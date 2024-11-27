@@ -2,13 +2,14 @@
 
 Eureka is a RESTful (Representational State Transfer) service that is primarily used in the AWS cloud for the purpose of discovery, load balancing and failover of middle-tier servers. It plays a critical role in Netflix mid-tier infra.
 
-We call this service, the **Eureka Server**. 
+
 Eureka also comes with a Java-based client component,the **Eureka Client**, which makes interactions with the service much easier.
 The client also has a built-in load balancer that does basic round-robin load balancing.
 
-To include Eureka Server in your project, use the starter with a group ID of `org.springframework.cloud` and an artifact ID of `spring-cloud-starter-netflix-eureka-server`.
-
-When the Eureka server comes up, it tries to get all of the instance registry information from a neighboring node. If there is a problem getting the information from a node, the server tries all of the peers before it gives up. If the server is able to successfully get all of the instances, it sets the renewal threshold that it should be receiving based on that information. If any time, the renewals falls below the percent configured for that value (below 85% within 15 mins), the server stops expiring instances to protect the current instance registry information.
+When the Eureka server comes up, it tries to get all of the instance registry information from a neighboring node. 
+If there is a problem getting the information from a node, the server tries all of the peers before it gives up. 
+If the server is able to successfully get all of the instances, it sets the renewal threshold that it should be receiving based on that information.
+If any time, the renewals falls below the percent configured for that value (below 85% within 15 mins), the server stops expiring instances to protect the current instance registry information.
 
 In Netflix, the above safeguard is called as `self-preservation` mode and is primarily used as a protection in scenarios where there is a network partition between a group of clients and the Eureka Server.
 In the case of network outages between peers, following things may happen.
@@ -21,8 +22,20 @@ When the peers are able to communicate fine, the registration information is aut
 The bottom line is, during the network outages, the server tries to be as resilient as possible,
 but there is a possibility of clients having different views of the servers during that time.
 
-In these scenarios, the server tries to protect the information it already has. There may be scenarios in case of a mass outage that this may cause the clients to get the instances that do not exist anymore. The clients must make sure they are resilient to eureka server returning an instance that is non-existent or un-responsive. The best protection in these scenarios is to timeout quickly and try other servers.
- 
+In these scenarios, the server tries to protect the information it already has. 
+There may be scenarios in case of a mass outage that this may cause the clients to get the instances that do not exist anymore.
+The clients must make sure they are resilient to eureka server returning an instance that is non-existent or un-responsive. 
+The best protection in these scenarios is to timeout quickly and try other servers.
+
+
+
+eureka分为以下几个部分
+
+- [server](/docs/CS/Framework/eureka/Server.md)
+- [client](/docs/CS/Framework/eureka/Client.md)
+
+
+
 
 ## Beat
 
@@ -33,9 +46,16 @@ If the server hasn't seen a renewal for 90 seconds, it removes the instance out 
 It is advisable not to change the renewal interval since the server uses that information to determine if there is a wide spread problem with the client to server communication.
 
 ### Fetch Registry
-Eureka clients fetches the registry information from the server and caches it locally. After that, the clients use that information to find other services. This information is updated periodically (every 30 seconds) by getting the delta updates between the last fetch cycle and the current one. The delta information is held longer (for about 3 mins) in the server, hence the delta fetches may return the same instances again. The Eureka client automatically handles the duplicate information.
+Eureka clients fetches the registry information from the server and caches it locally.
+After that, the clients use that information to find other services. 
+This information is updated periodically (every 30 seconds) by getting the delta updates between the last fetch cycle and the current one.
+The delta information is held longer (for about 3 mins) in the server, hence the delta fetches may return the same instances again. 
+The Eureka client automatically handles the duplicate information.
 
-After getting the deltas, Eureka client reconciles the information with the server by comparing the instance counts returned by the server and if the information does not match for some reason, the whole registry information is fetched again. Eureka server caches the compressed payload of the deltas, whole registry and also per application as well as the uncompressed information of the same. The payload also supports both JSON/XML formats. Eureka client gets the information in compressed JSON format using jersey apache client.
+After getting the deltas, Eureka client reconciles the information with the server by comparing the instance counts returned by the server and if the information does not match for some reason,
+the whole registry information is fetched again.
+Eureka server caches the compressed payload of the deltas, whole registry and also per application as well as the uncompressed information of the same.
+The payload also supports both JSON/XML formats. Eureka client gets the information in compressed JSON format using jersey apache client.
 
 ## Cache
 

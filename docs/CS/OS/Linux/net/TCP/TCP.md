@@ -6,7 +6,7 @@ TCP sockets are an example of *stream sockets*.
 
 ## tcp_init
 
-call tcp_init by [inet_init](/docs/CS/OS/Linux/network.md?id=init-inet)
+call tcp_init by [inet_init](/docs/CS/OS/Linux/net/network.md?id=init-inet)
 
 Size and allocate the main established and bind bucket hash tables.
 
@@ -270,7 +270,7 @@ This routine actually transmits TCP packets queued in by tcp_do_sendmsg().
 This is used by both the initial transmission and possible later retransmissions.
 
 All SKB's seen here are completely headerless.
-It is our job to **build the TCP header**, and **pass the packet down to [IP](/docs/CS/OS/Linux/IP.md?id=ip_queue_xmit)** so it can do the same plus pass the packet off to the device.
+It is our job to **build the TCP header**, and **pass the packet down to [IP](/docs/CS/OS/Linux/net/IP.md?id=ip_queue_xmit)** so it can do the same plus pass the packet off to the device.
 
 > [!NOTE]
 >
@@ -613,7 +613,7 @@ int sk_wait_data(struct sock *sk, long *timeo, const struct sk_buff *skb)
 
 ### tcp_rcv_established
 
-From dev [ip_local_deliver](/docs/CS/OS/Linux/network.md?id=ip_local_deliver)
+From dev [ip_local_deliver](/docs/CS/OS/Linux/net/network.md?id=ip_local_deliver)
 
 ```c
 
@@ -676,7 +676,7 @@ static int __must_check tcp_queue_rcv(struct sock *sk, struct sk_buff *skb,
 
 #### tcp_data_ready
 
-Call [sk_data_ready](/docs/CS/OS/Linux/network.md?id=sk_data_ready)
+Call [sk_data_ready](/docs/CS/OS/Linux/net/network.md?id=sk_data_ready)
 
 ```c
 void tcp_data_ready(struct sock *sk)

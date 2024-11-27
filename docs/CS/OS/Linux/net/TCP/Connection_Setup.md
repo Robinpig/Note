@@ -49,7 +49,7 @@ digraph {
 
 see system calls:
 
-1. [socket](/docs/CS/OS/Linux/socket.md?id=create)
+1. [socket](/docs/CS/OS/Linux/net/socket.md?id=create)
 2. [bind](/docs/CS/OS/Linux/Calls.md?id=bind)
 3. [listen](/docs/CS/OS/Linux/Calls.md?id=listen)
 4. [connect](/docs/CS/OS/Linux/Calls.md?id=connect)
@@ -450,7 +450,7 @@ Send a SYN-ACK after having received a SYN.
 This still operates on a request_sock only, not on a big socket.
 
 1. make synack
-2. dd an ip header to a skbuff and send it out.(invoke [ip_local_out](/docs/CS/OS/Linux/network.md?id=ip_local_out))
+2. dd an ip header to a skbuff and send it out.(invoke [ip_local_out](/docs/CS/OS/Linux/net/network.md?id=ip_local_out))
 
 ```c
 const struct tcp_request_sock_ops tcp_request_sock_ipv4_ops = {

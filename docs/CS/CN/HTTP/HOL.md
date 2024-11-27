@@ -5,17 +5,22 @@ Examples include input buffered network switches, out-of-order delivery and mult
 
 ### Network switches
 
-A switch may be composed of buffered input ports, a switch fabric and buffered output ports. If first-in first-out (FIFO) input buffers are used, only the oldest packet is available for forwarding.
-More recent arrivals cannot be forwarded if the oldest packet cannot be forwarded because its destination output is busy. The output may be busy if there is output contention.
+A switch may be composed of buffered input ports, a switch fabric and buffered output ports. 
+If first-in first-out (FIFO) input buffers are used, only the oldest packet is available for forwarding.
+More recent arrivals cannot be forwarded if the oldest packet cannot be forwarded because its destination output is busy.
+The output may be busy if there is output contention.
 
-Without HOL blocking, the new arrivals could potentially be forwarded around the stuck oldest packet to their respective destinations. HOL blocking can produce performance-degrading effects in input-buffered systems.
+Without HOL blocking, the new arrivals could potentially be forwarded around the stuck oldest packet to their respective destinations. 
+HOL blocking can produce performance-degrading effects in input-buffered systems.
 
 This phenomenon limits the throughput of switches.
-For FIFO input buffers, a simple model of fixed-sized cells to uniformly distributed destinations, causes the throughput to be limited to 58.6% of the total as the number of links becomes large.
+For FIFO input buffers, a simple model of fixed-sized cells to uniformly distributed destinations, 
+causes the throughput to be limited to 58.6% of the total as the number of links becomes large.
 
 One way to overcome this limitation is by using virtual output queues.
 
-Only switches with input buffering can suffer HOL blocking. With sufficient internal bandwidth, input buffering is unnecessary; all buffering is handled at outputs and HOL blocking is avoided.
+Only switches with input buffering can suffer HOL blocking. 
+With sufficient internal bandwidth, input buffering is unnecessary; all buffering is handled at outputs and HOL blocking is avoided.
 This no-input-buffering architecture is common in small to medium-sized ethernet switches.
 
 ### Out-of-order delivery

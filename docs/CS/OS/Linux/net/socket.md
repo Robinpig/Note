@@ -81,7 +81,7 @@ static struct file_system_type sock_fs_type = {
 	.kill_sb =	kill_anon_super,
 };
 ```
-call sockfs_init_fs_context when [mount fs](/docs/CS/OS/Linux/fs.md?id=init_fs_context)
+call sockfs_init_fs_context when [mount fs](/docs/CS/OS/Linux/fs/fs.md?id=init_fs_context)
 
 ```c
 
@@ -528,7 +528,7 @@ struct request_sock {
 
 List of sk_buff elements:
 
-![List of sk_buff elements](img/sk_buff.png)
+![List of sk_buff elements](../img/sk_buff.png)
 
 
 ##### sk_buff_head
@@ -793,7 +793,7 @@ Increase the headroom of an empty &sk_buff by reducing the tail room. This is on
 
 Buffer that is filled in while traversing the stack from the TCP layer down to the link layer:
 
-![](img/sk_buff_down.png)
+![](../img/sk_buff_down.png)
 
 When TCP is asked to transmit some data, it allocates a buffer following certain criteria (TCP Maximum Segment Size (mss), support for scatter gather I/O, etc.).
 TCP reserves (with skb_reserve) enough space at the head of the buffer to hold all the headers of all layers (TCP, IP, link layer). 
@@ -1649,7 +1649,7 @@ get pf by RCU and call inet_create
 ```
 
 
-call [inet_create](/docs/CS/OS/Linux/socket.md?id=inet_create)
+call [inet_create](/docs/CS/OS/Linux/net/socket.mdt.md?id=inet_create)
 ```c
 // net/ipv4/af_inet.c
 static const struct net_proto_family inet_family_ops = {

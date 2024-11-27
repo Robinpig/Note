@@ -1,6 +1,8 @@
 ## Introduction
 
+网络子系统的初始化流程
 
+描述Linux收发包流程
 
 
 
@@ -20,8 +22,8 @@ This is called single threaded during boot, so no need to take the rtnl semaphor
 
 1. Initialise the packet receive queues for each cpu.
 2. register func with [softirq](/docs/CS/OS/Linux/Interrupt.md?id=open_softirq)
-   - [net_rx_action](/docs/CS/OS/Linux/network.md?id=net_rx_action) receive func
-   - [net_tx_action](/docs/CS/OS/Linux/network.md?id=net_tx_action) transmit func
+   - [net_rx_action](/docs/CS/OS/Linux/net/network.mdk.md?id=net_rx_action) receive func
+   - [net_tx_action](/docs/CS/OS/Linux/net/network.mdk.md?id=net_tx_action) transmit func
 
 ```c
 // net/core/dev.c
@@ -52,7 +54,7 @@ static int __init net_dev_init(void)
 Register protocols into `inet_protos` and `ptype_base`:
 
 1. IP
-2. [UDP](/docs/CS/OS/Linux/UDP.md)
+2. [UDP](/docs/CS/OS/Linux/net/UDP.md)
 3. [TCP](/docs/CS/OS/Linux/TCP.md?id=tcp_init)
 4. ...
 
@@ -339,7 +341,7 @@ static int igb_alloc_q_vector(struct igb_adapter *adapter,
 
 ##### igb_request_msix
 
-register [igb_msix_ring](/docs/CS/OS/Linux/network.md?id=igb_msix_ring)
+register [igb_msix_ring](/docs/CS/OS/Linux/net/network.mdk.md?id=igb_msix_ring)
 
 ```c
 static int igb_request_msix(struct igb_adapter *adapter)
@@ -418,7 +420,7 @@ int __sys_sendto(int fd, void __user *buff, size_t len, unsigned int flags, ...)
 
 sock_sendmsg -> sock_sendmsg_nosec -> inet_sendmsg ->
 
-- [udp_sendmsg](/docs/CS/OS/Linux/UDP.md?id=udp_sendmsg)
+- [udp_sendmsg](/docs/CS/OS/Linux/net/UDP.md?id=udp_sendmsg)
 - or [tcp_sendmsg](/docs/CS/OS/Linux/TCP.md?id=send)
 
 ```c
@@ -432,7 +434,7 @@ int inet_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 
 ### ip_queue_xmit
 
-Both `ip_queue_xmit` and `ip_send_skb` call [ip_local_out](/docs/CS/OS/Linux/IP.md?id=ip_local_out)
+Both `ip_queue_xmit` and `ip_send_skb` call [ip_local_out](/docs/CS/OS/Linux/net/IP.md?id=ip_local_out)
 
 <!-- tabs:start -->
 
@@ -453,7 +455,7 @@ int __ip_queue_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl,
 
 ##### **ip_send_skb**
 
-Called by [UDP](/docs/CS/OS/Linux/UDP.md?id=transmit)
+Called by [UDP](/docs/CS/OS/Linux/net/UDP.md?id=transmit)
 
 ```c
 
@@ -653,7 +655,7 @@ static __latent_entropy void net_tx_action(struct softirq_action *h)
 
 #### dev_hard_start_xmit
 
-finally call [ndo_start_xmit](/docs/CS/OS/Linux/IP.md?id=ndo_start_xmit) by different adapters.
+finally call [ndo_start_xmit](/docs/CS/OS/Linux/net/IP.md?id=ndo_start_xmit) by different adapters.
 
 ```c
 static inline bool qdisc_restart(struct Qdisc *q, int *packets)
@@ -832,7 +834,7 @@ static bool igb_clean_tx_irq(struct igb_q_vector *q_vector, int napi_budget)
 
 #### igb_msix_ring
 
-This function is registered when the [NIC is active](/docs/CS/OS/Linux/network.md?id=open-NIC), in order to handle hard interrupts
+This function is registered when the [NIC is active](/docs/CS/OS/Linux/net/network.mdk.md?id=open-NIC), in order to handle hard interrupts
 
 Driver will `schedule a NAPI`(raise a `soft IRQ (NET_RX_SOFTIRQ)`).
 
@@ -852,7 +854,7 @@ static irqreturn_t igb_msix_ring(int irq, void *data)
 
 #### napi_schedule
 
-call [raise_softirq_irqoff](/docs/CS/OS/Linux/Interrupt.md?id=raise_softirq) to invoke [net_rx_action](/docs/CS/OS/Linux/network.md?id=net_rx_action)
+call [raise_softirq_irqoff](/docs/CS/OS/Linux/Interrupt.md?id=raise_softirq) to invoke [net_rx_action](/docs/CS/OS/Linux/net/network.mdk.md?id=net_rx_action)
 
 ```c
 // net/core/net.c
@@ -1176,7 +1178,7 @@ int __udp_enqueue_schedule_skb(struct sock *sk, struct sk_buff *skb)
 
 #### sk_data_ready
 
-`sk_data_ready` = `sock_def_readable` , see [Socket](/docs/CS/OS/Linux/socket.md?id=sock_init_data)
+`sk_data_ready` = `sock_def_readable` , see [Socket](/docs/CS/OS/Linux/net/socket.md?id=sock_init_data)
 
 ```c
 void sock_def_readable(struct sock *sk)
@@ -1200,7 +1202,7 @@ void sock_def_readable(struct sock *sk)
 
 ### Native Egress
 
-Recall the [egress flow](/docs/CS/OS/Linux/network.md?id=ndo_start_xmit), the loopback driver register `net_device_ops`:
+Recall the [egress flow](/docs/CS/OS/Linux/net/network.mdk.md?id=ndo_start_xmit), the loopback driver register `net_device_ops`:
 
 ```c
 
@@ -1222,7 +1224,7 @@ atic netdev_tx_t loopback_xmit(struct sk_buff *skb,
 
 tail input_pkt_queue with skb
 
-[Schedule NAPI](/docs/CS/OS/Linux/network.md?id=napi_schedule) for backlog device
+[Schedule NAPI](/docs/CS/OS/Linux/net/network.mdk.md?id=napi_schedule) for backlog device
 
 ```c
 int __netif_rx(struct sk_buff *skb)
@@ -1264,7 +1266,7 @@ static int __init net_dev_init(void)
 
 tail process_queue with input_pkt_queue
 
-call [__netif_receive_skb](/docs/CS/OS/Linux/network.md?id=netif_receive_skb) with process_queue
+call [__netif_receive_skb](/docs/CS/OS/Linux/net/network.mdk.md?id=netif_receive_skb) with process_queue
 
 ```c
 

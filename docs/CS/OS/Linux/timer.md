@@ -1,3 +1,87 @@
+## Introduction
+
+Linux 时间子系统是管理和维护系统时间的软件和硬件组件集合，对计算机系统运行和应用程序至关重要
+Linux 时间子系统包括时钟驱动程序、时钟中断处理程序、系统时间管理程序、时钟同步协议等
+其中，RTC（Real Time Clock，实时时钟）子系统是 Linux 内核中的一个重要部分，用于管理和操作硬件上的实时时钟
+实时时钟通常是一块独立的硬件设备，即使系统处于关机状态也能保持运行，为系统提供精确的时间信息
+
+Linux 内核提供了一组 API，让用户空间程序可以与 RTC 子系统进行交互，包括打开和关闭 RTC 设备文件、读取和设置当前时间、设置闹钟等
+在 Linux 中，RTC 子系统通常通过 I2C、SPI 或 ACPI 等总线进行与硬件的通信，具体的硬件细节和支持的功能取决于系统架构和所使用的硬件平台
+
+Linux 系统的晶振时间指的是系统时钟的精确度和准确性。它由硬件时钟提供，通常是一个晶体振荡器，用于提供稳定的时钟信号
+晶振时间与系统时间紧密相关，影响着系统中所有命令和函数的时间计算
+Linux系统以1970年1月1日0点0分0秒（UTC）为参考点，计算机更喜欢使用从当前时间点到这个参考点的秒数来表示时间
+因此，Linux 系统的晶振时间要确保系统时钟与这个参考点的时间保持一致，并提供秒级的精度
+
+```c
+// include/uapi/linux/time.h
+#ifndef __KERNEL__
+#ifndef _STRUCT_TIMESPEC
+#define _STRUCT_TIMESPEC
+struct timespec {
+	__kernel_old_time_t	tv_sec;		/* seconds */
+	long			tv_nsec;	/* nanoseconds */
+};
+#endif
+
+struct timeval {
+	__kernel_old_time_t	tv_sec;		/* seconds */
+	__kernel_suseconds_t	tv_usec;	/* microseconds */
+};
+
+struct itimerspec {
+	struct timespec it_interval;/* timer period */
+	struct timespec it_value;	/* timer expiration */
+};
+
+struct itimerval {
+	struct timeval it_interval;/* timer interval */
+	struct timeval it_value;	/* current value */
+};
+#endif
+
+struct timezone {
+	int	tz_minuteswest;	/* minutes west of Greenwich */
+	int	tz_dsttime;	/* type of dst correction */
+};
+```
+
+
+```c
+// include/linux/time.h
+struct timer_list {
+	/*
+	 * All fields that change during normal runtime grouped to the
+	 * same cacheline
+	 */
+	struct hlist_node	entry;
+	unsigned long		expires;
+	void			(*function)(struct timer_list *);
+	u32			flags;
+
+#ifdef CONFIG_LOCKDEP
+	struct lockdep_map	lockdep_map;
+#endif
+};
+```
+
+
+
+
+```c
+// include/linux/hrtimer.h
+struct hrtimer {
+	struct timerqueue_node		node;
+	ktime_t				_softexpires;
+	enum hrtimer_restart		(*function)(struct hrtimer *);
+	struct hrtimer_clock_base	*base;
+	u8				state;
+	u8				is_rel;
+	u8				is_soft;
+	u8				is_hard;
+};
+```
+
 
 ## init_timers
 
@@ -12,7 +96,6 @@ void __init init_timers(void)
 ```
 
 open [softirq](/docs/CS/OS/Linux/Interrupt.md?id=softirq)
-
 
 ```c
 static __latent_entropy void run_timer_softirq(struct softirq_action *h)
@@ -65,9 +148,8 @@ The SHIFT_HZ define expresses the same value as the nearest power of two in orde
 #endif
 ```
 
-
-
 The 64-bit value is not atomic - you MUST NOT read it without sampling the sequence number in jiffies_lock. get_jiffies_64() will do this for you as appropriate.
+
 ```c
 extern u64 __cacheline_aligned_in_smp jiffies_64;
 extern unsigned long volatile __cacheline_aligned_in_smp __jiffy_arch_data jiffies;
@@ -86,6 +168,7 @@ __visible u64 jiffies_64 __cacheline_aligned_in_smp = INITIAL_JIFFIES;
 ```
 
 Have the 32 bit jiffies value wrap 5 minutes after boot so jiffies wrap bugs show up earlier.
+
 ```c
 #define INITIAL_JIFFIES ((unsigned long)(unsigned int) (-300*HZ))
 ```

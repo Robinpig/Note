@@ -287,7 +287,7 @@ struct epitem {
 
 #### ep_ptable_queue_proc
 
-Initialize the poll table using the queue callback = `ep_poll_callback` which will be invoked at [sk_data_ready](/docs/CS/OS/Linux/network.md?id=sk_data_ready).
+Initialize the poll table using the queue callback = `ep_poll_callback` which will be invoked at [sk_data_ready](/docs/CS/OS/Linux/net/network.md?id=sk_data_ready).
 
 This is the callback that is used to add our wait queue to the target file wakeup lists.
 ```c

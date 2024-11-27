@@ -504,7 +504,7 @@ xx is still running!"
 直接升级客户端版本至1.11.1，新的客户端版本已避免类似情况
 **办法二：应用依赖排包**
 在打包部署的模块搜索“log”关键词，进行排包处理
-**●****Log4j2和Logback场景**
+Log4j2和Logback场景
 该场景是当前特别容易出现的情况，此时需要特别注意工程中是否存在log4j-to-slf4j这个jar包，如果它存在会出现日志文件无法输出问题
 **排包方案（二选一）：**
 1、继续保持两个日志组件同时存在，排除log4j-to-slf4j这个jar包
@@ -512,7 +512,7 @@ xx is still running!"
 排除logback：logback-classic、logback-core
 排查log4j2: log4j-api 2.x.x 和 log4j-core 2.x.x
 
-●仅log4j1场景
+仅log4j1场景
 如果业务放采用了log4j1，且没有log4j2和logback，就要关注看下是否存在如下的log4j-over-slf4j这个jar包
 **处理方案**：
 1、继续使用log4j1，排除log4j-over-slf4j

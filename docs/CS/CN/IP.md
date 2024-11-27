@@ -114,4 +114,4 @@ Without authentication or encryption (or when it is disabled for IPv6), IP spoof
 ## Links
 
 - [Computer Network](/docs/CS/CN/CN.md)
-- [Linux IP](/docs/CS/OS/Linux/IP.md)
+- [Linux IP](/docs/CS/OS/Linux/net/IP.md)

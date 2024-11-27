@@ -26,7 +26,19 @@ Borg is required to handle all these cases equally well.
 
 A Borg cell consists of a set of machines, a logically centralized controller called the Borgmaster, and an agent process called the Borglet that runs on each machine in a cell.
 
-![Borg Architecture](./img/Borg.png)
+
+
+
+<div style="text-align: center;">
+
+![Fig.1. Borg Architecture](./img/Borg.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. Borg Architecture
+</p>
+
 
 
 

@@ -176,7 +176,7 @@ static const struct net_proto_family packet_family_ops = {
 strace tcpdump port 80
 ```
 
-call [create socket](/docs/CS/OS/Linux/socket.md?id=create)
+call [create socket](/docs/CS/OS/Linux/net/socket.md?id=create)
 
 ```shell
 #define ETH_P_ALL	0x0003		/* Every packet (be careful!!!) */
