@@ -245,9 +245,41 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
 }
 ```
 
+Responsible for performing local session upgrade. Only request submitted directly to the leader should go through this processor.
+```java
+public class LeaderRequestProcessor implements RequestProcessor {
+    @Override
+    public void processRequest(Request request) throws RequestProcessorException {
+        // Screen quorum requests against ACLs first
+        if (!lzks.authWriteRequest(request)) {
+            return;
+        }
+
+        // Check if this is a local session and we are trying to create
+        // an ephemeral node, in which case we upgrade the session
+        Request upgradeRequest = null;
+        try {
+            upgradeRequest = lzks.checkUpgradeSession(request);
+        } catch (KeeperException ke) {
+            if (request.getHdr() != null) {
+                request.getHdr().setType(OpCode.error);
+                request.setTxn(new ErrorTxn(ke.code().intValue()));
+            }
+            request.setException(ke);
+        } catch (IOException ie) {
+            LOG.error("Unexpected error in upgrade", ie);
+        }
+        if (upgradeRequest != null) {
+            nextProcessor.processRequest(upgradeRequest);
+        }
+
+        nextProcessor.processRequest(request);
+    }
+}
+```
 
 
-
+对于事务请求会发起Proposal 将事务请求交付给SyncRequestProcessor
 ```java
 public class ProposalRequestProcessor implements RequestProcessor {
 public void processRequest(Request request) throws RequestProcessorException {
@@ -278,6 +310,42 @@ public void processRequest(Request request) throws RequestProcessorException {
 }    
 ```    
 
+ToBeAppliedRequestProcessor 的核心为一个toBeApplied队列，专门用来存储那些已经被CommitProcessor处理过的可提交的Proposal——直到FinalRequestProcessor处理完后，才会将其移除。
+
+```java
+// Leader.java
+static class ToBeAppliedRequestProcessor implements RequestProcessor {
+    public void processRequest(Request request) throws RequestProcessorException {
+        next.processRequest(request);
+
+        // The only requests that should be on toBeApplied are write
+        // requests, for which we will have a hdr. We can't simply use
+        // request.zxid here because that is set on read requests to equal
+        // the zxid of the last write op.
+        if (request.getHdr() != null) {
+            long zxid = request.getHdr().getZxid();
+            Iterator<Proposal> iter = leader.toBeApplied.iterator();
+            if (iter.hasNext()) {
+                Proposal p = iter.next();
+                if (p.request != null && p.request.zxid == zxid) {
+                    iter.remove();
+                    return;
+                }
+            }
+            LOG.error("Committed request not found on toBeApplied: {}", request);
+        }
+    }
+}
+```
+
+#### FinalRequestProcessor
+This Request processor actually applies any transaction associated with a request and services any queries. It is always at the end of a RequestProcessor chain (hence the name), so it does not have a nextProcessor member. This RequestProcessor counts on ZooKeeperServer to populate the outstandingRequests member of ZooKeeperServer.
+
+```java
+public class FinalRequestProcessor implements RequestProcessor {
+    
+}
+```
 
 ### RecvWorker
  
