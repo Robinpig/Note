@@ -35,6 +35,31 @@ and if the ZooKeeper service responds successfully to a change request, that cha
 >
 > [Build and run Zookeeper](/docs/CS/Framework/ZooKeeper/start.md)
 
+### Consistency Guarantees
+ZooKeeper is a high performance, scalable service. Both reads and write operations are designed to be fast, though reads are faster than writes. The reason for this is that in the case of reads, ZooKeeper can serve older data, which in turn is due to ZooKeeper's consistency guarantees:
+
+Sequential Consistency
+Updates from a client will be applied in the order that they were sent.
+
+Atomicity
+Updates either succeed or fail -- there are no partial results.
+
+Single System Image
+A client will see the same view of the service regardless of the server that it connects to.
+
+Reliability
+Once an update has been applied, it will persist from that time forward until a client overwrites the update. This guarantee has two corollaries:
+
+If a client gets a successful return code, the update will have been applied. On some failures (communication errors, timeouts, etc) the client will not know if the update has applied or not. We take steps to minimize the failures, but the guarantee is only present with successful return codes. (This is called the monotonicity condition in Paxos.)
+
+Any updates that are seen by the client, through a read request or successful update, will never be rolled back when recovering from server failures.
+
+Timeliness
+The clients view of the system is guaranteed to be up-to-date within a certain time bound (on the order of tens of seconds). Either system changes will be seen by a client within this bound, or the client will detect a service outage.
+
+
+
+
 
 ## Architecture
 
@@ -74,6 +99,9 @@ Paths to nodes are always expressed as canonical, absolute, slash-separated path
 <p style="text-align: center;">
 Fig.1. ZooKeeper's Hierarchical Namespace.
 </p>
+
+
+Zookeeper的这种层次模型称作DataTree DataTree的每个节点叫作ZNode
 
 ### ZNodes
 
