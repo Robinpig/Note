@@ -700,3 +700,4 @@ In the Pre-Vote algorithm, a candidate only increments its term if it first lear
 9. [On the Parallels between Paxos and Raft, and how to Port Optimizations](https://ipads.se.sjtu.edu.cn/_media/publications/wang_podc19.pdf)
 10. [Raft Refloated: Do We Have Consensus?](https://www.cl.cam.ac.uk/~ms705/pub/papers/2015-osr-raft.pdf)
 11. [etcd-io-raft]( https://github.com/etcd-io/raft)
+12. [raft-dev](https://groups.google.com/g/raft-dev)
