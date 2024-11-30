@@ -1,14 +1,5 @@
 ## Introduction
 
-[A simple totally ordered broadcast protocol](https://www.datadoghq.com/pdf/zab.totally-ordered-broadcast-protocol.2008.pdf)
-
-[ZooKeeper’s atomic broadcast protocol:Theory and practice](http://www.tcs.hut.fi/Studies/T-79.5001/reports/2012-deSouzaMedeiros.pdf)
-
-[Zab: High-performance broadcast for primary-backup systems](https://marcoserafini.github.io/papers/zab.pdf)
-
-
-
-
 Zab is very similar to [Paxos](/docs/CS/Distributed/Paxos.md), with one crucial difference – the agreement is reached on full history prefixes rather than on individual operations.
 This difference allows Zab to preserve primary order, which may be violated by Paxos.
 
@@ -246,6 +237,7 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
 ```
 
 Responsible for performing local session upgrade. Only request submitted directly to the leader should go through this processor.
+
 ```java
 public class LeaderRequestProcessor implements RequestProcessor {
     @Override
@@ -282,7 +274,7 @@ public class LeaderRequestProcessor implements RequestProcessor {
 对于事务请求会发起Proposal 将事务请求交付给SyncRequestProcessor
 ```java
 public class ProposalRequestProcessor implements RequestProcessor {
-public void processRequest(Request request) throws RequestProcessorException {
+    public void processRequest(Request request) throws RequestProcessorException {
         /* In the following IF-THEN-ELSE block, we process syncs on the leader.
          * If the sync is coming from a follower, then the follower
          * handler adds it to syncHandler. Otherwise, if it is a client of
@@ -307,8 +299,8 @@ public void processRequest(Request request) throws RequestProcessorException {
             }
         }
     }
-}    
-```    
+}
+```
 
 ToBeAppliedRequestProcessor 的核心为一个toBeApplied队列，专门用来存储那些已经被CommitProcessor处理过的可提交的Proposal——直到FinalRequestProcessor处理完后，才会将其移除。
 
@@ -339,6 +331,7 @@ static class ToBeAppliedRequestProcessor implements RequestProcessor {
 ```
 
 #### FinalRequestProcessor
+
 This Request processor actually applies any transaction associated with a request and services any queries. It is always at the end of a RequestProcessor chain (hence the name), so it does not have a nextProcessor member. This RequestProcessor counts on ZooKeeperServer to populate the outstandingRequests member of ZooKeeperServer.
 
 ```java
@@ -409,3 +402,9 @@ If the Queue is full, this methods removes an element from the head of the Queue
 
 - [ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)
 - [Consensus](/docs/CS/Distributed/Consensus.md)
+
+## References
+
+1. [Zab: High-performance broadcast for primary-backup systems](https://marcoserafini.github.io/papers/zab.pdf)
+2. [ZooKeeper’s atomic broadcast protocol:Theory and practice](http://www.tcs.hut.fi/Studies/T-79.5001/reports/2012-deSouzaMedeiros.pdf)
+3. [A simple totally ordered broadcast protocol](https://www.datadoghq.com/pdf/zab.totally-ordered-broadcast-protocol.2008.pdf)
