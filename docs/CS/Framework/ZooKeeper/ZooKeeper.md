@@ -64,7 +64,6 @@ The clients view of the system is guaranteed to be up-to-date within a certain t
 ## Architecture
 
 
-
 Server端主要组件有
 
 1. ZookeeperServerMain：这个类是ZK单机启动的启动入口，QuorumPeerMain是集群ZK的启动入口，等以后分析到集群的时候再来讲解当然，启动入口使用QuorumPeerMain也是可以的，只要把入参形式传成单机的即可而对于其作用也很简单，启动ZK的各类Thread处理线程以及生成ZK的文件日志；
