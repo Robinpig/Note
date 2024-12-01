@@ -871,6 +871,10 @@ kafka的log文件是以分区为单位的 日志未采用mmap
 
 如果 I/O 通道使用普通的 PLAINTEXT，那么，Kafka 就可以利用 Zero Copy 特性，直接将页缓存中的数据发送到网卡的 Buffer 中，避免中间的多次拷贝。相反，如果I/O 通道启用了 SSL，那么，Kafka 便无法利用 Zero Copy 特性了
 
+## Integration
+
+- [Spring Kafka](/docs/CS/Framework/Spring/Kafka.md)
+
 ## Links
 
 - [MQ](/docs/CS/MQ/MQ.md?id=Kafka)

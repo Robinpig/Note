@@ -368,8 +368,7 @@ The .seek() and .assign() API are also helpful to replay data from a specific of
 
 #### auto commit
 
-The easiest way to commit offsets is to allow the consumer to do it for you.
-If you configure enable.auto.commit=true, then every five seconds the consumer will commit the largest offset your client received from poll(). 
+**If you configure enable.auto.commit=true, then every five seconds the consumer will commit the largest offset your client received from poll()**. 
 The five-second interval is the default and is controlled by setting `auto.commit.interval.ms`. 
 Just like everything else in the consumer, the automatic commits are driven by the poll loop. 
 Whenever you poll, the consumer checks if it is time to commit, and if it is, it will commit the offsets it returned in the last poll.
@@ -379,10 +378,9 @@ It doesn’t know which events were actually processed, so it is critical to alw
 (Just like poll(), close() also commits offsets automatically.) 
 This is usually not an issue, but pay attention when you handle exceptions or exit the poll loop prematurely.
 
-Automatic commits are convenient, but they don’t give developers enough control to avoid duplicate messages.
 
 Most developers exercise more control over the time at which offsets are committed both to eliminate the possibility of missing messages and to reduce the number of messages duplicated during rebalancing. 
-The consumer API has the option of com‐ mitting the current offset at a point that makes sense to the application developer rather than based on a timer.
+The consumer API has the option of committing the current offset at a point that makes sense to the application developer rather than based on a timer.
 
 By setting `auto.commit.offset=false`, offsets will only be committed when the application explicitly chooses to do so. 
 The simplest and most reliable of the commit APIs is commitSync(). 
