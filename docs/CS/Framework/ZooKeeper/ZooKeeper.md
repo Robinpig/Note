@@ -31,7 +31,7 @@ ZooKeeper provides to its clients the abstraction of a set of data nodes (znodes
 ZooKeeper also has the following two liveness and durability guarantees: if a majority of ZooKeeper servers are active and communicating the service will be available;
 and if the ZooKeeper service responds successfully to a change request, that change persists across any number of failures as long as a quorum of servers is eventually able to recover.
 
-> 
+> [!TIP]
 >
 > [Build and run Zookeeper](/docs/CS/Framework/ZooKeeper/start.md)
 

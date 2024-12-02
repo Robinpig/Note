@@ -173,7 +173,7 @@ public class QuorumPeerMain {
 }
 ```
 
-##### **ZooKeeperServerMain**
+##### **Standalone**
 
 ```java
 public class ZooKeeperServerMain {
@@ -195,7 +195,6 @@ public class ZooKeeperServerMain {
     }
 
     public void runFromConfig(ServerConfig config) throws IOException, AdminServerException {
-        LOG.info("Starting server");
         FileTxnSnapLog txnLog = null;
         try {
             try {
@@ -613,6 +612,16 @@ session
 submitRequestNow里 touch session
 
 检测session
+
+
+
+
+
+### Standalone
+
+单机启动入口是`ZookeeperServerMain#main`
+
+- 首先是解析配置文件
 
 
 

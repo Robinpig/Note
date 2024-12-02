@@ -2,6 +2,10 @@
 
 
 
+```shell
+zkCli 
+```
+
 
 ```java
 class SendThread extends ZooKeeperThread {
