@@ -161,14 +161,18 @@ curator的LeaderSelector
 ### Watches
 
 Clients can set watches on znodes.
-Changes to that znode trigger the watch and then clear the watch. When a watch triggers, ZooKeeper sends the client a notification.
+Changes to that znode trigger the watch and then clear the watch. 
+When a watch triggers, ZooKeeper sends the client a notification.
 
-**New in 3.6.0:** Clients can also set permanent, recursive watches on a znode that are not removed when triggered and that trigger for changes on the registered znode as well as any children znodes recursively.
+> **New in 3.6.0:** Clients can also set permanent, recursive watches on a znode that are not removed when triggered and that trigger for changes on the registered znode as well as any children znodes recursively.
 
 ZooKeeper also has the notion of ephemeral nodes.
 These znodes exists as long as the session that created the znode is active.
 When the session ends the znode is deleted. Because of this behavior ephemeral znodes are not allowed to have children.
 
+
+最核心或者说关键的代码就是创建一个列表来存放观察者
+而在 ZooKeeper 中则是在客户端和服务器端分别实现两个存放观察者列表，即：ZKWatchManager 和 WatchManager
 
 
 在DataTree中有两个IWatchManager类型的对象，一个是dataWatches，一个是childWatches， 其中:
@@ -234,6 +238,7 @@ public class WatchManager implements IWatchManager {
     private int recursiveWatchQty = 0;
 }
 ```
+#### EventType
 
 EventType是一个枚举类型用来列举Zookeeper可能发生的事件， 可以看到监听事件的触发主要发生在节点状态的变更与节点数据的变更时触发
 

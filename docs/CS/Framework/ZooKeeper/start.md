@@ -65,6 +65,10 @@ QuorumPeerMain会做一个判断，当使用配置文件(args.length == 1)且是
 
 
 
+
+
+
+
 <!-- tabs:start -->
 
 
@@ -181,109 +185,6 @@ public class ZooKeeperServerMain {
         ZooKeeperServerMain main = new ZooKeeperServerMain();
         // ...
         main.initializeAndRun(args);
-    }
-
-    protected void initializeAndRun(String[] args) throws ConfigException, IOException, AdminServerException {
-        ServerConfig config = new ServerConfig();
-        if (args.length == 1) {
-            config.parse(args[0]);
-        } else {
-            config.parse(args);
-        }
-
-        runFromConfig(config);
-    }
-
-    public void runFromConfig(ServerConfig config) throws IOException, AdminServerException {
-        FileTxnSnapLog txnLog = null;
-        try {
-            try {
-                metricsProvider = MetricsProviderBootstrap.startMetricsProvider(
-                        config.getMetricsProviderClassName(),
-                        config.getMetricsProviderConfiguration());
-            } catch (MetricsProviderLifeCycleException error) {
-                throw new IOException("Cannot boot MetricsProvider " + config.getMetricsProviderClassName(), error);
-            }
-            ServerMetrics.metricsProviderInitialized(metricsProvider);
-            ProviderRegistry.initialize();
-            // Note that this thread isn't going to be doing anything else,
-            // so rather than spawning another thread, we will just call
-            // run() in this thread.
-            // create a file logger url from the command line args
-            txnLog = new FileTxnSnapLog(config.dataLogDir, config.dataDir);
-            JvmPauseMonitor jvmPauseMonitor = null;
-            if (config.jvmPauseMonitorToRun) {
-                jvmPauseMonitor = new JvmPauseMonitor(config);
-            }
-            final ZooKeeperServer zkServer = new ZooKeeperServer(jvmPauseMonitor, txnLog, config.tickTime, config.minSessionTimeout, config.maxSessionTimeout, config.listenBacklog, null, config.initialConfig);
-            txnLog.setServerStats(zkServer.serverStats());
-
-            // Registers shutdown handler which will be used to know the
-            // server error or shutdown state changes.
-            final CountDownLatch shutdownLatch = new CountDownLatch(1);
-            zkServer.registerServerShutdownHandler(new ZooKeeperServerShutdownHandler(shutdownLatch));
-
-            // Start Admin server
-            adminServer = AdminServerFactory.createAdminServer();
-            adminServer.setZooKeeperServer(zkServer);
-            adminServer.start();
-
-            boolean needStartZKServer = true;
-            if (config.getClientPortAddress() != null) {
-                cnxnFactory = ServerCnxnFactory.createFactory();
-                cnxnFactory.configure(config.getClientPortAddress(), config.getMaxClientCnxns(), config.getClientPortListenBacklog(), false);
-                cnxnFactory.startup(zkServer);
-                // zkServer has been started. So we don't need to start it again in secureCnxnFactory.
-                needStartZKServer = false;
-            }
-            if (config.getSecureClientPortAddress() != null) {
-                secureCnxnFactory = ServerCnxnFactory.createFactory();
-                secureCnxnFactory.configure(config.getSecureClientPortAddress(), config.getMaxClientCnxns(), config.getClientPortListenBacklog(), true);
-                secureCnxnFactory.startup(zkServer, needStartZKServer);
-            }
-
-            containerManager = new ContainerManager(
-                    zkServer.getZKDatabase(),
-                    zkServer.firstProcessor,
-                    Integer.getInteger("znode.container.checkIntervalMs", (int) TimeUnit.MINUTES.toMillis(1)),
-                    Integer.getInteger("znode.container.maxPerMinute", 10000),
-                    Long.getLong("znode.container.maxNeverUsedIntervalMs", 0)
-            );
-            containerManager.start();
-            ZKAuditProvider.addZKStartStopAuditLog();
-
-            serverStarted();
-
-            // Watch status of ZooKeeper server. It will do a graceful shutdown
-            // if the server is not running or hits an internal error.
-            shutdownLatch.await();
-
-            shutdown();
-
-            if (cnxnFactory != null) {
-                cnxnFactory.join();
-            }
-            if (secureCnxnFactory != null) {
-                secureCnxnFactory.join();
-            }
-            if (zkServer.canShutdown()) {
-                zkServer.shutdown(true);
-            }
-        } catch (InterruptedException e) {
-            // warn, but generally this is ok
-            LOG.warn("Server interrupted", e);
-        } finally {
-            if (txnLog != null) {
-                txnLog.close();
-            }
-            if (metricsProvider != null) {
-                try {
-                    metricsProvider.stop();
-                } catch (Throwable error) {
-                    LOG.warn("Error while stopping metrics", error);
-                }
-            }
-        }
     }
 }
 ```
@@ -619,9 +520,125 @@ submitRequestNow里 touch session
 
 ### Standalone
 
-单机启动入口是`ZookeeperServerMain#main`
+单机启动入口是`ZookeeperServerMain.main`
 
-- 首先是解析配置文件
+- 首先是解析配置文件 `ServerConfig.parse`
+- `initializeAndRun`
+  - [ServerCnxnFactory.createFactory](/docs/CS/Framework/ZooKeeper/IO.md)
+
+
+
+```java
+public class ZooKeeperServerMain {
+
+    protected void initializeAndRun(String[] args) throws ConfigException, IOException, AdminServerException {
+        ServerConfig config = new ServerConfig();
+        if (args.length == 1) {
+            config.parse(args[0]);
+        } else {
+            config.parse(args);
+        }
+
+        runFromConfig(config);
+    }
+
+    public void runFromConfig(ServerConfig config) throws IOException, AdminServerException {
+        FileTxnSnapLog txnLog = null;
+        try {
+            try {
+                metricsProvider = MetricsProviderBootstrap.startMetricsProvider(
+                        config.getMetricsProviderClassName(),
+                        config.getMetricsProviderConfiguration());
+            } catch (MetricsProviderLifeCycleException error) {
+                throw new IOException("Cannot boot MetricsProvider " + config.getMetricsProviderClassName(), error);
+            }
+            ServerMetrics.metricsProviderInitialized(metricsProvider);
+            ProviderRegistry.initialize();
+            // Note that this thread isn't going to be doing anything else,
+            // so rather than spawning another thread, we will just call
+            // run() in this thread.
+            // create a file logger url from the command line args
+            txnLog = new FileTxnSnapLog(config.dataLogDir, config.dataDir);
+            JvmPauseMonitor jvmPauseMonitor = null;
+            if (config.jvmPauseMonitorToRun) {
+                jvmPauseMonitor = new JvmPauseMonitor(config);
+            }
+            final ZooKeeperServer zkServer = new ZooKeeperServer(jvmPauseMonitor, txnLog, config.tickTime, config.minSessionTimeout, config.maxSessionTimeout, config.listenBacklog, null, config.initialConfig);
+            txnLog.setServerStats(zkServer.serverStats());
+
+            // Registers shutdown handler which will be used to know the
+            // server error or shutdown state changes.
+            final CountDownLatch shutdownLatch = new CountDownLatch(1);
+            zkServer.registerServerShutdownHandler(new ZooKeeperServerShutdownHandler(shutdownLatch));
+
+            // Start Admin server
+            adminServer = AdminServerFactory.createAdminServer();
+            adminServer.setZooKeeperServer(zkServer);
+            adminServer.start();
+
+            boolean needStartZKServer = true;
+            if (config.getClientPortAddress() != null) {
+                cnxnFactory = ServerCnxnFactory.createFactory();
+                cnxnFactory.configure(config.getClientPortAddress(), config.getMaxClientCnxns(), config.getClientPortListenBacklog(), false);
+                cnxnFactory.startup(zkServer);
+                // zkServer has been started. So we don't need to start it again in secureCnxnFactory.
+                needStartZKServer = false;
+            }
+            if (config.getSecureClientPortAddress() != null) {
+                secureCnxnFactory = ServerCnxnFactory.createFactory();
+                secureCnxnFactory.configure(config.getSecureClientPortAddress(), config.getMaxClientCnxns(), config.getClientPortListenBacklog(), true);
+                secureCnxnFactory.startup(zkServer, needStartZKServer);
+            }
+
+            containerManager = new ContainerManager(
+                    zkServer.getZKDatabase(),
+                    zkServer.firstProcessor,
+                    Integer.getInteger("znode.container.checkIntervalMs", (int) TimeUnit.MINUTES.toMillis(1)),
+                    Integer.getInteger("znode.container.maxPerMinute", 10000),
+                    Long.getLong("znode.container.maxNeverUsedIntervalMs", 0)
+            );
+            containerManager.start();
+            ZKAuditProvider.addZKStartStopAuditLog();
+
+            serverStarted();
+
+            // Watch status of ZooKeeper server. It will do a graceful shutdown
+            // if the server is not running or hits an internal error.
+            shutdownLatch.await();
+
+            shutdown();
+
+            if (cnxnFactory != null) {
+                cnxnFactory.join();
+            }
+            if (secureCnxnFactory != null) {
+                secureCnxnFactory.join();
+            }
+            if (zkServer.canShutdown()) {
+                zkServer.shutdown(true);
+            }
+        } catch (InterruptedException e) {
+            // warn, but generally this is ok
+            LOG.warn("Server interrupted", e);
+        } finally {
+            if (txnLog != null) {
+                txnLog.close();
+            }
+            if (metricsProvider != null) {
+                try {
+                    metricsProvider.stop();
+                } catch (Throwable error) {
+                    LOG.warn("Error while stopping metrics", error);
+                }
+            }
+        }
+    }
+}
+```
+
+
+
+
 
 
 
