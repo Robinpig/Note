@@ -1,31 +1,9 @@
 ## Introduction
 
-
-
 在QuorumPeerMain::runFromConfig的启动中初始化了Communication layer并设置到QuorumPeer
 
-
-```java
-
-ServerCnxnFactory cnxnFactory = null;
-ServerCnxnFactory secureCnxnFactory = null;
-
-if (config.getClientPortAddress() != null) {
-    cnxnFactory = ServerCnxnFactory.createFactory();
-    cnxnFactory.configure(config.getClientPortAddress(), config.getMaxClientCnxns(), config.getClientPortListenBacklog(), false);
-}
-
-if (config.getSecureClientPortAddress() != null) {
-    secureCnxnFactory = ServerCnxnFactory.createFactory();
-    secureCnxnFactory.configure(config.getSecureClientPortAddress(), config.getMaxClientCnxns(), config.getClientPortListenBacklog(), true);
-}
-
-
-quorumPeer.setCnxnFactory(cnxnFactory);
-quorumPeer.setSecureCnxnFactory(secureCnxnFactory);
-
-```
 createFactory
+
 ```java
 public static ServerCnxnFactory createFactory() throws IOException {
     String serverCnxnFactoryName = System.getProperty(ZOOKEEPER_SERVER_CNXN_FACTORY);
@@ -36,14 +14,14 @@ public static ServerCnxnFactory createFactory() throws IOException {
         ServerCnxnFactory serverCnxnFactory = (ServerCnxnFactory) Class.forName(serverCnxnFactoryName)
                                                                        .getDeclaredConstructor()
                                                                        .newInstance();
-        LOG.info(”Using {} as server connection factory“, serverCnxnFactoryName);
         return serverCnxnFactory;
     } catch (Exception e) {
-        IOException ioe = new IOException(”Couldn‘t instantiate “ + serverCnxnFactoryName, e);
         throw ioe;
     }
 }
 ```
+
+ServerCnxnFactory 实例化之后会依次调用 configure和startup函数 这将取决于具体的实现类型
 
 
 Zookeeper作为一个服务器,自然要与客户端进行网络通信,如何高效的与客户端进行通信,让网络IO不成为ZooKeeper的瓶颈是ZooKeeper急需解决的问题,ZooKeeper中使用ServerCnxnFactory管理与客户端的连接,从系统属性zookeeper.serverCnxnFactory中获取配置 其有两个实现, 
@@ -71,13 +49,37 @@ private void startServerCnxnFactory() {
 ```
 
 
+```java
+public abstract class ServerCnxnFactory {
+    public abstract void startup(ZooKeeperServer zkServer, boolean startServer) throws IOException, InterruptedException;
+}
+```
+
+```java
+public class NIOServerCnxnFactory extends ServerCnxnFactory {
+    @Override
+    public void startup(ZooKeeperServer zks, boolean startServer) throws IOException, InterruptedException {
+        start();
+        setZooKeeperServer(zks);
+        if (startServer) {
+            zks.startdata();
+            zks.startup();
+        }
+    }
+}
+```
+
+
 
 ## NIO
 
-NIOServerCnxnFactory implements a multi-threaded ServerCnxnFactory using NIO non-blocking socket calls. Communication between threads is handled via queues. 
+NIOServerCnxnFactory implements a multi-threaded ServerCnxnFactory using NIO non-blocking socket calls. 
+Communication between threads is handled via queues. 
 - 1 accept thread, which accepts new connections and assigns to a selector thread 
-- 1-N selector threads, each of which selects on 1/ N of the connections. The reason the factory supports more than one selector thread is that with large numbers of connections, select() itself can become a performance bottleneck. 
-- 0-M socket I/ O worker threads, which perform basic socket reads and writes. If configured with 0 worker threads, the selector threads do the socket I/ O directly. 
+- 1-N selector threads, each of which selects on 1/ N of the connections.
+  The reason the factory supports more than one selector thread is that with large numbers of connections, select() itself can become a performance bottleneck. 
+- 0-M socket I/ O worker threads, which perform basic socket reads and writes. 
+  If configured with 0 worker threads, the selector threads do the socket I/ O directly. 
 - 1 connection expiration thread, which closes idle connections; this is necessary to expire connections on which no session is established. 
 
 Typical (default) thread counts are: on a 32 core machine, 1 accept thread, 1 connection expiration thread, 4 selector threads, and 64 worker threads.
@@ -159,7 +161,7 @@ public class NIOServerCnxnFactory extends ServerCnxnFactory {
     public void start() {
         stopped = false;
         if (workerPool == null) {
-            workerPool = new WorkerService(“NIOWorker”, numWorkerThreads, false);
+            workerPool = new WorkerService("NIOWorker", numWorkerThreads, false);
         }
         for (SelectorThread thread : selectorThreads) {
             if (thread.getState() == Thread.State.NEW) {

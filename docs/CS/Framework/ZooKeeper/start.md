@@ -19,7 +19,8 @@ mvn clean install -DskipTest
 
 ## Start
 
-通过zkServer.sh启动ZooKeeper时，应用的统一入口为QuorumPeerMain。此处Quorum的含义是“保证数据冗余和最终一致的机制”，Peer表示集群中的一个平等地位节点
+通过zkServer.sh启动ZooKeeper时，应用的统一入口为QuorumPeerMain。
+此处Quorum的含义是“保证数据冗余和最终一致的机制”，Peer表示集群中的一个平等地位节点
 
 ### initializeAndRun
 
@@ -524,9 +525,10 @@ submitRequestNow里 touch session
 
 - 首先是解析配置文件 `ServerConfig.parse`
 - `initializeAndRun`
-  - [ServerCnxnFactory.createFactory](/docs/CS/Framework/ZooKeeper/IO.md)
+  
+两个主要的对象 ZooKeeperServer 和 [ServerCnxnFactory](/docs/CS/Framework/ZooKeeper/IO.md)
 
-
+ServerCnxnFactory.start会调用 ZooKeeperServer.startData
 
 ```java
 public class ZooKeeperServerMain {
@@ -607,31 +609,11 @@ public class ZooKeeperServerMain {
             shutdownLatch.await();
 
             shutdown();
-
-            if (cnxnFactory != null) {
-                cnxnFactory.join();
-            }
-            if (secureCnxnFactory != null) {
-                secureCnxnFactory.join();
-            }
-            if (zkServer.canShutdown()) {
-                zkServer.shutdown(true);
-            }
+            // ...
         } catch (InterruptedException e) {
-            // warn, but generally this is ok
-            LOG.warn("Server interrupted", e);
-        } finally {
-            if (txnLog != null) {
-                txnLog.close();
-            }
-            if (metricsProvider != null) {
-                try {
-                    metricsProvider.stop();
-                } catch (Throwable error) {
-                    LOG.warn("Error while stopping metrics", error);
-                }
-            }
-        }
+            // ...
+        } 
+        // ...
     }
 }
 ```
@@ -639,8 +621,280 @@ public class ZooKeeperServerMain {
 
 
 
+```java
+public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
+    public void startdata() throws IOException, InterruptedException {
+        //check to see if zkDb is not null
+        if (zkDb == null) {
+            zkDb = new ZKDatabase(this.txnLogFactory);
+        }
+        if (!zkDb.isInitialized()) {
+            loadData();
+        }
+    }
+}
+```
+
+这里创建DataTree
+```java
+public class ZKDatabase {
+    public ZKDatabase(FileTxnSnapLog snapLog) {
+        dataTree = createDataTree();
+        sessionsWithTimeouts = new ConcurrentHashMap<>();
+        this.snapLog = snapLog;
+
+        try {
+            snapshotSizeFactor = Double.parseDouble(
+                    System.getProperty(SNAPSHOT_SIZE_FACTOR,
+                            Double.toString(DEFAULT_SNAPSHOT_SIZE_FACTOR)));
+            if (snapshotSizeFactor > 1) {
+                snapshotSizeFactor = DEFAULT_SNAPSHOT_SIZE_FACTOR;
+            }
+        } catch (NumberFormatException e) {
+            snapshotSizeFactor = DEFAULT_SNAPSHOT_SIZE_FACTOR;
+        }
+
+        try {
+            commitLogCount = Integer.parseInt(
+                    System.getProperty(COMMIT_LOG_COUNT,
+                            Integer.toString(DEFAULT_COMMIT_LOG_COUNT)));
+            if (commitLogCount < DEFAULT_COMMIT_LOG_COUNT) {
+                commitLogCount = DEFAULT_COMMIT_LOG_COUNT;
+            }
+        } catch (NumberFormatException e) {
+            commitLogCount = DEFAULT_COMMIT_LOG_COUNT;
+        }
+    }
+}
+```
 
 
+When a new leader starts executing Leader#lead, it invokes this method. 
+The database, however, has been initialized before running leader election so that the server could pick its zxid for its initial vote.
+It does it by invoking QuorumPeer#getLastLoggedZxid.
+Consequently, we don't need to initialize it once more and avoid the penalty of loading it a second time. 
+Not reloading it is particularly important for applications that host a large database.
+
+The following if block checks whether the database has been initialized or not.
+Note that this method is invoked by at least one other method: ZooKeeperServer#startdata.
+
+See ZOOKEEPER-1642 for more detail.
+ 
+
+```java
+public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
+    public void loadData() throws IOException, InterruptedException {
+        if (zkDb.isInitialized()) {
+            setZxid(zkDb.getDataTreeLastProcessedZxid());
+        } else {
+            setZxid(zkDb.loadDataBase());
+        }
+
+        // Clean up dead sessions
+        zkDb.getSessions().stream()
+                .filter(session -> zkDb.getSessionWithTimeOuts().get(session) == null)
+                .forEach(session -> killSession(session, zkDb.getDataTreeLastProcessedZxid()));
+
+        // Make a clean snapshot
+        takeSnapshot();
+    }
+}
+```
+
+load the database from the disk onto memory and also add the transactions to the committedlog in memory. 
+
+```java
+public class ZKDatabase {
+    public long loadDataBase() throws IOException {
+        long startTime = Time.currentElapsedTime();
+        long zxid = snapLog.restore(dataTree, sessionsWithTimeouts, commitProposalPlaybackListener);
+        initialized = true;
+        long loadTime = Time.currentElapsedTime() - startTime;
+        ServerMetrics.getMetrics().DB_INIT_TIME.add(loadTime);
+        return zxid;
+    }
+}
+```
+
+
+```java
+public class FileTxnSnapLog {
+    public long restore(DataTree dt, Map<Long, Integer> sessions, PlayBackListener listener) throws IOException {
+        long snapLoadingStartTime = Time.currentElapsedTime();
+        long deserializeResult = snapLog.deserialize(dt, sessions);
+        ServerMetrics.getMetrics().STARTUP_SNAP_LOAD_TIME.add(Time.currentElapsedTime() - snapLoadingStartTime);
+        FileTxnLog txnLog = new FileTxnLog(dataDir);
+        boolean trustEmptyDB;
+        File initFile = new File(dataDir.getParent(), "initialize");
+        if (Files.deleteIfExists(initFile.toPath())) {
+            LOG.info("Initialize file found, an empty database will not block voting participation");
+            trustEmptyDB = true;
+        } else {
+            trustEmptyDB = autoCreateDB;
+        }
+
+        RestoreFinalizer finalizer = () -> {
+            long highestZxid = fastForwardFromEdits(dt, sessions, listener);
+            // The snapshotZxidDigest will reset after replaying the txn of the
+            // zxid in the snapshotZxidDigest, if it's not reset to null after
+            // restoring, it means either there are not enough txns to cover that
+            // zxid or that txn is missing
+            DataTree.ZxidDigest snapshotZxidDigest = dt.getDigestFromLoadedSnapshot();
+            return highestZxid;
+        };
+
+        if (-1L == deserializeResult) {
+            /* this means that we couldn't find any snapshot, so we need to
+             * initialize an empty database (reported in ZOOKEEPER-2325) */
+            if (txnLog.getLastLoggedZxid() != -1) {
+                // ZOOKEEPER-3056: provides an escape hatch for users upgrading
+                // from old versions of zookeeper (3.4.x, pre 3.5.3).
+                if (!trustEmptySnapshot) {
+                    throw new IOException(EMPTY_SNAPSHOT_WARNING + "Something is broken!");
+                } else {
+                    LOG.warn("{}This should only be allowed during upgrading.", EMPTY_SNAPSHOT_WARNING);
+                    return finalizer.run();
+                }
+            }
+
+            if (trustEmptyDB) {
+                /* TODO: (br33d) we should either put a ConcurrentHashMap on restore()
+                 *       or use Map on save() */
+                save(dt, (ConcurrentHashMap<Long, Integer>) sessions, false);
+
+                /* return a zxid of 0, since we know the database is empty */
+                return 0L;
+            } else {
+                /* return a zxid of -1, since we are possibly missing data */
+                LOG.warn("Unexpected empty data tree, setting zxid to -1");
+                dt.lastProcessedZxid = -1L;
+                return -1L;
+            }
+        }
+
+        return finalizer.run();
+    }
+}
+```
+
+save the datatree and the sessions into a snapshot
+```java
+public class FileTxnSnapLog {
+    public File save(
+            DataTree dataTree,
+            ConcurrentHashMap<Long, Integer> sessionsWithTimeouts,
+            boolean syncSnap) throws IOException {
+        long lastZxid = dataTree.lastProcessedZxid;
+        File snapshotFile = new File(snapDir, Util.makeSnapshotName(lastZxid));
+        LOG.info("Snapshotting: 0x{} to {}", Long.toHexString(lastZxid), snapshotFile);
+        try {
+            snapLog.serialize(dataTree, sessionsWithTimeouts, snapshotFile, syncSnap);
+            return snapshotFile;
+        } catch (IOException e) {
+            if (snapshotFile.length() == 0) {
+                /* This may be caused by a full disk. In such a case, the server
+                 * will get stuck in a loop where it tries to write a snapshot
+                 * out to disk, and ends up creating an empty file instead.
+                 * Doing so will eventually result in valid snapshots being
+                 * removed during cleanup. */
+                if (snapshotFile.delete()) {
+                    LOG.info("Deleted empty snapshot file: {}", snapshotFile.getAbsolutePath());
+                } else {
+                    LOG.warn("Could not delete empty snapshot file: {}", snapshotFile.getAbsolutePath());
+                }
+            } else {
+                /* Something else went wrong when writing the snapshot out to
+                 * disk. If this snapshot file is invalid, when restarting,
+                 * ZooKeeper will skip it, and find the last known good snapshot
+                 * instead. */
+            }
+            throw e;
+        }
+    }
+}
+```
+
+```java
+public class FileSnap implements SnapShot {
+    public synchronized void serialize(
+            DataTree dt,
+            Map<Long, Integer> sessions,
+            File snapShot,
+            boolean fsync) throws IOException {
+        if (!close) {
+            try (CheckedOutputStream snapOS = SnapStream.getOutputStream(snapShot, fsync)) {
+                OutputArchive oa = BinaryOutputArchive.getArchive(snapOS);
+                FileHeader header = new FileHeader(SNAP_MAGIC, VERSION, dbId);
+                serialize(dt, sessions, oa, header);
+                SnapStream.sealStream(snapOS, oa);
+
+                // Digest feature was added after the CRC to make it backward
+                // compatible, the older code cal still read snapshots which
+                // includes digest.
+                //
+                // To check the intact, after adding digest we added another
+                // CRC check.
+                if (dt.serializeZxidDigest(oa)) {
+                    SnapStream.sealStream(snapOS, oa);
+                }
+
+                // serialize the last processed zxid and add another CRC check
+                if (dt.serializeLastProcessedZxid(oa)) {
+                    SnapStream.sealStream(snapOS, oa);
+                }
+
+                lastSnapshotInfo = new SnapshotInfo(
+                        Util.getZxidFromName(snapShot.getName(), SNAPSHOT_FILE_PREFIX),
+                        snapShot.lastModified() / 1000);
+            }
+        } else {
+            throw new IOException("FileSnap has already been closed");
+        }
+    }
+
+    protected void serialize(
+            DataTree dt,
+            Map<Long, Integer> sessions,
+            OutputArchive oa,
+            FileHeader header) throws IOException {
+        // this is really a programmatic error and not something that can
+        // happen at runtime
+        if (header == null) {
+            throw new IllegalStateException("Snapshot's not open for writing: uninitialized header");
+        }
+        header.serialize(oa, "fileheader");
+        SerializeUtils.serializeSnapshot(dt, oa, sessions);
+    }
+}
+```
+FileHeader
+```java
+public class FileHeader implements Record {
+    private int magic;
+    private int version;
+    private long dbid;
+    public void serialize(OutputArchive a_, String tag) throws java.io.IOException {
+        a_.startRecord(this,tag);
+        a_.writeInt(magic,"magic");
+        a_.writeInt(version,"version");
+        a_.writeLong(dbid,"dbid");
+        a_.endRecord(this,tag);
+    }
+}
+```
+
+
+```java
+  public static void serializeSnapshot(DataTree dt, OutputArchive oa, Map<Long, Integer> sessions) throws IOException {
+        HashMap<Long, Integer> sessSnap = new HashMap<>(sessions);
+        oa.writeInt(sessSnap.size(), "count");
+        for (Entry<Long, Integer> entry : sessSnap.entrySet()) {
+            oa.writeLong(entry.getKey().longValue(), "id");
+            oa.writeInt(entry.getValue().intValue(), "timeout");
+        }
+        dt.serialize(oa, "tree");
+    }
+```
 
 ## Leader Election
 
