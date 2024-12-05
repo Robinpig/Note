@@ -706,11 +706,8 @@ load the database from the disk onto memory and also add the transactions to the
 ```java
 public class ZKDatabase {
     public long loadDataBase() throws IOException {
-        long startTime = Time.currentElapsedTime();
         long zxid = snapLog.restore(dataTree, sessionsWithTimeouts, commitProposalPlaybackListener);
         initialized = true;
-        long loadTime = Time.currentElapsedTime() - startTime;
-        ServerMetrics.getMetrics().DB_INIT_TIME.add(loadTime);
         return zxid;
     }
 }
@@ -776,6 +773,83 @@ public class FileTxnSnapLog {
     }
 }
 ```
+FileTxnSnapLog above the implementations of txnlog and snapshot
+
+```java
+public class FileTxnSnapLog {
+
+    //the directory containing
+    //the transaction logs
+    final File dataDir;
+    //the directory containing
+    //the snapshot directory
+    final File snapDir;
+    TxnLog txnLog;
+    SnapShot snapLog;
+    private final boolean autoCreateDB;
+    private final boolean trustEmptySnapshot;
+    public static final int VERSION = 2;
+}
+```
+
+
+```java
+public class FileTxnSnapLog {
+    public long fastForwardFromEdits(
+            DataTree dt,
+            Map<Long, Integer> sessions,
+            PlayBackListener listener) throws IOException {
+        TxnIterator itr = txnLog.read(dt.lastProcessedZxid + 1);
+        long highestZxid = dt.lastProcessedZxid;
+        TxnHeader hdr;
+        int txnLoaded = 0;
+        long startTime = Time.currentElapsedTime();
+        try {
+            while (true) {
+                // iterator points to
+                // the first valid txn when initialized
+                hdr = itr.getHeader();
+                if (hdr == null) {
+                    //empty logs
+                    return dt.lastProcessedZxid;
+                }
+                if (hdr.getZxid() < highestZxid && highestZxid != 0) {
+                    LOG.error("{}(highestZxid) > {}(next log) for type {}", highestZxid, hdr.getZxid(), hdr.getType());
+                } else {
+                    highestZxid = hdr.getZxid();
+                }
+                try {
+                    processTransaction(hdr, dt, sessions, itr.getTxn());
+                    dt.compareDigest(hdr, itr.getTxn(), itr.getDigest());
+                    txnLoaded++;
+                } catch (KeeperException.NoNodeException e) {
+                    throw new IOException("Failed to process transaction type: "
+                            + hdr.getType()
+                            + " error: "
+                            + e.getMessage(),
+                            e);
+                }
+                listener.onTxnLoaded(hdr, itr.getTxn(), itr.getDigest());
+                if (!itr.next()) {
+                    break;
+                }
+            }
+        } finally {
+            if (itr != null) {
+                itr.close();
+            }
+        }
+
+        long loadTime = Time.currentElapsedTime() - startTime;
+        LOG.info("{} txns loaded in {} ms", txnLoaded, loadTime);
+        ServerMetrics.getMetrics().STARTUP_TXNS_LOADED.add(txnLoaded);
+        ServerMetrics.getMetrics().STARTUP_TXNS_LOAD_TIME.add(loadTime);
+
+        return highestZxid;
+    }
+}
+```
+
 
 save the datatree and the sessions into a snapshot
 ```java

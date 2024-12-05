@@ -102,6 +102,48 @@ Fig.1. ZooKeeper's Hierarchical Namespace.
 
 Zookeeper的这种层次模型称作DataTree DataTree的每个节点叫作ZNode
 
+```java
+
+public class ZKDatabase {
+
+    private static final Logger LOG = LoggerFactory.getLogger(ZKDatabase.class);
+
+    /**
+     * make sure on a clear you take care of
+     * all these members.
+     */
+    protected DataTree dataTree;
+    protected ConcurrentHashMap<Long, Integer> sessionsWithTimeouts;
+    protected FileTxnSnapLog snapLog;
+    protected long minCommittedLog, maxCommittedLog;
+}
+```
+
+
+```java
+public class DataTree {
+    /**
+     * This map provides a fast lookup to the data nodes. The tree is the
+     * source of truth and is where all the locking occurs
+     */
+    private final NodeHashMap nodes;
+
+    private IWatchManager dataWatches;
+
+    private IWatchManager childWatches;
+}
+
+
+public class NodeHashMapImpl implements NodeHashMap {
+
+    private final ConcurrentHashMap<String, DataNode> nodes;
+    private final boolean digestEnabled;
+    private final DigestCalculator digestCalculator;
+
+    private final AdHash hash;
+}
+```
+
 ### ZNodes
 
 Unlike files in file systems, znodes are not designed for general data storage.
