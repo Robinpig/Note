@@ -532,11 +532,69 @@ class ZKWatchManager implements ClientWatchManager {
 ```
 ### session
 
-Session 指客户端会话。在 ZooKeeper 中，一个客户端会话是指 客户端和服务器之间的一个 TCP 长连接。客户端启动的时候，会与服务端建立一个 TCP 连接，客户端会话的生命周期，则是从第一次连接建立开始算起。通过这个连接，客户端能够通过心跳检测与服务器保持有效的会话，并向 ZooKeeper 服务器发送请求并接收响应，以及接收来自服务端的 Watch 事件通知
+Session 指客户端会话。在 ZooKeeper 中，一个客户端会话是指 客户端和服务器之间的一个 TCP 长连接。
+客户端启动的时候，会与服务端建立一个 TCP 连接，客户端会话的生命周期，则是从第一次连接建立开始算起。通过这个连接，客户端能够通过心跳检测与服务器保持有效的会话，并向 ZooKeeper 服务器发送请求并接收响应，以及接收来自服务端的 Watch 事件通知
 
-Session 的 sessionTimeout 参数，用来控制一个客户端会话的超时时间。当服务器压力太大 或者是网络故障等各种原因导致客户端连接断开时，Client 会自动从 ZooKeeper 地址列表中逐一尝试重连（重试策略可使用 Curator 来实现）。只要在 sessionTimeout 规定的时间内能够重新连接上集群中任意一台服务器，那么之前创建的会话仍然有效。如果，在 sessionTimeout 时间外重连了，就会因为 Session 已经被清除了，而被告知 SESSION_EXPIRED，此时需要程序去恢复临时数据；还有一种 Session 重建后的在新节点上的数据，被之前节点上因网络延迟晚来的写请求所覆盖的情况，在 ZOOKEEPER-417 中被提出，并在该 JIRA 中新加入的 SessionMovedException，使得 用同一个 sessionld/sessionPasswd 重建 Session 的客户端能感知到，但是这个问题到 ZOOKEEPER-2219 仍然没有得到很好的解决
+Session 的 sessionTimeout 参数，用来控制一个客户端会话的超时时间。
+当服务器压力太大 或者是网络故障等各种原因导致客户端连接断开时，Client 会自动从 ZooKeeper 地址列表中逐一尝试重连（重试策略可使用 Curator 来实现）。只要在 sessionTimeout 规定的时间内能够重新连接上集群中任意一台服务器，那么之前创建的会话仍然有效。如果，在 sessionTimeout 时间外重连了，就会因为 Session 已经被清除了，而被告知 SESSION_EXPIRED，此时需要程序去恢复临时数据；还有一种 Session 重建后的在新节点上的数据，被之前节点上因网络延迟晚来的写请求所覆盖的情况，在 ZOOKEEPER-417 中被提出，并在该 JIRA 中新加入的 SessionMovedException，使得 用同一个 sessionld/sessionPasswd 重建 Session 的客户端能感知到，但是这个问题到 ZOOKEEPER-2219 仍然没有得到很好的解决
 
 ![](https://yuzhouwan.com/picture/zk/zk_transition.png)
+
+processConnectRequest调用了reopenSession
+
+```java
+public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
+    public void reopenSession(ServerCnxn cnxn, long sessionId, byte[] passwd, int sessionTimeout) throws IOException {
+        if (checkPasswd(sessionId, passwd)) {
+            revalidateSession(cnxn, sessionId, sessionTimeout);
+        } else {
+            finishSessionInit(cnxn, false);
+        }
+    }
+}
+```
+
+```java
+protected void revalidateSession(ServerCnxn cnxn, long sessionId, int sessionTimeout) throws IOException {
+  boolean rc = sessionTracker.touchSession(sessionId, sessionTimeout);
+  finishSessionInit(cnxn, rc);
+}
+```
+SessionTrackerImpl
+```java
+public class SessionTrackerImpl extends ZooKeeperCriticalThread implements SessionTracker {
+
+    protected final ConcurrentHashMap<Long, SessionImpl> sessionsById = new ConcurrentHashMap<>();
+
+    private final ExpiryQueue<SessionImpl> sessionExpiryQueue;
+
+    protected final ConcurrentMap<Long, Integer> sessionsWithTimeout;
+    private final AtomicLong nextSessionId = new AtomicLong();
+}
+```
+
+
+```java
+public class SessionTrackerImpl extends ZooKeeperCriticalThread implements SessionTracker {
+    public synchronized boolean touchSession(long sessionId, int timeout) {
+        SessionImpl s = sessionsById.get(sessionId);
+
+        if (s == null) {
+            logTraceTouchInvalidSession(sessionId, timeout);
+            return false;
+        }
+
+        if (s.isClosing()) {
+            logTraceTouchClosingSession(sessionId, timeout);
+            return false;
+        }
+
+        updateSessionExpiry(s, timeout);
+        return true;
+    }
+}
+```
+
 
 ### ZooKeeper guarantees
 
