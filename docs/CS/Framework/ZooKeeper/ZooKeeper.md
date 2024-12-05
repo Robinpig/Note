@@ -540,7 +540,47 @@ Session 的 sessionTimeout 参数，用来控制一个客户端会话的超时�
 
 ![](https://yuzhouwan.com/picture/zk/zk_transition.png)
 
+ZooKeeperServer持有一个SessionTracker
+```java
+public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
+  protected SessionTracker sessionTracker;
+}
+```
+SessionTrackerImpl中sessionsById使用ConcurrentHashMap存储session
+```java
+public class SessionTrackerImpl extends ZooKeeperCriticalThread implements SessionTracker {
+
+    protected final ConcurrentHashMap<Long, SessionImpl> sessionsById = new ConcurrentHashMap<>();
+
+    private final ExpiryQueue<SessionImpl> sessionExpiryQueue;
+
+    protected final ConcurrentMap<Long, Integer> sessionsWithTimeout;
+    private final AtomicLong nextSessionId = new AtomicLong();
+}
+```
+
+
 processConnectRequest调用了reopenSession
+
+```java
+public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
+    long createSession(ServerCnxn cnxn, byte[] passwd, int timeout) {
+        if (passwd == null) {
+            // Possible since it's just deserialized from a packet on the wire.
+            passwd = new byte[0];
+        }
+        long sessionId = sessionTracker.createSession(timeout);
+        Random r = new Random(sessionId ^ superSecret);
+        r.nextBytes(passwd);
+        CreateSessionTxn txn = new CreateSessionTxn(timeout);
+        cnxn.setSessionId(sessionId);
+        Request si = new Request(cnxn, sessionId, 0, OpCode.createSession, RequestRecord.fromRecord(txn), null);
+        submitRequest(si);
+        return sessionId;
+    }
+}
+```
+
 
 ```java
 public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
@@ -558,18 +598,6 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
 protected void revalidateSession(ServerCnxn cnxn, long sessionId, int sessionTimeout) throws IOException {
   boolean rc = sessionTracker.touchSession(sessionId, sessionTimeout);
   finishSessionInit(cnxn, rc);
-}
-```
-SessionTrackerImpl
-```java
-public class SessionTrackerImpl extends ZooKeeperCriticalThread implements SessionTracker {
-
-    protected final ConcurrentHashMap<Long, SessionImpl> sessionsById = new ConcurrentHashMap<>();
-
-    private final ExpiryQueue<SessionImpl> sessionExpiryQueue;
-
-    protected final ConcurrentMap<Long, Integer> sessionsWithTimeout;
-    private final AtomicLong nextSessionId = new AtomicLong();
 }
 ```
 
@@ -591,6 +619,36 @@ public class SessionTrackerImpl extends ZooKeeperCriticalThread implements Sessi
 
         updateSessionExpiry(s, timeout);
         return true;
+    }
+}
+```
+
+
+#### session expire
+
+
+```java
+public class SessionTrackerImpl extends ZooKeeperCriticalThread implements SessionTracker {
+ @Override
+    public void run() {
+        try {
+            while (running) {
+                long waitTime = sessionExpiryQueue.getWaitTime();
+                if (waitTime > 0) {
+                    Thread.sleep(waitTime);
+                    continue;
+                }
+
+                for (SessionImpl s : sessionExpiryQueue.poll()) {
+                    ServerMetrics.getMetrics().STALE_SESSIONS_EXPIRED.add(1);
+                    setSessionClosing(s.sessionId);
+                    expirer.expire(s);
+                }
+            }
+        } catch (InterruptedException e) {
+            handleException(this.getName(), e);
+        }
+        LOG.info("SessionTrackerImpl exited loop!");
     }
 }
 ```

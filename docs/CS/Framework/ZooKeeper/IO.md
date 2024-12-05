@@ -487,9 +487,6 @@ public void processConnectRequest(ServerCnxn cnxn, ConnectRequest request) throw
     ServerMetrics.getMetrics().CONNECTION_REQUEST_COUNT.add(1);
 
     if (!cnxn.protocolManager.isReadonlyAvailable()) {
-        LOG.warn(
-            "Connection request from old client {}; will be dropped if server is in r-o mode",
-            cnxn.getRemoteSocketAddress());
     }
 
     if (!request.getReadOnly() && this instanceof ReadOnlyZooKeeperServer) {
@@ -498,17 +495,6 @@ public void processConnectRequest(ServerCnxn cnxn, ConnectRequest request) throw
         throw new CloseRequestException(msg, ServerCnxn.DisconnectReason.NOT_READ_ONLY_CLIENT);
     }
     if (request.getLastZxidSeen() > zkDb.dataTree.lastProcessedZxid) {
-        String msg = "Refusing session(0x"
-                     + Long.toHexString(sessionId)
-                     + ") request for client "
-                     + cnxn.getRemoteSocketAddress()
-                     + " as it has seen zxid 0x"
-                     + Long.toHexString(request.getLastZxidSeen())
-                     + " our last zxid is 0x"
-                     + Long.toHexString(getZKDatabase().getDataTreeLastProcessedZxid())
-                     + " client must try another server";
-
-        LOG.info(msg);
         throw new CloseRequestException(msg, ServerCnxn.DisconnectReason.CLIENT_ZXID_AHEAD);
     }
     int sessionTimeout = request.getTimeOut();
@@ -527,20 +513,8 @@ public void processConnectRequest(ServerCnxn cnxn, ConnectRequest request) throw
     cnxn.disableRecv();
     if (sessionId == 0) {
         long id = createSession(cnxn, passwd, sessionTimeout);
-        LOG.debug(
-            "Client attempting to establish new session: session = 0x{}, zxid = 0x{}, timeout = {}, address = {}",
-            Long.toHexString(id),
-            Long.toHexString(request.getLastZxidSeen()),
-            request.getTimeOut(),
-            cnxn.getRemoteSocketAddress());
     } else {
         validateSession(cnxn, sessionId);
-        LOG.debug(
-            "Client attempting to renew session: session = 0x{}, zxid = 0x{}, timeout = {}, address = {}",
-            Long.toHexString(sessionId),
-            Long.toHexString(request.getLastZxidSeen()),
-            request.getTimeOut(),
-            cnxn.getRemoteSocketAddress());
         if (serverCnxnFactory != null) {
             serverCnxnFactory.closeSession(sessionId, ServerCnxn.DisconnectReason.CLIENT_RECONNECT);
         }
