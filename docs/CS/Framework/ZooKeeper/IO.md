@@ -152,7 +152,7 @@ public void configure(InetSocketAddress addr, int maxcc, int backlog, boolean se
 }
 ```
 
-start
+start selectorThreads、acceptThread and expirerThread
 
 
 ```java
@@ -286,7 +286,9 @@ private void select() {
 
 ### SelectorThread
 
-SelectorThread SelectorThread从AcceptThread接收新接收的连接，并负责选择连接之间的I/O准备情况。 这个线程是唯一一个对选择器执行 **非线程安全或潜在阻塞调用的线程** (注册新连接和读写操作)。 将一个连接分配给一个SelectorThread是永久的，并且只有一个SelectorThread会与这个连接交互。 有1-N个SelectorThreads，连接平均分配在SelectorThreads之间。
+SelectorThread SelectorThread从AcceptThread接收新接收的连接，并负责选择连接之间的I/O准备情况。 这个线程是唯一一个对选择器执行 **非线程安全或潜在阻塞调用的线程** (注册新连接和读写操作)。 
+将一个连接分配给一个SelectorThread是永久的，并且只有一个SelectorThread会与这个连接交互。
+有1-N个SelectorThreads，连接平均分配在SelectorThreads之间。
 
 如果有一个工作线程池，当一个连接有I/O来执行时，SelectorThread通过清除它感兴趣的操作将它从选择中删除，并安排I/O由工作线程处理。
 
@@ -382,9 +384,7 @@ private void processAcceptedConnections() {
         }
     }
 }
-```
 
-```java
 protected NIOServerCnxn createConnection(SocketChannel sock, SelectionKey sk, SelectorThread selectorThread) throws IOException {
     return new NIOServerCnxn(zkServer, sock, sk, this, selectorThread);
 }
@@ -450,6 +450,327 @@ IOWorkRequest处理IO事件发生时机当SocketChannel上有数据可读时,wor
 
 
 
+```java
+public class SelectorThread extends AbstractSelectThread {
+
+    private void select() {
+        try {
+            selector.select();
+
+            Set<SelectionKey> selected = selector.selectedKeys();
+            ArrayList<SelectionKey> selectedList = new ArrayList<>(selected);
+            Collections.shuffle(selectedList);
+            Iterator<SelectionKey> selectedKeys = selectedList.iterator();
+            while (!stopped && selectedKeys.hasNext()) {
+                SelectionKey key = selectedKeys.next();
+                selected.remove(key);
+
+                if (!key.isValid()) {
+                    cleanupSelectionKey(key);
+                    continue;
+                }
+                if (key.isReadable() || key.isWritable()) {
+                    handleIO(key);
+                } else {
+                    LOG.warn("Unexpected ops in select {}", key.readyOps());
+                }
+            }
+        } catch (IOException e) {
+            LOG.warn("Ignoring IOException while selecting", e);
+        }
+    }
+
+    private void handleIO(SelectionKey key) {
+        IOWorkRequest workRequest = new IOWorkRequest(this, key);
+        NIOServerCnxn cnxn = (NIOServerCnxn) key.attachment();
+
+        // Stop selecting this key while processing on its
+        // connection
+        cnxn.disableSelectable();
+        key.interestOps(0);
+        touchCnxn(cnxn);
+        workerPool.schedule(workRequest);
+    }
+}
+```
+
+```java
+public class WorkerService {
+    public void schedule(WorkRequest workRequest, long id) {
+        if (stopped) {
+            workRequest.cleanup();
+            return;
+        }
+
+        ScheduledWorkRequest scheduledWorkRequest = new ScheduledWorkRequest(workRequest);
+
+        // If we have a worker thread pool, use that; otherwise, do the work
+        // directly.
+        int size = workers.size();
+        if (size > 0) {
+            try {
+                // make sure to map negative ids as well to [0, size-1]
+                int workerNum = ((int) (id % size) + size) % size;
+                ExecutorService worker = workers.get(workerNum);
+                worker.execute(scheduledWorkRequest);
+            } catch (RejectedExecutionException e) {
+                LOG.warn("ExecutorService rejected execution", e);
+                workRequest.cleanup();
+            }
+        } else {
+            // When there is no worker thread pool, do the work directly
+            // and wait for its completion
+            scheduledWorkRequest.run();
+        }
+    }
+}
+```
+```java
+private class ScheduledWorkRequest implements Runnable {
+    private final WorkRequest workRequest;
+
+    @Override
+    public void run() {
+        try {
+            // Check if stopped while request was on queue
+            if (stopped) {
+                workRequest.cleanup();
+                return;
+            }
+            workRequest.doWork();
+        } catch (Exception e) {
+            LOG.warn("Unexpected exception", e);
+            workRequest.cleanup();
+        }
+    }
+}
+```
+
+```java
+ private class IOWorkRequest extends WorkerService.WorkRequest {
+    public void doWork() throws InterruptedException {
+        if (!key.isValid()) {
+            selectorThread.cleanupSelectionKey(key);
+            return;
+        }
+
+        if (key.isReadable() || key.isWritable()) {
+            cnxn.doIO(key);
+
+            // Check if we shutdown or doIO() closed this connection
+            if (stopped) {
+                cnxn.close(ServerCnxn.DisconnectReason.SERVER_SHUTDOWN);
+                return;
+            }
+            if (!key.isValid()) {
+                selectorThread.cleanupSelectionKey(key);
+                return;
+            }
+            touchCnxn(cnxn);
+        }
+
+        // Mark this connection as once again ready for selection
+        cnxn.enableSelectable();
+        // Push an update request on the queue to resume selecting
+        // on the current set of interest ops, which may have changed
+        // as a result of the I/O operations we just performed.
+        if (!selectorThread.addInterestOpsUpdateRequest(key)) {
+            cnxn.close(ServerCnxn.DisconnectReason.CONNECTION_MODE_CHANGED);
+        }
+    }
+}
+```
+
+```java
+public class NIOServerCnxn extends ServerCnxn {
+    void doIO(SelectionKey k) throws InterruptedException {
+        try {
+            if (k.isReadable()) {
+                int rc = sock.read(incomingBuffer);
+                if (rc < 0) {
+                    try {
+                        handleFailedRead();
+                    } catch (EndOfStreamException e) {
+                        close(e.getReason());
+                        return;
+                    }
+                }
+                if (incomingBuffer.remaining() == 0) {
+                    boolean isPayload;
+                    if (incomingBuffer == lenBuffer) { // start of next request
+                        incomingBuffer.flip();
+                        isPayload = readLength(k);
+                        incomingBuffer.clear();
+                    } else {
+                        // continuation
+                        isPayload = true;
+                    }
+                    if (isPayload) { // not the case for 4letterword
+                        readPayload();
+                    } else {
+                        // four letter words take care
+                        // need not do anything else
+                        return;
+                    }
+                }
+            }
+            if (k.isWritable()) {
+                handleWrite(k);
+
+                if (!initialized && !getReadInterest() && !getWriteInterest()) {
+                    throw new CloseRequestException("responded to info probe", DisconnectReason.INFO_PROBE);
+                }
+            }
+        } catch (Throwable e) {
+            close(DisconnectReason.IO_EXCEPTION);
+        }
+    }
+
+    private void readPayload() throws IOException, InterruptedException, ClientCnxnLimitException {
+        if (incomingBuffer.remaining() != 0) { // have we read length bytes?
+            int rc = sock.read(incomingBuffer); // sock is non-blocking, so ok
+            if (rc < 0) {
+                handleFailedRead();
+            }
+        }
+
+        if (incomingBuffer.remaining() == 0) { // have we read length bytes?
+            incomingBuffer.flip();
+            packetReceived(4 + incomingBuffer.remaining());
+            if (!initialized) {
+                readConnectRequest();
+            } else {
+                readRequest();
+            }
+            lenBuffer.clear();
+            incomingBuffer = lenBuffer;
+        }
+    }
+
+    private void readConnectRequest() throws IOException, ClientCnxnLimitException {
+        if (!isZKServerRunning()) {
+            throw new IOException("ZooKeeperServer not running");
+        }
+        BinaryInputArchive bia = BinaryInputArchive.getArchive(new ByteBufferInputStream(incomingBuffer));
+        ConnectRequest request = protocolManager.deserializeConnectRequest(bia);
+        zkServer.processConnectRequest(this, request);
+        initialized = true;
+    }
+
+    protected void readRequest() throws IOException {
+        RequestHeader h = new RequestHeader();
+        ByteBufferInputStream.byteBuffer2Record(incomingBuffer, h);
+        RequestRecord request = RequestRecord.fromBytes(incomingBuffer.slice());
+        zkServer.processPacket(this, h, request);
+    }
+}
+```
+
+readRequest -> processPacket -> submitRequest -> enqueueRequest
+```java
+
+public class RequestThrottler extends ZooKeeperCriticalThread {
+  private final LinkedBlockingQueue<Request> submittedRequests = new LinkedBlockingQueue<>();
+
+  @Override
+  public void run() {
+    try {
+      while (true) {
+        if (killed) {
+          break;
+        }
+
+        Request request = submittedRequests.take();
+        // Throttling is disabled when maxRequests = 0
+        if (maxRequests > 0) {
+          while (!killed) {
+            if (dropStaleRequests && request.isStale()) {
+              // Note: this will close the connection
+              dropRequest(request);
+              request = null;
+              break;
+            }
+            if (zks.getInProcess() < maxRequests) {
+              break;
+            }
+            throttleSleep(stallTime);
+          }
+        }
+
+        if (killed) {
+          break;
+        }
+
+        // A dropped stale request will be null
+        if (request != null) {
+          if (request.isStale()) {
+            ServerMetrics.getMetrics().STALE_REQUESTS.add(1);
+          }
+          final long elapsedTime = Time.currentElapsedTime() - request.requestThrottleQueueTime;
+          ServerMetrics.getMetrics().REQUEST_THROTTLE_QUEUE_TIME.add(elapsedTime);
+          if (shouldThrottleOp(request, elapsedTime)) {
+            request.setIsThrottled(true);
+          }
+          zks.submitRequestNow(request);
+        }
+      }
+    } catch (InterruptedException e) {
+      LOG.error("Unexpected interruption", e);
+    }
+    int dropped = drainQueue();
+    LOG.info("RequestThrottler shutdown. Dropped {} requests", dropped);
+  }
+}
+```
+
+```java
+public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
+    public void submitRequestNow(Request si) {
+        if (firstProcessor == null) {
+            synchronized (this) {
+                try {
+                    // Since all requests are passed to the request
+                    // processor it should wait for setting up the request
+                    // processor chain. The state will be updated to RUNNING
+                    // after the setup.
+                    while (state == State.INITIAL) {
+                        wait(1000);
+                    }
+                } catch (InterruptedException e) {
+                    LOG.warn("Unexpected interruption", e);
+                }
+                if (firstProcessor == null || state != State.RUNNING) {
+                    throw new RuntimeException("Not started");
+                }
+            }
+        }
+        try {
+            touch(si.cnxn);
+            boolean validpacket = Request.isValid(si.type);
+            if (validpacket) {
+                setLocalSessionFlag(si);
+                firstProcessor.processRequest(si);
+                if (si.cnxn != null) {
+                    incInProcess();
+                }
+            } else {
+                LOG.warn("Received packet at server of unknown type {}", si.type);
+                // Update request accounting/throttling limits
+                requestFinished(si);
+                new UnimplementedRequestProcessor().processRequest(si);
+            }
+        } catch (MissingSessionException e) {
+            LOG.debug("Dropping request.", e);
+            // Update request accounting/throttling limits
+            requestFinished(si);
+        } catch (RequestProcessorException e) {
+            LOG.error("Unable to process request", e);
+            // Update request accounting/throttling limits
+            requestFinished(si);
+        }
+    }
+}
+```
 
 
 ## processConnectRequest 
