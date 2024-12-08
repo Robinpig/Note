@@ -250,6 +250,100 @@ execution.isolation.strategy=Semaphore
 
 Default TryableSemaphoreNoOp using threads in Hystrix, or else in calling thread.
 
+
+`execution.isolation.strategy`设置为THREAD时，command中的代码会放到线程池里执行，跟发起command调用的线程隔离开
+
+> execution.isolation.strategy
+>
+> This property indicates which isolation strategy HystrixCommand.run() executes with, one of the following two choices:
+>
+> THREAD — it executes on a separate thread and concurrent requests are limited by the number of threads in the thread-pool SEMAPHORE — it executes on the calling thread and concurrent requests are limited by the semaphore count
+
+
+
+优先采用HystrixThreadPoolKey来标识线程池，如果没有配置HystrixThreadPoolKey那么就使用HystrixCommandGroupKey来标识。command跟线程池的对应关系，就看HystrixCommandKey、HystrixThreadPoolKey、HystrixCommandGroupKey这三个参数的配置优先采用HystrixThreadPoolKey来标识线程池，如果没有配置HystrixThreadPoolKey那么就使用HystrixCommandGroupKey来标识。command跟线程池的对应关系，就看HystrixCommandKey、HystrixThreadPoolKey、HystrixCommandGroupKey这三个参数的配置
+```java
+private static HystrixThreadPoolKey initThreadPoolKey(HystrixThreadPoolKey threadPoolKey, HystrixCommandGroupKey groupKey, String threadPoolKeyOverride) {
+    if (threadPoolKeyOverride == null) {
+        // we don't have a property overriding the value so use either HystrixThreadPoolKey or HystrixCommandGroup
+        if (threadPoolKey == null) {
+            /* use HystrixCommandGroup if HystrixThreadPoolKey is null */
+            return HystrixThreadPoolKey.Factory.asKey(groupKey.name());
+        } else {
+            return threadPoolKey;
+        }
+    } else {
+        // we have a property defining the thread-pool so use it instead
+        return HystrixThreadPoolKey.Factory.asKey(threadPoolKeyOverride);
+    }
+}
+```
+Hystrix会保证同一个线程池标识只会创建一个线程池：
+
+```java
+    /* package */static HystrixThreadPool getInstance(HystrixThreadPoolKey threadPoolKey, HystrixThreadPoolProperties.Setter propertiesBuilder) {
+        // get the key to use instead of using the object itself so that if people forget to implement equals/hashcode things will still work
+        String key = threadPoolKey.name();
+
+        // this should find it for all but the first time
+        HystrixThreadPool previouslyCached = threadPools.get(key);
+        if (previouslyCached != null) {
+            return previouslyCached;
+        }
+
+        // if we get here this is the first time so we need to initialize
+        synchronized (HystrixThreadPool.class) {
+            if (!threadPools.containsKey(key)) {
+                threadPools.put(key, new HystrixThreadPoolDefault(threadPoolKey, propertiesBuilder));
+            }
+        }
+        return threadPools.get(key);
+    }    /* package */static HystrixThreadPool getInstance(HystrixThreadPoolKey threadPoolKey, HystrixThreadPoolProperties.Setter propertiesBuilder) {
+        // get the key to use instead of using the object itself so that if people forget to implement equals/hashcode things will still work
+        String key = threadPoolKey.name();
+
+        // this should find it for all but the first time
+        HystrixThreadPool previouslyCached = threadPools.get(key);
+        if (previouslyCached != null) {
+            return previouslyCached;
+        }
+
+        // if we get here this is the first time so we need to initialize
+        synchronized (HystrixThreadPool.class) {
+            if (!threadPools.containsKey(key)) {
+                threadPools.put(key, new HystrixThreadPoolDefault(threadPoolKey, propertiesBuilder));
+            }
+        }
+        return threadPools.get(key);
+    }
+```
+jdk在队列满了之后会创建线程执行新任务直到线程数量达到maximumPoolSize，而hystrix在队列满了之后直接拒绝新任务，maximumSize这项配置成了摆设。
+
+原因就在于hystrix判断队列是否满是否要拒绝新任务，没有通过jdk线程池在判断，而是自己判断的
+
+```java
+public boolean isQueueSpaceAvailable() {
+    if (queueSize <= 0) {
+        // we don't have a queue so we won't look for space but instead
+        // let the thread-pool reject or not
+        return true;
+    } else {
+        return threadPool.getQueue().size() < properties.queueSizeRejectionThreshold().get();
+    }
+}
+
+public Subscription schedule(Action0 action, long delayTime, TimeUnit unit) {
+    if (threadPool != null) {
+        if (!threadPool.isQueueSpaceAvailable()) {
+            throw new RejectedExecutionException("Rejected command because thread-pool queueSize is at rejection threshold.");
+        }
+    }
+    return worker.schedule(new HystrixContexSchedulerAction(concurrencyStrategy, action), delayTime, unit);
+}
+```
+
+
+
 #### HystrixThreadPool
 
 ```java
