@@ -37,7 +37,7 @@ spring.cloud.sentinel.transport.dashboard = localhost:8080
 - [CircuitBreaker](/docs/CS/Framework/Spring_Cloud/Sentinel/CircuitBreaker.md)
 
 
-
+Sentinel通过AspectJ切入接口 为其添加@Around通知 并使用try-catch包裹
 
 
 
