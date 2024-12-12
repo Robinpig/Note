@@ -2,6 +2,10 @@
 
 
 
+```shell
+zkCli -server 127.0.0.1:2181
+```
+
 
 ```java
 class SendThread extends ZooKeeperThread {
@@ -44,6 +48,7 @@ class SendThread extends ZooKeeperThread {
 }
 ```
 ClientCnxnSocketNIO
+
 ```java
 @Override
 void connect(InetSocketAddress addr) throws IOException {
@@ -74,3 +79,8 @@ void connect(InetSocketAddress addr) throws IOException {
         return sock;
     }
 ```
+
+
+## Links
+
+- [ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)

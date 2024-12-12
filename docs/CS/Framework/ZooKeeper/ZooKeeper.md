@@ -31,13 +31,37 @@ ZooKeeper provides to its clients the abstraction of a set of data nodes (znodes
 ZooKeeper also has the following two liveness and durability guarantees: if a majority of ZooKeeper servers are active and communicating the service will be available;
 and if the ZooKeeper service responds successfully to a change request, that change persists across any number of failures as long as a quorum of servers is eventually able to recover.
 
-> 
+> [!TIP]
 >
 > [Build and run Zookeeper](/docs/CS/Framework/ZooKeeper/start.md)
 
+### Consistency Guarantees
+ZooKeeper is a high performance, scalable service. Both reads and write operations are designed to be fast, though reads are faster than writes. The reason for this is that in the case of reads, ZooKeeper can serve older data, which in turn is due to ZooKeeper's consistency guarantees:
+
+Sequential Consistency
+Updates from a client will be applied in the order that they were sent.
+
+Atomicity
+Updates either succeed or fail -- there are no partial results.
+
+Single System Image
+A client will see the same view of the service regardless of the server that it connects to.
+
+Reliability
+Once an update has been applied, it will persist from that time forward until a client overwrites the update. This guarantee has two corollaries:
+
+If a client gets a successful return code, the update will have been applied. On some failures (communication errors, timeouts, etc) the client will not know if the update has applied or not. We take steps to minimize the failures, but the guarantee is only present with successful return codes. (This is called the monotonicity condition in Paxos.)
+
+Any updates that are seen by the client, through a read request or successful update, will never be rolled back when recovering from server failures.
+
+Timeliness
+The clients view of the system is guaranteed to be up-to-date within a certain time bound (on the order of tens of seconds). Either system changes will be seen by a client within this bound, or the client will detect a service outage.
+
+
+
+
 
 ## Architecture
-
 
 
 Server端主要组件有
@@ -74,6 +98,51 @@ Paths to nodes are always expressed as canonical, absolute, slash-separated path
 <p style="text-align: center;">
 Fig.1. ZooKeeper's Hierarchical Namespace.
 </p>
+
+
+Zookeeper的这种层次模型称作DataTree DataTree的每个节点叫作ZNode
+
+```java
+
+public class ZKDatabase {
+
+    private static final Logger LOG = LoggerFactory.getLogger(ZKDatabase.class);
+
+    /**
+     * make sure on a clear you take care of
+     * all these members.
+     */
+    protected DataTree dataTree;
+    protected ConcurrentHashMap<Long, Integer> sessionsWithTimeouts;
+    protected FileTxnSnapLog snapLog;
+    protected long minCommittedLog, maxCommittedLog;
+}
+```
+
+
+```java
+public class DataTree {
+    /**
+     * This map provides a fast lookup to the data nodes. The tree is the
+     * source of truth and is where all the locking occurs
+     */
+    private final NodeHashMap nodes;
+
+    private IWatchManager dataWatches;
+
+    private IWatchManager childWatches;
+}
+
+
+public class NodeHashMapImpl implements NodeHashMap {
+
+    private final ConcurrentHashMap<String, DataNode> nodes;
+    private final boolean digestEnabled;
+    private final DigestCalculator digestCalculator;
+
+    private final AdHash hash;
+}
+```
 
 ### ZNodes
 
@@ -134,14 +203,18 @@ curator的LeaderSelector
 ### Watches
 
 Clients can set watches on znodes.
-Changes to that znode trigger the watch and then clear the watch. When a watch triggers, ZooKeeper sends the client a notification.
+Changes to that znode trigger the watch and then clear the watch. 
+When a watch triggers, ZooKeeper sends the client a notification.
 
-**New in 3.6.0:** Clients can also set permanent, recursive watches on a znode that are not removed when triggered and that trigger for changes on the registered znode as well as any children znodes recursively.
+> **New in 3.6.0:** Clients can also set permanent, recursive watches on a znode that are not removed when triggered and that trigger for changes on the registered znode as well as any children znodes recursively.
 
 ZooKeeper also has the notion of ephemeral nodes.
 These znodes exists as long as the session that created the znode is active.
 When the session ends the znode is deleted. Because of this behavior ephemeral znodes are not allowed to have children.
 
+
+最核心或者说关键的代码就是创建一个列表来存放观察者
+而在 ZooKeeper 中则是在客户端和服务器端分别实现两个存放观察者列表，即：ZKWatchManager 和 WatchManager
 
 
 在DataTree中有两个IWatchManager类型的对象，一个是dataWatches，一个是childWatches， 其中:
@@ -207,6 +280,7 @@ public class WatchManager implements IWatchManager {
     private int recursiveWatchQty = 0;
 }
 ```
+#### EventType
 
 EventType是一个枚举类型用来列举Zookeeper可能发生的事件， 可以看到监听事件的触发主要发生在节点状态的变更与节点数据的变更时触发
 
@@ -458,11 +532,127 @@ class ZKWatchManager implements ClientWatchManager {
 ```
 ### session
 
-Session 指客户端会话。在 ZooKeeper 中，一个客户端会话是指 客户端和服务器之间的一个 TCP 长连接。客户端启动的时候，会与服务端建立一个 TCP 连接，客户端会话的生命周期，则是从第一次连接建立开始算起。通过这个连接，客户端能够通过心跳检测与服务器保持有效的会话，并向 ZooKeeper 服务器发送请求并接收响应，以及接收来自服务端的 Watch 事件通知
+Session 指客户端会话。在 ZooKeeper 中，一个客户端会话是指 客户端和服务器之间的一个 TCP 长连接。
+客户端启动的时候，会与服务端建立一个 TCP 连接，客户端会话的生命周期，则是从第一次连接建立开始算起。通过这个连接，客户端能够通过心跳检测与服务器保持有效的会话，并向 ZooKeeper 服务器发送请求并接收响应，以及接收来自服务端的 Watch 事件通知
 
-Session 的 sessionTimeout 参数，用来控制一个客户端会话的超时时间。当服务器压力太大 或者是网络故障等各种原因导致客户端连接断开时，Client 会自动从 ZooKeeper 地址列表中逐一尝试重连（重试策略可使用 Curator 来实现）。只要在 sessionTimeout 规定的时间内能够重新连接上集群中任意一台服务器，那么之前创建的会话仍然有效。如果，在 sessionTimeout 时间外重连了，就会因为 Session 已经被清除了，而被告知 SESSION_EXPIRED，此时需要程序去恢复临时数据；还有一种 Session 重建后的在新节点上的数据，被之前节点上因网络延迟晚来的写请求所覆盖的情况，在 ZOOKEEPER-417 中被提出，并在该 JIRA 中新加入的 SessionMovedException，使得 用同一个 sessionld/sessionPasswd 重建 Session 的客户端能感知到，但是这个问题到 ZOOKEEPER-2219 仍然没有得到很好的解决
+Session 的 sessionTimeout 参数，用来控制一个客户端会话的超时时间。
+当服务器压力太大 或者是网络故障等各种原因导致客户端连接断开时，Client 会自动从 ZooKeeper 地址列表中逐一尝试重连（重试策略可使用 Curator 来实现）。只要在 sessionTimeout 规定的时间内能够重新连接上集群中任意一台服务器，那么之前创建的会话仍然有效。如果，在 sessionTimeout 时间外重连了，就会因为 Session 已经被清除了，而被告知 SESSION_EXPIRED，此时需要程序去恢复临时数据；还有一种 Session 重建后的在新节点上的数据，被之前节点上因网络延迟晚来的写请求所覆盖的情况，在 ZOOKEEPER-417 中被提出，并在该 JIRA 中新加入的 SessionMovedException，使得 用同一个 sessionld/sessionPasswd 重建 Session 的客户端能感知到，但是这个问题到 ZOOKEEPER-2219 仍然没有得到很好的解决
 
 ![](https://yuzhouwan.com/picture/zk/zk_transition.png)
+
+ZooKeeperServer持有一个SessionTracker
+```java
+public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
+  protected SessionTracker sessionTracker;
+}
+```
+SessionTrackerImpl中sessionsById使用ConcurrentHashMap存储session
+```java
+public class SessionTrackerImpl extends ZooKeeperCriticalThread implements SessionTracker {
+
+    protected final ConcurrentHashMap<Long, SessionImpl> sessionsById = new ConcurrentHashMap<>();
+
+    private final ExpiryQueue<SessionImpl> sessionExpiryQueue;
+
+    protected final ConcurrentMap<Long, Integer> sessionsWithTimeout;
+    private final AtomicLong nextSessionId = new AtomicLong();
+}
+```
+
+
+processConnectRequest调用了reopenSession
+
+```java
+public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
+    long createSession(ServerCnxn cnxn, byte[] passwd, int timeout) {
+        if (passwd == null) {
+            // Possible since it's just deserialized from a packet on the wire.
+            passwd = new byte[0];
+        }
+        long sessionId = sessionTracker.createSession(timeout);
+        Random r = new Random(sessionId ^ superSecret);
+        r.nextBytes(passwd);
+        CreateSessionTxn txn = new CreateSessionTxn(timeout);
+        cnxn.setSessionId(sessionId);
+        Request si = new Request(cnxn, sessionId, 0, OpCode.createSession, RequestRecord.fromRecord(txn), null);
+        submitRequest(si);
+        return sessionId;
+    }
+}
+```
+
+
+```java
+public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
+    public void reopenSession(ServerCnxn cnxn, long sessionId, byte[] passwd, int sessionTimeout) throws IOException {
+        if (checkPasswd(sessionId, passwd)) {
+            revalidateSession(cnxn, sessionId, sessionTimeout);
+        } else {
+            finishSessionInit(cnxn, false);
+        }
+    }
+}
+```
+
+```java
+protected void revalidateSession(ServerCnxn cnxn, long sessionId, int sessionTimeout) throws IOException {
+  boolean rc = sessionTracker.touchSession(sessionId, sessionTimeout);
+  finishSessionInit(cnxn, rc);
+}
+```
+
+
+```java
+public class SessionTrackerImpl extends ZooKeeperCriticalThread implements SessionTracker {
+    public synchronized boolean touchSession(long sessionId, int timeout) {
+        SessionImpl s = sessionsById.get(sessionId);
+
+        if (s == null) {
+            logTraceTouchInvalidSession(sessionId, timeout);
+            return false;
+        }
+
+        if (s.isClosing()) {
+            logTraceTouchClosingSession(sessionId, timeout);
+            return false;
+        }
+
+        updateSessionExpiry(s, timeout);
+        return true;
+    }
+}
+```
+
+
+#### session expire
+
+
+```java
+public class SessionTrackerImpl extends ZooKeeperCriticalThread implements SessionTracker {
+ @Override
+    public void run() {
+        try {
+            while (running) {
+                long waitTime = sessionExpiryQueue.getWaitTime();
+                if (waitTime > 0) {
+                    Thread.sleep(waitTime);
+                    continue;
+                }
+
+                for (SessionImpl s : sessionExpiryQueue.poll()) {
+                    ServerMetrics.getMetrics().STALE_SESSIONS_EXPIRED.add(1);
+                    setSessionClosing(s.sessionId);
+                    expirer.expire(s);
+                }
+            }
+        } catch (InterruptedException e) {
+            handleException(this.getName(), e);
+        }
+        LOG.info("SessionTrackerImpl exited loop!");
+    }
+}
+```
+
 
 ### ZooKeeper guarantees
 
@@ -1194,6 +1384,109 @@ public class ClientCnxn {
 
 
 wakeupCnxn
+
+## process
+
+```dot
+digraph "QuorumZooKeeperServer" {
+rankdir = "BT"
+splines  = ortho;
+fontname = "Inconsolata";
+
+node [colorscheme = ylgnbu4];
+edge [colorscheme = dark28, dir = both];
+
+FollowerZooKeeperServer [shape = record, label = "{ FollowerZooKeeperServer |  }"];
+LeaderZooKeeperServer   [shape = record, label = "{ LeaderZooKeeperServer |  }"];
+LearnerZooKeeperServer  [shape = record, label = "{ LearnerZooKeeperServer |  }"];
+ObserverZooKeeperServer [shape = record, label = "{ ObserverZooKeeperServer |  }"];
+QuorumZooKeeperServer   [shape = record, label = "{ QuorumZooKeeperServer |  }"];
+ZooKeeperServer         [shape = record, label = "{ ZooKeeperServer |  }"];
+
+FollowerZooKeeperServer -> LearnerZooKeeperServer  [color = "#000082", style = solid , arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+LeaderZooKeeperServer   -> QuorumZooKeeperServer   [color = "#000082", style = solid , arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+LearnerZooKeeperServer  -> QuorumZooKeeperServer   [color = "#000082", style = solid , arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+ObserverZooKeeperServer -> LearnerZooKeeperServer  [color = "#000082", style = solid , arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+QuorumZooKeeperServer   -> ZooKeeperServer         [color = "#000082", style = solid , arrowtail = none    , arrowhead = normal  , taillabel = "", label = "", headlabel = ""];
+
+}
+```
+
+```java
+public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
+    protected void setupRequestProcessors() {
+        RequestProcessor finalProcessor = new FinalRequestProcessor(this);
+        RequestProcessor syncProcessor = new SyncRequestProcessor(this, finalProcessor);
+        ((SyncRequestProcessor) syncProcessor).start();
+        firstProcessor = new PrepRequestProcessor(this, syncProcessor);
+        ((PrepRequestProcessor) firstProcessor).start();
+    }
+}
+```
+
+
+```java
+public class LeaderZooKeeperServer extends QuorumZooKeeperServer {
+    @Override
+    protected void setupRequestProcessors() {
+        RequestProcessor finalProcessor = new FinalRequestProcessor(this);
+        RequestProcessor toBeAppliedProcessor = new Leader.ToBeAppliedRequestProcessor(finalProcessor, getLeader());
+        commitProcessor = new CommitProcessor(toBeAppliedProcessor, Long.toString(getServerId()), false, getZooKeeperServerListener());
+        commitProcessor.start();
+        ProposalRequestProcessor proposalProcessor = new ProposalRequestProcessor(this, commitProcessor);
+        proposalProcessor.initialize();
+        prepRequestProcessor = new PrepRequestProcessor(this, proposalProcessor);
+        prepRequestProcessor.start();
+        firstProcessor = new LeaderRequestProcessor(this, prepRequestProcessor);
+
+        setupContainerManager();
+    }
+}
+```
+
+```java
+public class FollowerZooKeeperServer extends LearnerZooKeeperServer {
+    @Override
+    protected void setupRequestProcessors() {
+        RequestProcessor finalProcessor = new FinalRequestProcessor(this);
+        commitProcessor = new CommitProcessor(finalProcessor, Long.toString(getServerId()), true, getZooKeeperServerListener());
+        commitProcessor.start();
+        firstProcessor = new FollowerRequestProcessor(this, commitProcessor);
+        ((FollowerRequestProcessor) firstProcessor).start();
+        syncProcessor = new SyncRequestProcessor(this, new SendAckRequestProcessor(getFollower()));
+        syncProcessor.start();
+    }
+}
+```
+
+```java
+public class ObserverZooKeeperServer extends LearnerZooKeeperServer {
+    @Override
+    protected void setupRequestProcessors() {
+        // We might consider changing the processor behaviour of
+        // Observers to, for example, remove the disk sync requirements.
+        // Currently, they behave almost exactly the same as followers.
+        RequestProcessor finalProcessor = new FinalRequestProcessor(this);
+        commitProcessor = new CommitProcessor(finalProcessor, Long.toString(getServerId()), true, getZooKeeperServerListener());
+        commitProcessor.start();
+        firstProcessor = new ObserverRequestProcessor(this, commitProcessor);
+        ((ObserverRequestProcessor) firstProcessor).start();
+
+        /*
+         * Observer should write to disk, so that the it won't request
+         * too old txn from the leader which may lead to getting an entire
+         * snapshot.
+         *
+         * However, this may degrade performance as it has to write to disk
+         * and do periodic snapshot which may double the memory requirements
+         */
+        if (syncRequestProcessorEnabled) {
+            syncProcessor = new SyncRequestProcessor(this, null);
+            syncProcessor.start();
+        }
+    }
+}
+```
 
 ## Server
 
