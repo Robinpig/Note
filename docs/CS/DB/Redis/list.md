@@ -28,6 +28,9 @@ typedef struct listIter {
 - get len $O(1)$
 - value void* support multiple types
 
+
+Redis3.2之前底层数据结构由linkedlist或者ziplist实现 优先ziplist
+
 Lists are also encoded in a special way to save a lot of space.
 The number of entries allowed per internal list node can be specified as a fixed maximum size or a maximum number of elements.
 For a fixed maximum size, use -5 through -1, meaning:
