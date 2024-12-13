@@ -1065,12 +1065,10 @@ public class DatadirCleanupManager {
 ```java
 public void start() {
     if (PurgeTaskStatus.STARTED == purgeTaskStatus) {
-        LOG.warn("Purge task is already running.");
         return;
     }
     // Don't schedule the purge task with zero or negative purge interval.
     if (purgeInterval <= 0) {
-        LOG.info("Purge task is not scheduled.");
         return;
     }
 
@@ -1095,7 +1093,6 @@ static class PurgeTask extends TimerTask {
 
     @Override
     public void run() {
-        LOG.info("Purge task started.");
         try {
             PurgeTxnLog.purge(logsDir, snapsDir, snapRetainCount);
         } catch (Exception e) {

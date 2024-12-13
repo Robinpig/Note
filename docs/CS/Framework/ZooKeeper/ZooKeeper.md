@@ -255,7 +255,6 @@ public static IWatchManager createWatchManager() throws IOException {
     }
     try {
         IWatchManager watchManager = (IWatchManager) Class.forName(watchManagerName).getConstructor().newInstance();
-        LOG.info("Using {} as watch manager", watchManagerName);
         return watchManager;
     } catch (Exception e) {
         IOException ioe = new IOException("Couldn't instantiate " + watchManagerName, e);
@@ -1900,6 +1899,55 @@ public Long update(E elem, int timeout) {
 
 dataWatches和childWatches分别是如何创建呢我们可以看下在DataTree类型的构造器中初始化监听管理器对象是通过WatchManagerFactory工厂类型提供的工厂方法创建的
 
+```java
+
+public interface IWatchManager {
+    boolean addWatch(String path, Watcher watcher);
+
+    default boolean addWatch(String path, Watcher watcher, WatcherMode watcherMode) {
+        if (watcherMode == WatcherMode.DEFAULT_WATCHER_MODE) {
+            return addWatch(path, watcher);
+        }
+        throw new UnsupportedOperationException();  // custom implementations must defeat this
+    }
+
+    boolean containsWatcher(String path, Watcher watcher);
+
+    default boolean containsWatcher(String path, Watcher watcher, @Nullable WatcherMode watcherMode) {
+        if (watcherMode == null || watcherMode == WatcherMode.DEFAULT_WATCHER_MODE) {
+            return containsWatcher(path, watcher);
+        }
+        throw new UnsupportedOperationException("persistent watch");
+    }
+
+    boolean removeWatcher(String path, Watcher watcher);
+
+    default boolean removeWatcher(String path, Watcher watcher, WatcherMode watcherMode) {
+        if (watcherMode == null || watcherMode == WatcherMode.DEFAULT_WATCHER_MODE) {
+            return removeWatcher(path, watcher);
+        }
+        throw new UnsupportedOperationException("persistent watch");
+    }
+
+    void removeWatcher(Watcher watcher);
+
+    WatcherOrBitSet triggerWatch(String path, EventType type, long zxid, List<ACL> acl);
+
+    WatcherOrBitSet triggerWatch(String path, EventType type, long zxid, List<ACL> acl, WatcherOrBitSet suppress);
+
+    int size();
+
+    void shutdown();
+
+    WatchesSummary getWatchesSummary();
+
+    WatchesReport getWatches();
+
+    WatchesPathReport getWatchesByPath();
+
+    void dumpWatches(PrintWriter pwriter, boolean byPath);
+}
+```
 
 ## Storage
 

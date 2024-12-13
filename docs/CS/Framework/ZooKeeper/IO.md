@@ -152,7 +152,7 @@ public void configure(InetSocketAddress addr, int maxcc, int backlog, boolean se
 }
 ```
 
-start selectorThreads、acceptThread and expirerThread
+start workerPool, selectorThreads、acceptThread and expirerThread
 
 
 ```java
@@ -282,6 +282,65 @@ private void select() {
 }
 ```
 
+
+```java
+private boolean doAccept() {
+            boolean accepted = false;
+            SocketChannel sc = null;
+            try {
+                sc = acceptSocket.accept();
+                accepted = true;
+                if (limitTotalNumberOfCnxns()) {
+                    throw new IOException("Too many connections max allowed is " + maxCnxns);
+                }
+                InetAddress ia = sc.socket().getInetAddress();
+                int cnxncount = getClientCnxnCount(ia);
+
+                if (maxClientCnxns > 0 && cnxncount >= maxClientCnxns) {
+                    throw new IOException("Too many connections from " + ia + " - max is " + maxClientCnxns);
+                }
+
+                sc.configureBlocking(false);
+
+                // Round-robin assign this connection to a selector thread
+                if (!selectorIterator.hasNext()) {
+                    selectorIterator = selectorThreads.iterator();
+                }
+                SelectorThread selectorThread = selectorIterator.next();
+                if (!selectorThread.addAcceptedConnection(sc)) {
+                    throw new IOException("Unable to add connection to selector queue"
+                                          + (stopped ? " (shutdown in progress)" : ""));
+                }
+                acceptErrorLogger.flush();
+            } catch (IOException e) {
+                // accept, maxClientCnxns, configureBlocking
+                ServerMetrics.getMetrics().CONNECTION_REJECTED.add(1);
+                acceptErrorLogger.rateLimitLog("Error accepting new connection: " + e.getMessage());
+                fastCloseSock(sc);
+            }
+            return accepted;
+        }
+```
+
+
+```java
+   /**
+         * Mask off the listen socket interest ops and use select() to sleep
+         * so that other threads can wake us up by calling wakeup() on the
+         * selector.
+         */
+        private void pauseAccept(long millisecs) {
+            acceptKey.interestOps(0);
+            try {
+                selector.select(millisecs);
+            } catch (IOException e) {
+                // ignore
+            } finally {
+                acceptKey.interestOps(SelectionKey.OP_ACCEPT);
+            }
+        }
+
+```
 
 
 ### SelectorThread
@@ -432,7 +491,7 @@ private void processInterestOpsUpdateRequests() {
     }
 }
 ```
-
+ZooKeeper为了追求性能的极致,设计为由selector thread调用key.interestOps(OP_READ & OP_WRITE), 因此worker thread就需在IO处理完毕后告诉selector thread该socketChannel可以去监听OP_READ和OP_WRITE事件了, updateQueue就是存放那些需要监听OP_READ和OP_WRITE事件的
 
 
 IOWorkRequest处理IO事件发生时机当SocketChannel上有数据可读时,worker thread调用NIOServerCnxn.doIO()进行读操作
@@ -722,7 +781,7 @@ public class RequestThrottler extends ZooKeeperCriticalThread {
   }
 }
 ```
-
+调用processor chain处理
 ```java
 public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
     public void submitRequestNow(Request si) {
@@ -754,18 +813,12 @@ public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
                     incInProcess();
                 }
             } else {
-                LOG.warn("Received packet at server of unknown type {}", si.type);
-                // Update request accounting/throttling limits
                 requestFinished(si);
                 new UnimplementedRequestProcessor().processRequest(si);
             }
         } catch (MissingSessionException e) {
-            LOG.debug("Dropping request.", e);
-            // Update request accounting/throttling limits
             requestFinished(si);
         } catch (RequestProcessorException e) {
-            LOG.error("Unable to process request", e);
-            // Update request accounting/throttling limits
             requestFinished(si);
         }
     }
@@ -904,10 +957,6 @@ void doIO(SelectionKey k) throws InterruptedException {
             }
         }
     } catch (CancelledKeyException e) {
-        LOG.warn("CancelledKeyException causing close of session: 0x{}", Long.toHexString(sessionId));
-
-        LOG.debug("CancelledKeyException stack trace", e);
-
         close(DisconnectReason.CANCELLED_KEY_EXCEPTION);
     } catch (CloseRequestException e) {
         // expecting close to log session closure
