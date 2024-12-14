@@ -68,6 +68,7 @@ server.4=127.0.0.1:2004:3004:observer
 ```
 
 
+
 leader选举存在与两个阶段中，一个是服务器启动时的leader选举。 一个是运行过程中leader节点宕机导致的leader选举
 
 
@@ -75,19 +76,50 @@ The request for the current leader will consist solely of an xid: int xid
 
 启动时候从磁盘加载数据到内存，然后开启服务端的网络处理服务，然后开启一个管理端，接下来就进入比较重要的选举功能
 
-zookeeper 选举底层主要分为选举应用层和消息传输队列层，第一层应用层队列统一接收和发送选票，而第二层传输层队列，是按照服务端 sid 分成了多个队列，是为了避免给每台服务端发送消息互相影响。比如对某台机器发送不成功不会影响正常服务端的发送
+zookeeper 选举底层主要分为选举应用层和消息传输队列层，第一层应用层队列统一接收和发送选票，而第二层传输层队列，
+是按照服务端 sid 分成了多个队列，是为了避免给每台服务端发送消息互相影响。比如对某台机器发送不成功不会影响正常服务端的发送
+
+
+```java
+public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
+    public synchronized void startup() {
+        if (sessionTracker == null) {
+            createSessionTracker();
+        }
+        startSessionTracker();
+        setupRequestProcessors();
+
+        startRequestThrottler();
+
+        registerJMX();
+
+        startJvmPauseMonitor();
+
+        registerMetrics();
+
+        setState(State.RUNNING);
+
+        requestPathMetricsCollector.start();
+
+        localSessionEnabled = sessionTracker.isLocalSessionsEnabled();
+
+        notifyAll();
+    }
+}
+```
 
 #### startLeaderElection
 
-This class manages the quorum protocol. There are three states this server can be in:
+This QuorumPeer manages the quorum protocol. There are three states this server can be in:
 1. Leader election - each server will elect a leader (proposing itself as a leader initially).
 2. Follower - the server will synchronize with the leader and replicate any transactions.
 
-This class will setup a datagram socket that will always respond with its view of the current leader. The response will take the form of:
-int xid;
-long myid;
-long leader_id;
-long leader_zxid;
+This class will setup a datagram socket that will always respond with its view of the current leader. 
+The response will take the form of:
+- int xid;
+- long myid;
+- long leader_id;
+- long leader_zxid;
 
 优先zxid最大 其次myid最大
 
@@ -867,35 +899,7 @@ class WorkerReceiver extends ZooKeeperThread {
 @Override
 public void run() {
     updateThreadName();
-
-    LOG.debug("Starting quorum peer");
-    try {
-        jmxQuorumBean = new QuorumBean(this);
-        MBeanRegistry.getInstance().register(jmxQuorumBean, null);
-        for (QuorumServer s : getView().values()) {
-            ZKMBeanInfo p;
-            if (getMyId() == s.id) {
-                p = jmxLocalPeerBean = new LocalPeerBean(this);
-                try {
-                    MBeanRegistry.getInstance().register(p, jmxQuorumBean);
-                } catch (Exception e) {
-                    LOG.warn("Failed to register with JMX", e);
-                    jmxLocalPeerBean = null;
-                }
-            } else {
-                RemotePeerBean rBean = new RemotePeerBean(this, s);
-                try {
-                    MBeanRegistry.getInstance().register(rBean, jmxQuorumBean);
-                    jmxRemotePeerBean.put(s.id, rBean);
-                } catch (Exception e) {
-                    LOG.warn("Failed to register with JMX", e);
-                }
-            }
-        }
-    } catch (Exception e) {
-        LOG.warn("Failed to register with JMX", e);
-        jmxQuorumBean = null;
-    }
+    // ... JMX
 
     try {
         /*
@@ -910,7 +914,7 @@ public void run() {
             case LOOKING:
                 LOG.info("LOOKING");
                 ServerMetrics.getMetrics().LOOKING_COUNT.add(1);
-
+                // readonlymode see ZOOKEEPER-784
                 if (Boolean.getBoolean("readonlymode.enabled")) {
                     LOG.info("Attempting to start ReadOnlyZooKeeperServer");
 
@@ -1043,71 +1047,26 @@ public void run() {
 
 #### case LOOKING
 
+> readonlymode默认禁用 这里主要分析参与选举的状态
+
 由于是刚刚启动，是 LOOKING 状态。所以走第一条分支。调用 setCurrentVote(makeLEStrategy().lookForLeader())
 
-```java
+```
 case LOOKING:
     LOG.info("LOOKING");
     ServerMetrics.getMetrics().LOOKING_COUNT.add(1);
-
-    if (Boolean.getBoolean("readonlymode.enabled")) {
-        LOG.info("Attempting to start ReadOnlyZooKeeperServer");
-
-        // Create read-only server but don't start it immediately
-        final ReadOnlyZooKeeperServer roZk = new ReadOnlyZooKeeperServer(logFactory, this, this.zkDb);
-
-        // Instead of starting roZk immediately, wait some grace
-        // period before we decide we're partitioned.
-        //
-        // Thread is used here because otherwise it would require
-        // changes in each of election strategy classes which is
-        // unnecessary code coupling.
-        Thread roZkMgr = new Thread() {
-            public void run() {
-                try {
-                    // lower-bound grace period to 2 secs
-                    sleep(Math.max(2000, tickTime));
-                    if (ServerState.LOOKING.equals(getPeerState())) {
-                        roZk.startup();
-                    }
-                } catch (InterruptedException e) {
-                    LOG.info("Interrupted while attempting to start ReadOnlyZooKeeperServer, not started");
-                } catch (Exception e) {
-                    LOG.error("FAILED to start ReadOnlyZooKeeperServer", e);
-                }
-            }
-        };
-        try {
-            roZkMgr.start();
-            reconfigFlagClear();
-            if (shuttingDownLE) {
-                shuttingDownLE = false;
-                startLeaderElection();
-            }
-            setCurrentVote(makeLEStrategy().lookForLeader());
-            checkSuspended();
-        } catch (Exception e) {
-            LOG.warn("Unexpected exception", e);
-            setPeerState(ServerState.LOOKING);
-        } finally {
-            // If the thread is in the the grace period, interrupt
-            // to come out of waiting.
-            roZkMgr.interrupt();
-            roZk.shutdown();
+    try {
+        reconfigFlagClear();
+        if (shuttingDownLE) {
+            shuttingDownLE = false;
+            startLeaderElection();
         }
-    } else {
-        try {
-            reconfigFlagClear();
-            if (shuttingDownLE) {
-                shuttingDownLE = false;
-                startLeaderElection();
-            }
-            setCurrentVote(makeLEStrategy().lookForLeader());
-        } catch (Exception e) {
-            LOG.warn("Unexpected exception", e);
-            setPeerState(ServerState.LOOKING);
-        }
+        setCurrentVote(makeLEStrategy().lookForLeader());
+    } catch (Exception e) {
+        LOG.warn("Unexpected exception", e);
+        setPeerState(ServerState.LOOKING);
     }
+    
     break;
 ```
 

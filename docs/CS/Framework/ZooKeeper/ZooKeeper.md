@@ -192,13 +192,374 @@ ZooKeeper 的每个 ZNode 上都会存储数据，对应于每个 ZNode，ZooKee
 如果想要让写入数据的操作支持 CAS，则可以借助 Versionable#withVersion 方法，在 setData() 的同时指定当前数据的 verison。如果写入成功，则说明在当前数据写入的过程中，没有其他用户对该 ZNode 节点的内容进行过修改；否则，会抛出一个 KeeperException.BadVersionException，以此可以判断本次 CAS 写入是失败的。而这样做的好处就是，可以避免 “并发局部更新 ZNode 节点内容” 时，发生相互覆盖的问题
 
 
-### Ephemeral Nodes
+```java
+public class DataTree {
+    /**
+     * This map provides a fast lookup to the data nodes. The tree is the
+     * source of truth and is where all the locking occurs
+     */
+    private final NodeHashMap nodes;
+}
+```
+
+a simple wrapper to ConcurrentHashMap that recalculates a digest after each mutation.
+
+```java
+  public class NodeHashMapImpl implements NodeHashMap {
+
+    private final ConcurrentHashMap<String, DataNode> nodes;
+    private final boolean digestEnabled;
+    private final DigestCalculator digestCalculator;
+}
+```
+
+
+
+This class contains the data for a node in the data tree.
+
+A data node contains a reference to its parent, a byte array as its data, an array of ACLs, a stat object, and a set of its children's paths.
+
+
+ZNode 由五部分组成：path、data、stat、acl、children，其中path是以/开始的全路径，剩余的四部分都存储在一个独立的DataNode数据结构中：data是 ZNode 的数据，stat是 ZNode 的元数据如版本号、数据长度等，acl是 ZNode 的权限控制，children是 ZNode 的子节点集合，同时DataNode也包含了一些辅助方法，比如getChildren、getData、setData等，用于操作 ZNode 的数据
+
+DataTree 的所有path都被保存在一个哈希表中，path到DataNode的映射关系是一一对应，因此我们可以通过path在 O(1) 时间复杂度内找到对应的DataNode，这样就能够保证数据的快速查询
+
+```java
+@SuppressFBWarnings({"EI_EXPOSE_REP", "EI_EXPOSE_REP2"})
+public class DataNode implements Record {
+    byte[] data;
+    Long acl;
+    public StatPersisted stat;
+    private Set<String> children = null;
+}
+```
+
+#### Ephemeral
+
+DataTree里维护了ephemerals的Map 依赖于session
+
+```java
+public class DataTree {
+    /**
+     * This hashtable lists the paths of the ephemeral nodes of a session.
+     */
+    private final Map<Long, HashSet<String>> ephemerals = new ConcurrentHashMap<Long, HashSet<String>>();
+}
+```
+
 临时节点有个特性，就是如果注册这个节点的机器失去连接(通常是宕机)，那么这个节点会被zookeeper删除。选主过程就是利用这个特性，在服务器启动的时候，去zookeeper特定的一个目录下注册一个临时节点(这个节点作为master，谁注册了这个节点谁就是master)，注册的时候，如果发现该节点已经存在，则说明已经有别的服务器注册了(也就是有别的服务器已经抢主成功)，那么当前服务器只能放弃抢主，作为从机存在。同时，抢主失败的当前服务器需要订阅该临时节点的删除事件，以便该节点删除时(也就是注册该节点的服务器宕机了或者网络断了之类的)进行再次抢主操作。选主的过程，其实就是简单的争抢在Zookeeper注册临时节点的操作，谁注册了约定的临时节点，谁就是master。所有服务器同时会在servers节点下注册一个临时节点（保存自己的基本信息），以便于应用程序读取当前可用的服务器列表
 curator的LeaderSelector
 
 
 
 如果当前是**临时顺序节点**，那么`ephemeralOwner`则存储了创建该节点的Owner的SessionID，有了SessionID，自然就能和对应的客户端匹配上，当Session失效之后，才能将该客户端创建的所有临时节点**全部删除**。
+
+
+```java
+public class DataTree {
+    public Set<String> getEphemerals(long sessionId) {
+        HashSet<String> ret = ephemerals.get(sessionId);
+        if (ret == null) {
+            return new HashSet<>();
+        }
+        synchronized (ret) {
+            return (HashSet<String>) ret.clone();
+        }
+    }
+}
+```
+
+
+
+### createNode
+
+```java
+public void createNode(final String path, byte[] data, List<ACL> acl, long ephemeralOwner, int parentCVersion, long zxid, long time, Stat outputStat) throws KeeperException.NoNodeException, KeeperException.NodeExistsException {
+    int lastSlash = path.lastIndexOf('/');
+    String parentName = path.substring(0, lastSlash);
+    String childName = path.substring(lastSlash + 1);
+    StatPersisted stat = createStat(zxid, time, ephemeralOwner);
+    DataNode parent = nodes.get(parentName);
+    if (parent == null) {
+        throw new KeeperException.NoNodeException();
+    }
+    synchronized (parent) {
+        // Add the ACL to ACL cache first, to avoid the ACL not being
+        // created race condition during fuzzy snapshot sync.
+        //
+        // This is the simplest fix, which may add ACL reference count
+        // again if it's already counted in in the ACL map of fuzzy
+        // snapshot, which might also happen for deleteNode txn, but
+        // at least it won't cause the ACL not exist issue.
+        //
+        // Later we can audit and delete all non-referenced ACLs from
+        // ACL map when loading the snapshot/txns from disk, like what
+        // we did for the global sessions.
+        Long longval = aclCache.convertAcls(acl);
+
+        Set<String> children = parent.getChildren();
+        if (children.contains(childName)) {
+            throw new KeeperException.NodeExistsException();
+        }
+
+        nodes.preChange(parentName, parent);
+        if (parentCVersion == -1) {
+            parentCVersion = parent.stat.getCversion();
+            parentCVersion++;
+        }
+        // There is possibility that we'll replay txns for a node which
+        // was created and then deleted in the fuzzy range, and it's not
+        // exist in the snapshot, so replay the creation might revert the
+        // cversion and pzxid, need to check and only update when it's
+        // larger.
+        if (parentCVersion > parent.stat.getCversion()) {
+            parent.stat.setCversion(parentCVersion);
+            parent.stat.setPzxid(zxid);
+        }
+        DataNode child = new DataNode(data, longval, stat);
+        parent.addChild(childName);
+        nodes.postChange(parentName, parent);
+        nodeDataSize.addAndGet(getNodeSize(path, child.data));
+        nodes.put(path, child);
+        EphemeralType ephemeralType = EphemeralType.get(ephemeralOwner);
+        if (ephemeralType == EphemeralType.CONTAINER) {
+            containers.add(path);
+        } else if (ephemeralType == EphemeralType.TTL) {
+            ttls.add(path);
+        } else if (ephemeralOwner != 0) {
+            HashSet<String> list = ephemerals.get(ephemeralOwner);
+            if (list == null) {
+                list = new HashSet<String>();
+                ephemerals.put(ephemeralOwner, list);
+            }
+            synchronized (list) {
+                list.add(path);
+            }
+        }
+        if (outputStat != null) {
+            child.copyStat(outputStat);
+        }
+    }
+    // now check if its one of the zookeeper node child
+    if (parentName.startsWith(quotaZookeeper)) {
+        // now check if its the limit node
+        if (Quotas.limitNode.equals(childName)) {
+            // this is the limit node
+            // get the parent and add it to the trie
+            pTrie.addPath(Quotas.trimQuotaPath(parentName));
+        }
+        if (Quotas.statNode.equals(childName)) {
+            updateQuotaForPath(Quotas.trimQuotaPath(parentName));
+        }
+    }
+
+    String lastPrefix = getMaxPrefixWithQuota(path);
+    long bytes = data == null ? 0 : data.length;
+    // also check to update the quotas for this node
+    if (lastPrefix != null) {    // ok we have some match and need to update
+        updateQuotaStat(lastPrefix, bytes, 1);
+    }
+    updateWriteStat(path, bytes);
+    dataWatches.triggerWatch(path, Event.EventType.NodeCreated);
+    childWatches.triggerWatch(parentName.equals("") ? "/" : parentName, Event.EventType.NodeChildrenChanged);
+}
+```
+
+
+
+delete Node
+
+```java
+public void deleteNode(String path, long zxid) throws KeeperException.NoNodeException {
+    int lastSlash = path.lastIndexOf('/');
+    String parentName = path.substring(0, lastSlash);
+    String childName = path.substring(lastSlash + 1);
+
+    // The child might already be deleted during taking fuzzy snapshot,
+    // but we still need to update the pzxid here before throw exception
+    // for no such child
+    DataNode parent = nodes.get(parentName);
+    if (parent == null) {
+        throw new KeeperException.NoNodeException();
+    }
+    synchronized (parent) {
+        nodes.preChange(parentName, parent);
+        parent.removeChild(childName);
+        // Only update pzxid when the zxid is larger than the current pzxid,
+        // otherwise we might override some higher pzxid set by a create
+        // Txn, which could cause the cversion and pzxid inconsistent
+        if (zxid > parent.stat.getPzxid()) {
+            parent.stat.setPzxid(zxid);
+        }
+        nodes.postChange(parentName, parent);
+    }
+
+    DataNode node = nodes.get(path);
+    if (node == null) {
+        throw new KeeperException.NoNodeException();
+    }
+    nodes.remove(path);
+    synchronized (node) {
+        aclCache.removeUsage(node.acl);
+        nodeDataSize.addAndGet(-getNodeSize(path, node.data));
+    }
+
+    // Synchronized to sync the containers and ttls change, probably
+    // only need to sync on containers and ttls, will update it in a
+    // separate patch.
+    synchronized (parent) {
+        long eowner = node.stat.getEphemeralOwner();
+        EphemeralType ephemeralType = EphemeralType.get(eowner);
+        if (ephemeralType == EphemeralType.CONTAINER) {
+            containers.remove(path);
+        } else if (ephemeralType == EphemeralType.TTL) {
+            ttls.remove(path);
+        } else if (eowner != 0) {
+            Set<String> nodes = ephemerals.get(eowner);
+            if (nodes != null) {
+                synchronized (nodes) {
+                    nodes.remove(path);
+                }
+            }
+        }
+    }
+
+    if (parentName.startsWith(procZookeeper) && Quotas.limitNode.equals(childName)) {
+        // delete the node in the trie.
+        // we need to update the trie as well
+        pTrie.deletePath(Quotas.trimQuotaPath(parentName));
+    }
+
+    // also check to update the quotas for this node
+    String lastPrefix = getMaxPrefixWithQuota(path);
+    if (lastPrefix != null) {
+        // ok we have some match and need to update
+        long bytes = 0;
+        synchronized (node) {
+            bytes = (node.data == null ? 0 : -(node.data.length));
+        }
+        updateQuotaStat(lastPrefix, bytes, -1);
+    }
+
+    updateWriteStat(path, 0L);
+
+    if (LOG.isTraceEnabled()) {
+        ZooTrace.logTraceMessage(
+            LOG,
+            ZooTrace.EVENT_DELIVERY_TRACE_MASK,
+            "dataWatches.triggerWatch " + path);
+        ZooTrace.logTraceMessage(
+            LOG,
+            ZooTrace.EVENT_DELIVERY_TRACE_MASK,
+            "childWatches.triggerWatch " + parentName);
+    }
+
+    WatcherOrBitSet processed = dataWatches.triggerWatch(path, EventType.NodeDeleted);
+    childWatches.triggerWatch(path, EventType.NodeDeleted, processed);
+    childWatches.triggerWatch("".equals(parentName) ? "/" : parentName, EventType.NodeChildrenChanged);
+}
+```
+#### expire
+
+ExpiryQueue tracks elements in time sorted fixed duration buckets.
+It's used by SessionTrackerImpl to expire sessions and NIOServerCnxnFactory to expire connections.
+
+```java
+public class ExpiryQueue<E> {
+
+    private final ConcurrentHashMap<E, Long> elemMap = new ConcurrentHashMap<E, Long>();
+    /**
+     * The maximum number of buckets is equal to max timeout/expirationInterval,
+     * so the expirationInterval should not be too small compared to the
+     * max timeout that this expiry queue needs to maintain.
+     */
+    private final ConcurrentHashMap<Long, Set<E>> expiryMap = new ConcurrentHashMap<Long, Set<E>>();
+}
+```
+
+
+
+This is a full featured SessionTracker. It tracks session in grouped by tick interval.
+ It always rounds up the tick interval to provide a sort of grace period.
+Sessions are thus expired in batches made up of sessions that expire in a given interval.
+
+
+
+```java
+public class SessionTrackerImpl extends ZooKeeperCriticalThread implements SessionTracker {
+
+    protected final ConcurrentHashMap<Long, SessionImpl> sessionsById = new ConcurrentHashMap<Long, SessionImpl>();
+
+    private final ExpiryQueue<SessionImpl> sessionExpiryQueue;
+
+  	@Override
+    public void run() {
+        try {
+            while (running) {
+                long waitTime = sessionExpiryQueue.getWaitTime();
+                if (waitTime > 0) {
+                    Thread.sleep(waitTime);
+                    continue;
+                }
+
+                for (SessionImpl s : sessionExpiryQueue.poll()) {
+                    ServerMetrics.getMetrics().STALE_SESSIONS_EXPIRED.add(1);
+                    setSessionClosing(s.sessionId);
+                    expirer.expire(s);
+                }
+            }
+        } catch (InterruptedException e) {
+            handleException(this.getName(), e);
+        }
+        LOG.info("SessionTrackerImpl exited loop!");
+    }
+}
+```
+
+
+
+更新session过期时间
+
+```java
+public class ExpiryQueue<E> {
+public Long update(E elem, int timeout) {
+    Long prevExpiryTime = elemMap.get(elem);
+    long now = Time.currentElapsedTime();
+    Long newExpiryTime = roundToNextInterval(now + timeout);
+
+    if (newExpiryTime.equals(prevExpiryTime)) {
+        // No change, so nothing to update
+        return null;
+    }
+
+    // First add the elem to the new expiry time bucket in expiryMap.
+    Set<E> set = expiryMap.get(newExpiryTime);
+    if (set == null) {
+        // Construct a ConcurrentHashSet using a ConcurrentHashMap
+        set = Collections.newSetFromMap(new ConcurrentHashMap<E, Boolean>());
+        // Put the new set in the map, but only if another thread
+        // hasn't beaten us to it
+        Set<E> existingSet = expiryMap.putIfAbsent(newExpiryTime, set);
+        if (existingSet != null) {
+            set = existingSet;
+        }
+    }
+    set.add(elem);
+
+    // Map the elem to the new expiry time. If a different previous
+    // mapping was present, clean up the previous expiry bucket.
+    prevExpiryTime = elemMap.put(elem, newExpiryTime);
+    if (prevExpiryTime != null && !newExpiryTime.equals(prevExpiryTime)) {
+        Set<E> prevSet = expiryMap.get(prevExpiryTime);
+        if (prevSet != null) {
+            prevSet.remove(elem);
+        }
+    }
+    return newExpiryTime;
+}
+}
+```
+
 
 ### Watches
 
@@ -224,6 +585,9 @@ When the session ends the znode is deleted. Because of this behavior ephemeral z
 
 使用这两个监听器可以分别为节点路径添加监听器在合适的场景下来触发监听，当然也可以移除已添加路径的监听器
 
+
+ 
+
 ```java
 public class DataTree {
 
@@ -242,6 +606,63 @@ public class DataTree {
     }
 }
 ```
+
+
+
+主要的监听方法是添加，移除，触发监听器，和查询信息等方法
+
+
+
+```java
+
+public interface IWatchManager {
+    boolean addWatch(String path, Watcher watcher);
+
+    default boolean addWatch(String path, Watcher watcher, WatcherMode watcherMode) {
+        if (watcherMode == WatcherMode.DEFAULT_WATCHER_MODE) {
+            return addWatch(path, watcher);
+        }
+        throw new UnsupportedOperationException();  // custom implementations must defeat this
+    }
+
+    boolean containsWatcher(String path, Watcher watcher);
+
+    default boolean containsWatcher(String path, Watcher watcher, @Nullable WatcherMode watcherMode) {
+        if (watcherMode == null || watcherMode == WatcherMode.DEFAULT_WATCHER_MODE) {
+            return containsWatcher(path, watcher);
+        }
+        throw new UnsupportedOperationException("persistent watch");
+    }
+
+    boolean removeWatcher(String path, Watcher watcher);
+
+    default boolean removeWatcher(String path, Watcher watcher, WatcherMode watcherMode) {
+        if (watcherMode == null || watcherMode == WatcherMode.DEFAULT_WATCHER_MODE) {
+            return removeWatcher(path, watcher);
+        }
+        throw new UnsupportedOperationException("persistent watch");
+    }
+
+    void removeWatcher(Watcher watcher);
+
+    WatcherOrBitSet triggerWatch(String path, EventType type, long zxid, List<ACL> acl);
+
+    WatcherOrBitSet triggerWatch(String path, EventType type, long zxid, List<ACL> acl, WatcherOrBitSet suppress);
+
+    int size();
+
+    void shutdown();
+
+    WatchesSummary getWatchesSummary();
+
+    WatchesReport getWatches();
+
+    WatchesPathReport getWatchesByPath();
+
+    void dumpWatches(PrintWriter pwriter, boolean byPath);
+}
+```
+
 
 
 
@@ -1528,427 +1949,6 @@ Observers have other advantages. Because they do not vote, they are not a critic
 
 
 
-
-## DataTree
-
-```java
-public class DataTree {
-    /**
-     * This map provides a fast lookup to the data nodes. The tree is the
-     * source of truth and is where all the locking occurs
-     */
-    private final NodeHashMap nodes;
-}
-```
-
-a simple wrapper to ConcurrentHashMap that recalculates a digest after each mutation.
-
-```java
-  public class NodeHashMapImpl implements NodeHashMap {
-
-    private final ConcurrentHashMap<String, DataNode> nodes;
-    private final boolean digestEnabled;
-    private final DigestCalculator digestCalculator;
-}
-```
-
-
-
-This class contains the data for a node in the data tree.
-
-A data node contains a reference to its parent, a byte array as its data, an array of ACLs, a stat object, and a set of its children's paths.
-
-```java
-@SuppressFBWarnings({"EI_EXPOSE_REP", "EI_EXPOSE_REP2"})
-public class DataNode implements Record {
-
-    /** the data for this datanode */
-    byte[] data;
-
-    /**
-     * the acl map long for this datanode. the datatree has the map
-     */
-    Long acl;
-
-    /**
-     * the stat for this node that is persisted to disk.
-     */
-    public StatPersisted stat;
-
-    /**
-     * the list of children for this node. note that the list of children string
-     * does not contain the parent path -- just the last part of the path. This
-     * should be synchronized on except deserializing (for speed up issues).
-     */
-    private Set<String> children = null;
-}
-```
-
-### Ephemeral
-
-DataTree里维护了ephemerals的Map
-
-```java
-public class DataTree {
-    /**
-     * This hashtable lists the paths of the ephemeral nodes of a session.
-     */
-    private final Map<Long, HashSet<String>> ephemerals = new ConcurrentHashMap<Long, HashSet<String>>();
-}
-```
-createNode
-
-```java
-public void createNode(final String path, byte[] data, List<ACL> acl, long ephemeralOwner, int parentCVersion, long zxid, long time, Stat outputStat) throws KeeperException.NoNodeException, KeeperException.NodeExistsException {
-    int lastSlash = path.lastIndexOf('/');
-    String parentName = path.substring(0, lastSlash);
-    String childName = path.substring(lastSlash + 1);
-    StatPersisted stat = createStat(zxid, time, ephemeralOwner);
-    DataNode parent = nodes.get(parentName);
-    if (parent == null) {
-        throw new KeeperException.NoNodeException();
-    }
-    synchronized (parent) {
-        // Add the ACL to ACL cache first, to avoid the ACL not being
-        // created race condition during fuzzy snapshot sync.
-        //
-        // This is the simplest fix, which may add ACL reference count
-        // again if it's already counted in in the ACL map of fuzzy
-        // snapshot, which might also happen for deleteNode txn, but
-        // at least it won't cause the ACL not exist issue.
-        //
-        // Later we can audit and delete all non-referenced ACLs from
-        // ACL map when loading the snapshot/txns from disk, like what
-        // we did for the global sessions.
-        Long longval = aclCache.convertAcls(acl);
-
-        Set<String> children = parent.getChildren();
-        if (children.contains(childName)) {
-            throw new KeeperException.NodeExistsException();
-        }
-
-        nodes.preChange(parentName, parent);
-        if (parentCVersion == -1) {
-            parentCVersion = parent.stat.getCversion();
-            parentCVersion++;
-        }
-        // There is possibility that we'll replay txns for a node which
-        // was created and then deleted in the fuzzy range, and it's not
-        // exist in the snapshot, so replay the creation might revert the
-        // cversion and pzxid, need to check and only update when it's
-        // larger.
-        if (parentCVersion > parent.stat.getCversion()) {
-            parent.stat.setCversion(parentCVersion);
-            parent.stat.setPzxid(zxid);
-        }
-        DataNode child = new DataNode(data, longval, stat);
-        parent.addChild(childName);
-        nodes.postChange(parentName, parent);
-        nodeDataSize.addAndGet(getNodeSize(path, child.data));
-        nodes.put(path, child);
-        EphemeralType ephemeralType = EphemeralType.get(ephemeralOwner);
-        if (ephemeralType == EphemeralType.CONTAINER) {
-            containers.add(path);
-        } else if (ephemeralType == EphemeralType.TTL) {
-            ttls.add(path);
-        } else if (ephemeralOwner != 0) {
-            HashSet<String> list = ephemerals.get(ephemeralOwner);
-            if (list == null) {
-                list = new HashSet<String>();
-                ephemerals.put(ephemeralOwner, list);
-            }
-            synchronized (list) {
-                list.add(path);
-            }
-        }
-        if (outputStat != null) {
-            child.copyStat(outputStat);
-        }
-    }
-    // now check if its one of the zookeeper node child
-    if (parentName.startsWith(quotaZookeeper)) {
-        // now check if its the limit node
-        if (Quotas.limitNode.equals(childName)) {
-            // this is the limit node
-            // get the parent and add it to the trie
-            pTrie.addPath(Quotas.trimQuotaPath(parentName));
-        }
-        if (Quotas.statNode.equals(childName)) {
-            updateQuotaForPath(Quotas.trimQuotaPath(parentName));
-        }
-    }
-
-    String lastPrefix = getMaxPrefixWithQuota(path);
-    long bytes = data == null ? 0 : data.length;
-    // also check to update the quotas for this node
-    if (lastPrefix != null) {    // ok we have some match and need to update
-        updateQuotaStat(lastPrefix, bytes, 1);
-    }
-    updateWriteStat(path, bytes);
-    dataWatches.triggerWatch(path, Event.EventType.NodeCreated);
-    childWatches.triggerWatch(parentName.equals("") ? "/" : parentName, Event.EventType.NodeChildrenChanged);
-}
-```
-
-
-
-delete Node
-
-```java
-public void deleteNode(String path, long zxid) throws KeeperException.NoNodeException {
-    int lastSlash = path.lastIndexOf('/');
-    String parentName = path.substring(0, lastSlash);
-    String childName = path.substring(lastSlash + 1);
-
-    // The child might already be deleted during taking fuzzy snapshot,
-    // but we still need to update the pzxid here before throw exception
-    // for no such child
-    DataNode parent = nodes.get(parentName);
-    if (parent == null) {
-        throw new KeeperException.NoNodeException();
-    }
-    synchronized (parent) {
-        nodes.preChange(parentName, parent);
-        parent.removeChild(childName);
-        // Only update pzxid when the zxid is larger than the current pzxid,
-        // otherwise we might override some higher pzxid set by a create
-        // Txn, which could cause the cversion and pzxid inconsistent
-        if (zxid > parent.stat.getPzxid()) {
-            parent.stat.setPzxid(zxid);
-        }
-        nodes.postChange(parentName, parent);
-    }
-
-    DataNode node = nodes.get(path);
-    if (node == null) {
-        throw new KeeperException.NoNodeException();
-    }
-    nodes.remove(path);
-    synchronized (node) {
-        aclCache.removeUsage(node.acl);
-        nodeDataSize.addAndGet(-getNodeSize(path, node.data));
-    }
-
-    // Synchronized to sync the containers and ttls change, probably
-    // only need to sync on containers and ttls, will update it in a
-    // separate patch.
-    synchronized (parent) {
-        long eowner = node.stat.getEphemeralOwner();
-        EphemeralType ephemeralType = EphemeralType.get(eowner);
-        if (ephemeralType == EphemeralType.CONTAINER) {
-            containers.remove(path);
-        } else if (ephemeralType == EphemeralType.TTL) {
-            ttls.remove(path);
-        } else if (eowner != 0) {
-            Set<String> nodes = ephemerals.get(eowner);
-            if (nodes != null) {
-                synchronized (nodes) {
-                    nodes.remove(path);
-                }
-            }
-        }
-    }
-
-    if (parentName.startsWith(procZookeeper) && Quotas.limitNode.equals(childName)) {
-        // delete the node in the trie.
-        // we need to update the trie as well
-        pTrie.deletePath(Quotas.trimQuotaPath(parentName));
-    }
-
-    // also check to update the quotas for this node
-    String lastPrefix = getMaxPrefixWithQuota(path);
-    if (lastPrefix != null) {
-        // ok we have some match and need to update
-        long bytes = 0;
-        synchronized (node) {
-            bytes = (node.data == null ? 0 : -(node.data.length));
-        }
-        updateQuotaStat(lastPrefix, bytes, -1);
-    }
-
-    updateWriteStat(path, 0L);
-
-    if (LOG.isTraceEnabled()) {
-        ZooTrace.logTraceMessage(
-            LOG,
-            ZooTrace.EVENT_DELIVERY_TRACE_MASK,
-            "dataWatches.triggerWatch " + path);
-        ZooTrace.logTraceMessage(
-            LOG,
-            ZooTrace.EVENT_DELIVERY_TRACE_MASK,
-            "childWatches.triggerWatch " + parentName);
-    }
-
-    WatcherOrBitSet processed = dataWatches.triggerWatch(path, EventType.NodeDeleted);
-    childWatches.triggerWatch(path, EventType.NodeDeleted, processed);
-    childWatches.triggerWatch("".equals(parentName) ? "/" : parentName, EventType.NodeChildrenChanged);
-}
-```
-#### expire
-
-ExpiryQueue tracks elements in time sorted fixed duration buckets.
-It's used by SessionTrackerImpl to expire sessions and NIOServerCnxnFactory to expire connections.
-
-```java
-public class ExpiryQueue<E> {
-
-    private final ConcurrentHashMap<E, Long> elemMap = new ConcurrentHashMap<E, Long>();
-    /**
-     * The maximum number of buckets is equal to max timeout/expirationInterval,
-     * so the expirationInterval should not be too small compared to the
-     * max timeout that this expiry queue needs to maintain.
-     */
-    private final ConcurrentHashMap<Long, Set<E>> expiryMap = new ConcurrentHashMap<Long, Set<E>>();
-}
-```
-
-
-
-This is a full featured SessionTracker. It tracks session in grouped by tick interval.
- It always rounds up the tick interval to provide a sort of grace period.
-Sessions are thus expired in batches made up of sessions that expire in a given interval.
-
-
-
-```java
-public class SessionTrackerImpl extends ZooKeeperCriticalThread implements SessionTracker {
-
-    protected final ConcurrentHashMap<Long, SessionImpl> sessionsById = new ConcurrentHashMap<Long, SessionImpl>();
-
-    private final ExpiryQueue<SessionImpl> sessionExpiryQueue;
-
-  	@Override
-    public void run() {
-        try {
-            while (running) {
-                long waitTime = sessionExpiryQueue.getWaitTime();
-                if (waitTime > 0) {
-                    Thread.sleep(waitTime);
-                    continue;
-                }
-
-                for (SessionImpl s : sessionExpiryQueue.poll()) {
-                    ServerMetrics.getMetrics().STALE_SESSIONS_EXPIRED.add(1);
-                    setSessionClosing(s.sessionId);
-                    expirer.expire(s);
-                }
-            }
-        } catch (InterruptedException e) {
-            handleException(this.getName(), e);
-        }
-        LOG.info("SessionTrackerImpl exited loop!");
-    }
-}
-```
-
-
-
-更新session过期时间
-
-```java
-public class ExpiryQueue<E> {
-public Long update(E elem, int timeout) {
-    Long prevExpiryTime = elemMap.get(elem);
-    long now = Time.currentElapsedTime();
-    Long newExpiryTime = roundToNextInterval(now + timeout);
-
-    if (newExpiryTime.equals(prevExpiryTime)) {
-        // No change, so nothing to update
-        return null;
-    }
-
-    // First add the elem to the new expiry time bucket in expiryMap.
-    Set<E> set = expiryMap.get(newExpiryTime);
-    if (set == null) {
-        // Construct a ConcurrentHashSet using a ConcurrentHashMap
-        set = Collections.newSetFromMap(new ConcurrentHashMap<E, Boolean>());
-        // Put the new set in the map, but only if another thread
-        // hasn't beaten us to it
-        Set<E> existingSet = expiryMap.putIfAbsent(newExpiryTime, set);
-        if (existingSet != null) {
-            set = existingSet;
-        }
-    }
-    set.add(elem);
-
-    // Map the elem to the new expiry time. If a different previous
-    // mapping was present, clean up the previous expiry bucket.
-    prevExpiryTime = elemMap.put(elem, newExpiryTime);
-    if (prevExpiryTime != null && !newExpiryTime.equals(prevExpiryTime)) {
-        Set<E> prevSet = expiryMap.get(prevExpiryTime);
-        if (prevSet != null) {
-            prevSet.remove(elem);
-        }
-    }
-    return newExpiryTime;
-}
-}
-```
-
-
-## Watcher
-
-在DataTree中有两个IWatchManager类型的对象，一个是dataWatches，一个是childWatches， 其中:
-- dataWatches是保存节点层面的watcher对象，
-- childWatches是保存子节点层面的watcher对象，
-使用这两个监听器可以分别为节点路径添加监听器在合适的场景下来触发监听，当然也可以移除已添加路径的监听器
-
-主要的监听方法是添加，移除，触发监听器，和查询信息等方法
-
-
-
-dataWatches和childWatches分别是如何创建呢我们可以看下在DataTree类型的构造器中初始化监听管理器对象是通过WatchManagerFactory工厂类型提供的工厂方法创建的
-
-```java
-
-public interface IWatchManager {
-    boolean addWatch(String path, Watcher watcher);
-
-    default boolean addWatch(String path, Watcher watcher, WatcherMode watcherMode) {
-        if (watcherMode == WatcherMode.DEFAULT_WATCHER_MODE) {
-            return addWatch(path, watcher);
-        }
-        throw new UnsupportedOperationException();  // custom implementations must defeat this
-    }
-
-    boolean containsWatcher(String path, Watcher watcher);
-
-    default boolean containsWatcher(String path, Watcher watcher, @Nullable WatcherMode watcherMode) {
-        if (watcherMode == null || watcherMode == WatcherMode.DEFAULT_WATCHER_MODE) {
-            return containsWatcher(path, watcher);
-        }
-        throw new UnsupportedOperationException("persistent watch");
-    }
-
-    boolean removeWatcher(String path, Watcher watcher);
-
-    default boolean removeWatcher(String path, Watcher watcher, WatcherMode watcherMode) {
-        if (watcherMode == null || watcherMode == WatcherMode.DEFAULT_WATCHER_MODE) {
-            return removeWatcher(path, watcher);
-        }
-        throw new UnsupportedOperationException("persistent watch");
-    }
-
-    void removeWatcher(Watcher watcher);
-
-    WatcherOrBitSet triggerWatch(String path, EventType type, long zxid, List<ACL> acl);
-
-    WatcherOrBitSet triggerWatch(String path, EventType type, long zxid, List<ACL> acl, WatcherOrBitSet suppress);
-
-    int size();
-
-    void shutdown();
-
-    WatchesSummary getWatchesSummary();
-
-    WatchesReport getWatches();
-
-    WatchesPathReport getWatchesByPath();
-
-    void dumpWatches(PrintWriter pwriter, boolean byPath);
-}
-```
-
 ## Storage
 
 epoch
@@ -1975,7 +1975,7 @@ InputArchive with `java.io.DataInput`
 
 ```dot
 digraph "TxnLog" {
-
+rankdir = "BT"
 splines  = ortho;
 fontname = "Inconsolata";
 
