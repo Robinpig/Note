@@ -700,6 +700,10 @@ public class WatchManager implements IWatchManager {
     private int recursiveWatchQty = 0;
 }
 ```
+
+Watcher 机制的实现是通过在 ZNode 上注册 Watcher，当 ZNode 发生变化时，通过watchTable找到所有注册在这个 ZNode 上的 Watcher，然后通知这些 Watcher。Zookeeper Server 会将 Watcher 事件通知发送给客户端，从而实现 Watch 事件通知机制
+
+
 #### EventType
 
 EventType是一个枚举类型用来列举Zookeeper可能发生的事件， 可以看到监听事件的触发主要发生在节点状态的变更与节点数据的变更时触发
@@ -847,8 +851,9 @@ public ClientCnxn(
 
 
 #### triggerWatch
+Watcher 机制是一次性的，当 ZNode 发生变化时，Zookeeper Server 会调用WatchManager.triggerWatch方法触发数据变更事件，同时将这些 Watcher 从watchTable中删除，这意味着每个 Watcher 只能接收到一次通知，如果我们想要继续监听 ZNode 的变化，那么我们需要重新注册 Watcher
 
-通知所有订阅者
+Watcher 与客户端的 Session 绑定，当 Session 超时或关闭时，所有的 Watcher 都会失效，客户端需要重新注册 Watcher，在重新建立连接前，任何 ZNode 的变化都不会通知客户端。那么我们在接收到通知后，或出现网络故障，都需要重新注册 Watcher，如果我们在重新注册 Watcher 之前，ZNode 发生了变化，那么我们就会错过这次变化，从而导致客户端观测到的数据变化过程少于真实的数据变化过程，因此 Zookeeper 的 Watcher 机制只能保证最终一致性，而不能保证线性一致性
 
 ```java
 @Override
@@ -2091,6 +2096,12 @@ autopurge.snapRetainCount
 和上面 purgeInterval 参数配合使用，指定需要保留的文件数目（default：3
 
 
+ZooKeeper内部存储ZKDatabase可以看作是一个简化版本的 Redis 实现，只支持基数树这种 KV 数据结构，同样也使用 WAL 日志和快照文件来保证数据的持久化。Zookeeper 的数据存储是基于内存的，所有的数据都存储在内存中，虽然能够保证数据的快速查询，但是也会带来一些问题：
+
+内存空间：Zookeeper 的所有数据都存储在内存中，包括 DataNode、Key Path、Watcher 等，内存上限就是 Zookeeper Server 的数据存储上限，因此 Zookeeper 只能存储 GB 级别的数；另一方面过多的数据量也会增加 GC 的压力，降低哈希表查询的性能，都会请求响应速度；
+持久化：Zookeeper 的持久化机制是基于文件系统的，每次写入操作都会同步操作日志到磁盘，同样会增加写入操作的延迟，降低写入性能；
+综上所述，内存空间是 Zookeeper 的死穴，内存决定了 Zookeeper 的数据存储上限，而磁盘 I/O 决定了 Zookeeper 的写入延迟与响应速度，使得 Zookeeper 只能支持几 GB 级别的数据存储，这是 Zookeeper 最大的局限性，也是 Zookeeper 在大规模集群中的瓶颈
+
 
 ## Links
 
@@ -2105,6 +2116,7 @@ autopurge.snapRetainCount
 5. [Dynamic Reconfiguration of Primary/Backup Clusters](https://www.usenix.org/system/files/conference/atc12/atc12-final74.pdf)
 6. [深入了解Zookeeper核心原理](https://segmentfault.com/a/1190000040297172)
 7. [ZooKeeper 原理与优化](https://yuzhouwan.com/posts/31915/#ZooKeeper-%E6%98%AF%E4%BB%80%E4%B9%88%EF%BC%9F)
+8. [谈谈 ZooKeeper 的局限性](https://wingsxdu.com/posts/database/zookeeper-limitations/)
 
 
 
