@@ -116,7 +116,7 @@ void pushGenericCommand(client *c, int where, int xx) {
 
 ## quicklist
 
-linked list of ziplists
+linked list of ziplists 链表每个节点都是ziplist
 
 try to reduce cascadeUpdate
 
@@ -271,6 +271,20 @@ int quicklistPushTail(quicklist *quicklist, void *value, size_t sz) {
     return (orig_tail != quicklist->tail);
 }
 ```
+
+
+
+quicklist解决了单个ziplist过大 缩小连锁更新的范围
+
+
+
+
+
+
+
+
+
+
 
 ## Links
 

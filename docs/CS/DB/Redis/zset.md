@@ -602,6 +602,16 @@ void memrev32(void *p) {
 }
 ```
 
+
+
+相比linkedlist 节省了prev和next的指针, 根据encoding可以再继续优化int类型的存储, 
+
+但是ziplist的限制是无法保存大数据量 其查询时间复杂度为`O(N)`
+
+
+
+
+
 ### insert
 
 1. encode content

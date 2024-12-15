@@ -11,7 +11,7 @@ struct redisServer {
 }  
 ```
 
-在initServer时创建redisDb数据
+在initServer时创建redisDb数据 根据redis.conf文件的配置 server.dbnum默认是16
 
 ```c
 void initServer(void){

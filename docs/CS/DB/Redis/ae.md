@@ -1,5 +1,11 @@
 ## Introduction
 
+
+
+a simple event-driven programming library
+
+
+
 This file(*networking.c*) defines all the I/O functions with clients, masters and replicas(which in Redis are just special clients):
 
 * `createClient()` allocates and initializes a new client.
