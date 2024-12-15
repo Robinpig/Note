@@ -98,7 +98,7 @@ Open hashing has the disadvantage of requiring pointers.
 This tends to slow the algorithm down a bit because of the time required to allocate new cells, and also essentially requires the implementation of a second data structure.
 
 - [HashMap in Java](/docs/CS/Java/JDK/Collection/Map.md?id=hash)
-- [Redis hash](/docs/CS/DB/Redis/hash.md)
+- [Redis hash](/docs/CS/DB/Redis/struct/hash.md)
 
 ### Closed Hashing (Open Addressing)
 
@@ -150,7 +150,7 @@ Rehashing frees the programmer from worrying about the table size and is importa
 
 ### Incremental resizing
 
-- [Redis rehash](/docs/CS/DB/Redis/hash.md?id=rehash)
+- [Redis rehash](/docs/CS/DB/Redis/struct/hash.md?id=rehash)
 
 ## Consistent Hash
 

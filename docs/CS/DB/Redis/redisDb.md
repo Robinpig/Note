@@ -83,7 +83,7 @@ struct dict {
 
 
 
-[dicht in hash](/docs/CS/DB/Redis/hash.md?id=dicht)
+[dicht in hash](/docs/CS/DB/Redis/struct/hash.md?id=dicht)
 
 ```c
 // dict.h
@@ -392,7 +392,7 @@ unsigned long LFUDecrAndReturn(robj *o) {
 
 ### dictFind
 
-call [rehash](/docs/CS/DB/Redis/hash.md?id=rehash) when dictIsRehashing
+call [rehash](/docs/CS/DB/Redis/struct/hash.md?id=rehash) when dictIsRehashing
 
 ```c
 // dict.c
@@ -487,7 +487,7 @@ int dictAdd(dict *d, void *key, void *val)
 
 add new object in ht[1] when rehashing
 
-[expand if needed](/docs/CS/DB/Redis/hash.md?id=expand)
+[expand if needed](/docs/CS/DB/Redis/struct/hash.md?id=expand)
 
 ```c
 /* Low level add or find:

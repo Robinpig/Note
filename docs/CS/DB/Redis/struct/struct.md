@@ -177,7 +177,7 @@ A few important notes about key expiration:
 
 ### Strings
 
-The Redis [String](/docs/CS/DB/Redis/SDS.md) type is the simplest type of value you can associate with a Redis key.
+The Redis [String](/docs/CS/DB/Redis/struct/SDS.md/SDS.md) type is the simplest type of value you can associate with a Redis key.
 Since Redis keys are strings, when we use the string type as a value too, we are mapping a string to another string.
 Values can be strings (including binary data) of every kind, for instance you can store a jpeg image inside a value.
 A value can't be bigger than 512 MB.
@@ -188,7 +188,7 @@ That even multiple clients issuing INCR against the same key will never enter in
 
 ### Lists
 
-Redis [lists](/docs/CS/DB/Redis/list.md) are implemented via Linked Lists. This means that even if you have millions of elements inside a list, the operation of adding a new element in the head or in the tail of the list is performed  *in constant time* .
+Redis [lists](/docs/CS/DB/Redis/struct/list.mdlist.md) are implemented via Linked Lists. This means that even if you have millions of elements inside a list, the operation of adding a new element in the head or in the tail of the list is performed  *in constant time* .
 
 Redis Lists are implemented with linked lists because for a database system it is crucial to be able to add elements to a very long list in a very fast way.
 
@@ -233,7 +233,7 @@ A few things to note about `BRPOP`:
 
 ### Hashes
 
-Redis [hashes](/docs/CS/DB/Redis/hash.md) look exactly how one might expect a "hash" to look, with field-value pairs.
+Redis [hashes](/docs/CS/DB/Redis/struct/hash.mdhash.md) look exactly how one might expect a "hash" to look, with field-value pairs.
 
 While hashes are handy to represent  *objects* , actually the number of fields you can put inside a hash has no practical limits (other than available memory), so you can use hashes in many different ways inside your application.
 
@@ -241,7 +241,7 @@ It is worth noting that small hashes (i.e., a few elements with small values) ar
 
 ### Sets
 
-Redis [Sets](/docs/CS/DB/Redis/set.md) are unordered collections of strings. 
+Redis [Sets](/docs/CS/DB/Redis/struct/set.md/set.md) are unordered collections of strings. 
 
 The `SADD` command adds new elements to a set.
 It's also possible to do a number of other operations against sets like testing if a given element already exists, performing the intersection, union or difference between multiple sets, and so forth.
@@ -250,7 +250,7 @@ Sets are good for expressing relations between objects. For instance we can easi
 
 ### Sorted sets
 
-[Sorted sets](/docs/CS/DB/Redis/zset.md) are a data type which is similar to a mix between a Set and a Hash. Like sets, sorted sets are composed of unique, non-repeating string elements, so in some sense a sorted set is a set as well.
+[Sorted sets](/docs/CS/DB/Redis/struct/zset.mdzset.md) are a data type which is similar to a mix between a Set and a Hash. Like sets, sorted sets are composed of unique, non-repeating string elements, so in some sense a sorted set is a set as well.
 
 However while elements inside sets are not ordered, every element in a sorted set is associated with a floating point value, called *the score* (this is why the type is also similar to a hash, since every element is mapped to a value).
 
@@ -363,7 +363,7 @@ It's important to note that **even when a command fails, all the other commands 
 
 We just have to repeat the operation hoping this time we'll not get a new race. This form of locking is called *optimistic locking* and is a very powerful form of locking.
 
-A [Redis script](/docs/CS/DB/Redis/struct.md?id=lua-scripts) is transactional by definition, so everything you can do with a Redis transaction, you can also do with a script, and usually the script will be both simpler and faster.
+A [Redis script](/docs/CS/DB/Redis/struct/struct.mdruct.md?id=lua-scripts) is transactional by definition, so everything you can do with a Redis transaction, you can also do with a script, and usually the script will be both simpler and faster.
 
 ### PubSub
 

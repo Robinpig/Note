@@ -285,7 +285,7 @@ robj *createEmbeddedStringObject(const char *ptr, size_t len) {
 
 zmolloc twice
 
-1. [createObject](/docs/CS/DB/Redis/struct.md?id=createobject)
+1. [createObject](/docs/CS/DB/Redis/struct/struct.mdruct.md?id=createobject)
 2. [sdsnewlen in sdsfromlonglong](/docs/CS/DB/Redis/SDS?id=sdsnewlen)
 
 ```c
@@ -671,7 +671,7 @@ incr
 
 ## Links
 
-- [Redis Struct](/docs/CS/DB/Redis/struct.md?id=Strings)
+- [Redis Struct](/docs/CS/DB/Redis/struct/struct.mdruct.md?id=Strings)
 
 ## References
 

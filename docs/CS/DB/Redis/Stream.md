@@ -220,7 +220,7 @@ raxNode *raxNewNode(size_t children, int datafield) {
 
 ## Links
 
-- [Redis Struct](/docs/CS/DB/Redis/struct.md)
+- [Redis Struct](/docs/CS/DB/Redis/struct/struct.md)
 
 ## References
 

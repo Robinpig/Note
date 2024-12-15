@@ -1,7 +1,7 @@
 ## Introduction
 
 
-Bitmaps are not an actual data type, but a set of bit-oriented operations defined on the [String type](/docs/CS/DB/Redis/SDS.md). Since strings are binary safe blobs and their maximum length is 512 MB, they are suitable to set up to 2^32 different bits.
+Bitmaps are not an actual data type, but a set of bit-oriented operations defined on the [String type](/docs/CS/DB/Redis/struct/SDS.md). Since strings are binary safe blobs and their maximum length is 512 MB, they are suitable to set up to 2^32 different bits.
 
 One of the biggest advantages of bitmaps is that they often provide extreme space savings when storing information. For example in a system where different users are represented by incremental user IDs, it is possible to remember a single bit information (for example, knowing whether a user wants to receive a newsletter) of 4 billion of users using just 512 MB of memory.
 
@@ -29,7 +29,7 @@ SETBIT key offset value
 
 ## Links
 
-- [Redis Struct](/docs/CS/DB/Redis/struct.md?id=hashes)
+- [Redis Struct](/docs/CS/DB/Redis/struct/struct.md?id=hashes)
 
 
 

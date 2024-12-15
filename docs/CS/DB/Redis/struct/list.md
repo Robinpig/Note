@@ -69,7 +69,7 @@ dup free match can be override  by other method
 ## LPUSH
 
 1. [lookupKeyWrite in db](/docs/CS/DB/Redis/redisDb.md?id=redisObject)
-2. [createQuicklistObject](/docs/CS/DB/Redis/list.md?id=quicklistCreate)
+2. [createQuicklistObject](/docs/CS/DB/Redis/struct/list.mdlist.md?id=quicklistCreate)
 3. [dbAdd](/docs/CS/DB/Redis/redisDb.md?id=add)
 
 default using quicklist
@@ -210,7 +210,7 @@ void listTypePush(robj *subject, robj *value, int where) {
 }
 ```
 
-call [ziplistPush](/docs/CS/DB/Redis/zset.md?id=insert)
+call [ziplistPush](/docs/CS/DB/Redis/struct/zset.mdzset.md?id=insert)
 
 ```c
 //quicklist.c
@@ -288,4 +288,4 @@ quicklist解决了单个ziplist过大 缩小连锁更新的范围
 
 ## Links
 
-- [Redis Struct](/docs/CS/DB/Redis/struct.md?id=lists)
+- [Redis Struct](/docs/CS/DB/Redis/struct/struct.mdruct.md?id=lists)
