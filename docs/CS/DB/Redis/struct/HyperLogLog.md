@@ -73,6 +73,12 @@ pfmerge newlog loglog
 
 begin with HYLL
 
+
+
+## Links
+
+- [Redis Struct](/docs/CS/DB/Redis/struct/struct.md)
+
 ## References
 1. [HyperLogLog: the analysis of a near-optimal cardinality estimation algorithm](http://algo.inria.fr/flajolet/Publications/FlFuGaMe07.pdf)
 2. [New cardinality estimation algorithms for HyperLogLog sketches](https://arxiv.org/pdf/1702.01284.pdf)

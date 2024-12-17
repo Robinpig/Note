@@ -158,6 +158,8 @@ stream *streamNew(void) {
 Representation of a radix tree as implemented in this file, that contains the strings "foo", "foobar" and "footer" after the insertion of each word.
 When the node represents a key inside the radix tree, we write it between [], otherwise it is written between ().
 
+Redis使用的是Compact Prefix Tree
+
 This is the vanilla representation:
 
 ```c

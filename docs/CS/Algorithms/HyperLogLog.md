@@ -26,7 +26,7 @@ To analyze the complexity, the data streaming ${\displaystyle (\epsilon ,\delta 
 The add operation depends on the size of the output of the hash function. As this size is fixed, we can consider the running time for the add operation to be ${\displaystyle O(1)}$.
 
 The count and merge operations depend on the number of registers m and have a theoretical cost of ${\displaystyle O(m)}$.
-In some implementations ([Redis](/docs/CS/DB/Redis/HyperLogLog.md)) the number of registers is fixed and the cost is considered to be ${\displaystyle O(1)}$ in the documentation.
+In some implementations ([Redis](/docs/CS/DB/Redis/struct/HyperLogLog.md)) the number of registers is fixed and the cost is considered to be ${\displaystyle O(1)}$ in the documentation.
 
 ## Links
 

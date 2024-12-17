@@ -73,7 +73,7 @@ The following is the list of all the data structures supported by Redis, which w
   you can set and clear individual bits, count all the bits set to 1, find the first set or unset bit, and so forth.
 * HyperLogLogs: this is a probabilistic data structure which is used in order to estimate the cardinality of a set.
   Don't be scared, it is simpler than it seems... See later in the HyperLogLog section of this tutorial.
-* [Streams](/docs/CS/DB/Redis/Stream.md): append-only collections of map-like entries that provide an abstract log data type.
+* [Streams](/docs/CS/DB/Redis/struct/Stream.md): append-only collections of map-like entries that provide an abstract log data type.
 
 
 
@@ -292,7 +292,7 @@ To split a bitmap across different keys instead of setting all the bits into a k
 
 ### HyperLogLogs
 
-A [HyperLogLog](/docs/CS/DB/Redis/HyperLogLog.md) is a probabilistic data structure used in order to count unique things (technically this is referred to estimating the cardinality of a set).
+A [HyperLogLog](/docs/CS/DB/Redis/struct/HyperLogLog.md) is a probabilistic data structure used in order to count unique things (technically this is referred to estimating the cardinality of a set).
 Usually counting unique items requires using an amount of memory proportional to the number of items you want to count, because you need to remember the elements you have already seen in the past in order to avoid counting them multiple times.
 However there is a set of algorithms that trade memory for precision: you end with an estimated measure with a standard error, which in the case of the Redis implementation is less than 1%.
 The magic of this algorithm is that you no longer need to use an amount of memory proportional to the number of items counted, and instead can use a constant amount of memory! 12k bytes in the worst case, or a lot less if your HyperLogLog (We'll just call them HLL from now) has seen very few elements.
