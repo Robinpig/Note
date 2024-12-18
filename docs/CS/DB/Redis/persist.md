@@ -431,6 +431,9 @@ void propagate(struct redisCommand *cmd, int dbid, robj **argv, int argc,
 }
 ```
 #### feedAppendOnlyFile
+
+feedAppendOnlyFile创建一个空的简单动态字符串（sds），将当前所有追加命令操作都追加到这个sds中，最终将这个sds追加到`server.aof_buf`
+
 ```c
 void feedAppendOnlyFile(struct redisCommand *cmd, int dictid, robj **argv, int argc) {
     sds buf = sdsempty();
