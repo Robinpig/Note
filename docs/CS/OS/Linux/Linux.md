@@ -706,3 +706,4 @@ If it's not, it should go back to sleeping on the condition variable, waiting fo
 3. [linux-insides](https://0xax.gitbooks.io/linux-insides/content/)
 4. [Linux0.11源码解析](https://zhuanlan.zhihu.com/c_1094189343643652096)
 5. [The Linux Kernel documentation](https://www.kernel.org/doc/)
+6. [Linux Weekly News](https://lwn.net/)
