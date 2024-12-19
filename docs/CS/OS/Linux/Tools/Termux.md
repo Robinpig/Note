@@ -22,14 +22,12 @@ apt get update
 
 apt get upgrade
 
-
 apt get install nodejs
 ```
 
 Network tools:
 
 ```shell
-
 apt install net-tools
 
 apt install dnsutils
@@ -41,6 +39,15 @@ pkg install netcat-openbsd
 
 pkg install root-repo
 pkg install tcpdump
+```
+
+> 安装curl会出现libcurl.so
+
+
+
+```shell
+pkg install wget zsh -y
+sh -c "$(wget -O- https://raw.githubusercontent.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
 ```
 
 
