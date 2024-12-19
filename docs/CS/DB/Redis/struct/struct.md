@@ -268,7 +268,7 @@ Because of this characteristic a common use case is leader boards.
 
 ### Bitmaps
 
-[Bitmaps](/docs/CS/DB/Redis/bitmap.md) are not an actual data type, but a set of bit-oriented operations defined on the String type.
+[Bitmaps](/docs/CS/DB/Redis/struct/bitmap.md) are not an actual data type, but a set of bit-oriented operations defined on the String type.
 Since strings are binary safe blobs and their maximum length is 512 MB, they are suitable to set up to 2^32 different bits.
 
 Bit operations are divided into two groups: constant-time single bit operations, like setting a bit to 1 or 0, or getting its value, and operations on groups of bits, for example counting the number of set bits in a given range of bits (e.g., population counting).
