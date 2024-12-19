@@ -740,6 +740,30 @@ public class ZKDatabase {
 ```
 
 
+FileTxnSnapLog above the implementations of txnlog and snapshot
+
+```java
+public class FileTxnSnapLog {
+
+    //the directory containing
+    //the transaction logs
+    final File dataDir;
+    //the directory containing
+    //the snapshot directory
+    final File snapDir;
+    TxnLog txnLog;
+    SnapShot snapLog;
+    private final boolean autoCreateDB;
+    private final boolean trustEmptySnapshot;
+    public static final int VERSION = 2;
+}
+```
+SnapLog 是 Zookeeper 的持久化存储模块，用于将 Zookeeper 的内存数据备份到磁盘上。SnapLog 由两部分组成：事务日志（Transaction Log）和快照文件（Snapshot File）
+事务日志用于记录所有的数据变更操作，快照文件会定期全量备份 DataTree 中的所有数据
+当 Server 启动时，会先加载最近日期的快照文件，然后逐个加载事务日志文件，最终恢复到最新的状态
+
+客户端的每次写入操作都会同步到磁盘，这会增加写操作的延迟，因此事务日志的写入性能直接决定 Zookeeper Server 对请求的响应速度，为了增加写入性能，Zookeeper 采用磁盘预分配的策略，在事务日志文件创建之初就向操作系统预分配一个很大的磁盘块，默认是64M，而一旦已分配的文件剩余空间不足 4KB 时，那么将会再次进行预分配
+
 ```java
 public class FileTxnSnapLog {
     public long restore(DataTree dt, Map<Long, Integer> sessions, PlayBackListener listener) throws IOException {
@@ -799,25 +823,6 @@ public class FileTxnSnapLog {
     }
 }
 ```
-FileTxnSnapLog above the implementations of txnlog and snapshot
-
-```java
-public class FileTxnSnapLog {
-
-    //the directory containing
-    //the transaction logs
-    final File dataDir;
-    //the directory containing
-    //the snapshot directory
-    final File snapDir;
-    TxnLog txnLog;
-    SnapShot snapLog;
-    private final boolean autoCreateDB;
-    private final boolean trustEmptySnapshot;
-    public static final int VERSION = 2;
-}
-```
-
 
 ```java
 public class FileTxnSnapLog {
