@@ -1563,3 +1563,4 @@ with jvisualvm
 21. [垃圾回收算法手册-自动内存管理的艺术]()
 22. [GraalVM与Java静态编译]()
 23. [JVM ,Java paper](https://www.cnblogs.com/WCFGROUP/p/6373416.html)
+24. [文章导航 - 深入剖析Java虚拟机HotSpot](https://mp.weixin.qq.com/s/uG9CNGypYtJptoDMUtZwMg)
