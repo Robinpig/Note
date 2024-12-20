@@ -406,6 +406,10 @@ void Fil_shard::space_free_low(fil_space_t *&space) {
 
 ## Storage
 
+
+
+> MySQL 里面完全不用担心数据量大了以后, Btree 高度增加影响性能的问题, 10TB 以内的数据 Btree 高度一定在 4 层以内, 超过 10TB 以后也会停留在 5 层, 不会更高了, 因为 MySQL 单表最大就支持 64TB 了
+
 ### Disk I/O
 
 InnoDB uses asynchronous disk I/O where possible, by creating a number of threads to handle I/O operations, while permitting other database operations to proceed while the I/O is still in progress.
