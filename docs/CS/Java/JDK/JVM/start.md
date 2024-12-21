@@ -629,7 +629,7 @@ init [CodeCache](/docs/CS/Java/JDK/JVM/CodeCache.md?id=init)
   os_init_globals();
 ```
 
-init [stub](/docs/CS/Java/JDK/JVM/Stub.md?id=init)
+init [stub](/docs/CS/Java/JDK/JVM/JavaCall?id=init)
 
 ```cpp
   stubRoutines_init1();

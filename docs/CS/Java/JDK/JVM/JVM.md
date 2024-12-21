@@ -228,7 +228,7 @@ These libraries are usually present in the form of .dll or .so files. These nati
 - [start](/docs/CS/Java/JDK/JVM/start.md) and [destroy](/docs/CS/Java/JDK/JVM/destroy.md)
 - [Thread](/docs/CS/Java/JDK/JVM/Thread.md)
 
-[JavaCalls](/docs/CS/Java/JDK/JVM/Stub.md?id=JavaCalls) and [JNI](/docs/CS/Java/JDK/Basic/JNI.md)
+[JavaCalls](/docs/CS/Java/JDK/JVM/JavaCall?id=JavaCalls) and [JNI](/docs/CS/Java/JDK/Basic/JNI.md)
 
 ```dot
 strict digraph {
