@@ -19,7 +19,15 @@ And everything is actually pass by value. <br>
 
 JDK版本
 
-[毕昇JDK](https://www.openeuler.org/zh/other/projects/bishengjdk/)
+- [毕昇JDK](https://www.openeuler.org/zh/other/projects/bishengjdk/)
+- OpenJDK
+- 
+
+
+
+## Build
+
+参考 https://github.com/Robinpig/jdk
 
 ## Basics
 
@@ -136,26 +144,6 @@ then the overall effect can be to reduce latency, even though more requests are 
 
 `performance elbow`
 
-## Building the JDK
-
-Prepare environment:
-
-
-## Upgrade
-
-Upgrade causes:
-- performance improvement, such as JVM(GC)
-- Framework supported, like Spring
-
-Upgrade concern:
-- dependencies, such as xml, 
-
-8 to 11
-
-Maven, Compile 
-
-jdwp host/ip from 0.0.0.0 to localhost and not support to debug remotely
-
 
 
 ## Tuning
@@ -169,6 +157,25 @@ Maven改造 大多数编译慢的情况都是生成依赖树阶段 依赖多而�
 - 优化依赖分析算法 边生成依赖树边进行版本仲裁
 - 增量缓存依赖树 修改pom文件的情况远小于修改自己代码的情况
 - maven程序编译成机器码运行
+
+### Upgrade
+
+Upgrade causes:
+
+- performance improvement, such as JVM(GC)
+- Framework supported, like Spring
+
+Upgrade concern:
+
+- dependencies, such as xml, 
+
+8 to 11
+
+Maven, Compile 
+
+jdwp host/ip from 0.0.0.0 to localhost and not support to debug remotely
+
+
 
 ## Links
 
