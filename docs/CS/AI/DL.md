@@ -1,3 +1,5 @@
+## Introduction 
+
 
 | Share Data        | Copy Data      |
 | ----------------- | -------------- |
@@ -91,3 +93,18 @@ $$
 | 极限学习机                | Extreme Learning Machines                          | 随机连接的FFNN，不使用反向传播，函数拟合能力较弱             |
 
  **Rectified Linear Unit**  ReLU	修正函数
+
+
+
+
+
+## Links
+
+
+
+
+
+## References
+
+
+
