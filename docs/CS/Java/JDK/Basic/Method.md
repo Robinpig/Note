@@ -122,6 +122,33 @@ void Method::link_method(const methodHandle& h_method, TRAPS) {
 }
 ```
 
+entry_for_method
+
+```c
+static MethodKind method_kind(const methodHandle& m);
+static address    entry_for_kind(MethodKind k)                { assert(0 <= k && k < number_of_method_entries, "illegal kind"); return _entry_table[k]; }
+static address    entry_for_method(const methodHandle& m)     { return entry_for_kind(method_kind(m)); }
+```
+Java方法的类型MethodKind
+
+```c
+ enum MethodKind {
+    zerolocals,                                                 // method needs locals initialization
+    zerolocals_synchronized,                                    // method needs locals initialization & is synchronized
+    native,                                                     // native method
+    native_synchronized,                                        // native method & is synchronized
+    empty,                                                      // empty method (code: _return)
+    getter,                                                     // getter method
+    setter,                                                     // setter method
+    abstract,                                                   // abstract method (throws an AbstractMethodException)
+
+    // ...
+    invalid = -1
+  };
+```
+
+
+
 #### set_code
 
 Install compiled code.  Instantly it can execute.

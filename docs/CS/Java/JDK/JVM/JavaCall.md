@@ -58,6 +58,70 @@ class JavaCalls: AllStatic {
 };
 ```
 
+
+
+这些函数与invokestatic、invokedynamic、invokestatic、invokespecial、invokevirtual几种方法调用指令相对应
+
+
+
+```c
+JNI_ENTRY(void, jni_CallStaticVoidMethod(JNIEnv *env, jclass cls, jmethodID methodID, ...))
+  HOTSPOT_JNI_CALLSTATICVOIDMETHOD_ENTRY(env, cls, (uintptr_t) methodID);
+  DT_VOID_RETURN_MARK(CallStaticVoidMethod);
+
+  va_list args;
+  va_start(args, methodID);
+  JavaValue jvalue(T_VOID);
+  JNI_ArgumentPusherVaArg ap(methodID, args);
+  jni_invoke_static(env, &jvalue, nullptr, JNI_STATIC, methodID, &ap, CHECK);
+  va_end(args);
+JNI_END
+```
+
+
+
+
+
+StubRoutines::call_stub() 创建的CallStub如下
+
+
+
+```c
+#define CAST_TO_FN_PTR(func_type, value) (reinterpret_cast<func_type>(value))
+```
+
+宏定义展开
+
+```c
+#define CAST_TO_FN_PTR(func_type, value) (reinterpret_cast<func_type>(value))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+zerolocals表示正常的Java方法调用，包括Java程序的main()方法，对于zerolocals来说，会调用ig_this->generate_normal_entry()函数生成入口。generate_normal_entry()函数会为执行的方法生成堆栈，而堆栈由局部变量表（用来存储传入的参数和被调用方法的局部变量）、Java方法栈帧数据和操作数栈这三大部分组成，所以entry_point例程（其实就是一段机器指令片段，英文名为stub）会创建这3部分来辅助Java方法的执行
+
+通过调用CallStaticVoidMethod()函数来调用Java主类中的main()方法。控制权转移到Java主类中的main()方法之中。调用CallStaticVoidMethod()函数就是调用jni_CallStaticVoidMethod()函数
+
+
+
+
+
+
+
+
 ## call_stub
 
 a function pointer

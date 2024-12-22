@@ -20,6 +20,14 @@ Use checked exceptions for recoverable conditions and runtime exceptions for pro
 - use checked exceptions for conditions from which the caller can reasonably be expected to recover.
 - Use runtime exceptions to indicate programming errors.
 
+
+
+
+
+Java 层面的 NPE 主要分为两类，一类是代码中主动抛出 NPE 异常，并被 JVM 捕获 （这里的代码既可以是 Java 代码，也可以是 JVM 内部代码）；另一类隐式 NPE（其原理是 JVM 内部遇到空指针访问，会产生 SIGSEGV 信号， 在 JVM 内部还会检查运行时是否存在 SIGSEGV 信号）
+
+
+
 All of the unchecked throwables you implement should subclass `RuntimeException`.
 
 Avoid unnecessary use of checked exceptions

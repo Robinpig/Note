@@ -19,6 +19,12 @@ JVM的构成主要包括如下几点：
 
 
 
+>
+
+[](https://github.com/FranzHaidnor/haidnorJVM)
+
+
+
 Directory based on JDK12 HotSpot, [Git Link](https://github.com/openjdk/jdk/tree/master/src/hotspot)
 
 ```
@@ -1502,6 +1508,13 @@ CollectedHeap* G1Arguments::create_heap() {
 ```
 
 ## Tuning
+
+
+JVM的发展方向主要包括3个方面。
+1. 首先是性能优化，通过提高性能和资源利用率来适应云原生时代的需求。其中最主要的技术是AOT编译器和JIT编译器的结合，以及JVM的内存管理和垃圾回收机制的优化。
+2. 其次是对容器化的支持，通过支持容器化和新的微服务架构以适应云原生时代的需求。其中最主要的技术是JVM的镜像化和容器化以及对容器化环境的适配。
+3. 最后是安全性和可靠性的提升，通过持续提高安全性和可靠性来适应新时代的要求
+
 
 ```shell
 java -XX:+PrintFlagsFinal -XX:+UnlockDiagnosticVMOptions -version

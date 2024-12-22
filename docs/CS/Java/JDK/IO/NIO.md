@@ -439,6 +439,10 @@ public abstract class Buffer {
 ### HeapByteBuffer
 
 
+HeapBuffer 背后是有一个对应的基本类型数组作为存储的
+DirectBuffer 和 MappedBuffer 背后的存储内存是在堆外内存中分配，不受 JVM 管理，所以不能用一个 Java 基本类型的数组表示，而是直接记录这段堆外内存的起始地址
+
+
 ```java
 class HeapByteBuffer extends ByteBuffer {
     // For speed these fields are actually declared in X-Buffer;
