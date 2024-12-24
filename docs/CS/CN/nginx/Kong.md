@@ -5,14 +5,6 @@
 
 
 ```yml
-docker pull kong:2.0
-
-docker pull postgres:9.6
-mkdir -p /opt/postgres/data
-docker run -d --name postgres \
-	-e POSTGRES_PASSWORD=password \
-	-p 5432:5432 \version: '3'
-
 services:
 
   kong-database:
@@ -25,7 +17,7 @@ services:
       - POSTGRES_DB=kong
       - POSTGRES_PASSWORD=kong
     volumes:
-      - "/opt/kong-db-data-postgres:/var/lib/postgresql/data"
+      - "~/data/kong-db-data-postgres:/var/lib/postgresql/data"
 
   kong-migrations:
     image: kong:2
@@ -72,8 +64,6 @@ services:
     container_name: konga
     environment:
       - NODE_ENV=production
-	-v /home/data/postgres/data:/var/lib/postgresql/data \
-	postgres:9.6
 ```
 
 
