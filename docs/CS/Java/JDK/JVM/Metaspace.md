@@ -101,6 +101,27 @@ Into Non-Class Space go a lot of things, among them as largest contributors:
 
 
 
+A ClassLoaderMetaspace manages MetaspaceArena(s) for a CLD.
+
+A CLD owns one MetaspaceArena if UseCompressedClassPointers is false. 
+Otherwise it owns two - one for the Klass* objects from the class space, one for the other types of MetaspaceObjs from the non-class space.
+
+```c
+// +------+       +----------------------+       +-------------------+
+// | CLD  | --->  | ClassLoaderMetaspace | ----> | (non class) Arena |
+// +------+       +----------------------+  |    +-------------------+     allocation top
+//                                          |       |                        v
+//                                          |       + chunk -- chunk ... -- chunk
+//                                          |
+//                                          |    +-------------------+
+//                                          +--> | (class) Arena     |
+//                                               +-------------------+
+//                                                  |
+//                                                  + chunk ... chunk
+//                                                               ^
+//                                                               alloc top
+```
+
 
 
 

@@ -5,7 +5,24 @@ Thus, normal oops don't have any virtual functions.
 <br/>
 Instead, they forward all "virtual" functions to their klass, which does have a vtbl and does the C++ dispatch depending on the object's actual type.
 
+
+
+
+
+
+
 ## Klass
+
+A Klass provides:
+
+1. language level class object (method dictionary etc.)
+2. provide vm dispatch behavior for the object
+
+
+
+Both functions are combined into one C++ class.
+
+
 
 ### Klass hierarchy
 

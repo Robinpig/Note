@@ -37,6 +37,32 @@ public final class String
 
 `From JDK11, value change to byte[] and add byte coder.`
 
+JDK 11中编译后的字节码和JDK 8是不一样的，不再是基于StringBuilder实现，而是基于StringConcatFactory.makeConcatWithConstants动态生成一个方法来实现。这个会比StringBuilder更快，不需要创建StringBuilder对象，也会减少一次数组拷贝
+由于是内部使用的数组，用了UNSAFE.allocateUninitializedArray的方式更快分配byte[]数组。通过StringConcatFactory.makeConcatWithConstants而不是JavaC生成代码，是因为生成的代码无法使用JDK的内部方法进行优化，还有就是，如果有算法变化，存量的Lib不需要重新编译，升级新版本JDk就能提速
+StringConcatFactory.makeConcatWithConstants是公开API，可以用来动态生成字符串拼接的方法，除了编译器生成字节码调用，也可以直接调用。调用生成方法一次大约需要1微秒（千分之一毫秒）
+
+可以看出，生成的方法是通过如下步骤来实现：
+1. StringConcatHelper的mix方法计算长度和字符编码 (将长度和coder组合放到一个long中)
+2. 根据长度和编码构造一个byte[]
+3. 然后把相关的值写入到byte[]中
+4. 使用byte[]无拷贝的方式构造String对象。
+
+这样的实现，和使用StringBuilder相比，减少了StringBuilder以及StringBuilder内部byte[]对象的分配，可以减轻GC的负担。也能避免可能产生的StringBuilder在latin1编码到UTF16时的数组拷贝。
+   
+StringBuilder缺省编码是LATIN1(ISO_8859_1)，如果append过程中遇到UTF16编码，会有一个将LATIN1转换为UTF16的动作，这个动作实现的方法是inflate。
+如果拼接的参数如果是带中文的字符串，使用StringBuilder还会多一次数组拷贝
+StringConcatFactory.makeConcatWithConstants是MethodHandles实现的。
+MethodHandle可以是一个方法引用，MethodHandles可以对MethodHandle做各种转换，包括过滤参数（filterAgument），参数折叠（foldArgument）、添加参数（insertArguments），最终生成的MethodHandle可以被认为是一个语法树。
+MethodHandles API功能强大，甚至可以认为它是图灵完备的。
+当然也有缺点，复杂的MethodHandle TreeExpress会生成大量中的中间类，JIT的开销也较大。
+   
+StringConcatFactory.makeConcatWithConstants通过MethodHandles动态构建一个MethodHandle调用StringConcatHelper的方法，组装一个MethodHandle实现无拷贝的字符拼接实现
+   
+这种动态生成MethodHandle表达式在参数个数较多时，会遇到问题，它会生成大量中间转换类，并且生成MethodHandle消耗比较大，
+极端情况下，C2优化器需要高达2G的内存来编译复杂的字符串拼接 ( https://github.com/openjdk/jdk/pull/18953 )，因此JDK 23引入了JVM启动参数java.lang.invoke.StringConcat.highArityThreshold，缺省值为20，当超过这个阈值时，使用StringBuilder实现
+   
+除了参数个数较多时编译消耗资源多之外，MethodHandle表达式还有启动速度比较慢的问题
+
 ```java
     /** The value is used for character storage. */
     @Stable

@@ -133,3 +133,7 @@ func makemap_small() *hmap {
 }
 ```
 
+
+## Links
+
+- [Golang](/docs/CS/Go/Go.md)

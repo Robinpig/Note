@@ -17,14 +17,6 @@ Change Repo:
 termux-change-repo
 ```
 
-```shell
-apt get update
-
-apt get upgrade
-
-apt get install nodejs
-```
-
 Network tools:
 
 ```shell
@@ -52,6 +44,54 @@ sh -c "$(wget -O- https://raw.githubusercontent.com/robbyrussell/oh-my-zsh/maste
 
 
 
+```shell
+pkg install autojump
+```
+
+
+
+```shell
+apt get update
+apt get upgrade
+
+apt get install nodejs
+```
+
+
+
+安装 proot 和 proot-distro
+
+```bash
+pkg install proot proot-distro
+```
+
+使用proot模拟linux文件系统：
+
+```bash
+termux-chroot
+```
+
+查看一下可用的发行版有哪些：
+
+```bash
+proot-distro list
+```
+
+安装 Ubuntu：
+
+```shell
+proot-distro install ubuntu
+```
+
+进入发行版环境
+
+```bash
+proot-distro login ubuntu
+```
+
+
+
+
 ## Links
 
 - [Linux](/docs/CS/OS/Linux/Linux.md)
@@ -59,3 +99,5 @@ sh -c "$(wget -O- https://raw.githubusercontent.com/robbyrussell/oh-my-zsh/maste
 ## References
 
 1. [Termux Wiki](https://wiki.termux.com/wiki/Main_Page)
+1. [一篇文章上手Termux](https://toad114514.github.io/2024/08/20/termux-all/)
+1. [termux从入门到入土](https://linux.do/t/topic/270578)
