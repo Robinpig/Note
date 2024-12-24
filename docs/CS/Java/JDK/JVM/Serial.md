@@ -650,3 +650,8 @@ public:
   }
 };
 ```
+
+
+## Links
+
+- [Garbage Collection](/docs/CS/Java/JDK/JVM/GC.md)

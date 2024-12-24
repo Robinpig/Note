@@ -254,7 +254,14 @@ Final Mark:
 
 ## Generational Shenandoah
 
+
+
 ## Links
+
+- [Garbage Collection](/docs/CS/Java/JDK/JVM/GC.md)
+
+
+
 
 ## References
 

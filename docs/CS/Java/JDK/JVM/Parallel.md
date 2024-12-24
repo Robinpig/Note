@@ -641,6 +641,13 @@ bool PSParallelCompact::invoke_no_policy(bool maximum_heap_compaction) {
 }
 ```
 
+
+## Links
+
+- [Garbage Collection](/docs/CS/Java/JDK/JVM/GC.md)
+
+
+
 ## References
 
 1. [Optimizing best-of-2 work stealing queue selection](https://bugs.openjdk.org/browse/JDK-8205921)
