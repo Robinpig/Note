@@ -751,6 +751,11 @@ Space losses: 0 bytes internal + 0 bytes external = 0 bytes total
 
 ## allocate_instance
 
+InstanceKlass了解对象所有信息，包括字段个数、大小、是否为数组、是否有父类，它能根据这些信息调用InstanceKlass::allocate_instance创建对应的instanceOop/arrayOop
+
+虚拟机首先获知对象大小，然后申请一片内存（mem_allocate），返回这片内存的首地址（HeapWord，完全等价于char*指针）
+接着初始化（initialize）这片内存最前面的一个机器字，将它设置为对象头的数据。然后将这片内存地址强制类型转换为oop
+
 called by `java.lang.reflect.Constructor` or `new Klass(args ...)` or etc.
 
 ```cpp

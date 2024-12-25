@@ -147,11 +147,11 @@ _number_of_stubs = 0;
 
 
 下面就从模板解释器的初始化开始，分析HotSpot的解释代码的生成。
-在创建虚拟机时，在初始化全局模块过程中，会调用interpreter_init()初始化模板解释器，模板解释器的初始化包括抽象解释器AbstractInterpreter的初始化、模板表TemplateTable的初始化、CodeCache的Stub队列StubQueue的初始化、解释器生成器InterpreterGenerator的初始化
+在创建虚拟机时，在[init_globals2](/docs/CS/Java/JDK/JVM/start.md?id=init_globals2)过程中，会调用interpreter_init()初始化模板解释器，
+模板解释器的初始化包括抽象解释器AbstractInterpreter的初始化、模板表TemplateTable的初始化、CodeCache的Stub队列StubQueue的初始化、解释器生成器InterpreterGenerator的初始化
 
 
-
-Threads::create_vm -> init_globals2
+ 
 
 ```c++
 jint init_globals2() {
@@ -173,11 +173,6 @@ jint init_globals2() {
   if (!compileBroker_init()) {
     return JNI_EINVAL;
   }
-#if INCLUDE_JVMCI
-  if (EnableJVMCI) {
-    JVMCI::initialize_globals();
-  }
-#endif
 
   if (!universe_post_init()) {
     return JNI_ERR;

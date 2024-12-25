@@ -695,9 +695,56 @@ interpreter_init_code after javaClasses_init and before any method gets linked
 }
 ```
 
+
+### init_globals2
+
+```c++
+jint init_globals2() {
+  universe2_init();          // dependent on codeCache_init and initial_stubs_init
+  javaClasses_init();        // must happen after vtable initialization, before referenceProcessor_init
+  interpreter_init_code();   // after javaClasses_init and before any method gets linked
+  referenceProcessor_init();
+  jni_handles_init();
+#if INCLUDE_VM_STRUCTS
+  vmStructs_init();
+#endif // INCLUDE_VM_STRUCTS
+
+  vtableStubs_init();
+  InlineCacheBuffer_init();
+  compilerOracle_init();
+  dependencyContext_init();
+  dependencies_init();
+
+  if (!compileBroker_init()) {
+    return JNI_EINVAL;
+  }
+#if INCLUDE_JVMCI
+  if (EnableJVMCI) {
+    JVMCI::initialize_globals();
+  }
+#endif
+
+  if (!universe_post_init()) {
+    return JNI_ERR;
+  }
+  compiler_stubs_init(false /* in_compiler_thread */); // compiler's intrinsics stubs
+  final_stubs_init();    // final StubRoutines stubs
+  MethodHandles::generate_adapters();
+
+  // All the flags that get adjusted by VM_Version_init and os::init_2
+  // have been set so dump the flags now.
+  if (PrintFlagsFinal || PrintFlagsRanges) {
+    JVMFlag::printFlags(tty, false, PrintFlagsRanges);
+  }
+
+  return JNI_OK;
+}
+```
+
+
 #### universe_post_init
 
-Init_globals -> universe_post_init
+init_globals2 -> universe_post_init -> Universe::initialize_known_methods -> link_class_or_fail
 
 init OutOfMemoryError allocate instances
 

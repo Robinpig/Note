@@ -228,6 +228,8 @@ JDK9+
 
 ## StringTable
 
+StringTable则是用来存放这些标准表示的字符串的哈希容器。它没有使用引用计数管理，是众多类型的GC Root之一，在垃圾回收过程中会被当作根，以它为起点出发进行标记。虚拟机用户可以使用参数-XX:+PrintStringTableStatistics在虚拟机退出时输出StringTable和SymbolTable的统计信息，或者使用jcmd <pid> VM.stringtable在运行时输出相关信息
+
 HashTable size:
 
 1. JDK1.8 60013

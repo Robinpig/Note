@@ -894,7 +894,8 @@ After a class is loaded into memory, it undergoes the linking process. Linking a
 
 Linking includes the following steps:
 
-- Verification: This phase checks the structural correctness of the .class file by checking it against a set of constraints or rules. If verification fails for some reason, we get a VerifyException.
+- Verification: This phase checks the structural correctness of the .class file by checking it against a set of constraints or rules. 
+  If verification fails for some reason, we get a VerifyException.
 - Preparation: In this phase, the JVM allocates memory for the static fields of a class or interface, and initializes them with default values.
 - Resolution: In this phase, symbolic references are replaced with direct references present in the runtime constant pool.
   For example, if you have references to other classes or constant variables present in other classes, they are resolved in this phase and replaced with their actual references.
@@ -915,16 +916,34 @@ Alternatively, an implementation may choose an "eager" linkage strategy, where a
 
 Because linking involves the allocation of new data structures, it may fail with an `OutOfMemoryError`.
 
+
+
+[init_globals2](/docs/CS/Java/JDK/JVM/start.md?id=init_globals2) -> universe_post_init -> Universe::initialize_known_methods -> link_class_or_fail
+
+```c
+// Called to verify that a class can link during initialization, without
+// throwing a VerifyError.
+bool InstanceKlass::link_class_or_fail(TRAPS) {
+  assert(is_loaded(), "must be loaded");
+  if (!is_linked()) {
+    link_class_impl(CHECK_false);
+  }
+  return is_linked();
+}
+```
+
+
 1. [verification](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=Verification)
 2. [Rewriting](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=Rewriting) after verification but before the first method of the class is executed
 3. relocate jsrs and link methods after they are all rewritten
 4. [Initialize_vtable](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=initialize_vtable) and [initialize_itable](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=initialize_itable)
 5. set_init_state
 
+
 ```cpp
 // InstanceKlass.cpp
 bool InstanceKlass::link_class_impl(TRAPS) {
-  if (DumpSharedSpaces && is_in_error_state()) {
+  if (DumpSharedSpaces && SystemDictionaryShared::has_class_failed_verification(this)) {
     // This is for CDS dumping phase only -- we use the in_error_state to indicate that
     // the class has failed verification. Throwing the NoClassDefFoundError here is just
     // a convenient way to stop repeat attempts to verify the same (bad) class.
@@ -946,12 +965,11 @@ bool InstanceKlass::link_class_impl(TRAPS) {
 
   // Timing
   // timer handles recursion
-  assert(THREAD->is_Java_thread(), "non-JavaThread in link_class_impl");
-  JavaThread* jt = (JavaThread*)THREAD;
+  JavaThread* jt = THREAD;
 
   // link super class before linking this class
   Klass* super_klass = super();
-  if (super_klass != NULL) {
+  if (super_klass != nullptr) {
     if (super_klass->is_interface()) {  // check if super class is an interface
       ResourceMark rm(THREAD);
       Exceptions::fthrow(
@@ -989,15 +1007,11 @@ bool InstanceKlass::link_class_impl(TRAPS) {
                              jt->get_thread_stat()->perf_recursion_counts_addr(),
                              jt->get_thread_stat()->perf_timers_addr(),
                              PerfClassTraceTime::CLASS_LINK);
-```
 
-[verification](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=Verification) &
-
-```
+  // verification & rewriting
   {
-    HandleMark hm(THREAD);
-    Handle h_init_lock(THREAD, init_lock());
-    ObjectLocker ol(h_init_lock, THREAD, h_init_lock() != NULL);
+    LockLinkState init_lock(this, jt);
+
     // rewritten will have been set if loader constraint error found
     // on an earlier link attempt
     // don't verify or rewrite if already rewritten
@@ -1005,6 +1019,9 @@ bool InstanceKlass::link_class_impl(TRAPS) {
 
     if (!is_linked()) {
       if (!is_rewritten()) {
+        if (is_shared()) {
+          assert(!verified_at_dump_time(), "must be");
+        }
         {
           bool verify_ok = verify_code(THREAD);
           if (!verify_ok) {
@@ -1019,55 +1036,38 @@ bool InstanceKlass::link_class_impl(TRAPS) {
           return true;
         }
 
-```
-
-[Rewriting](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=Rewriting)
-
-```
         // also sets rewritten
         rewrite_class(CHECK_false);
       } else if (is_shared()) {
         SystemDictionaryShared::check_verification_constraints(this, CHECK_false);
       }
 
-```
-
-relocate jsrs and [link methods]() after they are all rewritten
-
-```
+      // relocate jsrs and link methods after they are all rewritten
       link_methods(CHECK_false);
-```
 
-Initialize the vtable and interface table after
-methods have been rewritten since rewrite may fabricate new Method*s.
-also does loader constraint checking
-
-initialize_vtable and initialize_itable need to be rerun for a shared class if the class is not loaded by the NULL classloader.
-
-```cpp
-      ClassLoaderData * loader_data = class_loader_data();
-      if (!(is_shared() &&
-            loader_data->is_the_null_class_loader_data())) {
-        vtable().initialize_vtable(true, CHECK_false);
-        itable().initialize_itable(true, CHECK_false);
+      // Initialize the vtable and interface table after
+      // methods have been rewritten since rewrite may
+      // fabricate new Method*s.
+      // also does loader constraint checking
+      //
+      // initialize_vtable and initialize_itable need to be rerun
+      // for a shared class if
+      // 1) the class is loaded by custom class loader or
+      // 2) the class is loaded by built-in class loader but failed to add archived loader constraints or
+      // 3) the class was not verified during dump time
+      bool need_init_table = true;
+      if (is_shared() && verified_at_dump_time() &&
+          SystemDictionaryShared::check_linking_constraints(THREAD, this)) {
+        need_init_table = false;
       }
-#ifdef ASSERT
-      else {
-        vtable().verify(tty, true);
-        // In case itable verification is ever added.
-        // itable().verify(tty, true);
+      if (need_init_table) {
+        vtable().initialize_vtable_and_check_constraints(CHECK_false);
+        itable().initialize_itable_and_check_constraints(CHECK_false);
       }
-#endif
-```
 
-set_init_state
-
-```cpp
-      set_init_state(linked);
+      set_initialization_state_and_notify(linked, THREAD);
       if (JvmtiExport::should_post_class_prepare()) {
-        Thread *thread = THREAD;
-        assert(thread->is_Java_thread(), "thread->is_Java_thread()");
-        JvmtiExport::post_class_prepare((JavaThread *) thread, this);
+        JvmtiExport::post_class_prepare(THREAD, this);
       }
     }
   }
@@ -1276,7 +1276,7 @@ rewrite if override [Object.finalize()](/docs/CS/Java/JDK/Basic/Object.md?id=fin
 
 ### link_methods
 
-Now relocate and [link method entry points](/docs/CS/Java/JDK/Basic/Method.md?id=link_method) after class is rewritten.
+Now relocate and [link method entry points](/docs/CS/Java/JDK/JVM/Method.md?id=link_method) after class is rewritten.
 This is outside is_rewritten flag. In case of an exception, it can be executed more than once.
 
 ```cpp

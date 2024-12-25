@@ -188,6 +188,10 @@ void ciEnv::register_method(...) {
 
 ### adapter
 
+c2i是指编译模式到解释模式（Compiler-to-Interpreter），i2c是指解释模式到编译模式（Interpreter-to-Compiler）。由于编译产出的本地代码可能用寄存器存放参数1，用栈存放参数2，而解释器都用栈存放参数，需要一段代码来消弭它们的不同，适配器应运而生。它是一段跳床（Trampoline）代码，以i2c为例，可以形象地认为解释器“跳入”这段代码，将解释器的参数传递到机器代码要求的地方，这种要求即调用约定（Calling Convention），然后“跳出”到机器代码继续执行
+两个适配器都是由SharedRuntime::generate_i2c2i_adapters生成的
+
+
 ```cpp
 // SharedRuntime.cpp
 
