@@ -142,7 +142,45 @@ digraph g{
 ```
 
 
-### follow_object
+### oop_oop_iterate
+
+
+```c
+template <typename OopClosureType>
+void oopDesc::oop_iterate(OopClosureType* cl) {
+  OopIteratorClosureDispatch::oop_oop_iterate(cl, this, klass());
+}
+
+template <typename OopClosureType>
+void OopIteratorClosureDispatch::oop_oop_iterate(OopClosureType* cl, oop obj, Klass* klass) {
+  OopOopIterateDispatch<OopClosureType>::function(klass)(cl, obj, klass);
+}
+```
+
+获取开始OopMapBlock和结束OopMapBlock，然后遍历这些OopMapBlock。OopMapBlock存储了该对象的字段偏移和个数，分别用offset和count表示
+offset表示第一个字段相对于对象头的偏移，count表示对象有多少个字段
+另外，如果有父类，则再用一个OopMapBlock表示父类，因此通过遍历对象的所有OopMapBlock就能访问对象的全部字段
+
+```c
+template <typename T, class OopClosureType>
+ALWAYSINLINE void InstanceKlass::oop_oop_iterate(oop obj, OopClosureType* closure) {
+  if (Devirtualizer::do_metadata(closure)) {
+    Devirtualizer::do_klass(closure, this);
+  }
+
+  oop_oop_iterate_oop_maps<T>(obj, closure);
+}
+
+template <typename T, class OopClosureType>
+ALWAYSINLINE void InstanceKlass::oop_oop_iterate_oop_maps(oop obj, OopClosureType* closure) {
+  OopMapBlock* map           = start_of_nonstatic_oop_maps();
+  OopMapBlock* const end_map = map + nonstatic_oop_map_count();
+
+  for (; map < end_map; ++map) {
+    oop_oop_iterate_oop_map<T>(map, obj, closure);
+  }
+}
+```
 
 ```cpp
 // share/gc/serial/markSweep.cpp
@@ -235,9 +273,13 @@ non-static oop-map block
 
 ### vtable
 
-array
+可以开启VM参数`-Xlog:vtables=trace`查看所有类的虚表的创建过程(非production)
+在调用虚方法时虚拟机会在运行时常量池中查找n的静态类型Node的print方法，获取它在Node虚表中的index，接着用index定位动态类型AddNode虚表中的虚方法进行调用
 
--Xlog:vtables=trace
+> [!TIP]
+> 
+> gcc使用-fdump-class-hierarchy输出虚表，clang使用-Xclang -fdump-vtable-layouts输出虚表，msvc使用/d1reportAllClassLayout输出虚表
+
 
 update_inherited_vtable
 
