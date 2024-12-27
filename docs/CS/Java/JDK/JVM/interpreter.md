@@ -43,6 +43,10 @@ class AbstractInterpreter: AllStatic {
 
 A StubQueue maintains a queue of stubs. And BufferBlob store in [CodeCache](/docs/CS/Java/JDK/JVM/CodeCache.md).
 
+StubQueue是用来保存生成的本地代码的Stub队列，队列每一个元素对应一个InterpreterCodelet对象，InterpreterCodelet对象继承自抽象基类Stub，包含了字节码对应的本地代码以及一些调试和输出信息。 
+
+
+
 > [!NOTE]
 >
 > All sizes (spaces) are given in bytes.
@@ -125,7 +129,355 @@ _number_of_stubs = 0;
 
 ## TemplateInterpreter
 
-Th division of labor is as follows:
+
+
+模板解释器相对于为每一个指令都写了一段实现对应功能的汇编代码，在JVM初始化时，汇编器会将汇编代码翻译成机器指令加载到内存中，比如执行iload指令时，直接执行对应的汇编代码即可。
+
+
+
+
+
+模板解释器的大致逻辑主要分为以下几部分：
+
+1. 为每个字节码创建模板；
+2. 利用模板为每个字节码生成对应的机器指令；
+3. 将每个字节码生成的机器指令地址存储在派发表中；
+4. 在每个字节码生成的机器指令末尾，插入自动跳转下条指令逻辑。
+
+
+
+下面就从模板解释器的初始化开始，分析HotSpot的解释代码的生成。
+在创建虚拟机时，在[init_globals2](/docs/CS/Java/JDK/JVM/start.md?id=init_globals2)过程中，会调用interpreter_init()初始化模板解释器，
+模板解释器的初始化包括抽象解释器AbstractInterpreter的初始化、模板表TemplateTable的初始化、CodeCache的Stub队列StubQueue的初始化、解释器生成器InterpreterGenerator的初始化
+
+
+ 
+
+```c++
+jint init_globals2() {
+  universe2_init();          // dependent on codeCache_init and initial_stubs_init
+  javaClasses_init();        // must happen after vtable initialization, before referenceProcessor_init
+  interpreter_init_code();   // after javaClasses_init and before any method gets linked
+  referenceProcessor_init();
+  jni_handles_init();
+#if INCLUDE_VM_STRUCTS
+  vmStructs_init();
+#endif // INCLUDE_VM_STRUCTS
+
+  vtableStubs_init();
+  InlineCacheBuffer_init();
+  compilerOracle_init();
+  dependencyContext_init();
+  dependencies_init();
+
+  if (!compileBroker_init()) {
+    return JNI_EINVAL;
+  }
+
+  if (!universe_post_init()) {
+    return JNI_ERR;
+  }
+  compiler_stubs_init(false /* in_compiler_thread */); // compiler's intrinsics stubs
+  final_stubs_init();    // final StubRoutines stubs
+  MethodHandles::generate_adapters();
+
+  // All the flags that get adjusted by VM_Version_init and os::init_2
+  // have been set so dump the flags now.
+  if (PrintFlagsFinal || PrintFlagsRanges) {
+    JVMFlag::printFlags(tty, false, PrintFlagsRanges);
+  }
+
+  return JNI_OK;
+}
+```
+
+1.AbstractInterpreter是基于汇编模型的解释器的共同基类，定义了解释器和解释器生成器的抽象接口。 
+2.模板表TemplateTable保存了各个字节码的模板(目标代码生成函数和参数)。 
+
+TemplateTable的初始化调用def()将所有字节码的目标代码生成函数和参数保存在_template_table或_template_table_wide(wide指令)模板数组中
+
+```c
+void interpreter_init_code() {
+  Interpreter::initialize_code();
+  // need to hit every safepoint in order to call zapping routine
+  // register the interpreter
+  Forte::register_stub(
+    "Interpreter",
+    AbstractInterpreter::code()->code_start(),
+    AbstractInterpreter::code()->code_end()
+  );
+
+  // notify JVMTI profiler
+  if (JvmtiExport::should_post_dynamic_code_generated()) {
+    JvmtiExport::post_dynamic_code_generated("Interpreter",
+                                             AbstractInterpreter::code()->code_start(),
+                                             AbstractInterpreter::code()->code_end());
+  }
+}
+```
+
+
+
+```c
+void TemplateInterpreter::initialize_code() {
+  AbstractInterpreter::initialize();
+
+  TemplateTable::initialize();
+
+  // generate interpreter
+  { ResourceMark rm;
+    TraceTime timer("Interpreter generation", TRACETIME_LOG(Info, startuptime));
+    TemplateInterpreterGenerator g;
+    // Free the unused memory not occupied by the interpreter and the stubs
+    _code->deallocate_unused_tail();
+  }
+
+  if (PrintInterpreter) {
+    ResourceMark rm;
+    print();
+  }
+
+  // initialize dispatch table
+  _active_table = _normal_table;
+}
+```
+
+每个模板都关联其对应的汇编代码生成函数
+
+```c
+
+void TemplateTable::initialize() {
+
+  // For better readability
+  const char _    = ' ';
+  const int  ____ = 0;
+  const int  ubcp = 1 << Template::uses_bcp_bit;
+  const int  disp = 1 << Template::does_dispatch_bit;
+  const int  clvm = 1 << Template::calls_vm_bit;
+  const int  iswd = 1 << Template::wide_bit;
+  //                                    interpr. templates
+  // Java spec bytecodes                ubcp|disp|clvm|iswd  in    out   generator             argument
+  def(Bytecodes::_nop                 , ____|____|____|____, vtos, vtos, nop                 ,  _           );
+  def(Bytecodes::_aconst_null         , ____|____|____|____, vtos, atos, aconst_null         ,  _           );
+  //  ...
+}
+```
+
+`def`函数其实就是用来创建模板的
+
+
+
+
+
+在定义完成所有字节码对应的模板后，JVM会遍历所有字节码，为每个字节码生成对应的机器指令入口
+
+```c
+void TemplateInterpreterGenerator::set_entry_points_for_all_bytes() {
+  for (int i = 0; i < DispatchTable::length; i++) {
+    Bytecodes::Code code = (Bytecodes::Code)i;
+    if (Bytecodes::is_defined(code)) {
+      set_entry_points(code);
+    } else {
+      set_unimplemented(i);
+    }
+  }
+}
+```
+
+
+
+set_entry_points()将取出该字节码对应的Template模板，并调用set_short_enrty_points()进行处理，并将入口地址保存在转发表(DispatchTable)_normal_table或_wentry_table(使用wide指令)中
+
+```c
+void TemplateInterpreterGenerator::set_entry_points(Bytecodes::Code code) {
+  CodeletMark cm(_masm, Bytecodes::name(code), code);
+  // initialize entry points
+  assert(_unimplemented_bytecode    != nullptr, "should have been generated before");
+  assert(_illegal_bytecode_sequence != nullptr, "should have been generated before");
+  address bep = _illegal_bytecode_sequence;
+  address zep = _illegal_bytecode_sequence;
+  address cep = _illegal_bytecode_sequence;
+  address sep = _illegal_bytecode_sequence;
+  address aep = _illegal_bytecode_sequence;
+  address iep = _illegal_bytecode_sequence;
+  address lep = _illegal_bytecode_sequence;
+  address fep = _illegal_bytecode_sequence;
+  address dep = _illegal_bytecode_sequence;
+  address vep = _unimplemented_bytecode;
+  address wep = _unimplemented_bytecode;
+  // code for short & wide version of bytecode
+  if (Bytecodes::is_defined(code)) {
+    Template* t = TemplateTable::template_for(code);
+    assert(t->is_valid(), "just checking");
+    set_short_entry_points(t, bep, cep, sep, aep, iep, lep, fep, dep, vep);
+  }
+  if (Bytecodes::wide_is_defined(code)) {
+    Template* t = TemplateTable::template_for_wide(code);
+    assert(t->is_valid(), "just checking");
+    set_wide_entry_point(t, wep);
+  }
+  // set entry points
+  EntryPoint entry(bep, zep, cep, sep, aep, iep, lep, fep, dep, vep);
+  Interpreter::_normal_table.set_entry(code, entry);
+  Interpreter::_wentry_point[code] = wep;
+}
+```
+
+
+
+```c
+void TemplateInterpreterGenerator::set_wide_entry_point(Template* t, address& wep) {
+  assert(t->is_valid(), "template must exist");
+  assert(t->tos_in() == vtos, "only vtos tos_in supported for wide instructions");
+  wep = __ pc(); generate_and_dispatch(t);
+}
+
+
+void TemplateInterpreterGenerator::set_short_entry_points(Template* t, address& bep, address& cep, address& sep, address& aep, address& iep, address& lep, address& fep, address& dep, address& vep) {
+  assert(t->is_valid(), "template must exist");
+  switch (t->tos_in()) {
+    case btos:
+    case ztos:
+    case ctos:
+    case stos:
+      ShouldNotReachHere();  // btos/ctos/stos should use itos.
+      break;
+    case atos: vep = __ pc(); __ pop(atos); aep = __ pc(); generate_and_dispatch(t); break;
+    case itos: vep = __ pc(); __ pop(itos); iep = __ pc(); generate_and_dispatch(t); break;
+    case ltos: vep = __ pc(); __ pop(ltos); lep = __ pc(); generate_and_dispatch(t); break;
+    case ftos: vep = __ pc(); __ pop(ftos); fep = __ pc(); generate_and_dispatch(t); break;
+    case dtos: vep = __ pc(); __ pop(dtos); dep = __ pc(); generate_and_dispatch(t); break;
+    case vtos: set_vtos_entry_points(t, bep, cep, sep, aep, iep, lep, fep, dep, vep);     break;
+    default  : ShouldNotReachHere();                                                 break;
+  }
+}
+```
+
+最终会调用TemplateInterpreterGenerator::generate_and_dispatch（）来生成机器指令
+
+```c
+void TemplateInterpreterGenerator::generate_and_dispatch(Template* t, TosState tos_out) {
+#ifndef PRODUCT
+  // debugging code
+  if (CountBytecodes || TraceBytecodes || StopInterpreterAt > 0) count_bytecode();
+  if (PrintBytecodeHistogram)                                    histogram_bytecode(t);
+  if (PrintBytecodePairHistogram)                                histogram_bytecode_pair(t);
+  if (TraceBytecodes)                                            trace_bytecode(t);
+  if (StopInterpreterAt > 0)                                     stop_interpreter_at();
+  __ verify_FPU(1, t->tos_in());
+#endif // !PRODUCT
+  int step = 0;
+  if (!t->does_dispatch()) {
+    step = t->is_wide() ? Bytecodes::wide_length_for(t->bytecode()) : Bytecodes::length_for(t->bytecode());
+    if (tos_out == ilgl) tos_out = t->tos_out();
+    // compute bytecode size
+    assert(step > 0, "just checkin'");
+    // setup stuff for dispatching next bytecode
+    if (ProfileInterpreter && VerifyDataPointer
+        && MethodData::bytecode_has_profile(t->bytecode())) {
+      __ verify_method_data_pointer();
+    }
+    __ dispatch_prolog(tos_out, step);
+  }
+  // generate template
+  t->generate(_masm);
+  // advance
+  if (t->does_dispatch()) {
+#ifdef ASSERT
+    // make sure execution doesn't go beyond this point if code is broken
+    __ should_not_reach_here();
+#endif // ASSERT
+  } else {
+    // dispatch to next bytecode
+    __ dispatch_epilog(tos_out, step);
+  }
+}
+```
+
+在generate_and_dispatch（）中，会调用模版的generate（）方法，因为模板初始化时记录了对应的机器指令生成函数的指针，存在_gen中，所以这里直接调用_gen（）即可生成机器指令，对于iload来说，就相当于调用了TemplateTable::iload（）
+
+```c
+void Template::generate(InterpreterMacroAssembler* masm) {
+  // parameter passing
+  TemplateTable::_desc = this;
+  TemplateTable::_masm = masm;
+  // code generation
+  _gen(_arg);
+  masm->flush();
+}
+```
+
+
+
+
+
+t->generate(_masm)后并没有立马撤走，而是会进行dispatch操作，调用 __ dispatch_epilog(tos_out, step)来进行下一条指令的执行，dispatch_epilog（）里面调用的是dispatch_next（）方法
+
+```c
+void InterpreterMacroAssembler::dispatch_epilog(TosState state, int step) {
+    dispatch_next(state, step);
+}
+
+void InterpreterMacroAssembler::dispatch_next(TosState state, int step, bool generate_poll) {
+  // load next bytecode
+  ldrb(rscratch1, Address(pre(rbcp, step)));
+  dispatch_base(state, Interpreter::dispatch_table(state), /*verifyoop*/true, generate_poll);
+}
+```
+
+
+
+```c
+void InterpreterMacroAssembler::dispatch_base(TosState state,
+                                              address* table,
+                                              bool verifyoop,
+                                              bool generate_poll) {
+  if (VerifyActivationFrameSize) {
+    Unimplemented();
+  }
+  if (verifyoop) {
+    interp_verify_oop(r0, state);
+  }
+
+  Label safepoint;
+  address* const safepoint_table = Interpreter::safept_table(state);
+  bool needs_thread_local_poll = generate_poll && table != safepoint_table;
+
+  if (needs_thread_local_poll) {
+    NOT_PRODUCT(block_comment("Thread-local Safepoint poll"));
+    ldr(rscratch2, Address(rthread, JavaThread::polling_word_offset()));
+    tbnz(rscratch2, exact_log2(SafepointMechanism::poll_bit()), safepoint);
+  }
+
+  if (table == Interpreter::dispatch_table(state)) {
+    addw(rscratch2, rscratch1, Interpreter::distance_from_dispatch_table(state));
+    ldr(rscratch2, Address(rdispatch, rscratch2, Address::uxtw(3)));
+  } else {
+    mov(rscratch2, (address)table);
+    ldr(rscratch2, Address(rscratch2, rscratch1, Address::uxtw(3)));
+  }
+  br(rscratch2);
+
+  if (needs_thread_local_poll) {
+    bind(safepoint);
+    lea(rscratch2, ExternalAddress((address)safepoint_table));
+    ldr(rscratch2, Address(rscratch2, rscratch1, Address::uxtw(3)));
+    br(rscratch2);
+  }
+}
+```
+
+
+
+
+
+
+
+
+
+
+
+The division of labor is as follows:
 
 - Template Interpreter          Zero Interpreter       Functionality
 - templateTable*                bytecodeInterpreter*   actual interpretation of bytecodes

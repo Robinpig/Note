@@ -92,7 +92,7 @@ type mapextra struct {
 在Go语言中还有一个溢出桶的概念，在执行hash[key]=value赋值操作时，当指定桶中的数据超过8个时，并不会直接开辟一个新桶，而是将数据放置到溢出桶中，每个桶的最后都存储了overflow，即溢出桶的指针。在正常情况下，数据是很少会跑到溢出桶里面去的”
 
 同理，我们可以知道，在map执行查找操作时，如果key的hash在指定桶的tophash数组中不存在，那么需要遍历溢出桶中的数据。
-后面还会看到，如果一开始，初始化map的数量比较大，则map会提前创建好一些溢出桶存储在extra*mapextra字段”
+后面还会看到，如果一开始，初始化map的数量比较大，则map会提前创建好一些溢出桶存储在extra mapextra字段
 
 
 这样当出现溢出现象时，可以用提前创建好的桶而不用申请额外的内存空间。只有预分配的溢出桶使用完了，才会新建溢出桶。
@@ -133,3 +133,22 @@ func makemap_small() *hmap {
 }
 ```
 
+
+
+
+### mapaccess
+
+
+### mapassign
+
+
+
+newoverflow
+
+### mapdelete
+
+
+
+## Links
+
+- [Golang](/docs/CS/Go/Go.md)

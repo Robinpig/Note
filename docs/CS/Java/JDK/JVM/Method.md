@@ -57,12 +57,16 @@ class Method : public Metadata {
 }  
 ```
 
-Fields:
+方法链接需要用到的数据
+- _i2i_entry：定点解释器入口。方法调用会通过它进入解释器的世界，该字段一经设置后面不再改变。通过它一定能进入解释器。
+-  _from_interpreter_entry：解释器入口。最开始与_i2i_entry指向同一个地方，在字节码经过JIT编译成机器代码后会改变，指向i2c适配器入口。
+- _from_compiled_entry：编译器入口。最开始指向c2i适配器入口，在字节码经过编译后会改变地址，指向编译好的代码
+- _code：代码入口。当编译器完成编译后会指向编译后的本地代码
 
-- _i2i_entry
-- _from_compiled_entry
-- _from_interpreter_entry
-- _code compiled code
+链接阶段会将i2i_entry和_from_interpreter_entry都指向解释器入口，另外还会生成c2i适配器，将_from_compiled_entry也适配到解释器
+
+各种入口的地址不会是一成不变的，当编译/解释模式切换时，入口地址也会相应切换，如从解释器切换到编译器，编译完成后会设置新的_code、_from_compiled_entry和_from_interpreter_entry入口；如果发生退优化（Deoptimization），从编译模式回退到解释模式，又会重置这些入口
+
 
 ## Method Handle
 
@@ -121,6 +125,33 @@ void Method::link_method(const methodHandle& h_method, TRAPS) {
   }
 }
 ```
+
+entry_for_method
+
+```c
+static MethodKind method_kind(const methodHandle& m);
+static address    entry_for_kind(MethodKind k)                { assert(0 <= k && k < number_of_method_entries, "illegal kind"); return _entry_table[k]; }
+static address    entry_for_method(const methodHandle& m)     { return entry_for_kind(method_kind(m)); }
+```
+Java方法的类型MethodKind
+
+```c
+ enum MethodKind {
+    zerolocals,                                                 // method needs locals initialization
+    zerolocals_synchronized,                                    // method needs locals initialization & is synchronized
+    native,                                                     // native method
+    native_synchronized,                                        // native method & is synchronized
+    empty,                                                      // empty method (code: _return)
+    getter,                                                     // getter method
+    setter,                                                     // setter method
+    abstract,                                                   // abstract method (throws an AbstractMethodException)
+
+    // ...
+    invalid = -1
+  };
+```
+
+
 
 #### set_code
 

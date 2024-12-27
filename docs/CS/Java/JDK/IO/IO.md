@@ -167,6 +167,23 @@ In Java, 3 streams are created for us automatically. All these streams are attac
 2. System.in: standard input stream
 3. System.err: standard error stream
 
+
+```java
+public abstract class InputStream implements Closeable {
+
+    // MAX_SKIP_BUFFER_SIZE is used to determine the maximum buffer size to
+    // use when skipping.
+    private static final int MAX_SKIP_BUFFER_SIZE = 2048;
+
+    public abstract int read() throws IOException;
+}
+
+public abstract class OutputStream implements Closeable, Flushable {
+    public abstract void write(int b) throws IOException;
+}
+```
+
+
 #### BufferedStream
 
 Java BufferedOutputStream/BufferedInputStream class is used to read information from stream. It internally uses buffer mechanism to make the performance fast.
@@ -177,7 +194,18 @@ Iterative server serves client one by one.
 concurrent servers
 
 
+read
+
+Reads the next byte of data from the input stream.
+The value byte is returned as an int in the range 0 to 255
+If no byte is available because the end of the stream has been reached, the value -1 is returned.
+This method blocks until input data is available, the end of the stream is detected, or an exception is thrown.
+
+
+
 ### write
+Writes the specified byte to this output stream. The general contract for write is that one byte is written to the output stream. The byte to be written is the eight low-order bits of the argument b. The 24 high-order bits of b are ignored.
+
 
 In `IOUtil.write()`
 

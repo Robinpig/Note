@@ -510,6 +510,20 @@ CompileBroker::compilation_init_phase1()
 
 ## WatchedThread
 
+## Summary
+
+一些影响线程创建的因素，包括
+- JVM：Xmx，Xss，MaxPermSize，MaxDirectMemorySize，ReservedCodeCacheSize 等
+- Kernel：max_user_processes，max_map_count，max_threads，pid_max 等
+
+
+
+
+
+
+
+
+
 ## Links
 
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)

@@ -123,7 +123,23 @@ guava `RateLimiter` has two child class `SmoothBursty` and `SmoothWarmingUp` in 
 
 #### Guava RateLimiter
 
-![Guava RateLimiter](img/Ratelimiter.png)
+
+```java
+import com.google.common.util.concurrent.RateLimiter;
+
+public class RateLimiterDemo {
+    public static void main(String[] args) {
+        // 创建一个每秒放入5个令牌的RateLimiter
+        RateLimiter limiter = RateLimiter.create(5.0);
+
+        for (int i = 0; i < 10; i++) {
+            // 请求一个令牌
+            limiter.acquire();
+            System.out.println("处理请求: " + i);
+        }
+    }
+}
+```
 
 
 
@@ -153,6 +169,18 @@ private Object mutex() {
 }
 ```
 
+<div style="text-align: center;">
+
+![Fig.1. Guava RateLimiter](./img/RateLimiter.png)
+
+</div>
+
+<p style="text-align: center;">Fig.1. Guava RateLimiter</p>
+
+RateLimiter提供了两种模式：SmoothBursty和SmoothWarmingUp
+
+- SmoothBursty：这种模式适合于突发请求较多的场景。它允许在短时间内处理大量请求，然后速率会逐渐下降到稳定状态
+- SmoothWarmingUp：这个模式适用于需要预热的场景。它会在启动时逐渐增加发放令牌的速率，直到达到稳定状态。这对于那些刚开始时资源较少但随后需要稳定运行的系统很有用
 
 
 ```java

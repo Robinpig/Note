@@ -272,7 +272,8 @@ FileTxnSnapLog是ZooKeeper上层服务于底层数据存储之间的对接层，
 创建CountDownLatch，用来watch zk的状态，当zk关闭或者出现内部错误的时候优雅的关闭服务 ZooKeeperServerShutdownHandler是zk用于处理异常的组件。当系统发生错误时，会使用CountDownLatch通知其他线程停止工作
 
 
-AdminServer用来管理ZooKeeperServer。有两种实现方式JettyAdminServer和DummyAdminServer。当zookeeper.admin.enableServer为true时才启动AdminServer，通过反射的方式创建实例
+AdminServer用来管理ZooKeeperServer。
+有两种实现方式JettyAdminServer和DummyAdminServer。当zookeeper.admin.enableServer为true时才启动AdminServer，通过反射的方式创建实例
 AdminServer是3.5.0版本中新增特性，是一个内置的Jettry服务，它提供了一个HTTP接口为四字母单词命令。默认的，服务被启动在8080端口，并且命令被发起通过URL "/commands/[command name]",例如，http://localhost:8080/commands/stat。命令响应以JSON的格式返回。不像原来的协议，命令不是限制为四字母的名字，并且命令可以有多个名字。例如"stmk"可以被指定为"set_trace_mask"。为了查看所有可用命令的列表，指向一个浏览器的URL/commands (例如， http://localhost:8080/commands)。
 AdminServer默认开启，但是可以被关闭通过下面的方法：
 - 设置系统属性zookeeper.admin.enableServer为false.
@@ -347,7 +348,9 @@ PING的时间足够保守，以确保有合理的时间检测死连接并重新�
 
 #### loadDataBase
 
-最终 Session 和 数据的恢复，都将在 loadData 方法中完成。ZKServer 首先利用 ZKDatabase#loadDataBase 调用 FileTxnSnapLog#restore 方法，从磁盘中反序列化 100（硬编码了在 findNValidSnapshots(100) 代码里）个有效的 Snapshot 文件，恢复出 DataTree 和 sessionsWithTimeouts 两个数据结构，以便获取到最新有效的 ZXID，并使用 FileTxnSnapLog#processTransaction 方法增量地处理 DataTree 中的事务。随后根据 Session 超时时间，将超时的 Session 从 DataTree#ephemerals 变量（Map<Long: sessionId, HashSet<String>: pathList>）中移除。同时，利用 ZooKeeperServer#takeSnapshot 方法，将 DataTree 实例持久化到磁盘，创建一个全新的 Snapshot 文件
+最终 Session 和 数据的恢复，都将在 loadData 方法中完成。ZKServer 首先利用 ZKDatabase#loadDataBase 调用 FileTxnSnapLog#restore 方法，
+从磁盘中反序列化 100（硬编码了在 findNValidSnapshots(100) 代码里）个有效的 Snapshot 文件，恢复出 DataTree 和 sessionsWithTimeouts 两个数据结构，以便获取到最新有效的 ZXID，并使用 FileTxnSnapLog#processTransaction 方法增量地处理 DataTree 中的事务。随后根据 Session 超时时间，将超时的 Session 从 DataTree#ephemerals 变量（Map<Long: sessionId, HashSet<String>: pathList>）中移除。
+同时，利用 ZooKeeperServer#takeSnapshot 方法，将 DataTree 实例持久化到磁盘，创建一个全新的 Snapshot 文件
 
 Snapshot 策略
 首先，我们可以看到 SyncRequestProcessor 类的 run() 方法中，ZooKeeperServer#takeSnapshot 方法的调用是在一个新起的线程中发起的，因此 Snapshot 流程是异步发起的
@@ -737,6 +740,30 @@ public class ZKDatabase {
 ```
 
 
+FileTxnSnapLog above the implementations of txnlog and snapshot
+
+```java
+public class FileTxnSnapLog {
+
+    //the directory containing
+    //the transaction logs
+    final File dataDir;
+    //the directory containing
+    //the snapshot directory
+    final File snapDir;
+    TxnLog txnLog;
+    SnapShot snapLog;
+    private final boolean autoCreateDB;
+    private final boolean trustEmptySnapshot;
+    public static final int VERSION = 2;
+}
+```
+SnapLog 是 Zookeeper 的持久化存储模块，用于将 Zookeeper 的内存数据备份到磁盘上。SnapLog 由两部分组成：事务日志（Transaction Log）和快照文件（Snapshot File）
+事务日志用于记录所有的数据变更操作，快照文件会定期全量备份 DataTree 中的所有数据
+当 Server 启动时，会先加载最近日期的快照文件，然后逐个加载事务日志文件，最终恢复到最新的状态
+
+客户端的每次写入操作都会同步到磁盘，这会增加写操作的延迟，因此事务日志的写入性能直接决定 Zookeeper Server 对请求的响应速度，为了增加写入性能，Zookeeper 采用磁盘预分配的策略，在事务日志文件创建之初就向操作系统预分配一个很大的磁盘块，默认是64M，而一旦已分配的文件剩余空间不足 4KB 时，那么将会再次进行预分配
+
 ```java
 public class FileTxnSnapLog {
     public long restore(DataTree dt, Map<Long, Integer> sessions, PlayBackListener listener) throws IOException {
@@ -796,25 +823,6 @@ public class FileTxnSnapLog {
     }
 }
 ```
-FileTxnSnapLog above the implementations of txnlog and snapshot
-
-```java
-public class FileTxnSnapLog {
-
-    //the directory containing
-    //the transaction logs
-    final File dataDir;
-    //the directory containing
-    //the snapshot directory
-    final File snapDir;
-    TxnLog txnLog;
-    SnapShot snapLog;
-    private final boolean autoCreateDB;
-    private final boolean trustEmptySnapshot;
-    public static final int VERSION = 2;
-}
-```
-
 
 ```java
 public class FileTxnSnapLog {
@@ -1065,12 +1073,10 @@ public class DatadirCleanupManager {
 ```java
 public void start() {
     if (PurgeTaskStatus.STARTED == purgeTaskStatus) {
-        LOG.warn("Purge task is already running.");
         return;
     }
     // Don't schedule the purge task with zero or negative purge interval.
     if (purgeInterval <= 0) {
-        LOG.info("Purge task is not scheduled.");
         return;
     }
 
@@ -1095,7 +1101,6 @@ static class PurgeTask extends TimerTask {
 
     @Override
     public void run() {
-        LOG.info("Purge task started.");
         try {
             PurgeTxnLog.purge(logsDir, snapsDir, snapRetainCount);
         } catch (Exception e) {

@@ -5,7 +5,24 @@ Thus, normal oops don't have any virtual functions.
 <br/>
 Instead, they forward all "virtual" functions to their klass, which does have a vtbl and does the C++ dispatch depending on the object's actual type.
 
+
+
+
+
+
+
 ## Klass
+
+A Klass provides:
+
+1. language level class object (method dictionary etc.)
+2. provide vm dispatch behavior for the object
+
+
+
+Both functions are combined into one C++ class.
+
+
 
 ### Klass hierarchy
 
@@ -125,7 +142,45 @@ digraph g{
 ```
 
 
-### follow_object
+### oop_oop_iterate
+
+
+```c
+template <typename OopClosureType>
+void oopDesc::oop_iterate(OopClosureType* cl) {
+  OopIteratorClosureDispatch::oop_oop_iterate(cl, this, klass());
+}
+
+template <typename OopClosureType>
+void OopIteratorClosureDispatch::oop_oop_iterate(OopClosureType* cl, oop obj, Klass* klass) {
+  OopOopIterateDispatch<OopClosureType>::function(klass)(cl, obj, klass);
+}
+```
+
+获取开始OopMapBlock和结束OopMapBlock，然后遍历这些OopMapBlock。OopMapBlock存储了该对象的字段偏移和个数，分别用offset和count表示
+offset表示第一个字段相对于对象头的偏移，count表示对象有多少个字段
+另外，如果有父类，则再用一个OopMapBlock表示父类，因此通过遍历对象的所有OopMapBlock就能访问对象的全部字段
+
+```c
+template <typename T, class OopClosureType>
+ALWAYSINLINE void InstanceKlass::oop_oop_iterate(oop obj, OopClosureType* closure) {
+  if (Devirtualizer::do_metadata(closure)) {
+    Devirtualizer::do_klass(closure, this);
+  }
+
+  oop_oop_iterate_oop_maps<T>(obj, closure);
+}
+
+template <typename T, class OopClosureType>
+ALWAYSINLINE void InstanceKlass::oop_oop_iterate_oop_maps(oop obj, OopClosureType* closure) {
+  OopMapBlock* map           = start_of_nonstatic_oop_maps();
+  OopMapBlock* const end_map = map + nonstatic_oop_map_count();
+
+  for (; map < end_map; ++map) {
+    oop_oop_iterate_oop_map<T>(map, obj, closure);
+  }
+}
+```
 
 ```cpp
 // share/gc/serial/markSweep.cpp
@@ -218,9 +273,13 @@ non-static oop-map block
 
 ### vtable
 
-array
+可以开启VM参数`-Xlog:vtables=trace`查看所有类的虚表的创建过程(非production)
+在调用虚方法时虚拟机会在运行时常量池中查找n的静态类型Node的print方法，获取它在Node虚表中的index，接着用index定位动态类型AddNode虚表中的虚方法进行调用
 
--Xlog:vtables=trace
+> [!TIP]
+> 
+> gcc使用-fdump-class-hierarchy输出虚表，clang使用-Xclang -fdump-vtable-layouts输出虚表，msvc使用/d1reportAllClassLayout输出虚表
+
 
 update_inherited_vtable
 
@@ -733,6 +792,11 @@ Space losses: 0 bytes internal + 0 bytes external = 0 bytes total
 
 
 ## allocate_instance
+
+InstanceKlass了解对象所有信息，包括字段个数、大小、是否为数组、是否有父类，它能根据这些信息调用InstanceKlass::allocate_instance创建对应的instanceOop/arrayOop
+
+虚拟机首先获知对象大小，然后申请一片内存（mem_allocate），返回这片内存的首地址（HeapWord，完全等价于char*指针）
+接着初始化（initialize）这片内存最前面的一个机器字，将它设置为对象头的数据。然后将这片内存地址强制类型转换为oop
 
 called by `java.lang.reflect.Constructor` or `new Klass(args ...)` or etc.
 

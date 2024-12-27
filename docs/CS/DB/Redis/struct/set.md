@@ -10,9 +10,9 @@ Sets can be encoded as:
 ## sadd
 
 1. [lookupKeyWrite](/docs/CS/DB/Redis/redisDb.md?id=add)
-2. [setTypeCreate](/docs/CS/DB/Redis/zset.md?id=setTypeCreate)
+2. [setTypeCreate](/docs/CS/DB/Redis/struct/zset.mdzset.md?id=setTypeCreate)
 3. [dbAdd](/docs/CS/DB/Redis/redisDb.md?id=add)
-4. [setTypeCreate](/docs/CS/DB/Redis/zset.md?id=setTypeAdd)
+4. [setTypeCreate](/docs/CS/DB/Redis/struct/zset.mdzset.md?id=setTypeAdd)
 
 ```c
 // server.c
@@ -75,7 +75,7 @@ intset *intsetNew(void) {
 }
 ```
 
-or [create hashtable](/docs/CS/DB/Redis/hash.md?id=create)
+or [create hashtable](/docs/CS/DB/Redis/struct/hash.mdhash.md?id=create)
 
 ```c
 // object.c
@@ -89,9 +89,9 @@ robj *createSetObject(void) {
 
 ### setTypeAdd
 
-[dictAddRaw in hash](/docs/CS/DB/Redis/hash.md?id=dictAddRaw)
+[dictAddRaw in hash](/docs/CS/DB/Redis/struct/hash.mdhash.md?id=dictAddRaw)
 
-- if isSdsRepresentableAsLongLong, add to intset, when over max_intset_entries(512) convert to [dict](/docs/CS/DB/Redis/hash.md)
+- if isSdsRepresentableAsLongLong, add to intset, when over max_intset_entries(512) convert to [dict](/docs/CS/DB/Redis/struct/hash.mdhash.md)
 - or else [dictAdd](/docs/CS/DB/Redis/redisDb.md?id=add)
 
 ```c
@@ -253,4 +253,4 @@ static uint8_t intsetSearch(intset *is, int64_t value, uint32_t *pos) {
 
 ## Links
 
-- [Redis Struct](/docs/CS/DB/Redis/struct.md?id=sets)
+- [Redis Struct](/docs/CS/DB/Redis/struct/struct.mdruct.md?id=sets)

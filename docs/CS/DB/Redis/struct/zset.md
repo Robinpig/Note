@@ -97,7 +97,7 @@ It is possible to return scores as well, using the `WITHSCORES` argument:
 
 ## zadd
 
-create [ziplist](/docs/CS/DB/Redis/zset.md?id=ziplist) or [skiplist](/docs/CS/DB/Redis/zset.md?id=skiplist) + [dict](/docs/CS/DB/Redis/hash.md)
+create [ziplist](/docs/CS/DB/Redis/struct/zset.mdzset.md?id=ziplist) or [skiplist](/docs/CS/DB/Redis/struct/zset.mdzset.md?id=skiplist) + [dict](/docs/CS/DB/Redis/struct/hash.mdhash.md)
 
 ```c
 void zaddCommand(client *c) {
@@ -236,7 +236,7 @@ cleanup:
 
 ```
 
-using [hash table](/docs/CS/DB/Redis/hash.md) and zskiplist
+using [hash table](/docs/CS/DB/Redis/struct/hash.mdhash.md) and zskiplist
 
 ```c
 typedef struct zset {
@@ -486,9 +486,9 @@ digraph  {
 
 
 
-[hash](/docs/CS/DB/Redis/hash.md) and [zset](/docs/CS/DB/Redis/zset.md) default use ziplist.
+[hash](/docs/CS/DB/Redis/struct/hash.mdhash.md) and [zset](/docs/CS/DB/Redis/struct/zset.mdzset.md) default use ziplist.
 
-[list use quicklist( based on ziplist)](/docs/CS/DB/Redis/list.md?id=quicklist).
+[list use quicklist( based on ziplist)](/docs/CS/DB/Redis/struct/list.mdlist.md?id=quicklist).
 
 Hashes are encoded using a memory efficient data structure when they have a small number of entries, and the biggest entry does not exceed a given threshold.
 These thresholds can be configured using the following directives.
@@ -546,7 +546,7 @@ zlentry struct
 <prevlen><len><encoding>
 ```
 
-prevrawlen 1byte or 5 bytes, sometimes will [prevrawlen cascadeUpdate](/docs/CS/DB/Redis/zset.md?id=cascadeUpdate)
+prevrawlen 1byte or 5 bytes, sometimes will [prevrawlen cascadeUpdate](/docs/CS/DB/Redis/struct/zset.mdzset.md?id=cascadeUpdate)
 
 We use this function to receive information about a ziplist entry.
 Note that this is not how the data is actually encoded, is just what we get filled by a function in order to operate more easily.
@@ -601,6 +601,16 @@ void memrev32(void *p) {
     x[2] = t;
 }
 ```
+
+
+
+相比linkedlist 节省了prev和next的指针, 根据encoding可以再继续优化int类型的存储, 
+
+但是ziplist的限制是无法保存大数据量 其查询时间复杂度为`O(N)`
+
+
+
+
 
 ### insert
 
@@ -937,7 +947,7 @@ unsigned char *__ziplistCascadeUpdate(unsigned char *zl, unsigned char *p) {
 
 Node:
 
-- ele is a [sds](/docs/CS/DB/Redis/SDS.md)
+- ele is a [sds](/docs/CS/DB/Redis/struct/SDS.md/SDS.md)
 - order by score, then ele
 - *backward
 - level[]
@@ -1198,4 +1208,4 @@ void zslFree(zskiplist *zsl) {
 
 ## Links
 
-- [Redis Struct](/docs/CS/DB/Redis/struct.md?id=Sorted-sets)
+- [Redis Struct](/docs/CS/DB/Redis/struct/struct.mdruct.md?id=Sorted-sets)

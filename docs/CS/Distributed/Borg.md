@@ -97,3 +97,4 @@ It starts and stops tasks; restarts them if they fail; manages local resources b
 1. [Large-scale cluster management at Google with Borg](https://pdos.csail.mit.edu/6.824/papers/borg.pdf)
 2. [Borg, Omega, and Kubernetes](https://dl.acm.org/doi/pdf/10.1145/2890784)
 3. [Operating system support for warehouse-scale computing](https://people.csail.mit.edu/malte/pub/dissertations/phd-final.pdf)
+4. [Borg: the Next Generation](https://dl.acm.org/doi/pdf/10.1145/3342195.3387517)

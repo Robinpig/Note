@@ -181,25 +181,33 @@ public static void main(String[] args) {
 }
 ```
 
+
+
+###  
+
+Hotspot's representation of Java classes (referred to here as class meta-data) is stored in a portion of the Java heap referred to as the permanent generation. In addition, interned Strings and class static variables are stored in the permanent generation. The permanent generation is managed by Hotspot and must have enough room for all the class meta-data, interned Strings and class statics used by the Java application. Class metadata and statics are allocated in the permanent generation when a class is loaded and are garbage collected from the permanent generation when the class is unloaded. Interned Strings are also garbage collected when the permanent generation is GC'ed.
+
+
+
 [JEP 122: Remove the Permanent Generation](https://openjdk.java.net/jeps/122)
 
-### Metaspace
 
-CompressedClassSpaceSize default 1G
 
-Klass Metaspace
+永久代的**GC**是和老年代(old generation)捆绑在一起的，无论谁满了，都会触发永久代和老年代的垃圾收集
 
-a memory block used to storage Klass
+JDK1.7开始了方法区的部分移除：**符号引用(Symbols)**移至**native heap**，**字面量(interned strings)**和**静态变量(class statics)**移至**java heap**
 
-default size  = CompressedClassSpaceSize
+> This is part of the JRockit and Hotspot convergence effort. JRockit customers do not need to configure the permanent generation (since JRockit does not have a permanent generation) and are accustomed to not configuring the permanent generation.
 
-this space will removed if CompressedClassSpaceSize = 0 or -Xmx > 32G.  and Klass will be storaged into NoKlass Metaspace
 
-NoKlass Metaspace
 
-Multiple memory blocks to storage method constantPool or Klass.
+The proposed implementation will allocate class meta-data in native memory and move interned Strings and class statics to the Java heap. Hotspot will explicitly allocate and free the native memory for the class meta-data. Allocation of new class meta-data would be limited by the amount of available native memory rather than fixed by the value of -XX:MaxPermSize, whether the default or specified on the command line.
 
-jstat
+
+
+Allocation of native memory for class meta-data will be done in blocks of a size large enough to fit multiple pieces of class meta-data. Each block will be associated with a class loader and all class meta-data loaded by that class loader will be allocated by Hotspot from the block for that class loader. Additional blocks will be allocated for a class loader as needed. The block sizes will vary depending on the behavior of the application. The sizes will be chosen so as to limit internal and external fragmentation. Freeing the space for the class meta-data would be done when the class loader dies by freeing all the blocks associated with the class loader. Class meta-data will not be moved during the life of the class.
+
+
 
 ## Program Counter Register
 

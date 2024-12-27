@@ -25,6 +25,10 @@ Examples of such Garbage Collection roots are:
 
 The garbage collector traverses the whole object graph in memory, starting from those Garbage Collection Roots and following references from the roots to other objects.
 
+
+JDK 10中的JEP 304: Garbage Collector Interface发布后，GC代码可读性提升很多。 
+`/src/hotspot/share/gc/` 目录下按不同的GC算法分目录存放，shared目录下为通用代码和接口
+
 ## Generation
 
 Generational garbage collectors need to keep track of references from older to younger generations so that younger generations can be garbage-collected without inspecting every object in the older generation(s).

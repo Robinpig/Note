@@ -73,7 +73,7 @@ The following is the list of all the data structures supported by Redis, which w
   you can set and clear individual bits, count all the bits set to 1, find the first set or unset bit, and so forth.
 * HyperLogLogs: this is a probabilistic data structure which is used in order to estimate the cardinality of a set.
   Don't be scared, it is simpler than it seems... See later in the HyperLogLog section of this tutorial.
-* [Streams](/docs/CS/DB/Redis/Stream.md): append-only collections of map-like entries that provide an abstract log data type.
+* [Streams](/docs/CS/DB/Redis/struct/Stream.md): append-only collections of map-like entries that provide an abstract log data type.
 
 
 
@@ -177,7 +177,7 @@ A few important notes about key expiration:
 
 ### Strings
 
-The Redis [String](/docs/CS/DB/Redis/SDS.md) type is the simplest type of value you can associate with a Redis key.
+The Redis [String](/docs/CS/DB/Redis/struct/SDS.md/SDS.md) type is the simplest type of value you can associate with a Redis key.
 Since Redis keys are strings, when we use the string type as a value too, we are mapping a string to another string.
 Values can be strings (including binary data) of every kind, for instance you can store a jpeg image inside a value.
 A value can't be bigger than 512 MB.
@@ -188,7 +188,7 @@ That even multiple clients issuing INCR against the same key will never enter in
 
 ### Lists
 
-Redis [lists](/docs/CS/DB/Redis/list.md) are implemented via Linked Lists. This means that even if you have millions of elements inside a list, the operation of adding a new element in the head or in the tail of the list is performed  *in constant time* .
+Redis [lists](/docs/CS/DB/Redis/struct/list.mdlist.md) are implemented via Linked Lists. This means that even if you have millions of elements inside a list, the operation of adding a new element in the head or in the tail of the list is performed  *in constant time* .
 
 Redis Lists are implemented with linked lists because for a database system it is crucial to be able to add elements to a very long list in a very fast way.
 
@@ -233,7 +233,7 @@ A few things to note about `BRPOP`:
 
 ### Hashes
 
-Redis [hashes](/docs/CS/DB/Redis/hash.md) look exactly how one might expect a "hash" to look, with field-value pairs.
+Redis [hashes](/docs/CS/DB/Redis/struct/hash.mdhash.md) look exactly how one might expect a "hash" to look, with field-value pairs.
 
 While hashes are handy to represent  *objects* , actually the number of fields you can put inside a hash has no practical limits (other than available memory), so you can use hashes in many different ways inside your application.
 
@@ -241,7 +241,7 @@ It is worth noting that small hashes (i.e., a few elements with small values) ar
 
 ### Sets
 
-Redis [Sets](/docs/CS/DB/Redis/set.md) are unordered collections of strings. 
+Redis [Sets](/docs/CS/DB/Redis/struct/set.md/set.md) are unordered collections of strings. 
 
 The `SADD` command adds new elements to a set.
 It's also possible to do a number of other operations against sets like testing if a given element already exists, performing the intersection, union or difference between multiple sets, and so forth.
@@ -250,7 +250,7 @@ Sets are good for expressing relations between objects. For instance we can easi
 
 ### Sorted sets
 
-[Sorted sets](/docs/CS/DB/Redis/zset.md) are a data type which is similar to a mix between a Set and a Hash. Like sets, sorted sets are composed of unique, non-repeating string elements, so in some sense a sorted set is a set as well.
+[Sorted sets](/docs/CS/DB/Redis/struct/zset.mdzset.md) are a data type which is similar to a mix between a Set and a Hash. Like sets, sorted sets are composed of unique, non-repeating string elements, so in some sense a sorted set is a set as well.
 
 However while elements inside sets are not ordered, every element in a sorted set is associated with a floating point value, called *the score* (this is why the type is also similar to a hash, since every element is mapped to a value).
 
@@ -268,7 +268,7 @@ Because of this characteristic a common use case is leader boards.
 
 ### Bitmaps
 
-[Bitmaps](/docs/CS/DB/Redis/bitmap.md) are not an actual data type, but a set of bit-oriented operations defined on the String type.
+[Bitmaps](/docs/CS/DB/Redis/struct/bitmap.md) are not an actual data type, but a set of bit-oriented operations defined on the String type.
 Since strings are binary safe blobs and their maximum length is 512 MB, they are suitable to set up to 2^32 different bits.
 
 Bit operations are divided into two groups: constant-time single bit operations, like setting a bit to 1 or 0, or getting its value, and operations on groups of bits, for example counting the number of set bits in a given range of bits (e.g., population counting).
@@ -292,7 +292,7 @@ To split a bitmap across different keys instead of setting all the bits into a k
 
 ### HyperLogLogs
 
-A [HyperLogLog](/docs/CS/DB/Redis/HyperLogLog.md) is a probabilistic data structure used in order to count unique things (technically this is referred to estimating the cardinality of a set).
+A [HyperLogLog](/docs/CS/DB/Redis/struct/HyperLogLog.md) is a probabilistic data structure used in order to count unique things (technically this is referred to estimating the cardinality of a set).
 Usually counting unique items requires using an amount of memory proportional to the number of items you want to count, because you need to remember the elements you have already seen in the past in order to avoid counting them multiple times.
 However there is a set of algorithms that trade memory for precision: you end with an estimated measure with a standard error, which in the case of the Redis implementation is less than 1%.
 The magic of this algorithm is that you no longer need to use an amount of memory proportional to the number of items counted, and instead can use a constant amount of memory! 12k bytes in the worst case, or a lot less if your HyperLogLog (We'll just call them HLL from now) has seen very few elements.
@@ -363,7 +363,7 @@ It's important to note that **even when a command fails, all the other commands 
 
 We just have to repeat the operation hoping this time we'll not get a new race. This form of locking is called *optimistic locking* and is a very powerful form of locking.
 
-A [Redis script](/docs/CS/DB/Redis/struct.md?id=lua-scripts) is transactional by definition, so everything you can do with a Redis transaction, you can also do with a script, and usually the script will be both simpler and faster.
+A [Redis script](/docs/CS/DB/Redis/struct/struct.mdruct.md?id=lua-scripts) is transactional by definition, so everything you can do with a Redis transaction, you can also do with a script, and usually the script will be both simpler and faster.
 
 ### PubSub
 

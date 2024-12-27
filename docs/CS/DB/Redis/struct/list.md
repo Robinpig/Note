@@ -28,6 +28,9 @@ typedef struct listIter {
 - get len $O(1)$
 - value void* support multiple types
 
+
+Redis3.2之前底层数据结构由linkedlist或者ziplist实现 优先ziplist
+
 Lists are also encoded in a special way to save a lot of space.
 The number of entries allowed per internal list node can be specified as a fixed maximum size or a maximum number of elements.
 For a fixed maximum size, use -5 through -1, meaning:
@@ -66,7 +69,7 @@ dup free match can be override  by other method
 ## LPUSH
 
 1. [lookupKeyWrite in db](/docs/CS/DB/Redis/redisDb.md?id=redisObject)
-2. [createQuicklistObject](/docs/CS/DB/Redis/list.md?id=quicklistCreate)
+2. [createQuicklistObject](/docs/CS/DB/Redis/struct/list.mdlist.md?id=quicklistCreate)
 3. [dbAdd](/docs/CS/DB/Redis/redisDb.md?id=add)
 
 default using quicklist
@@ -113,7 +116,7 @@ void pushGenericCommand(client *c, int where, int xx) {
 
 ## quicklist
 
-linked list of ziplists
+linked list of ziplists 链表每个节点都是ziplist
 
 try to reduce cascadeUpdate
 
@@ -207,7 +210,7 @@ void listTypePush(robj *subject, robj *value, int where) {
 }
 ```
 
-call [ziplistPush](/docs/CS/DB/Redis/zset.md?id=insert)
+call [ziplistPush](/docs/CS/DB/Redis/struct/zset.mdzset.md?id=insert)
 
 ```c
 //quicklist.c
@@ -269,6 +272,20 @@ int quicklistPushTail(quicklist *quicklist, void *value, size_t sz) {
 }
 ```
 
+
+
+quicklist解决了单个ziplist过大 缩小连锁更新的范围
+
+
+
+
+
+
+
+
+
+
+
 ## Links
 
-- [Redis Struct](/docs/CS/DB/Redis/struct.md?id=lists)
+- [Redis Struct](/docs/CS/DB/Redis/struct/struct.mdruct.md?id=lists)

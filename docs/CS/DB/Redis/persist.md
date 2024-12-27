@@ -48,7 +48,7 @@ save 60 1000
 1. 频繁生成 RDB 文件写入磁盘，磁盘压力过大。会出现上一个 RDB 还未执行完，下一个又开始生成，陷入死循环。
 2. fork 出 bgsave 子进程会阻塞主线程，主线程的内存越大，阻塞时间越长。
 
-### RDB works
+### save
 
 Whenever Redis needs to dump the dataset to disk, this is what happens:
 
@@ -58,14 +58,226 @@ Whenever Redis needs to dump the dataset to disk, this is what happens:
 
 This method allows Redis to benefit from **copy-on-write** semantics.
 
-### saveRio
+
+
+BGSAVE 命令实现
 
 ```c
-int rdbSaveRio(rio *rdb, int *error, int rdbflags, rdbSaveInfo *rsi) {
+/* BGSAVE [SCHEDULE] */
+void bgsaveCommand(client *c) {
+    int schedule = 0;
+
+    /* The SCHEDULE option changes the behavior of BGSAVE when an AOF rewrite
+     * is in progress. Instead of returning an error a BGSAVE gets scheduled. */
+    if (c->argc > 1) {
+        if (c->argc == 2 && !strcasecmp(c->argv[1]->ptr,"schedule")) {
+            schedule = 1;
+        } else {
+            addReplyErrorObject(c,shared.syntaxerr);
+            return;
+        }
+    }
+
+    rdbSaveInfo rsi, *rsiptr;
+    rsiptr = rdbPopulateSaveInfo(&rsi);
+
+    if (server.child_type == CHILD_TYPE_RDB) {
+        addReplyError(c,"Background save already in progress");
+    } else if (hasActiveChildProcess() || server.in_exec) {
+        if (schedule || server.in_exec) {
+            server.rdb_bgsave_scheduled = 1;
+            addReplyStatus(c,"Background saving scheduled");
+        } else {
+            addReplyError(c,
+            "Another child process is active (AOF?): can't BGSAVE right now. "
+            "Use BGSAVE SCHEDULE in order to schedule a BGSAVE whenever "
+            "possible.");
+        }
+    } else if (rdbSaveBackground(SLAVE_REQ_NONE,server.rdb_filename,rsiptr,RDBFLAGS_NONE) == C_OK) {
+        addReplyStatus(c,"Background saving started");
+    } else {
+        addReplyErrorObject(c,shared.err);
+    }
+}
+```
+
+
+可以看见fork()函数的执行，在子进程中执行了rdbSave()函数，父进程则执行了一些设置状态的操作
+
+
+#### rdbSaveBackground
+
+`BGSAVE` command or serverCron
+
+```c
+// rdb.c
+int rdbSaveBackground(char *filename, rdbSaveInfo *rsi) {
+    pid_t childpid;
+
+    if (hasActiveChildProcess()) return C_ERR;
+
+    server.dirty_before_bgsave = server.dirty;
+    server.lastbgsave_try = time(NULL);
+
+    if ((childpid = redisFork(CHILD_TYPE_RDB)) == 0) {
+        int retval;
+
+        /* Child */
+        redisSetProcTitle("redis-rdb-bgsave");
+        redisSetCpuAffinity(server.bgsave_cpulist);
+        retval = rdbSave(filename,rsi);
+        if (retval == C_OK) {
+            sendChildCowInfo(CHILD_INFO_TYPE_RDB_COW_SIZE, "RDB");
+        }
+        exitFromChild((retval == C_OK) ? 0 : 1);
+    } else {
+        /* Parent */
+        if (childpid == -1) {
+            server.lastbgsave_status = C_ERR;
+            serverLog(LL_WARNING,"Can't save in background: fork: %s",
+                strerror(errno));
+            return C_ERR;
+        }
+        serverLog(LL_NOTICE,"Background saving started by pid %ld",(long) childpid);
+        server.rdb_save_time_start = time(NULL);
+        server.rdb_child_type = RDB_CHILD_TYPE_DISK;
+        return C_OK;
+    }
+    return C_OK; /* unreached */
+}
+```
+
+#### saveDoneHandler
+
+When a background RDB saving/transfer terminates, call the right handler.
+
+```c
+// rdb.c
+void backgroundSaveDoneHandler(int exitcode, int bysignal) {
+    int type = server.rdb_child_type;
+    switch(server.rdb_child_type) {
+    case RDB_CHILD_TYPE_DISK:
+        backgroundSaveDoneHandlerDisk(exitcode,bysignal);
+        break;
+    case RDB_CHILD_TYPE_SOCKET:
+        backgroundSaveDoneHandlerSocket(exitcode,bysignal);
+        break;
+    default:
+        serverPanic("Unknown RDB child type.");
+        break;
+    }
+
+    server.rdb_child_type = RDB_CHILD_TYPE_NONE;
+    server.rdb_save_time_last = time(NULL)-server.rdb_save_time_start;
+    server.rdb_save_time_start = -1;
+    /* Possibly there are slaves waiting for a BGSAVE in order to be served
+     * (the first stage of SYNC is a bulk transfer of dump.rdb) */
+    updateSlavesWaitingBgsave((!bysignal && exitcode == 0) ? C_OK : C_ERR, type);
+}
+```
+
+
+#### rdbSave
+刚开始生成一个临时的RDB文件，只有在执行成功后，才会进行rename操作，然后以写权限打开文件，然后调用了rdbSaveRio()函数将数据库的内容写到临时的RDB文件，
+之后进行刷新缓冲区和同步操作，就关闭文件进行rename操作和更新服务器状态
+
+```c
+int rdbSave(int req, char *filename, rdbSaveInfo *rsi, int rdbflags) {
+    char tmpfile[256];
+    char cwd[MAXPATHLEN]; /* Current working dir path for error messages. */
+
+    startSaving(rdbflags);
+    snprintf(tmpfile,256,"temp-%d.rdb", (int) getpid());
+
+    if (rdbSaveInternal(req,tmpfile,rsi,rdbflags) != C_OK) {
+        stopSaving(0);
+        return C_ERR;
+    }
+    
+    /* Use RENAME to make sure the DB file is changed atomically only
+     * if the generate DB file is ok. */
+    if (rename(tmpfile,filename) == -1) {
+        char *str_err = strerror(errno);
+        char *cwdp = getcwd(cwd,MAXPATHLEN);
+        serverLog(LL_WARNING,
+            "Error moving temp DB file %s on the final "
+            "destination %s (in server root dir %s): %s",
+            tmpfile,
+            filename,
+            cwdp ? cwdp : "unknown",
+            str_err);
+        unlink(tmpfile);
+        stopSaving(0);
+        return C_ERR;
+    }
+    if (fsyncFileDir(filename) != 0) {
+        serverLog(LL_WARNING,
+            "Failed to fsync directory while saving DB: %s", strerror(errno));
+        stopSaving(0);
+        return C_ERR;
+    }
+
+    serverLog(LL_NOTICE,"DB saved on disk");
+    server.dirty = 0;
+    server.lastsave = time(NULL);
+    server.lastbgsave_status = C_OK;
+    stopSaving(1);
+    return C_OK;
+}
+```
+rio是Redis抽象的IO层，它可以面向三种对象，分别是缓冲区，文件IO和socket IO
+
+#### saveRio
+
+```c
+int rdbSaveRio(int req, rio *rdb, int *error, int rdbflags, rdbSaveInfo *rsi) {
+    char magic[10];
+    uint64_t cksum;
+    long key_counter = 0;
+    int j;
+
+    if (server.rdb_checksum)
+        rdb->update_cksum = rioGenericUpdateChecksum;
+    snprintf(magic,sizeof(magic),"REDIS%04d",RDB_VERSION);
+    if (rdbWriteRaw(rdb,magic,9) == -1) goto werr;
+    if (rdbSaveInfoAuxFields(rdb,rdbflags,rsi) == -1) goto werr;
+    if (!(req & SLAVE_REQ_RDB_EXCLUDE_DATA) && rdbSaveModulesAux(rdb, REDISMODULE_AUX_BEFORE_RDB) == -1) goto werr;
+
+    /* save functions */
+    if (!(req & SLAVE_REQ_RDB_EXCLUDE_FUNCTIONS) && rdbSaveFunctions(rdb) == -1) goto werr;
+
+    /* save all databases, skip this if we're in functions-only mode */
+    if (!(req & SLAVE_REQ_RDB_EXCLUDE_DATA)) {
+        for (j = 0; j < server.dbnum; j++) {
+            if (rdbSaveDb(rdb, j, rdbflags, &key_counter) == -1) goto werr;
+        }
+    }
+
+    if (!(req & SLAVE_REQ_RDB_EXCLUDE_DATA) && rdbSaveModulesAux(rdb, REDISMODULE_AUX_AFTER_RDB) == -1) goto werr;
+
+    /* EOF opcode */
+    if (rdbSaveType(rdb,RDB_OPCODE_EOF) == -1) goto werr;
+
+    /* CRC64 checksum. It will be zero if checksum computation is disabled, the
+     * loading code skips the check in this case. */
+    cksum = rdb->cksum;
+    memrev64ifbe(&cksum);
+    if (rioWrite(rdb,&cksum,8) == 0) goto werr;
+    return C_OK;
+
+werr:
+    if (error) *error = errno;
+    return C_ERR;
 }
 ```
 
 call `rdbSaveKeyValuePair`
+
+一个空数据库持久化生成的dump.rdb文件，使用od -cx dump.rdb命令查看一下
+
+
+
+
 
 ### load RDB
 
@@ -124,77 +336,6 @@ Load an RDB file from the rio stream 'rdb'. On success C_OK is returned, otherwi
 
 ```c
 int rdbLoadRio(rio *rdb, int rdbflags, rdbSaveInfo *rsi) {
-```
-
-### rdbSaveBackground
-
-`BGSAVE` command or serverCron
-
-```c
-// rdb.c
-int rdbSaveBackground(char *filename, rdbSaveInfo *rsi) {
-    pid_t childpid;
-
-    if (hasActiveChildProcess()) return C_ERR;
-
-    server.dirty_before_bgsave = server.dirty;
-    server.lastbgsave_try = time(NULL);
-
-    if ((childpid = redisFork(CHILD_TYPE_RDB)) == 0) {
-        int retval;
-
-        /* Child */
-        redisSetProcTitle("redis-rdb-bgsave");
-        redisSetCpuAffinity(server.bgsave_cpulist);
-        retval = rdbSave(filename,rsi);
-        if (retval == C_OK) {
-            sendChildCowInfo(CHILD_INFO_TYPE_RDB_COW_SIZE, "RDB");
-        }
-        exitFromChild((retval == C_OK) ? 0 : 1);
-    } else {
-        /* Parent */
-        if (childpid == -1) {
-            server.lastbgsave_status = C_ERR;
-            serverLog(LL_WARNING,"Can't save in background: fork: %s",
-                strerror(errno));
-            return C_ERR;
-        }
-        serverLog(LL_NOTICE,"Background saving started by pid %ld",(long) childpid);
-        server.rdb_save_time_start = time(NULL);
-        server.rdb_child_type = RDB_CHILD_TYPE_DISK;
-        return C_OK;
-    }
-    return C_OK; /* unreached */
-}
-```
-
-### saveDoneHandler
-
-When a background RDB saving/transfer terminates, call the right handler.
-
-```c
-// rdb.c
-void backgroundSaveDoneHandler(int exitcode, int bysignal) {
-    int type = server.rdb_child_type;
-    switch(server.rdb_child_type) {
-    case RDB_CHILD_TYPE_DISK:
-        backgroundSaveDoneHandlerDisk(exitcode,bysignal);
-        break;
-    case RDB_CHILD_TYPE_SOCKET:
-        backgroundSaveDoneHandlerSocket(exitcode,bysignal);
-        break;
-    default:
-        serverPanic("Unknown RDB child type.");
-        break;
-    }
-
-    server.rdb_child_type = RDB_CHILD_TYPE_NONE;
-    server.rdb_save_time_last = time(NULL)-server.rdb_save_time_start;
-    server.rdb_save_time_start = -1;
-    /* Possibly there are slaves waiting for a BGSAVE in order to be served
-     * (the first stage of SYNC is a bulk transfer of dump.rdb) */
-    updateSlavesWaitingBgsave((!bysignal && exitcode == 0) ? C_OK : C_ERR, type);
-}
 ```
 
 ## AOF
@@ -265,89 +406,16 @@ There are three options:
 The suggested (and default) policy is to `fsync` every second. It is both very fast and pretty safe.
 The `always` policy is very slow in practice, but it supports group commit, so if there are multiple parallel writes Redis will try to perform a single `fsync` operation.
 
-bgrewriteaof
 
+
+
+
+AOF缓冲区是一个简单动态字符串（sds）
 ```c
 // server.h
 struct redisServer {
-
-    size_t stat_rdb_cow_bytes;      /* Copy on write bytes during RDB saving. */
-    size_t stat_aof_cow_bytes;      /* Copy on write bytes during AOF rewrite. */
-  
-    /* AOF persistence */
-    int aof_enabled;                /* AOF configuration */
-    int aof_state;                  /* AOF_(ON|OFF|WAIT_REWRITE) */
-    int aof_fsync;                  /* Kind of fsync() policy */
-    char *aof_filename;             /* Name of the AOF file */
-    int aof_no_fsync_on_rewrite;    /* Don't fsync if a rewrite is in prog. */
-    int aof_rewrite_perc;           /* Rewrite AOF if % growth is > M and... */
-    off_t aof_rewrite_min_size;     /* the AOF file is at least N bytes. */
-    off_t aof_rewrite_base_size;    /* AOF size on latest startup or rewrite. */
-    off_t aof_current_size;         /* AOF current size. */
-    off_t aof_fsync_offset;         /* AOF offset which is already synced to disk. */
-    int aof_flush_sleep;            /* Micros to sleep before flush. (used by tests) */
-    int aof_rewrite_scheduled;      /* Rewrite once BGSAVE terminates. */
-    list *aof_rewrite_buf_blocks;   /* Hold changes during an AOF rewrite. */
     sds aof_buf;      /* AOF buffer, written before entering the event loop */
-    int aof_fd;       /* File descriptor of currently selected AOF file */
-    int aof_selected_db; /* Currently selected DB in AOF */
-    time_t aof_flush_postponed_start; /* UNIX time of postponed AOF flush */
-    time_t aof_last_fsync;            /* UNIX time of last fsync() */
-    time_t aof_rewrite_time_last;   /* Time used by last AOF rewrite run. */
-    time_t aof_rewrite_time_start;  /* Current AOF rewrite start time. */
-    int aof_lastbgrewrite_status;   /* C_OK or C_ERR */
-    unsigned long aof_delayed_fsync;  /* delayed AOF fsync() counter */
-    int aof_rewrite_incremental_fsync;/* fsync incrementally while aof rewriting? */
-    int rdb_save_incremental_fsync;   /* fsync incrementally while rdb saving? */
-    int aof_last_write_status;      /* C_OK or C_ERR */
-    int aof_last_write_errno;       /* Valid if aof write/fsync status is ERR */
-    int aof_load_truncated;         /* Don't stop on unexpected AOF EOF. */
-    int aof_use_rdb_preamble;       /* Use RDB preamble on AOF rewrites. */
-    redisAtomic int aof_bio_fsync_status; /* Status of AOF fsync in bio job. */
-    redisAtomic int aof_bio_fsync_errno;  /* Errno of AOF fsync in bio job. */
-    /* AOF pipes used to communicate between parent and child during rewrite. */
-    int aof_pipe_write_data_to_child;
-    int aof_pipe_read_data_from_parent;
-    int aof_pipe_write_ack_to_parent;
-    int aof_pipe_read_ack_from_child;
-    int aof_pipe_write_ack_to_child;
-    int aof_pipe_read_ack_from_parent;
-    int aof_stop_sending_diff;     /* If true stop sending accumulated diffs
-                                      to child process. */
-    sds aof_child_diff;             /* AOF diff accumulator child side. */
-    /* RDB persistence */
-    long long dirty;                /* Changes to DB from the last save */
-    long long dirty_before_bgsave;  /* Used to restore dirty on failed BGSAVE */
-    struct saveparam *saveparams;   /* Save points array for RDB */
-    int saveparamslen;              /* Number of saving points */
-    char *rdb_filename;             /* Name of RDB file */
-    int rdb_compression;            /* Use compression in RDB? */
-    int rdb_checksum;               /* Use RDB checksum? */
-    int rdb_del_sync_files;         /* Remove RDB files used only for SYNC if
-                                       the instance does not use persistence. */
-    time_t lastsave;                /* Unix time of last successful save */
-    time_t lastbgsave_try;          /* Unix time of last attempted bgsave */
-    time_t rdb_save_time_last;      /* Time used by last RDB save run. */
-    time_t rdb_save_time_start;     /* Current RDB save start time. */
-    int rdb_bgsave_scheduled;       /* BGSAVE when possible if true. */
-    int rdb_child_type;             /* Type of save by active child. */
-    int lastbgsave_status;          /* C_OK or C_ERR */
-    int stop_writes_on_bgsave_err;  /* Don't allow writes if can't BGSAVE */
-    int rdb_pipe_read;              /* RDB pipe used to transfer the rdb data */
-                                    /* to the parent process in diskless repl. */
-    int rdb_child_exit_pipe;        /* Used by the diskless parent allow child exit. */
-    connection **rdb_pipe_conns;    /* Connections which are currently the */
-    int rdb_pipe_numconns;          /* target of diskless rdb fork child. */
-    int rdb_pipe_numconns_writing;  /* Number of rdb conns with pending writes. */
-    char *rdb_pipe_buff;            /* In diskless replication, this buffer holds data */
-    int rdb_pipe_bufflen;           /* that was read from the the rdb pipe. */
-    int rdb_key_save_delay;         /* Delay in microseconds between keys while
-                                     * writing the RDB. (for testings). negative
-                                     * value means fractions of microsecons (on average). */
-    int key_load_delay;             /* Delay in microseconds between keys while
-                                     * loading aof or rdb. (for testings). negative
-                                     * value means fractions of microsecons (on average). */
-}                     
+}
 ```
 
 ### append
@@ -363,6 +431,9 @@ void propagate(struct redisCommand *cmd, int dbid, robj **argv, int argc,
 }
 ```
 #### feedAppendOnlyFile
+
+feedAppendOnlyFile创建一个空的简单动态字符串（sds），将当前所有追加命令操作都追加到这个sds中，最终将这个sds追加到`server.aof_buf`
+
 ```c
 void feedAppendOnlyFile(struct redisCommand *cmd, int dictid, robj **argv, int argc) {
     sds buf = sdsempty();
@@ -430,6 +501,35 @@ If a background append only file rewriting is in progress we want to accumulate 
         aofRewriteBufferAppend((unsigned char*)buf,sdslen(buf));
 
     sdsfree(buf);
+}
+```
+
+catAppendOnlyGenericCommand()函数实现了追加命令到缓冲区中
+
+```c
+sds catAppendOnlyGenericCommand(sds dst, int argc, robj **argv) {
+    char buf[32];
+    int len, j;
+    robj *o;
+
+    buf[0] = '*';
+    len = 1+ll2string(buf+1,sizeof(buf)-1,argc);
+    buf[len++] = '\r';
+    buf[len++] = '\n';
+    dst = sdscatlen(dst,buf,len);
+
+    for (j = 0; j < argc; j++) {
+        o = getDecodedObject(argv[j]);
+        buf[0] = '$';
+        len = 1+ll2string(buf+1,sizeof(buf)-1,sdslen(o->ptr));
+        buf[len++] = '\r';
+        buf[len++] = '\n';
+        dst = sdscatlen(dst,buf,len);
+        dst = sdscatlen(dst,o->ptr,sdslen(o->ptr));
+        dst = sdscatlen(dst,"\r\n",2);
+        decrRefCount(o);
+    }
+    return dst;
 }
 ```
 

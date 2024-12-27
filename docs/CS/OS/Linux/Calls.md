@@ -301,7 +301,7 @@ Default: 0
 > The behavior of the backlog argument on TCP sockets changed with Linux 2.2.
 > Now it specifies the queue length for completely established sockets waiting to be accepted, instead of the number of incomplete connection requests.
 > The maximum length of the queue for incomplete sockets can be set using /proc/sys/net/ipv4/tcp_max_syn_backlog.
-> When syncookies are enabled there is no logical maximum length and this setting is ignored.  See tcp(7) for more information.
+> When syncookies are enabled there is no logical maximum length and this setting is ignored. 
 >
 > If the backlog argument is greater than the value in /proc/sys/net/core/somaxconn, then it is silently capped to that value.
 > Since Linux 5.4, the default in this file is 4096; in earlier kernels, the default value is 128.  

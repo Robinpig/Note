@@ -1025,6 +1025,8 @@ For leader to make better assignment decision,  we are attaching `group.instance
 
 ### Incremental Cooperative Rebalance
 
+> [KIP-429: Kafka Consumer Incremental Rebalance Protocol](https://cwiki.apache.org/confluence/display/KAFKA/KIP-429:+Kafka+Consumer+Incremental+Rebalance+Protocol#KIP429:KafkaConsumerIncrementalRebalanceProtocol-Consumer)
+
 A quick recap of eager rebalance semantics on KStream: when rebalance starts, all stream threads would
 
 1.  Join group with all currently assigned tasks revoked.

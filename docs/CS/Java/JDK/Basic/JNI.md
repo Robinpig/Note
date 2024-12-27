@@ -165,6 +165,49 @@ state in native is RUNNABLE
 
 ## JNI and GC
 
+
+
+
+
+
+
+JNI 编程时不要随意截获信号处理
+
+```java
+// JNITest.java
+import java.util.UUID;
+public class JNITest {
+    public static void main(String[] args) throws Exception {
+        System.loadLibrary("JNITest");
+        UUID.fromString(null);
+    }
+}
+
+// JNITest.c
+#include <signal.h>
+#include <jni.h>
+
+JNIEXPORT
+jint JNICALL JNI_OnLoad(JavaVM *jvm, void *reserved) {
+    signal(SIGSEGV, SIG_DFL);//如果注释这条语句，在运行时会出现NullPointerExcetpion异常
+    return JNI_VERSION_1_8;
+}
+```
+
+
+
+
+
+```shell
+$ gcc -Wall -shared -fPIC JNITest.c -o libJNITest.so -I$JAVA_HOME/include -I$JAVA_HOME/include/linux
+$ javac JNITest.java
+$ java -Xcomp -Djava.library.path=./ JNITest
+```
+
+
+
+
+
 ## Links
 
 - [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
@@ -174,3 +217,4 @@ state in native is RUNNABLE
 1. [Java Programming Tutorial Java Native Interface (JNI)](https://www3.ntu.edu.sg/home/ehchua/programming/java/JavaNativeInterface.html)
 2. [Java Native Interface Specification Contents](https://docs.oracle.com/en/java/javase/11/docs/specs/jni/index.html)
 3. [JEP 454: Foreign Function & Memory API](https://openjdk.java.net/jeps/454)
+4. [JNI 中错误的信号处理导致 JVM 崩溃问题分析](https://mp.weixin.qq.com/s?__biz=MzkyMjYzNjU0Ng==&mid=2247507047&idx=1&sn=fc1a4942877f4197653f0e0c031070c5&source=41#wechat_redirect)

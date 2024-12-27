@@ -2,7 +2,9 @@
 
 [MySQL Server](https://www.mysql.com/), the world's most popular open source database, and MySQL Cluster, a real-time, open source transactional database.
 
-**Installing MySQL**
+
+
+## Installing MySQL
 
 <!-- tabs:start -->
 
@@ -86,7 +88,28 @@ Init
 
 <!-- tabs:end -->
 
+### Debug
+
+```shell
+#查看mysqld启动时的缺省选项
+mysqld --print-defaults
+
+#查看mysqld启动配置文件的优先级
+mysqld --verbose --help | grep -A 1 "Default options"
+
+```
+
+
+
+
+
+
+
 Use gdb/lldb to debug
+
+
+
+
 
 ## Architecture
 

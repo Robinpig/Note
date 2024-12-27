@@ -9,7 +9,21 @@ Before we jump into the JVM, let's revisit the concept of a [Virtual Machine (VM
 Similar to virtual machines, the JVM creates an isolated space on a host machine.
 This space can be used to execute Java programs irrespective of the platform or operating system of the machine.
 
-### Directories
+
+
+JVM的构成主要包括如下几点： 
+
+- 一个抽象规范：其中定义了JVM到底是什么，由哪些组成部分。这些抽象的规范在Java虚拟机规范（The Java Virtual Machine Specification，JVMS）中进行了详细描述。 
+- 一个具体的实现：具体的实现过程不仅需要不同的厂商要遵循Java虚拟机规范，而且还要根据每个平台的不同特性以软件或软硬结合的方式去实现设定的功能。 
+- 一个运行的实例：当用JVM运行一个Java程序时，这个Java程序就是一个运行中的实例，每个运行中的Java程序都是一个JVM实例
+
+
+
+>
+
+[](https://github.com/FranzHaidnor/haidnorJVM)
+
+
 
 Directory based on JDK12 HotSpot, [Git Link](https://github.com/openjdk/jdk/tree/master/src/hotspot)
 
@@ -220,7 +234,7 @@ These libraries are usually present in the form of .dll or .so files. These nati
 - [start](/docs/CS/Java/JDK/JVM/start.md) and [destroy](/docs/CS/Java/JDK/JVM/destroy.md)
 - [Thread](/docs/CS/Java/JDK/JVM/Thread.md)
 
-[JavaCalls](/docs/CS/Java/JDK/JVM/Stub.md?id=JavaCalls) and [JNI](/docs/CS/Java/JDK/Basic/JNI.md)
+[JavaCalls](/docs/CS/Java/JDK/JVM/JavaCall?id=JavaCalls) and [JNI](/docs/CS/Java/JDK/Basic/JNI.md)
 
 ```dot
 strict digraph {
@@ -1495,6 +1509,13 @@ CollectedHeap* G1Arguments::create_heap() {
 
 ## Tuning
 
+
+JVM的发展方向主要包括3个方面。
+1. 首先是性能优化，通过提高性能和资源利用率来适应云原生时代的需求。其中最主要的技术是AOT编译器和JIT编译器的结合，以及JVM的内存管理和垃圾回收机制的优化。
+2. 其次是对容器化的支持，通过支持容器化和新的微服务架构以适应云原生时代的需求。其中最主要的技术是JVM的镜像化和容器化以及对容器化环境的适配。
+3. 最后是安全性和可靠性的提升，通过持续提高安全性和可靠性来适应新时代的要求
+
+
 ```shell
 java -XX:+PrintFlagsFinal -XX:+UnlockDiagnosticVMOptions -version
 ```
@@ -1555,3 +1576,4 @@ with jvisualvm
 21. [垃圾回收算法手册-自动内存管理的艺术]()
 22. [GraalVM与Java静态编译]()
 23. [JVM ,Java paper](https://www.cnblogs.com/WCFGROUP/p/6373416.html)
+24. [文章导航 - 深入剖析Java虚拟机HotSpot](https://mp.weixin.qq.com/s/uG9CNGypYtJptoDMUtZwMg)

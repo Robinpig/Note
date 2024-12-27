@@ -1,5 +1,127 @@
 ## Introduction
 
+由于Java方法与C/C++函数的调用约定不同，所以并不能直接调用，需要JavaCalls::call()这个函数辅助调用
+从C/C++方法中调用的一些Java方法主要有：
+1. Java主类中的main()方法；
+2. Java主类装载时，调用JavaCalls::call()函数执行checkAndLoadMain()方法；
+3. 类的初始化过程中，调用JavaCalls::call()函数执行的Java类初始化方法<clinit>，可以查看JavaCalls::call_default_constructor()函数，有对<clinit>方法的调用逻辑；
+4. 我们先省略main方法的执行流程（其实main方法的执行也是先启动一个JavaMain线程，套路都是一样的），单看某个JavaThread的启动过程。JavaThread的启动最终都要通过一个native方法java.lang.Thread#start0()完成的，这个方法经过解释器的native_entry入口，调用到了JVM_StartThread()函数。其中的static void thread_entry(JavaThread* thread, TRAPS)函数中会调用JavaCalls::call_virtual()函数。JavaThread最终会通过JavaCalls::call_virtual()函数来调用字节码中的run()方法；
+5. 在SystemDictionary::load_instance_class()这个能体现双亲委派的函数中，如果类加载器对象不为空，则会调用这个类加载器的loadClass()函数（通过call_virtual()函数来调用）来加载类。
+
+当然还会有其它方法，这里就不一一列举了。通过JavaCalls::call()、JavaCalls::call_helper()等函数调用Java方法，这些函数定义在javaCalls.hpp文件
+
+> All calls to Java have to go via JavaCalls. 
+> Sets up the stack frame and makes sure that the last_Java_frame pointers are chained correctly.
+
+```cpp
+// hotspot/share/runtime/javaCallcs.hpp
+class JavaCalls: AllStatic {
+  static void call_helper(JavaValue* result, const methodHandle& method, JavaCallArguments* args, TRAPS);
+ public:
+  // call_special
+  // ------------
+  // The receiver must be first oop in argument list
+  static void call_special(JavaValue* result, Klass* klass, Symbol* name, Symbol* signature, JavaCallArguments* args, TRAPS);
+
+  static void call_special(JavaValue* result, Handle receiver, Klass* klass, Symbol* name, Symbol* signature, TRAPS); // No args
+  static void call_special(JavaValue* result, Handle receiver, Klass* klass, Symbol* name, Symbol* signature, Handle arg1, TRAPS);
+  static void call_special(JavaValue* result, Handle receiver, Klass* klass, Symbol* name, Symbol* signature, Handle arg1, Handle arg2, TRAPS);
+
+  // virtual call
+  // ------------
+
+  // The receiver must be first oop in argument list
+  static void call_virtual(JavaValue* result, Klass* spec_klass, Symbol* name, Symbol* signature, JavaCallArguments* args, TRAPS);
+
+  static void call_virtual(JavaValue* result, Handle receiver, Klass* spec_klass, Symbol* name, Symbol* signature, TRAPS); // No args
+  static void call_virtual(JavaValue* result, Handle receiver, Klass* spec_klass, Symbol* name, Symbol* signature, Handle arg1, TRAPS);
+  static void call_virtual(JavaValue* result, Handle receiver, Klass* spec_klass, Symbol* name, Symbol* signature, Handle arg1, Handle arg2, TRAPS);
+
+  // Static call
+  // -----------
+  static void call_static(JavaValue* result, Klass* klass, Symbol* name, Symbol* signature, JavaCallArguments* args, TRAPS);
+
+  static void call_static(JavaValue* result, Klass* klass, Symbol* name, Symbol* signature, TRAPS);
+  static void call_static(JavaValue* result, Klass* klass, Symbol* name, Symbol* signature, Handle arg1, TRAPS);
+  static void call_static(JavaValue* result, Klass* klass, Symbol* name, Symbol* signature, Handle arg1, Handle arg2, TRAPS);
+  static void call_static(JavaValue* result, Klass* klass, Symbol* name, Symbol* signature, Handle arg1, Handle arg2, Handle arg3, TRAPS);
+
+  // Allocate instance + invoke constructor. This is equivalent to "new Klass(args ...)" expression in Java code.
+  static Handle construct_new_instance(InstanceKlass* klass, Symbol* constructor_signature, JavaCallArguments* args, TRAPS);
+
+  static Handle construct_new_instance(InstanceKlass* klass, Symbol* constructor_signature, TRAPS);
+  static Handle construct_new_instance(InstanceKlass* klass, Symbol* constructor_signature, Handle arg1, TRAPS);
+  static Handle construct_new_instance(InstanceKlass* klass, Symbol* constructor_signature, Handle arg1, Handle arg2, TRAPS);
+
+  // Low-level interface
+  static void call(JavaValue* result, const methodHandle& method, JavaCallArguments* args, TRAPS);
+};
+```
+
+
+
+这些函数与invokestatic、invokedynamic、invokestatic、invokespecial、invokevirtual几种方法调用指令相对应
+
+
+
+```c
+JNI_ENTRY(void, jni_CallStaticVoidMethod(JNIEnv *env, jclass cls, jmethodID methodID, ...))
+  HOTSPOT_JNI_CALLSTATICVOIDMETHOD_ENTRY(env, cls, (uintptr_t) methodID);
+  DT_VOID_RETURN_MARK(CallStaticVoidMethod);
+
+  va_list args;
+  va_start(args, methodID);
+  JavaValue jvalue(T_VOID);
+  JNI_ArgumentPusherVaArg ap(methodID, args);
+  jni_invoke_static(env, &jvalue, nullptr, JNI_STATIC, methodID, &ap, CHECK);
+  va_end(args);
+JNI_END
+```
+
+
+
+
+
+StubRoutines::call_stub() 创建的CallStub如下
+
+
+
+```c
+#define CAST_TO_FN_PTR(func_type, value) (reinterpret_cast<func_type>(value))
+```
+
+宏定义展开
+
+```c
+#define CAST_TO_FN_PTR(func_type, value) (reinterpret_cast<func_type>(value))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+zerolocals表示正常的Java方法调用，包括Java程序的main()方法，对于zerolocals来说，会调用ig_this->generate_normal_entry()函数生成入口。generate_normal_entry()函数会为执行的方法生成堆栈，而堆栈由局部变量表（用来存储传入的参数和被调用方法的局部变量）、Java方法栈帧数据和操作数栈这三大部分组成，所以entry_point例程（其实就是一段机器指令片段，英文名为stub）会创建这3部分来辅助Java方法的执行
+
+通过调用CallStaticVoidMethod()函数来调用Java主类中的main()方法。控制权转移到Java主类中的main()方法之中。调用CallStaticVoidMethod()函数就是调用jni_CallStaticVoidMethod()函数
+
+
+
+
+
+
+
+
 ## call_stub
 
 a function pointer
@@ -188,7 +310,7 @@ void generate_initial() {
 }
 ```
 
-And generate_initial -> [generate_call_stub](/docs/CS/Java/JDK/JVM/Stub.md?id=generate_call_stub)
+And generate_initial -> [generate_call_stub](/docs/CS/Java/JDK/JVM/JavaCall?id=generate_call_stub)
 
 ### generate_call_stub
 
@@ -452,7 +574,7 @@ Calculate current_stack_pointer here to make sure stack_shadow_pages_available()
     #endif
 ```
 
-[call stub](/docs/CS/Java/JDK/JVM/Stub.md?id=call_stub)
+[call stub](/docs/CS/Java/JDK/JVM/JavaCall?id=call_stub)
 
 ```cpp
       StubRoutines::call_stub()(
@@ -487,7 +609,7 @@ Calculate current_stack_pointer here to make sure stack_shadow_pages_available()
 }
 ```
 
-_call_stub_entry generated by [StubGenerator::generate_call_stub()](/docs/CS/Java/JDK/JVM/Stub.md?id=generate_call_stub)(different arch) when [start vm](/docs/CS/Java/JDK/JVM/start.md?id=init_globals)
+_call_stub_entry generated by [StubGenerator::generate_call_stub()](/docs/CS/Java/JDK/JVM/JavaCall?id=generate_call_stub)(different arch) when [start vm](/docs/CS/Java/JDK/JVM/start.md?id=init_globals)
 
 ```cpp
 // StubRoutines.hpp

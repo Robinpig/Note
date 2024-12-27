@@ -112,6 +112,13 @@ The remaining sections describe important design concepts that distinguish Gener
 - Large objects
 - Full garbage collections
 
+
+
+## Links
+
+- [Garbage Collection](/docs/CS/Java/JDK/JVM/GC.md)
+
+
 ## References
 
 1. [ZGC - by RednaxelaFX](https://www.zhihu.com/question/287945354/answer/458761494)
