@@ -90,7 +90,7 @@ send(...,&server_address,...);
 
 ### connect
 
-```
+```c
 SYSCALL_DEFINE3(connect, int, fd, struct sockaddr __user *, uservaddr, int, addrlen)
 {
 	return __sys_connect(fd, uservaddr, addrlen);
@@ -107,6 +107,19 @@ int __sys_connect_file(struct file *file, struct sockaddr_storage *address,
 	err = sock->ops->connect(sock, (struct sockaddr *)address, addrlen, sock->file->f_flags | file_flags);
 }   
 ```
+这里调用的是socket创建时注册的connect函数 TCP这里是`tcp_v4_connect`
+```c
+        
+struct proto tcp_prot = {
+	.name			= "TCP",
+	.owner			= THIS_MODULE,
+	.close			= tcp_close,
+	.pre_connect		= tcp_v4_pre_connect,
+	.connect		= tcp_v4_connect,
+}
+```
+
+
 
 ### tcp_v4_connect
 
@@ -567,6 +580,8 @@ struct sk_buff *tcp_make_synack(const struct sock *sk, struct dst_entry *dst,
 ```
 
 ## Rcv SYNACK
+client端接收SYN+ACK 回复ACK
+这里首先通过状态机判断是在TCP_SYN_SENT状态
 
 ```c
 int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
@@ -581,7 +596,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 	}
 }
 ```
-
+这里省略了验证报文的逻辑 主要关注tcp_finish_connect 和 tcp_send_ack
 ```c
 
 static int tcp_rcv_synsent_state_process(struct sock *sk, struct sk_buff *skb,
@@ -604,6 +619,7 @@ static int tcp_rcv_synsent_state_process(struct sock *sk, struct sk_buff *skb,
 ```
 
 ### tcp_finish_connect
+设置状态为TCP_ESTABLISHED
 
 ```c
 
@@ -1104,6 +1120,10 @@ static void tcp_v4_reqsk_send_ack(const struct sock *sk, struct sk_buff *skb,
 	tcp_v4_send_ack(sk, skb, seq, ...);
 }
 ```
+
+## Summary
+
+
 
 ## Links
 
