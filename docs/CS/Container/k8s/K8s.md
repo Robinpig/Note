@@ -119,8 +119,28 @@ Mac下通常使用Docker Desktop的k8s
 
 <!-- tabs:end -->
 
+Build
+
+```shell
+make all
+
+# 单独构建某个组件
+make WHAT=cmd/kubectl
+```
+
+构建函数入口
+kube::golang::build_binaries
 
 ### Installing a container runtime
+
+
+容器环境构建
+
+```shell
+make quick-release
+```
+
+调用到build/release.sh脚本
 
 <!-- tabs:start -->
 
