@@ -71,7 +71,7 @@ public class FileChannelImpl extends FileChannel {
 }
 ```
 
-
+当我们使用 HeapByteBuffer 传入 FileChannel 的 read or write 方法对文件进行读写时，JDK 会首先创建一个临时的 DirectByteBuffer，对于 `FileChannel#read` 来说，JDK 在 native 层会将 read 系统调用从文件中读取的内容首先存放到这个临时的 DirectByteBuffer 中，然后在拷贝到 HeapByteBuffer 中返回
 
 ```java
 public class IOUtil {
@@ -181,8 +181,20 @@ Java_sun_nio_ch_FileDispatcherImpl_read0(JNIEnv *env, jclass clazz, jobject fdo,
 #### write
 
 
+  
+JDK 会首先将 HeapByteBuffer 中的待写入数据拷贝到临时的 DirectByteBuffer 中，然后在 native 层通过 write 系统调用将 DirectByteBuffer 中的数据写入到文件的 page cache 中
 
 
+为什么必须要在 DirectByteBuffer 中做一次中转
+
+HeapByteBuffer 是位于 JVM 堆中的内存，那么它必然会受到 GC 的管理 GC执行过程中会移动存活对象 内存地址会发生变化
+
+内存从HeapByteBuffer拷贝到临时DirectByteBuffer过程调用的是Unsafe#copyMemory 不在safepoint中 拷贝过程不会执行GC
+
+```java
+@IntrinsicCandidate
+    private native void copyMemory0(Object srcBase, long srcOffset, Object destBase, long destOffset, long bytes);
+```
 
 
 
@@ -482,7 +494,7 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
 
 A direct byte buffer whose content is a memory-mapped region of a file.
 
-
+MappedByteBuffer 适合频繁读取小数据量的场景
 ```java
 public abstract class MappedByteBuffer
     extends ByteBuffer {
