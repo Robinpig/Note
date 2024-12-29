@@ -2607,7 +2607,7 @@ The majority side becomes the available cluster and the minority side is unavail
 
 ## Links
 
-- [K8s](/docs/CS/Container/K8s.md)
+- [K8s](/docs/CS/Container/k8s/K8s.md)
 
 ## References
 

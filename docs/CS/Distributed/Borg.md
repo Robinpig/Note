@@ -90,7 +90,7 @@ It starts and stops tasks; restarts them if they fail; manages local resources b
 
 - [Google](/docs/CS/Distributed/Google.md)
 - [Cluster Scheduler](/docs/CS/Distributed/Cluster_Scheduler.md)
-- [Kubernetes](/docs/CS/Container/K8s.md)
+- [Kubernetes](/docs/CS/Container/k8s/K8s.md)
 
 ## References
 

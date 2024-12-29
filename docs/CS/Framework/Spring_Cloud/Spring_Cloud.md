@@ -57,7 +57,7 @@ Fig.1. Spring Cloud architecture
 
 In the cloud, applications can’t always know the exact location of other services.
 A service registry, such as `Netflix Eureka`, or a sidecar solution, such as `HashiCorp Consul`, can help.
-Spring Cloud provides `DiscoveryClient` implementations for popular registries such as [Eureka](/docs/CS/Framework/Spring_Cloud/Eureka.md), [Consul](/docs/CS/Framework/Spring_Cloud/Consul.md), [Zookeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md), and even [Kubernetes](/docs/CS/Container/K8s.md)' built-in system.
+Spring Cloud provides `DiscoveryClient` implementations for popular registries such as [Eureka](/docs/CS/Framework/Spring_Cloud/Eureka.md), [Consul](/docs/CS/Framework/Spring_Cloud/Consul.md), [Zookeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md), and even [Kubernetes](/docs/CS/Container/k8s/K8s.md)' built-in system.
 There’s also a [Spring Cloud Load Balancer](https://spring.io/guides/gs/spring-cloud-loadbalancer/) to help you distribute the load carefully among your service instances.
 
 

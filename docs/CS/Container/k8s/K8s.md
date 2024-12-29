@@ -2,6 +2,8 @@
 
 [Kubernetes](https://kubernetes.io/), also known as K8s, is an open-source system for automating deployment, scaling, and management of [containerized](/docs/CS/Container/Container.md) applications.
 
+> Kubernetes来源于Google内部的Borg 和 Omega集群管理系统
+
 Kubernetes has the following characteristics:
 
 - It is made of a manager and a set of nodes
@@ -133,11 +135,22 @@ Ubuntu
 <!-- tabs:end -->
 ## Architecture
 
-下图是 K8S 集群的核心组件，包括数据库 etcd，调度器 scheduler，集群入口 API Server，控制器 Controller，服务代理 kube-proxy 以及直接管理具体业务容 器的 kubelet。这些组件逻辑上可以被分为三个部分:核心组件 etcd 数据库，对 etcd 进行直接操作的入口组件 API Server，以及其他组件。这里的“其他组件”之所以 可以被划分为一类，是因为它们都可以被看做是集群的控制器。
+K8s借鉴了Borg的架构设计理念 如Scheduler调度器、Pod资源对象管理等
+
+K8s架构分为Control Plane 和 Worker Node两部分
+Control Plane基于etcd做分布式键值存储 Control Plane主要包含以下组件
+- scheduler
+- apiServer
+- controller-manager
+
+工作节点主要包含以下组件:
+- kubelet
+- kube-proxy
+- Container-Runtime
 
 <div style="text-align: center;">
 
-![Fig.1. Kubernetes cluster architecture](img/Kubernetes-Cluster-Architecture.png)
+![Fig.1. Kubernetes cluster architecture](../img/Kubernetes-Cluster-Architecture.png)
 
 </div>
 
@@ -146,6 +159,11 @@ Fig.1. Kubernetes cluster architecture
 </p>
 
 
+kubectl是官方命令行工具 与kube-apiserver进行交互 通信协议默认HTTP/JSON
+
+
+kubelet 是在每个节点上运行的主要 “节点代理” 用于接收、处理、上报kube-apiserver下发的任务
+kubelet的3种标准化接口分别用于CRI、CNI和CSI
 
 在Kubernetes中 service是分布式集群架构的核心
 一个Service有以下特征
@@ -192,6 +210,29 @@ Kubernetes supports container runtimes such as containerd, CRI-O, and any other 
 
 
 apiserver模块在Kubernetes中扮演了非常重要的角色。它是Kubernetes集群中所有API的主要接口，负责处理和转发集群内部和外部的API请求。
+
+
+### project layout
+
+根据 Standard Go Project Layout 方案 来看一下Kubernetes Project Layout 的设计
+
+
+| 目录         | 说明       |
+|------------|----------|
+| cmd        | 可执行文件入口  |
+| pkg        | 核心库代码    |
+| vendor     |          |
+| api        |          |
+| build      |          |
+| test       |          |
+| docs       |          |
+| hack       |          |
+| third_party |          |
+| plugin     |          |
+| staging    | 核心库暂存目录 该目录下的核心包多以软连接的方式链接到 vendor/k8s.io 目录 |
+| translations |          |
+| CHANGELOG  |          |
+
 
 
 

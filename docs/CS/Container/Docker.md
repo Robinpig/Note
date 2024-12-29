@@ -320,7 +320,7 @@ docker-compose并没有解决负载均衡的问题。因此需要借助其他工
 ## Links
 
 - [Container](/docs/CS/Container/Container.md)
-- [Kubernetes](/docs/CS/Container/K8s.md)
+- [Kubernetes](/docs/CS/Container/k8s/K8s.md)
 
 ## References
 
