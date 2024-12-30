@@ -30,6 +30,34 @@ Errors happening after EXEC instead are not handled in a special way: all the ot
 
 ## process
 
+表示事务状态
+```c
+typedef struct multiState {
+    multiCmd *commands;     /* Array of MULTI commands */
+    int count;              /* Total number of MULTI commands */
+    int cmd_flags;          /* The accumulated command flags OR-ed together.
+                               So if at least a command has a given flag, it
+                               will be set in this field. */
+    int cmd_inv_flags;      /* Same as cmd_flags, OR-ing the ~flags. so that it
+                               is possible to know if all the commands have a
+                               certain flag. */
+    size_t argv_len_sums;    /* mem used by all commands arguments */
+    int alloc_count;         /* total number of multiCmd struct memory reserved. */
+} multiState;
+```
+进入事务状态后 把命令暂存到队列
+
+Redis执行事务时可能会遇到三种错误
+- 语法错误
+- 命令报错 正确的命令依旧会被执行 不能保证原子性
+- Redis忽然宕机
+
+
+Redis事务没有事务隔离级别的概念 
+
+
+Redis是基于内存存储的 无论是RDB还是AOF都无法完全保证数据不丢失
+
 ### multi
 
 queueMultiCommand in [processCommand](/docs/CS/DB/Redis/server.md?id=processCommand)

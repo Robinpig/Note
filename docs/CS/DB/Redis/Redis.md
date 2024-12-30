@@ -83,7 +83,7 @@ Redis将启动的这些服务抽象成一个全局的结构体 [redisServer](/do
 
 #### Thread Model
 
-Redis 使用单线程模型进行设计 保证了每个操作的原子性，也减少了线程的上下文切换和竞争 同时能带来更好的可维护性，方便开发和调试
+Redis 使用单线程模型进行设计 保证了每个操作的原子性，减少了线程创建的开销 也减少了线程的上下文切换和竞争 不需要考虑各种锁问题 同时能带来更好的可维护性，方便开发和调试
 
 > It’s not very frequent that CPU becomes your bottleneck with Redis, as usually Redis is either memory or network bound.
 > For instance, using pipelining Redis running on an average Linux system can deliver even 1 million requests per second, so if your application mainly uses O(N) or O(log(N)) commands, it is hardly going to use too much CPU.

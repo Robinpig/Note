@@ -56,13 +56,18 @@ The policies  **volatile-lru** ,  **volatile-lfu** ,  **volatile-random** , and 
 
 In general as a rule of thumb:
 
-* Use the **allkeys-lru** policy when you expect a power-law distribution in the popularity of your requests. That is, you expect a subset of elements will be accessed far more often than the rest.  **This is a good pick if you are unsure** .
+* Use the **allkeys-lru** policy when you expect a power-law distribution in the popularity of your requests. 
+  That is, you expect a subset of elements will be accessed far more often than the rest.  **This is a good pick if you are unsure** .
 * Use the **allkeys-random** if you have a cyclic access where all the keys are scanned continuously, or when you expect the distribution to be uniform.
 * Use the **volatile-ttl** if you want to be able to provide hints to Redis about what are good candidate for expiration by using different TTL values when you create your cache objects.
 
-The **volatile-lru** and **volatile-random** policies are mainly useful when you want to use a single instance for both caching and to have a set of persistent keys. However it is usually a better idea to run two Redis instances to solve such a problem.
+The **volatile-lru** and **volatile-random** policies are mainly useful when you want to use a single instance for both caching and to have a set of persistent keys. 
+However it is usually a better idea to run two Redis instances to solve such a problem.
 
 It is also worth noting that setting an `expire` value to a key costs memory, so using a policy like **allkeys-lru** is more memory efficient since there is no need for an `expire` configuration for the key to be evicted under memory pressure.
+
+
+对于数据不能淘汰和全部数据都可以淘汰的业务系统 建议使用不同的Redis集群
 
 ```c
 #define EVPOOL_SIZE 16
