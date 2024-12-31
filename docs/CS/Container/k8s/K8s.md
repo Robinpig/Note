@@ -159,13 +159,13 @@ K8s借鉴了Borg的架构设计理念 如Scheduler调度器、Pod资源对象管
 
 K8s架构分为Control Plane 和 Worker Node两部分
 Control Plane基于etcd做分布式键值存储 Control Plane主要包含以下组件
-- scheduler
-- apiServer
-- controller-manager
+- [scheduler](/docs/CS/Container/k8s/scheduler.md)
+- [apiServer](/docs/CS/Container/k8s/apiserver.md)
+- [controller-manager](/docs/CS/Container/k8s/controller-manager.md)
 
 工作节点主要包含以下组件:
-- kubelet
-- kube-proxy
+- [kubelet](/docs/CS/Container/k8s/kubelet.md)
+- [kube-proxy](/docs/CS/Container/k8s/kube-proxy.md)
 - Container-Runtime
 
 <div style="text-align: center;">
