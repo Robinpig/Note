@@ -82,6 +82,14 @@ struct tree_node
 - In a preorder traversal, work at a node is performed before (pre) its children are processed.
 - In a postorder traversal, the work at a node is performed after (post) its children are evaluated.
 
+
+
+
+
+树的经典遍历算法主要有二种：深度优先算法（DF）及广度优先算法（BF），BF 与DF 的效率其实差不多的。在有些场景，是 DF 更快，在有些场景，是 BF 更快。DF一般用 stack 数据结构，BF 一般用 queue 数据结构
+
+
+
 ## Binary Trees
 
 A tree is called binary tree if each node has zero child, one child or two children. Empty tree is also a valid binary tree.
