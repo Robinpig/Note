@@ -301,7 +301,5 @@ It is a lightweight alternative to using Docker, Moby or rkt as the runtime for 
 ## References
 
 1. [Kubernetes 中文社区](https://www.kubernetes.org.cn/docs)
-
 1. [Kubernetes源码笔记](https://wqyin.cn/gitbooks/kubeSourceCodeNote/)
-
 1. [Kubernetes源码剖析](https://blog.tianfeiyu.com/source-code-reading-notes/)
