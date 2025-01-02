@@ -257,6 +257,27 @@ apiserver模块在Kubernetes中扮演了非常重要的角色。它是Kubernetes
 | CHANGELOG  |          |
 
 
+### definition
+
+
+kubernetes内部资源定义
+有组：pkg\apis\<group>\
+无组：pkg\apis\core\types.go
+外部版本
+
+有组：staging\src\k8s.io\api\<group>\<version>\<resource file>
+无组：staging\src\k8s.io\api\core\v1
+
+资源操作方法接口
+staging\src\k8s.io\apiserver\pkg\registry\rest\rest.go
+资源操作方法
+staging\src\k8s.io\apiserver\pkg\registry\generic\registry\store.go
+定义控制器
+kubernetes\pkg\controller\
+
+
+
+
 
 
 ## CRI-O
@@ -293,6 +314,11 @@ It is a lightweight alternative to using Docker, Moby or rkt as the runtime for 
 ## Scheduling
 
 ## Storage Management
+
+
+## Summary
+
+K8s 改变了传统的应用部署发布的方式，给容器化的应用服务提供了灵活方便的容器编排、容器调度和简单的服务发现机制，但缺少了更丰富和更细粒度的服务治理能力
 
 
 
