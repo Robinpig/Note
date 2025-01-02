@@ -2,7 +2,11 @@
 
 
 
-code in `src/cmd/compile/internal/`
+go 源代码首先要通过 go build 编译为可执行文件，在 linux 平台上为 ELF 格式的可执行文件，编译阶段会经过编译器、汇编器、链接器三个过程最终生成可执行文件。
+
+1. 编译器：.go 源码通过 go 编译器生成为 .s 的 plan9 汇编代码，Go 编译器入口是 compile/internal/gc/main.go 文件的 main 函数；
+2. 汇编器：通过 go 汇编器将编译器生成的 .s 汇编语言转换为机器代码，并写出最终的目标程序 .o 文件，src/cmd/internal/obj 包实现了go汇编器；
+3. 链接器：汇编器生成的一个个 *.o 目标文件通过链接处理得到最终的可执行程序，src/cmd/link/internal/ld 包实现了链接器；
 
 - Lexical Analysis
 - Syntax Analysis

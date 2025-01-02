@@ -153,6 +153,9 @@ Ubuntu
 
 
 <!-- tabs:end -->
+
+
+
 ## Architecture
 
 K8s借鉴了Borg的架构设计理念 如Scheduler调度器、Pod资源对象管理等

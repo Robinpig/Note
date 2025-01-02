@@ -128,6 +128,10 @@ goroutine创建时优先加入本地队列 可被其它P/M窃取
 
 ## main
 
+程序入口函数在 `runtime/rt0_linux_amd64.s` 文件 最终会执行 `CALL runtime·mstart(SB)` 指令
+```
+rt0_linux_amd64.s -->_rt0_amd64 --> rt0_go-->runtime·settls -->runtime·check-->runtime·args-->runtime·osinit-->runtime·schedinit-->runtime·newproc-->runtime·mstart
+```
 
 
 ```asm
@@ -783,3 +787,6 @@ func execute(gp *g, inheritTime bool) {
 ## Links
 
 - [Golang](/docs/CS/Go/Go.md)
+
+## References
+1. [Golang 程序启动流程分析](https://blog.tianfeiyu.com/2021/07/01/golang_bootstrap/#more)
