@@ -789,6 +789,7 @@ bgrewriteaof
 #### rewriteAppendOnlyFileBackground
 
 
+
 call by:
 
 1. startAppendOnly
@@ -850,13 +851,309 @@ int rewriteAppendOnlyFileBackground(void) {
 }
 ```
 
+
+
+```c
+int rewriteAppendOnlyFile(char *filename) {
+    rio aof;
+    FILE *fp = NULL;
+    char tmpfile[256];
+
+    /* Note that we have to use a different temp name here compared to the
+     * one used by rewriteAppendOnlyFileBackground() function. */
+    snprintf(tmpfile,256,"temp-rewriteaof-%d.aof", (int) getpid());
+    fp = fopen(tmpfile,"w");
+    if (!fp) {
+        serverLog(LL_WARNING, "Opening the temp file for AOF rewrite in rewriteAppendOnlyFile(): %s", strerror(errno));
+        return C_ERR;
+    }
+
+    rioInitWithFile(&aof,fp);
+
+    if (server.aof_rewrite_incremental_fsync) {
+        rioSetAutoSync(&aof,REDIS_AUTOSYNC_BYTES);
+        rioSetReclaimCache(&aof,1);
+    }
+
+    startSaving(RDBFLAGS_AOF_PREAMBLE);
+
+    if (server.aof_use_rdb_preamble) {
+        int error;
+        if (rdbSaveRio(SLAVE_REQ_NONE,&aof,&error,RDBFLAGS_AOF_PREAMBLE,NULL) == C_ERR) {
+            errno = error;
+            goto werr;
+        }
+    } else {
+        if (rewriteAppendOnlyFileRio(&aof) == C_ERR) goto werr;
+    }
+
+    /* Make sure data will not remain on the OS's output buffers */
+    if (fflush(fp)) goto werr;
+    if (fsync(fileno(fp))) goto werr;
+    if (reclaimFilePageCache(fileno(fp), 0, 0) == -1) {
+        /* A minor error. Just log to know what happens */
+        serverLog(LL_NOTICE,"Unable to reclaim page cache: %s", strerror(errno));
+    }
+    if (fclose(fp)) { fp = NULL; goto werr; }
+    fp = NULL;
+
+    /* Use RENAME to make sure the DB file is changed atomically only
+     * if the generate DB file is ok. */
+    if (rename(tmpfile,filename) == -1) {
+        serverLog(LL_WARNING,"Error moving temp append only file on the final destination: %s", strerror(errno));
+        unlink(tmpfile);
+        stopSaving(0);
+        return C_ERR;
+    }
+    stopSaving(1);
+
+    return C_OK;
+
+werr:
+    serverLog(LL_WARNING,"Write error writing append only file on disk: %s", strerror(errno));
+    if (fp) fclose(fp);
+    unlink(tmpfile);
+    stopSaving(0);
+    return C_ERR;
+}
+```
+
+rewriteAppendOnlyFileRio
+
+```c
+int rewriteAppendOnlyFileRio(rio *aof) {
+    dictEntry *de;
+    int j;
+    long key_count = 0;
+    long long updated_time = 0;
+    kvstoreIterator *kvs_it = NULL;
+
+    /* Record timestamp at the beginning of rewriting AOF. */
+    if (server.aof_timestamp_enabled) {
+        sds ts = genAofTimestampAnnotationIfNeeded(1);
+        if (rioWrite(aof,ts,sdslen(ts)) == 0) { sdsfree(ts); goto werr; }
+        sdsfree(ts);
+    }
+
+    if (rewriteFunctions(aof) == 0) goto werr;
+
+    for (j = 0; j < server.dbnum; j++) {
+        char selectcmd[] = "*2\r\n$6\r\nSELECT\r\n";
+        redisDb *db = server.db + j;
+        if (kvstoreSize(db->keys) == 0) continue;
+
+        /* SELECT the new DB */
+        if (rioWrite(aof,selectcmd,sizeof(selectcmd)-1) == 0) goto werr;
+        if (rioWriteBulkLongLong(aof,j) == 0) goto werr;
+
+        kvs_it = kvstoreIteratorInit(db->keys);
+        /* Iterate this DB writing every entry */
+        while((de = kvstoreIteratorNext(kvs_it)) != NULL) {
+            sds keystr;
+            robj key, *o;
+            long long expiretime;
+            size_t aof_bytes_before_key = aof->processed_bytes;
+
+            keystr = dictGetKey(de);
+            o = dictGetVal(de);
+            initStaticStringObject(key,keystr);
+
+            expiretime = getExpire(db,&key);
+
+            /* Save the key and associated value */
+            if (o->type == OBJ_STRING) {
+                /* Emit a SET command */
+                char cmd[]="*3\r\n$3\r\nSET\r\n";
+                if (rioWrite(aof,cmd,sizeof(cmd)-1) == 0) goto werr;
+                /* Key and value */
+                if (rioWriteBulkObject(aof,&key) == 0) goto werr;
+                if (rioWriteBulkObject(aof,o) == 0) goto werr;
+            } else if (o->type == OBJ_LIST) {
+                if (rewriteListObject(aof,&key,o) == 0) goto werr;
+            } else if (o->type == OBJ_SET) {
+                if (rewriteSetObject(aof,&key,o) == 0) goto werr;
+            } else if (o->type == OBJ_ZSET) {
+                if (rewriteSortedSetObject(aof,&key,o) == 0) goto werr;
+            } else if (o->type == OBJ_HASH) {
+                if (rewriteHashObject(aof,&key,o) == 0) goto werr;
+            } else if (o->type == OBJ_STREAM) {
+                if (rewriteStreamObject(aof,&key,o) == 0) goto werr;
+            } else if (o->type == OBJ_MODULE) {
+                if (rewriteModuleObject(aof,&key,o,j) == 0) goto werr;
+            } else {
+                serverPanic("Unknown object type");
+            }
+
+            /* In fork child process, we can try to release memory back to the
+             * OS and possibly avoid or decrease COW. We give the dismiss
+             * mechanism a hint about an estimated size of the object we stored. */
+            size_t dump_size = aof->processed_bytes - aof_bytes_before_key;
+            if (server.in_fork_child) dismissObject(o, dump_size);
+
+            /* Save the expire time */
+            if (expiretime != -1) {
+                char cmd[]="*3\r\n$9\r\nPEXPIREAT\r\n";
+                if (rioWrite(aof,cmd,sizeof(cmd)-1) == 0) goto werr;
+                if (rioWriteBulkObject(aof,&key) == 0) goto werr;
+                if (rioWriteBulkLongLong(aof,expiretime) == 0) goto werr;
+            }
+
+            /* Update info every 1 second (approximately).
+             * in order to avoid calling mstime() on each iteration, we will
+             * check the diff every 1024 keys */
+            if ((key_count++ & 1023) == 0) {
+                long long now = mstime();
+                if (now - updated_time >= 1000) {
+                    sendChildInfo(CHILD_INFO_TYPE_CURRENT_INFO, key_count, "AOF rewrite");
+                    updated_time = now;
+                }
+            }
+
+            /* Delay before next key if required (for testing) */
+            if (server.rdb_key_save_delay)
+                debugDelay(server.rdb_key_save_delay);
+        }
+        kvstoreIteratorRelease(kvs_it);
+    }
+    return C_OK;
+
+werr:
+    if (kvs_it) kvstoreIteratorRelease(kvs_it);
+    return C_ERR;
+}
+```
+
 ### load AOF
 
 
 Replay the append log file. On success C_OK is returned. On non fatal error (the append only file is zero-length) C_ERR is returned. On fatal error an error message is logged and the program exists.
 
 ```c
-int loadAppendOnlyFile(char *filename) {
+/* Load the AOF files according the aofManifest pointed by am. */
+int loadAppendOnlyFiles(aofManifest *am) {
+    serverAssert(am != NULL);
+    int status, ret = AOF_OK;
+    long long start;
+    off_t total_size = 0, base_size = 0;
+    sds aof_name;
+    int total_num, aof_num = 0, last_file;
+
+    /* If the 'server.aof_filename' file exists in dir, we may be starting
+     * from an old redis version. We will use enter upgrade mode in three situations.
+     *
+     * 1. If the 'server.aof_dirname' directory not exist
+     * 2. If the 'server.aof_dirname' directory exists but the manifest file is missing
+     * 3. If the 'server.aof_dirname' directory exists and the manifest file it contains
+     *    has only one base AOF record, and the file name of this base AOF is 'server.aof_filename',
+     *    and the 'server.aof_filename' file not exist in 'server.aof_dirname' directory
+     * */
+    if (fileExist(server.aof_filename)) {
+        if (!dirExists(server.aof_dirname) ||
+            (am->base_aof_info == NULL && listLength(am->incr_aof_list) == 0) ||
+            (am->base_aof_info != NULL && listLength(am->incr_aof_list) == 0 &&
+             !strcmp(am->base_aof_info->file_name, server.aof_filename) && !aofFileExist(server.aof_filename)))
+        {
+            aofUpgradePrepare(am);
+        }
+    }
+
+    if (am->base_aof_info == NULL && listLength(am->incr_aof_list) == 0) {
+        return AOF_NOT_EXIST;
+    }
+
+    total_num = getBaseAndIncrAppendOnlyFilesNum(am);
+    serverAssert(total_num > 0);
+
+    /* Here we calculate the total size of all BASE and INCR files in
+     * advance, it will be set to `server.loading_total_bytes`. */
+    total_size = getBaseAndIncrAppendOnlyFilesSize(am, &status);
+    if (status != AOF_OK) {
+        /* If an AOF exists in the manifest but not on the disk, we consider this to be a fatal error. */
+        if (status == AOF_NOT_EXIST) status = AOF_FAILED;
+
+        return status;
+    } else if (total_size == 0) {
+        return AOF_EMPTY;
+    }
+
+    startLoading(total_size, RDBFLAGS_AOF_PREAMBLE, 0);
+
+    /* Load BASE AOF if needed. */
+    if (am->base_aof_info) {
+        serverAssert(am->base_aof_info->file_type == AOF_FILE_TYPE_BASE);
+        aof_name = (char*)am->base_aof_info->file_name;
+        updateLoadingFileName(aof_name);
+        base_size = getAppendOnlyFileSize(aof_name, NULL);
+        last_file = ++aof_num == total_num;
+        start = ustime();
+        ret = loadSingleAppendOnlyFile(aof_name);
+        if (ret == AOF_OK || (ret == AOF_TRUNCATED && last_file)) {
+            serverLog(LL_NOTICE, "DB loaded from base file %s: %.3f seconds",
+                aof_name, (float)(ustime()-start)/1000000);
+        }
+
+        /* If the truncated file is not the last file, we consider this to be a fatal error. */
+        if (ret == AOF_TRUNCATED && !last_file) {
+            ret = AOF_FAILED;
+            serverLog(LL_WARNING, "Fatal error: the truncated file is not the last file");
+        }
+
+        if (ret == AOF_OPEN_ERR || ret == AOF_FAILED) {
+            goto cleanup;
+        }
+    }
+
+    /* Load INCR AOFs if needed. */
+    if (listLength(am->incr_aof_list)) {
+        listNode *ln;
+        listIter li;
+
+        listRewind(am->incr_aof_list, &li);
+        while ((ln = listNext(&li)) != NULL) {
+            aofInfo *ai = (aofInfo*)ln->value;
+            serverAssert(ai->file_type == AOF_FILE_TYPE_INCR);
+            aof_name = (char*)ai->file_name;
+            updateLoadingFileName(aof_name);
+            last_file = ++aof_num == total_num;
+            start = ustime();
+            ret = loadSingleAppendOnlyFile(aof_name);
+            if (ret == AOF_OK || (ret == AOF_TRUNCATED && last_file)) {
+                serverLog(LL_NOTICE, "DB loaded from incr file %s: %.3f seconds",
+                    aof_name, (float)(ustime()-start)/1000000);
+            }
+
+            /* We know that (at least) one of the AOF files has data (total_size > 0),
+             * so empty incr AOF file doesn't count as a AOF_EMPTY result */
+            if (ret == AOF_EMPTY) ret = AOF_OK;
+
+            /* If the truncated file is not the last file, we consider this to be a fatal error. */
+            if (ret == AOF_TRUNCATED && !last_file) {
+                ret = AOF_FAILED;
+                serverLog(LL_WARNING, "Fatal error: the truncated file is not the last file");
+            }
+
+            if (ret == AOF_OPEN_ERR || ret == AOF_FAILED) {
+                goto cleanup;
+            }
+        }
+    }
+
+    server.aof_current_size = total_size;
+    /* Ideally, the aof_rewrite_base_size variable should hold the size of the
+     * AOF when the last rewrite ended, this should include the size of the
+     * incremental file that was created during the rewrite since otherwise we
+     * risk the next automatic rewrite to happen too soon (or immediately if
+     * auto-aof-rewrite-percentage is low). However, since we do not persist
+     * aof_rewrite_base_size information anywhere, we initialize it on restart
+     * to the size of BASE AOF file. This might cause the first AOFRW to be
+     * executed early, but that shouldn't be a problem since everything will be
+     * fine after the first AOFRW. */
+    server.aof_rewrite_base_size = base_size;
+
+cleanup:
+    stopLoading(ret == AOF_OK || ret == AOF_TRUNCATED);
+    return ret;
+}
 ```
 
 

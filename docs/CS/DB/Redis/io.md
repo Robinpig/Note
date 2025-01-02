@@ -1,6 +1,18 @@
 ## Introduction
 
 
+从 Redis 调试代码中，我们可以看到，Redis 线程主要分为 3 类：
+1. 主线程：负责程序的主逻辑，当然也负责 IO。
+2. 后台线程：延时回收耗时的系统资源。
+3. 网络 IO 线程：Redis 6.0 版本增加的 IO 线程，利用多核资源，实现 IO 并发。
+
+后台线程个数为 3 个（BIO_NUM_OPS），通过消息队列实现多线程的生产者和消费者工作方式 ——主线程生产，后台线程消费。
+它主要执行三种类型操作：
+1. 关闭文件。例如打开了 aof 和 rdb 这种大型的持久化文件，需要关闭。
+2. aof 文件刷盘。aof 持久化方式，主线程定时将新增内容追加到 aof 文件，只将数据写入内核缓存，并没有将其刷入磁盘，这种阻塞耗时的脏活累活需要后台线程去做。
+3. 释放体量大的数据。key-value 数据结构，主线程将 key 和 value 解除关系后，如果 value 很小的话，主线程实时释放，否则需要后台线程惰性释放
+
+
 
 Multi I/O
 
@@ -18,7 +30,48 @@ Multi I/O
 ![](https://mmbiz.qpic.cn/mmbiz_png/EoJib2tNvVtficyIzKOicibvLa33THndmjqmSibCy8KnXf0ZE3WRyWAfCUSgicDfaictMhgySliaQ7f4nvfqdecoNKJX6A/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
 
 
+io-threads 线程配置，redis.conf 配置文件默认是不开放的，默认只有一个线程在工作，这个线程就是 主线程。
+如果开放多线程配置，io-threads 4 那么 IO 处理线程默认共有 4 个，包括主线程。也就是说，新增的 IO 线程有 3 个。
+默认开启多线程 IO 方式：
+线程个数：主线程 + 3 个后台线程 + 3 个 IO 线程 = 7 个线程。
+进程个数：主进程 + 1 个子进程 = 2 进程。
+当然可以根据实际需要设置 IO 线程个数。
+默认 开启多线程 IO 后，经过统计线程共有 7 个，子进程有 1 个。理论上 CPU 的核心最少得 8 个, Redis 跑起来才能发挥最佳性能。
+Redis 默认使用自带的第三方内存库：jemalloc，它也会创建线程
 
+IO 线程默认不开放 读 操作，因为 Redis 作为数据缓存服务，一般它读入数据量是非常小的，写出数据量却非常大。
+
+
+```
+# redis.conf
+
+# 配置多线程处理线程个数，默认 4。
+# io-threads 4
+#
+# 多线程是否处理读事件，默认关闭。
+# io-threads-do-reads no
+```
+
+
+```c
+// config.c
+standardConfig static_configs[] = {
+    ...
+    /* Single threaded by default */
+    createIntConfig("io-threads", NULL, \
+        DEBUG_CONFIG | IMMUTABLE_CONFIG, 1, 128, \
+        server.io_threads_num, 1, INTEGER_CONFIG, NULL, NULL),
+    ...
+}
+```
+
+
+- 如果没开启多线程，那么 Redis 只会使用主线程处理网络 IO，主线程单线程处理网络 IO 是串行的。
+- 为了保证主逻辑处理方式整体不变，多线程 IO 工作方式，不允许同时并发读写操作，同一时刻只允许读或只允许写。
+- 如果开启了多线程，而且等待处理的 client 数量很少，新增的网络 IO 线程会被挂起，仍然使用主线程工作；否则启用多线程工作，将等待的 clients，平均分配给多个线程（主线程+新增线程）并行处理。
+- 任务分配完以后，主线程将处理自己的任务，并等待新增线程都处理完任务后，才会执行下一个步骤的其它操作，这样做的目的是为了保证整体逻辑串行；不因为引入多线程处理方式改变了原来的主逻辑，尽力将多线程并行逻辑的影响减少到最小
+
+Redis 6.0 引入 IO 多线程后，增加了处理器亲和性的设置功能
 
 
 ```config

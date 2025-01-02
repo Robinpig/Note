@@ -571,6 +571,12 @@ Small hashes are encoded in a very small space, so you should try representing y
 
 **A few keys use a lot more memory than a single key containing a hash with a few fields**.
 
+尽管 Redis 本身不会轻易崩溃，但如果内存耗尽且没有淘汰策略或者淘汰策略未能生效，Redis 可能拒绝新的写操作，并返回错误：OOM command not allowed when used memory > 'maxmemory'
+如果系统的配置或者操作系统的内存管理不当，可能会导致 Redis 进程被操作系统杀死
+
+
+
+
 ## References
 
 1. [Memory Optimization](https://redis.io/topics/memory-optimization)

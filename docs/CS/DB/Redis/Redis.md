@@ -96,6 +96,12 @@ Redis 4.0后开始使用多线程 新版的 Redis 服务在执行一些命令时
 > For now this is limited to deleting objects in the background, and to blocking commands implemented via Redis modules.
 > For the next releases, the plan is to make Redis more and more threaded.
 
+
+
+
+
+
+
 #### IO
 
 [I/O多路复用模块](/docs/CS/DB/Redis/ae.md)封装了底层的 select、epoll、avport 以及 kqueue 这些I/O多路复用函数，为上层提供了相同的接口
