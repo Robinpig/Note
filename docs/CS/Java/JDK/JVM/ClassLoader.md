@@ -212,6 +212,72 @@ protected ClassLoader(){
 
 ## init
 
+
+```c
+class ClassLoader: AllStatic {
+ public:
+  enum ClassLoaderType {
+    BOOT_LOADER = 1,      /* boot loader */
+    PLATFORM_LOADER  = 2, /* PlatformClassLoader */
+    APP_LOADER  = 3       /* AppClassLoader */
+  };
+
+  // Load individual .class file
+  static InstanceKlass* load_class(Symbol* class_name, bool search_append_only, TRAPS);
+};
+```
+
+
+```c
+// systemDictionary.cpp
+OopHandle   SystemDictionary::_java_system_loader;
+OopHandle   SystemDictionary::_java_platform_loader;
+```
+
+create_vm 时会完成system和 platform class loader的初始化
+
+
+```c
+jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
+    // cache the system and platform class loaders
+    SystemDictionary::compute_java_loaders(CHECK_JNI_ERR);
+}
+```
+
+
+```c
+void SystemDictionary::compute_java_loaders(TRAPS) {
+  if (_java_system_loader.is_empty()) {
+    oop system_loader = get_system_class_loader_impl(CHECK);
+    _java_system_loader = OopHandle(Universe::vm_global(), system_loader);
+  } else {
+    // It must have been restored from the archived module graph
+    assert(UseSharedSpaces, "must be");
+    assert(MetaspaceShared::use_full_module_graph(), "must be");
+    DEBUG_ONLY(
+      oop system_loader = get_system_class_loader_impl(CHECK);
+      assert(_java_system_loader.resolve() == system_loader, "must be");
+    )
+ }
+
+  if (_java_platform_loader.is_empty()) {
+    oop platform_loader = get_platform_class_loader_impl(CHECK);
+    _java_platform_loader = OopHandle(Universe::vm_global(), platform_loader);
+  } else {
+    // It must have been restored from the archived module graph
+    assert(UseSharedSpaces, "must be");
+    assert(MetaspaceShared::use_full_module_graph(), "must be");
+    DEBUG_ONLY(
+      oop platform_loader = get_platform_class_loader_impl(CHECK);
+      assert(_java_platform_loader.resolve() == platform_loader, "must be");
+    )
+  }
+}
+```
+
+
+
+
 ```cpp
 // share/classfile/systemDictionary.cpp
 void SystemDictionary::compute_java_loaders(TRAPS) {

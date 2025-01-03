@@ -1004,6 +1004,130 @@ oop MemAllocator::finish(HeapWord* mem) const {
 }
 ```
 
+## Handle
+
+In order to preserve oops during garbage collection, they should be allocated and passed around via Handles within the VM. A handle is simply an extra indirection allocated in a thread local handle area.
+A handle is a value object, so it can be passed around as a value, can be used as a parameter w/o using &-passing, and can be returned as a return value.
+
+oop parameters and return types should be Handles whenever feasible.
+
+
+Handles are specialized for different oop types to provide extra type information and avoid unnecessary casting.
+For each oop type xxxOop there is a corresponding handle called xxxHandle.
+
+获取被封装的oop对象，并不会直接调用Handle对象的obj()或non_null_obj() 函数，而是通过C++的运算符重载来获取Handle类重载了()和->运算符
+
+```c
+class Handle {
+ private:
+  oop* _handle;
+
+ protected:
+  oop     obj() const                            { return _handle == nullptr ? (oop)nullptr : *_handle; }
+  oop     non_null_obj() const                   { assert(_handle != nullptr, "resolving null handle"); return *_handle; }
+ public:
+  // Constructors
+  Handle()                                       { _handle = nullptr; }
+  inline Handle(Thread* thread, oop obj);
+
+  // General access
+  oop     operator () () const                   { return obj(); }
+  oop     operator -> () const                   { return non_null_obj(); }
+}
+```
+
+Handles are declared in a straight-forward manner, e.g.
+
+
+```c
+oop obj = ...;
+Handle h2(thread, obj);      // allocate a new handle in thread
+Handle h3;                   // declare handle only, no allocation occurs
+...
+h3 = h1;                     // make h3 refer to same indirection as h1
+oop obj2 = h2();             // get handle value
+h1->print();                 // invoking operation on oop
+```
+
+Handle被分配在本地线程的HandleArea中，这样在进行垃圾回收时只需要扫描每个线程的HandleArea即可找出所有Handle，进而找出所有引用的活跃对象
+
+```c
+// these inline functions are in a separate file to break an include cycle
+// between Thread and Handle
+
+inline Handle::Handle(Thread* thread, oop obj) {
+  assert(thread == Thread::current(), "sanity check");
+  if (obj == nullptr) {
+    _handle = nullptr;
+  } else {
+    _handle = thread->handle_area()->allocate_handle(obj);
+  }
+}
+```
+在创建线程时初始化_handle_area属性，然后通过handle_area()函数获取该属性的值
+
+
+```c
+public:
+oop* allocate_handle(oop obj) { return real_allocate_handle(obj); }
+// Handle allocation
+private:
+oop* real_allocate_handle(oop obj) {
+    oop* handle = (oop*)internal_amalloc(oopSize);
+    *handle = obj;
+    return handle;
+}
+```
+句柄的释放要通过HandleMark来完成
+
+```c
+class HandleArea: public Arena {
+friend class HandleMark;
+friend class NoHandleMark;
+friend class ResetNoHandleMark;
+HandleArea* _prev;          // link to outer (older) area
+};
+```
+
+
+
+```c
+class Arena : public CHeapObjBase {
+protected:
+friend class HandleMark;
+friend class NoHandleMark;
+friend class VMStructs;
+
+MEMFLAGS    _flags;           // Memory tracking flags
+
+Chunk *_first;                // First chunk
+Chunk *_chunk;                // current chunk
+char *_hwm, *_max;            // High water mark and max in current chunk
+// Get a new Chunk of at least size x
+void* grow(size_t x, AllocFailType alloc_failmode = AllocFailStrategy::EXIT_OOM);
+size_t _size_in_bytes;        // Size of arena (used for native memory tracking)
+
+void* internal_amalloc(size_t x, AllocFailType alloc_failmode = AllocFailStrategy::EXIT_OOM)  {
+    assert(is_aligned(x, BytesPerWord), "misaligned size");
+    if (pointer_delta(_max, _hwm, 1) >= x) {
+        char *old = _hwm;
+        _hwm += x;
+        return old;
+    } else {
+        return grow(x, alloc_failmode);
+    }
+}
+};
+```
+
+
+
+```c
+
+```
+
+
+
 ## Metadata
 
 ### Metadata hierarchy
