@@ -292,6 +292,31 @@ func (r *Request) request(fn func(*http.Request, *http.Response)) error {
 ```
 
 
+ClientSet 对比RESTClient使用更加便捷
+
+```go
+type CoreV1Interface interface {
+	RESTClient() rest.Interface
+	ComponentStatusesGetter
+	ConfigMapsGetter
+	EndpointsGetter
+	EventsGetter
+	LimitRangesGetter
+	NamespacesGetter
+	NodesGetter
+	PersistentVolumesGetter
+	PersistentVolumeClaimsGetter
+	PodsGetter
+	PodTemplatesGetter
+	ReplicationControllersGetter
+	ResourceQuotasGetter
+	SecretsGetter
+	ServicesGetter
+	ServiceAccountsGetter
+}
+```
+
+
 ## informer
 
 
