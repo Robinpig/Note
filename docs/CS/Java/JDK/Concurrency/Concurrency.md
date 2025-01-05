@@ -509,3 +509,4 @@ volatile
 4. [Concurrent Programming in Java](http://gee.cs.oswego.edu/dl/cpj/index.html)
 5. [Concurrency is hard](https://mkralka.github.io/blog/concurrency-is-hard)
 6. [Quotes from the JLS on Threading](https://cs.lmu.edu/~ray/notes/javathreadnotes/)
+7. [方腾飞 - InfoQ](https://www.infoq.cn/profile/DC2B685350B2CA/publish)
