@@ -2,10 +2,81 @@
 
 All Thread subclasses must be either JavaThread or NonJavaThread.
 
-![](../img/Thread.svg)
-
+Class hierarchy
+```c
+// - Thread
+//   - JavaThread
+//     - various subclasses eg CompilerThread, ServiceThread
+//   - NonJavaThread
+//     - NamedThread
+//       - VMThread
+//       - ConcurrentGCThread
+//       - WorkerThread
+//     - WatcherThread
+//     - JfrThreadSampler
+//     - LogAsyncWriter
 ```
+
+```c
+class ThreadShadow: public CHeapObj<mtThread> {
+  friend class VMStructs;
+  friend class JVMCIVMStructs;
+
+ protected:
+  oop  _pending_exception;                       // Thread has gc actions.
+  const char* _exception_file;                   // file information for exception (debugging only)
+  int         _exception_line;                   // line information for exception (debugging only)
+  friend void check_ThreadShadow();              // checks _pending_exception offset
+
+  // The following virtual exists only to force creation of a vtable.
+  // We need ThreadShadow to have a vtable, even in product builds,
+  // so that its layout will start at an offset of zero relative to Thread.
+  // Some C++ compilers are so "clever" that they put the ThreadShadow
+  // base class at offset 4 in Thread (after Thread's vtable), if they
+  // notice that Thread has a vtable but ThreadShadow does not.
+  virtual void unused_initial_virtual() { }
+
+ public:
+  oop  pending_exception() const                 { return _pending_exception; }
+  bool has_pending_exception() const             { return _pending_exception != nullptr; }
+  const char* exception_file() const             { return _exception_file; }
+  int  exception_line() const                    { return _exception_line; }
+
+  // Code generation support
+  static ByteSize pending_exception_offset()     { return byte_offset_of(ThreadShadow, _pending_exception); }
+
+  // use THROW whenever possible!
+  void set_pending_exception(oop exception, const char* file, int line);
+
+  // use CLEAR_PENDING_EXCEPTION whenever possible!
+  void clear_pending_exception();
+
+  // use CLEAR_PENDING_NONASYNC_EXCEPTION to clear probable nonasync exception.
+  void clear_pending_nonasync_exception();
+
+  ThreadShadow() : _pending_exception(nullptr),
+                   _exception_file(nullptr), _exception_line(0) {}
+};
+```
+
+
+线程对象持有
+```c
+class Thread: public ThreadShadow {
+public:
+  ParkEvent * volatile _ParkEvent;            // for Object monitors, JVMTI raw monitors,
+                                              // and ObjectSynchronizer::read_stable_mark
+  
+  // Termination indicator used by the signal handler.
+  // _ParkEvent is just a convenient field we can null out after setting the JavaThread termination state
+  // (which can't itself be read from the signal handler if a signal hits during the Thread destructor).
+  bool has_terminated()                       { return Atomic::load(&_ParkEvent) == nullptr; };
+};
+```
+
+
 Thread execution sequence and actions:
+```
 All threads:
  - thread_native_entry  // per-OS native entry point
    - stack initialization

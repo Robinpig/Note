@@ -23,9 +23,11 @@ Besides stored time series, Prometheus may generate temporary derived time serie
 
 Every time series is uniquely identified by its metric name and optional key-value pairs called labels.
 
-The metric name specifies the general feature of a system that is measured (e.g. http_requests_total - the total number of HTTP requests received). It may contain ASCII letters and digits, as well as underscores and colons. It must match the regex [a-zA-Z_:][a-zA-Z0-9_:]*.
+The metric name specifies the general feature of a system that is measured (e.g. http_requests_total - the total number of HTTP requests received). 
+It may contain ASCII letters and digits, as well as underscores and colons. It must match the regex [a-zA-Z_:][a-zA-Z0-9_:]*.
 
-Note: The colons are reserved for user defined recording rules. They should not be used by exporters or direct instrumentation.
+Note: The colons are reserved for user defined recording rules. 
+They should not be used by exporters or direct instrumentation.
 
 ## Grafana
 

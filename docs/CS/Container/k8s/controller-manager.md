@@ -427,6 +427,9 @@ panic("unreachable")
 }
 ```
 
+## 
+
+Controller Manager 在 cmd/kube-controller-manager/app/controllermanager.go 的 NewControllerInitializers 函数中初始化了所有的 Controller
 
 ## Links
 

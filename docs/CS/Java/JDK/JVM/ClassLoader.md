@@ -653,6 +653,7 @@ InstanceKlass* InstanceKlass::allocate_instance_klass(const ClassFileParser& par
 1. set minor/major version
 2. Initialize itable offset tables
 3. fill_oop_maps
+4. check_final_method_override
 4. [create_mirror](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=create_mirror) and initialize static fields
 5. generate_default_methods
 
@@ -953,6 +954,128 @@ void java_lang_Class::create_mirror(Klass* k, Handle class_loader,
   }
 }
 ```
+
+
+```c
+static void check_final_method_override(const InstanceKlass* this_klass, TRAPS) {
+  assert(this_klass != nullptr, "invariant");
+  const Array<Method*>* const methods = this_klass->methods();
+  const int num_methods = methods->length();
+
+  // go thru each method and check if it overrides a final method
+  for (int index = 0; index < num_methods; index++) {
+    const Method* const m = methods->at(index);
+
+    // skip private, static, and <init> methods
+    if ((!m->is_private() && !m->is_static()) &&
+        (m->name() != vmSymbols::object_initializer_name())) {
+
+      const Symbol* const name = m->name();
+      const Symbol* const signature = m->signature();
+      const InstanceKlass* k = this_klass->java_super();
+      const Method* super_m = nullptr;
+      while (k != nullptr) {
+        // skip supers that don't have final methods.
+        if (k->has_final_method()) {
+          // lookup a matching method in the super class hierarchy
+          super_m = InstanceKlass::cast(k)->lookup_method(name, signature);
+          if (super_m == nullptr) {
+            break; // didn't find any match; get out
+          }
+
+          if (super_m->is_final() && !super_m->is_static() &&
+              !super_m->access_flags().is_private()) {
+            // matching method in super is final, and not static or private
+            bool can_access = Reflection::verify_member_access(this_klass,
+                                                               super_m->method_holder(),
+                                                               super_m->method_holder(),
+                                                               super_m->access_flags(),
+                                                              false, false, CHECK);
+            if (can_access) {
+              // this class can access super final method and therefore override
+              ResourceMark rm(THREAD);
+              THROW_MSG(vmSymbols::java_lang_IncompatibleClassChangeError(),
+                        err_msg("class %s overrides final method %s.%s%s",
+                                this_klass->external_name(),
+                                super_m->method_holder()->external_name(),
+                                name->as_C_string(),
+                                signature->as_C_string()));
+            }
+          }
+
+          // continue to look from super_m's holder's super.
+          k = super_m->method_holder()->java_super();
+          continue;
+        }
+
+        k = k->java_super();
+      }
+    }
+  }
+}
+```
+
+### post_process_parsed_stream
+
+
+
+ClassFileParser::ClassFileParser ->
+ClassFileParser::post_process_parsed_stream
+-> klassVtable::compute_vtable_size_and_num_mirandas
+add_new_mirandas_to_lists - klassVtable::get_mirandas
+-> add_new_mirandas_to_lists -> InstanceKlass::lookup_method_in_all_interfaces
+Klass::look_method
+
+
+
+```c
+Method* lookup_method(const Symbol* name, const Symbol* signature) const {
+    return uncached_lookup_method(name, signature, OverpassLookupMode::find);
+  }
+```
+
+
+```cpp
+// uncached_lookup_method searches both the local class methods array and all
+// superclasses methods arrays, skipping any overpass methods in superclasses,
+// and possibly skipping private methods.
+Method* InstanceKlass::uncached_lookup_method(const Symbol* name,
+                                              const Symbol* signature,
+                                              OverpassLookupMode overpass_mode,
+                                              PrivateLookupMode private_mode) const {
+  OverpassLookupMode overpass_local_mode = overpass_mode;
+  const Klass* klass = this;
+  while (klass != nullptr) {
+    Method* const method = InstanceKlass::cast(klass)->find_method_impl(name,
+                                                                        signature,
+                                                                        overpass_local_mode,
+                                                                        StaticLookupMode::find,
+                                                                        private_mode);
+    if (method != nullptr) {
+      return method;
+    }
+    klass = klass->super();
+    overpass_local_mode = OverpassLookupMode::skip;   // Always ignore overpass methods in superclasses
+  }
+  return nullptr;
+}
+```
+
+
+```c
+Method* InstanceKlass::find_method_impl(const Array<Method*>* methods,
+                                        const Symbol* name,
+                                        const Symbol* signature,
+                                        OverpassLookupMode overpass_mode,
+                                        StaticLookupMode static_mode,
+                                        PrivateLookupMode private_mode) {
+  int hit = find_method_index(methods, name, signature, overpass_mode, static_mode, private_mode);
+  return hit >= 0 ? methods->at(hit): nullptr;
+}
+```
+
+
+
 
 ## Linking
 
