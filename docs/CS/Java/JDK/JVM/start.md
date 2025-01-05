@@ -33,21 +33,13 @@ Bootstrap ClassLoader
 
 
 
+虚拟机的生命周期
 
 
-> [!TIP]
->
-> Both  [main()](/docs/CS/Java/JDK/JVM/start.md?id=main) and [launcher](/docs/CS/Java/JDK/JVM/start.md?id=launcher)
->
-> - [create_vm](/docs/CS/Java/JDK/JVM/start.md?id=create_vm)
-> - Invoke main method
-> - [DestroyJavaVM](/docs/CS/Java/JDK/JVM/destroy.md?id=destroy_vm)
 
-<!-- tabs:start -->
 
-##### **main**
 
-> main-> JLI_Launch -> JVMInit -> ContinueInNewThread -> [JavaMain](/docs/CS/Java/JDK/JVM/start.md?id=JavaMain)
+main-> JLI_Launch -> JVMInit -> ContinueInNewThread -> [JavaMain](/docs/CS/Java/JDK/JVM/start.md?id=JavaMain)
 
 ```c
 // main.c
@@ -81,9 +73,54 @@ ContinueInNewThread(InvocationFunctions* ifn, jlong threadStackSize, ...)
 }
 ```
 
-**JavaMain**
+Block current thread and continue execution in a new thread(JavaThread).
 
-InitializeJVM  -> JNI_CreateJavaVM -> [Thread.create_vm](/docs/CS/Java/JDK/JVM/start.md?id=create_vm)
+```c
+int
+CallJavaMainInNewThread(jlong stack_size, void* args) {
+    int rslt;
+    pthread_t tid;
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+    size_t adjusted_stack_size;
+
+    if (stack_size > 0) {
+        if (pthread_attr_setstacksize(&attr, stack_size) == EINVAL) {
+            // System may require stack size to be multiple of page size
+            // Retry with adjusted value
+            adjusted_stack_size = adjustStackSize(stack_size);
+            if (adjusted_stack_size != (size_t) stack_size) {
+                pthread_attr_setstacksize(&attr, adjusted_stack_size);
+            }
+        }
+    }
+    pthread_attr_setguardsize(&attr, 0); // no pthread guard page on java threads
+
+    if (pthread_create(&tid, &attr, ThreadJavaMain, args) == 0) {
+        void* tmp;
+        pthread_join(tid, &tmp);
+        rslt = (int)(intptr_t)tmp;
+    } else {
+       /*
+        * Continue execution in current thread if for some reason (e.g. out of
+        * memory/LWP)  a new thread can't be created. This will likely fail
+        * later in JavaMain as JNI_CreateJavaVM needs to create quite a
+        * few new threads, anyway, just give it a try..
+        */
+        rslt = JavaMain(args);
+    }
+
+    pthread_attr_destroy(&attr);
+    return rslt;
+}
+```
+
+#### JavaMain
+
+- InitializeJVM  -> JNI_CreateJavaVM -> [Thread.create_vm](/docs/CS/Java/JDK/JVM/start.md?id=create_vm)
+- [Invoke main method](/docs/CS/Java/JDK/JVM/start.md?id=MainClass)
+- [DestroyJavaVM](/docs/CS/Java/JDK/JVM/destroy.md?id=destroy_vm)
 
 ```cpp
 // java.c
@@ -93,19 +130,11 @@ JavaMain(void* _args)
     if (!InitializeJVM(&vm, &env, &ifn)) {
         exit(1);
     }
-```
 
-Invoke main method
-
-```cpp
     mainClass = LoadMainClass(env, mode, what);
     mainID = (*env)->GetStaticMethodID(env, mainClass, "main",
     (*env)->CallStaticVoidMethod(env, mainClass, mainID, mainArgs);
-```
 
-[DestroyJavaVM](/docs/CS/Java/JDK/JVM/destroy.md?id=destroy_vm)
-
-```cpp
     LEAVE();
 
     #define LEAVE() \
@@ -120,44 +149,7 @@ Invoke main method
         } \
     } while (JNI_FALSE)
 ```
-
-##### **launcher**
-
-> launcher -> JNI_CreateJavaVM -> [createVM](/docs/CS/Java/JDK/JVM/start.md?id=create_vm)
-
-```cpp
-// launcher.c
-void *JNU_FindCreateJavaVM(char *vmlibpath) {
-    void *libVM = dlopen(vmlibpath, RTLD_LAZY);
-    return dlsym(libVM, "JNI_CreateJavaVM");
-}
-
-int main(int argc, char**argv) {
-  
-     create_vm = (create_vm_func)JNU_FindCreateJavaVM(argv[1]);
-     res = (*create_vm)(&jvm, (void**)&env, &vm_args);
-```
-
-Invoke main method
-
-```cpp
-     cls = (*env)->FindClass(env, argv[3]);
-     mid = (*env)->GetStaticMethodID(env, cls, "main",
-                                     "([Ljava/lang/String;)V");
-     (*env)->CallStaticVoidMethod(env, cls, mid, args);
-```
-
-[DestroyJavaVM](/docs/CS/Java/JDK/JVM/destroy.md?id=destroy_vm)
-
-```cpp
- destroy:
-     (*jvm)->DestroyJavaVM(jvm);
-     return 0;
-}
-```
-
-<!-- tabs:end -->
-
+ 
 ## create_vm
 
 1. Initialize library-based TLS
@@ -868,6 +860,40 @@ bool universe_post_init() {
 #### init classloader
 
 Initialize the class loader's access to methods in libzip.  Parse and process the boot classpath into a list ClassPathEntry objects.  Once this list has been created, it must not change order (see class PackageInfo) it can be appended to and is by jvmti and the kernel vm.
+
+## MainClass
+
+
+通过[JavaCalls::call()](/docs/CS/Java/JDK/JVM/JavaCall.md)函数来调用Java主类的main()方法
+
+```cpp
+
+static void jni_invoke_static(JNIEnv *env, JavaValue* result, jobject receiver, JNICallType call_type, jmethodID method_id, JNI_ArgumentPusher *args, TRAPS) {
+  methodHandle method(THREAD, Method::resolve_jmethod_id(method_id));
+
+  // Create object to hold arguments for the JavaCall, and associate it with
+  // the jni parser
+  ResourceMark rm(THREAD);
+  int number_of_parameters = method->size_of_parameters();
+  JavaCallArguments java_args(number_of_parameters);
+
+  assert(method->is_static(), "method should be static");
+
+  // Fill out JavaCallArguments object
+  args->push_arguments_on(&java_args);
+  // Initialize result type
+  result->set_type(args->return_type());
+
+  // Invoke the method. Result is returned as oop.
+  JavaCalls::call(result, method, &java_args, CHECK);
+
+  // Convert result
+  if (is_reference_type(result->get_type())) {
+    result->set_jobject(JNIHandles::make_local(THREAD, result->get_oop()));
+  }
+}
+```
+
 
 ## Links
 

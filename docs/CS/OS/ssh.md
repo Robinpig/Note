@@ -25,6 +25,11 @@ service ssh restart
 
 
 
+> [trzsz-ssh ( tssh )](https://github.com/trzsz/trzsz-ssh/tree/main) is an ssh client designed as a drop-in replacement for the openssh client.
+
+
+
+
 
 ## Links
 
