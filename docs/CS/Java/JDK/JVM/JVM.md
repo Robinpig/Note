@@ -248,9 +248,6 @@ strict digraph {
 
 ### Class
 
-- [ClassLoader](/docs/CS/Java/JDK/JVM/ClassLoader.md)
-- [Oop-Klass](/docs/CS/Java/JDK/JVM/Oop-Klass.md)
-
 ### Representation of Objects
 
 The Java Virtual Machine does not mandate any particular internal structure for objects.
@@ -259,6 +256,21 @@ In some of Oracle’s implementations of the Java Virtual Machine, a reference t
 
 - one to a table containing the methods of the object and a pointer to the Class object that represents the type of the object
 - and the other to the memory allocated from the heap for the object data.
+
+
+Java对象创建的流程大概如下：
+
+（1）检查对象所属类是否已经被加载解析。
+
+（2）为对象分配内存空间。
+
+（3）将分配给对象的内存初始化为零值。
+
+（4）执行对象的<init>方法进行初始化
+
+使用new关键字创建Java对象实例 如果是解释执行，那么对应生成的new字节码指令会执行TemplateTable::_new()函数生成的一段机器码
+
+
 
 ## GC
 

@@ -613,6 +613,43 @@ GC logging is on the JVM pausing path, hence the time taken by write() calls con
 
 For latency-sensitive applications, an immediate solution should be avoiding the IO contention by putting the GC log file on a separate HDD or high-performing disk such as SSD.
 
+
+## memory leak
+
+内存泄漏是指无用对象（不再使用的对象）持续占有内存或无用对象的内存得不到及时释放，从而造成内存空间的浪费称为内存泄漏
+内存泄露有时不严重且不易察觉，这样开发者就不知道存在内存泄露，需要自主观察，比较严重的时候，没有内存可以分配，直接oom
+
+
+常见的内存泄露
+
+Metaspace
+
+如果一个应用加载了大量的class, 那么Perm区存储的信息一般会比较大.另外大量的intern String对象也会导致该区不断增长。
+
+比较常见的一个是Groovy动态编译class造成泄露
+
+Heap
+
+
+
+静态集合类引起内存泄露
+
+监听器：但往往在释放对象的时候却没有记住去删除这些监听器，从而增加了内存泄漏的机会。
+
+各种连接，数据库、网络、IO等
+
+内部类和外部模块等的引用：内部类的引用是比较容易遗忘的一种，而且一旦没释放可能导致一系列的后继类对象没有释放。非静态内部类的对象会隐式强引用其外围对象，所以在内部类未释放时，外围对象也不会被释放，从而造成内存泄漏
+
+
+
+
+
+
+
+
+
+
+
 ## Tuning
 
 年轻代的内存使用率处在高位，导致频繁的 Minor GC，而频繁 GC 的效率又不高，说明对象没那么快能被回收，这时年轻代可以适当调大一点

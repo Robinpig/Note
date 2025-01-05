@@ -476,15 +476,30 @@ public class ConsumerImpl<T> extends ConsumerBase<T> implements ConnectionHandle
 
 ## message Retention
 
+默认情况下，Pulsar Broker 会对消息做如下处理：
 
-```
-defaultRetentionSizeInMB
-defaultRetentionTimeInMinutes
-```
+- 当消息被 Consumer 确认之后，会立即执行删除操作。
+- 对于未被确认的消息会存储到 backlog 中。
 
+但是，很多线上的生产环境下，这种默认行为并不能满足我们的生产需求，所以，Pulsar 提供了如下配置策略来覆盖这些行为：
+
+- Retention 策略：用户可以将 Consumer 已经确认的消息保留下来。
+- TTL 策略：对于未确认的消息，用户可以通过设置 TTL 来使未确认的消息到达已经确认的状态
+
+
+Retention 策略的设置提供了两种方式：
+
+- 消息的大小，默认值：defaultRetentionSizeInMB=0
+- 消息被保存的时间，默认值：defaultRetentionTimeInMinutes=0
 
 backlog
 
+backlog 是未被确认消息的集合，它有一个大前提是，这些消息所在的 Topic 是被 Broker 所持久化的，在默认情况下，用户创建的 Topic 都会被持久化。换句话说，Pulsar Broker 会将所有未确认或者未处理的消息都存放到 backlog 中。
+
+同样的，我们可以在 NameSpace 级别对 backlog 的大小进行配置。需要注意的是，对 backlog 进行配置时，我们需要明确以下两点：
+
+- 在当前的 NameSpace 下，每一个 Topic 允许的大小是多少
+- 如果超过设定的 backlog 的阈值，将会执行哪些操作
 
 
 ## Reader

@@ -1074,3 +1074,4 @@ gdb /usr/sbin/nginx <core file>
 1. [](https://www.aosabook.org/en/nginx.html)
 2. [Inside NGINX: How We Designed for Performance & Scale](https://www.nginx.com/blog/inside-nginx-how-we-designed-for-performance-scale/)
 3. [一站式入口服务|爱奇艺微服务平台 API 网关实战](https://mp.weixin.qq.com/s/joaYcdmeelGZmpMcEo-mpw)
+4. [Nginx教程](https://dunwu.github.io/nginx-tutorial/#/README)

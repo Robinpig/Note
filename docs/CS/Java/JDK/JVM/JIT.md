@@ -186,6 +186,43 @@ void ciEnv::register_method(...) {
 }
 ```
 
+
+ciEnv::lookup_method
+```c
+// Perform an appropriate method lookup based on accessor, holder,
+// name, signature, and bytecode.
+Method* ciEnv::lookup_method(ciInstanceKlass* accessor,
+                             ciKlass*         holder,
+                             Symbol*          name,
+                             Symbol*          sig,
+                             Bytecodes::Code  bc,
+                             constantTag      tag) {
+  InstanceKlass* accessor_klass = accessor->get_instanceKlass();
+  Klass* holder_klass = holder->get_Klass();
+
+  // Accessibility checks are performed in ciEnv::get_method_by_index_impl.
+  assert(check_klass_accessibility(accessor, holder_klass), "holder not accessible");
+
+  LinkInfo link_info(holder_klass, name, sig, accessor_klass,
+                     LinkInfo::AccessCheck::required,
+                     LinkInfo::LoaderConstraintCheck::required,
+                     tag);
+  switch (bc) {
+    case Bytecodes::_invokestatic:
+      return LinkResolver::resolve_static_call_or_null(link_info);
+    case Bytecodes::_invokespecial:
+      return LinkResolver::resolve_special_call_or_null(link_info);
+    case Bytecodes::_invokeinterface:
+      return LinkResolver::linktime_resolve_interface_method_or_null(link_info);
+    case Bytecodes::_invokevirtual:
+      return LinkResolver::linktime_resolve_virtual_method_or_null(link_info);
+    default:
+      fatal("Unhandled bytecode: %s", Bytecodes::name(bc));
+      return nullptr; // silence compiler warnings
+  }
+}
+```
+
 ### adapter
 
 c2i是指编译模式到解释模式（Compiler-to-Interpreter），i2c是指解释模式到编译模式（Interpreter-to-Compiler）。由于编译产出的本地代码可能用寄存器存放参数1，用栈存放参数2，而解释器都用栈存放参数，需要一段代码来消弭它们的不同，适配器应运而生。它是一段跳床（Trampoline）代码，以i2c为例，可以形象地认为解释器“跳入”这段代码，将解释器的参数传递到机器代码要求的地方，这种要求即调用约定（Calling Convention），然后“跳出”到机器代码继续执行
