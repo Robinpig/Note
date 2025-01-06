@@ -1064,48 +1064,7 @@ class klassItable {
   int                  _size_offset_table; // size of offset table (in itableOffset entries)
   int                  _size_method_table; // size of methodtable (in itableMethodEntry entries)
 
-  void initialize_itable_for_interface(int method_table_offset, InstanceKlass* interf_h,
-                                       GrowableArray<Method*>* supers, int start_offset);
-  void check_constraints(GrowableArray<Method*>* supers, TRAPS);
- public:
-  klassItable(InstanceKlass* klass);
-
-  itableOffsetEntry* offset_entry(int i) { assert(0 <= i && i <= _size_offset_table, "index out of bounds");
-                                           return &((itableOffsetEntry*)vtable_start())[i]; }
-
-  itableMethodEntry* method_entry(int i) { assert(0 <= i && i <= _size_method_table, "index out of bounds");
-                                           return &((itableMethodEntry*)method_start())[i]; }
-
-  int size_offset_table()                { return _size_offset_table; }
-
-  // Initialization
-  void initialize_itable_and_check_constraints(TRAPS);
-  void initialize_itable(GrowableArray<Method*>* supers = nullptr);
-
-#if INCLUDE_JVMTI
-  // RedefineClasses() API support:
-  // if any entry of this itable points to any of old_methods,
-  // replace it with the corresponding new_method.
-  // trace_name_printed is set to true if the current call has
-  // printed the klass name so that other routines in the adjust_*
-  // group don't print the klass name.
-  void adjust_method_entries(bool* trace_name_printed);
-  bool check_no_old_or_obsolete_entries();
-  void dump_itable();
-#endif // INCLUDE_JVMTI
-
-  // Setup of itable
-  static int assign_itable_indices_for_interface(InstanceKlass* klass);
-  static int method_count_for_interface(InstanceKlass* klass);
-  static int compute_itable_size(Array<InstanceKlass*>* transitive_interfaces);
-  static void setup_itable_offset_table(InstanceKlass* klass);
-
- private:
-  intptr_t* vtable_start() const { return ((intptr_t*)_klass) + _table_offset; }
-  intptr_t* method_start() const { return vtable_start() + _size_offset_table * itableOffsetEntry::size(); }
-
-  // Helper methods
-  static int  calc_itable_size(int num_interfaces, int num_methods) { return (num_interfaces * itableOffsetEntry::size()) + (num_methods * itableMethodEntry::size()); }
+  //
 
 };
 ```
