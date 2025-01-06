@@ -113,6 +113,12 @@ Redis objects can be encoded in different ways
 <!-- tabs:end -->
 
 
+
+Since Redis 2.2 many data types are optimized to use less space up to a certain size. Hashes, Lists, Sets composed of just integers, and Sorted Sets, when  smaller than a given number of elements, and up to a maximum element  size, are encoded in a very memory-efficient way that uses *up to 10 times less memory* (with 5 times less memory used being the average saving).
+
+
+
+
 <table id="tfhover" class="tftable" border="1">
 <tr><th>Data Type</th><th>Desc</th><th>Encoding</th><th>struct</th><th>Header 5</th></tr>
 <tr> <td rowspan="3">OBJ_STRING</td> <td rowspan="3">string </td><td> </td><td> </td><td> </td></tr>
