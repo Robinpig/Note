@@ -258,18 +258,376 @@ In some of Oracle’s implementations of the Java Virtual Machine, a reference t
 - and the other to the memory allocated from the heap for the object data.
 
 
+## new object
+
 Java对象创建的流程大概如下：
 
 （1）检查对象所属类是否已经被加载解析。
-
 （2）为对象分配内存空间。
-
 （3）将分配给对象的内存初始化为零值。
-
 （4）执行对象的<init>方法进行初始化
 
-使用new关键字创建Java对象实例 如果是解释执行，那么对应生成的new字节码指令会执行TemplateTable::_new()函数生成的一段机器码
+使用new关键字创建Java对象实例 如果是解释执行，那么对应生成的new字节码指令会执行 TemplateTable::_new()函数生成的一段机器码
+```cpp
+// templateTable_x86.cpp
+void TemplateTable::_new() {
+  transition(vtos, atos);
+  __ get_unsigned_2_byte_index_at_bcp(rdx, 1);
+  Label slow_case;
+  Label slow_case_no_pop;
+  Label done;
+  Label initialize_header;
 
+  __ get_cpool_and_tags(rcx, rax);
+
+  // Make sure the class we're about to instantiate has been resolved.
+  // This is done before loading InstanceKlass to be consistent with the order
+  // how Constant Pool is updated (see ConstantPool::klass_at_put)
+  const int tags_offset = Array<u1>::base_offset_in_bytes();
+  __ cmpb(Address(rax, rdx, Address::times_1, tags_offset), JVM_CONSTANT_Class);
+  __ jcc(Assembler::notEqual, slow_case_no_pop);
+
+  // get InstanceKlass
+  __ load_resolved_klass_at_index(rcx, rcx, rdx);
+  __ push(rcx);  // save the contexts of klass for initializing the header
+
+  // make sure klass is initialized & doesn't have finalizer
+  // make sure klass is fully initialized
+  __ cmpb(Address(rcx, InstanceKlass::init_state_offset()), InstanceKlass::fully_initialized);
+  __ jcc(Assembler::notEqual, slow_case);
+
+  // get instance_size in InstanceKlass (scaled to a count of bytes)
+  __ movl(rdx, Address(rcx, Klass::layout_helper_offset()));
+  // test to see if it has a finalizer or is malformed in some way
+  __ testl(rdx, Klass::_lh_instance_slow_path_bit);
+  __ jcc(Assembler::notZero, slow_case);
+
+  // Allocate the instance:
+  //  If TLAB is enabled:
+  //    Try to allocate in the TLAB.
+  //    If fails, go to the slow path.
+  //    Initialize the allocation.
+  //    Exit.
+  //
+  //  Go to slow path.
+
+  const Register thread = LP64_ONLY(r15_thread) NOT_LP64(rcx);
+
+  if (UseTLAB) {
+    NOT_LP64(__ get_thread(thread);)
+    __ tlab_allocate(thread, rax, rdx, 0, rcx, rbx, slow_case);
+    if (ZeroTLAB) {
+      // the fields have been already cleared
+      __ jmp(initialize_header);
+    }
+
+    // The object is initialized before the header.  If the object size is
+    // zero, go directly to the header initialization.
+    __ decrement(rdx, sizeof(oopDesc));
+    __ jcc(Assembler::zero, initialize_header);
+
+    // Initialize topmost object field, divide rdx by 8, check if odd and
+    // test if zero.
+    __ xorl(rcx, rcx);    // use zero reg to clear memory (shorter code)
+    __ shrl(rdx, LogBytesPerLong); // divide by 2*oopSize and set carry flag if odd
+
+    // rdx must have been multiple of 8
+#ifdef ASSERT
+    // make sure rdx was multiple of 8
+    Label L;
+    // Ignore partial flag stall after shrl() since it is debug VM
+    __ jcc(Assembler::carryClear, L);
+    __ stop("object size is not multiple of 2 - adjust this code");
+    __ bind(L);
+    // rdx must be > 0, no extra check needed here
+#endif
+
+    // initialize remaining object fields: rdx was a multiple of 8
+    { Label loop;
+    __ bind(loop);
+    __ movptr(Address(rax, rdx, Address::times_8, sizeof(oopDesc) - 1*oopSize), rcx);
+    NOT_LP64(__ movptr(Address(rax, rdx, Address::times_8, sizeof(oopDesc) - 2*oopSize), rcx));
+    __ decrement(rdx);
+    __ jcc(Assembler::notZero, loop);
+    }
+
+    // initialize object header only.
+    __ bind(initialize_header);
+    __ movptr(Address(rax, oopDesc::mark_offset_in_bytes()),
+              (intptr_t)markWord::prototype().value()); // header
+    __ pop(rcx);   // get saved klass back in the register.
+#ifdef _LP64
+    __ xorl(rsi, rsi); // use zero reg to clear memory (shorter code)
+    __ store_klass_gap(rax, rsi);  // zero klass gap for compressed oops
+#endif
+    __ store_klass(rax, rcx, rscratch1);  // klass
+
+    {
+      SkipIfEqual skip_if(_masm, &DTraceAllocProbes, 0, rscratch1);
+      // Trigger dtrace event for fastpath
+      __ push(atos);
+      __ call_VM_leaf(
+           CAST_FROM_FN_PTR(address, static_cast<int (*)(oopDesc*)>(SharedRuntime::dtrace_object_alloc)), rax);
+      __ pop(atos);
+    }
+
+    __ jmp(done);
+  }
+
+  // slow case
+  __ bind(slow_case);
+  __ pop(rcx);   // restore stack pointer to what it was when we came in.
+  __ bind(slow_case_no_pop);
+
+  Register rarg1 = LP64_ONLY(c_rarg1) NOT_LP64(rax);
+  Register rarg2 = LP64_ONLY(c_rarg2) NOT_LP64(rdx);
+
+  __ get_constant_pool(rarg1);
+  __ get_unsigned_2_byte_index_at_bcp(rarg2, 1);
+  call_VM(rax, CAST_FROM_FN_PTR(address, InterpreterRuntime::_new), rarg1, rarg2);
+   __ verify_oop(rax);
+
+  // continue
+  __ bind(done);
+}
+
+```
+
+
+```cpp
+JRT_ENTRY(void, InterpreterRuntime::_new(JavaThread* current, ConstantPool* pool, int index))
+  Klass* k = pool->klass_at(index, CHECK);
+  InstanceKlass* klass = InstanceKlass::cast(k);
+
+  // Make sure we are not instantiating an abstract klass
+  klass->check_valid_for_instantiation(true, CHECK);
+
+  // Make sure klass is initialized
+  klass->initialize(CHECK);
+
+  // At this point the class may not be fully initialized
+  // because of recursive initialization. If it is fully
+  // initialized & has_finalized is not set, we rewrite
+  // it into its fast version (Note: no locking is needed
+  // here since this is an atomic byte write and can be
+  // done more than once).
+  //
+  // Note: In case of classes with has_finalized we don't
+  //       rewrite since that saves us an extra check in
+  //       the fast version which then would call the
+  //       slow version anyway (and do a call back into
+  //       Java).
+  //       If we have a breakpoint, then we don't rewrite
+  //       because the _breakpoint bytecode would be lost.
+  oop obj = klass->allocate_instance(CHECK);
+  current->set_vm_result(obj);
+JRT_END
+```
+InstanceKlass了解对象所有信息，包括字段个数、大小、是否为数组、是否有父类，它能根据这些信息调用InstanceKlass::allocate_instance创建对应的instanceOop/arrayOop
+
+虚拟机首先获知对象大小，然后申请一片内存（mem_allocate），返回这片内存的首地址（HeapWord，完全等价于char*指针）
+接着初始化（initialize）这片内存最前面的一个机器字，将它设置为对象头的数据。然后将这片内存地址强制类型转换为oop
+
+called by `java.lang.reflect.Constructor` or `new Klass(args ...)` or etc.
+
+
+```cpp
+instanceOop InstanceKlass::allocate_instance(TRAPS) {
+  bool has_finalizer_flag = has_finalizer(); // Query before possible GC
+  size_t size = size_helper();  // Query before forming handle.
+
+  instanceOop i;
+
+  i = (instanceOop)Universe::heap()->obj_allocate(this, size, CHECK_NULL);
+  if (has_finalizer_flag && !RegisterFinalizersAtInit) {
+    i = register_finalizer(i, CHECK_NULL);
+  }
+  return i;
+}
+```
+
+```cpp
+// collectedHeap.cpp
+oop CollectedHeap::obj_allocate(Klass* klass, int size, TRAPS) {
+  ObjAllocator allocator(klass, size, THREAD);
+  return allocator.allocate();
+}
+
+oop MemAllocator::allocate() const {
+  oop obj = nullptr;
+  {
+    Allocation allocation(*this, &obj);
+    HeapWord* mem = mem_allocate(allocation);
+    if (mem != nullptr) {
+      obj = initialize(mem);
+    } else {
+      // The unhandled oop detector will poison local variable obj,
+      // so reset it to null if mem is null.
+      obj = nullptr;
+    }
+  }
+  return obj;
+}
+```
+
+
+```cpp
+HeapWord* MemAllocator::mem_allocate(Allocation& allocation) const {
+  if (UseTLAB) {
+    HeapWord* result = allocate_inside_tlab(allocation);
+    if (result != NULL) {
+      return result;
+    }
+  }
+
+  return allocate_outside_tlab(allocation);
+}
+
+
+HeapWord* MemAllocator::allocate_outside_tlab(Allocation& allocation) const {
+  allocation._allocated_outside_tlab = true;
+  HeapWord* mem = _heap->mem_allocate(_word_size, &allocation._overhead_limit_exceeded);
+  if (mem == NULL) {
+    return mem;
+  }
+```
+
+#### inside tlab
+
+Try refilling the TLAB and allocating the object in it.
+
+```cpp
+
+HeapWord* MemAllocator::allocate_inside_tlab(Allocation& allocation) const {
+  assert(UseTLAB, "should use UseTLAB");
+
+  // Try allocating from an existing TLAB.
+  HeapWord* mem = _thread->tlab().allocate(_word_size);
+  if (mem != NULL) {
+    return mem;
+  }
+
+  // Try refilling the TLAB and allocating the object in it.
+  return allocate_inside_tlab_slow(allocation);
+}
+```
+
+
+
+##### slow
+
+```cpp
+HeapWord* MemAllocator::allocate_inside_tlab_slow(Allocation& allocation) const {
+  HeapWord* mem = NULL;
+  ThreadLocalAllocBuffer& tlab = _thread->tlab();
+
+  if (JvmtiExport::should_post_sampled_object_alloc()) {
+    tlab.set_back_allocation_end();
+    mem = tlab.allocate(_word_size);
+
+    // We set back the allocation sample point to try to allocate this, reset it
+    // when done.
+    allocation._tlab_end_reset_for_sample = true;
+
+    if (mem != NULL) {
+      return mem;
+    }
+  }
+
+  // Retain tlab and allocate object in shared space if the amount free in the tlab is too large to discard.
+  if (tlab.free() > tlab.refill_waste_limit()) {
+    tlab.record_slow_allocation(_word_size);
+    return NULL;
+  }
+
+  // Discard tlab and allocate a new one.
+  // To minimize fragmentation, the last TLAB may be smaller than the rest.
+  size_t new_tlab_size = tlab.compute_size(_word_size);
+
+  // fill with dummy object(GC friendly)
+  tlab.retire_before_allocation();
+
+  if (new_tlab_size == 0) {
+    return NULL;
+  }
+
+  // Allocate a new TLAB requesting new_tlab_size. Any size between minimal and new_tlab_size is accepted.
+  size_t min_tlab_size = ThreadLocalAllocBuffer::compute_min_size(_word_size);
+  mem = Universe::heap()->allocate_new_tlab(min_tlab_size, new_tlab_size, &allocation._allocated_tlab_size);
+  if (mem == NULL) {
+    assert(allocation._allocated_tlab_size == 0,
+           "Allocation failed, but actual size was updated. min: " SIZE_FORMAT
+           ", desired: " SIZE_FORMAT ", actual: " SIZE_FORMAT,
+           min_tlab_size, new_tlab_size, allocation._allocated_tlab_size);
+    return NULL;
+  }
+  assert(allocation._allocated_tlab_size != 0, "Allocation succeeded but actual size not updated. mem at: "
+         PTR_FORMAT " min: " SIZE_FORMAT ", desired: " SIZE_FORMAT,
+         p2i(mem), min_tlab_size, new_tlab_size);
+
+  if (ZeroTLAB) {
+    // ..and clear it.
+    Copy::zero_to_words(mem, allocation._allocated_tlab_size);
+  } else {
+    // ...and zap just allocated object.
+#ifdef ASSERT
+    // Skip mangling the space corresponding to the object header to
+    // ensure that the returned space is not considered parsable by
+    // any concurrent GC thread.
+    size_t hdr_size = oopDesc::header_size();
+    Copy::fill_to_words(mem + hdr_size, allocation._allocated_tlab_size - hdr_size, badHeapWordVal);
+#endif // ASSERT
+  }
+
+  tlab.fill(mem, mem + _word_size, allocation._allocated_tlab_size);
+  return mem;
+}
+```
+
+#### outside tlab
+
+implement by different collectors
+
+```cpp
+
+HeapWord* MemAllocator::allocate_outside_tlab(Allocation& allocation) const {
+  allocation._allocated_outside_tlab = true;
+  HeapWord* mem = Universe::heap()->mem_allocate(_word_size, &allocation._overhead_limit_exceeded);
+  if (mem == NULL) {
+    return mem;
+  }
+
+  NOT_PRODUCT(Universe::heap()->check_for_non_bad_heap_word_value(mem, _word_size));
+  size_t size_in_bytes = _word_size * HeapWordSize;
+  _thread->incr_allocated_bytes(size_in_bytes);
+
+  return mem;
+}
+```
+
+
+### initialize
+
+clear_mem & set [markWord](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=MarkWord)
+
+```cpp
+// share/gc/shared/memAllocator.cpp
+oop ObjAllocator::initialize(HeapWord* mem) const {
+  mem_clear(mem);
+  return finish(mem);
+}
+
+oop MemAllocator::finish(HeapWord* mem) const {
+  // May be bootstrapping
+  oopDesc::set_mark(mem, markWord::prototype()); // no_hash_in_place | no_lock_in_place
+  
+  // Need a release store to ensure array/class length, mark word, and
+  // object zeroing are visible before setting the klass non-NULL, for
+  // concurrent collectors.
+  oopDesc::release_set_klass(mem, _klass);
+  return cast_to_oop(mem);
+}
+```
 
 
 ## GC

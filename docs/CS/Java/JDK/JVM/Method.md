@@ -1,7 +1,7 @@
 ## Introduction
 
 HotSpot VM通过Method类保存方法的元信息。Method用来保存方法中的一些常见信息，如运行时的解释入口和编译入口
-Method实例表示一个Java方法，因为一个应用有成千上万个方法，所以保证Method类在内存中的布局紧凑非常重要。为了方便回收垃圾，Method把所有的指针变量和方法都放在了Method内存布局的前面”
+Method实例表示一个Java方法，因为一个应用有成千上万个方法，所以保证Method类在内存中的布局紧凑非常重要。为了方便回收垃圾，Method把所有的指针变量和方法都放在了Method内存布局的前面
 Java方法本身的不可变数据如字节码等用ConstMethod表示，可变数据如Profile统计的性能数据等用MethodData表示，它们都可以在Method中通过指针访问。
 如果是本地方法，Method实例的内存布局的最后是native_function和signature_handler属性，按照解释器的要求，这两个属性必须在固定的偏移处
 
@@ -120,9 +120,9 @@ private:
 ConstantPool → InstanceKlass → Method数组，通过_method_idnum获取对应的Method实例的指针
 
 
-ClassFileParser::parse_method()函数解析完方法的各个属性后，接着会创建Method与ConstMethod实例保存这些属性信息”
+ClassFileParser::parse_method()函数解析完方法的各个属性后，接着会创建Method与ConstMethod实例保存这些属性信息
 
-InlineTableSizes类中定义了保存方法中相关属性的字段”
+InlineTableSizes类中定义了保存方法中相关属性的字段
 
 
 ```cpp
@@ -167,18 +167,18 @@ class InlineTableSizes : StackObj {
 };
 ```
 
-在创建ConstMethod实例时，上面的一些属性值会保存到ConstMethod实例中，因此需要开辟相应的存储空间”
+在创建ConstMethod实例时，上面的一些属性值会保存到ConstMethod实例中，因此需要开辟相应的存储空间
 
 
-在Method::allocate()函数中调用ConstMethod::allocate()函数”
+在Method::allocate()函数中调用ConstMethod::allocate()函数
 
 
-klassVtable与klassItable类用来实现Java方法的多态，也可以称为动态绑定，是指在应用执行期间通过判断接收对象的实际类型，然后调用对应的方法。C++为了实现多态，在对象中嵌入了虚函数表vtable，通过虚函数表来实现运行期的方法分派，Java也通过类似的虚函数表实现Java方法的动态分发”
+klassVtable与klassItable类用来实现Java方法的多态，也可以称为动态绑定，是指在应用执行期间通过判断接收对象的实际类型，然后调用对应的方法。C++为了实现多态，在对象中嵌入了虚函数表vtable，通过虚函数表来实现运行期的方法分派，Java也通过类似的虚函数表实现Java方法的动态分发
 
 C++中的vtable只包含虚函数，非虚函数在编译期就已经解析出正确的方法调用了。Java的vtable除了虚方法之外还包含其他的非虚方法。
-访问vtable需要通过klassVtable类”
+访问vtable需要通过klassVtable类
 
-vtable表示由一组变长（前面会有一个字段描述该表的长度）连续的vtableEntry元素构成的数组。其中，每个vtableEntry封装了一个Method实例”
+vtable表示由一组变长（前面会有一个字段描述该表的长度）连续的vtableEntry元素构成的数组。其中，每个vtableEntry封装了一个Method实例
 
 
 
@@ -709,12 +709,12 @@ static void gen_c2i_adapter(MacroAssembler *masm,
 ## vtable
 
 
-klassVtable与klassItable类用来实现Java方法的多态，也可以称为动态绑定，是指在应用执行期间通过判断接收对象的实际类型，然后调用对应的方法。C++为了实现多态，在对象中嵌入了虚函数表vtable，通过虚函数表来实现运行期的方法分派，Java也通过类似的虚函数表实现Java方法的动态分发”
+klassVtable与klassItable类用来实现Java方法的多态，也可以称为动态绑定，是指在应用执行期间通过判断接收对象的实际类型，然后调用对应的方法。C++为了实现多态，在对象中嵌入了虚函数表vtable，通过虚函数表来实现运行期的方法分派，Java也通过类似的虚函数表实现Java方法的动态分发
 
 C++中的vtable只包含虚函数，非虚函数在编译期就已经解析出正确的方法调用了。Java的vtable除了虚方法之外还包含其他的非虚方法。
-访问vtable需要通过klassVtable类”
+访问vtable需要通过klassVtable类
 
-vtable表示由一组变长（前面会有一个字段描述该表的长度）连续的vtableEntry元素构成的数组。其中，每个vtableEntry封装了一个Method实例”
+vtable表示由一组变长（前面会有一个字段描述该表的长度）连续的vtableEntry元素构成的数组。其中，每个vtableEntry封装了一个Method实例
 
 ```c
 class klassVtable {
@@ -1055,6 +1055,16 @@ bool klassVtable::update_inherited_vtable(Thread* current,
 ```
 
 ## itable
+Java的itable是Java接口函数表，可以方便查找某个接口对应的实现方法。itable的结构比vtable复杂，除了记录方法地址之外还要记录该方法所属的接口类Klass
+增加itable而不用vtable解决所有方法分派问题，是因为一个类可以实现多个接口，而每个接口的函数编号是和其自身相关的，vtable无法解决多个对应接口的函数编号问题
+
+
+A klassVtable abstracts the variable-length vtable that is embedded in InstanceKlass and ArrayKlass.  klassVtable objects are used just as convenient transient accessors to the vtable, not to actually hold the vtable data.
+Note: the klassVtable should not be accessed before the class has been verified (until that point, the vtable is uninitialized).
+
+Currently a klassVtable contains a direct reference to the vtable data, and is therefore not preserved across GCs.
+
+
 
 ```c
 class klassItable {
@@ -1069,10 +1079,118 @@ class klassItable {
 };
 ```
 
+klassItable类包含4个属性：
+
+- _klass：itable所属的Klass；
+- _table_offset：itable在所属Klass中的内存偏移量；
+- _size_offset_table：itable中itableOffsetEntry的大小；
+- _size_method_table：itable中itableMethodEntry的大小
+
+
+
+
+
+
+itable表由偏移表itableOffset和方法表itableMethod两个表组成，这两个表的长度是不固定的，即长度不一样。
+每个偏移表itableOffset保存的是类实现的一个接口Klass和该接口方法表所在的偏移位置；方法表itableMethod保存的是实现的接口方法
+在初始化itable时，HotSpot VM将类实现的接口及实现的方法填写在上述两张表中。接口中的非public方法和abstract方法（在vtable中占一个槽位）不放入itable
+
+```
+//
+// Format of an itable
+//
+//    ---- offset table ---
+//    Klass* of interface 1             \
+//    offset to vtable from start of oop  / offset table entry
+//    ...
+//    Klass* of interface n             \
+//    offset to vtable from start of oop  / offset table entry
+//    --- vtable for interface 1 ---
+//    Method*                             \
+//    compiler entry point                / method table entry
+//    ...
+//    Method*                             \
+//    compiler entry point                / method table entry
+//    -- vtable for interface 2 ---
+//    ...
+//
+```
+
+在接口表itableOffset中含有的项为itableOffsetEntry，类及属性的定义如下
+```cpp
+class itableOffsetEntry {
+ private:
+  InstanceKlass* _interface;
+  int      _offset;
+ // ...
+};
+```
+
+方法表itableMethod中含有的项为itableMethodEntry，类及属性的定义如下
+```cpp
+class itableMethodEntry {
+ private:
+  Method* _method;
+// ...
+};
+```
+
+
+itable的itableOffset偏移表在类解析时完成初始化
+
+```cpp
+void ClassFileParser::fill_instance_klass(InstanceKlass* ik,
+bool changed_by_loadhook,
+const ClassInstanceInfo& cl_inst_info,
+TRAPS) {
+    // ...
+    // Initialize itable offset tables
+    klassItable::setup_itable_offset_table(ik);
+    // ...
+}
+```
+Fill out offset table and interface klasses into the itable space
+```cpp
+void klassItable::setup_itable_offset_table(InstanceKlass* klass) {
+  if (klass->itable_length() == 0) return;
+  assert(!klass->is_interface(), "Should have zero length itable");
+
+  // Count no of interfaces and total number of interface methods
+  CountInterfacesClosure cic;
+  visit_all_interfaces(klass->transitive_interfaces(), &cic);
+  int nof_methods    = cic.nof_methods();
+  int nof_interfaces = cic.nof_interfaces();
+
+  // Add one extra entry so we can null-terminate the table
+  nof_interfaces++;
+
+  // Fill-out offset table
+  itableOffsetEntry* ioe = (itableOffsetEntry*)klass->start_of_itable();
+  itableMethodEntry* ime = (itableMethodEntry*)(ioe + nof_interfaces);
+  intptr_t* end               = klass->end_of_itable();
+  assert((oop*)(ime + nof_methods) <= (oop*)klass->start_of_nonstatic_oop_maps(), "wrong offset calculation (1)");
+  assert((oop*)(end) == (oop*)(ime + nof_methods),                      "wrong offset calculation (2)");
+
+  // Visit all interfaces and initialize itable offset table
+  SetupItableClosure sic((address)klass, ioe, ime);
+  visit_all_interfaces(klass->transitive_interfaces(), &sic);
+
+#ifdef ASSERT
+  ime  = sic.method_entry();
+  oop* v = (oop*) klass->end_of_itable();
+  assert( (oop*)(ime) == v, "wrong offset calculation (2)");
+#endif
+}
+```
+
+
 ### initialize_itable
 
 
-called when [Linking Class](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=Linking)
+而itable的方法表itableMethod需要等到方法连接时才会初始化 
+在[InstanceKlass::link_class_impl()](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=Linking)函数中完成方法连接后会初始化vtable与itable
+
+
 
 ```c
 void klassItable::initialize_itable(GrowableArray<Method*>* supers) {
