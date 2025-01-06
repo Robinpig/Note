@@ -104,7 +104,10 @@ func (rules *ClientConfigLoadingRules) Load() (*clientcmdapi.Config, error) {
 }
 ```
 
+## Clients
 
+
+### RESTClient
 
 ```go
 // veendor/k8s.io/client-go/rest/config.go
@@ -290,9 +293,55 @@ func (r *Request) request(fn func(*http.Request, *http.Response)) error {
 	}
 }
 ```
-
+### ClientSet
 
 ClientSet 对比RESTClient使用更加便捷
+ 
+```go
+func NewForConfig(c *rest.Config) (*CoreV1Client, error) {
+	config := *c
+	if err := setConfigDefaults(&config); err != nil {
+		return nil, err
+	}
+	client, err := rest.RESTClientFor(&config)
+	if err != nil {
+		return nil, err
+	}
+	return &CoreV1Client{client}, nil
+}
+```
+
+
+```go
+type Clientset struct {
+	*discovery.DiscoveryClient
+	admissionregistration *admissionregistrationinternalversion.AdmissionregistrationClient
+	core                  *coreinternalversion.CoreClient
+	apps                  *appsinternalversion.AppsClient
+	authentication        *authenticationinternalversion.AuthenticationClient
+	authorization         *authorizationinternalversion.AuthorizationClient
+	autoscaling           *autoscalinginternalversion.AutoscalingClient
+	batch                 *batchinternalversion.BatchClient
+	certificates          *certificatesinternalversion.CertificatesClient
+	events                *eventsinternalversion.EventsClient
+	extensions            *extensionsinternalversion.ExtensionsClient
+	networking            *networkinginternalversion.NetworkingClient
+	policy                *policyinternalversion.PolicyClient
+	rbac                  *rbacinternalversion.RbacClient
+	scheduling            *schedulinginternalversion.SchedulingClient
+	settings              *settingsinternalversion.SettingsClient
+	
+```
+
+
+CoreV1Client
+```go
+// CoreV1Client is used to interact with features provided by the  group.
+type CoreV1Client struct {
+	restClient rest.Interface
+}
+```
+CoreV1Interface中包含了各种kubernetes对象的调用接口，例如PodsGetter是对kubernetes中pod对象增删改查操作的接口。ServicesGetter是对service对象的操作的接口
 
 ```go
 type CoreV1Interface interface {
@@ -314,7 +363,11 @@ type CoreV1Interface interface {
 	ServicesGetter
 	ServiceAccountsGetter
 }
-```
+
+
+
+### DynamicClient
+
 
 
 ## informer
@@ -332,21 +385,23 @@ type CoreV1Interface interface {
   1. 通过 `client-go` 客户端对象 list `kube-apiserver` 资源，并且 watch `kube-apiserver` 资源变更。
   2. 作为生产者，将获取的资源放入 `Delta FIFO` 队列。
 
-- ```
-  Informer
-  ```
-
-  : 主要负责三类任务：
-
-  1. 作为消费者，将 `Reflector` 放入队列的资源拿出来。
-  2. 将资源交给 `indexer` 组件。
-  3. 交给 `indexer` 组件之后触发回调函数，处理回调事件。
-
-- `Indexer`: `indexer` 组件负责将资源信息存入到本地内存数据库（实际是 `map` 对象），该数据库作为缓存存在，其资源信息和 `ETCD` 中的资源信息完全一致（得益于 `watch` 机制）。因此，`client-go` 可以从本地 `indexer` 中读取相应的资源，而不用每次都从 `kube-apiserver` 中获取资源信息。这也实现了 `client-go` 对于实时性的要求。
-
 ```
 
-```
+
+## Informer
+
+
+主要负责三类任务：
+
+1. 作为消费者，将 `Reflector` 放入队列的资源拿出来。
+2. 将资源交给 `indexer` 组件。
+3. 交给 `indexer` 组件之后触发回调函数，处理回调事件。
+
+`Indexer`: `indexer` 组件负责将资源信息存入到本地内存数据库（实际是 `map` 对象），该数据库作为缓存存在，
+其资源信息和 `ETCD` 中的资源信息完全一致（得益于 `watch` 机制）。
+因此，`client-go` 可以从本地 `indexer` 中读取相应的资源，而不用每次都从 `kube-apiserver` 中获取资源信息
+这也实现了 `client-go` 对于实时性的要求。
+
 
 
 
