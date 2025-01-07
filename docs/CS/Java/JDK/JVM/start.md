@@ -688,6 +688,85 @@ interpreter_init_code after javaClasses_init and before any method gets linked
 ```
 
 
+#### universe_init
+
+```cpp
+
+jint universe_init() {
+  assert(!Universe::_fully_initialized, "called after initialize_vtables");
+  guarantee(1 << LogHeapWordSize == sizeof(HeapWord),
+         "LogHeapWordSize is incorrect.");
+  guarantee(sizeof(oop) >= sizeof(HeapWord), "HeapWord larger than oop?");
+  guarantee(sizeof(oop) % sizeof(HeapWord) == 0,
+            "oop size is not not a multiple of HeapWord size");
+
+  TraceTime timer("Genesis", TRACETIME_LOG(Info, startuptime));
+
+  initialize_global_behaviours();
+
+  GCLogPrecious::initialize();
+
+#ifdef _LP64
+  MetaspaceShared::adjust_heap_sizes_for_dumping();
+#endif // _LP64
+
+  GCConfig::arguments()->initialize_heap_sizes();
+
+  jint status = Universe::initialize_heap();
+  if (status != JNI_OK) {
+    return status;
+  }
+
+  Universe::initialize_tlab();
+
+  Metaspace::global_initialize();
+
+  // Initialize performance counters for metaspaces
+  MetaspaceCounters::initialize_performance_counters();
+
+  // Checks 'AfterMemoryInit' constraints.
+  if (!JVMFlagLimit::check_all_constraints(JVMFlagConstraintPhase::AfterMemoryInit)) {
+    return JNI_EINVAL;
+  }
+
+  // Create memory for metadata.  Must be after initializing heap for
+  // DumpSharedSpaces.
+  ClassLoaderData::init_null_class_loader_data();
+
+  // We have a heap so create the Method* caches before
+  // Metaspace::initialize_shared_spaces() tries to populate them.
+  Universe::_finalizer_register_cache = new LatestMethodCache();
+  Universe::_loader_addClass_cache    = new LatestMethodCache();
+  Universe::_throw_illegal_access_error_cache = new LatestMethodCache();
+  Universe::_throw_no_such_method_error_cache = new LatestMethodCache();
+  Universe::_do_stack_walk_cache = new LatestMethodCache();
+
+#if INCLUDE_CDS
+  DynamicArchive::check_for_dynamic_dump();
+  if (UseSharedSpaces) {
+    // Read the data structures supporting the shared spaces (shared
+    // system dictionary, symbol table, etc.)
+    MetaspaceShared::initialize_shared_spaces();
+  }
+  if (Arguments::is_dumping_archive()) {
+    MetaspaceShared::prepare_for_dumping();
+  }
+#endif
+
+  SymbolTable::create_table();
+  StringTable::create_table();
+
+  if (strlen(VerifySubSet) > 0) {
+    Universe::initialize_verify_flags();
+  }
+
+  ResolvedMethodTable::create_table();
+
+  return JNI_OK;
+}
+```
+
+
 ### init_globals2
 
 ```c++
