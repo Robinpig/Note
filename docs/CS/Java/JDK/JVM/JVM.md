@@ -605,6 +605,290 @@ HeapWord* MemAllocator::allocate_outside_tlab(Allocation& allocation) const {
 }
 ```
 
+gen
+
+在for循环中尝试通过无锁和全局锁方式完成内存分配，
+如果分配失败，则会触发垃圾回收，根据垃圾回收的结果可能会再循环一次，尝试再次分配，也可能会直接返回，表示无法分配
+
+```cpp
+HeapWord* GenCollectedHeap::mem_allocate(size_t size,
+                                         bool* gc_overhead_limit_was_exceeded) {
+  return mem_allocate_work(size,
+                           false /* is_tlab */);
+}
+
+
+HeapWord* GenCollectedHeap::mem_allocate_work(size_t size,
+                                              bool is_tlab) {
+
+  HeapWord* result = nullptr;
+
+  // Loop until the allocation is satisfied, or unsatisfied after GC.
+  for (uint try_count = 1, gclocker_stalled_count = 0; /* return or throw */; try_count += 1) {
+
+    // First allocation attempt is lock-free.
+    Generation *young = _young_gen;
+    if (young->should_allocate(size, is_tlab)) {
+      result = young->par_allocate(size, is_tlab);
+      if (result != nullptr) {
+        assert(is_in_reserved(result), "result not in heap");
+        return result;
+      }
+    }
+    uint gc_count_before;  // Read inside the Heap_lock locked region.
+    {
+      MutexLocker ml(Heap_lock);
+      log_trace(gc, alloc)("GenCollectedHeap::mem_allocate_work: attempting locked slow path allocation");
+      // Note that only large objects get a shot at being
+      // allocated in later generations.
+      bool first_only = !should_try_older_generation_allocation(size);
+
+      result = attempt_allocation(size, is_tlab, first_only);
+      if (result != nullptr) {
+        assert(is_in_reserved(result), "result not in heap");
+        return result;
+      }
+
+      if (GCLocker::is_active_and_needs_gc()) {
+        if (is_tlab) {
+          return nullptr;  // Caller will retry allocating individual object.
+        }
+        if (!is_maximal_no_gc()) {
+          // Try and expand heap to satisfy request.
+          result = expand_heap_and_allocate(size, is_tlab);
+          // Result could be null if we are out of space.
+          if (result != nullptr) {
+            return result;
+          }
+        }
+
+        if (gclocker_stalled_count > GCLockerRetryAllocationCount) {
+          return nullptr; // We didn't get to do a GC and we didn't get any memory.
+        }
+
+        // If this thread is not in a jni critical section, we stall
+        // the requestor until the critical section has cleared and
+        // GC allowed. When the critical section clears, a GC is
+        // initiated by the last thread exiting the critical section; so
+        // we retry the allocation sequence from the beginning of the loop,
+        // rather than causing more, now probably unnecessary, GC attempts.
+        JavaThread* jthr = JavaThread::current();
+        if (!jthr->in_critical()) {
+          MutexUnlocker mul(Heap_lock);
+          // Wait for JNI critical section to be exited
+          GCLocker::stall_until_clear();
+          gclocker_stalled_count += 1;
+          continue;
+        } else {
+          if (CheckJNICalls) {
+            fatal("Possible deadlock due to allocating while"
+                  " in jni critical section");
+          }
+          return nullptr;
+        }
+      }
+
+      // Read the gc count while the heap lock is held.
+      gc_count_before = total_collections();
+    }
+
+    VM_GenCollectForAllocation op(size, is_tlab, gc_count_before);
+    VMThread::execute(&op);
+    if (op.prologue_succeeded()) {
+      result = op.result();
+      if (op.gc_locked()) {
+         assert(result == nullptr, "must be null if gc_locked() is true");
+         continue;  // Retry and/or stall as necessary.
+      }
+
+      assert(result == nullptr || is_in_reserved(result),
+             "result not in heap");
+      return result;
+    }
+
+    // Give a warning if we seem to be looping forever.
+    if ((QueuedAllocationWarningCount > 0) &&
+        (try_count % QueuedAllocationWarningCount == 0)) {
+          log_warning(gc, ergo)("GenCollectedHeap::mem_allocate_work retries %d times,"
+                                " size=" SIZE_FORMAT " %s", try_count, size, is_tlab ? "(TLAB)" : "");
+    }
+  }
+}
+
+```
+
+
+```cpp
+HeapWord* DefNewGeneration::par_allocate(size_t word_size,
+                                         bool is_tlab) {
+  return eden()->par_allocate(word_size);
+}
+```
+
+Lock-free
+```cpp
+inline HeapWord* ContiguousSpace::par_allocate_impl(size_t size) {
+  do {
+    HeapWord* obj = top();
+    if (pointer_delta(end(), obj) >= size) {
+      HeapWord* new_top = obj + size;
+      HeapWord* result = Atomic::cmpxchg(top_addr(), obj, new_top);
+      // result can be one of two:
+      //  the old top value: the exchange succeeded
+      //  otherwise: the new value of the top is returned.
+      if (result == obj) {
+        assert(is_aligned(obj) && is_aligned(new_top), "checking alignment");
+        return obj;
+      }
+    } else {
+      return nullptr;
+    }
+  } while (true);
+}
+```
+
+
+
+Return true if any of the following is true:
+- the allocation won't fit into the current young gen heap
+- gc locker is occupied (jni critical section)
+- heap memory is tight -- the most recent previous collection was a full collection because a partial collection (would have) failed and is likely to fail again
+
+```cpp
+bool GenCollectedHeap::should_try_older_generation_allocation(size_t word_size) const {
+  size_t young_capacity = _young_gen->capacity_before_gc();
+  return    (word_size > heap_word_size(young_capacity))
+         || GCLocker::is_active_and_needs_gc()
+         || incremental_collection_failed();
+}
+```
+
+
+
+
+当在年轻代的Eden区中分配内存失败后，会通过加全局锁的方式实现，可能尝试在From Survivor或老年代中分配
+```cpp
+HeapWord* GenCollectedHeap::attempt_allocation(size_t size,
+                                               bool is_tlab,
+                                               bool first_only) {
+  HeapWord* res = nullptr;
+
+  if (_young_gen->should_allocate(size, is_tlab)) {
+    res = _young_gen->allocate(size, is_tlab);
+    if (res != nullptr || first_only) {
+      return res;
+    }
+  }
+
+  if (_old_gen->should_allocate(size, is_tlab)) {
+    res = _old_gen->allocate(size, is_tlab);
+  }
+
+  return res;
+}
+```
+
+
+```cpp
+// defNewGeneration.cpp
+HeapWord* DefNewGeneration::allocate(size_t word_size, bool is_tlab) {
+  // This is the slow-path allocation for the DefNewGeneration.
+  // Most allocations are fast-path in compiled code.
+  // We try to allocate from the eden.  If that works, we are happy.
+  // Note that since DefNewGeneration supports lock-free allocation, we
+  // have to use it here, as well.
+  HeapWord* result = eden()->par_allocate(word_size);
+  if (result == nullptr) {
+    // If the eden is full and the last collection bailed out, we are running
+    // out of heap space, and we try to allocate the from-space, too.
+    // allocate_from_space can't be inlined because that would introduce a
+    // circular dependency at compile time.
+    result = allocate_from_space(word_size);
+  }
+  return result;
+}
+```
+
+
+
+The last collection bailed out, we are running out of heap space,
+so we try to allocate the from-space, too.
+
+```cpp
+HeapWord* DefNewGeneration::allocate_from_space(size_t size) {
+  bool should_try_alloc = should_allocate_from_space() || GCLocker::is_active_and_needs_gc();
+
+  // If the Heap_lock is not locked by this thread, this will be called
+  // again later with the Heap_lock held.
+  bool do_alloc = should_try_alloc && (Heap_lock->owned_by_self() || (SafepointSynchronize::is_at_safepoint() && Thread::current()->is_VM_thread()));
+
+  HeapWord* result = nullptr;
+  if (do_alloc) {
+    result = from()->allocate(size);
+  }
+
+  return result;
+}
+```
+这里的flag should_allocate_from_space 的设置是在 DefNewGeneration::gc_epilogue 中设置的 
+
+Check if the heap is approaching full after a collection has been done. 
+Generally the young generation is empty at a minimum at the end of a collection.
+If it is not, then the heap is approaching full.
+
+```cpp
+
+void DefNewGeneration::gc_epilogue(bool full) {
+  DEBUG_ONLY(static bool seen_incremental_collection_failed = false;)
+
+  assert(!GCLocker::is_active(), "We should not be executing here");
+  GenCollectedHeap* gch = GenCollectedHeap::heap();
+  if (full) {
+    DEBUG_ONLY(seen_incremental_collection_failed = false;)
+    if (!collection_attempt_is_safe() && !_eden_space->is_empty()) {
+      gch->set_incremental_collection_failed(); // Slight lie: a full gc left us in that state
+      set_should_allocate_from_space(); // we seem to be running out of space
+    } else {
+      gch->clear_incremental_collection_failed(); // We just did a full collection
+      clear_should_allocate_from_space(); // if set
+    }
+  }
+
+  if (ZapUnusedHeapArea) {
+    eden()->check_mangled_unused_area_complete();
+    from()->check_mangled_unused_area_complete();
+    to()->check_mangled_unused_area_complete();
+  }
+
+  // update the generation and space performance counters
+  update_counters();
+  gch->counters()->update_counters();
+}
+```
+
+
+
+尝试old gen 分配
+
+```cpp
+// tenuredGeneration.inline.hpp
+HeapWord* TenuredGeneration::allocate(size_t word_size,
+                                                 bool is_tlab) {
+  assert(!is_tlab, "TenuredGeneration does not support TLAB allocation");
+  return _the_space->allocate(word_size);
+}
+
+// space.inline.hpp
+inline HeapWord* TenuredSpace::allocate(size_t size) {
+  HeapWord* res = ContiguousSpace::allocate(size);
+  if (res != nullptr) {
+    _offsets.alloc_block(res, size);
+  }
+  return res;
+}
+```
+
+
 
 ### initialize
 
