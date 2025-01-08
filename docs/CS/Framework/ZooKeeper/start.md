@@ -15,7 +15,8 @@ mvn clean install -DskipTest
 
 启动类配置参数 zoo.cfg
 
-直接启动类找不到的话 对provide的依赖 注释provide
+
+> ZooKeeper源码若是因为ClassNotFound导致compile failed，可以确认依赖的scope是provide导致 修改scope
 
 ## Start
 
@@ -543,6 +544,34 @@ submitRequestNow里 touch session
 
 
 
+#### quorumMaj
+
+```java
+public class QuorumMaj implements QuorumVerifier {
+    /**
+     * Defines a majority to avoid computing it every time.
+     */
+    public QuorumMaj(Map<Long, QuorumServer> allMembers) {
+        this.allMembers = allMembers;
+        for (QuorumServer qs : allMembers.values()) {
+            if (qs.type == LearnerType.PARTICIPANT) {
+                votingMembers.put(Long.valueOf(qs.id), qs);
+            } else {
+                observingMembers.put(Long.valueOf(qs.id), qs);
+            }
+        }
+        half = votingMembers.size() / 2;
+    }
+
+    /**
+     * Verifies if a set is a majority. Assumes that ackSet contains acks only
+     * from votingMembers
+     */
+    public boolean containsQuorum(Set<Long> ackSet) {
+        return (ackSet.size() > half);
+    }
+}
+```
 
 
 ### Standalone
