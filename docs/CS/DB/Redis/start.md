@@ -427,7 +427,7 @@ void loadServerConfig(char *filename, char *options) {
 4. open TCP listening socket and Unix domain socket
 5. Create the Redis databases and initialize other internal state
 6. aeCreateTimeEvent
-7. Create an event handler for accepting new connections in TCP and Unix domain sockets
+7. aeCreateFileEvent
 8. Open the AOF file if needed
 9. Set maxmemory = 3GB if 32 bit instances not set maxmemory
 
@@ -488,21 +488,7 @@ void initServer(void) {
     if (server.port != 0 &&
         listenToPort(server.port,server.ipfd,&server.ipfd_count) == C_ERR)
         exit(1);
-    if (server.tls_port != 0 &&
-        listenToPort(server.tls_port,server.tlsfd,&server.tlsfd_count) == C_ERR)
-        exit(1);
-
     /* Open the listening Unix domain socket. */
-    if (server.unixsocket != NULL) {
-        unlink(server.unixsocket); /* don't care if this fails */
-        server.sofd = anetUnixServer(server.neterr,server.unixsocket,
-            server.unixsocketperm, server.tcp_backlog);
-        if (server.sofd == ANET_ERR) {
-            serverLog(LL_WARNING, "Opening Unix socket: %s", server.neterr);
-            exit(1);
-        }
-        anetNonBlock(NULL,server.sofd);
-    }
 
     /* Abort if there are no listening sockets at all. */
     if (server.ipfd_count == 0 && server.tlsfd_count == 0 && server.sofd < 0) {
@@ -955,9 +941,11 @@ ConnectionType CT_Socket = {
     .sync_readline = connSocketSyncReadLine,
     .get_type = connSocketGetType
 };
+```
 
+处理socket read/write的事件 通常先read再write 这样有时候能在处理查询请求的时候马上获取响应
 
-
+```c
 static void connSocketEventHandler(struct aeEventLoop *el, int fd, void *clientData, int mask)
 {
     UNUSED(el);
@@ -981,11 +969,8 @@ static void connSocketEventHandler(struct aeEventLoop *el, int fd, void *clientD
         conn->conn_handler = NULL;
     }
 
-    /* Normally we execute the readable event first, and the writable
-     * event later. This is useful as sometimes we may be able
-     * to serve the reply of a query immediately after processing the
-     * query.
-     *
+    /* 
+    
      * However if WRITE_BARRIER is set in the mask, our application is
      * asking us to do the reverse: never fire the writable event
      * after the readable. In such a case, we invert the calls.
@@ -1092,13 +1077,7 @@ static void acceptCommonHandler(connection *conn, int flags, char *ip) {
 ```c
 client *createClient(connection *conn) {
     client *c = zmalloc(sizeof(client));
-```
 
-passing NULL as conn it is possible to create a non connected client.
-This is useful since all the commands needs to be executed in the context of a client.
-When commands are executed in other contexts (for instance a Lua script) we need a non connected client.
-
-```c
     if (conn) {
         connNonBlock(conn);
         connEnableTcpNoDelay(conn);
@@ -1189,7 +1168,7 @@ void linkClient(client *c) {
 }
 ```
 
-##### aeCreateFileEvent
+### aeCreateFileEvent
 
 The essence of `aeCreateFileEvent` function is to execute [`epoll_ctl`](http://man.cx/epoll_ctl) system call which adds a watch for `EPOLLIN` event on the *listening descriptor* create by `anetTcpServer` and associate it with the `epoll` descriptor created by a call to `aeCreateEventLoop`.
 
@@ -1872,7 +1851,7 @@ int getGenericCommand(client *c) {
 }
 ```
 返回值是通过addReply 返回
- 
+
 ```c
 void addReplyBulk(client *c, robj *obj) {
     addReplyBulkLen(c,obj);

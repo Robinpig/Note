@@ -1,7 +1,5 @@
 ## Introduction
 
-
-
 a simple event-driven programming library
 
 
@@ -74,21 +72,7 @@ The following should be ordered by performances, descending.
 
 `aeCreateEventLoop` first `malloc`s `aeEventLoop` structure then calls `ae_epoll.c:aeApiCreate`.
 
-The definition of `aeEventLoop` is below:
-
-```c
-typedef struct aeEventLoop
-{
-    int maxfd;
-    long long timeEventNextId;
-    aeFileEvent events[AE_SETSIZE]; /* Registered events */
-    aeFiredEvent fired[AE_SETSIZE]; /* Fired events */
-    aeTimeEvent *timeEventHead;
-    int stop;
-    void *apidata; /* This is used for polling API specific data */
-    aeBeforeSleepProc *beforesleep;
-} aeEventLoop;
-```
+InitServer 中调用了 aeCreateEventLoop
 
 `aeApiCreate` `malloc`s `aeApiState` that has two fields - `epfd` that holds the `epoll` file descriptor returned by a call from [`epoll_create`](http://man.cx/epoll_create(2)) and `events` that is of type `struct epoll_event` define by the Linux `epoll` library. The use of the `events` field will be described later.
 
