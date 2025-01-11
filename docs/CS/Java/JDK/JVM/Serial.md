@@ -1,5 +1,11 @@
 ## Introduction
 
+Serial收集器是单线程的串行收集器，其源代码实现相对其他收集器来说比较简单
+可以指定-XX:+UseSerialGC选项使用Serial（年轻代）+Serial Old（老年代）组合进行垃圾回收
+
+Serial收集器只负责年轻代的垃圾回收，触发YGC时一般都是由此收集器负责垃圾回收
+Serial Old收集器也是一个单线程收集器，使用“标记-整理”算法
+Serial Old收集器不但会回收老年代的内存垃圾，也会回收年轻代的内存垃圾，因此一般触发FGC时都是由此收集器负责回收的
 
 
 for Serial and ParNew
@@ -10,6 +16,154 @@ for Serial and ParNew
           "generation; zero means no maximum")                              \
           range(0, max_uintx)                                               \
 ```
+
+
+为了支持高频率的新生代回收，HotSpot VM使用了一种叫作卡表（Card Table）的数据结构。卡表是一个字节的集合，每一个字节可以用来表示老年代某一区域中的所有对象是否持有新生代对象的引用。我们可以根据卡表将堆空间划分为一系列2次幂大小的卡页（Card Page），卡表用于标记卡页的状态，每个卡表项对应一个卡页，HotSpot VM的卡页（Card Page）大小为512字节，卡表为一个简单的字节数组，即卡表的每个标记项为1个字节。
+当老年代中的某个卡页持有了新生代对象的引用时，HotSpot VM就把这个卡页对应的卡表项标记为dirty。这样在进行YGC时，可以不用全量扫描所有老年代对象或不用全量标记所有活跃对象来确定对年轻代对象的引用关系，只需要扫描卡表项为dirty的对应卡页，而卡表项为非dirty的区域一定不包含对新生代的引用。这样可以提高扫描效率，减少YGC的停顿时间。
+
+HotSpot VM使用CardTable类实现卡表的功能，其定义如下
+
+
+
+```cpp
+class CardTable: public CHeapObj<mtGC> {
+  friend class VMStructs;
+public:
+  typedef uint8_t CardValue;
+
+  // All code generators assume that the size of a card table entry is one byte.
+  // They need to be updated to reflect any change to this.
+  // This code can typically be found by searching for the byte_map_base() method.
+  STATIC_ASSERT(sizeof(CardValue) == 1);
+
+protected:
+  // The declaration order of these const fields is important; see the
+  // constructor before changing.
+  const MemRegion _whole_heap;       // the region covered by the card table
+  const size_t    _page_size;        // page size used when mapping _byte_map
+  size_t          _byte_map_size;    // in bytes
+  CardValue*      _byte_map;         // the card marking array
+  CardValue*      _byte_map_base;
+
+  // Some barrier sets create tables whose elements correspond to parts of
+  // the heap; the CardTableBarrierSet is an example.  Such barrier sets will
+  // normally reserve space for such tables, and commit parts of the table
+  // "covering" parts of the heap that are committed. At most one covered
+  // region per generation is needed.
+  static constexpr int max_covered_regions = 2;
+
+  // The covered regions should be in address order.
+  MemRegion _covered[max_covered_regions];
+
+  // The last card is a guard card; never committed.
+  MemRegion _guard_region;
+
+  inline size_t compute_byte_map_size(size_t num_bytes);
+};
+```
+
+
+This RemSet uses a card table both as shared data structure for a mod ref barrier set and for the rem set information.
+
+
+
+```cpp
+// 
+
+class CardTableRS : public CardTable {
+  friend class VMStructs;
+  // Below are private classes used in impl.
+  friend class VerifyCTSpaceClosure;
+  friend class ClearNoncleanCardWrapper;
+
+  void verify_space(Space* s, HeapWord* gen_start);
+
+public:
+  CardTableRS(MemRegion whole_heap);
+
+  void younger_refs_in_space_iterate(TenuredSpace* sp, OopIterateClosure* cl);
+
+  virtual void verify_used_region_at_save_marks(Space* sp) const NOT_DEBUG_RETURN;
+
+  void inline_write_ref_field_gc(void* field) {
+    CardValue* byte = byte_for(field);
+    *byte = dirty_card_val();
+  }
+
+  bool is_aligned(HeapWord* addr) {
+    return is_card_aligned(addr);
+  }
+
+  void verify();
+
+  // Update old gen cards to maintain old-to-young-pointer invariant: Clear
+  // the old generation card table completely if the young generation had been
+  // completely evacuated, otherwise dirties the whole old generation to
+  // conservatively not loose any old-to-young pointer.
+  void maintain_old_to_young_invariant(Generation* old_gen, bool is_young_gen_empty);
+
+  // Iterate over the portion of the card-table which covers the given
+  // region mr in the given space and apply cl to any dirty sub-regions
+  // of mr. Clears the dirty cards as they are processed.
+  void non_clean_card_iterate(TenuredSpace* sp,
+                              MemRegion mr,
+                              OopIterateClosure* cl,
+                              CardTableRS* ct);
+
+  bool is_in_young(const void* p) const override;
+};
+```
+
+
+```cpp
+CardTableRS::CardTableRS(MemRegion whole_heap) :
+  CardTable(whole_heap) { }
+
+CardTable::CardTable(MemRegion whole_heap) :
+  _whole_heap(whole_heap),
+  _page_size(os::vm_page_size()),
+  _byte_map_size(0),
+  _byte_map(nullptr),
+  _byte_map_base(nullptr),
+  _guard_region()
+{
+  assert((uintptr_t(_whole_heap.start())  & (_card_size - 1))  == 0, "heap must start at card boundary");
+  assert((uintptr_t(_whole_heap.end()) & (_card_size - 1))  == 0, "heap must end at card boundary");
+}
+```
+
+卡表只能粗粒度地表示某个对象中引用域地址所在的卡页，并不能通过卡表完成卡页中引用域的遍历，因此在实际情况下只能描述整个卡页中包含的对象，然后扫描对象中的引用域
+
+
+One implementation of "BlockOffsetTable," the BlockOffsetArray, divides the covered region into "N"-word subregions (where "N" = 2^"LogN".  An array with an entry for each such subregion indicates how far back one must go to find the start of the chunk that includes the first word of the subregion.
+
+Each BlockOffsetArray is owned by a Space.  However, the actual array may be shared by several BlockOffsetArrays; this is useful when a single resizable area (such as a generation) is divided up into several spaces in which contiguous allocation takes place.  (Consider, for example, the garbage-first generation.)
+
+```cpp
+class BlockOffsetSharedArray: public CHeapObj<mtGC> {
+ private:
+  bool _init_to_zero;
+
+  // The reserved region covered by the shared array.
+  MemRegion _reserved;
+
+  // End of the current committed region.
+  HeapWord* _end;
+
+  // Array for keeping offsets for retrieving object start fast given an
+  // address.
+  VirtualSpace _vs;
+  u_char* _offset_array;          // byte array keeping backwards offsets
+
+  void fill_range(size_t start, size_t num_cards, u_char offset) {
+    void* start_ptr = &_offset_array[start];
+    // If collector is concurrent, special handling may be needed.
+    G1GC_ONLY(assert(!UseG1GC, "Shouldn't be here when using G1");)
+    memset(start_ptr, offset, num_cards);
+  }
+};
+```
+
 
 
 ## New collect
