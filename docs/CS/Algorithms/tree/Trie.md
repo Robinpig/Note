@@ -1,8 +1,47 @@
 ## Introduction
 
-In computer science, a trie, also called digital tree or prefix tree, is a type of k-ary search tree, a tree data structure used for locating specific keys from within a set.
-These keys are most often strings, with links between nodes defined not by the entire key, but by individual characters.
-In order to access a key (to recover its value, change it, or remove it), the trie is traversed depth-first, following the links between nodes, which represent each character in the key.
+In computer science, a trie, also known as a digital tree or prefix tree, 
+is a specialized search tree data structure used to store and retrieve strings from a dictionary or set. 
+Unlike a [binary search tree](/docs/CS/Algorithms/tree/Binary-Tree.md), nodes in a trie do not store their associated key. 
+Instead, each node's position within the trie determines its associated key, 
+with the connections between nodes defined by individual characters rather than the entire key.
+
+Tries are particularly effective for tasks such as autocomplete, spell checking, and IP routing, 
+offering advantages over hash tables due to their prefix-based organization and lack of hash collisions. 
+Every child node shares a common prefix with its parent node, and the root node represents the empty string.
+While basic trie implementations can be memory-intensive, 
+various optimization techniques such as compression and bitwise representations have been developed to improve their efficiency. 
+A notable optimization is the [radix tree](/docs/CS/Algorithms/tree/Radix.md) , which provides more efficient prefix-based storage.
+
+While tries commonly store character strings, they can be adapted to work with any ordered sequence of elements, such as permutations of digits or shapes.
+A notable variant is the bitwise trie, which uses individual bits from fixed-length binary data (such as integers or memory addresses) as keys.
+
+
+
+Time complexity in big O notation
+
+| Operation | 	Average  | 	Worst case |
+| --- |-----------|-------------|
+| Search	| O(n)	| O(n)        |
+| Insert	| O(n)	| O(n)        |
+| Delete	| O(n)	| O(n)        |
+
+Space complexity
+
+|   |	Average |	Worst case |
+| --- | --- | --- |
+| Space |	O(n) |	O(n) |
+
+
+<div style="text-align: center;">
+
+![](https://upload.wikimedia.org/wikipedia/commons/thumb/b/be/Trie_example.svg/500px-Trie_example.svg.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. Trie
+</p>
 
 ```java
 public class TrieNode {
