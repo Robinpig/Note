@@ -11,7 +11,7 @@ offering advantages over hash tables due to their prefix-based organization and 
 Every child node shares a common prefix with its parent node, and the root node represents the empty string.
 While basic trie implementations can be memory-intensive, 
 various optimization techniques such as compression and bitwise representations have been developed to improve their efficiency. 
-A notable optimization is the radix tree, which provides more efficient prefix-based storage.
+A notable optimization is the [radix tree](/docs/CS/Algorithms/tree/Radix.md) , which provides more efficient prefix-based storage.
 
 While tries commonly store character strings, they can be adapted to work with any ordered sequence of elements, such as permutations of digits or shapes.
 A notable variant is the bitwise trie, which uses individual bits from fixed-length binary data (such as integers or memory addresses) as keys.
