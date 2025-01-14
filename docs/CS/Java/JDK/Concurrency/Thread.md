@@ -1642,6 +1642,16 @@ Preemptive Threads-Scheduling
 
 Virtual Thread
 
+
+## Tuning
+
+现象： 线程阻塞
+
+手段： jstack查看线程堆栈 可以grep出启动main线程 查看是 parking在哪里
+比如 线程池 Druid获取连接 例如某处执行sql时需要获取连接 但是此时是数据库组件未初始化完成之前 此时阻塞在DruidDataSource.getConnection()
+
+
+
 ## Links
 - [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
 - [JVM Thread](/docs/CS/Java/JDK/JVM/Thread.md)
