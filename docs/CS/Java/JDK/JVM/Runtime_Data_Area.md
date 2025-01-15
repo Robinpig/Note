@@ -27,6 +27,32 @@ The memory for the heap does not need to be contiguous.
 
 If a computation requires more heap than can be made available by the automatic storage management system, the Java Virtual Machine throws an `OutOfMemoryError`.
 
+
+在VM启动时 初始化TLAB前初始化heap
+具体实现由不同的collector
+```cpp
+// universe.cpp
+jint universe_init() {
+    GCConfig::arguments()->initialize_heap_sizes();
+
+    jint status = Universe::initialize_heap();
+    if (status != JNI_OK) {
+        return status;
+    }
+    //  ...
+}
+
+jint Universe::initialize_heap() {
+  assert(_collectedHeap == nullptr, "Heap already created");
+  _collectedHeap = GCConfig::arguments()->create_heap();
+
+  log_info(gc)("Using %s", _collectedHeap->name());
+  return _collectedHeap->initialize();
+}
+```
+
+
+
 ### new instance
 
 Allocate the instance:

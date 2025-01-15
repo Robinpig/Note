@@ -176,9 +176,232 @@ class VM_Operation: public CHeapObj<mtInternal> {
 }
 ```
 
+
+## NonJavaThread
+
+
+```cpp
+class NonJavaThread: public Thread {
+  friend class VMStructs;
+
+  NonJavaThread* volatile _next;
+
+  class List;
+  static List _the_list;
+
+  void add_to_the_list();
+  void remove_from_the_list();
+
+ protected:
+  virtual void pre_run();
+  virtual void post_run();
+
+ public:
+  NonJavaThread();
+  ~NonJavaThread();
+
+  class Iterator;
+};
+```
+
+
+```cpp
+// A base class for non-JavaThread subclasses with multiple
+// uniquely named instances. NamedThreads also provide a common
+// location to store GC information needed by GC threads
+// and the VMThread.
+class NamedThread: public NonJavaThread {
+  friend class VMStructs;
+  enum {
+    max_name_len = 64
+  };
+ private:
+  char* _name;
+  // log Thread being processed by oops_do
+  Thread* _processed_thread;
+  uint _gc_id; // The current GC id when a thread takes part in GC
+
+ public:
+  NamedThread();
+  ~NamedThread();
+  // May only be called once per thread.
+  void set_name(const char* format, ...)  ATTRIBUTE_PRINTF(2, 3);
+  virtual bool is_Named_thread() const { return true; }
+  virtual const char* name() const { return _name == nullptr ? "Unknown Thread" : _name; }
+  virtual const char* type_name() const { return "NamedThread"; }
+  Thread *processed_thread() { return _processed_thread; }
+  void set_processed_thread(Thread *thread) { _processed_thread = thread; }
+  virtual void print_on(outputStream* st) const;
+
+  void set_gc_id(uint gc_id) { _gc_id = gc_id; }
+  uint gc_id() { return _gc_id; }
+};
+```
+
+
+
+
 ## VMThread
 
-Created when [create_vm](/docs/CS/Java/JDK/JVM/start.md?id=create_vm) and wait for VMOperations.
+A single VMThread is used by other threads to offload heavy vm operations like scavenge, garbage_collect etc.
+
+```cpp
+class VMThread: public NamedThread {
+ private:
+  volatile bool _is_running;
+
+  static ThreadPriority _current_priority;
+
+  static bool _should_terminate;
+  static bool _terminated;
+  static Monitor * _terminate_lock;
+  static PerfCounter* _perf_accumulated_vm_operation_time;
+
+  static VMOperationTimeoutTask* _timeout_task;
+
+  static bool handshake_alot();
+  static void setup_periodic_safepoint_if_needed();
+
+  void evaluate_operation(VM_Operation* op);
+  void inner_execute(VM_Operation* op);
+  void wait_for_operation();
+
+  // Constructor
+  VMThread();
+
+  // No destruction allowed
+  ~VMThread() {
+    guarantee(false, "VMThread deletion must fix the race with VM termination");
+  }
+
+  // The ever running loop for the VMThread
+  void loop();
+
+ public:
+  bool is_running() const { return Atomic::load(&_is_running); }
+
+  // Tester
+  bool is_VM_thread() const                      { return true; }
+
+  // Called to stop the VM thread
+  static void wait_for_vm_thread_exit();
+  static bool should_terminate()                  { return _should_terminate; }
+  static bool is_terminated()                     { return _terminated == true; }
+
+  // Execution of vm operation
+  static void execute(VM_Operation* op);
+
+  // Returns the current vm operation if any.
+  static VM_Operation* vm_operation()             {
+    assert(Thread::current()->is_VM_thread(), "Must be");
+    return _cur_vm_operation;
+  }
+
+  static VM_Operation::VMOp_Type vm_op_type()     {
+    VM_Operation* op = vm_operation();
+    assert(op != nullptr, "sanity");
+    return op->type();
+  }
+
+  // Returns the single instance of VMThread.
+  static VMThread* vm_thread()                    { return _vm_thread; }
+
+  void verify();
+
+  // Performance measurement
+  static PerfCounter* perf_accumulated_vm_operation_time() {
+    return _perf_accumulated_vm_operation_time;
+  }
+
+  // Entry for starting vm thread
+  virtual void run();
+
+  // Creations/Destructions
+  static void create();
+  static void destroy();
+
+  static void wait_until_executed(VM_Operation* op);
+
+  // Printing
+  const char* type_name() const { return "VMThread"; }
+
+ private:
+  // VM_Operation support
+  static VM_Operation*     _cur_vm_operation;   // Current VM operation
+  static VM_Operation*     _next_vm_operation;  // Next VM operation
+
+  bool set_next_operation(VM_Operation *op);    // Set the _next_vm_operation if possible.
+
+  // Pointer to single-instance of VM thread
+  static VMThread*     _vm_thread;
+};
+```
+
+
+Created one VMThread when [create_vm](/docs/CS/Java/JDK/JVM/start.md?id=create_vm) and wait for VMOperations.
+
+```cpp
+jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
+    // Create the VMThread
+    { 
+        TraceTime timer("Start VMThread", TRACETIME_LOG(Info, startuptime));
+
+        VMThread::create();
+        VMThread* vmthread = VMThread::vm_thread();
+
+        if (!os::create_thread(vmthread, os::vm_thread)) {
+            vm_exit_during_initialization("Cannot create VM thread. "
+                "Out of system resources.");
+        }
+
+        // Wait for the VM thread to become ready, and VMThread::run to initialize
+        // Monitors can have spurious returns, must always check another state flag
+        {
+            MonitorLocker ml(Notify_lock);
+            os::start_thread(vmthread);
+            while (!vmthread->is_running()) {
+                ml.wait();
+            }
+        }
+    }
+}
+```
+
+
+```cpp
+jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
+    // Create the VMThread
+    { 
+        TraceTime timer("Start VMThread", TRACETIME_LOG(Info, startuptime));
+
+        VMThread::create();
+        VMThread* vmthread = VMThread::vm_thread();
+
+        if (!os::create_thread(vmthread, os::vm_thread)) {
+            vm_exit_during_initialization("Cannot create VM thread. "
+                "Out of system resources.");
+        }
+
+        // Wait for the VM thread to become ready, and VMThread::run to initialize
+        // Monitors can have spurious returns, must always check another state flag
+        {
+            MonitorLocker ml(Notify_lock);
+            os::start_thread(vmthread);
+            while (!vmthread->is_running()) {
+                ml.wait();
+            }
+        }
+    }
+}
+```
+
+
+
+
+
+
+JavaThread会通过执行VMThread::execute()函数把相关操作放到队列中，然后由VMThread在run()函数中轮询队列并获取任务
+
 
 ### VMThread::run
 
