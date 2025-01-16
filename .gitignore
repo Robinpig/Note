@@ -39,3 +39,8 @@ replay_pid*.log
 
 
 **/*.java
+
+# exclude node files
+/node_modules/*
+/package.json
+/package-lock.json

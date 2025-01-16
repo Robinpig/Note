@@ -154,7 +154,7 @@ reset后重启
 netsh int ip reset
 ```
 
-<!-- tabs:start -->
+<!-- tabs:end -->
 
 
 Docker builds containers using 10 major system features.
