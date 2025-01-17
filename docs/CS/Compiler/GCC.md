@@ -86,7 +86,7 @@ size xx.o
 
 ```
 
-有许多工具可以完成对ELF文件的探索查看，如readelf、objdump
+有许多工具可以完成对ELF文件的探索查看，如[binutils](https://www.gnu.org/software/binutils/) 中的readelf、objdump
 
 use objdump
 
@@ -98,6 +98,13 @@ objdump -s -d xx.o
 ```shell
 readelf -a xx.o
 ```
+
+[MACOS](/docs/CS/OS/mac/Tools/Tools.md)下安装binutils 工具
+
+```shell
+sudo port install binutils
+```
+
 
 
 
