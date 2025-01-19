@@ -56,9 +56,7 @@ struct proghdr {
 ## Links
 
 - [xv6](/docs/CS/OS/xv6/xv6.md)
-- [GCC](/docs/CS/Compiler/GCC.md)
+- [ELF](/docs/CS/Compiler/ELF.md)
 
 
 ## References
-
-1. [The 101 of ELF files on Linux: Understanding and Analysis](https://linux-audit.com/elf-binaries-on-linux-understanding-and-analysis/)

@@ -12,6 +12,11 @@ Go是一种新的语言，一种并发的、带垃圾回收的、快速编译的
 >[Go Wiki: Go Code Review Comments - The Go Programming Language](https://go.dev/wiki/CodeReviewComments)
 
 ## Config
+
+>  [Download and install Go](https://golang.google.cn/doc/install)
+
+
+
 Go mod是package和其dependencies的集合 是构建 版本控制和管理的单元
  package是同一路径导入文件的集合 通常package名和目录名相同
 
