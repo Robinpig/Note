@@ -514,6 +514,21 @@ public class DispatcherServlet extends FrameworkServlet {
 11. writeWithMessageConverter
 
 
+## Advice
+
+ContollerAdvice只能拦截控制器中的异常，换言之，只能拦截500之类的异常，但是对于404这样不会进入控制器处理的异常不起作用
+springboot会将所有的异常发送到路径为server.error.path（application.properties中可配置，默认为”/error”）的控制器方法中进行处理，
+
+通过重写AbstractErrorController 自定义异常处理
+
+```java
+@Controller
+@RequestMapping("/server/error")
+public class CustomErrHandleController extends AbstractErrorController
+{
+}
+```
+
 
 ## Chain
  
