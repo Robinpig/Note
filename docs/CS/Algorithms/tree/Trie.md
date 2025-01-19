@@ -120,6 +120,17 @@ private boolean delete(TrieNode current, String word, int index) {
 }
 ```
 
+
+
+
+
+Tries containing few long strings perform worse than BSTs
+Many nodes have one child!
+Long chains of nodes without any branching
+Radix trees are a refinement of tries that only introduce nodes when branching is neede
+
+
+
 ## Links
 
 - [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
