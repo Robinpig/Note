@@ -348,8 +348,6 @@ public class ClassLoaderDataGraph {
 
 ```cpp
 // ClassLoaderDataGraph.cpp
-// These functions assume that the caller has locked the ClassLoaderDataGraph_lock
-// if they are not calling the function from a safepoint.
 void ClassLoaderDataGraph::classes_do(KlassClosure* klass_closure) {
   ClassLoaderDataGraphIterator iter;
   while (ClassLoaderData* cld = iter.get_next()) {
