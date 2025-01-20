@@ -138,7 +138,7 @@ Fig.1. ZooKeeper's Hierarchical Namespace.
 </p>
 
 
-Zookeeper的这种层次模型称作DataTree DataTree的每个节点叫作ZNode
+Zookeeper的这种层次模型称作DataTree 
 
 ```java
 
@@ -157,28 +157,14 @@ public class ZKDatabase {
 }
 ```
 
-
+DataTree的每个节点叫作ZNode
 ```java
 public class DataTree {
-    /**
-     * This map provides a fast lookup to the data nodes. The tree is the
-     * source of truth and is where all the locking occurs
-     */
     private final NodeHashMap nodes;
 
     private IWatchManager dataWatches;
 
     private IWatchManager childWatches;
-}
-
-
-public class NodeHashMapImpl implements NodeHashMap {
-
-    private final ConcurrentHashMap<String, DataNode> nodes;
-    private final boolean digestEnabled;
-    private final DigestCalculator digestCalculator;
-
-    private final AdHash hash;
 }
 ```
 
@@ -232,15 +218,11 @@ ZooKeeper 的每个 ZNode 上都会存储数据，对应于每个 ZNode，ZooKee
 
 ```java
 public class DataTree {
-    /**
-     * This map provides a fast lookup to the data nodes. The tree is the
-     * source of truth and is where all the locking occurs
-     */
     private final NodeHashMap nodes;
 }
 ```
 
-a simple wrapper to ConcurrentHashMap that recalculates a digest after each mutation.
+DataTree 的所有path都被保存在一个哈希表中，path到DataNode的映射关系是一一对应，因此我们可以通过path在 O(1) 时间复杂度内找到对应的DataNode，这样就能够保证数据的快速查询
 
 ```java
   public class NodeHashMapImpl implements NodeHashMap {
@@ -260,7 +242,7 @@ A data node contains a reference to its parent, a byte array as its data, an arr
 
 ZNode 由五部分组成：path、data、stat、acl、children，其中path是以/开始的全路径，剩余的四部分都存储在一个独立的DataNode数据结构中：data是 ZNode 的数据，stat是 ZNode 的元数据如版本号、数据长度等，acl是 ZNode 的权限控制，children是 ZNode 的子节点集合，同时DataNode也包含了一些辅助方法，比如getChildren、getData、setData等，用于操作 ZNode 的数据
 
-DataTree 的所有path都被保存在一个哈希表中，path到DataNode的映射关系是一一对应，因此我们可以通过path在 O(1) 时间复杂度内找到对应的DataNode，这样就能够保证数据的快速查询
+
 
 ```java
 @SuppressFBWarnings({"EI_EXPOSE_REP", "EI_EXPOSE_REP2"})
@@ -271,6 +253,12 @@ public class DataNode implements Record {
     private Set<String> children = null;
 }
 ```
+
+
+
+
+
+
 
 #### Ephemeral
 
@@ -624,7 +612,7 @@ When the session ends the znode is deleted. Because of this behavior ephemeral z
 使用这两个监听器可以分别为节点路径添加监听器在合适的场景下来触发监听，当然也可以移除已添加路径的监听器
 
 
- 
+
 
 ```java
 public class DataTree {
