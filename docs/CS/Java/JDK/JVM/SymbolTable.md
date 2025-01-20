@@ -20,6 +20,12 @@ class SymbolTable : public AllStatic {
   static volatile bool _needs_rehashing;
 
 };
+
+typedef ConcurrentHashTable<SymbolTableConfig, mtSymbol> SymbolTableHash;
+static SymbolTableHash* _local_table = nullptr;
+
+volatile bool SymbolTable::_has_work = 0;
+volatile bool SymbolTable::_needs_rehashing = false;
 ```
 
 

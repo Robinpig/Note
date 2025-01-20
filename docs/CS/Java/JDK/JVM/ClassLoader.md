@@ -594,6 +594,293 @@ Methods
 }
 ```
 
+
+
+parse_constant_pool
+
+
+
+```c++
+
+void ClassFileParser::parse_constant_pool_entries(const ClassFileStream* const stream,
+                                                  ConstantPool* cp,
+                                                  const int length,
+                                                  TRAPS) {
+  assert(stream != nullptr, "invariant");
+  assert(cp != nullptr, "invariant");
+
+  // Use a local copy of ClassFileStream. It helps the C++ compiler to optimize
+  // this function (_current can be allocated in a register, with scalar
+  // replacement of aggregates). The _current pointer is copied back to
+  // stream() when this function returns. DON'T call another method within
+  // this method that uses stream().
+  const ClassFileStream cfs1 = *stream;
+  const ClassFileStream* const cfs = &cfs1;
+
+  debug_only(const u1* const old_current = stream->current();)
+
+  // Used for batching symbol allocations.
+  const char* names[SymbolTable::symbol_alloc_batch_size];
+  int lengths[SymbolTable::symbol_alloc_batch_size];
+  int indices[SymbolTable::symbol_alloc_batch_size];
+  unsigned int hashValues[SymbolTable::symbol_alloc_batch_size];
+  int names_count = 0;
+
+  // parsing  Index 0 is unused
+  for (int index = 1; index < length; index++) {
+    // Each of the following case guarantees one more byte in the stream
+    // for the following tag or the access_flags following constant pool,
+    // so we don't need bounds-check for reading tag.
+    const u1 tag = cfs->get_u1_fast();
+    switch (tag) {
+      case JVM_CONSTANT_Class : {
+        cfs->guarantee_more(3, CHECK);  // name_index, tag/access_flags
+        const u2 name_index = cfs->get_u2_fast();
+        cp->klass_index_at_put(index, name_index);
+        break;
+      }
+      case JVM_CONSTANT_Fieldref: {
+        cfs->guarantee_more(5, CHECK);  // class_index, name_and_type_index, tag/access_flags
+        const u2 class_index = cfs->get_u2_fast();
+        const u2 name_and_type_index = cfs->get_u2_fast();
+        cp->field_at_put(index, class_index, name_and_type_index);
+        break;
+      }
+      case JVM_CONSTANT_Methodref: {
+        cfs->guarantee_more(5, CHECK);  // class_index, name_and_type_index, tag/access_flags
+        const u2 class_index = cfs->get_u2_fast();
+        const u2 name_and_type_index = cfs->get_u2_fast();
+        cp->method_at_put(index, class_index, name_and_type_index);
+        break;
+      }
+      case JVM_CONSTANT_InterfaceMethodref: {
+        cfs->guarantee_more(5, CHECK);  // class_index, name_and_type_index, tag/access_flags
+        const u2 class_index = cfs->get_u2_fast();
+        const u2 name_and_type_index = cfs->get_u2_fast();
+        cp->interface_method_at_put(index, class_index, name_and_type_index);
+        break;
+      }
+      case JVM_CONSTANT_String : {
+        cfs->guarantee_more(3, CHECK);  // string_index, tag/access_flags
+        const u2 string_index = cfs->get_u2_fast();
+        cp->string_index_at_put(index, string_index);
+        break;
+      }
+      case JVM_CONSTANT_MethodHandle :
+      case JVM_CONSTANT_MethodType: {
+        if (_major_version < Verifier::INVOKEDYNAMIC_MAJOR_VERSION) {
+          classfile_parse_error(
+            "Class file version does not support constant tag %u in class file %s",
+            tag, THREAD);
+          return;
+        }
+        if (tag == JVM_CONSTANT_MethodHandle) {
+          cfs->guarantee_more(4, CHECK);  // ref_kind, method_index, tag/access_flags
+          const u1 ref_kind = cfs->get_u1_fast();
+          const u2 method_index = cfs->get_u2_fast();
+          cp->method_handle_index_at_put(index, ref_kind, method_index);
+        }
+        else if (tag == JVM_CONSTANT_MethodType) {
+          cfs->guarantee_more(3, CHECK);  // signature_index, tag/access_flags
+          const u2 signature_index = cfs->get_u2_fast();
+          cp->method_type_index_at_put(index, signature_index);
+        }
+        else {
+          ShouldNotReachHere();
+        }
+        break;
+      }
+      case JVM_CONSTANT_Dynamic : {
+        if (_major_version < Verifier::DYNAMICCONSTANT_MAJOR_VERSION) {
+          classfile_parse_error(
+              "Class file version does not support constant tag %u in class file %s",
+              tag, THREAD);
+          return;
+        }
+        cfs->guarantee_more(5, CHECK);  // bsm_index, nt, tag/access_flags
+        const u2 bootstrap_specifier_index = cfs->get_u2_fast();
+        const u2 name_and_type_index = cfs->get_u2_fast();
+        if (_max_bootstrap_specifier_index < (int) bootstrap_specifier_index) {
+          _max_bootstrap_specifier_index = (int) bootstrap_specifier_index;  // collect for later
+        }
+        cp->dynamic_constant_at_put(index, bootstrap_specifier_index, name_and_type_index);
+        break;
+      }
+      case JVM_CONSTANT_InvokeDynamic : {
+        if (_major_version < Verifier::INVOKEDYNAMIC_MAJOR_VERSION) {
+          classfile_parse_error(
+              "Class file version does not support constant tag %u in class file %s",
+              tag, THREAD);
+          return;
+        }
+        cfs->guarantee_more(5, CHECK);  // bsm_index, nt, tag/access_flags
+        const u2 bootstrap_specifier_index = cfs->get_u2_fast();
+        const u2 name_and_type_index = cfs->get_u2_fast();
+        if (_max_bootstrap_specifier_index < (int) bootstrap_specifier_index) {
+          _max_bootstrap_specifier_index = (int) bootstrap_specifier_index;  // collect for later
+        }
+        cp->invoke_dynamic_at_put(index, bootstrap_specifier_index, name_and_type_index);
+        break;
+      }
+      case JVM_CONSTANT_Integer: {
+        cfs->guarantee_more(5, CHECK);  // bytes, tag/access_flags
+        const u4 bytes = cfs->get_u4_fast();
+        cp->int_at_put(index, (jint)bytes);
+        break;
+      }
+      case JVM_CONSTANT_Float: {
+        cfs->guarantee_more(5, CHECK);  // bytes, tag/access_flags
+        const u4 bytes = cfs->get_u4_fast();
+        cp->float_at_put(index, *(jfloat*)&bytes);
+        break;
+      }
+      case JVM_CONSTANT_Long: {
+        // A mangled type might cause you to overrun allocated memory
+        guarantee_property(index + 1 < length,
+                           "Invalid constant pool entry %u in class file %s",
+                           index,
+                           CHECK);
+        cfs->guarantee_more(9, CHECK);  // bytes, tag/access_flags
+        const u8 bytes = cfs->get_u8_fast();
+        cp->long_at_put(index, bytes);
+        index++;   // Skip entry following eigth-byte constant, see JVM book p. 98
+        break;
+      }
+      case JVM_CONSTANT_Double: {
+        // A mangled type might cause you to overrun allocated memory
+        guarantee_property(index+1 < length,
+                           "Invalid constant pool entry %u in class file %s",
+                           index,
+                           CHECK);
+        cfs->guarantee_more(9, CHECK);  // bytes, tag/access_flags
+        const u8 bytes = cfs->get_u8_fast();
+        cp->double_at_put(index, *(jdouble*)&bytes);
+        index++;   // Skip entry following eigth-byte constant, see JVM book p. 98
+        break;
+      }
+      case JVM_CONSTANT_NameAndType: {
+        cfs->guarantee_more(5, CHECK);  // name_index, signature_index, tag/access_flags
+        const u2 name_index = cfs->get_u2_fast();
+        const u2 signature_index = cfs->get_u2_fast();
+        cp->name_and_type_at_put(index, name_index, signature_index);
+        break;
+      }
+      case JVM_CONSTANT_Utf8 : {
+        cfs->guarantee_more(2, CHECK);  // utf8_length
+        u2  utf8_length = cfs->get_u2_fast();
+        const u1* utf8_buffer = cfs->current();
+        assert(utf8_buffer != nullptr, "null utf8 buffer");
+        // Got utf8 string, guarantee utf8_length+1 bytes, set stream position forward.
+        cfs->guarantee_more(utf8_length+1, CHECK);  // utf8 string, tag/access_flags
+        cfs->skip_u1_fast(utf8_length);
+
+        // Before storing the symbol, make sure it's legal
+        if (_need_verify) {
+          verify_legal_utf8(utf8_buffer, utf8_length, CHECK);
+        }
+
+        unsigned int hash;
+        Symbol* const result = SymbolTable::lookup_only((const char*)utf8_buffer,
+                                                        utf8_length,
+                                                        hash);
+        if (result == nullptr) {
+          names[names_count] = (const char*)utf8_buffer;
+          lengths[names_count] = utf8_length;
+          indices[names_count] = index;
+          hashValues[names_count++] = hash;
+          if (names_count == SymbolTable::symbol_alloc_batch_size) {
+            SymbolTable::new_symbols(_loader_data,
+                                     constantPoolHandle(THREAD, cp),
+                                     names_count,
+                                     names,
+                                     lengths,
+                                     indices,
+                                     hashValues);
+            names_count = 0;
+          }
+        } else {
+          cp->symbol_at_put(index, result);
+        }
+        break;
+      }
+      case JVM_CONSTANT_Module:
+      case JVM_CONSTANT_Package: {
+        // Record that an error occurred in these two cases but keep parsing so
+        // that ACC_Module can be checked for in the access_flags.  Need to
+        // throw NoClassDefFoundError in that case.
+        if (_major_version >= JAVA_9_VERSION) {
+          cfs->guarantee_more(3, CHECK);
+          cfs->get_u2_fast();
+          set_class_bad_constant_seen(tag);
+          break;
+        }
+      }
+      default: {
+        classfile_parse_error("Unknown constant tag %u in class file %s",
+                              tag,
+                              THREAD);
+        return;
+      }
+    } // end of switch(tag)
+  } // end of for
+
+  // Allocate the remaining symbols
+  if (names_count > 0) {
+    SymbolTable::new_symbols(_loader_data,
+                             constantPoolHandle(THREAD, cp),
+                             names_count,
+                             names,
+                             lengths,
+                             indices,
+                             hashValues);
+  }
+
+  // Copy _current pointer of local copy back to stream.
+  assert(stream->current() == old_current, "non-exclusive use of stream");
+  stream->set_current(cfs1.current());
+
+}
+```
+
+
+
+在 `ConstantPool::resolve_constant_at_impl` 时调用
+
+```c++
+oop ConstantPool::string_at_impl(const constantPoolHandle& this_cp, int which, int obj_index, TRAPS) {
+  // If the string has already been interned, this entry will be non-null
+  oop str = this_cp->resolved_reference_at(obj_index);
+  assert(str != Universe::the_null_sentinel(), "");
+  if (str != nullptr) return str;
+  Symbol* sym = this_cp->unresolved_string_at(which);
+  str = StringTable::intern(sym, CHECK_(nullptr));
+  this_cp->string_at_put(which, obj_index, str);
+  assert(java_lang_String::is_instance(str), "must be string");
+  return str;
+}
+
+```
+
+
+
+
+
+
+
+
+
+```c++
+oop ConstantPool::resolved_reference_at(int index) const {
+  oop result = resolved_references()->obj_at(index);
+  assert(oopDesc::is_oop_or_null(result), "Must be oop");
+  return result;
+}
+```
+
+
+
+
+
 ### create_instance_klass
 
 1. [InstanceKlass::allocate_instance_klass](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=allocate_instance_klass)

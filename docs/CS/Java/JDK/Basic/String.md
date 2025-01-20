@@ -48,19 +48,19 @@ StringConcatFactory.makeConcatWithConstants是公开API，可以用来动态生�
 4. 使用byte[]无拷贝的方式构造String对象。
 
 这样的实现，和使用StringBuilder相比，减少了StringBuilder以及StringBuilder内部byte[]对象的分配，可以减轻GC的负担。也能避免可能产生的StringBuilder在latin1编码到UTF16时的数组拷贝。
-   
+
 StringBuilder缺省编码是LATIN1(ISO_8859_1)，如果append过程中遇到UTF16编码，会有一个将LATIN1转换为UTF16的动作，这个动作实现的方法是inflate。
 如果拼接的参数如果是带中文的字符串，使用StringBuilder还会多一次数组拷贝
 StringConcatFactory.makeConcatWithConstants是MethodHandles实现的。
 MethodHandle可以是一个方法引用，MethodHandles可以对MethodHandle做各种转换，包括过滤参数（filterAgument），参数折叠（foldArgument）、添加参数（insertArguments），最终生成的MethodHandle可以被认为是一个语法树。
 MethodHandles API功能强大，甚至可以认为它是图灵完备的。
 当然也有缺点，复杂的MethodHandle TreeExpress会生成大量中的中间类，JIT的开销也较大。
-   
+
 StringConcatFactory.makeConcatWithConstants通过MethodHandles动态构建一个MethodHandle调用StringConcatHelper的方法，组装一个MethodHandle实现无拷贝的字符拼接实现
-   
+
 这种动态生成MethodHandle表达式在参数个数较多时，会遇到问题，它会生成大量中间转换类，并且生成MethodHandle消耗比较大，
 极端情况下，C2优化器需要高达2G的内存来编译复杂的字符串拼接 ( https://github.com/openjdk/jdk/pull/18953 )，因此JDK 23引入了JVM启动参数java.lang.invoke.StringConcat.highArityThreshold，缺省值为20，当超过这个阈值时，使用StringBuilder实现
-   
+
 除了参数个数较多时编译消耗资源多之外，MethodHandle表达式还有启动速度比较慢的问题
 
 ```java
@@ -115,7 +115,6 @@ Returns a hash code for this string. The hash code for a String object is comput
 
 $$
 *s[0]*31^(n-1) + s[1]*31^(n-2) + ... + s[n-1]*
-
 $$
 
 Using int arithmetic, where s[i] is the ith character of the string, n is the length of the string, and ^ indicates exponentiation. (The hash value of the empty string is zero.)
@@ -243,6 +242,51 @@ HashTable size:
 ```shell
 jcmd <pid> VM.stringtable
 ```
+
+
+
+
+
+```c++
+class StringTable : public CHeapObj<mtSymbol>{
+  friend class VMStructs;
+  friend class Symbol;
+  friend class StringTableConfig;
+  friend class StringTableCreateEntry;
+
+  static volatile bool _has_work;
+
+  // Set if one bucket is out of balance due to hash algorithm deficiency
+  static volatile bool _needs_rehashing;
+
+  static OopStorage* _oop_storage;
+
+};
+```
+
+
+
+在 start JVM 时创建
+
+```c++
+
+void StringTable::create_table() {
+  size_t start_size_log_2 = ceil_log2(StringTableSize);
+  _current_size = ((size_t)1) << start_size_log_2;
+  log_trace(stringtable)("Start size: " SIZE_FORMAT " (" SIZE_FORMAT ")",
+                         _current_size, start_size_log_2);
+  _local_table = new StringTableHash(start_size_log_2, END_SIZE, REHASH_LEN, true);
+  _oop_storage = OopStorageSet::create_weak("StringTable Weak", mtSymbol);
+  _oop_storage->register_num_dead_callback(&gc_notification);
+
+}
+```
+
+
+
+
+
+
 
 ### intern
 
