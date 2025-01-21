@@ -63,6 +63,16 @@ There are many ways of implementing stack ADT; given below are the commonly used
 - Dynamic array based implementation
 - Linked lists implementation
 
+栈顶是交互的地方 数据修改以数组的尾部作为栈顶 
+
+
+
+
+
+单链表是前节点拥有后节点的指针 所以使用单链表的头节点作为栈顶 不需要有一个dummy节点
+
+
+
 ### Comparison of Implementations
 
 **Comparing Incremental Strategy and Doubling Strategy**
