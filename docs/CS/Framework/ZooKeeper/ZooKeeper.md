@@ -222,7 +222,7 @@ public class DataTree {
 }
 ```
 
-DataTree 的所有path都被保存在一个哈希表中，path到DataNode的映射关系是一一对应，因此我们可以通过path在 O(1) 时间复杂度内找到对应的DataNode，这样就能够保证数据的快速查询
+DataTree 的所有path都被保存在一个哈希表中，path到DataNode的映射关系是一一对应，因此我们可以通过path在 $O(1)$ 时间复杂度内找到对应的DataNode，这样就能够保证数据的快速查询
 
 ```java
   public class NodeHashMapImpl implements NodeHashMap {
@@ -599,9 +599,36 @@ ZooKeeper also has the notion of ephemeral nodes.
 These znodes exists as long as the session that created the znode is active.
 When the session ends the znode is deleted. Because of this behavior ephemeral znodes are not allowed to have children.
 
-
 最核心或者说关键的代码就是创建一个列表来存放观察者
 而在 ZooKeeper 中则是在客户端和服务器端分别实现两个存放观察者列表，即：ZKWatchManager 和 WatchManager
+
+客户端发送一个 Watch 监控事件的会话请求时，ZooKeeper 客户端主要做了两个工作：
+
+- 标记该会话是一个带有 Watch 事件的请求
+- 将 Watch 事件存储到 ZKWatchManager
+
+
+
+以 getData 接口为例。当发送一个带有 Watch 事件的请求时，客户端首先会把该会话标记为带有 Watch 监控的事件请求，之后通过 DataWatchRegistration 类来保存 watcher 事件和节点的对应关系
+
+之后客户端向服务器发送请求时，是将请求封装成一个 Packet 对象，并添加到一个等待发送队列 outgoingQueue 中
+
+最后，ZooKeeper 客户端就会向服务器端发送这个请求，完成请求发送后。调用负责处理服务器响应的 SendThread 线程类中的  readResponse 方法接收服务端的回调，并在最后执行 finishPacket（）方法将 Watch 注册到  ZKWatchManager 
+
+
+
+Zookeeper 服务端处理 Watch 事件基本有 2 个过程：
+
+- 解析收到的请求是否带有 Watch 注册事件
+- 将对应的 Watch 事件存储到 WatchManager
+
+
+
+当 ZooKeeper 服务器接收到一个客户端请求后，首先会对请求进行解析，判断该请求是否包含 Watch 事件。这在 ZooKeeper  底层是通过 FinalRequestProcessor 类中的 processRequest 函数实现的。当  getDataRequest.getWatch() 值为 True 时，表明该请求需要进行 Watch 监控注册。并通过  zks.getZKDatabase().getData 函数将 Watch 事件注册到服务端的 WatchManager 中
+
+
+
+
 
 
 在DataTree中有两个IWatchManager类型的对象，一个是dataWatches，一个是childWatches， 其中:
@@ -879,6 +906,10 @@ public ClientCnxn(
 #### triggerWatch
 Watcher 机制是一次性的，当 ZNode 发生变化时，Zookeeper Server 会调用WatchManager.triggerWatch方法触发数据变更事件，同时将这些 Watcher 从watchTable中删除，这意味着每个 Watcher 只能接收到一次通知，如果我们想要继续监听 ZNode 的变化，那么我们需要重新注册 Watcher
 
+
+
+
+
 Watcher 与客户端的 Session 绑定，当 Session 超时或关闭时，所有的 Watcher 都会失效，客户端需要重新注册 Watcher，在重新建立连接前，任何 ZNode 的变化都不会通知客户端。那么我们在接收到通知后，或出现网络故障，都需要重新注册 Watcher，如果我们在重新注册 Watcher 之前，ZNode 发生了变化，那么我们就会错过这次变化，从而导致客户端观测到的数据变化过程少于真实的数据变化过程，因此 Zookeeper 的 Watcher 机制只能保证最终一致性，而不能保证线性一致性
 
 ```java
@@ -963,6 +994,10 @@ public WatcherOrBitSet triggerWatch(String path, EventType type, long zxid, List
 }
 ```
 
+
+
+客户端
+
 ```java
 class ZKWatchManager implements ClientWatchManager {
 
@@ -981,6 +1016,22 @@ class ZKWatchManager implements ClientWatchManager {
     }
 }
 ```
+
+
+客户端使用 SendThread.readResponse() 方法来统一处理服务端的相应。首先反序列化服务器发送请求头信息  replyHdr.deserialize(bbia, “header”)，并判断相属性字段 xid 的值为  -1，表示该请求响应为通知类型。在处理通知类型时，首先将己收到的字节流反序列化转换成 WatcherEvent 对象。接着判断客户端是否配置了  chrootPath 属性，如果为 True 说明客户端配置了 chrootPath 属性。需要对接收到的节点路径进行 chrootPath  处理。最后调用 eventThread.queueEvent( ）方法将接收到的事件交给 EventThread 线程进行处理
+
+
+
+
+
+从 ZKWatchManager 中查询注册过的客户端 Watch 信息。客户端在查询到对应的 Watch 信息后，会将其从 ZKWatchManager 的管理中删除
+
+获取到对应的 Watcher 信息后，将查询到的 Watcher 存储到 waitingEvents 队列中，调用 EventThread 类中的 run 方法会循环取出在 waitingEvents 队列中等待的 Watcher 事件进行处理
+
+最后调用 processEvent(event) 方法来最终执行实现了 Watcher 接口的 process（）方法
+
+
+
 ### session
 
 Session 指客户端会话。在 ZooKeeper 中，一个客户端会话是指 客户端和服务器之间的一个 TCP 长连接。
@@ -1163,6 +1214,22 @@ ACL（Access Control List）用于控制ZNode的相关权限，其权限控制�
 粒度是对权限所作用的对象的分类，把上面三种粒度换个说法描述就是**对用户（Owner）、用户所属的组（Group)、其他组（Other）**的权限划分，这应该算是一种权限控制的标准了，典型的三段式。
 
 Zookeeper中虽然也是三段式，但是两者对粒度的划分存在区别。Zookeeper中的三段式为**Scheme、ID、Permissions**，含义分别为权限机制、允许访问的用户和具体的权限。
+
+以节点授权 addAuth 接口为例，首先客户端通过 ClientCnxn 类中的 addAuthInfo 方法向服务端发送 ACL  权限信息变更请求，该方法首先将 scheme 和 auth 封装成 AuthPacket 类，并通过 RequestHeader  方法表示该请求是权限操作请求，最后将这些数据统一封装到 packet 中，并添加到 outgoingQueue 队列中发送给服务端
+
+
+
+当节点授权请求发送到服务端后，在服务器的处理中首先调用 readRequest（）方法作为服务器处理的入口，其内部只是调用 processPacket 方法
+
+而在 processPacket 方法的内部，首先反序列化客户端的请求信息并封装到 AuthPacket 对象中。之后通过  getServerProvider 方法根据不同的 scheme 判断具体的实现类，这里我们使用 Digest 模式为例，因此该实现类是  DigestAuthenticationProvider 。之后调用其 handleAuthentication() 方法进行权限验证。如果返  KeeperException.Code.OK 则表示该请求已经通过了权限验证，如果返回的状态是其他或者抛出异常则表示权限验证失败
+
+权限认证的最终实现函数是 handleAuthentication 函数，这个函数主要的工作就是解析客户端传递的权限验证类型，并通过 addAuthInfo 函数将权限信息添加到 authInfo 集合属性中
+
+
+
+在处理一次权限请求时，先通过 PrepRequestProcessor 中的 checkAcl  函数检查对应的请求权限，如果该节点没有任何权限设置则直接返回，如果该节点有权限设置则循环遍历节点信息进行检查，如果具有相应的权限则直接返回表明权限认证成功，否则最后抛出 NoAuthException 异常中断操作表明权限认证失败
+
+
 
 ## Implementation
 

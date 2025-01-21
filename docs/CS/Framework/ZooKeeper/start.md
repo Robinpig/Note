@@ -581,6 +581,7 @@ public class QuorumMaj implements QuorumVerifier {
 - 首先是解析配置文件 `ServerConfig.parse`
 - `initializeAndRun`
   
+
 两个主要的对象 ZooKeeperServer 和 [ServerCnxnFactory](/docs/CS/Framework/ZooKeeper/IO.md)
 
 ServerCnxnFactory.start会调用 ZooKeeperServer.startData
@@ -734,7 +735,7 @@ The following if block checks whether the database has been initialized or not.
 Note that this method is invoked by at least one other method: ZooKeeperServer#startdata.
 
 See ZOOKEEPER-1642 for more detail.
- 
+
 
 ```java
 public class ZooKeeperServer implements SessionExpirer, ServerStats.Provider {
