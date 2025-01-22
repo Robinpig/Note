@@ -490,6 +490,22 @@ Or it could return no value because the key was null (provided null isn’t a va
 The indexOf(char) method could also return no value for many reasons, such as a negative argument. Returning Optional in these cases wouldn’t indicate the nature of the error.
 Furthermore, this Optional would be difficult to compose with values returned by other methods that could produce errors.
 
+
+Optional的使用上 利用map函数可以进行多级判断null
+
+If a value is present, apply the provided mapping function to it, and if the result is non-null, return an Optional describing the result. 
+Otherwise return an empty Optional.
+```java
+public<U> Optional<U> map(Function<? super T, ? extends U> mapper) {
+    Objects.requireNonNull(mapper);
+    if (!isPresent())
+        return empty();
+    else {
+        return Optional.ofNullable(mapper.apply(value));
+    }
+}
+```
+
 ## Monad
 
 ## Functional
