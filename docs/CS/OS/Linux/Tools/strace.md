@@ -33,6 +33,9 @@ strace提供了多种参数来定制跟踪的行为：
 - 某些程序可能包含检测strace的机制，可能会改变行为或退出。
 - 使用-o参数将输出重定向到文件是一个好的习惯，这样可以避免输出过多导致屏幕滚动过快。
 
+## Links
+
+
 
 ## References
 1. [strace(1) — Linux manual page](http://man7.org/linux/man-pages/man1/strace.1.html)
