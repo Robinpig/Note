@@ -524,15 +524,6 @@ public long restore(DataTree dt, Map<Long, Integer> sessions, PlayBackListener l
 先从snapshot恢复数据 再看事务日志是否有未完成的事务
 之后再save snapshot
 
-协议位于jute module下
-
-```java
-@InterfaceAudience.Public
-public interface Record {
-    void serialize(OutputArchive archive, String tag) throws IOException;
-    void deserialize(InputArchive archive, String tag) throws IOException;
-}
-```
 
 session
 
