@@ -228,6 +228,537 @@ static int bdi_init(struct backing_dev_info *bdi)
 
 
 
+
+
+## fault
+
+
+
+
+
+以`ext4`为例，`ext4_filemap_fault()`为缺页处理函数，具体调用了内存管理模块的`filemap_fault()`来完成:
+
+```c
+// fs/ext4/file.c
+static const struct vm_operations_struct ext4_file_vm_ops = {
+    .fault		= filemap_fault,
+    .map_pages	= filemap_map_pages,
+    .page_mkwrite   = ext4_page_mkwrite,
+};
+```
+
+
+
+Page Cache 的插入主要流程如下:
+
+- 判断查找的 Page 是否存在于 Page Cache，存在即直接返回
+- 否则通过[Linux 内核物理内存分配](https://www.leviathan.vip/2019/06/01/Linux内核源码分析-Page-Cache原理分析/[http://leviathan.vip/2019/04/13/Linux内核源码分析-物理内存的分配/#核心算法](http://leviathan.vip/2019/04/13/Linux内核源码分析-物理内存的分配/#核心算法)介绍的伙伴系统分配一个空闲的 Page.
+- 将 Page 插入 Page Cache，即插入`address_space`的`i_pages`.
+- 调用`address_space`的`readpage()`来读取指定 offset 的 Page
+
+
+
+```c
+// mm/filemap.c
+vm_fault_t filemap_fault(struct vm_fault *vmf)
+{
+    int error;
+    struct file *file = vmf->vma->vm_file;
+    struct file *fpin = NULL;
+    struct address_space *mapping = file->f_mapping;
+    struct inode *inode = mapping->host;
+    pgoff_t max_idx, index = vmf->pgoff;
+    struct folio *folio;
+    vm_fault_t ret = 0;
+    bool mapping_locked = false;
+
+    max_idx = DIV_ROUND_UP(i_size_read(inode), PAGE_SIZE);
+    if (unlikely(index >= max_idx))
+        return VM_FAULT_SIGBUS;
+
+    /*
+  * Do we have something in the page cache already?
+    */
+    folio = filemap_get_folio(mapping, index);
+    if (likely(!IS_ERR(folio))) {
+        /*
+      * We found the page, so try async readahead before waiting for
+        * the lock.
+        */
+        if (!(vmf->flags & FAULT_FLAG_TRIED))
+            fpin = do_async_mmap_readahead(vmf, folio);
+        if (unlikely(!folio_test_uptodate(folio))) {
+            filemap_invalidate_lock_shared(mapping);
+            mapping_locked = true;
+        }
+    } else {
+        ret = filemap_fault_recheck_pte_none(vmf);
+        if (unlikely(ret))
+            return ret;
+
+        /* No page in the page cache at all */
+        count_vm_event(PGMAJFAULT);
+        count_memcg_event_mm(vmf->vma->vm_mm, PGMAJFAULT);
+        ret = VM_FAULT_MAJOR;
+        fpin = do_sync_mmap_readahead(vmf);
+        retry_find:
+        /*
+              * See comment in filemap_create_folio() why we need
+              * invalidate_lock
+              */
+        if (!mapping_locked) {
+            filemap_invalidate_lock_shared(mapping);
+            mapping_locked = true;
+        }
+        folio = __filemap_get_folio(mapping, index,
+                                            FGP_CREAT|FGP_FOR_MMAP,
+                                            vmf->gfp_mask);
+        if (IS_ERR(folio)) {
+            if (fpin)
+                goto out_retry;
+            filemap_invalidate_unlock_shared(mapping);
+            return VM_FAULT_OOM;
+        }
+    }
+
+    if (!lock_folio_maybe_drop_mmap(vmf, folio, &fpin))
+        goto out_retry;
+
+    /* Did it get truncated? */
+    if (unlikely(folio->mapping != mapping)) {
+        folio_unlock(folio);
+        folio_put(folio);
+        goto retry_find;
+    }
+    VM_BUG_ON_FOLIO(!folio_contains(folio, index), folio);
+
+    /*
+                        * We have a locked folio in the page cache, now we need to check
+                        * that it's up-to-date. If not, it is going to be due to an error,
+                        * or because readahead was otherwise unable to retrieve it.
+                        */
+    if (unlikely(!folio_test_uptodate(folio))) {
+        /*
+                          * If the invalidate lock is not held, the folio was in cache
+                            * and uptodate and now it is not. Strange but possible since we
+                            * didn't hold the page lock all the time. Let's drop
+                            * everything, get the invalidate lock and try again.
+                            */
+                            if (!mapping_locked) {
+                              folio_unlock(folio);
+                              folio_put(folio);
+                              goto retry_find;
+                              }
+
+                              /*
+                              * OK, the folio is really not uptodate. This can be because the
+                              * VMA has the VM_RAND_READ flag set, or because an error
+                              * arose. Let's read it in directly.
+                              */
+                              goto page_not_uptodate;
+                              }
+
+                              /*
+                              * We've made it this far and we had to drop our mmap_lock, now is the
+                              * time to return to the upper layer and have it re-find the vma and
+                              * redo the fault.
+                              */
+                              if (fpin) {
+                                folio_unlock(folio);
+                                goto out_retry;
+                                }
+                                if (mapping_locked)
+                                  filemap_invalidate_unlock_shared(mapping);
+
+                                  /*
+                                  * Found the page and have a reference on it.
+                                  * We must recheck i_size under page lock.
+	 */
+	max_idx = DIV_ROUND_UP(i_size_read(inode), PAGE_SIZE);
+	if (unlikely(index >= max_idx)) {
+		folio_unlock(folio);
+		folio_put(folio);
+		return VM_FAULT_SIGBUS;
+	}
+
+	vmf->page = folio_file_page(folio, index);
+	return ret | VM_FAULT_LOCKED;
+
+page_not_uptodate:
+	/*
+	 * Umm, take care of errors if the page isn't up-to-date.
+	 * Try to re-read it _once_. We do this synchronously,
+	 * because there really aren't any performance issues here
+	 * and we need to check for errors.
+	 */
+	fpin = maybe_unlock_mmap_for_io(vmf, fpin);
+	error = filemap_read_folio(file, mapping->a_ops->read_folio, folio);
+	if (fpin)
+		goto out_retry;
+	folio_put(folio);
+
+	if (!error || error == AOP_TRUNCATED_PAGE)
+		goto retry_find;
+	filemap_invalidate_unlock_shared(mapping);
+
+	return VM_FAULT_SIGBUS;
+
+out_retry:
+	/*
+	 * We dropped the mmap_lock, we need to return to the fault handler to
+	 * re-find the vma and come back and find our hopefully still populated
+	 * page.
+	 */
+	if (!IS_ERR(folio))
+		folio_put(folio);
+	if (mapping_locked)
+		filemap_invalidate_unlock_shared(mapping);
+	if (fpin)
+		fput(fpin);
+	return ret | VM_FAULT_RETRY;
+}
+EXPORT_SYMBOL(filemap_fault);
+```
+
+
+
+假如 Page Cache 中的 Page 经过了修改，它的 flags 会被置为`PG_dirty`. 在 Linux 内核中，假如没有打开`O_DIRECT`标志，写操作实际上会被延迟刷盘，以下几种策略可以将脏页刷盘:
+
+- 手动调用`fsync()`或者`sync`强制落盘
+- 脏页占用比率过高，超过了设定的阈值，导致内存空间不足，触发刷盘(**强制回写**).
+- 脏页驻留时间过长，触发刷盘(**周期回写**).
+
+
+
+`bdi`是`backing device info`的缩写，它描述备用存储设备相关信息，就是我们通常所说的存储介质 SSD 硬盘等等。Linux 内核为每一个存储设备构造了一个`backing_dev_info`，假如磁盘有几个分区，每个分区对应一个`backing_dev_info`结构体.
+
+
+
+
+
+```c
+struct backing_dev_info {
+    u64 id;
+    struct rb_node rb_node; /* keyed by ->id */
+    struct list_head bdi_list;
+    unsigned long ra_pages;	/* max readahead in PAGE_SIZE units */
+    unsigned long io_pages;	/* max allowed IO size */
+
+    struct kref refcnt;	/* Reference counter for the structure */
+    unsigned int capabilities; /* Device capabilities */
+    unsigned int min_ratio;
+    unsigned int max_ratio, max_prop_frac;
+
+    /*
+	 * Sum of avg_write_bw of wbs with dirty inodes.  > 0 if there are
+	 * any dirty wbs, which is depended upon by bdi_has_dirty().
+	 */
+    atomic_long_t tot_write_bandwidth;
+    /*
+	 * Jiffies when last process was dirty throttled on this bdi. Used by
+	 * blk-wbt.
+	 */
+    unsigned long last_bdp_sleep;
+
+    struct bdi_writeback wb;  /* the root writeback info for this bdi */
+    struct list_head wb_list; /* list of all wbs */
+    #ifdef CONFIG_CGROUP_WRITEBACK
+    struct radix_tree_root cgwb_tree; /* radix tree of active cgroup wbs */
+    struct mutex cgwb_release_mutex;  /* protect shutdown of wb structs */
+    struct rw_semaphore wb_switch_rwsem; /* no cgwb switch while syncing */
+    #endif
+    wait_queue_head_t wb_waitq;
+
+    struct device *dev;
+    char dev_name[64];
+    struct device *owner;
+
+    struct timer_list laptop_mode_wb_timer;
+
+    #ifdef CONFIG_DEBUG_FS
+    struct dentry *debug_dir;
+    #endif
+};
+
+```
+
+
+
+
+
+```c
+// include/linux/backing-dev-defs.h
+struct bdi_writeback {
+    struct backing_dev_info *bdi;	/* our parent bdi */
+
+    unsigned long state;		/* Always use atomic bitops on this */
+    unsigned long last_old_flush;	/* last old data flush */
+
+    struct list_head b_dirty;	/* dirty inodes */
+    struct list_head b_io;		/* parked for writeback */
+    struct list_head b_more_io;	/* parked for more writeback */
+    struct list_head b_dirty_time;	/* time stamps are dirty */
+    spinlock_t list_lock;		/* protects the b_* lists */
+
+    atomic_t writeback_inodes;	/* number of inodes under writeback */
+    struct percpu_counter stat[NR_WB_STAT_ITEMS];
+
+    unsigned long bw_time_stamp;	/* last time write bw is updated */
+    unsigned long dirtied_stamp;
+    unsigned long written_stamp;	/* pages written at bw_time_stamp */
+    unsigned long write_bandwidth;	/* the estimated write bandwidth */
+    unsigned long avg_write_bandwidth; /* further smoothed write bw, > 0 */
+
+    /*
+	 * The base dirty throttle rate, re-calculated on every 200ms.
+	 * All the bdi tasks' dirty rate will be curbed under it.
+	 * @dirty_ratelimit tracks the estimated @balanced_dirty_ratelimit
+	 * in small steps and is much more smooth/stable than the latter.
+	 */
+    unsigned long dirty_ratelimit;
+    unsigned long balanced_dirty_ratelimit;
+
+    struct fprop_local_percpu completions;
+    int dirty_exceeded;
+    enum wb_reason start_all_reason;
+
+    spinlock_t work_lock;		/* protects work_list & dwork scheduling */
+    struct list_head work_list;
+    struct delayed_work dwork;	/* work item used for writeback */
+    struct delayed_work bw_dwork;	/* work item used for bandwidth estimate */
+
+    struct list_head bdi_node;	/* anchored at bdi->wb_list */
+
+    #ifdef CONFIG_CGROUP_WRITEBACK
+    struct percpu_ref refcnt;	/* used only for !root wb's */
+    struct fprop_local_percpu memcg_completions;
+    struct cgroup_subsys_state *memcg_css; /* the associated memcg */
+    struct cgroup_subsys_state *blkcg_css; /* and blkcg */
+    struct list_head memcg_node;	/* anchored at memcg->cgwb_list */
+    struct list_head blkcg_node;	/* anchored at blkcg->cgwb_list */
+    struct list_head b_attached;	/* attached inodes, protected by list_lock */
+    struct list_head offline_node;	/* anchored at offline_cgwbs */
+
+    union {
+        struct work_struct release_work;
+        struct rcu_head rcu;
+    };
+    #endif
+};
+```
+
+
+
+- `bdi`是该`bdi_writeback`所属的`backing_dev_info`.
+- `b_dirty`代表文件系统中被修改的`inode`节点.
+- `b_io`代表等待 I/O 的`inode`节点.
+- `dwork`是一个封装的延迟工作任务，由它的主函数将脏页回写存储设备:
+
+
+
+```c
+static int wb_init(struct bdi_writeback *wb, struct backing_dev_info *bdi,
+		   gfp_t gfp)
+{
+	int err;
+
+	memset(wb, 0, sizeof(*wb));
+
+	wb->bdi = bdi;
+	wb->last_old_flush = jiffies;
+	INIT_LIST_HEAD(&wb->b_dirty);
+	INIT_LIST_HEAD(&wb->b_io);
+	INIT_LIST_HEAD(&wb->b_more_io);
+	INIT_LIST_HEAD(&wb->b_dirty_time);
+	spin_lock_init(&wb->list_lock);
+
+	atomic_set(&wb->writeback_inodes, 0);
+	wb->bw_time_stamp = jiffies;
+	wb->balanced_dirty_ratelimit = INIT_BW;
+	wb->dirty_ratelimit = INIT_BW;
+	wb->write_bandwidth = INIT_BW;
+	wb->avg_write_bandwidth = INIT_BW;
+
+	spin_lock_init(&wb->work_lock);
+	INIT_LIST_HEAD(&wb->work_list);
+	INIT_DELAYED_WORK(&wb->dwork, wb_workfn);
+	INIT_DELAYED_WORK(&wb->bw_dwork, wb_update_bandwidth_workfn);
+
+	err = fprop_local_init_percpu(&wb->completions, gfp);
+	if (err)
+		return err;
+
+	err = percpu_counter_init_many(wb->stat, 0, gfp, NR_WB_STAT_ITEMS);
+	if (err)
+		fprop_local_destroy_percpu(&wb->completions);
+
+	return err;
+}
+```
+
+`bdi_writeback`对象封装了`dwork`以及需要处理的`inode`队列。当 Page Cache 调用`__mark_inode_dirty()`时，将需要刷脏的`inode`挂载到`bdi_writeback`对象的`b_dirty`队列上，然后唤醒对应的`bdi`刷脏线程。
+
+
+
+Handle writeback of dirty data for the device backed by this bdi. Also reschedules periodically and does kupdated style flushing.
+
+
+
+```c
+void wb_workfn(struct work_struct *work)
+{
+	struct bdi_writeback *wb = container_of(to_delayed_work(work),
+						struct bdi_writeback, dwork);
+	long pages_written;
+
+	set_worker_desc("flush-%s", bdi_dev_name(wb->bdi));
+
+	if (likely(!current_is_workqueue_rescuer() ||
+		   !test_bit(WB_registered, &wb->state))) {
+		/*
+		 * The normal path.  Keep writing back @wb until its
+		 * work_list is empty.  Note that this path is also taken
+		 * if @wb is shutting down even when we're running off the
+		 * rescuer as work_list needs to be drained.
+		 */
+		do {
+			pages_written = wb_do_writeback(wb);
+			trace_writeback_pages_written(pages_written);
+		} while (!list_empty(&wb->work_list));
+	} else {
+		/*
+		 * bdi_wq can't get enough workers and we're running off
+		 * the emergency worker.  Don't hog it.  Hopefully, 1024 is
+		 * enough for efficient IO.
+		 */
+		pages_written = writeback_inodes_wb(wb, 1024,
+						    WB_REASON_FORKER_THREAD);
+		trace_writeback_pages_written(pages_written);
+	}
+
+	if (!list_empty(&wb->work_list))
+		wb_wakeup(wb);
+	else if (wb_has_dirty_io(wb) && dirty_writeback_interval)
+		wb_wakeup_delayed(wb);
+}
+```
+
+`wb_do_writeback`分别实现了周期回写和后台回写两部分: `wb_check_old_data_flush()`，`wb_check_background_flush()`，具体实现我们分不同的场景分析，因为每一个存储设备都有一个`backing_dev_info`，所以每个存储设备之间的脏页回写互不影响.
+
+
+
+周期回写的时间单位是0.01s，默认为5s，可以通过`/proc/sys/vm/dirty_writeback_centisecs`调节:
+
+
+
+`Page`驻留为`dirty`状态的时间单位也为0.01s，默认为30s，可以通过`/proc/sys/vm/dirty_expire_centisecs`来调节:
+
+
+
+```c
+static long wb_check_old_data_flush(struct bdi_writeback *wb)
+{
+	unsigned long expired;
+	long nr_pages;
+
+	/*
+	 * When set to zero, disable periodic writeback
+	 */
+	if (!dirty_writeback_interval)
+		return 0;
+
+	expired = wb->last_old_flush +
+			msecs_to_jiffies(dirty_writeback_interval * 10);
+	if (time_before(jiffies, expired))
+		return 0;
+
+	wb->last_old_flush = jiffies;
+	nr_pages = get_nr_dirty_pages();
+
+	if (nr_pages) {
+		struct wb_writeback_work work = {
+			.nr_pages	= nr_pages,
+			.sync_mode	= WB_SYNC_NONE,
+			.for_kupdate	= 1,
+			.range_cyclic	= 1,
+			.reason		= WB_REASON_PERIODIC,
+		};
+
+		return wb_writeback(wb, &work);
+	}
+
+	return 0;
+}
+```
+
+
+
+强制回写分为**后台线程回写**和**用户进程主动回写**。
+
+当脏页数量超过了设定的阈值，后台回写线程会将脏页写回存储设备，后台回写阈值是脏页占可用内存大小的比例或者脏页的字节数，默认比例是10. 用户可以通过修改`/proc/sys/vm/dirty_background_ratio`修改脏页比或者修改`/proc/sys/vm/dirty_background_bytes`修改脏页的字节数。
+
+而在用户调用`write()`接口写文件时，假如脏页占可用内存大小的比例或者脏页的字节数超过了设定的阈值，会进行主动回写，用户可以通过设置`/proc/sys/vm/dirty_ratio`或者`/proc/sys/vm/dirty_bytes`修改这两个阈值
+
+
+
+
+
+```c
+static long wb_check_background_flush(struct bdi_writeback *wb)
+{
+	if (wb_over_bg_thresh(wb)) {
+
+		struct wb_writeback_work work = {
+			.nr_pages	= LONG_MAX,
+			.sync_mode	= WB_SYNC_NONE,
+			.for_background	= 1,
+			.range_cyclic	= 1,
+			.reason		= WB_REASON_BACKGROUND,
+		};
+
+		return wb_writeback(wb, &work);
+	}
+
+	return 0;
+}
+```
+
+
+
+假如用户调用`write()`或者其他写文件接口时，在写文件的过程中，产生了脏页后会调用`balance_dirty_pages`调节平衡脏页的状态. 假如脏页的数量超过了**(后台回写设定的阈值+ 进程主动回写设定的阈值) / 2 **，即`(background_thresh + dirty_thresh) / 2`会强制进行脏页回写. **用户线程进行的强制回写仍然是触发后台线程进行回写**
+
+
+
+
+
+
+
+触发 Page Cache 刷脏的几个条件如下:
+
+- 周期回写，可以通过设置`/proc/sys/vm/dirty_writeback_centisecs`调节周期.
+- 当**后台回写阈值是脏页占可用内存大小的比例或者脏页的字节数**超过了设定的阈值会触发后台线程回写.
+- 当用户进程写文件时会进行脏页检查假如超过了阈值会触发回写，从而调用后台线程完成回写.
+
+`Page`的写回操作是文件系统的封装，即`address_space`的`writepage`操作.
+
+
+
+Linux内核为每个存储设备都设置了刷脏进程，所以假如在日常开发过程遇到了刷脏压力过大的情况下，在条件允许的情况下，将写入文件分散在不同的存储设备，可以提高的写入速度，减小刷脏的压力
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ## write back
 
 
