@@ -82,6 +82,41 @@ sudo chown root chrome-sandbox && sudo chmod 4755 chrome-sandbox
 
 
 
+```shell
+sudo add-apt-repository ppa:linuxuprising/guake
+sudo apt-get update
+```
+
+
+
+ubuntu的unattended-upgrade进程总是会造成一些不好的体验，
+
+1.手动安装软件包时经常发现dpkg的锁被该进程占用，且不知道要占用多久；
+
+2.明明在software updater里禁止了更新，但还是老弹出提醒更新。
+
+禁用方法1：
+
+```shell
+sudo systemctl disable unattended-upgrades
+```
+
+禁用方法2：
+
+找到启动文件/etc/apt/apt.conf.d/50unattended-upgrades ，把里面的相关内容注释掉。
+
+把Unattended-Upgrade::Allowed-Origins里列出的origins都注释掉应该就可以了。
+
+
+
+
+
+
+
+
+
+
+
 ## Links
 
 
