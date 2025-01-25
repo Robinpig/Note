@@ -1,6 +1,6 @@
 ## Introduction
 
-### Throwable Hierarchy
+## Throwable Hierarchy
 
 ![Throwable](../img/Throwable.png)
 
@@ -41,12 +41,85 @@ Include failure-capture information in detail messages.
 Strive for failure atomicity. Generally speaking, a failed method invocation should leave the object in the state that it was in prior to the invocation.
 If you choose to ignore an exception, the catch block should contain a comment explaining why it is appropriate to do so, and the variable should be named ignored
 
-OutOfMemoryError
 
-```
+## Error
+
+### VirtualMachineError
+
+Java 中的虚拟机错误 VirtualMachineError 包括以下几种
+
+- StackOverflowError
+- OutOfMemoryError
+- UnknownError
+- InternalError
+- ZipError
+
+
+比较关心的就是 StackOverflowError 与 OutOfMemoryError，剩下的 InternalError 一般是内部使用错误，UnknownError 是虚拟机发生未知异常
+
+参考 [Java 虚拟机规范官方文档：Run-Time Data Areas](https://docs.oracle.com/javase/specs/jvms/se15/html/jvms-2.html#jvms-2.5)
+
+
+StackOverflowError 一般都是递归导致调用栈过深 修改代码解决
+如果调用栈真的太深而线程栈大小不足，比如那种回调背压模型的框架，netty + reactor 这种，一般线程栈需要调大一点
+
+### OutOfMemoryError
+
+
+OOM分为多种情况
+
+
 java.lang.OutOfMemoryError: Java heap space
-```
 
+
+OutOfMemoryError: unable to create native thread
+
+
+OutOfMemoryError: GC Overhead limit exceeded
+
+
+
+OutOfMemoryError: direct memory
+
+
+OutOfMemoryError: map failed
+
+
+[File MMAP](/docs/CS/Java/JDK/IO/NIO.md?id=MappedByteBuffer)时，如果系统内存不足，就会抛出这个异常
+
+
+这种情况下，考虑：
+
+增加系统内存
+采用文件分块，不要一次 mmap 很大的文件，也就是减少每次 mmap 文件的大小
+
+
+OutOfMemoryError: Requested array size exceeds VM limit
+
+当申请的数组大小超过堆内存限制，就会抛出这个异常
+
+
+
+OutOfMemoryError: Metaspace
+
+Metadata 占用空间超限（参考上面简述 Java 内存构成， class 这一块 包含两种，一种是 metadata，一种是 class space），会抛出这个异常
+
+
+OutOfMemoryError: Compressed class space
+
+class space 内存溢出导致的，和上一个异常类似，需要查看类信息统计定位问题。
+
+
+OutOfMemoryError: reason stack_trace_with_native_method
+
+这个发生在 JNI 调用中，内存不足
+
+
+打开 HeapDumpOnOutOfMemoryError 之后，不是所有的 OutOfMemoryError 都会触发
+
+
+
+## Exception
 
 > [!TIP]
 >
