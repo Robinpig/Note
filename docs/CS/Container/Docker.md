@@ -171,6 +171,26 @@ The specific features are as follows:
 - Security modules— Mandatory access controls
          
 
+## Under Hood
+
+
+
+Docker 底层技术主要包括 Namespaces，Cgroups 和 rootfs。
+
+Namespace 的作用是访问隔离，Linux Namespaces 机制提供 种资源隔离方案。每个 Namespace 下的资源，对于其他 Namespace 下的资源都是不可见的。
+
+Cgroup 主要用来资源控制，CPU\MEM\宽带等。提供的 种可以限制、记录、隔离进程组所使用的物理资源机制，实现进程资源控制。
+
+rootfs 的作用是文件系统隔离
+
+
+
+
+
+
+
+
+
 ## Architecture
 
 
@@ -230,6 +250,17 @@ An easy way to visualize the difference among volumes, bind mounts, and `tmpfs` 
 
 
 ## Docker Images
+
+
+
+Docker 可以将 个基础系统锐像可以披多个锐像共用。这里可以代入调用和级存的概念。保证每个容器体积小，速度快，性能忧
+
+采用了分层设计，启动容器后，镜像永远是只读属性。只不过在最上层加 层读写层（容器层），如果要对底层镜像的文件进行更改，读写层会复制 份镜像中的只读层进行写操作，这就是 Copy On Write
+
+
+
+
+
 
 
 ## Dockerfile

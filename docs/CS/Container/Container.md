@@ -29,7 +29,17 @@ Container via Virtual Machine:
 - 纯虚拟机，如 KVM、Xen、VMWare，是主流云厂商服务器的底层虚拟化技术，一般作为 k8s 中的 Node 存在，比容器要更低一个层次
 
 
+
+容器相比虚拟化的优势在于，可以再次提高服务器的资源利用率，重量更轻，体积更小，能够匹配为服务的需求，保持多环境运行的 致性，快速部署迁移，且容错率高。
+
+其劣势在于安全性相对较差，多容器管理有 定的难度，稳定性较差，排错难度较大
+
+
+
+
+
 符合 OCI 规范的几款主流容器化技术做一下分析
+
 - runc 是一个符合 OCI 标准的容器运行时，它是 Docker/Containerd 核心容器引擎的一部分。它使用 Linux 的命名空间（Namespace）和控制组（Cgroup）技术来实现容器的隔离
   在运行容器时，runc 使用命名空间隔离容器的进程、网络、文件系统和 IPC（进程间通信）。它还使用控制组来限制容器内进程的资源使用。这种隔离技术使得容器内的应用程序可以在一个相对独立的环境中运行，与宿主机和其他容器隔离开来。
   runc 的隔离技术虽然引入了一定开销，但是这种开销仅限于命名空间映射、限制检查和一些记账逻辑，理论上影响很小，而且当 syscall 是长耗时操作时，这种影响几乎可以忽略不计，一般情况下，基于 Namespace+Cgroup 的隔离技术对 CPU、内存、I/O 性能的影响较小
@@ -71,6 +81,10 @@ Features and defaults may differ, but adopting and leveraging OCI specifications
 certified to run on multiple operating systems and usable in multiple environments.
 
 
+
+
+
+
 ## LXC
 
 LXC is a userspace interface for the Linux kernel containment features. 
@@ -110,6 +124,9 @@ fun()
     ...
 }
 ```
+
+
+
 
 
 ## cgroup
