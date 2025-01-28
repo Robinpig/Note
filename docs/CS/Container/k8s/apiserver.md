@@ -2,12 +2,14 @@
 
 
 
-kube-apiserver 是 kubernetes 中与 etcd 直接交互的一个组件，其控制着 kubernetes 中核心资源的变化。它主要提供了以下几个功能：
+kube-apiserver 是 kubernetes 中唯一与 etcd 直接交互的一个组件，在k8s中所有组件都通过kube-apiserver操作资源对象
 
-- 提供 Kubernetes API，包括认证授权、数据校验以及集群状态变更等，供客户端及其他组件调用；
-- 代理集群中的一些附加组件组件，如 Kubernetes UI、metrics-server、npd 等；
-- 创建 kubernetes 服务，即提供 apiserver 的 Service，kubernetes Service；
-- 资源在不同版本之间的转换
+它主要提供了以下几个功能：
+
+- 将 Kubernetes 中的所有资源对象封装成RESTful风格的API接口进行管理
+- 进行集群状态管理与元数据管理 是唯一与etcd交互的组件
+- 具有丰富的安全访问机制 提供认证、授权以及准入控制器
+- 提供集群中各组件的通信与交互功能
 
 
 
@@ -25,131 +27,190 @@ kube-apiserver 共由 3 个组件构成（Aggregator、KubeAPIServer、APIExtens
 启动入口cmd/kube-apiserver/app/server.go
 
 ```c
-func Run(ctx context.Context, opts options.CompletedOptions) error {
-    // To help debugging, immediately log version
-    klog.Infof("Version: %+v", version.Get())
+func Run(runOptions *options.ServerRunOptions, stopCh <-chan struct{}) error {
+	// To help debugging, immediately log version
+	glog.Infof("Version: %+v", version.Get())
 
-    klog.InfoS("Golang settings", "GOGC", os.Getenv("GOGC"), "GOMAXPROCS", os.Getenv("GOMAXPROCS"), "GOTRACEBACK", os.Getenv("GOTRACEBACK"))
+	server, err := CreateServerChain(runOptions, stopCh)
+	if err != nil {
+		return err
+	}
 
-    config, err := NewConfig(opts)
-    if err != nil {
-        return err
-    }
-    completed, err := config.Complete()
-    if err != nil {
-        return err
-    }
-    server, err := CreateServerChain(completed)
-    if err != nil {
-        return err
-    }
-
-    prepared, err := server.PrepareRun()
-    if err != nil {
-        return err
-    }
-
-    return prepared.Run(ctx)
+	return server.PrepareRun().Run(stopCh)
 }
 ```
+
+### CreateServerChain
+
+1. createAPIExtensionsServer
+
+2. CreateKubeAPIServer
+
+3. createAggregatorServer
+
+   
 
 ```c
-func CreateServerChain(config CompletedConfig) (*aggregatorapiserver.APIAggregator, error) {
-    notFoundHandler := notfoundhandler.New(config.KubeAPIs.ControlPlane.Generic.Serializer, genericapifilters.NoMuxAndDiscoveryIncompleteKey)
-    apiExtensionsServer, err := config.ApiExtensions.New(genericapiserver.NewEmptyDelegateWithCustomHandler(notFoundHandler))
-    if err != nil {
-        return nil, err
-    }
-    crdAPIEnabled := config.ApiExtensions.GenericConfig.MergedResourceConfig.ResourceEnabled(apiextensionsv1.SchemeGroupVersion.WithResource("customresourcedefinitions"))
+func CreateServerChain(runOptions *options.ServerRunOptions, stopCh <-chan struct{}) (*genericapiserver.GenericAPIServer, error) {
+	nodeTunneler, proxyTransport, err := CreateNodeDialer(runOptions)
+	if err != nil {
+		return nil, err
+	}
+	kubeAPIServerConfig, sharedInformers, versionedInformers, insecureServingOptions, serviceResolver, pluginInitializer, err := CreateKubeAPIServerConfig(runOptions, nodeTunneler, proxyTransport)
+	if err != nil {
+		return nil, err
+	}
 
-    kubeAPIServer, err := config.KubeAPIs.New(apiExtensionsServer.GenericAPIServer)
-    if err != nil {
-        return nil, err
-    }
+	// TPRs are enabled and not yet beta, since this these are the successor, they fall under the same enablement rule
+	// If additional API servers are added, they should be gated.
+	apiExtensionsConfig, err := createAPIExtensionsConfig(*kubeAPIServerConfig.GenericConfig, versionedInformers, pluginInitializer, runOptions)
+	if err != nil {
+		return nil, err
+	}
+	apiExtensionsServer, err := createAPIExtensionsServer(apiExtensionsConfig, genericapiserver.EmptyDelegate)
+	if err != nil {
+		return nil, err
+	}
 
-    // aggregator comes last in the chain
-    aggregatorServer, err := controlplaneapiserver.CreateAggregatorServer(config.Aggregator, kubeAPIServer.ControlPlane.GenericAPIServer, apiExtensionsServer.Informers.Apiextensions().V1().CustomResourceDefinitions(), crdAPIEnabled, apiVersionPriorities)
-    if err != nil {
-        // we don't need special handling for innerStopCh because the aggregator server doesn't create any go routines
-        return nil, err
-    }
+	kubeAPIServer, err := CreateKubeAPIServer(kubeAPIServerConfig, apiExtensionsServer.GenericAPIServer, sharedInformers, versionedInformers)
+	if err != nil {
+		return nil, err
+	}
 
-    return aggregatorServer, nil
+	// if we're starting up a hacked up version of this API server for a weird test case,
+	// just start the API server as is because clients don't get built correctly when you do this
+	if len(os.Getenv("KUBE_API_VERSIONS")) > 0 {
+		if insecureServingOptions != nil {
+			insecureHandlerChain := kubeserver.BuildInsecureHandlerChain(kubeAPIServer.GenericAPIServer.UnprotectedHandler(), kubeAPIServerConfig.GenericConfig)
+			if err := kubeserver.NonBlockingRun(insecureServingOptions, insecureHandlerChain, kubeAPIServerConfig.GenericConfig.RequestTimeout, stopCh); err != nil {
+				return nil, err
+			}
+		}
+
+		return kubeAPIServer.GenericAPIServer, nil
+	}
+
+	// otherwise go down the normal path of standing the aggregator up in front of the API server
+	// this wires up openapi
+	kubeAPIServer.GenericAPIServer.PrepareRun()
+
+	// This will wire up openapi for extension api server
+	apiExtensionsServer.GenericAPIServer.PrepareRun()
+
+	// aggregator comes last in the chain
+	aggregatorConfig, err := createAggregatorConfig(*kubeAPIServerConfig.GenericConfig, runOptions, versionedInformers, serviceResolver, proxyTransport, pluginInitializer)
+	if err != nil {
+		return nil, err
+	}
+	aggregatorConfig.ExtraConfig.ProxyTransport = proxyTransport
+	aggregatorConfig.ExtraConfig.ServiceResolver = serviceResolver
+	aggregatorServer, err := createAggregatorServer(aggregatorConfig, kubeAPIServer.GenericAPIServer, apiExtensionsServer.Informers)
+	if err != nil {
+		// we don't need special handling for innerStopCh because the aggregator server doesn't create any go routines
+		return nil, err
+	}
+
+	if insecureServingOptions != nil {
+		insecureHandlerChain := kubeserver.BuildInsecureHandlerChain(aggregatorServer.GenericAPIServer.UnprotectedHandler(), kubeAPIServerConfig.GenericConfig)
+		if err := kubeserver.NonBlockingRun(insecureServingOptions, insecureHandlerChain, kubeAPIServerConfig.GenericConfig.RequestTimeout, stopCh); err != nil {
+			return nil, err
+		}
+	}
+
+	return aggregatorServer.GenericAPIServer, nil
 }
 ```
+
+
+
+#### createAPIExtensionsServer
+
+```go
+func createAPIExtensionsServer(apiextensionsConfig *apiextensionsapiserver.Config, delegateAPIServer genericapiserver.DelegationTarget) (*apiextensionsapiserver.CustomResourceDefinitions, error) {
+	apiextensionsServer, err := apiextensionsConfig.Complete().New(delegateAPIServer)
+	if err != nil {
+		return nil, err
+	}
+
+	return apiextensionsServer, nil
+}
+```
+
+
+
+#### CreateKubeAPIServer
+
+```go
+func CreateKubeAPIServer(kubeAPIServerConfig *master.Config, delegateAPIServer genericapiserver.DelegationTarget, sharedInformers informers.SharedInformerFactory, versionedInformers clientgoinformers.SharedInformerFactory) (*master.Master, error) {
+	kubeAPIServer, err := kubeAPIServerConfig.Complete(versionedInformers).New(delegateAPIServer)
+	if err != nil {
+		return nil, err
+	}
+	kubeAPIServer.GenericAPIServer.AddPostStartHook("start-kube-apiserver-informers", func(context genericapiserver.PostStartHookContext) error {
+		sharedInformers.Start(context.StopCh)
+		return nil
+	})
+
+	return kubeAPIServer, nil
+}
+```
+
+
+
+
+
+
+
+#### CreateAggregatorServer
 
 
 ```c
 // pkg/controlplane/apiserver/aggregator.go
-func CreateAggregatorServer(aggregatorConfig aggregatorapiserver.CompletedConfig, delegateAPIServer genericapiserver.DelegationTarget, crds apiextensionsinformers.CustomResourceDefinitionInformer, crdAPIEnabled bool, apiVersionPriorities map[schema.GroupVersion]APIServicePriority) (*aggregatorapiserver.APIAggregator, error) {
-    aggregatorServer, err := aggregatorConfig.NewWithDelegate(delegateAPIServer)
-    if err != nil {
-        return nil, err
-    }
+func createAggregatorServer(aggregatorConfig *aggregatorapiserver.Config, delegateAPIServer genericapiserver.DelegationTarget, apiExtensionInformers apiextensionsinformers.SharedInformerFactory) (*aggregatorapiserver.APIAggregator, error) {
+	aggregatorServer, err := aggregatorConfig.Complete().NewWithDelegate(delegateAPIServer)
+	if err != nil {
+		return nil, err
+	}
 
-    // create controllers for auto-registration
-    apiRegistrationClient, err := apiregistrationclient.NewForConfig(aggregatorConfig.GenericConfig.LoopbackClientConfig)
-    if err != nil {
-        return nil, err
-    }
-    autoRegistrationController := autoregister.NewAutoRegisterController(aggregatorServer.APIRegistrationInformers.Apiregistration().V1().APIServices(), apiRegistrationClient)
-    apiServices := apiServicesToRegister(delegateAPIServer, autoRegistrationController, apiVersionPriorities)
+	// create controllers for auto-registration
+	apiRegistrationClient, err := apiregistrationclient.NewForConfig(aggregatorConfig.GenericConfig.LoopbackClientConfig)
+	if err != nil {
+		return nil, err
+	}
+	autoRegistrationController := autoregister.NewAutoRegisterController(aggregatorServer.APIRegistrationInformers.Apiregistration().InternalVersion().APIServices(), apiRegistrationClient)
+	apiServices := apiServicesToRegister(delegateAPIServer, autoRegistrationController)
+	crdRegistrationController := crdregistration.NewAutoRegistrationController(
+		apiExtensionInformers.Apiextensions().InternalVersion().CustomResourceDefinitions(),
+		autoRegistrationController)
 
-    type controller interface {
-        Run(workers int, stopCh <-chan struct{})
-        WaitForInitialSync()
-    }
-    var crdRegistrationController controller
-    if crdAPIEnabled {
-        crdRegistrationController = crdregistration.NewCRDRegistrationController(
-            crds,
-            autoRegistrationController)
-    }
+	aggregatorServer.GenericAPIServer.AddPostStartHook("kube-apiserver-autoregistration", func(context genericapiserver.PostStartHookContext) error {
+		go crdRegistrationController.Run(5, context.StopCh)
+		go func() {
+			// let the CRD controller process the initial set of CRDs before starting the autoregistration controller.
+			// this prevents the autoregistration controller's initial sync from deleting APIServices for CRDs that still exist.
+			crdRegistrationController.WaitForInitialSync()
+			autoRegistrationController.Run(5, context.StopCh)
+		}()
+		return nil
+	})
 
-    // Imbue all builtin group-priorities onto the aggregated discovery
-    if aggregatorConfig.GenericConfig.AggregatedDiscoveryGroupManager != nil {
-        for gv, entry := range apiVersionPriorities {
-            aggregatorConfig.GenericConfig.AggregatedDiscoveryGroupManager.SetGroupVersionPriority(metav1.GroupVersion(gv), int(entry.Group), int(entry.Version))
-        }
-    }
+	aggregatorServer.GenericAPIServer.AddHealthzChecks(
+		makeAPIServiceAvailableHealthzCheck(
+			"autoregister-completion",
+			apiServices,
+			aggregatorServer.APIRegistrationInformers.Apiregistration().InternalVersion().APIServices(),
+		),
+	)
 
-    err = aggregatorServer.GenericAPIServer.AddPostStartHook("kube-apiserver-autoregistration", func(context genericapiserver.PostStartHookContext) error {
-        if crdAPIEnabled {
-            go crdRegistrationController.Run(5, context.Done())
-        }
-        go func() {
-            // let the CRD controller process the initial set of CRDs before starting the autoregistration controller.
-            // this prevents the autoregistration controller's initial sync from deleting APIServices for CRDs that still exist.
-            // we only need to do this if CRDs are enabled on this server.  We can't use discovery because we are the source for discovery.
-            if crdAPIEnabled {
-                klog.Infof("waiting for initial CRD sync...")
-                crdRegistrationController.WaitForInitialSync()
-                klog.Infof("initial CRD sync complete...")
-            } else {
-                klog.Infof("CRD API not enabled, starting APIService registration without waiting for initial CRD sync")
-            }
-            autoRegistrationController.Run(5, context.Done())
-        }()
-        return nil
-    })
-    if err != nil {
-        return nil, err
-    }
-
-    err = aggregatorServer.GenericAPIServer.AddBootSequenceHealthChecks(
-        makeAPIServiceAvailableHealthCheck(
-            "autoregister-completion",
-            apiServices,
-            aggregatorServer.APIRegistrationInformers.Apiregistration().V1().APIServices(),
-        ),
-    )
-    if err != nil {
-        return nil, err
-    }
-
-    return aggregatorServer, nil
+	return aggregatorServer, nil
 }
 ```
+
+
+
+
+
+
 
 
 

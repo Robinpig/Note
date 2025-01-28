@@ -296,7 +296,7 @@ func (r *Request) request(fn func(*http.Request, *http.Response)) error {
 ### ClientSet
 
 ClientSet 对比RESTClient使用更加便捷
- 
+
 ```go
 func NewForConfig(c *rest.Config) (*CoreV1Client, error) {
 	config := *c
@@ -391,6 +391,26 @@ type CoreV1Interface interface {
 ## Informer
 
 
+
+在Informer架构设计中，有多个核心组件，分别介绍如下。 
+
+1. Reflector 
+   Reflector用于监控（Watch）指定的Kubernetes资源，当监控的资源发生变化时，触发相应的变更事件，例如Added（资源添加）事件、Updated（资源更新）事件、Deleted（资源删除）事件，并将其资源对象存放到本地缓存DeltaFIFO中。 
+2. DeltaFIFO 
+   DeltaFIFO可以分开理解，FIFO是一个先进先出的队列，它拥有队列操作的基本方法，例如Add、Update、Delete、List、Pop、Close等，而Delta是一个资源对象存储，它可以保存资源对象的操作类型，例如Added（添加）操作类型、Updated（更新）操作类型、Deleted（删除）操作类型、Sync（同步）操作类型等。 
+3. Indexer 
+   Indexer是client-go用来存储资源对象并自带索引功能的本地存储，Reflector从DeltaFIFO中将消费出来的资源对象存储至Indexer。Indexer与Etcd集群中的数据完全保持一致。client-go可以很方便地从本地存储中读取相应的资源对象数据，而无须每次从远程Etcd集群中读取，以减轻Kubernetes API Server和Etcd集群的压力
+
+
+
+Informer是一个持久运行的goroutine
+
+通过Informer机制可以很容易地监控我们所关心的资源事件，例如，当监控Kubernetes Pod资源时，如果Pod资源发生了Added（资源添加）事件、Updated（资源更新）事件、Deleted（资源删除）事件，就通知client-go，告知Kubernetes资源事件变更了并且需要进行相应的处理
+
+
+
+Informer是可以共享使用的 也称为Shared Informer 同一类资源Informer可以共享Reflector
+
 主要负责三类任务：
 
 1. 作为消费者，将 `Reflector` 放入队列的资源拿出来。
@@ -401,6 +421,16 @@ type CoreV1Interface interface {
 其资源信息和 `ETCD` 中的资源信息完全一致（得益于 `watch` 机制）。
 因此，`client-go` 可以从本地 `indexer` 中读取相应的资源，而不用每次都从 `kube-apiserver` 中获取资源信息
 这也实现了 `client-go` 对于实时性的要求。
+
+
+
+
+
+### Resync
+
+Resync机制会将Indexer本地存储中的资源对象同步到DeltaFIFO中，并将这些资源对象设置为Sync的操作类型。Resync函数在Reflector中定时执行，它的执行周期由NewReflector函数传入的resyncPeriod参数设定
+
+
 
 
 

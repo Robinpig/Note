@@ -1,6 +1,10 @@
 ## Introduction
 
+kube-proxy用于节点上的网络代理 运行在k8s的每个节点上
 
+
+
+kube-proxy是管理Pod-to-Service和Extend-to-Service 网络的非常重要的组件之一
 
 入口函数在 cmd/kube-proxy/proxy.go
 

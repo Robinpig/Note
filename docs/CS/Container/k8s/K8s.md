@@ -119,7 +119,17 @@ Mac下通常使用Docker Desktop的k8s
 
 <!-- tabs:end -->
 
-Build
+### Build
+
+早期K8s支持使用Bazel构建
+
+由于使用Bazel方式构建的二进制文件维护复杂度较高 同时Go语言将编译过程的中间结果缓存下来实现类似增量编译 在K8s 1.21版本移除Bazel方式
+
+<!-- tabs:start -->
+
+
+
+##### **Local Env**
 
 ```shell
 make all
@@ -131,47 +141,69 @@ make WHAT=cmd/kubectl
 构建函数入口
 kube::golang::build_binaries
 
-### Installing a container runtime
+##### **Container Env**
 
 
 容器环境构建
 
 ```shell
+# 构建所有平台
+make release
+
+# 构建当前平台
 make quick-release
 ```
 
 调用到build/release.sh脚本
 
-<!-- tabs:start -->
+```go
 
-Ubuntu
+# Set up the context directory for the kube-build image and build it.
+function kube::build::build_image() {
+  mkdir -p "${LOCAL_OUTPUT_BUILD_CONTEXT}"
+  # Make sure the context directory owned by the right user for syncing sources to container.
+  chown -R ${USER_ID}:${GROUP_ID} "${LOCAL_OUTPUT_BUILD_CONTEXT}"
 
+  cp /etc/localtime "${LOCAL_OUTPUT_BUILD_CONTEXT}/"
 
+  cp build/build-image/Dockerfile "${LOCAL_OUTPUT_BUILD_CONTEXT}/Dockerfile"
+  cp build/build-image/rsyncd.sh "${LOCAL_OUTPUT_BUILD_CONTEXT}/"
+  dd if=/dev/urandom bs=512 count=1 2>/dev/null | LC_ALL=C tr -dc 'A-Za-z0-9' | dd bs=32 count=1 2>/dev/null > "${LOCAL_OUTPUT_BUILD_CONTEXT}/rsyncd.password"
+  chmod go= "${LOCAL_OUTPUT_BUILD_CONTEXT}/rsyncd.password"
+
+  kube::build::update_dockerfile
+  kube::build::set_proxy
+  kube::build::docker_build "${KUBE_BUILD_IMAGE}" "${LOCAL_OUTPUT_BUILD_CONTEXT}" 'false'
+
+  # Clean up old versions of everything
+  kube::build::docker_delete_old_containers "${KUBE_BUILD_CONTAINER_NAME_BASE}" "${KUBE_BUILD_CONTAINER_NAME}"
+  kube::build::docker_delete_old_containers "${KUBE_RSYNC_CONTAINER_NAME_BASE}" "${KUBE_RSYNC_CONTAINER_NAME}"
+  kube::build::docker_delete_old_containers "${KUBE_DATA_CONTAINER_NAME_BASE}" "${KUBE_DATA_CONTAINER_NAME}"
+  kube::build::docker_delete_old_images "${KUBE_BUILD_IMAGE_REPO}" "${KUBE_BUILD_IMAGE_TAG_BASE}" "${KUBE_BUILD_IMAGE_TAG}"
+
+  kube::build::ensure_data_container
+  kube::build::sync_to_container
+}
 ```
 
-```
+
+
+
 
 
 <!-- tabs:end -->
 
 
 
+
+
+
+
+
+
 ## Architecture
 
 K8s借鉴了Borg的架构设计理念 如Scheduler调度器、Pod资源对象管理等
-
-K8s架构分为Control Plane 和 Worker Node两部分
-
-Control Plane基于etcd做分布式键值存储 一个具有数据副本的最小可运行集群必须至少有3个etcd节点 生产环境建议创建5个节点
-Control Plane主要包含以下组件
-- [scheduler](/docs/CS/Container/k8s/scheduler.md)
-- [apiServer](/docs/CS/Container/k8s/apiserver.md)
-- [controller-manager](/docs/CS/Container/k8s/controller-manager.md)
-
-工作节点主要包含以下组件:
-- [kubelet](/docs/CS/Container/k8s/kubelet.md)
-- [kube-proxy](/docs/CS/Container/k8s/kube-proxy.md)
-- Container-Runtime
 
 <div style="text-align: center;">
 
@@ -184,14 +216,40 @@ Fig.1. Kubernetes cluster architecture
 </p>
 
 
-kubectl是官方命令行工具 与kube-apiserver进行交互 通信协议默认HTTP/JSON
 
 
-kubelet 是在每个节点上运行的主要 “节点代理” 用于接收、处理、上报kube-apiserver下发的任务
-kubelet的3种标准化接口分别用于CRI、CNI和CSI
+K8s架构分为Control Plane 和 Worker Node两部分
+
+Control Plane基于[etcd](/docs/CS/Framework/etcd/etcd.md) 做分布式键值存储 一个具有数据副本的最小可运行集群必须至少有3个etcd节点 生产环境建议创建5个节点
+Etcd集群存储Kubernetes系统集群的状态和元数据，其中包括所有Kubernetes资源对象信息、集群节点信息等
+Kubernetes将所有数据存储至Etcd集群中前缀为`/registry`的目录下
+
+Control Plane主要包含以下组件
+
+- [scheduler](/docs/CS/Container/k8s/scheduler.md)
+- [apiServer](/docs/CS/Container/k8s/apiserver.md)
+- [controller-manager](/docs/CS/Container/k8s/controller-manager.md)
+
+工作节点主要包含以下组件:
+
+- [kubelet](/docs/CS/Container/k8s/kubelet.md) 是在每个节点上运行的主要 “节点代理” 用于接收、处理、上报kube-apiserver下发的任务
+- [kube-proxy](/docs/CS/Container/k8s/kube-proxy.md)
+- Container-Runtime 负责提供容器的基础管理服务 接收 `kubelet` 的指令
+
+
+
+除此之外, Kubernetes官方提供了命令行工具（CLI），用户可以通过[kubectl]()以命令行交互的方式与Kubernetes API Server进行通信，通信协议使用HTTP/JSON
+
+Kubernetes系统使用client-go作为Go语言的官方编程式交互客户端库，提供对Kubernetes API Server服务的交互访问 k8s其它组件与apiserver的通信也是基于client-go实现
+
+
+
+ 
+
 
 在Kubernetes中 service是分布式集群架构的核心
 一个Service有以下特征
+
 - 唯一指定名称
 - 一个虚拟IP地址和端口号
 - 能够提供某种远程服务能力
@@ -259,7 +317,139 @@ apiserver模块在Kubernetes中扮演了非常重要的角色。它是Kubernetes
 | CHANGELOG  |          |
 
 
-### definition
+
+K8s各组件的代码入口 `main` 结构风格非常一致
+
+
+
+
+
+
+
+## Definition
+
+在整个Kubernetes体系架构中，资源是Kubernetes最重要的概念，可以说Kubernetes的生态系统都围绕着资源运作。Kubernetes系统虽然有相当复杂和众多的功能，但它本质上是一个资源控制系统——注册、管理、调度资源并维护资源的状态
+
+而对资源的操作都是基于API完成的 K8s通过`kube-apiserver` 提供RESTful风格的API 实现对资源的管理
+
+在Kubernetes庞大而复杂的系统中，只有资源是远远不够的，Kubernetes将资源再次分组和版本化，形成Group、Version、Resource
+Kubernetes系统支持多个Group，每个Group支持多个Version，每个Version支持多个Resource，其中部分资源同时会拥有自己的SubResource
+
+在定义一个Deployment YAML文件的时候 第一行的 `apiVersion:apps/v1` 中 apps表示group, v1表示版本
+
+
+
+每一个资源都至少有两个版本，分别是外部版本（External Version）和内部版本（Internal Version）。外部版本用于对外暴露给用户请求的接口所使用的资源对象。内部版本不对外暴露，仅在Kubernetes API Server内部使用
+
+
+
+所有资源类型都有一个具体的表示 称为Kind 又称Object Scheme, Kind分为以下几种
+
+- Object
+- List
+- Simple
+
+
+
+```go
+type GroupVersionKind struct {
+	Group   string
+	Version string
+	Kind    string
+}
+```
+
+
+
+
+
+```go
+type GroupVersionResource struct {
+	Group    string
+	Version  string
+	Resource string
+}
+```
+
+
+
+Scheme defines methods for serializing and deserializing API objects, a type registry for converting group, version, and kind information to and from Go schemas, and mappings between Go schemas of different versions. A scheme is the foundation for a versioned API and versioned configuration over time.
+
+
+
+// schemas, and mappings between Go schemas of different versions. A scheme is the foundation for a versioned API and versioned configuration over time.
+
+// foundation for a versioned API and versioned configuration over time.
+
+
+
+```go
+type Scheme struct {
+	// versionMap allows one to figure out the go type of an object with
+	// the given version and name.
+	gvkToType map[schema.GroupVersionKind]reflect.Type
+
+	// typeToGroupVersion allows one to find metadata for a given go object.
+	// The reflect.Type we index by should *not* be a pointer.
+	typeToGVK map[reflect.Type][]schema.GroupVersionKind
+
+	// unversionedTypes are transformed without conversion in ConvertToVersion.
+	unversionedTypes map[reflect.Type]schema.GroupVersionKind
+
+	// unversionedKinds are the names of kinds that can be created in the context of any group
+	// or version
+	// TODO: resolve the status of unversioned types.
+	unversionedKinds map[string]reflect.Type
+
+	// Map from version and resource to the corresponding func to convert
+	// resource field labels in that version to internal version.
+	fieldLabelConversionFuncs map[string]map[string]FieldLabelConversionFunc
+
+	// defaulterFuncs is an array of interfaces to be called with an object to provide defaulting
+	// the provided object must be a pointer.
+	defaulterFuncs map[reflect.Type]func(interface{})
+
+	// converter stores all registered conversion functions. It also has
+	// default coverting behavior.
+	converter *conversion.Converter
+}
+```
+
+
+
+NewScheme creates a new Scheme. This scheme is pluggable by default.
+
+```go
+func NewScheme() *Scheme {
+	s := &Scheme{
+		gvkToType:                 map[schema.GroupVersionKind]reflect.Type{},
+		typeToGVK:                 map[reflect.Type][]schema.GroupVersionKind{},
+		unversionedTypes:          map[reflect.Type]schema.GroupVersionKind{},
+		unversionedKinds:          map[string]reflect.Type{},
+		fieldLabelConversionFuncs: map[string]map[string]FieldLabelConversionFunc{},
+		defaulterFuncs:            map[reflect.Type]func(interface{}){},
+	}
+	s.converter = conversion.NewConverter(s.nameFunc)
+
+	s.AddConversionFuncs(DefaultEmbeddedConversions()...)
+
+	// Enable map[string][]string conversions by default
+	if err := s.AddConversionFuncs(DefaultStringConversions...); err != nil {
+		panic(err)
+	}
+	if err := s.RegisterInputDefaults(&map[string][]string{}, JSONKeyMapper, conversion.AllowDifferentFieldTypeNames|conversion.IgnoreMissingFields); err != nil {
+		panic(err)
+	}
+	if err := s.RegisterInputDefaults(&url.Values{}, JSONKeyMapper, conversion.AllowDifferentFieldTypeNames|conversion.IgnoreMissingFields); err != nil {
+		panic(err)
+	}
+	return s
+}
+
+```
+
+
+
 
 
 kubernetes内部资源定义
@@ -282,7 +472,7 @@ kubernetes\pkg\controller\
 
 
 
-## CRI-O
+### CRI-O
 
 CRI-O is an implementation of the Kubernetes CRI (Container Runtime Interface) to enable using OCI (Open Container Initiative) compatible runtimes.
 It is a lightweight alternative to using [Docker](/docs/CS/Container/Docker.md) as the runtime for kubernetes. 

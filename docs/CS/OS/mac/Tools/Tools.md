@@ -38,7 +38,13 @@ ccat
 htop
 
 
+tree
 
+```shell
+brew install tree
+
+tree ./ -L 2
+```
 
 
 

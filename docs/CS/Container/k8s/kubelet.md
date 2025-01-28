@@ -1,5 +1,11 @@
 ## Introduction
 
+kubelet用于节点管理 运行在每个k8s节点上 kubelet用来接收、处理、上报kube-apiserver下发的任务 kubelet在启动时会向kube-apiserver注册节点自身信息 它主要负责所在节点上的pod资源对象的管理
+
+kubelet的3种标准化接口分别用于CRI、CNI和CSI
+
+
+
 
 
 `kubelet` 使用 Cobra 作为应用命令行框架，和 `kube-scheduler`，`kube-apiserver` 初始化过程类似
