@@ -486,6 +486,106 @@ It is a lightweight alternative to using Docker, Moby or rkt as the runtime for 
 
 ### Pod
 
+PodSpec is a description of a pod
+
+```go
+type PodSpec struct {
+	Volumes []Volume
+	// List of initialization containers belonging to the pod.
+	InitContainers []Container
+	// List of containers belonging to the pod.
+	Containers []Container
+	// +optional
+	RestartPolicy RestartPolicy
+	// Optional duration in seconds the pod needs to terminate gracefully. May be decreased in delete request.
+	// Value must be non-negative integer. The value zero indicates delete immediately.
+	// If this value is nil, the default grace period will be used instead.
+	// The grace period is the duration in seconds after the processes running in the pod are sent
+	// a termination signal and the time when the processes are forcibly halted with a kill signal.
+	// Set this value longer than the expected cleanup time for your process.
+	// +optional
+	TerminationGracePeriodSeconds *int64
+	// Optional duration in seconds relative to the StartTime that the pod may be active on a node
+	// before the system actively tries to terminate the pod; value must be positive integer
+	// +optional
+	ActiveDeadlineSeconds *int64
+	// Set DNS policy for the pod.
+	// Defaults to "ClusterFirst".
+	// Valid values are 'ClusterFirstWithHostNet', 'ClusterFirst', 'Default' or 'None'.
+	// DNS parameters given in DNSConfig will be merged with the policy selected with DNSPolicy.
+	// To have DNS options set along with hostNetwork, you have to specify DNS policy
+	// explicitly to 'ClusterFirstWithHostNet'.
+	// +optional
+	DNSPolicy DNSPolicy
+	// NodeSelector is a selector which must be true for the pod to fit on a node
+	// +optional
+	NodeSelector map[string]string
+
+	// ServiceAccountName is the name of the ServiceAccount to use to run this pod
+	// The pod will be allowed to use secrets referenced by the ServiceAccount
+	ServiceAccountName string
+	// AutomountServiceAccountToken indicates whether a service account token should be automatically mounted.
+	// +optional
+	AutomountServiceAccountToken *bool
+
+	// NodeName is a request to schedule this pod onto a specific node.  If it is non-empty,
+	// the scheduler simply schedules this pod onto that node, assuming that it fits resource
+	// requirements.
+	// +optional
+	NodeName string
+	// SecurityContext holds pod-level security attributes and common container settings.
+	// Optional: Defaults to empty.  See type description for default values of each field.
+	// +optional
+	SecurityContext *PodSecurityContext
+	// ImagePullSecrets is an optional list of references to secrets in the same namespace to use for pulling any of the images used by this PodSpec.
+	// If specified, these secrets will be passed to individual puller implementations for them to use.  For example,
+	// in the case of docker, only DockerConfig type secrets are honored.
+	// +optional
+	ImagePullSecrets []LocalObjectReference
+	// Specifies the hostname of the Pod.
+	// If not specified, the pod's hostname will be set to a system-defined value.
+	// +optional
+	Hostname string
+	// If specified, the fully qualified Pod hostname will be "<hostname>.<subdomain>.<pod namespace>.svc.<cluster domain>".
+	// If not specified, the pod will not have a domainname at all.
+	// +optional
+	Subdomain string
+	// If specified, the pod's scheduling constraints
+	// +optional
+	Affinity *Affinity
+	// If specified, the pod will be dispatched by specified scheduler.
+	// If not specified, the pod will be dispatched by default scheduler.
+	// +optional
+	SchedulerName string
+	// If specified, the pod's tolerations.
+	// +optional
+	Tolerations []Toleration
+	// HostAliases is an optional list of hosts and IPs that will be injected into the pod's hosts
+	// file if specified. This is only valid for non-hostNetwork pods.
+	// +optional
+	HostAliases []HostAlias
+	// If specified, indicates the pod's priority. "SYSTEM" is a special keyword
+	// which indicates the highest priority. Any other name must be defined by
+	// creating a PriorityClass object with that name.
+	// If not specified, the pod priority will be default or zero if there is no
+	// default.
+	// +optional
+	PriorityClassName string
+	// The priority value. Various system components use this field to find the
+	// priority of the pod. When Priority Admission Controller is enabled, it
+	// prevents users from setting this field. The admission controller populates
+	// this field from PriorityClassName.
+	// The higher the value, the higher the priority.
+	// +optional
+	Priority *int32
+	// Specifies the DNS parameters of a pod.
+	// Parameters specified here will be merged to the generated DNS
+	// configuration based on DNSPolicy.
+	// +optional
+	DNSConfig *PodDNSConfig
+}
+```
+
 
 
 ### probes
