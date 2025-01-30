@@ -588,6 +588,251 @@ type PodSpec struct {
 
 
 
+
+
+Podz中主要包括3类容器: Init容器、普通容器、临时容器 分别对应InitContainers、Containers、EphemeralContainers
+
+
+
+Init容器是一种特殊的容器 在普通容器启动之前按顺序执行 上一个Init容器执行成功并结束之后 下一个Init容器才会开始执行 如果任何一个Init容器执行失败 则认为该Pod失败
+
+
+
+makeMounts determines the mount points for the given container.
+
+```go
+func makeMounts(pod *v1.Pod, podDir string, container *v1.Container, hostName, hostDomain, podIP string, podVolumes kubecontainer.VolumeMap, mounter mountutil.Interface) ([]kubecontainer.Mount, func(), error) {
+	// Kubernetes only mounts on /etc/hosts if:
+	// - container is not an infrastructure (pause) container
+	// - container is not already mounting on /etc/hosts
+	// - OS is not Windows
+	// Kubernetes will not mount /etc/hosts if:
+	// - when the Pod sandbox is being created, its IP is still unknown. Hence, PodIP will not have been set.
+	mountEtcHostsFile := len(podIP) > 0 && runtime.GOOS != "windows"
+	glog.V(3).Infof("container: %v/%v/%v podIP: %q creating hosts mount: %v", pod.Namespace, pod.Name, container.Name, podIP, mountEtcHostsFile)
+	mounts := []kubecontainer.Mount{}
+	var cleanupAction func() = nil
+	for i, mount := range container.VolumeMounts {
+		// do not mount /etc/hosts if container is already mounting on the path
+		mountEtcHostsFile = mountEtcHostsFile && (mount.MountPath != etcHostsPath)
+		vol, ok := podVolumes[mount.Name]
+		if !ok || vol.Mounter == nil {
+			glog.Errorf("Mount cannot be satisfied for container %q, because the volume is missing or the volume mounter is nil: %+v", container.Name, mount)
+			return nil, cleanupAction, fmt.Errorf("cannot find volume %q to mount into container %q", mount.Name, container.Name)
+		}
+
+		relabelVolume := false
+		// If the volume supports SELinux and it has not been
+		// relabeled already and it is not a read-only volume,
+		// relabel it and mark it as labeled
+		if vol.Mounter.GetAttributes().Managed && vol.Mounter.GetAttributes().SupportsSELinux && !vol.SELinuxLabeled {
+			vol.SELinuxLabeled = true
+			relabelVolume = true
+		}
+		hostPath, err := volume.GetPath(vol.Mounter)
+		if err != nil {
+			return nil, cleanupAction, err
+		}
+		if mount.SubPath != "" {
+			if !utilfeature.DefaultFeatureGate.Enabled(features.VolumeSubpath) {
+				return nil, cleanupAction, fmt.Errorf("volume subpaths are disabled")
+			}
+
+			if filepath.IsAbs(mount.SubPath) {
+				return nil, cleanupAction, fmt.Errorf("error SubPath `%s` must not be an absolute path", mount.SubPath)
+			}
+
+			err = volumevalidation.ValidatePathNoBacksteps(mount.SubPath)
+			if err != nil {
+				return nil, cleanupAction, fmt.Errorf("unable to provision SubPath `%s`: %v", mount.SubPath, err)
+			}
+
+			fileinfo, err := os.Lstat(hostPath)
+			if err != nil {
+				return nil, cleanupAction, err
+			}
+			perm := fileinfo.Mode()
+
+			volumePath, err := filepath.EvalSymlinks(hostPath)
+			if err != nil {
+				return nil, cleanupAction, err
+			}
+			hostPath = filepath.Join(volumePath, mount.SubPath)
+
+			if subPathExists, err := utilfile.FileOrSymlinkExists(hostPath); err != nil {
+				glog.Errorf("Could not determine if subPath %s exists; will not attempt to change its permissions", hostPath)
+			} else if !subPathExists {
+				// Create the sub path now because if it's auto-created later when referenced, it may have an
+				// incorrect ownership and mode. For example, the sub path directory must have at least g+rwx
+				// when the pod specifies an fsGroup, and if the directory is not created here, Docker will
+				// later auto-create it with the incorrect mode 0750
+				// Make extra care not to escape the volume!
+				if err := mounter.SafeMakeDir(hostPath, volumePath, perm); err != nil {
+					glog.Errorf("failed to mkdir %q: %v", hostPath, err)
+					return nil, cleanupAction, err
+				}
+			}
+			hostPath, cleanupAction, err = mounter.PrepareSafeSubpath(mountutil.Subpath{
+				VolumeMountIndex: i,
+				Path:             hostPath,
+				VolumeName:       vol.InnerVolumeSpecName,
+				VolumePath:       volumePath,
+				PodDir:           podDir,
+				ContainerName:    container.Name,
+			})
+			if err != nil {
+				// Don't pass detailed error back to the user because it could give information about host filesystem
+				glog.Errorf("failed to prepare subPath for volumeMount %q of container %q: %v", mount.Name, container.Name, err)
+				return nil, cleanupAction, fmt.Errorf("failed to prepare subPath for volumeMount %q of container %q", mount.Name, container.Name)
+			}
+		}
+
+		// Docker Volume Mounts fail on Windows if it is not of the form C:/
+		containerPath := mount.MountPath
+		if runtime.GOOS == "windows" {
+			if (strings.HasPrefix(hostPath, "/") || strings.HasPrefix(hostPath, "\\")) && !strings.Contains(hostPath, ":") {
+				hostPath = "c:" + hostPath
+			}
+		}
+		if !filepath.IsAbs(containerPath) {
+			containerPath = makeAbsolutePath(runtime.GOOS, containerPath)
+		}
+
+		propagation, err := translateMountPropagation(mount.MountPropagation)
+		if err != nil {
+			return nil, cleanupAction, err
+		}
+		glog.V(5).Infof("Pod %q container %q mount %q has propagation %q", format.Pod(pod), container.Name, mount.Name, propagation)
+
+		mustMountRO := vol.Mounter.GetAttributes().ReadOnly && utilfeature.DefaultFeatureGate.Enabled(features.ReadOnlyAPIDataVolumes)
+
+		mounts = append(mounts, kubecontainer.Mount{
+			Name:           mount.Name,
+			ContainerPath:  containerPath,
+			HostPath:       hostPath,
+			ReadOnly:       mount.ReadOnly || mustMountRO,
+			SELinuxRelabel: relabelVolume,
+			Propagation:    propagation,
+		})
+	}
+	if mountEtcHostsFile {
+		hostAliases := pod.Spec.HostAliases
+		hostsMount, err := makeHostsMount(podDir, podIP, hostName, hostDomain, hostAliases, pod.Spec.HostNetwork)
+		if err != nil {
+			return nil, cleanupAction, err
+		}
+		mounts = append(mounts, *hostsMount)
+	}
+	return mounts, cleanupAction, nil
+}
+```
+
+
+
+
+
+### container
+
+
+
+```go
+// Container represents a single container that is expected to be run on the host.
+type Container struct {
+	// Required: This must be a DNS_LABEL.  Each container in a pod must
+	// have a unique name.
+	Name string
+	// Required.
+	Image string
+	// Optional: The docker image's entrypoint is used if this is not provided; cannot be updated.
+	// Variable references $(VAR_NAME) are expanded using the container's environment.  If a variable
+	// cannot be resolved, the reference in the input string will be unchanged.  The $(VAR_NAME) syntax
+	// can be escaped with a double $$, ie: $$(VAR_NAME).  Escaped references will never be expanded,
+	// regardless of whether the variable exists or not.
+	// +optional
+	Command []string
+	// Optional: The docker image's cmd is used if this is not provided; cannot be updated.
+	// Variable references $(VAR_NAME) are expanded using the container's environment.  If a variable
+	// cannot be resolved, the reference in the input string will be unchanged.  The $(VAR_NAME) syntax
+	// can be escaped with a double $$, ie: $$(VAR_NAME).  Escaped references will never be expanded,
+	// regardless of whether the variable exists or not.
+	// +optional
+	Args []string
+	// Optional: Defaults to Docker's default.
+	// +optional
+	WorkingDir string
+	// +optional
+	Ports []ContainerPort
+	// List of sources to populate environment variables in the container.
+	// The keys defined within a source must be a C_IDENTIFIER. All invalid keys
+	// will be reported as an event when the container is starting. When a key exists in multiple
+	// sources, the value associated with the last source will take precedence.
+	// Values defined by an Env with a duplicate key will take precedence.
+	// Cannot be updated.
+	// +optional
+	EnvFrom []EnvFromSource
+	// +optional
+	Env []EnvVar
+	// Compute resource requirements.
+	// +optional
+	Resources ResourceRequirements
+	// +optional
+	VolumeMounts []VolumeMount
+	// volumeDevices is the list of block devices to be used by the container.
+	// This is an alpha feature and may change in the future.
+	// +optional
+	VolumeDevices []VolumeDevice
+	// +optional
+	LivenessProbe *Probe
+	// +optional
+	ReadinessProbe *Probe
+	// +optional
+	Lifecycle *Lifecycle
+	// Required.
+	// +optional
+	TerminationMessagePath string
+	// +optional
+	TerminationMessagePolicy TerminationMessagePolicy
+	// Required: Policy for pulling images for this container
+	ImagePullPolicy PullPolicy
+	// Optional: SecurityContext defines the security options the container should be run with.
+	// If set, the fields of SecurityContext override the equivalent fields of PodSecurityContext.
+	// +optional
+	SecurityContext *SecurityContext
+
+	// Variables for interactive containers, these have very specialized use-cases (e.g. debugging)
+	// and shouldn't be used for general purpose containers.
+	// +optional
+	Stdin bool
+	// +optional
+	StdinOnce bool
+	// +optional
+	TTY bool
+}
+```
+
+
+
+shouldPullImage returns whether we should pull an image according to the presence and pull policy of the image.
+
+```go
+func shouldPullImage(container *v1.Container, imagePresent bool) bool {
+	if container.ImagePullPolicy == v1.PullNever {
+		return false
+	}
+
+	if container.ImagePullPolicy == v1.PullAlways ||
+		(container.ImagePullPolicy == v1.PullIfNotPresent && (!imagePresent)) {
+		return true
+	}
+
+	return false
+}
+```
+
+
+
+
+
 ### probes
 
 
