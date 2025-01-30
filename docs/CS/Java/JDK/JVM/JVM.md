@@ -234,6 +234,8 @@ These libraries are usually present in the form of .dll or .so files. These nati
 - [start](/docs/CS/Java/JDK/JVM/start.md) and [destroy](/docs/CS/Java/JDK/JVM/destroy.md)
 - [Thread](/docs/CS/Java/JDK/JVM/Thread.md)
 
+虚拟机和Java沟通的两座桥梁是JNI和JavaCalls，Java层使用JNI进入JVM层，而JVM层使用JavaCalls进入Java层。JavaCalls可以在HotSpot VM中调用Java方法，main方法执行也是使用这种JavaCalls实现的
+
 [JavaCalls](/docs/CS/Java/JDK/JVM/JavaCall?id=JavaCalls) and [JNI](/docs/CS/Java/JDK/Basic/JNI.md)
 
 ```dot
