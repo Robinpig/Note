@@ -59,5 +59,10 @@ Only the asynchronous I/O model matches the asynchronous I/O definition.
 
 > See [Linux select](/docs/CS/OS/Linux/Calls.md?id=select)
 
+
+
+poll 描述fd的方式和select不同
+没有最大数量限制
+
 ## Links
 - [Computer Network](/docs/CS/CN/CN.md)

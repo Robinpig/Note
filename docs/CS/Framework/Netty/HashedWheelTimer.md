@@ -89,10 +89,39 @@ public class HashedWheelTimer implements Timer {
 }
 ```
 
+HashedWheelTimer 中只有一个 tick 指针，tick 每隔 tickDuration (100ms) 走一个刻度，也就是说 Netty 时间轮的时钟精度就是 100 ms , 定时任务的调度延时有时会在 100ms 左右。如果你接受不了这么大的调度误差，那么可以将  tickDuration 适当调小一些，但最小不能低于 1ms
 
-### Constructor
 
-Instance Count <= 64
+由于 HashedWheelTimer 中的 tickDuration 是 100ms , 有 512 个刻度 (HashedWheelBucket) , 所以时间轮中的 tick 指针走完一个时钟周期需要 51200ms
+延时任务模型 HashedWheelTimeout 中有一个字段 —— remainingRounds，用于记录延时任务还剩多少时钟周期可以执行。
+本次时钟周期内可以执行的延时任务，它的 remainingRounds = 0 ，workerThread 在遇到 remainingRounds = 0 的 HashedWheelTimeout 就会执行。
+下一个时钟周期才能执行的延时任务，它的  remainingRounds = 1 ，依次类推。当 workerThread 遇到 remainingRounds > 0 的 HashedWheelTimeout 就会直接跳过，并将 remainingRounds 减 1
+
+HashedWheelBucket 是一个具有头尾指针的双向链表，链表中存储的元素类型为 HashedWheelTimeout  用于封装定时任务。HashedWheelBucket 中的 head 指向双向链表中的第一个 HashedWheelTimeout ， tail 指向双向链表中的最后一个 HashedWheelTimeout
+
+HashedWheelTimeout 中有一个重要的属性 deadline ，它规定了延时任务 TimerTask 的到期时间。deadline 是一个绝对时间值，它以时间轮的启动时间 startTime 为起点，表示从 startTime 这个时间点开始，到 deadline 这个时间点到期
+
+
+tick 与 HashedWheelBucket 之间的映射关系通过 ticks & mask 计算得出。mask 为 HashedWheelBucket 的个数减 1 ，所以这就要求时间轮中 HashedWheelBucket 的个数必须是 2 的次幂
+
+在时间轮中，属于同一个 HashedWheelBucket 中的延时任务 HashedWheelTimeouts ，它们的到期时间 deadline 都在同一时间范围内 —— [ tick , tick + 1) * tickDuration
+
+默认情况下，只有一个线程 workerThread 负责推动时间轮的转动，以及延时任务的执行
+只有当前 tick 对应的 HashedWheelBucket 中的延时任务全部被执行完毕的时候，tick 才会向前推动。所以为了保证任务调度的及时性，时间轮中的延时任务执行时间不能太长，只适合逻辑简单，执行时间短的延时任务
+
+
+当我们向时间轮添加一个延时任务时，Netty 首先会根据延时任务的 deadline 以及 tickDuration 计算出该延时任务最终会停留在哪一个 tick 上。注意，延时任务中的  deadline 是一个绝对值而不是相对值，是以时间轮启动时间 startTime 为基准的一个绝对时间戳。tick 也是一个绝对值而不是相对值，是以时间轮刚刚启动时 tick = 0 为基准的绝对值，只增不减。
+比如，前面这个延时 51250ms 的任务，它最终会停留在 tick = 512 上。但由于时间轮是一个环形数组，所以 tick 512 与数组长度 512 取余得到所属 HashedWheelBucket 在 wheel 数组中的 index = 0。
+
+然后将延时任务添加到 HashedWheelBucket 的末尾，前面我们已经提过，HashedWheelBucket 是一个双向链表，向链表末尾添加一个元素的时间复杂度为 O(1) 。
+
+
+延时任务模型 HashedWheelTimeout 中有一个字段 —— remainingRounds，用于记录延时任务还剩多少时钟周期可以执行。
+
+Netty 的单层时间轮 HashedWheelTimer，它将海量定时任务的添加与取消操作的时间复杂度降低到了 O(1) ， 但无法避免时间轮的空推进现象以及无法应对海量延时跨度比较大的定时任务场景
+
+
+
 
 1. Normalize ticksPerWheel to power of two and initialize the wheel.
 2. Convert tickDuration to nanos.

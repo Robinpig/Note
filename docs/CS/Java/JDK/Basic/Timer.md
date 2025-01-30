@@ -3,8 +3,6 @@
 Timer 中有两个核心组件，一个是用于调度延时任务的 TimerThread ，另一个是 TaskQueue，用于组织延时任务
 
 ```java
-
-
 public class Timer {
     /**
      * The timer task queue.  This data structure is shared with the timer
@@ -38,6 +36,8 @@ public class Timer {
     private final static AtomicInteger nextSerialNumber = new AtomicInteger(0);
 }
 ```
+
+
 TaskQueue是一个优先级队列，其底层是一个数组实现的小根堆
 TaskQueue 会将所有延时任务按照它们的 ExecutionTime ，由近到远的组织在小根堆中，堆顶永远存放的是 ExecutionTime 最近的延时任务。
 
@@ -97,6 +97,8 @@ class TaskQueue {
 }
 ```
 
+## TimerThread
+
 TimerThread 会不断的从 TaskQueue 中获取堆顶任务，如果堆顶任务的 ExecutionTime 已经达到 —— executionTime <= currentTime , 则执行任务。如果该任务是一个周期性任务，则将任务重新放入到 TaskQueue 中。
 
 如果堆顶任务的 ExecutionTime 还没有到达，那么 TimerThread 就会等待 executionTime - currentTime 的时间，一直到堆顶任务的执行时间到达，TimerThread 被重新唤醒执行堆顶任务
@@ -138,6 +140,7 @@ class TimerThread extends Thread {
 }
 ```
 
+### mainLoop
 
 ```java
 class TimerThread extends Thread {
@@ -190,8 +193,12 @@ class TimerThread extends Thread {
 
 ```
 
+## Summary
+
 根据以上 Timer 的核心实现，我们可以总结出 Timer 在应对中间件场景的延时任务时，有以下四种不足：
-1. 首先用于组织延时任务的 TaskQueue 本质上是一个小根堆。对于堆这种数据结构来说，添加，删除一个延时任务时，堆都要向上，向下调整以便满足小根堆的特性。单次操作的时间复杂度为 O(logn)。显然在面对海量定时任务的添加，删除时，性能上还是差点意思。
+
+1. 首先用于组织延时任务的 TaskQueue 本质上是一个小根堆。对于堆这种数据结构来说，添加，删除一个延时任务时，堆都要向上，向下调整以便满足小根堆的特性
+   单次操作的时间复杂度为 O(logn)。显然在面对海量定时任务的添加，删除时，性能上还是差点意思。
 2. Timer 调度框架中只有一个 TimerThread 线程来负责延时任务的调度，执行。在面对海量任务的时候，通常会显得力不从心。
 3. 另外一个严重问题是，当延时任务在执行的过程中出现异常时， Timer 并不会捕获，会导致 TimerThread 终止。这样一来，TaskQueue 中的其他延时任务将永远不会得到执行。
 4. Timer 依赖于系统的绝对时间，如果系统时间本身不准确，那么延时任务的调度就可能会出问题
@@ -202,3 +209,4 @@ class TimerThread extends Thread {
 ## Links
 
 - [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
+- [Job execution](/docs/CS/Java/JDK/sche.md)

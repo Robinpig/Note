@@ -64,8 +64,9 @@ The clients view of the system is guaranteed to be up-to-date within a certain t
 
 ## Build
 
-
 ### Docker
+
+docker-compose.yml
 
 ```yaml
 version: '2'

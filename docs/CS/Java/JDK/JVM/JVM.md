@@ -2180,6 +2180,7 @@ java -XX:+PrintFlagsFinal -XX:+UnlockDiagnosticVMOptions -version
 
 
 The -XX:HeapDumpOnOutOfMemoryError Option
+
 This option tells the Java HotSpot VM to generate a heap dump when an allocation from the Java heap or the permanent generation cannot be satisfied. 
 There is no overhead in running with this option, so it can be useful for production systems where the OutOfMemoryError exception takes a long time to surface.
 You can also specify this option at runtime with the MBeans tab in the JConsole utility.

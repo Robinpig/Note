@@ -2,7 +2,7 @@
 
 [Kubernetes](https://kubernetes.io/), also known as K8s, is an open-source system for automating deployment, scaling, and management of [containerized](/docs/CS/Container/Container.md) applications.
 
-> Kubernetes来源于Google内部的Borg 和 Omega集群管理系统
+> Kubernetes来源于Google内部的[Borg](/docs/CS/Distributed/Borg.md) 和 Omega集群管理系统
 
 Kubernetes has the following characteristics:
 
@@ -161,7 +161,9 @@ Ubuntu
 K8s借鉴了Borg的架构设计理念 如Scheduler调度器、Pod资源对象管理等
 
 K8s架构分为Control Plane 和 Worker Node两部分
-Control Plane基于etcd做分布式键值存储 Control Plane主要包含以下组件
+
+Control Plane基于etcd做分布式键值存储 一个具有数据副本的最小可运行集群必须至少有3个etcd节点 生产环境建议创建5个节点
+Control Plane主要包含以下组件
 - [scheduler](/docs/CS/Container/k8s/scheduler.md)
 - [apiServer](/docs/CS/Container/k8s/apiserver.md)
 - [controller-manager](/docs/CS/Container/k8s/controller-manager.md)
