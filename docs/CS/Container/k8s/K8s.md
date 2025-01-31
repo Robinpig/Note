@@ -729,6 +729,177 @@ func makeMounts(pod *v1.Pod, podDir string, container *v1.Container, hostName, h
 
 
 
+
+
+PodRequestsAndLimits returns a dictionary of all defined resources summed up for all containers of the pod.
+
+```go
+func PodRequestsAndLimits(pod *api.Pod) (reqs map[api.ResourceName]resource.Quantity, limits map[api.ResourceName]resource.Quantity, err error) {
+	reqs, limits = map[api.ResourceName]resource.Quantity{}, map[api.ResourceName]resource.Quantity{}
+	for _, container := range pod.Spec.Containers {
+		for name, quantity := range container.Resources.Requests {
+			if value, ok := reqs[name]; !ok {
+				reqs[name] = *quantity.Copy()
+			} else {
+				value.Add(quantity)
+				reqs[name] = value
+			}
+		}
+		for name, quantity := range container.Resources.Limits {
+			if value, ok := limits[name]; !ok {
+				limits[name] = *quantity.Copy()
+			} else {
+				value.Add(quantity)
+				limits[name] = value
+			}
+		}
+	}
+	// init containers define the minimum of any resource
+	for _, container := range pod.Spec.InitContainers {
+		for name, quantity := range container.Resources.Requests {
+			value, ok := reqs[name]
+			if !ok {
+				reqs[name] = *quantity.Copy()
+				continue
+			}
+			if quantity.Cmp(value) > 0 {
+				reqs[name] = *quantity.Copy()
+			}
+		}
+		for name, quantity := range container.Resources.Limits {
+			value, ok := limits[name]
+			if !ok {
+				limits[name] = *quantity.Copy()
+				continue
+			}
+			if quantity.Cmp(value) > 0 {
+				limits[name] = *quantity.Copy()
+			}
+		}
+	}
+	return
+}
+```
+
+
+
+
+
+GetPodQOS returns the QoS class of a pod.
+A pod is besteffort if none of its containers have specified any requests or limits.
+A pod is guaranteed only when requests and limits are specified for all the containers and they are equal.
+A pod is burstable if limits and requests do not match across all containers.
+
+
+
+```go
+func GetPodQOS(pod *core.Pod) core.PodQOSClass {
+	requests := core.ResourceList{}
+	limits := core.ResourceList{}
+	zeroQuantity := resource.MustParse("0")
+	isGuaranteed := true
+	for _, container := range pod.Spec.Containers {
+		// process requests
+		for name, quantity := range container.Resources.Requests {
+			if !isSupportedQoSComputeResource(name) {
+				continue
+			}
+			if quantity.Cmp(zeroQuantity) == 1 {
+				delta := quantity.Copy()
+				if _, exists := requests[name]; !exists {
+					requests[name] = *delta
+				} else {
+					delta.Add(requests[name])
+					requests[name] = *delta
+				}
+			}
+		}
+		// process limits
+		qosLimitsFound := sets.NewString()
+		for name, quantity := range container.Resources.Limits {
+			if !isSupportedQoSComputeResource(name) {
+				continue
+			}
+			if quantity.Cmp(zeroQuantity) == 1 {
+				qosLimitsFound.Insert(string(name))
+				delta := quantity.Copy()
+				if _, exists := limits[name]; !exists {
+					limits[name] = *delta
+				} else {
+					delta.Add(limits[name])
+					limits[name] = *delta
+				}
+			}
+		}
+
+		if !qosLimitsFound.HasAll(string(core.ResourceMemory), string(core.ResourceCPU)) {
+			isGuaranteed = false
+		}
+	}
+	if len(requests) == 0 && len(limits) == 0 {
+		return core.PodQOSBestEffort
+	}
+	// Check is requests match limits for all resources.
+	if isGuaranteed {
+		for name, req := range requests {
+			if lim, exists := limits[name]; !exists || lim.Cmp(req) != 0 {
+				isGuaranteed = false
+				break
+			}
+		}
+	}
+	if isGuaranteed &&
+		len(requests) == len(limits) {
+		return core.PodQOSGuaranteed
+	}
+	return core.PodQOSBurstable
+}
+```
+
+rankMemoryPressure orders the input pods for eviction in response to memory pressure.
+It ranks by whether or not the pod's usage exceeds its requests, then by priority, and finally by memory usage above requests.
+
+```go
+func rankMemoryPressure(pods []*v1.Pod, stats statsFunc) {
+	orderedBy(exceedMemoryRequests(stats), priority, memory(stats)).Sort(pods)
+}
+```
+
+exceedMemoryRequests compares whether or not pods' memory usage exceeds their requests
+
+```go
+func exceedMemoryRequests(stats statsFunc) cmpFunc {
+	return func(p1, p2 *v1.Pod) int {
+		p1Stats, p1Found := stats(p1)
+		p2Stats, p2Found := stats(p2)
+		if !p1Found || !p2Found {
+			// prioritize evicting the pod for which no stats were found
+			return cmpBool(!p1Found, !p2Found)
+		}
+
+		p1Usage, p1Err := podMemoryUsage(p1Stats)
+		p2Usage, p2Err := podMemoryUsage(p2Stats)
+		if p1Err != nil || p2Err != nil {
+			// prioritize evicting the pod which had an error getting stats
+			return cmpBool(p1Err != nil, p2Err != nil)
+		}
+
+		p1Memory := p1Usage[v1.ResourceMemory]
+		p2Memory := p2Usage[v1.ResourceMemory]
+		p1ExceedsRequests := p1Memory.Cmp(podRequest(p1, v1.ResourceMemory)) == 1
+		p2ExceedsRequests := p2Memory.Cmp(podRequest(p2, v1.ResourceMemory)) == 1
+		// prioritize evicting the pod which exceeds its requests
+		return cmpBool(p1ExceedsRequests, p2ExceedsRequests)
+	}
+}
+```
+
+
+
+
+
+
+
 #### syncPod
 
 syncPod is the transaction script for the sync of a single pod.
