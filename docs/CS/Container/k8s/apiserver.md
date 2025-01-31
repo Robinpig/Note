@@ -22,6 +22,43 @@ kube-apiserver 共由 3 个组件构成（Aggregator、KubeAPIServer、APIExtens
 当请求到达 kube-apiserver 时，kube-apiserver 首先会执行在 http filter chain 中注册的过滤器链，该过滤器对其执行一系列过滤操作，主要有认证、鉴权等检查操作。当 filter chain 处理完成后，请求会通过 route 进入到对应的 handler 中，handler 中的操作主要是与 etcd 的交互
 
 
+
+
+
+kube-apiserver组件启动后的第一件事情是将Kubernetes所支持的资源注册到Scheme资源注册表中，这样后面启动的逻辑才能够从Scheme资源注册表中拿到资源信息并启动和运行APIExtensionsServer、KubeAPIServer、AggregatorServer这3种服务
+
+资源的注册过程并不是通过函数调用触发的，而是通过Go语言的导入（import）和初始化（init）机制触发的
+
+```go
+
+import (
+	"k8s.io/kubernetes/pkg/api/legacyscheme"
+	"k8s.io/kubernetes/pkg/master"
+  // ...
+  }
+```
+
+kube-apiserver导入了legacyscheme和master包 kube-apiserver资源注册分为两步：第1步，初始化Scheme资源注册表；第2步，注册Kubernetes所支持的资源
+
+在legacyscheme包中，定义了Scheme资源注册表、Codec编解码器及ParameterCodec参数编解码器。它们被定义为全局变量，这些全局变量在kube-apiserver的任何地方都可以被调用，服务于KubeAPIServer
+
+kube-apiserver启动时导入了master包，master包中的import_known_versions.go文件调用了Kubernetes资源下的install包，通过导入包的机制触发初始化函数
+
+```go
+func init() {
+	if missingVersions := legacyscheme.Registry.ValidateEnvRequestedVersions(); len(missingVersions) != 0 {
+		panic(fmt.Sprintf("KUBE_API_VERSIONS contains versions that are not installed: %q.", missingVersions))
+	}
+}
+```
+
+
+
+
+
+
+
+
 ## Run
 
 启动入口cmd/kube-apiserver/app/server.go
