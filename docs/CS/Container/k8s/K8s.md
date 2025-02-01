@@ -1515,6 +1515,153 @@ func (ds *dockerService) createContainerLogSymlink(containerID string) error {
 
 
 
+
+
+### Service
+
+ServiceSpec describes the attributes that a user creates on a service
+
+```go
+type ServiceSpec struct {
+	// Type determines how the Service is exposed. Defaults to ClusterIP. Valid
+	// options are ExternalName, ClusterIP, NodePort, and LoadBalancer.
+	// "ExternalName" maps to the specified externalName.
+	// "ClusterIP" allocates a cluster-internal IP address for load-balancing to
+	// endpoints. Endpoints are determined by the selector or if that is not
+	// specified, by manual construction of an Endpoints object. If clusterIP is
+	// "None", no virtual IP is allocated and the endpoints are published as a
+	// set of endpoints rather than a stable IP.
+	// "NodePort" builds on ClusterIP and allocates a port on every node which
+	// routes to the clusterIP.
+	// "LoadBalancer" builds on NodePort and creates an
+	// external load-balancer (if supported in the current cloud) which routes
+	// to the clusterIP.
+	// More info: https://kubernetes.io/docs/concepts/services-networking/service/
+	// +optional
+	Type ServiceType
+
+	// Required: The list of ports that are exposed by this service.
+	Ports []ServicePort
+
+	// Route service traffic to pods with label keys and values matching this
+	// selector. If empty or not present, the service is assumed to have an
+	// external process managing its endpoints, which Kubernetes will not
+	// modify. Only applies to types ClusterIP, NodePort, and LoadBalancer.
+	// Ignored if type is ExternalName.
+	// More info: https://kubernetes.io/docs/concepts/services-networking/service/
+	Selector map[string]string
+
+	// ClusterIP is the IP address of the service and is usually assigned
+	// randomly by the master. If an address is specified manually and is not in
+	// use by others, it will be allocated to the service; otherwise, creation
+	// of the service will fail. This field can not be changed through updates.
+	// Valid values are "None", empty string (""), or a valid IP address. "None"
+	// can be specified for headless services when proxying is not required.
+	// Only applies to types ClusterIP, NodePort, and LoadBalancer. Ignored if
+	// type is ExternalName.
+	// More info: https://kubernetes.io/docs/concepts/services-networking/service/#virtual-ips-and-service-proxies
+	// +optional
+	ClusterIP string
+
+	// ExternalName is the external reference that kubedns or equivalent will
+	// return as a CNAME record for this service. No proxying will be involved.
+	// Must be a valid RFC-1123 hostname (https://tools.ietf.org/html/rfc1123)
+	// and requires Type to be ExternalName.
+	ExternalName string
+
+	// ExternalIPs are used by external load balancers, or can be set by
+	// users to handle external traffic that arrives at a node.
+	// +optional
+	ExternalIPs []string
+
+	// Only applies to Service Type: LoadBalancer
+	// LoadBalancer will get created with the IP specified in this field.
+	// This feature depends on whether the underlying cloud-provider supports specifying
+	// the loadBalancerIP when a load balancer is created.
+	// This field will be ignored if the cloud-provider does not support the feature.
+	// +optional
+	LoadBalancerIP string
+
+	// Optional: Supports "ClientIP" and "None".  Used to maintain session affinity.
+	// +optional
+	SessionAffinity ServiceAffinity
+
+	// sessionAffinityConfig contains the configurations of session affinity.
+	// +optional
+	SessionAffinityConfig *SessionAffinityConfig
+
+	// Optional: If specified and supported by the platform, this will restrict traffic through the cloud-provider
+	// load-balancer will be restricted to the specified client IPs. This field will be ignored if the
+	// cloud-provider does not support the feature."
+	// +optional
+	LoadBalancerSourceRanges []string
+
+	// externalTrafficPolicy denotes if this Service desires to route external
+	// traffic to node-local or cluster-wide endpoints. "Local" preserves the
+	// client source IP and avoids a second hop for LoadBalancer and Nodeport
+	// type services, but risks potentially imbalanced traffic spreading.
+	// "Cluster" obscures the client source IP and may cause a second hop to
+	// another node, but should have good overall load-spreading.
+	// +optional
+	ExternalTrafficPolicy ServiceExternalTrafficPolicyType
+
+	// healthCheckNodePort specifies the healthcheck nodePort for the service.
+	// If not specified, HealthCheckNodePort is created by the service api
+	// backend with the allocated nodePort. Will use user-specified nodePort value
+	// if specified by the client. Only effects when Type is set to LoadBalancer
+	// and ExternalTrafficPolicy is set to Local.
+	// +optional
+	HealthCheckNodePort int32
+
+	// publishNotReadyAddresses, when set to true, indicates that DNS implementations
+	// must publish the notReadyAddresses of subsets for the Endpoints associated with
+	// the Service. The default value is false.
+	// The primary use case for setting this field is to use a StatefulSet's Headless Service
+	// to propagate SRV records for its Pods without respect to their readiness for purpose
+	// of peer discovery.
+	// This field will replace the service.alpha.kubernetes.io/tolerate-unready-endpoints
+	// when that annotation is deprecated and all clients have been converted to use this
+	// field.
+	// +optional
+	PublishNotReadyAddresses bool
+}
+```
+
+
+
+### Ingress
+
+IngressSpec describes the Ingress the user wishes to exist.
+
+```go
+type IngressSpec struct {
+	// A default backend capable of servicing requests that don't match any
+	// rule. At least one of 'backend' or 'rules' must be specified. This field
+	// is optional to allow the loadbalancer controller or defaulting logic to
+	// specify a global default.
+	// +optional
+	Backend *IngressBackend
+
+	// TLS configuration. Currently the Ingress only supports a single TLS
+	// port, 443. If multiple members of this list specify different hosts, they
+	// will be multiplexed on the same port according to the hostname specified
+	// through the SNI TLS extension, if the ingress controller fulfilling the
+	// ingress supports SNI.
+	// +optional
+	TLS []IngressTLS
+
+	// A list of host rules used to configure the Ingress. If unspecified, or
+	// no rule matches, all traffic is sent to the default backend.
+	// +optional
+	Rules []IngressRule
+	// TODO: Add the ability to specify load-balancer IP through claims
+}
+```
+
+
+
+
+
 ## Network Management
 
 ## Resource Management
