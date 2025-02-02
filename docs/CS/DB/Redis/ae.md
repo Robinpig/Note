@@ -790,6 +790,29 @@ typedef struct aeApiState {
 } aeApiState;
 ```
 
+kevent 定义在 event.h 源文件中
+
+```go
+struct kevent {
+	uintptr_t       ident;  /* identifier for this event */
+	int16_t         filter; /* filter for event */
+	uint16_t        flags;  /* general flags */
+	uint32_t        fflags; /* filter-specific flags */
+	intptr_t        data;   /* filter-specific data */
+	void            *udata; /* opaque user data identifier */
+};
+```
+
+
+
+
+
+
+
+
+
+
+
 ```c
 static int aeApiCreate(aeEventLoop *eventLoop) {
     aeApiState *state = zmalloc(sizeof(aeApiState));
