@@ -23,7 +23,8 @@
 ## Data Structures
 
 Data structure is a particular way of storing and organizing data in a computer so that it can be used efficiently.
-A data structure is a special format for organizing and storing data. General data structure types include arrays, files, linked lists, stacks, queues, trees, graphs and so on.
+A data structure is a special format for organizing and storing data. 
+General data structure types include arrays, files, linked lists, stacks, queues, trees, graphs and so on.
 <br>
 Depending on the organization of the elements, data structures are classified into two types:
 
@@ -115,8 +116,8 @@ In addition, all algorithms must satisfy the following criteria:
 2. **Output**. At least one quantity is produced.
 3. **Definiteness**. Each instruction is clear and unambiguous.
 4. **Finiteness**. If we trace out the instructions of an algorithm, then for all cases, the algorithm terminates after a finite number of steps.
-5. **Effectiveness**. Every instruction must be basic enough to be carried out, in principle, by a person using only pencil and paper. It is not enough that each operation be definite as in 3; it also must be feasible.
-
+5. **Effectiveness**. Every instruction must be basic enough to be carried out, in principle, by a person using only pencil and paper. 
+   It is not enough that each operation be definite as in 3; it also must be feasible.
 
 Computer algorithms solve computational problems.
 We want two things from a computer algorithm: given an input to a problem, it should always produce a correct solution to the problem,
