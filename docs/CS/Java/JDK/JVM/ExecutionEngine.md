@@ -1,8 +1,10 @@
 ## Introduction
 
-Once the bytecode has been loaded into the main memory, and details are available in the runtime data area, the next step is to run the program. The Execution Engine handles this by executing the code present in each class.
+Once the bytecode has been loaded into the main memory, and details are available in the runtime data area, the next step is to run the program. 
+The Execution Engine handles this by executing the code present in each class.
 
-However, before executing the program, the bytecode needs to be converted into machine language instructions. The JVM can use an interpreter or a JIT compiler for the execution engine.
+However, before executing the program, the bytecode needs to be converted into machine language instructions.
+The JVM can use an interpreter or a JIT compiler for the execution engine.
 
 Interpreter
 
