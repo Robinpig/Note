@@ -88,6 +88,107 @@ struct tree_node
 
 树的经典遍历算法主要有二种：深度优先算法（DF）及广度优先算法（BF），BF 与DF 的效率其实差不多的。在有些场景，是 DF 更快，在有些场景，是 BF 更快。DF一般用 stack 数据结构，BF 一般用 queue 数据结构
 
+### levelOrder
+
+
+
+层序遍历是从根节点开始 从上至下（先父节点后子节点） 从左至右（先左节点后右节点） 按顺序遍历 这就比较适用于队列FIFO的性质
+
+使用一个Queue用于保存当前层的节点 在下一层出队 获取其子节点入队
+
+以下是直接遍历输出的代码
+
+```go
+    queue := new(LinkQueue)
+    // 根节点先入队
+    queue.Add(root)
+    for queue.size > 0 {
+        // 不断出队列
+        element := queue.Remove()
+        // 先打印节点值
+        fmt.Print(element.Data, " ")
+        // 左子树非空，入队列
+        if element.Left != nil {
+            queue.Add(element.Left)
+        }
+        // 右子树非空，入队列
+        if element.Right != nil {
+            queue.Add(element.Right)
+        }
+    }
+```
+
+大多数情况下是需要整合成一个列表并返回的
+
+```java
+public int[] levelOrder(TreeNode root) {
+        int arr[]=new int[10000];
+        int index=0;
+        Queue<TreeNode>queue=new ArrayDeque<>();
+        if(root!=null)
+            queue.add(root);
+        while (!queue.isEmpty()){
+            TreeNode node=queue.poll();
+            arr[index++]= node.val;
+            if(node.left!=null)
+                queue.add(node.left);
+            if(node.right!=null)
+                queue.add(node.right);
+            
+        }
+        return Arrays.copyOf(arr,index);
+    }
+
+```
+
+在这基础上还有需要分层存储的多级列表 与单层存储相比 在对队列的出队操作需要注意 可以记录上层总共的节点数量 用于界定一层出队的次数
+
+
+
+还有之字形遍历
+
+第一行按照从左到右的顺序打印，第二层按照从右到左的顺序打印，第三行再按照从左到右的顺序打印，其他行以此类推
+
+为了区分每层的遍历顺序 可以使用一个临时变量用作奇偶数判断来变更每层的遍历顺序
+
+```java
+public List<List<Integer>> levelOrder(TreeNode root) {
+  List<List<Integer>> value=new ArrayList<>();//存储到的最终结果
+  if(root==null)
+    return value;
+  int index=0;//判断
+  Queue<TreeNode>queue=new ArrayDeque<>();
+  queue.add(root);
+  while (!queue.isEmpty()){
+    List<Integer>va=new ArrayList<>();//临时 用于存储到value中
+    int len=queue.size();//当前层的数量
+    for(int i=0;i<len;i++){
+      TreeNode node=queue.poll();
+      if(index%2==0)
+        va.add(node.val);
+      else
+        va.add(0,node.val);
+      if(node.left!=null)
+        queue.add(node.left);
+      if(node.right!=null)
+        queue.add(node.right);
+    }
+    value.add(va);
+    index++;
+  }
+  return value;
+}
+
+```
+
+
+
+
+
+
+
+
+
 
 
 ## Binary Trees
