@@ -42,6 +42,19 @@ Prior to Java 8, we had to specify the -server flag to use the C2 compiler. Howe
 
 We should note that the Graal JIT compiler is also available since Java 10, as an alternative to C2. Unlike C2, Graal can run in both just-in-time and ahead-of-time compilation modes to produce
 
+
+## Init
+
+编译策略通常由CompilationPolicy来表示，CompilationPolicy是选择哪个方法要用什么程度优化的抽象层。此类的继承体系如下
+在创建虚拟机时会调用compilationPolicy_init()函数
+
+
+```cpp
+void compilationPolicy_init() {
+  CompilationPolicy::initialize();
+}
+```
+
 ### On-stack Replacement
 
 On-stack replacement (OSR) is essential technology for adaptive optimization, allowing changes to code actively executing in a managed runtime.
