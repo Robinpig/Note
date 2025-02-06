@@ -42,18 +42,231 @@ Prior to Java 8, we had to specify the -server flag to use the C2 compiler. Howe
 
 We should note that the Graal JIT compiler is also available since Java 10, as an alternative to C2. Unlike C2, Graal can run in both just-in-time and ahead-of-time compilation modes to produce
 
-
 ## Init
 
+
+
+### compilationPolicy_init
+
 编译策略通常由CompilationPolicy来表示，CompilationPolicy是选择哪个方法要用什么程度优化的抽象层。此类的继承体系如下
-在创建虚拟机时会调用compilationPolicy_init()函数
+在创建虚拟机时 `init_global()` 会调用compilationPolicy_init()函数
 
 
 ```cpp
 void compilationPolicy_init() {
   CompilationPolicy::initialize();
 }
+
+
+void CompilationPolicy::initialize() {
+  if (!CompilerConfig::is_interpreter_only()) {
+    int count = CICompilerCount;
+    bool c1_only = CompilerConfig::is_c1_only();
+    bool c2_only = CompilerConfig::is_c2_or_jvmci_compiler_only();
+
+#ifdef _LP64
+    // Turn on ergonomic compiler count selection
+    if (FLAG_IS_DEFAULT(CICompilerCountPerCPU) && FLAG_IS_DEFAULT(CICompilerCount)) {
+      FLAG_SET_DEFAULT(CICompilerCountPerCPU, true);
+    }
+    if (CICompilerCountPerCPU) {
+      // Simple log n seems to grow too slowly for tiered, try something faster: log n * log log n
+      int log_cpu = log2i(os::active_processor_count());
+      int loglog_cpu = log2i(MAX2(log_cpu, 1));
+      count = MAX2(log_cpu * loglog_cpu * 3 / 2, 2);
+      // Make sure there is enough space in the code cache to hold all the compiler buffers
+      size_t c1_size = 0;
+#ifdef COMPILER1
+      c1_size = Compiler::code_buffer_size();
+#endif
+      size_t c2_size = 0;
+#ifdef COMPILER2
+      c2_size = C2Compiler::initial_code_buffer_size();
+#endif
+      size_t buffer_size = c1_only ? c1_size : (c1_size/3 + 2*c2_size/3);
+      int max_count = (ReservedCodeCacheSize - (CodeCacheMinimumUseSpace DEBUG_ONLY(* 3))) / (int)buffer_size;
+      if (count > max_count) {
+        // Lower the compiler count such that all buffers fit into the code cache
+        count = MAX2(max_count, c1_only ? 1 : 2);
+      }
+      FLAG_SET_ERGO(CICompilerCount, count);
+    }
+#endif
+
+    if (c1_only) {
+      // No C2 compiler thread required
+      set_c1_count(count);
+    } else if (c2_only) {
+      set_c2_count(count);
+    } else {
+        set_c1_count(MAX2(count / 3, 1));
+        set_c2_count(MAX2(count - c1_count(), 1));
+    }
+    assert(count == c1_count() + c2_count(), "inconsistent compiler thread count");
+    set_increase_threshold_at_ratio();
+  }
+  set_start_time(nanos_to_millis(os::javaTimeNanos()));
+}
 ```
+
+
+
+在64位JVM中，有2种情况来计算总的编译线程数，如下：
+
+- -XX:+CICompilerCountPerCPU=true， 默认情况下，编译线程的总数根据处理器数量来调整；
+- -XX:+CICompilerCountPerCPU=false且-XX:+CICompilerCount=N，强制设定总编译线程数。
+
+无论以上哪种情况，HotSpot VM都会将这些编译线程按照1:2的比例分配给C1和C2（至少1个），举个例子，对于一个四核机器来说，总的编译线程数目为 3，其中包含一个 C1 编译线程和两个 C2 编译线程。
+
+设置完成编译器线程数量后，会在创建虚拟机实例时 `Threads::create_vm` 调用CompileBroker::compilation_init_phase1()函数初始化编译相关组件，包括编译器实现，编译线程，计数器等
+
+```cpp
+void CompileBroker::compilation_init_phase1(JavaThread* THREAD) {
+  // No need to initialize compilation system if we do not use it.
+  if (!UseCompiler) {
+    return;
+  }
+  // Set the interface to the current compiler(s).
+  _c1_count = CompilationPolicy::c1_count();
+  _c2_count = CompilationPolicy::c2_count();
+
+
+#ifdef COMPILER1
+  if (_c1_count > 0) {
+    _compilers[0] = new Compiler();
+  }
+#endif // COMPILER1
+
+#ifdef COMPILER2
+  if (true JVMCI_ONLY( && !UseJVMCICompiler)) {
+    if (_c2_count > 0) {
+      _compilers[1] = new C2Compiler();
+      // Register c2 first as c2 CompilerPhaseType idToPhase mapping is explicit.
+      // idToPhase mapping for c2 is in opto/phasetype.hpp
+      JFR_ONLY(register_jfr_phasetype_serializer(compiler_c2);)
+    }
+  }
+#endif // COMPILER2
+
+  // Start the compiler thread(s)
+  init_compiler_threads();
+  // totalTime performance counter is always created as it is required
+  // by the implementation of java.lang.management.CompilationMXBean.
+  {
+    // Ensure OOM leads to vm_exit_during_initialization.
+    EXCEPTION_MARK;
+    _perf_total_compilation =
+                 PerfDataManager::create_counter(JAVA_CI, "totalTime",
+                                                 PerfData::U_Ticks, CHECK);
+  }
+
+}
+```
+
+
+
+
+
+### init_compiler_threads
+
+```cpp
+void CompileBroker::init_compiler_threads() {
+  // Ensure any exceptions lead to vm_exit_during_initialization.
+  EXCEPTION_MARK;
+#if !defined(ZERO)
+  assert(_c2_count > 0 || _c1_count > 0, "No compilers?");
+#endif // !ZERO
+  // Initialize the compilation queue
+  if (_c2_count > 0) {
+    const char* name = JVMCI_ONLY(UseJVMCICompiler ? "JVMCI compile queue" :) "C2 compile queue";
+    _c2_compile_queue  = new CompileQueue(name);
+    _compiler2_objects = NEW_C_HEAP_ARRAY(jobject, _c2_count, mtCompiler);
+    _compiler2_logs = NEW_C_HEAP_ARRAY(CompileLog*, _c2_count, mtCompiler);
+  }
+  if (_c1_count > 0) {
+    _c1_compile_queue  = new CompileQueue("C1 compile queue");
+    _compiler1_objects = NEW_C_HEAP_ARRAY(jobject, _c1_count, mtCompiler);
+    _compiler1_logs = NEW_C_HEAP_ARRAY(CompileLog*, _c1_count, mtCompiler);
+  }
+
+  char name_buffer[256];
+
+  for (int i = 0; i < _c2_count; i++) {
+    jobject thread_handle = nullptr;
+    // Create all j.l.Thread objects for C1 and C2 threads here, but only one
+    // for JVMCI compiler which can create further ones on demand.
+    JVMCI_ONLY(if (!UseJVMCICompiler || !UseDynamicNumberOfCompilerThreads || i == 0) {)
+    // Create a name for our thread.
+    os::snprintf_checked(name_buffer, sizeof(name_buffer), "%s CompilerThread%d", _compilers[1]->name(), i);
+    Handle thread_oop = create_thread_oop(name_buffer, CHECK);
+    thread_handle = JNIHandles::make_global(thread_oop);
+    JVMCI_ONLY(})
+    _compiler2_objects[i] = thread_handle;
+    _compiler2_logs[i] = nullptr;
+
+    if (!UseDynamicNumberOfCompilerThreads || i == 0) {
+      JavaThread *ct = make_thread(compiler_t, thread_handle, _c2_compile_queue, _compilers[1], THREAD);
+      assert(ct != nullptr, "should have been handled for initial thread");
+      _compilers[1]->set_num_compiler_threads(i + 1);
+      if (trace_compiler_threads()) {
+        ResourceMark rm;
+        ThreadsListHandle tlh;  // name() depends on the TLH.
+        assert(tlh.includes(ct), "ct=" INTPTR_FORMAT " exited unexpectedly.", p2i(ct));
+        stringStream msg;
+        msg.print("Added initial compiler thread %s", ct->name());
+        print_compiler_threads(msg);
+      }
+    }
+  }
+
+  for (int i = 0; i < _c1_count; i++) {
+    // Create a name for our thread.
+    os::snprintf_checked(name_buffer, sizeof(name_buffer), "C1 CompilerThread%d", i);
+    Handle thread_oop = create_thread_oop(name_buffer, CHECK);
+    jobject thread_handle = JNIHandles::make_global(thread_oop);
+    _compiler1_objects[i] = thread_handle;
+    _compiler1_logs[i] = nullptr;
+
+    if (!UseDynamicNumberOfCompilerThreads || i == 0) {
+      JavaThread *ct = make_thread(compiler_t, thread_handle, _c1_compile_queue, _compilers[0], THREAD);
+      assert(ct != nullptr, "should have been handled for initial thread");
+      _compilers[0]->set_num_compiler_threads(i + 1);
+      if (trace_compiler_threads()) {
+        ResourceMark rm;
+        ThreadsListHandle tlh;  // name() depends on the TLH.
+        assert(tlh.includes(ct), "ct=" INTPTR_FORMAT " exited unexpectedly.", p2i(ct));
+        stringStream msg;
+        msg.print("Added initial compiler thread %s", ct->name());
+        print_compiler_threads(msg);
+      }
+    }
+  }
+
+  if (UsePerfData) {
+    PerfDataManager::create_constant(SUN_CI, "threads", PerfData::U_Bytes, _c1_count + _c2_count, CHECK);
+  }
+
+#if defined(ASSERT) && COMPILER2_OR_JVMCI
+  if (DeoptimizeObjectsALot) {
+    // Initialize and start the object deoptimizer threads
+    const int total_count = DeoptimizeObjectsALotThreadCountSingle + DeoptimizeObjectsALotThreadCountAll;
+    for (int count = 0; count < total_count; count++) {
+      Handle thread_oop = create_thread_oop("Deoptimize objects a lot single mode", CHECK);
+      jobject thread_handle = JNIHandles::make_local(THREAD, thread_oop());
+      make_thread(deoptimizer_t, thread_handle, nullptr, nullptr, THREAD);
+    }
+  }
+#endif // defined(ASSERT) && COMPILER2_OR_JVMCI
+}
+```
+
+
+
+
+
+
+
+
 
 ### On-stack Replacement
 
