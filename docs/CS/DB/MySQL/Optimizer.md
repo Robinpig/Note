@@ -11,8 +11,65 @@
 Fig.1. Optimizer
 </p>
 
+
+MySQL查询成本
+
+I/O成本（1.0）
+
+- 查询记录时，需先把数据加载到内存中再操作，加载过程损耗时间称为 I/O成本
+- MySQL读取一个页（Page，16KB）数据的成本默认1.0
+
+CPU成本（0.2）
+
+- 读取及检测记录是否满足查询条件、对结果集进行排序等操作损耗的时间 称为CPU成本
+- MySQL读取一行数据 进行匹配比较的成本 默认0.2
+
+
+
+优化步骤
+
+1. 根据搜索条件，分析出 可能使用的索引
+2. 计算全表扫描的成本
+   - 全表扫描：在聚簇索引树数据全部遍历一次后，根据搜索条件进行比对
+3. 计算使用 不同索引执行查询的成本
+4. 对比各种执行方案的成本，找出成本最低的
+
+
+
+全表扫描成本计算
+
+查看聚簇索引占用page
+
+查看表记录数
+
+```shell
+SHOW TABLE STATUS LIKE 'tableName'
+```
+
+返回结果
+
+- Rows
+- Data_length InnoDB下代表聚簇索引占用空间大小 聚簇索引页面数量 * 每个页面大小（默认16KB）
+
+
+
+聚簇索引页面 * 每页成本 + 微调值 = IO成本
+
+表的总记录数 * CPU成本 + 微调值 = CPU成本
+
+
+
+
+
+
+
+
+
+
+
 接下来，我们来说一下什么是表的Access Path。
 创建一个简单的表，其中id是主键，并且我们在col1建立有二级索引：
+
 ```sql
 CREATE TABLE t1 (
 id INT PRIMARY KEY,
@@ -68,9 +125,14 @@ select * from mysql.server_cost;
 select * from mysql.engine_cost;
 ```
 
-
 在MySQL中，有关代价估计的代码主要集中在两个函数中：bool JOIN::estimate_rowcount()和bool Optimize_table_order::choose_table_order()中。
 bool JOIN::estimate_rowcount()会对每个表估计每种Access Path输出的行数以及对应的cost
+
+
+
+
+
+
 
 在这个函数中，只会考虑当这个表作为第一个读到的表时可行的Access Path。
 bool Optimize_table_order::choose_table_order()是通过某种搜索算法计算不同JOIN ORDER下，每个表的最佳Access Path和对应的cost。在这个函数中，表可以通过JOIN condition来拓展出新的Access Path。
