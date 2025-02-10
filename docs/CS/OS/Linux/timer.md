@@ -13,6 +13,90 @@ Linux 系统的晶振时间指的是系统时钟的精确度和准确性。它�
 Linux系统以1970年1月1日0点0分0秒（UTC）为参考点，计算机更喜欢使用从当前时间点到这个参考点的秒数来表示时间
 因此，Linux 系统的晶振时间要确保系统时钟与这个参考点的时间保持一致，并提供秒级的精度
 
+
+
+gettimeofday系统调用就是用来获取当前时间的，结果以timeval和timezone（时区）结构体的形式返回
+
+gettimeofday调用ktime_get_real_ts64获得以timespec64表示的当前时间然后转化为timeval形式
+
+```c
+void ktime_get_real_ts64(struct timespec64 *ts)
+{
+	struct timekeeper *tk = &tk_core.timekeeper;
+	unsigned int seq;
+	u64 nsecs;
+
+	WARN_ON(timekeeping_suspended);
+
+	do {
+		seq = read_seqcount_begin(&tk_core.seq);
+
+		ts->tv_sec = tk->xtime_sec;
+		nsecs = timekeeping_get_ns(&tk->tkr_mono);
+
+	} while (read_seqcount_retry(&tk_core.seq, seq));
+
+	ts->tv_nsec = 0;
+	timespec64_add_ns(ts, nsecs);
+}
+EXPORT_SYMBOL(ktime_get_real_ts64);
+```
+
+
+
+timekeeping_get_ns
+
+```c
+static __always_inline u64 timekeeping_get_ns(const struct tk_read_base *tkr)
+{
+	return timekeeping_cycles_to_ns(tkr, tk_clock_read(tkr));
+}
+
+static inline u64 timekeeping_cycles_to_ns(const struct tk_read_base *tkr, u64 cycles)
+{
+	/* Calculate the delta since the last update_wall_time() */
+	u64 mask = tkr->mask, delta = (cycles - tkr->cycle_last) & mask;
+
+	/*
+	 * This detects both negative motion and the case where the delta
+	 * overflows the multiplication with tkr->mult.
+	 */
+	if (unlikely(delta > tkr->clock->max_cycles)) {
+		/*
+		 * Handle clocksource inconsistency between CPUs to prevent
+		 * time from going backwards by checking for the MSB of the
+		 * mask being set in the delta.
+		 */
+		if (delta & ~(mask >> 1))
+			return tkr->xtime_nsec >> tkr->shift;
+
+		return delta_to_ns_safe(tkr, delta);
+	}
+
+	return ((delta * tkr->mult) + tkr->xtime_nsec) >> tkr->shift;
+}
+```
+
+
+
+
+
+
+
+```c
+static __always_inline void timespec64_add_ns(struct timespec64 *a, u64 ns)
+{
+	a->tv_sec += __iter_div_u64_rem(a->tv_nsec + ns, NSEC_PER_SEC, &ns);
+	a->tv_nsec = ns;
+}
+```
+
+
+
+
+
+
+
 ```c
 // include/uapi/linux/time.h
 #ifndef __KERNEL__
