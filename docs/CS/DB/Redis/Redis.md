@@ -6,7 +6,7 @@ So different processes can query and modify the same data structures in a shared
 
 Redis has **built-in replication, Lua scripting, LRU eviction, [transactions](/docs/CS/DB/Redis/Transaction.md), and different levels of on-disk persistence,** and provides **high availability via Redis Sentinel** and **automatic partitioning with Redis Cluster**.
 
->  [!TIP]
+>  [!TIPS]
 >
 > The Linux Foundation announced its intent to form [Valkey](/docs/CS/DB/Valkey.md), an open source alternative to the Redis in-memory, NoSQL data store. 
 
@@ -58,10 +58,19 @@ Redis源码目录:
 <p style="text-align: center;">
 Fig.1. Architecture
 </p>
+[Redis启动流程](/docs/CS/DB/Redis/start.md)
+
+[Redis命令执行流程](/docs/CS/DB/Redis/start.md?id=do)
 
 
 
-[Lifecycle](/docs/CS/DB/Redis/Lifecycle.md)
+图源 [redis 异步网络通信流程 - 单线程](https://www.processon.com/view/5eab75227d9c0869dab46472)
+
+![](https://wenfh2020.com/images/2020/2020-05-04-01-19-51.png)
+
+
+
+
 
 Server and Client
 
@@ -605,6 +614,19 @@ void slowlogPushEntryIfNeeded(client *c, robj **argv, int argc, long long durati
 ```
 
 slowlog get
+
+
+### commands
+
+常用运维命令 用于线上事故保留现场
+
+```shell
+INFO MEMORY
+
+MEMORY USAGE
+
+CLIENT LIST
+```
 
 
 ## Links

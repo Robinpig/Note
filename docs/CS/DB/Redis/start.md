@@ -1183,6 +1183,8 @@ Following is an explanation of what precisely `aeCreateFileEvent` does when call
 
 This completes the initialization of Redis event loop.
 
+初始化了 aeFileEvent，存放在 eventLoop 中的events[] 内。并且调用 aeApiAddEvent()，将监听端口的描述符注册到创建的内核队列中
+
 ```c
 // ae.c
 int aeCreateFileEvent(aeEventLoop *eventLoop, int fd, int mask,
@@ -1491,7 +1493,7 @@ struct redisServer {
 
 
 
-#### readQueryFromClient
+### readQueryFromClient
 
 `readQueryFromClient()` is the ***readable event handler*** and accumulates data from read from the client into the query buffer.
 
@@ -1829,7 +1831,28 @@ int processCommandAndResetClient(client *c) {
 }
 ```
 
-这里调用了[processCommand]() 处理命令 在函数内部调用 c->cmd->proc处理真正的命令 这里以GET的函数 getCommand 为例
+### processCommand
+
+这里调用了[processCommand]() 处理命令
+
+
+
+
+
+- 如果处于事务中，就将命令先放入队列中，不执行。
+- 如果不在事务中，就直接调用call() 执行命令。
+
+call() 中会调用命令对应的处理函数
+
+```c
+    c->cmd->proc(c);
+```
+
+
+
+
+
+这里以GET的函数 getCommand 为例
 
 ```c
 void getCommand(client *c) {
