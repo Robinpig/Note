@@ -107,7 +107,7 @@ PrintCodeCacheOnCompilation               = false
 ReservedCodeCacheSize                     = 251658240
 UseCodeCacheFlushing                      = true
 
-JIT
+## JIT
 
 1. c1
 2. opto(c2)
