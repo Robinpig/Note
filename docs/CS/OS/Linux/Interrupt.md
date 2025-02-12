@@ -1,6 +1,16 @@
 ## Introduction
 
+IDT 包含了256 个中断描述符， 本质上是内存中的一个数组， 由idt_table 变量表示。中断描述符由gate_desc 结构体表示， 有GATE_lNTERRUPT 、GATE_TRAP、GATE_CALL 和GATE_TASK 儿种类型。系统启动过程中， 会为idt_table 的元素赋值， 然后将它的地址写入寄存器。中断发生时CPU 根据该地址和中断索引，计算得到对应的中断处理程序地址并执行。256 个中断中，前32 个是x86 预留的， 其余的多数都可以给操作系统使用， 具体情况与系统的配置有关， 比如OxfO-Oxff是给SMP 使用的。内核预定义了多数专用的中断描述符， 多由idt_data 数组的形式给出， 比如early_idts、def_idts 和apic_idts等，系统初始化过程中会调用咄＿setup_from_ t able将这些数组的元素信息转换为 idt t able对应的元素信息。
 
+中断处理必须完成三个任务：
+1. 保存现场以便处理完毕后返回；
+2. 调用已注册的中断服务例程(ist) 处理中断事件；
+3. 返回中断前工作继续执行。
+   要做的其实就是将保存的现场在处理完中断后恢复到中断之前的状态， 确保程序能继续执行
+
+中断服务例程涉及两个关键的结构体，irq _ desc和irqaclion， 二者是一对多的关系。irq_desc与irq号对应， irqaction与一个设备对应， 共享同一个irq号的多个设备的irqaction对应同一个irq_desc CPU得到中断索引(x86上称之为vector),计算得到irq,通过irq_to_desc可以由irq获得对应的irq_desc
+
+Ilq是软件上的抽象， 为了多核系统上的通用性。veclo,是CPU看到的中断索引， 它们有一定的对应关系
 
 内核使用全局per-cpu变量vector_irq维护vectm和irq_desc的关系
 irq_desc和irq是一对一的关系。 irqaction表示设备对中断的处理
@@ -15,17 +25,31 @@ irq_desc和irq是一对一的关系。 irqaction表示设备对中断的处理
 
 
 两个结构体都有处理 中断的函数
-且相关的参数都已设置完毕，irq_desc并不一 定 需要 irqaction。 实际上，irq』、(lII“I Ill11(II( I(I 策略。l丸门II丿 1rqc1d1011 (I丿II、1从 )j勹“山1]lIII,II( II(I j『]丿ll 前者执行与否完全取决于handle_irq的
-采用中断的设备， 在使能 中断之前必须设詈触发方式(电平/边沿触发等)、irq号、 处理函 数等信息。内核提供了request_irq和request_threaded_irq两个函数可以方便地配置这些信息，前
-者调用后者实现
+且相关的参数都已设置完毕，irq_desc并不一 定 需要 irqaction。 实际上，irq_desc的handle_irq 是一定会执行的 irqaction函数一般由handle_irq调用 前者执行与否完全取决于handle_irq的策略
+采用中断的设备， 在使能 中断之前必须设詈触发方式(电平/边沿触发等)、irq号、 处理函 数等信息。内核提供了request_irq和request_threaded_irq两个函数可以方便地配置这些信息，前者调用后者实现
 
 
+irq_entries_start 是一个函数数组
+asm_common_interrupt, 重复NR_EXTERNAL_VECTORS次（记为n次），一次定义了n个中断处理函数
 
 
-
-
-
-
+```
+.align IDT_ALIGN
+SYM_CODE_START(irq_entries_start)
+    vector=FIRST_EXTERNAL_VECTOR
+    .rept NR_EXTERNAL_VECTORS
+	UNWIND_HINT_IRET_REGS
+0 :
+	ENDBR
+	.byte	0x6a, vector
+	jmp	asm_common_interrupt
+	/* Ensure that the above is IDT_ALIGN bytes max */
+	.fill 0b + IDT_ALIGN - ., 1, 0xcc
+	vector = vector+1
+    .endr
+SYM_CODE_END(irq_entries_start)
+```
+ 
 
 
 ## Hardware
@@ -347,35 +371,51 @@ const void *free_irq(unsigned int irq, void *dev_id)
 
 ### handle
 
+#### common_interrupt
+
 common_interrupt() handles all normal device IRQ's (the special SMP cross-CPU interrupts have their own entry points).
 
 ```c
 DEFINE_IDTENTRY_IRQ(common_interrupt)
 {
-	struct pt_regs *old_regs = set_irq_regs(regs);
-	struct irq_desc *desc;
+    struct pt_regs *old_regs = set_irq_regs(regs);
 
-	/* entry code tells RCU that we're not quiescent.  Check it. */
-	RCU_LOCKDEP_WARN(!rcu_is_watching(), "IRQ failed to wake up RCU");
+    /* entry code tells RCU that we're not quiescent.  Check it. */
+    RCU_LOCKDEP_WARN(!rcu_is_watching(), "IRQ failed to wake up RCU");
 
-	desc = __this_cpu_read(vector_irq[vector]);
-	if (likely(!IS_ERR_OR_NULL(desc))) {
-		handle_irq(desc, regs);
-	} else {
-		ack_APIC_irq();
+    if (unlikely(call_irq_handler(vector, regs)))
+        apic_eoi();
 
-		if (desc == VECTOR_UNUSED) {
-			pr_emerg_ratelimited("%s: %d.%u No irq handler for vector\n",
-					     __func__, smp_processor_id(),
-					     vector);
-		} else {
-			__this_cpu_write(vector_irq[vector], VECTOR_UNUSED);
-		}
-	}
-
-	set_irq_regs(old_regs);
+    set_irq_regs(old_regs);
 }
 ```
+
+
+```c
+static __always_inline int call_irq_handler(int vector, struct pt_regs *regs)
+{
+    struct irq_desc *desc;
+    int ret = 0;
+
+    desc = __this_cpu_read(vector_irq[vector]);
+    if (likely(!IS_ERR_OR_NULL(desc))) {
+        handle_irq(desc, regs);
+    } else {
+        ret = -EINVAL;
+        if (desc == VECTOR_UNUSED) {
+            pr_emerg_ratelimited("%s: %d.%u No irq handler for vector\n",
+                                 __func__, smp_processor_id(),
+                                 vector);
+        } else {
+            __this_cpu_write(vector_irq[vector], VECTOR_UNUSED);
+        }
+    }
+
+    return ret;
+}
+```
+
+
 
 ```c
 // kernel/irq/handle.c
@@ -866,6 +906,11 @@ out_mput:
 Signals are software interrupts.
 The simplest interface to the signal features of the UNIX System is the signal function.
 
+从本质上来说， 软中断并不是真正的中断，大多情况下可以将它理解为中断发生时进行的一系列橾作，比如timer、tasklet（小任务）等
+
+内核支持的软中断在内核中以类型为softirq_action数组的softirq_ vec变量表示，softirq_action结构体只有一个类型为函数指针的字段action, 表示相应的软中断的处理函数。另外，软中断执行频率较高，所以除非必要， 一般不建议用户添加新类型的软中断
+各软中断(enum的值从低到高）和对应的action
+
 ```shell
 cat /proc/softirqs
 
@@ -895,6 +940,14 @@ enum
 	NR_SOFTIRQS
 };
 ```
+
+其中两个用来实现tasklet（HI_SOFTIRQ、TASKLET_SOFTIRQ），两个用于网络的发送和接收操作
+（NET_TX_SOFTIRQ和NET_RX_SOFTIRQ，这是软中断机制的来源和其最重要的应用），
+一个用于块层实现异步请求完成（BLOCK_SOFTIRQ），
+一个用于调度器（SCHED_SOFTIRQ），以实现SMP系统上周期性的负载均衡
+在启用高分辨率定时器时，还需要一个软中断（HRTIMER_SOFTIRQ）
+
+
 
 ### init_softirq
 
