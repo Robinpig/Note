@@ -1,5 +1,13 @@
 ## Introduction
 
+The *page cache* is the main disk cache used by the Linux kernel. In most cases, the kernel refers to the page cache when reading from or writing to disk. New pages are added to the page cache to satisfy User Mode processes’s read requests. If the page is not already in the cache, a new entry is added to the cache and filled with the data read from the disk. If there is enough free memory, the page is kept in the cache for an indefinite period of time and can then be reused by other processes without accessing the disk.
+
+
+
+Similarly, before writing a page of data to a block device, the kernel verifies whether the corresponding page is already included in the cache; if not, a new entry is added to the cache and filled with the data to be written on disk. The I/O data transfer does not start immediately: the disk update is delayed for a few seconds, thus giving a chance to the processes to further modify the data to be written (in other words, the kernel implements deferred write operations
+
+
+
 
 在Linux上直接查看Page Cache的方式有很多，包括/proc/meminfo、free 、/proc/vmstat命令等，它们的内容其实是一致的
 > [free](https://gitlab.com/procps-ng/procps/-/blob/master/src/free.c) 是读取了/proc/meminfo
@@ -10,7 +18,11 @@ Buffers + Cached + SwapCached = Active(file) + Inactive(file) + Shmem + SwapCach
 ```
 
 在Page Cache中，Active(file)+Inactive(file)是File-backed page（与文件对应的内存页），是你最需要关注的部分。因为你平时用的mmap()内存映射方式和buffered I/O来消耗的内存就属于这部分，最重要的是，这部分在真实的生产环境上也最容易产生问题
-SwapCached是在打开了Swap分区后，把Inactive(anon)+Active(anon)这两项里的匿名页给交换到磁盘（swap out），然后再读入到内存（swap in）后分配的内存。由于读入到内存后原来的Swap File还在，所以SwapCached也可以认为是File-backed page，即属于Page Cache。这样做的目的也是为了减少I/O
+
+
+
+两边都有SwapCached，它也是Page Cache的一部分 SwapCached是在打开了Swap分区后，把Inactive(anon)+Active(anon)这两项里的匿名页给交换到磁盘（swap out），然后再读入到内存（swap in）后分配的内存。由于读入到内存后原来的Swap File还在，所以SwapCached也可以认为是File-backed page，即属于Page Cache。这样做的目的也是为了减少I/O
+
 SwapCached只在Swap分区打开的情况下才会有，而我建议你在生产环境中关闭Swap分区，因为Swap过程产生的I/O会很容易引起性能抖动。
 
 > Shmem是指匿名共享映射这种方式分配的内存（free命令中shared这一项），比如tmpfs（临时文件系统），这部分在真实的生产环境中产生的问题比较少
@@ -1131,7 +1143,7 @@ pause:
 ```
 
 
-
+domain_dirty_limits
 
 
 ```c
@@ -1196,7 +1208,39 @@ static void domain_dirty_limits(struct dirty_throttle_control *dtc)
 
 ```
 
+node_dirtyable_memory
 
+空闲内存加上page cache，再减去totalreserve
+
+
+```c
+static unsigned long node_dirtyable_memory(struct pglist_data *pgdat)
+{
+    unsigned long nr_pages = 0;
+    int z;
+
+    for (z = 0; z < MAX_NR_ZONES; z++) {
+        struct zone *zone = pgdat->node_zones + z;
+
+        if (!populated_zone(zone))
+            continue;
+
+        nr_pages += zone_page_state(zone, NR_FREE_PAGES);
+    }
+
+    /*
+	 * Pages reserved for the kernel should not be considered
+	 * dirtyable, to prevent a situation where reclaim has to
+	 * clean pages in order to balance the zones.
+	 */
+    nr_pages -= min(nr_pages, pgdat->totalreserve_pages);
+
+    nr_pages += node_page_state(pgdat, NR_INACTIVE_FILE);
+    nr_pages += node_page_state(pgdat, NR_ACTIVE_FILE);
+
+    return nr_pages;
+}
+```
 
 
 
