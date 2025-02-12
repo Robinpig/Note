@@ -33,9 +33,10 @@ Unlike other OS approaches (which make a distinction between a process, lightwei
 Therefore, a single-threaded process will be represented with one task structure and a multithreaded process will have one task structure for each of the user-level threads. 
 Finally, the kernel itself is multithreaded, and has kernel-level threads which are not associated with any user process and are executing kernel code.
 
-For compatibility with other UNIX systems, Linux identifies processes via the PID. The kernel organizes all processes in a doubly linked list of task structures.
+For compatibility with other UNIX systems, Linux identifies processes via the PID.
+The kernel organizes all processes in a doubly linked list of task structures.
 
-
+相同进程下的线程的tgid是相同的
 
 ```c
 struct task_struct {
