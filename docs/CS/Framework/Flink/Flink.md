@@ -1,6 +1,34 @@
 ## Introduction
 
+Apache Flink 是一个框架和分布式处理引擎，用于对无界和有界数据流进行状态计算
 
+
+
+**Flink应用场景**
+
+- 电商和市场营销: 实时报表|广告投放|实时推荐 
+- 物流配送及服务: 订单状态跟踪|信息推送 
+- 物联网: 实时数据采集|实时报警 
+- 银行和金融业: 实时结算|风险检测
+
+
+
+早期 Lambda架构（第二代）用两套系统，同时保证低延迟和结果准确
+
+Flink核心特点
+
+- 高吞吐、低延迟
+- 结果的正确性 （时间语义 事件时间 ）
+- 精确一次（exacly-once）的状态一致性保证
+- 可以与众多常用存储系统链接
+- 高可用、支持动态扩展
+
+ 
+
+Spark 适合处理批次数据
+
+- Spark采用RDD模型。Spark Streaming的DStream实际上也就是一组组小批数据RDD的集合
+- Flink基本数据模型是数据流，以及事件（Event）序列
 
 ## build
 
@@ -42,9 +70,7 @@ Flink集群主要包含3部分：JobManager、TaskManager和客户端，三者�
 
 
 
-obManager是整个集群的管理节点，负责接收和执行来自客户端提交的JobGraph。JobManager也会负责整个任务的Checkpoint协调工作，内部负责协调和调度提交的任务，并将JobGraph转换为ExecutionGraph结构，然后通过调度器调度并执行ExecutionGraph的节点。ExecutionGraph中的ExecutionVertex节点会以Task的形式在TaskManager中执行
-
-
+JobManager是整个集群的管理节点，负责接收和执行来自客户端提交的JobGraph。JobManager也会负责整个任务的Checkpoint协调工作，内部负责协调和调度提交的任务，并将JobGraph转换为ExecutionGraph结构，然后通过调度器调度并执行ExecutionGraph的节点。ExecutionGraph中的ExecutionVertex节点会以Task的形式在TaskManager中执行
 
 除了对Job的调度和管理之外，JobManager会对整个集群的计算资源进行统一管理，所有TaskManager的计算资源都会注册到JobManager节点中，然后分配给不同的任务使用。当然，JobManager还具备非常多的功能，例如Checkpoint的触发和协调等
 
@@ -55,6 +81,87 @@ obManager是整个集群的管理节点，负责接收和执行来自客户端�
 TaskManager作为整个集群的工作节点，主要作用是向集群提供计算资源，每个TaskManager都包含一定数量的内存、CPU等计算资源。这些计算资源会被封装成Slot资源卡槽，然后通过主节点中的ResourceManager组件进行统一协调和管理，而任务中并行的Task会被分配到Slot计算资源中。
 
 根据底层集群资源管理器的不同，TaskManager的启动方式及资源管理形式也会有所不同 例如，在基于Standalone模式的集群中，所有的TaskManager都是按照固定数量启动的；而YARN、Kubernetes等资源管理器上创建的Flink集群则支持按需动态启动TaskManager节点
+
+
+
+WordCount demo
+
+```java
+package com.yh.flink;
+
+import org.apache.flink.api.common.typeinfo.Types;
+import org.apache.flink.api.java.ExecutionEnvironment;
+import org.apache.flink.api.java.operators.AggregateOperator;
+import org.apache.flink.api.java.operators.DataSource;
+import org.apache.flink.api.java.operators.FlatMapOperator;
+import org.apache.flink.api.java.operators.UnsortedGrouping;
+import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.util.Collector;
+
+import java.util.Objects;
+
+public class BatchWordCount {
+    public static void main(String[] args) throws Exception {
+        //1.创建一个执行环境
+        ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
+        //2.从文件读取数据
+        DataSource<String> lineDataSource = env.readTextFile(Objects.requireNonNull(BatchWordCount.class.getResource("/")).getPath()+"input/words.txt");
+        // 3.将每行数据进行分词，然后转换成二元组类型
+        FlatMapOperator<String, Tuple2<String, Long>> wordAndOneTuple = lineDataSource.flatMap((String line, Collector<Tuple2<String, Long>> out) -> {
+            //将一行文本进行分词
+            String[] words = line.split(" ");
+            //将每个单词转换成二元组输出
+            for (String word : words) {
+                out.collect(Tuple2.of(word, 1L));
+            }
+        }).returns(Types.TUPLE(Types.STRING, Types.LONG));
+        //4.按照word进行分组
+        UnsortedGrouping<Tuple2<String, Long>> wordAndOneGroup = wordAndOneTuple.groupBy(0);
+        //5.分组内进行聚合统计
+        AggregateOperator<Tuple2<String, Long>> sum = wordAndOneGroup.sum(1);
+        //6.打印结果
+        sum.print();
+    }
+}
+package com.yh.flink;
+
+import org.apache.flink.api.common.typeinfo.Types;
+import org.apache.flink.api.java.tuple.Tuple2;
+import org.apache.flink.streaming.api.datastream.DataStreamSource;
+import org.apache.flink.streaming.api.datastream.KeyedStream;
+import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.util.Collector;
+
+import java.util.Objects;
+
+public class BatchWordCount {
+    public static void main(String[] args) throws Exception {
+        String filePath = Objects.requireNonNull(BatchWordCount.class.getResource("/")).getPath() + "input/words.txt";
+
+        //1.创建流式的执行环境
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        //2.读取文件
+        DataStreamSource<String> lineDataStreamSource = env.readTextFile(filePath);
+        //3.转换计算
+        SingleOutputStreamOperator<Tuple2<String, Long>> wordAndOneTuple = lineDataStreamSource.flatMap((String line, Collector<Tuple2<String, Long>> out) -> {
+            String[] words = line.split(" ");
+            for (String word : words) {
+                out.collect(Tuple2.of(word, 1L));
+            }
+        }).returns(Types.TUPLE(Types.STRING, Types.LONG));
+
+        //4.分组操作
+        KeyedStream<Tuple2<String, Long>, String> wordAndOneKeyedStream = wordAndOneTuple.keyBy(data -> data.f0);
+        //5.求和
+        SingleOutputStreamOperator<Tuple2<String, Long>> sum = wordAndOneKeyedStream.sum(1);
+        // 6.打印
+        sum.print();
+        //7.启动执行
+        env.execute();
+    }
+}
+```
 
 
 

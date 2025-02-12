@@ -175,6 +175,100 @@ public class Foo {
 LambdaForm
 
 
+
+在设计Lambda表达式时，Oracle的开发人员考虑过多种方案，如内部匿名类、方法句柄、invokedynamic等，最终选择invokedynamic，主要出于两方面的考量：
+\* 为未来的优化提供最大的灵活性
+\* 保持类的字节码格式稳定
+
+采用invokedynamic指令，将方法分派的具体逻辑放在LambdaMetafactory中，并将内部类的创建时机推迟到运行时。如果未来需要修改Lambda表达式的分配和调用方式，开发者仅需更新LambdaMetafactory逻辑即可，而不需要修改class文件格式
+
+
+
+```cpp
+// linkResolver.cpp
+// ConstantPool entries
+void LinkResolver::resolve_invoke(CallInfo& result, Handle recv, const constantPoolHandle& pool, int index, Bytecodes::Code byte, TRAPS) {
+  switch (byte) {
+    case Bytecodes::_invokestatic   : resolve_invokestatic   (result,       pool, index, CHECK); break;
+    case Bytecodes::_invokespecial  : resolve_invokespecial  (result, recv, pool, index, CHECK); break;
+    case Bytecodes::_invokevirtual  : resolve_invokevirtual  (result, recv, pool, index, CHECK); break;
+    case Bytecodes::_invokehandle   : resolve_invokehandle   (result,       pool, index, CHECK); break;
+    case Bytecodes::_invokedynamic  : resolve_invokedynamic  (result,       pool, index, CHECK); break;
+    case Bytecodes::_invokeinterface: resolve_invokeinterface(result, recv, pool, index, CHECK); break;
+    default                         :                                                            break;
+  }
+  return;
+}
+```
+
+resolve_invokedynamic -> resolve_dynamic_call -> SystemDictionary::invoke_bootstrap_method
+
+```cpp
+// Ask Java to run a bootstrap method, in order to create a dynamic call site
+// while linking an invokedynamic op, or compute a constant for Dynamic_info CP entry
+// with linkage results being stored back into the bootstrap specifier.
+void SystemDictionary::invoke_bootstrap_method(BootstrapInfo& bootstrap_specifier, TRAPS) {
+  // Resolve the bootstrap specifier, its name, type, and static arguments
+  bootstrap_specifier.resolve_bsm(CHECK);
+
+  // This should not happen.  JDK code should take care of that.
+  if (bootstrap_specifier.caller() == nullptr || bootstrap_specifier.type_arg().is_null()) {
+    THROW_MSG(vmSymbols::java_lang_InternalError(), "Invalid bootstrap method invocation with no caller or type argument");
+  }
+
+  bool is_indy = bootstrap_specifier.is_method_call();
+  objArrayHandle appendix_box;
+  if (is_indy) {
+    // Some method calls may require an appendix argument.  Arrange to receive it.
+    appendix_box = oopFactory::new_objArray_handle(vmClasses::Object_klass(), 1, CHECK);
+    assert(appendix_box->obj_at(0) == nullptr, "");
+  }
+
+  // call condy: java.lang.invoke.MethodHandleNatives::linkDynamicConstant(caller, bsm, type, info)
+  //       indy: java.lang.invoke.MethodHandleNatives::linkCallSite(caller, bsm, name, mtype, info, &appendix)
+  JavaCallArguments args;
+  args.push_oop(Handle(THREAD, bootstrap_specifier.caller_mirror()));
+  args.push_oop(bootstrap_specifier.bsm());
+  args.push_oop(bootstrap_specifier.name_arg());
+  args.push_oop(bootstrap_specifier.type_arg());
+  args.push_oop(bootstrap_specifier.arg_values());
+  if (is_indy) {
+    args.push_oop(appendix_box);
+  }
+  JavaValue result(T_OBJECT);
+  JavaCalls::call_static(&result,
+                         vmClasses::MethodHandleNatives_klass(),
+                         is_indy ? vmSymbols::linkCallSite_name() : vmSymbols::linkDynamicConstant_name(),
+                         is_indy ? vmSymbols::linkCallSite_signature() : vmSymbols::linkDynamicConstant_signature(),
+                         &args, CHECK);
+
+  Handle value(THREAD, result.get_oop());
+  if (is_indy) {
+    Handle appendix;
+    Method* method = unpack_method_and_appendix(value,
+                                                bootstrap_specifier.caller(),
+                                                appendix_box,
+                                                &appendix, CHECK);
+    methodHandle mh(THREAD, method);
+    bootstrap_specifier.set_resolved_method(mh, appendix);
+  } else {
+    bootstrap_specifier.set_resolved_value(value);
+  }
+
+  // sanity check
+  assert(bootstrap_specifier.is_resolved() ||
+         (bootstrap_specifier.is_method_call() &&
+          bootstrap_specifier.resolved_method().not_null()), "bootstrap method call failed");
+}
+```
+
+
+
+
+
+
+
+
 ## Functional Interface
 
 *There are some interfaces in Java that have only a single method but aren’t normally meant to be implemented by lambda expressions.

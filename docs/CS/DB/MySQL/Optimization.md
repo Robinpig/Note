@@ -110,12 +110,17 @@ BKA can be applied when there is an index access to the table produced by the se
 
 For BKA to be used, the `batched_key_access` flag of the `optimizer_switch` system variable must be set to on. BKA uses MRR, so the `mrr` flag must also be `on`.
 
+MySQL 5.6后，MySQL新增 optimizer trace功能
+
+
 ```mysql
 SET optimizer_trace="enabled=on";
 -- select SQL;
 SELECT * FROM information_schema.OPTIMIZER_TRACE;
 SET optimizer_trace="enabled=off";
 ```
+
+
 
 ### Execution Plan
 

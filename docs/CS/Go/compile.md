@@ -8,6 +8,20 @@ go 源代码首先要通过 go build 编译为可执行文件，在 linux 平台
 2. 汇编器：通过 go 汇编器将编译器生成的 .s 汇编语言转换为机器代码，并写出最终的目标程序 .o 文件，src/cmd/internal/obj 包实现了go汇编器；
 3. 链接器：汇编器生成的一个个 *.o 目标文件通过链接处理得到最终的可执行程序，src/cmd/link/internal/ld 包实现了链接器；
 
+
+
+跨平台编译
+
+```shell
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build
+CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build
+CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build
+```
+
+
+
+
+
 - Lexical Analysis
 - Syntax Analysis
 - generate Abstract Syntax Tree

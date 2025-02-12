@@ -106,6 +106,10 @@ aeEventLoop *aeCreateEventLoop(int setsize) {
 }
 ```
 
+aeCreateEventLoop() 内部会调用 aeApiCreate()，根据不同平台支持选择调用epoll、select 或者 kqueue 的 API，创建事件监听
+
+
+
 #### aeApiCreate
 
 ```c

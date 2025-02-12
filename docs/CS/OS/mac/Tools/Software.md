@@ -124,6 +124,71 @@ REMOTE=https://mirrors.tuna.tsinghua.edu.cn/git/ohmyzsh.git sh install.sh
    2. Add a new row below `[[ -s $(brew --prefix)/etc/profile.d/autojump.sh ]] && . $(brew --prefix)/etc/profile.d/autojump.sh`
    3. `wq`
 
+
+
+## iTerm2
+
+下载
+
+为 iTerm2 配置 Solarize 主题
+
+## 主题美化
+
+
+主题美化 设置 `.zshrc` 
+
+```
+ZSH_THEME="agnoster"
+```
+
+推荐补全
+
+```shell
+git clone https://github.com/zsh-users/zsh-autosuggestions ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-autosuggestions
+```
+在 `.zshrc` 中插件 增加zsh-autosuggestions
+```
+plugins=([plugins...] zsh-autosuggestions)
+```
+
+语法高亮
+
+```shell
+git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
+```
+
+在 `.zshrc` 中插件**最后面** 增加zsh-autosuggestions
+
+```
+plugins=( [plugins...] zsh-syntax-highlighting)
+```
+
+文件路径太长，只显示当前文件夹名
+
+打开主题配置文件，比如我的是 `agnoster.zsh-theme` ：
+
+```
+vim ~/.oh-my-zsh/themes/agnoster.zsh-theme
+
+SHELL
+```
+
+将文件里的 `%~` 修改成 `%1d`
+
+```
+# Dir: current working directory
+prompt_dir() {
+  # prompt_segment blue $CURRENT_FG '%~'   # Original code
+  prompt_segment blue $CURRENT_FG '%1d'    # Modified code
+}
+
+SHELL
+```
+
+## 
+
+
+
 ## Monitor Tools
 
 - iStat Menu
