@@ -12,18 +12,8 @@ linux系统中可以用numactl命令来查看系统node信息
 ```c
 // include/linux/mmzone.h
 typedef struct pglist_data {
-    /*
-     * node_zones contains just the zones for THIS node. Not all of the
-     * zones may be populated, but it is the full list. It is referenced by
-     * this node's node_zonelists as well as other node's node_zonelists.
-     */
     struct zone node_zones[MAX_NR_ZONES];
 
-    /*
-     * node_zonelists contains references to all zones in all nodes.
-     * Generally the first zones will be references to this node's
-     * node_zones.
-     */
     struct zonelist node_zonelists[MAX_ZONELISTS];
 
     int nr_zones; /* number of populated zones in this node */
@@ -252,44 +242,6 @@ struct zone {
     /* zone_start_pfn == zone_start_paddr >> PAGE_SHIFT */
     unsigned long       zone_start_pfn;
 
-    /*
-     * spanned_pages is the total pages spanned by the zone, including
-     * holes, which is calculated as:
-     *  spanned_pages = zone_end_pfn - zone_start_pfn;
-     *
-     * present_pages is physical pages existing within the zone, which
-     * is calculated as:
-     *  present_pages = spanned_pages - absent_pages(pages in holes);
-     *
-     * managed_pages is present pages managed by the buddy system, which
-     * is calculated as (reserved_pages includes pages allocated by the
-     * bootmem allocator):
-     *  managed_pages = present_pages - reserved_pages;
-     *
-     * cma pages is present pages that are assigned for CMA use
-     * (MIGRATE_CMA).
-     *
-     * So present_pages may be used by memory hotplug or memory power
-     * management logic to figure out unmanaged pages by checking
-     * (present_pages - managed_pages). And managed_pages should be used
-     * by page allocator and vm scanner to calculate all kinds of watermarks
-     * and thresholds.
-     *
-     * Locking rules:
-     *
-     * zone_start_pfn and spanned_pages are protected by span_seqlock.
-     * It is a seqlock because it has to be read outside of zone->lock,
-     * and it is done in the main allocator path.  But, it is written
-     * quite infrequently.
-     *
-     * The span_seq lock is declared along with zone->lock because it is
-     * frequently read in proximity to zone->lock.  It's good to
-     * give them a chance of being in the same cacheline.
-     *
-     * Write access to present_pages at runtime should be protected by
-     * mem_hotplug_begin/end(). Any reader who can't tolerant drift of
-     * present_pages should get_online_mems() to get a stable value.
-     */
     atomic_long_t       managed_pages;
     unsigned long       spanned_pages;
     unsigned long       present_pages;
@@ -491,6 +443,194 @@ page 与物理页帧是一一对应关系，OS在初始化时会根据物理内�
 - _refcount 引用计数，如果是 -1 的话说明没有该页没有被使用，可以重新分配给需要的进程
 
 理想情况下，内存中的所有页面从功能上讲都是等价的，都可以用于任何目的，但现实却并非如此，例如一些DMA处理器只能访问固定范围内的地址空间（见这里）。因此内核将整个内存地址空间划分成了不同的区，每个区叫着一个 Zone, 每个 Zone 都有自己的用途
+
+
+
+进程的虚拟内存空间在内核中是用 struct mm_struct 结构来描述的，每个进程都有自己独立的虚拟内存空间，而进程的虚拟内存到物理内存的映射也是独立的，为了保证每个进程里内存映射的独立进行，所以每个进程都会有独立的页表，而页表的起始地址就存放在 struct mm_struct 结构中的 pgd 属性中
+
+内核会在 mm_init 函数中调用 mm_alloc_pgd，并在 mm_alloc_pgd 函数中通过调用 pgd_alloc 为子进程分配其独立的顶级页表起始地址，赋值给子进程 struct mm_struct 结构中的 pgd 属性
+
+```c
+
+```c
+struct mm_struct {
+	// ...
+	pgd_t * pgd;
+}
+```
+
+
+
+调用 load_new_mm_cr3 函数将进程顶级页表起始地址 mm_struct-> pgd 中的虚拟内存地址通过 `__sme_pa 宏` 转换为物理内存地址，并将 pgd 的物理内存地址加载到 cr3 寄存器中
+
+进程的上下文在内核中完成切换之后，现在 cr3 寄存器中保存的就是当前进程顶级页表的起始物理内存地址了，当 CPU 通过虚拟内存地址访问进程的虚拟内存时，CPU 首先会从 cr3 寄存器中获取到当前进程的顶级页表起始地址，然后从虚拟内存地址中提取出虚拟内存页对应 PTE 在页表内的偏移，通过 `页表起始地址 + 页表内偏移 * sizeof(PTE)` 这个公式定位到虚拟内存页在页表中所对应的 PTE
+
+```c
+// arch/x86/mm/tlb.c
+void switch_mm_irqs_off(struct mm_struct *unused, struct mm_struct *next,
+			struct task_struct *tsk)
+{
+	struct mm_struct *prev = this_cpu_read(cpu_tlbstate.loaded_mm);
+	u16 prev_asid = this_cpu_read(cpu_tlbstate.loaded_mm_asid);
+	bool was_lazy = this_cpu_read(cpu_tlbstate_shared.is_lazy);
+	unsigned cpu = smp_processor_id();
+	unsigned long new_lam;
+	u64 next_tlb_gen;
+	bool need_flush;
+	u16 new_asid;
+
+	/* We don't want flush_tlb_func() to run concurrently with us. */
+	if (IS_ENABLED(CONFIG_PROVE_LOCKING))
+		WARN_ON_ONCE(!irqs_disabled());
+
+	/*
+	 * Verify that CR3 is what we think it is.  This will catch
+	 * hypothetical buggy code that directly switches to swapper_pg_dir
+	 * without going through leave_mm() / switch_mm_irqs_off() or that
+	 * does something like write_cr3(read_cr3_pa()).
+	 *
+	 * Only do this check if CONFIG_DEBUG_VM=y because __read_cr3()
+	 * isn't free.
+	 */
+#ifdef CONFIG_DEBUG_VM
+	if (WARN_ON_ONCE(__read_cr3() != build_cr3(prev->pgd, prev_asid,
+						   tlbstate_lam_cr3_mask()))) {
+		/*
+		 * If we were to BUG here, we'd be very likely to kill
+		 * the system so hard that we don't see the call trace.
+		 * Try to recover instead by ignoring the error and doing
+		 * a global flush to minimize the chance of corruption.
+		 *
+		 * (This is far from being a fully correct recovery.
+		 *  Architecturally, the CPU could prefetch something
+		 *  back into an incorrect ASID slot and leave it there
+		 *  to cause trouble down the road.  It's better than
+		 *  nothing, though.)
+		 */
+		__flush_tlb_all();
+	}
+#endif
+	if (was_lazy)
+		this_cpu_write(cpu_tlbstate_shared.is_lazy, false);
+
+	/*
+	 * The membarrier system call requires a full memory barrier and
+	 * core serialization before returning to user-space, after
+	 * storing to rq->curr, when changing mm.  This is because
+	 * membarrier() sends IPIs to all CPUs that are in the target mm
+	 * to make them issue memory barriers.  However, if another CPU
+	 * switches to/from the target mm concurrently with
+	 * membarrier(), it can cause that CPU not to receive an IPI
+	 * when it really should issue a memory barrier.  Writing to CR3
+	 * provides that full memory barrier and core serializing
+	 * instruction.
+	 */
+	if (prev == next) {
+		/* Not actually switching mm's */
+		VM_WARN_ON(this_cpu_read(cpu_tlbstate.ctxs[prev_asid].ctx_id) !=
+			   next->context.ctx_id);
+
+		/*
+		 * If this races with another thread that enables lam, 'new_lam'
+		 * might not match tlbstate_lam_cr3_mask().
+		 */
+
+		/*
+		 * Even in lazy TLB mode, the CPU should stay set in the
+		 * mm_cpumask. The TLB shootdown code can figure out from
+		 * cpu_tlbstate_shared.is_lazy whether or not to send an IPI.
+		 */
+		if (IS_ENABLED(CONFIG_DEBUG_VM) && WARN_ON_ONCE(prev != &init_mm &&
+				 !cpumask_test_cpu(cpu, mm_cpumask(next))))
+			cpumask_set_cpu(cpu, mm_cpumask(next));
+
+		/*
+		 * If the CPU is not in lazy TLB mode, we are just switching
+		 * from one thread in a process to another thread in the same
+		 * process. No TLB flush required.
+		 */
+		if (!was_lazy)
+			return;
+
+		/*
+		 * Read the tlb_gen to check whether a flush is needed.
+		 * If the TLB is up to date, just use it.
+		 * The barrier synchronizes with the tlb_gen increment in
+		 * the TLB shootdown code.
+		 */
+		smp_mb();
+		next_tlb_gen = atomic64_read(&next->context.tlb_gen);
+		if (this_cpu_read(cpu_tlbstate.ctxs[prev_asid].tlb_gen) ==
+				next_tlb_gen)
+			return;
+
+		/*
+		 * TLB contents went out of date while we were in lazy
+		 * mode. Fall through to the TLB switching code below.
+		 */
+		new_asid = prev_asid;
+		need_flush = true;
+	} else {
+		/*
+		 * Apply process to process speculation vulnerability
+		 * mitigations if applicable.
+		 */
+		cond_mitigation(tsk);
+
+		/*
+		 * Stop remote flushes for the previous mm.
+		 * Skip kernel threads; we never send init_mm TLB flushing IPIs,
+		 * but the bitmap manipulation can cause cache line contention.
+		 */
+		if (prev != &init_mm) {
+			VM_WARN_ON_ONCE(!cpumask_test_cpu(cpu,
+						mm_cpumask(prev)));
+			cpumask_clear_cpu(cpu, mm_cpumask(prev));
+		}
+
+		/* Start receiving IPIs and then read tlb_gen (and LAM below) */
+		if (next != &init_mm)
+			cpumask_set_cpu(cpu, mm_cpumask(next));
+		next_tlb_gen = atomic64_read(&next->context.tlb_gen);
+
+		choose_new_asid(next, next_tlb_gen, &new_asid, &need_flush);
+
+		/* Let nmi_uaccess_okay() know that we're changing CR3. */
+		this_cpu_write(cpu_tlbstate.loaded_mm, LOADED_MM_SWITCHING);
+		barrier();
+	}
+
+	new_lam = mm_lam_cr3_mask(next);
+	if (need_flush) {
+		this_cpu_write(cpu_tlbstate.ctxs[new_asid].ctx_id, next->context.ctx_id);
+		this_cpu_write(cpu_tlbstate.ctxs[new_asid].tlb_gen, next_tlb_gen);
+		load_new_mm_cr3(next->pgd, new_asid, new_lam, true);
+
+		trace_tlb_flush(TLB_FLUSH_ON_TASK_SWITCH, TLB_FLUSH_ALL);
+	} else {
+		/* The new ASID is already up to date. */
+		load_new_mm_cr3(next->pgd, new_asid, new_lam, false);
+
+		trace_tlb_flush(TLB_FLUSH_ON_TASK_SWITCH, 0);
+	}
+
+	/* Make sure we write CR3 before loaded_mm. */
+	barrier();
+
+	this_cpu_write(cpu_tlbstate.loaded_mm, next);
+	this_cpu_write(cpu_tlbstate.loaded_mm_asid, new_asid);
+	cpu_tlbstate_update_lam(new_lam, mm_untag_mask(next));
+
+	if (next != prev) {
+		cr4_update_pce_mm(next);
+		switch_ldt(prev, next);
+	}
+}
+```
+
+
+
+
 
 
 ## Zone
