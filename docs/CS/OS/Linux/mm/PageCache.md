@@ -2,8 +2,6 @@
 
 The *page cache* is the main disk cache used by the Linux kernel. In most cases, the kernel refers to the page cache when reading from or writing to disk. New pages are added to the page cache to satisfy User Mode processes’s read requests. If the page is not already in the cache, a new entry is added to the cache and filled with the data read from the disk. If there is enough free memory, the page is kept in the cache for an indefinite period of time and can then be reused by other processes without accessing the disk.
 
-
-
 Similarly, before writing a page of data to a block device, the kernel verifies whether the corresponding page is already included in the cache; if not, a new entry is added to the cache and filled with the data to be written on disk. The I/O data transfer does not start immediately: the disk update is delayed for a few seconds, thus giving a chance to the processes to further modify the data to be written (in other words, the kernel implements deferred write operations
 
 
@@ -12,7 +10,7 @@ Similarly, before writing a page of data to a block device, the kernel verifies 
 在Linux上直接查看Page Cache的方式有很多，包括/proc/meminfo、free 、/proc/vmstat命令等，它们的内容其实是一致的
 > [free](https://gitlab.com/procps-ng/procps/-/blob/master/src/free.c) 是读取了/proc/meminfo
 
-这些内容都是page cache
+这两边的内容都是page cache
 ```
 Buffers + Cached + SwapCached = Active(file) + Inactive(file) + Shmem + SwapCached
 ```
@@ -28,8 +26,8 @@ SwapCached只在Swap分区打开的情况下才会有，而我建议你在生产
 > Shmem是指匿名共享映射这种方式分配的内存（free命令中shared这一项），比如tmpfs（临时文件系统），这部分在真实的生产环境中产生的问题比较少
 
 Page Cache的产生有两种不同的方式：
-- Buffered I/O（标准I/O）标准I/O是写的(write(2))用户缓冲区(Userpace Page对应的内存)，然后再将用户缓冲区里的数据拷贝到内核缓冲区(Pagecache Page对应的内存)；如果是读的(read(2))话则是先从内核缓冲区拷贝到用户缓冲区，再从用户缓冲区读数据，也就是buffer和文件内容不存在任何映射关系
-- Memory-Mapped I/O（存储映射I/O）。对于存储映射I/O而言，则是直接将Pagecache Page给映射到用户地址空间，用户直接读写Pagecache Page中内容
+- Buffered I/O（标准I/O）<br/>标准I/O是写的(write(2))用户缓冲区(Userpace Page对应的内存)，然后再将用户缓冲区里的数据拷贝到内核缓冲区(Pagecache Page对应的内存)；如果是读的(read(2))话则是先从内核缓冲区拷贝到用户缓冲区，再从用户缓冲区读数据，也就是buffer和文件内容不存在任何映射关系
+- Memory-Mapped I/O（存储映射I/O）<br/>对于存储映射I/O而言，则是直接将Pagecache Page给映射到用户地址空间，用户直接读写Pagecache Page中内容
 
 显然，存储映射I/O要比标准I/O效率高一些，毕竟少了“用户空间到内核空间互相拷贝”的过程
 
@@ -54,7 +52,20 @@ egrep "min|low|high" /proc/zoneinfo
 
 
 
-page cache 在内核中的数据结构是一个叫做 address_space 的结构体 每个文件都会有自己的 page cache。struct address_space 结构在内存中只会保留一份
+page cache 在内核中的数据结构是一个叫做 address_space 的结构体 每个文件都会有自己的 page cache
+
+```c
+struct file {
+    ...
+    struct address_space *f_mapping;
+};
+```
+
+
+
+struct address_space 结构在内存中只会保留一份
+
+i_pages 用于存储当前文件的 `页缓存` 这里使用的是 xarray 在 前使用的是radix tree
 
 ```c
 struct address_space {
