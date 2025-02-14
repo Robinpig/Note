@@ -33,11 +33,21 @@ Unlike the hugetlbfs that requires users and/or system administrators to configu
 
 ## vm space
 
-在大多数操作系统中，数值比较小的地址通常被认为不是一个合法的地址，这块小地址是不允许访问的保留区
+操作系统为每个进程营造出一片独立的虚拟地址空间，使得进程与进程之间相互隔离，互不干扰的，解决了多进程同时运行时产生的内存地址冲突问题
+
+Linux虚拟内存空间整体布局
+
+- 在 32 位系统中，进程以为自己独占了 3G 的内存空间
+- 在 64 位系统中，进程以为自己独占了 128T 的内存空间
+
+
 
 ![32bit虚拟地址空间](https://mmbiz.qpic.cn/mmbiz_png/sOIZXFW0vUbGGUk2MUSBRrJEtYOJzImT4tbtfaNT1ztoudqt3UE8ia6RtNNbtUe1siaGb7b1Dre087AnhxlnWMSw/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
 
+在大多数操作系统中，数值比较小的地址通常被认为不是一个合法的地址，这块小地址是不允许访问的保留区
+
 用户态虚拟内存空间中的代码段并不是从 0x0000 0000 地址开始的，而是从 0x0804 8000 地址开始。
+
 > [What's the memory before 0x08048000 used for in 32 bit machine?](https://stackoverflow.com/questions/7187981/whats-the-memory-before-0x08048000-used-for-in-32-bit-machine)
 
 0x0000 0000 到 0x0804 8000 这段虚拟内存地址是一段不可访问的保留区，因为在大多数操作系统中，数值比较小的地址通常被认为不是一个合法的地址，这块小地址是不允许访问的。比如在 C 语言中我们通常会将一些无效的指针设置为 NULL，指向这块不允许访问的地址。
