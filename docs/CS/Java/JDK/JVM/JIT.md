@@ -40,7 +40,8 @@ C2 observes and analyzes the code over a longer period of time compared to C1. T
 Historically, we used C2 for long-running server-side applications. 
 Prior to Java 8, we had to specify the -server flag to use the C2 compiler. However, this flag will have no effect in Java 8 or higher.
 
-We should note that the Graal JIT compiler is also available since Java 10, as an alternative to C2. Unlike C2, Graal can run in both just-in-time and ahead-of-time compilation modes to produce
+We should note that the Graal JIT compiler is also available since Java 10, as an alternative to C2. 
+Unlike C2, Graal can run in both just-in-time and ahead-of-time compilation modes to produce
 
 ## Init
 
