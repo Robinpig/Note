@@ -86,7 +86,7 @@ We rely on probability to analyze hash-table operations, but you can understand 
 
 ### Graph
 
-[Graph](/docs/CS/Algorithms/graph.md)
+[Graph](/docs/CS/Algorithms/graph/graph.md)
 
 ### Page Replacement Algorithms
 
