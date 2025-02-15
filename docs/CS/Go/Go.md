@@ -3,8 +3,8 @@
 Go是一种新的语言，一种并发的、带垃圾回收的、快速编译的语言。它具有以下特点：
 
 - 类型安全和内存安全
-- 快速编译 Go为软件构造提供了一种模型，它使依赖分析更加容易，且避免了大部分C风格include文件与库的开头。
-- Go是静态类型的语言，它的类型系统没有层级。因此用户不需要在定义类型之间的关系上花费时间，这样感觉起来比典型的面向对象语言更轻量级。
+- 快速编译 Go为软件构造提供了一种模型，它使依赖分析更加容易，且避免了大部分C风格include文件与库的开头
+- Go是静态类型的语言，它的类型系统没有层级。因此用户不需要在定义类型之间的关系上花费时间，这样感觉起来比典型的面向对象语言更轻量级
 - Go完全是垃圾回收型的语言，并为并发执行与通信提供了基本的支持
 
 代码规范
@@ -40,24 +40,10 @@ godoc -http=:6060
 
 要让一个 Go 语言程序成功运行起来，只需要 package main 和 main 函数这两个核心部分， package main 代表的是一个可运行的应用程序，而 main 函数则是这个应用程序的主入口
 
-两个重要的环境变量没有设置，它们分别是 GOPATH 和 GOBIN。
-- GOPATH：代表 Go 语言项目的工作目录，在 Go Module 模式之前非常重要，现在基本上用来存放使用 go get 命令获取的项目。
-- GOBIN：代表 Go 编译生成的程序的安装目录，比如通过 go install 命令，会把生成的 Go 程序安装到 GOBIN 目录下，以供你在终端使用。
 
-export GOPATH=/Users/flysnow/go export GOBIN=$GOPATH/bin
-
-Go 语言开发工具包的另一强大功能就是可以跨平台编译
-
-Go 语言通过两个环境变量来控制跨平台编译，它们分别是 GOOS 和 GOARCH 。
-- GOOS：代表要编译的目标操作系统，常见的有 Linux、Windows、Darwin 等。
-- GOARCH：代表要编译的目标处理器架构，常见的有 386、AMD64、ARM64 等。
-这样通过组合不同的 GOOS 和 GOARCH，就可以编译出不同的可执行程序。比如我现在的操作系统是 macOS AMD64 的，我想编译出 Linux AMD64 的可执行程序，只需要执行 go build 命令即可，如以下代码所示：
-
-```shell
-GOOS=linux GOARCH=amd64 go build ./ch01/main.go
-```
 
 dependency tool
+
 - go get
 - godep
 - vender

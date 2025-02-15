@@ -10,7 +10,23 @@ go 源代码首先要通过 go build 编译为可执行文件，在 linux 平台
 
 
 
-跨平台编译
+两个重要的环境变量分别是 GOPATH 和 GOBIN。
+
+- GOPATH：代表 Go 语言项目的工作目录，在 Go Module 模式之前非常重要，现在基本上用来存放使用 go get 命令获取的项目。
+- GOBIN：代表 Go 编译生成的程序的安装目录，比如通过 go install 命令，会把生成的 Go 程序安装到 GOBIN 目录下，以供你在终端使用。
+
+export GOPATH=/Users/flysnow/go export GOBIN=$GOPATH/bin
+
+Go 语言开发工具包的另一强大功能就是可以跨平台编译
+
+Go 语言通过两个环境变量来控制跨平台编译，它们分别是 GOOS 和 GOARCH 。
+
+- GOOS：代表要编译的目标操作系统，常见的有 Linux、Windows、Darwin 等。
+- GOARCH：代表要编译的目标处理器架构，常见的有 386、AMD64、ARM64 等。
+
+可以通过 `go tool dist list` 查看支持的 GOOS、GOARCH 可选值
+
+通过组合不同的 GOOS 和 GOARCH，就可以编译出不同的可执行程序
 
 ```shell
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build
@@ -18,7 +34,7 @@ CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build
 CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build
 ```
 
-
+可以通过 `-x` 和 `--work` 查看编译的详细过程
 
 
 

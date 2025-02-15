@@ -5,7 +5,7 @@
 Go语言采用现代内存分配TCMalloc算法的思想来进行内存分配，将对象分为微小对象、小对象、大对象，使用三级管理结构mcache、mcentral、mheap用于管理、缓存加速span对象的访问和分配，使用精准的位图管理已分配的和未分配的对象及对象的大小。
 
 
-内存管理一般包含三个不同的组件，分别是用户程序（Mutator）、分配器（Allocator）和收集器（Collector）1，当用户程序申请内存时，它会通过内存分配器申请新的内存，而分配器会负责从堆中初始化相应的内存区域
+内存管理一般包含三个不同的组件，分别是用户程序（Mutator）、分配器（Allocator）和收集器（Collector），当用户程序申请内存时，它会通过内存分配器申请新的内存，而分配器会负责从堆中初始化相应的内存区域
 
 
 
@@ -13,12 +13,10 @@ Go语言采用现代内存分配TCMalloc算法的思想来进行内存分配，�
 
 Go 语言的内存分配器会根据申请分配的内存大小选择不同的处理逻辑，运行时根据对象的大小将对象分成微对象、小对象和大对象三种
 
-
 类别	大小
 微对象	(0, 16B)
 小对象	[16B, 32KB]
 大对象	(32KB, +∞)
-
 
 因为程序中的绝大多数对象的大小都在 32KB 以下，而申请的内存大小影响 Go 语言运行时分配内存的过程和开销，所以分别处理大对象和小对象有利于提高内存分配器的性能。
 多级缓存
@@ -91,6 +89,10 @@ Go 语言的内存分配器包含内存管理单元、线程缓存、中心缓�
 在 amd64 的 Linux 操作系统上，runtime.mheap 会持有 4,194,304 runtime.heapArena，每一个 runtime.heapArena 都会管理 64MB 的内存，单个 Go 语言程序的内存上限也就是 256TB。
 
 
+
+#### span
+
+
 runtime.mspan 是 Go 语言内存管理的基本单元，该结构体中包含 next 和 prev 两个字段，它们分别指向了前一个和后一个 runtime.mspan：
 
 
@@ -104,6 +106,21 @@ type mspan struct {
 串联后的上述结构体会构成如下双向链表，运行时会使用 runtime.mSpanList 存储双向链表的头结点和尾节点并在线程缓存以及中心缓存中使用
 
 
+
+```go
+
+// Central list of free objects of a given size.
+type mcentral struct {
+	_         sys.NotInHeap
+	spanclass spanClass
+	partial [2]spanSet // list of spans with a free object
+	full    [2]spanSet // list of spans with no free objects
+}
+```
+
+
+
+一个进程有多个 mcentral 管理这些 mcentral实例的是mheap的结构体实例
 
 
 
