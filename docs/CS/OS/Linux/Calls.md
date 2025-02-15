@@ -1,5 +1,90 @@
 ## Introduction
 
+系统调用的实现基础，其实就是两条汇编指令，分别是syscall和sysret。
+
+syscall使执行逻辑从用户态切换到内核态，在进入到内核态之后，cpu会从 MSR_LSTAR 寄存器中，获取处理系统调用内核代码的起始地址，即上面的 entry_SYSCALL_64。
+在执行 entry_SYSCALL_64 函数时，内核代码会根据约定，先从rax寄存器中获取想要执行的系统调用的编号，然后根据该编号从sys_call_table数组中找到对应的系统调用函数。
+接着，从 rdi, rsi, rdx, r10, r8, r9 寄存器中获取该系统调用函数所需的参数，然后调用该函数，把这些参数传入其中。
+在系统调用函数执行完毕之后，执行结果会被放到rax寄存器中。
+最后，执行sysret汇编指令，从内核态切换回用户态，用户程序继续执行。
+如果用户程序需要该系统调用的返回结果，则从rax中获取。
+
+sys_call_table数组的定义：
+
+
+该数组各元素的默认值都是 __x64_sys_ni_syscall
+该函数也非常简单，就是直接返回错误码 -ENOSYS，表示系统调用非法。
+sys_call_table数组定义的地方好像只设置了默认值，并没有设置真正的系统调用函数
+我们再回头仔细看下sys_call_table数组的定义，它在设置完默认值之后，后面还include了一个名为asm/syscalls_64.h的头文件 这个头文件是编译时生成的 makefile中使用了syscalltbl.sh脚本和syscall_64.tbl模板文件来生成这个syscalls_64.h头文件。
+来看下生成的syscalls_64.h头文件：
+
+
+
+
+```c
+__visible noinstr bool do_syscall_64(struct pt_regs *regs, int nr)
+{
+    add_random_kstack_offset();
+    nr = syscall_enter_from_user_mode(regs, nr);
+
+    instrumentation_begin();
+
+    if (!do_syscall_x64(regs, nr) && !do_syscall_x32(regs, nr) && nr != -1) {
+        /* Invalid system call, but still a system call. */
+        regs->ax = __x64_sys_ni_syscall(regs);
+    }
+
+    instrumentation_end();
+    syscall_exit_to_user_mode(regs);
+
+    /*
+	 * Check that the register state is valid for using SYSRET to exit
+	 * to userspace.  Otherwise use the slower but fully capable IRET
+	 * exit path.
+	 */
+
+    /* XEN PV guests always use the IRET path */
+    if (cpu_feature_enabled(X86_FEATURE_XENPV))
+        return false;
+
+    /* SYSRET requires RCX == RIP and R11 == EFLAGS */
+    if (unlikely(regs->cx != regs->ip || regs->r11 != regs->flags))
+        return false;
+
+    /* CS and SS must match the values set in MSR_STAR */
+    if (unlikely(regs->cs != __USER_CS || regs->ss != __USER_DS))
+        return false;
+
+    /*
+	 * On Intel CPUs, SYSRET with non-canonical RCX/RIP will #GP
+	 * in kernel space.  This essentially lets the user take over
+	 * the kernel, since userspace controls RSP.
+	 *
+	 * TASK_SIZE_MAX covers all user-accessible addresses other than
+	 * the deprecated vsyscall page.
+	 */
+    if (unlikely(regs->ip >= TASK_SIZE_MAX))
+        return false;
+
+    /*
+	 * SYSRET cannot restore RF.  It can restore TF, but unlike IRET,
+	 * restoring TF results in a trap from userspace immediately after
+	 * SYSRET.
+	 */
+    if (unlikely(regs->flags & (X86_EFLAGS_RF | X86_EFLAGS_TF)))
+        return false;
+
+    /* Use SYSRET to exit to userspace */
+    return true;
+}
+```
+
+efi stub是linux的一个feature，它可以通过配置 CONFIG_EFI_STUB 来开启和关闭。
+它的实现原理是，按照 uefi 指定的 pecoff 格式，将内核伪装成一个 uefi application，这样在支持 uefi 的各种硬件上，就可以按照 uefi 协议，直接启动linux内核了。
+
+linux内核efi stub有关pecoff 格式定义的部分都在 arch/x86/boot/header.S 这个文件里
+
+
 ```c
 // include/uapi/linux/net.h
 #define SYS_SOCKET     1             /* sys_socket(2)              */

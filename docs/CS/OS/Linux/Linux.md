@@ -580,7 +580,7 @@ usr/src/kernels/
 
 ## Processes
 
-Applications, servers, and other programs running under Unix are traditionally referred to as [processes](/docs/CS/OS/Linux/process.md).
+Applications, servers, and other programs running under Unix are traditionally referred to as [processes](/docs/CS/OS/Linux/proc/process.md).
 Each process is assigned address space in the virtual memory of the CPU.
 The address spaces of the individual processes are totally independent so that the processes are unaware of each other — as far as each process is concerned, it has the impression of being the only process in the system.
 If processes want to communicate to exchange data, for example, then special kernel mechanisms must be used.

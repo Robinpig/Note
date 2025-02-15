@@ -600,6 +600,7 @@ Quite unlike hard links, removing the original file named file causes the soft l
 
 [task_struct](/docs/CS/OS/Linux/proc/process.md?id=task_struct)中保存着files_struct
 
+
 ```c
 struct files_struct {
   /*

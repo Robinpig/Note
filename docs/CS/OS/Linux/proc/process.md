@@ -1,16 +1,11 @@
 ## Introduction
 
-
-
 Linux employs a hierarchical scheme in which each process depends on a parent process.
 The kernel starts the init program as the first process that is responsible for further system initialization actions and display of the login prompt or (in more widespread use today) display of a graphical login interface.
 init is therefore the root from which all processes originate, more or less directly, as shown graphically by the pstree program. init is the top of a tree structure whose branches spread further and further down.
 
-```shell
-pstree
-```
-
 kthread
+
 ```shell
 ps -fax
 ```
@@ -47,6 +42,26 @@ struct task_struct {
 ```
 
 
+
+`pstree` 命令可以查看当前进程树信息
+
+```c
+struct task_struct {
+       // ...... 
+	/* Real parent process: */
+	struct task_struct __rcu	*real_parent;
+
+	/* Recipient of SIGCHLD, wait4() reports: */
+	struct task_struct __rcu	*parent;
+
+	/*
+	 * Children/sibling form the list of natural children:
+	 */
+	struct list_head		children;
+	struct list_head		sibling;
+	struct task_struct		*group_leader;
+}
+```
 
 In addition to accessing process descriptors by traversing the linked lists, the PID can be mapped to the address of the task structure, and the process information can be accessed immediately.
 
@@ -828,7 +843,8 @@ struct nsproxy {
 #### state
 Task state bitmask. NOTE! These bits are also encoded in fs/proc/array.c: get_task_state().
 
-We have two separate sets of flags: task->state is about runnability, while task->exit_state are about the task exiting. Confusing, but this way modifying one set can't modify the other one by mistake.
+We have two separate sets of flags: task->state is about runnability, while task->exit_state are about the task exiting. 
+Confusing, but this way modifying one set can't modify the other one by mistake.
 
 > 进程的运行状态和其它信息可以在`/proc/PID/status`文件中查看
 
@@ -873,7 +889,7 @@ We have two separate sets of flags: task->state is about runnability, while task
 
 ### mm
 
-> 
+内核线程只固定工作在地址空间较高的部分 所以 mm_struct 为 null
 
 ```c
 
@@ -1378,7 +1394,7 @@ args->exit_signal is expected to be checked for sanity by the caller.
 
 1. copy_process
 2. trace_sched_process_fork
-3. wake_up_new_task
+3. wake_up_new_task 添加到调度队列
 4. ptrace_event_pid
 5. wait_for_vfork_done if **vfork** -- avoid dirty data and deadlock
 
