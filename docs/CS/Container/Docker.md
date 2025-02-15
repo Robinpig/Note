@@ -75,6 +75,9 @@ sudo systemctl start docker
 
 ##### **Mac**
 
+ARM mac 最好使用ARM 版本 Homebrew来安装 Docker
+
+
 ```shell
 brew install --cask docker
 brew install docker

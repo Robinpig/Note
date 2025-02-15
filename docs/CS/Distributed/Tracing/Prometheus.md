@@ -16,6 +16,12 @@ Prometheus's main features are:
 * targets are discovered via service discovery or static configuration
 * multiple modes of graphing and dashboarding support
 
+
+> [部署Prometheus](https://monaive.gitbook.io/prometheus)
+
+Prometheus受启发于Google的Brogmon监控系统
+Prometheus基于Golang开发，可方便进行二进制部署，同时可方便地使用Docker或Kubernetes进行部署 除程序外，仅有单文件配置文件与存储数据，存储数据亦可使用第三方数据库
+
 ## Data Model
 
 Prometheus fundamentally stores all data as time series: streams of timestamped values belonging to the same metric and the same set of labeled dimensions.
@@ -47,3 +53,4 @@ Dashboard
 ## References
 
 1. [Apache HertzBeat](https://github.com/apache/hertzbeat)
+2. [Prometheus Notes](https://erdong.site/prometheus-notes/)
