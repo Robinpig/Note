@@ -151,7 +151,14 @@ logsafepoint=debug # JDK11
 Other methods
 
 - Use JDK10 and later
+  Java 10中引入了一项新技术——Loop Strip Mining，这本质上一个循环分区技术，通过profiling统计出别的线程大概运行多久能抵达下一个安全点，同时找出在当前线程的长循环中，循环多少次能匹配这个平均抵达安全点的时间，然后在循环这些次数之后，安插安全点，以尽可能地避免单线程中长循环不经过安全点拖累所有人的问题
 - Use long to limit a countedLoop
+
+
+对于安全点检查的优化，只针对于计数循环（counted loop），对于非计数循环，每次循环完成后，都会安插安全点。
+此外，如果你的JVM运行在debug模式，是不会消除安全点检查的，也就是说即便你线上程序有如此bug，你在debug模式下也复现不出来
+
+
 
 
 ## Safepoint

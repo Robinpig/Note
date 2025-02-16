@@ -88,7 +88,10 @@ StubRoutines::call_stub() 创建的CallStub如下
 
 ```c
 #define CAST_TO_FN_PTR(func_type, value) (reinterpret_cast<func_type>(value))
+#define CAST_FROM_FN_PTR(new_type, func_ptr) ((new_type)((address_word)(func_ptr)))
 ```
+
+`reinterpret_cast` 负责转换指针指向的类型
 
 宏定义展开
 
@@ -96,14 +99,23 @@ StubRoutines::call_stub() 创建的CallStub如下
 #define CAST_TO_FN_PTR(func_type, value) (reinterpret_cast<func_type>(value))
 ```
 
+进行宏替换后，得到下面这行展开式：
+```c
+return (CallStub)(reinterpret_cast(_call_stub_entry));
+```
+
+
+reinterpret_cast(_call_stub_entry)返回了一个结果类型，JVM又将这种类型转换成了int类型
 
 
 
 
 
 
-
-
+```c
+// stubRoutines.hpp
+static CallStub call_stub()                              { return CAST_TO_FN_PTR(CallStub, _call_stub_entry); }
+```
 
 
 
@@ -491,6 +503,19 @@ void JavaCalls::call(JavaValue* result, const methodHandle& method, JavaCallArgu
 ```
 
 ### call_helper
+
+JVM在javaCalls::call_helper()中执行了call_stub()函数调用
+虽然call_stub()的原型函数里只有return (CallStub)(castable_address(_call_stub_entry))这一行代码，
+可是这行代码所蕴含的逻辑却十分丰富，编译器编译后，这行代码会被转换为类似下面的形式
+
+JVM调用Java函数的过程：
+- JVM先调用call_stub()函数，该函数将_call_stub_entry这一unsigned int类型的变量转换成CallStub自定义的类型，该类型是函数指针
+- JVM将call_stub()所返回的函数指针当成函数进行调用
+
+在javaCalls.cpp::call_helper()函数中，JVM是这样调用CallStub()函数的
+
+
+
 
 ```cpp
 

@@ -43,6 +43,15 @@ Prior to Java 8, we had to specify the -server flag to use the C2 compiler. Howe
 We should note that the Graal JIT compiler is also available since Java 10, as an alternative to C2. 
 Unlike C2, Graal can run in both just-in-time and ahead-of-time compilation modes to produce
 
+
+正常的编译路径是这样的，先解释执行（0层），再使用C1编译执行并带所有的profiling（3层），最后再使用C2编译执行（4层）。但是，
+- 如果当前方法过于平凡（trivial），方法体很小或者无从profile，就会从3层流转到1层，直接使用没有profiling的C1代码，并在此终止。
+- 如果C1编译器忙的话，就会直接使用C2编译。同理，如果C2编译器忙的话，就会回转到2层，再流转到3层，并等他不忙的时候，再使用C2编译。之所以先流转到2层的原因是为了减少在3层的时间，因为3层的执行效率相对2层较慢。而且如果C2忙的话，也说明大部分方法仍在3层排队等待C2的编译。
+- 如果C2做了一些比较激进的优化，比如分支预测，然后在实际执行中发现预测出错，这个时候就会进行「去优化」，重新进入解释执行。如下图，在运行过程中，编译器发现a总是小于10，一直在走左侧红色分支。此时，编译器就会笃定未来大概率还是走这个分支，于是就会省去if判断将代码直接组合优化。而对于a≥10的情况，就会重新解释执行
+
+
+
+
 ## Init
 
 
