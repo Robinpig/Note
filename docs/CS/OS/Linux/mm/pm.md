@@ -699,6 +699,10 @@ The selected task is killed in a hope that after it exits enough memory will be 
 
 ## memory model
 
+Linux支持三种内存页管理方式 通常称为内存模式 这三种内存模式的区别在于对page的管理方式和page与pfn的转换不同
+
+
+
 
 ```c
 // include/asm-generic/memory_model.h
@@ -772,10 +776,63 @@ typedef struct {
 #define PHYS_PFN(x) ((unsigned long)((x) >> PAGE_SHIFT))
 ```
 ### FLATMEM
-平坦内存模型：由一个全局数组mem_map 存储 struct page，直接线性映射到实际的物理内存
+平坦内存模型：把内存看作是连续的 即时中间有空洞也是会算作page 由一个全局数组mem_map 存储 struct page，直接线性映射到实际的物理内存
 mem_map 全局数组的下标就是相应物理页对应的 PFN 。
 
 在平坦内存模型下 ，page_to_pfn 与 pfn_to_page 的计算逻辑就非常简单，本质就是基于 mem_map 数组进行偏移操作
+
+
+
+申请足够存储所有page对象的内存 然后将地址赋值给 `pgdat -> node_mem_map`
+
+```c
+#ifdef CONFIG_FLATMEM
+static void __init alloc_node_mem_map(struct pglist_data *pgdat)
+{
+	unsigned long __maybe_unused start = 0;
+	unsigned long __maybe_unused offset = 0;
+
+	start = pgdat->node_start_pfn & ~(MAX_ORDER_NR_PAGES - 1);
+	offset = pgdat->node_start_pfn - start;
+	/* ia64 gets its own node_mem_map, before this, without bootmem */
+	if (!pgdat->node_mem_map) {
+		unsigned long size, end;
+		struct page *map;
+
+		/*
+		 * The zone's endpoints aren't required to be MAX_ORDER
+		 * aligned but the node_mem_map endpoints must be in order
+		 * for the buddy allocator to function correctly.
+		 */
+		end = pgdat_end_pfn(pgdat);
+		end = ALIGN(end, MAX_ORDER_NR_PAGES);
+		size =  (end - start) * sizeof(struct page);
+		map = memmap_alloc(size, SMP_CACHE_BYTES, MEMBLOCK_LOW_LIMIT,
+				   pgdat->node_id, false);
+		if (!map)
+			panic("Failed to allocate %ld bytes for node %d memory map\n",
+			      size, pgdat->node_id);
+		pgdat->node_mem_map = map + offset;
+	}
+
+#ifndef CONFIG_NUMA
+	/*
+	 * With no DISCONTIG, the global mem_map is just set as node 0's
+	 */
+	if (pgdat == NODE_DATA(0)) {
+		mem_map = NODE_DATA(0)->node_mem_map;
+		if (page_to_pfn(mem_map) != pgdat->node_start_pfn)
+			mem_map -= offset;
+	}
+#endif
+}
+#else
+static inline void alloc_node_mem_map(struct pglist_data *pgdat) { }
+#endif /* CONFIG_FLATMEM */
+```
+
+
+
 ### DISCONTIGMEM
 FLATMEM 平坦内存模型只适合管理一整块连续的物理内存，而对于多块非连续的物理内存来说使用 FLATMEM 平坦内存模型进行管理则会造成很大的内存空间浪费
 

@@ -9,6 +9,8 @@ An operating system (OS) is a software program that serves as the interface betw
 
 
 
+操作系统具备的功能
+
 
 - Abstract
 - Multiplex, sharing and isolation

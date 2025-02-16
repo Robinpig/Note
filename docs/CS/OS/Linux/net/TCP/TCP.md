@@ -1934,35 +1934,27 @@ void tcp_time_wait(struct sock *sk, int state, int timeo)
 
 #### tcp_timewait_state_process
 
-Main purpose of TIME-WAIT state is to close connection gracefully,
-when one of ends sits in LAST-ACK or CLOSING retransmitting FIN
-(and, probably, tail of data) and one or more our ACKs are lost.
+Main purpose of TIME-WAIT state is to close connection gracefully, when one of ends sits in LAST-ACK or CLOSING retransmitting FIN(and, probably, tail of data) and one or more our ACKs are lost.
 
-What is TIME-WAIT timeout? It is associated with maximal packet
-lifetime in the internet, which results in wrong conclusion, that
-it is set to catch "old duplicate segments" wandering out of their path.
-It is not quite correct. This timeout is calculated so that it exceeds
-maximal retransmission timeout enough to allow to lose one (or more)
-segments sent by peer and our ACKs. This time may be calculated from RTO.
+What is TIME-WAIT timeout? 
 
-When TIME-WAIT socket receives RST, it means that another end
-finally closed and we are allowed to kill TIME-WAIT too.
+It is associated with maximal packet lifetime in the internet, which results in wrong conclusion, that it is set to catch "old duplicate segments" wandering out of their path.
+It is not quite correct.
+This timeout is calculated so that it exceeds maximal retransmission timeout enough to allow to lose one (or more)segments sent by peer and our ACKs. 
+This time may be calculated from RTO.
+
+When TIME-WAIT socket receives RST, it means that another end finally closed and we are allowed to kill TIME-WAIT too.
 
 Second purpose of TIME-WAIT is catching old duplicate segments.
-Well, certainly it is pure paranoia, but if we load TIME-WAIT
-with this semantics, we MUST NOT kill TIME-WAIT state with RSTs.
+Well, certainly it is pure paranoia, but if we load TIME-WAIT with this semantics, we MUST NOT kill TIME-WAIT state with RSTs.
 
-If we invented some more clever way to catch duplicates
-(f.e. based on PAWS), we could truncate TIME-WAIT to several RTOs.
+If we invented some more clever way to catch duplicates(f.e. based on PAWS), we could truncate TIME-WAIT to several RTOs.
 The algorithm below is based on FORMAL INTERPRETATION of RFCs.
-When you compare it to RFCs, please, read section SEGMENT ARRIVES
-from the very beginning.
+When you compare it to RFCs, please, read section SEGMENT ARRIVES from the very beginning.
 
-NOTE. With recycling (and later with fin-wait-2) TW bucket
-is _not_ stateless. It means, that strictly speaking we must
-spinlock it. I do not want! Well, probability of misbehaviour
-is ridiculously low and, seems, we could use some mb() tricks
-to avoid misread sequence numbers, states etc.  --ANK
+NOTE. With recycling (and later with fin-wait-2) TW bucket is _not_ stateless.
+It means, that strictly speaking we must spinlock it.
+I do not want! Well, probability of misbehaviour is ridiculously low and, seems, we could use some mb() tricks to avoid misread sequence numbers, states etc.  --ANK
 
 We don't need to initialize tmp_out.sack_ok as we don't use the results
 
@@ -2039,12 +2031,8 @@ RFC 1122:
 [a TCP] MAY accept a new SYN from the remote TCP to
 reopen the connection directly, if it:
 
-1. assigns its initial sequence number for the new
-   connection to be larger than the largest sequence
-   number it used on the previous connection incarnation,
-   and
-2. returns to TIME-WAIT state if the SYN turns out
-   to be an old duplicate".
+1. assigns its initial sequence number for the new connection to be larger than the largest sequence number it used on the previous connection incarnation, and
+2. returns to TIME-WAIT state if the SYN turns out to be an old duplicate".
 
 if sysctl_tcp_rfc1337 enable, ignore RST
 

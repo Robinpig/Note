@@ -120,7 +120,7 @@ Nothing much to do here since it's the protocol's responsibility to handle the l
 
 We move the socket address to kernel space before we call the protocol layer (having also checked the address is ok).
 
-### Data Structures Related to bind
+Data Structures Related to bind
 
 - tcp_hashinfo
 - tcp_bind_hashbucket
