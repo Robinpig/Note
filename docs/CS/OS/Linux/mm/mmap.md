@@ -43,7 +43,6 @@ A file is mapped in multiples of the page size.
 For a file that is not a multiple of the page size, the remaining bytes in the partial page at the end of the mapping are zeroed when mapped, and modifications to that region are not written out to the file.
 The effect of changing the size of the underlying file of a mapping on the pages that correspond to added or removed regions of the file is unspecified.
 
-### ksys_mmap_pgoff
 
 ```c
 // arch/x86/kernel/sys_x86_64.c
@@ -56,7 +55,11 @@ SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 
 	return ksys_mmap_pgoff(addr, len, prot, flags, fd, off >> PAGE_SHIFT);
 }
+```
+### ksys_mmap_pgoff
 
+
+```c
 unsigned long ksys_mmap_pgoff(unsigned long addr, unsigned long len,
 			      unsigned long prot, unsigned long flags,
 			      unsigned long fd, unsigned long pgoff)
