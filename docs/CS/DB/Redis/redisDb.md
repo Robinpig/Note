@@ -35,7 +35,8 @@ void initServer(void){
 
 ## redisDb
 
-Redis database representation. There are multiple databases identified by integers from 0 (the default database) up to the max configured database.
+Redis database representation. 
+There are multiple databases identified by integers from 0 (the default database) up to the max configured database.
 
 ```java
 // server.h
@@ -60,6 +61,7 @@ blocking_keys 和 ready_keys 用于BLPOP命令的
 
 ### dict
 
+dict用来保存所有的kv对数据
 
 ```c
 // dict.h
@@ -77,13 +79,15 @@ struct dict {
 };
 ```
 
-一开始只使用 ht_table[0] 读写数据 ht_table[1] 指向NULL, 当rehash时才会创建更大的散列表 ht_table[1], rehash迁移完成后 交换 ht_table[0]  和 ht_table[1] 的指针 ht_table[1] 重新指向 NULL
+ht_table[2] 是一个大小为2的散列表数组
+一开始只使用 ht_table[0] 读写数据 ht_table[1] 指向NULL, 当rehash时才会创建更大的散列表 ht_table[1], 
+rehash迁移完成后 交换 ht_table[0]  和 ht_table[1] 的指针 ht_table[1] 重新指向 NULL
 
 
 
 
 
-[dicht in hash](/docs/CS/DB/Redis/struct/hash.md?id=dicht)
+散列表数组中元素是[dictEntry](/docs/CS/DB/Redis/struct/hash.md?id=dicht) 类型
 
 ```c
 // dict.h
@@ -98,7 +102,9 @@ typedef struct dictEntry {
     struct dictEntry *next;
 } dictEntry;
 ```
+ht_table 使用链地址法处理键碰撞
 
+而 val指针指向的是 redisObject
 
 
 

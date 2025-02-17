@@ -72,7 +72,8 @@ Fig.1. Architecture
 
 
 
-Redis将启动的这些服务抽象成一个全局的结构体 [redisServer](/docs/CS/DB/Redis/server.md?id=server) 它包含了存储的[redisDb](/docs/CS/DB/Redis/redisDb.md) 网络监听 客户端缓存等信息
+Redis将启动的这些服务抽象成一个全局的结构体 [redisServer](/docs/CS/DB/Redis/server.md?id=server) 
+它包含了存储kv的[redisDb](/docs/CS/DB/Redis/redisDb.md)、命令列表、网络监听、客户端缓存等信息
 
 
 
