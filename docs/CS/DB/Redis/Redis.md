@@ -1,6 +1,6 @@
 ## Introduction
 
-[Redis](https://redis.io) is often referred to as a *data structures* server.
+[Redis](https://redis.io)(Remote Dictionary Server) is often referred to as a *data structures* server.
 What this means is that Redis provides access to mutable data structures via a set of commands, which are sent using a *server-client* model with [TCP sockets](/docs/CS/CN/TCP/TCP.md) and a simple protocol.
 So different processes can query and modify the same data structures in a shared way.
 
@@ -48,6 +48,8 @@ Redis源码目录:
 
 ## Architecture
 
+Redis 整体架构如下图:
+
 
 <div style="text-align: center;">
 
@@ -58,6 +60,22 @@ Redis源码目录:
 <p style="text-align: center;">
 Fig.1. Architecture
 </p>
+主要模块:
+
+- 应用层: client
+- 网络层: 基于I/O多路复用封装了一个高性能ae库
+- 命令执行层
+- 内存层: 提供各种数据结构保存数据
+- 持久化层: 提供RDB 和 AOF 持久化策略
+- 高可用层: 提供Replication、Sentinel 和 Cluster实现高可用
+- 统计和监控
+
+
+
+Redis将启动的这些服务抽象成一个全局的结构体 [redisServer](/docs/CS/DB/Redis/server.md?id=server) 它包含了存储的[redisDb](/docs/CS/DB/Redis/redisDb.md) 网络监听 客户端缓存等信息
+
+
+
 [Redis启动流程](/docs/CS/DB/Redis/start.md)
 
 [Redis命令执行流程](/docs/CS/DB/Redis/start.md?id=do)
@@ -67,14 +85,6 @@ Fig.1. Architecture
 图源 [redis 异步网络通信流程 - 单线程](https://www.processon.com/view/5eab75227d9c0869dab46472)
 
 ![](https://wenfh2020.com/images/2020/2020-05-04-01-19-51.png)
-
-
-
-
-
-Server and Client
-
-Redis将启动的这些服务抽象成一个全局的结构体 [redisServer](/docs/CS/DB/Redis/server.md?id=server) 它包含了存储的[redisDb] 网络监听 客户端缓存等信息
 
 
 
