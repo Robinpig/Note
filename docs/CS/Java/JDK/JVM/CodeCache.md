@@ -368,6 +368,25 @@ void ICacheStubGenerator::generate_icache_flush(ICache::flush_icache_stub_t* flu
 
 编译类太多
 
+服务每次发布/重启后都会短暂地出现CPU满线程池满的情况，然后过一段时间又能自动恢复
+排查后发现是启动时JVM将部分热点代码编译为机器代码导致的，这个过程中JIT编译器会占用大量的CPU
+
+
+
+Code Cache的增长过程就像ArrayList一样，一开始分配一个初始的大小，此后随着越来越多的代码被编译为机器码，code cache不够用了之后，就会引发扩容
+默认的初始大小是2496KB，最大大小是240MB，二者可分别通过JVM参数-XX:InitialCodeCacheSize=N和-XX:ReservedCodeCacheSize=N进行设定。
+自Java 9开始，Code Cache的管理被分为了三个区域：
+- non-method segment：存储JVM内部代码，大小可使用-XX:NonNMethodCodeHeapSize参数配置；
+- profiled-code segment：C1编译后的代码，特点是生命周期较短（随时都有可能升级到C2编译），大小可使用-XX:ProfiledCodeHeapSize参数配置；
+- non-profiled segment：C2编译后的代码，特点是生命周期较长（因为极少发生反优化降级），大小可使用-XX:NonProfiledCodeHeapSize参数配置；
+
+Code Cache分区的好处是降低内存碎片的产生，提高运行效率
+
+
+
+
+
+
 
 
 

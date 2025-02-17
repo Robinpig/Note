@@ -149,6 +149,11 @@ Check parameters for validity. In other words, failure to validate parameters, c
 - Return optionals judiciously
 - Write doc comments for all exposed API elements
 
+
+从Object继承下来5个方法，final、静态方法和构造方法不会进入虚函数表中
+final关键字与C++的virtual有着相反的作用
+JVM的方法调用指令有四个，分别是 invokestatic，invokespecial，invokesvirtual 和 invokeinterface。前两个是静态绑定，后两个是动态绑定的，invokevirtual表示调用虚方法，也就是会查虚函数表进行调用，而invokeinterface表示调用接口方法，会有个接口函数表
+
 ### identify
 
 The return type is the type of the value that pops out of the method after you call it. The argument list gives the types and names for the information you want to pass into the method.
