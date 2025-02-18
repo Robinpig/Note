@@ -1491,9 +1491,9 @@ struct redisServer {
 
 
 
+### read
 
-
-### readQueryFromClient
+#### readQueryFromClient
 
 `readQueryFromClient()` is the ***readable event handler*** and accumulates data from read from the client into the query buffer.
 
@@ -1595,10 +1595,10 @@ int postponeClientRead(client *c) {
 
 
 
-主线程在执行beforeSleep函数时会调用 handleClientsWithPendingReadsUsingThreads 将clients分配给线程绑定队列
+主线程在执行beforeSleep函数时会调用 handleClientsWithPendingReadsUsingThreads 将clients通过RoundRobin方式分配给线程绑定队列 之后主线程也会执行一部分的命令读取与解析 而命令的执行需要等待所有I/O线程完成解析后才开始
 
-When threaded I/O is also enabled for the reading + parsing side, the readable handler will just put normal clients into a queue of clients to process (instead of serving them synchronously). 
-This function runs the queue using the I/O threads, and process them in order to accumulate the reads in the buffers, and also parse the first command available rendering it in the client structures.
+如果未开启I/O多线程模型 则需要主线程独立完成流程
+
 This function achieves thread safety using a fan-out -> fan-in paradigm:
 Fan out: The main thread fans out work to the io-threads which block until setIOPendingCount() is called with a value larger than 0 by the main thread.
 Fan in: The main thread waits until getIOPendingCount() returns 0. 
@@ -1691,7 +1691,7 @@ int handleClientsWithPendingReadsUsingThreads(void) {
 
 
 
-
+processPendingCommandAndInputBuffer
 
 ```c
 int processPendingCommandAndInputBuffer(client *c) {
@@ -1808,12 +1808,14 @@ void processInputBuffer(client *c) {
 }
 ```
 
-This function calls processCommand(), but also performs a few sub tasks for the client that are useful in that context:
+processCommandAndResetClient
+
+
+
+This function calls `processCommand()`, but also performs a few sub tasks for the client that are useful in that context:
 
 1. It sets the current client to the client 'c'.
 2. calls commandProcessed() if the command was handled.
-   The function returns C_ERR in case the client was freed as a side effect
-   of processing the command, otherwise C_OK is returned.
 
 ```c
 int processCommandAndResetClient(client *c) {
@@ -1831,13 +1833,13 @@ int processCommandAndResetClient(client *c) {
 }
 ```
 
+这里处理命令后返回值只有C_ERR 或者 C_OK, 命令的响应是在I/O线程里完成的
+
 ### processCommand
 
-这里调用了[processCommand]() 处理命令
+processCommand 函数从 server.commands 中查找命令对应的redisCommand实例
 
-
-
-
+如果通过就会进行如下处理
 
 - 如果处于事务中，就将命令先放入队列中，不执行。
 - 如果不在事务中，就直接调用call() 执行命令。
@@ -1847,8 +1849,6 @@ call() 中会调用命令对应的处理函数
 ```c
     c->cmd->proc(c);
 ```
-
-
 
 
 
@@ -1906,9 +1906,11 @@ void addReply(client *c, robj *obj) {
 }
 ```
 
-#### prepareClientToWrite
+##### prepareClientToWrite
 
-This function is called every time we are going to transmit new data to the client. The behavior is the following:
+This function is called every time we are going to transmit new data to the client. 
+
+The behavior is the following:
 
 If the client should receive new data (normal clients will) the function returns C_OK, and make sure to install the write handler in our event loop so that when the socket is writable new data gets written.
 
@@ -1946,9 +1948,111 @@ int prepareClientToWrite(client *c) {
 }
 ```
 
-#### handleClientsWithPendingWrites
+### write
 
-Call by beforeSleep
+#### handleClientsWithPendingWritesUsingThreads
+
+下一次时间循环时 beforeSleep 函数会调用 handleClientsWithPendingWrites 把 clients_pending_write 队列的数据分配给I/O线程和main线程
+
+分配完成后由负责的线程调用writeToClient函数把命令执行结果发送回客户端
+
+```c
+int handleClientsWithPendingWritesUsingThreads(void) {
+    int processed = listLength(server.clients_pending_write);
+    if (processed == 0) return 0; /* Return ASAP if there are no clients. */
+
+    /* If I/O threads are disabled or we have few clients to serve, don't
+     * use I/O threads, but the boring synchronous code. */
+    if (server.io_threads_num == 1 || stopThreadedIOIfNeeded()) {
+        return handleClientsWithPendingWrites();
+    }
+
+    /* Start threads if needed. */
+    if (!server.io_threads_active) startThreadedIO();
+
+    /* Distribute the clients across N different lists. */
+    listIter li;
+    listNode *ln;
+    listRewind(server.clients_pending_write,&li);
+    int item_id = 0;
+    while((ln = listNext(&li))) {
+        client *c = listNodeValue(ln);
+        c->flags &= ~CLIENT_PENDING_WRITE;
+
+        /* Remove clients from the list of pending writes since
+         * they are going to be closed ASAP. */
+        if (c->flags & CLIENT_CLOSE_ASAP) {
+            listDelNode(server.clients_pending_write, ln);
+            continue;
+        }
+
+        /* Since all replicas and replication backlog use global replication
+         * buffer, to guarantee data accessing thread safe, we must put all
+         * replicas client into io_threads_list[0] i.e. main thread handles
+         * sending the output buffer of all replicas. */
+        if (getClientType(c) == CLIENT_TYPE_SLAVE) {
+            listAddNodeTail(io_threads_list[0],c);
+            continue;
+        }
+
+        int target_id = item_id % server.io_threads_num;
+        listAddNodeTail(io_threads_list[target_id],c);
+        item_id++;
+    }
+
+    /* Give the start condition to the waiting threads, by setting the
+     * start condition atomic var. */
+    io_threads_op = IO_THREADS_OP_WRITE;
+    for (int j = 1; j < server.io_threads_num; j++) {
+        int count = listLength(io_threads_list[j]);
+        setIOPendingCount(j, count);
+    }
+
+    /* Also use the main thread to process a slice of clients. */
+    listRewind(io_threads_list[0],&li);
+    while((ln = listNext(&li))) {
+        client *c = listNodeValue(ln);
+        writeToClient(c,0);
+    }
+    listEmpty(io_threads_list[0]);
+
+    /* Wait for all the other threads to end their work. */
+    while(1) {
+        unsigned long pending = 0;
+        for (int j = 1; j < server.io_threads_num; j++)
+            pending += getIOPendingCount(j);
+        if (pending == 0) break;
+    }
+
+    io_threads_op = IO_THREADS_OP_IDLE;
+
+    /* Run the list of clients again to install the write handler where
+     * needed. */
+    listRewind(server.clients_pending_write,&li);
+    while((ln = listNext(&li))) {
+        client *c = listNodeValue(ln);
+
+        /* Update the client in the mem usage after we're done processing it in the io-threads */
+        updateClientMemUsage(c);
+
+        /* Install the write handler if there are pending writes in some
+         * of the clients. */
+        if (clientHasPendingReplies(c)) {
+            installClientWriteHandler(c);
+        }
+    }
+    listEmpty(server.clients_pending_write);
+
+    /* Update processed count on server */
+    server.stat_io_writes_processed += processed;
+
+    return processed;
+}
+```
+
+
+
+handleClientsWithPendingWrites
 
 This function is called just before entering the event loop, in the hope we can just write the replies to the client output buffer without any need to use a syscall in order to install the writable event handler, get it called, and so forth.
 
