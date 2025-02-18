@@ -28,18 +28,55 @@ Some build issues:
 
 
 Redis源码目录:
-- deps
-  - jemalloc
-  - Hiredis
-  - Linenoise
-  - Lua
-  - hdr_histogram
-- src
-  - commands
-  - modules
-- test
-- utils
-
+<table class="tg"><thead>
+  <tr>
+    <th class="tg-0lax">目录</th>
+    <th class="tg-0lax">子目录</th>
+    <th class="tg-0lax">描述</th>
+  </tr></thead>
+<tbody>
+  <tr>
+    <td class="tg-0lax" rowspan="5">deps</td>
+    <td class="tg-0lax">jemalloc</td>
+    <td class="tg-0lax"></td>
+  </tr>
+  <tr>
+    <td class="tg-0lax">Linenoise</td>
+    <td class="tg-0lax"></td>
+  </tr>
+  <tr>
+    <td class="tg-0lax">Hiredis</td>
+    <td class="tg-0lax"></td>
+  </tr>
+  <tr>
+    <td class="tg-0lax">Lua</td>
+    <td class="tg-0lax"></td>
+  </tr>
+  <tr>
+    <td class="tg-0lax" >hdr_histogram</td>
+    <td class="tg-0lax"></td>
+  </tr>
+  <tr>
+    <td class="tg-0lax" rowspan="2">src</td>
+    <td class="tg-0lax">commands</td>
+    <td class="tg-0lax"></td>
+  </tr>
+   <tr>
+    <td class="tg-0lax">modules</td>
+    <td class="tg-0lax"></td>
+  </tr>
+  <tr>
+    <td class="tg-0lax">test</td>
+    <td class="tg-0lax"></td>
+    <td class="tg-0lax"></td>
+  </tr>
+   <tr>
+    <td class="tg-0lax">utils</td>
+    <td class="tg-0lax"></td>
+    <td class="tg-0lax"></td>
+  </tr>
+</tbody>
+</table>
 
 
 
