@@ -42,10 +42,6 @@ Redis objects are used extensively in the Redis internals, however in order to a
 
 ## Data Types
 
-
-
-
-
 Data structures implemented into Redis have a few special properties:
 
 - Redis cares to store them on disk, even if they are always served and modified into the server memory. This means that Redis is fast, but that it is also non-volatile.

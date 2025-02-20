@@ -1,5 +1,9 @@
 ## Introduction
 
+字符串的使用场景最为广泛， 例如计数器、缓存、分布式锁、用户登录token和登录信息存储等
+
+
+
 **expire will be delete after set value again** -- set is idempotent
 
 when create string, len=capacity, usually we don't append string.
