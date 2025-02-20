@@ -3,13 +3,19 @@
 字符串的使用场景最为广泛， 例如计数器、缓存、分布式锁、用户登录token和登录信息存储等
 
 
+为什么要使用一个新的Simple Dynamic String 而不是使用C语言的字符串？
+
+C语言字符串的不足
+
+- 以char*字符串数组来实现 以\0 作为结尾 想要获取length需要遍历
+- \0 作为结尾使得其无法支持支持安全的二进制数据 如图片等的存储
+- 因为char数组的长度在创建时就确定了 所以每次扩缩容需要重新申请空间、拷贝再释放原有空间
+
 
 **expire will be delete after set value again** -- set is idempotent
 
 when create string, len=capacity, usually we don't append string.
 
-counter/limiter
-cache (shared sessions)
 
 ## Type
 
@@ -662,6 +668,15 @@ void sdsclear(sds s) {
 ## int
 
 incr
+
+## Impl
+
+分布式id生成器
+
+
+Redis集群能保证高可用和高性能 为了节省内存可以使用incr获取自增数字来创建id 但是哪怕开启AOF配置everysec策略也有可能会丢失数据
+所以可以通过异步机制 将id通过MQ发送给MySQL持久化
+
 
 ## Summary
 
