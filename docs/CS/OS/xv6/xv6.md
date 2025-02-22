@@ -64,6 +64,10 @@ sudo apt install qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils vir
 
 ARM架构Mac需要安装x86版本的Homebrew
 
+
+
+> https://github.com/nativeos/homebrew-i386-elf-toolchain
+
 ```shell
 # 安装binutils gcc
 brew tap nativeos/i386-elf-toolchain
@@ -314,7 +318,7 @@ The wraparound was caused by the fact the 8086 could only access 1 megabyte of m
 - 804x 键盘控制器法
 - Fast A20 法
 - BIOS 中断法
- 
+
 xv6 用了第一种 804x 键盘控制器法，这也是最古老且效率最慢的一种。当然因为硬件的不同，这三种方法可能不会被硬件都支持，正确的做法应该是这三种都尝试一下，每尝试一个就验证一下 A20 gate 是否被正确打开以保证兼容各种硬件。但是 xv6 作为一款教学用的操作系统就没必要做的这么复杂里。只用了一种最古老的方法（保证兼容大多数硬件）而且没有对打开成功与否做验证。像诸如 Linux 这样的操作系统就把三种方法的实现都做好里，并且加上了验证机制。
 
 在开启A20线之前需要关闭中断以防止我们的内核陷入混乱。命令字节是通过端口0x64来发送的

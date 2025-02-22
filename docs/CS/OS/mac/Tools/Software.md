@@ -76,11 +76,12 @@ tap
 
 x86和ARM版本
 
-|          | x86                                                          | ARM                                                          |
-| -------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| 命令路径 | /usr/local/bin/brew                                          | /opt/homebrew/bin/brew                                       |
-| 安装脚本 | arch -x86_64 /bin/bash -c "$(curl -fsSL https://gitee.com/ineo6/homebrew-install/raw/master/install.sh)" | /bin/bash -c "$(curl -fsSL https://gitee.com/ineo6/homebrew-install/raw/master/install.sh)" |
-|          |                                                              |                                                              |
+|              | x86                                                          | ARM                                                          |
+| ------------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| 命令路径     | /usr/local/bin/brew                                          | /opt/homebrew/bin/brew                                       |
+| 安装脚本     | arch -x86_64 /bin/bash -c "$(curl -fsSL https://gitee.com/ineo6/homebrew-install/raw/master/install.sh)" | /bin/bash -c "$(curl -fsSL https://gitee.com/ineo6/homebrew-install/raw/master/install.sh)" |
+| 安装软件路径 | /usr/local/Cellar                                            |                                                              |
+|              |                                                              |                                                              |
 
 共存方案 
 
@@ -108,6 +109,8 @@ source ~/.zshrc
 
 
 
+安装的软件路径
+
 ### ohmyzsh
 
 ```shell
@@ -124,7 +127,9 @@ REMOTE=https://mirrors.tuna.tsinghua.edu.cn/git/ohmyzsh.git sh install.sh
    2. Add a new row below `[[ -s $(brew --prefix)/etc/profile.d/autojump.sh ]] && . $(brew --prefix)/etc/profile.d/autojump.sh`
    3. `wq`
 
+通过 `j -a <dir>` 添加快速路径
 
+`j -s` 查看统计
 
 ## iTerm2
 
@@ -167,25 +172,21 @@ plugins=( [plugins...] zsh-syntax-highlighting)
 
 打开主题配置文件，比如我的是 `agnoster.zsh-theme` ：
 
-```
+```shell
 vim ~/.oh-my-zsh/themes/agnoster.zsh-theme
-
-SHELL
 ```
 
 将文件里的 `%~` 修改成 `%1d`
 
-```
+```shell
 # Dir: current working directory
 prompt_dir() {
   # prompt_segment blue $CURRENT_FG '%~'   # Original code
   prompt_segment blue $CURRENT_FG '%1d'    # Modified code
 }
-
-SHELL
 ```
 
-## 
+
 
 
 
@@ -193,11 +194,7 @@ SHELL
 
 - iStat Menu
 - Better MenuBar(Apple Store)
-- [SMCAMDProcessor](https://github.com/trulyspinach/SMCAMDProcessor)
-
-Disk
-
-- Disk Space Analyzer PRO
+- [SMCAMDProcessor](https://github.com/trulyspinach/SMCAMDProcessor) 适用AMD CPU
 
 ## Markdown
 
@@ -205,10 +202,31 @@ Disk
 - Marked 2
 - [Glow](https://github.com/charmbracelet/glow) is a terminal based markdown reader designed from the ground up to bring out the beauty—and power—of the CLI.
 
+## Read
+
+
+
 PDF Reader
 
 - PDF Reader Pro
 - PDF Expert
+
+Epub
+
+- Apple Books
+- Calibre
+
+
+
+## Disk
+
+
+
+分析
+
+- CleanMyMac
+- Disk Graph
+- Disk Space Analyzer PRO
 
 ## Others
 
@@ -216,7 +234,8 @@ PDF Reader
 - [MonitorControl](https://github.com/MonitorControl/MonitorControl)
 - Dynamic Wallpaper
 - OneSwitch
-- V2rayU
+- ~~V2rayU~~
+- ClashX
 
 ## Developer
 

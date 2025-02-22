@@ -16,6 +16,13 @@ Fig.1. VM.
 A single physical machine can run multiple virtual machines, each with their own operating system and applications.
 These virtual machines are isolated from each other.
 
+[vmware虚拟机软件下载地址](https://softwareupdate.vmware.com/cds/vmw-desktop/)
+
+[Ventoy](https://www.ventoy.net/cn/index.html) 是一个制作可启动U盘的开源工具 只需要把 ISO/WIM/IMG/VHD(x)/EFI 等类型的文件直接拷贝到U盘里面就可以启动了，无需其他操作
+
+支持Windows、Linux、FreeBSD等系统的镜像文件
+
+
 
 ## VMware
 
