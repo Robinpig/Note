@@ -38,3 +38,4 @@ Web 2.0：能读能写（2004 年 - 至今)
 ## References
 
 1. [什么是 Web3？](https://ethereum.org/zh/web3/)
+1. [15 天入门 Web3：你需要掌握的知识点都在这里](https://foresightnews.pro/article/detail/10947)
