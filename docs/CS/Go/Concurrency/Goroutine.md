@@ -928,3 +928,4 @@ func execute(gp *g, inheritTime bool) {
 
 ## References
 1. [Golang 程序启动流程分析](https://blog.tianfeiyu.com/2021/07/01/golang_bootstrap/#more)
+2. [Understanding Real-World Concurrency Bugs in Go](https://songlh.github.io/paper/go-study.pdf)
