@@ -100,6 +100,34 @@ make时mp.o文件告警
 
 
 
+##### **Docker**
+
+```shell
+docker pull linxi177229/mit6.s081:latest
+
+docker run --name mit6.s081 -itd linxi177229/mit6.s081
+```
+
+gdb
+
+```shell
+# 第一个 terminal
+cd xv6-labs-2020
+# 第一次执行 gdb 需要 执行 下面条语句 
+echo "add-auto-load-safe-path $(pwd)/.gdbinit " >> ~/.gdbinit # 第一次执行
+make CPUS=1 qemu-gdb
+
+# 第二个 terminal
+cd xv6-labs-2020
+gdb-multiarch
+```
+
+
+
+
+
+ 
+
 
 
 <!-- tabs:end -->

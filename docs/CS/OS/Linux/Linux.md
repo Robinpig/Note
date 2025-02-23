@@ -180,7 +180,6 @@ file vmlinux
 在该目录下创建文件 build-kernel.sh 并写入如下内容：
 
 ```shell
-Copy
 #!/bin/bash
 
 cd /workspace/linux-5.12.14
@@ -190,7 +189,6 @@ make O=../obj/linux/ -j$(nproc)
 在该目录下创建文件 start-gdb.sh 并写入如下内容：
 
 ```shell
-Copy
 #!/bin/bash
 
 echo 'add-auto-load-safe-path /workspace/linux-5.12.14/scripts/gdb/vmlinux-gdb.py' > /root/.gdbinit # 让 gdb 能够顺利加载内核的调试脚本，如果在下一节编译 Linux Kernel 时下载的是另一版本的 Linux Kernel 代码，请修改这里的版本号
@@ -236,7 +234,6 @@ ENV LD_LIBRARY_PATH /path/to/qemu-aarch64-static/usr/lib:$LD_LIBRARY_PATH
 通过如下命令构建镜像：
 
 ```shell
-Copy
 docker build --platform=linux/amd64 -t linux-builder .
 ```
 
