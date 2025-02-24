@@ -225,10 +225,6 @@ ADD ./start-gdb.sh /usr/local/bin
 ADD ./build-kernel.sh /usr/local/bin
 RUN chmod a+x /usr/local/bin/*.sh
 WORKDIR /workspace
-
-
-ENV PATH /path/to/qemu-aarch64-static:$PATH
-ENV LD_LIBRARY_PATH /path/to/qemu-aarch64-static/usr/lib:$LD_LIBRARY_PATH
 ```
 
 通过如下命令构建镜像：
@@ -254,7 +250,6 @@ mkdir -p $HOME/linux/obj
 进入目录 $HOME/linux/ 并运行如下命令，进入容器编译内核：
 
 ```shell
-
 docker run --platform=linux/amd64 -it --name linux-builder -v $HOME/linux:/workspace linux-builder
 ```
 
@@ -347,14 +342,22 @@ find . -print0 \
 运行
 
 ```shell
-qemu-system-x86_64 -kernel /workspace/obj/linux/arch/x86/boot/bzImage -initrd /workspace/obj/initramfs-busybox.cpio.gz -nographic -append "console=ttyS0"
+qemu-system-x86_64 -kernel /workspace/obj/linux/arch/x86_64/boot/bzImage -initrd /workspace/obj/initramfs-busybox.cpio.gz -nographic -append "console=ttyS0"
 ```
 
 ##### **ARM Docker**
 
 ARM配置操作基本同x86 以下列出的是不同点
 
-Dockerfile
+Dockerfile增加
+
+```dockerfile
+
+ENV PATH /path/to/qemu-aarch64-static:$PATH
+ENV LD_LIBRARY_PATH /path/to/qemu-aarch64-static/usr/lib:$LD_LIBRARY_PATH
+```
+
+
 
 > Busybox 配置时需要disable Applets->Shells->ash->job control
 > 否则将在linux启动后报错 can't access tty,job control turned off
