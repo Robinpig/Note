@@ -40,16 +40,16 @@ Cloud native technologies and architectures typically consist of some combinatio
 ## Programming Languages
 
 
-| Programming Language                | Compile Type | Usage |
-|-------------------------------------|--------------|-------|
-| [C](/docs/CS/C/C.md)                |              |       |
-| [C++](/docs/CS/C++/C++.md)          |              |       |
-| [Golang](/docs/CS/Go/Go.md)         |              |       |
-| [Java](/docs/CS/Java/JDK/JDK.md)    |              |       |
-| [Python](/docs/CS/Python/Python.md) |              |       |
-| [Rust](/docs/CS/Rust/Rust.md)       |              |       |
-| [Scala](/docs/CS/Scala/Scala.md)    |              |       |
-| [Flutter](/docs/CS/Flutter.md)      |              |       |
+| Programming Language                | Compile Type | Memory Management |      |
+| ----------------------------------- | ------------ | ----------------- | ---- |
+| [C](/docs/CS/C/C.md)                |              |                   |      |
+| [C++](/docs/CS/C++/C++.md)          |              |                   |      |
+| [Golang](/docs/CS/Go/Go.md)         |              | GC                |      |
+| [Java](/docs/CS/Java/JDK/JDK.md)    |              | GC                |      |
+| [Python](/docs/CS/Python/Python.md) |              | GC                |      |
+| [Rust](/docs/CS/Rust/Rust.md)       |              |                   |      |
+| [Scala](/docs/CS/Scala/Scala.md)    |              |                   |      |
+| [Flutter](/docs/CS/Flutter.md)      |              |                   |      |
 
 
 

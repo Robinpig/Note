@@ -1,5 +1,20 @@
 ## Introduction
 
+Redis的list是一种线性的有序结构 可以用于实现队列、栈
+
+list的底层数据结构一直在进行优化 从早期的linkedlist和ziplist 到3.2引入的linkedlist与ziplist组成的quicklist 再到7.0版本中的listpack
+
+这些都是为了在内存空间开销和访问性能之间做取舍
+
+
+
+## linkedlist
+
+Redis 3.2 之前 当list对象满足以下条件时使用 ziplist 否则使用 linkedlist
+
+- 单个元素占用 < 64byte
+- 元素数量 < 512
+
 ```c
 typedef struct list {
     listNode *head;
@@ -22,14 +37,16 @@ typedef struct listIter {
     int direction;
 } listIter;
 ```
-
+linkedlist的特征
 - get head/tail $O(1)$
 - get prev/next $O(1)$
 - get len $O(1)$
 - value void* support multiple types
 
+linkedlist的缺点
 
-Redis3.2之前底层数据结构由linkedlist或者ziplist实现 优先ziplist
+- prev/next指针占用空间 在数据本身很小的情况下就显得浪费了
+- 链表结构存储 遍历效率低
 
 Lists are also encoded in a special way to save a lot of space.
 The number of entries allowed per internal list node can be specified as a fixed maximum size or a maximum number of elements.
