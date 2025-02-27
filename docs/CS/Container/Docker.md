@@ -260,6 +260,21 @@ Docker 可以将 个基础系统锐像可以披多个锐像共用。这里可以
 
 采用了分层设计，启动容器后，镜像永远是只读属性。只不过在最上层加 层读写层（容器层），如果要对底层镜像的文件进行更改，读写层会复制 份镜像中的只读层进行写操作，这就是 Copy On Write
 
+```shell
+docker images
+
+# 需要先修改为规范的镜像
+docker tag name:version username/name:version
+
+docker push username/name:version
+```
+
+
+
+
+
+
+
 
 
 

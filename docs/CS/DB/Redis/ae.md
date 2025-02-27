@@ -17,18 +17,13 @@ This file(*networking.c*) defines all the I/O functions with clients, masters an
 
 For various [reasons](http://groups.google.com/group/redis-db/browse_thread/thread/b52814e9ef15b8d0/) Redis uses its own event library.
 
-Redis implements its own event library. The event library is implemented in `ae.c`.
+`Redis`需要对事件做整体抽象，于是定义了`aeEventLoop`结构
 
 `initServer` function defined in `redis.c` initializes the numerous fields of the [redisServer structure](/docs/CS/DB/Redis/server.md?id=server) variable. One such field is the Redis event loop `el`:
 
 ```c
 aeEventLoop *el
 ```
-
-aeEventLoop结构保存了一个void *类型的万能指针apidata，是用来保存轮询事件的状态的，也就是保存底层调用的多路复用库的事件状态，
-关于Redis的多路复用库的选择，Redis包装了常见的select epoll evport kqueue，他们在编译阶段，根据不同的系统选择性能最高的一个多路复用库作为Redis的多路复用程序的实现，
-而且所有库实现的接口名称都是相同的，因此Redis多路复用程序底层实现是可以互换的。
-具体选择库的源码为
 
 `initServer` initializes `server.el` field by calling `aeCreateEventLoop` defined in `ae.c`. The definition of `aeEventLoop` is below:
 
@@ -49,7 +44,9 @@ typedef struct aeEventLoop {
 } aeEventLoop;
 ```
 
-### Implementation of EventLoop
+aeEventLoop结构保存了一个void *类型的万能指针apidata，是用来保存轮询事件的状态的，也就是保存底层调用的多路复用库的事件状态，
+关于Redis的多路复用库的选择，Redis包装了常见的select epoll evport kqueue，他们在编译阶段，根据不同的系统选择性能最高的一个多路复用库作为Redis的多路复用程序的实现，
+而且所有库实现的接口名称都是相同的，因此Redis多路复用程序底层实现是可以互换的
 
 Include the best multiplexing layer supported by this system.
 The following should be ordered by performances, descending.
@@ -667,7 +664,7 @@ typedef void aeEventFinalizerProc(struct aeEventLoop *eventLoop, void *clientDat
 
 
 
-TimeEvent
+### TimeEvent
 
 ```c
 typedef struct aeTimeEvent {

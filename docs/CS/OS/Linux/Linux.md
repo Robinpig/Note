@@ -44,6 +44,10 @@ Linux在最初是宏内核架构 同时也逐渐融入了微内核的精华 如�
 - 内核模块可以设计成平台无关的
 - 相比微内核 具有宏内核的性能优势
 
+
+
+[Linux 0.11](/docs/CS/OS/Linux/0.11.md)
+
 ## Kernel
 
 调试环境需要安装qemu+gdb
@@ -180,7 +184,6 @@ file vmlinux
 在该目录下创建文件 build-kernel.sh 并写入如下内容：
 
 ```shell
-Copy
 #!/bin/bash
 
 cd /workspace/linux-5.12.14
@@ -190,7 +193,6 @@ make O=../obj/linux/ -j$(nproc)
 在该目录下创建文件 start-gdb.sh 并写入如下内容：
 
 ```shell
-Copy
 #!/bin/bash
 
 echo 'add-auto-load-safe-path /workspace/linux-5.12.14/scripts/gdb/vmlinux-gdb.py' > /root/.gdbinit # 让 gdb 能够顺利加载内核的调试脚本，如果在下一节编译 Linux Kernel 时下载的是另一版本的 Linux Kernel 代码，请修改这里的版本号
@@ -227,16 +229,11 @@ ADD ./start-gdb.sh /usr/local/bin
 ADD ./build-kernel.sh /usr/local/bin
 RUN chmod a+x /usr/local/bin/*.sh
 WORKDIR /workspace
-
-
-ENV PATH /path/to/qemu-aarch64-static:$PATH
-ENV LD_LIBRARY_PATH /path/to/qemu-aarch64-static/usr/lib:$LD_LIBRARY_PATH
 ```
 
 通过如下命令构建镜像：
 
 ```shell
-Copy
 docker build --platform=linux/amd64 -t linux-builder .
 ```
 
@@ -257,7 +254,6 @@ mkdir -p $HOME/linux/obj
 进入目录 $HOME/linux/ 并运行如下命令，进入容器编译内核：
 
 ```shell
-
 docker run --platform=linux/amd64 -it --name linux-builder -v $HOME/linux:/workspace linux-builder
 ```
 
@@ -350,14 +346,22 @@ find . -print0 \
 运行
 
 ```shell
-qemu-system-x86_64 -kernel /workspace/obj/linux/arch/x86/boot/bzImage -initrd /workspace/obj/initramfs-busybox.cpio.gz -nographic -append "console=ttyS0"
+qemu-system-x86_64 -kernel /workspace/obj/linux/arch/x86_64/boot/bzImage -initrd /workspace/obj/initramfs-busybox.cpio.gz -nographic -append "console=ttyS0"
 ```
 
 ##### **ARM Docker**
 
 ARM配置操作基本同x86 以下列出的是不同点
 
-Dockerfile
+Dockerfile增加
+
+```dockerfile
+
+ENV PATH /path/to/qemu-aarch64-static:$PATH
+ENV LD_LIBRARY_PATH /path/to/qemu-aarch64-static/usr/lib:$LD_LIBRARY_PATH
+```
+
+
 
 > Busybox 配置时需要disable Applets->Shells->ash->job control
 > 否则将在linux启动后报错 can't access tty,job control turned off
@@ -686,20 +690,37 @@ If it's not, it should go back to sleeping on the condition variable, waiting fo
 ## 参考书籍
 
 
-| 书名                                    | col2 | col3 |
-| --------------------------------------- | ---- | ---- |
-| Linux Performance and Tuning Guidelines |      |      |
-| Linux内核源码剖析 - TCP/IP实现          |      |      |
-| Linux内核源代码情景分析                 |      |      |
-| Linux内核设计与实现                     |      |      |
-| 深入理解计算机系统                      |      |      |
-| UNIX网络编程                            |      |      |
-| 图解TCP/IP                              |      |      |
-| 网络是怎样连接的                        |      |      |
-|                                         |      |      |
-|                                         |      |      |
-|                                         |      |      |
-|                                         |      |      |
+| 书名                                           | col2 | col3 |
+| ---------------------------------------------- | ---- | ---- |
+| Linux Performance and Tuning Guidelines        |      |      |
+| Linux内核源码剖析 - TCP/IP实现                 |      |      |
+| Linux内核源代码情景分析                        |      |      |
+| Linux内核设计与实现                            |      |      |
+| 深入理解计算机系统                             |      |      |
+| UNIX网络编程                                   |      |      |
+| UNIX环境高级编程                               |      |      |
+| 图解TCP/IP                                     |      |      |
+| 网络是怎样连接的                               |      |      |
+| Linnux内核完全注释                             |      |      |
+| 支撑处理器的技术                               |      |      |
+| An Introduction to GCC                         |      |      |
+| Linkers and Loaders                            |      |      |
+| Linux设备驱动程序                              |      |      |
+| 深入理解Linux内核                              |      |      |
+| 深入理解Linux虚拟内存管理                      |      |      |
+| Systems Performance : Enterprise and the Cloud |      |      |
+| TCP/IP Architecture, Design and Implementation in Linux | |  |
+| TCP/IP Illustrated, Volume 1: The Protocols |  |  |
+| The Design and Implementation of the FreeBSD Operating System |  |  |
+| Debug Hacks : 深入调试的技术和工具 |  |  |
+|  |  |  |
+|  |  |  |
+
+
+
+
+
+
 
 ## References
 
