@@ -48,22 +48,6 @@ linkedlist的缺点
 - prev/next指针占用空间 在数据本身很小的情况下就显得浪费了
 - 链表结构存储 遍历效率低
 
-Lists are also encoded in a special way to save a lot of space.
-The number of entries allowed per internal list node can be specified as a fixed maximum size or a maximum number of elements.
-For a fixed maximum size, use -5 through -1, meaning:
-
-- -5: max size: 64 Kb  <-- not recommended for normal workloads
-- -4: max size: 32 Kb  <-- not recommended
-- -3: max size: 16 Kb  <-- probably not recommended
-- -2: max size: 8 Kb   <-- good
-- -1: max size: 4 Kb   <-- good
-
-Positive numbers mean store up to _exactly_ that number of elements per list node.
-The highest performing option is usually -2 (8 Kb size) or -1 (4 Kb size), but if your use case is unique, adjust the settings as necessary.
-
-```conf
-list-max-ziplist-size -2
-```
 
 Lists may also be compressed.
 Compress depth is the number of quicklist ziplist nodes from *each* side of the list to *exclude* from compression.
@@ -133,7 +117,7 @@ void pushGenericCommand(client *c, int where, int xx) {
 
 ## quicklist
 
-linked list of ziplists 链表每个节点都是ziplist
+
 
 try to reduce cascadeUpdate
 
@@ -158,6 +142,8 @@ typedef struct quicklist {
 } quicklist;
 ```
 
+quicklistNode是一个双向链表, 链表每个节点都是ziplist
+
 quicklistNode is a 32 byte struct describing a ziplist for a quicklist.
 We use bit fields keep the quicklistNode at 32 bytes.
 count: 16 bits, max 65536 (max zl bytes is 65k, so max count actually < 32k).
@@ -181,6 +167,30 @@ typedef struct quicklistNode {
     unsigned int extra : 10; /* more bits to steal for future usage */
 } quicklistNode;
 ```
+
+从数据结构上看quicklist的设计重点在于控制每个ziplist的大小和元素个数
+
+- 单个ziplist的过小就会退化成linkedlist
+- 单个ziplist过大极端情况下只有一个ziplist同样无法避免级联更新
+
+
+Lists are also encoded in a special way to save a lot of space.
+The number of entries allowed per internal list node can be specified as a fixed maximum size or a maximum number of elements.
+For a fixed maximum size, use -5 through -1, meaning:
+
+- -5: max size: 64 Kb  <-- not recommended for normal workloads
+- -4: max size: 32 Kb  <-- not recommended
+- -3: max size: 16 Kb  <-- probably not recommended
+- -2: max size: 8 Kb   <-- good
+- -1: max size: 4 Kb   <-- good
+
+Positive numbers mean store up to _exactly_ that number of elements per list node.
+The highest performing option is usually -2 (8 Kb size) or -1 (4 Kb size), but if your use case is unique, adjust the settings as necessary.
+
+```conf
+list-max-ziplist-size -2
+```
+
 
 ### quicklistCreate
 
