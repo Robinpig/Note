@@ -9,6 +9,20 @@ This interface acts primarily as a marker interface to capture the types to work
 The CrudRepository and ListCrudRepository interfaces provide sophisticated CRUD functionality for the entity class that is being managed.
 
 
+
+常用JPA注解
+
+@Entiry
+@MappedSuperClass
+
+
+@Id
+@GeneratedValue
+@SequenceGenerator
+
+
+
+
 Annotation-driven configuration of base packages
 ```java
 @Configuration
@@ -106,7 +120,8 @@ public class JpaRepositoryFactoryBean<T extends Repository<S, ID>, S, ID>
 }
 ```
 
-create proxy for repository
+创建repository的代理对象 添加processors的拦截
+
 ```java
 public abstract class RepositoryFactorySupport implements BeanClassLoaderAware, BeanFactoryAware {
     public <T> T getRepository(Class<T> repositoryInterface, RepositoryFragments fragments) {
@@ -169,6 +184,7 @@ public abstract class RepositoryFactorySupport implements BeanClassLoaderAware, 
 }
 ```
 
+执行查询和interceptor
 
 
 ```java
@@ -210,6 +226,8 @@ class QueryExecutorMethodInterceptor implements MethodInterceptor {
     }
 }
 ```
+
+SQL解析实现在commons包里
 
 ## Log
 
