@@ -23,6 +23,15 @@ Since 0.2.8 缺省unfair，通过构造函数传入参数指定fair或者unfair�
 
 
 
+
+ 注意
+配置一些使用超时 如获取连接时
+testXXX 开启哪些需要注意 通常开启testIdle，testOnBorrow可不开
+removeAbandoned不建议开启
+
+
+
+
 ## Links
 
 - [DataSource](/docs/CS/Java/ConnectionPool/ConnectionPool.md)
