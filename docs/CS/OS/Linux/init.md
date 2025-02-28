@@ -1,5 +1,11 @@
 ## Introduction
 
+
+
+
+
+
+
 Like any other program, the kernel goes through a load and initialization phase before performing its normal tasks.
 Although this phase is not particularly interesting in the case of normal applications, the kernel — as the central system layer — has to address a number of specific problems. 
 The boot phase is split into the following three parts:
