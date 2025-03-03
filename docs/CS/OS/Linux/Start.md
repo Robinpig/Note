@@ -74,3 +74,25 @@ static int a20_test(int loops)
     return ok;
 }
 ```
+
+
+对于x86 i386架构，这部分代码在arch/x86/kernel/head_32.S
+
+对于x86 x64架构，这部分代码在arch/x86/kernel/head_64.S
+
+以arm64 架构为例
+
+```c
+/*
+ * Kernel startup entry point.
+ * ---------------------------
+ *
+ * The requirements are:
+ *   MMU = off, D-cache = off, I-cache = on or off,
+ *   x0 = physical address to the FDT blob.
+ *
+ * Note that the callee-saved registers are used for storing variables
+ * that are useful before the MMU is enabled. The allocations are described
+ * in the entry routines.
+ */
+```

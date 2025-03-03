@@ -546,6 +546,17 @@ zlentry struct
 <prevlen><len><encoding>
 ```
 
+
+
+逆序遍历时使用 prevlen 获取它用于前移获取prev entry的首地址 它会根据prev entry的字节数进行变长编码
+
+- prev entry < 254, prevlen为1byte
+- prev entry >= 254, prevlen为5byte, 第一个byte设置为254作为标识 4byte作为32位int值存储长度
+
+> [!TIP]
+>
+> 255用于zlend
+
 prevrawlen 1byte or 5 bytes, sometimes will [prevrawlen cascadeUpdate](/docs/CS/DB/Redis/struct/zset.mdzset.md?id=cascadeUpdate)
 
 We use this function to receive information about a ziplist entry.
@@ -604,7 +615,7 @@ void memrev32(void *p) {
 
 
 
-相比linkedlist 节省了prev和next的指针, 根据encoding可以再继续优化int类型的存储, 
+相比linkedlist 节省了prev和next的指针, 根据encoding可以再继续优化int类型的存储 将entry data合并到encoding中
 
 但是ziplist的限制是无法保存大数据量 其查询时间复杂度为`O(N)`
 
