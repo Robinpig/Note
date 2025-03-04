@@ -1407,7 +1407,9 @@ void initThreadedIO(void) {
 
 ##### IOThreadMain
 
-call `readQueryFromClient` when `IO_THREADS_OP_READ` in loop
+IO循环处理
+- IO_THREADS_OP_WRITE [writeToClient](/docs/CS/DB/Redis/start.md?id=writeToClient)
+- IO_THREADS_OP_READ [readQueryFromClient](/docs/CS/DB/Redis/start.md?id=readQueryFromClient)
 
 ```c
 void *IOThreadMain(void *myid) {
@@ -1492,6 +1494,8 @@ struct redisServer {
 
 
 ### read
+
+
 
 #### readQueryFromClient
 
