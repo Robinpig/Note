@@ -2,7 +2,7 @@
 
 
 
-Dubbo应用的启动过程DefaultApplicationDeployer的initialize()方法的全生命周期， 在初始化方法中通过调用startConfigCenter();方法来启动配置中心的加载。
+Dubbo应用的启动过程DefaultApplicationDeployer的initialize() 方法的全生命周期， 在初始化方法中通过调用 `startConfigCenter()` 方法来启动配置中心的加载。
 
 
 
