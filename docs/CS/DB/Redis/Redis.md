@@ -41,12 +41,12 @@ Redis源码目录:
     <td class="tg-0lax"></td>
   </tr>
   <tr>
-    <td class="tg-0lax">Linenoise</td>
-    <td class="tg-0lax"></td>
+    <td class="tg-0lax">linenoise</td>
+    <td class="tg-0lax">readline 功能的替代代码</td>
   </tr>
   <tr>
-    <td class="tg-0lax">Hiredis</td>
-    <td class="tg-0lax"></td>
+    <td class="tg-0lax">hiredis</td>
+    <td class="tg-0lax">客户端</td>
   </tr>
   <tr>
     <td class="tg-0lax">Lua</td>
@@ -83,6 +83,7 @@ Redis源码目录:
 
 
 
+
 ## Architecture
 
 Redis 整体架构如下图:
@@ -112,7 +113,7 @@ Fig.1. Architecture
 Redis将启动的这些服务抽象成一个全局的结构体 [redisServer](/docs/CS/DB/Redis/server.md?id=server) 
 它包含了存储kv的[redisDb](/docs/CS/DB/Redis/redisDb.md)、命令列表、网络监听、客户端缓存等信息
 
-
+为了实现网络通信功能 Redis封装了一个简单的基于事件驱动的网络通信库 [ae](/docs/CS/DB/Redis/ae.md)  它封装了底层的 select、epoll、avport 以及 kqueue 这些I/O多路复用函数，为上层提供了相同的接口
 
 [Redis启动流程](/docs/CS/DB/Redis/start.md)
 
@@ -159,10 +160,6 @@ Redis 4.0后开始使用多线程 新版的 Redis 服务在执行一些命令时
 
 
 
-#### IO
-
-[I/O多路复用模块](/docs/CS/DB/Redis/ae.md)封装了底层的 select、epoll、avport 以及 kqueue 这些I/O多路复用函数，为上层提供了相同的接口
-
 
 
 主从复制 哨兵集群 Cluster分片集群
@@ -170,10 +167,6 @@ Redis 4.0后开始使用多线程 新版的 Redis 服务在执行一些命令时
 
 
 负载均衡
-
-
-
-
 
 - [db](/docs/CS/DB/Redis/redisDb.md)
 
@@ -187,8 +180,6 @@ The most important thing to understand is the different trade-offs between the R
 
 
 ## Event
-
-[IO Event](/docs/CS/DB/Redis/ae.md)
 
 Time_Event
 
