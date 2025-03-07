@@ -24,6 +24,13 @@ These virtual machines are isolated from each other.
 
 
 
+Linux新版本安装 VM Tools
+```shell
+sudo apt install -y open-vm-tools open-vm-tools-desktop
+```
+
+
+
 ## VMware
 
 虚拟机挂载共享文件夹
