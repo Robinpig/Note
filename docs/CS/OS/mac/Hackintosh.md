@@ -2,6 +2,16 @@
 
 
 
+## 硬件准备
+
+
+
+
+
+## 制备U盘
+
+
+
 安装 [Etcher](https://etcher.balena.io/)
 
 下载dmg镜像 带有OC的镜像为佳 通过Etcher制作安装U盘 随后将配置的EFI拷贝到U盘
@@ -63,6 +73,10 @@ kext
 NVRAM -> boot-args
 
 
+
+> [!TIP]
+>
+> 每次更换EFI之后都需要Reset NVRAM
 
 
 
