@@ -44,6 +44,10 @@ Linux在最初是宏内核架构 同时也逐渐融入了微内核的精华 如�
 - 内核模块可以设计成平台无关的
 - 相比微内核 具有宏内核的性能优势
 
+
+
+[Linux 0.11](/docs/CS/OS/Linux/0.11.md)
+
 ## Kernel
 
 调试环境需要安装qemu+gdb
@@ -75,6 +79,147 @@ fs可以通过不同的tools来构建
 > can't access tty; job control turned off
 
 ### Build
+
+> [!TIP]
+>
+> 最佳推荐环境是 Linux物理机 > Linux虚拟机 > Docker容器
+
+
+
+编译Linux主要分两部分
+
+- kernel 下载[aliyun mirror](https://mirrors.aliyun.com/linux-kernel/v6.x/?spm=a2c6h.25603864.0.0.596f43c0uwxjrK)
+- fs 通常使用的是busybox
+
+#### Build Configuration
+
+qemu启动只携带kernel会error `unable to mount root fs`
+
+
+
+<!-- tabs:start -->
+
+
+
+##### **kernel**
+
+依赖
+
+```shell
+sudo apt-get install -y  procps  vim  bc bison build-essential cpio  flex  libelf-dev     libncurses-dev gcc g++ make
+
+```
+
+
+
+
+
+
+
+```shell
+make defconfig
+```
+
+
+
+或者使用 `make menuconfig` 更方便
+
+> Kernel hacking ---> Compile-time checks and compiler options 开启GDB Scripts
+
+
+
+##### **busybox**
+
+制作临时的init
+
+vim shell.c
+
+```shell
+#include<stdio.h>
+
+int main()
+{
+	while(1)
+	{
+    printf("Hello World!");
+    scanf("%d");	
+	}
+}
+```
+
+
+
+
+
+
+
+```shell
+gcc main.c  -static -o init
+
+echo "init" | cpio -H newc -o > init.cpio
+qemu-system-x86_64 -kernel linux-6.13.5/arch/x86/boot/bzImage  -initrd init.cpio
+```
+
+
+
+创建init文件
+
+
+
+
+
+```shell
+mkdir -p {bin,sbin,etc,proc,sys,usr/{bin,sbin}}
+```
+
+
+
+
+
+
+
+```shell
+find . -print0 | cpio --null -ov --format=newc | gzip -9 > busybox.cpio.gz
+```
+
+
+
+
+
+```shell
+qemu-system-x86_64  -kernel linux-6.13.5/arch/x86/boot/bzImage  -initrd busybox/busybox.cpio.gz  -nographic -append "console=ttyS0"
+```
+
+
+
+<!-- tabs:end -->
+
+
+
+grub的配置
+
+
+
+
+
+```shell
+sudo grub-install --target=x86_64-efi --efi-directory=$(realpath mnt) --bootloader-id=GRUB  --removable --recheck
+```
+
+
+
+
+
+
+
+```shell
+
+qemu-system-x86_64  -drive file=./linux.img -bios /usr/share/ovmf/OVMF.fd -m 1G -serial stdio
+```
+
+
+
+
 
 #### Build examples
 
@@ -180,7 +325,6 @@ file vmlinux
 在该目录下创建文件 build-kernel.sh 并写入如下内容：
 
 ```shell
-Copy
 #!/bin/bash
 
 cd /workspace/linux-5.12.14
@@ -190,7 +334,6 @@ make O=../obj/linux/ -j$(nproc)
 在该目录下创建文件 start-gdb.sh 并写入如下内容：
 
 ```shell
-Copy
 #!/bin/bash
 
 echo 'add-auto-load-safe-path /workspace/linux-5.12.14/scripts/gdb/vmlinux-gdb.py' > /root/.gdbinit # 让 gdb 能够顺利加载内核的调试脚本，如果在下一节编译 Linux Kernel 时下载的是另一版本的 Linux Kernel 代码，请修改这里的版本号
@@ -227,16 +370,11 @@ ADD ./start-gdb.sh /usr/local/bin
 ADD ./build-kernel.sh /usr/local/bin
 RUN chmod a+x /usr/local/bin/*.sh
 WORKDIR /workspace
-
-
-ENV PATH /path/to/qemu-aarch64-static:$PATH
-ENV LD_LIBRARY_PATH /path/to/qemu-aarch64-static/usr/lib:$LD_LIBRARY_PATH
 ```
 
 通过如下命令构建镜像：
 
 ```shell
-Copy
 docker build --platform=linux/amd64 -t linux-builder .
 ```
 
@@ -257,7 +395,6 @@ mkdir -p $HOME/linux/obj
 进入目录 $HOME/linux/ 并运行如下命令，进入容器编译内核：
 
 ```shell
-
 docker run --platform=linux/amd64 -it --name linux-builder -v $HOME/linux:/workspace linux-builder
 ```
 
@@ -268,7 +405,6 @@ cd /workspace/linux-5.12.14
 make O=../obj/linux menuconfig
 ```
 
-> Kernel hacking ---> Compile-time checks and compiler options 开启GDB Scripts
 
 编译kernel
 
@@ -350,14 +486,22 @@ find . -print0 \
 运行
 
 ```shell
-qemu-system-x86_64 -kernel /workspace/obj/linux/arch/x86/boot/bzImage -initrd /workspace/obj/initramfs-busybox.cpio.gz -nographic -append "console=ttyS0"
+qemu-system-x86_64 -kernel /workspace/obj/linux/arch/x86_64/boot/bzImage -initrd /workspace/obj/initramfs-busybox.cpio.gz -nographic -append "console=ttyS0"
 ```
 
 ##### **ARM Docker**
 
 ARM配置操作基本同x86 以下列出的是不同点
 
-Dockerfile
+Dockerfile增加
+
+```dockerfile
+
+ENV PATH /path/to/qemu-aarch64-static:$PATH
+ENV LD_LIBRARY_PATH /path/to/qemu-aarch64-static/usr/lib:$LD_LIBRARY_PATH
+```
+
+
 
 > Busybox 配置时需要disable Applets->Shells->ash->job control
 > 否则将在linux启动后报错 can't access tty,job control turned off
@@ -686,20 +830,37 @@ If it's not, it should go back to sleeping on the condition variable, waiting fo
 ## 参考书籍
 
 
-| 书名                                    | col2 | col3 |
-| --------------------------------------- | ---- | ---- |
-| Linux Performance and Tuning Guidelines |      |      |
-| Linux内核源码剖析 - TCP/IP实现          |      |      |
-| Linux内核源代码情景分析                 |      |      |
-| Linux内核设计与实现                     |      |      |
-| 深入理解计算机系统                      |      |      |
-| UNIX网络编程                            |      |      |
-| 图解TCP/IP                              |      |      |
-| 网络是怎样连接的                        |      |      |
-|                                         |      |      |
-|                                         |      |      |
-|                                         |      |      |
-|                                         |      |      |
+| 书名                                           | col2 | col3 |
+| ---------------------------------------------- | ---- | ---- |
+| Linux Performance and Tuning Guidelines        |      |      |
+| Linux内核源码剖析 - TCP/IP实现                 |      |      |
+| Linux内核源代码情景分析                        |      |      |
+| Linux内核设计与实现                            |      |      |
+| 深入理解计算机系统                             |      |      |
+| UNIX网络编程                                   |      |      |
+| UNIX环境高级编程                               |      |      |
+| 图解TCP/IP                                     |      |      |
+| 网络是怎样连接的                               |      |      |
+| Linnux内核完全注释                             |      |      |
+| 支撑处理器的技术                               |      |      |
+| An Introduction to GCC                         |      |      |
+| Linkers and Loaders                            |      |      |
+| Linux设备驱动程序                              |      |      |
+| 深入理解Linux内核                              |      |      |
+| 深入理解Linux虚拟内存管理                      |      |      |
+| Systems Performance : Enterprise and the Cloud |      |      |
+| TCP/IP Architecture, Design and Implementation in Linux | |  |
+| TCP/IP Illustrated, Volume 1: The Protocols |  |  |
+| The Design and Implementation of the FreeBSD Operating System |  |  |
+| Debug Hacks : 深入调试的技术和工具 |  |  |
+|  |  |  |
+|  |  |  |
+
+
+
+
+
+
 
 ## References
 

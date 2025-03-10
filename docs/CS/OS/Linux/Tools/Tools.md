@@ -85,11 +85,17 @@ vmstat [-s] [-n] [delay [count]]
 
 
 
-top
+### top
 
 ```shell
 top [d delay] [n iterations] [i] [H] [C]
 ```
+
+cat /proc/stat
+
+汇总 kernel_cpustat 变量并输出 定时采样CPU利用情况并汇总
+
+
 
 runtime config
 

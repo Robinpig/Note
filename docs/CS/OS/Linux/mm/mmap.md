@@ -43,6 +43,7 @@ A file is mapped in multiples of the page size.
 For a file that is not a multiple of the page size, the remaining bytes in the partial page at the end of the mapping are zeroed when mapped, and modifications to that region are not written out to the file.
 The effect of changing the size of the underlying file of a mapping on the pages that correspond to added or removed regions of the file is unspecified.
 
+offset在调用过程中转换成了页数 `ksys_mmap_pgoff` 传入的参数 `pgoff` 就是 off >> PAGE_SHIFT , 即 page offset
 
 ```c
 // arch/x86/kernel/sys_x86_64.c
@@ -411,6 +412,11 @@ do_mmap 是 mmap 系统调用的核心函数，内核会在这里完成内存映
 >
 > - [在Java里会抛出OOM: Map failed异常](/docs/CS/Java/JDK/IO/NIO.md?id=MappedByteBuffer)
 
+
+- get_unmapped_area
+- calc_vm_flag_bits
+- mmap_region
+
 ```c
 // mm/mmap.c
 unsigned long do_mmap(struct file *file, unsigned long addr,
@@ -615,8 +621,14 @@ int mlock_future_check(struct mm_struct *mm, unsigned long flags,
 ```
 
 #### mmap_region
-
+mmap 的调用
 1. vm_area_alloc
+2. vm_get_page_prot
+3. call_mmap
+   4. file -> f_op -> mmap
+4. vma_set_anonymous
+
+非匿名映射的情况下 mmap最终还是靠驱动提供的文件mmap操作实现的
 
 ```c
 unsigned long mmap_region(struct file *file, unsigned long addr,
