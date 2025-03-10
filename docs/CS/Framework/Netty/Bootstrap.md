@@ -1,6 +1,16 @@
-### Bootstrap Hierarchy
+## Introduction
+
+
+
+Bootstrap 是“引导”的意思，它主要负责整个 Netty 程序的启动、初始化、服务器连接等过程，它相当于一条主线，串联了 Netty 的其他核心组件
+
+
 
 ![Bootstrap](img/Bootstrap.png)
+
+
+
+Bootstrap 和 ServerBootStrap 十分相似，两者非常重要的区别在于 Bootstrap 可用于连接远端服务器，只绑定一个 EventLoopGroup。而 ServerBootStrap 则用于服务端启动绑定本地端口，会绑定两个 EventLoopGroup，这两个 EventLoopGroup 通常称为 Boss 和 Worker
 
 ## Create
 

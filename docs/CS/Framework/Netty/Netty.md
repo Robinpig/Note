@@ -25,6 +25,18 @@ It greatly simplifies and streamlines network programming such as TCP and UDP so
 Fig.1. Netty architecture.
 </p>
 
+
+Netty 结构一共分为三个模块：
+
+- Core
+  Core 核心层是 Netty 最精华的内容，它提供了底层网络通信的通用抽象和实现，包括可扩展的事件模型、通用的通信 API、支持零拷贝的 ByteBuf 等。
+- Protocol Support 协议支持层
+  协议支持层基本上覆盖了主流协议的编解码实现，如 HTTP、SSL、Protobuf、压缩、大文件传输、WebSocket、文本、二进制等主流协议，此外 Netty 还支持自定义应用层协议。Netty 丰富的协议支持降低了用户的开发成本，基于 Netty 我们可以快速开发 HTTP、WebSocket 等服务。
+- Transport Service 传输服务层
+  传输服务层提供了网络传输能力的定义和实现方法。它支持 Socket、HTTP 隧道、虚拟机管道等传输方式。Netty 对 TCP、UDP 等数据传输做了抽象和封装，用户可以更聚焦在业务逻辑实现上，而不必关系底层数据传输的细节
+
+
+
 ### Combining and Slicing ChannelBuffers
 
 When transfering data between communication layers, data often needs to be combined or sliced.
