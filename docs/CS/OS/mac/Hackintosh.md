@@ -93,6 +93,18 @@ Windows 下使用 [USBToolBox](https://github.com/USBToolBox/tool/) 来定制 US
 USBToolBox.kext 官方下载地址为：https://github.com/USBToolBox/kext/releases
 
 
+
+
+
+
+
+
+
+[USBMap](https://github.com/corpnewt/USBMap)
+
+
+
+
 ## Links
 
 - [MacOS](/docs/CS/OS/mac/mac.md)

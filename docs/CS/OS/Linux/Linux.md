@@ -797,6 +797,7 @@ If it's not, it should go back to sleeping on the condition variable, waiting fo
 - [memory](/docs/CS/OS/Linux/mm/memory.md)
 - [slab](/docs/CS/OS/Linux/mm/slab.md)
 - [mmap](/docs/CS/OS/Linux/mm/mmap.md)
+- [PageCache](/docs/CS/OS/Linux/mm/PageCache.md)
 
 ## fs
 
