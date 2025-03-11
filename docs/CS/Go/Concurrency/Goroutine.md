@@ -149,14 +149,14 @@ ok:
 在GMP模型中，
 
 - G代表的是Go语言中的协程（Goroutine），
-
 - M代表的是执行运算单元, Go会将其与操作系统的线程绑定
-
 - P代表的是Go逻辑处理器（Processor），Go语言为了方便协程调度与缓存，抽象出了逻辑处理器。
 
-  默认情况下P的数量等于CPU逻辑核的数量 可以使用runtime.GOMAXPROCS来修改 每个P都有一个本地goroutine队列
+默认情况下P的数量等于CPU逻辑核的数量 可以使用runtime.GOMAXPROCS来修改 每个P都有一个本地goroutine队列
 
-> 一般来讲，程序运行时就将GOMAXPROCS大小设置为CPU核数，可让Go程序充分利用CPU。 在某些IO密集型的应用里，这个值可能并不意味着性能最好。 理论上当某个Goroutine进入系统调用时，会有一个新的M被启用或创建，继续占满CPU。 但由于Go调度器检测到M被阻塞是有一定延迟的，也即旧的M被阻塞和新的M得到运行之间是有一定间隔的，所以在IO密集型应用中不妨把GOMAXPROCS设置的大一些，或许会有好的效果。
+> 一般来讲，程序运行时就将GOMAXPROCS大小设置为CPU核数，可让Go程序充分利用CPU。 在某些IO密集型的应用里，这个值可能并不意味着性能最好 
+> 理论上当某个Goroutine进入系统调用时，会有一个新的M被启用或创建，继续占满CPU。 但由于Go调度器检测到M被阻塞是有一定延迟的，
+> 也即旧的M被阻塞和新的M得到运行之间是有一定间隔的，所以在IO密集型应用中不妨把GOMAXPROCS设置的大一些，或许会有好的效果。
 
 最早的Go(1.0以下)运行时模型是GM模型
 1. 用一个全局的mutex保护着一个全局的runq（就绪队列），所有goroutine的创建、结束，以及 调度等操作都要先获得锁，造成对锁的争用异常严重
@@ -165,17 +165,20 @@ ok:
 4. 在存在系统调用的情况下，工作线程经常被阻塞和解除阻塞，从而增加了很多开销
 
 在任一时刻，一个P可能在其本地包含多个G，同时，一个P在任一时刻只能绑定一个M。
-  图14-9中没有涵盖的信息是：一个G并不是固定绑定同一个P的，有很多情况（例如P在运行时被销毁）会导致一个P中的G转移到其他的P中。
-  同样的，一个P只能对应一个M，但是具体对应的是哪一个M也是不固定的。一个M可能在某些时候转移到其他的P中执行
+图14-9中没有涵盖的信息是：一个G并不是固定绑定同一个P的，有很多情况（例如P在运行时被销毁）会导致一个P中的G转移到其他的P中。
+同样的，一个P只能对应一个M，但是具体对应的是哪一个M也是不固定的。一个M可能在某些时候转移到其他的P中执行
 
 
 
 实际上一共有三种 g：
 1. 执行用户代码的 g； 使用 go 关键字启动的 goroutine，也是我们接触最多的一类 g
-2. 执行调度器代码的 g，也即是 g0； g0 在底层和其他 g 是一样的数据结构，但是性质上有很大的区别，首先 g0 的栈大小是固定的，比如在 Linux 或者其他 Unix-like 的系统上一般是固定 8MB，不能动态伸缩，而普通的 g 初始栈大小是 2KB，可按需扩展 每个线程被创建出来之时都需要操作系统为之分配一个初始固定的线程栈，就是前面说的 8MB 大小的栈，g0 栈就代表了这个线程栈，因此每一个 m 都需要绑定一个 g0 来执行调度器代码，然后跳转到执行用户代码的地方。
+2. 执行调度器代码的 g，也即是 g0； g0 在底层和其他 g 是一样的数据结构，但是性质上有很大的区别，首先 g0 的栈大小是固定的，
+3. 比如在 Linux 或者其他 Unix-like 的系统上一般是固定 8MB，不能动态伸缩，而普通的 g 初始栈大小是 2KB，可按需扩展 
+4. 每个线程被创建出来之时都需要操作系统为之分配一个初始固定的线程栈，就是前面说的 8MB 大小的栈，g0 栈就代表了这个线程栈，因此每一个 m 都需要绑定一个 g0 来执行调度器代码，然后跳转到执行用户代码的地方。
 3. 执行 runtime.main 初始化工作的 main goroutine；
 
-启动一个新的 goroutine 是通过 go 关键字来完成的，而 go compiler 会在编译期间利用 cmd/compile/internal/gc.state.stmt 和 cmd/compile/internal/gc.state.call 这两个函数将 go 关键字翻译成 runtime.newproc 函数调用，而 runtime.newproc 接收了函数指针和其大小之后，会获取 goroutine 和调用处的程序计数器，接着再调用 runtime.newproc1
+启动一个新的 goroutine 是通过 go 关键字来完成的，而 go compiler 会在编译期间利用 cmd/compile/internal/gc.state.stmt 和 cmd/compile/internal/gc.state.call 
+这两个函数将 go 关键字翻译成 runtime.newproc 函数调用，而 runtime.newproc 接收了函数指针和其大小之后，会获取 goroutine 和调用处的程序计数器，接着再调用 runtime.newproc1
 
 
 
@@ -222,6 +225,11 @@ m0全局变量 与m0绑定的g0也是全局变量
 ```go
 type m struct {
    g0      *g     // goroutine with scheduling stack
+   mstartfn        func()
+   curg            *g       // current running goroutine
+   p               puintptr // attached p for executing go code (nil if not executing go code)
+   nextp           puintptr
+   id              int64
    ...
 }
 ```
@@ -238,13 +246,6 @@ rsp寄存器始终指向函数调用栈栈顶，rip寄存器指向程序要执�
  ```go
  
 type g struct {
-	// Stack parameters.
-	// stack describes the actual stack memory: [stack.lo, stack.hi).
-	// stackguard0 is the stack pointer compared in the Go stack growth prologue.
-	// It is stack.lo+StackGuard normally, but can be StackPreempt to trigger a preemption.
-	// stackguard1 is the stack pointer compared in the //go:systemstack stack growth prologue.
-	// It is stack.lo+StackGuard on g0 and gsignal stacks.
-	// It is ~0 on other goroutine stacks, to trigger a call to morestackc (and crash).
 	stack       stack  
 	sched     gobuf
 	...
@@ -676,7 +677,8 @@ runtime.schedule --> runtime.execute --> runtime.gogo --> goroutine code --> run
   --> runtime.mcall --> runtime.goexit0 --> runtime.schedule
 ```
 Go scheduler 会不断循环调用 runtime.schedule() 去调度 goroutines，而每个 goroutine 执行完成并退出之后，会再次调用 runtime.schedule()，使得调度器回到调度循环去执行其他的 goroutine，不断循环，永不停歇。
-当我们使用 go 关键字启动一个新 goroutine 时，最终会调用 runtime.newproc --> runtime.newproc1，来得到 g，runtime.newproc1 会先从 P 的 gfree 缓存链表中查找可用的 g，若缓存未生效，则会新创建 g 给当前的业务函数，最后这个 g 会被传给 runtime.gogo 去真正执行
+当我们使用 go 关键字启动一个新 goroutine 时，最终会调用 runtime.newproc --> runtime.newproc1，来得到 g，runtime.newproc1 会先从 P 的 gfree 缓存链表中查找可用的 g，
+若缓存未生效，则会新创建 g 给当前的业务函数，最后这个 g 会被传给 runtime.gogo 去真正执行
 
 
 
@@ -727,7 +729,9 @@ func gopark(unlockf func(*g, unsafe.Pointer) bool, lock unsafe.Pointer, reason w
 ```
 
 
-runtime.mcall 主要的工作就是是从当前 goroutine 切换回 g0 的系统堆栈，然后调用 fn(g)，而此时 runtime.mcall 调用执行的是 runtime.park_m，这个方法里会利用 CAS 把当前运行的 goroutine -- gp 的状态 从 _Grunning 切换到 _Gwaiting，表明该 goroutine 已进入到等待唤醒状态，此时封存和休眠 G 的操作就完成了，只需等待就绪之后被重新唤醒执行即可。最后调用 runtime.schedule() 再次进入调度循环，去执行下一个 goroutine，充分利用 CPU
+runtime.mcall 主要的工作就是是从当前 goroutine 切换回 g0 的系统堆栈，然后调用 fn(g)，而此时 runtime.mcall 调用执行的是 runtime.park_m，
+这个方法里会利用 CAS 把当前运行的 goroutine -- gp 的状态 从 _Grunning 切换到 _Gwaiting，表明该 goroutine 已进入到等待唤醒状态，此时封存和休眠 G 的操作就完成了，只需等待就绪之后被重新唤醒执行即可
+最后调用 runtime.schedule() 再次进入调度循环，去执行下一个 goroutine，充分利用 CPU
 
 ```go
 

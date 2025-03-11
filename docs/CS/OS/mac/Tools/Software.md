@@ -236,6 +236,7 @@ Epub
 - OneSwitch
 - ~~V2rayU~~
 - ClashX
+- [keka](https://www.keka.io/zh-cn/) 压缩文件管理器
 
 ## Developer
 

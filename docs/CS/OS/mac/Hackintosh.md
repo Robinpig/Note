@@ -2,6 +2,16 @@
 
 
 
+## 硬件准备
+
+
+
+
+
+## 制备U盘
+
+
+
 安装 [Etcher](https://etcher.balena.io/)
 
 下载dmg镜像 带有OC的镜像为佳 通过Etcher制作安装U盘 随后将配置的EFI拷贝到U盘
@@ -64,6 +74,10 @@ NVRAM -> boot-args
 
 
 
+> [!TIP]
+>
+> 每次更换EFI之后都需要Reset NVRAM
+
 
 
 
@@ -77,6 +91,18 @@ Windows 下使用 [USBToolBox](https://github.com/USBToolBox/tool/) 来定制 US
 除了上述生成的 `UTBMap.kext` 文件以外，我们还需要配合 `USBToolBox.kext` 使用。
 
 USBToolBox.kext 官方下载地址为：https://github.com/USBToolBox/kext/releases
+
+
+
+
+
+
+
+
+
+[USBMap](https://github.com/corpnewt/USBMap)
+
+
 
 
 ## Links

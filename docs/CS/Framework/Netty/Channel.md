@@ -334,6 +334,10 @@ public final void register(EventLoop eventLoop, final ChannelPromise promise) {
 3. [ChannelPipeline#fireChannelRegistered()](/docs/CS/Framework/Netty/ChannelHandler.md?id=firechannelactive)
 4. [AbstractChannel#beginRead()](/docs/CS/Framework/Netty/ChannelHandler.md?id=beginread) or fireChannelActive if active
 
+
+register0() 主要做了四件事：调用 JDK 底层进行 Channel 注册、触发 handlerAdded 事件、触发 channelRegistered 事件、Channel 当前状态为活跃时，触发 channelActive 事件
+
+
 ```java
 // AbstractChannel$AbstracrUnsafe
 private void register0(ChannelPromise promise) {

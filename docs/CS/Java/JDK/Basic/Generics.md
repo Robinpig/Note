@@ -1,6 +1,6 @@
 ## Introduction
 
-“Before generic classes were added to Java, generic programming was achieved with inheritance.
+Before generic classes were added to Java, generic programming was achieved with inheritance.
 The ArrayList class simply maintained an array of Object references:
 
 ```java
