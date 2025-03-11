@@ -63,6 +63,11 @@ mem init
 }
 ```
 
+
+### mem_init
+
+
+
 setup_arch -> paging_init
 
 ```c
