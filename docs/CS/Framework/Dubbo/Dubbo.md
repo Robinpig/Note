@@ -6,11 +6,21 @@
 Dubbo 被设计为高度可扩展，用户可以方便的实现流量拦截、选址的各种定制逻辑。
 在云原生时代，Dubbo相继衍生出了Dubbo3、Proxyless Mesh等架构与解决方案，在易用性、超大规模微服务实践、云原生基础设施适配、安全性等几大方向上进行了全面升级。  
 
-
-
 Dubbo 在很多大企业内部衍生出了独立版本，比如在阿里巴巴内部就基于Dubbo3 衍生出了 HSF3  
 
+## Build
 
+
+
+```shell
+git clone https://github.com/apache/dubbo.git
+
+mvn install -Dmaven.test.skip=true
+
+mvn idea:idea
+```
+
+查看 module `dubbo-demo` 学习用例
 
 ## Architecture
 

@@ -1,8 +1,11 @@
 ## Introduction
 
-有序数组的好处是可以通过二分实现O(lgn)的高效查找，然而插入元素时，为了保证有序性，时间复杂度是O(n)的。链表则刚好相反，插入数据是$O(1)$，查找元素则是O(n)的。即使链表数据是有序的，查找元素仍然是O(n)的，因为本质上，链表不支持random access
 
-In computer science, a skip list (or skiplist) is a probabilistic data structure that allows O(logn) average complexity for search as well as O(logn) average complexity for insertion within an ordered sequence of n elements. Thus it can get the best features of a sorted [array](https://en.wikipedia.org/wiki/Array_data_structure) (for searching) while maintaining a [linked list](https://en.wikipedia.org/wiki/Linked_list)-like structure that allows insertion, which is not possible with a static array.
+有序数组的好处是可以通过二分实现O(lgn)的高效查找，然而插入元素时，为了保证有序性，时间复杂度是O(n)的。链表则刚好相反，插入数据是$O(1)$，查找元素则是$O(n)$的。即使链表数据是有序的，查找元素仍然是O(n)的，因为本质上，链表不支持random access
+
+skiplist，即跳表是由William Pugh在1989年发明的，允许快速查询一个有序连续元素的数据链表，搜索、插入、删除的平均时间复杂度均为O(lgn)
+In computer science, a skip list (or skiplist) is a probabilistic data structure that allows O(logn) average complexity for search as well as O(logn) average complexity for insertion within an ordered sequence of n elements. 
+Thus it can get the best features of a sorted [array](https://en.wikipedia.org/wiki/Array_data_structure) (for searching) while maintaining a [linked list](https://en.wikipedia.org/wiki/Linked_list)-like structure that allows insertion, which is not possible with a static array.
 
 
 |   -   |   平均   | 最差情况下 |

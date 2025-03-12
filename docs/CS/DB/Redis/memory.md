@@ -1,5 +1,11 @@
 ## Introduction
 
+
+
+
+
+
+
 Selecting a non-default memory allocator when building Redis is done by setting the MALLOC environment variable.
 Redis is compiled and linked against libc malloc by default, with the exception of jemalloc being the default on Linux systems.
 This default was picked because jemalloc has proven to have fewer fragmentation problems than libc malloc.

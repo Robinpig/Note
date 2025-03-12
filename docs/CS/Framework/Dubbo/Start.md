@@ -88,20 +88,43 @@ public class Application {
 
 ### DubboBootstrap
 
-首先是DubboBootstrap的初始化配置
+Dubbo3 往云原生的方向走自然要针对云原生应用的应用启动，应用运行，应用发 布等信息做一些建模，这个 DubboBootstrap 就是用来启动 Dubbo 服务的。类似 于 Netty 的 Bootstrap 类型和 ServerBootstrap 启动器
 
-nstanceMap设计为Map类型 Key,意味着可以为多个应用程序模型创建不同的启动器,启动多个服务
+
+
+
+
+通过调用静态方法 getInstance()获取单例实例。之所以设计为单例，是因为 Dubbo 中的一些类(如 ExtensionLoader)只为每个进程设计一个实例
+
+instanceMap设计为Map<ApplicationModel, DubboBootstrap>类型, 意味着可以为多个应用程序模型创建不同的启动器,启动多个服务
 
 ```java
-public static DubboBootstrap getInstance(ApplicationModel applicationModel) {
-    return ConcurrentHashMapUtils.computeIfAbsent(
-            instanceMap, applicationModel, _k -> new DubboBootstrap(applicationModel));
+public final class DubboBootstrap {
+ 
+    private static final ConcurrentMap<ApplicationModel, DubboBootstrap> instanceMap = new ConcurrentHashMap<>();
+    private static volatile DubboBootstrap instance;   
+    
+    public static DubboBootstrap getInstance() {
+            if (instance == null) {
+                synchronized (DubboBootstrap.class) {
+                    if (instance == null) {
+                        instance = DubboBootstrap.getInstance(ApplicationModel.defaultModel());
+                    }
+                }
+            }
+            return instance;
+        }
+    
+    public static DubboBootstrap getInstance(ApplicationModel applicationModel) {
+        return ConcurrentHashMapUtils.computeIfAbsent(
+                instanceMap, applicationModel, _k -> new DubboBootstrap(applicationModel));
+    }
 }
 ```
 
 
 
-
+构造器
 
 ```java
 private DubboBootstrap(ApplicationModel applicationModel) {
@@ -149,15 +172,11 @@ DubboBootstrap的application方法设置一个应用程序配置ApplicationConfi
 
 ConfigManager配置管理器
 
-
-
-
-
-
+### ApplicationDeployer
 
 来看DubboBootstrap的start()方法:
 
-Dubbo启动器借助Deployer发布器来启动和发布服务,发布器的启动过程包含了启动配置中心,加载配置,启动元数据中心,启动服务等操作都是比较重要又比较复杂的过程
+DubboBootstrap借助DeployerDeployer来启动和发布服务,发布器的启动过程包含了启动配置中心,加载配置,启动元数据中心,启动服务等操作都是比较重要又比较复杂的过程
 
 ```java
 public DubboBootstrap start() {
@@ -192,7 +211,7 @@ public DubboBootstrap start(boolean wait) {
 
 
 
-
+initialize包含注册中心和元数据中心等初始化 而doStart 是服务的
 
 ```java
 public Future start() {
@@ -296,7 +315,7 @@ Dubbo 的 bootstrap 类为啥要用单例模式。 通过调用静态方法 getI
 
 
 
-DefaultApplicationDeployer 类型的 startConfigCenter()
+[DefaultApplicationDeployer.startConfigCenter()](/docs/CS/Framework/Dubbo/Start.md)
 
 
 通过 ls / 查看根目录，我们发现 Dubbo 注册了两个目录，/dubbo 和 /services 目录：
@@ -332,7 +351,7 @@ FORCE_INTERFACE：只订阅消费接口级信息。 APPLICATION_FIRST：注册�
 
 ### doStart
 
-发布服务 先启动内部服务，再启动外部服务
+发布服务 先启动内部服务，再启动外部服务 不论是内部服务还是外部服务调用的代码逻辑都是模块发布器 ModuleDeployer 的 start()方法，
 
 ```java
 private void doStart() {
