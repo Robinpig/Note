@@ -123,6 +123,18 @@ Linux
 
 head.S
 
+
+
+比较BIOS和UEFI的区别
+
+|      | BIOS                                                         | UEFI                          |
+| ---- | ------------------------------------------------------------ | ----------------------------- |
+|      | Tied to Master Boot Record(MBR) system, which limits disk size to 2TB | Use GUID Partition Table(GPT) |
+|      | Slow boot time                                               | faster boot time              |
+|      | less secure boot                                             | secure boot                   |
+
+
+
 ## BIOS
 
 In computing, BIOS (`Basic Input/Output System`, also known as the System BIOS, ROM BIOS, BIOS ROM or PC BIOS) 
