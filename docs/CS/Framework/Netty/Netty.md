@@ -1,6 +1,8 @@
 ## Introduction
 
-[Netty](https://netty.io) is a [NIO](/docs/CS/Java/JDK/IO/NIO.md) client server framework which enables quick and easy development of network applications such as protocol servers and clients.
+[Netty](https://netty.io) is *an asynchronous event-driven network application framework* for rapid development of maintainable high performance protocol servers & clients
+
+Netty is a [NIO](/docs/CS/Java/JDK/IO/NIO.md) client server framework which enables quick and easy development of network applications such as protocol servers and clients.
 It greatly simplifies and streamlines network programming such as TCP and UDP socket server.
 
 - **Ease of use**: Netty is simpler to use than plain Java NIO and has an extensive set of examples covering most use cases
@@ -37,25 +39,11 @@ Netty 结构一共分为三个模块：
 
 
 
-### Combining and Slicing ChannelBuffers
 
-When transfering data between communication layers, data often needs to be combined or sliced.
-For example, if a payload is split over multiple packages, it often needs to be be combined for decoding.
-Traditionally, data from the multiple packages are combined by copying them into a new byte buffer.
-Netty supports a zero-copy approach where by a ChannelBuffer "points" to the required buffers hence eliminating the need to perform a copy.
 
-### Universal Asynchronous I/O API
+服务编排层的职责是负责组装各类服务，它是 Netty 的核心处理链，用以实现网络事件的动态编排和有序传播。
 
-Traditional I/O APIs in Java provide different types and methods for different transport types.
-Netty has a universal asynchronous I/O interface called a [Channel](/docs/CS/Framework/Netty/Channel.md), which abstracts away all operations required for point-to-point communication.
-That is, once you wrote your application on one Netty transport, your application can run on other Netty transports.
-
-### Event Model based on the Interceptor Chain Pattern
-
-A well-defined and extensible event model is a must for an event-driven application.
-Netty has a well-defined event model focused on I/O.
-It also allows you to implement your own event type without breaking the existing code because each event type is distinguished from another by a strict type hierarchy.
-This is another differentiator against other frameworks.
+服务编排层的核心组件包括 ChannelPipeline、ChannelHandler、ChannelHandlerContext
 
 ## Sequence
 
