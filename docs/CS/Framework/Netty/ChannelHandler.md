@@ -1,5 +1,8 @@
 ## Introduction
 
+
+探讨ChannelPipeline 与 ChannelHandler 的关系
+
 ## ChannelPipeline
 
 ChannelPipeline 是 Netty 的核心编排组件，**负责组装各种 ChannelHandler**，实际数据的编解码以及加工处理操作都是由 ChannelHandler 完成的。ChannelPipeline 可以理解为**ChannelHandler 的实例列表**——内部通过双向链表将不同的 ChannelHandler 链接在一起。当 I/O 读写事件触发时，ChannelPipeline 会依次调用 ChannelHandler 列表对 Channel 的数据进行拦截和处理。
@@ -125,6 +128,14 @@ public final ChannelPipeline addFirst(EventExecutorGroup group, String name, Cha
 
 
 ChannelHandlerContext 用于保存 ChannelHandler 上下文，通过 ChannelHandlerContext 我们可以知道 ChannelPipeline 和 ChannelHandler 的关联关系。ChannelHandlerContext 可以实现 ChannelHandler 之间的交互，ChannelHandlerContext 包含了 ChannelHandler 生命周期的所有事件
+
+
+
+
+
+ChannelHandlerContext 是对 ChannelHandler 的封装，每个 ChannelHandler 都对应一个  ChannelHandlerContext，实际上 ChannelPipeline 维护的是与 ChannelHandlerContext  的关系
+
+
 
 
 
@@ -528,6 +539,8 @@ private static boolean skipContext(
 
 #### HeadContext
 
+HeadContext 既是 Inbound 处理器，也是 Outbound 处理器。它分别实现了 ChannelInboundHandler 和 ChannelOutboundHandler。网络数据写入操作的入口就是由 HeadContext 节点完成的。HeadContext 作为  Pipeline 的头结点负责读取数据并开始传递 InBound 事件，当数据处理完成后，数据会反方向经过 Outbound 处理器，最终传递到 HeadContext，所以 HeadContext 又是处理 Outbound 事件的最后一站
+
 ```java
 final class HeadContext extends AbstractChannelHandlerContext
         implements ChannelOutboundHandler, ChannelInboundHandler {
@@ -631,6 +644,67 @@ abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, R
 }
 ```
 
+#### HeadContext#write
+
+数据将会在 Pipeline 中一直寻找 Outbound 节点并向前传播，直到 Head 节点结束，由 Head 节点完成最后的数据发送
+
+```java
+// HeadContext
+@Override
+public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) {
+    unsafe.write(msg, promise);
+}
+```
+
+Head 节点是通过调用 unsafe 对象完成数据写入的，unsafe 对应的是 NioSocketChannelUnsafe 对象实例，最终调用到 AbstractChannel 中的 write 方法
+
+该方法有两个重要的点需要指出：
+
+1. filterOutboundMessage 方法会对待写入的 msg 进行过滤，如果 msg 使用的不是 DirectByteBuf，那么它会将 msg 转换成 DirectByteBuf。
+2. ChannelOutboundBuffer 可以理解为一个缓存结构，从源码最后一行 outboundBuffer.addMessage 可以看出是在向这个缓存中添加数据，所以 ChannelOutboundBuffer 才是理解数据发送的关键。
+
+> 只调用 write 方法，数据并不会被真正发送出去，而是存储在 ChannelOutboundBuffer 的缓存内
+
+```java
+// AbstractChannel.AbstractUnsafe
+@Override
+public final void write(Object msg, ChannelPromise promise) {
+    assertEventLoop();
+
+    ChannelOutboundBuffer outboundBuffer = this.outboundBuffer;
+    if (outboundBuffer == null) {
+        try {
+            // release message now to prevent resource-leak
+            ReferenceCountUtil.release(msg);
+        } finally {
+            safeSetFailure(promise,
+                    newClosedChannelException(initialCloseCause, "write(Object, ChannelPromise)"));
+        }
+        return;
+    }
+
+    int size;
+    try {
+        msg = filterOutboundMessage(msg);
+        size = pipeline.estimatorHandle().size(msg);
+        if (size < 0) {
+            size = 0;
+        }
+    } catch (Throwable t) {
+        try {
+            ReferenceCountUtil.release(msg);
+        } finally {
+            safeSetFailure(promise, t);
+        }
+        return;
+    }
+
+    outboundBuffer.addMessage(msg, size, promise);
+}
+```
+
+
+
 #### SimpleChannelInboundHandler
 
 release automatically
@@ -677,6 +751,14 @@ protected void onUnhandledInboundMessage(Object msg) {
     }
 }
 ```
+
+
+
+TailContext 提供了兜底的异常处理逻辑
+
+
+
+
 
 ##### addMessage
 
@@ -738,7 +820,15 @@ public final class ChannelOutboundBuffer {
 }
 ```
 
+
+
+
+
 #### doWrite
+
+
+
+
 
 ```java
 public class NioSocketChannel extends AbstractNioByteChannel implements io.netty.channel.socket.SocketChannel {
@@ -905,6 +995,8 @@ public class FlushConsolidationHandler extends ChannelDuplexHandler {
 ```
 
 ## Frame detection
+
+如何支持与自定义协议
 
 ### ByteToMessageDecoder
 ByteToMessageDecoder decodes bytes in a stream-like fashion from one ByteBuf to an other Message type.
@@ -1256,6 +1348,41 @@ You can change it to your preferred logging framework before other Netty classes
 >
 > The new default factory is effective only for the classes which were loaded after the default factory is changed.
 > Therefore, setDefaultFactory(InternalLoggerFactory) should be called as early as possible and shouldn't be called more than once.
+
+
+
+## Tuning
+
+异常事件的处理顺序与 ChannelHandler 的添加顺序相同，会依次向后传播，与 Inbound 事件和 Outbound 事件无关
+
+
+
+在 Netty  应用开发的过程中，良好的异常处理机制会让排查问题的过程事半功倍。所以推荐用户对异常进行统一拦截，然后根据实际业务场景实现更加完善的异常处理机制。通过异常传播机制的学习，我们应该可以想到最好的方法是在 ChannelPipeline 自定义处理器的末端添加统一的异常处理器
+
+
+
+```java
+public class ExceptionHandler extends ChannelDuplexHandler {
+
+    @Override
+
+    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+
+        if (cause instanceof RuntimeException) {
+
+            System.out.println("Handle Business Exception Success.");
+
+        }
+
+    }
+
+}
+
+```
+
+
+
+
 
 ## Links
 

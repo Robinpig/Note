@@ -9,7 +9,11 @@ It greatly simplifies and streamlines network programming such as TCP and UDP so
 - **Minimal dependency**: As we will see in a minute, you can get the whole framework with just a single dependency
 - **Performance**: Netty has better throughput and reduced latency than core Java APIs. It is also scalable thanks to its internal pooling of resources.
 - **Security**: Complete SSL/TLS and StartTLS support.
-- [Bootstrap](/docs/CS/Framework/Netty/Bootstrap.md)
+
+
+
+
+
 - [EventLoop](/docs/CS/Framework/Netty/EventLoop.md)
 - [ByteBuf](/docs/CS/Framework/Netty/ByteBuf.md)
 - [Future](/docs/CS/Framework/Netty/Future.md)
@@ -36,6 +40,26 @@ Netty 结构一共分为三个模块：
   协议支持层基本上覆盖了主流协议的编解码实现，如 HTTP、SSL、Protobuf、压缩、大文件传输、WebSocket、文本、二进制等主流协议，此外 Netty 还支持自定义应用层协议。Netty 丰富的协议支持降低了用户的开发成本，基于 Netty 我们可以快速开发 HTTP、WebSocket 等服务。
 - Transport Service 传输服务层
   传输服务层提供了网络传输能力的定义和实现方法。它支持 Socket、HTTP 隧道、虚拟机管道等传输方式。Netty 对 TCP、UDP 等数据传输做了抽象和封装，用户可以更聚焦在业务逻辑实现上，而不必关系底层数据传输的细节
+
+
+
+Netty 的逻辑处理架构为典型网络分层架构设计，共分为网络通信层、事件调度层、服务编排层，每一层各司其职
+
+网络通信层的**核心组件**包含**BootStrap、ServerBootStrap、Channel**三个组件
+
+
+
+[Bootstrap](/docs/CS/Framework/Netty/Bootstrap.md) 是“引导”的意思，它主要负责整个 Netty 程序的启动、初始化、服务器连接等过程，它相当于一条主线，串联了 Netty 的其他核心组件
+
+
+
+Netty 自己实现的 Channel 是以 JDK NIO Channel 为基础的，相比较于 JDK NIO，Netty 的 Channel 提供了更高层次的抽象，同时屏蔽了底层 Socket 的复杂性，赋予了 Channel 更加强大的功能
+
+
+
+事件调度层的职责是通过 Reactor 线程模型对各类事件进行聚合处理，通过 Selector 主循环线程集成多种事件（ I/O 事件、信号事件、定时事件等），实际的业务处理逻辑是交由服务编排层中相关的 Handler 完成。
+
+事件调度层的**核心组件**包括 **EventLoopGroup、EventLoop**
 
 
 
