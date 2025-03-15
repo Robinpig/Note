@@ -232,6 +232,10 @@ void __tcp_push_pending_frames(struct sock *sk, unsigned int cur_mss,
 
 #### tcp_write_xmit
 
+如果符合发送条件，则开始调用tcp_write_xmit内核函数。在这个函数中，会循环获取Socket发送队列中待发送的sk_buffer，然后进行拥塞控制以及滑动窗口的管理
+
+将从Socket发送队列中获取到的sk_buffer重新拷贝一份，设置sk_buffer副本中的TCP HEADER
+
 This routine writes packets to the network.
 It advances the send_head.  This happens as incoming acks open up the remote window for us.
 
