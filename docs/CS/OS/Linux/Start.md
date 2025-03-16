@@ -1,4 +1,12 @@
+## Introduction
 
+通常操作系统启动都是由Bootloader 
+
+- Gurb
+
+解压bzImage
+
+vmlinux
 
 
 

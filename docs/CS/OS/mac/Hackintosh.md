@@ -93,6 +93,28 @@ Windows 下使用 [USBToolBox](https://github.com/USBToolBox/tool/) 来定制 US
 USBToolBox.kext 官方下载地址为：https://github.com/USBToolBox/kext/releases
 
 
+
+
+
+[USBMap](https://github.com/corpnewt/USBMap)
+
+
+
+
+
+OS排错
+
+
+
+```
+ kernel: PMRD: Sleep Wake failure in EFI
+```
+
+
+
+
+
+
 ## Links
 
 - [MacOS](/docs/CS/OS/mac/mac.md)
@@ -101,3 +123,10 @@ USBToolBox.kext 官方下载地址为：https://github.com/USBToolBox/kext/relea
 ## References
 
 1. [Hackintosh.com](https://hackintosh.com/)
+1. https://apple.sqlsec.com/
+1. [黑苹果安装笔记和教程 2023年6月8日](https://zhuanlan.zhihu.com/p/553568297)
+1. https://shuiyunxc.github.io/
+1. https://ihackintosher.wordpress.com/
+1. https://www.kancloud.cn/q952008898/hei_ping_guo
+1. https://iiong.com/summarize-some-problems-of-hackintosh/
+1. https://forum.amd-osx.com/

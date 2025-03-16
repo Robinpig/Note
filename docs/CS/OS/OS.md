@@ -234,6 +234,7 @@ run the code to create a single lightweight executable—called a container—th
 - [Computer Organization](/docs/CS/CO/CO.md)
 - [Data Structures and Algorithms](/docs/CS/Algorithms/Algorithms.md)
 - [Computer Network](/docs/CS/CN/CN.md)
+- [Distributed system](/docs/CS/Distributed/Distributed)
 
 ## References
 

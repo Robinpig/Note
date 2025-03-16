@@ -1,6 +1,12 @@
 ## Introduction
 
-### EventLoop Hierarchy
+EventLoopGroup 本质是一个线程池，主要负责接收 I/O 请求，并分配线程执行处理请求
+
+每新建一个 Channel，EventLoopGroup 会选择一个 EventLoop 与其绑定。该 Channel 在生命周期内都可以对 EventLoop 进行多次绑定和解绑
+
+
+
+EventLoopGroup 是 Netty Reactor 线程模型的具体实现方式，Netty 通过创建不同的 EventLoopGroup 参数配置，就可以支持 Reactor 的三种线程模型
 
 ![EventLoopGroup](img/EventLoop.png)
 
@@ -381,7 +387,7 @@ private static Queue<Runnable> newTaskQueue0(int maxPendingTasks) {
 - if isPowerOfTwo default use **PowerOfTwoEventExecutorChooser**  idx.getAndIncrement() & executors.length - 1
 - or else GenericEventExecutorChooser Math.abs(idx.getAndIncrement() % executors.length)
 
- 
+
 ## Selector
 
 See [Selector](/docs/CS/Java/JDK/IO/NIO.md?id=Selectors)
@@ -1148,7 +1154,17 @@ private final class HandleImpl extends MaxMessageHandle {
 Poll all tasks from the task queue and run them via `Runnable#run()` method.
 This method stops running the tasks in the task queue and returns if it ran longer than timeoutNanos.
 
-Check timeout every 64 tasks because nanoTime() is relatively expensive.
+
+
+可以分为 6 个步骤。
+
+1. fetchFromScheduledTaskQueue 函数：将定时任务从 scheduledTaskQueue 中取出，聚合放入普通任务队列 taskQueue 中，只有定时任务的截止时间小于当前时间才可以被合并。
+2. 从普通任务队列 taskQueue 中取出任务。
+3. 计算任务执行的最大超时时间。
+4. safeExecute 函数：安全执行任务，实际直接调用的 Runnable 的 run() 方法。
+5. 每执行 64 个任务进行超时时间的检查，如果执行时间大于最大超时时间，则立即停止执行任务，避免影响下一轮的 I/O 事件的处理。
+6. 最后获取尾部队列中的任务执行。
+
 ```java
     protected boolean runAllTasks(long timeoutNanos) {
         fetchFromScheduledTaskQueue();
@@ -1401,7 +1417,16 @@ final class KQueueEventLoop extends SingleThreadEventLoop {
 }
 ```
 
-## Thread Affinity
+## Tuning
+
+结合实际工作中的经验给出一些 EventLoop 的最佳实践方案。
+
+1. 网络连接建立过程中三次握手、安全认证的过程会消耗不少时间。这里建议采用 Boss 和 Worker 两个 EventLoopGroup，有助于分担 Reactor 线程的压力。
+2. 由于 Reactor 线程模式适合处理耗时短的任务场景，对于耗时较长的 ChannelHandler 可以考虑维护一个业务线程池，将编解码后的数据封装成 Task 进行异步处理，避免 ChannelHandler 阻塞而造成 EventLoop 不可用。
+3. 如果业务逻辑执行时间较短，建议直接在 ChannelHandler 中执行。例如编解码操作，这样可以避免过度设计而造成架构的复杂性。
+4. 不宜设计过多的 ChannelHandler。对于系统性能和可维护性都会存在问题，在设计业务架构的时候，需要明确业务分层和 Netty 分层之间的界限。不要一味地将业务逻辑都添加到 ChannelHandler 中
+
+### Thread Affinity
 
 Create an [AffinityThreadFactory](https://github.com/OpenHFT/Java-Thread-Affinity) with a particular strategy and pass it to the EventLoopGroup which would contain latency-sensitive threads.
 

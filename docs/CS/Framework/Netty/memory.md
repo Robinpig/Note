@@ -3,7 +3,6 @@
 Some methods such as `ByteBuf.readBytes(int)` will cause a memory leak if the returned buffer is not released or added to the out List.
 Use derived buffers like `ByteBuf.readSlice(int)` to avoid leaking memory.
 
-
 在 4.1.52.Final 之前 Netty 内存池是基于 jemalloc3 的设计思想实现的，由于在该版本的实现中，内存规格的粒度设计的比较粗，可能会引起比较严重的内存碎片问题。所以为了近一步降低内存碎片，Netty 在  4.1.52.Final  版本中重新基于 jemalloc4 的设计思想对内存池进行了重构，通过将内存规格近一步拆分成更细的粒度，以及重新设计了内存分配算法尽量将内存碎片控制在比较小的范围内
 随后在 4.1.75.Final 版本中，Netty 为了近一步降低不必要的内存消耗，将 ChunkSize 从原来的 16M 改为了 4M 。而且在默认情况下不在为普通的用户线程提供内存池的 Thread Local 缓存。在兼顾性能的前提下，将不必要的内存消耗尽量控制在比较小的范围内。
 PoolArena 有两个实现，一个是 HeapArena，负责池化堆内内存，另一个是 DirectArena，负责池化堆外内存
@@ -518,8 +517,28 @@ final class PoolThreadCache {
 }
 ```
 
-
 ## Recycler
+
+Java 中频繁地创建和销毁对象的开销是很大的，所以很多人会将一些通用对象缓存起来，当需要某个对象时，优先从对象池中获取对象实例。通过重用对象，不仅避免频繁地创建和销毁所带来的性能损耗，而且对 JVM GC 是友好的，这就是对象池的作用
+
+Recycler 是 Netty 提供的自定义实现的轻量级对象回收站，借助 Recycler 可以完成对象的获取和回收
+对象池包含四个核心组件：Stack、WeakOrderQueue、Link、DefaultHandle
+
+
+Stack 是整个对象池的顶层数据结构，描述了整个对象池的构造，用于存储当前本线程回收的对象。
+在多线程的场景下，Netty 为了避免锁竞争问题，每个线程都会持有各自的对象池，内部通过 [FastThreadLocal](/docs/CS/Framework/Netty/FastThreadLocal.md) 来实现每个线程的私有化
+
+
+
+WeakOrderQueue 用于存储其他线程回收到当前线程所分配的对象，并且在合适的时机，Stack 会从异线程的 WeakOrderQueue 中收割对象
+
+每个 WeakOrderQueue 中都包含一个 Link 链表，回收对象都会被存在 Link 链表中的节点上，每个 Link 节点默认存储 16 个对象，当每个 Link 节点存储满了会创建新的 Link 节点放入链表尾部
+
+DefaultHandle 实例中保存了实际回收的对象，Stack 和 WeakOrderQueue 都使用 DefaultHandle 存储回收的对象。在 Stack 中包含一个 elements 数组，该数组保存的是 DefaultHandle 实例。WeakOrderQueue 中每个 Link 节点所存储的 16 个对象也是使用 DefaultHandle 表示的
+
+从对象池中获取对象的入口是在 Recycler#get() 方法
+
+
 
 count
 

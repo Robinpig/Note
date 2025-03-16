@@ -1,7 +1,6 @@
 ## Introduction
 
 xv6 是 MIT 开发的一个教学用的完整的类 Unix 操作系统, 是UNIX Version(v6)的简单实现，并且在 MIT 的操作系统课程 [6.828](http://pdos.csail.mit.edu/6.828/2012/xv6.html) 中使用
-
 xv6 是 Dennis Ritchie 和 Ken Thompson 合著的 Unix Version 6（v6）操作系统的重新实现。xv6 在一定程度上遵守 v6 的结构和风格，但它是用 ANSI C 实现的，并且是基于 x86 多核处理器的。
 
 2019年移植到RISC-V上后设置了6.S081课程
@@ -1089,6 +1088,8 @@ cpu id放入tp寄存器
 
 
 如果不是CPU0，则会循环等待CPU0进行系统初始化完成之后，才会进行下一步操作
+
+`__sync_synchronize` 阻止编译器重排 搭配 `volatile` 确保 started 字段
 
 ```shell
 #include "types.h"

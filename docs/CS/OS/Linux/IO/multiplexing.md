@@ -15,6 +15,7 @@ select核心实现是位图 将socket的fd注册至读 写 异常位图, 通过s
 
 位图通过整型数组模拟 数组长度16 每个数组元素8字节 一字节为8bit, 所以位图大小为 16*8*8 = 1024
 > 进程默认打开最大描述符1024 早期该整型数组已足够使用 不易变动 且数值越大 轮询效率越低
+
 ```c
 // include/uapi/linux/posix_types.h
 #undef __FD_SETSIZE
@@ -34,7 +35,7 @@ void FD_ZERO(fd_set *set);
 ```
 
 select函数
-> 每次调用都需要重新设置位图信息和超时
+> 每次调用select之前都要通过 `FD_ZERO` 和 `FD_SET` 重新设置文件描述符，因为文件描述符集合会在内核中被修改
 
 ```c
 int select(int nfds, fd_set *read_fds, fd_set *write_fds, fd_set *except_fds, struct timeval *timeout);
@@ -258,9 +259,21 @@ static int __pollwake(wait_queue_entry_t *wait, unsigned mode, int sync, void *k
 ```
 
 
+select有些不足的地方。
+
+- 在发起select系统调用以及返回时，用户线程各发生了一次用户态到内核态以及内核态到用户态的上下文切换开销。发生2次上下文切换
+- 在发起select系统调用以及返回时，用户线程在内核态需要将文件描述符集合从用户空间拷贝到内核空间。以及在内核修改完文件描述符集合后，又要将它从内核空间拷贝到用户空间。发生2次文件描述符集合的拷贝
+- 虽然由原来在用户空间发起轮询优化成了在内核空间发起轮询但select不会告诉用户线程到底是哪些Socket上发生了IO就绪事件，只是对IO就绪的Socket作了标记，用户线程依然要遍历文件描述符集合去查找具体IO就绪的Socket。时间复杂度依然为O(n)
+- 内核会对原始的文件描述符集合进行修改。导致每次在用户空间重新发起select调用时，都需要对文件描述符集合进行重置。
+- BitMap结构的文件描述符集合，长度为固定的1024,所以只能监听0~1023的文件描述符。
+- select系统调用 不是线程安全的
+
+
 ## poll
 
-`poll`函数与`select`不同，不需要为三种事件分别设置文件描述符集，而是构造了`pollfd`结构的数组，每个数组元素指定一个描述符`fd`以及对该描述符感兴趣的条件(events)。`poll`调用返回时，每个描述符`fd`上产生的事件均被保存在`revents`成员内。  
+poll相当于是改进版的select，但是工作原理基本和select没有本质的区别
+`poll`函数与`select`不同，不需要为三种事件分别设置文件描述符集，而是构造了`pollfd`结构的数组，每个数组元素指定一个描述符`fd`以及对该描述符感兴趣的条件(events)
+`poll`调用返回时，每个描述符`fd`上产生的事件均被保存在`revents`成员内
 和`select`类似，`timeout`参数用来指定超时时间(ms)
 
 pollfd 使用时间分离的方式 每次调用无需重新设置pollfd对象 且不会反悔潮湿时间 无需重新设置
@@ -374,6 +387,13 @@ static int do_poll(struct poll_list *list, struct poll_wqueues *wait,
 
 
 ## epoll
+
+
+select,poll的性能瓶颈主要体现在下面三个地方：
+
+- 因为内核不会保存我们要监听的socket集合，所以在每次调用select,poll的时候都需要传入，传出全量的socket文件描述符集合。这导致了大量的文件描述符在用户空间和内核空间频繁的来回复制。
+- 由于内核不会通知具体IO就绪的socket，只是在这些IO就绪的socket上打好标记，所以当select系统调用返回时，在用户空间还是需要完整遍历一遍socket文件描述符集合来获取具体IO就绪的socket。
+- 在内核空间中也是通过遍历的方式来得到IO就绪的socket。
 
 
 [epoll](/docs/CS/OS/Linux/IO/epoll.md) 的实现原理看起来很复杂，其实很简单，注意两个回调函数的使用：数据到达 socket 的等待队列时，通过**回调函数 ep_poll_callback** 找到 eventpoll 对象中红黑树的 epitem 节点，并将其加入就绪列队 rdllist，然后通过**回调函数 default_wake_function** 唤醒用户进程 ，并将 rdllist 传递给用户进程，让用户进程准确读取就绪的 socket 的数据。这种回调机制能够定向准确的通知程序要处理的事件，而不需要每次都循环遍历检查数据是否到达以及数据该由哪个进程处理

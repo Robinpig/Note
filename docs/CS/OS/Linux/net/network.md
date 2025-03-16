@@ -394,6 +394,8 @@ static int igb_request_msix(struct igb_adapter *adapter)
 
 ## Egress
 
+网络包发送流程
+
 ### send
 
 Send a datagram down a socket.
@@ -415,6 +417,12 @@ int __sys_sendto(int fd, void __user *buff, size_t len, unsigned int flags, ...)
 	err = sock_sendmsg(sock, &msg);
 }
 ```
+
+
+根据fd将真正的Socket找出，这个Socket对象中记录着各种协议栈的函数地址，然后构造struct msghdr对象，将用户需要发送的数据全部封装在这个struct msghdr结构体中
+
+
+
 
 ### inet_sendmsg
 
@@ -596,6 +604,8 @@ The qdisc will either transmit the data directly if it can, or queue it up to be
 
 raise NET_TX_SOFTIRQ if quota <= 0 in order to execute net_tx_action and recall `qdisc_run` func
 
+> NET_TX_SOFTIRQ类型的软中断只会在发送网络包时并且当用户线程的CPU quota用尽时，才会触发。剩下的接受过程中触发的软中断类型以及发送完数据触发的软中断类型均为 NET_RX_SOFTIRQ
+> 所以这就是你在服务器上查看 /proc/softirqs，一般 NET_RX都要比 NET_TX大很多的的原因
 ```c
 void __qdisc_run(struct Qdisc *q)
 {
@@ -781,7 +791,9 @@ After the transmission NIC will raise a `hard IRQ` to signal its completion.
 The driver will handle this IRQ (turn it off) and schedule (`soft IRQ`) the NAPI poll system.
 NAPI will handle the receive packets signaling and free the RAM.
 
-Reclaim resources after transmit completes
+数据发送完毕后，网卡设备会向CPU发送一个硬中断，CPU调用网卡驱动程序注册的硬中断响应程序，在硬中断响应中触发NET_RX_SOFTIRQ类型的软中断，
+在软中断的回调函数igb_poll中清理释放 sk_buffer，清理网卡发送队列（RingBuffer），解除 DMA 映射
+
 
 ```c
 static int igb_poll(struct napi_struct *napi, int budget)
@@ -828,11 +840,28 @@ static bool igb_clean_tx_irq(struct igb_q_vector *q_vector, int napi_budget)
 }
 ```
 
+
+这里释放清理的只是sk_buffer的副本，真正的sk_buffer现在还是存放在Socket的发送队列中。
+前面在传输层处理的时候我们提到过，因为传输层需要保证可靠性，所以 sk_buffer其实还没有删除。它得等收到对方的 ACK 之后才会真正删除
+
+
 ## Ingress
+
+网络包接收流程
 
 ### driver process
 
+当网络数据帧通过网络传输到达网卡时，网卡会将网络数据帧通过DMA的方式放到环形缓冲区RingBuffer中
+
+RingBuffer是网卡在启动的时候分配和初始化的环形缓冲队列。当RingBuffer满的时候，新来的数据包就会被丢弃。我们可以通过ifconfig命令查看网卡收发数据包的情况。
+其中overruns数据项表示当RingBuffer满时，被丢弃的数据包。如果发现出现丢包情况，可以通过ethtool命令来增大RingBuffer长度
+
+
 #### igb_msix_ring
+
+当DMA操作完成时，网卡会向CPU发起一个硬中断，告诉CPU有网络数据到达。CPU调用网卡驱动注册的硬中断响应程序。
+网卡硬中断响应程序会为网络数据帧创建内核数据结构 sk_buffer，并将网络数据帧拷贝到sk_buffer中。然后发起软中断请求，通知内核有新的网络数据帧到达
+
 
 This function is registered when the [NIC is active](/docs/CS/OS/Linux/net/network.mdk.md?id=open-NIC), in order to handle hard interrupts
 
@@ -870,6 +899,10 @@ static inline void ____napi_schedule(struct softnet_data *sd,
 ```
 
 ### net_rx_action
+
+内核线程ksoftirqd发现有软中断请求到来，随后调用网卡驱动注册的poll函数，poll函数将sk_buffer中的网络数据包送到内核协议栈中注册的ip_rcv函数中
+
+> 网卡硬中断响应程序中发出的软中断请求也会在这个CPU绑定的ksoftirqd线程中响应。所以如果发现Linux软中断，CPU消耗都集中在一个核上的话，那么就需要调整硬中断的CPU亲和性来打散硬中断
 
 ```c
 // net/core/dev.c
