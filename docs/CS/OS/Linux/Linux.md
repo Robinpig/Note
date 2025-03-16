@@ -106,7 +106,7 @@ qemu启动只携带kernel会error `unable to mount root fs`
 依赖
 
 ```shell
-sudo apt-get install -y  procps  vim  bc bison build-essential cpio  flex  libelf-dev     libncurses-dev gcc g++ make
+sudo apt-get install -y  procps  vim  bc bison build-essential cpio  flex  libelf-dev     libncurses-dev gcc g++ make libssl-dev
 
 ```
 
@@ -130,6 +130,26 @@ make defconfig
 
 ##### **busybox**
 
+
+
+> Busybox 配置时需要disable Applets->Shells->ash->job control
+> 否则将在linux启动后报错 can't access tty,job control turned off
+
+
+```shell
+
+make
+
+make install  CONFIG_PREFIX=../busybox
+```
+
+
+创建文件夹
+
+```shell
+mkdir -p {home,bin,sbin,etc,proc,sys,usr/{bin,sbin}}
+```
+
 制作临时的init
 
 vim shell.c
@@ -149,10 +169,7 @@ int main()
 
 
 
-
-
-
-
+打包init文件
 ```shell
 gcc main.c  -static -o init
 
@@ -161,27 +178,62 @@ qemu-system-x86_64 -kernel linux-6.13.5/arch/x86/boot/bzImage  -initrd init.cpio
 ```
 
 
+配置用户文件
 
-创建init文件
+```
+# /etc/passwd
+root:x:0:0:Linux User,,,:/root:/bin/sh
 
+# /etc/group
+tty:x:0:
 
+# /etc/shadow
+root::::::::
+```
 
-
+正式配置init
 
 ```shell
-mkdir -p {bin,sbin,etc,proc,sys,usr/{bin,sbin}}
+#!/bin/sh
+
+mount -t proc none /proc
+mount -t sysfs none /sys
+
+echo -e "\nBoot took $(cut -d' ' -f1 /proc/uptime) seconds\n"
+
+mkdir -p /home/admin
+
+mount -n -t tmpfs none /dev
+
+mknod -m 622 /dev/console c 5 1
+mknod -m 666 /dev/null c 1 3
+mknod -m 666 /dev/zero c 1 5
+mknod -m 666 /dev/ptmx c 5 2
+mknod -m 666 /dev/tty c 5 0 # <--
+mknod -m 444 /dev/random c 1 8
+mknod -m 444 /dev/urandom c 1 9
+mknod -m 666 /dev/ttyAMA0 c 5 3
+
+chown admin:tty /dev/console
+chown admin:tty /dev/ptmx
+chown admin:tty /dev/tty
+chown admin:tty /dev/ttyAMA0 
+
+exec /bin/sh
+```
+
+
+
+打包busybox
+```shell
+find . -print0 | cpio --null -ov --format=newc | gzip -9 > ../busybox.cpio.gz
 ```
 
 
 
 
 
-
-
-```shell
-find . -print0 | cpio --null -ov --format=newc | gzip -9 > busybox.cpio.gz
-```
-
+<!-- tabs:end -->
 
 
 
@@ -190,9 +242,6 @@ find . -print0 | cpio --null -ov --format=newc | gzip -9 > busybox.cpio.gz
 qemu-system-x86_64  -kernel linux-6.13.5/arch/x86/boot/bzImage  -initrd busybox/busybox.cpio.gz  -nographic -append "console=ttyS0"
 ```
 
-
-
-<!-- tabs:end -->
 
 
 
@@ -501,54 +550,6 @@ ENV PATH /path/to/qemu-aarch64-static:$PATH
 ENV LD_LIBRARY_PATH /path/to/qemu-aarch64-static/usr/lib:$LD_LIBRARY_PATH
 ```
 
-
-
-> Busybox 配置时需要disable Applets->Shells->ash->job control
-> 否则将在linux启动后报错 can't access tty,job control turned off
-
-配置用户文件
-
-```
-# /etc/passwd
-root:x:0:0:Linux User,,,:/root:/bin/sh
-
-# /etc/group
-tty:x:0:
-
-# /etc/shadow
-root::::::::
-```
-
-配置init
-
-```shell
-#!/bin/sh
-
-mount -t proc none /proc
-mount -t sysfs none /sys
-
-echo -e "\nBoot took $(cut -d' ' -f1 /proc/uptime) seconds\n"
-
-mkdir -p /home/admin
-
-mount -n -t tmpfs none /dev
-
-mknod -m 622 /dev/console c 5 1
-mknod -m 666 /dev/null c 1 3
-mknod -m 666 /dev/zero c 1 5
-mknod -m 666 /dev/ptmx c 5 2
-mknod -m 666 /dev/tty c 5 0 # <--
-mknod -m 444 /dev/random c 1 8
-mknod -m 444 /dev/urandom c 1 9
-mknod -m 666 /dev/ttyAMA0 c 5 3
-
-chown admin:tty /dev/console
-chown admin:tty /dev/ptmx
-chown admin:tty /dev/tty
-chown admin:tty /dev/ttyAMA0 
-
-exec /bin/sh
-```
 
 启动
 
