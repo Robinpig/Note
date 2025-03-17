@@ -53,8 +53,7 @@ ChannelPipeline 是线程安全的，因为每一个新的 Channel 都会对应�
 ```
 
 newChannelPipeline
-
-AbstractChannel Constructor init ChannelPipeline
+一个ChannelPipeline 固定有HeadContext 和 TailContext
 
 ```java
 // Returns a new {@link DefaultChannelPipeline} instance.
@@ -85,6 +84,9 @@ HeadContext(DefaultChannelPipeline pipeline) {
     setAddComplete();
 }
 ```
+
+通过对ChannelPipeline 在不同位置添加不同类型的 ChannelHandler 最后aa
+
 
 ### addFirst
 
