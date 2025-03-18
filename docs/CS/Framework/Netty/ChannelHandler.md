@@ -86,6 +86,23 @@ HeadContext(DefaultChannelPipeline pipeline) {
 }
 ```
 
+Netty 中的 IO 异步事件大体上分为两类：
+- inbound事件：入站事件，比如ChannelActive 事件， ChannelRead 事件，它们会从 pipeline 的头结点 HeadContext 开始一直向后传播。
+- outbound事件：出站事件，比如 write事件 以及 flush 事件，出站事件会从相反的方向从后往前传播直到 HeadContext 。最终会在 HeadContext 中完成出站事件的处理
+
+
+
+pipeline 这样一个双向链表数据结构中的类型正是 ChannelHandlerContext ，由 ChannelHandlerContext 包裹我们自定义的 IO 处理逻辑 ChannelHandler
+
+ChannelHandler 并不需要感知到它所处的 pipeline 中的上下文信息 不会感知和它相邻的两个 ChannelHandler 只需要专心处理好 IO 逻辑即可，关于 pipeline 的上下文信息全部封装在 ChannelHandlerContext中
+
+ChannelHandlerContext 中维护了 pipeline 这个双向链表中的 pre 以及 next 指针，这样可以方便的找到与其相邻的 ChannelHandler ，并可以过滤出一些符合执行条件的 ChannelHandler。
+正如它的命名一样， ChannelHandlerContext 正是起到了维护 ChannelHandler 上下文的一个作用。而 Netty 中的异步事件在 pipeline 中的传播靠的就是这个 ChannelHandlerContext
+
+
+
+
+
 ### addFirst
 
 we set the EventExecutorGroup of our workerThreadPoolExecutor for business.
@@ -703,7 +720,54 @@ public final void write(Object msg, ChannelPromise promise) {
 }
 ```
 
+filterOutboundMessage 方法 取决于具体Channel的实现 以常用的NioByteChannel为例 只会接受 ByteBuf 类型以及 FileRegion 类型的 msg 数据 同时会将 heap buffer 转换成 direct buffer
 
+> FileRegion 是Netty定义的用来通过零拷贝的方式网络传输文件数据
+ 
+
+```java
+public abstract class AbstractNioByteChannel extends AbstractNioChannel {
+    @Override
+    protected final Object filterOutboundMessage(Object msg) {
+        if (msg instanceof ByteBuf) {
+            ByteBuf buf = (ByteBuf) msg;
+            if (buf.isDirect()) {
+                return msg;
+            }
+
+            return newDirectBuffer(buf);
+        }
+
+        if (msg instanceof FileRegion) {
+            return msg;
+        }
+
+        throw new UnsupportedOperationException(
+            "unsupported message type: " + StringUtil.simpleClassName(msg) + EXPECTED_TYPES);
+    }
+}
+```
+
+
+
+pipeline 中会有一个 estimatorHandle 专门用来计算待发送 ByteBuffer 的大小。这个 estimatorHandle 会在 pipeline 对应的 Channel 中的配置类创建的时候被初始化
+
+```java
+public class DefaultChannelPipeline implements ChannelPipeline {
+    private volatile MessageSizeEstimator.Handle estimatorHandle;
+
+    final MessageSizeEstimator.Handle estimatorHandle() {
+        MessageSizeEstimator.Handle handle = estimatorHandle;
+        if (handle == null) {
+            handle = channel.config().getMessageSizeEstimator().newHandle();
+            if (!ESTIMATOR.compareAndSet(this, null, handle)) {
+                handle = estimatorHandle;
+            }
+        }
+        return handle;
+    }
+}
+```
 
 #### SimpleChannelInboundHandler
 

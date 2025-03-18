@@ -248,6 +248,13 @@ end
 
 ### Write
 
+Netty 中有两个触发 write 事件传播的方法，它们的传播处理逻辑都是一样的，只不过它们在 pipeline 中的传播起点是不同的。
+- channelHandlerContext.write() 方法会从当前 ChannelHandler 开始在 pipeline 中向前传播 write 事件直到 HeadContext。
+- channelHandlerContext.channel().write() 方法则会从 pipeline 的尾结点 TailContext 开始在 pipeline 中向前传播 write 事件直到 HeadContext
+
+
+
+
 - check isActive & isWritable
 - OP_WRITE for could write
 - write/flush run in EventLoop
