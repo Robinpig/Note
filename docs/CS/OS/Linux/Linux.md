@@ -60,11 +60,9 @@ Linux在最初是宏内核架构 同时也逐渐融入了微内核的精华 如�
 
 vmlinux 是生成的内核二进制文件它是一个没有压缩的镜像
 
-**Image**是vmlinux经过OBJCOPY后生成的纯二进制映像文件
-
-**zImage**是Image经过压缩后形成的一种映像压缩文件
-
-**uImage**是在zImage基础上在前面64字节加上内核信息后的映像压缩文件，供uboot使用
+- **Image**是vmlinux经过OBJCOPY后生成的纯二进制映像文件
+- **zImage**是Image经过压缩后形成的一种映像压缩文件
+- **uImage**是在zImage基础上在前面64字节加上内核信息后的映像压缩文件，供uboot使用
 
 fs可以通过不同的tools来构建
 
@@ -106,12 +104,9 @@ qemu启动只携带kernel会error `unable to mount root fs`
 依赖
 
 ```shell
-sudo apt-get install -y  procps  vim  bc bison build-essential cpio  flex  libelf-dev     libncurses-dev gcc g++ make libssl-dev
+sudo apt-get install -y  procps  vim  bc bison build-essential cpio  flex  libelf-dev  libncurses-dev gcc g++ make libssl-dev
 
 ```
-
-
-
 
 
 
@@ -122,9 +117,17 @@ make defconfig
 
 
 
+
 或者使用 `make menuconfig` 更方便
 
 > Kernel hacking ---> Compile-time checks and compiler options 开启GDB Scripts
+
+
+| 编译报错 | 解决方法 |
+| --- | --- |
+| No rule to make target 'debian/certs/debian-uefi-certs.pem | vim .config 文件 remove包含 debian 的key配置 |
+
+
 
 
 
