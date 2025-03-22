@@ -40,7 +40,7 @@ Container via Virtual Machine:
 
 符合 OCI 规范的几款主流容器化技术做一下分析
 
-- runc 是一个符合 OCI 标准的容器运行时，它是 Docker/Containerd 核心容器引擎的一部分。它使用 Linux 的命名空间（Namespace）和控制组（Cgroup）技术来实现容器的隔离
+- runc 是一个符合 OCI 标准的容器运行时，它是 Docker/Containerd 核心容器引擎的一部分。它使用 Linux 的 [Namespace](/docs/CS/OS/Linux/namespace.md) 和 [Cgroup](/docs/CS/OS/Linux/cgroup.md) 技术来实现容器的隔离
   在运行容器时，runc 使用命名空间隔离容器的进程、网络、文件系统和 IPC（进程间通信）。它还使用控制组来限制容器内进程的资源使用。这种隔离技术使得容器内的应用程序可以在一个相对独立的环境中运行，与宿主机和其他容器隔离开来。
   runc 的隔离技术虽然引入了一定开销，但是这种开销仅限于命名空间映射、限制检查和一些记账逻辑，理论上影响很小，而且当 syscall 是长耗时操作时，这种影响几乎可以忽略不计，一般情况下，基于 Namespace+Cgroup 的隔离技术对 CPU、内存、I/O 性能的影响较小
 - Kata Containers 是一个使用虚拟机技术实现的容器运行时，它提供了更高的隔离性和安全性。Kata Containers 使用了 Intel 的 Clear Containers 技术，并结合了轻量级虚拟机监控器和容器运行时。
@@ -76,7 +76,7 @@ The rapid growth in interest and usage of container-based solutions has led to t
 The Open Container Initiative (OCI), established in June 2015 by Docker and other industry leaders, is promoting common, minimal, open standards and specifications around container technology. 
 
 Today, Docker is one of the most well-known and highly used container engine technologies, but it is not the only option available. 
-The ecosystem is standardizing on containerd and other alternatives like CoreOS rkt, Mesos Containerizer, LXC Linux Containers, OpenVZ, and crio-d.
+The ecosystem is standardizing on containerd and other alternatives like CoreOS rkt, Mesos Containerizer, [LXC Linux Containers](/docs/CS/OS/Linux/LXC.md), OpenVZ, and crio-d.
 Features and defaults may differ, but adopting and leveraging OCI specifications as these evolve will ensure that solutions are vendor-neutral, 
 certified to run on multiple operating systems and usable in multiple environments.
 
@@ -84,190 +84,11 @@ certified to run on multiple operating systems and usable in multiple environmen
 
 
 
-
-## LXC
-
-LXC is a userspace interface for the Linux kernel containment features. 
-Through a powerful API and simple tools, it lets Linux users easily create and manage system or application containers.
-
-Current LXC uses the following kernel features to contain processes:
-
-- Kernel namespaces (ipc, uts, mount, pid, network and user)
-- Apparmor and SELinux profiles
-- Seccomp policies
-- Chroots (using pivot_root)
-- Kernel capabilities
-- CGroups (control groups)
-
-We can simplify to create a container:
-
-```c
-pid = clone(fun, stack, flags, clone_arg);
-(flags: CLONE_NEWPID  | CLONE_NEWNS  |
-    CLONE_NEWUSER | CLONE_NEWNET |
-    CLONE_NEWIPC  | CLONE_NEWUTS |
-    ...)
-
-echo $pid > /sys/fs/cgroup/cpu/tasks
-echo $pid > /sys/fs/cgroup/cpuset/tasks
-echo $pid > /sys/fs/cgroup/blkio/tasks
-echo $pid > /sys/fs/cgroup/memory/tasks
-echo $pid > /sys/fs/cgroup/devices/tasks
-echo $pid > /sys/fs/cgroup/freezer/tasks
-
-fun()
-{
-    ...
-    pivot_root("path_of_rootfs/", path);
-    ...
-    exec("/bin/bash");
-    ...
-}
-```
-
-
-
-
-
-## cgroup
-
-"cgroup" stands for "control group" and is never capitalized.
-The singular form is used to designate the whole feature and also as a qualifier as in "cgroup controllers". 
-When explicitly referring to multiple individual control groups, the plural form "cgroups" is used.
-
-cgroup is a mechanism to organize processes hierarchically and distribute system resources along the hierarchy in a controlled and configurable manner.
-
-cgroup is largely composed of two parts - the core and controllers. 
-cgroup core is primarily responsible for hierarchically organizing processes. 
-A cgroup controller is usually responsible for distributing a specific type of system resource along the hierarchy although there are utility controllers which serve purposes other than resource distribution.
-
-cgroups form a tree structure and every process in the system belongs to one and only one cgroup.
-All threads of a process belong to the same cgroup.
-On creation, all processes are put in the cgroup that the parent process belongs to at the time.
-A process can be migrated to another cgroup. Migration of a process doesn't affect already existing descendant processes.
-
-Following certain structural constraints, controllers may be enabled or disabled selectively on a cgroup. 
-All controller behaviors are hierarchical - if a controller is enabled on a cgroup, it affects all processes which belong to the cgroups consisting the inclusive sub-hierarchy of the cgroup. 
-When a controller is enabled on a nested cgroup, it always restricts the resource distribution further.
-The restrictions set closer to the root in the hierarchy can not be overridden from further away.
-
-cgroups are, therefore, a facility built into the kernel that allow the administrator to set resource utilization limits on any process on the system. 
-In general, cgroups control:
-
-- The number of CPU shares per process.
-- The limits on memory per process.
-- Block Device I/O per process.
-- Which network packets are identified as the same type so that another application can enforce network traffic rules.
-
-```shell
-cd /sys/fs/cgroup/cpu,cpuacct
-mkdir test
-cd test
-echo 100000 > cpu.cfs_period_us // 100ms 
-echo 100000 > cpu.cfs_quota_us //200ms 
-echo {$pid} > cgroup.procs
-```
-
-All cgroup_subsys_state(such as cpu, cpuset and memory) are inherited from different ancestors.
-
-| cgroup_subsys_state type | ancestor |
-| --- | --- |
-| cpu |  task_group |
-| memory | mem_cgroup |
-| dev | dev_cgroup |
-
-
-```c
-struct cgroup {
-	/* Private pointers for each registered subsystem */
-	struct cgroup_subsys_state __rcu *subsys[CGROUP_SUBSYS_COUNT];
-};  
-```
-
-
-Let's see the task_struct.
-
-```c
-struct task_struct {
-  #ifdef CONFIG_CGROUPS
-	/* Control Group info protected by css_set_lock: */
-	struct css_set __rcu		*cgroups;
-	/* cg_list protected by css_set_lock and tsk->alloc_lock: */
-	struct list_head		cg_list;
-#endif
-}
-```
-
-A css_set is a structure holding pointers to a set of cgroup_subsys_state objects.
-This saves space in the task struct object and speeds up `fork()`/`exit()`, since a single inc/dec and a list_add()/del() can bump the reference count on the entire cgroup set for a task.
-
-```c
-struct css_set {
-	/*
-	 * Set of subsystem states, one for each subsystem. This array is
-	 * immutable after creation apart from the init_css_set during
-	 * subsystem registration (at boot time).
-	 */
-	struct cgroup_subsys_state *subsys[CGROUP_SUBSYS_COUNT];
-}    
-```
-
-
-
-
-
-## Namespace
-
-A namespace wraps a global system resource in an abstraction that makes it appear to the processes within the namespace that they have their own isolated instance of the global resource.
-Changes to the global resource are visible to other processes that are members of the namespace, but are invisible to other processes.
-One use of namespaces is to implement containers.
-
-| Namespace | Flag |            Page                  | Isolates |
-| --- | --- | --- | --- |
-| Cgroup |    CLONE_NEWCGROUP | cgroup_namespaces(7)  | Cgroup root directory |
-| IPC |       CLONE_NEWIPC |    ipc_namespaces(7)     | System V IPC, POSIX message queues |
-| Network |   CLONE_NEWNET |    network_namespaces(7) | Network devices, stacks, ports, etc. |
-| Mount |     CLONE_NEWNS |     mount_namespaces(7)   | Mount points |
-| PID |       CLONE_NEWPID |    pid_namespaces(7)     | Process IDs |
-| Time |      CLONE_NEWTIME |   time_namespaces(7)    | Boot and monotonic clocks |
-| User |      CLONE_NEWUSER |   user_namespaces(7)    | User and group IDs |
-| UTS |       CLONE_NEWUTS |    uts_namespaces(7)     | Hostname and NIS domain name |
-
-The namespaces API
-
-As well as various /proc files described below, the namespaces API includes the following system calls:
-
-- clone(2)<br/>
-  The clone(2) system call creates a new process.  
-  If the flags argument of the call specifies one or more of the CLONE_NEW* flags listed above, 
-  then new namespaces are created for each flag, and the child process is made a member of those namespaces. 
-  (This system call also implements a number of features unrelated to namespaces.)
-- setns(2)<br/>
-  The setns(2) system call allows the calling process to join an existing namespace.  
-  The namespace to join is specified via a file descriptor that refers to one of the `/proc/pid/ns` files described below.
-- unshare(2)<br/>
-  The unshare(2) system call moves the calling process to a new namespace. 
-  If the flags argument of the call specifies one or more of the CLONE_NEW* flags listed above,
-  then new namespaces are created for each flag, and the calling process is made a member of those namespaces.
-  (This system call also implements a number of features unrelated to namespaces.)
-- ioctl(2)<br/>
-  Various ioctl(2) operations can be used to discover information about namespaces.  These operations are described in ioctl_ns(2).
-
-
-pivot_root() changes the root mount in the mount namespace of the calling process.
-More precisely, it moves the root mount to the directory put_old and makes new_root the new root mount.
-The calling process must have the CAP_SYS_ADMIN capability in the user namespace that owns the caller's mount namespace.
-
-pivot_root() changes the root directory and the current working directory of each process or thread in the same mount namespace to new_root if they point to the old root directory.
-On the other hand, pivot_root() does not change the caller's current working directory (unless it is on the old root directory), and thus it should be followed by a chdir("/") call.
-
-
-
-
-
 ## Links
 
+- [Operating Systems](/docs/CS/OS/OS.md)
 
 
 ## References
-1. [](https://www.infoq.cn/article/sh2tjyw1dki4zqpakujj)
+
+1. [不敢把数据库运行在 K8s 上？容器化对数据库性能有影响吗？](https://www.infoq.cn/article/sh2tjyw1dki4zqpakujj)

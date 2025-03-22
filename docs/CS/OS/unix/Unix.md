@@ -1,7 +1,5 @@
 ## Introduction
 
-## 
-
 What is Unix?
 
 A generous definition: Those operating systems derived from or inspired by the Research Unix systems of the 1970s.

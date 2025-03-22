@@ -6,7 +6,8 @@ Besides, different CPU architectures, and even different implementations of the 
 All this makes dealing directly with physical memory quite complex and to avoid this complexity a concept of virtual memory was developed.
 
 The virtual memory abstracts the details of physical memory from the application software, allows to keep only needed information in the physical memory (demand paging) and provides a mechanism for the protection and controlled sharing of data between processes.
-With virtual memory, each and every memory access uses a virtual address. When the CPU decodes an instruction that reads (or writes) from (or to) the system memory, it translates the virtual address encoded in that instruction to a physical address that the memory controller can understand.
+With virtual memory, each and every memory access uses a virtual address. 
+When the CPU decodes an instruction that reads (or writes) from (or to) the system memory, it translates the virtual address encoded in that instruction to a physical address that the memory controller can understand.
 
 The physical system memory is divided into page frames, or pages. 
 The size of each page is architecture specific. 
@@ -16,12 +17,23 @@ Each physical memory page can be mapped as one or more virtual pages.
 These mappings are described by page tables that allow translation from a virtual address used by programs to the physical memory address. 
 The page tables are organized hierarchically.
 
-The tables at the lowest level of the hierarchy contain physical addresses of actual pages used by the software. The tables at higher levels contain physical addresses of the pages belonging to the lower levels. The pointer to the top level page table resides in a register. When the CPU performs the address translation, it uses this register to access the top level page table. The high bits of the virtual address are used to index an entry in the top level page table. That entry is then used to access the next level in the hierarchy with the next bits of the virtual address as the index to that level page table. The lowest bits in the virtual address define the offset inside the actual page.
+The tables at the lowest level of the hierarchy contain physical addresses of actual pages used by the software. 
+The tables at higher levels contain physical addresses of the pages belonging to the lower levels. 
+The pointer to the top level page table resides in a register. 
+When the CPU performs the address translation, it uses this register to access the top level page table. 
+The high bits of the virtual address are used to index an entry in the top level page table. 
+That entry is then used to access the next level in the hierarchy with the next bits of the virtual address as the index to that level page table.
+The lowest bits in the virtual address define the offset inside the actual page.
 
 
 
-The address translation requires several memory accesses and memory accesses are slow relatively to CPU speed. To avoid spending precious processor cycles on the address translation, CPUs maintain a cache of such translations called Translation Lookaside Buffer (or TLB). Usually TLB is pretty scarce resource and applications with large memory working set will experience performance hit because of TLB misses.
-Many modern CPU architectures allow mapping of the memory pages directly by the higher levels in the page table. For instance, on x86, it is possible to map 2M and even 1G pages using entries in the second and the third level page tables. In Linux such pages are called huge. Usage of huge pages significantly reduces pressure on TLB, improves TLB hit-rate and thus improves overall system performance.
+The address translation requires several memory accesses and memory accesses are slow relatively to CPU speed.
+To avoid spending precious processor cycles on the address translation, CPUs maintain a cache of such translations called Translation Lookaside Buffer (or TLB). 
+Usually TLB is pretty scarce resource and applications with large memory working set will experience performance hit because of TLB misses.
+Many modern CPU architectures allow mapping of the memory pages directly by the higher levels in the page table. 
+For instance, on x86, it is possible to map 2M and even 1G pages using entries in the second and the third level page tables. 
+In Linux such pages are called huge. 
+Usage of huge pages significantly reduces pressure on TLB, improves TLB hit-rate and thus improves overall system performance.
 
 There are two mechanisms in Linux that enable mapping of the physical memory with the huge pages. 
 The first one is HugeTLB filesystem, or hugetlbfs. 

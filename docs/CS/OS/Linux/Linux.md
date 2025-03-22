@@ -23,8 +23,8 @@ Linux系统诞生于1991年10月5日
 
 跨平台在其它OS下使用Linux
 
-- [Docker]()
-- 虚拟机
+- [Docker](/docs/CS/Container/Docker.md)
+- [VM](/docs/CS/OS/VM.md)
 
 Windows下使用Linux
 
@@ -46,9 +46,11 @@ Linux在最初是宏内核架构 同时也逐渐融入了微内核的精华 如�
 
 
 
-[Linux 0.11](/docs/CS/OS/Linux/0.11.md)
 
 ## Kernel
+
+[Linux 0.11](/docs/CS/OS/Linux/0.11.md)
+
 
 调试环境需要安装qemu+gdb
 

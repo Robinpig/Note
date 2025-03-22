@@ -4,13 +4,8 @@ There is a body of software, in fact, that is responsible for making it easy to 
 That body of software is called the operating system (OS), as it is in charge of making sure the system operates correctly and efficiently in an easy-to-use manner.
 An operating system (OS) is a software program that serves as the interface between other applications and the hardware on a computer or mobile device.
 
-- Kernel
-- Shell
-
-
 
 操作系统具备的功能
-
 
 - Abstract
 - Multiplex, sharing and isolation
@@ -185,19 +180,17 @@ As long as there is no need for per-core concurrency, they are probably a good c
 [BootLoader](/docs/CS/OS/BootLoader.md)
 
 
-## Kernel Compile
+## OSs
 
 
 
+常见的操作系统
 
-
-[Linux](/docs/CS/OS/Linux/Linux.md) is an operating system.
-
-[xv6](/docs/CS/OS/xv6/xv6.md)
-
-[MacOS](/docs/CS/OS/mac/mac.md)
-
-[Windows](/docs/CS/OS/Windows/Windows.md)
+- [UNIX](/docs/CS/OS/unix/Unix.md)
+- [Linux](/docs/CS/OS/Linux/Linux.md) is an operating system.
+- [xv6](/docs/CS/OS/xv6/xv6.md)
+- [MacOS](/docs/CS/OS/mac/mac.md)
+- [Windows](/docs/CS/OS/Windows/Windows.md)
 
 ## Performance
 
