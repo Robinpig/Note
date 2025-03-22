@@ -336,6 +336,130 @@ out:
 - select_task_rq 选择一个适合的CPU
 - set_task_cpu 为进程指定运行队列
 
+##### select_task_rq
+
+select_task_rq 函数中会优先尝试使用 wake_affine机制调度到自己睡眠前的CPU核或者当前核上
+但不一定总会成功 有可能调度到其它核上
+
+```c
+static inline
+int select_task_rq(struct task_struct *p, int cpu, int *wake_flags)
+{
+	lockdep_assert_held(&p->pi_lock);
+
+	if (p->nr_cpus_allowed > 1 && !is_migration_disabled(p)) {
+		cpu = p->sched_class->select_task_rq(p, cpu, *wake_flags);
+		*wake_flags |= WF_RQ_SELECTED;
+	} else {
+		cpu = cpumask_any(p->cpus_ptr);
+	}
+
+	/*
+	 * In order not to call set_task_cpu() on a blocking task we need
+	 * to rely on ttwu() to place the task on a valid ->cpus_ptr
+	 * CPU.
+	 *
+	 * Since this is common to all placement strategies, this lives here.
+	 *
+	 * [ this allows ->select_task() to simply return task_cpu(p) and
+	 *   not worry about this generic constraint ]
+	 */
+	if (unlikely(!is_cpu_allowed(p, cpu)))
+		cpu = select_fallback_rq(task_cpu(p), p);
+
+	return cpu;
+}
+```
+
+##### ttwu_queue
+```c
+static void ttwu_queue(struct task_struct *p, int cpu, int wake_flags)
+{
+	struct rq *rq = cpu_rq(cpu);
+	struct rq_flags rf;
+
+	if (ttwu_queue_wakelist(p, cpu, wake_flags))
+		return;
+
+	rq_lock(rq, &rf);
+	update_rq_clock(rq);
+	ttwu_do_activate(rq, p, wake_flags, &rf);
+	rq_unlock(rq, &rf);
+}
+```
+
+```c
+static void
+ttwu_do_activate(struct rq *rq, struct task_struct *p, int wake_flags,
+		 struct rq_flags *rf)
+{
+	int en_flags = ENQUEUE_WAKEUP | ENQUEUE_NOCLOCK;
+
+	lockdep_assert_rq_held(rq);
+
+	if (p->sched_contributes_to_load)
+		rq->nr_uninterruptible--;
+
+#ifdef CONFIG_SMP
+	if (wake_flags & WF_RQ_SELECTED)
+		en_flags |= ENQUEUE_RQ_SELECTED;
+	if (wake_flags & WF_MIGRATED)
+		en_flags |= ENQUEUE_MIGRATED;
+	else
+#endif
+	if (p->in_iowait) {
+		delayacct_blkio_end(p);
+		atomic_dec(&task_rq(p)->nr_iowait);
+	}
+
+	activate_task(rq, p, en_flags);
+	wakeup_preempt(rq, p, wake_flags);
+
+	ttwu_do_wakeup(p);
+
+#ifdef CONFIG_SMP
+	if (p->sched_class->task_woken) {
+		/*
+		 * Our task @p is fully woken up and running; so it's safe to
+		 * drop the rq->lock, hereafter rq is only used for statistics.
+		 */
+		rq_unpin_lock(rq, rf);
+		p->sched_class->task_woken(rq, p);
+		rq_repin_lock(rq, rf);
+	}
+
+	if (rq->idle_stamp) {
+		u64 delta = rq_clock(rq) - rq->idle_stamp;
+		u64 max = 2*rq->max_idle_balance_cost;
+
+		update_avg(&rq->avg_idle, delta);
+
+		if (rq->avg_idle > max)
+			rq->avg_idle = max;
+
+		rq->idle_stamp = 0;
+	}
+#endif
+}
+```
+activate_task 将进程添加到自己所属运行队列的红黑树中
+
+```c
+void activate_task(struct rq *rq, struct task_struct *p, int flags)
+{
+	if (task_on_rq_migrating(p))
+		flags |= ENQUEUE_MIGRATED;
+	if (flags & ENQUEUE_MIGRATED)
+		sched_mm_cid_migrate_to(rq, p);
+
+	enqueue_task(rq, p, flags);
+
+	WRITE_ONCE(p->on_rq, TASK_ON_RQ_QUEUED);
+	ASSERT_EXCLUSIVE_WRITER(p->on_rq);
+}
+```
+
+
 ### autoremove_wake_function
 
 ```c
