@@ -986,3 +986,8 @@ out_put_task:
 	return retval;
 }
 ```
+
+
+## Links
+
+- [processes](/docs/CS/OS/Linux/proc/process.md)

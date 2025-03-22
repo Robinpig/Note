@@ -76,3 +76,7 @@ Pthread_mutex_unlock(&lock);
 ```
 
 
+
+## Links
+
+- [processes](/docs/CS/OS/Linux/proc/process.md)
