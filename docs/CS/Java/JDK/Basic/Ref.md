@@ -197,7 +197,7 @@ public abstract class Reference<T> {
 ## ReferenceHandler
 
 1. from PendingList to ReferenceQueue in a loop.
-2. if instanceof Cleaner , `invoke Cleaner.clean()` like DirectByteBuffer is free by [Cleaner](/docs/CS/Java/JDK/Basic/Direct_Buffer.md?id=cleaner).
+2. if instanceof Cleaner , `invoke Cleaner.clean()` like DirectByteBuffer is free by [Cleaner](/docs/CS/Java/JDK/IO/Direct_Buffer.md?id=cleaner).
 
 Create Reference Object
 

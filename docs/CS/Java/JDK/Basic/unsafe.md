@@ -30,7 +30,7 @@ public class TestUnsafe {
 
 ### Direct Memory
 
-[Direct Memory Management](/docs/CS/Java/JDK/Basic/Direct_Buffer.md)
+[Direct Memory Management](/docs/CS/Java/JDK/IO/Direct_Buffer.md)
 
 
 

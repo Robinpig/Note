@@ -6,7 +6,7 @@
 - [unsafe](/docs/CS/Java/JDK/Basic/unsafe.md)
 - [Ref](/docs/CS/Java/JDK/Basic/Ref.md)
 - [Reflection](/docs/CS/Java/JDK/Basic/Reflection.md)
-- [Direct Buffer](/docs/CS/Java/JDK/Basic/Direct_Buffer.md)
+- [Direct Buffer](/docs/CS/Java/JDK/IO/Direct_Buffer.md)
 - [JDK Tools and Utilities](/docs/CS/Java/JDK/Basic/Tools.md)
 - [Annotation](/docs/CS/Java/JDK/Basic/Annotation.md)
 - [Lambda](/docs/CS/Java/JDK/Basic/Lambda.md)
