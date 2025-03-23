@@ -21,16 +21,364 @@ Linux 内核使用页式内存管理，应用程序给出的内存地址是虚�
 （实际上只有用户态的地址映射才需要管理，内核态的地址映射是写死的
 
 
+
+```c
+// arch/x86/boot/main.c
+void main(void)
+{
+	/* Detect memory layout */
+	detect_memory();
+}
+```
+
+
 ## init
 
 内核的正式入口是 start_kernel, 前面的讨论基本都发生在 start_kernel 之后，但实际上在它之 前我们就需要访问内存了， 那么首先要做的就是识别系统中的内存， 由 detect_memo-1 y实现。
 根据硬件和BIOS的配置，detect_memo1-y依次调用detect_memory_e820、 cletect_memo1-y_e801 和 cletect_memm-y_88, 最终哪一个函数起作用取决于硬件和 BIOS 的配置
-后二者作为兼容老机器 存在， 此处主要以现代计算机中的 cletect_memor y_e820 为主进行分析。
-三者都是通过与 BIOS 通信实现的， 给 BIOS 发送 OxlS 中断， 根据 BIOS 反馈的信息提取内存 信息。 以detect_memory_e820为例，每一条有效的信息都被存储在boot_params.e820_table数组中
+后二者作为兼容老机器 存在， 此处主要以现代计算机中的 cletect_memor y_e820 为主进行分析
+三者都是通过与 BIOS 通信实现的， 给 BIOS 发送 OxlS 中断， 根据 BIOS 反馈的信息提取内存信息。
+以detect_memory_e820为例，每一条有效的信息都被存储在boot_params.e820_table数组中
 (类型为boot_e820_entr y)。
 boot_e820_entl-y有3 个字段， addr和size字段分别表示一段内存的起始地址和大小，type字段表示这段内存的用途。
 
 
+
+[init](/docs/CS/OS/Linux/init.md) 
+
+
+- 调用e820__memory_setup 将检测结果保存到 e820-table 全局数据结构中
+- e820__memoryblock_setup 函数创建 memblock 内存分配器
+- x86_init.paging.pagetable_init 分页机制初始化
+
+```c
+// arch/x86/kernel/setup.c
+void __init setup_arch(char **cmdline_p)
+{
+#ifdef CONFIG_X86_32
+	memcpy(&boot_cpu_data, &new_cpu_data, sizeof(new_cpu_data));
+
+	/*
+	 * copy kernel address range established so far and switch
+	 * to the proper swapper page table
+	 */
+	clone_pgd_range(swapper_pg_dir     + KERNEL_PGD_BOUNDARY,
+			initial_page_table + KERNEL_PGD_BOUNDARY,
+			KERNEL_PGD_PTRS);
+
+	load_cr3(swapper_pg_dir);
+
+	__flush_tlb_all();
+#else
+	printk(KERN_INFO "Command line: %s\n", boot_command_line);
+	boot_cpu_data.x86_phys_bits = MAX_PHYSMEM_BITS;
+#endif
+
+#ifdef CONFIG_CMDLINE_BOOL
+#ifdef CONFIG_CMDLINE_OVERRIDE
+	strscpy(boot_command_line, builtin_cmdline, COMMAND_LINE_SIZE);
+#else
+	if (builtin_cmdline[0]) {
+		/* append boot loader cmdline to builtin */
+		strlcat(builtin_cmdline, " ", COMMAND_LINE_SIZE);
+		strlcat(builtin_cmdline, boot_command_line, COMMAND_LINE_SIZE);
+		strscpy(boot_command_line, builtin_cmdline, COMMAND_LINE_SIZE);
+	}
+#endif
+	builtin_cmdline_added = true;
+#endif
+
+	strscpy(command_line, boot_command_line, COMMAND_LINE_SIZE);
+	*cmdline_p = command_line;
+
+	/*
+	 * If we have OLPC OFW, we might end up relocating the fixmap due to
+	 * reserve_top(), so do this before touching the ioremap area.
+	 */
+	olpc_ofw_detect();
+
+	idt_setup_early_traps();
+	early_cpu_init();
+	jump_label_init();
+	static_call_init();
+	early_ioremap_init();
+
+	setup_olpc_ofw_pgd();
+
+	ROOT_DEV = old_decode_dev(boot_params.hdr.root_dev);
+	screen_info = boot_params.screen_info;
+	edid_info = boot_params.edid_info;
+#ifdef CONFIG_X86_32
+	apm_info.bios = boot_params.apm_bios_info;
+	ist_info = boot_params.ist_info;
+#endif
+	saved_video_mode = boot_params.hdr.vid_mode;
+	bootloader_type = boot_params.hdr.type_of_loader;
+	if ((bootloader_type >> 4) == 0xe) {
+		bootloader_type &= 0xf;
+		bootloader_type |= (boot_params.hdr.ext_loader_type+0x10) << 4;
+	}
+	bootloader_version  = bootloader_type & 0xf;
+	bootloader_version |= boot_params.hdr.ext_loader_ver << 4;
+
+#ifdef CONFIG_BLK_DEV_RAM
+	rd_image_start = boot_params.hdr.ram_size & RAMDISK_IMAGE_START_MASK;
+#endif
+#ifdef CONFIG_EFI
+	if (!strncmp((char *)&boot_params.efi_info.efi_loader_signature,
+		     EFI32_LOADER_SIGNATURE, 4)) {
+		set_bit(EFI_BOOT, &efi.flags);
+	} else if (!strncmp((char *)&boot_params.efi_info.efi_loader_signature,
+		     EFI64_LOADER_SIGNATURE, 4)) {
+		set_bit(EFI_BOOT, &efi.flags);
+		set_bit(EFI_64BIT, &efi.flags);
+	}
+#endif
+
+	x86_init.oem.arch_setup();
+
+	early_reserve_memory();
+
+	iomem_resource.end = (1ULL << boot_cpu_data.x86_phys_bits) - 1;
+	e820__memory_setup();
+	parse_setup_data();
+
+	copy_edd();
+
+	if (!boot_params.hdr.root_flags)
+		root_mountflags &= ~MS_RDONLY;
+	setup_initial_init_mm(_text, _etext, _edata, (void *)_brk_end);
+
+	code_resource.start = __pa_symbol(_text);
+	code_resource.end = __pa_symbol(_etext)-1;
+	rodata_resource.start = __pa_symbol(__start_rodata);
+	rodata_resource.end = __pa_symbol(__end_rodata)-1;
+	data_resource.start = __pa_symbol(_sdata);
+	data_resource.end = __pa_symbol(_edata)-1;
+	bss_resource.start = __pa_symbol(__bss_start);
+	bss_resource.end = __pa_symbol(__bss_stop)-1;
+
+	x86_configure_nx();
+
+	parse_early_param();
+
+	if (efi_enabled(EFI_BOOT))
+		efi_memblock_x86_reserve_range();
+
+	x86_report_nx();
+
+	apic_setup_apic_calls();
+
+	if (acpi_mps_check()) {
+#ifdef CONFIG_X86_LOCAL_APIC
+		apic_is_disabled = true;
+#endif
+		setup_clear_cpu_cap(X86_FEATURE_APIC);
+	}
+
+	e820__reserve_setup_data();
+	e820__finish_early_params();
+
+	if (efi_enabled(EFI_BOOT))
+		efi_init();
+
+	reserve_ibft_region();
+	x86_init.resources.dmi_setup();
+
+	init_hypervisor_platform();
+
+	tsc_early_init();
+	x86_init.resources.probe_roms();
+
+	/* after parse_early_param, so could debug it */
+	insert_resource(&iomem_resource, &code_resource);
+	insert_resource(&iomem_resource, &rodata_resource);
+	insert_resource(&iomem_resource, &data_resource);
+	insert_resource(&iomem_resource, &bss_resource);
+
+	e820_add_kernel_range();
+	trim_bios_range();
+#ifdef CONFIG_X86_32
+	if (ppro_with_ram_bug()) {
+		e820__range_update(0x70000000ULL, 0x40000ULL, E820_TYPE_RAM,
+				  E820_TYPE_RESERVED);
+		e820__update_table(e820_table);
+		printk(KERN_INFO "fixed physical RAM map:\n");
+		e820__print_table("bad_ppro");
+	}
+#else
+	early_gart_iommu_check();
+#endif
+
+	/*
+	 * partially used pages are not usable - thus
+	 * we are rounding upwards:
+	 */
+	max_pfn = e820__end_of_ram_pfn();
+
+	/* update e820 for memory not covered by WB MTRRs */
+	cache_bp_init();
+	if (mtrr_trim_uncached_memory(max_pfn))
+		max_pfn = e820__end_of_ram_pfn();
+
+	max_possible_pfn = max_pfn;
+
+	/*
+	 * Define random base addresses for memory sections after max_pfn is
+	 * defined and before each memory section base is used.
+	 */
+	kernel_randomize_memory();
+
+#ifdef CONFIG_X86_32
+	/* max_low_pfn get updated here */
+	find_low_pfn_range();
+#else
+	check_x2apic();
+
+	/* How many end-of-memory variables you have, grandma! */
+	/* need this before calling reserve_initrd */
+	if (max_pfn > (1UL<<(32 - PAGE_SHIFT)))
+		max_low_pfn = e820__end_of_low_ram_pfn();
+	else
+		max_low_pfn = max_pfn;
+
+	high_memory = (void *)__va(max_pfn * PAGE_SIZE - 1) + 1;
+#endif
+
+	/* Find and reserve MPTABLE area */
+	x86_init.mpparse.find_mptable();
+
+	early_alloc_pgt_buf();
+
+	reserve_brk();
+
+	cleanup_highmap();
+
+	memblock_set_current_limit(ISA_END_ADDRESS);
+	e820__memblock_setup();
+
+	/*
+	 * Needs to run after memblock setup because it needs the physical
+	 * memory size.
+	 */
+	mem_encrypt_setup_arch();
+	cc_random_init();
+
+	efi_find_mirror();
+	efi_esrt_init();
+	efi_mokvar_table_init();
+
+	/*
+	 * The EFI specification says that boot service code won't be
+	 * called after ExitBootServices(). This is, in fact, a lie.
+	 */
+	efi_reserve_boot_services();
+
+	/* preallocate 4k for mptable mpc */
+	e820__memblock_alloc_reserved_mpc_new();
+
+	x86_platform.realmode_reserve();
+
+	init_mem_mapping();
+
+	cpu_init_replace_early_idt();
+
+	mmu_cr4_features = __read_cr4() & ~X86_CR4_PCIDE;
+
+	memblock_set_current_limit(get_max_mapped());
+
+	/* Allocate bigger log buffer */
+	setup_log_buf(1);
+
+	reserve_initrd();
+
+	acpi_table_upgrade();
+	/* Look for ACPI tables and reserve memory occupied by them. */
+	acpi_boot_table_init();
+
+	vsmp_init();
+
+	io_delay_init();
+
+	early_platform_quirks();
+
+	/* Some platforms need the APIC registered for NUMA configuration */
+	early_acpi_boot_init();
+	x86_init.mpparse.early_parse_smp_cfg();
+
+	x86_flattree_get_config();
+
+	initmem_init();
+	dma_contiguous_reserve(max_pfn_mapped << PAGE_SHIFT);
+
+	if (boot_cpu_has(X86_FEATURE_GBPAGES))
+		hugetlb_cma_reserve(PUD_SHIFT - PAGE_SHIFT);
+
+	/*
+	 * Reserve memory for crash kernel after SRAT is parsed so that it
+	 * won't consume hotpluggable memory.
+	 */
+	arch_reserve_crashkernel();
+
+	if (!early_xdbc_setup_hardware())
+		early_xdbc_register_console();
+
+    // 开启分页
+	x86_init.paging.pagetable_init();
+
+	kasan_init();
+
+	sync_initial_page_table();
+
+	tboot_probe();
+
+	map_vsyscall();
+
+	x86_32_probe_apic();
+
+	early_quirks();
+
+	topology_apply_cmdline_limits_early();
+
+	/*
+	 * Parse SMP configuration. Try ACPI first and then the platform
+	 * specific parser.
+	 */
+	acpi_boot_init();
+	x86_init.mpparse.parse_smp_cfg();
+
+	/* Last opportunity to detect and map the local APIC */
+	init_apic_mappings();
+
+	topology_init_possible_cpus();
+
+	init_cpu_to_node();
+	init_gi_nodes();
+
+	io_apic_init_mappings();
+
+	x86_init.hyper.guest_late_init();
+
+	e820__reserve_resources();
+	e820__register_nosave_regions(max_pfn);
+
+	x86_init.resources.reserve_resources();
+
+	e820__setup_pci_gap();
+
+	x86_init.oem.banner();
+
+	x86_init.timers.wallclock_init();
+
+	therm_lvt_init();
+
+	mcheck_init();
+
+	register_refined_jiffies(CLOCK_TICK_RATE);
+
+	unwind_init();
+}
+```
 
 
 Set up kernel memory allocators
@@ -72,6 +420,15 @@ mem init
 
 
 
+#### 
+
+```c
+struct x86_init_ops x86_init __initdata = {
+	.paging = {
+		.pagetable_init		= native_pagetable_init,
+	}
+};
+```
 setup_arch -> paging_init
 
 ```c

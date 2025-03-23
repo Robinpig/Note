@@ -1,11 +1,5 @@
 ## Introduction
 
-
-
-
-
-
-
 Like any other program, the kernel goes through a load and initialization phase before performing its normal tasks.
 Although this phase is not particularly interesting in the case of normal applications, the kernel — as the central system layer — has to address a number of specific problems. 
 The boot phase is split into the following three parts:
@@ -40,6 +34,66 @@ Then boot reads in the operating system kernel and jumps to it. At this point, i
 
 The kernel start-up code is written in assembly language and is highly machine dependent.
 
+
+> 内核启动中输出的信息可以通过 `dmesg` 命令查看
+
+## boot
+
+
+```c
+// arch/x86/boot/main.c
+void main(void)
+{
+	init_default_io_ops();
+
+	/* First, copy the boot header into the "zeropage" */
+	copy_boot_params();
+
+	/* Initialize the early-boot console */
+	console_init();
+	if (cmdline_find_option_bool("debug"))
+		puts("early console in setup code\n");
+
+	/* End of heap check */
+	init_heap();
+
+	/* Make sure we have all the proper CPU support */
+	if (validate_cpu()) {
+		puts("Unable to boot - please use a kernel appropriate for your CPU.\n");
+		die();
+	}
+
+	/* Tell the BIOS what CPU mode we intend to run in */
+	set_bios_mode();
+
+	/* Detect memory layout */
+	detect_memory();
+
+	/* Set keyboard repeat rate (why?) and query the lock flags */
+	keyboard_init();
+
+	/* Query Intel SpeedStep (IST) information */
+	query_ist();
+
+	/* Query APM information */
+#if defined(CONFIG_APM) || defined(CONFIG_APM_MODULE)
+	query_apm_bios();
+#endif
+
+	/* Query EDD information */
+#if defined(CONFIG_EDD) || defined(CONFIG_EDD_MODULE)
+	query_edd();
+#endif
+
+	/* Set the video mode */
+	set_video();
+
+	/* Do the last things and invoke protected mode */
+	go_to_protected_mode();
+}
+```
+
+
 ## Init
 
 ```c
@@ -54,7 +108,6 @@ asmlinkage void __init x86_64_start_kernel(char *real_mode);
 ```
 i386_start_kernel
 ```c
-
 asmlinkage __visible void __init i386_start_kernel(void)
 {
 	/* Make sure IDT is set up before any exception happens */

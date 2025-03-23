@@ -259,7 +259,7 @@ struct zone {
      */
     unsigned long       nr_isolate_pageblock;
 #endif
-
+ 
 #ifdef CONFIG_MEMORY_HOTPLUG
     /* see spanned/present_pages for more description */
     seqlock_t       span_seqlock;

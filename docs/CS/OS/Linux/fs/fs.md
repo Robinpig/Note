@@ -29,7 +29,9 @@
 对于 file 结构体来说，一定要绑定 inode 和 dentry ，哪怕是伪造的、不完整的 inode
 
 
+## fs_struct
 
+fs中包含两个path对象 root 和 pwd
 
 ```c
 
@@ -615,7 +617,7 @@ Quite unlike hard links, removing the original file named file causes the soft l
 
 ## files_struct
 
-[task_struct](/docs/CS/OS/Linux/proc/process.md?id=task_struct)中保存着files_struct
+[task_struct](/docs/CS/OS/Linux/proc/process.md?id=fs)中保存着files_struct
 
 
 ```c
@@ -644,6 +646,8 @@ struct files_struct {
 In the new lock-free model of file descriptor management, the reference counting is similar, but the locking is based on RCU. 
 The file descriptor table contains multiple elements - the fd sets (open_fds and close_on_exec, the array of file pointers, the sizes of the sets and the array etc.). 
 In order for the updates to appear atomic to a lock-free reader, all the elements of the file descriptor table are in a separate structure - struct fdtable.
+
+**fd 数组的下标就是文件描述符 数组元素为当前进程打开文件指针 这个文件是抽象的 也可能是一个socket
 ```c
 struct fdtable {
 	unsigned int max_fds;

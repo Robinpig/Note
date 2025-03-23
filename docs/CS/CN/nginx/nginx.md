@@ -738,7 +738,7 @@ create worker process
 
 worker progress set ngx_channel = ngx_processes[s].channel[1];
 
-invoke [fork](/docs/CS/OS/Linux/processes.md/id=fork)
+invoke [fork](/docs/CS/OS/Linux/proc/process.md?id=fork)
 
 ```c
 

@@ -28,786 +28,62 @@ Unlike other OS approaches (which make a distinction between a process, lightwei
 Therefore, a single-threaded process will be represented with one task structure and a multithreaded process will have one task structure for each of the user-level threads. 
 Finally, the kernel itself is multithreaded, and has kernel-level threads which are not associated with any user process and are executing kernel code.
 
-For compatibility with other UNIX systems, Linux identifies processes via the PID.
-The kernel organizes all processes in a doubly linked list of task structures.
-
-相同进程下的线程的tgid是相同的
-
-```c
-struct task_struct {
-       // ...... 	
-       pid_t                       pid;
-       pid_t                       tgid;
-}    
-```
-
-
-
-`pstree` 命令可以查看当前进程树信息
-
-```c
-struct task_struct {
-       // ...... 
-	/* Real parent process: */
-	struct task_struct __rcu	*real_parent;
-
-	/* Recipient of SIGCHLD, wait4() reports: */
-	struct task_struct __rcu	*parent;
-
-	/*
-	 * Children/sibling form the list of natural children:
-	 */
-	struct list_head		children;
-	struct list_head		sibling;
-	struct task_struct		*group_leader;
-}
-```
-
-In addition to accessing process descriptors by traversing the linked lists, the PID can be mapped to the address of the task structure, and the process information can be accessed immediately.
+task_struct 中封装了很多资源
 
 > 实时的空间进程布局可以在`/proc/PID/maps`文件中查看到
 
 
+
 ```c
-// include/linux/sched.h
 struct task_struct {
-#ifdef CONFIG_THREAD_INFO_IN_TASK
-       /*
-        * For reasons of header soup (see current_thread_info()), this
-        * must be the first element of task_struct.
-        */
-       struct thread_info            thread_info;
-#endif
-       /* -1 unrunnable, 0 runnable, >0 stopped: */
-       volatile long                state;
+    // Linux 通过 pid 来区分进程 相同进程下的线程的 tgid 是相同的 	
+    pid_t                       pid;
+    pid_t                       tgid;
+    
+       // 进程树关系 
+    /* Real parent process: */
+    struct task_struct __rcu	*real_parent;
+    
+    /* Recipient of SIGCHLD, wait4() reports: */
+    struct task_struct __rcu	*parent;
+    
+    /*
+     * Children/sibling form the list of natural children:
+     */
+    struct list_head		children;
+    struct list_head		sibling;
+    struct task_struct		*group_leader;
 
-       /*
-        * This begins the randomizable portion of task_struct. Only
-        * scheduling-critical items should be added above here.
-        */
-       randomized_struct_fields_start
-
-       void                        *stack;
-       refcount_t                   usage;
-       /* Per task flags (PF_*), defined further below: */
-       unsigned int                 flags;
-       unsigned int                 ptrace;
-
-#ifdef CONFIG_SMP
-       int                         on_cpu;
-       struct __call_single_node      wake_entry;
-#ifdef CONFIG_THREAD_INFO_IN_TASK
-       /* Current CPU: */
-       unsigned int                 cpu;
-#endif
-       unsigned int                 wakee_flips;
-       unsigned long                wakee_flip_decay_ts;
-       struct task_struct            *last_wakee;
-
-       /*
-        * recent_used_cpu is initially set as the last CPU used by a task
-        * that wakes affine another task. Waker/wakee relationships can
-        * push tasks around a CPU where each wakeup moves to the next one.
-        * Tracking a recently used CPU allows a quick search for a recently
-        * used CPU that may be idle.
-        */
-       int                         recent_used_cpu;
-       int                         wake_cpu;
-#endif
-       int                         on_rq;
-
-       int                         prio;
-       int                         static_prio;
-       int                         normal_prio;
-       unsigned int                 rt_priority;
-
-       const struct sched_class       *sched_class;
-       struct sched_entity           se;
-       struct sched_rt_entity        rt;
-#ifdef CONFIG_CGROUP_SCHED
-       struct task_group             *sched_task_group;
-#endif
-       struct sched_dl_entity        dl;
-
-#ifdef CONFIG_UCLAMP_TASK
-       /*
-        * Clamp values requested for a scheduling entity.
-        * Must be updated with task_rq_lock() held.
-        */
-       struct uclamp_se              uclamp_req[UCLAMP_CNT];
-       /*
-        * Effective clamp values used for a scheduling entity.
-        * Must be updated with task_rq_lock() held.
-        */
-       struct uclamp_se              uclamp[UCLAMP_CNT];
-#endif
-
-#ifdef CONFIG_PREEMPT_NOTIFIERS
-       /* List of struct preempt_notifier: */
-       struct hlist_head             preempt_notifiers;
-#endif
-
-#ifdef CONFIG_BLK_DEV_IO_TRACE
-       unsigned int                 btrace_seq;
-#endif
-
-       unsigned int                 policy;
-       int                         nr_cpus_allowed;
-       const cpumask_t                      *cpus_ptr;
-       cpumask_t                    cpus_mask;
-       void                        *migration_pending;
-#ifdef CONFIG_SMP
-       unsigned short               migration_disabled;
-#endif
-       unsigned short               migration_flags;
-
-#ifdef CONFIG_PREEMPT_RCU
-       int                         rcu_read_lock_nesting;
-       union rcu_special             rcu_read_unlock_special;
-       struct list_head              rcu_node_entry;
-       struct rcu_node                      *rcu_blocked_node;
-#endif /* #ifdef CONFIG_PREEMPT_RCU */
-
-#ifdef CONFIG_TASKS_RCU
-       unsigned long                rcu_tasks_nvcsw;
-       u8                          rcu_tasks_holdout;
-       u8                          rcu_tasks_idx;
-       int                         rcu_tasks_idle_cpu;
-       struct list_head              rcu_tasks_holdout_list;
-#endif /* #ifdef CONFIG_TASKS_RCU */
-
-#ifdef CONFIG_TASKS_TRACE_RCU
-       int                         trc_reader_nesting;
-       int                         trc_ipi_to_cpu;
-       union rcu_special             trc_reader_special;
-       bool                        trc_reader_checked;
-       struct list_head              trc_holdout_list;
-#endif /* #ifdef CONFIG_TASKS_TRACE_RCU */
-
-       struct sched_info             sched_info;
-
-       struct list_head              tasks;
-#ifdef CONFIG_SMP
-       struct plist_node             pushable_tasks;
-       struct rb_node               pushable_dl_tasks;
-#endif
-
-       struct mm_struct              *mm;
-       struct mm_struct              *active_mm;
-
-       /* Per-thread vma caching: */
-       struct vmacache                      vmacache;
-
-#ifdef SPLIT_RSS_COUNTING
-       struct task_rss_stat          rss_stat;
-#endif
-       int                         exit_state;
-       int                         exit_code;
-       int                         exit_signal;
-       /* The signal sent when the parent dies: */
-       int                         pdeath_signal;
-       /* JOBCTL_*, siglock protected: */
-       unsigned long                jobctl;
-
-       /* Used for emulating ABI behavior of previous Linux versions: */
-       unsigned int                 personality;
-
-       /* Scheduler bits, serialized by scheduler locks: */
-       unsigned                     sched_reset_on_fork:1;
-       unsigned                     sched_contributes_to_load:1;
-       unsigned                     sched_migrated:1;
-#ifdef CONFIG_PSI
-       unsigned                     sched_psi_wake_requeue:1;
-#endif
-
-       /* Force alignment to the next boundary: */
-       unsigned                     :0;
-
-       /* Unserialized, strictly 'current' */
-
-       /*
-        * This field must not be in the scheduler word above due to wakelist
-        * queueing no longer being serialized by p->on_cpu. However:
-        *
-        * p->XXX = X;               ttwu()
-        * schedule()                  if (p->on_rq && ..) // false
-        *   smp_mb__after_spinlock();   if (smp_load_acquire(&p->on_cpu) && //true
-        *   deactivate_task()              ttwu_queue_wakelist())
-        *     p->on_rq = 0;                 p->sched_remote_wakeup = Y;
-        *
-        * guarantees all stores of 'current' are visible before
-        * ->sched_remote_wakeup gets used, so it can be in this word.
-        */
-       unsigned                     sched_remote_wakeup:1;
-
-       /* Bit to tell LSMs we're in execve(): */
-       unsigned                     in_execve:1;
-       unsigned                     in_iowait:1;
-#ifndef TIF_RESTORE_SIGMASK
-       unsigned                     restore_sigmask:1;
-#endif
-#ifdef CONFIG_MEMCG
-       unsigned                     in_user_fault:1;
-#endif
-#ifdef CONFIG_COMPAT_BRK
-       unsigned                     brk_randomized:1;
-#endif
-#ifdef CONFIG_CGROUPS
-       /* disallow userland-initiated cgroup migration */
-       unsigned                     no_cgroup_migration:1;
-       /* task is frozen/stopped (used by the cgroup freezer) */
-       unsigned                     frozen:1;
-#endif
-#ifdef CONFIG_BLK_CGROUP
-       unsigned                     use_memdelay:1;
-#endif
-#ifdef CONFIG_PSI
-       /* Stalled due to lack of memory */
-       unsigned                     in_memstall:1;
-#endif
-#ifdef CONFIG_PAGE_OWNER
-       /* Used by page_owner=on to detect recursion in page tracking. */
-       unsigned                     in_page_owner:1;
-#endif
-
-       unsigned long                atomic_flags; /* Flags requiring atomic access. */
-
-       struct restart_block          restart_block;
-
-       pid_t                       pid;
-       pid_t                       tgid;
-
-#ifdef CONFIG_STACKPROTECTOR
-       /* Canary value for the -fstack-protector GCC feature: */
-       unsigned long                stack_canary;
-#endif
-       /*
-        * Pointers to the (original) parent process, youngest child, younger sibling,
-        * older sibling, respectively.  (p->father can be replaced with
-        * p->real_parent->pid)
-        */
-
-       /* Real parent process: */
-       struct task_struct __rcu       *real_parent;
-
-       /* Recipient of SIGCHLD, wait4() reports: */
-       struct task_struct __rcu       *parent;
-
-       /*
-        * Children/sibling form the list of natural children:
-        */
-       struct list_head              children;
-       struct list_head              sibling;
-       struct task_struct            *group_leader;
-
-       /*
-        * 'ptraced' is the list of tasks this task is using ptrace() on.
-        *
-        * This includes both natural children and PTRACE_ATTACH targets.
-        * 'ptrace_entry' is this task's link on the p->parent->ptraced list.
-        */
-       struct list_head              ptraced;
-       struct list_head              ptrace_entry;
-
-       /* PID/PID hash table linkage. */
-       struct pid                   *thread_pid;
-       struct hlist_node             pid_links[PIDTYPE_MAX];
-       struct list_head              thread_group;
-       struct list_head              thread_node;
-
-       struct completion             *vfork_done;
-
-       /* CLONE_CHILD_SETTID: */
-       int __user                   *set_child_tid;
-
-       /* CLONE_CHILD_CLEARTID: */
-       int __user                   *clear_child_tid;
-
-       /* PF_IO_WORKER */
-       void                        *pf_io_worker;
-
-       u64                         utime;
-       u64                         stime;
-#ifdef CONFIG_ARCH_HAS_SCALED_CPUTIME
-       u64                         utimescaled;
-       u64                         stimescaled;
-#endif
-       u64                         gtime;
-       struct prev_cputime           prev_cputime;
-#ifdef CONFIG_VIRT_CPU_ACCOUNTING_GEN
-       struct vtime                 vtime;
-#endif
-
-#ifdef CONFIG_NO_HZ_FULL
-       atomic_t                     tick_dep_mask;
-#endif
-       /* Context switch counts: */
-       unsigned long                nvcsw;
-       unsigned long                nivcsw;
-
-       /* Monotonic time in nsecs: */
-       u64                         start_time;
-
-       /* Boot based time in nsecs: */
-       u64                         start_boottime;
-
-       /* MM fault and swap info: this can arguably be seen as either mm-specific or thread-specific: */
-       unsigned long                min_flt;
-       unsigned long                maj_flt;
-
-       /* Empty if CONFIG_POSIX_CPUTIMERS=n */
-       struct posix_cputimers        posix_cputimers;
-
-#ifdef CONFIG_POSIX_CPU_TIMERS_TASK_WORK
-       struct posix_cputimers_work    posix_cputimers_work;
-#endif
-
-       /* Process credentials: */
-
-       /* Tracer's credentials at attach: */
-       const struct cred __rcu               *ptracer_cred;
-
-       /* Objective and real subjective task credentials (COW): */
-       const struct cred __rcu               *real_cred;
-
-       /* Effective (overridable) subjective task credentials (COW): */
-       const struct cred __rcu               *cred;
-
-#ifdef CONFIG_KEYS
-       /* Cached requested key. */
-       struct key                   *cached_requested_key;
-#endif
-
-       /*
-        * executable name, excluding path.
-        *
-        * - normally initialized setup_new_exec()
-        * - access it with [gs]et_task_comm()
-        * - lock it with task_lock()
-        */
-       char                        comm[TASK_COMM_LEN];
-
-       struct nameidata              *nameidata;
-
-#ifdef CONFIG_SYSVIPC
-       struct sysv_sem                      sysvsem;
-       struct sysv_shm                      sysvshm;
-#endif
-#ifdef CONFIG_DETECT_HUNG_TASK
-       unsigned long                last_switch_count;
-       unsigned long                last_switch_time;
-#endif
-       /* Filesystem information: */
-       struct fs_struct              *fs;
-
-       /* Open file information: */
-       struct files_struct           *files;
-
-#ifdef CONFIG_IO_URING
+    /* -1 unrunnable, 0 runnable, >0 stopped: */
+    volatile long                state;
+    
+    int                         prio;
+    int                         static_prio;
+    int                         normal_prio;
+    
+    struct sched_info             sched_info;
+    
+    struct list_head              tasks;
+    
+    struct mm_struct              *mm;
+    struct mm_struct              *active_mm;
+    
+    /* Per-thread vma caching: */
+    struct vmacache                      vmacache;
+    
+    /* Filesystem information: */
+    struct fs_struct              *fs;
+    
+    /* Open file information: */
+    struct files_struct           *files;
+    
+    #ifdef CONFIG_IO_URING
        struct io_uring_task          *io_uring;
-#endif
+    #endif
 
-       /* Namespaces: */
-       struct nsproxy               *nsproxy;
+   /* Namespaces: */
+   struct nsproxy               *nsproxy;
 
-       /* Signal handlers: */
-       struct signal_struct          *signal;
-       struct sighand_struct __rcu           *sighand;
-       sigset_t                     blocked;
-       sigset_t                     real_blocked;
-       /* Restored if set_restore_sigmask() was used: */
-       sigset_t                     saved_sigmask;
-       struct sigpending             pending;
-       unsigned long                sas_ss_sp;
-       size_t                      sas_ss_size;
-       unsigned int                 sas_ss_flags;
-
-       struct callback_head          *task_works;
-
-#ifdef CONFIG_AUDIT
-#ifdef CONFIG_AUDITSYSCALL
-       struct audit_context          *audit_context;
-#endif
-       kuid_t                      loginuid;
-       unsigned int                 sessionid;
-
-       struct seccomp               seccomp;
-       struct syscall_user_dispatch   syscall_dispatch;
-
-       /* Thread group tracking: */
-       u64                         parent_exec_id;
-       u64                         self_exec_id;
-
-       /* Protection against (de-)allocation: mm, files, fs, tty, keyrings, mems_allowed, mempolicy: */
-       spinlock_t                   alloc_lock;
-
-       /* Protection of the PI data structures: */
-       raw_spinlock_t               pi_lock;
-
-       struct wake_q_node            wake_q;
-
-#ifdef CONFIG_RT_MUTEXES
-       /* PI waiters blocked on a rt_mutex held by this task: */
-       struct rb_root_cached         pi_waiters;
-       /* Updated under owner's pi_lock and rq lock */
-       struct task_struct            *pi_top_task;
-       /* Deadlock detection and priority inheritance handling: */
-       struct rt_mutex_waiter        *pi_blocked_on;
-#endif
-
-#ifdef CONFIG_DEBUG_MUTEXES
-       /* Mutex deadlock detection: */
-       struct mutex_waiter           *blocked_on;
-#endif
-
-#ifdef CONFIG_DEBUG_ATOMIC_SLEEP
-       int                         non_block_count;
-#endif
-
-#ifdef CONFIG_TRACE_IRQFLAGS
-       struct irqtrace_events        irqtrace;
-       unsigned int                 hardirq_threaded;
-       u64                         hardirq_chain_key;
-       int                         softirqs_enabled;
-       int                         softirq_context;
-       int                         irq_config;
-#endif
-#ifdef CONFIG_PREEMPT_RT
-       int                         softirq_disable_cnt;
-#endif
-
-#ifdef CONFIG_LOCKDEP
-# define MAX_LOCK_DEPTH                      48UL
-       u64                         curr_chain_key;
-       int                         lockdep_depth;
-       unsigned int                 lockdep_recursion;
-       struct held_lock              held_locks[MAX_LOCK_DEPTH];
-#endif
-
-#if defined(CONFIG_UBSAN) && !defined(CONFIG_UBSAN_TRAP)
-       unsigned int                 in_ubsan;
-#endif
-
-       /* Journalling filesystem info: */
-       void                        *journal_info;
-
-       /* Stacked block device info: */
-       struct bio_list                      *bio_list;
-
-#ifdef CONFIG_BLOCK
-       /* Stack plugging: */
-       struct blk_plug                      *plug;
-#endif
-
-       /* VM state: */
-       struct reclaim_state          *reclaim_state;
-
-       struct backing_dev_info               *backing_dev_info;
-
-       struct io_context             *io_context;
-
-#ifdef CONFIG_COMPACTION
-       struct capture_control        *capture_control;
-#endif
-       /* Ptrace state: */
-       unsigned long                ptrace_message;
-       kernel_siginfo_t              *last_siginfo;
-
-       struct task_io_accounting      ioac;
-#ifdef CONFIG_PSI
-       /* Pressure stall state */
-       unsigned int                 psi_flags;
-#endif
-#ifdef CONFIG_TASK_XACCT
-       /* Accumulated RSS usage: */
-       u64                         acct_rss_mem1;
-       /* Accumulated virtual memory usage: */
-       u64                         acct_vm_mem1;
-       /* stime + utime since last update: */
-       u64                         acct_timexpd;
-#endif
-#ifdef CONFIG_CPUSETS
-       /* Protected by ->alloc_lock: */
-       nodemask_t                   mems_allowed;
-       /* Sequence number to catch updates: */
-       seqcount_spinlock_t           mems_allowed_seq;
-       int                         cpuset_mem_spread_rotor;
-       int                         cpuset_slab_spread_rotor;
-#endif
-#ifdef CONFIG_CGROUPS
-       /* Control Group info protected by css_set_lock: */
-       struct css_set __rcu          *cgroups;
-       /* cg_list protected by css_set_lock and tsk->alloc_lock: */
-       struct list_head              cg_list;
-#endif
-#ifdef CONFIG_X86_CPU_RESCTRL
-       u32                         closid;
-       u32                         rmid;
-#endif
-#ifdef CONFIG_FUTEX
-       struct robust_list_head __user *robust_list;
-#ifdef CONFIG_COMPAT
-       struct compat_robust_list_head __user *compat_robust_list;
-#endif
-       struct list_head              pi_state_list;
-       struct futex_pi_state         *pi_state_cache;
-       struct mutex                 futex_exit_mutex;
-       unsigned int                 futex_state;
-#endif
-#ifdef CONFIG_PERF_EVENTS
-       struct perf_event_context      *perf_event_ctxp[perf_nr_task_contexts];
-       struct mutex                 perf_event_mutex;
-       struct list_head              perf_event_list;
-#endif
-#ifdef CONFIG_DEBUG_PREEMPT
-       unsigned long                preempt_disable_ip;
-#endif
-#ifdef CONFIG_NUMA
-       /* Protected by alloc_lock: */
-       struct mempolicy              *mempolicy;
-       short                       il_prev;
-       short                       pref_node_fork;
-#endif
-#ifdef CONFIG_NUMA_BALANCING
-       int                         numa_scan_seq;
-       unsigned int                 numa_scan_period;
-       unsigned int                 numa_scan_period_max;
-       int                         numa_preferred_nid;
-       unsigned long                numa_migrate_retry;
-       /* Migration stamp: */
-       u64                         node_stamp;
-       u64                         last_task_numa_placement;
-       u64                         last_sum_exec_runtime;
-       struct callback_head          numa_work;
-
-       /*
-        * This pointer is only modified for current in syscall and
-        * pagefault context (and for tasks being destroyed), so it can be read
-        * from any of the following contexts:
-        *  - RCU read-side critical section
-        *  - current->numa_group from everywhere
-        *  - task's runqueue locked, task not running
-        */
-       struct numa_group __rcu               *numa_group;
-
-       /*
-        * numa_faults is an array split into four regions:
-        * faults_memory, faults_cpu, faults_memory_buffer, faults_cpu_buffer
-        * in this precise order.
-        *
-        * faults_memory: Exponential decaying average of faults on a per-node
-        * basis. Scheduling placement decisions are made based on these
-        * counts. The values remain static for the duration of a PTE scan.
-        * faults_cpu: Track the nodes the process was running on when a NUMA
-        * hinting fault was incurred.
-        * faults_memory_buffer and faults_cpu_buffer: Record faults per node
-        * during the current scan window. When the scan completes, the counts
-        * in faults_memory and faults_cpu decay and these values are copied.
-        */
-       unsigned long                *numa_faults;
-       unsigned long                total_numa_faults;
-
-       /*
-        * numa_faults_locality tracks if faults recorded during the last
-        * scan window were remote/local or failed to migrate. The task scan
-        * period is adapted based on the locality of the faults with different
-        * weights depending on whether they were shared or private faults
-        */
-       unsigned long                numa_faults_locality[3];
-
-       unsigned long                numa_pages_migrated;
-#endif /* CONFIG_NUMA_BALANCING */
-
-#ifdef CONFIG_RSEQ
-       struct rseq __user *rseq;
-       u32 rseq_sig;
-       /*
-        * RmW on rseq_event_mask must be performed atomically
-        * with respect to preemption.
-        */
-       unsigned long rseq_event_mask;
-#endif
-
-       struct tlbflush_unmap_batch    tlb_ubc;
-
-       union {
-              refcount_t            rcu_users;
-              struct rcu_head               rcu;
-       };
-
-       /* Cache last used pipe for splice(): */
-       struct pipe_inode_info        *splice_pipe;
-
-       struct page_frag              task_frag;
-
-#ifdef CONFIG_TASK_DELAY_ACCT
-       struct task_delay_info        *delays;
-#endif
-
-#ifdef CONFIG_FAULT_INJECTION
-       int                         make_it_fail;
-       unsigned int                 fail_nth;
-#endif
-       /*
-        * When (nr_dirtied >= nr_dirtied_pause), it's time to call
-        * balance_dirty_pages() for a dirty throttling pause:
-        */
-       int                         nr_dirtied;
-       int                         nr_dirtied_pause;
-       /* Start of a write-and-pause period: */
-       unsigned long                dirty_paused_when;
-
-#ifdef CONFIG_LATENCYTOP
-       int                         latency_record_count;
-       struct latency_record         latency_record[LT_SAVECOUNT];
-#endif
-       /*
-        * Time slack values; these are used to round up poll() and
-        * select() etc timeout values. These are in nanoseconds.
-        */
-       u64                         timer_slack_ns;
-       u64                         default_timer_slack_ns;
-
-#if defined(CONFIG_KASAN_GENERIC) || defined(CONFIG_KASAN_SW_TAGS)
-       unsigned int                 kasan_depth;
-#endif
-
-#ifdef CONFIG_KCSAN
-       struct kcsan_ctx              kcsan_ctx;
-#ifdef CONFIG_TRACE_IRQFLAGS
-       struct irqtrace_events        kcsan_save_irqtrace;
-#endif
-#endif
-
-#if IS_ENABLED(CONFIG_KUNIT)
-       struct kunit                 *kunit_test;
-#endif
-
-#ifdef CONFIG_FUNCTION_GRAPH_TRACER
-       /* Index of current stored address in ret_stack: */
-       int                         curr_ret_stack;
-       int                         curr_ret_depth;
-
-       /* Stack of return addresses for return function tracing: */
-       struct ftrace_ret_stack               *ret_stack;
-
-       /* Timestamp for last schedule: */
-       unsigned long long            ftrace_timestamp;
-
-       /*
-        * Number of functions that haven't been traced
-        * because of depth overrun:
-        */
-       atomic_t                     trace_overrun;
-
-       /* Pause tracing: */
-       atomic_t                     tracing_graph_pause;
-#endif
-
-#ifdef CONFIG_TRACING
-       /* State flags for use by tracers: */
-       unsigned long                trace;
-
-       /* Bitmask and counter of trace recursion: */
-       unsigned long                trace_recursion;
-#endif /* CONFIG_TRACING */
-
-#ifdef CONFIG_KCOV
-       /* See kernel/kcov.c for more details. */
-
-       /* Coverage collection mode enabled for this task (0 if disabled): */
-       unsigned int                 kcov_mode;
-
-       /* Size of the kcov_area: */
-       unsigned int                 kcov_size;
-
-       /* Buffer for coverage collection: */
-       void                        *kcov_area;
-
-       /* KCOV descriptor wired with this task or NULL: */
-       struct kcov                  *kcov;
-
-       /* KCOV common handle for remote coverage collection: */
-       u64                         kcov_handle;
-
-       /* KCOV sequence number: */
-       int                         kcov_sequence;
-
-       /* Collect coverage from softirq context: */
-       unsigned int                 kcov_softirq;
-#endif
-
-#ifdef CONFIG_MEMCG
-       struct mem_cgroup             *memcg_in_oom;
-       gfp_t                       memcg_oom_gfp_mask;
-       int                         memcg_oom_order;
-
-       /* Number of pages to reclaim on returning to userland: */
-       unsigned int                 memcg_nr_pages_over_high;
-
-       /* Used by memcontrol for targeted memcg charge: */
-       struct mem_cgroup             *active_memcg;
-#endif
-
-#ifdef CONFIG_BLK_CGROUP
-       struct request_queue          *throttle_queue;
-#endif
-
-#ifdef CONFIG_UPROBES
-       struct uprobe_task            *utask;
-#endif
-#if defined(CONFIG_BCACHE) || defined(CONFIG_BCACHE_MODULE)
-       unsigned int                 sequential_io;
-       unsigned int                 sequential_io_avg;
-#endif
-       struct kmap_ctrl              kmap_ctrl;
-#ifdef CONFIG_DEBUG_ATOMIC_SLEEP
-       unsigned long                task_state_change;
-#endif
-       int                         pagefault_disabled;
-#ifdef CONFIG_MMU
-       struct task_struct            *oom_reaper_list;
-#endif
-#ifdef CONFIG_VMAP_STACK
-       struct vm_struct              *stack_vm_area;
-#endif
-#ifdef CONFIG_THREAD_INFO_IN_TASK
-       /* A live task holds one reference: */
-       refcount_t                   stack_refcount;
-#endif
-#ifdef CONFIG_LIVEPATCH
-       int patch_state;
-#endif
-#ifdef CONFIG_SECURITY
-       /* Used by LSM modules for access restriction: */
-       void                        *security;
-#endif
-#ifdef CONFIG_BPF_SYSCALL
-       /* Used by BPF task local storage */
-       struct bpf_local_storage __rcu *bpf_storage;
-#endif
-
-#ifdef CONFIG_GCC_PLUGIN_STACKLEAK
-       unsigned long                lowest_stack;
-       unsigned long                prev_lowest_stack;
-#endif
-
-
-       /*
-        * New fields for task_struct should be added above here, so that
-        * they are included in the randomized portion of task_struct.
-        */
-       randomized_struct_fields_end
-
-       /* CPU-specific state of this task: */
-       struct thread_struct          thread;
-
-       /*
-        * WARNING: on x86, 'thread_struct' contains a variable-sized
-        * structure.  It *MUST* be at the end of 'task_struct'.
-        *
-        * Do not put anything below here!
-        */
 };
 ```
 
@@ -816,37 +92,16 @@ struct task_struct {
 `get_current()` implement by different arch
 
 
-A structure to contain pointers to all per-process namespaces - fs (mount), uts, network, sysvipc, etc.
-
-The pid namespace is an exception -- it's accessed using task_active_pid_ns.  The pid namespace here is the namespace that children will use.
-
-'count' is the number of tasks holding a reference.
-The count for each namespace, then, will be the number of nsproxies pointing to it, not the number of tasks.
-
-The nsproxy is shared by tasks which share all namespaces.
-As soon as a single namespace is cloned or unshared, the nsproxy is copied.
-
-```c
-// nsproxy.h
-struct nsproxy {
-	atomic_t count;
-	struct uts_namespace *uts_ns;
-	struct ipc_namespace *ipc_ns;
-	struct mnt_namespace *mnt_ns;
-	struct pid_namespace *pid_ns_for_children;
-	struct net 	     *net_ns;
-	struct cgroup_namespace *cgroup_ns;
-};
-```
-
-
 #### state
+
 Task state bitmask. NOTE! These bits are also encoded in fs/proc/array.c: get_task_state().
 
 We have two separate sets of flags: task->state is about runnability, while task->exit_state are about the task exiting. 
 Confusing, but this way modifying one set can't modify the other one by mistake.
 
 > 进程的运行状态和其它信息可以在`/proc/PID/status`文件中查看
+
+进程刚创建是 TASK_RUNNING 状态 ,等待调度
 
 ```c
 // sched.h
@@ -889,7 +144,10 @@ Confusing, but this way modifying one set can't modify the other one by mistake.
 
 ### mm
 
-内核线程只固定工作在地址空间较高的部分 所以 mm_struct 为 null
+对于用户进程来说 整个进程虚拟内存空间部分都是由 [mm_struct](/docs/CS/OS/Linux/mm/vm.md) 来表示的
+进程运行时 在用户态需要的内存数据 如代码 全局变量和 mmap 内存映射都是通过其进行内存查找和寻址的
+
+内核线程只固定工作在地址空间较高的部分 不涉及虚拟内存的使用 所以 mm_struct 为 null
 
 ```c
 
@@ -897,6 +155,37 @@ Confusing, but this way modifying one set can't modify the other one by mistake.
        struct mm_struct              *active_mm;
 ```
 
+
+### fs
+
+进程的文件位置等信息是由 [fs_struct](/docs/CS/OS/Linux/fs/fs.md) 来描述的
+
+进程使用files_struct 记录文件描述符的使用情况
+
+### namespace
+
+A structure to contain pointers to all per-process namespaces - fs (mount), uts, network, sysvipc, etc.
+
+The pid namespace is an exception -- it's accessed using task_active_pid_ns.  The pid namespace here is the namespace that children will use.
+
+'count' is the number of tasks holding a reference.
+The count for each namespace, then, will be the number of nsproxies pointing to it, not the number of tasks.
+
+The nsproxy is shared by tasks which share all namespaces.
+As soon as a single namespace is cloned or unshared, the nsproxy is copied.
+
+```c
+// nsproxy.h
+struct nsproxy {
+	atomic_t count;
+	struct uts_namespace *uts_ns;
+	struct ipc_namespace *ipc_ns;
+	struct mnt_namespace *mnt_ns;
+	struct pid_namespace *pid_ns_for_children;
+	struct net 	     *net_ns;
+	struct cgroup_namespace *cgroup_ns;
+};
+```
 
 
 
@@ -1273,11 +562,14 @@ The init process periodically invokes wait(), thereby allowing the exit status o
 
 
 
-Processes are created in Linux in an especially simple manner. The fork system call creates an exact copy of the original process. 
-The forking process is called the *parent process*. The new process is called the *child process*. The parent and child each have their own, private memory images. 
+Processes are created in Linux in an especially simple manner. 
+The fork system call creates an exact copy of the original process. 
+The forking process is called the *parent process*. The new process is called the *child process*. 
+The parent and child each have their own, private memory images. 
 If the parent subsequently changes any of its variables, the changes are not visible to the child, and vice versa.
 
-The fork system call returns a 0 to the child and a nonzero value, the child’s **PID** (*Process Identifier*), to the parent. Both processes normally check the return value and act accordingly.
+The fork system call returns a 0 to the child and a nonzero value, the child’s **PID** (*Process Identifier*), to the parent.
+Both processes normally check the return value and act accordingly.
 The child doesn’t start running at main() like you might expect; rather, it just comes into life as if it had called fork() itself.
 
 ```c
@@ -1861,7 +1153,67 @@ documented behavior for pid namespaces.
 ##### **Bitmap**
 
 ```c
+tatic int alloc_pidmap(struct pid_namespace *pid_ns)
+{
+	int i, offset, max_scan, pid, last = pid_ns->last_pid;
+	struct pidmap *map;
 
+	pid = last + 1;
+	if (pid >= pid_max)
+		pid = RESERVED_PIDS;
+	offset = pid & BITS_PER_PAGE_MASK;
+	map = &pid_ns->pidmap[pid/BITS_PER_PAGE];
+	/*
+	 * If last_pid points into the middle of the map->page we
+	 * want to scan this bitmap block twice, the second time
+	 * we start with offset == 0 (or RESERVED_PIDS).
+	 */
+	max_scan = DIV_ROUND_UP(pid_max, BITS_PER_PAGE) - !offset;
+	for (i = 0; i <= max_scan; ++i) {
+		if (unlikely(!map->page)) {
+			void *page = kzalloc(PAGE_SIZE, GFP_KERNEL);
+			/*
+			 * Free the page if someone raced with us
+			 * installing it:
+			 */
+			spin_lock_irq(&pidmap_lock);
+			if (!map->page) {
+				map->page = page;
+				page = NULL;
+			}
+			spin_unlock_irq(&pidmap_lock);
+			kfree(page);
+			if (unlikely(!map->page))
+				break;
+		}
+		if (likely(atomic_read(&map->nr_free))) {
+			for ( ; ; ) {
+				if (!test_and_set_bit(offset, map->page)) {
+					atomic_dec(&map->nr_free);
+					set_last_pid(pid_ns, last, pid);
+					return pid;
+				}
+				offset = find_next_offset(map, offset);
+				if (offset >= BITS_PER_PAGE)
+					break;
+				pid = mk_pid(pid_ns, map, offset);
+				if (pid >= pid_max)
+					break;
+			}
+		}
+		if (map < &pid_ns->pidmap[(pid_max-1)/BITS_PER_PAGE]) {
+			++map;
+			offset = 0;
+		} else {
+			map = &pid_ns->pidmap[0];
+			offset = RESERVED_PIDS;
+			if (unlikely(last == offset))
+				break;
+		}
+		pid = mk_pid(pid_ns, map, offset);
+	}
+	return -1;
+}
 ```
 
 
@@ -1920,6 +1272,104 @@ struct pid *alloc_pid(struct pid_namespace *ns)
 
 <!-- tabs:end -->
 
+### thread
+
+常用的glibc库 创建线程调用的是 `pthread_create` 函数
+
+We rely heavily on various flags the CLONE function understands:
+
+CLONE_VM, CLONE_FS, CLONE_FILES
+
+These flags select semantics with shared address space and file descriptors according to what POSIX requires.
+
+     CLONE_SIGHAND, CLONE_THREAD
+	This flag selects the POSIX signal semantics and various
+	other kinds of sharing (itimers, POSIX timers, etc.).
+
+     CLONE_SETTLS
+	The sixth parameter to CLONE determines the TLS area for the
+	new thread.
+
+     CLONE_PARENT_SETTID
+	The kernels writes the thread ID of the newly created thread
+	into the location pointed to by the fifth parameters to CLONE.
+
+	Note that it would be semantically equivalent to use
+	CLONE_CHILD_SETTID but it is be more expensive in the kernel.
+
+     CLONE_CHILD_CLEARTID
+	The kernels clears the thread ID of a thread that has called
+	sys_exit() in the location pointed to by the seventh parameter
+	to CLONE.
+
+     The termination signal is chosen to be zero which means no signal
+     is sent. 
+```c
+static int create_thread (struct pthread *pd, const struct pthread_attr *attr,
+			  bool *stopped_start, void *stackaddr,
+			  size_t stacksize, bool *thread_ran)
+{
+    // ...
+  const int clone_flags = (CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SYSVSEM
+			   | CLONE_SIGHAND | CLONE_THREAD
+			   | CLONE_SETTLS | CLONE_PARENT_SETTID
+			   | CLONE_CHILD_CLEARTID
+			   | 0);
+
+  TLS_DEFINE_INIT_TP (tp, pd);
+
+  struct clone_args args =
+    {
+      .flags = clone_flags,
+      .pidfd = (uintptr_t) &pd->tid,
+      .parent_tid = (uintptr_t) &pd->tid,
+      .child_tid = (uintptr_t) &pd->tid,
+      .stack = (uintptr_t) stackaddr,
+      .stack_size = stacksize,
+      .tls = (uintptr_t) tp,
+    };
+  int ret = __clone_internal (&args, &start_thread, pd);
+  if (__glibc_unlikely (ret == -1))
+    return errno;
+
+  /* It's started now, so if we fail below, we'll have to let it clean itself
+     up.  */
+  *thread_ran = true;
+
+  /* Now we have the possibility to set scheduling parameters etc.  */
+  if (attr != NULL)
+    {
+      /* Set the affinity mask if necessary.  */
+      if (need_setaffinity)
+	{
+	  assert (*stopped_start);
+
+	  int res = INTERNAL_SYSCALL_CALL (sched_setaffinity, pd->tid,
+					   attr->extension->cpusetsize,
+					   attr->extension->cpuset);
+	  if (__glibc_unlikely (INTERNAL_SYSCALL_ERROR_P (res)))
+	    return INTERNAL_SYSCALL_ERRNO (res);
+	}
+
+      /* Set the scheduling parameters.  */
+      if ((attr->flags & ATTR_FLAG_NOTINHERITSCHED) != 0)
+	{
+	  assert (*stopped_start);
+
+	  int res = INTERNAL_SYSCALL_CALL (sched_setscheduler, pd->tid,
+					   pd->schedpolicy, &pd->schedparam);
+	  if (__glibc_unlikely (INTERNAL_SYSCALL_ERROR_P (res)))
+	    return INTERNAL_SYSCALL_ERRNO (res);
+	}
+    }
+
+  return 0;
+}
+```
+
+创建线程调用的是 `clone` 同样也是走到了 [kernel_clone](/docs/CS/OS/Linux/proc/process.md?id=kernel_clone)
+
+
 ## exec
 
 Now the new address space must be created and filled in. 
@@ -1931,6 +1381,651 @@ Finally, the arguments and environment strings are copied to the new stack, the 
 At this point, the new command can start running.
 
 
+
+
+```c
+static int do_execve(struct filename *filename,
+	const char __user *const __user *__argv,
+	const char __user *const __user *__envp)
+{
+	struct user_arg_ptr argv = { .ptr.native = __argv };
+	struct user_arg_ptr envp = { .ptr.native = __envp };
+	return do_execveat_common(AT_FDCWD, filename, argv, envp, 0);
+}
+
+static int do_execveat_common(int fd, struct filename *filename,
+			      struct user_arg_ptr argv,
+			      struct user_arg_ptr envp,
+			      int flags)
+{
+	struct linux_binprm *bprm;
+	int retval;
+    // ...
+
+	bprm = alloc_bprm(fd, filename, flags);
+
+	retval = count(argv, MAX_ARG_STRINGS);
+	retval = count(envp, MAX_ARG_STRINGS);
+    // ...
+	retval = bprm_execve(bprm);
+}
+
+
+```
+### bprm_execve
+
+```c
+static int bprm_execve(struct linux_binprm *bprm)
+{
+	int retval;
+
+	retval = prepare_bprm_creds(bprm);
+	if (retval)
+		return retval;
+
+	/*
+	 * Check for unsafe execution states before exec_binprm(), which
+	 * will call back into begin_new_exec(), into bprm_creds_from_file(),
+	 * where setuid-ness is evaluated.
+	 */
+	check_unsafe_exec(bprm);
+	current->in_execve = 1;
+	sched_mm_cid_before_execve(current);
+
+	sched_exec();
+
+	/* Set the unchanging part of bprm->cred */
+	retval = security_bprm_creds_for_exec(bprm);
+	if (retval)
+		goto out;
+
+	retval = exec_binprm(bprm);
+	if (retval < 0)
+		goto out;
+
+	sched_mm_cid_after_execve(current);
+	/* execve succeeded */
+	current->fs->in_exec = 0;
+	current->in_execve = 0;
+	rseq_execve(current);
+	user_events_execve(current);
+	acct_update_integrals(current);
+	task_numa_free(current, false);
+	return retval;
+}
+```
+
+#### exec_binprm
+
+```c
+/* binfmt handlers will call back into begin_new_exec() on success. */
+static int exec_binprm(struct linux_binprm *bprm)
+{
+	pid_t old_pid, old_vpid;
+	int ret, depth;
+
+	/* Need to fetch pid before load_binary changes it */
+	old_pid = current->pid;
+	rcu_read_lock();
+	old_vpid = task_pid_nr_ns(current, task_active_pid_ns(current->parent));
+	rcu_read_unlock();
+
+	/* This allows 4 levels of binfmt rewrites before failing hard. */
+	for (depth = 0;; depth++) {
+		struct file *exec;
+		if (depth > 5)
+			return -ELOOP;
+
+		ret = search_binary_handler(bprm);
+		if (ret < 0)
+			return ret;
+		if (!bprm->interpreter)
+			break;
+
+		exec = bprm->file;
+		bprm->file = bprm->interpreter;
+		bprm->interpreter = NULL;
+
+		allow_write_access(exec);
+		if (unlikely(bprm->have_execfd)) {
+			if (bprm->executable) {
+				fput(exec);
+				return -ENOEXEC;
+			}
+			bprm->executable = exec;
+		} else
+			fput(exec);
+	}
+
+	audit_bprm(bprm);
+	trace_sched_process_exec(current, old_pid, bprm);
+	ptrace_event(PTRACE_EVENT_EXEC, old_vpid);
+	proc_exec_connector(current);
+	return 0;
+}
+```
+
+
+#### load_elf_binary
+
+
+
+```c
+
+static int load_elf_binary(struct linux_binprm *bprm)
+{
+	struct file *interpreter = NULL; /* to shut gcc up */
+	unsigned long load_bias = 0, phdr_addr = 0;
+	int first_pt_load = 1;
+	unsigned long error;
+	struct elf_phdr *elf_ppnt, *elf_phdata, *interp_elf_phdata = NULL;
+	struct elf_phdr *elf_property_phdata = NULL;
+	unsigned long elf_brk;
+	int retval, i;
+	unsigned long elf_entry;
+	unsigned long e_entry;
+	unsigned long interp_load_addr = 0;
+	unsigned long start_code, end_code, start_data, end_data;
+	unsigned long reloc_func_desc __maybe_unused = 0;
+	int executable_stack = EXSTACK_DEFAULT;
+	struct elfhdr *elf_ex = (struct elfhdr *)bprm->buf;
+	struct elfhdr *interp_elf_ex = NULL;
+	struct arch_elf_state arch_state = INIT_ARCH_ELF_STATE;
+	struct mm_struct *mm;
+	struct pt_regs *regs;
+
+	retval = -ENOEXEC;
+	/* First of all, some simple consistency checks */
+	if (memcmp(elf_ex->e_ident, ELFMAG, SELFMAG) != 0)
+		goto out;
+
+	if (elf_ex->e_type != ET_EXEC && elf_ex->e_type != ET_DYN)
+		goto out;
+	if (!elf_check_arch(elf_ex))
+		goto out;
+	if (elf_check_fdpic(elf_ex))
+		goto out;
+	if (!bprm->file->f_op->mmap)
+		goto out;
+
+	elf_phdata = load_elf_phdrs(elf_ex, bprm->file);
+	if (!elf_phdata)
+		goto out;
+
+	elf_ppnt = elf_phdata;
+	for (i = 0; i < elf_ex->e_phnum; i++, elf_ppnt++) {
+		char *elf_interpreter;
+
+		if (elf_ppnt->p_type == PT_GNU_PROPERTY) {
+			elf_property_phdata = elf_ppnt;
+			continue;
+		}
+
+		if (elf_ppnt->p_type != PT_INTERP)
+			continue;
+
+		/*
+		 * This is the program interpreter used for shared libraries -
+		 * for now assume that this is an a.out format binary.
+		 */
+		retval = -ENOEXEC;
+		if (elf_ppnt->p_filesz > PATH_MAX || elf_ppnt->p_filesz < 2)
+			goto out_free_ph;
+
+		retval = -ENOMEM;
+		elf_interpreter = kmalloc(elf_ppnt->p_filesz, GFP_KERNEL);
+		if (!elf_interpreter)
+			goto out_free_ph;
+
+		retval = elf_read(bprm->file, elf_interpreter, elf_ppnt->p_filesz,
+				  elf_ppnt->p_offset);
+		if (retval < 0)
+			goto out_free_interp;
+		/* make sure path is NULL terminated */
+		retval = -ENOEXEC;
+		if (elf_interpreter[elf_ppnt->p_filesz - 1] != '\0')
+			goto out_free_interp;
+
+		interpreter = open_exec(elf_interpreter);
+		kfree(elf_interpreter);
+		retval = PTR_ERR(interpreter);
+		if (IS_ERR(interpreter))
+			goto out_free_ph;
+
+		/*
+		 * If the binary is not readable then enforce mm->dumpable = 0
+		 * regardless of the interpreter's permissions.
+		 */
+		would_dump(bprm, interpreter);
+
+		interp_elf_ex = kmalloc(sizeof(*interp_elf_ex), GFP_KERNEL);
+		if (!interp_elf_ex) {
+			retval = -ENOMEM;
+			goto out_free_file;
+		}
+
+		/* Get the exec headers */
+		retval = elf_read(interpreter, interp_elf_ex,
+				  sizeof(*interp_elf_ex), 0);
+		if (retval < 0)
+			goto out_free_dentry;
+
+		break;
+
+out_free_interp:
+		kfree(elf_interpreter);
+		goto out_free_ph;
+	}
+
+	elf_ppnt = elf_phdata;
+	for (i = 0; i < elf_ex->e_phnum; i++, elf_ppnt++)
+		switch (elf_ppnt->p_type) {
+		case PT_GNU_STACK:
+			if (elf_ppnt->p_flags & PF_X)
+				executable_stack = EXSTACK_ENABLE_X;
+			else
+				executable_stack = EXSTACK_DISABLE_X;
+			break;
+
+		case PT_LOPROC ... PT_HIPROC:
+			retval = arch_elf_pt_proc(elf_ex, elf_ppnt,
+						  bprm->file, false,
+						  &arch_state);
+			if (retval)
+				goto out_free_dentry;
+			break;
+		}
+
+	/* Some simple consistency checks for the interpreter */
+	if (interpreter) {
+		retval = -ELIBBAD;
+		/* Not an ELF interpreter */
+		if (memcmp(interp_elf_ex->e_ident, ELFMAG, SELFMAG) != 0)
+			goto out_free_dentry;
+		/* Verify the interpreter has a valid arch */
+		if (!elf_check_arch(interp_elf_ex) ||
+		    elf_check_fdpic(interp_elf_ex))
+			goto out_free_dentry;
+
+		/* Load the interpreter program headers */
+		interp_elf_phdata = load_elf_phdrs(interp_elf_ex,
+						   interpreter);
+		if (!interp_elf_phdata)
+			goto out_free_dentry;
+
+		/* Pass PT_LOPROC..PT_HIPROC headers to arch code */
+		elf_property_phdata = NULL;
+		elf_ppnt = interp_elf_phdata;
+		for (i = 0; i < interp_elf_ex->e_phnum; i++, elf_ppnt++)
+			switch (elf_ppnt->p_type) {
+			case PT_GNU_PROPERTY:
+				elf_property_phdata = elf_ppnt;
+				break;
+
+			case PT_LOPROC ... PT_HIPROC:
+				retval = arch_elf_pt_proc(interp_elf_ex,
+							  elf_ppnt, interpreter,
+							  true, &arch_state);
+				if (retval)
+					goto out_free_dentry;
+				break;
+			}
+	}
+
+	retval = parse_elf_properties(interpreter ?: bprm->file,
+				      elf_property_phdata, &arch_state);
+	if (retval)
+		goto out_free_dentry;
+
+	/*
+	 * Allow arch code to reject the ELF at this point, whilst it's
+	 * still possible to return an error to the code that invoked
+	 * the exec syscall.
+	 */
+	retval = arch_check_elf(elf_ex,
+				!!interpreter, interp_elf_ex,
+				&arch_state);
+	if (retval)
+		goto out_free_dentry;
+
+	/* Flush all traces of the currently running executable */
+	retval = begin_new_exec(bprm);
+	if (retval)
+		goto out_free_dentry;
+
+	/* Do this immediately, since STACK_TOP as used in setup_arg_pages
+	   may depend on the personality.  */
+	SET_PERSONALITY2(*elf_ex, &arch_state);
+	if (elf_read_implies_exec(*elf_ex, executable_stack))
+		current->personality |= READ_IMPLIES_EXEC;
+
+	const int snapshot_randomize_va_space = READ_ONCE(randomize_va_space);
+	if (!(current->personality & ADDR_NO_RANDOMIZE) && snapshot_randomize_va_space)
+		current->flags |= PF_RANDOMIZE;
+
+	setup_new_exec(bprm);
+
+	/* Do this so that we can load the interpreter, if need be.  We will
+	   change some of these later */
+	retval = setup_arg_pages(bprm, randomize_stack_top(STACK_TOP),
+				 executable_stack);
+	if (retval < 0)
+		goto out_free_dentry;
+
+	elf_brk = 0;
+
+	start_code = ~0UL;
+	end_code = 0;
+	start_data = 0;
+	end_data = 0;
+
+	/* Now we do a little grungy work by mmapping the ELF image into
+	   the correct location in memory. */
+	for(i = 0, elf_ppnt = elf_phdata;
+	    i < elf_ex->e_phnum; i++, elf_ppnt++) {
+		int elf_prot, elf_flags;
+		unsigned long k, vaddr;
+		unsigned long total_size = 0;
+		unsigned long alignment;
+
+		if (elf_ppnt->p_type != PT_LOAD)
+			continue;
+
+		elf_prot = make_prot(elf_ppnt->p_flags, &arch_state,
+				     !!interpreter, false);
+
+		elf_flags = MAP_PRIVATE;
+
+		vaddr = elf_ppnt->p_vaddr;
+		/*
+		 * The first time through the loop, first_pt_load is true:
+		 * layout will be calculated. Once set, use MAP_FIXED since
+		 * we know we've already safely mapped the entire region with
+		 * MAP_FIXED_NOREPLACE in the once-per-binary logic following.
+		 */
+		if (!first_pt_load) {
+			elf_flags |= MAP_FIXED;
+		} else if (elf_ex->e_type == ET_EXEC) {
+			/*
+			 * This logic is run once for the first LOAD Program
+			 * Header for ET_EXEC binaries. No special handling
+			 * is needed.
+			 */
+			elf_flags |= MAP_FIXED_NOREPLACE;
+		} else if (elf_ex->e_type == ET_DYN) {
+			/*
+			 * This logic is run once for the first LOAD Program
+			 * Header for ET_DYN binaries to calculate the
+			 * randomization (load_bias) for all the LOAD
+			 * Program Headers.
+			 */
+
+			/*
+			 * Calculate the entire size of the ELF mapping
+			 * (total_size), used for the initial mapping,
+			 * due to load_addr_set which is set to true later
+			 * once the initial mapping is performed.
+			 *
+			 * Note that this is only sensible when the LOAD
+			 * segments are contiguous (or overlapping). If
+			 * used for LOADs that are far apart, this would
+			 * cause the holes between LOADs to be mapped,
+			 * running the risk of having the mapping fail,
+			 * as it would be larger than the ELF file itself.
+			 *
+			 * As a result, only ET_DYN does this, since
+			 * some ET_EXEC (e.g. ia64) may have large virtual
+			 * memory holes between LOADs.
+			 *
+			 */
+			total_size = total_mapping_size(elf_phdata,
+							elf_ex->e_phnum);
+			if (!total_size) {
+				retval = -EINVAL;
+				goto out_free_dentry;
+			}
+
+			/* Calculate any requested alignment. */
+			alignment = maximum_alignment(elf_phdata, elf_ex->e_phnum);
+
+			/*
+			 * There are effectively two types of ET_DYN
+			 * binaries: programs (i.e. PIE: ET_DYN with PT_INTERP)
+			 * and loaders (ET_DYN without PT_INTERP, since they
+			 * _are_ the ELF interpreter). The loaders must
+			 * be loaded away from programs since the program
+			 * may otherwise collide with the loader (especially
+			 * for ET_EXEC which does not have a randomized
+			 * position). For example to handle invocations of
+			 * "./ld.so someprog" to test out a new version of
+			 * the loader, the subsequent program that the
+			 * loader loads must avoid the loader itself, so
+			 * they cannot share the same load range. Sufficient
+			 * room for the brk must be allocated with the
+			 * loader as well, since brk must be available with
+			 * the loader.
+			 *
+			 * Therefore, programs are loaded offset from
+			 * ELF_ET_DYN_BASE and loaders are loaded into the
+			 * independently randomized mmap region (0 load_bias
+			 * without MAP_FIXED nor MAP_FIXED_NOREPLACE).
+			 */
+			if (interpreter) {
+				/* On ET_DYN with PT_INTERP, we do the ASLR. */
+				load_bias = ELF_ET_DYN_BASE;
+				if (current->flags & PF_RANDOMIZE)
+					load_bias += arch_mmap_rnd();
+				/* Adjust alignment as requested. */
+				if (alignment)
+					load_bias &= ~(alignment - 1);
+				elf_flags |= MAP_FIXED_NOREPLACE;
+			} else {
+				/*
+				 * For ET_DYN without PT_INTERP, we rely on
+				 * the architectures's (potentially ASLR) mmap
+				 * base address (via a load_bias of 0).
+				 *
+				 * When a large alignment is requested, we
+				 * must do the allocation at address "0" right
+				 * now to discover where things will load so
+				 * that we can adjust the resulting alignment.
+				 * In this case (load_bias != 0), we can use
+				 * MAP_FIXED_NOREPLACE to make sure the mapping
+				 * doesn't collide with anything.
+				 */
+				if (alignment > ELF_MIN_ALIGN) {
+					load_bias = elf_load(bprm->file, 0, elf_ppnt,
+							     elf_prot, elf_flags, total_size);
+					if (BAD_ADDR(load_bias)) {
+						retval = IS_ERR_VALUE(load_bias) ?
+							 PTR_ERR((void*)load_bias) : -EINVAL;
+						goto out_free_dentry;
+					}
+					vm_munmap(load_bias, total_size);
+					/* Adjust alignment as requested. */
+					if (alignment)
+						load_bias &= ~(alignment - 1);
+					elf_flags |= MAP_FIXED_NOREPLACE;
+				} else
+					load_bias = 0;
+			}
+
+			/*
+			 * Since load_bias is used for all subsequent loading
+			 * calculations, we must lower it by the first vaddr
+			 * so that the remaining calculations based on the
+			 * ELF vaddrs will be correctly offset. The result
+			 * is then page aligned.
+			 */
+			load_bias = ELF_PAGESTART(load_bias - vaddr);
+		}
+
+		error = elf_load(bprm->file, load_bias + vaddr, elf_ppnt,
+				elf_prot, elf_flags, total_size);
+		if (BAD_ADDR(error)) {
+			retval = IS_ERR_VALUE(error) ?
+				PTR_ERR((void*)error) : -EINVAL;
+			goto out_free_dentry;
+		}
+
+		if (first_pt_load) {
+			first_pt_load = 0;
+			if (elf_ex->e_type == ET_DYN) {
+				load_bias += error -
+				             ELF_PAGESTART(load_bias + vaddr);
+				reloc_func_desc = load_bias;
+			}
+		}
+
+		/*
+		 * Figure out which segment in the file contains the Program
+		 * Header table, and map to the associated memory address.
+		 */
+		if (elf_ppnt->p_offset <= elf_ex->e_phoff &&
+		    elf_ex->e_phoff < elf_ppnt->p_offset + elf_ppnt->p_filesz) {
+			phdr_addr = elf_ex->e_phoff - elf_ppnt->p_offset +
+				    elf_ppnt->p_vaddr;
+		}
+
+		k = elf_ppnt->p_vaddr;
+		if ((elf_ppnt->p_flags & PF_X) && k < start_code)
+			start_code = k;
+		if (start_data < k)
+			start_data = k;
+
+		/*
+		 * Check to see if the section's size will overflow the
+		 * allowed task size. Note that p_filesz must always be
+		 * <= p_memsz so it is only necessary to check p_memsz.
+		 */
+		if (BAD_ADDR(k) || elf_ppnt->p_filesz > elf_ppnt->p_memsz ||
+		    elf_ppnt->p_memsz > TASK_SIZE ||
+		    TASK_SIZE - elf_ppnt->p_memsz < k) {
+			/* set_brk can never work. Avoid overflows. */
+			retval = -EINVAL;
+			goto out_free_dentry;
+		}
+
+		k = elf_ppnt->p_vaddr + elf_ppnt->p_filesz;
+
+		if ((elf_ppnt->p_flags & PF_X) && end_code < k)
+			end_code = k;
+		if (end_data < k)
+			end_data = k;
+		k = elf_ppnt->p_vaddr + elf_ppnt->p_memsz;
+		if (k > elf_brk)
+			elf_brk = k;
+	}
+
+	e_entry = elf_ex->e_entry + load_bias;
+	phdr_addr += load_bias;
+	elf_brk += load_bias;
+	start_code += load_bias;
+	end_code += load_bias;
+	start_data += load_bias;
+	end_data += load_bias;
+
+	current->mm->start_brk = current->mm->brk = ELF_PAGEALIGN(elf_brk);
+
+	if (interpreter) {
+		elf_entry = load_elf_interp(interp_elf_ex,
+					    interpreter,
+					    load_bias, interp_elf_phdata,
+					    &arch_state);
+		if (!IS_ERR_VALUE(elf_entry)) {
+			/*
+			 * load_elf_interp() returns relocation
+			 * adjustment
+			 */
+			interp_load_addr = elf_entry;
+			elf_entry += interp_elf_ex->e_entry;
+		}
+		if (BAD_ADDR(elf_entry)) {
+			retval = IS_ERR_VALUE(elf_entry) ?
+					(int)elf_entry : -EINVAL;
+			goto out_free_dentry;
+		}
+		reloc_func_desc = interp_load_addr;
+
+		allow_write_access(interpreter);
+		fput(interpreter);
+
+		kfree(interp_elf_ex);
+		kfree(interp_elf_phdata);
+	} else {
+		elf_entry = e_entry;
+		if (BAD_ADDR(elf_entry)) {
+			retval = -EINVAL;
+			goto out_free_dentry;
+		}
+	}
+
+	kfree(elf_phdata);
+
+	set_binfmt(&elf_format);
+
+#ifdef ARCH_HAS_SETUP_ADDITIONAL_PAGES
+	retval = ARCH_SETUP_ADDITIONAL_PAGES(bprm, elf_ex, !!interpreter);
+	if (retval < 0)
+		goto out;
+#endif /* ARCH_HAS_SETUP_ADDITIONAL_PAGES */
+
+	retval = create_elf_tables(bprm, elf_ex, interp_load_addr,
+				   e_entry, phdr_addr);
+	if (retval < 0)
+		goto out;
+
+	mm = current->mm;
+	mm->end_code = end_code;
+	mm->start_code = start_code;
+	mm->start_data = start_data;
+	mm->end_data = end_data;
+	mm->start_stack = bprm->p;
+
+	if ((current->flags & PF_RANDOMIZE) && (snapshot_randomize_va_space > 1)) {
+		/*
+		 * For architectures with ELF randomization, when executing
+		 * a loader directly (i.e. no interpreter listed in ELF
+		 * headers), move the brk area out of the mmap region
+		 * (since it grows up, and may collide early with the stack
+		 * growing down), and into the unused ELF_ET_DYN_BASE region.
+		 */
+		if (IS_ENABLED(CONFIG_ARCH_HAS_ELF_RANDOMIZE) &&
+		    elf_ex->e_type == ET_DYN && !interpreter) {
+			mm->brk = mm->start_brk = ELF_ET_DYN_BASE;
+		} else {
+			/* Otherwise leave a gap between .bss and brk. */
+			mm->brk = mm->start_brk = mm->brk + PAGE_SIZE;
+		}
+
+		mm->brk = mm->start_brk = arch_randomize_brk(mm);
+#ifdef compat_brk_randomized
+		current->brk_randomized = 1;
+#endif
+	}
+
+	if (current->personality & MMAP_PAGE_ZERO) {
+		/* Why this, you ask???  Well SVr4 maps page 0 as read-only,
+		   and some applications "depend" upon this behavior.
+		   Since we do not have the power to recompile these, we
+		   emulate the SVr4 behavior. Sigh. */
+		error = vm_mmap(NULL, 0, PAGE_SIZE, PROT_READ | PROT_EXEC,
+				MAP_FIXED | MAP_PRIVATE, 0);
+
+		retval = do_mseal(0, PAGE_SIZE, 0);
+		if (retval)
+			pr_warn_ratelimited("pid=%d, couldn't seal address 0, ret=%d.\n",
+					    task_pid_nr(current), retval);
+	}
+
+	regs = current_pt_regs();
+
+	finalize_exec(bprm);
+	START_THREAD(elf_ex, regs, elf_entry, bprm->p);
+	retval = 0;
+}
+```
+
 ## exit
 
 Processes must terminate with the exit system call. This gives the kernel the opportunity to free the resources used by the processes to the system. 
@@ -1939,6 +2034,7 @@ Its definition is architecture-independent and is held in kernel/exit.c.
 Its implementation is not particularly interesting because it immediately delegates its work to do_exit.
 
 Suffice it to say that the implementation of this function consists essentially of decrementing reference counters and returning memory areas to memory management once the reference counter has reverted to 0 and the corresponding structure is no longer being used by any process in the system.
+
 
 
 ```c
