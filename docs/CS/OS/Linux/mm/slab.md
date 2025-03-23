@@ -36,7 +36,7 @@ slab 对象池在内存管理系统中的架构层次是基于伙伴系统之上
 
 ## kmem_cache
 
-每一个slab都有一个管理结构，叫做kmem_cache
+每一个slab都有一个管理结构，叫做 kmem_cache
 kmem_cache将所有node上的slab连接起来，进行统一的调配。每个slab其实就是一个page结构体，对应着2^gfporder个连续页框
 每个slab由根据需要，划分成多个object，每个object就是可以被进程使用的空间了
 Linux通过slab_caches双端链表，将系统中所有kmem_cache链接起来
@@ -78,13 +78,13 @@ struct kmem_cache_node {
     int free_touched;       /* updated without locking */
 #endif
 ...
-
 };
 ```
-kmem_cache_node 记录了3种slab：
-- slabs_full ：已经完全分配的 slab
-- slabs_partial： 部分分配的slab
-- slabs_free：空slab，或者没有对象被分配
+`kmem_cache_node` 记录了3种slab
+
+- slabs_full: 已经完全分配的 slab
+- slabs_partial: 部分分配的slab
+- slabs_free: 空slab，或者没有对象被分配
 
 kmalloc_info[] is to make slub_debug=,kmalloc-xx option work at boot time. kmalloc_index() supports up to 2^26=64MB, so the final entry of the table is kmalloc-67108864.
 index = 1 和 index = 2 是个例外，内核单独支持了 kmalloc-96 和 kmalloc-192 这两个通用 slab cache。
@@ -110,7 +110,8 @@ extern const struct kmalloc_info_struct {
 ```
 
 
-Linux kernel 使用 struct page 来描述一个slab。单个slab可以在slab链表之间移动，例如如果一个半满slab被分配了对象后变满了，就要从 slabs_partial 中被删除，同时插入到 slabs_full 中去。
+Linux kernel 使用 struct page 来描述一个slab
+单个slab可以在slab链表之间移动，例如如果一个半满slab被分配了对象后变满了，就要从 slabs_partial 中被删除，同时插入到 slabs_full 中去
 
 ```c
 struct page {
@@ -332,6 +333,155 @@ done:
 	return 0;
 }
 ```
+
+#### kmem_cache_init
+
+```c
+
+void __init kmem_cache_init(void)
+{
+	static __initdata struct kmem_cache boot_kmem_cache,
+		boot_kmem_cache_node;
+	int node;
+
+	if (debug_guardpage_minorder())
+		slub_max_order = 0;
+
+	/* Print slub debugging pointers without hashing */
+	if (__slub_debug_enabled())
+		no_hash_pointers_enable(NULL);
+
+	kmem_cache_node = &boot_kmem_cache_node;
+	kmem_cache = &boot_kmem_cache;
+
+	/*
+	 * Initialize the nodemask for which we will allocate per node
+	 * structures. Here we don't need taking slab_mutex yet.
+	 */
+	for_each_node_state(node, N_NORMAL_MEMORY)
+		node_set(node, slab_nodes);
+
+	create_boot_cache(kmem_cache_node, "kmem_cache_node",
+			sizeof(struct kmem_cache_node),
+			SLAB_HWCACHE_ALIGN | SLAB_NO_OBJ_EXT, 0, 0);
+
+	hotplug_memory_notifier(slab_memory_callback, SLAB_CALLBACK_PRI);
+
+	/* Able to allocate the per node structures */
+	slab_state = PARTIAL;
+
+	create_boot_cache(kmem_cache, "kmem_cache",
+			offsetof(struct kmem_cache, node) +
+				nr_node_ids * sizeof(struct kmem_cache_node *),
+			SLAB_HWCACHE_ALIGN | SLAB_NO_OBJ_EXT, 0, 0);
+
+	kmem_cache = bootstrap(&boot_kmem_cache);
+	kmem_cache_node = bootstrap(&boot_kmem_cache_node);
+
+	/* Now we can use the kmem_cache to allocate kmalloc slabs */
+	setup_kmalloc_cache_index_table();
+	create_kmalloc_caches();
+
+	/* Setup random freelists for each cache */
+	init_freelist_randomization();
+
+	cpuhp_setup_state_nocalls(CPUHP_SLUB_DEAD, "slub:dead", NULL,
+				  slub_cpu_dead);
+}
+```
+
+create_boot_cache
+
+```c
+/* Create a cache during boot when no slab services are available yet */
+void __init create_boot_cache(struct kmem_cache *s, const char *name,
+		unsigned int size, slab_flags_t flags,
+		unsigned int useroffset, unsigned int usersize)
+{
+	int err;
+	unsigned int align = ARCH_KMALLOC_MINALIGN;
+	struct kmem_cache_args kmem_args = {};
+
+	/*
+	 * kmalloc caches guarantee alignment of at least the largest
+	 * power-of-two divisor of the size. For power-of-two sizes,
+	 * it is the size itself.
+	 */
+	if (flags & SLAB_KMALLOC)
+		align = max(align, 1U << (ffs(size) - 1));
+	kmem_args.align = calculate_alignment(flags, align, size);
+
+#ifdef CONFIG_HARDENED_USERCOPY
+	kmem_args.useroffset = useroffset;
+	kmem_args.usersize = usersize;
+#endif
+
+	err = do_kmem_cache_create(s, name, size, &kmem_args, flags);
+
+	if (err)
+		panic("Creation of kmalloc slab %s size=%u failed. Reason %d\n",
+					name, size, err);
+
+	s->refcount = -1;	/* Exempt from merging for now */
+}
+```
+
+create_kmalloc_cache
+
+```c
+static struct kmem_cache *__init create_kmalloc_cache(const char *name,
+						      unsigned int size,
+						      slab_flags_t flags)
+{
+	struct kmem_cache *s = kmem_cache_zalloc(kmem_cache, GFP_NOWAIT);
+
+	if (!s)
+		panic("Out of memory when creating slab %s\n", name);
+
+	create_boot_cache(s, name, size, flags | SLAB_KMALLOC, 0, size);
+	list_add(&s->list, &slab_caches);
+	s->refcount = 1;
+	return s;
+}
+```
+
+create_kmalloc_caches
+
+Create the kmalloc array. Some of the regular kmalloc arrays may already have been created because they were needed to enable allocations for slab creation.
+```c
+void __init create_kmalloc_caches(void)
+{
+	int i;
+	enum kmalloc_cache_type type;
+
+	/*
+	 * Including KMALLOC_CGROUP if CONFIG_MEMCG defined
+	 */
+	for (type = KMALLOC_NORMAL; type < NR_KMALLOC_TYPES; type++) {
+		/* Caches that are NOT of the two-to-the-power-of size. */
+		if (KMALLOC_MIN_SIZE <= 32)
+			new_kmalloc_cache(1, type);
+		if (KMALLOC_MIN_SIZE <= 64)
+			new_kmalloc_cache(2, type);
+
+		/* Caches that are of the two-to-the-power-of size. */
+		for (i = KMALLOC_SHIFT_LOW; i <= KMALLOC_SHIFT_HIGH; i++)
+			new_kmalloc_cache(i, type);
+	}
+#ifdef CONFIG_RANDOM_KMALLOC_CACHES
+	random_kmalloc_seed = get_random_u64();
+#endif
+
+	/* Kmalloc array is now usable */
+	slab_state = UP;
+
+	if (IS_ENABLED(CONFIG_SLAB_BUCKETS))
+		kmem_buckets_cache = kmem_cache_create("kmalloc_buckets",
+						       sizeof(kmem_buckets),
+						       0, SLAB_NO_MERGE, NULL);
+}
+```
+
 
 
 
