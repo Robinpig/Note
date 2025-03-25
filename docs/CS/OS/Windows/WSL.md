@@ -72,6 +72,17 @@ cat /proc/meminfo
 ```
 
 
+WSL 查看Windows本地磁盘 C
+
+```shell
+cd /mnt/c
+```
+
+Windows 访问 WSL 目录  在目录下执行 `explorer.exe`
+
+
+
+
 ## Links
 
 - [Windows](/docs/CS/OS/Windows/Windows.md)
