@@ -621,11 +621,12 @@ int mlock_future_check(struct mm_struct *mm, unsigned long flags,
 ```
 
 #### mmap_region
+
 mmap 的调用
 1. vm_area_alloc
 2. vm_get_page_prot
 3. call_mmap
-   4. file -> f_op -> mmap
+   1. file -> f_op -> mmap
 4. vma_set_anonymous
 
 非匿名映射的情况下 mmap最终还是靠驱动提供的文件mmap操作实现的

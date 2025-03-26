@@ -29,6 +29,35 @@
 对于 file 结构体来说，一定要绑定 inode 和 dentry ，哪怕是伪造的、不完整的 inode
 
 
+## init
+
+系统初始化时挂载根文件系统
+```c
+void __init mount_root(char *root_device_name)
+{
+	switch (ROOT_DEV) {
+	case Root_NFS:
+		mount_nfs_root();
+		break;
+	case Root_CIFS:
+		mount_cifs_root();
+		break;
+	case Root_Generic:
+		mount_root_generic(root_device_name, root_device_name,
+				   root_mountflags);
+		break;
+	case 0:
+		if (root_device_name && root_fs_names &&
+		    mount_nodev_root(root_device_name) == 0)
+			break;
+		fallthrough;
+	default:
+		mount_block_root(root_device_name);
+		break;
+	}
+}
+```
+
 ## fs_struct
 
 fs中包含两个path对象 root 和 pwd

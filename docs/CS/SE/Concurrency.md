@@ -156,3 +156,4 @@ For example, while one would simply like to use the select() interface to manage
 ## References
 
 1. [Real-world Concurrency](https://queue.acm.org/detail.cfm?id=1454462)
+2. [Practical lock-freedom](https://www.cl.cam.ac.uk/techreports/UCAM-CL-TR-579.pdf)

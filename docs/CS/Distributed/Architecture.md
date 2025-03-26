@@ -93,6 +93,11 @@ The SOA approach is best suited for complex enterprise systems such as those for
 A banking system is extremely hard to break into microservices. But a monolithic approach also isn’t good for a banking system as one part could hurt the whole app.
 The best solution is to use the SOA approach and organize complex apps into isolated independent services.
 
+SOA架构过于严谨精密的流程与理论
+● SOA架构会利用一个被称为是企业服务总线（Enterprise Service Bus，ESB）的消息管道，来实现各个子系统之间的通讯交互，这就让各个服务间在ESB的调度下，不需要相互依赖就可以实现相互通讯，既带来了服务松耦合的好处，也为以后可以进一步实现业务流程编排（Business Process Management，BPM）提供了基础；
+● SOA架构使用了服务数据对象（Service Data Object，SDO）来访问和表示数据，使用服务组件架构（Service Component Architecture，SCA）来定义服务封装的形式和服务运行的容器
+
+
 ### Microservice architecture
 
 Microservice is a type of service-oriented software architecture that focuses on building a series of autonomous components that make up an app.
@@ -161,6 +166,8 @@ Microservices are very small, loosely coupled independent services and feature r
 
 
 
+
+SOA有更明确精细的规范 而微服务对服务的实现约束更少 工程师可以自行选择服务治理框架 但同时对其素养有了更高的要求
 
 
 

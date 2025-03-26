@@ -21,6 +21,18 @@ Linux 内核使用页式内存管理，应用程序给出的内存地址是虚�
 （实际上只有用户态的地址映射才需要管理，内核态的地址映射是写死的
 
 
+## boot
+
+
+内核的正式入口是 start_kernel, 前面的讨论基本都发生在 start_kernel 之后，但实际上在它之 前我们就需要访问内存了， 那么首先要做的就是识别系统中的内存， 由 detect_memo-1 y实现。
+根据硬件和BIOS的配置，detect_memo1-y依次调用detect_memory_e820、 cletect_memo1-y_e801 和 cletect_memm-y_88, 最终哪一个函数起作用取决于硬件和 BIOS 的配置
+后二者作为兼容老机器 存在， 此处主要以现代计算机中的 cletect_memor y_e820 为主进行分析
+三者都是通过与 BIOS 通信实现的， 给 BIOS 发送 OxlS 中断， 根据 BIOS 反馈的信息提取内存信息。
+以detect_memory_e820为例，每一条有效的信息都被存储在boot_params.e820_table数组中
+(类型为boot_e820_entr y)。
+boot_e820_entl-y有3 个字段， addr和size字段分别表示一段内存的起始地址和大小，type字段表示这段内存的用途。
+
+
 
 ```c
 // arch/x86/boot/main.c
@@ -31,16 +43,466 @@ void main(void)
 }
 ```
 
+### detect_memory
+
+探测内存布局
+
+```c
+// arch/x86/boot/memory.c
+void detect_memory(void)
+{
+    detect_memory_e820();
+
+    detect_memory_e801();
+
+    detect_memory_88();
+}
+```
+
+可以清晰的看到上面分别调用了三个函数detect_memory_e820()、detect_memory_e801()和detect_memory_88()
+较新的电脑调用detect_memory_e820()足矣探测内存布局，detect_memory_e801()和detect_memory_88()则是针对较老的电脑进行兼容而保留的
+
+#### detect_memory_e820
+
+```c
+static void detect_memory_e820(void)
+{
+    int count = 0;
+    struct biosregs ireg, oreg;
+    struct boot_e820_entry *desc = boot_params.e820_table;
+    static struct boot_e820_entry buf; /* static so it is zeroed */
+
+    initregs(&ireg);
+    ireg.ax  = 0xe820;
+    ireg.cx  = sizeof(buf);
+    ireg.edx = SMAP;
+    ireg.di  = (size_t)&buf;
+
+    /*
+     * Note: at least one BIOS is known which assumes that the
+     * buffer pointed to by one e820 call is the same one as
+     * the previous call, and only changes modified fields.  Therefore,
+     * we use a temporary buffer and copy the results entry by entry.
+     *
+     * This routine deliberately does not try to account for
+     * ACPI 3+ extended attributes.  This is because there are
+     * BIOSes in the field which report zero for the valid bit for
+     * all ranges, and we don't currently make any use of the
+     * other attribute bits.  Revisit this if we see the extended
+     * attribute bits deployed in a meaningful way in the future.
+     */
+
+    do {
+        intcall(0x15, &ireg, &oreg);
+        ireg.ebx = oreg.ebx; /* for next iteration... */
+
+        /* BIOSes which terminate the chain with CF = 1 as opposed
+           to %ebx = 0 don't always report the SMAP signature on
+           the final, failing, probe. */
+        if (oreg.eflags & X86_EFLAGS_CF)
+            break;
+
+        /* Some BIOSes stop returning SMAP in the middle of
+           the search loop.  We don't know exactly how the BIOS
+           screwed up the map at that point, we might have a
+           partial map, the full map, or complete garbage, so
+           just return failure. */
+        if (oreg.eax != SMAP) {
+            count = 0;
+            break;
+        }
+
+        *desc++ = buf;
+        count++;
+    } while (ireg.ebx && count < ARRAY_SIZE(boot_params.e820_table));
+
+    boot_params.e820_entries = count;
+}
+```
+
+
+
+
+
+
+
+对于x86-64架构或MIPS架构，除硬件外设访问的物理区间上的内存域为ZONE_DMA除外，其余都为ZONE_NORMAL类型，每个内存域内部则记录了所覆盖的页帧情况并用buddy system 来管理本内存域内部的空闲页帧，可以通过cat /proc/zoneinfo 命令查看系统的zone相关信息
+
+```c
+struct zone {
+    /* Read-mostly fields */
+
+    /* zone watermarks, access with *_wmark_pages(zone) macros */
+    unsigned long _watermark[NR_WMARK];
+    unsigned long watermark_boost;
+
+    unsigned long nr_reserved_highatomic;
+
+    /*
+     * We don't know if the memory that we're going to allocate will be
+     * freeable or/and it will be released eventually, so to avoid totally
+     * wasting several GB of ram we must reserve some of the lower zone
+     * memory (otherwise we risk to run OOM on the lower zones despite
+     * there being tons of freeable ram on the higher zones).  This array is
+     * recalculated at runtime if the sysctl_lowmem_reserve_ratio sysctl
+     * changes.
+     */
+    long lowmem_reserve[MAX_NR_ZONES];
+
+#ifdef CONFIG_NUMA
+    int node;
+#endif
+    struct pglist_data  *zone_pgdat;
+    struct per_cpu_pageset __percpu *pageset;
+    /*
+     * the high and batch values are copied to individual pagesets for
+     * faster access
+     */
+    int pageset_high;
+    int pageset_batch;
+
+#ifndef CONFIG_SPARSEMEM
+    /*
+     * Flags for a pageblock_nr_pages block. See pageblock-flags.h.
+     * In SPARSEMEM, this map is stored in struct mem_section
+     */
+    unsigned long       *pageblock_flags;
+#endif /* CONFIG_SPARSEMEM */
+
+    /* zone_start_pfn == zone_start_paddr >> PAGE_SHIFT */
+    unsigned long       zone_start_pfn;
+
+    atomic_long_t       managed_pages;
+    unsigned long       spanned_pages;
+    unsigned long       present_pages;
+#ifdef CONFIG_CMA
+    unsigned long       cma_pages;
+#endif
+
+    const char      *name;
+
+#ifdef CONFIG_MEMORY_ISOLATION
+    /*
+     * Number of isolated pageblock. It is used to solve incorrect
+     * freepage counting problem due to racy retrieving migratetype
+     * of pageblock. Protected by zone->lock.
+     */
+    unsigned long       nr_isolate_pageblock;
+#endif
+ 
+#ifdef CONFIG_MEMORY_HOTPLUG
+    /* see spanned/present_pages for more description */
+    seqlock_t       span_seqlock;
+#endif
+
+    int initialized;
+
+    /* Write-intensive fields used from the page allocator */
+    ZONE_PADDING(_pad1_)
+
+    /* free areas of different sizes */
+    struct free_area    free_area[MAX_ORDER];
+
+    /* zone flags, see below */
+    unsigned long       flags;
+
+    /* Primarily protects free_area */
+    spinlock_t      lock;
+
+    /* Write-intensive fields used by compaction and vmstats. */
+    ZONE_PADDING(_pad2_)
+
+    /*
+     * When free pages are below this point, additional steps are taken
+     * when reading the number of free pages to avoid per-cpu counter
+     * drift allowing watermarks to be breached
+     */
+    unsigned long percpu_drift_mark;
+
+#if defined CONFIG_COMPACTION || defined CONFIG_CMA
+    /* pfn where compaction free scanner should start */
+    unsigned long       compact_cached_free_pfn;
+    /* pfn where compaction migration scanner should start */
+    unsigned long       compact_cached_migrate_pfn[ASYNC_AND_SYNC];
+    unsigned long       compact_init_migrate_pfn;
+    unsigned long       compact_init_free_pfn;
+#endif
+
+#ifdef CONFIG_COMPACTION
+    /*
+     * On compaction failure, 1<<compact_defer_shift compactions
+     * are skipped before trying again. The number attempted since
+     * last failure is tracked with compact_considered.
+     * compact_order_failed is the minimum compaction failed order.
+     */
+    unsigned int        compact_considered;
+    unsigned int        compact_defer_shift;
+    int         compact_order_failed;
+#endif
+
+#if defined CONFIG_COMPACTION || defined CONFIG_CMA
+    /* Set to true when the PG_migrate_skip bits should be cleared */
+    bool            compact_blockskip_flush;
+#endif
+
+    bool            contiguous;
+
+    ZONE_PADDING(_pad3_)
+    /* Zone statistics */
+    atomic_long_t       vm_stat[NR_VM_ZONE_STAT_ITEMS];
+    atomic_long_t       vm_numa_stat[NR_VM_NUMA_STAT_ITEMS];
+} ____cacheline_internodealigned_in_smp;
+```
+
+
+由于多cpu多核的发展，当多个cpu需对一个zone操作时，容易造成条件竞争，频繁加解锁操作又过于消耗时间，故引入了per_cpu_pages结构，为每个cpu都准备一个单独的页面仓库
+
+
+```c
+struct per_cpu_pageset {
+	struct per_cpu_pages pcp;
+#ifdef CONFIG_NUMA
+	s8 expire;
+	u16 vm_numa_stat_diff[NR_VM_NUMA_STAT_ITEMS];
+#endif
+#ifdef CONFIG_SMP
+	s8 stat_threshold;
+	s8 vm_stat_diff[NR_VM_ZONE_STAT_ITEMS];
+#endif
+};
+
+struct per_cpu_pages {
+    int count;      /* number of pages in the list */
+    int high;       /* high watermark, emptying needed */
+    int batch;      /* chunk size for buddy add/remove */
+
+    /* Lists of pages, one per migrate type stored on the pcp-lists */
+    struct list_head lists[MIGRATE_PCPTYPES];
+};
+```
+
+
+zone_type
+
+```c
+enum zone_type {
+#ifdef CONFIG_ZONE_DMA
+    ZONE_DMA,
+#endif
+#ifdef CONFIG_ZONE_DMA32
+    ZONE_DMA32,
+#endif
+    ZONE_NORMAL,
+#ifdef CONFIG_HIGHMEM
+    ZONE_HIGHMEM,
+#endif
+    ZONE_MOVABLE,
+#ifdef CONFIG_ZONE_DEVICE
+    ZONE_DEVICE,
+#endif
+    __MAX_NR_ZONES
+
+};
+```
+
+页是OS管理物理内存的基本单元，每个物理内存页被称为一个页帧（Page Frame），每个页帧都会有一个编号，被称为PFN(Page Frame Number). 对于每个物理页帧，内核都会创建一个叫 page 的数据结构来追踪该页的各种信息与状态， page 是内存管理的核心
+
+page 与物理页帧是一一对应关系，OS在初始化时会根据物理内存创建出所有的 page 实例，因此我们必须要控制该结构体的大小，以避免过多的消耗内存。但一个内存页可能被用于各种目的， page 中就需要封装各种状态信息，因此内核工程师们精心设计了该数据结构，可以看到很多属性之间都是 union 关系，可以理解为虽然系统在方方面面都需要使用内存，但一个物理内存页一次只能用于一种目的，用于不同目的的字段之间可以是“或”的关系，这样就显著地降低了整个数据结构的大小。
+我们在这里先不关心每个字段的意义，后续章节讲到具体的应用场合时会针对性地做详细介绍，不过我们可以先看一下比较重要的字段：
+- flags 该字段是一个无符号长整型，用来存放各种类型的页标记，内核有个专门的文件来定义各种标记位，叫着 include/linux/page-flags.h, 例如标记 PG_locked 表示当前页被加锁了。
+  flags字段是一个寸土寸金的地方，只有最重要的标记才有资格在该字段中占有一席之地。
+- _refcount 引用计数，如果是 -1 的话说明没有该页没有被使用，可以重新分配给需要的进程
+
+理想情况下，内存中的所有页面从功能上讲都是等价的，都可以用于任何目的，但现实却并非如此，例如一些DMA处理器只能访问固定范围内的地址空间（见这里）。因此内核将整个内存地址空间划分成了不同的区，每个区叫着一个 Zone, 每个 Zone 都有自己的用途
+
+
+
+进程的虚拟内存空间在内核中是用 struct mm_struct 结构来描述的，每个进程都有自己独立的虚拟内存空间，而进程的虚拟内存到物理内存的映射也是独立的，为了保证每个进程里内存映射的独立进行，所以每个进程都会有独立的页表，而页表的起始地址就存放在 struct mm_struct 结构中的 pgd 属性中
+
+内核会在 mm_init 函数中调用 mm_alloc_pgd，并在 mm_alloc_pgd 函数中通过调用 pgd_alloc 为子进程分配其独立的顶级页表起始地址，赋值给子进程 struct mm_struct 结构中的 pgd 属性
+
+```c
+
+```c
+struct mm_struct {
+	// ...
+	pgd_t * pgd;
+}
+```
+
+
+
+调用 load_new_mm_cr3 函数将进程顶级页表起始地址 mm_struct-> pgd 中的虚拟内存地址通过 `__sme_pa 宏` 转换为物理内存地址，并将 pgd 的物理内存地址加载到 cr3 寄存器中
+
+进程的上下文在内核中完成切换之后，现在 cr3 寄存器中保存的就是当前进程顶级页表的起始物理内存地址了，当 CPU 通过虚拟内存地址访问进程的虚拟内存时，CPU 首先会从 cr3 寄存器中获取到当前进程的顶级页表起始地址，然后从虚拟内存地址中提取出虚拟内存页对应 PTE 在页表内的偏移，通过 `页表起始地址 + 页表内偏移 * sizeof(PTE)` 这个公式定位到虚拟内存页在页表中所对应的 PTE
+
+```c
+// arch/x86/mm/tlb.c
+void switch_mm_irqs_off(struct mm_struct *unused, struct mm_struct *next,
+			struct task_struct *tsk)
+{
+	struct mm_struct *prev = this_cpu_read(cpu_tlbstate.loaded_mm);
+	u16 prev_asid = this_cpu_read(cpu_tlbstate.loaded_mm_asid);
+	bool was_lazy = this_cpu_read(cpu_tlbstate_shared.is_lazy);
+	unsigned cpu = smp_processor_id();
+	unsigned long new_lam;
+	u64 next_tlb_gen;
+	bool need_flush;
+	u16 new_asid;
+
+	/* We don't want flush_tlb_func() to run concurrently with us. */
+	if (IS_ENABLED(CONFIG_PROVE_LOCKING))
+		WARN_ON_ONCE(!irqs_disabled());
+
+	/*
+	 * Verify that CR3 is what we think it is.  This will catch
+	 * hypothetical buggy code that directly switches to swapper_pg_dir
+	 * without going through leave_mm() / switch_mm_irqs_off() or that
+	 * does something like write_cr3(read_cr3_pa()).
+	 *
+	 * Only do this check if CONFIG_DEBUG_VM=y because __read_cr3()
+	 * isn't free.
+	 */
+#ifdef CONFIG_DEBUG_VM
+	if (WARN_ON_ONCE(__read_cr3() != build_cr3(prev->pgd, prev_asid,
+						   tlbstate_lam_cr3_mask()))) {
+		/*
+		 * If we were to BUG here, we'd be very likely to kill
+		 * the system so hard that we don't see the call trace.
+		 * Try to recover instead by ignoring the error and doing
+		 * a global flush to minimize the chance of corruption.
+		 *
+		 * (This is far from being a fully correct recovery.
+		 *  Architecturally, the CPU could prefetch something
+		 *  back into an incorrect ASID slot and leave it there
+		 *  to cause trouble down the road.  It's better than
+		 *  nothing, though.)
+		 */
+		__flush_tlb_all();
+	}
+#endif
+	if (was_lazy)
+		this_cpu_write(cpu_tlbstate_shared.is_lazy, false);
+
+	/*
+	 * The membarrier system call requires a full memory barrier and
+	 * core serialization before returning to user-space, after
+	 * storing to rq->curr, when changing mm.  This is because
+	 * membarrier() sends IPIs to all CPUs that are in the target mm
+	 * to make them issue memory barriers.  However, if another CPU
+	 * switches to/from the target mm concurrently with
+	 * membarrier(), it can cause that CPU not to receive an IPI
+	 * when it really should issue a memory barrier.  Writing to CR3
+	 * provides that full memory barrier and core serializing
+	 * instruction.
+	 */
+	if (prev == next) {
+		/* Not actually switching mm's */
+		VM_WARN_ON(this_cpu_read(cpu_tlbstate.ctxs[prev_asid].ctx_id) !=
+			   next->context.ctx_id);
+
+		/*
+		 * If this races with another thread that enables lam, 'new_lam'
+		 * might not match tlbstate_lam_cr3_mask().
+		 */
+
+		/*
+		 * Even in lazy TLB mode, the CPU should stay set in the
+		 * mm_cpumask. The TLB shootdown code can figure out from
+		 * cpu_tlbstate_shared.is_lazy whether or not to send an IPI.
+		 */
+		if (IS_ENABLED(CONFIG_DEBUG_VM) && WARN_ON_ONCE(prev != &init_mm &&
+				 !cpumask_test_cpu(cpu, mm_cpumask(next))))
+			cpumask_set_cpu(cpu, mm_cpumask(next));
+
+		/*
+		 * If the CPU is not in lazy TLB mode, we are just switching
+		 * from one thread in a process to another thread in the same
+		 * process. No TLB flush required.
+		 */
+		if (!was_lazy)
+			return;
+
+		/*
+		 * Read the tlb_gen to check whether a flush is needed.
+		 * If the TLB is up to date, just use it.
+		 * The barrier synchronizes with the tlb_gen increment in
+		 * the TLB shootdown code.
+		 */
+		smp_mb();
+		next_tlb_gen = atomic64_read(&next->context.tlb_gen);
+		if (this_cpu_read(cpu_tlbstate.ctxs[prev_asid].tlb_gen) ==
+				next_tlb_gen)
+			return;
+
+		/*
+		 * TLB contents went out of date while we were in lazy
+		 * mode. Fall through to the TLB switching code below.
+		 */
+		new_asid = prev_asid;
+		need_flush = true;
+	} else {
+		/*
+		 * Apply process to process speculation vulnerability
+		 * mitigations if applicable.
+		 */
+		cond_mitigation(tsk);
+
+		/*
+		 * Stop remote flushes for the previous mm.
+		 * Skip kernel threads; we never send init_mm TLB flushing IPIs,
+		 * but the bitmap manipulation can cause cache line contention.
+		 */
+		if (prev != &init_mm) {
+			VM_WARN_ON_ONCE(!cpumask_test_cpu(cpu,
+						mm_cpumask(prev)));
+			cpumask_clear_cpu(cpu, mm_cpumask(prev));
+		}
+
+		/* Start receiving IPIs and then read tlb_gen (and LAM below) */
+		if (next != &init_mm)
+			cpumask_set_cpu(cpu, mm_cpumask(next));
+		next_tlb_gen = atomic64_read(&next->context.tlb_gen);
+
+		choose_new_asid(next, next_tlb_gen, &new_asid, &need_flush);
+
+		/* Let nmi_uaccess_okay() know that we're changing CR3. */
+		this_cpu_write(cpu_tlbstate.loaded_mm, LOADED_MM_SWITCHING);
+		barrier();
+	}
+
+	new_lam = mm_lam_cr3_mask(next);
+	if (need_flush) {
+		this_cpu_write(cpu_tlbstate.ctxs[new_asid].ctx_id, next->context.ctx_id);
+		this_cpu_write(cpu_tlbstate.ctxs[new_asid].tlb_gen, next_tlb_gen);
+		load_new_mm_cr3(next->pgd, new_asid, new_lam, true);
+
+		trace_tlb_flush(TLB_FLUSH_ON_TASK_SWITCH, TLB_FLUSH_ALL);
+	} else {
+		/* The new ASID is already up to date. */
+		load_new_mm_cr3(next->pgd, new_asid, new_lam, false);
+
+		trace_tlb_flush(TLB_FLUSH_ON_TASK_SWITCH, 0);
+	}
+
+	/* Make sure we write CR3 before loaded_mm. */
+	barrier();
+
+	this_cpu_write(cpu_tlbstate.loaded_mm, next);
+	this_cpu_write(cpu_tlbstate.loaded_mm_asid, new_asid);
+	cpu_tlbstate_update_lam(new_lam, mm_untag_mask(next));
+
+	if (next != prev) {
+		cr4_update_pce_mm(next);
+		switch_ldt(prev, next);
+	}
+}
+```
+
+
 
 ## init
 
-内核的正式入口是 start_kernel, 前面的讨论基本都发生在 start_kernel 之后，但实际上在它之 前我们就需要访问内存了， 那么首先要做的就是识别系统中的内存， 由 detect_memo-1 y实现。
-根据硬件和BIOS的配置，detect_memo1-y依次调用detect_memory_e820、 cletect_memo1-y_e801 和 cletect_memm-y_88, 最终哪一个函数起作用取决于硬件和 BIOS 的配置
-后二者作为兼容老机器 存在， 此处主要以现代计算机中的 cletect_memor y_e820 为主进行分析
-三者都是通过与 BIOS 通信实现的， 给 BIOS 发送 OxlS 中断， 根据 BIOS 反馈的信息提取内存信息。
-以detect_memory_e820为例，每一条有效的信息都被存储在boot_params.e820_table数组中
-(类型为boot_e820_entr y)。
-boot_e820_entl-y有3 个字段， addr和size字段分别表示一段内存的起始地址和大小，type字段表示这段内存的用途。
 
 
 
