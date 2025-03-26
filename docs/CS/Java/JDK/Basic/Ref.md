@@ -1,5 +1,19 @@
 ## Introduction
 
+
+Java实现多种引用的原因
+● 提供更多样的对象生命周期管理
+● 提高GC回收
+
+Java提供了4种引用类型 分别是 FinalReference、SoftReference、WeakReference 和 PhantomReference 我们将在后面逐一介绍
+另外默认的 strong reference 无需显式定义 同时GC不会主动回收 strong reference引用的对象
+
+
+
+
+
+
+
 ### Ref Hierarchy
 
 ```
