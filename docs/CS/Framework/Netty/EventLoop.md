@@ -4,9 +4,13 @@ EventLoopGroup 本质是一个线程池，主要负责接收 I/O 请求，并分
 
 每新建一个 Channel，EventLoopGroup 会选择一个 EventLoop 与其绑定。该 Channel 在生命周期内都可以对 EventLoop 进行多次绑定和解绑
 
+不同IO模型下，EventLoop有着不同的实现，我们只需要切换不同的实现类就可以完成对NettyIO模型的切换
 
 
 EventLoopGroup 是 Netty Reactor 线程模型的具体实现方式，Netty 通过创建不同的 EventLoopGroup 参数配置，就可以支持 Reactor 的三种线程模型
+
+
+
 
 ![EventLoopGroup](img/EventLoop.png)
 

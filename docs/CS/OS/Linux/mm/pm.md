@@ -458,7 +458,7 @@ static int vmap_range_noflush(unsigned long addr, unsigned long end,
 ## alloc
 
 
-alloc_pages
+### alloc_pages
 
 
 ```c

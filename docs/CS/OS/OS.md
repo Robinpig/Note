@@ -182,15 +182,29 @@ As long as there is no need for per-core concurrency, they are probably a good c
 
 ## OSs
 
+1971年11月3日: [UNIX](/docs/CS/OS/unix/Unix.md) 第1版（UNIX V1）诞生 出版的第一版《Unix 程序员手册》中，将1971/1/1作为Unix纪元的开始
+1973年: 汤普逊和里奇用C语言重写了Unix，形成第三版UNIX
+
+1978年: 大约600台计算机在运行UNIX。伯克利大学推出以第6版UNIX为基础，加上改进和新功能而成的Unix，命名为BSD，开创Unix的另一分支：BSD系列
+
+DOS是1979年由微软公司为IBM个人电脑开发的MS-DOS,它是一个单用户单任务操作系统
+
+1984年，苹果公司发布Macintosh
+
+1985年11月20日，微软正式发布 [Windows](/docs/CS/OS/Windows/Windows.md) 1.0
+早期的 windows，其实就是套在 DOS 外面的一个"壳"，只是起到操作界面的作用。最开始，微软把它称之为"界面管理器"
 
 
-常见的操作系统
+1991年年底，Linux Torvalds公开了 [Linux](/docs/CS/OS/Linux/Linux.md) 内核源码0.02版
 
-- [UNIX](/docs/CS/OS/unix/Unix.md)
-- [Linux](/docs/CS/OS/Linux/Linux.md) is an operating system.
-- [xv6](/docs/CS/OS/xv6/xv6.md)
-- [MacOS](/docs/CS/OS/mac/mac.md)
-- [Windows](/docs/CS/OS/Windows/Windows.md)
+1995年，System 7 的 7.5.1 版本发布，Mac 系统开始改名为Mac OS
+
+
+2016 年 WWDC 上，苹果发布了macOS 10.12 Sierra。Mac OS X 的名字被更简洁优雅的 [macOS](/docs/CS/OS/mac/mac.md) 所取代
+
+随着智能手机和平板电脑的兴起 IOS 和 [Android](/docs/CS/OS/Android/Android.md) 成为移动设备的主流操作系统
+
+[xv6](/docs/CS/OS/xv6/xv6.md) 是 MIT 开发的一个教学用的完整的类 Unix 操作系统，并且在 MIT 的操作系统课程 6.828 中使用
 
 ## Performance
 

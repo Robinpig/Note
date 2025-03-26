@@ -39,6 +39,15 @@ vmhgfs-fuse .host:/ /mnt/hgfs -o rw,allow_other
 ```
 
 
+
+[QEMU](/docs/CS/OS/qemu.md) 和 
+[Bochs](/docs/CS/OS/Bochs.md) 用纯软件的方式完全模拟x86 CPU 和外围设备 所以运行性能较差
+
+
+
+
+
+
 ## Links
 
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
