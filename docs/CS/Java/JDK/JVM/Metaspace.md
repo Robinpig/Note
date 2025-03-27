@@ -1,6 +1,18 @@
 ## Introduction
 
 
+在介绍Metaspace之前 我们首先需要回顾一下 PermGen 内存上它是挨着堆的 垃圾回收使用的是老年代的回收算法
+PermGen 上主要存放以下数据
+● JVM internal representation of classes and their metadata
+● Class statics
+● Interned strings
+从 JDK7 开始，JDK 开发者们就有消灭永久代的打算了。有部分数据移到永久代之外了：
+● Symbols => native memory
+● Interned strings => Java Heap
+● Class statics => Java Heap
+
+JDK8后 彻底废弃 PermGen 由Metaspace取而代之
+OOM
 
 Metaspace is memory the VM uses to store class metadata.
 Class metadata are the runtime representation of java classes within a JVM process - basically any information the JVM needs to work with a Java class. That includes, but is not limited to, runtime representation of data from the JVM class file format.
@@ -123,13 +135,13 @@ Otherwise it owns two - one for the Klass* objects from the class space, one for
 ```
 
 
-
+## Tuning
 
 
 排查metaspace OOM
 
 
-
+经常会出问题的几个点有 Orika 的 classMap、JSON 的 ASMSerializer、Groovy 动态加载类等，基本都集中在反射、Javasisit 字节码增强、CGLIB 动态代理、OSGi 自定义类加载器等的技术点上。另外就是及时给 MetaSpace 区的使用率加一个监控，如果指标有波动提前发现并解决问题
 
 
 

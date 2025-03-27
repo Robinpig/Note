@@ -177,6 +177,225 @@ class VM_Operation: public CHeapObj<mtInternal> {
 ```
 
 
+
+### attach
+
+create_vm 时候会初始化
+
+默认情况下JVM启动的时候并不会立即启动Attach Listener线程。在客户端发送SIGQUIT信号时会启动Attach Listener线程
+
+
+
+```cpp
+jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
+    // ...
+    // Signal Dispatcher needs to be started before VMInit event is posted
+    os::initialize_jdk_signal_support(CHECK_JNI_ERR);
+
+    // Start Attach Listener if +StartAttachListener or it can‘t be started lazily
+    if (!DisableAttachMechanism) {
+        AttachListener::vm_start();
+        if (StartAttachListener || AttachListener::init_at_startup()) {
+            AttachListener::init();
+        }
+    }
+    // ...
+}
+
+```
+
+
+void os::initialize_jdk_signal_support(TRAPS) {
+    if (!ReduceSignalUsage) {
+        // Setup JavaThread for processing signals
+        const char* name = ”Signal Dispatcher“;
+        Handle thread_oop = JavaThread::create_system_thread_object(name, CHECK);
+
+        JavaThread* thread = new JavaThread(&signal_thread_entry);
+        JavaThread::vm_exit_on_osthread_failure(thread);
+
+        JavaThread::start_internal_daemon(THREAD, thread, thread_oop, NearMaxPriority);
+    }
+}
+
+
+Signal Dispatcher线程启动后会通过os::signal_wait()等待操作系统信号量。当收到操作系统信号量，且信号量为SIGBREAK时会触发初始化Attach Listener
+
+
+static void signal_thread_entry(JavaThread* thread, TRAPS) {
+  os::set_priority(thread, NearMaxPriority);
+  while (true) {
+    int sig;
+    {
+      // FIXME : Currently we have not decided what should be the status
+      //         for this java thread blocked here. Once we decide about
+      //         that we should fix this.
+      sig = os::signal_wait();
+    }
+    if (sig == os::sigexitnum_pd()) {
+       // Terminate the signal thread
+       return;
+    }
+
+    switch (sig) {
+      case SIGBREAK: {
+#if INCLUDE_SERVICES
+        // Check if the signal is a trigger to start the Attach Listener - in that
+        // case don‘t print stack traces.
+        if (!DisableAttachMechanism) {
+          // Attempt to transit state to AL_INITIALIZING.
+          AttachListenerState cur_state = AttachListener::transit_state(AL_INITIALIZING, AL_NOT_INITIALIZED);
+          if (cur_state == AL_INITIALIZING) {
+            // Attach Listener has been started to initialize. Ignore this signal.
+            continue;
+          } else if (cur_state == AL_NOT_INITIALIZED) {
+            // Start to initialize.
+            if (AttachListener::is_init_trigger()) {
+              // Attach Listener has been initialized.
+              // Accept subsequent request.
+              continue;
+            } else {
+              // Attach Listener could not be started.
+              // So we need to transit the state to AL_NOT_INITIALIZED.
+              AttachListener::set_state(AL_NOT_INITIALIZED);
+            }
+          } else if (AttachListener::check_socket_file()) {
+            // Attach Listener has been started, but unix domain socket file
+            // does not exist. So restart Attach Listener.
+            continue;
+          }
+        }
+#endif
+        // Print stack traces
+        // Any SIGBREAK operations added here should make sure to flush
+        // the output stream (e.g. tty->flush()) after output.  See 4803766.
+        // Each module also prints an extra carriage return after its output.
+        VM_PrintThreads op(tty, PrintConcurrentLocks, false /* no extended info */, true /* print JNI handle info */);
+        VMThread::execute(&op);
+        VM_FindDeadlocks op1(tty);
+        VMThread::execute(&op1);
+        Universe::print_heap_at_SIGBREAK();
+        if (PrintClassHistogram) {
+          VM_GC_HeapInspection op1(tty, true /* force full GC before heap inspection */);
+          VMThread::execute(&op1);
+        }
+        if (JvmtiExport::should_post_data_dump()) {
+          JvmtiExport::post_data_dump();
+        }
+        break;
+      }
+      default: {
+        // Dispatch the signal to java
+        HandleMark hm(THREAD);
+        Klass* klass = SystemDictionary::resolve_or_null(vmSymbols::jdk_internal_misc_Signal(), THREAD);
+        if (klass != nullptr) {
+          JavaValue result(T_VOID);
+          JavaCallArguments args;
+          args.push_int(sig);
+          JavaCalls::call_static(
+            &result,
+            klass,
+            vmSymbols::dispatch_name(),
+            vmSymbols::int_void_signature(),
+            &args,
+            THREAD
+          );
+        }
+        if (HAS_PENDING_EXCEPTION) {
+          // tty is initialized early so we don’t expect it to be null, but
+          // if it is we can‘t risk doing an initialization that might
+          // trigger additional out-of-memory conditions
+          if (tty != nullptr) {
+            char klass_name[256];
+            char tmp_sig_name[16];
+            const char* sig_name = ”UNKNOWN“;
+            InstanceKlass::cast(PENDING_EXCEPTION->klass())->
+              name()->as_klass_external_name(klass_name, 256);
+            if (os::exception_name(sig, tmp_sig_name, 16) != nullptr)
+              sig_name = tmp_sig_name;
+            warning(”Exception %s occurred dispatching signal %s to handler“
+                    ”- the VM may need to be forcibly terminated“,
+                    klass_name, sig_name );
+          }
+          CLEAR_PENDING_EXCEPTION;
+        }
+      }
+    }
+  }
+}
+
+
+这里 SIGBREAK 实际是 SIGQUIT信号
+
+// SIGBREAK is sent by the keyboard to query the VM state
+#ifndef SIGBREAK
+#define SIGBREAK SIGQUIT
+#endif
+
+
+
+// Starts the Attach Listener thread
+void AttachListener::init() {
+    EXCEPTION_MARK;
+
+    const char* name = ”Attach Listener“;
+    Handle thread_oop = JavaThread::create_system_thread_object(name, THREAD);
+    if (has_init_error(THREAD)) {
+        set_state(AL_NOT_INITIALIZED);
+        return;
+    }
+
+    JavaThread* thread = new JavaThread(&attach_listener_thread_entry);
+    JavaThread::vm_exit_on_osthread_failure(thread);
+
+    JavaThread::start_internal_daemon(THREAD, thread, thread_oop, NoPriority);
+}
+
+
+
+AttachListener::pd_init()初始化逻辑根据实际的操作系统决定。在linux上，最终的初始化工作是由LinuxAttachListener::init()完成
+
+
+
+// Starts the target JavaThread as a daemon of the given priority, and
+// bound to the given java.lang.Thread instance.
+// The Threads_lock is held for the duration.
+void JavaThread::start_internal_daemon(JavaThread* current, JavaThread* target,
+                                       Handle thread_oop, ThreadPriority prio) {
+
+  assert(target->osthread() != nullptr, ”target thread is not properly initialized“);
+
+  MutexLocker mu(current, Threads_lock);
+
+  // Initialize the fields of the thread_oop first.
+  if (prio != NoPriority) {
+    java_lang_Thread::set_priority(thread_oop(), prio);
+    // Note: we don’t call os::set_priority here. Possibly we should,
+    // else all threads should call it themselves when they first run.
+  }
+
+  java_lang_Thread::set_daemon(thread_oop());
+
+  // Now bind the thread_oop to the target JavaThread.
+  target->set_threadOopHandles(thread_oop());
+
+  Threads::add(target); // target is now visible for safepoint/handshake
+  // Publish the JavaThread* in java.lang.Thread after the JavaThread* is
+  // on a ThreadsList. We don‘t want to wait for the release when the
+  // Theads_lock is dropped when the ’mu‘ destructor is run since the
+  // JavaThread* is already visible to JVM/TI via the ThreadsList.
+  java_lang_Thread::release_set_thread(thread_oop(), target); // isAlive == true now
+  Thread::start(target);
+}
+
+
+
+
+
+
+
+
+
 ## NonJavaThread
 
 

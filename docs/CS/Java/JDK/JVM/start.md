@@ -167,6 +167,64 @@ JavaMain(void* _args)
 13. initialize compiler(s)
 14. post vm initialized
 
+
+JVM 在一开始的时候就会根据 -Xmx,-XX:MaxMetaspaceSize 指定的大小预先向操作系统申请一批内存作为 reserve_memory。这部分 reserve_memory 的权限就是 PROT_NONE ，是不可访问的。用于首先确定 JVM 堆和 MetaSpace 这些内存区域的地址范围（首先划分势力范围）
+
+
+
+char* os::reserve_memory(size_t bytes, bool executable, MEMFLAGS flags) {
+  char* result = pd_reserve_memory(bytes, executable);
+  if (result != nullptr) {
+    MemTracker::record_virtual_memory_reserve(result, bytes, CALLER_PC, flags);
+  }
+  return result;
+}
+
+// os_linux.cpp
+char* os::pd_reserve_memory(size_t bytes, bool exec) {
+  return anon_mmap(nullptr, bytes);
+}
+
+static char* anon_mmap(char* requested_addr, size_t bytes) {
+  // MAP_FIXED is intentionally left out, to leave existing mappings intact.
+  const int flags = MAP_PRIVATE | MAP_NORESERVE | MAP_ANONYMOUS;
+
+  // Map reserved/uncommitted pages PROT_NONE so we fail early if we
+  // touch an uncommitted page. Otherwise, the read/write might
+  // succeed if we have enough swap space to back the physical page.
+  char* addr = (char*)::mmap(requested_addr, bytes, PROT_NONE, flags, -1, 0);
+
+  return addr == MAP_FAILED ? nullptr : addr;
+}
+
+
+当 JVM 真正需要内存的时候，就会从这部分 reserve_memory 中划分出一部分（commit_memory）来使用 —— JVM 通过 mmap 重新映射 commit_memory 大小的虚拟内存出来
+
+JVM 在调用 mmap 重新映射的时候，flags 参数指定了 MAP_FIXED 标志，强制内核从之前的 reserve_memory 中重新映射。参数 prot  重新指定了 PROT_READ | PROT_WRITE 权限
+
+
+
+// os_linux.cpp
+bool os::pd_commit_memory(char* addr, size_t size, bool exec) {
+  return os::Linux::commit_memory_impl(addr, size, exec) == 0;
+}
+
+int os::Linux::commit_memory_impl(char* addr, size_t size, bool exec) {
+  int prot = exec ? PROT_READ|PROT_WRITE|PROT_EXEC : PROT_READ|PROT_WRITE;
+  uintptr_t res = (uintptr_t) ::mmap(addr, size, prot,
+                                     MAP_PRIVATE|MAP_FIXED|MAP_ANONYMOUS, -1, 0);
+  if (res != (uintptr_t) MAP_FAILED) {
+    if (UseNUMAInterleaving) {
+      numa_make_global(addr, size);
+    }
+    return 0;
+  }
+  
+  
+  
+
+
+
 ```cpp
 // thread.cpp
 jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
