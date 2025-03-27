@@ -140,9 +140,9 @@ total time = 测试结束时间 - 测试开始时间
 
 重试次数
 backoff机制 否则短时间内大量重试
-● 固定delay 还是会在间歇时间点大量重试的可能 类似间歇性脉冲
-● 随机delay 随机不可控
-● 细粒度控制 编码比较复杂 推荐使用 resi ience4j retr y 或则spring retry 等库来进行组合，
+- 固定delay 还是会在间歇时间点大量重试的可能 类似间歇性脉冲
+- 随机delay 随机不可控
+- 细粒度控制 编码比较复杂 推荐使用 resi ience4j retr y 或则spring retry 等库来进行组合，
 
 重试需要和断路器配合使用 对短时间内大量失效的情况更有效
 

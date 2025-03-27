@@ -3,13 +3,13 @@
 
 在介绍Metaspace之前 我们首先需要回顾一下 PermGen 内存上它是挨着堆的 垃圾回收使用的是老年代的回收算法
 PermGen 上主要存放以下数据
-● JVM internal representation of classes and their metadata
-● Class statics
-● Interned strings
+- JVM internal representation of classes and their metadata
+- Class statics
+- Interned strings
 从 JDK7 开始，JDK 开发者们就有消灭永久代的打算了。有部分数据移到永久代之外了：
-● Symbols => native memory
-● Interned strings => Java Heap
-● Class statics => Java Heap
+- Symbols => native memory
+- Interned strings => Java Heap
+- Class statics => Java Heap
 
 JDK8后 彻底废弃 PermGen 由Metaspace取而代之
 OOM

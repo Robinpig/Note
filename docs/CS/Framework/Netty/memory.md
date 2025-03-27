@@ -14,7 +14,68 @@ PoolArena 的默认个数为 availableProcessors * 2 , 因为 Netty 中的 React
 
 
 >可以通过 -Dio.netty.allocator.numHeapArenas 以及 -Dio.netty.allocator.numDirectArenas 来调整系统中 HeapArena 和 DirectArena 的个数
-> 
+>
+
+
+
+
+在服务端NioServerSocketChannel的配置类NioServerSocketChannelConfig以及客户端NioSocketChannel的配置类NioSocketChannelConfig实例化的时候会触发PooledByteBufAllocator的创建 创建出来的PooledByteBufAllocator实例保存在DefaultChannelConfig类中的ByteBufAllocator allocator字段中
+
+默认情况下是使用pooled的 除非在 Android 中
+
+
+```java
+public interface ByteBufAllocator {
+
+    ByteBufAllocator DEFAULT = ByteBufUtil.DEFAULT_ALLOCATOR;
+}
+```
+
+
+
+```java
+
+public final class ByteBufUtil {
+    static final ByteBufAllocator DEFAULT_ALLOCATOR;
+
+    static {
+        String allocType = SystemPropertyUtil.get(
+            "io.netty.allocator.type", PlatformDependent.isAndroid() ? "unpooled" : "pooled");
+
+        ByteBufAllocator alloc;
+        if ("unpooled".equals(allocType)) {
+            alloc = UnpooledByteBufAllocator.DEFAULT;
+            logger.debug("-Dio.netty.allocator.type: {}", allocType);
+        } else if ("pooled".equals(allocType)) {
+            alloc = PooledByteBufAllocator.DEFAULT;
+            logger.debug("-Dio.netty.allocator.type: {}", allocType);
+        } else if ("adaptive".equals(allocType)) {
+            alloc = new AdaptiveByteBufAllocator();
+            logger.debug("-Dio.netty.allocator.type: {}", allocType);
+        } else {
+            alloc = PooledByteBufAllocator.DEFAULT;
+            logger.debug("-Dio.netty.allocator.type: pooled (unknown: {})", allocType);
+        }
+
+        DEFAULT_ALLOCATOR = alloc;
+
+        THREAD_LOCAL_BUFFER_SIZE = SystemPropertyUtil.getInt("io.netty.threadLocalDirectBufferSize", 0);
+        logger.debug("-Dio.netty.threadLocalDirectBufferSize: {}", THREAD_LOCAL_BUFFER_SIZE);
+
+        MAX_CHAR_BUFFER_SIZE = SystemPropertyUtil.getInt("io.netty.maxThreadLocalCharBufferSize", 16 * 1024);
+        logger.debug("-Dio.netty.maxThreadLocalCharBufferSize: {}", MAX_CHAR_BUFFER_SIZE);
+    }
+}
+```
+
+
+```java
+public static final PooledByteBufAllocator DEFAULT =
+        new PooledByteBufAllocator(PlatformDependent.directBufferPreferred());
+```
+
+
+
 
 
 ```java
@@ -236,12 +297,12 @@ abstract class PoolArena<T> implements PoolArenaMetric {
 当一个PoolChunk使用完后 需要向内核申请新的PoolChunk
 PoolChunkList 是一个双向链表的数据结构，它用来组织和管理 PoolArena 中的这些 PoolChunk
 PoolArena 中一共有 6 个 PoolChunkList，分别是：qInit，q000，q025，q050，q075，q100。它们之间通过一个双向链表串联在一起，每个 PoolChunkList 管理着内存使用率在相同范围内的 PoolChunk
-● qInit 顾名思义，当一个新的 PoolChunk 被创建出来之后，它就会被放到 qInit 中，该 PoolChunkList 管理的 PoolChunk 内存使用率在 [0% , 25%) 之间，当里边的 PoolChunk 内存使用率大于等于 25% 时，就会被向后移动到下一个 q000 中。
-● q000 管理的 PoolChunk 内存使用率在 [1% , 50%) 之间，当里边的 PoolChunk 内存使用率大于等于 50% 时，就会被向后移动到下一个 q025 中。当里边的 PoolChunk 内存使用率小于 1% 时，PoolChunk 就会被重新释放回 OS 中。因为 ChunkSize 是 4M ，Netty 内存池提供的最小内存块尺寸为 16 字节，当 PoolChunk 内存使用率小于 1% 时， 其实内存使用率已经就是 0% 了，对于一个已经全部释放完的 Empty PoolChunk，就需要释放回 OS 中。
-● q025 管理的 PoolChunk 内存使用率在 [25% , 75%) 之间，当里边的 PoolChunk 内存使用率大于等于 75% 时，就会被向后移动到下一个 q050 中。当里边的 PoolChunk 内存使用率小于 25% 时，就会被向前移动到上一个 q000 中。
-● q050 管理的 PoolChunk 内存使用率在 [50% , 100%) 之间，当里边的 PoolChunk 内存使用率小于 50% 时，就会被向前移动到上一个 q025 中。当里边的 PoolChunk 内存使用率达到 100% 时，直接移动到 q100 中。
-● q075  管理的 PoolChunk 内存使用率在 [75% , 100%) 之间，当里边的 PoolChunk 内存使用率小于 75% 时，就会被向前移动到上一个 q050 中。当里边的 PoolChunk 内存使用率达到 100% 时，直接移动到 q100 中。
-● q100 管理的全部都是内存使用率 100 % 的 PoolChunk，当有内存释放回 PoolChunk 之后，才会向前移动到 q075 中。
+- qInit 顾名思义，当一个新的 PoolChunk 被创建出来之后，它就会被放到 qInit 中，该 PoolChunkList 管理的 PoolChunk 内存使用率在 [0% , 25%) 之间，当里边的 PoolChunk 内存使用率大于等于 25% 时，就会被向后移动到下一个 q000 中。
+- q000 管理的 PoolChunk 内存使用率在 [1% , 50%) 之间，当里边的 PoolChunk 内存使用率大于等于 50% 时，就会被向后移动到下一个 q025 中。当里边的 PoolChunk 内存使用率小于 1% 时，PoolChunk 就会被重新释放回 OS 中。因为 ChunkSize 是 4M ，Netty 内存池提供的最小内存块尺寸为 16 字节，当 PoolChunk 内存使用率小于 1% 时， 其实内存使用率已经就是 0% 了，对于一个已经全部释放完的 Empty PoolChunk，就需要释放回 OS 中。
+- q025 管理的 PoolChunk 内存使用率在 [25% , 75%) 之间，当里边的 PoolChunk 内存使用率大于等于 75% 时，就会被向后移动到下一个 q050 中。当里边的 PoolChunk 内存使用率小于 25% 时，就会被向前移动到上一个 q000 中。
+- q050 管理的 PoolChunk 内存使用率在 [50% , 100%) 之间，当里边的 PoolChunk 内存使用率小于 50% 时，就会被向前移动到上一个 q025 中。当里边的 PoolChunk 内存使用率达到 100% 时，直接移动到 q100 中。
+- q075  管理的 PoolChunk 内存使用率在 [75% , 100%) 之间，当里边的 PoolChunk 内存使用率小于 75% 时，就会被向前移动到上一个 q050 中。当里边的 PoolChunk 内存使用率达到 100% 时，直接移动到 q100 中。
+- q100 管理的全部都是内存使用率 100 % 的 PoolChunk，当有内存释放回 PoolChunk 之后，才会向前移动到 q075 中。
 
 
 
@@ -314,9 +375,9 @@ abstract class PoolArena<T> implements PoolArenaMetric {
 }
 ```
 
-● 对于 Small 内存规格来说，走 tcacheAllocateSmall 进行分配。
-● 对于 Normal 内存规格来说，走 tcacheAllocateNormal 进行分配。
-● 对于 Huge 内存规格来说，则直接向 OS 申请，不会走内存池。
+- 对于 Small 内存规格来说，走 tcacheAllocateSmall 进行分配。
+- 对于 Normal 内存规格来说，走 tcacheAllocateNormal 进行分配。
+- 对于 Huge 内存规格来说，则直接向 OS 申请，不会走内存池。
 
 ```java
 private void allocate(PoolThreadCache cache, PooledByteBuf<T> buf, final int reqCapacity) {
