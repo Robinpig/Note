@@ -12,7 +12,8 @@ The table below summarizes the main differences between Java NIO and IO.
 
 
 
-Java NIO enables you to do non-blocking IO. For instance, a thread can ask a channel to read data into a buffer. While the channel reads data into the buffer, the thread can do something else. Once data is read into the buffer, the thread can then continue processing it. The same is true for writing data to channels.
+Java NIO enables you to do non-blocking IO. For instance, a thread can ask a channel to read data into a buffer.
+While the channel reads data into the buffer, the thread can do something else. Once data is read into the buffer, the thread can then continue processing it. The same is true for writing data to channels.
 
 
 
@@ -338,7 +339,8 @@ Java_sun_nio_ch_FileDispatcherImpl_transferTo0(JNIEnv *env, jobject this,
 
 ## Buffers
 
-A buffer is essentially a block of memory into which you can write data, which you can then later read again. This memory block is wrapped in a NIO Buffer object, which provides a set of methods that makes it easier to work with the memory block.
+A buffer is essentially a block of memory into which you can write data, which you can then later read again. 
+This memory block is wrapped in a NIO Buffer object, which provides a set of methods that makes it easier to work with the memory block.
 
 
 Capacity, Position and Limit
@@ -383,6 +385,23 @@ public Buffer clear() {
 读取了 Buffer 中的部分数据，但是还有一部分数据没有读取，这时候，调用 clear() 方法开启写模式向 Buffer 中写入数据的话，就会出问题，因为这会覆盖掉我们还没有读取的数据部分
 
 
+
+JDK NIO 为每一种 Java 基本类型定义了对应的 Buffer 类（boolean 类型除外）
+
+
+
+
+JDK Buffer 也会根据其背后所依赖的虚拟内存在进程虚拟内存空间中具体所属的虚拟内存区域而演变出 HeapByteBuffer , MappedByteBuffer , DirectByteBuffer 。这三种不同类型 ByteBuffer 的本质区别就是其背后依赖的虚拟内存在 JVM 进程虚拟内存空间中的布局位置不同
+
+位于 JVM 堆之外的内存其实都可以归属到 DirectByteBuffer 的范畴中。比如，位于 OS 堆之内，JVM 堆之外的 MetaSpace，即时编译(JIT) 之后的 codecache，JVM 线程栈，Native 线程栈，JNI 相关的内存，等等
+JVM 在 OS 堆中划分出的 Direct Memory （上图红色部分）特指受到参数 -XX:MaxDirectMemorySize 限制的直接内存区域，比如通过 ByteBuffer#allocateDirect 申请到的 Direct Memory 容量就会受到该参数的限制
+
+通过 Unsafe#allocateMemory 申请到的 Direct Memory 容量则不会受任何 JVM 参数的限制，只会受操作系统本身对进程所使用内存容量的限制。也就是说 Unsafe 类会脱离 JVM 直接向操作系统进行内存申请
+
+MappedByteBuffer 背后所占用的内存位于 JVM 进程虚拟内存空间中的文件映射与匿名映射区中，系统调用 mmap 映射出来的内存就是在这个区域中划分的
+
+
+当 GC 结束之后，JVM 会唤醒 ReferenceHandler 线程去执行 pending 队列中的这些 Cleaner，在 Cleaner 中会释放其背后引用的 Native Memory
 
 
 ```java

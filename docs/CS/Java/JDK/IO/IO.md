@@ -482,7 +482,17 @@ public static Stream<String> lines(Path path, Charset cs) throws IOException {
 }
 ```
 
-### transferTo
+
+## Tuning
+
+JAVA NIO 和 JAVA AIO并没有提供断连重连、网络闪断、半包读写、失败缓存、网络拥塞和异常码流等的处理，这些都需要开发者自己来补齐相关的工作
+AIO在实践中，并没有比NIO更好。AIO在不同的平台有不同的实现，windows系统下使用的是一种异步IO技术：IOCP；
+Linux下由于没有这种异步 IO 技术，所以使用的是epoll 对异步 IO 进行模拟。所以 AIO 在 Linux 下的性能并不理想。AIO 也没有提供对 UDP 的支持
+
+在实际的大型互联网项目中，Java 原生的 API 应用并不广泛，取而代之的是一款第三方Java 框架，这就是 [Netty](/docs/CS/Framework/Netty/Netty.md)
+
+
+## Links
 
 
 
