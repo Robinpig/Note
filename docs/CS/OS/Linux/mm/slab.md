@@ -1434,3 +1434,4 @@ if (unlikely(ZERO_OR_NULL_PTR(x)))对地址做非零判断，接着virt_to_head_
 ## References
 
 1. [The Slab Allocator: An Object-Caching Kernel Memory Allocator](https://people.eecs.berkeley.edu/~kubitron/courses/cs194-24-S13/hand-outs/bonwick_slab.pdf)
+2. [Linux 内核 | 内存管理——Slab 分配器](https://www.dingmos.com/index.php/archives/23/)
