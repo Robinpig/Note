@@ -4,6 +4,10 @@
 
 man
 
+```shell
+sudo apt install man-db manpages-posix
+```
+
 [tldr](https://github.com/tldr-pages/tldr)
 
 ## Counter

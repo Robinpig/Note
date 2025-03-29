@@ -122,6 +122,18 @@ make defconfig
 
 或者使用 `make menuconfig` 更方便
 
+
+或者复制你的 Linux 发行版的配置文件：
+
+```shell
+### Debian 和 Fedora 及其衍生版：
+$ cp /boot/config-"$(uname -r)" .config
+
+### Arch Linux 及其衍生版：
+$ zcat /proc/config.gz > .config
+```
+
+
 > Kernel hacking ---> Compile-time checks and compiler options 开启GDB Scripts
 
 
