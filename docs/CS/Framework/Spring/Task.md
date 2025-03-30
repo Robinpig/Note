@@ -6,6 +6,8 @@
 
 ### TaskExecutor
 
+
+
 #### Abstraction
 
 Executors are the JDK name for the concept of thread pools. The “executor” naming is due to the fact that there is no guarantee that the underlying implementation is actually a pool. An executor may be single-threaded or even synchronous. Spring’s abstraction hides implementation details between the Java SE and Java EE environments.
@@ -24,8 +26,7 @@ The `TaskExecutor` was originally created to give other Spring components an abs
 
 
 
-#### Types
-
+ 
 Spring includes a number of pre-built implementations of `TaskExecutor`. In all likelihood, you should never need to implement your own. The variants that Spring provides are as follows:
 
 - `SyncTaskExecutor`: This implementation does not run invocations asynchronously. Instead, each invocation takes place in the calling thread. It is primarily used in situations where multi-threading is not necessary, such as in simple test cases.
@@ -36,7 +37,13 @@ Spring includes a number of pre-built implementations of `TaskExecutor`. In all 
 - `DefaultManagedTaskExecutor`: This implementation uses a JNDI-obtained `ManagedExecutorService` in a JSR-236 compatible runtime environment (such as a Java EE 7+ application server), replacing a CommonJ WorkManager for that purpose.
 
 
+从TaskExecutionProperties和TaskExecutionAutoConfiguration两个配置类我们看到
+Spring自动装载的ThreadPoolTaskExecutor线程池对象的参数：核心线程数=8；最大线程数=Integer.MAX_VALUE；队列大小=Integer.MAX_VALUE
 
+如果在使用Async注解时没有指定自定义的线程池会出现以下几种情况：
+- 当Spring容器中有且仅有一个TaskExecutor实例时，Spring会用这个线程池来处理Async注解的异步任务，这可能会踩坑，如果这个TaskExecutor实例是第三方jar引入的，可能会出现很诡异的问题。
+- Spring创建一个核心线程数=8、最大线程数=Integer.MAX_VALUE、队列大小=Integer.MAX_VALUE的线程池来处理Async注解的异步任务，这时候也可能会踩坑，由于线程池参数设置不合理，核心线程数=8，队列大小过大，如果有大批量并发任务，可能会出现OOM。
+- Spring创建SimpleAsyncTaskExecutor实例来处理Async注解的异步任务，SimpleAsyncTaskExecutor不是一个好的线程池实现类，SimpleAsyncTaskExecutor根据需要在当前线程或者新线程中执行异步任务。如果当前线程已经有空闲线程可用，任务将在当前线程中执行，否则将创建一个新线程来执行任务。由于这个线程池没有线程管理的能力，每次提交任务都实时创建新城，所以如果任务量大，会导致性能下降
 
 
 
