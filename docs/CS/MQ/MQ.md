@@ -412,7 +412,7 @@ The Cons of Using RabbitMQ:
 [Apache RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md)
 
 
-## Pulsar
+### Pulsar
 
 [Pulsar](/docs/CS/MQ/Pulsar/Pulsar.md) is a distributed pub-sub messaging platform with a very flexible messaging model and an intuitive client API.
 
@@ -454,6 +454,14 @@ naming Service
 - Kafka clients connect to the broker 
 
 
+为什么 RocketMQ 参考了 Kafka 的架构，却无法与 Kafka 保持相同的性能呢
+
+Kafka：使用 sendfile 函数进行零拷贝，以减少数据拷贝次数和系统内核切换次数，从而获得更高的性能。sendfile 返回的是发送成功的字节数，而应用层无法获取到消息内容。Kafka 以更少的拷贝次数以及系统内核切换次数，获得了更高的性能
+RocketMQ：使用 mmap 技术进行零拷贝，返回的是数据的具体内容，应用层可以获取消息内容并进行一些逻辑处理。
+RocketMQ 的一些功能需要了解具体这个消息内容，方便二次投递等，比如将消费失败的消息重新投递到死信队列中
+
+
+RocketMQ 和 Kafka 相比，在架构上做了减法，在功能上做了加法：RocketMQ 简化了协调节点和分区以及备份模型，同时增强了消息过滤、消息回溯和事务能力，加入了延迟队列、死信队列等新特性
 
 ## Links
 
