@@ -26,6 +26,19 @@ select、update、delete 语句执行过程中，不管 where 条件是否命中
 
 ## Deadlock
 
+两个事务分别持有对方需要的锁，并等待对方释放锁（事务1持有a锁、请求b锁，事务2持有b锁、请求a锁），导致程序无法继续进行
+
+MySQL自动监测死锁并回滚其中一个事务：
+
+- MySQL默认开启死锁检测（innodb_deadlock_detect默认为on），发现死锁后主动回滚死锁链条中的某一个事务，让其他事务得以继续执行
+- 如果死锁监测被关闭，InnoDB依赖innodb_lock_wait_timeout 进行事务回滚以避免死锁，请求锁的默认最长等待时间是50s
+- 如果要查看InnoDB用户事务中的最后一个死锁，可以使用 SHOW ENGINE INNODB STATUS
+- 如果频繁的出现死锁，可以启用innodb_print_all_deadlocks将所有死锁的有关信息打印到mysqld错误日志中
+
+数据库死锁常见原因：
+多个事务通过uptade或者select..for share / update锁定了多个表中的行记录，但锁定的顺序相反
+
+
 
 ERROR 40001: Deadlock found when trying to get lock; try restarting transaction
 
@@ -392,6 +405,16 @@ static void lock_wait_update_schedule_and_check_for_deadlocks() {
   }
 }
 ```
+
+
+如何减少死锁：
+- 当不同的事务同时访问数据资源时，尽量采用相同的操作顺序
+- 如果能确定幻读和不可重复读对应用的影响不大，可以考虑将隔离级别从默认的RR改成 RC，可以避免 Gap 锁导致的死锁；
+  - 为表添加合理的索引，如果不走索引，将会为表的每一行记录加锁，死锁的概率就会大大增大；
+  - 避免大事务，尽量将大事务拆成多个小事务来处理；因为大事务占用资源多，耗时长，与其他事务冲突的概率也会变高；
+
+
+
 
 ## Links
 

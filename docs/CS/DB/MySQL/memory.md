@@ -543,6 +543,16 @@ spilt page will new two pages first, then the old page will be directory page
 
 const > ref > ref_or_null > range > index > all
 
+
+
+## Thread
+
+
+
+MySQL 会给每个线程分配一块内存用于排序，称为 sort_buffer
+
+
+
 ## Shard
 
 Thread Memory：Thread level

@@ -80,3 +80,9 @@ mysql> SELECT * FROM mysql.slow_log;
 set long_query_time=0;
 
 ```
+
+
+
+## Links
+
+- [MySQL](/docs/CS/DB/MySQL/MySQL.md)
