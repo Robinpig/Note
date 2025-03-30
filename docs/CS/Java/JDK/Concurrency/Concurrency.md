@@ -477,6 +477,16 @@ If a thread holding a lock is permanently blocked (due to an infinite loop, dead
 
 
 
+手动填充也是填充的64字节，为什么@Contended注解会采用两倍的缓存行大小来填充呢
+- 目前大部分主流的CPU缓存行是64字节，但是也有部分CPU缓存行是32字节或者128字节，如果只填充64字节的话，在缓存行大小为32字节和64字节的CPU中是可以做到独占缓存行从而避免FalseSharding的，但在缓存行大小为128字节的CPU中还是会出现FalseSharding问题
+- 第二个原因其实是最为核心的一个原因，主要是为了防止CPU Adjacent Sector Prefetch（CPU相邻扇区预取）特性所带来的FalseSharding问题。
+
+CPU Adjacent Sector Prefetch：https://www.techarp.com/bios-guide/cpu-adjacent-sector-prefetch/
+
+CPU Adjacent Sector Prefetch是Intel处理器特有的BIOS功能特性，默认是enabled
+主要作用就是利用程序局部性原理，当CPU从内存中请求数据，并读取当前请求数据所在缓存行时，会进一步预取与当前缓存行相邻的下一个缓存行，
+这样当我们的程序在顺序处理数据时，会提高CPU处理效率。这一点也体现了程序局部性原理中的空间局部性特征。
+
 
 ## Tuning
 

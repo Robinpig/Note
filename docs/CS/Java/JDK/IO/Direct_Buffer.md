@@ -58,6 +58,8 @@ private static long directMemory = 64 * 1024 * 1024;
 1. `ByteBuffer.allocteDirect` call `Unsafe.allocateMemory`
 2. `Unsafe.allocateMemory`
 
+
+它是在堆外内存（C_HEAP）中分配一块内存空间，并返回堆外内存的基地址
 ```cpp
 //unsafe.cpp
 UNSAFE_ENTRY(jlong, Unsafe_AllocateMemory0(JNIEnv *env, jobject unsafe, jlong size)) {
@@ -69,14 +71,7 @@ UNSAFE_ENTRY(jlong, Unsafe_AllocateMemory0(JNIEnv *env, jobject unsafe, jlong si
   return addr_to_java(x);
 } UNSAFE_END
 
-UNSAFE_ENTRY(void, Unsafe_FreeMemory0(JNIEnv *env, jobject unsafe, jlong addr)) {
-  void* p = addr_from_java(addr);
-
-  os::free(p);
-} UNSAFE_END
 ```
-
-`Unsafe.allocateMemory/freeMemory` invoke `os::malloc/free ` finally use `glib::malloc/free`.
 
 
 
@@ -139,6 +134,9 @@ Direct buffers are indirectly freed by the Garbage Collector.
 
 When [ReferenceHandler](/docs/CS/Java/JDK/Basic/Ref.md?id=referencehandler) get the `PhantomReference`(`Cleaner`) of `DirectByteBuffer` instance, invoke` Cleaner.clean()` -> `unsafe.freeMemory()`
 
+调用 unsafe.freeMemory() 释放掉指定堆外内存地址的内存空间，然后重新统计系统中的 DirectByteBuffer 的大小情况
+
+
 ```java
 public class Cleaner extends PhantomReference<Object> {
     private Cleaner(Object referent, Runnable thunk) {
@@ -184,6 +182,16 @@ private static class Deallocator
 ```
 
 
+`Unsafe.allocateMemory/freeMemory` invoke `os::malloc/free ` finally use `glib::malloc/free`.
+
+
+```c
+UNSAFE_ENTRY(void, Unsafe_FreeMemory0(JNIEnv *env, jobject unsafe, jlong addr)) {
+  void* p = addr_from_java(addr);
+
+  os::free(p);
+} UNSAFE_END
+```
 
 [Cleaner extends PhantomReference](/docs/CS/Java/JDK/Basic/Ref.md?id=phantom-reference)
 
