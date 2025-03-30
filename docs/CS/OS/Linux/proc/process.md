@@ -15,11 +15,11 @@ ps -fax
 How this tree structure spreads is closely connected with how new processes are generated.
 For this purpose, Unix uses two mechanisms called fork and exec.
 
-1. [fork](/docs/CS/OS/Linux/process.md?id=fork) — Generates an exact copy of the current process that differs from the parent process only in its PID (process identification).
+1. [fork](/docs/CS/OS/Linux/proc/process.md?id=fork) — Generates an exact copy of the current process that differs from the parent process only in its PID (process identification).
    After the system call has been executed, there are two processes in the system, both performing the same actions.
    The memory contents of the initial process are duplicated -- at least in the view of the program.
    Linux uses a well-known technique known as copy on write that allows it to make the operation much more efficient by deferring the copy operations until either parent or child writes to a page -— read-only accessed can be satisfied from the same page for both.
-2. [exec](/docs/CS/OS/Linux/process.md?id=exec) — Loads a new program into an existing content and then executes it. The memory pages reserved by the old program are flushed, and their contents are replaced with new data. The new program then starts executing.
+2. [exec](/docs/CS/OS/Linux/proc/process.md?id=exec) — Loads a new program into an existing content and then executes it. The memory pages reserved by the old program are flushed, and their contents are replaced with new data. The new program then starts executing.
 
 
 ## task struct

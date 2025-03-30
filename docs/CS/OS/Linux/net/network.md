@@ -1225,7 +1225,7 @@ void sock_def_readable(struct sock *sk)
 }
 ```
 
-[wake_up_interruptible_sync_poll](/docs/CS/OS/Linux/thundering_herd.md?id=wake-up), wake up and invoke callback func
+[wake_up_interruptible_sync_poll](/docs/CS/OS/Linux/proc/thundering_herd.md?id=wake-up), wake up and invoke callback func
 
 ## Native IO
 

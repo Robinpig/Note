@@ -882,7 +882,7 @@ mem init
 
 
 
-#### 
+#### paging_init
 
 ```c
 struct x86_init_ops x86_init __initdata = {

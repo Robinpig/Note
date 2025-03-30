@@ -1,13 +1,17 @@
 ## Introduction
 
 
+
+
 任务的睡眠与唤醒是内核调度器重要的组成部分，下面先简单介绍一下唤醒的流程。
 
 现有任务A想要唤醒睡眠中的任务B。任务A正运行在CPU1上，任务B将会运行在CPU2上（这里1和2可以是同一个CPU）。无论用户态中是什么行为，最终在内核态都会走到try_to_wake_up()这个主入口。它主要干两件事情：
+
 1. 寻找合适的CPU2来让任务B运行
 2. 执行唤醒操作
 
 调度器设计了一套复杂的数据结构去维护所有任务，其中最主要的数据是每个CPU的运行队列（即runqueue，下文缩写rq）。该队列记录了对应CPU上的就绪任务的情况。因此，常规的第二件事展开来说就是：
+
 1. 获取CPU2的rq锁
 2. 将任务B加入CPU2的rq
 3. 如果任务B可以立即运行（满足抢占条件），则通知CPU2重新调度
@@ -15,14 +19,12 @@
 这种方式是在CPU1上去拿CPU2的锁并操作CPU2的数据，要注意第二步并不只是单纯的入队操作，还伴有许多统计数据的维护操作。从性能和缓存的角度来看，似乎有那么点微妙。
 
 既然有常规的方式，那当然还有特殊的方式，这种方式也就是本文的主角wakelist（CPU1和CPU2不相同时）：
+
 1. 将任务B加入CPU2的特殊链表(wakelist)上
 2. 通知CPU2
 3. 自己收工，剩下的事（指常规方式的那些事）都丢给CPU2做
 
 乍一看，通常情况下，似乎wakelist这种方式更好啊，让CPU2自己拿自己的锁，处理自己的数据，似乎对性能和缓存更友好。这样CPU1还可以提前结束工作，继续去处理后面的事。不过，这里的第二步是无条件通知的，如果是整个机器都比较繁忙的场景，CPU2正在运行其他任务，频繁被打断就不太好了。在引入wakelist唤醒方式之后，很快遇到了性能问题。内核大佬分析认为这是因为第二步的无条件通知产生的IPI太多了，因此用这个补丁将wakelist限制为只有CPU1和CPU2不共享llc时才使用，从而减少IPI的数量，同时保持数据不要在llc级别的缓存之间反复横跳。
-
-
-
 
 ```dot
 strict digraph {
@@ -344,10 +346,10 @@ task structs
 };
 ```
 
-
 ## policy
 
 Scheduling policies
+
 ```c
 #define SCHED_NORMAL		0
 #define SCHED_FIFO		1
@@ -360,8 +362,8 @@ Scheduling policies
 
 这几个调度类的优先级如下：Deadline > Realtime > Fair。Linux内核在选择下一个任务执行时，会按照该顺序来进行选择，也就是先从dl_rq里选择任务，然后从rt_rq里选择任务，最后从cfs_rq里选择任务。所以实时任务总是会比普通任务先得到执行
 
-
 如果你的某些任务对延迟容忍度很低，比如说在嵌入式系统中就有很多这类任务，那就可以考虑将你的任务设置为实时任务，比如将它设置为SCHED_FIFO的任务：
+
 ```shell
 chrt -f -p 1 pid
 ```
@@ -370,9 +372,8 @@ chrt -f -p 1 pid
 
 > [Android](/docs/CS/OS/Android/schedule.md)更多的是实时的任务
 
-
-
 ## schedule
+
 
 ```c
 static void __sched notrace preempt_schedule_common(void)
@@ -986,6 +987,45 @@ out_put_task:
 	return retval;
 }
 ```
+
+## rt
+
+RT调度器的所有实现都在文件 `kernel/sched/rt.c` 中
+
+```c
+struct rt_prio_array {
+	DECLARE_BITMAP(bitmap, MAX_RT_PRIO+1); /* include 1 bit for delimiter */
+	struct list_head queue[MAX_RT_PRIO];
+};
+```
+
+该结构体与 O(1) 调度器中的实现思路是一样的，都是为了降低调度器在查找下一个任务的时间复杂度。
+
+#### pick_next_rt_entity
+
+```c
+static struct sched_rt_entity *pick_next_rt_entity(struct rt_rq *rt_rq)
+{
+	struct rt_prio_array *array = &rt_rq->active;
+	struct sched_rt_entity *next = NULL;
+	struct list_head *queue;
+	int idx;
+
+	idx = sched_find_first_bit(array->bitmap);
+	BUG_ON(idx >= MAX_RT_PRIO);
+
+	queue = array->queue + idx;
+	if (SCHED_WARN_ON(list_empty(queue)))
+		return NULL;
+	next = list_entry(queue->next, struct sched_rt_entity, run_list);
+
+	return next;
+}
+
+```
+
+
+
 
 
 ## Links

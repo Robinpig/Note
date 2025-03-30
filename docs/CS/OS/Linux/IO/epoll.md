@@ -754,7 +754,7 @@ single wait queue is serialized by wq.lock, but the case when multiple wait queu
 2. add event to ready list
 3. Wake up ( if active ) both the eventpoll wait list and the ->poll() wait list.
 
-ep_pol_callback ->`ep_poll_safewake`->[wake_up_poll](/docs/CS/OS/Linux/thundering_herd.md?id=wake_up_poll)
+ep_pol_callback ->`ep_poll_safewake`->[wake_up_poll](/docs/CS/OS/Linux/proc/thundering_herd.md?id=wake_up_poll)
 
 
 ```c

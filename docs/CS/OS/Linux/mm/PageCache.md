@@ -1,8 +1,14 @@
 ## Introduction
 
-The *page cache* is the main disk cache used by the Linux kernel. In most cases, the kernel refers to the page cache when reading from or writing to disk. New pages are added to the page cache to satisfy User Mode processes’s read requests. If the page is not already in the cache, a new entry is added to the cache and filled with the data read from the disk. If there is enough free memory, the page is kept in the cache for an indefinite period of time and can then be reused by other processes without accessing the disk.
+The *page cache* is the main disk cache used by the Linux kernel. In most cases, the kernel refers to the page cache when reading from or writing to disk. 
+New pages are added to the page cache to satisfy User Mode processes’s read requests. 
+If the page is not already in the cache, a new entry is added to the cache and filled with the data read from the disk. 
+If there is enough free memory, the page is kept in the cache for an indefinite period of time and can then be reused by other processes without accessing the disk.
 
-Similarly, before writing a page of data to a block device, the kernel verifies whether the corresponding page is already included in the cache; if not, a new entry is added to the cache and filled with the data to be written on disk. The I/O data transfer does not start immediately: the disk update is delayed for a few seconds, thus giving a chance to the processes to further modify the data to be written (in other words, the kernel implements deferred write operations
+Similarly, before writing a page of data to a block device, the kernel verifies whether the corresponding page is already included in the cache; 
+if not, a new entry is added to the cache and filled with the data to be written on disk. 
+The I/O data transfer does not start immediately: the disk update is delayed for a few seconds, 
+thus giving a chance to the processes to further modify the data to be written (in other words, the kernel implements deferred write operations
 
 
 
@@ -1252,6 +1258,94 @@ static unsigned long node_dirtyable_memory(struct pglist_data *pgdat)
     return nr_pages;
 }
 ```
+
+
+
+回收的两种方式主要是两种：直接回收和后台回收
+
+```c
+# apt install -y sysstat
+sar -B -1
+```
+
+
+
+
+## Tuning
+
+与Page Cache有关的场景，比如：
+- 服务器的load飙高；
+- 服务器的I/O吞吐飙高；
+- 业务响应时延出现大的毛刺；
+- 业务平均访问时延明显增加
+
+
+
+几个指标也是通过解析/proc/vmstat里面的数据来得出的
+
+
+
+
+相信你在平时的工作中，应该会或多或少遇到过这些情形：系统很卡顿，敲命令响应非常慢；应用程序的RT变得很高，或者抖动得很厉害。在发生这些问题时，很有可能也伴随着系统load飙得很高。
+那这是什么原因导致的呢？据我观察，大多是有三种情况：
+- 直接内存回收引起的load飙高；
+- 系统中脏页积压过多引起的load飙高；
+- 系统NUMA策略配置不当引起的load飙高。
+
+
+
+
+直接内存回收是在进程申请内存的过程中同步进行的回收，而这个回收过程可能会消耗很多时间，进而导致进程的后续行为都被迫等待，这样就会造成很长时间的延迟，以及系统的CPU利用率会升高，最终引起load飙高。
+
+
+后台回收的原理 当内存水位低于watermark low时，就会唤醒kswapd进行后台回收，然后kswapd会一直回收到watermark high
+可以增大min_free_kbytes这个配置选项来及早地触发后台回收
+该值的设置和总的物理内存并没有一个严格对应的关系 如果配置不当会引起一些副作用
+可以渐进式地增大该值，比如先调整为1G，观察sar -B中pgscand是否还有不为0的情况；如果存在不为0的情况，继续增加到2G，再次观察是否还有不为0的情况来决定是否增大，以此类推
+
+即使将该值增加得很大，还是可能存在pgscand不为0的情况 增大该值并不是完全避免直接内存回收，而是尽量将直接内存回收行为控制在业务可以容忍的范围内
+
+
+
+这样做也有一些缺陷：提高了内存水位后，应用程序可以直接使用的内存量就会减少，这在一定程度上浪费了内存。所以在调整这一项之前，你需要先思考一下，应用程序更加关注什么，如果关注延迟那就适当地增大该值，如果关注内存的使用量那就适当地调小该值
+
+
+直接回收过程中，如果存在较多脏页就可能涉及在回收过程中进行回写，这可能会造成非常大的延迟，而且因为这个过程本身是阻塞式的，所以又可能进一步导致系统中处于D状态的进程数增多，最终的表现就是系统的load值很高
+
+可以通过sar -r来观察系统中的脏页个数
+kbdirty就是系统中的脏页大小，它同样也是对/proc/vmstat中nr_dirty的解析
+
+
+
+我们在生产环境上就曾经遇到这样的问题：系统中还有一半左右的free内存，但还是频频触发direct reclaim，导致业务抖动得比较厉害。后来经过排查发现是由于设置了zone_reclaim_mode，这是NUMA策略的一种。
+相比内存回收的危害而言，NUMA带来的性能提升几乎可以忽略，所以配置为0，利远大于弊
+
+
+这类问题做个总结，大致可以分为两方面：
+- 误操作而导致Page Cache被回收掉，进而导致业务性能下降明显；
+- 内核的一些机制导致业务Page Cache被回收，从而引起性能下降。
+
+- 如果你的业务对Page Cache所造成的延迟比较敏感，那你最好可以去保护它，比如通过mlock或者memory cgroup来对它们进行保护；
+- 在你不明白Page Cache是因为什么原因被释放时，你可以通过/proc/vmstat里面的一些指标来观察，找到具体的释放原因然后再对症下药的去做优化
+
+
+如何判断问题是不是由Page Cache引起的。
+我们知道，一个问题往往牵扯到操作系统的很多模块，比如说，当系统出现load飙高的问题时，可能是Page Cache引起的；也可能是锁冲突太厉害，物理资源（CPU、内存、磁盘I/O、网络I/O）有争抢导致的；也可能是内核特性设计缺陷导致的，等等。
+如果我们没有判断清楚问题是如何引起的而贸然采取措施，非但无法解决问题，反而会引起其他负面影响，比如说，load飙高本来是Page Cache引起的，如果你没有查清楚原因，而误以为是网络引起的，然后对网络进行限流，看起来把问题解决了，但是系统运行久了还是会出现load飙高，而且限流这种行为还降低了系统负载能力
+
+Linux内核主要是通过/proc和/sys把系统信息导出给用户，当你不清楚问题发生的原因时，你就可以试着去这几个目录下读取一下系统信息，看看哪些指标异常
+比如当你不清楚问题是否由Page Cache引起时，你可以试着去把/proc/vmstat里面的信息给读取出来，看看哪些指标单位时间内变化较大
+如果pgscan相关指标变化较大，那就可能是Page Cache引起的，因为pgscan代表了Page Cache的内存回收行为，它变化较大往往意味着系统内存压力很紧张。
+/proc和/sys里面的信息可以给我们指出一个问题分析的大致方向，我们可以判断出问题是不是由Page Cache引起的，但是如果想要深入地分析问题，知道Page Cache是如何引起问题的，我们还需要掌握更加专业的分析手段，专业的分析工具有ftrace，ebpf，perf等
+
+整体上追踪方式分为了静态追踪（预置了追踪点）和动态追踪（需要借助probe）：
+- 如果你想要追踪的东西已经有了预置的追踪点，那你直接使用这些预置追踪点就可以了；
+- 如果没有预置追踪点，那你就要看看是否可以使用probe(包括kprobe和uprobe)来实现。
+
+因为分析工具自身也会对业务造成一些影响（Heisenbug），比如说使用strace会阻塞进程的运行，再比如使用systemtap也会有加载编译的开销等，所以我们在使用这些工具之前也需要去详细了解下这些工具的副作用，以免引起意料之外的问题。
+比如我多年以前在使用systemtap的guru（专家）模式的时候，因为没有考虑到systemtap进程异常退出后，可能不会卸载systemtap模块从而引发系统panic的问题
+
+对于Page Cache而言，首先我们可以通过/proc/vmstat来做一个大致判断，然后再结合Page Cache的tracepoint来做更加深入的分析
 
 
 

@@ -33,6 +33,64 @@ slab 对象池在内存管理系统中的架构层次是基于伙伴系统之上
 在这些完整的内存页内在逐步划分出一小块一小块的内存块出来，而这些小内存块的尺寸就是 slab 对象池所管理的内核核心对象占用的内存大小
 
 
+当我们使用 fork() 系统调用创建进程的时候，内核需要使用 task_struct 专属的 slab 对象池分配 task_struct 对象
+为进程创建虚拟内存空间的时候，内核需要使用 mm_struct 专属的 slab 对象池分配  mm_struct 对象。
+当我们向页高速缓存 page cache 查找对应的文件缓存页时，内核需要使用 struct page 专属的 slab 对象池分配  struct page 对象
+当我们使用 open 系统调用打开一个文件时，内核需要使用 struct file专属的 slab 对象池分配 struct file 对象
+当服务端网络应用程序使用 accpet 系统调用接收客户端的连接时，内核需要使用 struct socket 专属的 slab 对象池为新进来的客户端连接分配 socket 对象。
+凡是需要被内核频繁使用的内核对象都需要被 slab 对象池所管理
+
+
+```c
+/* Reuses the bits in struct page */
+struct slab {
+	unsigned long __page_flags;
+
+	struct kmem_cache *slab_cache;
+	union {
+		struct {
+			union {
+				struct list_head slab_list;
+#ifdef CONFIG_SLUB_CPU_PARTIAL
+				struct {
+					struct slab *next;
+					int slabs;	/* Nr of slabs left */
+				};
+#endif
+			};
+			/* Double-word boundary */
+			union {
+				struct {
+					void *freelist;		/* first free object */
+					union {
+						unsigned long counters;
+						struct {
+							unsigned inuse:16;
+							unsigned objects:15;
+							/*
+							 * If slab debugging is enabled then the
+							 * frozen bit can be reused to indicate
+							 * that the slab was corrupted
+							 */
+							unsigned frozen:1;
+						};
+					};
+				};
+#ifdef system_has_freelist_aba
+				freelist_aba_t freelist_counter;
+#endif
+			};
+		};
+		struct rcu_head rcu_head;
+	};
+
+	unsigned int __page_type;
+	atomic_t __page_refcount;
+#ifdef CONFIG_SLAB_OBJ_EXT
+	unsigned long obj_exts;
+#endif
+};
+```
 
 ## kmem_cache
 
@@ -43,21 +101,73 @@ Linux通过slab_caches双端链表，将系统中所有kmem_cache链接起来
 
 
 ```c
+/*
+ * Slab cache management.
+ */
 struct kmem_cache {
-    unsigned int object_size;/* The original size of the object */
-    unsigned int size;  /* The aligned/padded/added on size  */
-    unsigned int align; /* Alignment as calculated */
-    slab_flags_t flags; /* Active flags on the slab */
-    unsigned int useroffset;/* Usercopy region offset */
-    unsigned int usersize;  /* Usercopy region size */
-    const char *name;   /* Slab name for sysfs */
-    int refcount;       /* Use counter */
-    void (*ctor)(void *);   /* Called on object slot creation */
-    struct list_head list;  /* List of all slab caches on the system */
+#ifndef CONFIG_SLUB_TINY
+	struct kmem_cache_cpu __percpu *cpu_slab;
+#endif
+	/* Used for retrieving partial slabs, etc. */
+	slab_flags_t flags;
+	unsigned long min_partial;
+	unsigned int size;		/* Object size including metadata */
+	unsigned int object_size;	/* Object size without metadata */
+	struct reciprocal_value reciprocal_size;
+	unsigned int offset;		/* Free pointer offset */
+#ifdef CONFIG_SLUB_CPU_PARTIAL
+	/* Number of per cpu partial objects to keep around */
+	unsigned int cpu_partial;
+	/* Number of per cpu partial slabs to keep around */
+	unsigned int cpu_partial_slabs;
+#endif
+	struct kmem_cache_order_objects oo;
+
+	/* Allocation and freeing of slabs */
+	struct kmem_cache_order_objects min;
+	gfp_t allocflags;		/* gfp flags to use on each alloc */
+	int refcount;			/* Refcount for slab cache destroy */
+	void (*ctor)(void *object);	/* Object constructor */
+	unsigned int inuse;		/* Offset to metadata */
+	unsigned int align;		/* Alignment */
+	unsigned int red_left_pad;	/* Left redzone padding size */
+	const char *name;		/* Name (only for display!) */
+	struct list_head list;		/* List of slab caches */
+#ifdef CONFIG_SYSFS
+	struct kobject kobj;		/* For sysfs */
+#endif
+#ifdef CONFIG_SLAB_FREELIST_HARDENED
+	unsigned long random;
+#endif
+
+#ifdef CONFIG_NUMA
+	/*
+	 * Defragmentation by allocating from a remote node.
+	 */
+	unsigned int remote_node_defrag_ratio;
+#endif
+
+#ifdef CONFIG_SLAB_FREELIST_RANDOM
+	unsigned int *random_seq;
+#endif
+
+#ifdef CONFIG_KASAN_GENERIC
+	struct kasan_cache kasan_info;
+#endif
+
+#ifdef CONFIG_HARDENED_USERCOPY
+	unsigned int useroffset;	/* Usercopy region offset */
+	unsigned int usersize;		/* Usercopy region size */
+#endif
+
+	struct kmem_cache_node *node[MAX_NUMNODES];
 };
 ```
 
 SLAB分配器由可变数量的缓存组成，这些缓存由称为“缓存链”的双向循环链表链接在一起
+链表的头结点指针保存在 struct kmem_cache 结构的 list 中
+
+
 
 ```c
 struct kmem_cache_node {

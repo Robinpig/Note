@@ -29,6 +29,49 @@ Three modes:
 2. polled
 3. kernel polled
 
+
+
+io_uring 结构体中包含需要使用到的 SQ和CQ ，以及需要关联的文件FD， 和相关的配置参数falgs;
+
+```c
+struct io_uring {
+    struct io_uring_sq sq;
+    struct io_uring_cq cq;
+    int ring_fd;
+};
+```
+
+sq 和 cq
+```
+struct io_uring_sq {
+    unsigned *khead;
+    unsigned *ktail;
+    unsigned *kring_mask;
+    unsigned *kring_entries;
+    unsigned *kflags;
+    unsigned *kdropped;
+    unsigned *array;
+    struct io_uring_sqe *sqes;
+
+    unsigned sqe_head;
+    unsigned sqe_tail;
+
+    size_t ring_sz;
+};
+
+struct io_uring_cq {
+    unsigned *khead;
+    unsigned *ktail;
+    unsigned *kring_mask;
+    unsigned *kring_entries;
+    unsigned *koverflow;
+    struct io_uring_cqe *cqes;
+
+    size_t ring_sz;
+};
+```
+
+
 ### io_ring_ctx
 
 ```c

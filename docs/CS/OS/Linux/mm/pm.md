@@ -185,8 +185,17 @@ The selected task is killed in a hope that after it exits enough memory will be 
 
 ## memory model
 
-Linux支持三种内存页管理方式 通常称为内存模式 这三种内存模式的区别在于对page的管理方式和page与pfn的转换不同
 
+内核中如何组织管理这些物理内存页 struct page 的方式我们称之为做物理内存模型
+- FLATMEM
+- DISCONTIGMEM
+- SPARSEMEM
+
+
+这三种内存模型的区别在于对page的管理方式和page与pfn的转换不同
+
+
+在 NUMA 架构下，只有 DISCONTIGMEM 非连续内存模型和 SPARSEMEM 稀疏内存模型是可用的。而 UMA 架构下，前面介绍的三种内存模型都可以配置使用。
 
 
 
@@ -361,6 +370,12 @@ static inline phys_addr_t virt_to_phys(volatile void *address)
 
 zone的空闲页帧由buddy allocator管理
 
+伙伴系统会将它所属物理内存区 zone 里的空闲内存划分成不同尺寸的物理内存块，这里的尺寸必须是 2 的次幂，物理内存块可以是由 1 个 page 组成，也可以是 2 个 page，4 个 page ........ 1024 个 page 组成。
+内核将这些相同尺寸的内存块用一个内核数据结构 struct free_area 中的双向链表 free_list 串联组织起来
+
+
+
+
 ```c
 /* Free memory management - zoned buddy allocator.  */
 #ifndef CONFIG_FORCE_MAX_ZONEORDER
@@ -459,6 +474,78 @@ static int vmap_range_noflush(unsigned long addr, unsigned long end,
 
 
 ### alloc_pages
+
+```c
+#define __alloc_pages(...)			alloc_hooks(__alloc_pages_noprof(__VA_ARGS__))
+```
+
+
+```c
+struct page *__alloc_pages_noprof(gfp_t gfp, unsigned int order,
+                                  int preferred_nid, nodemask_t *nodemask)
+{
+    struct page *page;
+    unsigned int alloc_flags = ALLOC_WMARK_LOW;
+    gfp_t alloc_gfp; /* The gfp_t that was actually used for allocation */
+    struct alloc_context ac = { };
+
+    /*
+	 * There are several places where we assume that the order value is sane
+	 * so bail out early if the request is out of bound.
+	 */
+    if (WARN_ON_ONCE_GFP(order > MAX_PAGE_ORDER, gfp))
+        return NULL;
+
+    gfp &= gfp_allowed_mask;
+    /*
+	 * Apply scoped allocation constraints. This is mainly about GFP_NOFS
+	 * resp. GFP_NOIO which has to be inherited for all allocation requests
+	 * from a particular context which has been marked by
+	 * memalloc_no{fs,io}_{save,restore}. And PF_MEMALLOC_PIN which ensures
+	 * movable zones are not used during allocation.
+	 */
+    gfp = current_gfp_context(gfp);
+    alloc_gfp = gfp;
+    if (!prepare_alloc_pages(gfp, order, preferred_nid, nodemask, &ac,
+                             &alloc_gfp, &alloc_flags))
+        return NULL;
+
+    /*
+	 * Forbid the first pass from falling back to types that fragment
+	 * memory until all local zones are considered.
+	 */
+    alloc_flags |= alloc_flags_nofragment(zonelist_zone(ac.preferred_zoneref), gfp);
+
+    /* First allocation attempt */
+    page = get_page_from_freelist(alloc_gfp, order, alloc_flags, &ac);
+    if (likely(page))
+        goto out;
+
+    alloc_gfp = gfp;
+    ac.spread_dirty_pages = false;
+
+    /*
+	 * Restore the original nodemask if it was potentially replaced with
+	 * &cpuset_current_mems_allowed to optimize the fast-path attempt.
+	 */
+    ac.nodemask = nodemask;
+
+    page = __alloc_pages_slowpath(alloc_gfp, order, &ac);
+
+    out:
+    if (memcg_kmem_online() && (gfp & __GFP_ACCOUNT) && page &&
+        unlikely(__memcg_kmem_charge_page(page, gfp, order) != 0)) {
+        __free_pages(page, order);
+        page = NULL;
+    }
+
+    trace_mm_page_alloc(page, order, alloc_gfp, ac.migratetype);
+    kmsan_alloc_page(page, order, alloc_gfp);
+
+    return page;
+}
+EXPORT_SYMBOL(__alloc_pages_noprof);
+```
 
 
 ```c

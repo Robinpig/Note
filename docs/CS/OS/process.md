@@ -542,4 +542,4 @@ All the programs continue to run indefinitely but fail to make any progress, is 
 ## Links
 
 - [Operating Systems](/docs/CS/OS/OS.md)
-- [Linux Process](/docs/CS/OS/Linux/process.md)
+- [Linux Process](/docs/CS/OS/Linux/proc/process.md)
