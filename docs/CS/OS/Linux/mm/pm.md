@@ -1,13 +1,18 @@
 ## Introduction
 
+物理内存是以页为单位管理的，内核提供了page 结构体与一页物理内存对应， 而一页物理内存的作用或者使用情况由它所在的区域(zone)决定，zone的分布则决定于它所处的结点(node)
 
-linux 支持 NUMA (Non Uniform Memory Access)。物理内存管理的第一个层次就是介质的管理，pg_data_t结构就描述了介质。一般而言，我们的内存管理介质只有内存，并且它是均匀的，所以可以简单地认为系统中只有一个 pg_data_t 对象
+结点(node)与NUMA(Non Uniform Memory Access, 非统一内存访问）架构有密切联系
+linux 支持 NUMA (Non Uniform Memory Access)。物理内存管理的第一个层次就是介质的管理，pg_data_t结构就描述了介质。
+一般而言，我们的内存管理介质只有内存，并且它是均匀的，所以可以简单地认为系统中只有一个 pg_data_t 对象
 
 On NUMA machines, each NUMA node would have a pg_data_t to describe it's memory layout. On UMA machines there is a single pglist_data which describes the whole memory.
 Memory statistics and page replacement data structures are maintained on a per-zone basis.
 
-linux系统中可以用numactl命令来查看系统node信息
+linux系统中可以用 numactl 命令来查看系统node信息
 
+
+内核定义了 pglist_data 结构体与node 对应
 
 ```c
 // include/linux/mmzone.h
@@ -106,7 +111,8 @@ typedef struct pglist_data {
 } pg_data_t;
 ```
 
-内存被划分为节点. 每个节点关联到系统中的一个处理器, 内核中表示为pg_data_t的实例. 系统中每个节点被链接到一个以NULL结尾的pgdat_list链表中<而其中的每个节点利用pg_data_tnode_next字段链接到下一节．而对于PC这种UMA结构的机器来说, 只使用了一个成为contig_page_data的静态pg_data_t结构.
+内存被划分为节点. 每个节点关联到系统中的一个处理器, 内核中表示为 pg_data_t 的实例.
+系统中每个节点被链接到一个以NULL结尾的pgdat_list链表中<而其中的每个节点利用pg_data_tnode_next字段链接到下一节．而对于PC这种UMA结构的机器来说, 只使用了一个成为 contig_page_data 的静态pg_data_t结构.
 各个节点又被划分为内存管理区域, 一个管理区域通过struct zone_struct描述, 其被定义为zone_t, 用以表示内存的某个范围, 低端范围的16MB被描述为ZONE_DMA, 某些工业标准体系结构中的(ISA)设备需要用到它, 然后是可直接映射到内核的普通内存域ZONE_NORMAL,最后是超出了内核段的物理地址域ZONE_HIGHMEM, 被称为高端内存. 是系统中预留的可用内存空间, 不能被内核直接映射
 
 > 但是Linux内核又把各个物理内存节点分成个不同的管理区域zone, 这是为什么呢?
@@ -117,7 +123,14 @@ typedef struct pglist_data {
 
 
 
+同一个node 上同一种内存从访问效率上看， 应该是一样的，但是基于兼容性考虑， 内核不得不做进一步划分，将一个node 划分为不同的zone
 
+
+内核在不同的阶段采用的内存管理方式也不同，主要分为 memblock 和buddy系统两种
+
+memblock是内存管理的第一个阶段，也是初级阶段，buddy系统会接替它的工作继续内存管 理。
+它与buddy系统交接是在 [mem_init]() 函数中完成的，标志为after_bootmem 变量置为1
+mem_init函数会调用set_highmem_pages_init和memblock_free_ all 分别释放highmem和lowmem到 buddy 系统
 
 ## Zone
 
@@ -479,7 +492,7 @@ static int vmap_range_noflush(unsigned long addr, unsigned long end,
 #define __alloc_pages(...)			alloc_hooks(__alloc_pages_noprof(__VA_ARGS__))
 ```
 
-
+This is the 'heart' of the zoned buddy allocator.
 ```c
 struct page *__alloc_pages_noprof(gfp_t gfp, unsigned int order,
                                   int preferred_nid, nodemask_t *nodemask)
@@ -1279,8 +1292,153 @@ struct scan_control {
 
 
 
+#### shrink_list
+
+```c
+static unsigned long shrink_list(enum lru_list lru, unsigned long nr_to_scan,
+				 struct lruvec *lruvec, struct scan_control *sc)
+{
+	if (is_active_lru(lru)) {
+		if (sc->may_deactivate & (1 << is_file_lru(lru)))
+			shrink_active_list(nr_to_scan, lruvec, sc, lru);
+		else
+			sc->skipped_deactivate = 1;
+		return 0;
+	}
+
+	return shrink_inactive_list(nr_to_scan, lruvec, sc, lru);
+}
+```
+
+shrink_inactive_list
+```c
+static unsigned long shrink_inactive_list(unsigned long nr_to_scan,
+		struct lruvec *lruvec, struct scan_control *sc,
+		enum lru_list lru)
+{
+	LIST_HEAD(folio_list);
+	unsigned long nr_scanned;
+	unsigned int nr_reclaimed = 0;
+	unsigned long nr_taken;
+	struct reclaim_stat stat;
+	bool file = is_file_lru(lru);
+	enum vm_event_item item;
+	struct pglist_data *pgdat = lruvec_pgdat(lruvec);
+	bool stalled = false;
+
+	while (unlikely(too_many_isolated(pgdat, file, sc))) {
+		if (stalled)
+			return 0;
+
+		/* wait a bit for the reclaimer. */
+		stalled = true;
+		reclaim_throttle(pgdat, VMSCAN_THROTTLE_ISOLATED);
+
+		/* We are about to die and free our memory. Return now. */
+		if (fatal_signal_pending(current))
+			return SWAP_CLUSTER_MAX;
+	}
+
+	lru_add_drain();
+
+	spin_lock_irq(&lruvec->lru_lock);
+
+	nr_taken = isolate_lru_folios(nr_to_scan, lruvec, &folio_list,
+				     &nr_scanned, sc, lru);
+
+	__mod_node_page_state(pgdat, NR_ISOLATED_ANON + file, nr_taken);
+	item = PGSCAN_KSWAPD + reclaimer_offset();
+	if (!cgroup_reclaim(sc))
+		__count_vm_events(item, nr_scanned);
+	__count_memcg_events(lruvec_memcg(lruvec), item, nr_scanned);
+	__count_vm_events(PGSCAN_ANON + file, nr_scanned);
+
+	spin_unlock_irq(&lruvec->lru_lock);
+
+	if (nr_taken == 0)
+		return 0;
+
+	nr_reclaimed = shrink_folio_list(&folio_list, pgdat, sc, &stat, false);
+
+	spin_lock_irq(&lruvec->lru_lock);
+	move_folios_to_lru(lruvec, &folio_list);
+
+	__mod_lruvec_state(lruvec, PGDEMOTE_KSWAPD + reclaimer_offset(),
+					stat.nr_demoted);
+	__mod_node_page_state(pgdat, NR_ISOLATED_ANON + file, -nr_taken);
+	item = PGSTEAL_KSWAPD + reclaimer_offset();
+	if (!cgroup_reclaim(sc))
+		__count_vm_events(item, nr_reclaimed);
+	__count_memcg_events(lruvec_memcg(lruvec), item, nr_reclaimed);
+	__count_vm_events(PGSTEAL_ANON + file, nr_reclaimed);
+	spin_unlock_irq(&lruvec->lru_lock);
+
+	lru_note_cost(lruvec, file, stat.nr_pageout, nr_scanned - nr_reclaimed);
+
+	/*
+	 * If dirty folios are scanned that are not queued for IO, it
+	 * implies that flushers are not doing their job. This can
+	 * happen when memory pressure pushes dirty folios to the end of
+	 * the LRU before the dirty limits are breached and the dirty
+	 * data has expired. It can also happen when the proportion of
+	 * dirty folios grows not through writes but through memory
+	 * pressure reclaiming all the clean cache. And in some cases,
+	 * the flushers simply cannot keep up with the allocation
+	 * rate. Nudge the flusher threads in case they are asleep.
+	 */
+	if (stat.nr_unqueued_dirty == nr_taken) {
+		wakeup_flusher_threads(WB_REASON_VMSCAN);
+		/*
+		 * For cgroupv1 dirty throttling is achieved by waking up
+		 * the kernel flusher here and later waiting on folios
+		 * which are in writeback to finish (see shrink_folio_list()).
+		 *
+		 * Flusher may not be able to issue writeback quickly
+		 * enough for cgroupv1 writeback throttling to work
+		 * on a large system.
+		 */
+		if (!writeback_throttling_sane(sc))
+			reclaim_throttle(pgdat, VMSCAN_THROTTLE_WRITEBACK);
+	}
+
+	sc->nr.dirty += stat.nr_dirty;
+	sc->nr.congested += stat.nr_congested;
+	sc->nr.unqueued_dirty += stat.nr_unqueued_dirty;
+	sc->nr.writeback += stat.nr_writeback;
+	sc->nr.immediate += stat.nr_immediate;
+	sc->nr.taken += nr_taken;
+	if (file)
+		sc->nr.file_taken += nr_taken;
+
+	trace_mm_vmscan_lru_shrink_inactive(pgdat->node_id,
+			nr_scanned, nr_reclaimed, &stat, sc->priority, file);
+	return nr_reclaimed;
+}
+```
+
 
 ## free
+
+Free pages allocated with alloc_pages().
+
+- page: The page pointer returned from alloc_pages().
+- order: The order of the allocation.
+
+This function can free multi-page allocations that are not compound
+pages.  It does not check that the @order passed in matches that of
+the allocation, so it is easy to leak memory.  Freeing more memory
+than was allocated will probably emit a warning.
+
+If the last reference to this page is speculative, it will be released
+by put_page() which only frees the first page of a non-compound
+allocation.
+
+To prevent the remaining pages from being leaked, we free
+the subsequent pages here.  If you want to use the page's reference
+count to decide when to free the allocation, you should allocate a
+compound page, and use put_page() instead of __free_pages().
+
+Context: May be called in interrupt context or while holding a normal spinlock, but not in NMI context or while holding a raw spinlock.
 
 ```c
 void __free_pages(struct page *page, unsigned int order)

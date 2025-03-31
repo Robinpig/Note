@@ -742,7 +742,6 @@ usr/src/kernels/
 
 内核源码根目录下的Makefile Kconfig Kbuild是与内核配置、编译相关的文件
 
--
 - [Init](/docs/CS/OS/Linux/init.md)
 
 内核中可供调用的函数通常需要EXPORT
@@ -758,7 +757,8 @@ Because Linux is a multitasking system, it supports what appears to be concurren
 Since only as many processes as there are CPUs in the system can really run at the same time, the kernel switches (unnoticed by users) between the processes at short intervals to give them the impression of simultaneous processing.
 Here, there are two problem areas:
 
-1. The kernel, with the help of the CPU, is responsible for the technical details of task switching. Each individual process must be given the illusion that the CPU is always available.
+1. The kernel, with the help of the CPU, is responsible for the technical details of task switching.
+   Each individual process must be given the illusion that the CPU is always available.
    This is achieved by saving all state-dependent elements of the process before CPU resources are withdrawn and the process is placed in an idle state.
    When the process is reactivated, the exact saved state is restored. Switching between processes is known as task switching.
 2. The kernel must also decide how CPU time is shared between the existing processes. Important processes are given a larger share of CPU time, less important processes a smaller share.

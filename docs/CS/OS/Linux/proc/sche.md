@@ -1025,6 +1025,10 @@ static struct sched_rt_entity *pick_next_rt_entity(struct rt_rq *rt_rq)
 ```
 
 
+## DL
+
+Deadline调度器的核心思想是EDF(Earliest Deadline First)与CBS(Constant Bandwidth Server),
+
 
 
 

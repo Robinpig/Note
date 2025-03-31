@@ -1,5 +1,7 @@
 ## Introduction
 
+文件系统是Linux 的基础，可以说“ 一切皆文件＂
+
 
 
 文件系统和结构体关系
@@ -11,10 +13,154 @@
 | 文件代表 | dentry      |
 | 文件内容 | file        |
 
-
+#### super_block
 
 系统中的文件系统并不具备睢一性， 也并不一定只存在于内存中， 比如某个计算机上有两块分区格式化完毕的ext4 格式的磁盘，就可以说系统中存在两个ext4 文件系统，一个磁盘就是一个文件系统
 
+
+```c
+struct super_block {
+	struct list_head	s_list;		/* Keep this first */
+	dev_t			s_dev;		/* search index; _not_ kdev_t */
+	unsigned char		s_blocksize_bits;
+	unsigned long		s_blocksize;
+	loff_t			s_maxbytes;	/* Max file size */
+	struct file_system_type	*s_type;
+	const struct super_operations	*s_op;
+	const struct dquot_operations	*dq_op;
+	const struct quotactl_ops	*s_qcop;
+	const struct export_operations *s_export_op;
+	unsigned long		s_flags;
+	unsigned long		s_iflags;	/* internal SB_I_* flags */
+	unsigned long		s_magic;
+	struct dentry		*s_root;
+	struct rw_semaphore	s_umount;
+	int			s_count;
+	atomic_t		s_active;
+#ifdef CONFIG_SECURITY
+	void                    *s_security;
+#endif
+	const struct xattr_handler * const *s_xattr;
+#ifdef CONFIG_FS_ENCRYPTION
+	const struct fscrypt_operations	*s_cop;
+	struct fscrypt_keyring	*s_master_keys; /* master crypto keys in use */
+#endif
+#ifdef CONFIG_FS_VERITY
+	const struct fsverity_operations *s_vop;
+#endif
+#if IS_ENABLED(CONFIG_UNICODE)
+	struct unicode_map *s_encoding;
+	__u16 s_encoding_flags;
+#endif
+	struct hlist_bl_head	s_roots;	/* alternate root dentries for NFS */
+	struct list_head	s_mounts;	/* list of mounts; _not_ for fs use */
+	struct block_device	*s_bdev;	/* can go away once we use an accessor for @s_bdev_file */
+	struct file		*s_bdev_file;
+	struct backing_dev_info *s_bdi;
+	struct mtd_info		*s_mtd;
+	struct hlist_node	s_instances;
+	unsigned int		s_quota_types;	/* Bitmask of supported quota types */
+	struct quota_info	s_dquot;	/* Diskquota specific options */
+
+	struct sb_writers	s_writers;
+
+	/*
+	 * Keep s_fs_info, s_time_gran, s_fsnotify_mask, and
+	 * s_fsnotify_info together for cache efficiency. They are frequently
+	 * accessed and rarely modified.
+	 */
+	void			*s_fs_info;	/* Filesystem private info */
+
+	/* Granularity of c/m/atime in ns (cannot be worse than a second) */
+	u32			s_time_gran;
+	/* Time limits for c/m/atime in seconds */
+	time64_t		   s_time_min;
+	time64_t		   s_time_max;
+#ifdef CONFIG_FSNOTIFY
+	u32			s_fsnotify_mask;
+	struct fsnotify_sb_info	*s_fsnotify_info;
+#endif
+
+	/*
+	 * q: why are s_id and s_sysfs_name not the same? both are human
+	 * readable strings that identify the filesystem
+	 * a: s_id is allowed to change at runtime; it's used in log messages,
+	 * and we want to when a device starts out as single device (s_id is dev
+	 * name) but then a device is hot added and we have to switch to
+	 * identifying it by UUID
+	 * but s_sysfs_name is a handle for programmatic access, and can't
+	 * change at runtime
+	 */
+	char			s_id[32];	/* Informational name */
+	uuid_t			s_uuid;		/* UUID */
+	u8			s_uuid_len;	/* Default 16, possibly smaller for weird filesystems */
+
+	/* if set, fs shows up under sysfs at /sys/fs/$FSTYP/s_sysfs_name */
+	char			s_sysfs_name[UUID_STRING_LEN + 1];
+
+	unsigned int		s_max_links;
+
+	/*
+	 * The next field is for VFS *only*. No filesystems have any business
+	 * even looking at it. You had been warned.
+	 */
+	struct mutex s_vfs_rename_mutex;	/* Kludge */
+
+	/*
+	 * Filesystem subtype.  If non-empty the filesystem type field
+	 * in /proc/mounts will be "type.subtype"
+	 */
+	const char *s_subtype;
+
+	const struct dentry_operations *s_d_op; /* default d_op for dentries */
+
+	struct shrinker *s_shrink;	/* per-sb shrinker handle */
+
+	/* Number of inodes with nlink == 0 but still referenced */
+	atomic_long_t s_remove_count;
+
+	/* Read-only state of the superblock is being changed */
+	int s_readonly_remount;
+
+	/* per-sb errseq_t for reporting writeback errors via syncfs */
+	errseq_t s_wb_err;
+
+	/* AIO completions deferred from interrupt context */
+	struct workqueue_struct *s_dio_done_wq;
+	struct hlist_head s_pins;
+
+	/*
+	 * Owning user namespace and default context in which to
+	 * interpret filesystem uids, gids, quotas, device nodes,
+	 * xattrs and security labels.
+	 */
+	struct user_namespace *s_user_ns;
+
+	/*
+	 * The list_lru structure is essentially just a pointer to a table
+	 * of per-node lru lists, each of which has its own spinlock.
+	 * There is no need to put them into separate cachelines.
+	 */
+	struct list_lru		s_dentry_lru;
+	struct list_lru		s_inode_lru;
+	struct rcu_head		rcu;
+	struct work_struct	destroy_work;
+
+	struct mutex		s_sync_lock;	/* sync serialisation lock */
+
+	/*
+	 * Indicates how deep in a filesystem stack this SB is
+	 */
+	int s_stack_depth;
+
+	/* s_inode_list_lock protects s_inodes */
+	spinlock_t		s_inode_list_lock ____cacheline_aligned_in_smp;
+	struct list_head	s_inodes;	/* all inodes */
+
+	spinlock_t		s_inode_wblist_lock;
+	struct list_head	s_inodes_wb;	/* writeback inodes */
+} __randomize_layout;
+```
 
 
 在 `/proc/PID/fd/`下面能看到句柄
@@ -127,6 +273,8 @@ How does it map the calls made by a process, such as open(), read(), write(), et
 
 #### file_system_type
 
+文件系统的种类由 file_system_type 结构体表示
+
 ```c
 // include/linux/fs.h
 struct file_system_type {
@@ -159,26 +307,25 @@ struct file_system_type {
 	struct lock_class_key i_mutex_dir_key;
 };
 ```
-Handling of filesystem drivers list.
 
-Rules:
 
-Inclusion to/removals from/scanning of list are protected by spinlock.
 
-During the unload module must call unregister_filesystem().
-We can access the fields of list element if:
-1. spinlock is held or
-2. we hold the reference to the module.
 
-The latter can be guaranteed by call of try_module_get(); if it
-returned 0 we must skip the element, otherwise we got the reference.
-
-Once the reference is obtained we can drop the spinlock.
+在使用file_system_type 前需要先调用register_filesystem 将其注册到系统中，后者将它链接到 file_systems 变量指向的单向链表中，使用时将它的名字作为参数调用get_fs_type 即可获取。
+所有可用的file_system_ type 组成一个链表，同一种文件系统(super_block) 链接到file_system_type 的fs_supers 字段表示的链表中，
 
 ```c
 // fs/filesystems.c
 static struct file_system_type *file_systems;
 ```
+
+文件系统可以分为三类， 基千磁盘的文件系统、基于内存的文件系统和网络文件系统
+
+文件系统从逻辑上可以分为两部分：虚拟文件系统(Virtual File System, VFS)和挂载到VFS的实际文件系统
+内核提供了VFS, 一个实际的文件系统满足了VFS的要求才可以被使川， 通俗一点讲VFS是实现文件系统的基本架构， 文件系统(ext4、sysfs等） 是这个架构的具体实现
+
+一个文件系统首先要挂载到系统中才能被看到，这就是第一个操作mount。用户空间可以调用 [mount](/docs/CS/OS/Linux/fs/fs.md?id=mount) 挂载文件系统
+
 
 ### inode
 
@@ -357,7 +504,122 @@ struct file {
 ulimit -a
 ```
 
-### mount
+## mount
+
+
+```c
+// fs/namespace.c
+SYSCALL_DEFINE5(mount, char __user *, dev_name, char __user *, dir_name,
+		char __user *, type, unsigned long, flags, void __user *, data)
+{
+	int ret;
+	char *kernel_type;
+	char *kernel_dev;
+	void *options;
+
+	kernel_type = copy_mount_string(type);
+	ret = PTR_ERR(kernel_type);
+	if (IS_ERR(kernel_type))
+		goto out_type;
+
+	kernel_dev = copy_mount_string(dev_name);
+	ret = PTR_ERR(kernel_dev);
+	if (IS_ERR(kernel_dev))
+		goto out_dev;
+
+	options = copy_mount_options(data);
+	ret = PTR_ERR(options);
+	if (IS_ERR(options))
+		goto out_data;
+
+	ret = do_mount(kernel_dev, dir_name, kernel_type, flags, options);
+
+	kfree(options);
+out_data:
+	kfree(kernel_dev);
+out_dev:
+	kfree(kernel_type);
+out_type:
+	return ret;
+}
+```
+do_mount
+
+```c
+long do_mount(const char *dev_name, const char __user *dir_name,
+		const char *type_page, unsigned long flags, void *data_page)
+{
+	struct path path;
+	int ret;
+
+	ret = user_path_at(AT_FDCWD, dir_name, LOOKUP_FOLLOW, &path);
+	if (ret)
+		return ret;
+	ret = path_mount(dev_name, &path, type_page, flags, data_page);
+	path_put(&path);
+	return ret;
+}
+```
+path_mount -> do_new_mount
+
+```c
+static int do_new_mount(struct path *path, const char *fstype, int sb_flags,
+			int mnt_flags, const char *name, void *data)
+{
+	struct file_system_type *type;
+	struct fs_context *fc;
+	const char *subtype = NULL;
+	int err = 0;
+
+	if (!fstype)
+		return -EINVAL;
+
+	type = get_fs_type(fstype);
+	if (!type)
+		return -ENODEV;
+
+	if (type->fs_flags & FS_HAS_SUBTYPE) {
+		subtype = strchr(fstype, '.');
+		if (subtype) {
+			subtype++;
+			if (!*subtype) {
+				put_filesystem(type);
+				return -EINVAL;
+			}
+		}
+	}
+
+	fc = fs_context_for_mount(type, sb_flags);
+	put_filesystem(type);
+	if (IS_ERR(fc))
+		return PTR_ERR(fc);
+
+	/*
+	 * Indicate to the filesystem that the mount request is coming
+	 * from the legacy mount system call.
+	 */
+	fc->oldapi = true;
+
+	if (subtype)
+		err = vfs_parse_fs_string(fc, "subtype",
+					  subtype, strlen(subtype));
+	if (!err && name)
+		err = vfs_parse_fs_string(fc, "source", name, strlen(name));
+	if (!err)
+		err = parse_monolithic_mount_data(fc, data);
+	if (!err && !mount_capable(fc))
+		err = -EPERM;
+	if (!err)
+		err = vfs_get_tree(fc);
+	if (!err)
+		err = do_new_mount_fc(fc, path, mnt_flags);
+
+	put_fs_context(fc);
+	return err;
+}
+```
+
+## vfsmount
 
 vfsmount
 
@@ -643,6 +905,92 @@ There is one other type of link that is really useful, and it is called a symbol
 
 Quite unlike hard links, removing the original file named file causes the soft link to point to a pathname that no longer exists.
 
+
+
+link和symlink分别为文件创建硬链接和符号链接（又称软链接），对应的shell命令是ln
+
+ln 创建了硬链接，ln -s 创建了符号链
+
+
+
+内核提供了link 和linkat创建硬链接， 它们都是系统调用，都通过 do_linkat 实现
+
+
+
+```c
+int do_linkat(int olddfd, struct filename *old, int newdfd,
+	      struct filename *new, int flags)
+{
+	struct mnt_idmap *idmap;
+	struct dentry *new_dentry;
+	struct path old_path, new_path;
+	struct inode *delegated_inode = NULL;
+	int how = 0;
+	int error;
+
+	error = filename_lookup(olddfd, old, how, &old_path, NULL);
+
+	new_dentry = filename_create(newdfd, new, &new_path,
+					(how & LOOKUP_REVAL));
+	error = PTR_ERR(new_dentry);
+	if (IS_ERR(new_dentry))
+		goto out_putpath;
+
+	error = -EXDEV;
+	if (old_path.mnt != new_path.mnt)
+		goto out_dput;
+	idmap = mnt_idmap(new_path.mnt);
+	error = may_linkat(idmap, &old_path);
+	if (unlikely(error))
+		goto out_dput;
+	error = security_path_link(old_path.dentry, &new_path, new_dentry);
+	if (error)
+		goto out_dput;
+	error = vfs_link(old_path.dentry, idmap, new_path.dentry->d_inode,
+			 new_dentry, &delegated_inode);
+
+	return error;
+}
+```
+
+## lookup
+
+
+```c
+
+static int path_lookupat(struct nameidata *nd, unsigned flags, struct path *path)
+{
+	const char *s = path_init(nd, flags);
+	int err;
+
+	if (unlikely(flags & LOOKUP_DOWN) && !IS_ERR(s)) {
+		err = handle_lookup_down(nd);
+		if (unlikely(err < 0))
+			s = ERR_PTR(err);
+	}
+
+	while (!(err = link_path_walk(s, nd)) &&
+	       (s = lookup_last(nd)) != NULL)
+		;
+	if (!err && unlikely(nd->flags & LOOKUP_MOUNTPOINT)) {
+		err = handle_lookup_down(nd);
+		nd->state &= ~ND_JUMPED; // no d_weak_revalidate(), please...
+	}
+	if (!err)
+		err = complete_walk(nd);
+
+	if (!err && nd->flags & LOOKUP_DIRECTORY)
+		if (!d_can_lookup(nd->path.dentry))
+			err = -ENOTDIR;
+	if (!err) {
+		*path = nd->path;
+		nd->path.mnt = NULL;
+		nd->path.dentry = NULL;
+	}
+	terminate_walk(nd);
+	return err;
+}
+```
 
 ## files_struct
 

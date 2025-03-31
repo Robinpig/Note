@@ -24,15 +24,10 @@ Linux 内核使用页式内存管理，应用程序给出的内存地址是虚�
 ## boot
 
 
-内核的正式入口是 start_kernel, 前面的讨论基本都发生在 start_kernel 之后，但实际上在它之 前我们就需要访问内存了， 那么首先要做的就是识别系统中的内存， 由 detect_memo-1 y实现。
-根据硬件和BIOS的配置，detect_memo1-y依次调用detect_memory_e820、 cletect_memo1-y_e801 和 cletect_memm-y_88, 最终哪一个函数起作用取决于硬件和 BIOS 的配置
-后二者作为兼容老机器 存在， 此处主要以现代计算机中的 cletect_memor y_e820 为主进行分析
+内核的正式入口是 [start_kernel](/docs/CS/OS/Linux/Start.md) , 但实际上在它之前我们就需要访问内存了， 那么首先要做的就是识别系统中的内存， 由 detect_memo-1 y实现。
+
+根据硬件和BIOS的配置，detect_memory依次调用detect_memory_e820、 detect_memo1-y_e801 和 detect_memory_88, 最终哪一个函数起作用取决于硬件和 BIOS 的配置
 三者都是通过与 BIOS 通信实现的， 给 BIOS 发送 OxlS 中断， 根据 BIOS 反馈的信息提取内存信息。
-以detect_memory_e820为例，每一条有效的信息都被存储在boot_params.e820_table数组中
-(类型为boot_e820_entr y)。
-boot_e820_entl-y有3 个字段， addr和size字段分别表示一段内存的起始地址和大小，type字段表示这段内存的用途。
-
-
 
 ```c
 // arch/x86/boot/main.c
@@ -60,9 +55,17 @@ void detect_memory(void)
 ```
 
 可以清晰的看到上面分别调用了三个函数detect_memory_e820()、detect_memory_e801()和detect_memory_88()
-较新的电脑调用detect_memory_e820()足矣探测内存布局，detect_memory_e801()和detect_memory_88()则是针对较老的电脑进行兼容而保留的
+
+此处主要以现代计算机中的 detect_memory_e820 为主进行分析，后二者作为兼容老机器存在
+
+
+
 
 #### detect_memory_e820
+
+
+每一条有效的信息都被存储在 `boot_params.e820_table` 数组中(类型为boot_e820_entry)
+boot_e820_entry有3个字段， addr 和 size 字段分别表示一段内存的起始地址和大小，type 字段表示这段内存的用途。
 
 ```c
 static void detect_memory_e820(void)
@@ -126,7 +129,7 @@ static void detect_memory_e820(void)
 
 
 
-对于x86-64架构或MIPS架构，除硬件外设访问的物理区间上的内存域为ZONE_DMA除外，其余都为ZONE_NORMAL类型，每个内存域内部则记录了所覆盖的页帧情况并用buddy system 来管理本内存域内部的空闲页帧，可以通过cat /proc/zoneinfo 命令查看系统的zone相关信息
+对于x86-64架构或MIPS架构，除硬件外设访问的物理区间上的内存域为ZONE_DMA除外，其余都为ZONE_NORMAL类型，每个内存域内部则记录了所覆盖的页帧情况并用buddy system 来管理本内存域内部的空闲页帧，可以通过 `cat /proc/zoneinfo` 命令查看系统的zone相关信息
 
 ```c
 struct zone {
@@ -138,15 +141,6 @@ struct zone {
 
     unsigned long nr_reserved_highatomic;
 
-    /*
-     * We don't know if the memory that we're going to allocate will be
-     * freeable or/and it will be released eventually, so to avoid totally
-     * wasting several GB of ram we must reserve some of the lower zone
-     * memory (otherwise we risk to run OOM on the lower zones despite
-     * there being tons of freeable ram on the higher zones).  This array is
-     * recalculated at runtime if the sysctl_lowmem_reserve_ratio sysctl
-     * changes.
-     */
     long lowmem_reserve[MAX_NR_ZONES];
 
 #ifdef CONFIG_NUMA
@@ -913,175 +907,13 @@ void __init paging_init(void)
 ```
 
 
-On NUMA machines, each NUMA node would have a pg_data_t to describe it's memory layout. On UMA machines there is a single pglist_data which describes the whole memory.
+On NUMA machines, each NUMA node would have a pg_data_t to describe it's memory layout. 
+On UMA machines there is a single pglist_data which describes the whole memory.
 
 Memory statistics and page replacement data structures are maintained on a per-zone basis.
-
-```c
-typedef struct pglist_data {
-	/*
-	 * node_zones contains just the zones for THIS node. Not all of the
-	 * zones may be populated, but it is the full list. It is referenced by
-	 * this node's node_zonelists as well as other node's node_zonelists.
-	 */
-	struct zone node_zones[MAX_NR_ZONES];
-
-	/*
-	 * node_zonelists contains references to all zones in all nodes.
-	 * Generally the first zones will be references to this node's
-	 * node_zones.
-	 */
-	struct zonelist node_zonelists[MAX_ZONELISTS];
-
-    int nr_zones; /* number of populated zones in this node */
-    
-    unsigned long node_start_pfn;
-	unsigned long node_present_pages; /* total number of physical pages */
-	unsigned long node_spanned_pages; /* total size of physical page
-					     range, including holes */
-	int node_id;
-	wait_queue_head_t kswapd_wait;
-	wait_queue_head_t pfmemalloc_wait;
-	struct task_struct *kswapd;	/* Protected by
-					   mem_hotplug_begin/end() */
-	int kswapd_order;
-	enum zone_type kswapd_highest_zoneidx;
-
-	int kswapd_failures;		/* Number of 'reclaimed == 0' runs */
-	
-	/* Fields commonly accessed by the page reclaim scanner */
-
-	/*
-	 * NOTE: THIS IS UNUSED IF MEMCG IS ENABLED.
-	 *
-	 * Use mem_cgroup_lruvec() to look up lruvecs.
-	 */
-	struct lruvec		__lruvec;
-
-	unsigned long		flags;
-
-	ZONE_PADDING(_pad2_)
-
-	/* Per-node vmstats */
-	struct per_cpu_nodestat __percpu *per_cpu_nodestats;
-	atomic_long_t		vm_stat[NR_VM_NODE_STAT_ITEMS];
-} pg_data_t;
-```
-
-
-#### alloc_pages
-
-```c
-static inline struct page *alloc_pages(gfp_t gfp_mask, unsigned int order)
-{
-	return alloc_pages_node(numa_node_id(), gfp_mask, order);
-}
-```
-This is the 'heart' of the zoned buddy allocator.
-
-```c
-struct page *__alloc_pages(gfp_t gfp, unsigned int order, int preferred_nid,
-							nodemask_t *nodemask)
-{
-	struct page *page;
-	unsigned int alloc_flags = ALLOC_WMARK_LOW;
-	gfp_t alloc_gfp; /* The gfp_t that was actually used for allocation */
-	struct alloc_context ac = { };
-
-	/*
-	 * There are several places where we assume that the order value is sane
-	 * so bail out early if the request is out of bound.
-	 */
-	if (unlikely(order >= MAX_ORDER)) {
-		WARN_ON_ONCE(!(gfp & __GFP_NOWARN));
-		return NULL;
-	}
-
-	gfp &= gfp_allowed_mask;
-	/*
-	 * Apply scoped allocation constraints. This is mainly about GFP_NOFS
-	 * resp. GFP_NOIO which has to be inherited for all allocation requests
-	 * from a particular context which has been marked by
-	 * memalloc_no{fs,io}_{save,restore}. And PF_MEMALLOC_PIN which ensures
-	 * movable zones are not used during allocation.
-	 */
-	gfp = current_gfp_context(gfp);
-	alloc_gfp = gfp;
-	if (!prepare_alloc_pages(gfp, order, preferred_nid, nodemask, &ac,
-			&alloc_gfp, &alloc_flags))
-		return NULL;
-
-	/*
-	 * Forbid the first pass from falling back to types that fragment
-	 * memory until all local zones are considered.
-	 */
-	alloc_flags |= alloc_flags_nofragment(ac.preferred_zoneref->zone, gfp);
-
-	/* First allocation attempt */
-	page = get_page_from_freelist(alloc_gfp, order, alloc_flags, &ac);
-	if (likely(page))
-		goto out;
-
-	alloc_gfp = gfp;
-	ac.spread_dirty_pages = false;
-
-	/*
-	 * Restore the original nodemask if it was potentially replaced with
-	 * &cpuset_current_mems_allowed to optimize the fast-path attempt.
-	 */
-	ac.nodemask = nodemask;
-
-	page = __alloc_pages_slowpath(alloc_gfp, order, &ac);
-
-out:
-	if (memcg_kmem_enabled() && (gfp & __GFP_ACCOUNT) && page &&
-	    unlikely(__memcg_kmem_charge_page(page, gfp, order) != 0)) {
-		__free_pages(page, order);
-		page = NULL;
-	}
-
-	trace_mm_page_alloc(page, order, alloc_gfp, ac.migratetype);
-
-	return page;
-}
-```
-
-#### free_pages
-
-Free pages allocated with alloc_pages().
-
-- page: The page pointer returned from alloc_pages().
-- order: The order of the allocation.
-
-This function can free multi-page allocations that are not compound
-pages.  It does not check that the @order passed in matches that of
-the allocation, so it is easy to leak memory.  Freeing more memory
-than was allocated will probably emit a warning.
-
-If the last reference to this page is speculative, it will be released
-by put_page() which only frees the first page of a non-compound
-allocation.  
-
-To prevent the remaining pages from being leaked, we free
-the subsequent pages here.  If you want to use the page's reference
-count to decide when to free the allocation, you should allocate a
-compound page, and use put_page() instead of __free_pages().
-
-Context: May be called in interrupt context or while holding a normal
-spinlock, but not in NMI context or while holding a raw spinlock.
-```c
-
-void __free_pages(struct page *page, unsigned int order)
-{
-	if (put_page_testzero(page))
-		free_the_page(page, order);
-	else if (!PageHead(page))
-		while (order-- > 0)
-			free_the_page(page + (1 << order), order);
-}
-```
-
-
+ 
+ 
+ 
 Check memory
 
 ```shell

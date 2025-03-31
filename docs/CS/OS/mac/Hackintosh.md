@@ -100,9 +100,13 @@ USBToolBox.kext 官方下载地址为：https://github.com/USBToolBox/kext/relea
 
 
 
-
+## 修复
 
 OS排错
+
+
+
+### sleep
 
 
 
@@ -111,6 +115,37 @@ OS排错
 ```
 
 
+
+Haackintosh 不支持休眠(挂起到磁盘或者S4睡眠)
+
+
+
+睡眠问题
+
+
+
+查看当前睡眠配置
+
+```shell
+pmset -g custom
+```
+
+
+
+**config.plist**:
+
+- ```
+  Misc -> Boot -> HibernateMode -> None
+  ```
+
+  - 我们将避免使用S4的黑魔法
+
+- ```
+  NVRAM -> Add -> 7C436110-AB2A-4BBB-A880-FE41995C9F82 -> boot-args
+  ```
+
+  - `keepsyms=1` - 确保如果内核在睡眠期间发生崩溃，我们可以从中获取所有重要的信息
+  - `swd_panic=1` - 避免了睡眠导致重启的问题，这应该给我们一个内核崩溃日志
 
 
 
