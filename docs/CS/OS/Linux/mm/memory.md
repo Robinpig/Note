@@ -1459,6 +1459,57 @@ vm_operations_struct 结构的 nopage 接口会在访问内存发生异常时被
 而调用 mmap() 系统调用对文件进行映射后，用户对映射后的内存进行读写实际上是对文件缓存的读写，所以减少了一次系统调用，从而加速了对文件读写的效率
 
 
+
+free -m 中 available的计算来源
+"available"的内存主要包括了：空闲内存减去所有zones的lowmem reserve和high watermark，再加上page cache和slab中可以回收的部分
+
+```c
+// mm/show_mem.c
+long si_mem_available(void)
+{
+	long available;
+	unsigned long pagecache;
+	unsigned long wmark_low = 0;
+	unsigned long reclaimable;
+	struct zone *zone;
+
+	for_each_zone(zone)
+		wmark_low += low_wmark_pages(zone);
+
+	/*
+	 * Estimate the amount of memory available for userspace allocations,
+	 * without causing swapping or OOM.
+	 */
+	available = global_zone_page_state(NR_FREE_PAGES) - totalreserve_pages;
+
+	/*
+	 * Not all the page cache can be freed, otherwise the system will
+	 * start swapping or thrashing. Assume at least half of the page
+	 * cache, or the low watermark worth of cache, needs to stay.
+	 */
+	pagecache = global_node_page_state(NR_ACTIVE_FILE) +
+		global_node_page_state(NR_INACTIVE_FILE);
+	pagecache -= min(pagecache / 2, wmark_low);
+	available += pagecache;
+
+	/*
+	 * Part of the reclaimable slab and other kernel memory consists of
+	 * items that are in use, and cannot be freed. Cap this estimate at the
+	 * low watermark.
+	 */
+	reclaimable = global_node_page_state_pages(NR_SLAB_RECLAIMABLE_B) +
+		global_node_page_state(NR_KERNEL_MISC_RECLAIMABLE);
+	reclaimable -= min(reclaimable / 2, wmark_low);
+	available += reclaimable;
+
+	if (available < 0)
+		available = 0;
+	return available;
+}
+EXPORT_SYMBOL_GPL(si_mem_available);
+```
+
+
 ## allocator
 
 Linux系统的内存管理是一个很复杂的“工程”，它不仅仅是物理内存管理，同时包括虚拟内存管理、内存交换和回收等，还有管理中的各式各样的算法
