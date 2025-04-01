@@ -313,8 +313,8 @@ struct mm_struct {
 
 ### VMA
 
-虚拟内存区域在内核中有一个对应的结构体vm_area_struct
-
+在Linux内核中，用vm_area_struct数据结构描述进程的虚拟内存
+对于虚拟内存和物理内存，采用建立页表的方法来建立映射关系
 
 
 This struct describes a virtual memory area.
@@ -1452,6 +1452,7 @@ EXPORT_SYMBOL(filemap_fault);
 
 ```
 #### do_wp_page
+
 当两个 JVM 进程试图对各自的 MappedByteBuffer 进行写入操作时，MMU 会发现 MappedByteBuffer 在进程页表中对应的 pte 是只读的，于是产生写保护类型的缺页中断。
 当 JVM 进程进入内核开始缺页处理的时候，内核会发现 MappedByteBuffer 在内核中的权限 —— vma->vm_page_prot 是可写的，但 pte 是只读的，于是开始进行写时复制 —— Copy On Write ，COW 的过程会在 do_wp_page 函数中进行
 

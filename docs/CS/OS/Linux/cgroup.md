@@ -1,5 +1,7 @@
 ## Introduction
 
+从 2.6.24 版本开始，linux 内核提供了一个叫做 cgroups的特性
+cgroup 和 namespace 类似，也是将进程进行分组，但它的目的和 namespace 不一样，namespace 是为了隔离进程组之间的资源，而 cgroup 是为了对一组进程进行统一的资源监控和限制
 
 "cgroup" stands for "control group" and is never capitalized.
 The singular form is used to designate the whole feature and also as a qualifier as in "cgroup controllers".
