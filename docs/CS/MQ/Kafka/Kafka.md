@@ -780,7 +780,12 @@ The protocol is kept quite simple to allow for future implementation of clients 
 
 ## Tuning
 
+Kafka 几个痛点： 
 
+1. 弹性扩容的能力，在Broker负载高的时候，没办法快速扩容，需要先迁移数据，扩容速度会比较慢，极端情况下，可能无法扩容，影响业务。
+2. 消费分组Rebalance速度在一些极端情况(如分区和消费者比较多)会比较慢，而Rebalance会导致消费暂停，从而影响消费性能。
+3. ~~基于zookeeper的架构，可能会出现Zookeeper、Contrller、Broker之间的元数据不一致。可能会导致集群异常。另外zookeeper的存在，增加了kafka的运维复杂度 Kakfa 在 4.0版本正式移除了 ZooKeeper~~
+4. 功能层面，kafka支持的功能比较简单，目前主要支持生产、消费、事务、幂等等功能。大家希望kakfa 支持更多的功能，比如延时消息、死信队列、消息轨迹等，但是社区当前不支持。  
 
 ### performance
 

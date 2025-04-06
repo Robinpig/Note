@@ -303,6 +303,18 @@ They are a mechanism used in order to signal a consumer to end its work so it is
 
 Message queues will authenticate applications that try to access the queue, and allow you to use encryption to encrypt messages over the network as well as in the queue itself.
 
+## Architecture
+
+最基础的消息队列应该具备五个模块。
+
+- 通信协议：用来完成客户端（生产者和消费者）和 Broker 之间的通信，比如生产或消费
+- 网络模块：客户端用来发送数据，服务端用来接收数据
+- 存储模块：服务端用来完成持久化数据存储
+- 生产者：完成生产相关的功能
+- 消费者：完成消费相关的功能
+
+
+
 ## Issues
 
 ### Disk Access
@@ -386,6 +398,21 @@ Based on no message losing
 Kafka partition -> queue -> thread
 
 ## MQs
+
+
+
+如果没有大消息和大流量等复杂场景，是可以选用非标准消息队列产品的。比如在用户状态审核的场景中，只需要向下游传递用户 ID 和审核结果，结构简单，数量有限。这时候选择非标准消息队列比如 Redis 和 MySQL 也是可以的  
+
+
+
+早年业界消息队列演进的主要推动力在于功能（如延迟消息、事务消息、顺序消息等）、场景（实时场景、大数据场景等）、分布式集群的支持等等。近几年，随着云原生架构和Serverless 的普及，业界 MQ 主要向实时消息和流消息的融合架构、Serverless、Event、协议兼容等方面演进。从而实现计算、存储的弹性，实现集群的 Serverless 化  
+
+- 从需求发展路径上看，消息队列的发展趋势是：消息 -> 流 -> 消息和流融合
+- 从架构发展的角度来看，消息队列的发展趋势是：单机 -> 分布式 -> 云原生/Serverless
+
+
+
+
 
 When the message sending and consumption ends coexist, the increasing number of topics will cause a drastic decline of Kafka's throughput, while Apache RocketMQ delivers a stable performance.
 Therefore, Kafka is more suitable for business scenarios with only a few topics and consumption ends, while Apache RocketMQ is a better choice for business scenarios with multiple topics and consumption ends.
