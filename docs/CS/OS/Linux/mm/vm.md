@@ -313,8 +313,8 @@ struct mm_struct {
 
 ### VMA
 
-虚拟内存区域在内核中有一个对应的结构体vm_area_struct
-
+在Linux内核中，用vm_area_struct数据结构描述进程的虚拟内存
+对于虚拟内存和物理内存，采用建立页表的方法来建立映射关系
 
 
 This struct describes a virtual memory area.
@@ -1293,7 +1293,7 @@ static vm_fault_t __do_fault(struct vm_fault *vmf)
 }
 ```
 
-
+filemap_fault
 ```c
 vm_fault_t filemap_fault(struct vm_fault *vmf)
 {
@@ -1451,7 +1451,248 @@ out_retry:
 EXPORT_SYMBOL(filemap_fault);
 
 ```
+#### do_wp_page
 
+当两个 JVM 进程试图对各自的 MappedByteBuffer 进行写入操作时，MMU 会发现 MappedByteBuffer 在进程页表中对应的 pte 是只读的，于是产生写保护类型的缺页中断。
+当 JVM 进程进入内核开始缺页处理的时候，内核会发现 MappedByteBuffer 在内核中的权限 —— vma->vm_page_prot 是可写的，但 pte 是只读的，于是开始进行写时复制 —— Copy On Write ，COW 的过程会在 do_wp_page 函数中进行
+
+```c
+static vm_fault_t do_wp_page(struct vm_fault *vmf)
+    __releases(vmf->ptl)
+{
+    struct vm_area_struct *vma = vmf->vma;
+
+    if (userfaultfd_pte_wp(vma, *vmf->pte)) {
+        pte_unmap_unlock(vmf->pte, vmf->ptl);
+        return handle_userfault(vmf, VM_UFFD_WP);
+    }
+
+    /*
+     * Userfaultfd write-protect can defer flushes. Ensure the TLB
+     * is flushed in this case before copying.
+     */
+    if (unlikely(userfaultfd_wp(vmf->vma) &&
+             mm_tlb_flush_pending(vmf->vma->vm_mm)))
+        flush_tlb_page(vmf->vma, vmf->address);
+
+    vmf->page = vm_normal_page(vma, vmf->address, vmf->orig_pte);
+    if (!vmf->page) {
+        /*
+         * VM_MIXEDMAP !pfn_valid() case, or VM_SOFTDIRTY clear on a
+         * VM_PFNMAP VMA.
+         *
+         * We should not cow pages in a shared writeable mapping.
+         * Just mark the pages writable and/or call ops->pfn_mkwrite.
+         */
+        if ((vma->vm_flags & (VM_WRITE|VM_SHARED)) ==
+                     (VM_WRITE|VM_SHARED))
+            return wp_pfn_shared(vmf);
+
+        pte_unmap_unlock(vmf->pte, vmf->ptl);
+        return wp_page_copy(vmf);
+    }
+
+    /*
+     * Take out anonymous pages first, anonymous shared vmas are
+     * not dirty accountable.
+     */
+    if (PageAnon(vmf->page)) {
+        struct page *page = vmf->page;
+
+        /* PageKsm() doesn't necessarily raise the page refcount */
+        if (PageKsm(page) || page_count(page) != 1)
+            goto copy;
+        if (!trylock_page(page))
+            goto copy;
+        if (PageKsm(page) || page_mapcount(page) != 1 || page_count(page) != 1) {
+            unlock_page(page);
+            goto copy;
+        }
+        /*
+         * Ok, we've got the only map reference, and the only
+         * page count reference, and the page is locked,
+         * it's dark out, and we're wearing sunglasses. Hit it.
+         */
+        unlock_page(page);
+        wp_page_reuse(vmf);
+        return VM_FAULT_WRITE;
+    } else if (unlikely((vma->vm_flags & (VM_WRITE|VM_SHARED)) ==
+                    (VM_WRITE|VM_SHARED))) {
+        return wp_page_shared(vmf);
+    }
+copy:
+    /*
+     * Ok, we need to copy. Oh, well..
+     */
+    get_page(vmf->page);
+
+    pte_unmap_unlock(vmf->pte, vmf->ptl);
+    return wp_page_copy(vmf);
+}
+```
+
+Handle the case of a page which we actually need to copy to a new page.
+Called with mmap_lock locked and the old page referenced, but
+without the ptl held.
+High level logic flow:
+- Allocate a page, copy the content of the old page to the new one.
+- Handle book keeping and accounting - cgroups, mmu-notifiers, etc.
+- Take the PTL. If the pte changed, bail out and release the allocated page
+- If the pte is still the way we remember it, update the page table and all
+  relevant references. This includes dropping the reference the page-table
+  held to the old page, as well as updating the rmap.
+- In any case, unlock the PTL and drop the reference we took to the old page.
+
+```c
+static vm_fault_t wp_page_copy(struct vm_fault *vmf)
+{
+    struct vm_area_struct *vma = vmf->vma;
+    struct mm_struct *mm = vma->vm_mm;
+    struct page *old_page = vmf->page;
+    struct page *new_page = NULL;
+    pte_t entry;
+    int page_copied = 0;
+    struct mmu_notifier_range range;
+
+    if (unlikely(anon_vma_prepare(vma)))
+        goto oom;
+
+    if (is_zero_pfn(pte_pfn(vmf->orig_pte))) {
+        new_page = alloc_zeroed_user_highpage_movable(vma,
+                                  vmf->address);
+        if (!new_page)
+            goto oom;
+    } else {
+        new_page = alloc_page_vma(GFP_HIGHUSER_MOVABLE, vma,
+                vmf->address);
+        if (!new_page)
+            goto oom;
+
+        if (!cow_user_page(new_page, old_page, vmf)) {
+            /*
+             * COW failed, if the fault was solved by other,
+             * it's fine. If not, userspace would re-fault on
+             * the same address and we will handle the fault
+             * from the second attempt.
+             */
+            put_page(new_page);
+            if (old_page)
+                put_page(old_page);
+            return 0;
+        }
+    }
+
+    if (mem_cgroup_charge(new_page, mm, GFP_KERNEL))
+        goto oom_free_new;
+    cgroup_throttle_swaprate(new_page, GFP_KERNEL);
+
+    __SetPageUptodate(new_page);
+
+    mmu_notifier_range_init(&range, MMU_NOTIFY_CLEAR, 0, vma, mm,
+                vmf->address & PAGE_MASK,
+                (vmf->address & PAGE_MASK) + PAGE_SIZE);
+    mmu_notifier_invalidate_range_start(&range);
+
+    /*
+     * Re-check the pte - we dropped the lock
+     */
+    vmf->pte = pte_offset_map_lock(mm, vmf->pmd, vmf->address, &vmf->ptl);
+    if (likely(pte_same(*vmf->pte, vmf->orig_pte))) {
+        if (old_page) {
+            if (!PageAnon(old_page)) {
+                dec_mm_counter_fast(mm,
+                        mm_counter_file(old_page));
+                inc_mm_counter_fast(mm, MM_ANONPAGES);
+            }
+        } else {
+            inc_mm_counter_fast(mm, MM_ANONPAGES);
+        }
+        flush_cache_page(vma, vmf->address, pte_pfn(vmf->orig_pte));
+        entry = mk_pte(new_page, vma->vm_page_prot);
+        entry = pte_sw_mkyoung(entry);
+        entry = maybe_mkwrite(pte_mkdirty(entry), vma);
+
+        /*
+         * Clear the pte entry and flush it first, before updating the
+         * pte with the new entry, to keep TLBs on different CPUs in
+         * sync. This code used to set the new PTE then flush TLBs, but
+         * that left a window where the new PTE could be loaded into
+         * some TLBs while the old PTE remains in others.
+         */
+        ptep_clear_flush_notify(vma, vmf->address, vmf->pte);
+        page_add_new_anon_rmap(new_page, vma, vmf->address, false);
+        lru_cache_add_inactive_or_unevictable(new_page, vma);
+        /*
+         * We call the notify macro here because, when using secondary
+         * mmu page tables (such as kvm shadow page tables), we want the
+         * new page to be mapped directly into the secondary page table.
+         */
+        set_pte_at_notify(mm, vmf->address, vmf->pte, entry);
+        update_mmu_cache(vma, vmf->address, vmf->pte);
+        if (old_page) {
+            /*
+             * Only after switching the pte to the new page may
+             * we remove the mapcount here. Otherwise another
+             * process may come and find the rmap count decremented
+             * before the pte is switched to the new page, and
+             * "reuse" the old page writing into it while our pte
+             * here still points into it and can be read by other
+             * threads.
+             *
+             * The critical issue is to order this
+             * page_remove_rmap with the ptp_clear_flush above.
+             * Those stores are ordered by (if nothing else,)
+             * the barrier present in the atomic_add_negative
+             * in page_remove_rmap.
+             *
+             * Then the TLB flush in ptep_clear_flush ensures that
+             * no process can access the old page before the
+             * decremented mapcount is visible. And the old page
+             * cannot be reused until after the decremented
+             * mapcount is visible. So transitively, TLBs to
+             * old page will be flushed before it can be reused.
+             */
+            page_remove_rmap(old_page, false);
+        }
+
+        /* Free the old page.. */
+        new_page = old_page;
+        page_copied = 1;
+    } else {
+        update_mmu_tlb(vma, vmf->address, vmf->pte);
+    }
+
+    if (new_page)
+        put_page(new_page);
+
+    pte_unmap_unlock(vmf->pte, vmf->ptl);
+    /*
+     * No need to double call mmu_notifier->invalidate_range() callback as
+     * the above ptep_clear_flush_notify() did already call it.
+     */
+    mmu_notifier_invalidate_range_only_end(&range);
+    if (old_page) {
+        /*
+         * Don't let another task, with possibly unlocked vma,
+         * keep the mlocked page.
+         */
+        if (page_copied && (vma->vm_flags & VM_LOCKED)) {
+            lock_page(old_page);    /* LRU manipulation */
+            if (PageMlocked(old_page))
+                munlock_vma_page(old_page);
+            unlock_page(old_page);
+        }
+        put_page(old_page);
+    }
+    return page_copied ? VM_FAULT_WRITE : 0;
+oom_free_new:
+    put_page(new_page);
+oom:
+    if (old_page)
+        put_page(old_page);
+    return VM_FAULT_OOM;
+}
+```
 
 ## vmalloc
 

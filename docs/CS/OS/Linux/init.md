@@ -154,7 +154,7 @@ asmlinkage __visible void __init __no_sanitize_address start_kernel(void)
        char *after_dashes;
 ```
 
-[init task](/docs/CS/OS/Linux/process.md?id=init-task)
+[init task](/docs/CS/OS/Linux/proc/process.md?id=init-task)
 ```c
        set_task_stack_end_magic(&init_task);
        smp_setup_processor_id();
@@ -402,7 +402,7 @@ call rest_init -> [kernel_init](/docs/CS/OS/Linux/init.md?id=kernel_init)
 
 ### kernel_init
 
-create [kernel_thread](/docs/CS/OS/Linux/process.md?id=kernel_clone) to run `kernel_init`
+create [kernel_thread](/docs/CS/OS/Linux/proc/process.md?id=kernel_clone) to run `kernel_init`
 
 ```c
 noinline void __ref rest_init(void)

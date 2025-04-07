@@ -39,6 +39,7 @@ replay_pid*.log
 
 
 **/*.java
+**/*.py
 
 # exclude node files
 /node_modules/

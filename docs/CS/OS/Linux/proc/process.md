@@ -15,11 +15,11 @@ ps -fax
 How this tree structure spreads is closely connected with how new processes are generated.
 For this purpose, Unix uses two mechanisms called fork and exec.
 
-1. [fork](/docs/CS/OS/Linux/process.md?id=fork) — Generates an exact copy of the current process that differs from the parent process only in its PID (process identification).
+1. [fork](/docs/CS/OS/Linux/proc/process.md?id=fork) — Generates an exact copy of the current process that differs from the parent process only in its PID (process identification).
    After the system call has been executed, there are two processes in the system, both performing the same actions.
    The memory contents of the initial process are duplicated -- at least in the view of the program.
    Linux uses a well-known technique known as copy on write that allows it to make the operation much more efficient by deferring the copy operations until either parent or child writes to a page -— read-only accessed can be satisfied from the same page for both.
-2. [exec](/docs/CS/OS/Linux/process.md?id=exec) — Loads a new program into an existing content and then executes it. The memory pages reserved by the old program are flushed, and their contents are replaced with new data. The new program then starts executing.
+2. [exec](/docs/CS/OS/Linux/proc/process.md?id=exec) — Loads a new program into an existing content and then executes it. The memory pages reserved by the old program are flushed, and their contents are replaced with new data. The new program then starts executing.
 
 
 ## task struct
@@ -88,9 +88,25 @@ struct task_struct {
 };
 ```
 
-
-
 `get_current()` implement by different arch
+
+### pid
+
+内核需要为每一个进程/线程都分配一个进程号。
+如果每个使用过的进程号如果使用传统的 int 变量来存储的话会消耗很大的内存
+早期版本为了节省内存 使用bitmap存储pid 每个bit表示一个pid 占用内存小 同时局部性较好 提高CPU缓存命中率
+
+
+
+分配时需要遍历pidmap 如果进程数量较多 耗时也会随之增长
+
+
+
+在最近几年的业界发展中，服务器的内存越来越大，服务器上几百 GB 的内存都很常见。另外随着这几年轻量化容器云的发展，服务器上运行的进程数越来越多。传统的基于 bitmap 来管理分配的 pid 的节约内存的优势越来越显得没有价值，而它分配新 pid 时占用的 CPU 资源较高这一缺点越来越明显
+
+[Replace PID bitmap allocation with IDR AP](https://lwn.net/Articles/735675/) 并入到了 Linux 4.15 的版本中
+
+
 
 
 #### state

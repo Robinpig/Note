@@ -14,7 +14,9 @@ sys_call_table数组的定义：
 该数组各元素的默认值都是 __x64_sys_ni_syscall
 该函数也非常简单，就是直接返回错误码 -ENOSYS，表示系统调用非法。
 sys_call_table数组定义的地方好像只设置了默认值，并没有设置真正的系统调用函数
+
 我们再回头仔细看下sys_call_table数组的定义，它在设置完默认值之后，后面还include了一个名为asm/syscalls_64.h的头文件 这个头文件是编译时生成的 makefile中使用了syscalltbl.sh脚本和syscall_64.tbl模板文件来生成这个syscalls_64.h头文件。
+
 来看下生成的syscalls_64.h头文件：
 
 
@@ -1140,7 +1142,8 @@ static struct file *alloc_file(const struct path *path, int flags,
 
 #### file_operations
 
-Socket files have a set of 'special' operations as well as the generic file ones. These don't appear in the operation structures but are done directly via the socketcall() multiplexor.
+Socket files have a set of 'special' operations as well as the generic file ones. 
+These don't appear in the operation structures but are done directly via the socketcall() multiplexor.
 
 ```c
 // net/socket.c

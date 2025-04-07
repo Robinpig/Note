@@ -256,3 +256,9 @@ Have the 32 bit jiffies value wrap 5 minutes after boot so jiffies wrap bugs sho
 ```c
 #define INITIAL_JIFFIES ((unsigned long)(unsigned int) (-300*HZ))
 ```
+
+
+
+## Links
+
+- [Linux](/docs/CS/OS/Linux/Linux.md)

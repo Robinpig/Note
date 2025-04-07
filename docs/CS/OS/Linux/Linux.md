@@ -97,6 +97,11 @@ qemu启动只携带kernel会error `unable to mount root fs`
 
 
 
+常见的根文件系统
+buildroot 和 busybox 无包管理工具
+
+
+
 <!-- tabs:start -->
 
 
@@ -140,6 +145,8 @@ $ zcat /proc/config.gz > .config
 | 编译报错 | 解决方法 |
 | --- | --- |
 | No rule to make target 'debian/certs/debian-uefi-certs.pem | vim .config 文件 remove包含 debian 的key配置 |
+
+
 
 
 
@@ -735,7 +742,6 @@ usr/src/kernels/
 
 内核源码根目录下的Makefile Kconfig Kbuild是与内核配置、编译相关的文件
 
--
 - [Init](/docs/CS/OS/Linux/init.md)
 
 内核中可供调用的函数通常需要EXPORT
@@ -751,7 +757,8 @@ Because Linux is a multitasking system, it supports what appears to be concurren
 Since only as many processes as there are CPUs in the system can really run at the same time, the kernel switches (unnoticed by users) between the processes at short intervals to give them the impression of simultaneous processing.
 Here, there are two problem areas:
 
-1. The kernel, with the help of the CPU, is responsible for the technical details of task switching. Each individual process must be given the illusion that the CPU is always available.
+1. The kernel, with the help of the CPU, is responsible for the technical details of task switching.
+   Each individual process must be given the illusion that the CPU is always available.
    This is achieved by saving all state-dependent elements of the process before CPU resources are withdrawn and the process is placed in an idle state.
    When the process is reactivated, the exact saved state is restored. Switching between processes is known as task switching.
 2. The kernel must also decide how CPU time is shared between the existing processes. Important processes are given a larger share of CPU time, less important processes a smaller share.
@@ -803,7 +810,7 @@ If it's not, it should go back to sleeping on the condition variable, waiting fo
 
 ### thundering herd
 
-[thundering herd](/docs/CS/OS/Linux/thundering_herd.md)
+[thundering herd](/docs/CS/OS/Linux/proc/thundering_herd.md)
 
 ## Interrupt
 
@@ -889,3 +896,4 @@ If it's not, it should go back to sleeping on the condition variable, waiting fo
 4. [Linux0.11源码解析](https://zhuanlan.zhihu.com/c_1094189343643652096)
 5. [The Linux Kernel documentation](https://www.kernel.org/doc/)
 6. [Linux Weekly News](https://lwn.net/)
+7. [최신 ARM 리눅스 커널 5.x/6.x 분석 블로그](http://jake.dothome.co.kr/)

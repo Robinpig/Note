@@ -3,6 +3,8 @@
 DNS is a distributed client/server networked database that is used by TCP/IP applications to map between host names and IP addresses (and vice versa), 
 to provide electronic mail routing information, service naming, and other capabilities.
 
+> Because accuracy is essential, TCP or some other reliable protocol must be used for AXFR requests.
+
 在绝大多数情况下，DNS 都是使用 UDP 协议进行通信的，DNS 协议在设计之初也推荐我们在进行域名解析时首先使用 UDP
 
 实际上，DNS 不仅使用了 UDP 协议，也使用了 TCP 协议
@@ -152,5 +154,6 @@ DNS调用次数 服务多了之后域名多需要解析更多域名
 ## References
 
 1. [RFC 1034 - Domain names - concepts and facilities](https://datatracker.ietf.org/doc/html/rfc1034)
-1. [RFC 1035 - Domain names - implementation and specification](https://datatracker.ietf.org/doc/html/rfc1035)
-1. [RFC 8484 - DNS Queries over HTTPS (DoH)](https://datatracker.ietf.org/doc/html/rfc8484)
+2. [RFC 1035 - Domain names - implementation and specification](https://datatracker.ietf.org/doc/html/rfc1035)
+3. [RFC 8484 - DNS Queries over HTTPS (DoH)](https://datatracker.ietf.org/doc/html/rfc8484)
+4. [为什么 DNS 使用 UDP 协议](https://draven.co/whys-the-design-dns-udp-tcp/)

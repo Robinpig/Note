@@ -54,6 +54,38 @@ CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build
 
 compiler不允许出现未使用的变量和导入包
 
+
+
+
+
+执行go build命令时候，带上-n选项可以观察编译流程所执行所有的命令
+从上面命令输出的内容可以看到：
+1. Go编译器首先会创建一个任务输出临时目录（mkdir -p $WORK/b001/）。b001是root task的工作目录，每次构建都是由一系列task完成，它们构成 action graph
+2. 接着将依赖的包: /usr/lib/go/pkg/linux_amd64/runtime.a 写入到importcfg中
+3. 接着会使用compile命令，并指定importcfg文件，将主程序empty_string.go编译成_pkg.a文件（/usr/lib/go/pkg/tool/linux_amd64/compile -o $WORK/b001/pkg.a -trimpath “$WORK/b001=>” -p main -complete -buildid aJhlsTb17ElgWQeF76b5/aJhlsTb17ElgWQeF76b5 -goversion go1.14.13 -D _/home/vagrant/dive-into-go -importcfg $WORK/b001/importcfg -pack ./empty_string.go）。
+4. 程序依赖的包都写到importcfg.link这个文件中，Go编译器连接阶段中链接器会使用该文件，找到所有依赖的包文件，将其连接到程序中（/usr/lib/go/pkg/tool/linux_amd64/link -o $WORK/b001/exe/a.out -importcfg $WORK/b001/importcfg.link -buildmode=exe -buildid=FoylCipvV-SPkhyi2PJs/aJhlsTb17ElgWQeF76b5/aJhlsTb17ElgWQeF76b5/FoylCipvV-SPkhyi2PJs -extld=gcc $WORK/b001/pkg.a /usr/lib/go/pkg/tool/linux_amd64/buildid -w $WORK/b001/exe/a.out # internal）。
+5. 将编译成功的二进制文件移动到输出目录中（mv $WORK/b001/exe/a.out empty_string）。
+
+
+为了详细查看go build整个详细过程，我们可以使用go build -work -a -p 1 -x empty_string.go命令来观察整个过程，它比go build -n提供了更详细的信息:
+- -work选项指示编译器编译完成后保留编译临时工作目录
+- -a选项强制编译所有包。我们使用go build -n时候，只看到main包编译过程，这是因为其他包已经编译过了，不会再编译。我们可以使用这个选项强制编译所有包。
+- -p选项用来指定编译过程中线程数，这里指定为1，是为观察编译的顺序性
+- -x选项可以指定编译参数
+
+
+b001目录用于main包编译 是任务图的root节点
+
+自举，英文名称是Bootstrapping。自举指的是用要编译的程序的编程语言来编写其编译器
+Go语言最开始是使用C语言实现的编译器，go1.4是最后一个C语言实现的编译器版本。
+自go1.5开始，Go实现了自举功能，go1.5的gc是由go语言实现的，它是由go1.4版本的C语言实现编译器编译出来的，详细内容可以参见Go 自举的设计文档： Go 1.3+ Compiler Overhaul。
+
+除了 Go 语言实现的 gc 外，Go 官方还维护了一个基于 gcc 实现的 Go 编译器 gccgo。与 gc 相比，gccgo 编译代码较慢，但支持更强大的优化，因此由 gccgo 构建的 CPU 密集型(CPU-bound)程序通常会运行得更快。
+此外 gccgo 比 gc 支持更多的操作系统，如果交叉编译gc不支持的操作系统，可以考虑使用gccgo
+
+
+
+
 ## Lexical Analysis
 
 扫描文件将其token化 例如 操作符 +/- -> _IncOp, 赋值符:= -> _Define

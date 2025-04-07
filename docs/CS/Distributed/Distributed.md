@@ -531,11 +531,17 @@ even though operations on two independent objects are linearizable, operations t
 
 Informally, sequential consistency implies that operations appear to take place in some total order, and that that order is consistent with the order of operations on each individual process.
 
-A process in a sequentially consistent system may be far ahead, or behind, of other processes. For instance, they may read arbitrarily stale state. However, once a process A has observed some operation from process B, it can never observe a state *prior* to B. This, combined with the total ordering property, makes sequential consistency a surprisingly strong model for programmers.
+A process in a sequentially consistent system may be far ahead, or behind, of other processes. For instance, they may read arbitrarily stale state. 
+However, once a process A has observed some operation from process B, it can never observe a state *prior* to B. 
+This, combined with the total ordering property, makes sequential consistency a surprisingly strong model for programmers.
 
-Leslie Lamport defined sequential consistency in his 1979 paper [How to Make a Multiprocessor Computer That Correctly Executes Multiprocess Programs](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/How-to-Make-a-Multiprocessor-Computer-That-Correctly-Executes-Multiprocess-Programs.pdf). He uses “sequentially consistent” to imply...
+Leslie Lamport defined sequential consistency in his 1979 paper [How to Make a Multiprocessor Computer That Correctly Executes Multiprocess Programs](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/How-to-Make-a-Multiprocessor-Computer-That-Correctly-Executes-Multiprocess-Programs.pdf).
+He uses “sequentially consistent” to imply...
 
 > … the result of any execution is the same as if the operations of all the processors were executed in some sequential order, and the operations of each individual processor appear in this sequence in the order specified by its program.
+
+顺序一致性关心的是 CPU 内部执行指令的顺序，而不关心 CPU 之间的相对顺序
+
 
 Viotti and Vukolić decompose sequential consistency into three properties:
 
@@ -1273,3 +1279,5 @@ zookeeper
 17. [The 5 Minute Rule for Trading Memory for Disc Accesses and the 5 Byte Rule for Trading Memory for CPU Time](https://dsf.berkeley.edu/cs286/papers/fiveminute-tr1986.pdf)
 18. [A Note on Distributed Computing](https://doc.akka.io/docs/misc/smli_tr-94-29.pdf)
 19. [Gossip Algorithms](https://devavrat.mit.edu/wp-content/uploads/2017/08/Gossip-Algorithms.pdf)
+20. [CONSENSUS: BRIDGING THEORY AND PRACTICE](https://ongardie.net/var/blurbs/pubs/dissertation.pdf)
+21. [Nezha: Deployable and High-Performance Consensus Using Synchronized Clocks](https://arxiv.org/pdf/2206.03285v1)

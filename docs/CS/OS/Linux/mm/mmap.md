@@ -2,7 +2,8 @@
 
 mmap() creates a new mapping in the virtual address space of the calling process.
 
-在调用 mmap 进行匿名映射的时候（比如进行堆内存的分配），是将进程虚拟内存空间中的某一段虚拟内存区域与物理内存中的匿名内存页进行映射，当调用 mmap 进行文件映射的时候，是将进程虚拟内存空间中的某一段虚拟内存区域与磁盘中某个文件中的某段区域进行映射
+在调用 mmap 进行匿名映射的时候（比如进行堆内存的分配），是将进程虚拟内存空间中的某一段虚拟内存区域与物理内存中的匿名内存页进行映射，
+当调用 mmap 进行文件映射的时候，是将进程虚拟内存空间中的某一段虚拟内存区域与磁盘中某个文件中的某段区域进行映射
 
 在进程虚拟内存空间的布局中，有一段叫做文件映射与匿名映射区的虚拟内存区域，当我们在用户态应用程序中调用 mmap 进行内存映射的时候，所需要的虚拟内存就是在这个区域中划分出来的
 
@@ -17,6 +18,12 @@ although this created a different set of problems that could realistically only 
 > [Are You Sure You Want to Use MMAP in Your Database Management System?](https://db.cs.cmu.edu/papers/2022/cidr2022-p13-crotty.pdf)
 
 ## mmap
+
+mmap 有两种映射方式，一种是匿名映射，常用于进程动态的向 OS 申请内存，比如，glibc 库里提供的用于动态申请内存的 malloc 函数，当申请的内存大于 128K 的时候，malloc 就会调用 mmap 采用匿名映射的方式来申请。
+另一种就是文件映射，用于将磁盘文件中的某段区域与进程虚拟内存空间中文件映射与匿名映射区里的某段虚拟内存区域进行关联映射。后续我们针对这段映射内存的读写就相当于是对磁盘文件的读写了，整个读写过程没有数据的拷贝，也没有切态的发生（这里特指在完成缺页处理之后）
+
+当我们调用 mmap 之后，OS 内核只是会为我们分配一段虚拟内存，然后将虚拟内存与磁盘文件进行映射，整个过程都只是在和虚拟内存打交道，并未出现任何物理内存的身影
+
 
 ```c
 #include <sys/mman.h>

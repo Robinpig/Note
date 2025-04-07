@@ -3,6 +3,21 @@
 [nginx [engine x]](https://nginx.org/en/) is an HTTP and reverse proxy server, a mail proxy server, and a generic TCP/UDP proxy server, originally written by Igor Sysoev.
 
 
+
+nginx 的竞品有 Lighttpd
+
+
+
+nignx 的特点
+
+- fast
+- 高扩展性
+- 高可靠性
+- 低内存消耗
+- 单机支持10w+ 并发连接
+- 热部署
+
+
 ### Install
 
 [Installing NGINX and NGINX Plus](https://docs.nginx.com/nginx/admin-guide/installing-nginx/)
@@ -104,6 +119,18 @@ make && make install
 
 <!-- tabs:end -->
 
+
+
+configure 执行成功后会生成objs目录 在该目录下生成 ngx_modules.c 和 Makefile 等文件
+
+ngx_modules.c 文件就是用来定义 ngx_modules 数组的 不需要的模块不会加入 ngx_modules 数组 也不会编译进nginx
+
+ngx_modules 数组中模块的先后顺序非常重要 指明了每个模块在 nginx中的优先级 一个请求同时符合多个模块的处理规则时 按照在ngx_modules 数组中的顺序选择最靠前的优先处理
+
+
+
+默认情况下 nginx 安装到 /usr/local/nginx/ 下 二进制文件路径为  /usr/local/nginx/sbin/nginx 配置文件路径为  /usr/local/nginx/conf/nginx.conf
+
 ### Debug
 
 
@@ -125,6 +152,14 @@ telnet 127.0.0.1 80
 ```
 
 
+
+nginx -t 测试配置文件是否有误
+
+
+
+### Configurations
+
+ 
 
 ## Architecture
 

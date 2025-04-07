@@ -37,6 +37,15 @@ Here are the most important Channel implementations in Java NIO:
 
 ### FileChannel
 
+
+File channels are safe for use by multiple concurrent threads.
+
+
+A file channel is created by invoking one of the open methods defined by this class. A file channel can also be obtained from an existing FileInputStream, FileOutputStream, or RandomAccessFile object by invoking that object's getChannel method, which returns a file channel that is connected to the same underlying file. Where the file channel is obtained from an existing stream or random access file then the state of the file channel is intimately connected to that of the object whose getChannel method returned the channel. Changing the channel's position, whether explicitly or by reading or writing bytes, will change the file position of the originating object, and vice versa. Changing the file's length via the file channel will change the length seen via the originating object, and vice versa. Changing the file's content by writing bytes will change the content seen by the originating object, and vice versa. Closing the channel will close the originating object.
+
+
+
+
 - Attempt a direct transfer
 - Attempt a mapped transfer
 - HeapBuffer
@@ -199,7 +208,7 @@ HeapByteBuffer 是位于 JVM 堆中的内存，那么它必然会受到 GC 的�
 
 
 
-#### transfer
+#### transferTo
 
 ```java
 public long transferTo(long position, long count, WritableByteChannel target) throws IOException {
@@ -282,6 +291,10 @@ private long transferToDirectlyInternal(long position, int icount,
 
 ```
 
+
+
+
+transferTo0
 
 ```c
 
@@ -388,10 +401,8 @@ public Buffer clear() {
 
 JDK NIO 为每一种 Java 基本类型定义了对应的 Buffer 类（boolean 类型除外）
 
-
-
-
-JDK Buffer 也会根据其背后所依赖的虚拟内存在进程虚拟内存空间中具体所属的虚拟内存区域而演变出 HeapByteBuffer , MappedByteBuffer , DirectByteBuffer 。这三种不同类型 ByteBuffer 的本质区别就是其背后依赖的虚拟内存在 JVM 进程虚拟内存空间中的布局位置不同
+针对每一种基本类型的 Buffer ，NIO 又根据 Buffer 背后的数据存储内存不同分为了：HeapBuffer，DirectBuffer，MappedBuffer
+这三种不同类型 ByteBuffer 的本质区别就是其背后依赖的虚拟内存在 JVM 进程虚拟内存空间中的布局位置不同
 
 位于 JVM 堆之外的内存其实都可以归属到 DirectByteBuffer 的范畴中。比如，位于 OS 堆之内，JVM 堆之外的 MetaSpace，即时编译(JIT) 之后的 codecache，JVM 线程栈，Native 线程栈，JNI 相关的内存，等等
 JVM 在 OS 堆中划分出的 Direct Memory （上图红色部分）特指受到参数 -XX:MaxDirectMemorySize 限制的直接内存区域，比如通过 ByteBuffer#allocateDirect 申请到的 Direct Memory 容量就会受到该参数的限制
@@ -513,7 +524,12 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
 
 A direct byte buffer whose content is a memory-mapped region of a file.
 
-MappedByteBuffer 适合频繁读取小数据量的场景
+MappedByteBuffer属于映射buffer（自己看看虚拟内存），但是DirectByteBuffer只是说明该部分内存是JVＭ在直接内存区分配的连续缓冲区，并不一是映射的。也就是说MappedByteBuffer应该是DirectByteBuffer的子类，但是为了方便和优化，把MappedByteBuffer作为了DirectByteBuffer的父类。另外，虽然MappedByteBuffer在逻辑上应该是DirectByteBuffer的子类，而且MappedByteBuffer的内存的GC和直接内存的GC类似（和堆GC不同），但是分配的MappedByteBuffer的大小不受-XX:MaxDirectMemorySize参数影响。
+MappedByteBuffer封装的是内存映射文件操作，也就是只能进行文件IO操作。MappedByteBuffer是根据mmap产生的映射缓冲区，这部分缓冲区被映射到对应的文件页上，属于直接内存在用户态，通过MappedByteBuffer可以直接操作映射缓冲区，而这部分缓冲区又被映射到文件页上，操作系统通过对应内存页的调入和调出完成文件的写入和写出
+
+
+
+
 ```java
 public abstract class MappedByteBuffer
     extends ByteBuffer {
@@ -787,6 +803,350 @@ private static abstract class Unmapper
     }
 }
 ```
+
+
+#### load
+
+```java
+public abstract class MappedByteBuffer extends ByteBuffer
+{
+  public final MappedByteBuffer load() {
+    if (fd == null) {
+      return this;
+    }
+    try {
+      SCOPED_MEMORY_ACCESS.load(session(), address, isSync, capacity());
+    } finally {
+      Reference.reachabilityFence(this);
+    }
+    return this;
+  }
+}
+```
+
+
+```c
+// MappedMemoryUtils.c 
+JNIEXPORT void JNICALL
+Java_java_nio_MappedMemoryUtils_load0(JNIEnv *env, jobject obj, jlong address,
+                                     jlong len)
+{
+    char *a = (char *)jlong_to_ptr(address);
+    int result = madvise((caddr_t)a, (size_t)len, MADV_WILLNEED);
+    if (result == -1) {
+        JNU_ThrowIOExceptionWithMessageAndLastError(env, "madvise with advise MADV_WILLNEED failed");
+    }
+}
+```
+
+load0 方法在 native 层面调用了一个叫做 madvise 的系统调用
+
+这里我们用到的 advice 选项为 MADV_WILLNEED ，该选项用来告诉内核我们将会马上访问这段虚拟内存，内核在收到这个建议之后，将会马上触发一次预读操作，尽可能将 MappedByteBuffer 背后映射的文件内容全部加载到 page cache 中
+
+madvise 这里只是负责将 MappedByteBuffer 映射的文件内容加载到内存中（page cache），并不负责将 MappedByteBuffer（虚拟内存） 与 page cache 中的这些文件页（物理内存）进行关联映射，也就是说此时 MappedByteBuffer 在 JVM 进程页表中相关的页表项 PTE 还是空的。
+所以 JDK 在调用完 load0 方法之后，还需要再次按照内存页的粒度对 MappedByteBuffer 进行访问，目的是触发缺页中断，在缺页中断处理中内核会将 MappedByteBuffer 与 page cache 通过进程页表关联映射起来。后续我们在对 MappedByteBuffer 进行访问就是直接访问 page cache 了，没有缺页中断也没有磁盘 IO 的开销
+
+MappedByteBuffer 的 load 逻辑 , JDK 封装在 MappedMemoryUtils 类中
+
+
+在进入 load0 native 实现之前，需要做一些转换工作。首先通过 mappingOffset 根据 MappedByteBuffer 的起始地址 address 计算出 address 距离其所在文件页的起始地址的长度，
+
+```java
+class MappedMemoryUtils {
+    static void load(long address, boolean isSync, long size) {
+        // no need to load a sync mapped buffer
+        if (isSync) {
+            return;
+        }
+        if ((address == 0) || (size == 0))
+            return;
+        long offset = mappingOffset(address);
+        long length = mappingLength(offset, size);
+        load0(mappingAddress(address, offset), length);
+
+        // Read a byte from each page to bring it into memory. A checksum
+        // is computed as we go along to prevent the compiler from otherwise
+        // considering the loop as dead code.
+        Unsafe unsafe = Unsafe.getUnsafe();
+        int ps = Bits.pageSize();
+        long count = Bits.pageCount(length);
+        long a = mappingAddress(address, offset);
+        byte x = 0;
+        for (long i=0; i<count; i++) {
+            // TODO consider changing to getByteOpaque thus avoiding
+            // dead code elimination and the need to calculate a checksum
+            x ^= unsafe.getByte(a);
+            a += ps;
+        }
+        if (unused != 0)
+            unused = x;
+    }
+}
+```
+#### handle_pte_fault
+
+当我们开始访问这段 MappedByteBuffer 的时候， CPU 会将 MappedByteBuffer 背后的虚拟内存地址送到 MMU 地址翻译单元中进行地址翻译查找其背后的物理内存地址
+如果 MMU 发现 MappedByteBuffer 在 JVM 进程页表中对应的页表项 PTE 还是空的，这说明 MappedByteBuffer 是刚刚被 mmap 系统调用映射出来的，还没有分配物理内存。
+于是 MMU 就会产生缺页中断，随后 JVM  进程切入到内核态，进行缺页处理，为 MappedByteBuffer 分配物理内存
+
+
+```c
+static vm_fault_t handle_pte_fault(struct vm_fault *vmf)
+{
+	pte_t entry;
+
+	if (unlikely(pmd_none(*vmf->pmd))) {
+		/*
+		 * Leave __pte_alloc() until later: because vm_ops->fault may
+		 * want to allocate huge page, and if we expose page table
+		 * for an instant, it will be difficult to retract from
+		 * concurrent faults and from rmap lookups.
+		 */
+		vmf->pte = NULL;
+		vmf->flags &= ~FAULT_FLAG_ORIG_PTE_VALID;
+	} else {
+		pmd_t dummy_pmdval;
+
+		/*
+		 * A regular pmd is established and it can't morph into a huge
+		 * pmd by anon khugepaged, since that takes mmap_lock in write
+		 * mode; but shmem or file collapse to THP could still morph
+		 * it into a huge pmd: just retry later if so.
+		 *
+		 * Use the maywrite version to indicate that vmf->pte may be
+		 * modified, but since we will use pte_same() to detect the
+		 * change of the !pte_none() entry, there is no need to recheck
+		 * the pmdval. Here we chooes to pass a dummy variable instead
+		 * of NULL, which helps new user think about why this place is
+		 * special.
+		 */
+		vmf->pte = pte_offset_map_rw_nolock(vmf->vma->vm_mm, vmf->pmd,
+						    vmf->address, &dummy_pmdval,
+						    &vmf->ptl);
+		if (unlikely(!vmf->pte))
+			return 0;
+		vmf->orig_pte = ptep_get_lockless(vmf->pte);
+		vmf->flags |= FAULT_FLAG_ORIG_PTE_VALID;
+
+		if (pte_none(vmf->orig_pte)) {
+			pte_unmap(vmf->pte);
+			vmf->pte = NULL;
+		}
+	}
+
+	if (!vmf->pte)
+		return do_pte_missing(vmf);
+
+	if (!pte_present(vmf->orig_pte))
+		return do_swap_page(vmf);
+
+	if (pte_protnone(vmf->orig_pte) && vma_is_accessible(vmf->vma))
+		return do_numa_page(vmf);
+
+	spin_lock(vmf->ptl);
+	entry = vmf->orig_pte;
+	if (unlikely(!pte_same(ptep_get(vmf->pte), entry))) {
+		update_mmu_tlb(vmf->vma, vmf->address, vmf->pte);
+		goto unlock;
+	}
+	if (vmf->flags & (FAULT_FLAG_WRITE|FAULT_FLAG_UNSHARE)) {
+		if (!pte_write(entry))
+			return do_wp_page(vmf);
+		else if (likely(vmf->flags & FAULT_FLAG_WRITE))
+			entry = pte_mkdirty(entry);
+	}
+	entry = pte_mkyoung(entry);
+	if (ptep_set_access_flags(vmf->vma, vmf->address, vmf->pte, entry,
+				vmf->flags & FAULT_FLAG_WRITE)) {
+		update_mmu_cache_range(vmf, vmf->vma, vmf->address,
+				vmf->pte, 1);
+	} else {
+		/* Skip spurious TLB flush for retried page fault */
+		if (vmf->flags & FAULT_FLAG_TRIED)
+			goto unlock;
+		/*
+		 * This is needed only for protection faults but the arch code
+		 * is not yet telling us if this is a protection fault or not.
+		 * This still avoids useless tlb flushes for .text page faults
+		 * with threads.
+		 */
+		if (vmf->flags & FAULT_FLAG_WRITE)
+			flush_tlb_fix_spurious_fault(vmf->vma, vmf->address,
+						     vmf->pte);
+	}
+unlock:
+	pte_unmap_unlock(vmf->pte, vmf->ptl);
+	return 0;
+}
+```
+
+
+filemap_fault
+
+```c
+vm_fault_t filemap_fault(struct vm_fault *vmf)
+{
+	int error;
+	struct file *file = vmf->vma->vm_file;
+	struct file *fpin = NULL;
+	struct address_space *mapping = file->f_mapping;
+	struct inode *inode = mapping->host;
+	pgoff_t max_idx, index = vmf->pgoff;
+	struct folio *folio;
+	vm_fault_t ret = 0;
+	bool mapping_locked = false;
+
+	max_idx = DIV_ROUND_UP(i_size_read(inode), PAGE_SIZE);
+	if (unlikely(index >= max_idx))
+		return VM_FAULT_SIGBUS;
+
+	trace_mm_filemap_fault(mapping, index);
+
+	/*
+	 * Do we have something in the page cache already?
+	 */
+	folio = filemap_get_folio(mapping, index);
+	if (likely(!IS_ERR(folio))) {
+		/*
+		 * We found the page, so try async readahead before waiting for
+		 * the lock.
+		 */
+		if (!(vmf->flags & FAULT_FLAG_TRIED))
+			fpin = do_async_mmap_readahead(vmf, folio);
+		if (unlikely(!folio_test_uptodate(folio))) {
+			filemap_invalidate_lock_shared(mapping);
+			mapping_locked = true;
+		}
+	} else {
+		ret = filemap_fault_recheck_pte_none(vmf);
+		if (unlikely(ret))
+			return ret;
+
+		/* No page in the page cache at all */
+		count_vm_event(PGMAJFAULT);
+		count_memcg_event_mm(vmf->vma->vm_mm, PGMAJFAULT);
+		ret = VM_FAULT_MAJOR;
+		fpin = do_sync_mmap_readahead(vmf);
+retry_find:
+		/*
+		 * See comment in filemap_create_folio() why we need
+		 * invalidate_lock
+		 */
+		if (!mapping_locked) {
+			filemap_invalidate_lock_shared(mapping);
+			mapping_locked = true;
+		}
+		folio = __filemap_get_folio(mapping, index,
+					  FGP_CREAT|FGP_FOR_MMAP,
+					  vmf->gfp_mask);
+		if (IS_ERR(folio)) {
+			if (fpin)
+				goto out_retry;
+			filemap_invalidate_unlock_shared(mapping);
+			return VM_FAULT_OOM;
+		}
+	}
+
+	if (!lock_folio_maybe_drop_mmap(vmf, folio, &fpin))
+		goto out_retry;
+
+	/* Did it get truncated? */
+	if (unlikely(folio->mapping != mapping)) {
+		folio_unlock(folio);
+		folio_put(folio);
+		goto retry_find;
+	}
+	VM_BUG_ON_FOLIO(!folio_contains(folio, index), folio);
+
+	/*
+	 * We have a locked folio in the page cache, now we need to check
+	 * that it's up-to-date. If not, it is going to be due to an error,
+	 * or because readahead was otherwise unable to retrieve it.
+	 */
+	if (unlikely(!folio_test_uptodate(folio))) {
+		/*
+		 * If the invalidate lock is not held, the folio was in cache
+		 * and uptodate and now it is not. Strange but possible since we
+		 * didn't hold the page lock all the time. Let's drop
+		 * everything, get the invalidate lock and try again.
+		 */
+		if (!mapping_locked) {
+			folio_unlock(folio);
+			folio_put(folio);
+			goto retry_find;
+		}
+
+		/*
+		 * OK, the folio is really not uptodate. This can be because the
+		 * VMA has the VM_RAND_READ flag set, or because an error
+		 * arose. Let's read it in directly.
+		 */
+		goto page_not_uptodate;
+	}
+
+	/*
+	 * We've made it this far and we had to drop our mmap_lock, now is the
+	 * time to return to the upper layer and have it re-find the vma and
+	 * redo the fault.
+	 */
+	if (fpin) {
+		folio_unlock(folio);
+		goto out_retry;
+	}
+	if (mapping_locked)
+		filemap_invalidate_unlock_shared(mapping);
+
+	/*
+	 * Found the page and have a reference on it.
+	 * We must recheck i_size under page lock.
+	 */
+	max_idx = DIV_ROUND_UP(i_size_read(inode), PAGE_SIZE);
+	if (unlikely(index >= max_idx)) {
+		folio_unlock(folio);
+		folio_put(folio);
+		return VM_FAULT_SIGBUS;
+	}
+
+	vmf->page = folio_file_page(folio, index);
+	return ret | VM_FAULT_LOCKED;
+
+page_not_uptodate:
+	/*
+	 * Umm, take care of errors if the page isn't up-to-date.
+	 * Try to re-read it _once_. We do this synchronously,
+	 * because there really aren't any performance issues here
+	 * and we need to check for errors.
+	 */
+	fpin = maybe_unlock_mmap_for_io(vmf, fpin);
+	error = filemap_read_folio(file, mapping->a_ops->read_folio, folio);
+	if (fpin)
+		goto out_retry;
+	folio_put(folio);
+
+	if (!error || error == AOP_TRUNCATED_PAGE)
+		goto retry_find;
+	filemap_invalidate_unlock_shared(mapping);
+
+	return VM_FAULT_SIGBUS;
+
+out_retry:
+	/*
+	 * We dropped the mmap_lock, we need to return to the fault handler to
+	 * re-find the vma and come back and find our hopefully still populated
+	 * page.
+	 */
+	if (!IS_ERR(folio))
+		folio_put(folio);
+	if (mapping_locked)
+		filemap_invalidate_unlock_shared(mapping);
+	if (fpin)
+		fput(fpin);
+	return ret | VM_FAULT_RETRY;
+}
+EXPORT_SYMBOL(filemap_fault);
+```
+
+
 
 
 ## Selectors

@@ -150,6 +150,78 @@ Prior to MySQL 8.0.21, there was no way to override this behavior, even in cases
 Beginning with MySQL 8.0.21, it is possible to turn off this optimization by setting the optimizer_switch system variable's prefer_ordering_index flag to off.
 
 
+## Tuning
+
+Explain sql 查看执行计划
+- id：表的执行顺序，id越大，越早被执行
+- select_type：查询类型，如普通查询simple、衍生表查询DERIVED、子查询等
+- type：访问类型，主要有七种，system>const>eq_ref>ref>range>index>ALL
+- system：表只有一行记录，相当于系统表
+- const：通过索引一次就找到了需要的数据
+- eq_ref：唯一性索引扫描，对于每个索引键，表中只有一条记录与之匹配。常见于主键索引或唯一索引
+- ref：非唯一性索引扫描，对于每个索引值，可能会找到多个符合条件的行（比如wmpoiId）
+- range：索引范围扫描，一般是在where语句中出现了between、<、>、in等的索引范围查询
+- index：全索引扫描，需要遍历索引树
+- all：全表扫描，需要遍历全表以找到匹配的行
+- possible_keys、keys、key_len、ref：可能会用到的索引、实际用到的索引、用到的索引的长度、使用哪些值进行索引查询
+- rows：执行该SQL命令扫描的行数
+- Extra
+- Using where：在MySQL server层 基于where条件对结果进行了过滤
+- Using index：使用了覆盖索引，索引树已包含所有需要的数据，无需回表查询
+- Using index condition：使用了索引下推，在索引遍历过程中，innodb层 就对索引包含的字段进行条件判断，减少回表次数（没有索引下推的话，先回表扫描拿到完整行记录后，再进行条件判断）
+- Using temporary：使用了临时表保存中间结果。MySQL在对查询结果进行排序，且数据量较大时便会使用临时表
+- Using filesort：MySQL需要对结果集进行排序操作，但无法使用索引排序（比如查询中包含了表达式、函数、JOIN等操作），MySQL会将结果集写入磁盘临时文件，然后进行排序操作。
+- Using join buffer：使用了连接缓存，当两张表做关联查询时，被驱动表上无索引可用，便会出现using join buffer
+
+
+排查与优化建议：
+- 条件字段是否存在合适的索引
+-  如果没有，根据具体业务分析如何更好地建立索引
+- 唯一索引 Vs 普通索引
+- 对于写多读少的业务，比如账单类、日志类系统，普通索引可以将每次更新先记录在change buffer中，等真正『读需求』带来时才会将对应的数据页从磁盘读取到内存中，再根据change buffer中该数据页的修改记录进行修改。这大大减少了磁盘的随机访问，数据库性能也随之提示
+- 在使用机械硬盘这种IO性能较差的设备时，基于change buffer机制的普通索引带来的性能改进可能是显著的。
+-  联合索引的字段顺序
+- 调整顺序是否少维护一个索引？如果可以，按这个顺序来。将查找频繁的数据靠左创建索引
+- 如果既要有联合查询，也要有各自的查询，比如(name，age)，从空间角度来看，name字段大于age字段，因此建立(name，age)联合索引和(age)单独的索引
+- 索引是否失效
+- 联合索引，不符合最左匹配原则：select * from test1 where age > 5 在存在  KEY 'index_price_age' ('id', 'price', 'age') 的背景下走了全表扫描
+联合索引，存在范围查询，范围查询后的字段无法再使用联合索引
+- <、>会使索引失效，但>=、<=、between and、like 、in并不会。in和or同时使用可能会失效
+
+- 对索引字段进行了函数操作，会导致索引失效
+- 显式函数操作： SELECT * FROM test1 WHERE YEAR(create_time) = 2022;
+- 隐式字符类型转换：SELECT * FROM test1 WHERE age > '30' AND price > 100;（test1表中，age是int类型）
+- 隐式字符编码转换：上面的查询，price列使用utf8b4数据集，age列使用utf8数据集  -->utf8b4
+- 减少表扫描次数
+- 只查询需要的列，并尽量缩小查询的结果集，避免select *
+- 避免使用子查询
+- 子查询通常会导致查询执行速度变慢。如果必须使用子查询，请使用 EXISTS 或 IN 等优化的子查询。
+- 避免多表关联查询
+- SQL查询中非索引关联查询优化比较差，占CPU较高
+- 分库分表后关联查询语句需要重构
+- 分解复杂的关联查询
+如果必须多表关联查询，必须确保关联字段存在索引，并选择合适的join类型
+- left join : 左连接，返回左表中所有的记录以及右表中符合on条件的记录
+- right join : 右连接，返回右表中所有的记录以及左表中连接字段相等的记录
+- inner join/join : 内连接，又叫等值连接，只返回两个表中连接字段相等的行记录
+- full join : 外连接，返回两个表中的行：left join + right join
+- cross join : 结果是笛卡尔积，第一个表的行数乘以第二个表的行数
+- 避免数据库大表
+问题：大表查询和修改，非常耗费IO和CPU资源
+- 
+解决方案：
+i.
+分库分表
+ii.
+及时清理表空洞
+- delete删除数据时，其实是逻辑删除，这些数据被标记为“可复用”，下次插入数据时直接复用这部分空间。
+- 数据页可能比较分散，利用率不高，同时占有大量磁盘空间，因此推荐alter table A engine=InnoDB 重建表，清理表空洞
+
+- MySQL 5.6 版本开始引入Online DDL，alter table A engine=InnoDB重建表的过程中，允许对表A进行增删改操作
+- （1）扫描表A 的所有数据页，存储到一个临时文件中；（2）拷贝数据到临时文件的过程中，将所有对表A的操作记录在一个日志文件(row log)中；（3）临时文件生成后，将日志文件中操作 应用到临时文件，得到一个逻辑数据上与表A相同的数据文件（4）用临时文件替换表A的数据
+
+（7）避免大事务
+
 ## Reference
 
 1. [MySQL 8.0 Reference Manual - Aggregate Function Descriptions](https://dev.mysql.com/doc/refman/8.0/en/aggregate-functions.html)

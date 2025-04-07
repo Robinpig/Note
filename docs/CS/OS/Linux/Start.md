@@ -104,3 +104,16 @@ static int a20_test(int loops)
  * in the entry routines.
  */
 ```
+
+
+在内核源代码的init/目录中只有一个文件main.c。系统在执行完boot/目录中的head.s 程序后就将
+执行权交给了main.c。
+
+
+链接脚本最终会把大量编译好的二进制文件（.o文件）合并为一个二进制可执行文件，也就是把每一个二进制文件整合到一个大文件中
+这个大文件有一个总的代码/数据/未初始化数据段，这个链接脚本在Linux内核里面其实就是vmlinux.lds.S文件
+
+
+## Links
+
+- [Linux](/docs/CS/OS/Linux/Linux.md)

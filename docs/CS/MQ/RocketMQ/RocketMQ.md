@@ -4,8 +4,7 @@ Apache RocketMQ is a distributed middleware service that adopts an asynchronous 
 The asynchronous communication model of Apache RocketMQ features simple system topology and weak upstream-downstream coupling.
 Apache RocketMQ is used in asynchronous decoupling and load shifting scenarios.
 
-
-build
+> RocketMQ 的前身是alibaba 内部的 [notify](/docs/CS/MQ/RocketMQ/Notify.md) 和 metaQ
 
 
 

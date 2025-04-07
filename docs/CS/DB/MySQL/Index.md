@@ -2,7 +2,8 @@
 
 A data structure that provides a fast lookup capability for **rows** of a **table**, typically by forming a tree structure (**B-tree)** representing all the values of a particular **column** or set of columns.
 
-InnoDB tables always have a **clustered index** representing the **primary key**. They can also have one or more **secondary indexes** defined on one or more columns. 
+InnoDB tables always have a **clustered index** representing the **primary key**. 
+They can also have one or more **secondary indexes** defined on one or more columns. 
 Depending on their structure, secondary indexes can be classified as **partial**, **column**, or **composite** indexes.
 
 Indexes are a crucial aspect of **query** performance. Database architects design tables, queries, and indexes to allow fast lookups for data needed by applications. 
@@ -167,6 +168,28 @@ MySQL uses indexes for these operations:
   When a query needs to access most of the rows, reading sequentially is faster than working through an index. 
   Sequential reads minimize disk seeks, even if not all the rows are needed for the query.
 
+
+## Tuning
+
+
+索引的结构
+
+哈希存储 等值查询 不适用于范围查询
+有序数组 适用范围查询 但是在中间插入比较麻烦 迁移数据成本较高
+二叉树 树高较大会使得IO次数较多 同时若是维护平衡二叉树带来的成本也较高
+B树 树高较低 匹配查询效率较高 但是因为节点的层次不一致 查询效率不稳定 同时对区间查询的支持也不够
+B+树 非叶子结点不存储数据 降低树高 叶子结点支持范围查询
+跳表 存放同样量级的数据，B+树的高度比跳表的要少，如果放在mysql数据库上来说，就是磁盘IO次数更少，因此B+树查询更快。 而针对写操作，B+树需要拆分合并索引数据页，跳表则独立插入，并根据随机函数确定层数，没有旋转和维持平衡的开销，因此跳表的写入性能会比B+树要好。
+rocksDB的存储引擎
+
+
+几点建议和忠告
+-在数据量非常大的情况下，没有 WHERE 条件过滤是非常可怕的
+-数据量很少的情况下（比如少于 1000 条），是没必要使用索引的
+-数据重复度大（区分度小）的，也没必要使用索引。几千万条数据，deleted = 1 的一共没几条，并且几乎不会查（代码里面大部分默认 deleted = 0），所以创建(deleted) 索引出了让引擎误会，选错索引导致全表扫描外，起不到任何作用
+-order by 不要乱用，尤其是对于分页表格，已经有了筛选项，就没必要按照分类排序了
+-不要给每个字段都创建一个单独索引，好多是被联合索引覆盖了，另外一些可能没有区分度
+-没有任何一条优化规则是可以解决所有问题的（否则就被引擎内置了），你能做的是了解原理，根据实际业务场景做出更优的选择
 
 
 ## Links

@@ -152,3 +152,6 @@ Otherwise it owns two - one for the Klass* objects from the class space, one for
 
 - [RuntimeArea](/docs/CS/Java/JDK/JVM/Runtime_Data_Area.md)
 
+## References
+
+1. [8251158: Implementation of JEP 387: Elastic Metaspace](https://github.com/openjdk/jdk/commit/7ba6a6bf003b810e9f48cb755abe39b1376ad3fe)
