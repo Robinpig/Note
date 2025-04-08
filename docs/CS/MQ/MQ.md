@@ -399,8 +399,7 @@ Broker 出现了故障，比如进程死掉了或者服务器宕机了，还是�
 
 Consumer:
 
-在执
-行完所有消费业务逻辑之后，再发送消费确认。
+在执行完所有消费业务逻辑之后，再发送消费确认。
 
 ### Duplicate Consume
 
@@ -414,6 +413,12 @@ Based on no message losing
 ### message ordering
 
 Kafka partition -> queue -> thread
+
+
+
+### 消息积压
+
+消息积压问题通常是消费侧的问题 因为一个 Topic 通常会被多个消费端订阅，我们只要看看其他消费组是否也积压
 
 ## MQs
 
