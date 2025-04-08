@@ -261,10 +261,12 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
 
 ### tryToFindTopicPublishInfo
+
 从本地缓存(ConcurrentMap< String/\* topic \*/, TopicPublishInfo>)中尝试获取，第一次肯定为空
 尝试从 NameServer 获取配置信息并更新本地缓存配置。
 如果找到可用的路由信息并返回。
 如果未找到路由信息，则再次尝试使用默认的 topic 去找路由配置信息。
+
 ```java
 private TopicPublishInfo tryToFindTopicPublishInfo(final String topic) {
     TopicPublishInfo topicPublishInfo = this.topicPublishInfoTable.get(topic);
@@ -762,6 +764,21 @@ public class MQClientAPIImpl implements NameServerUpdateCallback {
 
 ### FaultStrategy
 
+在 RocketMQ 客户端中会每隔 20s 去查询当前 Topic 的所有队列、消费者的个数，运用队列负载算法进行重新分配，然后与上一次的分配结果进行对比，如果发生了变化，则进行队列重新分配；如果没有发生变化，则忽略。
+
+消息发送默认超时时间，单位为毫秒。值得注意的是在 RocketMQ 4.3.0 版本之前，由于存在重试机制，设置的设计为单次重试的超时时间，即如果设置重试次数为 3 次，则 DefaultMQProducer#send 方法可能会超过 9s 才返回；该问题在 RocketMQ 4.3.0 版本进行了优化，设置的超时时间为总的超时时间，即如果超时时间设置 3s，重试次数设置为 10 次，可能不会重试 10 次，例如在重试到第 5 次的时候，已经超过 3s 了，试图尝试第 6 次重试时会退出，抛出超时异常，停止重试
+
+RocketMQ Topic 路由注册中心 NameServer 采用的是最终一致性模型，而且客户端是定时向 NameServer 更新 Topic 的路由信息，即客户端（Producer、Consumer）是无法实时感知 Broker 宕机的，这样消息发送者会继续向已宕机的 Broker 发送消息，造成消息发送异常。那 RocketMQ 是如何保证消息发送的高可用性呢？
+RocketMQ 为了保证消息发送的高可用性，在内部引入了重试机制，默认重试 2 次。RocketMQ 消息发送端采取的队列负载均衡默认采用轮循。
+在 RocketMQ 中消息发送者是线程安全的，即一个消息发送者可以在多线程环境中安全使用。每一个消息发送者全局会维护一个 Topic 上一次选择的队列，然后基于这个序号进行递增轮循，引入了 ThreadLocal 机制，即每一个发送者线程持有一个上一次选择的队列，用 sendWhichQueue 表示
+
+RocketMQ引入了故障规避机制，在消息重试的时候，会尽量规避上一次发送的 Broker 增大消息发送的成功率
+
+按照笔者的实践经验，RocketMQ Broker 的繁忙基本都是瞬时的，而且通常与系统 PageCache 内核的管理相关，很快就能恢复，故不建议开启延迟机制。因为一旦开启延迟机制，例如 5 分钟内不会向一个 Broker 发送消息，这样会导致消息在其他 Broker 激增，从而会导致部分消费端无法消费到消息，增大其他消费者的处理压力，导致整体消费性能的下降
+
+
+
+
 if sendLatencyFaultEnable = true
 
 ```java
@@ -953,6 +970,29 @@ public class ConsistentHashRouter<T extends Node> {
     }
 }
 ```
+
+## Tuning
+
+### issues
+
+No route info of this topic
+- 如果 NameServer 不存在该 Topic 的路由信息，如果没有开启自动创建主题，则抛出 No route info of this topic。 参数为 autoCreateTopicEnable，该参数默认为 true。但在生产环境不建议开启
+- 如果开启了自动创建路由信息，但还是抛出这个错误，这个时候请检查客户端（Producer）连接的 NameServer 地址是否与 Broker 中配置的 NameServer 地址是否一致
+
+
+timeout
+
+RocketMQ 会每一分钟打印前一分钟内消息发送的耗时情况分布，我们从这里就能窥探 RocketMQ 消息写入是否存在明细的性能瓶颈
+如果 100~200ms 及以上的区间超过 20 个后，说明 Broker 确实存在一定的瓶颈，如果只是少数几个，说明这个是内存或 PageCache 的抖动，问题不大
+
+通常情况下超时通常与 Broker 端的处理能力关系不大，还有另外一个佐证，在 RocketMQ broker 中还存在快速失败机制，即当 Broker 收到客户端的请求后会将消息先放入队列，然后顺序执行，如果一条消息队列中等待超过 200ms 就会启动快速失败，向客户端返回 [TIMEOUT_CLEAN_QUEUE]broker busy，这个在本专栏的第 3 部分会详细介绍。
+在 RocketMQ 客户端遇到网络超时，通常可以考虑一些应用本身的垃圾回收，是否由于 GC 的停顿时间导致的消息发送超时
+
+System busy、Broker busy
+在使用 RocketMQ 中，如果 RocketMQ 集群达到 1W/tps 的压力负载水平，System busy、Broker busy 就会是大家经常会遇到的问题
+
+在 RocketMQ 中处理消息发送的，是一个只有一个线程的线程池，内部会维护一个有界队列，默认长度为 1W。如果当前队列中挤压的数量超过 1w，执行线程池的拒绝策略，从而抛出 [too many requests and system thread pool busy] 错误
+
 
 ## Links
 
