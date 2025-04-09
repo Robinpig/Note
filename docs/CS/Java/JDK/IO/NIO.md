@@ -395,6 +395,7 @@ public Buffer clear() {
     return this;
 }
 ```
+
 读取了 Buffer 中的部分数据，但是还有一部分数据没有读取，这时候，调用 clear() 方法开启写模式向 Buffer 中写入数据的话，就会出问题，因为这会覆盖掉我们还没有读取的数据部分
 
 

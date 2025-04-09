@@ -994,6 +994,188 @@ System busy、Broker busy
 在 RocketMQ 中处理消息发送的，是一个只有一个线程的线程池，内部会维护一个有界队列，默认长度为 1W。如果当前队列中挤压的数量超过 1w，执行线程池的拒绝策略，从而抛出 [too many requests and system thread pool busy] 错误
 
 
+[REJECTREQUEST]system busy, start flow control for a while
+
+拒绝请求的条件有两个 操作系统PageCache是否繁忙 或者 transientStorePool是否不足
+
+
+```java
+public class SendMessageProcessor extends AbstractSendMessageProcessor implements NettyRequestProcessor {
+    @Override
+    public boolean rejectRequest() {
+        if (this.brokerController.getMessageStore().isOSPageCacheBusy() || this.brokerController.getMessageStore().isTransientStorePoolDeficient()) {
+            return true;
+        }
+
+        return false;
+    }
+}
+```
+
+begin、diff两个局部变量的含义：
+- begin
+通俗的一点讲，就是将消息写入Commitlog文件所持有锁的时间，精确说是将消息体追加到内存映射文件(DirectByteBuffer)或pageCache(FileChannel#map)该过程中开始持有锁的时间戳，具体的代码请参考：CommitLog#putMessage
+- diff
+一次消息追加过程中持有锁的总时长，即往内存映射文件或pageCache追加一条消息所耗时间
+
+
+```java
+public class DefaultMessageStore implements MessageStore {
+    @Override
+    public boolean isOSPageCacheBusy() {
+        long begin = this.getCommitLog().getBeginTimeInLock();
+        long diff = this.systemClock.now() - begin;
+
+        return diff < 10000000
+        && diff > this.messageStoreConfig.getOsPageCacheBusyTimeOutMills();
+    }
+}
+```
+
+Java NIO的内存映射机制，提供了将文件系统中的文件映射到内存机制，实现对文件的操作转换对内存地址的操作，极大的提高了IO特性，
+但这部分内存并不是常驻内存，可以被置换到交换内存(虚拟内存)，RocketMQ为了提高消息发送的性能，引入了内存锁定机制，
+即将最近需要操作的commitlog文件映射到内存，并提供内存锁定功能，确保这些文件始终存在内存中，该机制的控制参数就是transientStorePoolEnable
+
+```java
+public class DefaultMessageStore implements MessageStore {
+    public void start() throws Exception {
+        if (this.isTransientStorePoolEnable()) {
+            this.transientStorePool.init();
+        }
+    }
+}
+```
+
+
+
+```java
+public class TransientStorePool {
+    private static final Logger log = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
+
+    private final int poolSize;
+    private final int fileSize;
+    private final Deque<ByteBuffer> availableBuffers;
+    private volatile boolean isRealCommit = true;
+
+    public TransientStorePool(final int poolSize, final int fileSize) {
+        this.poolSize = poolSize;
+        this.fileSize = fileSize;
+        this.availableBuffers = new ConcurrentLinkedDeque<>();
+    }
+
+    /**
+     * It's a heavy init method.
+     */
+    public void init() {
+        for (int i = 0; i < poolSize; i++) {
+            ByteBuffer byteBuffer = ByteBuffer.allocateDirect(fileSize);
+
+            final long address = ((DirectBuffer) byteBuffer).address();
+            Pointer pointer = new Pointer(address);
+            LibC.INSTANCE.mlock(pointer, new NativeLong(fileSize));
+
+            availableBuffers.offer(byteBuffer);
+        }
+    }
+}
+```
+
+
+
+
+```java
+public void start() {
+    this.scheduledExecutorService.scheduleAtFixedRate(new AbstractBrokerRunnable(this.brokerController.getBrokerConfig()) {
+        @Override
+        public void run0() {
+            if (brokerController.getBrokerConfig().isBrokerFastFailureEnable()) {
+                cleanExpiredRequest();
+            }
+        }
+    }, 1000, 10, TimeUnit.MILLISECONDS);
+}
+```
+
+cleanExpiredRequest
+
+```java
+private void cleanExpiredRequest() {
+
+    while (this.brokerController.getMessageStore().isOSPageCacheBusy()) {
+        try {
+            if (!this.brokerController.getSendThreadPoolQueue().isEmpty()) {
+                final Runnable runnable = this.brokerController.getSendThreadPoolQueue().poll(0, TimeUnit.SECONDS);
+                if (null == runnable) {
+                    break;
+                }
+
+                final RequestTask rt = castRunnable(runnable);
+                if (rt != null) {
+                    rt.returnResponse(RemotingSysResponseCode.SYSTEM_BUSY, String.format(
+                        "[PCBUSY_CLEAN_QUEUE]broker busy, start flow control for a while, period in queue: %sms, "
+                            + "size of queue: %d",
+                        System.currentTimeMillis() - rt.getCreateTimestamp(),
+                        this.brokerController.getSendThreadPoolQueue().size()));
+                }
+            } else {
+                break;
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    for (Pair<BlockingQueue<Runnable>, Supplier<Long>> pair : cleanExpiredRequestQueueList) {
+        cleanExpiredRequestInQueue(pair.getObject1(), pair.getObject2().get());
+    }
+}
+
+void cleanExpiredRequestInQueue(final BlockingQueue<Runnable> blockingQueue, final long maxWaitTimeMillsInQueue) {
+    while (true) {
+        try {
+            if (!blockingQueue.isEmpty()) {
+                final Runnable runnable = blockingQueue.peek();
+                if (null == runnable) {
+                    break;
+                }
+                final RequestTask rt = castRunnable(runnable);
+                if (rt == null || rt.isStopRun()) {
+                    break;
+                }
+
+                final long behind = System.currentTimeMillis() - rt.getCreateTimestamp();
+                if (behind >= maxWaitTimeMillsInQueue) {
+                    if (blockingQueue.remove(runnable)) {
+                        rt.setStopRun(true);
+                        rt.returnResponse(RemotingSysResponseCode.SYSTEM_BUSY, String.format("[TIMEOUT_CLEAN_QUEUE]broker busy, start flow control for a while, period in queue: %sms, size of queue: %d", behind, blockingQueue.size()));
+                        if (System.currentTimeMillis() - jstackTime > 15000) {
+                            jstackTime = System.currentTimeMillis();
+                            LOGGER.warn("broker jstack \n " + UtilAll.jstack());
+                        }
+                    }
+                } else {
+                    break;
+                }
+            } else {
+                break;
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+}
+```
+事务消息
+
+
+在RocketMQ事务消息的主要流程中，一阶段的消息如何对用户不可见。其中，事务消息相对普通消息最大的特点就是一阶段发送的消息对用户是不可见的。那么，如何做到写入消息但是对用户不可见呢？RocketMQ事务消息的做法是：如果消息是half消息，将备份原消息的主题与消息消费队列，然后改变主题为RMQ_SYS_TRANS_HALF_TOPIC。由于消费组未订阅该主题，故消费端无法消费half类型的消息，然后RocketMQ会开启一个定时任务，从Topic为RMQ_SYS_TRANS_HALF_TOPIC中拉取消息进行消费，根据生产者组获取一个服务提供者发送回查事务状态请求，根据事务状态来决定是提交或回滚消息。
+
+在RocketMQ中，消息在服务端的存储结构如下，每条消息都会有对应的索引信息，Consumer通过ConsumeQueue这个二级索引来读取消息实体内容，其流程如下：
+
+
+RocketMQ的具体实现策略是：写入的如果事务消息，对消息的Topic和Queue等属性进行替换，同时将原来的Topic和Queue信息存储到消息的属性中，正因为消息主题被替换，故消息并不会转发到该原主题的消息消费队列，消费者无法感知消息的存在，不会消费
+
+RocketMQ事务消息方案中引入了Op消息的概念，用Op消息标识事务消息已经确定的状态（Commit或者Rollback）
+
+
 ## Links
 
 - [RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md)

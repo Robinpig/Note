@@ -36,6 +36,7 @@ public class PullMessageService extends ServiceThread {
 ```
 
 ## PushConsumer
+PUSH 模式是对 PULL 模式的封装，类似于一个高级 API
 
 - RebalanceImpl
 - 

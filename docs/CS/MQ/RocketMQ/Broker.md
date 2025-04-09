@@ -225,6 +225,9 @@ write into direct buffer and async to pagecache
 
 ## Topic
 
+NameServer 是在内存中存储 Topic 的路由信息，持久化 Topic 路由信息的地方是在 Broker 中，即 ${ROCKETMQ_HOME}/store/config/topics.json
+
+
 #### autoCreate
 
 autoCreateTopicEnable = true
