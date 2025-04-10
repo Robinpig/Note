@@ -2,6 +2,9 @@
 
 
 
+
+## PullMessageService
+
 Message model defines the way how messages are delivered to each consumer clients.
 RocketMQ supports two message models: clustering and broadcasting.
 
@@ -34,6 +37,12 @@ public class PullMessageService extends ServiceThread {
   }
 }
 ```
+
+
+
+PullMessageService 线程会按照队列向 Broker 拉取一批消息，然后会存入到 ProcessQueue 队列中，即所谓的处理队列，然后再提交到消费端线程池中进行消息消费，消息消费完成后会将对应的消息从 ProcessQueue 中移除，然后向 Broker 端提交消费进度，提交的消费偏移量为 ProceeQueue 中的最小偏移量
+
+
 
 ## PushConsumer
 
