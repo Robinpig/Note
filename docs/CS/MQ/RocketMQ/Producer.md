@@ -5,8 +5,61 @@ You do not need to create producers each time you send messages or destroy the p
 If you regularly create and destroy producers, a large number of short connection requests are generated on the broker.
 We recommend that you create and initialize the minimum number of producers that your business scenarios require, and reuse as many producers as you can.
 
+一个Producer的启动 先实例化 DefaultMQProducer ,再调用 start  之后调用 send 发送消息
+
+```java
+public class Producer {
+    public static final int MESSAGE_COUNT = 1000;
+    public static final String PRODUCER_GROUP = "please_rename_unique_group_name";
+    public static final String DEFAULT_NAMESRVADDR = "127.0.0.1:9876";
+    public static final String TOPIC = "TopicTest";
+    public static final String TAG = "TagA";
+
+    public static void main(String[] args) throws MQClientException, InterruptedException {
+
+        DefaultMQProducer producer = new DefaultMQProducer(PRODUCER_GROUP);
+
+        producer.start();
+
+        for (int i = 0; i < MESSAGE_COUNT; i++) {
+            try {
+                Message msg = new Message(TOPIC /* Topic */,
+                    TAG /* Tag */,
+                    ("Hello RocketMQ " + i).getBytes(RemotingHelper.DEFAULT_CHARSET) /* Message body */
+                );
+                
+                SendResult sendResult = producer.send(msg, 20 * 1000);
+
+                System.out.printf("%s%n", sendResult);
+            } catch (Exception e) {
+                e.printStackTrace();
+                Thread.sleep(1000);
+            }
+        }
+        /*
+         * Shut down once the producer instance is no longer in use.
+         */
+        producer.shutdown();
+    }
+}
+```
+
 DefaultMQProducerImpl 封装了大部分 Producer 的业务逻辑，
 MQClientInstance 封装了客户端一些通用的业务逻辑，MQClientAPIImpl 封装了客户端与服务端的 RPC，NettyRemotingClient 实现了底层网络通信。
+
+DefaultMQProducerImpl 当中有发送 Message 的核心实现
+```java
+    public DefaultMQProducer(final String producerGroup, RPCHook rpcHook, final List<String> topics,
+        boolean enableMsgTrace, final String customizedTraceTopic) {
+        this.producerGroup = producerGroup;
+        this.rpcHook = rpcHook;
+        this.topics = topics;
+        this.enableTrace = enableMsgTrace;
+        this.traceTopic = customizedTraceTopic;
+        defaultMQProducerImpl = new DefaultMQProducerImpl(this, rpcHook);
+        produceAccumulator = MQClientManager.getInstance().getOrCreateProduceAccumulator(this);
+    }
+```
 
 
 ```java
