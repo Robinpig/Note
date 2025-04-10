@@ -45,6 +45,7 @@ PullMessageService 线程会按照队列向 Broker 拉取一批消息，然后�
 
 
 ## PushConsumer
+PUSH 模式是对 PULL 模式的封装，类似于一个高级 API
 
 - RebalanceImpl
 - 
