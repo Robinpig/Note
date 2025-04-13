@@ -1479,7 +1479,13 @@ void aeMain(aeEventLoop *eventLoop) {
 
 这里看一下命令的执行流程
 
+对于一个命令处理的过程来说，主要可以分成四个阶段，它们分别对应了Redis源码中的不同函数。这里，我把它们对应的入口函数，也就是它们是从哪个函数开始进行执行的，罗列如下：
 
+- 命令读取，对应 readQueryFromClient 函数；
+- 命令解析，对应 processInputBuffer 函数；
+- 命令执行，对应 processCommand 函数；
+- 结果返回，对应 addReply 函数
+- 发送响应, 对应 writeToClient 函数
 
 server中两个重要的buffer
 
@@ -1597,7 +1603,7 @@ int postponeClientRead(client *c) {
 }
 ```
 
-
+#### handleClientsWithPendingReadsUsingThreads
 
 主线程在执行beforeSleep函数时会调用 handleClientsWithPendingReadsUsingThreads 将clients通过RoundRobin方式分配给线程绑定队列 之后主线程也会执行一部分的命令读取与解析 而命令的执行需要等待所有I/O线程完成解析后才开始
 
@@ -1695,7 +1701,7 @@ int handleClientsWithPendingReadsUsingThreads(void) {
 
 
 
-processPendingCommandAndInputBuffer
+#### processPendingCommandAndInputBuffer
 
 ```c
 int processPendingCommandAndInputBuffer(client *c) {
@@ -1734,24 +1740,12 @@ void processInputBuffer(client *c) {
         /* Return if clients are paused. */
         if (!(c->flags & CLIENT_SLAVE) && clientsArePaused()) break;
 
-        /* Immediately abort if the client is in the middle of something. */
         if (c->flags & CLIENT_BLOCKED) break;
 
-        /* Don't process more buffers from clients that have already pending
-         * commands to execute in c->argv. */
         if (c->flags & CLIENT_PENDING_COMMAND) break;
 
-        /* Don't process input from the master while there is a busy script
-         * condition on the slave. We want just to accumulate the replication
-         * stream (instead of replying -BUSY like we do with other clients) and
-         * later resume the processing. */
         if (server.lua_timedout && c->flags & CLIENT_MASTER) break;
 
-        /* CLIENT_CLOSE_AFTER_REPLY closes the connection once the reply is
-         * written to the client. Make sure to not let the reply grow after
-         * this flag has been set (i.e. don't process more commands).
-         *
-         * The same applies for clients we want to terminate ASAP. */
         if (c->flags & (CLIENT_CLOSE_AFTER_REPLY|CLIENT_CLOSE_ASAP)) break;
 
         /* Determine request type when unknown. */
@@ -1786,9 +1780,7 @@ void processInputBuffer(client *c) {
         if (c->argc == 0) {
             resetClient(c);
         } else {
-            /* If we are in the context of an I/O thread, we can't really
-             * execute the command here. All we can do is to flag the client
-             * as one that needs to process the command. */
+              //如果客户端有CLIENT_PENDING_READ标识，将其改为CLIENT_PENDING_COMMAND，就退出循环，并不调用processCommandAndResetClient函数执行命令
             if (c->flags & CLIENT_PENDING_READ) {
                 c->flags |= CLIENT_PENDING_COMMAND;
                 break;
@@ -1796,9 +1788,6 @@ void processInputBuffer(client *c) {
 
             /* We are finally ready to execute the command. */
             if (processCommandAndResetClient(c) == C_ERR) {
-                /* If the client is no longer valid, we avoid exiting this
-                 * loop and trimming the client buffer later. So we return
-                 * ASAP in that case. */
                 return;
             }
         }
@@ -1839,9 +1828,11 @@ int processCommandAndResetClient(client *c) {
 
 这里处理命令后返回值只有C_ERR 或者 C_OK, 命令的响应是在I/O线程里完成的
 
-### processCommand
+### process
 
-processCommand 函数从 server.commands 中查找命令对应的redisCommand实例
+#### processCommand
+
+processCommand 函数从 server.commands 这个hash 表中查找命令对应的redisCommand实例
 
 如果通过就会进行如下处理
 
@@ -1888,6 +1879,10 @@ void addReplyBulk(client *c, robj *obj) {
 ```
 
 #### addReply
+
+addReply函数是在networking.c文件中定义的。它的执行逻辑比较简单，主要是调用prepareClientToWrite函数，并在prepareClientToWrite函数中调用clientInstallWriteHandler函数，将待写回客户端加入到全局变量server的clients_pending_write列表中。
+
+然后，addReply函数会调用_addReplyToBuffer等函数，将要返回的结果添加到客户端的输出缓冲区中
 
 ```c
 void addReply(client *c, robj *obj) {

@@ -45,7 +45,7 @@ So now we have a good way to acquire and release the lock. T
 he system, reasoning about a non-distributed system composed of a single, always available, instance, is safe. Let’s extend the concept to a distributed system where we don’t have such guarantees.
 
 
-```
+```java
 uuid = getUUID(); 
 
 //lock 
@@ -65,6 +65,26 @@ try{
 	cancelScheduler(uuid); 
 }
 ```
+
+
+
+而对于解锁来说，我们可以使用如下的 Lua脚本来完成，而Lua脚本会以EVAL命令的形式在Redis server中执行。客户端会使用GET命令读取锁对应key的value，并判断value是否等于客户端自身的ID。如果等于，就表明当前客户端正拿着锁，此时可以执行DEL命令删除key，也就是释放锁；如果value不等于客户端自身ID，那么该脚本会直接返回。
+
+```
+if redis.call("get",lockKey) == uid then
+   return redis.call("del",lockKey)
+else
+   return 0
+end
+```
+
+这样一来，客户端就不会误删除别的客户端获得的锁了，从而保证了锁的安全性
+
+
+
+
+
+
 
 ### The Redlock algorithm
 
