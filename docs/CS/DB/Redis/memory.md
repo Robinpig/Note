@@ -561,6 +561,21 @@ The counter *logarithm factor* changes how many hits are needed in order to satu
 +--------+------------+------------+------------+------------+------------+
 ```
 
+
+
+
+
+无论是 LRU 算法还是 LFU 算法，它们在删除淘汰数据时，实际上都会根据 Redis server 的 **lazyfree-lazy-eviction 配置项**，来决定是否使用 Lazy Free，也就是惰性删除
+
+```
+lazyfree-lazy-eviction no
+lazyfree-lazy-expire no
+lazyfree-lazy-server-del no
+replica-lazy-flush no
+```
+
+
+
 ## Optimization
 
 Special encoding of small aggregate data types
