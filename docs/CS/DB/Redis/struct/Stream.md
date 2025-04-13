@@ -62,13 +62,20 @@ Streams, on the other hand, are allowed to stay at zero elements, both as a resu
 The reason why such an asymmetry exists is because Streams may have associated consumer groups, and we do not want to lose the state that the consumer groups defined just because there are no longer any items in the stream.
 Currently the stream is not deleted even when it has no associated consumer groups.
 
-Radix Tree save id, and listpack save message.
+
+
+为了充分节省内存空间，Stream 使用了两种内存友好的数据结构：listpack 和 Radix Tree。其中，消息 ID 是作为 Radix Tree 中的 key，消息具体数据是使用 listpack 保存，并作为 value 和消息 ID 一起保存到 Radix Tree 中
+
+每条消息都会有一个时间戳和序号组成的消息 ID，以及键值对组成的消息内容。而因为不同消息 ID 中的时间戳，通常会共享部分相同的前缀，如果采用诸如哈希表的结构来保存消息，每个消息 ID 都单独保存，容易造成空间浪费。因此，Stream 为了节省内存空间，采用了 Radix Tree 来保存消息 ID，同时使用 listpack 来保存消息本身的内容。
 
 ```c
 typedef struct stream {
     rax *rax;               /* The radix tree holding the stream. */
-    uint64_t length;        /* Number of elements inside this stream. */
+    uint64_t length;        /* Current number of elements inside this stream. */
     streamID last_id;       /* Zero if there are yet no items. */
+    streamID first_id;      /* The first non-tombstone entry, zero if empty. */
+    streamID max_deleted_entry_id;  /* The maximal ID that was deleted. */
+    uint64_t entries_added; /* All time count of elements added. */
     rax *cgroups;           /* Consumer groups dictionary: name -> streamCG */
 } stream;
 

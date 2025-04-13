@@ -1,40 +1,65 @@
 ## Introduction
 
+对于 Redis 键值数据库来说，Hash 表既是键值对中的一种值类型，同时，Redis 也使用一个全局 Hash 表来保存所有的键值对，从而既满足应用存取 Hash 结构数据需求，又能提供快速查询功能
+
 [redisDb](/docs/CS/DB/Redis/redisDb.md) also a hashtable
 
+
+
+
+
 redis command table
+
+
+
+在实际应用 Hash 表时，当数据量不断增加，它的性能就经常会受到**哈希冲突**和 **rehash 开销**的影响
+
+针对哈希冲突，Redis 采用了**链式哈希**，在不扩容哈希表的前提下，将具有相同哈希值的数据链接起来，以便这些数据在表中仍然可以被查询到；对于 rehash 开销，Redis 实现了**渐进式 rehash 设计**，进而缓解了 rehash 操作带来的额外开销对系统的性能影响
+
+
+
+Redis 准备了两个哈希表，用于 rehash 时交替保存数据
+
+在实际使用 Hash 表时，Redis 又在 dict.h 文件中，定义了一个 dict 结构体。这个结构体中有一个数组（ht[2]），包含了两个 Hash 表 ht[0]和 ht[1]
+
+
+
+
 
 ## Structures
 
 
-final struct dict
+
 
 rehashing not in progress if rehashidx == -1
 
 ```c
-// dict.c
-typedef struct dict {
+
+struct dict {
     dictType *type;
-    void *privdata;
-    dictht ht[2];
-    long rehashidx;
-    unsigned long iterators; /* number of iterators currently running */
-} dict;
+
+    dictEntry **ht_table[2];
+    unsigned long ht_used[2];
+
+    long rehashidx; /* rehashing not in progress if rehashidx == -1 */
+
+    /* Keep small vars at end for optimal (minimal) struct padding */
+    unsigned pauserehash : 15; /* If >0 rehashing is paused */
+
+    unsigned useStoredKeyApi : 1; /* See comment of storedHashFunction above */
+    signed char ht_size_exp[2]; /* exponent of size. (size = 1<<exp) */
+    int16_t pauseAutoResize;  /* If >0 automatic resizing is disallowed (<0 indicates coding error) */
+    void *metadata[];
+};
 ```
 
+在 dict.h 文件中，Hash 表被定义为一个二维数组 数组的每个元素是一个指向哈希项（dictEntry）的指针
 
-This is our hash table structure. Every dictionary has **two of this** as we implement **incremental rehashing**, for the old to the new table.
+Every dictionary has **two of this** as we implement **incremental rehashing**, for the old to the new table.
 
-```c
-typedef struct dictht {
-    dictEntry **table;
-    unsigned long size;
-    unsigned long sizemask;// always size -1
-    unsigned long used;
-} dictht;
-```
+为了实现链式哈希， Redis 在每个 dictEntry 的结构设计中，除了包含指向键和值的指针，还包含了指向下一个哈希项的指针
 
-dictEntry:
+在 dictEntry 结构体中，键值对的值是由一个**联合体 v** 定义的。这个联合体 v 中包含了指向实际值的指针 *val，还包含了无符号的 64 位整数、有符号的 64 位整数，以及 double 类的值 便于节省内存
 
 ```c
 typedef struct dictEntry {
@@ -325,10 +350,12 @@ void updateDictResizePolicy(void) {
 
 ### expandIfNeeded
 
+Redis 用来判断是否触发 rehash 的函数是 **_dictExpandIfNeeded**
+
 Expand the hash table if needed(check loadFactor & if has active childProcess):
 
 1. If the hash table is empty expand it to the initial size.
-2. If we reached the 1:1 ratio, and we are allowed to resize the hash table (avoid `hasActiveChildProcess`)
+2. If we reached the 1:1 ratio, and we are allowed to resize the hash table (avoid `hasActiveChildProcess`) 避开RDB 快照和 AOF 重写
 3. or we should avoid it but the ratio between elements/buckets is over the "safe" threshold, we resize doubling the number of buckets.
 
 ```c
@@ -351,7 +378,21 @@ static int _dictExpandIfNeeded(dict *d)
 }
 ```
 
+
+
+_dictExpandIfNeeded 是被 _dictKeyIndex 函数调用的，而 _dictKeyIndex 函数又会被 dictAddRaw 函数调用，然后 dictAddRaw 会被以下三个函数调用。
+
+- dictAdd：用来往 Hash 表中添加一个键值对。
+- dictRelace：用来往 Hash 表中添加一个键值对，或者键值对存在时，修改键值对。
+- dictAddorFind：直接调用 dictAddRaw。
+
+当我们往 Redis 中写入新的键值对或是修改键值对时，Redis 都会判断下是否需要进行 rehash
+
+
+
 ### dictExpand
+
+ehash 对 Hash 表空间的扩容是通过调用 `dictExpand` 函数来完成的 dictExpand 函数的参数有两个，一个是要扩容的 Hash 表，另一个是要扩到的容量
 
 Expand or create the hash table, when malloc_failed is non-NULL, it'll avoid panic if malloc fails (in which case it'll be set to 1).
 
@@ -395,6 +436,26 @@ int _dictExpand(dict *d, unsigned long size, int* malloc_failed)
     return DICT_OK;
 }
 ```
+
+
+
+```c
+/* Our hash table capability is a power of two */
+static unsigned long _dictNextPower(unsigned long size) {
+    unsigned long i = DICT_HT_INITIAL_SIZE;
+
+    if (size >= LONG_MAX) return LONG_MAX;
+    while(1) {
+        if (i >= size)
+            return i;
+        i *= 2;
+    }
+}
+```
+
+
+
+
 
 ## resize
 
@@ -443,10 +504,16 @@ int dictResize(dict *d)
 
 ## rehash
 
+
+
 This function performs just a step of rehashing, and only if hashing has not been paused for our hash table.
 When we have iterators in the middle of a rehashing we can't mess with the two hash tables otherwise some element can be missed or duplicated.
 
 This function is called by **common lookup or update operations** in the dictionary so that the hash table `automatically migrates` from H1 to H2 while it is actively used.
+
+这个函数实现了每次只对一个 bucket 执行 rehash
+
+一共会有 5 个函数通过调用 _dictRehashStep 函数，进而调用 dictRehash 函数，来执行 rehash，它们分别是：dictAddRaw，dictGenericDelete，dictFind，dictGetRandomKey，dictGetSomeKeys
 
 ```c
 // dict.c
@@ -454,6 +521,8 @@ static void _dictRehashStep(dict *d) {
     if (d->pauserehash == 0) dictRehash(d,1);
 }
 ```
+
+每次迁移完一个 bucket，Hash 表就会执行正常的增删查请求操作，这就是在代码层面实现渐进式 rehash 的方法
 
 Try to use 1 millisecond of CPU time at every call of this function to perform some rehashing, but only if there are no other processes saving the DB on disk.
 Otherwise rehashing is bad as will cause a lot of copy-on-write of memory pages.
@@ -483,6 +552,14 @@ Performs N steps of incremental rehashing.
 Note that a rehashing step consists in moving a bucket (that may have more than one key as we use chaining) from the old to the new hash table, however since part of the hash table may be composed of empty spaces,
 it is not guaranteed that this function will rehash even a single bucket, since it will visit at max N*10 empty buckets in total, otherwise the amount of work it does would be unbound and the function may block for a long time.
 
+dictRehash 函数的整体逻辑包括两部分：
+
+- 首先，该函数会执行一个循环，根据要进行键拷贝的 bucket 数量 n，依次完成这些 bucket 内部所有键的迁移。当然，如果 ht[0]哈希表中的数据已经都迁移完成了，键拷贝的循环也会停止执行。
+- 其次，在完成了 n 个 bucket 拷贝后，dictRehash 函数的第二部分逻辑，就是判断 ht[0]表中数据是否都已迁移完。如果都迁移完了，那么 ht[0]的空间会被释放。因为 Redis 在处理请求时，代码逻辑中都是使用 ht[0]，所以当 rehash 执行完成后，虽然数据都在 ht[1]中了，但 Redis 仍然会把 ht[1]赋值给 ht[0]，以便其他部分的代码逻辑正常使用。
+- 而在 ht[1]赋值给 ht[0]后，它的大小就会被重置为 0，等待下一次 rehash。与此同时，全局哈希表中的 rehashidx 变量会被标为 -1，表示 rehash 结束了（这里的 rehashidx 变量用来表示 rehash 的进度，稍后我会给你具体解释）。
+
+渐进式 rehash 在执行时设置了一个变量 `empty_visits`，用来表示已经检查过的空 bucket，当检查了一定数量的空 bucket 后，这一轮的 rehash 就停止执行，转而继续处理外来请求，避免了对 Redis 性能的影响
+
 ```c
 int dictRehash(dict *d, int n) {
     int empty_visits = n*10; /* Max number of empty buckets to visit. */
@@ -502,11 +579,7 @@ int dictRehash(dict *d, int n) {
             uint64_t h;
 
             nextde = de->next;
-```
 
-Get the index in the new hash table
-
-```c
             h = dictHashKey(d, de->key) & d->ht[1].sizemask;
             de->next = d->ht[1].table[h];
             d->ht[1].table[h] = de;

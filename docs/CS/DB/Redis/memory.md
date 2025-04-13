@@ -1,10 +1,17 @@
 ## Introduction
 
+Redis 是从三个方面来优化内存使用的，分别是内存分配、内存回收，以及数据替换。
+首先，在内存分配方面，Redis 支持使用不同的内存分配器，包括 glibc 库提供的默认分配器 tcmalloc、第三方库提供的 jemalloc。Redis 把对内存分配器的封装实现在了 zmalloc.h/zmalloc.c。
+其次，在内存回收上，Redis 支持设置过期 key，并针对过期 key 可以使用不同删除策略，这部分代码实现在 expire.c 文件中。同时，为了避免大量 key 删除回收内存，会对系统性能产生影响，Redis 在 lazyfree.c 中实现了异步删除的功能，所以这样，我们就可以使用后台 IO 线程来完成删除，以避免对 Redis 主线程的影响。
+最后，针对数据替换，如果内存满了，Redis 还会按照一定规则清除不需要的数据，这也是 Redis 可以作为缓存使用的原因。Redis 实现的数据替换策略有很多种，包括 LRU、LFU 等经典算法。这部分的代码实现在了 evict.c 中
 
 
 
+## shared
 
+Redis 采用了**共享对象**的设计思想 把常用数据创建为共享对象，当上层应用需要访问它们时，直接读取就行
 
+server 在启动过程中会调用 [createSharedObjects]() 函数 创建
 
 Selecting a non-default memory allocator when building Redis is done by setting the MALLOC environment variable.
 Redis is compiled and linked against libc malloc by default, with the exception of jemalloc being the default on Linux systems.
@@ -581,6 +588,10 @@ Small hashes are encoded in a very small space, so you should try representing y
 如果系统的配置或者操作系统的内存管理不当，可能会导致 Redis 进程被操作系统杀死
 
 
+
+## Links
+
+- [Redis](/docs/CS/DB/Redis/Redis.md?id=struct)
 
 
 ## References

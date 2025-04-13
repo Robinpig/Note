@@ -258,10 +258,9 @@ void trimStringObjectIfNeeded(robj *o) {
 
 zmalloc 1, better for cache
 
+对于不超过 44 字节的字符串来说 使用一块连续的内存空间，把 [redisObject]() 结构体和 SDS 结构体紧凑地放置在一起, 就可以避免内存碎片和两次内存分配的开销
+
 ```c
-/* Create a string object with encoding OBJ_ENCODING_EMBSTR, that is
- * an object where the sds string is actually an unmodifiable string
- * allocated in the same chunk as the object itself. */
 robj *createEmbeddedStringObject(const char *ptr, size_t len) {
     robj *o = zmalloc(sizeof(robj)+sizeof(struct sdshdr8)+len+1);
     struct sdshdr8 *sh = (void*)(o+1);
@@ -347,8 +346,11 @@ sds sdsfromlonglong(long long value) {
     int len = sdsll2str(buf,value);
     return sdsnewlen(buf,len);
 }
+```
 
+#### createRawStringObject
 
+```c
 /* Create a string object with encoding OBJ_ENCODING_RAW, that is a plain
  * string object where o->ptr points to a proper sds string. */
 robj *createRawStringObject(const char *ptr, size_t len) {

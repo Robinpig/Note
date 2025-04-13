@@ -188,6 +188,14 @@ The analysis and  [reply here](http://antirez.com/news/101).
 
 [TIL: clock skew exists](http://jvns.ca/blog/2016/02/09/til-clock-skew-exists/)
 
+
+
+
+
+## Links
+
+- [Redis](/docs/CS/DB/Redis/Redis.md?id=struct)
+
 ## References
 
 1. [Distributed locks with Redis](https://redis.io/topics/distlock)

@@ -252,7 +252,7 @@ Sets are good for expressing relations between objects. For instance we can easi
 
 ### Sorted sets
 
-[Sorted sets](/docs/CS/DB/Redis/struct/zset.mdzset.md) are a data type which is similar to a mix between a Set and a Hash. Like sets, sorted sets are composed of unique, non-repeating string elements, so in some sense a sorted set is a set as well.
+[Sorted sets](/docs/CS/DB/Redis/struct/zset.md) are a data type which is similar to a mix between a Set and a Hash. Like sets, sorted sets are composed of unique, non-repeating string elements, so in some sense a sorted set is a set as well.
 
 However while elements inside sets are not ordered, every element in a sorted set is associated with a floating point value, called *the score* (this is why the type is also similar to a hash, since every element is mapped to a value).
 
