@@ -57,3 +57,4 @@ Feed 流是一个动态的列表，列表内容会随着时间不断变化。传
 ## References
 
 1. [feed流设计：那些谋杀你时间APP | 人人都是产品经理](https://www.woshipm.com/pd/773523.html)
+1. [Feed 流系统的架构设计方案 | 炫仔的Blog](https://kixuan.github.io/posts/feed/)
