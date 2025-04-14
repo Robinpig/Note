@@ -115,20 +115,11 @@ sudo apt-get install -y  procps  vim  bc bison build-essential cpio  flex  libel
 
 ```
 
+Linux 内核的构建过程会查找 `.config` 文件。顾名思义，这是一个配置文件，用于指定 Linux 内核的所有可能的配置选项。这是必需的文件。
 
+获取 Linux 内核的 `.config` 文件有两种方式
 
-
-```shell
-make defconfig
-```
-
-
-
-
-或者使用 `make menuconfig` 更方便
-
-
-或者复制你的 Linux 发行版的配置文件：
+使用你的 Linux 发行版的配置作为基础（**推荐做法**）
 
 ```shell
 ### Debian 和 Fedora 及其衍生版：
@@ -137,6 +128,17 @@ $ cp /boot/config-"$(uname -r)" .config
 ### Arch Linux 及其衍生版：
 $ zcat /proc/config.gz > .config
 ```
+
+使用默认的，通用的配置
+
+
+```shell
+make defconfig
+```
+
+
+
+无论使用 Linux 发行版的配置并更新它，还是使用 `defconfig` 目标创建新的 `.config` 文件，你都可能希望熟悉如何修改这个配置文件 使用 `make menuconfig` 修改更方便
 
 
 > Kernel hacking ---> Compile-time checks and compiler options 开启GDB Scripts
