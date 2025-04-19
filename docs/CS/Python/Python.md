@@ -1,7 +1,17 @@
 ## Introduction
 
+[Python](https://www.python.org/) is a programming language that lets you work quickly and integrate systems more effectively.
+
+## Install
+
+发行版
+
+- Anaconda
+
+
 
 [标准库](https://docs.python.org/3/library/)
+
 - binascii
 - datetime
 - gettext
