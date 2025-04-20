@@ -124,7 +124,7 @@ struct proto tcp_prot = {
 ### tcp_v4_connect
 
 1. set state = TCP_SYN_SENT
-2. inet_hash_connect
+2. inet_hash_connect 随机选择一个端口
 3. Build a SYN and send it off
 
 ```c

@@ -1,5 +1,10 @@
 ## Introduction
 
+
+
+
+
+
 ```c
 // include/linux/netdevice.h
 struct packet_type {
@@ -183,7 +188,7 @@ struct sockaddr_un {
 
 socket中重要的pointer
 - fd
-- sock
+- sock 描述
 - proto_ops
 
 
@@ -1035,6 +1040,10 @@ struct inet_connection_sock_af_ops {
 
 #### inet_connection_sock
 inet_connection_sock - INET connection oriented sock
+
+- struct request_sock_queue icsk_accept_queue 全连接队列
+- 
+
 ```c
 // include/net/inet_connection_sock.h
 struct inet_connection_sock {

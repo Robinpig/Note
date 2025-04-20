@@ -266,6 +266,10 @@ int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 }
 ```
 
+绑定 IP 地址设置到 inet_rcv_saddr 上
+
+设置端口 inet_sport
+
 ```c
 
 int __inet_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len,
@@ -336,9 +340,7 @@ int __inet_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len,
 	/* Make sure we are allowed to bind here. */
 	if (snum || !(inet->bind_address_no_port ||
 		      (flags & BIND_FORCE_ADDRESS_NO_PORT))) {
-```
 
-```c
 		if (sk->sk_prot->get_port(sk, snum)) {
 			inet->inet_saddr = inet->inet_rcv_saddr = 0;
 			err = -EADDRINUSE;
@@ -776,11 +778,14 @@ static inline struct request_sock *reqsk_queue_remove(struct request_sock_queue 
 #### reqsk_queue_alloc
 
 Maximum number of SYN_RECV sockets in queue per LISTEN socket.
+
 One SYN_RECV socket costs about 80bytes on a 32bit machine.
 
 It would be better to replace it with a global counter for all sockets but then some measure against one socket starving all other sockets would be needed.
 
-The minimum value of it is 128. Experiments with real servers show that it is absolutely not enough even at 100conn/sec. 256 cures most of problems.
+The minimum value of it is 128.
+Experiments with real servers show that it is absolutely not enough even at 100conn/sec. 
+256 cures most of problems.
 
 This value is adjusted to 128 for low memory machines, and it will increase in proportion to the memory of machine.
 
