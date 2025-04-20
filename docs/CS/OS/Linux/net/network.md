@@ -55,7 +55,7 @@ Register protocols into `inet_protos` and `ptype_base`:
 
 1. IP
 2. [UDP](/docs/CS/OS/Linux/net/UDP.md)
-3. [TCP](/docs/CS/OS/Linux/TCP.md?id=tcp_init)
+3. [TCP](/docs/CS/OS/Linux/net/TCP/TCP.md?id=tcp_init)
 4. ...
 
 ```c
@@ -429,7 +429,7 @@ int __sys_sendto(int fd, void __user *buff, size_t len, unsigned int flags, ...)
 sock_sendmsg -> sock_sendmsg_nosec -> inet_sendmsg ->
 
 - [udp_sendmsg](/docs/CS/OS/Linux/net/UDP.md?id=udp_sendmsg)
-- or [tcp_sendmsg](/docs/CS/OS/Linux/TCP.md?id=send)
+- or [tcp_sendmsg](/docs/CS/OS/Linux/net/TCP/TCP.md?id=send)
 
 ```c
 int inet_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
@@ -448,7 +448,7 @@ Both `ip_queue_xmit` and `ip_send_skb` call [ip_local_out](/docs/CS/OS/Linux/net
 
 ##### **ip_queue_xmit**
 
-Called by [tcp_transmit_skb](/docs/CS/OS/Linux/TCP.md?id=tcp_transmit_skb)
+Called by [tcp_transmit_skb](/docs/CS/OS/Linux/net/TCP/TCP.md?id=tcp_transmit_skb)
 
 Note: skb->sk can be different from sk, in case of tunnels
 
@@ -1148,7 +1148,7 @@ tail skb queue and invoke func `sk_data_ready` to wake up 1 process.
 
 ##### **tcp_v4_rcv**
 
-tcp_queue_rcv and sk_data_ready in [tcp_rcv_established](/docs/CS/OS/Linux/TCP.md?id=tcp_rcv_established)
+tcp_queue_rcv and sk_data_ready in [tcp_rcv_established](/docs/CS/OS/Linux/net/TCP/TCP.md?id=tcp_rcv_established)
 
 ```c
 int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)

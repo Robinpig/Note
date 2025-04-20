@@ -718,7 +718,7 @@ static inline void sk_acceptq_added(struct sock *sk)
 
 #### inet_csk_reqsk_queue_add
 
-Called by [TCP connect request](/docs/CS/OS/Linux/TCP.md?id=tcp_conn_request)
+Called by [TCP connect request](/docs/CS/OS/Linux/net/TCP/TCP.md?id=tcp_conn_request)
 
 call `sk_acceptq_added`
 
@@ -846,7 +846,7 @@ All received ACK packets must first be matched against the fully established con
 On SYN Queue match, the kernel removes the item from the SYN Queue, happily creates a fully fledged connection (specifically: struct inet_sock), and adds it to the Accept Queue.
 
 SYN queue - logic queue
-see [qlen and max_syn_backlog](/docs/CS/OS/Linux/TCP.md?id=tcp_conn_request)
+see [qlen and max_syn_backlog](/docs/CS/OS/Linux/net/TCP/TCP.md?id=tcp_conn_request)
 
 ```c
 
@@ -1316,7 +1316,7 @@ struct sock *inet_csk_accept(struct sock *sk, struct proto_accept_arg *arg)
  *					            tcp_recvmsg      ----+----      udp_recvmsg
  */
 ```
-
+[tcp_recvmsg](/docs/CS/OS/Linux/net/TCP/TCP.md?id=tcp_recvmsg)
 
 
 

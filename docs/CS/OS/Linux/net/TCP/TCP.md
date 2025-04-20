@@ -567,7 +567,7 @@ u32 __tcp_select_window(struct sock *sk)
 
 `recvfrom` -> `inet_recvmsg` -> `tcp_recvmsg`
 
-process sk_receive_queue or sk_wait_data
+处理 sk_receive_queue 如果没有足够数据 则调用 sk_wait_data 阻塞当前进程
 
 ```c
 int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
@@ -1835,7 +1835,7 @@ void tcp_send_fin(struct sock *sk)
 
 ### rcv ACK
 
-see [tcp_rcv_state_process](/docs/CS/OS/Linux/TCP.md?id=tcp_rcv_state_process)
+see [tcp_rcv_state_process](/docs/CS/OS/Linux/net/TCP/TCP.md?id=tcp_rcv_state_process)
 
 #### tcp_time_wait
 
@@ -2335,11 +2335,11 @@ close decrement ref, when ref=0, close both sides.
 
 shutdown could close one side
 
-like [send FIN in Active Close](/docs/CS/OS/Linux/TCP.md?id=send-FIN)
+like [send FIN in Active Close](/docs/CS/OS/Linux/net/TCP/TCP.md?id=send-FIN)
 
 ### rcv ACK
 
-see [tcp_rcv_state_process](/docs/CS/OS/Linux/TCP.md?id=tcp_rcv_state_process)
+see [tcp_rcv_state_process](/docs/CS/OS/Linux/net/TCP/TCP.md?id=tcp_rcv_state_process)
 
 TIME_WAIT 60s
 

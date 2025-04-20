@@ -2,6 +2,16 @@
 
 
 
+偶发线上访问超时
+
+- 较早Linux 内核版本 SYN 重传时间为3s 较长 当 SYN队列溢出默认丢弃后需要等客户端重传多次后结束
+
+## cpu
+
+CPU 负载激增 甚至100%
+- 是否是版本更新导致
+
+
 ## load average
 
 let's talk about the load averages.

@@ -300,7 +300,7 @@ static void ep_ptable_queue_proc(struct file *file, wait_queue_head_t *whead,
 }
 ```
 
-set func for each socket in order to call by [sock_def_readable](/docs/CS/OS/Linux/TCP.md?id=tcp_data_ready)
+set func for each socket in order to call by [sock_def_readable](/docs/CS/OS/Linux/net/TCP/TCP.md?id=tcp_data_ready)
 
 ```c
 // include/linux/wait.h
