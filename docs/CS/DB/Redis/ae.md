@@ -715,7 +715,7 @@ typedef struct aeFiredEvent {
 
 ## epoll
 
-Redis use ae wrap epoll rather than use libevent
+Redis use ae wrap [epoll](/docs/CS/OS/Linux/IO/epoll.md) rather than use libevent
 
 aeApiCreate->`epoll_create`
 

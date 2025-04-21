@@ -13,7 +13,7 @@ typedef struct {
 } ngx_event_module_t;
 ```
 
-
+epoll
 
 ```c
 
@@ -76,6 +76,13 @@ extern ngx_module_t ngx_devpoll_module;
 extern ngx_module_t ngx_epoll_module;
 extern ngx_module_t ngx_select_module;
 ```
+
+
+
+## process
+
+ngx_epoll_process_events
+
 
 
 

@@ -1016,9 +1016,12 @@ SYSCALL_DEFINE4(accept4, int, fd, struct sockaddr __user *, upeer_sockaddr,
 }
 ```
 
-For accept, we attempt to create a new socket, set up the link with the client, wake up the client, then return the new connected fd. We collect the address of the connector in kernel space and move it to user at the very end. This is unclean because we open the socket then return an error.
+For accept, we attempt to create a new socket, set up the link with the client, wake up the client, then return the new connected fd.
+We collect the address of the connector in kernel space and move it to user at the very end. 
+This is unclean because we open the socket then return an error.
 
-1003.1g adds the ability to `recvmsg()` to query connection pending status to recvmsg. We need to add that support in a way thats clean when we restructure accept also.
+1003.1g adds the ability to `recvmsg()` to query connection pending status to recvmsg. 
+We need to add that support in a way thats clean when we restructure accept also.
 
 1. do_accept
 2. fd_install

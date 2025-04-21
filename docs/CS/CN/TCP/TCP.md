@@ -16,7 +16,7 @@ The Transmission Control Protocol (TCP) is intended for use as a highly reliable
                         +---------------------+
 ```
 
-TCP 的原始规范是 [RFC793](https://www.rfc-editor.org/rfc/rfc793)，其中的一些错误在 [RFC1122](https://www.rfc-editor.org/rfc/rfc1122) 中被修正。拥塞控制（**RFC5681**、**RFC3782/RFC6582**、**RFC3517/RFC6657**、**RFC3390**、**RFC3168/RFC8311**）、重传超时（**RFC6298**、**RFC5682**、**RFC4015**）、连接管理（**RFC5482**）等特性在后续一系列的 RFC 文档中也进行了补充设计
+TCP 的原始规范是 [RFC793](https://www.rfc-editor.org/rfc/rfc793)，其中的一些错误在 [RFC1122](https://www.rfc-editor.org/rfc/rfc1122) 中被修正。拥塞控制（**RFC5681**、**RFC3782/RFC6582**、**RFC3517/RFC6657**、**RFC3390**、**RFC3168/RFC8311**）、重传超时（**RFC6298**、**RFC5682**、**RFC4015**）、连接管理（**RFC5482**）等特性在后续一系列的 RFC 文档中也进行了补充设计
 
 > See [Linux TCP](/docs/CS/OS/Linux/net/TCP/TCP.md)
 
