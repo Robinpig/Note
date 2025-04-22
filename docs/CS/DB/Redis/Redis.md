@@ -11,6 +11,20 @@ Redis has **built-in replication, Lua scripting, LRU eviction, [transactions](/d
 > The Linux Foundation announced its intent to form [Valkey](/docs/CS/DB/Valkey.md), an open source alternative to the Redis in-memory, NoSQL data store. 
 
 
+
+## Features
+
+Redis 可以用来做什么
+
+- 缓存
+- 排行榜
+- 无须可靠要求的消息队列
+- 分布式锁
+- 计数器
+
+
+
+
 ## Build
 
 ##### **Mac**
@@ -693,9 +707,10 @@ CLIENT LIST
 
 ## References
 
-1. [Redis 面试全攻略、面试题大集合](https://mp.weixin.qq.com/s/6NobACeeKCcUy98Ikanryg)
-2. [Redis源码分析(一) - 硬核课堂](https://hardcore.feishu.cn/docs/doccnp9v7IljXiJ5FpNT1ipLhlR#)
-3. [Distributed locks with Redis](https://redis.io/topics/distlock)
-4. [Garnet](https://github.com/microsoft/garnet)
-5. [java - Redis 6.0 新特性篇：深度剖析客户端缓存（Client side caching）原理与性能 - Redis - SegmentFault 思否](https://segmentfault.com/a/1190000040926742)
+1. [Redis中文网](https://redis.com.cn/)
+2. [Redis 面试全攻略、面试题大集合](https://mp.weixin.qq.com/s/6NobACeeKCcUy98Ikanryg)
+3. [Redis源码分析(一) - 硬核课堂](https://hardcore.feishu.cn/docs/doccnp9v7IljXiJ5FpNT1ipLhlR#)
+4. [Distributed locks with Redis](https://redis.io/topics/distlock)
+5. [Garnet](https://github.com/microsoft/garnet)
+6. [java - Redis 6.0 新特性篇：深度剖析客户端缓存（Client side caching）原理与性能 - Redis - SegmentFault 思否](https://segmentfault.com/a/1190000040926742)
 
