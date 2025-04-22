@@ -900,7 +900,7 @@ static inline void ____napi_schedule(struct softnet_data *sd,
 
 ### net_rx_action
 
-内核线程ksoftirqd发现有软中断请求到来，随后调用网卡驱动注册的poll函数，poll函数将sk_buffer中的网络数据包送到内核协议栈中注册的ip_rcv函数中
+内核线程 ksoftirqd 发现有软中断请求到来，随后调用网卡驱动注册的poll函数，poll函数将sk_buffer中的网络数据包送到内核协议栈中注册的ip_rcv函数中
 
 > 网卡硬中断响应程序中发出的软中断请求也会在这个CPU绑定的ksoftirqd线程中响应。所以如果发现Linux软中断，CPU消耗都集中在一个核上的话，那么就需要调整硬中断的CPU亲和性来打散硬中断
 
@@ -1005,7 +1005,7 @@ napi_gro_receive -> napi_skb_finish -> gro_normal_one
 
 #### netif_receive_skb
 
-call deliver_skb
+将 packet 送到协议栈
 
 ```c
 
