@@ -283,12 +283,22 @@ call `rdbSaveKeyValuePair`
 
 #### loadDataFromDisk
 
+Redis 启动时调用 loadDataFromDisk 函数从磁盘 rdb 文件加载数据到内存
 
-在startup时被调用
+```c
+int main(int argc, char **argv) {
+    ...
+    if (!server.sentinel_mode) {
+        loadDataFromDisk();
+    }
+}
+```
+
+
+
+
 
 优先AOF文件 没有AOF才加载RDB文件
-
-load RDB or AOF file in memory.
 
 - loadAppendOnlyFile
 
@@ -302,28 +312,7 @@ void loadDataFromDisk(void) {
         rdbSaveInfo rsi = RDB_SAVE_INFO_INIT;
         errno = 0; /* Prevent a stale value from affecting error checking */
         if (rdbLoad(server.rdb_filename,&rsi,RDBFLAGS_NONE) == C_OK) {
-            serverLog(LL_NOTICE,"DB loaded from disk: %.3f seconds",
-                (float)(ustime()-start)/1000000);
-
             /* Restore the replication ID / offset from the RDB file. */
-            if ((server.masterhost ||
-                (server.cluster_enabled &&
-                nodeIsSlave(server.cluster->myself))) &&
-                rsi.repl_id_is_set &&
-                rsi.repl_offset != -1 &&
-                /* Note that older implementations may save a repl_stream_db
-                 * of -1 inside the RDB file in a wrong way, see more
-                 * information in function rdbPopulateSaveInfo. */
-                rsi.repl_stream_db != -1)
-            {
-                memcpy(server.replid,rsi.repl_id,sizeof(server.replid));
-                server.master_repl_offset = rsi.repl_offset;
-                /* If we are a slave, create a cached master from this
-                 * information, in order to allow partial resynchronizations
-                 * with masters. */
-                replicationCacheMasterUsingMyself();
-                selectDb(server.cached_master,rsi.repl_stream_db);
-            }
         } else if (errno != ENOENT) {
             serverLog(LL_WARNING,"Fatal error loading the DB: %s. Exiting.",strerror(errno));
             exit(1);

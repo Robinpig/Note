@@ -426,6 +426,11 @@ char *sentinelVoteLeader(sentinelRedisInstance *master, uint64_t req_epoch, char
 
 ## Failover
 
+1. 在 redis 集群中，当 sentinel 检测到 master 出现故障，那么 sentinel 需要对集群进行故障转移。
+2. 当一个 sentinel 发现 master 下线，它会将下线的 master 确认为**主观下线**。
+3. 当“法定个数”（quorum）sentinel 已经发现该 master 节点下线，那么 sentinel 会将其确认为**客观下线**。
+4. 多个 sentinel 根据一定的逻辑，选举出一个 sentinel 作为 leader，由它去进行故障转移，将原来连接已客观下线 master 最优的一个 slave 提升为新 master 角色。旧 master 如果重新激活，它将被降级为 slave
+
 ### State Machine
 
 ```c
@@ -554,6 +559,17 @@ void sentinelFailoverReconfNextSlave(sentinelRedisInstance *master) {
     sentinelFailoverDetectEnd(master);
 }
 ```
+
+
+
+## Tuning
+
+- redis 脑裂主要表现为：同一个 redis 集群，原来的 master，经过故障转移后，出现多个 master。
+- 解决方案主要通过 sentinel 哨兵的配置和 redis 的配置去解决问题。
+- 上述方案也是有不足的地方，例如 redis 配置限制可能会受到副本个数的影响，所以具体设置，要看具体的业务场景。主要是怎么通过比较小的代价去解决问题，或者降低出现问题的概率。
+- redis 虽然已经发布了 gossip 协议的无中心集群，sentinel 哨兵模式还是比较常用的，我们不建议直接使用 sentinel，可以考虑使用 codis
+
+
 
 ## Links
 
