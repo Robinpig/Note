@@ -1170,7 +1170,7 @@ void linkClient(client *c) {
 
 ### aeCreateFileEvent
 
-The essence of `aeCreateFileEvent` function is to execute [`epoll_ctl`](http://man.cx/epoll_ctl) system call which adds a watch for `EPOLLIN` event on the *listening descriptor* create by `anetTcpServer` and associate it with the `epoll` descriptor created by a call to `aeCreateEventLoop`.
+The essence of `aeCreateFileEvent` function is to execute `epoll_ctl` system call which adds a watch for `EPOLLIN` event on the *listening descriptor* create by `anetTcpServer` and associate it with the `epoll` descriptor created by a call to `aeCreateEventLoop`.
 
 Following is an explanation of what precisely `aeCreateFileEvent` does when called from `redis.c:initServer`.
 
@@ -1183,7 +1183,7 @@ Following is an explanation of what precisely `aeCreateFileEvent` does when call
 
 This completes the initialization of Redis event loop.
 
-初始化了 aeFileEvent，存放在 eventLoop 中的events[] 内。并且调用 aeApiAddEvent()，将监听端口的描述符注册到创建的内核队列中
+初始化了 aeFileEvent，存放在 eventLoop 中的events[] 内。并且调用 [aeApiAddEvent()](/docs/CS/DB/Redis/ae.md?id=Events)，将监听端口的描述符注册到创建的内核队列中
 
 ```c
 // ae.c
