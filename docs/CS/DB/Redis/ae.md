@@ -182,7 +182,7 @@ Without special flags the function sleeps until some file event fires, or when t
 * if flags has AE_CALL_AFTER_SLEEP set, the aftersleep callback is called.
 * if flags has AE_CALL_BEFORE_SLEEP set, the beforesleep callback is called.
 
-The function returns the number of events processed.
+从内核取出就绪事件，根据事件的读写类型，分别进行回调处理相关业务逻辑
 
 ```c
 // ae.c
@@ -691,14 +691,14 @@ typedef struct aeFiredEvent {
 ```
 
 
-### Summaries of Events
+## Events
 | Event Type  | Socket Type | Callback Method     | For              |
 | ------------- | ------------- | --------------------- | ------------------ |
 | AE_READABLE | Listen      | acceptTCPHandler    | connect          |
 | AE_READABLE | connected   | readQueryFromClient | read and execute |
 | AE_WRITABLE | connected   | sendReplyToClient   | Return data      |
 
-## Implementations
+### Implementations
 
 
 整个 I/O 多路复用模块抹平了不同平台上 I/O 多路复用函数的差异性，提供了相同的接口：
@@ -715,7 +715,7 @@ typedef struct aeFiredEvent {
 
 ## epoll
 
-Redis use ae wrap epoll rather than use libevent
+Redis use ae wrap [epoll](/docs/CS/OS/Linux/IO/epoll.md) rather than use libevent
 
 aeApiCreate->`epoll_create`
 
@@ -785,7 +785,7 @@ static void aeApiDelEvent(aeEventLoop *eventLoop, int fd, int delmask) {
 
 aeApiPoll ->`epoll_wait`
 
-wrap event into `eventLoop.fired` if events 
+通过 epoll_wait 从系统内核取出就绪文件事件 存储到 fired
 
 ```c
 static int aeApiPoll(aeEventLoop *eventLoop, struct timeval *tvp) {

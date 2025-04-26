@@ -11,6 +11,20 @@ Redis has **built-in replication, Lua scripting, LRU eviction, [transactions](/d
 > The Linux Foundation announced its intent to form [Valkey](/docs/CS/DB/Valkey.md), an open source alternative to the Redis in-memory, NoSQL data store. 
 
 
+
+## Features
+
+Redis 可以用来做什么
+
+- 缓存
+- 排行榜
+- 无须可靠要求的消息队列
+- 分布式锁
+- 计数器
+
+
+
+
 ## Build
 
 ##### **Mac**
@@ -147,20 +161,9 @@ Redis将启动的这些服务抽象成一个全局的结构体 [redisServer](/do
 
 同时根据实际存储的数据类型选择不同编码
 
-#### Thread Model
 
-Redis 使用单线程模型进行设计 保证了每个操作的原子性，减少了线程创建的开销 也减少了线程的上下文切换和竞争 不需要考虑各种锁问题 同时能带来更好的可维护性，方便开发和调试
 
-> It’s not very frequent that CPU becomes your bottleneck with Redis, as usually Redis is either memory or network bound.
-> For instance, using pipelining Redis running on an average Linux system can deliver even 1 million requests per second, so if your application mainly uses O(N) or O(log(N)) commands, it is hardly going to use too much CPU.
-
-如果这种吞吐量不能满足我们的需求，更推荐的做法是使用分片的方式将不同的请求交给不同的 Redis 服务器来处理，而不是在同一个 Redis 服务中引入大量的多线程操作
-
-Redis 4.0后开始使用多线程 新版的 Redis 服务在执行一些命令时就会使用主处理线程之外的其他线程，例如 UNLINK、FLUSHALL ASYNC、FLUSHDB ASYNC 等非阻塞的删除操作
-
-> However with Redis 4.0 we started to make Redis more threaded.
-> For now this is limited to deleting objects in the background, and to blocking commands implemented via Redis modules.
-> For the next releases, the plan is to make Redis more and more threaded.
+[Redis 并发模型]()
 
 
 
@@ -695,9 +698,10 @@ CLIENT LIST
 
 ## References
 
-1. [Redis 面试全攻略、面试题大集合](https://mp.weixin.qq.com/s/6NobACeeKCcUy98Ikanryg)
-2. [Redis源码分析(一) - 硬核课堂](https://hardcore.feishu.cn/docs/doccnp9v7IljXiJ5FpNT1ipLhlR#)
-3. [Distributed locks with Redis](https://redis.io/topics/distlock)
-4. [Garnet](https://github.com/microsoft/garnet)
-5. [java - Redis 6.0 新特性篇：深度剖析客户端缓存（Client side caching）原理与性能 - Redis - SegmentFault 思否](https://segmentfault.com/a/1190000040926742)
+1. [Redis中文网](https://redis.com.cn/)
+2. [Redis 面试全攻略、面试题大集合](https://mp.weixin.qq.com/s/6NobACeeKCcUy98Ikanryg)
+3. [Redis源码分析(一) - 硬核课堂](https://hardcore.feishu.cn/docs/doccnp9v7IljXiJ5FpNT1ipLhlR#)
+4. [Distributed locks with Redis](https://redis.io/topics/distlock)
+5. [Garnet](https://github.com/microsoft/garnet)
+6. [java - Redis 6.0 新特性篇：深度剖析客户端缓存（Client side caching）原理与性能 - Redis - SegmentFault 思否](https://segmentfault.com/a/1190000040926742)
 

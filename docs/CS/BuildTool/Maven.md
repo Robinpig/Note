@@ -219,6 +219,8 @@ deploy
 
 ## Mirrors
 
+> [aliyun Maven 镜像](https://developer.aliyun.com/mirror/maven)
+
 add mirror into `<mirrors></mirrors>` of `~/.m2/settings.xml`
 
 ```xml

@@ -172,6 +172,11 @@ virtual node
 
 
 
+
+- [Redis](/docs/CS/DB/Redis/Redis.md)
+
+
+
 ## Summary
 
 Hash tables can be used to implement the *insert* and *find* operations in constant average time. 

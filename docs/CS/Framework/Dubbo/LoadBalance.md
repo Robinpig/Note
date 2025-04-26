@@ -5,13 +5,6 @@
 
 
 ```java
-/**
- * LoadBalance. (SPI, Singleton, ThreadSafe)
- * <p>
- * <a href="http://en.wikipedia.org/wiki/Load_balancing_(computing)">Load-Balancing</a>
- *
- * @see org.apache.dubbo.rpc.cluster.Cluster#join(Directory)
- */
 @SPI(RandomLoadBalance.NAME)
 public interface LoadBalance {
 
@@ -556,3 +549,7 @@ public class ConsistentHashLoadBalance extends AbstractLoadBalance {
 }
 ```
 
+
+## Links
+
+- [Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md)

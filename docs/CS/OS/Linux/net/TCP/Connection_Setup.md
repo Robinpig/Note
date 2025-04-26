@@ -53,8 +53,8 @@ see system calls:
 2. [bind](/docs/CS/OS/Linux/Calls.md?id=bind)
 3. [listen](/docs/CS/OS/Linux/Calls.md?id=listen)
 4. [connect](/docs/CS/OS/Linux/Calls.md?id=connect)
-5. [send](/docs/CS/OS/Linux/TCP.md?id=send)
-6. [recv](/docs/CS/OS/Linux/TCP.md?id=recv)
+5. [send](/docs/CS/OS/Linux/net/TCP/TCP.md?id=send)
+6. [recv](/docs/CS/OS/Linux/net/TCP/TCP.md?id=recv)
 
 <!-- tabs:start -->
 
@@ -124,7 +124,7 @@ struct proto tcp_prot = {
 ### tcp_v4_connect
 
 1. set state = TCP_SYN_SENT
-2. inet_hash_connect
+2. inet_hash_connect 随机选择一个端口
 3. Build a SYN and send it off
 
 ```c
@@ -176,7 +176,7 @@ int inet_hash_connect(struct inet_timewait_death_row *death_row,
 				   __inet_check_established);
 }
 ```
-
+__inet_check_established
 ```c
 #define	EADDRNOTAVAIL	99	/* Cannot assign requested address */
 
@@ -1127,4 +1127,4 @@ static void tcp_v4_reqsk_send_ack(const struct sock *sk, struct sk_buff *skb,
 
 ## Links
 
-- [docs/CS/OS/Linux/TCP](/docs/CS/OS/Linux/TCP.md)
+- [docs/CS/OS/Linux/TCP](/docs/CS/OS/Linux/net/TCP/TCP.md)

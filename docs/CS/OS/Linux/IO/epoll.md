@@ -117,8 +117,9 @@ return fd;
 
 This structure is stored inside the "private_data" member of the file structure and represents the main data structure for the eventpoll interface.
 
-- rdlist : storage ready file descriptors
-- rbr root of rb
+- wq 存储等待进程
+- rdlist for ready file descriptors
+- rbr for monitored fd structs
 - *ovflist : This is a single linked list that chains all the "struct epitem" that happened while transferring ready events to userspace w/out holding ->lock.
 
 
@@ -300,7 +301,7 @@ static void ep_ptable_queue_proc(struct file *file, wait_queue_head_t *whead,
 }
 ```
 
-set func for each socket in order to call by [sock_def_readable](/docs/CS/OS/Linux/TCP.md?id=tcp_data_ready)
+set func for each socket in order to call by [sock_def_readable](/docs/CS/OS/Linux/net/TCP/TCP.md?id=tcp_data_ready)
 
 ```c
 // include/linux/wait.h

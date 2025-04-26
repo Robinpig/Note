@@ -431,6 +431,54 @@ need_full_resync:
 }
 ```
 
+
+时钟定期检查副本链接健康情况。
+
+This function counts the number of slaves with `lag <= min-slaves-max-lag`.
+If the option is active, the server will prevent writes if there are not enough connected slaves with the specified lag (or less).
+```c
+void refreshGoodSlavesCount(void) {
+    listIter li;
+    listNode *ln;
+    int good = 0;
+
+    if (!server.repl_min_slaves_to_write ||
+        !server.repl_min_slaves_max_lag) return;
+
+    listRewind(server.slaves,&li);
+    while((ln = listNext(&li))) {
+        client *slave = ln->value;
+        time_t lag = server.unixtime - slave->repl_ack_time;
+
+        if (slave->replstate == SLAVE_STATE_ONLINE &&
+            lag <= server.repl_min_slaves_max_lag) good++;
+    }
+    server.repl_good_slaves_count = good;
+}
+
+```
+
+超出配置范围，master 禁止写命令。
+
+```c
+int processCommand(client *c) {
+    ...
+    /* Don't accept write commands if there are not enough good slaves and
+    * user configured the min-slaves-to-write option. */
+    if (server.masterhost == NULL &&
+        server.repl_min_slaves_to_write &&
+        server.repl_min_slaves_max_lag &&
+        c->cmd->flags & CMD_WRITE &&
+        server.repl_good_slaves_count < server.repl_min_slaves_to_write)
+    {
+        flagTransaction(c);
+        addReply(c, shared.noreplicaserr);
+        return C_OK;
+    }
+    ...
+}
+```
+
 ### slave
 
 Try a partial resynchronization with the master if we are about to reconnect.
@@ -741,6 +789,95 @@ If there aren't slaves, and there is no backlog buffer to populate, we can retur
     }
 }
 ```
+
+### startBgsaveForReplication
+
+从服务刚启动或因网络原因，与主服务长时间断开，重连后发现主从数据已经严重不匹配了，主服务需要将内存数据保存成 rdb 二进制压缩文件，传送给这些重新链接的服务
+
+```c
+int startBgsaveForReplication(int mincapa, int req) {
+    int retval;
+    int socket_target = 0;
+    listIter li;
+    listNode *ln;
+
+    /* We use a socket target if slave can handle the EOF marker and we're configured to do diskless syncs.
+     * Note that in case we're creating a "filtered" RDB (functions-only, for example) we also force socket replication
+     * to avoid overwriting the snapshot RDB file with filtered data. */
+    socket_target = (server.repl_diskless_sync || req & SLAVE_REQ_RDB_MASK) && (mincapa & SLAVE_CAPA_EOF);
+    /* `SYNC` should have failed with error if we don't support socket and require a filter, assert this here */
+    serverAssert(socket_target || !(req & SLAVE_REQ_RDB_MASK));
+
+    serverLog(LL_NOTICE,"Starting BGSAVE for SYNC with target: %s",
+        socket_target ? "replicas sockets" : "disk");
+
+    rdbSaveInfo rsi, *rsiptr;
+    rsiptr = rdbPopulateSaveInfo(&rsi);
+    /* Only do rdbSave* when rsiptr is not NULL,
+     * otherwise slave will miss repl-stream-db. */
+    if (rsiptr) {
+        if (socket_target)
+            retval = rdbSaveToSlavesSockets(req,rsiptr);
+        else {
+            /* Keep the page cache since it'll get used soon */
+            retval = rdbSaveBackground(req, server.rdb_filename, rsiptr, RDBFLAGS_REPLICATION | RDBFLAGS_KEEP_CACHE);
+        }
+    } else {
+        serverLog(LL_WARNING,"BGSAVE for replication: replication information not available, can't generate the RDB file right now. Try later.");
+        retval = C_ERR;
+    }
+
+    /* If we succeeded to start a BGSAVE with disk target, let's remember
+     * this fact, so that we can later delete the file if needed. Note
+     * that we don't set the flag to 1 if the feature is disabled, otherwise
+     * it would never be cleared: the file is not deleted. This way if
+     * the user enables it later with CONFIG SET, we are fine. */
+    if (retval == C_OK && !socket_target && server.rdb_del_sync_files)
+        RDBGeneratedByReplication = 1;
+
+    /* If we failed to BGSAVE, remove the slaves waiting for a full
+     * resynchronization from the list of slaves, inform them with
+     * an error about what happened, close the connection ASAP. */
+    if (retval == C_ERR) {
+        serverLog(LL_WARNING,"BGSAVE for replication failed");
+        listRewind(server.slaves,&li);
+        while((ln = listNext(&li))) {
+            client *slave = ln->value;
+
+            if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START) {
+                slave->replstate = REPL_STATE_NONE;
+                slave->flags &= ~CLIENT_SLAVE;
+                listDelNode(server.slaves,ln);
+                addReplyError(slave,
+                    "BGSAVE failed, replication can't continue");
+                slave->flags |= CLIENT_CLOSE_AFTER_REPLY;
+            }
+        }
+        return retval;
+    }
+
+    /* If the target is socket, rdbSaveToSlavesSockets() already setup
+     * the slaves for a full resync. Otherwise for disk target do it now.*/
+    if (!socket_target) {
+        listRewind(server.slaves,&li);
+        while((ln = listNext(&li))) {
+            client *slave = ln->value;
+
+            if (slave->replstate == SLAVE_STATE_WAIT_BGSAVE_START) {
+                /* Check slave has the exact requirements */
+                if (slave->slave_req != req)
+                    continue;
+                replicationSetupSlaveForFullResync(slave, getPsyncInitialOffset());
+            }
+        }
+    }
+
+    return retval;
+}
+
+```
+
+
 
 ## Memory
 

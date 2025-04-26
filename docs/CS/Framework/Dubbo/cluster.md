@@ -4,18 +4,6 @@
 
 
 ```java
-/**
- * This is the final Invoker type referenced by the RPC proxy on Consumer side.
- * <p>
- * A ClusterInvoker holds a group of normal invokers, stored in a Directory, mapping to one Registry.
- * The ClusterInvoker implementation usually provides LB or HA policies, like FailoverClusterInvoker.
- * <p>
- * In multi-registry subscription scenario, the final ClusterInvoker will refer to several sub ClusterInvokers, with each
- * sub ClusterInvoker representing one Registry. Take ZoneAwareClusterInvoker as an example, it is specially customized for
- * multi-registry use cases: first, pick up one ClusterInvoker, then do LB inside the chose ClusterInvoker.
- *
- * @param <T>
- */
 public interface ClusterInvoker<T> extends Invoker<T> {
     URL getRegistryUrl();
 
@@ -28,26 +16,11 @@ public interface ClusterInvoker<T> extends Invoker<T> {
 ### Cluster
 
 ```java
-/**
- * Cluster. (SPI, Singleton, ThreadSafe)
- * <p>
- * <a href="http://en.wikipedia.org/wiki/Computer_cluster">Cluster</a>
- * <a href="http://en.wikipedia.org/wiki/Fault-tolerant_system">Fault-Tolerant</a>
- *
- */
 @SPI(Cluster.DEFAULT)
 public interface Cluster {
 
     String DEFAULT = "failover";
 
-    /**
-     * Merge the directory invokers to a virtual invoker.
-     *
-     * @param <T>
-     * @param directory
-     * @return cluster invoker
-     * @throws RpcException
-     */
     @Adaptive
     <T> Invoker<T> join(Directory<T> directory) throws RpcException;
 
@@ -64,27 +37,11 @@ public interface Cluster {
 }
 ```
 
-
+LoadBalance
 
 ```java
-/**
- * LoadBalance. (SPI, Singleton, ThreadSafe)
- * <p>
- * <a href="http://en.wikipedia.org/wiki/Load_balancing_(computing)">Load-Balancing</a>
- *
- * @see org.apache.dubbo.rpc.cluster.Cluster#join(Directory)
- */
 @SPI(RandomLoadBalance.NAME)
 public interface LoadBalance {
-
-    /**
-     * select one invoker in list.
-     *
-     * @param invokers   invokers.
-     * @param url        refer url
-     * @param invocation invocation.
-     * @return selected invoker.
-     */
     @Adaptive("loadbalance")
     <T> Invoker<T> select(List<Invoker<T>> invokers, URL url, Invocation invocation) throws RpcException;
 
@@ -96,44 +53,12 @@ public interface LoadBalance {
 ### Configurator
 
 ```java
-/**
- * Configurator. (SPI, Prototype, ThreadSafe)
- *
- */
 public interface Configurator extends Comparable<Configurator> {
 
-    /**
-     * Get the configurator url.
-     *
-     * @return configurator url.
-     */
     URL getUrl();
 
-    /**
-     * Configure the provider url.
-     *
-     * @param url - old provider url.
-     * @return new provider url.
-     */
     URL configure(URL url);
 
-
-    /**
-     * Convert override urls to map for use when re-refer. Send all rules every time, the urls will be reassembled and
-     * calculated
-     *
-     * URL contract:
-     * <ol>
-     * <li>override://0.0.0.0/...( or override://ip:port...?anyhost=true)&para1=value1... means global rules
-     * (all of the providers take effect)</li>
-     * <li>override://ip:port...?anyhost=false Special rules (only for a certain provider)</li>
-     * <li>override:// rule is not supported... ,needs to be calculated by registry itself</li>
-     * <li>override://0.0.0.0/ without parameters means clearing the override</li>
-     * </ol>
-     *
-     * @param urls URL list to convert
-     * @return converted configurator list
-     */
     static Optional<List<Configurator>> toConfigurators(List<URL> urls) {
         if (CollectionUtils.isEmpty(urls)) {
             return Optional.empty();
@@ -187,19 +112,9 @@ public interface Configurator extends Comparable<Configurator> {
 
 
 ```java
-/**
- * ConfiguratorFactory. (SPI, Singleton, ThreadSafe)
- *
- */
 @SPI
 public interface ConfiguratorFactory {
 
-    /**
-     * get the configurator instance.
-     *
-     * @param url - configurator url.
-     * @return configurator instance.
-     */
     @Adaptive("protocol")
     Configurator getConfigurator(URL url);
 
@@ -209,70 +124,22 @@ public interface ConfiguratorFactory {
 ### Router
 
 ```java
-/**
- * Router. (SPI, Prototype, ThreadSafe)
- * <p>
- * <a href="http://en.wikipedia.org/wiki/Routing">Routing</a>
- *
- * @see org.apache.dubbo.rpc.cluster.Cluster#join(Directory)
- * @see org.apache.dubbo.rpc.cluster.Directory#list(Invocation)
- */
 public interface Router extends Comparable<Router> {
 
     int DEFAULT_PRIORITY = Integer.MAX_VALUE;
 
-    /**
-     * Get the router url.
-     *
-     * @return url
-     */
     URL getUrl();
 
-    /**
-     * Filter invokers with current routing rule and only return the invokers that comply with the rule.
-     *
-     * @param invokers   invoker list
-     * @param url        refer url
-     * @param invocation invocation
-     * @return routed invokers
-     * @throws RpcException
-     */
     <T> List<Invoker<T>> route(List<Invoker<T>> invokers, URL url, Invocation invocation) throws RpcException;
 
-
-    /**
-     * Notify the router the invoker list. Invoker list may change from time to time. This method gives the router a
-     * chance to prepare before {@link Router#route(List, URL, Invocation)} gets called.
-     *
-     * @param invokers invoker list
-     * @param <T>      invoker's type
-     */
     default <T> void notify(List<Invoker<T>> invokers) {
 
     }
 
-    /**
-     * To decide whether this router need to execute every time an RPC comes or should only execute when addresses or
-     * rule change.
-     *
-     * @return true if the router need to execute every time.
-     */
     boolean isRuntime();
 
-    /**
-     * To decide whether this router should take effect when none of the invoker can match the router rule, which
-     * means the {@link #route(List, URL, Invocation)} would be empty. Most of time, most router implementation would
-     * default this value to false.
-     *
-     * @return true to execute if none of invokers matches the current router
-     */
     boolean isForce();
 
-    /**
-     * Router's priority, used to sort routers.
-     *
-     * @return router's priority
-     */
     int getPriority();
 
     @Override
@@ -288,28 +155,9 @@ public interface Router extends Comparable<Router> {
 
 
 ```java
-/**
- * RouterFactory. (SPI, Singleton, ThreadSafe)
- * <p>
- * <a href="http://en.wikipedia.org/wiki/Routing">Routing</a>
- *
- * @see org.apache.dubbo.rpc.cluster.Cluster#join(Directory)
- * @see org.apache.dubbo.rpc.cluster.Directory#list(org.apache.dubbo.rpc.Invocation)
- * <p>
- * Note Router has a different behaviour since 2.7.0, for each type of Router, there will only has one Router instance
- * for each service. See {@link CacheableRouterFactory} and {@link RouterChain} for how to extend a new Router or how
- * the Router instances are loaded.
- */
 @SPI
 public interface RouterFactory {
 
-    /**
-     * Create router.
-     * Since 2.7.0, most of the time, we will not use @Adaptive feature, so it's kept only for compatibility.
-     *
-     * @param url url
-     * @return router instance
-     */
     @Adaptive("protocol")
     Router getRouter(URL url);
 }
@@ -318,10 +166,6 @@ public interface RouterFactory {
 
 
 ```java
-/**
- * If you want to provide a router implementation based on design of v2.7.0, please extend from this abstract class.
- * For 2.6.x style router, please implement and use RouterFactory directly.
- */
 public abstract class CacheableRouterFactory implements RouterFactory {
     private ConcurrentMap<String, Router> routerMap = new ConcurrentHashMap<>();
 
@@ -381,14 +225,6 @@ public class RouterChain<T> {
         this.sort();
     }
 
-    /**
-     * If we use route:// protocol in version before 2.7.0, each URL will generate a Router instance, so we should
-     * keep the routers up to date, that is, each time router URLs changes, we should update the routers list, only
-     * keep the builtinRouters which are available all the time and the latest notified routers which are generated
-     * from URLs.
-     *
-     * @param routers routers from 'router://' rules in 2.6.x or before.
-     */
     public void addRouters(List<Router> routers) {
         List<Router> newRouters = new ArrayList<>();
         newRouters.addAll(builtinRouters);
@@ -401,12 +237,6 @@ public class RouterChain<T> {
         Collections.sort(routers);
     }
 
-    /**
-     *
-     * @param url
-     * @param invocation
-     * @return
-     */
     public List<Invoker<T>> route(URL url, Invocation invocation) {
         List<Invoker<T>> finalInvokers = invokers;
         for (Router router : routers) {
@@ -433,27 +263,10 @@ public class RouterChain<T> {
 
 
 ```java
-/**
- * Directory. (SPI, Prototype, ThreadSafe)
- * <p>
- * <a href="http://en.wikipedia.org/wiki/Directory_service">Directory Service</a>
- *
- * @see org.apache.dubbo.rpc.cluster.Cluster#join(Directory)
- */
 public interface Directory<T> extends Node {
 
-    /**
-     * get service type.
-     *
-     * @return service type.
-     */
     Class<T> getInterface();
 
-    /**
-     * list invokers.
-     *
-     * @return invokers
-     */
     List<Invoker<T>> list(Invocation invocation) throws RpcException;
 
     List<Invoker<T>> getAllInvokers();
@@ -476,24 +289,9 @@ public interface Directory<T> extends Node {
 [Load Balance](/docs/CS/Framework/Dubbo/LoadBalance.md)
 
 ```java
-/**
- * LoadBalance. (SPI, Singleton, ThreadSafe)
- * <p>
- * <a href="http://en.wikipedia.org/wiki/Load_balancing_(computing)">Load-Balancing</a>
- *
- * @see org.apache.dubbo.rpc.cluster.Cluster#join(Directory)
- */
 @SPI(RandomLoadBalance.NAME)
 public interface LoadBalance {
 
-    /**
-     * select one invoker in list.
-     *
-     * @param invokers   invokers.
-     * @param url        refer url
-     * @param invocation invocation.
-     * @return selected invoker.
-     */
     @Adaptive("loadbalance")
     <T> Invoker<T> select(List<Invoker<T>> invokers, URL url, Invocation invocation) throws RpcException;
 
@@ -501,4 +299,6 @@ public interface LoadBalance {
 ```
 
 
+## Links
 
+- [Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md)

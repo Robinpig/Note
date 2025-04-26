@@ -67,7 +67,7 @@ Since the minimum window is >=4 packets, the lower bound isn't an issue. The upp
 ## Links
 
 - [Computer Network TCP](/docs/CS/CN/TCP/TCP.md)
-- [Linux TCP](/docs/CS/OS/Linux/TCP.md)
+- [Linux TCP](/docs/CS/OS/Linux/net/TCP/TCP.md)
 
 
 ## References
