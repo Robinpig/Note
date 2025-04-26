@@ -1,6 +1,7 @@
 ## Introduction
 
-对于 Redis 键值数据库来说，Hash 表既是键值对中的一种值类型，同时，Redis 也使用一个全局 Hash 表来保存所有的键值对，从而既满足应用存取 Hash 结构数据需求，又能提供快速查询功能
+对于 Redis 键值数据库来说，Hash 表既是键值对中的一种值类型，
+同时，Redis 也使用一个全局 Hash 表来保存所有的键值对，从而既满足应用存取 Hash 结构数据需求，又能提供快速查询功能
 
 [redisDb](/docs/CS/DB/Redis/redisDb.md) also a hashtable
 

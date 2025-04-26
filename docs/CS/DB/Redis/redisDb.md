@@ -11,6 +11,7 @@ struct redisServer {
 }  
 ```
 
+
 在initServer时创建redisDb数据 根据redis.conf文件的配置 server.dbnum默认是16
 
 ```c
@@ -53,6 +54,7 @@ typedef struct redisDb {
 } redisDb;
 ```
 
+dict 和 expires 是 两个最重要的属性 底层数据结构是 dict
 将expires和dict分开存储因为不是每个key都有过期时间 分开存储能节省空间 在key过期时便于查询
 
 blocking_keys 和 ready_keys 用于BLPOP命令的
@@ -79,7 +81,7 @@ struct dict {
 };
 ```
 
-ht_table[2] 是一个大小为2的散列表数组
+ht_table[2] 是一个大小为2的[hash表](/docs/CS/DB/Redis/struct/hash.md)数组
 一开始只使用 ht_table[0] 读写数据 ht_table[1] 指向NULL, 当rehash时才会创建更大的散列表 ht_table[1], 
 rehash迁移完成后 交换 ht_table[0]  和 ht_table[1] 的指针 ht_table[1] 重新指向 NULL
 

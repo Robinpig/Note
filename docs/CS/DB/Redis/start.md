@@ -1605,7 +1605,8 @@ int postponeClientRead(client *c) {
 
 #### handleClientsWithPendingReadsUsingThreads
 
-主线程在执行beforeSleep函数时会调用 handleClientsWithPendingReadsUsingThreads 将clients通过RoundRobin方式分配给线程绑定队列 之后主线程也会执行一部分的命令读取与解析 而命令的执行需要等待所有I/O线程完成解析后才开始
+主线程在执行 [beforeSleep](/docs/CS/DB/Redis/ae.md?id=beforeSleep) 函数时会调用 handleClientsWithPendingReadsUsingThreads 将clients通过RoundRobin方式分配给线程绑定队列 
+之后主线程也会执行一部分的命令读取与解析 而命令的执行需要等待所有I/O线程完成解析后才开始
 
 如果未开启I/O多线程模型 则需要主线程独立完成流程
 
@@ -1731,7 +1732,8 @@ int processPendingCommandAndInputBuffer(client *c) {
 #### processInputBuffer
 
 This function is called every time, in the client structure 'c',
-there is more query buffer to process, because we read more data from the socket or because a client was blocked and later reactivated, so there could be pending query buffer, already representing a full command, to process.
+there is more query buffer to process, because we read more data from the socket or because a client was blocked and later reactivated,
+so there could be pending query buffer, already representing a full command, to process.
 
 ```c
 void processInputBuffer(client *c) {
@@ -1832,7 +1834,7 @@ int processCommandAndResetClient(client *c) {
 
 #### processCommand
 
-processCommand 函数从 server.commands 这个hash 表中查找命令对应的redisCommand实例
+processCommand 函数从 server.commands 这个[hash](/docs/CS/DB/Redis/struct/hash.md) 中查找命令对应的redisCommand实例
 
 如果通过就会进行如下处理
 
@@ -1868,7 +1870,7 @@ int getGenericCommand(client *c) {
     return C_OK;
 }
 ```
-返回值是通过addReply 返回
+返回值是通过addReply 写入到对应client的 buffer
 
 ```c
 void addReplyBulk(client *c, robj *obj) {
@@ -1951,9 +1953,9 @@ int prepareClientToWrite(client *c) {
 
 #### handleClientsWithPendingWritesUsingThreads
 
-下一次时间循环时 beforeSleep 函数会调用 handleClientsWithPendingWrites 把 clients_pending_write 队列的数据分配给I/O线程和main线程
+下一次时间循环时 [beforeSleep](/docs/CS/DB/Redis/ae.md?id=beforeSleep) 函数会调用 handleClientsWithPendingWrites 把 clients_pending_write 队列的数据分配给I/O线程和main线程
 
-分配完成后由负责的线程调用writeToClient函数把命令执行结果发送回客户端
+分配完成后由负责的线程调用 writeToClient 函数把命令执行结果发送回客户端
 
 ```c
 int handleClientsWithPendingWritesUsingThreads(void) {

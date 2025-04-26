@@ -8,9 +8,7 @@ Redis has **built-in replication, Lua scripting, LRU eviction, [transactions](/d
 
 > [!TIP]
 >
-> The Linux Foundation announced its intent to form [Valkey](/docs/CS/DB/Valkey.md), an open source alternative to the Redis in-memory, NoSQL data store. 
-
-
+> The Linux Foundation announced its intent to form [Valkey](/docs/CS/DB/Valkey.md), an open source alternative to the Redis in-memory, NoSQL data store.
 
 ## Features
 
@@ -22,9 +20,6 @@ Redis 可以用来做什么
 - 分布式锁
 - 计数器
 
-
-
-
 ## Build
 
 ##### **Mac**
@@ -32,16 +27,16 @@ Redis 可以用来做什么
 ```shell
 make MALLOC=jemalloc CFLAGS="-g -O0" 
 ```
+
 Some build issues:
 
-| Issue                                               | Fix                                                     | References                                                   |
-| --------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------ |
-| error: variable has incomplete type 'struct stat64' | add `#define MAC_OS_X_VERSION_10_6` into `src/config.h` | [Build Issue in arm](https://github.com/redis/redis/issues/12585) |      
 
-
-
+| Issue                                               | Fix                                                    | References                                                        |
+| --------------------------------------------------- | ------------------------------------------------------ | ----------------------------------------------------------------- |
+| error: variable has incomplete type 'struct stat64' | add`#define MAC_OS_X_VERSION_10_6` into `src/config.h` | [Build Issue in arm](https://github.com/redis/redis/issues/12585) |
 
 Redis源码目录:
+
 <table class="tg"><thead>
   <tr>
     <th class="tg-0lax">目录</th>
@@ -68,7 +63,7 @@ Redis源码目录:
   </tr>
   <tr>
     <td class="tg-0lax" >hdr_histogram</td>
-    <td class="tg-0lax"></td>
+    <td class="tg-0lax">生成每个命令的延迟跟踪直方图</td>
   </tr>
   <tr>
     <td class="tg-0lax" rowspan="2">src</td>
@@ -92,24 +87,18 @@ Redis源码目录:
 </tbody>
 </table>
 
-
-Redis 实现的测试代码可以分成四部分，分别是单元测试（对应 unit 子目录），Redis Cluster 功能测试（对应 cluster 子目录）、哨兵功能测试（对应 sentinel 子目录）、主从复制功能测试（对应 integration 子目录）。
+Redis 实现的测试代码可以分成四部分，分别是单元测试（对应 unit 子目录），Redis Cluster 功能测试（对应 cluster 子目录）、哨兵功能测试（对应 sentinel 子目录）、主从复制功能测试（对应 integration 子目录）
 这些子目录中的测试代码使用了 Tcl 语言（通用的脚本语言）进行编写，主要目的就是方便进行测试
 除了有针对特定功能模块的测试代码外，还有一些代码是用来支撑测试功能的，这些代码在 assets、helpers、modules、support 四个目录中
 
-
 除了 deps、src、tests、utils 四个子目录以外，Redis 源码总目录下其实还包含了两个重要的配置文件，一个是 Redis 实例的配置文件 redis.conf，另一个是哨兵的配置文件 sentinel.conf
 
-
-客户端在 Redis 的运行过程中也会被广泛使用，比如实例返回读取的数据、主从复制时在主从库间传输数据、Redis Cluster 的切片实例通信等，都会用到客户端。Redis 将客户端的创建、消息回复等功能，实现在了 networking.c 文件中
-
-
-
+客户端在 Redis 的运行过程中也会被广泛使用，比如实例返回读取的数据、主从复制时在主从库间传输数据、Redis Cluster 的切片实例通信等，都会用到客户端
+Redis 将客户端的创建、消息回复等功能，实现在了 networking.c 文件中
 
 ## Architecture
 
 Redis 整体架构如下图:
-
 
 <div style="text-align: center;">
 
@@ -120,35 +109,30 @@ Redis 整体架构如下图:
 <p style="text-align: center;">
 Fig.1. Architecture
 </p>
+
 主要模块:
 
 - 应用层: client
-- 网络层: 基于I/O多路复用封装了一个高性能ae库
-- 命令执行层
+- 网络层: 基于I/O多路复用封装了一个简单的基于事件驱动的网络通信库 [ae](/docs/CS/DB/Redis/ae.md)
+  它封装了底层的 select、epoll、avport 以及 kqueue 这些I/O多路复用函数，为上层提供了相同的接口
+- 命令执行层 负责执行客户端的各种命令
 - 内存层: 提供各种数据结构保存数据
-- 持久化层: 提供RDB 和 AOF 持久化策略
-- 高可用层: 提供Replication、Sentinel 和 Cluster实现高可用
-- 统计和监控
+- 持久化层: 提供 RDB 和 AOF 持久化策略
+- 高可用层: 提供 Replication 、Sentinel 和 Cluster 实现高可用
+- 统计和监控: 提供一些监控工具和性能分析工具, 例如内存监控、基准测试、内存碎片、Bigkey统计、慢指令查询
 
-
-
-Redis将启动的这些服务抽象成一个全局的结构体 [redisServer](/docs/CS/DB/Redis/server.md?id=server) 
+Redis将启动的这些服务抽象成一个全局的结构体 [redisServer](/docs/CS/DB/Redis/server.md?id=server)
 它包含了存储kv的[redisDb](/docs/CS/DB/Redis/redisDb.md)、命令列表、网络监听、客户端缓存等信息
 
-为了实现网络通信功能 Redis封装了一个简单的基于事件驱动的网络通信库 [ae](/docs/CS/DB/Redis/ae.md)  它封装了底层的 select、epoll、avport 以及 kqueue 这些I/O多路复用函数，为上层提供了相同的接口
+
 
 [Redis启动流程](/docs/CS/DB/Redis/start.md)
 
 [Redis命令执行流程](/docs/CS/DB/Redis/start.md?id=do)
 
-
-
 图源 [redis 异步网络通信流程 - 单线程](https://www.processon.com/view/5eab75227d9c0869dab46472)
 
 ![](https://wenfh2020.com/images/2020/2020-05-04-01-19-51.png)
-
-
-
 
 ### Why Redis so fast
 
@@ -161,34 +145,18 @@ Redis将启动的这些服务抽象成一个全局的结构体 [redisServer](/do
 
 同时根据实际存储的数据类型选择不同编码
 
-
-
-[Redis 并发模型]()
-
-
-
-
-
-
-
-
+[Redis 并发模型](/docs/CS/DB/Redis/Concurrency.md)
 
 主从复制 哨兵集群 Cluster分片集群
-
-
 
 负载均衡
 
 - [db](/docs/CS/DB/Redis/redisDb.md)
 
-
-
 ## Persistence
 
 [Persistence](/docs/CS/DB/Redis/persist.md) refers to the writing of data to durable storage, such as a solid-state disk (SSD).
 The most important thing to understand is the different trade-offs between the RDB and AOF persistence.
-
-
 
 ## Event
 
@@ -207,7 +175,7 @@ ServerCron:
 
 ### Slowlog
 
-The Redis Slow Log is a system to log queries that exceeded a specified execution time. 
+The Redis Slow Log is a system to log queries that exceeded a specified execution time.
 The execution time does not include the I/O operations like talking with the client, sending the reply and so forth, but just the time needed to actually execute the command
 (this is the only stage of command execution where the thread is blocked and can not serve other requests in the meantime).
 
@@ -243,46 +211,38 @@ latency monitor
 
 ## Cluster
 
-
 虽然 Redis 一般是作为内存数据库来使用的，但是它也提供了可靠性保证，这主要体现在 Redis 可以对数据做持久化保存，并且它还实现了主从复制机制，从而可以提供故障恢复的功能。
 这部分的代码实现比较集中，主要包括以下两个部分。
+
 - 数据持久化实现
-Redis 的数据持久化实现有两种方式：内存快照 RDB 和 AOF 日志，分别实现在了 rdb.h/rdb.c 和 aof.c 中。
-注意，在使用 RDB 或 AOF 对数据库进行恢复时，RDB 和 AOF 文件可能会因为 Redis 实例所在服务器宕机，而未能完整保存，进而会影响到数据库恢复。因此针对这一问题，Redis 还实现了对这两类文件的检查功能，对应的代码文件分别是 redis-check-rdb.c 和 redis-check-aof.c。
+  Redis 的数据持久化实现有两种方式：内存快照 RDB 和 AOF 日志，分别实现在了 rdb.h/rdb.c 和 aof.c 中。
+  注意，在使用 RDB 或 AOF 对数据库进行恢复时，RDB 和 AOF 文件可能会因为 Redis 实例所在服务器宕机，而未能完整保存，进而会影响到数据库恢复。因此针对这一问题，Redis 还实现了对这两类文件的检查功能，对应的代码文件分别是 redis-check-rdb.c 和 redis-check-aof.c。
 - 主从复制功能实现
-Redis 把主从复制功能实现在了 replication.c 文件中。另外你还需要知道的是，Redis 的主从集群在进行恢复时，主要是依赖于哨兵机制，而这部分功能则直接实现在了 sentinel.c 文件中。
-其次，与 Redis 实现高可靠性保证的功能类似，Redis 高可扩展性保证的功能，是通过 Redis Cluster 来实现的，这部分代码也非常集中，就是在 cluster.h/cluster.c 代码文件中。所以这样，我们在学习 Redis Cluster 的设计与实现时，就会非常方便，不用在不同的文件之间来回跳转了
+  Redis 把主从复制功能实现在了 replication.c 文件中。另外你还需要知道的是，Redis 的主从集群在进行恢复时，主要是依赖于哨兵机制，而这部分功能则直接实现在了 sentinel.c 文件中。
+  其次，与 Redis 实现高可靠性保证的功能类似，Redis 高可扩展性保证的功能，是通过 Redis Cluster 来实现的，这部分代码也非常集中，就是在 cluster.h/cluster.c 代码文件中。
+  所以这样，我们在学习 Redis Cluster 的设计与实现时，就会非常方便，不用在不同的文件之间来回跳转了
 
 单机Redis瓶颈
+
 - QPS
 - 容量
 - 单点故障
 
-
-
 ### Master-Slave
 
 主从复制
+
 - Redis读大于写 类似MySQL 副本提供读
 
-
-
 主从一致性
-
-
 
 ```
 (error) READONLY You can't write against a read only replica.
 ```
 
-
 disadvantage:
 
 load balance and recovery
-
-
-
-
 
 ```log
 # replica log
@@ -317,8 +277,6 @@ Streamed RDB transfer with replica 127.0.0.1:7001 succeeded (socket). Waiting fo
 Synchronization with replica 127.0.0.1:7001 succeeded
 ```
 
-
-
 ### Redis Sentinel
 
 monitor
@@ -327,13 +285,12 @@ monitor
 - notify slaves to replicaof and notify clients to create connections with new master
 
 ### Redis Cluster
+
 分片算法
 
 range 连续数据 业务相关
 
 hash
-
-
 
 [Distributed Lock](/docs/CS/DB/Redis/Lock.md)
 
@@ -370,7 +327,9 @@ network soft interrupt
 
 ## memory
 
- Redis 是内存数据库，所以，高效使用内存对 Redis 的实现来说非常重要。而实际上，Redis 主要是通过两大方面的技术来提升内存使用效率的，分别是[数据结构的优化设计与使用](/)，以及[内存友好的数据使用方式]()
+Redis 是内存数据库，所以，高效使用内存对 Redis 的实现来说非常重要
+而实际上，Redis 主要是通过两大方面的技术来提升内存使用效率的，
+分别是[数据结构的优化设计与使用](/docs/CS/DB/Redis/struct/struct.md)，以及[内存友好的数据使用方式](/docs/CS/DB/Redis/memory.md)
 
 Used_memor_rss
 
@@ -444,17 +403,13 @@ fork子进程的速度变慢
 - redis-check-aof
 - redis-benchmark
 
-
 ## 缓存一致性
 
 本地缓存和Redis缓存一致性
 
 常见是Redis和本地缓存都监听canal事件 同步数据库变更
 
-
-
 ### Client side caching
-
 
 Redis6 客户端缓存机制 监听key
 
@@ -463,58 +418,45 @@ Redis6 客户端缓存机制 监听key
 1. 数据以非常小的延迟提供。
 2. 数据库系统接收的查询较少，因此可以使用较少数量的节点为同一数据集提供服务。
 
-
-
-
-
 The tracking table is constituted by a radix tree of keys, each pointing to a radix tree of client IDs, used to track the clients that may have certain keys in their local, client side, cache.
 
- When a client enables tracking with "CLIENT TRACKING on", each key served to the client is remembered in the table mapping the keys to the client IDs.
+When a client enables tracking with "CLIENT TRACKING on", each key served to the client is remembered in the table mapping the keys to the client IDs.
 
- Later, when a key is modified, all the clients that may have local copy of such key will receive an invalidation message.
+Later, when a key is modified, all the clients that may have local copy of such key will receive an invalidation message.
 
- Clients will normally take frequently requested objects in memory, removing them when invalidation messages are received. 
+Clients will normally take frequently requested objects in memory, removing them when invalidation messages are received.
 
 ```redis
 CLIENT TRACKING ON|OFF [REDIRECT client-id] [PREFIX prefix] [BCAST] [OPTIN] [OPTOUT] [NOLOOP]
 ```
-
-
 
 Redis 客户端缓存支持称为*跟踪*，有两种模式：
 
 - 在默认模式下，服务器会记住给定客户端访问的密钥，并在修改相同的密钥时发送失效消息。这会消耗服务器端的内存，但仅针对客户端内存中可能具有的密钥集发送失效消息。 服务端在给客户端发送过一次 invalidate 消息后，如果 key 再被修改，此时，服务端就不会再次给客户端发送 invalidate 消息。
 
   **只有下次客户端再次执行只读命令被 track，才会进行下一次消息通知** 。
-
 - 在*广播*模式下，服务器不会尝试记住给定客户端访问了哪些密钥，因此此模式在服务器端根本不消耗内存。服务端会给客户端广播所有 key 的失效情况，如果 key 被频繁修改，服务端会发送大量的失效广播消息，这就会消耗大量的网络带宽资源。
 
   所以，在实际应用中，我们设置让客户端注册只跟踪指定前缀的 key，当注册跟踪的 key 前缀匹配被修改，服务端就会把失效消息广播给所有关注这个 key前缀的客户端
 
-
-
 默认模式
 
- Redis 服务端使用 TrackingTable 存储普通模式的客户端数据，它的数据类型是基数树(radix tree)
+Redis 服务端使用 TrackingTable 存储普通模式的客户端数据，它的数据类型是基数树(radix tree)
 
-Redis 用它存储**键的指针**和**客户端 ID** 的映射关系。因为键对象的指针就是内存地址，也就是长整型数据。客户端缓存的相关操作就是对该数据的增删改查： 
+Redis 用它存储**键的指针**和**客户端 ID** 的映射关系。因为键对象的指针就是内存地址，也就是长整型数据。客户端缓存的相关操作就是对该数据的增删改查：
 
-- 当开启 track 功能的客户端获取某一个键值时，Redis 会调用 `enableTracking` 方法使用基数树记录下该 key 和 clientId 的映射关系。 
+- 当开启 track 功能的客户端获取某一个键值时，Redis 会调用 `enableTracking` 方法使用基数树记录下该 key 和 clientId 的映射关系。
 - 当某一个 key 被修改或删除时，Redis 会调用 `trackingInvalidateKey` 方法根据 key 从 TrackingTable 中查找所有对应的客户端ID，然后调用 `sendTrackingMessage` 方法发送失效消息给这些客户端(会检查 CLIENT_TRACKING 相关标志位是否开启和是否开启了 NOLOOP)。
-- 发送完失效消息后，根据**键的指针值**将映射关系从 TrackingTable中删除。 
+- 发送完失效消息后，根据**键的指针值**将映射关系从 TrackingTable中删除。
 - 客户端关闭 track 功能后，因为删除需要进行大量操作，所以 Redis 使用懒删除方式，只是将该客户端的 CLIENT_TRACKING 相关标志位删除掉
-
-
 
 *广播*模式
 
 广播模式与普通模式类似，Redis 同样使用 `PrefixTable` 存储广播模式下的客户端数据，它存储**前缀字符串指针和(需要通知的key和客户端ID)**的映射关系。它和广播模式最大的区别就是真正发送失效消息的时机不同：
 
-- 当客户端开启广播模式时，会在 `PrefixTable`的前缀对应的客户端列表中加入该客户端ID。 
--  当某一个 key 被修改或删除时，Redis 会调用 `trackingInvalidateKey` 方法，`trackingInvalidateKey` 方法中如果发现 `PrefixTable` 不为空，则调用 `trackingRememberKeyToBroadcast` 依次遍历所有前缀，如果key 符合前缀规则，则记录到 `PrefixTable` 对应的位置。 
--  在 Redis 的事件处理周期函数 beforeSleep 函数里会调用 `trackingBroadcastInvalidationMessages` 函数来真正发送消息。
-
-
+- 当客户端开启广播模式时，会在 `PrefixTable`的前缀对应的客户端列表中加入该客户端ID。
+- 当某一个 key 被修改或删除时，Redis 会调用 `trackingInvalidateKey` 方法，`trackingInvalidateKey` 方法中如果发现 `PrefixTable` 不为空，则调用 `trackingRememberKeyToBroadcast` 依次遍历所有前缀，如果key 符合前缀规则，则记录到 `PrefixTable` 对应的位置。
+- 在 Redis 的事件处理周期函数 beforeSleep 函数里会调用 `trackingBroadcastInvalidationMessages` 函数来真正发送消息。
 
 ```c
 
@@ -578,8 +520,6 @@ void trackingInvalidateKey(client *c, robj *keyobj, int bcast) {
 }
 ```
 
-
-
 转发模式
 
 对于使用 RESP 2 协议的客户端来说，实现客户端缓存则需要另一种模式：重定向模式（redirect）
@@ -590,10 +530,6 @@ RESP 2 无法直接 PUSH 失效消息，所以 需要另一个支持 RESP 3 协�
 
 同时，再使用另外一个客户端，执行 CLIENT TRACKING 命令，设置服务端将失效消息转发给使用 RESP 2 协议的客户端。
 
-
-
-
-
 客户端可能希望运行有关次数的内部统计信息 给定的缓存密钥实际上是在请求中提供的，以便在 未来什么好缓存。通常：
 
 - 我们不希望缓存许多不断更改的键。
@@ -602,7 +538,7 @@ RESP 2 无法直接 PUSH 失效消息，所以 需要另一个支持 RESP 3 协�
 
 ## Tuning
 
-key 的命名规范，只有命名规范，才能提供可读性强、可维护性好的 key，方便日常管理 
+key 的命名规范，只有命名规范，才能提供可读性强、可维护性好的 key，方便日常管理
 
 把业务名作为前缀，然后用冒号或者下划线分隔，再加上具体的业务数据名 为避免key过长(key也是SDS 长度增加时元数据也会占用更多空间) 可以对前缀进行缩写
 
@@ -617,7 +553,7 @@ bigkey 通常有两种情况。
 
 对于JIT技术在存储引擎中而言，“EVAL is evil”，尽量避免使用lua耗费内存和计算资源
 
-**不同的序列化方法，在序列化速度和数据序列化后的占用内存空间这两个方面，效果是不一样的**。比如说，protostuff 和 kryo 这两种序列化方法，就要比 Java 内置的序列化方法（java-build-in-serializer）效率更高 
+**不同的序列化方法，在序列化速度和数据序列化后的占用内存空间这两个方面，效果是不一样的**。比如说，protostuff 和 kryo 这两种序列化方法，就要比 Java 内置的序列化方法（java-build-in-serializer）效率更高
 
 XML 和 JSON 格式的数据占用的内存空间比较大。为了避免数据占用过大的内存空间，建议使用压缩工具（例如 snappy 或 gzip），把数据压缩后再写入 Redis
 
@@ -627,15 +563,9 @@ XML 和 JSON 格式的数据占用的内存空间比较大。为了避免数据�
 
 第二种情况是，如果集合类型数据采用 ziplist 编码，而集合元素是整数，这个时候，也不能使用共享池。因为 ziplist 使用了紧凑型内存结构，判断整数对象的共享情况效率低。
 
-
-
 **同的业务数据放到不同的 Redis 实例中**。这样一来，既可以避免单实例的内存使用量过大，也可以避免不同业务的操作相互干扰
 
 Redis 单实例的内存大小都不要太大，根据我自己的经验值，建议你设置在 2~6GB 。这样一来，无论是 RDB 快照，还是主从集群进行数据同步，都能很快完成，不会阻塞正常请求的处理。
-
-
-
-
 
 Pubsub的典型场景
 Pubsub适合悲观锁和简单信号，不适合稳定的更新，因为可能会丢消息。在1对N的消息转发通道中，服务瓶颈。还有模
@@ -644,7 +574,6 @@ Pubsub适合悲观锁和简单信号，不适合稳定的更新，因为可能�
 Transaction
 Transaction是一种伪事物，没有回滚条件；集群版需要所有key使用hashtag保证，代码比较复杂，hashtag也可能导
 致算力和存储倾斜；Lua中封装了multi-exec，但更耗费CPU，比如编译、加载时，经常出现问题。
-
 
 Pipeline
 Pipeline用的比较多，如下面的示意图，实际上是把多个请求封装在一个请求中，合并在一个请求里发送，服务端一次
@@ -661,6 +590,7 @@ slowlog-log-slower-than=10000
 # 128
 slowlog-max-len=128
 ```
+
 慢查询日志删除使用FIFO
 
 ```c
@@ -678,7 +608,6 @@ void slowlogPushEntryIfNeeded(client *c, robj **argv, int argc, long long durati
 
 slowlog get
 
-
 ### commands
 
 常用运维命令 用于线上事故保留现场
@@ -690,7 +619,6 @@ MEMORY USAGE
 
 CLIENT LIST
 ```
-
 
 ## Links
 
@@ -704,4 +632,3 @@ CLIENT LIST
 4. [Distributed locks with Redis](https://redis.io/topics/distlock)
 5. [Garnet](https://github.com/microsoft/garnet)
 6. [java - Redis 6.0 新特性篇：深度剖析客户端缓存（Client side caching）原理与性能 - Redis - SegmentFault 思否](https://segmentfault.com/a/1190000040926742)
-
