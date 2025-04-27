@@ -150,6 +150,39 @@ pmset -g custom
 
 
 
+
+#### 睡眠立刻唤醒
+
+
+
+`log show --last 3m | grep "Wake reason"`
+
+```shell
+2025-04-27 09:03:22.819794+0800 0x77       Default     0x0                  0      0    kernel: (AppleACPIPlatform) AppleACPIPlatformPower Wake reason: XDCI
+```
+
+
+
+
+
+`pmset -g log | grep -e "Sleep.*due to" -e "Wake.*due to" -e "DarkWake.*due to"`
+
+```shell
+2025-04-27 08:49:22 +0800 Sleep               	Entering Sleep state due to 'Software Sleep pid=172': Using AC (Charge:0%)
+2025-04-27 08:57:42 +0800 Sleep               	Entering Sleep state due to '': Using AC (Charge:0%)
+2025-04-27 09:03:11 +0800 Sleep               	Entering Sleep state due to 'Software Sleep pid=173': Using AC (Charge:0%) 19 secs
+2025-04-27 09:03:30 +0800 Wake                	Wake from Normal Sleep [CDNVA] : due to XDCI/UserActivity Assertion Using AC (Charge:0%)
+```
+
+
+
+设置 ACPI
+
+
+
+
+
+
 ## Links
 
 - [MacOS](/docs/CS/OS/mac/mac.md)
