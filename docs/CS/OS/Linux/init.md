@@ -400,9 +400,11 @@ call rest_init -> [kernel_init](/docs/CS/OS/Linux/init.md?id=kernel_init)
 
 
 
-### kernel_init
+rest_init
 
-create [kernel_thread](/docs/CS/OS/Linux/proc/process.md?id=kernel_clone) to run `kernel_init`
+
+rest_init函数的重要功能就是建立了两个Linux  [kernel_thread](/docs/CS/OS/Linux/proc/process.md?id=kernel_clone):  `kernel_init` and `kthreadd`
+
 
 ```c
 noinline void __ref rest_init(void)
@@ -454,7 +456,9 @@ Pin init on the boot CPU. Task migration is not properly working until sched_ini
 
 
 
+#### kernel_init
 
+Linux内核的第一个用户态进程是在kernel_init线程建立的
 
 ```c
 // init/main.c
