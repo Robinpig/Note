@@ -108,6 +108,10 @@ OS排错
 
 ### sleep
 
+主板一般有5个部件是直接参与唤醒工作的，这五个部件分别是 XHC（USB控制器）、CNVW（CNVI网卡，如果你的主板自带或者预留了口的话）、GLAN（有线网卡）、XDCI（USB相关）、HDEF（音频）。旧的一些主板可能会有不同的命名，比如 XHC 有叫 EH01，HDEF 叫做 HDAS 等，这里不做讨论。而这些设备往往会直接影响睡眠
+
+
+
 
 
 ```
@@ -198,3 +202,4 @@ pmset -g custom
 1. https://www.kancloud.cn/q952008898/hei_ping_guo
 1. https://iiong.com/summarize-some-problems-of-hackintosh/
 1. https://forum.amd-osx.com/
+1. [使用 OpenCore 引导黑苹果](https://blog.xjn819.com/post/opencore-guide.html)
