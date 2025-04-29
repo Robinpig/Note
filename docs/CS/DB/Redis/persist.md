@@ -35,6 +35,12 @@ RDB disadvantages:
 
 By default Redis saves snapshots of the dataset on disk, in a binary file called `dump.rdb`.
 
+
+
+**RDB 触发方式**
+
+
+
 You can configure Redis to have it save the dataset every N seconds if there are at least M changes in the dataset, or you can manually call the `SAVE` or `BGSAVE` commands.
 
 For example, this configuration will make Redis automatically dump the dataset to disk every 60 seconds if at least 1000 keys changed:
@@ -47,6 +53,14 @@ save 60 1000
 
 1. 频繁生成 RDB 文件写入磁盘，磁盘压力过大。会出现上一个 RDB 还未执行完，下一个又开始生成，陷入死循环。
 2. fork 出 bgsave 子进程会阻塞主线程，主线程的内存越大，阻塞时间越长。
+
+
+
+`flushall` 命令用于清空 Redis 数据库，在生产环境下一定慎用，当 Redis 执行了 `flushall` 命令之后，则会触发自动持久化，把 RDB 文件清空
+
+
+
+在 Redis 主从复制中，当从节点执行全量复制操作时，主节点会执行 `bgsave` 命令，并将 RDB 文件发送给从节点
 
 ### save
 
