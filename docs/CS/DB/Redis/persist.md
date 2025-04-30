@@ -388,9 +388,29 @@ When you restart Redis it will re-play the AOF to rebuild the state like [binlog
 
 
 
+检查是否启动
+
+```
+config get appendonly
+```
+
+
+
+
+
+
+
 写后日志避免了额外的检查开销，不需要对执行的命令进行语法检查。如果使用写前日志的话，就需要先检查语法是否有误，否则日志记录了错误的命令，在使用日志恢复的时候就会出错。
 
 AOF 日志是主线程执行，将日志写入磁盘过程中，如果磁盘压力大就会导致写磁盘很慢，导致后续的「写」指令阻塞。
+
+
+
+
+
+
+
+
 
 Since Redis 7.0.0, Redis uses a multi part AOF mechanism.
 That is, the original single AOF file is split into base file (at most one) and incremental files (there may be more than one).
@@ -762,6 +782,8 @@ void aof_background_fsync(int fd) {
 
 ### rewriting
 
+AOF 文件重写是生成一个全新的文件，并把当前数据的最少操作命令保存到新文件上，当把所有的数据都保存至新文件之后，Redis 会交换两个文件，并把最新的持久化操作命令追加到新文件上
+
 
 
 
@@ -1028,6 +1050,10 @@ werr:
 
 ### load AOF
 
+只要开启了 AOF 持久化，并且提供了正常的 appendonly.aof 文件，在 Redis 启动时就会自定加载 AOF 文件并启动
+
+在 AOF 开启的情况下，即使 AOF 文件不存在，只有 RDB 文件，也不会加载 RDB 文件
+
 
 Replay the append log file. On success C_OK is returned. On non fatal error (the append only file is zero-length) C_ERR is returned. On fatal error an error message is logged and the program exists.
 
@@ -1169,6 +1195,16 @@ This prevents two Redis background processes from doing heavy disk I/O at the sa
 When snapshotting is in progress and the user explicitly requests a log rewrite operation using `BGREWRITEAOF` the server will reply with an OK status code telling the user the operation is scheduled, and the rewrite will start once the snapshotting is completed.
 
 In the case both AOF and RDB persistence are enabled and Redis restarts the AOF file will be used to reconstruct the original dataset since it is guaranteed to be the most complete.
+
+
+
+
+
+
+
+
+
+
 
 ## Links
 
