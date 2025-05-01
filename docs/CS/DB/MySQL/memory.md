@@ -437,7 +437,7 @@ row format:
 - Dynamic default
 - Compressed
 
-Structure
+数据页结构如下表
 
 
 | Name                | Size   | Description |
@@ -450,12 +450,16 @@ Structure
 | Page Directory      |        |             |
 | File Tailer         | 8Byte  |             |
 
-Supremum and Infimum
 
-InnoDB has two virtual row records per data page to define record boundaries.
-A Infimum record is a record that is smaller than any primary key value on the page,
-and a Supremum record is a record that is larger than any primary key value on the modified page.
-These two records are created when the page is created and will not be deleted under any circumstances.
+
+Infimum记录 和 Supremum记录 是InnoDB给我们自动生成的两个伪记录，并且规定：
+
+- Infimum记录 作为本页面中最小的记录
+- Supremum记录 作为本页面中最大的记录
+
+各条记录之间按照主键值大小组成了一个单向链表 由于链表无法实现快速搜索 引入了一个页目录 通过将记录进行分组 把每个组最大的那条记录在页面中的地址取出组成一个指针数组 用于二分搜索
+
+
 
 And since these two Records are not our own defined Records, they are not stored in the User Records section of the page,
 they are placed separately in a section called Infimum + Supremum.
