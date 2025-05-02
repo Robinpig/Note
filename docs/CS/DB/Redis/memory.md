@@ -7,6 +7,26 @@ Redis 是从三个方面来优化内存使用的，分别是内存分配、内�
 
 
 
+内存分布
+
+对象内存是redis中占用最大的一块内存，redis属于键值数据库。每次创建键值时，都会创建两个对象key和value。常见的数据类型为string、list、hash、zset、set
+
+自身内存 主要是是指AOF/RDB时fork创建的子进程内存开销，linux采用了写时复制技术
+
+缓冲内存 
+
+所有接入到redis服务器TCP连接的输入输出缓冲区，输入缓冲区无法控制，最大为1G，超过1G将会被断开连接。输出缓冲区通过client-output-buffer-limit控制
+
+复制积压缓冲区：
+
+用于主从复制时部分复制功能，根据repl-backlog-size参数控制，默认1MB。主节点只有一个，所有从节点共享。
+
+AOF缓存：
+
+在Redis重写期间保存最近的写入命令。这一部分占用量一般比较少。
+
+
+
 ## shared
 
 Redis 采用了**共享对象**的设计思想 把常用数据创建为共享对象，当上层应用需要访问它们时，直接读取就行
@@ -199,6 +219,11 @@ typedef struct redisObject {
 ```
 
 1000 ms
+
+
+freeMemoryIfNeeded
+
+
 
 ### performEvictions
 

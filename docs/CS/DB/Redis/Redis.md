@@ -20,7 +20,13 @@ Redis 可以用来做什么
 - 分布式锁
 - 计数器
 
-## Build
+## Configure
+
+
+
+### build
+
+禁用gcc编译优化，将makefile文件中 OPTIMIZATION?=-O2修为-O0
 
 ##### **Mac**
 
@@ -95,6 +101,16 @@ Redis 实现的测试代码可以分成四部分，分别是单元测试（对�
 
 客户端在 Redis 的运行过程中也会被广泛使用，比如实例返回读取的数据、主从复制时在主从库间传输数据、Redis Cluster 的切片实例通信等，都会用到客户端
 Redis 将客户端的创建、消息回复等功能，实现在了 networking.c 文件中
+
+
+
+### benchmark
+
+Redis-benchmark是官方自带的Redis性能测试工具，可以有效的测试Redis服务的性能。
+
+
+
+
 
 ## Architecture
 
