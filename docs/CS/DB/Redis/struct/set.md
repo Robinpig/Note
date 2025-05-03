@@ -2,6 +2,15 @@
 
 set是无序集合 
 
+集合类型的经典使用场景如下：
+
+- 微博关注我的人和我关注的人都适合用集合存储，可以保证人员不会重复；
+- 中奖人信息也适合用集合类型存储，这样可以保证一个人不会重复中奖
+
+
+
+
+
 Sets can be encoded as:
   - `hashtable`, normal set encoding.
   - `intset`, a special encoding used for small sets composed solely of integers.

@@ -1,6 +1,16 @@
 ## Introduction
 
 
+
+使用命令 `./create-cluster start` 就可以急速创建一个 Redis 集群
+
+
+
+
+
+
+
+
 why redis-cluster use 16384 slots?
 
 > The reason is:

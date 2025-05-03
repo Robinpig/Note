@@ -13,8 +13,37 @@ cannot delete elements
 
 $$
 k=m/n\ln2
-
 $$
+
+
+
+
+
+
+
+
+
+在 Redis 中不能直接使用布隆过滤器，但我们可以通过 Redis 4.0 版本之后提供的 modules（扩展模块）的方式引入
+
+git clone https://github.com/RedisLabsModules/redisbloom.git cd redisbloom make # 编译redisbloom
+
+
+
+\> ./src/redis-server redis.conf --loadmodule ./src/modules/RedisBloom-master/redisbloom.s
+
+
+
+它的经典使用场景包括以下几个：
+
+- 垃圾邮件过滤
+- 爬虫里的 URL 去重
+- 判断一个元素在亿级数据中是否存在
+
+
+
+
+
+
 
 ## Opposite of a Bloom Filter
 

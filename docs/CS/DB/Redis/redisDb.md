@@ -247,6 +247,11 @@ robj *lookupKeyWriteWithFlags(redisDb *db, robj *key, int flags) {
     return lookupKey(db,key,flags);
 }
 ```
+### expireIfNeeded
+
+所有对数据库的读写命令在执行之前，都会调用 expireIfNeeded 方法判断键值是否过期，过期则会从数据库中删除，反之则不做任何处理
+
+
 
 ```c
 // db.c
@@ -738,7 +743,10 @@ static dictEntry *dictGenericDelete(dict *d, const void *key, int nofree) {
 ```
 
 ## expire
-in [beforeSleep](/docs/CS/DB/Redis/ae.md?id=beforeSleep)
+called by [beforeSleep](/docs/CS/DB/Redis/ae.md?id=beforeSleep)
+
+activeExpireCycle 方法在规定的时间，分多次遍历各个数据库，从过期字典中随机检查一部分过期键的过期时间，删除其中的过期键
+
 `activeExpireCycle()` handles eviction of keys with a time to live set via the `EXPIRE` command.
 
 
@@ -761,6 +769,8 @@ If type is ACTIVE_EXPIRE_CYCLE_SLOW, that normal expire cycle is executed, where
 In the fast cycle, the check of every database is interrupted once the number of already expired keys in the database is estimated to be lower than a given percentage, in order to avoid doing too much work to gain too little memory.
 
 The configured expire "effort" will modify the baseline parameters in order to do more work in both the fast and slow expire cycles.
+
+
 
 ```c
 #define ACTIVE_EXPIRE_CYCLE_KEYS_PER_LOOP 20 /* Keys for each DB loop. */

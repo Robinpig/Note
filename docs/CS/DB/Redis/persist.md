@@ -11,6 +11,12 @@ Redis provides a different range of persistence options:
 
 The most important thing to understand is the different trade-offs between the RDB and AOF persistence.
 
+
+
+
+
+
+
 ## RDB
 
 RDB advantages:
@@ -34,6 +40,31 @@ RDB disadvantages:
   AOF also needs to fork() but you can tune how often you want to rewrite your logs without any trade-off on durability.
 
 By default Redis saves snapshots of the dataset on disk, in a binary file called `dump.rdb`.
+
+
+
+RDB 文件分为两个阶段，RDB 文件生成阶段和加载阶段。
+
+
+
+**1. RDB 文件生成**
+
+从内存状态持久化成 RDB（文件）的时候，会对 key 进行过期检查，过期的键不会被保存到新的 RDB 文件中，因此 Redis 中的过期键不会对生成新 RDB 文件产生任何影响。
+
+**2. RDB 文件加载**
+
+RDB 加载分为以下两种情况：
+
+- 如果 Redis 是主服务器运行模式的话，在载入 RDB 文件时，程序会对文件中保存的键进行检查，过期键不会被载入到数据库中。所以过期键不会对载入 RDB 文件的主服务器造成影响；
+- 如果 Redis 是从服务器运行模式的话，在载入 RDB 文件时，不论键是否过期都会被载入到数据库中。但由于主从服务器在进行数据同步时，从服务器的数据会被清空。所以一般来说，过期键对载入 RDB 文件的从服务器也不会造成影响。
+
+
+
+当 Redis 运行在主从模式下时，从库不会进行过期扫描，从库对过期的处理是被动的。也就是即使从库中的 key 过期了，如果有客户端访问从库时，依然可以得到 key 对应的值，像未过期的键值对一样返回。
+
+从库的过期键处理依靠主服务器控制，主库在 key 到期时，会在 AOF 文件里增加一条 del 指令，同步到所有的从库，从库通过执行这条 del 指令来删除过期的 key
+
+
 
 
 
@@ -1054,8 +1085,11 @@ werr:
 
 在 AOF 开启的情况下，即使 AOF 文件不存在，只有 RDB 文件，也不会加载 RDB 文件
 
-
 Replay the append log file. On success C_OK is returned. On non fatal error (the append only file is zero-length) C_ERR is returned. On fatal error an error message is logged and the program exists.
+
+
+
+Redis 判断 AOF 文件的开头是否是 RDB 格式的，是通过关键字 `REDIS` 判断的，RDB 文件的开头一定是 `REDIS`关键字开头的
 
 ```c
 /* Load the AOF files according the aofManifest pointed by am. */
@@ -1187,6 +1221,33 @@ cleanup:
 
 
 
+## mix
+
+**混合持久化优点：**
+
+- 混合持久化结合了 RDB 和 AOF 持久化的优点，开头为 RDB 的格式，使得 Redis 可以更快的启动，同时结合 AOF 的优点，有减低了大量数据丢失的风险。
+
+**混合持久化缺点：**
+
+- AOF 文件中添加了 RDB 格式的内容，使得 AOF 文件的可读性变得很差；
+- 兼容性差，如果开启混合持久化，那么此混合持久化 AOF 文件，就不能用在 Redis 4.0 之前版本了
+
+
+
+查询是否开启混合持久化可以使用 `config get aof-use-rdb-preamble` 命令
+
+Redis 5.0 默认是开启的
+
+
+
+在开启混合持久化的情况下，AOF 重写时会把 Redis 的持久化数据，以 RDB 的格式写入到 AOF 文件的开头，之后的数据再以 AOF 的格式化追加的文件的末尾
+
+
+
+
+
+
+
 ## Interactions
 
 Redis >= 2.4 makes sure to avoid triggering an AOF rewrite when an RDB snapshotting operation is already in progress, or allowing a BGSAVE while the AOF rewrite is in progress. 
@@ -1195,6 +1256,8 @@ This prevents two Redis background processes from doing heavy disk I/O at the sa
 When snapshotting is in progress and the user explicitly requests a log rewrite operation using `BGREWRITEAOF` the server will reply with an OK status code telling the user the operation is scheduled, and the rewrite will start once the snapshotting is completed.
 
 In the case both AOF and RDB persistence are enabled and Redis restarts the AOF file will be used to reconstruct the original dataset since it is guaranteed to be the most complete.
+
+
 
 
 

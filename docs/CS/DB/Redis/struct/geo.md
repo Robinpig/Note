@@ -6,6 +6,19 @@ Location-Based Service (LBS)
 
 
 
+Redis 中的 GEO 经典使用场景如下：
+
+1. 查询附近的人、附近的地点等；
+2. 计算相关的距离信息
+
+
+
+GEO 本质上是基于 ZSet 实现的
+
+
+
+
+
 GeoHash将经纬度编码转换为一个N位的二进制数
 
 每个地理位置坐标表示为geoPoint

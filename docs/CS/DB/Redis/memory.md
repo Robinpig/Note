@@ -5,6 +5,105 @@ Redis 是从三个方面来优化内存使用的，分别是内存分配、内�
 其次，在内存回收上，Redis 支持设置过期 key，并针对过期 key 可以使用不同删除策略，这部分代码实现在 expire.c 文件中。同时，为了避免大量 key 删除回收内存，会对系统性能产生影响，Redis 在 lazyfree.c 中实现了异步删除的功能，所以这样，我们就可以使用后台 IO 线程来完成删除，以避免对 Redis 主线程的影响。
 最后，针对数据替换，如果内存满了，Redis 还会按照一定规则清除不需要的数据，这也是 Redis 可以作为缓存使用的原因。Redis 实现的数据替换策略有很多种，包括 LRU、LFU 等经典算法。这部分的代码实现在了 evict.c 中
 
+redis 内存管理实现，有三种方案：
+1. jemalloc (谷歌)
+2. tcmalloc （facebook）
+3. libc （系统)
+
+
+```c
+#if defined(USE_TCMALLOC)
+#define ZMALLOC_LIB ("tcmalloc-" __xstr(TC_VERSION_MAJOR) "." __xstr(TC_VERSION_MINOR))
+#include <google/tcmalloc.h>
+#if (TC_VERSION_MAJOR == 1 && TC_VERSION_MINOR >= 6) || (TC_VERSION_MAJOR > 1)
+#define HAVE_MALLOC_SIZE 1
+#define zmalloc_size(p) tc_malloc_size(p)
+#else
+#error "Newer version of tcmalloc required"
+#endif
+
+#elif defined(USE_JEMALLOC)
+#define ZMALLOC_LIB ("jemalloc-" __xstr(JEMALLOC_VERSION_MAJOR) "." __xstr(JEMALLOC_VERSION_MINOR) "." __xstr(JEMALLOC_VERSION_BUGFIX))
+#include <jemalloc/jemalloc.h>
+#if (JEMALLOC_VERSION_MAJOR == 2 && JEMALLOC_VERSION_MINOR >= 1) || (JEMALLOC_VERSION_MAJOR > 2)
+#define HAVE_MALLOC_SIZE 1
+#define zmalloc_size(p) je_malloc_usable_size(p)
+#else
+#error "Newer version of jemalloc required"
+#endif
+
+#elif defined(__APPLE__)
+#include <malloc/malloc.h>
+#define HAVE_MALLOC_SIZE 1
+#define zmalloc_size(p) malloc_size(p)
+#endif
+```
+
+
+
+```c
+/* Allocate memory or panic */
+void *zmalloc(size_t size) {
+    void *ptr = ztrymalloc_usable_internal(size, NULL);
+    if (!ptr) zmalloc_oom_handler(size);
+    return ptr;
+}
+
+
+/* Try allocating memory, and return NULL if failed.
+ * '*usable' is set to the usable size if non NULL. */
+static inline void *ztrymalloc_usable_internal(size_t size, size_t *usable) {
+    /* Possible overflow, return NULL, so that the caller can panic or handle a failed allocation. */
+    if (size >= SIZE_MAX/2) return NULL;
+    void *ptr = malloc(MALLOC_MIN_SIZE(size)+PREFIX_SIZE);
+
+    if (!ptr) return NULL;
+#ifdef HAVE_MALLOC_SIZE
+    size = zmalloc_size(ptr);
+    update_zmalloc_stat_alloc(size);
+    if (usable) *usable = size;
+    return ptr;
+#else
+    size = MALLOC_MIN_SIZE(size);
+    *((size_t*)ptr) = size;
+    update_zmalloc_stat_alloc(size+PREFIX_SIZE);
+    if (usable) *usable = size;
+    return (char*)ptr+PREFIX_SIZE;
+#endif
+}
+
+void zfree(void *ptr) {
+#ifndef HAVE_MALLOC_SIZE
+    void *realptr;
+    size_t oldsize;
+#endif
+
+    if (ptr == NULL) return;
+#ifdef HAVE_MALLOC_SIZE
+    update_zmalloc_stat_free(zmalloc_size(ptr));
+    free(ptr);
+#else
+    realptr = (char*)ptr-PREFIX_SIZE;
+    oldsize = *((size_t*)realptr);
+    update_zmalloc_stat_free(oldsize+PREFIX_SIZE);
+    free(realptr);
+#endif
+}
+```
+redis 内存申请几乎都调用 zmalloc 接口，每次申请和回收都会被 used_memory 记录起来
+
+```c
+#define update_zmalloc_stat_alloc(__n) atomicIncr(used_memory,(__n))
+#define update_zmalloc_stat_free(__n) atomicDecr(used_memory,(__n))
+```
+
+```c
+size_t zmalloc_used_memory(void) {
+    size_t um;
+    atomicGet(used_memory,um);
+    return um;
+}
+```
 
 
 内存分布

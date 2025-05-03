@@ -3,6 +3,20 @@
 Sorted sets are a data type which is similar to a mix between a Set and a Hash.
 Like sets, sorted sets are composed of unique, non-repeating string elements, so in some sense a sorted set is a set as well.
 
+
+
+
+
+有序集合的经典使用场景如下：
+
+- 学生成绩排名
+- 粉丝列表，根据关注的先后时间排序
+- 排行榜
+
+
+
+
+
 However while elements inside sets are not ordered, every element in a sorted set is associated with a floating point value, called *the score* (this is why the type is also similar to a hash, since every element is mapped to a value).
 
 Moreover, elements in a sorted sets are *taken in order* (so they are not ordered on request, order is a peculiarity of the data structure used to represent sorted sets). They are ordered according to the following rule:
@@ -429,6 +443,36 @@ zset-max-ziplist-value 64
 - zset compose hash table and skip list
 - zset default use ziplist, then skiplist and never convert back.
 - zset compare with score and ele(sds)
+
+
+
+
+
+延迟队列的常见使用场景有以下几种：
+
+1. 超过 30 分钟未支付的订单，将会被取消
+2. 外卖商家超过 5 分钟未接单的订单，将会被取消
+3. 在平台注册但 30 天内未登录的用户，发短信提醒
+
+等类似的应用场景，都可以使用延迟队列来实现。
+
+
+Redis 是通过有序集合（ZSet）的方式来实现延迟消息队列的，ZSet 有一个 Score 属性可以用来存储延迟执行的时间
+
+
+
+**优点**
+
+1. 灵活方便，Redis 是互联网公司的标配，无序额外搭建相关环境；
+2. 可进行消息持久化，大大提高了延迟队列的可靠性；
+3. 分布式支持，不像 JDK 自身的 DelayQueue；
+4. 高可用性，利用 Redis 本身高可用方案，增加了系统健壮性。
+
+**缺点**
+
+需要使用无限循环的方式来执行任务检查，会消耗少量的系统资源。
+
+
 
 ## Links
 

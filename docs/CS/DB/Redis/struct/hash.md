@@ -5,11 +5,19 @@
 
 [redisDb](/docs/CS/DB/Redis/redisDb.md) also a hashtable
 
-
-
-
-
 redis command table
+
+
+
+哈希字典的典型使用场景如下：
+
+- 商品购物车，购物车非常适合用哈希字典表示，使用人员唯一编号作为字典的 key，value 值可以存储商品的 id 和数量等信息；
+- 存储用户的属性信息，使用人员唯一编号作为字典的 key，value 值为属性字段和对应的值；
+- 存储文章详情页信息等。
+
+
+
+
 
 
 
