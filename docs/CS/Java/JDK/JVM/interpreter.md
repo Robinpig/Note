@@ -750,11 +750,8 @@ Allocate monitor and [lock method](/docs/CS/Java/JDK/JVM/interpreter.md?id=lock_
   __ notify_method_entry();
 
   __ dispatch_next(vtos);
-```
 
-invocation counter overflow
-
-```cpp
+  // invocation counter overflow
   if (inc_counter) {
     // Handle overflow of counter and compile method
     __ bind(invocation_counter_overflow);

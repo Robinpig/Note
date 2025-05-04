@@ -91,7 +91,6 @@ StubRoutines::call_stub() 创建的CallStub如下
 #define CAST_FROM_FN_PTR(new_type, func_ptr) ((new_type)((address_word)(func_ptr)))
 ```
 
-`reinterpret_cast` 负责转换指针指向的类型
 
 宏定义展开
 
@@ -104,9 +103,8 @@ StubRoutines::call_stub() 创建的CallStub如下
 return (CallStub)(reinterpret_cast(_call_stub_entry));
 ```
 
-
-reinterpret_cast(_call_stub_entry)返回了一个结果类型，JVM又将这种类型转换成了int类型
-
+`reinterpret_cast` 负责转换指针指向的类型
+将_call_stub_entry强制转换为CallStub这种自定义的函数指针类型，最终JVM调用这一函数指针
 
 
 
@@ -322,7 +320,7 @@ void generate_initial() {
 }
 ```
 
-And generate_initial -> [generate_call_stub](/docs/CS/Java/JDK/JVM/JavaCall?id=generate_call_stub)
+And generate_initial -> [generate_call_stub](/docs/CS/Java/JDK/JVM/JavaCall.md?id=generate_call_stub)
 
 ### generate_call_stub
 
@@ -505,7 +503,7 @@ void JavaCalls::call(JavaValue* result, const methodHandle& method, JavaCallArgu
 ### call_helper
 
 JVM在javaCalls::call_helper()中执行了call_stub()函数调用
-虽然call_stub()的原型函数里只有return (CallStub)(castable_address(_call_stub_entry))这一行代码，
+虽然call_stub()的原型函数里只有 `return (CallStub)(reinterpret_cast(_call_stub_entry))` 这一行代码，
 可是这行代码所蕴含的逻辑却十分丰富，编译器编译后，这行代码会被转换为类似下面的形式
 
 JVM调用Java函数的过程：
