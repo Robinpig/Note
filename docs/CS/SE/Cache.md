@@ -7,6 +7,8 @@ The data in a cache is generally stored in fast access hardware such as RAM (Ran
 A cache's primary purpose is to increase data retrieval performance by reducing the need to access the underlying slower storage layer.
 Trading off capacity for speed, a cache typically stores a subset of data transiently, in contrast to databases whose data is usually complete and durable.
 
+
+
 Caches can be applied and leveraged throughout various layers of technology including Operating Systems, Networking layers including Content Delivery Networks (CDN) and DNS, web applications, and Databases.
 You can use caching to significantly reduce latency and improve IOPS for many read-heavy application workloads, such as Q&A portals, gaming, media sharing, and social networking.
 Cached information can include the results of database queries, computationally intensive calculations, API requests/responses and web artifacts such as HTML, JavaScript, and image files.
