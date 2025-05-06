@@ -827,6 +827,7 @@ jint universe_init() {
 
 ### init_globals2
 
+
 ```c++
 jint init_globals2() {
   universe2_init();          // dependent on codeCache_init and initial_stubs_init
@@ -834,9 +835,6 @@ jint init_globals2() {
   interpreter_init_code();   // after javaClasses_init and before any method gets linked
   referenceProcessor_init();
   jni_handles_init();
-#if INCLUDE_VM_STRUCTS
-  vmStructs_init();
-#endif // INCLUDE_VM_STRUCTS
 
   vtableStubs_init();
   InlineCacheBuffer_init();
