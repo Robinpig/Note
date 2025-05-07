@@ -496,14 +496,20 @@ At this time, large concurrent requests may overwhelm the back-end DB instantane
 
 Solution
 
-- [Circular Breaker](/docs/CS/SE/CircuitBreaker.md)
-
-Avoid too many requests accessing DataBases.
+- Avoid too many requests accessing DataBases.
 
 
 收集缓存监控信息 流处理如Flink判断是否是hot key 再通过监控系统通知到应用做处理 缓存集群需要查看是否均匀
 
 Redis里可以使用zset取最近访问的一定数量的请求ip zrang排序发现热点
+
+
+### Issue Summary
+
+
+尽量使用预防式方案
+
+[Circular Breaker](/docs/CS/SE/CircuitBreaker.md) 服务降级 请求限流这些都是属于 “有损” 方案 影响用户体验
 
 ## Tuning
 
