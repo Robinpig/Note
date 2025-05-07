@@ -45,9 +45,9 @@ When this is not possible, for example because of latency concerns due to very s
 
 同步分为三种情况：
 
-第一次主从库全量复制；
-主从正常运行期间的同步；
-主从库间网络断开重连同步。
+- 第一次主从库全量复制；
+- 主从正常运行期间的同步；
+- 主从库间网络断开重连同步。
 
 
 Every Redis master has a replication ID: it is a large pseudo random string that marks a given story of the dataset.
@@ -260,6 +260,7 @@ void syncWithMaster(connection *conn) {
 ![](https://mmbiz.qpic.cn/mmbiz_png/FbXJ7UCc6O1zU7aax8Hldic4B0PNZTsqhNvt5GshSvzh4e0y6YHtom4h83npL4XXZGicaJicicSKMbIT5KxybRjuXw/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
 
 ### fullsync
+
 主从库第一次复制过程大体可以分为 3 个阶段：连接建立阶段（即准备阶段）、主库同步数据到从库阶段、发送同步期间新写命令到从库阶段
 
 建立连接
@@ -280,24 +281,29 @@ replication buffer是一个在 master 端上创建的缓冲区，存放的数据
 3. slave load rdb 文件把数据恢复到内存的期间的写操作。
 
 replication buffer 由 client-output-buffer-limit slave 设置，当这个值太小会导致主从复制连接断开
-1）当 master-slave 复制连接断开，master 会释放连接相关的数据。replication buffer 中的数据也就丢失了，此时主从之间重新开始复制过程。
-
-2）还有个更严重的问题，主从复制连接断开，导致主从上出现重新执行 bgsave 和 rdb 重传操作无限循环。
+1. 当 master-slave 复制连接断开，master 会释放连接相关的数据。replication buffer 中的数据也就丢失了，此时主从之间重新开始复制过程。
+2. 还有个更严重的问题，主从复制连接断开，导致主从上出现重新执行 bgsave 和 rdb 重传操作无限循环。
 
 当主节点数据量较大，或者主从节点之间网络延迟较大时，可能导致该缓冲区的大小超过了限制，此时主节点会断开与从节点之间的连接；
 
 这种情况可能引起全量复制 -> replication buffer 溢出导致连接中断 -> 重连 -> 全量复制 -> replication buffer 缓冲区溢出导致连接中断……的循环。
 推荐把 replication buffer 的 hard/soft limit 设置成 512M
 
+一次全量复制中，对于主库来说，需要完成两个耗时的操作：生成 RDB 文件和传输 RDB 文件
+如果从库数量很多，而且都要和主库进行全量复制的话，就会导致主库忙于 fork 子进程生成 RDB 文件，进行数据全量同步
+fork 这个操作会阻塞主线程处理正常请求，从而导致主库响应应用程序的请求速度变慢。此外，传输 RDB 文件也会占用主库的网络带宽，同样会给主库的资源使用带来压力
 
+主 - 从 - 从 模式将主库生成 RDB 和传输 RDB 的压力，以级联的方式分散到从库上
 
 ### 增量复制
+
 当主从库完成了全量复制，它们之间就会一直维护一个网络连接，主库会通过这个连接将后续陆续收到的命令操作再同步给从库，这个过程也称为基于长连接的命令传播，使用长连接的目的就是避免频繁建立连接导致的开销。
 
 在命令传播阶段，除了发送写命令，主从节点还维持着心跳机制：PING 和 REPLCONF ACK
 
 
-断开重连增量复制的实现奥秘就是 repl_backlog_buffer 缓冲区，不管在什么时候 master 都会将写指令操作记录在 repl_backlog_buffer 中，因为内存有限， repl_backlog_buffer 是一个定长的环形数组，如果数组内容满了，就会从头开始覆盖前面的内容。
+断开重连增量复制的实现奥秘就是 repl_backlog_buffer 缓冲区，不管在什么时候 master 都会将写指令操作记录在 repl_backlog_buffer 中，
+因为内存有限， repl_backlog_buffer 是一个定长的环形数组，如果数组内容满了，就会从头开始覆盖前面的内容。
 
 master 使用 master_repl_offset记录自己写到的位置偏移量，slave 则使用 slave_repl_offset记录已经读取到的偏移量
 master 收到写操作，偏移量则会增加。从库持续执行同步的写指令后，在 repl_backlog_buffer 的已复制的偏移量 slave_repl_offset 也在不断增加。
@@ -305,7 +311,6 @@ master 收到写操作，偏移量则会增加。从库持续执行同步的写�
 正常情况下，这两个偏移量基本相等。在网络断连阶段，主库可能会收到新的写操作命令，所以 master_repl_offset会大于 slave_repl_offset
 
 当主从断开重连后，slave 会先发送 psync 命令给 master，同时将自己的 runID，slave_repl_offset发送给 master。
-
 master 只需要把 master_repl_offset与 slave_repl_offset之间的命令同步给从库即可。
 
 
@@ -895,6 +900,30 @@ To change this behavior, you can allow a replica to not ignore the `maxmemory`. 
 ```
 replica-ignore-maxmemory no
 ```
+
+
+## Summary
+
+全量复制虽然耗时，但是对于从库来说，如果是第一次同步，全量复制是无法避免的，
+所以，一个 Redis 实例的数据库不要太大，一个实例大小在几 GB 级别比较合适，这样可以减少 RDB 文件生成、传输和重新加载的开销
+另外，为了避免多个从库同时和主库进行全量复制，给主库过大的同步压力，我们也可以采用“主 - 从 - 从”这一级联模式，来缓解主库的压力
+
+
+
+两个典型的坑。
+
+- 主从数据不一致。Redis 采用的是异步复制，所以无法实现强一致性保证（主从数据时时刻刻保持一致），数据不一致是难以避免的。我给你提供了应对方法：保证良好网络环境，以及使用程序监控从库复制进度，一旦从库复制进度超过阈值，不让客户端连接从库。
+- 对于读到过期数据，这是可以提前规避的，一个方法是，使用 Redis 3.2 及以上版本；另外，你也可以使用 EXPIREAT/PEXPIREAT 命令设置过期时间，避免从库上的数据过期时间滞后。
+  不过，这里有个地方需要注意下，因为 EXPIREAT/PEXPIREAT 设置的是时间点，所以，主从节点上的时钟要保持一致，具体的做法是，让主从节点和相同的 NTP 服务器（时间服务器）进行时钟同步
+
+
+> Redis 中的 slave-serve-stale-data 配置项设置了从库能否处理数据读写命令，你可以把它设置为 no。这样一来，从库只能服务 INFO、SLAVEOF 命令，这就可以避免在从库中读到不一致的数据了
+
+
+
+
+把 min-slaves-to-write 和 min-slaves-max-lag 这两个配置项搭配起来使用，分别给它们设置一定的阈值，假设为 N 和 T。
+这两个配置项组合后的要求是，主库连接的从库中至少有 N 个从库，和主库进行数据复制时的 ACK 消息延迟不能超过 T 秒，否则，主库就不会再接收客户端的请求了
 
 ## Links
 

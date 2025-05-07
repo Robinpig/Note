@@ -1,6 +1,6 @@
 ## Introduction
 
-
+quicklistNode是一个双向链表, 链表每个节点都是 ziplist
 
 quicklist is a 40 byte struct (on 64-bit systems) describing a quicklist.
 
@@ -23,7 +23,7 @@ typedef struct quicklist {
 } quicklist;
 ```
 
-quicklistNode是一个双向链表, 链表每个节点都是 ziplist
+
 
 quicklistNode is a 32 byte struct describing a ziplist for a quicklist.
 We use bit fields keep the quicklistNode at 32 bytes.

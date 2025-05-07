@@ -374,6 +374,8 @@ int rdbLoadRio(rio *rdb, int rdbflags, rdbSaveInfo *rsi) {
 
 ## AOF
 
+说到日志，我们比较熟悉的是数据库的写前日志（Write Ahead Log,  WAL），也就是说，在实际写数据前，先把修改的数据记到日志文件中，以便故障时进行恢复。不过，AOF 日志正好相反，它是写后日志，“写后”的意思是 Redis 是先执行命令，把数据写入内存，然后才记录日志
+
 AOF advantages:
 
 - Using AOF Redis is much more durable: you can have different fsync policies: no fsync at all, fsync every second, fsync at every query.
@@ -1258,6 +1260,18 @@ When snapshotting is in progress and the user explicitly requests a log rewrite 
 In the case both AOF and RDB persistence are enabled and Redis restarts the AOF file will be used to reconstruct the original dataset since it is guaranteed to be the most complete.
 
 
+
+
+
+## Summary
+
+
+
+关于 AOF 和 RDB 的选择：
+
+- 数据不能丢失时，内存快照和 AOF 的混合使用是一个很好的选择；
+- 如果允许分钟级别的数据丢失，可以只使用 RDB；
+- 如果只用 AOF，优先使用 everysec 的配置选项，因为它在可靠性和性能之间取了一个平衡
 
 
 

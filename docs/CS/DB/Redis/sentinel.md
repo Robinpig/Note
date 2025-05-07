@@ -1,5 +1,7 @@
 ## Introduction
 
+
+
 Sentinels by default run **listening for connections to TCP port 26379**, so for Sentinels to work, port 26379 of your servers **must be open** to receive connections from the IP addresses of the other Sentinel instances.
 Otherwise Sentinels can't talk and can't agree about what to do, so failover will never be performed.
 
@@ -28,7 +30,9 @@ min id
 
 ## Testing the failover
 
-At this point our toy Sentinel deployment is ready to be tested. We can just kill our master and check if the configuration changes. To do so we can just do:
+At this point our toy Sentinel deployment is ready to be tested. 
+We can just kill our master and check if the configuration changes. 
+To do so we can just do:
 
 ```
 redis-cli -p 6379 DEBUG sleep 30
@@ -561,6 +565,28 @@ void sentinelFailoverReconfNextSlave(sentinelRedisInstance *master) {
 ```
 
 
+## cluster
+
+
+哨兵实例之间可以相互发现，要归功于 Redis 提供的 pub/sub 机制
+
+哨兵只要和主库建立起了连接，就可以在主库上发布消息了，比如说发布它自己的连接信息（IP 和端口）
+同时，它也可以从主库上订阅消息，获得其他哨兵发布的连接信息。当多个哨兵实例都在主库上做了发布和订阅操作后，它们之间就能知道彼此的 IP 地址和端口
+在主从集群中，主库上有一个名为“sentinel:hello”的频道，不同哨兵就是通过它来相互发现，实现互相通信的
+
+
+哨兵除了彼此之间建立起连接形成集群外，还需要和从库建立连接。这是因为，在哨兵的监控任务中，它需要对主从库都进行心跳判断，而且在主从库切换完成后，它还需要通知从库，让它们和新主库进行同步
+哨兵向主库发送 INFO 命令来获取从库信息
+
+
+我们可以依赖 pub/sub 机制，来帮助我们完成哨兵和客户端间的信息同步
+客户端读取哨兵的配置文件后，可以获得哨兵的地址和端口，和哨兵建立网络连接。我们可以在客户端执行订阅命令，来获取不同的事件消息
+
+
+
+要保证所有哨兵实例的配置是一致的，尤其是主观下线的判断值 down-after-milliseconds
+
+> 在我们的项目中，因为这个值在不同的哨兵实例上配置不一致，导致哨兵集群一直没有对有故障的主库形成共识，也就没有及时切换主库，最终的结果就是集群服务不稳定
 
 ## Tuning
 

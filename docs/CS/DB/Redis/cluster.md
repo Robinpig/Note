@@ -533,7 +533,15 @@ void clusterSetMaster(clusterNode *n) {
 
 ## gossip
 
-Initially we don't know our "name", but we'll find it once we connect to the first node, using the getsockname() function. Then we'll use this address for all the next messages.
+Redis Cluster 在运行时，每个实例上都会保存 Slot 和实例的对应关系（也就是 Slot 映射表），以及自身的状态信息。
+
+为了让集群中的每个实例都知道其它所有实例的状态信息，实例之间会按照一定的规则进行通信。这个规则就是 Gossip 协议
+
+例间使用 Gossip 协议进行通信时，通信开销受到通信消息大小和通信频率这两方面的影响，
+消息越大、频率越高，相应的通信开销也就越大
+
+Initially we don't know our "name", but we'll find it once we connect to the first node, using the getsockname() function.
+Then we'll use this address for all the next messages.
 
 ```c
 typedef struct {
