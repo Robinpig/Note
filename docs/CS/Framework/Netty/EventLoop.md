@@ -590,6 +590,7 @@ private boolean needsToSelectAgain;
 
 ## execute
 
+SocketChannel 调用register 函数时会调用 execute 函数
 startThread when execute first task
 
 ```java
