@@ -52,4 +52,8 @@ flagIndir是最让人困惑的标志，代表间接的。我们知道存储在�
 Interface核心方法调用了packEface函数。
 
 
+
+
 ## Links
+
+- [Golang](/docs/CS/Go/Go.md)
