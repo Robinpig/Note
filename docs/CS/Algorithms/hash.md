@@ -112,7 +112,7 @@ So at any point, the size of the table must be greater than or equal to the tota
   The insert can insert an item in a deleted slot, but the search doesn’t stop at a deleted slot.
 - [ThreadLocalMap in Java](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md?id=hash)
 - HashMap in Python
-- [map - Golang](/docs/CS/Go/map.md)
+- [map - Golang](/docs/CS/Go/struct/map.md)
 
 Closed hashing, also known as open addressing, is an alternative to resolving collisions with linked lists. 
 In a closed hashing system, if a collision occurs, alternate cells are tried until an empty cell is found.
