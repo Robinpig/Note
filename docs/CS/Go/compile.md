@@ -58,10 +58,10 @@ compiler不允许出现未使用的变量和导入包
 
 
 
-执行go build命令时候，带上-n选项可以观察编译流程所执行所有的命令
+执行go build 命令时候，带上 `-n` 选项可以观察编译流程所执行所有的命令
 从上面命令输出的内容可以看到：
 1. Go编译器首先会创建一个任务输出临时目录（mkdir -p $WORK/b001/）。b001是root task的工作目录，每次构建都是由一系列task完成，它们构成 action graph
-2. 接着将依赖的包: /usr/lib/go/pkg/linux_amd64/runtime.a 写入到importcfg中
+2. 接着将依赖的包: /usr/lib/go/pkg/linux_amd64/runtime.a 写入到 `importcfg` 中
 3. 接着会使用compile命令，并指定importcfg文件，将主程序empty_string.go编译成_pkg.a文件（/usr/lib/go/pkg/tool/linux_amd64/compile -o $WORK/b001/pkg.a -trimpath “$WORK/b001=>” -p main -complete -buildid aJhlsTb17ElgWQeF76b5/aJhlsTb17ElgWQeF76b5 -goversion go1.14.13 -D _/home/vagrant/dive-into-go -importcfg $WORK/b001/importcfg -pack ./empty_string.go）。
 4. 程序依赖的包都写到importcfg.link这个文件中，Go编译器连接阶段中链接器会使用该文件，找到所有依赖的包文件，将其连接到程序中（/usr/lib/go/pkg/tool/linux_amd64/link -o $WORK/b001/exe/a.out -importcfg $WORK/b001/importcfg.link -buildmode=exe -buildid=FoylCipvV-SPkhyi2PJs/aJhlsTb17ElgWQeF76b5/aJhlsTb17ElgWQeF76b5/FoylCipvV-SPkhyi2PJs -extld=gcc $WORK/b001/pkg.a /usr/lib/go/pkg/tool/linux_amd64/buildid -w $WORK/b001/exe/a.out # internal）。
 5. 将编译成功的二进制文件移动到输出目录中（mv $WORK/b001/exe/a.out empty_string）。
@@ -174,6 +174,11 @@ Go语言通过对抽象语法树的静态数据流分析（static data-flow anal
 SSA生成阶段是编译器进行后续优化的保证，例如常量传播（Constant Propagation）、无效代码清除、消除冗余、强度降低（Strength Reduction）等。
 大部分与SSA相关的代码位于ssa/文件夹中，但是将抽象语法树转换为SSA的逻辑位于gc/ssa.go文件中。在ssa/README.md文件中，有对SSA生成阶段比较详细的描述。
 Go语言提供了强有力的工具查看SSA初始及其后续优化阶段生成的代码片段，可以通过在编译时指定GOSSAFUNC=main实现
+
+
+`go build -gcflags -S main.go` 查看 Plan9 汇编代码
+
+
 
 
 

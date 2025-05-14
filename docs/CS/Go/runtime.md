@@ -5,8 +5,12 @@
 
 
 
-
-
+| 关键字 | 函数        |
+|-----|-----------|
+| go  | newproc   |
+| new | newobject |
+| make | makeslice makemap |
+| ... | ... |
 
 
 
