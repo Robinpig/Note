@@ -1,12 +1,24 @@
 ## Introduction
 
-
+Channel 的字面意思是“通道”，它是网络通信的载体。Channel提供了基本的 API 用于网络 I/O 操作，如  register、bind、connect、read、write、flush 等。Netty 自己实现的 Channel 是以 JDK NIO  Channel 为基础的，相比较于 JDK NIO，Netty 的 Channel 提供了更高层次的抽象，同时屏蔽了底层 Socket  的复杂性，赋予了 Channel 更加强大的功能，你在使用 Netty 时基本不需要再与 Java Socket 类直接打交道
 
 ### Channel Hierarchy
 
 ![Channel](img/Channel.png)
 
+bstractChannel 是整个家族的基类，派生出  AbstractNioChannel、AbstractOioChannel、AbstractEpollChannel  等子类，每一种都代表了不同的 I/O 模型和协议类型。常用的 Channel 实现类有：
 
+NioServerSocketChannel 异步 TCP 服务端。
+
+NioSocketChannel 异步 TCP 客户端。
+
+OioServerSocketChannel 同步 TCP 服务端。
+
+OioSocketChannel 同步 TCP 客户端。
+
+NioDatagramChannel 异步 UDP 连接。
+
+OioDatagramChannel 同步 UDP 连接
 
 ## Channel
 
@@ -97,6 +109,13 @@ public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparabl
     
 }
 ```
+
+
+
+hannel 会有多种状态，如**连接建立、连接注册、数据读写、连接销毁**等。随着状态的变化，Channel 处于不同的生命周期，每一种状态都会绑定相应的事件回调
+
+
+
 
 
 register in AbstractChannel
