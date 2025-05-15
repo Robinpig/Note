@@ -1922,7 +1922,8 @@ The function may return C_OK without actually installing the write event handler
 1. The event handler should already be installed since the output buffer already contains something.
 2. The client is a slave but not yet online, so we want to just accumulate writes in the buffer but not actually sending them yet.
 
-Typically gets called every time a reply is built, before adding more data to the clients output buffers. If the function returns C_ERR no data should be appended to the output buffers.
+Typically gets called every time a reply is built, before adding more data to the clients output buffers. 
+If the function returns C_ERR no data should be appended to the output buffers.
 
 ```c
 int prepareClientToWrite(client *c) {
