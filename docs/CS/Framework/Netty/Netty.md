@@ -79,6 +79,14 @@ Netty 自己实现的 Channel 是以 JDK NIO Channel 为基础的，相比较于
 
 ## Sequence
 
+源码编译collection 包
+
+cd common 目录 执行 `mvn clean install -DskipTests=true -Dcheckstyle.skip=true`
+
+
+
+
+
 In Java-based networking, the fundamental construct is the class Socket .
 Netty’s Channel interface provides an API that greatly simplifies the complexity of working directly with Socket.
 To work with TCP/IP Channels, we will deal with SocketChannel which represents the TCP connection between client and servers:
