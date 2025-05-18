@@ -134,8 +134,13 @@ Direct buffers are indirectly freed by the Garbage Collector.
 
 When [ReferenceHandler](/docs/CS/Java/JDK/Basic/Ref.md?id=referencehandler) get the `PhantomReference`(`Cleaner`) of `DirectByteBuffer` instance, invoke` Cleaner.clean()` -> `unsafe.freeMemory()`
 
-调用 unsafe.freeMemory() 释放掉指定堆外内存地址的内存空间，然后重新统计系统中的 DirectByteBuffer 的大小情况
 
+
+
+clean() 方法主要做两件事情：
+
+- 将 Cleaner 对象从 Cleaner 链表中移除；
+- 调用 unsafe.freeMemory() 释放掉指定堆外内存地址的内存空间，然后重新统计系统中的 DirectByteBuffer 的大小情况
 
 ```java
 public class Cleaner extends PhantomReference<Object> {

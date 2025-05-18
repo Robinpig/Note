@@ -118,33 +118,6 @@ hannel 会有多种状态，如**连接建立、连接注册、数据读写、�
 
 
 
-register in AbstractChannel
-
-
-```java
-//AbstractNioChannel#doRegister()
-protected void doRegister() throws Exception {
-    boolean selected = false;
-    for (;;) {
-        try {
-            selectionKey = javaChannel().register(eventLoop().unwrappedSelector(), 0, this);
-            return;
-        } catch (CancelledKeyException e) {
-            if (!selected) {
-                // Force the Selector to select now as the "canceled" SelectionKey may still be
-                // cached and not removed because no Select.select(..) operation was called yet.
-                eventLoop().selectNow();
-                selected = true;
-            } else {
-                // We forced a select operation on the selector before but the SelectionKey is still cached
-                // for whatever reason. JDK bug ?
-                throw e;
-            }
-        }
-    }
-}
-```
-
 ### SocketChannel
 
 read
@@ -318,10 +291,10 @@ interface Unsafe {
 
 ### register
 
-submit a Runnable of `register0` to [EventLoop](/docs/CS/Framework/Netty/Eventloop.md?id=execute).
+submit a Runnable of `register0` to [EventLoop](/docs/CS/Framework/Netty/EventLoop.md?id=execute).
 
 ```java
-//AbstractChannel$AbstracrUnsafe#register()
+//AbstractChannel$AbstractUnsafe#register()
 @Override
 public final void register(EventLoop eventLoop, final ChannelPromise promise) {
     //ignore assertion
@@ -348,10 +321,10 @@ public final void register(EventLoop eventLoop, final ChannelPromise promise) {
 
 **AbstractChannel$AbstracrUnsafe#register0** execute below methods:
 
-1. `doRegister()` by [java.nio.channels.SelectableChannel]() to EventLoop
-2. `ChannelPipeline#invokeHandlerAddedIfNeeded()` ensure we call `handlerAdded()` before we actually notify the promise
+1. 调用 JDK 底层 [java.nio.channels.SelectableChannel](/docs/CS/Java/JDK/IO/NIO.md?id=Channel) 进行注册
+2. `ChannelPipeline#invokeHandlerAddedIfNeeded()` 调用 ChannelInitializer 实现的 initChannel() 方法做 pipeline的初始化
 3. [ChannelPipeline#fireChannelRegistered()](/docs/CS/Framework/Netty/ChannelHandler.md?id=firechannelactive)
-4. [AbstractChannel#beginRead()](/docs/CS/Framework/Netty/ChannelHandler.md?id=beginread) or fireChannelActive if active
+4. 调用 pipeline.fireChannelActive() 方法触发 channelActive 事件 最终调用到 [AbstractChannel#beginRead()](/docs/CS/Framework/Netty/ChannelHandler.md?id=beginread) 
 
 
 register0() 主要做了四件事：调用 JDK 底层进行 Channel 注册、触发 handlerAdded 事件、触发 channelRegistered 事件、Channel 当前状态为活跃时，触发 channelActive 事件
@@ -399,7 +372,34 @@ private void register0(ChannelPromise promise) {
 }
 ```
 
+#### doRegister
 
+register() 的第三个入参传入的是 `this`, 即 Netty 自己实现的 Channel 对象，调用 register() 方法会将它绑定在 JDK 底层 Channel 的 attachment 上
+这样在每次 Selector 对象进行事件循环时，Netty 都可以从返回的 JDK 底层 Channel 中获得自己的 Channel 对象
+
+```java
+//AbstractNioChannel#doRegister()
+protected void doRegister() throws Exception {
+    boolean selected = false;
+    for (;;) {
+        try {
+            selectionKey = javaChannel().register(eventLoop().unwrappedSelector(), 0, this);
+            return;
+        } catch (CancelledKeyException e) {
+            if (!selected) {
+                // Force the Selector to select now as the "canceled" SelectionKey may still be
+                // cached and not removed because no Select.select(..) operation was called yet.
+                eventLoop().selectNow();
+                selected = true;
+            } else {
+                // We forced a select operation on the selector before but the SelectionKey is still cached
+                // for whatever reason. JDK bug ?
+                throw e;
+            }
+        }
+    }
+}
+```
 
 ### close
 
@@ -512,6 +512,8 @@ protected void doClose() throws Exception {
 ### beginRead
 
 call `SelectionKey.interestOps()`
+
+readInterestOp 参数就是在前面初始化 Channel 所传入的 SelectionKey.OP_ACCEPT 事件，所以 OP_ACCEPT 事件会被注册到 Channel 的事件集合中
 
 ```java
 @Override

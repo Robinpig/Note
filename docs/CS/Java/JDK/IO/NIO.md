@@ -41,7 +41,14 @@ Here are the most important Channel implementations in Java NIO:
 File channels are safe for use by multiple concurrent threads.
 
 
-A file channel is created by invoking one of the open methods defined by this class. A file channel can also be obtained from an existing FileInputStream, FileOutputStream, or RandomAccessFile object by invoking that object's getChannel method, which returns a file channel that is connected to the same underlying file. Where the file channel is obtained from an existing stream or random access file then the state of the file channel is intimately connected to that of the object whose getChannel method returned the channel. Changing the channel's position, whether explicitly or by reading or writing bytes, will change the file position of the originating object, and vice versa. Changing the file's length via the file channel will change the length seen via the originating object, and vice versa. Changing the file's content by writing bytes will change the content seen by the originating object, and vice versa. Closing the channel will close the originating object.
+A file channel is created by invoking one of the open methods defined by this class. 
+A file channel can also be obtained from an existing FileInputStream, FileOutputStream, or RandomAccessFile object by invoking that object's getChannel method,
+which returns a file channel that is connected to the same underlying file.
+Where the file channel is obtained from an existing stream or random access file then the state of the file channel is intimately connected to that of the object whose getChannel method returned the channel.
+Changing the channel's position, whether explicitly or by reading or writing bytes, will change the file position of the originating object, and vice versa.
+Changing the file's length via the file channel will change the length seen via the originating object, and vice versa.
+Changing the file's content by writing bytes will change the content seen by the originating object, and vice versa.
+Closing the channel will close the originating object.
 
 
 

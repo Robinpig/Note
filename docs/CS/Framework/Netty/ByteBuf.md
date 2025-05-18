@@ -12,7 +12,10 @@ To list a few cool features:
 - It is often faster than ByteBuffer.
 
 
-ByteBuf 是 Netty 中的数据容器，Netty 在接收网络数据和发送网络数据时，都会首先将这些网络数据事先缓存在 ByteBuf 中，然后在将它们丢给 pipeline 处理或者发送给 Socket ，这样做的目的是防止在接收网络数据的过程中网络数据一直积压在 Socket 的接收缓冲区中使得接收缓冲区的数据越来越多，导致对端 TCP 协议中的窗口关闭（滑动窗口），影响到了整个 TCP 通信的速度
+
+
+ByteBuf 是 Netty 中的数据容器，Netty 在接收网络数据和发送网络数据时，都会首先将这些网络数据事先缓存在 ByteBuf 中，然后在将它们丢给 pipeline 处理或者发送给 Socket ，
+这样做的目的是防止在接收网络数据的过程中网络数据一直积压在 Socket 的接收缓冲区中使得接收缓冲区的数据越来越多，导致对端 TCP 协议中的窗口关闭（滑动窗口），影响到了整个 TCP 通信的速度
 
 
 ###  ByteBuf Hierarchy
@@ -544,6 +547,10 @@ public final class ChannelOutboundBuffer {
 ```
 
 Check HighWaterMark
+
+每次添加数据时都会累加数据的字节数，然后判断缓存大小是否超过所设置的高水位线 64KB，如果超过了高水位，那么 Channel 会被设置为不可写状态
+直到缓存的数据大小低于低水位线 32KB 以后，Channel 才恢复成可写状态
+
 ```java
 private void incrementPendingOutboundBytes(long size, boolean invokeLater) {
         if (size == 0) {

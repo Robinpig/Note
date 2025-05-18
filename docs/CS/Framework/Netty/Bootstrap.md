@@ -43,7 +43,7 @@ public ServerBootstrap group(EventLoopGroup parentGroup, EventLoopGroup childGro
 ## bind
 
 1. [initAndRegister channel](/docs/CS/Framework/Netty/Bootstrap.md?id=initAndRegister)
-2. then doBind0
+2. doBind0 端口绑定 注册 OP_ACCEPT 事件到 Channel
 
 ```java
 // Create a new Channel and bind it.
@@ -95,7 +95,7 @@ private ChannelFuture doBind(final SocketAddress localAddress) {
 
 ### initAndRegister
 
-1. new and init chcnnel
+1. new and init channel
 2. register
 
 ```java
@@ -351,7 +351,7 @@ private void initChild(final Channel child) {
 
 [AbstractChannel$AbstractUnsafe#register()](/docs/CS/Framework/Netty/Channel.md?id=register) submit a Runnable of register0 to [EventLoop#execute()](/docs/CS/Framework/Netty/Eventloop.md?id=nioeventloopexecute).
 
-**AbstractChannel$AbstracrUnsafe#register0** execute follow methods:
+**AbstractChannel$AbstractUnsafe#register0** execute follow methods:
 
 1. [ChannelPipeline#fireChannelRegistered()](/docs/CS/Framework/Netty/ChannelHandler.md?id=channelpipelinefirechannelactive-)
 2. [AbstractChannel#beginRead()](/docs/CS/Framework/Netty/Channel.md?id=abstractchannelbeginread-)
@@ -451,7 +451,11 @@ public final void bind(final SocketAddress localAddress, final ChannelPromise pr
 }
 ```
 
-Finally invoke `sun.nio.ch.SocketChannelImpl#bind()`
+Netty 会根据 JDK 版本的不同，分别调用 JDK 底层不同的 bind() 方法
+
+JDK8 最终调用 `sun.nio.ch.SocketChannelImpl#bind()`
+
+执行完 doBind() 之后，服务端 JDK 原生的 Channel 真正已经完成端口绑定了
 
 ```java
 //NioSocketChannel#doBind0()
