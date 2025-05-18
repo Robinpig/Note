@@ -5,9 +5,13 @@
 
 ## ChannelPipeline
 
-ChannelPipeline 是 Netty 的核心编排组件，**负责组装各种 ChannelHandler**，实际数据的编解码以及加工处理操作都是由 ChannelHandler 完成的。ChannelPipeline 可以理解为**ChannelHandler 的实例列表**——内部通过双向链表将不同的 ChannelHandler 链接在一起。当 I/O 读写事件触发时，ChannelPipeline 会依次调用 ChannelHandler 列表对 Channel 的数据进行拦截和处理。
+ChannelPipeline 是 Netty 的核心编排组件，负责组装各种 ChannelHandler，实际数据的编解码以及加工处理操作都是由 ChannelHandler 完成的。ChannelPipeline 可以理解为ChannelHandler 的实例列表——内部通过双向链表将不同的 ChannelHandler 链接在一起。当 I/O 读写事件触发时，ChannelPipeline 会依次调用 ChannelHandler 列表对 Channel 的数据进行拦截和处理。
 
-ChannelPipeline 是线程安全的，因为每一个新的 Channel 都会对应绑定一个新的 ChannelPipeline
+**ChannelPipeline 是线程安全的，因为每一个新的 Channel 都会对应绑定一个新的 ChannelPipeline 一个 ChannelPipeline 关联一个 EventLoop，一个 EventLoop 仅会绑定一个线程**
+
+
+
+下面我们看一下 ChannelPipeline 的结构图：
 
 ```java
  /**
@@ -52,7 +56,18 @@ ChannelPipeline 是线程安全的，因为每一个新的 Channel 都会对应�
   */
 ```
 
+ChannelPipeline 中包含入站 ChannelInboundHandler 和出站 ChannelOutboundHandler 两种处理器
+
+ChannelPipeline 中每加入一个 ChannelHandler 都会绑定一个 ChannelHandlerContex
+
+ChannelHandlerContext 用于保存 ChannelHandler 上下文，通过 ChannelHandlerContext  我们可以知道 ChannelPipeline 和 ChannelHandler 的关联关系。ChannelHandlerContext 可以实现 ChannelHandler 之间的交互，ChannelHandlerContext 包含了 ChannelHandler  生命周期的所有事件，如 connect、bind、read、flush、write、close 等
+
+
+
+
+
 newChannelPipeline
+
 一个ChannelPipeline 固定有HeadContext 和 TailContext
 
 ```java
@@ -725,7 +740,7 @@ public final void write(Object msg, ChannelPromise promise) {
 filterOutboundMessage 方法 取决于具体Channel的实现 以常用的NioByteChannel为例 只会接受 ByteBuf 类型以及 FileRegion 类型的 msg 数据 同时会将 heap buffer 转换成 direct buffer
 
 > FileRegion 是Netty定义的用来通过零拷贝的方式网络传输文件数据
- 
+
 
 ```java
 public abstract class AbstractNioByteChannel extends AbstractNioChannel {

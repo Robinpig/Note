@@ -14,8 +14,6 @@ It greatly simplifies and streamlines network programming such as TCP and UDP so
 
 
 
-- [EventLoop](/docs/CS/Framework/Netty/EventLoop.md)
-- [ByteBuf](/docs/CS/Framework/Netty/ByteBuf.md)
 - [Future](/docs/CS/Framework/Netty/Future.md)
 - [FastThreadLocal](/docs/CS/Framework/Netty/FastThreadLocal.md)
 
@@ -35,15 +33,27 @@ Fig.1. Netty architecture.
 Netty 结构一共分为三个模块：
 
 - Core
-  Core 核心层是 Netty 最精华的内容，它提供了底层网络通信的通用抽象和实现，包括可扩展的事件模型、通用的通信 API、支持零拷贝的 ByteBuf 等。
-- Protocol Support 协议支持层
+  Core 核心层是 Netty 最精华的内容，它提供了底层网络通信的通用抽象和实现，包括可扩展的事件模型、通用的通信 API、支持零拷贝的 [ByteBuf](/docs/CS/Framework/Netty/ByteBuf.md) 等。
+- Protocol Support
   协议支持层基本上覆盖了主流协议的编解码实现，如 HTTP、SSL、Protobuf、压缩、大文件传输、WebSocket、文本、二进制等主流协议，此外 Netty 还支持自定义应用层协议。Netty 丰富的协议支持降低了用户的开发成本，基于 Netty 我们可以快速开发 HTTP、WebSocket 等服务。
-- Transport Service 传输服务层
+- Transport Service
   传输服务层提供了网络传输能力的定义和实现方法。它支持 Socket、HTTP 隧道、虚拟机管道等传输方式。Netty 对 TCP、UDP 等数据传输做了抽象和封装，用户可以更聚焦在业务逻辑实现上，而不必关系底层数据传输的细节
 
 
 
 Netty 的逻辑处理架构为典型网络分层架构设计，共分为网络通信层、事件调度层、服务编排层，每一层各司其职
+
+
+<div style="text-align: center;">
+
+![Fig.1. Netty architecture](./img/Logic_Arch.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. Netty logic architecture.
+</p>
+
 
 网络通信层的**核心组件**包含**BootStrap、ServerBootStrap、Channel**三个组件
 
@@ -51,15 +61,13 @@ Netty 的逻辑处理架构为典型网络分层架构设计，共分为网络�
 
 [Bootstrap](/docs/CS/Framework/Netty/Bootstrap.md) 是“引导”的意思，它主要负责整个 Netty 程序的启动、初始化、服务器连接等过程，它相当于一条主线，串联了 Netty 的其他核心组件
 
-
-
 Netty 自己实现的 Channel 是以 JDK NIO Channel 为基础的，相比较于 JDK NIO，Netty 的 Channel 提供了更高层次的抽象，同时屏蔽了底层 Socket 的复杂性，赋予了 Channel 更加强大的功能
 
 
 
 事件调度层的职责是通过 Reactor 线程模型对各类事件进行聚合处理，通过 Selector 主循环线程集成多种事件（ I/O 事件、信号事件、定时事件等），实际的业务处理逻辑是交由服务编排层中相关的 Handler 完成。
 
-事件调度层的**核心组件**包括 **EventLoopGroup、EventLoop**
+事件调度层的**核心组件**包括 EventLoopGroup、[EventLoop](/docs/CS/Framework/Netty/EventLoop.md)
 
 
 
@@ -70,6 +78,14 @@ Netty 自己实现的 Channel 是以 JDK NIO Channel 为基础的，相比较于
 服务编排层的核心组件包括 ChannelPipeline、ChannelHandler、ChannelHandlerContext
 
 ## Sequence
+
+源码编译collection 包
+
+cd common 目录 执行 `mvn clean install -DskipTests=true -Dcheckstyle.skip=true`
+
+
+
+
 
 In Java-based networking, the fundamental construct is the class Socket .
 Netty’s Channel interface provides an API that greatly simplifies the complexity of working directly with Socket.
