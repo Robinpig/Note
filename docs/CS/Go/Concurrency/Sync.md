@@ -1,19 +1,28 @@
 ## Introduction
 
+同步原语的适用场景
+
+- 共享资源。并发地读写共享资源，会出现数据竞争（data race）的问题，所以需要Mutex、RWMutex这样的并发原语来保护。
+- 任务编排。需要goroutine按照一定的规律执行，而goroutine之间有相互等待或者依赖的顺序关系，我们常常使用WaitGroup或者Channel来实现。
+- 消息传递。信息交流以及不同的goroutine之间的线程安全的数据交流，常常使用Channel来实现
 
 
 
-
-
-
-## Mutex
-不可重入
+Locker的接口定义了锁同步原语的方法集 不可重入
 ```go
 type Locker interface {
     Lock()
     Unlock()
 }
 ```
+这个接口在实际项目应用得不多，因为我们一般会直接使用具体的同步原语，而不是通过接口
+
+
+
+## Mutex
+
+
+在Go 标准库中，它提供了 Mutex 来实现互斥锁
 
 ```go
 type Mutex struct {
@@ -546,4 +555,4 @@ func (c *Cond) Signal() {
 
 ## Links
 
-
+- [Concurrency](/docs/CS/Go/Concurrency/Concurrency.md)
