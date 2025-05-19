@@ -651,3 +651,5 @@ ettcd#9956
 
 
 ## Links
+
+- [Concurrency](/docs/CS/Go/Concurrency/Concurrency.md)

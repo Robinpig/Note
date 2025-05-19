@@ -1096,11 +1096,9 @@ func execute(gp *g, inheritTime bool) {
 
 
 
-
-
 ## Links
 
-- [Golang](/docs/CS/Go/Go.md)
+- [Concurrency](/docs/CS/Go/Concurrency/Concurrency.md)
 
 ## References
 1. [Golang 程序启动流程分析](https://blog.tianfeiyu.com/2021/07/01/golang_bootstrap/#more)

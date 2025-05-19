@@ -35,3 +35,9 @@ func selectgo(cas0 *scase, order0 *uint16, pc0 *uintptr, nsends, nrecvs int, blo
 - select语句中除default外，各case执行顺序是随机的
 - select语句中如果没有default语句，则会阻塞等待任一case
 - select语句中读操作要判断是否成功读取，关闭的channel也可以读取
+
+
+
+## Links
+
+- [Concurrency](/docs/CS/Go/Concurrency/Concurrency.md)

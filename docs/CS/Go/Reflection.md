@@ -36,7 +36,8 @@ func main() {
 
 reflect.Value提供了Elem方法返回指针或接口指向的数据 如果Value存储的不是指针或接口，则使用Elem方法时会出错，因此在使用时要非常小心
 
-通过如下reflect.TypeOf函数对于reflect.Type的构建过程可以发现，其实现原理为将传递进来的接口变量转换为底层的实际空接口emptyInterface，并获取空接口的类型值。reflect.Type实质上是空接口结构体中的typ字段，其是rtype类型，Go语言中任何具体类型的底层结构都包含这一类型。
+通过如下reflect.TypeOf函数对于reflect.Type的构建过程可以发现，其实现原理为将传递进来的接口变量转换为底层的实际空接口emptyInterface，并获取空接口的类型值。
+reflect.Type实质上是空接口结构体中的typ字段，其是rtype类型，Go语言中任何具体类型的底层结构都包含这一类型。
 
 生成reflect.Value的原理也可以从reflect.ValueOf函数的生成方法中看出端倪。reflect.ValueOf函数的核心是调用了unpackEface函数。
 
