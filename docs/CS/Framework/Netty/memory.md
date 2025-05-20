@@ -19,7 +19,8 @@ PoolArena 的默认个数为 availableProcessors * 2 , 因为 Netty 中的 React
 
 
 
-在服务端NioServerSocketChannel的配置类NioServerSocketChannelConfig以及客户端NioSocketChannel的配置类NioSocketChannelConfig实例化的时候会触发PooledByteBufAllocator的创建 创建出来的PooledByteBufAllocator实例保存在DefaultChannelConfig类中的ByteBufAllocator allocator字段中
+在服务端NioServerSocketChannel的配置类NioServerSocketChannelConfig以及客户端NioSocketChannel的配置类NioSocketChannelConfig实例化的时候会触发 PooledByteBufAllocator 的创建 
+创建出来的PooledByteBufAllocator实例保存在DefaultChannelConfig类中的ByteBufAllocator allocator字段中
 
 默认情况下是使用pooled的 除非在 Android 中
 
@@ -207,6 +208,7 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
 多个线程与同一个PoolArena进行了绑定 它们之间还是会存在竞争的情况
 比如现在有两个线程：Thread1 和 Thread2 ，它俩共同绑定到了同一个 PoolArena 上，Thread1 首先向 PoolArena 申请了一个内存块，并加载到运行它的 CPU1  L1 Cache 中，Thread1 使用完之后将这个内存块释放回 PoolArena。
 假设此时 Thread2 向 PoolArena 申请同样尺寸的内存块，而且恰好申请到了刚刚被 Thread1 释放的内存块。注意，此时这个内存块已经在 CPU1  L1 Cache 中缓存了，运行 Thread2 的 CPU2  L1 Cache 中并没有，这就涉及到了 cacheline 的核间通信（MESI 协议相关），又要耗费几十个时钟周期
+
 内存池的第二个模型 —— PoolThreadCache ，作为线程的 Thread Local 缓存，它用于缓存线程从 PoolArena 中申请到的内存块，线程每次申请内存的时候首先会到 PoolThreadCache 中查看是否已经缓存了相应尺寸的内存块，如果有，则直接从 PoolThreadCache 获取，如果没有，再到 PoolArena 中去申请。同理，线程每次释放内存的时候，也是先释放到 PoolThreadCache 中，而不会直接释放回 PoolArena
 为每个线程引入 Thread Local 本地缓存 —— PoolThreadCache，实现了内存申请与释放的无锁化，同时也避免了 cacheline 在多核之间的通信开销，极大地提升了内存池的性能
 但是这样又会引来一个问题，就是内存消耗太大了，系统中有那么多的线程，如果每个线程在向 PoolArena 申请内存的时候，我们都为它默认创建一个 PoolThreadCache 本地缓存的话，这一部分的内存消耗将会特别大。
@@ -397,6 +399,7 @@ private void allocate(PoolThreadCache cache, PooledByteBuf<T> buf, final int req
 ```
 
 tcacheAllocateSmall
+
 Small 规格内存块的申请首先会尝试从线程本地缓存 PoolThreadCache 中去获取，如果缓存中没有，则到 smallSubpagePools 中申请
 
 
@@ -580,7 +583,8 @@ final class PoolThreadCache {
 
 ## Recycler
 
-Java 中频繁地创建和销毁对象的开销是很大的，所以很多人会将一些通用对象缓存起来，当需要某个对象时，优先从对象池中获取对象实例。通过重用对象，不仅避免频繁地创建和销毁所带来的性能损耗，而且对 JVM GC 是友好的，这就是对象池的作用
+Java 中频繁地创建和销毁对象的开销是很大的，所以很多人会将一些通用对象缓存起来，当需要某个对象时，优先从对象池中获取对象实例。
+通过重用对象，不仅避免频繁地创建和销毁所带来的性能损耗，而且对 JVM GC 是友好的，这就是对象池的作用
 
 Recycler 是 Netty 提供的自定义实现的轻量级对象回收站，借助 Recycler 可以完成对象的获取和回收
 对象池包含四个核心组件：Stack、WeakOrderQueue、Link、DefaultHandle
@@ -595,7 +599,8 @@ WeakOrderQueue 用于存储其他线程回收到当前线程所分配的对象�
 
 每个 WeakOrderQueue 中都包含一个 Link 链表，回收对象都会被存在 Link 链表中的节点上，每个 Link 节点默认存储 16 个对象，当每个 Link 节点存储满了会创建新的 Link 节点放入链表尾部
 
-DefaultHandle 实例中保存了实际回收的对象，Stack 和 WeakOrderQueue 都使用 DefaultHandle 存储回收的对象。在 Stack 中包含一个 elements 数组，该数组保存的是 DefaultHandle 实例。WeakOrderQueue 中每个 Link 节点所存储的 16 个对象也是使用 DefaultHandle 表示的
+DefaultHandle 实例中保存了实际回收的对象，Stack 和 WeakOrderQueue 都使用 DefaultHandle 存储回收的对象。在 Stack 中包含一个 elements 数组，该数组保存的是 DefaultHandle 实例。
+WeakOrderQueue 中每个 Link 节点所存储的 16 个对象也是使用 DefaultHandle 表示的
 
 从对象池中获取对象的入口是在 Recycler#get() 方法
 

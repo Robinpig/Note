@@ -369,6 +369,12 @@ create [FastThreadLocalThread](/docs/CS/Framework/Netty/FastThreadLocal.md)
 
 
 
+每个 EventLoop 线程都维护一个 Selector 选择器和任务队列 taskQueue
+
+
+
+
+
 
 ##### newTaskQueue
 
@@ -716,6 +722,8 @@ private void doStartThread() {
 
 ### run
 
+NioEventLoop 每次循环的处理流程
+
 1. [select](/docs/CS/Framework/Netty/EventLoop.md?id=select) get ready Channels, [rebuildSelector](/docs/CS/Framework/Netty/EventLoop.md?id=rebuildSelector) if IOException occurs
 2. [processSelectedKeys](/docs/CS/Framework/Netty/EventLoop.md?id=processSelectedKey)
 3. Ensure we always [run tasks](/docs/CS/Framework/Netty/EventLoop.md?id=runAllTasks).
@@ -724,6 +732,7 @@ private void doStartThread() {
 However, there is a race condition in this approach.
 The race condition is triggered when 'wakenUp' is set to true too early.
 'wakenUp' is set to true too early if:
+
 1) Selector is waken up between 'wakenUp.set(false)' and 'selector.select(...)'. (BAD)
 2) Selector is waken up between 'selector.select(...)' and 'if (wakenUp.get()) { ... }'. (OK)
 
@@ -739,6 +748,12 @@ is true immediately after selector.select(...).
 It is inefficient in that it wakes up the selector for both
 the first case (BAD - wake-up required) and the second case
 (OK - no wake-up required).
+
+
+
+NioEventLoop  无锁串行化的设计不仅使系统吞吐量达到最大化，而且降低了用户开发业务逻辑的难度，不需要花太多精力关心线程安全问题。虽然单线程执行避免了线程切换，但是它的缺陷就是不能执行时间过长的 I/O 操作，一旦某个 I/O 事件发生阻塞，那么后续的所有 I/O 事件都无法执行，甚至造成事件积压
+
+
 
 Always handle shutdown even if the loop processing threw an exception.
 And [closeAll](/docs/CS/Framework/Netty/EventLoop.md?id=closeAll) before shut down
@@ -1167,7 +1182,15 @@ This method stops running the tasks in the task queue and returns if it ran long
 
 
 
-可以分为 6 个步骤。
+NioEventLoop 不仅负责处理 I/O 事件，还要兼顾执行任务队列中的任务。任务队列遵循 FIFO 规则，可以保证任务执行的公平性。NioEventLoop 处理的任务类型基本可以分为三类。
+
+1. **普通任务**：通过 NioEventLoop 的 execute() 方法向任务队列 taskQueue  中添加任务。例如 Netty 在写数据时会封装 WriteAndFlushTask 提交给 taskQueue。taskQueue  的实现类是多生产者单消费者队列 MpscChunkedArrayQueue，在多线程并发添加任务时，可以保证线程安全。
+2. **定时任务**：通过调用 NioEventLoop 的 schedule() 方法向定时任务队列  scheduledTaskQueue 添加一个定时任务，用于周期性执行该任务。例如，心跳消息发送等。定时任务队列  scheduledTaskQueue 采用优先队列 PriorityQueue 实现。
+3. **尾部队列**：tailTasks 相比于普通任务队列优先级较低，在每次执行完 taskQueue 中任务后会去获取尾部队列中任务执行。尾部任务并不常用，主要用于做一些收尾工作，例如统计事件循环的执行时间、监控信息上报等。
+
+
+
+执行逻辑可以分为 6 个步骤。
 
 1. fetchFromScheduledTaskQueue 函数：将定时任务从 scheduledTaskQueue 中取出，聚合放入普通任务队列 taskQueue 中，只有定时任务的截止时间小于当前时间才可以被合并。
 2. 从普通任务队列 taskQueue 中取出任务。

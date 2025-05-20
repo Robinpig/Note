@@ -30,8 +30,8 @@ public class TestUnsafe {
 
 ### Direct Memory
 
-[Direct Memory Management](/docs/CS/Java/JDK/IO/Direct_Buffer.md)
 
+与 [DirectByteBuffer](/docs/CS/Java/JDK/IO/Direct_Buffer.md) 不同的是，Unsafe#allocateMemory 所分配的内存必须自己手动释放，否则会造成内存泄漏
 
 
 

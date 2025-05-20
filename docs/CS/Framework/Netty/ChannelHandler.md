@@ -736,7 +736,7 @@ public final void write(Object msg, ChannelPromise promise) {
     outboundBuffer.addMessage(msg, size, promise);
 }
 ```
-
+#### filterOutboundMessage
 filterOutboundMessage 方法 取决于具体Channel的实现 以常用的NioByteChannel为例 只会接受 ByteBuf 类型以及 FileRegion 类型的 msg 数据 同时会将 heap buffer 转换成 direct buffer
 
 > FileRegion 是Netty定义的用来通过零拷贝的方式网络传输文件数据
@@ -843,7 +843,7 @@ TailContext 提供了兜底的异常处理逻辑
 
 ##### addMessage
 
-Add given message to this ChannelOutboundBuffer. The given ChannelPromise will be notified once the message was written.
+ChannelOutboundBuffer 包含三个非常重要的指针：第一个被写到缓冲区的节点 flushedEntry、第一个未被写到缓冲区的节点 unflushedEntry和最后一个节点 tailEntry
 
 ```java
 public final class ChannelOutboundBuffer {
@@ -867,7 +867,39 @@ public final class ChannelOutboundBuffer {
 }
 ```
 
-##### addFlush
+第一次调用 write，因为链表里只有一个数据，所以 unflushedEntry 和 tailEntry 指针都指向第一个添加的数据 msg1。flushedEntry 指针在没有触发 flush 动作时会一直指向 NULL。
+
+第二次调用 write，tailEntry 指针会指向新加入的 msg2，unflushedEntry 保持不变。
+
+第 N 次调用 write，tailEntry 指针会不断指向新加入的 msgN，unflushedEntry 依然保持不变，unflushedEntry 和 tailEntry 指针之间的数据都是未写入 Socket 缓冲区的。
+
+每次写入数据后都会调用 incrementPendingOutboundBytes 方法判断缓存的水位线
+
+
+
+### flush
+
+flush 的核心逻辑主要分为两个步骤：addFlush 和 flush0
+
+```java
+protected abstract class AbstractUnsafe implements Unsafe {
+    @Override
+    public final void flush() {
+        assertEventLoop();
+
+        ChannelOutboundBuffer outboundBuffer = this.outboundBuffer;
+        if (outboundBuffer == null) {
+            return;
+        }
+
+        outboundBuffer.addFlush();
+        flush0();
+    }
+}
+```
+
+
+#### addFlush
 
 Add a flush to this ChannelOutboundBuffer. This means all previous added messages are marked as flushed and so you will be able to handle them.
 
@@ -902,13 +934,57 @@ public final class ChannelOutboundBuffer {
 ```
 
 
+#### flush0
+```java
+protected abstract class AbstractUnsafe implements Unsafe {
+    protected void flush0() {
+        if (inFlush0) {
+// Avoid re-entrance
+            return;
+        }
+
+        final ChannelOutboundBuffer outboundBuffer = this.outboundBuffer;
+        if (outboundBuffer == null || outboundBuffer.isEmpty()) {
+            return;
+        }
+
+        inFlush0 = true;
+
+        // Mark all pending write requests as failure if the channel is inactive.
+        if (!isActive()) {
+            try {
+                // Check if we need to generate the exception at all.
+                if (!outboundBuffer.isEmpty()) {
+                    if (isOpen()) {
+                        outboundBuffer.failFlushed(new NotYetConnectedException(), true);
+                    } else {
+                        // Do not trigger channelWritabilityChanged because the channel is closed already.
+                        outboundBuffer.failFlushed(newClosedChannelException(initialCloseCause, "flush0()"), false);
+                    }
+                }
+            } finally {
+                inFlush0 = false;
+            }
+            return;
+        }
+
+        try {
+            doWrite(outboundBuffer);
+        } catch (Throwable t) {
+            handleWriteError(t);
+        } finally {
+            inFlush0 = false;
+        }
+    }
+}
+```
+
+##### doWrite
+
+该方法负责将数据真正写入到 Socket 缓冲区
 
 
-
-#### doWrite
-
-
-
+根据自旋锁次数重复调用 doWriteInternal 方法发送数据，每成功发送一次数据，自旋锁的次数 writeSpinCount 减 1，当 writeSpinCount 耗尽，那么 doWrite 操作将会被暂时中断
 
 
 ```java
@@ -984,26 +1060,7 @@ public class NioSocketChannel extends AbstractNioByteChannel implements io.netty
 }
 ```
 
-flush
 
-```java
-protected abstract class AbstractUnsafe implements Unsafe {
-    @Override
-    public final void flush() {
-        assertEventLoop();
-
-        ChannelOutboundBuffer outboundBuffer = this.outboundBuffer;
-        if (outboundBuffer == null) {
-            return;
-        }
-
-        outboundBuffer.addFlush();
-        flush0();
-    }
-}
-```
-
-#### flush
 
 ChannelDuplexHandler which consolidates Channel.flush() / ChannelHandlerContext.flush() operations
 (which also includes Channel.writeAndFlush(Object) / Channel.writeAndFlush(Object, ChannelPromise)
