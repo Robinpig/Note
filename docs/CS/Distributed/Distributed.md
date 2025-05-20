@@ -1,5 +1,15 @@
 ## Introduction
 
+
+分布式系统解决了什么问题
+
+分布式系统解决了单机性能瓶颈导致的成本问题
+提高可用性的要求
+解决了用户量和数据量爆炸性地增大导致的成本问题
+分布式系统解决了大规模软件系统的迭代效率和成本的问题
+
+
+
 A distributed system is one in which components located at networked computers communicate and coordinate their actions only by **passing messages**.
 This definition leads to the following especially significant characteristics of distributed systems: concurrency of components, lack of a global clock and independent failures of components.
 
