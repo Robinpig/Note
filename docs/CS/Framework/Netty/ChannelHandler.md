@@ -117,7 +117,7 @@ ChannelHandlerContext 中维护了 pipeline 这个双向链表中的 pre 以及 
 
 
 
-通过对ChannelPipeline 在不同位置添加不同类型的 ChannelHandler 最后aa
+通过对ChannelPipeline 在不同位置添加不同类型的 ChannelHandler
 
 
 ### addFirst
@@ -874,6 +874,16 @@ public final class ChannelOutboundBuffer {
 第 N 次调用 write，tailEntry 指针会不断指向新加入的 msgN，unflushedEntry 依然保持不变，unflushedEntry 和 tailEntry 指针之间的数据都是未写入 Socket 缓冲区的。
 
 每次写入数据后都会调用 incrementPendingOutboundBytes 方法判断缓存的水位线
+
+
+
+
+
+### exception
+
+> [!TIP]
+>
+> 异常事件的传播顺序与 ChannelHandler 的添加顺序相同，会依次向后传播，与 Inbound 事件和 Outbound 事件无关
 
 
 
