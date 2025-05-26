@@ -51,12 +51,12 @@ sudo apt search <software>
 ```
 
 ```shell
-sudo apt install <software>
+sudo dpkg -i xx.deb
 ```
 
 
 
-
+##### Clash for Windows
 
 安装[clash for windows](https://github.com/MGod-monkey/clash-for-all-backup/releases/download/v0.20.39/Clash.for.Windows-0.20.39-x64-linux.tar.gz)
 
@@ -78,13 +78,22 @@ FATAL:setuid_sandbox_host.cc(158)] The SUID sandbox helper binary was found, but
 sudo chown root chrome-sandbox && sudo chmod 4755 chrome-sandbox
 ```
 
+##### Clash Verge
+
+[V2RaySE](https://v2rayse.com/)
+
+下载deb文件安装
 
 
+
+##### Guake
 
 
 ```shell
 sudo add-apt-repository ppa:linuxuprising/guake
 sudo apt-get update
+
+udo apt install guake
 ```
 
 
