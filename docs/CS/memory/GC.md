@@ -2146,7 +2146,7 @@ This also reduces dependencies on a specific JVM offering or version, making ong
 ## Links
 
 - [Memory](/docs/CS/memory/memory.md)
-- [JVM GC](/docs/CS/Java/JDK/JVM/GC.md)
+- [JVM GC](/docs/CS/Java/JDK/JVM/GC/GC.md)
 
 ## References
 

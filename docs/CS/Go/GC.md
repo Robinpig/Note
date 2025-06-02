@@ -90,4 +90,4 @@ func gcSweep(mode gcMode) bool {
 ## Links
 
 - [Garbage Collection](/docs/CS/memory/GC.md)
-- [Java GC](/docs/CS/Java/JDK/JVM/GC.md)
+- [Java GC](/docs/CS/Java/JDK/JVM/GC/GC.md)
