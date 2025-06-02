@@ -38,7 +38,7 @@ Fig.1. Reference hierarchy.
 ### Abstract Reference
 
 Abstract base class for reference objects. This class defines the operations common to all reference objects.
-Because reference objects are implemented in close cooperation with the [garbage collector](/docs/CS/Java/JDK/JVM/GC.md), this class may not be subclassed directly.
+Because reference objects are implemented in close cooperation with the [garbage collector](/docs/CS/Java/JDK/JVM/GC/GC.md), this class may not be subclassed directly.
 
 ```java
 public abstract class Reference<T> {

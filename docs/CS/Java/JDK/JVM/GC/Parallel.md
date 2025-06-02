@@ -641,10 +641,13 @@ bool PSParallelCompact::invoke_no_policy(bool maximum_heap_compaction) {
 }
 ```
 
+## Tuning
+
+
 
 ## Links
 
-- [Garbage Collection](/docs/CS/Java/JDK/JVM/GC.md)
+- [Garbage Collection](/docs/CS/Java/JDK/JVM/GC/GC.md)
 
 
 

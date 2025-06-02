@@ -258,7 +258,7 @@ Final Mark:
 
 ## Links
 
-- [Garbage Collection](/docs/CS/Java/JDK/JVM/GC.md)
+- [Garbage Collection](/docs/CS/Java/JDK/JVM/GC/GC.md)
 
 
 

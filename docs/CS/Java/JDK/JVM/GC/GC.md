@@ -42,7 +42,7 @@ This mechanism is usually referred to as a `write barrier` or `store check`.
 
 
 
-See [G1 Roots](/docs/CS/Java/JDK/JVM/G1.md?id=roots)
+See [G1 Roots](/docs/CS/Java/JDK/JVM/GC/G1.md?id=roots)
 
 Tri-color Marking
 
@@ -280,7 +280,7 @@ Equally, there may be one or more collector threads.
 
 From [JVM](https://book.douban.com/subject/34907497/):
 
-![Our Collectors](../img/our-collectors.png)
+![Our Collectors](../../img/our-collectors.png)
 
 And
 
@@ -290,10 +290,17 @@ And
 
 
 
-- [CMS](/docs/CS/Java/JDK/JVM/CMS.md)(removed since JDK14)
-- [G1](/docs/CS/Java/JDK/JVM/G1.md)
-- [Shenandoah](/docs/CS/Java/JDK/JVM/Shenandoah.md)
-- [ZGC](/docs/CS/Java/JDK/JVM/ZGC.md)
+JDK 8默认搜集器为 Parallel GC 
+- Young区采用 Parallel Scavenge
+- 老年代采用 Parallel Old 进行收集
+
+吞吐量优先，一般适用于后台任务型服务器 比如批量订单处理、科学计算等对吞吐量敏感，对时延不敏感的场景
+
+
+- [CMS](/docs/CS/Java/JDK/JVM/GC/CMS.md)(removed since JDK14)
+- [G1](/docs/CS/Java/JDK/JVM/GC/G1.md)
+- [Shenandoah](/docs/CS/Java/JDK/JVM/GC/Shenandoah.md)
+- [ZGC](/docs/CS/Java/JDK/JVM/GC/ZGC.md)
 
 > See  gcConfiguration.cpp
 
@@ -391,7 +398,7 @@ Because at least one processor is used for garbage collection during the concurr
 
 ### G1
 
-[G1GC](/docs/CS/Java/JDK/JVM/G1.md) was intended as a replacement for CMS and was designed for multi-threaded applications that have a large heap size available (more than 4GB). 
+[G1GC](/docs/CS/Java/JDK/JVM/GC/G1.md) was intended as a replacement for CMS and was designed for multi-threaded applications that have a large heap size available (more than 4GB). 
 It is parallel and concurrent like CMS, but it works quite differently under the hood compared to the older garbage collectors.
 
 
