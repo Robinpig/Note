@@ -58,7 +58,7 @@ ChannelPipeline 是 Netty 的核心编排组件，负责组装各种 ChannelHand
 
 ChannelPipeline 中包含入站 ChannelInboundHandler 和出站 ChannelOutboundHandler 两种处理器
 
-ChannelPipeline 中每加入一个 ChannelHandler 都会绑定一个 ChannelHandlerContex
+ChannelPipeline 中每加入一个 ChannelHandler 都会绑定一个 ChannelHandlerContext
 
 ChannelHandlerContext 用于保存 ChannelHandler 上下文，通过 ChannelHandlerContext  我们可以知道 ChannelPipeline 和 ChannelHandler 的关联关系。ChannelHandlerContext 可以实现 ChannelHandler 之间的交互，ChannelHandlerContext 包含了 ChannelHandler  生命周期的所有事件，如 connect、bind、read、flush、write、close 等
 

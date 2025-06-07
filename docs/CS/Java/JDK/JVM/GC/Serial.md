@@ -437,7 +437,7 @@ void TenuredGeneration::collect(bool   full,
 
   gch->pre_full_gc_dump(gc_timer);
 ```
-Invoke [Full collect](/docs/CS/Java/JDK/JVM/Serial.md?id=Full-collect)
+Invoke [Full collect](/docs/CS/Java/JDK/JVM/GC/Serial.md.md?id=Full-collect)
 ```cpp
   GenMarkSweep::invoke_at_safepoint(ref_processor(), clear_all_soft_refs);
 
@@ -808,4 +808,4 @@ public:
 
 ## Links
 
-- [Garbage Collection](/docs/CS/Java/JDK/JVM/GC.md)
+- [Garbage Collection](/docs/CS/Java/JDK/JVM/GC/GC.md)

@@ -858,31 +858,30 @@ If it's not, it should go back to sleeping on the condition variable, waiting fo
 ## 参考书籍
 
 
-| 书名                                           | col2 | col3 |
-| ---------------------------------------------- | ---- | ---- |
-| Linux Performance and Tuning Guidelines        |      |      |
-| Linux内核源码剖析 - TCP/IP实现                 |      |      |
-| Linux内核源代码情景分析                        |      |      |
-| Linux内核设计与实现                            |      |      |
-| 深入理解计算机系统                             |      |      |
-| UNIX网络编程                                   |      |      |
-| UNIX环境高级编程                               |      |      |
-| 图解TCP/IP                                     |      |      |
-| 网络是怎样连接的                               |      |      |
-| Linnux内核完全注释                             |      |      |
-| 支撑处理器的技术                               |      |      |
-| An Introduction to GCC                         |      |      |
-| Linkers and Loaders                            |      |      |
-| Linux设备驱动程序                              |      |      |
-| 深入理解Linux内核                              |      |      |
-| 深入理解Linux虚拟内存管理                      |      |      |
-| Systems Performance : Enterprise and the Cloud |      |      |
-| TCP/IP Architecture, Design and Implementation in Linux | |  |
-| TCP/IP Illustrated, Volume 1: The Protocols |  |  |
-| The Design and Implementation of the FreeBSD Operating System |  |  |
-| Debug Hacks : 深入调试的技术和工具 |  |  |
-|  |  |  |
-|  |  |  |
+| 书名                                           | Desc | 
+| ---------------------------------------------- | ---- |
+| Linux Performance and Tuning Guidelines        |      |      
+| Linux内核源码剖析 - TCP/IP实现                 |      |      
+| Linux内核源代码情景分析                        |      |      
+| Linux内核设计与实现                            |      |      
+| 深入理解计算机系统                             |      |      
+| UNIX网络编程                                   |      |      
+| UNIX环境高级编程                               |      |      
+| 图解TCP/IP                                     |      |      
+| 网络是怎样连接的                               |      |      
+| Linnux内核完全注释                             |      |      
+| 支撑处理器的技术                               |      |      
+| An Introduction to GCC                         |      |      
+| Linkers and Loaders                            |      |      
+| Linux设备驱动程序                              |      |      
+| 深入理解Linux内核                              |      |      
+| 深入理解Linux虚拟内存管理                      |      |      
+| Systems Performance : Enterprise and the Cloud |      |      
+| TCP/IP Architecture, Design and Implementation in Linux | |  
+| TCP/IP Illustrated, Volume 1: The Protocols |  |  
+| The Design and Implementation of the FreeBSD Operating System |  |  
+| Debug Hacks : 深入调试的技术和工具 |  |  
+| [鸟哥的Linux私房菜](https://linux.vbird.org/) |  |  
 
 
 

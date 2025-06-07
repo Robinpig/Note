@@ -441,6 +441,14 @@ public boolean listenerStart() {
 ```
 
 
+tomcat首先会加载进ContextLoaderListener
+
+这里可以通过 Spring MVC 的 [ContextLoaderListener](/docs/CS/Framework/Spring/MVC.md?id=ContextLoaderListener) 进行初始化
+
+
+
+
+
 #### stopInternal
 
 Gracefully terminate the active use of the public methods other than property getters/setters and life cycle methods of this component.

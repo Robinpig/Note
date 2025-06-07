@@ -130,7 +130,7 @@ The initial mark pause is typically short relative to the minor collection pause
 
 ## Links
 
-- [Garbage Collection](/docs/CS/Java/JDK/JVM/GC.md)
+- [Garbage Collection](/docs/CS/Java/JDK/JVM/GC/GC.md)
 
 ## References
 1. [Concurrent Mark Sweep (CMS) Collector](https://docs.oracle.com/javase/8/docs/technotes/guides/vm/gctuning/cms.html)

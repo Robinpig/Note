@@ -173,7 +173,7 @@ The Execution Engine reads the bytecode and executes it piece by piece.
    2. **Code Optimizer** – Responsible for optimizing the intermediate code generated above
    3. **Target Code Generator** – Responsible for Generating Machine Code or Native Code
    4. **Profiler** – A special component, responsible for finding hotspots, i.e. whether the method is called multiple times or not.
-3. [**Garbage Collector**](/docs/CS/Java/JDK/JVM/GC.md) - Collects and removes unreferenced objects. 
+3. [**Garbage Collector**](/docs/CS/Java/JDK/JVM/GC/GC.md) - Collects and removes unreferenced objects. 
    Garbage Collection can be triggered by calling `System.gc()`, but the execution is not guaranteed. Garbage collection of the JVM collects the objects that are created.
 
 Early VM’s were interpreter−only. Later VM’s were interpreter plus template generated code, and finally interpreter plus optimized code.
@@ -918,7 +918,7 @@ oop MemAllocator::finish(HeapWord* mem) const {
 
 ## GC
 
-- [GC](/docs/CS/Java/JDK/JVM/GC.md)
+- [GC](/docs/CS/Java/JDK/JVM/GC/GC.md)
 - [SafePoint](/docs/CS/Java/JDK/JVM/Safepoint.md)
 
 ### Deoptimization
@@ -2175,6 +2175,11 @@ JVM的发展方向主要包括3个方面。
 ```shell
 java -XX:+PrintFlagsFinal -XX:+UnlockDiagnosticVMOptions -version
 ```
+
+GC的行为与并发(负载)是正相关的，不管负载去制定JVM优化目标是不合理的 当并发比较高时，不管如何调优，Young GC总会很频繁，总会有不该晋升的对象晋升触发 Full GC
+
+
+
 
 ### OOM
 

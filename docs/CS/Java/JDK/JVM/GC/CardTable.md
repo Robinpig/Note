@@ -1,4 +1,4 @@
-
+## Introduction
 
 
 // Mapping from address to card marking array entry
@@ -42,3 +42,8 @@ But since the heap starts at some higher address, this points to somewhere befor
   CardValue* byte_map_base() const { return _byte_map_base; }
 
 ```
+
+
+## Links
+
+- [G1](/docs/CS/Java/JDK/JVM/GC/G1.md)
