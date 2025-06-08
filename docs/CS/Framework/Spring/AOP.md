@@ -396,6 +396,8 @@ final class JdkDynamicAopProxy implements AopProxy, InvocationHandler, Serializa
 
 ##### **CglibAopProxy**
 
+Cglib 内联到 Spring
+
 ```java
 class CglibAopProxy implements AopProxy, Serializable {
   @Override

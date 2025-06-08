@@ -279,6 +279,7 @@ Dependency injection is a pattern we can use to implement IoC, where the control
 **Dependency Injection in Spring can be done through constructors, setters or fields:**
 
 - Constructor-Based Dependency Injection. Using constructors to create object instances is more natural from the OOP standpoint.
+- Parameter injection
 - Setter-Based Dependency Injection
 - Field-Based Dependency Injection `org.springframework.beans.factory.annotation.Autowired` / `javax.annotation.Resource` / `javax.inject.Inject`
 
@@ -1384,6 +1385,11 @@ Checks already instantiated singletons and also allows for an early reference to
 1. get from singletonObjects
 2. or else singletonObject == null && currently in creation (within the entire factory), get from earlySingletonObjects
 3. or singletonObject == null && allowEarlyReference, get singletonFactory from singletonFactories, put new singletonObject into earlySingletonObjects and remove singletonFactory from singletonFactories if singletonFactory != null
+
+
+> [!TIP]
+> 
+> ObjectFactory/ObjectProvider 底层实现一致 提供的是延迟依赖查找 在调用 getObject 方法时 目标 Bean 才被依赖查找
 
 ```java
 public class DefaultSingletonBeanRegistry extends SimpleAliasRegistry implements SingletonBeanRegistry {
