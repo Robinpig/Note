@@ -65,6 +65,18 @@ When a parallel operation is invoked on a dataset, Spark creates a task to proce
 We try to send each task to one of its preferred locations using a technique called delay scheduling.
 Once launched on a worker, each task calls getIterator to start reading its partition.
 
+
+## Streaming
+
+Spark Streaming 属于 Spark API 的扩展
+
+以固定时间间隔(几秒钟) 处理一段段的批处理作业 延迟性较高 但能保证消息 exactly once
+
+吞吐量高
+
+
+
+
 ## Links
 
 - [Mesos](/docs/CS/Distributed/Cluster_Scheduler.md?id=Mesos)
