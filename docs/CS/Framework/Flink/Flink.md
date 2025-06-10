@@ -153,6 +153,13 @@ public class BatchWordCount {
 主要是 Yarn 和 Kubernetes
 
 
+Standalone集群 仅支持 Session 模式提交 Job
+
+```shell
+cd flink & ./bin/start-cluster.sh
+```
+
+
 
 
 ## JobManager
