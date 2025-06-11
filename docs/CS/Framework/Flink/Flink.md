@@ -153,14 +153,33 @@ public class BatchWordCount {
 主要是 Yarn 和 Kubernetes
 
 
+<!-- tabs:start -->
+
+##### **Standalone**
+
 Standalone集群 仅支持 Session 模式提交 Job
 
 ```shell
 cd flink & ./bin/start-cluster.sh
 ```
 
+##### **Yarn**
+
+Yarn 部署 资源隔离 特别是网络资源的隔离不够完善
+离线和实时作业同时运行相互干扰
+Kerberos 认证超期问题导致 checkpoint 无法持久化
+
+##### **Kubernetes**
 
 
+```shell
+kubectl create -f flink-configuration-configmap.yaml
+
+
+
+```
+
+<!-- tabs:end -->
 
 ## JobManager
 
@@ -263,13 +282,53 @@ public class StreamExecutionEnvironment implements AutoCloseable {
 }
 ```
 
+
+
+Flink 支持的数据源连接器 通过 addSource 函数添加
+之后通过 addSink 添加到转换流程中
+
+
+
+
+
+
+
+
+
+
+
+
 DataStream代表一系列同类型数据的集合，可以通过转换操作生成新的DataStream。
 DataStream用于表达业务转换逻辑，实际上并没有存储真实数据。
 
 DataStream数据结构包含两个主要成员：StreamExecutionEnvironment和Transformation<T> transformation。
 其中transformation是当前DataStream对应的上一次的转换操作，换句话讲，就是通过transformation生成当前的DataStream
 
-当用户通过DataStream API构建Flink作业时，StreamExecutionEnvironment会将DataStream之间的转换操作存储至StreamExecutionEnvironment的List<Transformation<?>> transformations集合，然后基于这些转换操作构建作业Pipeline拓扑，用于描述整个作业的计算逻辑。其中流式作业对应的Pipeline实现类为StreamGraph，批作业对应的Pipeline实现类为Plan
+当用户通过DataStream API构建Flink作业时，StreamExecutionEnvironment会将DataStream之间的转换操作存储至StreamExecutionEnvironment的List<Transformation<?>> transformations集合，
+然后基于这些转换操作构建作业Pipeline拓扑，用于描述整个作业的计算逻辑。
+其中流式作业对应的Pipeline实现类为StreamGraph，批作业对应的Pipeline实现类为Plan
+
+
+
+转换操作
+- 单数据
+  - map
+  - filter
+  - flatmap
+- window
+  - timeWindowAll
+  - countWindow
+- 多流合并
+  - join
+  - connect
+  - coGroup
+  - union
+  - interval join
+- 单流切分
+  - split
+  - sideOutput
+
+
 
 ### Transformation
 
@@ -285,9 +344,15 @@ ChainingStrategy支持如下四种策略
 
 Transformation结构中最主要的组成部分就是StreamOperator
 
-StreamOperator最终会通过StreamOperatorFactory封装在Transformation结构中，并存储在StreamGraph和JobGraph结构中，直到运行时执行StreamTask时，才会调用StreamOperatorFactory.createStreamOperator()方法在StreamOperatorFactory中定义StreamOperator实例
+StreamOperator最终会通过StreamOperatorFactory封装在Transformation结构中，并存储在StreamGraph和JobGraph结构中，
+直到运行时执行StreamTask时，才会调用StreamOperatorFactory.createStreamOperator()方法在StreamOperatorFactory中定义StreamOperator实例
 
-DataStream API中大部分转换操作都是通过SimpleOperatorFactory进行封装和创建的。SimpleStreamOperatorFactory根据算子类型的不同，拓展出了InputFormatOperatorFactory、UdfStreamOperatorFactory和OutputFormatOperatorFactory三种接口实现
+DataStream API中大部分转换操作都是通过SimpleOperatorFactory进行封装和创建的
+SimpleStreamOperatorFactory根据算子类型的不同，拓展出了InputFormatOperatorFactory、UdfStreamOperatorFactory和OutputFormatOperatorFactory三种接口实现
+
+
+
+
 
 ## Function
 
