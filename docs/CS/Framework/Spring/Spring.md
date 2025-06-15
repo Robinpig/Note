@@ -1,6 +1,6 @@
 ## Introduction
 
-The [Spring Framework](https://spring.io/projects/spring-framework) provides a comprehensive programming and configuration model for modern Java-based enterprise applications - on any kind of deployment platform. makes programming Java quicker, easier, and safer for everybody.
+The [Spring Framework](https://spring.io/projects/spring-framework) provides a comprehensive programming and configuration model for *modern Java-based enterprise applications* - on any kind of deployment platform. makes programming Java quicker, easier, and safer for everybody.
 Spring’s focus on speed, simplicity, and productivity has made it the world's most popular Java framework.
 
 ## Architecture
@@ -65,7 +65,9 @@ It makes it easy to use data access technologies, relational and  non-relational
 
 ### Integration
 
-REST Endpoints
+Spring Framework’s integration with a number of technologies.
+
+#### REST Clients
 
 The Spring Framework provides two choices for making calls to REST endpoints:
 
@@ -81,14 +83,19 @@ public interface RestTemplateRequestCustomizer<T extends ClientHttpRequest> {
 }
 ```
 
+#### Task Execution and Scheduling
+
 [Task Execution and Scheduling](/docs/CS/Framework/Spring/Task.md)
+
+#### Cache Abstraction
 
 [Cache Abstraction](/docs/CS/Framework/Spring/Cache.md)
 
 [Spring Security](/docs/CS/Framework/Spring/Security.md)
 
+### Test
 
-### Testing
+[Testing](/docs/CS/Framework/Spring/Test.md)
 
 SpringProperties
 
