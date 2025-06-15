@@ -4,6 +4,113 @@ Go进程中的众多协程其实依托于线程，借助操作系统将线程调
 
 
 
+## GMP
+
+
+
+在GMP模型中，
+
+- G代表的是Go语言中的协程（Goroutine），
+- M代表的是执行运算单元, Go会将其与操作系统的线程绑定
+- P代表的是Go逻辑处理器（Processor），Go语言为了方便协程调度与缓存，抽象出了逻辑处理器。
+
+Go 语言针对 GMP 模型 分别定义了对应的数据结构
+
+
+<!-- tabs:start -->
+
+
+##### **g**
+
+g结构体用于代表一个goroutine，该结构体保存了goroutine的所有信息，包括栈，gobuf结构体和其它的一些状态信息
+
+```go
+ 
+type g struct {
+	stack       stack  
+	sched     gobuf
+	...
+		
+}
+```
+
+
+
+##### **m**
+
+m结构体用来代表工作线程，它保存了m自身使用的栈信息，当前正在运行的goroutine以及与m绑定的p等信息
+
+调度程序被封装成协程 g0
+
+```go
+type m struct {
+   g0      *g     // goroutine with scheduling stack
+   mstartfn        func()
+   curg            *g       // current running goroutine
+   p               puintptr // attached p for executing go code (nil if not executing go code)
+   nextp           puintptr
+   id              int64
+   ...
+}
+```
+
+
+
+##### **p**
+
+p结构体用于保存工作线程执行go代码时所必需的资源，比如goroutine的运行队列，内存分配用到的缓存等等。
+
+```go
+type p struct {
+	id          int32
+	status      uint32 // one of pidle/prunning/...
+	m           muintptr   // back-link to associated m (nil if idle)
+
+	// Queue of runnable goroutines. Accessed without lock.
+	runqhead uint32
+	runqtail uint32
+	runq     [256]guintptr
+  ...
+}
+```
+
+<!-- tabs:end -->
+
+
+默认情况下P的数量等于CPU逻辑核的数量 可以使用runtime.GOMAXPROCS来修改 每个P都有一个本地goroutine队列
+
+> 一般来讲，程序运行时就将GOMAXPROCS大小设置为CPU核数，可让Go程序充分利用CPU。 在某些IO密集型的应用里，这个值可能并不意味着性能最好 
+> 理论上当某个Goroutine进入系统调用时，会有一个新的M被启用或创建，继续占满CPU。 但由于Go调度器检测到M被阻塞是有一定延迟的，
+> 也即旧的M被阻塞和新的M得到运行之间是有一定间隔的，所以在IO密集型应用中不妨把GOMAXPROCS设置的大一些，或许会有好的效果。
+
+最早的Go(1.0以下)运行时模型是GM模型
+
+1. 用一个全局的mutex保护着一个全局的runq（就绪队列），所有goroutine的创建、结束，以及 调度等操作都要先获得锁，造成对锁的争用异常严重
+2. G的每次执行都会被分发到随机的M上，造成在不同M之间频繁切换，破坏了程序的局部性， 主要原因也是因为只有一个全局的runq。例如在一个chan上互相唤醒的两个goroutine就会面临这种 问题。还有一点就是新创建的G会被创建它的M放入全局runq中，但是会被另一个M调度执行，也会造成不必要的开销
+3. 每个M都会关联一个内存分配缓存mcache，造成了大量的内存开销，进一步使数据的局部性变差。实际上只有执行Go代码的M才真地需要mcache，那些阻塞在系统调用中的M根本不需要， 而实际执行Go代码的M可能仅占M总数的1%。
+4. 在存在系统调用的情况下，工作线程经常被阻塞和解除阻塞，从而增加了很多开销
+
+在任一时刻，一个P可能在其本地包含多个G，同时，一个P在任一时刻只能绑定一个M。
+图14-9中没有涵盖的信息是：一个G并不是固定绑定同一个P的，有很多情况（例如P在运行时被销毁）会导致一个P中的G转移到其他的P中。
+同样的，一个P只能对应一个M，但是具体对应的是哪一个M也是不固定的。一个M可能在某些时候转移到其他的P中执行
+
+
+
+实际上一共有三种 g：
+
+1. 执行用户代码的 g； 使用 go 关键字启动的 goroutine，也是我们接触最多的一类 g
+2. 执行调度器代码的 g，也即是 g0； g0 在底层和其他 g 是一样的数据结构，但是性质上有很大的区别，首先 g0 的栈大小是固定的，
+3. 比如在 Linux 或者其他 Unix-like 的系统上一般是固定 8MB，不能动态伸缩，而普通的 g 初始栈大小是 2KB，可按需扩展 
+4. 每个线程被创建出来之时都需要操作系统为之分配一个初始固定的线程栈，就是前面说的 8MB 大小的栈，g0 栈就代表了这个线程栈，因此每一个 m 都需要绑定一个 g0 来执行调度器代码，然后跳转到执行用户代码的地方。
+5. 执行 runtime.main 初始化工作的 main goroutine；
+
+启动一个新的 goroutine 是通过 go 关键字来完成的，而 go compiler 会在编译期间利用 cmd/compile/internal/gc.state.stmt 和 cmd/compile/internal/gc.state.call 
+这两个函数将 go 关键字翻译成 runtime.newproc 函数调用，而 runtime.newproc 接收了函数指针和其大小之后，会获取 goroutine 和调用处的程序计数器，接着再调用 runtime.newproc1
+
+
+
+
+
 ## start
 
 首先来看Go程序的启动过程
@@ -20,10 +127,10 @@ TEXT _rt0_amd64_linux(SB),NOSPLIT,$-8
 
 go/src/runtime/asm_amd64.s
 
-
 _rt0_amd64 is common startup code for most amd64 systems when using internal linking.
 This is the entry point for the program from the kernel for an ordinary -buildmode=exe program. 
 The stack holds the number of arguments and the C-style argv.
+
 ```cpp
 TEXT _rt0_amd64(SB),NOSPLIT,$-8
 	MOVQ	0(SP), DI	// argc
@@ -140,8 +247,7 @@ ok:
 
 main goroutine
 
-```
-
+```go
 func main() {
 	mp := getg().m
 
@@ -317,60 +423,6 @@ func main() {
 
 上下文切换只是PC SP DX的修改 创建最初的m0 创建最初的g0
 
-## GMP
-
-
-
-在GMP模型中，
-
-- G代表的是Go语言中的协程（Goroutine），
-- M代表的是执行运算单元, Go会将其与操作系统的线程绑定
-- P代表的是Go逻辑处理器（Processor），Go语言为了方便协程调度与缓存，抽象出了逻辑处理器。
-
-默认情况下P的数量等于CPU逻辑核的数量 可以使用runtime.GOMAXPROCS来修改 每个P都有一个本地goroutine队列
-
-> 一般来讲，程序运行时就将GOMAXPROCS大小设置为CPU核数，可让Go程序充分利用CPU。 在某些IO密集型的应用里，这个值可能并不意味着性能最好 
-> 理论上当某个Goroutine进入系统调用时，会有一个新的M被启用或创建，继续占满CPU。 但由于Go调度器检测到M被阻塞是有一定延迟的，
-> 也即旧的M被阻塞和新的M得到运行之间是有一定间隔的，所以在IO密集型应用中不妨把GOMAXPROCS设置的大一些，或许会有好的效果。
-
-最早的Go(1.0以下)运行时模型是GM模型
-1. 用一个全局的mutex保护着一个全局的runq（就绪队列），所有goroutine的创建、结束，以及 调度等操作都要先获得锁，造成对锁的争用异常严重
-2. G的每次执行都会被分发到随机的M上，造成在不同M之间频繁切换，破坏了程序的局部性， 主要原因也是因为只有一个全局的runq。例如在一个chan上互相唤醒的两个goroutine就会面临这种 问题。还有一点就是新创建的G会被创建它的M放入全局runq中，但是会被另一个M调度执行，也 会造成不必要的开销
-3. 每个M都会关联一个内存分配缓存mcache，造成了大量的内存开销，进一步使数据的局部性 变差。实际上只有执行Go代码的M才真地需要mcache，那些阻塞在系统调用中的M根本不需要， 而实际执行Go代码的M可能仅占M总数的1%。
-4. 在存在系统调用的情况下，工作线程经常被阻塞和解除阻塞，从而增加了很多开销
-
-在任一时刻，一个P可能在其本地包含多个G，同时，一个P在任一时刻只能绑定一个M。
-图14-9中没有涵盖的信息是：一个G并不是固定绑定同一个P的，有很多情况（例如P在运行时被销毁）会导致一个P中的G转移到其他的P中。
-同样的，一个P只能对应一个M，但是具体对应的是哪一个M也是不固定的。一个M可能在某些时候转移到其他的P中执行
-
-
-
-实际上一共有三种 g：
-1. 执行用户代码的 g； 使用 go 关键字启动的 goroutine，也是我们接触最多的一类 g
-2. 执行调度器代码的 g，也即是 g0； g0 在底层和其他 g 是一样的数据结构，但是性质上有很大的区别，首先 g0 的栈大小是固定的，
-3. 比如在 Linux 或者其他 Unix-like 的系统上一般是固定 8MB，不能动态伸缩，而普通的 g 初始栈大小是 2KB，可按需扩展 
-4. 每个线程被创建出来之时都需要操作系统为之分配一个初始固定的线程栈，就是前面说的 8MB 大小的栈，g0 栈就代表了这个线程栈，因此每一个 m 都需要绑定一个 g0 来执行调度器代码，然后跳转到执行用户代码的地方。
-3. 执行 runtime.main 初始化工作的 main goroutine；
-
-启动一个新的 goroutine 是通过 go 关键字来完成的，而 go compiler 会在编译期间利用 cmd/compile/internal/gc.state.stmt 和 cmd/compile/internal/gc.state.call 
-这两个函数将 go 关键字翻译成 runtime.newproc 函数调用，而 runtime.newproc 接收了函数指针和其大小之后，会获取 goroutine 和调用处的程序计数器，接着再调用 runtime.newproc1
-
-
-
-**g结构体**
-
-g结构体用于代表一个goroutine，该结构体保存了goroutine的所有信息，包括栈，gobuf结构体和其它的一些状态信息
-
-**m结构体**
-
-m结构体用来代表工作线程，它保存了m自身使用的栈信息，当前正在运行的goroutine以及与m绑定的p等信息，详见下面定义中的注释
-
-**p结构体**
-
-p结构体用于保存工作线程执行go代码时所必需的资源，比如goroutine的运行队列，内存分配用到的缓存等等。
-
-
-
 schedt结构体用来保存调度器的状态信息和goroutine的全局运行队列
 
 
@@ -413,11 +465,11 @@ type m struct {
 
 在用户协程退出或者被抢占时，意味着需要重新执行协程调度，这时需要从用户协程g切换到协程g0，协程g与协程g0的对应关系如图15-2所示。要注意的是，每个线程的内部都在完成这样的切换与调度循环
 
-
 协程经历g→g0→g的过程，完成了一次调度循环。
 和线程类似，协程切换的过程叫作协程的上下文切换。当某一个协程g执行上下文切换时需要保存当前协程的执行现场，才能够在后续切换回g协程时正常执行。
 协程的执行现场存储在g.gobuf结构体中，g.gobuf结构体主要保存CPU中几个重要的寄存器值，分别是rsp、rip、rbp。
 rsp寄存器始终指向函数调用栈栈顶，rip寄存器指向程序要执行的下一条指令的地址，rbp存储了函数栈帧的起始位置
+
  ```go
  
 type g struct {
@@ -841,7 +893,7 @@ func newosproc(mp *m) {
 
 ## schedule
 
-调度的核心策略位于schedule函数
+调度的核心策略位于 `runtime.schedule` 函数
 Go scheduler 的调度 goroutine 过程中所调用的核心函数链如下：
 
 ```
