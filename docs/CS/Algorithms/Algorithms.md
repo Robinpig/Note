@@ -100,6 +100,16 @@ We rely on probability to analyze hash-table operations, but you can understand 
 
 [Graph](/docs/CS/Algorithms/graph/graph.md)
 
+
+
+[Disjoing Set](/docs/CS/Algorithms/Disjoint-Ser.md)
+
+[BloomFilter](/docs/CS/Algorithms/BloomFilter.md)
+
+
+
+
+
 ### Page Replacement Algorithms
 
 - [LRU](/docs/CS/Algorithms/LRU.md)
