@@ -1,6 +1,31 @@
 ## Introduction
 
+Dubbo 提供的是一种 Client-Based 的服务发现机制，依赖第三方注册中心组件来协调服务发现过程，支持常用的注册中心如 Nacos、Consul、Zookeeper 等
+
+服务发现包含提供者、消费者和注册中心三个参与角色，其中，Dubbo 提供者实例注册 URL 地址到注册中心，注册中心负责对数据进行聚合，Dubbo 消费者从注册中心读取地址列表并订阅变更，每当地址列表发生变化，注册中心将最新的列表通知到所有订阅的消费者实例
+
 Dubbo 将注册中心抽象为以`Registry`为核心的注册中心组件，将这些组件引入到`Consumer`和`Provider`后，就可以执行注册中心的相关操作了，如注册服务、订阅服务变更事件和通知服务变更等
+
+- 首先，Dubbo 注册中心以应用粒度聚合实例数据，消费者按消费需求精准订阅，避免了大多数开源框架如 Istio、Spring Cloud 等全量订阅带来的性能瓶颈。
+- 其次，Dubbo SDK 在实现上对消费端地址列表处理过程做了大量优化，地址通知增加了异步、缓存、bitmap 等多种解析优化，避免了地址更新常出现的消费端进程资源波动。
+- 最后，在功能丰富度和易用性上，服务发现除了同步 ip、port 等端点基本信息到消费者外，Dubbo 还将服务端的 RPC/HTTP 服务及其配置的元数据信息同步到消费端，这让消费者、提供者两端的更细粒度的协作成为可能，Dubbo 基于此机制提供了很多差异化的治理能力
+
+Dubbo 目前支持的主流注册中心实现包括：
+
+- Zookeeper
+- Nacos
+- Redis
+- Consul
+- Etcd
+- 更多实现
+
+同时也支持 Kubernetes、Mesh 体系的服务发现
+
+Dubbo 扩展生态 还提供了 Consul、Eureka、Etcd 等注册中心扩展实现
+
+Dubbo 还支持在一个应用中指定多个注册中心，并将服务根据注册中心分组，这样做使得服务分组管理或服务迁移变得更容易
+
+对于部分注册中心类型（如 Zookeeper、Nacos 等），Dubbo 会默认同时将其用作元数据中心和配置中心（建议保持默认开启状态）
 
 
 
@@ -43,128 +68,6 @@ Dubbo 与 SpringCloud、Kubernetes 等不同产品在微服务的抽象定义上
 
 
 
-
-
-## RegistryFactory
-
-
-```java
-// RegistryFactory. (SPI, Singleton, ThreadSafe)
-@SPI("dubbo")
-public interface RegistryFactory {
-
-    /**
-     * Connect to the registry
-     * <p>
-     * Connecting the registry needs to support the contract: <br>
-     * 1. When the check=false is set, the connection is not checked, otherwise the exception is thrown when disconnection <br>
-     * 2. Support username:password authority authentication on URL.<br>
-     * 3. Support the backup=10.20.153.10 candidate registry cluster address.<br>
-     * 4. Support file=registry.cache local disk file cache.<br>
-     * 5. Support the timeout=1000 request timeout setting.<br>
-     * 6. Support session=60000 session timeout or expiration settings.<br>
-     *
-     * @param url Registry address, is not allowed to be empty
-     * @return Registry reference, never return empty value
-     */
-    @Adaptive({"protocol"})
-    Registry getRegistry(URL url);
-}
-```
-
-### AbstractRegistryFactory
-
-```java
-// AbstractRegistryFactory. (SPI, Singleton, ThreadSafe)
-public abstract class AbstractRegistryFactory implements RegistryFactory {
-
-    // The lock for the acquisition process of the registry
-    protected static final ReentrantLock LOCK = new ReentrantLock();
-
-    // Registry Collection Map<RegistryAddress, Registry>
-    protected static final Map<String, Registry> REGISTRIES = new HashMap<>();
-
-    private static final AtomicBoolean destroyed = new AtomicBoolean(false);
-
-    // Get all registries
-    public static Collection<Registry> getRegistries() {
-        return Collections.unmodifiableCollection(new LinkedList<>(REGISTRIES.values()));
-    }
-
-    public static Registry getRegistry(String key) {
-        return REGISTRIES.get(key);
-    }
-
-    // get getServiceDiscovery from REGISTRIES & instanceof ServiceDiscoveryRegistry
-    public static List<ServiceDiscovery> getServiceDiscoveries() {
-        return AbstractRegistryFactory.getRegistries()
-                .stream()
-                .filter(registry -> registry instanceof ServiceDiscoveryRegistry)
-                .map(registry -> (ServiceDiscoveryRegistry) registry)
-                .map(ServiceDiscoveryRegistry::getServiceDiscovery)
-                .collect(Collectors.toList());
-    }
-...
-}
-```
-
-#### getRegistry
-```java
-    @Override
-    public Registry getRegistry(URL url) {
-
-        Registry defaultNopRegistry = getDefaultNopRegistryIfDestroyed();
-        if (null != defaultNopRegistry) {
-            return defaultNopRegistry;
-        }
-
-        url = URLBuilder.from(url)
-                .setPath(RegistryService.class.getName())
-                .addParameter(INTERFACE_KEY, RegistryService.class.getName())
-                .removeParameters(EXPORT_KEY, REFER_KEY)
-                .build();
-        String key = createRegistryCacheKey(url);
-        // Lock the registry access process to ensure a single instance of the registry
-        LOCK.lock();
-        try {
-            // double check
-            // fix https://github.com/apache/dubbo/issues/7265.
-            defaultNopRegistry = getDefaultNopRegistryIfDestroyed();
-            if (null != defaultNopRegistry) {
-                return defaultNopRegistry;
-            }
-
-            Registry registry = REGISTRIES.get(key);
-            if (registry != null) {
-                return registry;
-            }
-            //create registry by spi/ioc
-            registry = createRegistry(url);
-            if (registry == null) {
-                throw new IllegalStateException("Can not create registry " + url);
-            }
-            REGISTRIES.put(key, registry);
-            return registry;
-        } finally {
-            // Release the lock
-            LOCK.unlock();
-        }
-    }
-```
-
-#### createRegistry
-
-Implementations:
-1. ZookeeperRegistryFactory
-2. DubboRegistryFactory
-3. NacosRegistryFactory
-4. RedisRegistryFactory
-5. EtcdRegistryFactory
-
-
-```java
-    protected abstract Registry createRegistry(URL url);
-```
 
 ## Registry
 
@@ -248,7 +151,6 @@ public interface RegistryService {
      *
      * @param url Query condition, is not allowed to be empty, e.g. consumer://10.20.153.10/org.apache.dubbo.foo.BarService?version=1.0.0&application=kylin
      * @return The registered information list, which may be empty, the meaning is the same as the parameters of {@link org.apache.dubbo.registry.NotifyListener#notify(List<URL>)}.
-     * @see org.apache.dubbo.registry.NotifyListener#notify(List)
      */
     List<URL> lookup(URL url);
 
@@ -329,9 +231,10 @@ public abstract class AbstractRegistry implements Registry {
             notify(url.getBackupUrls());
         }
     }
-...
+
 }
 ```
+
 
 
 
@@ -373,6 +276,32 @@ protected void notify(URL url, NotifyListener listener, List<URL> urls) {
 
 
 #### Cache
+注册中心实现通用缓存机制 减小注册中心的流量压力
+
+
+服务初始化时会从本地磁盘文件中把持久化的注册数据读到Properties对象中 加载到内存缓存
+```java
+    private void loadProperties() {
+        if (file == null || !file.exists()) {
+            return;
+        }
+        try (InputStream in = Files.newInputStream(file.toPath())) {
+            properties.load(in);
+        } catch (IOException e) {
+            // 1-9 failed to read / save registry cache file.
+        } catch (Throwable e) {
+            // 1-9 failed to read / save registry cache file.
+        }
+    }
+```
+
+
+
+##### saveProperties
+
+
+
+缓存的保存有同步和异步两种
 
 ```java
 private void saveProperties(URL url) {
@@ -456,6 +385,8 @@ public void doSaveProperties(long version) {
         }
 }
 ```
+
+
 
 ### FailbackRegistry
 
@@ -1162,7 +1093,7 @@ public void registerInstance(String serviceName, String groupName, Instance inst
 
 ### ZookeeperRegistry
 
-
+Dubbo 使用 ZooKeeper 作为注册中心时 只会创建持久节点和顺序节点两种 对创建的顺序没有要求
 
 ```java
 public class ZookeeperRegistryFactory extends AbstractRegistryFactory {
@@ -1186,7 +1117,9 @@ public class ZookeeperRegistryFactory extends AbstractRegistryFactory {
 
 
 
+/dubbo/service 目录下会创建四类子目录
 
+服务暴露时 服务端订阅configurators 消费端订阅providers routers 和 configurators
 
 ```java
 public class ZookeeperRegistry extends FailbackRegistry {
@@ -1259,6 +1192,10 @@ public class ZookeeperRegistry extends FailbackRegistry {
 
 
 
+注册代码非常简单
+
+
+
 ```java
 @Override
 public void doRegister(URL url) {
@@ -1269,6 +1206,16 @@ public void doRegister(URL url) {
 public void doUnregister(URL url) {
   	zkClient.delete(toUrlPath(url));
 }
+
+```
+
+
+
+服务订阅 启动时拉取 后续通过接收事件重新拉取数据
+
+
+
+```java
 
 @Override
 public void doSubscribe(final URL url, final NotifyListener listener) {
@@ -1482,6 +1429,8 @@ private class RegistryChildListenerImpl implements ChildListener {
 
 
 ### RedisRegsitry
+
+
 
 ```java
 public class RedisRegistryFactory extends AbstractRegistryFactory {
@@ -1773,6 +1722,123 @@ private void doNotify(Collection<String> keys, URL url, Collection<NotifyListene
 }
 ```
 
+
+
+## RegistryFactory
+
+
+```java
+// RegistryFactory. (SPI, Singleton, ThreadSafe)
+@SPI("dubbo")
+public interface RegistryFactory {
+
+    @Adaptive({"protocol"})
+    Registry getRegistry(URL url);
+}
+```
+
+Connect to the registry
+Connecting the registry needs to support the contract: 
+1. When the check=false is set, the connection is not checked, otherwise the exception is thrown when disconnection 
+2. Support username:password authority authentication on URL.
+3. Support the backup=10.20.153.10 candidate registry cluster address.
+4. Support file=registry.cache local disk file cache.
+5. Support the timeout=1000 request timeout setting.
+6. Support session=60000 session timeout or expiration settings.
+
+### AbstractRegistryFactory
+
+```java
+// AbstractRegistryFactory. (SPI, Singleton, ThreadSafe)
+public abstract class AbstractRegistryFactory implements RegistryFactory {
+
+    // The lock for the acquisition process of the registry
+    protected static final ReentrantLock LOCK = new ReentrantLock();
+
+    // Registry Collection Map<RegistryAddress, Registry>
+    protected static final Map<String, Registry> REGISTRIES = new HashMap<>();
+
+    private static final AtomicBoolean destroyed = new AtomicBoolean(false);
+
+    // Get all registries
+    public static Collection<Registry> getRegistries() {
+        return Collections.unmodifiableCollection(new LinkedList<>(REGISTRIES.values()));
+    }
+
+    public static Registry getRegistry(String key) {
+        return REGISTRIES.get(key);
+    }
+
+    // get getServiceDiscovery from REGISTRIES & instanceof ServiceDiscoveryRegistry
+    public static List<ServiceDiscovery> getServiceDiscoveries() {
+        return AbstractRegistryFactory.getRegistries()
+                .stream()
+                .filter(registry -> registry instanceof ServiceDiscoveryRegistry)
+                .map(registry -> (ServiceDiscoveryRegistry) registry)
+                .map(ServiceDiscoveryRegistry::getServiceDiscovery)
+                .collect(Collectors.toList());
+    }
+...
+}
+```
+
+#### getRegistry
+```java
+    @Override
+    public Registry getRegistry(URL url) {
+
+        Registry defaultNopRegistry = getDefaultNopRegistryIfDestroyed();
+        if (null != defaultNopRegistry) {
+            return defaultNopRegistry;
+        }
+
+        url = URLBuilder.from(url)
+                .setPath(RegistryService.class.getName())
+                .addParameter(INTERFACE_KEY, RegistryService.class.getName())
+                .removeParameters(EXPORT_KEY, REFER_KEY)
+                .build();
+        String key = createRegistryCacheKey(url);
+        // Lock the registry access process to ensure a single instance of the registry
+        LOCK.lock();
+        try {
+            // double check
+            // fix https://github.com/apache/dubbo/issues/7265.
+            defaultNopRegistry = getDefaultNopRegistryIfDestroyed();
+            if (null != defaultNopRegistry) {
+                return defaultNopRegistry;
+            }
+
+            Registry registry = REGISTRIES.get(key);
+            if (registry != null) {
+                return registry;
+            }
+            //create registry by spi/ioc
+            registry = createRegistry(url);
+            if (registry == null) {
+                throw new IllegalStateException("Can not create registry " + url);
+            }
+            REGISTRIES.put(key, registry);
+            return registry;
+        } finally {
+            // Release the lock
+            LOCK.unlock();
+        }
+    }
+```
+
+#### createRegistry
+
+Implementations:
+1. ZookeeperRegistryFactory
+2. DubboRegistryFactory
+3. NacosRegistryFactory
+4. RedisRegistryFactory
+5. EtcdRegistryFactory
+
+
+```java
+    protected abstract Registry createRegistry(URL url);
+```
 
 
 ## NotifyListener

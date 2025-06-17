@@ -6,7 +6,7 @@
 Dubbo 被设计为高度可扩展，用户可以方便的实现流量拦截、选址的各种定制逻辑。
 在云原生时代，Dubbo相继衍生出了Dubbo3、Proxyless Mesh等架构与解决方案，在易用性、超大规模微服务实践、云原生基础设施适配、安全性等几大方向上进行了全面升级。  
 
-Dubbo 在很多大企业内部衍生出了独立版本，比如在阿里巴巴内部就基于Dubbo3 衍生出了 HSF3  
+Dubbo 在很多大企业内部衍生出了独立版本，比如在阿里巴巴内部就基于Dubbo3 衍生出了 [HSF3](/docs/CS/Framework/HSF/HSF.md)  
 
 ## Build
 
@@ -34,11 +34,11 @@ mvn idea:idea
 Fig.1. Architecture
 </p>
 
-以上是 Dubbo 的工作原理图，从抽象架构上分为两层：服务治理抽象控制面和Dubbo 数据面
+以上是 Dubbo 的工作原理图，从抽象架构上分为两层：服务治理控制面和Dubbo 数据面
 
-- 服务治理控制面
+- **服务治理控制面**
   服务治理控制面不是特指如注册中心类的单个具体组件，而是对 Dubbo 治理体系的抽象表达。控制面包含协调服务发现的注册中心、流量管控策略、Dubbo Admin控制台等，如果采用了 Service Mesh 架构则还包含 Istio 等服务网格控制面。
--  Dubbo 数据面
+-  **Dubbo 数据面**
   数据面代表集群部署的所有 Dubbo 进程，进程之间通过 RPC 协议实现数据交换，Dubbo 定义了微服务应用开发与调用规范并负责完成数据传输的编解码工作。
   - 服务消费者（Dubbo Consumer），发起业务调用或 RPC 通信的 Dubbo 进程。
   - 服务提供者（Dubbo Provider），接收业务调用或 RPC 通信的 Dubbo 进程。  
@@ -68,8 +68,41 @@ Dubbo 在微服务应用开发框架之上抽象了一 套 RPC 服务定义、�
 
 Dubbo 从设计上不绑定任何一款特定通信协议，HTTP/2、REST、gRPC、JsonRPC、 Thrift、Hessian2 等几乎所有主流的通信协议，Dubbo 框架都可以提供支持。
 
+服务治理
+
 服务开发框架解决了开发与通信的问题，但在微服务集群环境下，我们仍需要解决 无状态服务节点动态变化、外部化配置、日志跟踪、可观测性、流量管理、高可用 性、数据一致性等一系列问题，我们将这些问题统称为服务治理。
 Apache Dubbo 概念与架构 13Dubbo 抽象了一套微服务治理模式并发布了对应的官方实现，服务治理可帮助简化 微服务开发与运维，让开发者更专注在微服务业务本身。
+
+
+
+### Code Architecture
+
+> 引用自 [代码架构](https://cn.dubbo.apache.org/zh-cn/overview/mannual/java-sdk/reference-manual/architecture/code-architecture/)
+
+Dubbo 的整体自上到下分成 Biz, RPC 和 Remote 三层
+
+<div style="text-align: center;">
+
+![Fig.2. Dubbo Framework](img/Dubbo-framework.png)
+</div>
+
+<p style="text-align: center;">
+Fig.2. Code Architecture
+</p>
+图例说明：
+
+- 图中左边淡蓝背景的为服务消费方使用的接口，右边淡绿色背景的为服务提供方使用的接口，位于中轴线上的为双方都用到的接口。
+- 图中从下至上分为十层，各层均为单向依赖，右边的黑色箭头代表层之间的依赖关系，每一层都可以剥离上层被复用，其中，Service 和 Config 层为 API，其它各层均为 SPI。
+- 图中绿色小块的为扩展接口，蓝色小块为实现类，图中只显示用于关联各层的实现类。
+- 图中蓝色虚线为初始化过程，即启动时组装链，红色实线为方法调用过程，即运行时调用链，紫色三角箭头为继承，可以把子类看作父类的同一个节点，线上的文字为调用的方法
+
+
+
+设计原则
+
+- 采用 Microkernel + Plugin 模式，Microkernel 只负责组装 Plugin，Dubbo 自身的功能也是通过扩展点实现的，也就是 Dubbo 的所有功能点都可被用户自定义扩展所替换。
+- 采用 URL 作为配置信息的统一格式，所有扩展点都通过传递 URL 携带配置信息。
+
 
 
 
@@ -666,9 +699,6 @@ public void initialize() throws IllegalStateException {
 
 
 
-调用链路
-
-![Dubbo Framework](img/Dubbo-framework.png)
 
 
 

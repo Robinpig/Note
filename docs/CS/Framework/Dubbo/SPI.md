@@ -1,6 +1,6 @@
 ## Introduction
 
-Dubbo 并未使用 Java 原生的 [SPI](/docs/CS/Java/JDK/Basic/SPI.md) 机制，而是对其进行了增强.
+Dubbo 并未使用 Java 原生的 [SPI](/docs/CS/Java/JDK/Basic/SPI.md) 机制，而是对其进行了增强
 
 为什么 Dubbo自己实现 SPI，而不直接使用 Java SPI 呢？
 其主要原因有：
@@ -151,7 +151,7 @@ public class ExtensionLoader<T> {
     private static <T> boolean withExtensionAnnotation(Class<T> type) {
         return type.isAnnotationPresent(SPI.class);
     }
-  ...
+
 }
 ```
 
@@ -963,7 +963,7 @@ public class JdkCompiler extends AbstractCompiler {
     private final List<String> options;
 
     private static final String DEFAULT_JAVA_VERSION = "1.8";
-...
+
 }
 ```
 
