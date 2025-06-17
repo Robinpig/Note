@@ -173,6 +173,23 @@ public interface Registry extends Node, RegistryService {
 ```
 
 
+
+
+/dubbo/service 目录下会创建四类子目录
+
+服务暴露时 服务端订阅configurators 消费端订阅providers routers 和 configurators
+
+这是 Dubbo 3.x 推崇的一个应用级注册新特性，在不改变任何 Dubbo 配置的情况下，可以兼容一个应用从 2.x 版本平滑升级到 3.x 版本，
+这个新特性主要是为了将来能支持十万甚至百万 的集群实例地址发现，并且可以与不同的微服务体系实现地址发现互联互通。 
+但这里有个小问题了，控制提供方应用到底应该接口级注册，还是应用级注册，还是两个都注册呢？ 
+你可以通过在提供方设置 `dubbo.application.register-mode` 属性来自由控制，设置的值有 3 种：
+- interface：只接口级注册。 
+- instance：只应用级注册。 
+- all：接口级注册、应用级注册都会存在，同时也是默认值。
+
+
+
+
 ### AbstractRegistry
 
  when register/unregister, add/remove url from `Set<URL> registered`
@@ -1116,10 +1133,6 @@ public class ZookeeperRegistryFactory extends AbstractRegistryFactory {
 ```
 
 
-
-/dubbo/service 目录下会创建四类子目录
-
-服务暴露时 服务端订阅configurators 消费端订阅providers routers 和 configurators
 
 ```java
 public class ZookeeperRegistry extends FailbackRegistry {

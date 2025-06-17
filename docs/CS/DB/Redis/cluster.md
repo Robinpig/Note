@@ -873,6 +873,16 @@ void clusterFailoverReplaceYourMaster(void) {
 }
 ```
 
+## Tuning
+
+
+No way to dispatch this command to Redis Cluster because keys have different slots
+可能原因：JedisCluster操作的Key不在同一个Slot（槽）中。
+解决方法：通过Hash tags对Key进行改造
+
+
+
+
 ## Links
 
 - [Redis](/docs/CS/DB/Redis/Redis.md)
