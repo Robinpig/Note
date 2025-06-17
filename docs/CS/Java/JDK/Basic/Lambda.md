@@ -467,6 +467,14 @@ empty()
 
 iterate() generate()
 
+
+
+#### Collector
+
+toMap 函数 value 必须不为null 否则会导致报错
+
+[Collectors.toMap fails on null values](https://bugs.openjdk.org/browse/JDK-8148463)
+
 ### Parallel
 
 Returns an equivalent stream that is parallel. May return itself, either because the stream was already parallel, or because the underlying stream state was modified to be parallel.

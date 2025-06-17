@@ -1212,6 +1212,20 @@ public static ScheduledExecutorService newScheduledThreadPool(
 | disadvantage | unbound thread counts | unbound linked queue |
 |              |                       |                       |
 
+
+
+## Tuning
+
+
+线程池参数设置
+
+通常都是核心和最大线程池大小的设置 可以根据qps预期来设置 例如预计3k ，
+线上有160个pod 那单机20-30 并发10 rt时间大约80-100 那么需要核心线程10 最大线程100
+
+
+
+
+
 ## Links
 
 - [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
