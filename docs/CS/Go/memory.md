@@ -122,6 +122,103 @@ type mcentral struct {
 
 一个进程有多个 mcentral 管理这些 mcentral实例的是mheap的结构体实例
 
+### mallocgc
+Go 申请内存的入口函数是 `runtime.mallocgc`
+```go
+//go:linkname mallocgc
+func mallocgc(size uintptr, typ *_type, needzero bool) unsafe.Pointer {
+	if doubleCheckMalloc {
+		if gcphase == _GCmarktermination {
+			throw("mallocgc called with gcphase == _GCmarktermination")
+		}
+	}
+
+	// Short-circuit zero-sized allocation requests.
+	if size == 0 {
+		return unsafe.Pointer(&zerobase)
+	}
+
+	// It's possible for any malloc to trigger sweeping, which may in
+	// turn queue finalizers. Record this dynamic lock edge.
+	// N.B. Compiled away if lockrank experiment is not enabled.
+	lockRankMayQueueFinalizer()
+
+	// Pre-malloc debug hooks.
+	if debug.malloc {
+		if x := preMallocgcDebug(size, typ); x != nil {
+			return x
+		}
+	}
+
+	// For ASAN, we allocate extra memory around each allocation called the "redzone."
+	// These "redzones" are marked as unaddressable.
+	var asanRZ uintptr
+	if asanenabled {
+		asanRZ = redZoneSize(size)
+		size += asanRZ
+	}
+
+	// Assist the GC if needed.
+	if gcBlackenEnabled != 0 {
+		deductAssistCredit(size)
+	}
+
+	// Actually do the allocation.
+	var x unsafe.Pointer
+	var elemsize uintptr
+	if size <= maxSmallSize-mallocHeaderSize {
+		if typ == nil || !typ.Pointers() {
+			if size < maxTinySize {
+				x, elemsize = mallocgcTiny(size, typ, needzero)
+			} else {
+				x, elemsize = mallocgcSmallNoscan(size, typ, needzero)
+			}
+		} else if heapBitsInSpan(size) {
+			x, elemsize = mallocgcSmallScanNoHeader(size, typ, needzero)
+		} else {
+			x, elemsize = mallocgcSmallScanHeader(size, typ, needzero)
+		}
+	} else {
+		x, elemsize = mallocgcLarge(size, typ, needzero)
+	}
+
+	// Notify sanitizers, if enabled.
+	if raceenabled {
+		racemalloc(x, size-asanRZ)
+	}
+	if msanenabled {
+		msanmalloc(x, size-asanRZ)
+	}
+	if asanenabled {
+		// Poison the space between the end of the requested size of x
+		// and the end of the slot. Unpoison the requested allocation.
+		frag := elemsize - size
+		if typ != nil && typ.Pointers() && !heapBitsInSpan(elemsize) && size <= maxSmallSize-mallocHeaderSize {
+			frag -= mallocHeaderSize
+		}
+		asanpoison(unsafe.Add(x, size-asanRZ), asanRZ)
+		asanunpoison(x, size-asanRZ)
+	}
+
+	// Adjust our GC assist debt to account for internal fragmentation.
+	if gcBlackenEnabled != 0 && elemsize != 0 {
+		if assistG := getg().m.curg; assistG != nil {
+			assistG.gcAssistBytes -= int64(elemsize - size)
+		}
+	}
+
+	// Post-malloc debug hooks.
+	if debug.malloc {
+		postMallocgcDebug(x, elemsize, typ)
+	}
+	return x
+}
+```
+
+
+## memory leak
+
+Go 允许将局部变量的地址作为值返回给上层调用函数 所以存在内存泄露的可能
 
 
 

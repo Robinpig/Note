@@ -13,6 +13,44 @@ Go语言并不是没有尝试过分代GC。分代GC的主要假设是大部分�
 这和其他使用分代GC的编程语言有显著的不同，减弱了使用分代GC的优势。“同时，分代GC需要额外的写屏障来保护并发垃圾回收时对象的隔代性，会减慢GC的速度。
 因此，分代GC是被尝试过并抛弃的方案[2]。
 
+
+
+gcMarkBits 用于实现内存标记 0-白色 1-黑色
+
+```go
+type mspan struct {
+	// allocBits and gcmarkBits hold pointers to a span's mark and
+	// allocation bits. The pointers are 8 byte aligned.
+	// There are three arenas where this data is held.
+	// free: Dirty arenas that are no longer accessed
+	//       and can be reused.
+	// next: Holds information to be used in the next GC cycle.
+	// current: Information being used during this GC cycle.
+	// previous: Information being used during the last GC cycle.
+	// A new GC cycle starts with the call to finishsweep_m.
+	// finishsweep_m moves the previous arena to the free arena,
+	// the current arena to the previous arena, and
+	// the next arena to the current arena.
+	// The next arena is populated as the spans request
+	// memory to hold gcmarkBits for the next GC cycle as well
+	// as allocBits for newly allocated spans.
+	//
+	// The pointer arithmetic is done "by hand" instead of using
+	// arrays to avoid bounds checks along critical performance
+	// paths.
+	// The sweep will free the old allocBits and set allocBits to the
+	// gcmarkBits. The gcmarkBits are replaced with a fresh zeroed
+	// out memory.
+	allocBits  *gcBits
+	gcmarkBits *gcBits
+	pinnerBits *gcBits // bitmap for pinned objects; accessed atomically
+}
+```
+
+
+
+
+
 gcStart starts the GC. It transitions from _GCoff to _GCmark (if debug.gcstoptheworld == 0) or performs all of GC (if debug.gcstoptheworld != 0).
 
 
@@ -86,6 +124,10 @@ func gcSweep(mode gcMode) bool {
 	return false
 }
 ```
+
+
+
+
 
 ## Links
 
