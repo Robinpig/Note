@@ -167,6 +167,16 @@ You can imagine that the consistent hash algorithm, the entire hash value space 
 
 [Consistent Hashing and Random Trees: Distributed Caching Protocols for Relieving Hot Spots on the World Wide Web](https://www.cs.princeton.edu/courses/archive/fall09/cos518/papers/chash.pdf)
 
+虽然一致性 Hash 算法已经十分完善，但是还是有很多不足的地方
+
+1. Hash 环上的节点非常多或者更新频繁时，查询效率比较低下
+2. 整个 Hash 环需要一个服务路由来做负载均衡，存在单点问题
+
+一致性 Hash 算法首先需要考虑的问题就是：构造一个长度为 `2^32` 的整数环，根据节点名称的 Hash 值将服务器节点放置在这个 Hash 环上
+
+
+
+
 
 virtual node
 
