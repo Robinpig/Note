@@ -61,8 +61,6 @@ It makes it easy to use data access technologies, relational and  non-relational
 - [Spring Data for Apache Cassandra](https://spring.io/projects/spring-data-cassandra) - Easy configuration and access to Apache Cassandra or large scale, highly available, data oriented Spring applications.
 - [Spring Data for Apache Geode](https://spring.io/projects/spring-data-geode) - Easy configuration and access to Apache Geode for highly consistent, low latency, data oriented Spring applications.
 
-
-
 ### Integration
 
 Spring Framework’s integration with a number of technologies.
@@ -92,6 +90,10 @@ public interface RestTemplateRequestCustomizer<T extends ClientHttpRequest> {
 [Cache Abstraction](/docs/CS/Framework/Spring/Cache.md)
 
 [Spring Security](/docs/CS/Framework/Spring/Security.md)
+
+#### AI
+
+[Spring AI](/docs/CS/Framework/Spring/AI.md)
 
 ### Test
 
