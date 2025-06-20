@@ -216,9 +216,245 @@ func mallocgc(size uintptr, typ *_type, needzero bool) unsafe.Pointer {
 ```
 
 
+### heap
+
+Main malloc heap.
+The heap itself is the "free" and "scav" treaps, but all the other global data is here too.
+
+mheap must not be heap-allocated because it contains mSpanLists, which must not be heap-allocated.
+```go
+type mheap struct {
+	_ sys.NotInHeap
+
+	// lock must only be acquired on the system stack, otherwise a g
+	// could self-deadlock if its stack grows with the lock held.
+	lock mutex
+
+	pages pageAlloc // page allocation data structure
+
+	sweepgen uint32 // sweep generation, see comment in mspan; written during STW
+
+	// allspans is a slice of all mspans ever created. Each mspan
+	// appears exactly once.
+	//
+	// The memory for allspans is manually managed and can be
+	// reallocated and move as the heap grows.
+	//
+	// In general, allspans is protected by mheap_.lock, which
+	// prevents concurrent access as well as freeing the backing
+	// store. Accesses during STW might not hold the lock, but
+	// must ensure that allocation cannot happen around the
+	// access (since that may free the backing store).
+	allspans []*mspan // all spans out there
+
+	// Proportional sweep
+	//
+	// These parameters represent a linear function from gcController.heapLive
+	// to page sweep count. The proportional sweep system works to
+	// stay in the black by keeping the current page sweep count
+	// above this line at the current gcController.heapLive.
+	//
+	// The line has slope sweepPagesPerByte and passes through a
+	// basis point at (sweepHeapLiveBasis, pagesSweptBasis). At
+	// any given time, the system is at (gcController.heapLive,
+	// pagesSwept) in this space.
+	//
+	// It is important that the line pass through a point we
+	// control rather than simply starting at a 0,0 origin
+	// because that lets us adjust sweep pacing at any time while
+	// accounting for current progress. If we could only adjust
+	// the slope, it would create a discontinuity in debt if any
+	// progress has already been made.
+	pagesInUse         atomic.Uintptr // pages of spans in stats mSpanInUse
+	pagesSwept         atomic.Uint64  // pages swept this cycle
+	pagesSweptBasis    atomic.Uint64  // pagesSwept to use as the origin of the sweep ratio
+	sweepHeapLiveBasis uint64         // value of gcController.heapLive to use as the origin of sweep ratio; written with lock, read without
+	sweepPagesPerByte  float64        // proportional sweep ratio; written with lock, read without
+
+	// Page reclaimer state
+
+	// reclaimIndex is the page index in allArenas of next page to
+	// reclaim. Specifically, it refers to page (i %
+	// pagesPerArena) of arena allArenas[i / pagesPerArena].
+	//
+	// If this is >= 1<<63, the page reclaimer is done scanning
+	// the page marks.
+	reclaimIndex atomic.Uint64
+
+	// reclaimCredit is spare credit for extra pages swept. Since
+	// the page reclaimer works in large chunks, it may reclaim
+	// more than requested. Any spare pages released go to this
+	// credit pool.
+	reclaimCredit atomic.Uintptr
+
+	_ cpu.CacheLinePad // prevents false-sharing between arenas and preceding variables
+
+	// arenas is the heap arena map. It points to the metadata for
+	// the heap for every arena frame of the entire usable virtual
+	// address space.
+	//
+	// Use arenaIndex to compute indexes into this array.
+	//
+	// For regions of the address space that are not backed by the
+	// Go heap, the arena map contains nil.
+	//
+	// Modifications are protected by mheap_.lock. Reads can be
+	// performed without locking; however, a given entry can
+	// transition from nil to non-nil at any time when the lock
+	// isn't held. (Entries never transitions back to nil.)
+	//
+	// In general, this is a two-level mapping consisting of an L1
+	// map and possibly many L2 maps. This saves space when there
+	// are a huge number of arena frames. However, on many
+	// platforms (even 64-bit), arenaL1Bits is 0, making this
+	// effectively a single-level map. In this case, arenas[0]
+	// will never be nil.
+	arenas [1 << arenaL1Bits]*[1 << arenaL2Bits]*heapArena
+
+	// arenasHugePages indicates whether arenas' L2 entries are eligible
+	// to be backed by huge pages.
+	arenasHugePages bool
+
+	// heapArenaAlloc is pre-reserved space for allocating heapArena
+	// objects. This is only used on 32-bit, where we pre-reserve
+	// this space to avoid interleaving it with the heap itself.
+	heapArenaAlloc linearAlloc
+
+	// arenaHints is a list of addresses at which to attempt to
+	// add more heap arenas. This is initially populated with a
+	// set of general hint addresses, and grown with the bounds of
+	// actual heap arena ranges.
+	arenaHints *arenaHint
+
+	// arena is a pre-reserved space for allocating heap arenas
+	// (the actual arenas). This is only used on 32-bit.
+	arena linearAlloc
+
+	// allArenas is the arenaIndex of every mapped arena. This can
+	// be used to iterate through the address space.
+	//
+	// Access is protected by mheap_.lock. However, since this is
+	// append-only and old backing arrays are never freed, it is
+	// safe to acquire mheap_.lock, copy the slice header, and
+	// then release mheap_.lock.
+	allArenas []arenaIdx
+
+	// sweepArenas is a snapshot of allArenas taken at the
+	// beginning of the sweep cycle. This can be read safely by
+	// simply blocking GC (by disabling preemption).
+	sweepArenas []arenaIdx
+
+	// markArenas is a snapshot of allArenas taken at the beginning
+	// of the mark cycle. Because allArenas is append-only, neither
+	// this slice nor its contents will change during the mark, so
+	// it can be read safely.
+	markArenas []arenaIdx
+
+	// curArena is the arena that the heap is currently growing
+	// into. This should always be physPageSize-aligned.
+	curArena struct {
+		base, end uintptr
+	}
+
+	// central free lists for small size classes.
+	// the padding makes sure that the mcentrals are
+	// spaced CacheLinePadSize bytes apart, so that each mcentral.lock
+	// gets its own cache line.
+	// central is indexed by spanClass.
+	central [numSpanClasses]struct {
+		mcentral mcentral
+		pad      [(cpu.CacheLinePadSize - unsafe.Sizeof(mcentral{})%cpu.CacheLinePadSize) % cpu.CacheLinePadSize]byte
+	}
+
+	spanalloc              fixalloc // allocator for span*
+	cachealloc             fixalloc // allocator for mcache*
+	specialfinalizeralloc  fixalloc // allocator for specialfinalizer*
+	specialCleanupAlloc    fixalloc // allocator for specialcleanup*
+	specialprofilealloc    fixalloc // allocator for specialprofile*
+	specialReachableAlloc  fixalloc // allocator for specialReachable
+	specialPinCounterAlloc fixalloc // allocator for specialPinCounter
+	specialWeakHandleAlloc fixalloc // allocator for specialWeakHandle
+	speciallock            mutex    // lock for special record allocators.
+	arenaHintAlloc         fixalloc // allocator for arenaHints
+
+	// User arena state.
+	//
+	// Protected by mheap_.lock.
+	userArena struct {
+		// arenaHints is a list of addresses at which to attempt to
+		// add more heap arenas for user arena chunks. This is initially
+		// populated with a set of general hint addresses, and grown with
+		// the bounds of actual heap arena ranges.
+		arenaHints *arenaHint
+
+		// quarantineList is a list of user arena spans that have been set to fault, but
+		// are waiting for all pointers into them to go away. Sweeping handles
+		// identifying when this is true, and moves the span to the ready list.
+		quarantineList mSpanList
+
+		// readyList is a list of empty user arena spans that are ready for reuse.
+		readyList mSpanList
+	}
+
+	// cleanupID is a counter which is incremented each time a cleanup special is added
+	// to a span. It's used to create globally unique identifiers for individual cleanup.
+	// cleanupID is protected by mheap_.lock. It should only be incremented while holding
+	// the lock.
+	cleanupID uint64
+
+	unused *specialfinalizer // never set, just here to force the specialfinalizer type into DWARF
+}
+```
+
+
+
+Central list of free objects of a given size.
+```go
+type mcentral struct {
+	_         sys.NotInHeap
+	spanclass spanClass
+
+	// partial and full contain two mspan sets: one of swept in-use
+	// spans, and one of unswept in-use spans. These two trade
+	// roles on each GC cycle. The unswept set is drained either by
+	// allocation or by the background sweeper in every GC cycle,
+	// so only two roles are necessary.
+	//
+	// sweepgen is increased by 2 on each GC cycle, so the swept
+	// spans are in partial[sweepgen/2%2] and the unswept spans are in
+	// partial[1-sweepgen/2%2]. Sweeping pops spans from the
+	// unswept set and pushes spans that are still in-use on the
+	// swept set. Likewise, allocating an in-use span pushes it
+	// on the swept set.
+	//
+	// Some parts of the sweeper can sweep arbitrary spans, and hence
+	// can't remove them from the unswept set, but will add the span
+	// to the appropriate swept list. As a result, the parts of the
+	// sweeper and mcentral that do consume from the unswept list may
+	// encounter swept spans, and these should be ignored.
+	partial [2]spanSet // list of spans with a free object
+	full    [2]spanSet // list of spans with no free objects
+}
+```
+
 ## memory leak
 
-Go 允许将局部变量的地址作为值返回给上层调用函数 所以存在内存泄露的可能
+
+
+Go 允许将局部变量的地址作为值返回给上层调用函数 或者将局部变量的值设置到全局变量中 存在内存逃逸
+Go 会将该局部变量存储到堆内存中
+在编译Go程序的时候 加上一些编译参数可以输出内存逃逸的情况
+
+```shell
+go build -gcflags '-N -m -m -l ' main.go
+```
+
+正常情况无需担心内存逃逸 gc会自动回收不再使用的对象
+
+
+
+
+
 
 
 
