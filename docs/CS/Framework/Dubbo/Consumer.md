@@ -543,9 +543,11 @@ private synchronized void calcPreferredInvoker(MigrationRule migrationRule) {
 
 ## Filter
 
-拦截器可以实现服务提供方和服务消费方调用过程拦截，Dubbo 本身的大多功能均基于此扩展点实现，每次远程方法执行，该拦截都会被执行，请注意对性能的影响。 其中在消费端侧，`ClusterFilter` 用于选址前的拦截和 `Filter` 用于选址后的拦截。如无特殊需要使用 `ClusterFilter` 进行扩展拦截，以提高性能
+拦截器可以实现服务提供方和服务消费方调用过程拦截，Dubbo 本身的大多功能均基于此扩展点实现，每次远程方法执行，该拦截都会被执行，请注意对性能的影响。 
+其中在消费端侧，`ClusterFilter` 用于选址前的拦截和 `Filter` 用于选址后的拦截。如无特殊需要使用 `ClusterFilter` 进行扩展拦截，以提高性能
 
-在 Dubbo 3 中，`Filter` 和 `ClusterFilter` 的接口签名被统一抽象到 `BaseFilter` 中，开发者可以分别实现 `Filter` 或 `ClusterFilter` 的接口来实现自己的拦截器。 如果需要拦截返回状态，可以直接实现 `BaseFilter.Listener` 的接口，Dubbo 将自动识别，并进行调用
+在 Dubbo 3 中，`Filter` 和 `ClusterFilter` 的接口签名被统一抽象到 `BaseFilter` 中，开发者可以分别实现 `Filter` 或 `ClusterFilter` 的接口来实现自己的拦截器。
+如果需要拦截返回状态，可以直接实现 `BaseFilter.Listener` 的接口，Dubbo 将自动识别，并进行调用
 
 
 
@@ -905,6 +907,11 @@ public class HeartbeatTimerTask extends AbstractTimerTask {
 **Dubbo 采取的是双向心跳设计**，即服务端会向客户端发送心跳，客户端也会向服务端发送心跳，接收的一方更新 lastRead 字段，发送的一方更新 lastWrite 字段，超过心跳间隙的时间，便发送心跳请求给对端。这里的 lastRead/lastWrite 同样会被同一个通道上的普通调用更新，通过更新这两个字段，实现了只在连接空闲时才会真正发送空闲报文的机制
 
 Dubbo 对于建立的每一个连接，同时在客户端和服务端开启了 2 个定时器，一个用于定时发送心跳，一个用于定时重连、断连，执行的频率均为各自检测周期的 1/3。定时发送心跳的任务负责在连接空闲时，向对端发送心跳包。定时重连、断连的任务负责检测 lastRead 是否在超时周期内仍未被更新，如果判定为超时，客户端处理的逻辑是重连，服务端则采取断连的措施
+
+
+
+
+多注册中心的消费 是将每个注册中心封装成单独的 Invoker 再通过 StaticDirectory 保存所有的 Invoker 最终通过 Cluster 合并成一个 Invoker
 
 
 

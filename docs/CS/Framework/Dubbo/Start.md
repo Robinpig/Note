@@ -683,7 +683,10 @@ protected synchronized void doExport() {
     doExportUrls();
     bootstrap.setReady(true);
 }
+```
+#### doExportUrls
 
+```java
 private void doExportUrls() {
   ServiceRepository repository = ApplicationModel.getServiceRepository();
   ServiceDescriptor serviceDescriptor = repository.registerService(getInterfaceClass());
@@ -710,7 +713,7 @@ private void doExportUrls() {
 
 ```
 
-### doExportUrlsFor1Protocol
+##### doExportUrlsFor1Protocol
 
 export either local or remote, not both
 
@@ -1032,7 +1035,7 @@ public <T> Exporter<T> export(Invoker<T> invoker) throws RpcException {
 
 
 
-## Comsumer
+## Consumer
 
 ### createProxy
 
@@ -1301,8 +1304,20 @@ public interface ProxyFactory {
 
 destroy registries and protocols(servers then clients), wait for pending tasks completed.
 
+优雅停机的实现
+
+1. 收到信号 Spring触发容器销毁事件
+2. provider 取消服务注册元信息
+3. consumer 收到最新地址列表(不包含停机地址)
+4. provider 对 Consumer 响应 Dubbo 协议发送readonly报文 通知 Consumer 服务不可用
+5. provider 等待已经执行任务执行结束 并拒绝新任务执行
+
+> 2.6.3 后修复了一些停机bug 原因为Spring也同时注册了 shutdown hooks 并发线程执行可能引用已销毁资源导致报错 例如Dubbo发现 Spring已经关闭上下文状态导致访问Spring资源报错
+
 ### Shutdown Hooks
-The [shutdown hook](/docs/CS/Java/JDK/JVM/destroy.md?id=shutdown-hooks) thread to do the clean up stuff. This is a **singleton** in order to ensure there is only one shutdown hook registered. 
+
+The [shutdown hook](/docs/CS/Java/JDK/JVM/destroy.md?id=shutdown-hooks) thread to do the clean up stuff.
+This is a **singleton** in order to ensure there is only one shutdown hook registered. 
 
 Because ApplicationShutdownHooks use `java.util.IdentityHashMap` to store the shutdown hooks.
 

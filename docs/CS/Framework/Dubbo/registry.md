@@ -1441,7 +1441,7 @@ private class RegistryChildListenerImpl implements ChildListener {
 
 
 
-### RedisRegsitry
+### RedisRegistry
 
 
 
@@ -1735,7 +1735,18 @@ private void doNotify(Collection<String> keys, URL url, Collection<NotifyListene
 }
 ```
 
+### Etcd
 
+
+从 Dubbo3 开始，etcd 注册中心适配已经不再内嵌在 Dubbo 中 使用前需要单独引入独立的模块
+
+```xml
+<dependency>
+    <groupId>org.apache.dubbo.extensions</groupId>
+    <artifactId>dubbo-registry-etcd</artifactId>
+    <version>3.3.0</version>
+</dependency>
+```
 
 ## RegistryFactory
 

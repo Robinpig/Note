@@ -22,43 +22,7 @@ Dubbo 扩展能力的特性
 从 Dubbo 扩展的设计目标可以看出，Dubbo 实现的一些例如动态选择扩展实现、IOC、AOP 等特性，能够为用户提供非常灵活的扩展能力。
 
 
-
-
-Dubbo 加载扩展的整个流程如下：主要步骤为 4 个：
-- 读取并解析配置文件
-- 缓存所有扩展实现
-- 基于用户执行的扩展名，实例化对应的扩展实现
-- 进行扩展实例属性的 IOC 注入以及实例化扩展的包装类，实现 AOP 特性
-
-<div style="text-align: center;">
-
-![Fig.1. Dubbo加载流程](./img/SPI.png)
-
-</div>
-
-<p style="text-align: center;">
-Fig.1. Dubbo加载流程
-</p>
-
-Dubbo SPI是通过键值对的方式进行配置
-```
-xxx=com.foo.XxxProtocol
-yyy=com.foo.YyyProtocol
-```
-
-The reason for this change is:
-If there's third party library referenced by static field or by method in extension implementation, its class will fail to initialize if the third party library doesn't exist.
-In this case, dubbo cannot figure out extension's id therefore cannot be able to map the exception information with the extension, if the previous format is used.
-
-**For example**:
-Fails to load Extension("mina").
-When user configure to use mina, dubbo will complain the extension cannot be loaded, instead of reporting which extract extension implementation fails and the extract reason.
-
-### Packages
-
-![Dubbo-SPI](img/Dubbo-SPI.png)
-
-### Example
+## Example
 
 对接口添加@SPI注解
 
@@ -86,7 +50,46 @@ public interface Protocol {
 }
 ```
 
+### SPI 加载流程
+
+
+Dubbo 加载扩展的整个流程如下：主要步骤为 4 个：
+- 读取并解析配置文件
+- 缓存所有扩展实现
+- 基于用户执行的扩展名，实例化对应的扩展实现
+- 进行扩展实例属性的 IOC 注入以及实例化扩展的包装类，实现 AOP 特性
+
+<div style="text-align: center;">
+
+![Fig.1. Dubbo 加载扩展流程](./img/SPI.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. Dubbo 加载扩展流程
+</p>
+
+Dubbo SPI是通过键值对的方式进行配置
+```
+xxx=com.foo.XxxProtocol
+yyy=com.foo.YyyProtocol
+```
+
+The reason for this change is:
+If there's third party library referenced by static field or by method in extension implementation, its class will fail to initialize if the third party library doesn't exist.
+In this case, dubbo cannot figure out extension's id therefore cannot be able to map the exception information with the extension, if the previous format is used.
+
+**For example**:
+Fails to load Extension("mina").
+When user configure to use mina, dubbo will complain the extension cannot be loaded, instead of reporting which extract extension implementation fails and the extract reason.
+
+
+
 ## ExtensionLoader
+
+Dubbo 中，SPI 加载固定扩展类的入口是 ExtensionLoader 的 getExtension 方法
+
+
 
 org.apache.dubbo.rpc.model.ApplicationModel, DubboBootstrap and this class are at present designed to be singleton or static (by itself totally static or uses some static fields). So the instances returned from them are of process or classloader scope. 
 If you want to support multiple dubbo servers in a single process, you may need to refactor these three classes.
@@ -178,6 +181,7 @@ private ExtensionLoader(Class<?> type) {
                 (type == ExtensionFactory.class ? null : ExtensionLoader.getExtensionLoader(ExtensionFactory.class).getAdaptiveExtension());
     }
 ```
+
 获取Extension
 
 Dubbo SPI 第一次获取扩展点在流程上可以分为以下五步：
@@ -967,6 +971,23 @@ public class JdkCompiler extends AbstractCompiler {
 }
 ```
 
+
+
+## IoC
+
+Dubbo IOC 是通过 setter 方法注入依赖。Dubbo 首先会通过反射获取到实例的所有方法，然后再遍历方法列表，检测方法名是否具有 setter 方法特征。
+若有，则通过 ObjectFactory 获取依赖对象，最后通过反射调用 setter 方法将依赖设置到目标对象中
+
+
+## AOP
+Dubbo AOP 机制采用 wrapper 设计模式实现，要成为一个 AOP wrapper 类，必须同时满足以下几个条件：
+
+- wrapper 类必须实现 SPI 接口，如以下示例中的 class QosProtocolWrapper implements Protocol
+- 构造器 constructor 必须包含一个相同的 SPI 参数，如以下示例中 QosProtocolWrapper(Protocol protocol)
+- wrapper 类必须和普通的 SPI 实现一样写入配置文件，如以下示例 resources/META-INF/dubbo/internal/org.apache.dubbo.rpc.Protocol
+
+
+
 ## Summary
 
 
@@ -981,3 +1002,7 @@ public class JdkCompiler extends AbstractCompiler {
 ## Links
 
 - [Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md)
+
+## References
+
+1. [扩展点开发指南](https://cn.dubbo.apache.org/zh-cn/overview/mannual/java-sdk/reference-manual/architecture/dubbo-spi/)

@@ -1,108 +1,12 @@
 ## Introduction
 
-[Apache Dubbo](http://dubbo.apache.org/) 是一款易用、高性能的 WEB 和 RPC 框架，同时为构建企业级微服 务提供服务发现、流量治理、可观测、认证鉴权等能力、工具与最佳实践。
+[Apache Dubbo](http://dubbo.apache.org/) 是一款易用、高性能的 WEB 和 RPC 框架，同时为构建企业级微服务提供服务发现、流量治理、可观测、认证鉴权等能力、工具与最佳实践。
 
 使用 Dubbo 开发的微服务原生具备相互之间的远程地址发现与通信能力，利用Dubbo 提供的丰富服务治理特性，可以实现诸如服务发现、负载均衡、流量调度等服务治理诉求。
 Dubbo 被设计为高度可扩展，用户可以方便的实现流量拦截、选址的各种定制逻辑。
-在云原生时代，Dubbo相继衍生出了Dubbo3、Proxyless Mesh等架构与解决方案，在易用性、超大规模微服务实践、云原生基础设施适配、安全性等几大方向上进行了全面升级。  
+在云原生时代，Dubbo 相继衍生出了 Dubbo3、Proxyless Mesh等架构与解决方案，在易用性、超大规模微服务实践、云原生基础设施适配、安全性等几大方向上进行了全面升级。  
 
-Dubbo 在很多大企业内部衍生出了独立版本，比如在阿里巴巴内部就基于Dubbo3 衍生出了 [HSF3](/docs/CS/Framework/HSF/HSF.md)  
-
-## Build
-
-
-
-```shell
-git clone https://github.com/apache/dubbo.git
-
-mvn install -Dmaven.test.skip=true
-
-mvn idea:idea
-```
-
-查看 module `dubbo-demo` 学习用例
-
-## Architecture
-
-<div style="text-align: center;">
-
-![Fig.1. Queue](img/Architecture.png)
-
-</div>
-
-<p style="text-align: center;">
-Fig.1. Architecture
-</p>
-
-以上是 Dubbo 的工作原理图，从抽象架构上分为两层：服务治理控制面和Dubbo 数据面
-
-- **服务治理控制面**
-  服务治理控制面不是特指如注册中心类的单个具体组件，而是对 Dubbo 治理体系的抽象表达。控制面包含协调服务发现的注册中心、流量管控策略、Dubbo Admin控制台等，如果采用了 Service Mesh 架构则还包含 Istio 等服务网格控制面。
--  **Dubbo 数据面**
-  数据面代表集群部署的所有 Dubbo 进程，进程之间通过 RPC 协议实现数据交换，Dubbo 定义了微服务应用开发与调用规范并负责完成数据传输的编解码工作。
-  - 服务消费者（Dubbo Consumer），发起业务调用或 RPC 通信的 Dubbo 进程。
-  - 服务提供者（Dubbo Provider），接收业务调用或 RPC 通信的 Dubbo 进程。  
-
-
-
-Dubbo 数据面
-从数据面视角，Dubbo 帮助解决了微服务实践中的以下问题：
-
-- Dubbo 作为服务开发框架约束了微服务定义、开发与调用的规范，定义了服务
-  治理流程及适配模式。
-- Dubbo 作为 RPC 通信协议实现解决服务间数据传输的编解码问题  
-
-
-
-- [start](/docs/CS/Framework/Dubbo/Start.md)
-- [Registry](/docs/CS/Framework/Dubbo/registry.md)
-- [Remoting](/docs/CS/Framework/Dubbo/remoting.md)
-- [cluster](/docs/CS/Framework/Dubbo/cluster.md)
-- [Transporter](/docs/CS/Framework/Dubbo/Transporter.md)
-- [LoadBalance](/docs/CS/Framework/Dubbo/LoadBalance.md)
-
-
-Dubbo 在微服务应用开发框架之上抽象了一 套 RPC 服务定义、暴露、调用与治理的编程范式，比如 Dubbo Java 作为服务开发 框架，当运行在 Spring 体系时就是构建在 Spring Boot 应用开发框架之上的微服务 开发框架，并在此之上抽象了一套 RPC 服务定义、暴露、调用与治理的编程范式
-
-
-
-Dubbo 从设计上不绑定任何一款特定通信协议，HTTP/2、REST、gRPC、JsonRPC、 Thrift、Hessian2 等几乎所有主流的通信协议，Dubbo 框架都可以提供支持。
-
-服务治理
-
-服务开发框架解决了开发与通信的问题，但在微服务集群环境下，我们仍需要解决 无状态服务节点动态变化、外部化配置、日志跟踪、可观测性、流量管理、高可用 性、数据一致性等一系列问题，我们将这些问题统称为服务治理。
-Apache Dubbo 概念与架构 13Dubbo 抽象了一套微服务治理模式并发布了对应的官方实现，服务治理可帮助简化 微服务开发与运维，让开发者更专注在微服务业务本身。
-
-
-
-### Code Architecture
-
-> 引用自 [代码架构](https://cn.dubbo.apache.org/zh-cn/overview/mannual/java-sdk/reference-manual/architecture/code-architecture/)
-
-Dubbo 的整体自上到下分成 Biz, RPC 和 Remote 三层
-
-<div style="text-align: center;">
-
-![Fig.2. Dubbo Framework](img/Dubbo-framework.png)
-</div>
-
-<p style="text-align: center;">
-Fig.2. Code Architecture
-</p>
-图例说明：
-
-- 图中左边淡蓝背景的为服务消费方使用的接口，右边淡绿色背景的为服务提供方使用的接口，位于中轴线上的为双方都用到的接口。
-- 图中从下至上分为十层，各层均为单向依赖，右边的黑色箭头代表层之间的依赖关系，每一层都可以剥离上层被复用，其中，Service 和 Config 层为 API，其它各层均为 SPI。
-- 图中绿色小块的为扩展接口，蓝色小块为实现类，图中只显示用于关联各层的实现类。
-- 图中蓝色虚线为初始化过程，即启动时组装链，红色实线为方法调用过程，即运行时调用链，紫色三角箭头为继承，可以把子类看作父类的同一个节点，线上的文字为调用的方法
-
-
-
-设计原则
-
-- 采用 Microkernel + Plugin 模式，Microkernel 只负责组装 Plugin，Dubbo 自身的功能也是通过扩展点实现的，也就是 Dubbo 的所有功能点都可被用户自定义扩展所替换。
-- 采用 URL 作为配置信息的统一格式，所有扩展点都通过传递 URL 携带配置信息。
-
+Dubbo 在很多大企业内部衍生出了独立版本，比如在阿里巴巴内部就基于 Dubbo3 衍生出了 [HSF3](/docs/CS/Framework/HSF/HSF.md)  
 
 
 
@@ -120,12 +24,12 @@ Fig.2. Code Architecture
 
 <div style="text-align: center;">
 
-![Fig.1. Queue](img/Spring_Cloud.png)
+![Fig.1. Dubbo 和 Spring Cloud比较](img/Spring_Cloud.png)
 
 </div>
 
 <p style="text-align: center;">
-Fig.1. Dubbo和Spring Cloud比较
+Fig.1. Dubbo 和 Spring Cloud比较
 </p>
 
 虽然两者有很多相似之处，但由于它们在诞生背景与架构设计上的巨大差异，两者 在性能、适用的微服务集群规模、生产稳定性保障、服务治理等方面都有很大差异。
@@ -149,7 +53,7 @@ Spring Cloud 的问题有:
 - 在通信协议和编码上选择更灵活，包括 rpc 通信层协议如 HTTP、HTTP/2(Triple、 gRPC)、TCP 二进制协议、rest 等，序列化编码协议 Protobuf、JSON、Hessian2 等，支持单端口多协议。Apache Dubbo 概念与架构 30• Dubbo 从设计上突出服务服务治理能力，如权重动态调整、标签路由、条件路 由等，支持 Proxyless 等多种模式接入 Service Mesh 体系。
 - 高性能的 RPC 协议编码与实现。
 - Dubbo 是在超大规模微服务集群实践场景下开发的框架，可以做到百万实例规模的集群水平扩容，应对集群增长带来的各种问题。
-- Dubbo 提供 Java 外的多语言实现，使得构建多语言异构的微服务体系成为可能。 
+- Dubbo 提供 Java 外的多语言实现，使得构建多语言异构的微服务体系成为可能。
 
 
 
@@ -198,9 +102,108 @@ Dubbo 主要有以下核心组件:
 
 - Provider:服务的提供方，通过 Jar 或者容器的方式启动服务
 - Consumer:服务消费方
-- Registry:注册中心 
+- Registry:注册中心
 - Monitor:统计服务和调用次数，调用时间监控中心。(Dubbo 的控制台页面中可 以显示，目前只有一个简单版本)
 - Container:服务运行的容器
+
+
+
+## Build
+
+
+
+```shell
+git clone https://github.com/apache/dubbo.git
+
+mvn install -Dmaven.test.skip=true
+
+mvn idea:idea
+```
+
+查看 module `dubbo-demo` 学习用例
+
+## Architecture
+
+<div style="text-align: center;">
+
+![Fig.1. Architecture](img/Architecture.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. Architecture
+</p>
+
+以上是 Dubbo 的工作原理图，从抽象架构上分为两层：服务治理控制面和Dubbo 数据面
+
+- **服务治理控制面**
+  服务治理控制面不是特指如注册中心类的单个具体组件，而是对 Dubbo 治理体系的抽象表达。控制面包含协调服务发现的注册中心、流量管控策略、Dubbo Admin控制台等，如果采用了 Service Mesh 架构则还包含 Istio 等服务网格控制面。
+-  **Dubbo 数据面**
+  数据面代表集群部署的所有 Dubbo 进程，进程之间通过 RPC 协议实现数据交换，Dubbo 定义了微服务应用开发与调用规范并负责完成数据传输的编解码工作。
+  - 服务消费者（Dubbo Consumer），发起业务调用或 RPC 通信的 Dubbo 进程。
+  - 服务提供者（Dubbo Provider），接收业务调用或 RPC 通信的 Dubbo 进程。  
+
+
+
+Dubbo 数据面
+从数据面视角，Dubbo 帮助解决了微服务实践中的以下问题：
+
+- Dubbo 作为服务开发框架约束了微服务定义、开发与调用的规范，定义了服务
+  治理流程及适配模式。
+- Dubbo 作为 RPC 通信协议实现解决服务间数据传输的编解码问题  
+
+
+
+- [start](/docs/CS/Framework/Dubbo/Start.md)
+- [Registry](/docs/CS/Framework/Dubbo/registry.md)
+- [Remoting](/docs/CS/Framework/Dubbo/remoting.md)
+- [cluster](/docs/CS/Framework/Dubbo/cluster.md)
+- [Transporter](/docs/CS/Framework/Dubbo/Transporter.md)
+- [LoadBalance](/docs/CS/Framework/Dubbo/LoadBalance.md)
+
+
+Dubbo 在微服务应用开发框架之上抽象了一套 RPC 服务定义、暴露、调用与治理的编程范式，比如 Dubbo Java 作为服务开发 框架，
+当运行在 Spring 体系时就是构建在 Spring Boot 应用开发框架之上的微服务 开发框架，并在此之上抽象了一套 RPC 服务定义、暴露、调用与治理的编程范式
+
+
+
+Dubbo 从设计上不绑定任何一款特定通信协议，HTTP/2、REST、gRPC、JsonRPC、Thrift、Hessian2 等几乎所有主流的通信协议，Dubbo 框架都可以提供支持。
+
+服务治理
+
+服务开发框架解决了开发与通信的问题，但在微服务集群环境下，我们仍需要解决 无状态服务节点动态变化、外部化配置、日志跟踪、可观测性、流量管理、高可用 性、数据一致性等一系列问题，我们将这些问题统称为服务治理。
+Dubbo 抽象了一套微服务治理模式并发布了对应的官方实现，服务治理可帮助简化 微服务开发与运维，让开发者更专注在微服务业务本身。
+
+
+
+### Code Architecture
+
+> 引用自 [代码架构](https://cn.dubbo.apache.org/zh-cn/overview/mannual/java-sdk/reference-manual/architecture/code-architecture/)
+
+Dubbo 的整体自上到下分成 Biz, RPC 和 Remote 三层
+
+<div style="text-align: center;">
+
+![Fig.2. Dubbo Framework](img/Dubbo-framework.png)
+</div>
+
+<p style="text-align: center;">
+Fig.2. Code Architecture
+</p>
+图例说明：
+
+- 图中左边淡蓝背景的为服务消费方使用的接口，右边淡绿色背景的为服务提供方使用的接口，位于中轴线上的为双方都用到的接口。
+- 图中从下至上分为十层，各层均为单向依赖，右边的黑色箭头代表层之间的依赖关系，每一层都可以剥离上层被复用，其中，Service 和 Config 层为 API，其它各层均为 SPI。
+- 图中绿色小块的为扩展接口，蓝色小块为实现类，图中只显示用于关联各层的实现类。
+- 图中蓝色虚线为初始化过程，即启动时组装链，红色实线为方法调用过程，即运行时调用链，紫色三角箭头为继承，可以把子类看作父类的同一个节点，线上的文字为调用的方法
+
+
+
+设计原则
+
+- 采用 Microkernel + Plugin 模式，Microkernel 只负责组装 Plugin，Dubbo 自身的功能也是通过扩展点实现的，也就是 Dubbo 的所有功能点都可被用户自定义扩展所替换。
+- 采用 URL 作为配置信息的统一格式，所有扩展点都通过传递 URL 携带配置信息。
+
 
 
 ## Data Model
@@ -721,11 +724,12 @@ public void initialize() throws IllegalStateException {
 - 服务消费者，从提供者地址列表中，基于软负载均衡算法，选一台提供者进行调用，如果调用失败，再选另一台调用。
 - 服务消费者和提供者，在内存中累计调用次数和调用时间，定时每分钟发送一次统计数据到监控中心。
 
-## Package
+ 
 
-### SPI
 
-[SPI](/docs/CS/Framework/Dubbo/SPI.md)
+
+
+扩展机制和 [SPI](/docs/CS/Framework/Dubbo/SPI.md) 作为 Dubbo 的核心设计机制 
 
 use Adapter
 
@@ -778,6 +782,8 @@ GenericFilter
 MultiHandler
 
 
+
+[Filter](/docs/CS/Framework/Dubbo/Filter.md)
 
 
 

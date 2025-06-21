@@ -137,6 +137,7 @@ public class DefaultFilterChainBuilder implements FilterChainBuilder {
 
 ## Filters
 
+内置 Filter 除了 CompatibleFilter 之外 都使用了 @Activate 注解 即默认激活
 
 ### AccessLogFilter
 
@@ -144,15 +145,197 @@ public class DefaultFilterChainBuilder implements FilterChainBuilder {
 AccessLogFilter 是一个日志过滤器 记录服务请求日志 虽然默认 @Activate 但需要手动开启日志打印
 
 
-AccessLogFilter 构造函数
+AccessLogFilter
 
-### ExecuteLimiter
+```java
+@Activate(group = PROVIDER)
+public class AccessLogFilter implements Filter {
+
+    private final ConcurrentMap<String, Queue<AccessLogData>> logEntries = new ConcurrentHashMap<>();
+
+    private final AtomicBoolean scheduled = new AtomicBoolean();
+    private ScheduledFuture<?> future;
+}
+```
+在第一次调用请求时 通过对 scheduled 的 CAS判断 初始化定时任务到共享线程池中
+
+> 早期版本是直接创建线程池 3.0版本进行global executor service management
+
+```java
+    private final ScheduledExecutorService logScheduled = Executors.newScheduledThreadPool(2, new NamedThreadFactory("Dubbo-Access-Log", true));
+
+```
+
+
+
+
+
+### ExecuteLimitFilter
+
+限制服务方法最大并发数
+
+
+```java
+@Activate(group = CommonConstants.PROVIDER, value = EXECUTES_KEY)
+public class ExecuteLimitFilter implements Filter, Filter.Listener {
+
+    private static final String EXECUTE_LIMIT_FILTER_START_TIME = "execute_limit_filter_start_time";
+
+    @Override
+    public Result invoke(Invoker<?> invoker, Invocation invocation) throws RpcException {
+        URL url = invoker.getUrl();
+        String methodName = RpcUtils.getMethodName(invocation);
+        int max = url.getMethodParameter(methodName, EXECUTES_KEY, 0);
+        if (!RpcStatus.beginCount(url, methodName, max)) {
+            throw new RpcException(
+                    RpcException.LIMIT_EXCEEDED_EXCEPTION,
+                    "Failed to invoke method " + RpcUtils.getMethodName(invocation) + " in provider " + url
+                            + ", cause: The service using threads greater than <dubbo:service executes=\"" + max
+                            + "\" /> limited.");
+        }
+
+        invocation.put(EXECUTE_LIMIT_FILTER_START_TIME, System.currentTimeMillis());
+        try {
+            return invoker.invoke(invocation);
+        } catch (Throwable t) {
+            if (t instanceof RuntimeException) {
+                throw (RuntimeException) t;
+            } else {
+                throw new RpcException("unexpected exception when ExecuteLimitFilter", t);
+            }
+        }
+    }
+}
+```
+
+URL statistics.
+```java
+public class RpcStatus {
+
+    private static final ConcurrentMap<String, RpcStatus> SERVICE_STATISTICS = new ConcurrentHashMap<>();
+
+    private static final ConcurrentMap<String, ConcurrentMap<String, RpcStatus>> METHOD_STATISTICS =
+            new ConcurrentHashMap<>();
+
+    private final ConcurrentMap<String, Object> values = new ConcurrentHashMap<>();
+
+    private final AtomicInteger active = new AtomicInteger();
+    private final AtomicLong total = new AtomicLong();
+    private final AtomicInteger failed = new AtomicInteger();
+    private final AtomicLong totalElapsed = new AtomicLong();
+    private final AtomicLong failedElapsed = new AtomicLong();
+    private final AtomicLong maxElapsed = new AtomicLong();
+    private final AtomicLong failedMaxElapsed = new AtomicLong();
+    private final AtomicLong succeededMaxElapsed = new AtomicLong();
+
+}
+```
 
 
 ### ClassLoaderFilter
 
 
-切换当前工作线程的类加载器到接口的类加载器 以便和接口的类加载器上下文要求
+切换当前工作线程的类加载器到接口的类加载器 以便和接口的类加载器上下文一起工作
+> 这里区分了 ServiceModel
+
+```java
+@Activate(group = CommonConstants.PROVIDER, order = -30000)
+public class ClassLoaderFilter implements Filter, BaseFilter.Listener {
+
+    @Override
+    public Result invoke(Invoker<?> invoker, Invocation invocation) throws RpcException {
+        ClassLoader stagedClassLoader = Thread.currentThread().getContextClassLoader();
+        ClassLoader effectiveClassLoader;
+        if (invocation.getServiceModel() != null) {
+            effectiveClassLoader = invocation.getServiceModel().getClassLoader();
+        } else {
+            effectiveClassLoader = invoker.getClass().getClassLoader();
+        }
+
+        if (effectiveClassLoader != null) {
+            invocation.put(STAGED_CLASSLOADER_KEY, stagedClassLoader);
+            invocation.put(WORKING_CLASSLOADER_KEY, effectiveClassLoader);
+
+            Thread.currentThread().setContextClassLoader(effectiveClassLoader);
+        }
+        try {
+            return invoker.invoke(invocation);
+        } finally {
+            Thread.currentThread().setContextClassLoader(stagedClassLoader);
+        }
+    }
+}
+```
+
+### ContextFilter
+
+### ExceptionFilter
+
+### TimeoutFilter
+
+
+### TokenFilter
+
+
+### TpsLimitFilter
+
+
+### ActiveLimitFilter
+
+
+```java
+@Activate(group = CONSUMER, value = ACTIVES_KEY)
+public class ActiveLimitFilter implements Filter, Filter.Listener {
+
+    private static final String ACTIVE_LIMIT_FILTER_START_TIME = "active_limit_filter_start_time";
+
+    @Override
+    public Result invoke(Invoker<?> invoker, Invocation invocation) throws RpcException {
+        URL url = invoker.getUrl();
+        String methodName = RpcUtils.getMethodName(invocation);
+        int max = invoker.getUrl().getMethodParameter(methodName, ACTIVES_KEY, 0);
+        final RpcStatus rpcStatus = RpcStatus.getStatus(invoker.getUrl(), RpcUtils.getMethodName(invocation));
+        if (!RpcStatus.beginCount(url, methodName, max)) {
+            long timeout = invoker.getUrl().getMethodParameter(RpcUtils.getMethodName(invocation), TIMEOUT_KEY, 0);
+            long start = System.currentTimeMillis();
+            long remain = timeout;
+            synchronized (rpcStatus) {
+                while (!RpcStatus.beginCount(url, methodName, max)) {
+                    try {
+                        rpcStatus.wait(remain);
+                    } catch (InterruptedException e) {
+                        // ignore
+                    }
+                    long elapsed = System.currentTimeMillis() - start;
+                    remain = timeout - elapsed;
+                    if (remain <= 0) {
+                        throw new RpcException(
+                                RpcException.LIMIT_EXCEEDED_EXCEPTION,
+                                "Waiting concurrent invoke timeout in client-side for service:  "
+                                        + invoker.getInterface().getName()
+                                        + ", method: " + RpcUtils.getMethodName(invocation) + ", elapsed: "
+                                        + elapsed + ", timeout: " + timeout + ". concurrent invokes: "
+                                        + rpcStatus.getActive()
+                                        + ". max concurrent invoke limit: " + max);
+                    }
+                }
+            }
+        }
+
+        invocation.put(ACTIVE_LIMIT_FILTER_START_TIME, System.currentTimeMillis());
+
+        return invoker.invoke(invocation);
+    }
+}
+```
+
+
+
+### ConsumerContextFilter
+
+
+
+### FutureFilter
 
 
 
@@ -160,6 +343,10 @@ AccessLogFilter 构造函数
 
 
 
+
+## 自定义Filter
+
+自定义的 Filter 默认执行顺序在内置的 Filter 之后
 
 
 
