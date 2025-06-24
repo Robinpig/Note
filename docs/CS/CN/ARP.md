@@ -8,7 +8,7 @@ ARP is used with IPv4 only; IPv6 uses the Neighbor Discovery Protocol, which is 
 > 
 > A related protocol that provides the reverse mapping from ARP, called RARP, was used by systems lacking a disk drive (normally diskless workstations or X terminals). 
 > It is rarely used today and requires manual configuration by the system administrator. 
-> See [RFC0903] for details.
+
 
 
 ARP sends an Ethernet frame called an ARP request to every host on the shared link-layer segment. 
@@ -37,6 +37,10 @@ arp -a
 
 
 ## Proxy ARP
+
+## RARP
+
+
 
 
 ## Links
