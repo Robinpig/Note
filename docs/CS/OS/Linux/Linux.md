@@ -20,6 +20,8 @@ Linux系统诞生于1991年10月5日
   - [Ubuntu](/docs/CS/OS/Linux/Distribution/Ubuntu.md)
 - SuSE Linux
 - Arch Linux
+- [OpenSuse]()
+- [Android](/docs/CS/OS/Android/Android.md)
 
 跨平台在其它OS下使用Linux
 
