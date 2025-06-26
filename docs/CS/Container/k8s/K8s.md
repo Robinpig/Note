@@ -1671,6 +1671,10 @@ type IngressSpec struct {
 ## Storage Management
 
 
+## Others
+
+K8s 集群是一个具有严格 [acl](/docs/CS/Container/k8s/acl.md) 控制机制的安全系统
+
 ## Summary
 
 K8s 改变了传统的应用部署发布的方式，给容器化的应用服务提供了灵活方便的容器编排、容器调度和简单的服务发现机制，但缺少了更丰富和更细粒度的服务治理能力
