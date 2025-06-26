@@ -209,6 +209,11 @@ struct nsproxy {
 
 ## init task
 
+
+Linux 规定要有一个 init 进程存在 通常 init 进程承担系统服务管理的职责
+继承自 System V 风格的init系统比较简单 仍被应用到嵌入式系统中
+后来大部分发行版采用了 systemd 软件作为系统管理服务程序
+
 Set up the first task table, touch at your own risk!. Base=0,
 **limit=0x1fffff (=2MB)**
 
