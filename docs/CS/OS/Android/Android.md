@@ -7,6 +7,18 @@
 
 硬件抽象层
 
+
+
+Android 采用了自己编写的 init 工具 通过自定义的一套配置文件管理系统服务的启动 
+配置文件目录与其他 Linux 发行版在 `/etc` 下不同 Android 的在 `/system/etc` 下 为了兼容性将 `/etc` 链接到 `/system/etc` 下便于利用原有工具
+
+
+Android 单独开发了一个libc库 Bionic 重新开发运行加载器 ld.so 
+在 ELF 文件格式上做了扩充 对应设计了 Android 专用的 linker 程序
+在应用层上 Android可以兼容 Linux, Linux 无法直接兼容 Android
+
+
+
 ## Discuss
 支付宝以往的启动页较单一，无法较好地宣传和提升用户体验，需要对启动页进行能力升级
 这个启动页上有个倒计时功能。这篇文章主要讲下这个倒计时的实现。
