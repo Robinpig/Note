@@ -38,6 +38,15 @@ Windows下使用Linux
 
 
 
+一个基于Linux内核的操作系统， 一般应该包含以下部分。
+
+1. bootloader, 比如 GRUB 和 SYSLlNUX , 它负责将内核加载进内存，系统上电或者 BIOS 初始化完成后执行
+2. init 程序，负责启动系统的服务和操作系统的核心程序
+3. 必要的软件卉（比如加载el f文件的1小linux.so), 支持C程序的库（比如GNU CLibrary,简称glibc), And roid的B ionic
+4. 必要的命令和丁具， 比如shell命令和GNU coreutils中等。 coreutils是GNU下的一个 软件包，提供常用的命令， 比如ls等
+
+
+
 Linux在最初是宏内核架构 同时也逐渐融入了微内核的精华 如模块化设计 抢占式内核 动态加载内核模块等
 
 模块是被编译的目标文件 可以在运行时的内核中动态加载和卸载 和微内核实现的模块化不同 它们不是作为独立模块执行的 而是和静态编译的内核函数一样 运行在内核态中 模块的引入带来了不少的有点
@@ -50,6 +59,70 @@ Linux在最初是宏内核架构 同时也逐渐融入了微内核的精华 如�
 
 
 ## Kernel
+
+
+
+### Read
+
+执行 ctags -R 生成索引文件 tags
+
+- ctrl + ] 进入函数定义
+- g, ctrl + ] 进入函数定义 可选择
+- ctrl + o 返回
+
+打开vim后 加载tags文件
+
+```shell
+:set tags=tags
+```
+
+> 在线阅读 [bootlin](https://elixir.bootlin.com/linux/v6.11/source)
+
+#### Directory
+
+目录结构
+
+
+| Directory |                                                                                                                                                                                                                |  |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | - |
+| kernel    | The kernel directory contains the code for the components at the heart of the kernel.                                                                                                                          |  |
+| arch      | arch/ holds all architecture-specific files, both include files and C and Assembler sources.<br />There is a separate subdirectory for each processor architecture supported by the kernel.                    |  |
+| crypto    | crypto/ contains the files of the crypto layer (which is not discussed in this book).<br />It includesimplementations of various ciphers that are needed primarily to support IPSec (encrypted IP connection). |  |
+| mm        | High-level memory management resides in mm/.                                                                                                                                                                   |  |
+| fs        | fs/ holds the source code for all filesystem implementations.                                                                                                                                                  |  |
+| include   | include/ contains all header files with publicly exported functions.                                                                                                                                           |  |
+| init      | The code needed to initialize the kernel is held in init/.                                                                                                                                                     |  |
+| ipc       | The implementation of the System V IPC mechanism resides in ipc/.                                                                                                                                              |  |
+| lib       | lib/ contains generic library routines that can be employed by all parts of the kernel,<br />including data structures to implement various trees and data compression routines.                               |  |
+| net       | net/ contains the network implementation, which is split into a core section and a section to implement the individual protocols                                                                               |  |
+| security  | The security/ directory is used for security frameworks and key management for cryptography.                                                                                                                   |  |
+| scripts   | scripts/ contains all scripts and utilities needed to compile the kernel or to perform other useful tasks.                                                                                                     |  |
+| drivers   | drivers/ occupies the lion’s share of the space devoted to the sources.                                                                                                                                       |  |
+| firmware  |                                                                                                                                                                                                                |  |
+| virt      |                                                                                                                                                                                                                |  |
+| usr       |                                                                                                                                                                                                                |  |
+| tools     |                                                                                                                                                                                                                |  |
+| block     | block device                                                                                                                                                                                                   |  |
+
+```shell
+usr/src/kernels/
+```
+
+内核源码根目录下的Makefile Kconfig Kbuild是与内核配置、编译相关的文件
+
+- [Init](/docs/CS/OS/Linux/init.md)
+
+内核中可供调用的函数通常需要EXPORT
+
+
+
+### Build
+
+> [!TIP]
+>
+> 最佳推荐环境是 Linux物理机 > Linux虚拟机 > Docker容器
+
+
 
 [Linux 0.11](/docs/CS/OS/Linux/0.11.md)
 
@@ -79,14 +152,6 @@ fs可以通过不同的tools来构建
 出现如下问题 需要 设置disable Applets->Shells->ash->job control
 
 > can't access tty; job control turned off
-
-### Build
-
-> [!TIP]
->
-> 最佳推荐环境是 Linux物理机 > Linux虚拟机 > Docker容器
-
-
 
 编译Linux主要分两部分
 
@@ -697,58 +762,6 @@ linux/arch/x86/boot/compressed目录下的vmlinux是由该目录下的head_32.o�
 
 setup.bin文件是由objcopy命令根据setup.elf生成的
 setup.bin文件正是由/arch/x86/boot/目录下一系列对应的程序源代码文件编译链接产生
-
-### Read
-
-执行 ctags -R 生成索引文件 tags
-
-- ctrl + ] 进入函数定义
-- g, ctrl + ] 进入函数定义 可选择
-- ctrl + o 返回
-
-打开vim后 加载tags文件
-
-```shell
-:set tags=tags
-```
-
-> 在线阅读 [bootlin](https://elixir.bootlin.com/linux/v6.11/source)
-
-#### Directory
-
-目录结构
-
-
-| Directory |                                                                                                                                                                                                                |  |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | - |
-| kernel    | The kernel directory contains the code for the components at the heart of the kernel.                                                                                                                          |  |
-| arch      | arch/ holds all architecture-specific files, both include files and C and Assembler sources.<br />There is a separate subdirectory for each processor architecture supported by the kernel.                    |  |
-| crypto    | crypto/ contains the files of the crypto layer (which is not discussed in this book).<br />It includesimplementations of various ciphers that are needed primarily to support IPSec (encrypted IP connection). |  |
-| mm        | High-level memory management resides in mm/.                                                                                                                                                                   |  |
-| fs        | fs/ holds the source code for all filesystem implementations.                                                                                                                                                  |  |
-| include   | include/ contains all header files with publicly exported functions.                                                                                                                                           |  |
-| init      | The code needed to initialize the kernel is held in init/.                                                                                                                                                     |  |
-| ipc       | The implementation of the System V IPC mechanism resides in ipc/.                                                                                                                                              |  |
-| lib       | lib/ contains generic library routines that can be employed by all parts of the kernel,<br />including data structures to implement various trees and data compression routines.                               |  |
-| net       | net/ contains the network implementation, which is split into a core section and a section to implement the individual protocols                                                                               |  |
-| security  | The security/ directory is used for security frameworks and key management for cryptography.                                                                                                                   |  |
-| scripts   | scripts/ contains all scripts and utilities needed to compile the kernel or to perform other useful tasks.                                                                                                     |  |
-| drivers   | drivers/ occupies the lion’s share of the space devoted to the sources.                                                                                                                                       |  |
-| firmware  |                                                                                                                                                                                                                |  |
-| virt      |                                                                                                                                                                                                                |  |
-| usr       |                                                                                                                                                                                                                |  |
-| tools     |                                                                                                                                                                                                                |  |
-| block     | block device                                                                                                                                                                                                   |  |
-
-```shell
-usr/src/kernels/
-```
-
-内核源码根目录下的Makefile Kconfig Kbuild是与内核配置、编译相关的文件
-
-- [Init](/docs/CS/OS/Linux/init.md)
-
-内核中可供调用的函数通常需要EXPORT
 
 ## Processes
 
