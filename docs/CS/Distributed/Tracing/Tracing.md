@@ -34,7 +34,7 @@ Traces helps engineers analyze request flow and understand the entire lifecycle 
 Every operation done on a request, also called a "span," is encoded with critical data related to the microservice conducting that operation as it passes through the host system. 
 Tracking the path of a trace through a distributed system may help you find the reason for a bottleneck or breakdown.
 
-Using tracing tools, such as [Jaeger](https://www.jaegertracing.io/) and [Zipkin](/docs/CS/Distributed/Tracing/Zipkin.md), 
+Using tracing tools, such as [Jaeger](/docs/CS/Distributed/Tracing/Jaeger.md) and [Zipkin](/docs/CS/Distributed/Tracing/Zipkin.md), 
 you can look into individual system calls and figure out what's going on with your underlying components
 (which took the most or least time, whether or not specific underlying processes generated errors, etc.).
 Traces are also an excellent way to go deep into a metrics system alert.
@@ -43,6 +43,18 @@ Traces are also an excellent way to go deep into a metrics system alert.
 Distributed tracing, also called distributed request tracing, is a method used to profile and monitor applications, especially those built using a microservices architecture. 
 Distributed tracing helps pinpoint where failures occur and what causes poor performance.
 
+
+1. 快速定位请求失败原因
+2. 优化系统瓶颈
+2. 优化链路调用
+3. 生成网络拓扑
+4. 透明传输数据 比如A/B测试开关逻辑可以通过该数据传递
+
+
+一个服务追踪系统可以分为三层
+- 数据采集层，负责数据埋点并上报。
+- 数据处理层，负责数据的存储与计算。
+- 数据展示层，负责数据的图形化展示
 
 
 
