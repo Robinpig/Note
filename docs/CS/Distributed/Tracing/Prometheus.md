@@ -22,6 +22,30 @@ Prometheus's main features are:
 Prometheus受启发于Google的Brogmon监控系统
 Prometheus基于Golang开发，可方便进行二进制部署，同时可方便地使用Docker或Kubernetes进行部署 除程序外，仅有单文件配置文件与存储数据，存储数据亦可使用第三方数据库
 
+## Architecture
+
+Prometheus 主要包含下面几个组件：
+- Prometheus Server：用于拉取 metrics 信息并将数据存储在时间序列数据库。
+- Jobs/exporters：用于暴露已有的第三方服务的 metrics 给 Prometheus Server，比如
+- StatsD、Graphite 等，负责数据收集。
+- Pushgateway：主要用于短期 jobs，由于这类 jobs 存在时间短，可能在 Prometheus
+- Server 来拉取 metrics 信息之前就消失了，所以这类的 jobs 可以直接向 Prometheus
+- Server 推送它们的 metrics 信息。
+- Alertmanager：用于数据报警。
+- Prometheus web UI：负责数据展示
+
+
+它的工作流程大致是：
+
+- Prometheus Server 定期从配置好的 jobs 或者 exporters 中拉取 metrics 信息，或者
+- 接收来自 Pushgateway 发过来的 metrics 信息。
+- Prometheus Server 把收集到的 metrics 信息存储到时间序列数据库中，并运行已经定
+- 义好的 alert.rules，向 Alertmanager 推送警报。
+- Alertmanager 根据配置文件，对接收的警报进行处理，发出告警。
+- 通过 Prometheus web UI 进行可视化展示
+
+
+
 ## Data Model
 
 Prometheus fundamentally stores all data as time series: streams of timestamped values belonging to the same metric and the same set of labeled dimensions.
