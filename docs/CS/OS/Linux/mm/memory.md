@@ -6,7 +6,17 @@ mapping of files into processes address space and many other cool things.
 
 Linux memory management is a complex system with many configurable settings. 
 Most of these settings are available via /proc filesystem and can be queried and adjusted using sysctl. 
-These APIs are described in Documentation for /proc/sys/vm/ and in man 5 proc.
+These APIs are described in Documentation for `/proc/sys/vm/` and in man 5 proc.
+
+
+Linux 涉及三种地址: 虚拟地址、线性地址 和 物理地址
+
+
+应用使用的是虚拟地址 例如 %p 打印变量地址就是虚拟地址 虚拟地址经过分段处理变成线性地址 在使能了 MMU 的系统中 线性地址经过转换生成物理地址
+
+分段机制完成了虚拟内存到物理内存的映射 
+
+分页机制完成了线性内存到物理内存的映射
 
 Linux 内核使用页式内存管理，应用程序给出的内存地址是虚拟地址，它需要经过若干级页表一级一级的变换，才变成真正的物理地址。
 当访问一个由虚拟地址表示的内存空间时，需要先经过若干次的内存访问，得到每一级页表中用于转换的页表项（页表是存放在内存里面的），才能完成映射。
