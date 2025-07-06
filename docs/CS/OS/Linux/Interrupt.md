@@ -1,16 +1,22 @@
 ## Introduction
 
-IDT 包含了256 个中断描述符， 本质上是内存中的一个数组， 由idt_table 变量表示。中断描述符由gate_desc 结构体表示， 有GATE_lNTERRUPT 、GATE_TRAP、GATE_CALL 和GATE_TASK 儿种类型。系统启动过程中， 会为idt_table 的元素赋值， 然后将它的地址写入寄存器。中断发生时CPU 根据该地址和中断索引，计算得到对应的中断处理程序地址并执行。256 个中断中，前32 个是x86 预留的， 其余的多数都可以给操作系统使用， 具体情况与系统的配置有关， 比如OxfO-Oxff是给SMP 使用的。内核预定义了多数专用的中断描述符， 多由idt_data 数组的形式给出， 比如early_idts、def_idts 和apic_idts等，系统初始化过程中会调用咄＿setup_from_ t able将这些数组的元素信息转换为 idt t able对应的元素信息。
+IDT 包含了256 个中断描述符， 本质上是内存中的一个数组， 由idt_table 变量表示
+中断描述符由gate_desc 结构体表示， 有GATE_lNTERRUPT 、GATE_TRAP、GATE_CALL 和GATE_TASK 儿种类型
+系统启动过程中， 会为idt_table 的元素赋值， 然后将它的地址写入寄存器。中断发生时CPU 根据该地址和中断索引，计算得到对应的中断处理程序地址并执行
+256 个中断中，前32 个是x86 预留的， 其余的多数都可以给操作系统使用， 具体情况与系统的配置有关， 比如OxfO-Oxff是给SMP 使用的
+内核预定义了多数专用的中断描述符， 多由idt_data 数组的形式给出， 比如early_idts、def_idts 和apic_idts等，系统初始化过程中会调用咄＿setup_from_ t able将这些数组的元素信息转换为 idt t able对应的元素信息
 
 中断处理必须完成三个任务：
 1. 保存现场以便处理完毕后返回；
 2. 调用已注册的中断服务例程(ist) 处理中断事件；
 3. 返回中断前工作继续执行。
-   要做的其实就是将保存的现场在处理完中断后恢复到中断之前的状态， 确保程序能继续执行
 
-中断服务例程涉及两个关键的结构体，irq _ desc和irqaclion， 二者是一对多的关系。irq_desc与irq号对应， irqaction与一个设备对应， 共享同一个irq号的多个设备的irqaction对应同一个irq_desc CPU得到中断索引(x86上称之为vector),计算得到irq,通过irq_to_desc可以由irq获得对应的irq_desc
+要做的其实就是将保存的现场在处理完中断后恢复到中断之前的状态， 确保程序能继续执行
 
-Ilq是软件上的抽象， 为了多核系统上的通用性。veclo,是CPU看到的中断索引， 它们有一定的对应关系
+中断服务例程涉及两个关键的结构体，`irq_desc` 和 `irqaction`， 二者是一对多的关系。irq_desc 与 irq 号对应， irqaction 与一个设备对应， 
+共享同一个irq号的多个设备的irqaction对应同一个irq_desc CPU得到中断索引(x86上称之为vector),计算得到irq,通过irq_to_desc可以由irq获得对应的irq_desc
+
+Ilq是软件上的抽象， 为了多核系统上的通用性。vector 是CPU看到的中断索引， 它们有一定的对应关系
 
 内核使用全局per-cpu变量vector_irq维护vectm和irq_desc的关系
 irq_desc和irq是一对一的关系。 irqaction表示设备对中断的处理
@@ -29,8 +35,23 @@ irq_desc和irq是一对一的关系。 irqaction表示设备对中断的处理
 采用中断的设备， 在使能 中断之前必须设詈触发方式(电平/边沿触发等)、irq号、 处理函 数等信息。内核提供了request_irq和request_threaded_irq两个函数可以方便地配置这些信息，前者调用后者实现
 
 
+
+中断处理函数加ncller和thread_fn的编写要遵守以下几条重要的原则
+首先， 中断处理扜断了当前进程的执行， 同时需要进行一系列复杂的处理， 所以要快速返回 不能在handler中做复杂的操作(如I/O)  这就是所谓的中断处理的上半段(Top Half)
+如果需要复杂操作，一般有两种常见做法： 一种是在函数中启动工作队列或者软中断（如tasklet)等，由丁作队列等完成工作；第二种做法是在thread_fn 中执行，这就是所谓的中断处理的下半段(Bottom Half)
+
+
+其次，加nd如中不能进行任何sleep的动作， 调用sleep, 使用信号量、互斥锁等可能导致sleep的机制都不可行
+
+最后， 不要在hand如中调用如able_irq这类需要等待当前中断执行完毕的函数，中断处理中调用一个需要等待当前中断结束的函数，会发生死锁
+实际上，handle1 执行的时候， 一般外部中断依然是在禁止的状态， 不需要如able_irq
+
+
+request_threaded_irq创建新线程时，会调用 `sched_setseheduler_noeheck` (t, SCHED FIFO,...) 将线程设置为实时的
+所以，对用户体验影响比较大、要求快速响应的设备的驱动中，使用 request_threadecl_irq 有利于提高用户体验；相反，要求不高的设备的驱动中，使用request_irq更合适
+
 irq_entries_start 是一个函数数组
-asm_common_interrupt, 重复NR_EXTERNAL_VECTORS次（记为n次），一次定义了n个中断处理函数
+[asm_common_interrupt](/docs/CS/OS/Linux/Interrupt.md?id=handle), 重复NR_EXTERNAL_VECTORS次（记为n次），一次定义了n个中断处理函数
 
 
 ```
@@ -49,7 +70,19 @@ SYM_CODE_START(irq_entries_start)
     .endr
 SYM_CODE_END(irq_entries_start)
 ```
- 
+
+
+asm_common_interrupt调用common_interrupt后，执行error_return返回
+error_return根据需要返回的是用户态还是内核态， 分别调用restore_regs and return_ to kernel和swapgs_restore regs_and_return_to_usermode返回到不同的状态
+
+
+handle_ edge_irq有两个重要功能：
+- 第一个功能与中断重入有关
+- 第二个功能就是处理当前中断，调用handle_irq_ event实现。该函数会将IRQS_pENDING清零，调用irqd_set 将irq_clesc的irq_clata的 `IRQD_IRQ_INPROGRESS` 标记置位，表示正在处理中断
+  然后调用 `handle_irq_event_percpu` 函数将处理权交给设备，最后清除 `IRQD_IRQ_INPROGRESS` 标记
+
+
+
 
 
 ## Hardware
@@ -195,6 +228,8 @@ enum {
 };
 ```
 
+raise_softirq 和raise_softirq_irqoff不仅会将＿softirq_pending字段置位， 也会在in_interrupt不为真的清况下唤醒ksoftirqd线程处理软中断。所以，即使没有发生中断，软中断也可以被触发。
+除了扭ise_softirq这两个函数，invoke_softirq 也可以触发软中断处理：根据force_irqthreads相关的配置，要么唤醒ksoftirqd线程，要么直接调用＿do_softirq。
 ### request_irq
 
 request_irq - Add a handler for an interrupt line
@@ -908,7 +943,8 @@ The simplest interface to the signal features of the UNIX System is the signal f
 
 从本质上来说， 软中断并不是真正的中断，大多情况下可以将它理解为中断发生时进行的一系列橾作，比如timer、tasklet（小任务）等
 
-内核支持的软中断在内核中以类型为softirq_action数组的softirq_ vec变量表示，softirq_action结构体只有一个类型为函数指针的字段action, 表示相应的软中断的处理函数。另外，软中断执行频率较高，所以除非必要， 一般不建议用户添加新类型的软中断
+内核支持的软中断在内核中以类型为softirq_action数组的softirq_ vec变量表示，softirq_action结构体只有一个类型为函数指针的字段action, 表示相应的软中断的处理函数
+另外，软中断执行频率较高，所以除非必要， 一般不建议用户添加新类型的软中断
 各软中断(enum的值从低到高）和对应的action
 
 ```shell
@@ -983,6 +1019,8 @@ void open_softirq(int nr, void (*action)(struct softirq_action *))
 
 ### run_ksoftirqd
 
+ksoftirqd 线程执行 `run_ksoftirqd` 函数，也会调用 `＿do_softirq` 完成最终操作
+
 ```c
 
 static void run_ksoftirqd(unsigned int cpu)
@@ -1003,6 +1041,9 @@ static void run_ksoftirqd(unsigned int cpu)
 ```
 
 #### do_softirq
+
+_do_softirq调用ffs函数(find first set, 从低到高位查找第一个值为1的位）循环irq_stat的 _softirq_pending字段的每一个为1的位， 调用该位对应的softirq_action对象的action字段。
+所以，各种类型的软中断的优先级从Hl_SOfi'lRQ到Rcu_sonmQ依次递减。另外，在当前逻辑下 _softirq_pending字段多余的位不能用作其他目的，否则会造成数组越界
 
 ```c
 
@@ -1082,6 +1123,8 @@ restart:
 	current_restore_flags(old_flags, PF_MEMALLOC);
 }
 ```
+
+
 
 #### spawn_ksoftirqd
 
@@ -1177,11 +1220,20 @@ static int ksoftirqd_should_run(unsigned int cpu)
 #define or_softirq_pending(x)	(__this_cpu_or(local_softirq_pending_ref, (x)))
 ```
 
+
+
+软中断处理最终落到了softirq_action对象的action字段
+
+
+
+
 ### tasklet
 
 Because tasklets are implemented on top of softirqs, they are softirqs.
 
 Tasklets --- multithreaded analogue of BHs.
+
+tasklet 有Hl_SOF'rlRQ和TASKLET_SOF'l'IRQ两种类型，其中Hl_S01吓IRQ 优先级更高
 
 This API is deprecated. Please consider using threaded IRQs instead:
 https://lore.kernel.org/lkml/20200716081538.2sivhkj4hcyrusem@linutronix.de
@@ -1196,6 +1248,9 @@ Properties:
 - If the tasklet is already scheduled, but its execution is still not started, it will be executed only once.
 - If this tasklet is already running on another CPU (or schedule is called from tasklet itself), it is rescheduled for later.
 - Tasklet is strictly serialized wrt itself, but not wrt another tasklets. If client needs some intertask synchronization, he makes it with spinlocks.
+
+tasklet涉及两个结构体：tasklet_struct 和 tasklet_head
+在内核中tasklet_struct对象由单向链表链接，tasklet_head存储了链表的头部和尾部，它采用了FIFO (First In First Out)策略，新的 tasklet_struct 对象被插入到链表尾部
 
 ```c
 struct tasklet_struct
@@ -1220,8 +1275,10 @@ static __latent_entropy void tasklet_action(struct softirq_action *a)
 {
 	tasklet_action_common(a, this_cpu_ptr(&tasklet_vec), TASKLET_SOFTIRQ);
 }
+```
 
-
+tasklet_action_common的主要逻辑如下
+```c
 static void tasklet_action_common(struct softirq_action *a,
 				  struct tasklet_head *tl_head,
 				  unsigned int softirq_nr)
@@ -1307,3 +1364,4 @@ static void __tasklet_schedule_common(struct tasklet_struct *t,
 ## Links
 
 - [Linux](/docs/CS/OS/Linux/Linux.md)
+- [Interrupt](/docs/CS/OS/interrupt.md)

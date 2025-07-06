@@ -50,20 +50,38 @@
 </tbody>
 </table>
 
-> CPU在响应中断的时候是处理完当前指令后去check一下是否有中断 单指令是不可中断的
-
 
 
 x86处理器的INTR和NMI接受外部中断请求信号 INTR接受可屏蔽中断请求 NMI接受不可屏蔽中断请求 标志寄存器EFLAGS中的IF标志位决定是否屏蔽可屏蔽中断请求
 
 中断控制器与处理器相连 传统中断控制器为PIC 在SMP架构中 每个处理器都包含一个IOAPIC
 
-处理器识别中断后 根据中断控制器传递的中断索引去IDT(*InterruptDescriptor Table*)中查询并执行中断处理程序 中断处理程序会负责保护现场 处理中断 恢复保存的现场
+处理器识别中断后 根据中断控制器传递的中断索引去 IDT(*InterruptDescriptor Table*)中查询并执行中断处理程序 中断处理程序会负责保护现场 处理中断 恢复保存的现场
 
 
+中断处理流程如图所示:
+
+<div style="text-align: center;">
+
+![Fig.1. 中断处理流程](img/interrupt.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. 中断处理流程
+</p>
+
+> [!TIP]
+> 
+> CPU在响应中断的时候是处理完当前指令后去check一下是否有中断 单指令是不可中断的
+
+
+
+
+不同操作系统的实现差不多类似:
 
 - [Linux Interrupt](/docs/CS/OS/Linux/Interrupt.md)
-
+- [xv6 Interrupt](/docs/CS/OS/xv6/Interrupt.md)
 
 
 ## Links
