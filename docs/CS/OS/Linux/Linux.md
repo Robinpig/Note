@@ -779,7 +779,7 @@ Here, there are two problem areas:
    This is achieved by saving all state-dependent elements of the process before CPU resources are withdrawn and the process is placed in an idle state.
    When the process is reactivated, the exact saved state is restored. Switching between processes is known as task switching.
 2. The kernel must also decide how CPU time is shared between the existing processes. Important processes are given a larger share of CPU time, less important processes a smaller share.
-   The decision as to which process runs for how long is known as [scheduling](/docs/CS/OS/Linux/sche.md).
+   The decision as to which process runs for how long is known as [scheduling](/docs/CS/OS/Linux/proc/sche.md).
 
 ### Spurious wakeup
 
