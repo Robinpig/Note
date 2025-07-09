@@ -475,7 +475,7 @@ kubernetes\pkg\controller\
 ### CRI-O
 
 CRI-O is an implementation of the Kubernetes CRI (Container Runtime Interface) to enable using OCI (Open Container Initiative) compatible runtimes.
-It is a lightweight alternative to using [Docker](/docs/CS/Container/Docker.md) as the runtime for kubernetes. 
+It is a lightweight alternative to using [Docker](/docs/CS/Container/Docker/Docker.md) as the runtime for kubernetes. 
 It allows Kubernetes to use any OCI-compliant runtime as the container runtime for running pods. 
 Today it supports runc and Kata Containers as the container runtimes but any OCI-conformant runtime can be plugged in principle.
 
@@ -1664,6 +1664,12 @@ type IngressSpec struct {
 
 ## Network Management
 
+
+
+[Kubernetes 网络模型](/docs/CS/Container/k8s/net.md) 设计的一个基本原则是 每个Pod都拥有一个独立的 IP 地址 并假定所有的 Pod 都在一个可以直接联通、扁平的网络空间
+
+
+
 ## Resource Management
 
 ## Scheduling
@@ -1683,7 +1689,7 @@ K8s 改变了传统的应用部署发布的方式，给容器化的应用服务�
 
 ## Links
 
-- [Docker](/docs/CS/Container/Docker.md)
+- [Docker](/docs/CS/Container/Docker/Docker.md)
 
 
 ## References
