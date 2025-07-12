@@ -1,6 +1,260 @@
 ## Introduction
 
 
+进程执行在CPU上，所以CPU需要记录正在和将要运行在它上的进程的情况， 内核以 rq (runqueue)结构体描述它
+
+
+
+rq、CPU和task_struct之间的关系表
+
+| 函数和宏                       | 描述 |
+|----------------------------| --- |
+| task_cpu (task_struct * p) | 进程所屈的CPU |
+| cpu_rq (cpu)               | CPU对应的rq |
+ | task_rq (p)                | cpu_rq (task_cpu( p)), 进程所屈的rq |
+ | cpu_curr (cpu)             | (cpu_rq (cpu) ->curr), CPU当前执行的进程 |
+ 
+
+
+
+
+```c
+/*
+ * Wrappers for p->thread_info->cpu access. No-op on UP.
+ */
+#ifdef CONFIG_SMP
+
+static inline unsigned int task_cpu(const struct task_struct *p)
+{
+	return READ_ONCE(task_thread_info(p)->cpu);
+}
+```
+
+
+```c
+#define cpu_rq(cpu)		(&per_cpu(runqueues, (cpu)))
+#define this_rq()		this_cpu_ptr(&runqueues)
+#define task_rq(p)		cpu_rq(task_cpu(p))
+#define cpu_curr(cpu)		(cpu_rq(cpu)->curr)
+```
+
+
+每个CPU都有一个rq对象， 内核定义了rq类型的每CPU变最 runqueues 与它们对应。clock_task字段表示进程累计运行的时间，有可能不包括中断处理等时间（与系统的配置有关），clock 可能比它大
+
+```c
+struct rq {
+	/* runqueue lock: */
+	raw_spinlock_t		__lock;
+
+	unsigned int		nr_running;
+#ifdef CONFIG_NUMA_BALANCING
+	unsigned int		nr_numa_running;
+	unsigned int		nr_preferred_running;
+	unsigned int		numa_migrate_on;
+#endif
+#ifdef CONFIG_NO_HZ_COMMON
+#ifdef CONFIG_SMP
+	unsigned long		last_blocked_load_update_tick;
+	unsigned int		has_blocked_load;
+	call_single_data_t	nohz_csd;
+#endif /* CONFIG_SMP */
+	unsigned int		nohz_tick_stopped;
+	atomic_t		nohz_flags;
+#endif /* CONFIG_NO_HZ_COMMON */
+
+#ifdef CONFIG_SMP
+	unsigned int		ttwu_pending;
+#endif
+	u64			nr_switches;
+
+#ifdef CONFIG_UCLAMP_TASK
+	/* Utilization clamp values based on CPU's RUNNABLE tasks */
+	struct uclamp_rq	uclamp[UCLAMP_CNT] ____cacheline_aligned;
+	unsigned int		uclamp_flags;
+#define UCLAMP_FLAG_IDLE 0x01
+#endif
+
+	struct cfs_rq		cfs;
+	struct rt_rq		rt;
+	struct dl_rq		dl;
+#ifdef CONFIG_SCHED_CLASS_EXT
+	struct scx_rq		scx;
+#endif
+
+	struct sched_dl_entity	fair_server;
+
+#ifdef CONFIG_FAIR_GROUP_SCHED
+	/* list of leaf cfs_rq on this CPU: */
+	struct list_head	leaf_cfs_rq_list;
+	struct list_head	*tmp_alone_branch;
+#endif /* CONFIG_FAIR_GROUP_SCHED */
+
+	/*
+	 * This is part of a global counter where only the total sum
+	 * over all CPUs matters. A task can increase this counter on
+	 * one CPU and if it got migrated afterwards it may decrease
+	 * it on another CPU. Always updated under the runqueue lock:
+	 */
+	unsigned int		nr_uninterruptible;
+
+	union {
+		struct task_struct __rcu *donor; /* Scheduler context */
+		struct task_struct __rcu *curr;  /* Execution context */
+	};
+	struct sched_dl_entity	*dl_server;
+	struct task_struct	*idle;
+	struct task_struct	*stop;
+	unsigned long		next_balance;
+	struct mm_struct	*prev_mm;
+
+	unsigned int		clock_update_flags;
+	u64			clock;
+	/* Ensure that all clocks are in the same cache line */
+	u64			clock_task ____cacheline_aligned;
+	u64			clock_pelt;
+	unsigned long		lost_idle_time;
+	u64			clock_pelt_idle;
+	u64			clock_idle;
+#ifndef CONFIG_64BIT
+	u64			clock_pelt_idle_copy;
+	u64			clock_idle_copy;
+#endif
+
+	atomic_t		nr_iowait;
+
+	u64 last_seen_need_resched_ns;
+	int ticks_without_resched;
+
+#ifdef CONFIG_MEMBARRIER
+	int membarrier_state;
+#endif
+
+#ifdef CONFIG_SMP
+	struct root_domain		*rd;
+	struct sched_domain __rcu	*sd;
+
+	unsigned long		cpu_capacity;
+
+	struct balance_callback *balance_callback;
+
+	unsigned char		nohz_idle_balance;
+	unsigned char		idle_balance;
+
+	unsigned long		misfit_task_load;
+
+	/* For active balancing */
+	int			active_balance;
+	int			push_cpu;
+	struct cpu_stop_work	active_balance_work;
+
+	/* CPU of this runqueue: */
+	int			cpu;
+	int			online;
+
+	struct list_head cfs_tasks;
+
+	struct sched_avg	avg_rt;
+	struct sched_avg	avg_dl;
+#ifdef CONFIG_HAVE_SCHED_AVG_IRQ
+	struct sched_avg	avg_irq;
+#endif
+#ifdef CONFIG_SCHED_HW_PRESSURE
+	struct sched_avg	avg_hw;
+#endif
+	u64			idle_stamp;
+	u64			avg_idle;
+
+	/* This is used to determine avg_idle's max value */
+	u64			max_idle_balance_cost;
+
+#ifdef CONFIG_HOTPLUG_CPU
+	struct rcuwait		hotplug_wait;
+#endif
+#endif /* CONFIG_SMP */
+
+#ifdef CONFIG_IRQ_TIME_ACCOUNTING
+	u64			prev_irq_time;
+	u64			psi_irq_time;
+#endif
+#ifdef CONFIG_PARAVIRT
+	u64			prev_steal_time;
+#endif
+#ifdef CONFIG_PARAVIRT_TIME_ACCOUNTING
+	u64			prev_steal_time_rq;
+#endif
+
+	/* calc_load related fields */
+	unsigned long		calc_load_update;
+	long			calc_load_active;
+
+#ifdef CONFIG_SCHED_HRTICK
+#ifdef CONFIG_SMP
+	call_single_data_t	hrtick_csd;
+#endif
+	struct hrtimer		hrtick_timer;
+	ktime_t			hrtick_time;
+#endif
+
+#ifdef CONFIG_SCHEDSTATS
+	/* latency stats */
+	struct sched_info	rq_sched_info;
+	unsigned long long	rq_cpu_time;
+
+	/* sys_sched_yield() stats */
+	unsigned int		yld_count;
+
+	/* schedule() stats */
+	unsigned int		sched_count;
+	unsigned int		sched_goidle;
+
+	/* try_to_wake_up() stats */
+	unsigned int		ttwu_count;
+	unsigned int		ttwu_local;
+#endif
+
+#ifdef CONFIG_CPU_IDLE
+	/* Must be inspected within a RCU lock section */
+	struct cpuidle_state	*idle_state;
+#endif
+
+#ifdef CONFIG_SMP
+	unsigned int		nr_pinned;
+#endif
+	unsigned int		push_busy;
+	struct cpu_stop_work	push_work;
+
+#ifdef CONFIG_SCHED_CORE
+	/* per rq */
+	struct rq		*core;
+	struct task_struct	*core_pick;
+	struct sched_dl_entity	*core_dl_server;
+	unsigned int		core_enabled;
+	unsigned int		core_sched_seq;
+	struct rb_root		core_tree;
+
+	/* shared state -- careful with sched_core_cpu_deactivate() */
+	unsigned int		core_task_seq;
+	unsigned int		core_pick_seq;
+	unsigned long		core_cookie;
+	unsigned int		core_forceidle_count;
+	unsigned int		core_forceidle_seq;
+	unsigned int		core_forceidle_occupation;
+	u64			core_forceidle_start;
+#endif
+
+	/* Scratch cpumask to be temporarily used under rq_lock */
+	cpumask_var_t		scratch_mask;
+
+#if defined(CONFIG_CFS_BANDWIDTH) && defined(CONFIG_SMP)
+	call_single_data_t	cfsb_csd;
+	struct list_head	cfsb_csd_list;
+#endif
+};
+```
+
+rq结构体并没有直接与task_struct关联的字段，所以进程也并不由它直接管理， 实际的管理者是 cfs、1t和dl字段
+
+
 task_struct数据结构中关于进程调度的一些重要成员
 
 - prio成员：保存着进程的动态优先级，这是调度类考虑的优先级
@@ -13,6 +267,33 @@ task_struct数据结构中关于进程调度的一些重要成员
 - dl成员：deadline进程调度实体
 - policy成员：用于确定进程的类型，比如是普通进程还是实时进程
 - cpus_allowed成员：用于确定进程可以在哪几个CPU上运行
+
+
+一个进程从被创建开始， 到被凋度执行， 再到被抢占或者主动让出CPU, 整个过程调度器需要完成将进程纳入管理、调度进程执行和记录进程占用CPU的时间等工作
+考虑多个进程的情况， 还需要完成选择下一个进程、进程从一个CPU切换到另一个CPU等任务
+
+
+内核定义了 sched_class 结构体（调度类、调度器类）表示这些任务， 每一个任务对应一个字段（回调函数）
+
+sched_class 字段表
+
+| 字段                 | 任务内容或涸用时机 |
+|--------------------| --- |
+| enqueue_task       | 将进程插入可执行队列 |
+| dequeue_task       | 将进程从可执行队列删除 |
+| check_preempt_curr | 检查是否应该抢占rq的当前进程 |
+| pick_next_task     | 确定下一个将要被调度执行的进程 |
+| put_prev _task     | 处理将要被抢占的进程 |
+| select_task_rq     | 为进程选择CPU |
+| task_woken         | 进程已被唤醒 |
+| task_tick          | 时钟中断发生 |
+| task_fork          | 新进程被创建 |
+| task_dead          | 进程巳死 |
+
+
+调度类是调度器的行为指南， 逻辑上是调度器的一部分， 不同的调度器就需要不同的调度类， 一个调度类并不需要实现所有的字段
+
+内核定义了 stop_sched_class、dl_sched_class、 rt_sched_class、fair_sched_class 和idle_sched_class分别对应stop调度、最后期限调度（或者称为最早截止时间优先调度）、实时调度、完全公平调度和叫le调度
 
 
 任务的睡眠与唤醒是内核调度器重要的组成部分，下面先简单介绍一下唤醒的流程。
@@ -497,10 +778,21 @@ O(1)调度器在处理某些交互式进程时依然存在问题，特别是在�
 另外，它对NUMA的支持也不完善，因此大量难以维护和阅读的代码被加入该调度器代码实现中
 
 
+
+
+
+
 ## schedule
 
 
 The main entry point into the process schedule is the function schedule() , defined in kernel/sched/core.c
+
+schedule 一般在以下几种情况下执行。
+- 第1种，进程主动放弃CPU, 如sleep、等待某事件或条件等。
+- 第2种， 内核同步的时候，进程无法获得执行权， 比如信号掀、互斥锁等。
+- 第3种，进程处理中断或异常后，如果需要返回用户空间， 将要返回用户空间时，如果它的 TIF _NEED _RESCHED标志被置位，会执行schedule。
+- 第4种，进程处理中断或异常后， 如果需要继续在内核空间继续执行， 分为以下两种悄况。
+  内核是可抢占的(CONFIG_PREEMPT=y), 检查抢占是否使能， 抢占使能的悄况下， 可能会执行 schedule。 抢占被禁止的情况下，不会执行scheud el 。 如果内核是不可抢占的(CONFlG_PREEMPT= n)， 进程在内核态执行不会被抢占
 
 在Linux内核里schedule()是内部使用的接口函数，有不少其他函数会直接调用该函数。除此之外，schedule()函数还有不少变种的封装。
 preempt_schedule()用于可抢占内核的调度。
@@ -511,14 +803,6 @@ schedule_timeout(signed long timeout)用于使进程睡眠，直到超时为止
 static void __sched notrace preempt_schedule_common(void)
 {
 	do {
-```
-
-Because the function tracer can trace preempt_count_sub() and it also uses preempt_enable/disable_notrace(), if NEED_RESCHED is set, the preempt_enable_notrace() called by the function tracer will call this function again and cause infinite recursion.
-
-Preemption must be disabled here before the function tracer can trace. Break up preempt_disable() into two calls. One to disable preemption without fear of being traced.
-The other to still record the preemption latency, which can also be traced by the function tracer.
-
-```
 		preempt_disable_notrace();
 		preempt_latency_start(1);
 		__schedule(true);
@@ -562,8 +846,7 @@ The main means of driving the scheduler and thus entering this function are:
 1. Explicit blocking: mutex, semaphore, waitqueue, etc.
 2. TIF_NEED_RESCHED flag is checked on interrupt and userspace return paths. For example, see arch/x86/entry_64.S.
    To drive preemption between tasks, the scheduler sets the flag in timer interrupt handler scheduler_tick().
-3. Wakeups don't really cause entry into schedule(). They add a
-   task to the run-queue and that's it.
+3. Wakeups don't really cause entry into schedule(). They add a task to the run-queue and that's it.
 
 Now, if the new task added to the run-queue preempts the current
 task, then the wakeup sets TIF_NEED_RESCHED and schedule() gets
@@ -599,48 +882,17 @@ static void __sched notrace __schedule(bool preempt)
 	rq = cpu_rq(cpu);
 	prev = rq->curr;
 
-	schedule_debug(prev, preempt);
-
-	if (sched_feat(HRTICK) || sched_feat(HRTICK_DL))
-		hrtick_clear(rq);
-
 	local_irq_disable();
 	rcu_note_context_switch(preempt);
 
-	/*
-	 * Make sure that signal_pending_state()->signal_pending() below
-	 * can't be reordered with __set_current_state(TASK_INTERRUPTIBLE)
-	 * done by the caller to avoid the race with signal_wake_up():
-	 *
-	 * __set_current_state(@state)		signal_wake_up()
-	 * schedule()				  set_tsk_thread_flag(p, TIF_SIGPENDING)
-	 *					  wake_up_state(p, state)
-	 *   LOCK rq->lock			    LOCK p->pi_state
-	 *   smp_mb__after_spinlock()		    smp_mb__after_spinlock()
-	 *     if (signal_pending_state())	    if (p->state & @state)
-	 *
-	 * Also, the membarrier system call requires a full memory barrier
-	 * after coming from user-space, before storing to rq->curr.
-	 */
 	rq_lock(rq, &rf);
 	smp_mb__after_spinlock();
-```
 
-Promote REQ to ACT
-
-```c
 	rq->clock_update_flags <<= 1;
 	update_rq_clock(rq);
 
 	switch_count = &prev->nivcsw;
 
-	/*
-	 * We must load prev->state once (task_struct::state is volatile), such
-	 * that:
-	 *
-	 *  - we form a control dependency vs deactivate_task() below.
-	 *  - ptrace_{,un}freeze_traced() can change ->state underneath us.
-	 */
 	prev_state = prev->state;
 	if (!preempt && prev_state) {
 		if (signal_pending_state(prev_state, prev)) {
@@ -654,17 +906,6 @@ Promote REQ to ACT
 			if (prev->sched_contributes_to_load)
 				rq->nr_uninterruptible++;
 
-			/*
-			 * __schedule()			ttwu()
-			 *   prev_state = prev->state;    if (p->on_rq && ...)
-			 *   if (prev_state)		    goto out;
-			 *     p->on_rq = 0;		  smp_acquire__after_ctrl_dep();
-			 *				  p->state = TASK_WAKING
-			 *
-			 * Where __schedule() and ttwu() have matching control dependencies.
-			 *
-			 * After this, schedule() must not care about p->state any more.
-			 */
 			deactivate_task(rq, prev, DEQUEUE_SLEEP | DEQUEUE_NOCLOCK);
 
 			if (prev->in_iowait) {
@@ -674,11 +915,7 @@ Promote REQ to ACT
 		}
 		switch_count = &prev->nvcsw;
 	}
-```
 
-pick next task
-
-```c
 	next = pick_next_task(rq, prev, &rf);
 	clear_tsk_need_resched(prev);
 	clear_preempt_need_resched();
@@ -688,42 +925,14 @@ pick next task
 
 	if (likely(prev != next)) {
 		rq->nr_switches++;
-		/*
-		 * RCU users of rcu_dereference(rq->curr) may not see
-		 * changes to task_struct made by pick_next_task().
-		 */
+
 		RCU_INIT_POINTER(rq->curr, next);
-		/*
-		 * The membarrier system call requires each architecture
-		 * to have a full memory barrier after updating
-		 * rq->curr, before returning to user-space.
-		 *
-		 * Here are the schemes providing that barrier on the
-		 * various architectures:
-		 * - mm ? switch_mm() : mmdrop() for x86, s390, sparc, PowerPC.
-		 *   switch_mm() rely on membarrier_arch_switch_mm() on PowerPC.
-		 * - finish_lock_switch() for weakly-ordered
-		 *   architectures where spin_unlock is a full barrier,
-		 * - switch_to() for arm64 (weakly-ordered, spin_unlock
-		 *   is a RELEASE barrier),
-		 */
+
 		++*switch_count;
-```
 
-prev queued
-
-```c
 		migrate_disable_switch(rq, prev);
 		psi_sched_switch(prev, next, !task_on_rq_queued(prev));
 
-		trace_sched_switch(preempt, prev, next);
-```
-
-Context Switch
-
-Also unlocks the rq:
-
-```c
 		rq = context_switch(rq, prev, next, &rf);
 	} else {
 		rq->clock_update_flags &= ~(RQCF_ACT_SKIP|RQCF_REQ_SKIP);
@@ -739,6 +948,8 @@ Also unlocks the rq:
 ### pick_next_task
 
 Pick up the highest-prio task:
+
+它首先判断rq的可运行进程的数扯是否与完全公平队列的可运行进程的数最相等，相等则意味着其他几个调度类并没有可运行进程，直接调用 pick_next_task_fair 选择下一个进程即可
 
 ```c
 // sched/core.c
@@ -956,6 +1167,14 @@ static void set_next_task_idle(struct rq *rq, struct task_struct *next, bool fir
 
 context_switch - switch to the new MM and the new thread's register state.
 
+内核线程不会独立管理内存， 它们的task_struct的mm字段为NULL
+则以pr ev的有效内存( activ e _ mm)作为它的有效内存， 而且不需要
+切换内存(pgcl等）， 只需要增加mm_struct的mm_count的引用计数。内核线程不会访间用户空间的内存，而各进程的内核空间的内存是相同的，所以内核线程使用上一个进程的内存是可行的
+
+如果next不是内核线程，则调用switch_mm _irqs_off切换内存。
+如果prev是内核线程，它将要被next替代，所以没有必要再为它保留 `active_mm` ,但是在它之前被调度执行时，mm _count的引用计数被增加了，
+可能导致 `active_mm` 不能被完全释放，rq-> prev _mm = prev->active~111111将它传递给 rq , 进程切换完成后根据mm _count的值做进一步处理
+
 ```c
 // kernel/sched/core.c
 static __always_inline struct rq *
@@ -964,11 +1183,6 @@ context_switch(struct rq *rq, struct task_struct *prev,
 {
 	prepare_task_switch(rq, prev, next);
 
-	/*
-	 * For paravirt, this is coupled with an exit in switch_to to
-	 * combine the page table reload and the switch backend into
-	 * one hypercall.
-	 */
 	arch_start_context_switch(prev);
 
 	/*
@@ -1008,16 +1222,125 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	rq->clock_update_flags &= ~(RQCF_ACT_SKIP|RQCF_REQ_SKIP);
 
 	prepare_lock_switch(rq, next, rf);
-```
 
-Here we just switch the register state and the stack.
-
-```
+    // Here we just switch the register state and the stack.
 	switch_to(prev, next, prev);
 	barrier();
 
 	return finish_task_switch(prev);
 }
+```
+switch_to 的实现依赖具体的 arch
+
+
+arm
+
+```c
+extern struct task_struct *__switch_to(struct task_struct *, struct thread_info *, struct thread_info *);
+
+#define switch_to(prev,next,last)					\
+do {									\
+	__complete_pending_tlbi();					\
+	if (IS_ENABLED(CONFIG_CURRENT_POINTER_IN_TPIDRURO) || is_smp())	\
+		__this_cpu_write(__entry_task, next);			\
+	last = __switch_to(prev,task_thread_info(prev), task_thread_info(next));	\
+} while (0)
+```
+
+```c
+__notrace_funcgraph __sched
+struct task_struct *__switch_to(struct task_struct *prev,
+				struct task_struct *next)
+{
+	struct task_struct *last;
+
+	fpsimd_thread_switch(next);
+	tls_thread_switch(next);
+	hw_breakpoint_thread_switch(next);
+	contextidr_thread_switch(next);
+	entry_task_switch(next);
+	ssbs_thread_switch(next);
+	cntkctl_thread_switch(prev, next);
+	ptrauth_thread_switch_user(next);
+	permission_overlay_switch(next);
+	gcs_thread_switch(next);
+
+	/*
+	 * Complete any pending TLB or cache maintenance on this CPU in case
+	 * the thread migrates to a different CPU.
+	 * This full barrier is also required by the membarrier system
+	 * call.
+	 */
+	dsb(ish);
+
+	/*
+	 * MTE thread switching must happen after the DSB above to ensure that
+	 * any asynchronous tag check faults have been logged in the TFSR*_EL1
+	 * registers.
+	 */
+	mte_thread_switch(next);
+	/* avoid expensive SCTLR_EL1 accesses if no change */
+	if (prev->thread.sctlr_user != next->thread.sctlr_user)
+		update_sctlr_el1(next->thread.sctlr_user);
+
+	/* the actual thread switch */
+	last = cpu_switch_to(prev, next);
+
+	return last;
+}
+```
+
+
+x86_64
+
+```asm
+/*
+ * %rdi: prev task
+ * %rsi: next task
+ */
+.pushsection .text, "ax"
+SYM_FUNC_START(__switch_to_asm)
+	ANNOTATE_NOENDBR
+	/*
+	 * Save callee-saved registers
+	 * This must match the order in inactive_task_frame
+	 */
+	pushq	%rbp
+	pushq	%rbx
+	pushq	%r12
+	pushq	%r13
+	pushq	%r14
+	pushq	%r15
+
+	/* switch stack */
+	movq	%rsp, TASK_threadsp(%rdi)
+	movq	TASK_threadsp(%rsi), %rsp
+
+#ifdef CONFIG_STACKPROTECTOR
+	movq	TASK_stack_canary(%rsi), %rbx
+	movq	%rbx, PER_CPU_VAR(__stack_chk_guard)
+#endif
+
+	/*
+	 * When switching from a shallower to a deeper call stack
+	 * the RSB may either underflow or use entries populated
+	 * with userspace addresses. On CPUs where those concerns
+	 * exist, overwrite the RSB with entries which capture
+	 * speculative execution to prevent attack.
+	 */
+	FILL_RETURN_BUFFER %r12, RSB_CLEAR_LOOPS, X86_FEATURE_RSB_CTXSW
+
+	/* restore callee-saved registers */
+	popq	%r15
+	popq	%r14
+	popq	%r13
+	popq	%r12
+	popq	%rbx
+	popq	%rbp
+
+	jmp	__switch_to
+SYM_FUNC_END(__switch_to_asm)
+.popsection
 ```
 
 ## affinity
@@ -1161,7 +1484,151 @@ static struct sched_rt_entity *pick_next_rt_entity(struct rt_rq *rt_rq)
 
 Deadline调度器的核心思想是EDF(Earliest Deadline First)与CBS(Constant Bandwidth Server),
 
+## cfs
 
+cfs_ rq 结构体定义了与完全公平调度(Completely Fair Scheduler, cfs) 相关的字段
+
+cfs_rq字段表
+
+| 字段                          | 类型            | 描述                     |
+|-----------------------------|---------------|------------------------|
+| m·_mnmng                    | unsigned int  | TASK_IWNNING状态的进程数     |
+| lll1. 11 V11J lllll .lle    | u64           | 见下文                    |
+| tasks_timel111e.rb_root     | rb_root       | sched_entity对象组成的红黑树的根 |
+| tasks_timeline. rb_leftmost | rb_node*      |  红黑树最左边的叶子             |
+| CU11 next                   | sched_entity* | 当前／下一个sched_entity |
+
+
+```c
+struct cfs_rq {
+	struct load_weight	load;
+	unsigned int		nr_queued;
+	unsigned int		h_nr_queued;       /* SCHED_{NORMAL,BATCH,IDLE} */
+	unsigned int		h_nr_runnable;     /* SCHED_{NORMAL,BATCH,IDLE} */
+	unsigned int		h_nr_idle; /* SCHED_IDLE */
+
+	s64			avg_vruntime;
+	u64			avg_load;
+
+	u64			min_vruntime;
+#ifdef CONFIG_SCHED_CORE
+	unsigned int		forceidle_seq;
+	u64			min_vruntime_fi;
+#endif
+
+	struct rb_root_cached	tasks_timeline;
+
+	/*
+	 * 'curr' points to currently running entity on this cfs_rq.
+	 * It is set to NULL otherwise (i.e when none are currently running).
+	 */
+	struct sched_entity	*curr;
+	struct sched_entity	*next;
+
+#ifdef CONFIG_SMP
+	/*
+	 * CFS load tracking
+	 */
+	struct sched_avg	avg;
+#ifndef CONFIG_64BIT
+	u64			last_update_time_copy;
+#endif
+	struct {
+		raw_spinlock_t	lock ____cacheline_aligned;
+		int		nr;
+		unsigned long	load_avg;
+		unsigned long	util_avg;
+		unsigned long	runnable_avg;
+	} removed;
+
+#ifdef CONFIG_FAIR_GROUP_SCHED
+	u64			last_update_tg_load_avg;
+	unsigned long		tg_load_avg_contrib;
+	long			propagate;
+	long			prop_runnable_sum;
+
+	/*
+	 *   h_load = weight * f(tg)
+	 *
+	 * Where f(tg) is the recursive weight fraction assigned to
+	 * this group.
+	 */
+	unsigned long		h_load;
+	u64			last_h_load_update;
+	struct sched_entity	*h_load_next;
+#endif /* CONFIG_FAIR_GROUP_SCHED */
+#endif /* CONFIG_SMP */
+
+#ifdef CONFIG_FAIR_GROUP_SCHED
+	struct rq		*rq;	/* CPU runqueue to which this cfs_rq is attached */
+
+	/*
+	 * leaf cfs_rqs are those that hold tasks (lowest schedulable entity in
+	 * a hierarchy). Non-leaf lrqs hold other higher schedulable entities
+	 * (like users, containers etc.)
+	 *
+	 * leaf_cfs_rq_list ties together list of leaf cfs_rq's in a CPU.
+	 * This list is used during load balance.
+	 */
+	int			on_list;
+	struct list_head	leaf_cfs_rq_list;
+	struct task_group	*tg;	/* group that "owns" this runqueue */
+
+	/* Locally cached copy of our task_group's idle value */
+	int			idle;
+
+#ifdef CONFIG_CFS_BANDWIDTH
+	int			runtime_enabled;
+	s64			runtime_remaining;
+
+	u64			throttled_pelt_idle;
+#ifndef CONFIG_64BIT
+	u64                     throttled_pelt_idle_copy;
+#endif
+	u64			throttled_clock;
+	u64			throttled_clock_pelt;
+	u64			throttled_clock_pelt_time;
+	u64			throttled_clock_self;
+	u64			throttled_clock_self_time;
+	int			throttled;
+	int			throttle_count;
+	struct list_head	throttled_list;
+	struct list_head	throttled_csd_list;
+#endif /* CONFIG_CFS_BANDWIDTH */
+#endif /* CONFIG_FAIR_GROUP_SCHED */
+};
+```
+
+## Idle
+
+
+idle_sched_class作为优先级最低的sched_class,它的使命就是没有其他进程需要执行的时候占用CPU,有进程需要执行的时候让出CPU
+它不接受dequeue和enqueue操作，只负责idle 进程，由 rq->叫le指定
+pick_next_task_idle返回rq->idle,check_preempt_cmr_idle直接调用 `resched_crr(rq)`
+
+
+idle 进程完成初始化后， 会执行do_idle。默认情况下，它调用tick_nohz_idle_ente1使系统进
+入dyntick-idle状态，等待need_resched为真，满足条件后调用tick_nohz_idle_exit 退出dyntick一idle
+状态，然后调度其他进程执行。
+进入dyntick-idle状态后，do_idle 执行无限循环， 只要没有其他进程需要执行就会循环
+下去。
+编译内核的时候CONFIG_NO_HZ_COMMON默认为y,该情况下，无事可做时就会进入 dyntick-idle 状态
+
+
+正常情况下，时钟中断会周期性到来，一个tick接一个tick, 但如果idle 的时候还是处理周期性地时钟中断，势必会造成不必要的耗电
+所以为了降低耗电，dyntick-idle状态下会停止周期性的时钟中断，让下一个时钟中断在合理长的延迟后再到来。
+该特性的优点显然是省电，但需要注意的是对实时性要求较高的系统并不适用，因为进入和退出dyntick-idle状态都是有代价的
+
+
+<div style="text-align: center;">
+
+![Fig.1. Idle 进程流程](img/Idle.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. Idle 进程流程
+</p>
 
 
 ## Links

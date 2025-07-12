@@ -1064,8 +1064,15 @@ Log-structured File Systems
 Writing To Disk Sequentially
 
 
+## 文件系统
 
 
+[proc](/docs/CS/OS/Linux/fs/proc.md) 文件系统也是一个基于内存的文件系统，方便用户空间访间内核数据结构、更改内核某些设置
+
+[sysfs](/docs/CS/OS/Linux/fs/sysfs.md)  是一个基于内存的文件系统， 使用频率很
+
+
+[ext4](/docs/CS/OS/Linux/fs/ext4.md)  是一个基于磁盘的文件系统，全称是Fourth Extended Filesystem,为第4代扩展文件系统
 
 ## Links
 

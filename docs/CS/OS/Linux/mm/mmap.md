@@ -2,6 +2,10 @@
 
 mmap() creates a new mapping in the virtual address space of the calling process.
 
+> [!NOTE]
+> 
+>  `mmap` 使用的不是内核线性空间，是用户线性空间
+
 在调用 mmap 进行匿名映射的时候（比如进行堆内存的分配），是将进程虚拟内存空间中的某一段虚拟内存区域与物理内存中的匿名内存页进行映射，
 当调用 mmap 进行文件映射的时候，是将进程虚拟内存空间中的某一段虚拟内存区域与磁盘中某个文件中的某段区域进行映射
 
@@ -630,13 +634,11 @@ int mlock_future_check(struct mm_struct *mm, unsigned long flags,
 #### mmap_region
 
 mmap 的调用
-1. vm_area_alloc
-2. vm_get_page_prot
-3. call_mmap
-   1. file -> f_op -> mmap
-4. vma_set_anonymous
 
-非匿名映射的情况下 mmap最终还是靠驱动提供的文件mmap操作实现的
+mmap_region 主要做三件事：初妎化 vm_ area_struct 对象、完成映射，以及将对象 插入maple_tree。
+
+
+非匿名映射的情况下 mmap最终还是靠驱动提供的文件mmap操作实现的(file-> f_op-> mmap), 也就是说 mmap 究竟产生了什么效果最终是由驱动决定的
 
 ```c
 unsigned long mmap_region(struct file *file, unsigned long addr,
@@ -923,6 +925,17 @@ static const struct vm_operations_struct shmem_vm_ops = {
 #endif
 };
 ```
+
+驱动完成映射的方式殷有以下几类
+- 第一类，驱动有属千自己的物理内存，多为MMIO, 直接完成映射
+- 第二类与第一类类似，只不过物理内存不是现成的，需要先申请内存然后做映射
+- 第三类， 驱动的mmap 并不提供映射操作，由异常触发实际映射动作 mmap返回后， 实际上并没有完成内存映射的动作，返回的只是没有物理内存与之对应的虚拟地址。
+  稍后访问该地址会导致内存访间异常，内核处理该异常则会回调驱动的vm_operations_struct的fault操作， 驱动的fault操作中， 一般需要申请物理内存赋值给vm_fault的page字段并完成自身的逻辑，内核会完成虚拟内存和物理内存的映射。
+
+
+
+
+> 在内核中，brk并没有问用mmap来实现，但它实际上是一个简单的mmap
 
 ## munmap
 

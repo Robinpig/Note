@@ -2,7 +2,7 @@
 
 Linux employs a hierarchical scheme in which each process depends on a parent process.
 The kernel starts the init program as the first process that is responsible for further system initialization actions and display of the login prompt or (in more widespread use today) display of a graphical login interface.
-init is therefore the root from which all processes originate, more or less directly, as shown graphically by the pstree program.
+init is therefore the root from which all processes originate, more or less directly, as shown graphically by the `pstree` program.
 init is the top of a tree structure whose branches spread further and further down.
 
 kthread
@@ -10,7 +10,6 @@ kthread
 ```shell
 ps -fax
 ```
-
 
 How this tree structure spreads is closely connected with how new processes are generated.
 For this purpose, Unix uses two mechanisms called fork and exec.
@@ -21,33 +20,197 @@ For this purpose, Unix uses two mechanisms called fork and exec.
    Linux uses a well-known technique known as copy on write that allows it to make the operation much more efficient by deferring the copy operations until either parent or child writes to a page -— read-only accessed can be satisfied from the same page for both.
 2. [exec](/docs/CS/OS/Linux/proc/process.md?id=exec) — Loads a new program into an existing content and then executes it. The memory pages reserved by the old program are flushed, and their contents are replaced with new data. The new program then starts executing.
 
-
 ## task struct
 
 The Linux kernel internally represents processes as tasks, via the structure `task struct`.
-Unlike other OS approaches (which make a distinction between a process, lightweight process, and thread), Linux uses the task structure to represent any execution context. 
-Therefore, a single-threaded process will be represented with one task structure and a multithreaded process will have one task structure for each of the user-level threads. 
+Unlike other OS approaches (which make a distinction between a process, lightweight process, and thread), Linux uses the task structure to represent any execution context.
+Therefore, a single-threaded process will be represented with one task structure and a multithreaded process will have one task structure for each of the user-level threads.
 Finally, the kernel itself is multithreaded, and has kernel-level threads which are not associated with any user process and are executing kernel code.
 
 task_struct 中封装了很多资源
 
 > 实时的空间进程布局可以在`/proc/PID/maps`文件中查看到
 
+task_struct字段表
 
+<table>
+<thead>
+
+<tr>
+<th>字段</th>
+<th>类型</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>__state</td>
+<td>unsigned int</td>
+<td>进程状态</td>
+</tr>
+<tr>
+<td>stack</td>
+<td>void*</td>
+<td>进程的内核栈</td>
+</tr>
+<tr>
+<td>flags</td>
+<td>unsigned int</td>
+<td>进程的标记</td>
+</tr>
+<tr>
+<td>cpu</td>
+<td>unsigned int</td>
+<td>进程所屈的CPU</td>
+</tr>
+<tr>
+<td>p1io \r\n static_prio normal_prio</td>
+<td>int</td>
+<td>进程的优先级</td>
+</tr>
+<tr>
+<td>rt_priority</td>
+<td>unsigned int</td>
+<td>进程的优先级</td>
+</tr>
+<tr>
+<td>se</td>
+<td>sched_entity</td>
+<td rowspan="3">进程调度相关</td>
+</tr>
+<tr>
+<td>rt</td>
+<td>sched_rt_entity</td>
+</tr>
+<tr>
+<td>dl</td>
+<td>sched_dl_entity</td>
+</tr>
+<tr>
+<td>sched_class</td>
+<td>sched_class*</td>
+<td>进程所屈的sched_class</td>
+</tr>
+<tr>
+<td>tasks</td>
+<td>list_head</td>
+<td>将进程链接到以init_task.tasks 为头的链表中</td>
+</tr>
+<tr>
+<td>mm active_mm</td>
+<td>mm_struct*</td>
+<td>进程的内存信息</td>
+</tr>
+<tr>
+<td>exit_state
+exit_code
+exit_signal</td>
+<td>int</td>
+<td>进程退出（注销）相关的字段</td>
+</tr>
+<tr>
+<td>pid</td>
+<td>unsigned int</td>
+<td>进程的id</td>
+</tr>
+<tr>
+<td>tgid</td>
+<td>unsigned int</td>
+<td>进程所屈的线程组的id</td>
+</tr>
+<tr>
+<td>real-parent parent</td>
+<td>unsigned int</td>
+<td>进程的父进程</td>
+</tr>
+<tr>
+<td>children</td>
+<td>list_head</td>
+<td>进程的子进程组成的链表的头</td>
+</tr>
+<tr>
+<td>sibling</td>
+<td>list_head</td>
+<td>将进程链接到兄弟进程组成的链表中， 链表头为父进程的children字段</td>
+</tr>
+<tr>
+<td>group_leader</td>
+<td>task_struct*</td>
+<td>进程所处的线程组的领导进程</td>
+</tr>
+<tr>
+<td>thread_pid</td>
+<td>pid*</td>
+<td>进程对应的pid</td>
+</tr>
+<tr>
+<td>pid_links</td>
+<td>unsigned int</td>
+<td>link</td>
+</tr>
+<tr>
+<td>thread_group</td>
+<td>list_head</td>
+<td>将进程链接到线程组中, 链表的头为线程组领导进程的 thread_group字段</td>
+</tr>
+<tr>
+<td>real_cred cred</td>
+<td>cred*</td>
+<td>credentials</td>
+</tr>
+<tr>
+<td>fs</td>
+<td>unsigned int</td>
+<td>义件系统相关的信息</td>
+</tr>
+<tr>
+<td>files</td>
+<td>unsigned int</td>
+<td>进程使用的文件等信息</td>
+</tr>
+<tr>
+<td>nsproxy</td>
+<td>nsproxy*</td>
+<td>管理进程的多种namespace</td>
+</tr>
+<tr>
+<td>signal</td>
+<td>signal_struct*</td>
+<td rowspan="4">信号处理</td>
+</tr>
+<tr>
+<td>sighand</td>
+<td>sighand_struct*</td>
+</tr>
+<tr>
+<td>blocked</td>
+<td>sigset_t</td>
+</tr>
+<tr>
+<td>pending</td>
+<td>unsigned int</td>
+</tr>
+<tr>
+<td>thread</td>
+<td>unsigned int</td>
+<td>平台有关的信息</td>
+</tr>
+</tbody>
+</table>
 
 ```c
 struct task_struct {
-    // Linux 通过 pid 来区分进程 相同进程下的线程的 tgid 是相同的 	
+    // Linux 通过 pid 来区分进程 相同进程下的线程的 tgid 是相同的 
     pid_t                       pid;
     pid_t                       tgid;
-    
+  
        // 进程树关系 
     /* Real parent process: */
     struct task_struct __rcu	*real_parent;
-    
+  
     /* Recipient of SIGCHLD, wait4() reports: */
     struct task_struct __rcu	*parent;
-    
+  
     /*
      * Children/sibling form the list of natural children:
      */
@@ -57,27 +220,27 @@ struct task_struct {
 
     /* -1 unrunnable, 0 runnable, >0 stopped: */
     volatile long                state;
-    
+  
     int                         prio;
     int                         static_prio;
     int                         normal_prio;
-    
+  
     struct sched_info             sched_info;
-    
+  
     struct list_head              tasks;
-    
+  
     struct mm_struct              *mm;
     struct mm_struct              *active_mm;
-    
+  
     /* Per-thread vma caching: */
     struct vmacache                      vmacache;
-    
+  
     /* Filesystem information: */
     struct fs_struct              *fs;
-    
+  
     /* Open file information: */
     struct files_struct           *files;
-    
+  
     #ifdef CONFIG_IO_URING
        struct io_uring_task          *io_uring;
     #endif
@@ -90,30 +253,33 @@ struct task_struct {
 
 `get_current()` implement by different arch
 
+p->thread_info->cpu
+
 ### pid
 
 内核需要为每一个进程/线程都分配一个进程号。
 如果每个使用过的进程号如果使用传统的 int 变量来存储的话会消耗很大的内存
 早期版本为了节省内存 使用bitmap存储pid 每个bit表示一个pid 占用内存小 同时局部性较好 提高CPU缓存命中率
 
-
-
 分配时需要遍历pidmap 如果进程数量较多 耗时也会随之增长
-
-
 
 在最近几年的业界发展中，服务器的内存越来越大，服务器上几百 GB 的内存都很常见。另外随着这几年轻量化容器云的发展，服务器上运行的进程数越来越多。传统的基于 bitmap 来管理分配的 pid 的节约内存的优势越来越显得没有价值，而它分配新 pid 时占用的 CPU 资源较高这一缺点越来越明显
 
 [Replace PID bitmap allocation with IDR AP](https://lwn.net/Articles/735675/) 并入到了 Linux 4.15 的版本中
 
+我们在用户空间引用或者使用进程的时候不能
+直接使用task_slrn(,l, 一般悄况下使用的是进程id
+
+内核定义了pid结构体作为id和task_struct的桥梁
 
 
+### state
 
-#### state
+进程的状态由task_struct的 `__state` 字段表示
 
 Task state bitmask. NOTE! These bits are also encoded in fs/proc/array.c: get_task_state().
 
-We have two separate sets of flags: task->state is about runnability, while task->exit_state are about the task exiting. 
+We have two separate sets of flags: task->state is about runnability, while task->exit_state are about the task exiting.
 Confusing, but this way modifying one set can't modify the other one by mistake.
 
 > 进程的运行状态和其它信息可以在`/proc/PID/status`文件中查看
@@ -159,6 +325,33 @@ Confusing, but this way modifying one set can't modify the other one by mistake.
 
 ```
 
+进程的标志由 task_strnct 的flags字段表示，
+
+| 标志 | 描述 |
+| --- | --- |
+| PF_IDLE |  idle进程 |
+| PF_EXlTJNG |  进程正在退出 |
+| PF_VCPU |  进程运行在虚拟CPU上 |
+| PF_WQ_WOl | {KER 进程是一个workqueue的worker |
+| PF_SUPERPRIV |  进程拥有超级用户权限 |
+| PF |  SIGNALED 进程被某个信号杀掉 |
+| PF |  NOF'HEEZE 进程不能被freeze |
+| PF_KTHREAD |  进程是一个内核线程 |
+
+
+### group
+
+同一个线程组的线程， 它们的task_struct都通过thread_group字段链接到同一个链表中，链表的头为线程组领导进程的task_ struct 的 thread_ group字段， 可以据此来遍历线程组，
+
+### relation
+
+
+内核定义了一个使用频率很高的宏current,它是指向当前进程的Las k _strucl的指针。
+current的实现方式与平台有关，在x86 上是通过每CPU 变量实现的，变最的名字为pcpu_
+hot. current_task, current 通过获取当前CPU 上变量的值得到
+
+
+
 ### mm
 
 对于用户进程来说 整个进程虚拟内存空间部分都是由 [mm_struct](/docs/CS/OS/Linux/mm/vm.md) 来表示的
@@ -171,7 +364,6 @@ Confusing, but this way modifying one set can't modify the other one by mistake.
        struct mm_struct              *mm;
        struct mm_struct              *active_mm;
 ```
-
 
 ### fs
 
@@ -204,11 +396,7 @@ struct nsproxy {
 };
 ```
 
-
-
-
 ## init task
-
 
 Linux 规定要有一个 init 进程存在 通常 init 进程承担系统服务管理的职责
 继承自 System V 风格的init系统比较简单 仍被应用到嵌入式系统中
@@ -231,9 +419,10 @@ struct task_struct init_task
 #endif
 	.__state	= 0,
 ```
-fix up initial thread stack pointer vs thread_info confusion  
-The task ->stack pointer only incidentally ends up having the same value as the thread_info, and in fact that will change.  
-So fix the initial task struct initializer to point to 'init_stack' instead of 'init_thread_info', and make sure the ia64 definition for that exists.  
+
+fix up initial thread stack pointer vs thread_info confusion
+The task ->stack pointer only incidentally ends up having the same value as the thread_info, and in fact that will change.
+So fix the initial task struct initializer to point to 'init_stack' instead of 'init_thread_info', and make sure the ia64 definition for that exists.
 This actually makes the ia64 tsk->stack pointer be sensible for the initial task, but not for any other task.
 
 ```c
@@ -383,9 +572,7 @@ This actually makes the ia64 tsk->stack pointer be sensible for the initial task
 EXPORT_SYMBOL(init_task);
 ```
 
-
 #### thread_info
-
 
 ```c
 // arch/x86/include/asm/thread_info.h
@@ -399,8 +586,8 @@ struct thread_info {
 }
 ```
 
-
 #### exit
+
 ```c
 // kernel/exit.c
 
@@ -559,35 +746,32 @@ void __noreturn do_exit(long code)
 
 ## termination
 
-A parent process may wait for the termination of a child process by using the wait() system call. 
-The wait() system call is passed a parameter that allows the parent to obtain the exit status of the child. 
+A parent process may wait for the termination of a child process by using the wait() system call.
+The wait() system call is passed a parameter that allows the parent to obtain the exit status of the child.
 This system call also returns the process identifier of the terminated child so that the parent can tell which of its children has terminated:
+
 ```c
 pid t pid;
 int status;
 pid = wait(&status);
 ```
 
-When a process terminates, its resources are deallocated by the operating system. 
+When a process terminates, its resources are deallocated by the operating system.
 However, its entry in the process table must remain there until the parent calls wait(), because the process table contains the process’s exit status.
-A process that has terminated, but whose parent has not yet called wait(), is known as a **zombie** process. 
-All processes transition to this state when they terminate, but generally they exist as zombies only briefly. 
+A process that has terminated, but whose parent has not yet called wait(), is known as a **zombie** process.
+All processes transition to this state when they terminate, but generally they exist as zombies only briefly.
 Once the parent calls wait(), the process identifier of the zombie process and its entry in the process table are released.
 
 If a parent did not invoke wait() and instead terminated, thereby leaving its child processes as **orphans**.
 Traditional UNIX systems addressed this scenario by assigning the init process as the new parent to orphan processes.
 The init process periodically invokes wait(), thereby allowing the exit status of any orphaned process to be collected and releasing the orphan’s process identifier and process-table entry.
 
-
-
 ## fork
 
-
-
-Processes are created in Linux in an especially simple manner. 
-The fork system call creates an exact copy of the original process. 
-The forking process is called the *parent process*. The new process is called the *child process*. 
-The parent and child each have their own, private memory images. 
+Processes are created in Linux in an especially simple manner.
+The fork system call creates an exact copy of the original process.
+The forking process is called the *parent process*. The new process is called the *child process*.
+The parent and child each have their own, private memory images.
 If the parent subsequently changes any of its variables, the changes are not visible to the child, and vice versa.
 
 The fork system call returns a 0 to the child and a nonzero value, the child’s **PID** (*Process Identifier*), to the parent.
@@ -609,10 +793,8 @@ void main(int argc, char *argv[])
 ```
 
 When the child process is created, there are now two active processes in the system.
-The CPU scheduler determines which process runs at a given moment in time; because the scheduler is complex, we cannot usually make strong assumptions about what it will choose to do, and hence which process will run first. 
+The CPU scheduler determines which process runs at a given moment in time; because the scheduler is complex, we cannot usually make strong assumptions about what it will choose to do, and hence which process will run first.
 This nondeterminism, as it turns out, leads to some interesting problems, particularly in multi-threaded programs.
-
-
 
 Linux systems give the child its own page tables, but have them point to the parent’s pages, only marked read only.
 Whenever either process (the child or the parent) tries to write on a page, it gets a protection fault.
@@ -621,33 +803,29 @@ In this way, only pages that are actually written have to be copied.
 This mechanism is called *copy on write*.
 It has the additional benefit of not requiring two copies of the program in memory, thus saving RAM.
 
-
 The `wait()` system call allows a parent to wait for its child to complete execution.
 
 The `exec()` family of system calls allows a child to break free from its similarity to its parent and execute an entirely new program.
 The exec merely replaces the current process — its text, data, heap, and stack segments — with a brand-new program from disk.
 A successful call to `exec()` never returns.
 
-The separation of fork() and exec() is essential in building a UNIX shell, because it lets the shell run code after the call to fork() but before the call to exec(); 
+The separation of fork() and exec() is essential in building a UNIX shell, because it lets the shell run code after the call to fork() but before the call to exec();
 this code can alter the environment of the about-to-be-run program, and thus enables a variety of interesting features to be readily built.
 
 > [!TIP]
-> 
+>
 > GETTING IT RIGHT (LAMPSON’S LAW)
-> 
-> As Lampson states in his well-regarded “Hints for Computer Systems Design”, “Get it right. 
-> Neither abstraction nor simplicity is a substitute for getting it right.” Sometimes, you just have to do the right thing, and when you do, it is way better than the alternatives. 
-> 
+>
+> As Lampson states in his well-regarded “Hints for Computer Systems Design”, “Get it right.
+> Neither abstraction nor simplicity is a substitute for getting it right.” Sometimes, you just have to do the right thing, and when you do, it is way better than the alternatives.
+>
 > There are lots of ways to design APIs for process creation; however, the combination of fork() and exec() are simple and immensely powerful.
 
-The shell is just a user program. 
-It shows you a prompt and then waits for you to type something into it. You then type a command (i.e., the name of an executable program, plus any arguments) into it; 
-in most cases, the shell then figures out where in the file system the executable resides, calls fork() to create a new child process to run the command, 
-calls some variant of exec() to run the command, and then waits for the command to complete by calling wait(). 
+The shell is just a user program.
+It shows you a prompt and then waits for you to type something into it. You then type a command (i.e., the name of an executable program, plus any arguments) into it;
+in most cases, the shell then figures out where in the file system the executable resides, calls fork() to create a new child process to run the command,
+calls some variant of exec() to run the command, and then waits for the command to complete by calling wait().
 When the child completes, the shell returns from wait() and prints out a prompt again, ready for your next command.
-
-
-
 
 ```dot
 strict digraph {
@@ -665,6 +843,7 @@ clone -> kernel_clone;
 ```
 
 Create a kernel thread.
+
 ```c
 pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
 {
@@ -680,37 +859,35 @@ pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
 }
 ```
 
+虽然函数的名字是kernel_thread,但不要直接使用它来创建内核线程，虽然它成功创建了 kthreadd,但那是因为执行它的进程本身就是内核线程，内核线程必须由内核线程创建的原则不变
 
 > [!NOTE]
-> 
+>
 > Link: [fork: introduce kernel_clone()](https://lore.kernel.org/all/20200819104655.436656-2-christian.brauner@ubuntu.com/)
-> 
+>
 > The old _do_fork() helper doesn't follow naming conventions of in-kernel helpers for syscalls.
 > The process creation cleanup in [1] didn't change the name to something more reasonable mainly because _do_fork() was used in quite a few places.
-> So sending this as a separate series seemed the better strategy. 
-> 
-> This commit does two things:
->   1. renames _do_fork() to kernel_clone() but keeps _do_fork() as a simple static inline wrapper around kernel_clone().
->   2. Changes the return type from long to pid_t. This aligns kernel_thread() and kernel_clone().
+> So sending this as a separate series seemed the better strategy.
 >
-> Also, the return value from kernel_clone that is surfaced in fork(), vfork(), clone(), and clone3() is taken from pid_vrn() which returns a pid_t too.  
+> This commit does two things:
+>
+> 1. renames _do_fork() to kernel_clone() but keeps _do_fork() as a simple static inline wrapper around kernel_clone().
+> 2. Changes the return type from long to pid_t. This aligns kernel_thread() and kernel_clone().
+>
+> Also, the return value from kernel_clone that is surfaced in fork(), vfork(), clone(), and clone3() is taken from pid_vrn() which returns a pid_t too.
 > Follow-up patches will switch each caller of _do_fork() and each place where it is referenced over to kernel_clone().
 > After all these changes are done, we can remove _do_fork() completely and will only be left with kernel_clone().
-
-
 
 ### kernel_clone
 
 Ok, this is the main fork-routine.
-It copies the process, and if successful kick-starts
-it and waits for it to finish using the VM if required.
+It copies the process, and if successful kick-starts it and waits for it to finish using the VM if required.
 args->exit_signal is expected to be checked for sanity by the caller.
 
 1. copy_process
-2. trace_sched_process_fork
-3. wake_up_new_task 添加到调度队列
-4. ptrace_event_pid
-5. wait_for_vfork_done if **vfork** -- avoid dirty data and deadlock
+2. wake_up_new_task 添加到调度队列
+
+wait_for_vfork_done if **vfork** -- avoid dirty data and deadlock
 
 ```c
 // kernel/fork.c
@@ -722,46 +899,8 @@ pid_t kernel_clone(struct kernel_clone_args *args)
        struct task_struct *p;
        int trace = 0;
        pid_t nr;
-```
-For legacy clone() calls, CLONE_PIDFD uses the parent_tid argument
-to return the pidfd. Hence, CLONE_PIDFD and CLONE_PARENT_SETTID are
-mutually exclusive. With clone3() CLONE_PIDFD has grown a separate
-field in struct clone_args and it still doesn't make sense to have
-them both point at the same memory location. Performing this check
-here has the advantage that we don't need to have a separate helper
-to check for legacy clone().
-```c
-       if ((args->flags & CLONE_PIDFD) &&
-           (args->flags & CLONE_PARENT_SETTID) &&
-           (args->pidfd == args->parent_tid))
-              return -EINVAL;
-```
-Determine whether and which event to report to ptracer.  When
-called from kernel_thread or CLONE_UNTRACED is explicitly
-requested, no event is reported; otherwise, report if the event
-for the type of forking is enabled.
-```c
-       if (!(clone_flags & CLONE_UNTRACED)) {
-              if (clone_flags & CLONE_VFORK)
-                     trace = PTRACE_EVENT_VFORK;
-              else if (args->exit_signal != SIGCHLD)
-                     trace = PTRACE_EVENT_CLONE;
-              else
-                     trace = PTRACE_EVENT_FORK;
-
-              if (likely(!ptrace_event_enabled(current, trace)))
-                     trace = 0;
-       }
 
        p = copy_process(NULL, trace, NUMA_NO_NODE, args);
-       add_latent_entropy();
-
-       /*
-        * Do this prior waking up the new thread - the thread pointer
-        * might get invalid after that point, if the thread exits quickly.
-        */
-       trace_sched_process_fork(current, p);
-
        pid = get_task_pid(p, PIDTYPE_PID);
        nr = pid_vnr(pid);
 
@@ -776,10 +915,6 @@ for the type of forking is enabled.
 
        wake_up_new_task(p);
 
-       /* forking complete and child started to run, tell ptracer */
-       if (unlikely(trace))
-              ptrace_event_pid(trace, pid);
-
        if (clone_flags & CLONE_VFORK) {
               if (!wait_for_vfork_done(p, &vfork))
                      ptrace_event_pid(PTRACE_EVENT_VFORK_DONE, pid);
@@ -790,10 +925,7 @@ for the type of forking is enabled.
 }
 ```
 
-
-
 ### copy_process
-
 
 This creates a new process as a copy of the old one, but does not actually start it yet.
 
@@ -837,7 +969,7 @@ static __latent_entropy struct task_struct *copy_process(
        copy_io(clone_flags, p);
 
        copy_thread(clone_flags, args->stack, args->stack_size, p, args->tls);
-       
+     
        pid = alloc_pid(p->nsproxy->pid_ns_for_children, args->set_tid, args->set_tid_size);
 
        p->pid = pid_nr(pid);
@@ -856,12 +988,10 @@ static __latent_entropy struct task_struct *copy_process(
        copy_seccomp(p);
 
        init_task_pid_links(p);
-       
+     
        return p;
 }
 ```
-
-
 
 #### dup_task_struct
 
@@ -883,8 +1013,6 @@ static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
 }
 ```
 
-
-
 ##### alloc_task_struct_node
 
 ```c
@@ -895,6 +1023,7 @@ static inline struct task_struct *alloc_task_struct_node(int node)
 ```
 
 ##### arch_dup_task_struct
+
 implements by different arches
 
 ```c
@@ -915,7 +1044,6 @@ int arch_dup_task_struct(struct task_struct *dst, struct task_struct *src)
 	return 0;
 }
 ```
-
 
 #### copy_files
 
@@ -938,8 +1066,6 @@ static int copy_files(unsigned long clone_flags, struct task_struct *tsk,
 }
 ```
 
-
-
 #### copy_fs
 
 ```c
@@ -955,6 +1081,7 @@ static int copy_fs(unsigned long clone_flags, struct task_struct *tsk)
        return 0;
 }
 ```
+
 #### copy_mm
 
 if not **vfork**, dup_mm
@@ -980,7 +1107,6 @@ static int copy_mm(unsigned long clone_flags, struct task_struct *tsk)
 }
 ```
 
-
 ```c
 static struct mm_struct *dup_mm(struct task_struct *tsk,
 				struct mm_struct *oldmm)
@@ -996,7 +1122,6 @@ static struct mm_struct *dup_mm(struct task_struct *tsk,
 	return mm;
 }
 ```
-
 
 #### copy_thread
 
@@ -1087,24 +1212,22 @@ int copy_thread(unsigned long clone_flags, unsigned long sp, unsigned long arg,
 }
 ```
 
-
 #### sched_fork
-fork()/clone()-time setup:
+
+sched_fork和进程调度有关
+
+初始化task_struct的se、dl和1t字段， 它们都与进程调度有关，然后将新进程的状态置为TASK_NEW
+
+
+设置 sched_class
 ```c
 // kernel/sched/core.c
 int sched_fork(unsigned long clone_flags, struct task_struct *p)
 {
 	__sched_fork(clone_flags, p);
-	/*
-	 * We mark the process as NEW here. This guarantees that
-	 * nobody will actually run it, and a signal or other external
-	 * event cannot wake it up and insert it on the runqueue either.
-	 */
+
 	p->__state = TASK_NEW;
 
-	/*
-	 * Make sure we do not leak PI boosting priority to the child.
-	 */
 	p->prio = current->normal_prio;
 
 	uclamp_fork(p);
@@ -1165,9 +1288,9 @@ since v4.15
 >
 > Whatever type of failure alloc_pid returns, its error type is written to return -ENOMEM.
 
-> ENOMEM is not the most obvious choice especially for the case where the child subreaper has already exited and the pid namespace denies the creation of any new processes. 
+> ENOMEM is not the most obvious choice especially for the case where the child subreaper has already exited and the pid namespace denies the creation of any new processes.
 > But ENOMEM is what we have exposed to userspace for a long time and it is
-documented behavior for pid namespaces. 
+> documented behavior for pid namespaces.
 > So we can't easily change it even if there were an error code better suited.
 
 <!-- tabs:start -->
@@ -1238,8 +1361,6 @@ tatic int alloc_pidmap(struct pid_namespace *pid_ns)
 }
 ```
 
-
-
 ##### **IDR**
 
 ```c
@@ -1289,7 +1410,7 @@ struct pid *alloc_pid(struct pid_namespace *ns)
 		tmp = tmp->parent;
 	}
 	// ...
-}	
+}
 ```
 
 <!-- tabs:end -->
@@ -1304,28 +1425,28 @@ CLONE_VM, CLONE_FS, CLONE_FILES
 
 These flags select semantics with shared address space and file descriptors according to what POSIX requires.
 
-     CLONE_SIGHAND, CLONE_THREAD
-	This flag selects the POSIX signal semantics and various
-	other kinds of sharing (itimers, POSIX timers, etc.).
+ CLONE_SIGHAND, CLONE_THREAD
+This flag selects the POSIX signal semantics and various
+other kinds of sharing (itimers, POSIX timers, etc.).
 
-     CLONE_SETTLS
-	The sixth parameter to CLONE determines the TLS area for the
-	new thread.
+ CLONE_SETTLS
+The sixth parameter to CLONE determines the TLS area for the
+new thread.
 
-     CLONE_PARENT_SETTID
-	The kernels writes the thread ID of the newly created thread
-	into the location pointed to by the fifth parameters to CLONE.
+ CLONE_PARENT_SETTID
+The kernels writes the thread ID of the newly created thread
+into the location pointed to by the fifth parameters to CLONE.
 
-	Note that it would be semantically equivalent to use
-	CLONE_CHILD_SETTID but it is be more expensive in the kernel.
+Note that it would be semantically equivalent to use
+CLONE_CHILD_SETTID but it is be more expensive in the kernel.
 
-     CLONE_CHILD_CLEARTID
-	The kernels clears the thread ID of a thread that has called
-	sys_exit() in the location pointed to by the seventh parameter
-	to CLONE.
+ CLONE_CHILD_CLEARTID
+The kernels clears the thread ID of a thread that has called
+sys_exit() in the location pointed to by the seventh parameter
+to CLONE.
 
-     The termination signal is chosen to be zero which means no signal
-     is sent. 
+ The termination signal is chosen to be zero which means no signal
+ is sent. 
 ```c
 static int create_thread (struct pthread *pd, const struct pthread_attr *attr,
 			  bool *stopped_start, void *stackaddr,
@@ -1388,22 +1509,17 @@ static int create_thread (struct pthread *pd, const struct pthread_attr *attr,
   return 0;
 }
 ```
-
 创建线程调用的是 `clone` 同样也是走到了 [kernel_clone](/docs/CS/OS/Linux/proc/process.md?id=kernel_clone)
-
 
 ## exec
 
-Now the new address space must be created and filled in. 
-If the system supports mapped files, as Linux and virtually all other UNIX-based systems do, the new page tables are set up to indicate that no pages are in memory, 
+Now the new address space must be created and filled in.
+If the system supports mapped files, as Linux and virtually all other UNIX-based systems do, the new page tables are set up to indicate that no pages are in memory,
 except perhaps one stack page, but that the address space is backed by the executable file on disk.
-When the new process starts running, it will immediately get a page fault, which will cause the first page of code to be paged in from the executable file. 
+When the new process starts running, it will immediately get a page fault, which will cause the first page of code to be paged in from the executable file.
 In this way, nothing has to be loaded in advance, so programs can start quickly and fault in just those pages they need and no more.
-Finally, the arguments and environment strings are copied to the new stack, the signals are reset, and the registers are initialized to all zeros. 
+Finally, the arguments and environment strings are copied to the new stack, the signals are reset, and the registers are initialized to all zeros.
 At this point, the new command can start running.
-
-
-
 
 ```c
 static int do_execve(struct filename *filename,
@@ -1476,7 +1592,6 @@ static int bprm_execve(struct linux_binprm *bprm)
 	return retval;
 }
 ```
-
 #### exec_binprm
 
 ```c
@@ -1526,11 +1641,7 @@ static int exec_binprm(struct linux_binprm *bprm)
 	return 0;
 }
 ```
-
-
 #### load_elf_binary
-
-
 
 ```c
 
@@ -2047,23 +2158,19 @@ out_free_interp:
 	retval = 0;
 }
 ```
-
 ## exit
 
-Processes must terminate with the exit system call. This gives the kernel the opportunity to free the resources used by the processes to the system. 
+Processes must terminate with the exit system call. This gives the kernel the opportunity to free the resources used by the processes to the system.
 The entry point for this call is the sys_exit function that requires an error code as its parameter in order to exit the process.
-Its definition is architecture-independent and is held in kernel/exit.c. 
+Its definition is architecture-independent and is held in kernel/exit.c.
 Its implementation is not particularly interesting because it immediately delegates its work to do_exit.
 
 Suffice it to say that the implementation of this function consists essentially of decrementing reference counters and returning memory areas to memory management once the reference counter has reverted to 0 and the corresponding structure is no longer being used by any process in the system.
-
-
 
 ```c
 void __noreturn do_exit(long code)
 {
 ```
-
 Send signals to all our closest relatives so that they know to properly mourn us..
 
 ```c
@@ -2113,8 +2220,8 @@ static void exit_notify(struct task_struct *tsk, int group_dead)
 
 This does two things:
 
-1.  Make init inherit all the child processes 
-2.  Check to see if any process groups have become orphaned as a result of our exiting, and if they have any stopped jobs, send them a SIGHUP and then a SIGCONT.  (POSIX 3.2.2.2)
+1. Make init inherit all the child processes
+2. Check to see if any process groups have become orphaned as a result of our exiting, and if they have any stopped jobs, send them a SIGHUP and then a SIGCONT.  (POSIX 3.2.2.2)
 
 ```c
 
@@ -2156,6 +2263,7 @@ static void forget_original_parent(struct task_struct *father,
 #### find_new_reaper
 
 When we die, we re-parent all our children, and try to:
+
 1. give them to another thread in our thread group, if such a member exists
 2. give it to the first ancestor process which prctl'd itself as a child_subreaper for its children (like a service manager)
 3. give it to the init process (PID 1) in our pid namespace find_new_reaper
@@ -2196,28 +2304,27 @@ static struct task_struct *find_new_reaper(struct task_struct *father,
 	return child_reaper;
 }
 ```
-
 ## Threads
 
 Linux introduced a powerful new system call, clone, that blurred the distinction between processes and threads and possibly even inverted the primacy of the two concepts.
 It is called as follows:
+
 ```c
 pid = clone(function, stack ptr, sharing flags, arg);
 ```
-The call creates a new thread, either in the current process or in a new process, depending on sharing flags. 
+The call creates a new thread, either in the current process or in a new process, depending on sharing flags.
 If the new thread is in the current process, it shares the address space with the existing threads, and every subsequent write to any byte in the address space by any thread is immediately visible to all the other threads in the process.
 
 UNIX systems associate a
-single PID with a process, independent of whether it is single- or multithreaded. 
-In order to be compatible with other UNIX systems, Linux distinguishes between a *process identifier*(**PID**) and a *task identifier*(**TID**). Both fields are stored in the task structure. 
-When clone is used to create a new process that shares nothing with its creator, PID is set to a new value; otherwise, the task receives a new TID, but inherits the PID. 
+single PID with a process, independent of whether it is single- or multithreaded.
+In order to be compatible with other UNIX systems, Linux distinguishes between a *process identifier*(**PID**) and a *task identifier*(**TID**). Both fields are stored in the task structure.
+When clone is used to create a new process that shares nothing with its creator, PID is set to a new value; otherwise, the task receives a new TID, but inherits the PID.
 In this manner all threads in a process will receive the same PID as the first thread in the process.
-
 
 ## IPC
 
-Processes in Linux can communicate with each other using a form of message passing. 
-It is possible to create a channel between two processes into which one process can write a stream of bytes for the other to read. These channels are called **pipes**. 
+Processes in Linux can communicate with each other using a form of message passing.
+It is possible to create a channel between two processes into which one process can write a stream of bytes for the other to read. These channels are called **pipes**.
 Synchronization is possible because when a process tries to read from an empty pipe it is blocked until data are available.
 
 Shell pipelines are implemented with pipes. When the shell sees a line like
@@ -2225,7 +2332,6 @@ Shell pipelines are implemented with pipes. When the shell sees a line like
 ```shell
 sort <f | head
 ```
-
 Processes can also communicate in another way besides pipes: software interrupts.
 
 ### Message Passing
@@ -2233,32 +2339,33 @@ Processes can also communicate in another way besides pipes: software interrupts
 Pipes and FIFOs
 
 Pipes are the original form of Unix IPC.
-FIFOs, sometimes called **named pipes**. 
+FIFOs, sometimes called **named pipes**.
 Both pipes and FIFOs are accessed using the normal read and w r i t e functions.
 
 #### Pipes
+
 Pipes are provided with all flavors of Unix. A pipe is created by the pipe function and provides a one-way (unidirectional)flow of data.
-Pipes have no names, and their biggest disadvantage is that they can be used only between processesthat have a parent process in common. 
+Pipes have no names, and their biggest disadvantage is that they can be used only between processesthat have a parent process in common.
 Two unrelated processes cannot create a pipe between them and use it for IPC (ignoring descriptor passing).
 
 ```c
 #include <unistd.h>
 int pipe (int fd121);
 ```
-
 Although a pipe is created by one process, it is rarely used within a single process.
-Pipes are typically used to communicate between two different processes (a parent and child) in the following way. 
+Pipes are typically used to communicate between two different processes (a parent and child) in the following way.
 First, a process (which will be the parent)creates a pipe and then forks to create a copy of itself.
 Next, the parent process closes the read end of one pipe, and the child process closes the write end of that same pipe. This provides a one-wayflow of data between the two proecesses.
 
 All the pipes shown so far have been half-duplexor unidirectional, providing a oneway flow of data only. When a two-way flow of data is desired, we must create two pipes and use one foreach direction.
 
 ##### Full-Duplex Pipes
+
 Some systems provide full-duplex pipes: SVR4's pipe function and the socketpair function provided by many kernels.
 
 #### FIFOs
 
-FIFO stands for first in,first out, and a Unix FIFO is similar to a pipe. It is a one-way(half-duplex)flow of data. 
+FIFO stands for first in,first out, and a Unix FIFO is similar to a pipe. It is a one-way(half-duplex)flow of data.
 But unlike pipes, a FIFO has a pathname associated with it, allowing unrelated processes to access a single FIFO. FIFOs are also called named pipes.
 
 ```c
@@ -2267,7 +2374,6 @@ But unlike pipes, a FIFO has a pathname associated with it, allowing unrelated p
 
 int mkf if o (const char *pathname, mode-t mode);
 ```
-
 Posix Message Queues
 
 System V Message Queues
@@ -2292,34 +2398,27 @@ mmap
 
 shmget
 
-
 ### Remote Procedure Calls
-
-
-
-
-
-
-
 
 ## Scheduling
 
 Linux threads are kernel threads, so scheduling is based on threads, not processes.
 Linux distinguishes three classes of threads for scheduling purposes:
+
 1. Real-time FIFO.
 2. Real-time round robin.
 3. Timesharing
 
-Real-time FIFO threads are the highest priority and are not preemptable except by a newly readied real-time FIFO thread with even higher priority. 
-Real-time roundrobin threads are the same as real-time FIFO threads except that they hav e time quanta associated with them, and are preemptable by the clock. 
-If multiple realtime round-robin threads are ready, each one is run for its quantum, after which it goes to the end of the list of real-time round-robin threads. 
-Neither of these classes is actually real time in any sense. Deadlines cannot be specified and guarantees are not given. 
-These classes are simply higher priority than threads in the standard timesharing class. 
-The reason Linux calls them real time is that Linux is conformant to the P1003.4 standard (‘‘real-time’’ extensions to UNIX) which uses those names. 
+Real-time FIFO threads are the highest priority and are not preemptable except by a newly readied real-time FIFO thread with even higher priority.
+Real-time roundrobin threads are the same as real-time FIFO threads except that they hav e time quanta associated with them, and are preemptable by the clock.
+If multiple realtime round-robin threads are ready, each one is run for its quantum, after which it goes to the end of the list of real-time round-robin threads.
+Neither of these classes is actually real time in any sense. Deadlines cannot be specified and guarantees are not given.
+These classes are simply higher priority than threads in the standard timesharing class.
+The reason Linux calls them real time is that Linux is conformant to the P1003.4 standard (‘‘real-time’’ extensions to UNIX) which uses those names.
 The real-time threads are internally represented with priority levels from 0 to 99, 0 being the highest and 99 the lowest real-time priority level.
 
-The conventional, non-real-time threads form a separate class and are scheduled by a separate algorithm so they do not compete with the real-time threads. 
-Internally, these threads are associated with priority levels from 100 to 139, that is, Linux internally distinguishes among 140 priority levels (for real-time and nonreal-time tasks). 
+The conventional, non-real-time threads form a separate class and are scheduled by a separate algorithm so they do not compete with the real-time threads.
+Internally, these threads are associated with priority levels from 100 to 139, that is, Linux internally distinguishes among 140 priority levels (for real-time and nonreal-time tasks).
 As for the real-time round-robin threads, Linux allocates CPU time to the non-real-time tasks based on their requirements and their priority levels.
 
 In Linux, time is measured as the number of clock ticks. In older Linux versions, the clock ran at 1000Hz and each tick was 1ms, called a jiffy. In newer versions, the tick frequency can be configured to 500, 250 or even 1Hz. In order to
@@ -2328,97 +2427,91 @@ configured in ‘‘tickless’’ mode. This is useful when there is only one p
 mode. Finally, on newer systems, high-resolution timers allow the kernel to keep
 track of time in sub-jiffy granularity.
 
-> ARM阵营提出大小核的概念 
+> ARM阵营提出大小核的概念
 >
 > Energy Awareness Scheduler(EAS)
 
-
 ### Scheduler
 
-Besides the basic scheduling alogirithm, the Linux scheduler includes special features particularly useful for multiprocessor or multicore platforms. 
+Besides the basic scheduling alogirithm, the Linux scheduler includes special features particularly useful for multiprocessor or multicore platforms.
 First, the runqueue structure is associated with each CPU in the multiprocessing platform.
-- The scheduler tries to maintain benefits from **affinity scheduling**, and to schedule tasks on the CPU on which they were previously executing. 
-- Second, a set of system calls is available to further specify or modify the affinity requirements of a select thread. 
+
+- The scheduler tries to maintain benefits from **affinity scheduling**, and to schedule tasks on the CPU on which they were previously executing.
+- Second, a set of system calls is available to further specify or modify the affinity requirements of a select thread.
 - Finally, the scheduler performs periodic load balancing across runqueues of different CPUs to ensure that the system load is well balanced, while still meeting certain performance or affinity requirements.
 
-The scheduler considers only runnable tasks, which are placed on the appropriate runqueue. 
-Tasks which are not runnable and are waiting on various I/O operations or other kernel events are placed on another data structure, waitqueue. A waitqueue is associated with each event that tasks may wait on. 
-The head of the waitqueue includes a pointer to a linked list of tasks and a spinlock. 
+The scheduler considers only runnable tasks, which are placed on the appropriate runqueue.
+Tasks which are not runnable and are waiting on various I/O operations or other kernel events are placed on another data structure, waitqueue. A waitqueue is associated with each event that tasks may wait on.
+The head of the waitqueue includes a pointer to a linked list of tasks and a spinlock.
 The spinlock is necessary so as to ensure that the waitqueue can be concurrently manipulated through both the main kernel code and interrupt handlers or other asynchronous invocations.
 
+Both O(1) and CFS use multiple queues, whereas BFS uses a single queue, showing that both approaches can be successful.
+Of course, there are many other details which separate these schedulers.
 
-Both O(1) and CFS use multiple queues, whereas BFS uses a single queue, showing that both approaches can be successful. 
-Of course, there are many other details which separate these schedulers. 
-- For example, the O(1) scheduler is a priority-based scheduler (similar to the MLFQ discussed before), 
-  changing a process’s priority over time and then scheduling those with highest priority in order to meet various scheduling objectives; interactivity is a particular focus. 
-- CFS, in contrast, is a deterministic proportional-share approach (more like Stride scheduling, as discussed earlier). 
+- For example, the O(1) scheduler is a priority-based scheduler (similar to the MLFQ discussed before),
+  changing a process’s priority over time and then scheduling those with highest priority in order to meet various scheduling objectives; interactivity is a particular focus.
+- CFS, in contrast, is a deterministic proportional-share approach (more like Stride scheduling, as discussed earlier).
 - BFS, the only single-queue approach among the three, is also proportional-share, but based on a more complicated scheme known as Earliest Eligible Virtual Deadline First(EEVDF).
 
-The single-queue approach (SQMS) is rather straightforward to build and balances load well but inherently has difficulty with scaling to many processors and cache affinity. 
+The single-queue approach (SQMS) is rather straightforward to build and balances load well but inherently has difficulty with scaling to many processors and cache affinity.
 The multiple-queue approach (MQMS) scales better and handles cache affinity well, but has trouble with load imbalance and is more complicated.
 
 #### O(1)
 
-Historically, a popular Linux scheduler was the Linux O(1) scheduler. 
-It received its name because it was able to perform task-management operations, such as selecting a task or enqueueing a task on the runqueue, in constant time, independent of the total number of tasks in the system. 
-In the O(1) scheduler, the runqueue is organized in two arrays, active and expired. 
+Historically, a popular Linux scheduler was the Linux O(1) scheduler.
+It received its name because it was able to perform task-management operations, such as selecting a task or enqueueing a task on the runqueue, in constant time, independent of the total number of tasks in the system.
+In the O(1) scheduler, the runqueue is organized in two arrays, active and expired.
 Each of these is an array of 140 list heads, each corresponding to a different priority. Each list head points to a doubly linked list of processes at a given priority.
 The basic operation of the scheduler can be described as follows.
 
-The scheduler selects a task from the highest-priority list in the active array. 
-If that task’s timeslice (quantum) expires, it is moved to the expired list (potentially at a different priority level). 
-If the task blocks, for instance to wait on an I/O event, before its timeslice expires, once the event occurs and its execution can resume, it is placed back on the original active array, and its timeslice is decremented to reflect the CPU time it already used. 
-Once its timeslice is fully exhausted, it, too, will be placed on the expired array. 
-When there are no more tasks in the active array, the scheduler simply swaps the pointers, so the expired arrays now become active, and vice versa. 
+The scheduler selects a task from the highest-priority list in the active array.
+If that task’s timeslice (quantum) expires, it is moved to the expired list (potentially at a different priority level).
+If the task blocks, for instance to wait on an I/O event, before its timeslice expires, once the event occurs and its execution can resume, it is placed back on the original active array, and its timeslice is decremented to reflect the CPU time it already used.
+Once its timeslice is fully exhausted, it, too, will be placed on the expired array.
+When there are no more tasks in the active array, the scheduler simply swaps the pointers, so the expired arrays now become active, and vice versa.
 This method ensures that low-priority tasks will not starve(except when real-time FIFO threads completely hog the CPU, which is unlikely).
 
 Different priority levels are assigned different timeslice values, with higher quanta assigned to higher-priority processes.
 
-The idea behind this scheme is to get processes out of the kernel fast. 
+The idea behind this scheme is to get processes out of the kernel fast.
 If a process was blocked waiting for keyboard input, it is clearly an interactive process, and as such should be given a high priority as soon as it is ready in order to ensure that interactive processes get good service.
 
-
-
-
-Since Linux (or any other OS) does not know a priori whether a task is I/O- or CPU-bound, it relies on continuously maintaining interactivity heuristics. 
-In this manner, Linux distinguishes between static and dynamic priority. 
-The threads’ dynamic priority is continuously recalculated, so as to (1) reward interactive threads, and (2) punish CPU-hogging threads. 
+Since Linux (or any other OS) does not know a priori whether a task is I/O- or CPU-bound, it relies on continuously maintaining interactivity heuristics.
+In this manner, Linux distinguishes between static and dynamic priority.
+The threads’ dynamic priority is continuously recalculated, so as to (1) reward interactive threads, and (2) punish CPU-hogging threads.
 In the O(1) scheduler, the maximum priority bonus is −5, since lower-priority values correspond to higher priority received by the scheduler. The maximum priority penalty is +5.
-The scheduler maintains a sleep avg variable associated with each task. Whenever a task is awakened, this variable is incremented. 
-Whenever a task is preempted or when its quantum expires, this variable is decremented by the corresponding value. 
-This value is used to dynamically map the task’s bonus to values from −5 to +5. 
+The scheduler maintains a sleep avg variable associated with each task. Whenever a task is awakened, this variable is incremented.
+Whenever a task is preempted or when its quantum expires, this variable is decremented by the corresponding value.
+This value is used to dynamically map the task’s bonus to values from −5 to +5.
 The scheduler recalculates the new priority level as a thread is moved from the active to the expired list.
 
-However, in spite of the desirable property of constant-time operation, the O(1) scheduler had significant shortcomings. 
+However, in spite of the desirable property of constant-time operation, the O(1) scheduler had significant shortcomings.
 Most notably, the heuristics used to determine the interactivity of a task, and therefore its priority level, were complex and imperfect, and resulted in poor performance for interactive tasks.
-
 
 #### CFS
 
 CFS was based on ideas originally developed by Con Kolivas for an earlier scheduler, and was first integrated into the 2.6.23 release of the kernel. It is still the default scheduler for the non-real-time tasks.
 
-The main idea behind CFS is to use a red-black tree as the runqueue data structure. Tasks are ordered in the tree based on the amount of time they spend running on the CPU, called vruntime. 
+The main idea behind CFS is to use a red-black tree as the runqueue data structure. Tasks are ordered in the tree based on the amount of time they spend running on the CPU, called vruntime.
 CFS accounts for the tasks’ running time with nanosecond granularity.
-Each internal node in the tree corresponds to a task. 
-The children to the left correspond to tasks which had less time on the CPU, and therefore will be scheduled sooner, and the children to the right on the node are those that have consumed more CPU time thus far. 
+Each internal node in the tree corresponds to a task.
+The children to the left correspond to tasks which had less time on the CPU, and therefore will be scheduled sooner, and the children to the right on the node are those that have consumed more CPU time thus far.
 The leaves in the tree do not play any role in the scheduler.
 
-CFS always schedules the task which has had least amount of time on the CPU, typically the leftmost node in the tree. Periodically, 
-CFS increments the task’s vruntime value based on the time it has already run, and compares this to the current leftmost node in the tree. 
-If the running task still has smaller vruntime, it will continue to run. 
+CFS always schedules the task which has had least amount of time on the CPU, typically the leftmost node in the tree. Periodically,
+CFS increments the task’s vruntime value based on the time it has already run, and compares this to the current leftmost node in the tree.
+If the running task still has smaller vruntime, it will continue to run.
 Otherwise, it will be inserted at the appropriate place in the red-black tree, and the CPU will be given to task corresponding to the new leftmost node.
 
 To account for differences in task priorities and ‘‘niceness,’’ CFS changes the effective rate at which a task’s virtual time passes when it is running on the CPU.
-For lower-priority tasks, time passes more quickly, their vruntime value will increase more rapidly, and, depending on other tasks in the system, they will lose the CPU and be reinserted in the tree sooner than if they had a higher priority value. 
+For lower-priority tasks, time passes more quickly, their vruntime value will increase more rapidly, and, depending on other tasks in the system, they will lose the CPU and be reinserted in the tree sooner than if they had a higher priority value.
 In this manner, CFS avoids using separate runqueue structures for different priority levels.
 
-In summary, selecting a node to run can be done in constant time, whereas inserting a task in the runqueue is done in O(log(N)) time, where N is the number of tasks in the system. 
+In summary, selecting a node to run can be done in constant time, whereas inserting a task in the runqueue is done in O(log(N)) time, where N is the number of tasks in the system.
 Given the levels of load in current systems, this continues to be acceptable.
 
-
-
 In generally, the proportion of processor time that any process receives is determined only by the relative difference in niceness between it and the other runnable processes.
-The nice values, instead of yielding additive increases to timeslices, yield geometric differences.The absolute timeslice allotted any nice value is not an absolute number, but a given proportion of the processor. 
+The nice values, instead of yielding additive increases to timeslices, yield geometric differences.The absolute timeslice allotted any nice value is not an absolute number, but a given proportion of the processor.
 CFS is called a fair scheduler because it gives each process a fair share—a proportion—of the processor’s time.
 As mentioned, note that CFS isn’t perfectly fair, because it only approximates perfect multitasking, but it can place a lower bound on latency of n for n runnable processes on the unfairness.
 
@@ -2503,14 +2596,12 @@ static void update_curr(struct cfs_rq *cfs_rq)
 	account_cfs_rq_runtime(cfs_rq, delta_exec);
 }
 ```
-
 Pick the next process, keeping these things in mind, in this order:
+
 1. keep things fair between processes/task groups
 2. pick the "next" process, since someone really wants that to run
 3. pick the "last" process, for cache locality
 4. do not run the "skip" process, if something else is available
-
-
 
 ```c
 static void
@@ -2579,7 +2670,6 @@ static void __enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se)
 }
 
 ```
-
 rb_add_cached() - insert node into the leftmost cached tree
 
 leftmost if never turn to right.
@@ -2609,8 +2699,6 @@ rb_add_cached(struct rb_node *node, struct rb_root_cached *tree,
 	return leftmost ? node : NULL;
 }
 ```
-
-
 ## Links
 
 - [Linux](/docs/CS/OS/Linux/Linux.md)

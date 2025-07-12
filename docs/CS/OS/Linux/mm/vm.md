@@ -83,6 +83,78 @@ Linux虚拟内存空间整体布局
 0x0000 7FFF FFFF F000 - 0xFFFF 8000 0000 0000 范围内的地址的高 16 位 不全为 0 也不全为 1
 
 
+直接映射区是唯一的L ow Memory( x86)映射的区域
+
+
+
+`VMALLOC_START` 和 `VMALLOC_END` 之间的空间为动态映射区，它是内核线性空间中最灵活的区
+其他几个区都有固定的角色， 它们不能满足的需求， 都可以由动态映射区来满足， 常见的 iorcmap、[mmap](/docs/CS/OS/Linux/mm/mmap.md) 一般都需要使用它
+
+使用动态映射区需要申请一段属千该区域的线性区间，内核提供了 `get_vm_area` 函数族来满足该需求，它们的区别在于参数不同，但最终都通过调用 `__get_vm_area_node` 函数实现
+
+
+getv m_area传递的参数为VMLA LOC_STRA T和VMALLOC_END。内核会将已使用的动态映射区的线性区间记录下来，每一个区间以vmap_area结构体表示
+
+
+
+get_vm_area_node
+
+`__get_vm_area_node` 会查找一个没有被占用的合适的区间，如果找到则将该区间记录到红黑树和链表中，然后利用得到的 `vmap_area` 对象给 `vm_struct` 对象赋俏并返回
+`vm_struct` 结构体县其他模块可见的，`vmap_area` 结构体是动态映射区内部使用的。
+
+```c
+
+struct vm_struct *__get_vm_area_node(unsigned long size,
+		unsigned long align, unsigned long shift, unsigned long flags,
+		unsigned long start, unsigned long end, int node,
+		gfp_t gfp_mask, const void *caller)
+{
+	struct vmap_area *va;
+	struct vm_struct *area;
+	unsigned long requested_size = size;
+
+	BUG_ON(in_interrupt());
+	size = ALIGN(size, 1ul << shift);
+	if (unlikely(!size))
+		return NULL;
+
+	if (flags & VM_IOREMAP)
+		align = 1ul << clamp_t(int, get_count_order_long(size),
+				       PAGE_SHIFT, IOREMAP_MAX_ORDER);
+
+	area = kzalloc_node(sizeof(*area), gfp_mask & GFP_RECLAIM_MASK, node);
+	if (unlikely(!area))
+		return NULL;
+
+	if (!(flags & VM_NO_GUARD))
+		size += PAGE_SIZE;
+
+	area->flags = flags;
+	area->caller = caller;
+	area->requested_size = requested_size;
+
+	va = alloc_vmap_area(size, align, start, end, node, gfp_mask, 0, area);
+	if (IS_ERR(va)) {
+		kfree(area);
+		return NULL;
+	}
+
+	/*
+	 * Mark pages for non-VM_ALLOC mappings as accessible. Do it now as a
+	 * best-effort approach, as they can be mapped outside of vmalloc code.
+	 * For VM_ALLOC mappings, the pages are marked as accessible after
+	 * getting mapped in __vmalloc_node_range().
+	 * With hardware tag-based KASAN, marking is skipped for
+	 * non-VM_ALLOC mappings, see __kasan_unpoison_vmalloc().
+	 */
+	if (!(flags & VM_ALLOC))
+		area->addr = kasan_unpoison_vmalloc(area->addr, requested_size,
+						    KASAN_VMALLOC_PROT_NORMAL);
+
+	return area;
+}
+```
+
 ### mm_struct
 
 每个进程task_struct 都有唯一的 mm_struct 结构体

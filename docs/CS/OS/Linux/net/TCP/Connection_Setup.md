@@ -108,8 +108,8 @@ int __sys_connect_file(struct file *file, struct sockaddr_storage *address,
 }   
 ```
 这里调用的是socket创建时注册的connect函数 TCP这里是`tcp_v4_connect`
+
 ```c
-        
 struct proto tcp_prot = {
 	.name			= "TCP",
 	.owner			= THIS_MODULE,
@@ -124,7 +124,7 @@ struct proto tcp_prot = {
 ### tcp_v4_connect
 
 1. set state = TCP_SYN_SENT
-2. inet_hash_connect 随机选择一个端口
+2. `inet_hash_connect` 随机选择一个端口
 3. Build a SYN and send it off
 
 ```c
@@ -168,84 +168,258 @@ Bind a port for a connect operation and hash it.
 int inet_hash_connect(struct inet_timewait_death_row *death_row,
 		      struct sock *sk)
 {
+	const struct inet_sock *inet = inet_sk(sk);
+	const struct net *net = sock_net(sk);
 	u64 port_offset = 0;
+	u32 hash_port0;
 
 	if (!inet_sk(sk)->inet_num)
 		port_offset = inet_sk_port_offset(sk);
-	return __inet_hash_connect(death_row, sk, port_offset,
+
+	hash_port0 = inet_ehashfn(net, inet->inet_rcv_saddr, 0,
+				  inet->inet_daddr, inet->inet_dport);
+
+	return __inet_hash_connect(death_row, sk, port_offset, hash_port0,
 				   __inet_check_established);
 }
+EXPORT_SYMBOL_GPL(inet_hash_connect);
 ```
+
 __inet_check_established
+
 ```c
-#define	EADDRNOTAVAIL	99	/* Cannot assign requested address */
-
-
-static int __inet_check_established(struct inet_timewait_death_row *death_row,
-				    struct sock *sk, __u16 lport,
-				    struct inet_timewait_sock **twp)
+int __inet_hash_connect(struct inet_timewait_death_row *death_row,
+		struct sock *sk, u64 port_offset,
+		u32 hash_port0,
+		int (*check_established)(struct inet_timewait_death_row *,
+			struct sock *, __u16, struct inet_timewait_sock **,
+			bool rcu_lookup, u32 hash))
 {
 	struct inet_hashinfo *hinfo = death_row->hashinfo;
-	struct inet_sock *inet = inet_sk(sk);
-	__be32 daddr = inet->inet_rcv_saddr;
-	__be32 saddr = inet->inet_daddr;
-	int dif = sk->sk_bound_dev_if;
-	struct net *net = sock_net(sk);
-	int sdif = l3mdev_master_ifindex_by_index(net, dif);
-	INET_ADDR_COOKIE(acookie, saddr, daddr);
-	const __portpair ports = INET_COMBINED_PORTS(inet->inet_dport, lport);
-	unsigned int hash = inet_ehashfn(net, daddr, lport,
-					 saddr, inet->inet_dport);
-	struct inet_ehash_bucket *head = inet_ehash_bucket(hinfo, hash);
-	spinlock_t *lock = inet_ehash_lockp(hinfo, hash);
-	struct sock *sk2;
-	const struct hlist_nulls_node *node;
+	struct inet_bind_hashbucket *head, *head2;
 	struct inet_timewait_sock *tw = NULL;
+	int port = inet_sk(sk)->inet_num;
+	struct net *net = sock_net(sk);
+	struct inet_bind2_bucket *tb2;
+	struct inet_bind_bucket *tb;
+	bool tb_created = false;
+	u32 remaining, offset;
+	int ret, i, low, high;
+	bool local_ports;
+	int step, l3mdev;
+	u32 index;
 
-	spin_lock(lock);
-
-	sk_nulls_for_each(sk2, node, &head->chain) {
-		if (sk2->sk_hash != hash)
-			continue;
-
-		if (likely(inet_match(net, sk2, acookie, ports, dif, sdif))) {
-			if (sk2->sk_state == TCP_TIME_WAIT) {
-				tw = inet_twsk(sk2);
-				if (twsk_unique(sk, sk2, twp))
-					break;
-			}
-			goto not_unique;
-		}
+	if (port) {
+		local_bh_disable();
+		ret = check_established(death_row, sk, port, NULL, false,
+					hash_port0 + port);
+		local_bh_enable();
+		return ret;
 	}
 
-	/* Must record num and sport now. Otherwise we will see
-	 * in hash table socket with a funny identity.
+	l3mdev = inet_sk_bound_l3mdev(sk);
+    // 获取可用的端口
+	local_ports = inet_sk_get_local_port_range(sk, &low, &high);
+	step = local_ports ? 1 : 2;
+
+	high++; /* [32768, 60999] -> [32768, 61000[ */
+	remaining = high - low;
+	if (!local_ports && remaining > 1)
+		remaining &= ~1U;
+
+	get_random_sleepable_once(table_perturb,
+				  INET_TABLE_PERTURB_SIZE * sizeof(*table_perturb));
+	index = port_offset & (INET_TABLE_PERTURB_SIZE - 1);
+
+	offset = READ_ONCE(table_perturb[index]) + (port_offset >> 32);
+	offset %= remaining;
+
+	/* In first pass we try ports of @low parity.
+	 * inet_csk_get_port() does the opposite choice.
 	 */
-	inet->inet_num = lport;
-	inet->inet_sport = htons(lport);
-	sk->sk_hash = hash;
-	WARN_ON(!sk_unhashed(sk));
-	__sk_nulls_add_node_rcu(sk, &head->chain);
-	if (tw) {
-		sk_nulls_del_node_init_rcu((struct sock *)tw);
-		__NET_INC_STATS(net, LINUX_MIB_TIMEWAITRECYCLED);
-	}
-	spin_unlock(lock);
-	sock_prot_inuse_add(sock_net(sk), sk->sk_prot, 1);
+	if (!local_ports)
+		offset &= ~1U;
+other_parity_scan:
+	port = low + offset;
+	for (i = 0; i < remaining; i += step, port += step) {
+		if (unlikely(port >= high))
+			port -= remaining;
+		if (inet_is_local_reserved_port(net, port))
+			continue;
+		head = &hinfo->bhash[inet_bhashfn(net, port,
+						  hinfo->bhash_size)];
+		rcu_read_lock();
+		hlist_for_each_entry_rcu(tb, &head->chain, node) {
+			if (!inet_bind_bucket_match(tb, net, port, l3mdev))
+				continue;
+			if (tb->fastreuse >= 0 || tb->fastreuseport >= 0) {
+				rcu_read_unlock();
+				goto next_port;
+			}
+			if (!check_established(death_row, sk, port, &tw, true,
+					       hash_port0 + port))
+				break;
+			rcu_read_unlock();
+			goto next_port;
+		}
+		rcu_read_unlock();
 
-	if (twp) {
-		*twp = tw;
-	} else if (tw) {
-		/* Silly. Should hash-dance instead... */
-		inet_twsk_deschedule_put(tw);
+		spin_lock_bh(&head->lock);
+
+		/* Does not bother with rcv_saddr checks, because
+		 * the established check is already unique enough.
+		 */
+		inet_bind_bucket_for_each(tb, &head->chain) {
+			if (inet_bind_bucket_match(tb, net, port, l3mdev)) {
+				if (tb->fastreuse >= 0 ||
+				    tb->fastreuseport >= 0)
+					goto next_port_unlock;
+				WARN_ON(hlist_empty(&tb->bhash2));
+				if (!check_established(death_row, sk,
+						       port, &tw, false,
+						       hash_port0 + port))
+					goto ok;
+				goto next_port_unlock;
+			}
+		}
+
+		tb = inet_bind_bucket_create(hinfo->bind_bucket_cachep,
+					     net, head, port, l3mdev);
+		if (!tb) {
+			spin_unlock_bh(&head->lock);
+			return -ENOMEM;
+		}
+		tb_created = true;
+		tb->fastreuse = -1;
+		tb->fastreuseport = -1;
+		goto ok;
+next_port_unlock:
+		spin_unlock_bh(&head->lock);
+next_port:
+		cond_resched();
 	}
+
+	if (!local_ports) {
+		offset++;
+		if ((offset & 1) && remaining > 1)
+			goto other_parity_scan;
+	}
+	return -EADDRNOTAVAIL;
+
+ok:
+	/* Find the corresponding tb2 bucket since we need to
+	 * add the socket to the bhash2 table as well
+	 */
+	head2 = inet_bhashfn_portaddr(hinfo, sk, net, port);
+	spin_lock(&head2->lock);
+
+	tb2 = inet_bind2_bucket_find(head2, net, port, l3mdev, sk);
+	if (!tb2) {
+		tb2 = inet_bind2_bucket_create(hinfo->bind2_bucket_cachep, net,
+					       head2, tb, sk);
+		if (!tb2)
+			goto error;
+	}
+
+	/* Here we want to add a little bit of randomness to the next source
+	 * port that will be chosen. We use a max() with a random here so that
+	 * on low contention the randomness is maximal and on high contention
+	 * it may be inexistent.
+	 */
+	i = max_t(int, i, get_random_u32_below(8) * step);
+	WRITE_ONCE(table_perturb[index], READ_ONCE(table_perturb[index]) + i + step);
+
+	/* Head lock still held and bh's disabled */
+	inet_bind_hash(sk, tb, tb2, port);
+
+	if (sk_unhashed(sk)) {
+		inet_sk(sk)->inet_sport = htons(port);
+		inet_ehash_nolisten(sk, (struct sock *)tw, NULL);
+	}
+	if (tw)
+		inet_twsk_bind_unhash(tw, hinfo);
+
+	spin_unlock(&head2->lock);
+	spin_unlock(&head->lock);
+
+	if (tw)
+		inet_twsk_deschedule_put(tw);
+	local_bh_enable();
 	return 0;
 
-not_unique:
-	spin_unlock(lock);
-	return -EADDRNOTAVAIL;
+error:
+	if (sk_hashed(sk)) {
+		spinlock_t *lock = inet_ehash_lockp(hinfo, sk->sk_hash);
+
+		sock_prot_inuse_add(net, sk->sk_prot, -1);
+
+		spin_lock(lock);
+		__sk_nulls_del_node_init_rcu(sk);
+		spin_unlock(lock);
+
+		sk->sk_hash = 0;
+		inet_sk(sk)->inet_sport = 0;
+		inet_sk(sk)->inet_num = 0;
+
+		if (tw)
+			inet_twsk_bind_unhash(tw, hinfo);
+	}
+
+	spin_unlock(&head2->lock);
+	if (tb_created)
+		inet_bind_bucket_destroy(tb);
+	spin_unlock(&head->lock);
+
+	if (tw)
+		inet_twsk_deschedule_put(tw);
+
+	local_bh_enable();
+
+	return -ENOMEM;
 }
 ```
+#### get_local_port_range
+
+
+```c
+bool inet_sk_get_local_port_range(const struct sock *sk, int *low, int *high)
+{
+	int lo, hi, sk_lo, sk_hi;
+	bool local_range = false;
+	u32 sk_range;
+
+	inet_get_local_port_range(sock_net(sk), &lo, &hi);
+
+	sk_range = READ_ONCE(inet_sk(sk)->local_port_range);
+	if (unlikely(sk_range)) {
+		sk_lo = sk_range & 0xffff;
+		sk_hi = sk_range >> 16;
+
+		if (lo <= sk_lo && sk_lo <= hi)
+			lo = sk_lo;
+		if (lo <= sk_hi && sk_hi <= hi)
+			hi = sk_hi;
+		local_range = true;
+	}
+
+	*low = lo;
+	*high = hi;
+	return local_range;
+}
+EXPORT_SYMBOL(inet_sk_get_local_port_range);
+```
+
+
+```c
+static inline void inet_get_local_port_range(const struct net *net, int *low, int *high)
+{
+	u32 range = READ_ONCE(net->ipv4.ip_local_ports.range);
+
+	*low = range & 0xffff;
+	*high = range >> 16;
+}
+```
+
 
 #### tcp_connect
 

@@ -1,16 +1,41 @@
 ## Introduction
 
+
+内存空间包含了多种存储，RAM只是其中一部分，还包含了某些外部l/0设备的空间，系统
+会将它们映射到内存空间(Memory Mapped IO, MMlO) 。可以通过／ `proc/iomem` 文件来查看系统的内存空间布局。
+
+`/proc/iomem` 文件可以显示系统中的内存，及各段内存的使用情况
+
+
+设备的寄存器空间和它的内存(RAM)都可以成为MMIO的一部分， MMlO机制很大程度上提高了CPU访问外设的效率
+在x86架构中， CPU访问MMIO与访问普通内存无异（并不是所有架构都可以如此）。
+以显卡(G PU)为例， 一般它的寄存器空间和它自身的内存都会以 MMlO 的形式供CPU访问， CPU可以像访问指针一样访问它的寄存器和数据
+
+
+
+内存管理，本质上是维护内存介质(RAM+ MMIO)、内存空间和虚拟三者的关系
+
+
+
 物理内存是以页为单位管理的，内核提供了page 结构体与一页物理内存对应， 而一页物理内存的作用或者使用情况由它所在的区域(zone)决定，zone的分布则决定于它所处的结点(node)
 
+> 实际的物理内存并不是一页页的， 页只是逻辑上的划分
+
 结点(node)与NUMA(Non Uniform Memory Access, 非统一内存访问）架构有密切联系
-linux 支持 NUMA (Non Uniform Memory Access)。物理内存管理的第一个层次就是介质的管理，pg_data_t结构就描述了介质。
+传统的SMP架构中，所有的CPU共享系统总线， 限制了内存的访问能力
+SMP架构比较直观清晰，但是当系统中CPU的数最增加到一定程度时，它们会竞争总线资源， 最终导致总线成为系统的瓶颈
+
+Linux 支持 NUMA (Non Uniform Memory Access)。物理内存管理的第一个层次就是介质的管理，pg_data_t结构就描述了介质。
 一般而言，我们的内存管理介质只有内存，并且它是均匀的，所以可以简单地认为系统中只有一个 pg_data_t 对象
 
-On NUMA machines, each NUMA node would have a pg_data_t to describe it's memory layout. On UMA machines there is a single pglist_data which describes the whole memory.
+> 可以通过 `lscpu` 来查看系统当前Socket 和节点的布局情况
+
+On NUMA machines, each NUMA node would have a pg_data_t to describe it's memory layout.
+On UMA machines there is a single pglist_data which describes the whole memory.
 Memory statistics and page replacement data structures are maintained on a per-zone basis.
 
-linux系统中可以用 numactl 命令来查看系统node信息
 
+## node
 
 内核定义了 pglist_data 结构体与node 对应
 
@@ -126,11 +151,6 @@ typedef struct pglist_data {
 同一个node 上同一种内存从访问效率上看， 应该是一样的，但是基于兼容性考虑， 内核不得不做进一步划分，将一个node 划分为不同的zone
 
 
-内核在不同的阶段采用的内存管理方式也不同，主要分为 memblock 和buddy系统两种
-
-memblock是内存管理的第一个阶段，也是初级阶段，buddy系统会接替它的工作继续内存管 理。
-它与buddy系统交接是在 [mem_init]() 函数中完成的，标志为after_bootmem 变量置为1
-mem_init函数会调用set_highmem_pages_init和memblock_free_ all 分别释放highmem和lowmem到 buddy 系统
 
 ## Zone
 
@@ -199,7 +219,7 @@ The selected task is killed in a hope that after it exits enough memory will be 
 ## memory model
 
 
-内核中如何组织管理这些物理内存页 struct page 的方式我们称之为做物理内存模型
+内核中如何组织管理这些物理内存页的方式我们称之为做物理内存模型
 - FLATMEM
 - DISCONTIGMEM
 - SPARSEMEM
@@ -284,6 +304,7 @@ typedef struct {
 #define PHYS_PFN(x) ((unsigned long)((x) >> PAGE_SHIFT))
 ```
 ### FLATMEM
+
 平坦内存模型：把内存看作是连续的 即时中间有空洞也是会算作page 由一个全局数组mem_map 存储 struct page，直接线性映射到实际的物理内存
 mem_map 全局数组的下标就是相应物理页对应的 PFN 。
 
@@ -342,6 +363,7 @@ static inline void alloc_node_mem_map(struct pglist_data *pgdat) { }
 
 
 ### DISCONTIGMEM
+
 FLATMEM 平坦内存模型只适合管理一整块连续的物理内存，而对于多块非连续的物理内存来说使用 FLATMEM 平坦内存模型进行管理则会造成很大的内存空间浪费
 
 在 DISCONTIGMEM 非连续内存模型中，内核将物理内存从宏观上划分成了一个一个的节点 node （微观上还是一页一页的物理页），每个 node 节点管理一块连续的物理内存
@@ -376,6 +398,48 @@ static inline phys_addr_t virt_to_phys(volatile void *address)
     return __pa(address);
 }
 #define virt_to_phys virt_to_phys
+```
+
+
+
+## allocator
+
+
+内核在不同的阶段采用的内存管理方式也不同，主要分为 memblock 和buddy系统两种
+
+memblock 是内存管理的第一个阶段，也是初级阶段，buddy系统会接替它的工作继续内存管 理。
+它与buddy系统交接是在 [mem_init]() 函数中完成的，标志为after_bootmem 变量置为1
+mem_init函数会调用 set_highmem_pages_init 和 memblock_free_ all 分别释放highmem和lowmem到 buddy 系统
+
+
+内核收到的内存信息是由BlOS给出的，主要包括各内存段的区间和使用情况，这些区间是 Linux可见的所有内存
+只有用途为usable的内存区间才属千内核直接管理(MMIO 除外），但并不是所有的usable部分内存都直接归内核管理
+
+除了memblock和buddy系统外，还有一个更高的级别是启动程序
+比如grub, grub可以通过参数（比如mem = 2048MB)来限制内核可以管理的内存的上限， 也就是说高于2048MB的部分不归内核(mcmblock和buddy)管理
+同样， memblock也可以扣留一部分内存，剩下的部分才轮到buddy系统管理
+
+## memblock
+
+memblock有个前任b ootmem, 不过后者已经“ 退休＂
+
+block这个词意味着内存被分为一块块的，内核以memblock_region结构体表示一块， 它的 base和size字段分别表示块的起始地址和大小。块以数组的形式进行管理，该数组由 memblock_type 结构体的regions字段表示
+内核共有两个memblock_type对象（也可以理解为有两个由内存块组成的数组），一个表示可用的内存，一个表示被预留的内存，分别由memblock结构体的 memory和reserved字段表示
+
+
+memblock 是内存管理的第一个阶段，也是初级阶段，buddy系统会接替它的工作继续内存管理
+它与buddy系统交接是在mem_init函数中完成的，标志为 after_bootmem 变量置为1
+mem_init函数会调用set_highmem_pages_init和memblock_free_ all 分别释放highmem和lowmem到buddy 系统
+
+块被加入reserve数组的时候并未从memory数组删除，只有在memory数组中，且不在reserve 数组中的块(for_each_free_mem_range )才会进入buddy系统。
+与grub 一样，被预留的内存块也是给预留内存块的模块使用的，模块自行负责内存的映射。
+所以，buddy系统管理的内存是经过 grub和memblock “ 克扣” 后剩下的部分
+
+```c
+// 获取非reserved的 
+#define for_each_free_mem_range(i, nid, flags, p_start, p_end, p_nid)	\
+	__for_each_mem_range(i, &memblock.memory, &memblock.reserved,	\
+			     nid, flags, p_start, p_end, p_nid)
 ```
 
 
@@ -687,7 +751,7 @@ static inline bool prepare_alloc_pages(gfp_t gfp_mask, unsigned int order,
 
 内核通过 get_page_from_freelist 函数，挨个遍历检查各个 NUMA 节点中的物理内存区域是否有足够的空闲内存可以满足本次的内存分配要求，
 当找到符合内存分配标准的物理内存区域 zone 之后，接下来就会通过 rmqueue 函数进入到该物理内存区域 zone 对应的伙伴系统中分配物理内存
-
+如果失败，调用＿alloc_ pagcs_slow pat 
 
 ```c
 static struct page *
@@ -1092,7 +1156,7 @@ out:
 
 ### alloc_pages_slowpath
 
-内存降到 WMARK_LOW 后进入slowpath
+当进入＿alloc_pages_slowpath时，往往意味着伙伴系统中可用的连续内存不足
 
 __alloc_pages_slowpath
   - wake_all_kswapds
@@ -1290,7 +1354,88 @@ struct scan_control {
 ```
 
 
+#### shrink_lruvec
+```c
+static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
+{
+	unsigned long nr[NR_LRU_LISTS];
+	unsigned long targets[NR_LRU_LISTS];
+	unsigned long nr_to_scan;
+	enum lru_list lru;
+	unsigned long nr_reclaimed = 0;
+	unsigned long nr_to_reclaim = sc->nr_to_reclaim;
+	bool proportional_reclaim;
+	struct blk_plug plug;
 
+	get_scan_count(lruvec, sc, nr);
+	memcpy(targets, nr, sizeof(nr));
+
+	proportional_reclaim = (!cgroup_reclaim(sc) && !current_is_kswapd() &&
+				sc->priority == DEF_PRIORITY);
+
+	blk_start_plug(&plug);
+	while (nr[LRU_INACTIVE_ANON] || nr[LRU_ACTIVE_FILE] ||
+					nr[LRU_INACTIVE_FILE]) {
+		unsigned long nr_anon, nr_file, percentage;
+		unsigned long nr_scanned;
+
+		for_each_evictable_lru(lru) {
+			if (nr[lru]) {
+				nr_to_scan = min(nr[lru], SWAP_CLUSTER_MAX);
+				nr[lru] -= nr_to_scan;
+
+				nr_reclaimed += shrink_list(lru, nr_to_scan,
+							    lruvec, sc);
+			}
+		}
+
+		cond_resched();
+
+		if (nr_reclaimed < nr_to_reclaim || proportional_reclaim)
+			continue;
+
+		nr_file = nr[LRU_INACTIVE_FILE] + nr[LRU_ACTIVE_FILE];
+		nr_anon = nr[LRU_INACTIVE_ANON] + nr[LRU_ACTIVE_ANON];
+
+		if (!nr_file || !nr_anon)
+			break;
+
+		if (nr_file > nr_anon) {
+			unsigned long scan_target = targets[LRU_INACTIVE_ANON] +
+						targets[LRU_ACTIVE_ANON] + 1;
+			lru = LRU_BASE;
+			percentage = nr_anon * 100 / scan_target;
+		} else {
+			unsigned long scan_target = targets[LRU_INACTIVE_FILE] +
+						targets[LRU_ACTIVE_FILE] + 1;
+			lru = LRU_FILE;
+			percentage = nr_file * 100 / scan_target;
+		}
+
+		/* Stop scanning the smaller of the LRU */
+		nr[lru] = 0;
+		nr[lru + LRU_ACTIVE] = 0;
+
+
+		lru = (lru == LRU_FILE) ? LRU_BASE : LRU_FILE;
+		nr_scanned = targets[lru] - nr[lru];
+		nr[lru] = targets[lru] * (100 - percentage) / 100;
+		nr[lru] -= min(nr[lru], nr_scanned);
+
+		lru += LRU_ACTIVE;
+		nr_scanned = targets[lru] - nr[lru];
+		nr[lru] = targets[lru] * (100 - percentage) / 100;
+		nr[lru] -= min(nr[lru], nr_scanned);
+	}
+	blk_finish_plug(&plug);
+	sc->nr_reclaimed += nr_reclaimed;
+
+	if (can_age_anon_pages(lruvec_pgdat(lruvec), sc) &&
+	    inactive_is_low(lruvec, LRU_INACTIVE_ANON))
+		shrink_active_list(SWAP_CLUSTER_MAX, lruvec,
+				   sc, LRU_ACTIVE_ANON);
+}
+```
 
 #### shrink_list
 

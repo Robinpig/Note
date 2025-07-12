@@ -206,7 +206,7 @@ Another Docker client is Docker Compose, that lets you work with applications co
 
 <div style="text-align: center;">
 
-![Fig.1. Docker architecture](img/Docker-Architecture.png)
+![Fig.1. Docker architecture](../img/Docker-Architecture.png)
 
 </div>
 

@@ -1,6 +1,6 @@
 ## Introduction
 
-Linux内核社区的一位传奇人物Con Kolivas[1]提出了楼梯调度算法来实现公平性，在社区的一番争论之后，Red Hat公司的Ingo Molnar借鉴楼梯调度算法的思想提出了CFS算法
+Linux内核社区的一位传奇人物Con Kolivas 提出了楼梯调度算法来实现公平性，在社区的一番争论之后，Red Hat公司的Ingo Molnar借鉴楼梯调度算法的思想提出了CFS算法
 
 
 https://www.kernel.org/doc/Documentation/scheduler/sched-design-CFS.txt
@@ -8,6 +8,9 @@ https://www.kernel.org/doc/Documentation/scheduler/sched-design-CFS.txt
 进程创建时，会基于原进程的 vruntime 附加惩罚时间来初始化现有进程的 vruntime。
 进程唤醒时，会以睡眠时间和优先级无关的延迟常数对 vruntime 进行补偿（减小）。
 进程调度时，除去挑选 leftmost vruntime 以外，还需考虑 gran 和 buddy 机制。
+
+
+
 
 
 ### enqueue_entity
@@ -42,17 +45,9 @@ enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 
 	update_load_avg(cfs_rq, se, UPDATE_TG | DO_ATTACH);
 	se_update_runnable(se);
-	/*
-	 * XXX update_load_avg() above will have attached us to the pelt sum;
-	 * but update_cfs_group() here will re-adjust the weight and have to
-	 * undo/redo all that. Seems wasteful.
-	 */
+
 	update_cfs_group(se);
 
-	/*
-	 * XXX now that the entity has been re-weighted, and it's lag adjusted,
-	 * we can place the entity.
-	 */
 	if (!curr)
 		place_entity(cfs_rq, se, flags);
 
