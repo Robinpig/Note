@@ -139,124 +139,123 @@ static int __wake_up_common(struct wait_queue_head *wq_head, unsigned int mode,
 #### try_to_wake_up
 
 
- * Notes on Program-Order guarantees on SMP systems.
- *
- *  MIGRATION
- *
- * The basic program-order guarantee on SMP systems is that when a task [t]
- * migrates, all its activity on its old CPU [c0] happens-before any subsequent
- * execution on its new CPU [c1].
- *
- * For migration (of runnable tasks) this is provided by the following means:
- *
- *  A) UNLOCK of the rq(c0)->lock scheduling out task t
- *  B) migration for t is required to synchronize *both* rq(c0)->lock and
- *     rq(c1)->lock (if not at the same time, then in that order).
- *  C) LOCK of the rq(c1)->lock scheduling in task
- *
- * Release/acquire chaining guarantees that B happens after A and C after B.
- * Note: the CPU doing B need not be c0 or c1
- *
- * Example:
- *
- *   CPU0            CPU1            CPU2
- *
- *   LOCK rq(0)->lock
- *   sched-out X
- *   sched-in Y
- *   UNLOCK rq(0)->lock
- *
- *                                   LOCK rq(0)->lock // orders against CPU0
- *                                   dequeue X
- *                                   UNLOCK rq(0)->lock
- *
- *                                   LOCK rq(1)->lock
- *                                   enqueue X
- *                                   UNLOCK rq(1)->lock
- *
- *                   LOCK rq(1)->lock // orders against CPU2
- *                   sched-out Z
- *                   sched-in X
- *                   UNLOCK rq(1)->lock
- *
- *
- *  BLOCKING -- aka. SLEEP + WAKEUP
- *
- * For blocking we (obviously) need to provide the same guarantee as for
- * migration. However the means are completely different as there is no lock
- * chain to provide order. Instead we do:
- *
- *   1) smp_store_release(X->on_cpu, 0)   -- finish_task()
- *   2) smp_cond_load_acquire(!X->on_cpu) -- try_to_wake_up()
- *
- * Example:
- *
- *   CPU0 (schedule)  CPU1 (try_to_wake_up) CPU2 (schedule)
- *
- *   LOCK rq(0)->lock LOCK X->pi_lock
- *   dequeue X
- *   sched-out X
- *   smp_store_release(X->on_cpu, 0);
- *
- *                    smp_cond_load_acquire(&X->on_cpu, !VAL);
- *                    X->state = WAKING
- *                    set_task_cpu(X,2)
- *
- *                    LOCK rq(2)->lock
- *                    enqueue X
- *                    X->state = RUNNING
- *                    UNLOCK rq(2)->lock
- *
- *                                          LOCK rq(2)->lock // orders against CPU1
- *                                          sched-out Z
- *                                          sched-in X
- *                                          UNLOCK rq(2)->lock
- *
- *                    UNLOCK X->pi_lock
- *   UNLOCK rq(0)->lock
- *
- *
- * However, for wakeups there is a second guarantee we must provide, namely we
- * must ensure that CONDITION=1 done by the caller can not be reordered with
- * accesses to the task state; see try_to_wake_up() and set_current_state().
- */
+Notes on Program-Order guarantees on SMP systems.
 
-/**
- * try_to_wake_up - wake up a thread
- * @p: the thread to be awakened
- * @state: the mask of task states that can be woken
- * @wake_flags: wake modifier flags (WF_*)
- *
- * Conceptually does:
- *
- *   If (@state & @p->state) @p->state = TASK_RUNNING.
- *
- * If the task was not queued/runnable, also place it back on a runqueue.
- *
- * This function is atomic against schedule() which would dequeue the task.
- *
- * It issues a full memory barrier before accessing @p->state, see the comment
- * with set_current_state().
- *
- * Uses p->pi_lock to serialize against concurrent wake-ups.
- *
- * Relies on p->pi_lock stabilizing:
- *  - p->sched_class
- *  - p->cpus_ptr
- *  - p->sched_task_group
- * in order to do migration, see its use of select_task_rq()/set_task_cpu().
- *
- * Tries really hard to only take one task_rq(p)->lock for performance.
- * Takes rq->lock in:
- *  - ttwu_runnable()    -- old rq, unavoidable, see comment there;
- *  - ttwu_queue()       -- new rq, for enqueue of the task;
- *  - psi_ttwu_dequeue() -- much sadness :-( accounting will kill us.
- *
- * As a consequence we race really badly with just about everything. See the
- * many memory barriers and their comments for details.
+ MIGRATION
+
+The basic program-order guarantee on SMP systems is that when a task [t]
+migrates, all its activity on its old CPU [c0] happens-before any subsequent
+execution on its new CPU [c1].
+
+For migration (of runnable tasks) this is provided by the following means:
+
+ A) UNLOCK of the rq(c0)->lock scheduling out task t
+ B) migration for t is required to synchronize *both* rq(c0)->lock and
+    rq(c1)->lock (if not at the same time, then in that order).
+ C) LOCK of the rq(c1)->lock scheduling in task
+
+Release/acquire chaining guarantees that B happens after A and C after B.
+Note: the CPU doing B need not be c0 or c1
+
+Example:
+
+  CPU0            CPU1            CPU2
+
+   LOCK rq(0)->lock
+   sched-out X
+   sched-in Y
+   UNLOCK rq(0)->lock
+
+                                   LOCK rq(0)->lock // orders against CPU0
+                                   dequeue X
+                                   UNLOCK rq(0)->lock
+
+                                   LOCK rq(1)->lock
+                                   enqueue X
+                                   UNLOCK rq(1)->lock
+
+                   LOCK rq(1)->lock // orders against CPU2
+                   sched-out Z
+                   sched-in X
+                   UNLOCK rq(1)->lock
+
+
+ BLOCKING -- aka. SLEEP + WAKEUP
+
+For blocking we (obviously) need to provide the same guarantee as for
+migration. However the means are completely different as there is no lock
+chain to provide order. Instead we do:
+
+  1) smp_store_release(X->on_cpu, 0)   -- finish_task()
+  2) smp_cond_load_acquire(!X->on_cpu) -- try_to_wake_up()
+
+Example:
+
+  CPU0 (schedule)  CPU1 (try_to_wake_up) CPU2 (schedule)
+
+  LOCK rq(0)->lock LOCK X->pi_lock
+  dequeue X
+  sched-out X
+  smp_store_release(X->on_cpu, 0);
+
+                   smp_cond_load_acquire(&X->on_cpu, !VAL);
+                   X->state = WAKING
+                   set_task_cpu(X,2)
+
+                   LOCK rq(2)->lock
+                   enqueue X
+                   X->state = RUNNING
+                   UNLOCK rq(2)->lock
+
+                                         LOCK rq(2)->lock // orders against CPU1
+                                         sched-out Z
+                                         sched-in X
+                                         UNLOCK rq(2)->lock
+
+                   UNLOCK X->pi_lock
+  UNLOCK rq(0)->lock
+
+
+However, for wakeups there is a second guarantee we must provide, namely we
+must ensure that CONDITION=1 done by the caller can not be reordered with
+accesses to the task state; see try_to_wake_up() and set_current_state().
 
 
 
+try_to_wake_up - wake up a thread
+@p: the thread to be awakened
+@state: the mask of task states that can be woken
+@wake_flags: wake modifier flags (WF_*)
+
+Conceptually does:
+
+  If (@state & @p->state) @p->state = TASK_RUNNING.
+
+If the task was not queued/runnable, also place it back on a runqueue.
+
+This function is atomic against schedule() which would dequeue the task.
+ 
+It issues a full memory barrier before accessing @p->state, see the comment with set_current_state().
+ 
+Uses p->pi_lock to serialize against concurrent wake-ups.
+
+Relies on p->pi_lock stabilizing:
+ - p->sched_class
+ - p->cpus_ptr
+ - p->sched_task_group
+in order to do migration, see its use of select_task_rq()/set_task_cpu().
+
+Tries really hard to only take one task_rq(p)->lock for performance.
+Takes rq->lock in:
+ - ttwu_runnable()    -- old rq, unavoidable, see comment there;
+ - ttwu_queue()       -- new rq, for enqueue of the task;
+ - psi_ttwu_dequeue() -- much sadness :-( accounting will kill us.
+
+As a consequence we race really badly with just about everything. See the
+many memory barriers and their comments for details.
+
+
+try _to_ wake_up只能唤醒state参数指定状态的进程， 它可以是几个状态的组合， 比如wake_up_process传递的TASK_NORMAL
 
 
 ```c
@@ -333,7 +332,7 @@ out:
 ```
 
 这里调用到两个函数
-- select_task_rq 选择一个适合的CPU
+- select_task_rq 选择一个适合的CPU 它调用p->sched_class->select_task_rq计算得到指定的CPU 号，然后根据CPU的状态和进程允许的CPU 集合等因素调整
 - set_task_cpu 为进程指定运行队列
 
 ##### select_task_rq

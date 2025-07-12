@@ -132,7 +132,7 @@ static enum hrtimer_restart tick_nohz_handler(struct hrtimer *timer)
 	return HRTIMER_RESTART;
 }
 ```
-
+#### scheduler_tick
 tick_sched_handle -> update_process_times -> scheduler_tick
 ```c
 void scheduler_tick(void)
