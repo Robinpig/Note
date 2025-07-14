@@ -4,6 +4,14 @@
 
 描述Linux收发包流程
 
+Linux 网络子系统使用哈希表管理所有的TCP连接
+struct inet_hashinfo
+ehash 已经建立连接hash表
+bhash bind状态哈希表
+lhash2 和 listening_hash 代表listen状态哈希表
+
+
+
 
 
 ## init
