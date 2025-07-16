@@ -8,6 +8,8 @@ RTTI(Run Time Type Identification)即通过运行时类型识别，程序能够�
 有时我们需要将一个多态指针转换为其实际指向对象的类型，就需要知道运行时的类型信息，这就产生了运行时类型识别的要求
 和Java相比，C++要想获得运行时类型信息，只能通过RTTI机制，并且C++最终生成的代码是直接与机器相关的
 
+> Java中任何一个类都可以通过 [Reflection](/docs/CS/Java/JDK/Basic/Reflection.md) 来获取类的基本信息（接口、父类、方法、属性、Annotation等），
+> 而且Java中还提供了一个关键字 `instanceof`，可以在运行时判断一个类是不是另一个类的子类或者是该类的对象，Java生成字节码文件中含有类的信息
 
 dynamic_cast
 

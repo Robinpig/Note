@@ -165,10 +165,8 @@ struct address_space_operations {
 ```
 
 
-
-Xarray
-
-The XArray is an abstract data type which behaves like a very large array of pointers. It takes advantage of RCU to perform lookups without locking.
+> The [Xarray](/docs/CS/OS/Linux/struct/xarray.md) is an abstract data type which behaves like a very large array of pointers.
+> It takes advantage of RCU to perform lookups without locking.
 
 ```c
 struct file {
@@ -179,9 +177,6 @@ struct file {
 用于描述文件预读信息的结构体在内核中用 struct file_ra_state 结构体来表示
 
 ```c
-/*
- * Track a single file's readahead state
- */
 struct file_ra_state {
     pgoff_t start;          /* where readahead started */
     unsigned int size;      /* # of readahead pages */
@@ -202,14 +197,16 @@ struct file_ra_state {
 
 那么内核在什么情况下才会去触发 page cache 中的脏页回写呢？
 
-1. **内核在初始化的时候，会创建一个 timer 定时器去定时唤醒内核 flusher 线程回写脏页。**
-2. **当内存中脏页的数量太多了达到了一定的比例，就会主动唤醒内核中的 flusher 线程去回写脏页。**
-3. **脏页在内存中停留的时间太久了，等到 flusher 线程下一次被唤醒的时候就会回写这些驻留太久的脏页。**
-4. **用户进程可以通过 sync() 回写内存中的所有脏页和 fsync() 回写指定文件的所有脏页，这些是进程主动发起脏页回写请求。**
-5. **在内存比较紧张的情况下，需要回收物理页或者将物理页中的内容 swap 到磁盘上时，如果发现通过页面置换算法置换出来的页是脏页，那么就会触发回写。**
+1. 内核在初始化的时候，会创建一个 timer 定时器去定时唤醒内核 flusher 线程回写脏页
+2. 当内存中脏页的数量太多了达到了一定的比例，就会主动唤醒内核中的 flusher 线程去回写脏页
+3. 脏页在内存中停留的时间太久了，等到 flusher 线程下一次被唤醒的时候就会回写这些驻留太久的脏页
+4. 用户进程可以通过 sync() 回写内存中的所有脏页和 fsync() 回写指定文件的所有脏页，这些是进程主动发起脏页回写请求
+5. 在内存比较紧张的情况下，需要回收物理页或者将物理页中的内容 swap 到磁盘上时，如果发现通过页面置换算法置换出来的页是脏页，那么就会触发回写
 
 
-dirty_writeback_centisecs 内核参数的默认值为 500。单位为 0.01 s。也就是说内核会每隔 5s 唤醒一次 flusher 线程来执行相关脏页的回写。**该参数在内核源码中对应的变量名为 dirty_writeback_interval**
+dirty_writeback_centisecs 内核参数的默认值为 500。单位为 0.01 s
+也就是说内核会每隔 5s 唤醒一次 flusher 线程来执行相关脏页的回写。
+该参数在内核源码中对应的变量名为 dirty_writeback_interval
 
 ```c
 static int __init default_bdi_init(void)
