@@ -1,5 +1,16 @@
 ## Introduction
 
+
+像Cloud Foundry这样的PaaS项目，最核心的组件就是一套应用的打包和分发机制
+Docker项目与Cloud Foundry的容器在大部分功能和实现原理上都是一样的
+
+使用PaaS，用户就必须为每种语言、每种框架，甚至每个版本的应用维护一个打好的包。
+这个打包过程，没有任何章法可循，更麻烦的是，明明在本地运行得好好的应用，却需要做很多修改和配置工作才能在PaaS里运行起来。
+而这些修改和配置，并没有什么经验可以借鉴，基本上得靠不断试错，直到你摸清楚了本地应用和远端PaaS匹配的“脾气”才能够搞定
+
+Docker项目给PaaS世界带来的“降维打击”，其实是提供了一种非常便利的打包机制
+这种机制直接打包了应用运行所需要的整个操作系统，从而保证了本地环境和云端环境的高度一致，避免了用户通过“试错”来匹配两种不同运行环境之间差异的痛苦过程
+
 A Docker container image is a lightweight, standalone, executable package of software that includes everything needed to run an application: code, runtime, system tools, system libraries and settings.
 
 > 2013年3月15日 PyCon Solomon Hykes的演讲 [The future of Linux Containers](https://www.youtube.com/watch?v=wW9CAH9nSLs)
