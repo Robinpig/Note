@@ -46,6 +46,12 @@ Windows上WSL和虚拟机不适用 在`minikube start`报错 不支持双重虚�
 minikube status
 ```
 
+
+到目前为止，在容器里运行kubelet，依然没有很好的解决办法，也不推荐你用容器去部署Kubernetes项目
+
+[kubeadm](/docs/CS/Container/k8s/kubeadm.md) 选择了一种妥协方案：
+把kubelet直接运行在宿主机上，然后使用容器部署其他的Kubernetes组件
+
 ### Installing kubeadm, kubelet and kubectl
 
 You will install these packages on all of your machines:
@@ -485,6 +491,15 @@ It is a lightweight alternative to using Docker, Moby or rkt as the runtime for 
 
 
 ### Pod
+
+
+有了Pod之后，我们希望能一次启动多个应用的实例，这样就需要Deployment这个Pod的多实例管理器；而有了这样一组相同的Pod后，我们又需要通过一个固定的IP地址和端口以负载均衡的方式访问它，于是就有了Service
+
+
+除了应用与应用之间的关系外，应用运行的形态是影响“如何容器化这个应用”的第二个重要因素
+
+为此，Kubernetes定义了新的、基于Pod改进后的对象
+比如Job，用来描述一次性运行的Pod（比如，大数据任务）；再比如DaemonSet，用来描述每个宿主机上必须且只能运行一个副本的守护进程服务；又比如CronJob，则用于描述定时任务等等
 
 PodSpec is a description of a pod
 

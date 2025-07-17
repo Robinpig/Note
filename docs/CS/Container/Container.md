@@ -106,7 +106,7 @@ Mount Namespace修改的，是容器进程对文件系统“挂载点”的认�
 > 容器本身没有价值，有价值的是“容器编排”
 
 正因为如此，容器技术生态才爆发了一场关于“容器编排”的“战争”。而这次战争，最终以 [Kubernetes](/docs/CS/Container/k8s/K8s.md) 项目和 CNCF 社区的胜利而告终
-
+最具代表性的容器编排工具，当属Docker公司的Compose+Swarm组合，以及Google与RedHat公司共同主导的Kubernetes项目
 
 
 
