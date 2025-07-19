@@ -643,6 +643,16 @@ To customize this behavior, register a custom Retryer instance via the builder.
 If the retry is determined to be unsuccessful, the last RetryException will be thrown. 
 To throw the original cause that led to the unsuccessful retry, build your Feign client with the exceptionPropagationPolicy() option.
 
+## Fallback
+
+Feign 的 fallback 机制要生效，需要三部分配合
+-  Fallback/FallbackFactory 实现
+-  FeignClientsConfiguration 配置
+-  限流熔断框架的引入（Hystrix(已经不支持 不推荐) / Spring Cloud Circuit Breaker / Sentinel）
+
+Feign + SpringCloudCircuitBreaker 的用法从 2020.0.0 版本开始支持，目前经历一次大变化
+-  2022.0.0 开始开关从 feign.circuitbreaker.enabled 调整为 spring.cloud.openfeign.circuitbreaker.enabled
+
 ## Metrics
 
 By default, feign won't collect any metrics.
