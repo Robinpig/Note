@@ -170,6 +170,64 @@ then merge these iterators into a sorted iterator on the fly and build the tree 
 
 
 
+## Issues
+
+### OOM
+
+Elastic Search 集群出现OOM
+```
+[---][ERROR][o.e.b.ElasticsearchUncaughtExceptionHandler] [master-172.16.0.135-9200] fatal error in thread [Thread-7], exiting
+java.lang.OutOfMemoryError: Java heap space
+	at io.netty.buffer.PoolArena$HeapArena.newChunk(PoolArena.java:656) ~[?:?]
+	at io.netty.buffer.PoolArena.allocateNormal(PoolArena.java:237) ~[?:?]
+	at io.netty.buffer.PoolArena.allocate(PoolArena.java:221) ~[?:?]
+	at io.netty.buffer.PoolArena.allocate(PoolArena.java:141) ~[?:?]
+	at io.netty.buffer.PooledByteBufAllocator.newHeapBuffer(PooledByteBufAllocator.java:272) ~[?:?]
+	at io.netty.buffer.AbstractByteBufAllocator.heapBuffer(AbstractByteBufAllocator.java:160) ~[?:?]
+	at io.netty.buffer.AbstractByteBufAllocator.heapBuffer(AbstractByteBufAllocator.java:151) ~[?:?]
+	at io.netty.buffer.AbstractByteBufAllocator.ioBuffer(AbstractByteBufAllocator.java:133) ~[?:?]
+	at io.netty.channel.DefaultMaxMessagesRecvByteBufAllocator$MaxMessageHandle.allocate(DefaultMaxMessagesRecvByteBufAllocator.java:73) ~[?:?]
+	at io.netty.channel.nio.AbstractNioByteChannel$NioByteUnsafe.read(AbstractNioByteChannel.java:117) ~[?:?]
+	at io.netty.channel.nio.NioEventLoop.processSelectedKey(NioEventLoop.java:642) ~[?:?]
+	at io.netty.channel.nio.NioEventLoop.processSelectedKeysPlain(NioEventLoop.java:527) ~[?:?]
+	at io.netty.channel.nio.NioEventLoop.processSelectedKeys(NioEventLoop.java:481) ~[?:?]
+	at io.netty.channel.nio.NioEventLoop.run(NioEventLoop.java:441) ~[?:?]
+	at io.netty.util.concurrent.SingleThreadEventExecutor$5.run(SingleThreadEventExecutor.java:858) ~[?:?]
+	at java.lang.Thread.run(Thread.java:882) [?:1.8.0_152]
+```
+
+
+基本通过如下几种方式来解决OOM问题：
+修改调用链保存时间。调用链默认保存7天，比如说修改为3天，这样可以降低集群的数据量。
+调整shards的数据量，可以从默认的16调整到32或48。Elasticsearch中一个索引是由若干个shard组成的，通过增加shard数，可以降低每个shard的数据量，以达到降低节点内存占用的效果。
+扩容节点内存和数量。
+
+这几个优化的手段都尝试了，但现场反馈仍然存在OOM问题。截止第一阶段的优化，现场一共有16台机器，其中3台为master不作为datanode，13台为datanode。节点的内存配置为 72GB 或 48GB ，并且按照Elasticsearch官方建议，Elasticsearch进程的JVM堆最大已经调整到接近 32GB
+
+副本冗余是需要的 当某节点损坏后清理掉数据 没有副本就会永久丢失部分数据 再重新启动后索引会变成red 节点状态正常 日志无报错 但是 读取shard情况 发现总会存在 shard unassign的状态
+curl -POST '127.0.0.1:9200/_cat/shards?v'
+此时无法忽略这个丢失的shard 只能清理掉 red index
+
+一个本不需要做索引的大字段，被错误设置成了全文检索类型，导致高并发写入时数据无法及时索引落盘，最终引发堆溢出
+
+
+错误定义了索引
+"index":"not_analyzed" 并不是不做索引，而是不对内容进行全文索引，仅是作为一个keyword来索引。
+```json
+"spanEvents": {
+    "type":"text",
+    "index":"not_analyzed"
+}
+```
+应该定义为
+
+```json
+
+"spanEvents": {
+    "type":"text",
+    "index": false
+}
+```
 
 
 ## References
