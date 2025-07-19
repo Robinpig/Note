@@ -7,6 +7,8 @@ Programs written in this functional style are automatically parallelized and exe
 The run-time system takes care of the details of partitioning the input data, scheduling the program’s execution across a set of machines, handling machine failures, and managing the required inter-machine communication.
 This allows programmers without any experience with parallel and distributed systems to easily utilize the resources of a large distributed system.
 
+阿里的ODPS就是基于MapReduce底层技术架构进行封装实现
+
 ## Programming Model
 
 The computation takes a set of input key/value pairs, and produces a set of output key/value pairs.
@@ -255,6 +257,10 @@ We have learned several things from this work.
 - Second, network bandwidth is a scarce resource.
   A number of optimizations in our system are therefore targeted at reducing the amount of data sent across the network: the locality optimization allows us to read data from local disks, and writing a single copy of the intermediate data to local disk saves network bandwidth.
 - Third, redundant execution can be used to reduce the impact of slow machines, and to handle machine failures and data loss.
+
+
+
+
 
 ## Links
 
