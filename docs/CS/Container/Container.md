@@ -36,7 +36,7 @@ Container via Virtual Machine:
 
 
 
-
+容器技术的核心功能，就是通过约束和修改进程的动态表现，从而为其创造出一个“边界”
 
 符合 OCI 规范的几款主流容器化技术做一下分析
 
@@ -79,6 +79,33 @@ Today, Docker is one of the most well-known and highly used container engine tec
 The ecosystem is standardizing on containerd and other alternatives like CoreOS rkt, Mesos Containerizer, [LXC Linux Containers](/docs/CS/OS/Linux/LXC.md), OpenVZ, and crio-d.
 Features and defaults may differ, but adopting and leveraging OCI specifications as these evolve will ensure that solutions are vendor-neutral, 
 certified to run on multiple operating systems and usable in multiple environments.
+
+
+
+尽管你可以在容器里通过Mount Namespace单独挂载其他不同版本的操作系统文件，比如CentOS或者Ubuntu，但这并不能改变共享宿主机内核的事实。这意味着，如果你要在Windows宿主机上运行Linux容器，或者在低版本的Linux宿主机上运行高版本的Linux容器，都是行不通的
+其次，在Linux内核中，有很多资源和对象是不能被Namespace化的，最典型的例子就是：时间。
+这就意味着，如果你的容器中的程序使用settimeofday(2)系统调用修改了时间，整个宿主机的时间都会被随之修改，这显然不符合用户的预期
+由于上述问题，尤其是共享宿主机内核的事实，容器给应用暴露出来的攻击面是相当大的，应用“越狱”的难度自然也比虚拟机低得多
+
+更为棘手的是，尽管在实践中我们确实可以使用Seccomp等技术，对容器内部发起的所有系统调用进行过滤和甄别来进行安全加固，但这种方法因为多了一层对系统调用的过滤，必然会拖累容器的性能。何况，默认情况下，谁也不知道到底该开启哪些系统调用，禁止哪些系统调用。
+所以，在生产环境中，没有人敢把运行在物理机上的Linux容器直接暴露到公网上
+
+
+
+跟Namespace的情况类似，Cgroups对资源的限制能力也有很多不完善的地方，被提及最多的自然是/proc文件系统的问题
+
+在容器里执行top指令，就会发现，它显示的信息居然是宿主机的CPU和内存数据，而不是当前容器的数据。
+造成这个问题的原因就是，/proc文件系统并不知道用户通过Cgroups给这个容器做了什么样的资源限制，即：/proc文件系统不了解Cgroups限制的存在
+
+Mount Namespace修改的，是容器进程对文件系统“挂载点”的认知
+跟其他Namespace的使用略有不同的地方：它对容器进程视图的改变，一定是伴随着挂载操作（mount）才能生效 在此之前，新创建的容器会直接继承宿主机的各个挂载点
+
+
+## 容器编排
+
+> 容器本身没有价值，有价值的是“容器编排”
+
+正因为如此，容器技术生态才爆发了一场关于“容器编排”的“战争”。而这次战争，最终以 [Kubernetes](/docs/CS/Container/k8s/K8s.md) 项目和 CNCF 社区的胜利而告终
 
 
 

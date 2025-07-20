@@ -48,3 +48,8 @@ struct mutex {
 
 
 初始化
+
+
+## Links
+
+- [Linux Lock](/docs/CS/OS/Linux/Lock/Lock.md)
