@@ -5,6 +5,56 @@
 kubeadm的源代码，直接就在kubernetes/cmd/kubeadm目录下，是Kubernetes项目的一部分。其中，app/phases文件夹下的代码
 
 
+编写了一个给kubeadm用的YAML文件（名叫：kubeadm.yaml）：
+
+```yaml
+apiVersion: kubeadm.k8s.io/v1alpha1
+kind: MasterConfiguration
+controllerManagerExtraArgs:
+horizontal-pod-autoscaler-use-rest-clients: "true"
+horizontal-pod-autoscaler-sync-period: "10s"
+node-monitor-grace-period: "10s"
+apiServerExtraArgs:
+runtime-config: "api/all=true"
+kubernetesVersion: "stable-1.11"
+```
+
+
+```shell
+kubeadm init --config kubeadm.yaml
+```
+就可以完成Kubernetes Master的部署
+
+部署完成后，kubeadm会生成一行指令：
+
+```
+kubeadm join 10.168.0.2:6443 --token 00bwbx.uvnaa2ewjflwu1ry --discovery-token-ca-cert-hash sha256:00eb62a2a6020f94132e3fe1ab721349bbcd3e9b94da9654cfe15f2985ebd711
+```
+这个kubeadm join命令，就是用来给这个Master节点添加更多工作节点（Worker）的命令。我们在后面部署Worker节点的时候马上会用到它，所以找一个地方把这条命令记录下来。
+
+此外，kubeadm还会提示我们第一次使用Kubernetes集群所需要的配置命令：
+
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+而需要这些配置命令的原因是：Kubernetes集群默认需要加密方式访问。所以，这几条命令，就是将刚刚部署生成的Kubernetes集群的安全配置文件，保存到当前用户的.kube目录下，kubectl默认会使用这个目录下的授权信息访问Kubernetes集群。
+
+如果不这么做的话，我们每次都需要通过export KUBECONFIG环境变量告诉kubectl这个安全配置文件的位置
+
+可以使用kubectl get命令来查看当前唯一一个节点的状态
+
+在调试Kubernetes集群时，最重要的手段就是用kubectl describe来查看这个节点（Node）对象的详细信息、状态和事件（Event）
+
+通过kubectl describe指令的输出，我们可以看到NodeNotReady的原因在于，我们尚未部署任何网络插件
+
+
+在Kubernetes项目“一切皆容器”的设计理念指导下，部署网络插件非常简单，只需要执行一句kubectl apply指令，以Weave为例：
+
+$ kubectl apply -f https://git.io/weave-kube-1.6
+
+
+
 当你执行kubeadm init指令后，kubeadm首先要做的，是一系列的检查工作，以确定这台机器可以用来部署Kubernetes。这一步检查，我们称为“Preflight Checks”
 
 在通过了Preflight Checks之后，kubeadm要为你做的，是生成Kubernetes对外提供服务所需的各种证书和对应的目录。

@@ -351,7 +351,10 @@ drivers:
 
 ## Docker Volume
 
-
+运行在由Linux Namespace和Cgroups构成的隔离环境里；而它运行所需要的各种文件，比如python，app.py，以及整个操作系统文件，则由多个联合挂载在一起的rootfs层提供。
+这些rootfs层的最下层，是来自Docker镜像的只读层。
+在只读层之上，是Docker自己添加的Init层，用来存放被临时修改过的/etc/hosts等文件。
+而rootfs的最上层是一个可读写层，它以Copy-on-Write的方式存放任何对只读层的修改，容器声明的Volume的挂载点，也出现在这一层
 
 Issues
 
