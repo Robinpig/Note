@@ -17,6 +17,11 @@ EventLoopGroup 是 Netty Reactor 线程模型的具体实现方式，Netty 通�
 
 不同IO模型下，EventLoop有着不同的实现，我们只需要切换不同的实现类就可以完成对NettyIO模型的切换
 
+| BIO                        | NIO           | AIO           |
+|----------------------------|---------------|---------------|
+| ThreadPerChannelEventGroup | NioEventGroup | AioEventGroup |
+
+
 
 ![EventLoopGroup](img/EventLoop.png)
 
@@ -1282,6 +1287,7 @@ unsafe.close( ) in [Channel](/docs/CS/Framework/Netty/Channel.md )
 ## Implementation
 
 ### Epoll
+
 > [!NOTE]
 > 
 > See [epoll_ctl](/docs/CS/OS/Linux/epoll.md?id=epoll_ctl)
