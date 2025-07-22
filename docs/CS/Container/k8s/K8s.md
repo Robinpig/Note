@@ -46,6 +46,12 @@ Windows上WSL和虚拟机不适用 在`minikube start`报错 不支持双重虚�
 minikube status
 ```
 
+
+到目前为止，在容器里运行kubelet，依然没有很好的解决办法，也不推荐你用容器去部署Kubernetes项目
+
+[kubeadm](/docs/CS/Container/k8s/kubeadm.md) 选择了一种妥协方案：
+把kubelet直接运行在宿主机上，然后使用容器部署其他的Kubernetes组件
+
 ### Installing kubeadm, kubelet and kubectl
 
 You will install these packages on all of your machines:
@@ -485,6 +491,32 @@ It is a lightweight alternative to using Docker, Moby or rkt as the runtime for 
 
 
 ### Pod
+
+
+有了Pod之后，我们希望能一次启动多个应用的实例，这样就需要Deployment这个Pod的多实例管理器；而有了这样一组相同的Pod后，我们又需要通过一个固定的IP地址和端口以负载均衡的方式访问它，于是就有了Service
+
+
+除了应用与应用之间的关系外，应用运行的形态是影响“如何容器化这个应用”的第二个重要因素
+
+为此，Kubernetes定义了新的、基于Pod改进后的对象
+比如Job，用来描述一次性运行的Pod（比如，大数据任务）；再比如DaemonSet，用来描述每个宿主机上必须且只能运行一个副本的守护进程服务；又比如CronJob，则用于描述定时任务等等
+
+
+Pod 是一个逻辑概念，其实是一组共享了某些资源的容器。
+Kubernetes真正处理的，还是宿主机操作系统上Linux容器的Namespace和Cgroups，而并不存在一个所谓的Pod的边界或者隔离环境
+
+具体的说：Pod里的所有容器，共享的是同一个Network Namespace，并且可以声明共享同一个Volume。
+
+为了实现容器启动之间的优先级 就有了 infra 容器
+在这个Pod中，Infra容器永远都是第一个被创建的容器，而其他用户定义的容器，则通过Join Network Namespace的方式，与Infra容器关联在一起
+
+在Kubernetes项目里，Infra容器一定要占用极少的资源，所以它使用的是一个非常特殊的镜像，叫作：k8s.gcr.io/pause。这个镜像是一个用汇编语言编写的、永远处于“暂停”状态的容器，解压后的大小也只有100~200 KB左右。
+
+而在Infra容器“Hold住”Network Namespace后，用户容器就可以加入到Infra容器的Network Namespace当中了
+
+Pod这种“超亲密关系”容器的设计思想，实际上就是希望，当用户想在一个容器里跑多个功能并不相关的应用时，应该优先考虑它们是不是更应该被描述成一个Pod里的多个容器
+
+
 
 PodSpec is a description of a pod
 

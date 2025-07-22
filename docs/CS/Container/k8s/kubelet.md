@@ -4,7 +4,7 @@ kubelet用于节点管理 运行在每个k8s节点上 kubelet用来接收、处�
 
 kubelet的3种标准化接口分别用于CRI、CNI和CSI
 
-
+kubelet完全就是为了实现Kubernetes项目对容器的管理能力而重新实现的一个组件，与Borg之间并没有直接的传承关系
 
 
 
