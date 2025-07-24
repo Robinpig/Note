@@ -133,7 +133,7 @@ usr/src/kernels/
 
 - 带调试信息的内核vmlinux
 - 一个压缩的内核vmlinuz bzImage/Image
-- 一份裁剪过的文件系统initrd/init
+- 一份裁剪过的文件系统initrd/initramfs
 
 vmlinux 是生成的内核二进制文件它是一个没有压缩的镜像
 

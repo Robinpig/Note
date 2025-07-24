@@ -1,5 +1,8 @@
 ## Introduction
 
+
+Linux 的启动过程中有很多组件的参与 首先从 [BIOS](/docs/CS/OS/BootLoader.md) 开始 然后从磁盘上的分区找到 Bootloader 接着找到内核二进制文件 再使用 initrd 文件系统初始化早期内核 最后启动 systemd 等启动管理程序
+
 通常操作系统启动都是由Bootloader 
 
 - Gurb

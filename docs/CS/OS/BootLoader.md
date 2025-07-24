@@ -135,35 +135,10 @@ head.S
 
 
 
-## BIOS
+目前常见的 Bootloader 有 Grub 和 U-Boot
 
-In computing, BIOS (`Basic Input/Output System`, also known as the System BIOS, ROM BIOS, BIOS ROM or PC BIOS) 
-is firmware used to provide runtime services for operating systems and programs and to perform hardware initialization during the booting process (power-on startup).
-
-
-The BIOS in modern PCs initializes and tests the system hardware components (Power-on self-test), 
-and loads a boot loader from a mass storage device which then initializes a kernel. 
-In the era of DOS, the BIOS provided BIOS interrupt calls for the keyboard, display, storage, 
-and other input/output (I/O) devices that standardized an interface to application programs and the operating system. 
-More recent operating systems do not use the BIOS interrupt calls after startup.
-
-
-Most BIOS implementations are specifically designed to work with a particular computer or motherboard model, by interfacing with various devices especially system chipset.
-Originally, BIOS firmware was stored in a ROM chip on the PC motherboard. 
-In later computer systems, the BIOS contents are stored on flash memory so it can be rewritten without removing the chip from the motherboard.
-This allows easy, end-user updates to the BIOS firmware so new features can be added or bugs can be fixed, 
-but it also creates a possibility for the computer to become infected with BIOS rootkits. Furthermore, a BIOS upgrade that fails could brick the motherboard.
-
-MBR
-
-## UEFI
-
-The [Unified Extensible Firmware Interface](https://uefi.org/) (UEFI, successor of the EFI) is an interface between operating systems and firmware. 
-It provides a standard environment for booting an operating system and running pre-boot applications.
-
-
-It is distinct from the "MBR boot code" method that was used by legacy BIOS systems.
-
+并不是每一个OS都需要 Bootloader, 但是 Bootloader的存在使得内核的启动和硬件解耦合 并支持多系统选择启动 有的甚至支持网络加载内核
+随着 UEFI 的发展 内核与 UEFI 配合可以完成整个启动过程 不需要 Bootloader的参与
 
 
 ## Links
