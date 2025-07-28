@@ -4,6 +4,8 @@
 It is now a standalone open source project and maintained independently of any company.
 To emphasize this, and to clarify the project's governance structure, Prometheus joined the Cloud Native Computing Foundation in 2016 as the second hosted project, after Kubernetes.
 
+> Prometheus项目与 Kubernetes 项目一样，也来自于 Google 的 Borg 体系，它的原型系统，叫作BorgMon，是一个几乎与 Borg 同时诞生的内部监控系统
+
 Prometheus collects and stores its metrics as time series data, i.e. metrics information is stored with the timestamp at which it was recorded, alongside optional key-value pairs called labels.
 
 Prometheus's main features are:
@@ -39,8 +41,7 @@ Prometheus 主要包含下面几个组件：
 
 - Prometheus Server 定期从配置好的 jobs 或者 exporters 中拉取 metrics 信息，或者
 - 接收来自 Pushgateway 发过来的 metrics 信息。
-- Prometheus Server 把收集到的 metrics 信息存储到时间序列数据库中，并运行已经定
-- 义好的 alert.rules，向 Alertmanager 推送警报。
+- Prometheus Server 把收集到的 metrics 信息存储到时间序列数据库中，并运行已经定义好的 alert.rules，向 Alertmanager 推送警报。
 - Alertmanager 根据配置文件，对接收的警报进行处理，发出告警。
 - 通过 Prometheus web UI 进行可视化展示
 
