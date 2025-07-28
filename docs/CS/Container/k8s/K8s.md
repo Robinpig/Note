@@ -535,6 +535,11 @@ WAR包容器的类型不再是一个普通容器，而是一个Init Container类
 然后，我在这个Pod里同时运行一个sidecar容器，它也声明挂载同一个Volume到自己的/var/log目录上。
 这样，接下来sidecar容器就只需要做一件事儿，那就是不断地从自己的/var/log目录里读取日志文件，转发到MongoDB或者Elasticsearch中存储起来。这样，一个最基本的日志收集工作就完成了。
 
+
+凡是调度、网络、存储，以及安全相关的属性，基本上是Pod 级别的 凡是跟容器的Linux Namespace相关的属性，也一定是Pod 级别的
+这些属性的共同特征是，它们描述的是“机器”这个整体，而不是里面运行的“程序”
+
+
 PodSpec is a description of a pod
 
 ```go
@@ -636,7 +641,21 @@ type PodSpec struct {
 ```
 
 
+Pod生命周期的变化，主要体现在Pod API对象的 Status 部分，这是它除了Metadata和Spec之外的第三个重要字段。其中，pod.status.phase，就是Pod的当前状态，它有如下几种可能的情况：
 
+    Pending。这个状态意味着，Pod的YAML文件已经提交给了Kubernetes，API对象已经被创建并保存在Etcd当中。但是，这个Pod里有些容器因为某种原因而不能被顺利创建。比如，调度不成功。
+
+    Running。这个状态下，Pod已经调度成功，跟一个具体的节点绑定。它包含的容器都已经创建成功，并且至少有一个正在运行中。
+
+    Succeeded。这个状态意味着，Pod里的所有容器都正常运行完毕，并且已经退出了。这种情况在运行一次性任务时最为常见。
+
+    Failed。这个状态下，Pod里至少有一个容器以不正常的状态（非0的返回码）退出。这个状态的出现，意味着你得想办法Debug这个容器的应用，比如查看Pod的Events和日志。
+
+    Unknown。这是一个异常状态，意味着Pod的状态不能持续地被kubelet汇报给kube-apiserver，这很有可能是主从节点（Master和Kubelet）间的通信出现了问题
+
+Pod对象的Status字段，还可以再细分出一组Conditions。这些细分状态的值包括：PodScheduled、Ready、Initialized，以及Unschedulable。它们主要用于描述造成当前Status的具体原因是什么。
+
+比如，Pod当前的Status是Pending，对应的Condition是Unschedulable，这就意味着它的调度出现了问题
 
 
 Podz中主要包括3类容器: Init容器、普通容器、临时容器 分别对应InitContainers、Containers、EphemeralContainers
