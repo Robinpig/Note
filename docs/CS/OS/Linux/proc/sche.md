@@ -294,7 +294,7 @@ sched_class 字段表
 调度类是调度器的行为指南， 逻辑上是调度器的一部分， 不同的调度器就需要不同的调度类， 一个调度类并不需要实现所有的字段
 
 内核定义了 stop_sched_class、dl_sched_class、 rt_sched_class、fair_sched_class 和idle_sched_class分别对应stop调度、最后期限调度（或者称为最早截止时间优先调度）、实时调度、完全公平调度和叫le调度
-
+一般默认使用 fair_sched_class 即 CFS 调度算法
 
 任务的睡眠与唤醒是内核调度器重要的组成部分，下面先简单介绍一下唤醒的流程。
 
@@ -785,7 +785,7 @@ O(1)调度器在处理某些交互式进程时依然存在问题，特别是在�
 ## schedule
 
 
-The main entry point into the process schedule is the function schedule() , defined in kernel/sched/core.c
+The main entry point into the process schedule is the function `schedule()` , defined in `kernel/sched/core.c`
 
 schedule 一般在以下几种情况下执行。
 - 第1种，进程主动放弃CPU, 如sleep、等待某事件或条件等。
@@ -865,7 +865,9 @@ called on the nearest possible occasion:
   - return from syscall or exception to user-space
   - return from interrupt-handler to user-space
 
-WARNING: must be called with preemption disabled!
+> [!WARNING]
+> 
+> Must be called with preemption disabled!
 
 ```c
 // kernel/sched/core.c
