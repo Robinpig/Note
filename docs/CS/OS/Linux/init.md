@@ -400,7 +400,7 @@ call rest_init -> [kernel_init](/docs/CS/OS/Linux/init.md?id=kernel_init)
 
 
 
-rest_init
+### rest_init
 
 
 rest_init函数的重要功能就是建立了两个Linux  [kernel_thread](/docs/CS/OS/Linux/proc/process.md?id=kernel_clone):  `kernel_init` and `kthreadd`
