@@ -22,8 +22,21 @@ GDB主要由三个子系统组成 分别是
 
 
 
-
 like LLDB clang in MacOS
+
+
+
+
+
+
+
+go
+
+go attach
+
+
+
+
 
 以下是一些gdb的常用命令
 ```shell
