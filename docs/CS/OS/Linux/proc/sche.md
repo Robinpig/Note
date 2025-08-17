@@ -293,7 +293,7 @@ sched_class 字段表
 
 调度类是调度器的行为指南， 逻辑上是调度器的一部分， 不同的调度器就需要不同的调度类， 一个调度类并不需要实现所有的字段
 
-内核定义了 stop_sched_class、dl_sched_class、 rt_sched_class、fair_sched_class 和idle_sched_class分别对应stop调度、最后期限调度（或者称为最早截止时间优先调度）、实时调度、完全公平调度和叫le调度
+内核定义了 stop_sched_class、dl_sched_class、 rt_sched_class、fair_sched_class 和 idle_sched_class 分别对应stop调度、最后期限调度（或者称为最早截止时间优先调度）、实时调度、完全公平调度和叫le调度
 一般默认使用 fair_sched_class 即 CFS 调度算法
 
 任务的睡眠与唤醒是内核调度器重要的组成部分，下面先简单介绍一下唤醒的流程。
