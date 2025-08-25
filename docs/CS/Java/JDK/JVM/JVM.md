@@ -514,6 +514,8 @@ HeapWord* MemAllocator::allocate_inside_tlab(Allocation& allocation) const {
 }
 ```
 
+填充dummy对象的目的是为了遍历HR时，不再需要一个字节一个字节的遍历，dummy对象是一个int[]。
+
 
 
 ##### slow
