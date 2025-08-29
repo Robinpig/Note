@@ -1,8 +1,7 @@
 ## Introduction
 
-
-
-go 源代码首先要通过 go build 编译为可执行文件，在 linux 平台上为 ELF 格式的可执行文件，编译阶段会经过编译器、汇编器、链接器三个过程最终生成可执行文件。
+Go语言是一门静态编译型语言，源代码需要通过编译器转换成目标平台的机器码才能运行
+Go 源代码首先要通过 go build 编译为可执行文件，在 linux 平台上为 ELF 格式的可执行文件，编译阶段会经过编译器、汇编器、链接器三个过程最终生成可执行文件
 
 1. 编译器：.go 源码通过 go 编译器生成为 .s 的 plan9 汇编代码，Go 编译器入口是 compile/internal/gc/main.go 文件的 main 函数；
 2. 汇编器：通过 go 汇编器将编译器生成的 .s 汇编语言转换为机器代码，并写出最终的目标程序 .o 文件，src/cmd/internal/obj 包实现了go汇编器；
@@ -179,6 +178,12 @@ Go语言提供了强有力的工具查看SSA初始及其后续优化阶段生成
 `go build -gcflags -S main.go` 查看 Plan9 汇编代码
 
 
+查看代码底层源码
+
+go tool compile -S  
+
+
+Go编译器使用 Plan9 汇编作为统一汇编语言，屏蔽了不同架构的细节，生成的汇编代码随后通过汇编器（如 go tool asm）和链接器（如 go tool link）转换为可执行文件
 
 
 
