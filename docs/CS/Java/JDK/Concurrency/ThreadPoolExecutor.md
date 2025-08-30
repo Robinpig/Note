@@ -358,6 +358,9 @@ Returns true if this pool allows core threads to time out and terminate if no ta
 - When true, the same keep-alive policy applying to non-core threads applies also to core threads.
 - When false (the default), core threads are never terminated due to lack of incoming tasks.
 
+
+
+
 ### ThreadFactory
 
 New threads are created using a `ThreadFactory`.
@@ -1105,6 +1108,15 @@ for (Runnable r : pool.shutdownNow()) {
         ((Future)r).cancel(false);
 }
 ```
+
+### adaptive
+
+线程池可以修改的参数
+核心线程数和最大线程数
+
+队列长度调整并不直观
+
+VariableLinkedBlockingQueue
 
 ### monitor
 

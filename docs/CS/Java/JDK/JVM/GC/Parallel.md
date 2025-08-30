@@ -31,6 +31,37 @@ Skip dead objects at Full GC
 | ParallelOldDeadWoodLimiterStdDev | 80      | The standard deviation used by the parallel compact dead wood limiter (a number between 0-100) range(0, 100) |
 | PSChunkLargeArrays               | true    | Process large arrays in chunks                                                                               |
 
+
+
+ParallelScavengeHeap is the implementation of CollectedHeap for Parallel GC.
+
+The heap is reserved up-front in a single contiguous block, split into two parts, the old and young generation. 
+The old generation resides at lower addresses, the young generation at higher addresses. 
+The boundary address between the generations is fixed. Within a generation, committed memory grows towards higher addresses.
+
+```cpp
+//
+// low                                                                high
+//
+//                          +-- generation boundary (fixed after startup)
+//                          |
+// |<- old gen (reserved) ->|<-       young gen (reserved)             ->|
+// +---------------+--------+-----------------+--------+--------+--------+
+// |      old      |        |       eden      |  from  |   to   |        |
+// |               |        |                 |  (to)  | (from) |        |
+// +---------------+--------+-----------------+--------+--------+--------+
+// |<- committed ->|        |<-          committed            ->|
+//
+
+class ParallelScavengeHeap : public CollectedHeap {
+  friend class VMStructs;
+ private:
+  static PSYoungGen* _young_gen;
+  static PSOldGen*   _old_gen;
+}
+```
+
+
 ### invoke
 
 This method should contain all heap-specific policy for invoking a full collection.
@@ -642,6 +673,11 @@ bool PSParallelCompact::invoke_no_policy(bool maximum_heap_compaction) {
 ```
 
 ## Tuning
+
+Parallel Scavenge具有自适应调节策略（-XX:+UseAdaptiveSizePolicy）
+
+PS 以前是BFS对象图的 JDK1.6更改为默认DFS ParNew 一直是 BFS
+
 
 
 
