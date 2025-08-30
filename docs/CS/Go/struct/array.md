@@ -6,16 +6,12 @@
 
 
 
-
-
-
-
-
-
 ## array
 
 
-
+数组是Go语言中常见的数据结构，相比切片，数组我们使用的比较少
+只有数组大小和数组元素类型一样的数组才能够进行比较
+Go语言中数组是一个值类型变量，将一个数组作为函数参数传递是拷贝原数组形成一个新数组传递，在函数里面对数组做任何更改都不会影响原数组
 
 
 
@@ -61,6 +57,95 @@ append()
 
 
 
+
+### access
+
+
+如何实现随机访问数组的全部元素
+第一种方法用在Go调度器部分。G-M-P调度模型中，当M关联的P的本地队列中没有可以执行的G时候，M会从其他P的本地可运行G队列中偷取G，所有P存储一个全局切片中，为了随机性选择P来偷取，这就需要随机的访问数组。该算法具体叫什么，未找到相关文档。由于该算法实现上使用到素数和取模运算，姑且称之素数取模随机法。
+
+第二种方法使用算法Fisher–Yates shuffle，Go语言用它来随机性处理通道选择器select中case语句
+素数取模随机法 #
+该算法实现逻辑是：对于一个数组[n]T，随机的从小于n的素数集合中，选择一个素数，假定是p，接着从数组0到n-1位置中随机选择一个位置开始，假定是m，那么此时(m + p)%n = i位置处的数组元素就是我们要访问的第一个元素。第二次要访问的元素是(上一次位置+p)%n处元素，这里面就是(i+p)%n，以此类推，访问n次就可以访问完全部数组元素
+
+来自 `runtime/proc.go`
+
+
+```go
+
+
+
+// randomOrder/randomEnum are helper types for randomized work stealing.
+// They allow to enumerate all Ps in different pseudo-random orders without repetitions.
+// The algorithm is based on the fact that if we have X such that X and GOMAXPROCS
+// are coprime, then a sequences of (i + X) % GOMAXPROCS gives the required enumeration.
+type randomOrder struct {
+	count    uint32
+	coprimes []uint32
+}
+
+type randomEnum struct {
+	i     uint32
+	count uint32
+	pos   uint32
+	inc   uint32
+}
+
+
+func (ord *randomOrder) reset(count uint32) {
+	ord.count = count
+	ord.coprimes = ord.coprimes[:0]
+	for i := uint32(1); i <= count; i++ {
+		if gcd(i, count) == 1 {
+			ord.coprimes = append(ord.coprimes, i)
+		}
+	}
+}
+
+func (ord *randomOrder) start(i uint32) randomEnum {
+	return randomEnum{
+		count: ord.count,
+		pos:   i % ord.count,
+		inc:   ord.coprimes[i/ord.count%uint32(len(ord.coprimes))],
+	}
+}
+
+func (enum *randomEnum) done() bool {
+	return enum.i == enum.count
+}
+
+func (enum *randomEnum) next() {
+	enum.i++
+	enum.pos = (enum.pos + enum.inc) % enum.count
+}
+
+func (enum *randomEnum) position() uint32 {
+	return enum.pos
+}
+
+func gcd(a, b uint32) uint32 {
+	for b != 0 {
+		a, b = b, a%b
+	}
+	return a
+}
+
+func main() {
+	arr := [8]int{1, 2, 3, 4, 5, 6, 7, 8}
+	var order randomOrder
+	order.reset(uint32(len(arr)))
+
+	fmt.Println("====第一次随机遍历====")
+	for enum := order.start(rand.Uint32()); !enum.done(); enum.next() {
+		fmt.Println(arr[enum.position()])
+	}
+
+	fmt.Println("====第二次随机遍历====")
+	for enum := order.start(rand.Uint32()); !enum.done(); enum.next() {
+		fmt.Println(arr[enum.position()])
+	}
+}
+```
 
 
 
