@@ -168,6 +168,134 @@ MySQL uses indexes for these operations:
   When a query needs to access most of the rows, reading sequentially is faster than working through an index. 
   Sequential reads minimize disk seeks, even if not all the rows are needed for the query.
 
+## dict
+
+
+Data structure for an index.  Most fields will be
+initialized to 0, NULL or false in dict_mem_index_create().
+
+
+```c
+struct dict_index_t {
+  /** id of the index */
+  space_index_t id;
+
+  /** memory heap */
+  mem_heap_t *heap;
+
+  /** index name */
+  id_name_t name;
+
+  /** table name */
+  const char *table_name;
+
+  /** back pointer to table */
+  dict_table_t *table;
+
+  /** space where the index tree is placed */
+  unsigned space : 32;
+
+  /** index tree root page number */
+  unsigned page : 32;
+
+  /** In the pessimistic delete, if the page data size drops below this limit
+  in percent, merging it to a neighbor is tried */
+  unsigned merge_threshold : 6;
+
+  /** index type (DICT_CLUSTERED, DICT_UNIQUE, DICT_IBUF, DICT_CORRUPT) */
+  unsigned type : DICT_IT_BITS;
+
+  /** position of the trx id column in a clustered index record, if the fields
+  before it are known to be of a fixed size, 0 otherwise */
+  unsigned trx_id_offset : MAX_KEY_LENGTH_BITS;
+
+  // ...
+}
+```
+
+
+```c
+/** Builds a node pointer out of a physical record and a page number.
+ @return own: node pointer */
+dtuple_t *dict_index_build_node_ptr(const dict_index_t *index, /*!< in: index */
+                                    const rec_t *rec,  /*!< in: record for which
+                                                       to build node  pointer */
+                                    page_no_t page_no, /*!< in: page number to
+                                                       put in node pointer */
+                                    mem_heap_t *heap, /*!< in: memory heap where
+                                                      pointer created */
+                                    ulint level) /*!< in: level of rec in tree:
+                                                 0 means leaf level */
+{
+  dtuple_t *tuple;
+  dfield_t *field;
+  byte *buf;
+  ulint n_unique;
+
+  if (dict_index_is_ibuf(index)) {
+    /* In a universal index tree, we take the whole record as
+    the node pointer if the record is on the leaf level,
+    on non-leaf levels we remove the last field, which
+    contains the page number of the child page */
+
+    ut_a(!dict_table_is_comp(index->table));
+    n_unique = rec_get_n_fields_old_raw(rec);
+
+    if (level > 0) {
+      ut_a(n_unique > 1);
+      n_unique--;
+    }
+  } else {
+    n_unique = dict_index_get_n_unique_in_tree_nonleaf(index);
+  }
+
+  tuple = dtuple_create(heap, n_unique + 1);
+
+  /* When searching in the tree for the node pointer, we must not do
+  comparison on the last field, the page number field, as on upper
+  levels in the tree there may be identical node pointers with a
+  different page number; therefore, we set the n_fields_cmp to one
+  less: */
+
+  dtuple_set_n_fields_cmp(tuple, n_unique);
+
+  dict_index_copy_types(tuple, index, n_unique);
+
+  buf = static_cast<byte *>(mem_heap_alloc(heap, 4));
+
+  mach_write_to_4(buf, page_no);
+
+  field = dtuple_get_nth_field(tuple, n_unique);
+  dfield_set_data(field, buf, 4);
+
+  dtype_set(dfield_get_type(field), DATA_SYS_CHILD, DATA_NOT_NULL, 4);
+
+  rec_copy_prefix_to_dtuple(tuple, rec, index, n_unique, heap);
+  dtuple_set_info_bits(tuple,
+                       dtuple_get_info_bits(tuple) | REC_STATUS_NODE_PTR);
+
+  ut_ad(dtuple_check_typed(tuple));
+
+  return (tuple);
+}
+```
+
+secondary index
+
+leaf node
+
+non-leaf node
+
+
+InnoDB 二级索引的 Key 是二级索引字段 + 不在其中的主键字段
+为什么这么实现？一是支持非 unique 二级索引，二是支持 MVCC。两者的核心点其实都是：在二级索引 B+ 树上，二级索引字段不足以唯一标识一个 record，需要补充主键字段后才能唯一标识
+
+
+
+对于索引结构并发访问的处理，可以将索引整体作为一个数据项，应用事务系统的并发控制机制，例如基于 2PL、时间戳、MVCC 等机制。但是由于索引访问频繁，将成为锁竞争的集中点，导致系统低并发度。
+考虑到索引不必像其它数据项那样处理，对于事务而言，对一个索引查找两次，并在期间发现索引结构发生了变化，这是完全可以接受的，只要索引查找返回正确的数据项。因此只要维护索引的准确性，对索引进行非可串行化的并发调度是可接受的。
+
+
 
 ## Tuning
 
@@ -190,6 +318,8 @@ rocksDB的存储引擎
 -order by 不要乱用，尤其是对于分页表格，已经有了筛选项，就没必要按照分类排序了
 -不要给每个字段都创建一个单独索引，好多是被联合索引覆盖了，另外一些可能没有区分度
 -没有任何一条优化规则是可以解决所有问题的（否则就被引擎内置了），你能做的是了解原理，根据实际业务场景做出更优的选择
+
+
 
 
 ## Links
