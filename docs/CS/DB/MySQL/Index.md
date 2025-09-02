@@ -1,5 +1,9 @@
 ## Introduction
 
+
+
+## 理论
+
 A data structure that provides a fast lookup capability for **rows** of a **table**, typically by forming a tree structure (**B-tree)** representing all the values of a particular **column** or set of columns.
 
 InnoDB tables always have a **clustered index** representing the **primary key**. 
@@ -74,7 +78,7 @@ If the primary key is long, the secondary indexes use more space, so **it is adv
 
 
 
-### Physical Structure
+## Physical Structure
 
 With the exception of spatial indexes, InnoDB indexes are `B-tree` data structures. 
 Spatial indexes use `R-trees`, which are specialized data structures for indexing multi-dimensional data. 
