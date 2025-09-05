@@ -1,7 +1,5 @@
 ## Introduction
 
-
-
 在InnoDB 的实现中, btree 主要有两种lock: index lock 和 page lock
 
 index lock 就是整个Index 的lock, 具体在代码里面就是 dict_index->lock
