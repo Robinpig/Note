@@ -9,7 +9,13 @@ Arthas 是一款线上监控诊断产品，通过全局视角实时查看应用 
 
 java -jar 
 
-Bootstrap
+Bootstrap 类
+
+- 解析命令行参数
+- 选取目标进程号
+- 启动 arthas-core
+- 启动 arthas-client
+- 
 
 
 

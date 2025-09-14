@@ -113,9 +113,12 @@ Use gdb/lldb to debug
 
 ## Architecture
 
-The MySQL pluggable storage engine architecture enables a database professional to select a specialized storage engine for a particular application need while being completely shielded from the need to manage any specific application coding requirements.
-The MySQL server architecture isolates the application programmer and DBA from all of the low-level implementation details at the storage level, providing a consistent and easy application model and API.
-Thus, although there are different capabilities across different storage engines, the application is shielded from these differences.
+大体来说，MySQL 可以分为 Server 层和存储引擎层两部分
+
+Server 层包括连接器、查询缓存、分析器、优化器、执行器等，涵盖 MySQL 的大多数核心服务功能，以及所有的内置函数（如日期、时间、数学和加密函数等），所有跨存储引擎的功能都在这一层实现，比如存储过程、触发器、视图等。
+而存储引擎层负责数据的存储和提取。其架构模式是插件式的，支持 InnoDB、MyISAM、Memory 等多个存储引擎。现在最常用的存储引擎是 InnoDB，它从 MySQL 5.5.5 版本开始成为了默认存储引擎
+
+MySQL 可插拔存储引擎架构使数据库专业人员能够根据特定应用需求选择专用存储引擎，同时完全无需管理任何特定的应用程序编码要求。MySQL 服务器架构将应用程序程序员和 DBA 与存储级别的所有底层实现细节隔离开来，从而提供了一致且易于使用的应用程序模型和 API。因此，尽管不同存储引擎的功能有所不同，但应用程序可以免受这些差异的影响
 
 The MySQL pluggable storage engine architecture is shown in figure.
 
@@ -129,6 +132,9 @@ The MySQL pluggable storage engine architecture is shown in figure.
 Fig.1. MySQL Architecture with Pluggable Storage Engines.
 </p>
 
+
+
+
 ### Server Process
 
 - Caches
@@ -141,6 +147,18 @@ wait_timeout 8h
 mysql_reset_connection
 
 each thread per connection -> cache thread pool
+
+客户端如果太长时间没动静，连接器就会自动将它断开。这个时间是由参数 wait_timeout 控制的，默认值是 8 小时。
+如果在连接被断开之后，客户端再次发送请求的话，就会收到一个错误提醒： Lost connection to MySQL server during query
+
+但是全部使用长连接后，你可能会发现，有些时候 MySQL 占用内存涨得特别快，这是因为 MySQL 在执行过程中临时使用的内存是管理在连接对象里面的。这些资源会在连接断开的时候才释放。所以如果长连接累积下来，可能导致内存占用太大，被系统强行杀掉（OOM），从现象看就是 MySQL 异常重启了。
+怎么解决这个问题呢？你可以考虑以下两种方案。
+1. 定期断开长连接。使用一段时间，或者程序里面判断执行过一个占用内存的大查询后，断开连接，之后要查询再重连。
+2. 如果你用的是 MySQL 5.7 或更新版本，可以在每次执行一个比较大的操作后，通过执行 mysql_reset_connection 来重新初始化连接资源。这个过程不需要重连和重新做权限验证，但是会将连接恢复到刚刚创建完时的状态
+
+优化器是在表里面有多个索引的时候，决定使用哪个索引；或者在一个语句有多表关联（join）的时候，决定各个表的连接顺序
+
+
 
 ### Storage Engine
 
@@ -201,6 +219,10 @@ Each database has its own directory except information_schema.
 ### [File](/docs/CS/DB/MySQL/file.md)
 
 redo log prepare -> binlog write -> redo log commit
+
+redo log 和 binlog 都可以用于表示事务的提交状态，而两阶段提交就是让这两个状态保持逻辑上的一致
+
+
 
 ## Character Sets, Collations, Unicode
 
