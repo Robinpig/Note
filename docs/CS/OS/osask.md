@@ -8,7 +8,7 @@
 
 下载 [bz](https://vcraft.jp/soft/bz.html)
 
-
+软盘方式已经不适用于现在的大部分PC机
 
 
 
