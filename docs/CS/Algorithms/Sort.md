@@ -144,18 +144,11 @@ The worst case is `N^2/2` compares and `N^2/2` exchanges and the best case is N 
 The number of exchanges used by insertion sort is equal to the number of inversions in the array,
 and the number of compares is at least equal to the number of inversions and at most equal to the number of inversions plus the array size minus 1.
 
-## Shell Sort
 
-Shell sort (also called diminishing increment sort) was invented by Donald Shell.
-This sorting algorithm is a generalization of insertion sort. Insertion sort works efficiently on input that is already almost sorted.
-Shell sort is also known as n-gap insertion sort.
-Instead of comparing only the adjacent pair, shell sort makes several passes and uses various gaps between adjacent elements (ending with the gap of 1 or classical insertion sort).
-In insertion sort, comparisons are made between the adjacent elements.
-At most 1 inversion is eliminated for each comparison done with insertion sort.
-The variation used in shell sort is to avoid comparing adjacent elements until the last step of the algorithm.
-So, the last step of shell sort is effectively the insertion sort algorithm.
-It improves insertion sort by allowing the comparison and exchange of elements that are far away.
-This is the first algorithm which got less than quadratic complexity among comparison sort algorithms.
+
+
+
+
 
 ## Heap Sort
 
@@ -297,6 +290,19 @@ Can we have the best of both worlds? Is there a simple and lightweight way to ch
 > For every input array of length n $ 1, the average running time of randomized QuickSort is $O(nlogn)$.
 
 The algorithm doesn’t spend time allocating and managing additional memory (unlike [MergeSort](/docs/CS/Algorithms/Sort.md?id=MergeSort)).
+
+## Shell Sort
+
+Shell sort (also called diminishing increment sort) was invented by Donald Shell.
+This sorting algorithm is a generalization of insertion sort. Insertion sort works efficiently on input that is already almost sorted.
+Shell sort is also known as n-gap insertion sort.
+Instead of comparing only the adjacent pair, shell sort makes several passes and uses various gaps between adjacent elements (ending with the gap of 1 or classical insertion sort).
+In insertion sort, comparisons are made between the adjacent elements.
+At most 1 inversion is eliminated for each comparison done with insertion sort.
+The variation used in shell sort is to avoid comparing adjacent elements until the last step of the algorithm.
+So, the last step of shell sort is effectively the insertion sort algorithm.
+It improves insertion sort by allowing the comparison and exchange of elements that are far away.
+This is the first algorithm which got less than quadratic complexity among comparison sort algorithms.
 
 
 
