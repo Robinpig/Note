@@ -1,12 +1,12 @@
 ## Introduction
 
-
-
 go 源代码首先要通过 go build 编译为可执行文件，在 linux 平台上为 ELF 格式的可执行文件，编译阶段会经过编译器、汇编器、链接器三个过程最终生成可执行文件。
 
-1. 编译器：.go 源码通过 go 编译器生成为 .s 的 plan9 汇编代码，Go 编译器入口是 compile/internal/gc/main.go 文件的 main 函数；
+1. 编译器：.go 源码通过 go 编译器生成为 .s 的 plan9 汇编代码，Go 编译器入口是 `src/compile/internal/gc/main.go` 文件的 main 函数；
 2. 汇编器：通过 go 汇编器将编译器生成的 .s 汇编语言转换为机器代码，并写出最终的目标程序 .o 文件，src/cmd/internal/obj 包实现了go汇编器；
 3. 链接器：汇编器生成的一个个 *.o 目标文件通过链接处理得到最终的可执行程序，src/cmd/link/internal/ld 包实现了链接器；
+
+Go 语言编译器的源代码在 `src/cmd/compile` 目录中，目录下的文件共同组成了 Go 语言的编译器
 
 
 
@@ -36,7 +36,7 @@ CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build
 
 可以通过 `-x` 和 `--work` 查看编译的详细过程
 
-
+Go 的编译阶段:
 
 - Lexical Analysis
 - Syntax Analysis
@@ -135,6 +135,23 @@ Go语言编译器会计算函数内联花费的成本，只有执行相对简单
 如果希望程序中所有的函数都不执行内联操作，那么可以添加编译器选项-l 
 在调试时，可以获取当前函数是否可以内联，以及不可以内联的原因 
 
+## type check
+
+当拿到一组文件的抽象语法树之后，Go 语言的编译器会对语法树中定义和使用的类型进行检查，类型检查会按照以下的顺序分别验证和处理不同类型的节点：
+
+1. 常量、类型和函数名及类型；
+2. 变量的赋值和初始化；
+3. 函数和闭包的主体；
+4. 哈希键值对的类型；
+5. 导入函数体；
+6. 外部的声明；
+
+通过对整棵抽象语法树的遍历，我们在每个节点上都会对当前子树的类型进行验证，以保证节点不存在类型错误，所有的类型错误和不匹配都会在这一个阶段被暴露出来，其中包括：结构体对接口的实现。
+
+类型检查阶段不止会对节点的类型进行验证，还会展开和改写一些内建的函数，例如 make 关键字在这个阶段会根据子树的结构被替换成 [`runtime.makeslice`](https://draven.co/golang/tree/runtime.makeslice) 或者 [`runtime.makechan`](https://draven.co/golang/tree/runtime.makechan) 等函数
+
+
+
 ## escape
 
 逃逸分析是Go语言中重要的优化阶段，用于标识变量内存应该被分配在栈区还是堆区。
@@ -175,10 +192,20 @@ SSA生成阶段是编译器进行后续优化的保证，例如常量传播（Co
 大部分与SSA相关的代码位于ssa/文件夹中，但是将抽象语法树转换为SSA的逻辑位于gc/ssa.go文件中。在ssa/README.md文件中，有对SSA生成阶段比较详细的描述。
 Go语言提供了强有力的工具查看SSA初始及其后续优化阶段生成的代码片段，可以通过在编译时指定GOSSAFUNC=main实现
 
+编译器会通过 [`cmd/compile/internal/gc.compileFunctions`](https://draven.co/golang/tree/cmd/compile/internal/gc.compileFunctions) 编译整个 Go 语言项目中的全部函数，这些函数会在一个编译队列中等待几个 Goroutine 的消费，并发执行的 Goroutine 会将所有函数对应的抽象语法树转换成中间代码
+
+
+
+
+
 
 `go build -gcflags -S main.go` 查看 Plan9 汇编代码
 
 
+
+## 机器码生成
+
+Go 语言源代码的 [`src/cmd/compile/internal`](https://github.com/golang/go/tree/master/src/cmd/compile/internal) 目录中包含了很多机器码生成相关的包，不同类型的 CPU 分别使用了不同的包生成机器码
 
 
 
