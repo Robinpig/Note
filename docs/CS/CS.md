@@ -40,16 +40,17 @@ Cloud native technologies and architectures typically consist of some combinatio
 ## Programming Languages
 
 
-| Programming Language                | Compile Type | Memory Management | Func Call |
-| ----------------------------------- | ------------ | ----------------- | --------- |
-| [C](/docs/CS/C/C.md)                |              |                   | Register  |
-| [C++](/docs/CS/C++/C++.md)          |              |                   |           |
-| [Golang](/docs/CS/Go/Go.md)         |              | GC                | Stack     |
-| [Java](/docs/CS/Java/JDK/JDK.md)    |              | GC                | Stack     |
-| [Python](/docs/CS/Python/Python.md) |              | GC                |           |
-| [Rust](/docs/CS/Rust/Rust.md)       |              |                   |           |
-| [Scala](/docs/CS/Scala/Scala.md)    |              |                   |           |
-| [Flutter](/docs/CS/Flutter.md)      |              |                   |           |
+| Programming Language                      | Compile Type | Memory Management | Func Call |
+|-------------------------------------------|--------------|-------------------|-----------|
+| [C](/docs/CS/C/C.md)                      |              |                   | Register  |
+| [C++](/docs/CS/C++/C++.md)                |              |                   |           |
+| [Golang](/docs/CS/Go/Go.md)               |              | GC                | Stack     |
+| [Java](/docs/CS/Java/JDK/JDK.md)          |              | GC                | Stack     |
+| [Python](/docs/CS/Python/Python.md)       |              | GC                |           |
+| [Rust](/docs/CS/Rust/Rust.md)             |              |                   |           |
+| [Scala](/docs/CS/Scala/Scala.md)          |              |                   |           |
+| [Flutter](/docs/CS/Flutter.md)            |              |                   |           |
+| [Assembly](/docs/CS/assembly/assembly.md) |              |                   |           |
 
 不同语言的函数调用耗时有较大差异
 

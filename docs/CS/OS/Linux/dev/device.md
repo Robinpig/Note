@@ -1,5 +1,10 @@
 ## Introduction
 
+
+Linux内核主要包括三种驱动模型，字符设备驱动，块设备驱动以及网络设备驱动
+
+
+
 内核使用了大量不同的宏来标记具有不同作用的函数和数据结构。如宏__init 、__devinit 等
 这些宏在include/linux/init.h 头文件中定义
 - __init

@@ -64,17 +64,6 @@ We will go through many of them and you will be in a position to relate the data
 
 [Arrays and Linked Lists](/docs/CS/Algorithms/linked-list.md)
 
-One of the basic rules concerning programming is that no routine should ever exceed a page.
-This is accomplished by breaking the program down into modules. Each module is a logical unit and does a specific job.
-Its size is kept small by calling other modules. Modularity has several advantages.
-
-- First, it is much easier to debug small routines than large routines.
-- Second, it is easier for several people to work on a modular program simultaneously.
-- Third, a well-written modular program places certain dependencies in only one routine, making changes easier.
-
-For instance, if output needs to be written in a certain format, it is certainly important to have one routine to do this.
-If printing statements are scattered throughout the program, it will take considerably longer to make modifications.
-The idea that global variables and side effects are bad is directly attributable to the idea that modularity is good.
 
 We introduce [hash tables](/docs/CS/Algorithms/hash.md), a widely used data structure supporting the dictionary operations INSERT, DELETE, and SEARCH.
 In the worst case, hash tables require Θ(n) time to perform a SEARCH operation, but the expected time for hash-table operations is $O(1)$.
