@@ -55,8 +55,6 @@ Traits
 
 
 
-[compile](/docs/CS/Go/compile.md)
-
 
 goroutine
 
@@ -104,6 +102,14 @@ add path
 ### Upgrade
 
  删除旧版本 安装新版本
+
+
+
+## Compile
+
+Go 语言是一门需要编译才能运行的编程语言，也就是说代码在运行之前需要通过编译器生成二进制机器码，包含二进制机器码的文件才能在目标机器上运行
+
+[Go 语言编译过程](/docs/CS/Go/compile.md)
 
 
 
