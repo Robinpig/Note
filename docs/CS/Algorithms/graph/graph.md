@@ -1,12 +1,12 @@
 ## Introduction
 
-
-
 图（graph）是一种非线性数据结构，由顶点（vertex）和边（edge）组成。我们可以将图 G 抽象地表示为一组顶点 V 和一组边 E 的集合
 
 常用 `G=(V,E)` 表示图
 
-根据边是否具有方向，可分为无向图（undirected graph）和有向图（directed graph），如图 9-2 所示。
+### 图分类
+
+根据边是否具有方向，可分为无向图（undirected graph）和有向图（directed graph
 
 - 在无向图中，边表示两顶点之间的“双向”连接关系，例如微信或 QQ 中的“好友关系”。
 - 在有向图中，边具有方向性，即 A→B 和 A←B 两个方向的边是相互独立的，例如微博或抖音上的“关注”与“被关注”关系
@@ -16,6 +16,10 @@
 根据所有顶点是否连通，可分为连通图（connected graph）和非连通图（disconnected graph）对于连通图，从某个顶点出发，可以到达其余任意顶点
 
 可以为边添加“权重”变量，从而得到如图 9-4 所示的有权图（weighted graph）
+
+
+
+### 图结构
 
 图数据结构包含以下常用术语
 
@@ -84,11 +88,45 @@ If the graph is  *sparse* , a better solution is an *adjacency list* representat
 
 ### Dijkstra's Algorithm
 
+
+
+Dijkstra 算法是用于计算一个顶点到其它顶点的最短路径算法 
+
+基本思想是: 设置两个顶点集 S 和 T, S 中存放已确定最短路径的顶点, T 中存放待确定最短路径的顶点
+
+初始时 S 中仅有一个起始的节点, T 中包含除起始顶点之外的其余顶点
+
+
+
+Dijkstra 是一种贪心算法 每一步都做出局部最优的选择 最终达到全局最优的结果 该算法只适用于权重非负的图 如果图中包含负权重的边 Dijkstra 可能无法正确计算最短路径 在包含负权重的情况下 通常使用 `Bellman-Ford` 算法
+
+
+
+
+
+
+
+全点对最短路径算法用于计算图中所有顶点两两之间的最短路径 常见算法有 `Floyd-Warshall` 算法和 `Jonson's` 算法
+
+`Floyd-Warshall` 算法适用于稠密图 时间复杂度为 $O(V^3)$ 核心思想为动态规划
+
+`Jonson's` 算法适用于稀疏图 时间复杂度近似为 $O(V^3logV+VE)$ 是Dijkstra算法的变种 利用重新加权的技巧 允许在可能存在负权重边的图上使用 Dijkstra 算法
+
+
+
+
+
 ## Minimum Spanning Tree
 
 最小生成树
 
 
+
+中心性算法
+
+
+
+用于衡量图中顶点重要程度和影响力的算法
 
 
 
