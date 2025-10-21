@@ -1,8 +1,6 @@
 ## Introduction
 
-[MySQL Server](https://www.mysql.com/), the world's most popular open source database, and MySQL Cluster, a real-time, open source transactional database.
-
-
+[MySQL Server](https://www.mysql.com/), the world's most popular open source database, and MySQL Cluster, a real-time, open source **transactional** database.
 
 ## Installing MySQL
 
@@ -12,10 +10,10 @@
 
 [Installing and Upgrading MySQL](https://dev.mysql.com/doc/refman/8.0/en/installing.html)
 
-
 MySQL 8.4 的 "mysql_native_password is not loaded" 插件未加载错误
 
 Windows修改my.ini文件
+
 ```
 [mysqld]
 mysql_native_password=ON
@@ -26,7 +24,6 @@ ALTER USER 'your_username'@'your_hostname' IDENTIFIED WITH mysql_native_password
 
 FLUSH PRIVILEGES;
 ```
-
 
 ##### **Docker**
 
@@ -41,15 +38,11 @@ docker run --name test-mysql -e MYSQL_ROOT_PASSWORD=123456 -p 3306:3306 -d mysql
 
 <!-- tabs:end -->
 
-
-
 **Build from source**
 
 <!-- tabs:start -->
 
 Download source file and  unzip
-
-
 
 ##### **Ubuntu**
 
@@ -73,8 +66,6 @@ cmake -DDOWNLOAD_BOOST=1 -DWITH_BOOST=./boost -DCMAKE_BUILD_TYPE=Debug -DWITH_DE
 sudo make && make install
 ```
 
-
-
 Init
 
 ```shell
@@ -83,8 +74,6 @@ Init
 # run
 ./bin/mysqld --datadir=./data
 ```
-
-
 
 <!-- tabs:end -->
 
@@ -99,26 +88,19 @@ mysqld --verbose --help | grep -A 1 "Default options"
 
 ```
 
-
-
-
-
-
-
 Use gdb/lldb to debug
-
-
-
-
 
 ## Architecture
 
 大体来说，MySQL 可以分为 Server 层和存储引擎层两部分
 
-Server 层包括连接器、查询缓存、分析器、优化器、执行器等，涵盖 MySQL 的大多数核心服务功能，以及所有的内置函数（如日期、时间、数学和加密函数等），所有跨存储引擎的功能都在这一层实现，比如存储过程、触发器、视图等。
-而存储引擎层负责数据的存储和提取。其架构模式是插件式的，支持 InnoDB、MyISAM、Memory 等多个存储引擎。现在最常用的存储引擎是 InnoDB，它从 MySQL 5.5.5 版本开始成为了默认存储引擎
+Server 层包括连接器、查询缓存、分析器、优化器、执行器等，涵盖 MySQL 的大多数核心服务功能，以及所有的内置函数（如日期、时间、数学和加密函数等），所有跨存储引擎的功能都在这一层实现，比如存储过程、触发器、视图等
+而存储引擎层负责数据的存储和提取。其架构模式是插件式的，支持 InnoDB、MyISAM、Memory 等多个存储引擎
+现在最常用的存储引擎是 InnoDB，它从 MySQL 5.5.5 版本开始成为了默认存储引擎
 
-MySQL 可插拔存储引擎架构使数据库专业人员能够根据特定应用需求选择专用存储引擎，同时完全无需管理任何特定的应用程序编码要求。MySQL 服务器架构将应用程序程序员和 DBA 与存储级别的所有底层实现细节隔离开来，从而提供了一致且易于使用的应用程序模型和 API。因此，尽管不同存储引擎的功能有所不同，但应用程序可以免受这些差异的影响
+MySQL 可插拔存储引擎架构使数据库专业人员能够根据特定应用需求选择专用存储引擎，同时完全无需管理任何特定的应用程序编码要求
+MySQL 服务器架构将应用程序程序员和 DBA 与存储级别的所有底层实现细节隔离开来，从而提供了一致且易于使用的应用程序模型和 API
+因此，尽管不同存储引擎的功能有所不同，但应用程序可以免受这些差异的影响
 
 The MySQL pluggable storage engine architecture is shown in figure.
 
@@ -131,9 +113,6 @@ The MySQL pluggable storage engine architecture is shown in figure.
 <p style="text-align: center;">
 Fig.1. MySQL Architecture with Pluggable Storage Engines.
 </p>
-
-
-
 
 ### Server Process
 
@@ -153,12 +132,11 @@ each thread per connection -> cache thread pool
 
 但是全部使用长连接后，你可能会发现，有些时候 MySQL 占用内存涨得特别快，这是因为 MySQL 在执行过程中临时使用的内存是管理在连接对象里面的。这些资源会在连接断开的时候才释放。所以如果长连接累积下来，可能导致内存占用太大，被系统强行杀掉（OOM），从现象看就是 MySQL 异常重启了。
 怎么解决这个问题呢？你可以考虑以下两种方案。
+
 1. 定期断开长连接。使用一段时间，或者程序里面判断执行过一个占用内存的大查询后，断开连接，之后要查询再重连。
 2. 如果你用的是 MySQL 5.7 或更新版本，可以在每次执行一个比较大的操作后，通过执行 mysql_reset_connection 来重新初始化连接资源。这个过程不需要重连和重新做权限验证，但是会将连接恢复到刚刚创建完时的状态
 
 优化器是在表里面有多个索引的时候，决定使用哪个索引；或者在一个语句有多表关联（join）的时候，决定各个表的连接顺序
-
-
 
 ### Storage Engine
 
@@ -222,8 +200,6 @@ redo log prepare -> binlog write -> redo log commit
 
 redo log 和 binlog 都可以用于表示事务的提交状态，而两阶段提交就是让这两个状态保持逻辑上的一致
 
-
-
 ## Character Sets, Collations, Unicode
 
 MySQL includes character set support that enables you to store data using a variety of character sets and perform comparisons according to a variety of collations.
@@ -245,13 +221,12 @@ mysql>SHOW VARIABLES LIKE '%CHARACTER%';
 | character_set_system     | utf8                         |
 | character_sets_dir       | /usr/share/mariadb/charsets/ |
 
-
 ```sql
 SHOW TABLE STATUS LIKE 'TABLE_NAME';
 ```
+
 - Rows(approximate)
 - Data Length(Cluster)
-
 
 ## Partitioning
 
@@ -339,7 +314,6 @@ In fact, in addition to allowing writes to be delayed, caching can permit them t
 ## Links
 
 - [DataBases](/docs/CS/DB/DB.md?id=MySQL)
-
 
 ## References
 

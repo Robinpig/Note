@@ -15,9 +15,21 @@ This makes radix trees much more efficient for small sets (especially if the str
 
 
 
+基数树是对字典树的压缩，因此基本操作和字典树基本一致，只是多了节点的合并和分裂操作
 
 
 
+
+
+
+
+
+
+golang web 框架 gin 在 route 搜索上使用了该数据结构
+
+
+
+Linux 的基数树实现在 `lib/radix-tree.c` 中，Linux 并不是对一个字符串进行存储，而是一个无符号长整型名为 index 的值
 
 
 

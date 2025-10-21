@@ -154,6 +154,16 @@ In an ordinary sorted linked list, search, insert, and delete are in $O(n)$ beca
 If somehow we could scan down the list in bigger steps (skip down, as it were), we would reduce the cost of scanning.
 This is the fundamental idea behind Skip Lists.
 
+
+常见的一些题目
+
+单链表反转
+链表中环的检测    
+两个有序的链表合并  
+删除链表倒数第n个结点  
+求链表的中间结点
+
+
 ## Links
 
 - [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures)

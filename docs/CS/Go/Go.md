@@ -55,8 +55,6 @@ Traits
 
 
 
-[compile](/docs/CS/Go/compile.md)
-
 除了 Go 语言实现的 gc 外，Go 官方还维护了一个基于 gcc 实现的 Go 编译器 gccgo。与 gc 相比，gccgo 编译速度较慢，但支持更强大的优化，
 因此由 gccgo 构建的 CPU 密集型(CPU-bound)程序通常会运行得更快。此外 gccgo 比 gc 支持更多的操作系统，如果交叉编译gc不支持的操作系统，可以考虑使用gccgo
 
@@ -106,6 +104,14 @@ add path
 ### Upgrade
 
  删除旧版本 安装新版本
+
+
+
+## Compile
+
+Go 语言是一门需要编译才能运行的编程语言，也就是说代码在运行之前需要通过编译器生成二进制机器码，包含二进制机器码的文件才能在目标机器上运行
+
+[Go 语言编译过程](/docs/CS/Go/compile.md)
 
 
 

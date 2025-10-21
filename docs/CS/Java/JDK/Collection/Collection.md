@@ -201,7 +201,8 @@ This method acts as bridge between array-based and collection-based APIs, in com
 This method also provides a convenient way to create a fixed-size list initialized to contain several elements:
 List<String> stooges = Arrays.asList("Larry", "Moe", "Curly");
 
-```java
+
+```Java
 public static <T> List<T> asList(T... a) {
     return new ArrayList<>(a);
 }
@@ -233,6 +234,9 @@ ArrayList(E[] array) {
 ## Collections
 
 ### sort
+
+在 Java 7 之前，Arrays.sort()使用的是 归并排序算法。从 Java 7 开始使用的是 TimSort 算法
+
 
 ```java
 //Collections.java
