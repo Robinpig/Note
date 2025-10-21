@@ -124,6 +124,17 @@ to the lifetime of an object.
 ## Initialization
 
 
+
+
+c++ 的std::sort是内省排序：
+
+1. 大部分情况下是快排，三数中值法选pivot
+
+2. 当快排的递归深度超过阈值时转为堆排序
+
+3. 当子区间长度小于阈值时，直接使用插入排序
+
+
 ## Concurrency
 
 [Concurrency](/docs/CS/C++/Concurrency.md)

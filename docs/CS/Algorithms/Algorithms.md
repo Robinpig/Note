@@ -177,6 +177,9 @@ However. it should be borne in mind that the algorithm with the best worst-case 
 In theoretical analysis of algorithms it is common to estimate their complexity in the asymptotic sense, i.e., to estimate the complexity function for arbitrarily large input.
 Big O notation, Big-omega notation and Big-theta notation are used to this end.
 
+
+O-notation characterizes an upper bound on the asymptotic behavior of a function. In other words, it says that a function grows no faster than a certain rate, based on the highest-order term.
+
 An abstract data type (ADT) is a data type that is organized in such a way that the specification of the objects and the specification of the operations on the objects is separated from the representation of the objects and the implementation of the operations.
 
 > An algorithm is efficient if its running time is polynomial.
