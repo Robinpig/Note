@@ -1,6 +1,6 @@
 ## Introduction
 
-[nginx [engine x]](https://nginx.org/en/) is an HTTP and reverse proxy server, a mail proxy server, and a generic TCP/UDP proxy server, originally written by Igor Sysoev.
+[nginx [engine x]](https://nginx.org/en/) is an HTTP and reverse proxy server, a mail proxy server, and a generic TCP/UDP proxy server, originally written by `Igor Sysoev`.
 
 
 
@@ -11,12 +11,28 @@ nginx 的竞品有 Lighttpd
 nignx 的特点
 
 - fast
+- 单机支持10w+ 并发连接
+- 低内存消耗
 - 高扩展性
 - 高可靠性
-- 低内存消耗
-- 单机支持10w+ 并发连接
 - 热部署
 
+
+Tengine
+
+OpenResty
+
+
+
+
+## Tutorial
+
+主要组成部分
+
+- 二进制可执行文件
+- nginx.conf 配置文件
+- access.log 访问日志
+- error.log 错误日志
 
 ### Install
 
@@ -121,7 +137,7 @@ make && make install
 
 
 
-configure 执行成功后会生成objs目录 在该目录下生成 ngx_modules.c 和 Makefile 等文件
+configure 执行成功后会生成 objs 目录 在该目录下生成 ngx_modules.c 和 Makefile 等文件
 
 ngx_modules.c 文件就是用来定义 ngx_modules 数组的 不需要的模块不会加入 ngx_modules 数组 也不会编译进nginx
 
