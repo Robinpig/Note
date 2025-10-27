@@ -69,6 +69,18 @@ When multiple consumers read messages in the same topic, two main patterns of me
 
 The two patterns can be combined: for example, two separate groups of consumers may each subscribe to a topic, such that each group collectively receives all messages, but within each group only one of the nodes receives each message.
 
+## Protocols
+
+从功能支持、迭代速度、灵活性上考虑 大多数消息队列的核心通信协议都会选择自定义的私有协议
+
+私有协议的设计
+
+- 为了保证性能和可靠性 几乎所有主流消息队列在核心生产、消费链路的网络通信协议都是基于可靠性高、长连接的 [TCP](/docs/CS/CN/TCP/TCP.md) 协议
+- 应用通信协议分为请求和返回两种 协议包含协议头和协议体两部分
+- 编解码在实现上分为自定义实现和使用现有的编解码框架两种 从零实现编解码器比较复杂 一些消息队列（如 RocketMQ5.0 和 Pulsar) 开始使用业界成熟的编解码器 如 Google 的 [ProtocolBuffer](/docs//CS/Distributed/RPC/ProtoBuf.md)
+
+
+
 ## Partitioned Logs
 
 A [log](/docs/CS/log/Log.md) is simply an append-only sequence of records on disk.
