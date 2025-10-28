@@ -80,6 +80,18 @@ The two patterns can be combined: for example, two separate groups of consumers 
 - 编解码在实现上分为自定义实现和使用现有的编解码框架两种 从零实现编解码器比较复杂 一些消息队列（如 RocketMQ5.0 和 Pulsar) 开始使用业界成熟的编解码器 如 Google 的 [ProtocolBuffer](/docs//CS/Distributed/RPC/ProtoBuf.md)
 
 
+## Network
+
+基于 IO 多路复用技术和 Reactor 模型，可以解决网络模块的性能问题
+
+网络模块的特点是编码非常复杂，要考虑的细节
+和边界条件非常多，一些异常情况的处理也很细节，需要经过长时间的打磨。但是一旦开发完
+成，稳定后，代码几乎不需要再改动，因为需求是相对固定的
+而 Java NIO 库开发一个 Server 需要的工作量非常大
+为了提高稳定性或者降低成本，选择现成的、成熟的 NIO 框
+架是一个更好的方案
+Netty 就是这样一个基于 Java NIO 封装的成熟框架 当前业界主流消息队列 RocketMQ、Pulsar 也都是基于 Netty 开发
+的网络模块，Kafka 因为历史原因是基于 Java NIO 实现的
 
 ## Partitioned Logs
 
@@ -532,6 +544,8 @@ The Cons of Using RabbitMQ:
 
 [Pulsar](/docs/CS/MQ/Pulsar/Pulsar.md) is a distributed pub-sub messaging platform with a very flexible messaging model and an intuitive client API.
 
+
+下一代消息队列 RobustMQ
 
 
 ### Comparison
