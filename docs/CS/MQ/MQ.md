@@ -487,9 +487,17 @@ Kafka partition -> queue -> thread
 - 从需求发展路径上看，消息队列的发展趋势是：消息 -> 流 -> 消息和流融合
 - 从架构发展的角度来看，消息队列的发展趋势是：单机 -> 分布式 -> 云原生/Serverless
 
+消息、流分开来看都比较好理解。
 
+- 消息就是业务消息，在业务架构（比如微服务架构）中用来作消息传递，做系统的消息总线，比如用户提交订单的流程。
 
+- 流，就是在大数据架构中用来做大流量时的数据削峰，比如日志的投递流转
 
+消息和流融合就是这两个事情都能做。不过为什么会有消息和流融合的这个趋势呢
+
+其实都是钱的原因。虽然消息队列是基础组件，但是功能比较单一，主要是缓冲作用，在消息、流的方向上，功能需求一直是相对固定的，细分的市场也都有领头组件，流领域目前是Kafka 一家独大，消息领域的头部玩家，国外是 RabbitMQ，国内是 RocketMQ  
+
+当前开源社区用的较多的消息队列主要有 RabbitMQ、Kafka，RocketMQ 和Pulsar 四款  
 
 When the message sending and consumption ends coexist, the increasing number of topics will cause a drastic decline of Kafka's throughput, while Apache RocketMQ delivers a stable performance.
 Therefore, Kafka is more suitable for business scenarios with only a few topics and consumption ends, while Apache RocketMQ is a better choice for business scenarios with multiple topics and consumption ends.
