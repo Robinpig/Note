@@ -40,7 +40,8 @@ By choosing different values of 𝑝, it is possible to trade search costs again
 skiplist 相比 balanced trees的优势
 
 For many applications, skip lists are a more natural representation than trees, also leading to simpler algorithms.
-The simplicity of skip list algorithms makes them easier to implement and provides significant constant factor speed improvements over balanced tree and self-adjusting tree algorithms. Skip lists are also very space efficient.
+The simplicity of skip list algorithms makes them easier to implement and provides significant constant factor speed improvements over balanced tree and self-adjusting tree algorithms.
+Skip lists are also very space efficient.
 They can easily be configured to require an average of 1 1/3 pointers per element (or even less) and do not require balance or priority information to be stored with each node.
 建议同时设置一个 MaxLevel
 

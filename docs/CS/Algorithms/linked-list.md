@@ -45,6 +45,18 @@ Similarly, reduce the array size to half if the elements in the array are less t
 
 Note: We will see the implementation for dynamic arrays in the Stacks, Queues and Hashing chapters.
 
+
+
+## Bisection method
+
+二分法的基本思想是通过不断将区间一分为二，逐步缩小查找范围，从而找到目标值或近似解
+
+
+
+
+
+
+
 ## Linked Lists Overview
 
 A linked list is a data structure used for storing collections of data A linked list has the following properties.

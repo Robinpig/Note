@@ -884,6 +884,49 @@ At present, this is a new area of research, but it is worth keeping an eye on in
 LevelDB is a widely used key-value store based on [LSMtrees](/docs/CS/Algorithms/tree/LSM.md) that is inspired by [BigTable](/docs/CS/Distributed/Bigtable.md).
 LevelDB supports range queries, snapshots, and other features that are useful in modern applications.
 
+
+### Column Store
+
+
+### Document Store
+
+### Graph
+
+图数据库是一种专门用于存储和查询图形数据的数据库。它们在处理复杂关系和连接方面表现出色，适用于社交网络、推荐系统、知识图谱等应用场景
+
+
+| 对比     | 图数据库  | 关系型数据库 |
+|--------|-------|--------|
+| 理论基础   | 图论    | 关系模型   |
+| 数据存储方式 | 顶点    | 二维表    |
+| 关系存储方式 | 边     | 主键、外键  |
+| 关系查询方式 | 图查询语言 | 表连接    |
+| 关系查询速度 | 快     | 慢      |
+
+
+#### Neo4j
+
+Neo4j 是目前最流行的属性图数据库，具有“无索引邻接”的特性，即每个顶点维护着指向其邻接顶点的直接引用。
+这使得图导航操作的代价与图的大小无关，仅与图的遍历范围成正比。Neo4j 支持 Cypher 查询语言，适用于需要高效图遍历和查询的场景。
+
+#### JanusGraph
+
+JanusGraph 是一个开源的分布式图数据库，支持多种存储后端，如 Cassandra、HBase 和 BerkeleyDB。
+它借助第三方分布式索引库 ElasticSearch、Solr 和 Lucene 实现快速检索功能。JanusGraph 适用于需要分布式存储和高可用性的场景。
+
+#### Dgraph
+
+Dgraph 是一个分布式图数据库，使用 Go 语言开发，支持 GraphQL 查询语言。
+它对图的多跳遍历进行了深度优化，适用于需要高性能图查询的场景。
+
+#### NebulaGraph
+
+NebulaGraph 是一款开源的分布式图数据库，擅长处理超大规模数据集，同时保持毫秒级查询延时。
+它采用原生分布式结构，使用 Raft 协议保证数据一致性，支持 openCypher 查询语言。NebulaGraph 适用于需要处理大规模数据和高并发查询的场景
+
+
+
+
 ## Indexes
 
 [Indexes](/docs/CS/DB/Index.md)
