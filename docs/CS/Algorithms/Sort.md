@@ -441,6 +441,17 @@ Sorts that cannot be performed in main memory and must be done on disk or tape a
 
 Merging is the central idea of external sorts.
 
+外部排序的步骤:
+
+- 部分排序 根据内存大小 将待排序的文件拆成多个部分 选择合适的内排序算法对这些文件 输出到外部临时文件中
+- 归并阶段 对这些排序后的文件进行多路归并 当存储不足时可以分多次归并
+
+相比于内部排序 外部排序有个较大的时间消耗在IO上 归并阶段时每次归并都是遍历全部的文件 为了减少IO次数 可以通过增加更多的归并路数, 从而降低归并层数
+
+构建二叉堆记录出最近
+
+
+
 ### Multiway Merge
 
 ## Others

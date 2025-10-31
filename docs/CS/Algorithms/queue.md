@@ -85,6 +85,26 @@ Initially, both front and rear points to -1 which indicates that the queue is em
 The maximum size of the queue must be defined as prior and cannot be changed. Trying to EnQueue a new element into a full queue causes an implementation-specific exception.
 
 
+
+## Doubly End Queue
+
+双端队列是支持在头尾两端进行pop和push操作
+
+
+
+
+
+## Deque
+
+
+
+
+
+
+
+
+
+
 ## Links
 
 - [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures)

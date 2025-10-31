@@ -24,7 +24,6 @@ The pattern occurs only once in the text, at shift s = 3, which is a valid shift
 <br/>
 A vertical line connects each character of the pattern to its matching character in the text, and all matched characters are shaded blue.
 </p>
-
 Except for the naive brute-force algorithm, each string-matching algorithm in this chapter performs some preprocessing based on the pattern and then finds all valid shifts.
 We call this latter phase “matching.”
 Here are the preprocessing and matching times for each of the string-matching algorithms.
@@ -201,6 +200,10 @@ public class KMPSearch {
 ```
 
 ## BM
+
+Boyer Moore算法是目前已知的在大多数工业级应用场景中最快的字符串匹配算法，因而被广泛应用在各种需要搜索关键词的软件中，GNU grep, 许多文档编辑器快捷键 ctrl+f 对应的搜索功能都是基于这个算法实现的
+
+
 
 ## BMH
 
