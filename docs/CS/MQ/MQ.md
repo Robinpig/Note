@@ -93,6 +93,24 @@ The two patterns can be combined: for example, two separate groups of consumers 
 Netty 就是这样一个基于 Java NIO 封装的成熟框架 当前业界主流消息队列 RocketMQ、Pulsar 也都是基于 Netty 开发
 的网络模块，Kafka 因为历史原因是基于 Java NIO 实现的
 
+## Storage
+
+消息队列中的数据一般分为元数据和消息数据  
+
+元数据信息的特点是数据量比较小，不会经常读写，但是需要保证数据的强一致和高可靠，不允许出现数据的丢失。同时，元数据信息一般需要通知到所有的 Broker 节点，Broker 会根据元数据信息执行具体的逻辑  
+
+元数据信息的存储，一般有两个思路。
+
+基于第三方组件来实现元数据的存储。在集群内部实现元数据的存储
+
+基于第三方组件来实现元数据的存储是目前业界的主流选择。
+
+比如 Kafka ZooKeeper 版本、Pulsar、RocketMQ 用的就是这个思路，其中 Kakfa 和 Pulsar 的元数据存储在 ZooKeeper中，RocketMQ 存储在 NameServer 中（准确说是存储在 Broker+NameServer 中，后面会详细说明）。
+
+
+
+
+
 ## Partitioned Logs
 
 A [log](/docs/CS/log/Log.md) is simply an append-only sequence of records on disk.
