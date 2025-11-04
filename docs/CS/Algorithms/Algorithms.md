@@ -112,10 +112,6 @@ We rely on probability to analyze hash-table operations, but you can understand 
 | CLOCK (NRU)             | 循环扫描各页面 第一轮淘汰访问位=0的，并将扫描过的页面访问位改为1。若第-轮没选中，则进行第二轮扫描。	实现简单，算法开销小;但未考虑页面是否被修改过。                              |
 | 改进型CLOCK (改进型NRU) | 若用(访问位，修改位)的形式表述，则 第一轮:淘汰(0,0) 第二轮:淘汰(O,1)，并将扫描过的页面访问位都置为0 第三轮:淘汰(O, 0) 第四轮:淘汰(0, 1)	算法开销较小，性能也不错 PDF文档下载方式 |
 
-### Pattern Matching
-
-[Substring Search](/docs/CS/Algorithms/KMP.md)
-
 ## Algorithm Analysis
 
 
@@ -200,7 +196,7 @@ The greatest common divisor (gcd) of two integers is the largest integer that di
 
 Text-editing programs frequently need to find all occurrences of a pattern in the text.
 Typically, the text is a document being edited, and the pattern searched for is a particular word supplied by the user.
-Efficient algorithms for this problem—called “[string matching](/docs/CS/Algorithms/KMP.md)”—can greatly aid the responsiveness of the text-editing program.
+Efficient algorithms for this problem—called “[string matching](/docs/CS/Algorithms/string-search)”—can greatly aid the responsiveness of the text-editing program.
 
 - [Dynamic Programming](/docs/CS/Algorithms/DP.md)
 - [Greedy Programming](/docs/CS/Algorithms/Greedy.md)
@@ -209,9 +205,15 @@ Efficient algorithms for this problem—called “[string matching](/docs/CS/Alg
 - [Backtracking](/docs/CS/Algorithms/Backtracking.md)
 - [Divide and Conquer](/docs/CS/Algorithms/Divide-and-Conquer.md)
 
-## Sorting and Order Statistics
+### Sorting and Order Statistics
 
 - [Sort](/docs/CS/Algorithms/Sort.md)
+
+
+### Pattern Matching
+
+[Pattern search algorithms](/docs/CS/Algorithms/string-search.md) are essential tools in computer science and data processing.
+These algorithms are designed ti efficiently find a particular pattern within a larger set of data.
 
 ### Consensus Algorithm
 
