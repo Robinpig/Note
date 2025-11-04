@@ -98,11 +98,62 @@ Dijkstra 算法是用于计算一个顶点到其它顶点的最短路径算法
 
 
 
-Dijkstra 是一种贪心算法 每一步都做出局部最优的选择 最终达到全局最优的结果 该算法只适用于权重非负的图 如果图中包含负权重的边 Dijkstra 可能无法正确计算最短路径 在包含负权重的情况下 通常使用 `Bellman-Ford` 算法
+Dijkstra 是一种贪心算法 每一步都做出局部最优的选择 最终达到全局最优的结果 该算法只适用于权重非负的图 
+如果图中包含负权重的边 Dijkstra 可能无法正确计算最短路径 在包含负权重的情况下 通常使用 `Bellman-Ford` 算法
 
 
 
+```c++
+class Solution {
+    public:
+    int networkDelayTime(vector<vector<int>>& times, int n, int k) {
+        // 标记未被探索的节点距离
+        const int inf = INT
+        _
+        MAX / 2;
+        // 邻接表
+        vector<vector<int>> g(n, vector<int>(n, inf));
+        // 构图
+        for (auto time: times) {
+        g[time[0] - 1][time[1] - 1] = time[2];
+        }
+        vector<int> dist(n, inf); // 所有节点未被探索时距离都初始化为无穷
+        vector<bool> used(n, false); // 标记是否已经被加入树中
+        dist[k - 1] = 0; // 记录原点距离为0
+        for (int i = 0; i < n; ++i) {
+        int x = -1;
+        // 找出候选集中到S距离最短的节点
+        for (int y = 0; y < n; ++y) {
+            if (!used[y] && (x == -1 || dist[y] < dist[x])) {
+            x = y;
+            }
+            }
+            // 加入树中
+            used[x] = true;
+            // 基于x 对所有x的邻节点进行松弛操作
+            for (int y = 0; y < n; ++y) {
+                dist[y] = min(dist[y], dist[x] + g[x][y]);
+            }
+        }
+        // 取出最短路中的最大值
+        int ans = *max
 
+        element(dist.begin(), dist.end());
+        return ans == inf ? -1 : ans;
+    }
+};
+```
+
+Dijkstra 算法是逐步构建最短路径树，树中的节点的最短距离不依赖于树外节点，这样才可以一个节点加入最短路径树之后，距离不再改变。负权节点的存在会让加入最短路径树的节点的真实最短路径会因为不在树中的节点而改变，整个算法也就无效了
+
+
+动态路由算法中基于 Dijkstra 算法的链路状态算法，核心思路就是通过节点间的通信，获得每个节点到邻居的链路成本信息，进而在每个节点里都各自独立地绘制出全局路由图，之后就可以基于Dijkstra 算法构建出路由表了
+
+#### Bellman-Ford
+
+和 Dijkstra 用到的贪心思想不同，Bellman-Ford 算法采用的是动态规划的思想
+
+Bellman-Ford 的整体时间复杂度是 $O(V*E)$，大部分实际场景下，边的数量比节点数量大的多，所以时间复杂度要比 Dijkstra 算法差很多。当然好处在于可以处理图中有负边的情况
 
 
 
