@@ -1,5 +1,8 @@
 ## Introduction
 
+A queue interface specifies that you can add elements at the tail end of the queue, remove them at the head, and find out how many elements are in the queue. 
+You use a queue when you need to collect objects and retrieve them in a “first in, first out” fashion.
+
 Queues provide additional insertion, extraction, and inspection operations.
 
 Each of these methods exists in two forms: one throws an exception if the operation fails, the other returns a special
