@@ -44,7 +44,7 @@ Although the Θ((n – m + 1)m) worst-case running time of this algorithm is no 
 It also generalizes nicely to other pattern-matching problems.
 Then describes a string-matching algorithm that begins by constructing a finite automaton specifically designed to search for occurrences of the given pattern P in a text.
 This algorithm takes $O(m |∑|)$ preprocessing time, but only Θ(n) matching time.
-We present the similar, but much cleverer, [Knuth-Morris-Pratt (or KMP) algorithm](/docs/CS/Algorithms/KMP.md?id=KMP), which has the same $O(n)$ matching time, but it reduces the preprocessing time to only $O(m)$.
+We present the similar, but much cleverer, [Knuth-Morris-Pratt (or KMP) algorithm](/docs/CS/Algorithms/string-search?id=KMP), which has the same $O(n)$ matching time, but it reduces the preprocessing time to only $O(m)$.
 
 A completely different approach appears which examines suffix arrays and the longest common prefix array.
 You can use these arrays not only to find a pattern in a text, but also to answer other questions,
@@ -202,6 +202,8 @@ public class KMPSearch {
 ## BM
 
 Boyer Moore算法是目前已知的在大多数工业级应用场景中最快的字符串匹配算法，因而被广泛应用在各种需要搜索关键词的软件中，GNU grep, 许多文档编辑器快捷键 ctrl+f 对应的搜索功能都是基于这个算法实现的
+
+BM 算法，最大的特点就是利用了对目标串的预处理，用空间换时间，避免了许多不必要的比较，预处理的方式主要来自于对“坏字符”和“好后缀”两条规则的观察，因为这两个规则和主串都没有关系，只和模式串自身有关，显然可以通过预处理得到两个规则的偏移表，来加速整个模式匹配的过程。
 
 
 
