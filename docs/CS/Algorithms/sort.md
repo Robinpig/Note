@@ -4,24 +4,8 @@ Sorting is the process of rearranging a sequence of objects so as to put them in
 All computer systems have implementations of sorting algorithms, for use by the system and by users.
 
 The sorting algorithms divide into two basic types:
-those that sort in place and use no extra memory except perhaps for a small functioncall stack or a constant number of instance variables,
-and those that need enough extra memory to hold another copy of the array to be sorted.
+those that sort in place and use no extra memory except perhaps for a small functioncall stack or a constant number of instance variables, and those that need enough extra memory to hold another copy of the array to be sorted.
 
-After considering the classic [selection sort](/docs/CS/Algorithms/Sort.md?id=Selection-Sort) [insertion sort](/docs/CS/Algorithms/Sort.md?id=Insertion-Sort),
-[shellsort](/docs/CS/Algorithms/Sort.md?id=Shell-Sort), [mergesort](/docs/CS/Algorithms/Sort.md?id=Merge-Sort), 
-[quicksort](/docs/CS/Algorithms/Sort.md?id=Quick-Sort), and [heapsort](/docs/CS/Algorithms/Sort.md?id=Heap-Sort) algorithms, we will consider practical issues and applications.
-
-Suppose you have a group of n numbers and would like to determine the kth largest. This is known as the _selection problem_.
-
-We consider two classes of sorting algorithms.
-
-The first class of algorithms makes use of the structure of the elements to be sorted.
-For example. if the elements to be sorted are integers in a fixed range 0 to m - 1, then we can sort a sequence of /1 eleme Qts. in $O(n + m)$ time;
-if the elements to be sorted are strings over a fixed alphabet, then a sequence of strings can be sorted in time linearly proportional to the sum of the lengths of the strings.
-
-The second class of algorithms assumes no structure on the elements to be sorted. The basic operation is a comparison between a pair of elements.
-With algorithms of this nature we shall see that at least n log /1 comparisons are needed to sort a sequence of n elements.
-We give two $O(nlogn)$ sorting algorithms-Heapsort. which is $O(nlogn)$ in the worst case, and Quicksort, which is $O(nlogn)$ in the expected case.
 
 ## Classification of Sorting Algorithms
 
@@ -78,6 +62,27 @@ Another method of classifying sorting algorithms is:
 | Radix  | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(n)$    |
 | Bucket | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(n)$    |
 | Tree   | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(n)$    |
+
+
+
+
+After considering the classic [selection sort](/docs/CS/Algorithms/sort?id=Selection-Sort) [insertion sort](/docs/CS/Algorithms/sort?id=Insertion-Sort),
+[shellsort](/docs/CS/Algorithms/sort?id=Shell-Sort), [mergesort](/docs/CS/Algorithms/sort?id=Merge-Sort), 
+[quicksort](/docs/CS/Algorithms/sort?id=Quick-Sort), and [heapsort](/docs/CS/Algorithms/sort?id=Heap-Sort) algorithms, we will consider practical issues and applications.
+
+Suppose you have a group of n numbers and would like to determine the kth largest. This is known as the _selection problem_.
+
+We consider two classes of sorting algorithms.
+
+The first class of algorithms makes use of the structure of the elements to be sorted.
+For example. if the elements to be sorted are integers in a fixed range 0 to m - 1, then we can sort a sequence of /1 eleme Qts. in $O(n + m)$ time;
+if the elements to be sorted are strings over a fixed alphabet, then a sequence of strings can be sorted in time linearly proportional to the sum of the lengths of the strings.
+
+The second class of algorithms assumes no structure on the elements to be sorted. The basic operation is a comparison between a pair of elements.
+
+With algorithms of this nature we shall see that at least n log /1 comparisons are needed to sort a sequence of n elements.
+We give two $O(nlogn)$ sorting algorithms-Heapsort. which is $O(nlogn)$ in the worst case, and Quicksort, which is $O(nlogn)$ in the expected case.
+
 
 ## Bubble Sort
 
@@ -289,7 +294,7 @@ Can we have the best of both worlds? Is there a simple and lightweight way to ch
 
 > For every input array of length n $ 1, the average running time of randomized QuickSort is $O(nlogn)$.
 
-The algorithm doesn’t spend time allocating and managing additional memory (unlike [MergeSort](/docs/CS/Algorithms/Sort.md?id=MergeSort)).
+The algorithm doesn’t spend time allocating and managing additional memory (unlike [MergeSort](/docs/CS/Algorithms/sort?id=MergeSort)).
 
 ## Shell Sort
 
