@@ -207,7 +207,7 @@ Efficient algorithms for this problem—called “[string matching](/docs/CS/Alg
 
 ### Sorting and Order Statistics
 
-- [Sort](/docs/CS/Algorithms/Sort.md)
+- [Sort](/docs/CS/Algorithms/sort.md)
 
 
 ### Pattern Matching

@@ -9,55 +9,26 @@ Before we jump into the JVM, let's revisit the concept of a [Virtual Machine (VM
 Similar to virtual machines, the JVM creates an isolated space on a host machine.
 This space can be used to execute Java programs irrespective of the platform or operating system of the machine.
 
+JVM具备如下特性：
+
+1. 平台独立性：Java代码可以在任何安装了JVM的机器上运行，不用为每种平台编写不同的版本。
+2. 自动内存管理 ：JVM提供了垃圾收集机制，自动回收不再使用的内存，降低内存泄漏的风险。
+3. 高效的即时编译：JVM运行时即时编译对热点代码进行优化，提升程序执行效率。
+4. 强大的监控和调试工具：JVM为开发者提供了详细的性能数据和调试工具，帮助开发者提升程序性能，解决问题
+
 
 
 JVM的构成主要包括如下几点： 
 
 - 一个抽象规范：其中定义了JVM到底是什么，由哪些组成部分。这些抽象的规范在Java虚拟机规范（The Java Virtual Machine Specification，JVMS）中进行了详细描述。 
-- 一个具体的实现：具体的实现过程不仅需要不同的厂商要遵循Java虚拟机规范，而且还要根据每个平台的不同特性以软件或软硬结合的方式去实现设定的功能。 
+- 一个具体的实现：具体的实现过程不仅需要不同的厂商要遵循Java虚拟机规范，而且还要根据每个平台的不同特性以软件或软硬结合的方式去实现设定的功能 也有许多开发者自己用不同语言实现 JVM功能 比如 [haidnorJVM](https://github.com/FranzHaidnor/haidnorJVM)
 - 一个运行的实例：当用JVM运行一个Java程序时，这个Java程序就是一个运行中的实例，每个运行中的Java程序都是一个JVM实例
 
 
 
+> [!TIP]
 >
-
-[](https://github.com/FranzHaidnor/haidnorJVM)
-
-
-
-Directory based on JDK12 HotSpot, [Git Link](https://github.com/openjdk/jdk/tree/master/src/hotspot)
-
-```
-hotspot
-    |--- cpu   
-    |--- os
-    |--- os_cpu
-    |--- share
-        |--- adlc               # 
-        |--- aot                # 
-        |--- asm                # 
-        |--- c1                 # C1 JIT
-        |--- ci                 # compiler interface
-        |--- classfile          #
-        |--- code   
-        |--- compiler   
-        |--- gc   
-        |--- include  
-        |--- interpreter  
-        |--- jfr                # Java Flight Record
-        |--- jvmci  
-        |--- libadt   
-        |--- logging  
-        |--- memory   
-        |--- metaprogramming  
-        |--- oops   
-        |--- opto               # C2 JIT
-        |--- precompiled  
-        |--- prims              # implement JNI, JVMTI, Unsafe
-        |--- runtime  
-        |--- services           # HeapDump, MXBean, jcmd, jinfo
-        |--- utilities          # hashtable, JSON parser, elf, etc.
-```
+> 在学习 JVM 之前, 需要先了解 [Java Class](/docs/CS/Java/JDK/JVM/ClassFile.md) 文件 和 [Javac](/docs/CS/Java/JDK/JVM/Javac.md) 编译相关的知识
 
 log:
 
@@ -117,11 +88,6 @@ As shown in the above architecture diagram, the JVM is divided into three main s
 1. ClassLoader Subsystem
 2. Runtime Data Area
 3. Execution Engine
-
-Before
-
-- [Class File and Compiler](/docs/CS/Java/JDK/JVM/ClassFile.md)
-- [Javac](/docs/CS/Java/JDK/JVM/Javac.md)
 
 ### Class Loader Subsystem
 
