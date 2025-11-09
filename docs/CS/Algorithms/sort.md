@@ -33,9 +33,13 @@ Sorting algorithms are either recursive quick sort or non-recursive selection so
 
 **By Stability**
 
-Sorting algorithm is stable if for all indices i and j such that the key A[i] equals key A[j], if record R[i] precedes record R[j] in the original file,
-record R[i] precedes record R[j] in the sorted list. 
-Few sorting algorithms maintain the relative order of elements with equal keys (equivalent elements retain their relative positions even after sorting).
+稳定性是指相等的元素经过排序之后相对顺序是否发生了改变。
+拥有稳定性这一特性的算法会让原本有相等键值的纪录维持相对次序，即如果一个排序算法是稳定的，当有两个相等键值的纪录 𝑅 和 𝑆，且在原本的列表中 𝑅 出现在 𝑆 之前，在排序过的列表中 𝑅 也将会是在 𝑆 之前。
+
+基数排序、计数排序、插入排序、冒泡排序、归并排序是稳定排序。
+选择排序、堆排序、快速排序、希尔排序不是稳定排序
+
+
 
 **By Adaptability**
 
