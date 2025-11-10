@@ -10,7 +10,7 @@ The `InnoDB` transaction model aims combine the best properties of a multi-versi
 The lock information in `InnoDB` is stored space-efficiently so that lock escalation is not needed.
 Typically, several users are permitted to lock every row in `InnoDB` tables, or any random subset of the rows, without causing `InnoDB` memory exhaustion.
 
- 
+
  和ACID事务关系
 
 - 通过Undo Log实现原子性
@@ -926,6 +926,14 @@ Suppose that you are running in the default `REPEATABLE READ` isolation level. W
 **The snapshot of the database state applies to `SELECT` statements within a transaction, not necessarily to `DML` statements`**.
 
 If you insert or modify some rows and then commit that transaction, a `DELETE`or `UPDATE`statement issued from another concurrent `REPEATABLE READ` transaction **could affect those just-committed rows, even though the session could not query them**. If a transaction does update or delete rows committed by a different transaction, those changes do become visible to the current transaction.
+
+
+
+RR 为何不能解决 Photom Read?
+
+在其它事务中新增的record, 若本次事务中有其它事务更新, 则会重新生成快照读 形成幻读
+
+
 
 ## Transaction flow
 
