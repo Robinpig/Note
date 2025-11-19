@@ -217,6 +217,11 @@ HeapByteBuffer 是位于 JVM 堆中的内存，那么它必然会受到 GC 的�
 
 #### transferTo
 
+FileChannelImpl 对于 FileChannel 的 transfer 方法中有三种实现
+- 需要操作系统支持 操作系统直接传送数据
+- 使用 mmap 方式共享内存传送
+- 传统方式传送
+
 ```java
 public long transferTo(long position, long count, WritableByteChannel target) throws IOException {
         ensureOpen();
