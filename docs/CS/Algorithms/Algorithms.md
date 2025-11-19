@@ -30,8 +30,6 @@
 
 
 
-
-
 ## Data Structures
 
 Data structure is a particular way of storing and organizing data in a computer so that it can be used efficiently.
@@ -114,8 +112,6 @@ We rely on probability to analyze hash-table operations, but you can understand 
 
 ## Algorithm Analysis
 
-
-
 An *algorithm* is a finite set of instructions that, if followed, accomplishes a particular task.
 In addition, all algorithms must satisfy the following criteria:
 
@@ -127,13 +123,12 @@ In addition, all algorithms must satisfy the following criteria:
    It is not enough that each operation be definite as in 3; it also must be feasible.
 
 Computer algorithms solve computational problems.
-We want two things from a computer algorithm: given an input to a problem, it should always produce a correct solution to the problem,
-and it should use computational resources efficiently while doing so. 
+We want two things from a computer algorithm: given an input to a problem, it should always produce a correct solution to the problem, and it should use computational resources efficiently while doing so. 
 Let’s examine these two desiderata in turn.
 
 For some problems, it might be difficult or even impossible to say whether an algorithm produces a correct solution.
 Sometimes we can accept that a computer algorithm might produce an incorrect answer, as long as we can control how often it does so.
-Correctness is a tricky issue with another class of algorithms, called approximation algorithms. 
+Correctness is a tricky issue with another class of algorithms, called *approximation algorithms*. 
 Approximation algorithms apply to optimization problems, in which we want to find the best solution according to some quantitative measure.
 Finding the fastest route, as a GPS does, is one example, where the quantitative measure is travel time.
 For some problems, we have no algorithm that finds an optimal solution in any reasonable amount of time, but we know of an approximation algorithm that,
@@ -174,7 +169,13 @@ In theoretical analysis of algorithms it is common to estimate their complexity 
 Big O notation, Big-omega notation and Big-theta notation are used to this end.
 
 
-O-notation characterizes an upper bound on the asymptotic behavior of a function. In other words, it says that a function grows no faster than a certain rate, based on the highest-order term.
+O-notation characterizes an upper bound on the asymptotic behavior of a function.
+In other words, it says that a function grows no faster than a certain rate, based on the highest-order term.
+
+
+> Knuth traces the origin of the O-notation to a number-theory text by P. Bachmann in 1892.
+> The o-notation was invented b y E. Landau in b 1909 for his discussion of the distribution of prime numbers.
+> The Ω and Θ notations were advocated bay Knuth to correct the popular, but technically sloppy, practice in the literature of using O-notation for both upper and lower bounds.
 
 An abstract data type (ADT) is a data type that is organized in such a way that the specification of the objects and the specification of the operations on the objects is separated from the representation of the objects and the implementation of the operations.
 
