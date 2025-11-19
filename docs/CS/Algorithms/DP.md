@@ -191,13 +191,80 @@ int climbingStairsConstraintDP(int n) {
 
 ## LCS
 
-最长公共子序列（Longest Common Subsequence，LCS）是动态规划中的经典问题，顾名思义，即求两个序列最长的公共子序列（可以不连续）\
+最长公共子序列（Longest Common Subsequence，LCS）是动态规划中的经典问题，顾名思义，即求两个序列最长的公共子序列（可以不连续）
+
+它的解法是典型的二维动态规划，大部分比较困难的字符串问题都和这个问题一个套路，比如说编辑距离。而且，这个算法稍加改造就可以用于解决其他问题
+
+因为子序列类型的问题，穷举出所有可能的结果都不容易，而动态规划算法做的就是穷举 + 剪枝，它俩天生一对儿。所以可以说只要涉及子序列问题，十有八九都需要动态规划来解决
+
 我们规定用 s[-1] 表示序列 s 的最后一个元素，用 s[:1] 表示 s 去掉最后一个元素后的子序列，
 LCS[s1,s2] 表示s1和s2的LCS的长度。现在，假如我们有 abdcbab 和 bdcbabb 两个字符串，记为 s1 和 s2，我们要如何求它们的LCS呢
+
+对于字符串 s1 和 s2，一般来说都要构造一个这样的 DP table：
+
+ 
+
+为了方便理解此表，我们暂时认为索引是从 1 开始的，待会的代码中只要稍作调整即可。其中，dp[i][j] 的含义是：对于 s1[1..i] 和 s2[1..j]，它们的 LCS 长度是 dp[i][j]。
+
+比如上图的例子，d[2][4] 的含义就是：对于 "ac" 和 "babc"，它们的 LCS 长度是 2。我们最终想得到的答案应该是 dp[3][6]。
+
+ 
+
+用两个指针 i 和 j 从后往前遍历 s1 和 s2，如果 s1[i]==s2[j]，那么这个字符一定在 lcs 中；否则的话，s1[i] 和 s2[j] 这两个字符至少有一个不在 lcs 中，需要丢弃一个
+
+ 
+
+ 
+
+
+```
+class Solution {
+
+  public int longestCommonSubsequence(String text1, String text2) {
+
+​    int M = text1.length();
+
+​    int N = text2.length();
+
+​    int[][] dp = new int[M + 1][N + 1];
+
+​    for (int i = 1; i <= M; ++i) {
+
+​      for (int j = 1; j <= N; ++j) {
+
+​        if (text1.charAt(i - 1) == text2.charAt(j - 1)) {
+
+​          dp[i][j] = dp[i - 1][j - 1] + 1;
+
+​        } else {
+
+​          dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+
+​        }
+
+​      }
+
+​    }
+
+​    return dp[M][N];
+
+  }
+
+}
+```
+
+
 
 
 
 子串和子序列的区别在于，子串必须是连续的。求最长公共子串的长度和求最长公共子序列的长度的方法几乎一样
+
+
+
+
+
+
+
 
 ## Links
 
