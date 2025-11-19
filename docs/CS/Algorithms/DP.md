@@ -189,6 +189,16 @@ int climbingStairsConstraintDP(int n) {
 如果一个问题满足决策树模型，并具有较为明显的“加分项”，我们就可以假设它是一个动态规划问题，并在求解过程中验证它。
 
 
+## LCS
+
+最长公共子序列（Longest Common Subsequence，LCS）是动态规划中的经典问题，顾名思义，即求两个序列最长的公共子序列（可以不连续）\
+我们规定用 s[-1] 表示序列 s 的最后一个元素，用 s[:1] 表示 s 去掉最后一个元素后的子序列，
+LCS[s1,s2] 表示s1和s2的LCS的长度。现在，假如我们有 abdcbab 和 bdcbabb 两个字符串，记为 s1 和 s2，我们要如何求它们的LCS呢
+
+
+
+子串和子序列的区别在于，子串必须是连续的。求最长公共子串的长度和求最长公共子序列的长度的方法几乎一样
+
 ## Links
 
 - [Algorithm Analysis](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
