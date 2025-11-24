@@ -15,6 +15,64 @@
 
 
 
+p[] 存储每个节点的父节点信息 根节点的值可以指向自己或者其它带有意义的值
+
+```python
+int Find(int x){
+	if(p[x] == x)
+    return x;
+  else
+    return p[x] = Find(p[x]); // 路径压缩
+}
+```
+
+
+
+ 按高度合并 矮树合并到高树 高度不变
+
+```python
+void Union(int x, int y){
+  int rootx = Find(x);
+  int rooty = Find(y);
+  if(rootx != rooty){
+    if(h[rootx] < h[rooty]){
+    	p[rootx] = rooty;
+    } else if(h[rootx] > h[rooty]){ 
+    	p[rooty] = rootx;
+    } else{
+    	p[rootx] = rooty;
+    	h[rooty]++;
+    }
+  }
+}
+```
+
+
+
+
+
+
+
+```python
+void Union(int x, int y){
+  int rootx = Find(x);
+  int rooty = Find(y);
+  if(rootx != rooty){
+    if(s[rootx] <= s[rooty]) {
+    	p[rootx] = rooty;
+      s[rooty] += s[rootx];
+    } else { 
+    	p[rooty] = rootx;
+       s[rootx] += s[rooty];
+    }
+  }
+}
+```
+
+
+
+
+
 
 
 
