@@ -17,6 +17,21 @@ $$
 
 
 
+```java
+
+public static int calltz(int num){
+	int count = 0;
+	if( num % 2 == 0){
+		num = num/2;
+	} else {
+		
+	}
+
+}
+
+```
+
+
 
 
 
