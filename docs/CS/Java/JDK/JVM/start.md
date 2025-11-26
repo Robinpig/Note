@@ -20,16 +20,12 @@ based on JDK12
 ## Entry
 
 
-
 Windows
 
 jvm.dll
 
 
-
-Bootstrap ClassLoader
-
-
+java.exe 或者 javaw.exe 最终都是调用到 main函数
 
 
 
@@ -37,9 +33,7 @@ Bootstrap ClassLoader
 
 
 
-
-
-main-> JLI_Launch -> JVMInit -> ContinueInNewThread -> [JavaMain](/docs/CS/Java/JDK/JVM/start.md?id=JavaMain)
+main-> JLI_Launch -> JVMInit -> ContinueInNewThread -> 使用 pthread_create() 创建线程执行 [JavaMain](/docs/CS/Java/JDK/JVM/start.md?id=JavaMain) 函数
 
 ```c
 // main.c
@@ -994,7 +988,9 @@ bool universe_post_init() {
 
 #### init classloader
 
-Initialize the class loader's access to methods in libzip.  Parse and process the boot classpath into a list ClassPathEntry objects.  Once this list has been created, it must not change order (see class PackageInfo) it can be appended to and is by jvmti and the kernel vm.
+Initialize the class loader's access to methods in libzip.  
+Parse and process the boot classpath into a list ClassPathEntry objects.  
+Once this list has been created, it must not change order (see class PackageInfo) it can be appended to and is by jvmti and the kernel vm.
 
 ## MainClass
 
