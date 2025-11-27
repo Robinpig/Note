@@ -87,31 +87,13 @@
 
 发掘最优子结构性质的过程中，实际上遵循了如下的通用模式：
 
-1. 证明问题最优解的第一个组成部分是做出一个选择，例如，选择钢条第一次切割位置，
+1. 证明问题最优解的第一个组成部分是做出一个选择，例如，选择钢条第一次切割位置，选择矩阵链的划分位置等。做出这次选择会产生一个或多个待解的子问题。
+2. 对于一个给定问题，在其可能的第一步选择中，你假定已经知道哪种选择才会得到最优解。你现在并不关心这种选择具体是如何得到的，只是假定已经知道了这种选择。
+3. 给定可获得最优解的选择后，你确定这次选择会产生哪些子问题，以及如何最好地刻画子问题空间。
+4. 利用“剪切—粘贴" (cut-and-paste) 技术证明：作为构成原问题最优解的组成部分，每个子问题的解就是它本身的最优解。证明这一点是利用反证法：假定子问题的解不是其自身的最优解，那么我们就可以从原问题的解中“剪切＂掉这些非最优解，将最优解＂粘贴”进去，从而得到原困囡 问题一个更优的解，这与最初的解是原问题最优解的前提假设矛盾。如果原问题的最优解包含多个子问题，通常它们都很相似，我们可以将针对一个子问题的＂剪切—粘贴“论证方法稍加修改，用于其他子问题。
 
-选择矩阵链的划分位置等。做出这次选择会产生一个或多个待解的子问题。
+一个刻画子问题空间的好经验是：保持子问题空间尽可能简单，只在必要时才扩展它
 
-2. 对于一个给定问题，在其可能的第一步选择中，你假定已经知道哪种选择才会得到最优
-
-解。你现在并不关心这种选择具体是如何得到的，只是假定已经知道了这种选择。
-
-3. 给定可获得最优解的选择后，你确定这次选择会产生哪些子问题，以及如何最好地刻画
-
-子问题空间。
-
-4. 利用“剪切—粘贴" (cut-and-paste) 技术证明：作为构成原问题最优解的组成部分，每个子
-
-问题的解就是它本身的最优解。证明这一点是利用反证法：假定子问题的解不是其自身的最优
-
-解，那么我们就可以从原问题的解中“剪切＂掉这些非最优解，将最优解＂粘贴”进去，从而得到原
-
-困囡 问题一个更优的解，这与最初的解是原问题最优解的前提假设矛盾。如果原问题的最优解包含
-
-多个子问题，通常它们都很相似，我们可以将针对一个子问题的＂剪切—粘贴“论证方法稍加修
-
-改，用于其他子问题。
-
-### 
 The first step in solving an optimization problem by dynamic programming is to characterize the structure of an optimal solution. 
 A problem exhibits optimal substructure if an optimal solution to the problem contains within it optimal solutions to subproblems. 
 Whenever a problem exhibits optimal substructure, we have a good clue that dynamic programming might apply. 
@@ -126,6 +108,10 @@ The cost of the problem solution is usually the subproblem costs plus a cost tha
 In particular, problems to which [greedy algorithms](/docs/CS/Algorithms/Greedy.md) apply have optimal substructure. 
 One major difference between greedy algorithms and dynamic programming is that instead of first finding optimal solutions to subproblems and then making an informed choice, 
 greedy algorithms first make a “greedy” choice—the choice that looks best at the time—and then solve a resulting subproblem, without bothering to solve all possible related smaller subproblems.
+
+> [!TIP]
+>
+> 能够应用贪心算法的问题也必须具有最优子结构性质。贪心算法和动态规划最大的不同在于，它并不是首先寻找子问题的最优解，然后在其中进行选择，而是首先做出一次“贪心”选择—一在当时（局部）看来最优的选择 然后求解选出的子问题，从而不必费心求解所有可能相关的子问题
 
 ### Overlapping subproblems
 The second ingredient that an optimization problem must have for dynamic programming to apply is that the space of subproblems must be “small” in the sense
@@ -238,9 +224,17 @@ int climbingStairsConstraintDP(int n) {
 
 ## LCS
 
-最长公共子序列（Longest Common Subsequence，LCS）是动态规划中的经典问题，顾名思义，即求两个序列最长的公共子序列（可以不连续）\
+最长公共子序列（Longest Common Subsequence，LCS）是动态规划中的经典问题，顾名思义，即求两个序列最长的公共子序列（可以不连续）
 我们规定用 s[-1] 表示序列 s 的最后一个元素，用 s[:1] 表示 s 去掉最后一个元素后的子序列，
 LCS[s1,s2] 表示s1和s2的LCS的长度。现在，假如我们有 abdcbab 和 bdcbabb 两个字符串，记为 s1 和 s2，我们要如何求它们的LCS呢
+
+
+
+ LCS 算法，我们完全可以去掉表 b 。每个 c[i, j] 项只依赖千表 c 中的其他三项：
+
+c[i 一 1, j] 、 c[i, j-1] 和心 -1, j-1] 。给定 c[i, j] 的值，我们可以在 0(1) 时间内判断出在计算心， j] 时使用了这三项中的哪一项
+
+
 
 
 
