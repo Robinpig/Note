@@ -12,21 +12,18 @@
 
 我们通常按如下 4 个步骤来设计一个动态规划算法：
 
-1. 刻画一个最优解的结构特征。
-2. 递归地定义最优解的值。
-3. 计算最优解的值，通常采用自底向上的方法。
-4. 利用计算出的信息构造一个最优解。
+1. 刻画一个最优解的结构特征
+2. 递归地定义最优解的值
+3. 计算最优解的值，通常采用自底向上的方法
+4. 利用计算出的信息构造一个最优解
 
 步骤 1~3 是动态规划算法求解问题的基础。如果我们仅仅需要一个最优解的值，而非解本身，可以忽略步骤 4 
 如果确实要做步骤 4, 有时就需要在执行步骤 3 的过程中维护一些额外信息，以便用来构造一个最优解
 
 
 
-
-
-动态规划方法的思想如下所述
-
-朴素递归算法之所以效率很低，是因为它反复求解相同的子问题。因此，动态规划方法仔细安排求解顺序，对每个子问题只求解一次，并将结果保存下来
+朴素递归算法之所以效率很低，是因为它反复求解相同的子问题。
+因此，动态规划方法仔细安排求解顺序，对每个子问题只求解一次，并将结果保存下来
 如果随后再次需要此子问题的解，只需查找保存的结果，而不必重新计算。
 
 因此，动态规划方法是付出额外的内存空间来节省计算时间，是典型的时空权衡 (*time-memory trade-off*) 的例子
@@ -78,11 +75,43 @@
 
 
 
-## Elements of dynamic programming 
-We examine the two key ingredients that an optimization problem must have in order for dynamic programming to apply: optimal substructure and overlapping subproblems. 
-We also revisit and discuss more fully how memoization might help us take advantage of the overlapping-subproblems property in a top-down recursive approach.
+## 原理
+
+适合应用动态规划方法求解的最优化问题应该具备的两个要素：最优子结构和子问题重叠
 
 ### Optimal substructure
+
+用动态规划方法求解最优化问题的第一步就是刻画最优解的结构。如前文所述，如果一个问题的最优解包含其子问题的最优解，我们就称此问题具有最优子结构性质
+因此，某个问题是否适合应用动态规划算法，它是否具有最优子结构性质是一个好线索（当然，具有最优子结构性质也可能意味着适合应用贪心策略
+使用动态规划方法时，我们用子问题的最优解来构造原问题的最优解。因此，我们必须小心确保考察了最优解中用到的所有子问题
+
+发掘最优子结构性质的过程中，实际上遵循了如下的通用模式：
+
+1. 证明问题最优解的第一个组成部分是做出一个选择，例如，选择钢条第一次切割位置，
+
+选择矩阵链的划分位置等。做出这次选择会产生一个或多个待解的子问题。
+
+2. 对于一个给定问题，在其可能的第一步选择中，你假定已经知道哪种选择才会得到最优
+
+解。你现在并不关心这种选择具体是如何得到的，只是假定已经知道了这种选择。
+
+3. 给定可获得最优解的选择后，你确定这次选择会产生哪些子问题，以及如何最好地刻画
+
+子问题空间。
+
+4. 利用“剪切—粘贴" (cut-and-paste) 技术证明：作为构成原问题最优解的组成部分，每个子
+
+问题的解就是它本身的最优解。证明这一点是利用反证法：假定子问题的解不是其自身的最优
+
+解，那么我们就可以从原问题的解中“剪切＂掉这些非最优解，将最优解＂粘贴”进去，从而得到原
+
+困囡 问题一个更优的解，这与最初的解是原问题最优解的前提假设矛盾。如果原问题的最优解包含
+
+多个子问题，通常它们都很相似，我们可以将针对一个子问题的＂剪切—粘贴“论证方法稍加修
+
+改，用于其他子问题。
+
+### 
 The first step in solving an optimization problem by dynamic programming is to characterize the structure of an optimal solution. 
 A problem exhibits optimal substructure if an optimal solution to the problem contains within it optimal solutions to subproblems. 
 Whenever a problem exhibits optimal substructure, we have a good clue that dynamic programming might apply. 
