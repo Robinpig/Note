@@ -6,7 +6,68 @@
 
 并查集主要是解决一些元素分组的问题
 
-并查集支持两种操作：合并（Union）：合并两个集合（将不同集合的根节点中一个节点的父节点赋值为另一个节点）查找（Find）：判断两个元素是否在同一个集合中（查找根节点是否相同）
+并查集支持两种操作：
+
+- 合并（*Union*）：合并两个集合（将不同集合的根节点中一个节点的父节点赋值为另一个节点）
+- 查找（*Find*）：判断两个元素是否在同一个集合中（查找根节点是否相同）
+
+
+
+
+
+p[] 存储每个节点的父节点信息 根节点的值可以指向自己或者其它带有意义的值
+
+```python
+int Find(int x){
+	if(p[x] == x)
+    return x;
+  else
+    return p[x] = Find(p[x]); // 路径压缩
+}
+```
+
+
+
+ 按高度合并 矮树合并到高树 高度不变
+
+```python
+void Union(int x, int y){
+  int rootx = Find(x);
+  int rooty = Find(y);
+  if(rootx != rooty){
+    if(h[rootx] < h[rooty]){
+    	p[rootx] = rooty;
+    } else if(h[rootx] > h[rooty]){ 
+    	p[rooty] = rootx;
+    } else{
+    	p[rootx] = rooty;
+    	h[rooty]++;
+    }
+  }
+}
+```
+
+
+
+
+
+
+
+```python
+void Union(int x, int y){
+  int rootx = Find(x);
+  int rooty = Find(y);
+  if(rootx != rooty){
+    if(s[rootx] <= s[rooty]) {
+    	p[rootx] = rooty;
+      s[rooty] += s[rootx];
+    } else { 
+    	p[rooty] = rootx;
+       s[rootx] += s[rooty];
+    }
+  }
+}
+```
 
 
 
