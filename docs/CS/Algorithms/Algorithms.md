@@ -181,6 +181,12 @@ An abstract data type (ADT) is a data type that is organized in such a way that 
 
 > An algorithm is efficient if its running time is polynomial.
 
+
+
+均摊时间复杂度，听起来跟平均时间复杂度有点儿像。对于初学者来说，这两个概念确实非常容易弄混。我前面说了，大部分情况下，我们并不需要区分最好、最坏、平均三种复杂度。平均复杂度只在某些特殊情况下才会用到，而均摊时间复杂度应用的场景比它更加特殊、更加有限
+
+
+
 ### Computation Model
 
 Exact (not asymptotic) measures of efficiency can sometimes be computed but they usually require certain assumptions concerning the particular implementation of the algorithm, called model of computation.

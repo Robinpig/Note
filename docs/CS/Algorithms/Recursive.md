@@ -14,6 +14,8 @@ Each recursive call makes a new copy of that method (actually only the variables
 Once a method ends (that is, returns some data), the copy of that returning method is removed from memory.
 The recursive solutions look simple but visualization and tracing takes time.
 
+写递归代码的关键是，只要遇到递归，我们就把它抽象成一个递推公式，不用想一层层的调用关系，不要试图用人脑去分解递归的每个步骤
+
 A recursive function performs a task in part by calling itself to perform the subtasks.
 At some point, the function encounters a subtask that it can perform without calling itself.
 This case, where the function does not recur, is called the base case.
