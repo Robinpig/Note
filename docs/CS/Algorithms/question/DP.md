@@ -244,7 +244,7 @@ public class PerfectSquares {
 
   public static void main(String[] args) {
 
-​     System.out.println(numSquares(15));
+      System.out.println(numSquares(15));
 
   }
 
@@ -252,23 +252,23 @@ public class PerfectSquares {
 
   public static int numSquares(int n) {
 
-​    int[] f = new int[n + 1];
+     int[] f = new int[n + 1];
 
-​    for (int i = 1; i <= n; i++) {
+     for (int i = 1; i <= n; i++) {
 
-​      int min = Integer.MAX_VALUE;
+       int min = Integer.MAX_VALUE;
 
-​      for (int j = 1; i - j * j >= 0; j++) {
+       for (int j = 1; i - j * j >= 0; j++) {
 
-​        min = Math.min(min, f[i - j * j] + 1);
+         min = Math.min(min, f[i - j * j] + 1);
 
-​      }
+       }
 
-​      f[i] = min;
+       f[i] = min;
 
-​    }
+     }
 
-​    return f[n];
+     return f[n];
 
   }
 
@@ -336,35 +336,35 @@ public class PerfectSquares {
 ```
 public int trap(int[] height) {
 
-​    int ans = 0;
+     int ans = 0;
 
-​    int left = 0, right = height.length - 1;
+     int left = 0, right = height.length - 1;
 
-​    int leftMax = 0, rightMax = 0;
+     int leftMax = 0, rightMax = 0;
 
-​    while (left < right) {
+     while (left < right) {
 
-​      leftMax = Math.max(leftMax, height[left]);
+       leftMax = Math.max(leftMax, height[left]);
 
-​      rightMax = Math.max(rightMax, height[right]);
+       rightMax = Math.max(rightMax, height[right]);
 
-​      if (height[left] < height[right]) {
+       if (height[left] < height[right]) {
 
-​        ans += leftMax - height[left];
+         ans += leftMax - height[left];
 
-​        ++left;
+         ++left;
 
-​      } else {
+       } else {
 
-​        ans += rightMax - height[right];
+         ans += rightMax - height[right];
 
-​        --right;
+         --right;
 
-​      }
+       }
 
-​    }
+     }
 
-​    return ans;
+     return ans;
 
   }
 ```
