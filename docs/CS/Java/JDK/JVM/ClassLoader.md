@@ -2,6 +2,7 @@
 
 When you compile a .java source file, it is converted into byte code as a .class file.
 
+JVM类加载的时机主要基于 **首次主动使用** 的原则
 Every time you create an instance of a Java class, the class must first be loaded into memory.
 When you try to use this class in your program, the class loader loads it into the main memory.
 The class loader normally searches some core Java libraries and all directories included in the CLASSPATH environment variable.
@@ -47,6 +48,14 @@ The Java run-time has the following built-in class loaders:
   The platform class loader is a parent or an ancestor of the system class loader that all platform classes are visible to it.
 
 > The delegation model is very important for security.
+
+
+
+> [!NOTE]
+> 
+> 随着JVM的迭代，在不同的 JDK 版本中，类加载器也在发生着变化
+> 从JDK 9开始，JVM 引入了新的模块系统JPMS（Java Platform Module System），将 Java 核心库分成了一系列的模块，每个模块只包含相关的功能，使得代码更加清晰和可维护。原本的引导类加载器也被拆分成了两个不同的加载器，分别是平台类加载器（Platform ClassLoader）和系统类加载器（System ClassLoader）
+> 而到了JDK 11，为了提高性能，JVM 使用类数据共享（CDS）技术，允许不同的 Java 进程共享相同的 JVM 类元数据。到JDK 17的时候，JVM 则是直接移除了系统类加载器，所有的类加载操作由原本的应用类加载器接管。这个改动简化了 JVM 架构，也减小潜在的安全风险
 
 Here are ClassLoaders in **JDK17**:
 

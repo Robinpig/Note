@@ -197,7 +197,15 @@ Maven, Compile
 
 jdwp host/ip from 0.0.0.0 to localhost and not support to debug remotely
 
+## Summary
 
+Java 相对于其它现代语言主要的优势还是生态庞大
+
+和其它语言相比缺点
+- 启动耗时较长 启动加载类 
+- 其次是占用内存大 JVM固定占用内存
+- 还有面向对象过于严格 在编写简单程序比较麻烦 相较于Go 可以返回多个响应
+- 语法繁琐 相较于Python
 
 ## Links
 

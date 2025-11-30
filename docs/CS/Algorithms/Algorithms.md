@@ -30,8 +30,6 @@
 
 
 
-
-
 ## Data Structures
 
 Data structure is a particular way of storing and organizing data in a computer so that it can be used efficiently.
@@ -112,13 +110,7 @@ We rely on probability to analyze hash-table operations, but you can understand 
 | CLOCK (NRU)             | 循环扫描各页面 第一轮淘汰访问位=0的，并将扫描过的页面访问位改为1。若第-轮没选中，则进行第二轮扫描。	实现简单，算法开销小;但未考虑页面是否被修改过。                              |
 | 改进型CLOCK (改进型NRU) | 若用(访问位，修改位)的形式表述，则 第一轮:淘汰(0,0) 第二轮:淘汰(O,1)，并将扫描过的页面访问位都置为0 第三轮:淘汰(O, 0) 第四轮:淘汰(0, 1)	算法开销较小，性能也不错 PDF文档下载方式 |
 
-### Pattern Matching
-
-[Substring Search](/docs/CS/Algorithms/KMP.md)
-
 ## Algorithm Analysis
-
-
 
 An *algorithm* is a finite set of instructions that, if followed, accomplishes a particular task.
 In addition, all algorithms must satisfy the following criteria:
@@ -131,13 +123,12 @@ In addition, all algorithms must satisfy the following criteria:
    It is not enough that each operation be definite as in 3; it also must be feasible.
 
 Computer algorithms solve computational problems.
-We want two things from a computer algorithm: given an input to a problem, it should always produce a correct solution to the problem,
-and it should use computational resources efficiently while doing so. 
+We want two things from a computer algorithm: given an input to a problem, it should always produce a correct solution to the problem, and it should use computational resources efficiently while doing so. 
 Let’s examine these two desiderata in turn.
 
 For some problems, it might be difficult or even impossible to say whether an algorithm produces a correct solution.
 Sometimes we can accept that a computer algorithm might produce an incorrect answer, as long as we can control how often it does so.
-Correctness is a tricky issue with another class of algorithms, called approximation algorithms. 
+Correctness is a tricky issue with another class of algorithms, called *approximation algorithms*. 
 Approximation algorithms apply to optimization problems, in which we want to find the best solution according to some quantitative measure.
 Finding the fastest route, as a GPS does, is one example, where the quantitative measure is travel time.
 For some problems, we have no algorithm that finds an optimal solution in any reasonable amount of time, but we know of an approximation algorithm that,
@@ -178,11 +169,23 @@ In theoretical analysis of algorithms it is common to estimate their complexity 
 Big O notation, Big-omega notation and Big-theta notation are used to this end.
 
 
-O-notation characterizes an upper bound on the asymptotic behavior of a function. In other words, it says that a function grows no faster than a certain rate, based on the highest-order term.
+O-notation characterizes an upper bound on the asymptotic behavior of a function.
+In other words, it says that a function grows no faster than a certain rate, based on the highest-order term.
+
+
+> Knuth traces the origin of the O-notation to a number-theory text by P. Bachmann in 1892.
+> The o-notation was invented b y E. Landau in b 1909 for his discussion of the distribution of prime numbers.
+> The Ω and Θ notations were advocated bay Knuth to correct the popular, but technically sloppy, practice in the literature of using O-notation for both upper and lower bounds.
 
 An abstract data type (ADT) is a data type that is organized in such a way that the specification of the objects and the specification of the operations on the objects is separated from the representation of the objects and the implementation of the operations.
 
 > An algorithm is efficient if its running time is polynomial.
+
+
+
+均摊时间复杂度，听起来跟平均时间复杂度有点儿像。对于初学者来说，这两个概念确实非常容易弄混。我前面说了，大部分情况下，我们并不需要区分最好、最坏、平均三种复杂度。平均复杂度只在某些特殊情况下才会用到，而均摊时间复杂度应用的场景比它更加特殊、更加有限
+
+
 
 ### Computation Model
 
@@ -200,7 +203,7 @@ The greatest common divisor (gcd) of two integers is the largest integer that di
 
 Text-editing programs frequently need to find all occurrences of a pattern in the text.
 Typically, the text is a document being edited, and the pattern searched for is a particular word supplied by the user.
-Efficient algorithms for this problem—called “[string matching](/docs/CS/Algorithms/KMP.md)”—can greatly aid the responsiveness of the text-editing program.
+Efficient algorithms for this problem—called “[string matching](/docs/CS/Algorithms/string-search)”—can greatly aid the responsiveness of the text-editing program.
 
 - [Dynamic Programming](/docs/CS/Algorithms/DP.md)
 - [Greedy Programming](/docs/CS/Algorithms/Greedy.md)
@@ -209,9 +212,15 @@ Efficient algorithms for this problem—called “[string matching](/docs/CS/Alg
 - [Backtracking](/docs/CS/Algorithms/Backtracking.md)
 - [Divide and Conquer](/docs/CS/Algorithms/Divide-and-Conquer.md)
 
-## Sorting and Order Statistics
+### Sorting and Order Statistics
 
-- [Sort](/docs/CS/Algorithms/Sort.md)
+- [Sort](/docs/CS/Algorithms/sort.md)
+
+
+### Pattern Matching
+
+[Pattern search algorithms](/docs/CS/Algorithms/string-search.md) are essential tools in computer science and data processing.
+These algorithms are designed ti efficiently find a particular pattern within a larger set of data.
 
 ### Consensus Algorithm
 
@@ -224,7 +233,8 @@ Raft
 ### 
 
 Gale–Shapley algorithm (also known as the Deferred Acceptance algorithm).
-Gale Shapley Algorithm is an efficient algorithm that is used to solve the Stable Matching problem. It takes $O(N^2)$ time complexity where N is the number of people involved.
+Gale Shapley Algorithm is an efficient algorithm that is used to solve the Stable Matching problem. 
+It takes $O(N^2)$ time complexity where N is the number of people involved.
 
 The subject called the [“NP-complete” problems](/docs/CS/Algorithms/NP.md), whose status is unknown.
 No polynomial-time algorithm has yet been discovered for an NP-complete problem, nor has anyone yet been able to prove that no polynomial-time algorithm can exist for any one of them.

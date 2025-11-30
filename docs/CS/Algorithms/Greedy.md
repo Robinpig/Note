@@ -1,5 +1,10 @@
 ## Introduction
 
+贪心算法 (greedy algorithm) 在每一步都做出当时看起来最佳的选择。也就是说，它总是做出局部最优的选择，寄希望这样的选择能导致全局最优解
+贪心算法并不保证得到最优解，但对很多问题确实可以求得最优解
+
+贪心方法是一种强有力的算法设计方法，可以很好地解决很多问题。例如最小生成树 (minimum-spanning-tree) 算法、单源最短路径的 Dijkstra 算法，以及集合覆盖问题的 Chvatal 贪心启发式算法
+
 Greedy algorithms work in phases. 
 In each phase, a decision is made that appears to be good, without regard for future consequences. Generally, this means that some `local optimum` is chosen.  This "take what you can get now" strategy is the source of the name for this class of algorithms. 
 
@@ -75,7 +80,6 @@ Notice that if all the characters occur with the same frequency, then there are 
 ## Links
 
 - [Algorithm Analysis](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
-
 
 
 

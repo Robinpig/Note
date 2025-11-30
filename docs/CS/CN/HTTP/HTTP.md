@@ -292,6 +292,9 @@ With ALPN, the client gives the server a list of protocols in its order of prefe
 [HPACK](https://www.rfc-editor.org/rfc/rfc7541.txt) was designed to make it difficult for a conforming implementation to leak information, to make encoding and decoding very fast/cheap,
 to provide for receiver control over compression context size, to allow for proxy re-indexing (i.e., shared state between frontend and backend within a proxy), and for quick comparisons of Huffman-encoded strings.
 
+HPACK 是 HTTP/2.0 为了降低 HTTP payload 大小从而提高传输效率的杀招，应用了静态表、动态表和哈夫曼编码三种技术，把冗余的 HTTP 头信息大大压缩
+
+
 #### Reset
 
 One of the drawbacks with HTTP 1.1 is that when an HTTP message has been sent off with a Content-Length of a certain size, you can't easily just stop it. Sure, you can often (but not always) disconnect the TCP connection, but that comes at the cost of having to negotiate a new TCP handshake again.

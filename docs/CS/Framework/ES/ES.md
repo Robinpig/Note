@@ -153,6 +153,18 @@ GET /megacorp/employee/1
 ## Cluster
 Node是ES的实例 对于内存要求高 生产环境建议一台机器一个实例 每个node都有一个name node在启动之后会分配一个UUID存储在data目录
 
+
+
+## Analyzer
+
+通常说"ES分词器"指的其实是Analyzer，"分析器"也是指的Analyzer，但Tokenizer（中文翻译过来也是分词器）是Analyzer组成不可缺少的部分
+
+ 
+
+分词是指将文本转换成一系列单词( term or token )的过程,也可以叫做文本分析,在es里面称为Analysis 
+
+
+
 ## Inverted Index
 
 

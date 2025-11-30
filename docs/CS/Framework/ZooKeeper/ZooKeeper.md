@@ -1904,6 +1904,21 @@ ZooKeeperServer.takeSnapshot），发现在以下情况下会触发新的快照�
 autopurge.purgeInterval 最小只能指定为 1，这将清理间隔硬限制到 1 小时，针对高频写入情景无法降低风险。
 
 
+ZooKeeper的日志中看到类似于"will be dropped if server is in read-only mode"这样的消息，这通常意味着ZooKeeper服务器当前正处于只读模式，无法接受写操作。
+ZooKeeper进入只读模式可能有以下几个原因：
+
+- Leader选举未完成：在ZooKeeper集群中，只有Leader节点能够处理写请求。如果Leader节点失效或网络分割导致集群无法选出新的Leader，其他跟随者（Follower）节点会自动切换到只读模式，直到新的Leader被选举出来。
+- 维护或故障转移：手动将ZooKeeper集群设置为只读模式，可能是为了进行维护操作、数据迁移或故障转移期间保护数据一致性。
+- Quorum丢失：ZooKeeper集群依赖于大多数节点（称为quorum）达成一致。如果超过一半的节点不可用，剩下的节点将无法形成有效的quorum，因此会转为只读模式以避免数据不一致。
+
+解决办法：
+
+- 检查集群状态：首先，使用zkServer.sh status或相应的监控工具检查ZooKeeper集群的状态，确认是否存在Leader以及各节点的健康状况。
+- 等待或触发Leader选举：如果是因为Leader选举问题，通常ZooKeeper会自动尝试重新选举Leader。你也可以尝试重启集群中的部分节点，有时这能帮助触发选举过程。但请注意，随意重启节点可能会影响服务稳定性，需谨慎操作。
+- 检查网络连接：确保所有ZooKeeper节点之间的网络通信正常，没有网络分割或防火墙阻断情况。
+- 增加节点或调整配置：如果是因为Quorum丢失导致的问题，长期看可能需要增加更多的ZooKeeper节点以增强集群的容错能力，或者调整配置以适应当前的网络环境和硬件条件。
+- 查看日志：深入分析ZooKeeper的日志文件，特别是那些包含ERROR或WARN级别的消息，它们往往能提供关于问题原因的更多线索
+
 
 
 ## Tuning

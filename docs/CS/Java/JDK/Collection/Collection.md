@@ -2,6 +2,13 @@
 
 As is common with modern data structure libraries, the Java collection library separates interfaces and implementations.
 
+数组与集合区别
+
+- 数组长度是固定的 集合长度可以动态扩展或缩小
+- 数组可以包含基本数据类型和对象，而集合只能包含对象
+- 数组可以直接访问元素 集合需要迭代器或者其它方式来访问
+
+常见的集合类关系图如下:
 
 <div style="text-align: center;">
 
@@ -11,12 +18,101 @@ As is common with modern data structure libraries, the Java collection library s
 
 <p style="text-align: center;">Fig.1. Collection</p>
 
-- [List](/docs/CS/Java/JDK/Collection/List.md)
-- [Map](/docs/CS/Java/JDK/Collection/Map.md)
-- [Set](/docs/CS/Java/JDK/Collection/Set.md)
-- [Queue](/docs/CS/Java/JDK/Collection/Queue.md)
+[List](/docs/CS/Java/JDK/Collection/List.md) 是有序的Collection，使用此接口能够精确的控制每个元素的插入位置, 用户能根据索引访问List中元素
+常用的实现List的类有LinkedList，ArrayList，Vector，Stack
 
-## SequencedCollection
+[Set](/docs/CS/Java/JDK/Collection/Set.md) 不允许存在重复的元素，与List不同，set中的元素是无序的 
+常用的实现有 HashSet、LinkedHashSet 和 TreeSet
+
+[Map](/docs/CS/Java/JDK/Collection/Map.md) 是一个键值对集合，存储键、值和之间的映射。Key 无序，唯一；value 不要求有序，允许重复
+Map 没有继承于 Collection 接口，通过Key从 Map 集合中检索出Value 
+主要实现有 HashMap、ConcurrentHashMap、LinkedHashMap、TreeMap、EnumMap 和 HashTable
+
+
+[Queue](/docs/CS/Java/JDK/Collection/Queue.md) 是一种特殊的线性表 只允许 FIFO 操作
+
+
+
+## Iterable
+
+```java
+public interface Iterable<T> {
+
+    Iterator<T> iterator();
+
+    default void forEach(Consumer<? super T> action) {
+        Objects.requireNonNull(action);
+        for (T t : this) {
+            action.accept(t);
+        }
+    }
+
+    default Spliterator<T> spliterator() {
+        return Spliterators.spliteratorUnknownSize(iterator(), 0);
+    }
+}
+```
+
+### Iterator
+
+```java
+public interface Iterator<E> {
+
+    boolean hasNext();
+
+    E next();
+
+    default void remove() {
+        throw new UnsupportedOperationException("remove");
+    }
+
+    default void forEachRemaining(Consumer<? super E> action) {
+        Objects.requireNonNull(action);
+        while (hasNext())
+            action.accept(next());
+    }
+}
+```
+
+### ListIterator
+
+*An iterator for lists that allows the programmer to **traverse the list in either direction, modify the list during iteration**, and **obtain the iterator's current position in the list**.
+A ListIterator has no current element; its cursor position always lies between the element that would be returned by a call to previous() and the element that would be returned by a call to next().
+**An iterator for a list of length n has n+1 possible cursor positions**, as illustrated by the carets (^) below:*
+*Element(0)   Element(1)   Element(2)   ... Element(n-1)*
+*cursor positions:  ^            ^            ^            ^                  ^*
+
+*Note that **the remove and set(Object) methods are not defined in terms of the cursor position**; they are defined to operate on the last element returned by a call to next or previous().*
+
+```java
+public interface ListIterator<E> extends Iterator<E> {
+    // Query Operations
+
+    boolean hasNext();
+
+    E next();
+
+    boolean hasPrevious();
+
+    E previous();
+
+    int nextIndex();
+
+    int previousIndex();
+
+
+    // Modification Operations
+
+    void remove();
+
+    void set(E e);
+
+    void add(E e);
+}
+```
+
+
+## Sequenced
 
 A collection that has a well-defined *encounter order*, that supports operations at both ends, and that is reversible.
 The elements of a sequenced collection have an encounter order, where conceptually the elements have a linear arrangement from the first element to the last element.
@@ -68,11 +164,6 @@ public interface SequencedCollection<E> extends Collection<E> {
 }
 ```
 
-## Queue
-
-Let us look at that separation with a familiar data structure, the queue.
-
-A queue interface specifies that you can add elements at the tail end of the queue, remove them at the head, and find out how many elements are in the queue. You use a queue when you need to collect objects and retrieve them in a “first in, first out” fashion.
 
 ### Collection
 
@@ -159,7 +250,7 @@ public interface Collection<E> extends Iterable<E> {
 
 Allocate  memory when first element added.
 
-## Concurrent Modify
+## Concurrent
 
 ### Fail-Fast
 
@@ -195,12 +286,11 @@ ConcurrentHashMap UNSAFE.getObjectVolatile
 
 #### asList
 
-Returns a **fixed-size** list( **java.util.Arrays$ArrayList** ) backed by the specified array. (Changes to the returned list "write through" to the array.) 
+Returns a **fixed-size** list( **java.util.Arrays$ArrayList** ) backed by the specified array. (Changes to the returned list "write through" to the array.)
 This method acts as bridge between array-based and collection-based APIs, in combination with Collection.toArray. The returned list is serializable and implements RandomAccess.
 
 This method also provides a convenient way to create a fixed-size list initialized to contain several elements:
 List<String> stooges = Arrays.asList("Larry", "Moe", "Curly");
-
 
 ```Java
 public static <T> List<T> asList(T... a) {
@@ -225,7 +315,7 @@ ArrayList(E[] array) {
 ```
 
 > [!WARNING]
-> 
+>
 > When the parameter is primitiveType array, the List only has one element of this array.
 > Please using Arrays#stream instead.
 >
@@ -236,7 +326,6 @@ ArrayList(E[] array) {
 ### sort
 
 在 Java 7 之前，Arrays.sort()使用的是 归并排序算法。从 Java 7 开始使用的是 TimSort 算法
-
 
 ```java
 //Collections.java
@@ -277,7 +366,6 @@ public static void sort(int[] a) {
         DualPivotQuicksort.sort(a, 0, 0, a.length);
     }
 ```
-
 
 [The new optimized version of Dual-Pivot Quicksort](https://mail.openjdk.org/pipermail/core-libs-dev/2018-January/051000.html)
 
@@ -409,84 +497,6 @@ private static void rotate2(List<?> list, int distance) {
     reverse(list.subList(0, mid));
     reverse(list.subList(mid, size));
     reverse(list);
-}
-```
-
-## Iterable
-
-```java
-public interface Iterable<T> {
-
-    Iterator<T> iterator();
-
-    default void forEach(Consumer<? super T> action) {
-        Objects.requireNonNull(action);
-        for (T t : this) {
-            action.accept(t);
-        }
-    }
-
-    default Spliterator<T> spliterator() {
-        return Spliterators.spliteratorUnknownSize(iterator(), 0);
-    }
-}
-```
-
-### Iterator
-
-```java
-public interface Iterator<E> {
-
-    boolean hasNext();
-
-    E next();
-
-    default void remove() {
-        throw new UnsupportedOperationException("remove");
-    }
-
-    default void forEachRemaining(Consumer<? super E> action) {
-        Objects.requireNonNull(action);
-        while (hasNext())
-            action.accept(next());
-    }
-}
-```
-
-### ListIterator
-
-*An iterator for lists that allows the programmer to **traverse the list in either direction, modify the list during iteration**, and **obtain the iterator's current position in the list**.
-A ListIterator has no current element; its cursor position always lies between the element that would be returned by a call to previous() and the element that would be returned by a call to next().
-**An iterator for a list of length n has n+1 possible cursor positions**, as illustrated by the carets (^) below:*
-*Element(0)   Element(1)   Element(2)   ... Element(n-1)*
-*cursor positions:  ^            ^            ^            ^                  ^*
-
-*Note that **the remove and set(Object) methods are not defined in terms of the cursor position**; they are defined to operate on the last element returned by a call to next or previous().*
-
-```java
-public interface ListIterator<E> extends Iterator<E> {
-    // Query Operations
-
-    boolean hasNext();
-
-    E next();
-
-    boolean hasPrevious();
-
-    E previous();
-
-    int nextIndex();
-
-    int previousIndex();
-
-
-    // Modification Operations
-
-    void remove();
-
-    void set(E e);
-
-    void add(E e);
 }
 ```
 
