@@ -1,6 +1,9 @@
 ## Introduction
 
-*Java* *NIO* (New IO) is an alternative IO API for Java. Note: Sometimes NIO is claimed to mean *Non-blocking IO* . However, this is not what NIO meant originally. Also, parts of the NIO APIs are actually blocking - e.g. the file APIs - so the label "Non-blocking" would be slightly misleading.
+*Java* *NIO* (New IO) is an alternative IO API for Java. 
+Note: Sometimes NIO is claimed to mean *Non-blocking IO* . 
+However, this is not what NIO meant originally. 
+Also, parts of the NIO APIs are actually blocking - e.g. the file APIs - so the label "Non-blocking" would be slightly misleading.
 
 The table below summarizes the main differences between Java NIO and IO.
 
@@ -12,8 +15,10 @@ The table below summarizes the main differences between Java NIO and IO.
 
 
 
-Java NIO enables you to do non-blocking IO. For instance, a thread can ask a channel to read data into a buffer.
-While the channel reads data into the buffer, the thread can do something else. Once data is read into the buffer, the thread can then continue processing it. The same is true for writing data to channels.
+Java NIO enables you to do non-blocking IO. 
+For instance, a thread can ask a channel to read data into a buffer.
+While the channel reads data into the buffer, the thread can do something else. Once data is read into the buffer, the thread can then continue processing it. 
+The same is true for writing data to channels.
 
 
 
@@ -27,12 +32,43 @@ Java NIO Channels are similar to streams with a few differences:
 * Channels can be read and written asynchronously.
 * Channels always read to, or write from, a Buffer.
 
+A channel represents an open connection to an entity such as a hardware device, a file, a network socket, or a program component that is capable of performing one or more distinct I/O operations, for example reading or writing.
+A channel is either open or closed. A channel is open upon creation, and once closed it remains closed. Once a channel is closed, any attempt to invoke an I/O operation upon it will cause a ClosedChannelException to be thrown.
+Whether or not a channel is open may be tested by invoking its isOpen method.
+
+Channels are, in general, intended to be safe for multithreaded access as described in the specifications of the interfaces and classes that extend and implement this interface.
+
+A socket will have a channel if, and only if, the channel itself was created via the `SocketChannel.open` or `ServerSocketChannel.accept` methods.
+
+
 Here are the most important Channel implementations in Java NIO:
 
-* FileChannel
-* DatagramChannel
 * SocketChannel
 * ServerSocketChannel
+* DatagramChannel
+* FileChannel
+
+
+### SocketChannel
+
+
+
+#### Connect
+
+Connects this channel's socket.
+
+If this channel is in non-blocking mode then an invocation of this method initiates a non-blocking connection operation.
+- If the connection is established immediately, as can happen with a local connection, then this method returns true.
+- Otherwise this method returns false and the connection operation must later be completed by invoking the finishConnect method.
+
+If this channel is in blocking mode then an invocation of this method will block until the connection is established or an I/O error occurs.
+
+This method performs exactly the same security checks as the Socket class.
+That is, if a security manager has been installed then this method verifies that its checkConnect method permits connecting to the address and port number of the given remote endpoint.
+
+This method may be invoked at any time.
+If a read or write operation upon this channel is invoked while an invocation of this method is in progress then that operation will first block until this invocation is complete.
+If a connection attempt is initiated but fails, that is, if an invocation of this method throws a checked exception, then the channel will be closed.
 
 
 ### FileChannel
@@ -257,7 +293,7 @@ public long transferTo(long position, long count, WritableByteChannel target) th
 }
 ```
 
-
+##### transferToDirectly
 ```java
 private long transferToDirectlyInternal(long position, int icount,
                                             WritableByteChannel target,
@@ -304,9 +340,9 @@ private long transferToDirectlyInternal(long position, int icount,
 ```
 
 
+##### transferTo0
 
-
-transferTo0
+通过 JNI 调用本地方法 transferTo0 完成传送
 
 ```c
 
@@ -362,10 +398,79 @@ Java_sun_nio_ch_FileDispatcherImpl_transferTo0(JNIEnv *env, jobject this,
 ```
 
 
+### ServerSocketChannel
+
+```java
+public abstract class ServerSocketChannel extends AbstractSelectableChannel implements NetworkChannel {
+  
+  private final ReentrantLock acceptLock = new ReentrantLock();
+  
+  public SocketChannel accept() throws IOException {
+    int n = 0;
+    FileDescriptor newfd = new FileDescriptor();
+    InetSocketAddress[] isaa = new InetSocketAddress[1];
+
+    acceptLock.lock();
+    try {
+      boolean blocking = isBlocking();
+      try {
+        begin(blocking);
+        n = Net.accept(this.fd, newfd, isaa);
+        if (blocking) {
+          while (IOStatus.okayToRetry(n) && isOpen()) {
+            park(Net.POLLIN);
+            n = Net.accept(this.fd, newfd, isaa);
+          }
+        }
+      } finally {
+        end(blocking, n > 0);
+        assert IOStatus.check(n);
+      }
+    } finally {
+      acceptLock.unlock();
+    }
+
+    if (n > 0) {
+      return finishAccept(newfd, isaa[0]);
+    } else {
+      return null;
+    }
+  }
+}
+```
+
+
+
 ## Buffers
 
 A buffer is essentially a block of memory into which you can write data, which you can then later read again. 
 This memory block is wrapped in a NIO Buffer object, which provides a set of methods that makes it easier to work with the memory block.
+
+
+A container for data of a specific primitive type.
+
+A buffer is a linear, finite sequence of elements of a specific primitive type. Aside from its content, the essential properties of a buffer are its capacity, limit, and position:
+
+- A buffer's capacity is the number of elements it contains. The capacity of a buffer is never negative and never changes.
+- A buffer's limit is the index of the first element that should not be read or written. A buffer's limit is never negative and is never greater than its capacity.
+- A buffer's position is the index of the next element to be read or written. A buffer's position is never negative and is never greater than its limit.
+
+There is one subclass of this class for each non-boolean primitive type.
+
+Marking and resetting
+
+> The following invariant holds for the mark, position, limit, and capacity values:
+>
+> 0 <= mark <= position <= limit <= capacity
+
+Read-only buffers
+
+Every buffer is readable, but not every buffer is writable. The mutation methods of each buffer class are specified as optional operations that will throw a ReadOnlyBufferException when invoked upon a read-only buffer.
+A read-only buffer does not allow its content to be changed, but its mark, position, and limit values are mutable. Whether or not a buffer is read-only may be determined by invoking its isReadOnly method.
+
+Thread safety
+
+**Buffers are not safe for use by multiple concurrent threads.** If a buffer is to be used by more than one thread then access to the buffer should be controlled by appropriate synchronization.
 
 
 Capacity, Position and Limit
@@ -697,8 +802,9 @@ private Unmapper mapInternal(MapMode mode, long position, long size, int prot, b
 private native long map0(int prot, long position, long length, boolean isSync)
         throws IOException;
 ```
+##### map0
 
-调用的mmp64指向了[mmap](/docs/CS/OS/Linux/mm/mmap.md)
+调用的 `mmp64` 函数 指向了[Linux mmap](/docs/CS/OS/Linux/mm/mmap.md)
 
 ```c
 // UnixFileDispatcherImpl.c
@@ -1220,6 +1326,111 @@ public static SelectorProvider create() {
 ```
 
 See [Netty EventLoop - Selector](/docs/CS/Framework/Netty/EventLoop.md?id=Selector).
+
+### Selection
+
+A selection operation queries the underlying operating system for an update as to the readiness of each registered channel to perform any of the operations identified by its key's interest set. There are two forms of selection operation:
+
+- The select(), select(long), and selectNow() methods add the keys of channels ready to perform an operation to the selected-key set, or update the ready-operation set of keys already in the selected-key set.
+- The select(Consumer), select(Consumer, long), and selectNow(Consumer) methods perform an action on the key of each channel that is ready to perform an operation. These methods do not add to the selected-key set.
+
+
+Selection operations that add to the selected-key set
+
+During each selection operation, keys may be added to and removed from a selector's selected-key set and may be removed from its key and cancelled-key sets. Selection is performed by the select(), select(long), and selectNow() methods, and involves three steps:
+
+- Each key in the cancelled-key set is removed from each key set of which it is a member, and its channel is deregistered. This step leaves the cancelled-key set empty.
+- The underlying operating system is queried for an update as to the readiness of each remaining channel to perform any of the operations identified by its key's interest set as of the moment that the selection operation began.
+  For a channel that is ready for at least one such operation, one of the following two actions is performed:
+  - If the channel's key is not already in the selected-key set then it is added to that set and its ready-operation set is modified to identify exactly those operations for which the channel is now reported to be ready.
+    Any readiness information previously recorded in the ready set is discarded.
+  - Otherwise the channel's key is already in the selected-key set, so its ready-operation set is modified to identify any new operations for which the channel is reported to be ready.
+    Any readiness information previously recorded in the ready set is preserved; in other words, the ready set returned by the underlying system is bitwise-disjoined into the key's current ready set.
+- If all of the keys in the key set at the start of this step have empty interest sets then neither the selected-key set nor any of the keys' ready-operation sets will be updated.
+- If any keys were added to the cancelled-key set while step (2) was in progress then they are processed as in step (1).
+
+Whether or not a selection operation blocks to wait for one or more channels to become ready, and if so for how long, is the only essential difference between the three selection methods.
+
+election operations that perform an action on selected keys
+
+During each selection operation, keys may be removed from the selector's key, selected-key, and cancelled-key sets. Selection is performed by the select(Consumer), select(Consumer, long), and selectNow(Consumer) methods, and involves three steps:
+
+- Each key in the cancelled-key set is removed from each key set of which it is a member, and its channel is deregistered. This step leaves the cancelled-key set empty.
+- The underlying operating system is queried for an update as to the readiness of each remaining channel to perform any of the operations identified by its key's interest set as of the moment that the selection operation began.
+  For a channel that is ready for at least one such operation, the ready-operation set of the channel's key is set to identify exactly the operations for which the channel is ready and the action specified to the select method is invoked to consume the channel's key.
+  Any readiness information previously recorded in the ready set is discarded prior to invoking the action.
+  Alternatively, where a channel is ready for more than one operation, the action may be invoked more than once with the channel's key and ready-operation set modified to a subset of the operations for which the channel is ready.
+  Where the action is invoked more than once for the same key then its ready-operation set never contains operation bits that were contained in the set at previous calls to the action in the same selection operation.
+- If any keys were added to the cancelled-key set while step (2) was in progress then they are processed as in step (1).
+
+
+### Concurrency
+
+A Selector and its key set are safe for use by multiple concurrent threads. Its selected-key set and cancelled-key set, however, are not.
+
+The selection operations synchronize on the selector itself, on the selected-key set, in that order. They also synchronize on the cancelled-key set during steps (1) and (3) above.
+
+Changes made to the interest sets of a selector's keys while a selection operation is in progress have no effect upon that operation; they will be seen by the next selection operation.
+
+Keys may be cancelled and channels may be closed at any time. Hence the presence of a key in one or more of a selector's key sets does not imply that the key is valid or that its channel is open.
+Application code should be careful to synchronize and check these conditions as necessary if there is any possibility that another thread will cancel a key or close a channel.
+
+A thread blocked in a selection operation may be interrupted by some other thread in one of three ways:
+
+- By invoking the selector's wakeup method,
+- By invoking the selector's close method, or
+- By invoking the blocked thread's interrupt method, in which case its interrupt status will be set and the selector's wakeup method will be invoked.
+
+The close method synchronizes on the selector and its selected-key set in the same order as in a selection operation.
+
+A Selector's key set is safe for use by multiple concurrent threads.
+Retrieval operations from the key set do not generally block and so may overlap with new registrations that add to the set, or with the cancellation steps of selection operations that remove keys from the set.
+Iterators and spliterators return elements reflecting the state of the set at some point at or since the creation of the iterator/spliterator. They do not throw ConcurrentModificationException.
+
+A selector's selected-key set is not, in general, safe for use by multiple concurrent threads.
+If such a thread might modify the set directly then access should be controlled by synchronizing on the set itself.
+The iterators returned by the set's iterator methods are fail-fast: If the set is modified after the iterator is created, in any way except by invoking the iterator's own remove method, then a java.util.ConcurrentModificationException will be thrown.
+
+
+### select
+
+Selects a set of keys whose corresponding channels are ready for I/O operations.
+
+Both `select()` and `select(timeout)` methods perform a blocking selection operation.
+And return only after at least one channel is selected, this selector's wakeup method is invoked, or the current thread is interrupted, whichever comes first.
+The `select(timeout)` method  also returns after the given timeout period expires.
+This method does not offer real-time guarantees: It schedules the timeout as if by invoking the Object.wait(long) method.
+
+
+The `selectNow()` method performs a non-blocking selection operation.
+If no channels have become selectable since the previous selection operation then this method immediately returns zero.
+Invoking this method clears the effect of any previous invocations of the wakeup method.
+
+```java
+
+public abstract int select() throws IOException;
+
+public abstract int select(long timeout) throws IOException;
+
+public abstract int selectNow() throws IOException;
+```
+
+### wakeup
+
+Causes the first selection operation that has not yet returned to return immediately.
+
+If another thread is currently blocked in a selection operation then that invocation will return immediately.
+If no selection operation is currently in progress then the next invocation of a selection operation will return immediately unless selectNow() or selectNow(Consumer) is invoked in the meantime.
+In any case the value returned by that invocation may be non-zero.
+Subsequent selection operations will block as usual unless this method is invoked again in the meantime.
+> [!TIP]
+>
+> Invoking this method more than once between two successive selection operations has the same effect as invoking it just once.
+
+```java
+public abstract Selector wakeup();
+```
+
 
 ## Links
 
