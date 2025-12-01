@@ -15,14 +15,17 @@ Thus, operations such as find_min, find_max, and the printing of the entire tabl
 ## General Idea
 
 The ideal hash table data structure is merely an array of some fixed size, containing the keys.
-Typically, a key is a string with an associated value (for instance, salary information). We will refer to the table size as *H_SIZE*, with the understanding that this is part of a hash data structure and not merely some variable floating around globally.
+Typically, a key is a string with an associated value (for instance, salary information). 
+We will refer to the table size as *H_SIZE*, with the understanding that this is part of a hash data structure and not merely some variable floating around globally.
 The common convention is to have the table run from 0 to *H_SIZE-1*.
 
-Each key is mapped into some number in the range 0 to *H_SIZE* - *1* and placed in the appropriate cell. The mapping is called a  *hash function* , which ideally should be simple to compute and should ensure that any two distinct keys get different cells.
+Each key is mapped into some number in the range 0 to *H_SIZE* - *1* and placed in the appropriate cell.
+The mapping is called a  *hash function* , which ideally should be simple to compute and should ensure that any two distinct keys get different cells.
 
 Since there are a finite number of cells and a virtually inexhaustible supply of keys, this is clearly impossible, and thus we seek a hash function that distributes the keys evenly among the cells.
 
-This is the basic idea of hashing. The only remaining problems deal with choosing a function, deciding what to do when two keys hash to the same value (this is known as a  *collision* ), and deciding on the table size.
+This is the basic idea of hashing.
+The only remaining problems deal with choosing a function, deciding what to do when two keys hash to the same value (this is known as a  *collision* ), and deciding on the table size.
 
 ## Hash Function
 
@@ -80,9 +83,11 @@ If the element turns out to be new, it is inserted either at the front of the li
 
 > [!NOTE]
 >
-> Sometimes new elements are inserted at the front of the list, since it is convenient and also because frequently it happens that recently inserted elements are the most likely to be accessed in the near future.
+> Sometimes new elements are inserted at the front of the list,
+> since it is convenient and also because frequently it happens that recently inserted elements are the most likely to be accessed in the near future.
 
-Any scheme could be used besides linked lists to resolve the collisions-a binary search tree or even another hash table would work, but we expect that if the table is large and the hash function is good, all the lists should be short, so it is not worthwhile to try anything complicated.
+Any scheme could be used besides linked lists to resolve the collisions-a binary search tree or even another hash table would work,
+but we expect that if the table is large and the hash function is good, all the lists should be short, so it is not worthwhile to try anything complicated.
 
 We define the load factor,$\delta$ , of a hash table to be the ratio of the number of elements in the hash table to the table size. 
 In the example above,  = 1.0. The average length of a list is .

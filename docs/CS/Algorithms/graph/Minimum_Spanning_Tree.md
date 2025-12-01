@@ -14,7 +14,7 @@ Prim算法是以顶点为基础,一点一点向外延申,直到所有的顶点�
 
 ### Prim's Algorithm
 
-prim算法的思想和Dijkstra很相似
+prim算法的思想和Dijkstra很相似 适合稠密图
 
 
 

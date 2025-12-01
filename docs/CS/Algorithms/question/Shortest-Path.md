@@ -120,4 +120,12 @@ Bellman-Ford 的整体时间复杂度是 $O(V*E)$，大部分实际场景下，�
 
 [洛谷P3385 【模板】负环](https://www.luogu.com.cn/problem/P3385)
 
+## A*
+
+A star算法最早可追溯到1968年，在IEEE Transactions on Systems Science and Cybernetics中的论文A Formal Basis for the Heuristic Determination of Minimum Cost Paths中首次提出
+A*算法是把启发式方法（heuristic approaches）如BFS（完全使用贪心策略），和常规方法如 Dijsktra 算法结合在一起的算法
+有点不同的是，类似BFS的启发式方法经常给出一个近似解而不是保证最佳解。然而，尽管A star基于无法保证最佳解的启发式方法，A star却能保证找到一条最短路径
+
+
+
 ## Links
