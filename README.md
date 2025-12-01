@@ -21,3 +21,9 @@
 ## Philosophy
 
 [Philosophy](/docs/Philosophy/Philosophy.md)
+
+
+
+## Sports
+
+[Exercise physiology](/docs/Sports/Sports.md)
