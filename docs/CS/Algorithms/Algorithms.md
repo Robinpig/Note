@@ -32,15 +32,13 @@
 
 ## Data Structures
 
-Data structure is a particular way of storing and organizing data in a computer so that it can be used efficiently.
-A data structure is a special format for organizing and storing data. 
-General data structure types include arrays, files, linked lists, stacks, queues, trees, graphs and so on.
-<br>
-Depending on the organization of the elements, data structures are classified into two types:
+数据结构是在计算机中存储和组织数据的一种特定方式，以便能够高效地使用这些数据
+常见的数据结构类型包括数组、文件、链表、栈、队列、树、图等。
 
-1) Linear data structures: Elements are accessed in a sequential order but it is not compulsory to store all elements sequentially (say, Linked Lists).
-   Examples: Linked Lists, Stacks and Queues.
-2) Non – linear data structures: Elements of this data structure are stored / accessed in a non-linear order. Examples: Trees and graphs.
+根据元素的组织方式，数据结构可分为两类
+
+1) 线性数据结构：元素按顺序访问，但不必将所有元素顺序存储 例如：链表、栈和队列
+2) 非线性数据结构：此数据结构的元素以非线性顺序存储/访问 例如：树和图
 
 An abstract data type (ADT) is a set of operations.
 Abstract data types are mathematical abstractions; nowhere in an ADT's definition is there any mention of how the set of operations is implemented.
