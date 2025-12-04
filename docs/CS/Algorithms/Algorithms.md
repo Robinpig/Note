@@ -199,6 +199,20 @@ Also, by assuming infinite memory, we never worry about page faulting, which can
 Euclid's algorithm is for computing the greatest common divisor.
 The greatest common divisor (gcd) of two integers is the largest integer that divides both.
 
+
+
+
+
+**枚举算法（Enumeration Algorithm）**，又称穷举算法，是指根据问题的特点，逐一列出所有可能的解，并与目标条件进行比较，找出满足要求的答案。枚举时要确保不遗漏、不重复
+由于需要遍历所有状态，枚举算法在问题规模较大时效率较低
+因此，枚举算法常用于小规模问题，或作为其他算法的辅助工具，通过枚举部分信息来提升主算法的效率
+
+枚举算法的应用
+
+两数之和
+
+
+
 ### Advanced Design and Analysis Techniques
 
 Text-editing programs frequently need to find all occurrences of a pattern in the text.

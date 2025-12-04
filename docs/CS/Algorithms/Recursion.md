@@ -1,7 +1,13 @@
 ## Introduction
 
-A procedure that calls itself, directly or indirectly, is said to be *recursive*.
-The use of recursion often permits more lucid and concise descriptions of algorithms than would be possible without recursion.
+递归（Recursion），在数学和计算机科学中是指在函数的定义中使用函数自身的方法，在计算机科学中还额外指一种通过重复将问题分解为同类的子问题而解决问题的方法
+
+递归的基本思想是某个函数直接或者间接地调用自身，这样原问题的求解就转换为了许多性质相同但是规模更小的子问题
+求解时只需要关注如何把原问题划分成符合条件的子问题，而不需要过分关注这个子问题是如何被解决的
+写递归代码的关键是，只要遇到递归，我们就把它抽象成一个递推公式，不用想一层层的调用关系，不要试图用人脑去分解递归的每个步骤
+
+递归代码最重要的两个特征：结束条件和自我调用。自我调用是在解决子问题，而结束条件定义了最简子问题的答案
+
 
 When writing recursive routines, it is crucial to keep in mind the four basic rules of recursion:
 
@@ -10,16 +16,11 @@ When writing recursive routines, it is crucial to keep in mind the four basic ru
 3. *Design rule.* Assume that all the recursive calls work.
 4. *Compound interest rule.* Never duplicate work by solving the same instance of a problem in separate recursive calls.
 
-Each recursive call makes a new copy of that method (actually only the variables) in memory.
-Once a method ends (that is, returns some data), the copy of that returning method is removed from memory.
-The recursive solutions look simple but visualization and tracing takes time.
 
-写递归代码的关键是，只要遇到递归，我们就把它抽象成一个递推公式，不用想一层层的调用关系，不要试图用人脑去分解递归的每个步骤
+在程序执行中，递归是利用堆栈来实现的。每当进入一个函数调用，栈就会增加一层栈帧，每次函数返回，栈就会减少一层栈帧
+而栈不是无限大的，当递归层数过多时，就会造成 栈溢出 的后果
 
-A recursive function performs a task in part by calling itself to perform the subtasks.
-At some point, the function encounters a subtask that it can perform without calling itself.
-This case, where the function does not recur, is called the base case.
-The former, where the function calls itself to perform a subtask, is referred to as the recursive case.
+
 We can write all recursive functions using the format:
 
 ```
@@ -63,6 +64,12 @@ Iteration
 * For some problems, there are no obvious iterative algorithms.
 * Some problems are best suited for recursive solutions while others are not.
 
+
+## 递归优化
+
+比较初级的递归实现可能递归次数太多，容易超时。这时需要对递归进行优化
+
+分治（Divide and Conquer），字面上的解释是「分而治之」，就是把一个复杂的问题分成两个或更多的相同或相似的子问题，直到最后子问题可以简单的直接求解，原问题的解即子问题的解的合并
 
 ## Tail Call
 

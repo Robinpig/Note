@@ -5,18 +5,22 @@
 
 贪心方法是一种强有力的算法设计方法，可以很好地解决很多问题。例如最小生成树 (minimum-spanning-tree) 算法、单源最短路径的 Dijkstra 算法，以及集合覆盖问题的 Chvatal 贪心启发式算法
 
-Greedy algorithms work in phases. 
-In each phase, a decision is made that appears to be good, without regard for future consequences. Generally, this means that some `local optimum` is chosen.  
-This "take what you can get now" strategy is the source of the name for this class of algorithms. 
+通常，能用贪心算法解决的问题需同时满足两个条件：
 
-When the algorithm terminates, we hope that the `local optimum` is equal to the `global optimum`. 
-If this is the case, then the algorithm is correct; otherwise, the algorithm has produced a suboptimal solution.
-If the absolute best answer is not required, then simple greedy algorithms are sometimes used to generate approximate answers, 
-rather than using the more complicated algorithms generally required to generate an exact answer.
+1. 贪心选择性质
+2. 最优子结构
+
+贪心算法分阶段进行。在每个阶段，会做出一个看起来不错的决策，而不考虑未来的后果。通常，这意味着选择某个“局部最优”。这种“先取当前可得之物”的策略正是这一类算法名称的由来 这种“尽可能及时获取”的策略就是这类算法名称的来源
+
+> 贪心算法与动态规划的不同在于它对每个子问题的解决方案都做出选择，不能回退。动态规划则会保存以前的运算结果，并根据以前的结果对当前进行选择，有回退功能
+
+当算法终止时，我们希望“局部最优”等于“全局最优”。
+如果是这样，那么算法就是正确的；否则，算法就产生了次优解。
+如果不需要绝对最优答案，那么有时会使用简单的贪婪算法来生成近似答案，而不是使用通常需要的更复杂的算法来生成精确答案。
 
 
 
-We have already seen three greedy algorithms: Dijkstra's, Prim's, and Kruskal's algorithms.
+常见的三种贪心算法：Dijkstra 算法、Prim 算法和 Kruskal 算法
 
 There are several real-life examples of greedy algorithms. 
 The most obvious is the coin-changing problem.
