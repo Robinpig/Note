@@ -522,7 +522,8 @@ JDK NIO 为每一种 Java 基本类型定义了对应的 Buffer 类（boolean �
 针对每一种基本类型的 Buffer ，NIO 又根据 Buffer 背后的数据存储内存不同分为了：HeapBuffer，DirectBuffer，MappedBuffer
 这三种不同类型 ByteBuffer 的本质区别就是其背后依赖的虚拟内存在 JVM 进程虚拟内存空间中的布局位置不同
 
-位于 JVM 堆之外的内存其实都可以归属到 DirectByteBuffer 的范畴中。比如，位于 OS 堆之内，JVM 堆之外的 MetaSpace，即时编译(JIT) 之后的 codecache，JVM 线程栈，Native 线程栈，JNI 相关的内存，等等
+位于 JVM 堆之外的内存其实都可以归属到 DirectByteBuffer 的范畴中。
+比如，位于 OS 堆之内，JVM 堆之外的 MetaSpace，即时编译(JIT) 之后的 codecache，JVM 线程栈，Native 线程栈，JNI 相关的内存，等等
 JVM 在 OS 堆中划分出的 Direct Memory （上图红色部分）特指受到参数 -XX:MaxDirectMemorySize 限制的直接内存区域，比如通过 ByteBuffer#allocateDirect 申请到的 Direct Memory 容量就会受到该参数的限制
 
 通过 Unsafe#allocateMemory 申请到的 Direct Memory 容量则不会受任何 JVM 参数的限制，只会受操作系统本身对进程所使用内存容量的限制。也就是说 Unsafe 类会脱离 JVM 直接向操作系统进行内存申请
@@ -695,9 +696,7 @@ public MappedByteBuffer map(MapMode mode, long position, long size) throws IOExc
         }
     }
 ```
-调用到native方法map0
-
-捕获到的OOM会以 OOM:Map failed抛出
+调用到native方法 map0 若捕获到的OOM 会先尝试触发一次 System.gc 再重试 map0 若依旧 OOM 则将以 IOException(Map failed) 的形式抛出
 
 ```java
 private Unmapper mapInternal(MapMode mode, long position, long size, int prot, boolean isSync)
@@ -784,8 +783,6 @@ private Unmapper mapInternal(MapMode mode, long position, long size, int prot, b
                 throw ioe;
             }
 
-            assert (IOStatus.checkAll(addr));
-            assert (addr % allocationGranularity == 0);
             Unmapper um = (isSync
                            ? new SyncUnmapper(addr, mapSize, size, mfd, pagePosition)
                            : new DefaultUnmapper(addr, mapSize, size, mfd, pagePosition));
@@ -804,7 +801,7 @@ private native long map0(int prot, long position, long length, boolean isSync)
 ```
 ##### map0
 
-调用的 `mmp64` 函数 指向了[Linux mmap](/docs/CS/OS/Linux/mm/mmap.md)
+map0 调用的 `mmap64` 函数 指向了[Linux mmap](/docs/CS/OS/Linux/mm/mmap.md)
 
 ```c
 // UnixFileDispatcherImpl.c
