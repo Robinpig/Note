@@ -79,7 +79,7 @@ Iteration
 * Binary Search
 * Tree Traversals and many Tree Problems: InOrder, PreOrder PostOrder
 * Graph Traversals: DFS [Depth First Search] and BFS [Breadth First Search]
-* [Dynamic Programming Examples](/docs/CS/Algorithms/DP.md)
+* [Dynamic Programming Examples](/docs/CS/Algorithms/DP/DP.md)
 * Divide and Conquer Algorithms
 * Towers of Hanoi
 * [Backtracking Algorithms](/docs/CS/Algorithms/Backtracking.md)

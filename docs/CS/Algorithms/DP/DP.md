@@ -1,6 +1,6 @@
 ## Introduction
 
-动态规划 (*dynamic programming)* 与分治方法相似，都是通过组合子问题的解来求解原问题（在这里， "programmin旷指的是一种表格法，并非编写计算机程序）
+动态规划 (*dynamic programming)* 与分治方法相似，都是通过组合子问题的解来求解原问题（在这里， "programming" 指的是一种表格法，并非编写计算机程序）
 
 分治方法将问题划分为互不相交的子问题，递归地求解子问题，再将它们的解组合起来，求出原问题的解
 与之相反，动态规划应用于子问题重叠的情况，即不同的子问题具有公共的子子问题（子问题的求解是递归进行的，将其划分为更小的子子问题）。
@@ -118,7 +118,7 @@ The second ingredient that an optimization problem must have for dynamic program
 that a recursive algorithm for the problem solves the same subproblems over and over, rather than always generating new subproblems. 
 Typically, the total number of distinct subproblems is a polynomial in the input size. 
 When a recursive algorithm revisits the same problem repeatedly, we say that the optimization problem has overlapping subproblems. 
-In contrast, a problem for which a divide-andconquer approach is suitable usually generates brand-new problems at each step of the recursion. 
+In contrast, a problem for which a divide-and-conquer approach is suitable usually generates brand-new problems at each step of the recursion. 
 Dynamic-programming algorithms typically take advantage of overlapping subproblems by solving each subproblem once and then 
 storing the solution in a table where it can be looked up when needed, using constant time per lookup.
 
@@ -195,16 +195,23 @@ int climbingStairsConstraintDP(int n) {
 ```
 
 
-在上面的案例中，由于仅需多考虑前面一个状态，因此我们仍然可以通过扩展状态定义，使得问题重新满足无后效性。然而，某些问题具有非常严重的“有后效性”。
+在上面的案例中，由于仅需多考虑前面一个状态，因此我们仍然可以通过扩展状态定义，使得问题重新满足无后效性
+然而，某些问题具有非常严重的“有后效性”。
 
 爬楼梯与障碍生成
-给定一个共有 n 阶的楼梯，你每步可以上 1 阶或者 2 阶。规定当爬到第 i 阶时，系统自动会在第 2i 阶上放上障碍物，之后所有轮都不允许跳到第 2i 阶上。例如，前两轮分别跳到了第 2、3 阶上，则之后就不能跳到第 4、6 阶上。请问有多少种方案可以爬到楼顶？
 
-在这个问题中，下次跳跃依赖过去所有的状态，因为每一次跳跃都会在更高的阶梯上设置障碍，并影响未来的跳跃。对于这类问题，动态规划往往难以解决。
+给定一个共有 n 阶的楼梯，你每步可以上 1 阶或者 2 阶
+规定当爬到第 i 阶时，系统自动会在第 2i 阶上放上障碍物，之后所有轮都不允许跳到第 2i 阶上
+例如，前两轮分别跳到了第 2、3 阶上，则之后就不能跳到第 4、6 阶上。请问有多少种方案可以爬到楼顶？
 
-实际上，许多复杂的组合优化问题（例如旅行商问题）不满足无后效性。对于这类问题，我们通常会选择使用其他方法，例如启发式搜索、遗传算法、强化学习等，从而在有限时间内得到可用的局部最优解。
+在这个问题中，下次跳跃依赖过去所有的状态，因为每一次跳跃都会在更高的阶梯上设置障碍，并影响未来的跳跃
+对于这类问题，动态规划往往难以解决。
 
-总的来说，如果一个问题包含重叠子问题、最优子结构，并满足无后效性，那么它通常适合用动态规划求解。然而，我们很难从问题描述中直接提取出这些特性。因此我们通常会放宽条件，先观察问题是否适合使用回溯（穷举）解决。
+实际上，许多复杂的组合优化问题（例如旅行商问题）不满足无后效性
+对于这类问题，我们通常会选择使用其他方法，例如启发式搜索、遗传算法、强化学习等，从而在有限时间内得到可用的局部最优解。
+
+总的来说，如果一个问题包含重叠子问题、最优子结构，并满足无后效性，那么它通常适合用动态规划求解
+然而，我们很难从问题描述中直接提取出这些特性。因此我们通常会放宽条件，先观察问题是否适合使用回溯（穷举）解决。
 
 适合用回溯解决的问题通常满足“决策树模型”，这种问题可以使用树形结构来描述，其中每一个节点代表一个决策，每一条路径代表一个决策序列。
 
@@ -237,9 +244,10 @@ LCS[s1,s2] 表示s1和s2的LCS的长度。现在，假如我们有 abdcbab 和 b
 
  
 
-为了方便理解此表，我们暂时认为索引是从 1 开始的，待会的代码中只要稍作调整即可。其中，dp[i][j] 的含义是：对于 s1[1..i] 和 s2[1..j]，它们的 LCS 长度是 dp[i][j]。
+为了方便理解此表，我们暂时认为索引是从 1 开始的，待会的代码中只要稍作调整即可。
+其中，dp[i][j] 的含义是：对于 s1[1..i] 和 s2[1..j]，它们的 LCS 长度是 dp[i][j]。
 
-比如上图的例子，d[2][4] 的含义就是：对于 "ac" 和 "babc"，它们的 LCS 长度是 2。我们最终想得到的答案应该是 dp[3][6]。
+比如上图的例子，d[2][4] 的含义就是：对于 "ac" 和 "babc"，它们的 LCS 长度是 2。我们最终想得到的答案应该是 dp[3][6]
 
  
 
@@ -250,38 +258,25 @@ LCS[s1,s2] 表示s1和s2的LCS的长度。现在，假如我们有 abdcbab 和 b
  
 
 
-```
+```java
 class Solution {
 
-  public int longestCommonSubsequence(String text1, String text2) {
+    public int longestCommonSubsequence(String text1, String text2) {
+        int M = text1.length();
+        int N = text2.length();
+        int[][] dp = new int[M + 1][N + 1];
+        for (int i = 1; i <= M; ++i) {
+            for (int j = 1; j <= N; ++j) {
+                if (text1.charAt(i - 1) == text2.charAt(j - 1)) {
+                    dp[i][j] = dp[i - 1][j - 1] + 1;
+                } else {
+                    dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+                }
+            }
+        }
 
-​    int M = text1.length();
-
-​    int N = text2.length();
-
-​    int[][] dp = new int[M + 1][N + 1];
-
-​    for (int i = 1; i <= M; ++i) {
-
-​      for (int j = 1; j <= N; ++j) {
-
-​        if (text1.charAt(i - 1) == text2.charAt(j - 1)) {
-
-​          dp[i][j] = dp[i - 1][j - 1] + 1;
-
-​        } else {
-
-​          dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
-
-​        }
-
-​      }
-
-​    }
-
-​    return dp[M][N];
-
-  }
+        return dp[M][N];
+    }
 
 }
 ```

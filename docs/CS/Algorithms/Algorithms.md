@@ -190,7 +190,7 @@ Text-editing programs frequently need to find all occurrences of a pattern in th
 Typically, the text is a document being edited, and the pattern searched for is a particular word supplied by the user.
 Efficient algorithms for this problem—called “[string matching](/docs/CS/Algorithms/string-search)”—can greatly aid the responsiveness of the text-editing program.
 
-- [Dynamic Programming](/docs/CS/Algorithms/DP.md)
+- [Dynamic Programming](/docs/CS/Algorithms/DP/DP.md)
 - [Greedy Programming](/docs/CS/Algorithms/Greedy.md)
 - [Amortized Analysis](/docs/CS/Algorithms/Amortized.md)
 - [Randomized](/docs/CS/Algorithms/Randomized.md)
