@@ -3,42 +3,43 @@
 How to allocate direct memory?
 
 Allocates a new direct byte buffer.
-The new buffer's position will be zero, its limit will be its capacity, its mark will be undefined, and each of its elements will be initialized to zero. Whether or not it has a backing array is unspecified.
+The new buffer's position will be zero, its limit will be its capacity, its mark will be undefined, and each of its elements will be initialized to zero. 
+Whether or not it has a backing array is unspecified.
+
+
 ```java
-// ByteBuffer
-public static ByteBuffer allocateDirect(int capacity) {
+    // ByteBuffer
+    public static ByteBuffer allocateDirect(int capacity) {
         return new DirectByteBuffer(capacity);
     }
 
-DirectByteBuffer(int cap) {                   // package-private
-   super(-1, 0, cap, cap);
-   boolean pa = VM.isDirectMemoryPageAligned();
-   int ps = Bits.pageSize();
-   long size = Math.max(1L, (long)cap + (pa ? ps : 0));
-   Bits.reserveMemory(size, cap);
-   
-   long base = 0;
-   try {
-   base = unsafe.allocateMemory(size);
-   } catch (OutOfMemoryError x) {
-   Bits.unreserveMemory(size, cap);
-   throw x;
-   }
-   unsafe.setMemory(base, size, (byte) 0);
-   if (pa && (base % ps != 0)) {
-   // Round up to page boundary
-   address = base + ps - (base & (ps - 1));
-   } else {
-   address = base;
-   }
-   cleaner = Cleaner.create(this, new Deallocator(base, size, cap));
-   att = null;
-   
+    DirectByteBuffer(int cap) {                   // package-private
+        super(-1, 0, cap, cap);
+        boolean pa = VM.isDirectMemoryPageAligned();
+        int ps = Bits.pageSize();
+        long size = Math.max(1L, (long) cap + (pa ? ps : 0));
+        Bits.reserveMemory(size, cap);
 
+        long base = 0;
+        try {
+            base = unsafe.allocateMemory(size);
+        } catch (OutOfMemoryError x) {
+            Bits.unreserveMemory(size, cap);
+            throw x;
+        }
+        unsafe.setMemory(base, size, (byte) 0);
+        if (pa && (base % ps != 0)) {
+            // Round up to page boundary
+            address = base + ps - (base & (ps - 1));
+        } else {
+            address = base;
+        }
+        cleaner = Cleaner.create(this, new Deallocator(base, size, cap));
+        att = null;
 
-}
+    }
 ```
--XX:MaxDirectMemorySize=<size>
+检查当前 JVM 进程堆外内存是否超过了 -XX:MaxDirectMemorySize 的限制 通过检查后会执行 unsafe.allocateMemory 申请堆外内存
 
 ```java
 
@@ -54,12 +55,12 @@ private static long directMemory = 64 * 1024 * 1024;
 
 ```
 
-
-1. `ByteBuffer.allocteDirect` call `Unsafe.allocateMemory`
-2. `Unsafe.allocateMemory`
+### Unsafe.allocateMemory
 
 
+Unsafe.allocateMemory 通过  `malloc` 申请虚拟内存
 它是在堆外内存（C_HEAP）中分配一块内存空间，并返回堆外内存的基地址
+
 ```cpp
 //unsafe.cpp
 UNSAFE_ENTRY(jlong, Unsafe_AllocateMemory0(JNIEnv *env, jobject unsafe, jlong size)) {
@@ -78,12 +79,12 @@ UNSAFE_ENTRY(jlong, Unsafe_AllocateMemory0(JNIEnv *env, jobject unsafe, jlong si
 ## create DirectByteBuffer
 
 
-1. `reserveMemory`
-2. if has enough memory, return
+1. `reserveMemory` 该函数执行返回只有两种 正常返回有足够内存, 或者没有足够内存 抛出 OOM
+   1. if has enough memory, return
    1. Else `tryHandlePendingReference` free memory util enough memory
    2. `System.gc()`
-   4. Continue step 1, 2 util enough memory or MAX_SLEEPS
-   5. if still no enough memory, OOM
+   3. Continue step 1, 2 util enough memory or MAX_SLEEPS
+   4. if still no enough memory, OOM
 3. `unsafe.allocateMemory`
 4. init memory with `(byte) 0`
 5. create a `Cleaner` with `Deallocator` to free direct memory when directByteBuffer instance unused
@@ -97,7 +98,6 @@ public static ByteBuffer allocateDirect(int capacity) {
 }
 
 //DirectByteBuffer.java
-// Primary constructor
 DirectByteBuffer(int cap) {                   // package-private
     super(-1, 0, cap, cap);
     boolean pa = VM.isDirectMemoryPageAligned();
@@ -125,7 +125,119 @@ DirectByteBuffer(int cap) {                   // package-private
     att = null;
 }
 ```
+reserveMemory
 
+```java
+    static void reserveMemory(long size, long cap) {
+
+        if (!MEMORY_LIMIT_SET && VM.initLevel() >= 1) {
+            MAX_MEMORY = VM.maxDirectMemory();
+            MEMORY_LIMIT_SET = true;
+        }
+
+        // optimist!
+        if (tryReserveMemory(size, cap)) {
+            return;
+        }
+
+        final JavaLangRefAccess jlra = SharedSecrets.getJavaLangRefAccess();
+        boolean interrupted = false;
+        try {
+
+            // Retry allocation until success or there are no more
+            // references (including Cleaners that might free direct
+            // buffer memory) to process and allocation still fails.
+            boolean refprocActive;
+            do {
+                try {
+                    refprocActive = jlra.waitForReferenceProcessing();
+                } catch (InterruptedException e) {
+                    // Defer interrupts and keep trying.
+                    interrupted = true;
+                    refprocActive = true;
+                }
+                if (tryReserveMemory(size, cap)) {
+                    return;
+                }
+            } while (refprocActive);
+
+            // trigger VM's Reference processing
+            System.gc();
+
+            // A retry loop with exponential back-off delays.
+            // Sometimes it would suffice to give up once reference
+            // processing is complete.  But if there are many threads
+            // competing for memory, this gives more opportunities for
+            // any given thread to make progress.  In particular, this
+            // seems to be enough for a stress test like
+            // DirectBufferAllocTest to (usually) succeed, while
+            // without it that test likely fails.  Since failure here
+            // ends in OOME, there's no need to hurry.
+            long sleepTime = 1;
+            int sleeps = 0;
+            while (true) {
+                if (tryReserveMemory(size, cap)) {
+                    return;
+                }
+                if (sleeps >= MAX_SLEEPS) {
+                    break;
+                }
+                try {
+                    if (!jlra.waitForReferenceProcessing()) {
+                        Thread.sleep(sleepTime);
+                        sleepTime <<= 1;
+                        sleeps++;
+                    }
+                } catch (InterruptedException e) {
+                    interrupted = true;
+                }
+            }
+
+            // no luck
+            throw new OutOfMemoryError
+                ("Cannot reserve "
+                 + size + " bytes of direct buffer memory (allocated: "
+                 + RESERVED_MEMORY.get() + ", limit: " + MAX_MEMORY +")");
+
+        } finally {
+            if (interrupted) {
+                // don't swallow interrupts
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+```
+tryReserveMemory 
+
+```java
+    private static boolean tryReserveMemory(long size, long cap) {
+
+        // -XX:MaxDirectMemorySize limits the total capacity rather than the
+        // actual memory usage, which will differ when buffers are page
+        // aligned.
+        long totalCap;
+        while (cap <= MAX_MEMORY - (totalCap = TOTAL_CAPACITY.get())) {
+            if (TOTAL_CAPACITY.compareAndSet(totalCap, totalCap + cap)) {
+                RESERVED_MEMORY.addAndGet(size);
+                COUNT.incrementAndGet();
+                return true;
+            }
+        }
+
+        return false;
+    }
+```
+
+
+
+```java
+ static void unreserveMemory(long size, long cap) {
+     long cnt = COUNT.decrementAndGet();
+     long reservedMem = RESERVED_MEMORY.addAndGet(-size);
+     long totalCap = TOTAL_CAPACITY.addAndGet(-cap);
+     assert cnt >= 0 && reservedMem >= 0 && totalCap >= 0;
+ }
+```
 
 
 ## Cleaner
