@@ -1,46 +1,31 @@
 ## Introduction
 
+中文的“算法”一词至少在唐代就出现了，在此之前也有“术”“算术”等词，最早出现在《周髀算经》《九章算术》。而且，“算法”一词的含义从古到今几乎没有发生变化。
+
+英文的“算法”（algorithm）一词来源于 9 世纪波斯数学家花拉子米（al-Khwārizmī，780?~850?）——就是那个解决一次方程及一元二次方程的方法的人。花拉子米的拉丁文译名是“Algoritmi”。英文对“算法”原译为“algorism”，意思是花拉子米的运算法则，在 18 世纪演变为“algorithm”。这个词出现于 12 世纪，指的是用阿拉伯数字进行算术运算的过程
+
+约公元前 300 年记载于《几何原本》中的辗转相除法（欧几里得算法）被人们认为是史上第一个算法，可以求两数的最大公约数
+
+1936年 图灵提出《论数学计算在决断难题中之应用》 提出图灵机的概念 
+图灵机的出现解决了算法定义的难题，图灵的思想对算法的发展起到了重要的作用
+
+在此之后，算法更偏向于计算机科学领域，各种解决不同问题的算法也层出不穷，涉及排序、统计、线性规划、搜索、压缩等方面。
+
+到了现在，随着人工智能和机器学习的发展，涉及到神经网络的算法变得越发重要
 
 
-1900年 大卫希尔伯特提出了著名的希尔伯特之23个问题 第10个问题是 通过有限多次运算 测试多项式是否有整数根
-
-
-
-1936年 图灵提出《论数学计算在决断难题中之应用》 提出图灵机的概念
-
-
-
-
-
-以下涉及的都是计算机算法
-
-
-算法应用
-
-
-社会
-
-推荐算法
-- 衣食住行 买东西
-
-路径规划算法
-
-
-人工智能算法
 
 
 
 ## Data Structures
 
-Data structure is a particular way of storing and organizing data in a computer so that it can be used efficiently.
-A data structure is a special format for organizing and storing data. 
-General data structure types include arrays, files, linked lists, stacks, queues, trees, graphs and so on.
-<br>
-Depending on the organization of the elements, data structures are classified into two types:
+数据结构是在计算机中存储和组织数据的一种特定方式，以便能够高效地使用这些数据
+常见的数据结构类型包括数组、文件、链表、栈、队列、树、图等。
 
-1) Linear data structures: Elements are accessed in a sequential order but it is not compulsory to store all elements sequentially (say, Linked Lists).
-   Examples: Linked Lists, Stacks and Queues.
-2) Non – linear data structures: Elements of this data structure are stored / accessed in a non-linear order. Examples: Trees and graphs.
+根据元素的组织方式，数据结构可分为两类
+
+1) 线性数据结构：元素按顺序访问，但不必将所有元素顺序存储 例如：链表、栈和队列
+2) 非线性数据结构：此数据结构的元素以非线性顺序存储/访问 例如：树和图
 
 An abstract data type (ADT) is a set of operations.
 Abstract data types are mathematical abstractions; nowhere in an ADT's definition is there any mention of how the set of operations is implemented.
@@ -219,7 +204,7 @@ Text-editing programs frequently need to find all occurrences of a pattern in th
 Typically, the text is a document being edited, and the pattern searched for is a particular word supplied by the user.
 Efficient algorithms for this problem—called “[string matching](/docs/CS/Algorithms/string-search)”—can greatly aid the responsiveness of the text-editing program.
 
-- [Dynamic Programming](/docs/CS/Algorithms/DP.md)
+- [Dynamic Programming](/docs/CS/Algorithms/DP/DP.md)
 - [Greedy Programming](/docs/CS/Algorithms/Greedy.md)
 - [Amortized Analysis](/docs/CS/Algorithms/Amortized.md)
 - [Randomized](/docs/CS/Algorithms/Randomized.md)

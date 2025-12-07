@@ -16,5 +16,21 @@ bash shell的名称就是针对Bourne shell的拼写所玩的一个文字游戏�
 | zsh   | 一种结合 |
 
 
+
+
+## Script
+
+在创建 shell 脚本文件时 必须在第一行指定使用的 shell 格式为
+
+```shell
+#!/bin/bash
+```
+
+
+
+
+
+
+
 ## Links
 

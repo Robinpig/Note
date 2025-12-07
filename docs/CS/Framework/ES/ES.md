@@ -226,18 +226,21 @@ curl -POST '127.0.0.1:9200/_cat/shards?v'
 错误定义了索引
 "index":"not_analyzed" 并不是不做索引，而是不对内容进行全文索引，仅是作为一个keyword来索引。
 ```json
-"spanEvents": {
-    "type":"text",
-    "index":"not_analyzed"
+{
+  "spanEvents": {
+    "type": "text",
+    "index": "not_analyzed"
+  }
 }
 ```
 应该定义为
 
 ```json
-
-"spanEvents": {
-    "type":"text",
+{
+  "spanEvents": {
+    "type": "text",
     "index": false
+  }
 }
 ```
 
