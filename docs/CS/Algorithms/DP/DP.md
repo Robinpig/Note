@@ -3,7 +3,7 @@
 动态规划 (*dynamic programming)* 与分治方法相似，都是通过组合子问题的解来求解原问题（在这里， "programming" 指的是一种表格法，并非编写计算机程序）
 
 分治方法将问题划分为互不相交的子问题，递归地求解子问题，再将它们的解组合起来，求出原问题的解
-与之相反，动态规划应用于子问题重叠的情况，即不同的子问题具有公共的子子问题（子问题的求解是递归进行的，将其划分为更小的子子问题）。
+与之相反，动态规划应用于子问题重叠的情况，即不同的子问题具有公共的子子问题（子问题的求解是递归进行的，将其划分为更小的子子问题）
 在这种情况下，分治算法会做许多不必要的工作，它会反复地求解那些公共子子问题
 而动态规划算法对每个子子问题只求解一次，将其解保存在一个表格中，从而无需每次求解一个子子问题时都重新计算，避免了这种不必要的计算工作。
 
@@ -94,34 +94,11 @@
 
 一个刻画子问题空间的好经验是：保持子问题空间尽可能简单，只在必要时才扩展它
 
-The first step in solving an optimization problem by dynamic programming is to characterize the structure of an optimal solution. 
-A problem exhibits optimal substructure if an optimal solution to the problem contains within it optimal solutions to subproblems. 
-Whenever a problem exhibits optimal substructure, we have a good clue that dynamic programming might apply. 
-In dynamic programming, we build an optimal solution to the problem from optimal solutions to subproblems. 
-Consequently, we must take care to ensure that the range of subproblems we consider includes those used in an optimal solution
-
-Dynamic programming often uses optimal substructure in a bottom-up fashion.
-That is, we first find optimal solutions to subproblems and, having solved the subproblems, we find an optimal solution to the problem. 
-Finding an optimal solution to the problem entails making a choice among subproblems as to which we will use in solving the problem. 
-The cost of the problem solution is usually the subproblem costs plus a cost that is directly attributable to the choice itself.
-
-In particular, problems to which [greedy algorithms](/docs/CS/Algorithms/Greedy.md) apply have optimal substructure. 
-One major difference between greedy algorithms and dynamic programming is that instead of first finding optimal solutions to subproblems and then making an informed choice, 
-greedy algorithms first make a “greedy” choice—the choice that looks best at the time—and then solve a resulting subproblem, without bothering to solve all possible related smaller subproblems.
-
 > [!TIP]
 >
 > 能够应用贪心算法的问题也必须具有最优子结构性质。贪心算法和动态规划最大的不同在于，它并不是首先寻找子问题的最优解，然后在其中进行选择，而是首先做出一次“贪心”选择—一在当时（局部）看来最优的选择 然后求解选出的子问题，从而不必费心求解所有可能相关的子问题
 
 ### Overlapping subproblems
-The second ingredient that an optimization problem must have for dynamic programming to apply is that the space of subproblems must be “small” in the sense
-that a recursive algorithm for the problem solves the same subproblems over and over, rather than always generating new subproblems. 
-Typically, the total number of distinct subproblems is a polynomial in the input size. 
-When a recursive algorithm revisits the same problem repeatedly, we say that the optimization problem has overlapping subproblems. 
-In contrast, a problem for which a divide-and-conquer approach is suitable usually generates brand-new problems at each step of the recursion. 
-Dynamic-programming algorithms typically take advantage of overlapping subproblems by solving each subproblem once and then 
-storing the solution in a table where it can be looked up when needed, using constant time per lookup.
-
 
 
 
@@ -231,7 +208,7 @@ int climbingStairsConstraintDP(int n) {
 
 ## LCS
 
-最长公共子序列（Longest Common Subsequence，LCS）是动态规划中的经典问题，顾名思义，即求两个序列最长的公共子序列（可以不连续）
+最长公共子序列（*Longest Common Subsequence，LCS*）是动态规划中的经典问题，顾名思义，即求两个序列最长的公共子序列（可以不连续）
 
 它的解法是典型的二维动态规划，大部分比较困难的字符串问题都和这个问题一个套路，比如说编辑距离。而且，这个算法稍加改造就可以用于解决其他问题
 
