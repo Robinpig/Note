@@ -272,6 +272,7 @@ qemu-system-x86_64 -kernel linux-6.13.5/arch/x86/boot/bzImage  -initrd init.cpio
 
 
 配置用户文件
+/etc/passwd 文件包含了所有系统用户账户列表以及每个用户的基本配置信息
 
 ```
 # /etc/passwd
