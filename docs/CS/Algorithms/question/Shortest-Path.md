@@ -27,6 +27,14 @@
 
 最短路径的4个常用算法是Floyd、Bellman-Ford、SPFA、Dijkstra
 
+
+全点对最短路径算法用于计算图中所有顶点两两之间的最短路径 可以认为是单源最短路径问题的推广 即分别以每个顶点作为源顶点并求其至其它顶点的最短路径
+常见算法有 `Floyd-Warshall` 算法和 `Jonson's` 算法
+`Floyd-Warshall` 算法适用于稠密图 时间复杂度为 $O(V^3)$ 核心思想为动态规划
+
+`Jonson's` 算法适用于稀疏图 时间复杂度近似为 $O(V^3logV+VE)$ 是Dijkstra算法的变种 利用重新加权的技巧 允许在可能存在负权重边的图上使用 Dijkstra 算法
+
+
 ## Dijkstra
 
 Dijkstra 算法是用于计算单源最短路径算法
@@ -126,13 +134,19 @@ Bellman-Ford 的整体时间复杂度是 $O(V*E)$，大部分实际场景下，�
 
 
 
-全点对最短路径算法用于计算图中所有顶点两两之间的最短路径 常见算法有 `Floyd-Warshall` 算法和 `Jonson's` 算法
-
-`Floyd-Warshall` 算法适用于稠密图 时间复杂度为 $O(V^3)$ 核心思想为动态规划
-
-`Jonson's` 算法适用于稀疏图 时间复杂度近似为 $O(V^3logV+VE)$ 是Dijkstra算法的变种 利用重新加权的技巧 允许在可能存在负权重边的图上使用 Dijkstra 算法
 
 [洛谷P3385 【模板】负环](https://www.luogu.com.cn/problem/P3385)
+
+## Jonson
+
+Jonson 算法描述如下
+1. 给定图 G = (V, E), 增加一个新的顶点s, 使得s 与图 G 中所有顶点建立连接 设新的图为 G'
+2. 对图 G‘ 中顶点 s 使用 Bellman-Ford 算法计算单源最短路径, 得到结果 h[] = {h[0], h[1], ... h[V-1]}
+3. 对原图 G 中所有边进行 "re-weight", 即对每个边(u, v), 其新的权重为 w(u, v) + (h[u] - h[v])
+4. 移除新增顶点 s, 使用 Dijkstra 算法求最短路径
+
+
+Johnson 算法时间复杂度为 $O(V^2logV + VE)$
 
 ## A*
 
