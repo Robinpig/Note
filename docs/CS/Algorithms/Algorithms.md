@@ -218,7 +218,7 @@ Efficient algorithms for this problem—called “[string matching](/docs/CS/Alg
 
 ### Pattern Matching
 
-[Pattern search algorithms](/docs/CS/Algorithms/string-search.md) are essential tools in computer science and data processing.
+[Pattern search algorithms](/docs/CS/Algorithms/string/string-search.md) are essential tools in computer science and data processing.
 These algorithms are designed ti efficiently find a particular pattern within a larger set of data.
 
 ### Consensus Algorithm

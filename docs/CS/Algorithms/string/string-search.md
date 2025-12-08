@@ -13,7 +13,7 @@ The string-matching problem is the problem of finding all valid shifts with whic
 
 <div style="text-align: center;">
 
-![Fig.1. String-matching](./img/String-Matching.png)
+![Fig.1. String-matching](../img/String-Matching.png)
 
 </div>
 
@@ -72,7 +72,7 @@ Line 3 prints out each valid shift s.
 
 <div style="text-align: center;">
 
-![Fig.1. Naive string matcher](./img/Naive-String-Matcher.png)
+![Fig.1. Naive string matcher](../img/Naive-String-Matcher.png)
 
 </div>
 
