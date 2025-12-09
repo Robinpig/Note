@@ -8,13 +8,23 @@
 
 二分搜索适用于有序数组 相比于线性查找 可以在每次查询时成倍缩小查询范围 将时间复杂度降低到 $O(logN)$
 
-```
+二分搜索需要注意的地方是 left 和 right 的判断和 middle 的取值, 而这与区间的取值有关 [left, right] 或是 [left, right)
+
+- [left, right], while(left <= right), 下一个左区间的 right = middle - 1
+- [left, right), while(left < right), 下一个左区间的 right = middle
+
+middle取值为 middle = left + (right - left) >> 2, 等同于 (right + left)/2 作用是防止溢出
+
+将比较的三种情况独立出来而不是用 <= 这样的处理 首先是更清楚 其次能够支持更多问题变体
+下一个右区间的的 left = middle + 1
+
+```java
 int target, left, right;
-int middle = (left + right)/2
+int middle = left + (right - left) >> 2
 if(target < middle){
 	binarySearch(left, middle - 1);
 } else if(target > middle){
-	binarySearch(middle, right);
+	binarySearch(middle + 1, right);
 } else {
 	return target == middle
 }
@@ -25,6 +35,7 @@ if(target < middle){
 
 
 
+### 二分搜索变体
 
 
 
