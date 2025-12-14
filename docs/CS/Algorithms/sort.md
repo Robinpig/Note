@@ -117,6 +117,18 @@ We examine three sorting algorithms—counting sort, radix sort, and bucket sort
 Of course, these algorithms use operations other than comparisons to determine the sorted order.
 Consequently, the $O(nlogn)$ lower bound does not apply to them.
 
+```java
+for(int i = 0; i < nums.length; i++){
+  for(int j nums.length; j > i; j--){
+  		// swap into nums[i]
+	}
+}
+```
+
+
+
+
+
 ## Selection Sort
 
 Selection sort is an in-place sorting algorithm. Selection sort works well for small files.
@@ -225,7 +237,7 @@ Otherwise, we ignore the current element.
 
 Pseudo Code for recursive QuickSort function:
 
-```
+```python
 /* low  –> Starting index,  high  –> Ending index */
 quickSort(arr[], low, high) {
     if (low < high) {
