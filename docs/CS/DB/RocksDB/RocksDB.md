@@ -1,6 +1,13 @@
 ## Introduction
 
-[RocksDB](http://rocksdb.org/) is a library that provides an embeddable, persistent key-value store for fast storage.
+[RocksDB](http://rocksdb.org/) is developed and maintained by Facebook Database Engineering Team. 
+It is built on earlier work on [LevelDB](/docs/CS/DB/LevelDB/LevelDB.md) by Sanjay Ghemawat and Jeff Dean
+
+
+
+
+
+
 
 ## Links
 
