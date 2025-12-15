@@ -251,8 +251,20 @@ struct task_struct {
 };
 ```
 
-`get_current()` implement by different arch
+Linux 内核中经常通过 current 宏来获得当前进程对应的 struct task_struct, 以 ARM64 架构为例
 
+```c
+static __always_inline struct task_struct *get_current(void)
+{
+	unsigned long sp_el0;
+
+	asm ("mrs %0, sp_el0" : "=r" (sp_el0));
+
+	return (struct task_struct *)sp_el0;
+}
+```
+
+sp_el0 里面存放的是 init_task, 即 thread_info 地址, thread_info 在 struct task_struct 的开始处
 p->thread_info->cpu
 
 ### pid

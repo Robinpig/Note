@@ -5,18 +5,18 @@
 ZGC的回收算法与Azul Systems 2005年提出的Pauseless GC类似。仅三次与堆大小无关的短暂STW，开始标记、结束标记、开始relocate，从而轻松实现毫秒级停顿的目标
 
 ZGC的特性
-● 并发
-由于停顿时间小于10ms，显而易见的，回收周期绝大部分逻辑将于Mutator并发执行。
-● 基于分区
-与G1类似，JAVA Heap被划分为多个Region，但ZGC中Region大小并不唯一。
-● 压缩算法
-为了避免内存碎片，需要在回收周期中进行压缩。
-● 支持NUMA
-作为下一代垃圾回收算法，支持NUMA是必须的。
-● 使用colored pointers
-CMS和G1标记的是对象，而ZGC标记的是对象指针
-● 使用读屏障
-由于relocate步骤（类似于G1中的对象复制）是并发执行的，需要引入load barrier机制，根据colored pointer中的值，确保代码能够指向正确的对象地址
+- 并发
+  由于停顿时间小于10ms，显而易见的，回收周期绝大部分逻辑将于Mutator并发执行。
+- 基于分区
+  与G1类似，JAVA Heap被划分为多个Region，但ZGC中Region大小并不唯一。
+- 压缩算法
+  为了避免内存碎片，需要在回收周期中进行压缩。
+- 支持NUMA
+  作为下一代垃圾回收算法，支持NUMA是必须的。
+- 使用colored pointers
+  CMS和G1标记的是对象，而ZGC标记的是对象指针
+- 使用读屏障
+  由于relocate步骤（类似于G1中的对象复制）是并发执行的，需要引入load barrier机制，根据colored pointer中的值，确保代码能够指向正确的对象地址
 
 
 
@@ -202,9 +202,9 @@ zaddress ZObjectAllocator::alloc_object_in_shared_page(ZPage** shared_page,
 }
 ```
 
-● 在page中分配，如果成功则返回
-● 如果失败，则调用alloc_page函数分配
-● JVM参数ZStallOnOutOfMemory，控制是否当空间不足时，是否同步等待GC完成，false表示立即抛出OOM，默认为true
+- 在page中分配，如果成功则返回
+- 如果失败，则调用alloc_page函数分配
+- JVM参数ZStallOnOutOfMemory，控制是否当空间不足时，是否同步等待GC完成，false表示立即抛出OOM，默认为true
 
 ```cpp
 zaddress ZObjectAllocator::alloc_large_object(size_t size, ZAllocationFlags flags) {
@@ -237,8 +237,8 @@ ZPage* ZObjectAllocator::alloc_page(ZPageType type, size_t size, ZAllocationFlag
   return page;
 }
 ```
-● 调用ZHeap的alloc_page函数分配page
-● 如果分配成功，CAS添加内存占用量
+- 调用ZHeap的alloc_page函数分配page
+- 如果分配成功，CAS添加内存占用量
 
 
 ```cpp
@@ -252,8 +252,8 @@ ZPage* ZHeap::alloc_page(ZPageType type, size_t size, ZAllocationFlags flags, ZP
   return page;
 }
 ```
-● 调用PageAllocator的alloc_page函数分配page
-● 如果分配成功，则将page添加到page table中
+- 调用PageAllocator的alloc_page函数分配page
+- 如果分配成功，则将page添加到page table中
 ```cpp
 ZPage* ZPageAllocator::alloc_page(ZPageType type, size_t size, ZAllocationFlags flags, ZPageAge age) {
   EventZPageAllocation event;
@@ -419,9 +419,9 @@ void ZThread::run_service() {
 }
 ```
 
-● 调用wait_for_tick()等待100ms
-● 调用sample_allocation_rate，抽样计算分配速率
-● 判断是否触发GC，如是则执行collect函数
+- 调用wait_for_tick()等待100ms
+- 调用sample_allocation_rate，抽样计算分配速率
+- 判断是否触发GC，如是则执行collect函数
 
 
 
@@ -511,8 +511,8 @@ static bool rule_minor_timer(const ZDirectorStats& stats) {
 ```
 
 
-● 如果没有设置JVM参数-XX:ZCollectionInterval，则返回，不会使用rule_timer策略
-● 如果设置了ZCollectionInterval，则判断当前时间减上次gc时间是否大于ZCollectionInterval，如是则触发GC
+- 如果没有设置JVM参数-XX:ZCollectionInterval，则返回，不会使用rule_timer策略
+- 如果设置了ZCollectionInterval，则判断当前时间减上次gc时间是否大于ZCollectionInterval，如是则触发GC
 
 
 

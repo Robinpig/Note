@@ -64,10 +64,51 @@ struct cdev *cdev_alloc(void);
 
 
 
+对于设备树的处理 基本上就在 setup_arch() 这个函数里
+以 ARM 为例
+
+```c
+void __init setup_arch(char **cmdline_p)
+{
+	setup_machine_fdt(atags_vaddr);
+    unflatten_device_tree();
+}
+```
 
 
 
+unflatten_device_tree 将设备树的各节点转换成相应的 struct device_node 结构体
 
+```c
+void __init unflatten_device_tree(void)
+{
+	void *fdt = initial_boot_params;
+
+	/* Save the statically-placed regions in the reserved_mem array */
+	fdt_scan_reserved_mem_reg_nodes();
+
+	/* Populate an empty root node when bootloader doesn't provide one */
+	if (!fdt) {
+		fdt = (void *) __dtb_empty_root_begin;
+		/* fdt_totalsize() will be used for copy size */
+		if (fdt_totalsize(fdt) >
+		    __dtb_empty_root_end - __dtb_empty_root_begin) {
+			pr_err("invalid size in dtb_empty_root\n");
+			return;
+		}
+		of_fdt_crc32 = crc32_be(~0, fdt, fdt_totalsize(fdt));
+		fdt = copy_device_tree(fdt);
+	}
+
+	__unflatten_device_tree(fdt, NULL, &of_root,
+				early_init_dt_alloc_memory_arch, false);
+
+	/* Get pointer to "/chosen" and "/aliases" nodes for use everywhere */
+	of_alias_scan(early_init_dt_alloc_memory_arch);
+
+	unittest_unflatten_overlay_base();
+}
+```
 
 
 
