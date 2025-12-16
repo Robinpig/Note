@@ -105,6 +105,11 @@ RocksDB 中，将内存中的 MemTable 转化为磁盘上的 SST 文件，以及
 通常来说，用户不需要更改这个配置。
 如果用户在一个机器上部署了多个 TiKV 实例，或者机器的读负载比较高而写负载比较低，那么可以适当调低 rocksdb/max-background-jobs 至 3 或者 4
 
+## PD
+
+PD 本身至少由3个节点组成 通过集成 etcd 支持自动故障转移 无需担心单点故障和数据丢失问题
+同时通过 etcd 的 Raft 协议保证了数据一致性
+
 ### Titan
 
 Titan 是基于 RocksDB 的高性能单机 key-value 存储引擎插件。
