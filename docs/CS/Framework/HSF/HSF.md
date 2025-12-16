@@ -1,12 +1,12 @@
 ## Introduction
 
-高速服务框架HSF（High-speed Service Framework），是在阿里巴巴广泛使用的分布式RPC服务框架
+高速服务框架 HSF（*High-speed Service Framework*），是在阿里巴巴广泛使用的分布式 RPC 服务框架
 
-HSF连通不同的业务系统，解耦系统间的实现依赖。
-HSF从分布式应用的层面，统一了服务的发布与调用方式，从而帮助用户更加方便、快速地开发分布式应用，以及提供或使用公共功能模块。
-HSF为用户屏蔽了分布式领域中的各种复杂技术细节，如远程通讯、序列化实现、性能损耗、同步与异步调用方式的实现等。
+- HSF连通不同的业务系统，解耦系统间的实现依赖。
+- HSF从分布式应用的层面，统一了服务的发布与调用方式，从而帮助用户更加方便、快速地开发分布式应用，以及提供或使用公共功能模块。
+- HSF为用户屏蔽了分布式领域中的各种复杂技术细节，如远程通讯、序列化实现、性能损耗、同步与异步调用方式的实现等。
 
-> HSF3内核为[Dubbo3](/docs/CS/Framework/Dubbo/Dubbo.md).
+> HSF3内核为 [Dubbo3](/docs/CS/Framework/Dubbo/Dubbo.md).
 
 ## Architecture
 

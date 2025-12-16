@@ -1040,16 +1040,6 @@ Other fuzzy search techniques go in the direction of document classification and
 
 
 
-Taobao Distributed Data Layer
-以代码方式封装数据库操作进行分发 支持分库分表 读写分离， 类似竞品有美团的MTDDL
-TDDL上层是MyBatis Hibernate ，下面是JDBC Driver
-TDDL 为了解决每一层所要应对的问题，它在结构上至上而下也分了三层，分别是：
-Matrix 层、Group层以及 Atom 层。
-具体来说，从逻辑上来看：
-- 最顶层是要进行分库分表才过渡到中间层的，分库分表所带来的问题是在 Matrix 层解决；
-- 中间层是经过读写分离和主备切换处理，因此读写分离与主备切换的工作由 Group 层解决；
-- 至于 Atom 层，它面对的是实实在在的每一个数据库，更多的工作在与对数据库的连接管理，比如说当数据库的 IP 地址发生改变时，Atom 层要动态感知，以免连接找不到地址
-
 数据库问题排查
 线上问题 先确认是否是代码变动导致的 是否可以回滚降低影响
 先止损 再考虑定位修复问题
