@@ -1,7 +1,10 @@
 ## Introduction
 
-A tree is a data structure similar to a linked list but instead of each node pointing simply to the next node in a linear fashion, each node points to a number of nodes. Tree is an example of non- linear data structures. A tree structure is a way of representing the hierarchical nature of a structure in a graphical form.
-In trees ADT (Abstract Data Type), the order of the elements is not important. If we need ordering information, linear data structures like linked lists, stacks, queues, etc. can be used.
+A tree is a data structure similar to a linked list but instead of each node pointing simply to the next node in a linear fashion, each node points to a number of nodes.
+Tree is an example of non-linear data structures. 
+A tree structure is a way of representing the hierarchical nature of a structure in a graphical form.
+In trees ADT (Abstract Data Type), the order of the elements is not important. 
+If we need ordering information, linear data structures like linked lists, stacks, queues, etc. can be used.
 
 <div style="text-align: center;">
 
@@ -23,24 +26,29 @@ In trees ADT (Abstract Data Type), the order of the elements is not important. I
 - The set of all nodes at a given depth is called the level of the tree (B, C and D are at the same level). The root node is at level zero.
 
 
-- The root of a tree is the node with no parents. There can be at most one root node in a tree (node A in the above example).
-- An edge refers to the link from parent to child (all links in the figure).
-- A node with no children is called leaf node (E,J, K, H and I).
-- Children of same parent are called siblings (B, C, D are siblings of A, and E, F are the
-  siblings of B).
-- A node p is an ancestor of node q if there exists a path from root to q and p appears on the path. The node q is called a descendant of p. For example, A, C and G are the ancestors of K.
-- The depth of a node is the length of the path from the root to the node(depth of G is 2,A– C – G).
-- The height of a node is the length of the path from that node to the deepest node. The height
-  of a tree is the length of the path from the root to the deepest node in the tree. A (rooted) tree with only one node (the root) has a height of zero. In the previous example, the height of B is 2 (B – F – J).
-- Height of the tree is the maximum height among all the nodes in the tree and depth of the tree is the maximum depth among all the nodes in the tree. For a given tree, depth and height returns the same value. But for individual nodes we may get different results.
-- The size of a node is the number of descendants it has including itself (the size of the subtree C is 3).
-- The set of all nodes at a given depth is called the level of the tree (B, C and D are at the same level). The root node is at level zero.If every node in a tree has only one child (except leaf nodes) then we call such trees skew trees. If every node has only left child then we call them left skew trees. Similarly, if every node has only right child then we call them right skew trees.
 
 <div style="text-align: center;">
 
 ![A Tree](../img/Skew-Tree.png)
 
 </div>
+
+
+- The root of a tree is the node with no parents. There can be at most one root node in a tree (node A in the above example).
+- An edge refers to the link from parent to child (all links in the figure).
+- A node with no children is called leaf node (E,J, K, H and I).
+- Children of same parent are called siblings (B, C, D are siblings of A, and E, F are the siblings of B).
+- A node p is an ancestor of node q if there exists a path from root to q and p appears on the path. The node q is called a descendant of p. For example, A, C and G are the ancestors of K.
+- The depth of a node is the length of the path from the root to the node(depth of G is 2,A– C – G).
+- The height of a node is the length of the path from that node to the deepest node. The height
+  of a tree is the length of the path from the root to the deepest node in the tree. A (rooted) tree with only one node (the root) has a height of zero. In the previous example, the height of B is 2 (B – F – J).
+- Height of the tree is the maximum height among all the nodes in the tree and depth of the tree is the maximum depth among all the nodes in the tree. For a given tree, depth and height returns the same value. But for individual nodes we may get different results.
+- The size of a node is the number of descendants it has including itself (the size of the subtree C is 3).
+- The set of all nodes at a given depth is called the level of the tree (B, C and D are at the same level). The root node is at level zero.
+  If every node in a tree has only one child (except leaf nodes) then we call such trees skew trees.
+  If every node has only left child then we call them left skew trees. Similarly, if every node has only right child then we call them right skew trees.
+
+
 
 > [!NOTE]
 >
