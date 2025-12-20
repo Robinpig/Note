@@ -27,7 +27,7 @@
 1) 线性数据结构：元素按顺序访问，但不必将所有元素顺序存储 例如：链表、栈和队列
 2) 非线性数据结构：此数据结构的元素以非线性顺序存储/访问 例如：树和图
 
-An abstract data type (ADT) is a set of operations.
+An *abstract data type* (**ADT**) is a set of operations.
 Abstract data types are mathematical abstractions; nowhere in an ADT's definition is there any mention of how the set of operations is implemented.
 This can be viewed as an extension of modular design.
 
@@ -119,7 +119,8 @@ Finding the fastest route, as a GPS does, is one example, where the quantitative
 For some problems, we have no algorithm that finds an optimal solution in any reasonable amount of time, but we know of an approximation algorithm that,
 in a reasonable amount of time, can find a solution that is almost optimal. 
 
-What does it mean for an algorithm to use computational resources efficiently? 
+**What does it mean for an algorithm to use computational resources efficiently?** 
+
 Indeed, time is the primary measure of efficiency that we use to evaluate an algorithm, once we have shown that the algorithm gives a correct solution.
 But it is not the only measure.
 We might be concerned with how much computer memory the algorithm requires (its “memory footprint”), since an algorithm has to run within the available memory.
@@ -181,10 +182,18 @@ This model clearly has some weaknesses. Obviously, in real life, not all operati
 In particular, in our model one disk read counts the same as an addition, even though the addition is typically several orders of magnitude faster.
 Also, by assuming infinite memory, we never worry about page faulting, which can be a real
 
+
+
+### Algorithm Types
+
+将算法从问题到数据维度上归类 可以通过 体积(Volumn)、速度(Velocity) 和 多样性(Variety)
+
+
+
+
+
 Euclid's algorithm is for computing the greatest common divisor.
 The greatest common divisor (gcd) of two integers is the largest integer that divides both.
-
-
 
 
 

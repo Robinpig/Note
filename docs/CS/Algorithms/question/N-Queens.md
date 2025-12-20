@@ -19,6 +19,51 @@
 
 
 ```java
+public class Solution {
+ int GRID_SIZE = 8;
+
+    void placeQueens(int row, Integer[] columns, ArrayList<Integer[]> results) {
+        if (row == GRID_SIZE) { // 找到有效摆法
+            results.add(columns.clone());
+        } else {
+            for (int col = 0; col < GRID_SIZE; col++) {
+                if (checkValid(columns, row, col)) {
+                    columns[row] = col; // 摆放皇后
+                    placeQueens(row + 1, columns, results);
+                }
+            }
+        }
+    }
+
+    /* 检查(row1, column1)可否摆放皇后，做法是检查
+     * 有无其他皇后位于同一列或对角线。不必检查是否
+     * 在同一行上，因为调用 placeQueen时，一次只会
+     * 摆放一个皇后。由此可知，这一行是空的 */
+    boolean checkValid(Integer[] columns, int row1, int column1) {
+        for (int row2 = 0; row2 < row1; row2++) {
+            int column2 = columns[row2];
+            /* 检查摆放在(row2, column2)是否会
+             * 让(row1, column1)变成无效 */
+
+            /* 检查同一列是否有其他皇后 */
+            if (column1 == column2) {
+                return false;
+            }
+
+            /* 检查对角线：若两列的距离等于两行的
+             * 距离，就表示两个皇后在同一对角线上 */
+            int columnDistance = Math.abs(column2 - column1);
+
+            /* row1 > row2，不用取绝对值 */
+            int rowDistance = row1 - row2;
+            if (columnDistance == rowDistance) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+}
 ```
 
 
