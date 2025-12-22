@@ -159,10 +159,11 @@ plugins=([plugins...] zsh-autosuggestions)
 语法高亮
 
 ```shell
-git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
+git clone https://github.com/zsh-users/zsh-syntax-highlighting.git \
+ ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
 ```
 
-在 `.zshrc` 中插件**最后面** 增加zsh-autosuggestions
+在 `.zshrc` 中插件**最后面** 增加 zsh-syntax-highlighting
 
 ```
 plugins=( [plugins...] zsh-syntax-highlighting)
@@ -198,7 +199,7 @@ prompt_dir() {
 
 ## Markdown
 
-- Typora
+- [Typora]()
 - Marked 2
 - [Glow](https://github.com/charmbracelet/glow) is a terminal based markdown reader designed from the ground up to bring out the beauty—and power—of the CLI.
 

@@ -29,7 +29,7 @@ Linux5.x 在 Intel NUC10 的核显支持不友好 Ubuntu18.04 点击进入安装
 中文输入法
 
 ```shell
-sudo apt install fcitx5 \
+sudo apt install -y fcitx5 \
 fcitx5-chinese-addons \
 fcitx5-frontend-gtk4 fcitx5-frontend-gtk3 fcitx5-frontend-gtk2 \
 fcitx5-frontend-qt5
@@ -93,7 +93,7 @@ sudo chown root chrome-sandbox && sudo chmod 4755 chrome-sandbox
 sudo add-apt-repository ppa:linuxuprising/guake
 sudo apt-get update
 
-udo apt install guake
+sudo apt install guake
 ```
 
 
