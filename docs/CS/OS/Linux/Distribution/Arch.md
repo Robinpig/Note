@@ -21,7 +21,15 @@ ls /sys/firmware/efi/efivars
 
 镜像源
 
-编辑 `/etc/pacman.d/mirrorlist` 文件，并将 `Server = http://mirrors.163.com/archlinux/$repo/os/$arch` 放置**最上方**即可。
+编辑 `/etc/pacman.d/mirrorlist` 文件，并将 `Server = https://mirrors.tuna.tsinghua.edu.cn/archlinux/$repo/os/$arch` 放置**最上方**即可
+
+更新软件包缓存：
+
+
+
+```
+pacman -Syyu
+```
 
 
 
