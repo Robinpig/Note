@@ -26,6 +26,8 @@ Redis 可以用来做什么
 
 ### build
 
+修改配置文件中的daemon为yes
+
 禁用gcc编译优化，将makefile文件中 OPTIMIZATION?=-O2修为-O0
 
 ##### **Mac**

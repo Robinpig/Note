@@ -119,7 +119,7 @@ static intset *intsetUpgradeAndAdd(intset *is, int64_t value) {
 
 ## search
 
-$O(logN)$
+采用的是折半查找方式 时间复杂度为 $O(logN)$
 
 
 Search for the position of "value". Return 1 when the value was found and sets "pos" to the position of the value within the intset. 
