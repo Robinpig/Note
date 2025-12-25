@@ -137,7 +137,7 @@ REMOTE=https://mirrors.tuna.tsinghua.edu.cn/git/ohmyzsh.git sh install.sh
 
 为 iTerm2 配置 Solarize 主题
 
-## 主题美化
+### 主题美化
 
 
 主题美化 设置 `.zshrc` 
@@ -159,10 +159,11 @@ plugins=([plugins...] zsh-autosuggestions)
 语法高亮
 
 ```shell
-git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
+git clone https://github.com/zsh-users/zsh-syntax-highlighting.git \
+ ${ZSH_CUSTOM:-~/.oh-my-zsh/custom}/plugins/zsh-syntax-highlighting
 ```
 
-在 `.zshrc` 中插件**最后面** 增加zsh-autosuggestions
+在 `.zshrc` 中插件**最后面** 增加 zsh-syntax-highlighting
 
 ```
 plugins=( [plugins...] zsh-syntax-highlighting)
@@ -186,21 +187,33 @@ prompt_dir() {
 }
 ```
 
+## Display
+
+Wallpaper
+
+- Dynamic Wallpaper
 
 
 
 
 ## Monitor Tools
 
-- iStat Menu
-- Better MenuBar(Apple Store)
+- iStat Menu(付费)
+- Better MenuBar(Apple Store免费)
 - [SMCAMDProcessor](https://github.com/trulyspinach/SMCAMDProcessor) 适用AMD CPU
 
 ## Markdown
 
-- Typora
+- [Typora]()(付费)
 - Marked 2
 - [Glow](https://github.com/charmbracelet/glow) is a terminal based markdown reader designed from the ground up to bring out the beauty—and power—of the CLI.
+
+
+## Video Player
+
+- IINA
+
+
 
 ## Read
 
@@ -221,7 +234,6 @@ Epub
 ## Disk
 
 
-
 分析
 
 - CleanMyMac
@@ -230,13 +242,17 @@ Epub
 
 ## Others
 
+- Rectangle(开源)
 - Magnet
 - [MonitorControl](https://github.com/MonitorControl/MonitorControl)
-- Dynamic Wallpaper
+
 - OneSwitch
 - ~~V2rayU~~
 - ClashX
-- [keka](https://www.keka.io/zh-cn/) 压缩文件管理器
+
+压缩文件管理器
+
+- [KeKa](https://www.keka.io/zh-cn/) (官网免费)
 
 ## Developer
 
@@ -245,6 +261,19 @@ Epub
 - [Postman](https://www.postman.com/downloads/?utm_source=postman-home)
 - Charles
 - Dash
+
+
+启动台
+
+- HapiGo
+
+翻译
+
+- Easydict
+
+剪切板
+- Maccy
+
 
 ### Visual Studio Code
 
