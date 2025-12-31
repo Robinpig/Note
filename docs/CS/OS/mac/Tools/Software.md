@@ -246,6 +246,10 @@ Epub
 - Magnet
 - [MonitorControl](https://github.com/MonitorControl/MonitorControl)
 
+[BetterDisplay](https://github.com/waydabber/BetterDisplay)
+
+
+
 - OneSwitch
 - ~~V2rayU~~
 - ClashX
@@ -288,3 +292,7 @@ https://vscode.cdn.azure.cn/stable/3866c3553be8b268c8a7f8c0482c0c0177aa8bfa/VSCo
 ## Links
 
 - [Mac Tools](/docs/CS/OS/mac/Tools/Tools.md)
+
+## References
+
+1. [Open Source Mac Apps](https://indiegoodies.com/awesome-open-source-mac-apps)
