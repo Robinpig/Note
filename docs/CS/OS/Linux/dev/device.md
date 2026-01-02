@@ -1,6 +1,61 @@
 ## Introduction
 
 
+
+Linux 中用于管理硬件设备和驱动程序的结构和框架称为 设备模型
+
+Linux 设备模型中, kset、kobject 和 ktype 是实现设备模型的三个重要概念
+
+kobj_type
+
+```c
+struct kobj_type {
+	void (*release)(struct kobject *kobj);
+	const struct sysfs_ops *sysfs_ops;
+	const struct attribute_group **default_groups;
+	const struct kobj_ns_type_operations *(*child_ns_type)(const struct kobject *kobj);
+	const void *(*namespace)(const struct kobject *kobj);
+	void (*get_ownership)(const struct kobject *kobj, kuid_t *uid, kgid_t *gid);
+};
+```
+kobject
+
+```c
+struct kobject {
+	const char		*name;
+	struct list_head	entry;
+	struct kobject		*parent;
+	struct kset		*kset;
+	const struct kobj_type	*ktype;
+	struct kernfs_node	*sd; /* sysfs directory entry */
+	struct kref		kref;
+
+	unsigned int state_initialized:1;
+	unsigned int state_in_sysfs:1;
+	unsigned int state_add_uevent_sent:1;
+	unsigned int state_remove_uevent_sent:1;
+	unsigned int uevent_suppress:1;
+
+#ifdef CONFIG_DEBUG_KOBJECT_RELEASE
+	struct delayed_work	release;
+#endif
+};
+```
+
+kset
+
+```c
+struct kset {
+	struct list_head list;
+	spinlock_t list_lock;
+	struct kobject kobj;
+	const struct kset_uevent_ops *uevent_ops;
+} __randomize_layout;
+```
+
+设备驱动程序通过注册 ktype 创建 kobject 并将 kobject 添加到适当的 kset中
+
+
 Linux内核主要包括三种驱动模型，字符设备驱动，块设备驱动以及网络设备驱动
 
 
@@ -29,6 +84,7 @@ struct cdev {
 } __randomize_layout;
 ```
 设备驱动可以通过两种方式产生cdev 一种是全局静态变量 另一种是使用内核提供的cdev_alloc()接口函数
+
 ### net_device
 
 struct net_device - The DEVICE structure.

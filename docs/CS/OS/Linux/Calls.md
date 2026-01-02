@@ -1,6 +1,7 @@
 ## Introduction
 
-系统调用的实现基础，其实就是两条汇编指令，分别是syscall和sysret。
+系统调用的实现基础，其实就是两条汇编指令，分别是 syscall 和 sysret
+ARM 通过 svc 指令实现
 
 syscall使执行逻辑从用户态切换到内核态，在进入到内核态之后，cpu会从 MSR_LSTAR 寄存器中，获取处理系统调用内核代码的起始地址，即上面的 entry_SYSCALL_64。
 在执行 entry_SYSCALL_64 函数时，内核代码会根据约定，先从rax寄存器中获取想要执行的系统调用的编号，然后根据该编号从sys_call_table数组中找到对应的系统调用函数。
@@ -109,6 +110,119 @@ linux内核efi stub有关pecoff 格式定义的部分都在 arch/x86/boot/header
 #define SYS_RECVMMSG   19            /* sys_recvmmsg(2)            */
 #define SYS_SENDMMSG   20            /* sys_sendmmsg(2)            */
 ```
+
+
+## invoke
+
+
+### ARM64
+
+在内核中 ARM64 对应的异常向量表为 arch/arm64/kernel/entry.S
+
+中断处理函数
+```c
+asmlinkage void noinstr el0t_64_sync_handler(struct pt_regs *regs)
+{
+	unsigned long esr = read_sysreg(esr_el1);
+
+	switch (ESR_ELx_EC(esr)) {
+	case ESR_ELx_EC_SVC64:
+		el0_svc(regs);
+		break;
+		// ...
+	}
+}
+```
+el0_svc -> ... -> invoke_syscall
+
+```c
+static void noinstr el0_svc(struct pt_regs *regs)
+{
+	arm64_enter_from_user_mode(regs);
+	cortex_a76_erratum_1463225_svc_handler();
+	fpsimd_syscall_enter();
+	local_daif_restore(DAIF_PROCCTX);
+	do_el0_svc(regs);
+	arm64_exit_to_user_mode(regs);
+	fpsimd_syscall_exit();
+}
+
+// arch/arm64/kernel/syscall.c
+void do_el0_svc(struct pt_regs *regs)
+{
+	el0_svc_common(regs, regs->regs[8], __NR_syscalls, sys_call_table);
+}
+
+
+static void el0_svc_common(struct pt_regs *regs, int scno, int sc_nr,
+			   const syscall_fn_t syscall_table[])
+{
+	unsigned long flags = read_thread_flags();
+
+	regs->orig_x0 = regs->regs[0];
+	regs->syscallno = scno;
+
+	if (flags & _TIF_MTE_ASYNC_FAULT) {
+		syscall_set_return_value(current, regs, -ERESTARTNOINTR, 0);
+		return;
+	}
+
+	if (has_syscall_work(flags)) {
+		if (scno == NO_SYSCALL)
+			syscall_set_return_value(current, regs, -ENOSYS, 0);
+		scno = syscall_trace_enter(regs);
+		if (scno == NO_SYSCALL)
+			goto trace_exit;
+	}
+
+	invoke_syscall(regs, scno, sc_nr, syscall_table);
+
+	if (!has_syscall_work(flags) && !IS_ENABLED(CONFIG_DEBUG_RSEQ)) {
+		flags = read_thread_flags();
+		if (!has_syscall_work(flags) && !(flags & _TIF_SINGLESTEP))
+			return;
+	}
+
+trace_exit:
+	syscall_trace_exit(regs);
+}
+```
+
+#### invoke_syscall
+
+```c
+static void invoke_syscall(struct pt_regs *regs, unsigned int scno,
+			   unsigned int sc_nr,
+			   const syscall_fn_t syscall_table[])
+{
+	long ret;
+
+	add_random_kstack_offset();
+
+	if (likely(scno < sc_nr)) {
+		syscall_fn_t syscall_fn;
+		syscall_fn = syscall_table[array_index_nospec(scno, sc_nr)];
+		ret = __invoke_syscall(regs, syscall_fn);
+	} else {
+		ret = do_ni_syscall(regs, scno);
+	}
+
+	syscall_set_return_value(current, regs, 0, ret);
+
+	/*
+	 * This value will get limited by KSTACK_OFFSET_MAX(), which is 10
+	 * bits. The actual entropy will be further reduced by the compiler
+	 * when applying stack alignment constraints: the AAPCS mandates a
+	 * 16-byte aligned SP at function boundaries, which will remove the
+	 * 4 low bits from any entropy chosen here.
+	 *
+	 * The resulting 6 bits of entropy is seen in SP[9:4].
+	 */
+	choose_random_kstack_offset(get_random_u16());
+}
+```
+
+
 
 ## socket
 
@@ -2072,6 +2186,49 @@ struct pollfd {
 
 #define POLL_BUSY_LOOP	(__force __poll_t)0x8000
 ```
+
+## open
+
+
+```c
+int do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
+{
+	struct open_how how = build_open_how(flags, mode);
+	return do_sys_openat2(dfd, filename, &how);
+}
+```
+
+```c
+static int do_sys_openat2(int dfd, const char __user *filename,
+			  struct open_how *how)
+{
+	struct open_flags op;
+	struct filename *tmp;
+	int err, fd;
+
+	err = build_open_flags(how, &op);
+	if (unlikely(err))
+		return err;
+
+	tmp = getname(filename);
+	if (IS_ERR(tmp))
+		return PTR_ERR(tmp);
+
+	fd = get_unused_fd_flags(how->flags);
+	if (likely(fd >= 0)) {
+		struct file *f = do_filp_open(dfd, tmp, &op);
+		if (IS_ERR(f)) {
+			put_unused_fd(fd);
+			fd = PTR_ERR(f);
+		} else {
+			fd_install(fd, f);
+		}
+	}
+	putname(tmp);
+	return fd;
+}
+```
+
 
 ## Links
 

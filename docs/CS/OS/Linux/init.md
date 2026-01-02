@@ -403,7 +403,7 @@ call rest_init -> [kernel_init](/docs/CS/OS/Linux/init.md?id=kernel_init)
 ### rest_init
 
 
-rest_init函数的重要功能就是建立了两个Linux  [kernel_thread](/docs/CS/OS/Linux/proc/process.md?id=kernel_clone):  `kernel_init` and `kthreadd`
+rest_init函数的重要功能就是建立了两个Linux  [kernel_thread](/docs/CS/OS/Linux/proc/process.md?id=kernel_clone):  `kernel_init`(用户态为 init 进程, 所有用户态进程的祖先) and `kthreadd`(负责所有内核态线程的调度和管理 所有内核态线程的祖先)
 
 
 ```c
