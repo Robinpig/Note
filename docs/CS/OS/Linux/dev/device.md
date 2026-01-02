@@ -117,7 +117,7 @@ struct cdev *cdev_alloc(void);
 
 
 
-
+## device tree
 
 
 对于设备树的处理 基本上就在 setup_arch() 这个函数里
@@ -128,6 +128,45 @@ void __init setup_arch(char **cmdline_p)
 {
 	setup_machine_fdt(atags_vaddr);
     unflatten_device_tree();
+}
+```
+
+arch/arm64/kernel.c
+
+```c
+static void __init setup_machine_fdt(phys_addr_t dt_phys)
+{
+	int size = 0;
+	void *dt_virt = fixmap_remap_fdt(dt_phys, &size, PAGE_KERNEL);
+	const char *name;
+
+	if (dt_virt)
+		memblock_reserve(dt_phys, size);
+
+	/*
+	 * dt_virt is a fixmap address, hence __pa(dt_virt) can't be used.
+	 * Pass dt_phys directly.
+	 */
+	if (!early_init_dt_scan(dt_virt, dt_phys)) {
+		pr_crit("\n"
+			"Error: invalid device tree blob: PA=%pa, VA=%px, size=%d bytes\n"
+			"The dtb must be 8-byte aligned and must not exceed 2 MB in size.\n"
+			"\nPlease check your bootloader.\n",
+			&dt_phys, dt_virt, size);
+
+		while (true)
+			cpu_relax();
+	}
+
+	/* Early fixups are done, map the FDT as read-only now */
+	fixmap_remap_fdt(dt_phys, &size, PAGE_KERNEL_RO);
+
+	name = of_flat_dt_get_machine_name();
+	if (!name)
+		return;
+
+	pr_info("Machine model: %s\n", name);
+	dump_stack_set_arch_desc("%s (DT)", name);
 }
 ```
 
@@ -167,7 +206,7 @@ void __init unflatten_device_tree(void)
 ```
 
 
-
+device node 通过父节点、子节点和兄弟节点三个指针维护各个节点之间的关系
 
 
 

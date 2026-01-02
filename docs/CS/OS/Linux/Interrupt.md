@@ -13,7 +13,9 @@ IDT 包含了256 个中断描述符， 本质上是内存中的一个数组， �
 
 要做的其实就是将保存的现场在处理完中断后恢复到中断之前的状态， 确保程序能继续执行
 
-中断服务例程涉及两个关键的结构体，`irq_desc` 和 `irqaction`， 二者是一对多的关系。irq_desc 与 irq 号对应， irqaction 与一个设备对应， 
+中断服务例程涉及两个关键的结构体，`irq_desc` 和 `irqaction`， 二者是一对多的关系
+irq_desc 描述一个外设的中断 称为中断描述符 irq_data 描述中断控制器的硬件数据
+irq_desc 与 irq 号对应， irqaction 与一个设备对应， 
 共享同一个irq号的多个设备的irqaction对应同一个irq_desc CPU得到中断索引(x86上称之为vector),计算得到irq,通过irq_to_desc可以由irq获得对应的irq_desc
 
 Ilq是软件上的抽象， 为了多核系统上的通用性。vector 是CPU看到的中断索引， 它们有一定的对应关系
