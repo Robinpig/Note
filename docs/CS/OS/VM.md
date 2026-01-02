@@ -52,11 +52,21 @@ sudo apt install -y open-vm-tools open-vm-tools-desktop
 
 ## VMware
 
-虚拟机挂载共享文件夹
+虚拟机挂载共享文件夹(需要 VM Tools)
+
+在设置里先挂载好目录
+
+
+
 ```shell
-vmhgfs-fuse .host:/ /mnt/hgfs -o rw,allow_other
+sudo mkdir /mnt/hgfs
+sudo /usr/bin/vmhgfs-fuse .host:/ /mnt/hgfs -o allow_other -ouid=1000-ogid=1000-oumask=022
 ```
 
+如果之前挂载过 先 unmount
+```shell
+sudo umount /mnt/hgfs
+```
 
 
 [QEMU](/docs/CS/OS/qemu.md) 和 
