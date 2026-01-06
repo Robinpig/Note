@@ -571,7 +571,7 @@ sds sdscatlen(sds s, const void *t, size_t len) {
 
 1. avail >= addlen, return
 2. expand pow of 2 when len < 1M, or else expand 1M util 512M
-3. calc new Type, if same Type return, or else allocate new memory, `memcpy` and `free`
+3. calc new Type, if same Type `realloc` return, or else allocate new memory, `memcpy` and `free`
 
 Enlarge the free space at the end of the sds string so that the caller is sure that after calling this function can overwrite up to addlen bytes after the end of the string, plus one more byte for nul term.
 

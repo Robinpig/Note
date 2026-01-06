@@ -201,6 +201,7 @@ Wallpaper
 - iStat Menu(付费)
 - Better MenuBar(Apple Store免费)
 - [SMCAMDProcessor](https://github.com/trulyspinach/SMCAMDProcessor) 适用AMD CPU
+- [RunCat]
 
 ## Markdown
 
@@ -242,6 +243,15 @@ Epub
 
 ## Others
 
+超级右键
+
+Sound Source
+
+app locker
+
+
+drop 
+
 - Rectangle(开源)
 - Magnet
 - [MonitorControl](https://github.com/MonitorControl/MonitorControl)
@@ -257,6 +267,12 @@ Epub
 压缩文件管理器
 
 - [KeKa](https://www.keka.io/zh-cn/) (官网免费)
+
+
+
+
+启动台
+- Launch Next
 
 ## Developer
 

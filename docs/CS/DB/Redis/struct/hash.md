@@ -98,7 +98,7 @@ typedef struct dictType {
 
 ## Hash Function
 
-siphash
+在redis中hash使用的是 siphash 算法
 
 Hash Function: times33
 

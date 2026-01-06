@@ -269,7 +269,8 @@ using [hash table](/docs/CS/DB/Redis/struct/hash.mdhash.md) and zskiplist
 
 当往 Sorted Set 中插入数据时，zsetAdd 函数就会被调用 zsetAdd 函数会判定 Sorted Set 采用的是 ziplist 还是 skiplist 的编码方式
 
-zsetAdd 函数会先使用哈希表的 dictFind 函数，查找要插入的元素是否存在。如果不存在，就直接调用跳表元素插入函数 zslInsert 和哈希表元素插入函数 dictAdd，将新元素分别插入到跳表和哈希表中
+zsetAdd 函数会先使用哈希表的 dictFind 函数，查找要插入的元素是否存在。
+如果不存在，就直接调用跳表元素插入函数 zslInsert 和哈希表元素插入函数 dictAdd，将新元素分别插入到跳表和哈希表中
 
 > [!TIP]
 >
