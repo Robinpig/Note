@@ -6,6 +6,8 @@
 
 ## Clustering
 
+k-means 
+
 ## Dimensionality Reduction
 
 PCA

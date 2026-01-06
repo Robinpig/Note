@@ -69,6 +69,18 @@ sudo umount /mnt/hgfs
 ```
 
 
+开机自动挂载
+sudo vim /etc/fstab 
+在文件最后加入
+
+```
+.host:/ /mnt/hgfs fuse.vmhgfs-fuse allow_other,uid=1000,gid=1000,umask=022 00
+```
+
+
+
+
+
 [QEMU](/docs/CS/OS/qemu.md) 和 
 [Bochs](/docs/CS/OS/Bochs.md) 用纯软件的方式完全模拟x86 CPU 和外围设备 所以运行性能较差
 

@@ -20,6 +20,7 @@ Linux系统诞生于1991年10月5日
   - [Ubuntu](/docs/CS/OS/Linux/Distribution/Ubuntu.md)
 - SuSE Linux
 - Arch Linux
+- Kail Linux
 - [OpenSuse]()
 - [Android](/docs/CS/OS/Android/Android.md)
 
