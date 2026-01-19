@@ -43,9 +43,9 @@ We will go through many of them and you will be in a position to relate the data
 
 ### Lists, Stacks, and Queues
 
-[Lists](/docs/CS/Algorithms/list.md), [stacks](/docs/CS/Algorithms/stack.md), and [queues](/docs/CS/Algorithms/queue.md) are perhaps the three fundamental data structures in all of computer science.
+[Lists](/docs/CS/Algorithms/struct/list.md), [stacks](/docs/CS/Algorithms/struct/stack.md), and [queues](/docs/CS/Algorithms/struct/queue.md) are perhaps the three fundamental data structures in all of computer science.
 
-[Arrays and Linked Lists](/docs/CS/Algorithms/linked-list.md)
+[Arrays and Linked Lists](/docs/CS/Algorithms/struct/linked-list.md)
 
 
 We introduce [hash tables](/docs/CS/Algorithms/hash.md), a widely used data structure supporting the dictionary operations INSERT, DELETE, and SEARCH.
@@ -66,7 +66,7 @@ We rely on probability to analyze hash-table operations, but you can understand 
 
 ### Heap
 
-[heaps](/docs/CS/Algorithms/heap.md)
+[heaps](/docs/CS/Algorithms/struct/heap.md)
 
 ### Graph
 
@@ -76,7 +76,7 @@ We rely on probability to analyze hash-table operations, but you can understand 
 
 [Disjoing Set](/docs/CS/Algorithms/Disjoint-Ser.md)
 
-[BloomFilter](/docs/CS/Algorithms/BloomFilter.md)
+[BloomFilter](/docs/CS/Algorithms/struct/BloomFilter.md)
 
 
 
@@ -247,6 +247,22 @@ It takes $O(N^2)$ time complexity where N is the number of people involved.
 The subject called the [“NP-complete” problems](/docs/CS/Algorithms/NP.md), whose status is unknown.
 No polynomial-time algorithm has yet been discovered for an NP-complete problem, nor has anyone yet been able to prove that no polynomial-time algorithm can exist for any one of them.
 This so-called $P != NP$ question has been one of the deepest, most perplexing open research problems in theoretical computer science since it was first posed in 1971.
+
+
+
+## Practice
+
+
+LeetCode
+
+Online Judge
+
+- [洛谷](https://luogu.com.cn)
+- [LibreOJ](https://loj.ac)
+- [ZOJ](https://acm.zju.edu.cn/)
+- [POJ](https://poj.org)
+- [HDU](https://acm.hdu.edu.cn)
+- [Codeforces](https://codeforces.com)
 
 ## Links
 

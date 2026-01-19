@@ -1,6 +1,6 @@
 ## Introduction
 
-单调栈是一种特殊的[栈](/docs/CS/Algorithms/stack.md)数据结构，元素按递增或递减顺序保持。主要理念是在推动和弹出元素的同时保持这种秩序，这有助于高效解决各种问题。
+单调栈是一种特殊的[栈](/docs/CS/Algorithms/struct/stack.md)数据结构，元素按递增或递减顺序保持。主要理念是在推动和弹出元素的同时保持这种秩序，这有助于高效解决各种问题。
 
 Monotonic Stacks can be broadly classified into two types:
 
@@ -14,4 +14,4 @@ Monotonic Stacks can be broadly classified into two types:
 ## Links
 
 - [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
-- [stack](/docs/CS/Algorithms/stack.md)
+- [stack](/docs/CS/Algorithms/struct/stack.md)

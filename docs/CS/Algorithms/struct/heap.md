@@ -104,7 +104,7 @@ For the discussion below let us assume that elements are stored in arrays, which
 
 <div style="text-align: center;">
 
-![Binary Heap](img/Binary-Heap.png)
+![Binary Heap](../img/Binary-Heap.png)
 
 </div>
 

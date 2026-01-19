@@ -13,5 +13,5 @@ Each structure contains the element and a pointer to a structure containing its 
 ## Links
 
 - [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
-- [stack](/docs/CS/Algorithms/stack.md)
-- [queue](/docs/CS/Algorithms/queue.md)
+- [stack](/docs/CS/Algorithms/struct/stack.md)
+- [queue](/docs/CS/Algorithms/struct/queue.md)

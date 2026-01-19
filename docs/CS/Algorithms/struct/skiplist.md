@@ -16,13 +16,13 @@ Thus it can get the best features of a sorted [array](https://en.wikipedia.org/w
 | Delete | $O(logn)$ |   $O(n)$   |
 
 A skip list is built in layers.
-The bottom layer 1 is an ordinary ordered [linked list](/docs/CS/Algorithms/linked-list.md).
+The bottom layer 1 is an ordinary ordered [linked list](/docs/CS/Algorithms/struct/linked-list.md).
 Each higher layer acts as an "express lane" for the lists below, where an element in layer 𝑖 appears in layer 𝑖+1 with some fixed probability 𝑝 (two commonly used values for 𝑝 are 1/2 or 1/4).
 On average, each element appears in 1/(1−𝑝) lists, and the tallest element (usually a special head element at the front of the skip list) appears in all the lists. The skip list contains $log_{1/𝑝}⁡n$ (i.e. logarithm base 1/𝑝 of 𝑛) lists.
 
 <div style="text-align: center;">
 
-![Fig.1. Skip ist](./img/skip-list.png)
+![Fig.1. Skip ist](../img/skip-list.png)
 
 </div>
 

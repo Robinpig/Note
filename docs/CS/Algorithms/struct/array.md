@@ -23,6 +23,17 @@ Since these two operations take constant time, we can say the array access can b
   This will create a position for us to insert the new element at the desired position.
   If the position at which we want to add an element is at the beginning, then the shifting operation is more expensive.
 
+
+
+二维数组在内存空间的空间地址是否连续取决于编程语言的实现
+
+以 C++ 为例 在 C++ 中二维数组是连续分布的
+
+```c++
+void test_arr
+```
+
+
 ### Dynamic Arrays
 
 Dynamic array (also called growable array, resizable array, dynamic table, or array list) is a random access, variable-size list data structure that allows elements to be added or removed.

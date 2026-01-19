@@ -1,6 +1,6 @@
 ## Introduction
 
-A stack is a simple data structure used for storing data (similar to [Linked Lists](/docs/CS/Algorithms/linked-list.md)).
+A stack is a simple data structure used for storing data (similar to [Linked Lists](/docs/CS/Algorithms/struct/linked-list.md)).
 A stack is an ordered list in which insertion and deletion are done at one end, called top. 
 The last element inserted is the first one to be deleted.
 Hence, it is called the Last in First out (LIFO) or First in Last out (FILO) list.
@@ -106,5 +106,5 @@ Linked List Implementation
 ## Links
 
 - [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
-- [list](/docs/CS/Algorithms/list.md)
-- [queue](/docs/CS/Algorithms/queue.md)
+- [list](/docs/CS/Algorithms/struct/list.md)
+- [queue](/docs/CS/Algorithms/struct/queue.md)
