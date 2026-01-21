@@ -25,6 +25,24 @@ The vframe inheritance hierarchy:
     - externalVFrame
         - entryVFrame        ; special frame created when calling Java from C
     - BasicLock
+
+
+内存分配管理
+
+
+默认分配在资源区的对象的基类。
+可选地，对象可以分配到带有新（AnyObj：：C_HEAP）Foo（...）的C堆，或在有新（&arena）的竞技场中。
+AnyObj 可以分配到其他对象中，但不要使用新对象或删除（allocation_type未知）。 如果用新配置，使用删除来分配。
+
+```cpp
+class AnyObj {
+ public:
+  enum allocation_type { STACK_OR_EMBEDDED = 0, RESOURCE_AREA, C_HEAP, ARENA, allocation_mask = 0x3 };
+ }
+```
+
+
+
 ```cpp
 // vframe.hpp
 class vframe: public ResourceObj {

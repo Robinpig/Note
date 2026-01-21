@@ -1,5 +1,7 @@
 ## Introduction
 
+CodeCache 
+
 CodeBlob Types
 
 Used in the CodeCache to assign CodeBlobs to different CodeHeaps
@@ -94,6 +96,10 @@ The advantages are better control of the memory footprint, reduced code fragment
   os::register_code_area((char*)low_bound(), (char*)high_bound());
 }
 ```
+
+
+
+
 
 ```cpp
 // For init.cpp
