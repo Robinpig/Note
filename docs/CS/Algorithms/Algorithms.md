@@ -220,6 +220,12 @@ Efficient algorithms for this problem—called “[string matching](/docs/CS/Alg
 - [Backtracking](/docs/CS/Algorithms/Backtracking.md)
 - [Divide and Conquer](/docs/CS/Algorithms/Divide-and-Conquer.md)
 
+
+常见的算法优化技巧
+
+[双指针](/docs/CS/Algorithms/Two-Pointers.md)
+
+
 ### Sorting and Order Statistics
 
 - [Sort](/docs/CS/Algorithms/sort.md)
