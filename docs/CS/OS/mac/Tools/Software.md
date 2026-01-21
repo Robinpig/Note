@@ -202,6 +202,7 @@ Wallpaper
 - Better MenuBar(Apple Store免费)
 - [SMCAMDProcessor](https://github.com/trulyspinach/SMCAMDProcessor) 适用AMD CPU
 - [RunCat]
+- [Stats](https://mac-stats.com/)
 
 ## Markdown
 
@@ -245,7 +246,11 @@ Epub
 
 超级右键
 
-Sound Source
+Sound Source(付费)
+
+Background Music
+
+
 
 app locker
 
@@ -264,11 +269,17 @@ drop
 - ~~V2rayU~~
 - ClashX
 
+
+[Hidden Bar](https://github.com/dwarvesf/hidden)
+
+
+
 压缩文件管理器
 
 - [KeKa](https://www.keka.io/zh-cn/) (官网免费)
 
 
+[LuLu](https://github.com/objective-see/LuLu/blob/master/README_zh-Hans.md) 防火墙
 
 
 启动台
