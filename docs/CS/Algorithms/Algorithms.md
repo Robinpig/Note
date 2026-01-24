@@ -27,26 +27,26 @@
 1) 线性数据结构：元素按顺序访问，但不必将所有元素顺序存储 例如：链表、栈和队列
 2) 非线性数据结构：此数据结构的元素以非线性顺序存储/访问 例如：树和图
 
-An *abstract data type* (**ADT**) is a set of operations.
-Abstract data types are mathematical abstractions; nowhere in an ADT's definition is there any mention of how the set of operations is implemented.
-This can be viewed as an extension of modular design.
 
-Commonly used ADTs include: Linked Lists, Stacks, Queues, Priority Queues, Binary Trees, Dictionaries, Disjoint Sets (Union and Find), Hash Tables, Graphs, and many others.
-For example, stack uses a LIFO (Last-In-First-Out) mechanism while storing the data in data structures.
-The last element inserted into the stack is the first element that gets deleted.
-Common operations are: creating the stack, pushing an element onto the stack, popping an element from the stack, finding the current top of the stack, finding the number of elements in the stack, etc.
 
-While defining the ADTs do not worry about the implementation details.
-They come into the picture only when we want to use them.
-Different kinds of ADTs are suited to different kinds of applications, and some are highly specialized to specific tasks.
-We will go through many of them and you will be in a position to relate the data structures to the kind of problems they solve.
+### Liner Table
 
-### Lists, Stacks, and Queues
+列表（又称线性列表）的定义为：是一种数据项构成的有限序列，即按照一定的线性顺序，排列而成的数据项的集合
+
+列表的概念是在集合的特征上形成的，它具有顺序，且长度是可变的
+
+**常见线性数据结构：**
+
+1. 数组是列表的实现方式，它具有列表的特征，同时也具有自己的一些特征
+2. **链表**：像是一串手拉手的人，每个人只记住前后的人
+3. **栈**：像是一叠盘子，只能从顶部取放
+4. **队列**：像是排队买票，先来先服务
+
+
 
 [Lists](/docs/CS/Algorithms/struct/list.md), [stacks](/docs/CS/Algorithms/struct/stack.md), and [queues](/docs/CS/Algorithms/struct/queue.md) are perhaps the three fundamental data structures in all of computer science.
 
 [Arrays and Linked Lists](/docs/CS/Algorithms/struct/linked-list.md)
-
 
 We introduce [hash tables](/docs/CS/Algorithms/hash.md), a widely used data structure supporting the dictionary operations INSERT, DELETE, and SEARCH.
 In the worst case, hash tables require Θ(n) time to perform a SEARCH operation, but the expected time for hash-table operations is $O(1)$.
