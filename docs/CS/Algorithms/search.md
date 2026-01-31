@@ -9,10 +9,11 @@
 
 二分搜索适用于有序数组 相比于线性查找 可以在每次查询时成倍缩小查询范围 将时间复杂度降低到 $O(logN)$
 
-二分搜索需要注意的地方是 left 和 right 的判断和 middle 的取值, 而这与区间的取值有关 [left, right] 或是 [left, right)
+二分搜索需要注意的地方是 left 和 right 的判断和 middle 的取值, 而这与区间的取值有关 [left, right] 或是 [left, right) 或是 (left, right)
 
-- [left, right], while(left <= right), 下一个左区间的 right = middle - 1
-- [left, right), while(left < right), 下一个左区间的 right = middle
+- [left, right], while(left <= right), 下一个左区间的 right = middle - 1, left = mid + 1
+- [left, right), while(left < right), 下一个左区间的 right = middle, left = mid + 1
+- (left, right), while(left + 1 < right), 下一个左区间的 right = middle, left = mid, left 初始值为 -1
 
 middle取值为 middle = left + (right - left) >> 2, 等同于 (right + left)/2 作用是防止溢出
 
