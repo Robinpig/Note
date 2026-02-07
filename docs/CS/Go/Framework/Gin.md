@@ -1,6 +1,46 @@
 ## Introduction
 
-[Gin](https://github.com/gin-gonic/gin) 是一个 go 写的 web 框架，具有高性能的优点
+[Gin](https://gin-gonic.com/zh-cn/) 是一个高性能的 Go HTTP Web 框架。它提供了类似 Martini 的 API，但凭借 httprouter 性能提升显著—最高可达 40 倍。
+Gin 适合开发要求高速度和开发者生产力的 REST API、Web 应用和微服务
+
+## Installation
+
+```
+import "github.com/gin-gonic/gin"
+```
+
+main.go 文件
+
+```go
+package main
+
+import (
+  "net/http"
+
+  "github.com/gin-gonic/gin"
+)
+
+func main() {
+  // 创建带默认中间件（日志与恢复）的 Gin 路由器
+  r := gin.Default()
+
+  // 定义简单的 GET 路由
+  r.GET("/ping", func(c *gin.Context) {
+    // 返回 JSON 响应
+    c.JSON(http.StatusOK, gin.H{
+      "message": "pong",
+    })
+  })
+
+  // 默认端口 8080 启动服务器
+  // 监听 0.0.0.0:8080（Windows 下为 localhost:8080）
+  r.Run()
+}
+```
+
+
+
+## 原理
 
 Gin 是在 Golang HTTP 标准库 net/http 基础之上的再封装
 在 net/http 的既定框架下，gin 所做的是提供了一个 gin.Engine 对象作为 Handler 注入其中，从而实现路由注册/匹配、请求处理链路的优化
@@ -38,4 +78,4 @@ gin.Context 作为处理 http 请求的通用数据结构，不可避免地会�
 
 ## Links
 
-- [Golang](/docs/CS/Go/Go.md)
+- [Golang](/docs/CS/Go/Go.md?id=Frameworks)

@@ -563,6 +563,23 @@ sync.Cond 和 Java 的等待唤醒机制很像，它的三个方法 Wait、Signa
 ORM
 - [gorm](/docs/CS/Framework/gorm.md)
 
+Web
+- [Gin](/docs/CS/Go/Framework/Gin.md) 是一个高性能的 Go HTTP Web 框架
+- [gnet](/docs/CS/Go/Framework/gnet.md) 是一个基于事件驱动的高性能和轻量级网络框架 开发者可以使用 gnet 来实现自己的应用层网络协议(HTTP、RPC、Redis、WebSocket 等等)，从而构建出自己的应用层网络服务
+
+日志
+
+[Zap](/docs/CS/Go/Framework/Zap.md)
+
+
+[go-resty](/docs/CS/Go/Framework/go-resty.md)
+
+热加载
+
+[Fresh](https://github.com/gravityblast/fresh) is a command line tool that builds and (re)starts your web application everytime you save a Go or template file.
+
+
+
 ## Links
 - [C](/docs/CS/C/C.md)
 
