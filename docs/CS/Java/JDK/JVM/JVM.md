@@ -2134,7 +2134,7 @@ CollectedHeap* G1Arguments::create_heap() {
 ## Tuning
 
 
-云原生下JVM的窘境
+云原生下 JVM 的窘境
 
 - Java的启动时间一直为人所诟病 启动类加载耗时较长
 - Java的刚开始启动多是解释执行+编译执行，性能并不理想 通常是运行一段时间后性能才能达到巅峰
