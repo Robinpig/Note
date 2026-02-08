@@ -1,8 +1,8 @@
 ## Overview
 
-The parallel collector (also referred to here as the throughput collector) is a generational collector similar to the serial collector;
-the primary difference is that multiple threads are used to speed up garbage collection.
-The parallel collector is enabled with the command-line option -XX:+UseParallelGC.
+The parallel collector (also referred to here as the **throughput collector)** is a generational collector similar to the serial collector;
+the primary difference is that **multiple threads** are used to speed up garbage collection.
+The parallel collector is enabled with the command-line option `-XX:+UseParallelGC`.
 By default, with this option, both minor and major collections are executed in parallel to further reduce garbage collection overhead.
 
 On a machine with N hardware threads where N is greater than 8, the parallel collector uses a fixed fraction of N as the number of garbage collector threads.
