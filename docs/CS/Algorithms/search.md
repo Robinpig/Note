@@ -9,31 +9,132 @@
 
 二分搜索适用于有序数组 相比于线性查找 可以在每次查询时成倍缩小查询范围 将时间复杂度降低到 $O(logN)$
 
+
+```java
+public class BinarySearchUtil {
+
+    public static void main(String[] args) {
+        int[] array = {1, 3, 5, 7, 9, 11, 13, 15, 17, 19};
+        int target = 7;
+        int index = binarySearch(array, target);
+        if (index != -1) {
+            System.out.println("Target found at index: " + index);
+        } else {
+            System.out.println("Target not found in the array.");
+        }
+    }
+}
+```
+middle取值为 middle = left + (right - left) >> 2, 等同于 (right + left)/2 作用是防止溢出
+
+将比较的三种情况独立出来而不是用 <= 这样的处理 首先是更清楚 其次能够支持更多问题变体
+下一个右区间的的 left = middle + 1
+
+
 二分搜索需要注意的地方是 left 和 right 的判断和 middle 的取值, 而这与区间的取值有关 [left, right] 或是 [left, right) 或是 (left, right)
 
 - [left, right], while(left <= right), 下一个左区间的 right = middle - 1, left = mid + 1
 - [left, right), while(left < right), 下一个左区间的 right = middle, left = mid + 1
 - (left, right), while(left + 1 < right), 下一个左区间的 right = middle, left = mid, left 初始值为 -1
 
-middle取值为 middle = left + (right - left) >> 2, 等同于 (right + left)/2 作用是防止溢出
 
-将比较的三种情况独立出来而不是用 <= 这样的处理 首先是更清楚 其次能够支持更多问题变体
-下一个右区间的的 left = middle + 1
+
+三种实现
+
+<!-- tabs:start -->
+
+###### **左闭右闭**
 
 ```java
-int target, left, right;
-int middle = left + (right - left) >> 2
-if(target < middle){
-	binarySearch(left, middle - 1);
-} else if(target > middle){
-	binarySearch(middle + 1, right);
-} else {
-	return target == middle
+public class BinarySearchUtil {
+
+    /**
+     * 二分查找算法，使用左闭右闭区间 [left, right]。
+     */
+    public static int binarySearch(int[] array, int target) {
+        int left = 0; // 左边界初始为 0，表示左闭区间
+        int right = array.length - 1; // 右边界初始为数组长度减一，表示右闭区间
+
+        while (left <= right) { // 当左边界小于等于右边界时继续循环
+            int mid = left + (right - left) / 2; // 计算中间位置，防止溢出
+
+            if (array[mid] == target) {
+                return mid; // 找到目标值，返回索引
+            } else if (array[mid] < target) {
+                left = mid + 1; // 目标值在右半部分，更新左边界
+            } else {
+                right = mid - 1; // 目标值在左半部分，更新右边界
+            }
+        }
+
+        return -1; // 未找到目标值，返回 -1
+    }
 }
-
-
-
 ```
+
+
+
+###### **左闭右开**
+
+```java
+public class BinarySearchUtil {
+
+    /**
+     * 二分查找算法，使用左闭右开区间 [left, right)。
+     */
+    public static int binarySearch(int[] array, int target) {
+        int left = 0;
+        int right = array.length; // 右边界是开区间，所以初始值为数组长度
+
+        while (left < right) { // 当左边界小于右边界时继续循环
+            int mid = left + (right - left) / 2; // 计算中间位置，防止溢出
+
+            if (array[mid] == target) {
+                return mid; // 找到目标值，返回索引
+            } else if (array[mid] < target) {
+                left = mid + 1; // 目标值在右半部分，更新左边界
+            } else {
+                right = mid; // 目标值在左半部分，更新右边界
+            }
+        }
+
+        return -1; // 未找到目标值，返回 -1
+    }
+}
+```
+
+
+
+###### **左开右开**
+
+```java
+public class BinarySearchUtil {
+
+    /**
+     * 二分查找算法，使用左开右开区间 (left, right)。
+     */
+    public static int binarySearch(int[] array, int target) {
+        int left = -1; // 左边界初始为 -1，表示左开区间
+        int right = array.length; // 右边界初始为数组长度，表示右开区间
+
+        while (left + 1 < right) { // 当区间内还有元素时继续循环
+            int mid = left + (right - left) / 2; // 计算中间位置，防止溢出
+
+            if (array[mid] == target) {
+                return mid; // 找到目标值，返回索引
+            } else if (array[mid] < target) {
+                left = mid; // 目标值在右半部分，更新左边界
+            } else {
+                right = mid; // 目标值在左半部分，更新右边界
+            }
+        }
+
+        return -1; // 未找到目标值，返回 -1
+    }
+}
+```
+
+<!-- tabs:end -->
 
 
 
