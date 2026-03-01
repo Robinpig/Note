@@ -1957,6 +1957,7 @@ ZooKeeper内部存储ZKDatabase可以看作是一个简化版本的 Redis 实现
 6. [深入了解Zookeeper核心原理](https://segmentfault.com/a/1190000040297172)
 7. [ZooKeeper 原理与优化](https://yuzhouwan.com/posts/31915/#ZooKeeper-%E6%98%AF%E4%BB%80%E4%B9%88%EF%BC%9F)
 8. [谈谈 ZooKeeper 的局限性](https://wingsxdu.com/posts/database/zookeeper-limitations/)
+9. [HelloZooKeeper教程](https://github.com/HelloGitHub-Team/HelloZooKeeper)
 
 
 

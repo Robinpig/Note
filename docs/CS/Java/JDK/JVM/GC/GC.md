@@ -384,6 +384,20 @@ Parallel Scavenge and Parallel Old
 
 see [Garbage Collector Ergonomics](https://docs.oracle.com/javase/7/docs/technotes/guides/vm/gc-ergonomics.html)
 
+ParNew和Parallel Scavenge是两种不同的Java虚拟机垃圾收集器，主要用于新生代的垃圾收集。
+它们的主要区别包括:
+
+1. 默认的配合的老年代收集器不同
+   ParNew收集器通常与CMS收集器配合使用，作为CMS的默认新生代收集器。而Parallel Scavenge收集器通常与Parallel Old收集器配合，形成整个Parallel收集策略
+2. 目标和应用场景的差异
+   ParNew注重的是降低暂停时间，因此更适合需要低延迟的应用，如Web服务器、交互式应用等。而Parallel Scavenge注重高吞吐量，更适合后台运算为主的场景，如大型计算任务、批处理等。
+3. 暂停时间和吞吐量的考虑
+   ParNew为了保证低延迟，可能会牺牲部分吞吐量。而Parallel Scavenge则相反，它会牺牲部分延迟来保证最大的吞吐量。
+4. 自适应调节的能力
+   Parallel Scavenge具有自适应调节策略（-XX:+UseAdaptiveSizePolicy），能够根据系统的实际运行情况调整各个区域的大小及目标暂停时间。ParNew没有这种自适应机制。
+5. 与CMS和G1收集器的互动
+   ParNew与CMS的结合相对紧密，它们共同为低延迟场景提供服务。而Parallel Scavenge并不适合与CMS配合，但在Java 8及之前，它是与G1收集器配合的一个选项
+
 ### Concurrent
 
 The mostly concurrent collector trades processor resources (which would otherwise be available to the application) for shorter major collection pause times. The most visible overhead is the use of one or more processors during the concurrent parts of the collection. On an N processor system, the concurrent part of the collection will use K/N of the available processors, where 1<=K<=ceiling{N/4}. (Note that the precise choice of and bounds on K are subject to change.) In addition to the use of processors during concurrent phases, additional overhead is incurred to enable concurrency. Thus while garbage collection pauses are typically much shorter with the concurrent collector, application throughput also tends to be slightly lower than with the other collectors.
