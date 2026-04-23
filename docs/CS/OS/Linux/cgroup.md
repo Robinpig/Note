@@ -57,7 +57,7 @@ struct cgroup {
 ```
 
 
-Let's see the task_struct.
+一个进程是通过 task_struct 结构体下的 *cgroups 指向自己关联的task_group、mem_group等
 
 ```c
 struct task_struct {
@@ -83,6 +83,10 @@ struct css_set {
 	struct cgroup_subsys_state *subsys[CGROUP_SUBSYS_COUNT];
 }    
 ```
+
+对于容器下所有进程的CPU资源限制是通过 task_group 实现的， 内存资源是通过 mem_group 实现的
+
+
 
 
 
