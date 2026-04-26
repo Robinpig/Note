@@ -1,5 +1,15 @@
 ## Introduction
 
+Spring AI is an application framework for AI engineering. Its goal is to apply to the AI domain Spring ecosystem design principles such as portability and modular design and promote using POJOs as the building blocks of an application to the AI domain.
+
+Spring AI 解决了 AI 集成的根本难题：将企业数据和 API 与 AI 模型连接起来
+
+![spring-ai-integration-diagram-3](https://images.ctfassets.net/mnrwi97vnhts/4mda205vy509Dx3vGkMwFr/af520e66dc79fb80cd1bc129a11d6d23/spring-ai-integration-diagram-3.svg)
+
+
+
+
+
 
 
 spring-ai-openai-starter
