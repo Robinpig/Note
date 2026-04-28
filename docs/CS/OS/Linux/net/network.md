@@ -1,5 +1,24 @@
 ## Introduction
 
+在 TCP/IP ⽹络分层模型⾥，整个协议栈被分成了物理层、链路层、⽹络层，传输层和应⽤层。物理层
+对应的是⽹卡和⽹线，应⽤层对应的是我们常⻅的 Nginx，FTP 等等各种应⽤。Linux 实现的是链路
+层、⽹络层和传输层这三层。
+在 Linux 内核实现中，链路层协议靠⽹卡驱动来实现，内核协议栈来实现⽹络层和传输层。内核对更上
+层的应⽤层提供 socket 接⼝来供⽤户进程访问
+
+在 Linux 的源代码中，⽹络设备驱动对应的逻辑位于 driver/net/ethernet , 其中 intel 系列⽹卡的
+⽬录。
+driver/net/ethernet/intel ⽬录下。协议栈模块代码位于 kernel 和 net 目录
+
+内核和⽹络设备驱动是通过中断的⽅式来处理的。当设备上有数据到达的时候，会给 CPU 的相关引脚
+上触发⼀个电压变化，以通知 CPU 来处理数据。对于⽹络模块来说，由于处理过程⽐较复杂和耗时，
+如果在中断函数中完成所有的处理，将会导致中断处理函数（优先级过⾼）将过度占据 CPU ，将导致
+CPU ⽆法响应其它设备，例如⿏标和键盘的消息。
+因此Linux中断处理函数是分上半部和下半部的。上半部是只进⾏最简单的⼯作，快速处理然后释放 CPU ，接着 CPU 就可以允许其它中断进来。剩下将绝⼤部分的⼯作都放到下半部中，可以慢慢从容处理。2.4 以后的内核版本采⽤的下半部实现⽅式是软中断，由 ksoftirqd 内核线程全权处理。
+和硬中断不同的是，硬中断是通过给 CPU 物理引脚施加电压变化，⽽软中断是通过给内存中的⼀个变量的⼆进制值以通知软中断处理程序
+
+
+
 网络子系统的初始化流程
 
 描述Linux收发包流程
@@ -9,9 +28,6 @@ struct inet_hashinfo
 ehash 已经建立连接hash表
 bhash bind状态哈希表
 lhash2 和 listening_hash 代表listen状态哈希表
-
-
-
 
 
 ## init
@@ -32,6 +48,7 @@ This is called single threaded during boot, so no need to take the rtnl semaphor
 2. register func with [softirq](/docs/CS/OS/Linux/Interrupt.md?id=open_softirq)
    - [net_rx_action](/docs/CS/OS/Linux/net/network.mdk.md?id=net_rx_action) receive func
    - [net_tx_action](/docs/CS/OS/Linux/net/network.mdk.md?id=net_tx_action) transmit func
+
 
 ```c
 // net/core/dev.c
@@ -106,6 +123,7 @@ int inet_add_protocol(const struct net_protocol *prot, unsigned char protocol)
 #### dev_add_pack
 
 ip_packet_type
+
 
 ```c
 // net/ipv4/af_inet.c
@@ -267,6 +285,9 @@ check RX/TX overruns:
 ifconfig | grep overruns
 ```
 
+分配了
+
+
 ```c
 static int igb_setup_all_tx_resources(struct igb_adapter *adapter)
 {
@@ -305,6 +326,7 @@ int igb_setup_tx_resources(struct igb_ring *tx_ring)
 
 #### register_irq
 
+
 ```c
 static int igb_request_irq(struct igb_adapter *adapter)
 {
@@ -335,6 +357,7 @@ igb_init_interrupt_scheme -> igb_alloc_q_vector
 
 initialize NAPI with `igb_poll`
 
+
 ```c
 static int igb_alloc_q_vector(struct igb_adapter *adapter,
 			      int v_count, int v_idx,
@@ -350,6 +373,7 @@ static int igb_alloc_q_vector(struct igb_adapter *adapter,
 ##### igb_request_msix
 
 register [igb_msix_ring](/docs/CS/OS/Linux/net/network.mdk.md?id=igb_msix_ring)
+
 
 ```c
 static int igb_request_msix(struct igb_adapter *adapter)
@@ -857,7 +881,14 @@ static bool igb_clean_tx_irq(struct igb_q_vector *q_vector, int napi_budget)
 
 网络包接收流程
 
+当⽹卡上收到数据以后，Linux 中第⼀个⼯作的模块是⽹络驱动。 ⽹络驱动会以 DMA 的⽅式把⽹卡上
+收到的帧写到内存⾥。再向 CPU 发起⼀个中断，以通知 CPU 有数据到达。第⼆，当 CPU 收到中断请
+求后，会去调⽤⽹络驱动注册的中断处理函数。 ⽹卡的中断处理函数并不做过多⼯作，发出软中断请
+求，然后尽快释放 CPU。ksoftirqd 检测到有软中断请求到达，调⽤ poll 开始轮询收包，收到后交由各
+级协议栈处理。对于 udp 包来说，会被放到⽤户 socket 的接收队列中。
+
 ### driver process
+
 
 当网络数据帧通过网络传输到达网卡时，网卡会将网络数据帧通过DMA的方式放到环形缓冲区RingBuffer中
 
