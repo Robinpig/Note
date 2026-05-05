@@ -30,11 +30,22 @@ bhash bind状态哈希表
 lhash2 和 listening_hash 代表listen状态哈希表
 
 
+
+
 ## init
 
-Create [ksoftirqd](/docs/CS/OS/Linux/Interrupt.md?id=init_softirq) for each cpu.
+Linux 驱动，内核协议栈等等模块在具备接收⽹卡数据包之前，要做很多的准备⼯作才⾏。⽐如要提前
+创建好ksoftirqd内核线程，要注册好各个协议对应的处理函数，⽹卡设备⼦系统要提前初始化好，⽹卡
+要启动好。只有这些都Ready之后，我们才能真正开始接收数据包。
+
+
+
+Linux 的软中断都是在专⻔的内核线程 [ksoftirqd](/docs/CS/OS/Linux/Interrupt.md?id=init_softirq) 进行
+系统初始化时为每个CPU创建独立的 ksoftirqd
 
 ### init net dev
+
+linux 内核通过调⽤ subsys_initcall 来初始化各个⼦系统，在源代码⽬录⾥你可以 grep 出许多对这个函数的调⽤。这⾥我们要说的是⽹络⼦系统的初始化，会执⾏到 net_dev_init 函数
 
 > initcall see [kernel_init](/docs/CS/OS/Linux/init.md?id=kernel_init)
 
@@ -44,8 +55,12 @@ At boot time this walks the device list and unhooks any devices that fail to ini
 <br/>
 This is called single threaded during boot, so no need to take the rtnl semaphore.
 
-1. Initialise the packet receive queues for each cpu.
-2. register func with [softirq](/docs/CS/OS/Linux/Interrupt.md?id=open_softirq)
+1. 在这个函数⾥，会为每个 CPU 都申请⼀个 softnet_data 数据结构，在这个数据结构⾥的
+poll_list 是等待驱动程序将其 poll 函数注册进来 Initialise the packet receive queues for each cpu.
+2.  open_softirq 注册了每⼀种软中断都注册⼀个处理函数。 NET_TX_SOFTIRQ 的处理函数为
+net_tx_action，NET_RX_SOFTIRQ 的为 net_rx_action。继续跟踪 open_softirq 后发现这个注册
+的⽅式是记录在 softirq_vec 变量⾥的。后⾯ ksoftirqd 线程收到软中断的时候，也会使⽤这个变量
+来找到每⼀种软中断对应的处理函数 register func with [softirq](/docs/CS/OS/Linux/Interrupt.md?id=open_softirq)
    - [net_rx_action](/docs/CS/OS/Linux/net/network.mdk.md?id=net_rx_action) receive func
    - [net_tx_action](/docs/CS/OS/Linux/net/network.mdk.md?id=net_tx_action) transmit func
 
