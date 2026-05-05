@@ -1475,7 +1475,7 @@ void aeMain(aeEventLoop *eventLoop) {
 }
 ```
 
-## Do
+## 命令执行
 
 这里看一下命令的执行流程
 
@@ -1501,7 +1501,7 @@ struct redisServer {
 
 ### read
 
-
+客户端发送的请求触发可读事件, 调用 `readQueryFromClient` 执行流程
 
 #### readQueryFromClient
 
@@ -1605,7 +1605,7 @@ int postponeClientRead(client *c) {
 
 #### handleClientsWithPendingReadsUsingThreads
 
-主线程在执行 [beforeSleep](/docs/CS/DB/Redis/ae.md?id=beforeSleep) 函数时会调用 handleClientsWithPendingReadsUsingThreads 将clients通过RoundRobin方式分配给线程绑定队列 
+主线程在执行 [beforeSleep](/docs/CS/DB/Redis/ae.md?id=beforeSleep) 函数时会调用 handleClientsWithPendingReadsUsingThreads 将clients通过RoundRobin方式分配给 I/O 线程绑定队列  i o_thread_list, I/O 线程从队列中获取任务执行 socket 读取和解析
 之后主线程也会执行一部分的命令读取与解析 而命令的执行需要等待所有I/O线程完成解析后才开始
 
 如果未开启I/O多线程模型 则需要主线程独立完成流程
@@ -1618,6 +1618,7 @@ Then it can safely perform post-processing and return to normal synchronous work
 
 ```c
 int handleClientsWithPendingReadsUsingThreads(void) {
+  	// 是否开启I/O多线程
     if (!server.io_threads_active || !server.io_threads_do_reads) return 0;
     int processed = listLength(server.clients_pending_read);
     if (processed == 0) return 0;
@@ -1670,9 +1671,6 @@ int handleClientsWithPendingReadsUsingThreads(void) {
         serverAssert(!(c->flags & CLIENT_BLOCKED));
 
         if (beforeNextClient(c) == C_ERR) {
-            /* If the client is no longer valid, we avoid
-             * processing the client later. So we just go
-             * to the next. */
             continue;
         }
 
@@ -1680,9 +1678,6 @@ int handleClientsWithPendingReadsUsingThreads(void) {
         updateClientMemUsage(c);
 
         if (processPendingCommandAndInputBuffer(c) == C_ERR) {
-            /* If the client is no longer valid, we avoid
-             * processing the client later. So we just go
-             * to the next. */
             continue;
         }
 
@@ -1704,6 +1699,8 @@ int handleClientsWithPendingReadsUsingThreads(void) {
 
 #### processPendingCommandAndInputBuffer
 
+processCommandAndResetClient 执行实际的命令
+
 ```c
 int processPendingCommandAndInputBuffer(client *c) {
     if (c->flags & CLIENT_PENDING_COMMAND) {
@@ -1713,11 +1710,6 @@ int processPendingCommandAndInputBuffer(client *c) {
         }
     }
 
-    /* Now process client if it has more data in it's buffer.
-     *
-     * Note: when a master client steps into this function,
-     * it can always satisfy this condition, because its querbuf
-     * contains data not applied. */
     if (c->querybuf && sdslen(c->querybuf) > 0) {
         return processInputBuffer(c);
     }
@@ -1727,83 +1719,7 @@ int processPendingCommandAndInputBuffer(client *c) {
 
 
 
-
-
-#### processInputBuffer
-
-This function is called every time, in the client structure 'c',
-there is more query buffer to process, because we read more data from the socket or because a client was blocked and later reactivated,
-so there could be pending query buffer, already representing a full command, to process.
-
-```c
-void processInputBuffer(client *c) {
-    /* Keep processing while there is something in the input buffer */
-    while(c->qb_pos < sdslen(c->querybuf)) {
-        /* Return if clients are paused. */
-        if (!(c->flags & CLIENT_SLAVE) && clientsArePaused()) break;
-
-        if (c->flags & CLIENT_BLOCKED) break;
-
-        if (c->flags & CLIENT_PENDING_COMMAND) break;
-
-        if (server.lua_timedout && c->flags & CLIENT_MASTER) break;
-
-        if (c->flags & (CLIENT_CLOSE_AFTER_REPLY|CLIENT_CLOSE_ASAP)) break;
-
-        /* Determine request type when unknown. */
-        if (!c->reqtype) {
-            if (c->querybuf[c->qb_pos] == '*') {
-                c->reqtype = PROTO_REQ_MULTIBULK;
-            } else {
-                c->reqtype = PROTO_REQ_INLINE;
-            }
-        }
-
-        if (c->reqtype == PROTO_REQ_INLINE) {
-            if (processInlineBuffer(c) != C_OK) break;
-            /* If the Gopher mode and we got zero or one argument, process
-             * the request in Gopher mode. */
-            if (server.gopher_enabled &&
-                ((c->argc == 1 && ((char*)(c->argv[0]->ptr))[0] == '/') ||
-                  c->argc == 0))
-            {
-                processGopherRequest(c);
-                resetClient(c);
-                c->flags |= CLIENT_CLOSE_AFTER_REPLY;
-                break;
-            }
-        } else if (c->reqtype == PROTO_REQ_MULTIBULK) {
-            if (processMultibulkBuffer(c) != C_OK) break;
-        } else {
-            serverPanic("Unknown request type");
-        }
-
-        /* Multibulk processing could see a <= 0 length. */
-        if (c->argc == 0) {
-            resetClient(c);
-        } else {
-              //如果客户端有CLIENT_PENDING_READ标识，将其改为CLIENT_PENDING_COMMAND，就退出循环，并不调用processCommandAndResetClient函数执行命令
-            if (c->flags & CLIENT_PENDING_READ) {
-                c->flags |= CLIENT_PENDING_COMMAND;
-                break;
-            }
-
-            /* We are finally ready to execute the command. */
-            if (processCommandAndResetClient(c) == C_ERR) {
-                return;
-            }
-        }
-    }
-
-    /* Trim to pos */
-    if (c->qb_pos) {
-        sdsrange(c->querybuf,c->qb_pos,-1);
-        c->qb_pos = 0;
-    }
-}
-```
-
-processCommandAndResetClient
+#### processCommandAndResetClient
 
 
 
@@ -1834,7 +1750,7 @@ int processCommandAndResetClient(client *c) {
 
 #### processCommand
 
-processCommand 函数从 server.commands 这个[hash](/docs/CS/DB/Redis/struct/hash.md) 中查找命令对应的redisCommand实例
+processCommand 函数从 `server.commands` 这个[hash](/docs/CS/DB/Redis/struct/hash.md) 中查找命令对应的redisCommand实例
 
 如果通过就会进行如下处理
 
@@ -1882,7 +1798,7 @@ void addReplyBulk(client *c, robj *obj) {
 
 #### addReply
 
-addReply函数是在networking.c文件中定义的。它的执行逻辑比较简单，主要是调用prepareClientToWrite函数，并在prepareClientToWrite函数中调用clientInstallWriteHandler函数，将待写回客户端加入到全局变量server的clients_pending_write列表中。
+addReply函数是在networking.c文件中定义的。它的执行逻辑比较简单，主要是调用prepareClientToWrite函数，并在prepareClientToWrite函数中调用clientInstallWriteHandler函数，将待写回客户端加入到全局变量server的 `clients_pending_write` 列表中。
 
 然后，addReply函数会调用_addReplyToBuffer等函数，将要返回的结果添加到客户端的输出缓冲区中
 
@@ -1956,7 +1872,7 @@ int prepareClientToWrite(client *c) {
 
 下一次时间循环时 [beforeSleep](/docs/CS/DB/Redis/ae.md?id=beforeSleep) 函数会调用 handleClientsWithPendingWrites 把 clients_pending_write 队列的数据分配给I/O线程和main线程
 
-分配完成后由负责的线程调用 writeToClient 函数把命令执行结果发送回客户端
+分配完成后由负责的 I/O 线程或者主线程调用 `writeToClient` 函数把命令执行结果发送回客户端
 
 ```c
 int handleClientsWithPendingWritesUsingThreads(void) {
@@ -2116,6 +2032,8 @@ Write data in output buffers to client.
 If handler_installed is set, it will attempt to clear the write event.
 This function is called by threads, but always with handler_installed set to 0.
 So when handler_installed is set to 0 the function must be thread safe.
+
+writeToClient 函数核心是一个while 循环, 循环调用 _writeToClient 函数向底层的 socket 连接里写数据
 
 ```c
 int writeToClient(client *c, int handler_installed) {

@@ -81,15 +81,12 @@ struct dict {
 };
 ```
 
-ht_table[2] 是一个大小为2的[hash表](/docs/CS/DB/Redis/struct/hash.md)数组
-一开始只使用 ht_table[0] 读写数据 ht_table[1] 指向NULL, 当rehash时才会创建更大的散列表 ht_table[1], 
-rehash迁移完成后 交换 ht_table[0]  和 ht_table[1] 的指针 ht_table[1] 重新指向 NULL
+ht_table[2] 是一个大小为2的[hash表](/docs/CS/DB/Redis/struct/hash.md)数组 每个都是指向一个散列表数组的指针
 
+> 一开始只使用 ht_table[0] 读写数据 ht_table[1] 指向NULL, 当rehash时才会创建更大的散列表 ht_table[1], 
+> rehash迁移完成后 交换 ht_table[0]  和 ht_table[1] 的指针 ht_table[1] 重新指向 NULL
 
-
-
-
-散列表数组中元素是[dictEntry](/docs/CS/DB/Redis/struct/hash.md?id=dicht) 类型
+散列表数组中元素是[dictEntry](/docs/CS/DB/Redis/struct/hash.md?id=dicht) 类型, 链地址法处理键碰撞
 
 ```c
 // dict.h
@@ -101,13 +98,11 @@ typedef struct dictEntry {
         int64_t s64;
         double d;
     } v;
+   // 散列冲突形成的链表
     struct dictEntry *next;
 } dictEntry;
 ```
-ht_table 使用链地址法处理键碰撞
-
-而 val指针指向的是 redisObject
-
+val指针指向的是 redisObject
 
 
 
@@ -150,6 +145,8 @@ typedef struct redisObject {
 - Basically this structure can represent all the basic Redis data types like strings, lists, sets, sorted sets and so forth.
 - The interesting thing is that it has a `type` field, so that it is possible to know what type a given object has, and a `refcount`, so that the same object can be referenced in multiple places without allocating it multiple times.
 - Finally the `ptr` field points to the actual representation of the object, which might vary even for the same type, depending on the `encoding` used.
+
+
 
 Redis objects are used extensively in the Redis internals, however in order to avoid the overhead of indirect accesses, recently in many places we just use plain dynamic strings not wrapped inside a Redis object.
 
