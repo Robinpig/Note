@@ -645,6 +645,22 @@ However because `SCAN` has very little state associated (just the cursor) it has
   It is up to the application to handle the case of duplicated elements, for example only using the returned elements in order to perform operations that are safe when re-applied multiple times.
 * Elements that were not constantly present in the collection during a full iteration, may be returned or not: it is undefined.
 
+
+
+## Implementation
+
+在线购物的购物车应具备的功能
+
+- 添加商品
+- 浏览全部商品
+- 更新商品数量 查看商品信息(价格、图片、描述等)
+- 删除商品
+- 清空购物车
+
+散列表存储 key shoppingCart:userId
+
+散列表内存储 商品编码
+
 ## Links
 
 - [Redis Struct](/docs/CS/DB/Redis/struct/struct.mdruct.md?id=hashes)

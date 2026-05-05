@@ -679,11 +679,13 @@ incr
 Redis集群能保证高可用和高性能 为了节省内存可以使用incr获取自增数字来创建id 但是哪怕开启AOF配置everysec策略也有可能会丢失数据
 所以可以通过异步机制 将id通过MQ发送给MySQL持久化
 
-
 ## Summary
 
-- $O(1)$ getLen
-- **packed** and always append '\0'
+SDS的特征
+
+- $O(1)$ 获取字符串长度
+- 二进制格式数据安全 **packed** and always append '\0' 兼容C字符串
+- 空间预分配和惰性空间释放
 - expand pow of 2 when len < 1M, or else expand 1M util 512M
 - use sdsclear rather than sdsfree
 - Encoding

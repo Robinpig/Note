@@ -3,7 +3,6 @@
 Redis的list是一种线性的有序结构 可以用于实现队列、栈
 
 list的底层数据结构一直在进行优化 从早期的linkedlist和ziplist 到3.2引入的linkedlist与ziplist组成的quicklist 再到7.0版本中的listpack
-
 这些都是为了在内存空间开销和访问性能之间做取舍
 
 
@@ -134,9 +133,21 @@ void pushGenericCommand(client *c, int where, int xx) {
 
 ### MQ
 
+BLPOP、BEPOP 阻塞读取命令 减少CPU性能消耗
+
+
+
+重复消费: 消息队列自动为消息生成一个全局ID, 消费者存储消费过的ID进行判断
+
 
 
 BLMOVE 实现 ACK 机制
+
+
+
+可靠性
+
+
 
 
 

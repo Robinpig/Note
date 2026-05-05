@@ -7,10 +7,6 @@
 
 
 
-
-
-
-
 why redis-cluster use 16384 slots?
 
 > The reason is:

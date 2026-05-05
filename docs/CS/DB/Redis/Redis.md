@@ -43,6 +43,8 @@ Some build issues:
 | --------------------------------------------------- | ------------------------------------------------------ | ----------------------------------------------------------------- |
 | error: variable has incomplete type 'struct stat64' | add`#define MAC_OS_X_VERSION_10_6` into `src/config.h` | [Build Issue in arm](https://github.com/redis/redis/issues/12585) |
 
+### Source Code
+
 Redis源码目录:
 
 <table class="tg"><thead>
@@ -94,7 +96,6 @@ Redis源码目录:
   </tr>
 </tbody>
 </table>
-
 Redis 实现的测试代码可以分成四部分，分别是单元测试（对应 unit 子目录），Redis Cluster 功能测试（对应 cluster 子目录）、哨兵功能测试（对应 sentinel 子目录）、主从复制功能测试（对应 integration 子目录）
 这些子目录中的测试代码使用了 Tcl 语言（通用的脚本语言）进行编写，主要目的就是方便进行测试
 除了有针对特定功能模块的测试代码外，还有一些代码是用来支撑测试功能的，这些代码在 assets、helpers、modules、support 四个目录中
@@ -139,8 +140,10 @@ Fig.1. Architecture
 - 高可用层: 提供 Replication 、Sentinel 和 Cluster 实现高可用
 - 统计和监控: 提供一些监控工具和性能分析工具, 例如内存监控、基准测试、内存碎片、Bigkey统计、慢指令查询
 
+
+
 Redis将启动的这些服务抽象成一个全局的结构体 [redisServer](/docs/CS/DB/Redis/server.md?id=server)
-它包含了存储kv的[redisDb](/docs/CS/DB/Redis/redisDb.md)、命令列表、网络监听、客户端缓存等信息
+它包含了存储结构 [redisDb](/docs/CS/DB/Redis/redisDb.md)、命令列表、网络监听、客户端缓存等信息
 
 
 
