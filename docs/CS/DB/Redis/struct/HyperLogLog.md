@@ -1,7 +1,5 @@
 ## Introduction
 
-
-
 A HyperLogLog is a probabilistic data structure used in order to count unique things (technically this is referred to estimating the cardinality of a set). 
 Usually counting unique items requires using an amount of memory proportional to the number of items you want to count, 
 because you need to remember the elements you have already seen in the past in order to avoid counting them multiple times.
@@ -26,11 +24,6 @@ While you don't really *add items* into an HLL, because the data structure only 
 ```
 
 An example of use case for this data structure is counting unique queries performed by users in a search form every day.
-
-
-
-
-
 
 
 add HyperLogLog since 2.8.9

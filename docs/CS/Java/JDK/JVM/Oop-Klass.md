@@ -411,6 +411,20 @@ Fig.2. Oop hierarchy.
 
 ### Oop struct
 
+In the HotSpot JVM, object headers support many different features:
+
+- Garbage collection — Storing forwarding pointers and tracking object ages;
+- Type system — Identifying an object's class, which is used for method invocation, reflection, type checks, etc.;
+- Locking — Storing information about associated light-weight and heavy-weight locks; and
+- Hash codes — Storing an object's stable identity hash code, once computed.
+
+
+> [!TIP]
+>
+> [JEP 450: Compact Object Headers](https://openjdk.org/jeps/450)
+> 把对象头从 16 或 12 字节减少到 8 字节（64位平台），堆内存占用能明显降低，缓存局部性也更好，GC 压力也能减轻
+
+
 The layout of Oops is:
 
 - [markWord](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=MarkWord)
