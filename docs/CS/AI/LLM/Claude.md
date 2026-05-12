@@ -10,7 +10,10 @@ Claude Code 是 Anthropic 官方推出的命令行工具，让你可以在终端
 
 
 
-
+Mac
+```shell
+brew install --cask claude-code
+```
 
 
 

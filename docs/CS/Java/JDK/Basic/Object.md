@@ -93,6 +93,11 @@ For example, C++ uses the *virtual* keyword.
 In such languages, methods are not dynamically bound by default.
 In Java, dynamic binding is the default behavior and you don’t need extra keywords to produce polymorphism.
 
+> [!NOTE]
+> 多态为什么不适用于成员变量
+> 多态的主要设计目的，就是实现行为上的差异化，即“同一个行为在不同对象上有不同表现”，而成员变量代表的是对象的状态，其访问通常是直接的，不涉及运行时查找
+> - 成员变量的访问是在编译时根据引用变量的声明类型来确定的。编译器在编译时就知道 Parent p = new Child(); 中的 p 是 Parent 类型，因此访问 p 的成员变量时，会直接访问 Parent 类中定义的成员变量，即使子类有同名的成员变量（这被称为成员变量隐藏），也不会被多态机制所影响
+> - 如果成员变量也支持多态，会使得代码的语义变得复杂和不确定，增加理解和维护的难度
 
 Abstract Class vs Interface
 
