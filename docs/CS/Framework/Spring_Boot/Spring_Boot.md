@@ -348,11 +348,15 @@ Among those are the following:
 - Automatic disabling of template caches
 - Built in H2 Console, if the H2 database is in use
 
-More precisely, when DevTools is active, the application is loaded into two separate class loaders in the Java virtual machine (JVM). One class loader is loaded with your Java code, property files, and pretty much anything that’s in the src/main/ path of the project. These are items that are likely to change frequently. The other class loader is loaded with dependency libraries, which aren’t likely to change as often.
+更精确地说，当 DevTools 激活时，应用程序会被加载到 Java 虚拟机（JVM）中的两个独立类加载器中
+一个类加载器加载你的 Java 代码、属性文件，以及项目 src/main/ 路径下的几乎所有内容。这些都是可能经常更改的项
+另一个类加载器则加载依赖库，这些库不太可能经常更改
 
-When a change is detected, DevTools reloads only the class loader containing your project code and restarts the Spring application context but leaves the other class loader and the JVM intact. Although subtle, this strategy affords a small reduction in the time it takes to start the application.
+当检测到更改时，DevTools 仅重新加载包含您项目代码的类加载器并重启 Spring 应用程序上下文，而保持其他类加载器和 JVM 不变
+虽然这种方式微妙，但可以在应用程序启动时间上带来小幅减少
 
-The downside of this strategy is that changes to dependencies won’t be available in automatic restarts. That’s because the class loader containing dependency libraries isn’t automatically reloaded. Any time you add, change, or remove a dependency in your build specification, you’ll need to do a hard restart of the application for those changes to take effect.
+这种策略的缺点是对依赖项的更改在自动重启中不可用。这是因为包含依赖库的类加载器不会被自动重新加载
+每当你在构建规范中添加、修改或删除依赖项时，都需要对应用程序进行完全重启，以使这些更改生效
 
 
 

@@ -38,12 +38,19 @@ Redis 准备了两个哈希表，用于 rehash 时交替保存数据
 ## Structures
 
 
+7.0之前：dict内部包含了两个dictht
+
+7.0 变更
+- dictht ht[2]用dictEntry **ht_table[2]代替
+- 原来两个dictht的used用unsigned long ht_used[2]代替
+- 原来两个dictht的size用signed char ht_size_exp[2]代替，且由8个字节变为1个字节
+
+通过数据结构的优化（96->56字节）
 
 
 rehashing not in progress if rehashidx == -1
 
 ```c
-
 struct dict {
     dictType *type;
 
