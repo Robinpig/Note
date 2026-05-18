@@ -56,7 +56,13 @@ Method references enable you to do this; they are compact, easy-to-read lambda e
 - lambda -> invokedynamic
 
 
-lambda中参数不可变 实质就是类函数形参 在编译完之后到局部变量表一样 是不可变
+Lambda 表达式在 JVM 中被实现为匿名类的实例，存储在堆内存中
+局部变量存储在栈内存中，方法执行完毕后即销毁
+如果 Lambda 直接引用栈上的局部变量，当方法返回后，变量已不存在，但 Lambda 仍可能存活
+
+
+Lambda 中的局部变量本质上是值拷贝，不共享引用
+Java Lambda 限制 final 变量，是为了在栈/堆生命周期差异下保证语义清晰与线程安全，这是语言设计者在"灵活性"与"可维护性"之间做出的有意权衡
 
 <!-- tabs:start -->
 
@@ -643,7 +649,7 @@ public interface Effect<T> {
 Note that this is equivalent to Java’s Consumer interface. Only the name of the class and the name of the method are different.
 In fact, as I mentioned several times in the beginning of this book, names are irrelevant, but meaningful names are better.
 
-“Throwing an exception in the case of a failure isn’t what you generally want to do, at least in the Result class.
+Throwing an exception in the case of a failure isn’t what you generally want to do, at least in the Result class.
 Generally it’s up to the client to decide what to do, and you might want to do something less radical than throwing an exception.
 For “example, you might want to log the exception before continuing.
 
@@ -662,3 +668,4 @@ After the effect is applied, you’re ready to start another new functional prog
 3. [Project Lambda](https://openjdk.java.net/projects/lambda/)
 4. [Java 8 Stream Tutorial](https://winterbe.com/posts/2014/07/31/java8-stream-tutorial-examples/)
 5. [What's Wrong with Java 8: Currying vs Closures](https://dzone.com/articles/whats-wrong-java-8-currying-vs)
+6. [Lambda and final variables](https://javax0.github.io/2021/12/08/lambda-and-final-variables.html)

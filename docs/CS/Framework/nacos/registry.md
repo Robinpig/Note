@@ -1469,9 +1469,6 @@ public ObjectNode beat(HttpServletRequest request) throws Exception {
 ## Client subscribe
 
 
-
-
-
 Spring Cloud
 
 通过Bean自定义生命周期 在启动的finishRefresh阶段订阅
@@ -1518,6 +1515,7 @@ public class NacosWatch implements SmartLifecycle, DisposableBean {
 
 
 client端本地缓存
+
 ```java
 public class NacosNamingService implements NamingService {
     @Override
@@ -1600,6 +1598,8 @@ public class ServiceInfoUpdateService implements Closeable {
 ```
 
 #### UpdateTask
+
+Nacos 以开启线程的方式调用 UpdateTask 类中的 run 方法，触发本地的服务发现查询请求
 
 ```java
 public void scheduleUpdateIfAbsent(String serviceName, String groupName, String clusters) {

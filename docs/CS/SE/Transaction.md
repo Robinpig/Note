@@ -1089,6 +1089,9 @@ We characterized those isolation levels by discussing various examples of race c
   A transaction reads objects that match some search condition. Another client makes a write that affects the results of that search.
   Snapshot isolation prevents straightforward phantom reads, but phantoms in the context of write skew require special treatment, such as index-range locks.
 
+
+如果能用补偿和事务消息解决的场景，尽量不要上分布式事务来增加复杂度
+
 ## Links
 
 - [MySQL Transaction](/docs/CS/DB/MySQL/Transaction.md)

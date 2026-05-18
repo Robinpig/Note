@@ -275,10 +275,6 @@ class FeignClientFactoryBean implements FactoryBean<Object>, InitializingBean, A
                 : applicationContext.getBean(FeignClientFactory.class);
         Feign.Builder builder = feign(feignClientFactory);
         if (!StringUtils.hasText(url) && !isUrlAvailableInConfig(contextId)) {
-
-            if (LOG.isInfoEnabled()) {
-                LOG.info("For '" + name + "' URL not provided. Will try picking an instance via load-balancing.");
-            }
             if (!name.startsWith("http://") && !name.startsWith("https://")) {
                 url = "http://" + name;
             }
@@ -652,6 +648,20 @@ Feign 的 fallback 机制要生效，需要三部分配合
 
 Feign + SpringCloudCircuitBreaker 的用法从 2020.0.0 版本开始支持，目前经历一次大变化
 -  2022.0.0 开始开关从 feign.circuitbreaker.enabled 调整为 spring.cloud.openfeign.circuitbreaker.enabled
+
+
+
+## Log
+
+OpenFeign 组件默认将日志信息以 debug 模式输出，而默认情况下 Spring Boot 的日志
+级别是 Info，因此我们必须将应用日志的打印级别改为 debug 后才能看到 OpenFeign 的日志
+
+```
+logging:
+  level:
+    com.xx.TemplateService: debug
+    com.xx.CalculationService: debug
+```
 
 ## Metrics
 
