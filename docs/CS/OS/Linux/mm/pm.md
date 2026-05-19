@@ -547,6 +547,10 @@ cat /proc/buddyinfo
 # Node 0, zone   Normal  76763  72352  43128  14603   4780   1558    504    117     43    510    356 
 ```
 
+cat /proc/pagetypeinfo
+
+
+
 #### vmap_range_noflush
 
 ```c

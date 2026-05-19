@@ -15,6 +15,16 @@ filebeat配置
 Logstash负责解析转换日志
 
 
+从高可用的角度出发，我们通常并不会将业务系统与 Logstash 直连，取而代之的是将日
+志写入本地文件，然后通过 Filebeat 之类的工具收集本地 log 文件，并传输给
+Logstash。
+这样做的好处是，无论 Logstash 和应用服务器之间的连接通路是否顺畅，日志文件都会
+落盘保存，并不会因网络异常而丢失。另一方面，Filebeat 使用了一种“背压敏感协
+议”技术，用来应对海量数据访问的压力，它会根据 Logstash 的处理速率调整文件读取
+速度，如果 Logstash 正忙，Filebeat 就会降低读取文件的速度
+
+
+
 
 告警
 规则设置与通知机制
@@ -32,6 +42,14 @@ Elasticsearch 在分布式架构中有两个最常见的应用场景，一个是
 
 
 ## Install
+
+
+sebp/elk 镜像已经为我们集成了完整的 ELK 环境，只需要稍加配置就能迅速构建 ELK 环
+境，而且异常排查也比较方便
+
+docker pull sebp/elk:7.16.1
+
+
 
 Elastic7.13.7启动报错error updating geoip database
 
