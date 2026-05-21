@@ -1534,11 +1534,22 @@ The kernel offers two mechanisms for allocating memory, both of which are built 
 
 tcp 内存使用slab分配
 
-dmidecode 查看CPU 内存信息
+查看CPU 内存信息
+```shell
+dmidecode 
+```
+
 每个CPU和它直接相连的内存条组成Node
 
+```shell
+# 查看Node情况
 numactl --hardware
-查看Node情况
+```
+
+在 NUMA 架构下, CPU 访问自己同 node 的内存要比访问跨node的内存要快
+有些业务为了追求极致性能会NUMA绑定, 消灭跨node的内存访问
+
+
 Node划分为Zone
 
 ```shell

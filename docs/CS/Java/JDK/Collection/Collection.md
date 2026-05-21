@@ -1,13 +1,19 @@
 ## Introduction
 
-As is common with modern data structure libraries, the Java collection library separates interfaces and implementations.
+集合就是一个放数据的容器，准确的说是放数据对象引用的容器
+集合类存放的都是对象的引用，而不是对象的本身
+集合类型主要有3种：set(集）、list(列表）和map(映射)
 
 数组与集合区别
 
 - 数组长度是固定的 集合长度可以动态扩展或缩小
 - 数组可以包含基本数据类型和对象，而集合只能包含对象
 - 数组可以直接访问元素 集合需要迭代器或者其它方式来访问
+- 数组存储的元素必须是同一个数据类型；集合存储的对象可以是不同数据类型
 
+
+
+与现代数据结构库常见的做法一样，Java 集合库将接口和实现分开
 常见的集合类关系图如下:
 
 <div style="text-align: center;">
@@ -18,18 +24,25 @@ As is common with modern data structure libraries, the Java collection library s
 
 <p style="text-align: center;">Fig.1. Collection</p>
 
+Map接口和Collection接口是所有集合框架的父接口
+
 [List](/docs/CS/Java/JDK/Collection/List.md) 是有序的Collection，使用此接口能够精确的控制每个元素的插入位置, 用户能根据索引访问List中元素
 常用的实现List的类有LinkedList，ArrayList，Vector，Stack
 
 [Set](/docs/CS/Java/JDK/Collection/Set.md) 不允许存在重复的元素，与List不同，set中的元素是无序的 
 常用的实现有 HashSet、LinkedHashSet 和 TreeSet
 
+[Queue](/docs/CS/Java/JDK/Collection/Queue.md) 是一种特殊的线性表 只允许 FIFO 操作
+
+
+
 [Map](/docs/CS/Java/JDK/Collection/Map.md) 是一个键值对集合，存储键、值和之间的映射。Key 无序，唯一；value 不要求有序，允许重复
+
 Map 没有继承于 Collection 接口，通过Key从 Map 集合中检索出Value 
 主要实现有 HashMap、ConcurrentHashMap、LinkedHashMap、TreeMap、EnumMap 和 HashTable
 
 
-[Queue](/docs/CS/Java/JDK/Collection/Queue.md) 是一种特殊的线性表 只允许 FIFO 操作
+
 
 
 

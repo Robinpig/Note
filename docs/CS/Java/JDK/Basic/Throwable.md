@@ -44,6 +44,10 @@ If you choose to ignore an exception, the catch block should contain a comment e
 
 ## Error
 
+Error 类及其子类是程序中无法处理的错误，表示运行应用程序中出现了严重的错误
+这些错误是不受检异常，非代码性错误。因此，当此类错误发生时，应用程序不应该去处理此类错误
+因此不应该实现任何新的Error子类
+
 ### VirtualMachineError
 
 Java 中的虚拟机错误 VirtualMachineError 包括以下几种
