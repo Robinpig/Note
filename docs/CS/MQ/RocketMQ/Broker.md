@@ -161,9 +161,9 @@ public void start() throws Exception {
 
 #### registerBrokerAll
 
+Broker 启动后，通过 `BrokerController.registerBrokerAll()` 立即向所有 NameServer 注册，随后启动定时任务，默认每 30 秒发送一次心跳（间隔可通过 `brokerConfig.getRegisterNameServerPeriod()` 调整）。
 
-
-Broker sync route table every 30s
+心跳请求携带 Broker 的核心信息，包括 Broker ID、地址、Topic 配置等，NameServer 接收后更新 `RouteInfoManager` 中的路由表
 
 ```java
 public synchronized void registerBrokerAll(final boolean checkOrderConfig, boolean oneway, boolean forceRegister) {
@@ -261,7 +261,6 @@ And then the topic configs cache in producer will be overwrite by heartbeat betw
 therad pool per NettyRequestProcessor
 
 
-## Dledger
 
 
 
@@ -306,7 +305,7 @@ Files
 
 
 
-DefaultMessageStore
+Store的初始化在DefaultMessageStore中，DefaultMessageStore包含以下几个核心组件：
 
 - MessageStoreConfig
 - CommitLog
@@ -337,7 +336,6 @@ public class DefaultMessageStore implements MessageStore {
         return waitForPutResult(asyncPutMessage(msg));
     }
 
-
     private PutMessageResult waitForPutResult(CompletableFuture<PutMessageResult> putMessageResultFuture) {
         try {
             int putMessageTimeout =
@@ -347,9 +345,6 @@ public class DefaultMessageStore implements MessageStore {
         } catch (ExecutionException | InterruptedException e) {
             return new PutMessageResult(PutMessageStatus.UNKNOWN_ERROR, null);
         } catch (TimeoutException e) {
-            LOGGER.error("usually it will never timeout, putMessageTimeout is much bigger than slaveTimeout and "
-                    + "flushTimeout so the result can be got anyway, but in some situations timeout will happen like full gc "
-                    + "process hangs or other unexpected situations.");
             return new PutMessageResult(PutMessageStatus.UNKNOWN_ERROR, null);
         }
     }
@@ -386,6 +381,19 @@ public class DefaultMessageStore implements MessageStore {
 ```
 
 #### CommitLog#asyncPutMessages
+
+消息写入 CommitLog 的入口是 `DefaultMessageStore.asyncPutMessage()`，流程如下：
+
+1. **加锁**：先通过 `topicQueueLock` 对 MessageQueue 加锁，确保同一队列消息顺序写入；再通过 `putMessageLock`（自旋锁或可重入锁）保证同一时刻仅一个线程写入 CommitLog。
+
+2. **顺序写**：通过 `MappedFile.appendMessage()` 向 CommitLog 尾部写入消息，避免随机写，提升磁盘 IO 性能。
+
+3. 刷盘
+
+   ：消息写入 PageCache 后，需通过刷盘写入磁盘，确保断电不丢失。RocketMQ 支持两种刷盘模式：
+
+   - **同步刷盘（SYNC_FLUSH）**：消息写入后立即触发刷盘，刷盘成功后才返回 “发送成功”，可靠性高，但性能较低。
+   - **异步刷盘（ASYNC_FLUSH）**：消息写入 PageCache 后立即返回，后台线程（`CommitRealTimeService`）每 200ms 批量刷盘，性能高，但断电可能丢失消息。
 
 ```java
 public class CommitLog implements Swappable {
@@ -1137,6 +1145,49 @@ checkpoint
 
 - recover consumeQueue file to find max offset
 - check and compare the commitLog file offset and sync the offset
+
+
+
+
+
+### purge
+
+RocketMQ 启动定时任务（每 60 秒）删除过期文件，触发条件包括：
+
+- **时间阈值**：文件保留时间超过 `fileReservedTime`（默认 72 小时）。
+- **磁盘阈值**：磁盘利用率超过 `diskMaxUsedSpaceRatio`（默认 72%）。
+
+删除时，先删除 CommitLog 过期文件，再删除对应的 ConsumeQueue 与 IndexFile 文件，确保索引与数据一致性。需注意：RocketMQ 不检查消息是否被消费，若消息长期未消费，可能被删除，需合理设置 `fileReservedTime`
+
+
+
+## delay
+
+RocketMQ 支持两种延迟消息：固定延迟级别（如 1s、5s）与指定时间点（如 2024-05-20 12:00:00），核心是通过系统 Topic 与时间轮算法实现
+
+
+
+#### 固定延迟级别：基于 Schedule_Topic
+
+固定延迟消息的实现依赖 `SCHEDULE_TOPIC_XXXX` 系统 Topic，流程如下：
+
+1. **消息转移**：Producer 发送延迟消息时，Broker 通过 `HookUtils.handleScheduleMessage()` 将消息 Topic 改为 `SCHEDULE_TOPIC_XXXX`，Queue 改为延迟级别对应的 Queue（如延迟级别 1 对应 Queue 0）。
+2. **定时扫描**：Broker 启动 `ScheduleMessageService` 服务，每 1 秒扫描 `SCHEDULE_TOPIC_XXXX` 的 ConsumeQueue，计算消息延迟时间，若延迟时间到，则将消息转回原 Topic 与 Queue。
+3. **消息投递**：转回原 Topic 后，消息被正常消费，完成延迟投递。
+
+#### （2）指定时间点：基于时间轮算法
+
+指定时间点的延迟消息依赖 `rmq_sys_wheel_timer` 系统 Topic 与时间轮算法（`TimerWheel`），流程如下：
+
+1. **消息转移**：Producer 设定 `DELIVER_TIME_MS` 属性后，Broker 将消息 Topic 改为 `rmq_sys_wheel_timer`，Queue 固定为 0，存入 CommitLog。
+2. **时间轮管理**：Broker 启动 `TimerMessageStore` 服务，将消息按投递时间放入时间轮的对应 Slot（每个 Slot 对应 1 秒），时间轮指针（`currReadTimeMs`）每秒前进一格。
+3. **到期投递**：当时间轮指针指向消息所在 Slot 时，将消息转回原 Topic，完成投递。
+
+时间轮算法的优势在于：高效管理大量延迟任务，避免遍历所有任务，时间复杂度为 O (1)，适合高并发场景
+
+
+
+
 
 ## Links
 

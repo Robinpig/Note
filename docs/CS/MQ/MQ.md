@@ -854,6 +854,42 @@ The Cons of Using RabbitMQ:
 | Configuration                  | The default configuration is low level, user need to optimize the configuration parameters | Kafka uses key-value pairs format for configuration. <br />These values can be supplied either from a file or programmatically. | Work out of box,user only need to pay attention to a few configurations |       |
 | Management and Operation Tools | Supported                                                    | Supported, use terminal command to expose core metrics       | Supported, rich web and terminal command to expose core metrics |       |
 
+
+选型比较
+
+性能
+
+在性能方面，Kafka是优于RocketMQ的，可以达到几十万的TPS，而RocketMQ很难超过10W TPS，但是这是有提前的，提前就是Kafka的Topic或者Partition不能过多（最好不要超过64个），这是因为Kafka之所以可以高性能是因为采用了顺序写，但如果一旦Topic或者Partition变多，则变成不断的写多个文件相当于随机写，所以性能开始大幅度下降；而RocketMQ则几乎没有这个问题，及时在Topic很多的（官方说可以支持5W），也不会出现明显的性能下降，所以在需要使用很多Topic的场景下，可以选择RocketMQ，且上万的TPS也是不错的性能表现。
+
+
+
+可靠性
+
+可靠性方面，RocketMQ由于支持主从双同步刷盘机制，所以要强于Kafka的异步刷盘机制，虽然性能会下降，但是如果你对可靠性要求很高，推荐使用；当然如果你只是发送一些不可靠消息，如给用户发个通知，发个短信等，则不推荐使用同步刷盘，就算选择使用RocketMQ，也可以使用异步刷盘即可。
+
+消息投递语义
+​Kafka​：
+
+提供至少一次（At-least-once）​​ 作为默认和主要保证。通过消费者先处理业务再提交 Offset 来实现。
+
+支持最多一次（At-most-once）​​ 和精确一次（Exactly-once）​。精确一次语义需要与外部系统的事务协作或使用 Kafka 自身的幂等和事务特性，配置复杂，有性能开销。
+
+​RocketMQ​：
+
+默认提供至少一次保证。
+
+其设计哲学更倾向于业务层面的幂等性来保证最终效果上的“仅一次”效果，而非在传输层提供复杂的 Exactly-once。这在其事务消息模型中体现得尤为明显
+
+特性
+
+RocketMQ有很多丰富的特性，如自动消息重试，延时消息等。
+
+顺序消息
+​Kafka​：​在 Partition 内保证严格的消息顺序。这是其架构天然保证的。要保证全局顺序，必须使用一个 Partition，这会牺牲扩展性。
+
+​RocketMQ​：​在 Queue 内保证严格的消息顺序。同样，要保证全局顺序需使用一个 Queue。但 RocketMQ 在异常情况下的顺序保证更强​：如果消费顺序消息失败，消息会被发送到重试队列，但依然会按照顺序被重试。而 Kafka 在发生 Rebalance 时，可能会打乱处理顺序。
+
+
 Topic
 
 Kafka partition -> segment -> .log, .index, .timeindex
