@@ -18,7 +18,7 @@ mysql> SELECT * FROM mysql.general_log;
 
 ## Binary Log
 
-A `binary log`(`binlog`) is a file containing *a record of all statements or row changes* that attempt to change table data.
+A `binary log`(`binlog`) is a file containing **a record of all statements or row changes that attempt to change table data.**
 The contents of the binary log can be replayed to bring replicas up to date in a replication scenario, or to bring a database up to date after restoring table data from a backup.
 
 You can examine the contents of the binary log, or replay it during replication or recovery, by using the `mysqlbinlog` command.
@@ -70,6 +70,10 @@ log_queries_not_using_indexes	ON
 
 slow_query_log_file	demo-slow.log
 ```
+
+log_queries_not_using_indexes 开启后，如果运行的SQL语句没有使用索引，则MYSQL数据库同样会将其记录到慢查询日志
+
+
 
 ```sql
 
