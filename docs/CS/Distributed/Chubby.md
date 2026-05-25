@@ -8,7 +8,7 @@ and Bigtable uses Chubby in several ways: to elect a master, to allow the master
 In addition, both GFS and Bigtable use Chubby as a well-known and available location to store a small amount of meta-data; 
 in effect they use Chubby as the root of their distributed data structures.
 
-Asynchronous consensus is solved by the [Paxos](/docs/CS/Distributed/Paxos.md) protocol.
+Asynchronous consensus is solved by the [Paxos](/docs/CS/Distributed/Consensus/Paxos.md) protocol.
 
 ## Design
 
@@ -154,7 +154,7 @@ Two familiar mechanisms, proxies and partitioning, that they expect will allow C
 ## Links
 
 - [Google](/docs/CS/Distributed/Google.md)
-- [Paxos](/docs/CS/Distributed/Paxos.md)
+- [Paxos](/docs/CS/Distributed/Consensus/Paxos.md)
 - [Zookeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)
 
 ## References

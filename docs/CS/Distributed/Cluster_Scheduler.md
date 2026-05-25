@@ -198,7 +198,7 @@ providing a global view of the cluster status for each JM to make informed sched
 While treated as a single logical entity, the RM can be implemented physically in different configurations
 with different mechanisms, as it essentially addresses the well-studied problem of monitoring dynamically changing state of a collection of distributed resources at a large scale.
 For example, it can use a tree hierarchy or a directory service with an eventually consistent gossip protocol.
-Apollo’s architecture can accommodate any of such configurations. We implemented the RM in a master-slave configuration using [Paxos](/docs/CS/Distributed/Paxos.md).
+Apollo’s architecture can accommodate any of such configurations. We implemented the RM in a master-slave configuration using [Paxos](/docs/CS/Distributed/Consensus/Paxos.md).
 The RM is never on the performance critical path: Apollo can continue to make scheduling decisions (at a degraded quality) even when the RM is temporarily unavailable, for example, during a transient master-slave switch due to a machine failure.
 In addition, once a task is scheduled to a PN, the JM obtains up-to-date load information directly from the PN via frequent status updates.
 

@@ -1,7 +1,7 @@
 ## Introduction
 
 Spanner is Google’s scalable, multi-version, globally distributed, and synchronously-replicated database.
-At the highest level of abstraction, it is a database that shards data across many sets of [Paxos state machines](/docs/CS/Distributed/Paxos.md) in datacenters spread all over the world.
+At the highest level of abstraction, it is a database that shards data across many sets of [Paxos state machines](/docs/CS/Distributed/Consensus/Paxos.md) in datacenters spread all over the world.
 Replication is used for global availability and geographic locality; clients automatically failover between replicas.
 Spanner automatically reshards data across machines as the amount of data or the number of servers changes, and it automatically migrates data across machines (even across datacenters) to balance load and in response to failures.
 Spanner is designed to scale up to millions of machines across hundreds of datacenters and trillions of database rows.

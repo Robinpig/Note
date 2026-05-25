@@ -23,7 +23,7 @@ They provide orders of magnitude higher throughput than highly-optimized servers
 
 ### Chain Replication
 
-We choose to realize [Vertical Paxos](/docs/CS/Distributed/Paxos.md?id=Vertical-Paxos) in the network to address this challenge.
+We choose to realize [Vertical Paxos](/docs/CS/Distributed/Consensus/Paxos.md?id=Vertical-Paxos) in the network to address this challenge.
 The division of labor makes it a perfect fit for a network implementation, because the two parts can be naturally mapped to the network data and control planes.
 
 - The steady state protocol is typically a primary-backup (PB) protocol, which handles read and write queries and ensures strong consistency. It is simple enough to be implemented in the network data plane.

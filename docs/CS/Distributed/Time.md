@@ -83,7 +83,7 @@ State machine replication requires the total order of operations.
 
 In order for the conditions for atomic broadcast to be satisfied, the participants must effectively "agree" on the order of receipt of the messages.
 Participants recovering from failure, after the other participants have "agreed" an order and started to receive the messages, must be able to learn and comply with the agreed order. 
-Such considerations indicate that in systems with crash failures, atomic broadcast and [consensus](/docs/CS/Distributed/Consensus.md) are equivalent problems.
+Such considerations indicate that in systems with crash failures, atomic broadcast and [consensus](/docs/CS/Distributed/Consensus/Consensus.md) are equivalent problems.
 
 - A value can be proposed by a process for consensus by atomically broadcasting it, and a process can decide a value by selecting the value of the first message which it atomically receives.
 Thus, consensus can be reduced to atomic broadcast.
