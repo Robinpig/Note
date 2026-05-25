@@ -1,6 +1,6 @@
 ## Introduction
 
-Zab is very similar to [Paxos](/docs/CS/Distributed/Paxos.md), with one crucial difference – the agreement is reached on full history prefixes rather than on individual operations.
+Zab is very similar to [Paxos](/docs/CS/Distributed/Consensus/Paxos.md), with one crucial difference – the agreement is reached on full history prefixes rather than on individual operations.
 This difference allows Zab to preserve primary order, which may be violated by Paxos.
 
 > Given our use of the primary order property, we say that Zab is a `PO atomic broadcast` protocol.
@@ -2733,7 +2733,7 @@ If the Queue is full, this methods removes an element from the head of the Queue
 ## Links
 
 - [ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)
-- [Consensus](/docs/CS/Distributed/Consensus.md)
+- [Consensus](/docs/CS/Distributed/Consensus/Consensus.md)
 
 ## References
 

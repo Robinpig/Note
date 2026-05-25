@@ -53,7 +53,7 @@ The reason for this is that in the case of reads, ZooKeeper can serve older data
 If a client gets a successful return code, the update will have been applied. 
 On some failures (communication errors, timeouts, etc) the client will not know if the update has applied or not. 
 We take steps to minimize the failures, but the guarantee is only present with successful return codes. 
-(This is called the monotonicity condition in [Paxos](/docs/CS/Distributed/Paxos.md).)
+(This is called the monotonicity condition in [Paxos](/docs/CS/Distributed/Consensus/Paxos.md).)
 
 Any updates that are seen by the client, through a read request or successful update, will never be rolled back when recovering from server failures.
 
