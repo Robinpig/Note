@@ -1,28 +1,9 @@
-
-## Timer
-The Timer facility manages the execution of deferred (“run this task in 100 ms”) and periodic (“run this task every 10 ms”) tasks.
-However, Timer has some drawbacks, and ScheduledThreadPoolExecutor should be thought of as its replacement.
-You can construct a ScheduledThreadPoolExecutor through its constructor or through the newScheduledThreadPool factory.
-
-Timer does have support for scheduling based on absolute, not relative time, so that tasks can be sensitive to changes in the system clock;
-ScheduledThreadPoolExecutor supports only relative time.
-
-A Timer creates only a single thread for executing timer tasks. 
-If a timer task takes too long to run, the timing accuracy of other TimerTasks can suffer. 
-If a recurring TimerTask is scheduled to run every 10 ms and another Timer-Task takes 40 ms to run, 
-the recurring task either (depending on whether it was scheduled at fixed rate or fixed delay) gets called four times in rapid succession after the long-running task completes, 
-or “misses” four invocations completely. 
-Scheduled thread pools address this limitation by letting you provide multiple threads for executing deferred and periodic tasks.
-
-Another problem with Timer is that it behaves poorly if a TimerTask throws an unchecked exception. 
-The Timer thread doesn't catch the exception, so an unchecked exception thrown from a TimerTask terminates the timer thread. 
-Timer also doesn't resurrect the thread in this situation; instead, it erroneously assumes the entire Timer was cancelled. In this case, 
-TimerTasks that are already scheduled but not yet executed are never run, and new tasks cannot be scheduled.(This problem, called “`thread leakage`”.)
-
+## Introduction
 
 
 
 ## ScheduledExecutorService
+
 An ExecutorService that can schedule commands to run after a given delay, or to execute periodically.
 
 The schedule methods create tasks with various delays and return a task object that can be used to cancel or check execution. 
@@ -64,6 +45,7 @@ public interface ScheduledExecutorService extends ExecutorService {
 ```
 
 ### Usage Example
+
 Here is a class with a method that sets up a ScheduledExecutorService to beep every ten seconds for an hour:
 
 ```java
@@ -99,7 +81,6 @@ This class specializes ThreadPoolExecutor implementation by
 
 
 
-
 ```java
 public void run() {
     if (!canRunInCurrentRunState(this))
@@ -113,7 +94,9 @@ public void run() {
 }
 ```
 
-
+> [!TIP]
+>
+> 执行 run 方法时如果抛出 OOM 则不会执行 setNextRunTime 函数，该任务不会被再次调度执行
 
 ### compareTo
 

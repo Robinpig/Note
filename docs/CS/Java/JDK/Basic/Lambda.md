@@ -534,6 +534,10 @@ public <P_IN> R evaluateParallel(PipelineHelper<T> helper,
 }
 ```
 
+> [!TIP]
+>
+> parallel stream 除了会将任务调度到 ForkJoinPool.commonPool 之外 还会调度使用调用函数的当前线程执行， 提高处理效率，如果执行失败抛出 OOM 同样会杀掉当前线程
+
 #### Use caution when making streams parallel
 
 As a rule, performance gains from parallelism are best on streams over ArrayList, HashMap, HashSet, and ConcurrentHashMap instances; arrays; int ranges; and long ranges.

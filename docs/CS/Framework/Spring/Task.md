@@ -1,6 +1,7 @@
 ## Introduction
 
 
+Spring 对其它分布式任务调度框架 大多都采用了processor的接口方案，用户通过接口继承实现调度任务即可，或者使用提供的方法注解，由框架自动生成代理processor
 
 ## Async
 
