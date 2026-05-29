@@ -40,7 +40,6 @@ public interface ScheduledExecutorService extends ExecutorService {
                                                      long initialDelay,
                                                      long delay,
                                                      TimeUnit unit);
-
 }
 ```
 
@@ -79,8 +78,6 @@ This class specializes ThreadPoolExecutor implementation by
 4. Task decoration methods to allow interception and instrumentation, which are needed because subclasses cannot otherwise override submit methods to get this effect. These don't have any impact on pool control logic though.
 
 
-
-
 ```java
 public void run() {
     if (!canRunInCurrentRunState(this))
@@ -96,7 +93,9 @@ public void run() {
 
 > [!TIP]
 >
+> If any execution of the task encounters an exception, subsequent executions are suppressed.
 > 执行 run 方法时如果抛出 OOM 则不会执行 setNextRunTime 函数，该任务不会被再次调度执行
+> 正确做法在任务内部 try-catch，永远不要依赖线程池帮你兜底周期性任务的异常。 必须在 Runnable 内部捕获所有异常，确保 run() 方法正常返回
 
 ### compareTo
 
