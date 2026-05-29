@@ -380,6 +380,56 @@ public class DefaultMessageStore implements MessageStore {
 }
 ```
 
+
+
+load方法负责恢复存储状态
+
+```java
+@Override
+    public boolean load() {
+        boolean result = true;
+        stateMachine.transitTo(MessageStoreStateMachine.MessageStoreState.LOAD_BEGIN);
+        try {
+            boolean lastExitOK = !this.isTempFileExist();
+
+            // load Commit Log
+            result = this.commitLog.load();
+            stateMachine.transitTo(MessageStoreStateMachine.MessageStoreState.LOAD_COMMITLOG_OK, result);
+            // load Consume Queue
+            result = result && this.consumeQueueStore.load();
+            stateMachine.transitTo(MessageStoreStateMachine.MessageStoreState.LOAD_CONSUME_QUEUE_OK, result);
+
+            if (messageStoreConfig.isEnableCompaction()) {
+                result = result && this.compactionService.load(lastExitOK);
+                stateMachine.transitTo(MessageStoreStateMachine.MessageStoreState.LOAD_COMPACTION_OK, result);
+            }
+
+            if (result) {
+                loadCheckPoint();
+              // indexFile
+                result = this.indexService.load(lastExitOK);
+                stateMachine.transitTo(MessageStoreStateMachine.MessageStoreState.LOAD_INDEX_OK, result);
+                this.recover(lastExitOK);
+            }
+
+            long maxOffset = this.getMaxPhyOffset();
+            this.setBrokerInitMaxOffset(maxOffset);
+        } catch (Exception e) {
+            result = false;
+        }
+
+        if (!result) {
+            this.allocateMappedFileService.shutdown();
+        }
+
+        return result;
+    }
+```
+
+
+
+
+
 #### CommitLog#asyncPutMessages
 
 消息写入 CommitLog 的入口是 `DefaultMessageStore.asyncPutMessage()`，流程如下：
@@ -1154,8 +1204,8 @@ checkpoint
 
 RocketMQ 启动定时任务（每 60 秒）删除过期文件，触发条件包括：
 
-- **时间阈值**：文件保留时间超过 `fileReservedTime`（默认 72 小时）。
-- **磁盘阈值**：磁盘利用率超过 `diskMaxUsedSpaceRatio`（默认 72%）。
+- **时间阈值**：文件保留时间超过 `fileReservedTime`（默认 72 小时）
+- **磁盘阈值**：磁盘利用率超过 `diskMaxUsedSpaceRatio`（默认 72%）
 
 删除时，先删除 CommitLog 过期文件，再删除对应的 ConsumeQueue 与 IndexFile 文件，确保索引与数据一致性。需注意：RocketMQ 不检查消息是否被消费，若消息长期未消费，可能被删除，需合理设置 `fileReservedTime`
 
@@ -1165,17 +1215,163 @@ RocketMQ 启动定时任务（每 60 秒）删除过期文件，触发条件包�
 
 RocketMQ 支持两种延迟消息：固定延迟级别（如 1s、5s）与指定时间点（如 2024-05-20 12:00:00），核心是通过系统 Topic 与时间轮算法实现
 
-
-
-#### 固定延迟级别：基于 Schedule_Topic
+### 固定延迟
 
 固定延迟消息的实现依赖 `SCHEDULE_TOPIC_XXXX` 系统 Topic，流程如下：
 
-1. **消息转移**：Producer 发送延迟消息时，Broker 通过 `HookUtils.handleScheduleMessage()` 将消息 Topic 改为 `SCHEDULE_TOPIC_XXXX`，Queue 改为延迟级别对应的 Queue（如延迟级别 1 对应 Queue 0）。
-2. **定时扫描**：Broker 启动 `ScheduleMessageService` 服务，每 1 秒扫描 `SCHEDULE_TOPIC_XXXX` 的 ConsumeQueue，计算消息延迟时间，若延迟时间到，则将消息转回原 Topic 与 Queue。
-3. **消息投递**：转回原 Topic 后，消息被正常消费，完成延迟投递。
+1. **消息转移**：Producer 发送延迟消息时，Broker 通过 `HookUtils.handleScheduleMessage()` 将消息 Topic 改为 `SCHEDULE_TOPIC_XXXX`，Queue 改为延迟级别对应的 Queue（如延迟级别 1 对应 Queue 0）
+2. **定时扫描**：Broker 启动 `ScheduleMessageService` 服务，每 1 秒扫描 `SCHEDULE_TOPIC_XXXX` 的 ConsumeQueue，计算消息延迟时间，若延迟时间到，则将消息转回原 Topic 与 Queue
+3. **消息投递**：转回原 Topic 后，消息被正常消费，完成延迟投递
 
-#### （2）指定时间点：基于时间轮算法
+
+
+```java
+    public void start() {
+        if (started.compareAndSet(false, true)) {
+            this.load();
+            this.deliverExecutorService = ThreadUtils.newScheduledThreadPool(this.maxDelayLevel, new ThreadFactoryImpl("ScheduleMessageTimerThread_"));
+            if (this.enableAsyncDeliver) {
+                this.handleExecutorService = ThreadUtils.newScheduledThreadPool(this.maxDelayLevel, new ThreadFactoryImpl("ScheduleMessageExecutorHandleThread_"));
+            }      	
+          	// 为每个延时队列增加定时器
+            for (Map.Entry<Integer, Long> entry : this.delayLevelTable.entrySet()) {
+                Integer level = entry.getKey();
+                Long timeDelay = entry.getValue();
+                Long offset = this.offsetTable.get(level);
+                if (null == offset) {
+                    offset = 0L;
+                }
+								// 
+                if (timeDelay != null) {
+                    if (this.enableAsyncDeliver) {
+                        this.handleExecutorService.schedule(new HandlePutResultTask(level), FIRST_DELAY_TIME, TimeUnit.MILLISECONDS);
+                    }
+                    this.deliverExecutorService.schedule(new DeliverDelayedMessageTimerTask(level, offset), FIRST_DELAY_TIME, TimeUnit.MILLISECONDS);
+                }
+            }
+						// 定时延时进度刷盘
+            scheduledPersistService.scheduleAtFixedRate(() -> {
+                try {
+                    ScheduleMessageService.this.persist();
+                } catch (Throwable e) {
+                    log.error("scheduleAtFixedRate flush exception", e);
+                }
+            }, 10000, this.brokerController.getMessageStoreConfig().getFlushDelayOffsetInterval(), TimeUnit.MILLISECONDS);
+        }
+    }
+```
+
+offsetTable保存了每个延时级别处理到哪个位置
+
+DeliverDelayedMessageTimerTask#run 调用了 executeOnTimeUp方法
+
+```java
+// DeliverDelayedMessageTimerTask.java
+        public void executeOnTimeUp() {
+            ConsumeQueueInterface cq =
+                ScheduleMessageService.this.brokerController.getMessageStore().getConsumeQueue(TopicValidator.RMQ_SYS_SCHEDULE_TOPIC,
+                    delayLevel2QueueId(delayLevel));
+
+            if (cq == null) {
+                this.scheduleNextTimerTask(this.offset, DELAY_FOR_A_WHILE);
+                return;
+            }
+
+            ReferredIterator<CqUnit> bufferCQ = cq.iterateFrom(this.offset);
+            if (bufferCQ == null) {
+                long resetOffset;
+                if ((resetOffset = cq.getMinOffsetInQueue()) > this.offset) {
+                    log.error("schedule CQ offset invalid. offset={}, cqMinOffset={}, queueId={}",
+                        this.offset, resetOffset, cq.getQueueId());
+                } else if ((resetOffset = cq.getMaxOffsetInQueue()) < this.offset) {
+                    log.error("schedule CQ offset invalid. offset={}, cqMaxOffset={}, queueId={}",
+                        this.offset, resetOffset, cq.getQueueId());
+                } else {
+                    resetOffset = this.offset;
+                }
+
+                this.scheduleNextTimerTask(resetOffset, DELAY_FOR_A_WHILE);
+                return;
+            }
+
+            long nextOffset = this.offset;
+            try {
+                while (bufferCQ.hasNext() && isStarted()) {
+                    CqUnit cqUnit = bufferCQ.next();
+                    long offsetPy = cqUnit.getPos();
+                    int sizePy = cqUnit.getSize();
+                    long tagsCode = cqUnit.getTagsCode();
+
+                    if (!cqUnit.isTagsCodeValid()) {
+                        //can't find ext content.So re compute tags code.
+                        log.error("[BUG] can't find consume queue extend file content!addr={}, offsetPy={}, sizePy={}",
+                            tagsCode, offsetPy, sizePy);
+                        long msgStoreTime = ScheduleMessageService.this.brokerController.getMessageStore().getCommitLog().pickupStoreTimestamp(offsetPy, sizePy);
+                        tagsCode = computeDeliverTimestamp(delayLevel, msgStoreTime);
+                    }
+
+                    long now = System.currentTimeMillis();
+                    long deliverTimestamp = this.correctDeliverTimestamp(now, tagsCode);
+
+                    long currOffset = cqUnit.getQueueOffset();
+                    assert cqUnit.getBatchNum() == 1;
+                    nextOffset = currOffset + cqUnit.getBatchNum();
+
+                    long countdown = deliverTimestamp - now;
+                    if (countdown > 0) {
+                        this.scheduleNextTimerTask(currOffset, DELAY_FOR_A_WHILE);
+                        ScheduleMessageService.this.updateOffset(this.delayLevel, currOffset);
+                        return;
+                    }
+
+                    MessageExt msgExt = ScheduleMessageService.this.brokerController.getMessageStore().lookMessageByOffset(offsetPy, sizePy);
+                    if (msgExt == null) {
+                        continue;
+                    }
+
+                    MessageExtBrokerInner msgInner = ScheduleMessageService.this.messageTimeUp(msgExt);
+                    if (TopicValidator.RMQ_SYS_TRANS_HALF_TOPIC.equals(msgInner.getTopic())) {
+                        log.error("[BUG] the real topic of schedule msg is {}, discard the msg. msg={}",
+                            msgInner.getTopic(), msgInner);
+                        continue;
+                    }
+
+                    boolean deliverSuc;
+                    if (ScheduleMessageService.this.enableAsyncDeliver) {
+                        deliverSuc = this.asyncDeliver(msgInner, msgExt.getMsgId(), currOffset, offsetPy, sizePy);
+                    } else {
+                        deliverSuc = this.syncDeliver(msgInner, msgExt.getMsgId(), currOffset, offsetPy, sizePy);
+                    }
+
+                    if (!deliverSuc) {
+                        this.scheduleNextTimerTask(currOffset, DELAY_FOR_A_WHILE);
+                        return;
+                    }
+                }
+            } catch (Exception e) {
+                log.error("ScheduleMessageService, messageTimeUp execute error, offset = {}", nextOffset, e);
+            } finally {
+                bufferCQ.release();
+            }
+
+            this.scheduleNextTimerTask(nextOffset, DELAY_FOR_A_WHILE);
+        }
+```
+
+主要处理步骤如下：
+
+1. 从上次处理完毕的offset继续处理，获取对应的cq
+2. 通过tagsCode计算消息是否可消费
+3. 通过cq的size和offset获取message
+4. 将message的topic和qid换成真实的topic和qid
+5. 写入到commitLog
+6. 更新offsetTable
+
+
+
+
+
+### 指定时间点
 
 指定时间点的延迟消息依赖 `rmq_sys_wheel_timer` 系统 Topic 与时间轮算法（`TimerWheel`），流程如下：
 

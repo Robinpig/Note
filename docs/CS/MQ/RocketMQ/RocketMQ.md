@@ -73,7 +73,7 @@ Consumption Retry
 
 Message Storage and Cleanup
 
-#### transaction message
+#### 事务消息
 
 Apache RocketMQ transactional messages can be used to ensure consistency of upstream and downstream data.
 Transactional messages are an advanced message type provided by Apache RocketMQ to ensure the ultimate consistency between message production and local transaction.
@@ -130,6 +130,343 @@ Fig.1. 事务消息生命周期
 | 事务异常检查间隔         | 默认值：60秒。                                             | 事务异常检查间隔指的是，半事务消息因系统重启或异常情况导致没有提交，生产者客户端会按照该间隔时间进行事务状态回查。<br />间隔时长不建议设置过短，否则频繁的回查调用会影响系统性能。                    |
 | 半事务消息第一次回查时间 | 默认值：取值等于[事务异常检查间隔] 最大限制：不超过1小时。 | 无。                                                                                                                                                                                                  |
 | 半事务消息最大超时时长   | 默认值：4小时。 取值范围：不支持自定义修改。               | 半事务消息因系统重启或异常情况导致没有提交，生产者客户端会按照事务异常检查间隔时间进行回查，<br />若超过半事务消息超时时长后没有返回结果，半事务消息将会被强制回滚。 您可以通过监控该指标避免异常事务 |
+
+
+
+
+
+给消息打上事务相关的标记
+
+发送half message
+
+成功则由 listener 执行本地事务
+
+执行 end Transaction 方法
+
+```java
+// DefaultMQProducerImpl
+public TransactionSendResult sendMessageInTransaction(final Message msg,
+        final TransactionListener localTransactionListener, final Object arg)
+        throws MQClientException {
+        TransactionListener transactionListener = getCheckListener();
+        if (null == localTransactionListener && null == transactionListener) {
+            throw new MQClientException("tranExecutor is null", null);
+        }
+
+        ensureNotDelayedForTransactional(msg);
+        Validators.checkMessage(msg, this.defaultMQProducer);
+
+        SendResult sendResult = null;
+        MessageAccessor.putProperty(msg, MessageConst.PROPERTY_TRANSACTION_PREPARED, "true");
+        MessageAccessor.putProperty(msg, MessageConst.PROPERTY_PRODUCER_GROUP, this.defaultMQProducer.getProducerGroup());
+        try {
+            sendResult = this.send(msg);
+        } catch (Exception e) {
+            throw new MQClientException("send message Exception", e);
+        }
+
+        LocalTransactionState localTransactionState = LocalTransactionState.UNKNOW;
+        Throwable localException = null;
+        switch (sendResult.getSendStatus()) {
+            case SEND_OK: {
+                try {
+                    if (sendResult.getTransactionId() != null) {
+                        msg.putUserProperty("__transactionId__", sendResult.getTransactionId());
+                    }
+                    String transactionId = msg.getProperty(MessageConst.PROPERTY_UNIQ_CLIENT_MESSAGE_ID_KEYIDX);
+                    if (null != transactionId && !"".equals(transactionId)) {
+                        msg.setTransactionId(transactionId);
+                    }
+                    if (null != localTransactionListener) {
+                        localTransactionState = localTransactionListener.executeLocalTransaction(msg, arg);
+                    } else {
+                        log.debug("Used new transaction API");
+                        localTransactionState = transactionListener.executeLocalTransaction(msg, arg);
+                    }
+                    if (null == localTransactionState) {
+                        localTransactionState = LocalTransactionState.UNKNOW;
+                    }
+
+                    if (localTransactionState != LocalTransactionState.COMMIT_MESSAGE) {
+                        log.info("executeLocalTransactionBranch return: {} messageTopic: {} transactionId: {} tag: {} key: {}",
+                            localTransactionState, msg.getTopic(), msg.getTransactionId(), msg.getTags(), msg.getKeys());
+                    }
+                } catch (Throwable e) {
+                    log.error("executeLocalTransactionBranch exception, messageTopic: {} transactionId: {} tag: {} key: {}",
+                        msg.getTopic(), msg.getTransactionId(), msg.getTags(), msg.getKeys(), e);
+                    localException = e;
+                }
+            }
+            break;
+            case FLUSH_DISK_TIMEOUT:
+            case FLUSH_SLAVE_TIMEOUT:
+            case SLAVE_NOT_AVAILABLE:
+                localTransactionState = LocalTransactionState.ROLLBACK_MESSAGE;
+                break;
+            default:
+                break;
+        }
+
+        try {
+            this.endTransaction(msg, sendResult, localTransactionState, localException);
+        } catch (Exception e) {
+            log.warn("local transaction execute {}, but end broker transaction failed", localTransactionState, e);
+        }
+
+        TransactionSendResult transactionSendResult = new TransactionSendResult();
+        transactionSendResult.setSendStatus(sendResult.getSendStatus());
+        transactionSendResult.setMessageQueue(sendResult.getMessageQueue());
+        transactionSendResult.setMsgId(sendResult.getMsgId());
+        transactionSendResult.setQueueOffset(sendResult.getQueueOffset());
+        transactionSendResult.setTransactionId(sendResult.getTransactionId());
+        transactionSendResult.setLocalTransactionState(localTransactionState);
+        return transactionSendResult;
+    }
+```
+
+
+
+
+
+
+
+broker
+
+1. 将消息topic、queueId放入消息体自身的map中缓存
+2. 使用 queueId = 0
+3. 写入CommitLog
+
+```java
+private MessageExtBrokerInner parseHalfMessageInner(MessageExtBrokerInner msgInner) {
+        String uniqId = msgInner.getUserProperty(MessageConst.PROPERTY_UNIQ_CLIENT_MESSAGE_ID_KEYIDX);
+        if (uniqId != null && !uniqId.isEmpty()) {
+            MessageAccessor.putProperty(msgInner, TransactionalMessageUtil.TRANSACTION_ID, uniqId);
+        }
+        MessageAccessor.putProperty(msgInner, MessageConst.PROPERTY_REAL_TOPIC, msgInner.getTopic());
+        MessageAccessor.putProperty(msgInner, MessageConst.PROPERTY_REAL_QUEUE_ID,
+            String.valueOf(msgInner.getQueueId()));
+        msgInner.setSysFlag(
+            MessageSysFlag.resetTransactionValue(msgInner.getSysFlag(), MessageSysFlag.TRANSACTION_NOT_TYPE));
+        if (null != store.getMessageStoreConfig() && store.getMessageStoreConfig().isTransRocksDBEnable() && !store.getMessageStoreConfig().isTransWriteOriginTransHalfEnable()) {
+            msgInner.setTopic(TransactionalMessageUtil.buildHalfTopicForRocksDB());
+        } else {
+            msgInner.setTopic(TransactionalMessageUtil.buildHalfTopic());
+        }
+        msgInner.setQueueId(0);
+        msgInner.setPropertiesString(MessageDecoder.messageProperties2String(msgInner.getProperties()));
+        return msgInner;
+    }
+```
+
+
+
+check
+
+发送回查消息之前需要将half message 重新放入磁盘，为了保证顺序写语义是基于最新物理偏移量重新写入
+
+```java
+ @Override
+    public void check(long transactionTimeout, int transactionCheckMax,
+        AbstractTransactionalMessageCheckListener listener) {
+        try {
+            String topic = TopicValidator.RMQ_SYS_TRANS_HALF_TOPIC;
+            Set<MessageQueue> msgQueues = transactionalMessageBridge.fetchMessageQueues(topic);
+            if (msgQueues == null || msgQueues.size() == 0) {
+                log.warn("The queue of topic is empty :" + topic);
+                return;
+            }
+            log.debug("Check topic={}, queues={}", topic, msgQueues);
+            for (MessageQueue messageQueue : msgQueues) {
+                long startTime = System.currentTimeMillis();
+                MessageQueue opQueue = getOpQueue(messageQueue);
+                long halfOffset = transactionalMessageBridge.fetchConsumeOffset(messageQueue);
+                long opOffset = transactionalMessageBridge.fetchConsumeOffset(opQueue);
+                log.info("Before check, the queue={} msgOffset={} opOffset={}", messageQueue, halfOffset, opOffset);
+                if (halfOffset < 0 || opOffset < 0) {
+                    log.error("MessageQueue: {} illegal offset read: {}, op offset: {},skip this queue", messageQueue,
+                        halfOffset, opOffset);
+                    continue;
+                }
+
+                List<Long> doneOpOffset = new ArrayList<>();
+                HashMap<Long, Long> removeMap = new HashMap<>();
+                HashMap<Long, HashSet<Long>> opMsgMap = new HashMap<Long, HashSet<Long>>();
+                PullResult pullResult = fillOpRemoveMap(removeMap, opQueue, opOffset, halfOffset, opMsgMap, doneOpOffset);
+                if (null == pullResult) {
+                    log.error("The queue={} check msgOffset={} with opOffset={} failed, pullResult is null",
+                        messageQueue, halfOffset, opOffset);
+                    continue;
+                }
+                // single thread
+                int getMessageNullCount = 1;
+                long newOffset = halfOffset;
+                long i = halfOffset;
+                long nextOpOffset = pullResult.getNextBeginOffset();
+                int putInQueueCount = 0;
+                int escapeFailCnt = 0;
+
+                while (true) {
+                    if (System.currentTimeMillis() - startTime > MAX_PROCESS_TIME_LIMIT) {
+                        log.info("Queue={} process time reach max={}", messageQueue, MAX_PROCESS_TIME_LIMIT);
+                        break;
+                    }
+                    Long removedOpOffset;
+                    if ((removedOpOffset = removeMap.remove(i)) != null) {
+                        log.debug("Half offset {} has been committed/rolled back", i);
+                        opMsgMap.get(removedOpOffset).remove(i);
+                        if (opMsgMap.get(removedOpOffset).size() == 0) {
+                            opMsgMap.remove(removedOpOffset);
+                            doneOpOffset.add(removedOpOffset);
+                        }
+                    } else {
+                        GetResult getResult = getHalfMsg(messageQueue, i);
+                        MessageExt msgExt = getResult.getMsg();
+                        if (msgExt == null) {
+                            if (getMessageNullCount++ > MAX_RETRY_COUNT_WHEN_HALF_NULL) {
+                                break;
+                            }
+                            if (getResult.getPullResult().getPullStatus() == PullStatus.NO_NEW_MSG) {
+                                log.debug("No new msg, the miss offset={} in={}, continue check={}, pull result={}", i,
+                                    messageQueue, getMessageNullCount, getResult.getPullResult());
+                                break;
+                            } else {
+                                log.info("Illegal offset, the miss offset={} in={}, continue check={}, pull result={}",
+                                    i, messageQueue, getMessageNullCount, getResult.getPullResult());
+                                i = getResult.getPullResult().getNextBeginOffset();
+                                newOffset = i;
+                                continue;
+                            }
+                        }
+
+                        if (this.transactionalMessageBridge.getBrokerController().getBrokerConfig().isEnableSlaveActingMaster()
+                            && this.transactionalMessageBridge.getBrokerController().getMinBrokerIdInGroup()
+                            == this.transactionalMessageBridge.getBrokerController().getBrokerIdentity().getBrokerId()
+                            && BrokerRole.SLAVE.equals(this.transactionalMessageBridge.getBrokerController().getMessageStoreConfig().getBrokerRole())
+                        ) {
+                            final MessageExtBrokerInner msgInner = this.transactionalMessageBridge.renewHalfMessageInner(msgExt);
+                            final boolean isSuccess = this.transactionalMessageBridge.escapeMessage(msgInner);
+
+                            if (isSuccess) {
+                                escapeFailCnt = 0;
+                                newOffset = i + 1;
+                                i++;
+                            } else {
+                                log.warn("Escaping transactional message failed {} times! msgId(offsetId)={}, UNIQ_KEY(transactionId)={}",
+                                    escapeFailCnt + 1,
+                                    msgExt.getMsgId(),
+                                    msgExt.getUserProperty(MessageConst.PROPERTY_UNIQ_CLIENT_MESSAGE_ID_KEYIDX));
+                                if (escapeFailCnt < MAX_RETRY_TIMES_FOR_ESCAPE) {
+                                    escapeFailCnt++;
+                                    Thread.sleep(100L * (2 ^ escapeFailCnt));
+                                } else {
+                                    escapeFailCnt = 0;
+                                    newOffset = i + 1;
+                                    i++;
+                                }
+                            }
+                            continue;
+                        }
+
+                        if (needDiscard(msgExt, transactionCheckMax) || needSkip(msgExt)) {
+                            listener.resolveDiscardMsg(msgExt);
+                            newOffset = i + 1;
+                            i++;
+                            continue;
+                        }
+                        if (msgExt.getStoreTimestamp() >= startTime) {
+                            log.debug("Fresh stored. the miss offset={}, check it later, store={}", i,
+                                new Date(msgExt.getStoreTimestamp()));
+                            break;
+                        }
+
+                        long valueOfCurrentMinusBorn = System.currentTimeMillis() - msgExt.getBornTimestamp();
+                        long checkImmunityTime = transactionTimeout;
+                        String checkImmunityTimeStr = msgExt.getUserProperty(MessageConst.PROPERTY_CHECK_IMMUNITY_TIME_IN_SECONDS);
+                        if (null != checkImmunityTimeStr) {
+                            checkImmunityTime = getImmunityTime(checkImmunityTimeStr, transactionTimeout);
+                            if (valueOfCurrentMinusBorn <= checkImmunityTime) {
+                                if (checkPrepareQueueOffset(removeMap, doneOpOffset, msgExt, checkImmunityTimeStr)) {
+                                    newOffset = i + 1;
+                                    i++;
+                                    continue;
+                                }
+                            }
+                        } else {
+                            if (0 <= valueOfCurrentMinusBorn && valueOfCurrentMinusBorn <= checkImmunityTime) {
+                                log.debug("New arrived, the miss offset={}, check it later checkImmunity={}, born={}", i,
+                                    checkImmunityTime, new Date(msgExt.getBornTimestamp()));
+                                break;
+                            }
+                        }
+                        List<MessageExt> opMsg = pullResult == null ? null : pullResult.getMsgFoundList();
+                        boolean isNeedCheck = opMsg == null && valueOfCurrentMinusBorn > checkImmunityTime
+                            || opMsg != null && opMsg.get(opMsg.size() - 1).getBornTimestamp() - startTime > transactionTimeout
+                            || valueOfCurrentMinusBorn <= -1;
+
+                        if (isNeedCheck) {
+
+                            if (!putBackHalfMsgQueue(msgExt, i)) {
+                                continue;
+                            }
+                            putInQueueCount++;
+                            log.info("Check transaction. real_topic={},uniqKey={},offset={},commitLogOffset={}",
+                                    msgExt.getUserProperty(MessageConst.PROPERTY_REAL_TOPIC),
+                                    msgExt.getUserProperty(MessageConst.PROPERTY_UNIQ_CLIENT_MESSAGE_ID_KEYIDX),
+                                    msgExt.getQueueOffset(), msgExt.getCommitLogOffset());
+                            listener.resolveHalfMsg(msgExt);
+                        } else {
+                            nextOpOffset = pullResult != null ? pullResult.getNextBeginOffset() : nextOpOffset;
+                            pullResult = fillOpRemoveMap(removeMap, opQueue, nextOpOffset,
+                                    halfOffset, opMsgMap, doneOpOffset);
+                            if (pullResult == null || pullResult.getPullStatus() == PullStatus.NO_NEW_MSG
+                                    || pullResult.getPullStatus() == PullStatus.OFFSET_ILLEGAL
+                                    || pullResult.getPullStatus() == PullStatus.NO_MATCHED_MSG) {
+
+                                try {
+                                    Thread.sleep(SLEEP_WHILE_NO_OP);
+                                } catch (Throwable ignored) {
+                                }
+
+                            } else {
+                                log.info("The miss message offset:{}, pullOffsetOfOp:{}, miniOffset:{} get more opMsg.", i, nextOpOffset, halfOffset);
+                            }
+
+                            continue;
+                        }
+                    }
+                    newOffset = i + 1;
+                    i++;
+                }
+                if (newOffset != halfOffset) {
+                    transactionalMessageBridge.updateConsumeOffset(messageQueue, newOffset);
+                }
+                long newOpOffset = calculateOpOffset(doneOpOffset, opOffset);
+                if (newOpOffset != opOffset) {
+                    transactionalMessageBridge.updateConsumeOffset(opQueue, newOpOffset);
+                }
+                GetResult getResult = getHalfMsg(messageQueue, newOffset);
+                pullResult = pullOpMsg(opQueue, newOpOffset, 1);
+                long maxMsgOffset = getResult.getPullResult() == null ? newOffset : getResult.getPullResult().getMaxOffset();
+                long maxOpOffset = pullResult == null ? newOpOffset : pullResult.getMaxOffset();
+                long msgTime = getResult.getMsg() == null ? System.currentTimeMillis() : getResult.getMsg().getStoreTimestamp();
+
+                log.info("After check, {} opOffset={} opOffsetDiff={} msgOffset={} msgOffsetDiff={} msgTime={} msgTimeDelayInMs={} putInQueueCount={}",
+                        messageQueue, newOpOffset, maxOpOffset - newOpOffset, newOffset, maxMsgOffset - newOffset, new Date(msgTime),
+                        System.currentTimeMillis() - msgTime, putInQueueCount);
+            }
+        } catch (Throwable e) {
+            log.error("Check error", e);
+        }
+
+    }
+```
+
+
+
+
+
+
+
 
 
 ## Architecture
@@ -321,6 +658,14 @@ public class TraceBean {
 
 
 使用TraceContext组合不同上下文对象
+
+
+
+
+
+### Lite Topic
+
+
 
 
 

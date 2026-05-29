@@ -165,7 +165,7 @@ public SendResult send(Message msg,
 ```
 
 1. tryToFindTopicPublishInfo -> update Topic
-2. selectOneMessageQueue
+2. selectOneMessageQueue 最多重试三次
 
 ```java
 public class DefaultMQProducerImpl implements MQProducerInner {
