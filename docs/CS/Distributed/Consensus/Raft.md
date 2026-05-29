@@ -29,13 +29,10 @@ Raft 将共识问题分解为三个相对独立的子问题:
 
 ### States
 
-A Raft cluster contains several servers; five is a typical number, which allows the system to tolerate two failures.
-At any given time each server is in one of three states: leader, follower, or candidate.
-In normal operation there is exactly one leader and all of the other servers are followers.
-Followers are passive: they issue no requests on their own but simply respond to requests from leaders and candidates.
-The leader handles all client requests (if a client contacts a follower, the follower redirects it to the leader).
-The third state, candidate, is used to elect a new leader.
-Figure 1 shows the states and their transitions; the transitions are discussed below.
+一个 Raft 集群包含多个服务器；通常是五个，这使系统能够容忍两次故障。 在任何给定时间，每个服务器处于三种状态之一：领导者、跟随者或候选者。 在正常操作中，恰好有一个领导者，其余所有服务器都是跟随者。 跟随者是被动的：它们不会自行发出请求，只是响应来自领导者和候选者的请求。
+领导者处理所有client的请求（如果client 连接上了跟随者，跟随者会将其重定向到领导者）。第三种状态候选者则用于选举新的领导者。
+
+图1显示了各状态及其转换
 
 <div style="text-align: center;">
 
