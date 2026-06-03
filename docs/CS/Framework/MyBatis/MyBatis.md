@@ -17,6 +17,8 @@ MyBatis can use simple XML or Annotations for configuration and map primitives, 
 
 ## Architecture
 
+MyBatis 的核心实现围绕 **“配置驱动 + 动态代理 + 流水线执行 + 插件扩展”** 展开
+
 [Init](/docs/CS/Framework/MyBatis/Init.md)
 
 ### Infrastructure
@@ -106,6 +108,24 @@ Fig.1. MyBatis Infrastructure
 ## Extension
 
 [MyBatis-Spring](/docs/CS/Framework/MyBatis/MyBatis-Spring.md) : Load Mybatis-config.xml, create Configuration and SqlsessionFactory
+
+
+
+### 设计模式
+
+## 设计模式总结
+
+
+
+| 模式                        | 在 MyBatis 中的体现                                        | 作用                       |
+| --------------------------- | ---------------------------------------------------------- | -------------------------- |
+| **Builder**                 | `SqlSessionFactoryBuilder`, `MappedStatement.Builder`      | 复杂对象分步构建           |
+| **Factory**                 | `SqlSessionFactory`, `MapperProxyFactory`, `ObjectFactory` | 对象创建解耦               |
+| **Proxy**                   | `MapperProxy`, `Plugin`                                    | 无侵入拦截与零实现接口     |
+| **Template Method**         | `BaseExecutor.doQuery()`, `StatementHandler`               | 定义执行骨架，子类实现差异 |
+| **Decorator**               | `CachingExecutor`, `Log` 实现                              | 动态增强功能（缓存/日志）  |
+| **Strategy**                | `Executor`, `StatementHandler`, `TypeHandler`              | 运行时替换算法/策略        |
+| **Chain of Responsibility** | 插件拦截链                                                 | 责任链传递请求             |
 
 ## Links
 

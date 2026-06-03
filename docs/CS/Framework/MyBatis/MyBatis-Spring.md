@@ -1,5 +1,15 @@
 ## Introduction
 
+生产环境中 MyBatis 通常和 Spring 整合使用，主要变化在于：
+
+| 独立 MyBatis                 | Spring 整合后                       |
+| ---------------------------- | ----------------------------------- |
+| 手动创建 `SqlSessionFactory` | 由 `SqlSessionFactoryBean` 自动创建 |
+| 手动获取 `SqlSession`        | `SqlSessionTemplate` 自动管理       |
+| 手动获取 Mapper              | `@MapperScan` 自动扫描注册          |
+| 手动管理事务                 | `@Transactional` 声明式事务         |
+| 手动关闭 `SqlSession`        | Spring 自动关闭                     |
+
 ## Transaction
 
 <div style="text-align: center;">
@@ -159,6 +169,8 @@ public class ConnectionHolder extends ResourceHolderSupport {
 ```
 
 ## wrap SqlSession
+
+`SqlSessionTemplate` 使用 `ThreadLocal` + `TransactionSynchronizationManager` 实现会话隔离。
 
 ### SqlSessionTemplate
 

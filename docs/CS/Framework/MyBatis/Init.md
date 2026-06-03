@@ -6,6 +6,11 @@
 
 
 
+启动入口：`SqlSessionFactoryBuilder.build()`
+
+- `XMLConfigBuilder.parse()` 解析 `mybatis-config.xml`，构建全局唯一的 `Configuration` 对象。
+- `Configuration` 是 MyBatis 的**元数据注册中心**，所有映射规则、缓存配置、插件、TypeHandler 均在此注册
+
 ## SqlSessionFactoryBuilder
 
 ```java
@@ -137,9 +142,21 @@ public class XMLMapperBuilder extends BaseBuilder {
 
 
 
+
+
+- `buildStatementFromContext()` 调用 `XMLStatementBuilder.parseStatementNode()`。
+- 核心动作：创建 `MappedStatement` 对象，封装 SQL、参数映射、结果映射、缓存策略等。
+- 注册到 `Configuration.mappedStatements`（内部为 `StrictMap<String, MappedStatement>`，键格式：`namespace.methodId`
+
+
+
+> [!TIP]
+>
+> `MappedStatement` 是只读不可变对象（通过 Builder 模式构建），启动期一次性解析完成，运行期只读访问，保障高并发下的线程安全与性能
+
 ## Configuration
 
-a StrictMap not support method overload.  throw Exception when contains in put.
+StrictMap 限制了 Mapper中的函数不支持重载  throw Exception when contains in put.
 
 
 
@@ -166,6 +183,9 @@ public V put(String key, V value) {
   return super.put(key, value);
 }
 ```
+
+
+
 
 
 ## Links
