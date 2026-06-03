@@ -2383,6 +2383,29 @@ writev reduce send frequency
 
 SO_REUSEADDR vs. tw_reuse
 
+
+### TCP Reset
+
+
+
+Linux 中用于 RST 报文的发送函数由两个
+- tcp_v4_send_reset TCP状态机给出 RST 响应
+- tcp_send_active_reset 用户态主动调用 close 发送
+
+
+
+tcp_v4_rcv 网络层报文 对于合法并且处于不在挥手状态的数据包 调用 tcp_v4_do_rcv 处理
+- bad_packet 
+- 没有找到对应的 sock 时
+- 收到第一个 SYN 后 出现 tcp_child_process 状态转换失败
+- 挥手阶段 tcp_timewait_state_process 判断需要进行 RST
+
+
+主动 close 时
+- 如果有未发送完成的数据
+- linger2 设置小于0
+
+
 ## Links
 
 - [Linux Network](/docs/CS/OS/Linux/Linux.md?id=Network)
