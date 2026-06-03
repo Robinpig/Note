@@ -77,7 +77,10 @@ The ReentrantLock constructor offers a choice of two fairness options: create a 
 (*The polled `tryLock` always barges, even for fair locks*.)
 
 
+
+
 ### Summary of Lock
+
 > ReentrantLock is an advanced tool for situations where intrinsic locking is not practical.
 > 
 > Use it if you need its advanced features: 
