@@ -1045,7 +1045,7 @@ static void run_ksoftirqd(unsigned int cpu)
 #### do_softirq
 
 _do_softirq调用ffs函数(find first set, 从低到高位查找第一个值为1的位）循环irq_stat的 _softirq_pending字段的每一个为1的位， 调用该位对应的softirq_action对象的action字段。
-所以，各种类型的软中断的优先级从Hl_SOfi'lRQ到Rcu_sonmQ依次递减。另外，在当前逻辑下 _softirq_pending字段多余的位不能用作其他目的，否则会造成数组越界
+所以，各种类型的软中断的优先级从Hl_SOfilRQ到Rcu_sonmQ依次递减。另外，在当前逻辑下 _softirq_pending字段多余的位不能用作其他目的，否则会造成数组越界
 
 ```c
 
@@ -1131,9 +1131,6 @@ restart:
 #### spawn_ksoftirqd
 
 ```c
-/*
- * CPU type, hardware bug flags, and per-CPU state.  Frequently used state comes earlier:
- */
 struct cpuinfo_ia64 {
  ...
    struct task_struct *ksoftirqd; /* kernel softirq daemon for this CPU */
@@ -1142,13 +1139,6 @@ struct cpuinfo_ia64 {
 ```
 
 ```c
-/**
- * smpboot_register_percpu_thread - Register a per_cpu thread related
- * 					    to hotplug
- * @plug_thread:	Hotplug thread descriptor
- *
- * Creates and starts the threads on all online cpus.
- */
 int smpboot_register_percpu_thread(struct smp_hotplug_thread *plug_thread)
 {
 	unsigned int cpu;
@@ -1171,6 +1161,12 @@ out:
 	return ret;
 }
 ```
+
+
+
+当ksoftirad被创建出来以后，它就会进⼊⾃⼰的线程循环函数 `ksoftirqd_should_run` 和
+
+`run_ksoftirqd` 了。
 
 ```c
 

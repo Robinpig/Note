@@ -1,5 +1,23 @@
 ## Introduction
 
+Canal 通过伪装成数据库的从库，读取主库发来的 binlog，用来实现数据库增量订阅和消费服务
+
+用途
+
+- 数据库镜像
+- 数据库实时备份
+- 索引构建和实时维护（拆分异构索引、倒排索引等）
+- 业务cache刷新
+- 带业务逻辑的增量数据处理
+
+
+
+## Architecture
+
+canal 模拟 MySQL slave 的交互协议，向 MySQL master 发送 dump 协议，MySQL master  收到 dump 请求，开始推送 binlog 给 slave， canal 解析 binlog
+
+
+
 
 真实场景中，canal 高可用依赖 zookeeper ，笔者将客户端模式可以简单划分为：TCP 模式 和 MQ 模式 。
 

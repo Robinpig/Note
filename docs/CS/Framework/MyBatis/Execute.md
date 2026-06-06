@@ -7,6 +7,17 @@
 
 
 
+- 每个 Mapper 接口在 Spring 启动时通过 `MapperScannerConfigurer` 注册为 `MapperFactoryBean`。
+- 实际调用时，`getObject()` 触发 JDK 动态代理生成，代理处理器为 `MapperProxy`。
+
+
+
+接口零实现 + 动态代理 + 命令模式路由。业务代码调用 `mapper.findUser(1)` 实际是代理对象拦截后，通过 `namespace.id` 从 `Configuration` 查元数据，再交由执行器处理。
+
+调用链路：
+
+SqlSession.selectList() → Executor.query() → StatementHandler → ParameterHandler → ResultSetHandler
+
 ## mapper
 
 Session get mapper , then use mapper

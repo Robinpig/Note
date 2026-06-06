@@ -1,11 +1,12 @@
 ## Introduction
 
+Dledger 是 RocketMQ 用于解决**分布式数据一致性**的核心协议，基于 Raft 协议实现
 Dledger 作为一个轻量级的 Java Library，它的作用就是将 Raft 有关于算法方面的内容全部抽象掉，开发人员只需要关心业务即可
 部署 RocketMQ 时可以根据需要选择使用DLeger来替换原生的副本存储机制。
 
 > Etcd 虽然也实现了 Raft 协议，但它是自己封装的一个服务，对外提供的接口全是跟它自己的业务相关的
 
-Dledger 只做一件事情，就是 CommitLog。
+Dledger 只做一件事情，就是 CommitLog
 Dledger 的定位就是把上一层的 StateMachine 给去除，只留下 CommitLog。这样的话，系统就只需要实现一件事：就是把操作日志变得高可用和高可靠。
 
 这样做对消息系统还有非常特别的含义。消息系统里面如果还采用 StateMachine + CommitLog 的方式，会出现 double IO 的问题，因为消息本省可以理解为是一个操作记录。

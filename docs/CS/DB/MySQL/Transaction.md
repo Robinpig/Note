@@ -13,9 +13,8 @@ Typically, several users are permitted to lock every row in `InnoDB` tables, or 
 
  和ACID事务关系
 
-- 通过Undo Log实现原子性
-- 隔离性是Lock和MVCC
-- 隔离性是Redo log
+- 原子性、一致性和持久性是redo log 和 Undo Log
+- 隔离性是Lock 和 MVCC
 
 在sql记录执行流程
 

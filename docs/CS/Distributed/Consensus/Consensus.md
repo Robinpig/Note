@@ -262,7 +262,7 @@ Since the state machines are deterministic, each computes the same state and the
 
 <div style="text-align: center;">
 
-![Fig.1. Replicated state machine architecture](./img/Replicated-State-Machine.png)
+![Fig.1. Replicated state machine architecture](img/Replicated-State-Machine.png)
 
 </div>
 
@@ -353,11 +353,11 @@ Typical setup:
 
 ### Paxos
 
-[Paxos](/docs/CS/Distributed/Paxos.md) is a family of distributed algorithms used to reach consensus.
+[Paxos](/docs/CS/Distributed/Consensus/Paxos.md) is a family of distributed algorithms used to reach consensus.
 
 ### Raft
 
-[Raft](/docs/CS/Distributed/Raft.md) is a consensus algorithm that is designed to be easy to understand.
+[Raft](/docs/CS/Distributed/Consensus/Raft.md) is a consensus algorithm that is designed to be easy to understand.
 
 ### ZAB
 

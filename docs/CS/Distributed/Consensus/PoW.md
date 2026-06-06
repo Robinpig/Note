@@ -8,7 +8,7 @@
 
 ## Links
 
-- [Consensus](/docs/CS/Distributed/Consensus.md)
+- [Consensus](/docs/CS/Distributed/Consensus/Consensus.md)
 
 
 ## References

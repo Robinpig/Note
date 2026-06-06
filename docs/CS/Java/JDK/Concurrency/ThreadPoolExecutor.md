@@ -1228,13 +1228,130 @@ public static ScheduledExecutorService newScheduledThreadPool(
 
 ## Tuning
 
-
 线程池参数设置
+
+| `corePoolSize` / `maxPoolSize` | CPU密集型：`N_cpu + 1~2`；IO密集型：`N_cpu × (1 + 平均等待时间/平均计算时间)`。**必须经压测校准**，高并发建议初始值保守，靠动态扩容应对峰值 |
+| ------------------------------ | ------------------------------------------------------------ |
+| `keepAliveTime`                | IO密集：30~120s；CPU密集：5~15s。配合有界队列使用，避免线程堆积。 |
 
 通常都是核心和最大线程池大小的设置 可以根据qps预期来设置 例如预计3k ，
 线上有160个pod 那单机20-30 并发10 rt时间大约80-100 那么需要核心线程10 最大线程100
 
 
+
+**必须使用有界队列**：`ArrayBlockingQueue` 或 `new LinkedBlockingQueue<>(capacity)`。容量根据单机内存、单任务内存占用、目标TPS计算，通常 `500~5000`
+
+
+
+拒绝策略生产选型
+
+- ❌ 避免默认 `AbortPolicy`（直接抛异常，调用方难处理）
+- ✅ 核心链路：自定义策略 → 记录指标、降级返回、写本地磁盘/DB异步补偿、或触发熔断
+- ⚠️ `CallerRunsPolicy`：可反压调用方，但可能阻塞主线程，仅适用于同步调用链且有超时控制场景
+- 📦 推荐封装：`FallbackRejectedExecutionHandler`，结合 Sentinel/Resilience4j 实现快速失败
+
+
+
+
+资源隔离：一池一责，避免“火烧连营”
+
+- **按业务/优先级拆分**：支付、日志、消息推送、定时任务等必须独立线程池
+- **按IO/CPU拆分**：避免慢IO阻塞占满CPU计算线程
+- **核心/非核心隔离**：关键交易链路独占池，背景任务用低配额池
+- **现代补充**：Java 21+ 可评估虚拟线程（`Executors.newVirtualThreadPerTaskExecutor()`），但传统池仍需隔离关键路径
+
+异常处理与防泄漏：拒绝“静默失败”
+
+异常吞没防护
+```java
+  executor.execute(() -> {
+      try { /* 业务逻辑 */ } 
+      catch (Exception e) { log.error("task failed", e); /* 上报/补偿 */ }
+  });
+```
+
+- **重写钩子方法**：继承 `ThreadPoolExecutor`，重写 `afterExecute(Runnable r, Throwable t)` 统一捕获异常
+
+- **线程名与UncaughtExceptionHandler**：通过自定义 `ThreadFactory` 设置 `[pool-business-1]`，并注册 `Thread.setDefaultUncaughtExceptionHandler`
+
+- 防任务泄漏
+
+  ：
+
+  - 任务内禁止持有未释放的连接/锁/大对象
+  - 使用 `Future.get(timeout)` 或包装超时任务，避免无限期阻塞
+  - 定期巡检 `poolSize` 是否持续增长（典型泄漏信号）
+
+动态弹性：从“静态配置”到“自适应”
+
+- **运行时安全调整**：`ThreadPoolExecutor` 的 `setCorePoolSize()`、`setMaximumPoolSize()`、`setKeepAliveTime()` 是线程安全的，支持热更新
+
+- 动态控制方案
+
+  ：
+
+  - 接入配置中心（Nacos/Apollo）推送阈值
+  - 基于指标自动扩缩容：队列堆积率、拒绝率、CPU使用率、P99延迟
+  - 开源方案：`dynamic-tp`、`Hippo4j`（自带监控面板、告警、动态调参）
+
+- **控制算法参考**：AIMD（加性增乘性减）、PID反馈调节，避免震荡
+
+可观测性：没有监控的线程池等于盲开
+
+暴露并持续采集以下指标（Prometheus/Grafana）：
+
+
+
+| 指标       | 方法                      | 告警阈值建议        |
+| ---------- | ------------------------- | ------------------- |
+| 活跃线程数 | `getActiveCount()`        | > maxPoolSize × 80% |
+| 队列使用率 | `queue.size() / capacity` | > 70% 持续1分钟     |
+| 拒绝次数   | 自定义计数器              | > 0.1%/秒           |
+| 完成任务数 | `getCompletedTaskCount()` | 突降/停滞           |
+| 线程池大小 | `getPoolSize()`           | 持续增长不回落      |
+
+- **链路追踪透传**：使用 Spring `TaskDecorator` 或自定义 `Runnable` 包装，安全传递 `traceId`、`MDC`（注意 `InheritableThreadLocal` 内存泄漏风险，任务结束必须 `clear()`）
+- **定期 Dump**：`jstack` 分析阻塞链、死锁、线程状态分布
+
+优雅生命周期与降级策略
+
+启停规范
+
+```java
+  executor.shutdown();
+  if (!executor.awaitTermination(30, TimeUnit.SECONDS)) {
+      executor.shutdownNow(); // 强制中断
+  }
+```
+
+- **结合熔断降级**：当拒绝率或队列堆积持续超标，触发 Sentinel 熔断，快速返回 fallback，避免雪崩
+
+- **任务可重试设计**：非幂等操作防重；关键任务落盘+补偿调度器（如 XXL-JOB）
+
+验证：不经过压测的配置都是纸上谈兵
+
+- **全链路压测**：模拟峰值流量、突发脉冲、慢依赖、网络抖动
+- **混沌工程**：注入线程阻塞、GC停顿、队列满、拒绝策略触发，验证隔离与降级是否生效
+- **Soak Test（浸泡测试）**：7×24小时运行，观察内存泄漏、线程数、GC频率是否平稳
+
+生产 Checklist
+
+- 显式构造 `ThreadPoolExecutor`，禁用 `Executors.*`
+- 队列有界，容量经压测确定
+- 拒绝策略自定义，与业务降级打通
+- 按业务/IO/CPU拆分，核心链路独占
+- 任务内 `try-catch`，重写 `afterExecute`
+- 自定义 `ThreadFactory` 设置线程名与异常处理器
+- 暴露核心指标，接入监控告警
+- 支持配置中心动态调参，或接入动态线程池组件
+- 实现优雅关闭，结合熔断防雪崩
+- 完成全链路压测与浸泡测试
+
+
+
+若业务以轻量IO为主（如网关转发、HTTP调用），可评估 **Java 21 虚拟线程**，大幅降低线程上下文切换开销
+
+线程池只是执行载体，**长期稳定的核心是“流量治理”**：限流+熔断+隔离+降级+可观测，缺一不可
 
 
 

@@ -7,7 +7,7 @@ etcd is a distributed reliable key-value store for the most critical data of a d
 * *Fast*: benchmarked 10,000 writes/sec
 * *Reliable*: properly distributed using Raft
 
-etcd is written in Go and uses the [Raft](/docs/CS/Distributed/Raft.md) consensus algorithm to manage a highly-available replicated log.
+etcd is written in Go and uses the [Raft](/docs/CS/Distributed/Consensus/Raft.md) consensus algorithm to manage a highly-available replicated log.
 etcd 通过 Raft 协议进行 leader 选举和数据备份，对外提供高可用的数据存储，能有效应对网络问题和机器故障带来的数据丢失问题。
 同时它还可以提供服务发现、分布式锁、分布式数据队列、分布式通知和协调、集群选举等功能
 

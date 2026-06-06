@@ -85,7 +85,7 @@ The two main architecture components of the stream layer are the Stream Manager 
 ![Stream layer](img/Azure_Stream_Layer.png)
 
 The SM keeps track of the stream namespace, what extents are in each stream, and the extent allocation across the Extent Nodes (EN).
-The SM is a standard [Paxos](/docs/CS/Distributed/Paxos.md) cluster as used in prior storage systems, and is off the critical path of client requests.
+The SM is a standard [Paxos](/docs/CS/Distributed/Consensus/Paxos.md) cluster as used in prior storage systems, and is off the critical path of client requests.
 The SM is responsible for (a) maintaining the stream namespace and state of all active streams and extents, (b) monitoring the health of the ENs, (c) creating and assigning extents to ENs,
 (d) performing the lazy re-replication of extent replicas that are lost due to hardware failures or unavailability,
 (e)garbage collecting extents that are no longer pointed to by any stream, and (f) scheduling the erasure coding of extent data according to stream policy.

@@ -8,6 +8,8 @@ mysql --help | grep my.cnf
 
 ## Log Files
 
+MySQL 实现了多种类型的日志，各自承担不同的职责
+
 - [Error Log](/docs/CS/DB/MySQL/serverlog.md?id=error-log)
 - [slow query Log](/docs/CS/DB/MySQL/serverlog.md?id=slow-query-log)
 - [General Query Log](/docs/CS/DB/MySQL/serverlog.md?id=General-Query-Log)

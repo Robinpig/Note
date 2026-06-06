@@ -1,7 +1,7 @@
 ## Introduction
-NameServer是一个几乎无状态节点，可集群部署，节点是对等的 节点之间无任何信息同步 客户端访问任意节点获取的消息路由信息是一致的
+NameServer是一个几乎无状态节点，可集群部署，节点是对等的，节点之间无任何信息同步 ，客户端访问任意节点获取的消息路由信息是一致的
 
-Name Server无状态的关键点在于 消息路由信息是存储在Broker Server上的 Broker Server会定时将本地缓存或者在文件中的消息路由信息同步到Name Server Name Server只是提供了“读”的功能
+Name Server无状态的关键点在于，消息路由信息是存储在Broker Server上的。Broker Server会定时将本地缓存或者在文件中的消息路由信息同步到Name Server，Name Server只是提供了“读”的功能
 
 Namesrv组件
 
@@ -459,6 +459,17 @@ public class ClientRequestProcessor implements NettyRequestProcessor {
 ## HouseKeep
 
 BrokerHousekeepingService
+
+
+
+## Summary
+
+RocketMQ 选择自研 NameServer 而非使用 Zookeeper、Nacos，核心原因有两点：
+
+1. **独立性**：不依赖外部组件，避免版本依赖与运维复杂度，类似 Kafka 抛弃 Zookeeper 的思路。
+2. **轻量与高可用**：NameServer 之间不同步数据，Broker 向所有 NameServer 注册，只要有一个 NameServer 存活，就能提供服务（对比 Zookeeper 需要半数以上节点存活）。
+
+这种设计以牺牲数据一致性为代价，但对 RocketMQ 而言，客户端只需获取一个可用 Broker 即可，无需完整路由表，因此是可接受的。
 
 
 ## Links

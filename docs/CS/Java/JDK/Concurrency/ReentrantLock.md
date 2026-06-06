@@ -165,11 +165,21 @@ public boolean tryLock() {
 
 ## FairSync vs NonFairSync
 
+公平锁和非公平锁的核心差异体现在 lock() 方法和 acquire() 方法中的 tryAcquire() 实现上
+
+非公平锁的两大插队点：
+
+- 调用 lock() 时：直接尝试 CAS 抢占，如果锁恰好被释放，新线程就能立刻获得锁，即使等待队列里有老线程。
+- 在 tryAcquire() 中锁空闲时：同样直接 CAS 抢占，不检查等待队列
+
+公平锁的规则：锁空闲时，必须通过 hasQueuedPredecessors() 确认等待队列中没有其他线程在排队，当前线程才能获取锁。这样保证了严格遵循 FIFO 顺序
+
+
 |        | FairSync                    | NonFairSync |
 | ------ | --------------------------- | ----------- |
 | lock   | check hasQueuedPredecessors | quick CAS   |
 | unlock | -                           | -           |
-|        |                             |             |
+
 
 
 

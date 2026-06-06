@@ -380,7 +380,7 @@ But the JVM can't exit until all the (nondaemon) threads have terminated, so fai
 #### Delayed and Periodic Tasks
 
 The Timer facility manages the execution of deferred (“run this task in 100 ms”) and periodic (“run this task every 10 ms”) tasks.
-However, Timer has some drawbacks, and [ScheduledThreadPoolExecutor](/docs/CS/Java/JDK/Concurrency/ScheduledThreadPoolExecutor.md) should be thought of as its replacement.
+However, Timer has some drawbacks, and [ScheduledThreadPoolExecutor](/docs/CS/Java/JDK/Concurrency/sche.md) should be thought of as its replacement.
 You can construct a ScheduledThreadPoolExecutor through its constructor or through the newScheduledThreadPool factory.
 
 ## Performance

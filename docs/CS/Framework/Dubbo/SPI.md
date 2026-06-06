@@ -991,12 +991,18 @@ Dubbo AOP 机制采用 wrapper 设计模式实现，要成为一个 AOP wrapper 
 ## Summary
 
 
-|              | JDK SPI                   | Dubbo SPI       | Spring SPI |
-| -------------- | --------------------------- | ----------------- | ---------- |
-| load         | must load all SubClasses  | -               | must load all SubClasses |
-| Source       | only one source           | -               |  |
-| Fail Message | fail message may override | -               |  |
-| Extension    | -                         | support IoC AOP |  |
+|                                           | JDK SPI                   | Dubbo SPI                         | Spring SPI               |
+|-------------------------------------------|---------------------------|-----------------------------------|--------------------------|
+| load                                      | must load all SubClasses  | -                                 | must load all SubClasses |
+| Source                                    | only one source           | -                                 |                          |
+| Fail Message                              | fail message may override | -                                 |                          |
+| Extension                                 | -                         | support IoC AOP                   |                          |
+| 配置文件                                      | META-INF/services/全限定名    | META-INF/dubbo/全限定名（key=value 格式） |                          |
+| 默认实现                                      | -                         | @SPI("name") 指定默认                 |                          |
+| 按需加载	| 无法按名字获取	                  | getExtension("name") 精确获取         |  |
+| 自适应扩展	| 无	                        | @Adaptive 动态生成代理，运行时根据 URL 参数选择实现 |                           |
+| IoC/DI	| 无	                        | 自动通过 setter 注入依赖扩展                |                           |
+| AOP 包装                                    | 	-                        | 	 构造方法接收接口类型的类自动成为 Wrapper        |                          |
 
 
 ## Links

@@ -1,8 +1,37 @@
 ## Introduction
 
+MyBatis 将 Mapper 接口与 XML 映射的核心机制是**基于字符串的全局唯一键（`namespace.id`）**。而关于函数重载，MyBatis **官方明确不支持**，启动期会直接抛出重复键异常
+
+XML 文件顶部的 `<mapper namespace="com.example.UserMapper">` 是接口与 XML 绑定的**唯一契约**。 XML 中每条 SQL 的 `<select id="findById">` 中的 `id`，默认必须与 Mapper 接口中的方法名一致
+
+> XML 注册时用 `namespace.id` 存，代理路由时用 `interfaceName.methodName` 取。两者字符串完全一致，即完成映射
+
+StrictMap 的重复检测
 
 
 
+> [!TIP]
+>
+>  为什么这样设计？
+>
+> - **SQL 映射是显式的**：MyBatis 是半自动 ORM，每个方法必须对应明确的 SQL 语句或片段。重载会导致框架无法确定该走哪个 SQL。
+> - **键冲突成本高**：若支持重载，需引入方法签名哈希、参数类型推断等复杂逻辑，违背 MyBatis “轻量、透明、可控” 的设计哲学。
+> - **XML/注解已提供替代方案**：通过 `<if>`、`<choose>` 或 `@SelectProvider` 可在单方法内实现多态逻辑，无需重载。
+
+
+
+所有 SQL 被封装为 `MappedStatement` 对象，并以 `namespace + "." + id` 为 Key，注册到 `Configuration.mappedStatements`
+
+MyBatis 启动时，`XMLMapperBuilder` 负责解析 XML 并注册到全局配置中心 `Configuration`
+
+
+
+当业务代码调用 
+
+1. `MapperProxy` 拦截方法调用。
+2. 通过 `接口全限定名 + "." + 方法名` 生成 Key。
+3. 从 `Configuration` 中查找对应的 `MappedStatement`，获取 SQL、参数映射、结果映射等元数据。
+4. 交由 `Executor` 执行
 
 
 ## MapperRegistry

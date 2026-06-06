@@ -5,6 +5,24 @@ As the heart of the Elastic Stack, it centrally stores your data for lightning f
 
 > ELK包括 Elasticsearch、[Kibana](/docs/CS/Framework/ES/Kibana.md)、[Beats](/docs/CS/Framework/ES/Beats.md) 和 [Logstash](/docs/CS/Framework/ES/Logstash.md)
 
+
+[OpenSearch](/docs/CS/Framework/ES/OpenSearch.md) 起源于 2021 年许可证变更，基于最后一个开源版本 ES 7.10.2 fork
+目前已经和 Elasticsearch 在API、插件、默认配置和安全模型不再完全兼容
+
+
+
+## Architecture
+
+
+集群
+
+节点
+- master CPU高 内存要求低
+- coordinate CPU 带宽高
+- data CPU内存都要高
+- ingest
+
+
 日志采集系统
 
 filebeat -> MQ -> Logstash -> ES -> Kibana
@@ -170,6 +188,17 @@ GET /megacorp/employee/1
 
 ## Cluster
 Node是ES的实例 对于内存要求高 生产环境建议一台机器一个实例 每个node都有一个name node在启动之后会分配一个UUID存储在data目录
+
+
+
+## query
+
+
+ES的查询分为两个阶段
+
+- 协调节点分发请求到分片
+- 协调节点汇总data node的结果转换成最终结果
+
 
 
 

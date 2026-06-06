@@ -392,10 +392,7 @@ class HystrixTargeter implements Targeter {
 
 ### newInstance
 
-creates an api binding to the target. 
-As this invokes reflection, care should be taken to cache the result.
-
-
+基于 `ReflectiveFeign`，解析 `@FeignClient` + `@RequestMapping`，通过 `Contract` 生成方法到 HTTP 请求的映射模板
 
 ```java
 public class ReflectiveFeign extends Feign {
@@ -667,6 +664,25 @@ logging:
 
 By default, feign won't collect any metrics.
 But, it's possible to add metric collection capabilities to any feign client.
+
+
+
+## Summary
+
+### 生态集成与适用场景
+
+
+
+| 场景     | Dubbo 更合适                                                | OpenFeign 更合适                                           |
+| -------- | ----------------------------------------------------------- | ---------------------------------------------------------- |
+| 技术栈   | Java 为主，Spring Boot/Cloud Alibaba                        | Spring Cloud 全家桶，多语言混合                            |
+| 调用类型 | 内部微服务高频 RPC、大数据/实时计算节点通信                 | 面向外部的 REST API、跨语言服务对接、BFF 层聚合            |
+| 治理需求 | 需要完整的服务路由、权重、灰度、全链路追踪、精细化降级      | 依赖 Spring Cloud Gateway + Sentinel/Resilience4j 拼装治理 |
+| 部署环境 | 传统 VM / K8s 均可，Dubbo3 原生支持云原生（Mesh/Proxyless） | 云原生友好，天然契合 HTTP Ingress / API Gateway            |
+
+两者在协议层开始交汇（Dubbo 支持 HTTP/REST，Feign 可接二进制序列化），但**底层设计哲学未变**：Dubbo 是“协议栈驱动的全链路框架”，OpenFeign 是“声明式模板+生态拼装”
+
+
 
 
 ## Links

@@ -43,6 +43,10 @@ public class InterceptorChain {
 }
 ```
 
+多个插件按配置顺序形成**嵌套代理链**，`invocation.proceed()` 依次调用下一层。
+
+典型应用：分页插件（重写 SQL）、多数据源路由、SQL 日志打印
+
 
 
 Inreceptors for *ParameterHandler*, *ResultHandler*, *StatementHandler* and *Executor*.
@@ -213,6 +217,8 @@ public interface Interceptor {
 
 }
 ```
+
+
 
 
 

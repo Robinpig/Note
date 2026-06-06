@@ -162,7 +162,7 @@ It divides a consensus protocol into two parts, i.e., a steady state protocol an
 
 ## Links
 
-- [Consensus](/docs/CS/Distributed/Consensus.md)
+- [Consensus](/docs/CS/Distributed/Consensus/Consensus.md)
 
 ## References
 

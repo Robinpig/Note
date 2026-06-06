@@ -1,27 +1,26 @@
 ## Introduction
 
-在 TCP/IP ⽹络分层模型⾥，整个协议栈被分成了物理层、链路层、⽹络层，传输层和应⽤层。物理层
-对应的是⽹卡和⽹线，应⽤层对应的是我们常⻅的 Nginx，FTP 等等各种应⽤。Linux 实现的是链路
-层、⽹络层和传输层这三层。
-在 Linux 内核实现中，链路层协议靠⽹卡驱动来实现，内核协议栈来实现⽹络层和传输层。内核对更上
-层的应⽤层提供 socket 接⼝来供⽤户进程访问
+在 TCP/IP ⽹络分层模型⾥，整个协议栈被分成了物理层、链路层、⽹络层，传输层和应⽤层。
+物理层对应的是⽹卡和⽹线，应⽤层对应的是我们常⻅的 Nginx，FTP 等等各种应⽤。
+Linux 实现的是链路层、⽹络层和传输层这三层。
+在 Linux 内核实现中，链路层协议靠⽹卡驱动来实现，内核协议栈来实现⽹络层和传输层。内核对更上层的应⽤层提供 socket 接⼝来供⽤户进程访问
 
-在 Linux 的源代码中，⽹络设备驱动对应的逻辑位于 driver/net/ethernet , 其中 intel 系列⽹卡的
-⽬录。
-driver/net/ethernet/intel ⽬录下。协议栈模块代码位于 kernel 和 net 目录
+在 Linux 的源代码中，⽹络设备驱动对应的逻辑位于 `driver/net/ethernet` , 其中 intel 系列⽹卡的
+⽬录 `driver/net/ethernet/intel` ⽬录下。
+协议栈模块代码位于 kernel 和 net 目录
 
-内核和⽹络设备驱动是通过中断的⽅式来处理的。当设备上有数据到达的时候，会给 CPU 的相关引脚
-上触发⼀个电压变化，以通知 CPU 来处理数据。对于⽹络模块来说，由于处理过程⽐较复杂和耗时，
-如果在中断函数中完成所有的处理，将会导致中断处理函数（优先级过⾼）将过度占据 CPU ，将导致
-CPU ⽆法响应其它设备，例如⿏标和键盘的消息。
-因此Linux中断处理函数是分上半部和下半部的。上半部是只进⾏最简单的⼯作，快速处理然后释放 CPU ，接着 CPU 就可以允许其它中断进来。剩下将绝⼤部分的⼯作都放到下半部中，可以慢慢从容处理。2.4 以后的内核版本采⽤的下半部实现⽅式是软中断，由 ksoftirqd 内核线程全权处理。
+内核和⽹络设备驱动是通过中断的⽅式来处理的。
+当设备上有数据到达的时候，会给 CPU 的相关引脚上触发⼀个电压变化，以通知 CPU 来处理数据。
+对于⽹络模块来说，由于处理过程⽐较复杂和耗时，如果在中断函数中完成所有的处理，将会导致中断处理函数（优先级过⾼）将过度占据 CPU ，将导致 CPU ⽆法响应其它设备，例如⿏标和键盘的消息。
+因此Linux中断处理函数是分上半部和下半部的。
+上半部是只进⾏最简单的⼯作，快速处理然后释放 CPU ，接着 CPU 就可以允许其它中断进来。
+剩下将绝⼤部分的⼯作都放到下半部中，可以慢慢从容处理。
+2.4 以后的内核版本采⽤的下半部实现⽅式是软中断，由 [ksoftirqd](/docs/CS/OS/Linux/Interrupt.md?id=softirq) 内核线程全权处理。
 和硬中断不同的是，硬中断是通过给 CPU 物理引脚施加电压变化，⽽软中断是通过给内存中的⼀个变量的⼆进制值以通知软中断处理程序
 
 
 
-网络子系统的初始化流程
 
-描述Linux收发包流程
 
 Linux 网络子系统使用哈希表管理所有的TCP连接
 struct inet_hashinfo
@@ -34,16 +33,19 @@ lhash2 和 listening_hash 代表listen状态哈希表
 
 ## init
 
-Linux 驱动，内核协议栈等等模块在具备接收⽹卡数据包之前，要做很多的准备⼯作才⾏。⽐如要提前
-创建好ksoftirqd内核线程，要注册好各个协议对应的处理函数，⽹卡设备⼦系统要提前初始化好，⽹卡
-要启动好。只有这些都Ready之后，我们才能真正开始接收数据包。
+网络子系统的初始化流程
+
+Linux 驱动，内核协议栈等等模块在具备接收⽹卡数据包之前，要做很多的准备⼯作才⾏。
+⽐如要提前创建好ksoftirqd内核线程，要注册好各个协议对应的处理函数，⽹卡设备⼦系统要提前初始化好，⽹卡要启动好。
+只有这些都Ready之后，我们才能真正开始接收数据包。
 
 
+### 软中断内核线程创建
 
 Linux 的软中断都是在专⻔的内核线程 [ksoftirqd](/docs/CS/OS/Linux/Interrupt.md?id=init_softirq) 进行
 系统初始化时为每个CPU创建独立的 ksoftirqd
 
-### init net dev
+### 网络子系统初始化
 
 linux 内核通过调⽤ subsys_initcall 来初始化各个⼦系统，在源代码⽬录⾥你可以 grep 出许多对这个函数的调⽤。这⾥我们要说的是⽹络⼦系统的初始化，会执⾏到 net_dev_init 函数
 
@@ -56,13 +58,11 @@ At boot time this walks the device list and unhooks any devices that fail to ini
 This is called single threaded during boot, so no need to take the rtnl semaphore.
 
 1. 在这个函数⾥，会为每个 CPU 都申请⼀个 softnet_data 数据结构，在这个数据结构⾥的
-poll_list 是等待驱动程序将其 poll 函数注册进来 Initialise the packet receive queues for each cpu.
-2.  open_softirq 注册了每⼀种软中断都注册⼀个处理函数。 NET_TX_SOFTIRQ 的处理函数为
-net_tx_action，NET_RX_SOFTIRQ 的为 net_rx_action。继续跟踪 open_softirq 后发现这个注册
-的⽅式是记录在 softirq_vec 变量⾥的。后⾯ ksoftirqd 线程收到软中断的时候，也会使⽤这个变量
+poll_list 是等待驱动程序将其 poll 函数注册进来
+2.  open_softirq 注册了每⼀种软中断都注册⼀个处理函数。 `NET_TX_SOFTIRQ` 的处理函数为 `net_tx_action`，`NET_RX_SOFTIRQ` 的为 `net_rx_action`。这个注册的⽅式是记录在 softirq_vec 变量⾥的。ksoftirqd 线程收到软中断的时候，也会使⽤这个变量
 来找到每⼀种软中断对应的处理函数 register func with [softirq](/docs/CS/OS/Linux/Interrupt.md?id=open_softirq)
-   - [net_rx_action](/docs/CS/OS/Linux/net/network.mdk.md?id=net_rx_action) receive func
-   - [net_tx_action](/docs/CS/OS/Linux/net/network.mdk.md?id=net_tx_action) transmit func
+- [net_rx_action](/docs/CS/OS/Linux/net/network.mdk.md?id=net_rx_action) receive func
+- [net_tx_action](/docs/CS/OS/Linux/net/network.mdk.md?id=net_tx_action) transmit func
 
 
 ```c
@@ -89,9 +89,10 @@ static int __init net_dev_init(void)
 }
 ```
 
-### init inet
+### 协议栈注册
 
-Register protocols into `inet_protos` and `ptype_base`:
+内核实现了⽹络层的1P协议，也实现了传输层的TCP协议和UDP协议。这些协议对应的实现西数分别是 `ip_rcv()`、`tcp_v4_rcv()` 和 `udp_rcv() `
+fs_initcall 调⽤ inet init 后开始⽹络协议栈注册，通过inet init， 将这些函数注册到 `inet_protos` 和 `ptype_base` 数据结构中
 
 1. IP
 2. [UDP](/docs/CS/OS/Linux/net/UDP.md)
@@ -175,11 +176,9 @@ static inline struct list_head *ptype_head(const struct packet_type *pt)
 }
 ```
 
-### init driver
+### 网卡驱动初始化
 
-A driver registers an initialization function which is called by the kernel when the driver is loaded.
-This function is registered by using the module_init macro.
-<br/>
+每⼀个驱动程序（不仅仅包括⽹卡驱动程序）会使⽤ `module_init` 向内核注册⼀个初始化函数，当驱动程序被加载时，内核会调⽤这个函数
 The igb initialization function (igb_init_module) and its registration with module_init can be found in `drivers/net/ethernet/intel/igb/igb_main.c`.
 
 The bulk of the work to initialize the device happens with the call to `pci_register_driver`.
@@ -246,7 +245,7 @@ static const struct net_device_ops igb_netdev_ops = {
 };
 ```
 
-### open NIC
+### 启动网卡
 
 call open function -> allocate RX TX memory
 
@@ -896,11 +895,12 @@ static bool igb_clean_tx_irq(struct igb_q_vector *q_vector, int napi_budget)
 
 网络包接收流程
 
-当⽹卡上收到数据以后，Linux 中第⼀个⼯作的模块是⽹络驱动。 ⽹络驱动会以 DMA 的⽅式把⽹卡上
-收到的帧写到内存⾥。再向 CPU 发起⼀个中断，以通知 CPU 有数据到达。第⼆，当 CPU 收到中断请
-求后，会去调⽤⽹络驱动注册的中断处理函数。 ⽹卡的中断处理函数并不做过多⼯作，发出软中断请
-求，然后尽快释放 CPU。ksoftirqd 检测到有软中断请求到达，调⽤ poll 开始轮询收包，收到后交由各
-级协议栈处理。对于 udp 包来说，会被放到⽤户 socket 的接收队列中。
+当⽹卡上收到数据以后，Linux 中第⼀个⼯作的模块是⽹络驱动。
+⽹络驱动会以 DMA 的⽅式把⽹卡上收到的帧写到内存⾥。再向 CPU 发起⼀个中断，以通知 CPU 有数据到达。
+当 CPU 收到中断请求后，会去调⽤⽹络驱动注册的中断处理函数。 
+⽹卡的中断处理函数并不做过多⼯作，发出软中断请求，然后尽快释放 CPU。
+ksoftirqd 检测到有软中断请求到达，调⽤ poll 开始轮询收包，收到后交由各级协议栈处理。
+对于 udp 包来说，会被放到⽤户 socket 的接收队列中。
 
 ### driver process
 
@@ -1336,7 +1336,17 @@ static int enqueue_to_backlog(struct sk_buff *skb, int cpu,
 }
 ```
 
-## Native Ingress
+## 本机网络IO
+
+本机网络IO不需要经过网卡，节约了一些驱动上的开销
+
+发送数据不需要经过 Ring Buffer的驱动队列，直接将skb 通过软中断传递给接收协议栈。但是系统调用、协议栈、网络设备子系统、“驱动”程序都走了一遍
+
+如果需要绕过协议栈的开销，需要使用eBPF的 scokmap 和 sk redirect
+
+> [!TIP]
+>
+> 本机IP 192.168.0.x 和 127.0.0.1 没什么差别，都走虚拟的环回设备IO。因为内核在设置IP的时候，把所有的本机IP都初始化到local路由表⾥了，类型写死了是RTN_LOCAL。在后⾯的路由项选择的时候发现类型是RTN_LOCAL就选择环回IO设备
 
 Recall the dev init func, the default backlog poll func is `process_backlog`.
 

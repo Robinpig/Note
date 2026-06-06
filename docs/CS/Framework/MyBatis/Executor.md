@@ -401,7 +401,9 @@ public class ReuseExecutor extends BaseExecutor {
 
 ## BatchExecutor
 
-`add continuous SQL statements with the same statement structure to same stmt`
+`BatchExecutor` 是 MyBatis 专为**批量 INSERT/UPDATE/DELETE** 设计的执行器。它通过**延迟执行 + JDBC Batch API + SQL 分组复用**机制，将多次单条操作合并为一次网络交互，大幅提升吞吐量
+
+不立即执行，而是将相同结构的 SQL 分组到同一个 PreparedStatement 中，调用 JDBC addBatch() 暂存参数，最终在 commit() 时统一 executeBatch()
 
 ```java
 public class BatchExecutor extends BaseExecutor {
@@ -443,6 +445,58 @@ public class BatchExecutor extends BaseExecutor {
   }
 }
 ```
+
+在 MyBatis 中，**Executor 的选择是由 MyBatis 框架自动处理的** 默认配置来自于 `mybatis-config.xml` 会使用 `SimpleExecutor`
+
+需要显式指定 Executor 类型，可以通过 `SqlSessionFactory.openSession()` 方法设置 ExecutorType.BATCH
+
+
+
+**现象**：使用 `BatchExecutor` 但性能无提升，甚至比单条更慢。
+**原因**：MySQL JDBC 驱动默认**不真正批量**，会将 `addBatch()` 拆解为 `N` 条独立 SQL 发送。
+**解决**：连接 URL 必须添加参数：
+
+jdbc:mysql://host:3306/db?rewriteBatchedStatements=true&useServerPrepStmts=false
+
+批次过大导致 OOM
+
+**现象**：一次性 `insert 100万` 条抛出 `OutOfMemoryError`。
+**原因**：`statementList` 和 JDBC 驱动内部队列会持有所有参数对象的引用。
+**解决**：分批提交（推荐 1000~5000 条/批）：
+
+```
+for (int i = 0; i < 100000; i++) {
+  mapper.insert(user);
+  if (i > 0 && i % 1000 == 0) {
+    session.commit(); // 触发 flushStatements，释放内存
+    session.clearCache(); // 清理一级缓存，防 OOM
+  }
+}
+session.commit();
+```
+
+主键回填失败
+
+**现象**：`useGeneratedKeys=true` 但批量插入后拿不到 ID。
+**原因**：JDBC `executeBatch()` 默认不支持主键回填。
+**解决**：
+
+- MySQL 驱动 5.1.37+/8.0+ 已支持批量主键回填（需开启 `rewriteBatchedStatements`）
+- 或使用 `MyBatis-Plus` 等框架的批量主键生成策略
+
+
+
+混合 SQL 导致批次频繁断裂
+
+```
+mapper.insertA(); // 批次 1
+mapper.updateB(); // SQL 不同 → 批次断裂，新建批次 2
+mapper.insertA(); // SQL 再次不同 → 批次 3
+```
+
+**优化**：按 SQL 类型分组调用，或确保相同操作连续执行，最大化复用 `PreparedStatement`。
+
+
 
 ## CachingExecutor
 
@@ -491,6 +545,55 @@ public class CachingExecutor implements Executor {
     }
 }
 ```
+
+
+
+## Lazy
+
+MyBatis 延迟加载的底层通过**动态代理**实现，MyBatis 默认使用 **Javassist** 生成代理类（MyBatis 3.3 之前），3.3 之后支持切换为 **CGLIB**
+
+
+
+延迟加载必须使用 `resultMap` + `select` 子查询的方式
+
+
+
+延迟加载虽然可以减少不必要的查询，但在某些场景下会导致 **N+1 查询问题**
+
+```java
+// 查询 100 个用户
+List<User> users = userMapper.selectAll();  // 1 条 SQL
+
+// 遍历访问每个用户的部门
+for (User user : users) {
+    System.out.println(user.getDept().getName());  // 每次循环触发 1 条 SQL！
+}
+// 总共执行了 1 + 100 = 101 条 SQL
+
+```
+
+**解决方案**：
+
+| 方案           | 说明                                                      |
+| -------------- | --------------------------------------------------------- |
+| 改用 JOIN 查询 | 如果关联数据大概率会用到，直接用 JOIN 一次查完            |
+| 批量加载       | MyBatis 3.5.9+ 支持 `lazyLoadTriggerMethods` 配置批量触发 |
+| 控制访问粒度   | 在业务代码中避免在循环中访问延迟加载属性                  |
+
+
+
+>[!TIP]
+>
+>延迟加载和 MyBatis 二级缓存能一起用吗？
+>
+>- 可以，但需要注意：延迟加载触发的子查询也会走缓存。如果主对象在二级缓存中，关联对象的延迟加载可能读到过期的缓存数据。复杂场景下建议关闭二级缓存
+
+
+
+Spring 整合 MyBatis 后，延迟加载会不会失效？
+
+- 可能会。如果 Controller 层直接访问延迟属性，但 `SqlSession` 已经关闭了，就会报错。解决方案：使用 `OpenSessionInViewFilter`（Spring MVC）或 `OpenSessionInViewInterceptor`（Spring Boot），让 `SqlSession` 在整个请求期间保持打开
+
 
 
 ## Links

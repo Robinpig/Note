@@ -1,6 +1,6 @@
 ## Introduction
 
-Zab is very similar to [Paxos](/docs/CS/Distributed/Paxos.md), with one crucial difference – the agreement is reached on full history prefixes rather than on individual operations.
+Zab is very similar to [Paxos](/docs/CS/Distributed/Consensus/Paxos.md), with one crucial difference – the agreement is reached on full history prefixes rather than on individual operations.
 This difference allows Zab to preserve primary order, which may be violated by Paxos.
 
 > Given our use of the primary order property, we say that Zab is a `PO atomic broadcast` protocol.
@@ -67,12 +67,7 @@ server.3=127.0.0.1:2003:3003
 server.4=127.0.0.1:2004:3004:observer
 ```
 
-
-
-leader选举存在与两个阶段中，一个是服务器启动时的leader选举。 一个是运行过程中leader节点宕机导致的leader选举
-
-
-The request for the current leader will consist solely of an xid: int xid
+leader选举存在与两个阶段中，一个是服务器启动时的leader选举，一个是运行过程中leader节点宕机导致的leader选举
 
 启动时候从磁盘加载数据到内存，然后开启服务端的网络处理服务，然后开启一个管理端，接下来就进入比较重要的选举功能
 
@@ -2311,8 +2306,8 @@ boolean syncFollower(long peerLastZxid, LearnerMaster learnerMaster) {
 
 ### failover election
 
-当 ZooKeeper 集群中的 Leader 服务器发生崩溃时，集群会暂停处理事务性的会话请求，直到 ZooKeeper 集群中选举出新的 Leader 服务器。
 
+当 ZooKeeper 集群中的 Leader 服务器发生崩溃时，集群会暂停处理事务性的会话请求，直到 ZooKeeper 集群中选举出新的 Leader 服务器
 在 ZooKeeper 集群服务运行的过程中，集群中每台服务器的角色已经确定了，当 Leader 服务器崩溃后 ，ZooKeeper 集群中的其他服务器会首先将自身的状态信息变为 LOOKING 状态，该状态表示服务器已经做好选举新 Leader 服务器的准备了，这之后整个 ZooKeeper 集群开始进入选举新的 Leader 服务器过程。
 
 
@@ -2364,7 +2359,7 @@ public void run() {
     }
 }
 ```
-## Broadcast
+## Atomic Broadcast
 
 
 
@@ -2568,7 +2563,8 @@ public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider 
 }
 ```
 
-Responsible for performing local session upgrade. Only request submitted directly to the leader should go through this processor.
+Responsible for performing local session upgrade. 
+Only request submitted directly to the leader should go through this processor.
 
 ```java
 public class LeaderRequestProcessor implements RequestProcessor {
@@ -2673,7 +2669,7 @@ public class FinalRequestProcessor implements RequestProcessor {
 ```
 
 ### RecvWorker
- 
+
 ```java
 class RecvWorker extends ZooKeeperThread {
 
@@ -2730,10 +2726,22 @@ If the Queue is full, this methods removes an element from the head of the Queue
     }
 ```
 
+## ZAB 和 Raft
+
+ZAB 是专为 Zookeeper 定制的非通用协议，
+
+|        | ZAB                                            | Raft           |
+| ------ | ---------------------------------------------- | -------------- |
+| 一致性 | 写强一致性，读线性一致性（支持同步读强一致性） | 写、读强一致性 |
+|        |                                                |                |
+|        |                                                |                |
+
+
+
 ## Links
 
 - [ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)
-- [Consensus](/docs/CS/Distributed/Consensus.md)
+- [Consensus](/docs/CS/Distributed/Consensus/Consensus.md)
 
 ## References
 

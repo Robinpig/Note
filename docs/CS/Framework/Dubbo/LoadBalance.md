@@ -1,21 +1,11 @@
 ## Introduction
 
-
-
-
+在 Dubbo 的集群调用流程中，LoadBalance 的执行时机是在 Directory 获取全部 Invoker 和 Router 路由过滤之后，作为最后一环完成服务实例的最终选择
 
 ```java
 @SPI(RandomLoadBalance.NAME)
 public interface LoadBalance {
 
-    /**
-     * select one invoker in list.
-     *
-     * @param invokers   invokers.
-     * @param url        refer url
-     * @param invocation invocation.
-     * @return selected invoker.
-     */
     @Adaptive("loadbalance")
     <T> Invoker<T> select(List<Invoker<T>> invokers, URL url, Invocation invocation) throws RpcException;
 
@@ -28,22 +18,16 @@ public interface LoadBalance {
 
 
 
+
+所有负载均衡策略都继承自 AbstractLoadBalance，它实现了模板方法 select，并提供了通用的权重计算逻辑
+
 ### AbstractLoadBalance
 
+
+getWeight 方法则实现了 Dubbo 的预热机制：新启动的服务提供者权重会随时间线性增长，直到达到配置的权重值，这样可以防止服务刚启动时被分配过多流量
+
 ```java
-/**
- * AbstractLoadBalance
- */
 public abstract class AbstractLoadBalance implements LoadBalance {
-    /**
-     * Calculate the weight according to the uptime proportion of warmup time
-     * the new weight will be within 1(inclusive) to weight(inclusive)
-     *
-     * @param uptime the uptime in milliseconds
-     * @param warmup the warmup time in milliseconds
-     * @param weight the weight of an invoker
-     * @return weight which takes warmup into account
-     */
     static int calculateWarmupWeight(int uptime, int warmup, int weight) {
         int ww = (int) ( uptime / ((float) warmup / weight));
         return ww < 1 ? 1 : (Math.min(ww, weight));
@@ -62,15 +46,6 @@ public abstract class AbstractLoadBalance implements LoadBalance {
 
     protected abstract <T> Invoker<T> doSelect(List<Invoker<T>> invokers, URL url, Invocation invocation);
 
-
-    /**
-     * Get the weight of the invoker's invocation which takes warmup time into account
-     * if the uptime is within the warmup time, the weight will be reduce proportionally
-     *
-     * @param invoker    the invoker
-     * @param invocation the invocation of this invoker
-     * @return weight
-     */
     int getWeight(Invoker<?> invoker, Invocation invocation) {
         int weight;
         URL url = invoker.getUrl();
@@ -102,27 +77,16 @@ public abstract class AbstractLoadBalance implements LoadBalance {
 
 ### RandomLoadBalance
 
+
+计算总权重，生成一个 [0, totalWeight) 的随机数，然后依次减去每个 Invoker 的权重，当结果小于 0 时，该 Invoker 即被选中
+权重越大，被选中的概率越高
+
+调用量越大分布越均匀，且动态调整权重很方便，这也是它成为默认策略的原因
 ```java
-/**
- * This class select one provider from multiple providers randomly.
- * You can define weights for each provider:
- * If the weights are all the same then it will use random.nextInt(number of invokers).
- * If the weights are different then it will use random.nextInt(w1 + w2 + ... + wn)
- * Note that if the performance of the machine is better than others, you can set a larger weight.
- * If the performance is not so good, you can set a smaller weight.
- */
 public class RandomLoadBalance extends AbstractLoadBalance {
 
     public static final String NAME = "random";
 
-    /**
-     * Select one invoker between a list using a random criteria
-     * @param invokers List of possible invokers
-     * @param url URL
-     * @param invocation Invocation
-     * @param <T>
-     * @return The selected invoker
-     */
     @Override
     protected <T> Invoker<T> doSelect(List<Invoker<T>> invokers, URL url, Invocation invocation) {
         // Number of invokers
@@ -164,7 +128,13 @@ public class RandomLoadBalance extends AbstractLoadBalance {
 
 ### RoundRobinLoadBalance
 
-Weight round
+为每个方法调用维护一个计数器，每次请求将计数器加1，然后根据权重调整选择逻辑
+
+适合集群中各个节点性能相近的情况，能保证请求平滑均匀地分发
+
+> [!NOTE]
+>
+> Dubbo 2.6.5 版本后优化了实现，解决了原版本中“慢的提供者累积请求”的问题
 
 ```java
 public class RoundRobinLoadBalance extends AbstractLoadBalance {
@@ -273,6 +243,11 @@ public class RoundRobinLoadBalance extends AbstractLoadBalance {
 
 
 ### LeastActiveLoadBalance
+
+选择活跃数最少的 Invoker。活跃数指正在处理的请求数量，活跃数越小，说明该服务处理能力越强或当前负载越低
+
+能自动“避让”处理慢或负载高的节点，使慢的提供者收到更少请求，非常适合处理请求耗时差异较大的场景
+
 
 Filter the number of invokers with the least number of active calls and count the weights and quantities of these invokers.
  * If there is only one invoker, use the invoker directly;
@@ -445,7 +420,9 @@ public class ShortestResponseLoadBalance extends AbstractLoadBalance {
 
 ### ConsistentHashLoadBalance
 
-virtualInvokers
+将服务提供者节点（及其虚拟节点）映射到一个圆环上（哈希环），根据请求参数的哈希值在圆环上顺时针寻找最近的节点。Dubbo 默认使用 160 份虚拟节点来解决哈希偏斜问题
+
+特别适合有状态的服务，如缓存。当某台提供者宕机时，其上的请求会平摊到其他节点，避免了剧烈变动
 
 ```java
 /**

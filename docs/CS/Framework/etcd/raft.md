@@ -5,7 +5,7 @@
 
 raftexample 的目录位于 `etcd/contrib/raftexample/` ，这个目录是一个完整的 package，实现了一个极简的 kv 存储，就是为了专门理解 raft 的
 
-> 回顾[Raft](/docs/CS/Distributed/Raft.md)协议
+> 回顾[Raft](/docs/CS/Distributed/Consensus/Raft.md)协议
 
 
 

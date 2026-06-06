@@ -772,7 +772,7 @@ The properties described by client-centric consistency models are desirable and,
 
 ## Consensus
 
-[Consensus](/docs/CS/Distributed/Consensus.md) is a fundamental problem in fault-tolerant distributed systems.
+[Consensus](/docs/CS/Distributed/Consensus/Consensus.md) is a fundamental problem in fault-tolerant distributed systems.
 Consensus involves multiple servers agreeing on values. Once they reach a decision on a value, that decision is final.
 Typical consensus algorithms make progress when any majority of their servers is available; for example, a cluster of 5 servers can continue to operate even if 2 servers fail.
 If more servers fail, they stop making progress (but will never return an incorrect result).
@@ -962,7 +962,7 @@ One of the systems that uses this approach is [Spanner](/docs/CS/Distributed/Spa
 
 Because every leader process will eventually fail, failure has to be detected, reported, and reacted upon: a system has to elect another leader to replace the failed one.
 
-Some algorithms, such as [ZAB](/docs/CS/Framework/ZooKeeper/Zab.md), [Multi-Paxos](/docs/CS/Distributed/Paxos.md), or [Raft](/docs/CS/Distributed/Raft.md), use temporary leaders to reduce the number of messages required to reach an agreement between the participants.
+Some algorithms, such as [ZAB](/docs/CS/Framework/ZooKeeper/Zab.md), [Multi-Paxos](/docs/CS/Distributed/Consensus/Paxos.md), or [Raft](/docs/CS/Distributed/Consensus/Raft.md), use temporary leaders to reduce the number of messages required to reach an agreement between the participants.
 However, these algorithms use their own algorithm-specific means for leader election, failure detection, and resolving conflicts between the competing leader processes.
 
 ### Bully Algorithm

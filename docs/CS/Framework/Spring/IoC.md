@@ -217,6 +217,9 @@ The Spring framework provides several implementations of the ApplicationContext 
 <p style="text-align: center;">
 Fig.2. ApplicationContext Hierarchy.
 </p>
+`spring-context` 会自动将 `spring-core`,  `spring-beans`,  `spring-aop`,  `spring-expression` 这几个基础jar包带进来
+
+
 
 ### FactoryBean
 
@@ -421,8 +424,9 @@ registerBeanDefinition
 	}
 ```
 
-
 ## refresh
+
+ApplicationContext 建立之后，可以通过调用refresh方法重建，销毁原先的 ApplicationContext 并重新执行一次初始化操作
 
 ```java
 public class AbstractApplicationContext {

@@ -2,6 +2,46 @@
 
 We would like to talk about how Spring Boot startup.
 
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    1. SpringApplication初始化                │
+│  - 推断Web应用类型（Servlet/Reactive/None）                  │
+│  - 加载ApplicationContextInitializer                        │
+│  - 加载ApplicationListener                                  │
+│  - 推断主类（Main Class）                                    │
+└─────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────┐
+│                    2. 启动准备阶段                          │
+│  - 创建StopWatch（启动计时器）                              │
+│  - 配置Headless属性                                         │
+│  - 启动监听器（SpringApplicationRunListeners）               │
+│  - 准备环境（Environment）                                   │
+│  - 创建ApplicationContext                                   │
+│  - 准备上下文（prepareContext）                              │
+└─────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────┐
+│                    3. 刷新上下文阶段                        │
+│  - refreshContext() → AbstractApplicationContext.refresh()  │
+│  - BeanFactoryPostProcessor执行                             │
+│  - BeanPostProcessor注册                                    │
+│  - 自动配置核心：@EnableAutoConfiguration                    │
+│  - 内嵌Web容器启动（ServletWebServerApplicationContext）    │
+│  - 国际化、事件监听器初始化                                  │
+│  - 所有单例Bean初始化                                        │
+└─────────────────────────────────────────────────────────────┘
+                              ↓
+┌─────────────────────────────────────────────────────────────┐
+│                    4. 启动完成阶段                          │
+│  - afterRefresh()回调                                       │
+│  - 发布ApplicationReadyEvent事件                            │
+│  - 执行ApplicationRunner/CommandLineRunner                  │
+│  - 返回ApplicationContext                                    │
+└─────────────────────────────────────────────────────────────┘
+```
+
 ## Entrance
 
 ```java
@@ -31,6 +71,10 @@ Create a new SpringApplication instance. The application context will load beans
 2. load ApplicationContextInitializer
 3. load ApplicationListener
 4. deduceMainApplicationClass
+
+
+getSpringFactoriesInstances方法是SpringBoot的核心SPI机制，它从META-INF/spring.factories文件中加载指定类型的实现类
+这种机制使得SpringBoot具有极高的可扩展性，开发者也可以通过自定义spring.factories来注入自己的扩展点
 
 ```java
 public SpringApplication(ResourceLoader resourceLoader, Class<?>... primarySources) {

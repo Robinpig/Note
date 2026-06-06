@@ -1,21 +1,22 @@
 ## Introduction
 
-[Raft](https://raft.github.io/) is a consensus algorithm that is designed to be easy to understand.
-It's equivalent to [Paxos](/docs/CS/Distributed/Paxos.md) in fault-tolerance and performance.
-The difference is that it's decomposed into relatively independent subproblems, and it cleanly addresses all major pieces needed for practical systems.
+[Raft](https://raft.github.io/) 是一种共识算法，旨在易于理解。它在容错性和性能上相当于 [Paxos](/docs/CS/Distributed/Consensus/Paxos.mds/Paxos.md)。区别在于它被分解为相对独立的子问题，并且清晰地处理了构建实际系统所需的所有主要部分。
 
-In contrast to Paxos, which is leaderless, Raft is a leader-based log replication protocol.
-In simplified terms, a Raft implementation elects a leader once, and then the leader is responsible for making all the decisions about the state of the database.
-This helps avoid extra communication between replicas during individual reads and writes. Each node tracks the current leader and forwards requests to that leader.
-Raft is built around the concept of a replicated log. When the leader receives a request, it first stores an entry for it in its durable local log.
-This local log is then replicated to all of the followers, or replicas.
-Once the majority of replicas confirm they have persisted with the log, the leader applies the entry and instructs the replicas to do the same.
-In the event of leader failure, a replica with the most up-to-date log becomes the leader.
+## Basics
 
-Raft defines not only how the group makes a decision, but also the protocol for adding new members and removing members from the group.
-This feature makes Raft a natural fit for managing topology changes in distributed systems.
+与无领导的Paxos不同，Raft是一种基于领导者的日志复制协议。简单来说，Raft 实现会选举出一个领导者，然后该领导者负责对数据库状态的所有决策。这有助于在单个读写操作期间避免副本之间的额外通信。每个节点跟踪当前的领导者，并将请求转发给该领导者。
 
-Raft decomposes the consensus problem into three relatively independent sub-problems:
+Raft 是围绕复制日志的概念构建的。当领导者收到请求时，它首先在其持久化的本地日志中为该请求存储一个条目。 然后，这个本地日志会被复制到所有的追随者或副本。 
+一旦大多数副本确认它们已经在日志中持久化，领导者就会应用该条目，并指示副本执行相同操作。 
+
+有一个领导者可以简化复制日志的管理。
+例如，领导者可以决定新条目在日志中的位置而无需咨询其他服务器，并且数据从领导者到其他服务器的流动是简单的。
+领导者可能会失败或与其他服务器失去连接，在这种情况下会选举新的领导者，拥有最新日志的副本将成为新的领导者。
+
+Raft 不仅定义了组如何做出决策，还定义了添加新成员和从组中移除成员的协议。 
+这一特性使 Raft 自然适用于管理分布式系统中的拓扑变化。
+
+Raft 将共识问题分解为三个相对独立的子问题:
 
 - Leader election
 - Log replication
@@ -26,27 +27,16 @@ Raft decomposes the consensus problem into three relatively independent sub-prob
 - [RaftScope](https://github.com/ongardie/raftscope)
 - [The Secret Lives of Data](http://thesecretlivesofdata.com/raft/)
 
-## Basics
-
-Raft implements consensus by first electing a distinguished leader, then giving the leader complete responsibility for managing the replicated log.
-The leader accepts log entries from clients, replicates them on other servers, and tells servers when it is safe to apply log entries to their state machines.
-Having a leader simplifies the management of the replicated log.
-For example, the leader can decide where to place new entries in the log without consulting other servers, and data flows in a simple fashion from the leader to other servers.
-A leader can fail or become disconnected from the other servers, in which case a new leader is elected.
-
 ### States
 
-A Raft cluster contains several servers; five is a typical number, which allows the system to tolerate two failures.
-At any given time each server is in one of three states: leader, follower, or candidate.
-In normal operation there is exactly one leader and all of the other servers are followers.
-Followers are passive: they issue no requests on their own but simply respond to requests from leaders and candidates.
-The leader handles all client requests (if a client contacts a follower, the follower redirects it to the leader).
-The third state, candidate, is used to elect a new leader.
-Figure 1 shows the states and their transitions; the transitions are discussed below.
+一个 Raft 集群包含多个服务器；通常是五个，这使系统能够容忍两次故障。 在任何给定时间，每个服务器处于三种状态之一：领导者、跟随者或候选者。 在正常操作中，恰好有一个领导者，其余所有服务器都是跟随者。 跟随者是被动的：它们不会自行发出请求，只是响应来自领导者和候选者的请求。
+领导者处理所有client的请求（如果client 连接上了跟随者，跟随者会将其重定向到领导者）。第三种状态候选者则用于选举新的领导者。
+
+图1显示了各状态及其转换
 
 <div style="text-align: center;">
 
-![Fig.1. Server states](./img/Raft-Server-States.png)
+![Fig.1. Server states](img/Raft-Server-States.png)
 
 </div>
 
@@ -115,7 +105,7 @@ The receiving node checks it, with two possible outcomes: if the receiver’s te
 
 <div style="text-align: center;">
 
-![Fig.2. Terms](./img/Raft-Terms.png)
+![Fig.2. Terms](img/Raft-Terms.png)
 
 </div>
 
@@ -272,7 +262,7 @@ Each log entry also has an integer index identifying its position in the log.
 
 <div style="text-align: center;">
 
-![Fig.3. Logs](./img/Raft-Logs.png)
+![Fig.3. Logs](img/Raft-Logs.png)
 
 </div>
 
@@ -288,7 +278,7 @@ The leader decides when it is safe to apply a log entry to the state machines; s
 Raft guarantees that committed entries are durable and will eventually be executed by all of the available state machines.
 A log entry is committed once the leader that created the entry has replicated it on a majority of the servers (e.g., entry 7 in Figure 3).
 This also commits all preceding entries in the leader’s log, including entries created by previous leaders.
-[Membership change](/docs/CS/Distributed/Raft.md?id=Membership-changes) discusses some subtleties when applying this rule after leader changes, and it also shows that this definition of commitment is safe.
+[Membership change](/docs/CS/Distributed/Consensus/Raft.md?id=Membership-changes) discusses some subtleties when applying this rule after leader changes, and it also shows that this definition of commitment is safe.
 The leader keeps track of the highest index it knows to be committed, and it includes that index in future AppendEntries RPCs (including heartbeats) so that the other servers eventually find out.
 Once a follower learns that a log entry is committed, it applies the entry to its local state machine (in log order).
 
@@ -315,7 +305,7 @@ Missing and extraneous entries in a log may span multiple terms.
 
 <div style="text-align: center;">
 
-![Fig.4. Inconsistency Logs](./img/Raft-Logs-Inconsistency.png)
+![Fig.4. Inconsistency Logs](img/Raft-Logs-Inconsistency.png)
 
 </div>
 
@@ -390,7 +380,7 @@ Figure 5 illustrates a situation where an old log entry is stored on a majority 
 
 <div style="text-align: center;">
 
-![Fig.5. Old Terms](./img/Raft-Stale-Logs.png)
+![Fig.5. Old Terms](img/Raft-Stale-Logs.png)
 
 </div>
 
@@ -441,7 +431,7 @@ Consider the smallest term U
 
 <div style="text-align: center;">
 
-![Fig.6. Safety Argument](./img/Raft-Safety-Argument.png)
+![Fig.6. Safety Argument](img/Raft-Safety-Argument.png)
 
 </div>
 
@@ -684,8 +674,8 @@ In the Pre-Vote algorithm, a candidate only increments its term if it first lear
 
 ## Links
 
-- [Consensus](/docs/CS/Distributed/Consensus.md)
-- [Paxos](/docs/CS/Distributed/Paxos.md)
+- [Consensus](/docs/CS/Distributed/Consensus/Consensus.md)
+- [Paxos](/docs/CS/Distributed/Consensus/Paxos.mds/Paxos.md)
 
 ## References
 

@@ -65,7 +65,7 @@ public class PullMessageService extends ServiceThread {
 
 
 
-
+DefaultMQPushConsumerImpl
 
 
 
@@ -338,6 +338,10 @@ PUSH 模式是对 PULL 模式的封装，类似于一个高级 API
 ### start
 DefaultMQPushConsumerImpl#start
 
+1. **注册 Consumer**：将 Consumer 注册到 `consumerTable`，指定消费组（Consumer Group）与消息模式（集群 / 广播）。
+2. **初始化 OffsetStore**：集群模式使用 `RemoteBrokerOffsetStore`（Offset 存储在 Broker），广播模式使用 `LocalFileOffsetStore`（Offset 存储在本地文件）。
+3. **启动核心服务**：启动 `PullMessageService`（拉取消息服务）、`RebalanceService`（负载均衡服务）与 `consumeMessageService`（消息消费服务）
+
 ```java
 public class DefaultMQPushConsumerImpl implements MQConsumerInner {
   public synchronized void start() throws MQClientException {
@@ -441,7 +445,11 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
 
 ### pullMessage
 
+推模式的消息拉取由 `PullMessageService` 负责，流程如下：
 
+1. **拉取请求提交**：`PullMessageService` 从 `messageRequestQueue` 取出拉取请求（`PullRequest`），向 Broker 发送拉取消息请求。
+2. **长轮询优化**：若 Broker 无消息，不立即返回空响应，而是缓存拉取请求；当有新消息时，再触发响应，减少空轮询，节省带宽。
+3. **消息消费**：拉取到消息后，提交到 `consumeMessageService`，由线程池异步消费。若为顺序消费（`MessageListenerOrderly`），则通过队列锁保证同一 MessageQueue 的消息串行处理；若为并发消费（`MessageListenerConcurrently`），则无锁
 
 ```java
 public class PullMessageService extends ServiceThread {
@@ -797,10 +805,56 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
 }
 ```
 
+顺序消费的核心是对 MessageQueue 加锁，确保同一队列的消息按顺序处理。在 `ConsumeMessageOrderlyService` 中，通过 `messageQueueLock` 获取队列锁（`synchronized (objLock)`），消费完一条消息后释放锁，再处理下一条，避免并发导致的顺序混乱
+
+```java
+public class MessageQueueLock {
+    private ConcurrentMap<MessageQueue, ConcurrentMap<Integer, Object>> mqLockTable =
+        new ConcurrentHashMap<>(32);
+
+    public Object fetchLockObject(final MessageQueue mq) {
+        return fetchLockObject(mq, -1);
+    }
+
+    public Object fetchLockObject(final MessageQueue mq, final int shardingKeyIndex) {
+        ConcurrentMap<Integer, Object> objMap = this.mqLockTable.get(mq);
+        if (null == objMap) {
+            objMap = new ConcurrentHashMap<>(32);
+            ConcurrentMap<Integer, Object> prevObjMap = this.mqLockTable.putIfAbsent(mq, objMap);
+            if (prevObjMap != null) {
+                objMap = prevObjMap;
+            }
+        }
+
+        Object lock = objMap.get(shardingKeyIndex);
+        if (null == lock) {
+            lock = new Object();
+            Object prevLock = objMap.putIfAbsent(shardingKeyIndex, lock);
+            if (prevLock != null) {
+                lock = prevLock;
+            }
+        }
+
+        return lock;
+    }
+}
+```
+
+
+
+
 
 ## Rebalance
 
 在 RocketMQ 客户端中会每隔 20s 去查询当前 Topic 的所有队列、消费者的个数，运用队列负载算法进行重新分配，然后与上一次的分配结果进行对比，如果发生了变化，则进行队列重新分配；如果没有发生变化，则忽略
+
+Consumer 负载均衡由 `RebalanceService` 负责，核心是通过 `AllocateMessageQueueStrategy`（分配策略）将 MessageQueue 分配给 Consumer Group 中的实例，确保一个 MessageQueue 仅被一个 Consumer 消费（集群模式）
+
+RocketMQ 提供 6 种分配策略，常用的有：
+
+- **AllocateMessageQueueAveragely**：平均分配，将 MessageQueue 平均分给每个 Consumer。
+- **AllocateMessageQueueAveragelyByCircle**：轮询分配，依次将 MessageQueue 分配给 Consumer。
+- **AllocateMessageQueueConsistentHash**：一致性哈希分配，适合 Consumer 动态扩容场景
 
 
 
