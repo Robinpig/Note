@@ -2,8 +2,8 @@
 
 PropertySource
 
-Strategy for locating (possibly remote) property sources for the Environment.
-Implementations should not fail unless they intend to prevent the application from starting.
+用于定位 Environment 的（可能远程的）属性源的策略。
+除非实现意图阻止应用程序启动，否则不应失败。
 
 ```java
 public interface PropertySourceLocator {
@@ -13,18 +13,17 @@ public interface PropertySourceLocator {
 
 ## Spring Cloud Config Server
 
-Spring Cloud Config Server provides an HTTP resource-based API for external configuration (name-value pairs or equivalent YAML content).
-The server is embeddable in a Spring Boot application, by using the @EnableConfigServer annotation.
+Spring Cloud Config Server 为外部配置（键值对或等效的 YAML 内容）提供基于 HTTP 资源的 API。
+该服务器可以通过 @EnableConfigServer 注解嵌入到 Spring Boot 应用程序中。
 
 ## Spring Cloud Config Client
 
 ## Zookeeper
 
-data, such as configuration data. Spring Cloud Zookeeper Config is an alternative to the Config Server and Client .
-Configuration is loaded into the Spring Environment during the special "bootstrap" phase.
-Configuration is stored in the /config namespace by default.
-Multiple PropertySource instances are created based on the application's name and the active profiles that mimicks the
-Spring Cloud Config order of resolving properties.
+数据，例如配置数据。Spring Cloud Zookeeper Config 是 Config Server 和 Client 的替代方案。
+配置在特殊的 "bootstrap" 阶段加载到 Spring Environment 中。
+配置默认存储在 /config 命名空间下。
+根据应用程序名称和活动 profile 创建多个 PropertySource 实例，模拟 Spring Cloud Config 的属性解析顺序。
 
 ```java
 public class ZookeeperPropertySourceLocator implements PropertySourceLocator {
@@ -159,8 +158,8 @@ public class ConsulConfigAutoConfiguration {
 }
 ```
 
-A standard implementation of Spring's TaskScheduler interface, wrapping a native ScheduledThreadPoolExecutor and providing all applicable configuration options for it.
-The default number of scheduler threads is 1;
+Spring 的 TaskScheduler 接口的标准实现，包装了本地的 ScheduledThreadPoolExecutor，并为其提供所有适用的配置选项。
+默认的调度线程数为 1；
 ```java
 public class ConfigWatch implements ApplicationEventPublisherAware, SmartLifecycle {
     @Override
@@ -294,7 +293,7 @@ public class NacosConfigAutoConfiguration {
     }
 }
 ```
-On application start up, NacosContextRefresher add nacos listeners to all application level dataIds, when there is a change in the data, listeners will refresh configurations.
+在应用程序启动时，NacosContextRefresher 为所有应用程序级别的 dataId 添加 nacos 监听器，当数据发生变化时，监听器将刷新配置。
 ```java
 public class NacosContextRefresher
 		implements ApplicationListener<ApplicationReadyEvent>, ApplicationContextAware {

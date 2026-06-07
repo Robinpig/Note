@@ -11,25 +11,25 @@
 - [Annotation](/docs/CS/Java/JDK/Basic/Annotation.md)
 - [Lambda](/docs/CS/Java/JDK/Basic/Lambda.md)
 
-Like the Java programming language, the Java Virtual Machine operates on two kinds of types: [primitive types](/docs/CS/Java/JDK/Basic/PrimitiveType.md) and reference types.
+与 Java 编程语言一样，Java 虚拟机操作两种类型： [primitive types](/docs/CS/Java/JDK/Basic/PrimitiveType.md) 和 reference types。
 
 
 
 ### Reference Types and Values
 
-There are four kinds of *reference types*: class types, interface types, type variables, and array types.
+有四种 *reference types*： class types、interface types、type variables 和 array types。
 
 
-An array type consists of a `component type` with a single dimension.
+数组类型由单一维度的 `component type` 组成。
 
-The element type of an array type is necessarily either a primitive type, or a class type, or an interface type.
+数组类型的元素类型必须是 primitive type、class type 或 interface type。
 
-A reference value may also be the special null reference, a reference to no object, 
-which will be denoted here by null. 
-The null reference initially has no run-time type, but may be cast to any type. 
-The default value of a reference type is null.
+引用值也可以是一个特殊的 null 引用（即不引用任何对象的引用），
+在此用 null 表示。
+null 引用初始没有运行时类型，但可以转换为任何类型。
+引用类型的默认值是 null。
 
-**This specification does not mandate a concrete value encoding null.**
+**本规范不强制要求具体的 null 值编码。**
 
 ```
 ReferenceType:
@@ -65,7 +65,7 @@ Dims:
 
 ## Prims
 
-define open interface
+定义开放接口
 
 - JNI
 - JVM
@@ -75,7 +75,7 @@ define open interface
 
 ## Module
 
-- Services - for JMX
+- Services - 用于 JMX
   - Management
   - MemoryService
   - MemoryPool
@@ -103,14 +103,14 @@ define open interface
 - C1/Opto/Shark
 
 ## launcher
-use java/javaw
+使用 java/javaw
 
-start:
-1. get args
-2. pre env
-3. load libjvm
-4. parse args path
-5. new thread create VM and invoke main method
+启动流程：
+1. 获取参数
+2. 预初始化环境
+3. 加载 libjvm
+4. 解析参数路径
+5. 新建线程创建 VM 并调用 main 方法
 
 
 

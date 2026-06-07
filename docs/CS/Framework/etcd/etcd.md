@@ -1,13 +1,13 @@
 ## Introduction
 
-etcd is a distributed reliable key-value store for the most critical data of a distributed system, with a focus on being:
+etcd 是一个分布式可靠的键值存储，用于保存分布式系统中最关键的数据，其设计重点如下：
 
-* *Simple*: well-defined, user-facing API (gRPC)
-* *Secure*: automatic TLS with optional client cert authentication
-* *Fast*: benchmarked 10,000 writes/sec
-* *Reliable*: properly distributed using Raft
+* ***Simple***：定义良好的面向用户 API（gRPC）
+* ***Secure***：自动 TLS，支持可选的客户端证书认证
+* ***Fast***：基准测试达到 10,000 次写入/秒
+* ***Reliable***：通过 Raft 实现可靠的分布式
 
-etcd is written in Go and uses the [Raft](/docs/CS/Distributed/Consensus/Raft.md) consensus algorithm to manage a highly-available replicated log.
+etcd 使用 Go 语言编写，并采用 [Raft](/docs/CS/Distributed/Consensus/Raft.md) 共识算法来管理高可用的复制日志。
 etcd 通过 Raft 协议进行 leader 选举和数据备份，对外提供高可用的数据存储，能有效应对网络问题和机器故障带来的数据丢失问题。
 同时它还可以提供服务发现、分布式锁、分布式数据队列、分布式通知和协调、集群选举等功能
 
@@ -400,8 +400,8 @@ func startEtcd(cfg *embed.Config) (<-chan struct{}, <-chan error, error) {
 }
 ```
 
-StartEtcd launches the etcd server and HTTP handlers for client/server communication.
-The returned Etcd.Server is not guaranteed to have joined the cluster. Wait on the Etcd.Server.ReadyNotify() channel to know when it completes and is ready for use.
+StartEtcd 启动 etcd 服务器和用于客户端/服务器通信的 HTTP 处理器。
+返回的 Etcd.Server 不保证已加入集群。请等待 Etcd.Server.ReadyNotify() 通道以了解何时完成并准备就绪。
 
 ```go
 func StartEtcd(inCfg *Config) (e *Etcd, err error) {

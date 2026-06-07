@@ -1,20 +1,13 @@
-## Introduction
+## 简介
 
-[RocksDB](http://rocksdb.org/) is developed and maintained by Facebook Database Engineering Team. 
-It is built on earlier work on [LevelDB](/docs/CS/DB/LevelDB/LevelDB.md) by Sanjay Ghemawat and Jeff Dean
+[RocksDB](http://rocksdb.org/) 由 Facebook 数据库工程团队开发和维护。
+它基于 Sanjay Ghemawat 和 Jeff Dean 此前在 [LevelDB](/docs/CS/DB/LevelDB/LevelDB.md) 上的工作构建。
 
+## 链接
 
-
-
-
-
-
-## Links
-
-- [DataBases](/docs/CS/DB/DB.md)
+- [数据库](/docs/CS/DB/DB.md)
 - [LevelDB](/docs/CS/DB/RocksDB/RocksDB.md)
 
-
-## References
+## 参考
 
 1. []

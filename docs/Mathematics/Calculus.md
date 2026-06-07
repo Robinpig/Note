@@ -1,17 +1,17 @@
 ## Introduction
 
-The two main branches of calculus are differential calculus and integral calculus.
-At its base, differential calculus deals with rates of change and considers the slope of a function at a point,
-while integral calculus considers the area under and between the curves of a function.
+微积分的两个主要分支是微分学和积分学。
+从根本上说，微分学研究变化率，考虑函数在某一点的斜率，
+而积分学考虑函数曲线下方和曲线之间的面积。
 
-In practice, calculus involves the thorough study of limits,
-as an understanding of limits is necessary in order to tackle topics such as continuity, derivatives, integrals, series, and more.
+在实践中，微积分涉及对极限的彻底研究，
+因为理解极限是处理连续性、导数、积分、级数等主题的必要条件。
 
 ### Derivative
 
-Derivatives enable us to determine the slope of a curve at any specific point.
-The derivative of a function is the rate of change of the function's output relative to its input value.
-Given y = f(x), the derivative of f(x), denoted f'(x) (or df(x)/dx), is defined by the following limit:
+导数使我们能够确定曲线在任何特定点的斜率。
+函数的导数是函数输出相对于其输入值的变化率。
+给定 y = f(x)，f(x) 的导数记为 f'(x)（或 df(x)/dx），由以下极限定义：
 
 ```tex
 f'(x) = 

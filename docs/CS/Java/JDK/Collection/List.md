@@ -1,46 +1,46 @@
 ## Introduction
 
-An ordered collection (also known as a sequence). The user of this interface has precise control over where in the list each element is inserted.
-The user can access elements by their integer index (position in the list), and search for elements in the list.
+有序集合（也称为序列）。该接口的用户可以精确控制列表中每个元素的插入位置。
+用户可以通过整数索引（列表中的位置）访问元素，并在列表中搜索元素。
 
-Unlike sets, lists typically allow duplicate elements. More formally, lists typically allow pairs of elements e1 and e2 such that e1.equals(e2), and they typically allow multiple null elements if they allow null elements at all.
-It is not inconceivable that someone might wish to implement a list that prohibits duplicates, by throwing runtime exceptions when the user attempts to insert them, but we expect this usage to be rare.
+与 Set 不同，List 通常允许重复元素。更正式地说，List 通常允许满足 e1.equals(e2) 的元素对 e1 和 e2，并且如果允许 null 元素的话，通常允许多个 null 元素。
+不排除有人希望实现禁止重复元素的 List，在用户尝试插入重复元素时抛出运行时异常，但我们预计这种用法很少见。
 
-The List interface places additional stipulations, beyond those specified in the Collection interface, on the contracts of the iterator, add, remove, equals, and hashCode methods.
-Declarations for other inherited methods are also included here for convenience.
+List 接口在 Collection 接口规定的基础上，对 iterator、add、remove、equals 和 hashCode 方法的约定增加了额外要求。
+其他继承方法的声明也包含在此处以方便查阅。
 
-The List interface provides four methods for positional (indexed) access to list elements. Lists (like Java arrays) are zero based.
-Note that these operations may execute in time proportional to the index value for some implementations (the LinkedList class, for example).
-Thus, iterating over the elements in a list is typically preferable to indexing through it if the caller does not know the implementation.
+List 接口提供了四种用于按位置（索引）访问列表元素的方法。List（如 Java 数组）是从零开始的。
+注意，对于某些实现（例如 LinkedList 类），这些操作的执行时间可能与索引值成比例。
+因此，如果调用者不知道具体实现，遍历列表中的元素通常比通过索引访问更优。
 
-The List interface provides a special iterator, called a ListIterator, that allows element insertion and replacement, and bidirectional access in addition to the normal operations that the Iterator interface provides.
-A method is provided to obtain a list iterator that starts at a specified position in the list.
+List 接口提供了一种特殊的迭代器，称为 ListIterator，它除了支持 Iterator 接口提供的正常操作外，还允许元素插入、替换和双向访问。
+提供了获得从列表指定位置开始的列表迭代器的方法。
 
-The List interface provides two methods to search for a specified object. From a performance standpoint, these methods should be used with caution.
-In many implementations they will perform costly linear searches.
+List 接口提供了两种搜索指定对象的方法。从性能角度来看，应谨慎使用这些方法。
+在许多实现中，它们将执行代价高昂的线性搜索。
 
-The List interface provides two methods to efficiently insert and remove multiple elements at an arbitrary point in the list.
+List 接口提供了两种在列表中任意位置高效插入和删除多个元素的方法。
 
-Note: While it is permissible for lists to contain themselves as elements, extreme caution is advised: the equals and hashCode methods are no longer well defined on such a list.
-Some list implementations have restrictions on the elements that they may contain. For example, some implementations prohibit null elements, and some have restrictions on the types of their elements.
-Attempting to add an ineligible element throws an unchecked exception, typically NullPointerException or ClassCastException.
-Attempting to query the presence of an ineligible element may throw an exception, or it may simply return false; some implementations will exhibit the former behavior and some will exhibit the latter.
-More generally, attempting an operation on an ineligible element whose completion would not result in the insertion of an ineligible element into the list may throw an exception or it may succeed, at the option of the implementation.
-Such exceptions are marked as "optional" in the specification for this interface.
+注意：虽然允许列表将自身作为元素包含，但强烈建议谨慎：此类列表上的 equals 和 hashCode 方法不再有良好定义。
+某些列表实现可能对其包含的元素有限制。例如，某些实现禁止 null 元素，某些实现对其元素类型有限制。
+尝试添加不符合条件的元素将抛出未检查异常，通常为 NullPointerException 或 ClassCastException。
+尝试查询不符合条件的元素是否存在可能会抛出异常，也可能直接返回 false；某些实现会表现出前一种行为，某些则会表现出后一种。
+更一般地，对不符合条件的元素执行操作（如果该操作完成不会导致将不符合条件的元素插入列表）可能会抛出异常，也可能成功，具体取决于实现。
+此类异常在此接口的规范中被标记为"可选"。
 
-Unmodifiable Lists
+## Unmodifiable Lists
 
-The List.of and List.copyOf static factory methods provide a convenient way to create unmodifiable lists. The List instances created by these methods have the following characteristics:
-_ They are unmodifiable. Elements cannot be added, removed, or replaced. Calling any mutator method on the List will always cause UnsupportedOperationException to be thrown.
-However, if the contained elements are themselves mutable, this may cause the List's contents to appear to change.
-_ They disallow null elements. Attempts to create them with null elements result in NullPointerException.
-_ They are serializable if all elements are serializable.
-_ The order of elements in the list is the same as the order of the provided arguments, or of the elements in the provided array.
-_ The lists and their subList views implement the RandomAccess interface.
-_ They are value-based. Callers should make no assumptions about the identity of the returned instances. Factories are free to create new instances or reuse existing ones.
-Therefore, identity-sensitive operations on these instances (reference equality (==), identity hash code, and synchronization) are unreliable and should be avoided.
+List.of 和 List.copyOf 静态工厂方法提供了创建不可变列表的便捷方式。通过这些方法创建的 List 实例具有以下特性：
+- 它们是不可变的。不能添加、删除或替换元素。对 List 调用任何修改方法都将始终抛出 UnsupportedOperationException。
+但是，如果包含的元素本身是可变的，则可能导致 List 的内容看起来发生了变化。
+- 它们不允许 null 元素。尝试使用 null 元素创建它们将导致 NullPointerException。
+- 如果所有元素都是可序列化的，则它们是可序列化的。
+- 列表中元素的顺序与提供的参数顺序或提供的数组中的元素顺序相同。
+- 这些列表及其 subList 视图实现了 RandomAccess 接口。
+- 它们是基于值的（value-based）。调用者不应假设返回实例的身份。工厂可以自由创建新实例或重用现有实例。
+因此，对这些实例进行身份敏感的操作（引用相等性（==）、身份哈希码和同步）是不可靠的，应避免使用。
 
-They are serialized as specified on the Serialized Form page
+它们按照序列化表单页面上指定的方式进行序列化。
 
 ### List Hierarchy
 
@@ -48,13 +48,15 @@ They are serialized as specified on the Serialized Form page
 
 ## AbstractList
 
-The number of times this list has been structurally modified. Structural modifications are those that change the size of the list, or otherwise perturb it in such a fashion that iterations in progress may yield incorrect results.
+此列表已被结构修改的次数。结构修改是指改变列表大小的修改，或者以其他方式扰动列表，使得正在进行的迭代可能产生错误结果。
 
-This field is used by the iterator and list iterator implementation returned by the iterator and listIterator methods.
-If the value of this field changes unexpectedly, the iterator (or list iterator) will throw a *ConcurrentModificationException* in response to the *next*, *remove*, *previous*, *set* or *add* operations.
-This provides **fail-fast** behavior, rather than non-deterministic behavior in the face of concurrent modification during iteration.
+此字段由 iterator 和 listIterator 方法返回的迭代器和列表迭代器实现使用。
+如果此字段的值意外更改，迭代器（或列表迭代器）将在响应 *next*、*remove*、*previous*、*set* 或 *add* 操作时抛出 *ConcurrentModificationException*。
+这提供了**快速失败**行为，而不是在迭代期间面对并发修改时的不确定性行为。
 
-Use of this field by subclasses is optional. If a subclass wishes to provide fail-fast iterators (and list iterators), then it merely has to increment this field in its add(int, E) and remove(int) methods (and any other methods that it overrides that result in structural modifications to the list). A single call to add(int, E) or remove(int) must add no more than one to this field, or the iterators (and list iterators) will throw bogus *ConcurrentModificationExceptions*. If an implementation does not wish to provide fail-fast iterators, this field may be ignored.
+子类对此字段的使用是可选的。如果子类希望提供快速失败迭代器（和列表迭代器），则只需在其 add(int, E) 和 remove(int) 方法（以及它重写的任何其他导致列表结构修改的方法）中增加此字段。
+单次调用 add(int, E) 或 remove(int) 必须使此字段的增加不超过 1，否则迭代器（和列表迭代器）将抛出虚假的 *ConcurrentModificationException*。
+如果实现不希望提供快速失败迭代器，则可以忽略此字段。
 
 ```
 protected transient int modCount = 0;
@@ -66,17 +68,15 @@ private void checkForComodification(final int expectedModCount) {
     }
 ```
 
-
 ### subList
 
-Returns a view of the portion of this list between the specified fromIndex, inclusive, and toIndex, exclusive. 
-(If fromIndex and toIndex are equal, the returned list is empty.) The returned list is backed by this list, so non-structural changes in the returned list are reflected in this list, and vice-versa. 
-The returned list supports all of the optional list operations supported by this list.
+返回此列表中指定的 fromIndex（包含）和 toIndex（不包含）之间的部分视图。
+（如果 fromIndex 和 toIndex 相等，则返回的列表为空。）返回的列表由 this 列表支持，因此返回列表中的非结构性更改会反映在 this 列表中，反之亦然。
+返回的列表支持此列表支持的所有可选列表操作。
 
-This method eliminates the need for explicit range operations (of the sort that commonly exist for arrays). 
-Any operation that expects a list can be used as a range operation by passing a subList view instead of a whole list. 
-For example, the following idiom removes a range of elements from a list:
-
+此方法消除了对显式范围操作的需要（通常对数组执行的操作）。
+任何期望列表的操作都可以通过传递 subList 视图而不是整个列表来作为范围操作使用。
+例如，以下习惯用法从列表中删除一个元素范围：
 
 > [!TIP]
 > 
@@ -88,8 +88,7 @@ For example, the following idiom removes a range of elements from a list:
 > 
 > Does anyone actually use LinkedList? I wrote it, and I never use it. -- Joshua Bloch
 
-
-**Deque** means that the LinkedList supports insertion/deletion from head and tail.
+**Deque** 表示 LinkedList 支持从头部和尾部插入/删除。
 
 ```java
 public class LinkedList<E> extends AbstractSequentialList<E> implements List<E>, Deque<E>, Cloneable, java.io.Serializable
@@ -106,7 +105,7 @@ public class LinkedList<E> extends AbstractSequentialList<E> implements List<E>,
 }
 ```
 
-Each Node has prev and next Node.
+每个 Node 都有 prev 和 next 指针。
 
 ```java
 private static class Node<E> {
@@ -124,7 +123,7 @@ private static class Node<E> {
 
 ### add
 
-Find the (non-null) Node at the specified element index if not the first/last.
+如果既不是第一个也不是最后一个，则查找指定元素索引处的（非空）Node。
 
 ```java
 public class LinkedList<E> {
@@ -207,7 +206,7 @@ public void add(int index, E element) {
 }
 ```
 
-JDK11 remove ensureCapacity and ensureCapacityInternal
+JDK11 移除了 ensureCapacity 和 ensureCapacityInternal
 
 ```java
 public void ensureCapacity(int minCapacity) {
@@ -311,39 +310,39 @@ private void grow(int minCapacity) {
 
 ***int newCapacity = oldCapacity + (oldCapacity >> 1)***
 
-**Arrays.copyOf use System.arraycopy**
+**Arrays.copyOf 使用 System.arraycopy**
 
-Copies an array from the specified source array, beginning at the specified position, to the specified position of the destination array.
-A subsequence of array components are copied from the source array referenced by src to the destination array referenced by dest.
-The number of components copied is equal to the length argument.
-The components at positions srcPos through srcPos+length-1 in the source array are copied into positions destPos through destPos+length-1, respectively, of the destination array.
-If the src and dest arguments refer to the same array object, then the copying is performed as if the components at positions srcPos through srcPos+length-1
-were first copied to a temporary array with length components and then the contents of the temporary array were copied into positions destPos through destPos+length-1 of the destination array.
-If dest is null, then a NullPointerException is thrown.
-If src is null, then a NullPointerException is thrown and the destination array is not modified.
-Otherwise, if any of the following is true, an ArrayStoreException is thrown and the destination is not modified:
+从指定源数组复制一个数组，从指定位置开始，到目标数组的指定位置结束。
+从 src 引用的源数组复制一系列数组组件到 dest 引用的目标数组。
+复制的组件数量等于 length 参数。
+源数组中位置 srcPos 到 srcPos+length-1 的组件分别被复制到目标数组的位置 destPos 到 destPos+length-1。
+如果 src 和 dest 参数引用同一个数组对象，则复制过程就如同先将位置 srcPos 到 srcPos+length-1 的组件复制到一个具有 length 组件的临时数组，
+然后再将临时数组的内容复制到目标数组的位置 destPos 到 destPos+length-1。
+如果 dest 为 null，则抛出 NullPointerException。
+如果 src 为 null，则抛出 NullPointerException 且目标数组不被修改。
+否则，如果以下任一条件为真，则抛出 ArrayStoreException 且目标不被修改：
 
-1. *The src argument refers to an object that is not an array.*
-2. *The dest argument refers to an object that is not an array.*
-3. *The src argument and dest argument refer to arrays whose component types are different primitive types.*
-4. *The src argument refers to an array with a primitive component type and the dest argument refers to an array with a reference component type.*
-5. *The src argument refers to an array with a reference component type and the dest argument refers to an array with a primitive component type.*
+1. *src 参数引用的对象不是数组。*
+2. *dest 参数引用的对象不是数组。*
+3. *src 参数和 dest 参数引用的是组件类型不同的原始类型数组。*
+4. *src 参数引用的是原始组件类型的数组，而 dest 参数引用的是引用组件类型的数组。*
+5. *src 参数引用的是引用组件类型的数组，而 dest 参数引用的是原始组件类型的数组。*
 
-Otherwise, if any of the following is true, an IndexOutOfBoundsException is thrown and the destination is not modified:
+否则，如果以下任一条件为真，则抛出 IndexOutOfBoundsException 且目标不被修改：
 
-1. *The srcPos argument is negative.*
-2. *The destPos argument is negative.*
-3. *The length argument is negative.*
-4. *srcPos+length is greater than src.length, the length of the source array.*
-5. *destPos+length is greater than dest.length, the length of the destination array.*
+1. *srcPos 参数为负数。*
+2. *destPos 参数为负数。*
+3. *length 参数为负数。*
+4. *srcPos+length 大于 src.length（源数组的长度）。*
+5. *destPos+length 大于 dest.length（目标数组的长度）。*
 
-Otherwise, if any actual component of the source array from position srcPos through srcPos+length-1 cannot be converted to the component type of the destination array by assignment conversion,
-an ArrayStoreException is thrown.
-In this case, let k be the smallest nonnegative integer less than length such that src[srcPos+k] cannot be converted to the component type of the destination array;
-when the exception is thrown, source array components from positions srcPos through srcPos+k-1 will already have been copied to destination array positions destPos
-through destPos+k-1 and no other positions of the destination array will have been modified.
+否则，如果源数组中位置 srcPos 到 srcPos+length-1 的任何实际组件无法通过赋值转换转换为目标数组的组件类型，
+则抛出 ArrayStoreException。
+在这种情况下，令 k 为小于 length 的最小非负整数，使得 src[srcPos+k] 无法转换为目标数组的组件类型；
+抛出异常时，源数组中位置 srcPos 到 srcPos+k-1 的组件已被复制到目标数组的位置 destPos 到 destPos+k-1，
+目标数组的其他位置不会被修改。
 
-**(Because of the restrictions already itemized, this paragraph effectively applies only to the situation where both arrays have component types that are reference types.)**
+**（由于已经列出的限制，此段实际上仅适用于两个数组的组件类型均为引用类型的情况。）**
 
 ```
 public static native void arraycopy(Object src,  int  srcPos,
@@ -351,15 +350,14 @@ public static native void arraycopy(Object src,  int  srcPos,
                                     int length);
 ```
 
-ArayList use Object[], LinkedList use linked-list
+ArrayList 使用 Object[]，LinkedList 使用链表。
 
-1. Arraylist 从头部添加删除元素消耗比linkedlist大
-2. 中间和末尾都较优于linkedlist 因为linkedlist去中间需要遍历N,创建元素消耗比array大,对象多
+1. ArrayList 从头部添加删除元素消耗比 LinkedList 大
+2. 中间和末尾都较优于 LinkedList，因为 LinkedList 去中间需要遍历 N，创建元素消耗比 array 大，对象多
 
-遍历时linkedlist使用迭代器能获得接近array的性能
+遍历时 LinkedList 使用迭代器能获得接近 array 的性能。
 
 ### remove
-
 
 | Method                                 | Result          |
 | -------------------------------------- | --------------- |
@@ -371,18 +369,19 @@ ArayList use Object[], LinkedList use linked-list
 
 ### ArrayList Extensions
 
-A customized implementation of java.util.ArrayList designed to operate in a multithreaded environment where the large majority of method calls are read-only, instead of structural changes. When operating in "fast" mode, read calls are non-synchronized and write calls perform the following steps:
+java.util.ArrayList 的自定义实现，专为大多数方法调用为只读而非结构修改的多线程环境而设计。
+在"快速"模式下运行时，读取调用是非同步的，写入调用执行以下步骤：
 
-- Clone the existing collection
-- Perform the modification on the clone
-- Replace the existing collection with the (modified) clone
+- 克隆现有集合
+- 对克隆执行修改
+- 用（修改后的）克隆替换现有集合
 
-NOTE: If you are creating and accessing an ArrayList only within a single thread, you should use java.util.ArrayList directly (with no synchronization), for maximum performance.
+注意：如果仅在单个线程内创建和访问 ArrayList，应直接使用 java.util.ArrayList（无需同步）以获得最大性能。
 
-NOTE: This class is not cross-platform. Using it may cause unexpected failures on some architectures.
-It suffers from the same problems as the double-checked locking idiom. In particular, the instruction that clones the internal collection and the instruction that sets the internal reference to the clone can be executed or perceived out-of-order.
-This means that any read operation might fail unexpectedly, as it may be reading the state of the internal collection before the internal collection is fully formed.
-For more information on the double-checked locking idiom, see the Double-Checked Locking Idiom Is Broken Declaration .
+注意：此类不是跨平台的。在某些架构上使用可能会导致意外失败。
+它存在与双重检查锁定习惯用法相同的问题。特别是，克隆内部集合的指令和设置内部引用指向克隆的指令可能乱序执行或感知。
+这意味着任何读取操作都可能意外失败，因为它可能在内部集合完全形成之前读取其状态。
+有关双重检查锁定习惯用法的更多信息，请参阅双重检查锁定习惯用法已失效声明。
 
 ```java
 package org.apache.commons.collections;
@@ -408,7 +407,7 @@ public class FastArrayList extends ArrayList {
 
 ## CopyOnWriteArrayList
 
-Use [ReentrantLock](/docs/CS/Java/JDK/Concurrency/ReentrantLock.md) in add/remove
+add/remove 中使用 [ReentrantLock](/docs/CS/Java/JDK/Concurrency/ReentrantLock.md)
 
 ```java
 /** The lock protecting all mutators */
@@ -422,7 +421,7 @@ private transient volatile Object[] array;
 
 ### get
 
-no Lock
+无锁
 
 ```java
 public E get(int index) {
@@ -458,7 +457,6 @@ public boolean add(E e) {
 Stack vs ArrayDeque
 
 ## Summary
-
 
 | Type              | ArrayList          | LinkedList             | CopyOnWriteArrayList | Vector             | Stack              |
 | ----------------- | ------------------ | ---------------------- | -------------------- | ------------------ | ------------------ |

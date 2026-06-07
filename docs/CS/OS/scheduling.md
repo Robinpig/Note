@@ -1,78 +1,71 @@
-## Introduction
+## 简介
 
-Workload Assumptions
+工作负载假设
 
-[Process](/docs/CS/OS/process.md)
+[进程](/docs/CS/OS/process.md)
 
-### Scheduling Metrics
+### 调度度量
 
-Beyond making workload assumptions, we also need one more thing to enable us to compare different scheduling policies: a scheduling metric.
+除了做出工作负载假设外，我们还需要一件事来使我们能够比较不同的调度策略：一个调度度量。
 
-The **turnaround time** of a job is defined as the time at which the job completes minus the time at which the job arrived in the system.
-More formally, the turnaround time $T_{turnaround}$ is:
+作业的**周转时间**定义为作业完成时间减去作业到达系统的时间。
+更正式地说，周转时间 $T_{turnaround}$ 为：
 ```tex
 T_{turnaround} = T_{completion} − T_{arrival}
 ```
 
-Because we have assumed that all jobs arrive at the same time, for now $T_{arrival}$ = 0 and hence $T_{turnaround}$ = $T_{completion}$.
-This fact will change as we relax the aforementioned assumptions.
+由于我们假设所有作业同时到达，目前 $T_{arrival}$ = 0，因此 $T_{turnaround}$ = $T_{completion}$。
+当我们放宽上述假设时，这一事实将发生变化。
 
-Another metric of interest is fairness.
+另一个值得关注的度量是公平性。
 
-Performance and fairness are often at odds in scheduling; a scheduler, for example, may optimize performance but at the cost of preventing a few jobs from running, thus decreasing fairness.
+性能和公平性在调度中常常是矛盾的；例如，调度器可能优化性能，但代价是阻止一些作业运行，从而降低公平性。
 
+当计算机进行多道程序设计时，它经常有多个进程或线程同时竞争 CPU。
+每当其中两个或多个同时处于就绪状态时，就会发生这种情况。
+如果只有一个 CPU 可用，则必须选择接下来运行哪个进程。
+操作系统中做出选择的部分称为**调度器**，其使用的算法称为**调度算法**。
 
+许多适用于进程调度的相同问题也适用于线程调度，尽管有些不同。
+当内核管理线程时，调度通常按每个线程进行，很少或根本不考虑线程属于哪个进程。
 
+几乎所有进程都在计算突发和（磁盘或网络）I/O 请求之间交替。
+I/O 是指进程进入阻塞状态等待外部设备完成其工作。
+如果一个 I/O 密集型进程想要运行，它应该快速获得机会，以便它可以发出磁盘请求并保持磁盘忙碌。
 
+### 何时调度
 
-When a computer is multiprogrammed, it frequently has multiple processes or threads competing for the CPU at the same time.
-This situation occurs whenever two or more of them are simultaneously in the ready state.
-If only one CPU is available, a choice has to be made which process to run next.
-The part of the operating system that makes the choice is called the **scheduler**, and the algorithm it uses is called the **scheduling algorithm**.
+与调度相关的一个关键问题是何时做出调度决策。
+事实证明，有多种情况需要调度。
+- 首先，当创建新进程时，需要决定是运行父进程还是子进程。
+- 其次，当进程退出时必须做出调度决策。
+- 第三，当进程在 I/O、信号量或某种其他原因上阻塞时，必须选择另一个进程来运行。
+- 第四，当 I/O 中断发生时，可能做出调度决策。
+- 如果硬件时钟以 50 或 60 Hz 或其他频率提供周期性中断，则可以在每个时钟中断或每隔 k 个时钟中断时做出调度决策。
 
-Many of the same issues that apply to process scheduling also apply to thread scheduling, although some are different.
-When the kernel manages threads, scheduling is usually done per thread, with little or no regard to which process the thread belongs.
+## 调度算法目标
 
+所有系统
+- 公平性 - 给予每个进程公平的 CPU 份额
+- 策略执行 - 确保既定策略得以实施
+- 平衡 - 保持系统的所有部分忙碌
 
-Nearly all processes alternate bursts of computing with (disk or network) I/O requests.
-I/O is when a process enters the blocked state waiting for an external device to complete its work.
-If an I/O-bound process wants to run, it should get a chance quickly so that it can issue its disk request and keep the disk busy.
+批处理系统
+- 吞吐量 - 最大化每小时作业数
+- 周转时间 - 最小化提交和终止之间的时间
+- CPU 利用率 - 保持 CPU 始终忙碌
 
+交互式系统
+- 响应时间 - 快速响应请求
+- 比例性 - 满足用户期望
 
-### When to Schedule
+实时系统
+- 满足截止时间 - 避免数据丢失
+- 可预测性 - 避免多媒体系统中的质量下降
 
-A key issue related to scheduling is when to make scheduling decisions.
-It turns out that there are a variety of situations in which scheduling is needed.
-- First, when a new process is created, a decision needs to be made whether to run the parent process or the child process.
-- Second, a scheduling decision must be made when a process exits.
-- Third, when a process blocks on I/O, on a semaphore, or for some other reason, another process has to be selected to run.
-- Fourth, when an I/O interrupt occurs, a scheduling decision may be made.
-- If a hardware clock provides periodic interrupts at 50 or 60 Hz or some other frequency, a scheduling decision can be made at each clock interrupt or at every kth clock interrupt.
+### 批处理系统中的调度
 
-
-## Scheduling Algorithm Goals
-
-All systems
-- Fairness - giving each process a fair share of the CPU
-- Policy enforcement - seeing that stated policy is carried out
-- Balance - keeping all parts of the system busy
-
-Batch systems
-- Throughput - maximize jobs per hour
-- Turnaround time - minimize time between submission and termination
-- CPU utilization - keep the CPU busy all the time
-
-Interactive systems
-- Response time - respond to requests quickly
-- Propor tionality - meet users’ expectations
-
-Real-time systems
-- Meeting deadlines - avoid losing data
-- Predictability - avoid quality degradation in multimedia systems
-
-### Scheduling in Batch Systems
-
-Probably the simplest of all scheduling algorithms ever devised is nonpreemptive first-come, first-served.
+可能有史以来设计的所有调度算法中最简单的是非抢占式先到先服务。
 
 #### Shortest job first
 
@@ -82,96 +75,86 @@ Shortest job first is a nonpreemptive batch algorithm that assumes the run times
 
 A preemptive version of shortest job first is shortest remaining time next.
 
-### Scheduling in Interactive Systems
+### 交互式系统中的调度
 
-One of the oldest, simplest, fairest, and most widely used algorithms is round robin.
-Each process is assigned a time interval, called its quantum, during which it is allowed to run.
-If the process is still running at the end of the quantum, the CPU is preempted and given to another process.
-If the process has blocked or finished before the quantum has elapsed, the CPU switching is done when the process blocks, of course. Round robin is easy to implement.
-All the scheduler needs to do is maintain a list of runnable processes.
-When the process uses up its quantum, it is put on the end of the list.
+最古老、最简单、最公平且使用最广泛的算法之一是轮转调度。
+每个进程被分配一个时间间隔，称为时间片，在此期间允许运行。
+如果进程在时间片结束时仍在运行，CPU 被抢占并交给另一个进程。
+如果进程在时间片结束前阻塞或完成，CPU 切换当然在进程阻塞时进行。轮转调度易于实现。
+调度器需要做的就是维护一个可运行进程的列表。
+当进程用完其时间片时，它被放到列表的末尾。
 
-Setting the quantum too short causes too many process switches and lowers the CPU efficiency, but setting it too long may cause poor response to short interactive requests.
-A quantum around 20–50 msec is often a reasonable compromise.
+将时间片设置得太短会导致过多的进程切换并降低 CPU 效率，但设置得太长可能导致对短交互请求的响应不佳。
+约 20–50 毫秒的时间片通常是一个合理的折衷。
 
-The basic idea of priority scheduling is straightforward: each process is assigned a priority, and the runnable process with the highest priority is allowed to run.
+优先级调度的基本思想很简单：每个进程被分配一个优先级，允许具有最高优先级的可运行进程运行。
 
-Schedulers want accepting any input from user processes about scheduling decisions to make the best choice.
-The solution to this problem is to separate the *scheduling mechanism* from the *scheduling policy*.
-What this means is that the scheduling algorithm is parameterized in some way, but the parameters can be filled in by user processes. Let us consider the database example once again.
-Suppose that the kernel uses a priority-scheduling algorithm but provides a system call by which a process can set (and change) the priorities of its children.
-In this way, the parent can control how its children are scheduled, even though it itself does not do the scheduling.
-Here the mechanism is in the kernel but policy is set by a user process. Policy-mechanism separation is a key idea.
-
-
-
-
-## Scheduling Algorithms
-
-What the scheduler should optimize for is not the same in all systems. Three environments worth distinguishing are:
-1. Batch.
-2. Interactive.
-3. Real time.
-
-Consequently, nonpreemptive algorithms, or preemptive algorithms with long time periods for each process, are often acceptable in batch systems.
-
-In an environment with interactive users, preemption is essential to keep one process from hogging the CPU and denying service to the others.
-
-In systems with real-time constraints, preemption is, oddly enough, sometimes not needed because the processes know that they may not run for long periods of time and usually do their work and block quickly.
-The difference with interactive systems is that real-time systems run only programs that are intended to further the application at hand.
-Interactive systems are general purpose and may run arbitrary programs that are not cooperative and even possibly malicious.
+调度器希望接受来自用户进程关于调度决策的任何输入以做出最佳选择。
+解决此问题的方法是将*调度机制*与*调度策略*分开。
+这意味着调度算法以某种方式参数化，但参数可以由用户进程填充。让我们再次考虑数据库示例。
+假设内核使用优先级调度算法，但提供一个系统调用，进程可以通过该系统调用设置（和更改）其子进程的优先级。
+通过这种方式，父进程可以控制其子进程的调度方式，即使它本身不进行调度。
+这里的机制在内核中，但策略由用户进程设置。策略-机制分离是一个关键思想。
 
 
 
-The most basic algorithm we can implement is known as First In, First Out (FIFO) scheduling or sometimes First Come, First Served (FCFS).
-FIFO has a number of positive properties: it is clearly simple and thus easy to implement.
 
-This problem is generally referred to as the **convoy effect**, where a number of relatively-short potential consumers of a resource get queued behind a heavyweight resource consumer.
+## 调度算法
+
+调度器应该优化的目标在所有系统中并不相同。值得区分的三种环境是：
+1. 批处理。
+2. 交互式。
+3. 实时。
+
+因此，非抢占式算法或每个进程具有长时间段的抢占式算法，在批处理系统中通常是可以接受的。
+
+在具有交互用户的环境中，抢占对于防止一个进程霸占 CPU 并拒绝服务给其他进程至关重要。
+
+在具有实时约束的系统中，奇怪的是，有时不需要抢占，因为进程知道它们可能不会运行很长时间，通常会快速完成工作并阻塞。
+与交互式系统的区别在于，实时系统只运行旨在推进当前应用程序的程序。
+交互式系统是通用型的，可能运行任意程序，这些程序可能不合作甚至可能恶意。
+
+我们可以实现的最基本算法称为先进先出（FIFO）调度，有时也称为先到先服务（FCFS）。
+FIFO 有许多积极特性：它显然很简单，因此易于实现。
+
+这个问题通常被称为**护航效应**，即多个资源相对较短的潜在消费者排队在一个重量级资源消费者后面。
 
 ### SJF
 
-This new scheduling discipline is known as Shortest Job First (SJF), and the name should be easy to remember because it describes the policy quite completely: it runs the shortest job first, then the next shortest, and so on.
-SJF performs much better with regards to average turnaround time.
+这种新的调度规则称为最短作业优先（SJF），这个名称应该容易记住，因为它相当完整地描述了策略：它先运行最短的作业，然后运行次短的，依此类推。
+SJF 在平均周转时间方面表现更好。
 
+最短作业优先代表了一个通用的调度原则，可以应用于任何重视每个客户（或在我们的例子中，每个作业）感知周转时间的系统。
+想想你排过的任何队列：如果该场所关心客户满意度，他们很可能考虑过 SJF。
+例如，杂货店通常有"十件或以下"的通道，以确保只购买几件物品的购物者不会被困在为即将到来的核冬天做准备的家庭后面。
 
-Shortest Job First represents a general scheduling principle that can be applied to any system where the perceived turnaround time per customer(or, in our case, a job) matters.
-Think of any line you have waited in: if the establishment in question cares about customer satisfaction, it is likely they have taken SJF into account.
-For example, grocery stores commonly have a “ten-items-or-less” line to ensure that shoppers with only a few things to purchase don’t get stuck behind the family preparing for some upcoming nuclear winter.
-
-
-SJF is a non-preemptive scheduler.
+SJF 是一个非抢占式调度器。
 
 ### STCF
 
-Fortunately, there is a scheduler which does exactly that: add preemption to SJF, known as the Shortest Time-to-Completion First (STCF) or Preemptive Shortest Job First (PSJF) scheduler.
+幸运的是，有一个调度器正是这样做的：向 SJF 添加抢占，称为最短完成时间优先（STCF）或抢占式最短作业优先（PSJF）调度器。
 
+现在用户坐在终端前，同样要求系统提供交互性能。因此，一个新的度量诞生了：**响应时间**。
 
-
-
-
-Now users would sit at a terminal and demand interactive performance from the system as well. And thus, a new metric was born: **response time**.
-
-We define response time as the time from when the job arrives in a system to the first time it is scheduled3.
-More formally:
+我们将响应时间定义为作业到达系统到第一次被调度的时间。
+更正式地说：
 
 ```tex
 T_{response} = T_{firstrun} − T_{arrival}
 ```
 
-STCF and related disciplines are not particularly good for response time.
-While great for turnaround time, this approach is quite bad for response time and interactivity.
-
-
+STCF 和相关规则对于响应时间并不是特别好。
+虽然对周转时间很好，但这种方法对响应时间和交互性相当糟糕。
 
 RR
 
-The basic idea is simple: instead of running jobs to completion, RR runs a job for a time slice (sometimes called a scheduling quantum) and then switches to the next job in the run queue.
+基本思想很简单：RR 不将作业运行到完成，而是运行一个作业一个时间片（有时称为调度量子），然后切换到运行队列中的下一个作业。
 
-RR is sometimes called time-slicing. Note that the length of a time slice must be a multiple of the timer-interrupt period.
+RR 有时称为时间片轮转。请注意，时间片的长度必须是定时器中断周期的倍数。
 
-As you can see, the length of the time slice is critical for RR. The shorter it is, the better the performance of RR under the response-time metric.
-However, making the time slice too short is problematic: suddenly the cost of context switching will dominate overall performance.
-Thus, deciding on the length of the time slice presents a trade-off to a system designer, making it long enough to amortize the cost of switching without making it so long that the system is no longer responsive.
+如你所见，时间片的长度对 RR 至关重要。越短，RR 在响应时间度量下的性能越好。
+然而，使时间片过短是有问题的：上下文切换的成本将突然主导整体性能。
+因此，决定时间片的长度对系统设计者来说是一个权衡，使其足够长以分摊切换成本，但又不能长到使系统不再响应。
 
 > [!TIP]
 > AMORTIZATION CAN REDUCE COSTS
@@ -179,69 +162,63 @@ Thus, deciding on the length of the time slice presents a trade-off to a system 
 > The general technique of amortization is commonly used in systems when there is a fixed cost to some operation.
 > By incurring that cost less often (i.e., by performing the operation fewer times), the total cost to the system is reduced.
 
-Note that the cost of context switching does not arise solely from the OS actions of saving and restoring a few registers.
-When programs run, they build up a great deal of state in CPU caches, TLBs, branch predictors, and other on-chip hardware.
-Switching to another job causes this state to be flushed and new state relevant to the currently-running job to be brought in, which may exact a noticeable performance cost.
+请注意，上下文切换的成本不仅仅来自操作系统保存和恢复一些寄存器的操作。
+当程序运行时，它们在 CPU 缓存、TLB、分支预测器和其他片上硬件中构建了大量状态。
+切换到另一个作业会导致此状态被刷新，并带入与当前运行作业相关的新状态，这可能会带来显著的性能成本。
 
-More generally, any policy (such as RR) that is fair, i.e., that evenly divides the CPU among active processes on a small time scale, will perform poorly on metrics such as turnaround time.
-Indeed, this is an inherent trade-off: if you are willing to be unfair, you can run shorter jobs to completion, but at the cost of response time; if you instead value fairness, response time is lowered, but at the cost of turnaround time.
-This type of trade-off is common in systems.
+更一般地说，任何公平的策略（如 RR），即在较小的时间尺度上均匀地在活动进程之间分配 CPU，在周转时间等度量上表现将不佳。
+确实，这是一个固有的权衡：如果你愿意不公平，你可以将较短的作业运行到完成，但代价是响应时间；如果你更看重公平性，响应时间会降低，但代价是周转时间。
+这种类型的权衡在系统中很常见。
 
-TIP: OVERLAP ENABLES HIGHER UTILIZATION
-When possible, overlap operations to maximize the utilization of systems.
-Overlap is useful in many different domains, including when performing disk I/O or sending messages to remote machines;
-in either case, starting the operation and then switching to other work is a good idea, and improves the overall utilization and efficiency of the system.
+提示：重叠可实现更高利用率
+尽可能重叠操作以最大化系统利用率。
+重叠在许多不同领域中很有用，包括执行磁盘 I/O 或向远程机器发送消息时；
+无论哪种情况，启动操作然后切换到其他工作是个好主意，并能提高系统的整体利用率和效率。
 
 ### MLFQ
 
-TIP: LEARN FROM HISTORY
-The multi-level feedback queue is an excellent example of a system that
-learns from the past to predict the future. Such approaches are common in operating systems (and many other places in Computer Science,
-including hardware branch predictors and caching algorithms). Such
-approaches work when jobs have phases of behavior and are thus predictable; of course, one must be careful with such techniques, as they can
-easily be wrong and drive a system to make worse decisions than they
-would have with no knowledge at all.
+提示：从历史中学习
+多级反馈队列是一个从过去预测未来的系统的绝佳例子。
+这种方法在操作系统中很常见（以及计算机科学的许多其他地方，包括硬件分支预测器和缓存算法）。
+当作业具有行为阶段并且因此可预测时，这种方法有效；当然，必须谨慎使用此类技术，因为它们可能很容易出错，并驱使系统做出比完全没有知识时更糟糕的决策。
 
+在我们的处理中，MLFQ 有许多不同的队列，每个队列分配不同的优先级级别。在任何给定时间，一个准备运行的作业在单个队列上。
+MLFQ 使用优先级来决定在给定时间哪个作业应该运行：选择具有更高优先级（即位于更高队列）的作业来运行。
 
-In our treatment, the MLFQ has a number of distinct queues, each assigned a different priority level. At any given time, a job that is ready to run is on a single queue.
-MLFQ uses priorities to decide which job should run at a given time: a job with higher priority (i.e., a job on a higher queue) is chosen to run.
+当然，可能有多个作业在同一个队列上，因此具有相同的优先级。在这种情况下，我们将使用轮转调度在这些作业之间进行。
 
-Of course, more than one job may be on a given queue, and thus have the same priority. In this case, we will just use round-robin scheduling among those jobs.
+因此，我们得出了 MLFQ 的前两个基本规则：
+- 规则 1：如果 Priority(A) > Priority(B)，则 A 运行（B 不运行）。
+- 规则 2：如果 Priority(A) = Priority(B)，则 A 和 B 以 RR 方式运行。
 
-Thus, we arrive at the first two basic rules for MLFQ:
-- Rule 1: If Priority(A) > Priority(B), A runs (B doesn’t).
-- Rule 2: If Priority(A) = Priority(B), A & B run in RR.
+#### 如何更改优先级
 
+因此，MLFQ 调度的关键在于调度器如何设置优先级。
+MLFQ 不是给每个作业固定的优先级，而是根据其*观察到的行为*来变化作业的优先级。
+例如，如果一个作业在等待键盘输入时反复放弃 CPU，MLFQ 将保持其高优先级，因为这是交互式进程可能的行为。
+相反，如果一个作业长时间密集使用 CPU，MLFQ 将降低其优先级。
+通过这种方式，MLFQ 将尝试在进程运行时了解它们，从而使用作业的历史来预测其未来行为。
 
-#### How To Change Priority
+这是我们首次尝试的优先级调整算法：
+- 规则 3：当作业进入系统时，它被放置在最高优先级（最顶层队列）。
+- 规则 4a：如果作业在运行时用完整个时间片，其优先级降低（即向下移动一个队列）。
+- 规则 4b：如果作业在时间片结束前放弃 CPU，它保持在相同的优先级级别。
 
-The key to MLFQ scheduling therefore lies in how the scheduler sets priorities.
-Rather than giving a fixed priority to each job, MLFQ varies the priority of a job based on its *observed behavior*.
-If, for example, a job repeatedly relinquishes the CPU while waiting for input from the keyboard, MLFQ will keep its priority high, as this is how an interactive process might behave.
-If, instead, a job uses the CPU intensively for long periods of time, MLFQ will reduce its priority.
-In this way, MLFQ will try to learn about processes as they run, and thus use the history of the job to predict its future behavior.
+首先，存在饥饿问题：如果系统中有"太多"交互式作业，它们将共同消耗所有 CPU 时间，因此长时间运行的作业将永远不会收到任何 CPU 时间（它们会饥饿）。
 
-Here is our first attempt at a priorityadjustment algorithm:
-- Rule 3: When a job enters the system, it is placed at the highest priority (the topmost queue).
-- Rule 4a: If a job uses up an entire time slice while running, its priority is reduced (i.e., it moves down one queue).
-- Rule 4b: If a job gives up the CPU before the time slice is up, it stays at the same priority level.
+其次，聪明的用户可以重写其程序来欺骗调度器。
+欺骗调度器通常指做一些偷偷摸摸的事情来诱使调度器给你超过公平份额的资源。
 
-First, there is the problem of starvation: if there are “too many” interactive jobs in the system, they will combine to consume all CPU time, and thus long-running jobs will never receive any CPU time (they starve).
+这里简单的想法是定期提升系统中所有作业的优先级。
+有很多方法可以实现这一点，但让我们做一些简单的事情：将它们全部扔到最顶层的队列；因此，新规则：
+- 规则 5：经过一段时间 S 后，将系统中的所有作业移动到最顶层的队列。
 
-Second, a smart user could rewrite their program to game the scheduler.
-Gaming the scheduler generally refers to the idea of doing something sneaky to trick the scheduler into giving you more than your fair share of the resource.
+我们的新规则同时解决了两个问题。首先，保证进程不会饥饿：通过位于顶层队列，作业将以轮转方式与其他高优先级作业共享 CPU，因此最终会获得服务。
+其次，如果 CPU 密集型作业变得交互式，调度器在收到优先级提升后会正确处理它。
 
-The simple idea here is to periodically boost the priority of all the jobs in system.
-There are many ways to achieve this, but let’s just do something simple: throw them all in the topmost queue; hence, a new rule:
-- Rule 5: After some time period S, move all the jobs in the system to the topmost queue.
-
-Our new rule solves two problems at once. First, processes are guaranteed not to starve: by sitting in the top queue, a job will share the CPU with other high-priority jobs in a round-robin fashion, and thus eventually receive service.
-Second, if a CPU-bound job has become interactive, the scheduler treats it properly once it has received the priority boost.
-
-
-We now have one more problem to solve: how to prevent gaming of our scheduler?
-We thus rewrite Rules 4a and 4b to the following single rule:
-- Rule 4: Once a job uses up its time allotment at a given level (regardless of how many times it has given up the CPU), its priority is reduced (i.e., it moves down one queue).
+我们现在还有一个问题需要解决：如何防止对我们的调度器的欺骗？
+因此，我们将规则 4a 和 4b 重写为以下单一规则：
+- 规则 4：一旦作业在给定级别用完其时间配额（无论它放弃了 CPU 多少次），其优先级降低（即向下移动一个队列）。
 
 > [!TIP]
 > TIP: AVOID VOO-DOO CONSTANTS (OUSTERHOUT’S LAW)
@@ -268,43 +245,42 @@ Shortest Process Next
 
 Guaranteed Scheduling
 
-### Lottery Scheduling
+### 彩票调度
 
-The basic idea is to give processes lottery tickets for various system resources, such as CPU time.
-Whenever a scheduling decision has to be made, a lottery ticket is chosen at random, and the process holding that ticket gets the resource.
-When applied to CPU scheduling, the system might hold a lottery 50 times a second, with each winner getting 20 msec of CPU time as a prize.
+其基本思想是给进程分配各种系统资源（如 CPU 时间）的彩票。
+每当需要做出调度决策时，随机选择一张彩票，持有该彩票的进程获得资源。
+当应用于 CPU 调度时，系统可能每秒抽奖 50 次，每个获胜者获得 20 毫秒的 CPU 时间作为奖励。
 
 
 ### Fair-Share Scheduling
 
 
-### Scheduling in Real-Time Systems
+### 实时系统中的调度
 
-Real-time systems are generally categorized as hard real time, meaning there are absolute deadlines that must be met—or else!— and soft real time, meaning that missing an occasional deadline is undesirable, but nevertheless tolerable.
-In both cases, real-time behavior is achieved by dividing the program into a number of processes, each of whose behavior is predictable and known in advance.
-These processes are generally short lived and can run to completion in well under a second.
-When an external event is detected, it is the job of the scheduler to schedule the processes in such a way that all deadlines are met.
+实时系统通常分类为硬实时，意味着有必须满足的绝对截止时间——否则！——和软实时，意味着偶尔错过截止时间是不希望的，但仍然可以容忍。
+在这两种情况下，实时行为是通过将程序划分为多个进程来实现的，每个进程的行为是可预测且预先已知的。
+这些进程通常寿命很短，可以在远少于一秒的时间内运行完成。
+当检测到外部事件时，调度器的工作是以满足所有截止时间的方式调度进程。
 
-The events that a real-time system may have to respond to can be further categorized as periodic (meaning they occur at regular intervals) or aperiodic (meaning they occur unpredictably).
-A system may have to respond to multiple periodicev ent streams.
-Depending on how much time each event requires for processing, handling all of them may not even be possible.
-
-
-## Thread Scheduling
-
-Scheduling in such systems differs substantially depending on whether user-level threads or kernel-level threads (or both) are supported.
-
-Let us consider user-level threads first.
-Since the kernel is not aware of the existence of threads, it operates as it always does, picking a process.
-Since there are no clock interrupts to multiprogram threads, this thread may continue running as long as it wants to. If it uses up the process’ entire quantum, the kernel will select another process to run.
-
-A major difference between user-level threads and kernel-level threads is the performance. Doing a thread switch with user-level threads takes a handful of machine instructions.
-With kernel-level threads it requires a full context switch, changing the memory map and invalidating the cache, which is several orders of magnitude slower.
-On the other hand, with kernel-level threads, having a thread block on I/O does not suspend the entire process as it does with user-level threads.
+实时系统可能必须响应的事件可以进一步分类为周期性的（意味着它们以规则间隔发生）或非周期性的（意味着它们不可预测地发生）。
+一个系统可能需要响应多个周期性事件流。
+根据每个事件处理所需的时间，可能甚至无法处理所有事件。
 
 
-Another important factor is that user-level threads can employ an application-specific thread scheduler.
-In general, however, application-specific thread schedulers can tune an application better than the kernel can.
+## 线程调度
+
+此类系统中的调度根据支持的是用户级线程还是内核级线程（或两者）而有很大差异。
+
+让我们首先考虑用户级线程。
+由于内核不知道线程的存在，它像往常一样运行，选择一个进程。
+由于没有时钟中断来多道编程线程，该线程可以根据需要继续运行。如果它用完进程的整个时间片，内核将选择另一个进程运行。
+
+用户级线程和内核级线程之间的一个主要区别是性能。使用用户级线程进行线程切换只需几条机器指令。
+使用内核级线程则需要完整的上下文切换，更改内存映射并使缓存失效，这慢几个数量级。
+另一方面，使用内核级线程，线程在 I/O 上阻塞不会像用户级线程那样挂起整个进程。
+
+另一个重要因素是用户级线程可以采用特定于应用程序的线程调度器。
+然而，一般来说，特定于应用程序的线程调度器可以比内核更好地调整应用程序。
 
 
 

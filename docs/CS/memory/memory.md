@@ -1,35 +1,30 @@
 ## Introduction
 
-
 ## Memory management
 
+内存管理是协调和控制计算机系统中内存使用的艺术和过程。
 
+内存管理可以分为三个领域：
 
-Memory management is the art and the process of coordinating and controlling the use of [memory (1)](https://www.memorymanagement.org/glossary/m.html#term-memory-1) in a computer system.
+1. 内存管理硬件（MMU、RAM 等）；
+2. 操作系统内存管理（虚拟内存、保护）；
+3. 应用程序内存管理（分配、释放、垃圾回收）。
 
-Memory management can be divided into three areas:
+[Garbage collection](/docs/CS/memory/GC.md)（GC），也称为自动内存管理，是动态分配内存的自动回收。
+垃圾回收由垃圾收集器执行，它回收可以证明永远不会再被使用的内存。
+使用垃圾回收的系统和语言可以被称为带有垃圾回收的系统。
 
-1. Memory management hardware ([MMUs](https://www.memorymanagement.org/glossary/m.html#term-mmu), [RAM](https://www.memorymanagement.org/glossary/r.html#term-ram), etc.);
-2. Operating system memory management ([virtual memory](https://www.memorymanagement.org/glossary/v.html#term-virtual-memory), [protection](https://www.memorymanagement.org/glossary/p.html#term-protection));
-3. Application memory management ([allocation](https://www.memorymanagement.org/glossary/a.html#term-allocate), [deallocation](https://www.memorymanagement.org/glossary/f.html#term-free-1), [garbage collection](https://www.memorymanagement.org/glossary/g.html#term-garbage-collection)).
+垃圾回收是一种经过验证的内存管理技术，自 1950 年代发明以来一直在使用。
+它避免了程序员显式释放内存块的需要，从而避免了许多问题：内存泄漏、双重释放和过早释放。
+通过不必调查此类问题，减轻了程序员的负担，从而提高了生产力。
 
+垃圾回收还可以极大地简化程序，主要是通过允许模块之间提供更清晰的接口：模块之间的对象存储管理变得不必要。
 
-
-[Garbage collection](/docs/CS/memory/GC.md) (GC), also known as automatic memory management, is the automatic recycling of dynamically allocated memory. 
-Garbage collection is performed by a garbage collector which recycles memory that it can prove will never be used again. 
-Systems and languages which use garbage collection can be described as garbage-collected.
-
-Garbage collection is a tried and tested memory management technique that has been in use since its invention in the 1950s.
-It avoids the need for the programmer to deallocate memory blocks explicitly, thus avoiding a number of problems: memory leaks, double frees, and premature frees.
-The burden on the programmer is reduced by not having to investigate such problems, thereby increasing productivity.
-
-Garbage collection can also dramatically simplify programs, chiefly by allowing modules to present cleaner interfaces to each other: the management of object storage between modules is unnecessary.
-
-It is not possible, in general, for a garbage collector to determine exactly which objects are still live. 
-Even if it didn’t depend on future input, there can be no general algorithm to prove that an object is live (cf. the Halting Problem).
-All garbage collectors use some efficient approximation to liveness. In tracing garbage collection, the approximation is that an object can’t be live unless it is reachable.
-In reference counting, the approximation is that an object can’t be live unless it is referenced. 
-Hybrid algorithms are also possible. Often the term garbage collection is used narrowly to mean only tracing garbage collection.
+一般来说，垃圾收集器不可能精确确定哪些对象仍然是存活的。
+即使它不依赖于未来的输入，也没有通用算法可以证明对象是存活的（参见停机问题）。
+所有垃圾收集器都使用某种有效的存活性近似。在追踪式垃圾收集中，近似是除非对象是可达的，否则它就不是存活的。
+在引用计数中，近似是除非对象被引用，否则它就不是存活的。
+混合算法也是可能的。通常，术语"垃圾回收"狭义地仅指追踪式垃圾回收。
 
 ## Links
 

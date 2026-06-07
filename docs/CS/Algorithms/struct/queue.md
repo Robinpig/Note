@@ -1,132 +1,105 @@
 ## Introduction
 
-A queue is a data structure used for storing data (similar to Linked Lists and Stacks). In queue, the order in which data arrives is important.
-In general, a queue is a line of people or things waiting to be served in sequential order starting at the beginning of the line or sequence.
+队列是一种用于存储数据的数据结构（类似于链表和栈）。在队列中，数据到达的顺序很重要。
+通常，队列是一行等待服务的人或物，按照从行或序列开始的顺序进行服务。
 
-A queue is an ordered list in which insertions are done at one end (rear) and deletions are done at other end (front).
-The first element to be inserted is the first one to be deleted. Hence, it is called First in First out (**FIFO**) or Last in Last out (**LILO**) list.
+队列是一种有序列表，其中插入在末端（rear）进行，删除在前端（front）进行。
+第一个插入的元素是第一个被删除的元素。因此，它被称为先进先出（**FIFO**）或后进后出（**LILO**）列表。
 
-
-Similar to Stacks, special names are given to the two changes that can be made to a queue.
-When an element is inserted in a queue, the concept is called EnQueue, and when an element is removed from the queue, the concept is called DeQueue. 
-DeQueueing an empty queue is called underflow and EnQueuing an element in a full queue is called overflow. 
-Generally, we treat them as exceptions.
-
-
+与栈类似，队列的两种操作有特殊的名称。
+当元素插入队列时，称为 EnQueue（入队），当元素从队列中移除时，称为 DeQueue（出队）。
+对空队列执行 DeQueue 称为下溢（underflow），对满队列执行 EnQueue 称为上溢（overflow）。
+通常我们将它们视为异常。
 
 队列跟栈一样，也是一种**操作受限的线性表数据结构**
 
 作为一种非常基础的数据结构，队列的应用也非常广泛，特别是一些具有某些额外特性的队列，比如循环队列、阻塞队列、并发队列。它们在很多偏底层系统、框架、中间件的开发中，起着关键性的作用。比如高性能队列Disruptor、Linux环形缓存，都用到了循环并发队列；Java concurrent并发包利用ArrayBlockingQueue来实现公平锁等
 
- 
-
 跟栈一样，队列可以用数组来实现，也可以用链表来实现。用数组实现的栈叫作顺序栈，用链表实现的栈叫作链式栈。同样，用数组实现的队列叫作**顺序队列**，用链表实现的队列叫作**链式队列**。
 
- 
-
-使用阻塞队列，轻松实现一个“生产者-消费者模型”！
+使用阻塞队列，轻松实现一个"生产者-消费者模型"！
 
 线程安全的队列我们叫作**并发队列**。最简单直接的实现方式是直接在enqueue()、dequeue()方法上加锁，但是锁粒度大并发度会比较低，同一时刻仅允许一个存或者取操作。实际上，基于数组的循环队列，利用CAS原子操作，可以实现非常高效的并发队列。这也是循环队列比链式队列应用更加广泛的原因
 
-
 ## Queue ADT
-The following operations make a queue an ADT. Insertions and deletions in the queue must follow the FIFO scheme. For simplicity we assume the elements are integers.
 
-**Main Queue Operations**
+以下操作使队列成为一个 ADT。队列中的插入和删除必须遵循 FIFO 方案。为简单起见，假设元素是整数。
 
-- EnQueuefint data): Inserts an element at the end of the queue
-- int DeQueue(): Removes and returns the element at the front of the queue
+**主要队列操作**
 
-**Auxiliary Queue Operations**
+- EnQueue(int data): 在队列末尾插入一个元素
+- int DeQueue(): 移除并返回队列前端的元素
 
-- int Front(): Returns the element at the front without removing it
-- int QueueSize(): Returns the number of elements stored in the queue
-- int IsEmptyQueue(): Indicates whether no elements are stored in the queue or not
+**辅助队列操作**
 
-**Exceptions**
+- int Front(): 返回队列前端的元素但不移除
+- int QueueSize(): 返回队列中存储的元素数量
+- int IsEmptyQueue(): 指示队列中是否没有元素
 
-Similar to other ADTs, executing DeQueue on an empty queue throws an “Empty Queue Exception” and executing EnQueue on a full queue throws a “Full Queue Exception”.
+**异常**
+
+与其他 ADT 类似，在空队列上执行 DeQueue 会抛出"空队列异常"，在满队列上执行 EnQueue 会抛出"满队列异常"。
 
 ## Applications
 
-Following are the some of the applications that use queues.
+以下是一些使用队列的应用。
 
-Direct Applications
-- Operating systems schedule jobs (with equal priority) in the order of arrival (e.g., a print queue).
-- Simulation of real-world queues such as lines at a ticket counter or any other first- come first-served scenario requires a queue.
-- Multiprogramming.
-- Asynchronous data transfer (file IO, pipes, sockets).
-- Waiting times of customers at call center.
-- Determining number of cashiers to have at a supermarket.
+直接应用
+- 操作系统按到达顺序调度作业（具有相同优先级）（例如打印队列）。
+- 现实世界队列的模拟，如售票窗口前的排队或任何先到先服务的场景。
+- 多道程序。
+- 异步数据传输（文件 IO、管道、套接字）。
+- 呼叫中心的客户等待时间。
+- 确定超市需要设置的收银员数量。
 
-Indirect Applications
-- Auxiliary data structure for algorithms
-- Component of other data structures
-
-
+间接应用
+- 算法的辅助数据结构
+- 其他数据结构的组成部分
 
 ## Implementation
 
-There are many ways (similar to Stacks) of implementing queue operations and some of the commonly used methods are listed below.
-- Simple circular array based implementation
-- Dynamic circular array based implementation
-- Linked list implementation
+实现队列操作有许多方法（类似于栈），下面列出了一些常用方法。
+- 简单循环数组实现
+- 动态循环数组实现
+- 链表实现
 
-**Why Circular Arrays?**
+**为什么用循环数组？**
 
-First, let us see whether we can use simple arrays for implementing queues as we have done for stacks. 
-We know that, in queues, the insertions are performed at one end and deletions are performed at the other end. 
-After performing some insertions and deletions the process becomes easy to understand. In the example shown below, it can be seen clearly that the initial slots of the array are getting wasted. 
-So, simple array implementation for queue is not efficient. To solve this problem we assume the arrays as circular arrays. 
-That means, we treat the last element and the first array elements as contiguous.
-With this representation, if there are any free slots at the beginning, the rear pointer can easily go to its next free slot.
-With this representation, if there are any free slots at the beginning, the rear pointer can easily go to its next free slot.
+首先，让我们看看是否可以使用简单数组来实现队列，就像我们对栈所做的那样。
+我们知道，在队列中，插入在一端执行，删除在另一端执行。
+在执行一些插入和删除后，过程变得容易理解。在下面的例子中，可以清楚地看到数组的初始槽位被浪费了。
+因此，使用简单数组实现队列是低效的。为了解决这个问题，我们将数组视为循环数组。
+也就是说，我们将数组的最后一个元素和第一个元素视为连续的。
+通过这种表示，如果开头有空闲的槽位，rear 指针可以轻松地移动到下一个空闲槽位。
 
 > [!Note]
-> 
-> The simple circular array and dynamic circular array implementations are very similar to stack array implementations.
+>
+> 简单循环数组和动态循环数组的实现与栈的数组实现非常相似。
 
 ### Simple Circular Array Implementation
 
-This simple implementation of Queue ADT uses an array.
-In the array, we add elements circularly and use two variables to keep track of the start element and end element. 
-Generally, front is used to indicate the start element and rear is used to indicate the end element in the queue. 
-The array storing the queue elements may become full. An EnQueue operation will then throw a full queue exception. 
-Similarly, if we try deleting an element from an empty queue it will throw empty queue exception.
+这种简单的队列 ADT 实现使用数组。
+在数组中，我们循环地添加元素，并使用两个变量来跟踪起始元素和结束元素。
+通常，front 用于指示队列中的起始元素，rear 用于指示队列中的结束元素。
+存储队列元素的数组可能会满。EnQueue 操作随后会抛出满队列异常。
+类似地，如果尝试从空队列中删除元素，则会抛出空队列异常。
 
+初始时，front 和 rear 都指向 -1，表示队列为空。
 
-Initially, both front and rear points to -1 which indicates that the queue is empty.
-
-**Limitations:**
-The maximum size of the queue must be defined as prior and cannot be changed. Trying to EnQueue a new element into a full queue causes an implementation-specific exception.
-
-
+**局限性：**
+队列的最大大小必须事先定义且不能更改。尝试向满队列中 EnQueue 新元素会导致实现特定的异常。
 
 ## Doubly End Queue
 
-双端队列是支持在头尾两端进行pop和push操作
-
-
-
-
+双端队列是支持在头尾两端进行 pop 和 push 操作
 
 ## Deque
-
-
-
-
-
-
-
-
-
 
 ## Links
 
 - [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
 - [list](/docs/CS/Algorithms/struct/list.md)
 - [stack](/docs/CS/Algorithms/struct/stack.md)
-
 
 ## References
 

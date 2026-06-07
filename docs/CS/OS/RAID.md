@@ -1,34 +1,18 @@
-## Introduction
+## 简介
 
+**廉价磁盘冗余阵列**，更广为人知的名称为 **RAID**，是一种使用多个磁盘协同工作以构建更快、更大、更可靠的磁盘系统的技术。
 
-The **Redundant Array of Inexpensive Disks** better known as **RAID**, a technique to use multiple disks in concert to build a faster, bigger, and more reliable disk system.
+- RAID 0 级：条带化
+- RAID 1 级：镜像
+- RAID 4 级：使用奇偶校验节省空间
+- RAID 5 级：旋转奇偶校验
 
+RAID 将多个独立磁盘转换为一个更大、容量更高、更可靠的单一实体；重要的是，它是透明地实现的，因此上层的硬件和软件相对不易察觉这种变化。
 
+有许多可能的 RAID 级别可供选择，具体选择哪个 RAID 级别在很大程度上取决于最终用户看重什么。
+例如，镜像 RAID 简单、可靠，通常提供良好的性能，但容量成本较高。
+相比之下，RAID-5 从容量角度来看可靠且更好，但在工作负载中有小写入时性能非常差。
 
-- RAID Level 0: Striping
-- RAID Level 1: Mirroring
-- RAID Level 4: Saving Space With Parity
-- RAID Level 5: Rotating Parity
+## 链接
 
-
-
-RAID transforms a number of independent disks into a large, more capacious, and more reliable single entity; importantly, it does so transparently, and thus hardware and software above is relatively oblivious to the change.
-
-There are many possible RAID levels to choose from, and the exact RAID level to use depends heavily on what is important to the end-user.
-For example, mirrored RAID is simple, reliable, and generally provides good performance but at a high capacity cost. 
-RAID-5, in contrast, is reliable and better from a capacity standpoint, but performs quite poorly when there are small writes in the workload.
-
-
-
-
-
-
-
-
-
-
-
-
-## Links
-
-- [Operating System](/docs/CS/OS/OS.md)
+- [操作系统](/docs/CS/OS/OS.md)

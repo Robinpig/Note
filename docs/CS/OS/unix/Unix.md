@@ -1,115 +1,102 @@
-## Introduction
+## 简介
 
-What is Unix?
+什么是 Unix？
 
-A generous definition: Those operating systems derived from or inspired by the Research Unix systems of the 1970s.
-Includes commercial Unix systems, Research Unix, NetBSD, OpenBSD, [Linux](/docs/CS/OS/Linux/Linux.md), even Plan 9 and others.
+广义定义：那些源自或受 1970 年代 Research Unix 系统启发而衍生的操作系统。
+包括商业 Unix 系统、Research Unix、NetBSD、OpenBSD、[Linux](/docs/CS/OS/Linux/Linux.md)，甚至 Plan 9 等。
 
 > [!Note]
 >
 > Those who do not understand Unix are condemned to reinvent it, poorly.    --Henny Spencer
 
-Today, Unix runs everywhere (except a few PCs).
+如今，Unix 无处不在（除了少数 PC 之外）。
 
-What makes Unix Unix ?
-Something like the combination of:
+是什么造就了 Unix？
+大致是以下要素的组合：
 
-- high-level programming language
-- hierarchical file system
-- uniform, unformatted files (text)
-- separable shell
-- distinct tools
-- pipes
-- regular expressions
-- portability
-- security
+- 高级编程语言
+- 层次化文件系统
+- 统一的无格式文件（文本）
+- 可分离的 shell
+- 独特的工具
+- 管道
+- 正则表达式
+- 可移植性
+- 安全性
 
-Not all these ideas originate in Unix, but their combination does.
+并非所有这些思想都起源于 Unix，但它们的组合确实源于 Unix。
 
 > [!TIP]
 >
 > Keep It Simple, Stupid!
 
-To get to 2001, you need to add networking and graphics, but those are not definitive of Unix.
-Quite the opposite: these were added later and badly, with models taken largely from other systems.
+要发展到 2001 年，你需要添加网络和图形支持，但这些并非 Unix 的决定性特征。
+恰恰相反：这些是后来添加的，而且实现得很糟糕，其模型主要借鉴自其他系统。
 
-The Good things about Unix are also its Bad things. The things that made it successful also limited its success.
-Its strengths are also its weaknesses.
+Unix 的优点也正是它的缺点。使其成功的东西也限制了它的成功。
+它的优势同时也是它的劣势。
 
 - C
-- Tools
-- Text files
-- Portability
-- Open source
+- 工具
+- 文本文件
+- 可移植性
+- 开源
 
-The irony is Ugly.
-A simple example: flat text files.
+讽刺之处在于其丑陋。
+一个简单的例子：纯文本文件。
 
-One of Unix’s greatest contributions; unused outside.
-Almost no visibility beyond the Unix community!
+Unix 最伟大的贡献之一；却在外部无人使用。
+在 Unix 社区之外几乎没有可见性！
 
-Once, the commonest Unix program was grep. Today, it’s emacs or mozilla.
-**People prefer integrated environments and browsers.**
+曾经，Unix 上最常见的程序是 grep。如今，是 emacs 或 mozilla。
+**人们更喜欢集成环境和浏览器。**
 
-The tyranny of forced interaction:
+强制交互的暴政：
 
-- No ability to step beyond the model.
-- No programmability. (E.g.: Fetching maps, NYT)
-- Wasting human time.
-  The irony:
-- Most web pages are synthesized dynamically by Unix tools.
-- But the result hides that completely from the user.
+- 无法超越模型的能力。
+- 不可编程。（例如：获取地图、NYT）
+- 浪费人类时间。
+  讽刺之处在于：
+- 大多数网页是由 Unix 工具动态合成的。
+- 但结果却完全向用户隐藏了这一点。
 
-The weird solution: programs that interpret HTML to drive web interactions automatically.
+奇怪的解决方案：编写解释 HTML 以自动驱动 Web 交互的程序。
 
-- Simple examples: stock, weather.
-- Text-only browsing.
+- 简单示例：股票、天气。
+- 纯文本浏览。
 
-Flat text files are easy to use (Good) but don’t scale well (Bad).
+纯文本文件易于使用（好），但扩展性差（坏）。
 
-Unix did portability first and, still, best: (Good)
+Unix 率先实现并且至今仍是最好的可移植性：（好）
 
-- Sources in high-level language
-- Operating system runs independent of hardware
-- Interfaces don’t change (much) between platforms.
+- 高级语言源代码
+- 操作系统独立于硬件运行
+- 接口在不同平台之间变化不大（几乎不变）
 
-Unintended consequences: (Bad)
+意外的后果：（坏）
 
-- Machine became irrelevant
-- Therefore cost was only factor
-- Therefore hardware got lousy, widely variable
-- Therefore software had to cope, became non-portable.
+- 机器变得无关紧要
+- 因此成本成为唯一因素
+- 因此硬件变得廉价且差异巨大
+- 因此软件必须适应，变得不可移植。
 
-The success of PCs is in large part due to the fact that, by making all hardware equivalent, good software enabled bad hardware.
-
-
-1. What is the best thing about Unix?
-   A: The community.
-2. What is the worst thing about Unix?
-   A: That there are so many communities.
+PC 的成功在很大程度上归功于这样一个事实：通过使所有硬件趋同，好的软件使得差的硬件也能被使用。
 
 
+1. Unix 最好的地方是什么？
+   A：社区。
+2. Unix 最差的地方是什么？
+   A：社区太多了。
 
 
 
 1973: 信号、管道、grep
-1983； BSD socket
+1983: BSD socket
 
+## 链接
 
+- [操作系统](/docs/CS/OS/OS.md)
 
-
-
-
-
-
-
-## Links
-
-- [Operating Systems](/docs/CS/OS/OS.md)
-
-
-
-## References
+## 参考
 
 1. [The Good, the Bad, and the Ugly: The Unix Legacy](http://herpolhode.com/rob/ugly.pdf)
-

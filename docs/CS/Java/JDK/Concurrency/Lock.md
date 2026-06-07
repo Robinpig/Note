@@ -1,200 +1,40 @@
 ## Introduction
 
-The Lock interface defines a number of abstract locking operations.
-Unlike intrinsic locking, Lock offers a choice of unconditional, polled, timed, and interruptible lock acquisition,
-and all lock and unlock operations are explicit.
-Lock implementations must provide the same memory-visibility semantics as intrinsic locks,
-but can differ in their locking semantics, scheduling algorithms, ordering guarantees, and performance characteristics.
-
-
+Lock 接口定义了许多抽象锁定操作。
+与内置锁定不同，Lock 提供了无条件、轮询、定时和可中断的锁获取方式，
+并且所有锁定和解锁操作都是显式的。
+Lock 实现必须提供与内置锁相同的内存可见性语义，
+但它们的锁定语义、调度算法、顺序保证和性能特性可能有所不同。
 
 ## Lock
-Lock implementations provide more extensive locking operations than can be obtained using [synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md) methods and statements. 
-They allow more flexible structuring, may have quite different properties, and may support multiple associated Condition objects.*
 
-A lock is a tool for controlling access to a shared resource by multiple threads. 
-Commonly, a lock provides exclusive access to a shared resource: only one thread at a time can acquire the lock and all access to the shared resource requires that the lock be acquired first. 
-However, some locks may allow concurrent access to a shared resource, such as the read lock of a ReadWriteLock.
+Lock 实现提供了比使用 [synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md) 方法和语句可以获得的更广泛的锁定操作。
+它们允许更灵活的结构化，可能具有相当不同的属性，并且可能支持多个关联的 Condition 对象。
 
-The use of synchronized methods or statements provides access to the implicit monitor lock associated with every object, but forces all lock acquisition and release to occur in a block-structured way: 
-when multiple locks are acquired they must be released in the opposite order, and all locks must be released in the same lexical scope in which they were acquired.
+锁是控制多个线程对共享资源访问的工具。
+通常，锁提供对共享资源的独占访问：一次只有一个线程可以获取锁，并且对共享资源的所有访问都需要先获取锁。
+然而，某些锁可能允许对共享资源的并发访问，例如 ReadWriteLock 的读锁。
 
-While the scoping mechanism for synchronized methods and statements makes it much easier to program with monitor locks, 
-and helps avoid many common programming errors involving locks, there are occasions where you need to work with locks in a more flexible way. 
-For example, some algorithms for traversing concurrently accessed data structures require the use of "hand-over-hand" or "chain locking": 
-you acquire the lock of node A, then node B, then release A and acquire C, then release B and acquire D and so on. 
-Implementations of the Lock interface enable the use of such techniques by allowing a lock to be acquired and released in different scopes, and allowing multiple locks to be acquired and released in any order.
+使用 synchronized 方法或语句提供对每个对象关联的隐式监视器锁的访问，但强制所有锁获取和释放以块结构方式发生：
+当获取多个锁时，必须以相反的顺序释放，并且所有锁必须在获取它们的相同词法作用域内释放。
 
-
+虽然 synchronized 方法和语句的范围机制使得使用监视器锁编程更容易，
+并且有助于避免许多涉及锁的常见编程错误，但有时你需要以更灵活的方式使用锁。
+例如，某些并发访问数据结构的遍历算法需要使用"hand-over-hand"或"链式锁定"：
+你获取节点 A 的锁，然后是节点 B，然后释放 A 并获取 C，然后释放 B 并获取 D，依此类推。
+Lock 接口的实现通过允许在不同作用域中获取和释放锁，以及允许以任何顺序获取和释放多个锁，来支持使用这些技术。
 
 ```java
 public interface Lock {
     void lock();
     void lockInterruptibly() throws InterruptedException;
-
     boolean tryLock();
     boolean tryLock(long time, TimeUnit unit) throws InterruptedException;
-
     void unlock();
-
     Condition newCondition();
 }
 ```
 
-TicketLock
-
-CLHLock
-
-MCSLock
-
-### Polled and Timed Lock Acquisition
-
-The timed and polled lock-acqusition modes provided by tryLock allow more sophisticated error recovery than unconditional acquisition. 
-With intrinsic locks, a deadlock is fatal—the only way to recover is to restart the application, and the only defense is to construct your program so that inconsistent lock ordering is impossible. 
-Timed and polled locking offer another option: probabalistic deadlock avoidance.
-
-### Interruptible Lock Acquisition
-
-Just as timed lock acquisition allows exclusive locking to be used within timelimited activities, interruptible lock acquisition allows locking to be used within cancellable activities. 
-Several mechanisms, such as acquiring an intrinsic lock, that are not responsive to interruption. 
-These noninterruptible blocking mechanisms complicate the implementation of cancellable tasks. 
-The `lockInterruptibly` method allows you to try to acquire a lock while remaining responsive to interruption, and its inclusion in Lock avoids creating another category of non-interruptible blocking mechanisms.
-
-The canonical structure of interruptible lock acquisition is slightly more complicated than normal lock acquisition, as two try blocks are needed. 
-(If the interruptible lock acquisition can throw InterruptedException, the standard try-finally locking idiom works.) 
-The timed `tryLock` is also responsive to interruption and so can be used when you need both timed and interruptible lock acquisition.
-
-### Non-block-structured Locking
-
-With intrinsic locks, acquire-release pairs are block-structured—a lock is always released in the same basic block in which it was acquired, regardless of how control exits the block. 
-Automatic lock release simplifies analysis and prevents potential coding errors, but sometimes a more flexible locking discipline is needed.
-In ConcurrentMap, we saw how reducing lock granularity can enhance scalability. Lock striping allows different hash chains in a hash-based collection to use different locks.
-An example of this technique, called **hand-over-hand locking** or **lock coupling**.
-
-### Fairness
-
-The ReentrantLock constructor offers a choice of two fairness options: create a nonfair lock (the default) or a fair lock.
-(*The polled `tryLock` always barges, even for fair locks*.)
-
-
-
-
-### Summary of Lock
-
-> ReentrantLock is an advanced tool for situations where intrinsic locking is not practical.
-> 
-> Use it if you need its advanced features: 
-> timed, polled, or interruptible lock acquisition, fair queueing, or non-block-structured locking. 
-> 
-> **Otherwise, prefer synchronized.**
-
-[AQS](/docs/CS/Java/JDK/Concurrency/AQS.md)
-
-
-
-## Condition
-
-### Summary of Condition 
-
-
-
-|               | Object                | Condition                          |
-| ------------- | --------------------- | ---------------------------------- |
-| Method        | wait/notify           | await/signal                       |
-| Depend        | synchronized          | AQS                                |
-| Implement     | C++                   | Java                               |
-| Interruptibility | interruptibility |                                    |
-| wait time     |                       | could set a future time            |
-| Num           |                       | a Lock can use multiple Conditions |
-| Sleep         | Unsupported           | Supported                          |
-|               |                       |                                    |
-
-
-
-
-
-## LockSupport
-
-**LockSupport call [Unsafe](/docs/CS/Java/JDK/Basic/unsafe.md)**.
-
-
-
-### parker
-
-Disables the current thread for thread scheduling purposes unless the permit is available.
-
-If the permit is available then it is consumed and the call returns immediately; otherwise the current thread becomes disabled for thread scheduling purposes and lies dormant until one of three things happens:
-- Some other thread invokes unpark with the current thread as the target; or
-- Some other thread interrupts the current thread; or
-- The call spuriously (that is, for no reason) returns.
-
-This method does not report which of these caused the method to return. Callers should re-check the conditions which caused the thread to park in the first place. Callers may also determine, for example, the interrupt status of the thread upon return.
-
-```java
- public static void park(Object blocker) {
-        Thread t = Thread.currentThread();
-        setBlocker(t, blocker);
-        UNSAFE.park(false, 0L);
-        setBlocker(t, null);
-    }
-
-private static void setBlocker(Thread t, Object arg) {
-    // Even though volatile, hotspot doesn't need a write barrier here.
-    UNSAFE.putObject(t, parkBlockerOffset, arg);
-    }
-```
-**sample**:
-
-```
-while (!canProceed()) { ... LockSupport.park(this); }
-```
-
-Makes available the permit for the given thread, if it was not already available. 
-If the thread was blocked on park then it will unblock. 
-Otherwise, its next call to park is guaranteed not to block. This operation is not guaranteed to have any effect at all if the given thread has not been started.
-```java
-public static void unpark(Thread thread) {
-  if (thread != null)
-      UNSAFE.unpark(thread);
-}
-```
-
-### Sample
-
-
-```java
-class FIFOMutex {
-    private final AtomicBoolean locked = new AtomicBoolean(false);
-    private final Queue<Thread> waiters
-      = new ConcurrentLinkedQueue<Thread>();
- 
-    public void lock() {
-      boolean wasInterrupted = false;
-      Thread current = Thread.currentThread();
-      waiters.add(current);
- 
-      // Block while not first in queue or cannot acquire lock
-      while (waiters.peek() != current ||
-             !locked.compareAndSet(false, true)) {
-        LockSupport.park(this);
-        if (Thread.interrupted()) // ignore interrupts while waiting
-          wasInterrupted = true;
-      }
-
-      waiters.remove();
-      if (wasInterrupted)          // reassert interrupt status on exit
-        current.interrupt();
-    }
- 
-    public void unlock() {
-      locked.set(false);
-      LockSupport.unpark(waiters.peek());
-    }
-  }
-```
-
 ## Links
-- [synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md)
-- [AQS](/docs/CS/Java/JDK/Concurrency/AQS.md)
 
-
+- [JDK Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)

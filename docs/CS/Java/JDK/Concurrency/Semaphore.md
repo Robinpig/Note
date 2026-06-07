@@ -1,22 +1,18 @@
 ## Introduction
 
+计数信号量。从概念上讲，信号量维护一组许可。
+每次 acquire 都会阻塞（如果必要）直到许可可用，然后获取它。每次 release 添加一个许可，可能释放一个阻塞的获取者。
+然而，实际上并没有使用实际的许可对象；Semaphore 只是维护可用数量的计数并相应行动。
+Semaphore 是一种经典的并发工具。
+**信号量通常用于限制可以访问某些（物理或逻辑）资源的线程数。**
 
+在获取条目之前，每个线程必须从信号量获取一个许可，确保有条目可用。当线程用完该条目后，将其返回到池中，并将许可返回给信号量，允许另一个线程获取该条目。注意，在调用 acquire 时不持有同步锁，因为这会阻止条目被返回到池中。**信号量封装了限制对池访问所需的同步，与维护池本身一致性所需的任何同步分开**。
+初始化为 1 的信号量，并且其使用方式使其最多只有一个许可可用，可以作为互斥锁使用。这通常称为二值信号量，因为它只有两个状态：一个许可可用或零个许可可用。以这种方式使用时，二值信号量具有一个属性（与许多 `java.util.concurrent.locks.Lock` 实现不同），即**"锁"可以由非拥有者的线程释放（因为信号量没有所有权的概念）**。这在某些特殊情况下很有用，例如死锁恢复。
 
-A counting semaphore. Conceptually, a semaphore maintains a set of permits. 
-Each acquire blocks if necessary until a permit is available, and then takes it. Each release adds a permit, potentially releasing a blocking acquirer. 
-However, no actual permit objects are used; the Semaphore just keeps a count of the number available and acts accordingly.
-Semaphore is a classic concurrency tool.
-**Semaphores are often used to restrict the number of threads than can access some (physical or logical) resource.** 
-
-Before obtaining an item each thread must acquire a permit from the semaphore, guaranteeing that an item is available for use. When the thread has finished with the item it is returned back to the pool and a permit is returned to the semaphore, allowing another thread to acquire that item. Note that no synchronization lock is held when acquire is called as that would prevent an item from being returned to the pool. **The semaphore encapsulates the synchronization needed to restrict access to the pool, separately from any synchronization needed to maintain the consistency of the pool itself**.
-A semaphore initialized to one, and which is used such that it only has at most one permit available, can serve as a mutual exclusion lock. This is more commonly known as a binary semaphore, because it only has two states: one permit available, or zero permits available. When used in this way, the binary semaphore has the property (unlike many `java.util.concurrent.locks.Lock` implementations), that **the "lock" can be released by a thread other than the owner (as semaphores have no notion of ownership)**. This can be useful in some specialized contexts, such as deadlock recovery.
-
-The constructor for this class optionally accepts a fairness parameter. When set false, this class makes no guarantees about the order in which threads acquire permits. In particular, barging is permitted, that is, a thread invoking acquire can be allocated a permit ahead of a thread that has been waiting - logically the new thread places itself at the head of the queue of waiting threads. When fairness is set true, the semaphore guarantees that threads invoking any of the acquire methods are selected to obtain permits in the order in which their invocation of those methods was processed (first-in-first-out; FIFO). Note that FIFO ordering necessarily applies to specific internal points of execution within these methods. So, it is possible for one thread to invoke acquire before another, but reach the ordering point after the other, and similarly upon return from the method. Also note that the untimed tryAcquire methods do not honor the fairness setting, but will take any permits that are available.
-Generally, semaphores used to control resource access should be initialized as fair, to ensure that no thread is starved out from accessing a resource. When using semaphores for other kinds of synchronization control, the throughput advantages of non-fair ordering often outweigh fairness considerations.
-This class also provides convenience methods to acquire and release multiple permits at a time. Beware of the increased risk of indefinite postponement when these methods are used without fairness set true.
-**_Memory consistency effects_**: *Actions in a thread prior to calling release() **happen-before** actions following a successful acquire() in another thread.*
-
-
+此类的构造方法可选择接受一个公平性参数。当设置为 false 时，此类不保证线程获取许可的顺序。特别是，允许插队，即调用 acquire 的线程可能被分配一个先于已等待线程的许可——逻辑上新线程将自己置于等待线程队列的头部。当公平性设置为 true 时，信号量保证调用任何 acquire 方法的线程按照其对这些方法的调用被处理的顺序（先进先出；FIFO）选择获得许可。注意，FIFO 排序必然适用于这些方法内的特定内部执行点。因此，一个线程可能在另一个线程之前调用 acquire，但在之后到达排序点，并且在从方法返回时也是如此。另请注意，无定时的 tryAcquire 方法不遵守公平性设置，但会获取任何可用许可。
+通常，用于控制资源访问的信号量应初始化为公平的，以确保没有线程因访问资源而饥饿。当使用信号量进行其他类型的同步控制时，非公平排序的吞吐量优势往往超过公平性考虑。
+此类还提供了同时获取和释放多个许可的便捷方法。注意，当这些方法在没有设置公平性的情况下使用时，无限期推迟的风险会增加。
+**_内存一致性效应_**：*一个线程中调用 release() 之前的操作 **happens-before** 另一个线程中成功 acquire() 之后的操作。*
 
 ```java
 public class Semaphore implements java.io.Serializable {
@@ -33,203 +29,6 @@ public class Semaphore implements java.io.Serializable {
 }
 ```
 
-
-
-### Sync
-
-```java
-/**
- * Synchronization implementation for semaphore.  Uses AQS state
- * to represent permits. Subclassed into fair and nonfair
- * versions.
- */
-abstract static class Sync extends AbstractQueuedSynchronizer {
-    private static final long serialVersionUID = 1192457210091910933L;
-
-    Sync(int permits) {
-        setState(permits);
-    }
-
-    final int getPermits() {
-        return getState();
-    }
-		// invoke by tryAcquire
-    final int nonfairTryAcquireShared(int acquires) {
-        for (;;) {
-            int available = getState();
-            int remaining = available - acquires;
-            if (remaining < 0 ||
-                compareAndSetState(available, remaining))
-                return remaining;
-        }
-    }
-
-    protected final boolean tryReleaseShared(int releases) {
-        for (;;) {
-            int current = getState();
-            int next = current + releases;
-            if (next < current) // overflow
-                throw new Error("Maximum permit count exceeded");
-            if (compareAndSetState(current, next))
-                return true;
-        }
-    }
-
-    final void reducePermits(int reductions) {
-        for (;;) {
-            int current = getState();
-            int next = current - reductions;
-            if (next > current) // underflow
-                throw new Error("Permit count underflow");
-            if (compareAndSetState(current, next))
-                return;
-        }
-    }
-
-    final int drainPermits() {
-        for (;;) {
-            int current = getState();
-            if (current == 0 || compareAndSetState(current, 0))
-                return current;
-        }
-    }
-}
-```
-
-
-
-## acquire
-
-
-
-Repeatedly:
-
-1. Check if node now first
-2. if so, ensure head stable, else ensure valid predecessor
-3. if node is first or not yet enqueued, try acquiring
-4. else if node not yet created, create it
-5. else if not yet enqueued, try once to enqueue
-6. else if woken from park, retry (up to postSpins times)
-7. else if WAITING status not set, set and retry
-8. else park and clear WAITING status, and check cancellation
-
-```java
-public void acquire() throws InterruptedException {
-    sync.acquireSharedInterruptibly(1);
-}
-
-// in AQS
-public final void acquireSharedInterruptibly(int arg)
-        throws InterruptedException {
-    if (Thread.interrupted())
-        throw new InterruptedException();
-    if (tryAcquireShared(arg) < 0)
-        doAcquireSharedInterruptibly(arg);
-}
-
-// FairLock
-protected int tryAcquireShared(int acquires) {
-    for (;;) {
-        if (hasQueuedPredecessors())
-            return -1;
-        int available = getState();
-        int remaining = available - acquires;
-        if (remaining < 0 ||
-            compareAndSetState(available, remaining))
-            return remaining;
-    }
-}
-
-// NonFairLock
-final int nonfairTryAcquireShared(int acquires) {
-    for (;;) {
-        int available = getState();
-        int remaining = available - acquires;
-        if (remaining < 0 ||
-            compareAndSetState(available, remaining))
-            return remaining;
-    }
-}
-```
-
-
-
-
-
-## release
-
-```java
-public void release() {
-    sync.releaseShared(1);
-}
-
-protected final boolean tryReleaseShared(int releases) {
-    for (;;) {
-        int current = getState();
-        int next = current + releases;
-        if (next < current) // overflow
-            throw new Error("Maximum permit count exceeded");
-        if (compareAndSetState(current, next))
-            return true;
-    }
-}
-```
-
-
-
-## Example
-
-_For example, here is a class that uses a semaphore to control access to a pool of items:_
-
-```java
-  
- class Pool {
-   private static final int MAX_AVAILABLE = 100;
-   private final Semaphore available = new Semaphore(MAX_AVAILABLE, true);
-
-   public Object getItem() throws InterruptedException {
-     available.acquire();
-     return getNextAvailableItem();
-   }
-
-   public void putItem(Object x) {
-     if (markAsUnused(x))
-       available.release();
-   }
-
-   // Not a particularly efficient data structure; just for demo
-
-   protected Object[] items = ... whatever kinds of items being managed
-   protected boolean[] used = new boolean[MAX_AVAILABLE];
-
-   protected synchronized Object getNextAvailableItem() {
-     for (int i = 0; i < MAX_AVAILABLE; ++i) {
-       if (!used[i]) {
-         used[i] = true;
-         return items[i];
-       }
-     }
-     return null; // not reached
-   }
-
-   protected synchronized boolean markAsUnused(Object item) {
-     for (int i = 0; i < MAX_AVAILABLE; ++i) {
-       if (item == items[i]) {
-         if (used[i]) {
-           used[i] = false;
-           return true;
-         } else
-           return false;
-       }
-     }
-     return false;
-   }
- }
-```
-
-
-
-
 ## Links
-- [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
-- [AQS](/docs/CS/Java/JDK/Concurrency/AQS.md)
+
+- [JDK Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)

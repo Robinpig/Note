@@ -1,24 +1,23 @@
 ## Introduction
 
-The Timer facility manages the execution of deferred (“run this task in 100 ms”) and periodic (“run this task every 10 ms”) tasks.
-However, Timer has some drawbacks, and ScheduledThreadPoolExecutor should be thought of as its replacement.
-You can construct a ScheduledThreadPoolExecutor through its constructor or through the newScheduledThreadPool factory.
+Timer 工具管理延迟执行（"在 100 毫秒后运行此任务"）和周期性执行（"每 10 毫秒运行此任务"）的任务。
+然而，Timer 有一些缺点，ScheduledThreadPoolExecutor 应被视为其替代品。
+你可以通过构造方法或 newScheduledThreadPool 工厂来构造 ScheduledThreadPoolExecutor。
 
-Timer does have support for scheduling based on absolute, not relative time, so that tasks can be sensitive to changes in the system clock;
-ScheduledThreadPoolExecutor supports only relative time.
+Timer 确实支持基于绝对时间（而非相对时间）的调度，因此任务可以对系统时钟的变化敏感；
+ScheduledThreadPoolExecutor 只支持相对时间。
 
-A Timer creates only a single thread for executing timer tasks.
-If a timer task takes too long to run, the timing accuracy of other TimerTasks can suffer.
-If a recurring TimerTask is scheduled to run every 10 ms and another Timer-Task takes 40 ms to run,
-the recurring task either (depending on whether it was scheduled at fixed rate or fixed delay) gets called four times in rapid succession after the long-running task completes,
-or “misses” four invocations completely.
-Scheduled thread pools address this limitation by letting you provide multiple threads for executing deferred and periodic tasks.
+Timer 只创建一个线程来执行定时器任务。
+如果一个定时器任务运行时间过长，其他 TimerTask 的定时准确性可能会受到影响。
+如果一个重复性的 TimerTask 被安排每 10 毫秒运行一次，而另一个 TimerTask 需要 40 毫秒才能运行完成，
+那么重复性任务要么（取决于它是按固定速率还是固定延迟调度）在长时间运行的任务完成后连续被调用四次，
+要么完全"错过"四次调用。
+Scheduled 线程池通过允许你提供多个线程来执行延迟和周期性任务，解决了这个限制。
 
-Another problem with Timer is that it behaves poorly if a TimerTask throws an unchecked exception.
-The Timer thread doesn't catch the exception, so an unchecked exception thrown from a TimerTask terminates the timer thread.
-Timer also doesn't resurrect the thread in this situation; instead, it erroneously assumes the entire Timer was cancelled. In this case,
-TimerTasks that are already scheduled but not yet executed are never run, and new tasks cannot be scheduled.(This problem, called “`thread leakage`”.)
-
+Timer 的另一个问题是，如果 TimerTask 抛出未受检异常，其行为不佳。
+Timer 线程不会捕获异常，因此从 TimerTask 抛出的未受检异常会终止定时器线程。
+Timer 在这种情况下也不会恢复线程；相反，它错误地假定整个 Timer 已被取消。在这种情况下，
+已经调度但尚未执行的 TimerTask 永远不会运行，新的任务也无法被调度。（这个问题称为"`线程泄漏`"）。
 
 Timer 中有两个核心组件，一个是用于调度延时任务的 TimerThread ，另一个是 TaskQueue，用于组织延时任务
 
@@ -28,205 +27,12 @@ public class Timer {
      * The timer task queue.  This data structure is shared with the timer
      * thread.  The timer produces tasks, via its various schedule calls,
      * and the timer thread consumes, executing timer tasks as appropriate,
-     * and removing them from the queue when they're obsolete.
      */
     private final TaskQueue queue = new TaskQueue();
-
     private final TimerThread thread = new TimerThread(queue);
-
-    /**
-     * This object causes the timer's task execution thread to exit
-     * gracefully when there are no live references to the Timer object and no
-     * tasks in the timer queue.  It is used in preference to a finalizer on
-     * Timer as such a finalizer would be susceptible to a subclass's
-     * finalizer forgetting to call it.
-     */
-    private final Object threadReaper = new Object() {
-        protected void finalize() throws Throwable {
-            synchronized(queue) {
-                thread.newTasksMayBeScheduled = false;
-                queue.notify(); // In case queue is empty.
-            }
-        }
-    };
-
-    /**
-     * This ID is used to generate thread names.
-     */
-    private final static AtomicInteger nextSerialNumber = new AtomicInteger(0);
 }
 ```
-
-
-TaskQueue是一个优先级队列，其底层是一个数组实现的小根堆
-TaskQueue 会将所有延时任务按照它们的 ExecutionTime ，由近到远的组织在小根堆中，堆顶永远存放的是 ExecutionTime 最近的延时任务。
-
-```java
-class TaskQueue {
-    /**
-     * Priority queue represented as a balanced binary heap: the two children
-     * of queue[n] are queue[2*n] and queue[2*n+1].  The priority queue is
-     * ordered on the nextExecutionTime field: The TimerTask with the lowest
-     * nextExecutionTime is in queue[1] (assuming the queue is nonempty).  For
-     * each node n in the heap, and each descendant of n, d,
-     * n.nextExecutionTime <= d.nextExecutionTime.
-     */
-    private TimerTask[] queue = new TimerTask[128];
-
-    /**
-     * The number of tasks in the priority queue.  (The tasks are stored in
-     * queue[1] up to queue[size]).
-     */
-    private int size = 0;
-
-    /**
-     * Returns the number of tasks currently on the queue.
-     */
-    int size() {
-        return size;
-    }
-
-    /**
-     * Adds a new task to the priority queue.
-     */
-    void add(TimerTask task) {
-        // Grow backing store if necessary
-        if (size + 1 == queue.length)
-            queue = Arrays.copyOf(queue, 2*queue.length);
-
-        queue[++size] = task;
-        fixUp(size);
-    }
-
-    /**
-     * Return the "head task" of the priority queue.  (The head task is an
-     * task with the lowest nextExecutionTime.)
-     */
-    TimerTask getMin() {
-        return queue[1];
-    }
-
-    /**
-     * Remove the head task from the priority queue.
-     */
-    void removeMin() {
-        queue[1] = queue[size];
-        queue[size--] = null;  // Drop extra reference to prevent memory leak
-        fixDown(1);
-    }
-}
-```
-
-## TimerThread
-
-TimerThread 会不断的从 TaskQueue 中获取堆顶任务，如果堆顶任务的 ExecutionTime 已经达到 —— executionTime <= currentTime , 则执行任务。如果该任务是一个周期性任务，则将任务重新放入到 TaskQueue 中。
-
-如果堆顶任务的 ExecutionTime 还没有到达，那么 TimerThread 就会等待 executionTime - currentTime 的时间，一直到堆顶任务的执行时间到达，TimerThread 被重新唤醒执行堆顶任务
-
-```java
-class TimerThread extends Thread {
-    /**
-     * This flag is set to false by the reaper to inform us that there
-     * are no more live references to our Timer object.  Once this flag
-     * is true and there are no more tasks in our queue, there is no
-     * work left for us to do, so we terminate gracefully.  Note that
-     * this field is protected by queue's monitor!
-     */
-    boolean newTasksMayBeScheduled = true;
-
-    /**
-     * Our Timer's queue.  We store this reference in preference to
-     * a reference to the Timer so the reference graph remains acyclic.
-     * Otherwise, the Timer would never be garbage-collected and this
-     * thread would never go away.
-     */
-    private TaskQueue queue;
-
-    TimerThread(TaskQueue queue) {
-        this.queue = queue;
-    }
-
-    public void run() {
-        try {
-            mainLoop();
-        } finally {
-            // Someone killed this Thread, behave as if Timer cancelled
-            synchronized(queue) {
-                newTasksMayBeScheduled = false;
-                queue.clear();  // Eliminate obsolete references
-            }
-        }
-    }
-}
-```
-
-### mainLoop
-
-```java
-class TimerThread extends Thread {
-    /**
-     * The main timer loop.  (See class comment.)
-     */
-    private void mainLoop() {
-        while (true) {
-            try {
-                TimerTask task;
-                boolean taskFired;
-                synchronized(queue) {
-                    // Wait for queue to become non-empty
-                    while (queue.isEmpty() && newTasksMayBeScheduled)
-                    queue.wait();
-                    if (queue.isEmpty())
-                        break; // Queue is empty and will forever remain; die
-
-                    // Queue nonempty; look at first evt and do the right thing
-                    long currentTime, executionTime;
-                    task = queue.getMin();
-                    synchronized(task.lock) {
-                        if (task.state == TimerTask.CANCELLED) {
-                            queue.removeMin();
-                            continue;  // No action required, poll queue again
-                        }
-                        currentTime = System.currentTimeMillis();
-                        executionTime = task.nextExecutionTime;
-                        if (taskFired = (executionTime<=currentTime)) {
-                            if (task.period == 0) { // Non-repeating, remove
-                                queue.removeMin();
-                                task.state = TimerTask.EXECUTED;
-                            } else { // Repeating task, reschedule
-                                queue.rescheduleMin(
-                                    task.period<0 ? currentTime   - task.period
-                                    : executionTime + task.period);
-                            }
-                        }
-                    }
-                    if (!taskFired) // Task hasn't yet fired; wait
-                        queue.wait(executionTime - currentTime);
-                }
-                if (taskFired)  // Task fired; run it, holding no locks
-                    task.run();
-            } catch(InterruptedException e) {
-            }
-        }
-    }
-}
-
-```
-
-## Summary
-
-根据以上 Timer 的核心实现，我们可以总结出 Timer 在应对中间件场景的延时任务时，有以下四种不足：
-
-1. 首先用于组织延时任务的 TaskQueue 本质上是一个小根堆。对于堆这种数据结构来说，添加，删除一个延时任务时，堆都要向上，向下调整以便满足小根堆的特性
-   单次操作的时间复杂度为 O(logn)。显然在面对海量定时任务的添加，删除时，性能上还是差点意思。
-2. Timer 调度框架中只有一个 TimerThread 线程来负责延时任务的调度，执行。在面对海量任务的时候，通常会显得力不从心。
-3. 另外一个严重问题是，当延时任务在执行的过程中出现异常时， Timer 并不会捕获，会导致 TimerThread 终止。这样一来，TaskQueue 中的其他延时任务将永远不会得到执行。
-4. Timer 依赖于系统的绝对时间，如果系统时间本身不准确，那么延时任务的调度就可能会出问题
-
-
-
 
 ## Links
 
 - [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
-- [Job execution](/docs/CS/Java/JDK/sche.md)

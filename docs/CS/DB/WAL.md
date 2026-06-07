@@ -1,53 +1,58 @@
 ## Introduction
 
-In computer science, write-ahead logging (WAL) is a family of techniques for providing atomicity and durability (two of the ACID properties) in database systems.
-It can be seen as an implementation of the "Event Sourcing" architecture, in which the state of a system is the result of the evolution of incoming events from an initial state.
-A write ahead log is an append-only auxiliary disk-resident structure used for crash and transaction recovery.
-The changes are first recorded in the log, which must be written to stable storage, before the changes are written to the database.
+在计算机科学中，写前日志（WAL）是一类用于在数据库系统中提供原子性和持久性（ACID 属性中的两个）的技术。
+它可以被视为"Event Sourcing"架构的一种实现，其中系统的状态是从初始状态开始的事件演变的结果。
+写前日志是一种只追加的辅助磁盘驻留结构，用于崩溃和事务恢复。
+更改首先记录在日志中，日志必须写入稳定存储，然后才能将更改写入数据库。
 
-The following features are responsible for the popularity of Write Ahead Logging:
+以下特性是 Write Ahead Logging 流行的原因：
 
-- **Reduced Disk Writes:**<br>
-  WAL reduces the amount of disk writes significantly as you only need to flush the log file to the disk when committing a transaction. This is an optimal method rather than writing every transaction directly on the disk.
-- **Decreased Syncing Cost:**<br>
-  Since log files accept data sequentially, the syncing cost of log data is much less as compared to that of flushing data pages. This is beneficial, especially for servers managing numerous small transactions using different parts of your data store.
-- **Fast Redo Operation:**<br>
-  WAL supports high-speed roll-forward recovery (REDO). This implies any modifications that were aborted in between can be recovered from the log records.
-- **Accessible Data Backup:**<br>
-  WAL caters to your data backup needs and also provides you with backup and point-in-time recovery. You can simply archive the WAL data and revert to any time instant that occurred prior to the latest data write.
+- **减少磁盘写入：**<br>
+  WAL 显著减少了磁盘写入量，因为只需在提交事务时将日志文件刷新到磁盘。
+  相比直接将每个事务写入磁盘，这是一种更优的方法。
+- **降低同步成本：**<br>
+  由于日志文件顺序接收数据，日志数据的同步成本远低于刷新数据页面的成本。
+  这对于管理使用数据存储不同部分的大量小事务的服务器特别有益。
+- **快速重做操作：**<br>
+  WAL 支持高速前滚恢复（REDO）。
+  这意味着任何中途中止的修改都可以从日志记录中恢复。
+- **可访问的数据备份：**<br>
+  WAL 满足数据备份需求，并提供备份和即时恢复功能。
+  你可以简单地归档 WAL 数据并恢复到最近一次数据写入之前的任意时间点。
 
-In a system using WAL, all modifications are written to a log before they are applied. 
-Usually both redo and undo information is stored in the log.
+在使用 WAL 的系统中，所有修改在应用之前都会先写入日志。
+通常，redo 和 undo 信息都存储在日志中。
 
-The purpose of this can be illustrated by an example. Imagine a program that is in the middle of performing some operation when the machine it is running on loses power.
-Upon restart, that program might need to know whether the operation it was performing succeeded, succeeded partially, or failed.
-If a write-ahead log is used, the program can check this log and compare what it was supposed to be doing when it unexpectedly lost power to what was actually done.
-On the basis of this comparison, the program could decide to undo what it had started, complete what it had started, or keep things as they are.
+这可以通过一个例子来说明。想象一个程序正在执行某个操作时，其运行的机器突然断电。
+重启后，该程序可能需要知道它正在执行的操作是成功、部分成功还是失败。
+如果使用了写前日志，程序可以检查该日志，并将其在意外断电时本应执行的操作与实际执行的操作进行比较。
+基于此比较，程序可以决定撤销已开始的操作、完成已开始的操作或保持现状。
 
-After a certain amount of operations, the program should perform a checkpoint, writing all the changes specified in the WAL to the database and clearing the log.
+在执行一定数量的操作后，程序应执行检查点，将 WAL 中指定的所有更改写入数据库并清除日志。
 
-WAL allows updates of a database to be done in-place. Another way to implement atomic updates is with shadow paging, which is not in-place.
-The main advantage of doing updates in-place is that it reduces the need to modify indexes and block lists.
+WAL 允许对数据库进行原地更新。另一种实现原子更新的方法是影子分页，它不是原地更新的。
+原地更新的主要优点是减少了对修改索引和块列表的需求。
 
-ARIES is a popular algorithm in the WAL family.
+ARIES 是 WAL 系列中一种流行的算法。
 
 ### Examples
 
-- The log implementation in all Consensus algorithms like Zookeeper and RAFT is similar to write ahead log
-- The storage implementation in [Kafka](/docs/CS/MQ/Kafka/Kafka.md) follows similar structure as that of commit logs in databases
-- All the databases, including the nosql databases like Cassandra use write ahead log technique to guarantee durability
+- 所有共识算法（如 Zookeeper 和 RAFT）中的日志实现与写前日志类似
+- [Kafka](/docs/CS/MQ/Kafka/Kafka.md) 中的存储实现遵循与数据库中提交日志类似的结构
+- 所有数据库，包括像 Cassandra 这样的 NoSQL 数据库，都使用写前日志技术来保证持久性
 
 ## Checkpoint
 
-A “Checkpoint” operation transfers the Write Ahead Logging file transactions into your database.
-The normal rollback contains only 2 operations namely, Reading & Writing.
-However, WAL takes it a step further and adds a third operation called Checkpointing.
-You can even perform a Checkpoint and Read operation concurrently which will in turn boost your database’s performance.
+"Checkpoint"操作将 Write Ahead Logging 文件中的事务转移到你的数据库中。
+正常的回滚只包含两个操作，即读取和写入。
+然而，WAL 更进一步，添加了第三个称为 Checkpointing 的操作。
+你甚至可以并发执行 Checkpoint 和 Read 操作，这反过来将提升数据库的性能。
 
-A Checkpoint operation must stop only when it reaches a WAL page that succeeds the end mark of any of the current read operations.
-This is to prevent overwriting in the database file. Furthermore, a Checkpoint stores the WAL index to memorize how far it got.
-This allows it to resume the transfer of WAL data to your database from the point where it left off in the last transfer.
-A long-running Read operation can prevent a new Checkpoint from moving forward, but since every Read operation eventually ends, the Checkpoint can continue.
+Checkpoint 操作必须仅在到达任何当前读取操作结束标记之后的 WAL 页面时停止。
+这是为了防止覆盖数据库文件。
+此外，Checkpoint 会存储 WAL 索引以记住它已经处理到哪里。
+这使其能够从上次传输中断的地方恢复将 WAL 数据传输到数据库。
+长时间运行的 Read 操作可能会阻止新的 Checkpoint 向前推进，但由于每个 Read 操作最终都会结束，Checkpoint 可以继续。
 
 ## Links
 

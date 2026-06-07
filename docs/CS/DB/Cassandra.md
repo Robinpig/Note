@@ -1,19 +1,14 @@
 ## Introduction
 
-
 ## Thread Model
 
-
-property enable [epoll](epoll.md)
+支持启用 [epoll](epoll.md)
 
 OptionalSslHandler
 
-
 Connection limiter
 
-
 Flusher
-
 
 ## Links
 

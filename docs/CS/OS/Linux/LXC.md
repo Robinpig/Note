@@ -1,18 +1,18 @@
-## Introduction
+## 简介
 
-LXC is a userspace interface for the Linux kernel containment features.
-Through a powerful API and simple tools, it lets Linux users easily create and manage system or application containers.
+LXC 是 Linux 内核容器功能的用户空间接口。
+通过强大的 API 和简单的工具，它让 Linux 用户可以轻松创建和管理系统或应用程序容器。
 
-Current LXC uses the following kernel features to contain processes:
+当前 LXC 使用以下内核功能来包含进程：
 
-- Kernel namespaces (ipc, uts, mount, pid, network and user)
-- Apparmor and SELinux profiles
-- Seccomp policies
-- Chroots (using pivot_root)
-- Kernel capabilities
-- CGroups (control groups)
+- 内核命名空间（ipc、uts、mount、pid、network 和 user）
+- Apparmor 和 SELinux 配置文件
+- Seccomp 策略
+- Chroot（使用 pivot_root）
+- 内核能力
+- CGroups（控制组）
 
-We can simplify to create a container:
+我们可以简化为创建一个容器：
 
 ```c
 pid = clone(fun, stack, flags, clone_arg);
@@ -38,10 +38,7 @@ fun()
 }
 ```
 
-
-
-
-## Links
+## 链接
 
 - [Linux](/docs/CS/OS/Linux/Linux.md)
-- [Container](/docs/CS/Container/Container.md)
+- [容器](/docs/CS/Container/Container.md)

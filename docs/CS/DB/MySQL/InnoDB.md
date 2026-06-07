@@ -1,53 +1,53 @@
-## Introduction
+## 简介
 
-`InnoDB` is a general-purpose storage engine that balances high reliability and high performance.
-In MySQL 8.0, `InnoDB` is the default MySQL storage engine.
-Unless you have configured a different default storage engine, issuing a `CREATE TABLE` statement without an `ENGINE` clause creates an `InnoDB` table.
+`InnoDB` 是一个通用存储引擎，兼具高可靠性和高性能。
+在 MySQL 8.0 中，`InnoDB` 是默认的 MySQL 存储引擎。
+除非你配置了不同的默认存储引擎，否则在不指定 `ENGINE` 子句的情况下执行 `CREATE TABLE` 语句将创建 `InnoDB` 表。
 
-### Key Advantages of InnoDB
+### InnoDB 的主要优势
 
-- Its DML operations follow the ACID model, with transactions featuring commit, rollback, and crash-recovery capabilities to protect user data.
-- Row-level locking and Oracle-style consistent reads increase multi-user concurrency and performance.
-- `InnoDB` tables arrange your data on disk to optimize queries based on primary keys.
-  Each `InnoDB` table has a primary key index called the clustered index that organizes the data to minimize I/O for primary key lookups.
-- To maintain data integrity, `InnoDB` supports `FOREIGN KEY` constraints. With foreign keys, inserts, updates, and deletes are checked to ensure they do not result in inconsistencies across related tables.
+- 其 DML 操作遵循 ACID 模型，具有事务提交、回滚和崩溃恢复能力以保护用户数据。
+- 行级锁和 Oracle 风格的一致性读提高了多用户并发性和性能。
+- `InnoDB` 表在磁盘上组织数据，以优化基于主键的查询。
+  每个 `InnoDB` 表都有一个称为聚簇索引的主键索引，该索引组织数据以最小化主键查找的 I/O。
+- 为维护数据完整性，`InnoDB` 支持 `FOREIGN KEY` 约束。
+  通过外键，插入、更新和删除操作都会被检查，以确保不会导致相关表之间的不一致。
 
-**InnoDB Storage Engine Features**
+**InnoDB 存储引擎特性**
 
+| 特性 | 支持 |
+|------|------|
+| **B-tree 索引** | 是 |
+| **备份/时间点恢复**（在服务器层实现，而非存储引擎层） | 是 |
+| **集群数据库支持** | 否 |
+| **聚簇索引** | 是 |
+| **数据压缩** | 是 |
+| **数据缓存** | 是 |
+| **加密数据** | 是（通过加密函数在服务器层实现；MySQL 5.7 及更高版本支持静态数据加密） |
+| **外键支持** | 是 |
+| **全文搜索索引** | 是（MySQL 5.6 及更高版本支持 FULLTEXT 索引） |
+| **地理空间数据类型支持** | 是 |
+| **地理空间索引支持** | 是（MySQL 5.7 及更高版本支持地理空间索引） |
+| **哈希索引** | 否（InnoDB 在其自适应哈希索引特性内部使用哈希索引） |
+| **索引缓存** | 是 |
+| **锁粒度** | 行 |
+| **MVCC** | 是 |
+| **复制支持**（在服务器层实现，而非存储引擎层） | 是 |
+| **存储限制** | 64TB |
+| **T-tree 索引** | 否 |
+| **事务** | 是 |
+| **更新数据字典统计信息** | 是 |
 
-|                                                                                           Feature | Support                                                                                                                 |
-| ------------------------------------------------------------------------------------------------: | :---------------------------------------------------------------------------------------------------------------------- |
-|                                                                                **B-tree indexes** | Yes                                                                                                                     |
-| **Backup/point-in-time recovery** (Implemented in the server, rather than in the storage engine.) | Yes                                                                                                                     |
-|                                                                      **Cluster database support** | No                                                                                                                      |
-|                                                                             **Clustered indexes** | Yes                                                                                                                     |
-|                                                                               **Compressed data** | Yes                                                                                                                     |
-|                                                                                   **Data caches** | Yes                                                                                                                     |
-|                                                                                **Encrypted data** | Yes (Implemented in the server via encryption functions; In MySQL 5.7 and later, data-at-rest encryption is supported.) |
-|                                                                           **Foreign key support** | Yes                                                                                                                     |
-|                                                                      **Full-text search indexes** | Yes (Support for FULLTEXT indexes is available in MySQL 5.6 and later.)                                                 |
-|                                                                  **Geospatial data type support** | Yes                                                                                                                     |
-|                                                                   **Geospatial indexing support** | Yes (Support for geospatial indexing is available in MySQL 5.7 and later.)                                              |
-|                                                                                  **Hash indexes** | No (InnoDB utilizes hash indexes internally for its Adaptive Hash Index feature.)                                       |
-|                                                                                  **Index caches** | Yes                                                                                                                     |
-|                                                                           **Locking granularity** | Row                                                                                                                     |
-|                                                                                          **MVCC** | Yes                                                                                                                     |
-|           **Replication support** (Implemented in the server, rather than in the storage engine.) | Yes                                                                                                                     |
-|                                                                                **Storage limits** | 64TB                                                                                                                    |
-|                                                                                **T-tree indexes** | No                                                                                                                      |
-|                                                                                  **Transactions** | Yes                                                                                                                     |
-|                                                         **Update statistics for data dictionary** | Yes                                                                                                                     |
-
-[InnoDB Locking and Transaction Model](/docs/CS/DB/MySQL/Transaction.md)
+[InnoDB 锁和事务模型](/docs/CS/DB/MySQL/Transaction.md)
 
 ```sql
 mysql>SHOW VARIABLES LIKE 'innodb_version'; --8.0.33
 mysql>SHOW ENGINE INNODB STATUS;
 ```
 
-## Architecture
+## 架构
 
-The following diagram shows in-memory and on-disk structures that comprise the `InnoDB` storage engine architecture.
+下图展示了构成 `InnoDB` 存储引擎架构的内存和磁盘结构。
 
 <div style="text-align: center;">
 
@@ -56,68 +56,50 @@ The following diagram shows in-memory and on-disk structures that comprise the `
 </div>
 
 <p style="text-align: center;">
-Fig.1. InnoDB Architecture.
+Fig.1. InnoDB 架构图。
 </p>
 
-By default, InnoDB stores its data in a series of datafiles that are collectively known as a tablespace.
-A tablespace is essentially a black box that InnoDB manages all by itself.
+默认情况下，InnoDB 将其数据存储在一系列数据文件中，这些文件统称为表空间。
+表空间本质上是一个由 InnoDB 自己管理的黑盒。
 
-InnoDB uses MVCC to achieve high concurrency, and it implements all four SQL standard isolation levels.
-It defaults to the REPEATABLE READ isolation level, and it has a next-key locking strategy that prevents phantom reads in this isolation level:
-rather than locking only the rows you’ve touched in a query, InnoDB locks gaps in the index structure as well, preventing phantoms from being inserted.
+InnoDB 使用 MVCC 实现高并发，并实现了全部四个 SQL 标准隔离级别。
+它默认使用 REPEATABLE READ 隔离级别，并采用 next-key 锁策略防止该隔离级别下的幻读：
+InnoDB 不仅锁定查询中涉及的行，还锁定索引结构中的间隙，阻止幻影行插入。
 
-InnoDB tables are built on a clustered index, which we will cover in detail in Chap‐ ter 8 when we discuss schema design.
-InnoDB’s index structures are very different from those of most other MySQL storage engines.
-As a result, it provides very fast primary key lookups.
-However, secondary indexes (indexes that aren’t the primary key) contain the primary key columns, so if your primary key is large, other indexes will also be large.
-You should strive for a small primary key if you’ll have many indexes on a table.
+InnoDB 表基于聚簇索引构建。
+InnoDB 的索引结构与大多数其他 MySQL 存储引擎非常不同。
+因此，它提供非常快的主键查找。
+然而，辅助索引（非主键索引）包含主键列，因此如果你的主键很大，其他索引也会很大。
+如果表上有多个索引，应尽量使用较小的主键。
 
-InnoDB has a variety of internal optimizations.
-These include predictive read-ahead for prefetching data from disk, an adaptive hash index that automatically builds hash indexes in memory for very fast lookups, and an insert buffer to speed inserts.
+InnoDB 有多种内部优化。
+包括用于从磁盘预取数据的预测性预读、自动在内存中构建哈希索引以实现极快查找的自适应哈希索引，以及用于加速插入的插入缓冲区。
 
-### [InnoDB In-Memory Structures](/docs/CS/DB/MySQL/memory.md)
+### InnoDB 内存结构
 
-### InnoDB On-Disk Structures
+请参考 [InnoDB 内存结构](/docs/CS/DB/MySQL/memory.md)。
 
-- [Tablespaces](/docs/CS/DB/MySQL/tablespace.md)
-- [Indexes](/docs/CS/DB/MySQL/Index.md)
-- [Redo Log](/docs/CS/DB/MySQL/redolog.md)
-- [Undo Log](/docs/CS/DB/MySQL/undolog.md)
-- [Doublewrite Buffer](/docs/CS/DB/MySQL/Double-Buffer.md)
+### InnoDB 磁盘结构
 
-innodb shutdown handler
-innodb purge coordinator
-innodb purge worker * 3
+- [表空间](/docs/CS/DB/MySQL/tablespace.md)
+- [索引](/docs/CS/DB/MySQL/Index.md)
+- [重做日志](/docs/CS/DB/MySQL/redolog.md)
+- [Undo 日志](/docs/CS/DB/MySQL/undolog.md)
+- [双写缓冲区](/docs/CS/DB/MySQL/Double-Buffer.md)
 
-max_delayed_threads 20
-thread_stack 299008
+## 线程模型
 
-thread_pool_idle_timeout 60
-thread_pool_max_threads 65536
-innodb_purge_threads 4
-innodb_write_io_threads 4
-innodb_read_io_threads 4
-innodb_undo_logs 128
-
-innodb_adaptive_hash_index_parts 8
-innodb_adaptive_hash_index ON
-
-innodb_old_blocks_pct 37  — 3/8
-innodb_old_blocks_time	1000
-
-## Thread Model
-
-### Master Thread
+### Master 线程
 
 ```
-// using SHOW ENGINE INNODB STATUS;
+// 使用 SHOW ENGINE INNODB STATUS;
 srv_master_thread loops: 177 srv_active, 0 srv_shutdown, 2772864 srv_idle
 srv_master_thread log flush and writes: 2773038
 ```
 
 ```cpp
 // srv0srv.cc
-/** The master thread controlling the server. */
+/** 控制服务器的 master 线程。 */
 void srv_master_thread() {
 
   srv_slot_t *slot;
@@ -138,7 +120,7 @@ void srv_master_thread() {
 
   os_event_set(srv_threads.m_master_ready_for_dd_shutdown);
 
-  /* This is just for test scenarios. */
+  /* 仅用于测试场景。 */
   srv_thread_delay_cleanup_if_needed(true);
 
   while (srv_shutdown_state.load() < SRV_SHUTDOWN_MASTER_STOP) {
@@ -147,25 +129,24 @@ void srv_master_thread() {
 
   srv_master_shutdown_loop();
 
-  srv_main_thread_op_info = “exiting”;
+  srv_main_thread_op_info = "exiting";
   destroy_thd(thd);
 }
 ```
 
-#### main loop
+#### 主循环
 
 ```cpp
 
-/** Executes the main loop of the master thread.
-@param[in]   slot     slot reserved as SRV_MASTER */
+/** 执行 master 线程的主循环。
+@param[in]   slot     保留为 SRV_MASTER 的槽位 */
 static void srv_master_main_loop(srv_slot_t *slot) {
   if (srv_force_recovery >= SRV_FORCE_NO_BACKGROUND) {
-    /* When innodb_force_recovery is at least SRV_FORCE_NO_BACKGROUND,
-    we avoid performing active/idle master’s tasks. However, we still
-    need to ensure that:
-      srv_shutdown_state >= SRV_SHUTDOWN_PRE_DD_AND_SYSTEM_TRANSACTIONS,
-    after we exited srv_master_main_loop(). Keep waiting until that
-    is satisfied and then exit. */
+    /* 当 innodb_force_recovery 至少为 SRV_FORCE_NO_BACKGROUND 时，
+    我们避免执行 active/idle master 的任务。但仍需确保：
+      srv_shutdown_state >= SRV_SHUTDOWN_PRE_DD_AND_SYSTEM_TRANSACTIONS，
+    在退出 srv_master_main_loop() 之后。持续等待直到满足条件，
+    然后退出。 */
     while (srv_shutdown_state.load() <
            SRV_SHUTDOWN_PRE_DD_AND_SYSTEM_TRANSACTIONS) {
       srv_master_wait(slot);
@@ -181,10 +162,9 @@ static void srv_master_main_loop(srv_slot_t *slot) {
 
     MONITOR_INC(MONITOR_MASTER_THREAD_SLEEP);
 
-    /* Just in case - if there is not much free space in redo,
-    try to avoid asking for troubles because of extra work
-    performed in such background thread. */
-    srv_main_thread_op_info = “checking free log space”;
+    /* 以防万一 - 如果重做日志空间不足，
+    尽量避免在此类后台线程中执行额外工作引发问题。 */
+    srv_main_thread_op_info = "checking free log space";
     log_free_check();
 
     if (srv_check_activity(old_activity_count)) {
@@ -194,62 +174,58 @@ static void srv_master_main_loop(srv_slot_t *slot) {
       srv_master_do_idle_tasks();
     }
 
-    /* Let clone wait when redo/undo log encryption is set. If clone is already
-    in progress we skip the check and come back later. */
+    /* 当设置 redo/undo 日志加密时让克隆等待。如果克隆
+    已在执行中，则跳过检查，稍后返回。 */
     if (!clone_mark_wait()) {
       continue;
     }
 
-    /* Allow any blocking clone to progress. */
+    /* 允许阻塞的克隆继续执行。 */
     clone_mark_free();
 
-    /* Purge any deleted tablespace pages. */
+    /* 清理已删除的表空间页面。 */
     fil_purge();
   }
 }
 ```
 
-#### srv_master_do_idle_tasks
+#### idle 任务
 
-per 10 seconds
+每 10 秒执行一次：
 
-- flush log buffer
-- merge max 5 change buffer
-- flush max 100 buffer pool pages(might)
-- purge unused undo log
+- 刷新日志缓冲区
+- 合并最多 5 个 change buffer
+- 刷出最多 100 个缓冲池脏页（可能）
+- 清理未使用的 undo log
 
-#### srv_master_do_active_tasks
+#### active 任务
 
-per second
+每秒执行一次：
 
-- flush log buffer
-- merge change buffer(might)
-- flush max 100 buffer pool pages(might)
-- jump into background loop
+- 刷新日志缓冲区
+- 合并 change buffer（可能）
+- 刷出最多 100 个缓冲池脏页（可能）
+- 进入后台循环
 
 ```cpp
 
-/** Perform the tasks that the master thread is supposed to do when the
- server is active. There are two types of tasks. The first category is
- of such tasks which are performed at each inovcation of this function.
- We assume that this function is called roughly every second when the
- server is active. The second category is of such tasks which are
- performed at some interval e.g.: purge, dict_LRU cleanup etc. */
+/** 执行服务器活跃时 master 线程应执行的任务。
+有两类任务。第一类是在每次调用此函数时都要执行的任务。
+我们假设服务器活跃时此函数大约每秒调用一次。
+第二类是每隔一定间隔执行的任务，例如：purge、dict_LRU 清理等。 */
 static void srv_master_do_active_tasks(void) {
   const auto cur_time = ut_time_monotonic();
   auto counter_time = ut_time_monotonic_us();
 
-  /* First do the tasks that we are suppose to do at each
-  invocation of this function. */
+  /* 首先执行每次调用此函数都应执行的任务。 */
 
   ++srv_main_active_loops;
 
   MONITOR_INC(MONITOR_MASTER_ACTIVE_LOOPS);
 
-  /* ALTER TABLE in MySQL requires on Unix that the table handler
-  can drop tables lazily after there no longer are SELECT
-  queries to them. */
-  srv_main_thread_op_info = “doing background drop tables”;
+  /* MySQL 中的 ALTER TABLE 要求表处理器能够
+  在没有 SELECT 查询引用表时延迟删除表。 */
+  srv_main_thread_op_info = "doing background drop tables";
   row_drop_tables_for_mysql_in_background();
   MONITOR_INC_TIME_IN_MICRO_SECS(MONITOR_SRV_BACKGROUND_DROP_TABLE_MICROSECOND,
                                  counter_time);
@@ -261,18 +237,17 @@ static void srv_master_do_active_tasks(void) {
     return;
   }
 
-  /* Do an ibuf merge */
-  srv_main_thread_op_info = “doing insert buffer merge”;
+  /* 执行 ibuf 合并 */
+  srv_main_thread_op_info = "doing insert buffer merge";
   counter_time = ut_time_monotonic_us();
   ibuf_merge_in_background(false);
   MONITOR_INC_TIME_IN_MICRO_SECS(MONITOR_SRV_IBUF_MERGE_MICROSECOND,
                                  counter_time);
 
-  /* Flush logs if needed */
+  /* 如有需要刷新日志 */
   log_buffer_sync_in_background();
 
-  /* Now see if various tasks that are performed at defined
-  intervals need to be performed. */
+  /* 检查是否需要执行按定义间隔执行的任务。 */
 
   if (srv_shutdown_state.load() >=
       SRV_SHUTDOWN_PRE_DD_AND_SYSTEM_TRANSACTIONS) {
@@ -286,7 +261,7 @@ static void srv_master_do_active_tasks(void) {
   }
 
   if (cur_time % SRV_MASTER_DICT_LRU_INTERVAL == 0) {
-    srv_main_thread_op_info = “enforcing dict cache limit”;
+    srv_main_thread_op_info = "enforcing dict cache limit";
     ulint n_evicted = srv_master_evict_from_table_cache(50);
     if (n_evicted != 0) {
       MONITOR_INC_VALUE(MONITOR_SRV_DICT_LRU_EVICT_COUNT, n_evicted);
@@ -297,7 +272,7 @@ static void srv_master_do_active_tasks(void) {
 }
 ```
 
-### IO Thread
+### IO 线程
 
 ```sql
 mysql>SHOW VARIABLES LIKE 'innodb_%_io_threads';
@@ -319,7 +294,7 @@ mysql>SHOW ENGINE INNODB STATUS;
 -- I/O thread 8 state: waiting for i/o request (write thread)
 ```
 
-### Purge Thread
+### Purge 线程
 
 ```sql
 mysql>SHOW VARIABLES LIKE 'innodb_purge_threads';
@@ -332,7 +307,7 @@ innodb_purge_rseg_truncate_frequency	128
 
 void fil_purge() { fil_system->purge(); }
 
-/** Clean up the shards. */
+/** 清理分片。 */
 void purge() {
   for (auto shard : m_shards) {
     shard->purge();
@@ -340,13 +315,12 @@ void purge() {
 }
 
 
-/** Purge entries from m_deleted_spaces that are no longer referenced by a
-buffer pool page. This is no longer required to be done during checkpoint -
-this is done here for historical reasons - it has to be done periodically
-somewhere. */
+/** 清理 m_deleted_spaces 中不再被缓冲池页面引用的条目。
+这不再需要在检查点时完成 -
+出于历史原因在这里完成 - 它需要周期性地在某处完成。 */
 void purge() {
-  /* Avoid cleaning up old undo files while this is on. */
-  DBUG_EXECUTE_IF(“ib_undo_trunc_checkpoint_off”, return;);
+  /* 在此开启时避免清理旧的 undo 文件。 */
+  DBUG_EXECUTE_IF("ib_undo_trunc_checkpoint_off", return;);
 
   mutex_acquire();
   for (auto it = m_deleted_spaces.begin(); it != m_deleted_spaces.end();) {
@@ -365,18 +339,18 @@ void purge() {
 
   mutex_release();
 }  
-  
-  
-/** Free a tablespace object on which fil_space_detach() was invoked.
-There must not be any pending I/O’s or flushes on the files.
-@param[in,out]	space		tablespace */
+
+
+/** 释放一个已调用 fil_space_detach() 的表空间对象。
+上面不能有待处理的 I/O 或刷新。
+@param[in,out]	space		表空间 */
 void Fil_shard::space_free_low(fil_space_t *&space) {
 #ifndef UNIV_HOTBACKUP
   {
-    /* Temporary and undo tablespaces IDs are assigned from a large but
-    fixed size pool of reserved IDs. Therefore we must ensure that a
-    fil_space_t instance can’t be dropped until all the pages that point
-    to it are also purged from the buffer pool. */
+    /* 临时和 undo 表空间 ID 从一个大的但
+    固定大小的保留 ID 池中分配。因此我们必须确保
+    在从缓冲池中清除所有引用该 fil_space_t 的页面之前，
+    不能丢弃该实例。 */
 
     ut_a(srv_shutdown_state.load() == SRV_SHUTDOWN_LAST_PHASE ||
          space->has_no_references());
@@ -404,67 +378,60 @@ void Fil_shard::space_free_low(fil_space_t *&space) {
   
 ```
 
-## Storage
+## 存储
 
+### 磁盘 I/O
 
+InnoDB 尽可能使用异步磁盘 I/O，通过创建多个线程处理 I/O 操作，同时在 I/O 进行期间允许其他数据库操作继续执行。
+在 Linux 和 Windows 平台上，InnoDB 使用可用的操作系统和库函数执行"原生"异步 I/O。
+在其他平台上，InnoDB 仍使用 I/O 线程，但这些线程可能实际等待 I/O 请求完成；这种技术称为"模拟"异步 I/O。
 
-> MySQL 里面完全不用担心数据量大了以后, Btree 高度增加影响性能的问题, 10TB 以内的数据 Btree 高度一定在 4 层以内, 超过 10TB 以后也会停留在 5 层, 不会更高了, 因为 MySQL 单表最大就支持 64TB 了
+### 文件空间管理
 
-### Disk I/O
+使用 `innodb_data_file_path` 配置选项在配置文件中定义的数据文件构成 InnoDB 系统表空间。
+这些文件在逻辑上串联起来形成系统表空间，不涉及条带化。
+你无法定义表在系统表空间中的分配位置。
+在新创建的系统表空间中，InnoDB 从第一个数据文件开始分配空间。
 
-InnoDB uses asynchronous disk I/O where possible, by creating a number of threads to handle I/O operations, while permitting other database operations to proceed while the I/O is still in progress.
-On Linux and Windows platforms, InnoDB uses the available OS and library functions to perform “native” asynchronous I/O.
-On other platforms, InnoDB still uses I/O threads, but the threads may actually wait for I/O requests to complete; this technique is known as “simulated” asynchronous I/O.
+为避免将所有表和索引存放在系统表空间内带来的问题，
+可以启用 `innodb_file_per_table` 配置选项（默认启用），将每个新创建的表存储在单独的表空间文件中（扩展名为 .ibd）。
+对于这样存储的表，磁盘文件内的碎片更少，当表被截断时，
+空间会返回给操作系统，而不是被 InnoDB 保留在系统表空间中。
 
-### File Space Management
+每个表一个文件的表空间包含单个 InnoDB 表的数据和索引，存储在文件系统的单个数据文件中。
 
-The data files that you define in the configuration file using the innodb_data_file_path configuration option form the InnoDB system tablespace.
-The files are logically concatenated to form the system tablespace. There is no striping in use.
-You cannot define where within the system tablespace your tables are allocated. In a newly created system tablespace,
-InnoDB allocates space starting from the first data file.
+你也可以将表存储在通用表空间中。
+通用表空间是使用 `CREATE TABLESPACE` 语法创建的共享表空间。
+它们可以在 MySQL 数据目录之外创建，能够容纳多个表，并支持所有行格式的表。
 
-To avoid the issues that come with storing all tables and indexes inside the system tablespace,
-you can enable the innodb_file_per_table configuration option (the default), which stores each newly created table in a separate tablespace file (with extension .ibd).
-For tables stored this way, there is less fragmentation within the disk file, and when the table is truncated,
-the space is returned to the operating system rather than still being reserved by InnoDB within the system tablespace.
+## InnoDB 限制
 
-A file-per-table tablespace contains data and indexes for a single InnoDB table, and is stored on the file system in a single data file.
+涵盖了 `InnoDB` 表、索引、表空间以及其他方面的限制。
 
-You can also store tables in general tablespaces. General tablespaces are shared tablespaces created using CREATE TABLESPACE syntax.
-They can be created outside of the MySQL data directory, are capable of holding multiple tables, and support tables of all row formats.
-For more information, see Section 15.6.3.3, “General Tablespaces”.
+- 一个表最多可包含 1017 列，包括虚拟生成列。
+- 一个表最多可包含 64 个[辅助索引](/docs/CS/DB/MySQL/Index.md)。
+- 对于使用 `DYNAMIC` 或 `COMPRESSED` 行格式的 `InnoDB` 表，索引键前缀长度限制为 3072 字节。
+  对于使用 `REDUNDANT` 或 `COMPACT` 行格式的 `InnoDB` 表，索引键前缀长度限制为 767 字节。
+  例如，假设 `utf8mb4` 字符集和每个字符最多 4 字节，你可能在 `TEXT` 或 `VARCHAR` 列上超过 191 个字符的列前缀索引时遇到此限制。
+  尝试使用超过限制的索引键前缀长度将返回错误。
+  如果在创建 MySQL 实例时通过指定 `innodb_page_size` 选项将 `InnoDB` 页面大小减少到 8KB 或 4KB，则索引键的最大长度会基于 16KB 页面大小的 3072 字节限制按比例降低。
+  即，当页面大小为 8KB 时最大索引键长度为 1536 字节，当页面大小为 4KB 时为 768 字节。
+  适用于索引键前缀的限制也适用于完整列索引键。
+- 多列索引最多允许 16 列。超过此限制将返回错误。
+- 对于 4KB、8KB、16KB 和 32KB 页面大小，最大行大小（不包括任何离页存储的变长列）略小于页面的一半。
+- 尽管 `InnoDB` 内部支持大于 65,535 字节的行大小，但 MySQL 本身对所有列的组合大小施加了 65,535 字节的行大小限制。
+- 最大表或表空间大小受服务器文件系统的影响，文件系统施加的最大文件大小可能小于 `InnoDB` 定义的内部 64 TiB 大小限制。
+  例如，Linux 上的 _ext4_ 文件系统的最大文件大小为 16 TiB，因此最大表或表空间大小变为 16 TiB 而非 64 TiB。
+  另一个例子是 _FAT32_ 文件系统，其最大文件大小为 4 GB。
+  如果需要更大的系统表空间，请使用多个较小的数据文件而不是一个大数据文件进行配置，或者将表数据分布在每个表一个文件的数据文件和通用表空间数据文件中。
+- `InnoDB` 日志文件的最大总大小为 512 GB。
+- 最小表空间大小略大于 10 MB。最大表空间大小取决于 `InnoDB` 页面大小。
+- 表空间文件的路径（包括文件名）不能超过 Windows 上的 `MAX_PATH` 限制。
 
-## Cluster
-
-
-
-
-
-## InnoDB Limits
-
-It describes limits for `InnoDB` tables, indexes, tablespaces, and other aspects of the `InnoDB` storage engine.
-
-- A table can contain a maximum of 1017 columns. Virtual generated columns are included in this limit.
-- A table can contain a maximum of 64 [secondary indexes](/docs/CS/DB/MySQL/Index.md?id=secondary-index).
-- The index key prefix length limit is 3072 bytes for `InnoDB` tables that use `DYNAMIC` or `COMPRESSED` row format.
-  The index key prefix length limit is 767 bytes for `InnoDB` tables that use the `REDUNDANT` or `COMPACT` row format. For example, you might hit this limit with a column prefix index of more than 191 characters on a `TEXT` or `VARCHAR` column, assuming a `utf8mb4` character set and the maximum of 4 bytes for each character.
-  Attempting to use an index key prefix length that exceeds the limit returns an error.
-  If you reduce the `InnoDB` page size to 8KB or 4KB by specifying the `innodb_page_size` option when creating the MySQL instance, the maximum length of the index key is lowered proportionally, based on the limit of 3072 bytes for a 16KB page size. That is, the maximum index key length is 1536 bytes when the page size is 8KB, and 768 bytes when the page size is 4KB.
-  The limits that apply to index key prefixes also apply to full-column index keys.
-- A maximum of 16 columns is permitted for multicolumn indexes. Exceeding the limit returns an error.
-- The maximum row size, excluding any variable-length columns that are stored off-page, is slightly less than half of a page for 4KB, 8KB, 16KB, and 32KB page sizes.
-- - Although `InnoDB` supports row sizes larger than 65,535 bytes internally, MySQL itself imposes a row-size limit of 65,535 for the combined size of all columns. 
-- The maximum table or tablespace size is impacted by the server's file system, which can impose a maximum file size that's smaller than the internal 64 TiB size limit defined by `InnoDB`. 
-  For example, the _ext4_ file system on Linux has a maximum file size of 16 TiB, so the maximum table or tablespace size becomes 16 TiB instead of 64 TiB. Another example is the _FAT32_ file system, which has a maximum file size of 4 GB.
-  If you require a larger system tablespace, configure it using several smaller data files rather than one large data file, or distribute table data across file-per-table and general tablespace data files.
-- The combined maximum size for `InnoDB` log files is 512GB.
-- The minimum tablespace size is slightly larger than 10MB. The maximum tablespace size depends on the `InnoDB` page size.
-- The path of a tablespace file, including the file name, cannot exceed the `MAX_PATH` limit on Windows.
-
-## Links
+## 链接
 
 - [MySQL Server](/docs/CS/DB/MySQL/MySQL.md)
 
-## References
+## 参考
 
 1. [Introduction to InnoDB](https://dev.mysql.com/doc/refman/8.0/en/innodb-introduction.html)

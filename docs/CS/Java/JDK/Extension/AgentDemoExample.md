@@ -2,13 +2,13 @@
 
 ## Demo Example
 
-Only will be endless loop at run in IDEA other scenarios will exit normally: 
+只有在 IDEA 中运行才会进入死循环，其他场景会正常退出：
 
-1. run in Gradle or Maven 
-2. run with debug in IDEA 
-3. run with java command
+1. 在 Gradle 或 Maven 中运行
+2. 在 IDEA 中以调试模式运行
+3. 使用 java 命令运行
 
-Because of the Monitor Ctrl-Break Thread created by IDEA with param -javaagent:/Applications/IntelliJ IDEA.app/Contents/lib/idea_rt.jar={pid}
+原因是 IDEA 创建了 Monitor Ctrl-Break Thread，参数为 -javaagent:/Applications/IntelliJ IDEA.app/Contents/lib/idea_rt.jar={pid}
 
 ```java
 public class VolatileTest {

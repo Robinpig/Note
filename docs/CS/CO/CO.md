@@ -1,41 +1,40 @@
 ## Introduction
 
-Computer Organization and Architecture comprehensively covers processor and computer design fundamentals.
+计算机组成与架构全面涵盖了处理器和计算机设计的基础知识。
 
-- Basic Computer Instructions
-- Instruction Design and Format
-- Computer Arithmetic
-- Microprogrammed Control
-- Memory Organization
-
-
+- 基本计算机指令
+- 指令设计与格式
+- 计算机算术
+- 微程序控制
+- 内存组织
 
 SouthBridge
 NorthBridge
 
 ## Number System
 
-Ints are not Integers, Floats are not Reals.
+整数不是整数（Ints are not Integers），浮点数不是实数（Floats are not Reals）。
 
-IEEE Standard 754 Floating Point Numbers
+IEEE 754 浮点数标准
 
-IEEE 754 has 3 basic components:
+IEEE 754 有三个基本组成部分：
 
-1. **The Sign of Mantissa**
-   This is as simple as the name. 0 represents a positive number while 1 represents a negative number.
-2. **The Biased exponent**
-   The exponent field needs to represent both positive and negative exponents. A bias is added to the actual exponent in order to get the stored exponent.
-3. **The Normalised Mantissa**
-   The mantissa is part of a number in scientific notation or a floating-point number, consisting of its significant digits.
-   Here we have only 2 digits, i.e. O and 1. So a normalised mantissa is one with only one 1 to the left of the decimal.
-   IEEE 754 numbers are divided into two based on the above three components: single precision and double precision.
-
+1. **尾数的符号**
+   名称即含义。0 表示正数，1 表示负数。
+2. **有偏指数**
+   指数字段需要表示正指数和负指数。
+   为了得到存储的指数，会在实际指数上加上一个偏置值。
+3. **规格化尾数**
+   尾数是科学记数法或浮点数的一部分，由有效数字组成。
+   这里只有两个数字，即 0 和 1。
+   因此规格化尾数是指十进制小数点左侧只有一个 1。
+   IEEE 754 数字根据上述三个组成部分分为两类：单精度和双精度。
 
 ## ISA
 
-Instruction Set Architectures
+指令集架构
 
-Computer Instructions
+计算机指令
 
 RISC
 
@@ -43,30 +42,30 @@ CISC
 
 ## Pipelining
 
-Instruction is executed in 5 phases:
+指令执行分为 5 个阶段：
 
-- Instruction Fetch
-- Instruction Decode
-- Operand Fetch
-- Execute
-- Operand Store
+- 取指（Instruction Fetch）
+- 译码（Instruction Decode）
+- 取操作数（Operand Fetch）
+- 执行（Execute）
+- 写回（Operand Store）
 
 ### Speedup Ratio
 
-If i operations are performed with this pipeline, the time taken is i+(n-1) cycles.
-Without pipelining, the system would require n*i cycles.
-The speedup ratio is therefore
+如果用该流水线执行 i 个操作，所需时间为 i+(n-1) 个周期。
+没有流水线，系统需要 n*i 个周期。
+因此加速比为：
 
 ```tex
 S = \sum_{i+(n-1)}{n*i}=\sum_{1+\sum_i{n-1}}{n}cycles
 ```
 
-In the limit, when i=1 the value of S is 1, and when i=,the speedup is n.
+极限情况下，当 i=1 时 S 的值为 1，当 i 趋近无穷时，加速比为 n。
 
 ### Data Hazard
 
-Data dependency arises when the outcome of the current operation is dependent on the result of a previous instruction that has not yet been executed to completion.
-Data hazards arise because of the need to preserve the order of the execution of instructions.
+当当前操作的结果依赖于尚未执行完成的先前指令的结果时，就会产生数据依赖。
+数据冒险的产生是因为需要保持指令执行的顺序。
 
 Control Hazard
 
@@ -74,39 +73,36 @@ Structure Hazard
 
 ### Branches
 
-
-
 #### The Delayed Branch
 
 #### Branch Prediction
-
-
 
 #### Dynamic Branch Prediction
 
 ## Disk
 
-On spinning disks, seeks increase costs of random reads because they require disk rotation and mechanical head movements to position the read/write head to the desired location.
-However, once the expensive part is done, reading or writing contiguous bytes (i.e., sequential operations) is relatively cheap.
+在旋转磁盘上，寻道增加了随机读取的成本，因为需要磁盘旋转和机械臂移动来将读写头定位到目标位置。
+然而，一旦昂贵的部分完成，读取或写入连续字节（即顺序操作）就相对便宜。
 
-The smallest transfer unit of a spinning drive is a sector, so when some operation is performed, at least an entire sector can be read or written. Sector sizes typically range from 512 bytes to 4 Kb.
+旋转驱动器的最小传输单元是扇区，因此执行某些操作时，至少可以读取或写入整个扇区。
+扇区大小通常为 512 字节到 4 Kb。
 
-Head positioning is the most expensive part of an operation on the HDD. This is one of the reasons we often hear about the positive effects of sequential I/O: reading and writing contiguous memory segments from disk.
+磁头定位是 HDD 操作中最昂贵的部分。
+这就是我们经常听到顺序 I/O 积极影响的原因之一：从磁盘读取和写入连续的内存段。
 
-
-磁道 扇区 通常扇区512Byte
+通常扇区 512Byte
 
 ### Solid State Drives
 
-Solid state drives (SSDs) do not have moving parts: there’s no disk that spins, or head that has to be positioned for the read. 
-A typical SSD is built of memory cells, connected into strings (typically 32 to 64 cells per string), 
-strings are combined into arrays, arrays are combined into pages, and pages are combined into blocks.
+固态硬盘没有移动部件：没有旋转的磁盘，也没有需要定位读写的磁头。
+典型的 SSD 由存储单元构建，连接成字符串（通常每串 32 到 64 个单元），
+字符串组合成阵列，阵列组合成页，页组合成块。
 
-Depending on the exact technology used, a cell can hold one or multiple bits of data. 
-Pages vary in size between devices, but typically their sizes range from 2 to 16 Kb. Blocks typically contain 64 to 512 pages. 
-Blocks are organized into planes and, finally, planes are placed on a die. SSDs can have one or more dies. Figure 1 shows this hierarchy.
-
-
+根据使用的具体技术，一个单元可以保存一个或多个比特的数据。
+不同设备的页大小不同，但通常范围从 2 到 16 Kb。
+块通常包含 64 到 512 页。
+块组织成平面，最后平面放置在 die 上。
+SSD 可以有一个或多个 die。
 
 <div style="text-align: center;">
 
@@ -118,24 +114,27 @@ Blocks are organized into planes and, finally, planes are placed on a die. SSDs 
 Fig.1. SSD organization schematics
 </p>
 
+可以写入（编程）或读取的最小单元是页。
+但是，我们只能对空的内存单元（即写入前已擦除的单元）进行更改。
+最小的擦除实体不是页，而是包含多个页的块，这就是为什么它通常被称为擦除块。
+空块中的页必须顺序写入。
 
-The smallest unit that can be written (programmed) or read is a page. However, we can only make changes to the empty memory cells (i.e., to ones that have been erased before the write). 
-The smallest erase entity is not a page, but a block that holds multiple pages, which is why it is often called an erase block. Pages in an empty block have to be written sequentially.
+闪存控制器中负责将页 ID 映射到物理位置、跟踪空页、已写入页和废弃页的部分称为闪存转换层（FTL）。
+它还负责垃圾回收，在此期间 FTL 寻找可以安全擦除的块。
+某些块可能仍包含有效页。
+在这种情况下，它将有效页从这些块迁移到新位置，并重新映射页 ID。
+之后，它擦除现在未使用的块，使其可供写入。
 
-The part of a flash memory controller responsible for mapping page IDs to their physical locations, tracking empty, written, and discarded pages, is called the Flash Translation Layer (FTL). 
-It is also responsible for garbage collection, during which FTL finds blocks it can safely erase. Some blocks might still contain live pages. 
-In this case, it relocates live pages from these blocks to new locations and remaps page IDs to point there. 
-After this, it erases the now-unused blocks, making them available for writes.
+由于在两种设备类型（HDD 和 SSD）中，我们处理的是内存块而不是单个字节（即按块访问数据），大多数操作系统提供了块设备抽象。
+它隐藏了内部磁盘结构并在内部缓冲 I/O 操作，因此当我们从块设备读取单个字时，包含它的整个块都会被读取。
+这是我们在处理磁盘驻留数据结构时无法忽视且应始终考虑的约束。
 
-Since in both device types (HDDs and SSDs) we are addressing chunks of memory rather than individual bytes (i.e., accessing data block-wise), most operating systems have a block device abstraction. 
-It hides an internal disk structure and buffers I/O operations internally, so when we’re reading a single word from a block device, the whole block containing it is read. 
-This is a constraint we cannot ignore and should always take into account when working with disk-resident data structures.
+在 SSD 中，不像 HDD 那样强调随机与顺序 I/O 的差异，因为随机读取和顺序读取之间的延迟差异不那么显著。
+由于预取、读取连续页和内部并行性，仍然存在一些差异。
 
-In SSDs, we don’t have a strong emphasis on random versus sequential I/O, as in HDDs, because the difference in latencies between random and sequential reads is not as large. There is still some difference caused by prefetching, reading contiguous pages, and internal parallelism.
+尽管垃圾回收通常是后台操作，但其影响可能对写入性能产生负面影响，特别是在随机和非对齐写入工作负载的情况下。
 
-Even though garbage collection is usually a background operation, its effects may negatively impact write performance, especially in cases of random and unaligned write workloads.
-
-Writing only full blocks, and combining subsequent writes to the same block, can help to reduce the number of required I/O operations. 
+只写入完整块，并将对同一块的后续写入合并，有助于减少所需的 I/O 操作次数。
 
 ## Cache
 
@@ -160,7 +159,7 @@ cat /sys/devices/system/cpu/cpu0/cache/index3/size
 
 Instruction Cache and Data Cache
 
-flush cache to memory and execute code
+将缓存刷新到内存并执行代码
 
 ## Links
 

@@ -1,14 +1,12 @@
 ## Introduction
 
-The Spring for Apache Kafka (spring-kafka) project applies core Spring concepts to the development of Kafka-based messaging solutions. 
-It provides a "template" as a high-level abstraction for sending messages. 
-It also provides support for Message-driven POJOs with `@KafkaListener` annotations and a "listener container". 
-These libraries promote the use of dependency injection and declarative.
-In all of these cases, you will see similarities to the JMS support in the Spring Framework and RabbitMQ support in Spring AMQP.
+Spring for Apache Kafka (spring-kafka) 项目将核心 Spring 概念应用于基于 Kafka 的消息传递解决方案的开发。
+它提供了一个 "template" 作为发送消息的高级抽象。
+它还通过 `@KafkaListener` 注解和 "listener container" 支持 Message-driven POJOs。
+这些库促进了依赖注入和声明式编程的使用。
+在所有情况下，你都会看到与 Spring 框架中 JMS 支持和 Spring AMQP 中 RabbitMQ 支持的相似之处。
 
-
-Single-threaded Message listener container using the Java Consumer supporting auto-partition assignment or user-configured assignment.
-
+支持自动分区分配或用户配置分配的单线程消息监听器容器，使用 Java Consumer。
 
 ```java
 @Override  
@@ -38,8 +36,6 @@ protected void doStart() {
     }  
 }
 ```
-
-
 
 ## pollAndInvoke
 
@@ -131,7 +127,7 @@ private void doInvokeWithRecords(final ConsumerRecords<K, V> records) {
 }
 
 @Nullable  
-private RuntimeException doInvokeRecordListener(final ConsumerRecord<K, V> cRecord, // NOSONAR  
+private RuntimeException doInvokeRecordListener(final ConsumerRecord<K, V> cRecord,  
        Iterator<ConsumerRecord<K, V>> iterator) {  
   
     Object sample = startMicrometerSample();  
@@ -165,7 +161,7 @@ private RuntimeException doInvokeRecordListener(final ConsumerRecord<K, V> cReco
              this.logger.error(ee, ERROR_HANDLER_THREW_AN_EXCEPTION);  
              return ee;  
           }  
-          catch (Error er) { // NOSONAR  
+          catch (Error er) {  
              this.logger.error(er, "Error handler threw an error");  
              throw er;  
           }  
@@ -174,7 +170,6 @@ private RuntimeException doInvokeRecordListener(final ConsumerRecord<K, V> cReco
     });  
 }
 ```
-
 
 ## Links
 

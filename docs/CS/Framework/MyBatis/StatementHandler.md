@@ -33,7 +33,7 @@ public interface StatementHandler {
 
 ## RoutingStatementHandler
 
-`Use delegate to execute different strategy`
+使用委托模式执行不同的策略
 
 ```java
 public class RoutingStatementHandler implements StatementHandler {
@@ -63,7 +63,7 @@ public class RoutingStatementHandler implements StatementHandler {
 
 ## BaseStatementHandler
 
-`override prepare() , work depends on ParameterHandler and ResultSetHandler`
+重写 `prepare()`，其工作依赖于 ParameterHandler 和 ResultSetHandler
 
 ```java
 public abstract class BaseStatementHandler implements StatementHandler {
@@ -105,7 +105,7 @@ public abstract class BaseStatementHandler implements StatementHandler {
 
 ### ParameterHandler
 
-`getParameterObject and  setParameters`
+获取 parameterObject 和设置 parameters
 
 ```java
 public class DefaultParameterHandler implements ParameterHandler {
@@ -192,7 +192,7 @@ public interface ResultSetHandler {
 
 ### SimpleStatementHandler
 
-`use Statement execute so the parameterize method is empty`
+使用 `Statement` 执行，因此 parameterize 方法为空
 
 ```java
 public class SimpleStatementHandler extends BaseStatementHandler {
@@ -260,14 +260,12 @@ public class SimpleStatementHandler extends BaseStatementHandler {
 ```
 
 
-${} -> compiler SQL -> #{}
-
-Compiler SQL replace #{} to ? and use PrepareStatement to set parameters and with ''
+`${}` 在 SQL 编译阶段被处理，`#{}` 被替换为 `?`，通过 PreparedStatement 设置参数并带引号
 
 
 ### PreparedStatementHandler
 
-`use parameterHandler.setParameters in parameterize`
+在 parameterize 中使用 parameterHandler.setParameters
 
 ```java
 public class PreparedStatementHandler extends BaseStatementHandler {
@@ -336,7 +334,7 @@ public class PreparedStatementHandler extends BaseStatementHandler {
 
 ### CallableStatementHandler
 
-`Like PreparedStatementHandler and have private registerOutputParameters method` 
+与 PreparedStatementHandler 类似，但有私有的 registerOutputParameters 方法
 
 ```java
 public class CallableStatementHandler extends BaseStatementHandler {

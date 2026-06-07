@@ -21,7 +21,7 @@ Class file format：
 
 ### Constant Pool
 
-storage Literal and Symbolic References
+存储字面量和符号引用
 
 Code
 
@@ -29,9 +29,9 @@ LineNumberTable
 
 LocalVariableTable
 
-1. invokevirtual：public, protected methods without static, final
-2. invokeinterface：like invokevirtual
-3. invokespecial：private or constructor
+1. invokevirtual：public、protected 方法（非 static、final）
+2. invokeinterface：类似 invokevirtual
+3. invokespecial：private 或构造器
 4. invokestatic：static
 
-invokeinterface get a this object to get Klass
+invokeinterface 通过 this 对象获取 Klass

@@ -1,29 +1,28 @@
 ## Introduction
 
-[Project Valhalla](https://openjdk.java.net/projects/valhalla/) plans to augment the Java object model with value objects and user-defined primitives, combining the abstractions of object-oriented programming with the performance characteristics of simple primitives.
-These features will be complemented with changes to Java’s generics to preserve performance gains through generic APIs.
-
+[Project Valhalla](https://openjdk.java.net/projects/valhalla/) 计划用值对象和用户定义的原始类型来增强 Java 对象模型，将面向对象编程的抽象与简单原始类型的性能特性结合起来。
+这些特性将伴随着 Java 泛型的变更，以通过通用 API 保持性能提升。
 
 ## Hidden Classes
 
-Creates a hidden class or interface from bytes, returning a Lookup on the newly created class or interface.
+根据字节创建一个隐藏类或接口，返回对新创建的类或接口的 Lookup。
 
-Ordinarily, a class or interface C is created by a class loader, which either defines C directly or delegates to another class loader. A class loader defines C directly by invoking ClassLoader::defineClass, which causes the Java Virtual Machine to derive C from a purported representation in class file format. In situations where use of a class loader is undesirable, a class or interface C can be created by this method instead. This method is capable of defining C, and thereby creating it, without invoking ClassLoader::defineClass. Instead, this method defines C as if by arranging for the Java Virtual Machine to derive a nonarray class or interface C from a purported representation in class file format using the following rules:
+通常，类或接口 C 由类加载器创建，类加载器要么直接定义 C，要么委托给另一个类加载器。类加载器通过调用 ClassLoader::defineClass 直接定义 C，这导致 Java 虚拟机从类文件格式的表示形式派生出 C。在不适合使用类加载器的情况下，可以通过此方法代替创建类或接口 C。此方法能够定义 C 并由此创建它，而无需调用 ClassLoader::defineClass。相反，此方法通过安排 Java 虚拟机从类文件格式的表示形式派生出非数组类或接口 C 来定义 C，使用以下规则：
 
-- The lookup modes for this Lookup must include full privilege access. This level of access is needed to create C in the module of the lookup class of this Lookup.
-- The purported representation in bytes must be a ClassFile structure of a supported major and minor version. The major and minor version may differ from the class file version of the lookup class of this Lookup.
-- The value of this_class must be a valid index in the constant_pool table, and the entry at that index must be a valid CONSTANT_Class_info structure. Let N be the binary name encoded in internal form that is specified by this structure. N must denote a class or interface in the same package as the lookup class.
-- Let CN be the string N + "." + <suffix>, where <suffix> is an unqualified name.
-  Let newBytes be the ClassFile structure given by bytes with an additional entry in the constant_pool table, indicating a CONSTANT_Utf8_info structure for CN, and where the CONSTANT_Class_info structure indicated by this_class refers to the new CONSTANT_Utf8_info structure.
-  Let L be the defining class loader of the lookup class of this Lookup.
-  C is derived with name CN, class loader L, and purported representation newBytes as if by the rules of JVMS , with the following adjustments:
-    - The constant indicated by this_class is permitted to specify a name that includes a single "." character, even though this is not a valid binary class or interface name in internal form.
-    - The Java Virtual Machine marks L as the defining class loader of C, but no class loader is recorded as an initiating class loader of C.
-    - C is considered to have the same runtime package, module and protection domain as the lookup class of this Lookup.
-    - Let GN be the binary name obtained by taking N (a binary name encoded in internal form) and replacing ASCII forward slashes with ASCII periods. For the instance of Class representing C:
-        - Class.getName() returns the string GN + "/" + <suffix>, even though this is not a valid binary class or interface name.
-        - Class.descriptorString() returns the string "L" + N + "." + <suffix> + ";", even though this is not a valid type descriptor name.
-        - Class.describeConstable() returns an empty optional as C cannot be described in nominal form.
+- 此 Lookup 的查找模式必须包括完全权限访问。需要此级别的访问权限才能在此 Lookup 的查找类的模块中创建 C。
+- 字节中的表示形式必须是受支持的主次版本的 ClassFile 结构。主次版本可能与此 Lookup 的查找类的类文件版本不同。
+- this_class 的值必须是 constant_pool 表中的有效索引，并且该索引处的条目必须是有效的 CONSTANT_Class_info 结构。设 N 为此结构指定的内部形式编码的二进制名称。N 必须表示与查找类相同包中的类或接口。
+- 设 CN 为字符串 N + "." + <suffix>，其中 <suffix> 是非限定名称。
+  设 newBytes 为 bytes 给出的 ClassFile 结构，并在 constant_pool 表中添加一个额外的条目，指示 CN 的 CONSTANT_Utf8_info 结构，并且由 this_class 指示的 CONSTANT_Class_info 结构指向新的 CONSTANT_Utf8_info 结构。
+  设 L 为此 Lookup 的查找类的定义类加载器。
+  C 使用名称 CN、类加载器 L 和表示形式 newBytes 按照 JVMS 的规则派生，并进行以下调整：
+    - this_class 指示的常量允许指定包含单个"."字符的名称，即使这不是有效的内部形式二进制类或接口名称。
+    - Java 虚拟机将 L 标记为 C 的定义类加载器，但没有类加载器被记录为 C 的发起类加载器。
+    - C 被视为与此 Lookup 的查找类具有相同的运行时包、模块和保护域。
+    - 设 GN 为通过取 N（内部形式编码的二进制名称）并将 ASCII 正斜杠替换为 ASCII 句点而获得的二进制名称。对于表示 C 的 Class 实例：
+        - Class.getName() 返回字符串 GN + "/" + <suffix>，即使这不是有效的二进制类或接口名称。
+        - Class.descriptorString() 返回字符串 "L" + N + "." + <suffix> + ";"，即使这不是有效的类型描述符名称。
+        - Class.describeConstable() 返回空的 optional，因为 C 无法以名义形式描述。
 
 ```java
 public Lookup defineHiddenClass(byte[] bytes, boolean initialize, ClassOption... options)
@@ -38,9 +37,6 @@ Lookup defineClassAsLookup(boolean initialize) {
     return new Lookup(c, null, FULL_POWER_MODES);
 }
 ```
-
-
-
 
 ## Links
 

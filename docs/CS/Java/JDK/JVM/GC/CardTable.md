@@ -35,9 +35,9 @@ protected:
 ```
 
 
-Card marking array base (adjusted for heap low boundary)
-This would be the 0th element of _byte_map, if the heap started at 0x0.
-But since the heap starts at some higher address, this points to somewhere before the beginning of the actual _byte_map.
+Card marking array base（根据堆低边界调整）
+如果堆从 0x0 开始，这将是 _byte_map 的第 0 个元素。
+但由于堆从某个更高地址开始，这指向实际 _byte_map 起点之前的某个位置。
 ```cpp
   CardValue* byte_map_base() const { return _byte_map_base; }
 

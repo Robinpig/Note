@@ -1,10 +1,10 @@
 ## Introduction
 
-A tree is a data structure similar to a linked list but instead of each node pointing simply to the next node in a linear fashion, each node points to a number of nodes.
-Tree is an example of non-linear data structures. 
-A tree structure is a way of representing the hierarchical nature of a structure in a graphical form.
-In trees ADT (Abstract Data Type), the order of the elements is not important. 
-If we need ordering information, linear data structures like linked lists, stacks, queues, etc. can be used.
+树是一种类似于链表的数据结构，但每个节点不是线性地指向下一个节点，而是指向多个节点。
+树是非线性数据结构的示例。
+树结构是以图形形式表示结构层次的一种方式。
+在树 ADT（抽象数据类型）中，元素的顺序并不重要。
+如果需要排序信息，可以使用线性数据结构，如链表、栈、队列等。
 
 <div style="text-align: center;">
 
@@ -12,20 +12,16 @@ If we need ordering information, linear data structures like linked lists, stack
 
 </div>
 
-- The root of a tree is the node with no parents. There can be at most one root node in a tree (node A in the above example).
-- An edge refers to the link from parent to child (all links in the figure).
-- A node with no children is called leaf node (E,J, K, H and I).
-- Children of same parent are called siblings (B, C, D are siblings of A, and E, F are the siblings of B).
-- A node p is an ancestor of node q if there exists a path from root to q and p appears on the
-  path. The node q is called a descendant of p. For example, A, C and G are the ancestors of K.
-- The depth of a node is the length of the path from the root to the node(depth of G is 2,A– C – G).
-- The height of a node is the length of the path from that node to the deepest node. The height of a tree is the length of the path from the root to the deepest node in the tree. 
-  A (rooted) tree with only one node (the root) has a height of zero. In the previous example, the height of B is 2 (B – F – J).
-- Height of the tree is the maximum height among all the nodes in the tree and depth of the tree is the maximum depth among all the nodes in the tree. For a given tree, depth and height returns the same value. But for individual nodes we may get different results.
-- The size of a node is the number of descendants it has including itself (the size of the subtree C is 3).
-- The set of all nodes at a given depth is called the level of the tree (B, C and D are at the same level). The root node is at level zero.
-
-
+- 树的根是没有父节点的节点。一棵树中最多有一个根节点（上例中的节点 A）。
+- 边是指从父节点到子节点的链接（图中所有链接）。
+- 没有子节点的节点称为叶子节点（E, J, K, H 和 I）。
+- 同一父节点的子节点称为兄弟节点（B, C, D 是 A 的兄弟节点，E, F 是 B 的兄弟节点）。
+- 如果存在从根到 q 的路径且 p 出现在该路径上，则节点 p 是节点 q 的祖先。节点 q 称为 p 的后代。例如，A、C 和 G 是 K 的祖先。
+- 节点的深度是从根到该节点的路径长度（G 的深度为 2，A–C–G）。
+- 节点的高度是从该节点到最深节点的路径长度。树的高度是从根到树中最深节点的路径长度。只有一个节点（根）的（有根）树的高度为 0。在前面的例子中，B 的高度为 2（B–F–J）。
+- 树的高度是树中所有节点中的最大高度，树的深度是树中所有节点中的最大深度。对于给定的树，深度和高度返回相同的值。但对于单个节点，我们可能会得到不同的结果。
+- 节点的大小是其拥有的后代数量（包括自身）（子树 C 的大小为 3）。
+- 给定深度的所有节点的集合称为树的层（B、C 和 D 在同一层）。根节点在第 0 层。
 
 <div style="text-align: center;">
 
@@ -33,42 +29,37 @@ If we need ordering information, linear data structures like linked lists, stack
 
 </div>
 
-
-- The root of a tree is the node with no parents. There can be at most one root node in a tree (node A in the above example).
-- An edge refers to the link from parent to child (all links in the figure).
-- A node with no children is called leaf node (E,J, K, H and I).
-- Children of same parent are called siblings (B, C, D are siblings of A, and E, F are the siblings of B).
-- A node p is an ancestor of node q if there exists a path from root to q and p appears on the path. The node q is called a descendant of p. For example, A, C and G are the ancestors of K.
-- The depth of a node is the length of the path from the root to the node(depth of G is 2,A– C – G).
-- The height of a node is the length of the path from that node to the deepest node. The height
-  of a tree is the length of the path from the root to the deepest node in the tree. A (rooted) tree with only one node (the root) has a height of zero. In the previous example, the height of B is 2 (B – F – J).
-- Height of the tree is the maximum height among all the nodes in the tree and depth of the tree is the maximum depth among all the nodes in the tree. For a given tree, depth and height returns the same value. But for individual nodes we may get different results.
-- The size of a node is the number of descendants it has including itself (the size of the subtree C is 3).
-- The set of all nodes at a given depth is called the level of the tree (B, C and D are at the same level). The root node is at level zero.
-  If every node in a tree has only one child (except leaf nodes) then we call such trees skew trees.
-  If every node has only left child then we call them left skew trees. Similarly, if every node has only right child then we call them right skew trees.
-
-
+- 树的根是没有父节点的节点。一棵树中最多有一个根节点（上例中的节点 A）。
+- 边是指从父节点到子节点的链接（图中所有链接）。
+- 没有子节点的节点称为叶子节点（E, J, K, H 和 I）。
+- 同一父节点的子节点称为兄弟节点（B, C, D 是 A 的兄弟节点，E, F 是 B 的兄弟节点）。
+- 如果存在从根到 q 的路径且 p 出现在该路径上，则节点 p 是节点 q 的祖先。节点 q 称为 p 的后代。例如，A、C 和 G 是 K 的祖先。
+- 节点的深度是从根到该节点的路径长度（G 的深度为 2，A–C–G）。
+- 节点的高度是从该节点到最深节点的路径长度。树的高度是从根到树中最深节点的路径长度。只有一个节点（根）的（有根）树的高度为 0。在前面的例子中，B 的高度为 2（B–F–J）。
+- 树的高度是树中所有节点中的最大高度，树的深度是树中所有节点中的最大深度。对于给定的树，深度和高度返回相同的值。但对于单个节点，我们可能会得到不同的结果。
+- 节点的大小是其拥有的后代数量（包括自身）（子树 C 的大小为 3）。
+- 给定深度的所有节点的集合称为树的层（B、C 和 D 在同一层）。根节点在第 0 层。
+  如果树中的每个节点（除了叶子节点）都只有一个子节点，则我们称这样的树为斜树。
+  如果每个节点只有左子节点，则称为左斜树。类似地，如果每个节点只有右子节点，则称为右斜树。
 
 > [!NOTE]
 >
-> Notice that in a tree there is exactly one path from the root to each node.
-
+> 注意，在树中，从根到每个节点恰好有一条路径。
 
 > [!NOTE]
 >
-> Notice that in a tree there is exactly one path from the root to each node.For any node ni, the depth of ni is the length of the unique path from the root to ni.
-Thus, the root is at depth 0. The height of ni is the longest path from ni to a leaf.
-Thus all leaves are at height 0.
-The height of a tree is equal to the height of the root.
-The depth of a tree is equal to the depth of the deepest leaf; this is always equal to the height of the tree.
+> 注意，在树中，从根到每个节点恰好有一条路径。对于任何节点 ni，ni 的深度是从根到 ni 的唯一路径的长度。
+因此，根的深度为 0。ni 的高度是从 ni 到叶子的最长路径。
+因此所有叶子的高度为 0。
+树的高度等于根的高度。
+树的深度等于最深叶子的深度；这总是等于树的高度。
 
-If there is a path from n1 to n2, then n1 is an ancestor of n2 and n2 is a descendant of n1.
-If n1 != n2, then n1 is a proper ancestor of n2 and n2 is a proper descendant of n1.
+如果存在从 n1 到 n2 的路径，则 n1 是 n2 的祖先，n2 是 n1 的后代。
+如果 n1 != n2，则 n1 是 n2 的真祖先，n2 是 n1 的真后代。
 
 ## Implementation
 
-The typical declaration: keep the children of each node in a linked list of tree nodes.
+典型声明：将每个节点的子节点保存在树节点的链表中。
 
 ```c
 typedef struct tree_node *tree_ptr;
@@ -85,20 +76,14 @@ struct tree_node
 
 > [!NOTE]
 >
-> The UNIX file system is not a tree, but is treelike.
+> UNIX 文件系统不是树，但类似树。
 
-- In a preorder traversal, work at a node is performed before (pre) its children are processed.
-- In a postorder traversal, the work at a node is performed after (post) its children are evaluated.
+- 在前序遍历中，节点的工作在其子节点被处理之前（pre）执行。
+- 在后序遍历中，节点的工作在其子节点被评估之后（post）执行。
 
-
-
-
-
-树的经典遍历算法主要有二种：深度优先算法（DF）及广度优先算法（BF），BF 与DF 的效率其实差不多的。在有些场景，是 DF 更快，在有些场景，是 BF 更快。DF一般用 stack 数据结构，BF 一般用 queue 数据结构
+树的经典遍历算法主要有二种：深度优先算法（DF）及广度优先算法（BF），BF 与 DF 的效率其实差不多的。在有些场景，是 DF 更快，在有些场景，是 BF 更快。DF一般用 stack 数据结构，BF 一般用 queue 数据结构
 
 ### levelOrder
-
-
 
 层序遍历是从根节点开始 从上至下（先父节点后子节点） 从左至右（先左节点后右节点） 按顺序遍历 这就比较适用于队列FIFO的性质
 
@@ -146,12 +131,9 @@ public int[] levelOrder(TreeNode root) {
         }
         return Arrays.copyOf(arr,index);
     }
-
 ```
 
 在这基础上还有需要分层存储的多级列表 与单层存储相比 在对队列的出队操作需要注意 可以记录上层总共的节点数量 用于界定一层出队的次数
-
-
 
 还有之字形遍历
 
@@ -161,15 +143,15 @@ public int[] levelOrder(TreeNode root) {
 
 ```java
 public List<List<Integer>> levelOrder(TreeNode root) {
-  List<List<Integer>> value=new ArrayList<>();//存储到的最终结果
+  List<List<Integer>> value=new ArrayList<>();
   if(root==null)
     return value;
-  int index=0;//判断
+  int index=0;
   Queue<TreeNode>queue=new ArrayDeque<>();
   queue.add(root);
   while (!queue.isEmpty()){
-    List<Integer>va=new ArrayList<>();//临时 用于存储到value中
-    int len=queue.size();//当前层的数量
+    List<Integer>va=new ArrayList<>();
+    int len=queue.size();
     for(int i=0;i<len;i++){
       TreeNode node=queue.poll();
       if(index%2==0)
@@ -186,64 +168,51 @@ public List<List<Integer>> levelOrder(TreeNode root) {
   }
   return value;
 }
-
 ```
-
-
-
-
-
-
-
-
-
-
 
 ## Binary Trees
 
-A tree is called binary tree if each node has zero child, one child or two children. Empty tree is also a valid binary tree.
-We can visualize a binary tree as consisting of a root and two disjoint binary trees, called the left and right subtrees of the root.
+如果每个节点有零个、一个或两个子节点，则称为二叉树。空树也是有效的二叉树。
+我们可以将二叉树视为由根节点和两个不相交的二叉树（称为根的左子树和右子树）组成。
 
-Strict Binary Tree: A binary tree is called strict binary tree if each node has exactly two children or no children.
+严格二叉树：如果每个节点恰好有两个子节点或没有子节点，则称为严格二叉树。
 
-Full Binary Tree: A binary tree is called full binary tree if each node has exactly two children and all leaf nodes are at the same level.
+满二叉树：如果每个节点恰好有两个子节点且所有叶子节点都在同一层，则称为满二叉树。
 
-Complete Binary Tree: Before defining the complete binary tree, let us assume that the height of the binary tree is h.
-In complete binary trees, if we give numbering for the nodes by starting at the root (let us say the root node has 1) then we get a complete sequence from 1 to the number of nodes in the tree.
-While traversing we should give numbering for NULL pointers also.
-A binary tree is called complete binary tree if all leaf nodes are at height h or h – 1 and also without any missing number in the sequence
+完全二叉树：在定义完全二叉树之前，假设二叉树的高度为 h。
+在完全二叉树中，如果我们从根开始为节点编号（假设根节点编号为 1），则得到从 1 到树中节点数量的完整序列。
+遍历时，我们还应为 NULL 指针编号。
+如果所有叶子节点都在高度 h 或 h-1 并且序列中没有缺失的编号，则称为完全二叉树。
 
 ### Applications of Binary Trees
 
-Following are the some of the applications where binary trees play an important role:
+以下是二叉树发挥重要作用的一些应用：
 
-- Expression trees are used in compilers.
-- Huffman coding trees that are used in data compression algorithms.
-- Binary Search Tree (BST), which supports search, insertion and deletion on a
-  collection of items in O(logn) (average).
-- Priority Queue (PQ), which supports search and deletion of minimum (or maximum)
-  on a collection of items in logarithmic time (in worst case).
+- 表达式树用于编译器。
+- 哈夫曼编码树用于数据压缩算法。
+- 二叉搜索树（BST），支持对集合中项目的搜索、插入和删除，平均时间复杂度为 O(logn)。
+- 优先队列（PQ），支持对数时间内（最坏情况下）对集合中最小（或最大）元素的搜索和删除。
 
 ### Operations on Binary Trees
 
-Basic Operations
+基本操作
 
-- Inserting an element into a tree
-- Deleting an element from a tree
-- Searching for an element
-- Traversing the tree
+- 向树中插入元素
+- 从树中删除元素
+- 搜索元素
+- 遍历树
 
-Auxiliary Operations
+辅助操作
 
-- Finding the size of the tree
-- Finding the height of the tree
-- Finding the level which has maximum sum
-- Finding the least common ancestor (LCA) for a given pair of nodes, and many more.
+- 查找树的大小
+- 查找树的高度
+- 查找具有最大总和的层
+- 查找给定节点对的最低公共祖先（LCA），以及更多。
 
 ### Implementation
 
-Because a binary tree has at most two children, we can keep direct pointers to them.
-The declaration of tree nodes is similar in structure to that for doubly linked lists, in that a node is a structure consisting of the *key* information plus two pointers (*left* and  *right* ) to other nodes.
+由于二叉树最多有两个子节点，我们可以直接保留指向它们的指针。
+树节点的声明在结构上类似于双向链表，即节点是一个由键信息加上两个指针（left 和 right）组成的结构。
 
 ```c
 typedef struct tree_node *tree_ptr;
@@ -259,26 +228,26 @@ struct tree_node
 typedef tree_ptr TREE;
 ```
 
-We could draw the binary trees using the rectangular boxes that are customary for linked lists, but trees are generally drawn as circles connected by lines, because they are actually graphs. We also do not explicitly draw *NULL* pointers when referring to trees, because every binary tree with *n* nodes would require *n + *1* NULL* pointers.
+我们可以使用链表中常用的矩形框来绘制二叉树，但树通常绘制为用线连接的圆形，因为它们实际上是图。在引用树时，我们也不显式绘制 NULL 指针，因为具有 n 个节点的二叉树需要 n+1 个 NULL 指针。
 
-This general strattegy ( left, node, right ) is known as an *inorder* traversal.
+这种通用策略（left, node, right）称为*中序*遍历。
 
-Full binary  Tree
+满二叉树
 
-Complete Binary Tree
+完全二叉树
 
-Heap
+堆
 
 ### Binary Search Tree (BSTs)
 
-An important application of binary trees is their use in searching.
+二叉树的一个重要应用是搜索。
 
-The property that makes a binary tree into a binary search tree is that for every node,  *X* ,
-in the tree, the values of all the keys in the left subtree are smaller than the key value in  *X* , and the values of all the keys in the right subtree are larger than the key value in  *X* .
-Notice that this implies that all the elements in the tree can be ordered in some consistent manner.
+使二叉树成为二叉搜索树的属性是，对于树中的每个节点 X，
+左子树中所有键的值小于 X 中的键值，右子树中所有键的值大于 X 中的键值。
+注意，这意味着树中的所有元素可以按某种一致的方式排序。
 
-In below figure, the tree on the left is a binary search tree, but the tree on the right is not.
-The tree on the right has a node with key 7 in the left subtree of a node with key 6 (which happens to be the root).
+在下图中，左边的树是二叉搜索树，右边的树不是。
+右边的树在键为 6 的节点（恰好是根）的左子树中有一个键为 7 的节点。
 
 <div style="text-align: center;">
 
@@ -286,47 +255,45 @@ The tree on the right has a node with key 7 in the left subtree of a node with k
 
 </div>
 
-Because the average depth of a binary search tree is $O(\log{n})$, we generally do not need to worry about running out of stack space.
+因为二叉搜索树的平均深度为 $O(\log{n})$，我们通常不需要担心栈空间耗尽。
 
+因为二叉搜索树的平均深度为 $O(\log{n})$，我们通常不需要担心栈空间耗尽。树中所有节点的平均深度为 $O(\log{n})$，前提是假设所有树出现的概率相等。
 
-Because the average depth of a binary search tree is $O(\log{n})$, we generally do not need to worry about running out of stack space.The average depth over all nodes in a tree is $O(\log{n})$, on the assumption that all trees are equally likely.
+树中所有节点的深度之和称为*内部路径长度*。
 
-The sum of the depths of all nodes in a tree is known as the  *internal path length* .
-
-If the input comes into a tree presorted, then a series of *inserts* will take quadratic time and give a very expensive implementation of a linked list, since the tree will consist only of nodes with no left children. One solution to the problem is to insist on an extra structural condition called *balance:* no node is allowed to get too deep.
+如果输入在进入树之前已排序，则一系列 insert 将花费二次时间并产生链表，因为树将仅由没有左子节点的节点组成。一个解决方案是坚持一个额外的结构条件，称为*平衡*：不允许任何节点过深。
 
 ### Binary Tree Traversals
 
-Tree traversal is like searching the tree, except that in traversal the goal is to move through the tree in a particular order. In addition, all nodes are processed in the traversal but searching stops when the required node is found.
+树的遍历类似于搜索树，但区别在于遍历的目标是以特定顺序移动经过树。此外，遍历中所有节点都被处理，而搜索在找到所需节点时停止。
 
 #### Traversal Possibilities
 
-Starting at the root of a binary tree, there are three main steps that can be performed and the order in which they are performed defines the traversal type.
-These steps are: performing an action on the current node (referred to as “visiting” the node and denoted with “D”), traversing to the left child node (denoted with “L”), and traversing to the right child node (denoted with “R”).
-This process can be easily described through recursion. Based on the above definition there are 6 possibilities:
+从二叉树的根开始，有三个主要步骤可以执行，它们执行的顺序定义了遍历类型。
+这些步骤是：对当前节点执行操作（称为"访问"节点，记为"D"），遍历到左子节点（记为"L"），以及遍历到右子节点（记为"R"）。
+这个过程可以很容易地通过递归来描述。基于上述定义，有 6 种可能性：
 
-1. LDR: Process left subtree, process the current node data and then process right subtree
-2. LRD: Process left subtree, process right subtree and then process the current node data
-3. DLR: Process the current node data, process left subtree and then process right subtree
-4. DRL: Process the current node data, process right subtree and then process left subtree
-5. RDL: Process right subtree, process the current node data and then process left subtree
-6. RLD: Process right subtree, process left subtree and then process the current node data
+1. LDR：处理左子树，处理当前节点数据，然后处理右子树
+2. LRD：处理左子树，处理右子树，然后处理当前节点数据
+3. DLR：处理当前节点数据，处理左子树，然后处理右子树
+4. DRL：处理当前节点数据，处理右子树，然后处理左子树
+5. RDL：处理右子树，处理当前节点数据，然后处理左子树
+6. RLD：处理右子树，处理左子树，然后处理当前节点数据
 
-Classifying the Traversals
+遍历的分类
 
-The sequence in which these entities (nodes) are processed defines a particular traversal method.
-The classification is based on the order in which current node is processed.
-That means, if we are classifying based on current node (D) and if D comes in the middle then it does not matter whether L is on left side of D or R is on left side of D. Similarly, it does not matter whether L is
-on right side of D or R is on right side of D.
-Due to this, the total 6 possibilities are reduced to 3 and these are:
+这些实体（节点）被处理的顺序定义了特定的遍历方法。
+分类基于当前节点被处理的顺序。
+也就是说，如果我们基于当前节点（D）进行分类，并且如果 D 在中间，则 L 在 D 的左侧还是 R 在 D 的左侧并不重要。同样，L 在 D 的右侧还是 R 在 D 的右侧也不重要。
+因此，总共有 6 种可能性减少为 3 种：
 
-- Preorder (DLR) Traversal
-- Inorder (LDR) Traversal
-- Postorder (LRD) Traversal
+- 前序（DLR）遍历
+- 中序（LDR）遍历
+- 后序（LRD）遍历
 
-There is another traversal method which does not depend on the above orders and it is:
+还有另一种不依赖于上述顺序的遍历方法：
 
-- Level Order Traversal: This method is inspired from Breadth First Traversal (BFS of Graph algorithms).
+- 层序遍历：这种方法受到广度优先遍历（图算法的 BFS）的启发。
 
 ## Generic Trees (N-ary Trees)
 
@@ -334,14 +301,14 @@ There is another traversal method which does not depend on the above orders and 
 
 ## AVL Trees
 
-An AVL (Adelson-Velskii and Landis) tree is a binary search tree with a *balance* condition.
-The balance condition must be easy to maintain, and it ensures that the depth of the tree is  $O(\log{n})$.
-The simplest idea is to require that the left and right subtrees have the same height.
+AVL（Adelson-Velskii 和 Landis）树是一种具有*平衡*条件的二叉搜索树。
+平衡条件必须易于维护，并确保树的深度为 $O(\log{n})$。
+最简单的想法是要求左子树和右子树具有相同的高度。
 
-An AVL tree is identical to a binary search tree, except that for every node in the tree, the height of the left and right subtrees can differ by at most 1.
-(The height of an empty tree is defined to be -1.)
+AVL 树与二叉搜索树相同，只是树中每个节点的左子树和右子树的高度差最多为 1。
+（空树的高度定义为 -1。）
 
-In below figure the tree on the left is an AVL tree, but the tree on the right is not.
+在下图中，左边的树是 AVL 树，右边的树不是。
 
 ![AVL Tree](../img/AVL-Tree.png)
 
@@ -351,63 +318,59 @@ In below figure the tree on the left is an AVL tree, but the tree on the right i
 
 ## Splay Trees
 
-We now describe a relatively simple data structure, known as a  *splay tree* , that guarantees that any *m* consecutive tree operations take at most  $O(m\log{n})$ time.
+我们现在描述一种相对简单的数据结构，称为*伸展树*，它保证任意 m 次连续树操作最多需要 $O(m\log{n})$ 时间。
 
-Although this guarantee does not preclude the possibility that any *single* operation might take  $O(n)$ time,
-and thus the bound is not as strong as an  $O(\log{n})$ worst-case bound per operation,
-the net effect is the same: There are no bad input sequences.
-Generally, when a sequence of *m* operations has total worst-case running time of  $O(mf(n))$, we say that the *amortized* running time is  *O* ( *f* ( *n* )).
-Thus, a splay tree has  $O(\log{n})$ amortized cost per operation. Over a long sequence of operations, some may take more, some less.
+虽然这个保证不排除任何*单次*操作可能花费 $O(n)$ 时间的可能性，
+因此这个界不如每次操作 $O(\log{n})$ 的最坏情况界那么强，
+但净效果是一样的：没有坏的输入序列。
+通常，当 m 次操作的序列总的最坏情况运行时间为 $O(mf(n))$ 时，我们说*摊还*运行时间为 *O*(*f*(*n*))。
+因此，伸展树每次操作的摊还成本为 $O(\log{n})$。在长时间的操作序列中，有些操作可能花费更多，有些更少。
 
-Splay trees are based on the fact that the  $O(n)$ worst-case time per operation for binary search trees is not bad, as long at it occurs relatively infrequently.
-Any one access, even if it takes  $O(n)$, is still likely to be extremely fast.
-The problem with binary search trees is that it is possible, and not uncommon, for a whole sequence of bad accesses to take place.
-The cumulative running time then becomes noticeable.
-A search tree data structure with  $O(n)$ worst-case time, but a *guarantee* of at most  $O(m\log{n})$ for any *m* consecutive operations, is certainly satisfactory, because there are no bad sequences.
+伸展树基于这样一个事实：二叉搜索树每次操作 $O(n)$ 的最坏情况时间并不坏，只要它发生得相对不频繁。
+任何一次访问，即使花费 $O(n)$，仍然可能非常快。
+二叉搜索树的问题在于，可能（而且并不罕见）发生一连串的坏访问。
+累积运行时间就会变得显著。
+一种最坏情况时间为 $O(n)$，但对任意 m 次连续操作保证至多 $O(m\log{n})$ 的搜索树数据结构无疑是令人满意的，因为没有坏的序列。
 
-If any particular operation is allowed to have an  $O(n)$ worst-case time bound, and we still want an  $O(\log{n})$ amortized time bound, then it is clear that **whenever a node is accessed, it must be moved**.
-Otherwise, once we find a deep node, we could keep performing *finds* on it.
-If the node does not change location, and each access costs  $O(n)$, then a sequence of *m* accesses will cost $O(M*N)$.
+如果允许任何特定操作具有 $O(n)$ 的最坏情况时间界，并且我们仍然希望每次操作的摊还时间界为 $O(\log{n})$，那么显然**每当访问一个节点时，它必须被移动**。
+否则，一旦我们找到一个深节点，我们可以不断对其执行查找。
+如果节点不改变位置，并且每次访问花费 $O(n)$，那么 m 次访问的序列将花费 $O(M*N)$。
 
-The basic idea of the splay tree is that after a node is accessed, it is pushed to the root by a series of AVL tree rotations.
-Notice that if a node is deep, there are many nodes on the path that are also relatively deep, and by restructuring we can make future accesses cheaper on all these nodes.
-Thus, if the node is unduly deep, then we want this restructuring to have the side effect of balancing the tree (to some extent).
-Besides giving a good time bound in theory, this method is likely to have practical utility, because in many applications when a node is accessed, it is likely to be accessed again in the near future.
-Studies have shown that this happens much more often than one would expect.
-Splay trees also do not require the maintenance of height or balance information, thus saving space and simplifying the code to some extent (especially when careful implementations are written).
+伸展树的基本思想是，访问一个节点后，通过一系列 AVL 树旋转将其推到根。
+注意，如果一个节点很深，那么路径上有很多节点也相对较深，通过重组我们可以使未来对这些节点的访问更便宜。
+因此，如果节点过深，我们希望这种重组具有平衡树的副作用（在某种程度上）。
+除了在理论上给出好的时间界外，这种方法在实际中也可能有用，因为在许多应用中，当一个节点被访问时，它在不久的将来很可能再次被访问。
+研究表明，这种情况发生的频率比人们预期的要高得多。
+伸展树也不需要维护高度或平衡信息，从而节省空间并在一定程度上简化代码（特别是在仔细实现时）。
 
 ### Traversals
 
-In a level-order traveresal, all nodes at depth d are processed before any node at depth d + 1.
-Level-order traversal differs from the other traversals in that it is not done recursively; a queue is used, instead of the implied stack of recursion.
+在层序遍历中，深度 d 的所有节点在深度 d+1 的任何节点之前被处理。
+层序遍历与其他遍历的不同之处在于它不是递归完成的；使用队列而不是递归隐含的栈。
 
 ## B-Trees
 
-As previously mentioned, unbalanced trees have a worst-case complexity of O(N). Balanced trees give us an average O(log2 N). At the same time, due to low fanout (fanout is the maximum allowed number of children per node), we have to perform balancing, relocate nodes, and update pointers rather frequently. Increased maintenance costs make BSTs impractical as on-disk data structures.
+如前所述，不平衡树的最坏情况复杂度为 O(N)。平衡树给我们平均 O(log2 N)。同时，由于低扇出（扇出是每个节点允许的最大子节点数），我们必须进行平衡、重定位节点和更新指针，频率较高。增加的维护成本使 BST 作为磁盘数据结构不实用。
 
-If we wanted to maintain a BST on disk, we’d face several problems. One problem is locality: since elements are added in random order, there’s no guarantee that a newly created node is written close to its parent, which means that node child pointers may span across several disk pages. We can improve the situation to a certain extent by modifying the tree layout and using paged binary trees.
+如果我们想在磁盘上维护 BST，会面临几个问题。一个是局部性：由于元素以随机顺序添加，不能保证新创建的节点写在其父节点附近，这意味着节点子指针可能跨越多个磁盘页面。我们可以通过修改树布局和使用分页二叉树来在一定程度上改善情况。
 
-Another problem, closely related to the cost of following child pointers, is tree height. Since binary trees have a fanout of just two, height is a binary logarithm of the number of the elements in the tree, and we have to perform $O(log2 N)$ seeks to locate the searched element and, subsequently, perform the same number of disk transfers. 2-3-Trees and other low-fanout trees have a similar limitation: while they are useful as in-memory data structures, small node size makes them impractical for external storage.
+另一个与跟随子指针的成本密切相关的问题是树的高度。由于二叉树的扇出仅为 2，高度是树中元素数量的二进制对数，我们必须执行 $O(log2 N)$ 次寻道来定位搜索的元素，随后执行相同数量的磁盘传输。2-3 树和其他低扇出树也有类似的局限性：虽然它们作为内存数据结构很有用，但小的节点大小使它们不适合外部存储。
 
-A naive on-disk BST implementation would require as many disk seeks as comparisons, since there’s no built-in concept of locality. 
-This sets us on a course to look for a data structure that would exhibit this property.
+一个朴素的基于磁盘的 BST 实现需要与比较次数相同的磁盘寻道次数，因为没有内置的局部性概念。
+这促使我们寻找一种能够展现这种属性的数据结构。
 
-Considering these factors, a version of the tree that would be better suited for disk implementation has to exhibit the following properties:
+考虑到这些因素，更适合磁盘实现的树版本必须具有以下属性：
 
-- *High fanout* to improve locality of the neighboring keys.
-- *Low height* to reduce the number of seeks during traversal.
+- *高扇出*以改善相邻键的局部性。
+- *低高度*以减少遍历期间的寻道次数。
 
 > [!TIP]
-> Fanout and height are inversely correlated: the higher the fanout, the lower the height. If fanout is high, each node can hold more children, reducing the number of nodes and, subsequently, reducing height.
+> 扇出和高度是负相关的：扇出越高，高度越低。如果扇出很高，每个节点可以容纳更多子节点，从而减少节点数量，进而减少高度。
 
-B-Trees build upon the foundation of balanced search trees and are different in that they have higher fanout (have more child nodes) and smaller height.
+B 树建立在平衡搜索树的基础上，不同之处在于它们具有更高的扇出（更多子节点）和更低的高度。
 
-In most of the literature, binary tree nodes are drawn as circles. Since each node is responsible just for one key and splits the range into two parts, this level of detail is sufficient and intuitive. At the same time, B-Tree nodes are often drawn as rectangles, and pointer blocks are also shown explicitly to highlight the relationship between child nodes and separator keys. 
-Figure 7 shows binary tree, 2-3-Tree, and B-Tree nodes side by side, which helps to understand the similarities and differences between them.
-
-
-
-
+在大多数文献中，二叉树节点被绘制为圆形。由于每个节点只负责一个键并将范围分为两部分，这种详细程度就足够且直观了。同时，B 树节点通常被绘制为矩形，指针块也被显式显示，以突出子节点和分隔键之间的关系。
+图 7 并排显示了二叉树、2-3 树和 B 树节点，有助于理解它们之间的异同。
 
 <div style="text-align: center;">
 
@@ -416,45 +379,44 @@ Figure 7 shows binary tree, 2-3-Tree, and B-Tree nodes side by side, which help
 </div>
 
 <p style="text-align: center;">
-Fig.7. Binary tree, 2-3-Tree, and B-Tree nodes side by side.
+Fig.7. 二叉树、2-3 树和 B 树节点并排比较。
 </p>
-
 
 ## LSM-trees
 
-The [LSM-tree](/docs/CS/Algorithms/tree/LSM.md) uses an algorithm that defers and batches index changes, migrating the changes out to disk in a particularly efficient way reminiscent of merge sort.
+[LSM-tree](/docs/CS/Algorithms/tree/LSM.md) 使用一种算法来延迟和批量处理索引更改，以特别高效的方式将更改迁移到磁盘，类似于归并排序。
 
 ## Summary
 
-We have seen uses of trees in operating systems, compiler design, and searching.
-Expression trees are a small example of a more general structure known as a parse tree, which is a central data structure in compiler design.
-Parse trees are not binary, but are relatively simple extensions of expression trees (although the algorithms to build them are not quite so simple).
+我们已经看到了树在操作系统、编译器设计和搜索中的用途。
+表达式树是一种更通用结构（称为解析树）的小例子，解析树是编译器设计中的核心数据结构。
+解析树不是二叉树，而是表达式树的相对简单的扩展（尽管构建它们的算法不那么简单）。
 
-Search trees are of great importance in algorithm design.
-They support almost all the useful operations, and the logarithmic average cost is very small.
-The problem with search trees is that their performance depends heavily on the input being random.
-If this is not the case, the running time increases significantly, to the point where search trees become expensive linked lists.
+搜索树在算法设计中非常重要。
+它们支持几乎所有有用的操作，而对数平均成本非常小。
+搜索树的问题在于其性能在很大程度上依赖于输入的随机性。
+如果不是这样，运行时间会显著增加，以至于搜索树变成昂贵的链表。
 
-We saw several ways to deal with this problem.
-AVL trees work by insisting that all nodes' left and right subtrees differ in heights by at most one.
-This ensures that the tree cannot get too deep.
-The operations that do not change the tree, as insertion does, can all use the standard binary search tree code.
-Operations that change the tree must restore the tree. This can be somewhat complicated, especially in the case of deletion.
-We showed how to restore the tree after insertions in O(log n) time.
+我们看到了几种处理这个问题的方法。
+AVL 树通过要求所有节点的左右子树高度差最多为 1 来工作。
+这确保了树不会过深。
+不改变树的操作（如插入）都可以使用标准的二叉搜索树代码。
+改变树的操作必须恢复树。这可能有点复杂，特别是在删除的情况下。
+我们展示了如何在 O(log n) 时间内恢复插入后的树。
 
-We also examined the splay tree.
-Nodes in splay trees can get arbitrarily deep, but after every access the tree is adjusted in a somewhat mysterious manner.
-The net effect is that any sequence of m operations takes O(m log n) time, which is the same as a balanced tree would take.
+我们还研究了伸展树。
+伸展树中的节点可能任意深，但每次访问后树会以某种神秘的方式调整。
+净效果是，任何 m 次操作的序列需要 O(m log n) 时间，这与平衡树相同。
 
-B-trees are balanced m-way (as opposed to 2-way or binary) trees, which are well suited for disks; a special case is the 2-3 tree, which is another common method of implementing balanced search trees.
+B 树是平衡的 m 路（相对于 2 路或二叉树）树，非常适合磁盘；一个特殊情况是 2-3 树，这是实现平衡搜索树的另一种常见方法。
 
-In practice, the running time of all the balanced tree schemes is worse (by a constant factor) than the simple binary search tree,
-but this is generally acceptable in view of the protection being given against easily obtained worst-case input.
+在实践中，所有平衡树方案的运行时间都比简单的二叉搜索树差（由常数因子导致），
+但考虑到它们对容易获得的最坏情况输入提供的保护，这通常是可以接受的。
 
 > [!NOTE]
 >
-> A final note: By inserting elements into a search tree and then performing an inorder traversal, we obtain the elements in sorted order.
-> This gives an $O(n\log{n})$ algorithm to sort, which is a worst-case bound if any sophisticated search tree is used.
+> 最后一点：通过将元素插入搜索树然后执行中序遍历，我们得到排序后的元素。
+> 这给出了 $O(n\log{n})$ 的排序算法，如果使用任何高级搜索树，这是一个最坏情况界。
 
 ## Links
 

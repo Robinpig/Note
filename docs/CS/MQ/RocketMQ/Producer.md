@@ -1,9 +1,9 @@
 ## Introduction
 
-The producers of Apache RocketMQ are underlying resources that can be reused, like the connection pool of a database.
-You do not need to create producers each time you send messages or destroy the producers after you send messages.
-If you regularly create and destroy producers, a large number of short connection requests are generated on the broker.
-We recommend that you create and initialize the minimum number of producers that your business scenarios require, and reuse as many producers as you can.
+Apache RocketMQ 的生产者是底层资源，可以像数据库的连接池一样重用。
+你不需要每次发送消息时创建生产者，也不需要在发送消息后销毁生产者。
+如果频繁创建和销毁生产者，会在 broker 上生成大量的短连接请求。
+我们建议你创建和初始化业务场景所需的最小数量生产者，并尽可能多地重用生产者。
 
 一个Producer的启动 先实例化 DefaultMQProducer ,再调用 start  之后调用 send 发送消息
 

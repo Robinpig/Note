@@ -1,14 +1,13 @@
 ## Introduction
 
-ELF is the abbreviation for Executable and Linkable Format and defines the structure for binaries, libraries, and core files. 
-The formal specification allows the operating system to interpreter its underlying machine instructions correctly. 
-ELF files are typically the output of a compiler or linker and are a binary format.
-
+ELF 是 Executable and Linkable Format（可执行与可链接格式）的缩写，定义了二进制文件、库和核心文件的结构。
+正式规范允许操作系统正确解释其底层的机器指令。
+ELF 文件通常是编译器或链接器的输出，是一种二进制格式。
 
 ## x86
 
 ```c
-#define ELF_MAGIC 0x464C457FU  // “\x7FELF” in little endian
+#define ELF_MAGIC 0x464C457FU  // "\x7FELF" in little endian
 
 // File header
 struct elfhdr {
@@ -28,15 +27,9 @@ struct elfhdr {
   ushort shnum;
   ushort shstrndx;
 };
-
 ```
 
-
-
-
-
 ```c
-
 // Program section header
 struct proghdr {
   uint type;
@@ -48,15 +41,11 @@ struct proghdr {
   uint flags;
   uint align;
 };
-
 ```
-
-
 
 ## Links
 
 - [xv6](/docs/CS/OS/xv6/xv6.md)
 - [ELF](/docs/CS/Compiler/ELF.md)
-
 
 ## References

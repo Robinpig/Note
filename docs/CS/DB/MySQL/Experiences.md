@@ -1,6 +1,6 @@
-## Configurations
+## 配置
 
-### Create new User
+### 创建新用户
 
 ```mysql
 create user 'robin'@'%' identified by '123456';
@@ -10,17 +10,16 @@ grant all privileges on *.* to 'robin'@'%';
 flush privileges;
 ```
 
-### Forgot password
+### 忘记密码
 
-1. Start db with skip-grant-tables
-
+1. 以 skip-grant-tables 模式启动数据库
 
 ```shell
 #Mariadb 
 >/bin/mysqld_safe --skip-grant-tables&
 ```
 
-2. Rest password
+2. 重置密码
 
 ```mysql
 # mysql
@@ -30,18 +29,12 @@ MariaDB [mysql]> flush privileges;
 MariaDB [mysql]> exit; 
 ```
 
+3. 正常重启数据库
 
+## 使用
 
-3. Restart db as normal
+### 搜索分页
 
-
-
-## Using
-
-
-### Search Limit
-
-1. use cover index + child search primary key
-2. remember last index (for a continuous query)
-3. lower rank for a overflow limit offset value(fail-fast return 4XX)
-
+1. 使用覆盖索引 + 子查询主键
+2. 记住上一页最后一条记录的索引（用于连续查询）
+3. 对于过大的 limit offset 值降低优先级（快速失败返回 4XX）

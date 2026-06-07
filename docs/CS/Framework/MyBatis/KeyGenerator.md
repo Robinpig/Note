@@ -2,7 +2,7 @@
 
 
 
-### KeyGenerator Hierarchy
+### KeyGenerator 层次结构
 
 ![](img/KeyGenerator.png)
 
@@ -24,7 +24,7 @@ public interface KeyGenerator {
 
 #### processBefore
 
-call `processBefore` in constructor of BaseStatementHandler
+在 BaseStatementHandler 的构造函数中调用 `processBefore`
 
 ```java
 // BaseStatementHandler
@@ -44,7 +44,7 @@ protected void generateKeys(Object parameter) {
 
 #### processAfter
 
-call `processAfter` in *update* method of StatementHandler
+在 StatementHandler 的 *update* 方法中调用 `processAfter`
 
 ```java
 // StatementHandler
@@ -143,7 +143,7 @@ private void assignKeys(Configuration configuration, ResultSet rs, ResultSetMeta
 
 ### SelectKeyGenerator
 
-new keyExecutor and query, the transaction will be closed by parent executor.
+创建新的 keyExecutor 并执行查询，事务由父 executor 管理。
 
 
 
@@ -234,11 +234,11 @@ private void setValue(MetaObject metaParam, String property, Object value) {
 |               | SelectKeyGenerator                                    | Jdbc3KeyGenerator         |
 | ------------- | ----------------------------------------------------- | ------------------------- |
 | DB            | Oracle, DB2                                           | MySQL, PostgreSQL         |
-| processBefore | call processGeneratedKeys only once(default)          | do nothing                |
-| processAfter  | call processGeneratedKeys only once(when order first) | assignKeys from ResultSet |
-| Executor      | two executors                                         | One executor              |
+| processBefore | 只调用 processGeneratedKeys 一次（默认）              | 什么也不做                |
+| processAfter  | 只调用 processGeneratedKeys 一次（当 order 为 first） | 从 ResultSet 分配 keys    |
+| Executor      | 两个 executor                                         | 一个 executor             |
 
-All of them set value using [Reflection](/docs/CS/Java/JDK/Basic/Reflection.md)
+所有 KeyGenerator 都使用 [Reflection](/docs/CS/Java/JDK/Basic/Reflection.md) 设置值
 
 
 ## Links

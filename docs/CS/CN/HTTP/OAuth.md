@@ -1,69 +1,68 @@
-## Introduction
+## 简介
 
-[OAuth 2.0](https://oauth.net/2/) is the industry-standard protocol for authorization. OAuth 2.0 focuses on client developer simplicity while providing specific authorization flows for web applications, desktop applications, mobile phones, and living room devices.
+[OAuth 2.0](https://oauth.net/2/) 是业界标准的授权协议。OAuth 2.0 专注于客户端开发者的简易性，同时为 Web 应用、桌面应用、移动设备和客厅设备提供特定的授权流程。
 
-The OAuth 2.0 authorization framework enables a third-party application to obtain limited access to an HTTP service, either on behalf of a resource owner by orchestrating an approval interaction between the resource owner and the HTTP service,
-or by allowing the third-party application to obtain access on its own behalf.
+OAuth 2.0 授权框架使第三方应用能够获得对 HTTP 服务的有限访问，既可以代表资源所有者通过协调资源所有者和 HTTP 服务之间的批准交互来实现，
+也可以允许第三方应用代表自身获得访问权限。
 
-This OAuth is designed for use with [HTTP](/docs/CS/CN/HTTP/HTTP.md).  The use of OAuth over any protocol other than HTTP is out of scope.
+此 OAuth 设计用于 [HTTP](/docs/CS/CN/HTTP/HTTP.md)。在任何非 HTTP 协议上使用 OAuth 不在范围内。
 
-### Roles
+### 角色
 
-OAuth defines four roles:
+OAuth 定义了四个角色：
 
-- **resource owner**
-  An entity capable of granting access to a protected resource.
-  When the resource owner is a person, it is referred to as an end-user.
-- **resource server**
-  The server hosting the protected resources, capable of accepting and responding to protected resource requests using access tokens.
-- **client**
-  An application making protected resource requests on behalf of the resource owner and with its authorization.  
-  The term "client" does not imply any particular implementation characteristics (e.g., whether the application executes on a server, a desktop, or other devices).
-- **authorization server**
-  The server issuing access tokens to the client after successfully authenticating the resource owner and obtaining authorization.
+- **资源所有者（resource owner）**
+  能够授予对受保护资源访问权限的实体。
+  当资源所有者是人时，称为最终用户。
+- **资源服务器（resource server）**
+  托管受保护资源的服务器，能够接受并使用访问令牌响应受保护资源请求。
+- **客户端（client）**
+  代表资源所有者并凭借其授权发出受保护资源请求的应用。
+  "客户端"一词不暗示任何特定的实现特征（例如，应用是在服务器、桌面还是其他设备上执行）。
+- **授权服务器（authorization server）**
+  在成功验证资源所有者并获取授权后，向客户端颁发访问令牌的服务器。
 
-The authorization server may be the same server as the resource server or a separate entity.
-A single authorization server may issue access tokens accepted by multiple resource servers.
+授权服务器可以与资源服务器是同一台服务器，也可以是独立的实体。
+单个授权服务器可以颁发被多个资源服务器接受的访问令牌。
 
-### Protocol Flow
+### 协议流程
 
 ```
      +--------+                               +---------------+
-     |        |--(A)- Authorization Request ->|   Resource    |
-     |        |                               |     Owner     |
-     |        |<-(B)-- Authorization Grant ---|               |
+     |        |--(A)- 授权请求 --------------->|   资源所有者    |
+     |        |                               |               |
+     |        |<-(B)-- 授权许可 ---------------|               |
      |        |                               +---------------+
      |        |
      |        |                               +---------------+
-     |        |--(C)-- Authorization Grant -->| Authorization |
-     | Client |                               |     Server    |
-     |        |<-(D)----- Access Token -------|               |
+     |        |--(C)-- 授权许可 -------------->|   授权服务器   |
+     | 客户端  |                               |               |
+     |        |<-(D)----- 访问令牌 ------------|               |
      |        |                               +---------------+
      |        |
      |        |                               +---------------+
-     |        |--(E)----- Access Token ------>|    Resource   |
-     |        |                               |     Server    |
-     |        |<-(F)--- Protected Resource ---|               |
+     |        |--(E)----- 访问令牌 ----------->|   资源服务器   |
+     |        |                               |               |
+     |        |<-(F)--- 受保护资源 ------------|               |
      +--------+                               +---------------+
 
-                        Protocol Flow
+                    协议流程
 ```
 
+授权许可（Authorization Grant）
 
-Authorization Grant
+1. 授权码（Authorization Code）
+2. 隐式（Implicit）
+3. 资源所有者密码凭证（Resource Owner Password Credentials）
+4. 客户端凭证（Client Credentials）
 
-1. Authorization Code
-2. Implicit
-3. Resource Owner Password Credentials
-4. Client Credentials
+## 链接
 
-## Links
-
-- [Computer Network](/docs/CS/CN/CN.md) 
+- [计算机网络](/docs/CS/CN/CN.md) 
 - [HTTP](/docs/CS/CN/HTTP/HTTP.md)
 - [Spring Security](/docs/CS/Framework/Spring/Security.md?id=OAuth)
 
-## References
+## 参考文献
 
 1. [RFC 5849 - The OAuth 1.0 Protocol](https://datatracker.ietf.org/doc/html/rfc5849)
 2. [RFC 6749 - The OAuth 2.0 Authorization Framework](https://datatracker.ietf.org/doc/rfc6749)

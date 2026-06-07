@@ -1,25 +1,19 @@
 ## Introduction
 
+[Dragonfly](https://dragonflydb.io/) 是一个健壮、超快的内存数据存储，完全兼容 Redis™* 和 Memcached。
+Dragonfly 可垂直扩展，在单个实例上处理数百万 QPS 和数百 GB 的内存。
 
-[Dragonfly](https://dragonflydb.io/) is a robust, ultra fast in-memory datastore, fully compatible with Redis™* and Memcached. 
-Dragonfly scales vertically to handle millions of QPS and hundreds of GBs of memory on a single instance.
+多 CPU
 
+具有相对精度的过期时间
 
-Multi-CPU
-
-Expiration deadlines with relative accuracy
-
-Native Http console and Prometheus compatible metrics
-
+原生 HTTP 控制台和 Prometheus 兼容指标
 
 ## Cache Management
 
-Dragonfly has a single unified adaptive caching algorithm that is very simple and memory efficient.
+Dragonfly 拥有一个统一的单一日适应缓存算法，该算法非常简单且内存高效。
 
 2Q
-
-
-
 
 ## Links
 

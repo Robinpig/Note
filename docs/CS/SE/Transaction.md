@@ -1,78 +1,80 @@
 ## Introduction
 
-In the harsh reality of data systems, many things can go wrong:
+在数据系统的严酷现实中，很多事情可能会出错：
 
-- The database software or hardware may fail at any time (including in the middle of a write operation).
-- The application may crash at any time (including halfway through a series of operations).
-- Interruptions in the network can unexpectedly cut off the application from the database, or one database node from another.
-- Several clients may write to the database at the same time, overwriting each other’s changes.
-- A client may read data that doesn’t make sense because it has only partially been updated.
-- Race conditions between clients can cause surprising bugs.
+- 数据库软件或硬件可能随时发生故障（包括在写操作过程中）。
+- 应用程序可能随时崩溃（包括在一系列操作进行到一半时）。
+- 网络中断可能意外地切断应用程序与数据库的连接，或切断数据库节点之间的连接。
+- 多个客户端可能同时向数据库写入，相互覆盖彼此的更改。
+- 客户端可能读取到无意义的数据，因为这些数据只被部分更新。
+- 客户端之间的 race conditions（竞态条件）可能导致令人惊讶的 bug。
 
-*Transactions* have been the mechanism of choice for simplifying these issues.
-A transaction is a way for an application to group several reads and writes together into a logical unit.
-Conceptually, all the reads and writes in a transaction are executed as one operation: either the entire transaction succeeds (*commit*) or it fails (*abort*, *rollback*).
-If it fails, the application can safely retry.
-With transactions, error handling becomes much simpler for an application, because it doesn’t need to worry about partial failure—i.e., the case where some operations succeed and some fail (for whatever reason).
+Transaction（事务）一直是简化这些问题的首选机制。
+事务是应用程序将多次读取和写入组合成一个逻辑单元的方式。
+从概念上讲，事务中的所有读取和写入都作为一个操作执行：要么整个事务成功（commit），要么失败（abort、rollback）。
+如果失败，应用程序可以安全地重试。
+有了事务，应用程序的错误处理变得简单得多，因为它不必担心 partial failure（部分失败）——即某些操作成功而某些失败的情况（无论出于何种原因）。
 
-Transactions are created to **simplify the programming model** for applications that access the database.
-By using transactions, the application is free to ignore certain potential error scenarios and concurrency issues, because the database takes care of them instead (we call these *safety guarantees*).
+创建事务的目的是为访问数据库的应用程序**简化编程模型**。
+通过使用事务，应用程序可以自由地忽略某些潜在的错误场景和并发问题，因为数据库会代为处理这些问题（我们称之为 safety guarantees）。
 
-Not every application needs transactions, and sometimes there are advantages to weakening transactional guarantees or abandoning them entirely (for example, to achieve higher performance or higher availability). Some safety properties can be achieved without transactions.
+并非每个应用程序都需要事务，有时弱化事务保证或完全放弃事务反而有优势（例如为了获得更高的性能或更高的可用性）。
+某些安全属性可以在没有事务的情况下实现。
 
 ## ACID
 
-The safety guarantees provided by transactions are often described by the wellknown acronym **ACID**, which stands for *Atomicity*, *Consistency*, *Isolation*, and *Durability*.
-In practice, one database’s implementation of ACID does not equal another’s implementation.
-For example, there is a lot of ambiguity around the meaning of isolation.
-Today, when a system claims to be “ACID compliant,” it’s unclear what guarantees you can actually expect.
-ACID has unfortunately become mostly a marketing term.
-(Systems that do not meet the ACID criteria are sometimes called **BASE**, which stands for *Basically Available*, *Soft state*, and *Eventual consistency*.
-This is even more vague than the definition of ACID.
-It seems that the only sensible definition of BASE is “not ACID”; i.e., it can mean almost anything you want.)
+事务提供的安全保证通常用著名的缩写 **ACID** 来描述，它代表 Atomicity（原子性）、Consistency（一致性）、Isolation（隔离性）和 Durability（持久性）。
+在实践中，一个数据库的 ACID 实现并不等同于另一个数据库的实现。
+例如，关于 isolation 的含义存在很多歧义。
+如今，当一个系统声称"符合 ACID"时，你实际上能期待什么保证并不清楚。
+ACID 不幸地主要变成了一个营销术语。
+（不满足 ACID 标准的系统有时被称为 **BASE**，代表 Basically Available（基本可用）、Soft state（软状态）和 Eventual consistency（最终一致性）。
+这比 ACID 的定义更加模糊。
+似乎 BASE 唯一合理的定义就是"非 ACID"；也就是说，它可以意味着任何你想要的东西。）
 
 ### The Meaning of ACID
 
 #### Atomicity
 
-In the context of ACID, atomicity is not about concurrency.
-It does not describe what happens if several processes try to access the same data at the same time, because that is covered under the letter I, for isolation.
+在 ACID 的语境中，原子性与并发无关。
+它不描述如果多个进程尝试同时访问相同数据会发生什么，因为这属于字母 I 的范畴，即 isolation（隔离性）。
 
-Rather, ACID atomicity describes what happens if a client wants to make several writes, but a fault occurs after some of the writes have been processed—for example, a process crashes, a network connection is interrupted, a disk becomes full, or some integrity constraint is violated.
-If the writes are grouped together into an atomic transaction, and the transaction cannot be completed (committed) due to a fault, then the transaction is aborted and the database must discard or undo any writes it has made so far in that transaction.
+相反，ACID 原子性描述的是：如果客户端想要进行多次写入，但在部分写入已被处理后发生故障——例如进程崩溃、网络连接中断、磁盘已满或违反某些完整性约束——会发生什么。
+如果这些写入被组合成一个原子事务，并且由于故障而无法完成（committed）事务，则事务会被 aborted，数据库必须丢弃或撤销它在该事务中至今所做的任何写入。
 
-Without atomicity, if an error occurs partway through making multiple changes, it’s difficult to know which changes have taken effect and which haven’t.
-The application could try again, but that risks making the same change twice, leading to duplicate or incorrect data.
-Atomicity simplifies this problem: if a transaction was aborted, the application can be sure that it didn’t change anything, so it can safely be retried.
-**The ability to abort a transaction on error and have all writes from that transaction discarded is the defining feature of ACID atomicity.**
+如果没有原子性，如果在进行多次更改的过程中途发生错误，很难知道哪些更改已生效，哪些没有。
+应用程序可以尝试重试，但这有使相同更改执行两次的风险，导致重复或不正确的数据。
+原子性简化了这个问题：如果事务被 aborted，应用程序可以确信它没有更改任何内容，因此可以安全地重试。
+**在出错时中止事务并丢弃该事务的所有写入，是 ACID 原子性的定义特征。**
 
 #### Consistency
 
 > [!TIP]
-> 
-> The letter C doesn’t really belong in ACID
+>
+> The letter C doesn't really belong in ACID
 
-this idea of consistency depends on the application’s notion of invariants, and it’s the application’s responsibility to define its transactions correctly so that they preserve consistency.
-**This is not something that the database can guarantee: if you write bad data that violates your invariants, the database can’t stop you.**
-(Some specific kinds of invariants can be checked by the database, for example using foreign key constraints or uniqueness constraints.
-However, in general, the application defines what data is valid or invalid—the database only stores it.)
+一致性的想法取决于应用程序对 invariants（不变量）的概念，并且是应用程序的责任来正确定义其事务，以便它们保持一致性。
+**这不是数据库能够保证的：如果你写入了违反不变量的坏数据，数据库无法阻止你。**
+（某些特定类型的 invariants 可以由数据库检查，例如使用外键约束或唯一性约束。
+然而，一般来说，应用程序定义什么是有效或无效的数据——数据库只负责存储。）
 
-Atomicity, isolation, and durability are properties of the database, whereas consistency (in the ACID sense) is a property of the application.
-**The application may rely on the database’s atomicity and isolation properties in order to achieve consistency, but it’s not up to the database alone.**
-Thus, the letter C doesn’t really belong in ACID.
+原子性、隔离性和持久性是数据库的属性，而一致性（在 ACID 意义下）是应用程序的属性。
+**应用程序可以依赖数据库的原子性和隔离性属性来实现一致性，但这不仅仅取决于数据库本身。**
+因此，字母 C 实际上并不属于 ACID。
 
 #### Isolation
 
-Most databases are accessed by several clients at the same time.
-That is no problem if they are reading and writing different parts of the database, but if they are accessing the same database records, you can run into concurrency problems (race conditions).
+大多数数据库同时被多个客户端访问。
+如果它们读写数据库的不同部分，这没有问题；但如果它们访问相同的数据库记录，你可能会遇到并发问题（race conditions）。
 
-Figure 1 is a simple example of this kind of problem. Say you have two clients simultaneously incrementing a counter that is stored in a database.
-Each client needs to read the current value, add 1, and write the new value back (assuming there is no increment operation built into the database).
-In Figure 1 the counter should have increased from 42 to 44, because two increments happened, but it actually only went to 43 because of the race condition.
+Figure 1 是此类问题的一个简单示例。
+假设你有两个客户端同时将存储在数据库中的计数器加 1。
+每个客户端都需要读取当前值，加 1，然后写回新值（假设数据库没有内置的 increment 操作）。
+在 Figure 1 中，计数器应该从 42 增加到 44，因为发生了两次增量，但由于 race condition，它实际上只增加到 43。
 
-*Isolation* in the sense of ACID means that concurrently executing transactions are isolated from each other: they cannot step on each other’s toes.
-The classic database textbooks formalize isolation as serializability, which means that each transaction can pretend that it is the only transaction running on the entire database.
-The database ensures that when the transactions have committed, the result is the same as if they had run serially (one after another), even though in reality they may have run concurrently.
+ACID 意义上的 *isolation* 意味着并发执行的事务彼此隔离：它们不会相互干扰。
+经典数据库教科书将 isolation 形式化为 serializability（可串行化），这意味着每个事务都可以假装它是整个数据库上运行的唯一事务。
+数据库确保当事务提交时，结果与它们串行运行（一个接一个）的结果相同，即使实际上它们可能是并发运行的。
 
 <div style="text-align: center;">
 
@@ -84,93 +86,82 @@ The database ensures that when the transactions have committed, the result is th
 Fig.1. A race condition between two clients concurrently incrementing a counter.
 </p>
 
-However, in practice, serializable isolation is rarely used, because it carries a performance penalty.
-Some popular databases, such as Oracle 11g, don’t even implement it.
-In Oracle there is an isolation level called “serializable,” but it actually implements something called *snapshot isolation*, which is a weaker guarantee than serializability.
+然而，在实践中，serializable isolation 很少使用，因为它会带来性能损失。
+一些流行的数据库（如 Oracle 11g）甚至没有实现它。
+在 Oracle 中有一个名为"serializable"的 isolation level，但它实际上实现的是 snapshot isolation，这是一个比 serializability 更弱的保证。
 
 #### Durability
 
-The purpose of a database system is to provide a safe place where data can be stored without fear of losing it.
-Durability is the promise that once a transaction has committed successfully, any data it has written will not be forgotten, even if there is a hardware fault or the database crashes.
+数据库系统的目的是提供一个安全的地方来存储数据，而无需担心丢失数据。
+持久性是这样的承诺：一旦事务成功提交，它写入的任何数据都不会被遗忘，即使发生硬件故障或数据库崩溃。
 
-In a single-node database, durability typically means that the data has been written to nonvolatile storage such as a hard drive or SSD.
-It usually also involves a write-ahead log or similar, which allows recovery in the event that the data structures on disk are corrupted.
-In a replicated database, durability may mean that the data has been successfully copied to some number of nodes.
-In order to provide a durability guarantee, a database must wait until these writes or replications are complete before reporting a transaction as successfully committed.
+在单节点数据库中，durability 通常意味着数据已被写入非易失性存储（如硬盘或 SSD）。
+它通常还涉及 write-ahead log 或类似机制，这允许在磁盘上的数据结构损坏时进行恢复。
+在复制数据库中，durability 可能意味着数据已成功复制到一定数量的节点。
+为了提供 durability 保证，数据库必须等待这些写入或复制完成，然后才能报告事务已成功提交。
 
-Perfect durability does not exist: if all your hard disks and all your backups are destroyed at the same time, there’s obviously nothing your database can do to save you.
+完美持久性并不存在：如果你的所有硬盘和所有备份同时被销毁，显然数据库无法做任何事情来拯救你。
 
 ### Multi-Object Operations
 
-In ACID, atomicity and isolation describe what the database should do if a client makes several writes within the same transaction.
-Those assume that you want to modify several objects (rows, documents, records) at once. Such *multi-object transactions* are often needed if several pieces of data need to be kept in sync.
+在 ACID 中，原子性和隔离性描述了当客户端在同一事务中进行多次写入时，数据库应该做什么。
+这些假设你想要修改多个对象（行、文档、记录）。
+如果需要保持多段数据同步，这种 multi-object transactions 通常是必需的。
 
-Multi-object transactions require some way of determining which read and write operations belong to the same transaction.
-In relational databases, that is typically done based on the client’s TCP connection to the database server: on any particular connection, everything between a BEGIN TRANSACTION and a COMMIT statement is considered to be part of the same transaction.
+Multi-object transactions 需要某种方式来确定哪些读取和写入操作属于同一事务。
+在关系数据库中，这通常基于客户端与数据库服务器的 TCP 连接来完成：在任何特定连接上，BEGIN TRANSACTION 和 COMMIT 语句之间的所有内容都被视为同一事务的一部分。
 
-On the other hand, many nonrelational databases don’t have such a way of grouping operations together.
-Even if there is a multi-object API (for example, a key-value store may have a multi-put operation that updates several keys in one operation),
-that doesn’t necessarily mean it has transaction semantics: the command may succeed for some keys and fail for others, leaving the database in a partially updated state.
+另一方面，许多非关系数据库没有这样的方式将操作组合在一起。
+即使存在 multi-object API（例如，键值存储可能具有 multi-put 操作，可以一次更新多个键），这也不一定意味着它具有事务语义：该命令可能对某些键成功，对其他键失败，使数据库处于部分更新状态。
 
-Many distributed datastores have abandoned multi-object transactions because they are difficult to implement across partitions, and they can get in the way in some scenarios where very high availability or performance is required.
-However, there is nothing that fundamentally prevents transactions in a distributed database.
+许多分布式数据存储已放弃 multi-object transactions，因为它们难以跨分区实现，并且在某些需要非常高可用性或性能的场景中可能会造成阻碍。
+然而，没有什么从根本上阻止分布式数据库中的事务。
 
-There are some use cases in which single-object inserts, updates, and deletes are sufficient.
-However, in many other cases writes to several different objects need to be coordinated:
+有些用例中，单对象插入、更新和删除就足够了。
+然而，在许多其他情况下，需要协调对不同对象的写入：
 
-- In a relational data model, a row in one table often has a foreign key reference to a row in another table. (Similarly, in a graph-like data model, a vertex has edges to other vertices.)
-  Multi-object transactions allow you to ensure that these references remain valid: when inserting several records that refer to one another, the foreign keys have to be correct and up to date, or the data becomes nonsensical.
-- In a document data model, the fields that need to be updated together are often within the same document, which is treated as a single object—no multi-object transactions are needed when updating a single document.
-  However, document databases lacking join functionality also encourage denormalization.
-  When denormalized information needs to be updated, you need to update several documents in one go.
-  Transactions are very useful in this situation to prevent denormalized data from going out of sync.
-- In databases with secondary indexes (almost everything except pure key-value stores), the indexes also need to be updated every time you change a value.
-  These indexes are different database objects from a transaction point of view: for example, without transaction isolation, it’s possible for a record to appear in one index but not another, because the update to the second index hasn’t happened yet.
+- 在关系数据模型中，一个表中的一行通常具有指向另一表中一行的外键引用。（类似地，在图状数据模型中，顶点具有指向其他顶点的边。）Multi-object transactions 允许你确保这些引用保持有效：当插入多个相互引用的记录时，外键必须正确且最新，否则数据将变得毫无意义。
+- 在文档数据模型中，需要一起更新的字段通常位于同一文档内，该文档被视为单个对象——更新单个文档时不需要 multi-object transactions。然而，缺乏 join 功能的文档数据库也鼓励 denormalization（反规范化）。当需要更新 denormalized 信息时，你需要一次性更新多个文档。在这种情况下，事务非常有用，可以防止 denormalized 数据不同步。
+- 在具有 secondary indexes（二级索引）的数据库中（几乎除了纯键值存储之外的所有东西），每次更改值时也需要更新索引。这些索引从事务的角度来看与数据是不同的数据库对象：例如，如果没有事务隔离，一个记录可能出现在一个索引中但不出现在另一个索引中，因为对第二个索引的更新尚未发生。
 
-Such applications can still be implemented without transactions.
-**However, error handling becomes much more complicated without atomicity, and the lack of isolation can cause concurrency problems.**
+没有事务，这些应用程序仍然可以实现。
+**然而，没有原子性，错误处理会变得更加复杂，缺乏隔离性会导致并发问题。**
 
 ### Handling errors and aborts
 
-A key feature of a transaction is that it can be aborted and safely retried if an error
-occurred. ACID databases are based on this philosophy: if the database is in danger of violating its guarantee of atomicity, isolation, or durability, it would rather aban‐
-don the transaction entirely than allow it to remain half-finished.
+事务的一个关键特性是，如果发生错误，它可以被 aborted 并安全重试。
+ACID 数据库基于这种理念：如果数据库有违反其原子性、隔离性或持久性保证的危险，它宁愿完全放弃事务，也不允许它保持半途而废的状态。
 
-Not all systems follow that philosophy, though.
-In particular, datastores with leaderless replication work much more on a “best effort” basis, which could be summarized as “the database will do as much as it can, and if it runs into an error,
-it won’t undo something it has already done”—so it’s the application’s responsibility to recover from errors.
+然而，并非所有系统都遵循这种理念。
+特别是，使用 leaderless replication 的数据存储更多地基于"尽力而为"的方式，可以总结为"数据库将尽最大努力，如果遇到错误，它不会撤销已经做的事情"——因此应用程序有责任从错误中恢复。
 
-Although retrying an aborted transaction is a simple and effective error handling mechanism, it isn’t perfect:
+虽然重试被 aborted 的事务是一种简单有效的错误处理机制，但它并不完美：
 
-- If the transaction actually succeeded, but the network failed while the server tried to acknowledge the successful commit to the client (so the client thinks it failed),
-  then retrying the transaction causes it to be performed twice—unless you have an additional application-level deduplication mechanism in place.
-- If the error is due to overload, retrying the transaction will make the problem worse, not better.
-  To avoid such feedback cycles, you can limit the number of retries, use exponential backoff, and handle overload-related errors differently from other errors (if possible).
-- It is only worth retrying after transient errors (for example due to deadlock, isolation violation, temporary network interruptions, and failover); after a permanent error (e.g., constraint violation) a retry would be pointless.
-- If the transaction also has side effects outside of the database, those side effects may happen even if the transaction is aborted.
-  For example, if you’re sending an email, you wouldn’t want to send the email again every time you retry the transaction.
-  If you want to make sure that several different systems either commit or abort together, two-phase commit can help.
-- If the client process fails while retrying, any data it was trying to write to the
-  database is lost.
+- 如果事务实际上成功了，但服务器尝试向客户端确认成功提交时网络发生故障（因此客户端认为它失败了），则重试事务会导致它执行两次——除非你有额外的应用程序级去重机制。
+- 如果错误是由于过载引起的，重试事务会使问题变得更糟，而不是更好。为了避免这种反馈循环，你可以限制重试次数，使用指数退避，并以不同于其他错误的方式处理与过载相关的错误（如果可能）。
+- 只有在 transient errors（例如由于 deadlock、isolation violation、临时网络中断和故障转移）后才值得重试；在 permanent errors（例如 constraint violation）后重试将毫无意义。
+- 如果事务还在数据库之外有副作用，即使事务被 aborted，这些副作用也可能发生。例如，如果你正在发送电子邮件，你不希望每次重试事务时都再次发送电子邮件。如果你想确保多个不同的系统要么一起提交要么一起中止，two-phase commit 可能会有所帮助。
+- 如果客户端进程在重试期间失败，它试图写入数据库的任何数据都会丢失。
 
 ## Isolation Levels
 
-If two transactions don’t touch the same data, they can safely be run in parallel, because neither depends on the other.
-Concurrency issues (race conditions) only come into play when one transaction reads data that is concurrently modified by another transaction, or when two transactions try to simultaneously modify the same data.
-Concurrency bugs are hard to find by testing, because such bugs are only triggered when you get unlucky with the timing.
-Such timing issues might occur very rarely, and are usually difficult to reproduce.
-Concurrency is also very difficult to reason about, especially in a large application where you don’t necessarily know which other pieces of code are accessing the database.
-Application development is difficult enough if you just have one user at a time; having many concurrent users makes it much harder still, because any piece of data could unexpectedly change at any time.
-For that reason, databases have long tried to hide concurrency issues from application developers by providing transaction isolation.
-In theory, isolation should make your life easier by letting you pretend that no concurrency is happening: serializable isolation means that the database guarantees that transactions have the same effect as if they ran serially (i.e., one at a time, without any concurrency).
-In practice, isolation is unfortunately not that simple. Serializable isolation has a performance cost, and many databases don’t want to pay that price.
-It’s therefore common for systems to use weaker levels of isolation, which protect against some concurrency issues, but not all.
-Those levels of isolation are much harder to understand, and they can lead to subtle bugs, but they are nevertheless used in practice.
+如果两个事务不触及相同的数据，它们可以安全地并行运行，因为它们互不依赖。
+并发问题（race conditions）只在一个事务读取被另一个事务并发修改的数据时，或者两个事务尝试同时修改相同数据时才会出现。
+Concurrency bugs 很难通过测试找到，因为此类 bug 只有在你时机不利时才会触发。
+此类时机问题可能很少发生，并且通常很难重现。
+并发也非常难以推理，尤其是在大型应用程序中，你不一定知道哪些其他代码段正在访问数据库。
+如果只有一个用户，应用程序开发已经足够困难；拥有许多并发用户会使它变得更加困难，因为任何数据都可能在任何时候意外更改。
+因此，数据库长期以来一直试图通过提供事务隔离来向应用程序开发人员隐藏并发问题。
+理论上，隔离应该让你假装没有并发发生变得更容易：serializable isolation 意味着数据库保证事务的效果与它们串行运行（即一次一个，没有任何并发）的效果相同。
+实际上，隔离并不那么简单。
+Serializable isolation 有性能成本，许多数据库不想支付这个代价。
+因此，系统通常使用较弱的 isolation levels，这些级别可以防止某些并发问题，但不是全部。
+这些 isolation levels 要难理解得多，并且可能导致微妙的 bug，但它们在实践中仍被使用。
 
-Concurrency bugs caused by weak transaction isolation are not just a theoretical problem.
-They have caused substantial loss of money, led to investigation by financial auditors, and caused customer data to be corrupted.
-A popular comment on revelations of such problems is “Use an ACID database if you’re handling financial data!”—but that misses the point.
-Even many popular relational database systems (which are usually considered “ACID”) use weak isolation, so they wouldn’t necessarily have prevented these bugs from occurring.
+由弱事务隔离引起的并发 bug 不仅仅是一个理论问题。
+它们已导致 substantial 的资金损失，引发财务审计师的调查，并导致客户数据损坏。
+对此类问题披露的一个流行评论是"如果你处理财务数据，请使用 ACID 数据库！"——但这没有抓住重点。
+即使是许多流行的关系数据库系统（通常被认为是"ACID"）也使用弱隔离，因此它们不一定能防止这些 bug 的发生。
 
 
 | Isolation level  | Dirty Read         | Non-Repeatable Read | Phantom Read       |
@@ -182,21 +173,22 @@ Even many popular relational database systems (which are usually considered “A
 
 ### Read Committed
 
-The most basic level of transaction isolation is read committed.v It makes two guarantees:
+最基本的 transaction isolation level 是 read committed。
+它做出两个保证：
 
-1. When reading from the database, you will only see data that has been committed (no *dirty reads*).
-2. When writing to the database, you will only overwrite data that has been committed (no *dirty writes*).
+1. 从数据库读取时，你只会看到已提交的数据（不会发生 dirty reads）。
+2. 向数据库写入时，你只会覆盖已提交的数据（不会发生 dirty writes）。
 
 > Some databases support an even weaker isolation level called *read uncommitted*. It prevents dirty writes, but does not prevent dirty reads.
 
 #### No dirty reads
 
-Imagine a transaction has written some data to the database, but the transaction has not yet committed or aborted. Can another transaction see that uncommitted data?
-<br>
-If yes, that is called a *dirty read*
-Transactions running at the read committed isolation level must prevent dirty reads.
-This means that any writes by a transaction only become visible to others when that transaction commits (and then all of its writes become visible at once).
-This is illustrated in Figure 2, where user 1 has set x = 3, but user 2’s get x still returns the old value, 2, while user 1 has not yet committed.
+想象一个事务已向数据库写入了一些数据，但该事务尚未提交或中止。
+另一个事务能看到这些未提交的数据吗？<br>
+如果可以，这被称为 dirty read。
+运行在 read committed isolation level 的事务必须防止 dirty reads。
+这意味着事务的任何写入只有在该事务提交时才对其他人可见（然后它的所有写入会同时变得可见）。
+这在 Figure 2 中得到了说明，其中用户 1 已设置 x = 3，但在用户 1 尚未提交时，用户 2 的 get x 仍然返回旧值 2。
 
 <div style="text-align: center;">
 
@@ -205,36 +197,25 @@ This is illustrated in Figure 2, where user 1 has set x = 3, but user 2’s get 
 </div>
 
 <p style="text-align: center;">
-Fig.2. No dirty reads: user 2 sees the new value for x only after user 1’s transaction has committed.
+Fig.2. No dirty reads: user 2 sees the new value for x only after user 1's transaction has committed.
 </p>
 
-There are a few reasons why it’s useful to prevent dirty reads:
+防止 dirty reads 有几个有用的原因：
 
-- If a transaction needs to update several objects, a dirty read means that another transaction may see some of the updates but not others.
-  Seeing the database in a partially updated state is confusing to users and may cause other transactions to take incorrect decisions.
-- If a transaction aborts, any writes it has made need to be rolled back.
-  If the database allows dirty reads, that means a transaction may see data that is later rolled back—i.e., which is never actually committed to the database.
-  Reasoning about the consequences quickly becomes mind-bending.
+- 如果事务需要更新多个对象，dirty read 意味着另一个事务可能会看到部分更新，而不是全部。看到数据库处于部分更新状态会让用户感到困惑，并可能导致其他事务做出不正确的决定。
+- 如果事务 aborts，它所做的任何写入都需要回滚。如果数据库允许 dirty reads，这意味着一个事务可能会看到后来被回滚的数据——即永远不会实际提交到数据库的数据。推理其后果很快变得令人费解。
 
 #### No dirty writes
 
-What happens if two transactions concurrently try to update the same object in a database?
-We don’t know in which order the writes will happen, but we normally assume that the later write overwrites the earlier write.
-However, what happens if the earlier write is part of a transaction that has not yet committed, so the later write overwrites an uncommitted value?
-<br>
-This is called a *dirty write*.
-Transactions running at the read committed isolation level must prevent dirty writes, usually by delaying the second write until the first write’s transaction has committed or aborted.
+如果两个事务并发尝试更新数据库中的同一对象会发生什么？我们不知道写入会以什么顺序发生，但我们通常假设后来的写入会覆盖较早的写入。
+然而，如果较早的写入是尚未提交的事务的一部分，后来的写入覆盖了未提交的值，会发生什么？<br>
+这被称为 dirty write。
+运行在 read committed isolation level 的事务必须防止 dirty writes，通常通过延迟第二次写入，直到第一次写入的事务提交或中止。
 
-By preventing dirty writes, this isolation level avoids some kinds of concurrency problems:
+通过防止 dirty writes，这个 isolation level 避免了某些类型的并发问题。
 
-- If transactions update multiple objects, dirty writes can lead to a bad outcome.
-  For example, consider Figure 3, which illustrates a used car sales website on which two people, Alice and Bob, are simultaneously trying to buy the same car.
-  Buying a car requires two database writes: the listing on the website needs to be updated to reflect the buyer, and the sales invoice needs to be sent to the buyer.
-  In the case of Figure 3, the sale is awarded to Bob (because he performs the winning update to the listings table), but the invoice is sent to Alice (because she performs the winning update to the invoices table).
-  Read committed prevents such mishaps.
-- However, read committed does not prevent the race condition between two counter increments in Figure 1.
-  In this case, the second write happens after the first transaction has committed, so it’s not a dirty write.
-  It’s still incorrect, but for a different reason—in “*Lost Updates*”.
+- 如果事务更新多个对象，dirty writes 可能导致不良后果。例如，考虑 Figure 3，它说明了一个二手车销售网站，Alice 和 Bob 两个人同时尝试购买同一辆车。购买一辆车需要两次数据库写入：网站上的 listing 需要更新以反映买家，销售发票需要发送给买家。在 Figure 3 的情况下，销售被授予 Bob（因为他执行了对 listings 表的胜出更新），但发票发送给了 Alice（因为她执行了对 invoices 表的胜出更新）。Read committed 防止此类事故。
+- 然而，read committed 不能防止 Figure 1 中两个计数器增量之间的 race condition。在这种情况下，第二次写入发生在第一次事务提交之后，所以它不是 dirty write。它仍然是不正确的，但原因不同——在"Lost Updates"中。
 
 <div style="text-align: center;">
 
@@ -248,25 +229,25 @@ Fig.3. With dirty writes, conflicting writes from different transactions can be 
 
 #### Implementing read committed
 
-Read committed is a very popular isolation level. It is the default setting in Oracle 11g, PostgreSQL, SQL Server 2012, MemSQL, and many other databases.
+Read committed 是一个非常流行的 isolation level。
+它是 Oracle 11g、PostgreSQL、SQL Server 2012、MemSQL 和许多其他数据库的默认设置。
 
-Most commonly, databases prevent dirty writes by using row-level locks: when a transaction wants to modify a particular object (row or document), it must first acquire a lock on that object.
-It must then hold that lock until the transaction is committed or aborted.
-Only one transaction can hold the lock for any given object; if another transaction wants to write to the same object, it must wait until the first transaction is committed or aborted before it can acquire the lock and continue.
-This locking is done automatically by databases in read committed mode (or stronger isolation levels).
+最常见的是，数据库使用 row-level locks 来防止 dirty writes：当事务想要修改特定对象（行或文档）时，它必须首先获取该对象的锁。
+然后它必须持有该锁，直到事务提交或中止。
+对于任何给定对象，一次只能有一个事务持有该对象的锁；如果另一个事务想要写入同一对象，它必须等待第一个事务提交或中止后才能获取锁并继续。
+这种 locking 由数据库在 read committed 模式（或更强的 isolation levels）下自动完成。
 
-How do we prevent dirty reads?
+我们如何防止 dirty reads？<br>
+一个选项是使用相同的锁，并要求任何想要读取对象的事务短暂获取该锁，然后在读取后立即释放它。
+这将确保读取不会在对象具有脏的、未提交的值时发生（因为在此期间锁将由进行写入的事务持有）。
 <br>
-One option would be to use the same lock, and to require any transaction that wants to read an object to briefly acquire the lock and then release it again immediately after reading.
-This would ensure that a read couldn’t happen while an object has a dirty, uncommitted value (because during that time the lock would be held by the transaction that has made the write).
-<br>
-However, the approach of requiring read locks does not work well in practice, because one long-running write transaction can force many read-only transactions to wait until the long-running transaction has completed.
-This harms the response time of read-only transactions and is bad for operability: a slowdown in one part of an application can have a knock-on effect in a completely different part of the application, due to waiting for locks.
+然而，要求读锁的方法在实践中效果不佳，因为一个长时间运行的写入事务可能迫使许多只读事务等待，直到长时间运行的事务完成。
+这会损害只读事务的响应时间，并对可操作性产生不良影响：由于等待锁，应用程序一个部分的减速可能会对完全不同的部分产生连锁反应。
 
 ### Snapshot Isolation and Repeatable Read
 
-However, there are still plenty of ways in which you can have concurrency bugs when using read committed isolation.
-For example, Figure 4 illustrates a problem that can occur with read committed.
+然而，使用 read committed isolation 时，仍然有很多方式可能出现并发 bug。
+例如，Figure 4 说明了 read committed 可能出现的问题。
 
 <div style="text-align: center;">
 
@@ -278,57 +259,57 @@ For example, Figure 4 illustrates a problem that can occur with read committed.
 Fig.4. Read skew: Alice observes the database in an inconsistent state.
 </p>
 
-Say Alice has $1,000 of savings at a bank, split across two accounts with $500 each.
-Now a transaction transfers $100 from one of her accounts to the other.
-If she is unlucky enough to look at her list of account balances in the same moment as that transaction is being processed,
-she may see one account balance at a time before the incoming payment has arrived (with a balance of $500), and the other account after the outgoing transfer has been made (the new balance being $400).
-To Alice it now appears as though she only has a total of $900 in her accounts—it seems that $100 has vanished into thin air.
+假设 Alice 在银行有 1,000 美元的储蓄，分布在两个账户中，每个账户 500 美元。
+现在一个事务将 100 美元从她的一个账户转移到另一个账户。
+如果她恰好在该事务正在处理的那一刻查看她的账户余额列表，她可能会看到一个账户余额在 incoming payment 到达之前（余额为 500 美元），另一个账户在 outgoing transfer 之后（新余额为 400 美元）。
+对 Alice 来说，现在她似乎在她的账户中总共有 900 美元——似乎有 100 美元凭空消失了。
 
-This anomaly is called a *nonrepeatable read* or *read skew*: if Alice were to read the balance of account 1 again at the end of the transaction, she would see a different value ($600) than she saw in her previous query.
-Read skew is considered acceptable under read committed isolation: the account balances that Alice saw were indeed committed at the time when she read them.
+这种异常被称为 nonrepeatable read 或 read skew：如果 Alice 在事务结束时再次读取账户 1 的余额，她会看到与她之前查询不同的值（600 美元）。
+Read skew 在 read committed isolation 下被认为是可以接受的：Alice 看到的账户余额在她读取时确实已提交。
 
-In Alice’s case, this is not a lasting problem, because she will most likely see consistent account balances if she reloads the online banking website a few seconds later.
+在 Alice 的情况下，这不是一个持久的问题，因为如果她几秒钟后重新加载在线银行网站，她很可能会看到一致的账户余额。
 <br>
-However, some situations cannot tolerate such temporary inconsistency:
+然而，某些情况不能容忍这种临时不一致：
 
-- Backups <br>
-  Taking a backup requires making a copy of the entire database, which may take hours on a large database.
-  During the time that the backup process is running, writes will continue to be made to the database.
-  Thus, you could end up with some parts of the backup containing an older version of the data, and other parts containing a newer version.
-  If you need to restore from such a backup, the inconsistencies (such as disappearing money) become permanent.
-- Analytic queries and integrity checks <br>
-  Sometimes, you may want to run a query that scans over large parts of the database.
-  Such queries are common in analytics, or may be part of a periodic integrity check that everything is in order (monitoring for data corruption).
-  These queries are likely to return nonsensical results if they observe parts of the database at different points in time.
+- Backups<br>
+进行备份需要复制整个数据库，这在大型数据库上可能需要数小时。
+在备份过程运行期间，写入将继续对数据库进行。
+因此，你最终可能会得到备份的某些部分包含较旧版本的数据，而其他部分包含较新版本的数据。
+如果你需要从这样的备份中恢复，不一致性（例如消失的金钱）将变成永久性的。
+- Analytic queries and integrity checks<br>
+有时，你可能想要运行一个扫描数据库大部分内容的查询。
+此类查询在分析中很常见，或者可能是定期检查一切正常（监控数据损坏）的一部分。
+如果这些查询在不同的时间点观察数据库的部分内容，它们很可能会返回无意义的结果。
 
-*Snapshot isolation* is the most common solution to this problem.
-The idea is that each transaction reads from a *consistent snapshot* of the database—that is, the transaction sees all the data that was committed in the database at the start of the transaction.
-Even if the data is subsequently changed by another transaction, each transaction sees only the old data from that particular point in time.
-Snapshot isolation is a boon for long-running, read-only queries such as backups and analytics.
-It is very hard to reason about the meaning of a query if the data on which it operates is changing at the same time as the query is executing.
-When a transaction can see a consistent snapshot of the database, frozen at a particular point in time, it is much easier to understand.
+*Snapshot isolation* 是解决此问题的最常见解决方案。
+其思想是每个事务从数据库的*consistent snapshot*读取——也就是说，事务看到事务开始时数据库中已提交的所有数据。
+即使数据随后被另一个事务更改，每个事务也只能看到该特定时间点的旧数据。
+Snapshot isolation 对于长时间运行的只读查询（如备份和分析）非常有利。
+如果查询操作的数据在查询执行时同时更改，很难理解查询的含义。
+当事务可以看到在特定时间点冻结的数据库的一致快照时，它更容易理解。
 
-Snapshot isolation is a useful isolation level, especially for read-only transactions.
-However, many databases that implement it call it by different names.
-In Oracle it is called *serializable*, and in PostgreSQL and MySQL it is called *repeatable read*.
+Snapshot isolation 是一种有用的 isolation level，特别是对于只读事务。
+然而，许多实现它的数据库使用不同的名称。
+在 Oracle 中它被称为 serializable，在 PostgreSQL 和 MySQL 中它被称为 repeatable read。
 
 #### Implementing snapshot isolation
 
-Like read committed isolation, implementations of snapshot isolation typically use write locks to prevent dirty writes, which means that a transaction that makes a write can block the progress of another transaction that writes to the same object. However, reads do not require any locks.
-From a performance point of view, a key principle of snapshot isolation is *readers never block writers, and writers never block readers*.
-This allows a database to handle long-running read queries on a consistent snapshot at the same time as processing writes normally, without any lock contention between the two.
+与 read committed isolation 一样，snapshot isolation 的实现通常使用写入锁来防止 dirty writes，这意味着进行写入的事务可以阻止写入同一对象的另一个事务的进度。
+然而，读取不需要任何锁。
+从性能的角度来看，snapshot isolation 的一个关键原则是*readers never block writers, and writers never block readers*。
+这允许数据库在处理写入的同时，在 consistent snapshot 上处理长时间运行的读取查询，而两者之间没有任何锁争用。
 
-To implement snapshot isolation, databases use a generalization of the mechanism we saw for preventing dirty reads in Figure 2.
-The database must potentially keep several different committed versions of an object, because various in-progress transactions may need to see the state of the database at different points in time.
-Because it maintains several versions of an object side by side, this technique is known as *multiversion concurrency control* (MVCC).
+为了实现 snapshot isolation，数据库使用我们为在 Figure 2 中防止 dirty reads 所看到的机制的泛化。
+数据库可能必须保持一个对象的多个不同提交版本，因为各种进行中的事务可能需要在不同时间点看到数据库的状态。
+因为它并排维护一个对象的多个版本，这种技术被称为 multiversion concurrency control（MVCC）。
 
-If a database only needed to provide read committed isolation, but not snapshot isolation, it would be sufficient to keep two versions of an object: the committed version and the overwritten-but-not-yet-committed version.
-However, storage engines that support snapshot isolation typically use MVCC for their read committed isolation level as well.
-A typical approach is that read committed uses a separate snapshot for each query, while snapshot isolation uses the same snapshot for an entire transaction.
+如果数据库只需要提供 read committed isolation，而不需要 snapshot isolation，保持一个对象的两个版本就足够了：提交版本和已覆盖但尚未提交的版本。
+然而，支持 snapshot isolation 的存储引擎通常也为它们的 read committed isolation level 使用 MVCC。
+典型的方法是 read committed 为每个查询使用单独的 snapshot，而 snapshot isolation 为整个事务使用相同的 snapshot。
 
-Figure 5 illustrates how MVCC-based snapshot isolation is implemented in PostgreSQL (other implementations are similar).
-When a transaction is started, it is given a unique, always-increasingvii transaction ID (txid).
-Whenever a transaction writes anything to the database, the data it writes is tagged with the transaction ID of the writer.
+Figure 5 说明了 PostgreSQL 中如何实现基于 MVCC 的 snapshot isolation（其他实现类似）。
+当事务启动时，它会被赋予一个唯一的、始终递增的 transaction ID（txid）。
+当事务向数据库写入任何内容时，它写入的数据会标记有写入者的 transaction ID。
 
 <div style="text-align: center;">
 
@@ -340,92 +321,93 @@ Whenever a transaction writes anything to the database, the data it writes is ta
 Fig.5. Implementing snapshot isolation using multi-version objects.
 </p>
 
-Each row in a table has a created_by field, containing the ID of the transaction that inserted this row into the table.
-Moreover, each row has a deleted_by field, which is initially empty.
-If a transaction deletes a row, the row isn’t actually deleted from the database, but it is marked for deletion by setting the deleted_by field to the ID of the transaction that requested the deletion.
-At some later time, when it is certain that no transaction can any longer access the deleted data, a garbage collection process in the database removes any rows marked for deletion and frees their space.
+表中的每一行都有一个 created_by 字段，包含插入该行到表中的事务的 ID。
+此外，每一行都有一个 deleted_by 字段，最初为空。
+如果事务删除一行，该行实际上不会从数据库中删除，而是通过设置 deleted_by 字段为请求删除的事务的 ID 来标记为删除。
+在稍后的某个时间，当确定没有事务可以再访问已删除的数据时，数据库中的 garbage collection 过程会删除标记为删除的任何行并释放它们的空间。
 
-An update is internally translated into a delete and a create.
-For example, in Figure 5, transaction 13 deducts $100 from account 2, changing the balance from $500 to $400. The accounts table now actually contains two rows for account 2: a row with a balance of $500 which was marked as deleted by transaction 13, and a row with a balance of $400 which was created by transaction 13.
+更新在内部被转换为删除和创建。
+例如，在 Figure 5 中，事务 13 从账户 2 扣除 100 美元，将余额从 500 美元更改为 400 美元。
+accounts 表现在实际上包含账户 2 的两行：一行余额为 500 美元，被事务 13 标记为已删除，另一行余额为 400 美元，由事务 13 创建。
 
-When a transaction reads from the database, transaction IDs are used to decide which objects it can see and which are invisible.
-By carefully defining visibility rules, the database can present a consistent snapshot of the database to the application.
+当事务从数据库读取时，使用 transaction IDs 来决定它可以看见哪些对象，哪些不可见。
+通过仔细定义 visibility rules，数据库可以向应用程序呈现数据库的一致快照。
 <br>
-This works as follows:
+其工作原理如下：
 
-1. At the start of each transaction, the database makes a list of all the other transactions that are in progress (not yet committed or aborted) at that time.
-   Any writes that those transactions have made are ignored, even if the transactions subsequently commit.
-2. Any writes made by aborted transactions are ignored.
-3. Any writes made by transactions with a later transaction ID (i.e., which started after the current transaction started) are ignored, regardless of whether those transactions have committed.
-4. All other writes are visible to the application’s queries.
+1. 在每个事务开始时，数据库会列出当时正在进行的所有其他事务（尚未提交或中止）。
+这些事务所做的任何写入都会被忽略，即使这些事务随后提交。
+2. 被 aborted 事务所做的任何写入都会被忽略。
+3. 由具有较晚 transaction ID 的事务（即在当前事务启动之后启动的事务）所做的任何写入都会被忽略，无论这些事务是否已提交。
+4. 所有其他写入对应用程序的查询可见。
 
-These rules apply to both creation and deletion of objects.
-In Figure 5, when transaction 12 reads from account 2, it sees a balance of $500 because the deletion of the $500 balance was made by transaction 13
-(according to rule 3, transaction 12 cannot see a deletion made by transaction 13), and the creation of the $400 balance is not yet visible (by the same rule).
-Put another way, an object is visible if both of the following conditions are true:
+这些规则适用于对象的创建和删除。
+在 Figure 5 中，当事务 12 从账户 2 读取时，它看到余额为 500 美元，因为 500 美元余额的删除是由事务 13 进行的（根据规则 3，事务 12 不能看见事务 13 进行的删除），而 400 美元余额的创建尚不可见（根据相同的规则）。
+换句话说，如果满足以下两个条件，对象就是可见的：
 
-- At the time when the reader’s transaction started, the transaction that created the object had already committed.
-- The object is not marked for deletion, or if it is, the transaction that requested deletion had not yet committed at the time when the reader’s transaction started.
+- 当读取者的事务启动时，创建对象的事务已经提交。
+- 对象未被标记为删除，或者如果被标记为删除，请求删除的事务在读取者的事务启动时尚未提交。
 
-A long-running transaction may continue using a snapshot for a long time, continuing to read values that (from other transactions’ point of view) have long been overwritten or deleted.
-By never updating values in place but instead creating a new version every time a value is changed, the database can provide a consistent snapshot while incurring only a small overhead.
+长时间运行的事务可能会继续使用 snapshot 很长时间，继续读取从其他事务的角度来看已被覆盖或删除很久的值。
+通过从不就地更新值，而是在每次更改值时创建新版本，数据库可以在仅产生少量开销的情况下提供一致快照。
 
 #### Indexes and snapshot isolation
 
-How do indexes work in a multi-version database? One option is to have the index simply point to all versions of an object and require an index query to filter out any object versions that are not visible to the current transaction.
-When garbage collection removes old object versions that are no longer visible to any transaction, the corresponding index entries can also be removed.
+索引在多版本数据库中如何工作？一个选项是让索引简单地指向一个对象的所有版本，并要求索引查询过滤掉当前事务不可见的任何对象版本。
+当 garbage collection 删除不再对任何事务可见的旧对象版本时，相应的索引条目也可以被删除。
 
-In practice, many implementation details determine the performance of multiversion concurrency control.
-For example, PostgreSQL has optimizations for avoiding index updates if different versions of the same object can fit on the same page.
+在实践中，许多实现细节决定了 multiversion concurrency control 的性能。
+例如，PostgreSQL 有优化，如果同一对象的不同版本可以放在同一页上，则避免索引更新。
 
-Another approach is used in CouchDB, Datomic, and LMDB.
-Although they also use B-trees, they use an append-only/copy-on-write variant that does not overwrite pages of the tree when they are updated, but instead creates a new copy of each modified page.
-Parent pages, up to the root of the tree, are copied and updated to point to the new versions of their child pages.
-Any pages that are not affected by a write do not need to be copied, and remain immutable.
+CouchDB、Datomic 和 LMDB 中使用了另一种方法。
+虽然它们也使用 B 树，但它们使用 append-only/copy-on-write 变体，该变体在更新时不覆盖树的页，而是创建每个修改页的新副本。
+父页（直到树的根）被复制并更新以指向其子页的新版本。
+任何不受写入影响的页都不需要复制，并保持 immutable。
 
-With append-only B-trees, every write transaction (or batch of transactions) creates a new B-tree root, and a particular root is a consistent snapshot of the database at the point in time when it was created.
-There is no need to filter out objects based on transaction IDs because subsequent writes cannot modify an existing B-tree; they can only create new tree roots.
-However, this approach also requires a background process for compaction and garbage collection.
+使用 append-only B 树，每个写入事务（或一批事务）创建一个新的 B 树根，特定的根是创建时数据库在特定时间点的一致快照。
+无需根据 transaction IDs 过滤对象，因为后续写入无法修改现有的 B 树；它们只能创建新的树根。
+然而，这种方法也需要后台进程进行 compaction 和 garbage collection。
 
 ### Lost Updates
 
-There are several other interesting kinds of conflicts that can occur between concurrently writing transactions.
-The best known of these is the lost update problem, illustrated in Figure 1 with the example of two concurrent counter increments.
-The lost update problem can occur if an application reads some value from the database, modifies it, and writes back the modified value (a read-modify-write cycle).
-If two transactions do this concurrently, one of the modifications can be lost, because the second write does not include the first modification. (We sometimes say that the later write clobbers the earlier write.)
-This pattern occurs in various different scenarios:
+还有几种其他有趣的并发写入事务之间可能发生的冲突类型。
+其中最著名的是 lost update problem，如 Figure 1 中两个并发计数器增量的示例所示。
+当应用程序从数据库读取某个值，修改它，然后写回修改后的值（read-modify-write cycle）时，可能会出现 lost update problem。
+如果两个事务并发执行此操作，其中一个修改可能会丢失，因为第二次写入不包括第一次修改。
+（我们有时说后来的写入 clobber 了较早的写入。）
+这种模式出现在各种不同的场景中：
 
-- Incrementing a counter or updating an account balance (requires reading the current value, calculating the new value, and writing back the updated value)
-- Making a local change to a complex value, e.g., adding an element to a list within a JSON document (requires parsing the document, making the change, and writing back the modified document)
-- Two users editing a wiki page at the same time, where each user saves their changes by sending the entire page contents to the server, overwriting whatever is currently in the database
+- 递增计数器或更新账户余额（需要读取当前值，计算新值，然后写回更新的值）
+- 对复杂值进行本地更改，例如在 JSON 文档中的列表中添加元素（需要解析文档，进行更改，然后写回修改后的文档）
+- 两个用户同时编辑同一个 wiki 页面，每个用户通过向服务器发送整个页面内容来保存更改，覆盖数据库中当前的任何内容
 
 #### Atomic write operations
 
-Many databases provide atomic update operations, which remove the need to implement read-modify-write cycles in application code.
-They are usually the best solution if your code can be expressed in terms of those operations.
-For example, the following instruction is concurrency-safe in most relational databases:
+许多数据库提供 atomic update operations，这消除了在应用程序代码中实现 read-modify-write cycles 的需要。
+如果你的代码可以用这些操作来表达，它们通常是最好的解决方案。
+例如，以下指令在大多数关系数据库中是并发安全的：
 
 ```sql
 UPDATE counters SET value = value + 1 WHERE key = 'foo';
 ```
 
-Similarly, document databases such as MongoDB provide atomic operations for making local modifications to a part of a JSON document, and Redis provides atomic operations for modifying data structures such as priority queues.
-Not all writes can easily be expressed in terms of atomic operations—for example, updates to a wiki page involve arbitrary text editingviii—but in situations where atomic operations can be used, they are usually the best choice.
+类似地，文档数据库（如 MongoDB）提供 atomic operations 来对 JSON 文档的一部分进行本地修改，Redis 提供 atomic operations 来修改数据结构（如优先级队列）。
+并非所有写入都能轻易用 atomic operations 来表达——例如，对 wiki 页面的更新涉及任意文本编辑——但在可以使用 atomic operations 的情况下，它们通常是最佳选择。
 
-Atomic operations are usually implemented by taking an exclusive lock on the object when it is read so that no other transaction can read it until the update has been applied.
-This technique is sometimes known as cursor stability.
-Another option is to simply force all atomic operations to be executed on a single thread.
+Atomic operations 通常通过在读取对象时获取 exclusive lock 来实现，这样在更新应用之前，没有其他事务可以读取它。
+这种技术有时被称为 cursor stability。
+另一个选项是简单地强制所有 atomic operations 在单个线程上执行。
 
-Unfortunately, object-relational mapping frameworks make it easy to accidentally write code that performs unsafe read-modify-write cycles instead of using atomic operations provided by the database.
-That’s not a problem if you know what you are doing, but it is potentially a source of subtle bugs that are difficult to find by testing.
+不幸的是，object-relational mapping (ORM) 框架很容易让你意外地编写执行不安全的 read-modify-write cycles 的代码，而不是使用数据库提供的 atomic operations。
+如果你知道你在做什么，这不是问题，但它可能是难以通过测试找到的微妙 bug 的潜在来源。
 
 #### Explicit locking
 
-Another option for preventing lost updates, if the database’s built-in atomic operations don’t provide the necessary functionality, is for the application to explicitly lock objects that are going to be updated.
-Then the application can perform a readmodify-write cycle, and if any other transaction tries to concurrently read the same object, it is forced to wait until the first read-modify-write cycle has completed.
-For example, consider a multiplayer game in which several players can move the same figure concurrently.
-In this case, an atomic operation may not be sufficient, because the application also needs to ensure that a player’s move abides by the rules of the game, which involves some logic that you cannot sensibly implement as a database query.
-Instead, you may use a lock to prevent two players from concurrently moving the same piece, as illustrated in Example 1.
+如果数据库的内置 atomic operations 不提供所需的功能，防止 lost updates 的另一个选项是应用程序显式锁定将要更新的对象。
+然后应用程序可以执行 read-modify-write cycle，如果任何其他事务尝试并发读取同一对象，它将被迫等待，直到第一个 read-modify-write cycle 完成。
+例如，考虑一个多人游戏，其中多个玩家可以同时移动同一个棋子。
+在这种情况下，atomic operation 可能不够，因为应用程序还需要确保玩家的移动符合游戏规则，这涉及一些你无法合理作为数据库查询实现的逻辑。
+相反，你可以使用锁来防止两个玩家并发移动同一个棋子，如 Example 1 所示。
 
 ```sql
 BEGIN TRANSACTION;
@@ -439,26 +421,26 @@ UPDATE figures SET position = 'c4' WHERE id = 1234;
 COMMIT;
 ```
 
-This works, but to get it right, you need to carefully think about your application logic.
-It’s easy to forget to add a necessary lock somewhere in the code, and thus introduce a race condition.
+这可行，但要正确实现，你需要仔细思考你的应用程序逻辑。
+很容易忘记在代码的某个地方添加必要的锁，从而引入 race condition。
 
 #### Automatically detecting lost updates
 
-Atomic operations and locks are ways of preventing lost updates by forcing the readmodify-write cycles to happen sequentially.
-An alternative is to allow them to execute in parallel and, if the transaction manager detects a lost update, abort the transaction and force it to retry its read-modify-write cycle.
-An advantage of this approach is that databases can perform this check efficiently in conjunction with snapshot isolation.
-Indeed, PostgreSQL’s repeatable read, Oracle’s serializable, and SQL Server’s snapshot isolation levels automatically detect when a lost update has occurred and abort the offending transaction.
-However, MySQL/InnoDB’s repeatable read does not detect lost updates.
-Some authors argue that a database must prevent lost updates in order to qualify as providing snapshot isolation, so MySQL does not provide snapshot isolation under this definition.
-Lost update detection is a great feature, because it doesn’t require application code to use any special database features—you may forget to use a lock or an atomic operation and thus introduce a bug, but lost update detection happens automatically and is thus less error-prone.
+Atomic operations 和 locks 是通过强制 read-modify-write cycles 顺序执行来防止 lost updates 的方法。
+另一种方法是允许它们并行执行，如果 transaction manager 检测到 lost update，则 abort 事务并强制它重试其 read-modify-write cycle。
+这种方法的一个优势是数据库可以结合 snapshot isolation 高效地执行此检查。
+事实上，PostgreSQL 的 repeatable read、Oracle 的 serializable 和 SQL Server 的 snapshot isolation levels 会自动检测何时发生 lost update 并 abort 违规事务。
+然而，MySQL/InnoDB 的 repeatable read 不检测 lost updates。
+一些作者认为数据库必须防止 lost updates 才有资格提供 snapshot isolation，因此根据这个定义，MySQL 不提供 snapshot isolation。
+Lost update detection 是一个很棒的功能，因为它不需要应用程序代码使用任何特殊的数据库功能——你可能会忘记使用锁或 atomic operation 从而引入 bug，但 lost update detection 会自动发生，因此更不容易出错。
 
 #### Compare-and-set
 
-In databases that don’t provide transactions, you sometimes find an atomic compareand-set operation.
-The purpose of this operation is to avoid lost updates by allowing an update to happen only if the value has not changed since you last read it.
-If the current value does not match what you previously read, the update has no effect, and the read-modify-write cycle must be retried.
+在不提供事务的数据库中，你有时会找到原子 compare-and-set operation。
+此操作的目的是通过仅在值自你上次读取后未更改时才允许更新来避免 lost updates。
+如果当前值与你之前读取的值不匹配，则更新无效，必须重试 read-modify-write cycle。
 
-For example, to prevent two users concurrently updating the same wiki page, you might try something like this, expecting the update to occur only if the content of the page hasn’t changed since the user started editing it:
+例如，为了防止两个用户并发更新同一个 wiki 页面，你可能会尝试类似这样的操作，期望仅在页面内容自用户开始编辑后未更改时才发生更新：
 
 ```sql
 -- This may or may not be safe, depending on the database implementation
@@ -466,40 +448,41 @@ UPDATE wiki_pages SET content = 'new content'
 WHERE id = 1234 AND content = 'old content';
 ```
 
-If the content has changed and no longer matches 'old content', this update will have no effect, so you need to check whether the update took effect and retry if necessary.
-However, if the database allows the WHERE clause to read from an old snapshot, this statement may not prevent lost updates, because the condition may be true even though another concurrent write is occurring.
-Check whether your database’s compare-and-set operation is safe before relying on it.
+如果内容已更改且不再匹配 'old content'，此更新将无效，因此你需要检查更新是否生效，并在必要时重试。
+然而，如果数据库允许 WHERE 子句从旧 snapshot 读取，此语句可能无法防止 lost updates，因为条件可能为 true，即使另一个并发写入正在发生。
+在依赖之前，检查你的数据库的 compare-and-set operation 是否安全。
 
 #### Conflict resolution and replication
 
-In replicated databases, preventing lost updates takes on another dimension: since they have copies of the data on multiple nodes, and the data can potentially be modified concurrently on different nodes, some additional steps need to be taken to prevent lost updates.
+在复制数据库中，防止 lost updates 会承担另一个维度：由于它们在多个节点上拥有数据的副本，并且数据可能会在不同节点上并发修改，因此需要采取额外步骤来防止 lost updates。
 
-Locks and compare-and-set operations assume that there is a single up-to-date copy of the data.
-However, databases with multi-leader or leaderless replication usually allow several writes to happen concurrently and replicate them asynchronously, so they cannot guarantee that there is a single up-to-date copy of the data.
-Thus, techniques based on locks or compare-and-set do not apply in this context.
-Instead, a common approach in such replicated databases is to allow concurrent writes to create several conflicting versions of a value (also known as siblings), and to use application code or special data structures to resolve and merge these versions after the fact.
+Locks 和 compare-and-set operations 假设有数据的单个最新副本。
+然而，具有 multi-leader 或 leaderless replication 的数据库通常允许并发写入并异步复制它们，因此它们无法保证有数据的单个最新副本。
+因此，基于 locks 或 compare-and-set 的技术在此上下文中不适用。
+相反，此类复制数据库中的常见方法是允许并发写入创建多个冲突版本的值（也称为 siblings），并使用应用程序代码或特殊数据结构在事后解决和合并这些版本。
 
-Atomic operations can work well in a replicated context, especially if they are commutative (i.e., you can apply them in a different order on different replicas, and still get the same result).
-For example, incrementing a counter or adding an element to a set are commutative operations.
-That is the idea behind Riak 2.0 datatypes, which prevent lost updates across replicas.
-When a value is concurrently updated by different clients, Riak automatically merges together the updates in such a way that no updates are lost.
+Atomic operations 可以在复制上下文中很好地工作，特别是如果它们是可交换的（即，你可以在不同副本上以不同顺序应用它们，仍然得到相同的结果）。
+例如，递增计数器或向集合添加元素是可交换操作。
+这就是 Riak 2.0 datatypes 的想法，它防止跨副本的 lost updates。
+当值被不同用户并发更新时，Riak 会自动合并更新，使得没有更新丢失。
 
-On the other hand, the last write wins (LWW) conflict resolution method is prone to lost updates.
-Unfortunately, LWW is the default in many replicated databases.
+另一方面，last write wins (LWW) conflict resolution method 容易发生 lost updates。
+不幸的是，LWW 是许多复制数据库的默认设置。
 
 ### Write Skew and Phantoms
 
-In the previous sections we saw dirty writes and lost updates, two kinds of race conditions that can occur when different transactions concurrently try to write to the same objects.
-In order to avoid data corruption, those race conditions need to be prevented—either automatically by the database, or by manual safeguards such as using locks or atomic write operations.
-However, that is not the end of the list of potential race conditions that can occur between concurrent writes. In this section we will see some subtler examples of conflicts.
+在前面的部分中，我们看到了 dirty writes 和 lost updates，这是不同事务并发尝试写入相同对象时可能发生的两种 race conditions。
+为了避免数据损坏，这些 race conditions 需要被防止——要么由数据库自动防止，要么通过手动安全措施（如使用 locks 或 atomic write operations）。
+然而，这还不是并发写入之间可能发生的潜在 race conditions 列表的结束。
+在本节中，我们将看到一些更微妙的冲突示例。
 
-To begin, imagine this example: you are writing an application for doctors to manage their on-call shifts at a hospital.
-The hospital usually tries to have several doctors on call at any one time, but it absolutely must have at least one doctor on call.
-Doctors can give up their shifts (e.g., if they are sick themselves), provided that at least one colleague remains on call in that shift.
-Now imagine that Alice and Bob are the two on-call doctors for a particular shift.
-Both are feeling unwell, so they both decide to request leave.
-Unfortunately, they happen to click the button to go off call at approximately the same time.
-What happens next is illustrated in Figure 6.
+首先，想象这个示例：你正在为医生编写一个应用程序来管理他们在医院的 on-call shifts。
+医院通常试图在任何时候都有多名医生值班，但它绝对必须至少有一名医生值班。
+医生可以放弃他们的轮班（例如，如果他们自己生病了），前提是在该轮班中至少有一名同事仍然值班。
+现在想象 Alice 和 Bob 是特定轮班的两名值班医生。
+两人都感觉不舒服，所以他们两人都决定请假。
+不幸的是，他们大约在同时点击了下班按钮。
+接下来发生的事情如 Figure 6 所示。
 
 <div style="text-align: center;">
 
@@ -511,30 +494,27 @@ What happens next is illustrated in Figure 6.
 Fig.6. Example of write skew causing an application bug.
 </p>
 
-In each transaction, your application first checks that two or more doctors are currently on call; if yes, it assumes it’s safe for one doctor to go off call.
-Since the database is using snapshot isolation, both checks return 2, so both transactions proceed to the next stage.
-Alice updates her own record to take herself off call, and Bob updates his own record likewise. Both transactions commit, and now no doctor is on call.
-Your requirement of having at least one doctor on call has been violated.
+在每个事务中，你的应用程序首先检查当前是否有两名或更多医生值班；如果是，它假设一名医生下班是安全的。
+由于数据库使用 snapshot isolation，两个检查都返回 2，所以两个事务都进入下一个阶段。
+Alice 更新她自己的记录以使自己下班，Bob 同样更新他自己的记录。
+两个事务都提交，现在没有医生值班。
+你至少有一名医生值班的要求已被违反。
 
-This anomaly is called *write skew*.
-It is neither a dirty write nor a lost update, because the two transactions are updating two different objects (Alice’s and Bob’s oncall records, respectively).
-It is less obvious that a conflict occurred here, but it’s definitely a race condition: if the two transactions had run one after another, the second doctor would have been prevented from going off call.
-The anomalous behavior was only possible because the transactions ran concurrently.
-You can think of write skew as a generalization of the lost update problem.
-Write skew can occur if two transactions read the same objects, and then update some of those objects (different transactions may update different objects).
-In the special case where different transactions update the same object, you get a dirty write or lost update anomaly (depending on the timing).
+这种异常被称为 write skew。
+它既不是 dirty write 也不是 lost update，因为两个事务正在更新两个不同的对象（Alice 和 Bob 的 on-call records）。
+这里发生的冲突不太明显，但它绝对是 race condition：如果两个事务一个接一个地运行，第二个医生将被阻止下班。
+异常行为只有在事务并发运行时才可能发生。
+你可以将 write skew 视为 lost update problem 的泛化。
+当两个事务读取相同的对象，然后更新其中一些对象（不同的事务可能更新不同的对象）时，可能会发生 write skew。
+在不同事务更新相同对象的特殊情况下，你会得到 dirty write 或 lost update anomaly（取决于时机）。
 
-We saw that there are various different ways of preventing lost updates.
-With write skew, our options are more restricted:
+我们看到有各种不同的方法可以防止 lost updates。
+对于 write skew，我们的选择更加受限：
 
-- Atomic single-object operations don’t help, as multiple objects are involved.
-- The automatic detection of lost updates that you find in some implementations of snapshot isolation unfortunately doesn’t help either: write skew is not automatically detected in PostgreSQL’s repeatable read, MySQL/InnoDB’s repeatable read, Oracle’s serializable, or SQL Server’s snapshot isolation level.
-  Automatically preventing write skew requires true serializable isolation.
-- Some databases allow you to configure constraints, which are then enforced by the database (e.g., uniqueness, foreign key constraints, or restrictions on a particular value).
-  However, in order to specify that at least one doctor must be on call, you would need a constraint that involves multiple objects.
-  Most databases do not have built-in support for such constraints, but you may be able to implement them with triggers or materialized views, depending on the database.
-- If you can’t use a serializable isolation level, the second-best option in this case is probably to explicitly lock the rows that the transaction depends on.
-  In the doctors example, you could write something like the following:
+- Atomic single-object operations 无济于事，因为涉及多个对象。
+- 你在某些 snapshot isolation 实现中发现的 lost updates 自动检测也无济于事：write skew 不会在 PostgreSQL 的 repeatable read、MySQL/InnoDB 的 repeatable read、Oracle 的 serializable 或 SQL Server 的 snapshot isolation level 中自动检测。自动防止 write skew 需要真正的 serializable isolation。
+- 一些数据库允许你配置 constraints，然后由数据库强制执行（例如唯一性、外键约束或对特定值的限制）。然而，为了指定至少必须有一名医生值班，你需要一个涉及多个对象的 constraint。大多数数据库没有对此类 constraints 的内置支持，但你可以根据数据库使用 triggers 或 materialized views 来实现它们。
+- 如果你不能使用 serializable isolation level，在这种情况下第二好的选项可能是显式锁定事务依赖的行。在医生示例中，你可以编写类似以下内容：
 
 ```sql
 BEGIN TRANSACTION;
@@ -551,558 +531,72 @@ UPDATE doctors
 COMMIT;
 ```
 
-Here are some more examples:
+以下是更多示例：
 
-- Meeting room booking system
-  Say you want to enforce that there cannot be two bookings for the same meeting room at the same time.
-  When someone wants to make a booking, you first check for any conflicting bookings (i.e., bookings for the same room with an overlapping time range), and if none are found, you create the meeting.
-- Multiplayer game
-  In Example 1, we used a lock to prevent lost updates (that is, making sure that two players can’t move the same figure at the same time).
-  However, the lock doesn’t prevent players from moving two different figures to the same position on the board or potentially making some other move that violates the rules of the game.
-  Depending on the kind of rule you are enforcing, you might be able to use a unique constraint, but otherwise you’re vulnerable to write skew.
-- Claiming a username
-  On a website where each user has a unique username, two users may try to create accounts with the same username at the same time.
-  You may use a transaction to check whether a name is taken and, if not, create an account with that name.
-  However, like in the previous examples, that is not safe under snapshot isolation.
-  Fortunately, a unique constraint is a simple solution here (the second transaction that tries to register the username will be aborted due to violating the constraint).
-- Preventing double-spending
-  A service that allows users to spend money or points needs to check that a user doesn’t spend more than they have.
-  You might implement this by inserting a tentative spending item into a user’s account, listing all the items in the account, and checking that the sum is positive.
-  With write skew, it could happen that two spending items are inserted concurrently that together cause the balance to go negative, but that neither transaction notices the other.
+- Meeting room booking system<br>
+假设你要确保同一会议室在同一时间不能有两次预订。
+当有人想要进行预订时，你首先检查是否有任何冲突的预订（即，同一会议室具有重叠时间范围的预订），如果没有，则创建会议。
+- Multiplayer game<br>
+  在 Example 1 中，我们使用锁来防止 lost updates（即，确保两个玩家不能同时移动同一个棋子）。
+  然而，锁不能防止玩家将两个不同的棋子移动到棋盘上的相同位置或可能做出违反游戏规则的其他移动。
+  根据你正在强制执行的规则类型，你可以使用 unique constraint，否则你容易受到 write skew 的影响。
+- Claiming a username<br>
+在网站上，每个用户都有唯一的用户名，两个用户可能会尝试同时使用相同的用户名创建账户。
+你可以使用事务来检查名称是否已被占用，如果没有，则使用该名称创建账户。
+然而，与前面的示例一样，这在 snapshot isolation 下是不安全的。
+幸运的是，这里有一个简单的解决方案：unique constraint（尝试注册用户名的第二个事务将因违反 constraint 而被 aborted）。
+- Preventing double-spending<br>
+允许用户花费金钱或积分的服务需要检查用户花费的不超过他们拥有的金额。
+你可以通过在用户的账户中插入临时的支出项、列出账户中的所有项并检查总和是否为正来实现此目的。
+通过 write skew，可能会发生两个支出项并发插入，导致余额变为负数，但两个事务都没有注意到另一个。
 
 #### Phantoms causing write skew
 
-All of these examples follow a similar pattern:
+所有这些示例都遵循类似的模式：
 
-1. A SELECT query checks whether some requirement is satisfied by searching for rows that match some search condition (there are at least two doctors on call).
-2. Depending on the result of the first query, the application code decides how to continue (perhaps to go ahead with the operation, or perhaps to report an error to the user and abort).
-3. If the application decides to go ahead, it makes a write (INSERT, UPDATE, or DELETE) to the database and commits the transaction.
-   The effect of this write changes the precondition of the decision of step 2.
-   In other words, if you were to repeat the SELECT query from step 1 after commiting the write, you would get a different result, because the write changed the set of rows matching the search condition (there is now one fewer doctor on call).
+1. SELECT 查询通过搜索匹配某些搜索条件的行来检查是否满足某些要求（至少有两个医生值班）。
+2. 根据第一个查询的结果，应用程序代码决定如何继续（可能继续操作，或者向用户报告错误并 abort）。
+3. 如果应用程序决定继续，它会向数据库进行写入（INSERT、UPDATE 或 DELETE）并提交事务。
+此写入的效果会改变步骤 2 决策的前提条件。
+换句话说，如果你在提交写入后从步骤 1 重复 SELECT 查询，你会得到不同的结果，因为写入改变了匹配搜索条件的行集合（现在少了一个医生值班）。
 
-The steps may occur in a different order.
-For example, you could first make the write, then the SELECT query, and finally decide whether to abort or commit based on the result of the query.
+步骤可能以不同的顺序发生。
+例如，你可以先进行写入，然后进行 SELECT 查询，最后根据查询结果决定是否 abort 或 commit。
 
-In the case of the doctor on call example, the row being modified in step 3 was one of the rows returned in step 1, so we could make the transaction safe and avoid write skew by locking the rows in step 1 (`SELECT FOR UPDATE`).
-However, the other four examples are different: they check for the absence of rows matching some search condition, and the write adds a row matching the same condition.
-If the query in step 1 doesn’t return any rows, SELECT FOR UPDATE can’t attach locks to anything.
+在医生值班示例的情况下，步骤 3 中修改的行是步骤 1 中返回的行之一，所以我们可以通过在步骤 1 中锁定行（`SELECT FOR UPDATE`）来使事务安全并避免 write skew。
+然而，其他四个示例不同：它们检查的是匹配某些搜索条件的行是否存在，而写入添加了匹配相同条件的行。
+如果步骤 1 中的查询不返回任何行，SELECT FOR UPDATE 无法附加锁到任何内容。
 
-This effect, where a write in one transaction changes the result of a search query in another transaction, is called a *phantom*.
-Snapshot isolation avoids phantoms in read-only queries, but in read-write transactions like the examples we discussed, phantoms can lead to particularly tricky cases of write skew.
+这种效应，即一个事务中的写入改变了另一个事务中搜索查询的结果，被称为 phantom。
+Snapshot isolation 在只读查询中避免 phantoms，但在像我们讨论的这样的读写事务中，phantoms 可能导致特别棘手的 write skew 情况。
 
 ##### Materializing conflicts
 
-If the problem of phantoms is that there is no object to which we can attach the locks, perhaps we can artificially introduce a lock object into the database?
-For example, in the meeting room booking case you could imagine creating a table of time slots and rooms.
-Each row in this table corresponds to a particular room for a particular time period (say, 15 minutes).
-You create rows for all possible combinations of rooms and time periods ahead of time, e.g. for the next six months.
-Now a transaction that wants to create a booking can lock (`SELECT FOR UPDATE`) the rows in the table that correspond to the desired room and time period.
-After it has acquired the locks, it can check for overlapping bookings and insert a new booking as before.
-Note that the additional table isn’t used to store information about the booking—it’s purely a collection of locks which is used to prevent bookings on the same room and time range from being modified concurrently.
-This approach is called materializing conflicts, because it takes a phantom and turns it into a lock conflict on a concrete set of rows that exist in the database.
+如果 phantoms 的问题是没有对象可以附加锁，也许我们可以人为地向数据库引入锁对象？例如，在会议室预订的情况下，你可以想象创建一个时间槽和会议室的表。
+此表中的每一行对应于特定时间段的特定会议室（比如 15 分钟）。
+你提前为所有可能的房间和时间段组合创建行，例如未来六个月。
+现在想要进行预订的事务可以锁定（`SELECT FOR UPDATE`）表中对应于所需房间和时间段的行。
+在获取锁之后，它可以检查重叠的预订并插入新的预订，如前所述。
+请注意，额外的表不用于存储有关预订的信息——它纯粹是锁的集合，用于防止同一房间和时间范围内的预订被并发修改。
+这种方法被称为 materializing conflicts，因为它将 phantom 转化为数据库中存在的具体行集合上的锁冲突。
 
-Unfortunately, it can be hard and error-prone to figure out how to materialize conflicts, and it’s ugly to let a concurrency control mechanism leak into the application data model.
-For those reasons, materializing conflicts should be considered a last resort if no alternative is possible.
-A serializable isolation level is much preferable in most cases.
+不幸的是，找出如何 materialize conflicts 可能很困难且容易出错，并且让并发控制机制泄漏到应用程序数据模型中是不美观的。
+出于这些原因，materializing conflicts 应该被视为没有其他选择时的最后手段。
+在大多数情况下，serializable isolation level 更可取。
 
 ### Serializability
 
-Serializable isolation is usually regarded as the strongest isolation level.
-It guarantees that even though transactions may execute in parallel, the end result is the same as if they had executed one at a time, serially, without any concurrency.
-Thus, the database guarantees that if the transactions behave correctly when run individually, they continue to be correct when run concurrently—in other words, the database prevents all possible race conditions.
+Serializable isolation 通常被认为是最强的 isolation level。
+它保证即使事务可能并行执行，最终结果也与它们一次一个、串行执行的结果相同，没有任何并发。
+因此，数据库保证如果事务在单独运行时行为正确，它们在并发运行时将继续正确——换句话说，数据库防止所有可能的 race conditions。
 
-Most databases that provide serializability today use one of three techniques:
+如今提供 serializability 的大多数数据库使用三种技术之一：
 
-- Literally executing transactions in a serial order
-- Two-phase locking, which for several decades was the only viable option
-- Optimistic concurrency control techniques such as serializable snapshot isolation
+- 真正以串行顺序执行事务
+- Two-phase locking，这在几十年里是唯一可行的选择
+- 乐观并发控制技术，如 serializable snapshot isolation
 
 #### Actual Serial Execution
 
-The simplest way of avoiding concurrency problems is to remove the concurrency entirely: to execute only one transaction at a time, in serial order, on a single thread.
-By doing so, we completely sidestep the problem of detecting and preventing conflicts between transactions: the resulting isolation is by definition serializable.
-
-The approach of executing transactions serially is implemented in VoltDB/H-Store, [Redis](/docs/CS/DB/Redis/Redis.md), and Datomic.
-A system designed for single-threaded execution can sometimes perform better than a system that supports concurrency, because it can avoid the coordination overhead of locking.
-However, its throughput is limited to that of a single CPU core. In order to make the most of that single thread, transactions need to be structured differently from their traditional form.
-
-In this interactive style of transaction, a lot of time is spent in network communication between the application and the database.
-If you were to disallow concurrency in the database and only process one transaction at a time, the throughput would be dreadful because the database would spend most of its time waiting for the application to issue the next query for the current transaction.
-In this kind of database, it’s necessary to process multiple transactions concurrently in order to get reasonable performance.
-<br>
-For this reason, systems with single-threaded serial transaction processing don’t allow interactive multi-statement transactions.
-Instead, the application must submit the entire transaction code to the database ahead of time, as a stored procedure.
-Provided that all data required by a transaction is in memory, the stored procedure can execute very fast, without waiting for any network or disk I/O.
-
-Stored procedures have existed for some time in relational databases, and they have been part of the SQL standard (SQL/PSM) since 1999.
-They have gained a somewhat bad reputation, for various reasons:
-
-- Each database vendor has its own language for stored procedures (Oracle has PL/SQL, SQL Server has T-SQL, PostgreSQL has PL/pgSQL, etc.).
-  These languages haven’t kept up with developments in general-purpose programming languages, so they look quite ugly and archaic from today’s point of view, and they lack the ecosystem of libraries that you find with most programming languages.
-- Code running in a database is difficult to manage: compared to an application server, it’s harder to debug, more awkward to keep in version control and deploy, trickier to test, and difficult to integrate with a metrics collection system for monitoring.
-- A database is often much more performance-sensitive than an application server, because a single database instance is often shared by many application servers.
-  A badly written stored procedure (e.g., using a lot of memory or CPU time) in a database can cause much more trouble than equivalent badly written code in an application server.
-  However, those issues can be overcome.
-  Modern implementations of stored procedures have abandoned PL/SQL and use existing general-purpose programming languages instead: VoltDB uses Java or Groovy, Datomic uses Java or Clojure, and Redis uses Lua.
-
-With stored procedures and in-memory data, executing all transactions on a single thread becomes feasible.
-As they don’t need to wait for I/O and they avoid the overhead of other concurrency control mechanisms, they can achieve quite good throughput on a single thread.
-
-Executing all transactions serially makes concurrency control much simpler, but limits the transaction throughput of the database to the speed of a single CPU core on a single machine.
-Read-only transactions may execute elsewhere, using snapshot isolation, but for applications with high write throughput, the single-threaded transaction processor can become a serious bottleneck.
-
-In order to scale to multiple CPU cores, and multiple nodes, you can potentially [partition your data](/docs/CS/Distributed/Partition.md).
-If you can find a way of partitioning your dataset so that each transaction only needs to read and write data within a single partition, then each partition can have its own transaction processing thread running independently from the others.
-In this case, you can give each CPU core its own partition, which allows your transaction throughput to scale linearly with the number of CPU cores.
-
-However, for any transaction that needs to access multiple partitions, the database must coordinate the transaction across all the partitions that it touches.
-The stored procedure needs to be performed in lock-step across all partitions to ensure serializability across the whole system.
-Since cross-partition transactions have additional coordination overhead, they are vastly slower than single-partition transactions.
-
-Whether transactions can be single-partition depends very much on the structure of the data used by the application.
-Simple key-value data can often be partitioned very easily, but data with multiple secondary indexes is likely to require a lot of crosspartition coordination (see [Partitioning and Secondary Indexes](/docs/CS/Distributed/Partition.md?id=Partitioning-and-Secondary-Indexes)).
-
-Serial execution of transactions has become a viable way of achieving serializable isolation within certain constraints:
-
-- Every transaction must be small and fast, because it takes only one slow transaction to stall all transaction processing.
-- It is limited to use cases where the active dataset can fit in memory.
-  Rarely accessed data could potentially be moved to disk, but if it needed to be accessed in a single-threaded transaction, the system would get very slow.x
-- Write throughput must be low enough to be handled on a single CPU core, or else transactions need to be partitioned without requiring cross-partition coordination.
-- Cross-partition transactions are possible, but there is a hard limit to the extent to which they can be used.
-
-> If a transaction needs to access data that’s not in memory, the best solution may be to abort the transaction, asynchronously fetch the data into memory while continuing to process other transactions,
-> and then restart the transaction when the data has been loaded. This approach is known as *anti-caching*.
-
-#### Two-Phase Locking (2PL)
-
-For around 30 years, there was only one widely used algorithm for serializability in databases: *two-phase locking* (2PL).
-
-> Note that while two-phase locking (2PL) sounds very similar to *two-phase commit* (2PC), they are completely different things.
-
-Two-phase locking makes the lock requirements much stronger.
-Several transactions are allowed to concurrently read the same object as long as nobody is writing to it.
-But as soon as anyone wants to write (modify or delete) an object, exclusive access is required:
-
-- If transaction A has read an object and transaction B wants to write to that object, B must wait until A commits or aborts before it can continue.
-  (This ensures that B can’t change the object unexpectedly behind A’s back.)
-- If transaction A has written an object and transaction B wants to read that object, B must wait until A commits or aborts before it can continue.
-  (Reading an old version of the object, like in Figure 1, is not acceptable under 2PL.)
-
-In 2PL, writers don’t just block other writers; they also block readers and vice versa.
-Snapshot isolation has the mantra readers never block writers, and writers never block readers, which captures this key difference between snapshot isolation and two-phase locking.
-On the other hand, because 2PL provides serializability, it protects against all the race conditions discussed earlier, including lost updates and write skew.
-
-2PL is used by the serializable isolation level in MySQL (InnoDB) and SQL Server, and the repeatable read isolation level in DB2.
-
-The blocking of readers and writers is implemented by a having a lock on each object
-in the database. The lock can either be in shared mode or in exclusive mode. The lock
-is used as follows:
-
-- If a transaction wants to read an object, it must first acquire the lock in shared mode.
-  Several transactions are allowed to hold the lock in shared mode simultaneously, but if another transaction already has an exclusive lock on the object, these transactions must wait.
-- If a transaction wants to write to an object, it must first acquire the lock in exclusive mode.
-  No other transaction may hold the lock at the same time (either in shared or in exclusive mode), so if there is any existing lock on the object, the transaction must wait.
-- If a transaction first reads and then writes an object, it may upgrade its shared lock to an exclusive lock. The upgrade works the same as getting an exclusive lock directly.
-- After a transaction has acquired the lock, it must continue to hold the lock until the end of the transaction (commit or abort).
-  This is where the name “twophase” comes from: the first phase (while the transaction is executing) is when the locks are acquired, and the second phase (at the end of the transaction) is when all the locks are released.
-
-Since so many locks are in use, it can happen quite easily that transaction A is stuck waiting for transaction B to release its lock, and vice versa.
-This situation is called *deadlock*.
-The database automatically detects deadlocks between transactions and aborts one of them so that the others can make progress.
-The aborted transaction needs to be retried by the application.
-
-The big downside of two-phase locking, and the reason why it hasn’t been used by everybody since the 1970s, is performance: transaction throughput and response times of queries are significantly worse under two-phase locking than under weak isolation.
-This is partly due to the overhead of acquiring and releasing all those locks, but more importantly due to reduced concurrency.
-By design, if two concurrent transactions try to do anything that may in any way result in a race condition, one has to wait for the other to complete.
-
-Traditional relational databases don’t limit the duration of a transaction, because they are designed for interactive applications that wait for human input.
-Consequently, when one transaction has to wait on another, there is no limit on how long it may have to wait.
-Even if you make sure that you keep all your transactions short, a queue may form if several transactions want to access the same object, so a transaction may have to wait for several others to complete before it can do anything.
-For this reason, databases running 2PL can have quite unstable latencies, and they can be very slow at high percentiles if there is contention in the workload.
-It may take just one slow transaction, or one transaction that accesses a lot of data and acquires many locks, to cause the rest of the system to grind to a halt.
-This instability is problematic when robust operation is required.
-
-Although deadlocks can happen with the lock-based read committed isolation level, they occur much more frequently under 2PL serializable isolation (depending on the access patterns of your transaction).
-This can be an additional performance problem:when a transaction is aborted due to deadlock and is retried, it needs to do its work all over again. If deadlocks are frequent, this can mean significant wasted effort.
-
-##### Predicate locks
-
-A database with serializable isolation must prevent phantoms.
-
-In the meeting room booking example this means that if one transaction has searched for existing bookings for a room within a certain time window (see Example 2), another transaction is not allowed to concurrently insert or update another booking for the same room and time range.
-(It’s okay to concurrently insert bookings for other rooms, or for the same room at a different time that doesn’t affect the proposed booking.)
-How do we implement this? Conceptually, we need a predicate lock.
-It works similarly to the shared/exclusive lock described earlier, but rather than belonging to a particular object (e.g., one row in a table), it belongs to all objects that match some search condition, such as:
-
-```sql
-SELECT * FROM bookings
-WHERE room_id = 123 AND
-    end_time > '2018-01-01 12:00' AND
-    start_time < '2018-01-01 13:00';
-```
-
-A predicate lock restricts access as follows:
-
-- If transaction A wants to read objects matching some condition, like in that SELECT query, it must acquire a shared-mode predicate lock on the conditions of the query.
-  If another transaction B currently has an exclusive lock on any object matching those conditions, A must wait until B releases its lock before it is allowed to make its query.
-- If transaction A wants to insert, update, or delete any object, it must first check whether either the old or the new value matches any existing predicate lock.
-  If there is a matching predicate lock held by transaction B, then A must wait until B has committed or aborted before it can continue.
-
-The key idea here is that a predicate lock applies even to objects that do not yet exist in the database, but which might be added in the future (phantoms).
-If two-phase locking includes predicate locks, the database prevents all forms of write skew and other race conditions, and so its isolation becomes serializable.
-
-##### Index-range locks
-
-Unfortunately, predicate locks do not perform well: if there are many locks by active transactions, checking for matching locks becomes time-consuming.
-For that reason, most databases with 2PL actually implement index-range locking (also known as nextkey locking), which is a simplified approximation of predicate locking.
-
-It’s safe to simplify a predicate by making it match a greater set of objects.
-For example, if you have a predicate lock for bookings of room 123 between noon and 1 p.m., you can approximate it by locking bookings for room 123 at any time, or you can approximate it by locking all rooms (not just room 123) between noon and 1 p.m.
-This is safe, because any write that matches the original predicate will definitely also match the approximations.
-
-In the room bookings database you would probably have an index on the room_id column, and/or indexes on start_time and end_time (otherwise the preceding query would be very slow on a large database):
-
-- Say your index is on room_id, and the database uses this index to find existing bookings for room 123.
-  Now the database can simply attach a shared lock to this index entry, indicating that a transaction has searched for bookings of room 123.
-- Alternatively, if the database uses a time-based index to find existing bookings, it can attach a shared lock to a series of values in the index indicating that the transaction has searched for bookings that overlap the noon-1pm time period.
-
-Either way, an approximation of the search condition is attached to one of the indexes.
-Now, if another transaction wants to insert, update, or delete a booking for the same room and/or an overlapping time period, it will have to update the same part of the index.
-In the process of doing so, it will encounter the shared lock, and it will be forced to wait until the lock is released.
-This provides effective protection against phantoms and write skew.
-Index-range locks are not as precise as predicate locks would be (they may lock a bigger range of objects than is strictly necessary to maintain serializability), but since they have much lower overheads, they are a good compromise.
-If there is no suitable index where a range lock can be attached, the database can fall back to a shared lock on the entire table.
-This will not be good for performance, since it will stop all other transactions writing to the table, but it’s a safe fallback position.
-
-### Serializable Snapshot Isolation (SSI)
-
-An algorithm called *serializable snapshot isolation* (SSI) is very promising.
-It provides full serializability, but has only a small performance penalty compared to snapshot isolation.
-
-Two-phase locking is a so-called pessimistic concurrency control mechanism: it is based on the principle that if anything might possibly go wrong (as indicated by a lock held by another transaction), it’s better to wait until the situation is safe again before doing anything.
-It is like mutual exclusion, which is used to protect data structures in multi-threaded programming.
-Serial execution is, in a sense, pessimistic to the extreme: it is essentially equivalent to each transaction having an exclusive lock on the entire database (or one partition of the database) for the duration of the transaction.
-We compensate for the pessimism by making each transaction very fast to execute, so it only needs to hold the “lock” for a short time.
-
-By contrast, serializable snapshot isolation is an optimistic concurrency control technique.
-Optimistic in this context means that instead of blocking if something potentially dangerous happens, transactions continue anyway, in the hope that everything will turn out all right.
-When a transaction wants to commit, the database checks whether anything bad happened (i.e., whether isolation was violated); if so, the transaction is aborted and has to be retried.
-Only transactions that executed serializably are allowed to commit.
-
-#### Optimistic concurrency control
-
-Optimistic concurrency control is an old idea, and its advantages and disadvantages have been debated for a long time.
-It performs badly if there is high contention (many transactions trying to access the same objects), as this leads to a high proportion of transactions needing to abort.
-If the system is already close to its maximum throughput, the additional transaction load from retried transactions can make performance worse.
-
-However, if there is enough spare capacity, and if contention between transactions is not too high, optimistic concurrency control techniques tend to perform better than pessimistic ones.
-Contention can be reduced with commutative atomic operations: for example, if several transactions concurrently want to increment a counter,
-it doesn’t matter in which order the increments are applied (as long as the counter isn’t read in the same transaction), so the concurrent increments can all be applied without conflicting.
-
-As the name suggests, SSI is based on snapshot isolation—that is, all reads within a transaction are made from a consistent snapshot of the database.
-This is the main difference compared to earlier optimistic concurrency control techniques.
-On top of snapshot isolation, SSI adds an algorithm for detecting serialization conflicts among writes and determining which transactions to abort.
-
-#### Detecting outdated premise
-
-A transaction reads some data from the database, examines the result of the query, and decides to take some action (write to the database) based on the result that it saw.
-However, under snapshot isolation, the result from the original query may no longer be up-to-date by the time the transaction commits, because the data may have been modified in the meantime.
-Put another way, the transaction is taking an action based on a premise (a fact that was true at the beginning of the transaction, e.g., “There are currently two doctors on call”).
-Later, when the transaction wants to commit, the original data may have changed—the premise may no longer be true.
-
-When the application makes a query (e.g., “How many doctors are currently on call?”), the database doesn’t know how the application logic uses the result of that query.
-To be safe, the database needs to assume that any change in the query result (the premise) means that writes in that transaction may be invalid. In other words, there may be a causal dependency between the queries and the writes in the transaction.
-In order to provide serializable isolation, the database must detect situations in which a transaction may have acted on an outdated premise and abort the transaction in that case.
-<br>
-How does the database know if a query result might have changed? There are two cases to consider:
-
-- Detecting reads of a stale MVCC object version (uncommitted write occurred before the read)
-- Detecting writes that affect prior reads (the write occurs after the read)
-
-Compared to two-phase locking, the big advantage of serializable snapshot isolation is that one transaction doesn’t need to block waiting for locks held by another transaction.
-Like under snapshot isolation, writers don’t block readers, and vice versa.
-This design principle makes query latency much more predictable and less variable.
-In particular, read-only queries can run on a consistent snapshot without requiring any locks, which is very appealing for read-heavy workloads.
-
-Compared to serial execution, serializable snapshot isolation is not limited to the throughput of a single CPU core: FoundationDB distributes the detection of serialization conflicts across multiple machines, allowing it to scale to very high throughput.
-Even though data may be partitioned across multiple machines, transactions can read and write data in multiple partitions while ensuring serializable isolation.
-
-The rate of aborts significantly affects the overall performance of SSI.
-For example, a transaction that reads and writes data over a long period of time is likely to run into conflicts and abort, so SSI requires that read-write transactions be fairly short (longrunning read-only transactions may be okay).
-However, SSI is probably less sensitive to slow transactions than two-phase locking or serial execution.
-
-## BASE
-
-(Basically Available, Soft-State, Eventually Consistent)
-
-- Basic Availability: fulfill request, even in partial consistency.
-- Soft State: abandon the consistency requirements of the ACID model pretty much completely
-- Eventual Consistency: at some point in the future, data will converge to a consistent state; delayed consistency, as opposed to immediate consistency of the ACID properties.
-- purely a liveness guarantee (reads eventually return the requested value); but
-- does not make safety guarantees, i.e.,
-- an eventually consistent system can return any value before it converges
-
-### ACID vs. BASE trade-off
-
-- No general answer to whether your application needs an ACID versus BASE consistency model.
-- Given BASE’s loose consistency, developers need to be more knowledgeable and rigorous about consistent data if they choose a BASE store for their application.
-- Planning around BASE limitations can sometimes be a major disadvantage when compared to the simplicity of ACID transactions.
-- A fully ACID database is the perfect fit for use cases where data reliability and consistency are essential.
-
-## Atomic Commit
-
-To make multiple operations appear atomic, especially if some of them are remote, we need to use a class of algorithms called atomic commitment.
-Atomic commitment doesn’t allow disagreements between the participants: a transaction will not commit if even one of the participants votes against it.
-At the same time, this means that failed processes have to reach the same conclusion as the rest of the cohort.
-Another important implication of this fact is that atomic commitment algorithms do not work in the presence of Byzantine failures:
-when the process lies about its state or decides on an arbitrary value, since it contradicts unanimity.
-
-The problem that atomic commitment is trying to solve is reaching an agreement on whether or not to execute the proposed transaction.
-Cohorts cannot choose, influence, or change the proposed transaction or propose any alternative: they can only give their vote on whether or not they are willing to execute it.
-
-Atomic commitment algorithms do not set strict requirements for the semantics of transaction prepare, commit, or rollback operations.
-Database implementers have to decide on:
-
-- When the data is considered ready to commit, and they’re just a pointer swap away from making the changes public.
-- How to perform the commit itself to make transaction results visible in the shortest timeframe possible.
-- How to roll back the changes made by the transaction if the algorithm decides not to commit.
-
-In databases, distributed transactions are executed by the component commonly known as a transaction manager.
-The transaction manager is a subsystem responsible for scheduling, coordinating, executing, and tracking transactions.
-In a distributed environment, the transaction manager is responsible for ensuring that node-local visibility guarantees are consistent with the visibility prescribed by distributed atomic operations.
-In other words, transactions commit in all partitions, and for all replicas.
-
-We will discuss two atomic commitment algorithms: two- and three-phase commits.
-The big advantage of these algorithms is that they’re easy to understand and implement, but have several shortcomings.
-In 2PC, a coordinator (or at least its substitute) has to be alive for the length of the commitment process, which significantly reduces availability.
-3PC lifts this requirement for some cases, but is prone to split brain in case of network partition.
-
-Distributed transactions in modern database systems are often implemented using consensus algorithms.
-Consensus algorithms are more involved than atomic commit ones, but have much better fault-tolerance properties,
-and decouple decisions from their initiators and allow participants to decide on a value rather than on whether or not to accept the value.
-
-### Two-Phase Commit
-
-A two-phase commit protocol is an algorithm that lets all clients in a distributed system agree either to commit a transaction or abort.
-
-Let’s start with the most straightforward protocol for a distributed commit that allows multipartition atomic updates.
-Two-phase commit (2PC) is usually discussed in the context of database transactions. 2PC executes in two phases.
-During the first phase, the decided value is distributed, and votes are collected. During the second phase, nodes just flip the switch, making the results of the first phase visible.
-
-2PC assumes the presence of a leader (or coordinator) that holds the state, collects votes, and is a primary point of reference for the agreement round.
-The rest of the nodes are called cohorts. Cohorts, in this case, are usually partitions that operate over disjoint datasets, against which transactions are performed.
-The coordinator and every cohort keep local operation logs for each executed step. Participants vote to accept or reject some value, proposed by the coordinator.
-Most often, this value is an identifier of the distributed transaction that has to be executed, but 2PC can be used in other contexts as well.
-
-The coordinator can be a node that received a request to execute the transaction, or it can be picked at random, using a leader-election algorithm,
-assigned manually, or even fixed throughout the lifetime of the system.
-The protocol does not place restrictions on the coordinator role, and the role can be transferred to another participant for reliability or performance.
-
-As the name suggests, a two-phase commit is executed in two steps:
-
-- Prepare<br>
-  The coordinator notifies cohorts about the new transaction by sending a Propose message.
-  Cohorts make a decision on whether or not they can commit the part of the transaction that applies to them.
-  If a cohort decides that it can commit, it notifies the coordinator about the positive vote. Otherwise, it responds to the coordinator, asking it to abort the transaction.
-  All decisions taken by cohorts are persisted in the coordinator log, and each cohort keeps a copy of its decision locally.
-- Commit/abort<br>
-  Operations within a transaction can change state across different partitions (each represented by a cohort).
-  If even one of the cohorts votes to abort the transaction, the coordinator sends the Abort message to all of them.
-  Only if all cohorts have voted positively does the coordinator send them a final Commit message.
-
-This process is shown in Figure 13-1.
-
-<div style="text-align: center;">
-
-![2PC](../img/2PC.png)
-
-</div>
-
-<p style="text-align: center;">
-Fig5. Two-phase commit protocol. <br>During the first phase, cohorts are notified about the new transaction. During the second phase, the transaction is committed or aborted.
-</p>
-
-During the prepare phase, the coordinator distributes the proposed value and collects votes from the participants on whether or not this proposed value should be committed.
-Cohorts may choose to reject the coordinator’s proposal if, for example, another conflicting transaction has already committed a different value.
-
-After the coordinator has collected the votes, it can make a decision on whether to commit the transaction or abort it.
-If all cohorts have voted positively, it decides to commit and notifies them by sending a Commit message.
-Otherwise, the coordinator sends an Abort message to all cohorts and the transaction gets rolled back.
-In other words, if one node rejects the proposal, the whole round is aborted.
-
-During each step the coordinator and cohorts have to write the results of each operation to durable storage to be able to reconstruct the state and recover in case of local failures,
-and be able to forward and replay results for other participants.
-
-In the context of database systems, each 2PC round is usually responsible for a single transaction.
-During the prepare phase, transaction contents (operations, identifiers, and other metadata) are transferred from the coordinator to the cohorts.
-The transaction is executed by the cohorts locally and is left in a partially committed state (sometimes called precommitted),
-making it ready for the coordinator to finalize execution during the next phase by either committing or aborting it.
-By the time the transaction commits, its contents are already stored durably on all other nodes.
-
-#### Cohort Failures in 2PC
-
-“Let’s consider several failure scenarios. For example, as Figure 13-2 shows, if one of the cohorts fails during the propose phase, the coordinator cannot proceed with a commit, since it requires all votes to be positive. If one of the cohorts is unavailable, the coordinator will abort the transaction. This requirement has a negative impact on availability: failure of a single node can prevent transactions from happening. Some systems, for example, Spanner (see “Distributed Transactions with Spanner”), perform 2PC over Paxos groups rather than individual nodes to improve protocol availability.”
-
-“The main idea behind 2PC is a promise by a cohort that, once it has positively responded to the proposal, it will not go back on its decision, so only the coordinator can abort the transaction.
-
-If one of the cohorts has failed after accepting the proposal, it has to learn about the actual outcome of the vote before it can serve values correctly, since the coordinator might have aborted the commit due to the other cohorts’ decisions. When a cohort node recovers, it has to get up to speed with a final coordinator decision. Usually, this is done by persisting the decision log on the coordinator side and replicating decision values to the failed participants. Until then, the cohort cannot serve requests because it is in an inconsistent state.
-
-Since the protocol has multiple spots where processes are waiting for the other participants (when the coordinator collects votes, or when the cohort is waiting for the commit/abort phase), link failures might lead to message loss, and this wait will continue indefinitely. If the coordinator does not receive a response from the replica during the propose phase, it can trigger a timeout and abort the transaction.”
-
-#### Coordinator Failures in 2PC
-
-If one of the cohorts does not receive a commit or abort command from the coordinator during the second phase, as shown in Figure 13-3,
-it should attempt to find out which decision was made by the coordinator.
-The coordinator might have decided upon the value but wasn’t able to communicate it to the particular replica.
-In such cases, information about the decision can be replicated from the peers’ transaction logs or from the backup coordinator.
-Replicating commit decisions is safe since it’s always unanimous: the whole point of 2PC is to either commit or abort on all sites, and commit on one cohort implies that all other cohorts have to commit.
-
-During the first phase, the coordinator collects votes and, subsequently, promises from cohorts, that they will wait for its explicit commit or abort command.
-If the coordinator fails after collecting the votes, but before broadcasting vote results, the cohorts end up in a state of uncertainty.
-This is shown in Figure 13-4. Cohorts do not know what precisely the coordinator has decided, and whether or not any of the participants (potentially also unreachable) might have been notified about the transaction results.
-
-Inability of the coordinator to proceed with a commit or abort leaves the cluster in an undecided state.
-This means that cohorts will not be able to learn about the final decision in case of a permanent coordinator failure.
-Because of this property, we say that 2PC is a blocking atomic commitment algorithm.
-If the coordinator never recovers, its replacement has to collect votes for a given transaction again, and proceed with a final decision.
-
-Many databases use 2PC: MySQL, PostgreSQL, MongoDB,2 and others.
-Two-phase commit is often used to implement distributed transactions because of its simplicity (it is easy to reason about, implement, and debug) and low overhead (message complexity and the number of round-trips of the protocol are low).
-It is important to implement proper recovery mechanisms and have backup coordinator nodes to reduce the chance of the failures just described.
-
-<div style="text-align: center;">
-
-![3PC](../img/3PC.png)
-
-</div>
-
-<p style="text-align: center;">
-Fig5. Three-phase commit
-</p>
-
-During the propose step, similar to 2PC, the coordinator distributes the proposed value and collects votes from cohorts, as shown in Figure 13-5.
-If the coordinator crashes during this phase and the operation times out, or if one of the cohorts votes negatively, the transaction will be aborted.
-
-After collecting the votes, the coordinator makes a decision.
-If the coordinator decides to proceed with a transaction, it issues a Prepare command.
-It may happen that the coordinator cannot distribute prepare messages to all cohorts or it fails to receive their acknowledgments.
-In this case, cohorts may abort the transaction after timeout, since the algorithm hasn’t moved all the way to the prepared state.
-
-As soon as all the cohorts successfully move into the prepared state and the coordinator has received their prepare acknowledgments,
-the transaction will be committed if either side fails. This can be done since all participants at this stage have the same view of the state.
-
-#### Coordinator Failures in 3PC
-
-All state transitions are coordinated, and cohorts can’t move on to the next phase until everyone is done with the previous one: the coordinator has to wait for the replicas to continue.
-Cohorts can eventually abort the transaction if they do not hear from the coordinator before the timeout, if they didn’t move past the prepare phase.
-
-As we discussed previously, 2PC cannot recover from coordinator failures, and cohorts may get stuck in a nondeterministic state until the coordinator comes back.
-3PC avoids blocking the processes in this case and allows cohorts to proceed with a deterministic decision.
-
-The worst-case scenario for the 3PC is a network partition, shown in Figure 13-6. Some nodes successfully move to the prepared state, and now can proceed with commit after the timeout.
-Some can’t communicate with the coordinator, and will abort after the timeout.
-This results in a split brain: some nodes proceed with a commit and some abort, all according to the protocol, leaving participants in an inconsistent and contradictory state.
-
-While in theory 3PC does, to a degree, solve the problem with 2PC blocking, it has a larger message overhead, introduces potential contradictions, and does not work well in the presence of network partitions.
-This might be the primary reason 3PC is not widely used in practice.
-
-### Three-Phase Commit
-
-To make an atomic commitment protocol robust against coordinator failures and avoid undecided states, the three-phase commit (3PC) protocol adds an extra step,
-and timeouts on both sides that can allow cohorts to proceed with either commit or abort in the event of coordinator failure, depending on the system state.
-3PC assumes a synchronous model and that communication failures are not possible.
-
-3PC adds a prepare phase before the commit/abort step, which communicates cohort states collected by the coordinator during the propose phase,
-allowing the protocol to carry on even if the coordinator fails.
-All other properties of 3PC and a requirement to have a coordinator for the round are similar to its two-phase sibling.
-Another useful addition to 3PC is timeouts on the cohort side. Depending on which step the process is currently executing, either a commit or abort decision is forced on timeout.
-
-As Figure 13-5 shows, the three-phase commit round consists of three steps:
-
-- Propose<br>
-  The coordinator sends out a proposed value and collects the votes.
-- Prepare<br>
-  The coordinator notifies cohorts about the vote results.
-  If the vote has passed and all cohorts have decided to commit, the coordinator sends a Prepare message, instructing them to prepare to commit. Otherwise, an Abort message is sent and the round completes.
-- Commit<br>
-  Cohorts are notified by the coordinator to commit the transaction.
-
-### TCC
-
-
-Try Confirm Canel
-
-XA-2PC变种
-
-
-实现自由度高 将实现成本转移给component
-
-短事务 柔性事务锁定资源少 性能高
-
-对业务侵入性强 实现难度大
-
-
-Component需要实现try/confirm/canel
-
-
-Component 幂等职责:
-- try/confirm/cancel at least one
-- 网络问题 try可能延迟丢失 cancel先到达 需要支持空回滚 忽略后续try
-
-
-在异步轮询任务兜底下 try/confirm存在失败可能
-
-
-### Saga
-
-proxy
-
-MySQL
-
-## MVCC
-
-- Multi-Version Two-Phase Locking
-- Multi-Version Optimistic Concurrency Control
-- Multi-Version Timestamp Ordering
-
-## Summary
-
-We discussed several widely used isolation levels, in particular read committed, snapshot isolation (sometimes called repeatable read), and serializable.
-We characterized those isolation levels by discussing various examples of race conditions:
-
-- **Dirty reads** <br>
-  One client reads another client’s writes before they have been committed.
-  The read committed isolation level and stronger levels prevent dirty reads.
-- **Dirty writes** <br>
-  One client overwrites data that another client has written, but not yet committed.
-  Almost all transaction implementations prevent dirty writes.
-- **Read skew (nonrepeatable reads)** <br>
-  A client sees different parts of the database at different points in time. This issue is most commonly prevented with snapshot isolation, which allows a transaction to read from a consistent snapshot at one point in time.
-  It is usually implemented with multi-version concurrency control (MVCC).
-- **Lost updates** <br>
-  Two clients concurrently perform a read-modify-write cycle. One overwrites the other’s write without incorporating its changes, so data is lost.
-  Some implementations of snapshot isolation prevent this anomaly automatically, while others require a manual lock (`SELECT FOR UPDATE`).
-- **Write skew** <br>
-  A transaction reads something, makes a decision based on the value it saw, and writes the decision to the database.
-  However, by the time the write is made, the premise of the decision is no longer true. Only serializable isolation prevents this anomaly.
-- **Phantom reads** <br>
-  A transaction reads objects that match some search condition. Another client makes a write that affects the results of that search.
-  Snapshot isolation prevents straightforward phantom reads, but phantoms in the context of write skew require special treatment, such as index-range locks.
-
-
-如果能用补偿和事务消息解决的场景，尽量不要上分布式事务来增加复杂度
-
-## Links
-
-- [MySQL Transaction](/docs/CS/DB/MySQL/Transaction.md)
-
-## References
-
-1. [ACID vs. BASE and SQL vs. NoSQL](https://marcobrambillapolimi.files.wordpress.com/2019/01/01-nosql-overview.pdf)
-2. [A Critique of ANSI SQL Isolation Levels](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-95-51.pdf)
-3. [Serializable Isolation for Snapshot Databases](https://courses.cs.washington.edu/courses/cse444/08au/544M/READING-LIST/fekete-sigmod2008.pdf)
-4. [A Critique of ANSI SQL Isolation Levels](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-95-51.pdf)
-5. [An Empirical Evaluation of In-Memory Multi-Version Concurrency Control](https://db.cs.cmu.edu/papers/2017/p781-wu.pdf)
-6. [Serializable Snapshot Isolation in PostgreSQL](https://www.drkp.net/papers/ssi-vldb12.pdf)
-7. [Serializable, Lockless, Distributed: Isolation in CockroachDB](https://www.cockroachlabs.com/blog/serializable-lockless-distributed-isolation-cockroachdb/)
-8. [Large-scale Incremental Processing Using Distributed Transactions and Notifications](https://www.usenix.org/legacy/event/osdi10/tech/full_papers/Peng.pdf)
+避免并发问题的最简单方法是完全删除并发：一次只执行一个事务，以串行顺序在单个线程上执行。
+通过这样做，我们完全绕过了检测和防止事务之间冲突的问题：由此产生的隔离根据定义是 serializable。

@@ -1,51 +1,41 @@
-## Introduction
+## 介绍
 
-Redis provides a different range of persistence options:
+Redis 提供了不同范围的持久化选项：
 
-- **RDB** (Redis Database): The RDB persistence performs point-in-time snapshots of your dataset at specified intervals.
-- **AOF** (Append Only File): The AOF persistence logs every write operation received by the server, that will be played again at server startup, reconstructing the original dataset.
-  Commands are logged using the same format as the Redis protocol itself, in an append-only fashion. Redis is able to [rewrite the log](/docs/CS/DB/Redis/persist.md?id=rewriting) in the background when it gets too big.
-- **No persistence**: If you wish, you can disable persistence completely, if you want your data to just exist as long as the server is running.
-- **RDB + AOF**: It is possible to combine both AOF and RDB in the same instance.
-  Notice that, in this case, when Redis restarts the AOF file will be used to reconstruct the original dataset since it is guaranteed to be the most complete.
+- **RDB**（Redis Database）：RDB 持久化在指定时间间隔对数据集执行时间点快照。
+- **AOF**（Append Only File）：AOF 持久化记录服务器接收到的每个写操作，这些操作将在服务器启动时重新执行，重建原始数据集。
+  命令以 Redis 协议本身的相同格式记录，采用追加写入方式。当 AOF 文件过大时，Redis 能够在后台[重写日志](/docs/CS/DB/Redis/persist.md?id=rewriting)。
+- **无持久化**：如果需要，可以完全禁用持久化，使数据只在服务器运行时存在。
+- **RDB + AOF**：可以在同一实例中同时使用 AOF 和 RDB。
+  注意，在这种情况下，当 Redis 重启时，将使用 AOF 文件重建原始数据集，因为它被保证是最完整的。
 
-The most important thing to understand is the different trade-offs between the RDB and AOF persistence.
-
-
-
-
-
-
+最重要的是理解 RDB 和 AOF 持久化之间的不同权衡。
 
 ## RDB
 
-RDB advantages:
+RDB 优势：
 
-- RDB is a very compact single-file point-in-time representation of your Redis data. RDB files are perfect for backups.
-  For instance you may want to archive your RDB files every hour for the latest 24 hours, and to save an RDB snapshot every day for 30 days.
-  This allows you to easily restore different versions of the data set in case of disasters.
-- RDB is very good for disaster recovery, being a single compact file that can be transferred to far data centers, or onto Amazon S3 (possibly encrypted).
-- RDB maximizes Redis performances since the only work the Redis parent process needs to do in order to persist is forking a child that will do all the rest.
-  The parent instance will never perform disk I/O or alike.
-- RDB allows faster restarts with big datasets compared to AOF.
-- On replicas, RDB supports partial resynchronizations after restarts and failovers.
+- RDB 是 Redis 数据的一个非常紧凑的单文件时间点表示。RDB 文件非常适合备份。
+  例如，你可能希望每小时的 RDB 文件归档最近 24 小时，并每天保存一个 RDB 快照保留 30 天。
+  这允许你在灾难发生时轻松恢复不同版本的数据集。
+- RDB 非常适合灾难恢复，它是一个紧凑的单文件，可以传输到远程数据中心或 Amazon S3（可能加密）。
+- RDB 最大化 Redis 性能，因为 Redis 父进程为了持久化唯一需要做的是 fork 一个子进程，子进程将完成其余所有工作。
+  父进程永远不会执行磁盘 I/O 或类似操作。
+- 与 AOF 相比，RDB 允许大数据集更快地重启。
+- 在副本上，RDB 支持重启和故障转移后的部分重新同步。
 
-RDB disadvantages:
+RDB 缺点：
 
-- RDB is NOT good if you need to minimize the chance of data loss in case Redis stops working (for example after a power outage).
-  You can configure different *save points* where an RDB is produced (for instance after at least five minutes and 100 writes against the data set, but you can have multiple save points).
-  However you'll usually create an RDB snapshot every five minutes or more, so in case of Redis stopping working without a correct shutdown for any reason you should be prepared to lose the latest minutes of data.
-- RDB needs to fork() often in order to persist on disk using a child process.
-  Fork() can be time consuming if the dataset is big, and may result in Redis to stop serving clients for some millisecond or even for one second if the dataset is very big and the CPU performance not great.
-  AOF also needs to fork() but you can tune how often you want to rewrite your logs without any trade-off on durability.
+- 如果需要最小化 Redis 停止工作时（例如断电后）的数据丢失可能性，RDB 并不好。
+  你可以配置不同的*save 点*来生成 RDB（例如至少五分钟且有 100 次写入时，但你可以有多个保存点）。
+  然而，你通常每五分钟或更长时间创建一个 RDB 快照，因此如果 Redis 因任何原因未正确关闭而停止工作，你应该做好丢失最近几分钟数据的准备。
+- RDB 需要经常 fork() 以便使用子进程持久化到磁盘。
+  如果数据集很大，fork() 可能会很耗时，并可能导致 Redis 停止服务客户端几毫秒，甚至如果数据集非常大且 CPU 性能不佳，可能达到一秒。
+  AOF 也需要 fork()，但你可以调整重写日志的频率，而不会影响持久性。
 
-By default Redis saves snapshots of the dataset on disk, in a binary file called `dump.rdb`.
-
-
+默认情况下，Redis 将数据集快照保存到磁盘上的二进制文件中，名为 `dump.rdb`。
 
 RDB 文件分为两个阶段，RDB 文件生成阶段和加载阶段。
-
-
 
 **1. RDB 文件生成**
 
@@ -58,23 +48,15 @@ RDB 加载分为以下两种情况：
 - 如果 Redis 是主服务器运行模式的话，在载入 RDB 文件时，程序会对文件中保存的键进行检查，过期键不会被载入到数据库中。所以过期键不会对载入 RDB 文件的主服务器造成影响；
 - 如果 Redis 是从服务器运行模式的话，在载入 RDB 文件时，不论键是否过期都会被载入到数据库中。但由于主从服务器在进行数据同步时，从服务器的数据会被清空。所以一般来说，过期键对载入 RDB 文件的从服务器也不会造成影响。
 
-
-
 当 Redis 运行在主从模式下时，从库不会进行过期扫描，从库对过期的处理是被动的。也就是即使从库中的 key 过期了，如果有客户端访问从库时，依然可以得到 key 对应的值，像未过期的键值对一样返回。
 
-从库的过期键处理依靠主服务器控制，主库在 key 到期时，会在 AOF 文件里增加一条 del 指令，同步到所有的从库，从库通过执行这条 del 指令来删除过期的 key
-
-
-
-
+从库的过期键处理依靠主服务器控制，主库在 key 到期时，会在 AOF 文件里增加一条 del 指令，同步到所有的从库，从库通过执行这条 del 指令来删除过期的 key。
 
 **RDB 触发方式**
 
+你可以配置 Redis，使其在数据集每 N 秒至少有 M 次更改时保存数据集，或者你可以手动调用 `SAVE` 或 `BGSAVE` 命令。
 
-
-You can configure Redis to have it save the dataset every N seconds if there are at least M changes in the dataset, or you can manually call the `SAVE` or `BGSAVE` commands.
-
-For example, this configuration will make Redis automatically dump the dataset to disk every 60 seconds if at least 1000 keys changed:
+例如，以下配置将使 Redis 每 60 秒自动将数据集转储到磁盘，如果至少有 1000 个键发生更改：
 
 ```conf
 save 60 1000
@@ -85,25 +67,19 @@ save 60 1000
 1. 频繁生成 RDB 文件写入磁盘，磁盘压力过大。会出现上一个 RDB 还未执行完，下一个又开始生成，陷入死循环。
 2. fork 出 bgsave 子进程会阻塞主线程，主线程的内存越大，阻塞时间越长。
 
+`flushall` 命令用于清空 Redis 数据库，在生产环境下一定慎用，当 Redis 执行了 `flushall` 命令之后，则会触发自动持久化，把 RDB 文件清空。
 
-
-`flushall` 命令用于清空 Redis 数据库，在生产环境下一定慎用，当 Redis 执行了 `flushall` 命令之后，则会触发自动持久化，把 RDB 文件清空
-
-
-
-在 Redis 主从复制中，当从节点执行全量复制操作时，主节点会执行 `bgsave` 命令，并将 RDB 文件发送给从节点
+在 Redis 主从复制中，当从节点执行全量复制操作时，主节点会执行 `bgsave` 命令，并将 RDB 文件发送给从节点。
 
 ### save
 
-Whenever Redis needs to dump the dataset to disk, this is what happens:
+每当 Redis 需要将数据集转储到磁盘时，会发生以下情况：
 
-- Redis [forks](/docs/CS/OS/Linux/proc/process.md?id=fork). We now have a child and a parent process.
-- The child starts to write the dataset to a temporary RDB file.
-- When the child is done writing the new RDB file, it replaces the old one.
+- Redis [fork](/docs/CS/OS/Linux/proc/process.md?id=fork) 一个子进程。现在我们有了一个子进程和一个父进程。
+- 子进程开始将数据集写入临时 RDB 文件。
+- 当子进程完成写入新的 RDB 文件后，它会替换旧文件。
 
-This method allows Redis to benefit from **copy-on-write** semantics.
-
-
+这种方法允许 Redis 受益于**写时复制**语义。
 
 BGSAVE 命令实现
 
@@ -146,13 +122,11 @@ void bgsaveCommand(client *c) {
 }
 ```
 
-
-可以看见fork()函数的执行，在子进程中执行了rdbSave()函数，父进程则执行了一些设置状态的操作
-
+可以看到 fork() 函数的执行，在子进程中执行了 rdbSave() 函数，父进程则执行了一些设置状态的操作。
 
 #### rdbSaveBackground
 
-`BGSAVE` command or serverCron
+`BGSAVE` 命令或 serverCron 调用
 
 ```c
 // rdb.c
@@ -194,7 +168,7 @@ int rdbSaveBackground(char *filename, rdbSaveInfo *rsi) {
 
 #### saveDoneHandler
 
-When a background RDB saving/transfer terminates, call the right handler.
+当后台 RDB 保存/传输终止时，调用相应的处理程序。
 
 ```c
 // rdb.c
@@ -221,10 +195,10 @@ void backgroundSaveDoneHandler(int exitcode, int bysignal) {
 }
 ```
 
-
 #### rdbSave
-刚开始生成一个临时的RDB文件，只有在执行成功后，才会进行rename操作，然后以写权限打开文件，然后调用了rdbSaveRio()函数将数据库的内容写到临时的RDB文件，
-之后进行刷新缓冲区和同步操作，就关闭文件进行rename操作和更新服务器状态
+
+刚开始生成一个临时的 RDB 文件，只有在执行成功后，才会进行 rename 操作，然后以写权限打开文件，然后调用了 rdbSaveRio() 函数将数据库的内容写到临时的 RDB 文件，
+之后进行刷新缓冲区和同步操作，就关闭文件进行 rename 操作和更新服务器状态。
 
 ```c
 int rdbSave(int req, char *filename, rdbSaveInfo *rsi, int rdbflags) {
@@ -270,7 +244,8 @@ int rdbSave(int req, char *filename, rdbSaveInfo *rsi, int rdbflags) {
     return C_OK;
 }
 ```
-rio是Redis抽象的IO层，它可以面向三种对象，分别是缓冲区，文件IO和socket IO
+
+rio 是 Redis 抽象的 IO 层，它可以面向三种对象，分别是缓冲区，文件 IO 和 socket IO。
 
 #### saveRio
 
@@ -316,19 +291,15 @@ werr:
 }
 ```
 
-call `rdbSaveKeyValuePair`
+调用 `rdbSaveKeyValuePair`
 
-一个空数据库持久化生成的dump.rdb文件，使用od -cx dump.rdb命令查看一下
-
-
-
-
+一个空数据库持久化生成的 dump.rdb 文件，使用 od -cx dump.rdb 命令查看一下。
 
 ### load RDB
 
 #### loadDataFromDisk
 
-Redis 启动时调用 loadDataFromDisk 函数从磁盘 rdb 文件加载数据到内存
+Redis 启动时调用 loadDataFromDisk 函数从磁盘 rdb 文件加载数据到内存。
 
 ```c
 int main(int argc, char **argv) {
@@ -339,11 +310,7 @@ int main(int argc, char **argv) {
 }
 ```
 
-
-
-
-
-优先AOF文件 没有AOF才加载RDB文件
+优先 AOF 文件，没有 AOF 才加载 RDB 文件。
 
 - loadAppendOnlyFile
 
@@ -366,7 +333,7 @@ void loadDataFromDisk(void) {
 }
 ```
 
-Load an RDB file from the rio stream 'rdb'. On success C_OK is returned, otherwise C_ERR is returned and 'errno' is set accordingly.
+从 rio 流 'rdb' 加载 RDB 文件。成功返回 C_OK，否则返回 C_ERR 并相应设置 'errno'。
 
 ```c
 int rdbLoadRio(rio *rdb, int rdbflags, rdbSaveInfo *rsi) {
@@ -374,99 +341,78 @@ int rdbLoadRio(rio *rdb, int rdbflags, rdbSaveInfo *rsi) {
 
 ## AOF
 
-说到日志，我们比较熟悉的是数据库的写前日志（Write Ahead Log,  WAL），也就是说，在实际写数据前，先把修改的数据记到日志文件中，以便故障时进行恢复。不过，AOF 日志正好相反，它是写后日志，“写后”的意思是 Redis 是先执行命令，把数据写入内存，然后才记录日志
+说到日志，我们比较熟悉的是数据库的写前日志（Write Ahead Log, WAL），也就是说，在实际写数据前，先把修改的数据记到日志文件中，以便故障时进行恢复。不过，AOF 日志正好相反，它是写后日志，"写后"的意思是 Redis 是先执行命令，把数据写入内存，然后才记录日志。
 
-AOF advantages:
+AOF 优势：
 
-- Using AOF Redis is much more durable: you can have different fsync policies: no fsync at all, fsync every second, fsync at every query.
-  With the default policy of fsync every second write performances are still great (fsync is performed using a background thread and the main thread will try hard to perform writes when no fsync is in progress.) but you can only lose one second worth of writes.
-- The AOF log is an append only log, so there are no seeks, nor corruption problems if there is a power outage. 
-  Even if the log ends with an half-written command for some reason (disk full or other reasons) the redis-check-aof tool is able to fix it easily.
-- Redis is able to automatically rewrite the AOF in background when it gets too big.
-  The rewrite is completely safe as while Redis continue
-  s appending to the old file, a completely new one is produced with the minimal set of operations needed to create the current data set, and once this second file is ready Redis switches the two and starts appending to the new one.
-- AOF contains a log of all the operations one after the other in an easy to understand and parse format.
-  You can even easily export an AOF file.
-  For instance even if you've accidentally flushed everything using the `FLUSHALL` command, as long as no rewrite of the log was performed in the meantime, you can still save your data set just by stopping the server, removing the latest command, and restarting Redis again.
+- 使用 AOF，Redis 更持久：你可以使用不同的 fsync 策略：从不 fsync、每秒 fsync、每次查询 fsync。
+  使用默认的每秒 fsync 策略，写入性能仍然很好（fsync 由后台线程执行，主线程会尽力在没有 fsync 进行时执行写入），但你最多可能丢失一秒钟的写入。
+- AOF 日志是仅追加日志，因此没有寻道问题，也不会因断电而损坏。
+  即使日志以某些原因（磁盘满或其他原因）的半写命令结尾，redis-check-aof 工具也能轻松修复。
+- 当 AOF 文件过大时，Redis 能够在后台自动重写。
+  重写是完全安全的，因为当 Redis 继续追加到旧文件时，会生成一个全新的文件，其中包含创建当前数据集所需的最少操作集，一旦第二个文件准备好，Redis 切换两者并开始追加到新文件。
+- AOF 包含所有操作的日志，以易于理解和解析的格式一个接一个地排列。
+  你甚至可以轻松导出 AOF 文件。
+  例如，即使你不小心使用 `FLUSHALL` 命令清除了所有内容，只要在此期间没有执行日志重写，你仍然可以通过停止服务器、删除最新命令并重新启动 Redis 来保存数据集。
 
-AOF disadvantages:
+AOF 缺点：
 
-- AOF files are usually bigger than the equivalent RDB files for the same dataset.
-- AOF can be slower than RDB depending on the exact fsync policy. In general with fsync set to *every second* performance is still very high, and with fsync disabled it should be exactly as fast as RDB even under high load.
-  Still RDB is able to provide more guarantees about the maximum latency even in the case of an huge write load.
-- In the past we experienced rare bugs in specific commands (for instance there was one involving blocking commands like `BRPOPLPUSH`) causing the AOF produced to not reproduce exactly the same dataset on reloading.
-  These bugs are rare and we have tests in the test suite creating random complex datasets automatically and reloading them to check everything is fine.
-  However, these kind of bugs are almost impossible with RDB persistence.
-  To make this point more clear: the Redis AOF works by incrementally updating an existing state, like MySQL or MongoDB does, while the RDB snapshotting creates everything from scratch again and again, that is conceptually more robust.
+- 对于相同的数据集，AOF 文件通常比等效的 RDB 文件大。
+- 根据具体的 fsync 策略，AOF 可能比 RDB 慢。通常，将 fsync 设置为*每秒一次*时性能仍然非常高，禁用 fsync 时即使在高负载下也应与 RDB 一样快。
+  尽管如此，即使在大量写入负载的情况下，RDB 也能在最大延迟方面提供更多保证。
+- 过去，我们在特定命令中遇到过罕见的错误（例如有一个涉及阻塞命令如 `BRPOPLPUSH` 的错误），导致生成的 AOF 在重新加载时无法完全重现相同的数据集。
+  这些错误很少见，我们在测试套件中有测试，自动创建随机复杂数据集并重新加载以检查一切正常。
+  然而，这类错误在 RDB 持久化中几乎不可能发生。
+  更明确地说：Redis AOF 通过增量更新现有状态工作，就像 MySQL 或 MongoDB 所做的那样，而 RDB 快照则一次又一次地从零开始创建所有内容，这在概念上更健壮。
 
-However
+然而：
 
-1. It should be noted that every time the AOF is rewritten by Redis it is recreated from scratch starting from the actual data contained in the data set, making resistance to bugs stronger compared to an always appending AOF file (or one rewritten reading the old AOF instead of reading the data in memory).
-2. We have never had a single report from users about an AOF corruption that was detected in the real world.
+1. 需要注意的是，每次 Redis 重写 AOF 时，都会基于数据集中包含的实际数据从头开始重新创建，这使得对错误的抵抗力比始终追加的 AOF 文件（或通过读取旧 AOF 而不是读取内存中数据来重写的 AOF）更强。
+2. 我们从未收到过用户关于在现实世界中检测到 AOF 损坏的报告。
 
 **Redis < 7.0**
 
-- AOF can use a lot of memory if there are writes to the database during a rewrite (these are buffered in memory and written to the new AOF at the end).
-- All write commands that arrive during rewrite are written to disk twice.
-- Redis could freeze writing and fsyncing these write commands to the new AOF file at the end of the rewrite.
+- 如果重写期间有对数据库的写入，AOF 可能会使用大量内存（这些写入缓冲在内存中，最后写入新 AOF）。
+- 重写期间到达的所有写入命令都会写入磁盘两次。
+- 在重写结束时，Redis 可能会冻结写入和 fsync 这些写入命令到新 AOF 文件。
 
-You can turn on the AOF in your configuration file:
+你可以在配置文件中开启 AOF：
 
 ```
 appendonly yes
 ```
 
-From now on, every time Redis receives a command that changes the dataset (e.g. `SET`) it will append it to the AOF.
-When you restart Redis it will re-play the AOF to rebuild the state like [binlog](/docs/CS/DB/MySQL/binlog.md) in MySQL
+从现在开始，每当 Redis 收到更改数据集的命令（例如 `SET`）时，它都会将其追加到 AOF。
+当你重启 Redis 时，它将重放 AOF 以重建状态，就像 MySQL 中的 [binlog](/docs/CS/DB/MySQL/binlog.md) 一样。
 
-
-
-检查是否启动
+检查是否启动：
 
 ```
 config get appendonly
 ```
 
-
-
-
-
-
-
 写后日志避免了额外的检查开销，不需要对执行的命令进行语法检查。如果使用写前日志的话，就需要先检查语法是否有误，否则日志记录了错误的命令，在使用日志恢复的时候就会出错。
 
 AOF 日志是主线程执行，将日志写入磁盘过程中，如果磁盘压力大就会导致写磁盘很慢，导致后续的「写」指令阻塞。
 
+从 Redis 7.0.0 开始，Redis 使用多部分 AOF 机制。
+也就是说，原始的单 AOF 文件被拆分为基础文件（最多一个）和增量文件（可能有多个）。
+基础文件表示 AOF 重写时数据的初始（RDB 或 AOF 格式）快照。
+增量文件包含自上一个基础 AOF 文件创建以来的增量更改。所有这些文件都放在一个单独的目录中，并由一个清单文件跟踪。
 
+你可以配置 Redis 将数据 `fsync` 到磁盘的频率。
+有三个选项：
 
+- `appendfsync always`：每次将新命令追加到 AOF 时 `fsync`。非常非常慢，非常安全。
+  注意，命令是在来自多个客户端或管道的命令批次执行后追加到 AOF，因此这意味着在发送回复之前进行一次写入和一次 fsync。
+- `appendfsync everysec`：每秒 `fsync`。足够快（在 2.4 中可能与快照一样快），如果发生灾难，你可能丢失 1 秒的数据。
+- `appendfsync no`：从不 `fsync`，将数据完全交给操作系统。最快但最不安全的方法。
+  通常，Linux 使用此配置每 30 秒刷新一次数据，但这取决于内核的确切调优。
 
+建议（和默认）策略是每秒 `fsync`。它既非常快又相当安全。
+`always` 策略在实践中非常慢，但它支持组提交，因此如果有多个并行写入，Redis 将尝试执行单个 `fsync` 操作。
 
-
-
-
-
-Since Redis 7.0.0, Redis uses a multi part AOF mechanism.
-That is, the original single AOF file is split into base file (at most one) and incremental files (there may be more than one).
-The base file represents an initial (RDB or AOF format) snapshot of the data present when the AOF is rewritten.
-The incremental files contains incremental changes since the last base AOF file was created. All these files are put in a separate directory and are tracked by a manifest file.
-
-You can configure how many times Redis will `fsync` data on disk.
-There are three options:
-
-- `appendfsync always`: `fsync` every time new commands are appended to the AOF. Very very slow, very safe.
-  Note that the commands are apended to the AOF after a batch of commands from multiple clients or a pipeline are executed, so it means a single write and a single fsync (before sending the replies).
-- `appendfsync everysec`: `fsync` every second. Fast enough (in 2.4 likely to be as fast as snapshotting), and you can lose 1 second of data if there is a disaster.
-- `appendfsync no`: Never `fsync`, just put your data in the hands of the Operating System. The faster and less safe method.
-  Normally Linux will flush data every 30 seconds with this configuration, but it's up to the kernel exact tuning.
-
-The suggested (and default) policy is to `fsync` every second. It is both very fast and pretty safe.
-The `always` policy is very slow in practice, but it supports group commit, so if there are multiple parallel writes Redis will try to perform a single `fsync` operation.
-
-
-
-
-
-AOF缓冲区是一个简单动态字符串（sds）
+AOF 缓冲区是一个简单动态字符串（sds）。
 ```c
 // server.h
 struct redisServer {
@@ -476,7 +422,7 @@ struct redisServer {
 
 ### append
 
-Propagate the specified command (in the context of the specified database id) to AOF and Slaves.
+将指定命令（在指定数据库 ID 的上下文中）传播到 AOF 和从节点。
 ```c
 void propagate(struct redisCommand *cmd, int dbid, robj **argv, int argc,
                int flags)
@@ -486,9 +432,10 @@ void propagate(struct redisCommand *cmd, int dbid, robj **argv, int argc,
         feedAppendOnlyFile(cmd,dbid,argv,argc);
 }
 ```
+
 #### feedAppendOnlyFile
 
-feedAppendOnlyFile创建一个空的简单动态字符串（sds），将当前所有追加命令操作都追加到这个sds中，最终将这个sds追加到`server.aof_buf`
+feedAppendOnlyFile 创建一个空的简单动态字符串（sds），将当前所有追加命令操作都追加到这个 sds 中，最终将这个 sds 追加到 `server.aof_buf`。
 
 ```c
 void feedAppendOnlyFile(struct redisCommand *cmd, int dictid, robj **argv, int argc) {
@@ -507,7 +454,8 @@ void feedAppendOnlyFile(struct redisCommand *cmd, int dictid, robj **argv, int a
     if (cmd->proc == expireCommand || cmd->proc == pexpireCommand ||
         cmd->proc == expireatCommand) {
 ```
-Translate EXPIRE/PEXPIRE/EXPIREAT into PEXPIREAT
+
+将 EXPIRE/PEXPIRE/EXPIREAT 转换为 PEXPIREAT。
 ```c
         buf = catAppendOnlyExpireAtCommand(buf,cmd,argv[1],argv[2]);
     } else if (cmd->proc == setCommand && argc > 3) {
@@ -544,14 +492,15 @@ Translate EXPIRE/PEXPIRE/EXPIREAT into PEXPIREAT
          * for the replication itself. */
         buf = catAppendOnlyGenericCommand(buf,argc,argv);
     }
-
 ```
-Append to the AOF buffer. This will be flushed on disk just before of re-entering the event loop, so before the client will get a positive reply about the operation performed.
+
+追加到 AOF 缓冲区。这将在重新进入事件循环之前刷新到磁盘，因此在客户端获得关于操作的肯定回复之前。
 ```c
     if (server.aof_state == AOF_ON)
         server.aof_buf = sdscatlen(server.aof_buf,buf,sdslen(buf));
 ```
-If a background append only file rewriting is in progress we want to accumulate the differences between the child DB and the current one in a buffer, so that when the child process will do its work we can append the differences to the new append only file.
+
+如果后台追加文件重写正在进行中，我们希望将子进程 DB 和当前 DB 之间的差异累积到缓冲区中，以便当子进程完成其工作时，我们可以将差异追加到新的追加文件。
 ```c
     if (server.child_type == CHILD_TYPE_AOF)
         aofRewriteBufferAppend((unsigned char*)buf,sdslen(buf));
@@ -560,7 +509,7 @@ If a background append only file rewriting is in progress we want to accumulate 
 }
 ```
 
-catAppendOnlyGenericCommand()函数实现了追加命令到缓冲区中
+catAppendOnlyGenericCommand() 函数实现了追加命令到缓冲区中。
 
 ```c
 sds catAppendOnlyGenericCommand(sds dst, int argc, robj **argv) {
@@ -589,25 +538,24 @@ sds catAppendOnlyGenericCommand(sds dst, int argc, robj **argv) {
 }
 ```
 
-
 ### flush
 
 #### flushAppendOnlyFile
 
-Max wait 2 seconds if sync_in_progress
+如果 sync_in_progress，最多等待 2 秒。
 
-Write the append only file buffer on disk.
+将追加文件缓冲区写入磁盘。
 
-Since we are required to write the AOF before replying to the client, and the only way the client socket can get a write is entering when the the event loop, we accumulate all the AOF writes in a memory buffer and write it on disk using this function just before entering the event loop again.
+由于我们需要在回复客户端之前写入 AOF，而客户端 socket 只有在进入事件循环时才能写入，因此我们将所有 AOF 写入累积到内存缓冲区中，并在再次进入事件循环之前使用此函数将其写入磁盘。
 
-About the 'force' argument:
+关于 'force' 参数：
 
-When the fsync policy is set to 'everysec' we may delay the flush if there is still an fsync() going on in the background thread, since for instance on Linux write(2) will be blocked by the background fsync anyway.
-When this happens we remember that there is some aof buffer to be flushed ASAP, and will try to do that in the serverCron() function.
+当 fsync 策略设置为 'everysec' 时，如果后台线程中仍有 fsync() 正在进行，我们可能会延迟刷新，因为在 Linux 上 write(2) 无论如何都会被后台 fsync 阻塞。
+当发生这种情况时，我们会记住有一些 AOF 缓冲区需要尽快刷新，并将在 serverCron() 函数中尝试这样做。
 
-However if force is set to 1 we'll write regardless of the background fsync.
+然而，如果 force 设置为 1，我们将忽略后台 fsync 直接写入。
 
-called by `serverCron` or `beforeSleep` or `prepareForShutdown`
+由 `serverCron` 或 `beforeSleep` 或 `prepareForShutdown` 调用。
 
 ```c
 // aof
@@ -619,7 +567,8 @@ void flushAppendOnlyFile(int force) {
 
     if (sdslen(server.aof_buf) == 0) {
 ```
-Check if we need to do fsync even the aof buffer is empty, because previously in AOF_FSYNC_EVERYSEC mode, fsync is called only when aof buffer is not empty, so if users stop write commands before fsync called in one second, the data in page cache cannot be flushed in time.
+
+检查是否需要在 AOF 缓冲区为空时执行 fsync，因为之前在 AOF_FSYNC_EVERYSEC 模式下，仅在 AOF 缓冲区不为空时调用 fsync，因此如果用户在一秒钟内 fsync 被调用之前停止了写入命令，页面缓存中的数据无法及时刷新。
 ```c
         if (server.aof_fsync == AOF_FSYNC_EVERYSEC &&
             server.aof_fsync_offset != server.aof_current_size &&
@@ -765,7 +714,7 @@ write
     server.aof_current_size += nwritten;
 ```
 
-Re-use AOF buffer when it is small enough. The maximum comes from the arena size of 4k minus some overhead (but is otherwise arbitrary).
+当 AOF 缓冲区足够小时重用。最大值来自 4k 的 arena 大小减去一些开销（但其他方面是任意的）。
 
 ```c
     if ((sdslen(server.aof_buf)+sdsavail(server.aof_buf)) < 4000) {
@@ -815,54 +764,47 @@ void aof_background_fsync(int fd) {
 
 ### rewriting
 
-AOF 文件重写是生成一个全新的文件，并把当前数据的最少操作命令保存到新文件上，当把所有的数据都保存至新文件之后，Redis 会交换两个文件，并把最新的持久化操作命令追加到新文件上
+AOF 文件重写是生成一个全新的文件，并把当前数据的最少操作命令保存到新文件上，当把所有的数据都保存至新文件之后，Redis 会交换两个文件，并把最新的持久化操作命令追加到新文件上。
 
-
-
-
-Log rewriting uses the same copy-on-write trick already in use for snapshotting. This is how it works:
+日志重写使用与快照相同的写时复制技术。工作原理如下：
 
 **Redis >= 7.0**
 
-* Redis [forks](/docs/CS/OS/Linux/proc/process.md?id=fork), so now we have a child and a parent process.
-* The child starts writing the new base AOF in a temporary file.
-* The parent opens a new increments AOF file to continue writing updates. If the rewriting fails, the old base and increment files (if there are any) plus this newly opened increment file represent the complete updated dataset, so we are safe.
-* When the child is done rewriting the base file, the parent gets a signal, and uses the newly opened increment file and child generated base file to build a temp manifest, and persist it.
-* Profit! Now Redis does an atomic exchange of the manifest files so that the result of this AOF rewrite takes effect. Redis also cleans up the old base file and any unused increment files.
+* Redis [fork](/docs/CS/OS/Linux/proc/process.md?id=fork) 一个子进程，现在我们有了一个子进程和一个父进程。
+* 子进程开始将新的基础 AOF 写入临时文件。
+* 父进程打开一个新的增量 AOF 文件以继续写入更新。如果重写失败，旧的基础文件和增量文件（如果有的话）加上这个新打开的增量文件代表完整的更新数据集，因此我们是安全的。
+* 当子进程完成基础文件的重写后，父进程收到信号，并使用新打开的增量文件和子进程生成的基础文件构建临时清单，并持久化它。
+* 完成！现在 Redis 原子地交换清单文件，使此次 AOF 重写的结果生效。Redis 还会清理旧的基础文件和任何未使用的增量文件。
 
 **Redis < 7.0**
 
-* Redis [forks](/docs/CS/OS/Linux/proc/process.md?id=fork), so now we have a child and a parent process.
-* The child starts writing the new AOF in a temporary file.
-* The parent accumulates all the new changes in an in-memory buffer (but at the same time it writes the new changes in the old append-only file, so if the rewriting fails, we are safe).
-* When the child is done rewriting the file, the parent gets a signal, and appends the in-memory buffer at the end of the file generated by the child.
-* Now Redis atomically renames the new file into the old one, and starts appending new data into the new file.
+* Redis [fork](/docs/CS/OS/Linux/proc/process.md?id=fork) 一个子进程，现在我们有了一个子进程和一个父进程。
+* 子进程开始将新的 AOF 写入临时文件。
+* 父进程将所有新更改累积在内存缓冲区中（但同时将新更改写入旧的追加文件，因此如果重写失败，我们是安全的）。
+* 当子进程完成文件重写后，父进程收到信号，并将内存缓冲区追加到子进程生成的文件末尾。
+* 现在 Redis 原子地将新文件重命名为旧文件，并开始将新数据追加到新文件中。
 
-Whenever you issue a `BGREWRITEAOF` Redis will write the shortest sequence of commands needed to rebuild the current dataset in memory.
+每当你发出 `BGREWRITEAOF` 命令时，Redis 将写入重建当前内存中数据集所需的最短命令序列。
 
-
-
-bgrewriteaof 
+bgrewriteaof
 
 #### rewriteAppendOnlyFileBackground
 
-
-
-call by:
+由以下调用：
 
 1. startAppendOnly
 2. bgrewriteaofCommand
 3. serverCron
 
-This is how rewriting of the append only file in background works:
+这是后台重写追加文件的方式：
 
-1. The user calls `BGREWRITEAOF`
-2. Redis calls this function, that forks():
-   a. the child rewrite the append only file in a temp file.
-   b. the parent accumulates differences in server.aof_rewrite_buf.
-3. When the child finished '2a' exists.
-4. The parent will trap the exit code, if it's OK, will append the data accumulated into server.aof_rewrite_buf into the temp file, and finally will rename(2) the temp file in the actual file name.
-   The the new file is reopened as the new append only file. Profit!
+1. 用户调用 `BGREWRITEAOF`
+2. Redis 调用此函数，该函数 fork()：
+   a. 子进程将追加文件重写到临时文件。
+   b. 父进程将差异累积在 server.aof_rewrite_buf 中。
+3. 当子进程完成 '2a' 后退出。
+4. 父进程将捕获退出代码，如果成功，将累积在 server.aof_rewrite_buf 中的数据追加到临时文件，最后将临时文件 rename(2) 为实际文件名。
+   然后新文件重新打开作为新的追加文件。完成！
 
 ```c
 int rewriteAppendOnlyFileBackground(void) {
@@ -908,8 +850,6 @@ int rewriteAppendOnlyFileBackground(void) {
     return C_OK; /* unreached */
 }
 ```
-
-
 
 ```c
 int rewriteAppendOnlyFile(char *filename) {
@@ -1083,15 +1023,13 @@ werr:
 
 ### load AOF
 
-只要开启了 AOF 持久化，并且提供了正常的 appendonly.aof 文件，在 Redis 启动时就会自定加载 AOF 文件并启动
+只要开启了 AOF 持久化，并且提供了正常的 appendonly.aof 文件，在 Redis 启动时就会自动加载 AOF 文件并启动。
 
-在 AOF 开启的情况下，即使 AOF 文件不存在，只有 RDB 文件，也不会加载 RDB 文件
+在 AOF 开启的情况下，即使 AOF 文件不存在，只有 RDB 文件，也不会加载 RDB 文件。
 
-Replay the append log file. On success C_OK is returned. On non fatal error (the append only file is zero-length) C_ERR is returned. On fatal error an error message is logged and the program exists.
+重放追加日志文件。成功返回 C_OK。非致命错误（追加文件长度为零）返回 C_ERR。致命错误时记录错误信息并退出程序。
 
-
-
-Redis 判断 AOF 文件的开头是否是 RDB 格式的，是通过关键字 `REDIS` 判断的，RDB 文件的开头一定是 `REDIS`关键字开头的
+Redis 判断 AOF 文件的开头是否是 RDB 格式的，是通过关键字 `REDIS` 判断的，RDB 文件的开头一定是 `REDIS` 关键字开头的。
 
 ```c
 /* Load the AOF files according the aofManifest pointed by am. */
@@ -1221,67 +1159,39 @@ cleanup:
 }
 ```
 
-
-
 ## mix
 
 **混合持久化优点：**
 
-- 混合持久化结合了 RDB 和 AOF 持久化的优点，开头为 RDB 的格式，使得 Redis 可以更快的启动，同时结合 AOF 的优点，有减低了大量数据丢失的风险。
+- 混合持久化结合了 RDB 和 AOF 持久化的优点，开头为 RDB 的格式，使得 Redis 可以更快的启动，同时结合 AOF 的优点，又减低了大量数据丢失的风险。
 
 **混合持久化缺点：**
 
 - AOF 文件中添加了 RDB 格式的内容，使得 AOF 文件的可读性变得很差；
-- 兼容性差，如果开启混合持久化，那么此混合持久化 AOF 文件，就不能用在 Redis 4.0 之前版本了
+- 兼容性差，如果开启混合持久化，那么此混合持久化 AOF 文件，就不能用在 Redis 4.0 之前版本了。
 
+查询是否开启混合持久化可以使用 `config get aof-use-rdb-preamble` 命令。
 
+Redis 5.0 默认是开启的。
 
-查询是否开启混合持久化可以使用 `config get aof-use-rdb-preamble` 命令
-
-Redis 5.0 默认是开启的
-
-
-
-在开启混合持久化的情况下，AOF 重写时会把 Redis 的持久化数据，以 RDB 的格式写入到 AOF 文件的开头，之后的数据再以 AOF 的格式化追加的文件的末尾
-
-
-
-
-
-
+在开启混合持久化的情况下，AOF 重写时会把 Redis 的持久化数据，以 RDB 的格式写入到 AOF 文件的开头，之后的数据再以 AOF 的格式化追加的文件的末尾。
 
 ## Interactions
 
-Redis >= 2.4 makes sure to avoid triggering an AOF rewrite when an RDB snapshotting operation is already in progress, or allowing a BGSAVE while the AOF rewrite is in progress. 
-This prevents two Redis background processes from doing heavy disk I/O at the same time.
+Redis >= 2.4 确保在 RDB 快照操作已在进行中时避免触发 AOF 重写，或者在 AOF 重写进行中时避免允许 BGSAVE。
+这防止了两个 Redis 后台进程同时执行繁重的磁盘 I/O。
 
-When snapshotting is in progress and the user explicitly requests a log rewrite operation using `BGREWRITEAOF` the server will reply with an OK status code telling the user the operation is scheduled, and the rewrite will start once the snapshotting is completed.
+当快照正在进行且用户使用 `BGREWRITEAOF` 明确请求日志重写操作时，服务器将回复 OK 状态码，告诉用户操作已安排，重写将在快照完成后开始。
 
-In the case both AOF and RDB persistence are enabled and Redis restarts the AOF file will be used to reconstruct the original dataset since it is guaranteed to be the most complete.
-
-
-
-
+如果同时启用 AOF 和 RDB 持久化，Redis 重启时将使用 AOF 文件重建原始数据集，因为它被保证是最完整的。
 
 ## Summary
-
-
 
 关于 AOF 和 RDB 的选择：
 
 - 数据不能丢失时，内存快照和 AOF 的混合使用是一个很好的选择；
 - 如果允许分钟级别的数据丢失，可以只使用 RDB；
-- 如果只用 AOF，优先使用 everysec 的配置选项，因为它在可靠性和性能之间取了一个平衡
-
-
-
-
-
-
-
-
-
-
+- 如果只用 AOF，优先使用 everysec 的配置选项，因为它在可靠性和性能之间取了一个平衡。
 
 ## Links
 

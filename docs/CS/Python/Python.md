@@ -1,6 +1,6 @@
 ## Introduction
 
-[Python](https://www.python.org/) is a programming language that lets you work quickly and integrate systems more effectively.
+[Python](https://www.python.org/) 是一种让你快速工作并更有效集成系统的编程语言。
 
 ## Install
 

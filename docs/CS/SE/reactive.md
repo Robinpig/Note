@@ -1,21 +1,17 @@
 ## Introduction
 
-ReactiveX is a combination of the best ideas from
-the Observer pattern, the Iterator pattern, and functional programming
+ReactiveX 结合了观察者模式、迭代器模式和函数式编程的最佳思想。
 
+`java.util.Observable` 和 `java.util.Observer` 接口已被弃用。
+Observer 和 Observable 支持的事件模型相当有限，Observable 传递通知的顺序未指定，状态变化与通知之间不是一一对应的。
 
-The `java.util.Observable` and `java.util.Observer` interface have been deprecated. 
-The event model supported by Observer and Observable is quite limited, the order of notifications delivered by Observable is unspecified, and state changes are not in one-for-one correspondence with notifications. 
-
-- For a richer event model, consider using the java.beans package. 
-- For reliable and ordered messaging among threads, consider using one of the concurrent data structures in the java.util.concurrent package. 
-- For reactive streams style programming, see the java.util.concurrent.Flow API.
-
+- 对于更丰富的事件模型，请考虑使用 java.beans 包。
+- 对于线程间可靠有序的消息传递，请考虑使用 java.util.concurrent 包中的并发数据结构。
+- 对于响应式流风格编程，请参阅 java.util.concurrent.Flow API。
 
 Flow
 
-Interrelated interfaces and static methods for establishing flow-controlled components in which Publishers produce items consumed by one or more Subscribers, 
-each managed by a Subscription.
+用于建立流控制组件的相关接口和静态方法，其中 Publisher 产生由 Subscription 管理的 Subscriber 消费的项目。
 
 ## References
 1. [ReactiveX](http://reactivex.io/)

@@ -1,9 +1,7 @@
 ## Introduction
 
-The AsmTools open source project is used to develop tools for the production of proper and improper Java '.class' files. AsmTools are being opened in order to facilitate a community of Java .class file production for various testing and other OpenJDK development applications.
-
-
-
+AsmTools 开源项目用于开发工具，以生成正确和不正确的 Java '.class' 文件。
+AsmTools 开源是为了促进 Java .class 文件生成的社区发展，用于各种测试和其他 OpenJDK 开发应用。
 
 ## Links
 

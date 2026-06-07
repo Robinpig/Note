@@ -1,8 +1,8 @@
-## Introduction
+## 简介
 
-select() allows a program to monitor multiple file descriptors, waiting until one or more of the file descriptors become "ready" for some class of I/O operation (e.g., input possible). A file descriptor is considered ready if it is possible to perform a corresponding I/O operation (e.g., read(2), or a sufficiently small write(2)) without blocking.
+select() 允许程序监视多个文件描述符，等待直到一个或多个文件描述符变为"就绪"以进行某种 I/O 操作（例如，输入可用）。如果可以在不阻塞的情况下执行相应的 I/O 操作（例如 read(2) 或足够小的 write(2)），则认为文件描述符已就绪。
 
-poll() performs a similar task to select(2): it waits for one of a set of file descriptors to become ready to perform I/O.
+poll() 执行与 select(2) 类似的任务：它等待一组文件描述符中的一个变为就绪以执行 I/O。
 
 ## select
 

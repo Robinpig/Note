@@ -1,13 +1,10 @@
 ## Introduction
 
-Connection pooling is a well-known data access pattern.
-Its main purpose is to reduce the overhead involved in performing database connections and read/write database operations.
-**At the most basic level,** **a connection pool is a database connection cache implementation** that can be configured to suit specific requirements.
+连接池是一种众所周知的数据访问模式。
+其主要目的是减少执行数据库连接和读写数据库操作所带来的开销。
+**在最基本的层面上，连接池是一个数据库连接缓存实现**，可以根据特定需求进行配置。
 
 ## Connection Management
-
-
-
 
 | 参数 | 释义 | 参考因素 |
 |--| ---- | ---- |
@@ -41,7 +38,7 @@ Test connections with isValid() before returning them from the pool
 
 socket timeout
 
-link [TCP keepalive](/docs/CS/CN/TCP/TCP.md?id=keepalive)
+link [TCP keepalive](/docs/CN/TCP/TCP.md?id=keepalive)
 
 ### maxLifetime
 

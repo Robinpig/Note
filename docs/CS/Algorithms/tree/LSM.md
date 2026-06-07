@@ -1,55 +1,55 @@
 ## Introduction
 
-The Log-Structured Merge-tree (LSM-tree) has been widely adopted in the storage layers of modern NoSQL systems,
-including [BigTable](/docs/CS/Distributed/Bigtable.md), [Dynamo](/docs/CS/Distributed/Dynamo.md), [HBase](/docs/CS/DB/HBase.md), [Cassandra](/docs/CS/DB/Cassandra.md), [LevelDB](/docs/CS/DB/LevelDB/LevelDB.md), [RocksDB](/docs/CS/DB/RocksDB/RocksDB.md), and AsterixDB.
+日志结构合并树（LSM-tree）已被广泛应用于现代 NoSQL 系统的存储层，
+包括 [BigTable](/docs/CS/Distributed/Bigtable.md)、[Dynamo](/docs/CS/Distributed/Dynamo.md)、[HBase](/docs/CS/DB/HBase.md)、[Cassandra](/docs/CS/DB/Cassandra.md)、[LevelDB](/docs/CS/DB/LevelDB/LevelDB.md)、[RocksDB](/docs/CS/DB/RocksDB/RocksDB.md) 和 AsterixDB。
 
-The Log-Structured Merge-tree (LSM-tree) is a disk-based data structure designed to provide low-cost indexing for a file experiencing a high rate of record inserts (and deletes) over an extended period.
-The LSM-tree uses an algorithm that defers and batches index changes, cascading the changes from a memory-based component through one or more disk components in an efficient manner reminiscent of merge sort.
-During this process all index values are continuously accessible to retrievals (aside from very short locking periods), either through the memory component or one of the disk components.
-Different from traditional index structures that apply in-place updates, the LSM-tree first buffers all writes in memory and subsequently flushes them to disk and merges them using sequential I/Os,
-and will improve cost performance in domains where disk arm costs for inserts with traditional access methods overwhelm storage media costs.
+日志结构合并树（LSM-tree）是一种基于磁盘的数据结构，旨在为长时间内经历高频率记录插入（和删除）的文件提供低成本的索引。
+LSM-tree 使用一种算法来延迟和批量处理索引更改，以一种类似于归并排序的高效方式，将更改从基于内存的组件级联到一个或多个磁盘组件。
+在此过程中，所有索引值都可以通过内存组件或某个磁盘组件持续可检索（除非常短的锁定期间外）。
+与采用就地更新的传统索引结构不同，LSM-tree 首先将所有写入缓冲在内存中，随后将其刷新到磁盘并使用顺序 I/O 进行合并，
+在传统访问方法的插入操作中磁盘臂成本超过存储介质成本的领域中，将提高成本性能。
 
-This design brings a number of advantages, including superior write performance, high space utilization, tunability, and simplification of concurrency control and recovery.
-These advantages have enabled LSM-trees to serve a large variety of workloads.
-However, indexed finds requiring immediate response will lose I/O efficiency in some cases, so the LSM-tree is most useful in applications where index inserts are more common than finds that retrieve the entries.
+这种设计带来了许多优势，包括卓越的写入性能、高空间利用率、可调性以及简化的并发控制和恢复。
+这些优势使 LSM-tree 能够服务于各种工作负载。
+然而，需要即时响应的索引查找在某些情况下会失去 I/O 效率，因此 LSM-tree 在插入操作比检索条目的查找操作更常见的应用中最为有用。
 
 > [!NOTE]
-> LSM Trees write immutable files and merge them together over time. These files usually contain an index of their own to help readers efficiently locate data. Even though LSM Trees are often presented as an alternative to B-Trees, it is common for B-Trees to be used as the internal indexing structure for an LSM Tree’s immutable files.
+> LSM 树写入不可变文件，并随着时间的推移将它们合并。这些文件通常包含自己的索引，以帮助读取者高效定位数据。尽管 LSM 树通常被呈现为 B 树的替代品，但 B 树常被用作 LSM 树不可变文件的内部索引结构。
 
 ## Basics
 
-In general, an index structure can choose one of two strategies to handle updates, that is, *in-place updates* and *out-of-place updates*.
+通常，索引结构可以选择两种策略之一来处理更新，即*就地更新*和*异地更新*。
 
-An **in-place update** structure, such as a B+-tree, directly overwrites old records to store new updates.
-For example in Figure 1a, to update the value associated with key k1 from v1 to v4, the index entry `(k1, v1)` is directly modified to apply this update.
-These structures are often read-optimized since only the most recent version of each record is stored.
-However, this design sacrifices write performance, as updates incur random I/Os.
-Moreover, index pages can be fragmented by updates and deletes, thus reducing the space utilization.
+**就地更新**结构（如 B+ 树）直接覆盖旧记录以存储新更新。
+例如在图 1a 中，要将键 k1 关联的值从 v1 更新为 v4，索引条目 `(k1, v1)` 被直接修改以应用此更新。
+这些结构通常针对读取进行了优化，因为只存储每条记录的最新版本。
+然而，这种设计牺牲了写入性能，因为更新会产生随机 I/O。
+此外，索引页面可能因更新和删除而碎片化，从而降低空间利用率。
 
-In contrast, an **out-of-place update** structure, such as an LSM-tree, always stores updates into new locations instead of overwriting old entries.
-For example in Figure 1b, the update `(k1, v4)` is stored into a new place instead of updating the old entry `(k1, v1)` directly.
-This design improves write performance since it can exploit sequential I/Os to handle writes.
-It can also simplify the recovery process by not overwriting old data.
-However, the major problem of this design is that read performance is sacrificed since a record may be stored in any of multiple locations.
-Furthermore, these structures generally require a separate data reorganization process to improve storage and query efficiency continuously.
+相比之下，**异地更新**结构（如 LSM-tree）始终将更新存储到新位置，而不是直接覆盖旧条目。
+例如在图 1b 中，更新 `(k1, v4)` 被存储到新位置，而不是直接更新旧条目 `(k1, v1)`。
+这种设计提高了写入性能，因为它可以利用顺序 I/O 来处理写入。
+它还可以通过不覆盖旧数据来简化恢复过程。
+然而，这种设计的主要问题是读取性能被牺牲，因为一条记录可能存储在多个位置中的任何一个。
+此外，这些结构通常需要单独的数据重组过程来持续提高存储和查询效率。
 
 <div style="text-align: center;">
 
-![Examples of in-place and out-of-place update structures: each entry contains a key (denoted as “k”) and a value (denoted as “v”)](../img/LSM-Update-Structures.png)
+![Examples of in-place and out-of-place update structures: each entry contains a key (denoted as "k") and a value (denoted as "v")](../img/LSM-Update-Structures.png)
 
 </div>
 
-<p style="text-align: center;">Fig.1. Examples of in-place and out-of-place update structures: each entry contains a key (denoted as “k”) and a value (denoted as “v”)</p>
+<p style="text-align: center;">Fig.1. 就地更新和异地更新结构的示例：每个条目包含一个键（记为"k"）和一个值（记为"v"）</p>
 
 ## Components
 
-An LSM-tree is composed of two or more tree-like component data structures.
-A two component LSM-tree has
+LSM-tree 由两个或多个类似树形的组件数据结构组成。
+一个双组件 LSM-tree 具有
 
-- a smaller component which is entirely memory resident, known as the $C_0$ tree (or $C_0$ component),
-- and a larger component which is resident on disk, known as the $C_1$ tree (or $C_1$ component).
+- 一个完全常驻内存的较小组件，称为 $C_0$ 树（或 $C_0$ 组件），
+- 以及一个驻留在磁盘上的较大组件，称为 $C_1$ 树（或 $C_1$ 组件）。
 
-Although the $C_1$ component is disk resident, frequently referenced page nodes in $C_1$ will remain in memory buffers as usual (buffers not shown), so that popular high level directory nodes of $C_1$ can be counted on to be memory resident.
+尽管 $C_1$ 组件驻留在磁盘上，$C_1$ 中经常被引用的页面节点通常仍会保留在内存缓冲区中（缓冲区未显示），因此可以预期 $C_1$ 的热门高层目录节点会常驻内存。
 
 <div style="text-align: center;">
 
@@ -57,28 +57,28 @@ Although the $C_1$ component is disk resident, frequently referenced page nodes 
 
 </div>
 
-<p style="text-align: center;">Fig.2. Two Components</p>
+<p style="text-align: center;">Fig.2. 双组件</p>
 
-As each new History row is generated, a log record to recover this insert is first written to the sequential log file in the usual way.
-The index entry for the History row is then inserted into the memory resident $C_0$ tree, after which it will in time migrate out to the $C_1$ tree on disk; any search for an index entry will look first in $C_0$ and then in $C_1$.
-There is a certain amount of latency (delay) before entries in the $C_0$ tree migrate out to the disk resident $C_1$ tree, implying a need for recovery of index entries that don't get out to disk prior to a crash.
+每当生成新的 History 行时，首先以常规方式将用于恢复此插入的日志记录写入顺序日志文件。
+然后将 History 行的索引条目插入到常驻内存的 $C_0$ 树中，之后它将随时间迁移到磁盘上的 $C_1$ 树；任何对索引条目的搜索都将首先在 $C_0$ 中查找，然后在 $C_1$ 中查找。
+$C_0$ 树中的条目迁移到磁盘驻留的 $C_1$ 树存在一定的延迟（时间差），这意味着在崩溃之前未能迁移到磁盘的索引条目需要恢复。
 
-The log records that allow us to recover new inserts of History rows can be treated as logical logs;
-during recovery we can reconstruct the History rows that have been inserted and simultaneously recreate any needed entries to index these rows to recapture the lost content of $C_0$.
+允许我们恢复新插入的 History 行的日志记录可以视为逻辑日志；
+在恢复期间，我们可以重建已插入的 History 行，同时重新创建索引这些行所需的任何条目，以恢复丢失的 $C_0$ 内容。
 
-The $C_1$ tree has a comparable directory structure to a B-tree, but is optimized for sequential disk access, with nodes 100% full,
-and sequences of single-page nodes on each level below the root packed together in contiguous multi-page disk blocks for efficient arm use; this optimization was also used in the SB-tree.
-Multi-page block I/O is used during the rolling merge and for long range retrievals, while single-page nodes are used for matching indexed finds to minimize buffering requirements.
+$C_1$ 树具有与 B 树类似的目录结构，但针对顺序磁盘访问进行了优化，节点 100% 满，
+并且根以下每个层级上的单页面节点序列被紧密打包在连续的多页面磁盘块中，以实现高效的磁头使用；此优化也用于 SB-tree。
+在滚动合并和长距离检索期间使用多页面块 I/O，而单页面节点用于匹配的索引查找，以最小化缓冲需求。
 
-The rolling merge acts in a series of merge steps.
-A read of a multi-page block containing leaf nodes of the $C_1$ tree makes a range of entries in $C_1$ buffer resident.
-Each merge step then reads a disk page sized leaf node of the $C_1$ tree buffered in this block, merges entries from the leaf node with entries taken from the leaf level of the $C_0$ tree,
-thus decreasing the size of $C_0$, and creates a newly merged leaf node of the $C_1$ tree.
+滚动合并通过一系列合并步骤进行。
+读取包含 $C_1$ 树叶子节点的多页面块会使 $C_1$ 中的一系列条目变为缓冲区常驻。
+然后每个合并步骤读取在该块中缓冲的 $C_1$ 树的磁盘页面大小叶子节点，将该叶子节点中的条目与从 $C_0$ 树叶子层级获取的条目合并，
+从而减小 $C_0$ 的大小，并创建新的 $C_1$ 树叶子节点。
 
-The buffered multi-page block containing old $C_1$ tree nodes prior to merge is called the emptying block, and new leaf nodes are written to a different buffered multi-page block called the filling block.
-When this filling block has been packed full with newly merged leaf nodes of $C_1$, the block is written to a new free area on disk.
-The new multi-page block containing merged results is pictured in below figure as lying on the right of the former nodes.
-Subsequent merge steps bring together increasing index value segments of the $C_0$ and $C_1$ components until the maximum values are reached and the rolling merge starts again from the smallest values.
+合并前的包含旧 $C_1$ 树节点的缓冲多页面块称为清空块，而新叶子节点被写入另一个称为填充块的缓冲多页面块。
+当此填充块已满，被新合并的 $C_1$ 叶子节点填满时，该块被写入磁盘上的新空闲区域。
+包含合并结果的新多页面块如下图所示，位于原节点的右侧。
+后续的合并步骤将不断合并 $C_0$ 和 $C_1$ 组件中递增的索引值段，直到达到最大值，然后滚动合并从最小值重新开始。
 
 <div style="text-align: center;">
 
@@ -86,54 +86,54 @@ Subsequent merge steps bring together increasing index value segments of the $C_
 
 </div>
 
-<p style="text-align: center;">Fig.3. Rolling Merge </p>
+<p style="text-align: center;">Fig.3. 滚动合并</p>
 
-Newly merged blocks are written to new disk positions, so that the old blocks will not be overwritten and will be available for recovery in case of a crash.
-The parent directory nodes in $C_1$, also buffered in memory, are updated to reflect this new leaf structure, but usually remain in buffer for longer periods to minimize I/O;
-the old leaf nodes from the $C_1$ component are invalidated after the merge step is complete and are then deleted from the $C_1$ directory.
-In general, there will be leftover leaf-level entries for the merged $C_1$ component following each merge step, since a merge step is unlikely to result in a new node just as the old leaf node empties.
-The same consideration holds for multi-page blocks, since in general when the filling block has filled with newly merged nodes, there will be numerous nodes containing entries still in the shrinking block.
-These leftover entries, as well as updated directory node information, remain in block memory buffers for a time without being written to disk.
-To reduce reconstruction time in recovery, checkpoints of the merge process are taken periodically, forcing all buffered information to disk.
+新合并的块被写入新的磁盘位置，因此旧块不会被覆盖，在发生崩溃时可用于恢复。
+$C_1$ 中的父目录节点（也缓冲在内存中）被更新以反映新的叶子结构，但通常会在缓冲区中保留更长时间以最小化 I/O；
+来自 $C_1$ 组件的旧叶子节点在合并步骤完成后失效，然后从 $C_1$ 目录中删除。
+通常，每次合并步骤后，合并的 $C_1$ 组件会剩余一些叶子层级条目，因为一个合并步骤不太可能恰好在新节点生成时刚好使旧叶子节点清空。
+多页面块也是如此，因为通常当填充块已充满新合并的节点时，收缩块中仍会有许多包含条目的节点。
+这些剩余条目以及更新的目录节点信息会在块内存缓冲区中保留一段时间，而不会被写入磁盘。
+为了减少恢复时的重建时间，会定期对合并过程进行检查点操作，强制将所有缓冲信息写入磁盘。
 
-Unlike the $C_1$ tree, the $C_0$ tree is not expected to have a B-tree-like structure.
-For one thing, the nodes could be any size: there is no need to insist on disk page size nodes since the $C_0$ tree never sits on disk, and so we need not sacrifice CPU efficiency to minimize depth.
-Thus a skip-list or a B+-tree are possible alternative structures for a $C_0$ tree.
-When the growing $C_0$ tree first reaches its threshold size, a leftmost sequence of entries is deleted from the $C_0$ tree (this should be done in an efficient batch manner rather than one entry at a time) and reorganized into a $C_1$ tree leaf node packed 100% full.
-Successive leaf nodes are placed left-to-right in the initial pages of a buffer resident multi-page block until the block is full; then this block is written out to disk to become the first part of the $C_1$ tree disk-resident leaf level.
-A directory node structure for the $C_1$ tree is created in memory buffers as successive leaf nodes are added.
+与 $C_1$ 树不同，$C_0$ 树不期望具有类似 B 树的结构。
+首先，节点可以是任意大小：由于 $C_0$ 树从不驻留磁盘，无需坚持磁盘页面大小，因此我们不必牺牲 CPU 效率来最小化深度。
+因此，跳跃表或 B+ 树是 $C_0$ 树的可能备选结构。
+当增长的 $C_0$ 树首次达到其阈值大小时，一系列最左边的条目将从 $C_0$ 树中删除（应以高效的批量方式而非逐条进行）并重新组织成 100% 填满的 $C_1$ 树叶子节点。
+连续的叶子节点在缓冲区的多页面块的初始页面中从左到右放置，直到块满；然后此块被写入磁盘，成为 $C_1$ 树磁盘驻留叶子层级的第一部分。
+随着连续叶子节点的添加，在内存缓冲区中创建 $C_1$ 树的目录节点结构。
 
-An SSTable contains a list of data blocks and an index block; a data block stores key-value pairs ordered by keys, and the index block stores the key ranges of all data blocks.
+SSTable 包含一个数据块列表和一个索引块；数据块按键排序存储键值对，索引块存储所有数据块的键范围。
 
-A query over an LSM-tree has to search multiple components to perform reconciliation, that is, to find the latest version of each key.
-A point lookup query, which fetches the value for a specific key, can simply search all components one by one, from newest to oldest, and stop immediately after the first match is found.
-A range query can search all components at the same time, feeding the search results into a priority queue to perform reconciliation.
+对 LSM-tree 的查询必须搜索多个组件以执行 reconciliation（调和），即找到每个键的最新版本。
+点查找查询（获取特定键的值）可以简单地逐一搜索所有组件，从最新到最旧，并在找到第一个匹配项后立即停止。
+范围查询可以同时搜索所有组件，将搜索结果送入优先队列以执行调和。
 
-Successive multi-page blocks of the $C_1$ tree leaf level in ever increasing key-sequence order are written out to disk to keep the $C_0$ tree threshold size from exceeding its threshold.
-Upper level $C_1$ tree directory nodes are maintained in separate multi-page block buffers, or else in single page buffers, whichever makes more sense from a standpoint of total memory and disk arm cost;
-entries in these directory nodes contain separators that channel access to individual single-page nodes below, as in a B-tree.
-The intention is to provide efficient exact-match access along a path of single page index nodes down to the leaf level, avoiding multi-page block reads in such a case to minimize memory buffer requirements.
-Thus we read and write multipage blocks for the rolling merge or for long range retrievals, and single-page nodes for indexed find (exact-match) access.
-Partially full multi-page blocks of $C_1$ directory nodes are usually allowed to remain in buffer while a sequence of leaf node blocks are written out.
-$C_1$ directory nodes are forced to new positions on disk when:
+按递增键顺序排列的 $C_1$ 树叶子层级的连续多页面块被写入磁盘，以保持 $C_0$ 树的阈值大小不超过其阈值。
+上层的 $C_1$ 树目录节点维护在单独的多页面块缓冲区或单页面缓冲区中，以总内存和磁盘臂成本的角度选择更合理的方式；
+这些目录节点中的条目包含分隔符，用于将访问引导到下面的单个单页面节点，类似于 B 树。
+这样做的目的是提供高效的精确匹配访问，沿着单页面索引节点的路径向下到达叶子层级，在这种情况下避免多页面块读取以最小化内存缓冲需求。
+因此，我们为滚动合并或长距离检索读写多页面块，为索引查找（精确匹配）访问使用单页面节点。
+部分填满的 $C_1$ 目录节点多页面块通常允许在缓冲区中保留，同时写入一系列叶子节点块。
+$C_1$ 目录节点在以下情况下被强制写入磁盘上的新位置：
 
-- A multi-page block buffer containing directory nodes becomes full
-- The root node splits, increasing the depth of the $C_1$ tree (to a depth greater than two)
-- A checkpoint is performed
+- 包含目录节点的多页面块缓冲区变满
+- 根节点分裂，增加了 $C_1$ 树的深度（超过 2）
+- 执行检查点
 
-In the first case, the single multi-page block which has filled is written out to disk.
-In the latter two cases, all multi-page block buffers and directory node buffers are flushed to disk.
+在第一种情况下，已填满的单个多页面块被写入磁盘。
+在后两种情况下，所有多页面块缓冲区和目录节点缓冲区都被刷新到磁盘。
 
-After the rightmost leaf entry of the $C_0$ tree is written out to the $C_1$ tree for the first time, the process starts over on the left end of the two trees,
-except that now and with successive passes multi-page leaf-level blocks of the $C_1$ tree must be read into buffer and merged with the entries in the $C_0$ tree,
-thus creating new multi-page leaf blocks of $C_1$ to be written to disk.
+在 $C_0$ 树的最右边叶子条目首次写入 $C_1$ 树后，该过程在两棵树的最左端重新开始，
+只是此时以及后续的遍历中，$C_1$ 树的多页面叶子层级块必须读入缓冲区并与 $C_0$ 树中的条目合并，
+从而创建要写入磁盘的新 $C_1$ 多页面叶子块。
 
 ### Multi-Component
 
-In general, an LSM-tree of K+1 components has components $C_0$, $C_1$, $C_2$, . . ., $C_{K-1}$ and $C_K$, which are indexed tree structures of increasing size;
-the $C_0$ component tree is memory resident and all other components are disk resident (but with popular pages buffered in memory as with any disk resident access tree).
-Under pressure from inserts, there are asynchronous rolling merge processes in train between all component pairs ($C_{i-1}$, $C_i$), that move entries out from the smaller to the larger component each time the smaller component, $C_{i-1}$, exceeds its threshold size.
-During the life of a long-lived entry inserted in an LSM-tree, it starts in the $C_0$ tree and eventually migrates out to the CK, through a series of K asynchronous rolling merge steps.
+通常，具有 K+1 个组件的 LSM-tree 包含组件 $C_0$, $C_1$, $C_2$, ..., $C_{K-1}$ 和 $C_K$，它们是大小递增的索引树结构；
+$C_0$ 组件树常驻内存，所有其他组件驻留在磁盘上（但热门页面与任何磁盘驻留访问树一样缓存在内存中）。
+在插入的压力下，所有组件对 ($C_{i-1}$, $C_i$) 之间存在异步的滚动合并过程，每次较小的组件 $C_{i-1}$ 超过其阈值大小时，就将条目从较小的组件移出到较大的组件。
+在 LSM-tree 中插入的一个长期条目的生命周期中，它从 $C_0$ 树开始，最终通过一系列 K 个异步滚动合并步骤迁移到 CK。
 
 <div style="text-align: center;">
 
@@ -141,58 +141,58 @@ During the life of a long-lived entry inserted in an LSM-tree, it starts in the 
 
 </div>
 
-<p style="text-align: center;">Fig.4. An LSM-tree of K+1 components</p>
+<p style="text-align: center;">Fig.4. 具有 K+1 个组件的 LSM-tree</p>
 
 ### Component Sizes
 
 ## Merge
 
-An LSM-tree consists of a number of components of exponentially increasing sizes, C0 to Ck.
-The C0 component is a memory-resident update-in-place sorted tree, while the other components C1 to Ck are disk-resident append-only B-trees.
-During an insert in an LSM-tree, the inserted keyvalue pair is appended to an on-disk sequential log file, so as to enable recovery in case of a crash.
-Then, the key-value pair is added to the in-memory C0, which is sorted by keys; C0 allows efficient lookups and scans on recently inserted key-value pairs.
-Once C0 reaches its size limit, it will be merged with the on-disk C1 in an approach similar to merge sort; this process is known as compaction.
-The newly merged tree will be written to disk sequentially, replacing the old version of C1. Compaction (i.e., merge sorting) also happens for on-disk components, when each Ci reaches its size limit.
-Note that compactions are only performed between adjacent levels (Ci and Ci+1), and they can be executed asynchronously in the background.
+LSM-tree 由多个大小呈指数级增长的组件 C0 到 Ck 组成。
+C0 组件是内存驻留的就地更新排序树，而其他组件 C1 到 Ck 是磁盘驻留的只追加 B 树。
+在 LSM-tree 中插入时，插入的键值对被追加到磁盘上的顺序日志文件中，以便在发生崩溃时进行恢复。
+然后，键值对被添加到内存中的 C0，该组件按键排序；C0 允许对最近插入的键值对进行高效的查找和扫描。
+一旦 C0 达到其大小限制，它将与磁盘上的 C1 以类似于归并排序的方式进行合并；这个过程称为压缩。
+新合并的树将顺序写入磁盘，替换旧版本的 C1。对于磁盘上的组件，当每个 Ci 达到其大小限制时，也会进行压缩（即归并排序）。
+注意，压缩仅在相邻层级（Ci 和 Ci+1）之间执行，并且可以在后台异步执行。
 
-To serve a lookup operation, LSM-trees may need to search multiple components.
-Note that C0 contains the freshest data, followed by C1, and so on.
-Therefore, to retrieve a key-value pair, the LSM-tree searches components starting from C0 in a cascading fashion until it locates the desired data in the smallest component Ci.
-Compared with B-trees, LSM-trees may need multiple reads for a point lookup. Hence, LSM-trees are most useful when inserts are more common than lookups.
+为了服务查找操作，LSM-tree 可能需要搜索多个组件。
+注意，C0 包含最新鲜的数据，其次是 C1，依此类推。
+因此，要检索一个键值对，LSM-tree 从 C0 开始以级联方式搜索组件，直到在最小的组件 Ci 中找到所需数据。
+与 B 树相比，LSM-tree 对于点查找可能需要多次读取。因此，当插入比查找更常见时，LSM-tree 最为有用。
 
-As disk components accumulate over time, the query performance of an LSM-tree tends to degrade since more components must be examined.
-To address this, disk components are gradually merged to reduce the total number of components.
-Two types of merge policies are typically used in practice.
-As shown in Figure 3, both policies organize disk components into logical levels (or tiers) and are controlled by a size ratio T.
-Each component is labeled with its potential key range in the figure.
+随着磁盘组件随时间积累，LSM-tree 的查询性能往往下降，因为需要检查更多组件。
+为了解决这个问题，磁盘组件被逐渐合并以减少组件总数。
+实践中通常使用两种合并策略。
+如图 3 所示，两种策略都将磁盘组件组织成逻辑层级（或层），并由大小比率 T 控制。
+图中每个组件都标有其潜在的键范围。
 
-The LSM-tree, proposed in 1996, addressed these problems by designing a merge process which is integrated into the structure itself,
-providing high write performance with bounded query performance and space utilization.
-The original LSM-tree design contains a sequence of components $C_0$, $C_1$, ···, $C_k$ , as shown in Figure 4.
-Each component is structured as a B+-tree.
-$C_0$ resides in memory and serves incoming writes, while all remaining components $C_1$, ···, $C_k$ reside on disk.
-When $C_i$ is full, a rolling merge process is triggered to merge a range of leaf pages from $C_i$ into $C_{i+1}$.
-This design is often referred to as the leveling merge policy today.
-However, as we shall see later, the originally proposed rolling merge process is not used by today’s LSM-based storage systems due to its implementation complexity.
-**The original paper on LSM-trees further showed that under a stable workload, where the number of levels remains static,
-write performance is optimized when the size ratios $T_i = |C_{i+1}|/|C_i|$ between all adjacent components are the same.**
+LSM-tree 于 1996 年提出，通过设计一个集成到结构本身中的合并过程来解决这些问题，
+提供了高写入性能以及有界的查询性能和空间利用率。
+原始的 LSM-tree 设计包含一系列组件 $C_0$, $C_1$, ..., $C_k$，如图 4 所示。
+每个组件都结构化为 B+ 树。
+$C_0$ 驻留在内存中并处理传入的写入，而所有其余组件 $C_1$, ..., $C_k$ 驻留在磁盘上。
+当 $C_i$ 满时，触发滚动合并过程，将一系列叶子页面从 $C_i$ 合并到 $C_{i+1}$。
+这种设计通常被称为 leveling 合并策略。
+然而，正如我们稍后将看到的，由于实现复杂性，最初提出的滚动合并过程并未被当今基于 LSM 的存储系统所使用。
+**关于 LSM-tree 的原始论文进一步表明，在稳定的工作负载下（层级数保持不变），
+当所有相邻组件之间的大小比率 $T_i = |C_{i+1}|/|C_i|$ 相同时，写入性能达到最优。**
 
-In the leveling merge policy (Figure 3a), each level only maintains one component, but the component at level L is T times larger than the component at level L−1.
-As a result, the component at level L will be merged multiple times with incoming components at level L − 1 until it fills up, and it will then be merged into level L+1.
-For example in the figure, the component at level 0 is merged with the component at level 1, which will result in a bigger component at level 1.
+在 leveling 合并策略（图 3a）中，每个层级只维护一个组件，但层级 L 的组件比层级 L-1 的组件大 T 倍。
+因此，层级 L 的组件将与来自层级 L-1 的传入组件多次合并，直到它填满，然后合并到层级 L+1。
+例如在图中，层级 0 的组件与层级 1 的组件合并，这将产生层级 1 的一个更大组件。
 
 ### Tiering
 
-In parallel to the LSM-tree, Jagadish et al. proposed a similar structure with the **stepped-merge policy** to achieve better write performance.
-It organizes the components into levels, and when level L is full with T components, these T components are merged together into a new component at level L+1.
-This policy become the **tiering merge policy** used in today’s LSM-tree implementations.
+与 LSM-tree 并行，Jagadish 等人提出了一种具有**阶梯合并策略**的类似结构，以实现更好的写入性能。
+它将组件组织成层级，当层级 L 满（有 T 个组件）时，这 T 个组件合并在一起，形成层级 L+1 的新组件。
+该策略成为了当今 LSM-tree 实现中使用的 **tiering 合并策略**。
 
-In contrast, the tiering merge policy (Figure 3b) maintains up to T components per level.
-When level L is full, its T components are merged together into a new component at level L +1. In the figure, the two components at level 0 are merged together to form a new component at level 1.
-It should be noted that if level L is already the configured maximum level, then the resulting component remains at level L.
-In practice, for a stable workload where the volume of inserts equal the volume of deletes, the total number of levels remains static.
-In general, the leveling merge policy optimizes for query performance since there are fewer components to search in the LSM-tree.
-The tiering merge policy is more write optimized since it reduces the merge frequency.
+相比之下，tiering 合并策略（图 3b）每个层级维护最多 T 个组件。
+当层级 L 满时，其 T 个组件合并在一起，形成层级 L+1 的新组件。在图中，层级 0 的两个组件合并在一起，形成层级 1 的新组件。
+应注意，如果层级 L 已经是配置的最大层级，则结果组件停留在层级 L。
+在实践中，对于插入量等于删除量的稳定工作负载，总层级数保持不变。
+通常，leveling 合并策略针对查询性能进行了优化，因为 LSM-tree 中需要搜索的组件更少。
+Tiering 合并策略更针对写入进行了优化，因为它减少了合并频率。
 
 <div style="text-align: center;">
 
@@ -200,62 +200,62 @@ The tiering merge policy is more write optimized since it reduces the merge freq
 
 </div>
 
-<p style="text-align: center;">Fig.5. LSM-tree merge policies</p>
+<p style="text-align: center;">Fig.5. LSM-tree 合并策略</p>
 
-Once the merge starts, the situation is more complex.
-We picture the rolling merge process in a two component LSM-tree as having a conceptual cursor which slowly circulates in quantized steps through equal key values of the $C_0$ tree and $C_1$ tree components, drawing indexing data out from the $C_0$ tree to the $C_1$ tree on disk.
-The rolling merge cursor has a position at the leaf level of the $C_1$ tree and within each higher directory level as well.
-At each level, all currently merging multi-page blocks of the $C_1$ tree will in general be split into two blocks:
-the "emptying" block whose entries have been depleted but which retains information not yet reached by the merge cursor, and the "filling" block which reflects the result of the merge up to this moment.
-There will be an analogous "filling node" and "emptying node" defining the cursor which will certainly be buffer resident.
-For concurrent access purposes, both the emptying block and the filling block on each level contain an integral number of page-sized nodes of the $C_1$ tree,
-which simply happen to be buffer resident. (During the merge step that restructures individual nodes, other types of concurrent access to the entries on those nodes are blocked.)
-Whenever a complete flush of all buffered nodes to disk is required, all buffered information at each level must be written to new positions on disk (with positions reflected in superior directory information, and a sequential log entry for recovery purposes).
-At a later point, when the filling block in buffer on some level of the $C_1$ tree fills and must be flushed again, it goes to a new position.
-Old information that might still be needed during recovery is never overwritten on disk, only invalidated as new writes succeed with more up-to-date information.
+一旦合并开始，情况就更加复杂。
+我们将双组件 LSM-tree 中的滚动合并过程描述为具有一个概念性的游标，该游标以量子化的步长缓慢循环经过 $C_0$ 树和 $C_1$ 树组件的相等键值，将索引数据从 $C_0$ 树提取到磁盘上的 $C_1$ 树。
+滚动合并游标在 $C_1$ 树的叶子层级以及每个更高目录层级都有一个位置。
+在每个层级，当前正在合并的 $C_1$ 树多页面块通常会被分成两个块：
+一个是"清空"块，其条目已被耗尽，但保留了合并游标尚未到达的信息，另一个是"填充"块，反映了截至当前的合并结果。
+在每一级上，将有一个类似的"填充节点"和"清空节点"定义游标，它们必然缓冲常驻。
+出于并发访问的目的，每个层级上的清空块和填充块都包含整数个页面大小的 $C_1$ 树节点，
+这些节点恰好是缓冲常驻的。（在重组单个节点的合并步骤期间，对这些节点上的条目的其他类型的并发访问被阻塞。）
+每当需要将所有缓冲节点完整刷新到磁盘时，每个层级上的所有缓冲信息必须写入磁盘上的新位置（位置反映在上级目录信息中，并有一条用于恢复目的的顺序日志条目）。
+稍后，当 $C_1$ 树某个层级的填充块在缓冲区中填满并必须再次刷新时，它将被写入新位置。
+恢复期间仍可能需要的旧信息永远不会在磁盘上被覆盖，只会随着新写入成功并包含更新信息而失效。
 
-Today’s LSM-tree implementations still apply updates out-of-place to reduce random I/Os.
-All incoming writes are appended into a memory component.
-An insert or update operation simply adds a new entry, while a delete operation adds an anti-matter entry indicating that a key has been deleted.
-**However, today’s LSM-tree implementations commonly exploit the immutability of disk components1 to simplify concurrency control and recovery.
-Multiple disk components are merged together into a new one without modifying existing components.
-This is different from the rolling merge process proposed by the original LSM-tree.**
+当今的 LSM-tree 实现仍然应用异地更新来减少随机 I/O。
+所有传入的写入都被追加到内存组件中。
+插入或更新操作只是添加一个新条目，而删除操作则添加一个反物质条目，指示某个键已被删除。
+**然而，当今的 LSM-tree 实现通常利用磁盘组件的不可变性来简化并发控制和恢复。
+多个磁盘组件被合并成一个新组件，而不修改现有组件。
+这与原始 LSM-tree 提出的滚动合并过程不同。**
 
 ### Partitioning
 
-A commonly adopted optimization is to range-partition the disk components of LSM-trees into multiple (usually fixed-size) small partitions.
-To minimize the potential confusion caused by different terminologies, we use the term SSTable to denote such a partition, following the terminology from LevelDB.
-This optimization has several advantages.
+一种常用的优化是将 LSM-tree 的磁盘组件范围分区为多个（通常是固定大小的）小分区。
+为了尽量减少不同术语可能造成的混淆，我们沿用 LevelDB 的术语，使用 SSTable 来表示这样的分区。
+这种优化有几个优点。
 
-- First, partitioning breaks a large component merge operation into multiple smaller ones, bounding the processing time of each merge operation as well as the temporary disk space needed to create new components.
-- Moreover, partitioning can optimize for workloads with sequentially created keys or skewed updates by only merging components with overlapping key ranges.
-  For sequentially created keys, essentially no merge is performed since there are no components with overlapping key ranges.
-  For skewed updates, the merge frequency of the components with cold update ranges can be greatly reduced.
+- 首先，分区将一个大组件的合并操作分解为多个较小的操作，限制了每个合并操作的处理时间以及创建新组件所需的临时磁盘空间。
+- 此外，分区可以通过仅合并具有重叠键范围的组件，来优化具有顺序创建键或倾斜更新的工作负载。
+  对于顺序创建的键，由于没有重叠键范围的组件，基本上不需要执行合并。
+  对于倾斜更新，冷更新范围的组件的合并频率可以大大降低。
 
-It should be noted that the original LSM-tree automatically takes advantage of partitioning because of its rolling merges.
-However, due to the implementation complexity of its rolling merges, today’s LSM-tree implementations typically opt for actual physical partitioning rather than rolling merges.
+应注意，由于其滚动合并的特点，原始的 LSM-tree 自动利用了分区的优势。
+然而，由于其滚动合并的实现复杂性，当今的 LSM-tree 实现通常选择实际物理分区而不是滚动合并。
 
-An early proposal that applied partitioning to LSM-trees is the partitioned exponential file (PE-file).
-A PE-file contains multiple partitions, where each partition can be logically viewed as a separate LSM-tree.
-A partition can be further split into two partitions when it becomes too large.
-However, this design enforces strict key range boundaries
-among partitions, which reduces the flexibility of merges.
+一个早期将分区应用于 LSM-tree 的提议是分区指数文件（PE-file）。
+PE-file 包含多个分区，每个分区可以逻辑上视为一个单独的 LSM-tree。
+当一个分区变得太大时，可以进一步拆分为两个分区。
+然而，这种设计在分区之间强制执行严格的键范围边界，
+这降低了合并的灵活性。
 
-**It should be noted that partitioning is orthogonal to merge policies; both leveling and tiering (as well as other emerging merge policies) can be adapted to support partitioning.**
-To the best of our knowledge, only the partitioned leveling policy has been fully implemented by industrial LSM-based storage systems, such as LevelDB and RocksDB.
+**应注意，分区与合并策略是正交的；leveling 和 tiering（以及其他新兴的合并策略）都可以适配以支持分区。**
+据我们所知，只有分区 leveling 策略已被工业级基于 LSM 的存储系统完全实现，如 LevelDB 和 RocksDB。
 
 #### Partitioned Leveling
 
-In the partitioned leveling merge policy, pioneered by LevelDB, the disk component at each level is rangepartitioned into multiple fixed-size SSTables, as shown in Figure 6.
-**Each SSTable is labeled with its key range in the figure.**
-Note that the disk components at level 0 are not partitioned since they are directly flushed from memory.
-This design can also help the system to absorb write bursts since it can tolerate multiple unpartitioned components at level 0.
-To merge an SSTable from level L into level L+1, all of its overlapping SSTables at level L+1 are selected, and these SSTables are merged with it to produce new SSTables still at level L+1.
+在由 LevelDB 首创的分区 leveling 合并策略中，每个层级的磁盘组件被范围分区为多个固定大小的 SSTable，如图 6 所示。
+**图中每个 SSTable 都标有其键范围。**
+注意，层级 0 的磁盘组件未分区，因为它们是直接从内存刷新的。
+这种设计还可以帮助系统吸收写入突发，因为它可以容忍层级 0 有多个未分区的组件。
+要将一个 SSTable 从层级 L 合并到层级 L+1，选择其在层级 L+1 的所有重叠 SSTable，并与这些 SSTable 一起合并，生成仍在层级 L+1 的新 SSTable。
 <br>
-For example, in the figure, the SSTable labeled 0-30 at level 1 is merged with the SSTables labeled 0-15 and 16-32 at level 2.
-This merge operation produces new SSTables labeled 0-10, 11-19, and 20-32 at level 2, and the old SSTables will then be garbage-collected.
-Different policies can be used to select which SSTable to merge next at each level.
-For example, LevelDB uses a round-robin policy (to minimize the total write cost).
+例如，在图中，层级 1 中标为 0-30 的 SSTable 与层级 2 中标为 0-15 和 16-32 的 SSTable 合并。
+此合并操作在层级 2 生成标为 0-10、11-19 和 20-32 的新 SSTable，旧 SSTable 随后将被垃圾回收。
+可以使用不同策略来选择每个层级下一个要合并的 SSTable。
+例如，LevelDB 使用轮询策略（以最小化总写入成本）。
 
 <div style="text-align: center;">
 
@@ -263,19 +263,19 @@ For example, LevelDB uses a round-robin policy (to minimize the total write cost
 
 </div>
 
-<p style="text-align: center;">Fig.6. Partitioned leveling merge policy</p>
+<p style="text-align: center;">Fig.6. 分区 leveling 合并策略</p>
 
 #### Partitioned Tiering
 
-The partitioning optimization can also be applied to the tiering merge policy.
-However, one major issue in doing so is that each level can contain multiple SSTables with overlapping key ranges.
-These SSTables must be ordered properly based on their recency to ensure correctness.
-Two possible schemes can be used to organize the SSTables at each level, namely vertical grouping and horizontal grouping.
-In both schemes, the SSTables at each level are organized into groups.
-The vertical grouping scheme groups SSTables with overlapping key ranges together so that the groups have disjoint key ranges.
-Thus, it can be viewed as an extension of partitioned leveling to support tiering.
-Alternatively, under the horizontal grouping scheme, each logical disk component, which is range-partitioned into a set of SSTables, serves as a group directly.
-This allows a disk component to be formed incrementally based on the unit of SSTables.
+分区优化也可以应用于 tiering 合并策略。
+然而，这样做的一个主要问题是每个层级可能包含多个具有重叠键范围的 SSTable。
+这些 SSTable 必须基于其新近程度正确排序以确保正确性。
+有两种可能的方案来组织每个层级的 SSTable，即垂直分组和水平分组。
+在两种方案中，每个层级的 SSTable 都被组织成组。
+垂直分组方案将具有重叠键范围的 SSTable 分组在一起，使组具有不相交的键范围。
+因此，它可以被视为分区 leveling 对 tiering 的扩展。
+或者，在水平分组方案下，每个逻辑磁盘组件（范围分区为一组 SSTable）直接作为一个组。
+这允许基于 SSTable 的单元逐步形成磁盘组件。
 
 <div style="text-align: center;">
 
@@ -283,18 +283,18 @@ This allows a disk component to be formed incrementally based on the unit of SST
 
 </div>
 
-<p style="text-align: center;">Fig.7. Partitioned tiering with vertical grouping</p>
+<p style="text-align: center;">Fig.7. 带垂直分组的分区 tiering</p>
 
-An example of the vertical grouping scheme is shown in Figure 7.
-In this scheme, SSTables with overlapping key ranges are grouped together so that the groups have disjoint key ranges.
-During a merge operation, all of the SSTables in a group are merged together to produce the resulting SSTables based on the key ranges of the overlapping groups at the next level, which are then added to these overlapping groups.
+垂直分组方案的示例如图 7 所示。
+在该方案中，具有重叠键范围的 SSTable 被分组在一起，使得各组具有不相交的键范围。
+在合并操作期间，一个组中的所有 SSTable 被合并在一起，基于下一层级重叠组的键范围生成结果 SSTable，然后这些结果 SSTable 被添加到这些重叠组中。
 <br>
-For example in the figure, the SSTables labeled 0-30 and 0-31 at level 1 are merged together to produce the SSTables labeled 0-12 and 17-31, which are then added to the overlapping groups at level 2.
-Note the difference between the SSTables before and after this merge operation.
+例如在图中，层级 1 中标为 0-30 和 0-31 的 SSTable 被合并在一起，生成标为 0-12 和 17-31 的 SSTable，然后添加到层级 2 的重叠组中。
+注意此合并操作前后 SSTable 的差异。
 
-Before the merge operation, the SSTables labeled 0-30 and 0-31 have overlapping key ranges and both must be examined together by a point lookup query.
-However, after the merge operation, the SSTables labeled 0-12 and 17-31 have disjoint key ranges and only one of them needs to be examined by a point lookup query.
-It should also be noted that under this scheme SSTables are no longer fixed-size since they are produced based on the key ranges of the overlapping groups at the next level.
+在合并操作之前，标为 0-30 和 0-31 的 SSTable 具有重叠键范围，点查找查询必须同时检查两者。
+然而，在合并操作之后，标为 0-12 和 17-31 的 SSTable 具有不相交的键范围，点查找查询只需检查其中之一。
+还应注意，在此方案下 SSTable 不再是固定大小的，因为它们是基于下一层级重叠组的键范围生成的。
 
 <div style="text-align: center;">
 
@@ -302,23 +302,22 @@ It should also be noted that under this scheme SSTables are no longer fixed-size
 
 </div>
 
-<p style="text-align: center;">Fig.8. Partitioned tiering with horizontal grouping</p>
+<p style="text-align: center;">Fig.8. 带水平分组的分区 tiering</p>
 
-Figure 8 shows an example of the horizontal grouping scheme.
-In this scheme, each component, which is rangepartitioned into a set of fixed-size SSTables, serves as a logical group directly.
-Each level L further maintains an active group, which is also the first group, to receive new SSTables merged from the previous level.
-This active group can be viewed as a partial component being formed by merging the components at level L − 1 in the unpartitioned case.
-A merge operation selects the SSTables with overlapping key ranges from all of the groups at a level, and the resulting SSTables are added to the active group at the next level.
-For example in the figure, the SSTables labeled 35-70 and 35-65 at level 1 are merged together, and the resulting SSTables labeled 35-52 and 53-70 are added to the first group at level 2.
-However, although SSTables are fixed-size under the horizontal grouping scheme, it is still possible that one SSTable from a group may overlap a large number of SSTables in the remaining groups.
+图 8 显示了水平分组方案的示例。
+在该方案中，每个组件（范围分区为一组固定大小的 SSTable）直接作为一个逻辑组。
+每个层级 L 进一步维护一个活动组，即第一个组，用于接收从上一层级合并的新 SSTable。
+此活动组可以视为在未分区情况下通过合并层级 L-1 的组件而形成的部分组件。
+合并操作从层级的所有组中选择具有重叠键范围的 SSTable，并将结果 SSTable 添加到下一层级的活动组中。
+例如在图中，层级 1 中标为 35-70 和 35-65 的 SSTable 被合并在一起，结果标为 35-52 和 53-70 的 SSTable 被添加到层级 2 的第一个组中。
+然而，尽管在水平分组方案下 SSTable 是固定大小的，一个组中的某个 SSTable 仍可能重叠剩余组中的大量 SSTable。
 
 ### Cost Analysis
 
-The I/O cost of a query depends on the number of components in an LSM-tree.
-Without Bloom filters, the I/O cost of a point lookup will be O(L) for leveling and O(T · L) for tiering.
+查询的 I/O 成本取决于 LSM-tree 中的组件数量。
+在没有布隆过滤器的情况下，点查找的 I/O 成本对于 leveling 为 O(L)，对于 tiering 为 O(T·L)。
 
-<p style="text-align: center;">Table.1. Summary of Cost Complexity of LSM-trees</p>
-
+<p style="text-align: center;">Table.1. LSM-tree 成本复杂度总结</p>
 
 | Merge Policy | Write              | Point Lookup<br />(Zero-Result/ Non-Zero-Result) | Short Range Query | Long Range Query   | Space Amplification |
 | -------------- | -------------------- | -------------------------------------------------- | ------------------- | -------------------- | --------------------- |
@@ -327,256 +326,249 @@ Without Bloom filters, the I/O cost of a point lookup will be O(L) for leveling 
 
 ## Concurrency
 
-For concurrency control, an LSM-tree needs to handle concurrent reads and writes and to take care of concurrent flush and merge operations.
+对于并发控制，LSM-tree 需要处理并发的读取和写入，并处理并发的刷新和合并操作。
 
-Ensuring correctness for concurrent reads and writes is a general requirement for access methods in a database system.
-Depending on the transactional isolation requirement, today’s LSM-tree implementations either use a locking scheme or a multi-version scheme.
-A multi-version scheme works well with an LSM-tree since obsolete versions of a key can be naturally garbage-collected during merges.
-Concurrent flush and merge operations, however, are unique to LSM-trees.
-These operations modify the metadata of an LSM-tree, e.g., the list of active components.
-Thus, accesses to the component metadata must be properly synchronized.
-To prevent a component in use from being deleted, each component can maintain a reference counter.
-Before accessing the components of an LSM-tree, a query can first obtain a snapshot of active components and increment their in-use counters.
+确保并发读取和写入的正确性是数据库系统中访问方法的通用需求。
+根据事务隔离要求，当今的 LSM-tree 实现要么使用锁定方案，要么使用多版本方案。
+多版本方案与 LSM-tree 配合良好，因为过期的键版本可以在合并期间自然地被垃圾回收。
+然而，并发的刷新和合并操作是 LSM-tree 特有的。
+这些操作会修改 LSM-tree 的元数据，例如活动组件列表。
+因此，对组件元数据的访问必须正确同步。
+为防止正在使用的组件被删除，每个组件可以维护一个引用计数器。
+在访问 LSM-tree 的组件之前，查询可以首先获取活动组件的快照并递增它们的使用计数器。
 
-Since all writes are first appended into memory, writeahead logging (WAL) can be performed to ensure their durability.
-To simplify the recovery process, existing systems typically employ a no-steal buffer management policy.
-That is, a memory component can only be flushed when all active write transactions have terminated.
-During recovery for an LSM-tree, the transaction log is replayed to redo all successful transactions, but no undo is needed due to the no-steal policy.
-Meanwhile, the list of active disk components must also be recovered in the event of a crash.
+由于所有写入首先被追加到内存中，可以执行预写日志（WAL）来确保其持久性。
+为了简化恢复过程，现有系统通常采用无窃取缓冲管理策略。
+也就是说，只有当所有活动写入事务都已终止时，才能刷新内存组件。
+在 LSM-tree 的恢复过程中，重放事务日志以重做所有成功的事务，但由于无窃取策略，不需要撤销。
+同时，活动磁盘组件的列表也必须在崩溃后恢复。
 
-- For unpartitioned LSM-trees, this can be accomplished by adding a pair of timestamps to each disk component that indicate the range of timestamps of the stored entries.
-  This timestamp can be simply generated using local wall-clock time or a monotonic sequence number.
-  To reconstruct the component list, the recovery process can simply find all components with disjoint timestamps.
-  In the event that multiple components have overlapping timestamps, the component with the largest timestamp range is chosen and the rest can simply be deleted since they will have been merged to form the selected component.
-- For partitioned LSM-trees, this timestamp-based approach does not work anymore since each component is further range-partitioned.
-  To address this, a typical approach, used in LevelDB and RocksDB, is to maintain a separate metadata log to store all changes to the structural metadata, such as adding or deleting SSTables.
-  The state of the LSM-tree structure can then be reconstructed by replaying the metadata log during recovery.
+- 对于未分区的 LSM-tree，可以通过向每个磁盘组件添加一对时间戳来实现，这些时间戳表示存储条目时间戳的范围。
+  这个时间戳可以简单地使用本地挂钟时间或单调序列号生成。
+  要重建组件列表，恢复过程只需找到所有具有不重叠时间戳的组件。
+  如果有多个组件具有重叠的时间戳，则选择具有最大时间戳范围的组件，其余组件可以直接删除，因为它们已被合并到所选组件中。
+- 对于分区的 LSM-tree，这种基于时间戳的方法不再适用，因为每个组件进一步按范围分区。
+  为了解决这个问题，LevelDB 和 RocksDB 等系统采用了一种典型方法，即维护一个单独的元数据日志来存储对结构元数据的所有更改，例如添加或删除 SSTable。
+  然后，可以通过在恢复期间重放元数据日志来重建 LSM-tree 结构的状态。
 
-In general, we are given an LSM-tree of K+1 components, $C_0$, $C_1$, $C_2$, . . ., $C_{K-1}$ and $C_K$, of increasing size, where the $C_0$ component tree is memory resident and all other components are disk resident.
-There are asynchronous rolling merge processes in train between all component pairs ($C_{i-1}$, $C_i$) that move entries out from the smaller to the larger component each time the smaller component, $C_{i-1}$, exceeds its threshold size.
-Each disk resident component is constructed of page-sized nodes in a B-tree type structure, except that multiple nodes in key sequence order at all levels below the root sit on multi-page blocks.
-Directory information in upper levels of the tree channels access down through single page nodes and also indicates which sequence of nodes sits on a multi-page block, so that a read or write of such a block can be performed all at once.
-Under most circumstances, each multi-page block is packed full with single page nodes, but as we will see there are a few situations where a smaller number of nodes exist in such a block.
-In that case, the active nodes of the LSM-tree will fall on a contiguous set of pages of the multi-page block, though not necessarily the initial pages of the block.
-Apart from the fact that such contiguous pages are not necessarily the initial pages on the multi-page block, the structure of an LSM-tree component is identical to the structure of the SB-tree presented in, to which the reader is referred for supporting details.
+通常，我们有一个具有 K+1 个组件的 LSM-tree：$C_0$, $C_1$, $C_2$, ..., $C_{K-1}$ 和 $C_K$，大小递增，其中 $C_0$ 组件树常驻内存，所有其他组件驻留在磁盘上。
+所有组件对 ($C_{i-1}$, $C_i$) 之间存在异步的滚动合并过程，每次较小的组件 $C_{i-1}$ 超过其阈值大小时，就将条目从较小的组件移出到较大的组件。
+每个磁盘驻留组件由 B 树类型的页面大小节点构成，但根以下所有层级上的多个节点按键顺序位于多页面块上。
+树的上层目录信息将访问引导到单页面节点，并指示哪些节点序列位于多页面块上，以便可以一次完成对该块的读取或写入。
+在大多数情况下，每个多页面块都充满了单页面节点，但正如我们将看到的，有些情况下此类块中存在较少节点。
+在这种情况下，LSM-tree 的活动节点将落在多页面块的一组连续页面上，尽管不一定是块的初始页面。
+除了这些连续页面不一定是多页面块上的初始页面之外，LSM-tree 组件的结构与 SB-tree 的结构相同，读者可以参考该结构以获取支持的细节。
 
-A node of a disk-based component $C_i$ can be individually resident in a single page memory buffer, as when equal match finds are performed, or it can be memory resident within its containing multi-page block.
-A multi-page block will be buffered in memory as a result of a long range find or else because the rolling merge cursor is passing through the block in question at a high rate.
-In any event, all non-locked nodes of the $C_i$ component are accessible to directory lookup at all times, and disk access will perform lookaside to locate any node in memory, even if it is resident as part of a multi-page block taking part in the rolling merge.
-Given these considerations, a concurrency approach for the LSM-tree must mediate three distinct types of physical conflict.
+基于磁盘的组件 $C_i$ 的节点可以单独驻留在单页面内存缓冲区中（如执行等值匹配查找时），或者驻留在其包含的多页面块中。
+多页面块将因为长距离查找或因为滚动合并游标正高速通过该块而在内存中缓冲。
+无论如何，$C_i$ 组件的所有未锁定节点都可以随时通过目录查找访问，磁盘访问将执行旁路查找以定位内存中的任何节点，即使它是作为参与滚动合并的多页面块的一部分驻留。
+考虑到这些因素，LSM-tree 的并发方法必须调解三种不同类型的物理冲突。
 
-1. A find operation should not access a node of a disk-based component at the same time that a different process performing a rolling merge is modifying the contents of the node.
-2. A find or insert into the $C_0$ component should not access the same part of the tree that a different process is simultaneously altering to perform a rolling merge out to $C_1$.
-3. The cursor for the rolling merge from $C_{i-1}$ out to $C_i$ will sometimes need to move past the cursor for the rolling merge from $C_i$ out to $C_{i+1}$,
-   since the rate of migration out from the component $C_{i-1}$ is always at least as great as the rate of migration out from $C_i$ and this implies a faster rate of circulation of the cursor attached to the smaller component $C_{i-1}$.
-   Whatever concurrency method is adopted must permit this passage to take place without one process (migration out to $C_i$) being blocked behind the other at the point of intersection (migration out from $C_i$).
+1. 查找操作不应在另一个执行滚动合并的进程同时修改节点内容时访问基于磁盘的组件的节点。
+2. 对 $C_0$ 组件的查找或插入不应访问另一个进程同时正在修改以执行向 $C_1$ 滚动合并的同一树部分。
+3. 从 $C_{i-1}$ 到 $C_i$ 的滚动合并游标有时需要越过从 $C_i$ 到 $C_{i+1}$ 的滚动合并游标，
+   因为从组件 $C_{i-1}$ 迁移的速率总是至少与从 $C_i$ 迁移的速率一样大，这意味着附加到较小组件 $C_{i-1}$ 的游标循环速度更快。
+   无论采用何种并发方法，都必须允许这种穿越发生，而不会使一个进程（向 $C_i$ 迁移）在交叉点被另一个进程（从 $C_i$ 迁移）阻塞。
 
-Nodes are the unit of locking used in the LSM-tree to avoid physical conflict during concurrent access to disk based components.
-Nodes being updated because of rolling merge are locked in write mode and nodes being read during a find are locked in read mode; methods of directory locking to avoid deadlocks are well understood.
-The locking approach taken in $C_0$ is dependent on the data structure used.
-In the case of a (2-3)-tree, for example, we could write lock a subtree falling below a single (2-3)-directory node that contains all entries in the range affected during a merge to a node of $C_1$; simultaneously,
-find operations would lock all (2-3)-nodes on their access path in read mode so that one type of access will exclude another.
-Note that we are only considering concurrency at the lowest physical level of multi-level locking.
-We leave to others the question of more abstract locks, such as key range locking to preserve transactional isolation, and avoid for now the problem of phantom updates.
-Thus read-locks are released as soon as the entries being sought at the leaf level have been scanned.
-Write locks for (all) nodes under the cursor are released following each node merged from the larger component.
-This gives an opportunity for a long range find or for a faster cursor to pass a relatively slower cursor position, and thus addresses point (3) above.
+节点是 LSM-tree 中用于避免并发访问基于磁盘的组件时发生物理冲突的锁定单位。
+由于滚动合并而正在更新的节点以写模式锁定，在查找期间正在读取的节点以读模式锁定；避免死锁的目录锁定方法是众所周知的。
+$C_0$ 中采用的锁定方法取决于所使用的数据结构。
+例如，在 (2-3)-tree 的情况下，我们可以写锁定一个 (2-3)-目录节点下的子树，该节点包含在合并到 $C_1$ 节点期间受影响范围内的所有条目；同时，
+查找操作将以读模式锁定其访问路径上的所有 (2-3)-节点，使得一种访问排除另一种访问。
+注意，我们仅考虑多级锁定中最低物理级别的并发性。
+更抽象的锁的问题（如键范围锁定以保持事务隔离）留给其他人处理，我们暂时避免幻影更新的问题。
+因此，一旦在叶子层级找到的条目被扫描完成，读锁就会被释放。
+游标下（所有）节点的写锁在每次从较大组件合并一个节点后释放。
+这为长距离查找或更快的游标超越相对较慢的游标位置提供了机会，从而解决了上述第 (3) 点。
 
 ## Recovery
 
-As new entries are inserted into the $C_0$ component of the LSM-tree, and the rolling merge processes migrates entry information out to successively larger components, this work takes place in memory buffered multi-page blocks.
-As with any such memory buffered changes, the work is not resistant to system failure until it has been written to disk.
-We are faced with a classical recovery problem: to reconstruct work that has taken place in memory after a crash occurs and memory is lost.
-We don't need to create special logs to recover index entries on newly created records: transactional insert logs for these new records are written out to a sequential log file in the normal course of events,
-and it is a simple matter to treat these insert logs (which normally contain all field values together with the RID where the inserted record has been placed) as a logical base for reconstructing the index entries.
-This new approach to recover an index must be built into the system recovery algorithm, and may have the effect of extending the time before storage reclamation for such transactional History insert logs can take place, but this is a minor consideration.
+随着新条目插入到 LSM-tree 的 $C_0$ 组件中，以及滚动合并过程将条目信息迁移到相继更大的组件，这项工作发生在内存缓冲的多页面块中。
+与任何此类内存缓冲更改一样，在写入磁盘之前，这些工作对系统故障不具备抵抗力。
+我们面临一个经典的恢复问题：在崩溃发生且内存丢失后，重建在内存中进行的工作。
+我们不需要创建特殊的日志来恢复新创建记录的索引条目：这些新记录的事务性插入日志在正常情况下会被写入顺序日志文件，
+将这些插入日志（通常包含所有字段值以及插入记录放置位置的 RID）视为重建索引条目的逻辑基础是简单的。
+这种恢复索引的新方法必须嵌入到系统恢复算法中，并可能延长此类事务性历史插入日志的存储回收时间，但这是一个次要考虑因素。
 
-To demonstrate recovery of the LSM-tree index, it is important that we carefully define the form of a checkpoint and demonstrate that we know where to start in the sequential log file,
-and how to apply successive logs, so as to deterministically replicate updates to the index that need to be recovered.
-The scheme we use is as follows.
-When a checkpoint is requested at time T0, we complete all merge steps in operation so that node locks are released, then postpone all new entry inserts to the LSM-tree until the checkpoint completes;
-at this point we create an LSMtree checkpoint with the following actions.
+为了演示 LSM-tree 索引的恢复，重要的是精确定义检查点的形式，并演示我们知道在顺序日志文件中从哪里开始，
+以及如何依次应用日志，以确定性地复制需要恢复的索引更新。
+我们使用的方案如下。
+当在时间 T0 请求检查点时，我们完成所有正在进行的合并步骤（释放节点锁），然后将所有新条目的插入推迟到 LSM-tree，直到检查点完成；
+此时我们通过以下操作创建 LSM-tree 检查点。
 
-- We write the contents of component $C_0$ to a known disk location; following this, entry inserts to $C_0$ can begin again, but merge steps continue to be deferred.
-- We flush to disk all dirty memory buffered nodes of disk based components.
-- We create a special checkpoint log with the following information:
-  - The Log Sequence Number, LSN0, of the last inserted indexed row at time T0
-  - The disk addresses of the roots of all components
-  - The location of all merge cursors in the various components
-  - The current information for dynamic allocation of new multi-page blocks.
+- 将组件 $C_0$ 的内容写入已知的磁盘位置；之后，可以重新开始向 $C_0$ 插入条目，但合并步骤继续推迟。
+- 刷新磁盘组件的所有脏内存缓冲节点到磁盘。
+- 创建包含以下信息的特殊检查点日志：
+  - 在时间 T0 最后插入的索引行的日志序列号 LSN0
+  - 所有组件的根节点的磁盘地址
+  - 各个组件中所有合并游标的位置
+  - 新多页面块动态分配的当前信息。
 
-Once this checkpoint information has been placed on disk, we can resume regular operations of the LSM-tree.
-In the event of a crash and subsequent restart, this checkpoint can be located and the saved component $C_0$ loaded back into memory, together with the buffered blocks of other components needed to continue rolling merges.
-Then logs starting with the first LSN after LSN0 are read into memory and have their associated index entries entered into the LSM-tree.
-As of the time of the checkpoint, the positions of all disk-based components containing all indexing information were recorded in component directories starting at the roots, whose locations are known from the checkpoint log.
-None of this information has been wiped out by later writes of multi-page disk blocks since these writes are always to new locations on disk until subsequent checkpoints make outmoded multi-page blocks unnecessary.
-As we recover logs of inserts for indexed rows, we place new entries into the $C_0$ component; now the rolling merge starts again, overwriting any multi-page blocks written since the checkpoint,
-but recovering all new index entries, until the most recently inserted row has been indexed and recovery is complete.
+一旦此检查点信息已放置在磁盘上，我们可以恢复 LSM-tree 的正常操作。
+在发生崩溃和随后的重启时，可以定位此检查点，并将保存的组件 $C_0$ 加载回内存，以及其他组件继续滚动合并所需的缓冲块。
+然后读取从 LSN0 之后的第一个 LSN 开始的日志，并将其关联的索引条目输入到 LSM-tree 中。
+在检查点时刻，包含所有索引信息的所有基于磁盘的组件的位置已在以根开始的组件目录中记录，根的位置可从检查点日志获知。
+这些信息不会被后续的多页面磁盘块写入抹去，因为这些写入总是写入磁盘上的新位置，直到后续的检查点使过时的多页面块变得不必要。
+当我们恢复索引行的插入日志时，将新条目放入 $C_0$ 组件中；现在滚动合并重新开始，覆盖自检查点以来写入的任何多页面块，
+但恢复所有新的索引条目，直到最近插入的行已被索引，恢复完成。
 
 ## Optimizations
 
-We now identify the major issues of the basic LSM-tree design, and further present a taxonomy of LSM-tree improvements based on these drawbacks.
+我们现在确定基本 LSM-tree 设计的主要问题，并基于这些缺点进一步提出 LSM-tree 改进的分类。
 
-Write and read amplification are major problems in LSM-trees such as LevelDB.
-Write (read) amplification is defined as the ratio between the amount of data written to (read from) the underlying storage device and the amount of data requested by the user.
+写入和读取放大是 LSM-tree（如 LevelDB）中的主要问题。
+写入（读取）放大定义为写入（读取）到底层存储设备的数据量与用户请求的数据量之间的比率。
 
-To achieve mostly-sequential disk access, LevelDB writes more data than necessary (although still sequentially), i.e., LevelDB has high write amplification.
-Since the size limit of Li is 10 times that of Li−1, when merging a file from Li−1 to Li during compaction, LevelDB may read up to 10 files from Li in the worst case, and write back these files to Li after sorting.
-Therefore, the write amplification of moving a file across two levels can be up to 10.
-For a large dataset, since any newly generated table file can eventually migrate from L0 to L6 through a series of compaction steps, write amplification can be over 50 (10 for each gap between L1 to L6).
+为了实现大部分顺序磁盘访问，LevelDB 写入的数据量超过必要量（尽管仍然是顺序的），即 LevelDB 具有高写入放大。
+由于 Li 的大小限制是 Li-1 的 10 倍，在压缩期间将文件从 Li-1 合并到 Li 时，LevelDB 在最坏情况下可能从 Li 读取最多 10 个文件，并在排序后将这些文件写回 Li。
+因此，将文件跨越两个层级移动的写入放大可能高达 10。
+对于大型数据集，由于任何新生成的表文件都可以通过一系列压缩步骤从 L0 迁移到 L6，写入放大可能超过 50（L1 到 L6 之间每个间隙为 10）。
 
-Read amplification has been a major problem for LSM-trees due to trade-offs made in the design. There are two sources of read amplification in LevelDB.
-First, to lookup a key-value pair, LevelDB may need to check multiple levels. In the worst case, LevelDB needs to check eight files in L0, and one file for each of the remaining six levels: a total of 14 files.
-Second, to find a key-value pair within a SSTable file, LevelDB needs to read multiple metadata blocks within the file.
-Specifically, the amount of data actually read is given by (index block + bloom-filter blocks + data block).
-For example, to lookup a 1-KB key-value pair, LevelDB needs to read a 16-KB index block, a 4- KB bloom-filter block, and a 4-KB data block; in total, 24 KB.
-Therefore, considering the 14 SSTable files in the worst case, the read amplification of LevelDB is 24 × 14 = 336. Smaller key-value pairs will lead to an even higher read amplification.
+由于设计中的权衡，读取放大一直是 LSM-tree 的主要问题。LevelDB 中读取放大的来源有两个。
+首先，要查找一个键值对，LevelDB 可能需要检查多个层级。在最坏情况下，LevelDB 需要检查 L0 中的 8 个文件，以及其余六个层级中各一个文件：共 14 个文件。
+其次，要在 SSTable 文件中找到一个键值对，LevelDB 需要读取文件内的多个元数据块。
+具体来说，实际读取的数据量为（索引块 + 布隆过滤器块 + 数据块）。
+例如，要查找一个 1 KB 的键值对，LevelDB 需要读取 16 KB 的索引块、4 KB 的布隆过滤器块和 4 KB 的数据块；共 24 KB。
+因此，考虑到最坏情况下的 14 个 SSTable 文件，LevelDB 的读取放大为 24 × 14 = 336。更小的键值对会导致更高的读取放大。
 
 ### Write Amplification
 
-Even though LSM-trees can provide much better write throughput than in-place update structures such as B+-trees by reducing random I/Os, the leveling merge policy, which has been adopted by modern key-value stores such as LevelDB and RocksDB, still incurs relatively high write amplification.
-High write amplification not only limits the write performance of an LSM-tree but also reduces the lifespan of SSDs due to frequent disk writes.
-A large body of research has been conducted to re- duce the write amplification of LSM-trees.
+尽管 LSM-tree 可以通过减少随机 I/O 提供比就地更新结构（如 B+ 树）更好的写入吞吐量，但现代键值存储（如 LevelDB 和 RocksDB）采用的 leveling 合并策略仍然会导致相对较高的写入放大。
+高写入放大不仅限制了 LSM-tree 的写入性能，还因频繁的磁盘写入而降低 SSD 的寿命。
+已经有大量研究致力于减少 LSM-tree 的写入放大。
 
 #### Tiering
 
-One way to optimize write amplification is to apply tiering since it has much lower write amplification than leveling.
-This will lead to worse query performance and space utilization.
-The improvements in this category can all be viewed as some variants of the partitioned [tiering design with vertical or horizontal grouping](/docs/CS/Algorithms/tree/LSM.mdSM.md?id=Tiering-Merge_Policy).
+优化写入放大的一种方法是应用 tiering，因为它具有比 leveling 低得多的写入放大。
+这会导致较差的查询性能和空间利用率。
+此类别的改进都可以视为分区 [tiering 设计（垂直或水平分组）](/docs/CS/Algorithms/tree/LSM.md?id=Tiering-Merge_Policy)的某些变体。
 
-The WriteBuffer(WB) Tree can be viewed as a variant of the partitioned tiering design with vertical grouping.
-It has made the following modifications.
-First, it relies on hash-partitioning to achieve workload balance so that each SSTable group roughly stores the same amount of data.
-Furthermore, it organizes SSTable groups into a B+-tree-like structure to enable self-balancing to minimize the total number of levels.
-Specifically, each SSTable group is treated like a node in a B+-tree.
-When a non-leaf node becomes full with T SSTables, these T SSTables are merged together to form new SSTables that are added into its child nodes.
-When a leaf node becomes full with T SSTables, it is split into two leaf nodes by merging all of its SSTables into two leaf nodes with smaller key ranges so that each new node receives about T /2 SSTables.
+WriteBuffer（WB）树可以视为具有垂直分组的分区 tiering 设计的变体。
+它做了以下修改。
+首先，它依赖哈希分区来实现工作负载平衡，使每个 SSTable 组大致存储相同数量的数据。
+此外，它将 SSTable 组组织成类似 B+ 树的结构以实现自平衡，从而最小化总层级数。
+具体来说，每个 SSTable 组被视为 B+ 树中的一个节点。
+当非叶子节点满（有 T 个 SSTable）时，这 T 个 SSTable 合并在一起形成新的 SSTable，添加到其子节点中。
+当叶子节点满（有 T 个 SSTable）时，它被分成两个叶子节点，通过将其所有 SSTable 合并到两个具有更小键范围的叶子节点中，使每个新节点接收约 T/2 个 SSTable。
 
 #### Merge Skipping
 
-The skip-tree proposes a merge skipping idea to im- prove write performance.
-The observation is that each entry must be merged from level 0 down to the largest level.
-If some entries can be directly pushed to a higher level by skip- ping some level-by-level merges, then the total write cost will be reduced.
+Skip-tree 提出了一种合并跳过思想以提高写入性能。
+其观察是每个条目必须从层级 0 向下合并到最大层级。
+如果某些条目可以通过跳过一些逐层合并直接推送到更高层级，那么总写入成本将降低。
 
 #### Exploiting Data Skew
 
-TRIAD reduces write amplification for skewed update workloads where some hot keys are updated frequently
+TRIAD 减少了倾斜更新工作负载的写入放大，其中一些热键频繁更新
 
 ### Merge Operations
 
-Merge operations are critical to the performance of LSM-trees and must therefore be carefully implemented.
-Moreover, merge operations can have negative impacts on the system, including buffer cache misses after merges and write stalls during large merges.
-Several improvements have been proposed to optimize merge operations to address these problems.
+合并操作对 LSM-tree 的性能至关重要，因此必须仔细实现。
+此外，合并操作可能对系统产生负面影响，包括合并后的缓冲区缓存未命中和大型合并期间的写入停顿。
+已经提出了一些改进来优化合并操作以解决这些问题。
 
-Next we review some existing work that improves the implementation of merge operations, including improving merge performance, minimizing buffer cache misses, and eliminating write stalls.
+接下来我们回顾一些改进合并操作实现的现有工作，包括提高合并性能、最小化缓冲区缓存未命中和消除写入停顿。
 
 #### Merge Performance
 
-The VT-tree presents a stitching operation to improve merge performance.
-The basic idea is that when merging multiple SSTables, if the key range of a page from an input SSTable does not overlap the key ranges of any pages from other SSTables, then this page can be simply pointed to by the resulting SSTable without reading and copying it again.
-Even though stitching improves merge performance for certain workloads, it has a number of drawbacks.
+VT-tree 提出了一种拼接操作以提高合并性能。
+其基本思想是，在合并多个 SSTable 时，如果来自输入 SSTable 的页面的键范围与任何其他 SSTable 的页面的键范围不重叠，则结果 SSTable 可以直接指向该页面，而无需再次读取和复制它。
+尽管拼接可以提高某些工作负载的合并性能，但它有许多缺点。
 
-- First, it can cause fragmentation since pages are no longer continuously stored on disk.
-  To alleviate this problem, the VT-tree introduces a stitching threshold K so that a stitching operation is triggered only when there are at least K continuous pages from an input SSTable.
-- Moreover, since the keys in stitched pages are not scanned during a merge operation, a Bloom filter cannot be produced.
+- 首先，它可能导致碎片化，因为页面不再连续存储在磁盘上。
+  为了缓解这个问题，VT-tree 引入了拼接阈值 K，以便仅在输入 SSTable 中至少有 K 个连续页面时才触发拼接操作。
+- 此外，由于拼接页面中的键在合并操作期间未被扫描，因此无法生成布隆过滤器。
 
-To address this issue, the VT-tree uses quotient filters since multiple quotient filters can be combined directly without accessing the original keys.
+为了解决这个问题，VT-tree 使用商过滤器，因为多个商过滤器可以直接组合，无需访问原始键。
 
 #### Caching
 
-Merge operations can interfere with the caching behavior of a system.
-After a new component is enabled, queries may experience a large number of buffer cache misses since the new component has not been cached yet.
-A simple writethrough cache maintenance policy cannot solve this problem.
-If all of the pages of the new component were cached during a merge operation, a lot of other working pages would be evicted, which will again cause buffer cache misses.
+合并操作可能干扰系统的缓存行为。
+新组件启用后，查询可能会遇到大量缓冲区缓存未命中，因为新组件尚未被缓存。
+简单的写通缓存维护策略无法解决这个问题。
+如果在合并操作期间缓存了新组件的所有页面，则许多其他工作页面将被驱逐，这又会导致缓冲区缓存未命中。
 
 #### Write Stalls
 
-Although the LSM-tree offers a much higher write throughput compared to traditional B+-trees, it often exhibits write stalls and unpredictable write latencies since heavy operations such as flushes and merges run in the background.
-bLSM proposes a spring-and-gear merge scheduler to minimize write stalls for the unpartitioned leveling merge policy.
-Its basic idea is to tolerate an extra component at each level so that merges at different levels can proceed in parallel.
-Furthermore, the merge scheduler controls the progress of merge operations to ensure that level L produces a new component at level L+1 only after the previous merge operation at level L+1 has completed.
-This eventually cascades to limit the maximum write speed at the memory component and eliminates large write stalls.
-However, bLSM itself has several limitations.
-bLSM was only designed for the unpartitioned leveling merge policy.
-Moreover, it only bounds the maximum latency of writing to memory components while the queuing latency, which is often a major source of performance variability, is ignored.
+尽管 LSM-tree 提供了比传统 B+ 树高得多的写入吞吐量，但它经常表现出写入停顿和不可预测的写入延迟，因为繁重的操作（如刷新和合并）在后台运行。
+bLSM 提出了一种弹簧齿轮合并调度器，以最小化未分区 leveling 合并策略的写入停顿。
+其基本思想是容忍每个层级有一个额外组件，以便不同层级的合并可以并行进行。
+此外，合并调度器控制合并操作的进度，以确保层级 L 仅在层级 L+1 的先前合并操作完成后才在层级 L+1 生成新组件。
+这最终级联以限制内存组件的最大写入速度，并消除大的写入停顿。
+然而，bLSM 本身有几个局限性。
+bLSM 仅针对未分区 leveling 合并策略设计。
+此外，它仅限制了写入内存组件的最大延迟，而队列延迟（通常是性能变化的主要来源）被忽略。
 
 ### Hardware
 
-In order to maximize performance, LSM-trees must be carefully implemented to fully utilize the un- derling hardware platforms.
-The original LSM-tree has been designed for hard disks, with the goal being reducing ran- dom I/Os.
-In recent years, new hardware platforms have presented new opportunities for database systems to achieve better performance.
-A significant body of recent research has been devoted to improving LSM-trees to fully exploit the underling hardware platforms, including large memory, multi-core, SSD/NVM, and native storage.
+为了最大化性能，必须仔细实现 LSM-tree 以充分利用底层硬件平台。
+原始的 LSM-tree 是为硬盘设计的，目标是减少随机 I/O。
+近年来，新的硬件平台为数据库系统提供了实现更好性能的新机会。
+大量最新的研究致力于改进 LSM-tree，以充分利用底层硬件平台，包括大内存、多核、SSD/NVM 和原生存储。
 
 #### Large Memory
 
-It is beneficial for LSM-trees to have large memory components to reduce the total number of levels, as this will improve both write performance and query performance.
-However, managing large memory components brings several new challenges.
-If a memory component is implemented directly using on-heap data structures, large memory can result in a large number of small objects that lead to significant GC overheads.
-In contrast, if a memory component is implemented using off-heap structures such as a concurrent B+-tree, large memory can still cause a higher search cost (due to tree height) and cause more CPU cache misses for writes, as a write must first search for its position in the structure.
+LSM-tree 拥有大内存组件是有益的，因为它可以减少总层级数，从而改善写入性能和查询性能。
+然而，管理大内存组件带来了几个新的挑战。
+如果内存组件直接使用堆上数据结构实现，大内存可能导致大量小对象，从而产生显著的 GC 开销。
+相反，如果内存组件使用堆外结构（如并发 B+ 树）实现，大内存仍然可能导致更高的搜索成本（由于树的高度）和更多的 CPU 缓存未命中，因为写入必须首先在结构中搜索其位置。
 
 #### Multi-Core
 
-cLSM optimizes for multi-core machines and presents new concurrency control algorithms for various LSM-tree operations.
-It organizes LSM components into a concurrent linked list to minimize blocking caused by synchronization.
-Flush and merge operations are carefully designed so that they only result in atomic modifications to the linked list that will never block queries.
-When a memory component becomes full, a new memory component is allocated while the old one will be flushed.
-To avoid writers inserting into the old memory component, a writer acquires a shared lock before modifications and the flush thread acquires an exclusive lock before flushes.
-cLSM also supports snapshot scans via multi-versioning and atomic read-modify-write operations using an optimistic concurrency control approach that exploits the fact that all writes, and thus all conflicts, involve the memory component.
+cLSM 针对多核机器进行了优化，并为各种 LSM-tree 操作提出了新的并发控制算法。
+它将 LSM 组件组织成并发链表，以最小化同步引起的阻塞。
+刷新和合并操作被精心设计，使得它们仅导致链表的原子修改，永远不会阻塞查询。
+当内存组件变满时，分配新的内存组件，而旧组件将被刷新。
+为避免写入者插入旧的内存组件，写入者在修改前获取共享锁，刷新线程在刷新前获取排他锁。
+cLSM 还通过多版本化支持快照扫描，并使用乐观并发控制方法支持原子读-修改-写操作，该方法利用了所有写入（从而所有冲突）涉及内存组件的事实。
 
 #### SSD/NVM
 
-The FD-tree uses a similar design to LSM-trees to reduce random writes on SSDs.
-One major difference is that the FD-tree exploits fractional cascading to improve query performance instead of Bloom filters.
-For the component at each level, the FD-tree additionally stores fence pointers that point to each page at the next level.
+FD-tree 使用与 LSM-tree 类似的设计来减少 SSD 上的随机写入。
+一个主要区别是 FD-tree 利用分数级联来提高查询性能，而不是布隆过滤器。
+对于每个层级的组件，FD-tree 额外存储指向下一层级每个页面的栅栏指针。
 
-Since SSDs support efficient random reads, separating values from keys becomes a viable solution to improve the write performance of LSM-trees.
-This approach was first implemented by WiscKey and subsequently adopted by HashKV and SifrDB.
+由于 SSD 支持高效的随机读取，将值和键分离成为提高 LSM-tree 写入性能的可行解决方案。
+这种方法首先由 WiscKey 实现，随后被 HashKV 和 SifrDB 采用。
 
 #### Wisckey
 
-The storage landscape is quickly changing, and modern solid-state storage devices (SSDs) are supplanting HDDs in many important use cases.
-As compared to HDDs, SSDs are fundamentally different in their performance and reliability characteristics; when considering key-value storage system design, we believe the following three differences are of paramount importance.
+存储格局正在迅速变化，现代固态存储设备（SSD）正在许多重要使用场景中取代 HDD。
+与 HDD 相比，SSD 在性能和可靠性特性上有根本性不同；在考虑键值存储系统设计时，我们认为以下三个差异至关重要。
 
-- First, the difference between random and sequential performance is not nearly as large as with HDDs; thus, an LSM-tree that performs a large number of sequential I/Os to reduce later random I/Os may be wasting bandwidth needlessly.
-- Second, SSDs have a large degree of internal parallelism; an LSM built atop an SSD must be carefully designed to harness said parallelism.
-- Third, SSDs can wear out through repeated writes; the high write amplification in LSMtrees can significantly reduce device lifetime.
-  The combination of these factors greatly impacts LSM-tree performance on SSDs, reducing throughput by 90% and increasing write load by a factor over 10.
-  While replacing an HDD with an SSD underneath an LSM-tree does improve performance, with current LSM-tree technology, the SSD’s true potential goes largely unrealized.
+- 首先，随机和顺序性能之间的差异不像 HDD 那样大；因此，执行大量顺序 I/O 以减少后续随机 I/O 的 LSM-tree 可能不必要地浪费带宽。
+- 其次，SSD 具有很大程度的内并行性；构建在 SSD 之上的 LSM 必须精心设计以利用这种并行性。
+- 第三，SSD 可能因重复写入而磨损；LSM-tree 中的高写入放大可能显著缩短设备寿命。
+  这些因素的组合极大影响了 LSM-tree 在 SSD 上的性能，吞吐量降低 90%，写入负载增加 10 倍以上。
+  虽然在 LSM-tree 下用 SSD 替换 HDD 确实可以提高性能，但使用当前的 LSM-tree 技术，SSD 的真正潜力大部分尚未实现。
 
-The central idea behind WiscKey is the **separation of keys and values**; only keys are kept sorted in the LSM-tree, while values are stored separately in a log. In other words, we decouple key sorting and garbage collection in WiscKey while LevelDB bundles them together.
-This simple technique can significantly reduce write amplification by avoiding the unnecessary movement of values while sorting.
-Furthermore, the size of the LSM-tree is noticeably decreased, leading to fewer device reads and better caching during lookups.
-WiscKey retains the benefits of LSMtree technology, including excellent insert and lookup performance, but without excessive I/O amplification.
+WiscKey 的核心思想是**键值分离**；只有键在 LSM-tree 中保持排序，而值单独存储在日志中。换句话说，我们在 WiscKey 中解耦了键排序和垃圾回收，而 LevelDB 将它们捆绑在一起。
+这种简单的技术可以通过避免在排序过程中不必要地移动值来显著减少写入放大。
+此外，LSM-tree 的大小显着减小，从而减少设备读取并在查找期间实现更好的缓存。
 
-Separating keys from values introduces a number of challenges and optimization opportunities.
+WiscKey 保留了 LSM-tree 技术的优势，包括出色的插入和查找性能，但没有过度的 I/O 放大。
 
-- First, range query (scan) performance may be affected because values are not stored in sorted order anymore.
-  WiscKey solves this challenge by using the abundant internal parallelism of SSD devices.
-- Second, WiscKey needs garbage collection to reclaim the free space used by invalid values.
-  WiscKey proposes an online and lightweight garbage collector which only involves sequential I/Os and impacts the foreground workload minimally.
-- Third, separating keys and values makes crash consistency challenging; WiscKey leverages an interesting property in modern file systems, that appends never result in garbage data on a crash.
-  WiscKey optimizes performance while providing the same consistency guarantees as found in modern LSM-based systems.
+将键与值分离引入了一系列挑战和优化机会。
 
-WiscKey’s performance is not always better than standard LSM-trees; if small values are written in random order, and a large dataset is range-queried sequentially, WiscKey performs worse than LevelDB.
-However, this workload does not reflect real-world use cases (which primarily use shorter range queries) and can be improved by log reorganization.
+- 首先，范围查询（扫描）性能可能受到影响，因为值不再按排序顺序存储。
+  WiscKey 通过利用 SSD 设备丰富的内并行性来解决这一挑战。
+- 其次，WiscKey 需要垃圾回收来回收无效值占用的空间。
+  WiscKey 提出了一种在线轻量级垃圾回收器，仅涉及顺序 I/O，对前台工作负载影响最小。
+- 第三，键值分离使崩溃一致性变得具有挑战性；WiscKey 利用了现代文件系统的一个有趣特性，即追加操作绝不会在崩溃时产生垃圾数据。
+  WiscKey 在提供与现代基于 LSM 的系统相同的一致性保证的同时优化了性能。
 
-WiscKey’s architecture is shown in Figure 9. Keys are
-stored in an LSM-tree while values are stored in a separate value-log file, the vLog. The artificial value stored
-along with the key in the LSM-tree is the address of the
-actual value in the vLog.
-When the user inserts a key-value pair in WiscKey, the
-value is first appended to the vLog, and the key is then
-inserted into the LSM tree along with the value’s address
-(<vLog-offset, value-size>). Deleting a key simply
-deletes it from the LSM tree, without touching the vLog.
-All valid values in the vLog have corresponding keys in
-the LSM-tree; the other values in the vLog are invalid
-and will be garbage collected later.
+WiscKey 的性能并不总是优于标准 LSM-tree；如果小值以随机顺序写入，并且对大数据集进行顺序范围查询，WiscKey 的性能比 LevelDB 差。
+然而，这种工作负载并不反映现实世界的用例（主要使用较短的范围查询），并且可以通过日志重组来改善。
 
-When the user queries for a key, the key is first
-searched in the LSM-tree, and if found, the corresponding value’s address is retrieved. Then, WiscKey reads the
-value from the vLog. Note that this process is applied to both point queries and range queries.
-Although the idea behind key-value separation is simple, it leads to many challenges and optimization opportunities described in the following subsections.
+WiscKey 的架构如图 9 所示。键
+存储在 LSM-tree 中，而值存储在单独的值日志文件 vLog 中。与 LSM-tree 中键一起存储的人造值是实际值在 vLog 中的地址。
+当用户在 WiscKey 中插入键值对时，值首先被追加到 vLog，然后键与值的地址（<vLog-offset, value-size>）一起插入到 LSM-tree 中。
+删除键只需从 LSM-tree 中删除它，而无需触及 vLog。
+vLog 中的所有有效值在 LSM-tree 中都有对应的键；vLog 中的其他值无效，稍后将被垃圾回收。
+
+当用户查询键时，首先在 LSM-tree 中搜索该键，如果找到，则检索对应的值地址。然后，WiscKey 从 vLog 中读取该值。
+注意，此过程适用于点查询和范围查询。
+虽然键值分离背后的思想很简单，但它导致了许多挑战和优化机会，在以下子节中描述。
 
 <div style="text-align: center;">
 
@@ -585,39 +577,39 @@ Although the idea behind key-value separation is simple, it leads to many challe
 </div>
 
 <p style="text-align: center;">
-Fig.9. WiscKey Data Layout on SSD. 
-This figureshows the data layout of WiscKey on a single SSD device. 
+Fig.9. WiscKey 在 SSD 上的数据布局。
+该图显示了 WiscKey 在单个 SSD 设备上的数据布局。
 <br>
-Keys and value’s locations are stored in LSM-tree while values areappended to a separate value log file.
+键和值的位置存储在 LSM-tree 中，而值被追加到单独的值日志文件中。
 </p>
 
-To realize an SSD-optimized key-value store, WiscKey includes four critical ideas.
+为了实现 SSD 优化的键值存储，WiscKey 包含四个关键思想。
 
-- First, WiscKey separates keys from values, keeping only keys in the LSM-tree and the values in a separate log file.
-- Second, to deal with unsorted values (which necessitate random access during range queries), WiscKey uses the parallel random-read characteristic of SSD devices.
-- Third, WiscKey utilizes unique crash-consistency and garbagecollection techniques to efficiently manage the value log.
-- Finally, WiscKey optimizes performance by removing the LSM-tree log without sacrificing consistency, thus reducing system-call overhead from small writes.
+- 首先，WiscKey 将键与值分离，仅在 LSM-tree 中保留键，值保留在单独的日志文件中。
+- 其次，为了处理未排序的值（这需要在范围查询期间进行随机访问），WiscKey 利用了 SSD 设备的并行随机读取特性。
+- 第三，WiscKey 利用独特的崩溃一致性和垃圾回收技术来高效管理值日志。
+- 最后，WiscKey 通过在不牺牲一致性的情况下移除 LSM-tree 日志来优化性能，从而减少小写入的系统调用开销。
 
-WiscKey is motivated by a simple revelation. Compaction only needs to sort keys, while values can be managed separately.
-Since keys are usually smaller than values, compacting only keys could significantly reduce the amount of data needed during the sorting.
-In WiscKey, only the location of the value is stored in the LSM-tree with the key, while the actual values are stored elsewhere in an SSD-friendly fashion.
-With this design, for a database with a given size, the size of the LSM-tree of WiscKey is much smaller than that of LevelDB.
-The smaller LSM-tree can remarkably reduce the write amplification for modern workloads that have a moderately large value size.
+WiscKey 的动机源于一个简单的启示。压缩只需要排序键，而值可以单独管理。
+由于键通常比值小，仅压缩键可以显著减少排序过程中需要处理的数据量。
+在 WiscKey 中，只有值的位置与键一起存储在 LSM-tree 中，而实际值以 SSD 友好的方式存储在其他地方。
+通过这种设计，对于给定大小的数据库，WiscKey 的 LSM-tree 大小远小于 LevelDB 的 LSM-tree 大小。
+较小的 LSM-tree 可以显著减少现代工作负载（具有中等大小的值）的写入放大。
 
-WiscKey’s smaller read amplification improves lookup performance.
-During lookup, WiscKey first searches the LSM-tree for the key and the value’s location; once found, another read is issued to retrieve the value.
-Readers might assume that WiscKey will be slower than LevelDB for lookups, due to its extra I/O to retrieve the value.
-However, since the LSM-tree of WiscKey is much smaller than LevelDB (for the same database size), a lookup may search fewer levels of table files in the LSM-tree and a significant portion of the LSM-tree can be easily cached in memory.
-Hence, each lookup only requires a single random read (for retrieving the value) and thus achieves a lookup performance better than LevelDB.
+WiscKey 较小的读取放大提高了查找性能。
+在查找期间，WiscKey 首先在 LSM-tree 中搜索键和值的位置；一旦找到，就会发出另一次读取来检索该值。
+读者可能认为 WiscKey 将比 LevelDB 慢，因为它需要额外的 I/O 来检索值。
+然而，由于 WiscKey 的 LSM-tree 远小于 LevelDB（对于相同的数据库大小），查找可能搜索 LSM-tree 中较少的表文件层级，并且 LSM-tree 的很大一部分可以轻松缓存在内存中。
+因此，每次查找仅需要一次随机读取（用于检索值），从而实现比 LevelDB 更好的查找性能。
 
-To make range queries efficient, WiscKey leverages the parallel I/O characteristic of SSD devices to prefetch values from the vLog during range queries.
-The underlying idea is that, with SSDs, only keys require special attention for efficient retrieval.
-So long as keys are retrieved efficiently, range queries can use parallel random reads for efficiently retrieving values.
-The prefetching framework can easily fit with the current range query interface.
-In the current interface, if the user requests a range query, an iterator is returned to the user.
-For each Next() or Prev() requested on the iterator, WiscKey tracks the access pattern of the range query.
-Once a contiguous sequence of key-value pairs is requested, WiscKey starts reading a number of following keys from the LSM-tree sequentially.
-The corresponding value addresses retrieved from the LSM-tree are inserted into a queue; multiple threads will fetch these addresses from the vLog concurrently in the background.
+为了使范围查询高效，WiscKey 利用 SSD 设备的并行 I/O 特性，在范围查询期间从 vLog 预取值。
+其基本思想是，对于 SSD，只需对键给予特殊关注以实现高效检索。
+只要键被高效检索，范围查询就可以使用并行随机读取来高效检索值。
+预取框架可以轻松适应当前的范围查询接口。
+在当前接口中，如果用户请求范围查询，则向用户返回一个迭代器。
+对于每次在迭代器上请求的 Next() 或 Prev()，WiscKey 跟踪范围查询的访问模式。
+一旦请求了连续的键值对序列，WiscKey 开始从 LSM-tree 顺序读取后续的键。
+从 LSM-tree 检索到的对应值地址被插入到队列中；多个线程将在后台从 vLog 并发地获取这些地址。
 
 <div style="text-align: center;">
 
@@ -626,40 +618,40 @@ The corresponding value addresses retrieved from the LSM-tree are inserted into 
 </div>
 
 <p style="text-align: center;">
-Fig.10. WiscKey New Data Layout for Garbage Collection. 
-This figure shows the new data layout of WiscKey to support an efficient garbage collection. 
+Fig.10. WiscKey 用于垃圾回收的新数据布局。
+该图显示了 WiscKey 支持高效垃圾回收的新数据布局。
 <br>
-A head and tail pointer are maintained in memory and stored persistently in the LSM-tree.
+在内存中维护头指针和尾指针，并持久存储在 LSM-tree 中。
 <br>
-Only the garbage collection thread changes thetail, while all writes to the vLog are append to the head.
+只有垃圾回收线程更改尾指针，而所有对 vLog 的写入都追加到头指针。
 </p>
 
-Key-value stores based on standard LSM-trees do not immediately reclaim free space when a key-value pair is deleted or overwritten.
-Rather, during compaction, if data relating to a deleted or overwritten key-value pair is found, the data is discarded and space is reclaimed.
-In WiscKey, only invalid keys are reclaimed by the LSMtree compaction.
-Since WiscKey does not compact values, it needs a special garbage collector to reclaim free space in the vLog.
+基于标准 LSM-tree 的键值存储在键值对被删除或覆盖时不会立即回收空间。
+相反，在压缩期间，如果找到与被删除或覆盖的键值对相关的数据，则丢弃该数据并回收空间。
+在 WiscKey 中，只有无效键被 LSM-tree 压缩回收。
+由于 WiscKey 不压缩值，它需要专门的垃圾回收器来回收 vLog 中的空间。
 
-WiscKey targets a lightweight and online garbage collector.
-To make this possible, we introduce a small change to WiscKey’s basic data layout: while storing values in the vLog, we also store the corresponding key along with the value.
-The new data layout is shown in Figure 10: the tuple `(key size, value size, key, value)` is stored in the vLog.
-WiscKey’s garbage collection aims to keep valid values (that do not correspond to deleted keys) in a contiguous range of the vLog, as shown in Figure 9.
-One end of this range, the head, always corresponds to the end of the vLog where new values will be appended.
-The other end of this range, known as the tail, is where garbage collection starts freeing space whenever it is triggered.
-Only the part of the vLog between the head and the tail contains valid values and will be searched during lookups.
-During garbage collection, WiscKey first reads a chunk of key-value pairs (e.g., several MBs) from the tail of the vLog, then finds which of those values are valid (not yet overwritten or deleted) by querying the LSM-tree.
-WiscKey then appends valid values back to the head of the vLog.
-Finally, it frees the space occupied previously by the chunk, and updates the tail accordingly.
+WiscKey 的目标是轻量级在线垃圾回收器。
+为了实现这一点，我们对 WiscKey 的基本数据布局做了一个小改动：在将值存储到 vLog 的同时，我们也沿着值存储对应的键。
+新的数据布局如图 10 所示：元组 `(key size, value size, key, value)` 存储在 vLog 中。
+WiscKey 的垃圾回收旨在将有效值（不对应于已删除键的值）保留在 vLog 的连续范围内，如图 9 所示。
+此范围的一端，即头指针，始终对应于 vLog 的末尾，新值将被追加到此处。
+此范围的另一端，即尾指针，是垃圾回收在触发时开始释放空间的位置。
+只有 vLog 中头指针和尾指针之间的部分包含有效值，将在查找期间被搜索。
+在垃圾回收期间，WiscKey 首先从 vLog 的尾部读取一块键值对（例如，几 MB），然后通过查询 LSM-tree 找出哪些值是有效的（尚未被覆盖或删除）。
+WiscKey 然后将有效值追加回 vLog 的头部。
+最后，它释放该块先前占用的空间，并相应地更新尾指针。
 
-As shown in Figure 13, WiscKey stores key-value pairs into an append-only log and the LSM-tree simply serves as a primary index that maps each key to its location in the log.
-While this can greatly reduce the write cost by only merging keys, range query performance will be significantly impacted because values are not sorted anymore.
-Moreover, the value log must be garbage-collected efficiently to reclaim the storage space.
-In WiscKey, garbage-collection is performed in three steps.
+如图 13 所示，WiscKey 将键值对存储到只追加日志中，而 LSM-tree 仅作为将每个键映射到其在日志中位置的主索引。
+虽然这可以通过仅合并键来大大降低写入成本，但范围查询性能将受到显著影响，因为值不再排序。
+此外，值日志必须高效地进行垃圾回收以回收存储空间。
+在 WiscKey 中，垃圾回收分三步执行。
 
-- First, WiscKey scans the log tail and validates each entry by performing point lookups against the LSM-tree to find out whether the location of each key has changed or not.
-- Second, valid entries, whose locations have not changed, are then appended to the log and their locations are updated in the LSM-tree as well.
-- Finally, the log tail is truncated to reclaim the storage space.
+- 首先，WiscKey 扫描日志尾部，通过对 LSM-tree 执行点查找来验证每个条目，以确定每个键的位置是否已更改。
+- 其次，位置尚未更改的有效条目被追加到日志，其位置也相应更新到 LSM-tree 中。
+- 最后，日志尾部被截断以回收存储空间。
 
-However, this garbage-collection process has been shown to be a new performance bottleneck due to its expensive random point lookups.
+然而，这种垃圾回收过程已被证明是一个新的性能瓶颈，因为它需要进行昂贵的随机点查找。
 
 <div style="text-align: center;">
 
@@ -668,80 +660,80 @@ However, this garbage-collection process has been shown to be a new performance 
 </div>
 
 <p style="text-align: center;">
-Fig.11. WiscKey stores values into an append-only log toreduce the write amplification of the LSM-tree.
+Fig.11. WiscKey 将值存储到只追加日志中以减少 LSM-tree 的写入放大。
 </p>
 
-To avoid losing any data if a crash happens during garbage collection, WiscKey has to make sure that the newly appended valid values and the new tail are persistent on the device before actually freeing space.
-WiscKey achieves this using the following steps. After appending the valid values to the vLog, the garbage collection calls a fsync() on the vLog.
-Then, it adds these new value’s addresses and current tail to the LSMtree in a synchronous manner; the tail is stored in the LSM-tree as <‘‘tail’’, tail-vLog-offset>.
-Finally, the free space in the vLog is reclaimed.
-WiscKey can be configured to initiate and continue garbage collection periodically or until a particular threshold is reached.
-The garbage collection can also run in offline mode for maintenance.
-Garbage collection can be triggered rarely for workloads with few deletes and for environments with overprovisioned storage space.
+为了避免在垃圾回收期间发生崩溃时丢失数据，WiscKey 必须确保在释放空间之前，新追加的有效值和新的尾指针已持久化到设备上。
+WiscKey 通过以下步骤实现这一点。将有效值追加到 vLog 后，垃圾回收在 vLog 上调用 fsync()。
+然后，它以同步方式将这些新值的地址和当前尾指针添加到 LSM-tree 中；尾指针作为 <"tail", tail-vLog-offset> 存储在 LSM-tree 中。
+最后，回收 vLog 中的空间。
+WiscKey 可以配置为定期启动和继续垃圾回收，或直到达到特定阈值。
+垃圾回收也可以在离线模式下用于维护。
+对于删除很少的工作负载和具有超额配置存储空间的环境，垃圾回收可以很少触发。
 
-On a system crash, LSM-tree implementations usually guarantee atomicity of inserted key-value pairs and inorder recovery of inserted pairs.
-Since WiscKey’s architecture stores values separately from the LSM-tree, obtaining the same crash guarantees can appear complicated.
-However, WiscKey provides the same crash guarantees by using an interesting property of modern file systems (such as ext4, btrfs, and xfs).
-Consider a file that contains the sequence of bytes $b1b2b3...bn$, and the user appends the sequence $bn+1bn+2bn+3...bn+m$ to it.
-If a crash happens, after file-system recovery in modern file systems, the file will be observed to contain the sequence of bytes $b1b2b3...bnbn+1bn+2bn+3...bn+x$ ∃ x<m, i.e., only some prefix of the appended bytes will be added to the end of the file during file-system recovery.
-It is not possible for random bytes or a non-prefix subset of the appended bytes to be added to the file.
-Since values are appended sequentially to the end of the vLog file in WiscKey, the aforementioned property conveniently translates as follows: if a value X in the vLog is lost in a crash, all future values (inserted after X) are lost too.
+在系统崩溃时，LSM-tree 实现通常保证插入的键值对的原子性和有序恢复。
+由于 WiscKey 的架构将值与 LSM-tree 分开存储，获得相同的崩溃保证可能看起来很复杂。
+然而，WiscKey 通过利用现代文件系统（如 ext4、btrfs 和 xfs）的一个有趣属性来提供相同的崩溃保证。
+考虑一个包含字节序列 $b1b2b3...bn$ 的文件，用户追加了序列 $bn+1bn+2bn+3...bn+m$。
+如果发生崩溃，在现代文件系统的文件系统恢复后，该文件将包含字节序列 $b1b2b3...bnbn+1bn+2bn+3...bn+x$，其中 ∃ x<m，即只有追加字节的某个前缀在文件系统恢复期间被添加到文件末尾。
+不可能将随机字节或追加字节的非前缀子集添加到文件中。
+由于在 WiscKey 中值被顺序追加到 vLog 文件的末尾，上述属性方便地转化为：如果 vLog 中的值 X 在崩溃中丢失，则所有在 X 之后插入的未来值也会丢失。
 
-When the user queries a key-value pair, if WiscKey cannot find the key in the LSM-tree because the key had been lost during a system crash,
-WiscKey behaves exactly like traditional LSM-trees: even if the value had been written in vLog before the crash, it will be garbage collected later.
-If the key could be found in the LSM tree, however, an additional step is required to maintain consistency.
-In this case, WiscKey first verifies whether the value address retrieved from the LSM-tree falls within the current valid range of the vLog, and then whether the value found corresponds to the queried key.
-If the verifications fail, WiscKey assumes that the value was lost during a system crash, deletes the key from the LSMtree, and informs the user that the key was not found.
+当用户查询一个键值对时，如果 WiscKey 因系统崩溃期间键已丢失而无法在 LSM-tree 中找到该键，
+WiscKey 的行为与传统的 LSM-tree 完全相同：即使该值在崩溃前已写入 vLog，它也会稍后被垃圾回收。
+然而，如果键可以在 LSM-tree 中找到，则需要额外步骤来维护一致性。
+在这种情况下，WiscKey 首先验证从 LSM-tree 检索到的值地址是否落在 vLog 的当前有效范围内，然后验证找到的值是否对应于查询的键。
+如果验证失败，WiscKey 假定该值在系统崩溃期间丢失，从 LSM-tree 中删除该键，并通知用户未找到该键。
 
-Since each value added to the vLog has a header including the corresponding key, verifying whether the key and the value match is straightforward; if necessary, a magic number or checksum can be easily added to the header.
+由于添加到 vLog 的每个值都有一个包含对应键的头部，验证键和值是否匹配很简单；如果需要，可以轻松向头部添加幻数或校验和。
 
-LSM-tree implementations also guarantee the user durability of key value pairs after a system crash if the user specifically requests synchronous inserts.
-WiscKey implements synchronous inserts by flushing the vLog before performing a synchronous insert into its LSM-tree.
+LSM-tree 实现还保证，如果用户特别请求同步插入，在系统崩溃后键值对具有持久性。
+WiscKey 通过在将值同步插入其 LSM-tree 之前刷新 vLog 来实现同步插入。
 
-For each Put(), WiscKey needs to append the value to the vLog by using a write() system call.
-However, for an insert-intensive workload, issuing a large number of small writes to a file system can introduce a noticeable overhead, especially on a fast storage device.
-Figure 10 shows the total time to sequentially write a 10GB file in ext4 (Linux 3.14).
-For small writes, the overhead of each system call aggregates significantly, leading to a long run time. With large writes (larger than 4 KB), the device throughput is fully utilized.
+对于每个 Put()，WiscKey 需要通过 write() 系统调用将值追加到 vLog。
+然而，对于插入密集型工作负载，向文件系统发出大量小写入可能会产生显著的额外开销，尤其是在快速存储设备上。
+图 10 显示了在 ext4（Linux 3.14）中顺序写入 10GB 文件所需的总时间。
+对于小写入，每次系统调用的开销显著累积，导致运行时间长。对于大写入（大于 4 KB），设备吞吐量被充分利用。
 
-To reduce overhead, WiscKey buffers values in a userspace buffer, and flushes the buffer only when the buffer size exceeds a threshold or when the user requests a synchronous insertion.
-Thus, WiscKey only issues large writes and reduces the number of write() system calls.
-For a lookup, WiscKey first searches the vLog buffer, and if not found there, actually reads from the vLog.
-Obviously, this mechanism might result in some data (that is buffered) to be lost during a crash; the crash consistency guarantee obtained is similar to LevelDB.
+为了减少开销，WiscKey 在用户空间缓冲区中缓冲值，并且仅在缓冲区大小超过阈值或用户请求同步插入时才刷新缓冲区。
+因此，WiscKey 只发出大写入，并减少 write() 系统调用的数量。
+对于查找，WiscKey 首先搜索 vLog 缓冲区，如果未找到，则实际从 vLog 读取。
+显然，这种机制可能导致某些数据（已缓冲）在崩溃期间丢失；获得的崩溃一致性保证与 LevelDB 类似。
 
-The LSM-tree tracks inserted key-value pairs in the log file so that, if the user requests synchronous inserts and there is a crash, the log can be scanned after reboot and the inserted key-value pairs recovered.
-In WiscKey, the LSM-tree is only used for keys and value addresses.
-Moreover, the vLog also records inserted keys to support garbage collection.
-Hence, writes to the LSM-tree log file can be avoided without affecting correctness.
+LSM-tree 在日志文件中跟踪插入的键值对，以便如果用户请求同步插入并且发生崩溃，可以在重启后扫描日志并恢复插入的键值对。
+在 WiscKey 中，LSM-tree 仅用于键和值地址。
+此外，vLog 也记录插入的键以支持垃圾回收。
+因此，可以避免对 LSM-tree 日志文件的写入而不影响正确性。
 
-If a crash happens before the keys are persistent in the LSM-tree, they can be recovered by scanning the vLog.
-However, a naive algorithm would require scanning the entire vLog for recovery.
-So as to require scanning only a small portion of the vLog, WiscKey records the head of the vLog periodically in the LSM-tree, as a key-value pair <‘‘head’’, head-vLog-offset>.
-When a database is opened, WiscKey starts the vLog scan from the most recent head position stored in the LSM-tree, and continues scanning until the end of the vLog.
-Since the head is stored in the LSM-tree, and the LSM-tree inherently guarantees that keys inserted into the LSM-tree will be recovered in the inserted order, this optimization is crash consistent.
-Therefore, removing the LSM-tree log of WiscKey is a safe optimization, and improves performance especially when there are many small insertions.
+如果在键持久化到 LSM-tree 之前发生崩溃，可以通过扫描 vLog 来恢复它们。
+然而，朴素算法需要扫描整个 vLog 来进行恢复。
+为了只需扫描 vLog 的一小部分，WiscKey 定期将 vLog 的头指针记录在 LSM-tree 中，作为键值对 <"head", head-vLog-offset>。
+当打开数据库时，WiscKey 从存储在 LSM-tree 中的最近头位置开始扫描 vLog，并继续扫描直到 vLog 末尾。
+由于头指针存储在 LSM-tree 中，并且 LSM-tree 本质保证按插入顺序恢复插入到 LSM-tree 的键，因此这种优化是崩溃一致的。
+因此，移除 WiscKey 的 LSM-tree 日志是一种安全的优化，并且能提高性能，特别是在有很多小插入时。
 
 #### Native Storage
 
-Finally, the last line of work in this category attempts to perform native management of storage devices, such as HDDs and SSDs, to optimize the performance of LSM-tree implementations.
-The LSM-tree-based Direct Storage system (LDS) bypasses the file system to better exploit the sequential and aggregated I/O patterns exhibited by LSM-trees.
-The on-disk layout of LDS contains three parts: chunks, a version log, and a backup log.
-Chunks store the disk components of the LSM-tree.
-The version log stores the metadata changes of the LSM-tree after each flush and merge.
-For example, a version log record can record the obsolete chunks and the new chunks resulting from a merge.
-The version log is regularly checkpointed to aggregate all changes so that the log can be truncated.
-Finally, the backup log provides durability for in-memory writes by write-ahead logging.
+最后，此类中的最后一项工作尝试对存储设备（如 HDD 和 SSD）进行原生管理，以优化 LSM-tree 实现的性能。
+基于 LSM-tree 的直接存储系统（LDS）绕过文件系统，以更好地利用 LSM-tree 表现出的顺序和聚合 I/O 模式。
+LDS 的磁盘布局包含三部分：块、版本日志和备份日志。
+块存储 LSM-tree 的磁盘组件。
+版本日志存储每次刷新和合并后 LSM-tree 的元数据更改。
+例如，版本日志记录可以记录合并产生的过时块和新块。
+版本日志定期进行检查点操作，以聚合所有更改，从而可以截断日志。
+最后，备份日志通过预写日志为内存写入提供持久性。
 
 ### Special Workloads
 
-In addition to hardware opportu- nities, certain special workloads can also be considered to achieve better performance in those use cases.
-In this case, the basic LSM-tree implementation must be adapted and customized to exploit the unique characteristics exhibited by these special workloads.
+除了硬件机会之外，某些特殊工作负载也可以考虑在这些用例中实现更好的性能。
+在这种情况下，必须调整和定制基本的 LSM-tree 实现，以利用这些特殊工作负载展现的独特特性。
 
 ### Auto Tuning
 
-Based on the RUM conjecture, no ac- cess method can be read-optimal, write-optimal, and space- optimal at the same time.
-The tunability of LSM-trees is a promising solution to achieve optimal trade-offs for a given workload.
-However, LSM-trees can be hard to tune because of too many tuning knobs, such as memory allocation, merge policy, size ratio, etc.
-To address this issue, several auto- tuning techniques have been proposed in the literature.
+基于 RUM 猜想，没有一种访问方法可以同时实现读最优、写最优和空间最优。
+LSM-tree 的可调性对于在给定工作负载下实现最优权衡是一个有前景的解决方案。
+然而，LSM-tree 可能难以调优，因为存在太多调优参数，如内存分配、合并策略、大小比率等。
+为了解决这个问题，文献中已提出几种自动调优技术。
 
 #### Parameter Tuning
 
@@ -749,55 +741,55 @@ To address this issue, several auto- tuning techniques have been proposed in the
 
 #### Bloom Filter
 
-A Bloom filter is a space-efficient probabilistic data structure designed to aid in answering set membership queries.
-It supports two operations, i.e., inserting a key and testing the membership of a given key.
-To insert a key, it applies multiple hash functions to map the key into multiple locations in a bit vector and sets the bits at these locations to 1.z
-To check the existence of a given key, the key is again hashed to multiple locations.
-If all of the bits are 1, then the Bloom filter reports that the key probably exists.
-By design, the Bloom filter can report false positives but not false negatives.
+布隆过滤器是一种节省空间的概率性数据结构，旨在帮助回答集合成员查询。
+它支持两个操作：插入键和测试给定键的成员资格。
+要插入一个键，它应用多个哈希函数将键映射到位向量中的多个位置，并将这些位置的位设置为 1。
+要检查给定键的存在性，再次将键哈希到多个位置。
+如果所有位都是 1，则布隆过滤器报告该键可能存在。
+根据设计，布隆过滤器可能产生假阳性，但不会产生假阴性。
 
-Bloom filters can be built on top of disk components to greatly improve point lookup performance.
-To search a disk component, a point lookup query can first check its Bloom filter and then proceed to search its B+-tree only if its associated Bloom filter reports a positive answer.
-Alternatively, a Bloom filter can be built for each leaf page of a disk component.
-In this design, a point lookup query can first search the non-leaf pages of a B+-tree to locate the leaf page, where the non-leaf pages are assumed to be small enough to be cached, and then check the associated Bloom filter before fetching the leaf page to reduce disk I/Os.
-Note that the false positives reported by a Bloom filter do not impact the correctness of a query, but a query may waste some I/O searching for non-existent keys.
-The false positive rate of a Bloom filter can be computed as $(1−e^{−kn/m})k$ , where k is the number of hash functions, n is the number of keys, and m is the total number of bits.
-Furthermore, the optimal number of hash functions that minimizes the false positive rate is $k = \frac{m}{n}\ln{2}$.
-In practice, most systems typically use 10 bits/key as a default configuration, which gives a 1% false positive rate.
-Since Bloom filters are very small and can often be cached in memory, the number of disk I/Os for point lookups is greatly reduced by their use.
+布隆过滤器可以建立在磁盘组件之上，以极大提高点查找性能。
+要搜索一个磁盘组件，点查找查询可以首先检查其布隆过滤器，然后仅在其关联的布隆过滤器报告阳性结果时才继续搜索其 B+ 树。
+或者，可以为磁盘组件的每个叶子页面构建一个布隆过滤器。
+在这种设计中，点查找查询可以首先搜索 B+ 树的非叶子页面以定位叶子页面（假设非叶子页面足够小可以被缓存），然后在获取叶子页面之前检查关联的布隆过滤器，以减少磁盘 I/O。
+注意，布隆过滤器的假阳性不会影响查询的正确性，但查询可能会浪费一些 I/O 来搜索不存在的键。
+布隆过滤器的假阳性率可以计算为 $(1−e^{−kn/m})^k$，其中 k 是哈希函数的数量，n 是键的数量，m 是总位数。
+此外，最小化假阳性率的最优哈希函数数量为 $k = \frac{m}{n}\ln{2}$。
+在实践中，大多数系统通常使用 10 位/键作为默认配置，这提供了 1% 的假阳性率。
+由于布隆过滤器非常小且通常可以缓存在内存中，点查找的磁盘 I/O 数量通过使用它们大大减少。
 
 #### Data Placement
 
-Mutant optimizes the data placement of the LSM-tree on cloud storage.
-Cloud vendors often provide a variety of storage options with different performance characteristics and monetary costs.
-Given a monetary budget, it can be important to place SSTables on different storage devices properly to maximize system performance.
-Mutant solves this problem by monitoring the access frequency of each SSTable and finding a subset of SSTables to be placed in fast storage so that the total number of accesses to fast storage is maximized while the number of selected SSTables is bounded.
-This optimization problem is equivalent to a 0/1 knapsack problem, which is N/P hard, and can be approximated using a greedy algorithm.
+Mutant 优化了 LSM-tree 在云存储上的数据放置。
+云供应商通常提供多种具有不同性能特性和货币成本的存储选项。
+在给定的货币预算下，适当地将 SSTable 放置在不同的存储设备上以最大化系统性能可能很重要。
+Mutant 通过监控每个 SSTable 的访问频率并找到要放置在快速存储中的 SSTable 子集来解决这个问题，目标是最大化对快速存储的总访问次数，同时所选 SSTable 的数量受限于预算。
+这个优化问题等价于 0/1 背包问题，是 N/P 难的，可以使用贪心算法近似求解。
 
 ### Secondary Indexing
 
-A given LSM-tree only provides a simple key-value interface.
-To support the efficient processing of queries on non-key attributes, secondary indexes must be maintained.
-One issue in this area is how to maintain a set of related secondary indexes efficiently with a small overhead on write performance.
-Various LSM-based secondary indexing structures and techniques have been designed and evaluated as well.
+给定的 LSM-tree 仅提供简单的键值接口。
+为了支持对非键属性的高效查询处理，必须维护二级索引。
+这个领域的一个问题是如何高效地维护一组相关的二级索引，同时减少对写入性能的开销。
+各种基于 LSM 的二级索引结构和技术也已经被设计和评估。
 
 #### Index Structures
 
 #### Index Maintenance
 
-A key challenge of maintaining LSM-based secondary indexes is handling updates.
-For a primary LSM-tree, an update can blindly add the new entry (with the identical key)into the memory component so that the old entry is automatically deleted.
-However, this mechanism does not work for a secondary index since a secondary key value can change during an update.
-Extra work must be performed to clean up obsolete entries from secondary indexes during updates.
+维护基于 LSM 的二级索引的一个关键挑战是处理更新。
+对于主 LSM-tree，更新可以盲目地将新条目（具有相同的键）添加到内存组件中，以便旧条目自动被删除。
+然而，这种机制不适用于二级索引，因为二级键值在更新期间可能发生变化。
+必须执行额外的工作来清理更新期间二级索引中的过时条目。
 
 #### Statistics Collection
 
-Absalyamov et al. proposed a lightweight statistics collection framework for LSM-based systems.
-The basic idea is to integrate the task of statistics collection into the flush and merge operations to minimize the statistics maintenance overhead.
-During flush and merge operations, statistical synopses, such as histograms and wavelets, are created on-thefly and are sent back to the system catalog.
-Due to the multicomponent nature of LSM-trees, the system catalog stores multiple statistics for a dataset.
-To reduce the overhead during query optimization, mergeable statistics, such as equiwidth histograms, are merged beforehand.
-For statistics that are not mergeable, multiple synopses are kept to improve the accuracy of cardinality estimation.
+Absalyamov 等人提出了一种用于基于 LSM 的系统的轻量级统计信息收集框架。
+其基本思想是将统计信息收集任务集成到刷新和合并操作中，以最小化统计信息维护开销。
+在刷新和合并操作期间，统计概要（如直方图和小波）被即时创建并发送回系统目录。
+由于 LSM-tree 的多组件特性，系统目录为一个数据集存储多个统计信息。
+为了减少查询优化期间的开销，可合并的统计信息（如等宽直方图）会预先合并。
+对于不可合并的统计信息，保留多个概要以提高基数估计的准确性。
 
 #### Distributed Indexing
 

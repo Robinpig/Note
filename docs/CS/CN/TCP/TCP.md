@@ -1,200 +1,196 @@
-## Introduction
+## 简介
 
-The Transmission Control Protocol (TCP) is intended for use as a highly reliable host-to-host protocol between hosts in packet-switched computer communication networks, and in interconnected systems of such networks.
+TCP（传输控制协议）旨在用于分组交换计算机网络中主机之间的高可靠主机到主机协议，以及此类网络的互连系统中。
 
 ```
-                           Protocol Layering
+                           协议分层
 
-                        +---------------------+
-                        |     higher-level    |
-                        +---------------------+
-                        |        TCP          |
-                        +---------------------+
-                        |  internet protocol  |
-                        +---------------------+
-                        |communication network|
-                        +---------------------+
+                         +---------------------+
+                         |      高层协议      |
+                         +---------------------+
+                         |        TCP          |
+                         +---------------------+
+                         |   互联网协议        |
+                         +---------------------+
+                         |  通信网络           |
+                         +---------------------+
 ```
 
 TCP 的原始规范是 [RFC793](https://www.rfc-editor.org/rfc/rfc793)，其中的一些错误在 [RFC1122](https://www.rfc-editor.org/rfc/rfc1122) 中被修正。拥塞控制（**RFC5681**、**RFC3782/RFC6582**、**RFC3517/RFC6657**、**RFC3390**、**RFC3168/RFC8311**）、重传超时（**RFC6298**、**RFC5682**、**RFC4015**）、连接管理（**RFC5482**）等特性在后续一系列的 RFC 文档中也进行了补充设计
 
-> See [Linux TCP](/docs/CS/OS/Linux/net/TCP/TCP.md)
+> 参见 [Linux TCP](/docs/CS/OS/Linux/net/TCP/TCP.md)
 
-### Purpose
+### 目的
 
-The primary purpose of the TCP is to provide reliable, securable logical circuit or connection service between pairs of processes.
-It provides reliable delivery of data or reliable notification of failure.
-To provide this service on top of a less reliable internet communication system requires facilities in the following areas:
+TCP 的主要目的是在成对进程之间提供可靠、可安全保护的逻辑电路或连接服务。
+它提供数据的可靠交付或失败的可信通知。
+在较不可靠的互联网通信系统之上提供此服务需要以下领域的设施：
 
-- Basic Data Transfer
-- Reliability
-- Flow Control
-- Multiplexing
-- Connections
-- Precedence and Security
+- 基本数据传输（Basic Data Transfer）
+- 可靠性（Reliability）
+- 流控制（Flow Control）
+- 多路复用（Multiplexing）
+- 连接（Connections）
+- 优先级和安全（Precedence and Security）
 
-### Connections
+### 连接
 
-To identify the separate data streams that a TCP may handle, the TCP provides a port identifier.  Since port identifiers are selected  independently by each TCP they might not be unique.  To provide for  unique addresses within each TCP, we concatenate an internet address  identifying the TCP with a port identifier to create a [socket]() which will be unique throughout all networks connected together.
+为了标识 TCP 可能处理的独立数据流，TCP 提供了端口标识符。由于端口标识符由每个 TCP 独立选择，它们可能不是唯一的。
+为了在每个 TCP 内提供唯一地址，我们将标识 TCP 的互联网地址与端口标识符连接起来，创建一个在所有互连网络中唯一的[套接字]()。
 
-A connection is fully specified by the pair of sockets at the ends.  A  local socket may participate in many connections to different foreign  sockets.  A connection can be used to carry data in both directions, that is, it is `"full duplex"`.
+连接由两端的套接字对完全指定。一个本地套接字可以参与与不同远程套接字的多个连接。连接可用于在两个方向上承载数据，即它是"全双工"的。
 
-The procedures to establish connections utilize the synchronize (SYN)  control flag and involves an exchange of three messages.  This  exchange has been termed a `three-way hand shake `.
+建立连接的过程使用同步（SYN）控制标志，涉及三个消息的交换。这种交换被称为"三次握手"。
 
-### Relation to Other Protocols
+### 与其他协议的关系
 
-The following diagram illustrates the place of the TCP in the protocol  hierarchy:
+下图说明了 TCP 在协议层次结构中的位置：
 
 ```
-  
+   
        +------+ +-----+ +-----+       +-----+  
-       |Telnet| | FTP | |Voice|  ...  |     |  Application Level 
+       |Telnet| | FTP | |语音 |  ...  |     |  应用层
        +------+ +-----+ +-----+       +-----+  
              |   |         |             |   
             +-----+     +-----+       +-----+  
-            | TCP |     | RTP |  ...  |     |  Host Level  
+            | TCP |     | RTP |  ...  |     |  主机层
             +-----+     +-----+       +-----+  
                |           |             |   
             +-------------------------------+  
-            |    Internet Protocol & ICMP   |  Gateway Level   
+            |  Internet Protocol & ICMP   |  网关层
             +-------------------------------+  
                            |   
               +---------------------------+  
-              |   Local Network Protocol  |    Network Level   
+              |   本地网络协议            |  网络层
               +---------------------------+  
 
-                         Protocol Relationships
+                     协议关系
 ```
 
-## Header Format
+## 头部格式
 
 ```
-    0                   1                   2                   3
-    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |          Source Port          |       Destination Port        |
-   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |                        Sequence Number                        |
-   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |                    Acknowledgment Number                      |
-   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |  Data |           |U|A|P|R|S|F|                               |
-   | Offset| Reserved  |R|C|S|S|Y|I|            Window             |
-   |       |           |G|K|H|T|N|N|                               |
-   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |           Checksum            |         Urgent Pointer        |
-   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |                    Options                    |    Padding    |
-   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |                             data                              |
-   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+     0                   1                   2                   3
+     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |         源端口                |       目标端口                |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |                       序列号                                  |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |                    确认号                                     |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    | 数据 |           |U|A|P|R|S|F|                               |
+    | 偏移 |   保留     |R|C|S|S|Y|I|           窗口               |
+    |      |           |G|K|H|T|N|N|                               |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |          校验和                |        紧急指针              |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |                   选项                      |    填充         |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+    |                              data                             |
+    +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
-                            TCP Header Format
+                        TCP 头部格式
 
-          Note that one tick mark represents one bit position.
+          注意：一个刻度标记代表一个比特位。
 ```
 
+| 名称 | 长度 | 描述 |
+| ----------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 源端口（Source Port） | 16 位 | 源端口号。 |
+| 目标端口（Destination Port） | 16 位 | 目标端口号。 |
+| 序列号（Sequence Number） | 32 位 | 本段中第一个数据字节的序列号（当 SYN 存在时除外）。如果 SYN 存在，序列号是初始序列号（ISN），第一个数据字节为 ISN+1。 |
+| 确认号（Acknowledgment Number） | 32 位 | 如果 ACK 控制位被设置，此字段包含本段发送方期望接收的下一个序列号。一旦建立连接，此字段始终发送。 |
+| 数据偏移（Data Offset） | 4 位 | TCP 头部中 32 位字的数量。这指示数据的开始位置。TCP 头部（包括选项）是 32 位的整数倍。 |
+| 保留（Reserved） | 6 位 | |
+| 控制位（Control Bits） | 6 位 | URG: 紧急指针字段有效 ACK: 确认字段有效 PSH: 推送功能 RST: 重置连接 SYN: 同步序列号 FIN: 发送方无更多数据 |
+| 窗口（Window） | 16 位 | 从确认字段指示的那个字节开始，本段发送方愿意接收的数据字节数。 |
+| 校验和（Checksum） | 16 位 | |
+| 紧急指针（Urgent Pointer） | 16 位 | |
+| 选项（Options） | 可变 | |
+| 填充（Padding） | 可变 | TCP 头部填充用于确保 TCP 头部结束和数据开始于 32 位边界。填充由零组成。 |
 
-| Name                  | Length   | Description                                                                                                                                                                                                        |  |
-| ----------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -- |
-| Source Port           | 16 bits  | The source port number.                                                                                                                                                                                            |  |
-| Destination Port      | 16 bits  | The destination port number..                                                                                                                                                                                      |  |
-| Sequence Number       | 32 bits  | The sequence number of the first data octet in this segment (except     when SYN is present). If SYN is present the sequence number is the     initial sequence number (ISN) and the first data octet is ISN+1.    |  |
-| Acknowledgment Number | 32 bits  | If the ACK control bit is set this field contains the value of the     next sequence number the sender of the segment is expecting to     receive.  Once a connection is established this is always sent.          |  |
-| Data Offset           | 4 bits   | The number of 32 bit words in the TCP Header.  This indicates where the data begins.  The TCP header (even one including options) is an     integral number of 32 bits long.                                       |  |
-| Reserved              | 6 bits   |                                                                                                                                                                                                                    |  |
-| Control Bits          | 6 bits   | URG:  Urgent Pointer field significant     ACK:  Acknowledgment field significant     PSH:  Push Function     RST:  Reset the connection     SYN:  Synchronize sequence numbers     FIN:  No more data from sender |  |
-| Window                | 16 bits  | The number of data octets beginning with the one indicated in the     acknowledgment field which the sender of this segment is willing to     accept.                                                              |  |
-| Checksum              | 16 bits  |                                                                                                                                                                                                                    |  |
-| Urgent Pointer        | 16 bits  |                                                                                                                                                                                                                    |  |
-| Options               | variable |                                                                                                                                                                                                                    |  |
-| Padding               | variable | The TCP header padding is used to ensure that the TCP header ends     and data begins on a 32 bit boundary.  The padding is composed of     zeros.                                                                 |  |
+### 选项
 
-### Options
+原始 TCP 规范中定义的唯一选项是选项列表结束（EOL）、无操作（NOP）和最大段大小（MSS）。
+自那以后，定义了多个选项。完整列表由 IANA [TPARAMS] 维护。
 
-The only options defined in the original TCP specification are the End of Option List (EOL), the No Operation (NOP), and the Maximum Segment Size (MSS) options.
-Since then, several options have been defined. The entire list is maintained by the IANA [TPARAMS].
+每个选项以一个指定选项类型的 1 字节 kind 值开始。
+根据 [RFC1122]，不被理解的选项将被简单地忽略。kind 值为 0 和 1 的选项占用单个字节。
+其他选项在 kind 字节之后有一个 len 字节。长度是总长度，包括 kind 和 len 字节。
+NOP 选项的存在是为了允许发送方将字段填充到 4 字节的倍数（如果需要）。
+记住 TCP 头部的长度始终需要是 32 位的倍数，因为 TCP 头部长度字段使用该单位。
+EOL 选项指示列表的结束，不再执行选项列表的进一步处理。
 
-Every option begins with a 1-byte kind that specifies the type of option.
-Options that are not understood are simply ignored, according to [RFC1122]. The options with a kind value of 0 and 1 occupy a single byte.
-The other options have a len byte that follows the kind byte. The length is the total length, including the kind and len bytes.
-The reason for the NOP option is to allow the sender to pad fields to a multiple of 4 bytes, if it needs to.
-Remember that the TCP header’s length is always required to be a multiple of 32 bits because the TCP Header Length field uses that unit.
-The EOL option indicates the end of the list and that no further processing of the options list is to be performed.
+#### MSS 选项
 
-#### MSS Option
+最大段大小（Maximum Segment Size）
 
-Maximum Segment Size
+#### SACK 选项
 
-#### SACK Options
+选择性确认（Selective Acknowledgment）
 
-Selective Acknowledgment
+#### 窗口缩放选项
 
-#### Window Scale Option
+Window Scale (WSCALE 或 WSOPT)
 
-Window Scale(WSCALE or WSOPT)
+#### PAWS 选项
 
-#### PAWS option
+时间戳选项和防止序列号回绕（Protection against Wrapped Sequence Numbers）
 
-Timestamps Option and Protection against Wrapped Sequence Numbers
+时间戳选项（有时称为 Timestamp 选项，写作 TSOPT 或 TSopt）允许发送方在每个段中放置两个 4 字节的时间戳值。
+接收方在确认中反映这些值，允许发送方为每个接收到的 ACK 计算连接的 RTT 估计。
+希望计算良好连接 RTT 估计的主要原因是设置重传超时，它告诉 TCP 何时应尝试重传可能丢失的段。
 
-The Timestamps option (sometimes called the Timestamp option and written as TSOPT or TSopt) lets the sender place two 4-byte timestamp values in every segment.
-The receiver reflects these values in the acknowledgment, allowing the sender to calculate an estimate of the connection’s RTT for each ACK received.
-The main reason for wishing to calculate a good estimate of the connection’s RTT is to set the retransmission timeout, which tells TCP when it should try resending a segment that is likely lost.
+## 连接建立和终止
 
-## Connection Establishment and Termination
-
-TCP is a unicast *connection-oriented* protocol. Before either end can send data to the other, a connection must be established between them.
-A TCP connection is defined to be a 4-tuple consisting of two IP addresses and two port numbers. More precisely, it is a pair of *endpoints* or *sockets* where each endpoint is identified by an (IP address, port number) pair.
-A connection typically goes through three phases: setup, data transfer (called established), and teardown (closing).
-
+TCP 是一种单播*面向连接*的协议。在任一端可以向另一端发送数据之前，必须在它们之间建立连接。
+TCP 连接定义为由两个 IP 地址和两个端口号组成的四元组。更准确地说，它是一对*端点*或*套接字*，其中每个端点由（IP 地址，端口号）对标识。
+连接通常经历三个阶段：建立、数据传输（称为已建立）和拆除（关闭）。
 
 <div style="text-align: center;">
 
-![Fig.4. TCP Shake](../img/TCP_Shake.png)
+![图 4：TCP 握手](../img/TCP_Shake.png)
 
 </div>
 
-<p style="text-align: center;">Fig.4. TCP Shake</p>
+<p style="text-align: center;">图 4：TCP 握手</p>
 
+### 三次握手
 
+服务器必须准备好接受传入连接。这通常通过调用 socket、bind 和 listen 完成，称为被动打开。
+TCP 连接建立时发生以下场景：
 
-### Three-Way Handshake
+1. 客户端通过调用 connect 发起主动打开。
+   这导致客户端 TCP 发送一个"同步"（SYN）段，告诉服务器客户端将在连接上发送的数据的初始序列号。
+   通常，SYN 不携带数据；它只包含 IP 头部、TCP 头部和可能的 TCP 选项（我们稍后将讨论）。
+2. 服务器必须确认（ACK）客户端的 SYN，并且服务器还必须发送其自己的 SYN，包含服务器将在连接上发送的数据的初始序列号。
+   服务器在一个段中发送其 SYN 和客户端 SYN 的 ACK。
+3. 客户端必须确认服务器的 SYN。
 
-The server must be prepared to accept an incoming connection. This is normally done by calling socket, bind, and listen and is called a passive open.
-The following scenario occurs when a TCP connection is established:
+此交换所需的最小数据包数为三个；因此，这称为 TCP 的*三次握手*。
+**其主要目的是让连接的每一端知道连接正在启动以及作为选项携带的特殊细节，并交换 ISN。**
 
-1. The client issues an active open by calling connect.
-   This causes the client TCP to send a ‘‘synchronize’’ (SYN) segment, which tells the server the client’s initial sequence number for the data that the client will send on the connection.
-   Normally, there is no data sent with the SYN; it just contains an IP header, a TCP header, and possible TCP options (which we will talk about shortly).
-2. The server must acknowledge (ACK) the client’s SYN and the server must also send its own SYN containing the initial sequence number for the data that the server will send on the connection.
-   The server sends its SYN and the ACK of the client’s SYN in a single segment.
-3. The client must acknowledge the server’s SYN.
+由于 SYN 占用序列号空间的一个字节，每个 SYN 的 ACK 中的确认号是初始序列号加一。
+类似地，每个 FIN 的 ACK 是 FIN 的序列号加一。
+ISN 基于时间戳，参见 RFC1948
 
-The minimum number of packets required for this exchange is three; hence, this is called TCP’s *three-way handshake*.
-**Its main purposes are to let each end of the connection know that a connection is starting and the special details that are carried as options, and to exchange the ISNs.**
+- syn 队列
+- accept 队列
 
-Since a SYN occupies one byte of the sequence number space, the acknowledgment number in the ACK of each SYN is the initial sequence number plus one.
-Similarly, the ACK of each FIN is the sequence number of the FIN plus one.
-ISN based on the timestamp, see RFC1948
+#### 连接建立的超时
 
-- syn queue
-- accept queue
-
-#### Timeout of Connection Establishment
-
-
-| Retry   | File Settings                             | Default Value |
+| 重试 | 文件设置 | 默认值 |
 | --------- | ------------------------------------------- | --------------- |
-| SYN     | cat /proc/sys/net/ipv4/tcp_syn_retries    | 6             |
-| SYN+ACK | cat /proc/sys/net/ipv4/tcp_synack_retries | 5             |
+| SYN | cat /proc/sys/net/ipv4/tcp_syn_retries | 6 |
+| SYN+ACK | cat /proc/sys/net/ipv4/tcp_synack_retries | 5 |
 
-RFC1122 says the minimum retry MUST be at least 180secs.
-Nevertheless this value is corresponding to 63secs of retransmission with the current initial RTO.
+RFC1122 说最小重试必须至少为 180 秒。
+然而，此值对应于当前初始 RTO 为 63 秒的重传。
 
-RTO(Retransmission Timeout) 1 + 2 <<< (n-1)
+RTO（重传超时）1 + 2 <<< (n-1)
 
-if RTO very large, the actual reties will < setting retries
+如果 RTO 非常大，实际重试次数将小于设置的重试次数
 
 ```c
 #define TCP_RTO_MAX	((unsigned)(120*HZ))
@@ -205,42 +201,41 @@ if RTO very large, the actual reties will < setting retries
 iptables -I INPUT -p tcp --dport 80 -j DROP
 ```
 
+TCP 可以通过 ICMP 端口不可达或 TCP RST 被拒绝。
+捕获定义端口可能忽略 ICMP 数据报。
 
-TCP can be rejected though a ICMP Port unreachable or TCP RST. 
-Capture the defintintion port may ignore the ICMP datagram.
+### 连接终止
 
-### Connection Termination
+建立连接需要三个段，而终止连接需要四个段。
 
-While it takes three segments to establish a connection, it takes four to terminate a connection.
+1. 一个应用首先调用 close，我们说这一端执行主动关闭。
+   此端的 TCP 发送一个 FIN 段，表示它已完成数据发送。
+2. 接收 FIN 的另一端执行被动关闭。接收到的 FIN 由 TCP 确认。
+   FIN 的接收也作为文件结束符传递给应用（在任何可能已排队等待应用接收的数据之后），
+   因为收到 FIN 意味着应用将不会在连接上收到任何额外数据。
+3. 稍后，收到文件结束符的应用将关闭其套接字。这导致其 TCP 发送一个 FIN。
+4. 接收这最后一个 FIN 的系统上的 TCP（执行主动关闭的一端）确认该 FIN。
 
-1. One application calls close first, and we say that this end performs the active close.
-   This end’s TCP sends a FIN segment, which means it is finished sending data.
-2. The other end that receives the FIN performs the passive close. The received FIN is acknowledged by TCP.
-   The receipt of the FIN is also passed to the application as an end-of-file (after any data that may have already been queued for the application to receive),
-   since the receipt of the FIN means the application will not receive any additional data on the connection.
-3. Sometime later, the application that received the end-of-file will close its socket. This causes its TCP to send a FIN.
-4. The TCP on the system that receives this final FIN (the end that did the active close) acknowledges the FIN.
+由于每个方向都需要一个 FIN 和一个 ACK，通常需要四个段。
+我们使用"通常"这个限定词，因为在某些场景中，步骤 1 中的 FIN 与数据一起发送。
+此外，步骤 2 和步骤 3 的段都来自执行被动关闭的一端，可以合并为一个段。
 
-Since a FIN and an ACK are required in each direction, four segments are normally required.
-We use the qualifier ‘‘normally’’ because in some scenarios, the FIN in Step 1 is sent with data.
-Also, the segments in Steps 2 and 3 are both from the end performing the passive close and could be combined into one segment.
+在步骤 2 和步骤 3 之间，数据可以从执行被动关闭的一端流向执行主动关闭的一端。这称为*半关闭*。
 
-Between Steps 2 and 3 it is possible for data to flow from the end doing the passive close to the end doing the active close. This is called a *half-close*.
-
-The sending of each FIN occurs when a socket is closed.
-We indicated that the application calls close for this to happen, but realize that when a Unix process terminates,
-either voluntarily (calling exit or having the main function return) or involuntarily (receiving a signal that terminates the process),
-all open descriptors are closed, which will also cause a FIN to be sent on any TCP connection that is still open.
+每个 FIN 在套接字关闭时发送。
+我们指出应用调用 close 会导致此情况，但请注意，当 Unix 进程终止时，
+无论是自愿（调用 exit 或主函数返回）还是非自愿（接收终止进程的信号），
+所有打开的描述符都被关闭，这也会导致在任何仍打开的 TCP 连接上发送 FIN。
 
 > [!NOTE]
 >
-> Either the client or the server—can perform the active close. Often the client performs the active close, but with some protocols (notably HTTP/1.0), the server performs the active close.
+> 客户端或服务器都可以执行主动关闭。通常客户端执行主动关闭，但对于某些协议（尤其是 HTTP/1.0），服务器执行主动关闭。
 
-- fin retry
-- fin_wait2 wait time
-- time_wait limit
+- fin 重试
+- fin_wait2 等待时间
+- time_wait 限制
 
-#### Half Close
+#### 半关闭
 
 shutdown
 
@@ -248,86 +243,84 @@ shutdown
 - SHUT_WR
 - SHUT_RDWR
 
-### Simultaneous Open and Close
+### 同时打开和关闭
 
-A simultaneous open requires the exchange of four segments, one more than the normal three-way handshake.
+同时打开需要交换四个段，比正常的三次握手多一个。
 
-With a simultaneous close the same number of segments are exchanged as in the normal close. The only real difference is that the segment sequence is interleaved instead of sequential.
+对于同时关闭，交换的段数与正常关闭相同。唯一的真正区别是段序列是交错的而不是顺序的。
 
-### Connection State
+### 连接状态
 
-A connection progresses through a series of states during its lifetime.The states are:  LISTEN, SYN-SENT, SYN-RECEIVED, ESTABLISHED, FIN-WAIT-1, FIN-WAIT-2, CLOSE-WAIT, CLOSING, LAST-ACK, TIME-WAIT,
-and the fictional state CLOSED.CLOSED is fictional because it represents the state when there is no TCB, and therefore, no connection.Briefly the meanings of the states are:
+连接在其生命周期中经历一系列状态。这些状态是：LISTEN、SYN-SENT、SYN-RECEIVED、ESTABLISHED、FIN-WAIT-1、FIN-WAIT-2、CLOSE-WAIT、CLOSING、LAST-ACK、TIME-WAIT，
+以及虚拟状态 CLOSED。CLOSED 是虚拟的，因为它表示没有 TCB 时的状态，因此没有连接。简而言之，各状态的含义是：
 
-- LISTEN - represents waiting for a connection request from any remote TCP and port.
-- SYN-SENT - represents waiting for a matching connection request after having sent a connection request.
-- SYN-RECEIVED - represents waiting for a confirming connection request acknowledgment after having both received and sent a connection request.
-- ESTABLISHED - represents an open connection, data received can be delivered to the user.  The normal state for the data transfer phase of the connection.
-- FIN-WAIT-1 - represents waiting for a connection termination request from the remote TCP, or an acknowledgment of the connection termination request previously sent.
-- FIN-WAIT-2 - represents waiting for a connection termination request from the remote TCP.
-- CLOSE-WAIT - represents waiting for a connection termination request from the local user.
-- CLOSING - represents waiting for a connection termination request acknowledgment from the remote TCP.
-- LAST-ACK - represents waiting for an acknowledgment of the connection termination request previously sent to the remote TCP(which includes an acknowledgment of its connection termination request).
-- TIME-WAIT - represents waiting for enough time to pass to be sure the remote TCP received the acknowledgment of its connection termination request.
-- CLOSED - represents no connection state at all.
-
+- LISTEN - 表示等待来自任何远程 TCP 和端口的连接请求。
+- SYN-SENT - 表示在发送连接请求后等待匹配的连接请求。
+- SYN-RECEIVED - 表示在既接收又发送连接请求后等待确认的连接请求。
+- ESTABLISHED - 表示打开的连接，接收的数据可以交付给用户。连接数据传输阶段的正常状态。
+- FIN-WAIT-1 - 表示等待来自远程 TCP 的连接终止请求，或等待先前发送的连接终止请求的确认。
+- FIN-WAIT-2 - 表示等待来自远程 TCP 的连接终止请求。
+- CLOSE-WAIT - 表示等待来自本地用户的连接终止请求。
+- CLOSING - 表示等待来自远程 TCP 的连接终止请求确认。
+- LAST-ACK - 表示等待对先前发送给远程 TCP 的连接终止请求的确认（包括对其连接终止请求的确认）。
+- TIME-WAIT - 表示等待足够的时间过去，以确保远程 TCP 收到其连接终止请求的确认。
+- CLOSED - 表示完全没有连接状态。
 
 <div style="text-align: center;">
 
-![Fig.5. TCP State Transition Diagram](../img/TCP_State_Transition_Diagram.png)
+![图 5：TCP 状态转换图](../img/TCP_State_Transition_Diagram.png)
 
 </div>
 
-<p style="text-align: center;">Fig.5. TCP State Transition Diagram</p>
-
+<p style="text-align: center;">图 5：TCP 状态转换图</p>
 
 #### CLOSE_WAIT
 
-too much CLOSE_WAIT
-cause:
+过多的 CLOSE_WAIT
+原因：
 
-1. forget invoke close/shutdown to send FIN
-2. backlog too large
+1. 忘记调用 close/shutdown 发送 FIN
+2. backlog 过大
 
 #### FIN_WAIT_2
 
-Only when the application performs this close (and its FIN is received) does the active closing TCP move from the FIN_WAIT_2 to the TIME_WAIT state.
-This means that one end of the connection can remain in this state forever.
-The other end is still in the CLOSE_WAIT state and can remain there forever, until the application decides to issue its close.
+只有当应用执行此关闭（并且其 FIN 被接收）时，主动关闭的 TCP 才从 FIN_WAIT_2 状态移动到 TIME_WAIT 状态。
+这意味着连接的一端可以永远处于此状态。
+另一端仍处于 CLOSE_WAIT 状态，并且可以永远保持在那里，直到应用决定发出其关闭。
 
-Many implementations prevent this infinite wait in the FIN_WAIT_2 state as follows:
-If the application that does the active close does a complete close, not a half-close indicating that it expects to receive data, a **timer** is set.
-If the connection is idle when the timer expires, TCP moves the connection into the CLOSED state.
-In Linux, the variable `net.ipv4.tcp_fin_timeout` can be adjusted to control the number of seconds to which the timer is set. Its default value is 60s.
-When a connection moves from the FIN_WAIT_1 state to the FIN_WAIT_2 state and the connection cannot receive any more data
-(implying the process called close, instead of taking advantage of TCP’s half-close with shutdown), this timer is set to 10 minutes.
-When this timer expires it is reset to 75 seconds, and when it expires the second time the connection is dropped.
-The purpose of this timer is to avoid leaving a connection in the FIN_WAIT_2 state forever, if the other end never sends a FIN.
+许多实现通过如下方式防止 FIN_WAIT_2 状态的无限等待：
+如果执行主动关闭的应用执行完全关闭而不是半关闭（表明它期望接收数据），则设置一个**定时器**。
+如果定时器到期时连接空闲，TCP 将连接移动到 CLOSED 状态。
+在 Linux 中，变量 `net.ipv4.tcp_fin_timeout` 可以调整以控制定时器设置到的秒数。其默认值为 60 秒。
+当连接从 FIN_WAIT_1 状态移动到 FIN_WAIT_2 状态且连接无法再接收数据时
+（意味着进程调用了 close，而不是利用 TCP 的 shutdown 半关闭），此定时器设置为 10 分钟。
+当此定时器到期时，它重置为 75 秒，第二次到期时连接被丢弃。
+此定时器的目的是避免如果另一端从未发送 FIN，连接永远处于 FIN_WAIT_2 状态。
 
 #### TIME_WAIT
 
-The way in which a packet gets ‘‘lost’’ in a network is usually the result of routing anomalies.
-This original packet is called a lost duplicate or a wandering duplicate. TCP must handle these duplicates.
+数据包在网络上"丢失"的方式通常是路由异常的结果。
+这个原始数据包称为丢失的副本或游荡的副本。TCP 必须处理这些副本。
 
-There are two reasons for the TIME_WAIT state:
+TIME_WAIT 状态有两个原因：
 
-1. To implement TCP’s full-duplex connection termination reliably
-2. To allow old duplicate segments to expire in the network
+1. 可靠地实现 TCP 的全双工连接终止
+2. 允许旧的重复段在网络中过期
 
-The first reason can be explained by assuming that the final ACK is lost. The server will resend its final FIN, so the client must maintain state information, allowing it to resend the final ACK.
-If it did not maintain this information, it would respond with an RST (a different type of TCP segment), which would be interpreted by the server as an error.
+第一个原因可以通过假设最终的 ACK 丢失来解释。服务器将重新发送其最终的 FIN，因此客户端必须维护状态信息，允许它重新发送最终的 ACK。
+如果它不维护此信息，它将响应一个 RST（一种不同类型的 TCP 段），这将被服务器解释为错误。
 
-The connection is closed and then sometime later, we establish another connection between the same IP addresses and ports.
-This latter connection is called an incarnation of the previous connection since the IP addresses and ports are the same.
-TCP must prevent old duplicates from a connection from reappearing at some later time and being misinterpreted as belonging to a new incarnation of the same connection.
-To do this, TCP will not initiate a new incarnation of a connection that is currently in the TIME_WAIT state.
+连接关闭后，稍后我们在相同的 IP 地址和端口之间建立另一个连接。
+这后一个连接称为前一个连接的化身，因为 IP 地址和端口相同。
+TCP 必须防止来自一个连接的旧副本在稍后某个时间重新出现并被误解为属于同一连接的新化身。
+为此，TCP 不会发起当前处于 TIME_WAIT 状态的连接的新化身。
 
-> There is an exception to this rule.
-> Berkeley-derived implementations will initiate a new incarnation of a connection that is currently in the TIME_WAIT state if the arriving SYN has a sequence number that is ‘‘greater than’’ the ending sequence number from the previous incarnation.
+> 此规则有一个例外。
+> 如果到达的 SYN 具有"大于"前一个化身的结束序列号的序列号，源自 Berkeley 的实现会发起当前处于 TIME_WAIT 状态的连接的新化身。
 
-The timer is set to 1 minute (Net/3 uses an MSL of 30 seconds) when the connection enters the TIME_WAIT state and when it expires, the TCP control block and Internet PCB are deleted, allowing that socket pair to be reused.
+当连接进入 TIME_WAIT 状态时，定时器设置为 1 分钟（Net/3 使用 30 秒的 MSL），当它到期时，TCP 控制块和 Internet PCB 被删除，允许该套接字对被重用。
 
-orphan connection(use close) FIN_WAIT2 timeout tcp_fin_timeout s
+孤儿连接（使用 close）FIN_WAIT2 超时 tcp_fin_timeout 秒
 
 ```shell
 cat /proc/sys/net/ipv4/tcp_fin_timeout	#60
@@ -337,63 +330,63 @@ cat /proc/sys/net/ipv4/tcp_fin_timeout	#60
 #define TCP_TIMEWAIT_LEN (60*HZ)
 ```
 
-tcp_tw_reuse - INTEGER
+tcp_tw_reuse - 整数
 
-Enable reuse of TIME-WAIT sockets for new connections when it is safe from protocol viewpoint.
-It should not be changed without advice/request of technical experts.
+当从协议视角看安全时，允许将 TIME-WAIT 套接字重用于新连接。
+非技术专家建议/请求不应更改。
 
-- 0 - disable
-- 1 - global enable
-- 2 - enable for loopback traffic only, default
+- 0 - 禁用
+- 1 - 全局启用
+- 2 - 仅对环回流量启用，默认
 
-### Reset Segments
+### 重置段
 
-#### Nonexistent Port
+#### 不存在的端口
 
-In the case of UDP, we saw that an ICMP Destination Unreachable (Port Unreachable) message is generated when a datagram arrives for a destination port that is not in use. TCP uses a reset segment instead.
+对于 UDP，我们看到当数据报到达一个未使用的目标端口时，会生成 ICMP 目标不可达（端口不可达）消息。TCP 使用重置段代替。
 
-#### Aborting a Connection
+#### 中止连接
 
-Aborting a connection provides two features to the application:
+中止连接为应用提供两个特性：
 
-1. any queued data is thrown away and a reset segment is sent immediately
-2. the receiver of the reset can tell that the other end did an abort instead of a normal close.
+1. 任何排队的数据被丢弃，并立即发送重置段
+2. 重置的接收方可以判断另一端执行的是中止而不是正常关闭。
 
-The API being used by the application must provide a way to generate the abort instead of a normal close.
+应用使用的 API 必须提供生成中止而不是正常关闭的方法。
 
-#### Half-Open Connections
+#### 半开连接
 
-A TCP connection is said to be half-open if one end has closed or aborted the connection without the knowledge of the other end.
-This can happen anytime one of the peers crashes. As long as there is no attempt to transfer data across a half-open connection, the end that is still up does not detect that the other end has crashed.
+如果一端在另一端不知情的情况下关闭或中止了连接，则称 TCP 连接为半开。
+当任一对端崩溃时，可能发生这种情况。只要不尝试在半开连接上传输数据，仍然活跃的一端不会检测到另一端已崩溃。
 
-Another common cause of a half-open connection is when one host is powered off instead of shut down properly.
+半开连接的另一个常见原因是一台主机未正确关机而是直接断电。
 
 #### TWA
 
-As mentioned previously, the TIME_WAIT state is intended to allow any datagrams lingering from a closed connection to be discarded.
-During this period, the waiting TCP usually has little to do; it merely holds the state until the 2MSL timer expires.
-If, however, it receives certain segments from the connection during this period, or more specifically an RST segment, it can become desynchronized. This is called **TIME-WAIT Assassination (TWA)**.
+如前所述，TIME_WAIT 状态旨在允许从关闭的连接中残留的任何数据报被丢弃。
+在此期间，等待的 TCP 通常没什么可做的；它仅仅保持状态直到 2MSL 定时器过期。
+然而，如果在此期间它从连接接收到某些段，更具体地说是 RST 段，它可能会失去同步。这称为**TIME-WAIT 刺杀（TWA）**。
 
-This is no problem for the server, but it causes the client to prematurely transition from TIME_WAIT to CLOSED.
-Most systems avoid this problem by simply not reacting to reset segments while in the TIME_WAIT state.
+这对服务器不是问题，但它会导致客户端过早地从 TIME_WAIT 转换到 CLOSED。
+大多数系统通过简单地在 TIME_WAIT 状态下不响应重置段来避免此问题。
 
-The TCP mechanisms to protect against old duplicate segments, below if in TIME_WAIT:
+TCP 防止旧重复段的机制，如果在 TIME_WAIT 中：
 
-**Unreliable:** TIME-WAIT state removes the hazard of old duplicates for "fast" or "long" connections, in which clock-driven ISN selection is unable to prevent overlap of the old and new sequence spaces. The TIME-WAIT delay allows all old duplicate segments time enough to die in the Internet before the connection is reopened.
+**不可靠：** TIME-WAIT 状态消除了"快速"或"长"连接中旧副本的危害，其中时钟驱动的 ISN 选择无法防止旧序列空间和新序列空间的重叠。TIME-WAIT 延迟允许所有旧重复段在互联网中有足够的时间消亡，然后连接才被重新打开。
 
-TIME-WAIT state can be prematurely terminated ("assassinated") by an old duplicate data or ACK segment from the current or an earlier incarnation of the same connection.  We refer to this as "`TIME-WAIT Assassination`" (**TWA**).
+TIME-WAIT 状态可以被来自相同连接相同化身的旧重复数据或 ACK 段过早终止（"刺杀"）。我们称之为"`TIME-WAIT 刺杀`"（**TWA**）。
 
 ```
        TCP A                                                TCP B
 
    1.  ESTABLISHED                                          ESTABLISHED
 
-       (Close)
+       (关闭)
    2.  FIN-WAIT-1  --> <SEQ=100><ACK=300><CTL=FIN,ACK>  --> CLOSE-WAIT
 
    3.  FIN-WAIT-2  <-- <SEQ=300><ACK=101><CTL=ACK>      <-- CLOSE-WAIT
 
-                                                            (Close)
+                                                             (关闭)
    4.  TIME-WAIT   <-- <SEQ=300><ACK=101><CTL=FIN,ACK>  <-- LAST-ACK
 
    5.  TIME-WAIT   --> <SEQ=101><ACK=301><CTL=ACK>      --> CLOSED
@@ -405,26 +398,26 @@ TIME-WAIT state can be prematurely terminated ("assassinated") by an old duplica
    5.2  TIME-WAIT   --> <SEQ=101><ACK=301><CTL=ACK>    -->  ????
 
    5.3  CLOSED      <-- <SEQ=301><CTL=RST>             <--  ????
-      (prematurely)
+      (过早地)
 
-                         TWA Example
+                         TWA 示例
 ```
 
-If the connection is immediately reopened after a TWA event, the new incarnation will be exposed to old duplicate segments (except for the initial <SYN> segment, which is handled by the 3-way handshake).  There are three possible hazards that result:
+如果在 TWA 事件后立即重新打开连接，新化身将暴露于旧重复段（除了初始 <SYN> 段，它由三次握手处理）。这可能导致三种危害：
 
-- Old duplicate data may be accepted erroneously.
-- The new connection may be de-synchronized, with the two ends in permanent disagreement on the state.  Following the spec of RFC-793, this desynchronization results in an infinite ACK loop.  (It might be reasonable to change this aspect of RFC- 793 and kill the connection instead.) This hazard results from acknowledging something that was not sent.  This may result from an old duplicate ACK or as a side-effect of hazard H1.
-- The new connection may die. A duplicate segment (data or ACK) arriving in SYN-SENT state may kill the new connection after it has apparently opened successfully.
+- 旧重复数据可能被错误地接受。
+- 新连接可能失去同步，两端在状态上永久不一致。遵循 RFC-793 规范，这种失步会导致无限的 ACK 循环。（将此方面的 RFC-793 改为杀死连接可能是合理的。）这种危害来自确认未发送的内容。这可能是由旧重复 ACK 或作为危害 H1 的副作用引起的。
+- 新连接可能死亡。在 SYN-SENT 状态下到达的重复段（数据或 ACK）可能会在连接看似成功打开后杀死它。
 
-##### Fixes for TWA Hazards
+##### TWA 危害的修复
 
-We discuss three possible fixes to TCP to avoid these hazards.
+我们讨论三种可能的 TCP 修复方法来避免这些危害。
 
-- Ignore RST segments in TIME-WAIT state. If the 2 minute MSL is enforced, this fix avoids all three hazards.
-  This is the simplest fix.  One could also argue that it is formally the correct thing to do; since allowing time for old duplicate segments to die is one of TIME-WAIT state's functions,
-  the state should not be truncated by a RST segment. [See Linux](/d)
-- Use PAWS to avoid the hazards.
-- Use 64-bit Sequence Numbers
+- 在 TIME-WAIT 状态下忽略 RST 段。如果强制实施 2 分钟 MSL，此修复避免了所有三种危害。
+  这是最简单的修复。也可以争辩说这在形式上是正确的做法；因为允许旧重复段消亡是 TIME-WAIT 状态的功能之一，
+  该状态不应被 RST 段截断。[参见 Linux](/d)
+- 使用 PAWS 避免危害。
+- 使用 64 位序列号。
 
 TIME_WAIT数量超过`tcp_max_tw_buckets`后连接就不经过此状态而直接关闭
 
@@ -440,104 +433,103 @@ cat /proc/sys/net/ipv4/tcp_tw_reuse #3
 cat /proc/sys/net/ipv4/tcp_timestamps #1 enable
 ```
 
-see [RFC 6191 - Reducing the TIME-WAIT State Using TCP Timestamps](https://datatracker.ietf.org/doc/html/rfc6191)
+参见 [RFC 6191 - Reducing the TIME-WAIT State Using TCP Timestamps](https://datatracker.ietf.org/doc/html/rfc6191)
 
 ```shell
 net.ipv4.tcp_tw_recycle # 1 enable quick recycle TIME_WAIT sockets
 ```
 
-### Connection Queue
+### 连接队列
 
-New connections may be in one of two distinct states before they are made available to an application.
+新连接在提供给应用之前可能处于两种不同状态之一。
 
-- The first case is connections that have not yet completed but for which a SYN has been received (these are in the SYN_RCVD state).
-- The second case is connections that have already completed the three-way handshake and are in the ESTABLISHED state but have not yet been accepted by the application.
+- 第一种情况是尚未完成但已接收到 SYN 的连接（这些处于 SYN_RCVD 状态）。
+- 第二种情况是已完成三次握手并处于 ESTABLISHED 状态但尚未被应用接受的连接。
 
-Internally, the operating system ordinarily has two distinct connection queues, one for each of these cases.
+在内部，操作系统通常有两个不同的连接队列，每种情况一个。
 
-In modern Linux kernels this behavior has been changed to be the number of connections in the second case (ESTABLISHED connections).
-The application can therefore limit the number of fully formed connections waiting for it to handle.
-In Linux, then, the following rules apply:
+在现代 Linux 内核中，此行为已更改为第二种情况（ESTABLISHED 连接）的数量。
+因此，应用可以限制等待它处理的完全形成的连接数量。
+在 Linux 中，适用以下规则：
 
-1. When a connection request arrives (i.e., the SYN segment), the system-wide parameter `net.ipv4.tcp_max_syn_backlog` is checked (default 1024).
-   If the number of connections in the SYN_RCVD state would exceed this threshold, the incoming connection is rejected.
-2. Each listening endpoint has a fixed-length queue of connections that have been completely accepted by TCP (i.e., the three-way handshake is complete) but not yet accepted by the application.
-   The application specifies a limit to this queue, commonly called the backlog. This backlog must be between 0 and a system-specific maximum called `net.core.somaxconn`, inclusive (default 128).
-   Keep in mind that this backlog value specifies only the maximum number of queued connections for one listening endpoint, all of which have already been accepted by TCP and are waiting to be accepted by the application.
-   This backlog has no effect whatsoever on the maximum number of established connections application.
-   This backlog has no effect whatsoever on the maximum number of established connections allowed by the system, or on the number of clients that a concurrent server can handle concurrently.
-3. If there is room on this listening endpoint’s queue for this new connection, the TCP module ACKs the SYN and completes the connection.
-   The server application with the listening endpoint does not see this new connection until the third segment of the three-way handshake is received.
-   Also, the client may think the server is ready to receive data when the client’s active open completes successfully, before the server application has been notified of the new connection.
-   If this happens, the server’s TCP just queues the incoming data.
-4. If there is not enough room on the queue for the new connection, the TCP delays responding to the SYN, to give the application a chance to catch up.
-   Linux is somewhat unique in this behavior—it persists in not ignoring incoming connections if it possibly can.
-   If the `net.ipv4.tcp_abort_on_overflow` system control variable is set, new incoming connections are reset with a reset segment.
+1. 当连接请求到达（即 SYN 段）时，检查系统范围参数 `net.ipv4.tcp_max_syn_backlog`（默认 1024）。
+   如果 SYN_RCVD 状态下的连接数将超过此阈值，传入连接被拒绝。
+2. 每个监听端点有一个固定长度的连接队列，这些连接已被 TCP 完全接受（即三次握手完成）但尚未被应用接受。
+   应用为此队列指定一个限制，通常称为 backlog。此 backlog 必须在 0 和系统特定最大值 `net.core.somaxconn` 之间（包括，默认 128）。
+   请记住，此 backlog 值仅指定一个监听端口的排队连接最大数量，所有这些连接已被 TCP 接受并等待应用接受。
+   此 backlog 对应用可以处理的最大已建立连接数量完全没有影响。
+   此 backlog 对系统允许的最大已建立连接数量，或并发服务器可以同时处理的客户端数量完全没有影响。
+3. 如果此监听端口的队列中有空间容纳此新连接，TCP 模块 ACK 该 SYN 并完成连接。
+   具有监听端口的服务器应用直到收到三次握手的第三个段时才看到此新连接。
+   此外，当客户端的主动打开成功完成时，客户端可能认为服务器已准备好接收数据，而服务器应用尚未被通知新连接。
+   如果发生这种情况，服务器的 TCP 只是排队传入数据。
+4. 如果队列中没有足够的空间容纳新连接，TCP 延迟响应 SYN，以给应用追赶的机会。
+   Linux 在此行为上有些独特——如果可能，它坚持不忽略传入连接。
+   如果设置了 `net.ipv4.tcp_abort_on_overflow` 系统控制变量，新传入连接会收到一个重置段。
 
-#### syn queue
+#### syn 队列
 
 ```shell
 cat /proc/sys/net/ipv4/tcp_max_syn_backlog	#1024
 ```
 
 ```shell
- # get current syn queue size
+ # 获取当前 syn 队列大小
  netstat -natp | grep SYN_RECV | wc -l
 ```
 
-use [`hping3`] mock syn attack
+使用 [`hping3`] 模拟 syn 攻击
 
-**tcp_syncookies when syn queue is overflow**
+**tcp_syncookies 当 syn 队列溢出时**
 
 ```shell
 cat /proc/sys/net/ipv4/tcp_syncookies	#1
 ```
 
-check the syn sockets dropped
+检查丢弃的 syn 套接字
 
 ```shell
 netstat -s|grep "SYNs to LISTEN"
 ```
 
-**prevent syn attack**
+**防止 syn 攻击**
 
-1. expand syn queue and accept queue size
-2. enable tcp_syncookies
-3. reduce `tcp_synack_retries`to fast quit connection from SYN_RECV
+1. 扩大 syn 队列和 accept 队列大小
+2. 启用 tcp_syncookies
+3. 减少 `tcp_synack_retries` 以快速退出 SYN_RECV 连接
 
-#### accept queue
+#### accept 队列
 
 ```shell
-# -l show the listening socket
-# -n no expain server name
-# -t only tcp
+# -l 显示监听套接字
+# -n 不解释服务器名称
+# -t 仅 tcp
 ss -lnt
 ```
 
-
-|        | in Listening              | non-listening             |
+| | 监听中 | 非监听中 |
 | -------- | --------------------------- | --------------------------- |
-| Recv-Q | current accept queue size | recv & not read byte size |
-| Send-Q | max accept queue size     | send & not ack byte size  |
+| Recv-Q | 当前 accept 队列大小 | 已接收未读取的字节数 |
+| Send-Q | 最大 accept 队列大小 | 已发送未确认的字节数 |
 
-use[`wrk`](https://github.com/wg/wrk) to test accept queue overflow
+使用 [`wrk`](https://github.com/wg/wrk) 测试 accept 队列溢出
 
 ```shell
-# -t thread number
-# -c connection count
-# -d continue time
+# -t 线程数
+# -c 连接数
+# -d 持续时间
 wrk -t 6 -c 30000 -d 60s http://xxx.xxx.xxx.xxx 
 ```
 
-if see `connection reset by peer`, might be accept queue overflow, default will be connection timeout
+如果看到 `connection reset by peer`，可能是 accept 队列溢出，默认将是连接超时
 
-> If listening service is too slow to accept new connections, reset them.
-> Default state is FALSE. It means that if overflow occurred due to a burst, connection will recover. E
-> nable this option _only_ if you are really sure that listening daemon cannot be tuned to accept connections faster.
-> Enabling this option can harm clients of your server.
+> 如果监听服务太慢无法接受新连接，重置它们。
+> 默认状态为 FALSE。这意味着如果溢出是由于突发引起的，连接将恢复。
+> 仅在你确信监听守护进程无法被调优以更快接受连接时*才*启用此选项。
+> 启用此选项可能会伤害你的服务器的客户端。
 
 ```shell
-# 0 dicard, 1 dicard and return RST
+# 0 丢弃，1 丢弃并返回 RST
 cat /proc/sys/net/ipv4/tcp_abort_on_overflow
 ```
 
@@ -545,30 +537,30 @@ cat /proc/sys/net/ipv4/tcp_abort_on_overflow
 netstat -s|grep overflowed
 ```
 
-### Fast Open
+### 快速打开
 
-TCP Fast Open allows to reduce latency and significantly improve user-experience.
-However, naive firewalls and bad Intrusion Detection Systems got in our way
-Bad Middleboxes and Firewalls respond badly to TCP Fast Open
+TCP 快速打开（TFO）允许减少延迟并显著改善用户体验。
+然而，天真的防火墙和不良的入侵检测系统阻碍了我们。
+不良的中间盒和防火墙对 TCP 快速打开反应不佳。
 
-- Suppress TCP options
-- Drop packets
-- Mark entire connection as “invalid”
-- Blackhole the clients
+- 抑制 TCP 选项
+- 丢弃数据包
+- 将整个连接标记为"无效"
+- 黑洞客户端
 
-The key component of TFO is the Fast Open Cookie (cookie), a message authentication code (MAC) tag generated by the server.
-The client requests a cookie in one regular TCP connection, then uses it for future TCP connections to exchange data during the 3WHS:
+TFO 的关键组件是快速打开 Cookie，一种由服务器生成的消息认证码（MAC）标签。
+客户端在一个常规 TCP 连接中请求 Cookie，然后在未来的 TCP 连接中使用它在 3WHS 期间交换数据：
 
-Requesting a Fast Open Cookie:
+请求快速打开 Cookie：
 
-1. The client sends a SYN with a Fast Open option with an empty cookie field to request a cookie.
-2. The server generates a cookie and sends it through the Fast Open option of a SYN-ACK packet.
-3. The client caches the cookie for future TCP Fast Open connections(see below).
+1. 客户端发送带有空 Cookie 字段的 Fast Open 选项的 SYN 以请求 Cookie。
+2. 服务器生成一个 Cookie，并通过 SYN-ACK 数据包的 Fast Open 选项发送它。
+3. 客户端缓存 Cookie 以供未来的 TCP 快速打开连接使用（见下文）。
 
-Requesting Fast Open Cookie in connection 1:
+在连接 1 中请求快速打开 Cookie：
 
 ```
-   TCP A (Client)                                      TCP B (Server)
+   TCP A (客户端)                                      TCP B (服务器)
    ______________                                      ______________
    CLOSED                                                      LISTEN
 
@@ -577,10 +569,10 @@ Requesting Fast Open Cookie in connection 1:
    #2 ESTABLISHED    <---- <SYN,ACK,CookieOpt=C> ----------  SYN-RCVD
 ```
 
-Performing TCP Fast Open in connection 2:
+在连接 2 中执行 TCP 快速打开：
 
 ```
-   TCP A (Client)                                      TCP B (Server)
+   TCP A (客户端)                                      TCP B (服务器)
    ______________                                      ______________
    CLOSED                                                      LISTEN
 
@@ -620,159 +612,158 @@ cat /proc/sys/net/ipv4/tcp_fastopen	#1
 
 [Netty TPO](/docs/CS/Framework/Netty/TPO.md)
 
-### Attacks Involving TCP Connection Management
+### 涉及 TCP 连接管理的攻击
 
-A SYN flood is a TCP DoS attack whereby one or more malicious clients generate a series of TCP connection attempts (SYN segments) and send them at a server, often with a “spoofed” (e.g., random) source IP address.
-The server allocates some amount of connection resources to each partial connection.
-Because the connections are never established, the server may start to deny service to future legitimate requests because its memory is exhausted holding state for many half-open connections.
+SYN 洪水是一种 TCP DoS 攻击，其中一个或多个恶意客户端生成一系列 TCP 连接尝试（SYN 段）并将其发送到服务器，通常带有"伪造"（例如随机）源 IP 地址。
+服务器为每个部分连接分配一定数量的连接资源。
+由于连接从未建立，服务器可能开始拒绝未来的合法请求，因为其内存被许多半开连接的状态耗尽。
 
-One mechanism invented to deal with this issue is called SYN cookies [RFC4987].
-The main insight with SYN cookies is that most of the information that would be stored for a connection when a SYN arrives could be encoded inside the Sequence Number field supplied with the SYN + ACK.
-The target machine using SYN cookies need not allocate any storage for the incoming connection request—it allocates real memory only once the SYN + ACK segment has itself been acknowledged (and the initial sequence number is returned).
-In that case, all the vital connection parameters can be recovered and the connection can be placed in the ESTABLISHED state.
+一种用来处理此问题的机制称为 SYN cookies [RFC4987]。
+SYN cookies 的主要见解是，当 SYN 到达时，大部分将存储的连接信息可以编码在 SYN + ACK 提供的序列号字段中。
+使用 SYN cookies 的目标机器无需为传入连接请求分配任何存储——它仅在 SYN + ACK 段本身被确认（且初始序列号被返回）时才分配实际内存。
+在这种情况下，所有关键连接参数可以被恢复，连接可以置于 ESTABLISHED 状态。
 
-Another type of degradation attack on TCP involves PMTUD. In this case, an attacker fabricates an ICMP PTB message containing a very small MTU value (e.g., 68 bytes).
-This forces the victim TCP to attempt to fit its data into very small packets, greatly reducing its performance.
+另一种针对 TCP 的退化攻击涉及 PMTUD。在这种情况下，攻击者伪造包含非常小 MTU 值（例如 68 字节）的 ICMP PTB 消息。
+这迫使受害 TCP 尝试将其数据适配到非常小的数据包中，大大降低其性能。
 
-Another type of attack involves disrupting an existing TCP connection and possibly taking it over (called hijacking).
-These forms of attacks usually involve a first step of “desynchronizing” the two TCP endpoints so that if they were to talk to each other, they would be using invalid sequence numbers.
-They are particular examples of sequence number attacks [RFC1948].
-They can be accomplished in at least two ways: by causing invalid state transitions during connection establishment (similar to [TWA](/docs/CS/CN/TCP/TCP.mdP.md?id=time-wait-assassination-twa)), and by generating extra data while in the ESTABLISHED state.
+另一种类型的攻击涉及破坏现有 TCP 连接并可能接管它（称为劫持）。
+这些形式的攻击通常涉及第一步"失同步"两个 TCP 端点，使得如果它们相互通信，将使用无效的序列号。
+它们是序列号攻击 [RFC1948] 的特定示例。
+它们可以通过至少两种方式实现：在连接建立期间导致无效状态转换（类似于 [TWA](/docs/CS/CN/TCP/TCP.md?id=time-wait-assassination-twa)），以及在 ESTABLISHED 状态下生成额外数据。
 
-A collection of attacks generally called spoofing attacks involve TCP segments that have been specially tailored by an attacker to disrupt or alter the behavior of an existing TCP connection.
-An attacker can generate a spoofed reset segment and send it to an existing TCP endpoint.
-Provided the connection 4-tuple and checksum are correct, and the sequence number is in range, the reset generally results in a connection abort at either endpoint.
-Other types of segments (SYNs, even ACKs) can also be spoofed (and combined with flooding attacks), causing myriad problems.
-There are spoofing attacks that are not part of the TCP protocol yet can affect TCP’s operation. For example, ICMP can be used to modify PMTUD behavior.
-It can also be used to indicate that a port or host is not available, and this often causes a TCP connection to be terminated.
-Many of these attacks are described in [RFC5927], which also suggests a number of ways of improving robustness against spoofed ICMP messages.
+通常称为欺骗攻击的一类攻击涉及由攻击者专门定制以破坏或更改现有 TCP 连接行为的 TCP 段。
+攻击者可以生成伪造的重置段并将其发送到现有 TCP 端点。
+只要连接四元组和校验和正确，且序列号在范围内，重置通常会导致任一端点的连接中止。
+其他类型的段（SYN，甚至 ACK）也可以被伪造（并结合洪泛攻击），导致无数问题。
+有一些不属于 TCP 协议但仍可能影响 TCP 运行的欺骗攻击。例如，ICMP 可用于修改 PMTUD 行为。
+它还可用于指示端口或主机不可用，这通常导致 TCP 连接终止。
+这些攻击中的许多在 [RFC5927] 中描述，其中还建议了多种提高对伪造 ICMP 消息的鲁棒性的方法。
 
-## Timeout and Retransmission
+## 超时和重传
 
-The TCP protocol provides a reliable data delivery service between two applications using an underlying network layer (IP) that may lose, duplicate, or reorder packets.
-In order to provide an error-free exchange of data, TCP resends data it believes has been lost.
-To decide what data it needs to resend, TCP depends on a continuous flow of acknowledgments from receiver to sender.
-When data segments or acknowledgments are lost, TCP initiates a retransmission of the data that has not been acknowledged.
-TCP has two separate mechanisms for accomplishing retransmission, one based on time and one based on the structure of the acknowledgments.
-The second approach is usually much more efficient than the first.
+TCP 协议使用可能丢失、重复或重新排序数据包的底层网络层（IP），在两个应用之间提供可靠的数据交付服务。
+为了提供无差错的数.据交换，TCP 重传它认为已丢失的数据。
+为了决定需要重传哪些数据，TCP 依赖来自接收方到发送方的持续确认流。
+当数据段或确认丢失时，TCP 发起对未确认数据的重传。
+TCP 有两种独立的机制来实现重传，一种基于时间，一种基于确认的结构。
+第二种方法通常比第一种高效得多。
 
-Because TCP only acknowledges bytes up to the first missing byte in the stream, TCP is said to provide cumulative acknowledgments.
+由于 TCP 只确认流中第一个缺失字节之前的字节，TCP 被称为提供累积确认。
 
-### Retransmission Timeout
+### 重传超时
 
-TCP sets a timer when it sends data, and if the data is not acknowledged when the timer expires, a timeout or timer-based retransmission of data occurs.
-The timeout occurs after an interval called the retransmission timeout (RTO).
+TCP 在发送数据时设置一个定时器，如果数据在定时器到期时未被确认，则发生超时或基于定时器的数据重传。
+超时发生在一个称为重传超时（RTO）的间隔之后。
 
-This doubling of time between successive retransmissions is called a binary exponential backoff, and we saw it during a failed TCP connection establishment attempt.
+连续重传之间的这种加倍称为二进制指数退避，我们在失败的 TCP 连接建立尝试中看到过。
 
-Threshold R1 indicates the number of tries TCP will make (or the amount of time it will wait) to resend a segment before passing “negative advice” to the IP layer (e.g., causing it to reevaluate the IP route it is using).
-Threshold R2 (larger than R1) dictates the point at which TCP should abandon the connection. These thresholds are suggested to be at least three retransmissions and 100s, respectively.
-For connection establishment (sending SYN segments), these values may be different from those for data segments, and the R2 value for SYN segments is required to be at least 3 minutes.
+阈值 R1 指示 TCP 在向 IP 层传递"负面建议"（例如导致其重新评估正在使用的 IP 路由）之前将尝试的次数（或等待的时间）。
+阈值 R2（大于 R1）指示 TCP 应放弃连接的时间点。建议这些阈值分别至少为三次重传和 100 秒。
+对于连接建立（发送 SYN 段），这些值可能不同于数据段，SYN 段的 R2 值要求至少为 3 分钟。
 
-In Linux, the R1 and R2 values for regular data segments are available to be changed by applications or can be changed using the system-wide configuration variables `net.ipv4.tcp_retries1` and `net.ipv4.tcp_retries2`, respectively.
-These are measured in the number of retransmissions, and not in units of time. The default value for tcp_retries2 is 15, which corresponds roughly to 13–30 minutes, depending on the connection’s RTO. The default value for net.ipv4.tcp_retries1 is 3.
-For SYN segments, see [Timeout of Connection Establishment](/docs/CS/CN/TCP/TCP.mdP.md?id=timeout-of-connection-establishment).
+在 Linux 中，常规数据段的 R1 和 R2 值可以由应用更改，或分别使用系统范围配置变量 `net.ipv4.tcp_retries1` 和 `net.ipv4.tcp_retries2` 更改。
+这些以重传次数衡量，而非时间单位。tcp_retries2 的默认值为 15，大致对应 13-30 分钟，取决于连接的 RTO。net.ipv4.tcp_retries1 的默认值为 3。
+对于 SYN 段，参见[连接建立的超时](/docs/CS/CN/TCP/TCP.md?id=timeout-of-connection-establishment)。
 
-> From [ip-sysctl.txt](https://www.kernel.org/doc/Documentation/networking/ip-sysctl.txt)
+> 来自 [ip-sysctl.txt](https://www.kernel.org/doc/Documentation/networking/ip-sysctl.txt)
 >
-> tcp_retries1 - INTEGER
+> tcp_retries1 - 整数
 >
-> This value influences the time, after which TCP decides, that something is wrong due to unacknowledged RTO retransmissions, and reports this suspicion to the network layer.
-> See tcp_retries2 for more details.
-> RFC 1122 recommends at least 3 retransmissions, which is the default.
+> 此值影响 TCP 确定由于未确认的 RTO 重传而出问题的时间，并将此怀疑报告给网络层。
+> 更多细节参见 tcp_retries2。
+> RFC 1122 建议至少 3 次重传，这是默认值。
 >
-> tcp_retries2 - INTEGER
+> tcp_retries2 - 整数
 >
-> This value influences the timeout of an alive TCP connection, when RTO retransmissions remain unacknowledged.
-> Given a value of N, a hypothetical TCP connection following exponential backoff with an initial RTO of TCP_RTO_MIN would retransmit N times before killing the connection at the (N+1)th RTO.
+> 此值影响当 RTO 重传保持未确认时活动 TCP 连接的超时。
+> 给定值 N，一个假设的 TCP 连接，使用指数退避且初始 RTO 为 TCP_RTO_MIN，将在杀死连接前在第 (N+1) 个 RTO 处重传 N 次。
 >
-> The default value of 15 yields a hypothetical timeout of **924.6 seconds** and is a lower bound for the effective timeout.
-> TCP will effectively time out at the first RTO which exceeds the hypothetical timeout.
-> RFC 1122 recommends at least 100 seconds for the timeout, which corresponds to a value of at least 8.
+> 默认值 15 产生假设超时 **924.6 秒**，是有效超时的下限。
+> TCP 将在超过假设超时的第一个 RTO 处有效超时。
+> RFC 1122 建议超时至少为 100 秒，对应至少为 8 的值。
 
-### Fast Retransmit
+### 快速重传
 
-It has another way of initiating a retransmission called fast retransmission or fast retransmit, which usually happens without any delay.
-Fast retransmit is based on inferring losses by noticing when TCP’s cumulative acknowledgment fails to advance in the ACKs received over time,
-or when ACKs carrying selective acknowledgment information (SACKs) indicate that out-of-order segments are present at the receiver.
-Generally speaking, when the sender believes that the receiver might be missing some data, a choice needs to be made between sending new (unsent) data and retransmitting.
+它还有另一种发起重传的方式，称为快速重传，通常没有任何延迟。
+快速重传基于通过注意 TCP 的累积确认在随时间接收的 ACK 中未能推进，或携带选择性确认信息（SACK）的 ACK 指示接收方存在乱序段来推断丢失。
+一般来说，当发送方认为接收方可能丢失了一些数据时，需要在发送新（未发送）数据和重传之间做出选择。
 
-The duplicate ACKs sent immediately when out-of-order data arrives are not delayed.
-The reason is to let the sender know that a segment was received out of order, and to indicate what sequence number is expected (i.e., where the hole is).
-When SACK is used, these duplicate ACKs typically contain SACK blocks as well, which can provide information about more than one hole.
+乱序数据到达时立即发送的重复 ACK 不被延迟。
+原因是为了让发送方知道一个段被乱序接收，并指示期望什么序列号（即空洞在哪里）。
+当使用 SACK 时，这些重复 ACK 通常也包含 SACK 块，可以提供关于多个空洞的信息。
 
-The expected packet could be either missing or merely delayed.
-Because we generally do not know which one, TCP waits for a small number of duplicate ACKs (called the duplicate ACK threshold or dupthresh) to be received before concluding that a packet has been lost and initiating a fast retransmit.
-Traditionally, dupthresh has been a constant (with value 3), but some nonstandard implementations (including Linux) alter this value based on the current measured level of reordering.
+预期的数据包可能丢失或仅仅延迟。
+因为我们通常不知道是哪种情况，TCP 等待收到少量重复 ACK（称为重复 ACK 阈值或 dupthresh），然后才断定数据包已丢失并发起快速重传。
+传统上，dupthresh 是一个常数（值为 3），但一些非标准实现（包括 Linux）根据当前测量的重排序水平更改此值。
 
-A TCP sender observing at least dupthresh duplicate ACKs retransmits one or more packets that appear to be missing without waiting for a retransmission timer to expire.
-It may also send additional data that has not yet been sent. This is the essence of the fast retransmit algorithm.
-Packet loss inferred by the presence of duplicate ACKs is assumed to be related to network congestion, and [congestion control](/docs/CS/CN/TCP/TCP.mdP.md?id=Congestion-Control) procedures are invoked along with fast retransmit.
-Without SACK, no more than one segment is typically retransmitted until an acceptable ACK is received.
-With SACK, ACKs contain additional information allowing the sender to fill more than one hole in the receiver per RTT.
+观察到至少 dupthresh 个重复 ACK 的 TCP 发送方重传一个或多个看似丢失的数据包，而无需等待重传定时器到期。
+它还可以发送尚未发送的额外数据。这就是快速重传算法的本质。
+由重复 ACK 的存在推断的数据包丢失被认为与网络拥塞有关，并且在快速重传的同时调用[拥塞控制](/docs/CS/CN/TCP/TCP.md?id=拥塞控制)过程。
+没有 SACK，通常不会重传超过一个段，直到收到可接受的 ACK。
+有了 SACK，ACK 包含额外信息，允许发送方在每个 RTT 中填补接收方的多个空洞。
 
-### Spurious Timeouts
+### 虚假超时
 
-Under a number of circumstances, TCP may initiate a retransmission even when no data has been lost.
-Such undesirable retransmissions are called *spurious retransmissions* and are caused by *spurious timeouts* (timeouts firing too early) and other reasons such as packet reordering, packet duplication, or lost ACKs.
+在许多情况下，即使没有数据丢失，TCP 也可能发起重传。
+这种不希望的重传称为*虚假重传*，由*虚假超时*（触发过早的超时）和其他原因引起，如数据包重排序、数据包重复或 ACK 丢失。
 
-### Packet Reordering and Duplication
+### 数据包重排序和重复
 
-We wish TCP to be able to distinguish between packets that are reordered or duplicated and those that are lost.
+我们希望 TCP 能够区分重排序或复制的数据包和丢失的数据包。
 
-#### Reordering
+#### 重排序
 
-Packet reordering can occur in an IP network because IP provides no guarantee that relative ordering between packets is maintained during delivery.
+IP 网络中可能发生数据包重排序，因为 IP 不保证数据包在交付期间维持相对顺序。
 
-Reordering may take place in the forward path or the reverse path of a TCP connection (or in some cases both). The reordering of data segments has a somewhat different effect on TCP as does reordering of ACK packets.
+重排序可能发生在 TCP 连接的正向路径或反向路径上（或在某些情况下两者都有）。数据段的重排序与 ACK 数据包的重排序对 TCP 的影响有所不同。
 
-If reordering takes place in the reverse (ACK) direction, it causes the sending TCP to receive some ACKs that move the window significantly forward followed by some evidently old redundant ACKs that are discarded.
-This can lead to an unwanted burstiness (instantaneous high-speed sending) behavior in the sending pattern of TCP and also trouble in taking advantage of available network bandwidth, because of the behavior of TCP’s congestion control.
+如果重排序发生在反向（ACK）方向，它会导致发送 TCP 收到一些显著向前移动窗口的 ACK，随后是一些明显旧的冗余 ACK 被丢弃。
+这可能导致 TCP 发送模式中不希望的突发性（瞬时高速发送）行为，并且由于 TCP 拥塞控制的行为，也可能在利用可用网络带宽方面造成问题。
 
-If reordering occurs in the forward direction, TCP may have trouble distinguishing this condition from loss.
-Both loss and reordering result in the receiver receiving out-of-order packets that create holes between the next expected packet and the other packets received so far.
-When reordering is moderate (e.g., two adjacent packets switch order), the situation can be handled fairly quickly.
-When reorderings are more severe, TCP can be tricked into believing that data has been lost even though it has not.
-This can result in spurious retransmissions, primarily from the fast retransmit algorithm.
+如果重排序发生在正向方向，TCP 可能难以区分此状态与丢包。
+丢失和重排序都会导致接收方接收乱序数据包，在下一个预期数据包和已接收的其他数据包之间产生空洞。
+当重排序适度时（例如，两个相邻数据包交换顺序），情况可以相当快地处理。
+当重排序更严重时，TCP 可能被欺骗认为数据已丢失，即使并没有。
+这可能导致主要是来自快速重传算法的虚假重传。
 
-#### Duplication
+#### 重复
 
-Although rare, the IP protocol may deliver a single packet more than one time.
-This can happen, for example, when a link-layer network protocol performs a retransmission and creates two copies of the same packet.
-When duplicates are created, TCP can become confused in some of the ways we have seen already.
+虽然罕见，IP 协议可能多次交付单个数据包。
+这可能在链路层网络协议执行重传并创建同一数据包的两个副本时发生。
+当创建重复时，TCP 可能以我们已看到的某些方式变得混乱。
 
-The effect of packet 3 being duplicated is to produce a series of duplicate ACKs from the receiver.
-This is enough to trigger a spurious fast retransmit, as the non-SACK sender may mistakenly believe that packets 5 and 6 have arrived earlier.
-With SACK (and DSACK, in particular) this is more easily diagnosed at the sender. With DSACK, each of the duplicate ACKs for A3 contains DSACK information that segment 3 has already been received.
-Furthermore, none of them contains an indication of any out-of-order data, meaning the arriving packets (or their ACKs) must have been duplicates. TCP can often suppress spurious retransmissions in such cases.
+数据包 3 被复制的影响是从接收方产生一系列重复 ACK。
+这足以触发虚假的快速重传，因为非 SACK 发送方可能错误地认为数据包 5 和 6 已提前到达。
+有了 SACK（特别是 DSACK），发送方更容易诊断。使用 DSACK，A3 的每个重复 ACK 都包含 DSACK 信息，表明段 3 已被接收。
+此外，它们中没有一个指示任何乱序数据，意味着到达的数据包（或其 ACK）必须是重复的。TCP 通常可以在这种情况下抑制虚假重传。
 
-### Repacketization
+### 重新打包
 
-When TCP times out and retransmits, it does not have to retransmit the identical segment.
-Instead, TCP is allowed to perform repacketization, sending a bigger segment, which can increase performance. (Naturally, this bigger segment cannot exceed the MSS announced by the receiver and should not exceed the path MTU.)
-This is allowed in the protocol because TCP identifies the data being sent and acknowledged by its byte number, not its segment (or packet) number.
+当 TCP 超时并重传时，它不必重传相同的段。
+相反，TCP 被允许执行重新打包，发送更大的段，这可以提高性能。（自然，这个更大的段不能超过接收方宣布的 MSS，也不应超过路径 MTU。）
+协议允许这样做，因为 TCP 通过其字节号（而非其段或数据包号）来识别被发送和确认的数据。
 
-### Attacks Involving TCP Retransmission
+### 涉及 TCP 重传的攻击
 
-There is a class of DoS attack called low-rate DoS attacks [KK03].
-In such an attack, an attacker sends bursts of traffic to a gateway or host, causing the victim system to experience a retransmission timeout.
-Given an ability to predict when the victim TCP will attempt to retransmit, the attacker generates a burst of traffic at each retransmission attempt.
-As a consequence, the victim TCP perceives congestion in the network, throttles its sending rate to near zero, keeps backing off its RTO according to Karn’s algorithm, and effectively receives very little network throughput.
-The proposed mechanism to deal with this type of attack is to add randomization to the RTO, making it difficult for the attacker to guess the precise times when a retransmission will take place.
+有一种称为低速率 DoS 攻击 [KK03] 的 DoS 攻击类别。
+在这种攻击中，攻击者向网关或主机发送流量突发，导致受害系统经历重传超时。
+如果能够预测受害 TCP 将尝试重传的时间，攻击者在每次重传尝试时生成流量突发。
+结果，受害 TCP 感知到网络拥塞，将其发送速率限制到接近零，根据 Karn 算法持续退避其 RTO，并且实际上获得非常低的网络吞吐量。
+处理此类攻击的建议机制是向 RTO 添加随机化，使攻击者难以猜测重传发生的确切时间。
 
-A related but distinct form of DoS attack involves slowing a victim TCP’s segments down so that the RTT estimate is too high.
-Doing so causes the victim TCP to be less aggressive in retransmitting its own packets when they are lost.
-The opposite attack is also possible: an attacker forges ACKs when data has been transmitted but has not actually arrived at the receiver yet.
-In this case, the attacker can cause the victim TCP to believe that the connection RTT is significantly smaller than it really is, leading to an overaggressive TCP that creates numerous unwanted retransmissions.
+一种相关但不同的 DoS 攻击形式涉及减慢受害 TCP 的段，使 RTT 估计过高。
+这样做会导致受害 TCP 在其数据包丢失时不太积极地重传自己的数据包。
+相反的攻击也是可能的：当数据已被发送但实际上尚未到达接收方时，攻击者伪造 ACK。
+在这种情况下，攻击者可以导致受害 TCP 认为连接 RTT 明显小于实际值，导致过于激进的 TCP 产生大量不必要的重传。
 
-## Data Flow and Window Management
+## 数据流和窗口管理
 
-### Delayed Acknowledgments
+### 延迟确认
 
-In many cases, TCP does not provide an ACK for every incoming packet. This is possible because of TCP’s cumulative ACK field.
-Using a cumulative ACK allows TCP to intentionally delay sending an ACK for some amount of time, in the hope that it can combine the ACK it needs to send with some data the local application wishes to send in the other direction.
-This is a form of piggybacking that is used most often in conjunction with bulk data transfers.
-Obviously a TCP cannot delay ACKs indefinitely; otherwise its peer could conclude that data has been lost and initiate an unnecessary retransmission.
+在许多情况下，TCP 不为每个传入数据包提供 ACK。这是因为 TCP 的累积 ACK 字段是可能的。
+使用累积 ACK 允许 TCP 有意延迟发送 ACK 一段时间，希望它能将需要发送的 ACK 与本地应用希望在另一个方向发送的一些数据结合起来。
+这是一种捎带形式，最常用于批量数据传输。
+显然，TCP 不能无限期延迟 ACK；否则其对端可能得出结论认为数据已丢失并启动不必要的重传。
 
 ```shell
 #linux
@@ -781,60 +772,57 @@ cat /proc/sys/net/ipv4/tcp_sack	#1
 
 > [!Note]
 >
-> The Host Requirements RFC [RFC1122] states that TCP should implement a delayed ACK but the delay must be less than 500ms. Many implementations use a maximum of 200ms.
+> 主机要求 RFC [RFC1122] 指出 TCP 应实现延迟 ACK，但延迟必须小于 500 毫秒。许多实现使用最大 200 毫秒。
 
-Delaying ACKs causes less traffic to be carried over the network than when ACKs are not delayed because fewer ACKs are used.
-A ratio of 2 to 1 is fairly common for bulk transfers. The use of delayed ACKs and the maximum amount of time TCP is allowed to wait before sending an ACK can be configured, depending on the host operating system.
-Linux uses a dynamic adjustment algorithm whereby it can change between ACKing every segment (called “quickack” mode) and conventional delayed ACK mode.
+延迟 ACK 导致的网络流量比不延迟 ACK 少，因为使用的 ACK 更少。
+对于批量传输，2 比 1 的比例相当常见。延迟 ACK 的使用以及 TCP 在发送 ACK 前允许等待的最大时间可以配置，取决于主机操作系统。
+Linux 使用动态调整算法，可以在每段 ACK（称为"quickack"模式）和传统延迟 ACK 模式之间切换。
 
-### Nagle Algorithm
+### Nagle 算法
 
-The Nagle algorithm says that when a TCP connection has outstanding data that has not yet been acknowledged, small segments (those smaller than the SMSS) cannot be sent until all outstanding data is acknowledged.
-Instead, small amounts of data are collected by TCP and sent in a single segment when an acknowledgment arrives.
-This procedure effectively forces TCP into stop-and-wait behavior—it stops sending until an ACK is received for any outstanding data.
-The beauty of this algorithm is that it is *self-clocking*: the faster the ACKs come back, the faster the data is sent.
-On a comparatively high-delay WAN, where reducing the number of tinygrams is desirable, fewer segments are sent per unit time. Said another way, the RTT controls the packet sending rate.
-This is the trade-off the Nagle algorithm makes: fewer and larger packets are used, but the required delay is higher.
+Nagle 算法指出，当 TCP 连接有待确认的未完成数据时，不能发送小段（小于 SMSS 的段），直到所有未完成数据被确认。
+相反，少量数据由 TCP 收集并在确认到达时作为一个段发送。
+此过程有效地强制 TCP 进入停止-等待行为——它停止发送，直到收到任何未完成数据的 ACK。
+该算法的美妙之处在于它是*自时钟的*：ACK 返回得越快，数据发送得越快。
+在相对高延迟的 WAN 上，减少微小段的数量是可取的，每单位时间发送的段更少。换句话说，RTT 控制数据包发送速率。
+这是 Nagle 算法做出的权衡：使用更少但更大的数据包，但所需的延迟更高。
 
-If we consider what happens when the delayed ACK and Nagle algorithms are used together, we can construct an undesirable scenario.
-Consider a client using delayed ACKs that sends a request to a server, and the server responds with an amount of data that does not quite fit inside a single packet.
+如果我们考虑延迟 ACK 和 Nagle 算法一起使用时发生的情况，我们可以构建一个不期望的场景。
+考虑一个使用延迟 ACK 的客户端向服务器发送请求，服务器响应一定数量的数据，这些数据不完全适合单个数据包。
 
-The interaction between the Nagle algorithm and delayed ACKs
-
+Nagle 算法和延迟 ACK 之间的交互
 
 <div style="text-align: center;">
 
-![Fig.5. The interaction between the Nagle algorithm and delayed ACKs](../img/Nagle.png)
+![图 5：Nagle 算法和延迟 ACK 之间的交互](../img/Nagle.png)
 
 </div>
 
-<p style="text-align: center;">Fig.5. The interaction between the Nagle algorithm and delayed ACKs</p>
+<p style="text-align: center;">图 5：Nagle 算法和延迟 ACK 之间的交互</p>
 
-
-
-Here we see that the client, after receiving two packets from the server, withholds an ACK, hoping that additional data headed toward the server can be piggybacked.
-Generally, TCP is required to provide an ACK for two received packets only if they are full-size, and they are not here.
-At the server side, because the Nagle algorithm is operating, no additional packets are permitted to be sent to the client until an ACK is returned because at most one “small” packet is allowed to be outstanding.
-The combination of delayed ACKs and the Nagle algorithm leads to a form of deadlock (each side waiting for the other) [MMSV99][MM01].
-Fortunately, this deadlock is not permanent and is broken when the delayed ACK timer fires, which forces the client to provide an ACK even if the client has no additional data to send.
-However, the entire data transfer becomes idle during this deadlock period, which is usually not desirable.
-The Nagle algorithm can be disabled in such circumstances, as we saw with ssh.
+在这里我们看到，客户端在从服务器接收到两个数据包后，扣留 ACK，希望可以捎带发往服务器的额外数据。
+通常，TCP 要求仅在接收到的两个数据包都是全尺寸时才提供 ACK，而这里不是。
+在服务器端，由于 Nagle 算法在运行，在 ACK 返回之前不允许向客户端发送额外数据包，因为最多允许一个"小"数据包未完成。
+延迟 ACK 和 Nagle 算法的组合导致一种死锁形式（每一方等待另一方）[MMSV99][MM01]。
+幸运的是，这种死锁不是永久的，当延迟 ACK 定时器触发时被打破，这强制客户端即使没有额外数据要发送也提供 ACK。
+然而，在此死锁期间整个数据传输变得空闲，这通常是不希望的。
+在这种情况下可以禁用 Nagle 算法，正如我们在 ssh 中看到的。
 
 #### TCP_NODELAY
 
-If set, disable the Nagle algorithm. This means that segments are always sent as soon as possible, even if there is only a small amount of data.
-When not set, data is buffered until there is a sufficient amount to send out, thereby avoiding the frequent sending of small packets, which results in poor utilization of the network.
-This option is overridden by TCP_CORK; however, setting this option forces an explicit flush of pending output, even if TCP_CORK is currently set.
-As currently implemented, there is a 200 millisecond ceiling on the time for which output is corked by *TCP_CORK*.
+如果设置，禁用 Nagle 算法。这意味着即使只有少量数据，段也会尽快发送。
+当未设置时，数据被缓冲直到有足够数量要发送，从而避免频繁发送小数据包，这会导致网络利用率差。
+此选项被 TCP_CORK 覆盖；然而，设置此选项强制显式刷新待处理输出，即使 TCP_CORK 当前已设置。
+在当前实现中，*TCP_CORK* 导致的输出延塞有 200 毫秒的上限。
 
-[Nagle's algorithm](https://en.wikipedia.org/wiki/Nagle's_algorithm) is a means of improving the efficiency of TCP/IP networks by reducing the number of packets that need to be sent over the network.
+[Nagle 算法](https://en.wikipedia.org/wiki/Nagle's_algorithm)是一种通过减少需要在网络上发送的数据包数量来提高 TCP/IP 网络效率的方法。
 
-What Nagle's algorithm does is says:
+Nagle 算法的作用是：
 
-- if there is unacked data sent, and if the write buffer in the kernel is smaller than the MTU, then wait a little to see if the application writes more data.
-- If the write buffer reaches the MTU size then the data will be transmitted. If the in flight data is acked then the data will also be transmitted, even if it is smaller than the MTU.
+- 如果有未确认的数据已发送，并且内核中的写缓冲区小于 MTU，则稍等片刻，看看应用是否写入更多数据。
+- 如果写缓冲区达到 MTU 大小，则数据将被传输。如果飞行中的数据被确认，则数据也将被传输，即使小于 MTU。
 
-Where MSS is the maximum segment size, the largest segment that can be sent on this connection, and the window size is the currently acceptable window of unacknowledged data, this can be written in pseudocode as
+其中 MSS 是最大段大小，此连接上可以发送的最大段，窗口大小是当前可接受的未确认数据窗口，这可以写为伪代码：
 
 ```
 if there is new data to send then
@@ -852,14 +840,14 @@ end if
 
 > [!NOTE]
 >
-> The user-level solution is to avoid write–write–read sequences on sockets. Write–read–write–read is fine. Write–write–write is fine. But write–write–read is a killer.
-> So, if you can, buffer up your little writes to TCP and send them all at once. Using the standard UNIX I/O package and flushing write before each read usually works.
+> 用户级解决方案是避免在套接字上使用 write–write–read 序列。Write–read–write–read 没问题。Write–write–write 没问题。但 write–write–read 是致命的。
+> 因此，如果可能，将你小的写入缓冲到 TCP 并一次性发送它们。使用标准 UNIX I/O 包并在每次读取前刷新写入通常有效。
 
-The TCP delayed ack feature is again an attempt to minimize the number of small packets sent.
-The way it works is a TCP packet can ack multiple data packets at once.
-Therefore a TCP stack implementing the delayed ack feature may wait up to some amount of time before acking packets in the hope that it will be able to ack more packets at once.
-On Linux this can cause up to a 40 ms delay when acking packets.
-Again, this is usually a good thing since it decreases the number of packets that have to be sent (which is usually the limiting factor in network performance).
+TCP 延迟确认特性再次尝试最小化发送的小数据包数量。
+其工作方式是，一个 TCP 数据包可以一次确认多个数据包。
+因此，实现延迟确认特性的 TCP 栈可以在确认数据包之前等待一段时间，希望它能一次确认更多数据包。
+在 Linux 上，这可能导致确认数据包时最多 40 毫秒的延迟。
+同样，这通常是一件好事，因为它减少了必须发送的数据包数量（这通常是网络性能的限制因素）。
 
 ```shell
 cat /boot/config-4.18.0-193.el8.x86_64 |grep 'CONFIG_HZ='
@@ -870,67 +858,65 @@ CONFIG_HZ=1000
 
 TCP_QUICKACK
 
-An application that is very latency sensitive, particularly if it doesn't transmit a lot of data, can safely use TCP_NODELAY.
+对延迟非常敏感的应用，特别是如果不传输大量数据，可以安全地使用 TCP_NODELAY。
 
-### Flow Control and Window Management
+### 流控制和窗口管理
 
-TCP implements flow control by including a window advertisement on every ACK it sends. Such window advertisements signal the peer TCP how much buffer space is left at the endpoint that sent the window advertisement ACK.
-The maximum window advertisement is 65,535 bytes unless the Window Scale TCP option is used. In that case, the maximum window advertisement can be much larger (about 1GB).
+TCP 通过在其发送的每个 ACK 中包含窗口通告来实现流控制。这样的窗口通告向对端 TCP 信号发送窗口通告 ACK 的端点还剩多少缓冲区空间。
+除非使用窗口缩放 TCP 选项，否则最大窗口通告为 65,535 字节。在使用窗口缩放选项时，最大窗口通告可以大得多（约 1GB）。
 
-#### Sliding Windows
+#### 滑动窗口
 
-Each endpoint of a TCP connection is capable of sending and receiving data.
-The amount of data sent or received on a connection is maintained by a set of *window structures*. 
-For each active connection, each TCP endpoint maintains a *send window structure* and a *receive window structure*.
+TCP 连接的每个端点都能发送和接收数据。
+连接上发送或接收的数据量由一组*窗口结构*维护。
+对于每个活动连接，每个 TCP 端点维护一个*发送窗口结构*和一个*接收窗口结构*。
 
-> The window scale option appears only once in TCP handshanke.
+> 窗口缩放选项仅在 TCP 握手中出现一次。
 
+- 发送窗口（Sent Window）
+- 接收窗口（Receive Window）
+- 拥塞窗口（Congestion Window）
 
-- Sent Window
-- Receive Window
-- Congestion Window
+##### 发送方
 
+TCP 以字节（而非数据包）为单位维护其窗口结构。
+窗口大小字段包含相对于 ACK 号的字节偏移量。
+发送方计算其可用窗口，即它可以立即发送多少数据。可用窗口是提供的窗口减去已发送但尚未确认的数据量。
 
-##### sender-side
+随着时间的推移，这个滑动窗口随着接收方确认数据而向右移动。窗口左右边缘的相对运动增加或减少窗口的大小。
+三个术语用于描述窗口左右边缘的移动：
 
-TCP maintains its window structures in terms of bytes (not packets).
-The Window Size field contains a byte offset relative to the ACK number.
-The sender computes its usable window, which is how much data it can send immediately. The usable window is the offered window minus the amount of data already sent but not yet acknowledged.
+1. 当左边缘向右前进时，窗口关闭。当已发送的数据被确认且窗口大小变小时发生。
+2. 当右边缘向右移动时，窗口打开，允许发送更多数据。当另一端的接收进程读取已确认的数据，释放其 TCP 接收缓冲区中的空间时发生。
+3. 当右边缘向左移动时，窗口收缩。主机要求 RFC [RFC1122] 强烈不鼓励这样做，但 TCP 必须能够处理它。
 
-Over time this sliding window moves to the right, as the receiver acknowledges data. The relative motion of the two ends of the window increases or decreases the size of the window.
-Three terms are used to describe the movement of the right and left edges of the window:
+由于每个 TCP 段都包含 ACK 号和窗口通告，TCP 发送方在收到传入段时根据这两个值调整窗口结构。
+窗口的左边缘不能向左移动，因为此边缘由从另一端接收的 ACK 号控制，该 ACK 号是累积的，从不后退。
+当 ACK 号前进但窗口大小不变（常见情况）时，称窗口向前推进或"滑动"。
+如果 ACK 号前进但窗口通告随着其他到达的 ACK 变得更小，窗口的左边缘更接近右边缘。
+如果左边缘到达右边缘，称为零窗口。这阻止发送方传输任何数据。
+如果发生这种情况，发送 TCP 开始[探测对端的窗口]()以寻找提供的窗口增加。
 
-1. The window closes as the left edge advances to the right. This happens when data that has been sent is acknowledged and the window size gets smaller.
-2. The window opens when the right edge moves to the right, allowing more data to be sent. This happens when the receiving process on the other end reads acknowledged data, freeing up space in its TCP receive buffer.
-3. The window shrinks when the right edge moves to the left. The Host Requirements RFC [RFC1122] strongly discourages this, but TCP must be able to cope with it.
+##### 接收方
 
-Because every TCP segment contains both an ACK number and a window advertisement, a TCP sender adjusts the window structure based on both values whenever an incoming segment arrives.
-The left edge of the window cannot move to the left, because this edge is controlled by the ACK number received from the other end that is cumulative and never goes backward.
-When the ACK number advances the window but the window size does not change (a common case), the window is said to advance or “slide” forward.
-If the ACK number advances but the window advertisement grows smaller with other arriving ACKs, the left edge of the window moves closer to the right edge.
-If the left edge reaches the right edge, it is called a zero window. This stops the sender from transmitting any data.
-If this happens, the sending TCP begins to [probe the peer’s window]() to look for an increase in the offered window.
+接收方也维护一个窗口结构，比发送方的简单一些。
+接收窗口结构跟踪哪些数据已被接收和确认，以及它愿意接收的最大序列号。
+TCP 接收方依赖此结构来确保其接收数据的正确性。
+特别是，它希望避免存储已接收和确认的重复字节，也希望避免存储不应接收的字节（任何超出发送方右窗口边缘的字节）。
 
-##### receiver-side
+此结构也像发送方窗口一样包含左右窗口边缘，但窗口内的字节不需要像发送方窗口结构中那样区分。
+对于接收方，任何序列号小于左窗口边缘的字节被视为重复并丢弃，任何序列号超出右窗口边缘的字节被视为超出范围并丢弃。
+在接收窗口范围内的任何序列号到达的字节都被接受。
+注意，接收方生成的 ACK 号仅在段直接填充左窗口边缘时才可能前进，因为 TCP 的累积 ACK 结构。
+使用选择性 ACK，其他窗口内的段可以使用 TCP SACK 选项确认，但最终 ACK 号本身仅在接收到与左窗口边缘连续的数据时才前进。
 
-The receiver also keeps a window structure, which is somewhat simpler than the sender’s.
-The receiver window structure keeps track of what data has already been received and ACKed, as well as the maximum sequence number it is willing to receive.
-The TCP receiver depends on this structure to ensure the correctness of the data it receives.
-In particular, it wishes to avoid storing duplicate bytes it has already received and ACKed, and it also wishes to avoid storing bytes that it should not have received (any bytes beyond the sender’s right window edge).
+#### 窗口缩放
 
-This structure also contains a left and right window edge like the sender’s window, but the in-window bytes need not be differentiated as they are in the sender’s window structure.
-For the receiver, any bytes received with sequence numbers less than the left window edge are discarded as duplicates, and any bytes received with sequence numbers beyond the right window edge are discarded as out of scope.
-Bytes arriving with any sequence number in the receive window range are accepted.
-Note that the ACK number generated at the receiver may be advanced only when segments fill in directly at the left window edge because of TCP’s cumulative ACK structure.
-With selective ACKs, other in-window segments can be acknowledged using the TCP SACK option, but ultimately the ACK number itself is advanced only when data contiguous to the left window edge is received.
+参见 [RFC 1323 - TCP Extensions for High Performance](https://datatracker.ietf.org/doc/rfc1323/).
 
-#### Window Scale
+**窗口大小限制：**
 
-see [RFC 1323 - TCP Extensions for High Performance](https://datatracker.ietf.org/doc/rfc1323/).
-
-**Window Size Limit:**
-
-The TCP header uses a 16 bit field to report the receive window size to the sender.  Therefore, the largest window that can be used is 2**16 = 65K bytes.
+TCP 头部使用 16 位字段向发送方报告接收窗口大小。因此，可以使用的最大窗口是 2**16 = 65K 字节。
 
 ```
 TCP Window Scale Option (WSopt):
@@ -942,96 +928,96 @@ TCP Window Scale Option (WSopt):
                 +---------+---------+---------+
 ```
 
-The window field (SEG.WND) in the header of every incoming segment, with the exception of SYN segments, is left-shifted by Snd.Wind.Scale bits before updating SND.WND:
+每个传入段（SYN 段除外）头部的窗口字段（SEG.WND）在更新 SND.WND 之前左移 Snd.Wind.Scale 位：
 `SND.WND = SEG.WND << Snd.Wind.Scale`
 
-The window field (SEG.WND) of every outgoing segment, with the exception of SYN segments, is right-shifted by Rcv.Wind.Scale bits:
+每个传出段（SYN 段除外）头部的窗口字段（SEG.WND）右移 Rcv.Wind.Scale 位：
 `SEG.WND = RCV.WND >> Rcv.Wind.Scale`
 
-**Recovery from Losses:**
+**从丢失中恢复：**
 
-**Round-Trip Measurement:**
+**往返测量：**
 
-TCP implements reliable data delivery by retransmitting segments that are not acknowledged within some retransmission timeout (RTO) interval.
+TCP 通过在某个重传超时（RTO）间隔内重传未确认的段来实现可靠数据交付。
 
-New TCP option, `"Timestamps"`, and then defines a mechanism using this option that allows nearly every segment, including retransmissions, to be timed at negligible computational cost.  We use the mnemonic RTTM(`Round Trip Time Measurement)` for this mechanism, to distinguish it from other uses of the `Timestamps` option.
+新的 TCP 选项`"Timestamps"`，然后定义了一种使用此选项的机制，允许几乎每个段（包括重传）以可忽略的计算成本被计时。我们使用助记符 RTTM（往返时间测量）来表示此机制，以区别于`Timestamps`选项的其他用途。
 
 ##### PAWS
 
-We call PAWS(`Protect Against Wrapped Sequence numbers`), to extend TCP reliability to transfer rates well beyond the foreseeable upper limit of network bandwidths.
+我们称 PAWS（防止序列号回绕），将 TCP 可靠性扩展到远超网络带宽可预见上限的传输速率。
 
-The PAWS algorithm requires the following processing to be performed on all incoming segments for a synchronized connection:
+PAWS 算法需要对同步连接的所有传入段执行以下处理：
 
-- If there is a Timestamps option in the arriving segment and SEG.TSval < TS.Recent and if TS.Recent is valid (see later discussion), then treat the arriving segment as not acceptable:
-  - Send an acknowledgement in reply as specified in RFC-793 page 69 and drop the segment.
-  - Note: it is necessary to send an ACK segment in order to retain TCP's mechanisms for detecting and recovering from half-open connections.  For example, see Figure 10 of RFC-793.
-- If the segment is outside the window, reject it (normal TCP processing)
-- If an arriving segment satisfies: SEG.SEQ <= Last.ACK.sent, then record its timestamp in TS.Recent.
-- If an arriving segment is in-sequence (i.e., at the left window edge), then accept it normally.
-- Otherwise, treat the segment as a normal in-window, out-of-sequence TCP segment (e.g., queue it for later delivery to the user).
+- 如果到达的段中有时间戳选项且 SEG.TSval < TS.Recent 且 TS.Recent 有效（参见后续讨论），则将到达的段视为不可接受：
+  - 按照 RFC-793 第 69 页的规定发送确认作为回复并丢弃该段。
+  - 注意：有必要发送 ACK 段以保持 TCP 检测和恢复半开连接的机制。例如，参见 RFC-793 的图 10。
+- 如果段超出窗口，拒绝它（正常 TCP 处理）
+- 如果到达的段满足：SEG.SEQ <= Last.ACK.sent，则将其时间戳记录在 TS.Recent 中。
+- 如果到达的段是顺序的（即在左窗口边缘），则正常接受它。
+- 否则，将段视为正常的窗口内、乱序 TCP 段（例如，排队等待稍后交付给用户）。
 
-#### Zero Windows and the TCP Persist Timer
+#### 零窗口和 TCP 持久定时器
 
-TCP implements flow control by having the receiver specify the amount of data it is willing to accept from the sender: the receiver’s advertised window.
-When the receiver’s advertised window goes to zero, the sender is effectively stopped from transmitting data until the window becomes nonzero.
-When the receiver once again has space available, it provides a window update to the sender to indicate that data is permitted to flow once again.
-Because such updates do not generally contain data (they are a form of “pure ACK”), they are not reliably delivered by TCP.
-TCP must therefore handle the case where such window updates that would open the window are lost.
+TCP 通过让接收方指定它愿意从发送方接收的数据量来实现流控制：接收方通告的窗口。
+当接收方通告的窗口变为零时，发送方实际上停止传输数据，直到窗口变为非零。
+当接收方再次有可用空间时，它向发送方提供窗口更新以指示允许再次传输数据。
+由于此类更新通常不包含数据（它们是"纯 ACK"的一种形式），它们不被 TCP 可靠交付。
+因此，TCP 必须处理此类本应打开窗口的窗口更新丢失的情况。
 
-If an acknowledgment (containing a window update) is lost, we could end up with both sides waiting for the other:
-the receiver waiting to receive data (because it provided the sender with a nonzero window and expects to see incoming data) and the sender waiting to receive the window update allowing it to send.
-To prevent this form of deadlock from occurring, the sender uses a persist timer to query the receiver periodically, to find out if the window size has increased.
-The persist timer triggers the transmission of window probes.
-Window probes are segments that force the receiver to provide an ACK, which also necessarily contains a Window Size field.
-The Host Requirements RFC [RFC1122] suggests that the first probe should happen after one RTO and subsequent problems should occur at exponentially spaced intervals.
+如果确认（包含窗口更新）丢失，我们可能最终双方都在等待对方：
+接收方等待接收数据（因为它向发送方提供了非零窗口并期望看到传入数据），发送方等待接收允许其发送的窗口更新。
+为防止这种形式的死锁发生，发送方使用持久定时器定期查询接收方，以发现窗口大小是否已增加。
+持久定时器触发窗口探测的传输。
+窗口探测是强制接收方提供 ACK 的段，该 ACK 也必然包含窗口大小字段。
+主机要求 RFC [RFC1122] 建议第一次探测应在一个 RTO 后发生，后续探测应以指数间隔发生。
 
-Window probes contain a single byte of data and are therefore reliably delivered (retransmitted) by TCP if lost, thereby eliminating the potential deadlock condition caused by lost window updates.
-The probes are sent whenever the TCP persist timer expires, and the byte included may or may not be accepted by the receiver, depending on how much buffer space it has available.
-As with the [TCP retransmission timer](/docs/CS/CN/TCP/TCP.mdP.md?id=Retransmission-Timeout), the normal exponential backoff can be used when calculating the timeout for the persist timer.
-An important difference, however, is that a normal TCP never gives up sending window probes, whereas it may eventually give up trying to perform retransmissions.
+窗口探测包含一个字节的数据，因此如果丢失，TCP 会可靠交付（重传），从而消除了由丢失的窗口更新引起的潜在死锁条件。
+每当 TCP 持久定时器到期时发送探测，包含的字节可能被接收方接受或拒绝，取决于其可用缓冲区空间。
+与 [TCP 重传定时器](/docs/CS/CN/TCP/TCP.md?id=重传超时)一样，在计算持久定时器的超时时可以使用正常的指数退避。
+然而，一个重要区别是，正常的 TCP 从不放弃发送窗口探测，而它可能最终放弃尝试执行重传。
 
-There are numerous points that we can summarize:
+有许多点我们可以总结：
 
-1. The sender does not have to transmit a full window’s worth of data.
-2. A single segment from the receiver acknowledges data and slides the window to the right at the same time. This is because the window advertisement is relative to the ACK number in the same segment.
-3. The size of the window can decrease, but the right edge of the window does not move left, so as to avoid window shrinkage.
-4. The receiver does not have to wait for the window to fill before sending an ACK.
+1. 发送方不必传输整个窗口的数据。
+2. 来自接收方的单个段同时确认数据并向右滑动窗口。这是因为窗口通告是相对于同一段中的 ACK 号的。
+3. 窗口的大小可以减小，但窗口的右边缘不向左移动，以避免窗口收缩。
+4. 接收方不必等待窗口填满才发送 ACK。
 
-#### Silly Window Syndrome
+#### 愚蠢窗口综合症
 
-Window-based flow control schemes, especially those that do not use fixed-size segments (such as TCP), can fall victim to a condition known as the silly window syndrome (SWS).
-When it occurs, small data segments are exchanged across the connection instead of full-size segments [RFC0813].
-This leads to undesirable inefficiency because each segment has relatively high overhead—a small number of data bytes relative to the number of bytes in the headers.
+基于窗口的流控制方案，尤其是那些不使用固定大小段的方案（如 TCP），可能受一种称为愚蠢窗口综合症（SWS）的条件影响。
+当它发生时，小数据段在连接上交换，而不是全尺寸段 [RFC0813]。
+这导致不期望的低效率，因为每个段都有相对较高的开销——相对于头部中的字节数，数据字节数很少。
 
-SWS can be caused by either end of a TCP connection:
-the receiver can advertise small windows (instead of waiting until a larger window can be advertised), and the sender can transmit small data segments (instead of waiting for additional data to send a larger segment).
-Correct avoidance of silly window syndrome requires a TCP to implement rules specifically for this purpose, whether operating as a sender or a receiver. TCP never knows ahead of time how a peer TCP will behave.
-The following rules are applied:
+SWS 可能由 TCP 连接的任一端引起：
+接收方可以通告小窗口（而不是等到可以通告更大的窗口），发送方可以传输小数据段（而不是等待额外的数据发送更大的段）。
+正确避免愚蠢窗口综合症要求 TCP 无论是作为发送方还是接收方都专门为此目的实现规则。TCP 无法提前知道对端 TCP 的行为。
+应用以下规则：
 
-1. When operating as a receiver, small windows are not advertised.
-   The receive algorithm specified by [RFC1122] is to not send a segment advertising a larger window than is currently being advertised (which can be 0) until the window can be increased by
-   either one full-size segment (i.e., the receive MSS) or by one-half of the receiver’s buffer space, whichever is smaller.
-   Note that there are two cases where this rule can come into play: when buffer space has become available because of an application consuming data from the network, and when TCP must respond to a window probe.
-2. When sending, small segments are not sent and the Nagle algorithm governs when to send. Senders avoid SWS by not transmitting a segment unless at least one of the following conditions is true:
-   1. (a) A full-size (send MSS bytes) segment can be sent.
-   2. (b) TCP can send at least one-half of the maximum-size window that the other end has ever advertised on this connection.
-   3. (c) TCP can send everything it has to send and either (i) an ACK is not currently expected (i.e., we have no outstanding unacknowledged data) or (ii) the Nagle algorithm is disabled for this connection.
+1. 作为接收方时，不通告小窗口。
+   [RFC1122] 指定的接收算法是，不通告比当前正在通告的窗口（可以是 0）更大的窗口，直到窗口可以增加
+   至少一个全尺寸段（即接收 MSS）或接收方缓冲区空间的一半，取较小者。
+   注意，此规则可能起作用的两种情况：当由于应用从网络消耗数据而出现缓冲区空间时，以及当 TCP 必须响应窗口探测时。
+2. 作为发送方时，不发送小段，Nagle 算法控制何时发送。发送方通过在至少满足以下条件之一时才传输段来避免 SWS：
+   1. (a) 可以发送全尺寸（发送 MSS 字节）段。
+   2. (b) TCP 可以发送另一端曾在连接上通告的最大窗口的一半。
+   3. (c) TCP 可以发送其拥有的所有数据，并且要么 (i) 当前不期望 ACK（即我们没有未确认数据），要么 (ii) Nagle 算法对此连接已禁用。
 
-Condition (a) is the most straightforward and directly avoids the high-overhead segment problem.
-Condition (b) deals with hosts that always advertise tiny windows, perhaps smaller than the segment size.
-Condition (c) prevents TCP from sending small segments when there is unacknowledged data waiting to be ACKed and the Nagle algorithm is enabled.
-If the sending application is doing small writes (e.g., smaller than the segment size), condition (c) avoids silly window syndrome.
+条件 (a) 是最直接的，直接避免了高开销段的问题。
+条件 (b) 处理总是通告微小窗口（可能小于段大小）的主机。
+条件 (c) 防止 TCP 在有未确认数据等待 ACK 且 Nagle 算法启用时发送小段。
+如果发送应用正在执行小写入（例如小于段大小），条件 (c) 避免了愚蠢窗口综合症。
 
-These three conditions also let us answer the following question:
-If the Nagle algorithm prevents us from sending small segments while there is outstanding unacknowledged data, how small is small?
-From condition (a) we see that “small” means that the number of bytes is less than the SMSS (i.e., the largest packet size that does not exceed the PMTU or the receiver’s MSS).
-Condition (b) comes into play only with older, primitive hosts or when a small advertised window is used because of a limited receive buffer size.”
+这三个条件也让我们回答以下问题：
+如果 Nagle 算法阻止我们在有未确认数据时发送小段，什么算小？
+从条件 (a) 我们看到，"小"意味着字节数少于 SMSS（即不超过路径 MTU 或接收方 MSS 的最大数据包大小）。
+条件 (b) 仅对旧式或原始主机有效，或当由于有限的接收缓冲区大小而使用小的通告窗口时。
 
-### Buffers and Auto-Tuning
+### 缓冲区和自动调优
 
-The size of the receiver’s window is limited by the size of the receiver’s buffer.
-Historically, applications that failed to specify their receive buffers would be allocated a relatively small buffer that would cause throughput performance to suffer over network paths with high bandwidth and high delay.
-In more recent operating systems, auto-tuning sets the buffer size allocated automatically in an efficient way, causing such concerns to largely be a thing of the past.
+接收方窗口的大小受接收方缓冲区大小的限制。
+历史上，未能指定其接收缓冲区的应用将被分配一个相对较小的缓冲区，这将导致在高带宽和高延迟的网络路径上吞吐性能受损。
+在较新的操作系统中，自动调优以高效方式自动设置缓冲区大小，使此类担忧很大程度上成为过去。
 
 ```shell
 > sysctl -a |grep mem
@@ -1044,274 +1030,259 @@ net.core.rmem_max = 212992
 net.ipv4.tcp_rmem = 4096        87380   6291456
 ```
 
-### Attacks Involving Window Management
+### 涉及窗口管理的攻击
 
-The window management procedures for TCP have been the subject of various attacks, primarily forms of resource exhaustion.
-In essence, advertising a small window slows a TCP transfer, tying up resources such as memory for a potentially long time. 
-This has been used as a form of attack on bad traffic (i.e., worms).
+TCP 的窗口管理过程一直是各种攻击的主题，主要是资源耗尽的形式。
+本质上，通告小窗口会减慢 TCP 传输，长时间占用内存等资源。
+这已被用作针对不良流量（如蠕虫）的攻击形式。
 
-## Congestion Control
+## 拥塞控制
 
-If a router receives more data per unit time than it can send out, it must store that data. 
-If this situation persists, eventually the storage will run out and the router will be forced to drop some of the data.
-When a router is forced to discard data because it cannot handle the arriving traffic rate, is called *congestion*.
-The router is said to be congested when it is in this state, and even a single connection can drive one or more routers into congestion.
-Left unaddressed, congestion can cause the performance of a network to be reduced so badly that it becomes unusable.
-In the very worst cases, it is said to be in a state of congestion collapse.
-To either avoid or at least react effectively to mitigate this situation, each TCP implements congestion control procedures.
-The challenge is to determine exactly when and how TCP should slow down, and when it can speed up again.
+如果路由器接收的数据超过其每单位时间能发送的量，它必须存储该数据。
+如果这种情况持续，最终存储将耗尽，路由器将被迫丢弃部分数据。
+当路由器因无法处理到达的流量速率而被迫丢弃数据时，称为*拥塞*。
+当路由器处于此状态时，称其拥塞，甚至单个连接就可以驱动一个或多个路由器进入拥塞。
+如果不加以处理，拥塞可能导致网络性能严重降低，以至于变得不可用。
+在最坏的情况下，称为拥塞崩溃状态。
+为了要么避免要么至少有效应对以缓解这种情况，每个 TCP 实现拥塞控制过程。
+挑战在于精确确定 TCP 何时以及如何减速，以及何时可以再次加速。
 
 > [!TIP]
 >
-> TCP congestion control is often referred to as an ***additive-increase***, ***multiplicative-decrease(AIMD)*** form of congestion control.
-
-
+> TCP 拥塞控制通常被称为***加性增、乘性减（AIMD）***形式的拥塞控制。
 
 <div style="text-align: center;">
 
-![Fig.5. TCP congestion control FSM](../img/TCP_Congestion_Control_FSM.png)
+![图 5：TCP 拥塞控制 FSM](../img/TCP_Congestion_Control_FSM.png)
 
 </div>
 
-<p style="text-align: center;">Fig.5. TCP congestion control FSM</p>
+<p style="text-align: center;">图 5：TCP 拥塞控制 FSM</p>
 
+### 拥塞检测
 
+TCP 中检测拥塞的方法：
 
-### Detection of Congestion
-
-Methods for detecting congestion in TCP:
-
-- a lost packet is an indicator of congestion
-- measuring delay
-- network-supported Explicit Congestion Notification (ECN)
+- 丢失数据包是拥塞的指示
+- 测量延迟
+- 网络支持的显式拥塞通知（ECN）
 
 > [!Note]
 >
-> In today’s wired networks, packet loss is caused primarily by congestion in routers or switches.
-> With wireless networks, transmission and reception errors become a significant cause of packet loss.
-> Determining whether loss is due to congestion or transmission errors has been an active research topic since the mid-1990s when wireless networks started to attain widespread use.
+> 在当今的有线网络中，数据包丢失主要由路由器或交换机中的拥塞引起。
+> 对于无线网络，传输和接收错误成为数据包丢失的重要原因。
+> 确定丢包是由于拥塞还是传输错误自 1990 年代中期无线网络开始广泛使用以来一直是一个活跃的研究课题。
 
-One detail we need to address right away is just how to slow down a TCP sender.
-We saw that the Window Size field in the TCP header is used to signal a sender to adjust its window based on the availability of buffer space at the receiver.
-We can go a step further and arrange for the sender to slow down if either the receiver is too slow or the network is too slow.
-This is accomplished by introducing a window control variable at the sender that is based on an estimate of the network’s capacity and ensuring that the sender’s window size never exceeds the minimum of the two.
-In effect, a sending TCP then sends at a rate equal to what the receiver or the network can handle, whichever is less.
+我们需要立即解决的一个细节是如何减慢 TCP 发送方。
+我们看到 TCP 头部中的窗口大小字段用于根据接收方缓冲区空间的可用性向发送方发信号调整其窗口。
+我们可以更进一步，如果接收方太慢或网络太慢，安排发送方减速。
+这是通过引入发送方处基于网络容量估计的窗口控制变量，并确保发送方的窗口大小不超过两者的最小值来实现的。
+实际上，发送 TCP 然后以等于接收方或网络能处理的较低速率发送。
 
-The new value used to hold the estimate of the network’s available capacity is called the *congestion window*, written more compactly as simply *cwnd*.
-The sender’s actual (usable) window W is then written as the minimum of the receiver’s advertised window awnd and the congestion window:
+用于保存网络可用容量估计的新值称为*拥塞窗口*，简写为 *cwnd*。
+然后发送方的实际（可用）窗口 W 写为接收方通告窗口 awnd 和拥塞窗口的最小值：
 
 $$
 W = min(cwnd, awnd)
 $$
 
-With this relationship, the TCP sender is not permitted to have more than W unacknowledged packets or bytes outstanding in the network.
-The total amount of data a sender has introduced into the network for which it has not yet received an acknowledgment is sometimes called the flight size, which is always less than or equal to W.
-In general, W can be maintained in either packet or byte units.
+通过此关系，TCP 发送方不允许在网络中有超过 W 个未确认的数据包或字节未完成。
+发送方已引入网络但尚未收到确认的数据总量有时称为飞行大小，始终小于或等于 W。
+通常，W 可以以数据包或字节单位维护。
 
 > [!NOTE]
 >
-> When TCP does not make use of selective acknowledgment, the restriction on W means that the sender is not permitted to send a segment with a sequence number greater than the sum of the highest acknowledged sequence number and the value of W.
-> A SACK TCP sender treats W somewhat differently, using it as an overall limit to the flight size.
+> 当 TCP 不使用选择性确认时，对 W 的限制意味着发送方不允许发送序列号大于最高确认序列号加 W 的段。
+> SACK TCP 发送方对 W 的处理有些不同，将其用作飞行大小的整体限制。
 
-In addition, as we said before, we do not want W to be too big or too small—we want it to be set to about the **bandwidth-delay product (BDP)** of the network path, also called the *optimal window size*.
+此外，如前所述，我们不希望 W 太大或太小——我们希望将其设置为大约网络路径的**带宽-延迟乘积（BDP）**，也称为*最优窗口大小*。
 
-This is the amount of data that can be stored in the network in transit to the receiver.
-It is equal to the product of the RTT and the capacity of the lowest capacity (“bottleneck”) link on the path from sender to receiver.
-Generally, the sending strategy is to keep the network busy by arranging to have an amount of data at least as large as the BDP in the network.
-Using an outstanding limit that substantially exceeds the BDP, however, is usually undesirable as it can lead to unwanted delays.
-On the Internet, determining the BDP for a connection can be challenging, given that routes, delay, and the level of statistical multiplexing (i.e., sharing of capacity) change as a function of time.
+这是可以在传输到接收方途中存储在网络中的数据量。
+它等于 RTT 乘以从发送方到接收方路径上最低容量（"瓶颈"）链路的容量。
+通常，发送策略是通过安排网络中至少有 BDP 大小的数据量来保持网络忙碌。
+然而，使用显著超过 BDP 的未完成限制通常是不希望的，因为它可能导致不必要的延迟。
+在互联网上，确定连接的 BDP 可能具有挑战性，因为路由、延迟和统计复用（即容量共享）的水平随时间变化。
 
-Although handling congestion at the TCP sender is our primary area of interest, work has been done on handling the cases where congestion occurs on the reverse path, because of ACKs.
-In [RFC5690](https://datatracker.ietf.org/doc/rfc5690/) a method is introduced to inform a TCP receiver of the ACK ratio it should use (i.e., how many packets it should receive before sending an ACK).
+虽然处理 TCP 发送方的拥塞是我们的主要兴趣领域，但也已经做了处理由于 ACK 引起的反向路径上拥塞情况的工作。
+在 [RFC5690](https://datatracker.ietf.org/doc/rfc5690/) 中，引入了一种方法通知 TCP 接收方它应使用的 ACK 比率（即它在发送 ACK 之前应接收多少个数据包）。
 
-### Congestion Control Algorithms
+### 拥塞控制算法
 
-Note that if acknowledgments arrive at a relatively slow rate (e.g., if the end-end path has high delay or contains a low-bandwidth link), then the congestion window will be increased at a relatively slow rate.
-On the other hand, if acknowledgments arrive at a high rate, then the congestion window will be increased more quickly.
-Because TCP uses acknowledgments to trigger (or clock) its increase in congestion window size, TCP is said to be *self-clocking*.
+注意，如果确认以相对较低的速率到达（例如，如果端到端路径具有高延迟或包含低带宽链路），则拥塞窗口将以相对较低的速率增加。
+另一方面，如果确认以高速率到达，拥塞窗口将更快地增加。
+因为 TCP 使用确认来触发（或时钟）其拥塞窗口大小的增加，TCP 被称为*自时钟*的。
 
-We now turn to the main two algorithms of TCP: slow start and congestion avoidance. These algorithms, based on the principles of packet conservation and ACK clocking.
-**These algorithms do not operate at the same time—TCP executes only one at any given time, but it may switch back and forth between the two.**
+我们现在转向 TCP 的两个主要算法：慢启动和拥塞避免。这些算法基于数据包守恒和 ACK 时钟的原则。
+**这些算法不同时运行——TCP 在任意给定时间只执行其中一个，但可能在两者之间来回切换。**
 
-Fast recovery is recommended, but not required, for TCP senders.
+快速恢复是推荐的，但不是 TCP 发送方必需的。
 
+在高带宽、大 BDP 的网络中（例如 1Gb/s 或更高的 WAN），传统 TCP 可能表现不佳，因为其窗口增加算法（特别是拥塞避免算法）需要很长时间才能使窗口增长到足以饱和网络路径。
+换句话说，即使没有拥塞存在，TCP 也可能无法利用快速网络。
+此问题主要源于拥塞避免的固定加性增加行为。
 
-In high-speed networks with large BDPs (e.g., WANs of 1Gb/s or more), conventional TCP may not perform well because its window increase algorithm (the congestion avoidance algorithm, in particular) takes a long time to grow the window large enough to saturate the network path.
-Said another way, TCP can fail to take advantage of fast networks even when no congestion is present.
-This issue arises primarily from the fixed additive increase behavior of congestion avoidance.
+#### 慢启动
 
-#### Slow Start
-
-The slow start algorithm is executed when a new TCP connection is created or when a loss has been detected due to a retransmission timeout (RTO).
-It may also be invoked after a sending TCP has gone idle for some time.
-The purpose of slow start is to help TCP find a value for cwnd before probing for more available bandwidth using congestion avoidance and to establish the ACK clock.
-Typically, a TCP begins a new connection in slow start, eventually drops a packet, and then settles into steady-state operation using the [congestion avoidance algorithm](/docs/CS/CN/TCP/TCP.mdP.md?id=Congestion-Avoidance).
+慢启动算法在新 TCP 连接创建时或由于重传超时（RTO）检测到丢包时执行。
+也可能在发送 TCP 空闲一段时间后被调用。
+慢启动的目的是帮助 TCP 在使用拥塞避免探测更多可用带宽之前找到 cwnd 的值，并建立 ACK 时钟。
+通常，TCP 在新连接上开始慢启动，最终丢弃一个数据包，然后使用[拥塞避免算法](/docs/CS/CN/TCP/TCP.md?id=拥塞避免)进入稳态操作。
 
 > [!NOTE]
-> 
-> To quote from [RFC5681](https://datatracker.ietf.org/doc/rfc5681/):
 >
-> Beginning transmission into a network with unknown conditions requires TCP to slowly probe the network to determine the available capacity, in order to avoid congesting the network with an inappropriately large burst of data.
-> The slow start algorithm is used for this purpose at the beginning of a transfer, or after repairing loss detected by the retransmission timer.
+> 引用 [RFC5681](https://datatracker.ietf.org/doc/rfc5681/)：
+>
+> 开始传输进入具有未知条件的网络，需要 TCP 缓慢探测网络以确定可用容量，以避免用不适当的大数据突发拥塞网络。
+> 慢启动算法用于传输开始时，或在修复重传定时器检测到的丢包后。
 
+TCP 在慢启动开始时（SYN 交换后）发送特定数量的段，称为初始窗口（IW）。
+IW 的值最初是一个 SMSS，尽管根据 [RFC5681](https://datatracker.ietf.org/doc/rfc5681/) 允许更大。
+公式如下：
+- IW = 2*(SMSS) 且不超过 2 个段（如果 SMSS > 2190 字节）
+- IW = 3*(SMSS) 且不超过 3 个段（如果 2190 ≥ SMSS > 1095 字节）
+- IW = 4*(SMSS) 且不超过 4 个段（其他情况）
 
-A TCP begins in slow start by sending a certain number of segments (after the SYN exchange), called the initial window (IW). 
-The value of IW was originally one SMSS, although with [RFC5681](https://datatracker.ietf.org/doc/rfc5681/) it is allowed to be larger. 
-The formula works as follows:
-- IW = 2*(SMSS) and not more than 2 segments (if SMSS > 2190 bytes)
-- IW = 3*(SMSS) and not more than 3 segments (if 2190 ≥ SMSS > 1095 bytes)
-- IW = 4*(SMSS) and not more than 4 segments (otherwise)
+在大多数情况下，SMSS 等于接收方 MSS 和路径 MTU 中的较小者（减去头部大小）。
 
-In most cases SMSS is equal to the smaller of the receiver’s MSS and the path MTU (less header sizes).
+慢启动通过为每个收到的好 ACK 将 cwnd 增加 min(N, SMSS) 来操作，其中 N 是收到的"好 ACK"新确认的先前未确认字节数。
+好 ACK 是返回比迄今为止看到的更高 ACK 号的 ACK。
 
-Slow start operates by incrementing cwnd by min(N, SMSS) for each good ACK received, where N is the number of previously unacknowledged bytes ACKed by the received “good ACK.”
-A good ACK is one that returns a higher ACK number than has been seen so far.
+通常，假设无丢包且每个数据包都有一个 ACK，k 次往返交换后的 W 值为 W = $2^k$。
+改写后，可以说需要 k = $log_2W$ 个 RTT 才能达到操作窗口 W。
+这种增长看起来相当"快"（以指数函数增长），但仍然比 TCP 如果被允许立即发送等于接收方通告窗口的大小的数据包窗口要"慢"。
+（记住 W 仍然永远不允许超过 awnd。）
 
-In general, assuming no loss and an ACK for every packet, the value of W after k round-trip exchanges is W = $2^k$. 
-Rewriting, we can say that k = $log_2W$ RTTs are required to reach an operating window of W. 
-This growth seems quite “fast” (increasing as an exponential function) but is still “slower” than what TCP would do if it were allowed to send immediately a window of packets equal in size to the receiver’s advertised window. 
-(Recall that W is still never allowed to exceed awnd.)
+#### 拥塞避免
 
-#### Congestion Avoidance
+慢启动用于在连接上启动数据流时或在超时调用的丢失事件后使用。
+它相当快速地增加 cwnd，并有助于建立**慢启动阈值（ssthresh）**。
+一旦实现这一点，总是有可能更多的网络容量可用于连接。
+如果这种容量立即被大的流量突发使用，其他 TCP 连接的数据包共享路由器中相同队列可能会经历显著的数据包丢弃，
+导致网络中整体不稳定，因为许多连接同时经历数据包丢弃并以重传响应。
 
-Slow start is used when initiating data flow across a connection or after a loss event invoked by a timeout. 
-It increases cwnd fairly rapidly and helps to establish a value for **slow start threshold (ssthresh)**.
-Once this is achieved, there is always the possibility that more network capacity may become available for a connection.
-If such capacity were to be immediately used with large traffic bursts, other TCP connections with packets sharing the same queues in routers would likely experience significant packet drops,
-leading to overall instability in the network as many connections simultaneously experience packet drops and react with retransmissions.
-
-To address the problem of trying to find additional capacity that may become available, but to not do so too aggressively, TCP implements the congestion avoidance algorithm.
-Once ssthresh is established and cwnd is at least at this level, a TCP runs the congestion avoidance algorithm, which seeks additional capacity by increasing cwnd by approximately one segment for each window’s worth of data that is moved from sender to receiver successfully.
-This provides a much slower growth rate than slow start: approximately linear in terms of time, as opposed to slow start’s exponential growth.
-More precisely, cwnd is usually updated as follows for each received nonduplicate ACK:
+为了解决试图找到可能变得可用的额外容量但不过于激进的问题，TCP 实现了拥塞避免算法。
+一旦建立了 ssthresh 且 cwnd 至少达到此水平，TCP 运行拥塞避免算法，该算法通过对于每个成功从发送方移动到接收方的窗口数据，将 cwnd 增加大约一个段来寻求额外容量。
+这提供了比慢启动慢得多的增长率：相对于慢启动的指数增长，大约是时间上的线性增长。
+更准确地说，对于每个接收到的非重复 ACK，cwnd 通常如下更新：
 
 $$
 cwndt+1 = cwndt + SMSS * SMSS/cwndt
 $$
 
-We generally think of congestion avoidance growing the window linearly with respect to time, whereas slow start grows it exponentially with respect to time.
-This function is also called additive increase because a particular value (about one packet in this case) is added to cwnd for each successfully received window’s worth of data.
+我们通常认为拥塞避免随时间线性增长窗口，而慢启动随时间指数增长窗口。
+此函数也称为加性增加，因为对于每个成功接收的窗口数据，将特定值（本例中大约是一个数据包）添加到 cwnd。
 
-The assumption of the algorithm is that packet loss caused by bit errors is very small (much less than 1%), and therefore the loss of a packet signals congestion somewhere in the network between the source and destination.
-If this assumption is false, which it sometimes is for wireless networks, TCP slows down even when no congestion is present.
-In addition, many RTTs may be required for the value of cwnd to grow large, which is required for efficient use of networks with high capacity.
+算法的假设是比特错误导致的数据包丢失非常小（远小于 1%），因此数据包丢失信号了源和目的地之间网络某处的拥塞。
+如果此假设不成立（无线网络有时如此），即使在没有拥塞时 TCP 也会减速。
+此外，可能需要许多 RTT 才能使 cwnd 增长到较大，这是高效使用高容量网络所需的。
 
-We mentioned ssthresh earlier. This threshold is a limit on the value of cwnd that determines which algorithm is in operation, slow start or congestion avoidance. 
-When cwnd < ssthresh, slow start is used, and when cwnd > ssthresh, congestion avoidance is used. When they are equal, either can be used. 
-The most important distinction between slow start and congestion avoidance, as we have seen, is how each modifies the value of cwnd when new ACKs arrive. 
-What makes TCP somewhat tricky and interesting is that the value of ssthresh is not fixed but instead varies over time. Its main purpose is to remember the last “best” estimate of the operating window when no loss was present. 
-Said another way, it holds the lower bound on TCP’s best estimate of the optimal window size.
+我们之前提到 ssthresh。此阈值是 cwnd 值的限制，决定了哪个算法在运行，慢启动还是拥塞避免。
+当 cwnd < ssthresh 时，使用慢启动；当 cwnd > ssthresh 时，使用拥塞避免。当它们相等时，可以使用任一算法。
+慢启动和拥塞避免之间最重要的区别，正如我们所看到的，是每个算法在收到新 ACK 时如何修改 cwnd 的值。
+使 TCP 有些棘手和有趣的是，ssthresh 的值不是固定的，而是随时间变化。其主要目的是记住上次无丢包时操作窗口的"最佳"估计。
+换句话说，它保存了 TCP 对最佳窗口大小的最佳估计的下界。
 
+Tahoe 通过在任何丢包时简单地将 cwnd 减少到其起始值（当时为 1 SMSS）来实现，强制连接慢启动直到 cwnd 增长到 ssthresh 值。
 
-Tahoe was implemented by simply reducing cwnd to its starting value (1 SMSS at that time) upon any loss, forcing the connection to slow start until cwnd grew to the value ssthresh.
+当使用拥塞避免算法时，每个到达的好 ACK 将 cwnd 增加 cwnd 的加性量 1/cwnd，并在丢包事件时将其减少乘性因子一半。
+这称为*加性增加/乘性减少（AIMD）*拥塞控制。
 
-When using the congestion avoidance algorithm, increases cwnd by an additive amount of 1/cwnd for each arriving good ACK and decreases it by a multiplicative factor of one-half on a loss event. 
-This is called *additive increase/multiplicative decrease* (AIMD) congestion control.
+#### 快速恢复
 
+在快速恢复中，对于导致 TCP 进入快速恢复状态的缺失段的每个重复 ACK，cwnd 的值增加 1 MSS。
+最终，当缺失段的 ACK 到达时，TCP 在缩小 cwnd 后进入拥塞避免状态。
+如果发生超时事件，快速恢复在执行与慢启动和拥塞避免相同的操作后转换到慢启动状态：
+cwnd 的值设置为 1 MSS，ssthresh 的值设置为丢包事件发生时 cwnd 值的一半。
 
-#### Fast Recovery
-
-In fast recovery, the value of cwnd is increased by 1 MSS for every duplicate ACK received for the missing segment that caused TCP to enter the fast-recovery state.
-Eventually, when an ACK arrives for the missing segment, TCP enters the congestion-avoidance state after deflating cwnd.
-If a timeout event occurs, fast recovery transitions to the slow-start state after performing the same actions as in slow start and congestion avoidance:
-The value of cwnd is set to 1 MSS, and the value of ssthresh is set to half the value of cwnd when the loss event occurred.
-
-
-Reno Fast recovery allows cwnd to (temporarily) grow by 1 SMSS for each ACK received while recovering. 
-The congestion window is therefore inflated for a period of time, allowing an additional new packet to be sent for each ACK received, until a good ACK is seen.
+Reno 快速恢复允许 cwnd 在恢复期间为收到的每个 ACK（暂时）增加 1 SMSS。
+因此，拥塞窗口在一段时间内被膨胀，允许为收到的每个 ACK 发送一个额外的新数据包，直到看到好 ACK。
 
 NewReno
 
-One problem with fast recovery is that when multiple packets are dropped in a window of data, once one packet is recovered (i.e., successfully delivered and ACKed), 
-a good ACK can be received at the sender that causes the temporary window inflation in fast recovery to be erased before all the packets that were lost have been retransmitted. 
-ACKs that trigger this behavior are called partial ACKs. 
-A Reno TCP reacting to a partial ACK by reducing its inflated congestion window can go idle until a retransmission timer fires. 
-To understand why this happens, recall that (non-SACK) TCP depends on the signal of three (or dupthresh) duplicate ACKs to trigger its fast retransmit procedure. 
-If there are not enough packets in the network, it is not possible to trigger this procedure on packet loss, ultimately leading to the expiration of the retransmission timer and invocation of the slow start procedure, which drastically impacts TCP throughput performance.
+快速恢复的一个问题是，当一个窗口数据中丢失多个数据包时，一旦一个数据包被恢复（即成功交付并确认），
+发送方可能收到一个好 ACK，导致快速恢复中的临时窗口膨胀在丢失的所有数据包被重传之前被消除。
+触发此行为的 ACK 称为部分 ACK。
+通过减少其膨胀的拥塞窗口来响应部分 ACK 的 Reno TCP 可能会空闲，直到重传定时器触发。
+要理解为什么会这样，回忆一下（非 SACK）TCP 依赖三个（或 dupthresh）重复 ACK 的信号来触发其快速重传过程。
+如果网络中没有足够的数据包，无法在数据包丢失时触发此过程，最终导致重传定时器到期并调用慢启动过程，这极大地影响 TCP 吞吐性能。
 
-To address this problem with Reno, a modification called NewReno [RFC3782] has been developed. 
-This procedure modifies fast recovery by keeping track of the highest sequence number from the last transmitted window of data. 
-Only when an ACK with an ACK number at least as large as the recovery point is received is the inflation of fast recovery removed. 
-This allows a TCP to continue sending one segment for each ACK it receives while recovering and reduces the occurrence of retransmission timeouts, especially when multiple packets are dropped in a single window of data. 
-NewReno is a popular variant of modern TCPs—it does not suffer from the problems of the original fast recovery and is significantly less complicated to implement than SACKs. 
-With SACKs, however, a TCP can perform better than NewReno when multiple packets are lost in a window of data, but doing this requires careful attention to the congestion control procedures.
-
+为了解决 Reno 的此问题，开发了一种称为 NewReno [RFC3782] 的修改。
+此过程通过跟踪最后一个传输数据窗口中的最高序列号来修改快速恢复。
+仅当收到 ACK 号至少与恢复点一样大的 ACK 时，才移除快速恢复的膨胀。
+这允许 TCP 在恢复期间为收到的每个 ACK 继续发送一个段，并减少重传超时的发生，特别是当单个数据窗口中丢失多个数据包时。
+NewReno 是现代 TCP 的流行变体——它不受原始快速恢复问题的影响，并且实现起来比 SACK 简单得多。
+然而，使用 SACK，TCP 在数据窗口中丢失多个数据包时可以比 NewReno 表现更好，但这需要仔细关注拥塞控制过程。
 
 sack
 
-In the case of fast retransmit/recovery, when a packet is lost, the sending TCP transmits only the segment it believes is lost and is able to send new data if the window W allows. 
-Because the window is inflated for each arriving ACK during fast recovery, with larger windows TCP typically is able to send some additional data after performing its retransmission. 
-With SACK TCP, the sender can be informed of multiple missing segments and would theoretically be able to send them all immediately because they would all be in the valid window. 
-However, this might involve sending too much data into the network at once, thereby compromising the congestion control. 
-The following issue arises with SACK TCP: using only cwnd as a bound on the sender’s sliding window to indicate how many (and which) packets to send during recovery periods is not sufficient. 
-Instead, the selection of which packets to send needs to be decoupled from the choice of when to send them. Said another way, SACK TCP underscores the need to separate the congestion management from the selection and mechanism of packet retransmission. 
-Conventional (non-SACK) TCP mixes these together.
+在快速重传/恢复的情况下，当一个数据包丢失时，发送 TCP 仅传输它认为丢失的段，并且如果窗口 W 允许，还能够发送新数据。
+由于在快速恢复期间窗口为每个到达的 ACK 膨胀，使用更大的窗口，TCP 通常能够在执行重传后发送一些额外数据。
+使用 SACK TCP，发送方可以被告知多个缺失段，理论上能够立即全部发送，因为它们都在有效窗口中。
+然而，这可能涉及一次性向网络发送太多数据，从而影响拥塞控制。
+SACK TCP 出现以下问题：仅使用 cwnd 作为发送方滑动窗口的界限，以指示在恢复期间发送多少个（以及哪些）数据包是不够的。
+相反，发送哪个数据包的选择需要与何时发送它们的选择解耦。换句话说，SACK TCP 强调需要将拥塞管理与数据包重传的选择和机制分离。
+传统的（非 SACK）TCP 将这些混在一起。
 
-One way to implement this decoupling is to have a TCP keep track of how much data it has injected into the network separately from the maintenance of the window. 
-In [RFC3517] this is called the pipe variable, an estimate of the flight size. 
-Importantly, the pipe variable counts bytes (or packets, depending on the implementation) of transmissions and retransmissions, provided they are not known to be lost. 
-Assuming a large value of awnd, a SACK TCP is permitted to send a segment anytime the following relationship holds true: cwnd - pipe ≥ SMSS. 
-In other words, cwnd is still used to place a limit on the amount of data that can be outstanding in the network, but the amount of data estimated to be in the network is accounted for separately from the window itself. 
-How SACK TCP using this approach to congestion control compares with conventional TCP was first explored in detail with a series of simulations in [FF96].
+实现这种解耦的一种方法是让 TCP 跟踪它已注入网络的数据量，与窗口的维护分离。
+在 [RFC3517] 中，这称为 pipe 变量，飞行大小的估计。
+重要的是，pipe 变量计数传输和重传的字节（或数据包，取决于实现），前提是它们已知未被丢失。
+假设 awnd 较大，只要满足以下关系：cwnd - pipe ≥ SMSS，SACK TCP 被允许发送段。
+换句话说，cwnd 仍然用于限制网络中可以未完成的数据量，但估计在网络中的数据量与窗口本身分开计数。
+使用这种方法的 SACK TCP 与常规 TCP 的比较首次通过 [FF96] 中的一系列模拟详细探索。
 
-Forward Acknowledgment (FACK) and Rate Halving
+前向确认（FACK）和速率减半
 
-In an effort to avoid the initial pause after loss but not violate the convention of emerging from recovery with a congestion window set to half of its size on entry, forward acknowledgment (FACK) was described in [MM96]. 
-It consists of two algorithms called “overdamping” and “rampdown.” 
-Since the initial proposal, the authors updated their approach to form a unified and improved algorithm they call rate halving, based on earlier work by Hoe [H96]. 
-To ensure that it works as effectively as possible, they further govern its behavior by adding bounding parameters, resulting in the complete algorithm being called Rate-Halving with Bounding Parameters (RHBP) [PSCRH].
+为了努力避免丢包后的初始暂停，但不违反以进入时设置为一半的拥塞窗口退出恢复的约定，[MM96] 中描述了前向确认（FACK）。
+它包括两种算法，称为"过阻尼"和"斜坡下降"。
+自从最初提出以来，作者更新了他们的方法，形成统一和改进的算法，称为速率减半，基于 Hoe [H96] 的早期工作。
+为了确保尽可能有效地工作，他们通过添加边界参数进一步约束其行为，得到完整的算法称为带边界参数的速率减半（RHBP）[PSCRH]。
 
-Limited Transmit
+有限传输
 
-In [RFC3042], the authors propose limited transmit, a small modification to TCP designed to help it perform better when the usable window is small. 
-Recall from the experience with Reno TCP that when operating with a small window, there may not be enough packets in the network to trigger the fast retransmit/recovery algorithms when loss occurs, 
-as these algorithms typically require three duplicate ACKs to be observed prior to initiation.
+在 [RFC3042] 中，作者提出了有限传输，一种对 TCP 的小修改，旨在帮助它在可用窗口较小时更好地执行。
+回忆 Reno TCP 的经验，当使用小窗口操作时，网络中可能没有足够的数据包在丢包发生时触发快速重传/恢复算法，
+因为这些算法通常需要在发起之前观察到三个重复 ACK。
 
-With limited transmit, a TCP with unsent data is permitted to send a new packet for each pair of consecutive duplicate ACKs it receives. Doing this helps to keep at least a minimal number of packets in the network—enough so that fast retransmit can be triggered upon packet loss. 
-This is advantageous to TCP because waiting for an RTO (which can be a relatively large amount of time—several hundred milliseconds) can degrade throughput performance considerably. 
-As of [RFC5681], limited transmit is now a recommended TCP behavior. 
-Note that rate halving is one form of limited transmit.
+使用有限传输，有未发送数据的 TCP 被允许为其收到的每对连续重复 ACK 发送一个新数据包。这样做有助于保持网络中至少最小数量的数据包——足以在数据包丢失时触发快速重传。
+这对 TCP 有利，因为等待 RTO（可能是相对较长的时间——几百毫秒）可能大大降低吞吐性能。
+根据 [RFC5681]，有限传输现在是推荐的 TCP 行为。
+注意，速率减半是有限传输的一种形式。
 
+TCP 中拥塞管理的问题之一是当 TCP 发送方停止发送一段时间时，要么因为它没有更多数据要发送，要么因为其他原因被阻止发送。
+如果一切顺利，发送方从不暂停，它继续发送数据并接收来自对端的 ACK。
+这种连续反馈使其能够保持对 cwnd 和 ssthresh 应设为何值的相当最新的估计（在一个 RTT 内）。
 
-One of the issues with congestion management in TCP arises when the TCP sender stops sending for a period of time, either because it has no more data to send, or because it has been prevented from sending when it wants to for some other reason. 
-If all goes well, a sender never pauses, and it continues sending data and receiving ACKs from its peer. 
-This continuous feedback enables it to keep a reasonably current (within one RTT) estimate of what cwnd and ssthresh should be.
-
-If the TCP sender has been sending for some time, its cwnd may have grown to a substantial size. 
-If it then fails to send for some time but resumes later, the large cwnd may allow the sender to inject an undesirably large number of packets (i.e., a high-rate burst) into the network without delay. 
-Furthermore, if the pause is sufficiently long, its last cwnd value may no longer be appropriate for the path and congestion state.
+如果 TCP 发送方已经发送了一段时间，其 cwnd 可能已增长到相当大的大小。
+如果它然后暂停一段时间但稍后恢复，大的 cwnd 可能允许发送方立即向网络注入不希望的大量数据包（即高速率突发）。
+此外，如果暂停足够长，其最后的 cwnd 值可能不再适合路径和拥塞状态。
 
 #### CWV
 
-In [RFC2861], the authors propose an experimental Congestion Window Validation (CWV) mechanism. 
-Essentially, the sender’s current value of cwnd decays over a period of nonuse, and ssthresh maintains the “memory” of it prior to the initiation of the decay. 
-To understand the scheme, a distinction is made between an idle sender and an application-limited sender. 
-The idle sender has stopped producing data it wants to send into the network; ACKs for all the data it has sent so far have been received. 
-Thus, the connection is truly quiescent—no data is flowing, so no ACKs are either, except for occasional window updates. 
-The application-limited sender does have more data to send but has been unable to for some reason. 
-This could be because the sending computer is busy doing other tasks, or because some mechanism or protocol layer below TCP is preventing data from being sent. 
-This case results in underutilization of the allowed congestion window, but the connection is not completely quiescent. In particular, ACKs may still be returning for previously sent data.
-
-
-
-
+在 [RFC2861] 中，作者提出了一种实验性的拥塞窗口验证（CWV）机制。
+本质上，发送方当前的 cwnd 值在不使用期间随时间衰减，而 ssthresh 在衰减开始之前保持其"记忆"。
+要理解该方案，需要区分空闲发送方和应用限制的发送方。
+空闲发送方已停止产生要发送进入网络的数据；已收到它迄今为止发送的所有数据的 ACK。
+因此，连接真正静止——没有数据流动，所以也没有 ACK，除了偶尔的窗口更新。
+应用限制的发送方确实有更多数据要发送但由于某种原因无法发送。
+这可能是因为发送计算机忙于其他任务，或因为 TCP 下方的某些机制或协议层阻止发送数据。
+这种情况导致允许的拥塞窗口利用不足，但连接并非完全静止。特别是，先前发送的数据的 ACK 可能仍在返回。
 
 #### CUBIC
 
-CUBIC used an odd-degree polynomial function to control the window increase function. 
-Cubic functions can have both convex and concave portions, meaning that they can grow more slowly in some portions (concave) and more quickly in others (convex). 
-Until BIC and CUBIC, virtually all of the TCP literature advocated convex window growth functions. 
-The specific window growth function, used by CUBIC to set cwnd, is as follows:
+CUBIC 使用奇次多项式函数来控制窗口增加函数。
+三次函数可以具有凸和凹部分，这意味着它们可以在某些部分（凹）增长更慢，在其他部分（凸）增长更快。
+在 BIC 和 CUBIC 之前，几乎所有 TCP 文献都倡导凸窗口增长函数。
+CUBIC 用于设置 cwnd 的特定窗口增长函数如下：
 
 $$
 W(t) = C(t-K)^3 + W_{max}
 $$
 
-CUBIC has been the default congestion control algorithm for Linux kernels since 2.6.18. 
-Since kernel version 2.6.13, however, Linux supports pluggable congestion avoidance modules [P07], allowing the user to pick which algorithm to use.
-The variable `net.ipv4.tcp_congestion_control` contains the current default congestion control algorithm (default: cubic).
-The variable `net.ipv4.tcp_available_congestion_control` contains the congestion control algorithms loaded on the system (in general, additional ones can be loaded as kernel modules).
-The variable `net.ipv4.tcp_allowed_congestion_control` contains those algorithms permitted for use by applications (either selected specifically or by default).
+CUBIC 自 Linux 内核 2.6.18 以来一直是默认的拥塞控制算法。
+然而，自内核版本 2.6.13 以来，Linux 支持可插拔的拥塞避免模块 [P07]，允许用户选择使用哪个算法。
+变量 `net.ipv4.tcp_congestion_control` 包含当前的默认拥塞控制算法（默认：cubic）。
+变量 `net.ipv4.tcp_available_congestion_control` 包含系统上加载的拥塞控制算法（通常，额外的可以作为内核模块加载）。
+变量 `net.ipv4.tcp_allowed_congestion_control` 包含允许应用使用的算法（要么特定选择，要么默认）。
 
 ```shell
 cat /proc/sys/net/ipv4/tcp_congestion_control
@@ -1324,222 +1295,109 @@ cat /proc/sys/net/ipv4/tcp_allowed_congestion_control
 #reno cubic
 ```
 
-
-
 #### Vegas
 
-Vegas is fair relative to other Vegas TCPs sharing the same path because each pushes the network to hold only a minimal amount of data. 
-However, Vegas and standard TCP flows do not share paths equally. A standard TCP sender tends to fill queues in the network, whereas Vegas tends to keep them nearly empty. 
-Consequently, as the standard sender injects more packets, the Vegas sender sees increased delay and slows down. Ultimately, this leads to an unfair bias in favor of the standard TCP. 
-Vegas is supported by Linux but not enabled by default. For kernels prior to 2.6.13, the Boolean sysctl variable net.ipv4.tcp_vegas_cong_avoid determines whether it is used (default 0). 
-The variables net.ipv4.tcp_vegas_alpha (default 2) and net.ipv4.tcp_vegas_beta (default 6) correspond to the alpha and beta described previously but are expressed in half-packet units (i.e., 6 corresponds to 3 packets). 
-The variable net.ipv4.tcp_vegas_gamma (default 2) configures how many half-packets Vegas should attempt to keep outstanding during slow start. 
-For kernels after 2.6.13, Vegas must be loaded as a separate kernel module and enabled by setting net.ipv4.tcp_congestion_control to vegas.
+Vegas 相对于共享同一路径的其他 Vegas TCP 是公平的，因为每个都推动网络仅保持最小量的数据。
+然而，Vegas 和标准 TCP 流不共享路径平等。标准 TCP 发送方倾向于填充网络中的队列，而 Vegas 倾向于保持它们几乎为空。
+因此，随着标准发送方注入更多数据包，Vegas 发送方看到增加的延迟并减速。最终，这导致对标准 TCP 的不公平偏向。
+Linux 支持 Vegas 但默认未启用。对于 2.6.13 之前的内核，布尔 sysctl 变量 net.ipv4.tcp_vegas_cong_avoid 决定是否使用（默认 0）。
+变量 net.ipv4.tcp_vegas_alpha（默认 2）和 net.ipv4.tcp_vegas_beta（默认 6）对应于前面描述的 alpha 和 beta，但以半包单位表示（即 6 对应 3 个数据包）。
+变量 net.ipv4.tcp_vegas_gamma（默认 2）配置 Vegas 在慢启动期间应尝试保持多少半包未完成。
+对于 2.6.13 之后的内核，Vegas 必须作为单独的内核模块加载，并通过将 net.ipv4.tcp_congestion_control 设置为 vegas 来启用。
 
 [TCP Vegas: End to End Congestion Avoidance on a Global Internet](https://cseweb.ucsd.edu/~rbraud/jsac.pdf)
 
 #### BBR
 
-Bottleneck link Bandwidth
+瓶颈链路带宽（Bottleneck link Bandwidth）
 
-based on model
+基于模型（based on model）
 
+数据包丢失不等于拥塞（packet loss != congestion）
 
-packet loss != congestion
+大缓冲区允许更长的延迟（large buffer allow delay longer）
 
+BDP = RTT * BtlBW
 
-large buffer allow delay longer
+### 共享拥塞状态
 
+在许多情况下，后续连接可能从早期到同一主机的连接或当前到同一主机的其他活动连接中了解这些值。
+这个想法涉及在同一个机器上的多个连接之间共享拥塞状态。早期在 [RFC2140] 中的一篇描述，题为"TCP Control Block Interdependence"，描述了如何实现这一点。
+该工作指出了*时间共享*（新连接与现在 CLOSED 的其他连接共享信息）和*集合共享*（新连接与其他活动连接共享状态）之间的区别。
 
-BDP=RTT*BtlBW
+为了推广此想法并将其扩展到 TCP 以外的协议和应用，[RFC3124] 描述了**拥塞管理器**，
+它为协议实现提供本地操作系统服务，以了解诸如路径丢包率、估计拥塞、RTT 等到目标主机的信息。
 
-### Sharing Congestion State
+### TCP 友好性
 
-In many cases, subsequent connections could possibly learn of these values from earlier connections to the same hosts or from other currently active connections to the same hosts. 
-This idea involves sharing the congestion state across multiple connections in the same machine. An early description in [RFC2140], entitled “TCP Control Block Interdependence,” describes how this might be accomplished. 
-This work notes the difference between *temporal sharing* (new connections share information with others that are now CLOSED) and *ensemble sharing* (new connections share state with other active connections).
+当多个连接共享一个公共瓶颈时，具有较小 RTT 的会话能够在该链路空闲时更快地获取可用带宽（即更快地打开其拥塞窗口），因此将比较长 RTT 的连接获得更高的吞吐量。
 
-In an effort to generalize this idea and extend it to protocols and applications other than TCP, [RFC3124] describes the **Congestion Manager**, 
-which provides a local operating system service available to protocol implementations to learn information such as path loss rate, estimated congestion, RTT, and so forth to destination hosts.
+虽然它们在这种环境下并不总是平等共享带宽，但它们至少会随着其他 TCP 连接随时间来来去去而对它们的动态做出反应。
+然而，当 TCP 与其他（非 TCP）协议竞争带宽时，或当它与使用某些替代拥塞窗口控制集的 TCP 竞争时，这并不保证。
 
+为了为协议设计者提供指南，以避免在互联网上合作操作时与 TCP 流不公平竞争，
+研究人员开发了一种基于方程的速率控制限制，为在特定环境中运行的常规 TCP 连接使用的带宽提供了界限。
+此方法称为 TCP 友好速率控制（TFRC）[RFC5348]()。
+它旨在基于连接参数和环境因素（如 RTT 和数据包丢弃率）的组合提供发送速率限制。
+它也比传统 TCP 提供更稳定的带宽利用曲线，因此预期适用于使用中等大小数据包的流式应用（例如视频传输）。
 
+### 主动队列管理和 ECN
 
+应用 FIFO/尾部丢弃以外的调度和缓冲区管理策略的路由器通常被称为活跃的，它们用于管理队列的相应方法称为主动队列管理（AQM）机制。
+[RFC2309] 的作者讨论了 AQM 的潜在好处。
 
-### TCP Friendliness
+对于 TCP，这在 [RFC3168] 中描述，并在实验性规范 [RFC3540] 中通过额外安全性扩展。
+这些 RFC 描述了显式拥塞通知（ECN），这是一种路由器标记数据包（通过确保 IP 头部中的两个 ECN 位都被设置）以指示拥塞开始的方式。
 
-When multiple connections share a common bottleneck, those sessions with a smaller RTT are able to grab the available bandwidth at that link more quickly as it becomes free
-(that is, open their congestion windows faster) and thus will enjoy higher throughput than those connections with larger RTTs.
+ECN 机制部分在 IP 层操作，因此可能适用于 TCP 以外的传输协议，尽管大多数关于 ECN 的工作都是针对 TCP 的，这也是我们在此讨论的。
+当经历持久拥塞的 ECN 能力路由器接收到 IP 数据包时，它查看 IP 头部中的 *ECN-Capable Transport*（ECT）指示（当前定义为 IP 头部中两个 ECN 位中的任一个被设置）。
+如果设置，负责发送数据包的传输协议理解 ECN。
+此时，路由器在 IP 头部中设置拥塞经历指示（通过将两个 ECN 位都设置为 1）并转发数据报。
+建议路由器不要在拥塞不持久时（例如，单个最近由于队列溢出导致的数据包丢弃）设置 CE 指示，因为传输协议应针对单个 CE 指示做出反应。
 
-While they do not always share bandwidth equally in such circumstances, they do at least react to the dynamics of other TCP connections as they come and go over time.
-This is not guaranteed to be the case, however, when TCP competes for bandwidth with other (non-TCP) protocols, or when it competes with a TCP using some alternative set of controls on its congestion window.
+观察到带有 CE 设置的传入数据包的 TCP 接收方有义务将此指示返回给发送方（有一个实验性扩展将 ECN 添加到 SYN + ACK 段 [RFC5562]）。
+由于接收方通常通过使用（不可靠的）ACK 数据包向发送方返回信息，拥塞指示器丢失的可能性很大。
+为此，TCP 实现了一个小的可靠性增强协议，用于将指示携带回发送方。
+在收到带有 CE 设置的数据包时，TCP 接收方在发送的每个 ACK 数据包中设置 ECN-Echo 位字段，直到从 TCP 发送方在后续数据包中收到 CWR 位字段设置为 1。
+CWR 位字段设置指示拥塞窗口（即发送速率）已减少。
 
-To provide a guideline for protocol designers to avoid unfairly competing with TCP flows when operating cooperatively on the Internet,
-researchers have developed an equation-based rate control limit that provides a bound of the bandwidth used by a conventional TCP connection operating in a particular environment.
-This method is called TCP Friendly Rate Control (TFRC) [RFC5348]().
-It is designed to provide a sending rate limit based on a combination of connection parameters and with environmental factors such as RTT and packet drop rate.
-It also gives a more stable bandwidth utilization profile than conventional TCP, so it is expected to be appropriate for streaming applications that use moderately large packets (e.g., video transfer).
+收到 ACK 中的 ECN-Echo 指示的发送 TCP 以与检测到单个数据包丢弃相同的方式响应——调整 cwnd，并安排设置后续数据包中的 CWR 位字段。
+调用快速重传/恢复算法的规定拥塞响应（当然，没有数据包重传），导致 TCP 在遭受数据包丢弃之前减速。
+注意，TCP 不应过度反应；特别是，它不应针对同一窗口数据反应多次。这样做会过度惩罚 ECN TCP。
 
-### Active Queue Management and ECN
-
-
-
-Routers that apply scheduling and buffer management policies other than FIFO/drop tail are usually said to be active, and the corresponding methods they use to manage their queues are called active queue management (AQM) mechanisms.
-The authors of [RFC2309] provide a discussion of the potential benefits of AQM.
-
-
-
-For TCP, this is described in [RFC3168] and extended with additional security in an experimental specification [RFC3540].
-These RFCs describe Explicit Congestion Notification (ECN), which is a way for routers to mark packets (by ensuring both of the ECN bits in the IP header are set) to indicate the onset of congestion.
-
-The ECN mechanism operates partially at the IP layer and so is potentially applicable to transport protocols other than TCP, although most of the work on ECN has been with TCP, and it is what we discuss here.
-When an ECN-capable router experiencing persistent congestion receives an IP packet, it looks in the IP header for an *ECN-Capable Transport* (ECT) indication (currently defined as either of the two ECN bits in the IP header being set).
-If set, the transport protocol responsible for sending the packet understands ECN. 
-At this point, the router sets a Congestion Experienced indication in the IP header (by setting both ECN bits to 1) and forwards the datagram.
-Routers are discouraged from setting a CE indication when congestion does not appear to be persistent (e.g., upon a single recent packet drop due to queue overrun) because the transport protocol is supposed to react given even a single CE indication.
-
-The TCP receiver observing an incoming data packet with a CE set is obliged to return this indication to the sender (there is an experimental extension to add ECN to SYN + ACK segments as well [RFC5562]).
-Because the receiver normally returns information to the sender by using (unreliable) ACK packets, there is a significant chance that the congestion indicator could be lost.
-For this reason, TCP implements a small reliability-enhancing protocol for carrying the indication back to the sender.
-Upon receiving an incoming packet with CE set, the TCP receiver sets the ECN-Echo bit field in each ACK packet it sends until receiving a CWR bit field set to 1 from the TCP sender in a subsequent data packet.
-The CWR bit field being set indicates that the congestion window (i.e., sending rate) has been reduced.
-
-A sending TCP receiving an ECN-Echo indicator in an ACK reacts the same way it would when detecting a single packet drop by adjusting cwnd, and it also arranges to set the CWR bit field in a subsequent data packet.
-The prescribed congestion response of the fast retransmit/recovery algorithms is invoked (of course, without the packet retransmission), causing the TCP to slow down prior to suffering packet drops.
-Note that the TCP should not overreach; in particular, it should not react more than once for the same window of data. Doing so would overly penalize an ECN TCP relative to others.
-
-In Linux, ECN is enabled if the Boolean sysctl variable `net.ipv4.tcp_ecn` is nonzero. The default varies based on which Linux distribution is used, with off being most common.
+在 Linux 中，如果布尔 sysctl 变量 `net.ipv4.tcp_ecn` 非零，则启用 ECN。默认值因使用的 Linux 发行版而异，关闭最为常见。
 
 ## Keepalive
 
-Under some circumstances, it is useful for a client or server to become aware of the termination or loss of connection with its peer.
-In other circumstances, it is desirable to keep a minimal amount of data flowing over a connection, even if the applications do not have any to exchange.
-TCP keepalive provides a capability useful for both cases. 
+在某些情况下，客户端或服务器了解其对端的终止或连接丢失是有用的。
+在其他情况下，希望在连接上保持最小量的数据流动，即使应用没有要交换的数据。
+TCP keepalive 提供了对这两种情况都有用的能力。
 
-Keepalive is a method for TCP to probe its peer without affecting the content of the data stream. It is driven by a keepalive timer.
-When the timer fires, a keepalive probe (keepalive for short) is sent, and the peer receiving the probe responds with an ACK.
+Keepalive 是 TCP 探测其对端而不影响数据流内容的方法。它由 keepalive 定时器驱动。
+当定时器触发时，发送 keepalive 探测，接收探测的对端用 ACK 响应。
 
-Either end of a TCP connection may request keepalives, which are **turned off by default**, for their respective direction of the connection.
-A keepalive can be set for one side, both sides, or neither side. There are several configurable parameters that control the operation of keepalives.
-If there is no activity on the connection for some period of time (called the keepalive time), the side(s) with keepalive enabled sends a keepalive probe to its peer(s).
-If no response is received, the probe is repeated periodically with a period set by the keepalive interval until a number of probes equal to the number keepalive probes is reached.
-If this happens, the peer’s system is determined to be unreachable and the connection is terminated.
+TCP 连接的任一端可以为其连接方向请求 keepalive，**默认情况下是关闭的**。
+可以为一方、双方或任一方设置 keepalive。有几个可配置的参数控制 keepalive 的操作。
+如果连接在一段时间内无活动（称为 keepalive 时间），启用了 keepalive 的一方会向其对端发送 keepalive 探测。
+如果未收到响应，探测以 keepalive 间隔设置的周期重复，直到达到 keepalive 探测次数。
+如果达到此次数，确定对端系统不可达，连接终止。
 
-A keepalive probe is an empty (or 1-byte) segment with sequence number equal to one less than the largest ACK number seen from the peer so far.
-Because this sequence number has already been ACKed by the receiving TCP, the arriving segment does no harm, but it elicits an ACK that is used to determine whether the connection is still operating.
-Neither the probe nor its ACK contains any new data (it is “garbage” data), and neither is retransmitted by TCP if lost.
-RFC1122 dictates that because of this fact, the lack of response for a single keepalive probe should not be considered sufficient evidence that the connection has stopped operating.
-This is the reason for the keepalive probes parameter setting mentioned previously. Note that some (mostly older) TCP implementations do not respond to keepalives lacking the “garbage” byte of data.
+Keepalive 探测是一个空（或 1 字节）段，序列号等于迄今为止从对端看到的最大 ACK 号减一。
+由于此序列号已被接收 TCP 确认，到达的段没有伤害，但会引发一个 ACK，用于确定连接是否仍在运行。
+探测及其 ACK 都不包含任何新数据（它是"垃圾"数据），并且如果丢失，TCP 都不重传。
+RFC1122 规定，由于此事实，单个 keepalive 探测的缺乏响应不应被视为连接已停止运行的充分证据。
+这就是前面提到的 keepalive 探测参数设置的原因。注意，一些（主要是旧版）TCP 实现不响应缺少"垃圾"数据字节的 keepalive。
 
-Anytime it is operating, a TCP using keepalives may find its peer in one of four states:
+在操作时，使用 keepalive 的 TCP 可能发现其对端处于以下四种状态之一：
 
-1. The peer host is still up and running and reachable. The peer’s TCP responds normally and the requestor knows that the other end is still up.
-   The requestor’s TCP resets the keepalive timer for later (equal to the value of the keepalive time).
-   If there is application traffic across the connection before the next timer expires, the timer is reset back to the value of keepalive time.
-2. The peer’s host has crashed and is either down or in the process of rebooting.
-   In either case, its TCP is not responding. The requestor does not receive a response to its probe, and it times out after a time specified by the keepalive interval.
-   The requestor sends a total of keepalive probes of these probes, keepalive interval time apart, and if it does not receive a response, the requestor considers the peer’s host as down and terminates the connection.
-3. The client’s host has crashed and rebooted. In this case, the server receives a response to its keepalive probe, but the response is a reset segment, causing the requestor to terminate the connection.
-4. The peer’s host is up and running but is unreachable from the requestor for some reason (e.g., the network cannot deliver traffic and may or may not inform the peers of this fact using ICMP).
-   This is effectively the same as state 2, because TCP cannot distinguish between the two. All TCP can tell is that no replies are received to its probes.
+1. 对端主机仍在运行、可达。对端的 TCP 正常响应，请求方知道另一端仍在运行。
+   请求方的 TCP 将 keepalive 定时器重置为稍后（等于 keepalive 时间的值）。
+   如果在下次定时器到期之前连接上有应用流量，定时器重置回 keepalive 时间的值。
+2. 对端主机已崩溃，要么停机要么在重启过程中。
+   无论哪种情况，其 TCP 没有响应。请求方未收到对其探测的响应，并在 keepalive 间隔指定的时间后超时。
+   请求方发送总共 keepalive 个探测，每次 keepalive 间隔时间间隔，如果未收到响应，请求方认为对端主机已停机并终止连接。
+3. 客户端主机已崩溃并重启。在这种情况下，服务器收到对其 keepalive 探测的响应，但响应是一个重置段，导致请求方终止连接。
+4. 对端主机正在运行但由于某种原因从请求方不可达（例如，网络无法交付流量，可能通知也可能不通知对端此事实使用 ICMP）。
+   这实际上与状态 2 相同，因为 TCP 无法区分两者。TCP 能判断的就是没有收到对其探测的回复。
 
-The requestor does not have to worry about the peer’s host being shut down gracefully and then rebooting (as opposed to crashing).
-When the system is shut down by an operator, all application processes are terminated (i.e., the peer’s process), which causes the peer’s TCP to send a FIN on the connection.
-Receiving the FIN would cause the requestor’s TCP to report an end-of-file to the requestor’s process, allowing the requestor to detect this scenario and exit.
-In the first state the requestor’s application has no idea that keepalive probes are taking place (except that it chose to enable keepalives in the first place). Everything is handled at the TCP layer.
-It is transparent to the application until one of states 2, 3, or 4 is determined. In these three cases, an error is returned to the requestor’s application by its TCP.
-(Normally the requestor has issued a read from the network, waiting for data from the peer. If the keepalive feature returns an error, it is returned to the requestor as the return value from the read.)
-In scenario 2 the error is something like “Connection timed out,” and in scenario 3 we expect “Connection reset by peer.
-The fourth scenario may look as if the connection timed out, or may cause another error to be returned, depending on whether an ICMP error related to the connection is received and how it is processed.
-We look at all four scenarios in the next section.
-
-The values of the variables keepalive time, keepalive interval, and keepalive probes can usually be changed.
-Some systems allow these changes on a per-connection basis, while others allow them to be set only system-wide (or both in some cases).
-In Linux, these values are available as sysctl variables with the names `net.ipv4.tcp_keepalive_time`, `net.ipv4.tcp_keepalive_intvl`, and `net.ipv4.tcp_keepalive_probes`, respectively.
-The defaults are 7200 (seconds, or 2 hours), 75 (seconds), and 9 (probes).
-
-## Examples
-
-### How to optimize TCP
-
-1. for client set syn_retries
-2. for server
-   1. prevent syn attacks
-   2. improve accept queue
-3. transport optimizing
-   1. expand tcp_window_scaling
-
-socket的SO_SNDBUF/SO_RCVBUF会关闭缓存区动态调整功能
-
-### max connections
-
-1. 文件描述符限制
-   系统级：当前系统可打开的最大数量，通过fs.file-max参数可修改
-   用户级：指定用户可打开的最大数量，修改/etc/security/limits.conf
-   进程级：单个进程可打开的最大数量，通过fs.nr_open参数可修改
-
-2 占用资源限制
-
-```shell
-sysctl -a | grep rmem
-net.ipv4.tcp_rmem = 4096 87380 8388608
-net.core.rmem_default = 212992
-net.core.rmem_max = 8388608
-```
-
-ss
-
-slabtop
-
-## Timers
-
-TCP maintains seven timers for each connection. They are briefly described here, in the approximate order of their occurrence during the lifetime of a connection.
-
-1. A [connection-establishment timer](/docs/CS/CN/TCP/TCP.mdP.md?id=timeout-of-connection-establishment) starts when a SYN is sent to establish a new connection.
-   If a response is not received within 75 seconds, the connection establishment is aborted.
-2. A [retransmission timer](/docs/CS/CN/TCP/TCP.mdP.md?id=retransmission-timeout) is set when TCP sends data. If the data is not acknowledged by the other end when this timer expires, TCP retransmits the data.
-3. A [delayed ACK timer](/docs/CS/CN/TCP/TCP.mdP.md?id=delayed-acknowledgments) is set when TCP receives data that must be acknowledged, but need not be acknowledged immediately.
-   Instead, TCP waits up to 200 ms before sending the ACK. If, during this 200-ms time period, TCP has data to send on this connection, the pending acknowledgment is sent along with the data (called piggybacking).
-4. A [persist timer](/docs/CS/CN/TCP/TCP.mdP.md?id=zero-windows-and-the-tcp-persist-timer) is set when the other end of a connection advertises a window of 0, stopping TCP from sending data.
-   Like the retransmission timer, the persist timer value is calculated dynamically, based on the round-trip time. The value of this is bounded by TCP to be between 5 and 60 seconds.
-5. A [keepalive timer](/docs/CS/CN/TCP/TCP.mdP.md?id=Keepalive) can be set by the process using the SO_KEEPALIVE socket option.
-6. A [FIN_WAIT_2 timer](/docs/CS/CN/TCP/TCP.mdP.md?id=fin_wait_2).
-7. A [TIME_WAIT timer](/docs/CS/CN/TCP/TCP.mdP.md?id=time_wait), often called the 2MSL timer.
-   The timer is set to 1 minute (Net/3 uses an MSL of 30 seconds) when the connection enters the TIME_WAIT state and when it expires, the TCP control block and Internet PCB are deleted, allowing that socket pair to be reused.
-
-TCP has two timer functions: one is called every 200 ms (the fast timer) and the other every 500 ms (the slow timer).
-The delayed ACK timer is different from the other six: when the delayed ACK timer is set for a connection it means that a delayed ACK must be sent the next time the 200-ms timer expires (i.e., the elapsed time is between 0 and 200 ms).
-The other six timers are decremented every 500 ms, and only when the counter reaches 0 does the corresponding action take place.
-
-
-
-## Performance
-
-导致 TCP 性能问题的三个重要原因：
-- TCP 的拥塞控制在发生丢包时会进行退让，减少能够发送的数据段数量，但是丢包并不一定意味着网络拥塞，更多的可能是网络状况较差；
-- TCP 的三次握手带来了额外开销，这些开销不只包括需要传输更多的数据，还增加了首次传输数据的网络延迟；
-- TCP 的重传机制在数据包丢失时可能会重新传输已经成功接收的数据段，造成带宽的浪费；
-
-为了解决 TCP 的性能问题，目前业界有两种解决方案：
-1. 使用 UDP 构建性能更加优异、更灵活的传输协议，例如：QUIC19 等；
-2. 通过不同的手段优化 TCP 协议的性能，例如：选择性 ACK（Selective ACK, SACK），TCP 快开启（TCP Fast Open, TFO）；
-   由于 TCP 协议在操作系统内核中，不利于协议的更新，所以第一种方案目前发展的更好，HTTP/3 就使用了 QUIC 作为传输协议
-
-## Links
-
-- [Computer Network](/docs/CS/CN/CN.md)
-
-## References
-
-1. [RFC 793 - Transmission Control Protocol](https://datatracker.ietf.org/doc/rfc793/)
-2. [RFC 1122 - Requirements for Internet Hosts - Communication Layers](https://datatracker.ietf.org/doc/rfc1122/)
-3. [RFC 1323 - TCP Extensions for High Performance](https://datatracker.ietf.org/doc/rfc1323/)
-4. [RFC 1337 - TIME-WAIT Assassination Hazards in TCP](https://datatracker.ietf.org/doc/rfc1337/)
-5. [RFC 2018 - TCP Selective Acknowledgment Options](https://datatracker.ietf.org/doc/rfc2018/)
-6. [RFC 2525 - Known TCP Implementation Problems](https://datatracker.ietf.org/doc/rfc2525/)
-7. [RFC 2581 - TCP Congestion Control](https://datatracker.ietf.org/doc/rfc2581/)
-8. [RFC 3168 - The Addition of Explicit Congestion Notification (ECN) to IP](https://datatracker.ietf.org/doc/rfc3168/)
-9. [RFC 5690 - Adding Acknowledgement Congestion Control to TCP](https://datatracker.ietf.org/doc/rfc5690/)
-10. [RFC 6077 - Open Research Issues in Internet Congestion Control](https://datatracker.ietf.org/doc/rfc6077/)
-11. [RFC 6191 - Reducing the TIME-WAIT State Using TCP Timestamps](https://datatracker.ietf.org/doc/doc/rfc6191)
-12. [RFC 6937 - Proportional Rate Reduction for TCP](https://datatracker.ietf.org/doc/doc/rfc6937)
-13. [RFC 7413 - TCP Fast Open](https://datatracker.ietf.org/doc/rfc7413/)
+请求方不需要担心对端主机正常关闭然后重启（与崩溃相对）。

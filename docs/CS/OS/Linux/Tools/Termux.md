@@ -1,7 +1,7 @@
-## introduction
+## 简介
 
-[Termux](https://termux.dev/en/) is an Android terminal emulator and [Linux](/docs/CS/OS/Linux/Linux.md) environment app that works directly with no rooting or setup required.
-A minimal base system is installed automatically - additional packages are available using the APT package manager.
+[Termux](https://termux.dev/en/) 是一个 Android 终端模拟器和 [Linux](/docs/CS/OS/Linux/Linux.md) 环境应用，可直接使用，无需 root 或额外设置。
+自动安装最小基础系统——额外的包可通过 APT 包管理器获取。
 
 
 

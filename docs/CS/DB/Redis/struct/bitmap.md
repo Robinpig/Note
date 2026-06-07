@@ -1,38 +1,26 @@
-## Introduction
+## 简介
 
+位图（Bitmaps）并非实际的数据类型，而是一组基于 [String 类型](/docs/CS/DB/Redis/struct/SDS.md) 定义的面向位的操作。
+由于字符串是二进制安全的 blob，最大长度为 512 MB，因此它们适合设置最多 2^32 个不同的位。
 
-Bitmaps are not an actual data type, but a set of bit-oriented operations defined on the [String type](/docs/CS/DB/Redis/struct/SDS.md). Since strings are binary safe blobs and their maximum length is 512 MB, they are suitable to set up to 2^32 different bits.
+位图的最大优势之一是它们在存储信息时通常提供极大的空间节省。
+例如，在一个由递增用户 ID 表示不同用户的系统中，只需 512 MB 内存就可以记住 40 亿用户的单比特信息（例如，知道用户是否愿意接收新闻通讯）。
 
-One of the biggest advantages of bitmaps is that they often provide extreme space savings when storing information. For example in a system where different users are represented by incremental user IDs, it is possible to remember a single bit information (for example, knowing whether a user wants to receive a newsletter) of 4 billion of users using just 512 MB of memory.
+位图可以轻松地拆分为多个键，例如为了分片数据集，通常最好避免使用巨大的键。
+要将位图分散到不同键上，而不是将所有位设置到一个键中，一个简单的策略就是每个键存储 M 位，用 `bit-number/M` 获取键名，用 `bit-number MOD M` 获取键内的第 N 位。
 
+## 命令
 
-
-Bitmaps are trivial to split into multiple keys, for example for the sake of sharding the data set and because in general it is better to avoid working with huge keys. To split a bitmap across different keys instead of setting all the bits into a key, a trivial strategy is just to store M bits per key and obtain the key name with `bit-number/M` and the Nth bit to address inside the key with `bit-number MOD M`.
-
-## Commands
-
-See help by 
+查看帮助：
 
 ```shell
 help @string
 ```
 
-
-
-
-
 ```shell
 SETBIT key offset value
 ```
 
+## 链接
 
-
-## Links
-
-- [Redis Struct](/docs/CS/DB/Redis/struct/struct.md?id=hashes)
-
-
-
-
-
-
+- [Redis 数据结构](/docs/CS/DB/Redis/struct/struct.md?id=hashes)

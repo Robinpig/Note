@@ -1,27 +1,27 @@
 ## EventLoop
 
-Will handle all the I/O operations for a Channel once registered. One EventLoop instance will usually handle more than one Channel but this may depend on implementation details and internals.
+一旦 Channel 注册后，由它处理所有 I/O 操作。一个 EventLoop 实例通常处理多个 Channel，但这可能取决于实现细节和内部机制。
 
 ```java
 public interface EventLoop extends OrderedEventExecutor, EventLoopGroup {
 
     /**
-     * Returns an <em>internal-use-only</em> object that provides unsafe operations.
+     * 返回一个仅供内部使用的对象，提供不安全操作。
      */
     Unsafe unsafe();
 
     /**
-     * <em>Unsafe</em> operations that should <em>never</em> be called from user-code. These methods
-     * are only provided to implement the actual transport, and must be invoked from the {@link EventLoop} itself.
+     * 不应从用户代码调用的不安全操作。这些方法仅用于实现实际的传输，
+     * 并且必须从 EventLoop 自身调用。
      */
     interface Unsafe {
         /**
-         * Register the {@link Channel} to the {@link EventLoop}.
+         * 将 Channel 注册到 EventLoop。
          */
         void register(Channel channel) throws Exception;
 
         /**
-         * Deregister the {@link Channel} from the {@link EventLoop}.
+         * 将 Channel 从 EventLoop 注销。
          */
         void deregister(Channel channel) throws Exception;
     }
@@ -32,28 +32,27 @@ public interface EventLoop extends OrderedEventExecutor, EventLoopGroup {
 
 ### IoHandler
 
-Handles IO dispatching for an EventLoop All operations except wakeup(boolean) MUST be executed on the EventLoop thread and should never be called from the user-directly.
+处理 EventLoop 的 IO 分发。除 wakeup(boolean) 外的所有操作都必须在 EventLoop 线程上执行，且不应由用户直接调用。
 
 ```java
 public interface IoHandler extends EventLoop.Unsafe {
     /**
-     * Run the IO handled by this {@link IoHandler}. The {@link IoExecutionContext} should be used
-     * to ensure we not execute too long and so block the processing of other task that are
-     * scheduled on the {@link EventLoop}. This is done by taking {@link IoExecutionContext#delayNanos(long)} or
-     * {@link IoExecutionContext#deadlineNanos()} into account.
+     * 运行此 IoHandler 处理的 IO。
+     * IoExecutionContext 用于确保不会执行过长时间而阻塞 EventLoop 上调度的其他任务。
+     * 这通过考虑 IoExecutionContext#delayNanos(long) 或 IoExecutionContext#deadlineNanos() 来实现。
      *
-     * @return the number of {@link Channel} for which I/O was handled.
+     * @return 已处理 IO 的 Channel 数量。
      */
     int run(IoExecutionContext context);
 
-    // Wakeup the IoHandler, which means if any operation blocks it should be unblocked and return as soon as possible.
+    // 唤醒 IoHandler，如果有任何阻塞操作，应解除阻塞并尽快返回。
     void wakeup(boolean inEventLoop);
 
-    // Prepare to destroy this IoHandler. This method will be called before destroy() and may be called multiple times.
+    // 准备销毁此 IoHandler。此方法将在 destroy() 之前调用，并可能被多次调用。
     void prepareToDestroy();
 
     /**
-     * Destroy the {@link IoHandler} and free all its resources.
+     * 销毁 IoHandler 并释放其所有资源。
      */
     void destroy();
 }
@@ -63,7 +62,7 @@ public interface IoHandler extends EventLoop.Unsafe {
 
 ## NioHandler
 
-call [processSelectedKeys](/docs/CS/Framework/Netty/EventLoop.md?id=processSelectedKey)
+调用 [processSelectedKeys](/docs/CS/Framework/Netty/EventLoop.md?id=processSelectedKey)
 
 ```java
 // NioHandler

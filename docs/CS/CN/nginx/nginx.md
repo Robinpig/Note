@@ -1,12 +1,8 @@
-## Introduction
+## 简介
 
-[nginx [engine x]](https://nginx.org/en/) is an HTTP and reverse proxy server, a mail proxy server, and a generic TCP/UDP proxy server, originally written by `Igor Sysoev`.
-
-
+[nginx [engine x]](https://nginx.org/en/) 是一个 HTTP 和反向代理服务器、邮件代理服务器以及通用 TCP/UDP 代理服务器，最初由 `Igor Sysoev` 编写。
 
 nginx 的竞品有 Lighttpd
-
-
 
 nignx 的特点
 
@@ -17,15 +13,11 @@ nignx 的特点
 - 高可靠性
 - 热部署
 
-
 Tengine
 
 OpenResty
 
-
-
-
-## Tutorial
+## 教程
 
 主要组成部分
 
@@ -34,7 +26,7 @@ OpenResty
 - access.log 访问日志
 - error.log 错误日志
 
-### Install
+### 安装
 
 [Installing NGINX and NGINX Plus](https://docs.nginx.com/nginx/admin-guide/installing-nginx/)
 
@@ -135,21 +127,15 @@ make && make install
 
 <!-- tabs:end -->
 
-
-
 configure 执行成功后会生成 objs 目录 在该目录下生成 ngx_modules.c 和 Makefile 等文件
 
 ngx_modules.c 文件就是用来定义 ngx_modules 数组的 不需要的模块不会加入 ngx_modules 数组 也不会编译进nginx
 
 ngx_modules 数组中模块的先后顺序非常重要 指明了每个模块在 nginx中的优先级 一个请求同时符合多个模块的处理规则时 按照在ngx_modules 数组中的顺序选择最靠前的优先处理
 
-
-
 默认情况下 nginx 安装到 /usr/local/nginx/ 下 二进制文件路径为  /usr/local/nginx/sbin/nginx 配置文件路径为  /usr/local/nginx/conf/nginx.conf
 
-### Debug
-
-
+### 调试
 
 ```shell
 gdb /usr/local/nginx/sbin/nginx
@@ -167,19 +153,13 @@ telnet 127.0.0.1 80
 
 ```
 
-
-
 nginx -t 测试配置文件是否有误
 
+### 配置
 
+## 架构
 
-### Configurations
-
- 
-
-## Architecture
-
-Src packages:
+源代码包：
 
 - core   
 - event  
@@ -189,63 +169,54 @@ Src packages:
 - os     
 - stream
 
-
 <div style="text-align: center;">
 
-![nginx's architecture](./img/architecture.png)
+![nginx的架构](./img/architecture.png)
 
 </div>
 
 <p style="text-align: center;">
-Fig.1. nginx's architecture.
+图 1：nginx 的架构。
 </p>
 
-Architecture and scalability
-- One master and several worker processes; worker processes run under an unprivileged user;
-- Flexible configuration;
-- Reconfiguration and upgrade of an executable without interruption of the client servicing;
-- Support for kqueue (FreeBSD 4.1+), epoll (Linux 2.6+), /dev/poll (Solaris 7 11/99+), event ports (Solaris 10), select, and poll;
-- The support of the various kqueue features including EV_CLEAR, EV_DISABLE (to temporarily disable events), NOTE_LOWAT, EV_EOF, number of available data, error codes;
-- The support of various epoll features including EPOLLRDHUP (Linux 2.6.17+, glibc 2.8+) and EPOLLEXCLUSIVE (Linux 4.5+, glibc 2.24+);
-- sendfile (FreeBSD 3.1+, Linux 2.2+, macOS 10.5+), sendfile64 (Linux 2.4.21+), and sendfilev (Solaris 8 7/01+) support;
-- File AIO (FreeBSD 4.3+, Linux 2.6.22+);
-- DIRECTIO (FreeBSD 4.4+, Linux 2.4+, Solaris 2.6+, macOS);
-- Accept-filters (FreeBSD 4.1+, NetBSD 5.0+) and TCP_DEFER_ACCEPT (Linux 2.4+) support;
-- 10,000 inactive HTTP keep-alive connections take about 2.5M memory;
-- Data copy operations are kept to a minimum.
+架构和可扩展性
+- 一个 master 和多个 worker 进程；worker 进程以非特权用户身份运行；
+- 灵活的配置；
+- 可中断客户端服务进行可执行文件的重配置和升级；
+- 支持 kqueue (FreeBSD 4.1+), epoll (Linux 2.6+), /dev/poll (Solaris 7 11/99+), event ports (Solaris 10), select 和 poll；
+- 支持各种 kqueue 特性，包括 EV_CLEAR、EV_DISABLE（临时禁用事件）、NOTE_LOWAT、EV_EOF、可用数据量、错误码；
+- 支持各种 epoll 特性，包括 EPOLLRDHUP (Linux 2.6.17+, glibc 2.8+) 和 EPOLLEXCLUSIVE (Linux 4.5+, glibc 2.24+)；
+- 支持 sendfile (FreeBSD 3.1+, Linux 2.2+, macOS 10.5+)、sendfile64 (Linux 2.4.21+) 和 sendfilev (Solaris 8 7/01+)；
+- 支持 File AIO (FreeBSD 4.3+, Linux 2.6.22+)；
+- 支持 DIRECTIO (FreeBSD 4.4+, Linux 2.4+, Solaris 2.6+, macOS)；
+- 支持 Accept-filters (FreeBSD 4.1+, NetBSD 5.0+) 和 TCP_DEFER_ACCEPT (Linux 2.4+)；
+- 10,000 个非活跃 HTTP keep-alive 连接仅需约 2.5M 内存；
+- 数据拷贝操作保持在最小程度。
 
-### process model
-NGINX uses a predictable process model that is tuned to the available hardware resources:
+### 进程模型
+NGINX 使用可预测的进程模型，针对可用硬件资源进行了调优：
 
-- The master process performs the privileged operations such as reading configuration and binding to ports, and then creates a small number of child processes (the next three types).
-- The cache loader process runs at startup to load the disk‑based cache into memory, and then exits. It is scheduled conservatively, so its resource demands are low.
-- The cache manager process runs periodically and prunes entries from the disk caches to keep them within the configured sizes.
-- The worker processes do all of the work! They handle network connections, read and write content to disk, and communicate with upstream servers.
+- master 进程执行特权操作，如读取配置和绑定端口，然后创建少量子进程（以下三种类型）。
+- cache loader 进程在启动时运行，将基于磁盘的缓存加载到内存中，然后退出。其调度保守，因此资源需求低。
+- cache manager 进程定期运行，从磁盘缓存中清理条目，使其保持在配置的大小内。
+- worker 进程完成所有工作！它们处理网络连接、读写磁盘内容以及与上游服务器通信。
 
-The NGINX configuration recommended in most cases – running one worker process per CPU core – makes the most efficient use of hardware resources. You configure it by setting the parameter on the directive:autoworker_processes
+大多数情况下推荐的 NGINX 配置——每个 CPU 核心运行一个 worker 进程——能够最高效地利用硬件资源。你可以通过设置 `worker_processes` 指令上的参数来配置。
 
-When an NGINX server is active, only the worker processes are busy. 
-Each worker process handles multiple connections in a nonblocking fashion, reducing the number of context switches.
+当 NGINX 服务器活跃时，只有 worker 进程处于忙碌状态。
+每个 worker 进程以非阻塞方式处理多个连接，减少了上下文切换的次数。
 
-Each worker process is single‑threaded and runs independently, grabbing new connections and processing them. 
-The processes can communicate using shared memory for shared cache data, session persistence data, and other shared resources.
-
-
-
-
+每个 worker 进程是单线程的，独立运行，获取新连接并处理它们。
+进程可以使用共享内存进行缓存数据、会话持久化数据和其他共享资源的通信。
 
 一旦master进程接收到重新加载配置的信号，它将检查新配置文件的语法是否正确，并尝试应用其中提供的配置。
 
 - 如果成功，master进程将启动新的worker进程，并发送消息给旧的worker进程，要求他们shutdown 旧的worker进程在接收到关闭命令后，停止接受新的连接，直到所有之前已经接受的连接全部处理完为止。之后，旧的worker进程退出
 - 否则，master进程将回滚所做的更改，并继续使用旧配置。
 
-
-
 nginx的master进程的进程ID，默认情况下，放在nginx.pid文件中，该文件所在的目录一般是/usr/local/nginx/logs 或者 /var/run
 
-
-## Struct
-
+## 结构体
 
 ### queue
 
@@ -315,8 +286,7 @@ typedef struct {
 } ngx_radix_tree_t;
 ```
 
-## Module
-
+## 模块
 
 ```c
 
@@ -393,9 +363,9 @@ typedef struct {
 ```
 
 
-### Load Balance
+### 负载均衡
 
-#### default
+#### 默认
 ```nginx
 # default
 upstream real_serer{
@@ -403,7 +373,7 @@ upstream real_serer{
     server 192.168.1.100:8001;
 }
 ```
-#### weight
+#### 权重
 ```nginx
 # weight
 upstream real_serer{
@@ -440,7 +410,7 @@ upstream bakend {
 } 
 ```
 
-consistent hash
+一致性hash
 
 一致性hash就是创建出n个虚拟节点，n个虚拟节点构成一个环，从n个虚拟节点中，挑选出一些节点当成真实的upstream server节点。构成一个每次将计算得到的hash%n，得到请求分配的虚拟节点的位置c，从位置c顺时针移动，获得离c最近的真实upstream server节点
 
@@ -453,7 +423,7 @@ upstream bakend {
 } 
 ```
 
-fail retry
+失败重试
 
 ```nginx
 # weight
@@ -466,7 +436,7 @@ upstream real_serer{
 
 
 
-limit
+限流
 
 limit_req_zone
 
@@ -499,7 +469,7 @@ limit_conn_zone, need **ngx_http_limit_conn_module**
 
 白名单 黑名单
 
-### Cache
+### 缓存
 
 
 ### ssl
@@ -526,7 +496,6 @@ An optional company name []:
 openssl x509 -req -days 3650 -in yh.com.csr -signkey yh.com.key -out yh.com.crt
 
 ```
-
 
 ## main
 
@@ -759,7 +728,6 @@ ngx_master_process_cycle(ngx_cycle_t *cycle)
 
 ### worker cycle
 
-
 ```c
 
 static void
@@ -785,11 +753,11 @@ ngx_start_worker_processes(ngx_cycle_t *cycle, ngx_int_t n, ngx_int_t type)
     }
 }
 ```
-create worker process
+创建 worker 进程
 
-worker progress set ngx_channel = ngx_processes[s].channel[1];
+worker 进程设置 ngx_channel = ngx_processes[s].channel[1];
 
-invoke [fork](/docs/CS/OS/Linux/proc/process.md?id=fork)
+调用 [fork](/docs/CS/OS/Linux/proc/process.md?id=fork)
 
 ```c
 
@@ -1081,31 +1049,25 @@ ngx_process_events_and_timers(ngx_cycle_t *cycle)
 
 #### ngx_process_events
 
-ngx_event_actions_t see [Event](/docs/CS/CN/nginx/event.md)
+ngx_event_actions_t 参见 [Event](/docs/CS/CN/nginx/event.md)
 
 
 ### signal
 
-
-
-## Configuration
+## 配置
 
 ### config
 
-
-
 p
-
 
 // core/ngx_conf_file.c
 ngx_conf_parse
 
 ngx_conf_handler
 
+## 调优
 
-## Tuning
-
-enable coredump
+启用 coredump
 ```config
 worker_rlimit_core 500m
 worker_directory /tmp
@@ -1115,12 +1077,11 @@ worker_directory /tmp
 gdb /usr/sbin/nginx <core file>
 ```
 
-## Links
+## 链接
 
-- [Computer Network](/docs/CS/CN/CN.md)
+- [计算机网络](/docs/CS/CN/CN.md)
 
-
-## References
+## 参考文献
 
 1. [](https://www.aosabook.org/en/nginx.html)
 2. [Inside NGINX: How We Designed for Performance & Scale](https://www.nginx.com/blog/inside-nginx-how-we-designed-for-performance-scale/)

@@ -1,74 +1,73 @@
 ## Introduction
 
-Amazon’s e-commerce system comprising on many services that communicate with each other to provide a rich set of functionalities.
-Each service runs it’s own instance of Dynamo and operates under a set of assumptions which are as follows:
+Amazon 的电子商务系统由许多相互通信以提供丰富功能的服务组成。
+每个服务运行自己的 Dynamo 实例，并基于以下一组假设运行：
 
-* Data access & update is done via a key-value based query model.
-  This simplifies the interface for Dynamo as now it doesn’t need to provide complex query model that performs joins over multiple tables.
-* There is a compromise on consistency of data stored on Dynamo nodes. Instead of strict consistency, applications using Dynamo as storage layer work with an eventual consistency model.
-* Writes are given a higher priority in case of conflict resolution. With tight latency requirements, write requests are processed without resolving the conflict and all the conflicting states related to a key are preserved.
-  Conflict resolution happens at read time based on policy such as last-write-wins or the resolution logic is moved to the client side.
-* Every Dynamo node in a system is identical to other nodes in the same system.
-  This means that there is no master node with extra responsibilities.
-  This makes maintenance of nodes in a system much easier as compared to a typical master-replica model.
+* 数据访问和更新通过基于键值的查询模型完成。
+  这简化了 Dynamo 的接口，因为它不需要提供执行多表连接操作的复杂查询模型。
+* 对存储在 Dynamo 节点上的数据的一致性做出妥协。使用 Dynamo 作为存储层的应用程序使用最终一致性模型，而非严格一致性。
+* 在冲突解决中，写入操作被赋予更高优先级。在严格的延迟要求下，写入请求在不解决冲突的情况下被处理，与某个键相关的所有冲突状态都被保留。
+  冲突解决在读取时根据策略（如最后写入胜出）进行，或者解决逻辑被移到客户端。
+* 系统中的每个 Dynamo 节点与同一系统中的其他节点完全相同。
+  这意味着没有具有额外职责的主节点。
+  与典型的主-副本模型相比，这使得系统中的节点维护更加容易。
 
-Going through each of these challenges, remember and try to appreciate the simple interface that Dynamo provides i.e.
-`GET(key) & PUT(key, context, object)` as its simplicity plays a key role in solving these set of challenges. The `context` includes some metadata about the version of the `object`.
+回顾每个挑战时，请记住并欣赏 Dynamo 提供的简单接口，即 `GET(key) & PUT(key, context, object)`，其简单性在解决这些挑战中起到了关键作用。`context` 包含关于 `object` 版本的一些元数据。
 
-* Partitioning: In order to continue scaling the storage system, Dynamo needs to partition data over multiple nodes once the node reaches a certain threshold in terms of capacity.
-  In order to perform this partitioning, Dynamo relies upon [Consistent Hashing](https://distributed-computing-musings.com/2022/01/partitioning-consistent-hashing/).
-  Basic implementation of consistent hashing poses problems with non-uniform data distribution.
-  Therefore Dynamo makes use of virtual nodes on top of consistent hashing ring in order to distribute data more uniformly across the ring.
-* Replication: As high availability is a key requirement for Dynamo, any key that is persisted in the storage layer is stored across `N` nodes.
-  This replication is performed by a coordinator that stores the key in node assigned to key in the ring according to consistent hashing algorithm and additionally replicate it to `N - 1` nodes in clockwise direction in the ring.
-  The list of these `N` nodes responsible for storing the key is known as  *preference list* .
-* Data Versioning: Dynamo focusses on providing eventual consistency and therefore a scenario where a `put()` operation succeeds without the update being persisted on all nodes is possible.
-  Also Dynamo considers failure as a normal scenario and considers failures as an event rather than an exceptional state.
-  These failures can be node failures or even partition failures due to network outage. Dynamo persists every update associated with a key even in state of failure and makes use of [vector clocks](https://distributed-computing-musings.com/2022/05/vector-clocks-keeping-time-in-check/) to find the correct ordering of updates associated with a key.
-  This vector clock is used to find the causality among updates happening on a key on multiple nodes or partitions.
-* Executing Database Operations: Any read/write operation in Dynamo is handled by a node also known as coordinator node.
-  This node is the first accessible node among the top `N` nodes in *preference list* (Discussed in replication section).
-  To perform the read/write operation coordinator node communicates with all `N` nodes in the* preference list. *Any node that is experiencing an outage or is unaccessible due to network failure is skipped.
-  To maintain consistency, Dynamo uses a [quorum based approach](https://distributed-computing-musings.com/2022/01/replication-maintaining-a-quorum/) where it consists of two configurable parameters `R & W.`
-  To maintain the quorum, `R` & `W` are set so that `R + W > N.`
-* Handling Temporary Failures: Using a traditional quorum based approach, Dynamo runs a risk of sacrificing the availability of its storage system.
-  The requirements for quorum can be broken in case nodes inside the *preference list *goes down or nodes in the list are unreachable due to partition failure.
-  To overcome this, Dynamo makes use of [Sloppy Quorum &amp; Hinted hand-off.](https://distributed-computing-musings.com/2022/05/sloppy-quorum-and-hinted-handoff-quorum-in-the-times-of-failure/) Doing this all read & writes are performed on first `N` healthy nodes which may not be necessarily first `N` nodes on the hash ring.
-* Handling Permanent Failures: Hinted handoff has an edge case where the node with hinted message might go down permanently before it has transmitted the message to original node. In this case we run into the risk of compromising the durability of our storage system.
-  This might have a cascading effect where we end up with inconsistent data and might not realize the out of sync state before it is too late. To overcome this Dynamo makes use of [Merkle tree](https://en.wikipedia.org/wiki/Merkle_tree) which is an anti-entropy protocol.
-  Merkle tree is also a well known concept in blockchain technology.
-  Dynamo uses Merkle tree to detect inconsistencies among replica nodes and stop the spread of outdated data among replica nodes.
-* Membership & Failure Detection: Dynamo uses a [gossip-based protocol](https://en.wikipedia.org/wiki/Gossip_protocol#:~:text=A%20gossip%20protocol%20or%20epidemic,all%20members%20of%20a%20group.) to provide a consistent view of nodes in the system to other nodes.
-  So whenever a new node is added to the system or a node goes down, other nodes in the system communicate using this protocol to figure out the state of nodes in the storage system.
-  The gossip based mechanism is also useful for failure detection. Information about nodes that are marked as failed is propagated to other nodes which can use this information to avoid unnecessary communication during database operations.
+* 分区：为了持续扩展存储系统，Dynamo 需要在节点达到容量阈值时将数据分区到多个节点。
+  为了实现分区，Dynamo 依赖于 [一致性哈希](https://distributed-computing-musings.com/2022/01/partitioning-consistent-hashing/)。
+  一致性哈希的基本实现对不均匀的数据分布存在一些问题。
+  因此，Dynamo 在一致性哈希环上使用虚拟节点来更均匀地分布数据。
+* 复制：由于高可用性是 Dynamo 的关键需求，持久化到存储层的任何键都存储在 `N` 个节点上。
+  复制由协调器执行，该协调器根据一致性哈希算法将键存储在环中分配的节点上，并额外复制到环中顺时针方向的 `N-1` 个节点。
+  负责存储该键的 `N` 个节点列表称为 **preference list**。
+* 数据版本控制：Dynamo 侧重于提供最终一致性，因此可能出现 `put()` 操作成功但更新未持久化到所有节点的场景。
+  同时，Dynamo 将故障视为正常情况，并将故障视为事件而非异常状态。
+  这些故障可能是节点故障，也可能是网络中断导致的分区故障。Dynamo 即使在故障状态下也会持久化与键相关的每次更新，并使用 [vector clock](https://distributed-computing-musings.com/2022/05/vector-clocks-keeping-time-in-check/) 来找出与键相关的更新的正确顺序。
+  Vector clock 用于发现在多个节点或分区上对某个键发生的更新之间的因果关系。
+* 执行数据库操作：Dynamo 中的任何读写操作都由一个节点（也称为协调器节点）处理。
+  该节点是 **preference list**（在复制部分讨论）中前 `N` 个节点中第一个可访问的节点。
+  为了执行读写操作，协调器节点与 **preference list** 中的所有 `N` 个节点通信。任何发生故障或由于网络故障不可访问的节点将被跳过。
+  为了维护一致性，Dynamo 使用 [基于 quorum 的方法](https://distributed-computing-musings.com/2022/01/replication-maintaining-a-quorum/)，包含两个可配置参数 `R` 和 `W`。
+  为了维护 quorum，`R` 和 `W` 的设置满足 `R + W > N`。
+* 处理临时故障：使用传统的基于 quorum 的方法，Dynamo 面临牺牲存储系统可用性的风险。
+  当 **preference list** 中的节点宕机或由于分区故障不可达时，quorum 的要求可能被打破。
+  为了克服这一点，Dynamo 使用 [Sloppy Quorum 和 Hinted hand-off](https://distributed-computing-musings.com/2022/05/sloppy-quorum-and-hinted-handoff-quorum-in-the-times-of-failure/)。这样一来，所有读写操作都在前 `N` 个健康节点上执行，这些节点不一定是哈希环上的前 `N` 个节点。
+* 处理永久性故障：Hinted handoff 存在一个边界情况，即携带 hinted 消息的节点可能在将消息传输到原始节点之前永久宕机。在这种情况下，我们面临损害存储系统持久性的风险。
+  这可能会产生级联效应，导致数据不一致，并且可能直到为时已晚才意识到数据不同步的状态。为了克服这一点，Dynamo 使用 [Merkle tree](https://en.wikipedia.org/wiki/Merkle_tree)，这是一种 anti-entropy 协议。
+  Merkle tree 也是区块链技术中一个众所周知的概念。
+  Dynamo 使用 Merkle tree 来检测副本节点之间的不一致性，并阻止过时数据在副本节点间传播。
+* 成员管理和故障检测：Dynamo 使用 [基于 gossip 的协议](https://en.wikipedia.org/wiki/Gossip_protocol) 向其他节点提供系统中节点的一致视图。
+  因此，每当新节点加入系统或节点宕机时，系统中的其他节点使用该协议进行通信，以确定存储系统中节点的状态。
+  基于 gossip 的机制对于故障检测也很有用。被标记为故障的节点信息会传播到其他节点，以便在数据库操作期间避免不必要的通信。
 
-On a high-level, Dynamo comprises of three main components which are request coordination, membership & failure detection and local persistence engine.
+从高层次来看，Dynamo 包含三个主要组件：请求协调、成员管理和故障检测，以及本地持久化引擎。
 
 ## Learnings
 
-There are a certain set of learnings that have come from building Dynamo and which has led to adding more improvements in the design of this data store.
-Some of these learnings are as below:
+从构建 Dynamo 的过程中得到了一些经验教训，这些教训促使对该数据存储的设计进行了更多改进。
+部分经验教训如下：
 
-* Though the primary focus of Dynamo is on availability, performance is also of essence at Amazon’s scale.
-  Certain applications might have higher requirements for performance when dealing with critical user facing flow.
-  Dynamo caters to this by providing an option to compromise on durability of data in exchange of an elevated performance.
-  It is done by providing an in-memory buffer which stores the client updates and is written to storage layer at regular intervals.
-  This also improves the read performance as now application will first read from this buffer and then route the request to storage if record is not found in buffer.
-  This elevates the performance as now each update is not required to be persisted on disk in order to send a successful response
-  but at the same time introduces a new set of challenges in terms of durability as now the node which holds the buffer can go down before the changes are persisted on storage node.
-* Dynamo uses consistent hashing to store data across a set of nodes.
-  With time these nodes can encounter an imbalance in traffic they are processing and this needs to be kept in check to maintain the overall health of system.
-  Dynamo has provided a threshold percentage for load on any node and if a node crosses this threshold in terms of traffic it is serving then it is marked as out of balance.
-  Dynamo’s partitioning methodology has evolved over time with focus towards distributing data across the nodes as evenly as possible.
-* Some applications might require stronger hold on the consistency guarantees and therefore Dynamo provides the control of data consistency to developers by making `N, R & W `of the storage system configurable.
-  So if your application requires strong consistency and you are ok with compromising the write traffic then you can set `W=N & R=1` as an extreme measure.
-  Now an update needs to be posted on all nodes before you can send a successful response to client.
-  On other extreme if you are ok stale results but want to make your write requests as fast as possible then you can set `W=1` so that write succeeds if it has been persisted on even a single node.
-  All this control is with the developer so that they can update it on need to need basis.
+* 尽管 Dynamo 的主要关注点是可用性，但在 Amazon 的规模下，性能也同样重要。
+  某些应用程序在处理关键用户面向流程时可能对性能有更高要求。
+  Dynamo 通过提供以数据持久性换取更高性能的选项来满足这一需求。
+  这通过提供内存缓冲区来实现，该缓冲区存储客户端更新，并定期写入存储层。
+  这还提高了读取性能，因为应用程序将首先从此缓冲区读取，如果未找到记录，再将请求路由到存储。
+  这提升了性能，因为每次更新不再需要持久化到磁盘才能发送成功响应，
+  但同时也引入了持久性方面的新挑战，因为持有缓冲区的节点可能在更改持久化到存储节点之前宕机。
+* Dynamo 使用一致性哈希将数据存储在一组节点上。
+  随着时间的推移，这些节点处理流量可能出现不平衡，需要进行检查以维护系统的整体健康。
+  Dynamo 为每个节点的负载设定了阈值百分比，如果节点在流量方面超过此阈值，则标记为不平衡。
+  Dynamo 的分区方法随着时间的推移不断演进，重点是将数据尽可能均匀地分布在节点之间。
+* 某些应用程序可能对一致性保证有更强的要求，因此 Dynamo 通过使存储系统的 `N`、`R` 和 `W` 可配置，将数据一致性的控制权交给开发者。
+  因此，如果应用程序需要强一致性，并且可以接受写入流量受损，那么可以将 `W=N` 和 `R=1` 作为极端措施。
+  这样一来，更新需要发布到所有节点才能向客户端发送成功响应。
+  另一个极端是，如果能够接受过时结果，但希望写入请求尽可能快，可以将 `W=1`，这样只要写入选定节点就成功。
+  所有这些控制权都交给开发者，以便他们可以根据需要随时更新。
 
 ## Links
 
 ## References
 
-1. [Dynamo: Amazon’s Highly Available Key-value Store](https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf)
-2. [Paper Notes: Dynamo – Amazon’s Highly Available Key-value Store](https://distributed-computing-musings.com/2022/05/paper-notes-dynamo-amazons-highly-available-key-value-store/)
+1. [Dynamo: Amazon's Highly Available Key-value Store](https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf)
+2. [Paper Notes: Dynamo – Amazon's Highly Available Key-value Store](https://distributed-computing-musings.com/2022/05/paper-notes-dynamo-amazons-highly-available-key-value-store/)

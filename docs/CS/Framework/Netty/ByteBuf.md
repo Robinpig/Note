@@ -1,15 +1,15 @@
 ## Introduction
 
-Netty uses its own buffer API instead of NIO [ByteBuffer](/docs/CS/Java/JDK/IO/NIO.md?id=Buffer) to represent a sequence of bytes.
-This approach has significant advantages over using ByteBuffer. 
-Netty's new buffer type, ChannelBuffer has been designed from the ground up to address the problems of ByteBuffer and to meet the daily needs of network application developers. 
-To list a few cool features:
+Netty 使用自己的 Buffer API 而不是 NIO 的 [ByteBuffer](/docs/CS/Java/JDK/IO/NIO.md?id=Buffer) 来表示字节序列。
+相比使用 ByteBuffer，这种方法具有显著优势。
+Netty 新的缓冲区类型 ChannelBuffer 从头设计，旨在解决 ByteBuffer 的问题并满足网络应用开发者的日常需求。
+以下是一些出色的特性：
 
-- You can define your own buffer type if necessary.
-- Transparent zero copy is achieved by a built-in composite buffer type.
-- A dynamic buffer type is provided out-of-the-box, whose capacity is expanded on demand, just like StringBuffer.
-- There's no need to call flip() anymore.
-- It is often faster than ByteBuffer.
+- 如有需要，你可以定义自己的缓冲区类型。
+- 通过内置的复合缓冲区类型实现透明零拷贝。
+- 开箱即用的动态缓冲区类型，其容量可按需扩展，就像 StringBuffer 一样。
+- 无需再调用 flip() 方法。
+- 通常比 ByteBuffer 更快。
 
 
 
@@ -132,26 +132,23 @@ public ByteBuf capacity(int newCapacity) {
 
 
 
-The general rule of thumb is that the party that accesses a reference-counted object last is also responsible for the destruction of that reference-counted object. Specifically:
+一般的经验法则是，最后一个访问引用计数对象的组件也负责销毁该引用计数对象。具体来说：
 
-- If a sending component is supposed to pass a reference-counted object to another receiving component, the sending component usually does not need to destroy it but defers that decision to the receiving component.
-- If a component consumes a reference-counted object and knows nothing else will access it anymore (i.e., does not pass along a reference to yet another component), the component should destroy it.
-
-
+- 如果发送组件需要将引用计数对象传递给另一个接收组件，发送组件通常不需要销毁它，而是将这一决定推迟给接收组件。
+- 如果某个组件消费了一个引用计数对象，并且知道没有其他组件会再访问它（即，没有将引用传递给其他组件），则该组件应销毁它。
 
 
 
-`ByteBuf.duplicate()`, `ByteBuf.slice()` and `ByteBuf.order(ByteOrder)` create a *derived* buffer which shares the memory region of the parent buffer. 
-A derived buffer does not have its own reference count, but shares the reference count of the parent buffer.
+`ByteBuf.duplicate()`、`ByteBuf.slice()` 和 `ByteBuf.order(ByteOrder)` 创建**派生**缓冲区，与父缓冲区共享内存区域。
+派生缓冲区没有自己的引用计数，而是共享父缓冲区的引用计数。
 
 
-In contrast, `ByteBuf.copy()` and `ByteBuf.readBytes(int)` are *not derived* buffers. The returned `ByteBuf` is allocated and will need to be released.
+相比之下，`ByteBuf.copy()` 和 `ByteBuf.readBytes(int)` 不是派生缓冲区。返回的 `ByteBuf` 是新分配的，需要手动释放。
 
 
-
-Sometimes, a `ByteBuf` is contained by a buffer holder, such as `DatagramPacket`, `HttpContent`, and `WebSocketframe`.
-Those types extend a common interface called `ByteBufHolder`.
-A buffer holder shares the reference count of the buffer it contains, just like a derived buffer.
+有时，`ByteBuf` 被包含在缓冲区持有者中，例如 `DatagramPacket`、`HttpContent` 和 `WebSocketframe`。
+这些类型扩展了一个名为 `ByteBufHolder` 的通用接口。
+缓冲区持有者与其包含的缓冲区共享引用计数，就像派生缓冲区一样。
 
 
 > [!NOTE]
@@ -162,16 +159,14 @@ A buffer holder shares the reference count of the buffer it contains, just like 
 
 
 
-
-
-If you are in doubt or you want to simplify releasing the messages, you can use `ReferenceCountUtil.release()`.
-Alternatively, you could consider extending `SimpleChannelHandler` which calls `ReferenceCountUtil.release(msg)` for all messages you receive.
+如果你有疑问或想简化消息释放，可以使用 `ReferenceCountUtil.release()`。
+或者，可以考虑继承 `SimpleChannelHandler`，它会对接收到的所有消息调用 `ReferenceCountUtil.release(msg)`。
 
 
 
 ### RefCnt
 
-refCnt use AtomicIntegerFieldUpdater rather than AtomicInteger to reduce memory
+refCnt 使用 AtomicIntegerFieldUpdater 而非 AtomicInteger 以减少内存
 
 ```java
 public abstract class AbstractReferenceCountedByteBuf extends AbstractByteBuf {
@@ -521,9 +516,9 @@ public final class ChannelOutboundBuffer {
 
 addMessage
 
-The addMessage method in ChannelOutboundBuffer should add the message to the "unflushed" buffer before calling incrementPendingOutboundBytes since 
-incrementPendingOutboundBytes may call fireChannelWritabilityChanged which could trigger a user handler to write a second message 
-and could thus save the messages in the "unflushed" buffer in the wrong order.
+ChannelOutboundBuffer 中的 addMessage 方法应在调用 incrementPendingOutboundBytes 之前将消息添加到"未 flush"缓冲区，因为
+incrementPendingOutboundBytes 可能会调用 fireChannelWritabilityChanged，从而触发用户 handler 写入第二条消息，
+这可能导致消息在"未 flush"缓冲区中顺序错乱。
 
 ```java
 public final class ChannelOutboundBuffer {
@@ -636,7 +631,7 @@ DefaultResourceLeak(
 AbstractByteBufAllocator
 
 #### Report Level
-Represents the level of resource leak detection.
+表示资源泄漏检测的级别。
 
 - DISABLED
 - SIMPLE    SimpleLeakAwareByteBuf
@@ -671,16 +666,16 @@ protected static ByteBuf toLeakAwareBuffer(ByteBuf buf) {
 
 
 
-### Leak detection levels
+### 泄漏检测级别
 
-There are currently 4 levels of leak detection:
+目前有 4 个泄漏检测级别：
 
-- `DISABLED` - disables leak detection completely. Not recommended.
-- `SIMPLE` - tells if there is a leak or not for 1% of buffers. Default.
-- `ADVANCED` - tells where the leaked buffer was accessed for 1% of buffers.
-- `PARANOID` - Same with `ADVANCED` except that it's for every single buffer. Useful for automated testing phase. You could fail the build if the build output contains '`LEAK: `'.
+- `DISABLED` - 完全禁用泄漏检测。不推荐。
+- `SIMPLE` - 检测 1% 的缓冲区是否存在泄漏。默认值。
+- `ADVANCED` - 检测 1% 的缓冲区并显示泄漏缓冲区的访问位置。
+- `PARANOID` - 与 `ADVANCED` 相同，但针对每一个缓冲区。适用于自动化测试阶段。如果构建输出包含 '`LEAK: `'，可以使构建失败。
 
-You can specify the leak detection level as a JVM option `-Dio.netty.leakDetection.level`
+可以通过 JVM 选项 `-Dio.netty.leakDetection.level` 指定泄漏检测级别
 
 ```shell
 java -Dio.netty.leakDetection.level=advanced ...
@@ -694,7 +689,7 @@ java -Dio.netty.leakDetection.level=advanced ...
 
 ### DefaultResourceLeak
 
-add into allLeaks when created and remove when reference count == 0
+创建时添加到 allLeaks，引用计数为 0 时移除
 
 ```java
   private static final class DefaultResourceLeak<T>
@@ -841,9 +836,9 @@ private static final class DefaultResourceLeak<T>
 
 ### track
 
-track when newBuffer()
+在 newBuffer() 时进行追踪
 
-random 1/128 report if level < PARANOID, report and new DefaultResourceLeak
+如果 level < PARANOID，随机 1/128 概率报告，否则报告并创建新的 DefaultResourceLeak
 
 ```java
 private DefaultResourceLeak track0(T obj) {
@@ -897,7 +892,7 @@ private void reportLeak() {
 }
 ```
 
-dispose if reference still in allLeaks after clear ByteBuf
+如果在 clear ByteBuf 后引用仍在 allLeaks 中，则 dispose
 ```java
 boolean dispose() {
     // Clears this reference object. 
@@ -909,19 +904,19 @@ boolean dispose() {
 
 #### record
 
-This method works by exponentially backing off as more records are present in the stack. 
-Each record has a 1 / 2^n chance of dropping the top most record and replacing it with itself. This has a number of convenient properties:
+此方法通过指数退避来工作，随着栈中记录增多而降低记录频率。
+每条记录有 1 / 2^n 的概率丢弃栈顶记录并替换为自身。这具有许多便捷特性：
 
-- The current record is always recorded. This is due to the compare and swap dropping the top most record, rather than the to-be-pushed record.
-- The very last access will always be recorded. This comes as a property of 1.
-- It is possible to retain more records than the target, based upon the probability distribution.
-- It is easy to keep a precise record of the number of elements in the stack, since each element has to know how tall the stack is.
+- 当前记录总会被记录。这是因为 compare and swap 丢弃的是栈顶记录，而不是待推入的记录。
+- 最后一次访问总会被记录。这是特性 1 的推论。
+- 根据概率分布，可以保留比目标更多的记录。
+- 很容易精确记录栈中元素的数量，因为每个元素需要知道栈的深度。
 
-In this particular implementation, there are also some advantages. A thread local random is used to decide if something should be recorded. 
-This means that if there is a deterministic access pattern, it is now possible to see what other accesses occur, rather than always dropping them. 
-Second, after TARGET_RECORDS accesses, backoff occurs. This matches typical access patterns, where there are either a high number of accesses (i.e. a cached buffer), or low (an ephemeral buffer), but not many in between. 
-The use of atomics avoids serializing a high number of accesses, when most of the records will be thrown away. 
-High contention only happens when there are very few existing records, which is only likely when the object isn't shared! If this is a problem, the loop can be aborted and the record dropped, because another thread won the race.
+在这个特定实现中，还有一些其他优势。使用线程本地随机数来决定是否应该记录某次访问。
+这意味着如果存在确定性的访问模式，现在可以看到其他访问的发生情况，而不是总是丢弃它们。
+其次，在达到 TARGET_RECORDS 次访问后，开始退避。这与典型的访问模式相匹配——要么大量访问（如缓存缓冲区），要么少量访问（如临时缓冲区），很少有中间情况。
+使用原子操作避免了在大多数记录将被丢弃时序列化大量访问。
+高竞争只发生在已有记录非常少的情况下，而这只有在对象不被共享时才会发生！如果这是一个问题，可以中止循环并丢弃记录，因为另一个线程赢得了竞争。
 
 ```java
 private void record0(Object hint) {
@@ -956,12 +951,12 @@ private void record0(Object hint) {
 
 
 
-### Best Practices
+### 最佳实践
 
-- Run your unit tests and integration tests at `PARANOID` leak detection level, as well as at `SIMPLE` level.
-- Canary your application before rolling out to the entire cluster at `SIMPLE` level for a reasonably long time to see if there's a leak.
-- If there is a leak, canary again at `ADVANCED` level to get some hints about where the leak is coming from.
-- Do not deploy an application with a leak to the entire cluster.
+- 在 `PARANOID` 和 `SIMPLE` 泄漏检测级别下运行单元测试和集成测试。
+- 在部署到整个集群之前，先在 `SIMPLE` 级别下灰度运行你的应用一段合理的时间，检查是否存在泄漏。
+- 如果存在泄漏，在 `ADVANCED` 级别下再次灰度，获取泄漏来源的线索。
+- 不要将有泄漏的应用部署到整个集群。
 
 
 > [!TIP]

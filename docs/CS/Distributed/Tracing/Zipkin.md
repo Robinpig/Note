@@ -1,24 +1,20 @@
 ## Introduction
 
-[Zipkin](https://zipkin.io/) is a distributed tracing system.
-It helps gather timing data needed to troubleshoot latency problems in service architectures.
-Features include both the collection and lookup of this data.
-
-
+[Zipkin](https://zipkin.io/) 是一个分布式追踪系统。
+它帮助收集用于排查服务架构中延迟问题所需的时序数据。
+功能包括数据的收集和查找。
 
 ### Architecture
 
-Tracers live in your applications and record timing and metadata about operations that took place. 
-They often instrument libraries, so that their use is transparent to users. 
-The trace data collected is called a Span.
+Tracer 存在于应用程序中，记录所发生操作的时序和元数据。
+它们通常对库进行埋点，以便对用户透明使用。
+收集到的追踪数据称为 Span。
 
-Instrumentation is written to be safe in production and have little overhead. 
-For this reason, they only propagate IDs in-band, to tell the receiver there’s a trace in progress.
-Trace instrumentation report spans asynchronously to prevent delays or failures relating to the tracing system from delaying or breaking user code.
+埋点被编写为在生产环境中安全且开销很小。
+因此，它们仅带内传播 ID，以告知接收方有追踪正在进行。
+追踪埋点异步报告 span，以防止与追踪系统相关的延迟或故障延迟或破坏用户代码。
 
-Here’s a diagram describing this flow from Zipkin homepage:
-
-
+以下是来自 Zipkin 主页的描述此流程的示意图：
 
 <div style="text-align: center;">
 
@@ -27,21 +23,18 @@ Here’s a diagram describing this flow from Zipkin homepage:
 </div>
 
 <p style="text-align: center;">
-Fig.1. Architecture
+Fig.1. 架构
 </p>
-
-
-
 
 ## Transport
 
-Spans sent by the instrumented library must be transported from the services being traced to Zipkin collectors.
-There are three primary transports: HTTP, Kafka and Scribe.
+被埋点库发送的 span 必须从被追踪的服务传输到 Zipkin collector。
+有三种主要的传输方式：HTTP、Kafka 和 Scribe。
 
 ### Reporter
 
-The component in an instrumented app that sends data to Zipkin is called a Reporter.
-Reporters send trace data via one of several transports to Zipkin collectors, which persist trace data to storage.
+被埋点应用中向 Zipkin 发送数据的组件称为 Reporter。
+Reporter 通过多种传输方式之一将追踪数据发送到 Zipkin collector，collector 将追踪数据持久化到存储中。
 
 ```java
 public interface Reporter<S> {
@@ -73,55 +66,57 @@ public interface Reporter<S> {
 ```
 
 #### Sleuth
+
 ```java
-	private static final class CompositeReporter implements Reporter<zipkin2.Span> {
+private static final class CompositeReporter implements Reporter<zipkin2.Span> {
 
-		private static final Log log = LogFactory.getLog(CompositeReporter.class);
+    private static final Log log = LogFactory.getLog(CompositeReporter.class);
 
-		private final List<SpanAdjuster> spanAdjusters;
+    private final List<SpanAdjuster> spanAdjusters;
 
-		private final Reporter<zipkin2.Span> spanReporter;
+    private final Reporter<zipkin2.Span> spanReporter;
 
-		private CompositeReporter(List<SpanAdjuster> spanAdjusters,
-				List<Reporter<Span>> spanReporters) {
-			this.spanAdjusters = spanAdjusters;
-			this.spanReporter = spanReporters.size() == 1 ? spanReporters.get(0)
-					: new ListReporter(spanReporters);
-		}
+    private CompositeReporter(List<SpanAdjuster> spanAdjusters,
+            List<Reporter<Span>> spanReporters) {
+        this.spanAdjusters = spanAdjusters;
+        this.spanReporter = spanReporters.size() == 1 ? spanReporters.get(0)
+                : new ListReporter(spanReporters);
+    }
 
-		@Override
-		public void report(Span span) {
-			Span spanToAdjust = span;
-			for (SpanAdjuster spanAdjuster : this.spanAdjusters) {
-				spanToAdjust = spanAdjuster.adjust(spanToAdjust);
-			}
-			this.spanReporter.report(spanToAdjust);
-		}
+    @Override
+    public void report(Span span) {
+        Span spanToAdjust = span;
+        for (SpanAdjuster spanAdjuster : this.spanAdjusters) {
+            spanToAdjust = spanAdjuster.adjust(spanToAdjust);
+        }
+        this.spanReporter.report(spanToAdjust);
+    }
 
-		private static final class ListReporter implements Reporter<zipkin2.Span> {
+    private static final class ListReporter implements Reporter<zipkin2.Span> {
 
-			private final List<Reporter<Span>> spanReporters;
+        private final List<Reporter<Span>> spanReporters;
 
-			private ListReporter(List<Reporter<Span>> spanReporters) {
-				this.spanReporters = spanReporters;
-			}
+        private ListReporter(List<Reporter<Span>> spanReporters) {
+            this.spanReporters = spanReporters;
+        }
 
-			@Override
-			public void report(Span span) {
-				for (Reporter<zipkin2.Span> spanReporter : this.spanReporters) {
-					try {
-						spanReporter.report(span);
-					}
-					catch (Exception ex) {
-						log.warn("Exception occurred while trying to report the span " + span, ex);
-					}
-				}
-			}
-		}
-
-	}
+        @Override
+        public void report(Span span) {
+            for (Reporter<zipkin2.Span> spanReporter : this.spanReporters) {
+                try {
+                    spanReporter.report(span);
+                }
+                catch (Exception ex) {
+                    log.warn("Exception occurred while trying to report the span " + span, ex);
+                }
+            }
+        }
+    }
+}
 ```
+
 #### Async
+
 ```java
 static final class BoundedAsyncReporter<S> extends AsyncReporter<S> {
     static final Logger logger = Logger.getLogger(BoundedAsyncReporter.class.getName());
@@ -147,14 +142,12 @@ static final class BoundedAsyncReporter<S> extends AsyncReporter<S> {
     @Override
     public void report(S next) {
         if (next == null) throw new NullPointerException("span == null");
-        // Lazy start so that reporters never used don't spawn threads
         if (started.compareAndSet(false, true)) startFlusherThread();
         metrics.incrementSpans(1);
         int nextSizeInBytes = encoder.sizeInBytes(next);
         int messageSizeOfNextSpan = sender.messageSizeInBytes(nextSizeInBytes);
         metrics.incrementSpanBytes(nextSizeInBytes);
         if (closed.get() ||
-                // don't enqueue something larger than we can drain
                 messageSizeOfNextSpan > messageMaxBytes ||
                 !pending.offer(next, nextSizeInBytes)) {
             metrics.incrementSpansDropped(1);
@@ -167,65 +160,44 @@ static final class BoundedAsyncReporter<S> extends AsyncReporter<S> {
         flush(BufferNextMessage.create(encoder.encoding(), messageMaxBytes, 0));
     }
 
-
     void flush(BufferNextMessage<S> bundler) {
         pending.drainTo(bundler, bundler.remainingNanos());
-
-        // record after flushing reduces the amount of gauge events vs on doing this on report
         metrics.updateQueuedSpans(pending.count);
         metrics.updateQueuedBytes(pending.sizeInBytes);
-
-        // loop around if we are running, and the bundle isn't full
-        // if we are closed, try to send what's pending
         if (!bundler.isReady() && !closed.get()) return;
-
-        // Signal that we are about to send a message of a known size in bytes
         metrics.incrementMessages();
         metrics.incrementMessageBytes(bundler.sizeInBytes());
-
-        // Create the next message. Since we are outside the lock shared with writers, we can encode
         ArrayList<byte[]> nextMessage = new ArrayList<>(bundler.count());
         bundler.drain(new SpanWithSizeConsumer<S>() {
             @Override public boolean offer(S next, int nextSizeInBytes) {
-                nextMessage.add(encoder.encode(next)); // speculatively add to the pending message
+                nextMessage.add(encoder.encode(next));
                 if (sender.messageSizeInBytes(nextMessage) > messageMaxBytes) {
-                    // if we overran the message size, remove the encoded message.
                     nextMessage.remove(nextMessage.size() - 1);
                     return false;
                 }
                 return true;
             }
         });
-
         try {
             sender.sendSpans(nextMessage).execute();
         } catch (Throwable t) {
-            // In failure case, we increment messages and spans dropped.
             int count = nextMessage.size();
             Call.propagateIfFatal(t);
             metrics.incrementMessagesDropped(t);
             metrics.incrementSpansDropped(count);
-
             Level logLevel = FINE;
-
             if (shouldWarnException) {
                 logger.log(WARNING, "Spans were dropped due to exceptions. "
                         + "All subsequent errors will be logged at FINE level.");
                 logLevel = WARNING;
                 shouldWarnException = false;
             }
-
             if (logger.isLoggable(logLevel)) {
                 logger.log(logLevel,
                         format("Dropped %s spans due to %s(%s)", count, t.getClass().getSimpleName(),
                                 t.getMessage() == null ? "" : t.getMessage()), t);
             }
-
-            // Raise in case the sender was closed out-of-band.
             if (t instanceof ClosedSenderException) throw (ClosedSenderException) t;
-
-            // Old senders in other artifacts may be using this less precise way of indicating they've been closed
-            // out-of-band.
             if (t instanceof IllegalStateException && t.getMessage().equals("closed"))
                 throw (IllegalStateException) t;
         }
@@ -234,20 +206,19 @@ static final class BoundedAsyncReporter<S> extends AsyncReporter<S> {
 ```
 
 ## Collector
-Once the trace data arrives at the Zipkin collector daemon, it is validated, stored, and indexed for lookups by the Zipkin collector.
 
+一旦追踪数据到达 Zipkin collector 守护进程，它就会被验证、存储和索引，以供 Zipkin collector 查询。
 
 ## Storage
 
-Zipkin was initially built to store data on Cassandra since Cassandra is scalable, has a flexible schema, and is heavily used within Twitter.
-However, we made this component pluggable. In addition to Cassandra, we natively support ElasticSearch and MySQL. 
-Other back-ends might be offered as third party extensions.
+Zipkin 最初构建时使用 Cassandra 存储数据，因为 Cassandra 可扩展、具有灵活的模式，并且在 Twitter 内部被广泛使用。
+然而，我们使这个组件可插拔。除了 Cassandra，我们还原生支持 ElasticSearch 和 MySQL。
+其他后端可能作为第三方扩展提供。
 
 ## Query Service
 
-Once the data is stored and indexed, we need a way to extract it. The query daemon provides a simple JSON API for finding and retrieving traces.
-The primary consumer of this API is the Web UI.
-
+数据被存储和索引后，我们需要一种提取数据的方式。Query daemon 提供简单的 JSON API，用于查找和检索追踪。
+该 API 的主要消费者是 Web UI。
 
 ## Links
 

@@ -1,16 +1,9 @@
 ## Introduction
 
-
-
-1. Color Space Conversion
-2. Chrominance Downsampling
-3. Discrete Cosine Transform
-4. Quantization
-5. Run Length and Huffman Encoding
-
-
-
-
+1. 色彩空间转换
+2. 色度下采样
+3. 离散余弦变换
+4. 量化
+5. 游程编码和哈夫曼编码
 
 ## Links
-

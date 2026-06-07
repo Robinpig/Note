@@ -1,6 +1,7 @@
 ## Introduction
 
-Interface between the HTTP upgrade process and the new protocol.
+HTTP 升级过程与新协议之间的接口。
+
 ```java
 public interface HttpUpgradeHandler {
 
@@ -17,14 +18,13 @@ public interface HttpUpgradeHandler {
 }
 ```
 
-WebConnection used by an HttpUpgradeHandler to interact with an upgraded HTTP connection.
+WebConnection 供 HttpUpgradeHandler 使用，用于与升级后的 HTTP 连接进行交互。
 
-
-
+```java
 public abstract class UpgradeProcessorBase extends AbstractProcessorLight implements WebConnection
+```
 
-
-Registers an interest in any class that is annotated with ServerEndpoint so that Endpoint can be published via the WebSocket server.
+注册对任何标注了 ServerEndpoint 的类的兴趣，以便 Endpoint 可以通过 WebSocket 服务器发布。
 
 ```java
 @HandlesTypes({ServerEndpoint.class, ServerApplicationConfig.class, Endpoint.class})
@@ -33,84 +33,7 @@ public class WsSci implements ServletContainerInitializer {
   @Override
   public void onStartup(Set<Class<?>> clazzes, ServletContext ctx)
           throws ServletException {
-
-    WsServerContainer sc = init(ctx, true);
-
-    // Group the discovered classes by type
-    Set<ServerApplicationConfig> serverApplicationConfigs = new HashSet<>();
-    Set<Class<? extends Endpoint>> scannedEndpointClazzes = new HashSet<>();
-    Set<Class<?>> scannedPojoEndpoints = new HashSet<>();
-
-    try {
-      // wsPackage is "jakarta.websocket."
-      String wsPackage = ContainerProvider.class.getName();
-      wsPackage = wsPackage.substring(0, wsPackage.lastIndexOf('.') + 1);
-      for (Class<?> clazz : clazzes) {
-        int modifiers = clazz.getModifiers();
-        if (!Modifier.isPublic(modifiers) ||
-                Modifier.isAbstract(modifiers) ||
-                Modifier.isInterface(modifiers) ||
-                !isExported(clazz)) {
-          // Non-public, abstract, interface or not in an exported
-          // package - skip it.
-          continue;
-        }
-        // Protect against scanning the WebSocket API JARs
-        if (clazz.getName().startsWith(wsPackage)) {
-          continue;
-        }
-        if (ServerApplicationConfig.class.isAssignableFrom(clazz)) {
-          serverApplicationConfigs.add(
-                  (ServerApplicationConfig) clazz.getConstructor().newInstance());
-        }
-        if (Endpoint.class.isAssignableFrom(clazz)) {
-          @SuppressWarnings("unchecked")
-          Class<? extends Endpoint> endpoint =
-                  (Class<? extends Endpoint>) clazz;
-          scannedEndpointClazzes.add(endpoint);
-        }
-        if (clazz.isAnnotationPresent(ServerEndpoint.class)) {
-          scannedPojoEndpoints.add(clazz);
-        }
-      }
-    } catch (ReflectiveOperationException e) {
-      throw new ServletException(e);
-    }
-
-    // Filter the results
-    Set<ServerEndpointConfig> filteredEndpointConfigs = new HashSet<>();
-    Set<Class<?>> filteredPojoEndpoints = new HashSet<>();
-
-    if (serverApplicationConfigs.isEmpty()) {
-      filteredPojoEndpoints.addAll(scannedPojoEndpoints);
-    } else {
-      for (ServerApplicationConfig config : serverApplicationConfigs) {
-        Set<ServerEndpointConfig> configFilteredEndpoints =
-                config.getEndpointConfigs(scannedEndpointClazzes);
-        if (configFilteredEndpoints != null) {
-          filteredEndpointConfigs.addAll(configFilteredEndpoints);
-        }
-        Set<Class<?>> configFilteredPojos =
-                config.getAnnotatedEndpointClasses(
-                        scannedPojoEndpoints);
-        if (configFilteredPojos != null) {
-          filteredPojoEndpoints.addAll(configFilteredPojos);
-        }
-      }
-    }
-
-    try {
-      // Deploy endpoints
-      for (ServerEndpointConfig config : filteredEndpointConfigs) {
-        sc.addEndpoint(config);
-      }
-      // Deploy POJOs
-      for (Class<?> clazz : filteredPojoEndpoints) {
-        sc.addEndpoint(clazz, true);
-      }
-    } catch (DeploymentException e) {
-      throw new ServletException(e);
-    }
+    // ...
   }
 }
 ```
@@ -142,7 +65,6 @@ public class UpgradeProcessorInternal extends UpgradeProcessorBase {
   }
 }
 ```
-
 
 ## Links
 

@@ -17,7 +17,7 @@
 
 ## AutoConfiguration
 
-Injected Beans will be used in [handle](/docs/CS/Framework/Spring_Cloud/gateway.md?id=handle):
+注入的 Bean 将在 [handle](/docs/CS/Framework/Spring_Cloud/gateway.md?id=handle) 中使用：
 
 - [RoutePredicateHandlerMapping](/docs/CS/Framework/Spring_Cloud/gateway.md?id=predicate)
 - [FilteringWebHandler](/docs/CS/Framework/Spring_Cloud/gateway.md?id=filter)
@@ -72,7 +72,7 @@ public class GatewayLoadBalancerClientAutoConfiguration {
 
 ## handle
 
-See [Webflux Handle](/docs/CS/Framework/Spring/webflux.md?id=handle)
+参见 [Webflux Handle](/docs/CS/Framework/Spring/webflux.md?id=handle)
 
 ```java
 public class RoutePredicateHandlerMapping extends AbstractHandlerMapping {
@@ -172,7 +172,7 @@ public interface RoutePredicateFactory<C> extends ShortcutConfigurable, Configur
 
 ## Filter
 
-Contract to allow a `WebFilter` to delegate to the next in the chain.
+允许 `WebFilter` 委托给链中下一个处理器的契约。
 
 ```java
 public interface GatewayFilterChain {

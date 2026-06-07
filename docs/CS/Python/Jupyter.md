@@ -1,7 +1,7 @@
 ## Introduction
 
 
-Jupyter is a large umbrella project that covers many different software offerings and tools, including the popular Jupyter Notebook and JupyterLab web-based notebook authoring and editing applications.
+Jupyter 是一个大型伞状项目，涵盖许多不同的软件产品与工具，包括流行的 Jupyter Notebook 和 JupyterLab 基于 Web 的笔记本编写和编辑应用程序。
 
 ## Installation
 
@@ -9,13 +9,13 @@ Jupyter is a large umbrella project that covers many different software offering
 
 ### JupyterLab
 
-Install JupyterLab with pip:
+使用 pip 安装 JupyterLab：
 
-Note: If you install JupyterLab with conda or mamba, we recommend using the conda-forge channel.
-Once installed, launch JupyterLab with:
+注意：如果用 conda 或 mamba 安装 JupyterLab，建议使用 conda-forge 频道。
+安装后，使用以下命令启动 JupyterLab：
 Jupyter Notebook
-Install the classic Jupyter Notebook with:
-To run the notebook:
+安装经典 Jupyter Notebook：
+运行 notebook：
 
 https://tanbro.github.io/pytorch-tutorials-notebooks-zhs/beginner/blitz/tensor_tutorial/
 ARM mac install torch 和AMD显卡一样不支持CUDA

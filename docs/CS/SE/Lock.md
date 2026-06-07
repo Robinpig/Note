@@ -1,193 +1,185 @@
 ## Introduction
 
-We have two kinds of locks:
+我们有两种锁：
 
-- **Optimistic**: instead of blocking something potentially dangerous happens, we continue anyway, in the hope that everything will be ok.
-- **Pessimistic**: block access to the resource before operating on it, and we release the lock at the end.
+- **乐观锁**：不阻止可能危险的操作，继续执行，希望一切顺利。
+- **悲观锁**：在操作前阻塞对资源的访问，操作结束时释放锁。
 
-To use **optimistic** lock, we usually use a version field on the database record we have to handle, and when we update it, we check if the data we read has the same version of the data we are writing.
+使用**乐观锁**时，通常使用数据库记录上的版本字段，更新时检查读取的数据是否与正在写入的数据具有相同的版本。
 
-Database access libraries like [Hibernate](https://docs.jboss.org/hibernate/orm/current/userguide/html_single/Hibernate_User_Guide.html#locking-optimistic) usually provide facilities to use an optimistic lock.
+像 [Hibernate](https://docs.jboss.org/hibernate/orm/current/userguide/html_single/Hibernate_User_Guide.html#locking-optimistic) 这样的数据库访问库通常提供使用乐观锁的功能。
 
-The **pessimistic lock**, instead, will rely on an external system that will hold the lock for our microservices.
+**悲观锁**则依赖于一个外部系统来为我们的微服务持有锁。
 
-Locks are problematic by their very nature; perhaps we should seek to avoid using them unless we truly must.
+锁本质上是有问题的；除非确实必要，否则应避免使用。
 
 ## Evaluation Lcoks
 
-- provide mutual exclusion
-- fairness
-  - starve
-- performance
-  - lock-free
+- 提供互斥
+- 公平性
+  - 饥饿
+- 性能
+  - 无锁
   - MPSC
   - MPMC
 
 Dekker
 
-The simplest bit of hardware support to understand is known as a test-and-set (or atomic exchange1) instruction.
-Each architecture that supports test-and-set calls it by a different name.
-On SPARC it is called the load/store unsigned byte instruction (`ldstub`); on x86 it is the locked version of the atomic exchange (`xchg`).
+最容易理解的硬件支持是 test-and-set（或原子交换）指令。
+支持 test-and-set 的每种架构都有不同的名称。
+在 SPARC 上称为 load/store unsigned byte 指令（`ldstub`）；在 x86 上称为带有锁前缀的原子交换（`xchg`）。
 
-Another hardware primitive that some systems provide is known as the compare-and-swap instruction (as it is called on SPARC, for example), or compare-and-exchange (as it called on x86).
+某些系统提供的另一种硬件原语是 compare-and-swap 指令（例如在 SPARC 上），或 compare-and-exchange（在 x86 上）。
 
 ## Spin Locks
 
-To work correctly on a single processor, it requires a preemptive scheduler (i.e., one that will interrupt a thread via a timer, in order to run a different thread, from time to time).
-Without preemption, spin locks don’t make much sense on a single CPU, as a thread spinning on a CPU will never relinquish it.
+要在单处理器上正确工作，需要抢占式调度器（即通过定时器中断线程以运行其他线程的调度器）。
+没有抢占，自旋锁在单 CPU 上没有太大意义，因为在一个 CPU 上自旋的线程永远不会放弃它。
 
-Spin locks don’t provide any fairness guarantees. Indeed, a thread spinning may spin forever, under contention. Simple spin locks (as discussed thus far) are not fair and may lead to starvation.
+自旋锁不提供任何公平性保证。实际上，在竞争激烈时，自旋锁可能会永远旋转。简单的自旋锁不公平，可能导致饥饿。
 
-For spin locks, in the single CPU case, performance overheads can be quite painful; imagine the case where the thread holding the lock is preempted within a critical section.
-The scheduler might then run every other thread (imagine there are N − 1 others), each of which tries to acquire the lock.
-In this case, each of those threads will spin for the duration of a time slice before giving up the CPU, a waste of CPU cycles.
-However, on multiple CPUs, spin locks work reasonably well (if the number of threads roughly equals the number of CPUs).
-The thinking goes as follows: imagine Thread A on CPU 1 and Thread B on CPU 2, both contending for a lock. If Thread A (CPU 1) grabs the lock, and then Thread B tries to, B will spin (on CPU 2).
-However, presumably the critical section is short, and thus soon the lock becomes available, and is acquired by Thread B.
-Spinning to wait for a lock held on another processor doesn’t waste many cycles in this case, and thus can be effective.
+对于自旋锁，在单 CPU 情况下，性能开销可能非常大；想象持有锁的线程在临界区中被抢占的情况。
+调度器可能会运行所有其他线程（假设有 N-1 个），每个线程都尝试获取锁。
+在这种情况下，每个线程将旋转整个时间片才放弃 CPU，浪费 CPU 周期。
+然而，在多 CPU 上，自旋锁工作得相当好（如果线程数大致等于 CPU 数）。
+逻辑如下：想象 CPU 1 上的线程 A 和 CPU 2 上的线程 B 竞争一个锁。
+如果线程 A 拿到锁，然后线程 B 尝试获取，B 将在 CPU 2 上自旋。
+然而，临界区通常很短，因此锁很快变得可用，并被线程 B 获取。
+这种情况下，自旋等待另一个处理器持有的锁不会浪费太多周期，因此有效。
 
 ## Two-Phase Locks
 
 ## Distributed Lock
 
-Fault-tolerant consensus is expensive.
-Exclusive access by a single process (also known as locking) is cheap, but it is not fault-tolerant—if a process fails while it is holding a lock, no one else can access the resource.
-Adding a timeout to a lock makes a fault-tolerant lock or ‘lease’.
-Thus a process holds a lease on a state component or ‘resource’ until an expiration time; we say that the process is the ‘master’ for the resource while it holds the lease.
-No other process will touch the resource until the lease expires.
-For this to work, of course, the processes must have synchronized clocks.
-More precisely, if the maximum skew between the clocks of two processes is ε and process P’s lease expires at time t, then P knows that no other process will touch the resource before time t – ε on P’s clock.
+容错共识是昂贵的。
+单个进程的独占访问（也称为锁定）是廉价的，但不具备容错性——如果进程在持锁时失败，则其他人无法访问该资源。
+为锁添加超时使其成为容错锁或"lease"。
+因此，进程对状态组件或"资源"持有 lease 直到过期时间；我们说进程在持有 lease 期间是该资源的"master"。
+在 lease 到期之前，没有其他进程会接触该资源。
+当然，这需要进程具有同步时钟。
+更准确地说，如果两个进程时钟之间的最大偏差为 ε，进程 P 的 lease 在时间 t 过期，那么 P 知道在 P 时钟的 t - ε 时间之前没有其他进程会接触该资源。
 
-While it holds the lease the master can read and write the resource freely.
-Writes must take bounded time, so that they can be guaranteed either to fail or to precede any operation that starts after the lease expires;
-this can be a serious problem for a resource such as a SCSI disk, which has weak ordering guarantees and a long upper bound on the time a write can take.
+在持有 lease 期间，master 可以自由读写资源。
+写操作必须是有界时间的，以便保证要么失败，要么在 lease 过期后启动的任何操作之前完成；
+对于像 SCSI 磁盘这样具有弱排序保证和长写入时间上界的资源，这可能是一个严重问题。
 
-A process can keep control of a resource by renewing its lease before it expires.
-It can also release its lease, perhaps on demand.
-If you can’t talk to the process that holds the lease, however (perhaps because it has failed), you have to wait for the lease to expire before touching its resource.
-So there is a tradeoff between the cost of renewing a lease and the time you have to wait for the lease to expire after a (possible) failure.
-A short lease means a short wait during recovery but a higher cost to renew the lease.
-A long lease means a long wait during recovery but a lower cost to renew.
+进程可以通过在 lease 过期前续约来保持对资源的控制。
+也可以按需释放 lease。
+但如果无法与持有 lease 的进程通信（可能是因为它已失败），只能等待 lease 过期才能接触其资源。
+因此，续约成本与等待 lease 过期的时间之间存在权衡。
+短 lease 意味着恢复期间等待时间短，但续约成本高。
+长 lease 意味着恢复期间等待时间长，但续约成本低。
 
-As for optimistic lock, database access libraries like Hibernate usually provide facilities, but in a distributed scenario, we would use more specific solutions that are used to implement more complex algorithms like:
+对于乐观锁，像 Hibernate 这样的数据库访问库通常提供相关功能，但在分布式场景中，我们会使用更具体的解决方案来实现更复杂的算法，如：
 
-- [Redis](/docs/CS/DB/Redis/Lock.md) uses libraries that implement a lock algorithm like [ShedLock](https://github.com/lukas-krecan/ShedLock), and [Redisson](https://github.com/redisson/redisson/wiki/8.-Distributed-locks-and-synchronizers).
-  The first one provides lock implementation using also other systems like MongoDB, DynamoDB, and more.
-- [Zookeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md?id=lock) provides some recipes about locking.
-- [Hazelcast](https://hazelcast.com/blog/long-live-distributed-locks/) offers a lock system based on his [CP subsystem](https://docs.hazelcast.org/docs/3.12.3/manual/html-single/index.html#cp-subsystem).
+- [Redis](/docs/CS/DB/Redis/Lock.md) 使用实现锁算法的库，如 [ShedLock](https://github.com/lukas-krecan/ShedLock) 和 [Redisson](https://github.com/redisson/redisson/wiki/8.-Distributed-locks-and-synchronizers)。
+  前者还使用其他系统（如 MongoDB、DynamoDB 等）提供锁实现。
+- [Zookeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md?id=lock) 提供了一些关于锁的 recipes。
+- [Hazelcast](https://hazelcast.com/blog/long-live-distributed-locks/) 基于其 [CP subsystem](https://docs.hazelcast.org/docs/3.12.3/manual/html-single/index.html#cp-subsystem) 提供了锁系统。
 - [有赞 Bond](https://tech.youzan.com/bond/)
-
-
-
 
 数据库 select for update
 
-
-
-Redisson lua based on Redis single thread model
+Redisson lua 基于 Redis 单线程模型
 
 RedissonLock#unlockInnerAsync
 
-- delete whe decrement to zero
-- broadcast to waiting
+- 减到零时删除
+- 广播给等待者
 
-Implementing a pessimistic lock, we have a big issue; what happens if the lock owner doesn’t release it? The lock will be held forever and we could be in a **deadlock**.
-To prevent this issue, we will set an **expiration time** on the lock, so the lock will be **auto-released**.
+实现悲观锁有一个大问题：如果锁持有者不释放锁怎么办？锁将永远被持有，可能导致**死锁**。
+为防止此问题，我们为锁设置**过期时间**，这样锁将**自动释放**。
 
-But if the time expires before the task is finished by the first lock holder, another microservice can acquire the lock, and both lock holders can now release the lock, causing inconsistency.
-Remember, no timer assumption can be reliable in asynchronous networks.
+但如果第一个锁持有者的任务在时间到期前未完成，另一个微服务可以获取锁，然后两个锁持有者都可以释放锁，导致不一致。
+记住，在异步网络中，没有定时器假设是可靠的。
 
-We need to use a **fencing token,** which is incremented each time a microservice acquires a lock.
-This token must be passed to the lock manager when we release the lock, so if the first owner releases the lock before the second owner, the system will refuse the second lock release.
-Depending on the implementation, we can also decide to let win the second lock owner.
+我们需要使用**fencing token**，每次微服务获取锁时递增。
+释放锁时必须将此 token 传递给锁管理器，因此如果第一个持有者在第二个持有者之前释放锁，系统将拒绝第二次锁释放。
+根据实现，也可以决定让第二个锁持有者胜出。
 
-scenarios:
+场景：
 
-- lock timeout and retry
-- exclusion unlock
-- unlock gratefully before shutdown
-- reentrant lock
-- lock TTL
-- hot key
-
-
-
-
+- 锁超时重试
+- 独占解锁
+- 关闭前优雅解锁
+- 可重入锁
+- 锁 TTL
+- 热 key
 
 ## Lock-based Concurrent Data Structures
 
-The approximate counter works by representing a single logical counter via numerous local physical counters, one per CPU core, as well as a single global counter.
-Specifically, on a machine with four CPUs, there are four local counters and one global one.
-In addition to these counters, there are also locks: one for each local counter, and one for the global counter.
+近似计数器通过使用多个本地物理计数器（每个 CPU 核心一个）以及一个全局计数器来表示单个逻辑计数器。
+具体来说，在具有四个 CPU 的机器上，有四个本地计数器和一个全局计数器。
+除了这些计数器，还有锁：每个本地计数器一个，全局计数器一个。
 
-The basic idea of approximate counting is as follows.
-When a thread running on a given core wishes to increment the counter, it increments its local counter; access to this local counter is synchronized via the corresponding local lock.
-Because each CPU has its own local counter, threads across CPUs can update local counters without contention, and thus updates to the counter are scalable.
+近似计数的基本思想如下。
+当给定核心上运行的线程希望增加计数器时，它增加其本地计数器；通过相应的本地锁同步对该本地计数器的访问。
+因为每个 CPU 有自己的本地计数器，跨 CPU 的线程可以无竞争地更新本地计数器，因此对计数器的更新是可扩展的。
 
-However, to keep the global counter up to date (in case a thread wishes to read its value), the local values are periodically transferred to the global counter, by acquiring the global lock and incrementing it by the local counter’s value; the local counter is then reset to zero.
+然而，为了使全局计数器保持最新（以防线程需要读取其值），本地值定期传输到全局计数器：获取全局锁，将其增加本地计数器的值，然后将本地计数器重置为零。
 
-How often this local-to-global transfer occurs is determined by a threshold S.
-The smaller S is, the more the counter behaves like the non-scalable counter above; the bigger S is, the more scalable the counter, but the further off the global value might be from the actual count.
-One could simply acquire all the local locks and the global lock (in a specified order, to avoid deadlock) to get an exact value, but that is not scalable.
+本地到全局传输的频率由阈值 S 决定。
+S 越小，计数器行为越像不可扩展的计数器；S 越大，计数器越可扩展，但全局值可能偏离实际计数更远。
+可以获取所有本地锁和全局锁（按指定顺序以避免死锁）来获得精确值，但这不可扩展。
 
 ### Concurrent Linked List
 
-Enable more concurrency within a list is something called **hand-over-hand locking** (a.k.a. **lock coupling**).
-Instead of having a single lock for the entire list, you instead add a lock per node of the list.
-When traversing the list, the code first grabs the next node’s lock and then releases the current node’s lock (which inspires the name hand-over-hand).
+在列表中实现更高并发的是所谓的**hand-over-hand locking**（也称为**lock coupling**）。
+不是为整个列表使用单个锁，而是为列表的每个节点添加一个锁。
+遍历列表时，代码首先获取下一个节点的锁，然后释放当前节点的锁。
 
-Conceptually, a hand-over-hand linked list makes some sense; it enables a high degree of concurrency in list operations.
-However, in practice, it is hard to make such a structure faster than the simple single lock approach, as the overheads of acquiring and releasing locks for each node of a list traversal is prohibitive.
-Even with very large lists, and a large number of threads, the concurrency enabled by allowing multiple ongoing traversals is unlikely to be faster than simply grabbing a single lock, performing an operation,
-and releasing it. Perhaps some kind of hybrid (where you grab a new lock every so many nodes) would be worth investigating.
+概念上，hand-over-hand 链表有一定意义；它在列表操作中实现了高度并发。
+然而，在实践中，很难使这种结构比简单的单锁方法更快，因为遍历列表时为每个节点获取和释放锁的开销太大。
+即使对于非常大的列表和大量线程，允许多个并发遍历所带来的并发性也不太可能比简单地获取单个锁、执行操作并释放它更快。
+也许某种混合方式（每 N 个节点获取一个新锁）值得研究。
 
 ### Concurrent Queues
 
-Instead of having a single lock, we use two locks, one for the head of the queue, and one for the tail.
-The goal of these two locks is to enable concurrency of enqueue and dequeue operations.
-In the common case, the enqueue routine will only access the tail lock, and dequeue only the head lock.
+不是使用单个锁，而是使用两个锁，一个用于队列头部，一个用于尾部。
+这两个锁的目标是启用入队和出队操作的并发性。
+在通常情况下，入队列例程只访问尾锁，出队列只访问头锁。
 
-Add a dummy node (allocated in the queue initialization code); this dummy enables the separation of head and tail operations.
+添加一个虚拟节点（在队列初始化代码中分配）；这个虚拟节点使得头部和尾部操作可以分离。
 
-Queues are commonly used in multi-threaded applications.
-However, the type of queue used here (with just locks) often does not completely meet the needs of such programs.
-A more fully developed bounded queue, that enables a thread to wait if the queue is either empty or overly full(condition variables).
+队列常用于多线程应用程序。
+然而，这里使用的队列类型（仅使用锁）通常不能完全满足此类程序的需求。
+更完善的有限队列允许线程在队列为空或过满时等待（条件变量）。
 
 ### Concurrent Hash Table
 
-Instead of having a single lock for the entire structure, it uses a lock per hash bucket (each of which is represented by a list). Doing so enables many concurrent operations to take place.
+不是为整个结构使用单个锁，而是为每个哈希桶（每个桶由一个列表表示）使用一个锁。这样做使得许多并发操作可以同时进行。
 
 ## Condition Variables
 
-A **condition variable** is an explicit queue that threads can put themselves on when some state of execution(i.e., some condition) is not as desired (by **waiting** on the condition);
-some other thread, when it changes said state, can then wake one (or more) of those waiting threads and thus allow them to continue (by **signaling** on the condition).
+**条件变量**是一个显式队列，线程可以在执行状态（即某个条件）不符合预期时将自己放入其中（通过**等待**条件）；
+当其他线程改变该状态时，可以唤醒一个（或多个）等待线程，从而允许它们继续执行（通过**通知**条件）。
 
 > [!TIP]
 >
-> Always hold the lock when calling `signal` or `wait`.
+> 调用 `signal` 或 `wait` 时始终持有锁。
 >
-> Remember with condition variables is to always use while loops.
+> 使用条件变量时始终使用 while 循环。
 
-A covering condition covers all the cases where a thread needs to wake up (conservatively).
-In general, if you find that your program only works when you change your signals to broadcasts (but you don’t think it should need to), you probably have a bug; fix it!
+covering condition 保守地涵盖线程需要唤醒的所有情况。
+一般来说，如果发现程序只有在将 signal 改为 broadcast 时才有效（但你认为不需要这样），很可能有 bug；修复它！
 
 ## Semaphores
 
-A semaphore is an object with an integer value that we can manipulate with two routines; in the POSIX standard, these routines are `sem_wait()` and `sem_post()`.
+信号量是一个具有整数值的对象，可以通过两个例程操作；在 POSIX 标准中，这些例程是 `sem_wait()` 和 `sem_post()`。
 
-Because the initial value of the semaphore determines its behavior, before calling any other routine to interact with the semaphore, we must first initialize it to some value.
+因为信号量的初始值决定其行为，在调用其他例程与之交互之前，必须先将其初始化为某个值。
 
 ### Binary Semaphores (Locks)
 
-We simply surround the critical section of interest with a sem wait()/sem post() pair.
-The initial value should be 1.
+只需用 sem_wait()/sem_post() 对包围关键的临界区。
+初始值应为 1。
 
 ```c
 sem_t m;
-sem_init(&m, 0, X); // initialize semaphore to X; what should X be?
+sem_init(&m, 0, X); // 将信号量初始化为 X；X 应该是什么？
 
 sem_wait(&m);
-// critical section here
+// 临界区
 sem_post(&m);
 ```
 
@@ -195,7 +187,7 @@ sem_post(&m);
 
 ### Implement Semaphores
 
-Implementing Zemaphores With Locks And CVs:
+用锁和条件变量实现信号量：
 
 ```c
 
@@ -205,7 +197,7 @@ typedef struct __Zem_t {
   pthread_mutex_t lock;
 } Zem_t;
 
-// only one thread can call this
+// 只能有一个线程调用此函数
 void Zem_init(Zem_t *s, int value) {
   s->value = value;
   Cond_init(&s->cond);
@@ -228,8 +220,8 @@ void Zem_post(Zem_t *s) {
 }
 ```
 
-We use just one lock and one condition variable, plus a state variable to track the value of the semaphore.
-Curiously, building condition variables out of semaphores is a much trickier proposition.
+我们只使用一个锁和一个条件变量，加上一个跟踪信号量值的状态变量。
+有趣的是，用信号量构建条件变量要棘手得多。
 
 ## References
 

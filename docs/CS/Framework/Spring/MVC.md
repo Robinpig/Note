@@ -1,27 +1,26 @@
 ## Introduction
 
-[Spring Web MVC](https://docs.spring.io/spring-framework/docs/current/reference/html/web.html#mvc) is the original web framework built on the Servlet API and has been included in the Spring Framework from the very beginning.
-The formal name, “Spring Web MVC,” comes from the name of its source module (spring-webmvc), but it is more commonly known as “Spring MVC”.
+[Spring Web MVC](https://docs.spring.io/spring-framework/docs/current/reference/html/web.html#mvc) 是基于 Servlet API 构建的原始 Web 框架，从一开始就包含在 Spring Framework 中。
+其正式名称 "Spring Web MVC" 来自其源模块 (spring-webmvc)，但更常被称为 "Spring MVC"。
 
-Parallel to Spring Web MVC, Spring Framework 5.0 introduced a reactive-stack web framework whose name, [“Spring WebFlux”](/docs/CS/Framework/Spring/webflux.md) is also based on its source module (spring-webflux).
+与 Spring Web MVC 并行，Spring Framework 5.0 引入了一个响应式栈的 Web 框架，其名称 ["Spring WebFlux"](/docs/CS/Framework/Spring/webflux.md) 也基于其源模块 (spring-webflux)。
 
 ### DispatcherServlet
 
-Spring MVC, as many other web frameworks, is designed around the front controller pattern where a central `Servlet`, the `DispatcherServlet`,
-provides a shared algorithm for request processing, while actual work is performed by configurable delegate components.
-This model is flexible and supports diverse workflows.
+Spring MVC 与许多其他 Web 框架一样，围绕前端控制器模式设计，其中核心的 `Servlet`——`DispatcherServlet`，
+提供了请求处理的通用算法，而实际工作由可配置的委托组件执行。
+这种模型非常灵活，支持多样化的工作流程。
 
-The DispatcherServlet, as any Servlet, needs to be declared and mapped according to the Servlet specification by using Java configuration or in web.xml.
-In turn, the DispatcherServlet uses Spring configuration to discover the delegate components it needs for request mapping, view resolution, exception handling, and more.
+DispatcherServlet 与任何 Servlet 一样，需要根据 Servlet 规范通过 Java 配置或在 web.xml 中声明和映射。
+然后，DispatcherServlet 使用 Spring 配置来发现它所需用于请求映射、视图解析、异常处理等的委托组件。
 
-比
-如 Spring MVC 中的 DispatcherServlet，就是在 init 方法里创建了自己的 Spring 容器
+比如 Spring MVC 中的 DispatcherServlet，就是在 init 方法里创建了自己的 Spring 容器
 
 <!-- tabs:start -->
 
 ##### **Java configuration**
 
-The following example of the Java configuration registers and initializes the DispatcherServlet, which is auto-detected by the Servlet container (see Servlet Config):
+以下 Java 配置示例注册并初始化了 DispatcherServlet，它会由 Servlet 容器自动检测（参见 Servlet Config）：
 
 ```java
 public class MyWebApplicationInitializer implements WebApplicationInitializer {
@@ -44,7 +43,7 @@ public class MyWebApplicationInitializer implements WebApplicationInitializer {
 
 ##### **web.xml**
 
-The following example of web.xml configuration registers and initializes the DispatcherServlet:
+以下 web.xml 配置示例注册并初始化了 DispatcherServlet：
 
 ```xml
 <web-app>
@@ -80,14 +79,14 @@ The following example of web.xml configuration registers and initializes the Dis
 
 ## Context Hierarchy
 
-DispatcherServlet expects a WebApplicationContext (an extension of a plain ApplicationContext) for its own configuration.
-WebApplicationContext has a link to the ServletContext and the Servlet with which it is associated.
-It is also bound to the ServletContext such that applications can use static methods on RequestContextUtils to look up the WebApplicationContext if they need access to it.
+DispatcherServlet 期望一个 WebApplicationContext（普通 ApplicationContext 的扩展）作为其自身配置。
+WebApplicationContext 与 ServletContext 及其关联的 Servlet 相关联。
+它还被绑定到 ServletContext，以便应用可以使用 RequestContextUtils 上的静态方法来查找 WebApplicationContext（如果需要访问）。
 
-The root WebApplicationContext typically contains infrastructure beans, such as data repositories and business services that need to be shared across multiple Servlet instances.
-Those beans are effectively inherited and can be overridden (that is, re-declared) in the Servlet-specific child WebApplicationContext, which typically contains beans local to the given Servlet.
+根 WebApplicationContext 通常包含基础设施 beans，例如数据仓库和业务服务，这些需要在多个 Servlet 实例之间共享。
+这些 beans 可以被继承，并在特定于 Servlet 的子 WebApplicationContext 中被覆盖（即重新声明），该子上下文通常包含特定于该 Servlet 的 beans。
 
-The following image shows this relationship:
+下图展示了这种关系：
 
 <div style="text-align: center;">
 
@@ -103,15 +102,14 @@ Fig.1. Context Hierarchy.
 
 ### ContextLoaderListener
 
-Bootstrap listener to start up and shut down Spring's **root WebApplicationContext**.
-Simply delegates to ContextLoader as well as to ContextCleanupListener.
-As of Spring 3.1, ContextLoaderListener supports injecting the root web application context via the ContextLoaderListener(WebApplicationContext) constructor, allowing for programmatic configuration in Servlet 3.0+ environments.
-See org.springframework.web.WebApplicationInitializer for usage examples.
+用于启动和关闭 Spring **根 WebApplicationContext** 的引导监听器。
+简单地委托给 ContextLoader 以及 ContextCleanupListener。
+从 Spring 3.1 开始，ContextLoaderListener 支持通过 ContextLoaderListener(WebApplicationContext) 构造函数注入根 Web 应用上下文，允许在 Servlet 3.0+ 环境中进行程序化配置。
+有关使用示例，请参阅 org.springframework.web.WebApplicationInitializer。
 
 > [!TIP]
 >
 > Spring Boot 默认只有一个上下文
-
 
 ```java
 public class ContextLoaderListener extends ContextLoader implements ServletContextListener {
@@ -132,8 +130,8 @@ public class ContextLoaderListener extends ContextLoader implements ServletConte
 }
 ```
 
-Initialize Spring's web application context for the given servlet context, using the application context provided at construction time,
-or creating a new one according to the "*contextClass*" and "*contextConfigLocation*" context-params.
+为给定的 servlet 上下文初始化 Spring 的 Web 应用上下文，使用构造时提供的应用上下文，
+或根据 "contextClass" 和 "contextConfigLocation" 上下文参数创建一个新的。
 
 ```java
 public class ContextLoaderListener extends ContextLoader implements ServletContextListener {
@@ -211,11 +209,11 @@ public class ContextLoaderListener extends ContextLoader implements ServletConte
 
 ### ServletContainerInitializer
 
-A Spring-provided ServletContainerInitializer designed to support code-based configuration of the servlet container using Spring's WebApplicationInitializer SPI as
-opposed to (or possibly in combination with) the traditional web.xml-based approach.
+一个由 Spring 提供的 ServletContainerInitializer，设计用于支持使用 Spring 的 WebApplicationInitializer SPI 进行基于代码的 Servlet 容器配置，
+而不是（或可能结合）传统的基于 web.xml 的方式。
 
-This class will be loaded and instantiated and have its onStartup method invoked by any Servlet-compliant container during container startup assuming that the spring-web module JAR is present on the classpath.
-This occurs through the JAR Services API ServiceLoader.load(Class) method detecting the spring-web module's META-INF/services/jakarta.servlet.ServletContainerInitializer service provider configuration file.
+此类将被加载和实例化，其 onStartup 方法将由任何符合 Servlet 规范的容器在容器启动时调用，前提是 classpath 中存在 spring-web 模块 JAR。
+这通过 JAR Services API ServiceLoader.load(Class) 方法检测 spring-web 模块的 META-INF/services/jakarta.servlet.ServletContainerInitializer 服务提供者配置文件来实现。
 
 ```java
 public interface ServletContainerInitializer {
@@ -273,7 +271,7 @@ public abstract class SpringBootServletInitializer implements WebApplicationInit
 }
 ```
 
-Apps externds SpringBootServletInitializer and start
+应用继承 SpringBootServletInitializer 并启动
 
 ```java
 public class IngredientServiceServletInitializer extends SpringBootServletInitializer {
@@ -349,8 +347,7 @@ public abstract class FrameworkServlet extends HttpServletBean implements Applic
 }
 ```
 
-
-Default load beans for current ApplicationContext.
+为当前 ApplicationContext 默认加载 beans。
 ```java
 public abstract class AbstractHandlerMethodMapping<T> extends AbstractHandlerMapping implements InitializingBean {
     @Override
@@ -373,7 +370,6 @@ public abstract class AbstractHandlerMethodMapping<T> extends AbstractHandlerMap
     }
 }
 ```
-
 
 #### initStrategies
 
@@ -401,7 +397,7 @@ public class DispatcherServlet extends FrameworkServlet {
 
 ## dispatch
 
-All HTTP requests  call `processRequest` -> doService -> doDispatch
+所有 HTTP 请求都调用 `processRequest` -> doService -> doDispatch
 
 ```java
 public abstract class FrameworkServlet extends HttpServletBean implements ApplicationContextAware {
@@ -416,10 +412,10 @@ public abstract class FrameworkServlet extends HttpServletBean implements Applic
 
 ### doDispatch
 
-Process the actual dispatching to the handler.
-The handler will be obtained by applying the servlet's HandlerMappings in order. The HandlerAdapter will be obtained by querying the servlet's installed HandlerAdapters to find the first that supports the handler class.
-All HTTP methods are handled by this method.
-It's up to HandlerAdapters or handlers themselves to decide which methods are acceptable.
+处理实际的分发到处理程序。
+处理程序将通过按顺序应用 servlet 的 HandlerMappings 来获取。HandlerAdapter 将通过查询 servlet 安装的 HandlerAdapters 来找到第一个支持该处理程序类的适配器。
+所有 HTTP 方法都由该方法处理。
+由 HandlerAdapters 或处理程序本身决定哪些方法是可接受的。
 
 ```java
 public class DispatcherServlet extends FrameworkServlet {
@@ -513,13 +509,12 @@ public class DispatcherServlet extends FrameworkServlet {
 10. interceptor afterCompletion
 11. writeWithMessageConverter
 
-
 ## Advice
 
-ContollerAdvice只能拦截控制器中的异常，换言之，只能拦截500之类的异常，但是对于404这样不会进入控制器处理的异常不起作用
-springboot会将所有的异常发送到路径为server.error.path（application.properties中可配置，默认为”/error”）的控制器方法中进行处理，
+ContollerAdvice 只能拦截控制器中的异常，换言之，只能拦截 500 之类的异常，但是对于 404 这样不会进入控制器处理的异常不起作用
+Springboot 会将所有的异常发送到路径为 server.error.path（application.properties 中可配置，默认为"/error"）的控制器方法中进行处理，
 
-通过重写AbstractErrorController 自定义异常处理
+通过重写 AbstractErrorController 自定义异常处理
 
 ```java
 @Controller
@@ -529,50 +524,44 @@ public class CustomErrHandleController extends AbstractErrorController
 }
 ```
 
-
 ## Chain
- 
 
-HandlerInterceptors are part of the Spring MVC framework and sit between the DispatcherServlet and our Controllers.
+HandlerInterceptors 是 Spring MVC 框架的一部分，位于 DispatcherServlet 和我们的 Controllers 之间。
 
-HandlerInterceptor is basically similar to a Servlet Filter,
-but in contrast to the latter it just allows custom pre-processing with the option of prohibiting the execution of the handler itself, and custom post-processing. 
+HandlerInterceptor 基本类似于 Servlet Filter，
+但与后者不同，它只允许自定义预处理（可以选择禁止处理程序本身的执行）和自定义后处理。
 
-Filters are more powerful, for example they allow for exchanging the request and response objects that are handed down the chain.
-Note that a filter gets configured in web. xml, a HandlerInterceptor in the application context.
+Filter 更强大，例如它们允许交换沿链传递的请求和响应对象。
+注意，Filter 在 web.xml 中配置，而 HandlerInterceptor 在应用上下文中配置。
 
-As a basic guideline, fine-grained handler-related preprocessing tasks are candidates for HandlerInterceptor implementations,
-especially factored-out common handler code and authorization checks.
-On the other hand, a Filter is well-suited for request content and view content handling, like multipart forms and GZIP compression. 
-This typically shows when one needs to map the filter to certain content types (e. g. images), or to all requests.
+作为基本指导，细粒度的与处理程序相关的预处理任务是 HandlerInterceptor 实现的候选，
+特别是提取公共处理程序代码和授权检查。
+另一方面，Filter 非常适合处理请求内容和视图内容，例如 multipart 表单和 GZIP 压缩。
+这通常体现在需要将 Filter 映射到某些内容类型（例如图片）或所有请求时。
 
-[Spring Security](/docs/CS/Framework/Spring/Security.md) is a great example of using filters for authentication and authorization.
-To configure Spring Security, we simply need to add a single filter, the DelegatingFilterProxy.
-Spring Security can then intercept all incoming and outgoing traffic.
-This is why Spring Security can be used outside of Spring MVC.
+[Spring Security](/docs/CS/Framework/Spring/Security.md) 是使用 Filter 进行身份验证和授权的一个很好的例子。
+要配置 Spring Security，我们只需添加一个 Filter——DelegatingFilterProxy。
+Spring Security 可以拦截所有传入和传出的流量。
+这就是 Spring Security 可以在 Spring MVC 之外使用的原因。
 
 ![](./img/MVC-chain.png)
 
-
-
 ### HandlerInterceptor
-
-
 
 - HandlerInterceptor/AsyncHandlerInterceptor
 
 - ResponseBodyAdvice
 
 > [Spring Interceptor vs AOP](https://coderanch.com/t/636483/frameworks/Spring-Interceptor-AOP)
-> 
-> MVC Interceptor is a MVC only concept. They can intercept requests to the controller only. 
+>
+> MVC Interceptor is a MVC only concept. They can intercept requests to the controller only.
 > [AOP](/docs/CS/Framework/Spring/AOP.md) can be used to intercept calls to any public method in any Spring loaded bean.
-> 
+>
 > AOP is only option to use if you are trying to weave code into your service layer.
-> A Controller method can be intercepted by either an Aspect or a HandlerInterceptor. 
-> The difference is that the AOP advice only has access to the controller being called, and the parameters being passed to the method. 
-> A HandlerInterceptor always has access to the complete HttpRequest, HttpResponse and the object being called. 
-> So, if your interceptor is doing something that requires it to always have access to the Request and response, you should use HandlerInterceptor. 
+> A Controller method can be intercepted by either an Aspect or a HandlerInterceptor.
+> The difference is that the AOP advice only has access to the controller being called, and the parameters being passed to the method.
+> A HandlerInterceptor always has access to the complete HttpRequest, HttpResponse and the object being called.
+> So, if your interceptor is doing something that requires it to always have access to the Request and response, you should use HandlerInterceptor.
 > If you want to do something with the parameters to the controller method, you should write an Aspect
 
 ```java
@@ -603,38 +592,34 @@ Filter will be create when web server start
 
 see [FilterChain.doFilter() in Tomcat](/docs/CS/Framework/Tomcat/Connector.md?id=doFilter)
 
-Spring MVC provides fine-grained support for CORS configuration through annotations on controllers.
-However, when used with [Spring Security](/docs/CS/Framework/Spring/Security.md), we advise relying on the built-in CorsFilter that must be ordered ahead of Spring Security’s chain of filters.
+Spring MVC 通过控制器上的注解为 CORS 配置提供了细粒度支持。
+但是，当与 [Spring Security](/docs/CS/Framework/Spring/Security.md) 一起使用时，我们建议依赖内置的 CorsFilter，它必须排在 Spring Security 的过滤器链之前。
 
 ## Asynchronous Requests
 
-Spring MVC has an extensive integration with Servlet 3.0 asynchronous request processing:
+Spring MVC 与 Servlet 3.0 异步请求处理有广泛的集成：
 
-- DeferredResult and Callable return values in controller methods provide basic support for a single asynchronous return value.
-- Controllers can stream multiple values, including SSE and raw data.
-- Controllers can use reactive clients and return reactive types for response handling.
+- 控制器方法中的 DeferredResult 和 Callable 返回值提供了对单个异步返回值的基本支持。
+- 控制器可以流式传输多个值，包括 SSE 和原始数据。
+- 控制器可以使用响应式客户端并返回响应式类型进行响应处理。
 
-The Servlet API was originally built for making a single pass through the Filter-Servlet chain.
-Asynchronous request processing, added in Servlet 3.0, lets applications exit the Filter-Servlet chain but leave the response open for further processing.
-The Spring MVC asynchronous support is built around that mechanism. When a controller returns a DeferredResult, the Filter-Servlet chain is exited, and the Servlet container thread is released.
-Later, when the DeferredResult is set, an ASYNC dispatch (to the same URL) is made, during which the controller is mapped again but, rather than invoking it, the DeferredResult value is used (as if the controller returned it) to resume processing.
+Servlet API 最初是为通过 Filter-Servlet 链的单个传递而构建的。
+Servlet 3.0 中新增的异步请求处理允许应用退出 Filter-Servlet 链，但保持响应打开以供进一步处理。
+Spring MVC 的异步支持就是围绕这种机制构建的。当控制器返回 DeferredResult 时，Filter-Servlet 链退出，Servlet 容器线程被释放。
+稍后，当 DeferredResult 被设置时，会进行一个 ASYNC 分发（到相同的 URL），在此期间控制器再次被映射，但不是调用它，而是使用 DeferredResult 值（就像控制器返回了它一样）来恢复处理。
 
-From a programming model perspective, both Spring MVC and Spring WebFlux support asynchronous and Reactive Types as return values in controller methods.
-Spring MVC even supports streaming, including reactive back pressure.
-However, **individual writes to the response remain blocking (and are performed on a separate thread)**, unlike WebFlux, which relies on non-blocking I/O and does not need an extra thread for each write.
+从编程模型的角度来看，Spring MVC 和 Spring WebFlux 都支持控制器方法返回值的异步和响应式类型。
+Spring MVC 甚至支持流式传输，包括响应式背压。
+然而，**对响应的每次写入仍然是阻塞的（并在单独的线程上执行）**，这与 WebFlux 不同，WebFlux 依赖非阻塞 I/O，不需要为每次写入额外的线程。
 
-Another fundamental difference is that **Spring MVC does not support asynchronous or reactive types in controller method arguments (for example, @RequestBody, @RequestPart, and others)**,
-nor does it have any explicit support for asynchronous and reactive types as model attributes.
-Spring WebFlux does support all that.
+另一个根本区别是 **Spring MVC 不支持控制器方法参数中的异步或响应式类型（例如 @RequestBody、@RequestPart 等）**，
+也不支持将异步和响应式类型作为模型属性。
+Spring WebFlux 完全支持所有这些。
 
 ## Extension
 
 1. must declare @PathVariable @RequestParam or @RequestBody
 2. Nested Validation need to add `@Valid` at field
-
-
-
-
 
 Init DispatchServlet when startup
 
@@ -668,7 +653,6 @@ receive all headers
 
 request header in MultiValueMap are case-sensitive
 
-
 ### Converter
 
 ```java
@@ -694,8 +678,7 @@ public class FormattingConversionService extends GenericConversionService
 @DateTimeFormat(pattern="yyyy-MM-dd HH:mm:ss") Date date
 ```
 
-
-Avoid response can not cast to String Exception when we transform response String to Object
+避免在将响应 String 转换为 Object 时出现 response can not cast to String Exception
 
 ```java
 @EnableWebMvc
@@ -712,12 +695,12 @@ public class WebConfiguration implements WebMvcConfigurer {
 GsonMessageConverter
 
 > [!TIP]
-> 
+>
 > `@JsonIgnore` not work when not using Jackson.
 
 #### MessageConverter
 
-Create the method argument value of the expected parameter type by reading from the given HttpInputMessage.
+通过从给定的 HttpInputMessage 读取数据，创建预期参数类型的方法参数值。
 
 ```java
 public class RequestResponseBodyMethodProcessor extends AbstractMessageConverterMethodProcessor {
@@ -759,22 +742,18 @@ public class RequestResponseBodyMethodProcessor extends AbstractMessageConverter
 }
 ```
 
-
-
 ### Static Resources
 
-By default Spring boot serves static content from one of the following locations in the classpath: 
+默认情况下，Spring Boot 从 classpath 中的以下位置之一提供静态内容：
 
 1. /static
 2. /public
 3. /resources
 4. /META-INF/resources
 
-We can customize the static resource locations using `spring.resources.static-locations` property. 
+我们可以使用 `spring.resources.static-locations` 属性自定义静态资源位置。
 
-We can specify additional static locations by overriding the `addResourceHandlers` method of `WebMvcConfigurer`.
-
-
+我们可以通过覆盖 `WebMvcConfigurer` 的 `addResourceHandlers` 方法来指定额外的静态位置。
 
 ### Request
 
@@ -844,7 +823,6 @@ NativeWebRequest webRequest, @Nullable WebDataBinderFactory binderFactory) throw
 }
 ```
 nested filed validation must annotate with ` @jakarta.validation.Valid`
-
 
 ### Http2
 

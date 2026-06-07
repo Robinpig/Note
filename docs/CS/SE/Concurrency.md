@@ -1,95 +1,91 @@
 ## Introduction
 
-
-
-
 ## Common Concurrency Problems
-
 
 ### Deadlock
 
-One reason is that in large code bases, complex dependencies arise between components.
+原因之一是在大型代码库中，组件之间会产生复杂的依赖关系。
 
-Another reason is due to the nature of encapsulation.
+另一个原因是封装的性质。
 
 #### Prevention
 
-Circular Wait
+循环等待
 
-Of course, in more complex systems, more than two locks will exist, and thus total lock ordering may be difficult to achieve (and perhaps is unnecessary anyhow).
-Thus, a partial ordering can be a useful way to structure lock acquisition so as to avoid deadlock.
+当然，在更复杂的系统中，会存在两个以上的锁，因此完全锁排序可能难以实现（也许无论如何都没必要）。
+因此，偏序关系可以成为构建锁获取方式以避免死锁的有用方法。
 
-As you can imagine, both total and partial ordering require careful design of locking strategies and must be constructed with great care.
-Further, ordering is just a convention, and a sloppy programmer can easily ignore the locking protocol and potentially cause deadlock.
-Finally, lock ordering requires a deep understanding of the code base, and how various routines are called; just one mistake could result Deadlocks.
+可以想象，全序和偏序都需要仔细设计锁定策略，并且必须非常谨慎地构建。
+此外，排序只是一种约定，粗心的程序员很容易忽略锁定协议，可能导致死锁。
+最后，锁排序需要对代码库以及各种例程的调用方式有深入理解；一个错误就可能导致死锁。
 
+持有并等待
 
-Hold-and-wait
+死锁的持有并等待条件可以通过原子性地一次性获取所有锁来避免。
 
+注意该解决方案存在多个问题。
+与之前一样，封装对我不利：调用例程时，这种方法要求我们确切知道必须持有哪些锁并提前获取它们。
+这种技术也可能降低并发性，因为所有锁必须在早期（一次性）获取，而不是在真正需要时才获取。
 
-The hold-and-wait requirement for deadlock can be avoided by acquiring all locks at once, atomically.
-
-Note that the solution is problematic for a number of reasons.
-As before, encapsulation works against us: when calling a routine, this approach requires us to know exactly which locks must be held and to acquire them ahead of time.
-This technique also is likely to decrease concurrency as all locks must be acquired early on (at once) instead of when they are truly needed.
-
-No Preemption
-
+不可抢占
 
 ```c
 trylock
 ```
 
-One new problem does arise, however: livelock.
+然而有一个新问题出现：活锁（livelock）。
 
-There are solutions to the livelock problem, too: for example, one could add a random delay before looping back and trying the entire thing over again, thus decreasing the odds of repeated interference among competing threads.
+活锁问题也有解决方案：例如，可以在循环重试之前添加随机延迟，从而降低竞争线程间重复干扰的概率。
 
+互斥
 
-Mutual Exclusion
+无锁（以及相关的无等待）方法背后的思想很简单：使用强大的硬件指令，可以构建不需要显式锁定的数据结构。
 
-The idea behind these lock-free (and related wait-free) approaches here is simple: using powerful hardware instructions, you can build data structures in a manner that does not require explicit locking.
-
-In this manner, no lock is acquired, and no deadlock can arise (though livelock is still a possibility).
+这样，没有获取锁，也不会发生死锁（尽管活锁仍有可能）。
 
 #### Deadlock Avoidance
 
-Further, such approaches can limit concurrency, as we saw in the second example above. Thus, avoidance of deadlock via scheduling is not a widely-used general-purpose solution.
+此外，这种方法可能限制并发性，如上面第二个例子所示。
+因此，通过调度避免死锁并不是广泛使用的通用解决方案。
 
 #### Detect and Recover
 
-Many database systems employ deadlock detection and recovery techniques. A deadlock detector runs periodically, building a resource graph and checking it for cycles.
-In the event of a cycle (deadlock), the system needs to be restarted. If more intricate repair of data structures is first required, a human being may be involved to ease the process.
-
+许多数据库系统采用死锁检测和恢复技术。
+死锁检测器定期运行，构建资源图并检查循环。
+如果发生循环（死锁），需要重启系统。
+如果需要更复杂的数据结构修复，可能需要人工参与来简化过程。
 
 ### Atomicity-Violation
 
-The formal definition of an atomicity violation is this: “The desired serializability among multiple memory accesses is violated (i.e. a code region is intended to be atomic, but the atomicity is not enforced during execution)”.
+原子性违例的正式定义是："多个内存访问之间的所需可串行性被违反（即代码区域本应是原子的，但执行时并未强制执行原子性）"。
 
 ### Order-Violation
 
-The formal definition of an order violation is this: “The desired order between two (groups of) memory accesses is flipped (i.e., A should always be executed before B, but the order is not enforced during execution)”.
+顺序违例的正式定义是："两组内存访问之间的期望顺序被颠倒（即 A 应始终在 B 之前执行，但执行时未强制执行该顺序）"。
 
-The fix to this type of bug is generally to enforce ordering. As we discussed in detail previously, using condition variables is an easy and robust way to add this style of synchronization into modern code bases.
-
+此类 bug 的修复通常是强制排序。
+正如之前详细讨论的，使用条件变量是向现代代码库添加此类同步的简单而稳健的方式。
 
 ## Event-based
 
-A different style of concurrent programming is often used in both GUI-based applications as well as some types of internet servers. 
-This style, known as event-based concurrency, has become popular in some modern systems, including server-side frameworks such as node.js.
+一种不同的并发编程风格常用于 GUI 应用程序以及某些类型的互联网服务器。
+这种风格称为基于事件的并发，已在一些现代系统中流行，包括 node.js 等服务端框架。
 
-The problem that event-based concurrency addresses is two-fold. 
+基于事件的并发解决两个问题：
 
-- The first is that managing concurrency correctly in multi-threaded applications can be challenging; as we’ve discussed, missing locks, deadlock, and other nasty problems can arise. 
-- The second is that in a multi-threaded application, the developer has little or no control over what is scheduled at a given moment in time; 
-  rather, the programmer simply creates threads and then hopes that the underlying OS schedules them in a reasonable manner across available CPUs. 
-  Given the difficulty of building a generalpurpose scheduler that works well in all cases for all workloads, sometimes the OS will schedule work in a manner that is less than optimal.
+- 首先，在多线程应用程序中正确管理并发可能具有挑战性；如我们所讨论的，可能出现缺少锁、死锁和其他棘手问题。
+- 其次，在多线程应用程序中，开发人员几乎无法控制某个时刻调度什么；
+  相反，程序员只是创建线程，然后希望底层 OS 能在可用 CPU 上以合理的方式调度它们。
+  鉴于构建一个在所有情况下对所有工作负载都能良好运行的通用调度器的难度，有时 OS 会以不太优化的方式调度工作。
 
-How can we build a concurrent server without using threads, and thus retain control over concurrency as well as avoid some of the problems that seem to plague multi-threaded applications?
+如何在没有线程的情况下构建并发服务器，从而保持对并发的控制并避免困扰多线程应用程序的某些问题？
 
-The basic approach we’ll use, as stated above, is called event-based concurrency. 
-The approach is quite simple: you simply wait for something (i.e., an “event”) to occur; when it does, you check what type of event it is and do the small amount of work it requires (which may include issuing I/O requests, or scheduling other events for future handling, etc.).
+我们将使用的基本方法称为基于事件的并发。
+该方法非常简单：只需等待某事（即"事件"）发生；当事件发生时，检查它是哪种类型的事件，并执行所需的小工作量（可能包括发出 I/O 请求，或调度其他事件以供将来处理等）。
 
-Such applications are based around a simple construct known as the event loop. Pseudocode for an event loop looks like this:
+此类应用程序围绕一个称为事件循环的简单构造构建。
+事件循环的伪代码如下：
+
 ```c
 while (1) {
     events = getEvents();
@@ -97,53 +93,53 @@ while (1) {
         processEvent(e);
 }
 ```
-The main loop simply waits for something to do(by calling getEvents() in the code above) and then, for each event returned, processes them, one at a time; the code that processes each event is known as an **event handler**. 
-Importantly, when a handler processes an event, it is the only activity taking place in the system; thus, deciding which event to handle next is equivalent to scheduling. 
-This explicit control over scheduling is one of the fundamental advantages of the event-based approach.
 
+主循环只是等待要做的事情（通过调用 getEvents()），然后处理每个返回的事件，一次一个；处理每个事件的代码称为**事件处理器**。
+重要的是，当处理器处理事件时，它是系统中唯一正在进行的活动；因此，决定接下来处理哪个事件就相当于调度。
+这种对调度的显式控制是基于事件方法的基本优势之一。
 
-With that basic event loop in mind, we next must address the question of how to receive events. In most systems, a basic API is available, via either the select() or poll() system calls.
+有了基本的事件循环，接下来需要解决如何接收事件的问题。
+在大多数系统中，可以通过 select() 或 poll() 系统调用使用基本 API。
 
-With a single CPU and an event-based application, the problems found in concurrent programs are no longer present. 
-Specifically, because only one event is being handled at a time, there is no need to acquire or release locks; the event-based server cannot be interrupted by another thread because it is decidedly single threaded. 
-Thus, concurrency bugs common in threaded programs do not manifest in the basic event-based approach.
+使用单 CPU 和基于事件的应用程序，并发程序中的问题不再存在。
+具体来说，因为一次只处理一个事件，所以不需要获取或释放锁；基于事件的服务器不能被另一个线程中断，因为它完全是单线程的。
+因此，线程程序中常见的并发 bug 在基本的基于事件方法中不会出现。
 
 ### Blocking System Calls
 
 > [!NOTE]
-> Event-based servers enable fine-grained control over scheduling of tasks.
-> However, to maintain such control, no call that blocks the execution of the caller can ever be made; failing to obey this design tip will result in a blocked event-based server.
+> 基于事件的服务器能够精细控制任务调度。
+> 然而，要保持这种控制，绝不能调用任何阻塞调用者执行的调用；未能遵守此设计原则将导致基于事件的服务器被阻塞。
 
-To overcome this limit, many modern operating systems have introduced new ways to issue I/O requests to the disk system, referred to generically as asynchronous I/O.
+为了克服这一限制，许多现代操作系统引入了向磁盘系统发出 I/O 请求的新方式，统称为异步 I/O。
 
 ### State Managements
 
-Another issue with the event-based approach is that such code is generally more complicated to write than traditional thread-based code. 
-The reason is as follows: when an event handler issues an asynchronous I/O, it must package up some program state for the next event handler to use when the I/O finally completes; 
-this additional work is not needed in thread-based programs, as the state the program needs is on the stack of the thread. 
-Adya et al. call this work **manual stack management**, and it is fundamental to event-based programming.
+基于事件方法的另一个问题是，此类代码通常比传统的基于线程的代码更难编写。
+原因如下：当事件处理器发出异步 I/O 时，它必须打包一些程序状态，供 I/O 最终完成时的下一个事件处理器使用；
+基于线程的程序不需要此额外工作，因为程序需要的状态在线程栈上。
+Adya 等人称此为**手动栈管理**，它是基于事件编程的基础。
 
-The solution, as described by Adya et al., is to use an old programming language construct known as a continuation. 
-Though it sounds complicated, the idea is rather simple: basically, record the needed information to finish processing this event in some data structure; when the event happens (i.e., when the disk I/O completes), look up the needed information and process the event.
+Adya 等人描述的解决方案是使用一种称为延续的古老编程语言构造。
+虽然听起来复杂，但想法相当简单：基本上，将完成此事件处理所需的信息记录在某个数据结构中；当事件发生时（即磁盘 I/O 完成时），查找所需信息并处理事件。
 
 ### Other Problems
 
-There are a few other difficulties with the event-based approach that we should mention. 
+基于事件的方法还有其他一些困难需要提及。
 
-- For example, when systems moved from a single CPU to multiple CPUs, some of the simplicity of the event-based approach disappeared.
-- Another problem with the event-based approach is that it does not integrate well with certain kinds of systems activity, such as paging.
-- A third issue is that event-based code can be hard to manage over time, as the exact semantics of various routines changes. 
+- 例如，当系统从单 CPU 迁移到多 CPU 时，基于事件方法的一些简单性消失了。
+- 基于事件方法的另一个问题是它不能很好地与某些系统活动（如分页）集成。
+- 第三个问题是，随着时间的推移，基于事件的代码可能难以管理，因为各种例程的确切语义会发生变化。
 
-Finally, though asynchronous disk I/O is now possible on most platforms, it has taken a long time to get there, and it never quite integrates with asynchronous network I/O in as simple and uniform a manner as you might think. 
-For example, while one would simply like to use the select() interface to manage all outstanding I/Os, usually some combination of select() for networking and the AIO calls for disk I/O are required.
-
+最后，尽管异步磁盘 I/O 现在在大多数平台上成为可能，但花了很长时间才达到这一点，而且它从未像你想象的那样简单统一地与异步网络 I/O 集成。
+例如，虽然人们可能希望使用 select() 接口管理所有未完成的 I/O，但通常需要将 select() 用于网络和 AIO 调用用于磁盘 I/O 进行某种组合。
 
 ## synchronization
 
 ### Mutex
 | Language | Implementation         |
 | --- |------------------------|
-| C++ | std：mutex              |
+| C++ | std::mutex              |
 | Java | ReentrantLock          |
 | Python | thread.locking         |
 | C# | System.Threading.Mutex |

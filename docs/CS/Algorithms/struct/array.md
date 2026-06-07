@@ -1,29 +1,26 @@
 ## Introduction
 
-One memory block is allocated for the entire array to hold elements of the array.
-The array elements can be accessed in constant time by using the index of the particular element as the subscript.
+为整个数组分配一个内存块来存储数组元素。
+通过使用特定元素的下标作为索引，可以在常数时间内访问数组元素。
 
-To access an array element, the address of an element is computed as an offset from the base address of the array and one multiplication
-is needed to compute what is supposed to be added to the base address to get the memory address of the element.
-First, the size of an element of that data type is calculated and then it is multiplied with the index of the element to get the value to be added to the base address.
-This process takes one multiplication and one addition.
-Since these two operations take constant time, we can say the array access can be performed in constant time.
+要访问数组元素，元素的地址被计算为从数组基地址开始的偏移量，需要进行一次乘法来计算需要加到基地址上的值，以获取元素的内存地址。
+首先计算该数据类型的元素大小，然后乘以元素的索引，得到要加到基地址上的值。
+这个过程需要一次乘法和一次加法。
+由于这两个操作花费常数时间，因此数组访问可以在常数时间内完成。
 
-**Advantages of Arrays**
+**数组的优点**
 
-- Simple and easy to use
-- Faster access to the elements (constant access)
+- 简单易用
+- 更快的元素访问（常数时间访问）
 
-**Disadvantages of Arrays**
+**数组的缺点**
 
-- Preallocates all needed memory up front and wastes memory space for indices in the array that are empty.
-- Fixed size: The size of the array is static (specify the array size before using it).
-- One block allocation: To allocate the array itself at the beginning, sometimes it may not be possible to get the memory for the complete array (if the array size is big).
-- Complex position-based insertion: To insert an element at a given position, we may need to shift the existing elements.
-  This will create a position for us to insert the new element at the desired position.
-  If the position at which we want to add an element is at the beginning, then the shifting operation is more expensive.
-
-
+- 预先分配所有需要的内存，浪费数组中空索引的空间。
+- 固定大小：数组的大小是静态的（使用前需指定数组大小）。
+- 单一内存块分配：在开始时分配数组本身，有时可能无法为整个数组获取内存（如果数组很大）。
+- 基于位置的复杂插入：要在给定位置插入元素，可能需要移动现有元素。
+  这将在我们想要的位置为新元素腾出空间。
+  如果插入元素的位置在开头，则移动操作的开销更大。
 
 二维数组在内存空间的空间地址是否连续取决于编程语言的实现
 
@@ -33,22 +30,16 @@ Since these two operations take constant time, we can say the array access can b
 void test_arr
 ```
 
-
 ### Dynamic Arrays
 
-Dynamic array (also called growable array, resizable array, dynamic table, or array list) is a random access, variable-size list data structure that allows elements to be added or removed.
-One simple way of implementing dynamic arrays is to initially start with some fixed size array.
-As soon as that array becomes full, create the new array double the size of the original array.
-Similarly, reduce the array size to half if the elements in the array are less than half the size.
+动态数组（也称为可增长数组、可调整大小数组、动态表或数组列表）是一种随机访问、大小可变的列表数据结构，允许添加或删除元素。
+实现动态数组的一种简单方法是初始时使用某个固定大小的数组。
+一旦该数组满了，就创建一个新数组，大小为原始数组的两倍。
+类似地，如果数组中的元素少于一半，则将数组大小缩减为一半。
 
-Note: We will see the implementation for dynamic arrays in the Stacks, Queues and Hashing chapters.
-
+注意：我们将在栈、队列和哈希表章节中看到动态数组的实现。
 
 动态数组支持自动扩容 通常不实现自动缩容
-
-
-
-
 
 ## Links
 

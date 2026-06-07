@@ -2,78 +2,76 @@
 
 ### Index and Table Pages
 
-Index and table rows are grouped together in pages; these are often 4K in size, this being a rather convenient size to use for most purposes, but other page sizes may be used.
-Fortunately, as far as index design is concerned, this is not an important consideration other than that the page size will determine the number of index and table rows in each page and the number of pages involved.
-To cater for new rows being added to tables and indexes, a certain proportion of each page may be left free when they are loaded or reorganized. This will be considered later.
+索引行和表行被分组到页面中；这些页面通常大小为 4K，这对大多数用途来说是一个相当方便的大小，但也可以使用其他页面大小。
+幸运的是，就索引设计而言，这并不是一个重要考虑因素，除了页面大小将决定每页中索引行和表行的数量以及涉及的页面数量。
+为了容纳新行被添加到表和索引中，每页在加载或重新组织时可能会保留一定比例的空闲空间。这一点将在后面讨论。
 
-Buffer pools and I/O activity (discussed later) are based on pages; for example, an entire page will be read from disk into a buffer pool.
-This means that several rows, not just one, are read into the buffer pool with a single I/O.
-We will also see that several pages may be read into the pool by just one I/O.
+缓冲池和 I/O 活动（后面讨论）基于页面进行操作；例如，整个页面将从磁盘读入缓冲池。
+这意味着单次 I/O 会将多行（而不仅仅是一行）读入缓冲池。
+我们还将看到，单次 I/O 可以将多个页面读入缓冲池。
 
 ### Index Rows
 
-An index row is a useful concept when evaluating access paths. 
-For a unique index, such as the primary key index CNO on table CUST, it is equivalent to an index entry in the leaf page (see Fig 1); the column values are copied from the table to the index, and a pointer to the table row added. 
-Usually, the table page number forms a part of this pointer, something that should be kept in mind for a later time.
-For a nonunique index, such as the index CITY on table CUST, the index rows for a particular index value should be visualized as individual index entries, each having the same CITY value, but followed by a different pointer value.
-What is actually stored in a nonunique index is, in most cases, one CITY value followed by several pointers.
+索引行是评估访问路径时的一个有用概念。
+对于唯一索引（例如表 CUST 上的主键索引 CNO），它相当于叶页面中的一个索引条目（见图 1）；列值从表复制到索引，并添加指向表行的指针。
+通常，表页码构成此指针的一部分，这一点应在后续牢记。
+对于非唯一索引（例如表 CUST 上的索引 CITY），特定索引值的索引行应被视为单个索引条目，每个条目具有相同的 CITY 值，但后跟不同的指针值。
+实际上，在非唯一索引中存储的通常是一个 CITY 值后跟多个指针。
 
 <div style="text-align: center;">
 
-![Fig.1. Very small index](./img/Small-Index.png)
+![Fig.1. 微型索引](./img/Small-Index.png)
 
 </div>
 
 <p style="text-align: center;">
-Fig.1. Very small index.
+Fig.1. 微型索引。
 </p>
 
 ### Index Structure
 
-The nonleaf pages always contain a (possibly truncated) key value, the highest key together with a pointer, to a page at the next lower level, as shown in Figure 1.
-Several index levels may be built up in this way, until there is only a single page, called the root page, at the top of the index structure.
-This type of index is called a B-tree index (a balanced tree index) because the same number of nonleaf pages are required to find each index row.
+非叶页面始终包含一个（可能被截断的）键值、最高键以及指向下一级页面的指针，如图 1 所示。
+通过这种方式可以构建多个索引层级，直到顶部只有一个页面，称为根页面。
+这种类型的索引称为 B-tree 索引（平衡树索引），因为找到每个索引行所需的非叶页面数量相同。
 
 ### Table Rows
 
-Each index row shown in Figure 1 points to a corresponding row in the table; the pointer usually identifies the page in which the row resides together with some means of identifying its position within the page.
-Each table row contains some control information to define the row and to enable the DBMS to handle insertions and deletions, together with the columns themselves.
+图 1 中显示的每个索引行指向表中相应的行；指针通常标识该行所在的页面，以及在该页面内定位该行位置的方式。
+每个表行包含一些控制信息，用于定义该行并使 DBMS 能够处理插入和删除操作，以及列本身。
 
-The sequence in which the rows are positioned in the table, as a result of a table load or row inserts, may be defined so as to be the same as that of one of its indexes.
-In this case, as the index rows are processed, one after another in key sequence, so the corresponding table rows will be processed, one after another in the same sequence.
-Both index and table are then accessed in a sequential manner that, as we will see shortly, is a very efficient process.
+作为表加载或行插入的结果，表中行的排列顺序可以定义为与其中一个索引的顺序相同。
+在这种情况下，当按键顺序逐行处理索引行时，相应的表行也将按键顺序逐行处理。
+索引和表都以顺序方式访问，正如我们即将看到的，这是一个非常高效的过程。
 
-Obviously, only one of the indexes can be defined to determine the sequence of the table rows in this way.
-If the table is being accessed via any other index, as the index rows are processed, one after another in key sequence, the corresponding rows will not be held in the table in the same sequence.
-For example, the first index row may point to page 17, the next index row to page 2, the next to page 85, and so forth.
-Now, although the index is still being processed sequentially and efficiently, the table is being processed randomly and much less efficiently.
+显然，只有一个索引可以以这种方式定义表行的顺序。
+如果通过任何其他索引访问表，当按键顺序逐行处理索引行时，相应的行在表中的存储顺序将不同。
+例如，第一个索引行可能指向第 17 页，下一个索引行指向第 2 页，再下一个指向第 85 页，依此类推。
+此时，虽然索引仍然是顺序高效处理的，但表却是随机处理的，效率要低得多。
 
 ### Buffer Pools and Disk I/Os
 
-One of the primary objectives of relational database management systems is to ensure that data from tables and indexes is readily available when required.
-To enable this objective to be achieved as far as possible buffer pools, held in memory, are used to minimize disk activity. Each DBMS may have several pools according to the type, table or index, and the page size.
-Each pool will be large enough to hold many pages, perhaps hundreds of thousands of them.
-The buffer pool managers will attempt to ensure that frequently used data remains in the pool to avoid the necessity of additional reads from disk.
-How effective this is will be extremely important with respect to the performance of SQL statements, and so will be equally important for the purposes of this book. We will return to this subject on many occasions where the need arises.
-For now we must simply be aware of the relative costs involved in accessing index or table rows from pages that may or may not be stored in the buffer pools.
+关系数据库管理系统的主要目标之一是确保表和索引中的数据在需要时随时可用。
+为了实现这一目标，尽可能使用内存中的缓冲池来最小化磁盘活动。每个 DBMS 可能根据类型（表或索引）和页面大小拥有多个缓冲池。
+每个池的大小足以容纳许多页面，可能有数十万个页面。
+缓冲池管理器将努力确保常用数据保留在池中，以避免额外的磁盘读取。
+这对于 SQL 语句的性能至关重要，因此对于本书的目的也同样重要。我们将在需要时多次回到这个主题。
+现在，我们只需了解从可能存储在缓冲池中或可能未存储的页面访问索引或表行所涉及的相对成本。
 
-In summary then, the ideal place for an index or table page to be when it is requested is in the database buffer pool.
-If it is not there, the next best place for it to be is in the disk server read cache.
-If it is in neither of these, a slow read from disk will be necessary, perhaps involving a long wait for the device to become available.
+总之，索引或表页面在请求时的理想位置是在数据库缓冲池中。
+如果不在那里，次佳位置是在磁盘服务器读取缓存中。
+如果两者都不在，则需要进行缓慢的磁盘读取，可能涉及长时间等待设备变为可用。
 
-- Detect SELECT statements that are too slow due to inadequate indexing: Worst input: Variable values leading to the longest elapsed time
-- Design indexes that make all SELECT statements fast enough:  Table maintenance (INSERT, UPDATE, DELETE) must be fast enough as well
+- 检测因索引不足而过慢的 SELECT 语句：最差输入：导致最长运行时间的变量值
+- 设计使所有 SELECT 语句足够快的索引：表的维护（INSERT、UPDATE、DELETE）也必须足够快
 
-The SELECTs found in textbooks and course material were so unrealistically simple that the best index was usually obvious.
-Experience with real applications has taught, however, that even harmless looking SELECTs, particularly joins, often have a huge number of reasonable indexing alternatives.
-Estimating each alternative requires far too much effort, and measurements even more so.
-On the other hand, even experienced database designers have made numerous mistakes when relying on intuition to design indexes.
+教科书和教材中的 SELECT 语句过于简单，以至于最佳索引通常是显而易见的。
+然而，实际应用的经验告诉我们，即使是看似无害的 SELECT 语句（特别是连接），通常也有大量合理的索引选择。
+估算每种选择需要太多的工作，测量更是如此。
+另一方面，即使是经验丰富的数据库设计师在依赖直觉设计索引时也犯过许多错误。
 
 ## Links
 
-
 - [DataBases](/docs/CS/DB/DB.md)
-
 
 ## References
 

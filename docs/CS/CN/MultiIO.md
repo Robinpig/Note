@@ -1,28 +1,24 @@
-## Introduction
+## 简介
 
+I/O 多路复用通常用于网络应用中的以下场景：
+- 当客户端处理多个描述符（通常是交互式输入和网络套接字）时，应使用 I/O 多路复用。
+- 客户端同时处理多个套接字是可能的，但很少见。
+- 如果 TCP 服务器同时处理监听套接字和已连接的套接字，通常使用 I/O 多路复用。
+- 如果服务器同时处理 TCP 和 UDP，通常使用 I/O 多路复用。
+- 如果服务器处理多个服务以及可能的多种协议，通常使用 I/O 多路复用。
 
-I/O multiplexing is typically used in networking applications in the following scenarios:
-- When a client is handling multiple descriptors (normally interactive input and a network socket), I/O multiplexing should be used.
-- It is possible, but rare, for a client to handle multiple sockets at the same time.
-- If a TCP server handles both a listening socket and its connected sockets, I/O multiplexing is normally used.
-- If a server handles both TCP and UDP, I/O multiplexing is normally used.
-- If a server handles multiple services and perhaps multiple protocols, I/O multiplexing is normally used.
+I/O 多路复用不仅限于网络编程。许多非平凡的应用也需要这些技术。
 
-I/O multiplexing is not limited to network programming. Many nontrivial applications find a need for these techniques.
+## I/O 模型
 
-## I/O Models
+在描述 select 和 poll 之前，我们需要退后一步，从更宏观的角度审视 Unix 下可用的五种 I/O 模型的基本区别：
+- 阻塞 I/O（blocking I/O）
+- 非阻塞 I/O（nonblocking I/O）
+- I/O 多路复用（select 和 poll）
+- 信号驱动 I/O（SIGIO）
+- 异步 I/O（POSIX aio_ 函数）
 
-Before describing select and poll, we need to step back and look at the bigger picture, examining the basic differences in the five I/O models that are available to us
-under Unix:
-- blocking I/O
-- nonblocking I/O
-- I/O multiplexing (select and poll)
-- signal driven I/O (SIGIO)
-- asynchronous I/O (the POSIX aio_ functions)
-
-
-Figure from UNP:
-
+图来自 UNP：
 
 <div style="text-align: center;">
 
@@ -30,39 +26,33 @@ Figure from UNP:
 
 </div>
 
-<p style="text-align: center;">Fig.1. Comparison of the five I/O models</p>
+<p style="text-align: center;">图 1：五种 I/O 模型对比</p>
 
+输入操作通常有两个不同的阶段：
+1. 等待数据准备好
+2. 将数据从内核复制到进程
 
+对于套接字上的输入操作，第一步通常涉及等待数据到达网络。
+当数据包到达时，它被复制到内核的缓冲区中。第二步是将这些数据从内核缓冲区复制到我们的应用程序缓冲区。
 
-There are normally two distinct phases for an input operation:
-1. Waiting for the data to be ready
-2. Copying the data from the kernel to the process
-
-For an input operation on a socket, the first step normally involves waiting for data to arrive on the network. 
-When the packet arrives, it is copied into a buffer within the kernel. The second step is copying this data from the kernel’s buffer into our application buffer.
-
-The main difference between the first four models is the first phase, as the second phase in the first four models is the same: the process is blocked in a call to recvfrom while the data is copied from the kernel to the caller’s buffer. 
-Asynchronous I/O, however, handles both phases and is different from the first four.
+前四种模型的主要区别在于第一阶段，因为前四种模型的第二阶段是相同的：当数据从内核复制到调用者的缓冲区时，进程在 recvfrom 调用中被阻塞。
+而异步 I/O 处理了两个阶段，与前四种模型不同。
 
 > [!NOTE]
 > 
-> POSIX defines these two terms as follows:
-> - A synchronous I/O operation causes the requesting process to be blocked until that I/O operation completes.
-> - An asynchronous I/O operation does not cause the requesting process to be blocked.
+> POSIX 对这两个术语的定义如下：
+> - 同步 I/O 操作会导致请求进程阻塞，直到该 I/O 操作完成。
+> - 异步 I/O 操作不会导致请求进程阻塞。
 
-Using these definitions, the first four I/O models—blocking, nonblocking, I/O multiplexing, and signal-driven I/O—are all synchronous because the actual I/O operation(recvfrom) blocks the process. 
-Only the asynchronous I/O model matches the asynchronous I/O definition.
-
+根据这些定义，前四种 I/O 模型——阻塞、非阻塞、I/O 多路复用和信号驱动 I/O——都是同步的，因为实际的 I/O 操作（recvfrom）会阻塞进程。
+只有异步 I/O 模型匹配异步 I/O 的定义。
 
 ## select
 
-
-> See [Linux select](/docs/CS/OS/Linux/Calls.md?id=select)
-
-
+> 参见 [Linux select](/docs/CS/OS/Linux/Calls.md?id=select)
 
 poll 描述fd的方式和select不同
 没有最大数量限制
 
-## Links
-- [Computer Network](/docs/CS/CN/CN.md)
+## 链接
+- [计算机网络](/docs/CS/CN/CN.md)

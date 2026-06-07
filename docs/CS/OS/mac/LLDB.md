@@ -1,26 +1,13 @@
-## Introduction
+## 简介
 
-[LLDB]（https://lldb.llvm.org/index.html）is a next generation, high-performance debugger. It is built as a set of reusable components which highly leverage existing libraries in the larger LLVM Project, such as the Clang expression parser and LLVM disassembler.
+[LLDB](https://lldb.llvm.org/index.html) 是下一代高性能调试器。它构建为一组可复用组件，大量利用了 LLVM 项目中现有的库，例如 Clang 表达式解析器和 LLVM 反汇编器。
 
-LLDB is the default debugger in Xcode on macOS and supports debugging C, Objective-C and C++ on the desktop and iOS devices and simulator
+LLDB 是 macOS 上 Xcode 的默认调试器，支持在桌面、iOS 设备和模拟器上调试 C、Objective-C 和 C++。
 
-For users already familiar with [GDB](/docs/CS/C/GDB.md) there is a cheat sheet listing common tasks and their LLDB equivalent in the [GDB to LLDB command map](https://lldb.llvm.org/use/map.html).
+对于已经熟悉 [GDB](/docs/CS/C/GDB.md) 的用户，[GDB 到 LLDB 命令映射](https://lldb.llvm.org/use/map.html) 中提供了一个速查表，列出了常见任务及其 LLDB 等效命令。
 
+## 链接
 
-
-
-
-
-
-
-
-## Links
-
-
-
-## References
+## 参考
 
 1. [LLDB调试器使用简介 | 南峰子的技术博客 (southpeak.github.io)](https://southpeak.github.io/2015/01/25/tool-lldb/)
-
-
-

@@ -11,19 +11,20 @@ StackYellowPages                          = 2
 ```
 
 ### vframe
-vframes are virtual stack frames representing source level activations.
-A single frame may hold several source level activations in the case of optimized code.
-The debugging stored with the optimized code enables us to unfold a frame as a stack of vframes.
 
-A cVFrame represents an activation of a non-java method.
+vframe 是表示源码级别 activations 的虚拟栈帧。
+在优化代码的情况下，单个帧可能包含多个源码级别的 activations。
+与优化代码一起存储的调试信息使我们能够将帧展开为 vframes 栈。
 
-The vframe inheritance hierarchy:
+cVFrame 表示非 Java 方法的 activation。
+
+vframe 继承层次结构：
 - vframe
     - javaVFrame
         - interpretedVFrame
-        - compiledVFrame     ; (used for both compiled Java methods and native stubs)
+        - compiledVFrame     ; （用于编译的 Java 方法和 native stubs）
     - externalVFrame
-        - entryVFrame        ; special frame created when calling Java from C
+        - entryVFrame        ; 从 C 调用 Java 时创建的特殊帧
     - BasicLock
 
 
@@ -31,8 +32,8 @@ The vframe inheritance hierarchy:
 
 
 默认分配在资源区的对象的基类。
-可选地，对象可以分配到带有新（AnyObj：：C_HEAP）Foo（...）的C堆，或在有新（&arena）的竞技场中。
-AnyObj 可以分配到其他对象中，但不要使用新对象或删除（allocation_type未知）。 如果用新配置，使用删除来分配。
+可选地，对象可以分配到 C 堆（new (AnyObj::C_HEAP) Foo(...)）或 Arena（new (&arena) Foo(...)）中。
+AnyObj 可以分配到其他对象中，但不要使用 new 或 delete 来分配（allocation_type 未知）。如果用 new 配置，使用 delete 来释放。
 
 ```cpp
 class AnyObj {
@@ -56,11 +57,11 @@ class vframe: public ResourceObj {
 
 
 
-A frame represents a physical stack frame (an activation).  
-Frames can be C or Java frames, and the Java frames can be interpreted or compiled.
+frame 表示一个物理栈帧（一个 activation）。
+帧可以是 C 帧或 Java 帧，Java 帧可以是解释帧或编译帧。
 
-In contrast, vframes represent source-level activations,
-so that one physical frame can correspond to multiple source level frames because of inlining.
+相比之下，vframe 表示源码级别的 activations，
+因此由于内联，一个物理帧可能对应多个源码级别的帧。
 
 ```cpp
 // frame.hpp
@@ -81,7 +82,7 @@ class frame {
   
 ```
 
-CPU_HEADER associate to `frame_<CPU_arch>.hpp`, such as frame_x86.hpp
+CPU_HEADER 关联到 `frame_<CPU_arch>.hpp`，例如 frame_x86.hpp
 ```
 #include CPU_HEADER(frame)
 }

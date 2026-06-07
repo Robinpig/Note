@@ -1,22 +1,19 @@
 ## Introduction
 
-[Gson](https://github.com/google/gson) is a Java library that can be used to convert Java Objects into their JSON representation. It can also be used to convert a JSON string to an equivalent Java object. Gson can work with arbitrary Java objects including pre-existing objects that you do not have source-code of.
+[Gson](https://github.com/google/gson) 是一个 Java 库，可用于将 Java 对象转换为其 JSON 表示形式。
+它也可以用于将 JSON 字符串转换为等效的 Java 对象。
+Gson 可以处理任意 Java 对象，包括那些你没有源代码的现有对象。
 
 > [!Note]
 > 
 > Gson is currently in maintenance mode; existing bugs will be fixed, but large new features will likely not be added.
 
-
-GSON provide two ways to exclude fields from JSON by GsonBuilder:
+GSON 通过 GsonBuilder 提供两种方式来排除 JSON 中的字段：
 
 - `@Expose Annotation`</br>
-  By using the @Expose annotations and then using the excludeFieldsWithoutExposeAnnotation() method on the GsonBuilder will ignore all fields except the ones that have been exposed using the @Expose annotation.
+  使用 @Expose 注解，然后在 GsonBuilder 上调用 excludeFieldsWithoutExposeAnnotation() 方法，将忽略除使用 @Expose 注解暴露的字段之外的所有字段。
 - `Custom Annotation`</br>
-  By defining a custom annotation and ignoring fields that are annotated with exclusion class by extending ExclusionStrategy interface implementing that by using below GsonBuilder methods can ingnore/exclude fields from JSON.
-
-
-
-
+  通过定义自定义注解，并扩展 ExclusionStrategy 接口忽略带有排除类注解的字段，使用以下 GsonBuilder 方法可以实现从 JSON 中忽略/排除字段。
 
 ## Links
 

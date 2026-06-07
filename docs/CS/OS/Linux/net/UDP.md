@@ -1,8 +1,8 @@
 ## Introduction
 
-[UDP](/docs/CS/CN/UDP.md) is a simple transport-layer protocol.
+[UDP](/docs/CS/CN/UDP.md) 是一个简单的传输层协议。
 
-only need bind
+只需要 bind
 
 
 ## Rcv

@@ -1,47 +1,47 @@
-## Introduction
+## 介绍
 
-At the base of Redis replication (excluding the high availability features provided as an additional layer by Redis Cluster or Redis Sentinel) there is a *leader follower* (master-replica) replication that is simple to use and configure.
-It allows replica Redis instances to be exact copies of master instances.
-The replica will automatically reconnect to the master every time the link breaks, and will attempt to be an exact copy of it *regardless* of what happens to the master.
+在 Redis 复制的基础上（不包括由 Redis Cluster 或 Redis Sentinel 提供的额外高可用性功能），有一个简单易用且易于配置的*领导者追随者*（主-从）复制机制。
+它允许从 Redis 实例成为主实例的精确副本。
+每当链接断开时，从实例会自动重新连接到主实例，并*无论*主实例发生什么，都会尝试成为其精确副本。
 
-This system works using three main mechanisms:
+该系统使用三个主要机制工作：
 
-1. When a master and a replica instances are well-connected, the master keeps the replica updated by sending a stream of commands to the replica to replicate the effects on the dataset happening in the master side due to:
-   client writes, keys expired or evicted, any other action changing the master dataset.
-2. When the link between the master and the replica breaks, for network issues or because a timeout is sensed in the master or the replica, the replica reconnects and attempts to proceed with a partial resynchronization:
-   it means that it will try to just obtain the part of the stream of commands it missed during the disconnection.
-3. When a partial resynchronization is not possible, the replica will ask for a full resynchronization.
-   This will involve a more complex process in which the master needs to create a snapshot of all its data, send it to the replica, and then continue sending the stream of commands as the dataset changes.
+1. 当主实例和从实例连接良好时，主实例通过向从实例发送命令流来保持从实例更新，以复制主实例端由于以下原因导致的数据集变化：
+   客户端写入、键过期或淘汰、任何其他更改主数据集的行动。
+2. 当主从之间的链接因网络问题或主从端超时而断开时，从实例重新连接并尝试进行部分重新同步：
+   这意味着它将尝试仅获取断开期间错过的命令流部分。
+3. 当无法进行部分重新同步时，从实例将请求全量重新同步。
+   这将涉及一个更复杂的过程，其中主实例需要创建其所有数据的快照，发送给从实例，然后随着数据集的变化继续发送命令流。
 
-Redis uses by default asynchronous replication, which being low latency and high performance, is the natural replication mode for the vast majority of Redis use cases. 
-However, Redis replicas asynchronously acknowledge the amount of data they received periodically with the master. 
-So the master does not wait every time for a command to be processed by the replicas, however it knows, if needed, what replica already processed what command. This allows having optional synchronous replication.
+Redis 默认使用异步复制，具有低延迟和高性能的特点，是绝大多数 Redis 用例的自然复制模式。
+然而，Redis 从实例会异步确认它们定期从主实例接收的数据量。
+因此主实例不会每次都等待从实例处理命令，但如果需要，它知道哪个从实例已经处理了哪个命令。这允许支持可选的同步复制。
 
-Synchronous replication of certain data can be requested by the clients using the `WAIT` command.
-However `WAIT` is only able to ensure there are the specified number of acknowledged copies in the other Redis instances, it does not turn a set of Redis instances into a CP system with strong consistency:
-acknowledged writes can still be lost during a failover, depending on the exact configuration of the Redis persistence.
-However with `WAIT` the probability of losing a write after a failure event is greatly reduced to certain hard to trigger failure modes.
+客户端可以使用 `WAIT` 命令请求某些数据的同步复制。
+然而 `WAIT` 只能确保在其他 Redis 实例中存在指定数量的已确认副本，它不会将一组 Redis 实例转换为具有强一致性的 CP 系统：
+已确认的写入在故障转移期间仍可能丢失，具体取决于 Redis 持久化的确切配置。
+但使用 `WAIT` 后，故障事件后丢失写入的概率大大降低，仅限于某些难以触发的故障模式。
 
-### Important facts
+### 重要事实
 
-* Redis uses asynchronous replication, with asynchronous replica-to-master acknowledges of the amount of data processed.
-* A master can have multiple replicas.
-* Replicas are able to accept connections from other replicas. Aside from connecting a number of replicas to the same master, replicas can also be connected to other replicas in a cascading-like structure.
-  Since Redis 4.0, all the sub-replicas will receive exactly the same replication stream from the master.
-* Redis replication is non-blocking on the master side. This means that the master will continue to handle queries when one or more replicas perform the initial synchronization or a partial resynchronization.
-* Replication is also largely non-blocking on the replica side.
-  While the replica is performing the initial synchronization, it can handle queries using the old version of the dataset, assuming you configured Redis to do so in redis.conf.
-  Otherwise, you can configure Redis replicas to return an error to clients if the replication stream is down. However, after the initial sync, the old dataset must be deleted and the new one must be loaded.
-  The replica will block incoming connections during this brief window (that can be as long as many seconds for very large datasets).
-  Since Redis 4.0 you can configure Redis so that the deletion of the old data set happens in a different thread, however loading the new initial dataset will still happen in the main thread and block the replica.
-* Replication can be used both for scalability, to have multiple replicas for read-only queries (for example, slow O(N) operations can be offloaded to replicas), or simply for improving data safety and high availability.
-* You can use replication to avoid the cost of having the master writing the full dataset to disk: a typical technique involves configuring your master `redis.conf` to avoid persisting to disk at all, then connect a replica configured to save from time to time, or with AOF enabled.
-  However, this setup must be handled with care, since a restarting master will start with an empty dataset: if the replica tries to sync with it, the replica will be emptied as well.
+* Redis 使用异步复制，从实例异步确认已处理的数据量。
+* 一个主实例可以有多个从实例。
+* 从实例能够接受其他从实例的连接。除了将多个从实例连接到同一个主实例外，从实例还可以以级联结构连接到其他从实例。
+  从 Redis 4.0 开始，所有子从实例将从主实例接收完全相同的复制流。
+* Redis 复制在主端是非阻塞的。这意味着当一个或多个从实例执行初始同步或部分重新同步时，主实例将继续处理查询。
+* 复制在从端也基本上是非阻塞的。
+  当从实例执行初始同步时，它可以继续使用旧版本的数据集处理查询，前提是你已在 redis.conf 中配置 Redis 这样做。
+  否则，你可以配置 Redis 从实例在复制流断开时向客户端返回错误。然而，初始同步后，旧数据集必须被删除，新数据集必须加载。
+  在这个短暂的时间窗口内（对于非常大的数据集可能长达数秒），从实例将阻塞传入连接。
+  从 Redis 4.0 开始，你可以配置 Redis 在单独的线程中删除旧数据集，但加载新的初始数据集仍将在主线程中进行并阻塞从实例。
+* 复制既可用于可扩展性，让多个从实例处理只读查询（例如，慢的 O(N) 操作可以卸载到从实例），也可用于提高数据安全性和高可用性。
+* 你可以使用复制来避免主实例将完整数据集写入磁盘的成本：一种典型技术是配置主实例 `redis.conf` 完全避免持久化，然后连接一个配置为定期保存或启用 AOF 的从实例。
+  然而，这种设置必须谨慎处理，因为重启的主实例将以空数据集启动：如果从实例尝试与其同步，从实例也会被清空。
 
-In setups where Redis replication is used, it is strongly advised to have persistence turned on in the master and in the replicas.
-When this is not possible, for example because of latency concerns due to very slow disks, instances should be configured to **avoid restarting automatically** after a reboot.
+在使用 Redis 复制的设置中，强烈建议在主实例和从实例上都开启持久化。
+如果无法做到，例如由于磁盘较慢导致的延迟问题，实例应配置为在重启后**避免自动重启**。
 
-## Replication works
+## 复制工作原理
 
 同步分为三种情况：
 
@@ -49,107 +49,106 @@ When this is not possible, for example because of latency concerns due to very s
 - 主从正常运行期间的同步；
 - 主从库间网络断开重连同步。
 
-
-Every Redis master has a replication ID: it is a large pseudo random string that marks a given story of the dataset.
-Each master also takes an offset that increments for every byte of replication stream that it is produced to be sent to replicas, to update the state of the replicas with the new changes modifying the dataset.
-The replication offset is incremented even if no replica is actually connected, so basically every given pair of:
+每个 Redis 主实例都有一个复制 ID：它是一个大的伪随机字符串，标记数据集的一段给定历史。
+每个主实例还会维护一个偏移量，该偏移量随复制流的每个字节递增，复制流被生成以发送给从实例，以使用修改数据集的新更改更新从实例的状态。
+即使没有从实例实际连接，复制偏移量也会递增，因此基本上每个给定的：
 
 ```
 Replication ID, offset
 ```
 
-Identifies an exact version of the dataset of a master.
+标识了主实例数据集的一个精确版本。
 
-When replicas connect to masters, they use the `PSYNC` command to send their old master replication ID and the offsets they processed so far.
-This way the master can send just the incremental part needed.
-However if there is not enough *backlog* in the master buffers, or if the replica is referring to an history (replication ID) which is no longer known, then a full resynchronization happens: in this case the replica will get a full copy of the dataset, from scratch.
+当从实例连接到主实例时，它们使用 `PSYNC` 命令发送其旧的主实例复制 ID 和已处理的偏移量。
+这样主实例只需发送所需的增量部分。
+然而，如果主实例缓冲区中没有足够的*积压*，或者从实例引用的历史（复制 ID）已不再知晓，则会发生全量重新同步：在这种情况下，从实例将从头开始获取数据集的完整副本。
 
-This is how a full synchronization works in more details:
+以下是全量同步的详细工作方式：
 
-The master starts a background saving process to produce an RDB file. At the same time it starts to buffer all new write commands received from the clients.
-When the background saving is complete, the master transfers the database file to the replica, which saves it on disk, and then loads it into memory.
-The master will then send all buffered commands to the replica. This is done as a stream of commands and is in the same format of the Redis protocol itself.
+主实例启动后台保存进程以生成 RDB 文件。同时，它开始缓冲从客户端收到的所有新写入命令。
+当后台保存完成时，主实例将数据库文件传输给从实例，从实例将其保存到磁盘，然后加载到内存中。
+然后主实例将所有缓冲的命令发送给从实例。这是作为命令流完成的，格式与 Redis 协议本身相同。
 
-You can try it yourself via telnet.
-Connect to the Redis port while the server is doing some work and issue the `SYNC` command.
-You'll see a bulk transfer and then every command received by the master will be re-issued in the telnet session.
-Actually `SYNC` is an old protocol no longer used by newer Redis instances, but is still there for backward compatibility: it does not allow partial resynchronizations, so now `PSYNC` is used instead.
+你可以通过 telnet 亲自尝试。
+在服务器执行某些工作时连接到 Redis 端口并发出 `SYNC` 命令。
+你会看到一个批量传输，然后主实例收到的每个命令都会在 telnet 会话中重新发出。
+实际上 `SYNC` 是一个旧协议，新的 Redis 实例不再使用，但仍保留用于向后兼容：它不允许部分重新同步，所以现在使用 `PSYNC`。
 
-As already said, replicas are able to automatically reconnect when the master-replica link goes down for some reason.
-If the master receives multiple concurrent replica synchronization requests, it performs a single background save in to serve all of them.
+如前所述，当主从链接因某种原因断开时，从实例能够自动重新连接。
+如果主实例收到多个并发的从实例同步请求，它会执行一次后台保存来服务所有从实例。
 
-This is one of the most complex files inside Redis, it is recommended to approach it only after getting a bit familiar with the rest of the code base. In this file there is the implementation of both the master and replica role of Redis.
+这是 Redis 内部最复杂的文件之一，建议在熟悉了其他代码库后再来阅读。此文件中实现了 Redis 的主实例和从实例角色。
 
-One of the most important functions inside this file is `replicationFeedSlaves()` that writes commands to the clients representing replica instances connected to our master, so that the replicas can get the writes performed by the clients: this way their data set will remain synchronized with the one in the master.
+此文件中最重要的函数之一是 `replicationFeedSlaves()`，它将命令写入连接到我们主实例的从实例客户端，以便从实例能够获取客户端执行的写入：这样它们的数据集将与主实例保持同步。
 
-This file also implements both the `SYNC` and `PSYNC` commands that are used in order to perform the first synchronization between masters and replicas, or to continue the replication after a disconnection.
+此文件还实现了 `SYNC` 和 `PSYNC` 命令，用于执行主从之间的首次同步，或在断开连接后继续复制。
 
-Prepare a configuration file for the Redis slave server.
-You can make a copy of redis.conf and rename it redis-slave.conf, then make the following changes:
+为 Redis 从服务器准备配置文件。
+你可以复制 redis.conf 并重命名为 redis-slave.conf，然后进行以下更改：
 
 > port 6380
 > pidfile /var/run/redis_6380.pid
 > replicaof 127.0.0.1 6379
 
-The backlog is a buffer that accumulates replica data when replicas are disconnected for some time, so that when a replica wants to reconnect again, often a full resync is not needed, but a
-partial resync is enough, just passing the portion of data the replica missed while disconnected.
+积压是一个缓冲区，在从实例断开连接一段时间后累积从实例数据，这样当从实例想要重新连接时，通常不需要全量重新同步，
+而只需要部分重新同步，传递从实例断开期间错过的数据部分即可。
 
-The bigger the replication backlog, the longer the replica can endure the disconnect and later be able to perform a partial resynchronization.
+复制积压越大，从实例可以忍受断开的连接时间越长，之后才能执行部分重新同步。
 
-The backlog is only allocated if there is at least one replica connected.
+只有至少连接了一个从实例时，积压才会分配。
 
 ```
 repl-backlog-size 1mb
 ```
 
-By calculating the delta value of the master_repl_offset from the INFO command during peak hours, we can estimate an appropriate size for the replication backlog:
+通过计算高峰时段 INFO 命令中的 master_repl_offset 的增量值，我们可以估计复制积压的适当大小：
 
 > t*(master_repl_offset2- master_repl_offset1)/(t2-t1)
-> t  is how long the disconnection may last in seconds
+> t 是断开可能持续的时间（秒）
 
-## Expire Keys
+## 过期键
 
-Redis expires allow keys to have a limited time to live (TTL). 
-Such a feature depends on the ability of an instance to count the time, however Redis replicas correctly replicate keys with expires, even when such keys are altered using Lua scripts.
+Redis 过期允许键具有有限的生命周期（TTL）。
+此功能依赖于实例计时能力，但 Redis 从实例可以正确复制具有过期时间的键，即使这些键是使用 Lua 脚本更改的。
 
-To implement such a feature Redis cannot rely on the ability of the master and replica to have syncd clocks, since this is a problem that cannot be solved and would result in race conditions and diverging data sets, so Redis uses three main techniques to make the replication of expired keys able to work:
+为了实现此功能，Redis 不能依赖主从实例具有同步时钟，因为这是一个无法解决的问题，会导致竞争条件和数据集发散，因此 Redis 使用三种主要技术使过期键的复制能够工作：
 
-1. Replicas don't expire keys, instead they wait for masters to expire the keys. 
-   When a master expires a key (or evict it because of LRU), it synthesizes a `DEL` command which is transmitted to all the replicas.
-2. However because of master-driven expire, sometimes replicas may still have in memory keys that are already logically expired, since the master was not able to provide the `DEL` command in time. 
-   To deal with that the replica uses its logical clock to report that a key does not exist **only for read operations** that don't violate the consistency of the data set (as new commands from the master will arrive). 
-   In this way replicas avoid reporting logically expired keys that are still existing. 
-   In practical terms, an HTML fragments cache that uses replicas to scale will avoid returning items that are already older than the desired time to live.
-3. During Lua scripts executions no key expiries are performed. As a Lua script runs, conceptually the time in the master is frozen, so that a given key will either exist or not for all the time the script runs. 
-   This prevents keys expiring in the middle of a script, and is needed to send the same script to the replica in a way that is guaranteed to have the same effects in the data set.
+1. 从实例不会过期键，而是等待主实例过期键。
+   当主实例过期键（或由于 LRU 淘汰键）时，它会合成一个 `DEL` 命令，传输给所有从实例。
+2. 然而，由于主驱动的过期，有时从实例可能仍然在内存中保存已逻辑过期的键，因为主实例未能及时提供 `DEL` 命令。
+   为处理这种情况，从实例使用其逻辑时钟报告键不存在，**仅针对不违反数据集一致性的读操作**（因为来自主实例的新命令会到达）。
+   这样，从实例避免报告仍然存在的逻辑过期键。
+   实际上，使用从实例来扩展的 HTML 片段缓存将避免返回已经超过所需 TTL 的项目。
+3. 在 Lua 脚本执行期间，不会进行任何键过期。当 Lua 脚本运行时，概念上主实例的时间被冻结，因此给定的键在脚本运行的所有时间内要么存在要么不存在。
+   这防止了键在脚本执行中途过期，并且是向从实例发送相同脚本以确保对数据集产生相同效果所必需的。
 
-Once a replica is promoted to a master it will start to expire keys independently, and will not require any help from its old master.
+一旦从实例被提升为主实例，它将开始独立过期键，并且不需要从其旧主实例获得任何帮助。
 
-## How Redis replication works
+## Redis 复制如何工作
 
-Every Redis master has a replication ID: it is a large pseudo random string that marks a given story of the dataset.
-Each master also takes an offset that increments for every byte of replication stream that it is produced to be sent to replicas, in order to update the state of the replicas with the new changes modifying the dataset.
-The replication offset is incremented even if no replica is actually connected, so basically every given pair of:
+每个 Redis 主实例都有一个复制 ID：它是一个大的伪随机字符串，标记数据集的一段给定历史。
+每个主实例还会维护一个偏移量，该偏移量随复制流的每个字节递增，复制流被生成以发送给从实例，以使用修改数据集的新更改更新从实例的状态。
+即使没有从实例实际连接，复制偏移量也会递增。
 
-After a master has no connected replicas for some time, the backlog will be freed.
-The following option configures the amount of seconds that need to elapse, starting from the time the last replica disconnected, for the backlog buffer to be freed.
+在主实例一段时间没有连接的从实例后，积压将被释放。
+以下选项配置从最后一个从实例断开连接开始，需要经过多少秒积压缓冲区才会被释放。
 
-Note that replicas never free the backlog for timeout, since they may be promoted to masters later, and should be able to correctly "partially resynchronize" with other replicas: hence they should always accumulate backlog.
+请注意，从实例永远不会因超时而释放积压，因为它们稍后可能被提升为主实例，并且应能正确地对其他从实例进行"部分重新同步"：因此它们应始终保持积压。
 
-A value of 0 means to never release the backlog.
+值为 0 表示永远不会释放积压。
 
 ```
 repl-backlog-ttl 3600
 ```
 
-Disable TCP_NODELAY on the replica socket after SYNC?
+在 SYNC 后禁用从套接字的 TCP_NODELAY？
 
-If you select "yes" Redis will use a smaller number of TCP packets and less bandwidth to send data to replicas.
-But this can add a delay for the data to appear on the replica side, up to 40 milliseconds with Linux kernels using a default configuration.
+如果选择"yes"，Redis 将使用更少的 TCP 数据包和更少的带宽向从实例发送数据。
+但这可能会增加数据在从端出现的时间延迟，使用 Linux 内核的默认配置可达 40 毫秒。
 
-If you select "no" the delay for data to appear on the replica side will be reduced but more bandwidth will be used for replication.
+如果选择"no"，数据在从端出现的延迟将减少，但复制将使用更多带宽。
 
-By default we optimize for low latency, but in very high traffic conditions or when the master and replicas are many hops away, turning this to "yes" may be a good idea.
+默认情况下，我们优化低延迟，但在非常高的流量条件下，或者当主从实例之间的距离很远时，将此设置为"yes"可能是个好主意。
 
 ```
 repl-disable-tcp-nodelay no
@@ -159,20 +158,20 @@ repl-disable-tcp-nodelay no
 Replication ID, offset
 ```
 
-Identifies an exact version of the dataset of a master.
+标识了主实例数据集的一个精确版本。
 
-When replicas connect to masters, they use the `PSYNC` command in order to send their old master replication ID and the offsets they processed so far.
-This way the master can send just the incremental part needed.
-However if there is not enough *backlog* in the master buffers, or if the replica is referring to an history (replication ID) which is no longer known, than a full resynchronization happens: in this case the replica will get a full copy of the dataset, from scratch.
+当从实例连接到主实例时，它们使用 `PSYNC` 命令发送其旧的主实例复制 ID 和已处理的偏移量。
+这样主实例只需发送所需的增量部分。
+然而，如果主实例缓冲区中没有足够的*积压*，或者从实例引用的历史（复制 ID）已不再知晓，则会发生全量重新同步：在这种情况下，从实例将从头开始获取数据集的完整副本。
 
 replication buffer
 
-One of the most important functions inside this file is `replicationFeedSlaves()` that writes commands to the clients representing replica instances connected to our master, so that the replicas can get the writes performed by the clients:
-this way their data set will remain synchronized with the one in the master.
+此文件中最重要的函数之一是 `replicationFeedSlaves()`，它将命令写入连接到我们主实例的从实例客户端，以便从实例能够获取客户端执行的写入：
+这样它们的数据集将与主实例保持同步。
 
 #### replicationSetMaster
 
-Set replication to the specified master address and port.
+将复制设置为指定的主实例地址和端口。
 
 ```c
 // replication.c
@@ -249,7 +248,7 @@ int connectWithMaster(void) {
 
 #### sync
 
-This handler fires when the non blocking connect was able to establish a connection with the master.
+当非阻塞连接能够与主实例建立连接时，此处理程序触发。
 
 ```c
 void syncWithMaster(connection *conn) {
@@ -261,74 +260,69 @@ void syncWithMaster(connection *conn) {
 
 ### fullsync
 
-主从库第一次复制过程大体可以分为 3 个阶段：连接建立阶段（即准备阶段）、主库同步数据到从库阶段、发送同步期间新写命令到从库阶段
+主从库第一次复制过程大体可以分为 3 个阶段：连接建立阶段（即准备阶段）、主库同步数据到从库阶段、发送同步期间新写命令到从库阶段。
 
 建立连接
-该阶段的主要作用是在主从节点之间建立连接，为数据全量同步做好准备。从库会和主库建立连接，从库执行 replicaof 并发送 psync 命令并告诉主库即将进行同步，主库确认回复后会用 FULLRESYNC 响应命令带上两个参数：主库 runID 和主库目前的复制进度 offset，返回给从库，主从库间就开始同步了
+该阶段的主要作用是在主从节点之间建立连接，为数据全量同步做好准备。从库会和主库建立连接，从库执行 replicaof 并发送 psync 命令并告诉主库即将进行同步，主库确认回复后会用 FULLRESYNC 响应命令带上两个参数：主库 runID 和主库目前的复制进度 offset，返回给从库，主从库间就开始同步了。
 
-master 执行 bgsave命令生成 RDB 文件，并将文件发送给从库，同时主库为每一个 slave 开辟一块 replication buffer 缓冲区记录从生成 RDB 文件开始收到的所有写命令。
+master 执行 bgsave 命令生成 RDB 文件，并将文件发送给从库，同时主库为每一个 slave 开辟一块 replication buffer 缓冲区记录从生成 RDB 文件开始收到的所有写命令。
 
-从库收到 RDB 文件后保存到磁盘，并清空当前数据库的数据，再加载 RDB 文件数据到内存中
-
+从库收到 RDB 文件后保存到磁盘，并清空当前数据库的数据，再加载 RDB 文件数据到内存中。
 
 从节点加载 RDB 完成后，主节点将 replication buffer 缓冲区的数据发送到从节点，Slave 接收并执行，从节点同步至主节点相同的状态。
 
-
-replication buffer是一个在 master 端上创建的缓冲区，存放的数据是下面三个时间内所有的 master 数据写操作。
+replication buffer 是一个在 master 端上创建的缓冲区，存放的数据是下面三个时间内所有的 master 数据写操作。
 
 1. master 执行 bgsave 产生 RDB 的期间的写操作；
 2. master 发送 rdb 到 slave 网络传输期间的写操作；
 3. slave load rdb 文件把数据恢复到内存的期间的写操作。
 
-replication buffer 由 client-output-buffer-limit slave 设置，当这个值太小会导致主从复制连接断开
+replication buffer 由 client-output-buffer-limit slave 设置，当这个值太小会导致主从复制连接断开。
 1. 当 master-slave 复制连接断开，master 会释放连接相关的数据。replication buffer 中的数据也就丢失了，此时主从之间重新开始复制过程。
 2. 还有个更严重的问题，主从复制连接断开，导致主从上出现重新执行 bgsave 和 rdb 重传操作无限循环。
 
-当主节点数据量较大，或者主从节点之间网络延迟较大时，可能导致该缓冲区的大小超过了限制，此时主节点会断开与从节点之间的连接；
+当主节点数据量较大，或者主从节点之间网络延迟较大时，可能导致该缓冲区的大小超过了限制，此时主节点会断开与从节点之间的连接。
 
 这种情况可能引起全量复制 -> replication buffer 溢出导致连接中断 -> 重连 -> 全量复制 -> replication buffer 缓冲区溢出导致连接中断……的循环。
-推荐把 replication buffer 的 hard/soft limit 设置成 512M
+推荐把 replication buffer 的 hard/soft limit 设置成 512M。
 
-一次全量复制中，对于主库来说，需要完成两个耗时的操作：生成 RDB 文件和传输 RDB 文件
-如果从库数量很多，而且都要和主库进行全量复制的话，就会导致主库忙于 fork 子进程生成 RDB 文件，进行数据全量同步
-fork 这个操作会阻塞主线程处理正常请求，从而导致主库响应应用程序的请求速度变慢。此外，传输 RDB 文件也会占用主库的网络带宽，同样会给主库的资源使用带来压力
+一次全量复制中，对于主库来说，需要完成两个耗时的操作：生成 RDB 文件和传输 RDB 文件。
+如果从库数量很多，而且都要和主库进行全量复制的话，就会导致主库忙于 fork 子进程生成 RDB 文件，进行数据全量同步。
+fork 这个操作会阻塞主线程处理正常请求，从而导致主库响应应用程序的请求速度变慢。此外，传输 RDB 文件也会占用主库的网络带宽，同样会给主库的资源使用带来压力。
 
-主 - 从 - 从 模式将主库生成 RDB 和传输 RDB 的压力，以级联的方式分散到从库上
+主 - 从 - 从 模式将主库生成 RDB 和传输 RDB 的压力，以级联的方式分散到从库上。
 
 ### 增量复制
 
 当主从库完成了全量复制，它们之间就会一直维护一个网络连接，主库会通过这个连接将后续陆续收到的命令操作再同步给从库，这个过程也称为基于长连接的命令传播，使用长连接的目的就是避免频繁建立连接导致的开销。
 
-在命令传播阶段，除了发送写命令，主从节点还维持着心跳机制：PING 和 REPLCONF ACK
-
+在命令传播阶段，除了发送写命令，主从节点还维持着心跳机制：PING 和 REPLCONF ACK。
 
 断开重连增量复制的实现奥秘就是 repl_backlog_buffer 缓冲区，不管在什么时候 master 都会将写指令操作记录在 repl_backlog_buffer 中，
-因为内存有限， repl_backlog_buffer 是一个定长的环形数组，如果数组内容满了，就会从头开始覆盖前面的内容。
+因为内存有限，repl_backlog_buffer 是一个定长的环形数组，如果数组内容满了，就会从头开始覆盖前面的内容。
 
-master 使用 master_repl_offset记录自己写到的位置偏移量，slave 则使用 slave_repl_offset记录已经读取到的偏移量
+master 使用 master_repl_offset 记录自己写到的位置偏移量，slave 则使用 slave_repl_offset 记录已经读取到的偏移量。
 master 收到写操作，偏移量则会增加。从库持续执行同步的写指令后，在 repl_backlog_buffer 的已复制的偏移量 slave_repl_offset 也在不断增加。
 
-正常情况下，这两个偏移量基本相等。在网络断连阶段，主库可能会收到新的写操作命令，所以 master_repl_offset会大于 slave_repl_offset
+正常情况下，这两个偏移量基本相等。在网络断连阶段，主库可能会收到新的写操作命令，所以 master_repl_offset 会大于 slave_repl_offset。
 
-当主从断开重连后，slave 会先发送 psync 命令给 master，同时将自己的 runID，slave_repl_offset发送给 master。
-master 只需要把 master_repl_offset与 slave_repl_offset之间的命令同步给从库即可。
-
-
+当主从断开重连后，slave 会先发送 psync 命令给 master，同时将自己的 runID，slave_repl_offset 发送给 master。
+master 只需要把 master_repl_offset 与 slave_repl_offset 之间的命令同步给从库即可。
 
 replication buffer 和 repl_backlog
 
-replication buffer 对应于每个 slave，通过 config set client-output-buffer-limit slave设置。
-repl_backlog_buffer是一个环形缓冲区，整个 master 进程中只会存在一个，所有的 slave 公用。repl_backlog 的大小通过 repl-backlog-size 参数设置，默认大小是 1M，其大小可以根据每秒产生的命令、（master 执行 rdb bgsave） +（ master 发送 rdb 到 slave） + （slave load rdb 文件）时间之和来估算积压缓冲区的大小，repl-backlog-size 值不小于这两者的乘积。
+replication buffer 对应于每个 slave，通过 config set client-output-buffer-limit slave 设置。
+repl_backlog_buffer 是一个环形缓冲区，整个 master 进程中只会存在一个，所有的 slave 公用。repl_backlog 的大小通过 repl-backlog-size 参数设置，默认大小是 1M，其大小可以根据每秒产生的命令、（master 执行 rdb bgsave）+（master 发送 rdb 到 slave）+（slave load rdb 文件）时间之和来估算积压缓冲区的大小，repl-backlog-size 值不小于这两者的乘积。
 总的来说，replication buffer 是主从库在进行全量复制时，主库上用于和从库连接的客户端的 buffer，而 repl_backlog_buffer 是为了支持从库增量复制，主库上用于持续保存写操作的一块专用 buffer。
 
-repl_backlog_buffer是一块专用 buffer，在 Redis 服务器启动后，开始一直接收写操作命令，这是所有从库共享的。主库和从库会各自记录自己的复制进度，所以，不同的从库在进行恢复时，会把自己的复制进度（slave_repl_offset）发给主库，主库就可以和它独立同步。
+repl_backlog_buffer 是一块专用 buffer，在 Redis 服务器启动后，开始一直接收写操作命令，这是所有从库共享的。主库和从库会各自记录自己的复制进度，所以，不同的从库在进行恢复时，会把自己的复制进度（slave_repl_offset）发给主库，主库就可以和它独立同步。
 ### master
 
 #### masterTryPartialResynchronization
 
-This function handles the PSYNC command from the point of view of a master receiving a request for partial resynchronization.
+此函数从主实例的角度处理 PSYNC 命令，接收部分重新同步请求。
 
-On success return C_OK, otherwise C_ERR is returned and we proceed with the usual full resync.
+成功时返回 C_OK，否则返回 C_ERR，我们将进行通常的全量重新同步。
 
 ```c
 int masterTryPartialResynchronization(client *c) {
@@ -436,11 +430,10 @@ need_full_resync:
 }
 ```
 
-
 时钟定期检查副本链接健康情况。
 
-This function counts the number of slaves with `lag <= min-slaves-max-lag`.
-If the option is active, the server will prevent writes if there are not enough connected slaves with the specified lag (or less).
+此函数计算 `lag <= min-slaves-max-lag` 的从实例数量。
+如果该选项启用，当没有足够多的具有指定延迟（或更少）的连接从实例时，服务器将阻止写入。
 ```c
 void refreshGoodSlavesCount(void) {
     listIter li;
@@ -486,35 +479,35 @@ int processCommand(client *c) {
 
 ### slave
 
-Try a partial resynchronization with the master if we are about to reconnect.
-If there is no cached master structure, at least try to issue a "PSYNC ? -1" command in order to trigger a full resync using the PSYNC command in order to obtain the master replid and the master replication global offset.
+如果我们要重新连接，尝试与主实例进行部分重新同步。
+如果没有缓存的主实例结构，至少尝试发出"PSYNC ? -1"命令，以便使用 PSYNC 命令触发全量重新同步，从而获取主实例 replid 和全局复制偏移量。
 
-This function is designed to be called from syncWithMaster(), so the following assumptions are made:
+此函数设计为由 syncWithMaster() 调用，因此有以下假设：
 
-1. We pass the function an already connected socket "fd".
-2. This function does not close the file descriptor "fd".
-   However in case of successful partial resynchronization, the function will reuse 'fd' as file descriptor of the server.master client structure.
+1. 我们传递一个已连接的套接字 "fd"。
+2. 此函数不会关闭文件描述符 "fd"。
+   然而，在部分重新同步成功的情况下，该函数将重用 'fd' 作为 server.master 客户端结构的文件描述符。
 
-The function is split in two halves: if read_reply is 0, the function writes the PSYNC command on the socket, and a new function call is needed, with read_reply set to 1, in order to read the reply of the command.
-This is useful in order to support non blocking operations, so that we write, return into the event loop, and read when there are data.
+该函数分为两部分：如果 read_reply 为 0，该函数将 PSYNC 命令写入套接字，然后需要再次调用该函数，read_reply 设置为 1，以读取命令的回复。
+这对于支持非阻塞操作很有用，这样我们写入、返回到事件循环，然后在有数据时读取。
 
-When read_reply is 0 the function returns PSYNC_WRITE_ERR if there was a write error, or PSYNC_WAIT_REPLY to signal we need another call with read_reply set to 1.
-However even when read_reply is set to 1 the function may return PSYNC_WAIT_REPLY again to signal there were insufficient data to read to complete its work.
-We should re-enter into the event loop and wait in such a case.
+当 read_reply 为 0 时，如果发生写入错误，函数返回 PSYNC_WRITE_ERR，或者返回 PSYNC_WAIT_REPLY 表示我们需要再次调用 read_reply 设置为 1。
+然而，即使 read_reply 设置为 1，该函数也可能再次返回 PSYNC_WAIT_REPLY，表示没有足够的数据可供读取以完成其工作。
+在这种情况下，我们应该重新进入事件循环并等待。
 
-The function returns:
+函数返回：
 
-- PSYNC_CONTINUE: If the PSYNC command succeeded and we can continue.
-- PSYNC_FULLRESYNC: If PSYNC is supported but a full resync is needed. In this case the master replid and global replication offset is saved.
-- PSYNC_NOT_SUPPORTED: If the server does not understand PSYNC at all and the caller should fall back to SYNC.
-- PSYNC_WRITE_ERROR: There was an error writing the command to the socket.
-- PSYNC_WAIT_REPLY: Call again the function with read_reply set to 1.
-- PSYNC_TRY_LATER: Master is currently in a transient error condition.
+- PSYNC_CONTINUE：如果 PSYNC 命令成功，我们可以继续。
+- PSYNC_FULLRESYNC：如果支持 PSYNC 但需要全量重新同步。在这种情况下，主实例 replid 和全局复制偏移量会被保存。
+- PSYNC_NOT_SUPPORTED：如果服务器根本不理解 PSYNC，调用者应回退到 SYNC。
+- PSYNC_WRITE_ERROR：写入命令到套接字时发生错误。
+- PSYNC_WAIT_REPLY：再次调用该函数，read_reply 设置为 1。
+- PSYNC_TRY_LATER：主实例当前处于临时错误状态。
 
-Notable side effects:
+值得注意的副作用：
 
-1. As a side effect of the function call the function removes the readable event handler from "fd", unless the return value is PSYNC_WAIT_REPLY.
-2. server.master_initial_offset is set to the right value according to the master reply. This will be used to populate the 'server.master' structure replication offset.
+1. 作为函数调用的副作用，该函数会从 "fd" 移除可读事件处理程序，除非返回值是 PSYNC_WAIT_REPLY。
+2. server.master_initial_offset 根据主实例回复设置为正确的值。这将用于填充 'server.master' 结构复制偏移量。
 
 #### slaveTryPartialResynchronization
 
@@ -685,9 +678,9 @@ int slaveTryPartialResynchronization(connection *conn, int read_reply) {
 }
 ```
 
-Propagate write commands to slaves, and populate the replication backlog as well.
-This function is used if the instance is a master: we use the commands received by our clients in order to create the replication stream.
-Instead if the instance is a slave and has sub-slaves attached, we use replicationFeedSlavesFromMasterStream()
+将写入命令传播到从实例，并同时填充复制积压。
+如果实例是主实例，则使用此函数：我们使用客户端收到的命令来创建复制流。
+如果实例是从实例且附有子从实例，则使用 replicationFeedSlavesFromMasterStream()。
 
 ```c
 void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
@@ -704,7 +697,7 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
     if (server.masterhost != NULL) return;
 ```
 
-If there aren't slaves, and there is no backlog buffer to populate, we can return ASAP.
+如果没有从实例，也没有需要填充的积压缓冲区，我们可以立即返回。
 
 ```c
     if (server.repl_backlog == NULL && listLength(slaves) == 0) return;
@@ -797,7 +790,7 @@ If there aren't slaves, and there is no backlog buffer to populate, we can retur
 
 ### startBgsaveForReplication
 
-从服务刚启动或因网络原因，与主服务长时间断开，重连后发现主从数据已经严重不匹配了，主服务需要将内存数据保存成 rdb 二进制压缩文件，传送给这些重新链接的服务
+从服务刚启动或因网络原因，与主服务长时间断开，重连后发现主从数据已经严重不匹配了，主服务需要将内存数据保存成 rdb 二进制压缩文件，传送给这些重新链接的服务。
 
 ```c
 int startBgsaveForReplication(int mincapa, int req) {
@@ -882,62 +875,50 @@ int startBgsaveForReplication(int mincapa, int req) {
 
 ```
 
-
-
 ## Memory
 
-By default, a replica will ignore `maxmemory` (unless it is promoted to master after a failover or manually).
-It means that the eviction of keys will be handled by the master, sending the DEL commands to the replica as keys evict in the master side.
+默认情况下，从实例会忽略 `maxmemory`（除非在故障转移后或被手动提升为主实例）。
+这意味着键的淘汰将由主实例处理，在主端淘汰键时向从实例发送 DEL 命令。
 
-This behavior ensures that masters and replicas stay consistent, which is usually what you want.
-However, if your replica is writable, or you want the replica to have a different memory setting, and you are sure all the writes performed to the replica are idempotent, then you may change this default (but be sure to understand what you are doing).
+此行为确保主从实例保持一致，这通常是期望的。
+然而，如果从实例是可写的，或者你希望从实例有不同的内存设置，并且你确定对从实例执行的所有写入都是幂等的，那么你可以更改此默认值（但请确保你了解自己在做什么）。
 
-Note that since the replica by default does not evict, it may end up using more memory than what is set via `maxmemory` (since there are certain buffers that may be larger on the replica, or data structures may sometimes take more memory and so forth).
-Make sure you monitor your replicas, and make sure they have enough memory to never hit a real out-of-memory condition before the master hits the configured `maxmemory` setting.
+请注意，由于从实例默认不淘汰，它最终可能使用比 `maxmemory` 设置更多的内存（因为某些缓冲区在从实例上可能更大，或者数据结构有时可能占用更多内存等）。
+请确保监控你的从实例，确保它们有足够的内存，在主实例达到配置的 `maxmemory` 设置之前永远不会遇到真正的内存不足情况。
 
-To change this behavior, you can allow a replica to not ignore the `maxmemory`. The configuration directives to use is:
+要更改此行为，你可以允许从实例不忽略 `maxmemory`。要使用的配置指令是：
 
 ```
 replica-ignore-maxmemory no
 ```
 
-
 ## Summary
 
 全量复制虽然耗时，但是对于从库来说，如果是第一次同步，全量复制是无法避免的，
-所以，一个 Redis 实例的数据库不要太大，一个实例大小在几 GB 级别比较合适，这样可以减少 RDB 文件生成、传输和重新加载的开销
-另外，为了避免多个从库同时和主库进行全量复制，给主库过大的同步压力，我们也可以采用“主 - 从 - 从”这一级联模式，来缓解主库的压力
-
-
+所以，一个 Redis 实例的数据库不要太大，一个实例大小在几 GB 级别比较合适，这样可以减少 RDB 文件生成、传输和重新加载的开销。
+另外，为了避免多个从库同时和主库进行全量复制，给主库过大的同步压力，我们也可以采用"主 - 从 - 从"这一级联模式，来缓解主库的压力。
 
 两个典型的坑。
 
 - 主从数据不一致。Redis 采用的是异步复制，所以无法实现强一致性保证（主从数据时时刻刻保持一致），数据不一致是难以避免的。我给你提供了应对方法：保证良好网络环境，以及使用程序监控从库复制进度，一旦从库复制进度超过阈值，不让客户端连接从库。
 - 对于读到过期数据，这是可以提前规避的，一个方法是，使用 Redis 3.2 及以上版本；另外，你也可以使用 EXPIREAT/PEXPIREAT 命令设置过期时间，避免从库上的数据过期时间滞后。
-  不过，这里有个地方需要注意下，因为 EXPIREAT/PEXPIREAT 设置的是时间点，所以，主从节点上的时钟要保持一致，具体的做法是，让主从节点和相同的 NTP 服务器（时间服务器）进行时钟同步
+  不过，这里有个地方需要注意下，因为 EXPIREAT/PEXPIREAT 设置的是时间点，所以，主从节点上的时钟要保持一致，具体的做法是，让主从节点和相同的 NTP 服务器（时间服务器）进行时钟同步。
 
-
-> Redis 中的 slave-serve-stale-data 配置项设置了从库能否处理数据读写命令，你可以把它设置为 no。这样一来，从库只能服务 INFO、SLAVEOF 命令，这就可以避免在从库中读到不一致的数据了
-
-
-
+> Redis 中的 slave-serve-stale-data 配置项设置了从库能否处理数据读写命令，你可以把它设置为 no。这样一来，从库只能服务 INFO、SLAVEOF 命令，这就可以避免在从库中读到不一致的数据了。
 
 把 min-slaves-to-write 和 min-slaves-max-lag 这两个配置项搭配起来使用，分别给它们设置一定的阈值，假设为 N 和 T。
-这两个配置项组合后的要求是，主库连接的从库中至少有 N 个从库，和主库进行数据复制时的 ACK 消息延迟不能超过 T 秒，否则，主库就不会再接收客户端的请求了
+这两个配置项组合后的要求是，主库连接的从库中至少有 N 个从库，和主库进行数据复制时的 ACK 消息延迟不能超过 T 秒，否则，主库就不会再接收客户端的请求了。
 
 ## Tuning
 
-线上 Redis 使用，不管是最初的 sync 机制，还是后来的 psync 和 psync2，主从复制都会受限于复制积压缓冲。如果 slave 断开复制连接的时间较长，或者 master 某段时间写入量过大，而 slave 的复制延迟较大，slave 的复制偏移量落在 master 的复制积压缓冲之外，则会导致全量复制
-于是，微博整合 Redis 的 rdb 和 aof 策略，构建了完全增量复制方案
+线上 Redis 使用，不管是最初的 sync 机制，还是后来的 psync 和 psync2，主从复制都会受限于复制积压缓冲。如果 slave 断开复制连接的时间较长，或者 master 某段时间写入量过大，而 slave 的复制延迟较大，slave 的复制偏移量落在 master 的复制积压缓冲之外，则会导致全量复制。
+于是，微博整合 Redis 的 rdb 和 aof 策略，构建了完全增量复制方案。
 在完全增量方案中，aof 文件不再只有一个，而是按后缀 id 进行递增，如 aof.00001、aof.00002，当 aof 文件超过阀值，则创建下一个 id 加 1 的文件，从而滚动存储最新的写指令。
 在 bgsave 构建 rdb 时，rdb 文件除了记录当前的内存数据快照，还会记录 rdb 构建时间，对应 aof 文件的 id 及位置。这样 rdb 文件和其记录 aof 文件位置之后的写指令，就构成一份完整的最新数据记录。
 主从复制时，master 通过独立的复制线程向 slave 同步数据。每个 slave 会创建一个复制线程。第一次复制是全量复制，之后的复制，不管 slave 断开复制连接有多久，只要 aof 文件没有被删除，都是增量复制。
-第一次全量复制时，复制线程首先将 rdb 发给 slave，然后再将 rdb 记录的 aof 文件位置之后的所有数据，也发送给 slave，即可完成。整个过程不用重新构建 rdb
+第一次全量复制时，复制线程首先将 rdb 发给 slave，然后再将 rdb 记录的 aof 文件位置之后的所有数据，也发送给 slave，即可完成。整个过程不用重新构建 rdb。
 后续同步时，slave 首先传递之前复制的 aof 文件的 id 及位置。master 的复制线程根据这个信息，读取对应 aof 文件位置之后的所有内容，发送给 slave，即可完成数据同步。
-由于整个复制过程，master 在独立复制线程中进行，所以复制过程不影响用户的正常请求。为了减轻 master 的复制压力，全增量复制方案仍然支持 slave 嵌套，即可以在 slave 后继续挂载多个 slave，从而把复制压力分散到多个不同的 Redis 实例
-
-
-
+由于整个复制过程，master 在独立复制线程中进行，所以复制过程不影响用户的正常请求。为了减轻 master 的复制压力，全增量复制方案仍然支持 slave 嵌套，即可以在 slave 后继续挂载多个 slave，从而把复制压力分散到多个不同的 Redis 实例。
 
 ## Links
 

@@ -1,6 +1,6 @@
 ## Introduction
 
-### Executor Hierarchy
+### Executor 层次结构
 
 ![](img/Executor.png)
 
@@ -46,7 +46,7 @@ public interface Executor {
 }
 ```
 
-default use `SimpleExecutor`, if 2nd Cache enable, wrap to `CachingExecutor`
+默认使用 `SimpleExecutor`，如果启用了二级缓存，则包装为 `CachingExecutor`
 ```java
 // Configuration 
 public Executor newExecutor(Transaction transaction, ExecutorType executorType) {
@@ -71,7 +71,7 @@ public Executor newExecutor(Transaction transaction, ExecutorType executorType) 
 
 ## BaseExecutor
 
-`BaseExecutor provider cache management and transaction management`
+`BaseExecutor` 提供缓存管理和事务管理
 
 ```java
 public abstract class BaseExecutor implements Executor {
@@ -103,11 +103,11 @@ public abstract class BaseExecutor implements Executor {
 
 
 
-### Local Cache
+### 本地缓存
 
-clearLocalCache localCache and  localOutputParameterCache will clear when:
-- update or close : SESSION
-- query
+以下情况会清除 localCache 和 localOutputParameterCache：
+- update 或 close 时：SESSION 级别清除
+- query 时：
     - queryStack == 0 && ms.isFlushCacheRequired()
     - configuration.getLocalCacheScope() == LocalCacheScope.STATEMENT
 
@@ -209,7 +209,7 @@ public void clearLocalCache() {
 
 
 
-### Transaction Management
+### 事务管理
 
 
 
@@ -239,9 +239,9 @@ public void rollback(boolean required) throws SQLException {
 
 ### doFlushStatements
 
-Call by SqlSession
+由 SqlSession 调用
 
-flushStatement call doFlushStatements
+flushStatement 调用 doFlushStatements
 
 ```java
 // BatchExecutor
@@ -289,12 +289,12 @@ public List<BatchResult> doFlushStatements(boolean isRollback) throws SQLExcepti
 
 ## SimpleExecutor
 
-1. newStatementHandler
-2. get Connection from transaction
-3. get Statement
+1. 创建 StatementHandler
+2. 从 transaction 获取 Connection
+3. 获取 Statement
 4. [StatementHandler update](/docs/CS/Framework/MyBatis/StatementHandler.md?id=update)
-   1. execute
-   2. resultSetHandler.handleResultSets(Query) or [keyGenerator::processAfter()](/docs/CS/Framework/MyBatis/KeyGenerator.md?id=processAfter)
+   1. 执行 execute
+   2. resultSetHandler.handleResultSets（查询）或 [keyGenerator::processAfter()](/docs/CS/Framework/MyBatis/KeyGenerator.md?id=processAfter)
 
 ```java
 public class SimpleExecutor extends BaseExecutor {
@@ -329,10 +329,10 @@ public class SimpleExecutor extends BaseExecutor {
     }
   }
   
-  // getConnection from transaction
+  // 从 transaction 获取 Connection
   protected Connection getConnection(Log statementLog) throws SQLException {
     Connection connection = transaction.getConnection();
-    if (statementLog.isDebugEnabled()) { // create JDK Proxy instance
+    if (statementLog.isDebugEnabled()) { // 创建 JDK Proxy 实例
       return ConnectionLogger.newInstance(connection, statementLog, queryStack);
     } else {
       return connection;
@@ -355,9 +355,9 @@ public class SimpleExecutor extends BaseExecutor {
 
 ## ReuseExecutor
 
-use HashMap to reuse Statements.
+使用 HashMap 重用 Statement。
 
-close Statements and clear map in *doFlushStatements*.
+在 `doFlushStatements` 中关闭 Statement 并清空 map。
 
 ```java
 public class ReuseExecutor extends BaseExecutor {
@@ -453,14 +453,14 @@ public class BatchExecutor extends BaseExecutor {
 
 
 **现象**：使用 `BatchExecutor` 但性能无提升，甚至比单条更慢。
-**原因**：MySQL JDBC 驱动默认**不真正批量**，会将 `addBatch()` 拆解为 `N` 条独立 SQL 发送。
+**原因**：MySQL JDBC 驱动默认**不真正批量**，会将 `addBatch()` 拆解为 N 条独立 SQL 发送。
 **解决**：连接 URL 必须添加参数：
 
 jdbc:mysql://host:3306/db?rewriteBatchedStatements=true&useServerPrepStmts=false
 
 批次过大导致 OOM
 
-**现象**：一次性 `insert 100万` 条抛出 `OutOfMemoryError`。
+**现象**：一次性 insert 100 万条抛出 `OutOfMemoryError`。
 **原因**：`statementList` 和 JDBC 驱动内部队列会持有所有参数对象的引用。
 **解决**：分批提交（推荐 1000~5000 条/批）：
 
@@ -500,7 +500,7 @@ mapper.insertA(); // SQL 再次不同 → 批次 3
 
 ## CachingExecutor
 
-[2nd Level Cache](/docs/CS/Framework/MyBatis/Cache.md)
+[二级缓存](/docs/CS/Framework/MyBatis/Cache.md)
 
 
 ```java
@@ -548,7 +548,7 @@ public class CachingExecutor implements Executor {
 
 
 
-## Lazy
+## 延迟加载
 
 MyBatis 延迟加载的底层通过**动态代理**实现，MyBatis 默认使用 **Javassist** 生成代理类（MyBatis 3.3 之前），3.3 之后支持切换为 **CGLIB**
 
@@ -582,11 +582,11 @@ for (User user : users) {
 
 
 
->[!TIP]
+> [!TIP]
 >
->延迟加载和 MyBatis 二级缓存能一起用吗？
+> 延迟加载和 MyBatis 二级缓存能一起用吗？
 >
->- 可以，但需要注意：延迟加载触发的子查询也会走缓存。如果主对象在二级缓存中，关联对象的延迟加载可能读到过期的缓存数据。复杂场景下建议关闭二级缓存
+> - 可以，但需要注意：延迟加载触发的子查询也会走缓存。如果主对象在二级缓存中，关联对象的延迟加载可能读到过期的缓存数据。复杂场景下建议关闭二级缓存
 
 
 

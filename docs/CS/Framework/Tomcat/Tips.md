@@ -1,11 +1,9 @@
-
-
 ## SynchronizedStack
 
-This is intended as a (mostly) GC-free alternative to [java.util.concurrent.ConcurrentLinkedQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=ConcurrentLinkedQueue) when the requirement is to create a pool of re-usable objects with no requirement to shrink the pool. 
-The aim is to provide the bare minimum of required functionality as quickly as possible with minimum garbage.
+这旨在作为 [java.util.concurrent.ConcurrentLinkedQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=ConcurrentLinkedQueue) 的（几乎）无 GC 替代方案，适用于需要创建可复用对象池且无需收缩池的场景。
+目标是尽可能快地提供最低限度的必要功能，同时产生最少的垃圾。
 
-This is a unbound stack and depended on maxConnection.
+这是一个无界栈，依赖于 maxConnection。
 
 ```java
 public class SynchronizedStack<T> {
@@ -17,11 +15,11 @@ public class SynchronizedStack<T> {
 
 ## Delay analysis
 
-only analysis request header, delay analysis request body
+仅分析请求头，延迟分析请求体。
 
 ## daemon Thread
 
-Start the background thread that will periodically check for session timeouts.
+启动后台线程，定期检查 session 超时。
 
 ```java
  protected void threadStart() {
@@ -44,8 +42,8 @@ Start the background thread that will periodically check for session timeouts.
     }
 ```
 
+用于在固定延迟后调用此容器及其子容器的 backgroundProcess 方法的私有 runnable 类。
 
-Private runnable class to invoke the backgroundProcess method of this container and its children after a fixed delay.
 ```java
 protected class ContainerBackgroundProcessor implements Runnable {
 
@@ -89,8 +87,9 @@ protected class ContainerBackgroundProcessor implements Runnable {
 ```
 
 ### backgroundProcess
-Execute a periodic task, such as reloading, etc. 
-This method will be invoked inside the classloading context of this container. Unexpected throwables will be caught and logged.
+
+执行周期性任务，例如重新加载等。
+此方法将在该容器的类加载上下文中调用。意外的 throwable 将被捕获并记录。
 
 ```java
 public abstract class ContainerBase extends LifecycleMBeanBase
@@ -133,6 +132,7 @@ public abstract class ContainerBase extends LifecycleMBeanBase
     }
 }
 ```
+
 #### hotswap
 
 ```java
@@ -189,4 +189,3 @@ public class StandardContext extends ContainerBase
     }
 }
 ```
-

@@ -1,9 +1,9 @@
-## Introduction
+## 简介
 
-Linux employs a hierarchical scheme in which each process depends on a parent process.
-The kernel starts the init program as the first process that is responsible for further system initialization actions and display of the login prompt or (in more widespread use today) display of a graphical login interface.
-init is therefore the root from which all processes originate, more or less directly, as shown graphically by the `pstree` program.
-init is the top of a tree structure whose branches spread further and further down.
+Linux 采用层次化方案，其中每个进程依赖于一个父进程。
+内核启动 init 程序作为第一个进程，负责进一步的系统初始化操作和显示登录提示符，或者（在今天更普遍的用法中）显示图形登录界面。
+因此，init 是所有进程或多或少直接源自的根，如 `pstree` 程序图形化展示的那样。
+init 是树结构的顶部，其分支越来越向下延伸。
 
 kthread
 
@@ -11,21 +11,21 @@ kthread
 ps -fax
 ```
 
-How this tree structure spreads is closely connected with how new processes are generated.
-For this purpose, Unix uses two mechanisms called fork and exec.
+这种树结构如何扩展与新进程的生成方式密切相关。
+为此，Unix 使用了两种称为 fork 和 exec 的机制。
 
-1. [fork](/docs/CS/OS/Linux/proc/process.md?id=fork) — Generates an exact copy of the current process that differs from the parent process only in its PID (process identification).
-   After the system call has been executed, there are two processes in the system, both performing the same actions.
-   The memory contents of the initial process are duplicated -- at least in the view of the program.
-   Linux uses a well-known technique known as copy on write that allows it to make the operation much more efficient by deferring the copy operations until either parent or child writes to a page -— read-only accessed can be satisfied from the same page for both.
-2. [exec](/docs/CS/OS/Linux/proc/process.md?id=exec) — Loads a new program into an existing content and then executes it. The memory pages reserved by the old program are flushed, and their contents are replaced with new data. The new program then starts executing.
+1. [fork](/docs/CS/OS/Linux/proc/process.md?id=fork) — 生成当前进程的精确副本，仅在 PID（进程标识）上不同于父进程。
+   系统调用执行后，系统中存在两个进程，都执行相同的操作。
+   初始进程的内存内容被复制——至少在程序看来是这样。
+   Linux 使用一种称为写时复制的众所周知的技术，通过将复制操作推迟到父进程或子进程写入页面时才执行，从而使操作更加高效——只读访问可以同时从同一页面满足。
+2. [exec](/docs/CS/OS/Linux/proc/process.md?id=exec) — 将新程序加载到现有内容中然后执行。旧程序保留的内存页被刷新，其内容被新数据替换。然后新程序开始执行。
 
-## task struct
+## task_struct
 
-The Linux kernel internally represents processes as tasks, via the structure `task struct`.
-Unlike other OS approaches (which make a distinction between a process, lightweight process, and thread), Linux uses the task structure to represent any execution context.
-Therefore, a single-threaded process will be represented with one task structure and a multithreaded process will have one task structure for each of the user-level threads.
-Finally, the kernel itself is multithreaded, and has kernel-level threads which are not associated with any user process and are executing kernel code.
+Linux 内核内部通过 `task_struct` 结构将进程表示为任务。
+与其他操作系统方法（区分进程、轻量级进程和线程）不同，Linux 使用任务结构来表示任何执行上下文。
+因此，单线程进程将由一个 task_struct 表示，多线程进程将为每个用户级线程拥有一个 task_struct。
+最后，内核本身是多线程的，具有不与任何用户进程关联且正在执行内核代码的内核级线程。
 
 task_struct 中封装了很多资源
 

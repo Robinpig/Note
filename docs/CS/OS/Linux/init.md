@@ -1,38 +1,37 @@
-## Introduction
+## 简介
 
-Like any other program, the kernel goes through a load and initialization phase before performing its normal tasks.
-Although this phase is not particularly interesting in the case of normal applications, the kernel — as the central system layer — has to address a number of specific problems. 
-The boot phase is split into the following three parts:
-- Kernel loading into RAM and the creation of a minimal runtime environment.
-- Branching to the (platform-dependent) machine code of the kernel and system-specific initialization of the elementary system functions written in assembly language.
-- Branching to the (platform-independent) part of the initialization code written in C, and complete initialization of all subsystems with a subsequent switch to normal operation.
+与其他任何程序一样，内核在执行正常任务之前要经历加载和初始化阶段。
+虽然在普通应用程序的情况下，这个阶段并不是特别有趣，但内核作为系统核心层必须解决许多特定的问题。
+启动阶段分为以下三个部分：
+- 将内核加载到 RAM 并创建最小运行时环境。
+- 跳转到（平台相关的）内核机器代码，并用汇编语言对基本系统功能进行系统特定的初始化。
+- 跳转到（平台无关的）用 C 编写的初始化代码部分，完成所有子系统的初始化，随后切换到正常运行。
 
-As usual, a boot loader is responsible for the first phase. Its tasks depend largely on what the particular architecture is required to do. 
-Because in-depth knowledge of specific processor features and problems is needed to understand all details of the first phase, the architecture-specific reference manual is a good source of information. 
-The second phase is also very hardware-dependent.
+通常，引导加载程序负责第一阶段。其任务在很大程度上取决于特定架构的要求。
+由于理解第一阶段的全部细节需要深入了解特定的处理器特性和问题，因此架构特定的参考手册是一个很好的信息来源。
+第二阶段也非常依赖硬件。
 
+在第三个与系统无关的阶段，内核已驻留在内存中，并且（在某些架构上）处理器已从引导模式切换到内核随后运行所需的执行模式。
+在 IA-32 机器上，需要将处理器从启动时立即激活的 8086 模拟模式切换到保护模式，以使系统具备 32 位能力。
+其他架构也需要设置工作——例如，通常需要显式启用分页，并且核心系统组件必须置于确定的初始状态以便工作开始。
+所有这些任务都必须用汇编语言编写，因此它们不是内核中最吸引人的部分。
 
-In the third, system-independent phase, the kernel is already resident in memory and (on some architectures) the processor has switched from boot mode to execution mode in which the kernel then runs.
-On IA-32 machines, it is necessary to switch the processor from 8086 emulation, which is immediately active at boot time, to protected mode to make the system 32-bit capable.
-Setup work is also required on other architectures — for instance, it is often necessary to activate paging explicitly, and central system components must be placed in a defined initial state so that work can begin. 
-All these tasks must be coded in assembly language and therefore are not the most inviting parts of the kernel.
+专注于启动的第三阶段可以省去许多架构特定的琐事，并且还有一个额外的好处：
+一般来说，后续的操作序列与内核运行的具体平台无关。
 
-Concentrating on the third phase of startup allows for dispensing with many architecture-specific trifles and has the added advantage that, 
-generally speaking, the remaining sequence of operations is independent of the particular platform on which the kernel runs.
+当计算机启动时，BIOS 执行上电自检（POST）以及初始设备发现和初始化，因为操作系统的引导过程可能依赖于对磁盘、屏幕、键盘等的访问。
+接下来，引导磁盘的第一个扇区，即 MBR（主引导记录），被读入固定的内存位置并执行。
+该扇区包含一个小型（512 字节）程序，该程序从引导设备（如 SATA 或 SCSI 磁盘）加载一个名为 boot 的独立程序。
+boot 程序首先将其自身复制到固定的高内存地址，以便为操作系统释放低内存。
 
-When the computer starts, the BIOS performs Power-On-Self-Test (POST) and initial device discovery and initialization, since the OS’ boot process may rely on access to disks, screens, keyboards, and so on. 
-Next, the first sector of the boot disk, the MBR (Master Boot Record), is read into a fixed memory location and executed. 
-This sector contains a small (512-byte) program that loads a standalone program called boot from the boot device, such as a SATA or SCSI disk. 
-The boot program first copies itself to a fixed high-memory address to free up low memory for the operating system.
+一旦移动完成，boot 读取引导设备的根目录。
+为此，它必须理解文件系统和目录格式，一些引导加载程序（如 GRUB）确实具备此能力。
+其他流行的引导加载程序（如 Intel 的 LILO）不依赖于任何特定的文件系统。
+相反，它们需要块映射和描述物理扇区、磁头和柱面的低级地址来找到要加载的相关扇区。
 
-Once moved, boot reads the root directory of the boot device. 
-To do this, it must understand the file system and directory format, which is the case with some bootloaders such as GRUB (GRand Unified Bootloader). 
-Other popular bootloaders, such as Intel’s LILO, do not rely on any specific file system. 
-Instead, they need a block map and low-level addresses, which describe physical sectors, heads, and cylinders, to find the relevant sectors to be loaded.
+然后 boot 读入操作系统内核并跳转到它。此时，它已完成其工作，内核正在运行。
 
-Then boot reads in the operating system kernel and jumps to it. At this point, it has finished its job and the kernel is running.
-
-The kernel start-up code is written in assembly language and is highly machine dependent.
+内核启动代码是用汇编语言编写的，并且高度依赖于机器。
 
 
 > 内核启动中输出的信息可以通过 `dmesg` 命令查看
@@ -136,16 +135,16 @@ asmlinkage __visible void __init i386_start_kernel(void)
 }
 ```
 
-The code scanning for EFI embedded-firmware runs near the end of start_kernel(), just before calling rest_init(). 
-For normal drivers and subsystems using subsys_initcall() to register themselves this does not matter. 
-This means that code running earlier cannot use EFI embedded-firmware.
+扫描 EFI 嵌入式固件的代码在 start_kernel() 末尾附近运行，就在调用 rest_init() 之前。
+对于使用 subsys_initcall() 注册自身的普通驱动程序和子系统，这无关紧要。
+这意味着早期运行的代码无法使用 EFI 嵌入式固件。
 
 ## start_kernel
 
-`start_kernel` acts as a dispatcher function to perform both platform-independent and platform-dependent tasks, all of which are implemented in C. 
-It is responsible for invoking the high-level initialization routines of almost all kernel subsystems.
-Users can recognize when the kernel enters this initialization phase because one of the first things the function does is display the Linux banner on screen.
-(The message is generated early on in the boot operation but is not displayed on-screen until the console system has been initialized. It is buffered in the intervening period.)
+`start_kernel` 充当调度函数，执行与平台无关和平台相关的任务，所有这些任务都是用 C 实现的。
+它负责调用几乎所有内核子系统的高级初始化例程。
+用户可以通过该函数最先做的事情之一是在屏幕上显示 Linux 横幅来识别内核何时进入此初始化阶段。
+（该消息在启动操作早期生成，但在控制台系统初始化之前不会显示在屏幕上。在此期间它被缓冲。）
 
 ```c
 asmlinkage __visible void __init __no_sanitize_address start_kernel(void)
@@ -219,7 +218,7 @@ asmlinkage __visible void __init __no_sanitize_address start_kernel(void)
        /* trace_printk can be enabled here */
        early_trace_init();
 ```
-Set up the scheduler prior starting any interrupts (such as the timer interrupt). Full topology setup happens at smp_init() time - but meanwhile we still have a functioning scheduler.
+在任何中断（如定时器中断）启动之前设置调度器。完整的拓扑设置在 smp_init() 时进行——但与此同时，我们仍然有一个正常工作的调度器。
 
 ```c
        sched_init();
@@ -239,7 +238,7 @@ Set up the scheduler prior starting any interrupts (such as the timer interrupt)
         */
        housekeeping_init();
 ```
-Allow workqueue creation and work item queueing/cancelling early.  Work item execution depends on kthreads and starts after workqueue_init().
+允许早期创建工作队列和排队/取消工作项。工作项的执行依赖于内核线程，并在 workqueue_init() 之后开始。
 ```c
        workqueue_init_early();
 
@@ -414,7 +413,7 @@ noinline void __ref rest_init(void)
 
        rcu_scheduler_starting();
 ```
-We need to spawn init first so that it obtains pid 1, however the init task will end up wanting to create kthreads, which, if we schedule it before we create kthreadd, will OOPS.
+我们需要先生成 init 以便它获得 pid 1，然而 init 任务最终会想要创建内核线程，如果我们在此之前调度它，将会 OOPS。
 ```c
        pid = kernel_thread(kernel_init, NULL, CLONE_FS);
 ```

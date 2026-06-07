@@ -1,79 +1,74 @@
 ## Introduction
 
-Database management systems can serve different purposes: some are used primarily for temporary hot data, some serve as a long-lived cold storage, some allow complex analytical queries, some only allow accessing values by the key, some are optimized to store time-series data, and some store large blobs efficiently. 
-
-
+数据库管理系统可用于不同的目的：有些主要用于临时热数据，有些作为长期冷存储，有些允许复杂的分析查询，有些仅允许通过键访问值，有些针对存储时间序列数据进行了优化，还有一些高效地存储大型 blob。
 
 > Knowledge Base of Relational and NoSQL Database Management Systems in [DB-Engines](https://db-engines.com/en/ranking)
 
+每个数据库系统都有其优势和劣势。
+为了降低昂贵迁移的风险，在决定使用特定数据库之前，你可以投入一些时间来建立对其满足应用程序需求能力的信心。
 
-Every database system has strengths and weaknesses. To reduce the risk of an expensive migration, you can invest some time before you decide on a specific database to build confidence in its ability to meet your application’s needs.
+要比较数据库，深入了解使用场景并定义当前和预期的变量（例如）会有所帮助：
+- Schema 和记录大小
+- 客户端数量
+- 查询类型和访问模式
+- 读写查询的速率
+- 这些变量的预期变化
 
-To compare databases, it’s helpful to understand the use case in great detail and define the current and anticipated variables, such as:
-- Schema and record sizes
-- Number of clients
-- Types of queries and access patterns
-- Rates of the read and write queries
-- Expected changes in any of these variables
-
-
-
-Type:
-- Based on Disk: B-Tree or LSM Tree
-- Based on memory: hashtable or skiplist
-- Storge layout: row or 
-- encode: protobuf or Thirft
-
+类型：
+- 基于磁盘：B-Tree 或 LSM Tree
+- 基于内存：hashtable 或 skiplist
+- 存储布局：行式或列式
+- 编码：protobuf 或 Thrift
 
 ### Memory- Versus Disk-Based
 
-Database systems store data in memory and on disk. In-memory database management systems (sometimes called main memory DBMS) store data primarily in memory and use the disk for recovery and logging. 
-Disk-based DBMS hold most of the data on disk and use memory for caching disk contents or as a temporary storage. 
-Both types of systems use the disk to a certain extent, but main memory databases store their contents almost exclusively in RAM.
+数据库系统在内存和磁盘上存储数据。
+内存数据库管理系统（有时称为主存 DBMS）主要将数据存储在内存中，并使用磁盘进行恢复和日志记录。
+基于磁盘的 DBMS 将大部分数据保存在磁盘上，并使用内存来缓存磁盘内容或作为临时存储。
+两种类型的系统都在一定程度上使用磁盘，但主存数据库几乎完全将内容存储在 RAM 中。
 
-Main memory database systems are different from their disk-based counterparts not only in terms of a primary storage medium, but also in which data structures, organization, and optimization techniques they use.
+主存数据库系统与其基于磁盘的对应物不仅在主存储介质上有所不同，而且在使用的数据结构、组织和优化技术上也不同。
 
-Databases using memory as a primary data store do this mainly because of performance, comparatively low access costs, and access granularity. 
-Programming for main memory is also significantly simpler than doing so for the disk. 
-Operating systems abstract memory management and allow us to think in terms of allocating and freeing arbitrarily sized memory chunks.
-On disk, we have to manage data references, serialization formats, freed memory, and fragmentation manually.
+使用内存作为主要数据存储的数据库主要是出于性能、相对较低的访问成本和访问粒度的考虑。
+为主存编程也明显比为磁盘编程更简单。
+操作系统抽象了内存管理，允许我们考虑分配和释放任意大小的内存块。
+在磁盘上，我们必须手动管理数据引用、序列化格式、释放内存和碎片化。
 
-The main limiting factors on the growth of in-memory databases are RAM volatility (in other words, lack of durability) and costs. 
-Since RAM contents are not persistent, software errors, crashes, hardware failures, and power outages can result in data loss. 
-There are ways to ensure durability, such as uninterrupted power supplies and battery-backed RAM, but they require additional hardware resources and operational expertise. In practice, it all comes down to the fact that disks are easier to maintain and have significantly lower prices.
+限制内存数据库增长的主要因素是 RAM 的易失性（换句话说，缺乏持久性）和成本。
+由于 RAM 内容不是持久的，软件错误、崩溃、硬件故障和断电可能导致数据丢失。
+有一些方法可以确保持久性，例如不间断电源和电池备份 RAM，但它们需要额外的硬件资源和运维专业知识。
+在实践中，这一切都归结为磁盘更易于维护且价格显著更低。
 
-The situation is likely to change as the availability and popularity of Non-Volatile Memory (NVM) technologies grow. 
-NVM storage reduces or completely eliminates (depending on the exact technology) asymmetry between read and write latencies, further improves read and write performance, and allows byte-addressable access.
+随着非易失性内存（NVM）技术的可用性和普及度的增长，这种情况可能会改变。
+NVM 存储减少或完全消除了读写延迟之间的不对称性（取决于具体技术），进一步提高了读写性能，并允许字节可寻址访问。
 
+内存数据库系统在磁盘上维护备份以提供持久性并防止易失性数据丢失。
+某些数据库仅将数据存储在内存中，没有任何持久性保证，但我们不在本书的范围内讨论它们。
 
-In-memory database systems maintain backups on disk to provide durability and prevent loss of the volatile data. Some databases store data exclusively in memory, without any durability guarantees, but we do not discuss them in the scope of this book.
+在操作被认为是完成之前，其结果必须写入顺序日志文件。
+为了避免在启动或崩溃后重放完整的日志内容，内存存储维护一个备份副本。
+备份副本作为基于磁盘的有序结构维护，对此结构的修改通常是异步的（与客户端请求解耦），并批量应用以减少 I/O 操作的数量。
+在恢复期间，可以从备份和日志中恢复数据库内容。
 
-Before the operation can be considered complete, its results have to be written to a sequential log file. 
-To avoid replaying complete log contents during startup or after a crash, in-memory stores maintain a backup copy. 
-The backup copy is maintained as a sorted disk-based structure, and modifications to this structure are often asynchronous (decoupled from client requests) and applied in batches to reduce the number of I/O operations. 
-During recovery, database contents can be restored from the backup and logs.
+日志记录通常批量应用于备份。
+处理完一批日志记录后，备份保存特定时间点的数据库快照，并且该点之前的日志内容可以被丢弃。
+这个过程称为 checkpointing。
+它通过保持磁盘驻留数据库与日志条目的最新状态来减少恢复时间，而无需客户端等待备份更新完成。
 
-Log records are usually applied to backup in batches. After the batch of log records is processed, backup holds a database snapshot for a specific point in time, and log contents up to this point can be discarded. 
-This process is called checkpointing. 
-It reduces recovery times by keeping the disk-resident database most up-to-date with log entries without requiring clients to block until the backup is updated.
+基于磁盘的数据库使用专为磁盘访问优化的专用存储结构。
+在内存中，可以相对快速地跟随指针，随机内存访问显著快于随机磁盘访问。
+基于磁盘的存储结构通常采用宽而矮的树形式，而基于内存的实现可以从更大的数据结构池中选择，并执行在磁盘上不可能或难以实现的优化。
+类似地，处理可变大小数据在磁盘上需要特别注意，而在内存中通常只需用指针引用该值即可。
 
-Disk-based databases use specialized storage structures, optimized for disk access. In memory, pointers can be followed comparatively quickly, and random memory access is significantly faster than the random disk access.
-Disk-based storage structures often have a form of wide and short trees, while memory-based implementations can choose from a larger pool of data structures and perform optimizations that would otherwise be impossible or difficult to implement on disk. 
-Similarly, handling variable-size data on disk requires special attention, while in memory it’s often a matter of referencing the value with a pointer.
-
-For some use cases, it is reasonable to assume that an entire dataset is going to fit in memory.
-Some datasets are bounded by their real-world representations, such as student records for schools, customer records for corporations, or inventory in an online store. Each record takes up not more than a few Kb, and their number is limited.
+对于某些用例，假设整个数据集可以放入内存是合理的。
+某些数据集受其现实世界表示的约束，例如学校的学生记录、公司的客户记录或在线商店的库存。
+每条记录占用不超过几 KB，且数量有限。
 
 ### Column- Versus Row-Oriented
 
-
-One of the ways to classify databases is by how the data is stored on disk: row- or column-wise. 
-Tables can be partitioned either horizontally (storing values belonging to the same row together), or vertically (storing values belonging to the same column together). 
-Figure 2 depicts this distinction: (a) shows the values partitioned column-wise, and (b) shows the values partitioned row-wise.
-
-
-
-
+对数据库进行分类的一种方法是根据数据在磁盘上的存储方式：行式或列式。
+表可以水平分区（将属于同一行的值存储在一起），也可以垂直分区（将属于同一列的值存储在一起）。
+图 2 展示了这种区别：(a) 显示了按列分区的值，(b) 显示了按行分区的值。
 
 <div style="text-align: center;">
 
@@ -82,30 +77,29 @@ Figure 2 depicts this distinction: (a) shows the values partitioned column-wise,
 </div>
 
 <p style="text-align: center;">
-Fig.1. Data layout in column- and row-oriented stores
+Fig.1. 列式和行式存储中的数据布局
 </p>
 
-Row-oriented database management systems store data in records or rows. Their layout is quite close to the tabular data representation, where every row has the same set of fields.
-Since row-oriented stores are most useful in scenarios when we have to access data by row, storing entire rows together improves spatial locality.
+面向行的数据库管理系统以记录或行的形式存储数据。
+它们的布局非常接近表格数据表示，其中每行具有相同的字段集。
+由于面向行的存储在我们需要按行访问数据时最为有用，将整行存储在一起提高了空间局部性。
 
-Column-oriented database management systems partition data vertically (i.e., by column) instead of storing it in rows. Here, values for the same column are stored contiguously on disk.
-Column-oriented stores are a good fit for analytical workloads that compute aggregates, such as finding trends, computing average values, etc. Processing complex aggregates can be used in cases when logical records have multiple fields, but some of them have different importance and are often consumed together.
-Storing values that have the same data type together (e.g., numbers with other numbers, strings with other strings) offers a better compression ratio.
+面向列的数据库管理系统垂直分区数据（即按列），而不是按行存储。
+在这里，同一列的值在磁盘上连续存储。
+面向列的存储非常适合计算聚合的分析工作负载，例如查找趋势、计算平均值等。
+处理复杂聚合可用于逻辑记录有多个字段但某些字段具有不同重要性且经常一起消费的情况。
+将相同数据类型的值存储在一起（例如数字和数字、字符串和字符串）提供了更好的压缩比。
 
 #### Wide Column Stores
 
-Column-oriented databases should not be mixed up with wide column stores, such as BigTable or HBase, where data is represented as a multidimensional map, columns are grouped into column families (usually storing data of the same type), and inside each column family, data is stored row-wise. This layout is best for storing data retrieved by a key or a sequence of keys.
-
+不应将面向列的数据库与宽列存储（如 BigTable 或 HBase）混淆，后者的数据表示为多维映射，列被分组为列族（通常存储相同类型的数据），在每个列族内部，数据按行存储。
+这种布局最适合于通过键或键序列检索数据的场景。
 
 ## Architecture
 
-Database management systems use a client/server model, where database system instances (nodes) take the role of servers, and application instances take the role of clients.
+数据库管理系统使用客户端/服务器模型，其中数据库系统实例（节点）充当服务器角色，应用程序实例充当客户端角色。
 
-Databases are modular systems and consist of multiple parts: a transport layer accepting requests, a query processor determining the most efficient way to run queries, an execution engine carrying out the operations, and a storage engine.
-
-
-
-
+数据库是模块化系统，由多个部分组成：接受请求的传输层、确定最有效查询执行方式的查询处理器、执行操作的执行引擎以及存储引擎。
 
 <div style="text-align: center;">
 
@@ -114,125 +108,130 @@ Databases are modular systems and consist of multiple parts: a transport layer a
 </div>
 
 <p style="text-align: center;">
-Fig.1. Architecture of a database management system
+Fig.1. 数据库管理系统的架构
 </p>
 
+客户端请求通过传输子系统到达。
+请求以查询的形式出现，最常见的是用某种查询语言表达。
+传输子系统还负责与数据库集群中其他节点的通信。
 
-Client requests arrive through the transport subsystem. Requests come in the form of queries, most often expressed in some query language.
-The transport subsystem is also responsible for communication with other nodes in the database cluster.
+收到请求后，传输子系统将查询交给查询处理器，由后者解析、解释和验证。
+随后执行访问控制检查，因为这些检查只有在查询被解释后才能完全完成。
 
-Upon receipt, the transport subsystem hands the query over to a query processor, which parses, interprets, and validates it.
-Later, access control checks are performed, as they can be done fully only after the query is interpreted.
+解析后的查询传递给查询优化器，优化器首先消除查询中不可能和冗余的部分，
+然后尝试根据内部统计信息（索引基数、近似交集大小等）和数据分布（集群中哪些节点持有数据及其传输的相关成本）找到最有效的执行方式。
+优化器处理查询解析所需的关系操作（通常表示为依赖树）以及优化，如索引排序、基数估计和选择访问方法。
 
-The parsed query is passed to the query optimizer, which first eliminates impossible and redundant parts of the query, 
-and then attempts to find the most efficient way to execute it based on internal statistics (index cardinality, approximate intersection size, etc.) and data placement (which nodes in the cluster hold the data and the costs associated with its transfer).
-The optimizer handles both relational operations required for query resolution, usually presented as a dependency tree, and optimizations, such as index ordering, cardinality estimation, and choosing access methods.
+查询通常以执行计划（或查询计划）的形式呈现：必须执行的一系列操作，以便其结果被认为是完整的。
+由于相同的查询可以通过不同的执行计划来满足，而这些计划的效率可能不同，优化器会选择最佳可用计划。
 
-The query is usually presented in the form of an execution plan (or query plan): a sequence of operations that have to be carried out for its results to be considered complete.
-Since the same query can be satisfied using different execution plans that can vary in efficiency, the optimizer picks the best available plan.
+执行计划由执行引擎处理，该引擎收集本地和远程操作的执行结果。
+远程执行可能涉及向集群中其他节点写入和读取数据以及复制。
 
-The execution plan is handled by the execution engine, which collects the results of the execution of local and remote operations. Remote execution can involve writing and reading data to and from other nodes in the cluster, and replication.
+本地查询（直接来自客户端或其他节点）由存储引擎执行。
 
-Local queries (coming directly from clients or from other nodes) are executed by the storage engine.
+### 存储引擎
 
-###  storage engine
+存储引擎（或数据库引擎）是数据库管理系统的一个软件组件，负责在内存和磁盘上存储、检索和管理数据，旨在捕获每个节点的持久、长期记忆。
+虽然数据库可以响应复杂查询，但存储引擎更细粒度地查看数据，并提供简单的数据操作 API，允许用户创建、更新、删除和检索记录。
+一种理解方式是，数据库管理系统是构建在存储引擎之上的应用程序，提供了模式、查询语言、索引、事务和许多其他有用的功能。
 
+为了灵活性，键和值都可以是任意字节序列，没有规定形式。
+它们的排序和表示语义在更高级的子系统中定义。
+例如，你可以在一个表中使用 int32（32 位整数）作为键，在另一个表中使用 ascii（ASCII 字符串）；从存储引擎的角度来看，两个键都只是序列化的条目。
 
+像 BerkeleyDB、LevelDB 及其后代 RocksDB、LMDB 及其后代 libmdbx、Sophia、HaloDB 等许多存储引擎都是独立于它们现在嵌入到的数据库管理系统而开发的。
+使用可插拔的存储引擎使数据库开发人员能够利用现有的存储引擎快速启动数据库系统，并专注于其他子系统。
 
-The storage engine (or database engine) is a software component of a database management system responsible for storing, retrieving, and managing data in memory and on disk, designed to capture a persistent, long-term memory of each node. While databases can respond to complex queries, storage engines look at the data more granularly and offer a simple data manipulation API, allowing users to create, update, delete, and retrieve records. One way to look at this is that database management systems are applications built on top of storage engines, offering a schema, a query language, indexing, transactions, and many other useful features.
+同时，数据库系统组件之间的清晰划分开辟了在不同引擎之间切换的机会，这些引擎可能更适合特定的用例。
 
-For flexibility, both keys and values can be arbitrary sequences of bytes with no prescribed form. Their sorting and representation semantics are defined in higher-level subsystems. For example, you can use int32 (32-bit integer) as a key in one of the tables, and ascii (ASCII string) in the other; from the storage engine perspective both keys are just serialized entries.
+存储引擎有几个具有专门职责的组件：
+- 事务管理器<br>
+  该管理器调度事务，并确保它们不会使数据库处于逻辑上不一致的状态。
+- 锁管理器<br>
+  该管理器为正在运行的事务锁定数据库对象，确保并发操作不会违反物理数据完整性。
+- 访问方法（存储结构）<br>
+  这些方法管理对磁盘上数据的访问和组织。访问方法包括堆文件和存储结构，如 B-Tree 或 LSM Tree。
+- 缓冲管理器<br>
+  该管理器在内存中缓存数据页面。
+- 恢复管理器<br>
+  该管理器维护操作日志，并在发生故障时恢复系统状态。
 
-Storage engines such as BerkeleyDB, LevelDB and its descendant RocksDB, LMDB and its descendant libmdbx, Sophia, HaloDB, and many others were developed independently from the database management systems they’re now embedded into. Using pluggable storage engines has enabled database developers to bootstrap database systems using existing storage engines, and concentrate on the other subsystems.
+事务管理器和锁管理器共同负责并发控制：它们保证逻辑和物理数据完整性，同时确保并发操作尽可能高效地执行。
 
-At the same time, clear separation between database system components opens up an opportunity to switch between different engines, potentially better suited for particular use cases. 
+存储引擎基于某种数据结构。
+然而，这些结构并不描述缓存、恢复、事务性以及存储引擎在其之上添加的其他内容的语义。
 
+存储结构有三个常见变量：它们使用（或不使用）*缓冲*、使用*不可变*（或可变）文件，以及按*顺序*（或无序）存储值。
 
-The storage engine has several components with dedicated responsibilities:
-- Transaction manager<br>
-  This manager schedules transactions and ensures they cannot leave the database in a logically inconsistent state.
-- Lock manager<br>
-  This manager locks on the database objects for the running transactions, ensuring that concurrent operations do not violate physical data integrity.
-- Access methods (storage structures)<br>
-  These manage access and organizing data on disk. Access methods include heap files and storage structures such as B-Trees or LSM Trees.
-- Buffer manager<br>
-  This manager caches data pages in memory.
--  Recovery manager<br>
-   This manager maintains the operation log and restoring the system state in case of a failure.
+- **缓冲**<br>
+  定义存储结构是否选择在内存中收集一定量的数据，然后再将其放入磁盘。
+  当然，每种磁盘结构都必须在某种程度上使用缓冲，因为与磁盘之间数据传输的最小单位是一个块，并且最好写入完整的块。
+  这里，我们讨论的是可避免的缓冲，即存储引擎实现者选择做的事情。
+  我们在本书中讨论的最早的优化之一是在 B-Tree 节点中添加内存缓冲以摊销 I/O 成本。
+  然而，这不是应用缓冲的唯一方式。
+  例如，双组件 LSM Tree 尽管与 B-Tree 有相似之处，但以完全不同的方式使用缓冲，并将缓冲与不可变性结合起来。
+- **可变性**（或不可变性）<br>
+  定义存储结构是否读取文件的部分内容、更新它们，并将更新后的结果写回文件中的相同位置。
+  不可变结构是只追加的：一旦写入，文件内容不会被修改，而是将修改追加到文件末尾。
+  实现不可变性还有其他方法。
+  其中之一是写时复制，其中保存记录更新版本的修改页面被写入文件中的新位置，而不是其原始位置。
+  通常，LSM 和 B-Tree 之间的区别被描述为不可变存储与原地更新存储之间的区别，但也存在一些受 B-Tree 启发但不可变的结构（例如 "Bw-Trees"）。
+- **排序**<br>
+  定义为数据记录是否按键顺序存储在磁盘的页面中。
+  换句话说，排序相近的键存储在磁盘的连续段中。
+  排序通常定义了我们是否能高效地扫描记录范围，而不仅仅是定位单个数据记录。
+  无序存储数据（最常见的是按插入顺序）为某些写入时优化提供了可能性。
+  例如，Bitcask 和 WiscKey 将数据记录直接存储在只追加文件中。
 
-Together, transaction and lock managers are responsible for concurrency control: they guarantee logical and physical data integrity while ensuring that concurrent operations are executed as efficiently as possible.
+我们将存储结构分为两组：可变和不可变，并将不可变性确定为影响其设计和实现的核心概念之一。
+大多数可变存储结构使用原地更新机制。
+在插入、删除或更新操作期间，数据记录直接在目标文件中的位置进行更新。
 
+存储引擎通常允许同一数据记录的多个版本存在于数据库中；例如，使用多版本并发控制（参见 "Multiversion Concurrency Control"）或槽位页面组织（参见 "Slotted Pages"）时。
+为了简单起见，现在我们假设每个键只与一个数据记录关联，该记录具有唯一位置。
 
-A storage engine is based on some data structure. However, these structures do not describe the semantics of caching, recovery, transactionality, and other things that storage engines add on top of them.
+最流行的存储结构之一是 B-Tree。
+许多开源数据库系统基于 B-Tree，多年来它们已被证明覆盖了大多数用例。
 
-Storage structures have three common variables: they use *buffering* (or avoid using it), use *immutable* (or mutable) files, and store values in *order* (or out of order). 
+不可变数据结构常用于函数式编程语言，并因其安全特性而越来越受欢迎：一旦创建，不可变结构不会改变，其所有引用可以并发访问，其完整性由无法修改的事实保证。
 
-- **Buffering**<br>
-  This defines whether or not the storage structure chooses to collect a certain amount of data in memory before putting it on disk. <br>
-  Of course, every on-disk structure has to use buffering to some degree, since the smallest unit of data transfer to and from the disk is a block, and it is desirable to write full blocks. <br>
-  Here, we’re talking about avoidable buffering, something storage engine implementers choose to do. <br>
-  One of the first optimizations we discuss in this book is adding in-memory buffers to B-Tree nodes to amortize I/O costs.
-  However, this is not the only way we can apply buffering. <br>
-  For example, two-component LSM Trees, despite their similarities with B-Trees, use buffering in an entirely different way, and combine buffering with immutability.
-- **Mutability** (or immutability)<br>
-  This defines whether or not the storage structure reads parts of the file, updates them, and writes the updated results at the same location in the file. <br>
-  Immutable structures are append-only: once written, file contents are not modified. Instead, modifications are appended to the end of the file. 
-  There are other ways to implement immutability. <br>
-  One of them is copy-on-write, where the modified page, holding the updated version of the record, is written to the new location in the file, instead of its original location. <br>
-  Often the distinction between LSM and B-Trees is drawn as immutable against in-place update storage, but there are structures (for example, “Bw-Trees”) that are inspired by B-Trees but are immutable.
-- **Ordering**<br>
-  This is defined as whether or not the data records are stored in the key order in the pages on disk.
-   In other words, the keys that sort closely are stored in contiguous segments on disk. <br>
-  Ordering often defines whether or not we can efficiently scan the range of records, not only locate the individual data records. <br>
-  Storing data out of order (most often, in insertion order) opens up for some write-time optimizations. 
-  For example, Bitcask and WiscKey store data records directly in append-only files.
+在高层次上，数据在存储结构内部和外部的处理方式存在严格区别。
+在内部，不可变文件可以保存多个副本，较新的副本覆盖较旧的副本，而可变文件通常只保存最新的值。
+访问时，处理不可变文件，协调冗余副本，并将最新版本返回给客户端。
 
+我们使用 B-Tree 作为可变结构的典型示例，使用日志结构合并树（LSM Tree）作为不可变结构的示例。
+不可变 LSM Tree 使用只追加存储和合并协调，而 B-Tree 定位磁盘上的数据记录并在文件中的原始偏移量处更新页面。
 
+原地更新存储结构针对读取性能进行了优化：在磁盘上定位数据后，可以将记录返回给客户端。
+这是以牺牲写入性能为代价的：要原地更新数据记录，首先必须在磁盘上定位它。
+另一方面，只追加存储针对写入性能进行了优化。
+写入不必在磁盘上定位记录以覆盖它们。
+然而，这是以牺牲读取为代价的，因为读取必须检索多个数据记录版本并进行协调。
 
-We separated storage structures in two groups: mutable and immutable ones, and identified immutability as one of the core concepts influencing their design and implementation. Most of the mutable storage structures use an in-place update mechanism. During insert, delete, or update operations, data records are updated directly in their locations in the target file.
+数据库社区的一大争议是 B-Tree 还是 LSM Tree 具有更低的写放大。
+了解两种情况下写放大的来源至关重要。
+在 B-Tree 中，写放大来自回写操作以及后续对同一节点的更新。
+在 LSM Tree 中，写放大是由压缩过程中数据从一个文件迁移到另一个文件引起的。
+直接比较两者可能会导致错误的结论。
 
-Storage engines often allow multiple versions of the same data record to be present in the database; for example, when using multiversion concurrency control (see “Multiversion Concurrency Control”) or slotted page organization (see “Slotted Pages”). For the sake of simplicity, for now we assume that each key is associated only with one data record, which has a unique location.
+总之，以不可变方式在磁盘上存储数据时，我们面临三个问题：
 
-One of the most popular storage structures is a B-Tree. Many open source database systems are B-Tree based, and over the years they’ve proven to cover the majority of use cases.
+- 读放大<br>
+  由于需要访问多个表来检索数据。
+- 写放大<br>
+  由压缩过程持续重写引起。
+- 空间放大<br>
+  由于存储与同一键关联的多个记录。
 
+### 优化器
 
-Immutable data structures are often used in functional programming languages and are getting more popular because of their safety characteristics: once created, an immutable structure doesn’t change, all of its references can be accessed concurrently, and its integrity is guaranteed by the fact that it cannot be modified.
+关系数据库的长期优势之一是请求数据时很少或根本不考虑数据访问方式。
+这个决定由称为优化器的 DBMS 组件做出。
+不同关系系统的优化器差异很大，并且可能永远如此，但它们都试图使用系统收集的数据统计信息，以最有效的方式访问数据。
 
-On a high level, there is a strict distinction between how data is treated inside a storage structure and outside of it. Internally, immutable files can hold multiple copies, more recent ones overwriting the older ones, while mutable files generally hold only the most recent value instead. When accessed, immutable files are processed, redundant copies are reconciled, and the most recent ones are returned to the client.
-
-We use B-Trees as a typical example of mutable structure and Log-Structured Merge Trees (LSM Trees) as an example of an immutable structure. Immutable LSM Trees use append-only storage and merge reconciliation, and B-Trees locate data records on disk and update pages at their original offsets in the file.
-
-
-In-place update storage structures are optimized for read performance: after locating data on disk, the record can be returned to the client. This comes at the expense of write performance: to update the data record in place, it first has to be located on disk. On the other hand, append-only storage is optimized for write performance. Writes do not have to locate records on disk to overwrite them. However, this is done at the expense of reads, which have to retrieve multiple data record versions and reconcile them.
-
-
-One of the big disputes in the database community is whether B-Trees or LSM Trees have lower write amplification. It is extremely important to understand the source of write amplification in both cases. In B-Trees, it comes from writeback operations and subsequent updates to the same node. In LSM Trees, write amplification is caused by migrating data from one file to the other during compaction. Comparing the two directly may lead to incorrect assumptions.
-
-In summary, when storing data on disk in an immutable fashion, we face three problems:
-
-- Read amplification<br>
-   Resulting from a need to address multiple tables to retrieve data.
-- Write amplification<br>
-   Caused by continuous rewrites by the compaction process.
-- Space amplification<br>
-   Arising from storing multiple records associated with the same key.
-
-
-
-
-
-### optimizer
-
-
-One of the long-standing advantages of relational databases has been that data is requested with little or no thought for the way in which the data is to be accessed.
-This decision is made by a component of the DBMS called the optimizer. 
-These have varied widely across different relational systems and probably always will, but they all try to access the data in the most effective way possible, using statistics stored by the system collected on the data.
-
-
-Before an SQL statement can be executed, the optimizer must first decide how to access the data; which index, if any, should be used; how the index should be used; should assisted random read be used; and so forth. 
-All of this information is embodied in the access path.
-
-
+在执行 SQL 语句之前，优化器必须首先决定如何访问数据；应该使用哪个索引（如果有的话）；如何使用索引；是否应使用辅助随机读取；等等。
+所有这些信息都体现在访问路径中。
 
 <div style="text-align: center;">
 
@@ -241,95 +240,81 @@ All of this information is embodied in the access path.
 </div>
 
 <p style="text-align: center;">
-Fig.2. Traditional index scan.
+Fig.2. 传统索引扫描。
 </p>
 
-Index Slices and Matching Columns
-Thus a thin slice of the index, depicted in Figure 3.1, will be sequentially scanned,
-and for each index row having a value between 100 and 110, the corresponding
-row will be accessed from the table using a synchronous read unless the page
-is already in the buffer pool. The cost of the access path is clearly going to
-depend on the thickness of the slice, which in turn will depend on the range
-predicate; a thicker slice will, of course, require more index pages to be read
-sequentially and more index rows will have to be processed. The real increase
-in cost though is going to come from an increase in the number of synchronous
-reads to the table at a cost of perhaps 10 ms per page. Similarly, a thinner slice
-will certainly reduce the index costs, but again the major saving will be due to
-fewer synchronous reads to the table. The size of the index slice may be very
-important for this reason.
+索引切片和匹配列
+因此，如图 3.1 所示的薄索引切片将被顺序扫描，
+对于每个值在 100 到 110 之间的索引行，将使用同步读取从表中访问相应的行（除非该页面已经在缓冲池中）。
+访问路径的成本显然取决于切片的厚度，而切片厚度又取决于范围谓词；更厚的切片当然需要顺序读取更多的索引页面，并且必须处理更多的索引行。
+然而，成本的实际增加将来自对表的同步读取数量的增加，每页成本约为 10 毫秒。
+类似地，更薄的切片肯定会降低索引成本，但主要的节省还是来自对表的更少同步读取。
+因此，索引切片的大小可能非常重要。
 
-The term index slice is not one that is used by any of the relational database
-systems; these all use their own terminology, but we feel that an index slice
-is a much more descriptive term and one that we can use regardless of DBMS.
-Another way that is often used to describe an index slice is to define the number of
-matching columns used in the processing of the index. In our example (having
-a value between 100 and 110), we have only a single matching column. 
-This single matching column in fact defines the thickness of our slice. If there had
-been a second column, both in the WHERE clause and in the index, such that the
-two columns together were able to define an even thinner slice of the index, we
-would have two matching columns. Less index processing would be required,
-but of even greater importance, fewer synchronous reads to the table would
-be required.
-
+术语"index slice"并不是任何关系数据库系统使用的术语；它们都使用自己的术语，但我们认为 index slice 是一个更具描述性的术语，且不依赖于具体 DBMS。
+另一种描述索引切片的常用方法是定义索引处理中使用的匹配列数。
+在我们的示例中（值在 100 到 110 之间），我们只有一个匹配列。
+这个单一的匹配列实际上定义了切片的厚度。
+如果存在第二列，同时出现在 WHERE 子句和索引中，使得这两列能够共同定义更薄的索引切片，那么我们将有两个匹配列。
+则需要更少的索引处理，但更重要的是，需要对表进行更少的同步读取。
 
 #### Index Screening and Screening Columns
 
-Sometimes a column may indeed be in both the WHERE clause and in the index, suffice it to say at this time that not all columns in the index are able to define the index slice.
-Such columns, however, may still be able to reduce the number of synchronous reads to the table and so play the more important part.
-We will call these columns screening columns, as indeed do some relational database systems, because this is exactly what they do. 
-They avoid the necessity of accessing the table rows because they are able to determine that it is not necessary to do so by their very presence in the index.
+有时一列可能同时出现在 WHERE 子句和索引中，但并非索引中的所有列都能定义索引切片。
+然而，这些列可能仍然能够减少对表的同步读取次数，从而发挥更重要的作用。
+我们将这些列称为筛选列（screening columns），一些关系数据库系统也确实如此称呼，因为它们正是发挥了这个作用。
+它们避免了访问表行的必要性，因为它们能够通过自身在索引中的存在来确定无需这样做。
 
-Examine index columns from leading to trailing
-1. In the WHERE clause, does a column have at least one simple enough predicate referring to it?
-   If yes, the column is an M column.
-   If not, this column and the remaining columns are not M columns.
-2. If the predicate is a range predicate, the remaining columns are not M columns.
-3. Any column after the last M column is an S column if there is a simple enough predicate referring to that column.
+从前导列到末尾列检查索引列
+1. 在 WHERE 子句中，是否有列引用了至少一个足够简单的谓词？
+   如果是，则该列是 M 列。
+   如果不是，则该列及后续列不是 M 列。
+2. 如果谓词是范围谓词，则后续列不是 M 列。
+3. 最后一个 M 列之后的任何列，如果有足够简单的谓词引用该列，则为 S 列。
 
 #### Access Path Terminology
 
-Unfortunately, the terminology used to describe access paths is far from standardized—even the term access path itself, another term that is often used being the execution plan.
-We will use access path when referring to the way the data is actually accessed; we will use execution plan when referring to the output provided by the DBMS by means of an `EXPLAIN` facility (described below). 
-This is a subtle distinction, and it is really of no consequence if the terms are used interchangeably.
+不幸的是，用于描述访问路径的术语远未标准化——即使是 access path 本身这个术语也常常被其他术语如执行计划所替代。
+我们在指代实际访问数据的方式时将使用 access path；在指代 DBMS 通过 `EXPLAIN` 工具（如下所述）提供的输出时使用执行计划。
+这是一个微妙的区别，如果这些术语互换使用实际上也无大碍。
 
-The execution plan is handled by the execution engine, which collects the results of the execution of local and remote operations. Remote execution can involve writing and reading data to and from other nodes in the cluster, and replication.
+执行计划由执行引擎处理，该引擎收集本地和远程操作的执行结果。
+远程执行可能涉及向集群中其他节点写入和读取数据以及复制。
 
-Matching predicates are sometimes called range delimiting predicates. 
-If a predicate is simple enough for an optimizer in the sense that it is a matching predicate when a suitable index is available, it is called indexable or sargable. 
-The opposite term is nonindexable or nonsargable.
+匹配谓词有时称为范围界定谓词。
+如果一个谓词对优化器来说足够简单，即在有合适索引可用时是一个匹配谓词，则称为 indexable 或 sargable。
+相反术语是 nonindexable 或 nonsargable。
 
-SQL Server uses the term table lookup for an access path that uses an index but also reads table rows. This is the opposite of index only. 
-The obvious way to eliminate the table accesses is to add the missing columns to the index. 
-Many SQL Server books call an index a covering index when it makes an index-only access path possible for a SELECT call. 
-SELECT statements that use a covering index are sometimes called covering SELECTs.
-
-
+SQL Server 对使用索引但也读取表行的访问路径使用术语 table lookup。
+这与 index only 相反。
+消除表访问的明显方法是将缺失的列添加到索引中。
+许多 SQL Server 书籍将使得 SELECT 调用的 index-only 访问路径成为可能的索引称为覆盖索引。
+使用覆盖索引的 SELECT 语句有时称为覆盖 SELECT。
 
 ### Transaction manager
-Local queries (coming directly from clients or from other nodes) are executed by the storage engine.
-The storage engine has several components with dedicated responsibilities:
+本地查询（直接来自客户端或其他节点）由存储引擎执行。
+存储引擎有几个具有专门职责的组件：
 
-
-This manager schedules transactions and ensures they cannot leave the database in a logically inconsistent state.
+该管理器调度事务，并确保它们不会使数据库处于逻辑上不一致的状态。
 
 Lock manager
 
-This manager locks on the database objects for the running transactions, ensuring that concurrent operations do not violate physical data integrity.
+该管理器为正在运行的事务锁定数据库对象，确保并发操作不会违反物理数据完整性。
 
 Access methods (storage structures)
 
-These manage access and organizing data on disk. Access methods include heap files and storage structures such as B-Trees or LSM Trees.
+这些方法管理对磁盘上数据的访问和组织。访问方法包括堆文件和存储结构，如 B-Tree 或 LSM Tree。
 
 Buffer manager
 
-This manager caches data pages in memory (see “Buffer Management”).
+该管理器在内存中缓存数据页面（参见 "Buffer Management"）。
 
 Recovery manager
 
-This manager maintains the operation log and restoring the system state in case of a failure (see “Recovery”).
+该管理器维护操作日志，并在发生故障时恢复系统状态（参见 "Recovery"）。
 
-Together, transaction and lock managers are responsible for concurrency control (see “Concurrency Control”):
-they guarantee logical and physical data integrity while ensuring that concurrent operations are executed as efficiently as possible.
+事务管理器和锁管理器共同负责并发控制（参见 "Concurrency Control"）：
+它们保证逻辑和物理数据完整性，同时确保并发操作尽可能高效地执行。
 
 Storage data layer
 
@@ -347,141 +332,187 @@ Tolerance
 
 concurrency
 
-A version of the tree that would be better suited for disk implementation has to exhibit the following properties:
+适合磁盘实现的树版本需要具备以下特性：
 
-- High fanout to improve locality of the neighboring keys.
-- Low height to reduce the number of seeks during traversal.
+- 高扇出以改善相邻键的局部性。
+- 低高度以减少遍历过程中的寻道次数。
 
 > [!TIP]
 >
-> Fanout and height are inversely correlated: the higher the fanout, the lower the height.
-> If fanout is high, each node can hold more children, reducing the number of nodes and, subsequently, reducing height.
+> 扇出和高度呈负相关：扇出越高，高度越低。
+> 如果扇出很高，每个节点可以容纳更多子节点，从而减少节点数量，进而降低高度。
 
 #### Buffer Management
 
-Most databases are built using a two-level memory hierarchy: slower persistent storage (disk) and faster main memory (RAM). To reduce the number of accesses to persistent storage, pages are cached in memory. When the page is requested again by the storage layer, its cached copy is returned.
+大多数数据库使用两层内存层次结构构建：较慢的持久存储（磁盘）和较快的主内存（RAM）。
+为了减少对持久存储的访问次数，页面被缓存在内存中。
+当存储层再次请求该页面时，返回其缓存副本。
 
-Cached pages available in memory can be reused under the assumption that no other process has modified the data on disk. This approach is sometimes referenced as virtual disk [BAYER72]. A virtual disk read accesses physical storage only if no copy of the page is already available in memory. A more common name for the same concept is page cache or buffer pool. The page cache is responsible for caching pages read from disk in memory. In case of a database system crash or unorderly shutdown, cached contents are lost.
+内存中可用的缓存页面可以在假设没有其他进程修改磁盘上数据的情况下重用。
+这种方法有时被称为虚拟磁盘 [BAYER72]。
+虚拟磁盘读取仅当内存中没有可用的页面副本时才访问物理存储。
+同一概念更常见的名称是页面缓存或缓冲池。
+页面缓存负责将从磁盘读取的页面缓存在内存中。
+如果数据库系统崩溃或非正常关闭，缓存内容将丢失。
 
-The problem of caching pages is not limited in scope to databases. Operating systems have the concept of a page cache, too. Operating systems utilize unused memory segments to transparently cache disk contents to improve performance of I/O syscalls.
+页面缓存的问题不仅限于数据库范畴。
+操作系统也有页面缓存的概念。
+操作系统利用未使用的内存段透明地缓存磁盘内容，以提高 I/O 系统调用的性能。
 
-Uncached pages are said to be paged in when they’re loaded from disk. If any changes are made to the cached page, it is said to be dirty, until these changes are flushed back on disk.
+未缓存的页面被称为调入（paged in），即从磁盘加载。
+如果对缓存页面进行了任何修改，则该页面被称为脏页，直到这些修改被刷新回磁盘。
 
-Since the memory region where cached pages are held is usually substantially smaller than an entire dataset, the page cache eventually fills up and, in order to page in a new page, one of the cached pages has to be evicted.
+由于存储缓存页面的内存区域通常远小于整个数据集，页面缓存最终会填满，为了调入新页面，必须驱逐某个缓存页面。
 
-The primary functions of a page cache can be summarized as:
+页面缓存的主要功能可以总结为：
 
-- It keeps cached page contents in memory.
-- It allows modifications to on-disk pages to be buffered together and performed against their cached versions.
-- When a requested page isn’t present in memory and there’s enough space available for it, it is paged in by the page cache, and its cached version is returned.
-- If an already cached page is requested, its cached version is returned.
-- If there’s not enough space available for the new page, some other page is evicted and its contents are flushed to disk.
+- 它将缓存页面内容保存在内存中。
+- 它允许对磁盘页面的修改被缓冲在一起，并针对其缓存版本执行。
+- 当请求的页面不在内存中且空间足够时，页面缓存将其调入，并返回其缓存版本。
+- 如果请求的页面已被缓存，则返回其缓存版本。
+- 如果没有足够的空间容纳新页面，则驱逐其他页面并将其内容刷新到磁盘。
 
 > [!NOTE]
-> Many database systems open files using O_DIRECT flag. This flag allows I/O system calls to bypass the kernel page cache, access the disk directly, and use database-specific buffer management. This is sometimes frowned upon by the operating systems folks.
-> Linus Torvalds has criticized usage of O_DIRECT since it’s not asynchronous and has no readahead or other means for instructing the kernel about access patterns. However, until operating systems start offering better mechanisms, O_DIRECT is still going to be useful.
-> We can gain some control over how the kernel evicts pages from its cache is by using fadvise, but this only allows us to ask the kernel to consider our opinion and does not guarantee it will actually happen. To avoid syscalls when performing I/O, we can use memory mapping, but then we lose control over caching.
+> 许多数据库系统使用 O_DIRECT 标志打开文件。
+> 此标志允许 I/O 系统调用绕过内核页面缓存，直接访问磁盘，并使用数据库特定的缓冲管理。
+> 操作系统相关人员有时对此不以为然。
+> Linus Torvalds 曾批评 O_DIRECT 的使用，因为它不是异步的，并且没有预读或其他用于指示内核访问模式的方法。
+> 然而，在操作系统提供更好的机制之前，O_DIRECT 仍然是有用的。
+> 我们可以通过使用 fadvise 对内核如何从其缓存中驱逐页面获得一些控制，但这只允许我们请求内核考虑我们的意见，并不能保证它真的会发生。
+> 为了避免在执行 I/O 时进行系统调用，我们可以使用内存映射，但这样我们就失去了对缓存的控制。
 
 ##### Caching Semantics
 
-All changes made to buffers are kept in memory until they are eventually written back to disk. As no other process is allowed to make changes to the backing file, this synchronization is a one-way process: from memory to disk, and not vice versa. The page cache allows the database to have more control over memory management and disk accesses. You can think of it as an application-specific equivalent of the kernel page cache: it accesses the block device directly, implements similar functionality, and serves a similar purpose. It abstracts disk accesses and decouples logical write operations from the physical ones.
+对缓冲区的所有更改都保留在内存中，直到最终写回磁盘。
+由于不允许其他进程对后备文件进行更改，这种同步是单向的：从内存到磁盘，而不是相反。
+页面缓存允许数据库对内存管理和磁盘访问拥有更多控制。
+你可以将其视为内核页面缓存的应用程序级等价物：它直接访问块设备，实现类似的功能，并服务于类似的目的。
+它抽象了磁盘访问，并将逻辑写操作与物理写操作解耦。
 
-Caching pages helps to keep the tree partially in memory without making additional changes to the algorithm and materializing objects in memory. All we have to do is replace disk accesses by the calls to the page cache.
+缓存页面有助于使树部分保留在内存中，而无需对算法进行额外更改或在内存中物化对象。
+我们所要做的是将磁盘访问替换为对页面缓存的调用。
 
-When the storage engine accesses (in other words, requests) the page, we first check if its contents are already cached, in which case the cached page contents are returned. If the page contents are not yet cached, the cache translates the logical page address or page number to its physical address, loads its contents in memory, and returns its cached version to the storage engine. Once returned, the buffer with cached page contents is said to be referenced, and the storage engine has to hand it back to the page cache or dereference it once it’s done. The page cache can be instructed to avoid evicting pages by pinning them.
+当存储引擎访问（即请求）页面时，我们首先检查其内容是否已被缓存，如果是，则返回缓存的页面内容。
+如果页面内容尚未缓存，缓存将逻辑页面地址或页号转换为其物理地址，将其内容加载到内存中，并将其缓存版本返回给存储引擎。
+返回后，持有缓存页面内容的缓冲区被称为被引用，存储引擎必须在完成后将其交还给页面缓存或解除引用。
+可以通过固定页面来指示页面缓存避免驱逐它。
 
-If the page is modified (for example, a cell was appended to it), it is marked as dirty. A dirty flag set on the page indicates that its contents are out of sync with the disk and have to be flushed for durability.
-
+如果页面被修改（例如，向其追加了一个单元格），则将其标记为脏。
+页面上设置的脏标志表示其内容与磁盘不同步，必须为持久性而刷新。
 
 ##### Cache Eviction
 
-Keeping caches populated is good: we can serve more reads without going to persistent storage, and more same-page writes can be buffered together. However, the page cache has a limited capacity and, sooner or later, to serve the new contents, old pages have to be evicted. If page contents are in sync with the disk (i.e., were already flushed or were never modified) and the page is not pinned or referenced, it can be evicted right away. Dirty pages have to be flushed before they can be evicted. Referenced pages should not be evicted while some other thread is using them.
+保持缓存填充良好是有益的：我们可以提供更多读取而无需访问持久存储，并且更多同页写入可以缓冲在一起。
+然而，页面缓存容量有限，迟早为了提供新内容，必须驱逐旧页面。
+如果页面内容与磁盘同步（即已刷新或从未修改），且页面未被固定或引用，则可以立即驱逐。
+脏页在驱逐前必须刷新。
+如果其他线程正在使用引用页面，则不应将其驱逐。
 
-Since triggering a flush on every eviction might be bad for performance, some databases use a separate background process that cycles through the dirty pages that are likely to be evicted, updating their disk versions. For example, PostgreSQL has a background flush writer that does just that.
+由于每次驱逐都触发刷新可能对性能不利，一些数据库使用单独的后台进程，循环遍历可能被驱逐的脏页，更新其磁盘版本。
+例如，PostgreSQL 有一个后台刷新写入器就是做这个的。
 
-Another important property to keep in mind is durability: if the database has crashed, all data that was not flushed is lost. To make sure that all changes are persisted, flushes are coordinated by the checkpoint process. The checkpoint process controls the write-ahead log (WAL) and page cache, and ensures that they work in lockstep. Only log records associated with operations applied to cached pages that were flushed can be discarded from the WAL. Dirty pages cannot be evicted until this process completes.
+另一个需要牢记的重要特性是持久性：如果数据库崩溃，所有未刷新的数据都将丢失。
+为了确保所有更改都已持久化，刷新由检查点进程协调。
+检查点进程控制写前日志（WAL）和页面缓存，并确保它们同步工作。
+只有与已刷新的缓存页面关联的操作的日志记录才能从 WAL 中丢弃。
+在此过程完成之前，脏页不能被驱逐。
 
-
-This means there is always a trade-off between several objectives:
-- Postpone flushes to reduce the number of disk accesses
-- Preemptively flush pages to allow quick eviction
-- Pick pages for eviction and flush in the optimal order
-- Keep cache size within its memory bounds
-- Avoid losing the data as it is not persisted to the primary storage
-
+这意味着始终需要在多个目标之间进行权衡：
+- 推迟刷新以减少磁盘访问次数
+- 预先刷新页面以允许快速驱逐
+- 选择要驱逐的页面并以最佳顺序刷新
+- 保持缓存大小在其内存限制内
+- 避免数据丢失，因为数据尚未持久化到主存储
 
 ##### Locking Pages in Cache
 
-Having to perform disk I/O on each read or write is impractical: subsequent reads may request the same page, just as subsequent writes may modify the same page. Since B-Tree gets “narrower” toward the top, higher-level nodes (ones that are closer to the root) are hit for most of the reads. Splits and merges also eventually propagate to the higher-level nodes. This means there’s always at least a part of a tree that can significantly benefit from being cached.
+每次读取或写入都执行磁盘 I/O 是不切实际的：后续读取可能请求同一页面，就像后续写入可能修改同一页面一样。
+由于 B-Tree 越靠近顶部越"窄"，较高层级的节点（更接近根节点的）在大多数读取中会被命中。
+分裂和合并最终也会传播到较高层级的节点。
+这意味着树中总有一部分可以显著受益于缓存。
 
-We can “lock” pages that have a high probability of being used in the nearest time. Locking pages in the cache is called pinning. Pinned pages are kept in memory for a longer time, which helps to reduce the number of disk accesses and improve performance.
+我们可以"锁定"在最近时间内很可能被使用的页面。
+锁定页面在缓存中称为固定（pinning）。
+固定页面在内存中保留更长时间，有助于减少磁盘访问次数并提高性能。
 
+由于 B-Tree 的每个较低节点级别拥有的节点数量呈指数级多于较高级别，而较高级别的节点仅代表树的很小一部分，树的这一部分可以永久驻留在内存中，其他部分可以按需调入。
+这意味着，为了执行查询，我们不必进行 h 次磁盘访问（如 "B-Tree Lookup Complexity" 中所讨论的，h 是树的高度），而只需对较低级别（页面未被缓存的那些）进行磁盘访问。
 
-Since each lower B-Tree node level has exponentially more nodes than the higher one, and higher-level nodes represent just a small fraction of the tree, this part of the tree can reside in memory permanently, and other parts can be paged in on demand. 
-This means that, in order to perform a query, we won’t have to make h disk accesses (as discussed in “B-Tree Lookup Complexity”, h is the height of the tree), but only hit the disk for the lower levels, for which pages are not cached.
+对子树执行的操作可能导致相互矛盾的结构更改——例如，多次删除操作导致合并，随后写入导致分裂，反之亦然。
+同样的情况也适用于从不同子树传播的结构更改（在树的不同部分，时间上接近发生的结构更改向上传播）。
+这些操作可以通过仅在内存中应用更改来缓冲在一起，这可以减少磁盘写入次数并摊销操作成本，因为可以执行一次写入而不是多次写入。
 
-Operations performed against a subtree may result in structural changes that contradict each other—for example, multiple delete operations causing merges followed by writes causing splits, or vice versa. 
-Likewise for structural changes that propagate from different subtrees (structural changes occurring close to each other in time, in different parts of the tree, propagating up). 
-These operations can be buffered together by applying changes only in memory, which can reduce the number of disk writes and amortize the operation costs, since only one write can be performed instead of multiple writes.
-
-
-> The page cache also allows the storage engine to have fine-grained control over prefetching and eviction. It can be instructed to load pages ahead of time, before they are accessed. For example, when the leaf nodes are traversed in a range scan, the next leaves can be preloaded. Similarly, if a maintenance process loads the page, it can be evicted immediately after the process finishes, since it’s unlikely to be useful for the in-flight queries. Some databases, for example, PostgreSQL, use a circular buffer (in other words, FIFO page replacement policy) for large sequential scans.
-
-
-
-
-
+> 页面缓存还允许存储引擎对预取和驱逐进行细粒度控制。
+> 可以指示它在页面被访问之前提前加载它们。
+> 例如，当在范围扫描中遍历叶节点时，可以预加载下一个叶节点。
+> 类似地，如果维护进程加载了页面，可以在该进程完成后立即驱逐它，因为它不太可能对正在进行的查询有用。
+> 某些数据库，例如 PostgreSQL，对大型顺序扫描使用循环缓冲区（即 FIFO 页面替换策略）。
 
 ## store
 
-Database systems do use files for storing the data, but instead of relying on filesystem hierarchies of directories and files for locating records, they compose files using implementation-specific formats. The main reasons to use specialized file organization over flat files are:
+数据库系统确实使用文件存储数据，但它们不是依赖文件系统的目录和文件层次结构来定位记录，而是使用实现特定的格式来组织文件。
+使用专门的文件组织方式而非平面文件的主要原因是：
 
-- Storage efficiency<br>
-   Files are organized in a way that minimizes storage overhead per stored data record.
-- Access efficiency<br>
-   Records can be located in the smallest possible number of steps.
-- Update efficiency<br>
-   Record updates are performed in a way that minimizes the number of changes on disk.
+- 存储效率<br>
+  文件以最小化每个存储数据记录的存储开销的方式组织。
+- 访问效率<br>
+  记录可以在最少的步骤数内定位。
+- 更新效率<br>
+  记录更新的执行方式最小化磁盘上的更改数量。
 
-Database systems store data records, consisting of multiple fields, in tables, where each table is usually represented as a separate file. Each record in the table can be looked up using a search key. To locate a record, database systems use indexes: auxiliary data structures that allow it to efficiently locate data records without scanning an entire table on every access. Indexes are built using a subset of fields identifying the record.
+数据库系统将由多个字段组成的数据记录存储在表中，每个表通常表示为一个单独的文件。
+表中的每条记录可以使用搜索键进行查找。
+为了定位记录，数据库系统使用索引：辅助数据结构，允许在不扫描整个表的情况下高效定位数据记录。
+索引使用标识记录的部分字段构建。
 
-A database system usually separates data files and index files: data files store data records, while index files store record metadata and use it to locate records in data files. 
-Index files are typically smaller than the data files. 
-Files are partitioned into pages, which typically have the size of a single or multiple disk blocks.
-Pages can be organized as sequences of records or as a slotted pages.
+数据库系统通常将数据文件和索引文件分开：数据文件存储数据记录，而索引文件存储记录元数据并使用它在数据文件中定位记录。
+索引文件通常比数据文件小。
+文件被分区为页面，页面大小通常为一个或多个磁盘块的大小。
+页面可以组织为记录序列或槽位页面。
 
-New records (insertions) and updates to the existing records are represented by key/value pairs. 
-Most modern storage systems do not delete data from pages explicitly. Instead, they use deletion markers (also called tombstones), which contain deletion metadata, such as a key and a timestamp. 
-Space occupied by the records shadowed by their updates or deletion markers is reclaimed during garbage collection, which reads the pages, writes the live (i.e., nonshadowed) records to the new place, and discards the shadowed ones.
+新记录（插入）和对现有记录的更新由键/值对表示。
+大多数现代存储系统不会显式地从页面中删除数据。
+相反，它们使用删除标记（也称为 tombstones），其中包含删除元数据，如键和时间戳。
+被更新或删除标记覆盖的记录所占用的空间在垃圾回收期间被回收，垃圾回收读取页面，将存活（即未被覆盖的）记录写入新位置，并丢弃被覆盖的记录。
 
 ### Data Files
 
-Data files (sometimes called *primary files*) can be implemented as *index-organized tables* (IOT), *heap-organized tables* (heap files), or *hash-organized tables* (hashed files).
+数据文件（有时称为*主文件*）可以实现为*索引组织表*（IOT）、*堆组织表*（堆文件）或*哈希组织表*（哈希文件）。
 
-- Records in heap files are not required to follow any particular order, and most of the time they are placed in a write order. This way, no additional work or file reorganization is required when new pages are appended. Heap files require additional index structures, pointing to the locations where data records are stored, to make them searchable.
-- In hashed files, records are stored in buckets, and the hash value of the key determines which bucket a record belongs to. Records in the bucket can be stored in append order or sorted by key to improve lookup speed.
-- Index-organized tables (IOTs) store data records in the index itself. Since records are stored in key order, range scans in IOTs can be implemented by sequentially scanning its contents.<br>
-  Storing data records in the index allows us to reduce the number of disk seeks by at least one, since after traversing the index and locating the searched key, we do not have to address a separate file to find the associated data record.
+- 堆文件中的记录不需要遵循任何特定顺序，大多数情况下按写入顺序放置。
+  这样，当追加新页面时，不需要额外的工作或文件重组。
+  堆文件需要额外的索引结构，指向存储数据记录的位置，以使其可搜索。
+- 在哈希文件中，记录存储在桶中，键的哈希值决定记录属于哪个桶。
+  桶中的记录可以按追加顺序存储或按键排序以提高查找速度。
+- 索引组织表（IOT）将数据记录存储在索引本身中。
+  由于记录按键顺序存储，IOT 中的范围扫描可以通过顺序扫描其内容来实现。<br>
+  将数据记录存储在索引中允许我们通过至少减少一次磁盘寻道来减少磁盘寻道次数，因为在遍历索引并定位搜索键之后，我们无需访问单独的文件来找到关联的数据记录。
 
-When records are stored in a separate file, index files hold data entries, uniquely identifying data records and containing enough information to locate them in the data file. For example, we can store file offsets (sometimes called row locators), locations of data records in the data file, or bucket IDs in the case of hash files. In index-organized tables, data entries hold actual data records.
+当记录存储在单独的文件中时，索引文件保存数据条目，唯一标识数据记录并包含足够的信息以在数据文件中定位它们。
+例如，我们可以存储文件偏移量（有时称为行定位器）、数据文件中数据记录的位置，或者在哈希文件的情况下存储桶 ID。
+在索引组织表中，数据条目保存实际的数据记录。
 
 ### Index Files
 
-An index is a structure that organizes data records on disk in a way that facilitates efficient retrieval operations. Index files are organized as specialized structures that map keys to locations in data files where the records identified by these keys (in the case of heap files) or primary keys (in the case of index-organized tables) are stored.
+索引是一种在磁盘上组织数据记录的结构，以促进高效的检索操作。
+索引文件被组织为专门的结构，将键映射到数据文件中的位置，其中存储了由这些键标识的记录（在堆文件的情况下）或主键（在索引组织表的情况下）。
 
-An index on a primary (data) file is called the primary index. However, in most cases we can also assume that the primary index is built over a primary key or a set of keys identified as primary. All other indexes are called secondary.
+主（数据）文件上的索引称为主索引。
+然而，在大多数情况下，我们也可以假设主索引是建立在主键或标识为主键的键集上的。
+所有其他索引称为二级索引。
 
-Secondary indexes can point directly to the data record, or simply store its primary key. A pointer to a data record can hold an offset to a heap file or an index-organized table. Multiple secondary indexes can point to the same record, allowing a single data record to be identified by different fields and located through different indexes. While primary index files hold a unique entry per search key, secondary indexes may hold several entries per search key.
+二级索引可以直接指向数据记录，或者简单地存储其主键。
+指向数据记录的指针可以持有堆文件或索引组织表的偏移量。
+多个二级索引可以指向同一记录，允许单个数据记录通过不同字段标识并通过不同索引定位。
+虽然主索引文件每个搜索键持有一个唯一条目，但二级索引每个搜索键可能持有多个条目。
 
-If the order of data records follows the search key order, this index is called clustered (also known as clustering). Data records in the clustered case are usually stored in the same file or in a clustered file, where the key order is preserved. If the data is stored in a separate file, and its order does not follow the key order, the index is called nonclustered (sometimes called unclustered).
+如果数据记录的顺序遵循搜索键的顺序，则该索引称为聚簇索引。
+在聚簇情况下，数据记录通常存储在同一个文件或聚簇文件中，其中键顺序得以保持。
+如果数据存储在单独的文件中，且其顺序不遵循键顺序，则该索引称为非聚簇索引。
 
-Figure 3 shows the difference between the two approaches:
-- a) Two indexes reference data entries directly from secondary index files.
-- b) A secondary index goes through the indirection layer of a primary index to locate the data entries.
-
-
-
-
+图 3 显示了两种方法之间的区别：
+- a) 两个索引直接从二级索引文件引用数据条目。
+- b) 二级索引通过主索引的间接层来定位数据条目。
 
 <div style="text-align: center;">
 
@@ -490,34 +521,32 @@ Figure 3 shows the difference between the two approaches:
 </div>
 
 <p style="text-align: center;">
-Fig.3. Storing data records in an index file versus storing offsets to the data file (index segments shown in white; segments holding data records shown in gray).
+Fig.3. 在索引文件中存储数据记录与存储指向数据文件的偏移量（白色显示索引段；灰色显示包含数据记录的段）。
 </p>
 
 > [!TIP]
-> Index-organized tables store information in index order and are clustered by definition. <br>
-> Primary indexes are most often clustered. Secondary indexes are nonclustered by definition, since they’re used to facilitate access by keys other than the primary one. <br>
-> Clustered indexes can be both index-organized or have separate index and data files.
+> 索引组织表按索引顺序存储信息，并且根据定义是聚簇的。
+> 主索引通常是聚簇的。
+> 二级索引根据定义是非聚簇的，因为它们用于通过主键以外的键进行访问。
+> 聚簇索引可以是索引组织的，也可以具有单独的索引和数据文件。
 
-Many database systems have an inherent and explicit primary key, a set of columns that uniquely identify the database record. In cases when the primary key is not specified, the storage engine can create an implicit primary key (for example, MySQL InnoDB adds a new auto-increment column and fills in its values automatically).
-
+许多数据库系统具有固有的显式主键，即唯一标识数据库记录的一组列。
+当未指定主键时，存储引擎可以创建隐式主键（例如，MySQL InnoDB 添加一个新的自增列并自动填充其值）。
 
 #### Primary Index as an Indirection
 
-By referencing data directly, we can reduce the number of disk seeks, but have to pay a cost of updating the pointers whenever the record is updated or relocated during a maintenance process. Using indirection in the form of a primary index allows us to reduce the cost of pointer updates, but has a higher cost on a read path.
+通过直接引用数据，我们可以减少磁盘寻道次数，但必须在记录更新或在维护过程中被重定位时付出更新指针的代价。
+使用主索引形式的间接引用可以降低指针更新的成本，但在读取路径上成本更高。
 
-Updating just a couple of indexes might work if the workload mostly consists of reads, but this approach does not work well for write-heavy workloads with multiple indexes. To reduce the costs of pointer updates, instead of payload offsets, some implementations use primary keys for indirection. For example, MySQL InnoDB uses a primary index and performs two lookups: one in the secondary index, and one in a primary index when performing a query.
-This adds an overhead of a primary index lookup instead of following the offset directly from the secondary index.
+如果工作负载主要由读取组成，仅更新几个索引可能可行，但对于具有多个索引的写重负载，这种方法效果不佳。
+为了降低指针更新的成本，一些实现使用主键进行间接引用，而不是使用有效负载偏移量。
+例如，MySQL InnoDB 使用主索引，并在执行查询时执行两次查找：一次在二级索引中，一次在主索引中。
+这增加了主索引查找的开销，而不是直接从二级索引跟随偏移量。
 
-Figure 6 shows how the two approaches are different:
+图 6 显示了两种方法的区别：
 
-- a) Two indexes reference data entries directly from secondary index files.
-- b) A secondary index goes through the indirection layer of a primary index to locate the data entries.
-
-
-
-
-
-
+- a) 两个索引直接从二级索引文件引用数据条目。
+- b) 二级索引通过主索引的间接层来定位数据条目。
 
 <div style="text-align: center;">
 
@@ -526,239 +555,278 @@ Figure 6 shows how the two approaches are different:
 </div>
 
 <p style="text-align: center;">
-Fig.6. Referencing data tuples directly (a) versus using a primary index as indirection (b).
+Fig.6. 直接引用数据元组 (a) 与使用主索引作为间接引用 (b)。
 </p>
 
-It is also possible to use a hybrid approach and store both data file offsets and primary keys. First, you check if the data offset is still valid and pay the extra cost of going through the primary key index if it has changed, updating the index file after finding a new offset.
-
-
-
+也可以使用混合方法，同时存储数据文件偏移量和主键。
+首先检查数据偏移量是否仍然有效，如果已更改则通过主键索引进行额外查找，在找到新偏移量后更新索引文件。
 
 ## OLAP
 
-OLAP, or online analytical processing, is technology for performing high-speed complex queries or multidimensional analysis on large volumes of data in a data warehouse, data lake or other data repository. 
-OLAP is used in business intelligence (BI), decision support, and a variety of business forecasting and reporting applications. 
+OLAP（在线分析处理）是一种用于在数据仓库、数据湖或其他数据存储库中对大量数据进行高速复杂查询或多维分析的技术。
+OLAP 用于商业智能（BI）、决策支持以及各种业务预测和报告应用。
 
-Table. Comparing characteristics of transaction processing versus analytic systems
+表. 事务处理系统与分析系统特性对比
 
-
-| Property             | Transaction processing systems (OLTP)             | Analytic systems (OLAP)                   |
-| ---------------------- | --------------------------------------------------- | ------------------------------------------- |
-| Main read pattern    | Small number of records per query, fetched by key | Aggregate over large number of records    |
-| Main write pattern   | Random-access, low-latency writes from user input | Bulk import (ETL) or event stream         |
-| Primarily used by    | End user/customer, via web application            | Internal analyst, for decision support    |
-| What data represents | Latest state of data (current point in time)      | History of events that happened over time |
-| Dataset size         | Gigabytes to terabytes                            | Terabytes to petabytes                    |
-
+| 属性 | 事务处理系统（OLTP） | 分析系统（OLAP） |
+| ----- | ----- | ----- |
+| 主要读取模式 | 每次查询少量记录，按键获取 | 聚合大量记录 |
+| 主要写入模式 | 用户输入的随机访问、低延迟写入 | 批量导入（ETL）或事件流 |
+| 主要使用者 | 最终用户/客户，通过 Web 应用程序 | 内部分析师，用于决策支持 |
+| 数据表示 | 数据的最新状态（当前时间点） | 随时间发生的事件历史 |
+| 数据集大小 | GB 到 TB | TB 到 PB |
 
 MOLAP vs. ROLAP vs. HOLAP
 
-OLAP that works directly with a multidimensional OLAP cube is known as multidimensional OLAP, or MOLAP. Again, for most uses, MOLAP is the fastest and most practical type of multidimensional data analysis.
+直接与多维 OLAP 立方体一起工作的 OLAP 称为多维 OLAP 或 MOLAP。
+同样，对于大多数用途而言，MOLAP 是最快且最实用的多维数据分析类型。
 
-ROLAP, or relational OLAP, is multidimensional data analysis that operates directly on data on relational tables, without first reorganizing the data into a cube.
-ROLAP is best when the ability to work directly with large amounts of data is more important than performance and flexibility.
+ROLAP（关系型 OLAP）是直接对关系表上的数据进行操作的多维数据分析，无需先将数据重组为立方体。
+当能够直接处理大量数据比性能和灵活性更重要时，ROLAP 是最佳选择。
 
-HOLAP, or hybrid OLAP, attempts to create the optimal division of labor between relational and multidimensional databases within a single OLAP architecture. 
-The relational tables contain larger quantities of data, and OLAP cubes are used for aggregations and speculative processing. 
-HOLAP requires an OLAP server that supports both MOLAP and ROLAP.
+HOLAP（混合型 OLAP）试图在单个 OLAP 架构内创建关系型和多维数据库之间的最佳分工。
+关系表包含较大量的数据，而 OLAP 立方体用于聚合和推测性处理。
+HOLAP 需要支持 MOLAP 和 ROLAP 的 OLAP 服务器。
 
-
-At first, the same databases were used for both transaction processing and analytic queries.
-SQL turned out to be quite flexible in this regard: it works well for OLTPtype queries as well as OLAP-type queries. 
-Nevertheless, in the late 1980s and early 1990s, there was a trend for companies to stop using their OLTP systems for analytics purposes, and to run the analytics on a separate database instead. 
-This separate database was called a *data warehouse*
-
-
+最初，同一数据库同时用于事务处理和分析查询。
+SQL 在这方面表现得相当灵活：它既适用于 OLTP 类型的查询，也适用于 OLAP 类型的查询。
+然而，在 1980 年代末和 1990 年代初，企业倾向于停止使用 OLTP 系统进行分析目的，而是在单独的数据库上运行分析。
+这个单独的数据库被称为*数据仓库*。
 
 ### Data Warehousing
 
-An enterprise may have dozens of different transaction processing systems: systems powering the customer-facing website, controlling point of sale (checkout) systems in physical stores, 
-tracking inventory in warehouses, planning routes for vehicles, managing suppliers, administering employees, etc. 
-Each of these systems is complex and needs a team of people to maintain it, so the systems end up operating mostly autonomously from each other.
-These OLTP systems are usually expected to be highly available and to process transactions with low latency, since they are often critical to the operation of the business. 
-Database administrators therefore closely guard their OLTP databases. 
-They are usually reluctant to let business analysts run ad hoc analytic queries on an OLTP database, since those queries are often expensive, scanning large parts of the dataset, which can harm the performance of concurrently executing transactions.
+一个企业可能有数十个不同的事务处理系统：为面向客户的网站提供动力的系统、控制实体店销售点（收银）系统、
+跟踪仓库库存、规划车辆路线、管理供应商、管理人员等等。
+每个系统都很复杂，需要一个团队来维护，因此这些系统最终大多是彼此独立运行的。
+这些 OLTP 系统通常要求高可用性并以低延迟处理事务，因为它们通常对业务运营至关重要。
+因此，数据库管理员会严密保护他们的 OLTP 数据库。
+他们通常不乐意让业务分析师在 OLTP 数据库上运行临时分析查询，因为这些查询通常很昂贵，扫描数据集的大部分内容，可能损害并发执行事务的性能。
 
-A data warehouse, by contrast, is a separate database that analysts can query to their hearts’ content, without affecting OLTP operations. 
-The data warehouse contains a read-only copy of the data in all the various OLTP systems in the company.
-Data is extracted from OLTP databases (using either a periodic data dump or a continuous stream of updates), transformed into an analysis-friendly schema, cleaned up, and then loaded into the data warehouse. 
-This process of getting data into the warehouse is known as Extract–Transform–Load (ETL).
+相比之下，数据仓库是一个单独的数据库，分析师可以随心所欲地查询，而不会影响 OLTP 操作。
+数据仓库包含公司所有各种 OLTP 系统中数据的只读副本。
+数据从 OLTP 数据库中提取（使用定期数据转储或持续更新流），转换为分析友好的模式，进行清理，然后加载到数据仓库中。
+将数据导入仓库的过程称为提取-转换-加载（ETL）。
 
-A big advantage of using a separate data warehouse, rather than querying OLTP systems directly for analytics, is that the data warehouse can be optimized for analytic access patterns. 
-It turns out that the indexing algorithms work well for OLTP, but are not very good at answering analytic queries.
+使用单独的数据仓库而不是直接查询 OLTP 系统进行分析的一大优势是可以针对分析访问模式优化数据仓库。
+事实证明，索引算法对 OLTP 效果很好，但不擅长回答分析查询。
 
-The data model of a data warehouse is most commonly relational, because SQL is generally a good fit for analytic queries.
-There are many graphical data analysis tools that generate SQL queries, visualize the results, and allow analysts to explore the data(through operations such as drill-down and slicing and dicing).
-On the surface, a data warehouse and a relational OLTP database look similar, because they both have a SQL query interface. 
-However, the internals of the systems can look quite different, because they are optimized for very different query patterns.
-Many database vendors now focus on supporting either transaction processing or analytics workloads, but not both.
-Some databases, such as Microsoft SQL Server and SAP HANA, have support for transaction processing and data warehousing in the same product. However, they are increasingly becoming two separate storage and query engines, which happen to be accessible through a common SQL interface.
+数据仓库的数据模型最常见的是关系型的，因为 SQL 通常非常适合分析查询。
+有许多图形化数据分析工具可以生成 SQL 查询、可视化结果，并允许分析师探索数据（通过下钻、切片和切块等操作）。
+表面上看，数据仓库和关系型 OLTP 数据库看起来相似，因为它们都有 SQL 查询接口。
+然而，系统的内部结构可能看起来截然不同，因为它们针对非常不同的查询模式进行了优化。
+许多数据库供应商现在专注于支持事务处理或分析工作负载，而非两者兼顾。
+有些数据库，例如 Microsoft SQL Server 和 SAP HANA，在同一产品中支持事务处理和数据仓库。
+然而，它们正日益成为两个独立的存储和查询引擎，恰好通过共同的 SQL 接口访问。
 
 ## Transaction
 
 ### Recovery
 
-A *write-ahead log* (WAL for short, also known as a commit log) is an append-only auxiliary disk-resident structure used for crash and transaction recovery. The page cache allows buffering changes to page contents in memory. Until the cached contents are flushed back to disk, the only disk-resident copy preserving the operation history is stored in the WAL. Many database systems use append-only write-ahead logs; for example, PostgreSQL and MySQL.
+*写前日志*（简称 WAL，也称为提交日志）是一种只追加的辅助磁盘驻留结构，用于崩溃和事务恢复。
+页面缓存允许在内存中缓冲对页面内容的更改。
+在缓存内容刷新回磁盘之前，磁盘上唯一保存操作历史的副本存储在 WAL 中。
+许多数据库系统使用只追加的写前日志；例如 PostgreSQL 和 MySQL。
 
-The main functionality of a write-ahead log can be summarized as:
+写前日志的主要功能可以总结为：
 
-- Allow the page cache to buffer updates to disk-resident pages while ensuring durability semantics in the larger context of a database system.
-- Persist all operations on disk until the cached copies of pages affected by these operations are synchronized on disk. Every operation that modifies the database state has to be logged on disk before the contents of the associated pages can be modified.
-- Allow lost in-memory changes to be reconstructed from the operation log in case of a crash.
+- 允许页面缓存缓冲对磁盘驻留页面的更新，同时在数据库系统的更大上下文中确保持久性语义。
+- 将所有操作持久化到磁盘，直到受这些操作影响的页面的缓存副本在磁盘上同步为止。
+  每个修改数据库状态的操作在修改相关页面内容之前，必须先记录到磁盘。
+- 允许在崩溃时从操作日志重建丢失的内存中更改。
 
+除了此功能外，写前日志在事务处理中也扮演着重要角色。
+WAL 的重要性怎么强调也不为过，因为它确保数据到达持久存储并在崩溃时可用，因为未提交的数据可以从日志中重放，崩溃前的数据库状态可以完全恢复。
 
+写前日志是只追加的，其写入内容是不可变的，因此对日志的所有写入都是顺序的。
+由于 WAL 是一种不可变的、只追加的数据结构，读取者可以安全地访问其内容直到最新的写入阈值，而写入者继续向日志尾部追加数据。
 
-In addition to this functionality, the write-ahead log plays an important role in transaction processing. It is hard to overstate the importance of the WAL as it ensures that data makes it to the persistent storage and is available in case of a crash, as uncommitted data is replayed from the log and the pre-crash database state is fully restored.
+WAL 由日志记录组成。
+每条记录都有一个唯一的、单调递增的日志序列号（LSN）。
+通常，LSN 由内部计数器或时间戳表示。
+由于日志记录不一定占用整个磁盘块，其内容在日志缓冲区中缓存，并在强制操作中刷新到磁盘。
+强制操作在日志缓冲区填满时发生，并且可以由事务管理器或页面缓存请求。
+所有日志记录必须按 LSN 顺序刷新到磁盘。
 
+除了单个操作记录外，WAL 还保存指示事务完成的记录。
+事务在日志被强制到达其提交记录的 LSN 之前，不能被视为已提交。
 
-The write-ahead log is append-only and its written contents are immutable, so all writes to the log are sequential. Since the WAL is an immutable, append-only data structure, readers can safely access its contents up to the latest write threshold while the writer continues appending data to the log tail.
+为了确保系统在回滚或恢复期间发生崩溃后仍能继续正常运行，一些系统在撤销期间使用补偿日志记录（CLR）并将其存储在日志中。
 
-The WAL consists of log records. Every record has a unique, monotonically increasing log sequence number (LSN). Usually, the LSN is represented by an internal counter or a timestamp. Since log records do not necessarily occupy an entire disk block, their contents are cached in the log buffer and are flushed on disk in a force operation. Forces happen as the log buffers fill up, and can be requested by the transaction manager or a page cache. All log records have to be flushed on disk in LSN order.
+WAL 通常通过允许在到达检查点时修剪日志的接口与主存储结构耦合。
+日志记录是数据库最关键的正确性方面之一，这有点棘手：日志修剪与确保数据已到达主存储结构之间的哪怕是微小的不一致都可能导致数据丢失。
 
-Besides individual operation records, the WAL holds records indicating transaction completion. A transaction can’t be considered committed until the log is forced up to the LSN of its commit record.
+检查点是日志知道截至某个标记的日志记录已完全持久化且不再需要的方式，这显著减少了数据库启动期间所需的工作量。
+强制将所有脏页刷新到磁盘的过程通常称为同步检查点，因为它完全同步了主存储结构。
 
-To make sure the system can continue functioning correctly after a crash during rollback or recovery, some systems use compensation log records (CLR) during undo and store them in the log.
-
-The WAL is usually coupled with a primary storage structure by the interface that allows trimming it whenever a checkpoint is reached. Logging is one of the most critical correctness aspects of the database, which is somewhat tricky to get right: even the slightest disagreements between log trimming and ensuring that the data has made it to the primary storage structure may cause data loss.
-
-Checkpoints are a way for a log to know that log records up to a certain mark are fully persisted and aren’t required anymore, which significantly reduces the amount of work required during the database startup. A process that forces all dirty pages to be flushed on disk is generally called a sync checkpoint, as it fully synchronizes the primary storage structure.
-
-Flushing the entire contents on disk is rather impractical and would require pausing all running operations until the checkpoint is done, so most database systems implement fuzzy checkpoints. In this case, the last_checkpoint pointer stored in the log header contains the information about the last successful checkpoint. A fuzzy checkpoint begins with a special begin_checkpoint log record specifying its start, and ends with end_checkpoint log record, containing information about the dirty pages, and the contents of a transaction table. Until all the pages specified by this record are flushed, the checkpoint is considered to be incomplete. Pages are flushed asynchronously and, once this is done, the last_checkpoint record is updated with the LSN of the begin_checkpoint record and, in case of a crash, the recovery process will start from there.
+将全部内容刷新到磁盘相当不切实际，并且需要暂停所有正在运行的操作直到检查点完成，因此大多数数据库系统实现了模糊检查点。
+在这种情况下，存储在日志头部中的 last_checkpoint 指针包含关于最后一次成功检查点的信息。
+模糊检查点以指定其开始的特殊 begin_checkpoint 日志记录开始，以包含有关脏页信息和事务表内容的 end_checkpoint 日志记录结束。
+直到该记录指定的所有页面都被刷新，检查点才被认为是完整的。
+页面被异步刷新，完成后，last_checkpoint 记录更新为 begin_checkpoint 记录的 LSN，并且在发生崩溃的情况下，恢复过程将从那里开始。
 
 #### Operation Versus Data Log
 
-Some database systems, for example System R [CHAMBERLIN81], use shadow paging: a copy-on-write technique ensuring data durability and transaction atomicity. New contents are placed into the new unpublished shadow page and made visible with a pointer flip, from the old page to the one holding updated contents.
+某些数据库系统，例如 System R [CHAMBERLIN81]，使用影子分页：一种写时复制技术，确保数据持久性和事务原子性。
+新内容被放入未发布的影子页面中，并通过指针翻转（从旧页面翻转到持有更新内容的页面）使其可见。
 
-Any state change can be represented by a before-image and an after-image or by corresponding redo and undo operations. Applying a redo operation to a before-image produces an after-image. Similarly, applying an undo operation to an after-image produces a before-image.
+任何状态变化都可以用前像和后像或相应的 redo 和 undo 操作来表示。
+对前像应用 redo 操作产生后像。
+类似地，对后像应用 undo 操作产生前像。
 
-We can use a physical log (that stores complete page state or byte-wise changes to it) or a logical log (that stores operations that have to be performed against the current state) to move records or pages from one state to the other, both backward and forward in time. It is important to track the exact state of the pages that physical and logical log records can be applied to.
+我们可以使用物理日志（存储完整的页面状态或对其的字节级更改）或逻辑日志（存储必须针对当前状态执行的操作）来在时间上向前或向后移动记录或页面。
+跟踪物理和逻辑日志记录可以应用的页面的确切状态非常重要。
 
-Physical logging records before and after images, requiring entire pages affected by the operation to be logged. A logical log specifies which operations have to be applied to the page, such as "insert a data record X for key Y", and a corresponding undo operation, such as "remove the value associated with Y".
+物理日志记录操作的前后像，要求记录受操作影响的所有页面。
+逻辑日志指定必须应用于页面的操作，例如"为键 Y 插入数据记录 X"，以及相应的撤销操作，例如"删除与 Y 关联的值"。
 
-In practice, many database systems use a combination of these two approaches, using logical logging to perform an undo (for concurrency and performance) and physical logging to perform a redo (to improve recovery time).
+在实践中，许多数据库系统结合使用这两种方法，使用逻辑日志执行撤销（为了并发性和性能）和物理日志执行重做（以改善恢复时间）。
 
 #### Steal and Force Policies
 
-To determine when the changes made in memory have to be flushed on disk, database management systems define steal/no-steal and force/no-force policies.
-These policies are mostly applicable to the page cache, but they’re better discussed in the context of recovery, since they have a significant impact on which recovery approaches can be used in combination with them.
+为了确定何时必须将内存中的更改刷新到磁盘上，数据库管理系统定义了 steal/no-steal 和 force/no-force 策略。
+这些策略主要适用于页面缓存，但最好在恢复的上下文中讨论，因为它们对可以与之结合使用的恢复方法有重要影响。
 
-A recovery method that allows flushing a page modified by the transaction even before the transaction has committed is called a steal policy. 
-A no-steal policy does not allow flushing any uncommitted transaction contents on disk. 
-To steal a dirty page here means flushing its in-memory contents to disk and loading a different page from disk in its place.
+允许在事务提交之前刷新由该事务修改的页面的恢复方法称为 steal 策略。
+no-steal 策略不允许将任何未提交的事务内容刷新到磁盘。
+这里的 steal 脏页意味着将其内存中内容刷新到磁盘，并从磁盘加载不同的页面到其位置。
 
-A force policy requires all pages modified by the transactions to be flushed on disk before the transaction commits. 
-On the other hand, a no-force policy allows a transaction to commit even if some pages modified during this transaction were not yet flushed on disk. 
-To force a dirty page here means to flush it on disk before the commit.
+force 策略要求在事务提交之前，将所有由该事务修改的页面刷新到磁盘。
+另一方面，no-force 策略允许事务提交，即使在该事务期间修改的一些页面尚未刷新到磁盘。
+这里的 force 脏页意味着在提交之前将其刷新到磁盘。
 
-Steal and force policies are important to understand, since they have implications for transaction undo and redo.
-Undo rolls back updates to forced pages for committed transactions, while redo applies changes performed by committed transactions on disk.
+理解 steal 和 force 策略很重要，因为它们对事务的撤销和重做有影响。
+撤销回滚对已提交事务的强制页面的更新，而重做则将已提交事务执行的更改应用到磁盘。
 
-Using the no-steal policy allows implementing recovery using only redo entries: old copy is contained in the page on disk and modification is stored in the log. 
-With no-force, we potentially can buffer several updates to pages by deferring them. Since page contents have to be cached in memory for that time, a larger page cache may be needed.
+使用 no-steal 策略允许仅使用重做条目实现恢复：旧副本包含在磁盘上的页面中，修改存储在日志中。
+使用 no-force，我们可以通过延迟来缓冲对页面的多次更新。
+由于页面内容需要在此期间缓存在内存中，可能需要更大的页面缓存。
 
-When the force policy is used, crash recovery doesn’t need any additional work to reconstruct the results of committed transactions, since pages modified by these transactions are already flushed. 
-A major drawback of using this approach is that transactions take longer to commit due to the necessary I/O.
+当使用 force 策略时，崩溃恢复不需要额外工作来重建已提交事务的结果，因为这些事务修改的页面已经被刷新。
+使用这种方法的一个主要缺点是事务需要更长的提交时间，因为需要必要的 I/O。
 
-More generally, until the transaction commits, we need to have enough information to undo its results. 
-If any pages touched by the transaction are flushed, we need to keep undo information in the log until it commits to be able to roll it back. 
-Otherwise, we have to keep redo records in the log until it commits. In both cases, transaction cannot commit until either undo or redo records are written to the logfile.
-
-
-
-
-
-
-
-
-
-
-
-
-
+更一般地，在事务提交之前，我们需要有足够的信息来撤销其结果。
+如果事务触及的任何页面已被刷新，我们需要在日志中保留撤销信息直到其提交才能回滚。
+否则，我们必须在日志中保留重做记录直到其提交。
+在这两种情况下，事务在撤销或重做记录写入日志文件之前无法提交。
 
 ### Concurrency Control
 
 #### Why is concurrency control needed?
 
-If transactions are executed *serially*, i.e., sequentially with no overlap in time, no transaction concurrency exists. However, if concurrent transactions with interleaving operations are allowed in an uncontrolled manner, some unexpected, undesirable results may occur, such as:
+如果事务是*串行*执行的，即按顺序执行且时间上无重叠，则不存在事务并发。
+然而，如果允许具有交错操作的并发事务不受控制地运行，可能会出现一些意外的不良结果，例如：
 
-1. The lost update problem: A second transaction writes a second value of a data-item (datum) on top of a first value written by a first concurrent transaction, and the first value is lost to other transactions running concurrently which need, by their precedence, to read the first value. The transactions that have read the wrong value end with incorrect results.
-2. The dirty read problem: Transactions read a value written by a transaction that has been later aborted. This value disappears from the database upon abort, and should not have been read by any transaction ("dirty read"). The reading transactions end with incorrect results.
-3. The incorrect summary problem: While one transaction takes a summary over the values of all the instances of a repeated data-item, a second transaction updates some instances of that data-item. The resulting summary does not reflect a correct result for any (usually needed for correctness) precedence order between the two transactions (if one is executed before the other), but rather some random result, depending on the timing of the updates, and whether certain update results have been included in the summary or not.
+1. 丢失更新问题：第二个事务将数据项的第二个值写入第一个并发事务写入的第一个值之上，第一个值对需要按其优先顺序读取第一个值的其他并发事务丢失。
+   读取了错误值的事务最终得到不正确的结果。
+2. 脏读问题：事务读取了后来被中止的事务写入的值。
+   该值在中止时从数据库中消失，任何事务都不应读取它（"脏读"）。
+   读取事务最终得到不正确的结果。
+3. 不正确的汇总问题：当一个事务对所有实例重复的数据项的值进行汇总时，第二个事务更新了该数据项的某些实例。
+   得到的汇总结果不能反映两个事务之间的任何（通常正确性所需的）优先顺序的正确结果，而是一些取决于更新时机以及某些更新结果是否已包含在汇总中的随机结果。
 
-Most high-performance transactional systems need to run transactions concurrently to meet their performance requirements. Thus, without concurrency control such systems can neither provide correct results nor maintain their databases consistently.
+大多数高性能事务系统需要并发运行事务以满足其性能要求。
+因此，如果没有并发控制，这些系统既无法提供正确的结果，也无法一致地维护其数据库。
 
 #### Concurrency control mechanisms
 
 #### Categories
 
-The main categories of concurrency control mechanisms are:
+并发控制机制的主要类别包括：
 
-- **[Optimistic](https://en.wikipedia.org/wiki/Optimistic_concurrency_control)** - Delay the checking of whether a transaction meets the isolation and other integrity rules (e.g., [serializability](https://en.wikipedia.org/wiki/Serializability) and [recoverability](https://en.wikipedia.org/wiki/Serializability#Correctness_-_recoverability)) until its end, without blocking any of its (read, write) operations ("...and be optimistic about the rules being met..."), and then abort a transaction to prevent the violation, if the desired rules are to be violated upon its commit. An aborted transaction is immediately restarted and re-executed, which incurs an obvious overhead (versus executing it to the end only once). If not too many transactions are aborted, then being optimistic is usually a good strategy.
-- **Pessimistic** - Block an operation of a transaction, if it may cause violation of the rules, until the possibility of violation disappears. Blocking operations is typically involved with performance reduction.
-- **Semi-optimistic** - Block operations in some situations, if they may cause violation of some rules, and do not block in other situations while delaying rules checking (if needed) to transaction's end, as done with optimistic.
+- **[Optimistic](https://en.wikipedia.org/wiki/Optimistic_concurrency_control)** - 延迟检查事务是否满足隔离性和其他完整性规则（例如，[serializability](https://en.wikipedia.org/wiki/Serializability) 和 [recoverability](https://en.wikipedia.org/wiki/Serializability#Correctness_-_recoverability)）到其结束时，不阻塞其任何（读、写）操作（"乐观地认为规则会被满足..."），然后在如果提交时将要违反所需规则时中止事务以防止违规。
+   中止的事务立即重新启动并重新执行，这会产生明显的开销（相对于只执行到结束一次）。
+   如果没有太多事务被中止，那么乐观策略通常是一个好策略。
+- **Pessimistic** - 如果某个操作可能导致违反规则，则阻塞该事务的操作，直到违反的可能性消失。
+   阻塞操作通常涉及性能降低。
+- **Semi-optimistic** - 在某些情况下如果操作可能导致违反某些规则则阻塞操作，在其他情况下不阻塞，同时延迟规则检查（如果需要）到事务结束时，如乐观方法所做的那样。
 
-Different categories provide different performance, i.e., different average transaction completion rates (*throughput*), depending on transaction types mix, computing level of parallelism, and other factors. If selection and knowledge about trade-offs are available, then category and method should be chosen to provide the highest performance.
+不同类别提供不同的性能，即不同的平均事务完成率（*吞吐量*），取决于事务类型组合、计算并行度和其他因素。
+如果存在选择且了解权衡，则应选择能够提供最高性能的类别和方法。
 
-The mutual blocking between two transactions (where each one blocks the other) or more results in a [deadlock](https://en.wikipedia.org/wiki/Deadlock), where the transactions involved are stalled and cannot reach completion. Most non-optimistic mechanisms (with blocking) are prone to deadlocks which are resolved by an intentional abort of a stalled transaction (which releases the other transactions in that deadlock), and its immediate restart and re-execution. The likelihood of a deadlock is typically low.
+两个事务之间的相互阻塞（每个事务阻塞另一个）或多个事务之间的阻塞会导致[死锁](https://en.wikipedia.org/wiki/Deadlock)，涉及的事务停滞不前，无法完成。
+大多数非乐观机制（带有阻塞的）容易发生死锁，通过有意中止停滞事务（释放死锁中的其他事务）并立即重新启动和重新执行来解决。
+死锁的可能性通常较低。
 
-Blocking, deadlocks, and aborts all result in performance reduction, and hence the trade-offs between the categories.
+阻塞、死锁和中止都会导致性能降低，因此需要在不同类别之间进行权衡。
 
 #### Methods
 
-Many methods for concurrency control exist. Most of them can be implemented within either main category above. The major methods,[[1\]](https://en.wikipedia.org/wiki/Concurrency_control#cite_note-Bern2009-1) which have each many variants, and in some cases may overlap or be combined, are:
+存在许多并发控制方法。
+大多数可以在上述任一主要类别内实现。
+主要的方法，每个都有许多变体，并且在某些情况下可能重叠或组合，包括：
 
-1. Locking (e.g., **[Two-phase locking](https://en.wikipedia.org/wiki/Two-phase_locking)** - 2PL) - Controlling access to data by [locks](https://en.wikipedia.org/wiki/Lock_(computer_science)) assigned to the data. Access of a transaction to a data item (database object) locked by another transaction may be blocked (depending on lock type and access operation type) until lock release.
-2. **Serialization [graph checking](https://en.wikipedia.org/wiki/Serializability#Testing_conflict_serializability)** (also called Serializability, or Conflict, or Precedence graph checking) - Checking for [cycles](https://en.wikipedia.org/wiki/Cycle_(graph_theory)) in the schedule's [graph](https://en.wikipedia.org/wiki/Directed_graph) and breaking them by aborts.
-3. **[Timestamp ordering](https://en.wikipedia.org/wiki/Timestamp-based_concurrency_control)** (TO) - Assigning timestamps to transactions, and controlling or checking access to data by timestamp order.
-4. **[Commitment ordering](https://en.wikipedia.org/wiki/Commitment_ordering)** (or Commit ordering; CO) - Controlling or checking transactions' chronological order of commit events to be compatible with their respective [precedence order](https://en.wikipedia.org/wiki/Serializability#Testing_conflict_serializability).
+1. 锁（例如，**[Two-phase locking](https://en.wikipedia.org/wiki/Two-phase_locking)** - 2PL）- 通过分配给数据的[锁](https://en.wikipedia.org/wiki/Lock_(computer_science))控制对数据的访问。
+   事务对被另一事务锁定的数据项（数据库对象）的访问可能被阻塞（取决于锁类型和访问操作类型），直到锁释放。
+2. **[Serialization graph checking](https://en.wikipedia.org/wiki/Serializability#Testing_conflict_serializability)**（也称为 Serializability、Conflict 或 Precedence graph checking）- 检查调度[图](https://en.wikipedia.org/wiki/Directed_graph)中的[环](https://en.wikipedia.org/wiki/Cycle_(graph_theory))并通过中止来打破它们。
+3. **[Timestamp ordering](https://en.wikipedia.org/wiki/Timestamp-based_concurrency_control)**（TO）- 为事务分配时间戳，并通过时间戳顺序控制或检查对数据的访问。
+4. **[Commitment ordering](https://en.wikipedia.org/wiki/Commitment_ordering)**（或 Commit ordering; CO）- 控制或检查事务提交事件的 chronological 顺序与它们各自的[优先顺序](https://en.wikipedia.org/wiki/Serializability#Testing_conflict_serializability)兼容。
 
-Other major concurrency control types that are utilized in conjunction with the methods above include:
+与上述方法结合使用的其他主要并发控制类型包括：
 
-- **[Multiversion concurrency control](https://en.wikipedia.org/wiki/Multiversion_concurrency_control)** (MVCC) - Increasing concurrency and performance by generating a new version of a database object each time the object is written, and allowing transactions' read operations of several last relevant versions (of each object) depending on scheduling method.
-- **[Index concurrency control](https://en.wikipedia.org/wiki/Index_locking)** - Synchronizing access operations to [indexes](https://en.wikipedia.org/wiki/Index_(database)), rather than to user data. Specialized methods provide substantial performance gains.
-- **Private workspace model** (**Deferred update**) - Each transaction maintains a private workspace for its accessed data, and its changed data become visible outside the transaction only upon its commit (e.g., [Weikum and Vossen 2001](https://en.wikipedia.org/wiki/Concurrency_control#Weikum01)). This model provides a different concurrency control behavior with benefits in many cases.
+- **[Multiversion concurrency control](https://en.wikipedia.org/wiki/Multiversion_concurrency_control)**（MVCC）- 通过每次写入对象时生成该数据库对象的新版本，并允许事务读取每个对象的最后几个相关版本（取决于调度方法）来提高并发性和性能。
+- **[Index concurrency control](https://en.wikipedia.org/wiki/Index_locking)** - 同步对[索引](https://en.wikipedia.org/wiki/Index_(database))的访问操作，而不是对用户数据的操作。
+   专门的方法可提供显著的性能提升。
+- **Private workspace model**（**Deferred update**）- 每个事务为其访问的数据维护一个私有工作空间，其更改后的数据仅在事务提交时才对外部可见（例如，[Weikum and Vossen 2001](https://en.wikipedia.org/wiki/Concurrency_control#Weikum01)）。
+   这种模型在多种情况下提供了不同的并发控制行为和优势。
 
-The most common mechanism type in database systems since their early days in the 1970s has been *[Strong strict Two-phase locking](https://en.wikipedia.org/wiki/Two-phase_locking)* (SS2PL; also called *Rigorous scheduling* or *Rigorous 2PL*) which is a special case (variant) of both [Two-phase locking](https://en.wikipedia.org/wiki/Two-phase_locking) (2PL) and [Commitment ordering](https://en.wikipedia.org/wiki/Commitment_ordering) (CO). It is pessimistic. In spite of its long name (for historical reasons) the idea of the **SS2PL** mechanism is simple: "Release all locks applied by a transaction only after the transaction has ended." SS2PL (or Rigorousness) is also the name of the set of all schedules that can be generated by this mechanism, i.e., these are SS2PL (or Rigorous) schedules, have the SS2PL (or Rigorousness) property.
+自 1970 年代早期以来，数据库系统中最常见的机制类型是 *[Strong strict Two-phase locking](https://en.wikipedia.org/wiki/Two-phase_locking)*（SS2PL；也称为 *Rigorous scheduling* 或 *Rigorous 2PL*），它是 [Two-phase locking](https://en.wikipedia.org/wiki/Two-phase_locking)（2PL）和 [Commitment ordering](https://en.wikipedia.org/wiki/Commitment_ordering)（CO）的特殊情况（变体）。
+它是悲观的。
+尽管名字很长（出于历史原因），**SS2PL** 机制的思想很简单："只有在事务结束后才释放该事务应用的所有锁。"
+SS2PL（或 Rigorousness）也是此机制可以生成的所有调度集合的名称，即这些是 SS2PL（或 Rigorous）调度，具有 SS2PL（或 Rigorousness）属性。
 
 #### Optimistic concurrency control
 
-**Optimistic concurrency control** (**OCC**) is a [concurrency control](https://en.wikipedia.org/wiki/Concurrency_control) method applied to transactional systems such as [relational database management systems](https://en.wikipedia.org/wiki/Relational_database_management_systems) and [software transactional memory](https://en.wikipedia.org/wiki/Software_transactional_memory). OCC assumes that multiple transactions can frequently complete without interfering with each other. While running, transactions use data resources without acquiring locks on those resources. Before committing, each transaction verifies that no other transaction has modified the data it has read. If the check reveals conflicting modifications, the committing transaction rolls back and can be restarted.[[1\]](https://en.wikipedia.org/wiki/Optimistic_concurrency_control#cite_note-1) Optimistic concurrency control was first proposed by [H. T. Kung](https://en.wikipedia.org/wiki/H._T._Kung) and John T. Robinson.[[2\]](https://en.wikipedia.org/wiki/Optimistic_concurrency_control#cite_note-KungRobinson1981-2)
+**Optimistic concurrency control**（**OCC**）是一种应用于事务系统的[并发控制](https://en.wikipedia.org/wiki/Concurrency_control)方法，例如[关系数据库管理系统](https://en.wikipedia.org/wiki/Relational_database_management_systems)和[软件事务内存](https://en.wikipedia.org/wiki/Software_transactional_memory)。
+OCC 假设多个事务可以经常完成而不会相互干扰。
+在运行时，事务使用数据资源时不获取对这些资源的锁。
+在提交之前，每个事务验证没有其他事务修改了它已读取的数据。
+如果检查发现冲突的修改，提交的事务将回滚并可以重新启动。[[1\]](https://en.wikipedia.org/wiki/Optimistic_concurrency_control#cite_note-1)
+乐观并发控制最初由 H. T. Kung 和 John T. Robinson 提出。[[2\]](https://en.wikipedia.org/wiki/Optimistic_concurrency_control#cite_note-KungRobinson1981-2)
 
-OCC is generally used in environments with low [data contention](https://en.wikipedia.org/wiki/Block_contention). When conflicts are rare, transactions can complete without the expense of managing locks and without having transactions wait for other transactions' locks to clear, leading to higher throughput than other concurrency control methods. However, if contention for data resources is frequent, the cost of repeatedly restarting transactions hurts performance significantly, in which case other [concurrency control](https://en.wikipedia.org/wiki/Concurrency_control) methods may be better suited. However, locking-based ("pessimistic") methods also can deliver poor performance because locking can drastically limit effective concurrency even when deadlocks are avoided.
+OCC 通常用于低[数据争用](https://en.wikipedia.org/wiki/Block_contention)的环境。
+当冲突很少时，事务可以完成而无需管理锁的开销，也无需等待其他事务的锁释放，从而比其他并发控制方法具有更高的吞吐量。
+然而，如果数据资源的争用频繁，重复重启事务的成本会显著损害性能，在这种情况下，其他[并发控制](https://en.wikipedia.org/wiki/Concurrency_control)方法可能更合适。
+然而，基于锁的（"悲观"）方法也可能表现不佳，因为锁即使在避免死锁的情况下也会极大地限制有效并发性。
 
 ##### Phases of optimistic concurrency control
 
-Optimistic concurrency control transactions involve these phases:
+乐观并发控制事务涉及以下阶段：
 
-- **Begin**: Record a timestamp marking the transaction's beginning.
-- **Modify**: Read database values, and tentatively write changes.
-- **Validate**: Check whether other transactions have modified data that this transaction has used (read or written). This includes transactions that completed after this transaction's start time, and optionally, transactions that are still active at validation time.
-- **Commit/Rollback**: If there is no conflict, make all changes take effect. If there is a conflict, resolve it, typically by aborting the transaction, although other resolution schemes are possible. Care must be taken to avoid a [time-of-check to time-of-use](https://en.wikipedia.org/wiki/Time-of-check_to_time-of-use) bug, particularly if this phase and the previous one are not performed as a single [atomic](https://en.wikipedia.org/wiki/Linearizability) operation.
+- **Begin**：记录标记事务开始的时间戳。
+- **Modify**：读取数据库值，并暂定写入更改。
+- **Validate**：检查其他事务是否修改了此事务已使用（读取或写入）的数据。
+  这包括在此事务开始时间之后完成的事务，以及可选地，在验证时仍然活跃的事务。
+- **Commit/Rollback**：如果没有冲突，使所有更改生效。
+  如果存在冲突，则解决它，通常通过中止事务，但其他解决方案也是可能的。
+  必须小心避免[检查时间到使用时间](https://en.wikipedia.org/wiki/Time-of-check_to_time-of-use)的 bug，特别是如果此阶段和前一阶段不是作为单个[原子](https://en.wikipedia.org/wiki/Linearizability)操作执行的话。
 
 ### Two-phase locking
 
-In [databases](https://en.wikipedia.org/wiki/Database) and [transaction processing](https://en.wikipedia.org/wiki/Transaction_processing), **two-phase locking** (**2PL**) is a [concurrency control](https://en.wikipedia.org/wiki/Concurrency_control) method that guarantees [serializability](https://en.wikipedia.org/wiki/Serializability).[[1\]](https://en.wikipedia.org/wiki/Two-phase_locking#cite_note-Bern1987-1)[[2\]](https://en.wikipedia.org/wiki/Two-phase_locking#cite_note-Weikum2001-2) It is also the name of the resulting set of [database transaction](https://en.wikipedia.org/wiki/Database_transaction) [schedules](https://en.wikipedia.org/wiki/Schedule_(computer_science)) (histories). The protocol utilizes [locks](https://en.wikipedia.org/wiki/Lock_(computer_science)), applied by a transaction to data, which may block (interpreted as signals to stop) other transactions from accessing the same data during the transaction's life.
+在[数据库](https://en.wikipedia.org/wiki/Database)和[事务处理](https://en.wikipedia.org/wiki/Transaction_processing)中，**两阶段锁**（**2PL**）是一种保证[可串行化](https://en.wikipedia.org/wiki/Serializability)的[并发控制](https://en.wikipedia.org/wiki/Concurrency_control)方法。[[1\]](https://en.wikipedia.org/wiki/Two-phase_locking#cite_note-Bern1987-1)[[2\]](https://en.wikipedia.org/wiki/Two-phase_locking#cite_note-Weikum2001-2)
+它也是由此产生的[数据库事务](https://en.wikipedia.org/wiki/Database_transaction)[调度](https://en.wikipedia.org/wiki/Schedule_(computer_science))集合的名称。
+该协议利用事务应用于数据的[锁](https://en.wikipedia.org/wiki/Lock_(computer_science))，这些锁可能会阻塞（解释为停止信号）其他事务在事务生命周期内访问同一数据。
 
-By the 2PL protocol, locks are applied and removed in two phases:
+根据 2PL 协议，锁在两个阶段中应用和释放：
 
-1. Expanding phase: locks are acquired and no locks are released.
-2. Shrinking phase: locks are released and no locks are acquired.
+1. 扩展阶段：获取锁，不释放任何锁。
+2. 收缩阶段：释放锁，不获取任何锁。
 
-Two types of locks are utilized by the basic protocol: *Shared* and *Exclusive* locks. Refinements of the basic protocol may utilize more lock types. Using locks that block processes, 2PL may be subject to [deadlocks](https://en.wikipedia.org/wiki/Deadlock) that result from the mutual blocking of two or more transactions.
+基本协议使用两种类型的锁：*共享*锁和*排他*锁。
+基本协议的优化可能使用更多的锁类型。
+使用阻塞进程的锁，2PL 可能遭受由两个或多个事务相互阻塞导致的[死锁](https://en.wikipedia.org/wiki/Deadlock)。
 
 ## Replication
 
-When thinking about replication we need to make a decision on two different categories of configurations:
+在考虑复制时，我们需要在两种不同类别的配置上做出决定：
 
-* Algorithm for performing replication
-  * Leader-Follower Replication
-  * Multi Leader Replication
-  * Leaderless Replication
-* Process in which replication is performed
-  * Synchronous Replication
-  * Asynchronous Replication
-  * Combination of both synchronous & asynchronous replication
+* 执行复制的算法
+  * 主从复制
+  * 多主复制
+  * 无主复制
+* 执行复制的过程
+  * 同步复制
+  * 异步复制
+  * 同步和异步复制的组合
 
 ## Shard
 
@@ -766,31 +834,31 @@ When thinking about replication we need to make a decision on two different cate
 
 [Granularity of Locks and Degrees of Consistency in a Shared DataBase](http://jimgray.azurewebsites.net/papers/granularity%20of%20locks%20and%20degrees%20of%20consistency%20rj%201654.pdf)
 
-Atomic Commitment Protocl(ACP)
+Atomic Commitment Protocol(ACP)
 
 ## DBs
 
-Document databases reverted back to the hierarchical model in one aspect: storing nested records (one-to-many relationships) within their parent record rather than in a separate table.
+文档数据库在一个方面回到了层次模型：将嵌套记录（一对多关系）存储在其父记录中，而不是存储在单独的表中。
 
-When it comes to representing many-to-one and many-to-many relationships, relational and document databases are not fundamentally different:
-in both cases, the related item is referenced by a unique identifier, which is called a foreign key in the relational model and a document reference in the document model.
-That identifier is resolved at read time by using a join or follow-up queries.
+在表示多对一和多对多关系时，关系数据库和文档数据库并无根本不同：
+在这两种情况下，相关项通过唯一标识符引用，这在关系模型中称为外键，在文档模型中称为文档引用。
+该标识符在读取时通过使用 join 或后续查询来解析。
 
-The main arguments in favor of the document data model are schema flexibility, better performance due to locality, and that for some applications it is closer to the data structures used by the application.
-The relational model counters by providing better support for joins, and many-to-one and many-to-many relationships.
+支持文档数据模型的主要论据是模式灵活性、由于局部性而带来的更好性能，以及对某些应用程序来说更接近应用程序使用的数据结构。
+关系模型通过提供更好的 join 支持以及多对一和多对多关系来回应。
 
-If the data in your application has a document-like structure (i.e., a tree of one-tomany relationships, where typically the entire tree is loaded at once), then it’s probably a good idea to use a document model.
-The relational technique of shredding—splitting a document-like structure into multiple tables can lead to cumbersome schemas and unnecessarily complicated application code.
-The document model has limitations: for example, you cannot refer directly to a nested item within a document, but instead you need to say something like “the second item in the list of positions for user 251” (much like an access path in the hierarchical model).
-However, as long as documents are not too deeply nested, that is not usually a problem.
+如果你应用程序中的数据具有类似文档的结构（即一对多关系的树，通常一次加载整个树），那么使用文档模型可能是个好主意。
+关系式的切分技术（将类似文档的结构拆分为多个表）可能导致繁琐的模式和不必要的复杂应用程序代码。
+文档模型有局限性：例如，你无法直接引用文档中的嵌套项，而必须说类似"用户 251 的职位列表中的第二项"这样的话（很像层次模型中的访问路径）。
+然而，只要文档嵌套不是太深，这通常不是问题。
 
-Document databases are called schema-on-read (the structure of the data is implicit, and only interpreted when the data is read), in contrast with schema-on-write (the traditional approach of relational databases, where the schema is explicit and the database ensures all written data conforms to it).
-Schema-on-read is similar to dynamic (runtime) type checking in programming lanuages, whereas schema-on-write is similar to static (compile-time) type checking.
+文档数据库被称为 schema-on-read（数据的结构是隐式的，仅在读取数据时解释），与 schema-on-write（关系数据库的传统方法，其中模式是显式的，数据库确保所有写入的数据都符合它）形成对比。
+Schema-on-read 类似于编程语言中的动态（运行时）类型检查，而 schema-on-write 类似于静态（编译时）类型检查。
 
-The difference between the approaches is particularly noticeable in situations where an application wants to change the format of its data.
-For example, say you are currently storing each user’s full name in one field, and you instead want to store the first name and last name separately.
-In a document database, you would just start writing new documents with the new fields and have code in the application that handles the case when old documents are read.
-For example:
+这两种方法的区别在应用程序想要更改其数据格式时尤为明显。
+例如，假设你当前将每个用户的全名存储在一个字段中，而现在你想将名字和姓氏分开存储。
+在文档数据库中，你只需开始用新字段写入新文档，并在应用程序中编写代码来处理读取旧文档时的情况。
+例如：
 
 ```
 if (user && user.name && !user.first_name) {
@@ -799,7 +867,7 @@ user.first_name = user.name.split(" ")[0];
 }
 ```
 
-On the other hand, in a “statically typed” database schema, you would typically perform a migration along the lines of:
+另一方面，在"静态类型"的数据库模式中，你通常会执行如下迁移：
 
 ```sql
 ALTER TABLE users ADD COLUMN first_name text;
@@ -807,86 +875,86 @@ UPDATE users SET first_name = split_part(name, ' ', 1); -- PostgreSQL
 UPDATE users SET first_name = substring_index(name, ' ', 1); -- MySQL
 ```
 
-Schema changes have a bad reputation of being slow and requiring downtime.
-This reputation is not entirely deserved: most relational database systems execute the ALTER TABLE statement in a few milliseconds.
-MySQL is a notable exception—it copies the entire table on ALTER TABLE, which can mean minutes or even hours of downtime when altering a large table—although various tools exist to work around this limitation.
+Schema 变更因缓慢和需要停机而名声不佳。
+这种名声并不完全应得：大多数关系数据库系统在几毫秒内执行 ALTER TABLE 语句。
+MySQL 是一个显著的例外——它在 ALTER TABLE 时复制整个表，这在修改大表时可能意味着几分钟甚至几小时的停机时间——尽管存在各种工具来绕过此限制。
 
-Running the UPDATE statement on a large table is likely to be slow on any database, since every row needs to be rewritten.
-If that is not acceptable, the application can leave first_name set to its default of NULL and fill it in at read time, like it would with a document database.
+在任何数据库上对大型表运行 UPDATE 语句都可能很慢，因为需要重写每一行。
+如果这不可接受，应用程序可以将 first_name 保留为默认的 NULL，并在读取时填充它，就像在文档数据库中那样。
 
-The schema-on-read approach is advantageous if the items in the collection don’t all have the same structure for some reason (i.e., the data is heterogeneous)—for example, because:
+如果集合中的项目由于某种原因并非都具有相同的结构（即数据是异构的），则 schema-on-read 方法是有利的——例如，因为：
 
-- There are many different types of objects, and it is not practical to put each type of object in its own table.
-- The structure of the data is determined by external systems over which you have no control and which may change at any time.
+- 有许多不同类型的对象，将每种对象类型放在自己的表中不切实际。
+- 数据的结构由你无法控制的外部系统决定，并且可能随时更改。
 
-In situations like these, a schema may hurt more than it helps, and schemaless documents can be a much more natural data model. But in cases where all records are expected to have the same structure, schemas are a useful mechanism for documenting and enforcing that structure.
+在这种情况下，schema 可能弊大于利，而无 schema 的文档可能是一种更自然的数据模型。
+但在所有记录预期具有相同结构的情况下，schema 是记录和强制该结构的有用机制。
 
-A document is usually stored as a single continuous string, encoded as JSON, XML, or a binary variant thereof (such as MongoDB’s BSON).
-If your application often needs to access the entire document (for example, to render it on a web page), there is a performance advantage to this storage locality.
-If data is split across multiple tables, multiple index lookups are required to retrieve it all, which may require more disk seeks and take more time.
+文档通常作为单个连续字符串存储，编码为 JSON、XML 或其二进制变体（例如 MongoDB 的 BSON）。
+如果你的应用程序经常需要访问整个文档（例如，在网页上渲染它），这种存储局部性具有性能优势。
+如果数据分布在多个表中，则需要多次索引查找来检索所有数据，这可能需要更多的磁盘寻道和更多时间。
 
-The locality advantage only applies if you need large parts of the document at the same time.
-The database typically needs to load the entire document, even if you access only a small portion of it, which can be wasteful on large documents.
-On updates to a document, the entire document usually needs to be rewritten—only modifications that don’t change the encoded size of a document can easily be performed in place.
-For these reasons, it is generally recommended that you keep documents fairly small and avoid writes that increase the size of a document.
-These performance limitations significantly reduce the set of situations in which document databases are useful.
+局部性优势仅在你同时需要文档的大部分内容时适用。
+即使只访问文档的一小部分，数据库通常也需要加载整个文档，这在大型文档上可能很浪费。
+在更新文档时，通常需要重写整个文档——只有不改变文档编码大小的修改才能容易地原地执行。
+由于这些原因，通常建议保持文档较小，并避免增加文档大小的写入。
+这些性能限制显著减少了文档数据库有用的情况集。
 
-New nonrelational “NoSQL” datastores have diverged in two main directions:
+新的非关系型"NoSQL"数据存储分化为两个主要方向：
 
-1. Document databases target use cases where data comes in self-contained documents and relationships between one document and another are rare.
-2. Graph databases go in the opposite direction, targeting use cases where anything is potentially related to everything.
+1. 文档数据库针对数据以自包含文档形式出现且文档之间关系很少的用例。
+2. 图数据库走向相反方向，针对任何东西都可能与任何东西相关的用例。
 
 ### Inmemory DB
 
-The data structures discussed so far in this chapter have all been answers to the limitations of disks. Compared to main memory, disks are awkward to deal with.
-With both magnetic disks and SSDs, data on disk needs to be laid out carefully if you want good performance on reads and writes.
-However, we tolerate this awkwardness because disks have two significant advantages: they are durable (their contents are not lost if the power is turned off), and they have a lower cost per gigabyte than RAM.
-As RAM becomes cheaper, the cost-per-gigabyte argument is eroded.
-Many datasets are simply not that big, so it’s quite feasible to keep them entirely in memory, potenially distributed across several machines.
-This has led to the development of *inmemory databases*.
-Some in-memory key-value stores, such as Memcached, are intended for caching use only, where it’s acceptable for data to be lost if a machine is restarted.
-But other inmemory databases aim for durability, which can be achieved with special hardware(such as battery-powered RAM), by writing a log of changes to disk, by writing periodic snapshots to disk, or by replicating the in-memory state to other machines.
-When an in-memory database is restarted, it needs to reload its state, either from disk or over the network from a replica (unless special hardware is used).
-Despite writing to disk, it’s still an in-memory database, because the disk is merely used as an append-only log for durability, and reads are served entirely from memory.
-Writing to disk also has operational advantages: files on disk can easily be backed up, inspected, and analyzed by external utilities.
+到目前为止本章讨论的数据结构都是针对磁盘限制的解决方案。
+与主内存相比，磁盘处理起来很尴尬。
+无论是磁盘还是 SSD，要获得良好的读写性能，都需要仔细布局磁盘上的数据。
+然而，我们容忍这种尴尬是因为磁盘有两个显著优势：它们是持久的（断电时内容不会丢失），并且每 GB 的成本低于 RAM。
+随着 RAM 变得更便宜，每 GB 成本的论点正在被削弱。
+许多数据集并不那么大，因此将它们完全保存在内存中是相当可行的，可能分布在多台机器上。
+这导致了*内存数据库*的发展。
+一些内存键值存储，如 Memcached，仅用于缓存目的，机器重启时数据丢失是可以接受的。
+但其他内存数据库旨在实现持久性，可以通过特殊硬件（如电池供电的 RAM）、将更改日志写入磁盘、将定期快照写入磁盘或将内存状态复制到其他机器来实现。
+当内存数据库重新启动时，它需要从磁盘或通过网络从副本重新加载其状态（除非使用特殊硬件）。
+尽管会写入磁盘，但它仍然是内存数据库，因为磁盘仅用作持久性的只追加日志，而读取完全从内存提供。
+写入磁盘还具有操作上的优势：磁盘上的文件可以轻松地由外部工具备份、检查和分析。
 
-Products such as VoltDB, MemSQL, and Oracle TimesTen are in-memory databases with a relational model, and the vendors claim that they can offer big performance improvements by removing all the overheads associated with managing on-disk data structures.
-RAMCloud is an open source, in-memory key-value store with durability (using a log-structured approach for the data in memory as well as the data on disk).
-Redis and Couchbase provide weak durability by writing to disk asynchronously.
+像 VoltDB、MemSQL 和 Oracle TimesTen 这样的产品是具有关系模型的内存数据库，供应商声称它们可以通过消除与管理磁盘数据结构相关的所有开销来提供巨大的性能提升。
+RAMCloud 是一个开源的内存键值存储，具有持久性（对内存中的数据和磁盘上的数据都使用日志结构方法）。
+Redis 和 Couchbase 通过异步写入磁盘提供弱持久性。
 
-Counterintuitively, the performance advantage of in-memory databases is not due to the fact that they don’t need to read from disk.
-Even a disk-based storage engine may never need to read from disk if you have enough memory, because the operating system caches recently used disk blocks in memory anyway.
-Rather, they can be faster because they can avoid the overheads of encoding in-memory data structures in a form that can be written to disk.
+反直觉的是，内存数据库的性能优势并非因为它们不需要从磁盘读取。
+即使是基于磁盘的存储引擎，如果你有足够的内存，也可能永远不需要从磁盘读取，因为操作系统会在内存中缓存最近使用的磁盘块。
+相反，它们可以更快，是因为它们可以避免将以内存数据结构编码为可写入磁盘的形式的开销。
 
-Besides performance, another interesting area for in-memory databases is providing data models that are difficult to implement with disk-based indexes.
-For example, Redis offers a database-like interface to various data structures such as priority queues and sets.
-Because it keeps all data in memory, its implementation is comparatively simple.
-Recent research indicates that an in-memory database architecture could be extended to support datasets larger than the available memory, without bringing back the over heads of a disk-centric architecture.
+除了性能，内存数据库的另一个有趣领域是提供难以使用基于磁盘的索引实现的数据模型。
+例如，Redis 为各种数据结构（如优先级队列和集合）提供类似数据库的接口。
+因为它将所有数据保存在内存中，其实现相对简单。
+最近的研究表明，内存数据库架构可以扩展到支持大于可用内存的数据集，而无需恢复以磁盘为中心的架构的开销。
 
-The so-called anti-caching approach works by evicting the least recently used data from memory to disk when there is not enough memory, and loading it back into memory when it is accessed again in the future.
-This is similar to what operating systems do with virtual memory and swap files, but the database can manage memory more efficiently than the OS, as it can work at the granularity of individual records rather than entire memory pages.
-This approach still requires indexes to fit entirely in memory, though (like the Bitcask example at the beginning of the chapter).
+所谓的反缓存方法通过在内存不足时将最近最少使用的数据从内存驱逐到磁盘，并在将来再次访问时将其加载回内存。
+这类似于操作系统使用虚拟内存和交换文件的做法，但数据库可以比 OS 更高效地管理内存，因为它可以以单个记录而不是整个内存页面的粒度工作。
+不过，这种方法仍然要求索引完全适合内存（就像本章开头的 Bitcask 示例一样）。
 
-Further changes to storage engine design will probably be needed if non-volatile memory (NVM) technologies become more widely adopted.
-At present, this is a new area of research, but it is worth keeping an eye on in the future.
+如果非易失性内存（NVM）技术得到更广泛的应用，存储引擎设计可能需要进一步更改。
+目前，这是一个新的研究领域，但值得在未来关注。
 
 ### MySQL
 
-[MySQL Server](/docs/CS/DB/MySQL/MySQL.md), the world's most popular open source database, and MySQL Cluster, a real-time, open source transactional database.
+[MySQL Server](/docs/CS/DB/MySQL/MySQL.md)，世界上最流行的开源数据库，以及 MySQL Cluster，一个实时的开源事务型数据库。
 
 ### Redis
 
-[Redis](/docs/CS/DB/Redis/Redis.md) is an open source (BSD licensed), in-memory data structure store, used as a database, cache, and message broker.
+[Redis](/docs/CS/DB/Redis/Redis.md) 是一个开源（BSD 许可）的内存数据结构存储，用作数据库、缓存和消息代理。
 
 ### LevelDB
 
-[LevelDB](/docs/CS/DB/LevelDB/LevelDB.md) is a fast key-value storage library written at Google that provides an ordered mapping from string keys to string values.
-LevelDB is a widely used key-value store based on [LSMtrees](/docs/CS/Algorithms/tree/LSM.md) that is inspired by [BigTable](/docs/CS/Distributed/Bigtable.md).
-LevelDB supports range queries, snapshots, and other features that are useful in modern applications.
-
+[LevelDB](/docs/CS/DB/LevelDB/LevelDB.md) 是 Google 开发的一个快速键值存储库，提供从字符串键到字符串值的有序映射。
+LevelDB 是一个基于 [LSMtrees](/docs/CS/Algorithms/tree/LSM.md) 的广泛使用的键值存储，其灵感来源于 [BigTable](/docs/CS/Distributed/Bigtable.md)。
+LevelDB 支持范围查询、快照以及其他在现代应用程序中有用的特性。
 
 ### Column Store
-
 
 ### Document Store
 
@@ -894,19 +962,17 @@ LevelDB supports range queries, snapshots, and other features that are useful in
 
 图数据库是一种专门用于存储和查询图形数据的数据库。它们在处理复杂关系和连接方面表现出色，适用于社交网络、推荐系统、知识图谱等应用场景
 
-
-| 对比     | 图数据库  | 关系型数据库 |
+| 对比 | 图数据库 | 关系型数据库 |
 |--------|-------|--------|
-| 理论基础   | 图论    | 关系模型   |
-| 数据存储方式 | 顶点    | 二维表    |
-| 关系存储方式 | 边     | 主键、外键  |
-| 关系查询方式 | 图查询语言 | 表连接    |
-| 关系查询速度 | 快     | 慢      |
-
+| 理论基础 | 图论 | 关系模型 |
+| 数据存储方式 | 顶点 | 二维表 |
+| 关系存储方式 | 边 | 主键、外键 |
+| 关系查询方式 | 图查询语言 | 表连接 |
+| 关系查询速度 | 快 | 慢 |
 
 #### Neo4j
 
-Neo4j 是目前最流行的属性图数据库，具有“无索引邻接”的特性，即每个顶点维护着指向其邻接顶点的直接引用。
+Neo4j 是目前最流行的属性图数据库，具有"无索引邻接"的特性，即每个顶点维护着指向其邻接顶点的直接引用。
 这使得图导航操作的代价与图的大小无关，仅与图的遍历范围成正比。Neo4j 支持 Cypher 查询语言，适用于需要高效图遍历和查询的场景。
 
 #### JanusGraph
@@ -924,104 +990,98 @@ Dgraph 是一个分布式图数据库，使用 Go 语言开发，支持 GraphQL 
 NebulaGraph 是一款开源的分布式图数据库，擅长处理超大规模数据集，同时保持毫秒级查询延时。
 它采用原生分布式结构，使用 Raft 协议保证数据一致性，支持 openCypher 查询语言。NebulaGraph 适用于需要处理大规模数据和高并发查询的场景
 
-
-
-
 ## Indexes
 
 [Indexes](/docs/CS/DB/Index.md)
 
-A *primary key* uniquely identifies one row in a relational table, or one document in a document database, or one vertex in a graph database.
-Other records in the database can refer to that row/document/vertex by its primary key (or ID), and the index is used to resolve such references.
+*主键*唯一标识关系表中的一行、文档数据库中的一个文档或图数据库中的一个顶点。
+数据库中的其他记录可以通过其主键（或 ID）引用该行/文档/顶点，并使用索引来解析此类引用。
 
-It is also very common to have *secondary indexes*.
-In relational databases, you can create several secondary indexes on the same table using the CREATE INDEX command, and they are often crucial for performing joins efficiently.
-A secondary index can easily be constructed from a key-value index.
-The main difference is that keys are not unique; i.e., there might be many rows (documents, vertices) with the same key.
-This can be solved in two ways: either by making each value in the index a list of matching row identifiers (like a postings list in a full-text index) or by making each key unique by appending a row identifier to it.
-Either way, both B-trees and log-structured indexes can be used as secondary indexes.
+*二级索引*也是非常常见的。
+在关系数据库中，你可以使用 CREATE INDEX 命令在同一张表上创建多个二级索引，它们对于高效执行 join 通常至关重要。
+二级索引可以很容易地从键值索引构建。
+主要区别在于键不是唯一的；也就是说，可能存在多行（文档、顶点）具有相同的键。
+这可以通过两种方式解决：要么使索引中的每个值成为匹配行标识符的列表（如全文索引中的 posting list），要么通过向键附加行标识符使每个键唯一。
+无论哪种方式，B-tree 和日志结构索引都可以用作二级索引。
 
 ### Storing values within the index
 
-The key in an index is the thing that queries search for, but the value can be one of two things: it could be the actual row (document, vertex) in question, or it could be a reference to the row stored elsewhere.
-In the latter case, the place where rows are stored is known as a heap file, and it stores data in no particular order (it may be append-only, or it may keep track of deleted rows in order to overwrite them with new data later).
-The heap file approach is common because it avoids duplicating data when multiple secondary indexes are present: each index just references a location in the heap file, and the actual data is kept in one place.
+索引中的键是查询搜索的内容，但值可以是两种之一：它可以是实际的行（文档、顶点），也可以是对存储在其他地方的行的引用。
+在后一种情况下，行存储的位置称为堆文件，它不按特定顺序存储数据（可能只追加，或者可能跟踪已删除的行以便稍后用新数据覆盖它们）。
+堆文件方法很常见，因为它避免了在存在多个二级索引时重复数据：每个索引仅引用堆文件中的一个位置，而实际数据保存在一个地方。
 
-When updating a value without changing the key, the heap file approach can be quite efficient: the record can be overwritten in place, provided that the new value is not larger than the old value.
-The situation is more complicated if the new value is larger, as it probably needs to be moved to a new location in the heap where there is enough space.
-In that case, either all indexes need to be updated to point at the new heap location of the record, or a forwarding pointer is left behind in the old heap location.
+当更新值而不更改键时，堆文件方法可以非常高效：只要新值不大于旧值，就可以原地覆盖记录。
+如果新值更大，情况就更复杂了，因为它可能需要移动到堆中有足够空间的新位置。
+在这种情况下，要么需要更新所有索引以指向记录的新堆位置，要么在旧堆位置留下一个转发指针。
 
-In some situations, the extra hop from the index to the heap file is too much of a performance penalty for reads, so it can be desirable to store the indexed row directly within an index.
-This is known as a clustered index.
-For example, in MySQL’s InnoDB storage engine, the primary key of a table is always a clustered index, and secondary indexes refer to the primary key (rather than a heap file location).
-In SQL Server, you can specify one clustered index per table.
-A compromise between a clustered index (storing all row data within the index) and a nonclustered index (storing only references to the data within the index) is known as a covering index or index with included columns, which stores some of a table’s columns within the index.
-This allows some queries to be answered by using the index alone (in which case, the index is said to cover the query).
+在某些情况下，从索引到堆文件的额外跳转对读取来说性能损失太大，因此可能需要将索引行直接存储在索引中。
+这称为聚簇索引。
+例如，在 MySQL 的 InnoDB 存储引擎中，表的主键始终是聚簇索引，二级索引引用主键（而不是堆文件位置）。
+在 SQL Server 中，你可以为每个表指定一个聚簇索引。
+聚簇索引（将所有行数据存储在索引中）和非聚簇索引（仅将数据的引用存储在索引中）之间的折衷称为覆盖索引或包含列的索引，它将某些表列存储在索引中。
+这使得某些查询可以仅通过索引来回答（在这种情况下，称索引覆盖了查询）。
 
-As with any kind of duplication of data, clustered and covering indexes can speed up reads, but they require additional storage and can add overhead on writes.
-Databases also need to go to additional effort to enforce transactional guarantees, because applications should not see inconsistencies due to the duplication.
+与任何类型的数据重复一样，聚簇索引和覆盖索引可以加速读取，但它们需要额外的存储空间并增加写入开销。
+数据库还需要付出额外的努力来强制执行事务保证，因为应用程序不应因重复而看到不一致。
 
 ### Multi-column indexes
 
-The indexes discussed so far only map a single key to a value.
-That is not sufficient if we need to query multiple columns of a table (or multiple fields in a document) simultaneously.
-The most common type of multi-column index is called a concatenated index, which simply combines several fields into one key by appending one column to another (the index definition specifies in which order the fields are concatenated).
-This is like an old-fashioned paper phone book, which provides an index from (lastname, firstname) to phone number.
-Due to the sort order, the index can be used to find all the people with a particular last name, or all the people with a particular lastnamefirstname combination.
-However, the index is useless if you want to find all the people with a particular first name.
-Multi-dimensional indexes are a more general way of querying several columns at once, which is particularly important for geospatial data.
-For example, a restaurantsearch website may have a database containing the latitude and longitude of each restaurant.
-When a user is looking at the restaurants on a map, the website needs to search for all the restaurants within the rectangular map area that the user is currently viewing.
-This requires a two-dimensional range query like the following:
+到目前为止讨论的索引仅将单个键映射到一个值。
+如果我们需要同时查询表的多个列（或文档中的多个字段），这是不够的。
+最常见的多列索引类型称为连接索引，它通过将一列追加到另一列来简单地将多个字段组合成一个键（索引定义指定字段的连接顺序）。
+这就像老式的纸质电话簿，提供了从（姓氏、名字）到电话号码的索引。
+由于排序顺序，该索引可用于查找所有具有特定姓氏的人，或所有具有特定姓氏和名字组合的人。
+但是，如果你想查找所有具有特定名字的人，该索引就没用了。
+多维索引是一种更通用的同时查询多个列的方式，这对地理空间数据尤其重要。
+例如，餐厅搜索网站可能有一个包含每家餐厅纬度和经度的数据库。
+当用户在查看地图上的餐厅时，网站需要搜索用户当前查看的矩形地图区域内的所有餐厅。
+这需要一个像这样的二维范围查询：
 
 ```
 SELECT * FROM restaurants WHERE latitude > 51.4946 AND latitude < 51.5079 AND longitude > -0.1162 AND longitude < -0.1004;
 ```
 
-A standard B-tree or LSM-tree index is not able to answer that kind of query efficiently: it can give you either all the restaurants in a range of latitudes (but at any longitude), or all the restaurants in a range of longitudes (but anywhere between the North and South poles), but not both simultaneously.
+标准的 B-tree 或 LSM-tree 索引无法高效回答这种查询：它可以给你在某个纬度范围内的所有餐厅（但任何经度），或者所有在某个经度范围内的餐厅（但位于北极和南极之间的任何地方），但不能同时满足两者。
 
-One option is to translate a two-dimensional location into a single number using a space-filling curve, and then to use a regular B-tree index.
-More commonly, specialized spatial indexes such as R-trees are used.
-For example, PostGIS implements geospatial indexes as R-trees using PostgreSQL’s Generalized Search Tree indexing facility.
-We don’t have space to describe R-trees in detail here, but there is plenty of literature on them.
+一种选择是使用空间填充曲线将二维位置转换为单个数字，然后使用常规 B-tree 索引。
+更常见的是使用专门的时空索引，如 R-tree。
+例如，PostGIS 使用 PostgreSQL 的 Generalized Search Tree 索引工具将地理空间索引实现为 R-tree。
+我们无法在这里详细描述 R-tree，但有大量关于它们的文献。
 
-An interesting idea is that multi-dimensional indexes are not just for geographic locations.
-For example, on an ecommerce website you could use a three-dimensional index on the dimensions (red, green, blue) to search for products in a certain range of colors, or in a database of weather observations you could have a two-dimensional index on (date, temperature) in order to efficiently search for all the observations during the year 2013 where the temperature was between 25 and 30.
-With a onedimensional index, you would have to either scan over all the records from 2013 (regardless of temperature) and then filter them by temperature, or vice versa.
-A 2D index could narrow down by timestamp and temperature simultaneously.
-This technique is used by HyperDex.
+一个有趣的想法是多维索引不仅仅用于地理位置。
+例如，在电子商务网站上，你可以使用 (red, green, blue) 维度的三维索引来搜索特定颜色范围内的产品，或者在天气观测数据库中，你可以在 (date, temperature) 上使用二维索引来有效搜索 2013 年期间温度在 25 到 30 之间的所有观测记录。
+使用一维索引，你必须扫描 2013 年的所有记录（无论温度如何），然后按温度过滤，或者反过来。
+二维索引可以同时按时间戳和温度缩小范围。
+这项技术被 HyperDex 使用。
 
 ### Full-text search and fuzzy indexes
 
-All the indexes discussed so far assume that you have exact data and allow you to query for exact values of a key, or a range of values of a key with a sort order.
-What they don’t allow you to do is search for similar keys, such as misspelled words.
-Such fuzzy querying requires different techniques.
+到目前为止讨论的所有索引都假设你有精确数据，并允许你查询键的精确值或排序后的键值范围。
+它们不允许你搜索类似的键，例如拼写错误的单词。
+这种模糊查询需要不同的技术。
 
-For example, full-text search engines commonly allow a search for one word to be expanded to include synonyms of the word, to ignore grammatical variations of words, and to search for occurrences of words near each other in the same document, and support various other features that depend on linguistic analysis of the text.
-To cope with typos in documents or queries, Lucene is able to search text for words within a certain edit distance (an edit distance of 1 means that one letter has been added, removed, or replaced).
+例如，全文搜索引擎通常允许搜索一个单词，将其扩展为包含该单词的同义词，忽略单词的语法变体，搜索同一文档中彼此邻近出现的单词，并支持依赖于文本语言分析的各种其他功能。
+为了处理文档或查询中的拼写错误，Lucene 能够在一定编辑距离内搜索文本中的单词（编辑距离为 1 表示添加、删除或替换了一个字母）。
 
-As mentioned in “Making an LSM-tree out of SSTables” on page 78, Lucene uses a SSTable-like structure for its term dictionary.
-This structure requires a small inmemory index that tells queries at which offset in the sorted file they need to look for a key.
-In LevelDB, this in-memory index is a sparse collection of some of the keys, but in Lucene, the in-memory index is a finite state automaton over the characters in the keys, similar to a trie.
-This automaton can be transformed into a Levenshtein automaton, which supports efficient search for words within a given edit distance.
+如 "Making an LSM-tree out of SSTables" 第 78 页所述，Lucene 使用类似 SSTable 的结构作为其术语词典。
+这种结构需要一个小型的内存索引，告诉查询在排序文件中的哪个偏移量处查找键。
+在 LevelDB 中，这个内存索引是某些键的稀疏集合，但在 Lucene 中，内存索引是键中字符上的有限状态自动机，类似于 trie。
+这个自动机可以转换为 Levenshtein 自动机，支持在给定编辑距离内高效搜索单词。
 
-Other fuzzy search techniques go in the direction of document classification and machine learning. See an information retrieval textbook for more detail.
-
+其他模糊搜索技术朝着文档分类和机器学习的方向发展。
+更多细节请参考信息检索教科书。
 
 ## Tuning
-
 
 引自 [InfoQ 不敢把数据库运行在 K8s 上？容器化对数据库性能有影响吗?](https://www.infoq.cn/article/sh2tjyw1dki4zqpakujj):
 
 ![](https://static001.geekbang.org/wechat/images/2e/2e9a348aac0cc015f6c81a1a0ed8c983.png)
-
 
 - MySQL 需要特别关注临时文件，由于临时文件使用的是 BufferedIO，如果没有 Cgroup 限制，会很快触发 OS 大量的脏页刷脏，这个刷脏过程会占用存储设备的几乎所有通道，造成正常请求卡住，这种现象是比较经典的 Disk IO hang。
 - PostgreSQL 是多进程模式，所以需要十分关注链接数和页表大小，虽然使用 Hugepage 方案可以降低页表的负担，
   但是 Hugepage 本身还是有比较多的副作用，利用 pgBouncer 之类的 proxy 做链接复用是一种更好的解法；当开启 full page 时，PostgreSQL 对 I/O 带宽的需求非常强烈，此时的瓶颈为 I/O 带宽；当 I/O 和链接数都不是瓶颈时，PostgreSQL 在更高的并发下瓶颈来自内部的锁实现机制。具体可以参考《Postgresql@k8s 性能优化记》[7]。
 - MongoDB 整体表现比较稳定，主要的问题一般来自 Disk I/O 和链接数，WiredTiger 在 cache 到 I/O 的流控上做得比较出色，虽然有 I/O 争抢，但是 IO hang 的概率比较小，当然 OLTP 数据库的 workload 会比 MongoDB 更复杂一些，也更难达到一种均衡。
 - Redis 的瓶颈主要在网络，所以需要特别关注应用和 Redis 服务之间的网络延迟，这部分延迟由网络链路决定，Redis 满载时 70%+ 的 CPU 消耗在网络栈上，所以为了解决网络性能的扩展性问题，Redis 6.0 版本引入了网络多线程功能，真正的 worker thread 还是单线程，这个功能在大幅提升 Redis 性能的同时也保持了 Redis 简单优雅的特性
-
 
 数据库的演进
 
@@ -1038,23 +1098,13 @@ Other fuzzy search techniques go in the direction of document classification and
 水平分库分表
 - 唯一id的生成
 
-
-
 数据库问题排查
 线上问题 先确认是否是代码变动导致的 是否可以回滚降低影响
 先止损 再考虑定位修复问题
 慢查询
 先看explain
 
-
-
-
-
 ## Links
-
-
-
-
 
 ## References
 

@@ -2,13 +2,13 @@
 
 quicklistNode是一个双向链表, 链表每个节点都是 ziplist
 
-quicklist is a 40 byte struct (on 64-bit systems) describing a quicklist.
+quicklist 是一个 40 字节的结构体（64 位系统上），用于描述一个 quicklist。
 
-- 'count' is the number of total entries.
-- 'len' is the number of quicklist nodes.
-- 'compress' is: 0 if compression disabled, otherwise it's the number of quicklistNodes to leave uncompressed at ends of quicklist.
-- 'fill' is the user-requested (or default) fill factor.
-- 'bookmakrs are an optional feature that is used by realloc this struct, so that they don't consume memory when not used.
+- 'count' 是总的条目数。
+- 'len' 是 quicklist 节点的数量。
+- 'compress' 是：0 表示未启用压缩，否则表示 quicklist 两端未压缩的 quicklistNode 数量。
+- 'fill' 是用户请求的（或默认的）填充因子。
+- 'bookmarks' 是一个可选功能，用于 realloc 此结构体，以便在不使用时不会消耗内存。
 
 ```c
 typedef struct quicklist {
@@ -23,16 +23,14 @@ typedef struct quicklist {
 } quicklist;
 ```
 
-
-
-quicklistNode is a 32 byte struct describing a ziplist for a quicklist.
-We use bit fields keep the quicklistNode at 32 bytes.
-- count: 16 bits, max 65536 (max zl bytes is 65k, so max count actually < 32k).
-- encoding: 2 bits, RAW=1, LZF=2.
-- container: 2 bits, NONE=1, ZIPLIST=2.
-- recompress: 1 bit, bool, true if node is temporary decompressed for usage.
-- attempted_compress: 1 bit, boolean, used for verifying during testing.
-- extra: 10 bits, free for future use; pads out the remainder of 32 bits
+quicklistNode 是一个 32 字节的结构体，用于描述 quicklist 的一个 ziplist。
+我们使用位字段将 quicklistNode 保持在 32 字节。
+- count: 16 位，最大 65536（最大 zl 字节是 65k，因此最大实际 count < 32k）。
+- encoding: 2 位，RAW=1, LZF=2。
+- container: 2 位，NONE=1, ZIPLIST=2。
+- recompress: 1 位，布尔值，表示节点是否因使用而临时解压缩。
+- attempted_compress: 1 位，布尔值，用于在测试期间验证。
+- extra: 10 位，供将来使用；填充剩余的 32 位。
 
 ```c
 typedef struct quicklistNode {
@@ -54,24 +52,22 @@ typedef struct quicklistNode {
 - 单个ziplist的过小就会退化成linkedlist
 - 单个ziplist过大极端情况下只有一个ziplist同样无法避免级联更新
 
+Lists 也以一种特殊方式进行编码以节省大量空间。
+每个内部列表节点允许的条目数可以指定为固定最大大小或最大元素数量。
+对于固定最大大小，使用 -5 到 -1，含义如下：
 
-Lists are also encoded in a special way to save a lot of space.
-The number of entries allowed per internal list node can be specified as a fixed maximum size or a maximum number of elements.
-For a fixed maximum size, use -5 through -1, meaning:
+- -5: 最大大小: 64 Kb  <-- 不建议用于正常工作负载
+- -4: 最大大小: 32 Kb  <-- 不建议
+- -3: 最大大小: 16 Kb  <-- 可能不建议
+- -2: 最大大小: 8 Kb   <-- 良好
+- -1: 最大大小: 4 Kb   <-- 良好
 
-- -5: max size: 64 Kb  <-- not recommended for normal workloads
-- -4: max size: 32 Kb  <-- not recommended
-- -3: max size: 16 Kb  <-- probably not recommended
-- -2: max size: 8 Kb   <-- good
-- -1: max size: 4 Kb   <-- good
-
-Positive numbers mean store up to _exactly_ that number of elements per list node.
-The highest performing option is usually -2 (8 Kb size) or -1 (4 Kb size), but if your use case is unique, adjust the settings as necessary.
+正数表示每个列表节点存储恰好该数量的元素。
+性能最高的选项通常是 -2（8 Kb 大小）或 -1（4 Kb 大小），但如果你的使用场景特殊，请根据需要调整设置。
 
 ```conf
 list-max-ziplist-size -2
 ```
-
 
 ## quicklistCreate
 
@@ -202,20 +198,8 @@ REDIS_STATIC int _quicklistNodeAllowInsert(const quicklistNode *node,
     retur
 ```
 
-
-
-
-
-
-
-
-
-
 ## Tuning
 
 quicklist解决了单个ziplist过大 缩小连锁更新的范围
 
-
-
 ## Links
-

@@ -1,18 +1,16 @@
 ## Introduction
 
-A randomized algorithm is an algorithm that employs a degree of randomness as part of its logic or procedure. 
-The algorithm typically uses uniformly random "Uniform distribution (discrete)") bits as an auxiliary input to guide its behavior,
-in the hope of achieving good performance in the "average case" over all possible choices of random determined by the random bits;
-thus either the running time, or the output (or both) are random variables.
+随机化算法是一种在其逻辑或过程中使用一定程度的随机性的算法。
+该算法通常使用均匀随机（离散）分布的比特作为辅助输入来指导其行为，
+以期在随机比特所决定的随机选择的所有可能情况下获得良好的"平均情况"性能；
+因此，运行时间或输出（或两者）都是随机变量。
 
-There is a distinction between algorithms that use the random input so that they always terminate with the correct answer, 
-but where the expected running time is finite (Las Vegas algorithms, for example Quicksort), and algorithms which have a chance of producing an incorrect result 
-(Monte Carlo algorithms, for example the Monte Carlo algorithm for the MFAS problem) or fail to produce a result either by signaling a failure or failing to terminate. 
-In some cases, probabilistic algorithms are the only practical means of solving a problem.
+有两类算法使用随机输入：一类总是以正确结果终止，但期望运行时间是有限的（拉斯维加斯算法，例如快速排序）；
+另一类有一定概率产生错误结果（蒙特卡洛算法，例如用于 MFAS 问题的蒙特卡洛算法）或无法产生结果（通过发出失败信号或无法终止）。
+在某些情况下，概率算法是解决问题的唯一实用手段。
 
-In common practice, randomized algorithms are approximated using a pseudorandom number generator in place of a true source of random bits;
-such an implementation may deviate from the expected theoretical behavior and mathematical guarantees which may depend on the existence of an ideal true random number generator.
-
+在实际应用中，随机化算法通常使用伪随机数生成器来近似真正的随机比特源；
+这种实现可能会偏离预期的理论行为和数学保证，因为这些保证可能依赖于理想的真随机数生成器的存在。
 
 ## Links
 

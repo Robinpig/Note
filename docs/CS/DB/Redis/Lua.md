@@ -1,19 +1,15 @@
-
 ## Introduction
-
 
 ## script
 
-## Redis Lua scripts debugger
-Starting with version 3.2 Redis includes a complete Lua debugger, that can be used in order to make the task of writing complex Redis scripts much simpler.
+## Redis Lua 脚本调试器
+从 3.2 版本开始，Redis 包含了一个完整的 Lua 调试器，可用于简化编写复杂 Redis 脚本的任务。
 
-By default every new debugging session is a **forked session**. This also means that changes are **rolled back** after the script debugging session finished.
+默认情况下，每个新的调试会话都是**分支会话**。
+这也意味着脚本调试会话结束后，更改会被**回滚**。
 
-An alternative synchronous (non forked) debugging model is available on demand, so that changes to the dataset can be retained. In this mode the server blocks for the time the debugging session is active
-
-
-
-
+按需提供另一种同步（非分支）调试模式，以便保留对数据集的更改。
+在此模式下，服务器在调试会话活动期间阻塞。
 
 ## Links
 

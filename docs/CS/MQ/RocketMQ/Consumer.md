@@ -5,13 +5,13 @@
 
 ## PullMessageService
 
-Message model defines the way how messages are delivered to each consumer clients.
-RocketMQ supports two message models: clustering and broadcasting.
+消息模型定义了消息如何投递给每个消费者客户端。
+RocketMQ 支持两种消息模型：集群和广播。
 
-- If clustering is set, consumer clients with the same consumerGroup would only consume shards of the messages subscribed, which achieves load balances;
-- Conversely, if the broadcasting is set, each consumer client will consume all subscribed messages separately.
+- 如果设置为集群，具有相同 consumerGroup 的消费者客户端只会消费所订阅消息的分片，从而实现负载均衡。
+- 相反，如果设置为广播，每个消费者客户端将分别消费所有订阅的消息。
 
-This defaults model is clustering.
+默认模型是集群。
 
 ```java
 public class PullMessageService extends ServiceThread {

@@ -4,7 +4,7 @@ CodeCache
 
 CodeBlob Types
 
-Used in the CodeCache to assign CodeBlobs to different CodeHeaps
+用于在 CodeCache 中将 CodeBlobs 分配到不同的 CodeHeaps
 
 ```cpp
 // 
@@ -21,27 +21,27 @@ struct CodeBlobType {
 
 ## CodeBlob
 
-CodeBlob - superclass for all entries in the CodeCache.
+CodeBlob - CodeCache 中所有条目的超类。
 
 ```
-Subtypes are:
- CompiledMethod       : Compiled Java methods (include method that calls to native code)
-  nmethod             : JIT Compiled Java methods
- RuntimeBlob          : Non-compiled method code; generated glue code
-  BufferBlob          : Used for non-relocatable code such as interpreter, stubroutines, etc.
-   AdapterBlob        : Used to hold C2I/I2C adapters
-   VtableBlob         : Used for holding vtable chunks
-   MethodHandlesAdapterBlob : Used to hold MethodHandles adapters
-   OptimizedEntryBlob : Used for upcalls from native code
-  RuntimeStub         : Call to VM runtime methods
-  SingletonBlob       : Super-class for all blobs that exist in only one instance
-   DeoptimizationBlob : Used for deoptimization
-   ExceptionBlob      : Used for stack unrolling
-   SafepointBlob      : Used to handle illegal instruction exceptions
-   UncommonTrapBlob   : Used to handle uncommon traps
+子类型包括：
+ CompiledMethod       : 编译的 Java 方法（包括调用 native code 的方法）
+  nmethod             : JIT 编译的 Java 方法
+ RuntimeBlob          : 非编译方法代码；生成的胶水代码
+  BufferBlob          : 用于不可重定位代码，如 interpreter、stubroutines 等
+   AdapterBlob        : 用于保存 C2I/I2C 适配器
+   VtableBlob         : 用于保存 vtable 块
+   MethodHandlesAdapterBlob : 用于保存 MethodHandles 适配器
+   OptimizedEntryBlob : 用于从 native code 上行调用
+  RuntimeStub         : 调用 VM 运行时方法
+  SingletonBlob       : 只存在单一实例的所有 blob 的超类
+   DeoptimizationBlob : 用于去优化
+   ExceptionBlob      : 用于栈展开
+   SafepointBlob      : 用于处理非法指令异常
+   UncommonTrapBlob   : 用于处理 uncommon trap
 
 
-Layout : continuous in the CodeCache
+布局：在 CodeCache 中连续存放
   - header
   - relocation
   - content space
@@ -67,11 +67,11 @@ void CodeCache::initialize() {
   CodeCacheExpansionSize = align_up(CodeCacheExpansionSize, os::vm_page_size());
 ```
 
-Enables segmentation of the code cache, without which the code cache consists of one large segment.
-With `-XX:+SegmentedCodeCache`, separate segments will be used for non\-method, profiled method, and non\-profiled method code.
-The segments are not resized at runtime.
-The advantages are better control of the memory footprint, reduced code fragmentation, and better CPU iTLB (instruction translation lookaside buffer) and instruction cache behavior due to improved locality.
-(see [JEP 197: Segmented Code Cache](https://openjdk.java.net/jeps/197))
+启用代码缓存分段，没有此选项时代码缓存由一个大段组成。
+使用 `-XX:+SegmentedCodeCache` 后，将为 non-method、profiled method 和 non-profiled method 代码使用独立的段。
+这些段在运行时不会调整大小。
+其优点是更好地控制内存占用、减少代码碎片，以及由于改进的局部性而带来更好的 CPU iTLB（指令转换后备缓冲区）和指令缓存行为。
+（参见 [JEP 197: Segmented Code Cache](https://openjdk.java.net/jeps/197)）
 
 ```cpp
   if (SegmentedCodeCache) {
@@ -108,9 +108,9 @@ void icache_init() {
 }
 ```
 
-Interface for updating the instruction cache.
-Whenever the VM modifies code, part of the processor instruction cache potentially has to be flushed.
-This implementation is empty: Zero never deals with code.
+用于更新指令缓存的接口。
+每当 VM 修改代码时，处理器指令缓存的部分可能需要刷新。
+此实现为空：Zero 从不处理代码。
 
 ```
 class ICache : public AbstractICache {

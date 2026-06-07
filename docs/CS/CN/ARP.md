@@ -1,48 +1,39 @@
-## Introduction
+## 简介
 
-For TCP/IP networks, the *Address Resolution Protocol* (ARP) provides a dynamic mapping between IPv4 addresses and the hardware addresses used by various network technologies. 
-ARP is used with IPv4 only; IPv6 uses the Neighbor Discovery Protocol, which is incorporated into ICMPv6.
-
+对于 TCP/IP 网络，*地址解析协议*（ARP）在 IPv4 地址与各种网络技术使用的硬件地址之间提供动态映射。
+ARP 仅用于 IPv4；IPv6 使用邻居发现协议（Neighbor Discovery Protocol），该协议集成在 ICMPv6 中。
 
 > [!Note]
 > 
-> A related protocol that provides the reverse mapping from ARP, called RARP, was used by systems lacking a disk drive (normally diskless workstations or X terminals). 
-> It is rarely used today and requires manual configuration by the system administrator. 
+> 一种提供 ARP 反向映射的相关协议称为 RARP，曾被缺乏磁盘驱动器的系统（通常是无盘工作站或 X 终端）使用。
+> 如今很少使用，且需要系统管理员手动配置。
 
+ARP 向共享链路层网段上的所有主机发送一个称为 ARP 请求的以太网帧。
+这称为*链路层广播*。
 
+假设有一台设备想要通过互联网与其他设备通信。
+它向源网络的所有设备广播一个数据包。
+网络中的设备从协议数据单元（PDU，即帧）中剥离数据链路层的头部，并将数据包传输到网络层（OSI 第 3 层），
+在此验证数据包的网络 ID 是否与目标 IP 的网络 ID 匹配，如果匹配则向源端回复目标 MAC 地址，
+否则数据包到达网络网关，网关向与之连接的所有设备广播数据包并验证它们的网络 ID。
+上述过程持续进行，直到路径上的倒数第二个网络设备到达目标，验证后 ARP 回复目标 MAC 地址。
 
-ARP sends an Ethernet frame called an ARP request to every host on the shared link-layer segment. 
-This is called a *link-layer broadcast*.
+## ARP 缓存
 
-Imagine a device that wants to communicate with others over the internet. 
-It broadcast a packet to all the devices of the source network.
-The devices of the network peel the header of the data link layer from the Protocol Data Unit (PDU) called frame and transfer the packet to the network layer (layer 3 of OSI) 
-where the network ID of the packet is validated with the destination IP’s network ID of the packet and if it’s equal then it responds to the source with the MAC address of the destination, 
-else the packet reaches the gateway of the network and broadcasts packet to the devices it is connected with and validates their network ID. 
-The above process continues till the second last network device in the path reaches the destination where it gets validated and ARP, in turn, responds with the destination MAC address.
-
-
-
-## ARP Cache
-
-Essential to the efficient operation of ARP is the maintenance of an ARP cache (or table) on each host and router. 
-This cache maintains the recent mappings from network-layer addresses to hardware addresses for each interface that uses address resolution. 
-When IPv4 addresses are mapped to hardware addresses, the normal expiration time of an entry in the cache is 20 minutes from the time the entry was created.
+ARP 高效运行的关键在于每个主机和路由器上维护一个 ARP 缓存（或表）。
+该缓存维护每个使用地址解析的接口从网络层地址到硬件地址的最近映射。
+当 IPv4 地址映射到硬件地址时，缓存中条目的正常过期时间为条目创建后的 20 分钟。
 
 ```shell
 arp -a
 ```
 
-### Cache Timeout
+### 缓存超时
 
-
-## Proxy ARP
+## 代理 ARP
 
 ## RARP
 
+## 链接
 
-
-
-## Links
-
-- [Computer Network](/docs/CS/CN/CN.md)
+- [计算机网络](/docs/CS/CN/CN.md)

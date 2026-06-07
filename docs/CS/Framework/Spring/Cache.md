@@ -1,18 +1,16 @@
 ## Introduction
 
-Similar to the transaction support, the [caching abstraction](https://docs.spring.io/spring-framework/docs/current/reference/html/integration.html#cache) allows consistent use of various caching solutions with minimal impact on the code.
-As with other services in the Spring Framework, the caching service is an abstraction (not a cache implementation) and requires the use of actual storage to store the cache data — that is, 
-the abstraction frees you from having to write the caching logic but does not provide the actual data store. 
-This abstraction is materialized by the `org.springframework.cache.Cache` and `org.springframework.cache.CacheManager` interfaces.
+与事务支持类似，[缓存抽象](https://docs.spring.io/spring-framework/docs/current/reference/html/integration.html#cache)允许以最小的代码影响一致地使用各种缓存解决方案。
+与 Spring 框架中的其他服务一样，缓存服务是一种抽象（非缓存实现），需要使用实际的存储来缓存数据——即，
+抽象让你不必编写缓存逻辑，但不提供实际的数据存储。
+该抽象由 `org.springframework.cache.Cache` 和 `org.springframework.cache.CacheManager` 接口实现。
 
-Spring provides a few implementations of that abstraction: [JDK java.util.concurrent.ConcurrentMap](/docs/CS/Java/JDK/Collection/Map.md?id=ConcurrentHashMap) based caches, Ehcache 2.x, Gemfire cache, Caffeine, and JSR-107 compliant caches (such as Ehcache 3.x).
+Spring 提供了该抽象的几种实现：[JDK java.util.concurrent.ConcurrentMap](/docs/CS/Java/JDK/Collection/Map.md?id=ConcurrentHashMap) 缓存、Ehcache 2.x、Gemfire 缓存、Caffeine 和符合 JSR-107 的缓存（例如 Ehcache 3.x）。
 
-To use the cache abstraction, you need to take care of two aspects:
+要使用缓存抽象，你需要处理两个方面：
 
-- Caching declaration: Identify the methods that need to be cached and their policy.
-- Cache configuration: The backing cache where the data is stored and from which it is read.
-
-
+- 缓存声明：确定需要缓存的方法及其策略。
+- 缓存配置：存储数据和读取数据的后端缓存。
 
 ## Quick Start
 
@@ -36,12 +34,7 @@ public @interface EnableCaching {
 }
 ```
 
-
-
-
 ### CacheManager
-
-
 
 ```java
 public interface CacheManager {
@@ -117,16 +110,15 @@ public abstract class AbstractCacheManager implements CacheManager, Initializing
 
 ### Cacheable
 
-Cacheable not support to set expire time.
+Cacheable 不支持设置过期时间。
 
-Many extensions resolve keys and get time by override the KeyGenerator and CacheManger.
+许多扩展通过覆盖 KeyGenerator 和 CacheManager 来解析键和获取时间。
 
 ## Interceptor
 
-
-AOP Alliance MethodInterceptor for declarative cache management using the common Spring caching infrastructure (org.springframework.cache.Cache).
-CacheInterceptor simply calls the relevant superclass methods in the correct order.
-CacheInterceptors are thread-safe.
+用于声明式缓存管理的 AOP Alliance MethodInterceptor，使用通用的 Spring 缓存基础设施（org.springframework.cache.Cache）。
+CacheInterceptor 简单地在正确的顺序中调用相关的超类方法。
+CacheInterceptors 是线程安全的。
 
 ```java
 public class CacheInterceptor extends CacheAspectSupport implements MethodInterceptor, Serializable {
@@ -239,10 +231,9 @@ public class CacheInterceptor extends CacheAspectSupport implements MethodInterc
 }
 ```
 
-
 ### Cache
 
-Implement Cache.
+实现 Cache。
 
 ```java
 public interface Cache {
@@ -284,7 +275,6 @@ public interface Cache {
 ## Summary
 
 TODO: Cache Consistency
-
 
 ## Links
 

@@ -1,6 +1,6 @@
 ## Introduction
 
-Just allocate, do not collect garbage.
+只分配，不回收垃圾。
 
 
 

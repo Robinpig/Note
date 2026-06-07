@@ -1,14 +1,14 @@
 ## Introduction
 
-[Netty](https://netty.io) is *an asynchronous event-driven network application framework* for rapid development of maintainable high performance protocol servers & clients
+[Netty](https://netty.io) 是一个**异步事件驱动的网络应用框架**，用于快速开发可维护的高性能协议服务器和客户端。
 
-Netty is a [NIO](/docs/CS/Java/JDK/IO/NIO.md) client server framework which enables quick and easy development of network applications such as protocol servers and clients.
-It greatly simplifies and streamlines network programming such as TCP and UDP socket server.
+Netty 是一个 [NIO](/docs/CS/Java/JDK/IO/NIO.md) 客户端-服务器框架，能够快速简便地开发协议服务器和客户端等网络应用程序。
+它极大地简化并优化了 TCP 和 UDP Socket 服务器等网络编程。
 
-- **Ease of use**: Netty is simpler to use than plain Java NIO and has an extensive set of examples covering most use cases
-- **Minimal dependency**: As we will see in a minute, you can get the whole framework with just a single dependency
-- **Performance**: Netty has better throughput and reduced latency than core Java APIs. It is also scalable thanks to its internal pooling of resources.
-- **Security**: Complete SSL/TLS and StartTLS support.
+- **易于使用**：Netty 比原生 Java NIO 更易用，并提供了涵盖大多数用例的大量示例
+- **最小依赖**：稍后你会看到，只需一个依赖即可获得整个框架
+- **高性能**：Netty 比核心 Java API 具有更高的吞吐量和更低的延迟。由于其内部资源池化，它也具有很好的可伸缩性。
+- **安全性**：完整的 SSL/TLS 和 StartTLS 支持。
 
 
 
@@ -79,7 +79,7 @@ Netty 自己实现的 Channel 是以 JDK NIO Channel 为基础的，相比较于
 
 ## Sequence
 
-源码编译collection 包
+编译 collection 源码包
 
 cd common 目录 执行 `mvn clean install -DskipTests=true -Dcheckstyle.skip=true`
 
@@ -87,26 +87,26 @@ cd common 目录 执行 `mvn clean install -DskipTests=true -Dcheckstyle.skip=tr
 
 
 
-In Java-based networking, the fundamental construct is the class Socket .
-Netty’s Channel interface provides an API that greatly simplifies the complexity of working directly with Socket.
-To work with TCP/IP Channels, we will deal with SocketChannel which represents the TCP connection between client and servers:
+在基于 Java 的网络编程中，基本构造是 Socket 类。
+Netty 的 Channel 接口提供了一套 API，极大简化了直接操作 Socket 的复杂性。
+要使用 TCP/IP Channel，我们会用到 SocketChannel，它表示客户端和服务器之间的 TCP 连接：
 
-SocketChannels are managed by EventLoop which is looking for new events, such as incoming data.. When an event occurs, it is eventually passed on to the appropriate Handler for example a ChannelHandler.
+SocketChannel 由 EventLoop 管理，EventLoop 负责监听新事件（如传入数据）。当事件发生时，最终会传递给适当的 Handler，例如 ChannelHandler。
 
-Next, to share resources like threads, Netty groups each EventLoop into an EventLoopGroup.
+接下来，为了共享线程等资源，Netty 将每个 EventLoop 分组到 EventLoopGroup 中。
 
-Finally, to handle the bootstrapping of Netty and its resources, you can use the BootStrap class.
+最后，要引导 Netty 及其资源，可以使用 BootStrap 类。
 
-Let’s see how to use the above Classes with a simple Server echo example.
+下面通过一个简单的 Server echo 示例来演示如何使用上述类。
 
 > [Example writing a Discard Server](https://netty.io/wiki/user-guide-for-4.x.html#writing-a-discard-server)
 
 ### Bind
 
 - [Create EventLoopGroup](/docs/CS/Framework/Netty/EventLoop.md?id=create-eventloopgroup)
-- BossEventLoop starts thread when register ServerSocketChannel
-- first register(Selector, 0, ServerSocketChannel)
-- selectionKey.interestOps(OP_ACCEPT) when fireChannelActive() after bind
+- BossEventLoop 在注册 ServerSocketChannel 时启动线程
+- 首先 register(Selector, 0, ServerSocketChannel)
+- 在 bind 之后 fireChannelActive() 时设置 selectionKey.interestOps(OP_ACCEPT)
 
 ```plantuml
 skinparam backgroundColor #DDDDDD
@@ -375,10 +375,10 @@ private final class HandleImpl implements ExtendedHandle {
 满足一次扩容条件就进行扩容，并且扩容步长为4， 扩容比较奔放
 
 
-- BossEventLoop select() for OP_ACCEPT
-- WorkerEventLoop starts thread when register
-- first register(Selector, 0, SocketChannel)
-- selectionKey.interestOps(OP_READ) when fireChannelActive()
+- BossEventLoop 执行 select() 监听 OP_ACCEPT
+- WorkerEventLoop 在注册时启动线程
+- 首先 register(Selector, 0, SocketChannel)
+- 在 fireChannelActive() 时设置 selectionKey.interestOps(OP_READ)
 
 ```plantuml
 skinparam backgroundColor #DDDDDD
@@ -432,9 +432,9 @@ Netty服务端对于一次OP_READ事件的处理，会在一个do{}while()循环
 
 
 
-- ReadComplete contains multiple Reads(max 16)
-- AdaptiveRecvByteBufAllocator try 2 reduce size and expand quickly
-- default execute in WorkerEventLoop, also can define own ThreadPool when add Handlers
+- ReadComplete 包含多个 Reads（最多 16 次）
+- AdaptiveRecvByteBufAllocator 缩容谨慎（尝试 2 次），扩容迅速
+- 默认在 WorkerEventLoop 中执行，也可以在添加 Handler 时自定义 ThreadPool
 
 > [!TIP]
 >
@@ -855,11 +855,11 @@ OP_READ 事件的注册是在 NioSocketChannel 被注册到对应的 Reactor 中
 
 ### Memory
 
-- use primitive type rather than wrapper type(long + AtomicLongFieldUpdater rather than AtomicLong)
-- reduce object creative
-  - class field rather than instance field
-- expect map size to reduce expand, AdaptiveRecvByteBufAllocator
-- zero copy
+- 使用基本类型而非包装类型（long + AtomicLongFieldUpdater 而非 AtomicLong）
+- 减少对象创建
+  - 使用类字段而非实例字段
+- 预估 Map 大小以减少扩容，AdaptiveRecvByteBufAllocator
+- 零拷贝
 
 
 AllocateByteBuf
@@ -871,9 +871,9 @@ AllocateByteBuf
 
 ### Zero Copy
 
-- Direct Memory
-- Composite or wrap ByteBuf
-- FileChannel transfer
+- 直接内存
+- Composite 或 wrap ByteBuf
+- FileChannel 传输
 
 [Future and Promise](/docs/CS/Framework/Netty/Future.md)
 

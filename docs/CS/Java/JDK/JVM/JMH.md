@@ -1,10 +1,9 @@
 ## Introduction
 
-One of the positive aspects of working with microbenchmarks is that it exposes the highly dynamic behavior and non-normal distributions that are produced by low-level subsystems. 
-This, in turn, leads to a better understanding and mental models of the complexities of the JVM.
+使用微基准测试的积极方面之一是它揭示了底层子系统产生的高度动态行为和非正态分布。
+这反过来又促使更好地理解和建立 JVM 复杂性的心智模型。
 
-
-- Do not microbenchmark unless you know you are a known use case for it.
-- If you must microbenchmark, use JMH.
-- Discuss your results as publicly as you can, and in the company of your peers.
-- Be prepared to be wrong a lot and to have your thinking challenged repeatedly.
+- 除非你知道自己是一个已知用例，否则不要进行微基准测试。
+- 如果必须进行微基准测试，请使用 JMH。
+- 尽可能公开讨论你的结果，并在同行面前进行。
+- 准备好经常犯错，并准备好你的思维被反复挑战。

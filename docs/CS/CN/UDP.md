@@ -1,62 +1,51 @@
-## Introduction
+## 简介
 
-UDP is a simple, datagram-oriented, transport-layer protocol that preserves message boundaries.
-It can provide error detection, and it includes the first true end-to-end checksum at the transport layer that we have encountered. 
-Generally, each UDP output operation requested by an application produces exactly one UDP datagram, which causes one IP datagram to be sent.
+UDP 是一个简单的、面向数据报的传输层协议，它保留消息边界。
+它可以提供错误检测，并且包含我们遇到的传输层第一个真正的端到端校验和。
+通常，应用程序请求的每个 UDP 输出操作恰好生成一个 UDP 数据报，这会导致发送一个 IP 数据报。
 
-> UDP can be full-duplex.
+> UDP 可以是全双工的。
 
-Some applications are better suited for UDP for the following reasons:
+某些应用更适合使用 UDP，原因如下：
 
-- Finer application-level control over what data is sent, and when.
-- No connection establishment.
-- No connection state.
-- Small packet header overhead.
-The TCP segment has 20 bytes of header overhead in every segment, whereas UDP has only 8 bytes of overhead.
+- 更精细的应用程序级控制，决定发送什么数据以及何时发送。
+- 无需建立连接。
+- 无连接状态。
+- 数据包头开销小。
+  TCP 段在每个段中有 20 字节的头部开销，而 UDP 只有 8 字节开销。
 
-### Checksum
+### 校验和
 
-Why UDP provides a checksum in the first place, as many link-layer protocols(including the popular Ethernet protocol) also provide error checking. 
-The reason is that there is no guarantee that all the links between source and destination provide error checking; that is, one of the links may use a link-layer protocol that does not provide error checking.
-Furthermore, even if segments are correctly transferred across a link, it’s possible that bit errors could be introduced when a segment is stored in a router’s memory. 
-Given that neither link-by-link reliability nor in-memory error detection is guaranteed, UDP must provide error detection at the transport layer, on an end-end basis, if the endend data transfer service is to provide error detection. 
-This is an example of the celebrated end-end principle in system design, which states that since certain functionality (error detection, in this case) must be implemented on an end-end basis: 
-“functions placed at the lower levels may be redundant or of little value when compared to the cost of providing them at the higher level.”
+为什么 UDP 首先提供校验和，因为许多链路层协议（包括流行的以太网协议）也提供错误检查。
+原因是无法保证源和目的地之间的所有链路都提供错误检查；也就是说，其中一条链路可能使用不提供错误检查的链路层协议。
+此外，即使段正确通过了链路，当段存储在路由器内存中时，也可能引入位错误。
+鉴于既不能保证逐链路的可靠性，也不能保证内存中的错误检测，如果端到端数据传输服务要提供错误检测，UDP 必须在传输层提供端到端的错误检测。
+这是系统设计中著名的端到端原则的一个例子，该原则指出，某些功能（本例中的错误检测）必须在端到端基础上实现：
+"放置在较低层的功能与在较高层提供它们的成本相比可能是冗余的或价值不大。"
 
-Because IP is supposed to run over just about any layer-2 protocol, it is useful for the transport layer to provide error checking as a safety measure. 
-Although UDP provides error checking, it does not do anything to recover from an error. 
-Some implementations of UDP simply discard the damaged segment; others pass the damaged segment to the application with a warning.
+由于 IP 应该可以在几乎任何第 2 层协议上运行，因此传输层提供错误检查作为安全措施是有用的。
+虽然 UDP 提供错误检查，但它不做任何从错误中恢复的工作。
+某些 UDP 实现只是丢弃损坏的段；其他实现则将损坏的段连同警告一起传递给应用程序。
 
+## 拥塞控制
 
-## Congestion Control
+## 涉及 UDP 和 IP 分片的攻击
 
+大多数涉及 UDP 的攻击涉及耗尽某些共享资源（缓冲区、链路容量等）或利用协议实现中的错误导致系统崩溃或其他不良行为。
+两者都属于 DoS 攻击的广泛范畴：成功的攻击者能够使合法用户无法使用服务。
+使用 UDP 的最直接 DoS 攻击就是尽可能快地产生大量流量。
+由于 UDP 不调节其发送流量速率，这可能会对共享同一网络路径的其他应用的性能产生负面影响。
+即使没有恶意意图，也可能发生这种情况。
 
+一种与 UDP 经常相关的更复杂的 DoS 攻击形式是放大攻击。
+这种攻击通常涉及攻击者发送少量流量，诱使其他系统产生更多流量。
 
+## 链接
 
-
-## Attacks Involving UDP and IP Fragmentation
-
-Most attacks involving UDP relate to exhaustion of some shared resource (buffers, link capacity, etc.) or exploitation of bugs in protocol implementations causing system crashes or other undesired behavior. 
-Both fall into the broad category of DoS attacks: the successful attacker is able to cause services to be made unavailable to legitimate users. 
-The most straightforward DoS attack with UDP is simply generating massive amounts of traffic as fast as possible. 
-Because UDP does not regulate its sending traffic rate, this can negatively impact the performance of other applications sharing the same network path. 
-This can happen even without malicious intent.
-
-A more sophisticated form of DoS attack frequently associated with UDP is a magnification attack. 
-This type of attack generally involves an attacker sending a small amount of traffic that induces other systems to generate much more.
-
-
-
-
-
-
-
-## Links
-
-- [Computer Network](/docs/CS/CN/CN.md)
+- [计算机网络](/docs/CS/CN/CN.md)
 - [Linux UDP](/docs/CS/OS/Linux/net/UDP.md)
 
-## References
+## 参考文献
 
 1. [RFC 768 - User Datagram Protocol](https://www.rfc-editor.org/info/rfc768)
-1. [RFC 4340 - Datagram Congestion Control Protocol (DCCP)](https://www.rfc-editor.org/info/rfc4340)
+2. [RFC 4340 - Datagram Congestion Control Protocol (DCCP)](https://www.rfc-editor.org/info/rfc4340)

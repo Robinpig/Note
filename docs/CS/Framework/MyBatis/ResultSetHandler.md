@@ -28,10 +28,10 @@ public interface ResultSetHandler {
 
 ## Proxy
 
-Most MetaObjects don't  implements interface, use JavassistProxyFactory rather than JDK Dynamic Proxy
+大多数 MetaObject 不实现接口，因此使用 JavassistProxyFactory 而非 JDK 动态代理
 
 1. CglibProxyFactory
-2. JavassistProxyFactory default
+2. JavassistProxyFactory（默认）
 
 ```java
 public interface ProxyFactory {
@@ -94,7 +94,6 @@ private final ResultLoaderMap lazyLoader;
       throw ExceptionUtil.unwrapThrowable(t);
     }
   }
-}
 ```
 
 
@@ -128,7 +127,7 @@ public void load(final Object userObject) throws SQLException {
     this.resultLoader = new ResultLoader(old.configuration, new ClosedExecutor(), old.mappedStatement,
                                          old.parameterObject, old.targetType, old.cacheKey, old.boundSql);
   }
-	// use executor to selectList and set value
+	// 使用 executor 执行 selectList 并设置值
   this.metaResultObject.setValue(property, this.resultLoader.loadResult());
 }
 

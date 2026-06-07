@@ -1,92 +1,39 @@
-## Error Log
+## 简介
 
-The error log contains a record of **mysqld** startup and shutdown times.
-It also contains diagnostic messages such as errors, warnings, and notes that occur during server startup and shutdown, and while the server is running.
-For example, if **mysqld** notices that a table needs to be automatically checked or repaired, it writes a message to the error log.
+MySQL Server 日志包含：
 
-## General Query Log
+- **错误日志**（Error Log）
+- **通用查询日志**（General Query Log）
+- **慢查询日志**（Slow Query Log）
+- **二进制日志**（Binary Log）
+- **中继日志**（Relay Log）
 
-The general query log is a general record of what **mysqld** is doing.
-The server writes information to this log when clients connect or disconnect, and it logs each SQL statement received from clients.
-The general query log can be very useful when you suspect an error in a client and want to know exactly what the client sent to **mysqld**.
+### 二进制日志
 
-By default, the general query log is disabled.
+二进制日志（Binary Log / Binlog）包含描述数据库变更（如表创建或表数据修改）的"事件"。
+它还包含可能进行修改的语句的事件（除非使用基于行的日志记录）。
+二进制日志也用于 `SELECT` 语句，这些语句不会修改数据。
 
-```sql
-mysql> SELECT * FROM mysql.general_log;
-```
+> 二进制日志有两个重要用途：
+> 1. **复制**：主库将二进制日志发送给从库，从库执行这些事件以保持数据一致。
+> 2. **数据恢复**：通过 `mysqlbinlog` 工具处理二进制日志来恢复数据。
 
-## Binary Log
+> 二进制日志在事务提交时写入，包含已提交的事务。
 
-A `binary log`(`binlog`) is a file containing **a record of all statements or row changes that attempt to change table data.**
-The contents of the binary log can be replayed to bring replicas up to date in a replication scenario, or to bring a database up to date after restoring table data from a backup.
+### 中继日志
 
-You can examine the contents of the binary log, or replay it during replication or recovery, by using the `mysqlbinlog` command.
-For the MySQL Enterprise Backup product, the file name of the binary log and the current position within the file are important details. To record this information for the source when taking a backup in a replication context, you can specify the --slave-info option.
+中继日志（Relay Log）是由从库 I/O 线程从主库二进制日志读取的事件组成的日志。
+然后，从库 SQL 线程执行中继日志中的事件。
 
-binlog cache for each threads but only one binlog file
+### 慢查询日志
 
-write into page cache
+慢查询日志（Slow Query Log）包含执行时间超过 `long_query_time` 秒且至少检查 `min_examined_row_limit` 行的 SQL 语句。
 
-fsync to disk
+## 链接
 
-binlog_group_commit_sync_delay
-binlog_group_commit_sync_no_delay_count
+- [MySQL Server](/docs/CS/DB/MySQL/MySQL.md)
+- [MySQL 复制](/docs/CS/DB/MySQL/replica.md)
 
-### Configurations
+## 参考
 
-This system variable sets the binary logging format, and can be any one of `STATEMENT`, `ROW`, or `MIXED`. The default is `ROW`.
-
-Binary logging is enabled by default (the `log_bin` system variable is set to ON).
-
-**By default, the binary log is synchronized to disk at each write (`sync_binlog=1`)**.
-If `sync_binlog` was not enabled, and the operating system or machine (not only the MySQL server) crashed, there is a chance that the last statements of the binary log could be lost.
-To prevent this, enable the `sync_binlog` system variable to synchronize the binary log to disk after every *`N`* commit groups.
-The safest value for `sync_binlog` is 1 (the default), but this is also the slowest.
-
-In earlier MySQL releases, there was a chance of inconsistency between the table content and binary log content if a crash occurred, even with `sync_binlog` set to 1.
-For example, if you are using `InnoDB` tables and the MySQL server processes a `COMMIT` statement, it writes many prepared transactions to the binary log in sequence, synchronizes the binary log, and then commits the transaction into `InnoDB`. If the server unexpectedly exited between those two operations, the transaction would be rolled back by `InnoDB` at restart but still exist in the binary log. Such an issue was resolved in previous releases by enabling `InnoDB` support for two-phase commit in XA transactions. In 8.0.0 and higher, the `InnoDB` support for two-phase commit in XA transactions is always enabled.
-
-`InnoDB` support for two-phase commit in XA transactions ensures that the binary log and `InnoDB` data files are synchronized. However, the MySQL server should also be configured to synchronize the binary log and the `InnoDB` logs to disk before committing the transaction. The `InnoDB` logs are synchronized by default, and `sync_binlog=1` ensures the binary log is synchronized. The effect of implicit `InnoDB` support for two-phase commit in XA transactions and `sync_binlog=1` is that at restart after a crash, after doing a rollback of transactions, the MySQL server scans the latest binary log file to collect transaction *`xid`* values and calculate the last valid position in the binary log file. The MySQL server then tells `InnoDB` to complete any prepared transactions that were successfully written to the to the binary log, and truncates the binary log to the last valid position. This ensures that the binary log reflects the exact data of `InnoDB` tables, and therefore the replica remains in synchrony with the source because it does not receive a statement which has been rolled back.
-
-## Slow Query Log
-
-The slow query log consists of SQL statements that take more than `long_query_time` seconds to execute and require at least `min_examined_row_limit` rows to be examined.
-The slow query log can be used to find queries that take a long time to execute and are therefore candidates for optimization.
-However, examining a long slow query log can be a time-consuming task. To make this easier, you can use the **mysqldumpslow** command to process a slow query log file and summarize its contents.
-
-```
-long_query_time	10.000000
-log_slow_admin_statements	ON
-log_slow_disabled_statements	sp
-log_slow_filter	admin,filesort,filesort_on_disk,filesort_priority_queue,full_join,full_scan,query_cache,query_cache_miss,tmp_table,tmp_table_on_disk
-log_slow_rate_limit	1
-log_slow_slave_statements	ON
-log_slow_verbosity
-slow_launch_time	2
-
-slow_query_log	ON // must be ON
-log_queries_not_using_indexes	ON
-
-slow_query_log_file	demo-slow.log
-```
-
-log_queries_not_using_indexes 开启后，如果运行的SQL语句没有使用索引，则MYSQL数据库同样会将其记录到慢查询日志
-
-
-
-```sql
-
-mysql> SELECT * FROM mysql.slow_log;
-```
-
-```sql
-set long_query_time=0;
-
-```
-
-
-
-## Links
-
-- [MySQL](/docs/CS/DB/MySQL/MySQL.md)
+1. [MySQL 官方文档 - 二进制日志](https://dev.mysql.com/doc/refman/8.0/en/binary-log.html)

@@ -6,7 +6,7 @@
 
 ![DataSourceFactory](img/DataSourceFactory.png)
 
-`DataSourceFactory provide methods to setProperties and get javax.sql.DataSource`
+`DataSourceFactory` 提供 setProperties 和获取 javax.sql.DataSource 的方法
 
 ```java
 public interface DataSourceFactory {
@@ -164,7 +164,7 @@ public class UnpooledDataSource implements DataSource {
 
 ```java
 /**
- * This is a simple, synchronous, thread-safe database connection pool.
+ * 一个简单、同步、线程安全的数据库连接池。
  */
 public class PooledDataSource implements DataSource {
 
@@ -230,12 +230,12 @@ class PooledConnection implements InvocationHandler {
   private boolean valid;
 
   /**
-   * Constructor for SimplePooledConnection that uses the Connection and PooledDataSource passed in.
+   * 使用传入的 Connection 和 PooledDataSource 构造 PooledConnection。
    *
    * @param connection
-   *          - the connection that is to be presented as a pooled connection
+   *          - 作为池化连接呈现的连接
    * @param dataSource
-   *          - the dataSource that the connection is from
+   *          - 连接所属的数据源
    */
   public PooledConnection(Connection connection, PooledDataSource dataSource) {
     this.hashCode = connection.hashCode();
@@ -248,20 +248,20 @@ class PooledConnection implements InvocationHandler {
   }
 
   /**
-   * Method to see if the connection is usable.
+   * 检查连接是否可用。
    *
-   * @return True if the connection is usable
+   * @return 如果连接可用则返回 true
    */
   public boolean isValid() {
     return valid && realConnection != null && dataSource.pingConnection(this);
   }
 
   /**
-   * Required for InvocationHandler implementation.
+   * InvocationHandler 接口所需实现。
    *
-   * @param proxy  - not used
-   * @param method - the method to be executed
-   * @param args - the parameters to be passed to the method
+   * @param proxy  - 未使用
+   * @param method - 要执行的方法
+   * @param args - 传递给方法的参数
    */
   @Override
   public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
@@ -338,19 +338,19 @@ private PooledConnection popConnection(String username, String password) throws 
   while (conn == null) {
     synchronized (state) {
       if (!state.idleConnections.isEmpty()) {
-        // Pool has available connection
+        // 池中有可用连接
         conn = state.idleConnections.remove(0);
       } else {
-        // Pool does not have available connection
+        // 池中没有可用连接
         if (state.activeConnections.size() < poolMaximumActiveConnections) {
-          // Can create new connection
+          // 可以创建新连接
           conn = new PooledConnection(dataSource.getConnection(), this);
         } else {
-          // Cannot create new connection
+          // 无法创建新连接
           PooledConnection oldestActiveConnection = state.activeConnections.get(0);
           long longestCheckoutTime = oldestActiveConnection.getCheckoutTime();
           if (longestCheckoutTime > poolMaximumCheckoutTime) {
-            // Can claim overdue connection
+            // 可以回收超时连接
             state.claimedOverdueConnectionCount++;
             state.accumulatedCheckoutTimeOfOverdueConnections += longestCheckoutTime;
             state.accumulatedCheckoutTime += longestCheckoutTime;
@@ -360,12 +360,10 @@ private PooledConnection popConnection(String username, String password) throws 
                 oldestActiveConnection.getRealConnection().rollback();
               } catch (SQLException e) {
                 /*
-                   Just log a message for debug and continue to execute the following
-                   statement like nothing happened.
-                   Wrap the bad connection with a new PooledConnection, this will help
-                   to not interrupt current executing thread and give current thread a
-                   chance to join the next competition for another valid/good database
-                   connection. At the end of this loop, bad {@link @conn} will be set as null.
+                   仅记录调试消息，然后继续执行后续语句，就像什么都没发生一样。
+                   将坏连接包装到新的 PooledConnection 中，这有助于不中断当前执行线程，
+                   并给当前线程一个机会参与下一次竞争以获取有效的数据库连接。
+                   在此循环结束时，坏的 {@link @conn} 将被设置为 null。
                  */
                 log.debug("Bad connection. Could not roll back");
               }
@@ -375,7 +373,7 @@ private PooledConnection popConnection(String username, String password) throws 
             conn.setLastUsedTimestamp(oldestActiveConnection.getLastUsedTimestamp());
             oldestActiveConnection.invalidate();
           } else {
-            // Must wait
+            // 必须等待
             try {
               if (!countedWait) {
                 state.hadToWaitCount++;
@@ -391,7 +389,7 @@ private PooledConnection popConnection(String username, String password) throws 
         }
       }
       if (conn != null) {
-        // ping to server and check the connection is valid or not
+        // ping 服务器检查连接是否有效
         if (conn.isValid()) {
           if (!conn.getRealConnection().getAutoCommit()) {
             conn.getRealConnection().rollback();
@@ -427,11 +425,11 @@ private PooledConnection popConnection(String username, String password) throws 
 
 ```java
 /**
- * Method to check to see if a connection is still usable
+ * 检查连接是否仍然可用。
  *
  * @param conn
- *          - the connection to check
- * @return True if the connection is still usable
+ *          - 要检查的连接
+ * @return 如果连接仍然可用则返回 true
  */
 protected boolean pingConnection(PooledConnection conn) {
   boolean result = true;
@@ -467,11 +465,11 @@ protected boolean pingConnection(PooledConnection conn) {
 }
 
 /**
- * Unwraps a pooled connection to get to the 'real' connection
+ * 解包池化连接以获取"真实"连接。
  *
  * @param conn
- *          - the pooled connection to unwrap
- * @return The 'real' connection
+ *          - 要解包的池化连接
+ * @return "真实"连接
  */
 public static Connection unwrapConnection(Connection conn) {
   if (Proxy.isProxyClass(conn.getClass())) {
@@ -486,7 +484,7 @@ public static Connection unwrapConnection(Connection conn) {
 
 #### forceCloseAll
 
-`Closes all active and idle connections in the pool. The method in finalize`
+关闭池中所有活动和空闲连接。该方法在 finalize 中调用
 
 ```java
 public void forceCloseAll() {
@@ -526,7 +524,7 @@ public void forceCloseAll() {
 
 #### pingConnection
 
-`Method to check to see if a connection is still usable.True if the connection is still usable.`
+检查连接是否仍然可用，如果可用则返回 true
 
 ```java
 protected boolean pingConnection(PooledConnection conn) {
@@ -567,33 +565,33 @@ protected boolean pingConnection(PooledConnection conn) {
 
 ```java
 /**
- * Wraps a database connection.
- * Handles the connection lifecycle that comprises: its creation, preparation, commit/rollback and close.
+ * 包装数据库连接。
+ * 处理连接的生命周期：创建、准备、提交/回滚和关闭。
  */
 public interface Transaction {
 
   /**
-   * Retrieve inner database connection.
+   * 获取内部数据库连接。
    */
   Connection getConnection() throws SQLException;
 
   /**
-   * Commit inner database connection.
+   * 提交内部数据库连接。
    */
   void commit() throws SQLException;
 
   /**
-   * Rollback inner database connection.
+   * 回滚内部数据库连接。
    */
   void rollback() throws SQLException;
 
   /**
-   * Close inner database connection.
+   * 关闭内部数据库连接。
    */
   void close() throws SQLException;
 
   /**
-   * Get transaction timeout if set.
+   * 获取事务超时时间（如果已设置）。
    */
   Integer getTimeout() throws SQLException;
 
@@ -604,32 +602,32 @@ public interface Transaction {
 
 ```java
 /**
- * Creates {@link Transaction} instances.
+ * 创建 {@link Transaction} 实例。
  */
 public interface TransactionFactory {
 
   /**
-   * Sets transaction factory custom properties.
+   * 设置事务工厂的自定义属性。
    * @param props
-   *          the new properties
+   *          新属性
    */
   default void setProperties(Properties props) {
     // NOP
   }
 
   /**
-   * Creates a {@link Transaction} out of an existing connection.
-   * @param conn Existing database connection
+   * 从现有连接创建 {@link Transaction}。
+   * @param conn 现有数据库连接
    * @return Transaction
    * @since 3.1.0
    */
   Transaction newTransaction(Connection conn);
 
   /**
-   * Creates a {@link Transaction} out of a datasource.
-   * @param dataSource DataSource to take the connection from
-   * @param level Desired isolation level
-   * @param autoCommit Desired autocommit
+   * 从数据源创建 {@link Transaction}。
+   * @param dataSource 获取连接的 DataSource
+   * @param level 期望的隔离级别
+   * @param autoCommit 期望的自动提交模式
    * @return Transaction
    * @since 3.1.0
    */
@@ -639,7 +637,7 @@ public interface TransactionFactory {
 
 
 /**
- * Creates a {@code SpringManagedTransaction}.
+ * 创建 {@code SpringManagedTransaction}。
  *
  * @author Hunter Presnall
  */
@@ -674,10 +672,10 @@ public class SpringManagedTransactionFactory implements TransactionFactory {
 
 ```java
 /**
- * {@link Transaction} that makes use of the JDBC commit and rollback facilities directly.
- * It relies on the connection retrieved from the dataSource to manage the scope of the transaction.
- * Delays connection retrieval until getConnection() is called.
- * Ignores commit or rollback requests when autocommit is on.
+ * 直接使用 JDBC 的提交和回滚功能的 {@link Transaction}。
+ * 它依赖于从 dataSource 获取的连接来管理事务范围。
+ * 延迟连接获取直到调用 getConnection()。
+ * 当 autocommit 开启时忽略提交或回滚请求。
  *
  * @author Clinton Begin
  *
@@ -738,8 +736,7 @@ public class JdbcTransaction implements Transaction {
         connection.setAutoCommit(desiredAutoCommit);
       }
     } catch (SQLException e) {
-      // Only a very poorly implemented driver would fail here,
-      // and there's not much we can do about that.
+      // 只有实现极差的驱动才会在这里失败，对此我们无能为力。
       throw new TransactionException("Error configuring AutoCommit.  "
           + "Your driver may not support getAutoCommit() or setAutoCommit(). "
           + "Requested setting: " + desiredAutoCommit + ".  Cause: " + e, e);
@@ -749,11 +746,11 @@ public class JdbcTransaction implements Transaction {
   protected void resetAutoCommit() {
     try {
       if (!connection.getAutoCommit()) {
-        // MyBatis does not call commit/rollback on a connection if just selects were performed.
-        // Some databases start transactions with select statements
-        // and they mandate a commit/rollback before closing the connection.
-        // A workaround is setting the autocommit to true before closing the connection.
-        // Sybase throws an exception here.
+        // MyBatis 在仅执行 select 时不会对连接调用 commit/rollback。
+        // 某些数据库以 select 语句开始事务，
+        // 并要求在关闭连接前执行 commit/rollback。
+        // 解决方法是在关闭连接前将 autocommit 设置为 true。
+        // Sybase 会在这里抛出异常。
         connection.setAutoCommit(true);
       }
     } catch (SQLException e) {
@@ -777,7 +774,7 @@ public class JdbcTransaction implements Transaction {
 
 
 /**
- * Creates {@link JdbcTransaction} instances.
+ * 创建 {@link JdbcTransaction} 实例。
  */
 public class JdbcTransactionFactory implements TransactionFactory {
 
@@ -797,10 +794,10 @@ public class JdbcTransactionFactory implements TransactionFactory {
 
 ```java
 /**
- * {@link Transaction} that lets the container manage the full lifecycle of the transaction.
- * Delays connection retrieval until getConnection() is called.
- * Ignores all commit or rollback requests.
- * By default, it closes the connection but can be configured not to do it.
+ * 让容器管理事务完整生命周期的 {@link Transaction}。
+ * 延迟连接获取直到调用 getConnection()。
+ * 忽略所有提交或回滚请求。
+ * 默认情况下关闭连接，但可以配置为不关闭。
  */
 public class ManagedTransaction implements Transaction {
 
@@ -832,12 +829,12 @@ public class ManagedTransaction implements Transaction {
 
   @Override
   public void commit() throws SQLException {
-    // Does nothing
+    // 什么也不做
   }
 
   @Override
   public void rollback() throws SQLException {
-    // Does nothing
+    // 什么也不做
   }
 
   @Override
@@ -866,7 +863,7 @@ public class ManagedTransaction implements Transaction {
 
 ```java
 /**
- * Creates {@link ManagedTransaction} instances.
+ * 创建 {@link ManagedTransaction} 实例。
  */
 public class ManagedTransactionFactory implements TransactionFactory {
 
@@ -889,9 +886,8 @@ public class ManagedTransactionFactory implements TransactionFactory {
 
   @Override
   public Transaction newTransaction(DataSource ds, TransactionIsolationLevel level, boolean autoCommit) {
-    // Silently ignores autocommit and isolation level, as managed transactions are entirely
-    // controlled by an external manager.  It's silently ignored so that
-    // code remains portable between managed and unmanaged configurations.
+    // 静默忽略 autocommit 和 isolation level，因为托管事务完全由外部管理器控制。
+    // 静默忽略以便代码在托管和非托管配置之间保持可移植性。
     return new ManagedTransaction(ds, level, closeConnection);
   }
 }

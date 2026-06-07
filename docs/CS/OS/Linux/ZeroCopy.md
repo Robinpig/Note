@@ -1,68 +1,65 @@
-## Introduction
+## 简介
 
-"`Zero-copy`" describes computer operations in which the CPU does not perform the task of copying data from one memory area to another or in which unnecessary data copies are avoided.
-This is frequently used to save CPU cycles and memory bandwidth in many time consuming tasks, such as when transmitting a file at high speed over a network, etc., thus improving the performance of programs (processes) executed by a computer.
+"零拷贝"描述的是 CPU 不执行将数据从一个内存区域复制到另一个内存区域的任务，或者避免了不必要的数据复制的计算机操作。
+这常用于节省 CPU 周期和内存带宽，尤其是在许多耗时的任务中，例如通过网络高速传输文件等，从而提高计算机执行程序（进程）的性能。
 
-Zero-copy programming techniques can be used when exchanging data within a user space process (i.e. between two or more threads, etc.) and/or between two or more processes (see also producer–consumer problem) and/or when data has to be accessed / copied / moved inside kernel space or between a user space process and kernel space portions of operating systems (OS).
+零拷贝编程技术可用于用户空间进程内的数据交换（即两个或多个线程之间等）和/或两个或多个进程之间（另见生产者-消费者问题），以及/或数据需要在操作系统内核空间内部或用户空间进程与内核空间之间被访问/复制/移动时。
 
-Usually when a user space process has to execute system operations like reading or writing data from/to a device (i.e. a disk, a NIC, etc.) through their high level software interfaces or like moving data from one device to another, etc., it has to perform one or more system calls that are then executed in kernel space by the operating system.
+通常，当用户空间进程必须执行系统操作，如通过高级软件接口从设备（即磁盘、网卡等）读取或写入数据，或将数据从一个设备移动到另一个设备时，它必须执行一个或多个系统调用，然后由操作系统在内核空间中执行。
 
-If data has to be copied or moved from source to destination and both are located inside kernel space (i.e. two files, a file and a network card, etc.) then unnecessary data copies, from kernel space to user space and from user space to kernel space, can be avoided by using special (zero-copy) system calls, usually available in most recent versions of popular operating systems.
+如果数据必须从源复制或移动到目标，且两者都在内核空间内（即两个文件、一个文件和一个网卡等），则可以通过使用特殊的（零拷贝）系统调用避免不必要的数据复制（从内核空间到用户空间以及从用户空间到内核空间），这些系统调用通常在大多数流行操作系统的最新版本中可用。
 
-Zero-copy versions of operating system elements, such as device drivers, file systems, network protocol stacks, etc., greatly increase the performance of certain application programs (that become processes when executed) and more efficiently utilize system resources.
-Performance is enhanced by allowing the CPU to move on to other tasks while data copies / processing proceed in parallel in another part of the machine.
-Also, zero-copy operations reduce the number of time-consuming context switches between user space and kernel space.
-System resources are utilized more efficiently since using a sophisticated CPU to perform extensive data copy operations, which is a relatively simple task, is wasteful if other simpler system components can do the copying.
+操作系统元素的零拷贝版本，如设备驱动程序、文件系统、网络协议栈等，极大地提高了某些应用程序（执行时成为进程）的性能，并更有效地利用系统资源。
+通过允许 CPU 在数据复制/处理在机器的另一部分并行进行时转移到其他任务，从而增强性能。
+此外，零拷贝操作减少了用户空间和内核空间之间耗时的上下文切换次数。
+系统资源得到更有效的利用，因为使用复杂的 CPU 执行相对简单的数据复制操作是浪费的，如果其他更简单的系统组件可以完成复制的话。
 
-As an example, reading a file and then sending it over a network the traditional way requires 2 extra data copies (1 to read from kernel to user space + 1 to write from user to kernel space) and 4 context switches per read/write cycle. Those extra data copies use the CPU.
+例如，传统方式读取文件然后通过网络发送需要 2 次额外的数据复制（1 次从内核读取到用户空间 + 1 次从用户写入到内核空间）以及每次读/写周期 4 次上下文切换。这些额外的数据复制使用 CPU。
 
-Sending that file by using mmap of file data and a cycle of write calls, reduces the context switches to 2 per write call and avoids those previous 2 extra user data copies.
+通过使用文件数据的 mmap 和写调用周期发送该文件，将上下文切换减少到每次写调用 2 次，并避免先前那 2 次额外的用户数据复制。
 
-Sending the same file via zero copy reduces the context switches to 2 per sendfile call and eliminates all CPU extra data copies (both in user and in kernel space).
+通过零拷贝发送同一文件将上下文切换减少到每次 sendfile 调用 2 次，并消除了所有 CPU 额外数据复制（包括用户空间和内核空间）。
 
-Zero-copy protocols are especially important for very high-speed networks in which the capacity of a network link approaches or exceeds the CPU's processing capacity.
-In such a case the CPU may spend nearly all of its time copying transferred data, and thus becomes a bottleneck which limits the communication rate to below the link's capacity.
-A rule of thumb used in the industry is that roughly one CPU clock cycle is needed to process one bit of incoming data.
+零拷贝协议对于网络链路容量接近或超过 CPU 处理能力的超高速网络尤其重要。
+在这种情况下，CPU 可能几乎将所有时间花在复制传输的数据上，从而成为限制通信速率低于链路容量的瓶颈。
+行业中的经验法则是，处理一比特传入数据大约需要一个 CPU 时钟周期。
 
-Techniques for creating zero-copy software include the use of `direct memory access` (DMA)-based copying and memory-mapping through a memory management unit (MMU).
-These features require specific hardware support and usually involve particular memory alignment requirements.
+创建零拷贝软件的技术包括使用基于直接内存访问（DMA）的复制和通过内存管理单元（MMU）的内存映射。
+这些特性需要特定的硬件支持，并且通常涉及特定的内存对齐要求。
 
-A newer approach used by the Heterogeneous System Architecture (HSA) facilitates the passing of pointers between the CPU and the GPU and also other processors.
-This requires a unified address space for the CPU and the GPU.
+异构系统架构（HSA）使用的一种较新方法促进了 CPU 和 GPU 以及其他处理器之间指针的传递。
+这需要 CPU 和 GPU 的统一地址空间。
 
-## Program interfaces
+## 程序接口
 
-Several operating systems support zero-copying of user data and file contents through specific APIs.
-Here are listed only a few well known system calls / APIs available in most popular OSs.
+多个操作系统通过特定 API 支持用户数据和文件内容的零拷贝。
+以下仅列出了大多数流行操作系统中可用的一些众所周知的系统调用/API。
 
-The Linux kernel supports zero-copy through various system calls, such as:
+Linux 内核通过多种系统调用支持零拷贝，例如：
 
-- sendfile;
-- splice;
-- tee;
-- vmsplice;
-- process_vm_readv;
-- process_vm_writev;
-- copy_file_range;
-- raw sockets with packet mmap or AF_XDP.
+- sendfile；
+- splice；
+- tee；
+- vmsplice；
+- process_vm_readv；
+- process_vm_writev；
+- copy_file_range；
+- 使用 packet mmap 或 AF_XDP 的原始套接字。
 
-FreeBSD, NetBSD, OpenBSD, DragonFly BSD, etc. support zero-copy through at least these system calls:
+FreeBSD、NetBSD、OpenBSD、DragonFly BSD 等至少通过以下系统调用支持零拷贝：
 
-- sendfile;
-- write, writev + mmap when writing data to a network socket.
+- sendfile；
+- 当将数据写入网络套接字时的 write、writev + mmap。
 
-Java input streams can support zero-copy through the java.nio.channels.FileChannel's transferTo() method if the underlying operating system also supports zero copy.
+如果底层操作系统也支持零拷贝，Java 输入流可以通过 java.nio.channels.FileChannel 的 transferTo() 方法支持零拷贝。
 
-RDMA (Remote Direct Memory Access) protocols deeply rely on zero-copy techniques.
-
-
+RDMA（远程直接内存访问）协议深度依赖零拷贝技术。
 
 ## sendfile
 
-The sendfile system call was introduced to simplify the transmission of data over the network and between two local files.
-Introduction of sendfile not only reduces data copying, it also reduces context switches.
+引入 sendfile 系统调用是为了简化网络和两个本地文件之间的数据传输。
+sendfile 的引入不仅减少了数据复制，还减少了上下文切换。
 
-
-## References
+## 参考
 
 1. [Zero Copy I: User-Mode Perspective](https://www.linuxjournal.com/article/6345?page=0,0)

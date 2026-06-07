@@ -1,5 +1,6 @@
 # Scala
 
-[The Scala Programming Language](https://www.scala-lang.org/)
+[Scala 编程语言](https://www.scala-lang.org/)
 
-Scala combines object-oriented and functional programming in one concise, high-level language. Scala's static types help avoid bugs in complex applications, and its JVM and JavaScript runtimes let you build high-performance systems with easy access to huge ecosystems of libraries.
+Scala 将面向对象和函数式编程结合在一种简洁的高级语言中。
+Scala 的静态类型帮助避免复杂应用中的 bug，其 JVM 和 JavaScript 运行时让你能够构建高性能系统，并轻松访问庞大的库生态系统。

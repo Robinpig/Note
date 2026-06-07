@@ -1,287 +1,278 @@
 ## Introduction
 
-A reliable computer system must be able to cope with the failure of one or more of its components.
-A failed component may exhibit a type of behavior that is often overlooked--namely, sending conflicting information to different parts of the system.
-The problem of coping with this type of failure is expressed abstractly as the **Byzantine Generals Problem**.
+一个可靠的计算机系统必须能够应对一个或多个组件的故障。
+故障组件可能表现出一种常被忽视的行为——即向系统的不同部分发送冲突信息。
+应对这种故障的问题被抽象地表述为 **拜占庭将军问题**。
 
-The Byzantine Generals Problem seems deceptively simple.
-Using only oral messages, this problem is solvable if and only if more than two-thirds of the generals are loyal; so a single traitor can confound two loyal generals.
-In particular, with only three generals, no solution can work in the presence of a single traitor.
-An oral message is one whose contents are completely under the control of the sender, so a traitorous sender can transmit any possible message.
-Such a message corresponds to the type of message that computers normally send to one another.
+拜占庭将军问题看似简单。
+仅使用口头消息，该问题有解当且仅当超过三分之二的将军是忠诚的；因此一个叛徒可以迷惑两个忠诚的将军。
+特别地，只有三位将军时，在存在一个叛徒的情况下无法解决。
+口头消息是指其内容完全由发送者控制的消息，因此叛徒发送者可以传输任何可能的消息。
+这种消息对应于计算机通常相互发送的消息类型。
 
 ## Problem
 
-We imagine that several divisions of the Byzantine army are camped outside an enemy city, each division commanded by its own general.
-The generals can communicate with one another only by messenger.
-After observing the enemy, they must decide upon a common plan of action.
-However, some of the generals may be traitors, trying to prevent the loyal generals from reaching agreement.
+假设拜占庭军队的几个师驻扎在敌城之外，每个师由自己的将军指挥。
+将军们只能通过信使相互通信。
+观察敌人后，他们必须商定一个共同的行动计划。
+然而，有些将军可能是叛徒，试图阻止忠诚的将军达成一致。
 
-The generals must have an algorithm to guarantee that
+将军们必须有一个算法来保证：
 
-- **A. All loyal generals decide upon the same plan of action.**
+- **A. 所有忠诚的将军决定相同的行动计划。**
 
-The loyal generals will all do what the algorithm says they should, but the traitors may do anything they wish.
-The algorithm must guarantee condition A regardless of what the traitors do.
-The loyal generals should not only reach agreement, but should agree upon a reasonable plan.
-We therefore also want to insure that
+忠诚的将军将按照算法说的去做，但叛徒可以做任何他们想做的事。
+无论叛徒做什么，算法都必须保证条件 A。
+忠诚的将军不仅应达成一致，还应商定一个合理的计划。
+因此，我们还希望确保：
 
-- **B. A small number of traitors cannot cause the loyal generals to adopt a bad plan.**
+- **B. 少数叛徒不能导致忠诚的将军采纳一个糟糕的计划。**
 
-We consider how the generals reach a decision.
-Each general observes the enemy and communicates his observations to the others. Let v(i) be the information communicated by the ith general.
-Each general uses some method for combining the values v (1) ..... v (n) into a single plan of action, where n is the number of generals.
-Condition A is achieved by having all generals use the same method for combining the information, and Condition B is achieved by using a robust method.
-For example, if the only decision to be made is whether to attack or retreat, then v(i) con be General i's opinion of which option is best, and the final decision can be based upon a majority vote among them.
-A small number of traitors can affect the decision only if the loyal generals were almost equally divided between the two possibilities, in which case neither decision could be called bad.
+我们考虑将军们如何做决定。
+每位将军观察敌人并将他的观察结果传达给其他人。令 v(i) 为第 i 位将军传达的信息。
+每位将军使用某种方法将值 v(1).....v(n) 合并成一个单一的行动计划，其中 n 是将军的数量。
+条件 A 通过让所有将军使用相同的方法合并信息来实现，条件 B 通过使用稳健的方法来实现。
+例如，如果唯一要做的决定是进攻还是撤退，那么 v(i) 可以是将军 i 对哪个选项最好的意见，最终决定可以基于他们之间的多数投票。
+少数叛徒只有在忠诚的将军几乎平均分为两种可能性时才能影响决定，在这种情况下，任何一个决定都不能被称为糟糕。
 
-For condition A to be satisfied, the following must be true:
+要满足条件 A，必须满足以下条件：
 
-1. For every i(whether or not the ith general is loyal), any two loyal generals use the same value of v(i).
+1. 对于每个 i（无论第 i 位将军是否忠诚），任意两位忠诚的将军使用相同的 v(i) 值。
 
-We therefore have the following requirement for each i:
+因此，我们有以下对每个 i 的要求：
 
-2. If the ith general is loyal, then the value that he sends must be used by every loyal general as the value of v (i).
+2. 如果第 i 位将军是忠诚的，那么他发送的值必须被每位忠诚的将军用作 v(i) 的值。
 
-Conditions 1 and 2 are both conditions on the single value sent by the ith general.
-We can therefore restrict our consideration to the problem of how a single general sends his value to the others.
-We phrase this in terms of a commanding general sending an order to his lieutenants, obtaining the following problem.
+条件 1 和 2 都是关于第 i 位将军发送的单个值的条件。
+因此，我们可以将问题限制在单个将军如何将其值发送给其他人。
+我们将其表述为一位指挥将军向他的副将发送命令，得到以下问题。
 
-**Byzantine Generals Problem.**
+**拜占庭将军问题。**
 
-A commanding general must send an order to his n - 1 lieutenant generals such that
+一位指挥将军必须向他的 n-1 位副将发送命令，使得：
 
-- **IC1**. All loyal lieutenants obey the same order.
-- **IC2**. If the commanding general is loyal, then every loyal lieutenant obeys the order he sends.
+- **IC1**。所有忠诚的副将遵守相同的命令。
+- **IC2**。如果指挥将军是忠诚的，那么每位忠诚的副将遵守他发送的命令。
 
-Conditions IC1 and IC2 are called the *interactive consistency* conditions.
-Note that if the commander is loyal, then IC1 follows from IC2. However, the commander need not be loyal.
+条件 IC1 和 IC2 被称为 *交互一致性* 条件。
+注意，如果指挥官是忠诚的，那么 IC1 由 IC2 推导出来。然而，指挥官不一定是忠诚的。
 
-To solve our original problem, the ith general sends his value of v(i) by using a solution to the Byzantine Generals Problem to send the order "use v (i) as my value", with the other generals acting as the lieutenants.
+为了解决我们最初的问题，第 i 位将军通过使用拜占庭将军问题的解决方案来发送命令"将 v(i) 作为我的值使用"，从而发送他的 v(i) 值，其他将军担任副将。
 
 ## Impossibility Results
 
-We now show that with oral messages no solution for three generals can handle a single traitor.
-For simplicity, we consider the case in which the only possible decisions are "attack" or "retreat".
+我们现在展示，使用口头消息，对于三位将军，没有一个解决方案可以处理一个叛徒。
+为简单起见，我们考虑唯一可能的决定是"进攻"或"撤退"的情况。
 
-Let us first examine the scenario pictured in Figure 1 in which the commander is loyal and sends an "attack" order, but
-Lieutenant 2 is a traitor and reports to Lieutenant 1 that he received a "retreat" order.
-For IC2 to be satisfied, Lieutenant 1 must obey the order to attack.
+让我们首先检查图 1 所示的场景，其中指挥官是忠诚的并发送"进攻"命令，但
+副将 2 是叛徒，他向副将 1 报告他收到了"撤退"命令。
+为了满足 IC2，副将 1 必须遵守进攻的命令。
 
 ```dot
 digraph {
-    label="Fig.1.  Lieutenant 2 a traitor."
-    Lieutenant1[label="Lieutenant 1"];
-    Lieutenant2[label="Lieutenant 2"  style=filled];
-    Commander -> Lieutenant1[label="attack"];
-    Commander -> Lieutenant2[label="attack"];
-    Lieutenant2 -> Lieutenant1[label="he said 'retreat'"];
+    label="Fig.1.  副将 2 是叛徒。"
+    Lieutenant1[label="副将 1"];
+    Lieutenant2[label="副将 2"  style=filled];
+    Commander -> Lieutenant1[label="进攻"];
+    Commander -> Lieutenant2[label="进攻"];
+    Lieutenant2 -> Lieutenant1[label="他说'撤退'"];
     {rank="same";Lieutenant1;Lieutenant2;}
 }
 ```
 
-Consider another scenario, in which the commander is a traitor and sends an "attack" order to Lieutenant 1 and a "retreat" order to Lieutenant 2.
-Lieutenant 1 does not know who the traitor is, and he cannot tell what message the commander actually sent to Lieutenant 2.
+考虑另一种场景，其中指挥官是叛徒，他向副将 1 发送"进攻"命令，向副将 2 发送"撤退"命令。
+副将 1 不知道谁是叛徒，也无法判断指挥官实际向副将 2 发送了什么消息。
 
 ```dot
 digraph {
-    label="Fig.2.  The commander a traitor."
+    label="Fig.2.  指挥官是叛徒。"
     Commander[style=filled]
-    Lieutenant1[label="Lieutenant 1"];
-    Lieutenant2[label="Lieutenant 2"];
-    Commander -> Lieutenant1[label="attack"];
-    Commander -> Lieutenant2[label="retreat"];
-    Lieutenant2 -> Lieutenant1[label="he said 'retreat'"];
+    Lieutenant1[label="副将 1"];
+    Lieutenant2[label="副将 2"];
+    Commander -> Lieutenant1[label="进攻"];
+    Commander -> Lieutenant2[label="撤退"];
+    Lieutenant2 -> Lieutenant1[label="他说'撤退'"];
     {rank="same";Lieutenant1;Lieutenant2;}
 }
 ```
 
-Hence, the scenarios in these two pictures appear exactly the same to Lieutenant 1.
-If the traitor lies consistently, then there is no way for Lieutenant 1 to distinguish between these two situations, so he must obey the "attack" order in both of them.
-Hence, whenever Lieutenant 1 receives an "attack" order from the commander, he must obey it.
-A similar argument shows that if Lieutenant 1 receives a "retreat" order from the commander then he must obey it even if Lieutenant 2 tells him that the commander said "attack".
+因此，这两张图中的场景对副将 1 来说看起来完全相同。
+如果叛徒始终如一地撒谎，那么副将 1 无法区分这两种情况，因此他必须在两种情况下都服从"进攻"命令。
+因此，每当副将 1 收到来自指挥官的"进攻"命令时，他必须服从。
+类似的论证表明，如果副将 1 收到来自指挥官的"撤退"命令，那么即使副将 2 告诉他指挥官说了"进攻"，他也必须服从。
 
-Using this result, we can show that no solution with fewer than $3m + 1$ generals can cope with $m$ traitors.
+使用这个结果，我们可以证明没有少于 $3m + 1$ 位将军的解决方案可以应对 $m$ 个叛徒。
 
 ## Oral Message
 
-We first specify exactly what we mean by "oral messages".
-Each general is supposed to execute some algorithm that involves sending messages to the other generals, and we assume that a loyal general correctly executes his algorithm.
+我们首先精确说明我们所说的"口头消息"的含义。
+每位将军应执行某种涉及向其他将军发送消息的算法，并且我们假设忠诚的将军正确执行其算法。
 
-The definition of an oral message is embodied in the following assumptions which we make for the generals' message system:
+口头消息的定义体现在我们为将军的消息系统所做的以下假设中：
 
-- **A1**. Every message that is sent is delivered correctly.
-- **A2**. The receiver of a message knows who sent it.
-- **A3**. The absence of a message can be detected.
+- **A1**。发送的每条消息都被正确传递。
+- **A2**。消息的接收者知道谁发送了它。
+- **A3**。可以检测到消息的缺失。
 
-Assumptions A1 and A2 prevent a traitor from interfering with the communication between two other generals, since by A1 he cannot interfere with the messages they do send, and by A2 he cannot confuse their intercourse by introducing spurious messages.
-Assumption A3 will foil a traitor who tries to prevent a decision by simply not sending messages.
+假设 A1 和 A2 防止叛徒干扰其他两位将军之间的通信，因为根据 A1，他无法干扰他们发送的消息，而且根据 A2，他无法通过引入虚假消息来混淆他们的交流。
+假设 A3 将挫败试图通过不发送消息来阻止决定的叛徒。
 
-A traitorous commander may decide not to send any order.
-Since the lieutenants must obey some order, they need some default order to obey in this case.
-We let RETREAT be this default order.
+叛徒指挥官可能决定不发送任何命令。
+由于副将必须服从某个命令，他们需要在此情况下服从某个默认命令。
+我们将 RETREAT 作为此默认命令。
 
-We inductively define the ***Oral Message algorithms*** **OM(m)**, for all nonnegative integers m, by which a commander sends an order to n - 1 lieutenants.
-We show that OM(m) solves the Byzantine Generals Problem for $3m + 1$ or more generals in the presence of at most m traitors.
+我们归纳地定义 ***Oral Message 算法*** **OM(m)**，用于所有非负整数 m，通过该算法，指挥官向 n-1 位副将发送命令。
+我们证明，在最多 m 个叛徒的情况下，OM(m) 为 $3m+1$ 或更多位将军解决了拜占庭将军问题。
 
-The algorithm assumes a function majority with the property that if a *majority* of the values $v_i$ equal $v$, then majority ($v_1,..., v_{n-1}$) equals $v$. (Actually, it assumes a sequence of such functions--one for each n.)
-There are two natural choices for the value of majority($v_1,..., v_{n-1}$):
+该算法假设一个 majority 函数，其性质是，如果大多数值 $v_i$ 等于 $v$，则 majority($v_1,..., v_{n-1}$) 等于 $v$。（实际上，它假设这样一个函数序列——每个 n 对应一个。）
+majority($v_1,..., v_{n-1}$) 的值有两个自然选择：
 
-1. The majority value among the $v_i$ if it exists, otherwise the value RETREAT;
-2. The median of the $v_i$, assuming that they come from an ordered set.
+1. $v_i$ 中的多数值（如果存在），否则为 RETREAT；
+2. $v_i$ 的中位数，假设它们来自一个有序集合。
 
-Algorithm OM(0).
+算法 OM(0)。
 
-1. The commander sends his value to every lieutenant.
-2. Each lieutenant uses the value he receives from the commander, or uses the value RETREAT if he receives no value.
+1. 指挥官将他的值发送给每位副将。
+2. 每位副将使用他从指挥官处收到的值，如果未收到值，则使用 RETREAT。
 
-Algorithm OM(m), m > O.
+算法 OM(m)，m > 0。
 
-1. The commander sends his value to every lieutenant.
-2. For each i, let $v_i$ be the value Lieutenant i receives from the commander, or else be RETREAT if he receives no value.
-   Lieutenant i acts as the commander in Algorithm OM(m - 1) to send the value vi to each of the n - 2 other lieutenants.
-3. For each i, and each j != i, let $v_j$ be the value Lieutenant i received from Lieutenant j in step(2) (using Algorithm OM(m - 1)), or else RETREAT if he received no such value.
-   Lieutenant i uses the value majority ($v_1,..., v_{n-1}$).
+1. 指挥官将他的值发送给每位副将。
+2. 对于每个 i，令 $v_i$ 为副将 i 从指挥官处收到的值，如果未收到值，则为 RETREAT。
+   副将 i 在算法 OM(m-1) 中担任指挥官，将值 vi 发送给其他 n-2 位副将。
+3. 对于每个 i，以及每个 j != i，令 $v_j$ 为副将 i 在步骤 (2)（使用算法 OM(m-1)）中从副将 j 处收到的值，如果未收到这样的值，则为 RETREAT。
+   副将 i 使用值 majority($v_1,..., v_{n-1}$)。
 
-To understand how this algorithm works, we consider the case m = 1, n = 4.
+为了理解该算法的工作原理，我们考虑 m=1, n=4 的情况。
 
-Figure 3 illustrates the messages received by Lieutenant 2 when the commander sends the value v and Lieutenant 3 is a traitor.
-In the first step of OM(1), the commander sends v to all three lieutenants.
-In the second step, Lieutenant 1 sends the value v to Lieutenant 2, using the trivial algorithm OM(0).
-Also in the second step, the traitorous Lieutenant 3 sends Lieutenant 2 some other value x.
-In step 3, Lieutenant 2 then has $v_1 = v_2 = v$ and $v_3 = x$, so he obtains the correct value v = majority(v, v, x).
+图 3 说明了当指挥官发送值 v 且副将 3 是叛徒时，副将 2 收到的消息。
+在 OM(1) 的第一步中，指挥官将 v 发送给所有三位副将。
+在第二步中，副将 1 使用简单算法 OM(0) 向副将 2 发送值 v。
+同样在第二步中，叛徒副将 3 向副将 2 发送某个其他值 x。
+在第三步中，副将 2 有 $v_1=v_2=v$ 且 $v_3=x$，因此他获得正确的值 v=majority(v, v, x)。
 
 ```dot
 digraph {
-    label="Fig.3.  Algorithm OM(1); lieutenant 3 a traitor."
-  
-    Lieutenant1[label="Lieutenant 1"];
-    Lieutenant2[label="Lieutenant 2"];
-    Lieutenant3[label="Lieutenant 3"  style=filled];
-  
+    label="Fig.3.  算法 OM(1)；副将 3 是叛徒。"
+    Lieutenant1[label="副将 1"];
+    Lieutenant2[label="副将 2"];
+    Lieutenant3[label="副将 3"  style=filled];
     Commander -> Lieutenant1[label="v"];
     Commander -> Lieutenant2[label="v"];
     Commander -> Lieutenant3[label="v"];
-  
     {rank="same";Lieutenant1;Lieutenant2;Lieutenant3;}
-  
     Lieutenant2 -> Lieutenant3[ color="white"];
     Lieutenant3 -> Lieutenant2[label="x"];
     Lieutenant1 -> Lieutenant2[label="v"];
 }
 ```
 
-Figure 4 shows the values received by the lieutenants if a traitorous commander sends three arbitrary values x, y, and z to the three lieutenants.
-Each lieutenant obtains v~ = x, v2 = y, and v3 = z, so they all obtain the same value majority(x, y, z) in step (3), regardless of whether or not any of the three values x, y, and z are equal.
+图 4 显示了如果叛徒指挥官向三位副将发送三个任意值 x、y 和 z 时，副将收到的值。
+每位副将在步骤 (3) 中获得 v1=x, v2=y 和 v3=z，因此他们都获得相同的值 majority(x, y, z)，无论三个值 x、y 和 z 是否相等。
 
 ```dot
 digraph {
-    label="Fig.4.  Algorithm OM(1); the commander a traitor."
+    label="Fig.4.  算法 OM(1)；指挥官是叛徒。"
     nodesep=2;
     ranksep=1;
     splines=ortho;
-  
     Commander[style=filled]
-    Lieutenant1[label="Lieutenant 1"];
-    Lieutenant2[label="Lieutenant 2"];
-    Lieutenant3[label="Lieutenant 3"];
-  
+    Lieutenant1[label="副将 1"];
+    Lieutenant2[label="副将 2"];
+    Lieutenant3[label="副将 3"];
     Commander -> Lieutenant1[taillabel="x"];
     Commander -> Lieutenant2[taillabel="y"];
     Commander -> Lieutenant3[taillabel="z"];
-  
     {rank="same";Lieutenant1;Lieutenant2;Lieutenant3;}
-  
     Lieutenant2 -> Lieutenant3[taillabel="y"];
     Lieutenant2 -> Lieutenant1[taillabel="y"];
     Lieutenant3 -> Lieutenant1[taillabel="\nz"];
     Lieutenant3 -> Lieutenant2[taillabel="z"];
     Lieutenant1 -> Lieutenant2[taillabel="x"];
     Lieutenant1 -> Lieutenant3[taillabel="\nx"];
-  
 }
 ```
 
-The recursive algorithm OM(m) invokes n - 1 separate executions of the algorithm OM(m - 1), each of which invokes n - 2 executions of OM(m - 2), etc.
-This means that, for m > 1, a lieutenant sends many separate messages to each other lieutenant.
-There must be some way to distinguish among these different messages.
-The reader can verify that all ambiguity is removed if each lieutenant i prefixes the number i to the value vi that he sends in step (2).
-As the recursion "unfolds," the algorithm OM(m - k) will be called (n - 1) ... (n - k) times to send a value prefixed by a sequence of k lieutenants' numbers.
+递归算法 OM(m) 调用 n-1 个单独的 OM(m-1) 算法执行，每个又调用 n-2 个 OM(m-2) 执行，依此类推。
+这意味着，对于 m>1，一位副将向其他每位副将发送许多单独的消息。
+必须有某种方法来区分这些不同的消息。
+读者可以验证，如果每位副将 i 在步骤 (2) 中发送的值 vi 前加上数字 i，则所有歧义都被消除。
+随着递归的"展开"，算法 OM(m-k) 将被调用 (n-1)...(n-k) 次，以发送前面带有 k 个副将编号序列的值。
 
 ## Sign Message
 
-With unforgeable written messages, the problem is solvable for any number of generals and possible traitors.
-The problem becomes easier to solve if we can restrict that ability. One way to do this is to allow the generals to send unforgeable signed messages.
+使用不可伪造的书面消息，问题对于任意数量的将军和可能的叛徒都是可解的。
+如果我们能够限制这种能力，问题就变得更容易解决。一种方法是允许将军发送不可伪造的签名消息。
 
-More precisely, we add to A1-A3 the following assumption(**A4**):
+更准确地说，我们对 A1-A3 添加以下假设 (**A4**)：
 
-- (a) A loyal general's signature cannot be forged, and any alteration of the contents of his signed messages can be detected.
-- (b) Anyone can verify the authenticity of a general's signature.
+- (a) 忠诚将军的签名不能被伪造，并且其签名消息内容的任何更改都能被检测到。
+- (b) 任何人都可以验证将军签名的真实性。
 
-Note that we make no assumptions about a traitorous general's signature.
-In particular, we allow his signature to be forged by another traitor, thereby permitting collusion among the traitors.
+注意，我们对叛徒将军的签名不做任何假设。
+特别地，我们允许他的签名被另一个叛徒伪造，从而允许叛徒之间串通。
 
-Now that we have introduced signed messages, our previous argument that four generals are required to cope with one traitor no longer holds.
-In fact, a three-general solution does exist.
+既然我们引入了签名消息，我们之前关于需要四位将军来应对一个叛徒的论证不再成立。
+事实上，三位将军的解决方案确实存在。
 
-Algorithm SM (rn).
-Initially $V_i = \emptyset$.
+算法 SM(m)。
+初始 $V_i = \emptyset$。
 
-1. The commander signs and sends his value to every lieutenant.
-2. For each i:
-   1. If Lieutenant i receives a message of the form $v:0$ from the commander and he has not yet received any order, then
-      1. he lets $V_i$ equal $\{v\}$;
-      2. he sends the message $v:0:i$ to every other lieutenant.
-   2. If Lieutenant i receives a message of the form $v:0:j_1:...:j_k$ and v is not in the set $V_i$, then
-      1. he adds v to $V_i$;
-      2. if k < m, then he sends the message $v:0:j_1:...:j_k:i$ to every lieutenant other than $j_1:...:j_k$.
-3. For each i: When Lieutenant i will receive no more messages, he obeys the order choice($V_i$).
+1. 指挥官签名并将他的值发送给每位副将。
+2. 对于每个 i：
+   1. 如果副将 i 收到来自指挥官的 $v:0$ 形式的消息，并且他尚未收到任何命令，则
+      1. 他令 $V_i$ 等于 $\{v\}$；
+      2. 他将消息 $v:0:i$ 发送给其他每位副将。
+   2. 如果副将 i 收到 $v:0:j_1:...:j_k$ 形式的消息，且 v 不在集合 $V_i$ 中，则
+      1. 他将 v 添加到 $V_i$；
+      2. 如果 k < m，则他将消息 $v:0:j_1:...:j_k:i$ 发送给除 $j_1:...:j_k$ 之外的每位副将。
+3. 对于每个 i：当副将 i 将不再收到消息时，他执行命令 choice($V_i$)。
 
-Note that in step(2), Lieutenant i ignores any message containing an order v that is already in the set $V_i$.
+注意，在步骤 (2) 中，副将 i 忽略任何包含已在集合 $V_i$ 中的命令 v 的消息。
 
 ```dot
 digraph {
     nodesep=2;
-    label="Fig.5.  Algorithm SM(1); the commander a traitor."
+    label="Fig.5.  算法 SM(1)；指挥官是叛徒。"
     Commander[style=filled]
-    Lieutenant1[label="Lieutenant 1"];
-    Lieutenant2[label="Lieutenant 2"];
-    Commander -> Lieutenant1[label="attack"];
-    Commander -> Lieutenant2[label="retreat"];
-    Lieutenant1 -> Lieutenant2[label="attack:0:1"];
-    Lieutenant2 -> Lieutenant1[label="retreat:0:2"];
+    Lieutenant1[label="副将 1"];
+    Lieutenant2[label="副将 2"];
+    Commander -> Lieutenant1[label="进攻"];
+    Commander -> Lieutenant2[label="撤退"];
+    Lieutenant1 -> Lieutenant2[label="进攻:0:1"];
+    Lieutenant2 -> Lieutenant1[label="撤退:0:2"];
     {rank="same";Lieutenant1;Lieutenant2;}
 }
 ```
 
-Figure 5 illustrates Algorithm SM(1) for the case of three generals when the commander is a traitor.
-The commander sends an "attack" order to one lieutenant and a "retreat" order to the other.
-Both lieutenants receive the two orders in step(2), so after step (2) V1 -- V2 ffi {"attack", "retreat"}, and they both obey the order choice{ {"attack", "retreat"} ).
-Observe that here, unlike the situation in Figure 2, the lieutenants know the commander is a traitor because his signature appears on two different orders, and A4 states that only he could have generated those signatures.
+图 5 说明了在三位将军且指挥官是叛徒的情况下，算法 SM(1) 的执行过程。
+指挥官向一位副将发送"进攻"命令，向另一位发送"撤退"命令。
+两位副将在步骤 (2) 中都收到两个命令，因此在步骤 (2) 之后 V1 = V2 = {"attack", "retreat"}，并且他们都执行命令 choice({"attack", "retreat"})。
+注意，与图 2 中的情况不同，此处副将知道指挥官是叛徒，因为他的签名出现在两个不同的命令上，而 A4 指出只有他才能生成这些签名。
 
-In Algorithm SM(m), a lieutenant signs his name to acknowledge his receipt of an order.
-If he is the ruth lieutenant to add his signature to the order, then that signature is not relayed to anyone else by its recipient, so it is superfluous. (More precisely, assumption A2 makes it unnecessary.)
-In particular, the lieutenants need not sign their messages in SM(1).
+在算法 SM(m) 中，副将签名以确认收到命令。
+如果他是第 m 个在命令上添加签名的副将，则该签名不会被其接收者转发给其他人，因此它是多余的。（更准确地说，假设 A2 使其成为不必要的。）
+特别地，副将在 SM(1) 中不需要签名其消息。
 
 ## Missing Communication Paths
 
 ## Summary
 
-We have presented several solutions to the Byzantine Generals Problem.
-These solutions are expensive in both the amount of time and the number of messages required.
-Algorithms OM(m) and SM(m) both require message paths of length up to $m + 1$.
-In other words, each lieutenant may have to wait for messages that originated at the commander and were then relayed via m other lieutenants.
-For incompletely connected graphs, message paths of length $m + d$ are required, where d is the diameter of the subgraph of loyal generals.
+我们提出了拜占庭将军问题的几种解决方案。
+这些解决方案在所需的时间和消息数量上都是昂贵的。
+算法 OM(m) 和 SM(m) 都需要长度最多为 $m+1$ 的消息路径。
+换句话说，每位副将可能需要等待最初由指挥官发出、然后经由 m 位其他副将转发的消息。
+对于不完全连接的图，需要长度为 $m+d$ 的消息路径，其中 d 是忠诚将军子图的直径。
 
-Algorithms OM(m) and SM(m) involve sending up to (n - 1)(n - 2) ...(n - m - 1) messages.
-The number of separate messages required can certainly be reduced by combining messages.
-It may also be possible to reduce the amount of information transferred.
-However, we expect that a large number of messages will still be required.
+算法 OM(m) 和 SM(m) 涉及发送多达 (n-1)(n-2)...(n-m-1) 条消息。
+通过合并消息，肯定可以减少所需的单独消息数量。
+也可能减少传输的信息量。
+然而，我们预计仍然需要大量消息。
 
-Achieving reliability in the face of arbitrary malfunctioning is a difficult problem, and its solution seems to be inherently expensive.
-The only way to reduce the cost is to make assumptions about the type of failure that may occur.
-For example, it is often assumed that a computer may fail to respond but will never respond incorrectly.
-However, when extremely high reliability is required, such assumptions cannot be made, and the full expense of a Byzantine Generals solution is required.
+在任意故障面前实现可靠性是一个困难的问题，其解决方案本质上似乎是昂贵的。
+降低成本的唯一方法是对可能发生的故障类型做出假设。
+例如，通常假设计算机可能无法响应，但永远不会错误地响应。
+然而，当需要极高的可靠性时，不能做出这样的假设，并且需要拜占庭将军解决方案的全部代价。
 
 ## Links
 

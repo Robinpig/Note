@@ -1,85 +1,85 @@
-## Introduction
+## 简介
 
-Head-of-line blocking (HOL blocking) in computer networking is a performance-limiting phenomenon that occurs when a line of packets is held up by the first packet.
-Examples include input buffered network switches, out-of-order delivery and multiple requests in HTTP pipelining.
+计算机网络中的队头阻塞（HOL blocking）是一种性能受限现象，当一队数据包被第一个数据包阻挡时发生。
+示例包括输入缓冲网络交换机、乱序交付和 HTTP 管道化中的多个请求。
 
-### Network switches
+### 网络交换机
 
-A switch may be composed of buffered input ports, a switch fabric and buffered output ports. 
-If first-in first-out (FIFO) input buffers are used, only the oldest packet is available for forwarding.
-More recent arrivals cannot be forwarded if the oldest packet cannot be forwarded because its destination output is busy.
-The output may be busy if there is output contention.
+交换机可能由缓冲输入端口、交换结构和缓冲输出端口组成。
+如果使用先进先出（FIFO）输入缓冲区，只有最旧的数据包可用于转发。
+如果最旧的数据包因为其目标输出忙而无法转发，则最近到达的数据包也无法转发。
+如果存在输出争用，输出可能忙。
 
-Without HOL blocking, the new arrivals could potentially be forwarded around the stuck oldest packet to their respective destinations. 
-HOL blocking can produce performance-degrading effects in input-buffered systems.
+如果没有 HOL 阻塞，新到达的数据包可能绕过卡住的最旧数据包转发到各自的目的地。
+HOL 阻塞会在输入缓冲系统中产生性能退化效应。
 
-This phenomenon limits the throughput of switches.
-For FIFO input buffers, a simple model of fixed-sized cells to uniformly distributed destinations, 
-causes the throughput to be limited to 58.6% of the total as the number of links becomes large.
+这种现象限制了交换机的吞吐量。
+对于 FIFO 输入缓冲区，一个固定大小信元均匀分布到目的地的简单模型，
+导致当链路数量变大时吞吐量被限制在总量的 58.6%。
 
-One way to overcome this limitation is by using virtual output queues.
+克服此限制的一种方法是使用虚拟输出队列（virtual output queues）。
 
-Only switches with input buffering can suffer HOL blocking. 
-With sufficient internal bandwidth, input buffering is unnecessary; all buffering is handled at outputs and HOL blocking is avoided.
-This no-input-buffering architecture is common in small to medium-sized ethernet switches.
+只有具有输入缓冲的交换机会遭受 HOL 阻塞。
+在内部带宽足够的情况下，输入缓冲不是必需的；所有缓冲在输出端处理，HOL 阻塞得以避免。
+这种无输入缓冲架构在中小型以太网交换机中很常见。
 
-### Out-of-order delivery
+### 乱序交付
 
-Out-of-order delivery occurs when sequenced packets arrive out of order. This may happen due to different paths taken by the packets or from packets being dropped and resent.
-HOL blocking can significantly increase packet reordering.
+当有序数据包乱序到达时发生乱序交付。这可能由于数据包走不同路径或数据包被丢弃和重发而发生。
+HOL 阻塞可以显著增加数据包重排序。
 
-Reliably broadcasting messages across a lossy network among a large number of peers is a difficult problem.
-While atomic broadcast algorithms solve the single point of failure problem of centralized servers, those algorithms introduce a head-of-line blocking problem.
-The Bimodal Multicast algorithm, a randomized algorithm that uses a gossip protocol, avoids head-of-line blocking by allowing some messages to be received out-of-order.
+在丢包网络中，在大量对等点之间可靠地广播消息是一个困难的问题。
+虽然原子广播算法解决了集中式服务器的单点故障问题，但这些算法引入了队头阻塞问题。
+Bimodal Multicast 算法是一种使用 gossip 协议的随机算法，通过允许某些消息乱序接收来避免队头阻塞。
 
 ### HTTP
 
-One form of HOL blocking in HTTP/1.1 is when the number of allowed parallel requests in the browser is used up, and subsequent requests need to wait for the former ones to complete.
-This is mainly because the protocol is purely textual in nature and doesn’t use delimiters between resource chunks.
-HTTP/1.1 introduced a feature called ["Pipelining"](/docs/CS/CN/HTTP/HTTP.md?id=pipelining) which allowed a client sending several HTTP requests over the same TCP connection.
-However HTTP/1.1 still required the responses to arrive in order so it didn't really solved the HOL issue and as of today it is not widely adopted.
+HTTP/1.1 中 HOL 阻塞的一种形式是，当浏览器中允许的并行请求数量用尽时，后续请求需要等待前面的请求完成。
+这主要是因为该协议本质上是纯文本的，并且不在资源块之间使用分隔符。
+HTTP/1.1 引入了一个称为["管道化"](/docs/CS/CN/HTTP/HTTP.md?id=pipelining)的特性，允许客户端在同一个 TCP 连接上发送多个 HTTP 请求。
+然而，HTTP/1.1 仍然要求响应按顺序到达，因此它并没有真正解决 HOL 问题，而且至今未被广泛采用。
 
-As such, the goal for HTTP/2 was quite clear: **make it so that we can move back to a single TCP connection by solving the HOL blocking problem**.
-HTTP/2 addresses this issue through request **multiplexing**, which eliminates HOL blocking at the application layer, but HOL still exists at the transport (TCP) layer.
-Stated differently: we want to enable proper multiplexing of resource chunks.
-This wasn’t possible in HTTP/1.1 because there was no way to discern to which resource a chunk belongs, or where it ends and another begins.
-HTTP/2 solves this quite elegantly by prepending small control messages, called **frames**, before the resource chunks.
-By “framing” individual messages HTTP/2 is thus much more flexible than HTTP/1.1.
-It allows for many resources to be sent multiplexed on a single TCP connection by interleaving their chunks.
+因此，HTTP/2 的目标非常明确：**通过解决 HOL 阻塞问题，使我们可以回到单 TCP 连接**。
+HTTP/2 通过请求**多路复用**解决了这个问题，它消除了应用层的 HOL 阻塞，但传输层（TCP）的 HOL 仍然存在。
+换句话说：我们希望启用资源块的多路复用。
+这在 HTTP/1.1 中是不可能的，因为无法判断一个块属于哪个资源，或它在哪里结束、另一个在哪里开始。
+HTTP/2 通过在资源块前添加称为**帧**的小型控制消息来优雅地解决这个问题。
+通过对单个消息进行"帧化"，HTTP/2 比 HTTP/1.1 灵活得多。
+它允许通过交错块，在单个 TCP 连接上多路复用多个资源。
 
-HTTP/3 uses [QUIC](/docs/CS/CN/HTTP/QUIC.md) instead of TCP which removes HOL blocking in the transport layer.
+HTTP/3 使用 [QUIC](/docs/CS/CN/HTTP/QUIC.md) 替代 TCP，从而消除了传输层的 HOL 阻塞。
 
-When a TCP packet gets lost in transit, the receiver can’t acknowledge incoming packages until the lost package is re-sent by a server.
-Since TCP is by design oblivious to higher-level protocols like HTTP, a single lost packet will block the stream for all in-flight HTTP requests until the missing data is re-sent.
-Put differently, there is a mismatch in perspective between the two Layers: HTTP/2 sees multiple, independent resource bytestreams, but TCP sees just a single, opaque bytestream.
+当 TCP 数据包在传输中丢失时，接收方在丢失的数据包被服务器重发之前无法确认后续数据包。
+由于 TCP 在设计上对 HTTP 等高层协议不感知，单个丢失的数据包将阻止流中的所有进行中 HTTP 请求，直到丢失的数据被重发。
+换句话说，两层之间存在视角不匹配：HTTP/2 看到多个独立的资源字节流，但 TCP 只看到一个单一的不透明字节流。
 
-> QUIC’s HOL blocking removal probably won’t actually help all that much for Web performance.
+> QUIC 消除 HOL 阻塞实际上可能对 Web 性能帮助不大。
 
-### TLS HOL blocking
+### TLS HOL 阻塞
 
-the TLS protocol provides encryption (and other things) for Application Layer protocols, such as HTTP.
-It does this by wrapping the data it gets from HTTP into TLS records, which are conceptually similar to HTTP/2 frames or TCP packets.
-They for example include a bit of metadata at the start to indicate how long the record is. This record and its HTTP contents are then encrypted and passed to TCP for transport.
+TLS 协议为应用层协议（如 HTTP）提供加密（和其他功能）。
+它通过将从 HTTP 获取的数据包装到 TLS 记录中来做到这一点，TLS 记录在概念上类似于 HTTP/2 帧或 TCP 数据包。
+例如，它们在开头包含一些元数据来指示记录的长度。然后这个记录及其 HTTP 内容被加密并传递给 TCP 传输。
 
-Crucially however, TLS can only decrypt a record in its entirety, which is why a form of TLS HOL blocking can occur.
-Imagine that the TLS record was spread out over 11 TCP packets, and the last TCP packet is lost.
-Since the TLS record is incomplete, it cannot be decrypted, and is thus stuck waiting for the retransmission of the last TCP packet.
-Note that in this specific case there is no TCP HOL blocking: there are no packets after number 11 that are stuck waiting for the retransmit.
+然而，关键的是，TLS 只能完整地解密一个记录，这就是为什么会发生 TLS HOL 阻塞。
+想象一下，TLS 记录分布在 11 个 TCP 数据包上，最后一个 TCP 数据包丢失了。
+由于 TLS 记录不完整，它无法被解密，因此只能等待最后一个 TCP 数据包的重传。
+注意，在这种特定情况下没有 TCP HOL 阻塞：没有数据包 11 之后的包在等待重传。
 
-While this is a highly specific case that probably does not happen very frequently in practice, it was still something taken into account when designing the QUIC protocol.
-As there the goal was to eliminate HOL blocking in all its forms once and for all (or at least as much as possible), even this edge case had to be removed. This is part of the reason why,
-while QUIC integrates TLS, it will always encrypt data on a per-packet basis and it does not use TLS records directly.
-As we’ve seen, this is less efficient and requires more CPU than using larger blocks, and is one of the main reasons why QUIC can still be slower than TCP in current implementations.
+虽然这是一个非常特定的情况，在实践中可能不经常发生，但在设计 QUIC 协议时仍然考虑到了这一点。
+因为那里的目标是一劳永逸地消除所有形式的 HOL 阻塞（或尽可能多的），即使这个边缘情况也必须被消除。
+这就是为什么，虽然 QUIC 集成了 TLS，但它始终在逐数据包基础上加密数据，而不直接使用 TLS 记录。
+正如我们所见，这比使用更大的块效率更低，需要更多的 CPU，并且是 QUIC 在当前实现中仍然可能比 TCP 慢的主要原因之一。
 
-> See [Optimizing TLS Record Size & Buffering Latency](https://www.igvita.com/2013/10/24/optimizing-tls-record-size-and-buffering-latency/)
+> 参见 [Optimizing TLS Record Size & Buffering Latency](https://www.igvita.com/2013/10/24/optimizing-tls-record-size-and-buffering-latency/)
 
-## Links
+## 链接
 
-- [Computer Network](/docs/CS/CN/CN.md)
+- [计算机网络](/docs/CS/CN/CN.md)
 - [HTTP](/docs/CS/CN/HTTP/HTTP.md)
 - [QUIC](/docs/CS/CN/HTTP/QUIC.md)
 
-## References
+## 参考文献
 
 1. [Head-of-line blocking - Wiki](https://en.wikipedia.org/wiki/Head-of-line_blocking)
 2. [Making the Web Faster with HTTP 2.0 HTTP continues to evolve](https://queue.acm.org/detail.cfm?id=2555617)

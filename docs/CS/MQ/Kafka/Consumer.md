@@ -215,26 +215,26 @@ bin/kafka-consumer-groups.sh --bootstrap-server localhost:9092 --describe --grou
 
 ### Partition
 
-The "Round-Robin" partitioner 
-This partitioning strategy can be used when user wants to distribute the writes to all partitions equally. 
-This is the behaviour regardless of record key hash.
+"Round-Robin" 分区器 
+当用户希望将写入均匀分布到所有分区时，可以使用此分区策略。
+此行为与记录 key 的哈希无关。
 
-NOTE this partitioner is deprecated and shouldn't be used. 
-To use default partitioning logic remove partitioner.class configuration setting. 
-See KIP-794 for more info. The default partitioning strategy:
+注意，此分区器已弃用，不应使用。
+要使用默认分区逻辑，请移除 partitioner.class 配置设置。
+更多信息请参见 KIP-794。默认分区策略：
 
-- If a partition is specified in the record, use it
-- If no partition is specified but a key is present choose a partition based on a hash of the key
-- If no partition or key is present choose the sticky partition that changes when the batch is full. 
-  See KIP-480 for details about sticky partitioning.
+- 如果记录中指定了分区，则使用它
+- 如果未指定分区但存在 key，则基于 key 的哈希选择分区
+- 如果没有分区或 key，则选择粘性分区，该分区在批次满时更改。
+  有关粘性分区的详细信息，请参见 KIP-480。
 
-NOTE this partitioner is deprecated and shouldn't be used. To use default partitioning logic remove partitioner.class configuration setting and set partitioner.ignore.keys=true.
-See KIP-794 for more info. The partitioning strategy:
+注意，此分区器已弃用，不应使用。要使用默认分区逻辑，请移除 partitioner.class 配置设置并设置 partitioner.ignore.keys=true。
+更多信息请参见 KIP-794。分区策略：
 
-- If a partition is specified in the record, use it
-- Otherwise choose the sticky partition that changes when the batch is full. 
-  NOTE: In contrast to the DefaultPartitioner, the record key is NOT used as part of the partitioning strategy in this partitioner.
-  Records with the same key are not guaranteed to be sent to the same partition. See KIP-480 for details about sticky partitioning.
+- 如果记录中指定了分区，则使用它
+- 否则选择粘性分区，该分区在批次满时更改。
+  注意：与 DefaultPartitioner 不同，此分区器中的分区策略不使用记录 key。
+  具有相同 key 的记录不能保证发送到同一分区。有关粘性分区的详细信息，请参见 KIP-480。
 
 ## subscribe
 
@@ -275,47 +275,45 @@ public class AsyncKafkaConsumer<K, V> implements ConsumerDelegate<K, V> {
 
 ## poll
 
-Kafka consumers poll the Kafka broker to receive batches of data.
-Once the consumer is subscribed to Kafka topics, the poll loop handles all details of coordination, partition rebalances, heartbeats, and data fetching, 
-leaving the developer with a clean API that simply returns available data from the assigned partitions.
+Kafka 消费者轮询 Kafka broker 以接收数据批次。
+一旦消费者订阅了 Kafka topics，poll 循环将处理协调、分区重平衡、心跳和数据获取的所有细节，
+为开发者留下一个干净的 API，只需从分配的分区返回可用数据。
 
-Consumers poll brokers periodically using the .poll() method. 
-If two .poll() calls are separated by more than max.poll.interval.ms time, then the consumer will be disconnected from the group.
+消费者使用 .poll() 方法定期轮询 broker。
+如果两次 .poll() 调用相隔超过 max.poll.interval.ms 时间，则消费者将与组断开连接。
 
-- `max.poll.interval.ms`: (default 5 minutes) 
-  The maximum delay between invocations of poll() when using consumer group management. 
-  This places an upper bound on the amount of time that the consumer can be idle before fetching more records. 
-  If poll() is not called before expiration of this timeout, then the consumer is considered failed and the group will rebalance in order to reassign the partitions to another member.
--  `max.poll.records`: (default 500)
-- This controls the maximum number of records that a single call to poll() will return. 
-  This is useful to help control the amount of data your application will receive in your processing loop. 
-  A lower max.poll.records ensure you will call you next .poll() before the max.poll.interval.ms delay is reached.
+- `max.poll.interval.ms`：（默认 5 分钟）
+  使用消费者组管理时，poll() 调用之间的最大延迟。
+  这为消费者在获取更多记录之前可以空闲的时间设置了上限。
+  如果在此超时到期之前未调用 poll()，则消费者被视为失败，组将重新平衡以将分区重新分配给另一个成员。
+- `max.poll.records`：（默认 500）
+  这控制单次 poll() 调用将返回的最大记录数。
+  这有助于控制应用程序在处理循环中将接收的数据量。
+  较低的 max.poll.records 确保你将在达到 max.poll.interval.ms 延迟之前调用下一个 .poll()。
 
+调用 .poll() 后，消费者将从 Kafka 分区获取数据。
+然后消费者在主线程中处理数据，并继续预取下一批数据的优化，以加快流水线处理并减少处理延迟。
 
+从消费者到 Kafka broker 的获取请求可以通过以下配置控制：
 
-Upon calling .poll() the consumer will fetch data from the Kafka partitions.
-The consumer then processes the data in the main thread and the consumer proceeds to an optimization of pre-fetching the next batch of data to pipeline data faster and reduce processing latency.
-
-The fetch requests from the consumer to the Kafka broker can be controlled by the following configurations:
-
-- `fetch.min.bytes` 
-  This property allows a consumer to specify the minimum amount of data that it wants to receive from the broker when fetching records. 
-  If a broker receives a request for records from a consumer but the new records amount to fewer bytes than fetch.min.bytes, 
-  the broker will wait until more messages are available before sending the records back to the consumer (based on the fetch.max.wait.ms setting)
-  his reduces the load on both the consumer and the broker as they have to handle fewer back-and-forth messages and optimizes for a minimum fetch size.
-- `fetch.max.wait.ms` 
-  The maximum amount of time the Kafka broker will block before answering the fetch request if there isn't sufficient data to immediately satisfy the requirement given by fetch.min.bytes.
-  This means that until the requirement of fetch.min.bytes to be satisfied, you will have up to 500 ms of latency before the fetch returns data to the consumer (e.g. introducing a potential delay to be more efficient in requests)
+- `fetch.min.bytes`
+  此属性允许消费者指定在获取记录时希望从 broker 接收的最小数据量。
+  如果 broker 收到消费者的记录请求，但新记录的数据量少于 fetch.min.bytes，
+  broker 将等待更多消息可用，然后将记录发送回消费者（基于 fetch.max.wait.ms 设置）。
+  这减少了消费者和 broker 的负载，因为它们必须处理更少的来回消息，并针对最小获取大小进行了优化。
+- `fetch.max.wait.ms`
+  如果没有足够数据立即满足 fetch.min.bytes 的要求，Kafka broker 在回答获取请求之前将阻塞的最大时间量。
+  这意味着在满足 fetch.min.bytes 的要求之前，你将有最多 500 ms 的延迟，然后获取才会将数据返回给消费者。
 - `max.partition.fetch.bytes`
-  The maximum amount of data per partition the server will return. Records are fetched in batches by the consumer.
-  If the first record batch in the first non-empty partition of the fetch is larger than this limit, the batch will still be returned to ensure that the consumer can make progress.
+  服务器将为每个分区返回的最大数据量。消费者以批次方式获取记录。
+  如果获取请求中第一个非空分区的第一个记录批次大于此限制，该批次仍将被返回，以确保消费者可以继续推进。
 - `fetch.max.bytes`
-  Maximum data returned for each fetch request. If you have available memory, try increasing fetch.max.bytes to allow the consumer to read more data in each request.
+  每次获取请求返回的最大数据。如果有可用内存，请尝试增加 fetch.max.bytes 以允许消费者在每次请求中读取更多数据。
 - `max.poll.records`
-  This controls the maximum number of records that a single call to poll() will return.
-  This is useful to help control the amount of data your application will receive in your processing loop.
-  This setting does not impact the underlying fetching behavior.
-  The consumer will cache the records from each fetch request and returns them incrementally from each poll.
+  这控制单次 poll() 调用将返回的最大记录数。
+  这有助于控制应用程序在处理循环中将接收的数据量。
+  此设置不影响底层的获取行为。
+  消费者将缓存每次获取请求的记录，并从每次 poll 中增量返回。
 
 
 ### Commit

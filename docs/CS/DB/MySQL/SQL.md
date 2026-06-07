@@ -1,6 +1,4 @@
-## How a SQL execute
-
-
+## SQL 如何执行
 
 connector
 
@@ -10,36 +8,21 @@ Analysis
 
 Improver
 
-Executor 
+Executor
 
 Engine
-
-
 
 wait_timeout 8h
 
 mysql_reset_connection
 
-
-
 query_cache_type DEMAND
 
-
-
 rows_examined not same as engine execute rows
-
-
-
-
-
-
-
 
 read-view
 
 MVCC
-
-
 
 lock
 
@@ -52,11 +35,7 @@ lock
 
 MDL 会直到事务提交才释放，在做表结构变更的时候，你一定要小心不要导致锁住线上查询和更新。
 
-
-
 Dead lock
-
-
 
 1. innodb_lock_wait_timeout default 50s
 2. nnodb_deadlock_detect = on
@@ -75,80 +54,64 @@ Dead lock
 2. limiter
 3. 分段锁, multiple rows
 
-
-
 自增ID用完后会溢出回到0, 主键重复
-
-
 
 ## count
 
 ### count(*) 
 
-MyISAM have a cache of all rows
+MyISAM 缓存了所有行数
 
-InnoDB 
+InnoDB
 
-from MySQL 8.0.13, count(*) all rows 
+从 MySQL 8.0.13 开始，count(*) 扫描所有行
 
-choose a least index
+选择一个最小的索引
 
+`InnoDB` 以相同的方式处理 `SELECT COUNT(*)` 和 `SELECT COUNT(1)` 操作。
+两者没有性能差异。
 
+与 count(*) 类似，但建议使用 `count(*)`
 
-
-
-`InnoDB` handles `SELECT COUNT(*)` and `SELECT COUNT(1)` operations in the same way. There is no performance difference.
-
-Like count(*), but suggest `count(*)`
-
-
-
-
- count(column)
-
+count(column)
 
 ## NULL 
 
-
 - sum IFNULL(SUM(column), 0)
-- count(column) not contain NULL row, please use count(*)
-- IS NULL or IS NOT NULL in where clause
-
- 
-
-
+- count(column) 不包含 NULL 行，请使用 count(*)
+- where 子句中使用 IS NULL 或 IS NOT NULL
 
 ### limit
 
-If you need only a specified number of rows from a result set, use a LIMIT clause in the query, rather than fetching the whole result set and throwing away the extra data.
+如果只需要结果集中指定数量的行，请在查询中使用 LIMIT 子句，而不是获取整个结果集然后丢弃多余数据。
 
-MySQL sometimes optimizes a query that has a LIMIT row_count clause and no HAVING clause:
+MySQL 有时会优化带有 LIMIT row_count 子句且没有 HAVING 子句的查询：
 
-- If you select only a few rows with LIMIT, MySQL uses indexes in some cases when normally it would prefer to do a full table scan.
-- If you combine LIMIT row_count with ORDER BY, MySQL stops sorting as soon as it has found the first row_count rows of the sorted result, rather than sorting the entire result. 
-  If ordering is done by using an index, this is very fast. 
-  If a filesort must be done, all rows that match the query without the LIMIT clause are selected, and most or all of them are sorted, before the first row_count are found. 
-  After the initial rows have been found, MySQL does not sort any remainder of the result set.
-  One manifestation of this behavior is that an ORDER BY query with and without LIMIT may return rows in different order, as described later in this section.
-- If you combine LIMIT row_count with DISTINCT, MySQL stops as soon as it finds row_count unique rows.
-- In some cases, a GROUP BY can be resolved by reading the index in order (or doing a sort on the index), then calculating summaries until the index value changes. In this case, LIMIT row_count does not calculate any unnecessary GROUP BY values.
-- As soon as MySQL has sent the required number of rows to the client, it aborts the query unless you are using SQL_CALC_FOUND_ROWS. 
-  In that case, the number of rows can be retrieved with SELECT FOUND_ROWS().
-- LIMIT 0 quickly returns an empty set. This can be useful for checking the validity of a query.
-  It can also be employed to obtain the types of the result columns within applications that use a MySQL API that makes result set metadata available. 
-  With the mysql client program, you can use the —column-type-info option to display result column types.
-- If the server uses temporary tables to resolve a query, it uses the LIMIT row_count clause to calculate how much space is required.
-- If an index is not used for ORDER BY but a LIMIT clause is also present, the optimizer may be able to avoid using a merge file and sort the rows in memory using an in-memory filesort operation.
+- 如果使用 LIMIT 只选择少量行，MySQL 在通常情况下会使用索引，尽管它可能更倾向于全表扫描。
+- 如果将 LIMIT row_count 与 ORDER BY 结合使用，MySQL 会在找到排序结果的前 row_count 行后停止排序，而不是对整个结果进行排序。
+  如果排序通过索引完成，这会非常快。
+  如果必须进行 filesort，则会选择所有匹配的行（不带 LIMIT 子句），并在找到前 row_count 行之前对大部分或全部进行排序。
+  找到初始行后，MySQL 不会对结果集的剩余部分进行排序。
+  这种行为的一个体现是：带 LIMIT 和不带 LIMIT 的 ORDER BY 查询可能以不同的顺序返回行，如本节后面所述。
+- 如果将 LIMIT row_count 与 DISTINCT 结合使用，MySQL 会在找到 row_count 个唯一行后立即停止。
+- 在某些情况下，可以通过按顺序读取索引（或对索引进行排序）来解决 GROUP BY，然后计算汇总直到索引值发生变化。在这种情况下，LIMIT row_count 不会计算任何不必要的 GROUP BY 值。
+- 一旦 MySQL 将所需数量的行发送到客户端，它就会中止查询，除非你使用 SQL_CALC_FOUND_ROWS。
+  在这种情况下，可以通过 SELECT FOUND_ROWS() 检索行数。
+- LIMIT 0 快速返回空集。这可用于检查查询的有效性。
+  它还可用于在使用提供结果集元数据的 MySQL API 的应用程序中获取结果列类型。
+  使用 mysql 客户端程序，可以使用 --column-type-info 选项显示结果列类型。
+- 如果服务器使用临时表来解析查询，它会使用 LIMIT row_count 子句来计算所需空间。
+- 如果 ORDER BY 未使用索引但存在 LIMIT 子句，优化器可能能够避免使用合并文件，而是使用内存中的 filesort 操作对行进行排序。
 
-If multiple rows have identical values in the ORDER BY columns, the server is free to return those rows in any order, and may do so differently depending on the overall execution plan. 
-In other words, the sort order of those rows is nondeterministic with respect to the nonordered columns.
-**One factor that affects the execution plan is LIMIT, so an ORDER BY query with and without LIMIT may return rows in different orders.**
+如果多行在 ORDER BY 列中具有相同的值，服务器可以自由地以任何顺序返回这些行，并且可能根据整体执行计划以不同的方式执行。
+换句话说，这些行的排序顺序对于非排序列来说是不确定的。
+**影响执行计划的一个因素是 LIMIT，因此带 LIMIT 和不带 LIMIT 的 ORDER BY 查询可能以不同的顺序返回行。**
 
-If it is important to ensure the same row order with and without LIMIT, include additional columns in the ORDER BY clause to make the order deterministic.
-For a query with an ORDER BY or GROUP BY and a LIMIT clause, the optimizer tries to choose an ordered index by default when it appears doing so would speed up query execution.
-Prior to MySQL 8.0.21, there was no way to override this behavior, even in cases where using some other optimization might be faster. 
-Beginning with MySQL 8.0.21, it is possible to turn off this optimization by setting the optimizer_switch system variable's prefer_ordering_index flag to off.
+如果确保带和不带 LIMIT 时具有相同的行顺序很重要，请在 ORDER BY 子句中包含额外的列以使顺序确定。
 
+对于带有 ORDER BY 或 GROUP BY 以及 LIMIT 子句的查询，优化器在默认情况下会尝试选择有序索引，如果这样做似乎会加速查询执行。
+在 MySQL 8.0.21 之前，无法覆盖此行为，即使使用其他优化可能更快。
+从 MySQL 8.0.21 开始，可以通过将 optimizer_switch 系统变量的 prefer_ordering_index 标志设置为 off 来关闭此优化。
 
 ## Tuning
 
@@ -172,7 +135,6 @@ Explain sql 查看执行计划
 - Using temporary：使用了临时表保存中间结果。MySQL在对查询结果进行排序，且数据量较大时便会使用临时表
 - Using filesort：MySQL需要对结果集进行排序操作，但无法使用索引排序（比如查询中包含了表达式、函数、JOIN等操作），MySQL会将结果集写入磁盘临时文件，然后进行排序操作。
 - Using join buffer：使用了连接缓存，当两张表做关联查询时，被驱动表上无索引可用，便会出现using join buffer
-
 
 排查与优化建议：
 - 条件字段是否存在合适的索引
@@ -214,7 +176,7 @@ i.
 分库分表
 ii.
 及时清理表空洞
-- delete删除数据时，其实是逻辑删除，这些数据被标记为“可复用”，下次插入数据时直接复用这部分空间。
+- delete删除数据时，其实是逻辑删除，这些数据被标记为"可复用"，下次插入数据时直接复用这部分空间。
 - 数据页可能比较分散，利用率不高，同时占有大量磁盘空间，因此推荐alter table A engine=InnoDB 重建表，清理表空洞
 
 - MySQL 5.6 版本开始引入Online DDL，alter table A engine=InnoDB重建表的过程中，允许对表A进行增删改操作

@@ -67,7 +67,7 @@ ContinueInNewThread(InvocationFunctions* ifn, jlong threadStackSize, ...)
 }
 ```
 
-Block current thread and continue execution in a new thread(JavaThread).
+阻塞当前线程，在新线程（JavaThread）中继续执行。
 
 ```c
 int
@@ -336,9 +336,8 @@ jint Threads::create_vm(JavaVMInitArgs* args, bool* canTryAgain) {
       JavaThread::_jvmci_old_thread_counters = NULL;
     }
   #endif // INCLUDE_JVMCI
-```
 
-Attach the main thread to this os thread
+将主线程附加到该 os 线程
 
 ```cpp
   JavaThread* main_thread = new JavaThread();
@@ -358,7 +357,7 @@ Attach the main thread to this os thread
   }
 ```
 
-Enable guard page *after* os::create_main_thread(), otherwise it would crash Linux VM, see notes in `os_linux.cpp`. (Allows throw SOF and still running)
+在 os::create_main_thread() **之后**启用 guard page，否则会导致 Linux VM 崩溃，参见 `os_linux.cpp` 中的说明。（允许抛出 SOF 并继续运行）
 
 see [JEP 270: Reserved Stack Areas for Critical Sections](https://openjdk.java.net/jeps/270)
 
@@ -392,7 +391,7 @@ see [JEP 270: Reserved Stack Areas for Critical Sections](https://openjdk.java.n
   JvmtiExport::transition_pending_onload_raw_monitors();
 ```
 
-Create the [VMThread](/docs/CS/Java/JDK/JVM/Thread.md?id=VMThread)
+创建 [VMThread](/docs/CS/Java/JDK/JVM/Thread.md?id=VMThread)
 
 ```cpp
   { 
@@ -404,7 +403,7 @@ Create the [VMThread](/docs/CS/Java/JDK/JVM/Thread.md?id=VMThread)
     }
 ```
 
-Wait for the VM thread to become ready, and [VMThread::run](/docs/CS/Java/JDK/JVM/Thread.md?id=VMThreadrun) to initialize Monitors can have spurious returns, must always check another state flag.
+等待 VM 线程准备就绪，[VMThread::run](/docs/CS/Java/JDK/JVM/Thread.md?id=VMThreadrun) 初始化 Monitors 可能有虚假返回，必须始终检查另一个状态标志。
 
 ```cpp
     {
@@ -484,8 +483,8 @@ Wait for the VM thread to become ready, and [VMThread::run](/docs/CS/Java/JDK/JV
 
 [Start the service thread](/docs/CS/Java/JDK/JVM/Thread.md?id=ServiceThreadinitialize)
 
-The service thread enqueues JVMTI deferred events and does various hashtable and other cleanups.
-Needs to start before the compilers start posting events.
+service thread 将 JVMTI 延迟事件入队，并执行各种哈希表和其他清理操作。
+需要在编译器开始发布事件之前启动。
 
 ```cpp
   ServiceThread::initialize();
@@ -497,7 +496,7 @@ Needs to start before the compilers start posting events.
   MonitorDeflationThread::initialize();
 ```
 
-initialize compiler(s) with [compilation_init_phase1](/docs/CS/Java/JDK/JVM/Thread.md?id=compilation_init_phase1)
+通过 [compilation_init_phase1](/docs/CS/Java/JDK/JVM/Thread.md?id=compilation_init_phase1) 初始化编译器
 
 ```cpp
 #if defined(COMPILER1) || COMPILER2_OR_JVMCI
@@ -546,7 +545,7 @@ initialize compiler(s) with [compilation_init_phase1](/docs/CS/Java/JDK/JVM/Thre
   call_initPhase3(CHECK_JNI_ERR);
 ```
 
-cache the [system and platform class loaders](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=init)
+缓存 [system 和 platform class loaders](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=init)
 
 ```cpp
   SystemDictionary::compute_java_loaders(CHECK_JNI_ERR);
@@ -611,7 +610,7 @@ cache the [system and platform class loaders](/docs/CS/Java/JDK/JVM/ClassLoader.
     MutexLocker ml(PeriodicTask_lock);
 ```
 
-Make sure the WatcherThread can be started by [WatcherThread::start()](/docs/CS/Java/JDK/JVM/Thread.md?id=WatcherThreadstart) or by dynamic enrollment.
+确保 WatcherThread 可以通过 [WatcherThread::start()](/docs/CS/Java/JDK/JVM/Thread.md?id=WatcherThreadstart) 启动或通过动态注册启动。
 
 ```cpp
     WatcherThread::make_startable();
@@ -665,7 +664,7 @@ jint init_globals() {
   compilationPolicy_init();
 ```
 
-init [CodeCache](/docs/CS/Java/JDK/JVM/CodeCache.md?id=init)
+初始化 [CodeCache](/docs/CS/Java/JDK/JVM/CodeCache.md?id=init)
 
 ```cpp
   codeCache_init();
@@ -673,7 +672,7 @@ init [CodeCache](/docs/CS/Java/JDK/JVM/CodeCache.md?id=init)
   os_init_globals();
 ```
 
-init [stub](/docs/CS/Java/JDK/JVM/JavaCall?id=init)
+初始化 [stub](/docs/CS/Java/JDK/JVM/JavaCall?id=init)
 
 ```cpp
   stubRoutines_init1();
@@ -685,7 +684,7 @@ init [stub](/docs/CS/Java/JDK/JVM/JavaCall?id=init)
   gc_barrier_stubs_init();   // depends on universe_init, must be before interpreter_init
 ```
 
-interpreter_init_stub before methods get loaded
+interpreter_init_stub 在方法加载之前执行
 
 ```cpp
   interpreter_init_stub();
@@ -697,7 +696,7 @@ interpreter_init_stub before methods get loaded
   javaClasses_init();// must happen after vtable initialization, before referenceProcessor_init
 ```
 
-interpreter_init_code after javaClasses_init and before any method gets linked
+interpreter_init_code 在 javaClasses_init 之后、任何方法链接之前执行
 
 ```cpp
   interpreter_init_code();
@@ -988,9 +987,9 @@ bool universe_post_init() {
 
 #### init classloader
 
-Initialize the class loader's access to methods in libzip.  
-Parse and process the boot classpath into a list ClassPathEntry objects.  
-Once this list has been created, it must not change order (see class PackageInfo) it can be appended to and is by jvmti and the kernel vm.
+初始化类加载器对 libzip 中方法的访问。  
+解析并将 boot classpath 处理为 ClassPathEntry 对象列表。  
+一旦此列表创建完成，其顺序不得更改（参见 class PackageInfo），它可以被追加，jvmti 和内核 vm 也是如此。
 
 ## MainClass
 

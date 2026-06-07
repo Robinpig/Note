@@ -1,68 +1,62 @@
 ## Introduction
 
-An intrinsic function is a function that has special handling by the compiler or interpreter for our programming language. More specifically, it’s a special case where the compiler or interpreter can replace the function with an alternative implementation for various reasons.
+intrinsic function（内建函数）是一种由编译器或解释器为编程语言进行特殊处理的函数。更具体地说，这是一种特殊情况，编译器或解释器可以出于各种原因用替代实现替换该函数。
 
-The programming language typically handles this by understanding that a specific method call is special, and whenever we call this method, then the resulting behavior is different. 
-This then allows our code to look no different from normal, but the programming language’s implementation can intervene in special cases to give additional benefits.
+编程语言通常通过理解特定的方法调用是特殊的来处理这个问题，当我们调用此方法时，产生的行为会有所不同。
+这使得我们的代码看起来与正常代码没有区别，但编程语言的实现可以在特殊情况下进行干预以提供额外的好处。
 
-The exact way that it works varies between programming languages and also between operating systems and hardware. However, because these are handled for us, we typically don’t need to know any of these details.
+具体的工作方式因编程语言以及操作系统和硬件而异。然而，由于这些是替我们处理的，我们通常不需要知道任何这些细节。
 
-Intrinsics can give various benefits. 
-Replacing particular algorithms with native code can make them perform better or even leverage the operating system’s specific features or underlying hardware.
+Intrinsics 可以提供各种好处。
+用本地代码替换特定算法可以使它们表现更好，甚至可以利用操作系统的特定功能或底层硬件。
 
-The JVM implements intrinsics by replacing the exact method call on an exact class with an alternative version. 
-The JVM handles this itself, so it will only work for core classes and particular architectures. 
-It also allows only certain methods to be swapped out, rather than entire classes.
+JVM 通过将特定类上的特定方法调用替换为替代版本来实现 intrinsics。
+JVM 自己处理这个问题，因此它只对核心类和特定架构起作用。
+它也允许只交换某些方法，而不是整个类。
 
-Exactly how this works will vary between JVMs. This includes not only different versions of the JVM – Java 8 vs. Java 11, for example. 
-This also includes different JVM targets – Linux vs. Windows, for example – and especially JVM vendors – Oracle vs. IBM. 
-In some cases, certain command-line flags passed to the JVM can affect them.
+具体如何工作因 JVM 而异。这不仅包括不同版本的 JVM——例如 Java 8 对比 Java 11。
+这还包括不同的 JVM 目标——例如 Linux 对比 Windows——尤其是不同的 JVM 供应商——Oracle 对比 IBM。
+在某些情况下，传递给 JVM 的某些命令行标志也会影响它们。
 
-This variety means that there’s no way to determine, based only on the application, which methods will be replaced with intrinsic and which won’t. 
-It’ll be different based on the JVM running the application. 
-But this can lead to surprising results in some cases – including significant performance benefits achieved simply by changing the JVM used.
-
+这种多样性意味着无法仅基于应用程序确定哪些方法会被 intrinsic 替换，哪些不会。
+这将根据运行应用程序的 JVM 而有所不同。
+但在某些情况下，这可能导致令人惊讶的结果——包括仅仅通过更改使用的 JVM 就能获得显著的性能提升。
 
 ## Performance Benefits
-Intrinsics are often used to implement a more efficient version of the same code, for example, by leveraging implementation details of the running OS or CPU. 
-Sometimes this is because it can use a more efficient implementation, and other times it can go as far as using hardware-specific functionality.
+Intrinsics 常用于实现相同代码的更高效版本，例如通过利用运行中的操作系统或 CPU 的实现细节。
+有时这是因为可以使用更高效的实现，而其他时候它可以深入到使用硬件特定的功能。
 
-For example, the HotSpot JDK has an intrinsic implementation for many of the methods in java.lang.Math. Depending on the exact JVM, these are potentially implemented using CPU instructions to do the exact calculations required.
+例如，HotSpot JDK 对 java.lang.Math 中的许多方法有 intrinsic 实现。根据具体的 JVM，这些方法可能使用 CPU 指令来执行所需的精确计算。
 
-For example, take `java.lang.Math.sqrt()`. We can write a test:
+例如，以 `java.lang.Math.sqrt()` 为例。我们可以编写一个测试：
 ```
 for (int a = 0; a < 100000; ++a) {
     double result = Math.sqrt(a);
 }
 ```
-This test is performing a square root operation 100,000 times, which takes approx 123ms. 
-However, if we replace this code with a copy of the implementation of `Math.sqrt()` instead:
+这个测试执行了 10 万次平方根运算，大约需要 123 毫秒。
+然而，如果我们用 `Math.sqrt()` 的实现副本替换这段代码：
 ```
 double result = StrictMath.sqrt(a);
 ```
-This code does the same thing but executes in 166ms instead. That’s an increase of 35% by copying the implementation instead of allowing the JVM to replace it with the intrinsic version.
+这段代码做同样的事情，但执行时间为 166 毫秒。这是通过复制实现而不是允许 JVM 用 intrinsic 版本替换它而导致的 35% 的增加。
 
+遗憾的是，没有确定的方法来识别可能被 intrinsic 版本替换的方法。
+这是因为不同的 JVM，或者同一 JVM 在不同平台上，会为不同的方法执行此操作。
 
+然而，使用 Java 9 及更高版本的 Hotspot JVM 时，所有可能被替换的方法上都使用了 `@HotSpotIntrinsicCandidate` 注解。
+添加此注解不会自动导致方法被替换。
+实际上，这发生在底层 JVM 内部。
+相反，JVM 开发者知道这些方法是特殊的，并且要谨慎对待它们。
 
-There is, unfortunately, no guaranteed way to identify methods that might be replaced with intrinsic versions. 
-This is because different JVMs or even the same JVM on different platforms will do this for different methods.
+**Java intrinsic 和 native 方法有什么区别？**
 
-However, when using Hotspot JVM as of Java 9, the `@HotSpotIntrinsicCandidate` annotation is used on all methods that may be replaced. 
-Adding this annotation doesn’t automatically cause the method to be replaced. 
-In reality, that happens within the underlying JVM. 
-Instead, JVM developers know that these methods are special and to be careful with them.
-
-**What is the difference between Java intrinsic and native methods?**
-
-- The [JIT](/docs/CS/Java/JDK/JVM/JIT.md) knows about intrinsics, so it can inline the relevant machine instruction into the code it's JITing, and optimize around it as part of a hot loop.
-- A `JNI` function is a 100% black box for the compiler, with significant call/return overhead (especially if you use it for just a scalar).
-
+- [JIT](/docs/CS/Java/JDK/JVM/JIT.md) 知道 intrinsics，因此它可以将相关的机器指令内联到它正在 JIT 编译的代码中，并作为热循环的一部分进行优化。
+- `JNI` 函数对于编译器来说是一个 100% 的黑盒，具有显著的调用/返回开销（特别是如果你仅将它用于标量）。
 
 ## Links
 
 - [JNI](/docs/CS/Java/JDK/Basic/JNI.md)
 - [JIT](/docs/CS/Java/JDK/JVM/JIT.md)
 
-
 ## References
-

@@ -1,14 +1,14 @@
 ## Introduction
 
-Obviously all of these instructions can be implemented just by using an array.
-Even if the array is dynamically allocated, an estimate of the maximum size of the list is required.
-Usually this requires a high over-estimate, which wastes considerable space.
-This could be a serious limitation, especially if there are many lists of unknown size.
+显然，所有这些指令都可以仅通过使用数组来实现。
+即使数组是动态分配的，也需要预估列表的最大大小。
+通常这需要一个较高的估计值，这会浪费大量空间。
+这可能是一个严重的限制，尤其是在有许多大小未知的列表时。
 
-In order to avoid the linear cost of insertion and deletion, we need to ensure that the list is not stored contiguously, since otherwise entire parts of the list will need to be moved.
+为了避免插入和删除的线性成本，我们需要确保列表不是连续存储的，否则整个部分都需要移动。
 
-The linked list consists of a series of structures, which are not necessarily adjacent in memory.
-Each structure contains the element and a pointer to a structure containing its successor.
+链表由一系列结构组成，这些结构在内存中不一定相邻。
+每个结构包含元素和一个指向其后继结构的指针。
 
 ## Links
 

@@ -1,25 +1,23 @@
 ## Introduction
 
-Almost all the algorithms we have studied thus far have been *polynomial-time algorithms*: on inputs of size n, their worst-case running time is $O(n^k)$ for some constant k.
-You might wonder whether all problems can be solved in polynomial time. The answer is no.
-For example, there are problems, such as Turing’s famous “Halting Problem,” that cannot be solved by any computer, no matter how long you’re willing to wait for an answer.
-There are also problems that can be solved, but not in O(nk) time for any constant k.
-Generally, we think of problems that are solvable by polynomial-time algorithms as being tractable, or “easy,” and problems that require superpolynomial time as being intractable, or "hard".
+迄今为止我们研究过的几乎所有算法都是**多项式时间算法**：在规模为 n 的输入上，它们的最坏情况运行时间为 $O(n^k)$，其中 k 为某个常数。
+你可能会想是否所有问题都能在多项式时间内解决。答案是否定的。
+例如，有些问题，如图灵著名的"停机问题"，无法由任何计算机解决，无论你愿意等待多久的答案。
+还有一些问题虽然可以解决，但无法在 $O(n^k)$ 时间内解决（对于任何常数 k）。
+通常，我们认为可以用多项式时间算法解决的问题是可处理的，或称"容易的"，而需要超多项式时间的问题是不可处理的，或称"困难的"。
 
-The implication of this "rating scheme" is that problems _having polynomial-time-bounded algorithms are tractable.
-But bear in mind that although an exponential function such as 2" grows faster than any polynomial function of 11, for small values of n an $0(2")$-time-bounded algorithm can be more efficient than many polynomial-time-bounded algorithms.
-For example. 2" itself does not overtaken'° until /1 reaches 59.
-Nevertheless, the growth rate of an exponential function is so explosive that we say a problem is intractable if all algorithms to solve that problem are of at least exponential time complexity.
+这种"评级方案"的含义是，具有多项式时间界算法的问题是可处理的。
+但请记住，尽管指数函数（如 2^n）增长快于任何多项式函数，但对于较小的 n 值，$O(2^n)$ 时间界的算法可能比许多多项式时间界的算法更高效。
+例如，2^n 直到 n 达到 59 时才超过 n^10。
+然而，指数函数的增长率如此惊人，以至于我们说如果解决某个问题的所有算法都至少具有指数时间复杂度，那么该问题就是难解的。
 
-A certain class of problems, the class cf nondeterministic polynomial-time complete ("NP-complete" for short) problems, is quite likely to contain only intractable problems.
-This class of problems includes many "classical" problems in combinatorics, such as the traveling salesman problem, the Hamilton circuit problem, and integer linear programming, and all problems in the class can be shown "equivalent,"in the sense that if one problem is tractable, then all are.
-Since many of these problems have been studied by mathematicians and computer scientists for decades, and no polynomial-time-bounded algorithm has been found for even one of them,
-it is natural to conjecture that no such polynomial algorithms exist, and consequently, to regard all the problems in this class as being intractable.
+某一类问题，即非确定性多项式时间完全问题（简称"NP-complete"），很可能只包含难解的问题。
+这类问题包括组合数学中许多"经典"问题，如旅行商问题、哈密顿回路问题和整数线性规划，并且该类中的所有问题都可以证明是"等价的"，即如果一个问题可解，则所有问题都可解。
+由于其中许多问题已被数学家和计算机科学家研究了数十年，且至今未找到任何一个问题的多项式时间界算法，因此很自然地推测不存在这样的多项式算法，从而认为该类中的所有问题都是难解的。
 
-A second class of problems, called the "polynomialspace complete" problems, which are at least as hard as the NP-complete
-problems, yet still not provably intractable.
+第二类问题称为"多项式空间完全"问题，其难度至少与 NP-complete 问题相当，但尚未被证明是难解的。
 
-The key notion behind the theory of NP-complete problems is the nondeterministic Turing machine.
+NP-complete 问题理论背后的关键概念是非确定性图灵机。
 
 ## Links
 

@@ -1,102 +1,94 @@
-## Introduction
+﻿## 简介
 
-Processes are one of the oldest and most important abstractions that operating systems provide.
-We will go into considerable detail about processes and their first cousins, threads.
-
+进程是操作系统提供的最古老和最重要的抽象之一。
+我们将详细讨论进程及其近亲——线程。
 
 > [!TIP]
 > Separate Policy and Mechanism
 >
 > Separating the two allows one easily to change policies without having to rethink the mechanism and is thus a form of modularity, a general software design principle.
 
+## 进程
 
-## Processes
+任何操作系统中最核心的概念是进程：**一个正在运行的程序的抽象**。
+进程只是一个正在执行的程序实例，包括程序计数器、寄存器和变量的当前值。
+从概念上讲，每个进程都有自己的虚拟 CPU。
+当然，实际上真正的 CPU 在进程之间来回切换。
+这种快速来回切换称为*多道程序设计*。
+当使用多道程序设计时，CPU 利用率可以提高。
 
-The most central concept in any operating system is the process: **an abstraction of a running program**.
-A process is just an instance of an executing program, including the current values of the program counter, registers, and variables.
-Conceptually, each process has its own virtual CPU.
-In reality, of course, the real CPU switches back and forth from process to process.
-This rapid switching back and forth is called *multiprogramming*.
-When multiprogramming is used, the CPU utilization can be improved.
-
-A better model is to look at CPU usage from a probabilistic viewpoint. Suppose that a process spends a fraction p of its time waiting for I/O to complete. 
-With n processes in memory at once, the probability that all n processes are waiting for I/O (in which case the CPU will be idle) is p^n. 
-The CPU utilization is then given by the formula
+更好的模型是从概率角度看待 CPU 使用。假设一个进程花费 p 比例的时间等待 I/O 完成。
+如果内存中同时有 n 个进程，所有 n 个进程都在等待 I/O（此时 CPU 将空闲）的概率是 p^n。
+那么 CPU 利用率由以下公式给出：
 
 ```tex
-CPU utilization = 1 − p^n
+CPU utilization = 1 - p^n
 ```
 
-With the CPU switching back and forth among the processes, the rate at which a process performs its computation will not be uniform and probably not even reproducible if the same processes are run again.
-Thus, processes must not be programmed with built-in assumptions about timing.
+随着 CPU 在进程之间来回切换，进程执行计算的速度不会均匀，如果再次运行相同的进程，结果可能甚至不可复现。
+因此，进程不能编程为内建关于时序的假设。
 
-A process is an activity of some kind. It has a program, input, output, and a state.
-A single processor may be shared among several processes, with some [scheduling algorithm](/docs/CS/OS/scheduling.md) being accustomed to determine when to stop work on one process and service a different one.
-In contrast, a program is something that may be stored on disk, not doing anything.
+进程是某种活动。它有一个程序、输入、输出和一个状态。
+单个处理器可以在多个进程之间共享，使用某种[调度算法](/docs/CS/OS/scheduling.md)来决定何时停止一个进程的工作并服务另一个进程。
+相比之下，程序是可以存储在磁盘上的东西，不做任何事情。
 
+### 进程创建
 
-### Process Creation
+导致进程创建的四个主要事件：
+1. 系统初始化。
+2. 运行进程执行进程创建系统调用。
+3. 用户请求创建新进程。
+4. 批处理作业的启动。
 
-Four principal events cause processes to be created:
-1. System initialization.
-2. Execution of a process-creation system call by a running process.
-3. A user request to create a new process.
-4. Initiation of a batch job
+从技术上讲，在所有这些情况下，新进程都是由现有进程执行进程创建系统调用而创建的。
+该系统调用告诉操作系统创建一个新进程，并直接或间接指示要在其中运行哪个程序。
 
-Technically, in all these cases, a new process is created by having an existing process execute a process creation system call.
-This system call tells the operating system to create a new process and indicates, directly or indirectly, which program to run in it.
+在 UNIX 中，只有一个系统调用来创建新进程：fork。该调用创建调用进程的精确克隆。
+在 fork 之后，两个进程（父进程和子进程）具有相同的内存映像、相同的环境字符串和相同的打开文件。仅此而已。
+通常，子进程随后执行 execve 或类似的系统调用来更改其内存映像并运行新程序。
 
-In UNIX, there is only one system call to create a new process: fork. This call creates an exact clone of the calling process.
-After the fork, the two processes, the parent and the child, have the same memory image, the same environment strings, and the same open files. That is all there is.
-Usually, the child process then executes execve or a similar system call to change its memory image and run a new program.
+在 UNIX 和 Windows 系统中，进程创建后，父进程和子进程各自拥有不同的地址空间。
+如果任一进程更改其地址空间中的一个字，该更改对另一个进程不可见。
+在 UNIX 中，子进程的初始地址空间是父进程的副本，但涉及的是两个完全不同的地址空间；没有可写内存被共享。
+一些 UNIX 实现在两者之间共享程序文本，因为它不能被修改。
+或者，子进程可以共享父进程的所有内存，但在这种情况下，内存是*写时复制*共享，这意味着每当两者之一想要修改部分内存时，
+该内存块首先被显式复制，以确保修改发生在私有内存区域。
+再次强调，没有可写内存被共享。
+然而，新创建的进程可以共享其创建者的某些其他资源，例如打开的文件。
+在 Windows 中，父进程和子进程的地址空间从一开始就是不同的。
 
-In both UNIX and Windows systems, after a process is created, the parent and child have their own distinct address spaces.
-If either process changes a word in its address space, the change is not visible to the other process.
-In UNIX, the child’s initial address space is a copy of the parent’s, but there are definitely two distinct address spaces involved; no writable memory is shared.
-Some UNIX implementations share the program text between the two since that cannot be modified.
-Alternatively, the child may share all of the parent’s memory, but in that case the memory is shared *copy-on-write*, which means that whenever either of the two wants to modify part of the memory,
-that chunk of memory is explicitly copied first to make sure the modification occurs in a private memory area.
-Again, no writable memory is shared.
-It is, however, possible for a newly created process to share some of its creator’s other resources, such as open files.
-In Windows, the parent’s and child’s address spaces are different from the start.
+### 进程终止
 
+新进程将终止，通常由以下条件之一引起：
+1. 正常退出（自愿）。
+2. 错误退出（自愿）。
+3. 致命错误（非自愿）。
+4. 被另一个进程杀死（非自愿）。
 
-### Process Termination
+### 进程层次结构
 
-The new process will terminate, usually due to one of the following conditions:
-1. Normal exit (voluntary).
-2. Error exit (voluntary).
-3. Fatal error (involuntary).
-4. Killed by another process (involuntary).
+在 UNIX 中，进程及其所有子进程和进一步的后代共同形成一个进程组。
+当用户从键盘发送信号时，该信号被传递到当前与键盘关联的进程组的所有成员（通常是当前窗口中创建的所有活动进程）。
+单独地，每个进程可以捕获信号、忽略信号或采取默认操作（即被信号杀死）。
+整个系统中的所有进程属于一个单一的树，以 *init* 为根。
+UNIX 中的进程不能抛弃其子进程。
 
+Windows 没有进程层次结构的概念。所有进程都是平等的。
+进程层次结构的唯一提示是，当创建进程时，父进程被授予一个特殊的令牌（称为句柄），它可以用来控制子进程。
+然而，它可以自由地将此令牌传递给其他进程，从而破坏层次结构。
 
-### Process Hierarchies
+### 进程状态
 
-In UNIX, a process and all of its children and further descendants together form a process group. 
-When a user sends a signal from the keyboard, the signal is delivered to all members of the process group currently associated with the keyboard (usually all active processes that were created in the current window).
-Individually, each process can catch the signal, ignore the signal, or take the default action, which is to be killed by the signal.
-All the processes in the whole system belong to a single tree, with *init* at the root.
-Processes in UNIX cannot disinherit their children.
+我们看到一个状态图，显示进程可能处于的三个状态：
+1. 运行（此时正在使用 CPU）。
+2. 就绪（可运行；暂时停止以让另一个进程运行）。
+3. 阻塞（无法运行，直到某个外部事件发生）。
 
-Windows has no concept of a process hierarchy. All processes are equal.
-The only hint of a process hierarchy is that when a process is created, the parent is given a special token (called a handle) that it can use to control the child.
-However, it is free to pass this token to some other process, thus invalidating the hierarchy. 
-
-
-### Process States
-
-we see a state diagram showing the three states a process may be in:
-1. Running (actually using the CPU at that instant).
-2. Ready (runnable; temporarily stopped to let another process run).
-3. Blocked (unable to run until some external event happens).
-
-Logically, the first two states are similar. 
-In both cases the process is willing to run, only in the second one, there is temporarily no CPU available for it. 
-The third state is fundamentally different from the first two in that the process cannot run, even if the CPU is idle and has nothing else to do.
-
+从逻辑上讲，前两个状态是相似的。
+在这两种情况下，进程都愿意运行，只是在第二种情况下，暂时没有可用的 CPU。
+第三个状态与前两个有根本不同，因为即使 CPU 空闲且无事可做，进程也无法运行。
 
 <div style="text-align: center;">
-
 
 ![Process State](./img/Process%20State.png)
 
@@ -106,96 +98,94 @@ The third state is fundamentally different from the first two in that the proces
 Fig.1. A compiler.
 </p>
 
-Four transitions are possible among these three states, as shown.
+这三个状态之间有四种可能的转换，如图所示。
 
-- Transition 1 occurs when the operating system discovers that a process cannot continue right now.
-- Transitions 2 and 3 are caused by the process scheduler, a part of the operating system, without the process even knowing about them.
-- Transition 4 occurs when the external event for which a process was waiting(such as the arrival of some input) happens. 
-  If no other process is running at that instant, transition 3 will be triggered and the process will start running. 
-  Otherwise it may have to wait in ready state for a little while until the CPU is available and its turn comes.
+- 转换 1 发生在操作系统发现进程无法继续运行时。
+- 转换 2 和 3 由进程调度器（操作系统的一部分）引起，进程甚至不知道它们。
+- 转换 4 发生在进程等待的外部事件（例如，某些输入的到达）发生时。
+  如果此时没有其他进程在运行，将触发转换 3，进程将开始运行。
+  否则，它可能需要在就绪状态等待一段时间，直到 CPU 可用且轮到它。
 
+有时系统会有一个**初始**状态，进程在创建时处于该状态。
+另外，进程可能处于**最终**状态，它已退出但尚未被清理（在基于 UNIX 的系统中，这称为**僵尸**状态）。
+这种最终状态可能很有用，因为它允许其他进程（通常是创建该进程的父进程）检查进程的返回码，查看刚刚完成的进程是否成功执行
+（通常，在基于 UNIX 的系统中，程序成功完成任务时返回零，否则返回非零）。
+完成后，父进程将进行最后一次调用（`wait()`）等待子进程完成，并同时指示操作系统清理与现已消亡的进程相关的任何数据结构。
 
-Sometimes a system will have an **initial** state that the process is in when it is being created.
-Also, a process could be placed in a **final** state where it has exited but has not yet been cleaned up (in UNIX-based systems, this is called the **zombie** state). 
-This final state can be useful as it allows other processes(usually the parent that created the process) to examine the return code of the process and see if the just-finished process executed successfully
-(usually, programs return zero in UNIX-based systems when they have accomplished a task successfully, and non-zero otherwise). 
-When finished, the parent will make one final call (`wait()`) to wait for the completion of the child, and to also indicate to the OS that it can clean up any relevant data structures that referred to the now-extinct process.
+### 进程控制块
 
-### Process Control Block
+为了理解什么构成一个进程，我们必须理解其机器状态：程序在运行时可以读取或更新的内容。
+在任何给定时刻，机器的哪些部分对此程序的执行是重要的？
 
-To understand what constitutes a process, we thus have to understand its machine state: what a program can read or update when it is running.
-At any given time, what parts of the machine are important to the execution of this program?
+构成进程的机器状态的一个明显组件是其内存。
+进程的机器状态还包括寄存器。
 
-One obvious component of machine state that comprises a process is its memory.
-Also part of the process’s machine state are registers;
+为了实现进程模型，操作系统维护一个表（结构数组），称为*进程表*，每个进程一个条目。（一些作者将这些条目称为*进程控制块*。）
+此条目包含有关进程状态的重要信息，包括其程序计数器、栈指针、内存分配、其打开文件的状态、其记账和调度信息，
+以及当进程从*运行*状态切换到*就绪*或*阻塞*状态时必须保存的关于进程的所有其他信息，以便稍后可以重新启动，就像从未停止过一样。
 
-To implement the process model, the operating system maintains a table (an array of structures), called the *process table*, with one entry per process. (Some authors call these entries *process control blocks*.)
-This entry contains important information about the process’ state, including its program counter, stack pointer, memory allocation, the status of its open files, its accounting and scheduling information, 
-and everything else about the process that must be saved when the process is switched from *running* to *ready* or *blocked* state so that it can be restarted later as if it had never been stopped.
+与每个 I/O 类关联的是一个位置（通常位于内存底部附近的固定位置），称为中断向量。它包含中断服务程序的地址。
+假设当磁盘中断发生时，用户进程 3 正在运行。
+用户进程 3 的程序计数器、程序状态字以及有时一个或多个寄存器被中断硬件压入（当前）栈。然后计算机跳转到中断向量中指定的地址。
+这就是硬件所做的全部。从此以后，由软件，特别是中断服务程序负责。
 
+所有中断都从保存寄存器开始，通常保存在当前进程的进程表条目中。
+然后，中断压入栈的信息被移除，栈指针被设置为指向进程处理程序使用的临时栈。
+保存寄存器和设置栈指针等操作甚至不能用 C 等高级语言表达，因此它们由一个小型汇编语言例程执行，
+通常对所有中断使用相同的例程，因为保存寄存器的工作是相同的，无论中断的原因是什么。
 
-Associated with each I/O class is a location (typically at a fixed location near the bottom of memory) called the interrupt vector. It contains the address of the interrupt service procedure. 
-Suppose that user process 3 is running when a disk interrupt happens. 
-User process 3’s program counter, program status word, and sometimes one or more registers are pushed onto the (current) stack by the interrupt hardware. The computer then jumps to the address specified in the interrupt vector. 
-That is all the hardware does. From here on, it is up to the software, in particular, the interrupt service procedure.
+当此例程完成时，它调用一个 C 过程来为此特定中断类型执行其余工作。（我们假设操作系统是用 C 编写的，这是所有实际操作系统的常见选择。）
+当它完成其工作后（可能使某个进程变为就绪状态），调度器被调用来决定接下来运行谁。
+之后，控制权被传递回汇编语言代码，以加载当前进程的寄存器和内存映射并开始运行。
+中断处理和调度总结如下。值得注意的是，具体细节因系统而异。
 
-All interrupts start by saving the registers, often in the process table entry for the current process. 
-Then the information pushed onto the stack by the interrupt is removed and the stack pointer is set to point to a temporary stack used by the process handler. 
-Actions such as saving the registers and setting the stack pointer cannot even be expressed in high-level languages such as C, so they are performed by a small assembly-language routine, 
-usually the same one for all interrupts since the work of saving the registers is identical, no matter what the cause of the interrupt is.
+1. 硬件压栈程序计数器等。
+2. 硬件从中断向量加载新的程序计数器。
+3. 汇编语言过程保存寄存器。
+4. 汇编语言过程设置新栈。
+5. C 中断服务程序运行（通常读取和缓冲输入）。
+6. 调度器决定接下来运行哪个进程。
+7. C 过程返回到汇编代码。
+8. 汇编语言过程启动新的当前进程。
 
-When this routine is finished, it calls a C procedure to do the rest of the work for this specific interrupt type. (We assume the operating system is written in C, the usual choice for all real operating systems.) 
-When it has done its job, possibly making some process now ready, the scheduler is called to see who to run next.
-After that, control is passed back to the assembly-language code to load up the registers and memory map for the now-current process and start it running.
-Interrupt handling and scheduling are summarized below. It is worth noting that the details vary somewhat from system to system.
+一个进程在其执行期间可能被中断数千次，但关键思想是，每次中断后，被中断的进程返回到与中断发生前完全相同的状态。
 
-1. Hardware stacks program counter, etc.
-2. Hardware loads new program counter from interrupt vector.
-3. Assembly-language procedure saves registers.
-4. Assembly-language procedure sets up new stack.
-5. C interrupt service runs (typically reads and buffers input).
-6. Scheduler decides which process is to run next.
-7. C procedure returns to the assembly code.
-8. Assembly-language procedure starts up new current process.
+### 多进程
 
-A process may be interrupted thousands of times during its execution, but the key idea is that after each interrupt the interrupted process returns to precisely the same state it was in before the interrupt occurred.
+> Google 的 Chrome Web 浏览器被设计为使用多进程架构来解决此问题。
 
-### Multiprocess
+Chrome 识别三种不同类型的进程：浏览器、渲染器和插件。
 
-> Google’s Chrome web browser was designed to address this issue by using a multiprocess architecture.
+- 浏览器进程负责管理用户界面以及磁盘和网络 I/O。Chrome 启动时创建一个浏览器进程。
+  只创建一个浏览器进程。
+- 渲染器进程包含渲染网页的逻辑。
+  因此，它们包含处理 HTML、Javascript、图像等的逻辑。
+  通常，每个在新标签页中打开的网站都会创建一个新的渲染器进程，因此可能有多个渲染器进程同时处于活动状态。
+- 每种正在使用的插件类型（如 Flash 或 QuickTime）创建一个插件进程。
+  插件进程包含插件代码以及使插件能够与关联的渲染器进程和浏览器进程通信的附加代码。
 
-Chrome identifies three different types of processes: browser, renderers, and plug-ins.
+多进程方法的优点是网站在彼此隔离的环境中运行。
+如果一个网站崩溃，只有其渲染器进程受到影响；所有其他进程保持不变。
+此外，渲染器进程在沙箱中运行，这意味着对磁盘和网络 I/O 的访问受到限制，从而最大限度地减少任何安全漏洞的影响。
 
-- The browser process is responsible for managing the user interface as well as disk and network I/O. A new browser process is created when Chrome is started.
-  Only one browser process is created.
-- Renderer processes contain logic for rendering web pages.
-  Thus, they contain the logic for handling HTML, Javascript, images, and so forth.
-  As a general rule, a new renderer process is created for each website opened in a new tab, and so several renderer processes may be active at the same time.
-- A plug-in process is created for each type of plug-in (such as Flash or QuickTime) in use.
-  Plugin processes contain the code for the plug-in as well as additional code that enables the plug-in to communicate with associated renderer processes and the browser process.
+### 内存段
 
-The advantage of the multiprocess approach is that websites run in isolation from one another.
-If one website crashes, only its renderer process is affected; all other processes remain unharmed.
-Furthermore, renderer processes run in a sandbox, which means that access to disk and network I/O is restricted, minimizing the effects of any security exploits.
+运行中进程的数据组织为五个段：
+- 代码段包含程序文本；即构成程序的机器语言指令。
+- 静态段包含不可变的值，如字符串字面量。例如，如果程序包含字符串 "Hello, World"，这些字符将存储在静态段中。
+- 全局段包含全局变量和声明为 static 的局部变量。
+- 堆段包含在运行时分配的内存块，通常通过调用 C 库函数 malloc。
+- 栈段包含调用栈，即一系列栈帧。每次调用函数时，分配一个栈帧以包含函数的参数和局部变量。
+  当函数完成时，其栈帧从栈中移除。
 
+这些段的排列部分由编译器决定，部分由操作系统决定。具体细节因系统而异，但在最常见的排列中：
+- 文本段位于内存的"底部"附近，即靠近地址 0。
+- 静态段通常就在文本段上方，即更高地址处。
+- 全局段通常就在静态段上方。
+- 堆通常在全局段上方。当它扩展时，向更高地址增长。
+- 栈在内存顶部附近；即虚拟地址空间中最高地址附近。当栈扩展时，向更低地址增长。
 
-### Memory segments
-The data of a running process is organized into five segments:
-- The code segment contains the program text; that is, the machine language instructions that make up the program.
-- The static segment contains immutable values, like string literals. For example, if your program contains the string "Hello, World", those characters will be stored in the static segment.
-- The global segment contains global variables and local variables that are declared static.
-- The heap segment contains chunks of memory allocated at run time, most often by calling the C library function malloc.
-- The stack segment contains the call stack, which is a sequence of stack frames. Each time a function is called, a stack frame is allocated to contain the parameters and local variables of the function. 
-  When the function completes, its stack frame is removed from the stack.
-
-The arrangement of these segments is determined partly by the compiler and partly by the operating system. The details vary from one system to another, but in the most common arrangement:
-- The text segment is near the “bottom” of memory, that is, at addresses near 0.
-- The static segment is often just above the text segment, that is, at higher addresses.
-- The global segment is often just above the static segment.
-- The heap is often above the global segment. As it expands, it grows up toward larger addresses.
-- The stack is near the top of memory; that is, near the highest addresses in the virtual address space. As the stack expands, it grows down toward smaller addresses.
-
-To determine the layout of these segments on your system, try running this program:
+要确定系统上这些段的布局，请尝试运行此程序：
 ```c
 #include <stdio.h>
 #include <stdlib.h>
@@ -214,18 +204,18 @@ int main () {
 }
 ```
 
-main is the name of a function; when it is used as a variable, it refers to the address of the first machine language instruction in main, which we expect to be in the text segment.
+main 是函数名；当它用作变量时，它引用 main 中第一条机器语言指令的地址，我们期望它在文本段中。
 
-global is a global variable, so we expect it to be in the global segment. local is a local variable, so we expect it to be on the stack.
+global 是全局变量，因此我们期望它在全局段中。local 是局部变量，因此我们期望它在栈上。
 
-s refers to a “string literal”, which is a string that appears as part of the program (as opposed to a string that is read from a file, input by a user, etc.). 
-We expect the location of the string to be in the static segment (as opposed to the pointer, s, which is a local variable).
+s 引用一个"字符串字面量"，即作为程序一部分出现的字符串（与从文件读取、由用户输入等的字符串相对）。
+我们期望字符串位于静态段中（与指针 s 相对，s 是局部变量）。
 
-p contains an address returned by malloc, which allocates space in the heap. “malloc” stands for “memory allocate.”
+p 包含 malloc 返回的地址，malloc 在堆中分配空间。"malloc"代表"内存分配"。
 
-The format sequence %p tells printf to format each address as a “pointer”, so it displays the results in hexadecimal.
+格式序列 %p 告诉 printf 将每个地址格式化为"指针"，因此它以十六进制显示结果。
 
-When I run this program, the output looks like this (I added spaces to make it easier to read):
+当我运行此程序时，输出如下所示（我添加了空格以便于阅读）：
 ```
 Address of main is   0x      40057d
 Address of global is 0x      60104c
@@ -234,312 +224,285 @@ p points to          0x     16c3010
 s points to          0x      4006a4
 ```
 
-As expected, the address of main is the lowest, followed by the location of the string literal. 
-The location of global is next, then the address p points to. The address of local is much bigger.
+如预期，main 的地址最低，其次是字符串字面量的位置。
+接下来是 global 的位置，然后是 p 指向的地址。local 的地址大得多。
 
-The largest address has 12 hexadecimal digits. Each hex digit corresponds to 4 bits, so it is a 48-bit address. 
-That suggests that the usable part of the virtual address space is 248 bytes.
+最大的地址有 12 个十六进制数字。每个十六进制数字对应 4 位，因此是一个 48 位地址。
+这表明虚拟地址空间的可用部分是 2^48 字节。
 
-As an exercise, run this program on your computer and compare your results to mine. 
-Add a second call to malloc and check whether the heap on your system grows up (toward larger addresses).
-Add a function that prints the address of a local variable, and check whether the stack grows down.
+作为练习，在你的计算机上运行此程序并将你的结果与我的比较。
+添加第二次 malloc 调用并检查你的系统上的堆是否向上增长（向更高地址）。
+添加一个打印局部变量地址的函数，并检查栈是否向下增长。
 
+## 线程
 
+- 使用线程的主要原因是，在许多应用程序中，多个活动同时发生。其中一些可能会不时阻塞。
+  通过将此类应用程序分解为多个准并行运行的顺序线程，编程模型变得更简单。
+- 使用线程的第二个原因是，由于它们比进程更轻量级，因此比进程更容易（即更快）创建和销毁。
+  当所需线程数量动态且快速变化时，此属性很有用。
+- 使用线程的第三个原因也是性能方面的。
+- 最后，线程在具有多个 CPU 的系统上很有用，因为那里可以实现真正的并行。
 
-## Threads
+### 经典线程模型
 
-- The main reason for having threads is that in many applications, multiple activities are going on at once. Some of these may block from time to time. 
-  By decomposing such an application into multiple sequential threads that run in quasi-parallel, the programming model becomes simpler.
-- A second argument for having threads is that since they are lighter weight than processes, they are easier (i.e., faster) to create and destroy than processes.
-  When the number of threads needed changes dynamically and rapidly, this property is useful to have.
-- A third reason for having threads is also a performance argument.
-- Finally, threads are useful on systems with multiple CPUs, where real parallelism is possible.
+进程模型基于两个独立的概念：资源分组和执行。有时将它们分开是有用的；这就是线程的用武之地。
 
+进程有一个执行线程，通常简称为线程。线程有一个程序计数器，用于跟踪要执行的下一条指令。
+它有寄存器，保存当前工作变量。它有一个栈，包含执行历史，每个被调用但尚未返回的过程对应一个帧。
+虽然线程必须在某个进程中执行，但线程及其进程是不同的概念，可以分开处理。
+进程用于将资源分组在一起；线程是在 CPU 上调度的实体。
 
-### The Classical Thread Model
+线程为进程模型增加的是允许多个执行在同一进程环境中发生，并且在很大程度上彼此独立。
+由于线程具有进程的某些属性，它们有时被称为*轻量级进程*。
+术语*多线程*也用于描述在同一个进程中允许多个线程的情况。
 
-The process model is based on two independent concepts: resource grouping and execution. Sometimes it is useful to separate them; this is where threads come in.
+### 线程的实现
 
-A process has is a thread of execution, usually shortened to just thread. The thread has a program counter that keeps track of which instruction to execute next. 
-It has registers, which hold its current working variables. It has a stack, which contains the execution history, with one frame for each procedure called but not yet returned from. 
-Although a thread must execute in some process, the thread and its process are different concepts and can be treated separately. 
-Processes are used to group resources together; threads are the entities scheduled for execution on the CPU.
+实现线程有两个主要地方：用户空间和内核。
+这个选择有些争议，混合实现也是可能的。
 
-What threads add to the process model is to allow multiple executions to take place in the same process environment, to a large degree independent of one another.
-Because threads have some of the properties of processes, they are sometimes called *lightweight processes*.
-The term *multithreading* is also used to describe the situation of allowing multiple threads in the same process.
+#### 用户空间
 
+方法是将线程包完全放在用户空间中。内核对此一无所知。就内核而言，它管理的是普通的单线程进程。
 
-### Implementing  of Threads
+当线程在用户空间中管理时，每个进程需要自己的私有线程表来跟踪该进程中的线程。
+该表类似于内核的进程表，只是它仅跟踪每个线程的属性，例如每个线程的程序计数器、栈指针、寄存器、状态等。
+线程表由运行时系统管理。
+当线程移动到就绪状态或阻塞状态时，重新启动所需的信息存储在线程表中，就像内核在进程表中存储关于进程的信息一样。
 
-There are two main places to implement threads: user space and the kernel.
-The choice is a bit controversial, and a hybrid implementation is also possible.
+- 第一个也是最明显的优点是，用户级线程包可以在不支持线程的操作系统上实现。
+- 保存线程状态的过程和调度器只是本地过程，因此调用它们比进行内核调用高效得多。
+  在其他问题中，不需要陷阱，不需要上下文切换，不需要刷新内存缓存等等。这使得线程调度非常快。
+- 它们允许每个进程拥有自己定制的调度算法。
 
-#### User Space
+尽管性能更好，用户级线程包有一些主要问题。
+- 首先是阻塞系统调用如何实现的问题。
+- 与阻塞系统调用问题有些类似的是缺页问题。
+- 用户级线程包的另一个问题是线程可能永远运行。
+- 程序员通常恰好在线程经常阻塞的应用程序中使用线程。
 
-The method is to put the threads package entirely in user space. The kernel knows nothing about them. As far as the kernel is concerned, it is managing ordinary, single-threaded processes. 
+#### 在内核中
 
-When threads are managed in user space, each process needs its own private thread table to keep track of the threads in that process.
-This table is analogous to the kernel’s process table, except that it keeps track only of the per-thread properties, such as each thread’s program counter, stack pointer, registers, state, and so forth.
-The thread table is managed by the run-time system.
-When a thread is moved to ready state or blocked state, the information needed to restart it is stored in the thread table, exactly the same way as the kernel stores information about processes in the process table.
+内核有一个跟踪系统中所有线程的线程表。
+当线程想要创建新线程或销毁现有线程时，它进行内核调用，然后通过更新内核线程表来执行创建或销毁。
 
-- The first, and most obvious, advantage is that a user-level threads package can be implemented on an operating system that does not support threads.
-- The procedure that saves the thread’s state and the scheduler are just local procedures, so invoking them is much more efficient than making a kernel call.
-  Among other issues, no trap is needed, no context switch is needed, the memory cache need not be flushed, and so on. This makes thread scheduling very fast.
-- They allow each process to have its own customized scheduling algorithm.
+所有可能阻塞线程的调用都作为系统调用实现，其成本比调用运行时系统过程高得多。
+内核线程不需要任何新的非阻塞系统调用。
+此外，如果进程中的一个线程引起缺页，内核可以轻松检查该进程是否有任何其他可运行的线程，如果有，则在等待所需页面从磁盘调入时运行其中一个。
+它们的主要缺点是系统调用的成本很高，因此如果线程操作（创建、终止等）很常见，将产生更多的开销。
 
-Despite their better performance, user-level threads packages have some major problems.
-- First among these is the problem of how blocking system calls are implemented.
-- Somewhat analogous to the problem of blocking system calls is the problem of page faults.
-- Another problem with user-level thread packages is that threads running forever.
-- Programmers generally want threads precisely in applications where the threads block often.
+#### 混合实现
 
+使用内核级线程，然后将用户级线程多路复用到其中一些或全部上。
+当使用这种方法时，程序员可以确定使用多少个内核线程以及每个内核线程上多路复用多少个用户级线程。这个模型提供了最大的灵活性。
 
+#### 调度器激活
 
-#### In the Kernel
+调度器激活工作的目标是模仿内核线程的功能，但具有通常与在用户空间中实现的线程包相关的更好性能和更大灵活性。
 
-The kernel has a thread table that keeps track of all the threads in the system. 
-When a thread wants to create a new thread or destroy an existing thread, it makes a kernel call, which then does the creation or destruction by updating the kernel thread table.
+使这种方案工作的基本思想是，当内核知道某个线程已阻塞时（例如，由于执行了阻塞系统调用或引起缺页），
+内核通知进程的运行时系统，在栈上传递相关线程的编号和所发生事件的描述作为参数。
+通知是通过内核在已知起始地址激活运行时系统来完成的，大致类似于 UNIX 中的信号。
+这种机制称为**上调用**。
+对调度器激活的一个反对意见是其对上调用的根本依赖，这一概念违反了任何分层系统中固有的结构。
 
-All calls that might block a thread are implemented as system calls, at considerably greater cost than a call to a run-time system procedure.
-Kernel threads do not require any new, nonblocking system calls. 
-In addition, if one thread in a process causes a page fault, the kernel can easily check to see if the process has any other runnable threads, and if so, run one of them while waiting for the required page to be brought in from the disk. 
-Their main disadvantage is that the cost of a system call is substantial, so if thread operations (creation, termination, etc.) a common, much more overhead will be incurred.
+### 多线程
 
+线程之间对全局变量使用的冲突。
+对此问题有多种可能的解决方案。
+- 一种是完全禁止全局变量。
+- 另一种是给每个线程分配自己的私有全局变量。
 
-#### Hybrid Implementations
+将单线程程序转换为多线程程序的下一个问题是，许多库过程不是可重入的。——同步机制
 
-Use kernel-level threads and then multiplex user-level threads onto some or all of them.
-When this approach is used, the programmer can determine how many kernel threads to use and how many user-level threads to multiplex on each one. This model gives the ultimate in flexibility.
+接下来，考虑信号。有些信号逻辑上是线程特定的，而有些则不是。
 
+线程引入的最后一个问题是栈管理。
 
-#### Scheduler Activations
+## 进程间通信
 
-The goals of the scheduler activation work are to mimic the functionality of kernel threads, but with the better performance and greater flexibility usually associated with threads packages implemented in user space.
+进程经常需要与其他进程通信。
+我们将研究与这种**进程间通信**（或 **IPC**）相关的一些问题。
 
-The basic idea that makes this scheme work is that when the kernel knows that a thread has blocked (e.g., by its having executed a blocking system call or caused a page fault), 
-the kernel notifies the process’ run-time system, passing as parameters on the stack the number of the thread in question and a description of the event that occurred. 
-The notification happens by having the kernel activate the run-time system at a known starting address, roughly analogous to a signal in UNIX. 
-This mechanism is called an **upcall**.
-An objection to scheduler activations is the fundamental reliance on upcalls, a concept that violates the structure inherent in any layered system.
+这里有三个问题。
+- 一个进程如何将信息传递给另一个进程。
+- 第二个问题涉及确保两个或多个进程不会互相妨碍。
+- 第三个问题涉及存在依赖关系时的正确排序。
 
+同样重要的是要提到，这些问题中有两个同样适用于线程。
+第一个问题——传递信息——对于线程来说很容易，因为它们共享公共地址空间（位于不同地址空间中需要通信的线程属于通信进程的范畴）。
+然而，另外两个问题——互不妨碍和正确排序——同样适用于线程。
+相同的问题存在，相同的解决方案适用。
 
-### Multithreaded
+进程间通信有两种基本模型：共享内存和消息传递。
 
+在共享内存模型中，建立由协作进程共享的内存区域。
+然后进程可以通过读取和写入共享区域的数据来交换信息。
+在消息传递模型中，通信通过协作进程之间交换的消息进行。
 
-Conflicts between threads over the use of a global variable.
-And various solutions to this problem are possible. 
-- One is to prohibit global variables altogether.
-- Another is to assign each thread its own private global variables.
+消息传递对于交换较小量的数据很有用，因为不需要避免冲突。
+消息传递在分布式系统中也比共享内存更容易实现。
 
-The next problem in turning a single-threaded program into a multithreaded one is that many library procedures are not reentrant. -- Synchronization Mechanism
+共享内存可能比消息传递更快，因为消息传递系统通常通过系统调用实现，因此需要更耗时的内核干预。
+在共享内存系统中，只需要在建立共享内存区域时进行系统调用。
+一旦建立共享内存，所有访问都被视为常规内存访问，不需要内核的帮助。
 
-Next, consider signals. Some signals are logically thread specific, whereas others are not.
+### 竞态条件
 
-Last problem introduced by threads is stack management.
+两个或多个进程读取或写入某些共享数据，最终结果取决于谁在什么时间精确运行的情况，称为**竞态条件**。
 
-## InterProcess Communication
+### 临界区
 
-Processes frequently need to communicate with other processes.
-We will look at some of the issues related to this **InterProcess Communication**, or **IPC**.
+我们如何避免竞态条件？
+我们需要的是**互斥**，即某种确保如果一个进程正在使用共享变量或文件，其他进程将被排除执行相同操作的方法。
+有时进程必须访问共享内存或文件，或执行其他可能导致竞争的关键操作。
+程序中访问共享内存的部分称为**临界区**或**临界区域**。
+如果我们能够安排没有两个进程同时处于其临界区中，就可以避免竞争。
 
-There are three issues here. 
-- How one process can pass information to another.
-- The second has to do with making sure two or more processes do not get in each other’s way.
-- The third concerns proper sequencing when dependencies are present.
+虽然这个要求避免了竞态条件，但不足以使并行进程使用共享数据正确且高效地协作。
+我们需要满足四个条件才能有好的解决方案：
+1. 没有两个进程可以同时处于其临界区中。
+2. 不能对速度或 CPU 数量做出任何假设。
+3. 在临界区外运行的进程不能阻塞任何进程。
+4. 没有进程应无限期等待进入其临界区。
 
-It is also important to mention that two of these issues apply equally well to threads. 
-The first one—passing information—is easy for threads since they share a common address space (threads in different address spaces that need to communicate fall under the heading of communicating processes). 
-However, the other two—keeping out of each other’s hair and proper sequencing—apply equally well to threads.
-The same problems exist and the same solutions apply.
+### 忙等待的互斥
 
-There are two fundamental models of interprocess communication: shared memory and message passing.
+#### 禁用中断
 
-In the shared-memory model, a region of memory that is shared by the cooperating processes is established. 
-Processes can then exchange information by reading and writing data to the shared region. 
-In the message-passing model, communication takes place by means of messages exchanged between the cooperating processes.
+#### 锁变量
 
-Message passing is useful for exchanging smaller amounts of data, because no conflicts need be avoided.
-Message passing is also easier to implement in a distributed system than shared memory.
+#### 严格交替
 
-Shared memory can be faster than message passing, since message-passing systems are typically implemented using system calls and thus require the more time-consuming task of kernel intervention.
-In shared-memory systems, system calls are required only to establish sharedmemory regions. 
-Once shared memory is established, all accesses are treated as routine memory accesses, and no assistance from the kernel is required.
+持续测试一个变量直到某个值出现称为*忙等待*。通常应避免，因为它浪费 CPU 时间。只有在有合理预期等待时间很短的情况下才使用忙等待。
+使用忙等待的锁称为**自旋锁**。
 
-### Race Conditions
+#### Peterson 解法
 
-Where two or more processes are reading or writing some shared data and the final result depends on who runs precisely when, are called **race conditions**.
+#### TSL 指令
 
-### Critical Regions
+TSL 的一个替代指令是 XCHG，它原子性地交换两个位置的内容，例如一个寄存器和一个内存字。
+所有 Intel x86 CPU 使用 XCHG 指令进行低级同步。
 
-How do we avoid race conditions?
-What we need is **mutual exclusion**, that is, some way of making sure that if one process is using a shared variable or file, the other processes will be excluded from doing the same thing.
-Sometimes a process has to access shared memory or files, or do other critical things that can lead to races. 
-That part of the program where the shared memory is accessed is called the **critical region** or **critical section**. 
-If we could arrange matters such that no two processes were ever in their critical regions at the same time, we could avoid races.
+### 睡眠与唤醒
 
-Although this requirement avoids race conditions, it is not sufficient for having parallel processes cooperate correctly and efficiently using shared data. 
-We need four conditions to hold to have a good solution:
-1. No two processes may be simultaneously inside their critical regions.
-2. No assumptions may be made about speeds or the number of CPUs.
-3. No process running outside its critical region may block any process.
-4. No process should have to wait forever to enter its critical region.
+Peterson 解法和使用 TSL 或 XCHG 的解都是正确的，但两者都有忙等待的缺陷。
 
-### Mutual Exclusion with Busy Waiting
+考虑一台具有两个进程的计算机，H 具有高优先级，L 具有低优先级。调度规则是每当 H 处于就绪状态时就运行它。
+在某个时刻，当 L 处于其临界区中时，H 变为就绪（例如，I/O 操作完成）。
+H 现在开始忙等待，但由于 L 在 H 运行时永远不会被调度，L 永远没有机会离开其临界区，因此 H 永远循环。
+这种情况有时称为**优先级反转问题**。
 
+#### 生产者-消费者问题
 
-#### Disabling Interrupts
+让我们考虑**生产者-消费者问题**（也称为**有界缓冲区问题**）。
 
-#### Lock Variables
+### 信号量
 
-#### Strict Alternation
+信号量可以有值 0，表示没有保存唤醒，或某个正值，表示有一个或多个唤醒待处理。
 
-Continuously testing a variable until some value appears is called*busy waiting*. 
-It should usually be avoided, since it wastes CPU time. Only when there is a reasonable expectation that the wait will be short is busy waiting used. 
-A lock that uses busy waiting is called a **spin lock**.
+Dijkstra 提出了对信号量的两个操作，现在通常称为 down 和 up（分别是 sleep 和 wakeup 的泛化）。
+信号量上的 down 操作检查值是否大于 0。
+如果是，则递减该值（即使用一个存储的唤醒）并继续。
+如果值为 0，则进程进入睡眠状态，暂时不完成 down 操作。
+检查值、更改值以及可能进入睡眠，都作为单个不可分的原子操作完成。
+保证一旦信号量操作开始，没有其他进程可以访问该信号量，直到操作完成或阻塞。
+这种原子性对于解决同步问题和避免竞态条件绝对必要。
+原子操作（一组相关操作要么不间断地全部执行，要么根本不执行）在计算机科学的许多其他领域也极其重要。
 
+### 互斥量
 
-#### Peterson’s Solution
+当不需要信号量的计数能力时，有时使用信号量的简化版本，称为互斥量。
+互斥量是一个共享变量，可以处于两种状态之一：未锁定或锁定。
+因此，只需要 1 位来表示它，但实际上通常使用整数，0 表示未锁定，所有其他值表示锁定。
 
+当 *enter_region* 无法进入临界区时，它会反复测试锁（忙等待）。
+当 *mutex lock* 无法获取锁时，它调用 thread yield 将 CPU 让给另一个线程。因此没有忙等待。当线程下次运行时，它再次测试锁。
 
-#### The TSL Instruction
+#### Futex
 
-An alternative instruction to TSL is XCHG, which exchanges the contents of two locations atomically, for example, a register and a memory word.
-All Intel x86 CPUs use XCHG instruction for low-level synchronization.
+futex（快速用户空间互斥量）是 Linux 的一个特性，它实现基本的锁定（很像互斥量），但避免落入内核，除非确实必要。
 
-### Sleep and Wakeup
+futex 由两部分组成：一个内核服务和一个用户库。内核服务提供一个"等待队列"，允许多个进程等待一个锁。
+除非内核显式解除阻塞，否则它们不会运行。
+在没有竞争的情况下，futex 完全在用户空间中工作。
 
-Both Peterson’s solution and the solutions using TSL or XCHG are correct, but both have the defect of requiring busy waiting.
+如果锁被另一个线程持有，我们的线程必须等待。
+在这种情况下，futex 库不会自旋，而是使用系统调用将线程放入内核中的等待队列。
+当线程完成锁的使用后，它通过原子性的"递增和测试"释放锁，并检查结果以查看是否有任何进程仍在内核等待队列上阻塞。
+如果是，它将通知内核解除其中一个或多个进程的阻塞。
+如果没有竞争，则完全不涉及内核。
 
-Consider a computer with two processes, H, with high priority, and L, with low priority. The scheduling rules are such that H is run whenever it is in ready state. 
-At a certain moment, with L in its critical region, H becomes ready to run(e.g., an I/O operation completes). 
-H now begins busy waiting, but since L is never scheduled while H is running, L never gets the chance to leave its critical region, so H loops forever. 
-This situation is sometimes referred to as the **priority inversion problem**.
+#### Pthreads 中的互斥量
 
+Pthreads 提供了许多可用于同步线程的函数。
+基本机制使用互斥量变量（可以锁定或解锁）来保护每个临界区。
+如果多个线程在同一个互斥量上等待，当它被解锁时，只允许其中一个继续并重新锁定它。
+这些锁不是强制性的。由程序员确保线程正确使用它们。
 
-#### The Producer-Consumer Problem
+Pthreads 提供了第二种同步机制：**条件变量**。
+条件变量允许线程因某个条件未满足而阻塞。
+条件变量和互斥量总是一起使用。模式是一个线程锁定互斥量，然后当它无法获得所需时在条件变量上等待。
 
-Let us consider the **producer-consumer problem** (also known as the **bounded-buffer problem**).
+### 监视器
 
+监视器有一个重要的属性使它们对实现互斥很有用：在任何时刻，监视器中只能有一个进程处于活动状态。
 
-### Semaphores
+监视器是一种编程语言构造，因此编译器知道它们是特殊的，可以区别对待对监视器过程的调用和其他过程调用。
+通常，当进程调用监视器过程时，该过程的前几条指令会检查是否有任何其他进程当前在监视器中处于活动状态。
+如果是，调用进程将被挂起，直到其他进程离开监视器。如果没有其他进程在使用监视器，调用进程可以进入。
 
-A semaphore could have the value 0, indicating that no wakeups were saved, or some positive value if one or more wakeups were pending.
+虽然监视器提供了一种实现互斥的简单方法，但我们还需要一种方法让进程在无法继续时阻塞。
+解决方案在于引入条件变量，以及对其的两个操作，*wait* 和 *signal*。
 
-Dijkstra proposed having two operations on semaphores, now usually called down and up (generalizations of sleep and wakeup, respectively). 
-The down operation on a semaphore checks to see if the value is greater than 0. 
-If so, it decrements the value (i.e., uses up one stored wakeup) and just continues. 
-If the value is 0, the process is put to sleep without completing the down for the moment. 
-Checking the value, changing it, and possibly going to sleep, are all done as a single, indivisible atomic action. 
-It is guaranteed that once a semaphore operation has started, no other process can access the semaphore until the operation has completed or blocked. 
-This atomicity is absolutely essential to solving synchronization problems and avoiding race conditions. 
-Atomic actions, in which a group of related operations are either all performed without interruption or not performed at all, are extremely important in many other areas of computer science as well.
+条件变量不是计数器。它们不像信号量那样累积信号供以后使用。
+因此，如果条件变量在没有人等待时被 signal，该信号永远丢失。换句话说，wait 必须在 signal 之前发生。
 
+wait 和 signal 操作看起来类似于我们之前看到的具有致命竞态条件的 sleep 和 wakeup。
+嗯，它们非常相似，但有一个关键区别：sleep 和 wakeup 失败是因为当一个进程试图进入睡眠时，另一个进程正在试图唤醒它。
+使用监视器，这种情况不可能发生。
+监视器过程的自动互斥保证，例如，如果监视器过程中的生产者发现缓冲区已满，
+它将能够完成 wait 操作，而不必担心调度器可能在 wait 完成之前切换到消费者。
+在 wait 完成且生产者被标记为不可运行之前，消费者甚至根本不会被允许进入监视器。
 
-### Mutexes
+通过将关键字 [synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md) 添加到方法声明中，Java 保证一旦任何线程开始执行该方法，不允许其他线程开始执行该对象的任何其他 synchronized 方法。
+Java 中的 synchronized 方法在本质上与经典监视器不同：Java 没有内建的条件变量。相反，它提供了两个过程，wait 和 notify，
+它们等效于 sleep 和 wakeup，但当在 synchronized 方法内部使用时，它们不会受到竞态条件的影响。
 
-When the semaphore’s ability to count is not needed, a simplified version of the semaphore, called a mutex, is sometimes used.
-A mutex is a shared variable that can be in one of two states: unlocked or locked.
-Consequently, only 1 bit is required to represent it, but in practice an integer often is used, with 0 meaning unlocked and all other values meaning locked.
+### 消息传递
 
-When *enter_region* fails to enter the critical region, it keeps testing the lock repeatedly (busy waiting).
-When the *mutex lock* fails to acquire a lock, it calls thread yield to give up the CPU to another thread. Consequently there is no busy waiting. When the thread runs the next time, it tests the lock again.
+消息传递使用两个原语，*send* 和 *receive*，与信号量类似而不同于监视器，它们是系统调用而非语言构造。
 
-#### Futexs
+消息传递系统有许多信号量或监视器不会出现的问题和设计问题，特别是当通信进程位于通过网络连接的不同机器上时。
 
-A futex(fast user space mutex) is a feature of Linux that implements basic locking (much like a mutex) but avoids dropping into the kernel unless it really has to.
+例如，消息可能被网络丢失。
+接收者必须能够区分新消息和旧消息的重传。通常，此问题通过在每条原始消息中放入连续的序列号来解决。
 
-A futex consists of two parts: a kernel service and a user library. The kernel service provides a ‘‘wait queue’’ that allows multiple processes to wait on a lock. 
-They will not run, unless the kernel explicitly unblocks them.
-In the absence of contention, the futex works completely in user space.
+认证也是消息系统中的一个问题。
 
-If the lock is held by another thread, our thread has to wait. 
-In that case, the futex library does not spin, but uses a system call to put the thread on the wait queue in the kernel. 
-When a thread is done with the lock, it releases the lock with an atomic ‘‘increment and test’’ and checks the result to see if any processes are still blocked on the kernel wait queue. 
-If so, it will let the kernel know that it may unblock one or more of these processes. 
-If there is no contention, the kernel is not involved at all.
+最后是性能问题。
 
-#### Mutexes in Pthreads
+### 屏障
 
-Pthreads provides a number of functions that can be used to synchronize threads. 
-The basic mechanism uses a mutex variable, which can be locked or unlocked, to guard each critical region.
-If multiple threads are waiting on the same mutex, when it is unlocked, only one of them is allowed to continue and relock it. 
-These locks are not mandatory. It is up to the programmer to make sure threads use them correctly.
+我们的最后一个同步机制适用于进程组，而不是双进程的生产者-消费者类型情况。
+一些应用程序分为多个阶段，规则是直到所有进程都准备好进入下一阶段，任何进程才能进入下一阶段。
+这种行为可以通过在每个阶段结束时放置一个**屏障**来实现。
 
-Pthreads offers a second synchronization mechanism: **condition variables**.
-Condition variables allow threads to block due to some condition not being met.
-Condition variables and mutexes are always used together. The pattern is for one thread to lock a mutex, then wait on a conditional variable when it cannot get what it needs.
+### 避免锁
 
-### Monitors
+RCU（读-复制-更新）将更新的移除和回收阶段解耦。
 
-Monitors have an important property that makes them useful for achieving mutual exclusion: only one process can be active in a monitor at any instant.
+### IPC 问题
 
-Monitors are a programming-language construct, so the compiler knows they are special and can handle calls to monitor procedures differently from other procedure calls.
-Typically, when a process calls a monitor procedure, the first few instructions of the procedure will check to see if any other process is currently active within the monitor. 
-If so, the calling process will be suspended until the other process has left the monitor. If no other process is using the monitor, the calling process may enter.
+#### 哲学家就餐问题
 
-Although monitors provide an easy way to achieve mutual exclusion, we also need a way for processes to block when they cannot proceed.
-The solution lies in the introduction of condition variables, along with two operations on them, *wait* and *signal*.
+死锁
 
-Condition variables are not counters. They do not accumulate signals for later use the way semaphores do. 
-Thus, if a condition variable is signaled with no one waiting on it, the signal is lost forever. In other words, the wait must come before the signal.
+所有程序持续运行但无法取得任何进展的情况，称为饥饿。
 
-The operations wait and signal look similar to sleep and wakeup, which we saw earlier had fatal race conditions. 
-Well, they are very similar, but with one crucial difference: sleep and wakeup failed because while one process was trying to go to sleep, the other one was trying to wake it up. 
-With monitors, that cannot happen. 
-The automatic mutual exclusion on monitor procedures guarantees that if, say, the producer inside a monitor procedure discovers that the buffer is full, 
-it will be able to complete the wait operation without having to worry about the possibility that the scheduler may switch to the consumer just before the wait completes. 
-The consumer will not even be let into the monitor at all until the wait is finished and the producer has been marked as no longer runnable.
+#### 读者-写者问题
 
+## 链接
 
-By adding the keyword [synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md) to a method declaration, Java guarantees that once any thread has started executing that method, no other thread will be allowed to start executing any other synchronized method of that object.
-Synchronized methods in Java differ from classical monitors in an essential way: Java does not have condition variables built in. Instead, it offers two procedures, wait and notify, 
-which are the equivalent of sleep and wakeup except that when they are used inside synchronized methods, they are not subject to race conditions.
-
-
-### Message Passing
-
-Message passing uses two primitives, *send* and *receive*, which, like semaphores and unlike monitors, are system calls rather than language constructs.
-
-
-Message-passing systems have many problems and design issues that do not arise with semaphores or with monitors, especially if the communicating processes are on different machines connected by a network. 
-
-For example, messages can be lost by the network.
-It is essential that the receiver be able to distinguish a new message from the retransmission of an old one. Usually, this problem is solved by putting consecutive sequence numbers in each original message.
-
-Authentication is also an issue in message systems.
-
-Last of these is performance.
-
-### Barriers
-
-Our last synchronization mechanism is intended for groups of processes rather than two-process producer-consumer type situations. 
-Some applications are divided into phases and have the rule that no process may proceed into the next phase until all processes are ready to proceed to the next phase. 
-This behavior may be achieved by placing a **barrier** at the end of each phase.
-
-
-### Avoiding Locks
-
-RCU (Read-Copy-Update) decouples the removal and reclamation phases of the update.
-
-
-### IPC Problems
-
-#### The Dining Philosophers Problem
-
-DeadLock
-
-All the programs continue to run indefinitely but fail to make any progress, is called starvation.
-
-
-#### The Readers and Writers Problem
-
-
-
-
-
-## Links
-
-- [Operating Systems](/docs/CS/OS/OS.md)
-- [Linux Process](/docs/CS/OS/Linux/proc/process.md)
+- [操作系统](/docs/CS/OS/OS.md)
+- [Linux 进程](/docs/CS/OS/Linux/proc/process.md)

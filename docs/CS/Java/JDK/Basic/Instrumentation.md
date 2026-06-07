@@ -1,16 +1,13 @@
 ## Introduction
 
-This class provides services needed to instrument Java programming language code. Instrumentation is the addition of byte-codes to methods for the purpose of gathering data to be utilized by tools. Since the changes are purely additive, these tools do not modify application state or behavior. Examples of such benign tools include monitoring agents, profilers, coverage analyzers, and event loggers.
-There are two ways to obtain an instance of the Instrumentation interface:
-When a JVM is launched in a way that indicates an agent class. In that case an Instrumentation instance is passed to the premain method of the agent class.
-When a JVM provides a mechanism to start agents sometime after the JVM is launched. In that case an Instrumentation instance is passed to the agentmain method of the agent code.
-These mechanisms are described in the package specification.
-Once an agent acquires an Instrumentation instance, the agent may call methods on the instance at any time.
+此类提供检测 Java 编程语言代码所需的服务。Instrumentation 是为了收集供工具使用的数据而向方法添加字节码。由于这些更改纯粹是添加性的，这些工具不会修改应用状态或行为。此类良性工具的示例包括监控代理、性能分析器、覆盖分析器和事件记录器。
+有两种方法可以获得 Instrumentation 接口的实例：
+当 JVM 以指示代理类的方式启动时。在这种情况下，Instrumentation 实例被传递给代理类的 premain 方法。
+当 JVM 提供一种在 JVM 启动后的某个时间启动代理的机制时。在这种情况下，Instrumentation 实例被传递给代理代码的 agentmain 方法。
+这些机制在包规范中有描述。
+一旦代理获得 Instrumentation 实例，代理可以随时调用该实例上的方法。
 
-
-
-
-Based on JVMTI redefineClasses -> redefine_single_class
+基于 JVMTI redefineClasses -> redefine_single_class
 
 ## Links
 

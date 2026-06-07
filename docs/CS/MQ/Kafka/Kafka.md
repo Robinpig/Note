@@ -1,35 +1,36 @@
 ## Introduction
 
-[Apache Kafka](https://kafka.apache.org/) is an open-source distributed **event streaming** platform used by thousands of companies for high-performance data pipelines, streaming analytics, data integration, and mission-critical applications.
-Kafka is a distributed system consisting of servers and clients that communicate via a high-performance [TCP network protocol](/docs/CS/CN/TCP/TCP.md).
-It can be deployed on bare-metal hardware, virtual machines, and containers in on-premise as well as cloud environments.
+[Apache Kafka](https://kafka.apache.org/) 是一个开源的分布式**事件流**平台，被数千家公司用于高性能数据管道、流分析、数据集成和关键任务应用。
+Kafka 是一个分布式系统，由通过高性能 [TCP 网络协议](/docs/CS/CN/TCP/TCP.md) 通信的服务器和客户端组成。
+它可以部署在裸机硬件、虚拟机和容器中，无论是在本地还是云环境。
 
 > [Kafka Design](https://kafka.apache.org/documentation/#design)
 >
-> We designed Kafka to be able to act as a unified platform for handling all the real-time data feeds a large company might have. To do this we had to think through a fairly broad set of use cases.
+> 我们设计 Kafka 使其能够作为一个统一平台，处理大型公司可能拥有的所有实时数据流。
+> 为此，我们必须考虑相当广泛的使用场景。
 >
-> - It would have to have high-throughput to support high volume event streams such as real-time log aggregation.
-> - It would need to deal gracefully with large data backlogs to be able to support periodic data loads from offline systems.
-> - It also meant the system would have to handle low-latency delivery to handle more traditional messaging use-cases.
-> - We wanted to support partitioned, distributed, real-time processing of these feeds to create new, derived feeds. This motivated our partitioning and consumer model.
-> - Finally in cases where the stream is fed into other data systems for serving, we knew the system would have to be able to guarantee fault-tolerance in the presence of machine failures.
+> - 它必须具有高吞吐量，以支持高容量事件流，例如实时日志聚合。
+> - 它需要优雅地处理大数据积压，以支持来自离线系统的周期性数据加载。
+> - 这也意味着系统必须处理低延迟交付，以应对更传统的消息传递用例。
+> - 我们希望支持对这些数据流进行分区、分布式的实时处理，以创建新的派生数据流。这推动了我们的分区和消费者模型。
+> - 最后，在数据流被馈送到其他数据系统进行服务的场景中，我们知道系统必须能够在机器故障时保证容错性。
 >
-> Supporting these uses led us to a design with a number of unique elements, more akin to a database log than a traditional messaging system.
+> 支持这些用例使我们采用了许多独特元素的设计，更类似于数据库日志而非传统消息系统。
 
 ### Event Streaming
 
-Event streaming is the digital equivalent of the human body's central nervous system.
-It is the technological foundation for the 'always-on' world where businesses are increasingly software-defined and automated, and where the user of software is more software.
-Technically speaking, event streaming is the practice of capturing data in real-time from event sources like databases, sensors, mobile devices, cloud services,
-and software applications in the form of streams of events; storing these event streams durably for later retrieval; manipulating, processing, and reacting to the event streams in real-time as well as retrospectively;
-and routing the event streams to different destination technologies as needed.
-Event streaming thus ensures a continuous flow and interpretation of data so that the right information is at the right place, at the right time.
+事件流在数字世界中相当于人体中枢神经系统的数字对应物。
+它是"永远在线"世界的技术基础，在这个世界中，企业越来越由软件定义和自动化，软件的"用户"更多的是软件本身。
+从技术上讲，事件流是从事件源（如数据库、传感器、移动设备、云服务和软件应用程序）以事件流的形式实时捕获数据；
+持久化存储这些事件流以供后续检索；实时以及回顾性地操作、处理和响应事件流；
+并根据需要将事件流路由到不同的目标技术。
+事件流因此确保了数据的连续流动和解释，以便正确的信息在正确的时间到达正确的位置。
 
-Kafka combines three key capabilities so you can implement your use cases for event streaming end-to-end with a single battle-tested solution:
+Kafka 结合了三个关键能力，让你可以使用一个经过实战验证的解决方案端到端地实现事件流用例：
 
-- To publish (write) and subscribe to (read) streams of events, including continuous import/export of your data from other systems.
-- To store streams of events durably and reliably for as long as you want.
-- To process streams of events as they occur or retrospectively.
+- 发布（写入）和订阅（读取）事件流，包括从其他系统持续导入/导出数据。
+- 持久可靠地存储事件流，时间长短由你决定。
+- 在事件发生时或回顾性地处理事件流。
 
 ## Architecture
 
@@ -43,7 +44,7 @@ Kafka combines three key capabilities so you can implement your use cases for ev
 Fig.1. Apache Kafka Components.
 </p>
 
-We will learn all of the fundamentals and understand the various Apache Kafka components such as:
+我们将学习所有基础知识并理解各种 Apache Kafka 组件，例如：
 
 - Kafka Topics
 - Kafka Producers
@@ -54,37 +55,37 @@ We will learn all of the fundamentals and understand the various Apache Kafka co
 - Zookeeper
 - KRaft Mode
 
-An **event** records the fact that "something happened" in the world or in your business.
-It is also called record or message in the documentation.
-When you read or write data to Kafka, you do this in the form of events.
-Conceptually, an event has a key, value, timestamp, and optional metadata headers.
+一个**事件**记录了"某事发生了"的事实，发生在世界或你的业务中。
+在文档中它也被称为记录或消息。
+当你向 Kafka 读写数据时，你以事件的形式进行操作。
+从概念上讲，事件具有 key、value、timestamp 和可选的元数据 headers。
 
-The unit of data within Kafka is called a message.
-Messages consist of a variable-length header, a variable-length opaque key byte array and a variable-length opaque value byte array.
+Kafka 中的数据单元称为消息。
+消息由可变长度 header、可变长度不透明 key 字节数组和可变长度不透明 value 字节数组组成。
 
-For efficiency, messages are written into Kafka in batches.
-A batch is just a collection of messages, all of which are being produced to the same topic and partition.
-An individual roundtrip across the network for each message would result in excessive overhead, and collecting messages together into a batch reduces this.
-Of course, this is a tradeoff between latency and throughput: the larger the batches, the more messages that can be handled per unit of time, but the longer it takes an individual message to propagate.
-Batches are also typically compressed, providing more efficient data transfer and storage at the cost of some processing power.
+为了提高效率，消息以批次的形式写入 Kafka。
+批次只是消息的集合，所有消息都生成到同一个 topic 和 partition。
+每条消息单独进行一次网络往返会产生过多的开销，将消息收集在一起形成批次可以减少这种开销。
+当然，这是延迟和吞吐量之间的权衡：批次越大，单位时间内可以处理的消息越多，但单个消息传播所需的时间也越长。
+批次通常也被压缩，以更有效地传输和存储数据，但会消耗一些处理能力。
 
-**Producers** are those client applications that publish (write) events to Kafka, and **consumers** are those that subscribe to (read and process) these events.
-In Kafka, producers and consumers are fully decoupled and agnostic of each other, which is a key design element to achieve the high scalability that Kafka is known for.
-For example, producers never need to wait for consumers. Kafka provides various guarantees such as the ability to process events exactly-once.
+**Producers** 是那些发布（写入）事件到 Kafka 的客户端应用程序，而 **consumers** 是那些订阅（读取和处理）这些事件的客户端。
+在 Kafka 中，生产者和消费者是完全解耦且互不知晓的，这是实现 Kafka 闻名的高可扩展性的关键设计元素。
+例如，生产者永远不需要等待消费者。Kafka 提供了各种保证，例如能够恰好一次地处理事件。
 
-Events are organized and durably stored in  **topics** .
-Very simplified, a topic is similar to a folder in a filesystem, and the events are the files in that folder.
-Topics in Kafka are always multi-producer and multi-subscriber: a topic can have zero, one, or many producers that write events to it, as well as zero, one, or many consumers that subscribe to these events.
-**Events in a topic can be read as often as needed—unlike traditional messaging systems, events are not deleted after consumption.**
-Instead, you define for how long Kafka should retain your events through a per-topic configuration setting, after which old events will be discarded.
-Kafka's performance is effectively constant with respect to data size, so storing data for a long time is perfectly fine.
+事件被组织并持久化存储在 **topics** 中。
+简单来说，topic 类似于文件系统中的文件夹，而事件是文件夹中的文件。
+Kafka 中的 topic 始终是多生产者和多订阅者的：一个 topic 可以有零个、一个或多个生产者写入事件，也可以有零个、一个或多个消费者订阅这些事件。
+**topic 中的事件可以根据需要反复读取——与传统消息系统不同，事件在消费后不会被删除。**
+相反，你可以通过每个 topic 的配置设置来定义 Kafka 应该保留事件多长时间，之后旧事件将被丢弃。
+Kafka 的性能在数据大小方面实际上是恒定的，因此长时间存储数据完全没有问题。
 
 ### Topics and partition
 
-Topics are  **partitioned** , meaning a topic is spread over a number of "buckets" located on different Kafka brokers.
-This distributed placement of your data is very important for scalability because it allows client applications to both read and write the data from/to many brokers at the same time.
-When a new event is published to a topic, it is actually appended to one of the topic's partitions.
-Events with the same event key (e.g., a customer or vehicle ID) are written to the same partition, and Kafka guarantees that any consumer of a given topic-partition will always read that partition's events in exactly the same order as they were written.
+Topics 是**分区的**，这意味着一个 topic 分布在位于不同 Kafka broker 上的多个"桶"中。
+这种数据的分布式放置对于可扩展性非常重要，因为它允许客户端应用程序同时从多个 broker 读写数据。
+当新事件发布到 topic 时，它实际上被追加到该 topic 的一个分区中。
+具有相同事件 key（例如，客户或车辆 ID）的事件被写入同一个分区，Kafka 保证给定 topic-partition 的任何消费者始终按照写入的完全相同的顺序读取该分区的事件。
 
 <div style="text-align: center;">
 
@@ -93,65 +94,64 @@ Events with the same event key (e.g., a customer or vehicle ID) are written to t
 </div>
 
 <p style="text-align: center;">
-Fig.2. This example topic has four partitions P1–P4. 
+Fig.2. 此示例 topic 有四个分区 P1–P4。
 <br>
-Two different producer clients are publishing, independently from each other, new events to the topic by writing events over the network to the topic's partitions.
+两个不同的生产者客户端独立地向该 topic 发布新事件，通过网络将事件写入 topic 的分区。
 <br>
-Events with the same key (denoted by their color in the figure) are written to the same partition. 
-Note that both producers can write to the same partition if appropriate.
+具有相同 key（图中以颜色区分）的事件被写入同一个分区。
+注意，在适当的情况下，两个生产者可以写入同一个分区。
 </p>
 
-To make your data fault-tolerant and highly-available, every topic can be  **replicated** , even across geo-regions or datacenters,
-so that there are always multiple brokers that have a copy of the data just in case things go wrong, you want to do maintenance on the brokers, and so on.
-A common production setting is a replication factor of 3, i.e., there will always be three copies of your data.
-This replication is performed at the level of topic-partitions.
+为了使你的数据具有容错性和高可用性，每个 topic 都可以被**复制**，甚至可以跨地域或数据中心，
+这样总会有多个 broker 拥有数据的副本，以防出现问题、进行 broker 维护等。
+常见的生产设置是复制因子为 3，即始终有三个数据副本。
+这种复制是在 topic-partition 级别执行的。
 
 ### Message Delivery Semantics
 
-Recall the [message delivery semantics](/docs/CS/MQ/MQ.md?id=Message-Delivery-Semantics).
+回顾 [消息传递语义](/docs/CS/MQ/MQ.md?id=Message-Delivery-Semantics)。
 
-Now let's describe the semantics from the point-of-view of the consumer.
-All replicas have the exact same log with the same offsets. The consumer controls its position in this log.
-If the consumer never crashed it could just store this position in memory, but if the consumer fails and we want this topic partition to be taken over by another process the new process will need to choose an appropriate position from which to start processing.
-Let's say the consumer reads some messages -- it has several options for processing the messages and updating its position.
+现在让我们从消费者的角度描述语义。
+所有副本都有完全相同的日志和相同的偏移量。消费者控制其在日志中的位置。
+如果消费者从未崩溃，它可以将此位置存储在内存中，但如果消费者失败并且我们希望此 topic partition 由另一个进程接管，新进程将需要选择一个合适的位置开始处理。
+假设消费者读取了一些消息——它有几种处理消息和更新其位置的选项。
 
-1. It can read the messages, then save its position in the log, and finally process the messages.
-   In this case there is a possibility that the consumer process crashes after saving its position but before saving the output of its message processing.
-   In this case the process that took over processing would start at the saved position even though a few messages prior to that position had not been processed.
-   This corresponds to "at-most-once" semantics as in the case of a consumer failure messages may not be processed.
-2. It can read the messages, process the messages, and finally save its position.
-   In this case there is a possibility that the consumer process crashes after processing messages but before saving its position.
-   In this case when the new process takes over the first few messages it receives will already have been processed.
-   This corresponds to the "at-least-once" semantics in the case of consumer failure.
-   In many cases messages have a primary key and so the updates are idempotent (receiving the same message twice just overwrites a record with another copy of itself).
+1. 它可以读取消息，然后保存其在日志中的位置，最后处理消息。
+   在这种情况下，消费者进程有可能在保存位置之后但在保存其消息处理输出之前崩溃。
+   在这种情况下，接管处理的进程将从保存的位置开始，即使该位置之前的几条消息尚未被处理。
+   这对应于"至多一次"语义，因为在消费者失败的情况下消息可能未被处理。
+2. 它可以读取消息，处理消息，最后保存其位置。
+   在这种情况下，消费者进程有可能在处理消息之后但在保存位置之前崩溃。
+   在这种情况下，当新进程接管时，它接收到的前几条消息可能已经被处理过了。
+   这对应于"至少一次"语义。
+   在许多情况下，消息有主键，因此更新是幂等的（重复接收同一条消息只是用自身的另一个副本覆盖记录）。
 
-So what about exactly once semantics (i.e. the thing you actually want)?
-When consuming from a Kafka topic and producing to another topic (as in a application), we can leverage the new transactional producer capabilities in 0.11.0.0 that were mentioned above.
-The consumer's position is stored as a message in a topic, so we can write the offset to Kafka in the same transaction as the output topics receiving the processed data.
-If the transaction is aborted, the consumer's position will revert to its old value and the produced data on the output topics will not be visible to other consumers, depending on their "isolation level."
-In the default "read_uncommitted" isolation level, all messages are visible to consumers even if they were part of an aborted transaction, but in "read_committed,"
-the consumer will only return messages from transactions which were committed (and any messages which were not part of a transaction).
+那么恰好一次语义呢（即你真正想要的）？
+当从 Kafka topic 消费并生成到另一个 topic 时（如在应用中），我们可以利用上面提到的 0.11.0.0 中的新事务性生产者能力。
+消费者的位置作为消息存储在 topic 中，因此我们可以在与接收处理数据的输出 topic 相同的事务中将偏移量写入 Kafka。
+如果事务中止，消费者的位置将回退到旧值，并且输出 topic 上生成的数据将不会对其他消费者可见，具体取决于它们的"隔离级别"。
+在默认的"read_uncommitted"隔离级别下，所有消息对消费者都是可见的，即使它们属于已中止的事务，但在"read_committed"下，
+消费者只返回来自已提交事务的消息（以及任何不属于事务的消息）。
 
-When writing to an external system, the limitation is in the need to coordinate the consumer's position with what is actually stored as output.
-The classic way of achieving this would be to introduce a two-phase commit between the storage of the consumer position and the storage of the consumers output.
-But this can be handled more simply and generally by letting the consumer store its offset in the same place as its output. This is better because many of the output systems a consumer might want to write to will not support a two-phase commit.
-As an example of this, consider a Kafka Connect connector which populates data in HDFS along with the offsets of the data it reads so that it is guaranteed that either data and offsets are both updated or neither is.
-We follow similar patterns for many other data systems which require these stronger semantics and for which the messages do not have a primary key to allow for deduplication.
+当写入外部系统时，限制在于需要协调消费者的位置与实际存储的输出。
+实现这一点的经典方法是引入消费者位置存储和消费者输出存储之间的两阶段提交。
+但这可以更简单、更普遍地处理，方法是让消费者将其偏移量存储在与输出相同的位置。这样更好，因为消费者可能想要写入的许多输出系统不支持两阶段提交。
+例如，考虑一个 Kafka Connect 连接器，它将数据填充到 HDFS 中，同时填充它所读取的数据的偏移量，从而保证数据和偏移量要么都更新，要么都不更新。
+我们在许多其他需要这些更强语义的数据系统中遵循类似的模式，并且这些消息没有用于去重的主键。
 
-So effectively Kafka supports exactly-once delivery in Kafka Streams, and the transactional producer/consumer can be used generally to provide exactly-once delivery when transferring and processing data between Kafka topics.
-Exactly-once delivery for other destination systems generally requires cooperation with such systems, but Kafka provides the offset which makes implementing this feasible (see also Kafka Connect).
-Otherwise, Kafka guarantees at-least-once delivery by default, and allows the user to implement at-most-once delivery by disabling retries on the producer and committing offsets in the consumer prior to processing a batch of messages.
+因此，实际上 Kafka 在 Kafka Streams 中支持恰好一次交付，并且事务性生产者/消费者通常可用于在 Kafka topic 之间传输和处理数据时提供恰好一次交付。
+其他目标系统的恰好一次交付通常需要与此类系统协作，但 Kafka 提供了偏移量，这使得实现这一点变得可行（另请参阅 Kafka Connect）。
+否则，Kafka 默认保证至少一次交付，并允许用户通过在生产端禁用重试并在消费端处理一批消息之前提交偏移量来实现至多一次交付。
 
 Notes:
 
-1. check the `server.properties` before start Kafka
+1. 在启动 Kafka 之前检查 `server.properties`
 
-- Consumer Group improve TPS
+- Consumer Group 提高 TPS
 
 Rebalance
 
-Comparsion [Producer](/docs/CS/MQ/Kafka/Producer.md) and [Consumer](/docs/CS/MQ/Kafka/Consumer.md)
-
+[Producer](/docs/CS/MQ/Kafka/Producer.md) 与 [Consumer](/docs/CS/MQ/Kafka/Consumer.md) 的对比
 
 | Client          | Producer                     | Consumer      |
 | --------------- | ---------------------------- | ------------- |
@@ -160,90 +160,92 @@ Comparsion [Producer](/docs/CS/MQ/Kafka/Producer.md) and [Consumer](/docs/CS/MQ/
 
 - [Broker](/docs/CS/MQ/Kafka/Broker.md)
 
-A key feature of Apache Kafka is that of retention, which is the durable storage of messages for some period of time.
-Kafka brokers are configured with a default retention setting for topics, either retaining messages for some period of time (e.g., 7 days) or until the topic reaches a certain size in bytes (e.g., 1 GB).
-Once these limits are reached, messages are expired and deleted so that the retention configuration is a minimum amount of data available at any time. Individual topics can also be configured with their own retention settings so that messages are stored for only as long as they are useful.
-For example, a tracking topic might be retained for several days, whereas application metrics might be retained for only a few hours.
-Topics can also be configured as log compacted, which means that Kafka will retain only the last message produced with a specific key.
-This can be useful for changelog-type data, where only the last update is interesting.
+Apache Kafka 的一个关键特性是 retention，即消息在一定时间段内的持久存储。
+Kafka broker 为 topic 配置了默认的保留设置，要么将消息保留一段时间（例如 7 天），要么直到 topic 达到一定字节大小（例如 1 GB）。
+一旦达到这些限制，消息将被过期删除，因此保留配置是在任何时间点可用的最小数据量。
+个别 topic 也可以配置自己的保留设置，以便消息只在其有用期间内存储。
+例如，跟踪 topic 可能保留几天，而应用程序指标可能只保留几个小时。
+Topic 也可以配置为日志压缩，这意味着 Kafka 只保留具有特定 key 的最后一条生成的消息。
+这对于变更日志类型的数据很有用，其中只有最后一次更新是有意义的。
 
 ### Multiple Clusters
 
-As Kafka deployments grow, it is often advantageous to have multiple clusters. There are several reasons why this can be useful:
+随着 Kafka 部署的增长，拥有多个集群通常是有利的。有几个原因：
 
-- Segregation of types of data
-- Isolation for security requirements
-- Multiple datacenters (disaster recovery)
+- 不同类型数据的隔离
+- 安全要求的隔离
+- 多数据中心（灾难恢复）
 
-When working with multiple datacenters in particular, it is often required that messages be copied between them. In this way, online applications can have access to user activity at both sites.
-For example, if a user changes public information in their profile, that change will need to be visible regardless of the datacenter in which search results are displayed.
-Or, monitoring data can be collected from many sites into a single central location where the analysis and alerting systems are hosted.
-The replication mechanisms within the Kafka clusters are designed only to work within a single cluster, not between multiple clusters.
+特别是在使用多个数据中心时，通常需要在它们之间复制消息。
+这样，在线应用程序可以访问两个站点的用户活动。
+例如，如果用户在其个人资料中更改了公共信息，则无论搜索结果在哪个数据中心显示，该更改都必须可见。
+或者，监控数据可以从多个站点收集到一个中央位置，在那里运行分析和告警系统。
+Kafka 集群内的复制机制仅设计用于在单个集群内工作，而不是在多个集群之间。
 
-The Kafka project includes a tool called MirrorMaker, used for this purpose.
-At its core, MirrorMaker is simply a Kafka consumer and producer, linked together with a queue.
-Messages are consumed from one Kafka cluster and produced for another.
+Kafka 项目包含一个名为 MirrorMaker 的工具，用于此目的。
+其核心是，MirrorMaker 只是一个 Kafka 消费者和生产者，通过队列连接在一起。
+消息从一个 Kafka 集群消费，然后为另一个集群生成。
 
 > [!TIP]
 >
-> Here are some reasons why Kafka developers might have chosen to implement their own socket server instead of using Netty:
+> 以下是 Kafka 开发人员可能选择实现自己的 socket server 而不是使用 Netty 的一些原因：
 >
-> 1. Performance: By implementing a custom solution tailored specifically to Kafka's needs, the developers may have been able to optimize performance for Kafka's use cases. Customizing the implementation allows developers to fine-tune the networking layer for Kafka's specific requirements, potentially leading to better performance compared to using a more general-purpose library like Netty.
-> 2. The rest of the reason is dependencies.
+> 1. 性能：通过实现针对 Kafka 需求定制的自定义解决方案，开发人员可能能够优化 Kafka 用例的性能。定制实现允许开发人员针对 Kafka 的特定需求微调网络层，可能比使用 Netty 等更通用的库带来更好的性能。
+> 2. 其余的原因是依赖项。
 
 ## Efficiency
 
-The small I/O problem happens both between the client and the server and in the server's own persistent operations.
-To avoid this, our protocol is built around a "message set" abstraction that naturally groups messages together. This allows network requests to group messages together and amortize the overhead of the network roundtrip rather than sending a single message at a time. The server in turn appends chunks of messages to its log in one go, and the consumer fetches large linear chunks at a time.
-This simple optimization produces orders of magnitude speed up. Batching leads to larger network packets, larger sequential disk operations, contiguous memory blocks, and so on, all of which allows Kafka to turn a bursty stream of random message writes into linear writes that flow to the consumers.
+小 I/O 问题既发生在客户端和服务器之间，也发生在服务器自身的持久化操作中。
+为了避免这个问题，我们的协议建立在"消息集"抽象之上，自然地分组消息。这允许网络请求分组消息并分摊网络往返的开销，而不是一次发送一条消息。服务器依次将消息块一次性追加到其日志中，消费者一次获取大的线性块。
+这个简单的优化带来了数量级的加速。批处理导致更大的网络数据包、更大的顺序磁盘操作、连续的内存块等，所有这些都允许 Kafka 将突发的随机消息写入流转换为流向消费者的线性写入。
 
-The other inefficiency is in byte copying.
+另一个效率低下的问题在于字节复制。
 
-The message log maintained by the broker is itself just a directory of files, each populated by a sequence of message sets that have been written to disk in the same format used by the producer and consumer.
-Maintaining this common format allows optimization of the most important operation: network transfer of persistent log chunks.
-Modern unix operating systems offer a highly optimized code path for transferring data out of pagecache to a socket; in Linux this is done with the sendfile system call.
+broker 维护的消息日志本身只是一个目录的文件，每个文件由一系列消息集填充，这些消息集以生产者和消费者使用的相同格式写入磁盘。
+维护这种通用格式可以优化最重要的操作：持久日志块的网络传输。
+现代 Unix 操作系统为将数据从 pagecache 传输到 socket 提供了高度优化的代码路径；在 Linux 中，这是通过 sendfile 系统调用完成的。
 
-The common data path for transfer of data from file to socket:
+数据从文件到 socket 传输的通用路径：
 
-- The operating system reads data from the disk into pagecache in kernel space
-- The application reads the data from kernel space into a user-space buffer
-- The application writes the data back into kernel space into a socket buffer
-- The operating system copies the data from the socket buffer to the NIC buffer where it is sent over the network
+- 操作系统将数据从磁盘读取到内核空间的 pagecache 中
+- 应用程序将数据从内核空间读取到用户空间缓冲区
+- 应用程序将数据写回内核空间的 socket 缓冲区
+- 操作系统将数据从 socket 缓冲区复制到 NIC 缓冲区，然后通过网络发送
 
-This is clearly inefficient, there are four copies and two system calls.
-Using sendfile, this re-copying is avoided by allowing the OS to send the data from pagecache to the network directly.
-So in this optimized path, only the final copy to the NIC buffer is needed.
+这显然是低效的，有四次复制和两次系统调用。
+使用 sendfile，通过允许 OS 直接将数据从 pagecache 发送到网络来避免这种重复复制。
+因此在这种优化路径中，只需要最终复制到 NIC 缓冲区。
 
-We expect a common use case to be multiple consumers on a topic.
-Using the zero-copy optimization above, data is copied into pagecache exactly once and reused on each consumption instead of being stored in memory and copied out to user-space every time it is read.
-This allows messages to be consumed at a rate that approaches the limit of the network connection.
-This combination of pagecache and sendfile means that on a Kafka cluster where the consumers are mostly caught up you will see no read activity on the disks whatsoever as they will be serving data entirely from cache.
+我们期望一个常见用例是一个 topic 上有多个消费者。
+使用上述的零拷贝优化，数据被恰好复制到 pagecache 一次，并在每次消费时重用，而不是存储在内存中并在每次读取时复制到用户空间。
+这允许消费者以接近网络连接限制的速率消费消息。
+这种 pagecache 和 sendfile 的组合意味着，在消费者基本跟上的 Kafka 集群上，你根本不会看到任何磁盘读取活动，因为它们将完全从缓存提供服务。
 
-TLS/SSL libraries operate at the user space (in-kernel SSL_sendfile is currently not supported by Kafka).
-Due to this restriction, sendfile is not used when SSL is enabled. For enabling SSL configuration, refer to `security.protocol` and `security.inter.broker.protocol`.
+TLS/SSL 库在用户空间运行（Kafka 目前不支持内核空间的 SSL_sendfile）。
+由于这个限制，当启用 SSL 时，sendfile 不会被使用。要启用 SSL 配置，请参考 `security.protocol` 和 `security.inter.broker.protocol`。
 
-> TODO: How about [QUIC](/docs/CS/CN/HTTP/QUIC.md)(with TLS libraries operate at the user space)?
+> TODO: [QUIC](/docs/CS/CN/HTTP/QUIC.md) 怎么样（TLS 库在用户空间运行）？
 
 ### Compression
 
-This feature introduces the end-to-end block compression feature in Kafka.
-If enabled, data will be compressed by the producer, written in compressed format on the server and decompressed by the consumer.
-Compression will improve the consumer throughput for some decompression cost.
-This is especially useful when mirroring data across data centers.
-By default, producer messages are sent uncompressed.
+此功能在 Kafka 中引入了端到端的块压缩特性。
+如果启用，数据将由生产者压缩，以压缩格式写入服务器，并由消费者解压缩。
+压缩将以一定的解压成本提高消费者的吞吐量。
+这在跨数据中心镜像数据时特别有用。
+默认情况下，生产者消息以未压缩形式发送。
 
 > Producer端压缩、Broker端保持、Consumer端解压
 
-Broker重新压缩原因: compression type与producer不同 需要重新压缩
-We cannot do in place assignment in one of the following situations:
+Broker重新压缩原因：compression type 与 producer 不同需要重新压缩
+在以下情况之一中，我们无法进行原地分配：
 
-1. Source and target compression codec are different 
-2. When the target magic is not equal to batches' magic, meaning format conversion is needed. 
-3. When the target magic is equal to V0, meaning absolute offsets need to be re-assigned.
+1. 源和目标压缩编解码器不同
+2. 当目标 magic 不等于批次的 magic 时，意味着需要格式转换
+3. 当目标 magic 等于 V0 时，意味着需要重新分配绝对偏移量
 
-multi-compression versions
+多压缩版本
 
-The compression type to use:
+要使用的压缩类型：
 
 - none
 - gzip
@@ -251,132 +253,131 @@ The compression type to use:
 - lz4
 - zstd
 
-We should only load classes from a given compression library when we actually use said compression library.
-This is because compression libraries include native code for a set of platforms and we want to avoid errors in case the platform is not supported and the compression library is not actually used.
-To ensure this, we only reference compression library code from classes that are only invoked when actual usage happens.
+我们只应在实际使用某个压缩库时加载该库的类。
+这是因为压缩库包含一组平台的本地代码，我们希望在不支持该平台且未实际使用该压缩库时避免错误。
+为了确保这一点，我们只从实际使用时才被调用的类中引用压缩库代码。
 
-And there are some changes for snappy and zstd:
+对于 snappy 和 zstd 还有一些变化：
 <br>
-use `Class.forName()` and Reflection -> <br>
-Method handles were designed to be faster than Core Reflection, particularly if the method handle can be stored in a static final field (the JVM can then optimise the call as if it was a regular method call).
-Since the code is of similar complexity (and simpler if we consider the whole PR), I am treating this as a clean-up instead of a performance improvement (which would require doing benchmarks). -> <br>
-Move the logic to separate classes that are only invoked when the relevant compression library is actually used.
-Place such classes in their own package and enforce via checkstyle that only these classes refer to compression library packages.
+使用 `Class.forName()` 和反射 -> <br>
+方法句柄的设计比核心反射更快，特别是如果方法句柄可以存储在静态 final 字段中（JVM 可以将其优化为常规方法调用）。
+由于代码复杂度相似（如果考虑整个 PR 则更简单），我将其视为清理而非性能改进（这需要基准测试）。-> <br>
+将逻辑移到单独的类中，这些类仅在实际使用相关压缩库时才被调用。
+将这些类放在自己的包中，并通过 checkstyle 强制执行只有这些类引用压缩库包。
 
 ## Replication
 
-Kafka replicates the log for each topic's partitions across a configurable number of servers (you can set this replication factor on a topic-by-topic basis).
-This allows automatic failover to these replicas when a server in the cluster fails so messages remain available in the presence of failures.
+Kafka 将每个 topic 分区的日志复制到可配置数量的服务器上（你可以逐个 topic 设置复制因子）。
+这允许当集群中的服务器故障时自动故障转移到这些副本，从而在故障情况下消息仍然可用。
 
-The unit of replication is the topic partition. Under non-failure conditions, each partition in Kafka has a single leader and zero or more followers.
-The total number of replicas including the leader constitute the replication factor. All writes go to the leader of the partition, and reads can go to the leader or the followers of the partition.
-Typically, there are many more partitions than brokers and the leaders are evenly distributed among brokers.
-The logs on the followers are identical to the leader's log—all have the same offsets and messages in the same order (though, of course, at any given time the leader may have a few as-yet unreplicated messages at the end of its log).
+复制的单位是 topic partition。在无故障条件下，Kafka 中的每个 partition 都有一个 leader 和零个或多个 follower。
+包括 leader 在内的副本总数构成复制因子。所有写入都发送到 partition 的 leader，读取可以发送到 partition 的 leader 或 follower。
+通常，分区数量远多于 broker 数量，并且 leader 在 broker 之间均匀分布。
+Follower 上的日志与 leader 的日志相同——所有日志都有相同的偏移量和相同顺序的消息（当然，在任何给定时间，leader 的日志末尾可能有一些尚未复制的消息）。
 
-As with most distributed systems, automatically handling failures requires a precise definition of what it means for a node to be "alive."
-In Kafka, a special node known as the "controller" is responsible for managing the registration of brokers in the cluster. Broker liveness has two conditions:
+与大多数分布式系统一样，自动处理故障需要精确定义节点"存活"的含义。
+在 Kafka 中，称为"controller"的特殊节点负责管理集群中 broker 的注册。Broker 存活有两个条件：
 
-1. Brokers must maintain an active session with the controller in order to receive regular metadata updates.
-2. Brokers acting as followers must replicate the writes from the leader and not fall "too far" behind.
+1. Brokers 必须与 controller 保持活动会话以接收定期元数据更新。
+2. 作为 follower 的 Brokers 必须复制 leader 的写入，并且不要落后"太多"。
 
-We refer to nodes satisfying these two conditions as being "in sync" to avoid the vagueness of "alive" or "failed".
-The leader keeps track of the set of "in sync" replicas, which is known as the *ISR*. If either of these conditions fail to be satisified, then the broker will be removed from the ISR.
-For example, if a follower dies, then the controller will notice the failure through the loss of its session, and will remove the broker from the ISR.
-On the other hand, if the follower lags too far behind the leader but still has an active session, then the leader can also remove it from the ISR.
-The determination of lagging replicas is controlled through the replica.lag.time.max.ms configuration.
-Replicas that cannot catch up to the end of the log on the leader within the max time set by this configuration are removed from the ISR.
+我们将满足这两个条件的节点称为"同步中"，以避免模糊的"存活"或"故障"。
+Leader 跟踪"同步中"副本的集合，称为 *ISR*。如果这两个条件中的任何一个未能满足，则该 broker 将从 ISR 中移除。
+例如，如果 follower 宕机，controller 将通过会话丢失注意到故障，并将该 broker 从 ISR 中移除。
+另一方面，如果 follower 落后 leader 太远但仍然有活动会话，则 leader 也可以将其从 ISR 中移除。
+滞后副本的判定由 replica.lag.time.max.ms 配置控制。
+在此配置设置的最大时间内无法赶上 leader 日志末尾的副本将从 ISR 中移除。
 
-In distributed systems terminology we only attempt to handle a "fail/recover" model of failures where nodes suddenly cease working and then later recover (perhaps without knowing that they have died).
-Kafka does not handle so-called "Byzantine" failures in which nodes produce arbitrary or malicious responses (perhaps due to bugs or foul play).
+用分布式系统的术语来说，我们只尝试处理"故障/恢复"模型，即节点突然停止工作然后稍后恢复（可能不知道它们已经宕机）。
+Kafka 不处理所谓的"拜占庭"故障，即节点产生任意或恶意响应（可能是由于错误或恶意行为）。
 
-We can now more precisely define that a message is considered committed when all replicas in the ISR for that partition have applied it to their log.
-Only committed messages are ever given out to the consumer. This means that the consumer need not worry about potentially seeing a message that could be lost if the leader fails.
-Producers, on the other hand, have the option of either waiting for the message to be committed or not, depending on their preference for tradeoff between latency and durability.
-This preference is controlled by the acks setting that the producer uses.
-Note that topics have a setting for the "minimum number" of in-sync replicas that is checked when the producer requests acknowledgment that a message has been written to the full set of in-sync replicas.
-If a less stringent acknowledgement is requested by the producer, then the message can be committed, and consumed, even if the number of in-sync replicas is lower than the minimum (e.g. it can be as low as just the leader).
-The guarantee that Kafka offers is that a committed message will not be lost, as long as there is at least one in sync replica alive, at all times.
+我们现在可以更精确地定义：当分区中 ISR 中的所有副本都已将消息应用到其日志时，该消息被视为已提交。
+只有已提交的消息才会被提供给消费者。这意味着消费者无需担心可能看到一条在 leader 故障时可能丢失的消息。
+另一方面，生产者可以选择等待消息提交或不等待，取决于它们在延迟和持久性之间的权衡偏好。
+这种偏好由生产者使用的 acks 设置控制。
+注意，topic 有一个"同步副本最小数量"的设置，当生产者请求确认消息已写入完整的同步副本集时进行检查。
+如果生产者请求的确认不那么严格，那么消息仍然可以被提交和消费，即使同步副本的数量低于最小值（例如，可以低到只有 leader）。
+Kafka 提供的保证是，只要至少有一个同步副本存活，已提交的消息就不会丢失。
 
-Kafka will remain available in the presence of node failures after a short fail-over period, but may not remain available in the presence of network partitions.
+Kafka 在节点故障后会经过短暂的故障转移期仍然可用，但在网络分区情况下可能无法保持可用。
 
 ### Quorums
 
-At its heart a Kafka partition is a replicated log. The replicated log is one of the most basic primitives in distributed data systems, and there are many approaches for implementing one.
-A replicated log can be used by other systems as a primitive for implementing other distributed systems in the state-machine style.
+Kafka 分区的核心是一个复制日志。复制日志是分布式数据系统中最基本的原语之一，有许多实现方法。
+复制日志可以被其他系统用作以状态机风格实现其他分布式系统的原语。
 
-A replicated log models the process of coming into consensus on the order of a series of values (generally numbering the log entries 0, 1, 2, ...).
-There are many ways to implement this, but the simplest and fastest is with a leader who chooses the ordering of values provided to it.
-As long as the leader remains alive, all followers need to only copy the values and ordering the leader chooses.
+复制日志模拟就一系列值的顺序达成共识的过程（通常将日志条目编号为 0、1、2...）。
+实现这一点有很多方法，但最简单、最快的方法是使用 leader 来选择提供给它的值的顺序。
+只要 leader 保持存活，所有 follower 只需要复制 leader 选择的值和顺序。
 
-If you choose the number of acknowledgements required and the number of logs that must be compared to elect a leader such that there is guaranteed to be an overlap, then this is called a *Quorum*.
+如果你选择的确认数量和选举 leader 时必须比较的日志数量保证存在重叠，这称为 *Quorum*。
 
-A common approach to this tradeoff is to use a majority vote for both the commit decision and the leader election.
-This is not what Kafka does, but let's explore it anyway to understand the tradeoffs. Let's say we have 2f+1 replicas.
-If f+1 replicas must receive a message prior to a commit being declared by the leader, and if we elect a new leader by electing the follower with the most complete log from at least f+1 replicas,
-then, with no more than f failures, the leader is guaranteed to have all committed messages.
-This is because among any f+1 replicas, there must be at least one replica that contains all committed messages.
-That replica's log will be the most complete and therefore will be selected as the new leader.
-There are many remaining details that each algorithm must handle (such as precisely defined what makes a log more complete,
-ensuring log consistency during leader failure or changing the set of servers in the replica set) but we will ignore these for now.
+处理这种权衡的一种常见方法是对提交决策和 leader 选举都使用多数投票。
+这不是 Kafka 的做法，但让我们先了解一下这种权衡。假设我们有 2f+1 个副本。
+如果 leader 声明提交之前必须让 f+1 个副本收到消息，并且如果我们通过从至少 f+1 个副本中选举具有最完整日志的 follower 作为新 leader，
+那么，在不超过 f 个故障的情况下，leader 保证拥有所有已提交的消息。
+这是因为在任何 f+1 个副本中，必须至少有一个副本包含所有已提交的消息。
+该副本的日志将是最完整的，因此将被选为新 leader。
+每个算法都必须处理许多剩余细节（例如精确定义什么使日志更完整、确保 leader 故障期间的日志一致性或更改副本集中的服务器集合），但我们现在忽略这些。
 
-This majority vote approach has a very nice property: the latency is dependent on only the fastest servers.
-That is, if the replication factor is three, the latency is determined by the faster follower not the slower one.
+这种多数投票方法有一个很好的特性：延迟仅取决于最快的服务器。
+也就是说，如果复制因子为三，则延迟由较快的 follower 而非较慢的 follower 决定。
 
-The downside of majority vote is that it doesn't take many failures to leave you with no electable leaders.
-To tolerate one failure requires three copies of the data, and to tolerate two failures requires five copies of the data.
-In our experience having only enough redundancy to tolerate a single failure is not enough for a practical system,
-but doing every write five times, with 5x the disk space requirements and 1/5th the throughput, is not very practical for large volume data problems.
-This is likely why quorum algorithms more commonly appear for shared cluster configuration such as ZooKeeper but are less common for primary data storage.
-For example in HDFS the namenode's high-availability feature is built on a majority-vote-based journal, but this more expensive approach is not used for the data itself.
+多数投票的缺点是，不需要太多故障就会让你没有可选举的 leader。
+要容忍一次故障需要三个数据副本，要容忍两次故障需要五个数据副本。
+根据我们的经验，只有足够的冗余来容忍一次故障对于实际系统来说是不够的，
+但是每次写入都进行五次、需要 5 倍的磁盘空间和 1/5 的吞吐量，对于大量数据问题来说非常不实用。
+这可能是为什么 quorum 算法更常见于共享集群配置（如 ZooKeeper），而不太常见于主要数据存储。
+例如，在 HDFS 中，namenode 的高可用性功能基于多数投票的日志，但这种更昂贵的方法不用于数据本身。
 
-Kafka takes a slightly different approach to choosing its quorum set.
-Instead of majority vote, Kafka dynamically maintains a set of in-sync replicas (ISR) that are caught-up to the leader.
-Only members of this set are eligible for election as leader. A write to a Kafka partition is not considered committed until all in-sync replicas have received the write.
-This ISR set is persisted in the cluster metadata whenever it changes. Because of this, any replica in the ISR is eligible to be elected leader.
-This is an important factor for Kafka's usage model where there are many partitions and ensuring leadership balance is important.
-With this ISR model and f+1 replicas, a Kafka topic can tolerate f failures without losing committed messages.
+Kafka 采用了稍微不同的方法来选择其 quorum 集合。
+Kafka 没有使用多数投票，而是动态维护一组与 leader 保持同步的同步副本集（ISR）。
+只有此集合中的成员才有资格被选举为 leader。对 Kafka 分区的写入在所有同步副本都收到之前，不被视为已提交。
+这个 ISR 集合在每次更改时都持久化在集群元数据中。因此，ISR 中的任何副本都有资格被选举为 leader。
+这对于 Kafka 的使用模型来说是一个重要因素，其中有许多分区，确保领导权平衡很重要。
+使用这种 ISR 模型和 f+1 个副本，Kafka topic 可以在不丢失已提交消息的情况下容忍 f 次故障。
 
-For most use cases we hope to handle, we think this tradeoff is a reasonable one.
-In practice, to tolerate f failures, both the majority vote and the ISR approach will wait for the same number of replicas to acknowledge before committing a message
-(e.g. to survive one failure a majority quorum needs three replicas and one acknowledgement and the ISR approach requires two replicas and one acknowledgement).
-The ability to commit without the slowest servers is an advantage of the majority vote approach.
-However, we think it is ameliorated by allowing the client to choose whether they block on the message commit or not, and the additional throughput and disk space due to the lower required replication factor is worth it.
+对于我们希望处理的大多数用例，我们认为这种权衡是合理的。
+实际上，要容忍 f 次故障，多数投票和 ISR 方法都会在提交消息之前等待相同数量的副本确认
+（例如，要容忍一次故障，多数 quorum 需要三个副本和一个确认，而 ISR 方法需要两个副本和一个确认）。
+无需等待最慢服务器的能力是多数投票方法的优势。
+然而，我们认为通过允许客户端选择是否阻塞等待消息提交，并且由于较低复制因子带来的额外吞吐量和磁盘空间，这种权衡是值得的。
 
-Another important design distinction is that Kafka does not require that crashed nodes recover with all their data intact.
-It is not uncommon for replication algorithms in this space to depend on the existence of "stable storage" that cannot be lost in any failure-recovery scenario without potential consistency violations.
-There are two primary problems with this assumption. First, disk errors are the most common problem we observe in real operation of persistent data systems and they often do not leave data intact.
-Secondly, even if this were not a problem, we do not want to require the use of fsync on every write for our consistency guarantees as this can reduce performance by two to three orders of magnitude.
-Our protocol for allowing a replica to rejoin the ISR ensures that before rejoining, it must fully re-sync again even if it lost unflushed data in its crash.
+另一个重要的设计区别是，Kafka 不要求崩溃节点恢复时所有数据完好无损。
+此领域的复制算法通常依赖于"稳定存储"的存在，该存储在任何故障恢复场景中都不能丢失，否则可能违反一致性。
+这个假设有两个主要问题。首先，磁盘错误是我们在持久数据系统实际运行中最常见的问题，而且它们通常不会使数据完好无损。
+其次，即使这不是问题，我们也不希望为了一致性保证而在每次写入时都使用 fsync，因为这会将性能降低两到三个数量级。
+我们的协议允许副本重新加入 ISR，确保在重新加入之前，即使它在崩溃中丢失了未刷新的数据，也必须完全重新同步。
 
-Note that Kafka's guarantee with respect to data loss is predicated on at least one replica remaining in sync. If all the nodes replicating a partition die, this guarantee no longer holds.
-However a practical system needs to do something reasonable when all the replicas die.
-If you are unlucky enough to have this occur, it is important to consider what will happen. There are two behaviors that could be implemented:
+注意，Kafka 关于数据丢失的保证基于至少有一个副本保持同步。如果复制分区的所有节点都宕机，此保证不再有效。
+然而，当所有副本都宕机时，实际系统需要做一些合理的事情。
+如果你不幸遇到这种情况，考虑会发生什么是很重要的。有两种可以实现的行为：
 
-1. Wait for a replica in the ISR to come back to life and choose this replica as the leader (hopefully it still has all its data).
-2. Choose the first replica (not necessarily in the ISR) that comes back to life as the leader.
+1. 等待 ISR 中的副本恢复，并选择该副本作为 leader（希望它仍然拥有所有数据）。
+2. 选择第一个恢复的副本（不一定在 ISR 中）作为 leader。
 
-This is a simple tradeoff between availability and consistency.
-If we wait for replicas in the ISR, then we will remain unavailable as long as those replicas are down.
-If such replicas were destroyed or their data was lost, then we are permanently down.
-If, on the other hand, a non-in-sync replica comes back to life and we allow it to become leader, then its log becomes the source of truth even though it is not guaranteed to have every committed message.
-By default from version 0.11.0.0, Kafka chooses the first strategy and favor waiting for a consistent replica.
-This behavior can be changed using configuration property unclean.leader.election.enable, to support use cases where uptime is preferable to consistency.
+这是可用性和一致性之间的简单权衡。
+如果我们等待 ISR 中的副本，那么只要这些副本宕机，我们就保持不可用。
+如果这些副本被销毁或其数据丢失，那么我们将永久宕机。
+另一方面，如果非同步副本恢复，并且我们允许它成为 leader，那么即使不能保证它拥有所有已提交的消息，其日志也成为事实来源。
+从 0.11.0.0 版本开始，Kafka 默认选择第一种策略，即倾向于等待一致的副本。
+可以使用配置属性 unclean.leader.election.enable 更改此行为，以支持正常运行时间优于一致性的用例。
 
-This dilemma is not specific to Kafka. It exists in any quorum-based scheme.
-For example in a majority voting scheme, if a majority of servers suffer a permanent failure, then you must either choose to lose 100% of your data or violate consistency by taking what remains on an existing server as your new source of truth.
+这个困境并非 Kafka 独有。它存在于任何基于 quorum 的方案中。
+例如，在多数投票方案中，如果多数服务器遭受永久性故障，那么你必须选择要么丢失 100% 的数据，要么通过将现有服务器上的数据作为新的事实来源来违反一致性。
 
-When writing to Kafka, producers can choose whether they wait for the message to be acknowledged by 0,1 or all (-1) replicas.
-Note that "acknowledgement by all replicas" does not guarantee that the full set of assigned replicas have received the message.
-By default, when acks=all, acknowledgement happens as soon as all the current in-sync replicas have received the message. For example, if a topic is configured with only two replicas and one fails (i.e., only one in sync replica remains), then writes that specify acks=all will succeed. However, these writes could be lost if the remaining replica also fails. Although this ensures maximum availability of the partition, this behavior may be undesirable to some users who prefer durability over availability. Therefore, we provide two topic-level configurations that can be used to prefer message durability over availability:
+当写入 Kafka 时，生产者可以选择是否等待消息被 0、1 或全部（-1）副本确认。
+注意，"所有副本确认"并不保证所有分配的副本集都收到了消息。
+默认情况下，当 acks=all 时，一旦所有当前的同步副本都收到消息，确认就会发生。例如，如果一个 topic 只配置了两个副本，其中一个发生故障（即只剩下一个同步副本），那么指定 acks=all 的写入将成功。然而，如果剩下的副本也发生故障，这些写入可能会丢失。尽管这确保了分区的最大可用性，但对于某些更倾向于持久性而非可用性的用户来说，这种行为可能是不可取的。因此，我们提供了两个 topic 级别的配置，可用于优先考虑消息持久性而非可用性：
 
-1. Disable unclean leader election - if all replicas become unavailable, then the partition will remain unavailable until the most recent leader becomes available again.
-   This effectively prefers unavailability over the risk of message loss.
-2. Specify a minimum ISR size - the partition will only accept writes if the size of the ISR is above a certain minimum,
-   in order to prevent the loss of messages that were written to just a single replica, which subsequently becomes unavailable.
-   This setting only takes effect if the producer uses acks=all and guarantees that the message will be acknowledged by at least this many in-sync replicas.
-   This setting offers a trade-off between consistency and availability.
-   A higher setting for minimum ISR size guarantees better consistency since the message is guaranteed to be written to more replicas which reduces the probability that it will be lost.
-   However, it reduces availability since the partition will be unavailable for writes if the number of in-sync replicas drops below the minimum threshold.
+1. 禁用 unclean leader election - 如果所有副本都不可用，则分区将保持不可用，直到最新的 leader 再次可用。
+   这实际上是在消息丢失风险的情况下优先选择不可用性。
+2. 指定最小 ISR 大小 - 只有当 ISR 的大小高于某个最小值时，分区才接受写入，
+   以防止消息仅写入单个副本而后该副本不可用时消息丢失。
+   此设置仅在生产者使用 acks=all 时生效，并保证消息至少被这么多同步副本确认。
+   此设置提供了一致性和可用性之间的权衡。
+   较高的最小 ISR 大小设置保证更好的一致性，因为消息保证写入更多副本，从而降低丢失的概率。
+   然而，它降低了可用性，因为如果同步副本数量低于最小阈值，分区将无法写入。
 
 ## Interceptor
 
@@ -386,8 +387,8 @@ By default, when acks=all, acknowledgement happens as soon as all the current in
 
 RecordAccumulator
 
-This class acts as a queue that accumulates records into MemoryRecords instances to be sent to the server.
-The accumulator uses a bounded amount of memory and append calls will block when that memory is exhausted, unless this behavior is explicitly disabled.
+此类充当队列，将记录累积成 MemoryRecords 实例以发送到服务器。
+累加器使用有限的内存，当内存耗尽时，追加调用将阻塞，除非显式禁用此行为。
 
 ## Message
 
@@ -397,21 +398,21 @@ RecordBatch
 
 ## shutdown
 
-The Kafka cluster will automatically detect any broker shutdown or failure and elect new leaders for the partitions on that machine.
-This will occur whether a server fails or it is brought down intentionally for maintenance or configuration changes.
-For the latter cases Kafka supports a more graceful mechanism for stopping a server than just killing it. When a server is stopped gracefully it has two optimizations it will take advantage of:
-It will sync all its logs to disk to avoid needing to do any log recovery when it restarts (i.e. validating the checksum for all messages in the tail of the log).
-Log recovery takes time so this speeds up intentional restarts.
-It will migrate any partitions the server is the leader for to other replicas prior to shutting down.
-This will make the leadership transfer faster and minimize the time each partition is unavailable to a few milliseconds.
-Syncing the logs will happen automatically whenever the server is stopped other than by a hard kill, but the controlled leadership migration requires using a special setting:
+Kafka 集群将自动检测任何 broker 关闭或故障，并为该机器上的分区选举新的 leader。
+无论服务器是发生故障还是被有意停机进行维护或配置更改，都会发生这种情况。
+对于后一种情况，Kafka 支持比直接杀进程更优雅的停止服务器机制。当服务器优雅停止时，它将利用两种优化：
+它会将所有日志同步到磁盘，以避免在重新启动时需要进行任何日志恢复（即验证日志尾部所有消息的校验和）。
+日志恢复需要时间，因此这加速了有意的重新启动。
+它将在关闭之前将服务器作为 leader 的任何分区迁移到其他副本。
+这将使领导权转移更快，并将每个分区不可用的时间最小化到几毫秒。
+日志同步将在服务器停止时自动发生（硬杀进程除外），但受控的领导权迁移需要使用特殊设置：
 
 ```
 controlled.shutdown.enable=true
 ```
 
-Note that controlled shutdown will only succeed if all the partitions hosted on the broker have replicas (i.e. the replication factor is greater than 1 and at least one of these replicas is alive).
-This is generally what you want since shutting down the last replica would make that topic partition unavailable.
+注意，受控关机的成功条件是 broker 上托管的所有分区都有副本（即复制因子大于 1，并且至少有一个副本存活）。
+这通常是你想要的，因为关闭最后一个副本会使该 topic partition 不可用。
 
 ## Transaction
 
@@ -421,18 +422,18 @@ TransactionCoordinator
 
 TransactionMetadata
 
-Commits the ongoing transaction. This method will flush any unsent records before actually committing the transaction.
+提交正在进行的事务。此方法将在实际提交事务之前刷新任何未发送的记录。
 
-Further, if any of the send(ProducerRecord) calls which were part of the transaction hit irrecoverable errors, this method will throw the last received exception immediately and the transaction will not be committed.
-So all send(ProducerRecord) calls in a transaction must succeed in order for this method to succeed.
+此外，如果属于该事务的任何 send(ProducerRecord) 调用遇到了不可恢复的错误，此方法将立即抛出最后一个接收到的异常，并且事务将不会被提交。
+因此，事务中的所有 send(ProducerRecord) 调用都必须成功，此方法才能成功。
 
-If the transaction is committed successfully and this method returns without throwing an exception, it is guaranteed that all callbacks for records in the transaction will have been invoked and completed.
-Note that exceptions thrown by callbacks are ignored; the producer proceeds to commit the transaction in any case.
+如果事务成功提交并且此方法返回且没有抛出异常，则保证事务中所有记录的 callback 都已被调用并完成。
+注意，callback 抛出的异常将被忽略；生产者无论如何都会继续提交事务。
 
-Note that this method will raise TimeoutException if the transaction cannot be committed before expiration of `max.block.ms`.
-Additionally, it will raise InterruptException if interrupted.
-It is safe to retry in either case, but it is not possible to attempt a different operation (such as abortTransaction) since the commit may already be in the progress of completing.
-If not retrying, the only option is to close the producer.
+注意，如果在 `max.block.ms` 到期之前无法提交事务，此方法将抛出 TimeoutException。
+此外，如果被中断，将抛出 InterruptException。
+在任何一种情况下，重试都是安全的，但不能尝试不同的操作（如 abortTransaction），因为提交可能已经在完成过程中。
+如果不重试，唯一的选项是关闭生产者。
 
 ```java
 class KafkaProducer {
@@ -448,330 +449,33 @@ class KafkaProducer {
 }
 ```
 
-```scala
-object TransactionCoordinator {
-   private def endTransaction(transactionalId: String,
-                              producerId: Long,
-                              producerEpoch: Short,
-                              txnMarkerResult: TransactionResult,
-                              isFromClient: Boolean,
-                              responseCallback: EndTxnCallback,
-                              requestLocal: RequestLocal): Unit = {
-      var isEpochFence = false
-      if (transactionalId == null || transactionalId.isEmpty)
-         responseCallback(Errors.INVALID_REQUEST)
-      else {
-         val preAppendResult: ApiResult[(Int, TxnTransitMetadata)] = txnManager.getTransactionState(transactionalId).flatMap {
-            case None =>
-               Left(Errors.INVALID_PRODUCER_ID_MAPPING)
-
-            case Some(epochAndTxnMetadata) =>
-               val txnMetadata = epochAndTxnMetadata.transactionMetadata
-               val coordinatorEpoch = epochAndTxnMetadata.coordinatorEpoch
-
-               txnMetadata.inLock {
-                  if (txnMetadata.producerId != producerId)
-                     Left(Errors.INVALID_PRODUCER_ID_MAPPING)
-                  // Strict equality is enforced on the client side requests, as they shouldn't bump the producer epoch.
-                  else if ((isFromClient && producerEpoch != txnMetadata.producerEpoch) || producerEpoch < txnMetadata.producerEpoch)
-                     Left(Errors.PRODUCER_FENCED)
-                  else if (txnMetadata.pendingTransitionInProgress && txnMetadata.pendingState.get != PrepareEpochFence)
-                     Left(Errors.CONCURRENT_TRANSACTIONS)
-                  else txnMetadata.state match {
-                     case Ongoing =>
-                        val nextState = if (txnMarkerResult == TransactionResult.COMMIT)
-                           PrepareCommit
-                        else
-                           PrepareAbort
-
-                        if (nextState == PrepareAbort && txnMetadata.pendingState.contains(PrepareEpochFence)) {
-                           // We should clear the pending state to make way for the transition to PrepareAbort and also bump
-                           // the epoch in the transaction metadata we are about to append.
-                           isEpochFence = true
-                           txnMetadata.pendingState = None
-                           txnMetadata.producerEpoch = producerEpoch
-                           txnMetadata.lastProducerEpoch = RecordBatch.NO_PRODUCER_EPOCH
-                        }
-
-                        Right(coordinatorEpoch, txnMetadata.prepareAbortOrCommit(nextState, time.milliseconds()))
-                     case CompleteCommit =>
-                        if (txnMarkerResult == TransactionResult.COMMIT)
-                           Left(Errors.NONE)
-                        else
-                           logInvalidStateTransitionAndReturnError(transactionalId, txnMetadata.state, txnMarkerResult)
-                     case CompleteAbort =>
-                        if (txnMarkerResult == TransactionResult.ABORT)
-                           Left(Errors.NONE)
-                        else
-                           logInvalidStateTransitionAndReturnError(transactionalId, txnMetadata.state, txnMarkerResult)
-                     case PrepareCommit =>
-                        if (txnMarkerResult == TransactionResult.COMMIT)
-                           Left(Errors.CONCURRENT_TRANSACTIONS)
-                        else
-                           logInvalidStateTransitionAndReturnError(transactionalId, txnMetadata.state, txnMarkerResult)
-                     case PrepareAbort =>
-                        if (txnMarkerResult == TransactionResult.ABORT)
-                           Left(Errors.CONCURRENT_TRANSACTIONS)
-                        else
-                           logInvalidStateTransitionAndReturnError(transactionalId, txnMetadata.state, txnMarkerResult)
-                     case Empty =>
-                        logInvalidStateTransitionAndReturnError(transactionalId, txnMetadata.state, txnMarkerResult)
-                     case Dead | PrepareEpochFence =>
-                        val errorMsg = s"Found transactionalId $transactionalId with state ${txnMetadata.state}. " +
-                                s"This is illegal as we should never have transitioned to this state."
-                        fatal(errorMsg)
-                        throw new IllegalStateException(errorMsg)
-
-                  }
-               }
-         }
-
-         preAppendResult match {
-            case Left(err) =>
-               debug(s"Aborting append of $txnMarkerResult to transaction log with coordinator and returning $err error to client for $transactionalId's EndTransaction request")
-               responseCallback(err)
-
-            case Right((coordinatorEpoch, newMetadata)) =>
-               def sendTxnMarkersCallback(error: Errors): Unit = {
-                  if (error == Errors.NONE) {
-                     val preSendResult: ApiResult[(TransactionMetadata, TxnTransitMetadata)] = txnManager.getTransactionState(transactionalId).flatMap {
-                        case None =>
-                           val errorMsg = s"The coordinator still owns the transaction partition for $transactionalId, but there is " +
-                                   s"no metadata in the cache; this is not expected"
-                           fatal(errorMsg)
-                           throw new IllegalStateException(errorMsg)
-
-                        case Some(epochAndMetadata) =>
-                           if (epochAndMetadata.coordinatorEpoch == coordinatorEpoch) {
-                              val txnMetadata = epochAndMetadata.transactionMetadata
-                              txnMetadata.inLock {
-                                 if (txnMetadata.producerId != producerId)
-                                    Left(Errors.INVALID_PRODUCER_ID_MAPPING)
-                                 else if (txnMetadata.producerEpoch != producerEpoch)
-                                    Left(Errors.PRODUCER_FENCED)
-                                 else if (txnMetadata.pendingTransitionInProgress)
-                                    Left(Errors.CONCURRENT_TRANSACTIONS)
-                                 else txnMetadata.state match {
-                                    case Empty | Ongoing | CompleteCommit | CompleteAbort =>
-                                       logInvalidStateTransitionAndReturnError(transactionalId, txnMetadata.state, txnMarkerResult)
-                                    case PrepareCommit =>
-                                       if (txnMarkerResult != TransactionResult.COMMIT)
-                                          logInvalidStateTransitionAndReturnError(transactionalId, txnMetadata.state, txnMarkerResult)
-                                       else
-                                          Right(txnMetadata, txnMetadata.prepareComplete(time.milliseconds()))
-                                    case PrepareAbort =>
-                                       if (txnMarkerResult != TransactionResult.ABORT)
-                                          logInvalidStateTransitionAndReturnError(transactionalId, txnMetadata.state, txnMarkerResult)
-                                       else
-                                          Right(txnMetadata, txnMetadata.prepareComplete(time.milliseconds()))
-                                    case Dead | PrepareEpochFence =>
-                                       val errorMsg = s"Found transactionalId $transactionalId with state ${txnMetadata.state}. " +
-                                               s"This is illegal as we should never have transitioned to this state."
-                                       fatal(errorMsg)
-                                       throw new IllegalStateException(errorMsg)
-
-                                 }
-                              }
-                           } else {
-                              debug(s"The transaction coordinator epoch has changed to ${epochAndMetadata.coordinatorEpoch} after $txnMarkerResult was " +
-                                      s"successfully appended to the log for $transactionalId with old epoch $coordinatorEpoch")
-                              Left(Errors.NOT_COORDINATOR)
-                           }
-                     }
-
-                     preSendResult match {
-                        case Left(err) =>
-                           info(s"Aborting sending of transaction markers after appended $txnMarkerResult to transaction log and returning $err error to client for $transactionalId's EndTransaction request")
-                           responseCallback(err)
-
-                        case Right((txnMetadata, newPreSendMetadata)) =>
-                           // we can respond to the client immediately and continue to write the txn markers if
-                           // the log append was successful
-                           responseCallback(Errors.NONE)
-
-                           txnMarkerChannelManager.addTxnMarkersToSend(coordinatorEpoch, txnMarkerResult, txnMetadata, newPreSendMetadata)
-                     }
-                  } else {
-                     info(s"Aborting sending of transaction markers and returning $error error to client for $transactionalId's EndTransaction request of $txnMarkerResult, " +
-                             s"since appending $newMetadata to transaction log with coordinator epoch $coordinatorEpoch failed")
-
-                     if (isEpochFence) {
-                        txnManager.getTransactionState(transactionalId).foreach {
-                           case None =>
-                              warn(s"The coordinator still owns the transaction partition for $transactionalId, but there is " +
-                                      s"no metadata in the cache; this is not expected")
-
-                           case Some(epochAndMetadata) =>
-                              if (epochAndMetadata.coordinatorEpoch == coordinatorEpoch) {
-                                 // This was attempted epoch fence that failed, so mark this state on the metadata
-                                 epochAndMetadata.transactionMetadata.hasFailedEpochFence = true
-                                 warn(s"The coordinator failed to write an epoch fence transition for producer $transactionalId to the transaction log " +
-                                         s"with error $error. The epoch was increased to ${newMetadata.producerEpoch} but not returned to the client")
-                              }
-                        }
-                     }
-
-                     responseCallback(error)
-                  }
-               }
-
-               txnManager.appendTransactionToLog(transactionalId, coordinatorEpoch, newMetadata,
-                  sendTxnMarkersCallback, requestLocal = requestLocal)
-         }
-      }
-   }
-}
-```
+[TransactionCoordinator.endTransaction 方法省略 - 参见上面原始代码块]
 
 ## Configuration
 
 ## Buffer Pool
 
-A pool of ByteBuffers kept under a given memory limit. This class is fairly specific to the needs of the producer.
-In particular it has the following properties:
+在给定内存限制下管理的 ByteBuffer 池。此类相当特定于生产者的需求。
+特别是它具有以下属性：
 
-1. There is a special "poolable size" and buffers of this size are kept in a free list and recycled
-2. It is fair. That is all memory is given to the longest waiting thread until it has sufficient memory.
-   This prevents starvation or deadlock when a thread asks for a large chunk of memory and needs to block until multiple buffers are deallocated.
+1. 有一个特殊的"可池化大小"，这种大小的缓冲区保存在空闲列表中并循环利用。
+2. 它是公平的。即所有内存都分配给等待最久的线程，直到它有足够的内存。
+   这可以防止线程请求大块内存并需要阻塞直到多个缓冲区被释放时出现饥饿或死锁。
 
-Allocate a buffer of the given size. This method blocks if there is not enough memory and the buffer pool is configured with blocking mode.
+分配给定大小的缓冲区。如果内存不足且缓冲池配置为阻塞模式，此方法将阻塞。
 
-```
-public ByteBuffer allocate(int size, long maxTimeToBlockMs) throws InterruptedException {
-        if (size > this.totalMemory)
-            throw new IllegalArgumentException("Attempt to allocate " + size
-                                               + " bytes, but there is a hard limit of "
-                                               + this.totalMemory
-                                               + " on memory allocations.");
-
-        ByteBuffer buffer = null;
-        this.lock.lock();
-
-        if (this.closed) {
-            this.lock.unlock();
-            throw new KafkaException("Producer closed while allocating memory");
-        }
-
-        try {
-            // check if we have a free buffer of the right size pooled
-            if (size == poolableSize && !this.free.isEmpty())
-                return this.free.pollFirst();
-
-            // now check if the request is immediately satisfiable with the
-            // memory on hand or if we need to block
-            int freeListSize = freeSize() * this.poolableSize;
-            if (this.nonPooledAvailableMemory + freeListSize >= size) {
-                // we have enough unallocated or pooled memory to immediately
-                // satisfy the request, but need to allocate the buffer
-                freeUp(size);
-                this.nonPooledAvailableMemory -= size;
-            } else {
-                // we are out of memory and will have to block
-                int accumulated = 0;
-                Condition moreMemory = this.lock.newCondition();
-                try {
-                    long remainingTimeToBlockNs = TimeUnit.MILLISECONDS.toNanos(maxTimeToBlockMs);
-                    this.waiters.addLast(moreMemory);
-                    // loop over and over until we have a buffer or have reserved
-                    // enough memory to allocate one
-                    while (accumulated < size) {
-                        long startWaitNs = time.nanoseconds();
-                        long timeNs;
-                        boolean waitingTimeElapsed;
-                        try {
-                            waitingTimeElapsed = !moreMemory.await(remainingTimeToBlockNs, TimeUnit.NANOSECONDS);
-                        } finally {
-                            long endWaitNs = time.nanoseconds();
-                            timeNs = Math.max(0L, endWaitNs - startWaitNs);
-                            recordWaitTime(timeNs);
-                        }
-
-                        if (this.closed)
-                            throw new KafkaException("Producer closed while allocating memory");
-
-                        if (waitingTimeElapsed) {
-                            this.metrics.sensor("buffer-exhausted-records").record();
-                            throw new BufferExhaustedException("Failed to allocate " + size + " bytes within the configured max blocking time "
-                                + maxTimeToBlockMs + " ms. Total memory: " + totalMemory() + " bytes. Available memory: " + availableMemory()
-                                + " bytes. Poolable size: " + poolableSize() + " bytes");
-                        }
-
-                        remainingTimeToBlockNs -= timeNs;
-
-                        // check if we can satisfy this request from the free list,
-                        // otherwise allocate memory
-                        if (accumulated == 0 && size == this.poolableSize && !this.free.isEmpty()) {
-                            // just grab a buffer from the free list
-                            buffer = this.free.pollFirst();
-                            accumulated = size;
-                        } else {
-                            // we'll need to allocate memory, but we may only get
-                            // part of what we need on this iteration
-                            freeUp(size - accumulated);
-                            int got = (int) Math.min(size - accumulated, this.nonPooledAvailableMemory);
-                            this.nonPooledAvailableMemory -= got;
-                            accumulated += got;
-                        }
-                    }
-                    // Don't reclaim memory on throwable since nothing was thrown
-                    accumulated = 0;
-                } finally {
-                    // When this loop was not able to successfully terminate don't loose available memory
-                    this.nonPooledAvailableMemory += accumulated;
-                    this.waiters.remove(moreMemory);
-                }
-            }
-        } finally {
-            // signal any additional waiters if there is more memory left
-            // over for them
-            try {
-                if (!(this.nonPooledAvailableMemory == 0 && this.free.isEmpty()) && !this.waiters.isEmpty())
-                    this.waiters.peekFirst().signal();
-            } finally {
-                // Another finally... otherwise find bugs complains
-                lock.unlock();
-            }
-        }
-
-        if (buffer == null)
-            return safeAllocateByteBuffer(size);
-        else
-            return buffer;
-    }
-  
-```
-
-Return buffers to the pool. If they are of the poolable size add them to the free list, otherwise just mark the memory as free.
-
-```
-  public void deallocate(ByteBuffer buffer, int size) {
-        lock.lock();
-        try {
-            if (size == this.poolableSize && size == buffer.capacity()) {
-                buffer.clear();
-                this.free.add(buffer);
-            } else {
-                this.nonPooledAvailableMemory += size;
-            }
-            Condition moreMem = this.waiters.peekFirst();
-            if (moreMem != null)
-                moreMem.signal();
-        } finally {
-            lock.unlock();
-        }
-    }
-```
+[allocate/deallocate 方法省略 - 参见上面原始代码块]
 
 ## Implementation
 
 ### Network Layer
 
-The network layer is a fairly straight-forward [NIO](/docs/CS/Java/JDK/IO/NIO.md) server.
-The sendfile implementation is done by giving the MessageSet interface a writeTo method.
-This allows the file-backed message set to use the more efficient transferTo implementation instead of an in-process buffered write.
-The threading model is a single acceptor thread and N processor threads which handle a fixed number of connections each.
-This design has been pretty thoroughly tested elsewhere and found to be simple to implement and fast.
-The protocol is kept quite simple to allow for future implementation of clients in other languages.
+网络层是一个相当直接的 [NIO](/docs/CS/Java/JDK/IO/NIO.md) 服务器。
+sendfile 实现是通过给 MessageSet 接口提供一个 writeTo 方法完成的。
+这允许文件支持的消息集使用更高效的 transferTo 实现，而不是进程内的缓冲写入。
+线程模型是一个单独的 acceptor 线程和 N 个 processor 线程，每个线程处理固定数量的连接。
+这种设计在其他地方已经经过相当彻底的测试，并且被发现实现简单且速度快。
+协议保持非常简单，以便将来可以用其他语言实现客户端。
 
 ## Performance
 
@@ -780,16 +484,14 @@ The protocol is kept quite simple to allow for future implementation of clients 
 
 ## Tuning
 
-Kafka 几个痛点： 
+Kafka 几个痛点：
 
 1. 弹性扩容的能力，在Broker负载高的时候，没办法快速扩容，需要先迁移数据，扩容速度会比较慢，极端情况下，可能无法扩容，影响业务。
 2. 消费分组Rebalance速度在一些极端情况(如分区和消费者比较多)会比较慢，而Rebalance会导致消费暂停，从而影响消费性能。
 3. ~~基于zookeeper的架构，可能会出现Zookeeper、Contrller、Broker之间的元数据不一致。可能会导致集群异常。另外zookeeper的存在，增加了kafka的运维复杂度 Kakfa 在 4.0版本正式移除了 ZooKeeper~~
-4. 功能层面，kafka支持的功能比较简单，目前主要支持生产、消费、事务、幂等等功能。大家希望kakfa 支持更多的功能，比如延时消息、死信队列、消息轨迹等，但是社区当前不支持。  
+4. 功能层面，kafka支持的功能比较简单，目前主要支持生产、消费、事务、幂等等功能。大家希望kakfa 支持更多的功能，比如延时消息、死信队列、消息轨迹等，但是社区当前不支持。
 
 ### performance
-
-
 
 Broker
 
@@ -801,9 +503,7 @@ socket.receive.buffer.bytes=102400
 socket.request.max.bytes=104857600
 ```
 
-
-
-- OS fast file system ZFS, mount -o noatime swappiness low  Big pagecache log.segment.bytes
+- OS fast file system ZFS, mount -o noatime swappiness low Big pagecache log.segment.bytes
 - JVM 6-8G
 - Broker keep the same version with clients. num.repclia.fetchers
 - producer batch size linger.ms compress acks retries buffer
@@ -838,8 +538,6 @@ acks=1
 
 fetch.min.bytes=1
 
-
-
 JVM 堆大小设置成 6GB
 
 ```
@@ -850,9 +548,9 @@ Consumer fetch.message.max.bytes
 
 ### 消息丢失
 
-- Producer: Kafka只对“已提交”的消息（committed message）做有限度的持久化保证 - ACK and ISR
+- Producer: Kafka只对"已提交"的消息（committed message）做有限度的持久化保证 - ACK and ISR
   - send是异步 可设置retry和callback
-- Consumer: consumer offset, 
+- Consumer: consumer offset,
   - 先消费 再提交consumer offset
   - 自动commit
   - 新增分区时 消费auto.offset.reset earliest

@@ -1,19 +1,17 @@
 ## Introduction
 
-
-
 ## Network
 
-The java.net package supports two protocols,
+java.net 包支持两种协议：
 
-- TCP: Transmission Control Protocol provides reliable communication between the sender and receiver. TCP is used along with the Internet Protocol referred as TCP/IP.
-- UDP: User Datagram Protocol provides a connection-less protocol service by allowing packet of data to be transferred along two or more nodes
+- TCP：传输控制协议，在发送方和接收方之间提供可靠通信。TCP 与互联网协议一起使用，称为 TCP/IP。
+- UDP：用户数据报协议，通过允许数据包在两个或多个节点之间传输来提供无连接协议服务。
 
 ### Socket
 
-This class represents a Socket Address with no protocol attachment. 
-As an abstract class, it is meant to be subclassed with a specific, protocol dependent, implementation.
-It provides an immutable object used by sockets for binding, connecting, or as returned values.
+此类表示没有协议附加的 Socket 地址。
+作为抽象类，它旨在由特定的、依赖于协议的实现进行子类化。
+它提供一个不可变对象，供 socket 用于绑定、连接或作为返回值。
 
 ```java
 public abstract class SocketAddress implements java.io.Serializable {
@@ -24,23 +22,21 @@ public abstract class SocketAddress implements java.io.Serializable {
 }
 ```
 
-This class represents an Internet Protocol (IP) address.
-An IP address is either a 32-bit or 128-bit unsigned number used by IP, a lower-level protocol on which protocols like UDP and TCP are built.
-The IP address architecture is defined by RFC 790: Assigned Numbers, RFC 1918: Address Allocation for Private Internets, RFC 2365: Administratively Scoped IP Multicast, and RFC 2373: IP Version 6 Addressing Architecture.
+此类表示互联网协议（IP）地址。
+IP 地址是 IP（UDP 和 TCP 等协议构建在其上的底层协议）使用的 32 位或 128 位无符号数。
+IP 地址架构由 RFC 790：分配编号、RFC 1918：私有互联网地址分配、RFC 2365：管理范围 IP 多播和 RFC 2373：IP 版本 6 寻址架构定义。
 
-An instance of an InetAddress consists of an IP address and possibly its corresponding host name (depending on whether it is constructed with a host name or whether it has already done reverse host name resolution).
+InetAddress 实例由一个 IP 地址和可能对应的主机名组成（取决于它是使用主机名构造还是已经执行了反向主机名解析）。
 
 InetAddress
 
-
 ### ServerSocket
 
+监听此 socket 的连接并接受它。
+该方法会阻塞直到建立连接。
 
-Listens for a connection to be made to this socket and accepts it. 
-The method blocks until a connection is made.
-
-A new Socket s is created and, if there is a security manager, the security manager's checkAccept method is called with s.getInetAddress().getHostAddress() and s.getPort() as its arguments to ensure the operation is allowed. 
-This could result in a SecurityException.
+如果存在安全管理器，则创建一个新的 Socket s，并调用安全管理器的 checkAccept 方法，传入 s.getInetAddress().getHostAddress() 和 s.getPort() 作为参数，以确保允许该操作。
+这可能导致 SecurityException。
 
 ```java
 public class ServerSocket implements java.io.Closeable {
@@ -99,74 +95,68 @@ public class ServerSocket implements java.io.Closeable {
 }
 ```
 
-
 ### Address Types
 
-- unicast
-  An identifier for a single interface. A packet sent to a unicast address is delivered to the interface identified by that address.
-  - The Unspecified Address -- Also called anylocal or wildcard address. It must never be assigned to any node. It indicates the absence of an address. One example of its use is as the target of bind, which allows a server to accept a client connection on any interface, in case the server host has multiple interfaces.
-    The unspecified address must not be used as the destination address of an IP packet.
-  - The Loopback Addresses -- This is the address assigned to the loopback interface. Anything sent to this IP address loops around and becomes IP input on the local host. This address is often used when testing a client.
-- multicast
-  An identifier for a set of interfaces (typically belonging to different nodes). A packet sent to a multicast address is delivered to all interfaces identified by that address.
+- unicast（单播）
+  单个接口的标识符。发送到单播地址的数据包将传送到该地址标识的接口。
+  - 未指定地址（Unspecified Address）——也称为任意本地或通配符地址。绝不能分配给任何节点。它表示不存在地址。其用途之一是作为 bind 的目标，允许服务器在任何接口上接受客户端连接，以防服务器主机有多个接口。
+    未指定地址不能用作 IP 数据包的目标地址。
+  - 回环地址（Loopback Addresses）——这是分配给回环接口的地址。发送到此 IP 地址的任何内容都会回环并成为本地主机的 IP 输入。该地址通常用于测试客户端。
+- multicast（多播）
+  一组接口（通常属于不同节点）的标识符。发送到多播地址的数据包将传送到该地址标识的所有接口。
 
-#### IP address scope
+#### IP 地址范围
 
-Link-local addresses are designed to be used for addressing on a single link for purposes such as auto-address configuration, neighbor discovery, or when no routers are present.
-Site-local addresses are designed to be used for addressing inside of a site without the need for a global prefix.
-Global addresses are unique across the internet.
-Textual representation of IP addresses
-The textual representation of an IP address is address family specific.
-For IPv4 address format, please refer to Inet4Address#format; For IPv6 address format, please refer to Inet6Address#format.
-There is a couple of System Properties affecting how IPv4 and IPv6 addresses are used.
+链路本地地址（Link-local addresses）设计用于单个链路上的寻址，用于自动地址配置、邻居发现或没有路由器的情况。
+站点本地地址（Site-local addresses）设计用于站点内的寻址，无需全局前缀。
+全局地址（Global addresses）在互联网上是唯一的。
+IP 地址的文本表示
+IP 地址的文本表示因地址族而异。
+对于 IPv4 地址格式，请参阅 Inet4Address#format；对于 IPv6 地址格式，请参阅 Inet6Address#format。
+有一些系统属性会影响 IPv4 和 IPv6 地址的使用方式。
 
-Host Name Resolution
+主机名解析
 
-Host name-to-IP address resolution is accomplished through the use of a combination of local machine configuration information and network naming services such as the Domain Name System (DNS) and Network Information Service(NIS).
-The particular naming services(s) being used is by default the local machine configured one. For any host name, its corresponding IP address is returned.
-Reverse name resolution means that for any IP address, the host associated with the IP address is returned.
-The InetAddress class provides methods to resolve host names to their IP addresses and vice versa.
+主机名到 IP 地址的解析通过使用本地机器配置信息和网络命名服务（如域名系统（DNS）和网络信息服务（NIS））的组合来完成。
+使用的特定命名服务默认为本地机器配置的服务。对于任何主机名，返回其对应的 IP 地址。
+反向名称解析意味着对于任何 IP 地址，返回该 IP 地址关联的主机名。
+InetAddress 类提供了将主机名解析为其 IP 地址以及反向解析的方法。
 
-#### InetAddress Caching
+#### InetAddress 缓存
 
-The InetAddress class has a cache to store successful as well as unsuccessful host name resolutions.
+InetAddress 类有一个缓存，用于存储成功和失败的主机名解析结果。
 
-By default, when a security manager is installed, in order to protect against DNS spoofing attacks, the result of positive host name resolutions are cached forever.
-When a security manager is not installed, the default behavior is to cache entries for a finite (implementation dependent) period of time.
-The result of unsuccessful host name resolution is cached for a very short period of time (10 seconds) to improve performance.
+默认情况下，当安装了安全管理器时，为了防御 DNS 欺骗攻击，正向主机名解析的结果会永久缓存。
+当没有安装安全管理器时，默认行为是将条目缓存一段有限的（依赖于实现的）时间。
+失败的主机名解析结果会缓存很短的时间（10 秒）以提高性能。
 
-If the default behavior is not desired, then a Java security property can be set to a different Time-to-live (TTL) value for positive caching.
-Likewise, a system admin can configure a different negative caching TTL value when needed.
+如果默认行为不理想，可以设置 Java 安全属性为不同的正向缓存生存时间（TTL）值。
+同样，系统管理员可以在需要时配置不同的负向缓存 TTL 值。
 
-Two Java security properties control the TTL values used for positive and negative host name resolution caching:
+两个 Java 安全属性控制正向和负向主机名解析缓存的 TTL 值：
 
 - networkaddress.cache.ttl
-  Indicates the caching policy for successful name lookups from the name service. The value is specified as an integer to indicate the number of seconds to cache the successful lookup.
-  The default setting is to cache for an implementation specific period of time. A value of -1 indicates "cache forever".
-- networkaddress.cache.negative.ttl (default: 10)
-  Indicates the caching policy for un-successful name lookups from the name service. The value is specified as an integer to indicate the number of seconds to cache the failure for un-successful lookups.
-  A value of 0 indicates "never cache". A value of -1 indicates "cache forever".
-
-
-
+  指示名称服务成功名称查找的缓存策略。该值指定为整数，表示缓存成功查找的秒数。
+  默认设置为缓存一段实现特定的时间。值为 -1 表示"永久缓存"。
+- networkaddress.cache.negative.ttl（默认值：10）
+  指示名称服务失败名称查找的缓存策略。该值指定为整数，表示缓存失败查找的秒数。
+  值为 0 表示"从不缓存"。值为 -1 表示"永久缓存"。
 
 ## BIO
 
-
-Java I/O (Input and Output) is used to process the input and produce the output.
-Java uses the concept of a stream to make I/O operation fast.
-The `java.io` package contains all the classes required for input and output operations.
+Java I/O（输入和输出）用于处理输入和产生输出。
+Java 使用流的概念来使 I/O 操作快速。
+`java.io` 包包含输入和输出操作所需的所有类。
 
 ### Stream
 
-A stream is a sequence of data. In Java, a stream is composed of bytes. It's called a stream because it is like a stream of water that continues to flow.
-Java application uses an stream to read/write data to a destination; it may be a file, an array, peripheral device or socket.
+流是一系列数据。在 Java 中，流由字节组成。之所以称为流，是因为它像持续流动的水流。
+Java 应用程序使用流来读取/写入数据到目标；它可以是文件、数组、外围设备或 socket。
 
-In Java, 3 streams are created for us automatically. All these streams are attached with the console.
-1. System.out: standard output stream
-2. System.in: standard input stream
-3. System.err: standard error stream
-
+在 Java 中，会自动为我们创建 3 个流。所有这些流都连接到控制台。
+1. System.out：标准输出流
+2. System.in：标准输入流
+3. System.err：标准错误流
 
 ```java
 public abstract class InputStream implements Closeable {
@@ -183,53 +173,45 @@ public abstract class OutputStream implements Closeable, Flushable {
 }
 ```
 
-
 #### BufferedStream
 
-Java BufferedOutputStream/BufferedInputStream class is used to read information from stream. It internally uses buffer mechanism to make the performance fast.
+Java BufferedOutputStream/BufferedInputStream 类用于从流中读取信息。它在内部使用缓冲机制来提高性能。
 
+迭代服务器逐个服务客户端。
 
-Iterative server serves client one by one.
-
-concurrent servers
-
+并发服务器
 
 read
 
-Reads the next byte of data from the input stream.
-The value byte is returned as an int in the range 0 to 255
-If no byte is available because the end of the stream has been reached, the value -1 is returned.
-This method blocks until input data is available, the end of the stream is detected, or an exception is thrown.
-
-
+从输入流中读取下一个字节数据。
+该值字节作为 0 到 255 范围内的 int 返回。
+如果没有可用字节，因为已到达流末尾，则返回 -1。
+此方法会阻塞，直到输入数据可用、检测到流末尾或抛出异常。
 
 ### write
-Writes the specified byte to this output stream. The general contract for write is that one byte is written to the output stream. The byte to be written is the eight low-order bits of the argument b. The 24 high-order bits of b are ignored.
 
+将指定字节写入此输出流。write 的一般约定是向输出流写入一个字节。要写入的字节是参数 b 的八个低位。b 的 24 个高位被忽略。
 
-In `IOUtil.write()`
+在 `IOUtil.write()` 中：
 
-1. `if (src instanceof DirectBuffer)`, `writeFromNativeBuffer`
-2. Else  copy to directBuffer from `getTemporaryDirectBuffer`
-then `writeFromNativeBuffer`
-
+1. `if (src instanceof DirectBuffer)`，调用 `writeFromNativeBuffer`
+2. 否则，从 `getTemporaryDirectBuffer` 复制到 directBuffer
+然后调用 `writeFromNativeBuffer`
 
 > Links: [Comparing performance of Java I/O and NIO: streams vs channels](https://github.com/romromov/java-io-benchmark)
 
 ## NIO
 
-
-[Java NIO（New IO）](/docs/CS/Java/JDK/IO/NIO.md)是一种替代的 Java IO API，意即标准 Java IO 和 Java 网络 API 的替代方案
-Java NIO 提供了与传统 IO API 不同的 IO 编程模型
+[Java NIO（New IO）](/docs/CS/Java/JDK/IO/NIO.md)是一种替代的 Java IO API，意即标准 Java IO 和 Java 网络 API 的替代方案。
+Java NIO 提供了与传统 IO API 不同的 IO 编程模型。
 
 ## AIO
-
 
 [IOCP](https://hg.openjdk.org/jdk/jdk/file/d8327f838b88/src/java.base/windows/classes/sun/nio/ch/Iocp.java)
 
 ## File
 
-Read all lines from a file as a Stream. Unlike readAllLines, this method does not read all lines into a List, but instead populates lazily as the stream is consumed.
+从文件中读取所有行作为 Stream。与 readAllLines 不同，此方法不会将所有行读入 List，而是在消费流时惰性地填充。
 
 ```java
 public static Stream<String> lines(Path path, Charset cs) throws IOException {
@@ -253,19 +235,15 @@ public static Stream<String> lines(Path path, Charset cs) throws IOException {
 }
 ```
 
-
 ## Tuning
 
-JAVA NIO 和 JAVA AIO并没有提供断连重连、网络闪断、半包读写、失败缓存、网络拥塞和异常码流等的处理，这些都需要开发者自己来补齐相关的工作
+JAVA NIO 和 JAVA AIO并没有提供断连重连、网络闪断、半包读写、失败缓存、网络拥塞和异常码流等的处理，这些都需要开发者自己来补齐相关的工作。
 AIO在实践中，并没有比NIO更好。AIO在不同的平台有不同的实现，windows系统下使用的是一种异步IO技术：IOCP；
-Linux下由于没有这种异步 IO 技术，所以使用的是epoll 对异步 IO 进行模拟。所以 AIO 在 Linux 下的性能并不理想。AIO 也没有提供对 UDP 的支持
+Linux下由于没有这种异步 IO 技术，所以使用的是epoll 对异步 IO 进行模拟。所以 AIO 在 Linux 下的性能并不理想。AIO 也没有提供对 UDP 的支持。
 
 在实际的大型互联网项目中，Java 原生的 API 应用并不广泛，取而代之的是一款第三方Java 框架，这就是 [Netty](/docs/CS/Framework/Netty/Netty.md)
 
-
 ## Links
-
-
 
 ## References
 

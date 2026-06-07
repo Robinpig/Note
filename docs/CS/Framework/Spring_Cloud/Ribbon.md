@@ -1,20 +1,20 @@
 ## Introduction
 
-Ribbon is a client-side load balancer that gives you a lot of control over the behavior of HTTP and TCP clients. 
-It provides the following features
+Ribbon 是一个客户端负载均衡器，让你对 HTTP 和 TCP 客户端的行为有很大的控制权。
+它提供以下功能：
 
-- Load balancing
-- Fault tolerance
-- Multiple protocol (HTTP, TCP, UDP) support in an asynchronous and reactive model
-- Caching and batching
+- 负载均衡
+- 容错
+- 异步和响应式模型下的多协议（HTTP、TCP、UDP）支持
+- 缓存和批处理
 
-Feign already uses Ribbon.
+Feign 已经使用了 Ribbon。
 
 > [!WARNING]
-> 
+>
 > Last Release on Nov 17, 2021
 
-The following table shows the beans that Spring Cloud Netflix provides by default for Ribbon:
+下表显示了 Spring Cloud Netflix 默认为 Ribbon 提供的 bean：
 
 | Bean Type | Bean Name | Class Name |
 | :--: | :--: | :--: |
@@ -27,7 +27,7 @@ The following table shows the beans that Spring Cloud Netflix provides by defaul
 | `ServerListUpdater` | `ribbonServerListUpdater` | `PollingServerListUpdater` |
 
 
-Each Ribbon named client has a corresponding child application Context that Spring Cloud maintains. This application context is lazily loaded on the first request to the named client. This lazy loading behavior can be changed to instead eagerly load these child application contexts at startup, by specifying the names of the Ribbon clients, as shown in the following example:
+每个 Ribbon named client 都有一个由 Spring Cloud 维护的对应子 Application Context。该 Application Context 在首次请求 named client 时延迟加载。可以通过指定 Ribbon client 的名称来更改此延迟加载行为，使其在启动时提前加载这些子 Application Context，如下例所示：
 
 ```yml
 ribbon:
@@ -40,10 +40,10 @@ ribbon:
 
 ### AutoConfiguration
 
-Auto-configuration for blocking client-side load balancing.
+阻塞式客户端负载均衡的自动配置。
 
 loadBalancerInterceptor
-RestTemplateCustomizer set interceptors to RestTemplate
+RestTemplateCustomizer 设置拦截器到 RestTemplate
 
 ```java
 @Configuration(proxyBeanMethods = false)
@@ -207,9 +207,9 @@ public class BaseLoadBalancer extends AbstractLoadBalancer implements PrimeConne
 
 ### intercept
 
-AsyncLoadBalancerInterceptor#intercept() wrap request to `ServiceRequestWrapper` then executeAsync by `org.springframework.http.client.AsyncClientHttpRequestExecution`
+AsyncLoadBalancerInterceptor#intercept() 将请求包装为 `ServiceRequestWrapper`，然后通过 `org.springframework.http.client.AsyncClientHttpRequestExecution` 异步执行。
 
-Use [LoadBalancer](/docs/CS/Framework/Spring_Cloud/Ribbon.md?id=LoadBalancer) to execute.
+使用 [LoadBalancer](/docs/CS/Framework/Spring_Cloud/Ribbon.md?id=LoadBalancer) 来执行。
 
 ```java
 // org.springframework.cloud.client.loadbalancer.AsyncLoadBalancerInterceptor
@@ -231,7 +231,7 @@ public ListenableFuture<ClientHttpResponse> intercept(final HttpRequest request,
 
 
 
-Default use [ZoneAwareLoadBalancer](/docs/CS/Framework/Spring_Cloud/Ribbon.md?id=chooseServer) which can avoid a zone as a whole when choosing server.
+默认使用 [ZoneAwareLoadBalancer](/docs/CS/Framework/Spring_Cloud/Ribbon.md?id=chooseServer)，它可以在选择服务器时避免整个 zone。
 ```java
 // org.springframework.cloud.netflix.ribbon
 @Configuration(proxyBeanMethods = false)
@@ -279,7 +279,7 @@ public class RibbonClientConfiguration {
 }
 ```
 > [!TIP]
-> 
+>
 >
 
 feign.client.config.default.readTimeout=3000
@@ -287,7 +287,7 @@ feign.client.config.default.connectTimeout=3000
 
 
 
-default `RoundRobinRule`
+默认使用 `RoundRobinRule`
 
 ## IRule
 ![IRule](img/IRule.png)
@@ -295,7 +295,7 @@ default `RoundRobinRule`
 
 ## ServerListUpdater
 
-scheduleWithFixedDelay 30s get serversList from Registry Center([Eureka](/docs/CS/Framework/Spring_Cloud/Eureka.md), [Nacos](/docs/CS/Framework/Spring_Cloud/nacos/Nacos.md), etc. ) and check timestamps.
+使用 scheduleWithFixedDelay 每 30 秒从注册中心（[Eureka](/docs/CS/Framework/Spring_Cloud/Eureka.md)、[Nacos](/docs/CS/Framework/Spring_Cloud/nacos/Nacos.md) 等）获取 serversList 并检查时间戳。
 
 ```java
 public class PollingServerListUpdater implements ServerListUpdater {

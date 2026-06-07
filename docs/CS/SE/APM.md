@@ -1,9 +1,9 @@
 ## Introduction
 
-In the fields of information technology and systems management,
-**application performance management** (**APM**) is the monitoring and management of performance and availability of software applications.
-APM strives to detect and diagnose complex application performance problems to maintain an expected level of service.
-APM is the translation of IT metrics into business meaning ([i.e.] value).
+在信息技术和系统管理领域，
+**应用性能管理**（**APM**）是对软件应用的性能和可用性进行监控和管理。
+APM 致力于检测和诊断复杂的应用性能问题，以维持预期的服务水平。
+APM 是将 IT 指标转化为业务意义（即价值）的过程。
 
 
 

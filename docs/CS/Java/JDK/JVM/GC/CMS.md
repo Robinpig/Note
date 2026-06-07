@@ -1,25 +1,24 @@
 ## Introduction
 
-The Concurrent Mark Sweep (CMS) collector is designed for applications that **prefer shorter garbage collection pauses** and that can afford to **share processor resources with the garbage collector while the application is running**. 
-Typically applications that have a relatively large set of long-lived data (a large tenured generation) and run on machines with two or more processors tend to benefit from the use of this collector. 
-However, this collector should be considered for any application with a low pause time requirement. The CMS collector is enabled with the command-line option `-XX:+UseConcMarkSweepGC`.
+Concurrent Mark Sweep（CMS）收集器专为**偏好更短垃圾回收暂停**且能够**在应用程序运行时与垃圾回收器共享处理器资源**的应用程序设计。
+通常，具有相对大量长期存活数据（大老年代）并在具有两个或更多处理器的机器上运行的应用程序倾向于从此收集器的使用中受益。
+然而，任何具有低暂停时间要求的应用程序都应考虑此收集器。CMS 收集器通过命令行选项 `-XX:+UseConcMarkSweepGC` 启用。
 
-Similar to the other available collectors, the CMS collector is generational; thus both minor and major collections occur.
-The CMS collector attempts to reduce pause times due to major collections by using separate garbage collector threads to trace the reachable objects concurrently with the execution of the application threads.
-During each major collection cycle, the CMS collector pauses all the application threads for a brief period at the beginning of the collection and again toward the middle of the collection. 
-The second pause tends to be the longer of the two pauses. Multiple threads are used to do the collection work during both pauses. 
-The remainder of the collection (including most of the tracing of live objects and sweeping of unreachable objects is done with one or more garbage collector threads that run concurrently with the application.
-Minor collections can interleave with an ongoing major cycle, and are done in a manner similar to the parallel collector (in particular, the application threads are stopped during minor collections).
+与其他可用收集器类似，CMS 收集器是分代的；因此会发生 minor 和 major 回收。
+CMS 收集器尝试通过使用单独的垃圾回收器线程与应用程序线程同时追踪可达对象来减少 major 回收导致的暂停时间。
+在每个 major 回收周期中，CMS 收集器在回收开始时和回收中途短暂暂停所有应用程序线程。
+第二次暂停往往是两者中较长的一次。两次暂停期间都使用多个线程执行回收工作。
+回收的其余部分（包括大部分存活对象追踪和不可达对象清除）由一个或多个与应用程序同时运行的垃圾回收器线程完成。
+Minor 回收可以与正在进行的 major 周期交错，并以类似于并行收集器的方式完成（特别是，应用程序线程在 minor 回收期间停止）。
 
-Before CMS, Serial, Parallel all STW.
+在 CMS 之前，Serial、Parallel 都是 STW。
 
-CMS for Old GC, and Young GC still a pause by [other collectors(ParNew)](/docs/CS/Java/JDK/JVM/ParNew.md).
+CMS 用于 Old GC，Young GC 仍然由[其他收集器（ParNew）](/docs/CS/Java/JDK/JVM/ParNew.md)暂停执行。
 
-- Initial Mark(STW)
+- Initial Mark（STW）
 - Concurrent Mark
-- Remark Mark(STW) remark from `GC ROOT`, `Writter Barrier`
+- Remark Mark（STW）从 `GC ROOT`、`Write Barrier` 重新标记
 - Concurrent Sweep
-
 
 ```
 // CMS & ParNew code in same directory /hotspot/share/gc/cms (JDK12)
@@ -27,78 +26,83 @@ UseConcMarkSweepGC                       := true
 UseParNewGC                              := true
 ```
 
-
 UseCMSBestFit
 
-
 #### Concurrent Mode Failure
-The CMS collector uses one or more garbage collector threads that run simultaneously with the application threads with the goal of completing the collection of the tenured generation before it becomes full. 
-As described previously, in normal operation, the CMS collector does most of its tracing and sweeping work with the application threads still running, so only brief pauses are seen by the application threads. 
 
-**However, if the CMS collector is unable to finish reclaiming the unreachable objects before the tenured generation fills up, 
-or if an allocation cannot be satisfied with the available free space blocks in the tenured generation, 
-then the application is paused and the collection is completed with all the application threads stopped.** 
+CMS 收集器使用一个或多个与应用程序线程同时运行的垃圾回收器线程，目标是在老年代变满之前完成其回收。
+如前所述，在正常操作中，CMS 收集器在应用程序线程仍在运行时完成大部分追踪和清除工作，因此应用程序线程只看到短暂的暂停。
 
-The inability to complete a collection concurrently is referred to as `concurrent mode failure` and indicates the need to adjust the CMS collector parameters. 
-If a concurrent collection is interrupted by an explicit garbage collection (`System.gc()`) or for a garbage collection needed to provide information for diagnostic tools, then a `concurrent mode interruption` is reported.
+**然而，如果 CMS 收集器无法在老年代填满之前完成回收不可达对象，
+或者如果无法使用老年代中可用的空闲空间块满足分配，
+那么应用程序将被暂停，并在所有应用程序线程停止的情况下完成回收。**
+
+无法完成并发回收称为 `concurrent mode failure`，表明需要调整 CMS 收集器参数。
+如果并发回收被显式垃圾回收（`System.gc()`）或为诊断工具提供信息所需的垃圾回收中断，则会报告 `concurrent mode interruption`。
 
 #### Excessive GC Time and OutOfMemoryError
-The CMS collector throws an OutOfMemoryError if too much time is being spent in garbage collection: if more than 98% of the total time is spent in garbage collection and less than 2% of the heap is recovered, then an OutOfMemoryError is thrown. This feature is designed to prevent applications from running for an extended period of time while making little or no progress because the heap is too small. If necessary, this feature can be disabled by adding the option -XX:-UseGCOverheadLimit to the command line.
 
-**The policy is the same as that in the parallel collector, except that time spent performing concurrent collections is not counted toward the 98% time limit. In other words, only collections performed while the application is stopped count toward excessive GC time. Such collections are typically due to a concurrent mode failure or an explicit collection request (for example, a call to `System.gc`).**
+如果花在垃圾回收上的时间过多，CMS 收集器会抛出 OutOfMemoryError：如果超过 98% 的总时间花在垃圾回收上，并且回收的堆少于 2%，则抛出 OutOfMemoryError。此功能旨在防止应用程序由于堆太小而在长时间内几乎没有进展的情况下运行。如有必要，可以通过在命令行中添加选项 `-XX:-UseGCOverheadLimit` 来禁用此功能。
+
+**该策略与并行收集器中的策略相同，不同之处在于执行并发回收所花费的时间不计入 98% 的时间限制。换句话说，只有在应用程序停止时执行的回收才计入 excessive GC time。此类回收通常是由于并发模式失败或显式回收请求（例如调用 `System.gc`）引起的。**
 
 #### Floating Garbage
-The CMS collector, like all the other collectors in Java HotSpot VM, is a tracing collector that identifies at least all the reachable objects in the heap. In the parlance of Richard Jones and Rafael D. Lins in their publication Garbage Collection: Algorithms for Automated Dynamic Memory, it is an `incremental update collector`. **Because application threads and the garbage collector thread run concurrently during a major collection, objects that are traced by the garbage collector thread may subsequently become unreachable by the time collection process ends.** Such unreachable objects that have not yet been reclaimed are referred to as floating garbage. The amount of floating garbage depends on the duration of the concurrent collection cycle and on the frequency of reference updates, also known as mutations, by the application. Furthermore, because the young generation and the tenured generation are collected independently, each acts a source of roots to the other. As a rough guideline, try increasing the size of the tenured generation by 20% to account for the floating garbage. Floating garbage in the heap at the end of one concurrent collection cycle is collected during the next collection cycle.
+
+CMS 收集器与 Java HotSpot VM 中的所有其他收集器一样，是一种追踪收集器，它至少识别堆中所有可达对象。用 Richard Jones 和 Rafael D. Lins 在其著作《Garbage Collection: Algorithms for Automated Dynamic Memory》中的术语来说，它是一个**增量更新收集器**。**由于应用程序线程和垃圾回收器线程在 major 回收期间同时运行，垃圾回收器线程追踪过的对象可能在回收过程结束时变得不可达。** 这些尚未被回收的不可达对象称为浮动垃圾（floating garbage）。浮动垃圾的数量取决于并发回收周期的持续时间以及应用程序引用更新（也称为变更）的频率。此外，由于年轻代和老年代是独立回收的，它们各自作为对方根的来源。作为粗略的指导，尝试将老年代大小增加 20% 以应对浮动垃圾。一个并发回收周期结束时堆中的浮动垃圾将在下一个回收周期中被收集。
 
 #### Pauses
-The CMS collector pauses an application twice during a concurrent collection cycle. The first pause is to mark as live the objects directly reachable from the roots (for example, object references from application thread stacks and registers, static objects and so on) and from elsewhere in the heap (for example, the young generation). This first pause is referred to as the `initial mark pause`. The second pause comes at the end of the concurrent tracing phase and finds objects that were missed by the concurrent tracing due to updates by the application threads of references in an object after the CMS collector had finished tracing that object. This second pause is referred to as the `remark pause`.
+
+CMS 收集器在并发回收周期中暂停应用程序两次。第一次暂停是将根直接可达的对象（例如，来自应用程序线程栈和寄存器的对象引用、静态对象等）以及来自堆中其他地方（例如年轻代）的对象标记为存活。此第一次暂停称为 `initial mark pause`。第二次暂停发生在并发追踪阶段结束时，用于查找由于 CMS 收集器完成对某个对象的追踪后应用程序线程更新了该对象中的引用而未被并发追踪发现的对象。此第二次暂停称为 `remark pause`。
 
 #### Concurrent Phases
-The concurrent tracing of the reachable object graph occurs between the initial mark pause and the remark pause. During this concurrent tracing phase one or more concurrent garbage collector threads may be using processor resources that would otherwise have been available to the application. As a result, compute-bound applications may see a commensurate fall in application throughput during this and other concurrent phases even though the application threads are not paused. After the remark pause, a concurrent sweeping phase collects the objects identified as unreachable. Once a collection cycle completes, the CMS collector waits, consuming almost no computational resources, until the start of the next major collection cycle.
+
+可达对象图的并发追踪发生在 initial mark pause 和 remark pause 之间。在此并发追踪阶段期间，一个或多个并发垃圾回收器线程可能正在使用本可用于应用程序的处理器资源。因此，计算密集型应用程序可能会在此和其他并发阶段期间看到应用程序吞吐量的相应下降，即使应用程序线程未被暂停。在 remark pause 之后，并发清除阶段收集被识别为不可达的对象。一旦回收周期完成，CMS 收集器就会等待，几乎不消耗计算资源，直到下一个 major 回收周期开始。
 
 #### Starting a Concurrent Collection Cycle
-With the serial collector a major collection occurs whenever the tenured generation becomes full and all application threads are stopped while the collection is done. In contrast, the start of a concurrent collection must be timed such that the collection can finish before the tenured generation becomes full; otherwise, the application would observe longer pauses due to concurrent mode failure. There are several ways to start a concurrent collection.
 
-Based on recent history, the CMS collector maintains estimates of the time remaining before the tenured generation will be exhausted and of the time needed for a concurrent collection cycle. Using these dynamic estimates, a concurrent collection cycle is started with the aim of completing the collection cycle before the tenured generation is exhausted. These estimates are padded for safety, because concurrent mode failure can be very costly.
+对于串行收集器，每当老年代变满时就会发生 major 回收，并且在回收完成时所有应用程序线程都会停止。相比之下，并发回收的启动必须计时，以便回收可以在老年代变满之前完成；否则，应用程序将由于并发模式失败而观察到更长的暂停。有几种方法可以启动并发回收。
 
-A concurrent collection also starts if the occupancy of the tenured generation exceeds an initiating occupancy (a percentage of the tenured generation). The default value for this initiating occupancy threshold is approximately `92%`, but the value is subject to change from release to release. This value can be manually adjusted using the command-line option `-XX:CMSInitiatingOccupancyFraction=<N>`, where <N> is an integral percentage (0 to 100) of the tenured generation size.
+基于最近的历史记录，CMS 收集器维护对老年代将要耗尽之前剩余时间的估计以及对并发回收周期所需时间的估计。使用这些动态估计，并发回收周期的目标是确保在老年耗尽之前完成回收周期。这些估计添加了安全填充，因为并发模式失败可能代价高昂。
+
+如果老年代的占用率超过启动占用率（老年代的一个百分比），也会启动并发回收。此启动占用率阈值的默认值约为 `92%`，但该值可能随版本而变。可以使用命令行选项 `-XX:CMSInitiatingOccupancyFraction=<N>` 手动调整此值，其中 `<N>` 是老年代大小的整数百分比（0 到 100）。
 
 #### Scheduling Pauses
-The pauses for the young generation collection and the tenured generation collection occur independently. They do not overlap, but may occur in quick succession such that the pause from one collection, immediately followed by one from the other collection, can appear to be a single, longer pause. To avoid this, the CMS collector attempts to schedule the remark pause roughly midway between the previous and next young generation pauses. This scheduling is currently not done for the initial mark pause, which is usually much shorter than the remark pause.
+
+年轻代回收和老年代回收的暂停独立发生。它们不重叠，但可能接连发生，使得一次回收的暂停紧接着另一次回收的暂停，看起来像是一次更长的暂停。为了避免这种情况，CMS 收集器尝试将 remark pause 安排在前一个和后一个年轻代暂停之间的大致中间位置。目前，initial mark pause 不进行此调度，它通常比 remark pause 短得多。
 
 #### Incremental Mode
-Note that the incremental mode is being deprecated in Java SE 8 and may be removed in a future major release.
 
-The CMS collector can be used in a mode in which the concurrent phases are done incrementally. Recall that during a concurrent phase the garbage collector thread is using one or more processors. The incremental mode is meant to lessen the effect of long concurrent phases by periodically stopping the concurrent phase to yield back the processor to the application. This mode, referred to here as i-cms, divides the work done concurrently by the collector into small chunks of time that are scheduled between young generation collections. This feature is useful when applications that need the low pause times provided by the CMS collector are run on machines with small numbers of processors (for example, 1 or 2).
+注意，增量模式在 Java SE 8 中已弃用，可能在未来的主要版本中移除。
 
-The concurrent collection cycle typically includes the following steps:
-- Stop all application threads, identify the set of objects reachable from roots, and then resume all application threads.
-- Concurrently trace the reachable object graph, using one or more processors, while the application threads are executing.
-- Concurrently retrace sections of the object graph that were modified since the tracing in the previous step, using one processor.
-- Stop all application threads and retrace sections of the roots and object graph that may have been modified since they were last examined, and then resume all application threads.
-- Concurrently sweep up the unreachable objects to the free lists used for allocation, using one processor.
-- Concurrently resize the heap and prepare the support data structures for the next collection cycle, using one processor.
+CMS 收集器可以在一种模式下使用，其中并发阶段是增量完成的。回想一下，在并发阶段期间，垃圾回收器线程正在使用一个或多个处理器。增量模式旨在通过定期停止并发阶段将处理器交还给应用程序来减轻长并发阶段的影响。此模式在此称为 i-cms，它将收集器并发完成的工作分成小块时间，安排在年轻代回收之间。当需要在具有少量处理器（例如 1 或 2 个）的机器上运行需要 CMS 收集器提供的低暂停时间的应用程序时，此功能很有用。
 
-Normally, the CMS collector uses one or more processors during the entire concurrent tracing phase, without voluntarily relinquishing them. Similarly, one processor is used for the entire concurrent sweep phase, again without relinquishing it. This overhead can be too much of a disruption for applications with response time constraints that might otherwise have used the processing cores, particularly when run on systems with just one or two processors. Incremental mode solves this problem by breaking up the concurrent phases into short bursts of activity, which are scheduled to occur midway between minor pauses.
+并发回收周期通常包括以下步骤：
+- 停止所有应用程序线程，识别根可达的对象集，然后恢复所有应用程序线程。
+- 在应用程序线程执行的同时，使用一个或多个处理器并发追踪可达对象图。
+- 使用一个处理器并发重新追踪自上一步骤追踪以来被修改的对象图部分。
+- 停止所有应用程序线程并重新追踪自上次检查以来可能被修改的根和对象图部分，然后恢复所有应用程序线程。
+- 使用一个处理器将不可达对象并发清除到用于分配的空闲列表。
+- 使用一个处理器并发调整堆大小并为下一个回收周期准备支持数据结构。
 
-The i-cms mode uses a duty cycle to control the amount of work the CMS collector is allowed to do before voluntarily giving up the processor. The duty cycle is the percentage of time between young generation collections that the CMS collector is allowed to run. The i-cms mode can automatically compute the duty cycle based on the behavior of the application (the recommended method, known as automatic pacing), or the duty cycle can be set to a fixed value on the command line.
+通常，CMS 收集器在整个并发追踪阶段使用一个或多个处理器，不会自愿放弃它们。类似地，一个处理器用于整个并发清除阶段，同样不会放弃它。对于有响应时间约束的应用程序（它们可能本来会使用处理核心），这种开销可能过于干扰，尤其是在只有一两个处理器的系统上运行时。增量模式通过将并发阶段分解为短暂的活动 burst 来解决此问题，这些 burst 被安排在 minor 暂停之间发生。
 
+i-cms 模式使用 duty cycle 来控制 CMS 收集器在自愿放弃处理器之前允许执行的工作量。duty cycle 是 CMS 收集器在年轻代回收之间允许运行的时间百分比。i-cms 模式可以根据应用程序的行为自动计算 duty cycle（推荐的方法，称为自动 pacing），也可以在命令行上将 duty cycle 设置为固定值。
 
 ### Basic Troubleshooting
-The i-cms automatic pacing feature uses statistics gathered while the program is running to compute a duty cycle so that concurrent collections complete before the heap becomes full. However, past behavior is not a perfect predictor of future behavior and the estimates may not always be accurate enough to prevent the heap from becoming full. If too many full collections occur, then try the steps in Table 8-2, "Troubleshooting the i-cms Automatic Pacing Feature", one at a time.
 
+i-cms 自动 pacing 功能使用程序运行时收集的统计数据来计算 duty cycle，以便并发回收在堆变满之前完成。然而，过去的行为并非未来的完美预测器，估计值可能并不总是足够准确以防止堆变满。如果发生过多的 full GC，请尝试表 8-2 "Troubleshooting the i-cms Automatic Pacing Feature" 中的步骤，一次一个。
 
 Table Troubleshooting the i-cms Automatic Pacing Feature
 
 | Step | Options |
 | --- | --- |
-| 1. Increase the safety factor. | -XX:CMSIncrementalSafetyFactor=<N> |
-| 2. Increase the minimum duty cycle. | -XX:CMSIncrementalDutyCycleMin=<N> |
-| 3. Disable automatic pacing and use a fixed duty cycle. | -XX:-CMSIncrementalPacing -XX:CMSIncrementalDutyCycle=<N> |
-
+| 1. 增加安全系数。 | -XX:CMSIncrementalSafetyFactor=<N> |
+| 2. 增加最小 duty cycle。 | -XX:CMSIncrementalDutyCycleMin=<N> |
+| 3. 禁用自动 pacing 并使用固定 duty cycle。 | -XX:-CMSIncrementalPacing -XX:CMSIncrementalDutyCycle=<N> |
 
 ### Measurements
-Example "Output from the CMS Collector" is the output from the CMS collector with the options -verbose:gc and -XX:+PrintGCDetails, with a few minor details removed. Note that the output for the CMS collector is interspersed with the output from the minor collections; typically many minor collections occur during a concurrent collection cycle. CMS-initial-mark indicates the start of the concurrent collection cycle, CMS-concurrent-mark indicates the end of the concurrent marking phase, and CMS-concurrent-sweep marks the end of the concurrent sweeping phase. Not discussed previously is the precleaning phase indicated by CMS-concurrent-preclean. Precleaning represents work that can be done concurrently in preparation for the remark phase CMS-remark. The final phase is indicated by CMS-concurrent-reset and is in preparation for the next concurrent collection.
+
+示例 "Output from the CMS Collector" 是使用选项 -verbose:gc 和 -XX:+PrintGCDetails 的 CMS 收集器的输出，删除了少量细节。注意，CMS 收集器的输出与 minor 回收的输出交错在一起；通常在并发回收周期内发生多次 minor 回收。CMS-initial-mark 表示并发回收周期的开始，CMS-concurrent-mark 表示并发标记阶段的结束，CMS-concurrent-sweep 表示并发清除阶段的结束。之前未讨论的是由 CMS-concurrent-preclean 指示的预清理阶段。预清理表示可以在并发状态下完成的工作，为 remark 阶段 CMS-remark 做准备。最后一个阶段由 CMS-concurrent-reset 指示，为下一个并发回收做准备。
 
 Example Output from the CMS Collector
 ```
@@ -120,13 +124,11 @@ Example Output from the CMS Collector
 [GC [DefNew: 2048K->1K(2112K), 0.0013936 secs] 17527K->15479K(27912K), 0.0014814 secs
 ]
 ```
-The initial mark pause is typically short relative to the minor collection pause time. The concurrent phases (concurrent mark, concurrent preclean and concurrent sweep) normally last significantly longer than a minor collection pause, as indicated by Example 8-1, "Output from the CMS Collector". Note, however, that the application is not paused during these concurrent phases. The remark pause is often comparable in length to a minor collection. The remark pause is affected by certain application characteristics (for example, a high rate of object modification can increase this pause) and the time since the last minor collection (for example, more objects in the young generation may increase this pause).
-
+Initial mark pause 通常相对于 minor 回收暂停时间较短。并发阶段（concurrent mark、concurrent preclean 和 concurrent sweep）通常比 minor 暂停持续时间长得多，如示例 8-1 "Output from the CMS Collector" 所示。但请注意，在这些并发阶段期间应用程序不会暂停。Remark pause 的长度通常与 minor 回收相当。Remark pause 受到某些应用程序特性（例如，对象修改率高可能增加此暂停）和自上次 minor 回收以来的时间（例如，年轻代中对象更多可能增加此暂停）的影响。
 
 ## Summary
-1. The Concurrent Mark Sweep (CMS) collector is a concurrent collector which prefer shorter garbage collection pauses.
 
-
+1. Concurrent Mark Sweep（CMS）收集器是一种偏好更短垃圾回收暂停的并发收集器。
 
 ## Links
 

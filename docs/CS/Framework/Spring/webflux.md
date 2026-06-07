@@ -1,18 +1,15 @@
 ## Introduction
 
-The reactive-stack web framework, [Spring WebFlux](https://docs.spring.io/spring-framework/docs/current/reference/html/web-reactive.html), has been added Spring 5.0. 
-It is fully non-blocking, supports [reactive streams](http://www.reactive-streams.org/) back pressure, and runs on such servers as Netty, Undertow, and Servlet 3.1+ containers.
-
+响应式栈 Web 框架 [Spring WebFlux](https://docs.spring.io/spring-framework/docs/current/reference/html/web-reactive.html) 已在 Spring 5.0 中加入。
+它是完全非阻塞的，支持[响应式流](http://www.reactive-streams.org/)背压，并可在 Netty、Undertow 和 Servlet 3.1+ 容器等服务器上运行。
 
 ### Concurrency Model
 
-Both [Spring MVC](/docs/CS/Framework/Spring/MVC.md) and Spring WebFlux support annotated controllers, but there is a key difference in the concurrency model and the default assumptions for blocking and threads.
-- In Spring MVC (and servlet applications in general), it is assumed that applications can block the current thread, (for example, for remote calls). 
-  For this reason, servlet containers use a large thread pool to absorb potential blocking during request handling.
-- In Spring WebFlux (and non-blocking servers in general), it is assumed that applications do not block. 
-  Therefore, non-blocking servers use a small, fixed-size thread pool (event loop workers) to handle requests.
-
-
+[Spring MVC](/docs/CS/Framework/Spring/MVC.md) 和 Spring WebFlux 都支持注解控制器，但在并发模型以及阻塞和线程的默认假设方面存在关键差异。
+- 在 Spring MVC（以及一般的 Servlet 应用）中，假设应用可以阻塞当前线程（例如，用于远程调用）。
+  因此，Servlet 容器使用大型线程池来吸收请求处理期间的潜在阻塞。
+- 在 Spring WebFlux（以及一般的非阻塞服务器）中，假设应用不会阻塞。
+  因此，非阻塞服务器使用小的固定大小线程池（事件循环工作者）来处理请求。
 
 ## Start Server
 
@@ -81,12 +78,10 @@ public Mono<? extends DisposableServer> bind(ServerBootstrap b) {
 }
 ```
 
-
-
 ## handle
 
-Contract to handle a web request.
-Use *HttpWebHandlerAdapter* to adapt a *WebHandler* to an *HttpHandler*. The *WebHttpHandlerBuilder* provides a convenient way to do that while also optionally configuring one or more filters and/or exception handlers.
+处理 Web 请求的契约。
+使用 *HttpWebHandlerAdapter* 将 *WebHandler* 适配为 *HttpHandler*。*WebHttpHandlerBuilder* 提供了一种方便的方式，同时还可以选择配置一个或多个过滤器和/或异常处理程序。
 
 ```java
 public interface WebHandler {
@@ -97,25 +92,22 @@ public interface WebHandler {
 }
 ```
 
-
-
 ### DispatcherHandler
 
-Central dispatcher for HTTP request handlers/controllers. Dispatches to registered handlers for processing a request, providing convenient mapping facilities.
+HTTP 请求处理器/控制器的中央分发器。将请求分派到注册的处理程序进行处理，提供方便映射功能。
 
-DispatcherHandler discovers the delegate components it needs from Spring configuration. It detects the following in the application context:
+DispatcherHandler 从 Spring 配置中发现所需的委托组件。它在应用上下文中检测以下内容：
 
-- HandlerMapping -- map requests to handler objects
+- HandlerMapping -- 将请求映射到处理器对象
   - RoutePredicateHandlerMapping
     - [Spring Cloud Gateway](/docs/CS/Framework/Spring_Cloud/gateway.md)
-- HandlerAdapter -- for using any handler interface
-- HandlerResultHandler -- process handler return values
+- HandlerAdapter -- 用于使用任何处理器接口
+- HandlerResultHandler -- 处理处理程序返回值
 
-DispatcherHandler is also designed to be a Spring bean itself and implements ApplicationContextAware for access to the context it runs in. If DispatcherHandler is declared as a bean with the name "webHandler", it is discovered by WebHttpHandlerBuilder.applicationContext(ApplicationContext) which puts together a processing chain together with WebFilter, WebExceptionHandler and others.
+DispatcherHandler 本身也被设计为一个 Spring bean，并实现了 ApplicationContextAware 以访问其运行的上下文。
+如果 DispatcherHandler 被声明为名为 "webHandler" 的 bean，它将被 WebHttpHandlerBuilder.applicationContext(ApplicationContext) 发现，该方法将处理链与 WebFilter、WebExceptionHandler 等其他组件组合在一起。
 
-A DispatcherHandler bean declaration is included in `@EnableWebFlux` configuration.
-
-
+`@EnableWebFlux` 配置中包含一个 DispatcherHandler bean 声明。
 
 ```java
 public class DispatcherHandler implements WebHandler, PreFlightRequestHandler, ApplicationContextAware {
@@ -164,9 +156,6 @@ public class DispatcherHandler implements WebHandler, PreFlightRequestHandler, A
 }
 ```
 
-
-
-
 #### initStrategies
 ```java
 public class DispatcherHandler implements WebHandler, PreFlightRequestHandler, ApplicationContextAware {
@@ -198,8 +187,6 @@ public class DispatcherHandler implements WebHandler, PreFlightRequestHandler, A
     }
 }
 ```
-
-
 
 ## Links
 

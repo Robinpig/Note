@@ -1,58 +1,55 @@
 ## Introduction
 
-[Spring Security](https://spring.io/projects/spring-security) is a powerful and highly customizable authentication and access-control framework.
-It is the de-facto standard for securing Spring-based applications.
-Spring Security is a framework that focuses on providing both authentication and authorization to Java applications.
+[Spring Security](https://spring.io/projects/spring-security) 是一个功能强大且高度可定制的身份验证和访问控制框架。
+它是保护基于 Spring 的应用的事实标准。
+Spring Security 是一个专注于为 Java 应用提供身份验证和授权的框架。
 
 ## Architecture
 
-Spring Security’s Servlet support is based on Servlet Filters, so it is helpful to look at the role of Filters generally first.
-The client sends a request to the application, and the container creates a FilterChain which contains the Filters and Servlet that should process the HttpServletRequest based on the path of the request URI. 
-In a Spring MVC application the Servlet is an instance of DispatcherServlet. 
-At most one Servlet can handle a single HttpServletRequest and HttpServletResponse. 
-However, more than one Filter can be used to:
-- Prevent downstream Filters or the Servlet from being invoked. In this instance the Filter will typically write the HttpServletResponse.
-- Modify the HttpServletRequest or HttpServletResponse used by the downstream Filters and Servlet
+Spring Security 的 Servlet 支持基于 Servlet Filters，因此首先了解 Filter 的作用会很有帮助。
+客户端向应用发送请求，容器创建一个 FilterChain，其中包含根据请求 URI 路径应处理 HttpServletRequest 的 Filters 和 Servlet。
+在 Spring MVC 应用中，Servlet 是 DispatcherServlet 的一个实例。
+最多只有一个 Servlet 可以处理单个 HttpServletRequest 和 HttpServletResponse。
+然而，可以使用多个 Filter 来：
+- 阻止下游 Filters 或 Servlet 被调用。在这种情况下，Filter 通常会写入 HttpServletResponse。
+- 修改下游 Filters 和 Servlet 使用的 HttpServletRequest 或 HttpServletResponse
 
-Since a Filter only impacts downstream Filters and the Servlet, the order each Filter is invoked is extremely important.
-
+由于 Filter 仅影响下游的 Filters 和 Servlet，每个 Filter 被调用的顺序非常重要。
 
 ### DelegatingFilterProxy
 
-Spring provides a Filter implementation named DelegatingFilterProxy that allows bridging between the Servlet container’s lifecycle and Spring’s ApplicationContext. 
-The Servlet container allows registering Filters using its own standards, but it is not aware of Spring defined Beans. 
-DelegatingFilterProxy can be registered via standard Servlet container mechanisms, but delegate all the work to a Spring Bean that implements Filter.
+Spring 提供了一个名为 DelegatingFilterProxy 的 Filter 实现，它允许在 Servlet 容器的生命周期和 Spring 的 ApplicationContext 之间建立桥梁。
+Servlet 容器允许使用自己的标准注册 Filters，但它不知道 Spring 定义的 Beans。
+DelegatingFilterProxy 可以通过标准的 Servlet 容器机制注册，但将所有工作委托给一个实现 Filter 的 Spring Bean。
 
-Here is a picture of how DelegatingFilterProxy fits into the Filters and the FilterChain.
+下图展示了 DelegatingFilterProxy 如何融入 Filters 和 FilterChain。
 
 ![DelegatingFilterProxy](https://docs.spring.io/spring-security/reference/_images/servlet/architecture/delegatingfilterproxy.png)
 
-DelegatingFilterProxy looks up *Bean Filter0* from the ApplicationContext and then invokes *Bean Filter0*.
+DelegatingFilterProxy 从 ApplicationContext 中查找 *Bean Filter0*，然后调用 *Bean Filter0*。
 
-Another benefit of DelegatingFilterProxy is that it allows **delaying looking Filter bean instances**. 
-This is important because the container needs to register the Filter instances before the container can startup. 
-However, Spring typically uses a ContextLoaderListener to load the Spring Beans which will not be done until after the Filter instances need to be registered.
-
+DelegatingFilterProxy 的另一个好处是它允许**延迟查找 Filter bean 实例**。
+这很重要，因为容器需要在容器启动之前注册 Filter 实例。
+然而，Spring 通常使用 ContextLoaderListener 来加载 Spring Beans，这要到 Filter 实例需要注册之后才会完成。
 
 ### FilterChainProxy
 
-Spring Security’s Servlet support is contained within FilterChainProxy. 
-FilterChainProxy is a special Filter provided by Spring Security that allows delegating to many Filter instances through SecurityFilterChain. 
-Since FilterChainProxy is a Bean, it is typically wrapped in a DelegatingFilterProxy.
+Spring Security 的 Servlet 支持包含在 FilterChainProxy 中。
+FilterChainProxy 是 Spring Security 提供的一个特殊 Filter，允许通过 SecurityFilterChain 委托给多个 Filter 实例。
+由于 FilterChainProxy 是一个 Bean，它通常被包装在 DelegatingFilterProxy 中。
 
 ![FilterChainProxy](https://docs.spring.io/spring-security/reference/_images/servlet/architecture/filterchainproxy.png)
 
-SecurityFilterChain is used by FilterChainProxy to determine which Spring Security Filters should be invoked for this request.
+SecurityFilterChain 被 FilterChainProxy 用于确定应对此请求调用哪些 Spring Security Filters。
 
 > [!TIP]
-> 
+>
 > See [Security Filters](https://docs.spring.io/spring-security/reference/servlet/architecture.html#servlet-security-filters)
 
-
-FilterChainProxy provides a number of advantages to registering directly with the Servlet container or DelegatingFilterProxy. 
-- First, it provides a starting point for all of Spring Security’s Servlet support.
-- Second, since FilterChainProxy is central to Spring Security usage it can perform tasks that are not viewed as optional.
-- In addition, it provides more flexibility in determining when a SecurityFilterChain should be invoked.
+FilterChainProxy 相比直接向 Servlet 容器或 DelegatingFilterProxy 注册提供了一些优势。
+- 首先，它为 Spring Security 的所有 Servlet 支持提供了一个起点。
+- 其次，由于 FilterChainProxy 是 Spring Security 使用的核心，它可以执行那些不被视为可选的任务。
+- 此外，它在确定何时调用 SecurityFilterChain 方面提供了更大的灵活性。
 
 ```dot
 strict digraph{
@@ -99,7 +96,7 @@ strict digraph{
 
 ## Authentication
 
-At the heart of Spring Security’s authentication model is the SecurityContextHolder. It contains the SecurityContext.
+Spring Security 身份验证模型的核心是 SecurityContextHolder，它包含 SecurityContext。
 
 ![SecurityContextHolder](https://docs.spring.io/spring-security/reference/_images/servlet/authentication/architecture/securitycontextholder.png)
 
@@ -107,27 +104,25 @@ At the heart of Spring Security’s authentication model is the SecurityContextH
 
 #### SecurityContextPersistenceFilter
 
-SecurityContextPersistenceFilter MUST be executed BEFORE any authentication processing mechanisms.
-Authentication processing mechanisms (e.g. BASIC, CAS processing filters etc) expect the SecurityContextHolder(default to using [MODE_THREADLOCAL](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md)) to contain a valid SecurityContext by the time they execute.
+SecurityContextPersistenceFilter 必须在任何身份验证处理机制之前执行。
+身份验证处理机制（例如 BASIC、CAS 处理 filters 等）期望在执行时 SecurityContextHolder（默认使用 [MODE_THREADLOCAL](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md)）包含有效的 SecurityContext。
 
-SecurityContextPersistenceFilter populates the SecurityContextHolder with information obtained from the configured SecurityContextRepository prior to the request and stores it back in the repository once the request has completed and clearing the context holder.
-By default it uses an HttpSessionSecurityContextRepository. See this class for information HttpSession related configuration options.
-This filter will only execute once per request, to resolve servlet container (specifically Weblogic) incompatibilities.
-
+SecurityContextPersistenceFilter 在请求之前用从配置的 SecurityContextRepository 获取的信息填充 SecurityContextHolder，并在请求完成后将其存回仓库并清除上下文持有者。
+默认情况下，它使用 HttpSessionSecurityContextRepository。有关 HttpSession 相关配置选项的信息，请参阅此类。
+此 Filter 每个请求只执行一次，以解决 Servlet 容器（特别是 Weblogic）的不兼容问题。
 
 #### AuthenticationProcessingFilter
 
 AuthenticationProcessingFilter
 
-The filter requires that you set the authenticationManager property. 
-An AuthenticationManager is required to process the authentication request tokens created by implementing classes.
-This filter will intercept a request and attempt to perform authentication from that request if the request matches the setRequiresAuthenticationRequestMatcher(RequestMatcher).
-Authentication is performed by the `attemptAuthentication` method.
-
+该 Filter 要求你设置 authenticationManager 属性。
+AuthenticationManager 是处理实现类创建的认证请求令牌所必需的。
+如果请求与 setRequiresAuthenticationRequestMatcher(RequestMatcher) 匹配，此 Filter 将拦截请求并尝试从该请求执行身份验证。
+身份验证通过 `attemptAuthentication` 方法执行。
 
 UsernamePasswordAuthenticationFilter
 
-Wrap `UsernamePasswordAuthenticationToken` to AuthenticationManager
+将 `UsernamePasswordAuthenticationToken` 包装到 AuthenticationManager
 ```java
 public class UsernamePasswordAuthenticationFilter extends
         AbstractAuthenticationProcessingFilter {
@@ -166,18 +161,17 @@ public class UsernamePasswordAuthenticationFilter extends
 }
 ```
 
-
 #### authenticate
 
-Attempts to authenticate the passed Authentication object, returning a fully populated Authentication object (including granted authorities) if successful.
-An AuthenticationManager must honour the following contract concerning exceptions:
+尝试认证传入的 Authentication 对象，如果成功则返回一个完全填充的 Authentication 对象（包括已授予的权限）。
+AuthenticationManager 必须遵守以下关于异常的契约：
 
-- A DisabledException must be thrown if an account is disabled and the AuthenticationManager can test for this state.
-- A LockedException must be thrown if an account is locked and the AuthenticationManager can test for account locking.
-- A BadCredentialsException must be thrown if incorrect credentials are presented. Whilst the above exceptions are optional, an AuthenticationManager must always test credentials.
+- 如果账户被禁用且 AuthenticationManager 可以测试此状态，则必须抛出 DisabledException。
+- 如果账户被锁定且 AuthenticationManager 可以测试账户锁定，则必须抛出 LockedException。
+- 如果提供了错误的凭证，必须抛出 BadCredentialsException。虽然上述异常是可选的，但 AuthenticationManager 必须始终测试凭证。
 
-Exceptions should be tested for and if applicable thrown in the order expressed above (i.e. if an account is disabled or locked, the authentication request is immediately rejected and the credentials testing process is not performed). 
-This prevents credentials being tested against disabled or locked accounts.
+应按照上述顺序测试异常，并在适用时抛出（即，如果账户被禁用或锁定，认证请求立即被拒绝，不执行凭证测试过程）。
+这可以防止对禁用或锁定账户测试凭证。
 
 ```java
 public class ProviderManager implements AuthenticationManager, MessageSourceAware, InitializingBean {
@@ -266,11 +260,7 @@ public class ProviderManager implements AuthenticationManager, MessageSourceAwar
 }
 ```
 
-
-
-
 ### Username/Password
-
 
 UserDetailService
 
@@ -295,12 +285,10 @@ public interface UserDetails extends Serializable {
 
 PasswordEncoder
 
-
 ## Authorization
 
-Spring Security provides interceptors which control access to secure objects such as method invocations or web requests. 
-A pre-invocation decision on whether the invocation is allowed to proceed is made by the AccessDecisionManager.
-
+Spring Security 提供了拦截器，用于控制对安全对象（例如方法调用或 Web 请求）的访问。
+AccessDecisionManager 负责做出是否允许调用的预调用决策。
 
 ### AccessDecisionManager
 
@@ -316,7 +304,6 @@ public interface AccessDecisionManager {
 	boolean supports(Class<?> clazz);
 }
 ```
-
 
 ```java
 public abstract class AbstractAccessDecisionManager implements AccessDecisionManager, InitializingBean, MessageSourceAware {
@@ -337,42 +324,34 @@ public abstract class AbstractAccessDecisionManager implements AccessDecisionMan
 }
 ```
 
-
 ### SecurityInterceptor
 
+AbstractSecurityInterceptor 将确保安全拦截器的正确启动配置。
+它还将实现安全对象调用的正确处理，即：
 
-The AbstractSecurityInterceptor will ensure the proper startup configuration of the security interceptor.
-It will also implement the proper handling of secure object invocations, namely:
-
-1. Obtain the Authentication object from the SecurityContextHolder.
-2. Determine if the request relates to a secured or public invocation by looking up the secure object request against the SecurityMetadataSource.
-3. For an invocation that is secured (there is a list of ConfigAttributes for the secure object invocation):
-    1. If either the Authentication.isAuthenticated() returns false, or the alwaysReauthenticate is true, authenticate the request against the configured AuthenticationManager.
-       When authenticated, replace the Authentication object on the SecurityContextHolder with the returned value.
-    2. Authorize the request against the configured AccessDecisionManager.
-    3. Perform any run-as replacement via the configured RunAsManager.
-    4. Pass control back to the concrete subclass, which will actually proceed with executing the object.
-       A InterceptorStatusToken is returned so that after the subclass has finished proceeding with execution of the object,
-       its finally clause can ensure the AbstractSecurityInterceptor is re-called and tidies up correctly using finallyInvocation(InterceptorStatusToken).
-    5. The concrete subclass will re-call the AbstractSecurityInterceptor via the afterInvocation(InterceptorStatusToken, Object) method.
-    6. If the RunAsManager replaced the Authentication object, return the SecurityContextHolder to the object that existed after the call to AuthenticationManager.
-    7. If an AfterInvocationManager is defined, invoke the invocation manager and allow it to replace the object due to be returned to the caller.
-4. For an invocation that is public (there are no ConfigAttributes for the secure object invocation):
-    1. As described above, the concrete subclass will be returned an InterceptorStatusToken which is subsequently re-presented to the AbstractSecurityInterceptor after the secure object has been executed.
-       The AbstractSecurityInterceptor will take no further action when its afterInvocation(InterceptorStatusToken, Object) is called.
-5. Control again returns to the concrete subclass, along with the Object that should be returned to the caller. The subclass will then return that result or exception to the original caller.
+1. 从 SecurityContextHolder 获取 Authentication 对象。
+2. 通过将安全对象请求与 SecurityMetadataSource 进行比对，确定该请求涉及安全调用还是公共调用。
+3. 对于安全的调用（有安全对象调用的 ConfigAttributes 列表）：
+   1. 如果 Authentication.isAuthenticated() 返回 false，或 alwaysReauthenticate 为 true，则对配置的 AuthenticationManager 进行认证请求。认证后，将 SecurityContextHolder 上的 Authentication 对象替换为返回的值。
+   2. 对配置的 AccessDecisionManager 进行授权请求。
+   3. 通过配置的 RunAsManager 执行任何 run-as 替换。
+   4. 将控制权返回给具体子类，子类将实际继续执行对象。返回 InterceptorStatusToken，以便子类完成对象执行后，其 finally 子句可以确保 AbstractSecurityInterceptor 被重新调用并使用 finallyInvocation(InterceptorStatusToken) 正确清理。
+   5. 具体子类将通过 afterInvocation(InterceptorStatusToken, Object) 方法重新调用 AbstractSecurityInterceptor。
+   6. 如果 RunAsManager 替换了 Authentication 对象，将 SecurityContextHolder 恢复到调用 AuthenticationManager 后存在的对象。
+   7. 如果定义了 AfterInvocationManager，则调用此管理器并允许其替换要返回给调用者的对象。
+4. 对于公共调用（没有安全对象调用的 ConfigAttributes）：
+   1. 如上所述，具体子类将返回一个 InterceptorStatusToken，该 Token 随后在安全对象执行后重新呈现给 AbstractSecurityInterceptor。当调用其 afterInvocation(InterceptorStatusToken, Object) 时，AbstractSecurityInterceptor 将不再执行进一步操作。
+5. 控制权返回到具体子类，以及应返回给调用者的 Object。子类然后将该结果或异常返回给原始调用者。
 
 ## OAuth
 
-Spring Security supports protecting endpoints using two forms of OAuth 2.0 Bearer Tokens:
+Spring Security 支持使用两种形式的 OAuth 2.0 Bearer Tokens 来保护端点：
 - JWT
 - Opaque Tokens
-
 
 ### Authorization Grants
 
 ### Resource Server
-
 
 ## Init
 
@@ -405,7 +384,6 @@ public abstract class AbstractSecurityWebApplicationInitializer implements WebAp
     }
 }
 ```
-
 
 ## Links
 

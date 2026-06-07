@@ -44,11 +44,11 @@ public class HashMap<K,V> extends AbstractMap<K,V>
 
 ### Node
 
-**Why we need TreeNode?**
+**为什么需要 TreeNode？**
 
 O(n) -> O(logN)
 
-A class implements Map.Entry<K,V> and override hashCode and equals methods.
+一个实现 Map.Entry<K,V> 的类，重写 hashCode 和 equals 方法。
 
 ```java
 static class Node<K,V> implements Map.Entry<K,V> {
@@ -111,7 +111,7 @@ static class Entry<K,V> extends HashMap.Node<K,V> {
 
 ### Fields
 
-Treeify and untreeify using different threshold to improve performance. 
+使用不同的阈值进行树化和反树化以提高性能。
 
 ```java
 //The default initial capacity - MUST be a power of two.
@@ -714,242 +714,35 @@ final Node<K,V> untreeify(HashMap<K,V> map) {
 
 ### New Methods
 
-The default implementation makes no guarantees about synchronization or atomicity properties of this method.
-Any implementation providing atomicity guarantees must override this method and document its concurrency properties.
-In particular, all implementations of subinterface java.util.concurrent.ConcurrentMap must document whether the function is applied once atomically only if the value is not present.
+默认实现不保证此方法的同步或原子性属性。
+任何提供原子性保证的实现必须重写此方法并记录其并发属性。
+特别是，子接口 java.util.concurrent.ConcurrentMap 的所有实现必须记录该函数是否仅在值不存在时以原子方式应用一次。
 
-##### putIfAbsent
-If the specified key is not already associated with a value (or is mapped to null) associates it with the given value and returns null, else returns the current value.
+如果指定的键尚未关联值（或映射为 null），则将其与给定值关联并返回 null，否则返回当前值。
 
-```java
-public interface Map {
-    default V putIfAbsent(K key, V value) {
-        V v = get(key);
-        if (v == null) {
-            v = put(key, value);
-        }
+返回指定键映射到的值，如果此映射不包含该键的映射，则返回 defaultValue。
 
-        return v;
-    }
-}
-```
+对此映射中的每个条目执行给定操作，直到所有条目处理完毕或操作抛出异常。除非实现类另有指定，操作按条目集迭代的顺序执行（如果指定了迭代顺序）。操作抛出的异常将传递给调用者。
 
+仅当指定键当前映射到指定值时，才移除该键的条目。
 
-##### getOrDefault
+仅当指定键当前映射到指定值时，才替换该键的条目。
 
-Returns the value to which the specified key is mapped, or defaultValue if this map contains no mapping for the key.
+仅当指定键当前映射到某个值时，才替换该键的条目。
 
-> [!TIP]
-> 
-> get
-> 
-> If this map permits null values, then a return value of null does not necessarily indicate that the map contains no mapping for the key; 
-> it's also possible that the map explicitly maps the key to null.
-> The `containsKey` operation may be used to distinguish these two cases.
+用在该条目上调用给定函数的结果替换每个条目的值，直到所有条目处理完毕或函数抛出异常。
+函数抛出的异常将传递给调用者。
 
-```java
-public interface Map {
-    default V getOrDefault(Object key, V defaultValue) {
-        V v;
-        return (((v = get(key)) != null) || containsKey(key))
-                ? v
-                : defaultValue; // get(key)
-    }
-}
-```
+如果指定的键尚未关联值（或映射为 null），则尝试使用给定的映射函数计算其值并将其插入此映射（除非为 null）。
 
-##### forEach
+如果指定键的值存在且非 null，则尝试根据键及其当前映射值计算新映射。
 
-Performs the given action for each entry in this map until all entries have been processed or the action throws an exception. Unless otherwise specified by the implementing class, actions are performed in the order of entry set iteration (if an iteration order is specified.) Exceptions thrown by the action are relayed to the caller.
+尝试为指定键及其当前映射值（如果没有当前映射则为 null）计算映射。例如，创建或追加 String msg 到值映射：
 
-```java
-public interface Map {
-    default void forEach(BiConsumer<? super K, ? super V> action) {
-        Objects.requireNonNull(action);
-        for (Map.Entry<K, V> entry : entrySet()) {
-            K k;
-            V v;
-            try {
-                k = entry.getKey();
-                v = entry.getValue();
-            } catch (IllegalStateException ise) {
-                // this usually means the entry is no longer in the map.
-                throw new ConcurrentModificationException(ise);
-            }
-            action.accept(k, v);
-        }
-    }
-}
-```
+方法 [merge()](/docs/CS/Java/JDK/Collection/Map.md?id=merge) 通常更简单。）
 
-##### remove
-Removes the entry for the specified key only if it is currently mapped to the specified value.
-
-```java
-public interface Map {
-    default boolean remove(Object key, Object value) {
-        Object curValue = get(key);
-        if (!Objects.equals(curValue, value) ||
-                (curValue == null && !containsKey(key))) {
-            return false;
-        }
-        remove(key);
-        return true;
-    }
-}
-```
-
-##### replace
-Replaces the entry for the specified key only if currently mapped to the specified value.
-```java
-public interface Map {
-    default boolean replace(K key, V oldValue, V newValue) {
-        Object curValue = get(key);
-        if (!Objects.equals(curValue, oldValue) ||
-                (curValue == null && !containsKey(key))) {
-            return false;
-        }
-        put(key, newValue);
-        return true;
-    }
-}
-```
-Replaces the entry for the specified key only if it is currently mapped to some value.
-```java
-public interface Map {
-    default V replace(K key, V value) {
-        V curValue;
-        if (((curValue = get(key)) != null) || containsKey(key)) {
-            curValue = put(key, value);
-        }
-        return curValue;
-    }
-}
-```
-
-Replaces each entry's value with the result of invoking the given function on that entry until all entries have been processed or the function throws an exception.
-Exceptions thrown by the function are relayed to the caller.
-```java
-public interface Map {
-    default void replaceAll(BiFunction<? super K, ? super V, ? extends V> function) {
-        Objects.requireNonNull(function);
-        for (Map.Entry<K, V> entry : entrySet()) {
-            K k;
-            V v;
-            try {
-                k = entry.getKey();
-                v = entry.getValue();
-            } catch (IllegalStateException ise) {
-                // this usually means the entry is no longer in the map.
-                throw new ConcurrentModificationException(ise);
-            }
-
-            // ise thrown from function is not a cme.
-            v = function.apply(k, v);
-
-            try {
-                entry.setValue(v);
-            } catch (IllegalStateException ise) {
-                // this usually means the entry is no longer in the map.
-                throw new ConcurrentModificationException(ise);
-            }
-        }
-    }
-}
-```
-
-
-##### computeIfAbsent
-
-If the specified key is not already associated with a value (or is mapped to null), attempts to compute its value using the given mapping function and enters it into this map unless null.
-- If the function returns null no mapping is recorded.
-- If the function itself throws an (unchecked) exception, the exception is rethrown, and no mapping is recorded.
-```java
-public interface Map {
-    default V computeIfAbsent(K key, Function<? super K, ? extends V> mappingFunction) {
-        Objects.requireNonNull(mappingFunction);
-        V v;
-        if ((v = get(key)) == null) {
-            V newValue;
-            if ((newValue = mappingFunction.apply(key)) != null) {
-                put(key, newValue);
-                return newValue;
-            }
-        }
-
-        return v;
-    }
-}
-```
-
-##### computeIfPresent
-
-If the value for the specified key is present and non-null, attempts to compute a new mapping given the key and its current mapped value.
-- If the function returns null, the mapping is removed. 
-- If the function itself throws an (unchecked) exception, the exception is rethrown, and the current mapping is left unchanged.
-```java
-public interface Map {
-    default V computeIfPresent(K key, BiFunction<? super K, ? super V, ? extends V> remappingFunction) {
-        Objects.requireNonNull(remappingFunction);
-        V oldValue;
-        if ((oldValue = get(key)) != null) {
-            V newValue = remappingFunction.apply(key, oldValue);
-            if (newValue != null) {
-                put(key, newValue);
-                return newValue;
-            } else {
-                remove(key);
-                return null;
-            }
-        } else {
-            return null;
-        }
-    }
-}
-```
-
-
-##### compute
-
-Attempts to compute a mapping for the specified key and its current mapped value (or null if there is no current mapping). For example, to either create or append a String msg to a value mapping:
-`map.compute(key, (k, v) -> (v == null) ? msg : v.concat(msg))`
-
-Method [merge()](/docs/CS/Java/JDK/Collection/Map.md?id=merge) is often simpler to use for such purposes.)
-- If the function returns null, the mapping is removed (or remains absent if initially absent). 
-- If the function itself throws an (unchecked) exception, the exception is rethrown, and the current mapping is left unchanged.
-
-```java
-public interface Map {
-    default V compute(K key,
-                      BiFunction<? super K, ? super V, ? extends V> remappingFunction) {
-        Objects.requireNonNull(remappingFunction);
-        V oldValue = get(key);
-
-        V newValue = remappingFunction.apply(key, oldValue);
-        if (newValue == null) {
-            // delete mapping
-            if (oldValue != null || containsKey(key)) {
-                // something to remove
-                remove(key);
-                return null;
-            } else {
-                // nothing to do. Leave things as they were.
-                return null;
-            }
-        } else {
-            // add or replace old mapping
-            put(key, newValue);
-            return newValue;
-        }
-    }
-}
-```
-
-##### merge
-
-f the specified key is not already associated with a value or is associated with null, associates it with the given non-null value. 
-Otherwise, replaces the associated value with the results of the given remapping function, or removes if the result is null.
-This method may be of use when combining multiple mapped values for a key. For example, to either create or append a String msg to a value mapping:
+否则，用给定重新映射函数的结果替换关联值，如果结果为 null 则移除。
+当合并键的多个映射值时，此方法可能有用。例如，创建或追加 String msg 到值映射：
 `map.merge(key, msg, String::concat)`
 
 - If the function returns null the mapping is removed. 
@@ -975,17 +768,13 @@ public interface Map {
 
 ## ConcurrentHashMap
 
-A hash table supporting full concurrency of retrievals and high expected concurrency for updates. This class obeys the same functional specification as Hashtable, and includes versions of methods corresponding to each method of Hashtable. However, even though all operations are thread-safe, retrieval operations do not entail locking, and there is not any support for locking the entire table in a way that prevents all access. This class is fully interoperable with Hashtable in programs that rely on its thread safety but not on its synchronization details.
+支持检索完全并发和更新高度预期的并发哈希表。此类遵循与 Hashtable 相同的功能规范，并包含与 Hashtable 每个方法对应的方法版本。然而，尽管所有操作都是线程安全的，检索操作不需要加锁，并且不支持以防止所有访问的方式锁定整个表。在依赖其线程安全但不依赖其同步细节的程序中，此类与 Hashtable 完全互操作。
 
+提供线程安全和原子性保证的 Map。
+为了维护指定的保证，继承自 Map 的方法（包括 putIfAbsent）的默认实现必须被此接口的实现重写。
+类似地，由 keySet、values 和 entrySet 方法返回的集合的实现必须在必要时重写 removeIf 等方法以保持原子性保证。
 
-
-### ConcurrentMap
-
-A Map providing thread safety and atomicity guarantees.
-To maintain the specified guarantees, default implementations of methods including putIfAbsent inherited from Map must be overridden by implementations of this interface. 
-Similarly, implementations of the collections returned by methods keySet, values, and entrySet must override methods such as removeIf when necessary to preserve atomicity guarantees.
-
-Memory consistency effects: As with other concurrent collections, actions in a thread prior to placing an object into a ConcurrentMap as a key or value happen-before actions subsequent to the access or removal of that object from the ConcurrentMap in another thread.
+内存一致性效果：与其他并发集合一样，线程在将对象作为键或值放入 ConcurrentMap 之前的操作 happens-before 于另一个线程中访问或移除该对象的后续操作。
 
 ```java
 public interface ConcurrentMap<K,V> extends Map<K,V> {
@@ -1003,7 +792,7 @@ public interface ConcurrentMap<K,V> extends Map<K,V> {
 }
 ```
 
-A node inserted at head of bins during transfer operations.
+在传输操作期间插入到桶头部的节点。
 ```java
 static final class ForwardingNode<K,V> extends Node<K,V> {
     final Node<K, V>[] nextTable;
@@ -1587,27 +1376,21 @@ static final class CounterCell {
 
 ## LinkedHashMap
 
-Hash table and linked list implementation of the Map interface, with **predictable iteration order**.
-This implementation differs from `HashMap` in that it **maintains a doubly-linked list running through all of its entries**. 
+Map 接口的哈希表和链表实现，具有**可预测的迭代顺序**。
+此实现与 `HashMap` 的不同之处在于它**维护一个贯穿所有条目的双向链表**。
 
-This **linked list defines the iteration ordering**:
+此**链表定义了迭代顺序**：
 
-1. normally the order in which keys were inserted into the map (insertion-order).
-2. Note that insertion order is not affected if a key is re-inserted into the map. (A key k is reinserted into a map m if m.put(k, v) is invoked when m.containsKey(k) would return true immediately prior to the invocation.)
+此实现使其客户端免受 HashMap（和 Hashtable）提供的未指定、通常混乱的排序影响，同时不会产生与 TreeMap 相关的额外成本。
 
-This implementation spares its clients from the unspecified, generally chaotic ordering provided by HashMap (and Hashtable), without incurring the increased cost associated with TreeMap.
+如果此映射应删除其最旧的条目，则返回 true。此方法在向映射插入新条目后由 put 和 putAll 调用。
+它使实现者有机会在每次添加新条目时删除最旧的条目。
+如果映射表示缓存，这很有用：它允许映射通过删除过期条目来减少内存消耗。
 
-[Other LRU implements](/docs/CS/Algorithms/LRU.md)
-
-
-Returns true if this map should remove its eldest entry. This method is invoked by put and putAll after inserting a new entry into the map. 
-It provides the implementor with the opportunity to remove the eldest entry each time a new one is added. 
-This is useful if the map represents a cache: it allows the map to reduce memory consumption by deleting stale entries.
-
-This method typically does not modify the map in any way, instead allowing the map to modify itself as directed by its return value. 
-It is permitted for this method to modify the map directly, but if it does so, it must return false (indicating that the map should not attempt any further modification). 
-The effects of returning true after modifying the map from within this method are unspecified.
-This implementation merely returns false (so that this map acts like a normal map - the eldest element is never removed).
+此方法通常不会以任何方式修改映射，而是允许映射根据其返回值自行修改。
+允许此方法直接修改映射，但如果这样做，它必须返回 false（表示映射不应尝试任何进一步修改）。
+从此方法内部修改映射后返回 true 的效果是未指定的。
+此实现仅返回 false（因此此映射的行为类似于普通映射——最旧的元素永远不会被删除）。
 
 ```
    protected boolean removeEldestEntry(Map.Entry<K,V> eldest) {

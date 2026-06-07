@@ -1,18 +1,12 @@
 ## Introduction
 
-
-
-
-
 ## BitSet
 
-This class implements **a vector of bits that grows as needed**. Each component of the bit set has a boolean value. The bits of a BitSet are indexed by nonnegative integers. Individual indexed bits can be examined, set, or cleared. One BitSet may be used to modify the contents of another BitSet through logical AND, logical inclusive OR, and logical exclusive OR operations.
-By default, all bits in the set initially have the value false.
-Every bit set has a current size, which is the number of bits of space currently in use by the bit set. Note that the size is related to the implementation of a bit set, so it may change with implementation. The length of a bit set relates to logical length of a bit set and is defined independently of implementation.
-Unless otherwise noted, passing a null parameter to any of the methods in a BitSet will result in a NullPointerException.
-A BitSet is **not safe for multithreaded** use without external synchronization.
-
-
+此类实现了一个**按需增长的位向量**。位集合的每个组件都有一个 boolean 值。BitSet 的位由非负整数索引。可以检查、设置或清除单个索引位。一个 BitSet 可用于通过逻辑 AND、逻辑包含 OR 和逻辑异 OR 操作修改另一个 BitSet 的内容。
+默认情况下，集合中的所有位初始值为 false。
+每个位集合都有一个当前大小，即位集合当前使用的位数空间。注意，该大小与位集合的实现相关，因此可能随实现而变化。位集合的长度与其逻辑长度相关，独立于实现定义。
+除非另有说明，向 BitSet 的任何方法传递 null 参数将导致 NullPointerException。
+BitSet 在没有外部同步的情况下**不适合多线程**使用。
 
 ```java
 /*
@@ -51,12 +45,6 @@ private transient int wordsInUse = 0;
  */
 private transient boolean sizeIsSticky = false;
 ```
-
-
-
-
-
-
 
 ```java
 /**
@@ -99,8 +87,6 @@ private BitSet(long[] words) {
     checkInvariants();
 }
 ```
-
-
 
 ### set
 
@@ -286,10 +272,6 @@ public void clear() {
 }
 ```
 
-
-
-
-
 ```java
 /**
  * Every public method must preserve these invariants.
@@ -316,10 +298,6 @@ private void recalculateWordsInUse() {
 }
 ```
 
-
-
-
-
 ```java
 /**
  * Ensures that the BitSet can accommodate a given wordIndex,
@@ -336,8 +314,6 @@ private void expandTo(int wordIndex) {
     }
 }
 ```
-
-
 
 ### flip
 
@@ -408,10 +384,6 @@ public void flip(int fromIndex, int toIndex) {
 }
 ```
 
-
-
-
-
 ```java
 /**
  * Returns the number of bits set to {@code true} in this {@code BitSet}.
@@ -426,8 +398,6 @@ public int cardinality() {
     return sum;
 }
 ```
-
-
 
 ### logic
 
@@ -542,8 +512,6 @@ public void andNot(BitSet set) {
     recalculateWordsInUse();
     checkInvariants();
 }
-```
-
 
 ## Links
 - [Collection](/docs/CS/Java/JDK/Collection/Collection.md)

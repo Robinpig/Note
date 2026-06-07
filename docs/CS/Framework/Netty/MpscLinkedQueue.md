@@ -1,9 +1,7 @@
 ## Introduction
 
-The code was inspired by the similarly named JCTools class:
+代码灵感来源于类似的 JCTools 类：
 https://github.com/JCTools/JCTools/blob/master/jctools-core/src/main/java/org/jctools/queues/atomic
-
-
 
 
 
@@ -23,19 +21,19 @@ private static Queue<Runnable> newTaskQueue(
 }
 ```
 
-Factory used to create Queue instances that will be used to store tasks for an EventLoop. Generally speaking the returned Queue MUST be thread-safe and depending on the EventLoop implementation must be of type java.util.concurrent.BlockingQueue.
+用于创建 Queue 实例的工厂，这些实例将用于存储 EventLoop 的任务。通常来说，返回的 Queue 必须是线程安全的，并且根据 EventLoop 的实现，必须是 java.util.concurrent.BlockingQueue 类型。
 
 ```java
 public interface EventLoopTaskQueueFactory {
 
-    // Returns a new Queue to use.
+    //返回一个新的 Queue 供使用。
     Queue<Runnable> newTaskQueue(int maxCapacity);
 }
 ```
 
 
 
-Create a new Queue which is safe to use for multiple producers (different threads) and a single consumer (one thread!).
+创建一个适用于多生产者（不同线程）和单消费者（一个线程）的 Queue。
 
 ```java
 private static Queue<Runnable> newTaskQueue0(int maxPendingTasks) {
@@ -47,7 +45,7 @@ private static Queue<Runnable> newTaskQueue0(int maxPendingTasks) {
 
 
 
-default use `MpscUnboundedArrayQueue`
+默认使用 `MpscUnboundedArrayQueue`
 
 ```java
 // PlatformDependent
@@ -161,13 +159,10 @@ public boolean offer(final E e)
 
 
 
-
-
 ```java
 /**
- * This method assumes index is actually (index << 1) because lower bit is
- * used for resize. This is compensated for by reducing the element shift.
- * The computation is constant folded, so there's no cost.
+ * 此方法假定 index 实际上是 (index << 1)，因为低位用于表示扩容。
+ * 这通过减少元素偏移来补偿。该计算是常量折叠的，因此没有额外成本。
  */
 static long modifiedCalcCircularRefElementOffset(long index, long mask)
 {
@@ -179,7 +174,7 @@ static long modifiedCalcCircularRefElementOffset(long index, long mask)
 
 ```java
 /**
- * We do not inline resize into this method because we do not resize on fill.
+ * 我们不将 resize 内联到此方法中，因为我们不会在填充时立即扩容。
  */
 private int offerSlowPath(long mask, long pIndex, long producerLimit)
 {
@@ -223,11 +218,11 @@ private int offerSlowPath(long mask, long pIndex, long producerLimit)
 
 ```java
 /**
- * An ordered store of an element to a given offset
+ * 将元素有序存储到给定偏移量
  *
  * @param buffer this.buffer
- * @param offset computed via {@link UnsafeRefArrayAccess#calcCircularRefElementOffset}
- * @param e      an orderly kitty
+ * @param offset 通过 {@link UnsafeRefArrayAccess#calcCircularRefElementOffset} 计算
+ * @param e      待存储的元素
  */
 public static <E> void soRefElement(E[] buffer, long offset, E e)
 {
@@ -289,8 +284,8 @@ private void resize(long oldMask, E[] oldBuffer, long pIndex, E e, Supplier<E> s
 
 ### poll
 
-Called from the consumer thread subject to the restrictions appropriate to the implementation and according to the Queue.poll() interface.
-This implementation is correct for single consumer thread use only.
+从消费者线程调用，受限于实现的特定约束，并遵循 Queue.poll() 接口约定。
+此实现仅适用于单消费者线程使用。
 
 ```java
 @SuppressWarnings("unchecked")
@@ -345,10 +340,8 @@ public int size()
     // NOTE: because indices are on even numbers we cannot use the size util.
 
     /*
-     * It is possible for a thread to be interrupted or reschedule between the read of the producer and
-     * consumer indices, therefore protection is required to ensure size is within valid range. In the
-     * event of concurrent polls/offers to this method the size is OVER estimated as we read consumer
-     * index BEFORE the producer index.
+     * 线程可能在读取生产者和消费者索引之间被中断或重新调度，因此需要保护以确保 size 在有效范围内。
+     * 在此方法发生并发 poll/offer 时，size 会被高估，因为我们在生产者索引之前读取消费者索引。
      */
     long after = lvConsumerIndex();
     long size;

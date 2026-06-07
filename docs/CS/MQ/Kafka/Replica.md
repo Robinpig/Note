@@ -1,83 +1,78 @@
 ## Introduction
 
-Follow-Replicas not supported read/write.
+Follow-Replicas 不支持读写。
 - Read-your-writes
 - Monotonic Reads
 
-
-
 ## ISR
 
-An ISR is a replica that is up to date with the leader broker for a partition.
-Any replica that is not up to date with the leader is out of sync.
+ISR 是指与分区 leader broker 保持同步的副本。
+任何与 leader 不同步的副本都是 out of sync。
 
-When the leader for a partition is no longer available, one of the in-sync replicas (ISR) will be chosen as the new leader. This leader election is ”clean“ in the sense that it guarantees no loss of committed data - by definition, committed data exists on all ISRs.
+当分区 leader 不可用时，将选择一个同步副本（ISR）作为新 leader。
+这种 leader 选举是"干净的"，因为它保证不会丢失已提交的数据——根据定义，已提交的数据存在于所有 ISR 上。
 
-But what to do when no ISR exists except for the leader that just became unavailable?
+但当除了刚刚不可用的 leader 之外没有 ISR 时该怎么办？
 
-Wait for an ISR to come back online. This is the default behavior, and this makes you run the risk of the topic becoming unavailable.
+等待 ISR 重新上线。这是默认行为，但这会使 topic 面临不可用的风险。
 
-Enable unclean.leader.election.enable=true and start producing to non-ISR partitions. We are going to lose all messages that were written to the old leader while that replica was out of sync and also cause some inconsistencies in consumers.
+启用 unclean.leader.election.enable=true 并开始向非 ISR 分区生产消息。我们将丢失在副本不同步期间写入旧 leader 的所有消息，并导致消费者中的一些不一致。
 
 ### Consumers Replicas Fetching
 
-Kafka consumers read by default from the partition leader.
-But since Apache Kafka 2.4, it is possible to configure consumers to read from in-sync replicas instead (usually the closest).
-Reading from the closest in-sync replicas (ISR) may improve the request latency, and also decrease network costs, because in most cloud environments cross-data centers network requests incur charges.
+Kafka 消费者默认从分区 leader 读取。
+但从 Apache Kafka 2.4 开始，可以配置消费者从同步副本（通常是最接近的那个）读取。
+从最近的同步副本（ISR）读取可以改善请求延迟，并降低网络成本，因为在大多数云环境中，跨数据中心网络请求会产生费用。
 
 ### Preferred leader
 
-The preferred leader is the designated leader broker for a partition at topic creation time (as opposed to being a replica).
-When the preferred leader goes down, any partition that is an ISR (in-sync replica) is eligible to become a new leader (but not a preferred leader).
-Upon recovering the preferred leader broker and having its partition data back in sync, the preferred leader will regain leadership for that partition.
+Preferred leader 是在 topic 创建时为分区指定的 leader broker（相对于副本而言）。
+当 preferred leader 下线时，任何属于 ISR（同步副本）的分区都有资格成为新 leader（但不是 preferred leader）。
+当 preferred leader broker 恢复并且其分区数据重新同步后，preferred leader 将重新获得该分区的领导权。
 
 ### Replication Factor and Partition Count
 
-When creating a topic, we have to provide a partition count and the replication factor.
-These two are very important to set correctly as they impact the performance and durability in the system.
+创建 topic 时，我们必须提供分区数和复制因子。
+这两个参数对系统的性能和持久性影响很大，需要正确设置。
 
-The factors to consider while choosing replication factor are:
+选择复制因子时需要考虑的因素：
 
-It should be at least 2 and a maximum of 4.
-The recommended number is 3 as it provides the right balance between performance and fault tolerance
+至少应为 2，最大为 4。
+推荐数量为 3，因为这可以在性能和容错之间提供良好的平衡
 
-A Kafka cluster should have a maximum of 200,000 partitions across all brokers when managed by Zookeeper. The reason is that if brokers go down, Zookeeper needs to perform a lot of leader elections.
-Confluent still recommends up to 4,000 partitions per broker in your cluster.
-This problem should be solved by Kafka in a Zookeeper-less mode (Kafka KRaft)
-If you need more than 200,000 partitions in your cluster, follow the Netflix model and create more Kafka clusters
-
+在由 ZooKeeper 管理的 Kafka 集群中，所有 broker 的分区总数应不超过 200,000 个。原因是如果 broker 宕机，ZooKeeper 需要执行大量的 leader 选举。
+Confluent 仍建议集群中每个 broker 最多 4000 个分区。
+这个问题应该在无 ZooKeeper 模式（Kafka KRaft）下得到解决。
+如果集群中需要超过 200,000 个分区，请遵循 Netflix 模型创建更多 Kafka 集群
 
 replica.lag.time.max.ms
 
-
 replication.factor = min.insync.replicas + 1
-
 
 ### Unclean Leader Election
 
+当分区 leader 不再可用时，将选择一个同步副本（ISR）作为新 leader。
+这种 leader 选举是"干净的"，因为它保证不会丢失已提交的数据——根据定义，已提交的数据存在于所有 ISR 上。
 
-When the leader for a partition is no longer available, one of the in-sync replicas (ISR) will be chosen as the new leader. 
-This leader election is "clean" in the sense that it guarantees no loss of committed data - by definition, committed data exists on all ISRs.
+但当除了刚刚不可用的 leader 之外没有 ISR 时该怎么办？
 
-But what to do when no ISR exists except for the leader that just became unavailable?
+- 等待 ISR 重新上线。
+  这是默认行为，但这会使 topic 面临不可用的风险。
+- 启用 unclean.leader.election.enable=true 并开始向非 ISR 分区生产消息。
+  我们将丢失在副本不同步期间写入旧 leader 的所有消息，并导致消费者中的一些不一致。
 
-- Wait for an ISR to come back online. 
-  This is the default behavior, and this makes you run the risk of the topic becoming unavailable.
-- Enable unclean.leader.election.enable=true and start producing to non-ISR partitions.
-  We are going to lose all messages that were written to the old leader while that replica was out of sync and also cause some inconsistencies in consumers.
+这些不洁 leader 选举可以帮助提高集群的可用性，
+但如果未将数据复制到另一个集群或其他存储目标，则可能导致数据丢失。
+具体过程如下：
 
-These unclean leader elections can help improve the availability of your cluster, 
-but they could result in data loss if you do not duplicate the data to another cluster or other storage destination.
-Here’s how that might play out:
-
-1. The broker that is the leader for Partition A goes offline. 
-   None of the followers of Partition A are caught up to the leader (ISR=0).
-2. If unclean leader elections are enabled, one of the follower brokers will get elected as the new leader for the partition,
-   even though it is “unclean.” This allows consumers and producers to continue sending requests to Partition A.
-3. If the previous leader comes back online, it will reset its offset to match the new leader’s offset, resulting in data loss. 
-   For example, if the previous leader processed messages up to offset=7, and the new, 
-   unclean leader was slightly behind (offset=4) at the time it was elected leader, 
-   some messages (offsets 5–7) will get deleted after the first leader comes back online and rejoins the cluster as a replica/follower.
+1. 作为分区 A leader 的 broker 离线。
+   分区 A 的所有 follower 都未赶上 leader（ISR=0）。
+2. 如果启用了不洁 leader 选举，其中一个 follower broker 将被选为分区的新 leader，
+   即使它是"不洁的"。这允许消费者和生产者继续向分区 A 发送请求。
+3. 如果之前的 leader 重新上线，它将重置其 offset 以匹配新 leader 的 offset，从而导致数据丢失。
+   例如，如果之前的 leader 处理消息到 offset=7，而新的
+   不洁 leader 在被选为 leader 时稍落后（offset=4），
+   那么在第一个 leader 重新上线并以 replica/follower 身份重新加入集群后，某些消息（offsets 5-7）将被删除。
 
 ## replica sync
 

@@ -1,17 +1,13 @@
 ## Introduction
 
+一个同步点，线程可以在该点配对并交换对内的元素。
+Exchanger 允许两个线程在交汇点交换对象，这在多种管道设计中很有用。
 
-
-A synchronization point at which threads can pair and swap elements within pairs.
-An Exchanger allows two threads to exchange objects at a rendezvous point, and is useful in several pipeline designs.
-
-Each thread presents some object on entry to the exchange method, matches with a partner thread, and receives its partner's object on return. 
-An Exchanger may be viewed as a bidirectional form of a **SynchronousQueue**. 
-Exchangers may be useful in applications such as genetic algorithms and pipeline designs.
-Sample Usage: Here are the highlights of a class that uses an Exchanger to swap buffers between threads so that the thread filling the buffer gets a freshly emptied one when it needs it,
-handing off the filled one to the thread emptying the buffer.
-
-
+每个线程在进入 exchange 方法时呈现一些对象，与伙伴线程匹配，并在返回时接收其伙伴的对象。
+Exchanger 可以看作是一种双向形式的 **SynchronousQueue**。
+Exchanger 可能用于诸如遗传算法和管道设计等应用中。
+示例用法：以下是一个使用 Exchanger 在线程之间交换缓冲区的类的要点，以便填充缓冲区的线程在需要时可以获得一个刚清空的缓冲区，
+并将已填充的缓冲区交给清空缓冲区的线程。
 
 ```java
  class FillAndEmpty {
@@ -28,7 +24,7 @@ handing off the filled one to the thread emptying the buffer.
            if (currentBuffer.isFull())
              currentBuffer = exchanger.exchange(currentBuffer);
          }
-       } catch (InterruptedException ex) { ... handle ... }
+       } catch (InterruptedException ex) { ... }
      }
    }
 
@@ -41,7 +37,7 @@ handing off the filled one to the thread emptying the buffer.
            if (currentBuffer.isEmpty())
              currentBuffer = exchanger.exchange(currentBuffer);
          }
-       } catch (InterruptedException ex) { ... handle ...}
+       } catch (InterruptedException ex) { ... }
      }
    }
 
@@ -52,4 +48,6 @@ handing off the filled one to the thread emptying the buffer.
  }
 ```
 
-**Memory consistency effects**: For each pair of threads that successfully exchange objects via an Exchanger, actions prior to the exchange() in each thread happen-before those subsequent to a return from the corresponding exchange() in the other thread.
+## Links
+
+- [JDK Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)

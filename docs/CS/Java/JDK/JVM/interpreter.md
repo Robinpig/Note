@@ -84,10 +84,10 @@ class StubQueue: public CHeapObj<mtCode> {
 
 #### Implementation of StubQueue
 
-Standard wrap-around queue implementation; the queue dimensions are specified by the _queue_begin & _queue_end indices.
-The queue can be in two states (transparent to the outside):
+标准的环绕队列实现；队列尺寸由 _queue_begin 和 _queue_end 索引指定。
+队列可以处于两种状态（对外透明）：
 
-a) contiguous state: all queue entries in one block (or empty)
+a) 连续状态：所有队列条目在同一个块中（或为空）
 
 ```
 Queue: |...|XXXXXXX|...............|
@@ -96,7 +96,7 @@ Queue: |...|XXXXXXX|...............|
            one block
 ```
 
-b) non-contiguous state: queue entries in two blocks
+b) 非连续状态：队列条目分布在两个块中
 
 ```
 Queue: |XXX|.......|XXXXXXX|.......|
@@ -105,9 +105,9 @@ Queue: |XXX|.......|XXXXXXX|.......|
         1st block  2nd block
 ```
 
-In the non-contiguous state, the wrap-around point is indicated via the _buffer_limit index since the last queue entry may not fill up the queue completely in
-which case we need to know where the 2nd block's end is to do the proper wrap-around.
-When removing the last entry of the 2nd block, _buffer_limit is reset to _buffer_size.
+在非连续状态下，环绕点通过 _buffer_limit 索引指示，因为最后一个队列条目可能未完全填满队列，
+此时我们需要知道第二个块的结束位置以进行正确的环绕。
+当移除第二个块的最后一个条目时，_buffer_limit 会重置为 _buffer_size。
 
 ```cpp
 StubQueue::StubQueue(StubInterface* stub_interface, int buffer_size,
@@ -477,11 +477,11 @@ void InterpreterMacroAssembler::dispatch_base(TosState state,
 
 
 
-The division of labor is as follows:
+分工如下：
 
 - Template Interpreter          Zero Interpreter       Functionality
-- templateTable*                bytecodeInterpreter*   actual interpretation of bytecodes
-- templateInterpreter*          zeroInterpreter*       generation of assembly code that creates and manages interpreter runtime frames.
+- templateTable*                bytecodeInterpreter*   字节码的实际解释执行
+- templateInterpreter*          zeroInterpreter*       创建和管理解释器运行时帧的汇编代码生成
 
 ```cpp
 // share/interpreter/templateInterpreter.hpp
@@ -528,25 +528,25 @@ TemplateInterpreterGenerator::TemplateInterpreterGenerator(StubQueue* _code): Ab
 
 ## init
 
-The reason that interpreter initialization is split into two parts is that the first part needs to run before methods are loaded (which with CDS implies linked also),
-and the other part needs to run after.
-The reason is that when methods are loaded (with CDS) or linked(without CDS),
-the i2c adapters are generated that assert we are currently in the interpreter.
+解释器初始化分为两部分的原因在于：第一部分需要在方法加载之前运行（使用 CDS 时也意味着链接），
+另一部分需要在之后运行。
+原因是当方法加载（使用 CDS）或链接（不使用 CDS）时，
+会生成 i2c 适配器，这些适配器断言我们当前处于解释器中。
 
-Asserting that requires knowledge about where the interpreter is in memory.
-Therefore, establishing the interpreter address must be done before methods are loaded.
-However, we would like to actually generate the interpreter after methods are loaded.
-That allows us to remove otherwise hardcoded offsets regarding fields that are needed in the interpreter code.
+进行断言需要知道解释器在内存中的位置。
+因此，必须在方法加载之前确定解释器地址。
+然而，我们希望在方法加载之后实际生成解释器。
+这允许我们移除解释器代码中原本硬编码的字段偏移量。
 
-This leads to a split like:
+因此分为以下步骤：
 
-1. reserving the memory for the interpreter
-2. loading methods
-3. generating the interpreter
+1. 为解释器预留内存
+2. 加载方法
+3. 生成解释器
 
 ### init_stub
 
-allocate interpreter and new StubQueue
+分配解释器和新的 StubQueue
 
 ```cpp
 void interpreter_init_stub() {
@@ -601,10 +601,10 @@ void TemplateInterpreter::initialize_code() {
   TemplateTable::initialize();
 ```
 
-TemplateInterpreterGenerator::generate_all -> TemplateInterpreterGenerator::generate_method_entry -> generate_native_entry/generate_normal_entry(different arch)
+TemplateInterpreterGenerator::generate_all -> TemplateInterpreterGenerator::generate_method_entry -> generate_native_entry/generate_normal_entry（不同架构）
 
-- [generate_native_entry](/docs/CS/Java/JDK/JVM/interpreter.md?id=generate_native_entry) -- need to unlock manually after call native method
-- [generate_normal_entry](/docs/CS/Java/JDK/JVM/interpreter.md?id=generate_normal_entry) -- using dispatch_next(), some bytecode(`return`,`athrow`) will unlock
+- [generate_native_entry](/docs/CS/Java/JDK/JVM/interpreter.md?id=generate_native_entry) -- 调用 native 方法后需要手动解锁
+- [generate_normal_entry](/docs/CS/Java/JDK/JVM/interpreter.md?id=generate_normal_entry) -- 使用 dispatch_next()，某些字节码（`return`、`athrow`）会自动解锁
 
 ```cpp
   { ResourceMark rm;
@@ -626,7 +626,7 @@ TemplateInterpreterGenerator::generate_all -> TemplateInterpreterGenerator::gene
 
 ### generate_normal_entry
 
-Generic interpreted method entry to (asm) interpreter
+通用解释方法入口到（asm）解释器
 
 Such as x86
 
@@ -683,10 +683,10 @@ address TemplateInterpreterGenerator::generate_normal_entry(bool synchronized) {
     __ decrementl(rdx); // until everything initialized
     __ jcc(Assembler::greater, loop);
     __ bind(exit);
-  }
+   }
 ```
 
-initialize fixed part of activation frame
+初始化 activation frame 的固定部分
 
 ```cpp
   generate_fixed_frame(false);
@@ -709,7 +709,7 @@ initialize fixed part of activation frame
   __ profile_parameters_type(rax, rcx, rdx);
 ```
 
-increment invocation count & check for overflow
+增加调用计数并检查溢出
 
 ```cpp
   Label invocation_counter_overflow;
@@ -728,14 +728,14 @@ increment invocation count & check for overflow
   __ movbool(do_not_unlock_if_synchronized, false);
 ```
 
-check for synchronized methods
-Must happen AFTER invocation_counter check and stack overflow check, so method is not locked if overflows.
+检查同步方法
+必须在 invocation_counter 检查和栈溢出检查**之后**进行，这样在溢出时方法不会被锁定。
 
 ```cpp
   if (synchronized) {
 ```
 
-Allocate monitor and [lock method](/docs/CS/Java/JDK/JVM/interpreter.md?id=lock_method)
+分配 monitor 并 [锁定方法](/docs/CS/Java/JDK/JVM/interpreter.md?id=lock_method)
 
 ```cpp
     lock_method();
@@ -797,7 +797,7 @@ void InterpreterMacroAssembler::dispatch_base(TosState state,
   }
 ```
 
-Check if need [SafePoint](/docs/CS/Java/JDK/JVM/Safepoint.md) then jump into safepoint_table.
+检查是否需要 [SafePoint](/docs/CS/Java/JDK/JVM/Safepoint.md)，然后跳转到 safepoint_table。
 
 ```cpp
   address* const safepoint_table = Interpreter::safept_table(state);
@@ -813,7 +813,7 @@ Check if need [SafePoint](/docs/CS/Java/JDK/JVM/Safepoint.md) then jump into saf
   }
 ```
 
-Or else jump into normal table.
+否则跳转到 normal table。
 
 ```cpp
   bind(no_safepoint);
@@ -825,16 +825,16 @@ Or else jump into normal table.
 
 #### lock_method
 
-Allocate monitor and lock method (asm interpreter) , see [synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md).
+分配 monitor 并锁定方法（asm 解释器），参见 [synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md)。
 
-Args:
+参数：
 
 - rbx: Method*
 - r14/rdi: locals
-- Kills:
+- 破坏：
 - rax
-- c_rarg0, c_rarg1, c_rarg2, c_rarg3, ...(param regs)
-- rscratch1, rscratch2 (scratch regs)
+- c_rarg0, c_rarg1, c_rarg2, c_rarg3, ...（参数寄存器）
+- rscratch1, rscratch2（临时寄存器）
 
 ```cpp
 // cpu/x86/templateInterpreterGenerator_x86.cpp

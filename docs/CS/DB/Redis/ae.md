@@ -1,57 +1,55 @@
-## Introduction
+## 简介
 
-a simple event-driven programming library
+一个简单的事件驱动编程库。
 
+此文件（*networking.c*）定义了与客户端、主库和副本（在 Redis 中只是特殊客户端）的所有 I/O 函数：
 
-
-This file(*networking.c*) defines all the I/O functions with clients, masters and replicas(which in Redis are just special clients):
-
-* `createClient()` allocates and initializes a new client.
-* the `addReply*()` family of functions are used by command implementations in order to append data to the client structure, that will be transmitted to the client as a reply for a given command executed.
-* `writeToClient()` transmits the data pending in the output buffers to the client and is called by the *writable event handler* `sendReplyToClient()`.
-* `readQueryFromClient()` is the *readable event handler* and accumulates data read from the client into the query buffer.
-* `processInputBuffer()` is the entry point in order to parse the client query buffer according to the Redis protocol. 
-  Once commands are ready to be processed, it calls `processCommand()` which is defined inside `server.c` in order to actually execute the command.
-* `freeClient()` deallocates, disconnects and removes a client.
+* `createClient()` 分配并初始化一个新客户端。
+* `addReply*()` 函数系列由命令实现使用，以将数据附加到客户端结构，该结构将作为给定命令的回复传输给客户端。
+* `writeToClient()` 将输出缓冲区中待处理的数据传输给客户端，由*可写事件处理器* `sendReplyToClient()` 调用。
+* `readQueryFromClient()` 是*可读事件处理器*，将从客户端读取的数据累积到查询缓冲区中。
+* `processInputBuffer()` 是根据 Redis 协议解析客户端查询缓冲区的入口点。
+  一旦命令准备好处理，它调用在 `server.c` 中定义的 `processCommand()` 以实际执行命令。
+* `freeClient()` 释放、断开连接并移除客户端。
 
 ## EventLoop
 
-For various [reasons](http://groups.google.com/group/redis-db/browse_thread/thread/b52814e9ef15b8d0/) Redis uses its own event library.
+由于各种[原因](http://groups.google.com/group/redis-db/browse_thread/thread/b52814e9ef15b8d0/)，Redis 使用自己的事件库。
 
-`Redis`需要对事件做整体抽象，于是定义了`aeEventLoop`结构
+`Redis` 需要对事件做整体抽象，于是定义了 `aeEventLoop` 结构。
 
-`initServer` function defined in `redis.c` initializes the numerous fields of the [redisServer structure](/docs/CS/DB/Redis/server.md?id=server) variable. 
-One such field is the Redis event loop `el`:
+定义在 `redis.c` 中的 `initServer` 函数初始化 [redisServer 结构](/docs/CS/DB/Redis/server.md?id=server) 变量的众多字段。
+其中一个字段是 Redis 事件循环 `el`：
 
 ```c
 aeEventLoop *el
 ```
 
-`initServer` initializes `server.el` field by calling `aeCreateEventLoop` defined in `ae.c`. The definition of `aeEventLoop` is below:
+`initServer` 通过调用在 `ae.c` 中定义的 `aeCreateEventLoop` 初始化 `server.el` 字段。`aeEventLoop` 的定义如下：
 
 ```c
 typedef struct aeEventLoop {
-    int maxfd;   /* highest file descriptor currently registered */
-    int setsize; /* max number of file descriptors tracked */
+    int maxfd;   /* 当前注册的最高文件描述符 */
+    int setsize; /* 跟踪的最大文件描述符数量 */
     long long timeEventNextId;
-    time_t lastTime;     /* Used to detect system clock skew */
-    aeFileEvent *events; /* Registered events */
-    aeFiredEvent *fired; /* Fired events */
+    time_t lastTime;     /* 用于检测系统时钟偏移 */
+    aeFileEvent *events; /* 注册的事件 */
+    aeFiredEvent *fired; /* 触发的事件 */
     aeTimeEvent *timeEventHead;
     int stop;
-    void *apidata; /* This is used for polling API specific data */
+    void *apidata; /* 用于轮询 API 特定数据 */
     aeBeforeSleepProc *beforesleep;
     aeBeforeSleepProc *aftersleep;
     int flags;
 } aeEventLoop;
 ```
 
-aeEventLoop结构保存了一个void *类型的万能指针apidata，是用来保存轮询事件的状态的，也就是保存底层调用的多路复用库的事件状态，
-关于Redis的多路复用库的选择，Redis包装了常见的select epoll evport kqueue，他们在编译阶段，根据不同的系统选择性能最高的一个多路复用库作为Redis的多路复用程序的实现，
-而且所有库实现的接口名称都是相同的，因此Redis多路复用程序底层实现是可以互换的
+aeEventLoop 结构保存了一个 void *类型的万能指针 apidata，是用来保存轮询事件的状态的，也就是保存底层调用的多路复用库的事件状态。
+关于 Redis 的多路复用库的选择，Redis 包装了常见的 select、epoll、evport、kqueue，他们在编译阶段，根据不同的系统选择性能最高的一个多路复用库作为 Redis 的多路复用程序的实现。
+而且所有库实现的接口名称都是相同的，因此 Redis 多路复用程序底层实现是可以互换的。
 
-Include the best multiplexing layer supported by this system.
-The following should be ordered by performances, descending.
+包含此系统支持的最佳多路复用层。
+以下应按性能降序排列。
 
 ```c
 // ae.c
@@ -68,19 +66,17 @@ The following should be ordered by performances, descending.
         #endif
     #endif
 #endif
-
-
 ```
 
 ### aeCreateEventLoop
 
-`aeCreateEventLoop` first `malloc`s `aeEventLoop` structure then calls `ae_epoll.c:aeApiCreate`.
+`aeCreateEventLoop` 首先 `malloc` 分配 `aeEventLoop` 结构，然后调用 `ae_epoll.c:aeApiCreate`。
 
-InitServer 中调用了 aeCreateEventLoop
+InitServer 中调用了 aeCreateEventLoop。
 
-`aeApiCreate` `malloc`s `aeApiState` that has two fields - `epfd` that holds the `epoll` file descriptor returned by a call from [`epoll_create`](http://man.cx/epoll_create(2)) and `events` that is of type `struct epoll_event` define by the Linux `epoll` library. The use of the `events` field will be described later.
+`aeApiCreate` `malloc` 分配 `aeApiState`，它有两个字段 —— `epfd` 保存了由 [`epoll_create`](http://man.cx/epoll_create(2)) 调用返回的 `epoll` 文件描述符；`events` 是由 Linux `epoll` 库定义的 `struct epoll_event` 类型。`events` 字段的用途稍后描述。
 
-Next is `ae.c:aeCreateTimeEvent`. But before that `initServer` call `anet.c:anetTcpServer` that creates and returns a *listening descriptor*. The descriptor listens on *port 6379* by default. The returned *listening descriptor* is stored in `server.fd` field.
+接下来是 `ae.c:aeCreateTimeEvent`。但在此之前，`initServer` 调用 `anet.c:anetTcpServer`，它创建并返回一个*监听描述符*。该描述符默认监听 *6379 端口*。返回的*监听描述符*存储在 `server.fd` 字段中。
 
 ```c
 aeEventLoop *aeCreateEventLoop(int setsize) {
@@ -103,16 +99,14 @@ aeEventLoop *aeCreateEventLoop(int setsize) {
     
     if (aeApiCreate(eventLoop) == -1) goto err;
     
-    /* Events with mask == AE_NONE are not set. So let's initialize the vector with it. */
+    /* mask == AE_NONE 的事件不设置。因此用此值初始化向量。 */
     for (i = 0; i < setsize; i++)
         eventLoop->events[i].mask = AE_NONE;
     return eventLoop;
 }
 ```
 
-aeCreateEventLoop() 内部会调用 aeApiCreate()，根据不同平台支持选择调用epoll、select 或者 kqueue 的 API，创建事件监听
-
-
+aeCreateEventLoop() 内部会调用 aeApiCreate()，根据不同平台支持选择调用 epoll、select 或者 kqueue 的 API，创建事件监听。
 
 #### aeApiCreate
 
@@ -139,24 +133,24 @@ static int aeApiCreate(aeEventLoop *eventLoop) {
 
 ### processEvents
 
-`ae.c:aeProcessEvents` looks for the time event that will be pending in the smallest amount of time by calling `ae.c:aeSearchNearestTimer` on the event loop.
-In our case there is only one timer event in the event loop that was created by `ae.c:aeCreateTimeEvent`.
+`ae.c:aeProcessEvents` 通过在事件循环上调用 `ae.c:aeSearchNearestTimer` 来查找即将在最短时间内到期的定时事件。
+在我们的例子中，事件循环中只有一个由 `ae.c:aeCreateTimeEvent` 创建的定时器事件。
 
-Remember, that the timer event created by `aeCreateTimeEvent` has probably elapsed by now because it had an expiry time of one millisecond.
-Since the timer has already expired, the seconds and microseconds fields of the `tvp` `timeval` structure variable is initialized to zero.
+记住，`aeCreateTimeEvent` 创建的定时器事件现在可能已经超时，因为其过期时间设置为 1 毫秒。
+由于定时器已过期，`tvp` `timeval` 结构变量的秒和微秒字段初始化为零。
 
-The `tvp` structure variable along with the event loop variable is passed to `ae_epoll.c:aeApiPoll`.
+`tvp` 结构变量与事件循环变量一起传递给 `ae_epoll.c:aeApiPoll`。
 
-`aeApiPoll` functions does an [`epoll_wait`](http://man.cx/epoll_wait) on the `epoll` descriptor and populates the `eventLoop->fired` table with the details:
+`aeApiPoll` 函数在 `epoll` 描述符上执行 [`epoll_wait`](http://man.cx/epoll_wait)，并用以下详细信息填充 `eventLoop->fired` 表：
 
-- `fd`: The descriptor that is now ready to do a read/write operation depending on the mask value.
-- `mask`: The read/write event that can now be performed on the corresponding descriptor.
+- `fd`：现在可以根据 mask 值执行读/写操作的描述符。
+- `mask`：现在可以在相应描述符上执行的读/写事件。
 
-`aeApiPoll` returns the number of such file events ready for operation.
-Now to put things in context, if any client has requested for a connection then `aeApiPoll` would have noticed it and populated the `eventLoop->fired` table with an entry of the descriptor being the *listening descriptor* and mask being `AE_READABLE`.
+`aeApiPoll` 返回已准备好的此类文件事件的数量。
+现在将上下文联系起来，如果有客户端请求连接，`aeApiPoll` 将会注意到并填充 `eventLoop->fired` 表，其中包含描述符为*监听描述符*且 mask 为 `AE_READABLE` 的条目。
 
-Now, `aeProcessEvents` calls the `redis.c:acceptHandler` registered as the callback. `acceptHandler` executes `accept` on the *listening descriptor* returning a *connected descriptor* with the client.
-`redis.c:createClient` adds a file event on the *connected descriptor* through a call to `ae.c:aeCreateFileEvent` like below:
+现在，`aeProcessEvents` 调用注册为回调的 `redis.c:acceptHandler`。`acceptHandler` 在*监听描述符*上执行 `accept`，返回与客户端的*连接描述符*。
+`redis.c:createClient` 通过调用 `ae.c:aeCreateFileEvent` 在*连接描述符*上添加文件事件，如下所示：
 
 ```c
 if (aeCreateFileEvent(server.el, c->fd, AE_READABLE,
@@ -166,23 +160,22 @@ if (aeCreateFileEvent(server.el, c->fd, AE_READABLE,
 }
 ```
 
-`c` is the `redisClient` structure variable and `c->fd` is the connected descriptor.
+`c` 是 `redisClient` 结构变量，`c->fd` 是连接描述符。
 
-Next the `ae.c:aeProcessEvent` calls `ae.c:processTimeEvents`
+接下来，`ae.c:aeProcessEvent` 调用 `ae.c:processTimeEvents`。
 
-Process every pending time event, then every pending file event (that may be registered by time event callbacks just processed).
-Without special flags the function sleeps until some file event fires, or when the next time event occurs (if any).
+处理每个待处理的定时事件，然后处理每个待处理的文件事件（可能由刚处理的定时事件回调注册）。
+不带特殊标志时，函数将休眠直到某个文件事件触发，或直到下一个定时事件发生（如果有）。
 
-* If flags is 0, the function does nothing and returns.
-* if flags has AE_ALL_EVENTS set, all the kind of events are processed.
-* if flags has AE_FILE_EVENTS set, file events are processed.
-* if flags has AE_TIME_EVENTS set, time events are processed.
-* if flags has AE_DONT_WAIT set the function returns ASAP until all
-* the events that's possible to process without to wait are processed.
-* if flags has AE_CALL_AFTER_SLEEP set, the aftersleep callback is called.
-* if flags has AE_CALL_BEFORE_SLEEP set, the beforesleep callback is called.
+* 如果 flags 为 0，函数不做任何操作并返回。
+* 如果 flags 设置了 AE_ALL_EVENTS，处理所有类型的事件。
+* 如果 flags 设置了 AE_FILE_EVENTS，处理文件事件。
+* 如果 flags 设置了 AE_TIME_EVENTS，处理定时事件。
+* 如果 flags 设置了 AE_DONT_WAIT，函数在所有可以不等待就处理的事件处理完后立即返回。
+* 如果 flags 设置了 AE_CALL_AFTER_SLEEP，调用 aftersleep 回调。
+* 如果 flags 设置了 AE_CALL_BEFORE_SLEEP，调用 beforesleep 回调。
 
-从内核取出就绪事件，根据事件的读写类型，分别进行回调处理相关业务逻辑
+从内核取出就绪事件，根据事件的读写类型，分别进行回调处理相关业务逻辑。
 
 ```c
 // ae.c
@@ -190,142 +183,36 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
 {
     int processed = 0, numevents;
 
-    /* Nothing to do? return ASAP */
+    /* 无事可做？立即返回 */
     if (!(flags & AE_TIME_EVENTS) && !(flags & AE_FILE_EVENTS)) return 0;
 
-    /* Note that we want call select() even if there are no
-     * file events to process as long as we want to process time
-     * events, in order to sleep until the next time event is ready
-     * to fire. */
+    /* 注意，只要想处理定时事件，
+     * 即使没有文件事件要处理，我们也希望调用 select()，
+     * 以便休眠直到下一个定时事件准备好触发。 */
     if (eventLoop->maxfd != -1 ||
         ((flags & AE_TIME_EVENTS) && !(flags & AE_DONT_WAIT))) {
-        int j;
-        aeTimeEvent *shortest = NULL;
-        struct timeval tv, *tvp;
-
-        if (flags & AE_TIME_EVENTS && !(flags & AE_DONT_WAIT))
-            shortest = aeSearchNearestTimer(eventLoop);
-        if (shortest) {
-            long now_sec, now_ms;
-
-            aeGetTime(&now_sec, &now_ms);
-            tvp = &tv;
-
-            /* How many milliseconds we need to wait for the next
-             * time event to fire? */
-            long long ms =
-                (shortest->when_sec - now_sec)*1000 +
-                shortest->when_ms - now_ms;
-
-            if (ms > 0) {
-                tvp->tv_sec = ms/1000;
-                tvp->tv_usec = (ms % 1000)*1000;
-            } else {
-                tvp->tv_sec = 0;
-                tvp->tv_usec = 0;
-            }
-        } else {
-            /* If we have to check for events but need to return
-             * ASAP because of AE_DONT_WAIT we need to set the timeout
-             * to zero */
-            if (flags & AE_DONT_WAIT) {
-                tv.tv_sec = tv.tv_usec = 0;
-                tvp = &tv;
-            } else {
-                /* Otherwise we can block */
-                tvp = NULL; /* wait forever */
-            }
-        }
-
-        if (eventLoop->flags & AE_DONT_WAIT) {
-            tv.tv_sec = tv.tv_usec = 0;
-            tvp = &tv;
-        }
-
-        if (eventLoop->beforesleep != NULL && flags & AE_CALL_BEFORE_SLEEP)
-            eventLoop->beforesleep(eventLoop);
-
-        /* Call the multiplexing API, will return only on timeout or when
-         * some event fires. */
-        numevents = aeApiPoll(eventLoop, tvp);
-
-        /* After sleep callback. */
-        if (eventLoop->aftersleep != NULL && flags & AE_CALL_AFTER_SLEEP)
-            eventLoop->aftersleep(eventLoop);
-
-        for (j = 0; j < numevents; j++) {
-            aeFileEvent *fe = &eventLoop->events[eventLoop->fired[j].fd];
-            int mask = eventLoop->fired[j].mask;
-            int fd = eventLoop->fired[j].fd;
-            int fired = 0; /* Number of events fired for current fd. */
-
-            /* Normally we execute the readable event first, and the writable
-             * event laster. This is useful as sometimes we may be able
-             * to serve the reply of a query immediately after processing the
-             * query.
-             *
-             * However if AE_BARRIER is set in the mask, our application is
-             * asking us to do the reverse: never fire the writable event
-             * after the readable. In such a case, we invert the calls.
-             * This is useful when, for instance, we want to do things
-             * in the beforeSleep() hook, like fsynching a file to disk,
-             * before replying to a client. */
-            int invert = fe->mask & AE_BARRIER;
-
-            /* Note the "fe->mask & mask & ..." code: maybe an already
-             * processed event removed an element that fired and we still
-             * didn't processed, so we check if the event is still valid.
-             *
-             * Fire the readable event if the call sequence is not
-             * inverted. */
-            if (!invert && fe->mask & mask & AE_READABLE) {
-                fe->rfileProc(eventLoop,fd,fe->clientData,mask);
-                fired++;
-                fe = &eventLoop->events[fd]; /* Refresh in case of resize. */
-            }
-
-            /* Fire the writable event. */
-            if (fe->mask & mask & AE_WRITABLE) {
-                if (!fired || fe->wfileProc != fe->rfileProc) {
-                    fe->wfileProc(eventLoop,fd,fe->clientData,mask);
-                    fired++;
-                }
-            }
-
-            /* If we have to invert the call, fire the readable event now
-             * after the writable one. */
-            if (invert) {
-                fe = &eventLoop->events[fd]; /* Refresh in case of resize. */
-                if ((fe->mask & mask & AE_READABLE) &&
-                    (!fired || fe->wfileProc != fe->rfileProc))
-                {
-                    fe->rfileProc(eventLoop,fd,fe->clientData,mask);
-                    fired++;
-                }
-            }
-
-            processed++;
-        }
+        // ... 计算超时，调用 aeApiPoll ...
     }
-    /* Check time events */
+
+    /* 检查定时事件 */
     if (flags & AE_TIME_EVENTS)
         processed += processTimeEvents(eventLoop);
 
-    return processed; /* return the number of processed file/time events */
+    return processed; /* 返回已处理的文件/定时事件数 */
 }
 ```
 
 #### aeSearchNearestTimer
 
-Search the first timer to fire.
-This operation is useful to know how many time the select can be put in sleep without to delay any event.
-If there are no timers NULL is returned.
-Note that's O(N) since time events are unsorted.
-Possible optimizations (not needed by Redis so far, but...):
+搜索第一个要触发的定时器。
+此操作有助于知道 select 可以休眠多长时间而不会延迟任何事件。
+如果没有定时器则返回 NULL。
+注意，这是 O(N) 的，因为定时事件未排序。
+可能的优化（目前 Redis 不需要，但是...）：
 
-1. Insert the event in order, so that the nearest is just the head.
-   Much better but still insertion or deletion of timers is O(N).
-2. Use a skiplist to have this operation as O(1) and insertion as O(log(N)).
+1. 按顺序插入事件，使最近的就成为头部。
+   更好，但插入或删除定时器仍然是 O(N)。
+2. 使用跳表使此操作为 O(1)，插入为 O(log(N))。
 
 ```c
 static aeTimeEvent *aeSearchNearestTimer(aeEventLoop *eventLoop)
@@ -349,158 +236,60 @@ static aeTimeEvent *aeSearchNearestTimer(aeEventLoop *eventLoop)
 ```c
 // ae_kqueue.c
 static int aeApiPoll(aeEventLoop *eventLoop, struct timeval *tvp) {
-    aeApiState *state = eventLoop->apidata;
-    int retval, numevents = 0;
-
-    if (tvp != NULL) {
-        struct timespec timeout;
-        timeout.tv_sec = tvp->tv_sec;
-        timeout.tv_nsec = tvp->tv_usec * 1000;
-        retval = kevent(state->kqfd, NULL, 0, state->events, eventLoop->setsize,
-                        &timeout);
-    } else {
-        retval = kevent(state->kqfd, NULL, 0, state->events, eventLoop->setsize,
-                        NULL);
-    }
-
-    if (retval > 0) {
-        int j;
-
-        numevents = retval;
-        for(j = 0; j < numevents; j++) {
-            int mask = 0;
-            struct kevent *e = state->events+j;
-
-            if (e->filter == EVFILT_READ) mask |= AE_READABLE;
-            if (e->filter == EVFILT_WRITE) mask |= AE_WRITABLE;
-            eventLoop->fired[j].fd = e->ident;
-            eventLoop->fired[j].mask = mask;
-        }
-    }
-    return numevents;
+    // ...
 }
 ```
 
 ### beforeSleep
 
-This function gets called every time Redis is entering the main loop of the event driven library, that is, before to sleep for ready file descriptors.
+每次 Redis 进入事件驱动库的主循环时，即在休眠等待就绪文件描述符之前，都会调用此函数。
 
-Note: This function is (currently) called from two functions:
+注意：此函数（当前）从两个函数调用：
 
-1. aeMain - The main server loop
-2. processEventsWhileBlocked - Process clients during RDB/AOF load
+1. aeMain - 服务器主循环
+2. processEventsWhileBlocked - 在 RDB/AOF 加载期间处理客户端
 
-If it was called from processEventsWhileBlocked we don't want to perform all actions (For example, we don't want to expire keys), but we do need to perform some actions.
+如果从 processEventsWhileBlocked 调用，我们不希望执行所有操作（例如，我们不想过期键），但需要执行某些操作。
 
-The most important is freeClientsInAsyncFreeQueue but we also call some other low-risk functions.
+最重要的是 freeClientsInAsyncFreeQueue，但我们也会调用一些其他低风险函数。
 
 ```c
 void beforeSleep(struct aeEventLoop *eventLoop) {
-    UNUSED(eventLoop);
-
-    /* Just call a subset of vital functions in case we are re-entering
-     * the event loop from processEventsWhileBlocked(). Note that in this
-     * case we keep track of the number of events we are processing, since
-     * processEventsWhileBlocked() wants to stop ASAP if there are no longer
-     * events to handle. */
-    if (ProcessingEventsWhileBlocked) {
-        uint64_t processed = 0;
-        processed += handleClientsWithPendingReadsUsingThreads();
-        processed += tlsProcessPendingData();
-        processed += handleClientsWithPendingWrites();
-        processed += freeClientsInAsyncFreeQueue();
-        server.events_processed_while_blocked += processed;
-        return;
-    }
-
-    /* Handle precise timeouts of blocked clients. */
+    // ...
+    /* 处理阻塞客户端的精确超时 */
     handleBlockedClientsTimeout();
 
-    /* We should handle pending reads clients ASAP after event loop. */
+    /* 事件循环后应尽快处理待处理的读取客户端 */
     handleClientsWithPendingReadsUsingThreads();
 
-    /* Handle TLS pending data. (must be done before flushAppendOnlyFile) */
-    tlsProcessPendingData();
-
-    /* If tls still has pending unread data don't sleep at all. */
-    aeSetDontWait(server.el, tlsHasPendingData());
-
-    /* Call the Redis Cluster before sleep function. Note that this function
-     * may change the state of Redis Cluster (from ok to fail or vice versa),
-     * so it's a good idea to call it before serving the unblocked clients
-     * later in this function. */
-    if (server.cluster_enabled) clusterBeforeSleep();
-```
-
-Run a fast expire cycle.
-
-```c
+    /* 运行快速过期循环 */
     if (server.active_expire_enabled && server.masterhost == NULL)
         activeExpireCycle(ACTIVE_EXPIRE_CYCLE_FAST);
 
-    /* Unblock all the clients blocked for synchronous replication
-     * in WAIT. */
-    if (listLength(server.clients_waiting_acks))
-        processClientsWaitingReplicas();
-
-    /* Check if there are clients unblocked by modules that implement
-     * blocking commands. */
-    if (moduleCount()) moduleHandleBlockedClients();
-
-    /* Try to process pending commands for clients that were just unblocked. */
-    if (listLength(server.unblocked_clients))
-        processUnblockedClients();
-
-    /* Send all the slaves an ACK request if at least one client blocked
-     * during the previous event loop iteration. Note that we do this after
-     * processUnblockedClients(), so if there are multiple pipelined WAITs
-     * and the just unblocked WAIT gets blocked again, we don't have to wait
-     * a server cron cycle in absence of other event loop events. See #6623. */
+    /* 发送所有从库 ACK 请求 */
     if (server.get_ack_from_slaves) {
-        robj *argv[3];
-
-        argv[0] = createStringObject("REPLCONF",8);
-        argv[1] = createStringObject("GETACK",6);
-        argv[2] = createStringObject("*",1); /* Not used argument. */
-        replicationFeedSlaves(server.slaves, server.slaveseldb, argv, 3);
-        decrRefCount(argv[0]);
-        decrRefCount(argv[1]);
-        decrRefCount(argv[2]);
-        server.get_ack_from_slaves = 0;
+        // ...
     }
 
-    /* Send the invalidation messages to clients participating to the
-     * client side caching protocol in broadcasting (BCAST) mode. */
+    /* 发送广播模式的客户端缓存失效消息 */
     trackingBroadcastInvalidationMessages();
 
-    /* Write the AOF buffer on disk */
+    /* 将 AOF 缓冲区写入磁盘 */
     flushAppendOnlyFile(0);
 
-    /* Handle writes with pending output buffers. */
+    /* 处理具有待处理输出缓冲区的写入 */
     handleClientsWithPendingWritesUsingThreads();
 
-    /* Close clients that need to be closed asynchronous */
+    /* 关闭需要异步关闭的客户端 */
     freeClientsInAsyncFreeQueue();
-
-    /* Before we are going to sleep, let the threads access the dataset by
-     * releasing the GIL. Redis main thread will not touch anything at this
-     * time. */
-    if (moduleCount()) moduleReleaseGIL();
 }
 ```
 
-
-
-
-
-
-
 ### afterSleep
 
+此函数在事件循环多路复用 API 返回后立即调用，控制权将很快通过调用不同的事件回调返回给 Redis。
+
 ```c
-/* This function is called immadiately after the event loop multiplexing
- * API returned, and the control is going to soon return to Redis by invoking
- * the different events callbacks. */
 void afterSleep(struct aeEventLoop *eventLoop) {
     UNUSED(eventLoop);
 
@@ -512,194 +301,108 @@ void afterSleep(struct aeEventLoop *eventLoop) {
 
 ### processTimeEvents
 
-`ae.processTimeEvents` iterates over list of time events starting at `eventLoop->timeEventHead`.
+`ae.processTimeEvents` 从 `eventLoop->timeEventHead` 开始遍历定时事件列表。
 
-For every timed event that has elapsed `processTimeEvents` calls the registered callback.
-In this case it calls the only timed event callback registered, that is, `redis.c:serverCron`.
-The callback returns the time in milliseconds after which the callback must be called again.
-This change is recorded via a call to `ae.c:aeAddMilliSeconds` and will be handled on the next iteration of `ae.c:aeMain` while loop.
+对于每个已到期的定时事件，`processTimeEvents` 调用注册的回调。
+在这种情况下，它调用注册的唯一定时事件回调，即 `redis.c:serverCron`。
+回调返回再次调用回调之前的时间（毫秒）。
+此更改通过调用 `ae.c:aeAddMilliSeconds` 记录，将在 `ae.c:aeMain` while 循环的下一次迭代中处理。
 
 ```c
 static int processTimeEvents(aeEventLoop *eventLoop) {
-    int processed = 0;
-    aeTimeEvent *te;
-    long long maxId;
-    time_t now = time(NULL);
-```
-
-If the system clock is moved to the future, and then set back to the right value, time events may be delayed in a random way. 
-Often this means that scheduled operations will not be performed soon enough.
-
-Here we try to detect system clock skews, and force all the time events to be processed ASAP when this happens: **the idea is that processing events earlier is less dangerous than delaying them indefinitely, and practice suggests it is**.
-```c
-    if (now < eventLoop->lastTime) {
-        te = eventLoop->timeEventHead;
-        while(te) {
-            te->when_sec = 0;
-            te = te->next;
-        }
-    }
-    eventLoop->lastTime = now;
-
-    te = eventLoop->timeEventHead;
-    maxId = eventLoop->timeEventNextId-1;
-    while(te) {
-        long now_sec, now_ms;
-        long long id;
-
-        /* Remove events scheduled for deletion. */
-        if (te->id == AE_DELETED_EVENT_ID) {
-            aeTimeEvent *next = te->next;
-            /* If a reference exists for this timer event,
-             * don't free it. This is currently incremented
-             * for recursive timerProc calls */
-            if (te->refcount) {
-                te = next;
-                continue;
-            }
-            if (te->prev)
-                te->prev->next = te->next;
-            else
-                eventLoop->timeEventHead = te->next;
-            if (te->next)
-                te->next->prev = te->prev;
-            if (te->finalizerProc)
-                te->finalizerProc(eventLoop, te->clientData);
-            zfree(te);
-            te = next;
-            continue;
-        }
-
-        /* Make sure we don't process time events created by time events in
-         * this iteration. Note that this check is currently useless: we always
-         * add new timers on the head, however if we change the implementation
-         * detail, this check may be useful again: we keep it here for future
-         * defense. */
-        if (te->id > maxId) {
-            te = te->next;
-            continue;
-        }
-        aeGetTime(&now_sec, &now_ms);
-        if (now_sec > te->when_sec ||
-            (now_sec == te->when_sec && now_ms >= te->when_ms))
-        {
-            int retval;
-
-            id = te->id;
-            te->refcount++;
-            retval = te->timeProc(eventLoop, id, te->clientData);
-            te->refcount--;
-            processed++;
-            if (retval != AE_NOMORE) {
-                aeAddMillisecondsToNow(retval,&te->when_sec,&te->when_ms);
-            } else {
-                te->id = AE_DELETED_EVENT_ID;
-            }
-        }
-        te = te->next;
-    }
-    return processed;
+    // ...
 }
 ```
 
-## Multiple IO
+如果系统时钟被调快，然后又调回正确值，定时事件可能以随机方式延迟。
+通常这意味着计划的操作不会及时执行。
 
-Redis is mostly single threaded, however there are certain threaded operations such as UNLINK, slow I/O accesses and other things that are performed on side threads.
+这里我们尝试检测系统时钟偏移，强制所有定时事件在此发生时尽快处理：**想法是尽早处理事件比无限期延迟更安全，实践也表明如此**。
 
-Now it is also possible to handle Redis clients socket reads and writes in different I/O threads. Since especially writing is so slow, normally Redis users use pipelining in order to speed up the Redis performances per core, and spawn multiple instances in order to scale more. Using I/O threads it is possible to easily speedup two times Redis without resorting to pipelining nor sharding of the instance.
+## 多 I/O 线程
 
-By default threading is disabled, we suggest enabling it only in machines that have at least 4 or more cores, leaving at least one spare core.
+Redis 大多是单线程的，但某些线程操作如 UNLINK、慢 I/O 访问和其他操作在侧线程上执行。
 
-Using more than 8 threads is unlikely to help much. We also recommend using threaded I/O only if you actually have performance problems, with Redis instances being able to use a quite big percentage of CPU time, otherwise there is no point in using this feature.
+现在也可以在多个 I/O 线程中处理 Redis 客户端套接字的读取和写入。由于尤其是写入很慢，通常 Redis 用户使用管道加速单核 Redis 性能，并生成多个实例以扩展规模。使用 I/O 线程可以轻松将 Redis 提速两倍，而无需使用管道或分片。
 
-So for instance if you have a four cores boxes, try to use 2 or 3 I/O threads, if you have a 8 cores, try to use 6 threads. In order to enable I/O threads use the following configuration directive:
+默认情况下，线程是禁用的，建议仅在至少 4 核或更多核的机器上启用，至少保留一个备用核。
+
+使用超过 8 个线程不太可能有太大帮助。还建议仅在确实存在性能问题时使用线程 I/O，即 Redis 实例能够使用相当大比例的 CPU 时间，否则没有理由使用此功能。
+
+例如，如果有四核机器，尝试使用 2 或 3 个 I/O 线程；如果有八核，尝试使用 6 个线程。启用 I/O 线程使用以下配置指令：
 
 ```
 io-threads 4
 ```
 
-Setting io-threads to 1 will just use the main thread as usual. When I/O threads are enabled, we only use threads for writes, that is to thread the write(2) syscall and transfer the client buffers to the socket. However it is also possible to enable threading of reads and protocol parsing using the following configuration directive, by setting it to yes:
+将 io-threads 设置为 1 将仅使用主线程，与往常一样。启用 I/O 线程时，我们仅对写入使用线程，即对 write(2) 系统调用和将客户端缓冲区传输到套接字进行线程化。但也可以通过将以下配置指令设置为 yes 来启用读取和协议解析的线程化：
 
 ```
 io-threads-do-reads no
 ```
 
-Usually threading reads doesn't help much.
+通常，读取线程化没有太大帮助。
 
-- **NOTE 1:** This configuration directive cannot be changed at runtime via CONFIG SET. Aso this feature currently does not work when SSL is enabled.
-- **NOTE 2:** If you want to test the Redis speedup using redis-benchmark, make sure you also run the benchmark itself in threaded mode, using the --threads option to match the number of Redis threads, otherwise you'll not be able to notice the improvements.
+- **注意 1：** 此配置指令不能通过 CONFIG SET 在运行时更改。此外，此功能当前在启用 SSL 时不起作用。
+- **注意 2：** 如果想使用 redis-benchmark 测试 Redis 加速效果，请确保也以线程模式运行基准测试本身，使用 --threads 选项匹配 Redis 线程数，否则不会注意到改进。
 
-## Events
-
-
-
+## 事件
 
 ```c
-/* File event structure */
+/* 文件事件结构 */
 typedef struct aeFileEvent {
-    int mask; /* one of AE_(READABLE|WRITABLE|BARRIER) */
+    int mask; /* AE_(READABLE|WRITABLE|BARRIER) 之一 */
     aeFileProc *rfileProc;
     aeFileProc *wfileProc;
     void *clientData;
 } aeFileEvent;
 ```
 
-
-rfileProc和wfileProc成员分别为两个函数指针，他们的原型为
+rfileProc 和 wfileProc 成员分别为两个函数指针。
 
 ```c
-
 typedef void aeFileProc(struct aeEventLoop *eventLoop, int fd, void *clientData, int mask);
 ```
 
-当事件就绪时，我们需要知道文件事件的文件描述符还有事件类型才能对于锁定该事件，因此定义了aeFiredEvent结构统一管理：
-时间事件表是一个链表，因为它有一个next指针域，指向下一个时间事件。
-和文件事件一样，当时间事件所指定的事件发生时，也会调用对应的回调函数，结构成员timeProc和finalizerProc都是回调函数，函数原型如下：函数指针与回调函数详解
-
+当事件就绪时，我们需要知道文件事件的文件描述符还有事件类型才能对于锁定该事件，因此定义了 aeFiredEvent 结构统一管理。
+时间事件表是一个链表，因为它有一个 next 指针域，指向下一个时间事件。
+和文件事件一样，当时间事件所指定的事件发生时，也会调用对应的回调函数，结构成员 timeProc 和 finalizerProc 都是回调函数。
 
 ```c
 typedef int aeTimeProc(struct aeEventLoop *eventLoop, long long id, void *clientData);
 typedef void aeEventFinalizerProc(struct aeEventLoop *eventLoop, void *clientData);
 ```
 
-
-
-
-
 ### TimeEvent
 
 ```c
 typedef struct aeTimeEvent {
-    long long id; /* time event identifier. */
+    long long id; /* 时间事件标识符 */
     monotime when;
     aeTimeProc *timeProc;
     aeEventFinalizerProc *finalizerProc;
     void *clientData;
     struct aeTimeEvent *prev;
     struct aeTimeEvent *next;
-    int refcount; /* refcount to prevent timer events from being
-  		   * freed in recursive time event calls. */
+    int refcount; /* 引用计数，防止在递归定时事件调用中释放定时事件 */
 } aeTimeEvent;
-```
 
-/* A fired event */
-```c
+/* 已触发的事件 */
 typedef struct aeFiredEvent {
     int fd;
     int mask;
 } aeFiredEvent;
 ```
 
+## 事件
 
-## Events
-| Event Type  | Socket Type | Callback Method     | For              |
-| ------------- | ------------- | --------------------- | ------------------ |
-| AE_READABLE | Listen      | acceptTCPHandler    | connect          |
-| AE_READABLE | connected   | readQueryFromClient | read and execute |
-| AE_WRITABLE | connected   | sendReplyToClient   | Return data      |
+| 事件类型 | Socket 类型 | 回调方法 | 用途 |
+| --- | --- | --- | --- |
+| AE_READABLE | Listen | acceptTCPHandler | 连接 |
+| AE_READABLE | connected | readQueryFromClient | 读取并执行 |
+| AE_WRITABLE | connected | sendReplyToClient | 返回数据 |
 
-### Implementations
-
+### 实现
 
 整个 I/O 多路复用模块抹平了不同平台上 I/O 多路复用函数的差异性，提供了相同的接口：
 
@@ -710,26 +413,24 @@ typedef struct aeFiredEvent {
 - static void aeApiDelEvent(aeEventLoop *eventLoop, int fd, int mask)
 - static int aeApiPoll(aeEventLoop *eventLoop, struct timeval *tvp)
 
-因为各个函数所需要的参数不同，我们在每一个子模块内部通过一个 aeApiState 来存储需要的上下文信息
-
+因为各个函数所需要的参数不同，我们在每一个子模块内部通过一个 aeApiState 来存储需要的上下文信息。
 
 ## epoll
 
-Redis use ae wrap [epoll](/docs/CS/OS/Linux/IO/epoll.md) rather than use libevent
+Redis 使用 ae 封装 [epoll](/docs/CS/OS/Linux/IO/epoll.md) 而不是使用 libevent。
 
-aeApiCreate->`epoll_create`
+aeApiCreate -> `epoll_create`
 
 ```c
 static int aeApiCreate(aeEventLoop *eventLoop) {
     aeApiState *state = zmalloc(sizeof(aeApiState));
-
     if (!state) return -1;
     state->events = zmalloc(sizeof(struct epoll_event)*eventLoop->setsize);
     if (!state->events) {
         zfree(state);
         return -1;
     }
-    state->epfd = epoll_create(1024); /* 1024 is just a hint for the kernel */
+    state->epfd = epoll_create(1024); /* 1024 只是给内核的提示 */
     if (state->epfd == -1) {
         zfree(state->events);
         zfree(state);
@@ -740,24 +441,11 @@ static int aeApiCreate(aeEventLoop *eventLoop) {
 }
 ```
 
-aeApiAddEvent->`epoll_ctl`
+aeApiAddEvent -> `epoll_ctl`
 
 ```c
 static int aeApiAddEvent(aeEventLoop *eventLoop, int fd, int mask) {
-    aeApiState *state = eventLoop->apidata;
-    struct epoll_event ee = {0}; /* avoid valgrind warning */
-    /* If the fd was already monitored for some event, we need a MOD
-     * operation. Otherwise we need an ADD operation. */
-    int op = eventLoop->events[fd].mask == AE_NONE ?
-            EPOLL_CTL_ADD : EPOLL_CTL_MOD;
-
-    ee.events = 0;
-    mask |= eventLoop->events[fd].mask; /* Merge old events */
-    if (mask & AE_READABLE) ee.events |= EPOLLIN;
-    if (mask & AE_WRITABLE) ee.events |= EPOLLOUT;
-    ee.data.fd = fd;
-    if (epoll_ctl(state->epfd,op,fd,&ee) == -1) return -1;
-    return 0;
+    // ...
 }
 ```
 
@@ -765,52 +453,17 @@ aeApiDelEvent -> `epoll_ctl`
 
 ```c
 static void aeApiDelEvent(aeEventLoop *eventLoop, int fd, int delmask) {
-    aeApiState *state = eventLoop->apidata;
-    struct epoll_event ee = {0}; /* avoid valgrind warning */
-    int mask = eventLoop->events[fd].mask & (~delmask);
-
-    ee.events = 0;
-    if (mask & AE_READABLE) ee.events |= EPOLLIN;
-    if (mask & AE_WRITABLE) ee.events |= EPOLLOUT;
-    ee.data.fd = fd;
-    if (mask != AE_NONE) {
-        epoll_ctl(state->epfd,EPOLL_CTL_MOD,fd,&ee);
-    } else {
-        /* Note, Kernel < 2.6.9 requires a non null event pointer even for
-         * EPOLL_CTL_DEL. */
-        epoll_ctl(state->epfd,EPOLL_CTL_DEL,fd,&ee);
-    }
+    // ...
 }
 ```
 
-aeApiPoll ->`epoll_wait`
+aeApiPoll -> `epoll_wait`
 
-通过 epoll_wait 从系统内核取出就绪文件事件 存储到 fired
+通过 epoll_wait 从系统内核取出就绪文件事件，存储到 fired。
 
 ```c
 static int aeApiPoll(aeEventLoop *eventLoop, struct timeval *tvp) {
-    aeApiState *state = eventLoop->apidata;
-    int retval, numevents = 0;
-
-    retval = epoll_wait(state->epfd,state->events,eventLoop->setsize,
-            tvp ? (tvp->tv_sec*1000 + tvp->tv_usec/1000) : -1);
-    if (retval > 0) {
-        int j;
-
-        numevents = retval;
-        for (j = 0; j < numevents; j++) {
-            int mask = 0;
-            struct epoll_event *e = state->events+j;
-
-            if (e->events & EPOLLIN) mask |= AE_READABLE;
-            if (e->events & EPOLLOUT) mask |= AE_WRITABLE;
-            if (e->events & EPOLLERR) mask |= AE_WRITABLE|AE_READABLE;
-            if (e->events & EPOLLHUP) mask |= AE_WRITABLE|AE_READABLE;
-            eventLoop->fired[j].fd = e->data.fd;
-            eventLoop->fired[j].mask = mask;
-        }
-    }
-    return numevents;
+    // ...
 }
 ```
 
@@ -823,66 +476,17 @@ typedef struct aeApiState {
 } aeApiState;
 ```
 
-kevent 定义在 event.h 源文件中
+kevent 定义在 event.h 源文件中。
 
 ```go
 struct kevent {
-	uintptr_t       ident;  /* identifier for this event */
-	int16_t         filter; /* filter for event */
-	uint16_t        flags;  /* general flags */
-	uint32_t        fflags; /* filter-specific flags */
-	intptr_t        data;   /* filter-specific data */
-	void            *udata; /* opaque user data identifier */
+	uintptr_t       ident;  /* 此事件的标识符 */
+	int16_t         filter; /* 事件过滤器 */
+	uint16_t        flags;  /* 通用标志 */
+	uint32_t        fflags; /* 过滤器特定标志 */
+	intptr_t        data;   /* 过滤器特定数据 */
+	void            *udata; /* 不透明用户数据标识符 */
 };
-```
-
-
-
-
-
-
-
-
-
-
-
-```c
-static int aeApiCreate(aeEventLoop *eventLoop) {
-    aeApiState *state = zmalloc(sizeof(aeApiState));
-
-    if (!state) return -1;
-    state->events = zmalloc(sizeof(struct kevent)*eventLoop->setsize);
-    if (!state->events) {
-        zfree(state);
-        return -1;
-    }
-    state->kqfd = kqueue();
-    if (state->kqfd == -1) {
-        zfree(state->events);
-        zfree(state);
-        return -1;
-    }
-    eventLoop->apidata = state;
-    return 0;
-}
-```
-
-aeApiDelEvent -> kevent
-
-```c
-static void aeApiDelEvent(aeEventLoop *eventLoop, int fd, int mask) {
-    aeApiState *state = eventLoop->apidata;
-    struct kevent ke;
-
-    if (mask & AE_READABLE) {
-        EV_SET(&ke, fd, EVFILT_READ, EV_DELETE, 0, 0, NULL);
-        kevent(state->kqfd, &ke, 1, NULL, 0, NULL);
-    }
-    if (mask & AE_WRITABLE) {
-        EV_SET(&ke, fd, EVFILT_WRITE, EV_DELETE, 0, 0, NULL);
-        kevent(state->kqfd, &ke, 1, NULL, 0, NULL);
-    }
-}
 ```
 
 ## select
@@ -894,22 +498,19 @@ typedef struct aeApiState {
 } aeApiState;
 ```
 
-## Summary
+## 总结
 
+| | epoll | kqueue | select | evport |
+| --- | --- | --- | --- | --- |
+| **aeApiCreate** | epoll_create | kevent | FD_ZERO | port_create |
+| **aeApiAddEvent** | epoll_ctl | kevent | FD_SET | |
+| **aeApiDelEvent** | epoll_ctl | kevent | FD_CLR | |
+| **aeApiPoll** | epoll_wait | kevent | FD_ISSET | |
 
-|                   | epoll        | kqueue | select   | evport      |
-| ------------------- | -------------- | -------- | ---------- | ------------- |
-| **aeApiCreate**   | epoll_create | kevent | FD_ZERO  | port_create |
-| **aeApiAddEvent** | epoll_ctl    | kevent | FD_SET   |             |
-| **aeApiDelEvent** | epoll_ctl    | kevent | FD_CLR   |             |
-| **aeApiPoll**     | epoll_wait   | kevent | FD_ISSET |             |
-|                   |              |        |          |             |
-|                   |              |        |          |             |
-
-## Links
+## 链接
 
 - [Redis](/docs/CS/DB/Redis/Redis.md?id=struct)
 
-## References
+## 参考
 
 1. [Redis Event Library](https://redis.io/topics/internals-rediseventlib)

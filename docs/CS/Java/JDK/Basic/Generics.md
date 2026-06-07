@@ -1,7 +1,7 @@
 ## Introduction
 
-Before generic classes were added to Java, generic programming was achieved with inheritance.
-The ArrayList class simply maintained an array of Object references:
+在泛型类添加到 Java 之前，泛型编程是通过继承实现的。
+ArrayList 类简单地维护了一个 Object 引用的数组：
 
 ```java
 public class ArrayList // before generic classes
@@ -17,7 +17,7 @@ public class ArrayList // before generic classes
 }
 ```
 
-This approach has two problems. A cast is necessary whenever you retrieve a value:
+这种方法有两个问题。每次检索值时都需要进行强制转换：
 
 ```java
 ArrayList files = new ArrayList();
@@ -25,76 +25,76 @@ String filename = (String) files.get(0);
 
 ```
 
-Moreover, there is no error checking. You can add values of any class:
+此外，没有错误检查。你可以添加任何类的值：
 
 ```java
 files.add(new File("..."));
 ```
 
-This call compiles and runs without error. Elsewhere, casting the result of get to a String will cause an error.
-Generics offer a better solution: type parameters. The ArrayList class now has a type parameter that indicates the element type:
+此调用编译并运行无误。在其他地方，将 get 的结果强制转换为 String 将导致错误。
+泛型提供了更好的解决方案：类型参数。ArrayList 类现在有一个指示元素类型的类型参数：
 
 ```java
 var files = new ArrayList<String>();
 ```
 
-This makes your code easier to read. You can tell right away that this particular array list contains String objects.
+这使得你的代码更易于阅读。你可以立即知道这个特定的数组列表包含 String 对象。
 
-Generics means parameterized types.
+泛型意味着参数化类型。
 
-The idea is to allow type (Integer, String, … etc, and user-defined types) to be a parameter to methods, classes, and interfaces. Using Generics, it is possible to create classes that work with different data types.
+其思想是允许类型（Integer、String 等以及用户定义的类型）作为方法、类和接口的参数。使用泛型，可以创建适用于不同数据类型的类。
 
-An entity such as class, interface, or method that operates on a parameterized type is called generic entity.
+诸如类、接口或方法等操作参数化类型的实体称为泛型实体。
 
-Object is the superclass of all other classes and Object reference can refer to any type object. These features lack type safety. Generics adds that type safety feature. We will discuss that type safety feature in later examples.
+Object 是所有其他类的超类，Object 引用可以引用任何类型对象。这些特性缺乏类型安全。泛型增加了类型安全特性。
 
-Generics in Java is similar to templates in C++. For example, classes like HashSet, ArrayList, HashMap, etc use generics very well. There are some fundamental differences between the two approaches to generic types.
+Java 中的泛型类似于 C++ 中的模板。例如，像 HashSet、ArrayList、HashMap 等类很好地使用了泛型。两种方法在泛型类型之间存在一些根本差异。
 
-How to implement generics?
+如何实现泛型？
 
 - Code specialization
 - Code sharing
 
 `C++ and C# use Code specialization while Java use Code sharing.`
 
-> “In layman,s term, generics force type safety in java language.”
+> "In layman,s term, generics force type safety in java language."
 >
-> “Generics add stability to your code by making more of your bugs detectable at compile time.”
+> "Generics add stability to your code by making more of your bugs detectable at compile time."
 
-In the heart of generics is “[**type safety**](https://en.wikipedia.org/wiki/Type_safety)“.
-What exactly is type safety? It’s just a guarantee by compiler that if correct Types are used in correct places then there should not be any `ClassCastException` in runtime.
-A usecase can be list of `Integer` i.e. `List<Integer>`. If you declare a list in java like `List<Integer>`, then java guarantees that it will detect and report you any attempt to insert any non-integer type into above list.
+泛型的核心是"**类型安全**"。
+类型安全到底是什么？这只是编译器的一个保证，如果正确的类型在正确的位置使用，那么在运行时就不应该有任何 `ClassCastException`。
+一个用例可以是 `Integer` 的列表，即 `List<Integer>`。如果你在 Java 中声明像 `List<Integer>` 这样的列表，那么 Java 保证它会检测并报告任何尝试将非整数类型插入上述列表的行为。
 
-Another important term in java generics is “[**type erasure**](https://en.wikipedia.org/wiki/Type_erasure)“.
-It essentially means that all the extra information added using generics into source code will be removed from bytecode generated from it.
-Inside bytecode, it will be old java syntax which you will get if you don’t use generics at all. This necessarily helps in generating and executing code written prior to java 5 when generics were not added in language.
+Java 泛型中另一个重要的术语是"**类型擦除**"。
+它本质上意味着使用泛型添加到源代码中的所有额外信息将从生成的字节码中删除。
+在字节码内部，它将是你完全不使用泛型时得到的旧 Java 语法。这有助于生成和执行 Java 5 之前（当时语言中尚未添加泛型）编写的代码。
 
 ## Type Erasure
 
-Whenever you define a generic type, a corresponding raw type is automatically provided. The name of the raw type is simply the name of the generic type, with the type parameters removed.
-The type variables are erased and replaced by their bounding types (or Object for variables without bounds).
+每当你定义泛型类型时，会自动提供一个相应的原始类型。原始类型的名称就是泛型类型的名称，并去掉了类型参数。
+类型变量被擦除并替换为其边界类型（对于无边界的变量替换为 Object）。
 
-Type erasure is a mapping from types (possibly including parameterized types and type variables) to types (that are never parameterized types or type variables).
-We write |T| for the erasure of type T. The erasure mapping is defined as follows:
+类型擦除是从类型（可能包括参数化类型和类型变量）到类型（永远不会是参数化类型或类型变量）的映射。
+我们用 |T| 表示类型 T 的擦除。擦除映射定义如下：
 
-- The erasure of a parameterized type ([§4.5](https://docs.oracle.com/javase/specs/jls/se8/html/jls-4.html#jls-4.5)) G`<`T1,...,Tn`>` is |G|.
-- The erasure of a nested type T`.`C is |T|.C.
-- The erasure of an array type T`[]` is |T|`[]`.
-- The erasure of a type variable ([§4.4](https://docs.oracle.com/javase/specs/jls/se8/html/jls-4.html#jls-4.4)) is the erasure of its leftmost bound.
-- The erasure of every other type is the type itself.
+- 参数化类型 G`<`T1,...,Tn`>` 的擦除是 |G|。
+- 嵌套类型 T`.`C 的擦除是 |T|.C。
+- 数组类型 T`[]` 的擦除是 |T|`[]`。
+- 类型变量的擦除是其最左边边界的擦除。
+- 所有其他类型的擦除就是类型本身。
 
-Type erasure also maps the signature ([§8.4.2](https://docs.oracle.com/javase/specs/jls/se8/html/jls-8.html#jls-8.4.2)) of a constructor or method to a signature that has no parameterized types or type variables.
-The erasure of a constructor or method signature s is a signature consisting of the same name as s and the erasures of all the formal parameter types given in s.
+类型擦除还将构造方法或方法的签名映射为没有参数化类型或类型变量的签名。
+构造方法或方法签名 s 的擦除是由相同名称的签名以及 s 中给出的所有形式参数类型的擦除组成的。
 
-The return type of a method ([§8.4.5](https://docs.oracle.com/javase/specs/jls/se8/html/jls-8.html#jls-8.4.5)) and the type parameters of a generic method or constructor ([§8.4.4](https://docs.oracle.com/javase/specs/jls/se8/html/jls-8.html#jls-8.4.4), [§8.8.4](https://docs.oracle.com/javase/specs/jls/se8/html/jls-8.html#jls-8.8.4)) also undergo erasure if the method or constructor's signature is erased.
+方法返回类型和泛型方法或构造方法的类型参数在方法或构造方法的签名被擦除时也经历擦除。
 
-The erasure of the signature of a generic method has no type parameters.
+泛型方法的签名擦除没有类型参数。
 
 generics not exist in JVM,only have List.class not List<Integer>.class
 
 ## Type Expression
 
-Usually Parameters :
+通常参数：
 
 - E - Element  use in Collection
 - T - Type
@@ -104,42 +104,41 @@ Usually Parameters :
 
 ## Restrictions and Limitations
 
-In the following sections, I discuss a number of restrictions that you need to consider when working with Java generics.
-Most of these restrictions are a consequence of type erasure.
+在接下来的章节中，我将讨论在使用 Java 泛型时需要考虑的一些限制。
+这些限制大多数是类型擦除的结果。
 
-Type Parameters Cannot Be Instantiated with Primitive Types
+类型参数不能用基本类型实例化
 
-You cannot substitute a primitive type for a type parameter. Thus, there is no Pair<double>, only Pair<Double>.
-The reason is, of course, type erasure. After erasure, the Pair class has fields of type Object, and you can’t use them to store double values.
-This is an annoyance, to be sure, but it is consistent with the separate status of primitive types in the Java language. 
-It is not a fatal flaw—there are only eight primitive types, and you can always handle them with separate classes and methods when wrapper types are not an acceptable substitute.
+你不能用基本类型替换类型参数。因此，没有 Pair<double>，只有 Pair<Double>。
+原因当然是类型擦除。擦除后，Pair 类有 Object 类型的字段，你不能用它们来存储 double 值。
+这确实有点烦人，但它与 Java 语言中基本类型的独立状态是一致的。
+这不是一个致命的缺陷——只有八种基本类型，当包装类型不是可接受的替代品时，你总是可以用单独的类和方法来处理它们。
 
-Runtime Type Inquiry Only Works with Raw Types
+运行时类型查询仅适用于原始类型
 
-Objects in the virtual machine always have a specific nongeneric type. 
-Therefore, all type inquiries yield only the raw type. 
-For example,
+虚拟机中的对象总是具有特定的非泛型类型。
+因此，所有类型查询都只产生原始类型。
+例如，
 
 ```
 if (a instanceof Pair<String>) // ERROR
 ```
 
-could only test whether a is a Pair of any type. The same is true for the test
+只能测试 a 是否是任何类型的 Pair。测试也是如此
 
 ```
 if (a instanceof Pair<T>) // ERROR
 ```
 
-or the cast
+或强制转换
 
 ```
-
 Pair<String> p = (Pair<String>) a; // warning--can only test that a is a Pair
 ```
 
-To remind you of the risk, you will get a compiler error (with instanceof) or warning (with casts) when you try to inquire whether an object belongs to a generic type.
-In the same spirit, the getClass method always returns the raw type. 
-For example:
+为了提醒你风险，当你尝试查询对象是否属于泛型类型时，你会收到编译器错误（对于 instanceof）或警告（对于强制转换）。
+同样，getClass 方法总是返回原始类型。
+例如：
 
 ```
 Pair<String> stringPair = . . .;
@@ -147,39 +146,39 @@ Pair<Employee> employeePair = . . .;
 if (stringPair.getClass() == employeePair.getClass()) // they are equal
 ```
 
-The comparison yields true because both calls to getClass return Pair.class.
+比较返回 true，因为两次调用 getClass 都返回 Pair.class。
 
-You cannot instantiate arrays of parameterized types, such as
-
-```
-var table = new Pair<String>[10]; // ERROR”
-```
-
-You cannot use type variables in an expression such as new T(. . .).
-For example, the following Pair<T> constructor is illegal:
+你不能实例化参数化类型的数组，例如
 
 ```
-public Pair() { first = new T(); second = new T(); } // ERROR”
+var table = new Pair<String>[10]; // ERROR"
 ```
 
-Just as you cannot instantiate a single generic instance, you cannot instantiate an array.
-The reasons are different—an array is, after all, filled with null values, which would seem safe to construct.
-But an array also carries a type, which is used to monitor array stores in the virtual machine.
-That type is erased.
+你不能在像 new T(...) 这样的表达式中使用类型变量。
+例如，下面的 Pair<T> 构造方法是非法的：
 
-Type Variables Are Not Valid in Static Contexts of Generic Classes
+```
+public Pair() { first = new T(); second = new T(); } // ERROR"
+```
 
-You Cannot Throw or Catch Instances of a Generic Class
+正如你不能实例化单个泛型实例一样，你也不能实例化数组。
+原因不同——数组毕竟是用 null 值填充的，这似乎可以安全地构造。
+但数组也携带一个类型，用于监视虚拟机中的数组存储。
+那个类型被擦除了。
 
-You can neither throw nor catch objects of a generic class. In fact, it is not even legal for a generic class to extend Throwable.
-For example, the following definition will not compile:
+类型变量在泛型类的静态上下文中无效
+
+你不能抛出或捕获泛型类的实例
+
+你既不能抛出也不能捕获泛型类的对象。实际上，泛型类扩展 Throwable 甚至是不合法的。
+例如，下面的定义将无法编译：
 
 ```
 public class Problem<T> extends Exception { /* . . . */ }
       // ERROR--can't extend Throwable
 ```
 
-You cannot use a type variable in a catch clause. For example, the following method will not compile:
+你不能在 catch 子句中使用类型变量。例如，下面的方法将无法编译：
 
 ```java
     public static <T extends Throwable> void doWork(Class<T> t) {
@@ -192,7 +191,7 @@ You cannot use a type variable in a catch clause. For example, the following met
     }
 ```
 
-However, it is OK to use type variables in exception specifications. The following method is legal:
+但是，在异常规范中使用类型变量是可以的。下面的方法是合法的：
 
 ```java
     public static <T extends Throwable> void doWork(T t) throws T // OK
@@ -206,10 +205,10 @@ However, it is OK to use type variables in exception specifications. The followi
     }
 ```
 
-You Can Defeat Checked Exception Checking
+你可以绕过受检异常检查
 
-A bedrock principle of Java exception handling is that you must provide a handler for all checked exceptions.
-You can use generics to defeat this scheme. The key ingredient is this method:
+Java 异常处理的一个基本原则是必须为所有受检异常提供处理器。
+你可以使用泛型来绕过这个规则。关键要素是这个方法：
 
 ```
 SuppressWarnings("unchecked")

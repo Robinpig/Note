@@ -1,6 +1,6 @@
-## Introduction
+## 简介
 
-Kali Linux is an open-source, [Debian-based](/docs/CS/OS/Linux/Distribution/Debian.md) Linux distribution geared towards various information security tasks, such as Penetration Testing, Security Research, Computer Forensics and Reverse Engineering.
+Kali Linux 是一个开源的、[基于 Debian](/docs/CS/OS/Linux/Distribution/Debian.md) 的 Linux 发行版，面向各种信息安全任务，如渗透测试、安全研究、计算机取证和逆向工程。
 
 
 

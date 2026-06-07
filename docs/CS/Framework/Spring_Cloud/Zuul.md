@@ -1,6 +1,6 @@
 ## Introduction
 
-[Zuul](https://github.com/Netflix/zuul) is an L7 gateway service that provides dynamic routing, monitoring, resiliency, security, and more.
+[Zuul](https://github.com/Netflix/zuul) 是一个 L7 网关服务，提供动态路由、监控、弹性、安全等功能。
 
 
 

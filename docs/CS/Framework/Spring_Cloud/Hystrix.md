@@ -1,10 +1,10 @@
 ## Introduction
 
-[Hystrix](https://github.com/Netflix/Hystrix/wiki/) is a library that helps you control the interactions between these distributed services by adding latency tolerance and fault tolerance logic. 
-Hystrix does this by isolating points of access between the services, stopping cascading failures across them, and providing fallback options, all of which improve your system’s overall resiliency.
+[Hystrix](https://github.com/Netflix/Hystrix/wiki/) 是一个库，通过添加延迟容忍和容错逻辑，帮助你控制这些分布式服务之间的交互。
+Hystrix 通过隔离服务之间的访问点、阻止级联故障以及提供回退选项来实现这一点，所有这些都能提高系统的整体弹性。
 
 
-Using RxJava.
+使用 RxJava。
 
 
 ## Command
@@ -34,8 +34,8 @@ abstract class AbstractCommand<R> implements HystrixInvokableInfo<R>, HystrixObs
 
 ### HystrixCommand
 
-Used to wrap code that will execute potentially risky functionality (typically meaning a service call over the network) with fault and latency tolerance, statistics and performance metrics capture, circuit breaker and bulkhead functionality. 
-This command is essentially a blocking command but provides an Observable facade if used with observe().
+用于包装将要执行潜在有风险功能（通常意味着通过网络进行服务调用）的代码，提供容错和延迟容忍、统计和性能指标捕获、断路器和舱壁功能。
+该命令本质上是一个阻塞式命令，但如果与 observe() 一起使用，则提供 Observable 外观。
 
 ```java
 public abstract class HystrixCommand<R> extends AbstractCommand<R> implements HystrixExecutable<R>, HystrixInvokableInfo<R>, HystrixObservable<R> {
@@ -45,8 +45,8 @@ public abstract class HystrixCommand<R> extends AbstractCommand<R> implements Hy
 
 #### Setter
 
-Fluent interface for arguments to the HystrixCommand constructor.
-The required arguments are set via the 'with' factory method and optional arguments via the 'and' chained methods.
+HystrixCommand 构造函数的参数的流式接口。
+必需参数通过 'with' 工厂方法设置，可选参数通过 'and' 链式方法设置。
 
 Example:
 ```java
@@ -109,12 +109,12 @@ public class HystrixCommandAspect {
 ```
 ### Executor
 
-Invokes necessary method of HystrixExecutable or HystrixObservable for specified execution type:
+根据指定的执行类型调用 HystrixExecutable 或 HystrixObservable 的必要方法：
 
 - ExecutionType.SYNCHRONOUS -> HystrixExecutable.execute()
 - ExecutionType.ASYNCHRONOUS -> HystrixExecutable.queue()
-- ExecutionType.OBSERVABLE -> depends on specify observable execution mode: 
-    - ObservableExecutionMode.EAGER - HystrixObservable.observe(), 
+- ExecutionType.OBSERVABLE -> 取决于指定的 observable 执行模式：
+    - ObservableExecutionMode.EAGER - HystrixObservable.observe(),
     - ObservableExecutionMode.LAZY - HystrixObservable.toObservable().
     
 ```java
@@ -147,7 +147,7 @@ public class CommandExecutor {
 }
 ```
 
-All of them call [toObservable](/docs/CS/Framework/Spring_Cloud/Hystrix.md?id=execute) finally.
+它们最终都会调用 [toObservable](/docs/CS/Framework/Spring_Cloud/Hystrix.md?id=execute)。
 ```java
 public ResponseType execute() {
         try {
@@ -248,8 +248,7 @@ execution.isolation.strategy=Semaphore
 ```
 
 
-Default TryableSemaphoreNoOp using threads in Hystrix, or else in calling thread.
-
+默认使用 TryableSemaphoreNoOp，在 Hystrix 中使用线程，否则在调用线程中执行。
 
 `execution.isolation.strategy`设置为THREAD时，command中的代码会放到线程池里执行，跟发起command调用的线程隔离开
 
@@ -261,7 +260,7 @@ Default TryableSemaphoreNoOp using threads in Hystrix, or else in calling thread
 
 
 
-优先采用HystrixThreadPoolKey来标识线程池，如果没有配置HystrixThreadPoolKey那么就使用HystrixCommandGroupKey来标识。command跟线程池的对应关系，就看HystrixCommandKey、HystrixThreadPoolKey、HystrixCommandGroupKey这三个参数的配置优先采用HystrixThreadPoolKey来标识线程池，如果没有配置HystrixThreadPoolKey那么就使用HystrixCommandGroupKey来标识。command跟线程池的对应关系，就看HystrixCommandKey、HystrixThreadPoolKey、HystrixCommandGroupKey这三个参数的配置
+优先采用HystrixThreadPoolKey来标识线程池，如果没有配置HystrixThreadPoolKey那么就使用HystrixCommandGroupKey来标识。command跟线程池的对应关系，就看HystrixCommandKey、HystrixThreadPoolKey、HystrixCommandGroupKey这三个参数的配置
 ```java
 private static HystrixThreadPoolKey initThreadPoolKey(HystrixThreadPoolKey threadPoolKey, HystrixCommandGroupKey groupKey, String threadPoolKeyOverride) {
     if (threadPoolKeyOverride == null) {
@@ -364,8 +363,8 @@ public abstract class HystrixThreadPoolProperties {
 }
 ```
 
-- If maxQueueSize > 0 and coreSize < maximumSize, the poolSize never incr to maximumSize and reject new tasks. The max = coreSize + maxQueueSize.
-- If maxQueueSize <= 0 and coreSize < maximumSize, the poolSize incr to maximumSize then reject new tasks. The max = maximumSize.
+- 如果 maxQueueSize > 0 且 coreSize < maximumSize，则 poolSize 永远不会增加到 maximumSize 并拒绝新任务。最大值为 coreSize + maxQueueSize。
+- 如果 maxQueueSize <= 0 且 coreSize < maximumSize，则 poolSize 会增加到 maximumSize 然后拒绝新任务。最大值为 maximumSize。
 
 
 
@@ -387,12 +386,12 @@ public abstract class HystrixThreadPoolProperties {
 }
 ```
 
-Whether the threadpool queue has space available according to the queueSizeRejectionThreshold settings. 
-Note that the queueSize is an final instance variable on HystrixThreadPoolDefault, and not looked up dynamically. 
-The data structure is static, so this does not make sense as a dynamic lookup. 
-The queueSizeRejectionThreshold can be dynamic (up to queueSize), so that should still get checked on each invocation.
+根据 queueSizeRejectionThreshold 设置判断线程池队列是否有可用空间。
+请注意，queueSize 是 HystrixThreadPoolDefault 上的 final 实例变量，不会动态查找。
+数据结构是静态的，所以这并不适合作为动态查找。
+queueSizeRejectionThreshold 可以是动态的（最大为 queueSize），因此每次调用时仍应检查它。
 
-If a SynchronousQueue implementation is used (maxQueueSize <= 0), it always returns 0 as the size so this would always return true.
+如果使用 SynchronousQueue 实现（maxQueueSize <= 0），它始终返回 0 作为大小，因此这里始终返回 true。
 
 ```java
 static class HystrixThreadPoolDefault implements HystrixThreadPool {
@@ -411,10 +410,10 @@ static class HystrixThreadPoolDefault implements HystrixThreadPool {
 
 #### Semaphore
 
-Semaphore that only supports tryAcquire and never blocks and that supports a dynamic permit count.
+仅支持 tryAcquire 且永不阻塞的信号量，支持动态许可计数。
 
-Using [AtomicInteger](/docs/CS/Java/JDK/Concurrency/Atomic.md) increment/decrement instead of [java.util.concurrent.Semaphore](/docs/CS/Java/JDK/Concurrency/Semaphore.md) since we don't need blocking and need a custom implementation to get the dynamic permit count and
-since AtomicInteger achieves the same behavior and performance without the more complex implementation of the actual Semaphore class using [AbstractQueueSynchronizer](/docs/CS/Java/JDK/Concurrency/AQS.md).
+使用 [AtomicInteger](/docs/CS/Java/JDK/Concurrency/Atomic.md) 递增/递减，而不是 [java.util.concurrent.Semaphore](/docs/CS/Java/JDK/Concurrency/Semaphore.md)，因为我们不需要阻塞，并且需要自定义实现来获取动态许可计数。
+由于 AtomicInteger 在不需要实际 Semaphore 类的更复杂实现（使用 [AbstractQueueSynchronizer](/docs/CS/Java/JDK/Concurrency/AQS.md)）的情况下，可以实现相同的行为和性能。
 
 ```java
 static class TryableSemaphoreActual implements TryableSemaphore {
@@ -451,8 +450,8 @@ static class TryableSemaphoreActual implements TryableSemaphore {
 
 ### Circuit Breaker
 
-Circuit-breaker logic that is hooked into HystrixCommand execution and will stop allowing executions if failures have gone past the defined threshold.
-It will then allow single retries after a defined sleepWindow until the execution succeeds at which point it will again close the circuit and allow executions again.
+挂钩到 HystrixCommand 执行的断路器逻辑，如果失败次数超过定义的阈值，将停止允许执行。
+然后，它会在定义的 sleepWindow 之后允许单次重试，直到执行成功，此时它将再次关闭电路并允许执行。
 
 ```java
 public interface HystrixCircuitBreaker {

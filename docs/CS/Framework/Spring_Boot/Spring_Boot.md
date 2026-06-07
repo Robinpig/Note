@@ -1,13 +1,13 @@
 ## Introduction
 
-[Spring Boot](https://docs.spring.io/spring-boot/index.html) makes it easy to create stand-alone, production-grade Spring based Applications that you can "just run".
+[Spring Boot](https://docs.spring.io/spring-boot/index.html) 使得创建独立、生产级的 Spring 应用变得简单，你可以"直接运行"它们。
 
 - [How to start Spring Boot Application?](/docs/CS/Framework/Spring_Boot/Start.md)
 - [Actuator](Actuator.md)
 
 ## Architecture
 
-**Convention Over Configuration**
+**约定优于配置**
 
 spring-boot
 spring-boot-autoconfigure
@@ -18,18 +18,18 @@ spring-boot-test
 
 ## AutoConfiguration
 
-Spring Boot auto-configuration attempts to automatically configure your Spring application based on the jar dependencies that you have added. 
+Spring Boot 的自动配置会根据你添加的 jar 依赖自动配置你的 Spring 应用。
 
-You need to opt-in to auto-configuration by adding the @EnableAutoConfiguration or @SpringBootApplication annotations to one of your @Configuration classes.
+你需要通过在某个 @Configuration 类上添加 @EnableAutoConfiguration 或 @SpringBootApplication 注解来选择启用自动配置。
 
 > You should only ever add one @SpringBootApplication or @EnableAutoConfiguration annotation. We generally recommend that you add one or the other to your primary @Configuration class only. 
 
 
 
-Auto-configuration is non-invasive. 
-At any point, you can start to define your own configuration to replace specific parts of the auto-configuration. 
+自动配置是非侵入性的。
+你可以随时定义自己的配置来替换自动配置的特定部分。
 
-If you need to find out what auto-configuration is currently being applied, and why, start your application with the `--debug` switch. 
+如果需要查看当前应用了哪些自动配置及其原因，使用 `--debug` 参数启动应用。
 
 
 
@@ -44,38 +44,39 @@ If you need to find out what auto-configuration is currently being applied, and 
 
 
 
+
 [How to start Spring Boot Application?](/docs/CS/Framework/Spring_Boot/Start.md)
 
 
 
 ## Starter
 
-Dependency management is a critical aspects of any complex project. And doing this manually is less than ideal; the more time you spent on it the less time you have on the other important aspects of the project.
+依赖管理是任何复杂项目的关键方面。手动管理依赖并不理想；你在上面花费的时间越多，花在项目其他重要方面的时间就越少。
 
-Starters are a set of convenient dependency descriptors that you can include in your application. You get a one-stop-shop for all the Spring and related technology that you need, without having to hunt through sample code and copy paste loads of dependency descriptors. 
+Starter 是一组方便的依赖描述符，你可以将其包含在应用中。你无需在示例代码中搜索并复制粘贴大量依赖描述符，就能获得所需的所有 Spring 及相关技术。
 
-The starters contain a lot of the dependencies that you need to get a project up and running quickly and with a consistent, supported set of managed transitive dependencies.
+Starter 包含了许多启动项目所需的依赖，并提供了一致且受支持的托管传递依赖集。
 
-A full Spring Boot starter for a library may contain the following components:
+一个完整的库的 Spring Boot starter 可能包含以下组件：
 
-- The `autoconfigure` module that contains the auto-configuration code.
-- The `starter` module that provides a dependency to the autoconfigure module as well as the library and any additional dependencies that are typically useful. In a nutshell, adding the starter should be enough to start using that library.
+- `autoconfigure` 模块，包含自动配置代码。
+- `starter` 模块，提供对 autoconfigure 模块以及库和通常有用的任何额外依赖的依赖。简而言之，添加 starter 应该足以开始使用该库。
 
-> You may combine the auto-configuration code and the dependency management in a single module if you don’t need to separate those two concerns.
+> You may combine the auto-configuration code and the dependency management in a single module if you don't need to separate those two concerns.
 
 ### Externalized Configuration
 
-The Spring environment abstraction is a one-stop shop for any configurable property.
-It abstracts the origins of properties so that beans needing those properties can consume them from Spring itself.
-The Spring environment pulls from several property sources, including the following:
+Spring 环境抽象是任何可配置属性的一站式场所。
+它抽象了属性的来源，使得需要这些属性的 beans 可以从 Spring 自身消费它们。
+Spring 环境从多个属性源获取信息，包括：
 
-- JVM system properties
-- Operating system environment variables
-- Command-line arguments
-- Application property configuration files
+- JVM 系统属性
+- 操作系统环境变量
+- 命令行参数
+- 应用属性配置文件
 
-It then aggregates those properties into a single source from which Spring beans can be injected.
-Figure 4 illustrates how properties from property sources flow through the Spring environment abstraction to Spring beans.
+然后它将这些属性聚合到一个单一源中，Spring beans 可以从中注入。
+图 4 说明了属性如何从属性源流经 Spring 环境抽象到达 Spring beans。
 
 <div style="text-align: center;">
 
@@ -84,14 +85,13 @@ Figure 4 illustrates how properties from property sources flow through the Sprin
 </div>
 
 <p style="text-align: center;">
-Fig.4. The Spring environment pulls properties from property sources and makes them available to beans in the application context.
+图 4. Spring 环境从属性源拉取属性并将其提供给应用上下文中的 beans。
 </p>
 
 #### Configuration properties
 
 
-When binding to `Map` properties, if the `key` contains anything other than lowercase alpha-numeric characters or `-`, you need to use the bracket notation so that the original value is preserved. If the key is not surrounded by `[]`, any characters that are not alpha-numeric or `-` are removed.
-
+当绑定到 `Map` 属性时，如果 `key` 包含除小写字母数字字符或 `-` 之外的任何字符，你需要使用括号表示法以保留原始值。如果 key 没有被 `[]` 包围，任何非字母数字或 `-` 的字符都会被移除。
 
 
 
@@ -118,7 +118,7 @@ public class ConfigurationPropertiesBindingPostProcessor
 }
 ```
 
-Return a `@ConfigurationPropertiesBean` instance for the given bean details or null if the bean is not a `@ConfigurationProperties` object.
+为给定的 bean 详情返回一个 `@ConfigurationPropertiesBean` 实例，如果该 bean 不是 `@ConfigurationProperties` 对象则返回 null。
 
 ```java
 public final class ConfigurationPropertiesBean {
@@ -152,26 +152,26 @@ public final class ConfigurationPropertiesBean {
 
 
 
-If you don't want to include web:
+如果不希望包含 web：
 
-- don't add starter-web
-- set `spring.main.web-application-type=none`
-- set  `WebApplicationType.NONE`  before `SpringApplication.run()`
-
-
+- 不要添加 starter-web
+- 设置 `spring.main.web-application-type=none`
+- 在 `SpringApplication.run()` 之前设置 `WebApplicationType.NONE`
 
 
 
-resolve request order:
 
-- dynamic controller
-- static resources
+
+请求解析顺序：
+
+- 动态控制器
+- 静态资源
 
 ## Test
 
 ### Junit5
 
-It's need JDK15 to build Junit5,.
+构建 Junit5 需要 JDK15。
 
 #### 
 
@@ -205,11 +205,11 @@ static methods
 
 Nest Test
 
-Inner test invoke Outer test.
+内部测试调用外部测试。
 
 ##### Paramterized Test
 
-Use different parameters to run test.
+使用不同参数运行测试。
 
 - @ParamterizedTest
 - @ValueSource
@@ -220,8 +220,8 @@ Use different parameters to run test.
 
 ### WebMock
 
-By default, @SpringBootTest does not start the server but instead sets up a mock environment for testing web endpoints.
-With Spring MVC, we can query our web endpoints using MockMvc or WebTestClient, as shown in the following example:
+默认情况下，@SpringBootTest 不会启动服务器，而是为测试 Web 端点设置一个模拟环境。
+使用 Spring MVC，我们可以通过 MockMvc 或 WebTestClient 查询 Web 端点，如下例所示：
 
 ```java
 import org.junit.jupiter.api.Test;
@@ -282,7 +282,7 @@ public class HelloTest {
 
 ## Actuator
 
-Admin
+管理
 
 ```java
 @ControllerAdvice
@@ -307,10 +307,10 @@ public class GlobalExceptionHandler {
 
 ### Dependency Management
 
-Spring Boot provides the parent POM for an easier creation of Spring Boot applications.
-However, using the parent POM may not always be desirable, if we already have a parent to inherit from.
+Spring Boot 提供了 parent POM 以便更轻松地创建 Spring Boot 应用。
+然而，如果我们已经有一个需要继承的父 POM，使用 parent POM 并不总是理想的。
 
-If we don’t make use of the parent POM, we can still benefit from dependency management by adding the spring-boot-dependencies artifact with scope=import:
+如果不使用 parent POM，我们仍然可以通过添加 scope=import 的 spring-boot-dependencies 工件来受益于依赖管理：
 ```xml
 <dependencyManagement>
      <dependencies>
@@ -324,7 +324,7 @@ If we don’t make use of the parent POM, we can still benefit from dependency m
     </dependencies>
 </dependencyManagement>
 ```
-On the other hand, without the parent POM, we no longer benefit from plugin management. This means we need to add the spring-boot-maven-plugin explicitly:
+另一方面，没有 parent POM，我们也不再受益于插件管理。这意味着我们需要显式添加 spring-boot-maven-plugin：
 ```xml
 <build>
     <plugins>
@@ -340,13 +340,13 @@ On the other hand, without the parent POM, we no longer benefit from plugin mana
 
 ### Developer Tools
 
-DevTools provides Spring developers with some handy develop-ment-time tools.
-Among those are the following:
+DevTools 为 Spring 开发者提供了一些方便的**开发时工具**。
+其中包括：
 
-- Automatic application restart when code changes
-- Automatic browser refresh when browser-destined resources (such as templates, JavaScript, stylesheets, and so on) change
-- Automatic disabling of template caches
-- Built in H2 Console, if the H2 database is in use
+- 代码更改时自动重启应用
+- 浏览器资源（如模板、JavaScript、样式表等）更改时自动刷新浏览器
+- 自动禁用模板缓存
+- 内置 H2 控制台（如果使用了 H2 数据库）
 
 更精确地说，当 DevTools 激活时，应用程序会被加载到 Java 虚拟机（JVM）中的两个独立类加载器中
 一个类加载器加载你的 Java 代码、属性文件，以及项目 src/main/ 路径下的几乎所有内容。这些都是可能经常更改的项
@@ -362,7 +362,7 @@ Among those are the following:
 
 ### Docker
 
-add dockerfile-maven-plugin
+添加 dockerfile-maven-plugin
 
 ```xml
             <plugin>
@@ -389,7 +389,7 @@ add dockerfile-maven-plugin
 
 ```
 
-add Dockerfile
+添加 Dockerfile
 
 ```dockerfile
 FROM java:8
@@ -404,19 +404,19 @@ mvn package
 
 
 
-then check by `docker image ls`
+然后通过 `docker image ls` 检查
 
 ## Production-ready Features
 
-Spring Boot includes a number of additional features to help you monitor and manage your application when you push it to production. You can choose to manage and monitor your application by using HTTP endpoints or with JMX. Auditing, health, and metrics gathering can also be automatically applied to your application.
+Spring Boot 包含许多额外功能，帮助你在将应用部署到生产环境时进行监控和管理。你可以选择通过 HTTP 端点或 JMX 来管理和监控应用。审计、健康检查和指标收集也可以自动应用到你的应用中。
 
-The `spring-boot-actuator` module provides all of Spring Boot’s production-ready features. The recommended way to enable the features is to add a dependency on the spring-boot-starter-actuator “Starter”.
+`spring-boot-actuator` 模块提供了 Spring Boot 的所有生产就绪功能。启用这些功能的推荐方式是添加对 spring-boot-starter-actuator Starter 的依赖。
 
 ### Observability
-Observability is the ability to observe the internal state of a running system from the outside. It consists of the three pillars logging, metrics and traces.
+可观测性是从外部观察运行中系统内部状态的能力。它由三个支柱组成：日志、指标和链路追踪。
 
-For metrics and traces, Spring Boot uses Micrometer Observation. 
-To create your own observations (which will lead to metrics and traces), you can inject an `ObservationRegistry`.
+对于指标和链路追踪，Spring Boot 使用 Micrometer Observation。
+要创建你自己的观测（这将产生指标和链路追踪），可以注入一个 `ObservationRegistry`。
 
 
 ## Issues
@@ -435,4 +435,3 @@ To create your own observations (which will lead to metrics and traces), you can
 - [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md)
 - Splunk
 - Solr
-

@@ -1,7 +1,6 @@
 ## Introduction
 
-
-Create a consumer builder with no schema (Schema.BYTES) for subscribing to one or more topics.
+创建一个没有 schema（Schema.BYTES）的消费者构建器，用于订阅一个或多个 topic。
 ```java
 Consumer<byte[]> consumer = client.newConsumer()
         .topic("my-topic")         
@@ -129,7 +128,7 @@ public abstract class ConsumerBase<T> extends HandlerState implements Consumer<T
 
 triggerListener
 
-The messages are added into the receiver queue by the internal pinned executor, so need to use internal pinned executor to avoid race condition which message might be added into the receiver queue but not able to read here.
+消息由内部固定执行器添加到接收队列，因此需要使用内部固定执行器以避免竞争条件，即消息可能被添加到接收队列但无法在此处读取。
 ```java
 public abstract class ConsumerBase<T> extends HandlerState implements Consumer<T> {
     private void triggerListener() {
@@ -229,12 +228,12 @@ protected Message<T> beforeConsume(Message<T> message) {
         }
     }
 ```
-This is called just before the message is returned by Consumer.receive(), MessageListener.received(Consumer, Message) or the java.util.concurrent.CompletableFuture returned by Consumer.receiveAsync() completes.
+此方法在消息由 Consumer.receive()、MessageListener.received(Consumer, Message) 或 Consumer.receiveAsync() 返回的 CompletableFuture 完成之前调用。
 
-This method calls ConsumerInterceptor.beforeConsume(Consumer, Message) for each interceptor. Messages returned from each interceptor get passed to beforeConsume() of the next interceptor in the chain of interceptors.
+此方法为每个拦截器调用 ConsumerInterceptor.beforeConsume(Consumer, Message)。每个拦截器返回的消息被传递给拦截器链中下一个拦截器的 beforeConsume()。
 
-This method does not throw exceptions. 
-If any of the interceptors in the chain throws an exception, it gets caught and logged, and next interceptor in int the chain is called with 'messages' returned by the previous successful interceptor beforeConsume call.
+此方法不抛出异常。
+如果链中的任何拦截器抛出异常，它会被捕获并记录，然后链中的下一个拦截器将使用前一个成功拦截器的 beforeConsume 调用返回的"消息"进行调用。
 
 ```java
 public class ConsumerInterceptors<T> implements Closeable {
@@ -281,10 +280,10 @@ public class ConsumerInterceptors<T> implements Closeable {
 
 ### retry
 
-reconsumeLater the consumption of Messages.
-When a message is "reconsumeLater" it will be marked for redelivery after some custom delay.
+reconsumeLater 用于重新消费消息。
+当消息被"reconsumeLater"时，它将被标记为在自定义延迟后重新投递。
 
-Example of usage:
+使用示例：
 ```java
   while (true) {
       Message<String> msg = consumer.receive();

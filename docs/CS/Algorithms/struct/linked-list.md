@@ -1,79 +1,72 @@
 ## Introduction
 
-An array implementation allows print_list and find to be carried out in linear time, which is as good as can be expected, and the find_kth operation takes constant time.
-However, insertion and deletion are expensive.
+数组实现允许 print_list 和 find 在线性时间内完成，这与预期一样好，而 find_kth 操作需要常数时间。
+然而，插入和删除开销很大。
 
-In order to avoid the linear cost of insertion and deletion, we need to ensure that the list is not stored contiguously,
-since otherwise entire parts of the list will need to be moved.
+为了避免插入和删除的线性成本，我们需要确保列表不是连续存储的，
+否则整个部分的列表都需要移动。
 
-The linked list consists of a series of structures, which are not necessarily adjacent in memory.
-Each structure contains the element and a pointer to a structure containing its successor. We call this the next pointer.
-The last cell's next pointer points to ; this value is defined by C and cannot be confused with another pointer.
-ANSI C specifies that is zero.
-
+链表由一系列结构组成，这些结构在内存中不一定相邻。
+每个结构包含元素和一个指向其后继结构的指针。我们称之为 next 指针。
+最后一个单元格的 next 指针指向 NULL；这个值由 C 语言定义，不会与其他指针混淆。
+ANSI C 规定 NULL 为零。
 
 ## Bisection method
 
 二分法的基本思想是通过不断将区间一分为二，逐步缩小查找范围，从而找到目标值或近似解
 
-
-
-
-
-
-
 ## Linked Lists Overview
 
-A linked list is a data structure used for storing collections of data A linked list has the following properties.
+链表是一种用于存储数据集合的数据结构。链表具有以下属性：
 
-- Successive elements are connected by pointers
-- The last element points to NULL
-- Can grow or shrink in size during execution of a program
-- Can be made just as long as required (until systems memory exhausts)
-- Does not waste memory space (but takes some extra memory for pointers). It allocates memory as list grows.
+- 连续元素通过指针连接
+- 最后一个元素指向 NULL
+- 可以在程序执行期间增长或缩小
+- 可以根据需要任意延长（直到系统内存耗尽）
+- 不浪费内存空间（但为指针占用一些额外内存）。它在列表增长时分配内存。
 
 ### Linked Lists ADT
 
-The following operations make linked lists an ADT:
+以下操作使链表成为一个 ADT：
 
-**Main Linked Lists Operations**
+**主要链表操作**
 
-- Insert: inserts an element into the list
-- Delete: removes and returns the specified position element from the list
+- Insert：将元素插入列表
+- Delete：移除并返回指定位置的元素
 
-**Auxiliary Linked Lists Operations**
+**辅助链表操作**
 
-- Delete List: removes all elements of the list (dispose of the list)
-- Count: returns the number of elements in the list
-- Find nth node from the end of the list
+- Delete List：移除列表的所有元素（释放列表）
+- Count：返回列表中的元素数量
+- 从链表末尾查找第 n 个节点
 
-**Advantages of Linked Lists**
+**链表的优点**
 
-Linked lists have both advantages and disadvantages. The advantage of linked lists is that they can be expanded in constant time.
-To create an array, we must allocate memory for a certain number of elements.
-To add more elements to the array when full, we must create a new array and copy the old array into the new array. This can take a lot of time.
+链表既有优点也有缺点。链表的优点是可以在常数时间内扩展。
+要创建数组，我们必须为一定数量的元素分配内存。
+当数组满时，要添加更多元素，必须创建一个新数组并将旧数组复制到新数组中。这可能需要大量时间。
 
-We can prevent this by allocating lots of space initially but then we might allocate more than we need and waste memory.
-With a linked list, we can start with space for just one allocated element and add on new elements easily without the need to do any copying and reallocating.
+我们可以通过初始时分配大量空间来防止这种情况，但这样可能会分配超过需要的内存而浪费空间。
+使用链表，我们可以从仅为单个分配的元素开始，轻松添加新元素，而无需进行任何复制和重新分配。
 
-**Issues with Linked Lists (Disadvantages)**
+**链表的问题（缺点）**
 
-There are a number of issues with linked lists. The main disadvantage of linked lists is access time to individual elements.
-Array is random-access, which means it takes O(1) to access any element in the array.
-Linked lists take O(n) for access to an element in the list in the worst case.
-Another advantage of arrays in access time is spacial locality in memory.
-Arrays are defined as contiguous blocks of memory, and so any array element will be physically near its neighbors.
-This greatly benefits from modern CPU caching methods.
+链表存在许多问题。链表的主要缺点是访问单个元素的时间。
+数组是随机访问的，这意味着访问数组中的任何元素只需要 O(1) 时间。
+链表在最坏情况下访问列表中的元素需要 O(n) 时间。
+数组在访问时间上的另一个优势是内存的空间局部性。
+数组定义为连续的内存块，因此任何数组元素在物理上都将靠近其相邻元素。
+这极大地受益于现代 CPU 缓存方法。
 
-Although the dynamic allocation of storage is a great advantage, the overhead with storing and retrieving data can make a big difference.
-Sometimes linked lists are hard to manipulate. If the last item is deleted, the last but one must then have its pointer changed to hold a NULL reference.
-This requires that the list is traversed to find the last but one link, and its pointer set to a NULL reference.
-Finally, linked lists waste memory in terms of extra reference points.
+尽管动态存储分配是一个巨大的优势，但存储和检索数据的开销可能造成很大差异。
+有时链表难以操作。如果删除了最后一个元素，倒数第二个元素的指针必须更改为 NULL。
+这需要遍历列表以找到倒数第二个链接，并将其指针设置为 NULL。
+最后，链表在额外的引用点方面浪费内存。
 
 ## Comparison of Linked Lists with Arrays
 
 <p style="text-align: center;">
-Tab.1 Comparison of Linked Lists with Arrays
+Tab.1 链表与数组的比较
 </p>
 
 <div style="text-align: center;">
@@ -92,71 +85,59 @@ Tab.1 Comparison of Linked Lists with Arrays
 
 ## Singly Linked Lists
 
-Generally “linked list” means a singly linked list.
-This list consists of a number of nodes in which each node has a next pointer to the following element.
-The link of the last node in the list is NULL, which indicates the end of the list.
+通常"链表"指的是单向链表。
+这种列表由多个节点组成，每个节点都有一个指向下一个元素的 next 指针。
+列表中最后一个节点的链接是 NULL，表示列表的结束。
 
 ## Doubly Linked Lists
 
-Sometimes it is convenient to traverse lists backwards. The standard implementation does not help here, but the solution is simple.
-Merely add an extra field to the data structure, containing a pointer to the previous cell.
-The cost of this is an extra link, which adds to the space requirement and also doubles the cost of insertions and deletions because there are more pointers to fix.
-On the other hand, it simplifies deletion, because you no longer have to refer to a key by using a pointer to the previous cell; this information is now at hand.
-
-
+有时需要向后遍历列表。标准的实现无法做到这一点，但解决方案很简单。
+只需在数据结构中添加一个额外字段，包含指向前一个单元格的指针。
+这样做的代价是一个额外的链接，增加了空间需求，并使插入和删除的成本加倍，因为需要修复更多的指针。
+另一方面，它简化了删除操作，因为不再需要通过指向前一个单元格的指针来引用键；这些信息现在就在手边。
 
 通常实现双向链表是将链表首尾的前驱和后继指针，设为 NULL 或者指向一个特殊的虚拟节点，来标记链表的终结
 
 ## Circularly Linked Lists
 
-A popular convention is to have the last cell keep a pointer back to the first.
-This can be done with or without a header (if the header is present, the last cell points to it), and can also be done with doubly linked lists (the first cell's previous pointer points to the last cell).
-This clearly affects some of the tests, but the structure is popular in some applications.
-
-
+一种流行的约定是让最后一个单元格保持指回第一个的指针。
+这可以在有或没有头节点的情况下完成（如果存在头节点，最后一个单元格指向它），也可以在双向链表中完成（第一个单元格的前一个指针指向最后一个单元格）。
+这显然会影响某些测试，但这种结构在某些应用中很流行。
 
 循环链表在许多需要循环遍历的场景下非常有用，比如可以用于模拟约瑟夫环
 
-For large amounts of input, the linear access time of linked lists is prohibitive.
+对于大量输入，链表的线性访问时间是不可接受的。
 
 ## Skip Lists
 
-Binary trees can be used for representing abstract data types such as dictionaries and ordered lists.
-They work well when the elements are inserted in a random order.
-Some sequences of operations, such as inserting the elements in order, produce degenerate data structures that give very poor performance.
-If it were possible to randomly permute the list of items to be inserted, trees would work well with high probability for any input sequence.
-In most cases queries must be answered on-line, so randomly permuting the input is impractical.
-Balanced tree algorithms rearrange the tree as operations are performed to maintain certain balance conditions and assure good performance.
+二叉树可用于表示抽象数据类型，如字典和有序列表。
+当元素以随机顺序插入时，它们工作良好。
+某些操作序列，例如按顺序插入元素，会产生性能非常差的数据结构。
+如果可能随机排列要插入的项目列表，那么树对任何输入序列都有很大概率表现良好。
+在大多数情况下，查询必须在线回答，因此随机排列输入是不切实际的。
+平衡树算法在执行操作时会重新排列树，以维持特定的平衡条件并确保良好性能。
 
-Skip lists are a probabilistic alternative to balanced trees.
-Skip list is a data structure that can be used as an alternative to [balanced binary trees](/docs/CS/Algorithms/tree/tree.md).
-As compared to a binary tree, skip lists allow quick search, insertion and deletion of elements.
-This is achieved by using probabilistic balancing rather than strictly enforce balancing.
-It is basically a linked list with additional pointers such that intermediate nodes can be skipped.
-It uses a random number generator to make some decisions.
+跳跃表是平衡树的一种概率性替代方案。
+跳跃表是一种可以用作[平衡二叉树](/docs/CS/Algorithms/tree/tree.md)替代方案的数据结构。
+与二叉树相比，跳跃表允许快速搜索、插入和删除元素。
+这是通过使用概率平衡而不是严格强制平衡来实现的。
+它基本上是一个带有额外指针的链表，因此可以跳过中间节点。
+它使用随机数生成器来做出一些决策。
 
-In an ordinary sorted linked list, search, insert, and delete are in $O(n)$ because the list must be scanned node-by-node from the head to find the relevant node.
-If somehow we could scan down the list in bigger steps (skip down, as it were), we would reduce the cost of scanning.
-This is the fundamental idea behind Skip Lists.
+在普通的有序链表中，搜索、插入和删除都是 $O(n)$，因为必须从头开始逐个节点扫描列表才能找到相关节点。
+如果我们能以更大的步长向下扫描列表（跳过），就会降低扫描成本。
+这就是跳跃表的基本思想。
 
 ## Iterator
 
-每个链表数据结构中都会有一个虚拟节点成员变量 `node` 用于标记首(或者首尾)
+每个链表数据结构中都会有一个虚拟节点成员变量 `node` 用于标记首（或者首尾）
 对于循环链表 这个 node 初始化时 pre 和 next 都指向自身
 
 实现 Iterator 时 将 end 迭代器指向这个 node, begin 则指向 node.next 符合 Iterator 前闭后开的语义
 
-
-
-
-
-
-
 常见的一些题目
 
 设计一个链表
-
-
 
 单链表反转
 链表中环的检测    
@@ -164,11 +145,9 @@ This is the fundamental idea behind Skip Lists.
 删除链表倒数第n个结点  
 求链表的中间结点
 
-
 ## Links
 
 - [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
--
 
 ## References
 

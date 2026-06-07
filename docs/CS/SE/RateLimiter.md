@@ -1,26 +1,23 @@
 ## Introduction
 
-Rate limiting is an essential technique used in software systems to control the rate of incoming requests. 
-It helps to prevent the overloading of servers by limiting the number of requests that can be made in a given time frame.
+限流是软件系统中用于控制传入请求速率的重要技术。
+它通过限制在给定时间范围内可以发出的请求数量来帮助防止服务器过载。
 
-Rate limiting helps prevent resource starvation caused by Denial of Service (DoS) attacks.
-Rate limiting can help limit cost overruns by preventing the overuse of a resource.
+限流有助于防止 DoS 攻击导致的资源枯竭。
+限流可以通过防止资源过度使用来帮助限制成本超支。
 
-
-
-
-Most rate limiting implementations share three core concepts. 
-They are the limit, the window, and the identifier.
+大多数限流实现共享三个核心概念。
+它们是 limit、window 和 identifier。
 
 ## Algorithms
 
-Several algorithms are used for rate limiting, including
+限流使用多种算法，包括：
 
-- Token bucket
-- Leaky bucket
-- Fixed window counter
-- Sliding window log
-- Sliding window counter
+- Token bucket（令牌桶）
+- Leaky bucket（漏桶）
+- Fixed window counter（固定窗口计数器）
+- Sliding window log（滑动窗口日志）
+- Sliding window counter（滑动窗口计数器）
 
 ### Counter
 
@@ -50,17 +47,17 @@ for (int i = 0; i < 100; i++) {
 
 ### Sliding Window Logs
 
-Another approach to rate limiting is to use sliding window logs. 
-This data structure involves a “window” of **fixed size** that slides along a timeline of events, storing information about the events that fall within the window at any given time.
+限流的另一种方法是使用滑动窗口日志。
+这种数据结构涉及一个**固定大小**的"窗口"，沿着事件时间线滑动，存储任意给定时刻落在窗口内的事件信息。
 
-This rate limitation keeps track of each client’s request in a time-stamped log. 
-These logs are normally stored in a time-sorted hash set or table.
+这种限流方式在带时间戳的日志中跟踪每个客户端的请求。
+这些日志通常存储在按时间排序的哈希集或表中。
 
-The sliding window logs algorithm can be implemented using the following steps:
+滑动窗口日志算法可以通过以下步骤实现：
 
-- A time-sorted queue or hash table of timestamps within the time range of the most recent window is maintained for each client making the requests.
-- When a certain length of the queue is reached or after a certain number of minutes, whenever a new request comes, a check is done for any timestamps older than the current window time.
-- The queue is updated with new timestamp of incoming request and if number of elements in queue does not exceed the authorised count, it is proceeded otherwise an exception is triggered.
+- 为每个发出请求的客户端维护最近窗口时间范围内时间戳的时间排序队列或哈希表。
+- 当队列达到一定长度或经过一定时间后，每当有新请求到来时，检查是否有任何早于当前窗口时间的时间戳。
+- 用传入请求的新时间戳更新队列，如果队列中的元素数不超过授权计数，则继续处理，否则触发异常。
 
 
 
@@ -68,9 +65,9 @@ The sliding window logs algorithm can be implemented using the following steps:
 
 ### Sliding Window Counters
 
-The sliding window counter algorithm is an optimization over sliding window logs. As we can see in the previous approach, memory usage is high. For example, to manage numerous users or huge window timeframes, all the request timestamps must be kept for a window time, which eventually uses a huge amount of memory. Also, removing numerous timestamps older than a particular timeframe means high complexity of time as well.
+滑动窗口计数器算法是对滑动窗口日志的优化。如前一种方法所示，内存使用量很高。例如，要管理大量用户或长窗口时间范围，必须为窗口时间保留所有请求时间戳，最终占用大量内存。此外，删除大量早于特定时间范围的时间戳也意味着较高的时间复杂度。
 
-To reduce surges of traffic, this algorithm accounts for a weighted value of the previous window’s request based on timeframe. If we have a one-minute rate limit, we can record the counter for each second and calculate the sum of all counters in the previous minute whenever we get a new request to determine the throttling limit.
+为了减少流量突发，此算法根据时间范围计算前一个窗口’s request based on timeframe. If we have a one-minute rate limit, we can record the counter for each second and calculate the sum of all counters in the previous minute whenever we get a new request to determine the throttling limit.
 
 The sliding window counters can be separated into the following concepts:
 
@@ -80,37 +77,35 @@ The sliding window counters can be separated into the following concepts:
 
 ### Leaky Bucket
 
-It is based on the idea that if the average rate at which water is poured exceeds the rate at which the bucket leaks, the bucket will overflow.
+它基于这样的思想：如果倒水的平均速率超过桶泄漏的速率，桶将溢出。
 
-**The leaky bucket empties at a fixed rate. 
-Each incoming request adds to the bucket’s depth, and if the bucket overflows, the request is rejected.**
+**漏桶以固定速率排空。
+每个传入请求增加桶的深度，如果桶溢出，则拒绝请求。**
 
-One way to implement this is using a queue, which corresponds to the bucket that will contain the incoming requests. 
-Whenever a new request is made, it is added to the queue’s end. If the queue is full at any time, then the additional requests are discarded.
+实现此方法的一种方式是使用队列，该队列对应于包含传入请求的桶。
+每当有新请求时，将其添加到队列末尾。如果队列在任何时候已满，则丢弃额外的请求。
 
-The leaky bucket algorithm can be separated into the following concepts:
+漏桶算法可以分解为以下概念：
 
-- Initialize the leaky bucket with a fixed depth and a rate at which it leaks.
-- For each request, add to the bucket’s depth.
-- If the bucket’s depth exceeds its capacity, reject the request.
-- Leak the bucket at a fixed rate.
-
+- 用固定深度和泄漏速率初始化漏桶。
+- 对于每个请求，增加桶的深度。
+- 如果桶的深度超过其容量，拒绝请求。
+- 以固定速率泄漏桶。
 
 ### Token Bucket
 
+令牌桶算法以固定速率向"桶"中分配令牌。
+每个请求从桶中消耗一个令牌，只有当有足够的令牌可用时才允许请求。
+未使用的令牌存储在桶中，最多达到最大容量。
+该算法提供了一种简单灵活的方法来控制请求速率并平滑流量突发。
 
-The token bucket algorithm allocates tokens at a fixed rate into a “bucket.”
-Each request consumes a token from the bucket, and requests are only allowed if there are sufficient tokens available.
-Unused tokens are stored in the bucket, up to a maximum capacity.
-This algorithm provides a simple and flexible way to control the rate of requests and smooth out bursts of traffic.
+令牌桶算法的概念理解如下：
 
-The token bucket algorithm can be conceptually understood as follows:
-
-A token is added to the bucket every $1/r$ seconds.
-The bucket can hold at the most b tokens. If a token arrives when the bucket is full, it is discarded.
-When a packet (network layer PDU) of n bytes arrives,
-if at least n tokens are in the bucket, n tokens are removed from the bucket, and the packet is sent to the network.
-if fewer than n tokens are available, no tokens are removed from the bucket, and the packet is considered to be non-conformant.
+每 $1/r$ 秒向桶中添加一个令牌。
+桶最多可以容纳 b 个令牌。如果令牌到达时桶已满，则丢弃该令牌。
+当 n 字节的数据包到达时，
+如果桶中至少有 n 个令牌，则从桶中移除 n 个令牌，并将数据包发送到网络。
+如果可用令牌少于 n 个，则不从桶中移除令牌，该数据包被视为不符合要求。
 
 
 guava `RateLimiter` has two child class `SmoothBursty` and `SmoothWarmingUp` in `SmoothRateLimiter`.
@@ -424,7 +419,7 @@ Sentinel
 
 ## Distributed
 
-Distributed rate limiting involves distributing rate limiting across multiple nodes or instances of a system to handle high traffic loads and improve scalability. Techniques such as consistent hashing, token passing, or distributed caches are used to coordinate rate limiting across nodes.
+分布式限流涉及将限流分布到系统的多个节点或实例上，以处理高流量负载并提高可扩展性。一致性哈希、令牌传递或分布式缓存等技术用于协调节点间的限流。
 
 
 

@@ -1,12 +1,12 @@
 ## Introduction
 
-Zab is very similar to [Paxos](/docs/CS/Distributed/Consensus/Paxos.md), with one crucial difference – the agreement is reached on full history prefixes rather than on individual operations.
-This difference allows Zab to preserve primary order, which may be violated by Paxos.
+Zab 与 [Paxos](/docs/CS/Distributed/Consensus/Paxos.md) 非常相似，但有一个关键区别——其协议是在完整的历史前缀上达成共识，而不是在单个操作上。
+这一差异使得 Zab 能够保持主序（primary order），而 Paxos 可能会违反该顺序。
 
 > Given our use of the primary order property, we say that Zab is a `PO atomic broadcast` protocol.
 
-Zab has three phases: discovery, synchronization, and broadcast. 
-Each process executes one iteration of this protocol at a time, and at any time, a process may drop the current iteration and start a new one by proceeding to Phase 1.
+Zab 包含三个阶段：发现（discovery）、同步（synchronization）和广播（broadcast）。
+每个进程一次执行该协议的一个迭代，任何时候，进程都可以放弃当前迭代并通过进入阶段 1 开始新迭代。
 
 ZooKeeper有Leader、Follower、Observer三种角色 其中Follower、Observer都是Learner 
 Observer不负责选举投票 可以在不影响写性能的情况下提升集群的读性能
@@ -1310,25 +1310,25 @@ private void setPeerState(long proposedLeader, SyncedLearnerTracker voteSet) {
 leader检测到过半节点失去通信时 退出当前循环 关闭所有和learner的socket连接 设置状态为LOOKING 开始新的选举
 
 
-In ZOOKEEPER-3922, we separate the behaviors of FOLLOWING and LEADING.
-To avoid the duplication of codes, we create a method called followingBehavior which was used to shared by FOLLOWING and LEADING. This method returns a Vote.
-When the returned Vote is null, it follows the original idea to break switch statement; otherwise, a valid returned Vote indicates, a leader is generated.
+在 ZOOKEEPER-3922 中，我们将 FOLLOWING 和 LEADING 的行为分开。
+为了避免代码重复，我们创建了一个名为 followingBehavior 的方法，供 FOLLOWING 和 LEADING 共享。该方法返回一个 Vote。
+当返回的 Vote 为 null 时，它遵循原始思路跳出 switch 语句；否则，有效的返回 Vote 表示已生成 leader。
 
-The reason why we need to separate these behaviors is to make the algorithm runnable for 2-node setting. An extra condition for generating leader is needed.
-Due to the majority rule, only when there is a majority in the voteset, a leader will be generated.
-However, in a configuration of 2 nodes, the number to achieve the majority remains 2, which means a recovered node cannot generate a leader which is the existed leader.
-Therefore, we need the Oracle to kick in this situation.
-In a two-node configuration, the Oracle only grants the permission to maintain the progress to one node.
-The oracle either grants the permission to the remained node and makes it a new leader when there is a faulty machine, which is the case to maintain the progress.
-Otherwise, the oracle does not grant the permission to the remained node, which further causes a service down.
+我们需要分离这些行为的原因是为了使算法能够在双节点配置下运行。需要一个额外的条件来生成 leader。
+根据多数规则，只有当投票集中存在多数时，才会生成 leader。
+然而，在 2 个节点的配置中，达到多数的数量仍然是 2，这意味着恢复的节点无法生成 leader，而现有 leader 已经存在。
+因此，我们需要 Oracle 在这种情况下介入。
+在双节点配置中，Oracle 只授权一个节点维持进度。
+Oracle 要么授权给剩余节点，使其在出现故障机器时成为新 leader（这是维持进度的情况）。
+否则，Oracle 不授权给剩余节点，这将导致服务宕机。
 
-In the former case, when a failed server recovers and participate in the leader election, it would not locate a new leader because there does not exist a majority in the voteset.
-It fails on the containAllQuorum() infinitely due to two facts.
-- First one is the fact that it does do not have a majority in the voteset.
-- The other fact is the fact that the oracle would not give the permission since the oracle already gave the permission to the existed leader, the healthy machine.
+在前一种情况下，当故障服务器恢复并参与 leader 选举时，它将无法找到新 leader，因为投票集中不存在多数。
+它会在 containAllQuorum() 上无限失败，原因有两个：
+- 第一个是它在投票集中没有多数。
+- 另一个是 Oracle 不会授予权限，因为 Oracle 已将权限授予了现有的 leader（健康的机器）。
 
-Logically, when the oracle replies with negative, it implies the existed leader which is LEADING notification comes from is a valid leader.
-To threat this negative replies as a permission to generate the leader is the purpose to separate these two behaviors.
+从逻辑上讲，当 Oracle 回复否定时，这意味着发送 LEADING 通知的现有 leader 是有效的 leader。
+将这些否定回复视为生成 leader 的许可，正是分离这两种行为的目的。
 
 
 #### sendNotifications
@@ -2141,8 +2141,8 @@ public class LearnerHandler extends ZooKeeperThread {
 
 #### syncFollower
 
-When leader election is completed, the leader will set its lastProcessedZxid to be (epoch < 32). There will be no txn associated with this zxid.
-The learner will set its lastProcessedZxid to the same value if it get DIFF or SNAP from the learnerMaster. If the same learner come back to sync with learnerMaster using this zxid, we will never find this zxid in our history. In this case, we will ignore TRUNC logic and always send DIFF if we have old enough history
+当 leader 选举完成后，leader 会将其 lastProcessedZxid 设置为 (epoch << 32)。该 zxid 不会关联任何事务。
+如果 learner 从 learnerMaster 收到 DIFF 或 SNAP，它会将自己的 lastProcessedZxid 设置为相同的值。如果同一个 learner 使用此 zxid 返回与 learnerMaster 同步，我们将无法在历史记录中找到此 zxid。在这种情况下，我们将忽略 TRUNC 逻辑，如果历史记录足够旧，则始终发送 DIFF。
 
 
 ```java
@@ -2382,10 +2382,10 @@ QuorumCnxManager会为每个远程服务器创建一个SendWorker线程和RecvWo
 在两两创建连接时，有个规则：只允许SID大的服务器主动和其他服务器建立连接，否则断开连接。在receiveConnection方法中，服务器会接受远程SID比自己大的连接。从而避免了两台服务器之间的重复连接
 
 
-There are three states this server can be in:
-Leader election - each server will elect a leader (proposing itself as a leader initially).
-Follower - the server will synchronize with the leader and replicate any transactions.
-Leader - the server will process requests and forward them to followers. A majority of followers must log the request before it can be accepted.
+服务器可以处于以下三种状态：
+- **Leader election**：每台服务器将选举一个 leader（初始时提议自己为 leader）。
+- **Follower**：服务器将与 leader 同步并复制所有事务。
+- **Leader**：服务器将处理请求并将其转发给 follower。必须有多数 follower 记录该请求后才能接受。
 
 ```java
 public class QuorumPeer extends ZooKeeperThread implements QuorumStats.Provider {

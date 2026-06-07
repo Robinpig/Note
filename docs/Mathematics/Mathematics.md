@@ -2,13 +2,13 @@
 
 ## Primary Math
 
-Primary math, also referred to as elementary math or early math, is a category of mathematics that covers topics that are typically learned in early education.
-The topics learned in primary math, including tools, concepts, etc., provide a foundation for learning mathematics.
-They include topics such as numbers, counting, arithmetic, measurement, basic data visualization and analysis, and more.
+初等数学是数学的一个类别，涵盖通常在早期教育中学习的主题。
+初等数学中学习的主题（包括工具、概念等）为学习数学提供了基础。
+它们包括数字、计数、算术、测量、基本数据可视化和分析等主题。
 
-Below are some of the key topics in primary math.
+以下是一些初等数学的关键主题。
 
-### Exponents
+### 指数
 
 ```tex
 \begin{aligned}
@@ -22,11 +22,11 @@ X^N+X^N&=X{2N} \\
 \end{aligned}
 ```
 
-### Logarithms
+### 对数
 
-In computer science, all logarithms are to base 2 unless specified otherwise.
+在计算机科学中，除非另有说明，所有对数都以 2 为底。
 
-DEFINITION: x^a = b if and only if $ \log_x{b} = a $
+定义：x^a = b 当且仅当 $ \log_x{b} = a $
 
 ```tex
 \begin{aligned}
@@ -38,15 +38,15 @@ DEFINITION: x^a = b if and only if $ \log_x{b} = a $
 \end{aligned}
 ```
 
-### Series
+### 级数
 
 ```tex
 \sum_{i=0}^{N}2^i=2^{N+1}-1
 ```
 
-### Modular Arithmetic
+### 模算术
 
-The P Word
+P Word
 
 ## 韦达定理
 
@@ -64,13 +64,13 @@ $$
 x_1+x_2=-{b\over a}
 $$
 
-And
+且
 
 $$
 x_1x_2={c\over a}
 $$
 
-so
+因此
 
 $$
 x_{1,2}={-b \pm \sqrt{b^2-4ac} \over 2a }
@@ -90,7 +90,7 @@ $$
 
 ad-bc
 
-## Newton's method
+## 牛顿法
 
 ```tex
 X_{k+1} = X_k - \frac{f(X_k)}{f'(X_k)}, k=1,2,...
@@ -98,74 +98,71 @@ X_{k+1} = X_k - \frac{f(X_k)}{f'(X_k)}, k=1,2,...
 
 ## Pure Mathematics
 
-## Algebra
+## 代数
 
-Algebra is a branch of mathematics in which arithmetic is extended to deal with unknown numbers or relationships using letters and other symbols.
-It is a broad branch that is used to some degree in almost all other areas of mathematics.
-As such, for those who seek to pursue virtually any higher study of mathematics, it is important to have a strong grasp of algebra.
+代数是数学的一个分支，其中算术被扩展到使用字母和其他符号来处理未知数或关系。
+它是一个广泛的领域，几乎所有其他数学领域都在一定程度上使用它。
+因此，对于任何希望深入学习数学的人来说，掌握代数非常重要。
 
-The letters or symbols used in algebra are called variables.
+代数中使用的字母或符号称为变量。
 
-Elementary algebra includes concepts such as variables and algebraic notation,
-simplifying expressions, equations, properties of equality and inequality, substitution, solving algebraic equations, and more.
-These form the foundation that will eventually allow us to approach more difficult algebraic and mathematical topics.
+初等代数包括变量和代数符号、简化表达式、方程、等式和不等式的性质、代入、解代数方程等概念。
+这些构成了基础，最终使我们能够处理更困难的代数和数学主题。
 
-## Geometry
+## 几何
 
-Geometry is a branch of mathematics that includes the study of shape, size, and other properties of figures.
-It is one of the oldest branches of mathematics and may have been used even in prehistoric times.
+几何是数学的一个分支，包括对形状、大小和其他图形性质的研究。
+它是最古老的数学分支之一，可能在史前时代就已使用。
 
-### Plane Geometry
+### 平面几何
 
-A point indicates a location in space. It has no dimension and is represented by a dot. Points are typically labeled with capital letters.
+点表示空间中的位置。它没有维度，用点表示。点通常用大写字母标记。
 
-A line has one dimension, its length, and is represented with a line containing arrows indicating it extends in either direction indefinitely.
-Two non-overlapping points determine a unique line and we can name the line with those two points or any other two points on the line.
+线有一个维度（长度），用带箭头的线表示，指示它向两个方向无限延伸。
+两个不重合的点确定一条唯一的线，我们可以用这两点或线上任何其他两点来命名该线。
 
-A plane has two dimensions, length and width, and forms a flat surface (such as a piece of notebook paper) extending in both directions indefinitely.
-A plane can be named by three noncollinear points or by a letter.
+平面有两个维度（长和宽），形成一个平坦的表面（如一张笔记本纸），向两个方向无限延伸。
+平面可以由三个不共线的点或一个字母命名。
 
-### Solid Geometry
+### 立体几何
 
-Solid geometry is the branch of geometry.
-The solids are polyhedra (plural for polyhedron) or non-polyhedra.
+立体几何是几何学的一个分支。
+立体是多面体或非多面体。
 
-A polyhedron is a solid whose faces are polygons.
+多面体是其表面为多边形的立体。
 
-A non-polyhedron is a solid that has all or partly curved surfaces.
+非多面体是所有或部分表面为曲面的立体。
 
-There are numerous branches of geometry that are classified based on various criteria such as the methods of study,
-the types of objects studied, and more.
+几何学有许多分支，根据研究方法、研究对象类型等各种标准进行分类。
 
-**Analytic Geometry**
+**解析几何**
 
-Analytic geometry is the study of plane and solid geometry that uses Algebra and incorporates the two-dimensional coordinate plane or three-dimensional coordinate plane.
-It is sometimes referred to as coordinate geometry for this reason.
+解析几何是研究平面和立体几何的学科，它使用代数并结合二维或三维坐标平面。
+因此，它有时被称为坐标几何。
 
-Since analytic geometry uses Algebra and the coordinate planes for geometric figures,
-it tends to be more numerical in nature, and thus has proven to be an important branch of mathematics used by engineers and physicists.
+由于解析几何使用代数和坐标平面来处理几何图形，
+它本质上更倾向于数值化，因此已被证明是工程师和物理学家使用的重要数学分支。
 
-**Euclidean Geometry**
+**欧氏几何**
 
-Euclidean geometry is the study of plane and solid geometry which uses axioms,
-postulates, and deductive reasoning to prove theorems about geometric concepts.
+欧氏几何是使用公理、公设和演绎推理来证明几何概念定理的平面和立体几何研究。
 
-**Non-Euclidean Geometry**
+**非欧几何**
 
-Non-Euclidean geometry typically uses most of the ideas of Euclidean geometry but uses a different version of Euclid's parallel postulate.
-In Euclidean geometry two parallel lines never intersect.
-In Non-Euclidean geometry, parallel lines can intersect depending on which type of geometry is chosen.
-There are two basic types: Spherical and Hyperbolic Non-Euclidean geometries.
+非欧几何通常使用欧氏几何的大部分思想，但使用不同版本的欧几里得平行公设。
+在欧氏几何中，两条平行线永不相交。
+在非欧几何中，根据选择的几何类型，平行线可以相交。
+有两种基本类型：球面非欧几何和双曲非欧几何。
 
-Think of folding a plane in Euclidean geometry onto a sphere or a hyperboloid (a three-dimensional hyperbola).
-The lines are bent and circular or elliptical in spherical geometry, and parabolic or hyperbolic in hyperbolic geometry.
+想象将欧氏几何中的平面折叠到球面或双曲面上。
+在球面几何中，线是弯曲的、圆形或椭圆形的；在双曲几何中，线是抛物线或双曲线形的。
 
-## Calculus
+## 微积分
 
-[Calculus](/docs/Mathematics/Mathematics.md) is a branch of mathematics that is the study of change.
-We use calculus to help explain the physical world around us.
-Disciplines such as physics, statistics, economics, and medicine,
-use calculus to not only explain the problems and issues that confront them,
-but also to construct models that can be used to predict future events or to describe past events.
+[微积分](/docs/Mathematics/Mathematics.md)是研究变化的数学分支。
+我们使用微积分来帮助解释周围的物理世界。
+物理学、统计学、经济学和医学等学科，
+不仅使用微积分来解释它们面临的问题，
+还用于构建可用于预测未来事件或描述过去事件的模型。
 
 ## Links

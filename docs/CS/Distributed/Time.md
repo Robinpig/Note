@@ -1,49 +1,47 @@
 ## Introduction
 
-
-
 ## Logical Clocks
 
 ### Partial Ordering
 
-***Clock Condition***.
-For any events a, b: if a-> b then C(a) < C(b).
+***Clock Condition***。
+对于任意事件 a, b：如果 a -> b，则 C(a) < C(b)。
 
-- C1.
-  If a and b are events in process $P_i$, and a comes before b, then $C_i(a) < C_i(b)$.
-- C2.
-  If a is the sending of a message by process $P_i$ and b is the receipt of that message by process $P_j$, then $C_i(a) < C_i(b)$.
+- C1。
+  如果 a 和 b 是进程 $P_i$ 中的事件，且 a 在 b 之前发生，则 $C_i(a) < C_i(b)$。
+- C2。
+  如果 a 是进程 $P_i$ 发送消息的事件，b 是进程 $P_j$ 接收该消息的事件，则 $C_i(a) < C_i(b)$。
 
-To guarantee that the system of clocks satisfies the Clock Condition, we will insure that it satisfies conditions C1 and C2.
+为了保证时钟系统满足 Clock Condition，我们将确保它满足条件 C1 和 C2。
 
-Condition C 1 is simple; the processes need only obey the following implementation rule(**IR1**):
+条件 C1 很简单；进程只需遵守以下实现规则 (**IR1**)：
 
-- Each process $P_i$ increments $C_i$ between any two successive events.
+- 每个进程 $P_i$ 在两个连续事件之间递增 $C_i$。
 
-To meet condition C2, we require that each message m contain a timestamp $T_m$ which equals the time at which the message was sent.
-Upon receiving a message timestamped $T_m$, a process must advance its clock to be later than $T_m$.
-More precisely, we have the following rule(**IR2**).
+为了满足条件 C2，我们要求每条消息 m 包含一个时间戳 $T_m$，等于消息发送的时间。
+收到时间戳为 $T_m$ 的消息后，进程必须将其时钟推进到晚于 $T_m$ 的时间。
+更准确地说，我们有以下规则 (**IR2**)。
 
-- If event a is the sending of a message m by process $P_i$, then the message m contains a timestamp $T_m= C_i(a)$.
-- Upon receiving a message m, process $P_j$ sets $C_j$ greater than or equal to its present value and greater than $T_m$.
+- 如果事件 a 是进程 $P_i$ 发送消息 m，则消息 m 包含时间戳 $T_m = C_i(a)$。
+- 接收到消息 m 后，进程 $P_j$ 将 $C_j$ 设置为大于或等于其当前值且大于 $T_m$ 的值。
 
 ### Totally
 
-We assume first of all that for any two processes $P_i$ and $P_j$, the messages sent from $P_i$ to $P_j$ are received in the same order as they are sent.
-Moreover, we assume that every message is eventually received. (These assumptions can be avoided by introducing message numbers and message acknowledgment protocols.)
-We also assume that a process can send messages directly to every other process.
+我们首先假设对于任意两个进程 $P_i$ 和 $P_j$，从 $P_i$ 发送到 $P_j$ 的消息按照发送顺序被接收。
+此外，我们假设每条消息最终都会被收到。（这些假设可以通过引入消息编号和消息确认协议来避免。）
+我们还假设一个进程可以直接向其他每个进程发送消息。
 
-It is obvious that no algorithm based entirely upon events in $\xi$, and which **does not relate those events in any way with the other events** in $\xi$, can guarantee that request A is ordered before request B.
+显然，仅基于 $\xi$ 中事件的算法，且 **不以任何方式将这些事件与 $\xi$ 中的其他事件关联**，无法保证请求 A 在请求 B 之前被排序。
 
-The total ordering defined by the algorithm is somewhat arbitrary.
-It can produce anomalous behavior if it disagrees with the ordering perceived by the system's users.
-This can be prevented by the use of properly synchronized physical clocks.
+算法定义的全序有些任意。
+如果它偏离了系统用户感知的排序，可能会产生异常行为。
+这可以通过使用适当同步的物理时钟来防止。
 
-> THEOREM.
-> Assume a strongly connected graph of processes with diameter d which always obeys rules IR 1' and IR2'.
-> Assume that for any message m, #m --< # for some constant g, and that for all t > to: (a) PC 1 holds.
-> (b) There are constants ~" and ~ such that every ~- seconds a message with an unpredictable delay less than ~ is sent over every arc.
-> Then PC2 is satisfied with • = d(2x~- +~) for all t > to + Td, where the approximations assume # + ~<< z.
+> THEOREM。
+> 假设一个直径为 d 的强连通进程图，始终遵守规则 IR 1' 和 IR2'。
+> 假设对于任何消息 m，#m --< # 对于某个常数 g，且对于所有 t > to：(a) PC1 成立。
+> (b) 存在常数 ~" 和 ~，使得每 ~ 秒在每条边上发送一条不可预测延迟小于 ~ 的消息。
+> 则 PC2 在 t > to + Td 时满足，• = d(2x~- +~)，其中近似假设 # + ~<< z。
 
 ## Vector Clocks
 
@@ -55,53 +53,48 @@ This can be prevented by the use of properly synchronized physical clocks.
 
 ## Hybrid Logical Clocks
 
-
 ## Total Order Broadcast
 
-In fault-tolerant distributed computing, an atomic broadcast or total order broadcast is a broadcast where all correct processes in a system of multiple processes receive the same set of messages in the same order; that is, the same sequence of messages.
-The broadcast is termed "atomic" because it either eventually completes correctly at all participants, or all participants abort without side effects. Atomic broadcasts are an important distributed computing primitive.
+在容错分布式计算中，atomic broadcast 或 total order broadcast 是一种广播，其中多进程系统中所有正确的进程接收相同的消息集合，且顺序相同；即相同的消息序列。
+之所以称为"原子"广播，是因为它要么最终在所有参与者处正确完成，要么所有参与者中止且无副作用。原子广播是一种重要的分布式计算原语。
 
-The following properties are usually required from an atomic broadcast protocol:
+原子广播协议通常需要满足以下属性：
 
-- Validity: if a correct participant broadcasts a message, then all correct participants will eventually receive it.
-- Uniform Agreement: if one correct participant receives a message, then all correct participants will eventually receive that message.
-- Uniform Integrity: a message is received by each participant at most once, and only if it was previously broadcast.
-- Uniform Total Order: the messages are totally ordered in the mathematical sense; that is, if any correct participant receives message 1 first and message 2 second, then every other correct participant must receive message 1 before message 2.
+- Validity：如果正确的参与者广播了一条消息，那么所有正确的参与者最终都会收到它。
+- Uniform Agreement：如果一个正确的参与者收到了一条消息，那么所有正确的参与者最终都会收到该消息。
+- Uniform Integrity：每条消息最多被每个参与者接收一次，并且仅当它之前被广播过。
+- Uniform Total Order：消息在数学意义上是全序的；即，如果任何正确的参与者先收到消息 1 后收到消息 2，那么每个其他正确的参与者必须在收到消息 2 之前收到消息 1。
 
-Note that total order is not equivalent to FIFO order, which requires that if a process sent message 1 before it sent message 2, then all participants must receive message 1 before receiving message 2. 
-It is also not equivalent to "causal order", where if message 2 "depends on" or "occurs after" message 1 then all participants must receive message 2 after receiving message 1. 
-While a strong and useful condition, total order requires only that all participants receive the messages in the same order, but does not place other constraints on that order.
+注意，total order 不等同于 FIFO 顺序，FIFO 要求如果进程在发送消息 2 之前发送了消息 1，那么所有参与者必须在收到消息 2 之前收到消息 1。
+它也不等同于"因果顺序"，如果消息 2 "依赖于"或"发生在"消息 1 之后，那么所有参与者必须在收到消息 1 之后才收到消息 2。
+虽然 total order 是一个强大且有用的条件，但它只要求所有参与者以相同顺序接收消息，并不对该顺序施加其他约束。
 
-For example, what if the natural numbers 7, 8, 1, 4, and 5 are given? We can then serialize 1<4<5<7<8. In other words, the natural numbers are total order.
-What about the sets {b, d}, {d,d} {z, b} next? They cannot be serialized. In other words, these sets are not in total order.
+例如，给定自然数 7, 8, 1, 4, 5，我们可以序列化为 1<4<5<7<8。换句话说，自然数是全序的。
+那么集合 {b, d}, {d, d}, {z, b} 呢？它们无法被序列化。换句话说，这些集合不是全序的。
 
-State machine replication requires the total order of operations.
-
-
+状态机复制需要操作的全序。
 
 ### Equivalent to consensus
 
-In order for the conditions for atomic broadcast to be satisfied, the participants must effectively "agree" on the order of receipt of the messages.
-Participants recovering from failure, after the other participants have "agreed" an order and started to receive the messages, must be able to learn and comply with the agreed order. 
-Such considerations indicate that in systems with crash failures, atomic broadcast and [consensus](/docs/CS/Distributed/Consensus/Consensus.md) are equivalent problems.
+为了满足原子广播的条件，参与者必须有效地"同意"消息接收的顺序。
+从故障中恢复的参与者，在其他参与者已经"同意"了一个顺序并开始接收消息后，必须能够了解并遵守已同意的顺序。
+这些考虑表明，在存在崩溃故障的系统中，原子广播和 [consensus](/docs/CS/Distributed/Consensus/Consensus.md) 是等价的问题。
 
-- A value can be proposed by a process for consensus by atomically broadcasting it, and a process can decide a value by selecting the value of the first message which it atomically receives.
-Thus, consensus can be reduced to atomic broadcast.
-<br>
-- Conversely, a group of participants can atomically broadcast messages by achieving consensus regarding the first message to be received, followed by achieving consensus on the next message, and so forth until all the messages have been received. 
-Thus, atomic broadcast reduces to consensus.
+- 可以通过原子广播一个值来由进程提议该值进行共识，并且进程可以通过选择其原子接收的第一条消息的值来决定一个值。
+  因此，共识可以简化为原子广播。
+- 相反，一组参与者可以通过先就第一条接收的消息达成共识，然后就下一条消息达成共识，依此类推，直到所有消息都被接收，从而实现原子广播。
+  因此，原子广播简化为共识。
 
+请记住，total order broadcast 要求消息按相同顺序恰好传递一次给所有节点。
+仔细想想，这等同于执行多轮共识：在每一轮中，节点提议它们想要发送的下一条消息，然后决定在全序中下一条要传递的消息。
+因此，total order broadcast 等同于重复的多轮共识（每轮共识决策对应一次消息传递）：
+- 由于共识的 agreement 属性，所有节点决定传递相同的消息且顺序相同。
+- 由于 integrity 属性，消息不会被重复。
+- 由于 validity 属性，消息不会被破坏或凭空捏造。
+- 由于 termination 属性，消息不会丢失。
 
-Remember that total order broadcast requires messages to be delivered exactly once, in the same order, to all nodes. 
-If you think about it, this is equivalent to performing several rounds of consensus: in each round, nodes propose the message that they want to send next, and then decide on the next message to be delivered in the total order.
-So, total order broadcast is equivalent to repeated rounds of consensus (each consensus decision corresponding to one message delivery):
-- Due to the agreement property of consensus, all nodes decide to deliver the same messages in the same order.
-- Due to the integrity property, messages are not duplicated.
-- Due to the validity property, messages are not corrupted and not fabricated out of thin air.
-- Due to the termination property, messages are not lost.
-
-Viewstamped Replication, Raft, and Zab implement total order broadcast directly, because that is more efficient than doing repeated rounds of one-value-at-a-time consensus. 
-In the case of Paxos, this optimization is known as Multi-Paxos.
+Viewstamped Replication、Raft 和 Zab 直接实现了 total order broadcast，因为这比重复执行多轮一次一个值的共识更高效。
+对于 Paxos，这种优化称为 Multi-Paxos。
 
 ## Links
 
@@ -116,5 +109,5 @@ In the case of Paxos, this optimization is known as Multi-Paxos.
 5. [Synchronizing Clocks in the Presence of Faults](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/12/Synchronizing-Clocks-in-the-Presence-of-Faults.pdf)
 6. [Byzantine Clock Synchronization](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/Byzantine-Clock-Synchronization.pdf)
 7. [An Overview of Clock Synchronization.](https://www.researchgate.net/publication/221655803_An_Overview_of_Clock_Synchronization)
-8. [Total Order Broadcast and Multicast Algorithms: Taxonomy and Survey]()https://csis.pace.edu/~marchese/CS865/Papers/defago_200356.pdf
+8. [Total Order Broadcast and Multicast Algorithms: Taxonomy and Survey](https://csis.pace.edu/~marchese/CS865/Papers/defago_200356.pdf)
 9. [Atomic Broadcasts and Consensus: A Survey](https://www.net.in.tum.de/fileadmin/TUM/NET/NET-2020-11-1/NET-2020-11-1_19.pdf)
