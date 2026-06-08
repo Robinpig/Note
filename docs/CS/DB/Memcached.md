@@ -9,6 +9,19 @@
 - Mc 完全基于内存操作，在系统运行期间，在有新 key 写进来时，如果没有空闲内存分配，就会对最不活跃的 key 进行 eviction 剔除操作。
 - 最后，Mc 服务节点运行也特别简单，不同 Mc 节点之间互不通信，由 client 自行负责管理数据分布
 
+
+## Installation
+
+
+```shell
+# cent os
+yum install -y memcached
+
+systemctl start memcached
+systemctl enable memcached
+```
+
+
 ## Architecture
 
 Mc 的系统架构主要包括网络处理模块、多线程处理模块、哈希表、LRU、slab 内存分配模块 5 部分。

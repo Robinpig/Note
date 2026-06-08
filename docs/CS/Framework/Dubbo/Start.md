@@ -1,204 +1,215 @@
 ## Introduction
 
+基于 Dubbo 3.0.8 版本的源码，其启动流程的核心，是引入了分层模型（域模型）和独立的发布器（`Deployer`），以此来解耦服务与应用的启动逻辑。总的来说，一个完整流程由 `DubboBootstrap`（传统 API 入口）或 Spring 事件监听器（Spring Boot 集成入口）触发，经由发布器串联起配置加载、模型初始化到最终的服务导出/引用等步骤
+
+![Dubbo启动流程图](./img/Dubbo启动流程图.svg)
 
 
 
+## Spring Boot
 
-## start
-
-如果按完整服务启动与订阅的顺序我们可以归结为以下6点:
-
-- 导出服务(提供者)
-  - 服务提供方通过指定端口对外暴露服务
-- 注册服务(提供者)
-  - 提供方向注册中心注册自己的信息
-- (服务发现)-订阅服务(消费者)
-  - 服务调用方通过注册中心订阅自己感兴趣的服务
-- (服务发现)-服务推送(消费者)
-  - 注册中心向调用方推送地址列表
-- 调用服务(消费者调用提供者)
-  - 调用方选择一个地址发起RPC调用
-- 监控服务
-  - 服务提供方和调用方的统计数据由监控模块收集展示
-
-上面的完整的服务启动订阅与调用流程不仅仅适用于Dubbo 同样也适用于其他服务治理与发现的模型, 一般服务发现与服务调用的思路就是这样的,我们将以上内容扩展,暴漏服务可以使用http,tcp,udp等各种协议,注册服务可以注册到Redis,Dns,Etcd,Zookeeper等注册中心中,订阅服务可以主动去注册中心查询服务列表,服务发现可以让注册中心将服务数据动态推送给消费者.Dubbo其实就是基于这种简单的服务模型来扩展出各种功能的支持,来满足服务治理的各种场景,了解了这里可能各位同学就想着自行开发一个简单的微服务框架了。
-
-##### **Spring Boot**
-
-伴随着SpringBoot容器的启动，Dubbo 主要是做了如下几件事情:
-
-- 将解析属性配置的class 和解析注解（@Service、@Reference等等）配置的class 注册到beanDefinitionMap
-- 将解析后的配置类（AnnotationAttributes）和Dubbo的@Service服务，注册到beanDefinitionMap
-- 当Spring创建Bean、填充属性时，对@Reference 注解标注的属性做注入（inject）
-- 通过监听ContextRefreshedEvent事件，调用DubboBootstrap 启动器，暴露@Service 服务到注册中心
-
-DubboConfigConfigurationRegistrar 用于将不同的属性加载到不同的配置文件中
-registerBeans 方法最终通过 ConfigurationBeanBindingsRegister 将解析之后的配置类注册到BeanDefinitionMap
-最终在Spring 容器中他们会被初始化成若干对象，例如：dubbo:registry 会转换成org.apache.dubbo.config.RegistryConfig#0
+Dubbo 与 Spring Boot 的集成，核心就是利用 Spring Boot 的自动装配机制，将 Dubbo 的各个核心组件注册到 Spring 容器中，从而启动 RPC 服务。整个过程主要分为自动配置、服务暴露和服务引用三大环节
 
 
-DubboComponentScanRegistrar 主要是用来将ServiceAnnotationBeanPostProcessor 注册到BeanDefinitionMap 中。
-在Spring调用BeanFactory相关的后置处理器（invokeBeanFactoryPostProcessors）时，会使用ServiceAnnotationBeanPostProcessor 将@DubboService相关注解注册到BeanDefinitionMap
 
-在 ServiceAnnotationBeanPostProcessor 中，真正做注解解析注册的是他的父类ServiceClassPostProcessor
-在ServiceClassPostProcessor 中，它注册了一个dubbo监听器，用于监听Spring容器的刷新、关闭事件，同时也将@DubboService 注解的类注册到了BeanDefinitionMap 中.
+##### **Dubbo2.7**
 
-伴随着Spring 容器的启动，在invokeBeanFactoryPostProcessors阶段我们注册了dubbo相关的组件到IOC，在finishBeanFactoryInitialization(beanFactory) Dubbo的组件被初始化、实例化，最后Dubbo通过监听Spring事件的方式完成启动器的调用、服务导出等操作
+以下是 Dubbo 接入 Spring Boot 的完整时序图，包含自动配置、服务暴露和服务引用的核心交互
 
-DubboBootstrap 的启动是通过监听Spring事件实现的。Spring会在容器Refresh 的最后一步发送一个事件ContextRefreshedEvent，表示容器刷新完毕
+```mermaid
+sequenceDiagram
+    participant App as Spring Boot 应用
+    participant SC as Spring 容器
+    participant DAA as DubboAutoConfiguration
+    participant SABPP as ServiceAnnotationBeanPostProcessor
+    participant RABPP as ReferenceAnnotationBeanPostProcessor
+    participant SB as ServiceBean
+    participant PF as ProxyFactory
+    participant Proto as Protocol (DubboProtocol)
+    participant Reg as 注册中心 (Zookeeper)
+    participant RB as ReferenceBean
+    participant Proxy as 远程服务代理
 
-对于ContextRefreshedEvent 事件的监听，最终调用了dubboBootstrap.start() 方法
+    Note over App,Proxy: 1. 自动配置与组件注册阶段
+    App->>SC: 启动 @SpringBootApplication + @EnableDubbo
+    SC->>DAA: 加载 spring.factories 自动配置
+    DAA-->>SC: 导入 Dubbo 核心组件
+    SC->>SABPP: 注册 ServiceAnnotationBeanPostProcessor
+    SC->>RABPP: 注册 ReferenceAnnotationBeanPostProcessor
 
+    Note over App,Proxy: 2. Bean 扫描与包装阶段
+    SC->>SABPP: 扫描 Dubbo @Service 注解
+    SABPP->>SC: 为每个服务创建 ServiceBean 并注册
+    SC->>RABPP: 扫描 @Reference 注解字段
+    RABPP->>SC: 为每个引用创建 ReferenceBean 并注册
 
-```java
+    Note over App,Proxy: 3. 服务提供者暴露服务 (监听容器刷新事件)
+    SC-->>SB: 发送 ContextRefreshedEvent
+    SB->>SB: export() 触发服务暴露
+    SB->>PF: 通过 ProxyFactory 创建 Invoker (ref → Invoker)
+    PF-->>SB: 返回 Invoker
+    SB->>Proto: Protocol.export(Invoker)
+    Proto->>Proto: 启动 Netty Server (默认 20880)
+    Proto->>Reg: 注册服务 URL 到注册中心
+    Reg-->>Proto: 注册成功
+    Proto-->>SB: 返回 Exporter
+    SB-->>SC: 服务暴露完成
 
+    Note over App,Proxy: 4. 服务消费者引用服务 (依赖注入阶段)
+    SC->>RABPP: 处理 @Reference 注入
+    RABPP->>RB: 调用 ReferenceBean.getObject()
+    RB->>RB: init() 初始化引用
+    RB->>PF: 通过 Protocol 创建远程 Invoker (订阅/直连)
+    PF-->>RB: 返回 Invoker
+    RB->>PF: ProxyFactory.getProxy(Invoker)
+    PF-->>RB: 返回服务接口的动态代理
+    RB-->>RABPP: 返回代理对象
+    RABPP-->>SC: 注入到 @Reference 字段
+
+    Note over App,Proxy: 5. 运行时调用 (最终由代理通过 Netty 调用远程服务)
 ```
 
-所有的功能都是由导出服务(提供者)开始的,只有提供者先提供了服务才可以有真正的服务让消费者调用
+启动步骤：
 
-来看一个Provider的启动:
+1. 启动类@EnableDubbo -> Spring Boot启动
+2. 加载spring.factories -> DubboAutoConfiguration（自动配置）
+3. DubboComponentScanRegistrar注册ServiceAnnotationBeanPostProcessor和ReferenceAnnotationBeanPostProcessor到Spring容器。
+4. Spring刷新容器，后置处理器处理阶段：
+   a. ServiceAnnotationBeanPostProcessor处理@Service，为每个服务创建ServiceBean实例并注册。
+   b. ReferenceAnnotationBeanPostProcessor处理@Reference，为每个引用创建ReferenceBean并注册（或延迟处理？）
+5. 容器刷新完成，发布ContextRefreshedEvent。
+6. ServiceBean监听到事件，调用export()。
+7. ServiceBean调用ProxyFactory.getInvoker(ref)创建Invoker。
+8. 调用Protocol.export(invoker)，启动Netty Server，注册到Registry。
+9. 同时，ReferenceAnnotationBeanPostProcessor在依赖注入阶段或SmartInitializingSingleton阶段（实际是在postProcessAfterInitialization或通过ReferenceBean初始化），调用ReferenceBean.getObject()创建代理。
+10. ReferenceBean创建Invoker（从Registry订阅或直连），然后ProxyFactory.getProxy(invoker)生成代理，注入到字段
 
-```java
-public class Application {
 
-    private static final String REGISTRY_URL = "zookeeper://127.0.0.1:2181";
 
-    public static void main(String[] args) {
-        startWithBootstrap();
-    }
+##### **Dubbo3**
 
-    private static void startWithBootstrap() {
-        ServiceConfig<DemoServiceImpl> service = new ServiceConfig<>();
-        service.setInterface(DemoService.class);
-        service.setRef(new DemoServiceImpl());
+在 Spring 或 Spring Boot 环境中，启动过程不再需要手动编码调用 `DubboBootstrap`。框架会通过内置的 `DubboDeployApplicationListener` 监听 Spring 容器的 `ContextRefreshedEvent` 事件来触发启动
 
-        DubboBootstrap bootstrap = DubboBootstrap.getInstance();
-        bootstrap
-                .application(new ApplicationConfig("dubbo-demo-api-provider"))
-                .registry(new RegistryConfig(REGISTRY_URL))
-                .protocol(new ProtocolConfig(CommonConstants.DUBBO, -1))
-                .service(service)
-                .start()
-                .await();
-    }
-}
+```mermaid
+sequenceDiagram
+    participant App as Spring Boot应用
+    participant Context as Spring容器
+    participant DDAL as DubboDeployApplicationListener
+    participant DCAL as DubboConfigApplicationListener
+    participant SABPP as ServiceAnnotationBeanPostProcessor
+    participant RABPP as ReferenceAnnotationBeanPostProcessor
+    participant SB as ServiceBean
+    participant RB as ReferenceBean
+    participant Registry as 注册中心 (支持双注册)
+
+    Note over App, Registry: 1. Spring Boot启动阶段 (@EnableDubbo)
+    App->>Context: SpringApplication.run()
+    Context->>DCAL: 触发 ApplicationEnvironmentPreparedEvent
+    DCAL->>DCAL: 预加载和绑定 dubbo. 配置
+
+    Note over App, Registry: 2. 后置处理器注册阶段
+    Context->>SABPP: 实例化 ServiceAnnotationBeanPostProcessor
+    Context->>RABPP: 实例化 ReferenceAnnotationBeanPostProcessor
+    SABPP->>SABPP: scanServiceBeans() 扫描 @DubboService
+    SABPP->>Context: 为每个服务创建 ServiceBean 并注册
+    RABPP->>RABPP: 扫描 @DubboReference 注入点
+    RABPP->>Context: 创建 ReferenceBean 并注册
+
+    Note over App, Registry: 3. 容器刷新与启动阶段
+    Context->>DDAL: 触发 ContextRefreshedEvent
+    DDAL->>DDAL: 获取所有 ServiceBean
+    loop 遍历所有服务
+        DDAL->>SB: export()
+        SB->>SB: doExportUrls()
+        SB->>Registry: 双注册: 应用级 + 接口级
+        Registry-->>SB: 注册成功
+    end
+    DDAL-->>Context: 所有服务暴露完成
+
+    Note over App, Registry: 4. 服务引用阶段
+    RABPP->>RB: 处理 @DubboReference 字段
+    RB->>RB: getObject() 获取代理
+    RB->>Registry: 双订阅: 应用级 + 接口级
+    RB->>RB: createProxy() 创建远程调用代理
+    RB-->>RABPP: 返回代理对象
 ```
 
+ Spring Boot 3.x + Dubbo 3.x 的启动步骤：
+
+1. **配置加载**：`DubboConfigApplicationListener` 监听 `ApplicationEnvironmentPreparedEvent`，读取 `dubbo.*` 配置并绑定到配置对象。
+2. **后置处理器注册**：Spring 容器注册 `ServiceAnnotationBeanPostProcessor` 和 `ReferenceAnnotationBeanPostProcessor`。
+3. **扫描服务提供者**：`ServiceAnnotationBeanPostProcessor` 扫描 `@DubboService` 注解的类，为每个服务生成 `ServiceBean` 并注册到容器。
+4. **暴露服务**：`ContextRefreshedEvent` 触发 `DubboDeployApplicationListener`，调用 `ServiceBean.export()`，执行双注册（同时写入应用级和接口级元数据），并启动 `Triple` 协议服务器。
+5. **引用服务**：`ReferenceAnnotationBeanPostProcessor` 处理 `@DubboReference` 注入点，调用 `ReferenceBean.getObject()` 创建代理，通过双订阅从注册中心获取地址列表，生成远程调用代理
 
 
-### DubboBootstrap
+
+
+## DubboBootstrap
 
 Dubbo3 往云原生的方向走自然要针对云原生应用的应用启动，应用运行，应用发 布等信息做一些建模，这个 DubboBootstrap 就是用来启动 Dubbo 服务的。类似 于 Netty 的 Bootstrap 类型和 ServerBootstrap 启动器
 
 
 
-
-
-通过调用静态方法 getInstance()获取单例实例。之所以设计为单例，是因为 Dubbo 中的一些类(如 ExtensionLoader)只为每个进程设计一个实例
-
-instanceMap设计为Map<ApplicationModel, DubboBootstrap>类型, 意味着可以为多个应用程序模型创建不同的启动器,启动多个服务
-
-```java
-public final class DubboBootstrap {
- 
-    private static final ConcurrentMap<ApplicationModel, DubboBootstrap> instanceMap = new ConcurrentHashMap<>();
-    private static volatile DubboBootstrap instance;   
-    
-    public static DubboBootstrap getInstance() {
-            if (instance == null) {
-                synchronized (DubboBootstrap.class) {
-                    if (instance == null) {
-                        instance = DubboBootstrap.getInstance(ApplicationModel.defaultModel());
-                    }
-                }
-            }
-            return instance;
-        }
-    
-    public static DubboBootstrap getInstance(ApplicationModel applicationModel) {
-        return ConcurrentHashMapUtils.computeIfAbsent(
-                instanceMap, applicationModel, _k -> new DubboBootstrap(applicationModel));
-    }
-}
-```
-
-
-
-构造器
-
-```java
-private DubboBootstrap(ApplicationModel applicationModel) {
-    this.applicationModel = applicationModel;
-    configManager = applicationModel.getApplicationConfigManager();
-    environment = applicationModel.modelEnvironment();
-
-    executorRepository = ExecutorRepository.getInstance(applicationModel);
-    applicationDeployer = applicationModel.getDeployer();
-    // listen deploy events
-    applicationDeployer.addDeployListener(new DeployListenerAdapter<ApplicationModel>() {
-        @Override
-        public void onStarted(ApplicationModel scopeModel) {
-            notifyStarted(applicationModel);
-        }
-
-        @Override
-        public void onStopped(ApplicationModel scopeModel) {
-            notifyStopped(applicationModel);
-        }
-
-        @Override
-        public void onFailure(ApplicationModel scopeModel, Throwable cause) {
-            notifyStopped(applicationModel);
-        }
-    });
-    // register DubboBootstrap bean
-    applicationModel.getBeanFactory().registerBean(this);
-}
-```
-
-
-
-DubboBootstrap的application方法设置一个应用程序配置ApplicationConfig对象
-
-```java
- public DubboBootstrap application(ApplicationConfig applicationConfig) {
-        //将启动器构造器中初始化的默认应用程序模型对象传递给配置对象
-        applicationConfig.setScopeModel(applicationModel);
-        //将配置信息添加到配置管理器中
-        configManager.setApplication(applicationConfig);
-        return this;
-    }
-```
-
-ConfigManager配置管理器
-
-### ApplicationDeployer
-
-来看DubboBootstrap的start()方法:
-
-DubboBootstrap借助DeployerDeployer来启动和发布服务,发布器的启动过程包含了启动配置中心,加载配置,启动元数据中心,启动服务等操作都是比较重要又比较复杂的过程
-
 ```java
 public DubboBootstrap start() {
-        //调用重载的方法进行启动参数代表是否等待启动结束
-        this.start(true);
-        return this;
-    }
-
-public DubboBootstrap start(boolean wait) {
-    Future future = applicationDeployer.start();
-    if (wait) {
-        try {
-            future.get();
-        } catch (Exception e) {
-            throw new IllegalStateException("await dubbo application start finish failure", e);
-        }
+    // 1. 状态检查与初始化
+    if (started.compareAndSet(false, true)) {
+        // 2. 核心初始化（配置、模型等）
+        initialize(); 
+        // 3. 暴露服务
+        exportServices();
+        // 4. 暴露元数据服务
+        exportMetadataService();
+        // 5. 注册服务实例（服务发现）
+        registerServiceInstance();
+        // 6. 引用服务
+        referServices();
     }
     return this;
 }
 ```
 
+### initialize
 
+`initialize()` 是整个启动流程的基础，它负责搭建 Dubbo 运行所需的核心骨架，主要完成以下几件事：
+
+1. **初始化配置 (ConfigManager)**：`ConfigManager` 负责从各类配置源（如 API、XML、Properties、配置中心）加载和合并配置信息，形成统一的配置视图。
+2. **搭建领域模型 (ApplicationModel)**：Dubbo 3.x 引入了分层模型，`ApplicationModel` 是应用级的根模型，代表着整个 Dubbo 应用，它管理所有模块和全局配置。
+3. **创建模块模型 (ModuleModel)**：`ModuleModel` 是模块级模型，通常对应一个 RPC 服务模块，管理着服务发布和引用的具体逻辑。
+4. **初始化发布器 (Deployer)**：发布器是 Dubbo 3.x 中用于管理启动和关闭逻辑的核心组件，包括 `ApplicationDeployer` 和 `ModuleDeployer`。
+5. **初始化环境组件 (Environment)**：负责系统属性、环境变量等配置的管理。
+6. **预热缓存**：包括加载本地缓存的服务列表、启动配置中心监听器等。
+
+```java
+@Override
+public void initialize() {
+    if (initialized) {
+        return;
+    }
+    // Ensure that the initialization is completed when concurrent calls
+    synchronized (startLock) {
+        if (initialized) {
+            return;
+        }
+        onInitialize();
+        // register shutdown hook
+        registerShutdownHook();
+        startConfigCenter();
+        loadApplicationConfigs();
+        initModuleDeployers();
+        initMetricsReporter();
+        initMetricsService();
+        // @since 2.7.8
+        startMetadataCenter();
+        initialized = true;
+    }
+}
+```
+
+## Deploy
+
+无论是哪种入口，最终都会进入框架层，依赖由 **分层模型** 和 **发布器** 协同完成的启动过程
 
 发布器包含
 
@@ -256,98 +267,7 @@ public Future start() {
 }
 ```
 
-### initialize
 
-
-
-```java
-@Override
-public void initialize() {
-    if (initialized) {
-        return;
-    }
-    // Ensure that the initialization is completed when concurrent calls
-    synchronized (startLock) {
-        if (initialized) {
-            return;
-        }
-        onInitialize();
-
-        // register shutdown hook
-        registerShutdownHook();
-
-        startConfigCenter();
-
-        loadApplicationConfigs();
-
-        initModuleDeployers();
-
-        initMetricsReporter();
-
-        initMetricsService();
-
-        // @since 2.7.8
-        startMetadataCenter();
-
-        initialized = true;
-    }
-}
-```
-
-
-
-Dubbo 配置加载大概分为两个阶段
-- 第一阶段为 DubboBootstrap 初始化之前，在 Spring context 启动时解析处理 XML 配置/注解配置/Java-config 或者是执行 API 配置代码，创建 config bean 并且加入到 ConfigManager 中。 
-- 第二阶段为 DubboBootstrap 初始化过程，从配置中心读取外部配置，依次处 理实例级属性配置和应用级属性配置，最后刷新所有配置实例的属性，也就是 属性覆盖
-
-
-发生属性覆盖可能有两种情况，并且二者可能是会同时发生的：
-- 不同配置源配置了相同的配置项。
-- 相同配置源，但在不同层次指定了相同的配置项。
-
-属性覆盖处理流程： 按照优先级从高到低依次查找，如果找到此前缀开头的属性，则选定使用这个前缀 提取属性，忽略后面的配置。
-
-
-DubboBootstrap 就是用来启动 Dubbo 服务的。类似 于 Netty 的 Bootstrap 类型和 ServerBootstrap 启动器
-
-
-Dubbo 的 bootstrap 类为啥要用单例模式。 通过调用静态方法 getInstance()获取单例实例。之所以设计为单例，是因为 Dubbo 中的一些类（如 ExtensionLoader）只为每个进程设计一个实例。
-
-
-
-[DefaultApplicationDeployer.startConfigCenter()](/docs/CS/Framework/Dubbo/Start.md)
-
-
-通过 ls / 查看根目录，我们发现 Dubbo 注册了两个目录，/dubbo 和 /services 目录：
-Dubbo 3.x 推崇的一个应用级注册新特性，在不改变任何 Dubbo 配置的情况下，可以兼 容一个应用从 2.x 版本平滑升级到 3.x 版本，这个新特性主要是为了将来能支持十万甚至百万 的集群实例地址发现，并且可以与不同的微服务体系实现地址发现互联互通
-增加了对services目录下的应用级注册功能
-
-你可以通过在提供方设置 dubbo.application.register-mode 属性来自由控制
-
-- interface：只接口级注册。 
-- instance：只应用级注册。 
-- all：接口级注册、应用级注册都会存在，同时也是默认值。
-
-Consumer
-
-可以考虑在消费方的 Dubbo XML 配置文件中，为 DemoFacade 服务添加 check="false" 的属性，来达到启动不检查服务的目的，
-
-
-dubbo目录下各服务注册里有consumer
-所以通过一个 interface，我们就能从注 册中心查看有哪些提供方应用节点、哪些消费方应用节点。
-
-在消费方侧也存在如何抉择的问题，到 底是订阅接口级注册信息，还是订阅应用级注册信息呢
-
-其实 Dubbo 也为我们提供了过渡的兼容方案，你可以通过在消费方设置 dubbo.application.service-discovery.migration 属性来兼容新老订阅方案
-
-FORCE_INTERFACE：只订阅消费接口级信息。 APPLICATION_FIRST：注册中心有应用级注册信息则订阅应用级信息，否则订阅接口级信 息，起到了智能决策来兼容过渡方案。 FORCE_APPLICATION：只订阅应用级信息
-
-不过总有调用不顺畅的时候，尤其是在提供方服务有点耗时的情况下，你可能会遇到这样的异 常信息
-
-源码中默认的超时时间，可以从这段代码中查看，是 1000ms：
-
-除了网络抖动影响调用，更多时候可能因为有些服务器故障了，比如消费方调着调着，提供方 突然就挂了，消费方如果换台提供方，继续重试调用一下也许就正常了，所以你可以继续设置failover容错策略
-常用容错策略有
 
 ### doStart
 
@@ -464,12 +384,6 @@ private synchronized Future startSync() throws IllegalStateException {
                     // check reference config
                     checkReferences();
                 } catch (Throwable e) {
-                    logger.warn(
-                            CONFIG_FAILED_WAIT_EXPORT_REFER,
-                            "",
-                            "",
-                            "wait for export/refer services occurred an exception",
-                            e);
                     onModuleFailed(getIdentifier() + " start failed: " + e, e);
                 } finally {
                     // complete module start future after application state changed
@@ -489,158 +403,35 @@ private synchronized Future startSync() throws IllegalStateException {
 
 
 
-## Config
+### ModuleDeployer
 
-Enables Dubbo components as Spring Beans, equals `DubboComponentScan` and `EnableDubboConfig` combination.
+`initialize()` 完成后，Dubbo 进入**模块启动阶段**，主要逻辑由 `DefaultApplicationDeployer` 推动，并由 `ModuleDeployer` 执行具体的模块生命周期管理。其核心流程如下：
 
-**Note**: `EnableDubbo` must base on Spring Framework 4.2 and above
+1. **初始化**：`ModuleDeployer` 实例化，并加载该模块的专属配置。
+2. **准备**：校验模块配置、解析服务依赖等。
+3. **启动**：开始执行模块级别的启动逻辑，进入**阶段三**。
+4. **发布**：模块成功启动后，广播 `ModuleDeployedEvent` 事件，通知系统模块就绪
 
-```java
-@Target({ElementType.TYPE})
-@Retention(RetentionPolicy.RUNTIME)
-@Inherited
-@Documented
-@EnableDubboConfig
-@DubboComponentScan
-public @interface EnableDubbo {
-    
-    @AliasFor(annotation = DubboComponentScan.class, attribute = "basePackages")
-    String[] scanBasePackages() default {};
-
-    @AliasFor(annotation = DubboComponentScan.class, attribute = "basePackageClasses")
-    Class<?>[] scanBasePackageClasses() default {};
-
-    @AliasFor(annotation = EnableDubboConfig.class, attribute = "multiple")
-    boolean multipleConfig() default true;
-
-}
-```
-
-### Registrar
-
-registerBeanDefinitions
-
-
-```java
-@Target({ElementType.TYPE})
-@Retention(RetentionPolicy.RUNTIME)
-@Inherited
-@Documented
-@Import(DubboConfigConfigurationRegistrar.class)
-public @interface EnableDubboConfig {
-
-    boolean multiple() default true;
-
-}
-
-public class DubboConfigConfigurationRegistrar implements ImportBeanDefinitionRegistrar, ApplicationContextAware {
-
-    private ConfigurableApplicationContext applicationContext;
-
-    @Override
-    public void registerBeanDefinitions(AnnotationMetadata importingClassMetadata, BeanDefinitionRegistry registry) {
-
-        AnnotationAttributes attributes = AnnotationAttributes.fromMap(
-                importingClassMetadata.getAnnotationAttributes(EnableDubboConfig.class.getName()));
-
-        boolean multiple = attributes.getBoolean("multiple");
-
-        // Single Config Bindings
-        registerBeans(registry, DubboConfigConfiguration.Single.class);
-
-        if (multiple) { // Since 2.6.6 https://github.com/apache/dubbo/issues/3193
-            registerBeans(registry, DubboConfigConfiguration.Multiple.class);
-        }
-
-        // Since 2.7.6
-        registerCommonBeans(registry);
-    }
-}
-```
+`ModuleDeployer` 的启动，标志着 Dubbo 进入核心业务启动阶段
 
 
 
-### ServiceClassPostProcessor
-
-```java
-public class ServiceClassPostProcessor implements BeanDefinitionRegistryPostProcessor, EnvironmentAware,
-        ResourceLoaderAware, BeanClassLoaderAware {
-
-    private static final List<Class<? extends Annotation>> serviceAnnotationTypes = asList(
-            // @since 2.7.7 Add the @DubboService , the issue : https://github.com/apache/dubbo/issues/6007
-            DubboService.class,
-            // @since 2.7.0 the substitute @com.alibaba.dubbo.config.annotation.Service
-            Service.class,
-            // @since 2.7.3 Add the compatibility for legacy Dubbo's @Service , the issue : https://github.com/apache/dubbo/issues/4330
-            com.alibaba.dubbo.config.annotation.Service.class
-    );
 
 
-    @Override
-    public void postProcessBeanDefinitionRegistry(BeanDefinitionRegistry registry) throws BeansException {
-
-        // @since 2.7.5
-        registerInfrastructureBean(registry, DubboBootstrapApplicationListener.BEAN_NAME, DubboBootstrapApplicationListener.class);
-
-        Set<String> resolvedPackagesToScan = resolvePackagesToScan(packagesToScan);
-
-        if (!CollectionUtils.isEmpty(resolvedPackagesToScan)) {
-            registerServiceBeans(resolvedPackagesToScan, registry);
-        }
-    }
-}
-```
-
-#### registerServiceBeans
-
-```java
-private void registerServiceBeans(Set<String> packagesToScan, BeanDefinitionRegistry registry) {
-
-    DubboClassPathBeanDefinitionScanner scanner =
-            new DubboClassPathBeanDefinitionScanner(registry, environment, resourceLoader);
-
-    BeanNameGenerator beanNameGenerator = resolveBeanNameGenerator(registry);
-
-    scanner.setBeanNameGenerator(beanNameGenerator);
-
-    // refactor @since 2.7.7
-    serviceAnnotationTypes.forEach(annotationType -> {
-        scanner.addIncludeFilter(new AnnotationTypeFilter(annotationType));
-    });
-
-    for (String packageToScan : packagesToScan) {
-        // Registers @Service Bean first
-        scanner.scan(packageToScan);
-        // Finds all BeanDefinitionHolders of @Service whether @ComponentScan scans or not.
-        Set<BeanDefinitionHolder> beanDefinitionHolders =
-                findServiceBeanDefinitionHolders(scanner, packageToScan, registry, beanNameGenerator);
-        if (!CollectionUtils.isEmpty(beanDefinitionHolders)) {
-            for (BeanDefinitionHolder beanDefinitionHolder : beanDefinitionHolders) {
-                registerServiceBean(beanDefinitionHolder, registry, scanner);
-            }
-        } else {}
-	}
-}
-
-private BeanNameGenerator resolveBeanNameGenerator(BeanDefinitionRegistry registry) {
-    BeanNameGenerator beanNameGenerator = null;
-
-    if (registry instanceof SingletonBeanRegistry) {
-        SingletonBeanRegistry singletonBeanRegistry = SingletonBeanRegistry.class.cast(registry);
-        beanNameGenerator = (BeanNameGenerator) singletonBeanRegistry.getSingleton(CONFIGURATION_BEAN_NAME_GENERATOR);
-    }
-
-    if (beanNameGenerator == null) {
-        beanNameGenerator = new AnnotationBeanNameGenerator();
-    }
-    return beanNameGenerator;
-}
-```
-
-
-
+模块启动后，`start()` 方法会继续调用 `exportServices` 和 `referServices` 来执行具体的服务操作，这也是服务治理的核心环节
 
 ## Provider
+
+提供者启动的核心是暴露服务，供消费者调用。该过程主要由 `ServiceConfig` 类完成
+
+`ServiceConfig.export()` 内部会调用 `doExportUrls()`，完成如下关键步骤：
+
+1. **前置准备**：再次进行配置校验、接口赋值等。
+2. **生成 URL**：根据 `ApplicationConfig`、`RegistryConfig`、`ProtocolConfig` 等配置构建 URL，并**将本地服务实现封装成 `Invoker`**，它是 Dubbo 中调用处理的核心实体。
+3. **协议暴露**：调用 `Protocol.export(invoker)` 方法。Dubbo 会根据 URL 协议（如 `dubbo` 或 `tri`）进行不同的暴露逻辑：
+   - 启动对应的网络服务器（如 Netty Server）。
+   - 将服务接口、IP、端口等信息注册到配置的注册中心（如 Zookeeper）。
+4. **事件分发**：服务暴露完成后，会发送 `ServiceConfigExportedEvent` 事件，用于触发后续操作，如服务映射。
 
 ### doExport
 
@@ -1037,6 +828,10 @@ public <T> Exporter<T> export(Invoker<T> invoker) throws RpcException {
 
 ## Consumer
 
+服务消费者的启动过程相对“懒”，`referServices()` 方法并不立即发起远程连接，而是**为每个 `ReferenceConfig` 创建一个动态代理对象**。这个代理对象直到业务代码第一次调用其方法时，才会触发真正的服务引用和连接建立，这是一种**懒加载机制**，可以有效避免启动耗时过长。
+
+
+
 ### createProxy
 
 all of scenarios need to create [Proxy](/docs/CS/Framework/Dubbo/Start.md?id=proxy) :
@@ -1212,11 +1007,6 @@ private ExchangeClient[] getClients(URL url) {
 
 }
 
-/**
- * Create new connection
- *
- * @param url
- */
 private ExchangeClient initClient(URL url) {
 
     // client type setting.
