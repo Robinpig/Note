@@ -1,4 +1,4 @@
-## 简介
+## Introduction
 
 所有 Redis 命令按照以下方式定义：
 
