@@ -1,22 +1,29 @@
 ## Introduction
 
-Spring Data JPA 是更大 Spring Data 家族的一部分，使得基于 JPA（Java Persistence API）的仓库实现变得简单。
+Spring Data JPA, part of the larger Spring Data family, makes it easy to easily implement JPA-based (Java Persistence API) repositories.
 
-Spring Data 仓库抽象中的核心接口是 Repository。
-它接受要管理的领域类以及领域类的标识符类型作为类型参数。
-此接口主要作为标记接口，用于捕获要处理的类型，并帮助你发现扩展此接口的接口。
-CrudRepository 和 ListCrudRepository 接口为正在管理的实体类提供了复杂的 CRUD 功能。
 
-常用 JPA 注解
+The central interface in the Spring Data repository abstraction is Repository. 
+It takes the domain class to manage as well as the identifier type of the domain class as type arguments. 
+This interface acts primarily as a marker interface to capture the types to work with and to help you to discover interfaces that extend this one. 
+The CrudRepository and ListCrudRepository interfaces provide sophisticated CRUD functionality for the entity class that is being managed.
+
+
+
+常用JPA注解
 
 @Entiry
 @MappedSuperClass
+
 
 @Id
 @GeneratedValue
 @SequenceGenerator
 
-基于注解的 base packages 配置
+
+
+
+Annotation-driven configuration of base packages
 ```java
 @Configuration
 @EnableJpaRepositories
@@ -113,7 +120,7 @@ public class JpaRepositoryFactoryBean<T extends Repository<S, ID>, S, ID>
 }
 ```
 
-创建 repository 的代理对象，添加 processors 的拦截
+创建repository的代理对象 添加processors的拦截
 
 ```java
 public abstract class RepositoryFactorySupport implements BeanClassLoaderAware, BeanFactoryAware {
@@ -177,7 +184,8 @@ public abstract class RepositoryFactorySupport implements BeanClassLoaderAware, 
 }
 ```
 
-执行查询和 interceptor
+执行查询和interceptor
+
 
 ```java
 class QueryExecutorMethodInterceptor implements MethodInterceptor {
@@ -219,13 +227,14 @@ class QueryExecutorMethodInterceptor implements MethodInterceptor {
 }
 ```
 
-SQL 解析实现在 commons 包里
+SQL解析实现在commons包里
 
 ## Log
 
 ```properties
 logging.level.org.springframework.orm.jpa=DEBUG
 ```
+
 
 ## Links
 

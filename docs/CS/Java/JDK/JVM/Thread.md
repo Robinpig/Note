@@ -1,8 +1,8 @@
 ## Introduction
 
-所有 Thread 子类必须是 JavaThread 或 NonJavaThread。
+All Thread subclasses must be either JavaThread or NonJavaThread.
 
-类层次结构
+Class hierarchy
 ```c
 // - Thread
 //   - JavaThread
@@ -75,7 +75,7 @@ public:
 ```
 
 
-线程执行序列和操作：
+Thread execution sequence and actions:
 ```
 All threads:
  - thread_native_entry  // per-OS native entry point

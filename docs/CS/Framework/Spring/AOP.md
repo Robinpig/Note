@@ -1,70 +1,74 @@
 ## Introduction
 
-Aspect-Oriented Programming（AOP，面向切面编程）通过提供另一种思考程序结构的方式，补充了 Object-Oriented Programming（OOP，面向对象编程）。
-OOP 中模块化的基本单位是类，而在 AOP 中模块化的基本单位是 aspect（切面）。
-切面能够模块化跨多个类型和对象的关注点（例如事务管理），这些关注点在 AOP 文献中通常被称为 crosscutting concerns（横切关注点）。
+Aspect-Oriented Programming (AOP) complements Object-Oriented Programming (OOP) by providing another way of thinking about program structure.
+The key unit of modularity in OOP is the class, whereas in AOP the unit of modularity is the aspect.
+Aspects enable the modularization of concerns such as transaction management that cut across multiple types and objects. (Such concerns are often termed crosscutting concerns in AOP literature.)
 
-Spring 的关键组件之一是 AOP 框架。
-虽然 Spring IoC 容器不依赖于 AOP（意味着如果你不想使用 AOP，可以不用），但 AOP 补充了 Spring IoC，提供了一个非常强大的中间件解决方案。
+One of the key components of Spring is the AOP framework.
+While the Spring IoC container does not depend on AOP, meaning you do not need to use AOP if you don't want to, AOP complements Spring IoC to provide a very capable middleware solution.
 
-由于 [AspectJ](/docs/CS/Java/AspectJ.md) 使用编译时和类加载时织入，Spring AOP 则使用运行时织入。
+As [AspectJ](/docs/CS/Java/AspectJ.md) uses compile time and classload time weaving, Spring AOP makes use of runtime weaving.
 
-AOP 在 Spring 框架中用于：
+AOP is used in the Spring Framework to:
 
-- 提供声明式企业服务，特别是作为 EJB 声明式服务的替代方案。其中最重要的服务是[声明式事务管理](/docs/CS/Framework/Spring/Transaction.md?id=Declarative-transaction)。
-- 允许用户实现自定义切面，用 AOP 补充他们的 OOP 使用。
+- provide declarative enterprise services, especially as a replacement for EJB declarative services. The most important such service is [declarative transaction management](/docs/CS/Framework/Spring/Transaction.md?id=Declarative-transaction).
+- allow users to implement custom aspects, complementing their use of OOP with AOP.
 
-如果要代理的目标对象实现了至少一个接口，则使用 JDK 动态代理。目标类型实现的所有接口都会被代理。
-如果目标对象没有实现任何接口，则创建 CGLIB 代理。
+
+If the target object to be proxied implements at least one interface, a JDK dynamic proxy is used. All of the interfaces implemented by the target type are proxied. 
+If the target object does not implement any interfaces, a CGLIB proxy is created.
 
 ![](img/AOP.png)
 
+
 ## AOP Concepts
 
-让我们首先定义一些核心的 AOP 概念和术语。
-这些术语并非 Spring 特有。
-不幸的是，AOP 的术语并不特别直观。
-然而，如果 Spring 使用自己的术语，会更加令人困惑。
+Let us begin by defining some central AOP concepts and terminology.
+These terms are not Spring-specific.
+Unfortunately, AOP terminology is not particularly intuitive.
+However, it would be even more confusing if Spring used its own terminology.
 
-- Aspect：跨多个类的关注点的模块化。
-  事务管理是企业 Java 应用中横切关注点的一个很好的例子。
-  在 Spring AOP 中，切面通过常规类（基于 schema 的方式）或使用 @Aspect 注解的常规类（@AspectJ 风格）来实现。
-- Join point：程序执行过程中的一个点，例如方法的执行或异常的处理。在 Spring AOP 中，join point 始终表示方法的执行。
-- Advice：切面在特定 join point 处执行的动作。
-  不同类型的 advice 包括 "around"、"before" 和 "after" advice（advice 类型稍后讨论）。
-  许多 AOP 框架（包括 Spring）将 advice 建模为拦截器，并在 join point 周围维护一个拦截器链。
-- Pointcut：匹配 join point 的谓词。Advice 与 pointcut 表达式相关联，并在任何由 pointcut 匹配的 join point 处运行（例如，具有特定名称的方法的执行）。
-  由 pointcut 表达式匹配的 join point 概念是 AOP 的核心，Spring 默认使用 AspectJ 的 pointcut 表达式语言。
-- Introduction：为类型声明额外的方法或字段。Spring AOP 允许你向任何被 advice 的对象引入新接口（以及相应的实现）。
-  例如，你可以使用 introduction 使 bean 实现 IsModified 接口以简化缓存。（Introduction 在 AspectJ 社区中称为 inter-type declaration。）
-- Target object：被一个或多个切面 advice 的对象。也称为"被 advice 的对象"。
-  由于 Spring AOP 通过运行时代理实现，该对象始终是一个代理对象。
-- AOP proxy：由 AOP 框架创建的对象，用于实现切面契约（advise 方法执行等）。在 Spring 框架中，AOP 代理是 JDK 动态代理或 CGLIB 代理。
-- Weaving：将切面与其他应用类型或对象链接起来，以创建被 advice 的对象。
-  这可以在编译时（例如使用 AspectJ 编译器）、加载时或运行时完成。Spring AOP 与其他纯 Java AOP 框架一样，在运行时执行织入。
+- Aspect: A modularization of a concern that cuts across multiple classes.
+  Transaction management is a good example of a crosscutting concern in enterprise Java applications.
+  In Spring AOP, aspects are implemented by using regular classes (the schema-based approach) or regular classes annotated with the @Aspect annotation (the @AspectJ style).
+- Join point: A point during the execution of a program, such as the execution of a method or the handling of an exception. In Spring AOP, a join point always represents a method execution.
+- Advice: Action taken by an aspect at a particular join point.
+  Different types of advice include "around", "before", and "after" advice. (Advice types are discussed later.)
+  Many AOP frameworks, including Spring, model an advice as an interceptor and maintain a chain of interceptors around the join point.
+- Pointcut: A predicate that matches join points. Advice is associated with a pointcut expression and runs at any join point matched by the pointcut (for example, the execution of a method with a certain name).
+  The concept of join points as matched by pointcut expressions is central to AOP, and Spring uses the AspectJ pointcut expression language by default.
+- Introduction: Declaring additional methods or fields on behalf of a type. Spring AOP lets you introduce new interfaces (and a corresponding implementation) to any advised object.
+  For example, you could use an introduction to make a bean implement an IsModified interface, to simplify caching. (An introduction is known as an inter-type declaration in the AspectJ community.)
+- Target object: An object being advised by one or more aspects. Also referred to as the "advised object".
+  Since Spring AOP is implemented by using runtime proxies, this object is always a proxied object.
+- AOP proxy: An object created by the AOP framework in order to implement the aspect contracts (advise method executions and so on). In the Spring Framework, an AOP proxy is a JDK dynamic proxy or a CGLIB proxy.
+- Weaving: linking aspects with other application types or objects to create an advised object.
+  This can be done at compile time (using the AspectJ compiler, for example), load time, or at runtime. Spring AOP, like other pure Java AOP frameworks, performs weaving at runtime.
 
 ### Advice
+Spring AOP includes the following types of advice:
 
-Spring AOP 包含以下类型的 advice：
+- Before advice: Advice that runs before a join point but that does not have the ability to prevent execution flow proceeding to the join point (unless it throws an exception).
+- After returning advice: Advice to be run after a join point completes normally (for example, if a method returns without throwing an exception).
+- After throwing advice: Advice to be run if a method exits by throwing an exception.
+- After (finally) advice: Advice to be run regardless of the means by which a join point exits (normal or exceptional return).
+- Around advice: Advice that surrounds a join point such as a method invocation. This is the most powerful kind of advice.
+  Around advice can perform custom behavior before and after the method invocation.
+  It is also responsible for choosing whether to proceed to the join point or to shortcut the advised method execution by returning its own return value or throwing an exception.
 
-- Before advice：在 join point 之前运行的 advice，但无法阻止执行流程继续到 join point（除非抛出异常）。
-- After returning advice：在 join point 正常完成后运行的 advice（例如，方法返回且没有抛出异常时）。
-- After throwing advice：如果方法通过抛出异常退出时运行的 advice。
-- After (finally) advice：无论 join point 以何种方式退出（正常返回或异常返回）都会运行的 advice。
-- Around advice：围绕 join point（如方法调用）的 advice。这是最强大的一种 advice。
-  Around advice 可以在方法调用前后执行自定义行为。
-  它还负责选择是继续执行 join point，还是通过返回自己的返回值或抛出异常来短路被 advice 的方法执行。
+Around advice is the most general kind of advice. Since Spring AOP, like AspectJ, provides a full range of advice types, we recommend that you use the least powerful advice type that can implement the required behavior.
+For example, if you need only to update a cache with the return value of a method, you are better off implementing an after returning advice than an around advice, although an around advice can accomplish the same thing.
+Using the most specific advice type provides a simpler programming model with less potential for errors.
+For example, you do not need to invoke the method on the used for around advice, and, hence, you cannot fail to invoke it.proceed()JoinPoint
 
-Around advice 是最通用的 advice 类型。由于 Spring AOP 与 AspectJ 一样提供了完整的 advice 类型范围，我们建议使用能够实现所需行为的最不强大的 advice 类型。
-例如，如果你只需要用方法的返回值更新缓存，实现 after returning advice 比 around advice 更好，尽管 around advice 也能完成同样的工作。
-使用最具体的 advice 类型可以提供更简单的编程模型，减少出错的可能性。
-例如，你不需要调用用于 around advice 的 proceed() 方法，因此不会忘记调用它。
+All advice parameters are statically typed so that you work with advice parameters of the appropriate type (e.g. the type of the return value from a method execution) rather than arrays.Object
 
-所有 advice 参数都是静态类型的，因此你可以使用适当类型的 advice 参数（例如方法执行的返回值类型），而不是使用 Object 数组。
+The concept of join points matched by pointcuts is the key to AOP, which distinguishes it from older technologies offering only interception.
+Pointcuts enable advice to be targeted independently of the object-oriented hierarchy.
+For example, you can apply an around advice providing declarative transaction management to a set of methods that span multiple objects (such as all business operations in the service layer).
 
-由 pointcut 匹配的 join point 概念是 AOP 的关键，这使其区别于仅提供拦截的旧技术。
-Pointcuts 使 advice 能够独立于面向对象的层次结构进行定位。
-例如，你可以将提供声明式事务管理的 around advice 应用于跨多个对象的一组方法（例如服务层的所有业务操作）。
+
+
 
 ### Pointcut
 
@@ -78,7 +82,7 @@ public interface Pointcut {
 }
 ```
 
-Pointcut 类型：
+Pointcut types:
 
 - StaticMethodMatcherPointcut
 - DynamicMethodMatcherPointcut
@@ -138,7 +142,7 @@ public @interface EnableAspectJAutoProxy {
 
 ### registerBeanDefinitions
 
-根据给定的 `@EnableAspectJAutoProxy` 注解，向当前 `BeanDefinitionRegistry` 注册一个 **AnnotationAwareAspectJAutoProxyCreator**。
+Registers an **AnnotationAwareAspectJAutoProxyCreator** against the current `BeanDefinitionRegistry` as appropriate based on a given `@EnableAspectJAutoProxy` annotation.
 
 ```java
 class AspectJAutoProxyRegistrar implements ImportBeanDefinitionRegistrar {
@@ -182,15 +186,15 @@ protected void initBeanFactory(ConfigurableListableBeanFactory beanFactory) {
 }
 ```
 
-*AspectJAwareAdvisorAutoProxyCreator 的子类，用于处理当前应用上下文中的所有 **AspectJ 注解切面**以及 Spring Advisors。*
-任何 AspectJ 注解类都会被自动识别，如果 Spring AOP 的基于代理的模型能够应用其 advice，则会应用它们。这涵盖了方法执行 joinpoint。
-如果使用了 [aop:include](aop:include) 元素，则只有名称与包含模式匹配的 @AspectJ bean 才会被视为用于 Spring 自动代理的切面。
+*AspectJAwareAdvisorAutoProxyCreator subclass that processes all **AspectJ annotation aspects** in the current application context, as well as Spring Advisors.*
+Any AspectJ annotated classes will automatically be recognized, and their advice applied if Spring AOP's proxy-based model is capable of applying it. This covers method execution joinpoints.
+If the [aop:include](aop:include) element is used, only @AspectJ beans with names matched by an include pattern will be considered as defining aspects to use for Spring auto-proxying.
 
-Spring Advisors 的处理遵循 `org.springframework.aop.framework.autoproxy.AbstractAdvisorAutoProxyCreator` 中建立的规则。
+Processing of Spring Advisors follows the rules established in `org.springframework.aop.framework.autoproxy.AbstractAdvisorAutoProxyCreator`.
 
 #### findEligibleAdvisors
 
-查找所有符合条件的 Advisor 以对该类进行自动代理。
+Find all eligible Advisors for auto-proxying this class.
 
 ```
 // AbstractAdvisorAutoProxyCreator
@@ -282,13 +286,13 @@ public List<Advisor> findAdvisorBeans() {
 
 ## ProxyFactoryBean
 
-ProxyFactoryBean 是一个 FactoryBean 实现，它基于 Spring BeanFactory 中的 beans 构建 AOP 代理。
+ProxyFactoryBean is a FactoryBean implementation that builds an AOP proxy based on beans in Spring BeanFactory.
 
-MethodInterceptor 和 Advisor 通过当前 bean factory 中的 bean 名称列表来识别，通过 "interceptorNames" 属性指定。
-列表中的最后一个条目可以是目标 bean 或 TargetSource 的名称；不过，通常更推荐使用 "targetName"/"target"/"targetSource" 属性。
+MethodInterceptors and Advisors are identified by a list of bean names in the current bean factory, specified through the "interceptorNames" property.
+The last entry in the list can be the name of a target bean or a TargetSource; however, it is normally preferable to use the "targetName"/"target"/"targetSource" properties instead.
 
-返回一个代理。当客户端从此工厂 bean 获取 beans 时调用。创建要由此工厂返回的 AOP 代理的实例。
-对于 singleton，该实例会被缓存；对于 proxy，每次调用 getObject() 都会创建新实例。
+Return a proxy. Invoked when clients obtain beans from this factory bean. Create an instance of the AOP proxy to be returned by this factory.
+The instance will be cached for a singleton, and create on each call to getObject() for a proxy.
 
 ```
 public Object getObject() throws BeansException {
@@ -304,8 +308,8 @@ public Object getObject() throws BeansException {
 
 ### initializeAdvisorChain
 
-创建 advisor（拦截器）链。从 BeanFactory 获取的 Advisor 会在每次添加新的 prototype 实例时刷新。
-通过工厂 API 以编程方式添加的拦截器不受此类更改的影响。
+Create the advisor (interceptor) chain. Advisors that are sourced from a BeanFactory will be refreshed each time a new prototype instance is added.
+Interceptors added programmatically through the factory API are unaffected by such changes.
 
 ```java
 public class ProxyFactoryBean extends ProxyCreatorSupport implements FactoryBean<Object>, BeanClassLoaderAware, BeanFactoryAware {
@@ -354,10 +358,10 @@ private synchronized Object getSingletonInstance() {
 
 ### ProxyFactory
 
-根据此工厂中的设置创建一个新的代理。
-可以重复调用。如果添加或删除了接口，效果会有所不同。
-可以添加和删除拦截器。
-使用给定的类加载器（如果需要用于代理创建）。
+Create a new proxy according to the settings in this factory.
+Can be called repeatedly. Effect will vary if we've added or removed interfaces.
+Can add and remove interceptors.
+Uses the given class loader (if necessary for proxy creation).
 
 ```java
 public class DefaultAopProxyFactory implements AopProxyFactory, Serializable {
@@ -375,7 +379,6 @@ public class DefaultAopProxyFactory implements AopProxyFactory, Serializable {
   }
 }
 ```
-
 #### createAopProxy
 
 <!-- tabs:start -->
@@ -470,12 +473,12 @@ class CglibAopProxy implements AopProxy, Serializable {
 
 ## Create Proxy
 
-Spring AOP 使用 JDK 动态代理或 CGLIB 为给定的目标对象创建代理。
-（如果有选择，首选 JDK 动态代理。）
+Spring AOP uses either JDK dynamic proxies or CGLIB to create the proxy for a given target object.
+(JDK dynamic proxies are preferred whenever you have a choice).
 
 ![](img/AnnotationAwareAspectJAutoProxyCreator.png)
 
-`AbstractAutoProxyCreator` 实现了 [BeanPostProcessor](/docs/CS/Framework/Spring/IoC.md?id=BeanPostProcessor)
+`AbstractAutoProxyCreator` implements [BeanPostProcessor](/docs/CS/Framework/Spring/IoC.md?id=BeanPostProcessor)
 
 ### postProcessBeforeInstantiation
 
@@ -524,7 +527,7 @@ public abstract class AbstractAutoProxyCreator extends ProxyProcessorSupport imp
 
 #### getAdvicesAndAdvisorsForBean
 
-返回给定的 bean 是否应该被代理，以及要应用哪些额外的 advice（例如 AOP Alliance 拦截器）和 advisor。
+Return whether the given bean is to be proxied, what additional advices (e.g. AOP Alliance interceptors) and advisors to apply.
 
 ```
 @Override
@@ -542,7 +545,7 @@ public abstract class AbstractAutoProxyCreator extends ProxyProcessorSupport imp
 
 ### postProcessAfterInitialization
 
-如果 bean 被子类识别为要代理的对象，则使用配置的拦截器创建代理。
+Create a proxy with the configured interceptors if the bean is identified as one to proxy by the subclass.
 
 ```
 @Override
@@ -559,7 +562,7 @@ public Object postProcessAfterInitialization(@Nullable Object bean, String beanN
 
 ### wrapIfNecessary
 
-如果必要，包装给定的 bean，即如果它有资格被代理。
+Wrap the given bean if necessary, i.e. if it is eligible for being proxied.
 
 ```
 protected Object wrapIfNecessary(Object bean, String beanName, Object cacheKey) {
@@ -591,7 +594,7 @@ protected Object wrapIfNecessary(Object bean, String beanName, Object cacheKey) 
 
 ### createProxy
 
-为给定的 bean 创建一个 AOP 代理。
+Create an AOP proxy for the given bean.
 
 ```
 protected Object createProxy(Class<?> beanClass, @Nullable String beanName,
@@ -634,7 +637,7 @@ protected Object createProxy(Class<?> beanClass, @Nullable String beanName,
 
 #### buildAdvisors
 
-确定给定 bean 的 advisor，包括特定的拦截器以及公共拦截器，所有内容都适配为 Advisor 接口。
+Determine the advisors for the given bean, including the specific interceptors as well as the common interceptor, all adapted to the Advisor interface.
 
 ```
 protected Advisor[] buildAdvisors(@Nullable String beanName, @Nullable Object[] specificInterceptors) {
@@ -736,7 +739,7 @@ private List<Method> getAdvisorMethods(Class<?> aspectClass) {
 
 ### Order
 
-一个工厂，可以根据遵守 AspectJ 注解语法的类（使用反射调用相应的 advice 方法）创建 Spring AOP Advisor。
+Factory that can create Spring AOP Advisors given AspectJ classes from classes honoring AspectJ's annotation syntax, using reflection to invoke the corresponding advice methods.
 
 > [!Note]
 >
@@ -746,8 +749,9 @@ private List<Method> getAdvisorMethods(Class<?> aspectClass) {
 - Order: `Around` -> `Before` -> `After` -> `AfterReturning` -> `AfterThrowing`
 - Actual invoke: `Around` -> `Before` -> `AfterReturning` -> `AfterThrowing` -> `After`
 
+
 > [!TIP]
->
+> 
 > Usually, the metrics and logs are set to HIGHEST_PRECEDENCE so that it doesn't affect other advices, such as the tansaction interceptor.
 
 ```java
@@ -767,8 +771,8 @@ public class AspectJAfterAdvice extends AbstractAspectJAdvice implements MethodI
 
 ## proceed
 
-继续执行链中的下一个拦截器。
-此方法的实现及其语义取决于实际的 joinpoint 类型（请参阅子接口）。
+Proceed to the next interceptor in the chain.
+The implementation and the semantics of this method depends on the actual joinpoint type (see the children interfaces).
 
 ```
 // ReflectiveMethodInvocation
@@ -839,8 +843,8 @@ public MethodInterceptor[] getInterceptors(Advisor advisor) throws UnknownAdvice
 
 ### MethodBeforeAdviceInterceptor
 
-用于包装 MethodBeforeAdvice 的拦截器。
-由 AOP 框架内部使用；应用开发者不应直接使用此类。
+Interceptor to wrap a MethodBeforeAdvice.
+Used internally by the AOP framework; application developers should not need to use this class directly.
 
 ```java
 @SuppressWarnings("serial")
@@ -870,6 +874,7 @@ public class MethodBeforeAdviceInterceptor implements MethodInterceptor, BeforeA
 
 ## Summary
 
+
 |               | Cglib     | JDK       |
 | ------------- | --------- | --------- |
 | Create Proxy  | Slow      | Fast      |
@@ -878,16 +883,16 @@ public class MethodBeforeAdviceInterceptor implements MethodInterceptor, BeforeA
 
 ### Do not get bean directly
 
-通过 `@Autowired`、方法或 `ApplicationContext` 获取 bean，不要使用 `this.field`
+get bean by `@Autowired` or method or `ApplicationContext` rather than using `this.field`
 
-使用 `AopContext.currentProxy()`（获取一个[默认包含 null 的 ThreadLocal](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md)）必须在 `@EnableAspectJAutoProxy` 中设置 `exposeProxy = true`
+Using `AopContext.currentProxy()`(get a [ThreadLocal which default contains null](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md)) must set `exposeProxy = true` in `@EnableAspectJAutoProxy`
 
-`ObjenesisCglibAopProxy`：
+`ObjenesisCglibAopProxy`:
 
-- 基于 Objenesis 的 CglibAopProxy 扩展，用于**在不调用类构造函数的情况下创建代理实例**。从 Spring 4 开始默认使用。
-- 默认使用 `sun.reflect.ReflectionFactory.newConstructorForSerialization().newInstance()`，并使用 `this.field` 进行操作，可能导致 `NPE`
+- Objenesis-based extension of CglibAopProxy to **create proxy instances without invoking the constructor of the class**. Used by default as of Spring 4.
+- default use `sun.reflect.ReflectionFactory.newConstructorForSerialization().newInstance()`, and use `this.field` to do something that may cause `NPE`
 
-设置 `spring.objenesis.ignore = true` 以调用类的构造函数，但我们建议通过方法或 `@Autowired` 获取 bean
+set `spring.objenesis.ignore = true`  to invoke the constructor of the class, but we suggest getting bean by method or `@Autowired`
 
 ## Links
 

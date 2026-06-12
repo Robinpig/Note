@@ -62,29 +62,29 @@ gcCause.cpp
 
 ### Young Generation
 
-新创建的对象从 Young Generation 开始。Young Generation 进一步细分为：
+Newly created objects start in the Young Generation. The Young Generation is further subdivided into:
 
-- Eden 空间 - 所有新对象从这里开始，初始内存分配给他们
-- Survivor 空间（FromSpace 和 ToSpace） - 对象在经历一次垃圾回收周期后从 Eden 移到这里
+- Eden space - all new objects start here, and initial memory is allocated to them
+- Survivor spaces (FromSpace and ToSpace) - objects are moved here from Eden after surviving one garbage collection cycle.
 
-当对象从 Young Generation 被垃圾回收时，这是一个 `minor garbage collection` 事件。
+When objects are garbage collected from the Young Generation, it is a `minor garbage collection` event.
 
-当 Eden 空间被对象填满时，执行 Minor GC。
-所有死亡对象被删除，所有存活对象被移动到其中一个 survivor 空间。
-Minor GC 还会检查 survivor 空间中的对象，并将它们移动到另一个 survivor 空间。
+When Eden space is filled with objects, a Minor GC is performed.
+All the dead objects are deleted, and all the live objects are moved to one of the survivor spaces.
+Minor GC also checks the objects in a survivor space, and moves them to the other survivor space.
 
-以下列序列为例：
+Take the following sequence as an example:
 
-- Eden 包含所有对象（存活和死亡）
-- Minor GC 发生 - 所有死亡对象从 Eden 中移除。所有存活对象移动到 S1（FromSpace）。Eden 和 S2 现在为空。
-- 新对象被创建并添加到 Eden。Eden 和 S1 中的一些对象变为死亡。
-- Minor GC 发生 - 所有死亡对象从 Eden 和 S1 中移除。所有存活对象移动到 S2（ToSpace）。Eden 和 S1 现在为空。
+- Eden has all objects (live and dead)
+- Minor GC occurs - all dead objects are removed from Eden. All live objects are moved to S1 (FromSpace). Eden and S2 are now empty.
+- New objects are created and added to Eden. Some objects in Eden and S1 become dead.
+- Minor GC occurs - all dead objects are removed from Eden and S1. All live objects are moved to S2 (ToSpace). Eden and S1 are now empty.
 
-因此，在任何时候，其中一个 survivor 空间始终为空。当存活对象在 survivor 空间之间移动达到一定阈值时，它们被移动到 Old Generation。
+So, at any time, one of the survivor spaces is always empty. When the surviving objects reach a certain threshold of moving around the survivor spaces, they are moved to the Old Generation.
 
-可以使用 `-Xmn` 标志设置 Young Generation 的大小。
+You can use the `-Xmn` flag to set the size of the Young Generation.
 
-默认 old/young=2:1
+default old/young=2:1
 
 Eden:from:to=8:1:1
 
@@ -97,12 +97,12 @@ Eden:from:to=8:1:1
 
 ### Old Generation
 
-长期存活的对象最终从 Young Generation 移动到 Old Generation。
-这也称为 Tenured Generation，包含在 survivor 空间中停留了很长时间的对象。
+Objects that are long-lived are eventually moved from the Young Generation to the Old Generation.
+This is also known as Tenured Generation, and contains objects that have remained in the survivor spaces for a long time.
 
-当对象从 Old Generation 被垃圾回收时，这是一个 `major garbage collection` 事件。
+When objects are garbage collected from the Old Generation, it is a `major garbage collection` event.
 
-可以使用 -Xms 和 -Xmx 标志设置堆内存的初始和最大大小。
+You can use the -Xms and -Xmx flags to set the size of the initial and maximum size of the Heap memory.
 
 ### Intergenerational Reference Hypothesis
 
@@ -121,11 +121,11 @@ False Sharing
 
 ## MetaSpace
 
-从 Java 8 开始，MetaSpace 内存空间取代了 PermGen 空间。
-其实现与 PermGen 不同，堆的此空间现在自动调整大小。
+Starting with Java 8, the MetaSpace memory space replaces the PermGen space. 
+The implementation differs from the PermGen and this space of the heap is now automatically resized.
 
-这避免了应用程序由于堆的 PermGen 空间大小限制而耗尽内存的问题。
-Metaspace 内存可以被垃圾回收，当 Metaspace 达到其最大大小时，不再使用的类可以自动清理。
+This avoids the problem of applications running out of memory due to the limited size of the PermGen space of the heap. 
+The Metaspace memory can be garbage collected and the classes that are no longer used can be automatically cleaned when the Metaspace reaches its maximum size.
 ```
 -Xnoclassgc -verbose:class -XX:+TraceClassLoading -XX:+TraceClassUnLoading -XX:+ClassUnloadingWithConcurrentMark -XX:+PrintAdaptiveSizePolicy
 ```
@@ -260,15 +260,15 @@ JVM_END
 
 ## Collectors
 
-根据 Dijkstra *et al*，垃圾回收程序分为两个半独立部分。
+Following Dijkstra *et al*, a garbage-collected program is divided into two semiindependent parts.
 
-- mutator 执行应用程序代码，分配新对象并通过更改引用字段来改变对象图，使它们指向不同的目标对象。
-  这些引用字段可能包含在堆对象中以及其他称为根的地方，例如静态变量、线程栈等。
-  由于这种引用更新，任何对象都可能最终与根断开连接，即通过从根出发的任何边序列都无法到达。
-- collector 执行垃圾回收代码，发现不可达对象并回收其存储。
+- The mutator executes application code, which allocates new objects and mutates the object graph by changing reference fields so that they refer to different destination objects.
+  These reference fields may be contained in heap objects as well as other places known as roots, such as static variables, thread stacks, and so on.
+  As a result of such reference updates, any object can end up disconnected from the roots, that is, unreachable by following any sequence of edges from the roots.
+- The collector executes garbage collection code, which discovers unreachable objects and reclaims their storage.
 
-程序可能有多个 mutator 线程，但这些线程通常可以被视为堆上的单个执行者。
-同样，可能有一个或多个 collector 线程。
+A program may have more than one mutator thread, but the threads together can usually be thought of as a single actor over the heap. 
+Equally, there may be one or more collector threads.
 
 ### Comparing garbage collectors
 

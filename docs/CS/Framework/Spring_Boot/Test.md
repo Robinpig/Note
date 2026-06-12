@@ -5,34 +5,34 @@
 
 ### Cache Context
 
-Spring Test 支持的一个不错特性是应用上下文会在测试之间缓存。
-这样，如果测试用例中有多个方法或多个测试用例使用相同的配置，它们只需承担一次启动应用的开销。
-你可以通过 @DirtiesContext 注解来控制缓存。
+A nice feature of the Spring Test support is that the application context is cached between tests.
+That way, if you have multiple methods in a test case or multiple test cases with the same configuration, they incur the cost of starting the application only once.
+You can control the cache by using the @DirtiesContext annotation.
 
 
 
-一旦 TestContext 框架为测试加载了 ApplicationContext（或 WebApplicationContext），该上下文就会被缓存，并重用于同一测试套件中声明相同唯一上下文配置的所有后续测试。要理解缓存的工作原理，理解"唯一"和"测试套件"的含义非常重要。
+Once the TestContext framework loads an (or ) for a test, that context is cached and reused for all subsequent tests that declare the same unique context configuration within the same test suite. To understand how caching works, it is important to understand what is meant by “unique” and “test suite.”`ApplicationContext``WebApplicationContext`
 
-ApplicationContext 可以通过用于加载它的配置参数组合来唯一标识。因此，配置参数的唯一组合用于生成缓存上下文的键。TestContext 框架使用以下配置参数来构建上下文缓存键：
+An can be uniquely identified by the combination of configuration parameters that is used to load it. Consequently, the unique combination of configuration parameters is used to generate a key under which the context is cached. The TestContext framework uses the following configuration parameters to build the context cache key:`ApplicationContext`
 
-* `locations`（来自 `@ContextConfiguration`）
-* `classes`（来自 `@ContextConfiguration`）
-* `contextInitializerClasses`（来自 `@ContextConfiguration`）
-* `contextCustomizers`（来自 `ContextCustomizerFactory`）——这包括 `@DynamicPropertySource` 和 `@MockBean`、`@SpyBean` 等方法以及 Spring Boot 测试支持的各种功能
-* `contextLoader`（来自 `@ContextConfiguration`）
-* `parent`（来自 `@ContextHierarchy`）
-* `activeProfiles`（来自 `@ActiveProfiles`）
-* `propertySourceLocations`（来自 `@TestPropertySource`）
-* `propertySourceProperties`（来自 `@TestPropertySource`）
-* `resourceBasePath`（来自 `@WebAppConfiguration``）
+* `locations` (from `@ContextConfiguration`)
+* `classes` (from `@ContextConfiguration`)
+* `contextInitializerClasses` (from `@ContextConfiguration`)
+* `contextCustomizers` (from ) – this includes methods as well as various features from Spring Boot’s testing support such as and .`ContextCustomizerFactory``@DynamicPropertySource``@MockBean``@SpyBean`
+* `contextLoader` (from `@ContextConfiguration`)
+* `parent` (from `@ContextHierarchy`)
+* `activeProfiles` (from `@ActiveProfiles`)
+* `propertySourceLocations` (from `@TestPropertySource`)
+* `propertySourceProperties` (from `@TestPropertySource`)
+* `resourceBasePath` (from `@WebAppConfiguration`)
 
 
 
-通常，你应该避免修改应用上下文中阻止其重用的任何全局状态。
+n general, you should avoid modifying any global state inside your application context that prevents reusing it.
 
-确保始终清理资源，并在每次测试执行后保持 Spring 上下文的干净。
+Make sure to always clean up resources and leave the Spring Context clean after each test execution.
 
-尽量在集成测试中保持相同的上下文配置。为此，你可以引入一个包含公共配置的抽象父类。
+Try to stick as much as possible to the same context configuration for your integration tests. To achieve this, you can either introduce an abstract parent class that includes your common configuration
 
 ```java
 @AutoConfigureMockMvc
@@ -49,10 +49,10 @@ public abstract class AbstractIntegrationTest {
 
 ## Transaction Management
 
-使用 @Transactional 回滚更改
+Roll Back Changes Using @Transactional
 
-之前，在测试持久层时，我们看到 @DataJpaTest 默认使测试具有 @Transactional 行为。
-然而，@SpringBootTest 不会这样做，所以如果我们希望在测试后回滚任何更改，必须自己添加 @Transactional 注解：
+Earlier, when testing the persistence layer we saw how @DataJpaTest makes tests @Transactional by default.
+However, @SpringBootTest does not do this, so if we would like to roll back any changes after tests, we have to add the @Transcational annotation ourselves:
 
 ## Links
 

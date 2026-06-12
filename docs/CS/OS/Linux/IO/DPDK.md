@@ -1,7 +1,8 @@
 
-## 简介
+## Introduction
 
-DPDK 是数据平面开发套件，包含用于加速在各种 CPU 架构上运行的数据包处理工作负载的库。
+
+DPDK is the Data Plane Development Kit that consists of libraries to accelerate packet processing workloads running on a wide variety of CPU architectures.
 
 
 

@@ -1,23 +1,26 @@
-## 简介
+## Introduction
 
-无论是计算机网络中还是其他地方，从信息安全角度来看，信息有三个主要属性可能是期望的：
-机密性、完整性和可用性（CIA 三元组），总结如下：
-- 机密性（Confidentiality）意味着信息仅对其预期用户（可能包括处理系统）可知。
-- 完整性（Integrity）意味着信息在交付之前未经未授权的方式修改。
-- 可用性（Availability）意味着信息在需要时可用。
+There are three primary properties of information, whether in a computer network or not, that may be desirable from an information security point of view: 
+confidentiality, integrity, and availability (the CIA triad), summarized here:
+- Confidentiality means that information is made known only to its intended users (which could include processing systems).
+- Integrity means that information has not been modified in an unauthorized way before it is delivered.
+- Availability means that information is available when needed.
 
-这些是信息的核心属性，但我们可能还希望有其他属性，包括认证、不可否认性和可审计性。
-认证（Authentication）意味着某个特定的已标识方或主体没有冒充其他主体。
-不可否认性（Nonrepudiation）意味着如果某个主体执行了某个操作（例如同意合同条款），这一事实以后可以被证明（即不能成功否认）。
-可审计性（Auditability）意味着存在某种可信的日志或记录，描述信息的使用方式。
-此类日志通常对取证（即法律和起诉）目的很重要。
+These are core properties of information, yet there are other properties we may also desire, including authentication, nonrepudiation, and auditability. 
+Authentication means that a particular identified party or principal is not impersonating another principal. 
+Nonrepudiation means that if some action is performed by a principal (e.g., agreeing to the terms of a contract), this fact can be proven later (i.e., cannot successfully be denied). 
+Auditability means that some sort of trustworthy log or accounting describing how information has been used is available. 
+Such logs are often important for forensic (i.e., legal and prosecuritorial) purposes.
+
+
 
 ## TLS
 
 ## IPsec
 
+
 ## DNSSEC
 
-## 链接
+## Links
 
-- [计算机网络](/docs/CS/CN/CN.md)
+- [Computer Network](/docs/CS/CN/CN.md)

@@ -1,33 +1,33 @@
-## 简介
+## Introduction
 
-共享的应用程序/内核提交和完成环形缓冲区对，用于支持快速高效的 IO。
+Shared application/kernel submission and completion ring pairs, for supporting fast/efficient IO.
 
-关于应用程序和内核端匹配的读/写顺序内存屏障的说明。
+A note on the read/write ordering memory barriers that are matched between the application and kernel side.
 
-在应用程序读取 CQ 环尾部后，它必须使用适当的 smp_rmb() 来与内核在写入尾部之前使用的 smp_wmb() 配对（使用 smp_load_acquire 读取尾部也可以）。
-在更新 CQ 头部之前还需要 smp_mb()（将条目加载与头部存储排序），与 io_get_cqe 中通过控制依赖的隐式屏障配对（使用 smp_store_release 存储头部也可以）。
-否则可能导致读取无效的 CQ 条目。
+After the application reads the CQ ring tail, it must use an appropriate smp_rmb() to pair with the smp_wmb() the kernel uses before writing the tail (using smp_load_acquire to read the tail will do).
+It also needs a smp_mb() before updating CQ head (ordering the entry load(s) with the head store), pairing with an implicit barrier through a control-dependency in io_get_cqe (smp_store_release to store head will do).
+Failure to do so could lead to reading invalid CQ entries.
 
-同样，应用程序在写入 SQ 尾部之前必须使用适当的 smp_wmb()（将 SQ 条目存储与尾部存储排序），与 io_get_sqring 中的 smp_load_acquire 配对（使用 smp_store_release 存储尾部也可以）。
-并且它需要一个屏障来排序 SQ 头部加载，然后再写入新的 SQ 条目（使用 smp_load_acquire 读取头部也可以）。
+Likewise, the application must use an appropriate smp_wmb() before writing the SQ tail (ordering SQ entry stores with the tail store), which pairs with smp_load_acquire in io_get_sqring (smp_store_release to store the tail will do).
+And it needs a barrier ordering the SQ head load before writing new SQ entries (smp_load_acquire to read head will do).
 
-当使用 SQ 轮询线程（IORING_SETUP_SQPOLL）时，应用程序需要在更新 SQ 尾部*之后*检查 SQ 标志中的 IORING_SQ_NEED_WAKEUP；两者之间需要一个完整的内存屏障 smp_mb()。
+When using the SQ poll thread (IORING_SETUP_SQPOLL), the application needs to check the SQ flags for IORING_SQ_NEED_WAKEUP *after* updating the SQ tail; a full memory barrier smp_mb() is needed between.
 
-另请参阅 liburing 库中的示例：
+Also see the examples in the liburing library:
 
 git://git.kernel.dk/liburing
-io_uring 还对在内核和应用程序之间共享的数据发生的任何存储或加载使用 READ/WRITE_ONCE()。
-这样做既是为了排序目的，也是为了确保一旦从应用程序可能修改的数据中加载了值，该值保持稳定。
+io_uring also uses READ/WRITE_ONCE() for _any_ store or load that happens from data shared between the kernel and application.
+This is done both for ordering purposes, but also to ensure that once a value is loaded from data that the application could potentially modify, it remains stable.
 
-SQ 和 CQ 都是用户空间和内核空间共享的单生产者-单消费者队列。
+SQ and CQ both of them are one-Producer-one-Consumer queue which shared in user space and kernel space.
 
-应用程序消费 CQ 不需要切换到内核空间。
+app consume CQ don't need change to kernel space
 
-三种模式：
+Three modes:
 
-1. 中断驱动
-2. 轮询
-3. 内核轮询
+1. Interrupt driven
+2. polled
+3. kernel polled
 
 
 

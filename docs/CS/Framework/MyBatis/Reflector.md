@@ -9,7 +9,7 @@ DefaultObjectFactory
 
 
 
-### Reflector 层次结构
+### Reflector Hierarchy
 
 ![Reflector](img/Reflector.png)
 
@@ -17,8 +17,8 @@ DefaultObjectFactory
 
 ```java
 /**
- * 此类表示一组缓存的类定义信息，
- * 支持属性名与 getter/setter 方法之间的轻松映射。
+ * This class represents a cached set of class definition information that
+ * allows for easy mapping between property names and getter/setter methods.
  */
 public class Reflector {
 
@@ -238,12 +238,13 @@ public class Reflector {
   }
 
   /**
-   * 此方法返回一个数组，包含此类及其所有父类中声明的所有方法。
-   * 我们使用此方法而不是更简单的 <code>Class.getMethods()</code>，
-   * 因为我们也想查找私有方法。
+   * This method returns an array containing all methods
+   * declared in this class and any superclass.
+   * We use this method, instead of the simpler <code>Class.getMethods()</code>,
+   * because we want to look for private methods as well.
    *
-   * @param clazz 类
-   * @return 包含此类中所有方法的数组
+   * @param clazz The class
+   * @return An array containing all methods in this class
    */
   private Method[] getClassMethods(Class<?> clazz) {
     Map<String, Method> uniqueMethods = new HashMap<>();
@@ -251,8 +252,8 @@ public class Reflector {
     while (currentClass != null && currentClass != Object.class) {
       addUniqueMethods(uniqueMethods, currentClass.getDeclaredMethods());
 
-      // 我们还需要查找接口方法
-      // 因为该类可能是抽象的
+      // we also need to look for interface methods -
+      // because the class may be abstract
       Class<?>[] interfaces = currentClass.getInterfaces();
       for (Class<?> anInterface : interfaces) {
         addUniqueMethods(uniqueMethods, anInterface.getMethods());
@@ -270,8 +271,9 @@ public class Reflector {
     for (Method currentMethod : methods) {
       if (!currentMethod.isBridge()) {
         String signature = getSignature(currentMethod);
-        // 检查该方法是否已知
-        // 如果已知，则扩展类必须已经覆盖了该方法
+        // check to see if the method is already known
+        // if it is known, then an extended class must have
+        // overridden a method
         if (!uniqueMethods.containsKey(signature)) {
           uniqueMethods.put(signature, currentMethod);
         }
@@ -294,9 +296,9 @@ public class Reflector {
   }
 
   /**
-   * 检查是否可以控制成员的 accessible 属性。
+   * Checks whether can control member accessible.
    *
-   * @return 如果可以控制成员 accessible，返回 {@literal true}
+   * @return If can control member accessible, it return {@literal true}
    * @since 3.5.0
    */
   public static boolean canControlMemberAccessible() {
@@ -312,9 +314,9 @@ public class Reflector {
   }
 
   /**
-   * 获取该实例提供信息的类名。
+   * Gets the name of the class the instance provides information for.
    *
-   * @return 类名
+   * @return The class name
    */
   public Class<?> getType() {
     return type;
@@ -349,10 +351,10 @@ public class Reflector {
   }
 
   /**
-   * 获取属性 setter 的类型。
+   * Gets the type for a property setter.
    *
-   * @param propertyName - 属性名
-   * @return 属性 setter 的 Class
+   * @param propertyName - the name of the property
+   * @return The Class of the property setter
    */
   public Class<?> getSetterType(String propertyName) {
     Class<?> clazz = setTypes.get(propertyName);
@@ -363,10 +365,10 @@ public class Reflector {
   }
 
   /**
-   * 获取属性 getter 的类型。
+   * Gets the type for a property getter.
    *
-   * @param propertyName - 属性名
-   * @return 属性 getter 的 Class
+   * @param propertyName - the name of the property
+   * @return The Class of the property getter
    */
   public Class<?> getGetterType(String propertyName) {
     Class<?> clazz = getTypes.get(propertyName);
@@ -377,38 +379,38 @@ public class Reflector {
   }
 
   /**
-   * 获取对象的可读属性数组。
+   * Gets an array of the readable properties for an object.
    *
-   * @return 可读属性数组
+   * @return The array
    */
   public String[] getGetablePropertyNames() {
     return readablePropertyNames;
   }
 
   /**
-   * 获取对象的可写属性数组。
+   * Gets an array of the writable properties for an object.
    *
-   * @return 可写属性数组
+   * @return The array
    */
   public String[] getSetablePropertyNames() {
     return writablePropertyNames;
   }
 
   /**
-   * 检查一个类是否有指定名称的可写属性。
+   * Check to see if a class has a writable property by name.
    *
-   * @param propertyName - 要检查的属性名
-   * @return 如果对象有该名称的可写属性，返回 true
+   * @param propertyName - the name of the property to check
+   * @return True if the object has a writable property by the name
    */
   public boolean hasSetter(String propertyName) {
     return setMethods.containsKey(propertyName);
   }
 
   /**
-   * 检查一个类是否有指定名称的可读属性。
+   * Check to see if a class has a readable property by name.
    *
-   * @param propertyName - 要检查的属性名
-   * @return 如果对象有该名称的可读属性，返回 true
+   * @param propertyName - the name of the property to check
+   * @return True if the object has a readable property by the name
    */
   public boolean hasGetter(String propertyName) {
     return getMethods.containsKey(propertyName);
@@ -422,7 +424,7 @@ public class Reflector {
 
 ### ReflectorFactory
 
-使用 [ConcurrentMap](/docs/CS/Java/JDK/Collection/Map?id=ConcurrentMap) 缓存所有 Reflector
+use [ConcurrentMap](/docs/CS/Java/JDK/Collection/Map?id=ConcurrentMap) cache all Reflectors
 
 ```java
 public interface ReflectorFactory {
@@ -472,30 +474,30 @@ public class DefaultReflectorFactory implements ReflectorFactory {
 
 
 /**
- * MyBatis 使用 ObjectFactory 创建所有需要的新的 Object。
+ * MyBatis uses an ObjectFactory to create all needed new Objects.
  */
 public interface ObjectFactory {
 
   /**
-   * 设置配置属性。
+   * Sets configuration properties.
    */
   default void setProperties(Properties properties) {
     // NOP
   }
 
   /**
-   * 使用默认构造函数创建新对象。
+   * Creates a new object with default constructor.
    */
   <T> T create(Class<T> type);
 
   /**
-   * 使用指定的构造函数和参数创建新对象。
+   * Creates a new object with the specified constructor and params.
    */
   <T> T create(Class<T> type, List<Class<?>> constructorArgTypes, List<Object> constructorArgs);
 
   /**
-   * 返回此对象是否可以包含一组其他对象。
-   * 主要目的是支持非 java.util.Collection 对象，如 Scala 集合。
+   * Returns true if this object can have a set of other objects.
+   * It's main purpose is to support non-java.util.Collection objects like Scala collections.
    */
   <T> boolean isCollection(Class<T> type);
 
@@ -585,15 +587,15 @@ public interface TypeHandler<T> {
   void setParameter(PreparedStatement ps, int i, T parameter, JdbcType jdbcType) throws SQLException;
 
   /**
-   * 获取结果。
+   * Gets the result.
    *
    * @param rs
-   *          结果集
+   *          the rs
    * @param columnName
-   *          列名，当配置 <code>useColumnLabel</code> 为 <code>false</code> 时使用
-   * @return 结果
+   *          Colunm name, when configuration <code>useColumnLabel</code> is <code>false</code>
+   * @return the result
    * @throws SQLException
-   *           SQL 异常
+   *           the SQL exception
    */
   T getResult(ResultSet rs, String columnName) throws SQLException;
 
@@ -605,11 +607,11 @@ public interface TypeHandler<T> {
 
 
 /**
- * 引用泛型类型的 {@link TypeHandler} 基类。
+ * The base {@link TypeHandler} for references a generic type.
  * <p>
- * 重要说明：从 3.5.0 开始，此类不再调用 {@link ResultSet#wasNull()} 和
- * {@link CallableStatement#wasNull()} 方法来处理 SQL {@code NULL} 值。
- * 换句话说，应在子类中处理 {@code null} 值。
+ * Important: Since 3.5.0, This class never call the {@link ResultSet#wasNull()} and
+ * {@link CallableStatement#wasNull()} method for handling the SQL {@code NULL} value.
+ * In other words, {@code null} value handling should be performed on subclass.
  * </p>
  *
  * @author Clinton Begin
@@ -625,7 +627,7 @@ public abstract class BaseTypeHandler<T> extends TypeReference<T> implements Typ
   protected Configuration configuration;
 
   /**
-   * 设置 configuration。
+   * Sets the configuration.
    */
   @Deprecated
   public void setConfiguration(Configuration c) {
@@ -686,7 +688,7 @@ public abstract class BaseTypeHandler<T> extends TypeReference<T> implements Typ
   public abstract void setNonNullParameter(PreparedStatement ps, int i, T parameter, JdbcType jdbcType) throws SQLException;
 
   /**
-   * 获取可空结果。
+   * Gets the nullable result.
    */
   public abstract T getNullableResult(ResultSet rs, String columnName) throws SQLException;
 
@@ -710,7 +712,7 @@ public final class TypeHandlerRegistry {
   private Class<? extends TypeHandler> defaultEnumTypeHandler = EnumTypeHandler.class;
 
   /**
-   * 默认构造函数。
+   * The default constructor.
    */
   public TypeHandlerRegistry() {
     this(new Configuration());
@@ -722,11 +724,11 @@ public final class TypeHandlerRegistry {
 
 ```java
 /**
-    * 传入 MyBatis configuration 的构造函数。
-       *
-    * @param configuration 一个 MyBatis configuration
-    * @since 3.5.4
-       */
+   * The constructor that pass the MyBatis configuration.
+      *
+   * @param configuration a MyBatis configuration
+   * @since 3.5.4
+      */
 
     public TypeHandlerRegistry(Configuration configuration) {
   
@@ -971,11 +973,11 @@ public final class TypeHandlerRegistry {
 ```java
 
  /**
-    * 为 {@link Enum} 设置默认的 {@link TypeHandler} 类。
-    * 默认的 {@link TypeHandler} 是 {@link org.apache.ibatis.type.EnumTypeHandler}。
-    * @param typeHandler 用于 {@link Enum} 的类型处理器类
-    * @since 3.4.5
-       */
+   * Set a default {@link TypeHandler} class for {@link Enum}.
+   * A default {@link TypeHandler} is {@link org.apache.ibatis.type.EnumTypeHandler}.
+   * @param typeHandler a type handler class for {@link Enum}
+   * @since 3.4.5
+      */
   public void setDefaultEnumTypeHandler(Class<? extends TypeHandler> typeHandler) {
     this.defaultEnumTypeHandler = typeHandler;
   }
@@ -1101,7 +1103,7 @@ public final class TypeHandlerRegistry {
       if (soleHandler == null) {
         soleHandler = handler;
       } else if (!handler.getClass().equals(soleHandler.getClass())) {
-        // 注册了多个类型处理器
+        // More than one type handlers registered.
         return null;
       }
     }
@@ -1112,7 +1114,7 @@ public final class TypeHandlerRegistry {
     return unknownTypeHandler;
   }
 
-  // 构造一个处理器（也可从 Builders 中使用）
+  // Construct a handler (used also from Builders)
   @SuppressWarnings("unchecked")
   public <T> TypeHandler<T> getInstance(Class<?> javaTypeClass, Class<?> typeHandlerClass) {
     if (javaTypeClass != null) {
@@ -1136,11 +1138,11 @@ public final class TypeHandlerRegistry {
   // get information
 
   /**
-    * 获取类型处理器。
-       *
-    * @return 类型处理器集合
-    * @since 3.2.2
-       */
+   * Gets the type handlers.
+      *
+   * @return the type handlers
+   * @since 3.2.2
+      */
     public Collection<TypeHandler<?>> getTypeHandlers() {
 
     return Collections.unmodifiableCollection(allTypeHandlersMap.values());
@@ -1166,6 +1168,7 @@ private static Type resolveType(Type type, Type srcType, Class<?> declaringClass
 ```
 
 ## ObjectWrapper
+
 
 
 

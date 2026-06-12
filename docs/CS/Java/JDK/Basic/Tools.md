@@ -4,18 +4,18 @@ JDK 自带的命令行工具
 
 ## Basic Tools
 
-java/javaw - 启动 Java 应用程序
+java/javaw - Launches a Java application
 
-[java 命令启动一个 Java 应用程序](/docs/CS/Java/JDK/JVM/start.md)。它通过启动 Java 运行时环境、加载指定类并调用该类的 main 方法来实现。
+[The java command starts a Java application.](/docs/CS/Java/JDK/JVM/start.md) It does this by starting a Java runtime environment, loading a specified class, and calling that class's main method.
 
-javac - Java 编程语言编译器
+javac - Java programming language compiler
 
-javac 工具读取用 Java 编程语言编写的类和接口定义，并将其编译为字节码 class 文件。它也可以处理 Java 源文件和类中的注解。
+The javac tool reads class and interface definitions, written in the Java programming language, and compiles them into bytecode class files. It can also process annotations in Java source files and classes.
 
 
-javap - Java Class 文件反汇编器
+javap - The Java Class File Disassembler
 
-javap 命令反汇编一个或多个 class 文件。其输出取决于所使用的选项。如果未使用任何选项，javap 会打印传递给它的类的包、受保护和公共字段及方法。javap 将其输出打印到 stdout。
+The javap command disassembles one or more class files. Its output depends on the options used. If no options are used, javap prints out the package, protected, and public fields and methods of the classes passed to it. javap prints its output to stdout.
 
 javab
 
@@ -75,20 +75,20 @@ jstat_options file
 
 ### jinfo
 
-jinfo 命令 process_id
+jinfo command process_id
 
 |        |                                  |
 | ------ | -------------------------------- |
-| -flags | 获取进程的标志            |
-| -flag  | 检查或更新可管理的标志 |
+| -flags | Get flages of process            |
+| -flag  | check or update manageable flags |
 
 
 
 ### jstack
 
-使用 top -H pid 查看线程
+top -H pid
 
-jstack process_id 等价于 jcmd process_id Thread.print
+jstack process_id  == jcmd process_id Thread.print
 
 
 vjtop
@@ -96,9 +96,9 @@ vjtop
 
 
 
-### jmap - 内存映射工具
+### jmap
 
-### jhat - 堆转储分析工具
+### jhat
 
 
 

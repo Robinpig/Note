@@ -1,23 +1,23 @@
 ## Introduction
 
-[MyBatis](https://mybatis.org/mybatis-3/) 是一流的持久化框架，支持自定义 SQL、存储过程和高级映射。
-MyBatis 消除了几乎所有的 JDBC 代码以及手动设置参数和获取结果的工作。
-MyBatis 可以使用简单的 XML 或注解来配置和映射基本类型、Map 接口和 Java POJO（Plain Old Java Objects）到数据库记录。
+[MyBatis](https://mybatis.org/mybatis-3/) is a first class persistence framework with support for custom SQL, stored procedures and advanced mappings.
+MyBatis eliminates almost all of the JDBC code and manual setting of parameters and retrieval of results.
+MyBatis can use simple XML or Annotations for configuration and map primitives, Map interfaces and Java POJOs (Plain Old Java Objects) to database records.
 
-**与 Hibernate 对比**
+**Compare with Hibernate**
 
 
 |             | MyBatis               | Hibernate       |
 | :---------- | --------------------- | --------------- |
-| DB          | 依赖数据库             | 数据库无关       |
-| SQL         | 手写 SQL              | 少写 SQL         |
-|             | 关系导向               | 对象导向         |
-| Scalability | 低                    | 高               |
-|             |                       |                  |
+| DB          | Depend on DB          | Independent DB  |
+| SQL         | write SQL manually    | Less SQL        |
+|             | Relationship oriented | Object oriented |
+| Scalability | Low                   | High            |
+|             |                       |                 |
 
 ## Architecture
 
-MyBatis 的核心实现围绕 **"配置驱动 + 动态代理 + 流水线执行 + 插件扩展"** 展开
+MyBatis 的核心实现围绕 **“配置驱动 + 动态代理 + 流水线执行 + 插件扩展”** 展开
 
 [Init](/docs/CS/Framework/MyBatis/Init.md)
 
@@ -86,18 +86,18 @@ strict digraph {
 </div>
 
 <p style="text-align: center;">
-Fig.1. MyBatis 基础设施
+Fig.1. MyBatis Infrastructure
 </p>
 
 - [Binding](/docs/CS/Framework/MyBatis/binding.md)
-- [Log](/docs/CS/Framework/MyBatis/Logging.md) 提供 log4j、log4j2、slf4j、jdklog 等日志实现
+- [Log](/docs/CS/Framework/MyBatis/Logging.md) provide log4j log4j2 slf4j jdklog and so on
 - [Cache](/docs/CS/Framework/MyBatis/Cache.md)
 - [DataSource](/docs/CS/Framework/MyBatis/DataSource.md)
-- [Reflector](/docs/CS/Framework/MyBatis/Reflector.md) 表示一组缓存的类定义信息，支持属性名与 getter/setter 方法之间的轻松映射
+- [Reflector](/docs/CS/Framework/MyBatis/Reflector.md) class represents a cached set of class definition information that allows for easy mapping between property names and getter/setter methods.`
 
 ### Core
 
-- [SQL 执行流程](/docs/CS/Framework/MyBatis/Execute.md)
+- [How SQL works](/docs/CS/Framework/MyBatis/Execute.md)
 - [Executor](/docs/CS/Framework/MyBatis/Executor.md)
 - [StatementHandler](/docs/CS/Framework/MyBatis/StatementHandler.md)
 - [ResultSetHandler](/docs/CS/Framework/MyBatis/ResultSetHandler.md)
@@ -107,7 +107,7 @@ Fig.1. MyBatis 基础设施
 
 ## Extension
 
-[MyBatis-Spring](/docs/CS/Framework/MyBatis/MyBatis-Spring.md): 加载 Mybatis-config.xml，创建 Configuration 和 SqlsessionFactory
+[MyBatis-Spring](/docs/CS/Framework/MyBatis/MyBatis-Spring.md) : Load Mybatis-config.xml, create Configuration and SqlsessionFactory
 
 
 

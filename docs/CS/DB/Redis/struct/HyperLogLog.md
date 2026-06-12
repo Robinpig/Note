@@ -1,63 +1,120 @@
-## 简介
+## Introduction
 
-HyperLogLog 是一种用于解决**基数计数**问题的概率数据结构，即使在输入元素的数量或体积非常大的情况下。
-内存使用量是固定的，对于使用 Redis 实现的每个 HyperLogLog，使用**最多 12 KB**，标准误差为 **0.81%**。
-使用的算法已从原始 HyperLogLog 算法进行了改进，使用了 [Flajolet 等人的《HyperLogLog: the analysis of a near-optimal cardinality estimation algorithm》](http://algo.inria.fr/flajolet/Publications/FlajoletFGM07.pdf) 中描述的思想以及原始论文中未描述的新方法。
+A HyperLogLog is a probabilistic data structure used in order to count unique things (technically this is referred to estimating the cardinality of a set). 
+Usually counting unique items requires using an amount of memory proportional to the number of items you want to count, 
+because you need to remember the elements you have already seen in the past in order to avoid counting them multiple times.
+However there is a set of algorithms that trade memory for precision: you end with an estimated measure with a standard error, which in the case of the Redis implementation is less than 1%. 
+The magic of this algorithm is that you no longer need to use an amount of memory proportional to the number of items counted, 
+and instead can use a constant amount of memory! 12k bytes in the worst case, or a lot less if your HyperLogLog (We'll just call them HLL from now) has seen very few elements.
 
-计算集合中唯一元素的数量，就像获得 `SCARD` 的结果一样。
+HLLs in Redis, while technically a different data structure, are encoded as a Redis string, so you can call `GET` to serialize a HLL, and `SET` to deserialize it back to the server.
 
-如果我们使用 `SADD`，它将保存所有元素，消耗大量内存；如果我们使用 HyperLogLog，它将消耗很少的内存。
+Conceptually the HLL API is like using Sets to do the same task. 
+You would `SADD` every observed element into a set, and would use `SCARD` to check the number of elements inside the set, which are unique since `SADD` will not re-add an existing element.
 
-HyperLogLog 的主要命令是 [PFADD](https://redis.io/commands/pfadd)、[PFCOUNT](https://redis.io/commands/pfcount) 和 [PFMERGE](https://redis.io/commands/pfmerge)。
+While you don't really *add items* into an HLL, because the data structure only contains a state that does not include actual elements, the API is the same:
+- Every time you see a new element, you add it to the count with `PFADD`.
+- Every time you want to retrieve the current approximation of the unique elements *added* with `PFADD` so far, you use the `PFCOUNT`.
 
-- [PFADD](https://redis.io/commands/pfadd) 添加计数。
-- [PFCOUNT](https://redis.io/commands/pfcount) 获取计数值。
-- [PFMERGE](https://redis.io/commands/pfmerge) 合并。
+```
+> pfadd hll a b c d
+(integer) 1
+> pfcount hll
+(integer) 4
+```
 
-PFADD 和 PFCOUNT 在概念上类似于集合的 SADD 和 SCARD。
+An example of use case for this data structure is counting unique queries performed by users in a search form every day.
 
+
+add HyperLogLog since 2.8.9
+
+cardinality counting
+
+
+The Redis HyperLogLog implementation is based on the following ideas:
+
+* The use of a 64 bit hash function as proposed in [1], in order to estimate cardinalities larger than 10^9, at the cost of just 1 additional bit per register.
+* The use of 16384 6-bit registers for a great level of accuracy, using a total of 12k per key.
+* The use of the Redis string data type. No new type is introduced.
+* No attempt is made to compress the data structure as in [1]. Also the algorithm used is the original HyperLogLog Algorithm as in [2], 
+  with the only difference that a 64 bit hash function is used, so no correction is performed for values near 2^32 as in [1].
+
+[1] Heule, Nunkesser, Hall: HyperLogLog in Practice: Algorithmic Engineering of a State of The Art Cardinality Estimation Algorithm.
+[2] P. Flajolet, Éric Fusy, O. Gandouet, and F. Meunier. Hyperloglog: The analysis of a near-optimal cardinality estimation algorithm.
+
+Redis uses two representations:
+
+1. A "dense" representation where every entry is represented by a 6-bit integer.
+2. A "sparse" representation using run length compression suitable for representing HyperLogLogs with many registers set to 0 in a memory efficient way.
+
+
+
+结构体如下
 ```c
 struct hllhdr {
-    char magic[4];      /* "HLL" 的魔术字符串 */
-    uint8_t encoding;   /* HLL_DENSE 或 HLL_SPARSE. */
-    uint8_t notused[3]; /* 保留，未来使用，初始化为 0 */
-    uint8_t card[8];    /* 缓存的基数，小端序，如果尚未缓存则为 0。 */
-    uint8_t registers[]; /* 数据字节。 */
+    char magic[4];      /* "HYLL" */
+    uint8_t encoding;   /* HLL_DENSE or HLL_SPARSE. */
+    uint8_t notused[3]; /* Reserved for future use, must be zero. */
+    uint8_t card[8];    /* Cached cardinality, little endian. */
+    uint8_t registers[]; /* Data bytes. */
 };
 ```
 
-## 算法
 
-### 伯努利过程
+Both the dense and sparse representation have a 16 byte header as follows:
 
-HyperLogLog 的底层实现使用了概率论中的 **伯努利过程**。
+```
++------+---+-----+----------+
+| HYLL | E | N/U | Cardin.  |
++------+---+-----+----------+
+```
+The first 4 bytes are a magic string set to the bytes "HYLL"."E" is one byte encoding, currently set to HLL_DENSE or HLL_SPARSE. N/U are three not used bytes.
 
-对于伯努利过程，在一次实验中，将硬币 A 和 B 抛掷，设 k 为在首次成功（正面）之前需要投掷的次数。
+The "Cardin." field is a 64 bit integer stored in little endian format with the latest cardinality computed that can be reused if the data structure was not modified since the last computation
+(this is useful because there are high probabilities that HLLADD operations don't modify the actual data structure and hence the approximated cardinality).
 
-如果最大值为 k_max，则根据概率计算，实验次数大约为 $2^{k_max}$。
+When the most significant bit in the most significant byte of the cached cardinality is set,
+it means that the data structure was modified and we can't reuse the cached value that must be recomputed.
 
-一旦集合中的数据量足够大，就可以近似出数据集中的唯一值数量。
 
-举一个简单的例子来便于理解：
 
-我们生成大量整数，并使用位序列中前导零的数量来估计唯一元素的数量。
 
-例如，整数 4（二进制 100）在最低有效位中有 2 个前导零（假设位从右开始编号，从 0 开始），整数 10（二进制 1010）只有 1 个前导零。
+```redis
+exists loglog
+0
+```
 
-如果我们从整数集合中看到的最大前导零数是 3，那么该集合中唯一整数的数量大约是 $2^3=8$。
 
-### 分桶平均
 
-为了减少误差，HyperLogLog 使用分桶平均，即通过将数据划分为 m 个桶，分别计算每个桶的估算值并取平均。
+```
+pfadd loglog
+1
+pfadd loglog
+0
+```
 
-HyperLogLog 标准的误差公式为 $1.04 / \sqrt{m}$。
 
-对于 Redis 的实现，m = 16384。
 
-### 偏差修正
+```
+pfcount loglog
+```
 
-Redis 的 HyperLogLog 实现包括对小基数和大基数的偏差修正。
 
-## 参考
 
-1. [Redis 新数据类型——HyperLogLog](https://www.cnblogs.com/taojietaoge/p/16478371.html)
+```
+pfmerge newlog loglog
+```
+
+
+
+begin with HYLL
+
+
+
+## Links
+
+- [Redis Struct](/docs/CS/DB/Redis/struct/struct.md)
+
+## References
+1. [HyperLogLog: the analysis of a near-optimal cardinality estimation algorithm](http://algo.inria.fr/flajolet/Publications/FlFuGaMe07.pdf)
+2. [New cardinality estimation algorithms for HyperLogLog sketches](https://arxiv.org/pdf/1702.01284.pdf)

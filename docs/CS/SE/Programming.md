@@ -2,38 +2,37 @@
 
 ## Interpreter versus Compiler
 
-现在你可能已经理解，任何编程语言本质上都是人类友好的形式化方式，用于编写计算机要执行的指令。
-这些指令在某个阶段会被翻译成计算机真正理解的机器语言。
-这些语言由一组基本操作组成，其执行在处理器硬件中实现。
+By now, you might have understood that, any programming language is essentially a human-friendly formalism for writing instructions for a computer to follow.
+These instructions are at some point translated into machine language, which is what the computer really understands.
+These languages are composed of a set of basic operations whose execution is implemented in the hardware of the processor.
 
-人们通常将编程语言描述为编译型或解释型。
-"编译"意味着程序被翻译成机器语言然后由硬件执行；"解释"意味着程序由软件解释器读取和执行。
-通常 C 被认为是编译型语言，Python 被认为是解释型语言。
-但这种区别并不总是明确的。
+People often describe programming languages as either compiled or interpreted.
+“Compiled” means that programs are translated into machine language and then executed by hardware; “interpreted” means that programs are read and executed by a software interpreter.
+Usually C is considered a compiled language and Python is considered an interpreted language. But the distinction is not always clear-cut.
 
-首先，许多语言既可以编译也可以解释。
-例如，有 C 的解释器和 Python 的编译器。
-其次，有些语言如 Java 采用混合方法，将程序编译为中间语言，然后在解释器中运行翻译后的程序。
-Java 使用一种称为 Java 字节码的中间语言，它类似于机器语言，但由软件解释器 Java 虚拟机（JVM）执行。
-几乎所有高级编程语言都有编译器和解释器。
+First, many languages can be either compiled or interpreted.
+For example, there are C interpreters and Python compilers.
+Second, there are languages like Java that use a hybrid approach, compiling programs into an intermediate language and then running the translated program in an interpreter.
+Java uses an intermediate language called Java bytecode, which is similar to machine language, but it is executed by a software interpreter, the Java virtual machine (JVM).
+Almost all high level programming languages have compilers and interpreters.
 
-因此，编译或解释并非语言的固有特性；不过，编译型和解释型语言之间存在一些普遍差异。
+So being compiled or interpreted is not an intrinsic characteristic of a language; nevertheless, there are some general differences between compiled and interpreted languages.
 
-许多解释型语言支持动态类型，但编译型语言通常限于静态类型。
-在静态类型语言中，你可以通过查看程序来知道每个变量引用的类型。
-在动态类型语言中，直到程序运行时才能知道变量的类型。
-通常，static 指编译时（程序被编译时）发生的事情，dynamic 指运行时（程序运行时）发生的事情。
-例如，在 Python 中可以编写如下函数：
+Many interpreted languages support dynamic types, but compiled languages are usually limited to static types.
+In a statically-typed language, you can tell by looking at the program what type each variable refers to.
+In a dynamically- typed language, you don’t always know the type of a variable until the pro- gram is running.
+In general, static refers to things that happen at compile time (while a program is being compiled), and dynamic refers to things that happen at run time (while a program is running).
+For example, in Python you can write a function like this:
 
 ```python
 def add(x, y):
     return x + y
 ```
 
-查看这段代码，你无法知道 x 和 y 在运行时将引用什么类型。
-这个函数可能被多次调用，每次传入不同类型的值。
-任何支持加法运算符的值都可以工作；其他类型会导致异常或运行时错误。
-在 C 中，相同的函数编写如下：
+Looking at this code, you can’t tell what type x and y will refer to at run time.
+This function might be called several times, each time with values with different types.
+Any values that support the addition operator will work; any other types will cause an exception or runtime error.
+In C you would write the same function like this:
 
 ```c
 int add(int x, int y) {
@@ -41,59 +40,56 @@ int add(int x, int y) {
 }
 ```
 
-函数的第一行包含参数和返回值的**类型声明**：x 和 y 声明为整数，
-这意味着我们可以在编译时检查加法运算符对此类型是否合法（是合法的）。
-返回值也声明为整数。
+The first line of the function includes *type declarations* for the parameters and the return value: x and y are declared to be integers,
+which means that we can check at compile time whether the addition operator is legal for this type (it is).
+The return value is also declared to be an integer.
 
-由于这些声明，当该函数在程序其他位置被调用时，
-编译器可以检查提供的参数是否具有正确的类型，以及返回值是否被正确使用。
+Because of these declarations, when this function is called elsewhere in the program,
+the compiler can check whether the arguments provided have the right type, and whether the return value is used correctly.
 
-这些检查在程序开始执行之前进行，因此可以更早地发现错误。
-更重要的是，可以在从未运行过的程序部分发现错误。
-此外，这些检查不必在运行时进行，这是编译型语言通常比解释型语言运行更快的原因之一。
+These checks happen before the program starts executing, so errors can be found earlier. More importantly, errors can be found in parts of the program that have never run.
+Furthermore, these checks don’t have to happen at run time, which is one of the reasons compiled languages generally run faster than interpreted languages.
 
-在编译时声明类型也节省了空间。
-在动态语言中，变量名在程序运行时存储在内存中，并且通常可由程序访问。
-例如，Python 的内置函数 locals 返回一个包含变量名及其值的字典。
+Declaring types at compile time also saves space. In dynamic languages, vari- able names are stored in memory while the program runs, and they are of ten accessible by the program.
+For example, in Python the built-in function locals returns a dictionary that contains variable names and their values.
 
-在编译型语言中，变量名存在于编译时，但不存在于运行时。
-编译器为每个变量选择一个位置，并将这些位置记录为编译程序的一部分。
-变量的位置称为其地址。
-运行时，每个变量的值存储在其地址处，但变量名根本不存储（除非编译器为了调试目的而添加）。
+In compiled languages, variable names exist at compile-time but not at run time. The compiler chooses a location for each variable and records these locations as part of the compiled program.
+The location of a variable is called its address.
+At run time, the value of each variable is stored at its address, but the names of the variables are not stored at all (unless they are added by the compiler for purposes of debugging).
 
 ### The compilation process
 
-编译的步骤：
+The steps of compilation are:
 
-1. 预处理：C 是包含在编译前生效的预处理指令的语言之一。
-   例如，#include 指令导致来自另一个文件的源代码被插入到该指令的位置。
-2. 解析：解析过程中，编译器读取源代码并构建程序的内部表示，称为抽象语法树。
-   此步骤检测到的错误通常是语法错误。
-3. 静态检查：编译器检查变量和值是否具有正确的类型，函数是否以正确的参数数量和类型调用等。
-   此步骤检测到的错误有时称为静态语义错误。
-4. 代码生成：编译器读取程序的内部表示并生成机器码或字节码。
-5. 链接：如果程序使用库中定义的值和函数，编译器需要找到适当的库并包含所需的代码。
-6. 优化：在过程中的多个阶段，编译器可以转换程序以生成运行更快或占用更少空间的代码。
-   大多数优化是消除明显浪费的简单更改，但有些编译器执行复杂的分析和转换。
+1. Preprocessing: C is one of several languages that include preprocessing directives that take effect before the program is compiled.
+   For example, the #include directive causes the source code from another file to be inserted at the location of the directive.
+2. Parsing: During parsing, the compiler reads the source code and builds an internal representation of the program, called an abstract syntax tree.
+   Errors detected during this step are generally syntax errors.
+3. Static checking: The compiler checks whether variables and values have the right type, whether functions are called with the right number and type of arguments, etc.
+   Errors detected during this step are sometimes called static semantic errors.
+4. Code generation: The compiler reads the internal representation of the program and generates machine code or byte code.
+5. Linking: If the program uses values and functions defined in a library, the compiler has to find the appropriate library and include the required code.
+6. Optimization: At several points in the process, the compiler can trans- form the program to generate code that runs faster or uses less space.
+   Most optimizations are simple changes that eliminate obvious waste, but some compilers perform sophisticated analyses and transformations.
 
-**编译器和解释器的区别**
+**Difference between compiler and interpreter**
 
-- 编译器将高级指令转换为机器语言，而解释器将高级指令转换为中间形式。
-- 执行前，编译器处理整个程序；而解释器翻译第一行后立即执行，以此类推。
-- 编译器在编译过程结束后创建错误列表，而解释器在遇到第一个错误后停止翻译。
-- 编译器创建独立的可执行文件，而解释型程序每次都需要解释器。
+- A complier converts the high level instruction into machine language while an interpreter converts the high level instruction into an intermediate form.
+- Before execution, entire program is executed by the compiler whereas after translating the first line, an interpreter then executes it and so on.
+- List of errors is created by the compiler after the compilation process while an interpreter stops translating after the first error.
+- An independent executable file is created by the compiler whereas interpreter is required by an interpreted program each time.
 
 ## Script Languages
 
-脚本语言一词从未被正式定义，但以下是其典型特征：
+The term scripting language has never been formally defined, but here are the typical characteristics:
 
-- 常用于系统管理。
-- 对变量类型非常随意，例如不区分整数、浮点或字符串变量。
-- 语言内建大量高级操作，例如栈 push/pop。
-- 解释执行，而非编译为主机指令集。
+- Used often for system administration.
+- Very casual with regard to typing of variables, e.g. no distinction between integer, floating-point or string variables.
+- Lots of high-level operations intrinsic to the language, e.g. stack push/pop.
+- Interpreted, rather than being compiled to the instruction set of the host machine.
 
-如今许多人更喜欢 Python，因为它更简洁优雅。
-我们看看三种脚本语言：Shell、Perl 和 Python。
+Today many people prefer Python, as it is much cleaner and more elegant.
+We look at three scripting languages: Shell, PERLand Python.
 
 ## Links
 

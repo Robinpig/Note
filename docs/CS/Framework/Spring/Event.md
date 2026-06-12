@@ -1,11 +1,11 @@
 ## Introduction
 
-Spring Application Events 是由 Spring 框架触发的事件。
-它们旨在用于需要感知环境变化的应用的开发中。
-Spring Application Events 允许开发者创建能够实时响应应用环境变化的应用。
+Spring Application Events are events that are triggered by the Spring framework.
+They are designed to be used in the development of applications that need to be aware of changes in the environment.
+Spring Application Events allow developers to create applications that can respond to changes in the application environment in real time.
 
-Spring Application Events 基于 Observer 模式的概念。
-Observer 模式是一种设计模式，其中一个对象能够观察另一个对象的状态并做出相应反应。对于 Spring Application Events，观察者是应用，被观察的对象是应用环境。
+Spring Application Events are based on the concept of the Observer pattern.
+The Observer pattern is a design pattern in which an object is able to observe the state of another object and react accordingly. In the case of Spring Application Events, the observer is the application and the object being observed is the application environment.
 
 ## ApplicationEvent
 
@@ -20,7 +20,7 @@ public abstract class ApplicationEvent extends EventObject {
 }
 ```
 
-标准上下文事件：
+Standard Context Events:
 
 - ContextRefreshedEvent
 - ContextStartedEvent
@@ -28,7 +28,7 @@ public abstract class ApplicationEvent extends EventObject {
 - ContextClosedEvent
 
 ## multicastEvent
-支持 [Async](/docs/CS/Framework/Spring/Task.md)
+support [Async](/docs/CS/Framework/Spring/Task.md)
 ```java
 public class SimpleApplicationEventMulticaster extends AbstractApplicationEventMulticaster {
     public void multicastEvent(ApplicationEvent event, @Nullable ResolvableType eventType) {
@@ -73,6 +73,8 @@ public interface ApplicationEventPublisher {
 ```
 ### publishEvent
 
+
+
 ```java
 protected void initApplicationEventMulticaster() {
 		ConfigurableListableBeanFactory beanFactory = getBeanFactory();
@@ -94,6 +96,7 @@ protected void initApplicationEventMulticaster() {
 	}
     
 ```
+
 
 ```java
 public abstract class AbstractApplicationContext extends DefaultResourceLoader
@@ -162,7 +165,7 @@ public interface ApplicationListener<E extends ApplicationEvent> extends EventLi
 
 ## SpringApplicationEvent
 
-Spring Boot 提供了几个预定义的 ApplicationEvents，它们与 SpringApplication 的生命周期相关。
+Spring Boot provides several predefined ApplicationEvents that are tied to the lifecycle of a SpringApplication.
 
 ```java
 public abstract class SpringApplicationEvent extends ApplicationEvent {
@@ -195,14 +198,15 @@ public abstract class SpringApplicationEvent extends ApplicationEvent {
 >
 > org.springframework.context.ApplicationListener=com.example.project.MyListener
 
-应用事件按以下顺序发送：
+Application events are sent in the following order, as your application runs:
 
-1. `ApplicationStartingEvent` 在运行开始时但在任何处理之前发送，除��监听器和初始化器的注册。
-2. `ApplicationEnvironmentPreparedEvent` 在上下文中使用的 `Environment` 已知但上下文尚未创建时发送。
-3. `ApplicationPreparedEvent` 在 [refresh](/docs/CS/Framework/Spring/IoC.md?id=refresh) 开始之前但在 bean 定义加载之后发送。
-4. `ApplicationStartedEvent` 在上下文刷新之后、任何应用和命令行运行器被调用之前发送。
-5. `ApplicationReadyEvent` 在任何应用和命令行运行器被调用之后发送。表示应用已准备好处理请求。
-6. `ApplicationFailedEvent` 在启动时出现异常时发送。
+1. An `ApplicationStartingEvent` is sent at the start of a run but before any processing, except for the registration of listeners and initializers.
+2. An `ApplicationEnvironmentPreparedEvent` is sent when the `Environment` to be used in the context is known but before the context is created.
+3. An `ApplicationPreparedEvent` is sent just before the [refresh](/docs/CS/Framework/Spring/IoC.md?id=refresh) is started but after bean definitions have been loaded.
+4. An `ApplicationStartedEvent` is sent after the context has been refreshed but before any application and command-line runners have been called.
+5. An `ApplicationReadyEvent` is sent after any application and command-line runners have been called. It indicates that the application is ready to service requests.
+6. An `ApplicationFailedEvent` is sent if there is an exception on startup.
+
 
 ## Implementations
 

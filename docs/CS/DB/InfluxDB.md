@@ -1,14 +1,19 @@
 ## Introduction
 
-InfluxDB 是一个用 Rust 编写的开源时间序列数据库，使用 Apache Arrow、Apache Parquet 和 Apache DataFusion 作为其基础构建模块。
-这个最新版本（3.x）的 InfluxDB 专注于为各类观测数据（指标、事件、日志、追踪等）提供实时缓冲，
-可通过 SQL 或 InfluxQL 查询，并以 Parquet 文件形式批量持久化到对象存储中，供其他第三方系统使用。
-它可以在启用写前日志或完全基于对象存储（如果禁用写前日志）的模式下运行
-（在后一种操作模式下，任何尚未持久化到对象存储的缓冲数据都可能存在数据丢失的风险）。
+
+InfluxDB is an open source time series database written in Rust, using Apache Arrow, Apache Parquet, and Apache DataFusion as its foundational building blocks.
+This latest version (3.x) of InfluxDB focuses on providing a real-time buffer for observational data of all kinds (metrics, events, logs, traces, etc.)
+that is queryable via SQL or InfluxQL, and persisted in bulk to object storage as Parquet files, which other third-party systems can then use.
+It is able to run either with a write ahead log or completely off object storage if the write ahead log is disabled
+(in this mode of operation there is a potential window of data loss for any data buffered that has not yet been persisted to object store).
+
+
 
 ## Links
 
 - [DataBases](/docs/CS/DB/DB.md)
 
+
 ## References
 1.[influxdata](https://www.influxdata.com/)
+

@@ -1,32 +1,34 @@
 ## Introduction
 
 
-开发计算机软件可能是一个复杂的过程，在过去的 25 年中，研究人员已经确定了软件开发中涉及的许多不同活动。
-它们包括：
-- 问题定义
-- 需求开发
-- 构建规划
-- 软件架构或高层设计
-- 详细设计
-- 编码与调试
-- 单元测试
-- 集成测试
-- 系统测试
-- 修正性维护
+Developing computer software can be a complicated process, and in the last 25 years, researchers have identified numerous distinct activities that go into software development. 
+They include
+- Problem definition
+- Requirements development
+- Construction planning
+- Software architecture, or high-level design
+- Detailed design
+- Coding and debugging
+- Unit testing
+- Integration testing
+- IntegrationSystem testing
+- Corrective maintenance
 
-构建主要是编码和调试，但也涉及详细设计、构建规划、单元测试、集成、集成测试等活动。
 
-以下是构建中涉及的一些具体任务：
-- 验证基础工作已经完成，以便构建能够成功进行
-- 确定代码将如何被测试
-- 设计和编写类与例程
-- 创建和命名变量与命名常量
-- 选择控制结构并组织语句块
-- 对自己代码进行单元测试、集成测试和调试
-- 审查其他团队成员的底层设计和代码，并让他们审查你的
-- 通过仔细格式化和注释来打磨代码
-- 集成分别创建的软件组件
-- 调优代码使其运行更快并使用更少资源
+Construction is mostly coding and debugging but also involves detailed design, construction planning, unit testing, integration, integration testing, and other activities.
+
+
+Here are some of the specific tasks involved in construction:
+- Verifying that the groundwork has been laid so that construction can proceed successfully
+- Determining how your code will be tested
+- Designing and writing classes and routines
+- Creating and naming variables and named constants
+- Selecting control structures and organizing blocks of statements
+- Unit testing, integration testing, and debugging your own code
+- Reviewing other team members' low-level designs and code and having them review yours
+- Polishing code by carefully formatting and commenting it
+- Integrating software components that were created separately
+- Tuning code to make it faster and use fewer resources
 
 
 

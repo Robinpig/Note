@@ -4,16 +4,16 @@
 
 **JUnit 5 = JUnit Platform + JUnit Jupiter + JUnit Vintage**
 
-JUnit Platform 作为在 JVM 上启动测试框架的基础。
-它还定义了用于开发测试框架的 TestEngine API，该框架运行在平台上。
-此外，平台提供了 Console Launcher 用于从命令行启动平台，以及 JUnit Platform Suite Engine 用于使用平台上的一个或多个测试引擎运行自定义测试套件。
-流行的 IDE（如 IntelliJ IDEA、Eclipse、NetBeans 和 Visual Studio Code）和构建工具（如 Gradle、Maven 和 Ant）也为 JUnit Platform 提供了一流支持。
+The JUnit Platform serves as a foundation for launching testing frameworks on the JVM.
+It also defines the TestEngine API for developing a testing framework that runs on the platform.
+Furthermore, the platform provides a Console Launcher to launch the platform from the command line and the JUnit Platform Suite Engine for running a custom test suite using one or more test engines on the platform.
+First-class support for the JUnit Platform also exists in popular IDEs (see IntelliJ IDEA, Eclipse, NetBeans, and Visual Studio Code) and build tools (see Gradle, Maven, and Ant).
 
-JUnit Jupiter 是在 JUnit 5 中编写测试和扩展的编程模型和扩展模型的组合。
-Jupiter 子项目提供了一个 TestEngine 用于在平台上运行基于 Jupiter 的测试。
+JUnit Jupiter is the combination of the programming model and extension model for writing tests and extensions in JUnit 5.
+The Jupiter sub-project provides a TestEngine for running Jupiter based tests on the platform.
 
-JUnit Vintage 提供了一个 TestEngine 用于在平台上运行基于 JUnit 3 和 JUnit 4 的测试。
-它要求 class path 或 module path 中存在 JUnit 4.12 或更高版本。
+JUnit Vintage provides a TestEngine for running JUnit 3 and JUnit 4 based tests on the platform.
+It requires JUnit 4.12 or later to be present on the class path or module path.
 
 ## Test Lifecycle
 

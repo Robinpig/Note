@@ -4,9 +4,9 @@ package `org.apache.ibatis.plugin`
 
 
 
-## 添加拦截器
+## addInterceptor 
 
-在以下时机调用 `Configuration::addInterceptor()`：
+call  `Configuration::addInterceptor()` when:
 
 1. `org.mybatis.spring.SqlSessionFactoryBean::buildSqlSessionFactory()`
 2. `org.apache.ibatis.builder.xml.XMLConfigBuilder::parseConfiguration()`
@@ -49,7 +49,7 @@ public class InterceptorChain {
 
 
 
-Interceptor 支持 *ParameterHandler*、*ResultHandler*、*StatementHandler* 和 *Executor*。
+Inreceptors for *ParameterHandler*, *ResultHandler*, *StatementHandler* and *Executor*.
 
 ```java
 // Configuration
@@ -175,7 +175,7 @@ public @interface Intercepts {
 
 ## invoke
 
-Plugin 实现了 *InvocationHandler*，因此在 invoke 方法中调用 `Interceptor::intercept()`
+Plugin implements *InvocationHandler*, so it call `Interceptor::intercept()` in invoke method.
 
 
 
@@ -366,13 +366,13 @@ public class PageInterceptor implements Interceptor {
 
 
 
-## 适用场景
+## Applicable Scene
 
-1. 检查 SQL 是否允许执行
-2. 增强功能
-   1. 分页插件（Pagehelper）
-   2. 分片（Shard）
-   3. 生成分布式唯一键
+1. Check if the SQL is allowed to execute
+2. Enhance
+   1. Pagehelper
+   2. Shard
+   3. Generate distributed unique key
 
 
 

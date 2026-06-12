@@ -2,37 +2,37 @@
 
 ![](img/Timer.png)
 
-一个针对近似 I/O 超时调度优化的 `Timer`。
+A `Timer`optimized for approximated I/O timeout scheduling.
 
 ### Tick Duration
 
-正如"近似"所描述的，此定时器不会准时执行调度的 `TimerTask`。
-`HashedWheelTimer` 在每个 tick 时，会检查是否有任何 `TimerTask` 已到期并执行它们。
+As described with 'approximated', this timer does not execute the scheduled `TimerTask` on time.
+`HashedWheelTimer`, on every tick, will check if there are any `TimerTask`s behind the schedule and execute them.
 
-你可以通过在构造函数中指定更小或更大的 tick duration 来增加或减少执行时间的精度。
-在大多数网络应用中，I/O 超时不需要精确到毫秒级。
-因此，默认的 tick duration 为 100 毫秒，大多数情况下你不需要尝试不同的配置。
+You can increase or decrease the accuracy of the execution timing by specifying smaller or larger tick duration in the constructor.
+In most network applications, I/O timeout does not need to be accurate.
+Therefore, the default tick duration is 100 milliseconds and you will not need to try different configurations in most cases.
 
-### Ticks per Wheel（Wheel Size）
+### Ticks per Wheel (Wheel Size)
 
-`HashedWheelTimer` 维护一个称为 wheel 的数据结构。
-简单来说，wheel 是一个 TimerTask 的哈希表，其哈希函数是"任务截止时间"。
-每个 wheel 的默认 tick 数（即 wheel 的大小）为 512。如果你要调度大量超时任务，可以指定更大的值。
+`HashedWheelTimer` maintains a data structure called 'wheel'.
+To put simply, a wheel is a hash table of TimerTasks whose hash function is 'dead line of the task'.
+The default number of ticks per wheel (i.e. the size of the wheel) is 512. You could specify a larger value if you are going to schedule a lot of timeouts.
 
-### 不要创建过多实例
+### Do not create many instances.
 
-`HashedWheelTimer` 在每次实例化和启动时都会创建一个新线程。
-因此，应确保只创建一个实例并在整个应用中共享。
-一个常见的错误是为每个连接创建一个新实例，这会导致应用无响应。
+`HashedWheelTimer` creates a new thread whenever it is instantiated and started.
+Therefore, you should make sure to create only one instance and share it across your application.
+One of the common mistakes, that makes your application unresponsive, is to create a new instance for every connection.
 
-### 实现细节
+### Implementation Details
 
-`HashedWheelTimer` 基于 [George Varghese](https://cseweb.ucsd.edu/users/varghese/) 和 Tony Lauck 的论文《Hashed and Hierarchical Timing Wheels: data structures to efficiently implement a timer facility》（https://cseweb.ucsd.edu/users/varghese/PAPERS/twheel.ps.Z）。
-更全面的幻灯片可参见[此处](https://www.cse.wustl.edu/~cdgill/courses/cs6874/TimingWheels.ppt)。
+`HashedWheelTimer` is based on [George Varghese](https://cseweb.ucsd.edu/users/varghese/) and Tony Lauck's paper, ['Hashed and Hierarchical Timing Wheels: data structures to efficiently implement a timer facility'](https://cseweb.ucsd.edu/users/varghese/PAPERS/twheel.ps.Z).
+More comprehensive slides are located [here](https://www.cse.wustl.edu/~cdgill/courses/cs6874/TimingWheels.ppt).
 
 ## Timer
 
-在后台线程中调度 TimerTask 在将来一次性执行。
+Schedules TimerTasks for one-time future execution in a background thread.
 
 ```java
 public interface Timer {
@@ -50,7 +50,7 @@ public interface TimerTask {
 ```
 
 
-一个定时器
+A timer
 
 ```java
 public class HashedWheelTimer implements Timer {
@@ -123,11 +123,11 @@ Netty 的单层时间轮 HashedWheelTimer，它将海量定时任务的添加与
 
 
 
-1. 将 ticksPerWheel 规范化为 2 的次幂并初始化 wheel。
-2. 将 tickDuration 转换为纳秒。
-3. 防止溢出。
-4. 创建新线程
-5. 如果需要则 leakDetector.track
+1. Normalize ticksPerWheel to power of two and initialize the wheel.
+2. Convert tickDuration to nanos.
+3. Prevent overflow.
+4. newThread
+5. if need leakDetector.track
 6.
 
 ```java
@@ -233,7 +233,7 @@ public Timeout newTimeout(TimerTask task, long delay, TimeUnit unit) {
 }
 ```
 
-显式启动后台线程。即使你不调用此方法，后台线程也会按需自动启动。
+Starts the background thread explicitly.  The background thread will start automatically on demand even if you did not call this method.
 
 ```java
 public void start() {
@@ -281,8 +281,8 @@ private static void reportTooManyInstances() {
 
 ## run
 
-1. 初始化 startTime。
-2. 通知在 start() 中等待初始化的其他线程。
+1. Initialize the startTime.
+2. Notify the other threads waiting for the initialization at start().
 3. waitForNextTick
 4. processCancelledTasks
 5. transferTimeoutsToBuckets
@@ -331,7 +331,7 @@ public void run() {
 
 ### waitForNextTick
 
-根据 startTime 和当前 tick 数计算目标 nanoTime，然后等待直到达到该目标。
+calculate goal nanoTime from startTime and current tick number, then wait until that goal has been reached.
 
 ```java
 private long waitForNextTick() {
@@ -603,7 +603,7 @@ private static final class HashedWheelBucket {
 
 ### transferTimeoutsToBuckets
 
-每个 tick 最多传输 **100000** 个超时任务，以防止线程在循环中添加新超时任务时导致 workerThread 停滞。
+transfer only max. **100000** timeouts per tick to prevent a thread to stale the workerThread when it just adds new timeouts in a loop.
 
 ```java
 private void transferTimeoutsToBuckets() {

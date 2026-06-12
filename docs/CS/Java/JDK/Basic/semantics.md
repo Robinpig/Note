@@ -1,13 +1,16 @@
 
 
-####  优先使用 for-each 循环而非传统 for 循环
+####  Prefer for-each loops to traditional for loops.
 
-#### 优先使用 try-with-resources 而非 try-finally
+#### Prefer try-with-resources to try-finally
+
 
 ## interface
 
-- 通过接口引用对象
-- 优先使用接口而非反射
+- Refer to objects by their interfaces  
+- Prefer interfaces to reflection  
+
+
 
 ## Links
 - [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)

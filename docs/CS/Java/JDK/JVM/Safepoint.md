@@ -1,9 +1,9 @@
 ## Introduction
-**Safepoint** 是程序执行中的一个点，在该点程序的状态是已知的且可以被检查。例如寄存器、内存等。
-为了让 JVM 完全暂停并运行任务（如 GC），**所有线程**必须到达一个 safepoint。
+A _safepoint_ is a point in program execution where the state of the program is known and can be examined. Things like registers, memory, etc.
+For the JVM to completely pause and run tasks (such as GC), **all threads** must come to a safepoint.
 
-例如，要获取线程的堆栈跟踪，我们必须到达一个 safepoint。
-这也意味着像 `jstack` 这样的工具要求程序的所有线程都能到达 safepoint。
+For example, to retrieve a stack trace on a thread we must come to a safepoint. 
+This also means tools like `jstack` require that all threads of the program be able to reach a safepoint.
 
 > A point during program execution at which all GC roots are known and all heap object contents are consistent. 
 > From a global point of view, all threads must block at a safepoint before the GC can run. 
@@ -14,26 +14,26 @@
 > The JIT compiler emits a GC map at each safepoint. C/C++ code in the VM uses stylized macro-based conventions (e.g., TRAPS) to mark potential safepoints.
 
 
-虽然 GC 是最常见的 safepoint 操作之一，但还有许多 VM 操作[2](https://blanco.io/blog/jvm-safepoint-pauses/#fn:2)在线程处于 safepoint 时运行。
-有些可以通过连接到 HotSpot JVM 从外部调用（例如 `jstack`、`jcmd`），而其他操作则是 JVM 内部操作（monitor deflation、code deoptimization）。
-以下是常见操作的列表。
+While GC is one of the most common safepoint operations, there are many VM operations[2](https://blanco.io/blog/jvm-safepoint-pauses/#fn:2) that are run while threads are at safepoints. 
+Some may be invoked externally by connecting to the HotSpot JVM (i.e. `jstack`, `jcmd`) while others are internal to the JVM operation (monitor deflation, code deoptimization). 
+A list of common operations is below.
 
--   User Invoked（用户调用）：
-    -   死锁检测
+-   User Invoked:
+    -   Deadlock detection
     -   JVMTI
-    -   线程转储
--   Run at regular intervals（定期运行）可以配置`-XX:GuaranteedSafepointInterval=0`关闭
+    -   Thread Dumps
+-   Run at regular intervals 可以配置`-XX:GuaranteedSafepointInterval=0`关闭
     -   Monitor Deflation
     -   Inline Cache Cleaning
     -   Invocation Counter Delay
     -   Compiled Code Marking
--   Other（其他）：
-    -   撤销 [Biased Locks](https://blogs.oracle.com/dave/biased-locking-in-hotspot)
-    -   编译方法去优化
+-   Other:
+    -   Revoking [Biased Locks](https://blogs.oracle.com/dave/biased-locking-in-hotspot)
+    -   Compiled method Deoptimization
     -   GC
 
-所有这些操作都强制 JVM 到达 safepoint 以运行某种 VM 操作。
-现在我们可以将 safepoint 操作时间分解为两类
+All these operations force the JVM to come to a safepoint in order to run some kind of VM operation.
+Now we can decompose a safepoint operation times into two categories
 
 
 除了执行 JNI 本地代码外，Java 线程还有其他几种状态：解释执行字节码、执行即时编译器生成的机器码和线程阻塞。阻塞的线程由于处于 Java 虚拟机线程调度器的掌控之下，因此属于安全点。
@@ -53,33 +53,35 @@ HotSpot 虚拟机的做法便是在生成代码的方法出口以及非计数循
 不过，不同的即时编译器插入安全点检测的位置也可能不同。以 Graal 为例，除了上述位置外，它还会在计数循环的循环回边处插入安全点检测。
 其他的虚拟机也可能选取方法入口而非方法出口来插入安全点检测。
 
-**只有 VM 线程可以执行 safepoint。**
+**Only VM thread may execute a safepoint.**
 
-**Safepoint 实际上是一个内存页。**
+**Safepoint is actually a page of memory.**
 
 ![](./img/pause-time-diagram.png)
--   从发起 safepoint 请求到所有线程到达 safepoint 所花的时间
--   执行 safepoint 操作所花的时间。
+-   Time taken from initiating the safepoint request until all threads reach a safepoint
+-   Time taken to perform safepoint operation.
 
 
-因此，如果应用程序没有响应，可能是因为
+So, if applications are not responding, it may be because
 
-1.  JVM 正试图到达 safepoint，大多数线程已经停止，除了可能一两个线程，或者
-2.  JVM 已经到达 safepoint 并正在运行一些内部操作。可能是 GC、锁偏向撤销、缓存行失效等。
+1.  The JVM is trying to reach a safepoint and most threads have already stopped except maybe one or two, or
+2.  The JVM has reached a safepoint and is running some internal operations. May it be GC, lock bias revocation, cache line invalidation, etc.
 
-问题在于我们需要首先弄清楚是什么触发了暂停，然后调查暂停的哪一部分花了很长时间；是到达 safepoint 的时间（TTSP），还是执行 VM 操作的时间。
+The issue is that we need to figure out exactly what is triggering the pause in the first place if anything, and then investigate which part of the pause is taking a long time; the time to get to the safepoint (TTSP), or the time spent performing the VM operation.
 
-要做到这一点，需要更多的日志记录。需要添加到 JVM 的标志是 `-XX:+PrintSafepointStatistics -XX:PrintSafepointStatisticsCount=1`。添加这两个参数后，每次发生 safepoint 操作时，都会打印到 stdout 或配置的日志文件。
+To do that more logging is required. The flags that need to be added to the JVM are `-XX:+PrintSafepointStatistics -XX:PrintSafepointStatisticsCount=1`. Adding these two arguments will print to stdout or the configured log file every time a safepoint operation occurs.
 
-重要的是要重申，spin、block 和 sync 时间代表了 TTSP 的部分。因此，如果 TTSP 很大，可能意味着一个线程正在尝试完成其工作，而其余 JVM 线程暂停等待它到达 safepoint。这就是为什么 JVM 的总暂停时间必须考虑为 TTSP + cleanup + vmop。
 
-有了这些信息，我们可以方便地获取任何 JVM 日志并找出正在运行的操作。同时考虑 safepoint 日志和 GC 日志至关重要。否则可能会错过上面提到的关于 TTSP 的信息。
+
+It’s important to reiterate that the spin, block, and sync times represent portions of the TTSP. So, if TTSP is large it can mean that one thread might be attempting to finish its work, while the rest of the JVM threads are paused waiting for it to reach a safepoint. This is why the total pause time of a JVM must be considered TTSP + cleanup + vmop.
+
+With this information we can handily take any JVM logs and figure out which operations were running. It’s critical to consider both the safepoint logs and GC logs. Otherwise it’s possible to miss information about TTSP mentioned above.
 
 ## Example
 ### Preemptive Suspension
 
 ### Voluntary Suspension
-主线程会在子线程结束后打印 num，而不是我们期望的 1000ms 后。
+Main thread will print the num util sub thread ends, not after 1000ms we expected.
 
 ```java
 public static AtomicInteger num = new AtomicInteger(0);

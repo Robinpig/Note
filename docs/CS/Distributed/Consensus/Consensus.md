@@ -1,263 +1,264 @@
 ## Introduction
 
-共识是容错分布式系统中的一个基本问题。
-共识通常表述为一组进程之间的协议。
-共识涉及多个服务器对值达成一致。一旦它们对某个值做出决定，该决定就是最终的。
-典型的共识算法在任何多数服务器可用时都能取得进展；例如，一个由 5 台服务器组成的集群即使在 2 台服务器故障时也能继续运行。
-如果更多服务器故障，它们会停止取得进展（但永远不会返回错误结果）。
+Consensus is a fundamental problem in fault-tolerant distributed systems.
+Consensus is usually expressed in terms of agreement among a set of processes.
+Consensus involves multiple servers agreeing on values. Once they reach a decision on a value, that decision is final.
+Typical consensus algorithms make progress when any majority of their servers is available; for example, a cluster of 5 servers can continue to operate even if 2 servers fail.
+If more servers fail, they stop making progress (but will never return an incorrect result).
 
-共识通常出现在复制状态机的上下文中，这是一种构建容错系统的通用方法。
-每台服务器都有一个状态机和一个日志。状态机是我们要使其容错的组件，例如哈希表。
-对客户端来说，它们仿佛在与一个单一、可靠的状态机交互，即使集群中的少数服务器发生故障。
-每个状态机从其日志中获取命令作为输入。在我们的哈希表示例中，日志将包含类似 set x to 3 的命令。
-共识算法用于就服务器日志中的命令达成一致。
-共识算法必须确保，如果任何状态机将 set x to 3 作为第 n 条命令应用，则没有其他状态机会应用不同的第 n 条命令。
-因此，每个状态机处理相同的命令序列，从而产生相同的结果序列并达到相同的状态序列。
+Consensus typically arises in the context of replicated state machines, a general approach to building fault-tolerant systems.
+Each server has a state machine and a log. The state machine is the component that we want to make fault-tolerant, such as a hash table.
+It will appear to clients that they are interacting with a single, reliable state machine, even if a minority of the servers in the cluster fail.
+Each state machine takes as input commands from its log. In our hash table example, the log would include commands like set x to 3.
+A consensus algorithm is used to agree on the commands in the servers' logs.
+The consensus algorithm must ensure that if any state machine applies set x to 3 as the nth command, no other state machine will ever apply a different nth command.
+As a result, each state machine processes the same series of commands and thus produces the same series of results and arrives at the same series of states.
 
-分布式计算和多智能体系统中的一个基本问题是在存在多个故障进程的情况下实现整体系统可靠性。
-这通常需要协调进程以达成共识，或就计算所需的某个数据值达成一致。
-共识的示例应用包括就事务以何种顺序提交到数据库达成一致、状态机复制和原子广播。
-通常需要共识的实际应用包括云计算、时钟同步、PageRank、意见形成、智能电网、状态估计、无人机（以及一般的多机器人/智能体）控制、负载均衡、区块链等。
+A fundamental problem in distributed computing and multi-agent systems is to achieve overall system reliability in the presence of a number of faulty processes.
+This often requires coordinating processes to reach consensus, or agree on some data value that is needed during computation.
+Example applications of consensus include agreeing on what transactions to commit to a database in which order, state machine replication, and atomic broadcasts.
+Real-world applications often requiring consensus include cloud computing, clock synchronization, PageRank, opinion formation, smart power grids, state estimation, control of UAVs (and multiple robots/agents in general), load balancing, blockchain, and others.
 
-在许多情况下，节点之间达成一致非常重要。
-例如：
+There are a number of situations in which it is important for nodes to agree. 
+For example:
 
-- **领导者选举**
-  在单领导者复制的数据库中，所有节点需要就哪个节点是领导者达成一致。
-  如果某些节点因网络故障而无法与其他节点通信，领导地位可能会受到争议。
-  在这种情况下，共识对于避免错误的故障转移很重要，错误的故障转移会导致脑裂情况，即两个节点都自认为是领导者。
-  如果有两个领导者，它们都会接受写入，它们的数据会发散，导致不一致和数据丢失。
-- **原子提交**
-  在支持跨多个节点或分区的事务的数据库中，存在一个问题：事务可能在某些节点上失败但在其他节点上成功。
-  如果我们想维护事务原子性，必须让所有节点就事务的结果达成一致：要么全部中止/回滚（如果出错），要么全部提交（如果没有出错）。这个共识实例称为原子提交问题。
+- Leader election
+  In a database with single-leader replication, all nodes need to agree on which node is the leader.
+  The leadership position might become contested if some nodes can’t communicate with others due to a network fault.
+  In this case, consensus is important to avoid a bad failover, resulting in a split brain situation in which two nodes both believe themselves to be the leader.
+  If there were two leaders, they would both accept writes and their data would diverge, leading to inconsistency and data loss.
+- Atomic commit
+  In a database that supports transactions spanning several nodes or partitions, we have the problem that a transaction may fail on some nodes but succeed on others.
+  If we want to maintain transaction atomicity, we have to get all nodes to agree on the outcome of the transaction: either they all abort/roll back (if anything goes wrong) or they all commit (if nothing goes wrong). This instance of consensus is known as the atomic commit problem.
 
-原子提交的正式定义与共识略有不同：原子事务只有在所有参与者投票提交时才能提交，如果有任何参与者需要中止则必须中止。
-共识可以决定由某个参与者提出的任何值。
-然而，原子提交和共识可以相互归约。
-非阻塞原子提交比共识更难，请参见"三阶段提交"。
+Atomic commit is formalized slightly differently from consensus: an atomic transaction can commit only if all participants vote to commit, and must abort if any participant needs to abort.
+Consensus is allowed to decide on any value that is proposed by one of the participants.
+However, atomic commit and consensus are reducible to each other.
+Nonblocking atomic commit is harder than consensus—see “Three-phase commit".
 
-例如，共识的一些可能用途包括：
+For example, some possible uses of consensus are:
 
-- 决定是否将事务提交到数据库
-- 通过就当前时间达成一致来同步时钟
-- 同意进入分布式算法的下一阶段（这就是著名的复制状态机方法）
-- 选举领导者节点以协调某些更高级别的协议
+- deciding whether or not to commit a transaction to a database
+- synchronising clocks by agreeing on the current time
+- agreeing to move to the next stage of a distributed algorithm (this is the famous replicated state machine approach)
+- electing a leader node to coordinate some higher-level protocol
 
-## 问题描述
+## Problem description
 
-共识问题要求多个进程（或智能体）对单个数据值达成一致。
-某些进程（智能体）可能以其他方式发生故障或不可靠，因此共识协议必须具有容错性或弹性。
-进程必须以某种方式提出它们的候选值，相互通信，并就单个共识值达成一致。
+The consensus problem requires agreement among a number of processes (or agents) for a single data value.
+Some of the processes (agents) may fail or be unreliable in other ways, so consensus protocols must be fault tolerant or resilient.
+The processes must somehow put forth their candidate values, communicate with one another, and agree on a single consensus value.
 
-共识问题是多智能体系统控制中的一个基本问题。
-生成共识的一种方法是让所有进程（智能体）就多数值达成一致。
-在此上下文中，多数要求至少比可用票数的一半多一（其中每个进程获得一票）。
-然而，一个或多个故障进程可能会扭曲最终结果，导致无法达成共识或错误地达成共识。
+The consensus problem is a fundamental problem in control of multi-agent systems.
+One approach to generating consensus is for all processes (agents) to agree on a majority value.
+In this context, a majority requires at least one more than half of available votes (where each process is given a vote).
+However, one or more faulty processes may skew the resultant outcome such that consensus may not be reached or reached incorrectly.
 
-解决共识问题的协议旨在处理有限数量的故障进程。
-这些协议必须满足一些要求才能有用。例如，一个简单的协议可以让所有进程输出二进制值 1。
-这没有用，因此要求被修改为输出必须以某种方式依赖于输入。即共识协议的输出值必须是某个进程的输入值。
-另一个要求是进程只能决定一次输出值，并且此决定是不可撤销的。在某个执行中，如果没有发生故障，则该进程被称为正确的。
-容忍停故障的共识协议必须满足以下属性。
+Protocols that solve consensus problems are designed to deal with limited numbers of faulty processes.
+These protocols must satisfy a number of requirements to be useful. For instance, a trivial protocol could have all processes output binary value 1.
+This is not useful and thus the requirement is modified such that the output must somehow depend on the input. That is, the output value of a consensus protocol must be the input value of some process.
+Another requirement is that a process may decide upon an output value only once and this decision is irrevocable. A process is called correct in an execution if it does not experience a failure.
+A consensus protocol tolerating halting failures must satisfy the following properties.
 
-- **终止性**
-  最终，每个正确的进程都会决定某个值。
-- **有效性**
-  已决定的值必须是由某个进程提出的。
-- **一致性**
-  每个正确的进程必须就相同的值达成一致。
+- **Termination**
+  Eventually, every correct process decides some value.
+- **Validity**
+  The value that has been decided must have proposed by some process.
+- **Agreement**
+  Every correct process must agree on the same value.
 
-能够正确保证在最多 t 个故障的情况下 n 个进程达成共识的协议称为 t-弹性协议。
+A protocol that can correctly guarantee consensus amongst n processes of which at most t fail is said to be t-resilient.
 
-在评估共识协议的性能时，两个感兴趣的因素是运行时间和消息复杂度。
-运行时间以大 O 表示法表示，以消息交换轮数为单位，作为某些输入参数（通常是进程数和/或输入域的大小）的函数。
-消息复杂度指协议生成的消息流量。
-其他因素可能包括内存使用和消息大小。
+In evaluating the performance of consensus protocols two factors of interest are running time and message complexity.
+Running time is given in Big O notation in the number of rounds of message exchange as a function of some input parameters (typically the number of processes and/or the size of the input domain).
+Message complexity refers to the amount of message traffic that is generated by the protocol.
+Other factors may include memory usage and the size of messages.
 
-我们根据三类智能体对其进行描述：
+We characterize it in terms of three classes of agents:
 
-- **提议者** 提议者可以提出一个值。
-- **接受者** 接受者以某种方式协作选择一个提出的值。
-- **学习者** 学习者可以了解已选择的值。
+- **Proposers** A proposer can propose a value.
+- **Acceptors** The acceptors cooperate in some way to choose a single proposed value.
+- **Learners** A learner can learn what value has been chosen.
 
-在传统表述中，每个进程同时是提议者、接受者和学习者。
-然而，在分布式客户端/服务器系统中，我们也可以将客户端视为提议者和学习者，将服务器视为接受者。
+In the traditional statement, each process is a proposer, an acceptor, and a learner.
+However, in a distributed client/server system, we can also consider the clients to be the proposers and learners, and the servers to be the acceptors.
 
-共识问题由以下三个需求描述，其中 N 是接受者数量，F 是允许在不阻碍进展的情况下故障的接受者数量。
+The consensus problem is characterized by the following three requirements, where N is the number of acceptors and F is the number of acceptors that must be allowed to fail without preventing progress.
 
-- **非平凡性** 只有提议者提出的值才能被学习。
-- **安全性** 最多只能学习一个值。
-- **活性** 如果提议者 p、学习者 l 和一组 N − F 个接受者无故障且可以相互通信，且 p 提出一个值，则 l 最终会学习一个值。
+- **Nontriviality** Only a value proposed by a proposer can be learned.
+- **Safety** At most one value can be learned.
+- **Liveness** If a proposer p, a learner l, and a set of N − F acceptors are non-faulty and can communicate with one another, and if p proposes a value, then l will eventually learn a value.
 
-即使最多 M 个接受者是恶意的，且即使提议者是恶意的，也必须维护非平凡性和安全性。
-根据定义，学习者是非恶意的，因此条件仅适用于非恶意学习者。
-恶意接受者按定义为故障，因此活性条件中的 N − F 个接受者不包括恶意接受者。
-注意，M 是维护安全性的最大故障数，而 F 是确保活性的最大故障数。
-这些参数原则上是独立的。迄今为止，仅考虑了 M = 0（非拜占庭）和 M = F（拜占庭）的情况。
-如果恶意故障预计很少但不可忽略，我们可以假设 0 < M < F。
-如果安全性比活性更重要，我们可以假设 F < M。
+Nontriviality and safety must be maintained even if at most M of the acceptors are malicious, and even if proposers are malicious.
+By definition, a learner is non-malicious, so the conditions apply only to non-malicious learners.
+A malicious acceptor by definition has failed, so the N − F acceptors in the liveness condition do not include malicious ones.
+Note that M is the maximum number of failures under which safety is preserved, while F is the maximum number of failures under which liveness is ensured.
+These parameters are, in principle, independent. Hitherto, the only cases considered have been M = 0 (non-Byzantine) and M = F (Byzantine).
+If malicious failures are expected to be rare but not ignorable, we may assume 0 < M < F.
+If safety is more important than liveness, we might assume F < M .
 
-经典的 Fischer、Lynch、Paterson 结果（**FLP**）表明，没有纯粹的异步算法可以解决共识问题。
-然而，我们将活性要求中的"可以相互通信"解释为包括同步要求。
-因此，在任何情况下都必须维护非平凡性和安全性；只有当系统最终表现同步时，才需要活性。
-Dwork、Lynch 和 Stockmeyer 证明了存在满足这些要求的算法。
+The classic Fischer, Lynch, Paterson result(**FLP**) implies that no purely asynchronous algorithm can solve consensus.
+However, we interpret “can communicate with one another” in the liveness requirement to include a synchrony requirement.
+Thus, nontriviality and safety must be maintained in any case; liveness is required only if the system eventually behaves synchronously.
+Dwork, Lynch, and Stockmeyer([Consensus in the Presence of Partial Synchrony](http://courses.csail.mit.edu/6.897/fall04/papers/Dwork/consensus-in-ps.pdf)) showed the existence of an algorithm satisfying these requirements.
 
-以下是异步共识算法的近似下界结果。
+Here are approximate lower-bound results for an asynchronous consensus algorithm. Their precise statements and proofs will appear later.
 
-> **近似定理 1**
+> **Approximate Theorem 1**
 >
-> 如果至少有两个提议者，或一个恶意提议者，则 N > 2F + M。
+> If there are at least two proposers, or one malicious proposer, then N > 2F + M .
 
-> **近似定理 2**
+> **Approximate Theorem 2**
 >
-> 如果至少有两个提议者，或一个恶意提议者，则从提出值到学习该值之间至少存在 2 消息延迟。
+> If there are at least two proposers, or one malicious proposer, then there is at least a 2-message delay between the proposal of a value and the learning of that value.
 
-> **近似定理 3**
+> **Approximate Theorem 3**
 >
-> - 如果至少有两个提议者，其提议可以在尽管 Q 个接受者故障的情况下以 2 消息延迟被学习，或者有一个可能恶意且不是接受者的提议者，则 N > 2Q + F + 2M。
-> - 如果有一个可能恶意且也是接受者的提议者，其提议可以在尽管 Q 个接受者故障的情况下以 2 消息延迟被学习，则 N > max(2Q + F + 2M − 2, Q + F + 2M)。
+> - If there are at least two proposers whose proposals can be learned with a 2-message delay despite the failure of Q acceptors, or there is one such possibly malicious proposer that is not an acceptor, then N > 2Q + F + 2M .
+> - If there is a single possibly malicious proposer that is also an acceptor, and whose proposals can be learned with a 2-message delay despite the failure of Q acceptors, then N > max(2Q + F + 2M − 2, Q + F + 2M ).
 
-这些结果是近似的，因为存在边界不成立的特殊情况。
-例如，近似定理 1 在三个不同进程的情况下不成立：一个进程是提议者和接受者，一个进程是接受者和学习者，一个进程是提议者和学习者。
-在这种情况下，存在一个 N = 2、F = 1、M = 0 的异步共识算法。
+These results are approximate because there are special cases in which the bounds do not hold.
+For example, Approximate Theorem 1 does not hold in the case of three distinct processes: one process that is a proposer and an acceptor, one process that is an acceptor and a learner, and one process that is a proposer and a learner.
+In this case, there is an asynchronous consensus algorithm with N = 2, F = 1, and M = 0.
 
-当 M = 0 时，第一个定理相当明显，并且已在多种环境中得到证明。
-对于 M = F，它已在原始的拜占庭协议论文中得到证明。
+The first theorem is fairly obvious when M = 0 and has been proved in several settings.
+For M = F, it was proved in the [original Byzantine agreement paper](https://lamport.azurewebsites.net/pubs/reaching.pdf).
 
-## 计算模型
+## Models of computation
 
-不同的计算模型可能定义不同的"共识问题"。有些模型可能处理完全连接的图，而其他模型可能处理环和树。
-在某些模型中允许消息认证，而在其他模型中进程是完全匿名的。进程通过访问共享内存中的对象进行通信的共享内存模型也是一个重要的研究领域。
+Varying models of computation may define a "consensus problem". Some models may deal with fully connected graphs, while others may deal with rings and trees.
+In some models message authentication is allowed, whereas in others processes are completely anonymous. Shared memory models in which processes communicate by accessing objects in shared memory are also an important area of research.
 
-### 具有直接或可转移认证的通信信道
+### Communication channels with direct or transferable authentication
 
-在大多数通信协议模型中，参与者通过认证信道进行通信。
-这意味着消息不是匿名的，接收者知道他们收到的每条消息的来源。
-一些模型假设更强的、可转移的认证形式，其中每条消息由发送者签名，因此接收者不仅知道每条消息的直接来源，还知道最初创建该消息的参与者。
-这种更强的认证类型通过数字签名实现，当这种更强的认证形式可用时，协议可以容忍更多的故障。
+In most models of communication protocol participants communicate through authenticated channels.
+This means that messages are not anonymous, and receivers know the source of every message they receive.
+Some models assume a stronger, transferable form of authentication, where each message is signed by the sender, so that a receiver knows not just the immediate source of every message, but the participant that initially created the message.
+This stronger type of authentication is achieved by digital signatures, and when this stronger form of authentication is available, protocols can tolerate a larger number of faults.
 
-这两种不同的认证模型通常称为口头通信模型和书面通信模型。
-在口头通信模型中，信息的直接来源是已知的，而在更强的书面通信模型中，接收者不仅知道消息的直接来源，还知道消息的通信历史。
+The two different authentication models are often called oral communication and written communication models.
+In an oral communication model, the immediate source of information is known, whereas in stronger, written communication models, every step along the receiver learns not just the immediate source of the message, but the communication history of the message.
 
-### 共识的输入和输出
+### Inputs and outputs of consensus
 
-在最传统的单值共识协议（如 Paxos）中，协作节点就单个值（如整数）达成一致，该值可能具有可变大小，以便编码有用的元数据（如提交给数据库的事务）。
+In the most traditional single-value consensus protocols such as Paxos, cooperating nodes agree on a single value such as an integer, which may be of variable size so as to encode useful metadata such as a transaction committed to a database.
 
-单值共识问题的一个特例称为二元共识，它将输入以及输出域限制为单个二进制数字 {0,1}。
-虽然二元共识本身不是非常有用，但它通常用作更通用共识协议的构建块，特别是对于异步共识。
+A special case of the single-value consensus problem, called binary consensus, restricts the input, and hence the output domain, to a single binary digit {0,1}.
+While not highly useful by themselves, binary consensus protocols are often useful as building blocks in more general consensus protocols, especially for asynchronous consensus.
 
-在多值共识协议（如 Multi-Paxos 和 Raft）中，目标不仅是在单个值上达成一致，而是在一系列值上随时间达成一致，形成逐步增长的历史。
-虽然多值共识可以通过连续运行多次单值共识协议来简单实现，但许多优化和其他考虑（如重配置支持）可以使多值共识协议在实践中更高效。
+In multi-valued consensus protocols such as Multi-Paxos and Raft, the goal is to agree on not just a single value but a series of values over time, forming a progressively-growing history.
+While multi-valued consensus may be achieved naively by running multiple iterations of a single-valued consensus protocol in succession, many optimizations and other considerations such as reconfiguration support can make multi-valued consensus protocols more efficient in practice.
 
-## 崩溃故障与拜占庭故障
+## Crash and Byzantine failures
 
-进程可能经历两种类型的故障：崩溃故障或拜占庭故障。
-崩溃故障发生在进程突然停止且不再恢复时。
-拜占庭故障是对进程行为没有任何限制的故障。
-例如，它们可能由对手的恶意行为导致。
-经历拜占庭故障的进程可能向其他进程发送矛盾或冲突的数据，或者可能休眠并在长时间延迟后恢复活动。
-在这两种故障类型中，拜占庭故障更具破坏性。
+There are two types of failures a process may undergo, a crash failure or a Byzantine failure.
+A crash failure occurs when a process abruptly stops and does not resume.
+Byzantine failures are failures in which absolutely no conditions are imposed.
+For example, they may occur as a result of the malicious actions of an adversary.
+A process that experiences a Byzantine failure may send contradictory or conflicting data to other processes, or it may sleep and then resume activity after a lengthy delay.
+Of the two types of failures, Byzantine failures are far more disruptive.
 
-因此，容忍拜占庭故障的共识协议必须能够抵御可能发生的每一种错误。
+Thus, a consensus protocol tolerating Byzantine failures must be resilient to every possible error that can occur.
 
-容忍拜占庭故障的更强版本通过加强完整性约束来给出：
+A stronger version of consensus tolerating Byzantine failures is given by strengthening the Integrity constraint:
 
-**完整性**
-如果正确的进程决定 v，则 v 必须是由某个正确的进程提出的。
+**Integrity**
+If a correct process decides v, then v must have been proposed by some correct process.
 
-### 异步系统和同步系统
+### Asynchronous and synchronous systems
 
-共识问题可以在异步或同步系统的情况下考虑。
-虽然现实世界的通信通常是异步的，但建模同步系统更实用且通常更容易，因为异步系统自然比同步系统涉及更多问题。
+The consensus problem may be considered in the case of asynchronous or synchronous systems.
+While real world communications are often inherently asynchronous, it is more practical and often easier to model synchronous systems, given that asynchronous systems naturally involve more issues than synchronous ones.
 
-在同步系统中，假设所有通信按轮次进行。
-在一轮中，进程可以发送它需要的所有消息，同时接收来自其他进程的所有消息。
-这样，没有消息可以从一轮中影响同一轮内发送的任何消息。
+In synchronous systems, it is assumed that all communications proceed in rounds. 
+In one round, a process may send all the messages it requires, while receiving all messages from other processes.
+In this manner, no message from one round may influence any messages sent within the same round.
 
-## FLP 不可能性
+## FLP Impossibility
 
-假设处理完全是异步的；进程之间没有共享的时间概念。
-此类系统中的算法不能基于超时，并且进程无法判断其他进程是崩溃了还是只是运行太慢。
-鉴于这些假设，不存在可以在有界时间内保证共识的协议。
-没有完全异步的共识算法能够容忍甚至单个远程进程的未宣布崩溃。
+Assumes that processing is entirely asynchronous; there’s no shared notion of time between the processes.
+Algorithms in such systems cannot be based on timeouts, and there’s no way for a process to find out whether the other process has crashed or is simply running too slow.
+Given these assumptions, there exists no protocol that can guarantee consensus in a bounded time.
+No completely asynchronous consensus algorithm can tolerate the unannounced crash of even a single remote process.
 
-如果我们不考虑进程完成算法步骤的上限时间，则无法可靠地检测进程故障，并且没有确定性算法可以达成共识。
-这意味着我们无法在异步系统中总是在有界时间内达成共识。
-在实践中，系统至少表现出一定程度的同步性，并且解决此问题需要更精细的模型。
+If we do not consider an upper time bound for the process to complete the algorithm steps, process failures can’t be reliably detected, and there’s no deterministic algorithm to reach a consensus.
+It means that we cannot always reach consensus in an asynchronous system in bounded time.
+In practice, systems exhibit at least some degree of synchrony, and the solution to this problem requires a more refined model.
 
-FLP 结果基于异步模型，这实际上是一类表现出某些定时属性的模型。
-异步模型的主要特征是处理器接收、处理和响应传入消息所需的时间没有上限。
-因此，无法判断处理器是发生了故障，还是只是需要很长时间来处理。
-异步模型是一个弱模型，但并非完全物理上不现实。
-我们都遇到过似乎需要任意长时间来提供网页的 Web 服务器。
-随着移动自组织网络变得越来越普及，我们看到这些网络中的设备可能为了节省电量在处理过程中断电，然后稍后重新出现并继续运行，就像什么都没发生过一样。
-这引入了适合异步模型的任意延迟。
+The FLP result is based on the asynchronous model, which is actually a class of models which exhibit certain properties of timing.
+The main characteristic of asynchronous models is that there is no upper bound on the amount of time processors may take to receive, process and respond to an incoming message.
+Therefore it is impossible to tell if a processor has failed, or is simply taking a long time to do its processing. 
+The asynchronous model is a weak one, but not completely physically unrealistic.
+We have all encountered web servers that seem to take an arbitrarily long time to serve us a page.
+Now that mobile ad-hoc networks are becoming more and more pervasive, we see that devices in those networks may power down during processing to save battery, only to reappear later and continue as though nothing had happened.
+This introduces an arbitrary delay which fits the asynchronous model.
 
-在异步模型中解决共识问题并不总是可能的。
-此外，设计高效的同步算法并不总是可以实现的，并且对于某些任务，实际解决方案更可能是依赖于时间的。
+It is not always possible to solve a consensus problem in an asynchronous model.
+Moreover, designing an efficient synchronous algorithm is not always achievable, and for some tasks the practical solutions are more likely to be time-dependent [Efficiency of Synchronous Versus Asynchronous Distributed Systems](https://dl.acm.org/doi/pdf/10.1145/2402.322387).
 
-- 故障模型
-- 崩溃故障
-- 遗漏故障
+- Failure Models
+- Crash Faults
+- Omission Faults
 
-此模型假设进程跳过了某些算法步骤，或无法执行这些步骤，或此执行对其他参与者不可见，或者无法向其他参与者发送或接收消息。
+This model assumes that the process skips some of the algorithm steps, or is not able to execute them, or this execution is not visible to other participants, or it cannot send or receive messages to and from other participants.
 
-遗漏故障捕获了由故障网络链路、交换机故障或网络拥塞引起的进程间网络分区。
-网络分区可以表示为单个进程或进程组之间消息的遗漏。
-崩溃可以通过完全省略进出进程的任何消息来模拟。
+Omission fault captures network partitions between the processes caused by faulty network links, switch failures, or network congestion.
+Network partitions can be represented as omissions of messages between individual processes or process groups.
+A crash can be simulated by completely omitting any messages to and from the process.
 
-任意故障
+Arbitrary Faults
 
-避免 FLP：
+Avoid FLP:
 
-- 故障屏蔽
-- 故障检测器
-- 非确定性
+- Fault Masking
+- Failure Detectors
+- Non-Determinism
 
-在一个完全异步的消息传递分布式系统中，其中至少有一个进程可能发生崩溃故障，著名的 FLP 不可能性结果已经证明，实现共识的确定性算法是不可能的。
-这个不可能性结果源于最坏情况的调度场景，这些场景在实践中不太可能发生，除非在网络中的智能拒绝服务攻击者等对抗性情况下。
-在大多数正常情况下，进程调度具有一定程度的自然随机性。
+In a fully asynchronous message-passing distributed system, in which at least one process may have a crash failure, it has been proven in the famous FLP impossibility result that a deterministic algorithm for achieving consensus is impossible.
+This impossibility result derives from worst-case scheduling scenarios, which are unlikely to occur in practice except in adversarial situations such as an intelligent denial-of-service attacker in the network.
+In most normal situations, process scheduling has a degree of natural randomness.
 
-在异步模型中，某些形式的故障可以由同步共识协议处理。
-例如，通信链路的损失可以建模为经历拜占庭故障的进程。
+In an asynchronous model, some forms of failures can be handled by a synchronous consensus protocol.
+For instance, the loss of a communication link may be modeled as a process which has suffered a Byzantine failure.
 
-随机化共识算法可以通过以压倒性概率同时实现安全性和活性来规避 FLP 不可能性结果，即使在最坏情况的调度场景下也是如此。
+Randomized consensus algorithms can circumvent the FLP impossibility result by achieving both safety and liveness with overwhelming probability,
+even under worst-case scheduling scenarios such as an intelligent denial-of-service attacker in the network.
 
-### 故障检测器
+### Failure Detectors
 
-故障检测器的属性：
+properties of failure detectors:
 
-- 完全性
-- 准确性
+- Completeness
+- Accuracy
 
-最终弱故障检测器
+Eventually Weakly Failure Detector
 
-- 最终弱完全性
-- 最终弱准确性
+- Eventually Weakly Complete
+- Eventually Weakly Accurate
 
-## 许可型与无许可型共识
+## Permissioned versus permissionless consensus
 
-传统共识算法假设参与节点集合是固定的且预先给定的：
-即某些先前（手动或自动）配置过程已许可了一组特定的已知参与者，它们可以相互认证为组成员。
-在没有这种定义明确、具有认证成员的封闭组的情况下，对开放共识组的 Sybil 攻击甚至可以击败拜占庭共识算法，
-只需创建足够多的虚拟参与者来压倒容错阈值。
+Consensus algorithms traditionally assume that the set of participating nodes is fixed and given at the outset:
+that is, that some prior (manual or automatic) configuration process has permissioned a particular known group of participants who can authenticate each other as members of the group.
+In the absence of such a well-defined, closed group with authenticated members, a Sybil attack against an open consensus group can defeat even a Byzantine consensus algorithm,
+simply by creating enough virtual participants to overwhelm the fault tolerance threshold.
 
-相比之下，无许可共识协议允许网络中的任何人动态加入并参与，无需事先许可，
-而是强制采用不同形式的人造成本或进入壁垒来减轻 Sybil 攻击威胁。
-Bitcoin 引入了第一个使用工作量证明和难度调整函数的无许可共识协议，其中参与者竞争解决加密哈希谜题，
-并概率性地获得提交区块的权利，并根据其投入的计算工作量获得相应奖励。
-部分由于这种方法的高能源成本，后续的无许可共识协议提出或采用了其他替代参与规则来防范 Sybil 攻击，
-例如权益证明、空间证明和权威证明。
+A permissionless consensus protocol, in contrast, allows anyone in the network to join dynamically and participate without prior permission,
+but instead imposes a different form of artificial cost or barrier to entry to mitigate the Sybil attack threat.
+Bitcoin introduced the first permissionless consensus protocol using proof of work and a difficulty adjustment function, in which participants compete to solve cryptographic hash puzzles,
+and probabilistically earn the right to commit blocks and earn associated rewards in proportion to their invested computational effort.
+Motivated in part by the high energy cost of this approach, subsequent permissionless consensus protocols have proposed or adopted other alternative participation rules for Sybil attack protection,
+such as proof of stake, proof of space, and proof of authority.
 
 
-## 共识算法
+## Consensus Algorithms
 
-### 复制状态机
+### Replicated State Machines
 
-复制状态机通常使用复制日志实现，如图 1 所示。
-每台服务器存储一个包含一系列命令的日志，其状态机按顺序执行这些命令。
-每个日志包含相同的命令且顺序相同，因此每个状态机处理相同的命令序列。
-由于状态机是确定性的，每个状态机会计算出相同的状态和相同的输出序列。
+Replicated state machines are typically implemented using a replicated log, as shown in Figure 1.
+Each server stores a log containing a series of commands, which its state machine executes in order.
+Each log contains the same commands in the same order, so each state machine processes the same sequence of commands.
+Since the state machines are deterministic, each computes the same state and the same sequence of outputs.
 
 <div style="text-align: center;">
 
@@ -267,106 +268,109 @@ Bitcoin 引入了第一个使用工作量证明和难度调整函数的无许可
 
 <p style="text-align: center;">
 
-Fig.1. 复制状态机架构。
-共识算法管理一个包含来自客户端的状态机命令的复制日志。
-状态机处理来自日志的相同命令序列，因此它们产生相同的输出。
+Fig.1. Replicated state machine architecture.
+The consensus algorithm manages a replicated log containing state machine commands from clients.
+The state machines process identical sequences of commands from the logs, so they produce the same outputs.
 
 </p>
 
-保持复制日志一致是共识算法的工作。
-服务器上的共识模块从客户端接收命令并将其添加到日志中。
-它与其他服务器上的共识模块通信，以确保每个日志最终包含相同的请求且顺序相同，即使某些服务器发生故障。
-一旦命令被正确复制，每台服务器的状态机按日志顺序处理它们，并将输出返回给客户端。
-因此，这些服务器看起来构成一个单一的、高度可靠的状态机。
+Keeping the replicated log consistent is the job of the consensus algorithm.
+The consensus module on a server receives commands from clients and adds them to its log.
+It communicates with the consensus modules on other servers to ensure that every log eventually contains the same requests in the same order, even if some servers fail.
+Once commands are properly replicated, each server’s state machine processes them in log order, and the outputs are returned to clients.
+As a result, the servers appear to form a single, highly reliable state machine.
 
 ### 2PC
 
-如果没有故障，共识是容易的。
+Consensus is easy if there are no faults.
 
-顾名思义，2PC 在两个不同的阶段运行。
+As its name suggests, 2PC operates in two distinct phases.
 
-- 第一个提议阶段涉及向系统中的每个参与者提出一个值并收集响应。
-- 第二个提交或中止阶段将投票结果传达给参与者，并告诉它们要么继续决定，要么中止协议。
+- The first proposal phase involves proposing a value to every participant in the system and gathering responses.
+- The second commit-or-abort phase communicates the result of the vote to the participants and tells them either to go ahead and decide or abort the protocol.
 
-提出值的过程称为协调者，不需要特殊选举——任何节点都可以充当协调者，因此可以发起一轮 2PC。
+The process that proposes values is called the coordinator, and does not have to be specially elected - any node can act as the coordinator if they want to and therefore initiate a round of 2PC.
 
-2PC 存在一个缺陷。如果允许节点发生故障——即使只有一个节点发生故障——事情就会变得复杂得多。
+There is a fly in 2PC’s ointment. If nodes are allowed to fail - if even a single node can fail - then things get a good deal more complicated.
 
-2PC 仍然是一个非常流行的共识协议，因为它具有较低的消息复杂度（尽管在故障情况下，如果每个节点都决定成为恢复节点，复杂度可能达到 O(n^2)）。
-与协调者通信的客户端可以在 3 个消息延迟的时间内得到回复。这种低延迟对一些应用非常有吸引力。
+2PC is still a very popular consensus protocol, because it has a low message complexity (although in the failure case, if every node decides to be the recovery node the complexity can go to $O(n^2)$.
+A client that talks to the co-ordinator can have a reply in 3 message delays’ time. This low latency is very appealing for some applications.
 
-然而，2PC 可能因协调者故障而阻塞，这是一个严重影响可用性的重大问题。
-如果事务可以随时回滚，则协议可以在节点超时时恢复，但如果协议必须将任何提交决定视为永久的，错误的故障可能导致整个系统戛然而止。
+However, the fact the 2PC can block on co-ordinator failure is a significant problem that dramatically hurts availability.
+If transactions can be rolled back at any time, then the protocol can recover as nodes time out, but if the protocol has to respect any commit decisions as permanent, the wrong failure can bring the whole thing to a juddering halt.
 
-2PC 的根本困难在于，一旦协调者做出提交决定并通知到某些副本，这些副本立即执行提交操作，而不检查其他所有副本是否都收到了消息。
-然后，如果已提交的副本与协调者一起崩溃，系统无法得知事务的结果是什么（因为只有协调者和收到消息的副本确切知道）。
-由于事务可能已在崩溃的副本上提交，协议无法悲观地中止，因为事务可能已经产生了不可撤销的副作用。
-类似地，协议无法乐观地强制事务提交，因为原始投票可能是中止。
+The fundamental difficulty with 2PC is that, once the decision to commit has been made by the co-ordinator and communicated to some replicas, the replicas go right ahead and act upon the commit statement without checking to see if every other replica got the message.
+Then, if a replica that committed crashes along with the co-ordinator, the system has no way of telling what the result of the transaction was (since only the co-ordinator and the replica that got the message know for sure).
+Since the transaction might already have been committed at the crashed replica, the protocol cannot pessimistically abort - as the transaction might have had side-effects that are impossible to undo.
+Similarly, the protocol cannot optimistically force the transaction to commit, as the original vote might have been to abort.
+
 
 ### 3PC
 
-这个问题——大部分——通过向 2PC 添加一个额外阶段来规避，这毫不意外地给我们带来了三阶段提交协议。
-这个想法非常简单。我们将 2PC 的第二阶段"提交"拆分为两个子阶段。第一个是"准备提交"阶段。
-当协调者在第一阶段收到全体一致的"是"投票时，它向所有副本发送此消息。
-收到此消息后，副本进入一个能够提交事务的状态——通过获取必要的锁等——但关键是，不做任何之后无法撤销的工作。
-然后它们回复协调者，告知已收到"准备提交"消息。
+This problem is - mostly - circumvented by the addition of an extra phase to 2PC, unsurprisingly giving us a three-phase commit protocol.
+The idea is very simple. We break the second phase of 2PC - ‘commit’ - into two sub-phases. The first is the ‘prepare to commit’ phase.
+The co-ordinator sends this message to all replicas when it has received unanimous ‘yes’ votes in the first phase.
+On receipt of this messages, replicas get into a state where they are able to commit the transaction - by taking necessary locks and so forth - but crucially do not do any work that they cannot later undo.
+They then reply to the co-ordinator telling it that the ‘prepare to commit’ message was received.
 
-此阶段的目的是将投票结果传达给每个副本，以便无论哪个副本发生故障，协议状态都可以恢复。
+The purpose of this phase is to communicate the result of the vote to every replica so that the state of the protocol can be recovered no matter which replica dies.
 
-协议的最后一个阶段几乎与 2PC 中原始的"提交或中止"阶段完全相同。
-如果协调者从所有副本收到"准备提交"消息的送达确认，那么继续进行事务提交是安全的。
-然而，如果送达未确认，协调者无法保证如果它崩溃，协议状态可以恢复（如果你容忍固定数量 f 的故障，协调者可以在收到 f+1 个确认后继续）。
-在这种情况下，协调者将中止事务。
+The last phase of the protocol does almost exactly the same thing as the original ‘commit or abort’ phase in 2PC.
+If the co-ordinator receives confirmation of the delivery of the ‘prepare to commit’ message from all replicas, it is then safe to go ahead with committing the transaction.
+However, if delivery is not confirmed, the co-ordinator cannot guarantee that the protocol state will be recovered should it crash (if you are tolerating a fixed number ff of failures, the co-ordinator can go ahead once it has received f+1f+1 confirmations).
+In this case, the co-ordinator will abort the transaction.
 
-如果协调者在任何时候崩溃，恢复节点可以接管事务并从任何剩余的副本查询状态。
-如果已提交事务的副本已崩溃，我们知道所有其他副本都已收到"准备提交"消息（否则协调者不会进入提交阶段），
-因此恢复节点将能够确定事务可以提交，并安全地将协议引导至完成。
-如果任何副本向恢复节点报告尚未收到"准备提交"，恢复节点将知道事务尚未在任何副本上提交，因此将能够悲观地中止或从头重新运行协议。
+If the co-ordinator should crash at any point, a recovery node can take over the transaction and query the state from any remaining replicas.
+If a replica that has committed the transaction has crashed, we know that every other replica has received a ‘prepare to commit’ message (otherwise the co-ordinator wouldn’t have moved to the commit phase),
+and therefore the recovery node will be able to determine that the transaction was able to be committed, and safely shepherd the protocol to its conclusion.
+If any replica reports to the recovery node that it has not received ‘prepare to commit’, the recovery node will know that the transaction has not been committed at any replica, and will therefore be able either to pessimistically abort or re-run the protocol from the beginning.
 
-那么 3PC 解决了我们所有的问题吗？不完全，但它已经很接近了。
-在网络分区的情况下，问题出现了——想象一下所有收到"准备提交"的副本位于分区的一侧，而没有收到的位于另一侧。
-然后两个分区将继续运行，各自有恢复节点分别提交或中止事务，当网络合并时，系统将处于不一致状态。
-因此，3PC 与 2PC 一样可能存在不安全的运行，但它总能取得进展，因此满足其活性属性。
-3PC 不会因单节点故障而阻塞，这使得它对于高可用性比低延迟更重要的服务更有吸引力。
+So does 3PC fix all our problems? Not quite, but it comes close.
+In the case of a network partition, the wheels rather come off - imagine that all the replicas that received ‘prepare to commit’ are on one side of the partition, and those that did not are on the other.
+Then both partitions will continue with recovery nodes that respectively commit or abort the transaction, and when the network merges the system will have an inconsistent state.
+So 3PC has potentially unsafe runs, as does 2PC, but will always make progress and therefore satisfies its liveness properties.
+The fact that 3PC will not block on single node failures makes it much more appealing for services where high availability is more important than low latencies.
 
-3PC 实际上仅在具有崩溃停止故障的同步网络中才能良好工作。
+3PC in fact only works well in a synchronous network with crash-stop failures.
 
 ## XA
 
-### 可调一致性模型 - Quorum NWR
+### Tunable consistency model - Quorum NWR
 
 Dynamo DB / Cassandra
 
-Quorum NWR 定义：
-- N：副本数
-- W：写仲裁大小为 W。写操作要被视为成功，必须从 W 个副本收到确认
-- R：读仲裁大小为 R。读操作要被视为成功，必须从 R 个副本收到确认
+Quorum NWR Definition:
+- N: The number of replicas
+- W: A write quorum of size W. For a write operation to be considered as successful, write operation must be acknowledged from W replicas
+- R: A read quorum of size W. For a read operation to be considered as successful, read operation must be acknowledged from R replicas
 
-如果 W+R > N，可以保证强一致性，因为至少有一个重叠节点拥有最新数据以确保一致性
+If W+R > N, could guarantee strong consistency because there must be at least one overlapping node that has the latest data to ensure consistency
 
-典型设置：
-- 如果 R = 1 且 W = N，系统针对快速读取优化
-- 如果 R = N 且 W = 1，系统针对快速写入优化
-- 如果 W + R > N，保证强一致性（通常 N = 3，W = R = 2）
+Typical setup:
+- If R = 1 and W = N, the system is optimized for a fast read
+- If R = N and W = 1, the system is optimized for a fast write
+- If W + R > N, strong consistency is guaranteed (Usually N = 3, W = R = 2)
 
 ### Paxos
 
-[Paxos](/docs/CS/Distributed/Consensus/Paxos.md) 是一族用于达成共识的分布式算法。
+[Paxos](/docs/CS/Distributed/Consensus/Paxos.md) is a family of distributed algorithms used to reach consensus.
 
 ### Raft
 
-[Raft](/docs/CS/Distributed/Consensus/Raft.md) 是一种设计为易于理解的共识算法。
+[Raft](/docs/CS/Distributed/Consensus/Raft.md) is a consensus algorithm that is designed to be easy to understand.
 
 ### ZAB
 
 ### PBFT
 
-标准的共识算法无法胜任，因为它们本身不具备拜占庭容错能力。
+Standard consensus algorithms won’t do as they themselves are not Byzantine fault tolerant.
 
-## 区块链
+
+## blockchain
+
 
 共识算法还有一个很重要的领域，就是比较火的区块链，比如工作量证明（POW）、权益证明（POS）和委托权益证明（DPOS）、置信度证明（PoB）等等，都是共识算法
-大家熟知的zk、etcd这种之所以叫"传统分布式"，就是相对于区块链这种"新型分布式系统"而言的，都是多节点共同工作，只是区块链有几点特殊：
+大家熟知的zk、etcd这种之所以叫“传统分布式”，就是相对于区块链这种”新型分布式系统“而言的，都是多节点共同工作，只是区块链有几点特殊：
 1. 区块链需要解决的是拜占庭将军问题，paxos之类的一致性算法无法对抗欺诈节点
 2. 区块链中不存在中央控制方，没有一个节点可以控制或协调账本数据的生成
 3. 区块链中的共识算法如果达不到一致性，则任何人都可以硬分叉，另建一个社区、一条链
@@ -378,7 +382,7 @@ PoW，Proof of Work
 不足：
 - 速度慢。
 - 耗能巨大，对环境不好。
-- 易受"规模经济"（economies of scale）的影响。
+- 易受“规模经济”（economies of scale）的影响。
 使用者：Bitcoin、Ethereum、Litecoin、Dogecoin等。
 类型：有竞争共识（Competitive consensus）
 https://bitcoin.org/bitcoin.pdf
@@ -387,9 +391,9 @@ PoS，Proof of Stake）
 优点：
 - 节能。
 - 攻击者代价更大。
-- 不易受"规模经济"的影响。
+- 不易受“规模经济”的影响。
 不足：
-- "无利害关系"（Nothing at stake）攻击问题。
+- “无利害关系“(Nothing at stake)”攻击问题。
 使用者：Ethereum（即将推出）、Peercoin、Nxt。
 类型：有竞争共识。
 
@@ -401,7 +405,9 @@ PoS，Proof of Stake）
 不足：
 * 只有使用 PoW 或 PoS 的区块链，才能采用这种共识算法。
 
-* 在"公证员激活"（Notaries Active）模式下，必须校准不同节点（公证员或正常节点）的哈希率，否则哈希率间的差异会爆炸
+* 在“公证员激活”（Notaries Active）模式下，必须校准不同节点（公证员或正常节点）的哈希率，否则哈希率间的差异会爆炸
+ 
+
 
 ## Links
 
@@ -431,3 +437,7 @@ PoS，Proof of Stake）
 20. [A Survey of Distributed Consensus Protocols for Blockchain Networks](https://arxiv.org/pdf/1904.04098.pdf)
 21. [Consensus in the Presence of Partial Synchrony](https://dl.acm.org/doi/pdf/10.1145/42282.42283)
 22. [ConsensusPedia: An Encyclopedia of 30+ Consensus Algorithms](https://hackernoon.com/consensuspedia-an-encyclopedia-of-29-consensus-algorithms-e9c4b4b7d08f)
+
+
+
+

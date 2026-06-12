@@ -158,7 +158,7 @@ public class EurekaServerBootstrap {
 ### EurekaBootStrap
 
 
-初始化 Eureka，包括与其他 Eureka 对等节点同步以及发布注册信息。
+Initializes Eureka, including syncing up with other Eureka peers and publishing the registry.
 ```java
 public abstract class EurekaBootStrap implements ServletContextListener {
     @Override
@@ -198,10 +198,10 @@ public abstract class EurekaBootStrap implements ServletContextListener {
 
 #### initEurekaServerContext
 
-启动 Eureka server 的类。
-Eureka server 通过类路径中 eureka.server.props 指定的 EurekaServerConfig 配置。
-Eureka client 组件也通过 eureka.client.props 指定的 EurekaInstanceConfig 配置进行初始化。
-如果服务器运行在 AWS 云中，Eureka server 会按指定方式将其绑定到弹性 IP。
+The class that kick starts the eureka server.
+The eureka server is configured by using the configuration EurekaServerConfig specified by eureka.server.props in the classpath.
+The eureka client component is also initialized by using the configuration EurekaInstanceConfig specified by eureka.client.props.
+If the server runs in the AWS cloud, the eureka server binds it to the elastic ip as specified.
 
 ```java
 public abstract class EurekaBootStrap implements ServletContextListener {
@@ -698,8 +698,8 @@ protected void updateRenewsPerMinThreshold() {
 
 ## serve
 
-ServletContainer 是 Jersey 框架的核心处理类，每一个 Web 框架都会有一个前端处理器，统一接收并处理客户端的请求，类似于 Spring MVC 中的 DispatcherServlet。
-与 DispatcherServlet 是一个 Servlet 不同的是，它既是一个 Servlet 同时也实现了 Filter。
+ServletContainer是 jersey 框架的核心处理类，每一个 Web 框架都会有一个前端处理器。统一接收并处理客户端的请求。类似于 Spring MVC 中的 DispatcherServlet
+与 DispatcherServlet 是一个 Servlet 不同的是它既是一个 Servlet 同时也实现了 Filter
 
 
 #### register monitor

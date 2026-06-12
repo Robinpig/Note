@@ -1,43 +1,206 @@
 ## Introduction
 
-ReentrantLock 实现 [Lock](/docs/CS/Java/JDK/Concurrency/Lock.md) 接口，提供与 [synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md) 相同的互斥和内存可见性保证。
-获取 ReentrantLock 与进入 synchronized 块具有相同的内存语义，释放 ReentrantLock 与退出 synchronized 块具有相同的内存语义。
-而且，与 synchronized 一样，ReentrantLock 提供可重入的锁定语义。
-ReentrantLock 支持 Lock 定义的所有锁获取模式，在处理锁不可用方面比 synchronized 提供更大的灵活性。
+ReentrantLock implements [Lock](/docs/CS/Java/JDK/Concurrency/Lock.md), providing the same mutual exclusion and memory-visibility guarantees as [synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md). 
+Acquiring a ReentrantLock has the same memory semantics as entering a synchronized block, and releasing a ReentrantLock has the same memory semantics as exiting a synchronized block.
+And, like synchronized, ReentrantLock offers reentrant locking semantics. 
+ReentrantLock supports all of the lock-acquisition modes defined by Lock, providing more flexibility for dealing with lock unavailability than does synchronized.
 
-**为什么要创建与内置锁如此相似的新锁定机制？**
 
-内置锁在大多数情况下工作正常，但有一些功能限制——无法中断正在等待获取锁的线程，
-或者无法尝试获取锁而不愿意永远等待。
-内置锁也必须在获取它们的相同代码块中释放；
-这简化了编码并与异常处理良好地交互，但使得非块结构的锁定纪律变得不可能。
 
-一种可重入的互斥锁，具有与使用 synchronized 方法和语句访问的隐式监视器锁相同的基本行为和语义，但具有扩展能力。
-ReentrantLock 由最后一个成功锁定但尚未解锁的线程拥有。当锁不被其他线程持有时，调用 lock 的线程将返回，
-成功获取锁。
-如果当前线程已经拥有锁，该方法将立即返回。
-这可以通过 isHeldByCurrentThread 和 getHoldCount 方法检查。
+**Why create a new locking mechanism that is so similar to intrinsic locking?**
 
-此类的构造方法接受一个可选的公平性参数。当设置为 true 时，在争用下，锁倾向于授予等待时间最长的线程。否则，此锁不保证任何特定的访问顺序。使用公平锁的程序在多线程访问时可能显示较低的整体吞吐量（即更慢，通常慢得多），但获得锁的时间方差更小，并保证无饥饿。但注意，锁的公平性并不能保证线程调度的公平性。因此，使用公平锁的多个线程中的一个可能连续多次获得锁，而其他活跃线程没有进展且当前未持有锁。另请注意，无定时的 tryLock() 方法不遵守公平性设置。如果锁可用，即使其他线程在等待，它也会成功。
+Intrinsic locking works fine in most situations but has some functional limitations—it is not possible to interrupt a thread waiting to acquire a lock, 
+or to attempt to acquire a lock without being willing to wait for it forever. 
+Intrinsic locks also must be released in the same block of code in which they are acquired; 
+this simplifies coding and interacts nicely with exception handling, but makes non-blockstructured locking disciplines impossible.
 
-建议的做法是始终在 lock 调用后立即跟随 try 块，最常见的是在 before/after 构造中，例如：
+
+A reentrant mutual exclusion Lock with the same basic behavior and semantics as the implicit monitor lock accessed using synchronized methods and statements, but with extended capabilities.
+A ReentrantLock is owned by the thread last successfully locking, but not yet unlocking it. A thread invoking lock will return, 
+successfully acquiring the lock, when the lock is not owned by another thread. 
+The method will return immediately if the current thread already owns the lock. 
+This can be checked using methods isHeldByCurrentThread, and getHoldCount.
+
+
+The constructor for this class accepts an optional fairness parameter. When set true, under contention, locks favor granting access to the longest-waiting thread. Otherwise this lock does not guarantee any particular access order. Programs using fair locks accessed by many threads may display lower overall throughput (i.e., are slower; often much slower) than those using the default setting, but have smaller variances in times to obtain locks and guarantee lack of starvation. Note however, that fairness of locks does not guarantee fairness of thread scheduling. Thus, one of many threads using a fair lock may obtain it multiple times in succession while other active threads are not progressing and not currently holding the lock. Also note that the untimed tryLock() method does not honor the fairness setting. It will succeed if the lock is available even if other threads are waiting.
+
+It is recommended practice to always immediately follow a call to lock with a try block, most typically in a before/after construction such as:
 
 ```java
-class X {
-    private final ReentrantLock lock = new ReentrantLock();
-    // ...
 
-    public void m() {
-        lock.lock();  // block until condition holds
-        try {
-            // ... method body
-        } finally {
-            lock.unlock();
-        }
-    }
+ class X {
+   private final ReentrantLock lock = new ReentrantLock();
+   // ...
+
+   public void m() {
+     lock.lock();  // block until condition holds
+     try {
+       // ... method body
+     } finally {
+       lock.unlock()
+     }
+   }
+ }
+```
+
+In addition to implementing the Lock interface, this class defines a number of public and protected methods for inspecting the state of the lock. 
+Some of these methods are only useful for instrumentation and monitoring.
+Serialization of this class behaves in the same way as built-in locks: a deserialized lock is in the unlocked state, regardless of its state when serialized.
+This lock supports a maximum of 2147483647 recursive locks by the same thread. Attempts to exceed this limit result in Error throws from locking methods.
+
+
+## lock
+
+```java
+public void lock() {
+    sync.lock();
+}
+
+// NonFairSync
+final void lock() {
+    if (compareAndSetState(0, 1)) // quick CAS for first lock
+        setExclusiveOwnerThread(Thread.currentThread());
+    else
+        acquire(1);
+}
+
+// FairSync
+final void lock() {
+    acquire(1);
 }
 ```
 
-## Links
 
-- [JDK Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
+
+### nonfairTryAcquire
+
+invoke in tryAcquire
+
+```java
+final boolean nonfairTryAcquire(int acquires) {
+    final Thread current = Thread.currentThread();
+    int c = getState();
+    if (c == 0) {
+        if (compareAndSetState(0, acquires)) {
+            setExclusiveOwnerThread(current);
+            return true;
+        }
+    }
+    else if (current == getExclusiveOwnerThread()) {
+        int nextc = c + acquires;
+        if (nextc < 0) // overflow
+            throw new Error("Maximum lock count exceeded");
+        setState(nextc);
+        return true;
+    }
+    return false;
+}
+```
+
+
+
+### FairSync#tryAcquire 
+
+```java
+/**
+ * Fair version of tryAcquire.  Don't grant access unless
+ * recursive call or no waiters or is first.
+ */
+protected final boolean tryAcquire(int acquires) {
+    final Thread current = Thread.currentThread();
+    int c = getState();
+    if (c == 0) {
+        if (!hasQueuedPredecessors() &&
+            compareAndSetState(0, acquires)) {
+            setExclusiveOwnerThread(current);
+            return true;
+        }
+    }
+    else if (current == getExclusiveOwnerThread()) {
+        int nextc = c + acquires;
+        if (nextc < 0)
+            throw new Error("Maximum lock count exceeded");
+        setState(nextc);
+        return true;
+    }
+    return false;
+}
+```
+
+see [hasQueuedPredecessors](/docs/CS/Java/JDK.Concurrency/AQS.md?id=hasqueuedpredecessors)
+
+## unlock
+
+```java
+public void unlock() {
+    sync.release(1);
+}
+
+protected final boolean tryRelease(int releases) {
+    int c = getState() - releases;
+    if (Thread.currentThread() != getExclusiveOwnerThread())
+        throw new IllegalMonitorStateException();
+    boolean free = false;
+    if (c == 0) {
+        free = true;
+        setExclusiveOwnerThread(null);
+    }
+    setState(c);
+   
+```
+
+
+
+## tryLock
+
+only nonfairTryAcquire
+
+```java
+public boolean tryLock() {
+    return sync.nonfairTryAcquire(1);
+}
+```
+
+
+
+## FairSync vs NonFairSync
+
+公平锁和非公平锁的核心差异体现在 lock() 方法和 acquire() 方法中的 tryAcquire() 实现上
+
+非公平锁的两大插队点：
+
+- 调用 lock() 时：直接尝试 CAS 抢占，如果锁恰好被释放，新线程就能立刻获得锁，即使等待队列里有老线程。
+- 在 tryAcquire() 中锁空闲时：同样直接 CAS 抢占，不检查等待队列
+
+公平锁的规则：锁空闲时，必须通过 hasQueuedPredecessors() 确认等待队列中没有其他线程在排队，当前线程才能获取锁。这样保证了严格遵循 FIFO 顺序
+
+
+|        | FairSync                    | NonFairSync |
+| ------ | --------------------------- | ----------- |
+| lock   | check hasQueuedPredecessors | quick CAS   |
+| unlock | -                           | -           |
+
+
+
+
+## ReentrantLock vs synchronized
+
+
+
+|               | ReentrantLock     | synchronized |
+| ------------- | ----------------- | ------------ |
+| Fair          | has FairLock      | - |
+| Share         | has shared        | - |
+| Interruptible | has interruptible | - |
+| Timeout | has tryLock(timeout) | - |
+| Condition | Multiple conditions | - |
+| Other | can get length of queue | - |
+| Use | only for code block | for method/code block |
+| Unlock | must unlock in finally | Auto Unlock |
+
+
+
+
+
+## Summary
+

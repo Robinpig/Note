@@ -1,4 +1,4 @@
-## 简介
+## Introduction
 
 > [!NOTE]
 > 
@@ -6,91 +6,96 @@
 > 
 > A set of processes is deadlocked if each process in the set is waiting for an event that only another process in the set can cause.
 
-死锁的主要类别涉及某些进程已获得独占访问权限的资源。
-简而言之，资源是在一段时间内必须被获取、使用和释放的任何东西。
+A major class of deadlocks involves resources to which some process has been granted exclusive access.
+In short, a resource is anything that must be acquired, used, and released over the course of time.
 
-资源分为两类：可抢占和不可抢占。
+Resources come in two types: preemptable and nonpreemptable.
 
-通常，死锁涉及不可抢占资源。
+In general, deadlocks involve nonpreemptable resources.
 
-在大多数情况下，每个进程等待的事件是释放当前由集合中另一个成员持有的某个资源。
-这种死锁称为资源死锁。
+In most cases, the event that each process is waiting for is the release of some resource currently possessed by another member of the set.
+This kind of deadlock is called a resource deadlock.
 
-### 必要条件
+### Necessary Conditions
 
-如果系统中同时出现以下四个条件，则可能发生死锁：
-1. 互斥条件。
-   至少一个资源必须以非共享模式持有；也就是说，一次只有一个线程可以使用该资源。
-   如果另一个线程请求该资源，请求线程必须被延迟，直到资源被释放。
-2. 持有并等待。
-   一个线程必须持有至少一个资源，并等待获取当前被其他线程持有的额外资源。
-3. 不可抢占。
-   资源不能被抢占；也就是说，资源只能由持有它的线程在完成其任务后自愿释放。
-4. 循环等待。
+A deadlock situation can arise if the following four conditions hold simultaneously in a system:
+1. Mutual exclusion. 
+   At least one resource must be held in a nonsharable mode; that is, only one thread at a time can use the resource. 
+   If another thread requests that resource, the requesting thread must be delayed until the resource has been released.
+2. Hold and wait. 
+   A thread must be holding at least one resource and waiting to acquire additional resources that are currently being held by other threads.
+3. No preemption. 
+   Resources cannot be preempted; that is, a resource can be released only voluntarily by the thread holding it, after that thread has completed its task.
+4. Circular wait.
 
-发生资源死锁必须同时满足这四个条件。
-循环等待条件蕴含了持有并等待条件，因此这四个条件并非完全独立。
+All four of these conditions must be present for a resource deadlock to occur.
+The circular-wait condition implies the hold-and-wait condition, so the four conditions are not completely independent.
 
-### 处理死锁
 
-通常，有四种策略用于处理死锁。
-1. 忽略问题。也许你忽略它，它也会忽略你。
-2. 检测与恢复。让死锁发生，检测它们，然后采取行动。
-3. 通过谨慎资源分配进行动态避免。
-4. 预防，通过结构性地否定四个条件之一。
+### Handling Deadlocks
 
-第一种解决方案是大多数操作系统（包括 Linux 和 Windows）使用的方案。
-然后由内核和应用程序开发者编写处理死锁的程序。
+In general, four strategies are used for dealing with deadlocks.
+1. Just ignore the problem. Maybe if you ignore it, it will ignore you.
+2. Detection and recovery. Let them occur, detect them, and take action.
+3. Dynamic avoidance by careful resource allocation.
+4. Prevention, by structurally negating one of the four conditions.
 
-## 死锁避免
+The first solution is the one used by most operating systems, including Linux and Windows. 
+It is then up to kernel and application developers to write programs that handle deadlocks.
 
-死锁避免基本上是不可能的，因为它需要关于未来请求的信息，而这些信息是未知的。
 
-### 安全状态
+## Deadlock Avoidance
 
-### 银行家算法
+Deadlock avoidance is essentially impossible, because it requires information about future requests, which is not known.
 
-实际上，现有系统很少（如果有的话）使用银行家算法来避免死锁。
-然而，一些系统使用类似于银行家算法的启发式方法来预防死锁。
-例如，当缓冲区利用率高于 70% 时，网络可能会限制流量——估计剩余的 30% 足以让当前用户完成服务并归还其资源。
+### Safe State
 
-## 死锁预防
 
-### 互斥条件
+### Banker’s Algorithm
 
-互斥条件必须成立。也就是说，至少有一个资源必须是非共享的。可共享资源不需要互斥访问，因此不会涉及死锁。
+In practice, few, if any, existing systems use the banker’s algorithm for avoiding deadlocks. 
+Some systems, however, use heuristics similar to those of the banker’s algorithm to prevent deadlock. 
+For instance, networks may throttle traffic when buffer utilization reaches higher than, say, 70%—estimating that the remaining 30% will be sufficient for current users to complete their service and return their resources.
+
+
+## Deadlock Prevention
+
+### Mutual Exclusion
+
+The mutual-exclusion condition must hold. That is, at least one resource must be nonsharable. Sharable resources do not require mutually exclusive access and thus cannot be involved in a deadlock.
 > [!TIP]
 > 
 > Avoid assigning a resource unless absolutely necessary, and try to make sure that as few processes as possible may actually claim the resource.
 
-### 持有并等待
+### Hold and Wait
 
-我们可以使用的一种协议要求每个线程在开始执行之前请求并分配其所有资源。
+One protocol that we can use requires each thread to request and be allocated all its resources before it begins execution.
 
-打破持有并等待条件的另一种替代方法是要求请求资源的进程首先临时释放它当前持有的所有资源。
-然后它尝试一次性获取所需的一切。
+An alternative different way to break the hold-and-wait condition is to require a process requesting a resource to first temporarily release all the resources it currently holds. 
+Then it tries to get everything it needs all at once.
 
-这两种协议都有两个主要缺点。
-- 首先，资源利用率可能很低，因为资源可能被分配但长时间未使用。
-- 其次，可能发生饥饿。
+Both these protocols have two main disadvantages. 
+- First, resource utilization may be low, since resources may be allocated but unused for a long period.
+- Second, starvation is possible.
 
-### 不可抢占
+### No Preemption
 
-为确保此条件不成立，我们可以使用以下协议。
-如果一个线程持有某些资源并请求另一个无法立即分配的资源（即线程必须等待），则该线程当前持有的所有资源都被抢占。
-换句话说，这些资源被隐式释放。
+To ensure that this condition does not hold, we can use the following protocol. 
+If a thread is holding some resources and requests another resource that cannot be immediately allocated to it (that is, the thread must wait), then all resources the thread is currently holding are preempted. 
+In other words, these resources are implicitly released.
 
-此协议通常应用于状态可以轻松保存和恢复的资源，例如 CPU 寄存器和数据库事务。
-它通常不能应用于互斥锁和信号量等资源，而这正是死锁最常见的资源类型。
+This protocol is often applied to resources whose state can be easily saved and restored later, such as CPU registers and database transactions. 
+It cannot generally be applied to such resources as mutex locks and semaphores, precisely the type of resources where deadlock occurs most commonly.
 
-### 循环等待
 
-确保此条件永不成立的一种方法是对所有资源类型施加全局顺序，并要求每个线程按递增顺序请求资源。
+### Circular Wait
 
-请记住，制定顺序或层次结构本身并不能防止死锁。由应用程序开发者编写遵循该顺序的程序。
+One way to ensure that this condition never holds is to impose a total ordering of all resource types and to require that each thread requests resources in an increasing order of enumeration.
 
-同样重要的是要注意，如果锁可以动态获取，施加锁顺序并不能保证预防死锁。
-例如，假设我们有一个在两个账户之间转移资金的函数。
+Keep in mind that developing an ordering, or hierarchy, does not in itself prevent deadlock. It is up to application developers to write programs that follow the ordering.
+
+It is also important to note that imposing a lock ordering does not guarantee deadlock prevention if locks can be acquired dynamically.
+For example, assume we have a function that transfers funds between two accounts.
 ```c
 void transaction(Account from, Account to, double amount)
 {
@@ -105,96 +110,106 @@ void transaction(Account from, Account to, double amount)
     release(lock1);
 }
 ```
-为了防止竞态条件，每个账户都有一个关联的互斥锁，通过 get lock() 函数获取。
-如果两个线程同时调用 transaction() 函数，但传递不同的账户，则可能发生死锁。
-也就是说，一个线程可能调用
+To prevent a race condition, each account has an associated mutex lock that is obtained from a get lock() function.
+Deadlock is possible if two threads simultaneously invoke the transaction() function, transposing different accounts. 
+That is, one thread might invoke
 ```c
 transaction(checking account, savings account, 25.0)
 ```
-而另一个可能调用
+and another might invoke
 ```c
 transaction(savings account, checking account, 50.0)
 ```
 
-## 死锁检测与恢复
 
-### 死锁检测
 
-何时检查死锁？
-- 一种可能性是每次发出资源请求时都进行检查。这肯定能尽早检测到死锁，但在 CPU 时间方面可能代价高昂。
-- 另一种策略是每 k 分钟检查一次，或者仅在 CPU 利用率降至某个阈值以下时检查。
-  考虑 CPU 利用率的原因是，如果有足够多的进程死锁，则可运行的进程将很少，CPU 通常会空闲。
+## Deadlock Detection and Recovery
 
-### 死锁恢复
 
-#### 通过抢占恢复
+### Deadlock Detection
 
-为了使用资源抢占来消除死锁，我们依次从进程中抢占一些资源，并将这些资源交给其他进程，直到死锁循环被打破。
 
-如果需要使用抢占来处理死锁，则需要解决三个问题：
-1. 选择受害者
-2. 回滚
-3. 饥饿
+When to look for deadlocks comes up? 
+- One possibility is to check every time a resource request is made. This is certain to detect them as early as possible, but it is potentially expensive in terms of CPU time. 
+- An alternative strategy is to check every k minutes, or perhaps only when the CPU utilization has dropped below some threshold. 
+  The reason for considering the CPU utilization is that if enough processes are deadlocked, there will be few runnable processes, and the CPU will often be idle.
 
-#### 通过回滚恢复
 
-如果系统设计者和机器操作员知道可能发生死锁，他们可以安排定期对进程进行检查点保存。
+### Deadlock Recovery
 
-#### 通过终止进程恢复
+#### Recovery through Preemption
 
-为了通过终止进程或线程来消除死锁，我们使用两种方法之一。在这两种方法中，系统都会回收分配给已终止进程的所有资源。
-- 终止所有死锁进程。这种方法显然会打破死锁循环，但代价高昂。
-  死锁进程可能已经计算了很长时间，这些部分计算的结果必须被丢弃，并且可能必须在以后重新计算。
-- 一次终止一个进程，直到死锁循环被消除。
-  这种方法会产生相当大的开销，因为在每次终止进程后，必须调用死锁检测算法来确定是否还有任何进程仍处于死锁状态。
+To eliminate deadlocks using resource preemption, we successively preempt some resources from processes and give these resources to other processes until the deadlock cycle is broken.
 
-如果使用部分终止方法，则必须确定应终止哪个（或哪些）死锁进程。
-这个决定是一个策略决策，类似于 CPU 调度决策。问题基本上是一个经济问题；我们应该终止那些终止成本最小的进程。
-不幸的是，**最小成本**这个术语并不精确。
+If preemption is required to deal with deadlocks, then three issues need to be addressed:
+1. Selecting a victim
+2. Rollback
+3. Starvation
 
-## 其他问题
 
-### 两阶段锁定
+#### Recovery through Rollback
 
-### 通信死锁
+If the system designers and machine operators know that deadlocks are likely, they can arrange to have processes checkpointed periodically.
 
-资源死锁是一个**竞争同步**问题。
+#### Recovery through Killing Processes
 
-另一种死锁可能发生在通信系统（例如网络）中，其中两个或多个进程通过发送消息进行通信。
-一种常见的安排是进程 A 向进程 B 发送请求消息，然后阻塞直到 B 发回回复消息。
-假设请求消息丢失了。A 阻塞等待回复。B 阻塞等待请求要求它做某事。我们就遇到了死锁。
-这种情况称为**通信死锁**，以区别于更常见的资源死锁。
-通信死锁是**协作同步**的一种异常。这种类型的死锁中的进程如果独立执行，将无法完成服务。
+To eliminate deadlocks by aborting a process or thread, we use one of two methods. In both methods, the system reclaims all resources allocated to the terminated processes.
+- Abort all deadlocked processes. This method clearly will break the deadlock cycle, but at great expense. 
+  The deadlocked processes may have computed for a long time, and the results of these partial computations must be discarded and probably will have to be recomputed later.
+- Abort one process at a time until the deadlock cycle is eliminated. 
+  This method incurs considerable overhead, since after each process is aborted, a deadlock-detection algorithm must be invoked to determine whether any processes are still deadlocked.
 
-通信死锁不能通过对资源排序（因为没有资源）或通过精心调度（因为没有可以推迟请求的时刻）来预防。
-幸运的是，通常可以使用另一种技术来打破通信死锁：**超时**。
-在大多数网络通信系统中，每当发送需要回复的消息时，就会启动一个定时器。
-如果在回复到达之前定时器超时，消息的发送者会认为消息已丢失并重新发送（如果需要则重复多次）。
-通过这种方式，死锁被打破。换个说法，超时作为检测死锁的启发式方法，并支持恢复。
-这种启发式方法也适用于资源死锁，并且被那些使用可能导致死锁并冻结系统的不稳定或有缺陷的设备驱动程序的用户所依赖。
+If the partial termination method is used, then we must determine which deadlocked process (or processes) should be terminated. 
+This determination is a policy decision, similar to CPU-scheduling decisions. The question is basically an economic one; we should abort those processes whose termination will incur the minimum cost. 
+Unfortunately, the term minimum cost is not a precise one.
 
-并非通信系统或网络中发生的所有死锁都是通信死锁。资源死锁也可能在那里发生。
-因为接收方没有缓冲区，没有数据包可以移动，这就是经典的资源死锁，尽管发生在通信系统的中间。
 
-### 活锁
+## Other Issues
 
-活锁是另一种生存性故障形式。
-当线程持续尝试执行某个失败的操作时，就会发生活锁。
-活锁通常发生在线程同时重试失败操作时。
-因此，通常可以通过让每个线程在随机时间重试失败操作来避免活锁。这正是以太网在网络冲突时采用的方法。
-当发生冲突时，参与冲突的主机不会立即尝试重传数据包，而是在尝试再次发送之前退避一段随机时间。
+### Two-Phase Locking
 
-活锁不如死锁常见，但仍然是设计并发应用程序时的一个具有挑战性的问题，并且像死锁一样，它可能只在特定的调度情况下发生。
+### Communication Deadlocks
 
-### 饥饿
+Resource deadlock is a problem of *competition synchronization*.
 
-与死锁和活锁密切相关的问题是饥饿。在动态系统中，对资源的请求一直在发生。需要一些策略来决定谁在什么时候获得哪个资源。
-这种策略虽然看起来合理，但可能导致某些进程即使没有死锁也永远得不到服务。
+Another kind of deadlock can occur in communication systems (e.g., networks), in which two or more processes communicate by sending messages. 
+A common arrangement is that process A sends a request message to process B, and then blocks until B sends back a reply message. 
+Suppose that the request message gets lost. A is blocked waiting for the reply. B is blocked waiting for a request asking it to do something. We have a deadlock.
+This situation is called a *communication deadlock* to contrast it with the more common resource deadlock.
+Communication deadlock is an anomaly of *cooperation synchronization*. The processes in this type of deadlock could not complete service if executed independently.
 
-可以通过使用先到先服务的资源分配策略来避免饥饿。使用这种方法，等待时间最长的进程将获得下一个服务。
-随着时间的推移，任何给定的进程最终都会成为最老的进程，从而获得所需的资源。
+Communication deadlocks cannot be prevented by ordering the resources(since there are no resources) or avoided by careful scheduling (since there are no moments when a request could be postponed).
+Fortunately, there is another technique that can usually be employed to break communication deadlocks: **timeouts**. 
+In most network communication systems, whenever a message is sent to which a reply is expected, a timer is started. 
+If the timer goes off before the reply arrives, the sender of the message assumes that the message has been lost and sends it again(and again and again if needed). 
+In this way, the deadlock is broken. Phrased differently, the timeout serves as a heuristic to detect deadlocks and enables recovery. 
+This heuristic is applicable to resource deadlock also and is relied upon by users with temperamental or buggy device drivers that can deadlock and freeze the system.
 
-## 链接
+Not all deadlocks occurring in communication systems or networks are communication deadlocks. Resource deadlocks can also occur there.
+No packet can move because there is no buffer at the receiver and we have a classical resource deadlock, albeit in the middle of a communications system.
 
-- [操作系统](/docs/CS/OS/OS.md)
-- [进程与线程](/docs/CS/OS/process.md)
+### Livelock
+
+Livelock is another form of liveness failure.
+Livelock occurs when a thread continuously attempts an action that fails.
+Livelock typically occurs when threads retry failing operations at the same time. 
+It thus can generally be avoided by having each thread retry the failing operation at random times. This is precisely the approach taken by Ethernet networks when a network collision occurs. 
+Rather than trying to retransmit a packet immediately after a collision occurs, a host involved in a collision will backoff a random period of time before attempting to transmit again.
+
+Livelock is less common than deadlock but nonetheless is a challenging issue in designing concurrent applications, and like deadlock, it may only occur under specific scheduling circumstances.
+
+### Starvation
+
+A problem closely related to deadlock and livelock is starvation. In a dynamic system, requests for resources happen all the time. Some policy is needed to make a decision about who gets which resource when. 
+This policy, although seemingly reasonable, may lead to some processes never getting service even though they are not deadlocked.
+
+Starvation can be avoided by using a first-come, first-served resource allocation policy. With this approach, the process waiting the longest gets served next.
+In due course of time, any giv en process will eventually become the oldest and thus get the needed resource.
+
+
+
+## Links
+
+
+- [Operating Systems](/docs/CS/OS/OS.md)
+- [Processes and Threads](/docs/CS/OS/process.md)

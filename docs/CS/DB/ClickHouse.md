@@ -1,14 +1,24 @@
 ## Introduction
 
-[ClickHouse](https://clickhouse.com) 是一个用于在线分析处理查询（OLAP）的**列式**数据库管理系统（DBMS）。
+[ClickHouse](https://clickhouse.com) is a **column-oriented** database management system (DBMS) for online analytical processing of queries (OLAP).
 
 ## Engines
 
 ### MergeTree
 
+
 TTL
-- 列级别
-- 表级别
+- column level
+- table level
+
+
+
+
+
+
+
+
+
 
 ## Links
 

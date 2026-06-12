@@ -1,30 +1,37 @@
 ## Introduction
 
-不要玩严格劣势策略
 
-理性选择可能导致糟糕的结果。
 
-囚徒困境
+Don't play a strictly dominated strategy
 
-协调问题
+Rational choices can lead to bad outcomes.
 
-更多竞争
 
-共同知识
 
-迭代删除劣势策略
+Prisoner's Dilemma
+
+
+Coordination problem
+
+
+more completion
+
+common knowledge
+
+
+Iterative Deletion of Dominated Strategies
+
 
 ## Nash Equilibrium
 
-纳什均衡是一个博弈论概念，确定了非合作博弈中的最优解决方案，其中每个参与者都缺乏改变其初始策略的动机。
-在纳什均衡下，假设其他参与者保持策略不变，参与者不会从偏离其最初选择的策略中获得任何好处。
-一个博弈可能有多个纳什均衡或根本没有。
+Nash Equilibrium is a game theory concept that determines the optimal solution in a non-cooperative game in which each player lacks any incentive to change his/her initial strategy. 
+Under the Nash equilibrium, a player does not gain anything from deviating from their initially chosen strategy, assuming the other players also keep their strategies unchanged. 
+A game may have multiple Nash equilibria or none at all.
 
-囚徒困境是一个常见的博弈论例子，能充分展示纳什均衡的效果。
+The prisoners' dilemma is a common game theory example and one that adequately showcases the effect of the Nash equilibrium.
 
-- 在纳什均衡中，考虑到其他参与者的决策，每个参与者的策略都是最优的。
-  每个参与者都赢了，因为每个人都得到了他们想要的结果。
-- 纳什均衡并不总是意味着选择了最优策略。
+- In the Nash equilibrium, each player's strategy is optimal when considering the decisions of other players. Every player wins because everyone gets the outcome they desire.
+- The Nash equilibrium does not always mean that the most optimal strategy is chosen.
 
 ## Pareto Efficiency
 

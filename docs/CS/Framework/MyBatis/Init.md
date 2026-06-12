@@ -2,7 +2,7 @@
 
 
 
-初始化 Configuration 并构建 DefaultSqlSessionFactory
+`Init Configuration and build DefaultSqlSessionFactory`
 
 
 
@@ -57,7 +57,7 @@ public abstract class BaseBuilder {
 
 ### XMLConfigBuilder
 
-解析 mybatis-config.xml 并构建 Configuration 对象（仅一次）
+`parse mybatis-config.xml and build Configuration Object once`
 
 ```java
 public class XMLConfigBuilder extends BaseBuilder {
@@ -156,7 +156,7 @@ public class XMLMapperBuilder extends BaseBuilder {
 
 ## Configuration
 
-StrictMap 限制了 Mapper 中的函数不支持重载，put 时如果包含相同 key 会抛出异常
+StrictMap 限制了 Mapper中的函数不支持重载  throw Exception when contains in put.
 
 
 

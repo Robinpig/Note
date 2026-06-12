@@ -1,202 +1,323 @@
-## 简介
+## Introduction
 
-MySQL 是一个数据库管理系统（DBMS）。
+[MySQL Server](https://www.mysql.com/), the world's most popular open source database, and MySQL Cluster, a real-time, open source **transactional** database.
 
-### 体系结构
+## Installing MySQL
 
-MySQL 采用了客户端-服务器架构。
+<!-- tabs:start -->
 
-#### 连接层
+##### **Normal**
 
-- 连接池组件
-- 认证组件
+[Installing and Upgrading MySQL](https://dev.mysql.com/doc/refman/8.0/en/installing.html)
 
-#### 服务层
+MySQL 8.4 的 "mysql_native_password is not loaded" 插件未加载错误
 
-- 管理服务和工具组件：备份、恢复、安全管理等
-- SQL 接口组件：DML、DDL、存储过程、视图、触发器
-- 解析器组件：语法解析
-- 优化器组件：查询优化，选择索引和执行计划
-- 缓存和缓冲区组件：查询缓存（MySQL 8.0 中已移除）
+Windows修改my.ini文件
 
-#### 存储引擎层
-
-可插拔式存储引擎架构，支持多种存储引擎同时使用。
-常用的存储引擎包括 InnoDB、MyISAM、Memory 等。
-
-#### 文件系统层
-
-数据存储在文件系统中，与操作系统交互。
-
-### 存储引擎
-
-MySQL 支持多种存储引擎，最常用的包括：
-
-#### InnoDB
-
-InnoDB 是 MySQL 的默认存储引擎，支持：
-
-- 事务（ACID 兼容）
-- 行级锁
-- 外键约束
-- 崩溃恢复
-- MVCC（多版本并发控制）
-
-#### MyISAM
-
-MyISAM 是 MySQL 的旧存储引擎（在 MySQL 5.5.5 之前为默认引擎），不支持事务。
-
-#### Memory
-
-Memory 存储引擎将数据存储在内存中，重启后数据会丢失。
-
-#### NDB（NDB Cluster）
-
-NDB 是 MySQL Cluster 使用的存储引擎。
-
-### 锁类型
-
-MySQL 中的锁类型包括：
-
-- **全局锁**：锁定整个数据库实例，通常用于全库备份。
-- **表级锁**：包括表锁和元数据锁（MDL）。
-- **行级锁**：InnoDB 支持行级锁，包括记录锁、间隙锁和 Next-Key 锁。
-- **意向锁**：用于表示事务打算在行上获取的锁类型。
-
-### SQL 执行流程
-
-1. **解析**：解析器进行词法和语法分析，生成解析树。
-2. **预处理**：验证表和列是否存在，解析权限。
-3. **优化**：优化器选择最佳执行计划。
-4. **执行**：执行器根据执行计划调用存储引擎 API。
-
-### 日志
-
-MySQL Server 层：
-
-- binlog：二进制日志，用于复制和恢复。
-- error log：错误日志。
-- general query log：通用查询日志。
-- slow query log：慢查询日志。
-
-InnoDB 存储引擎层：
-
-- redo log：重做日志，用于崩溃恢复。
-- undo log：回滚日志，用于事务回滚和 MVCC。
-
-### 复制
-
-MySQL 复制通过 binlog 实现：
-
-- **异步复制**：主库写入 binlog 后立即返回，不等待从库确认。
-- **半同步复制**：主库等待至少一个从库确认收到 binlog 后再提交。
-- **组复制**：基于 Paxos 协议的组复制。
-
-### XA 事务
-
-外部 XA 事务允许在多个资源管理器之间协调事务。
-
-## 架构
-
-```sql
-
-SELECT * FROM users WHERE id = 1;
 ```
-
-1. 查询缓存（MySQL 5.7 及更早版本）
-2. 解析器 -> 解析树
-3. 预处理器 -> 验证语义
-4. 优化器 -> 执行计划
-5. 执行器 -> 调用存储引擎 API
-
-### 客户端连接
-
-- 使用 TCP 连接
-- 认证
-
-### 缓存
-
-MySQL 8.0 已移除查询缓存。
-
-```sql
-SHOW STATUS LIKE 'Qcache%';
+[mysqld]
+mysql_native_password=ON
 ```
-
-## 数据类型
-
-### 整型
-
-TINYINT、SMALLINT、MEDIUMINT、INT、BIGINT
-
-### 浮点型
-
-FLOAT、DOUBLE
-
-### 定点型
-
-DECIMAL
-
-### 字符串
-
-CHAR、VARCHAR、BINARY、VARBINARY、BLOB、TEXT、ENUM、SET
-
-### 日期和时间
-
-DATE、TIME、YEAR、DATETIME、TIMESTAMP
-
-### JSON
-
-MySQL 5.7.8 引入了 JSON 类型。
-
-## MySQL 的索引类型
-
-- B+ 树索引
-- 哈希索引
-- 全文索引
-- 空间索引（R 树）
-
-## 查询执行顺序
-
-```sql
-SELECT ...
-FROM ...
-JOIN ...
-ON ...
-WHERE ...
-GROUP BY ...
-HAVING ...
-ORDER BY ...
-LIMIT ...
-```
-
-## 参考
 
 ```shell
-SELECT VERSION();
-SELECT @@version;
+ALTER USER 'your_username'@'your_hostname' IDENTIFIED WITH mysql_native_password BY 'your_password';
+
+FLUSH PRIVILEGES;
 ```
 
-MySQL 中的 ROW 操作
+##### **Docker**
+
+```shell
+docker pull mysql:5.7
+docker image ls
+docker run --name test-mysql -e MYSQL_ROOT_PASSWORD=123456 -p 3306:3306 -d mysql:5.7
+
+```
+
+##### **K8s**
+
+<!-- tabs:end -->
+
+**Build from source**
+
+<!-- tabs:start -->
+
+Download source file and  unzip
+
+##### **Ubuntu**
+
+```shell
+sudo apt install gcc build-essential cmake bison libncurses5-dev libssl-dev pkg-config
+
+# cd source code root
+
+cmake -DDOWNLOAD_BOOST=1 -DWITH_BOOST=./extra/boost -DCMAKE_BUILD_TYPE=Debug -DWITH_DEBUG=1
+
+sudo make && make install
+```
+
+##### **MacOS**
+
+```shell
+brew install cmake gcc bison
+# cd source code root
+cmake -DDOWNLOAD_BOOST=1 -DWITH_BOOST=./boost -DCMAKE_BUILD_TYPE=Debug -DWITH_DEBUG=1 -DBISON_EXECUTABLE=/opt/homebrew/opt/bison/bin/bison
+
+sudo make && make install
+```
+
+Init
+
+```shell
+./bin/mysqld --initialize-insecure --datadir=./data
+
+# run
+./bin/mysqld --datadir=./data
+```
+
+<!-- tabs:end -->
+
+### Debug
+
+```shell
+#查看mysqld启动时的缺省选项
+mysqld --print-defaults
+
+#查看mysqld启动配置文件的优先级
+mysqld --verbose --help | grep -A 1 "Default options"
+
+```
+
+Use gdb/lldb to debug
+
+## Architecture
+
+大体来说，MySQL 可以分为 Server 层和存储引擎层两部分
+
+Server 层包括连接器、查询缓存、分析器、优化器、执行器等，涵盖 MySQL 的大多数核心服务功能，以及所有的内置函数（如日期、时间、数学和加密函数等），所有跨存储引擎的功能都在这一层实现，比如存储过程、触发器、视图等
+而存储引擎层负责数据的存储和提取。其架构模式是插件式的，支持 InnoDB、MyISAM、Memory 等多个存储引擎
+现在最常用的存储引擎是 InnoDB，它从 MySQL 5.5.5 版本开始成为了默认存储引擎
+
+MySQL 可插拔存储引擎架构使数据库专业人员能够根据特定应用需求选择专用存储引擎，同时完全无需管理任何特定的应用程序编码要求
+MySQL 服务器架构将应用程序程序员和 DBA 与存储级别的所有底层实现细节隔离开来，从而提供了一致且易于使用的应用程序模型和 API
+因此，尽管不同存储引擎的功能有所不同，但应用程序可以免受这些差异的影响
+
+The MySQL pluggable storage engine architecture is shown in figure.
+
+<div style="text-align: center;">
+
+![Fig.1. MySQL Architecture with Pluggable Storage Engines](img/Storage-Engine.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. MySQL Architecture with Pluggable Storage Engines.
+</p>
+
+### Server Process
+
+- Caches
+- Parser
+- Optimizer
+- SQL Interface
+
+wait_timeout 8h
+
+mysql_reset_connection
+
+each thread per connection -> cache thread pool
+
+客户端如果太长时间没动静，连接器就会自动将它断开。这个时间是由参数 wait_timeout 控制的，默认值是 8 小时。
+如果在连接被断开之后，客户端再次发送请求的话，就会收到一个错误提醒： Lost connection to MySQL server during query
+
+但是全部使用长连接后，你可能会发现，有些时候 MySQL 占用内存涨得特别快，这是因为 MySQL 在执行过程中临时使用的内存是管理在连接对象里面的。这些资源会在连接断开的时候才释放。所以如果长连接累积下来，可能导致内存占用太大，被系统强行杀掉（OOM），从现象看就是 MySQL 异常重启了。
+怎么解决这个问题呢？你可以考虑以下两种方案。
+
+1. 定期断开长连接。使用一段时间，或者程序里面判断执行过一个占用内存的大查询后，断开连接，之后要查询再重连。
+2. 如果你用的是 MySQL 5.7 或更新版本，可以在每次执行一个比较大的操作后，通过执行 mysql_reset_connection 来重新初始化连接资源。这个过程不需要重连和重新做权限验证，但是会将连接恢复到刚刚创建完时的状态
+
+优化器是在表里面有多个索引的时候，决定使用哪个索引；或者在一个语句有多表关联（join）的时候，决定各个表的连接顺序
+
+### Storage Engine
+
+Storage engines are MySQL components that handle the SQL operations for different table types. [InnoDB](/docs/CS/DB/MySQL/InnoDB.md) is the default and most general-purpose storage engine.
 
 ```sql
-INSERT INTO users (name, age) VALUES ('John', 25);
-SELECT * FROM users;
-UPDATE users SET age = 26 WHERE id = 1;
-DELETE FROM users WHERE id = 1;
+SELECT VERSION(); -- 5.7.42
+
+SHOW ENGINES;
 ```
 
-- DDL
-- DML
-- DCL
 
-### 数据库创建
+| Engine             | Support | Comment                                                        | Transactions | XA  | Savepoints |
+| ------------------ | ------- | -------------------------------------------------------------- | ------------ | --- | ---------- |
+| InnoDB             | DEFAULT | Supports transactions, row-level locking, and foreign keys     | YES          | YES | YES        |
+| MRG_MYISAM         | YES     | Collection of identical MyISAM tables                          | NO           | NO  | NO         |
+| MEMORY             | YES     | Hash based, stored in memory, useful for temporary tables      | NO           | NO  | NO         |
+| BLACKHOLE          | YES     | /dev/null storage engine (anything you write to it disappears) | NO           | NO  | NO         |
+| MyISAM             | YES     | MyISAM storage engine                                          | NO           | NO  | NO         |
+| CSV                | YES     | CSV storage engine                                             | NO           | NO  | NO         |
+| ARCHIVE            | YES     | Archive storage engine                                         | NO           | NO  | NO         |
+| PERFORMANCE_SCHEMA | YES     | Performance Schema                                             | NO           | NO  | NO         |
+| FEDERATED          | NO      | Federated MySQL storage engine                                 |              |     |            |
+
+**MyISAM vs InnoDB**
+
+
+| Feature                      | MyISAM Support | InnoDB Support                                                                    |
+| ---------------------------- | -------------- | --------------------------------------------------------------------------------- |
+| **B-tree indexes**           | Yes            | Yes                                                                               |
+| **Cluster database support** | No             | Yes                                                                               |
+| **Clustered indexes**        | No             | Yes                                                                               |
+| **Data caches**              | No             | Yes                                                                               |
+| **Foreign key support**      | No             | Yes                                                                               |
+| **Full-text search indexes** | Yes            | Yes                                                                               |
+| **Hash indexes**             | No             | No (InnoDB utilizes hash indexes internally for its Adaptive Hash Index feature.) |
+| **Index caches**             | Yes            | Yes                                                                               |
+| **Locking granularity**      | Table          | Row                                                                               |
+| **MVCC**                     | No             | Yes                                                                               |
+| **Storage limits**           | 256TB          | 64TB                                                                              |
+| **Transactions**             | No             | Yes                                                                               |
+
+[Alternative Storage Engines](/docs/CS/DB/MySQL/Engine.md)
+
+### schema
+
+Default schemas:
+
+- mysql
+- sys
+- information_schema
+- performance_schema
+
+Each database has its own directory except information_schema.
+
+### Files
+
+### [File](/docs/CS/DB/MySQL/file.md)
+
+redo log prepare -> binlog write -> redo log commit
+
+redo log 和 binlog 都可以用于表示事务的提交状态，而两阶段提交就是让这两个状态保持逻辑上的一致
+
+## Character Sets, Collations, Unicode
+
+MySQL includes character set support that enables you to store data using a variety of character sets and perform comparisons according to a variety of collations.
+The default MySQL server character set and collation are `latin1` and `latin1_swedish_ci`, but you can specify character sets at the server, database, table, column, and string literal levels.
 
 ```sql
-CREATE DATABASE IF NOT EXISTS mydb DEFAULT CHARACTER SET utf8mb4 DEFAULT COLLATE utf8mb4_unicode_ci;
+mysql>SHOW VARIABLES LIKE '%CHARACTER%';
 ```
 
-## 链接
 
-- [MySQL 官方文档](https://dev.mysql.com/doc/)
-- [InnoDB 存储引擎](/docs/CS/DB/MySQL/InnoDB.md)
-- [MySQL 复制](/docs/CS/DB/MySQL/replica.md)
+| Variable_name            | Value                        |
+| ------------------------ | ---------------------------- |
+| character_set_client     | utf8mb4                      |
+| character_set_connection | utf8mb4                      |
+| character_set_database   | utf8mb4                      |
+| character_set_filesystem | binary                       |
+| character_set_results    | utf8mb4                      |
+| character_set_server     | latin1                       |
+| character_set_system     | utf8                         |
+| character_sets_dir       | /usr/share/mariadb/charsets/ |
+
+```sql
+SHOW TABLE STATUS LIKE 'TABLE_NAME';
+```
+
+- Rows(approximate)
+- Data Length(Cluster)
+
+## Partitioning
+
+In MySQL 8.0, partitioning support is provided by the InnoDB and NDB storage engines.
+
+## Master-Slave
+
+MySQL is designed for accepting writes on one node at any given time.
+This has advantages in managing consistency but leads to trade-offs when you need the data written in multiple servers or multiple locations.
+MySQL offers a native way to dis‐ tribute writes that one node takes to additional nodes. This is referred to as replication.
+In MySQL, the source node has a thread per replica that is logged in as a replication client that wakes up when a write occurs, sending new data.
+
+### replication
+
+master write to binary log
+slaves get binary log events by I/O threads and write to relay log
+slaves SQL threads replay SQL from relay log
+
+Notes:
+
+- same OS version
+- same DB version
+- same data
+- same server id
+
+## [Optimization](/docs/CS/DB/MySQL/Optimization.md)
+
+### Performance Schema
+
+Performance Schema provides low-level metrics on operations running inside MySQL server.
+To explain how Performance Schema works, there are two concepts I need to introduce early.
+
+- The first is an instrument. An instrument refers to any portion of the MySQL code that we want to capture information about.
+  For example, if we want to collect information about metadata locks, we would need to enable the wait/lock/meta data/sql/mdl instrument.
+- The second concept is a consumer, which is simply a table that stores the information about what code was instrumented.
+  If we instrument queries, the consumer will record information like the total number of executions, how many times no index was used, the time spent, and so forth.
+  The consumer is what most people closely associate with Performance Schema.
+
+Performance Schema stores data in tables that use the PERFORMANCE_SCHEMA engine. This engine stores data in memory.
+Some of the performance_schema tables are autosized by default; others have a fixed number of rows. You can adjust these options by changing startup variables.
+
+Since version 5.7, Performance Schema is enabled by default with most of the instru‐ ments disabled. Only global, thread, statements, and transaction instrumentation is enabled. Since version 8.0, metadata lock and memory instrumentation are addition‐ ally enabled by default.
+
+The mysql, information_schema, and performance_schema databases are not instru‐ mented. All other objects, threads, and actors are instrumented.
+
+Most of the instances, handles, and setup tables are autosized. For the _history tables, the last 10 events per thread are stored. For the _history_long tables, the lat‐ est 10,000 events per thread are stored. The maximum stored SQL text length is 1,024 bytes. The maximum SQL digest length is also 1,024 bytes. Everything that is larger is right-trimmed.
+
+### What Limits MySQL’s Performance?
+
+Many different hardware components can affect MySQL’s performance, but the most frequent bottleneck we see is CPU exhaustion. CPU saturation can happen when MySQL tries to execute too many queries in parallel or when a smaller number of queries runs for too long on the CPU.
+
+Broadly speaking, you have two goals for your server:
+
+- *Low latency (fast response time)*<br>
+  To achieve this, you need fast CPUs because each query will use only a single CPU.
+- *High throughput*<br>
+  If you can run many queries at the same time, you might benefit from multiple CPUs to service the queries.
+
+If your workload doesn’t utilize all of your CPUs, MySQL can still use the extra CPUs for background tasks such as purging InnoDB buffers, network operations, and so on.
+However, these jobs are usually minor compared to executing queries.
+
+I/O saturation can still happen but much less frequently than CPU exhaustion. This is largely because of the transition to using solid-state drives (SSDs).
+Historically, the performance penalty of no longer working in memory and going to the hard disk drive (HDD) was extreme. SSDs are generally 10 to 20 times faster than SSH.
+Nowadays, if queries need to hit disk, you’re still going to see decent performance from them.
+
+Memory exhaustion can still happen but usually only when you try to allocate too much memory to MySQL.
+
+The main reason to have a lot of memory isn’t so you can hold a lot of data in mem‐ ory: it’s ultimately so you can avoid disk I/O, which is orders of magnitude slower than accessing data in memory.
+The trick is to balance the memory and disk size, speed, cost, and other qualities so you get good performance for your workload.
+
+If you have enough memory, you can insulate the disk from read requests completely. If all your data fits in memory, every read will be a cache hit once the server’s caches are warmed up.
+There will still be logical reads from memory but no physical reads from disk. Writes are a different matter, though.
+A write can be performed in mem‐ ory just as a read can, but sooner or later it has to be written to the disk so it’s perma‐ nent.
+In other words, a cache can delay writes, but caching cannot eliminate writes as it can for reads.
+
+In fact, in addition to allowing writes to be delayed, caching can permit them to be grouped together in two important ways:
+
+- *Many writes, one flush*<br>
+  A single piece of data can be changed many times in memory without all of the new values being written to disk.
+  When the data is eventually flushed to disk, all the modifications that happened since the last physical write are permanent.
+  For example, many statements could update an in-memory counter. If the counter is incremented one hundred times and then written to disk, one hundred modifica‐ tions have been grouped into one write.
+- *I/O merging*<br>
+  Many different pieces of data can be modified in memory, and the modifications can be collected together, so the physical writes can be performed as a single disk operation.
+
+## Links
+
+- [DataBases](/docs/CS/DB/DB.md?id=MySQL)
+
+## References
+
+1. [MySQL Source Code Documentation](https://dev.mysql.com/doc/dev/mysql-server/latest/)
+2. [MySQL源码编译和调试指南(Ubuntu 22.04.4 LTS) by GrokDB](https://grokdb.io/post/first-post/)
+3. [Mac系统下源码编译安装MySQL 5.7.17的教程](http://www.80vps.com/new1114.htm)
+4. [Mac上编译MySQL源码与安装](https://max2d.com/archives/983)

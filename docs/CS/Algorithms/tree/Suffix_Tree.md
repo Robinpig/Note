@@ -1,6 +1,16 @@
 ## Introduction
 
-后缀树是一种基数树，用于存储给定字符串的所有后缀
+A suffix tree is a radix tree that stores all suffixes of a given string
+
+
+
+
+
+
+
+
+
+
 
 ## Links
 

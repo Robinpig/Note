@@ -1,37 +1,352 @@
+
 ## Introduction
 
-用于运行 ForkJoinTasks 的 ExecutorService。
-ForkJoinPool 提供了非 ForkJoinTask 客户端的提交入口点，以及管理和监控操作。
 
-ForkJoinPool 与其他类型的 ExecutorService 的主要区别在于采用了工作窃取：
-池中的所有线程都尝试查找并执行提交给池的任务和/或由其他活跃任务创建的任务（如果没有工作，最终会阻塞等待）。
-这使得当大多数任务生成其他子任务（如大多数 ForkJoinTasks 所做的那样），以及当许多小任务从外部客户端提交到池时，能够实现高效处理。
-特别是在构造方法中将 asyncMode 设置为 true 时，ForkJoinPools 也可能适用于使用从不 join 的事件风格任务。所有工作线程都初始化为 Thread.isDaemon 为 true。
 
-静态 commonPool() 可用于大多数应用程序。公共池由任何未显式提交到指定池的 ForkJoinTask 使用。
-使用公共池通常会减少资源使用（其线程在非使用期间缓慢回收，并在后续使用中恢复）。
+An ExecutorService for running ForkJoinTasks. 
+A ForkJoinPool provides the entry point for submissions from non-ForkJoinTask clients, as well as management and monitoring operations.
 
-对于需要单独或自定义池的应用程序，可以使用给定的目标并行度级别构造 ForkJoinPool；默认情况下，等于可用处理器的数量。
-池通过动态添加、挂起或恢复内部工作线程来尝试维持足够的活跃（或可用）线程，即使某些任务因等待 join 其他任务而停滞。
-然而，在面对阻塞 I/O 或其他非托管同步时，不保证此类调整。
+A ForkJoinPool differs from other kinds of ExecutorService mainly by virtue of employing work-stealing: 
+all threads in the pool attempt to find and execute tasks submitted to the pool and/or created by other active tasks (eventually blocking waiting for work if none exist). 
+This enables efficient processing when most tasks spawn other subtasks (as do most ForkJoinTasks), as well as when many small tasks are submitted to the pool from external clients. 
+Especially when setting asyncMode to true in constructors, ForkJoinPools may also be appropriate for use with event-style tasks that are never joined. All worker threads are initialized with Thread.isDaemon set true.
 
-嵌套的 ForkJoinPool.ManagedBlocker 接口允许扩展所容纳的同步种类。
-可以使用带有与 ThreadPoolExecutor 类中记录的参数对应的构造方法来覆盖默认策略。
-除了执行和生命周期控制方法外，此类还提供了状态检查方法（例如 getStealCount），旨在帮助开发、调优和监控 fork/join 应用程序。
+A static commonPool() is available and appropriate for most applications. The common pool is used by any ForkJoinTask that is not explicitly submitted to a specified pool. 
+Using the common pool normally reduces resource usage (its threads are slowly reclaimed during periods of non-use, and reinstated upon subsequent use).
+
+For applications that require separate or custom pools, a ForkJoinPool may be constructed with a given target parallelism level; by default, equal to the number of available processors. 
+The pool attempts to maintain enough active (or available) threads by dynamically adding, suspending, or resuming internal worker threads, even if some tasks are stalled waiting to join others. 
+However, no such adjustments are guaranteed in the face of blocked I/O or other unmanaged synchronization. 
+
+The nested ForkJoinPool.ManagedBlocker interface enables extension of the kinds of synchronization accommodated. 
+The default policies may be overridden using a constructor with parameters corresponding to those documented in class ThreadPoolExecutor.
+In addition to execution and lifecycle control methods, this class provides status check methods (for example getStealCount) that are intended to aid in developing, tuning, and monitoring fork/join applications. 
+
+Also, method toString returns indications of pool state in a convenient form for informal monitoring.
+As is the case with other ExecutorServices, there are three main task execution methods summarized in the following table. 
+These are designed to be used primarily by clients not already engaged in fork/join computations in the current pool. 
+
+The main forms of these methods accept instances of ForkJoinTask, but overloaded forms also allow mixed execution of plain Runnable- or Callable- based activities as well. 
+However, tasks that are already executing in a pool should normally instead use the within-computation forms listed in the table 
+unless using async event-style tasks that are not usually joined, in which case there is little difference among choice of methods.
+
+
+Summary of task execution methods:
+
+|  | Call from non-fork/join clients | Call from within fork/join computations |
+| --- | --- | --- |
+| Arrange async execution | execute(ForkJoinTask) | ForkJoinTask.fork |
+| Await and obtain result | invoke(ForkJoinTask) | ForkJoinTask.invoke |
+| Arrange exec and obtain Future | submit(ForkJoinTask) | ForkJoinTask.fork (ForkJoinTasks are Futures) |
+
+
+The parameters used to construct the common pool may be controlled by setting the following system properties:
+1. java.util.concurrent.ForkJoinPool.common.parallelism - the parallelism level, a non-negative integer
+2. java.util.concurrent.ForkJoinPool.common.threadFactory - the class name of a ForkJoinPool.ForkJoinWorkerThreadFactory. The system class loader is used to load this class.
+3. java.util.concurrent.ForkJoinPool.common.exceptionHandler - the class name of a Thread.UncaughtExceptionHandler. The system class loader is used to load this class.
+4. java.util.concurrent.ForkJoinPool.common.maximumSpares - the maximum number of allowed extra threads to maintain target parallelism (default 256).
+
+If no thread factory is supplied via a system property, then the common pool uses a factory that uses the system class loader as the thread context class loader. In addition, if a SecurityManager is present, then the common pool uses a factory supplying threads that have no Permissions enabled. Upon any error in establishing these settings, default parameters are used. It is possible to disable or limit the use of threads in the common pool by setting the parallelism property to zero, and/or using a factory that may return null. However doing so may cause unjoined tasks to never be executed.
+
+**Implementation notes**: This implementation restricts the maximum number of running threads to 32767. Attempts to create pools with greater than the maximum number result in IllegalArgumentException.
+This implementation rejects submitted tasks (that is, by throwing RejectedExecutionException) only when the pool is shut down or internal resources have been exhausted.
+
+
+
+## CommonPool
+
+Returns the common pool instance. This pool is statically constructed; its run state is unaffected by attempts to shutdown or shutdownNow. However this pool and any ongoing processing are automatically terminated upon program System.exit. Any program that relies on asynchronous task processing to complete before program termination should invoke commonPool().awaitQuiescence, before exit.
 
 ```java
-ForkJoinPool commonPool = ForkJoinPool.commonPool();
+/**
+ * Common (static) pool. Non-null for public use unless a static
+ * construction exception, but internal usages null-check on use
+ * to paranoically avoid potential initialization circularities
+ * as well as to simplify generated code.
+ */
+static final ForkJoinPool common;
+
+public static ForkJoinPool commonPool() {
+        // assert common != null : "static init error";
+        return common;
+    }
 ```
 
-### 工作窃取
+init commonPool in static
+```java
+static {
+        try {
+            MethodHandles.Lookup l = MethodHandles.lookup();
+            CTL = l.findVarHandle(ForkJoinPool.class, "ctl", long.class);
+            MODE = l.findVarHandle(ForkJoinPool.class, "mode", int.class);
+            QA = MethodHandles.arrayElementVarHandle(ForkJoinTask[].class);
+        } catch (ReflectiveOperationException e) {
+            throw new ExceptionInInitializerError(e);
+        }
 
-工作窃取算法允许空闲线程从其他繁忙线程的队列尾部"窃取"任务。
-这有助于保持所有线程忙碌，提高整体吞吐量。
+        // Reduce the risk of rare disastrous classloading in first call to
+        // LockSupport.park: https://bugs.openjdk.java.net/browse/JDK-8074773
+        Class<?> ensureLoaded = LockSupport.class;
 
-### commonPool
+        int commonMaxSpares = DEFAULT_COMMON_MAX_SPARES;
+        try {
+            String p = System.getProperty
+                ("java.util.concurrent.ForkJoinPool.common.maximumSpares");
+            if (p != null)
+                commonMaxSpares = Integer.parseInt(p);
+        } catch (Exception ignore) {}
+        COMMON_MAX_SPARES = commonMaxSpares;
 
-公共池是 ForkJoinPool 的共享实例，默认并行度等于 Runtime.getRuntime().availableProcessors() - 1。
+        defaultForkJoinWorkerThreadFactory =
+            new DefaultForkJoinWorkerThreadFactory();
+        modifyThreadPermission = new RuntimePermission("modifyThread");
 
-## Links
+        common = AccessController.doPrivileged(new PrivilegedAction<>() {
+            public ForkJoinPool run() {
+                return new ForkJoinPool((byte)0); }});
 
-- [JDK Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
+        COMMON_PARALLELISM = Math.max(common.mode & SMASK, 1);
+    }
+```
+
+```java
+    /**
+     * Constructor for common pool using parameters possibly
+     * overridden by system properties
+     */
+    private ForkJoinPool(byte forCommonPoolOnly) {
+        int parallelism = -1;
+        ForkJoinWorkerThreadFactory fac = null;
+        UncaughtExceptionHandler handler = null;
+        try {  // ignore exceptions in accessing/parsing properties
+            String pp = System.getProperty
+                ("java.util.concurrent.ForkJoinPool.common.parallelism");
+            if (pp != null)
+                parallelism = Integer.parseInt(pp);
+            fac = (ForkJoinWorkerThreadFactory) newInstanceFromSystemProperty(
+                "java.util.concurrent.ForkJoinPool.common.threadFactory");
+            handler = (UncaughtExceptionHandler) newInstanceFromSystemProperty(
+                "java.util.concurrent.ForkJoinPool.common.exceptionHandler");
+        } catch (Exception ignore) {
+        }
+
+        if (fac == null) {
+            if (System.getSecurityManager() == null)
+                fac = defaultForkJoinWorkerThreadFactory;
+            else // use security-managed default
+                fac = new InnocuousForkJoinWorkerThreadFactory();
+        }
+        if (parallelism < 0 && // default 1 less than #cores
+            (parallelism = Runtime.getRuntime().availableProcessors() - 1) <= 0)
+            parallelism = 1;
+        if (parallelism > MAX_CAP)
+            parallelism = MAX_CAP;
+
+        long c = ((((long)(-parallelism) << TC_SHIFT) & TC_MASK) |
+                  (((long)(-parallelism) << RC_SHIFT) & RC_MASK));
+        int b = ((1 - parallelism) & SMASK) | (COMMON_MAX_SPARES << SWIDTH);
+        int n = (parallelism > 1) ? parallelism - 1 : 1;
+        n |= n >>> 1; n |= n >>> 2; n |= n >>> 4; n |= n >>> 8; n |= n >>> 16;
+        n = (n + 1) << 1;
+
+        this.workerNamePrefix = "ForkJoinPool.commonPool-worker-";
+        this.workQueues = new WorkQueue[n];
+        this.factory = fac;
+        this.ueh = handler;
+        this.saturate = null;
+        this.keepAlive = DEFAULT_KEEPALIVE;
+        this.bounds = b;
+        this.mode = parallelism;
+        this.ctl = c;
+    }
+```
+
+## workQueue
+
+
+```java
+public <T> T invoke(ForkJoinTask<T> task) {
+    if (task == null)
+        throw new NullPointerException();
+    externalSubmit(task);
+    return task.join();
+}
+```
+
+
+
+## fork
+
+Arranges to asynchronously execute this task in the pool the current task is running in, if applicable, or using the ForkJoinPool.commonPool() if not inForkJoinPool. 
+While it is not necessarily enforced, it is a usage error to fork a task more than once unless it has completed and been reinitialized. 
+Subsequent modifications to the state of this task or any data it operates on are not necessarily consistently observable by any thread other than the one executing it 
+unless preceded by a call to join or related methods, or a call to isDone returning true.
+
+```java
+public final ForkJoinTask<V> fork() {
+    Thread t;
+    if ((t = Thread.currentThread()) instanceof ForkJoinWorkerThread)
+        ((ForkJoinWorkerThread)t).workQueue.push(this);
+    else
+        ForkJoinPool.common.externalPush(this);
+    return this;
+}
+```
+
+
+
+## join
+
+Returns the result of the computation when it is done. This method differs from get() in that abnormal completion results in RuntimeException or Error, 
+not ExecutionException, and that interrupts of the calling thread do not cause the method to abruptly return by throwing InterruptedException.
+
+1. if done, return
+2. ! instanceof ForkJoinWorkerThread, externalAwaitDone
+3. Or awaitJoin
+
+```java
+public final V join() {
+    int s;
+    if (((s = doJoin()) & ABNORMAL) != 0)
+        reportException(s);
+    return getRawResult();
+}
+
+private int doJoin() {
+  int s; Thread t; ForkJoinWorkerThread wt; ForkJoinPool.WorkQueue w;
+  return (s = status) < 0 ? s :
+  ((t = Thread.currentThread()) instanceof ForkJoinWorkerThread) ?
+    (w = (wt = (ForkJoinWorkerThread)t).workQueue).
+    tryUnpush(this) && (s = doExec()) < 0 ? s :
+  wt.pool.awaitJoin(w, this, 0L) :
+  externalAwaitDone();
+}
+```
+
+Pops the given task only if it is at the current top.
+
+```java
+final boolean tryUnpush(ForkJoinTask<?> task) {
+    boolean popped = false;
+    int s, cap; ForkJoinTask<?>[] a;
+    if ((a = array) != null && (cap = a.length) > 0 &&
+        (s = top) != base &&
+        (popped = QA.compareAndSet(a, (cap - 1) & --s, task, null)))
+        TOP.setOpaque(this, s);
+    return popped;
+}
+```
+
+
+
+```java
+final int doExec() {
+    int s; boolean completed;
+    if ((s = status) >= 0) {
+        try {
+            completed = exec();
+        } catch (Throwable rex) {
+            completed = false;
+            s = setExceptionalCompletion(rex);
+        }
+        if (completed)
+            s = setDone();
+    }
+    return s;
+}
+```
+
+
+
+```java
+final int awaitJoin(WorkQueue w, ForkJoinTask<?> task, long deadline) {
+    int s = 0;
+    int seed = ThreadLocalRandom.nextSecondarySeed();
+    if (w != null && task != null &&
+        (!(task instanceof CountedCompleter) ||
+         (s = w.helpCC((CountedCompleter<?>)task, 0, false)) >= 0)) {
+        w.tryRemoveAndExec(task);
+        int src = w.source, id = w.id;
+        int r = (seed >>> 16) | 1, step = (seed & ~1) | 2;
+        s = task.status;
+        while (s >= 0) {
+            WorkQueue[] ws;
+            int n = (ws = workQueues) == null ? 0 : ws.length, m = n - 1;
+            while (n > 0) {
+                WorkQueue q; int b;
+                if ((q = ws[r & m]) != null && q.source == id &&
+                    q.top != (b = q.base)) {
+                    ForkJoinTask<?>[] a; int cap, k;
+                    int qid = q.id;
+                    if ((a = q.array) != null && (cap = a.length) > 0) {
+                        ForkJoinTask<?> t = (ForkJoinTask<?>)
+                            QA.getAcquire(a, k = (cap - 1) & b);
+                        if (q.source == id && q.base == b++ &&
+                            t != null && QA.compareAndSet(a, k, t, null)) {
+                            q.base = b;
+                            w.source = qid;
+                            t.doExec();
+                            w.source = src;
+                        }
+                    }
+                    break;
+                }
+                else {
+                    r += step;
+                    --n;
+                }
+            }
+            if ((s = task.status) < 0)
+                break;
+            else if (n == 0) { // empty scan
+                long ms, ns; int block;
+                if (deadline == 0L)
+                    ms = 0L;                       // untimed
+                else if ((ns = deadline - System.nanoTime()) <= 0L)
+                    break;                         // timeout
+                else if ((ms = TimeUnit.NANOSECONDS.toMillis(ns)) <= 0L)
+                    ms = 1L;                       // avoid 0 for timed wait
+                if ((block = tryCompensate(w)) != 0) {
+                    task.internalWait(ms);
+                    CTL.getAndAdd(this, (block > 0) ? RC_UNIT : 0L);
+                }
+                s = task.status;
+            }
+        }
+    }
+    return s;
+}
+```
+
+
+
+```java
+private int externalAwaitDone() {
+    int s = tryExternalHelp();
+    if (s >= 0 && (s = (int)STATUS.getAndBitwiseOr(this, SIGNAL)) >= 0) {
+        boolean interrupted = false;
+        synchronized (this) {
+            for (;;) {
+                if ((s = status) >= 0) {
+                    try {
+                        wait(0L);
+                    } catch (InterruptedException ie) {
+                        interrupted = true;
+                    }
+                }
+                else {
+                    notifyAll();
+                    break;
+                }
+            }
+        }
+        if (interrupted)
+            Thread.currentThread().interrupt();
+    }
+    return s;
+}
+```
+
+
+## References
+1. [A Java Fork/Join Framework - Doug Lea](http://gee.cs.oswego.edu/dl/papers/fj.pdf)

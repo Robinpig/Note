@@ -1,50 +1,50 @@
 ## Lambda expressions
 
-在计算机编程中，匿名函数（函数字面量、lambda 抽象、lambda 函数、lambda 表达式或块）是一种不绑定到标识符的函数定义。
-匿名函数通常作为参数传递给高阶函数，或用于构造需要返回函数的高阶函数的结果。
-如果函数只使用一次或有限次数，匿名函数可能在语法上比使用命名函数更轻量。
-匿名函数在函数式编程语言和其他具有一等函数的语言中无处不在，它们为函数类型扮演着与字面量为其他数据类型相同的角色。
+In computer programming, an anonymous function (function literal, lambda abstraction, lambda function, lambda expression or block) is a function definition that is not bound to an identifier.
+Anonymous functions are often arguments being passed to higher-order functions or used for constructing the result of a higher-order function that needs to return a function.
+If the function is only used once, or a limited number of times, an anonymous function may be syntactically lighter than using a named function.
+Anonymous functions are ubiquitous in functional programming languages and other languages with first-class functions, where they fulfil the same role for the function type as literals do for other data types.
 
-"lambda 抽象"、"lambda 函数"和"lambda 表达式"这些名称指的是 lambda 演算中的函数抽象表示法，其中通常的函数 f(x) = M 将写作 (λx.M)（M 是使用 x 的表达式）。
-与 Python 语法 lambda x: M 进行比较。
-"箭头函数"这个名称指的是数学"映射到"符号 x ↦ M。与 JavaScript 语法 x => M 进行比较。
+The names "lambda abstraction", "lambda function", and "lambda expression" refer to the notation of function abstraction in lambda calculus, where the usual function f(x) = M would be written (λx.M) (M is an expression that uses x).
+Compare to the Python syntax of lambda x: M.
+The name "arrow function" refers to the mathematical "maps to" symbol, x ↦ M. Compare to the JavaScript syntax of x => M.
 
-匿名函数可用于包含不需要命名且可能短期使用的功能。一些显著例子包括闭包和柯里化。
+Anonymous functions can be used for containing functionality that need not be named and possibly for short-term use. Some notable examples include closures and currying.
 
-**使用匿名函数是一种风格问题。**
-使用它们从来不是解决问题的唯一方法；每个匿名函数都可以被定义为一个命名函数并按名称调用。
-一些程序员使用匿名函数来封装特定的、不可重用的代码，而不会用大量简短的单行普通函数充斥代码。
+**The use of anonymous functions is a matter of style.**
+Using them is never the only way to solve a problem; each anonymous function could instead be defined as a named function and called by name.
+Some programmers use anonymous functions to encapsulate specific, non-reusable code without littering the code with a lot of little one-line normal functions.
 
-在某些编程语言中，匿名函数通常用于非常特定的目的，例如将事件绑定到回调或为特定值实例化函数，这可能比调用更通用的命名函数更高效、更易读且更不容易出错。
+In some programming languages, anonymous functions are commonly implemented for very specific purposes such as binding events to callbacks or instantiating the function for particular values, which may be more efficient, more readable, and less error-prone than calling a more-generic named function.
 
-闭包是在包含绑定变量的环境中求值的函数。以下示例将变量"threshold"绑定到一个匿名函数中，该函数将输入与阈值进行比较。
+Closures are functions evaluated in an environment containing bound variables. The following example binds the variable "threshold" in an anonymous function that compares the input to the threshold.
 
-为每个可能的比较函数创建函数是不切实际的，并且保留阈值以供进一步使用可能过于不便。
-无论使用闭包的原因是什么，匿名函数都是包含比较功能的实体。
+It would be impractical to create a function for every possible comparison function and may be too inconvenient to keep the threshold around for further use.
+Regardless of the reason why a closure is used, the anonymous function is the entity that contains the functionality that does the comparing.
 
-柯里化是改变函数的过程，使其不是接受多个输入，而是接受单个输入并返回一个接受第二个输入的函数，依此类推。
-在此示例中，执行任意整数除法的函数被转换为执行固定整数除法的函数。
+Currying is the process of changing a function so that rather than taking multiple inputs, it takes a single input and returns a function which accepts the second input, and so forth.
+In this example, a function that performs division by any integer is transformed into one that performs division by a set integer.
 
-虽然匿名函数的使用可能不常与柯里化一起使用，但它仍然可以使用。在上面的示例中，函数 divisor 生成具有指定除数的函数。
-函数 half 和 third 使用固定的除数对 divide 函数进行柯里化。
+While the use of anonymous functions is perhaps not common with currying, it still can be used. In the above example, the function divisor generates functions with a specified divisor.
+The functions half and third curry the divide function with a fixed divisor.
 
-divisor 函数还通过绑定变量 d 形成闭包。
+The divisor function also forms a closure by binding the variable d.
 
-高阶函数是接受函数作为参数的函数。
-这通常用于自定义通用定义函数的行为，通常是循环构造或递归方案。
-匿名函数是指定此类函数参数的便捷方式。
+A higher-order function is a function that takes a function as an argument.
+This is commonly used to customize the behavior of a generically defined function, often a looping construct or recursion scheme.
+Anonymous functions are a convenient way to specify such function arguments.
 
-fold 函数遍历结构中的所有元素（对于列表通常是从左到右，称为"左折叠"，在 Python 中称为 reduce），并在遍历时累积值。
-这可用于将结构的所有元素组合成一个值，例如：
+A fold function runs over all elements in a structure (for lists usually left-to-right, a "left fold", called reduce in Python), accumulating a value as it goes.
+This can be used to combine all elements of a structure into one value, for example:
 
-与局部类和匿名类一样，lambda 表达式可以捕获变量；它们对封闭作用域的局部变量具有相同的访问权限。
-然而，与局部类和匿名类不同，lambda 表达式没有任何[屏蔽](/docs/CS/Java/JDK/Basic/Object.md?id=Shadowing)问题。
-Lambda 表达式是词法作用域的。这意味着它们不会从超类型继承任何名称，也不会引入新的作用域级别。
-Lambda 表达式中的声明就像在封闭环境中一样被解释。
+Like local and anonymous classes, lambda expressions can capture variables; they have the same access to local variables of the enclosing scope.
+However, unlike local and anonymous classes, lambda expressions do not have any [shadowing](/docs/CS/Java/JDK/Basic/Object.md?id=Shadowing) issues.
+Lambda expressions are lexically scoped. This means that they do not inherit any names from a supertype or introduce a new level of scoping.
+Declarations in a lambda expression are interpreted just as they are in the enclosing environment.
 
-Lambda 表达式是一种新的语言特性，在此版本中引入。
-它们使你可以将功能视为方法参数，或将代码视为数据。
-Lambda 表达式让你可以更简洁地表达单方法接口（称为函数式接口）的实例。
+Lambda Expressions, a new language feature, has been introduced in this release.
+They enable you to treat functionality as a method argument, or code as data.
+Lambda expressions let you express instances of single-method interfaces (referred to as functional interfaces) more compactly.
 
 ### Method References
 

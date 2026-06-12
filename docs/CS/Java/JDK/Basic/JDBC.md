@@ -27,7 +27,7 @@ strict digraph {
 }
 ```
 
-通过 isClose() 或 isValid() 检查连接状态
+Connection isClose() or isValid()
 
 
 
@@ -37,21 +37,21 @@ strict digraph {
 - 性能稍微好一点
 - 执行引擎按照执行计划执行 可以防SQL注入
 
-使用 #{} 替代 ${} 是安全的
+It's safety to use #{} replace \${}
 
 ## DriverManager
 
 
 
-NOTE: javax.sql.DataSource 接口提供了另一种连接数据源的方式。
-使用 DataSource 对象是连接数据源的首选方式。
-作为初始化的一部分，DriverManager 类将尝试通过以下方式加载可用的 JDBC drivers：
+NOTE: The javax. sql. DataSource interface, provides another way to connect to a data source. 
+The use of a DataSource object is the preferred means of connecting to a data source.
+As part of its initialization, the DriverManager class will attempt to load available JDBC drivers by using:
 
-jdbc.drivers 系统属性，包含以冒号分隔的 JDBC driver 完全限定类名列表。
-每个 driver 使用系统类加载器加载：
+The jdbc. drivers system property which contains a colon separated list of fully qualified class names of JDBC drivers. 
+Each driver is loaded using the system class loader:
 jdbc.drivers=foo.bah.Driver:wombat.sql.Driver:bad.taste.ourDriver
 
-`java.sql.Driver` 类的服务提供者，通过 [service-provider loading](/docs/CS/Java/JDK/Basic/SPI.md) 机制加载。
+Service providers of the `java.sql.Driver` class, that are loaded via the [service-provider loading](/docs/CS/Java/JDK/Basic/SPI.md) mechanism.
  
 
 

@@ -1,73 +1,74 @@
 ## Introduction
 
-在某些情况下，我们可能需要在一组元素中找到最小/最大的元素。我们可以借助优先队列 ADT 来实现这一点。
-优先队列 ADT 是一种支持 Insert（插入）和 DeleteMin（删除并返回最小元素）或 DeleteMax（删除并返回最大元素）操作的数据结构。
-这些操作等同于队列的 EnQueue 和 DeQueue 操作。区别在于，在优先队列中，元素进入队列的顺序可能与它们被处理的顺序不同。
-优先队列的一个示例应用是作业调度，它基于优先级而不是先来先服务。
+In some situations we may need to find the minimum/maximum element among a collection of elements. We can do this with the help of Priority Queue ADT.
+A priority queue ADT is a data structure that supports the operations Insert and DeleteMin (which returns and removes the minimum element) or DeleteMax (which returns and removes the maximum element).
+These operations are equivalent to EnQueue and DeQueue operations of a queue. The difference is that, in priority queues, the order in which the elements enter the queue may not be the same in which they were processed.
+An example application of a priority queue is job scheduling, which is prioritized instead of serving in first come first serve.
 
-如果具有最小键的元素具有最高优先级（即总是删除最小元素），则称为*升序优先队列*。
-类似地，如果具有最大键的元素具有最高优先级（总是删除最大元素），则称为*降序优先队列*。
-由于这两种类型是对称的，我们将重点讨论其中一种：升序优先队列。
+A priority queue is called an *ascending – priority* queue, if the item with the smallest key has the highest priority (that means, delete the smallest element always).
+Similarly, a priority queue is said to be a *descending – priority* queue if the item with the largest key has the highest priority (delete the maximum element always).
+Since these two types are symmetric we will be concentrating on one of them: ascending-priority queue.
 
-优先队列在实现[*贪心算法*](/docs/CS/Algorithms/Greedy.md)中也很重要，贪心算法通过重复寻找最小值来运作。
+Priority queues are also important in the implementation of  [*greedy algorithms*](/docs/CS/Algorithms/Greedy.md) , which operate by repeatedly finding a minimum.
 
 ## Priority Queue ADT
 
-以下操作使优先队列成为一个 ADT。
+The following operations make priority queues an ADT.
 
-**主要优先队列操作**
+**Main Priority Queues Operations**
 
-优先队列是元素的容器，每个元素都有一个关联的键。
+A priority queue is a container of elements, each having an associated key.
 
-- Insert(key, data)：将具有键 key 的数据插入优先队列。元素基于键进行排序。
-- DeleteMin/DeleteMax：移除并返回具有最小/最大键的元素。
-- GetMinimum/GetMaximum：返回具有最小/最大键的元素但不删除。
+- Insert (key, data): Inserts data with key to the priority queue. Elements are ordered based on key.
+- DeleteMin/DeleteMax: Remove and return the element with the smallest/largest key.
+- GetMinimum/GetMaximum: Return the element with the smallest/largest key without deleting it.
 
-**辅助优先队列操作**
+**Auxiliary Priority Queues Operations**
 
-- kth – Smallest/kth – Largest：返回优先队列中第 k 小/第 k 大的键。
-- Size：返回优先队列中的元素数量。
-- Heap Sort：基于优先级（键）对优先队列中的元素进行排序。
+- kth – Smallest/kth – Largest: Returns the kth –Smallest/kth –Largest key in priority queue.
+- Size: Returns number of elements in priority queue.
+- Heap Sort: Sorts the elements in the priority queue based on priority (key)
 
 ## Priority Queue Applications
 
-优先队列有许多应用——下面列出其中一些：
+Priority queues have many applications - a few of them are listed below:
 
-- 数据压缩：哈夫曼编码算法
-- 最短路径算法：Dijkstra 算法
-- 最小生成树算法：Prim 算法
-- 事件驱动模拟：排队等待的客户
-- 选择问题：查找第 k 小的元素
+- Data compression: Huffman Coding algorithm
+- Shortest path algorithms: Dijkstra’s algorithm
+- Minimum spanning tree algorithms: Prim’s algorithm
+- Event-driven simulation: customers in a line
+- Selection problem: Finding kth- smallest element
 
 ## Priority Queue Implementations
 
-在讨论实际实现之前，让我们先列举可能的选项。
+Before discussing the actual implementation, let us enumerate the possible options.
 
-无序数组实现
-元素插入数组时不考虑顺序。删除（DeleteMax）通过搜索键然后删除来执行。
-插入复杂度：O(1)。DeleteMin 复杂度：O(n)。
+Unordered Array Implementation
+Elements are inserted into the array without bothering about the order. Deletions (DeleteMax) are performed by searching the key and then deleting.
+Insertions complexity: O(1). DeleteMin complexity: O(n).
 
-无序链表实现
-与数组实现非常相似，但使用链表而不是数组。插入复杂度：O(1)。DeleteMin 复杂度：O(n)。
+Unordered List Implementation
+It is very similar to array implementation, but instead of using arrays, linked lists are used. Insertions complexity: O(1). DeleteMin complexity: O(n).
 
-有序数组实现
-元素基于键字段按排序顺序插入数组。删除仅在一端进行。
-插入复杂度：O(n)。DeleteMin 复杂度：O(1)。
+Ordered Array Implementation
+Elements are inserted into the array in sorted order based on key field. Deletions are performed at only one end.
+Insertions complexity: O(n). DeleteMin complexity: O(1).
 
-有序链表实现
-元素基于键字段按排序顺序插入链表。删除仅在一端进行，从而保持优先队列的状态。所有其他与链表 ADT 相关的功能无需修改即可执行。
-插入复杂度：O(n)。DeleteMin 复杂度：O(1)。
+Ordered List Implementation
+Elements are inserted into the list in sorted order based on key field. Deletions are performed at only one end, hence preserving the status of the priority queue. All other functionalities associated with a linked list ADT are performed without modification.
+Insertions complexity: O(n). DeleteMin complexity: O(1).
 
-二叉搜索树实现
-如果插入是随机的，插入和删除平均都需要 O(logn)（参见树章节）。
+Binary Search Trees Implementation
+Both insertions and deletions take O(logn) on average if insertions are random (refer to Trees chapter).
 
-平衡二叉搜索树实现
-插入和删除在最坏情况下都需要 O(logn)（参见树章节）。
+Balanced Binary Search Trees Implementation
+Both insertions and deletion take O(logn) in the worst case (refer to Trees chapter).
 
-二叉堆实现
-在后续章节中我们将详细讨论这一点。目前，假设二叉堆实现为搜索、插入和删除提供 O(logn) 的复杂度，为查找最大或最小元素提供 O(1) 的复杂度。
+Binary Heap Implementation
+In subsequent sections we will discuss this in full detail. For now, assume that binary heap implementation gives O(logn) complexity for search, insertions and deletions and O(1) for finding the maximum or minimum element.
 
-实现对比
+Comparing Implementations
+
 
 | Implementation               | Insertion       | Deletion(DeleteMax) | Find Min        |
 | ---------------------------- | --------------- | ------------------- | --------------- |
@@ -81,25 +82,25 @@
 
 ## Heaps and Binary Heaps
 
-堆是一种具有某些特殊属性的树。
-堆的基本要求是节点的值必须 ≥（或 ≤）其子节点的值。
-这称为堆属性。
-堆还有一个额外属性，即所有叶子节点应位于 h 或 h-1 层（其中 h 是树的高度），对于某个 h > 0（完全二叉树）。
-这意味着堆应形成一棵完全二叉树。
+A heap is a tree with some special properties.
+The basic requirement of a heap is that the value of a node must be ≥ (or ≤) than the values of its children.
+This is called heap property.
+A heap also has the additional property that all leaves should be at h or h – 1 levels (where h is the height of the tree) for some h > 0 (complete binary trees).
+That means heap should form a complete binary tree.
 
-基于堆的属性，我们可以将堆分为两种类型：
+Based on the property of a heap we can classify heaps into two types:
 
-- **最小堆：** 节点的值必须小于或等于其子节点的值
-- **最大堆：** 节点的值必须大于或等于其子节点的值
+- **Min heap:** The value of a node must be less than or equal to the values of its children
+- **Max heap:** The value of a node must be greater than or equal to the values of its children
 
 ### Binary Heaps
 
-在二叉堆中，每个节点最多可以有两个子节点。在实践中，二叉堆就足够了，我们将重点讨论二叉最小堆和二叉最大堆。
+In binary heap each node may have up to two children. In practice, binary heaps are enough and we concentrate on binary min heaps and binary max heaps for the remaining discussion.
 
-**堆的表示：**
-在查看堆操作之前，让我们看看堆如何表示。一种可能性是使用数组。
-由于堆形成完全二叉树，不会有空间的浪费。
-对于下面的讨论，假设元素存储在从索引 0 开始的数组中。之前的最大堆可以表示为：
+**Representing Heaps:**
+Before looking at heap operations, let us see how heaps can be represented. One possibility is using arrays.
+Since heaps are forming complete binary trees, there will not be any wastage of locations.
+For the discussion below let us assume that elements are stored in arrays, which starts at index 0. The previous max heap can be represented as:
 
 <div style="text-align: center;">
 
@@ -107,12 +108,13 @@
 
 </div>
 
-#### Heapifying
 
-向堆中插入元素后，它可能不满足堆属性。
-在这种情况下，我们需要调整堆的位置，使其再次成为堆。
-这个过程称为 heapifying。
-在最大堆中，要 heapify 一个元素，我们必须找到其子节点中的最大值，并与当前元素交换，然后继续这个过程，直到每个节点都满足堆属性。
+#### Heapifying
+After inserting an element into heap, it may not satisfy the heap property.
+In that case we need to adjust the locations of the heap to make it heap again.
+This process is called heapifying. 
+In max-heap, to heapify an element, we have to find the maximum of its children and swap it with the current element and continue this process until the heap property is satisfied at every node.
+
 
 ```dot
 digraph {
@@ -130,13 +132,13 @@ digraph {
  10 -> 7;
 }
 ```
+Observation: One important property of heap is that, if an element is not satisfying the heap property, then all the elements from that element to the root will have the same problem. 
+In the example below, element 1 is not satisfying the heap property and its parent 31 is also having the issue.
+Similarly, if we heapify an element, then all the elements from that element to the root will also satisfy the heap property automatically.
+Let us go through an example. In the above heap, the element 1 is not satisfying the heap property. Let us try heapifying this element.
 
-观察：堆的一个重要属性是，如果一个元素不满足堆属性，那么从该元素到根的所有元素都会有同样的问题。
-在下面的例子中，元素 1 不满足堆属性，其父节点 31 也有问题。
-类似地，如果我们 heapify 一个元素，那么从该元素到根的所有元素也会自动满足堆属性。
-让我们看一个例子。在上面的堆中，元素 1 不满足堆属性。让我们尝试 heapify 这个元素。
+To heapify 1, find the maximum of its children and swap with that.
 
-要 heapify 1，找到其子节点中的最大值并与之交换。
 
 ```dot
 digraph {
@@ -155,8 +157,7 @@ digraph {
  1 -> 7;
 }
 ```
-
-我们需要继续这个过程，直到元素满足堆属性。现在，将 1 与 8 交换。
+We need to continue this process until the element satisfies the heap properties. Now, swap 1 with 8.
 
 ```dot
 digraph {
@@ -175,66 +176,65 @@ digraph {
  8 -> 7;
 }
 ```
-
-现在树满足堆属性。在上面的 heapify 过程中，由于我们是从上到下移动，这个过程有时称为 percolate down（向下渗透）。
-类似地，如果我们从任何其他节点到根开始 heapify，我们可以称该过程为 percolate up（向上渗透），因为是从下到上移动。
+Now the tree is satisfying the heap property. In the above heapifying process, since we aremoving from top to bottom, this process is sometimes called percolate down. 
+Similarly, if we start heapifying from any other node to root, we can that process percolate up as move from bottom to top.
 
 ##### Deleting an Element
+To delete an element from heap, we just need to delete the element from the root.
+This is the only operation (maximum element) supported by standard heap.
+After deleting the root element, copy the last element of the heap (tree) and delete that last element.
 
-要从堆中删除元素，我们只需要删除根元素。
-这是标准堆支持的唯一操作（最大元素）。
-删除根元素后，复制堆（树）的最后一个元素并删除该最后一个元素。
+After replacing the last element, the tree may not satisfy the heap property. To make it heap again, call the PercolateDown function.
+- Copy the first element into some variable
+- Copy the last element into first element location
+- PercolateDown the first element
 
-替换最后一个元素后，树可能不满足堆属性。为了使其再次成为堆，调用 PercolateDown 函数。
-- 将第一个元素复制到某个变量
-- 将最后一个元素复制到第一个元素的位置
-- 对第一个元素执行 PercolateDown
+Time Complexity: same as Heapify function and it is O(logn).
 
-时间复杂度：与 Heapify 函数相同，为 O(logn)。
 
 ##### Inserting an Element
+Insertion of an element is similar to the heapify and deletion process.
+- Increase the heap size
+- Keep the new element at the end of the heap (tree)
+- Heapify the element from bottom to top (root)
 
-插入元素类似于 heapify 和删除过程。
-- 增加堆大小
-- 将新元素放在堆（树）的末尾
-- 从底部到顶部（根）heapify 该元素
 
 ## HeapSort
 
-堆 ADT 的一个主要应用是排序（堆排序）。
-堆排序算法将所有元素（来自未排序数组）插入堆中，然后从堆根中移除它们，直到堆为空。
-注意，堆排序可以在待排序数组上就地完成。
-不是删除元素，而是将第一个元素（最大）与最后一个元素交换，并减小堆大小（数组大小）。
-然后，我们 heapify 第一个元素。继续这个过程，直到剩余元素的数量为 1。
+One main application of heap ADT is sorting (heap sort).
+The heap sort algorithm inserts all elements (from an unsorted array) into a heap, then removes them from the root of a heap until the heap is empty.
+Note that heap sort can be done in place with the array to be sorted.
+Instead of deleting an element, exchange the first element (maximum) with the last element and reduce the heap size (array size). 
+Then, we heapify the first element. Continue this process until the number of remaining elements is one.
 
 ## d-Heaps
 
-二叉堆非常简单，以至于在需要优先队列时几乎总是使用它们。
-一个简单的泛化是 *d-heap*，它与二叉堆完全一样，只是所有节点都有 d 个子节点（因此，二叉堆是 2-heap）。
+Binary heaps are so simple that they are almost always used when priority queues are needed.
+A simple generalization is a  *d-heap* , which is exactly like a binary heap except that all nodes have *d *children (thus, a binary heap is a 2-heap).
 
 ## Leftist Heaps
 
 ## Skew Heaps
 
-*Skew heap*（斜堆）是左偏堆的自调整版本，实现起来极其简单。
-斜堆与左偏堆的关系类似于伸展树与 AVL 树的关系。
-斜堆是具有堆顺序的二叉树，但树上没有结构约束。
-与左偏堆不同，不维护任何节点的空路径长度信息。
-斜堆的右路径可能在任何时候任意长，因此所有操作的最坏情况运行时间为 *O*(*n*)。
-然而，与伸展树一样，可以证明对于任意 m 次连续操作，总的最坏情况运行时间为 *O*(*m* log *n*)。
-因此，斜堆每次操作的摊还成本为 *O*(log *n*)。
+A *skew heap* is a self-adjusting version of a leftist heap that is incredibly simple to implement.
+The relationship of skew heaps to leftist heaps is analogous to the relation between splay trees and AVL trees.
+Skew heaps are binary trees with heap order, but there is no structural constraint on these trees.
+Unlike leftist heaps, no information is maintained about the null path length of any node.
+The right path of a skew heap can be arbitrarily long at any time, so the worst-case running time of all operations is  *O* ( *n* ).
+However, as with splay trees, it can be shown that for any *m* consecutive operations, the total worst-case running time is  *O* (*m *log  *n* ).
+Thus, skew heaps have  *O* (log  *n* ) amortized cost per operation.
 
-与左偏堆一样，斜堆的基本操作是合并。
+As with leftist heaps, the fundamental operation on skew heaps is merging.
 
 ## Binomial Queues
 
 ## Summary
 
-标准的二叉堆实现因其简单和快速而优雅。它不需要指针，只需常量级别的额外空间，同时高效地支持优先队列操作。
+The standard binary heap implementation is elegant because of its simplicity and speed. It requires no pointers and only a constant amount of extra space, yet supports the priority queue operations efficiently.
 
-我们考虑了额外的*合并*操作，并开发了三种实现，每种都有其独特之处。
-左偏堆是递归威力的极好示例。斜堆因缺乏平衡标准而成为一种非凡的数据结构。
-二项队列展示了如何使用简单的想法来实现良好的时间界。
+We considered the additional *merge* operation and developed three implementations, each of which is unique in its own way.
+The leftist heap is a wonderful example of the power of recursion. The skew heap represents a remarkable data structure because of the lack of balance criteria.
+The binomial queue shows how a simple idea can be used to achieve a good time bound.
 
 ## Links
 

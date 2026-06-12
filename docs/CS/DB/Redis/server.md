@@ -1,16 +1,16 @@
-## 介绍
+## Introduction
 
 ## Server
 
-所有服务器配置以及通常的所有共享状态都定义在一个名为 `server` 的全局结构中，类型为 `struct redisServer`。
-此结构中的一些重要字段是：
+All the server configuration and in general all the shared state is defined in a global structure called `server`, of type `struct redisServer`.
+A few important fields in this structure are:
 
-* `server.db` 是一个 [Redis 数据库](/docs/CS/DB/Redis/redisDb.md) 数组，存储数据的地方。
-* `server.commands` 是命令表。
-* `server.clients` 是连接到服务器的客户端链表。
-* `server.master` 是一个特殊客户端，即主实例（如果当前实例是从实例）。
+* `server.db` is an array of [Redis databases](/docs/CS/DB/Redis/redisDb.md), where data is stored.
+* `server.commands` is the command table.
+* `server.clients` is a linked list of clients connected to the server.
+* `server.master` is a special client, the master, if the instance is a replica.
 
-还有大量其他字段。大多数字段直接在结构定义中注释。
+There are tons of other fields. Most fields are commented directly inside the structure definition.
 
 ```c
 struct redisServer {
@@ -93,7 +93,7 @@ struct redisServer {
     off_t loading_process_events_interval_bytes;
 ```
 
-经常查找的命令的快速指针。
+Fast pointers to often looked up command
 
 ```c
     struct redisCommand *delCommand, *multiCommand, *lpushCommand,
@@ -444,13 +444,17 @@ struct redisServer {
 };
 ```
 
-aeEventLoop 见 ae。
+aeEventLoop see ae
+
+
+
+
 
 ## Client
 
-过去称为 `redisClient`，现在简化为 `client`。
+In the past it was called `redisClient`, now just `client`.
 
-该结构有许多字段，这里只展示主要的：
+The structure has many fields, here we'll just show the main ones:
 
 ```c
 struct client {
@@ -466,40 +470,46 @@ struct client {
 }
 ```
 
-客户端结构定义了一个*已连接的客户端*：
+The client structure defines a  *connected client* :
 
-* `fd` 字段是客户端套接字文件描述符。
-* `argc` 和 `argv` 填充了客户端正在执行的命令，以便实现特定 Redis 命令的函数可以读取参数。
-* `querybuf` 累积来自客户端的请求，Redis 服务器根据 Redis 协议解析这些请求，并通过调用客户端正在执行的命令的实现来执行。
-* `reply` 和 `buf` 是动态和静态缓冲区，用于累积服务器发送给客户端的回复。一旦文件描述符可写，这些缓冲区会增量写入套接字。
-* `createClient()` 分配并初始化一个新的客户端。
-* `addReply*()` 函数系列由命令实现使用，用于将数据追加到客户端结构，这些数据将作为已执行命令的回复传输给客户端。
-* `writeToClient()` 将输出缓冲区中待处理的数据传输给客户端，由*可写事件处理程序* `sendReplyToClient()` 调用。
-* `readQueryFromClient()` 是*可读事件处理程序*，将从客户端读取的数据累积到查询缓冲区中。
-* `processInputBuffer()` 是根据 Redis 协议解析客户端查询缓冲区的入口点。一旦命令准备好处理，它会调用 `server.c` 中定义的 `processCommand()` 来实际执行命令。
-* `freeClient()` 释放、断开和移除客户端。
+* The `fd` field is the client socket file descriptor.
+* `argc` and `argv` are populated with the command the client is executing, so that functions implementing a given Redis command can read the arguments.
+* `querybuf` accumulates the requests from the client, which are parsed by the Redis server according to the Redis protocol and executed by calling the implementations of the commands the client is executing.
+* `reply` and `buf` are dynamic and static buffers that accumulate the replies the server sends to the client. These buffers are incrementally written to the socket as soon as the file descriptor is writeable.
+* `createClient()` allocates and initializes a new client.
+* the `addReply*()` family of functions are used by command implementations in order to append data to the client structure, that will be transmitted to the client as a reply for a given command executed.
+* `writeToClient()` transmits the data pending in the output buffers to the client and is called by the *writable event handler* `sendReplyToClient()`.
+* `readQueryFromClient()` is the *readable event handler* and accumulates data read from the client into the query buffer.
+* `processInputBuffer()` is the entry point in order to parse the client query buffer according to the Redis protocol.
+  Once commands are ready to be processed, it calls `processCommand()` which is defined inside `server.c` in order to actually execute the command.
+* `freeClient()` deallocates, disconnects and removes a client.
 
 ### Buffer
 
-通常，客户端缓存的两个关键优势是：
 
-1. 数据以非常低的延迟可用。
-2. 数据库系统接收更少的查询，允许它用更少的节点服务相同的数据集。
+Usually the two key advantages of client-side caching are:
 
-Redis 客户端缓存支持称为*Tracking*，有两种模式：
+1. Data is available with a very small latency.
+2. The database system receives less queries, allowing it to serve the same dataset with a smaller number of nodes.
 
-* 在默认模式下，服务器记住给定客户端访问了哪些键，并在相同键被修改时发送失效消息。这在服务器端消耗内存，但仅针对客户端可能在内存中的键集发送失效消息。
-* 在*broadcasting*模式下，服务器不尝试记住给定客户端访问了哪些键，因此这种模式在服务器端完全不消耗内存。相反，客户端订阅键前缀，如 `object:` 或 `user:`，并在每次匹配订阅前缀的键被访问时收到通知消息。
 
-客户端可能希望对给定缓存键在请求中被实际服务的次数运行内部统计，以了解未来应该缓存什么。通常：
+The Redis client-side caching support is called  *Tracking* , and has two modes:
 
-* 我们不希望缓存许多频繁变化的键。
-* 我们不希望缓存许多很少被请求的键。
-* 我们希望缓存经常被请求且以合理速率变化的键。对于不以合理速率变化的键的例子，考虑一个不断[`INCR`](https://redis.io/commands/incr)emented 的全局计数器。
+* In the default mode, the server remembers what keys a given client accessed, and sends invalidation messages when the same keys are modified. This costs memory in the server side, but sends invalidation messages only for the set of keys that the client might have in memory.
+* In the *broadcasting* mode, the server does not attempt to remember what keys a given client accessed, so this mode costs no memory at all in the server side. Instead clients subscribe to key prefixes such as `object:` or `user:`, and receive a notification message every time a key matching a subscribed prefix is touched.
 
-然而，更简单的客户端可能只使用一些随机抽样来淘汰数据，只需记住给定缓存值上次被服务的时间，试图淘汰最近未被服务的键。
 
-结构 `client`（过去称为 `redisClient`）有许多字段，这里只展示主要的：
+
+Clients may want to run internal statistics about the number of times a given cached key was actually served in a request, to understand in the future what is good to cache. In general:
+
+* We don't want to cache many keys that change continuously.
+* We don't want to cache many keys that are requested very rarely.
+* We want to cache keys that are requested often and change at a reasonable rate. For an example of key not changing at a reasonable rate, think of a global counter that is continuously [`INCR`](https://redis.io/commands/incr)emented.
+
+However simpler clients may just evict data using some random sampling just remembering the last time a given cached value was served, trying to evict keys that were not served recently.
+
+
+The structure `client`(in the past it was called `redisClient`) has many fields, here we'll just show the main ones:
 
 ```c
 typedef struct client {
@@ -526,10 +536,10 @@ typedef struct client {
  #define PROTO_REPLY_CHUNK_BYTES (16*1024) /* 16k output buffer */
 ```
 
-客户端结构定义了一个*已连接的客户端*：
+The client structure defines a *connected client*:
 
-* `querybuf` 累积来自客户端的请求，Redis 服务器根据 Redis 协议解析这些请求，并通过调用客户端正在执行的命令的实现来执行。
-* `reply` 和 `buf` 是动态和静态缓冲区（16KB），用于累积服务器发送给客户端的回复。一旦文件描述符可写，这些缓冲区会增量写入套接字。
+* `querybuf` accumulates the requests from the client, which are parsed by the Redis server according to the Redis protocol and executed by calling the implementations of the commands the client is executing.
+* `reply` and `buf` are dynamic and static buffers(16KB) that accumulate the replies the server sends to the client. These buffers are incrementally written to the socket as soon as the file descriptor is writeable.
 
 #### querybuf
 
@@ -538,7 +548,7 @@ typedef struct client {
 createSizeTConfig("client-query-buffer-limit", NULL, MODIFIABLE_CONFIG, 1024*1024, LONG_MAX, server.client_max_querybuf_len, 1024*1024*1024, MEMORY_CONFIG, NULL, NULL), /* Default: 1GB max query buffer. */
 ```
 
-如果超出限制则关闭客户端。
+close client if over limit
 
 ```c
 // networking::readQueryFromClient
@@ -554,22 +564,26 @@ if (sdslen(c->querybuf) > server.client_max_querybuf_len) {
 }
 ```
 
+
 #### resize
 
-客户端查询缓冲区是一个 sds.c 字符串，末尾可能有很多未使用的空闲空间，此函数在需要时回收空间。
 
-该函数始终返回 0，因为它从不终止客户端。
+The client query buffer is an sds.c string that can end with a lot of free space not used, this function reclaims space if needed.
 
-有两个条件可以调整查询缓冲区大小：
+The function always returns 0 as it never terminates the client.
 
-1. 查询缓冲区 > BIG_ARG 且对最新峰值来说太大。
-2. 查询缓冲区 > BIG_ARG 且客户端空闲。
-3. 仅当查询缓冲区实际浪费至少几 KB（4KB）时才调整大小。
 
-有两个条件可以调整待处理查询缓冲区大小：
 
-1. 待处理查询缓冲区 > LIMIT_PENDING_QUERYBUF。
-2. 已用长度小于 pending_querybuf_size/2。
+There are two conditions to resize the query buffer:
+
+1. Query buffer is > BIG_ARG and too big for latest peak.
+2. Query buffer is > BIG_ARG and client is idle.
+3. Only resize the query buffer if it is actually wasting at least a few kbytes(4KB).
+
+There are two conditions to resize the pending query buffer:
+
+1. Pending Query buffer is > LIMIT_PENDING_QUERYBUF.
+2. Used length is smaller than pending_querybuf_size/2
 
 ```c
 int clientsCronResizeQueryBuffer(client *c) {
@@ -607,7 +621,7 @@ int clientsCronResizeQueryBuffer(client *c) {
 
 #### reply dynamic buffer
 
-客户端输出缓冲区限制可用于强制断开因某种原因未足够快地从服务器读取数据的客户端（常见原因是 Pub/Sub 客户端无法像发布者生成消息那样快地消费消息）。
+The client output buffer limits can be used to force disconnection of clients that are not reading data from the server fast enough for some reason (a common reason is that a Pub/Sub client can't consume messages as fast as the publisher can produce them).
 
 ```
 client-output-buffer-limit normal 0 0 0
@@ -615,7 +629,7 @@ client-output-buffer-limit replica 256mb 64mb 60
 client-output-buffer-limit pubsub 32mb 8mb 60
 ```
 
-此结构用于表示客户端的输出缓冲区，实际上是一个由这样块组成的链表，即 client->reply。
+This structure is used in order to represent the output buffer of a client, which is actually a linked list of blocks like that, that is: client->reply.
 
 ```c
 // server.h
@@ -627,8 +641,8 @@ typedef struct clientReplyBlock {
 
 ### freeClientAsync
 
-安排一个客户端在 serverCron() 函数中的安全时间释放。
-当我们需要终止一个客户端但处于无法调用 freeClient() 的上下文中时，此函数很有用，因为客户端应在程序流程的延续中保持有效。
+Schedule a client to free it at a safe time in the serverCron() function. 
+This function is useful when we need to terminate a client but we are in a context where calling freeClient() is not possible, because the client should be valid for the continuation of the flow of the program.
 
 ```c
 // networking.c
@@ -656,11 +670,11 @@ void freeClientAsync(client *c) {
 
 ### processCommand
 
-如果调用了此函数，我们已经读取了一个完整的命令，参数在客户端的 argv/argc 字段中。
-processCommand() 执行命令或为来自客户端的批量读取准备服务器。
+If this function gets called we already read a whole command, arguments are in the client argv/argc fields. 
+processCommand() execute the command or prepare the server for a bulk read from the client.
 
-如果返回 C_OK，则客户端仍然存活有效，调用者可以执行其他操作。
-如果返回 C_ERR，则客户端已被销毁（例如在 QUIT 之后）。
+If C_OK is returned the client is still alive and valid and other operations can be performed by the caller. 
+Otherwise if C_ERR is returned the client was destroyed (i.e. after QUIT).
 
 ```c
 int processCommand(client *c) {
@@ -760,13 +774,13 @@ int processCommand(client *c) {
         }
         return C_OK;
     }
+
 ```
+If [cluster](/docs/CS/DB/Redis/cluster.md) is enabled perform the cluster redirection here.
+However we don't perform the redirection if:
 
-如果启用了 [cluster](/docs/CS/DB/Redis/cluster.md)，在此执行集群重定向。
-但以下情况不执行重定向：
-
-1. 此命令的发送者是我们的主实例。
-2. 该命令没有键参数。
+1. The sender of this command is our master.
+2. The command has no key arguments.
 
 ```c
     if (server.cluster_enabled &&
@@ -951,8 +965,7 @@ int processCommand(client *c) {
         return C_OK;       
     }
 ```
-
-执行命令。
+Exec the command
 
 ```c
     if (c->flags & CLIENT_MULTI &&

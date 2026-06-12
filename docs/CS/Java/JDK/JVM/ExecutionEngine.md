@@ -1,30 +1,31 @@
 ## Introduction
 
-一旦字节码加载到主内存中，并且在运行时数据区中可获得详细信息，下一步就是运行程序。
-Execution Engine 通过执行每个类中的代码来处理。
+Once the bytecode has been loaded into the main memory, and details are available in the runtime data area, the next step is to run the program. 
+The Execution Engine handles this by executing the code present in each class.
 
-然而，在执行程序之前，需要将字节码转换为机器语言指令。
-JVM 可以使用解释器或 JIT 编译器作为执行引擎。
+However, before executing the program, the bytecode needs to be converted into machine language instructions.
+The JVM can use an interpreter or a JIT compiler for the execution engine.
 
-解释器（Interpreter）
+Interpreter
 
-解释器逐行读取并执行字节码指令。由于逐行执行，解释器相对较慢。
-解释器的另一个缺点是，当一个方法被多次调用时，每次都需要重新解释。
+The interpreter reads and executes the bytecode instructions line by line. Due to the line by line execution, the interpreter is comparatively slower.
+Another disadvantage of the interpreter is that when a method is called multiple times, every time a new interpretation is required.
 
-JIT 编译器
 
-JIT 编译器克服了解释器的缺点。
-Execution Engine 首先使用解释器执行字节码，但当发现重复代码时，它会使用 JIT 编译器。
+JIT Compiler
 
-JIT 编译器随后编译整个字节码并将其转换为本地机器码。
-这种本地机器码直接用于重复的方法调用，从而提高了系统性能。
+The JIT Compiler overcomes the disadvantage of the interpreter. 
+The Execution Engine first uses the interpreter to execute the byte code, but when it finds some repeated code, it uses the JIT compiler.
 
-JIT 编译器包含以下组件：
+The JIT compiler then compiles the entire bytecode and changes it to native machine code.
+This native machine code is used directly for repeated method calls, which improves the performance of the system.
 
-- Intermediate Code Generator - 生成中间代码
-- Code Optimizer - 优化中间代码以获得更好的性能
-- Target Code Generator - 将中间代码转换为本地机器码
-- Profiler - 发现热点（重复执行的代码）
+The JIT Compiler has the following components:
+
+- Intermediate Code Generator - generates intermediate code
+- Code Optimizer - optimizes the intermediate code for better performance
+- Target Code Generator - converts intermediate code to native machine code
+- Profiler - finds the hotspots (code that is executed repeatedly)
 
 ```
 -Xint only interceptor

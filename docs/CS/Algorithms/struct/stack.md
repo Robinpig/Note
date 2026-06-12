@@ -1,100 +1,107 @@
 ## Introduction
 
-栈是一种用于存储数据的简单数据结构（类似于[链表](/docs/CS/Algorithms/struct/linked-list.md)）。
-栈是一种有序列表，其中插入和删除都在一端进行，这一端称为栈顶。
-最后插入的元素是第一个被删除的。
-因此，它被称为后进先出（LIFO）或先进后出（FILO）列表。
+A stack is a simple data structure used for storing data (similar to [Linked Lists](/docs/CS/Algorithms/struct/linked-list.md)).
+A stack is an ordered list in which insertion and deletion are done at one end, called top. 
+The last element inserted is the first one to be deleted.
+Hence, it is called the Last in First out (LIFO) or First in Last out (FILO) list.
 
-栈的两种操作有特殊的名称。
-当元素插入栈时，称为 *push*（入栈），当元素从栈中移除时，称为 *pop*（出栈）。
-尝试在空栈上执行 pop 称为 *underflow*（下溢），尝试在满栈上执行 push 称为 *overflow*（上溢）。
-通常我们将它们视为异常。
+Special names are given to the two changes that can be made to a stack. 
+When an element is inserted in a stack, the concept is called *push*, and when an element is removed from the stack, the concept is called *pop*.
+Trying to pop out an empty stack is called *underflow* and trying to push an element in a full stack is called *overflow*.
+Generally, we treat them as exceptions.
+
 
 ## Stack ADT
 
-以下操作使栈成为一个 ADT。
-为简单起见，假设数据是整数类型。
+The following operations make a stack an ADT.
+For simplicity, assume the data is an integer type.
 
-**主要栈操作**
+**Main stack operations**
 
-- Push(int data): 将数据压入栈。
-- int Pop(): 移除并返回栈中最后插入的元素。
+- Push (int data): Inserts data onto stack.
+- int Pop(): Removes and returns the last inserted element from the stack.
 
-**辅助栈操作**
+**Auxiliary stack operations**
 
-- int Top(): 返回最后插入的元素但不移除。
-- int Size(): 返回栈中存储的元素数量。
-- int IsEmptyStack(): 指示栈中是否有元素。
-- int IsFullStack(): 指示栈是否已满。
+- int Top(): Returns the last inserted element without removing it.
+- int Size(): Returns the number of elements stored in the stack.
+- int IsEmptyStack(): Indicates whether any elements are stored in the stack or not.
+- int IsFullStack(): Indicates whether the stack is full or not.
 
-**异常**
+**Exceptions**
 
-尝试执行某个操作有时可能会导致错误条件，称为异常。
-异常被"抛出"给无法执行的操作。
-在栈 ADT 中，如果栈为空，则无法执行 pop 和 top 操作。尝试在空栈上执行 pop（或 top）会抛出异常。
-尝试在满栈上执行 push 会抛出异常。
+Attempting the execution of an operation may sometimes cause an error condition, called an exception.
+Exceptions are said to be “thrown” by an operation that cannot be executed.
+In the Stack ADT, operations pop and top cannot be performed if the stack is empty. Attempting the execution of pop (top) on an empty stack throws an exception.
+Trying to push an element in a full stack throws an exception.
 
 ## Applications
 
-以下是栈发挥重要作用的一些应用。
+Following are some of the applications in which stacks play an important role.
 
-**直接应用**
+**Direct applications**
 
-- 符号平衡
-- 中缀到后缀的转换
-- 后缀表达式的求值
-- 实现函数调用（包括递归）
-- 查找跨度（股票市场中的跨度查找，参见问题部分）
-- Web 浏览器中的页面访问历史 [返回按钮]
-- 文本编辑器中的撤销序列
-- HTML 和 XML 中的标签匹配
+- Balancing of symbols
+- Infix-to-postfix conversion
+- Evaluation of postfix expression
+- Implementing function calls (including recursion)
+- Finding of spans (finding spans in stock markets, refer to Problems section)
+- Page-visited history in a Web browser [Back Buttons]
+- Undo sequence in a text editor
+- Matching Tags in HTML and XML
 
-**间接应用**
+**Indirect applications**
 
-- 其他算法的辅助数据结构（例如：树的遍历算法）
-- 其他数据结构的组成部分（例如：[模拟队列]()）
+- Auxiliary data structure for other algorithms (Example: Tree traversal algorithms)
+- Component of other data structures (Example: [Simulating queues]())
 
 ## Implementation
 
-实现栈 ADT 有许多方法；下面列出常用的方法。
+There are many ways of implementing stack ADT; given below are the commonly used methods.
 
-- 简单数组实现
-- 动态数组实现
-- 链表实现
+- Simple array based implementation
+- Dynamic array based implementation
+- Linked lists implementation
 
-栈顶是交互的地方 数据修改以数组的尾部作为栈顶
+栈顶是交互的地方 数据修改以数组的尾部作为栈顶 
 
-单链表是前节点拥有后节点的指针 所以使用单链表的头节点作为栈顶 不需要有一个 dummy 节点
+
+
+
+
+单链表是前节点拥有后节点的指针 所以使用单链表的头节点作为栈顶 不需要有一个dummy节点
+
+
 
 ### Comparison of Implementations
 
-**增量策略与加倍策略的比较**
+**Comparing Incremental Strategy and Doubling Strategy**
 
-我们通过分析执行一系列 n 个 push 操作所需的总时间 T(n) 来比较增量策略和加倍策略。
-从一个由大小为 1 的数组表示的空栈开始。
-push 操作的摊还时间是在整个操作序列中一次 push 的平均时间，即 $T(n)/n$。
+We compare the incremental strategy and doubling strategy by analyzing the total time T(n) needed to perform a series of n push operations.
+We start with an empty stack represented by an array of size 1.
+We call amortized time of a push operation is the average time taken by a push over the series of operations, that is, $T(n)/n$.
 
-**增量策略**
+**Incremental Strategy**
 
-push 操作的摊还时间（每次操作的平均时间）为 $O(n)$ $[O(n^2)/n]$。
+The amortized time (average time per operation) of a push operation is $O(n)$ $[O(n2)/n]$.
 
-**加倍策略**
+**Doubling Strategy**
 
-在这种方法中，push 操作的摊还时间为 $O(1)$ $[O(n)/n]$。
+In this method, the amortized time of a push operation is $O(1)$ $[O(n)/n]$.
 
-数组实现与链表实现的比较
+Comparing Array Implementation and Linked List Implementation
 
-数组实现
+Array Implementation
 
-- 操作需要常数时间。
-- 偶尔有昂贵的加倍操作。
-- 任何 n 次操作的序列（从空栈开始）——"摊还"界所需时间与 n 成比例。
+- Operations take constant time.
+- Expensive doubling operation every once in a while.
+- Any sequence of n operations (starting from empty stack) - “amortized” bound takes time proportional to n.
 
-链表实现
+Linked List Implementation
 
-- 优雅地增长和收缩。
-- 每个操作需要常数时间 O(1)。
-- 每个操作使用额外的空间和时间来处理引用。
+- Grows and shrinks gracefully.
+- Every operation takes constant time O(1).
+- Every operation uses extra space and time to deal with references.
 
 ## Links
 

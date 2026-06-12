@@ -1,17 +1,18 @@
 ## Overview
 
-JVM 可以以有序或突然的方式关闭。
-当最后一个"正常"（非守护）线程终止、有人调用 `System.exit` 或通过其他平台特定方式（如发送 `SIGINT` 或按 `Ctrl-C`）时，会启动有序关闭。
+The JVM can shut down in either an orderly or abrupt manner.
+An orderly shutdown is initiated when the last "normal"(non‐daemon) thread terminates,
+someone calls `System.exit`, or by other platform‐specific means (such as sending a `SIGINT` or hitting `Ctrl-C`).
 
-虽然这是 JVM 关闭的标准和首选方式，
-但也可以通过调用 `Runtime.halt` 或通过操作系统杀死 JVM 进程（如发送 `SIGKILL`）来突然关闭。
+While this is the standard and preferred way for the JVM to shut down,
+it can also be shut down abruptly by calling `Runtime.halt` or by killing the JVM process through the operating system (such as sending a `SIGKILL`).
 
 ## destroy_vm
 
-- `Threads::destroy_vm()` 通常在程序从 [main()](/docs/CS/Java/JDK/JVM/start.md?id=main) 返回时从 `jni_DestroyJavaVM()` 调用。
-- 另一个 VM 退出路径是通过 vm_exit()，当程序调用 `System.exit()` 返回值或 VM 中出现严重错误时。
+- `Threads::destroy_vm()` is normally called from `jni_DestroyJavaVM()` when the program falls off the end of [main()](/docs/CS/Java/JDK/JVM/start.md?id=main).
+- Another VM exit path is through vm_exit() when the program calls `System.exit()` to return a value or when there is a serious error in VM.
 
-这两个关闭路径并不完全相同，但它们在 Java 级别共享 Shutdown.shutdown()，在 VM 级别共享 before_exit() 和 VM_Exit 操作。
+The two shutdown paths are not exactly the same, but they share Shutdown.shutdown() at Java level and before_exit() and VM_Exit op at VM level.
 
 ```
 Shutdown sequence:
@@ -135,19 +136,19 @@ bool Threads::destroy_vm() {
 }
 ```
 
-最后一个运行中的线程调用 `java.lang.Shutdown.shutdown()`
+Last thread running calls `java.lang.Shutdown.shutdown()`
 
 ## Shutdown Hooks
 
-*在有序关闭中，JVM 首先启动所有已注册的 shutdown hooks。* Shutdown hooks 是通过 `Runtime.addShutdownHook` 注册的未启动线程。JVM 不保证 shutdown hooks 启动的顺序。如果在关闭时任何应用程序线程（守护或非守护）仍在运行，它们将与关闭过程同时继续运行。当所有 shutdown hooks 完成后，如果 runFinalizersOnExit 为 true，JVM 可能会选择运行 finalizers，然后停止。JVM 不会尝试停止或中断关闭时仍在运行的任何应用程序线程；当 JVM 最终停止时，它们会被突然终止。如果 shutdown hooks 或 finalizers 没有完成，那么有序关闭过程会"挂起"，并且必须突然关闭 JVM。
+*In an orderly shutdown, the JVM first starts all registered shutdown hooks.* Shutdown hooks are unstarted threads that are registered with `Runtime.addShutdownHook`. The JVM makes no guarantees on the order in which shutdown hooks are started. If any application threads (daemon or nondaemon) are still running at shutdown time, they continue to run concurrently with the shutdown process. When all shutdown hooks have completed, the JVM may choose to run finalizers if runFinalizersOnExit is true, and then halts. The JVM makes no attempt to stop or interrupt any application threads that are still running at shutdown time; they are abruptly terminated when the JVM eventually halts. If the shutdown hooks or finalizers don't complete, then the orderly shutdown process "hangs" and the JVM must be shut down abruptly.
 
-*在突然关闭中，除了停止 JVM 之外，JVM 不需要执行任何操作；shutdown hooks 不会运行。*
+*In an abrupt shutdown, the JVM is not required to do anything other than halt the JVM; shutdown hooks will not run.*
 
-**Shutdown hooks 应该是线程安全的**：它们必须在访问共享数据时使用同步，并应小心避免死锁，就像任何其他并发代码一样。此外，它们不应假设应用程序的状态（例如其他服务是否已关闭或所有正常线程是否已完成）或 JVM 关闭的原因，因此必须非常防御性地编码。最后，它们应尽可能快地退出，因为它们的存会延迟 JVM 终止，而此时用户可能正期望 JVM 快速终止。
+**Shutdown hooks should be thread‐safe**: they must use synchronization when accessing shared data and should be careful to avoid deadlock, just like any other concurrent code. Further, they should not make assumptions about the state of the application (such as whether other services have shut down already or all normal threads have completed)or about why the JVM is shutting down, and must therefore be coded extremely defensively. Finally, they should exit as quickly as possible, since their existence delays JVM termination at a time when the user may be expecting the JVM to terminate quickly.
 
-Shutdown hooks 可用于服务或应用程序清理，例如删除临时文件或清理操作系统不会自动清理的资源。
+Shutdown hooks can be used for service or application cleanup, such as deleting temporary files or cleaning up resources that are not automatically cleaned up by the OS.
 
-由于所有 shutdown hooks 同时运行，关闭日志文件可能会给想要使用日志记录器的其他 shutdown hooks 带来麻烦。为避免此问题，shutdown hooks 不应依赖可能被应用程序或其他 shutdown hooks 关闭的服务。实现此目的的一种方法是为所有服务使用单个 shutdown hook，而不是为每个服务使用一个，并让它调用一系列关闭操作。例如 [DubboShutdownHook](/docs/CS/Framework/Dubbo/Start.md?id=shutdown-hooks)
+Because shutdown hooks all run concurrently, closing the log file could cause trouble for other shutdown hooks who want to use the logger. To avoid this problem, shutdown hooks should not rely on services that can be shut down by the application or other shutdown hooks. One way to accomplish this is to use a single shutdown hook for all services, rather than one for each service, and have it call a series of shutdown actions. For example [DubboShutdownHook](/docs/CS/Framework/Dubbo/Start.md?id=shutdown-hooks)
 
 ## Links
 

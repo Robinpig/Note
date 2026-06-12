@@ -1,47 +1,47 @@
 ## Overview
 
-OpenJDK 是一个三层编译环境。
-只执行几次的方法会被解释执行。
-一旦方法达到一定的执行阈值，就会使用教科书式编译器 C1 进行编译。
-只有当方法达到更高的执行阈值时，才会使用优化编译器 C2 进行编译。
+OpenJDK is a three tiered compilation environment.
+Methods that are only executed a few times are interpreted.
+Once a method hits a certain threshold of executions it is compiled using a text book style compiler called C1.
+Only when the method has hit an even higher threshold of executions will it be compiled using C2, the optimizing compiler.
 
-JVM 在运行时解释和执行字节码。此外，它还利用即时（JIT）编译来提升性能。
+The JVM interprets and executes bytecode at runtime. In addition, it makes use of the just-in-time (JIT) compilation to boost performance.
 
-在早期版本的 Java 中，我们必须在 Hotspot JVM 中可用的两种 JIT 编译器之间手动选择。
-一种针对更快的应用程序启动进行了优化，另一种则实现了更好的整体性能。
-Java 7 引入了分层编译，以兼得两者的优势。
+In earlier versions of Java, we had to manually choose between the two types of JIT compilers available in the Hotspot JVM. 
+One is optimized for faster application start-up, while the other achieves better overall performance.
+Java 7 introduced tiered compilation in order to achieve the best of both worlds.
 
-JIT 编译器将频繁执行的代码段编译为本地代码。
-这些代码段称为热点，因此得名 Hotspot JVM。
-因此，Java 可以实现与完全编译语言相似的性能。
-让我们看看 JVM 中可用的两种 JIT 编译器。
+A JIT compiler compiles bytecode to native code for frequently executed sections.
+These sections are called hotspots, hence the name Hotspot JVM.
+As a result, Java can run with similar performance to a fully compiled language.
+Let's look at the two types of JIT compilers available in the JVM.
 
-系统支持 5 个执行级别：
+The system supports 5 execution levels:
 
-* level 0 - 解释器（Profiling 由 MethodData 对象或简称 MDO 跟踪）
-* level 1 - 完全优化的 C1（无 profiling）
-* level 2 - 带有调用和回边计数器的 C1
-* level 3 - 完全 profiling 的 C1（level 2 + 所有其他 MDO profiling 信息）
-* level 4 - 完全 profile 引导优化的 C2
+* level 0 - interpreter (Profiling is tracked by a MethodData object, or MDO in short)
+* level 1 - C1 with full optimization (no profiling)
+* level 2 - C1 with invocation and backedge counters
+* level 3 - C1 with full profiling (level 2 + All other MDO profiling information)
+* level 4 - C2 with full profile guided optimization
 
-C1 – 客户端编译器
+C1 – Client Compiler
 
-客户端编译器，也称为 C1，是一种针对更快启动时间优化的 JIT 编译器。
-它尝试尽快优化和编译代码。
+The client compiler, also called C1, is a type of a JIT compiler optimized for faster start-up time. 
+It tries to optimize and compile the code as soon as possible.
 
-历史上，我们将 C1 用于短生命周期的应用程序以及启动时间是一项重要非功能性需求的应用程序。
-在 Java 8 之前，我们必须指定 -client 标志才能使用 C1 编译器。但是，如果我们使用 Java 8 或更高版本，此标志将无效。
+Historically, we used C1 for short-lived applications and applications where start-up time was an important non-functional requirement. 
+Prior to Java 8, we had to specify the -client flag to use the C1 compiler. However, if we use Java 8 or higher, this flag will have no effect.
 
-C2 – 服务端编译器
+C2 – Server Compiler
 
-服务端编译器，也称为 C2（Opto），是一种针对更好整体性能优化的 JIT 编译器。
-与 C1 相比，C2 观察和分析代码的时间更长。这使得 C2 能够在编译代码中做出更好的优化。
+The server compiler, also called C2(Opto), is a type of a JIT compiler optimized for better overall performance. 
+C2 observes and analyzes the code over a longer period of time compared to C1. This allows C2 to make better optimizations in the compiled code.
 
-历史上，我们将 C2 用于长期运行的服务端应用程序。
-在 Java 8 之前，我们必须指定 -server 标志才能使用 C2 编译器。但是，此标志在 Java 8 或更高版本中将无效。
+Historically, we used C2 for long-running server-side applications. 
+Prior to Java 8, we had to specify the -server flag to use the C2 compiler. However, this flag will have no effect in Java 8 or higher.
 
-我们应该注意，自 Java 10 起，Graal JIT 编译器也可用作 C2 的替代方案。
-与 C2 不同，Graal 可以在即时编译和预先编译模式下运行，以生成
+We should note that the Graal JIT compiler is also available since Java 10, as an alternative to C2. 
+Unlike C2, Graal can run in both just-in-time and ahead-of-time compilation modes to produce
 
 
 正常的编译路径是这样的，先解释执行（0层），再使用C1编译执行并带所有的profiling（3层），最后再使用C2编译执行（4层）。但是，

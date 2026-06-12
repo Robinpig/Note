@@ -1,4 +1,4 @@
 ## Introduction
 
-[CloudEvents](https://cloudevents.io/zh-cn/) 是一个以通用格式描述事件数据的规范，旨在提供服务、平台和系统之间的互操作性。
+[CloudEvents](https://cloudevents.io/zh-cn/) is a specification for describing event data in common formats to provide interoperability across services, platforms and systems.
 

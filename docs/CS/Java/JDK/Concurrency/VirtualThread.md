@@ -1,37 +1,45 @@
 ## Introduction
 
-Virtual threads（虚拟线程）是轻量级线程，极大地减少了编写、维护和观察高吞吐量并发应用程序的工作量。
+Virtual threads are lightweight threads that dramatically reduce the effort of writing, maintaining, and observing high-throughput concurrent applications.
 
-平台线程是围绕操作系统（OS）线程的薄包装。
-平台线程在其底层 OS 线程上运行 Java 代码，并且平台线程在其整个生命周期中捕获其 OS 线程。
-因此，可用平台线程的数量受限于 OS 线程的数量。
 
-平台线程通常具有较大的线程栈和由操作系统维护的其他资源。
-它们适合运行所有类型的任务，但可能是一种有限的资源。
+A platform thread is implemented as a thin wrapper around an operating system (OS) thread.
+A platform thread runs Java code on its underlying OS thread, and the platform thread captures its OS thread for the platform thread's entire lifetime. 
+Consequently, the number of available platform threads is limited to the number of OS threads.
 
-与平台线程一样，虚拟线程也是 `java.lang.Thread` 的实例。
-然而，虚拟线程不绑定到特定的 OS 线程。虚拟线程仍在 OS 线程上运行代码。
-但是，当在虚拟线程中运行的代码调用阻塞 I/O 操作时，Java 运行时会挂起虚拟线程，直到它可以恢复。
-与挂起的虚拟线程关联的 OS 线程现在可以自由地为其他虚拟线程执行操作。
+Platform threads typically have a large thread stack and other resources that are maintained by the operating system. 
+They are suitable for running all types of tasks but may be a limited resource.
 
-虚拟线程的实现方式类似于虚拟内存。
-为了模拟大量内存，操作系统将大型虚拟地址空间映射到有限的 RAM。
-类似地，为了模拟大量线程，Java 运行时将大量虚拟线程映射到少量 OS 线程。
 
-与平台线程不同，虚拟线程通常具有浅调用栈，执行少至单个 HTTP 客户端调用或单个 JDBC 查询。
-尽管虚拟线程支持线程局部变量和可继承的线程局部变量，
-但应谨慎考虑使用它们，因为单个 JVM 可能支持数百万个虚拟线程。
+Like a platform thread, a virtual thread is also an instance of `java.lang.Thread`. 
+However, a virtual thread isn't tied to a specific OS thread. A virtual thread still runs code on an OS thread. 
+However, when code running in a virtual thread calls a blocking I/O operation, the Java runtime suspends the virtual thread until it can be resumed. 
+The OS thread associated with the suspended virtual thread is now free to perform operations for other virtual threads.
 
-虚拟线程适合运行大部分时间处于阻塞状态的任务，通常等待 I/O 操作完成。
-然而，它们不适用于长时间运行的 CPU 密集型操作。
+Virtual threads are implemented in a similar way to virtual memory.
+To simulate a lot of memory, an operating system maps a large virtual address space to a limited amount of RAM. 
+Similarly, to simulate a lot of threads, the Java runtime maps a large number of virtual threads to a small number of OS threads.
 
-在高吞吐量并发应用程序中使用虚拟线程，尤其是那些由大量并发任务组成且大部分时间在等待的应用程序。
+Unlike platform threads, virtual threads typically have a shallow call stack, performing as few as a single HTTP client call or a single JDBC query.
+Although virtual threads support thread-local variables and inheritable thread-local variables,
+you should carefully consider using them because a single JVM might support millions of virtual threads.
 
-```java
-Thread thread = Thread.ofVirtual().start(() -> System.out.println("Hello"));
-thread.join();
-```
+Virtual threads are suitable for running tasks that spend most of the time blocked, often waiting for I/O operations to complete.
+However, they aren't intended for long-running CPU-intensive operations.
+
+Use virtual threads in high-throughput concurrent applications, especially those that consist of a great number of concurrent tasks that spend much of their time waiting. 
+Server applications are examples of high-throughput applications because they typically handle many client requests that perform blocking I/O operations such as fetching resources.
+
+Virtual threads are not faster threads; they do not run code any faster than platform threads.
+They exist to provide scale (higher throughput), not speed (lower latency).
+
+
 
 ## Links
 
-- [JDK Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
+- [Java Thread](/docs/CS/Java/JDK/Concurrency/Thread.md)
+
+
+## References
+
+1. [JEP 444: Virtual Threads](https://openjdk.org/jeps/444)

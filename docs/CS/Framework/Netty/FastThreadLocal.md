@@ -1,19 +1,21 @@
+
+
 ## Introduction
 
-[ThreadLocal](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md) 的一个特殊变体，当从 FastThreadLocalThread 访问时，能提供更高的访问性能。
+A special variant of [ThreadLocal](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md) that yields higher access performance when accessed from a FastThreadLocalThread.
 
-在内部，**FastThreadLocal 使用数组中的常量索引**，而不是使用哈希码和哈希表来查找变量。
-虽然看似微不足道，但它比使用哈希表具有轻微的性能优势，在频繁访问时非常有用。
-要利用此线程局部变量，你的**线程必须是 FastThreadLocalThread 或其子类型**。
-默认情况下，`DefaultThreadFactory` 创建的所有线程都是 FastThreadLocalThread，原因就在于此。
-请注意，**快速路径仅在继承 FastThreadLocalThread 的线程上可用**，因为它需要一个特殊字段来存储必要的状态。
-任何其他类型的线程访问都会回退到常规的 ThreadLocal。
+Internally, a **FastThreadLocal uses a constant index in an array**, instead of using hash code and hash table, to look for a variable. 
+Although seemingly very subtle, it yields slight performance advantage over using a hash table, and it is useful when accessed frequently.
+To take advantage of this thread-local variable, your **thread must be a FastThreadLocalThread or its subtype**. 
+By default, all threads created by `DefaultThreadFactory` are FastThreadLocalThread due to this reason.
+Note that **the fast path is only possible on threads that extend FastThreadLocalThread, because it requires a special field to store the necessary state**. 
+An access by any other kind of thread falls back to a regular ThreadLocal.
 
 
 
-## 使用 FastThreadLocal
+## Use FastThreadLocal
 
-**FastThreadLocal 不继承 ThreadLocal。**
+**FastThreadLocal don not extens ThreadLocal.**
 
 ```java
 public class FastThreadLocal<V> {
@@ -49,7 +51,7 @@ private void setKnownNotUnset(InternalThreadLocalMap threadLocalMap, V value) {
     }
 }
 
-// 当且仅当创建了新的线程局部变量时返回 true
+// true if and only if a new thread-local variable has been created
 public boolean setIndexedVariable(int index, Object value) {
     Object[] lookup = indexedVariables;
     if (index < lookup.length) {
@@ -86,7 +88,7 @@ private void expandIndexedVariableTableAndSet(int index, Object value) {
 
 
 
-将 FastThreadLocal 的**强引用**添加到 InternalThreadLocalMap 的 indexedVariables[0] 中的 Set 中以便 remove
+add **StrongReference** of FastThreadLocal to *a Set in indexedVariables[0]* of InternalThreadLocalMap remove
 
 ```java
 @SuppressWarnings("unchecked")
@@ -224,19 +226,19 @@ public int size() {
         }
     }
 
-    // 我们应该从计数中减 1，因为 'indexedVariables' 中的第一个元素由 'FastThreadLocal' 保留，
-    // 用于保存要在 'FastThreadLocal.removeAll()' 时移除的 'FastThreadLocal' 列表。
+    // We should subtract 1 from the count because the first element in 'indexedVariables' is reserved
+    // by 'FastThreadLocal' to keep the list of 'FastThreadLocal's to remove on 'FastThreadLocal.removeAll()'.
     return count - 1;
 }
 ```
 
 
 
-### 缓存行填充
+### Cache Line
 
 ```java
 // Cache line padding (must be public)
-// 启用 CompressedOops 时，此类的实例应至少占用 128 字节。
+// With CompressedOops enabled, an instance of this class should occupy at least 128 bytes.
 public long rp1, rp2, rp3, rp4, rp5, rp6, rp7, rp8, rp9;
 ```
 
@@ -248,12 +250,12 @@ public long rp1, rp2, rp3, rp4, rp5, rp6, rp7, rp8, rp9;
 
 | Type | ThreadLocal | FastThreadLocal |
 | --- | --- | --- |
-| 定位方式 | 数组索引 | hash 与线性探测 |
-| 扩容 | 仅复制 | 复制并 rehash |
-| 遍历 | 遍历所有元素 | 获取 head Set 获取所有 FastThreadLocal |
-| 存储 | ThreadLocalMap 中的 WeakReference key | InternalThreadLocalMap，值可能存储在 ThreadLocalMap 或 FastThreadLocal 的字段中，实际值存储在 InternalThreadLocalMap 中 |
-| remove | 只需在任务完成后移除 | 存在内存泄漏问题，set/get 时会清理过期值 |
-| 特殊值 | - | InternalThreadLocalMap 中所有 FastThreadLocal 的强引用 Set |
+| Location | array index | hash & liner |
+| resize | just copy | copy & rehash |
+| Iteration | iterate all elements | get head Set and get all FastThreadLocal |
+| Storage | weakReference key in ThreadLocalMap | InternalThreadLocalMap may value in ThreadLocalMap or  field in FastThreadLocal, storage value in InternalThreadLocalMap |
+| remove | only need to remove after task done | exist memory leaky & expunge stale value when set/get |
+| Special val | - | a strong reference set of all fastThreadLocals in InternalThreadLocalMap |
 
 
 ## Links

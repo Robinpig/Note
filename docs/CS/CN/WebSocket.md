@@ -1,36 +1,36 @@
-## 简介
+## Introduction
 
-WebSocket 协议使得在受控环境中运行不可信代码的客户端与选择与该代码通信的远程主机之间进行双向通信成为可能。
-其使用的安全模型是 Web 浏览器常用的基于来源的安全模型。
-该协议由打开握手和基本消息帧组成，分层于 [TCP](/docs/CS/CN/TCP/TCP.md) 之上。
-该技术的目标是为需要与服务器进行双向通信的基于浏览器的应用提供一种机制，而不依赖于打开多个 [HTTP](/docs/CS/CN/HTTP/HTTP.md) 连接（例如使用 XMLHttpRequest 或 `<iframe>` 和长轮询）。
+The WebSocket Protocol enables two-way communication between a client running untrusted code in a controlled environment to a remote host that has opted-in to communications from that code.
+The security model used for this is the origin-based security model commonly used by web browsers.
+The protocol consists of an opening handshake followed by basic message framing, layered over [TCP](/docs/CS/CN/TCP/TCP.md).
+The goal of this technology is to provide a mechanism for browser-based applications that need two-way communication with servers that does not rely on opening multiple [HTTP](/docs/CS/CN/HTTP/HTTP.md) connections (e.g., using XMLHttpRequest or `<iframe>`s and long polling).
 
-### 背景
+### Background
 
-历史上，创建需要客户端和服务器之间双向通信的 Web 应用（例如即时通讯和游戏应用）需要滥用 HTTP 来轮询服务器获取更新，同时将上行通知作为独立的 HTTP 调用发送。
+Historically, creating web applications that need bidirectional communication between a client and a server (e.g., instant messaging and gaming applications) has required an abuse of HTTP to poll the server for updates while sending upstream notifications as distinct HTTP calls.
 
-这导致了各种问题：
+This results in a variety of problems:
 
-- 服务器被迫为每个客户端使用多个不同的底层 TCP 连接：一个用于向客户端发送信息，每个传入消息都需要一个新的连接。
-- 线路协议开销大，每个客户端到服务器的消息都有 HTTP 头部。
-- 客户端脚本被迫维护从传出连接到传入连接的映射以跟踪回复。
+- The server is forced to use a number of different underlying TCP connections for each client: one for sending information to the client and a new one for each incoming message.
+- The wire protocol has a high overhead, with each client-to-server message having an HTTP header.
+- The client-side script is forced to maintain a mapping from the outgoing connections to the incoming connection to track replies
 
-更简单的解决方案是对双向流量使用单个 TCP 连接。这就是 WebSocket 协议提供的。
-结合 WebSocket API，它为从网页到远程服务器的双向通信提供了 HTTP 轮询的替代方案。
+A simpler solution would be to use a single TCP connection for traffic in both directions. This is what the WebSocket Protocol provides.
+Combined with the WebSocket API, it provides an alternative to HTTP polling for two-way communication from a web page to a remote server.
 
-同样的技术可以用于各种 Web 应用：游戏、股票行情、具有同时编辑功能的多用户应用、实时暴露服务器端服务的用户界面等。
+The same technique can be used for a variety of web applications: games, stock tickers, multiuser applications with simultaneous editing, user interfaces exposing server-side services in real time, etc.
 
-WebSocket 协议旨在取代那些利用 HTTP 作为传输层以从现有基础设施（代理、过滤、认证）中受益的现有双向通信技术。
-这些技术是在效率和可靠性之间的折衷方案，因为 HTTP 最初并非用于双向通信（详见 [RFC6202](https://datatracker.ietf.org/doc/html/rfc6202)）。
-WebSocket 协议试图在现有 HTTP 基础设施的背景下解决现有双向 HTTP 技术的目标；
-因此，它设计为在 HTTP 端口 80 和 443 上工作，并支持 HTTP 代理和中介，即使这意味着当前环境特有的某些复杂性。
-然而，该设计并不将 WebSocket 局限于 HTTP，未来的实现可以在专用端口上使用更简单的握手，而无需重新发明整个协议。
-最后这一点很重要，因为交互式消息的流量模式并不完全匹配标准 HTTP 流量，可能在某些组件上引起异常负载。
+The WebSocket Protocol is designed to supersede existing bidirectional communication technologies that use HTTP as a transport layer to benefit from existing infrastructure (proxies, filtering, authentication).
+Such technologies were implemented as trade-offs between efficiency and reliability because HTTP was not initially meant to be used for bidirectional communication (see [RFC6202](https://datatracker.ietf.org/doc/html/rfc6202) for further discussion).
+The WebSocket Protocol attempts to address the goals of existing bidirectional HTTP technologies in the context of the existing HTTP infrastructure;
+as such, it is designed to work over HTTP ports 80 and 443 as well as to support HTTP proxies and intermediaries, even if this implies some complexity specific to the current environment.
+However, the design does not limit WebSocket to HTTP, and future implementations could use a simpler handshake over a dedicated port without reinventing the entire protocol.
+This last point is important because the traffic patterns of interactive messaging do not closely match standard HTTP traffic and can induce unusual loads on some components.
 
-### 协议概述
+### Protocol Overview
 
-该协议有两部分：握手和数据传输。
-来自客户端的握手如下所示：
+The protocol has two parts: a handshake and the data transfer.
+The handshake from the client looks as follows:
 
 ```http
 GET /chat HTTP/1.1
@@ -43,7 +43,7 @@ Sec-WebSocket-Protocol: chat, superchat
 Sec-WebSocket-Version: 13
 ```
 
-来自服务器的握手如下所示：
+The handshake from the server looks as follows:
 
 ```http
 HTTP/1.1 101 Switching Protocols
@@ -53,52 +53,51 @@ Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=
 Sec-WebSocket-Protocol: chat
 ```
 
-一旦客户端和服务器都发送了握手，且握手成功，数据传输部分开始。
-这是一个双向通信通道，每一方都可以独立于另一方随时发送数据。
+Once the client and server have both sent their handshakes, and if the handshake was successful, then the data transfer part starts.
+This is a two-way communication channel where each side can, independently from the other, send data at will.
 
-成功握手后，客户端和服务器以本规范中称为"消息"的概念单元来回传输数据。
-在线路上，一条消息由一个或多个帧组成。
-WebSocket 消息不一定对应特定的网络层帧，因为分段消息可能由中介合并或拆分。
+After a successful handshake, clients and servers transfer data back and forth in conceptual units referred to in this specification as "messages".
+On the wire, a message is composed of one or more frames. 
+The WebSocket message does not necessarily correspond to a particular network layer framing, as a fragmented message may be coalesced or split by an intermediary.
 
-一个帧有相关联的类型。
-属于同一条消息的每个帧包含相同类型的数据。大致来说，
-有文本数据类型（解释为 UTF-8 文本）、
-二进制数据类型（其解释由应用决定）
-和控制帧（不旨在为应用携带数据，而是用于协议级信令，
-例如指示连接应关闭）。
-本版本协议定义了六种帧类型，并保留十种供将来使用。
+A frame has an associated type. 
+Each frame belonging to the same message contains the same type of data. Broadly speaking, 
+there are types for textual data (which is interpreted as UTF-8 text), 
+binary data (whose interpretation is left up to the application),
+and control frames (which are not intended to carry data for the application but instead for protocol-level signaling, 
+such as to signal that the connection should be closed). 
+This version of the protocol defines six frame types and leaves ten reserved for future use.
 
-WebSocket 协议的设计原则是应该具有最小的帧结构
-（现有的帧结构只是为了使协议基于帧而非基于流，并支持 Unicode 文本和二进制帧之间的区分）。
-期望元数据由应用层分层在 WebSocket 之上，就像元数据由应用层分层在 TCP 之上一样（例如 HTTP）。
+The WebSocket Protocol is designed on the principle that there should be minimal framing 
+(the only framing that exists is to make the protocol frame-based instead of stream-based and to support a distinction between Unicode text and binary frames).
+It is expected that metadata would be layered on top of WebSocket by the application layer, in the same way that metadata is layered on top of TCP by the application layer (e.g., HTTP).
 
-从概念上讲，WebSocket 实际上只是 TCP 之上的一层，它执行以下操作：
+Conceptually, WebSocket is really just a layer on top of TCP that does the following:
 
-- 为浏览器添加基于 Web 来源的安全模型
-- 添加寻址和协议命名机制，以支持一个端口上的多个服务和一 IP 地址上的多个主机名
-- 在 TCP 之上分层帧机制，以回到 TCP 构建其上的 IP 数据包机制，但没有长度限制
-- 包含一个额外的带内关闭握手，设计为在代理和其他中介存在的情况下工作
+- adds a web origin-based security model for browsers
+- adds an addressing and protocol naming mechanism to support multiple services on one port and multiple host names on one IP address
+- layers a framing mechanism on top of TCP to get back to the IP packet mechanism that TCP is built on, but without length limits
+- includes an additional closing handshake in-band that is designed to work in the presence of proxies and other intermediaries
 
-除此之外，WebSocket 没有添加任何东西。
-基本上，它旨在尽可能接近于在 Web 的约束下向脚本暴露原始 TCP。
-它的设计方式使得其服务器可以与 HTTP 服务器共享端口，因为其握手是一个有效的 HTTP Upgrade 请求。
-从概念上讲，可以使用其他协议来建立客户端-服务器消息传递，但 WebSocket 的意图是提供一个相对简单的协议，
-可以与 HTTP 和已部署的 HTTP 基础设施（如代理）共存，
-并且在考虑到安全性的前提下尽可能接近 TCP，同时有针对性地添加简化使用的功能（例如添加消息语义）。
+Other than that, WebSocket adds nothing.
+Basically it is intended to be as close to just exposing raw TCP to script as possible given the constraints of the Web.
+It's also designed in such a way that its servers can share a port with HTTP servers, by having its handshake be a valid HTTP Upgrade request.
+One could conceptually use other protocols to establish client-server messaging, but the intent of WebSockets is to provide a relatively simple protocol that can coexist with HTTP and deployed HTTP infrastructure (such as proxies)
+and that is as close to TCP as is safe for use with such infrastructure given security considerations, with targeted additions to simplify usage and keep simple things simple (such as the addition of message semantics).
 
-该协议旨在可扩展；未来版本可能会引入多路复用等额外概念。
+The protocol is intended to be extensible; future versions will likely introduce additional concepts such as multiplexing.
 
-WebSocket 协议是一个独立的基于 TCP 的协议。
-它与 HTTP 的唯一关系是其握手被 HTTP 服务器解释为 Upgrade 请求。
+The WebSocket Protocol is an independent TCP-based protocol.
+Its only relationship to HTTP is that its handshake is interpreted by HTTP servers as an Upgrade request.
 
-默认情况下，WebSocket 协议为常规 WebSocket 连接使用端口 80，为通过传输层安全（TLS）隧道传输的 WebSocket 连接使用端口 443。
+By default, the WebSocket Protocol uses port 80 for regular WebSocket connections and port 443 for WebSocket connections tunneled over Transport Layer Security (TLS).
 
-## 数据帧
+## Data Framing
 
-在 WebSocket 协议中，数据使用一系列帧传输。
-基本帧协议定义了一个帧类型，包含操作码、有效载荷长度以及"扩展数据"和"应用数据"的指定位置，它们共同定义了"有效载荷数据"。
-某些位和操作码保留供协议未来扩展使用。
-数据帧可以在打开握手完成之后、该端点发送 Close 帧之前的任何时间由客户端或服务器传输。
+In the WebSocket Protocol, data is transmitted using a sequence of frames.
+The base framing protocol defines a frame type with an opcode, a payload length, and designated locations for "Extension data" and "Application data", which together define the "Payload data".
+Certain bits and opcodes are reserved for future expansion of the protocol.
+A data frame MAY be transmitted by either the client or the server at any time after opening handshake completion and before that endpoint has sent a Close frame.
 
 ```
       0                   1                   2                   3
@@ -121,72 +120,70 @@ WebSocket 协议是一个独立的基于 TCP 的协议。
      +---------------------------------------------------------------+
 ```
 
-### 分段
+### Fragmentation
 
-分段的主要目的是允许在启动时未知大小的消息无需缓冲即可发送。
-如果消息不能被分段，那么端点必须缓冲整个消息，以便在发送第一个字节之前计算其长度。
-有了分段，服务器或中介可以选择一个合理大小的缓冲区，当缓冲区满时，将片段写入网络。
+The primary purpose of fragmentation is to allow sending a message that is of unknown size when the message is started without having to buffer that message.
+If messages couldn't be fragmented, then an endpoint would have to buffer the entire message so its length could be counted before the first byte is sent.
+With fragmentation, a server or intermediary may choose a reasonable size buffer and, when the buffer is full, write a fragment to the network.
 
-分段的第二个用例是多路复用，其中一个逻辑通道上的大消息不应独占输出通道，
-因此多路复用需要能够将消息拆分为更小的片段，以更好地共享输出通道。
-（注意，本文档未描述多路复用扩展。）
+A secondary use-case for fragmentation is for multiplexing, where it is not desirable for a large message on one logical channel to monopolize the output channel, so the multiplexing needs to be free to split the message into smaller fragments to better share the output channel.
+(Note that the multiplexing extension is not described in this document.)
 
-除非扩展另有指定，帧没有语义含义。
-如果客户端和服务器未协商任何扩展，或者协商了某些扩展但中介理解所有已协商的扩展并知道如何在存在这些扩展的情况下合并和/或拆分帧，
-则中介可能会合并和/或拆分帧。
-这意味着，在没有扩展的情况下，发送方和接收方不得依赖于特定帧边界的存在。
+Unless specified otherwise by an extension, frames have no semantic meaning.
+An intermediary might coalesce and/or split frames, if no extensions were negotiated by the client and the server or if some extensions were negotiated, but the intermediary understood all the extensions negotiated and knows how to coalesce and/or split frames in the presence of these extensions.
+One implication of this is that in absence of extensions, senders and receivers must not depend on the presence of specific frame boundaries.
 
-以下规则适用于分段：
+The following rules apply to fragmentation:
 
-- 未分段的消息由单个帧组成，其中 FIN 位设置且操作码不为 0。
-- 分段消息由单个 FIN 位清除且操作码不为 0 的帧组成，后跟零个或多个 FIN 位清除且操作码为 0 的帧，以及一个 FIN 位设置且操作码为 0 的终止帧。
-  分段消息在概念上等同于一个更大的消息，其有效载荷等于按顺序片段有效载荷的拼接；然而，在存在扩展的情况下，这可能不成立，因为扩展定义了"扩展数据"的解释。
-  例如，"扩展数据"可能只出现在第一个片段的开头并应用于后续片段，或者每个片段中都可能有仅适用于该特定片段的"扩展数据"。
-  在没有"扩展数据"的情况下，以下示例演示了分段的工作原理。<br>
-  示例：对于作为三个片段发送的文本消息，第一个片段操作码为 0x1 且 FIN 位清除，第二个片段操作码为 0x0 且 FIN 位清除，第三个片段操作码为 0x0 且 FIN 位设置。
-- 控制帧可以插入到分段消息的中间。控制帧本身不得被分段。
-- 消息片段必须按照发送方发送的顺序交付给接收方。
-- 除非已协商可以解释交错行为的扩展，否则一条消息的片段不得与另一条消息的片段交错。
-- 端点必须能够处理分段消息中间的控制帧。
-- 发送方可以为非控制消息创建任意大小的片段。
-- 客户端和服务器必须支持接收分段和非分段消息。
-- 由于控制帧不能被分段，中介不得尝试更改控制帧的分段。
-- 如果使用了任何保留位值且中介不知道这些值的含义，中介不得更改消息的分段。
-- 如果连接上下文中已协商扩展且中介不知道协商扩展的语义，中介不得更改任何消息的分段。
-  类似地，未看到 WebSocket 握手（且未被告知其内容）导致 WebSocket 连接的中介不得更改该连接的任何消息的分段。
-- 根据这些规则，消息的所有片段具有相同类型，由第一个片段的操作码设置。
-  由于控制帧不能被分段，消息中所有片段的类型必须是文本、二进制或保留操作码之一。
+- An unfragmented message consists of a single frame with the FIN bit set (Section 5.2) and an opcode other than 0.
+- A fragmented message consists of a single frame with the FIN bit clear and an opcode other than 0, followed by zero or more frames with the FIN bit clear and the opcode set to 0, and terminated by a single frame with the FIN bit set and an opcode of 0.
+  A fragmented message is conceptually equivalent to a single larger message whose payload is equal to the concatenation of the payloads of the fragments in order; however, in the presence of extensions, this may not hold true as the extension defines the interpretation of the "Extension data" present.
+  For instance,"Extension data" may only be present at the beginning of the first fragment and apply to subsequent fragments, or there may be"Extension data" present in each of the fragments that applies only to that particular fragment.
+  In the absence of "Extension data", the following example demonstrates how fragmentation works.<br>
+  EXAMPLE: For a text message sent as three fragments, the first fragment would have an opcode of 0x1 and a FIN bit clear, the second fragment would have an opcode of 0x0 and a FIN bit clear, and the third fragment would have an opcode of 0x0 and a FIN bit that is set.
+- Control frames MAY be injected in the middle of a fragmented message.  Control frames themselves MUST NOT be fragmented.
+- Message fragments MUST be delivered to the recipient in the order sent by the sender.
+- The fragments of one message MUST NOT be interleaved between the fragments of another message unless an extension has been negotiated that can interpret the interleaving.
+- An endpoint MUST be capable of handling control frames in the middle of a fragmented message.
+- A sender MAY create fragments of any size for non-control messages.
+- Clients and servers MUST support receiving both fragmented and unfragmented messages.
+- As control frames cannot be fragmented, an intermediary MUST NOT attempt to change the fragmentation of a control frame.
+- An intermediary MUST NOT change the fragmentation of a message if any reserved bit values are used and the meaning of these values is not known to the intermediary.
+- An intermediary MUST NOT change the fragmentation of any message in the context of a connection where extensions have been negotiated and the intermediary is not aware of the semantics of the negotiated extensions.
+  Similarly, an intermediary that didn't see the WebSocket handshake (and wasn't notified about its content) that resulted in a WebSocket connection MUST NOT change the fragmentation of any message of such connection.
+- As a consequence of these rules, all fragments of a message are of the same type, as set by the first fragment's opcode.
+  Since control frames cannot be fragmented, the type for all fragments in a message MUST be either text, binary, or one of the reserved opcodes.
 
-注意：如果控制帧不能被插入，例如，在一个大消息之后的 ping 延迟将非常长。
-因此，要求处理分段消息中间的控制帧。
+NOTE: If control frames could not be interjected, the latency of a ping, for example, would be very long if behind a large message.
+Hence, the requirement of handling control frames in the middle of a fragmented message.
 
-实现说明：在没有任何扩展的情况下，接收方不必缓冲整个帧来处理它。
-例如，如果使用流式 API，帧的一部分可以交付给应用程序。
-然而，请注意，这个假设可能不适用于所有未来的 WebSocket 扩展。
+IMPLEMENTATION NOTE: In the absence of any extension, a receiver doesn't have to buffer the whole frame in order to process it.
+For example, if a streaming API is used, a part of a frame can be delivered to the application.
+However, note that this assumption might not hold true for all future WebSocket extensions.
 
-控制帧通过操作码的最高有效位为 1 来识别。
-当前定义的控制帧操作码包括 0x8（Close）、0x9（Ping）和 0xA（Pong）。
-操作码 0xB-0xF 保留用于将来定义更多的控制帧。
+Control frames are identified by opcodes where the most significant bit of the opcode is 1.
+Currently defined opcodes for control frames include 0x8 (Close), 0x9 (Ping), and 0xA (Pong).
+Opcodes 0xB-0xF are reserved for further control frames yet to be defined.
 
-控制帧用于通信 WebSocket 的状态。
-控制帧可以插入到分段消息的中间。
+Control frames are used to communicate state about the WebSocket.
+Control frames can be interjected in the middle of a fragmented message.
 
-所有控制帧的有效载荷长度必须为 125 字节或更少，且不得被分段。
+All control frames MUST have a payload length of 125 bytes or less and MUST NOT be fragmented.
 
-## 发送和接收数据
+## Sending and Receiving Data
 
-### 发送数据
+### Sending Data
 
-### 接收数据
+### Receiving Data
 
-## 安全考虑
+## Security Considerations
 
-## 链接
+## Links
 
-- [计算机网络](/docs/CS/CN/CN.md)
+- [Computer Network](/docs/CS/CN/CN.md)
 - [TCP](/docs/CS/CN/TCP/TCP.md)
 - [HTTP](/docs/CS/CN/HTTP/HTTP.md)
 
-## 参考文献
+## References
 
 1. [RFC 6455 - The WebSocket Protocol](https://datatracker.ietf.org/doc/html/rfc6455)

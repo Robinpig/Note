@@ -1,13 +1,14 @@
 ## Introduction
 
-Spring Framework 为事务管理提供了一致的抽象，带来了以下好处：
+The Spring Framework provides a consistent abstraction for transaction management that delivers the following benefits:
 
-- 跨不同事务 API（如 Java Transaction API (JTA)、JDBC、Hibernate、Java Persistence API (JPA) 和 Java Data Objects (JDO)）的一致编程模型。
-- 支持声明式事务管理。
-- 比复杂的事务 API（如 JTA）更简单的编程式事务管理 API。
-- 与 Spring 的数据访问抽象出色集成。
+- Consistent programming model across different transaction APIs such as Java Transaction API (JTA), JDBC, Hibernate, Java Persistence API (JPA), and Java Data Objects (JDO).
+Support for declarative transaction management.
+- - Simpler API for programmatic transaction management than complex transaction APIs such as JTA.
+- Excellent integration with Spring’s data access abstractions.
 
-让我们回忆一下在 application.yml 中声明 Spring Boot 数据源的样子：
+Let’s remember what declaring a data source in Spring Boot looks like in application.yml:
+
 
 ```yaml
 spring:
@@ -18,8 +19,9 @@ spring:
     driverClassname: ...
 ```
 
-Spring 将这些设置映射到 org.springframework.boot.autoconfigure.jdbc.DataSourceProperties 的实例。
-因此，要使用多个数据源，我们需要在 Spring 的应用上下文中声明具有不同映射的多个 bean。
+Spring maps these settings to an instance of org.springframework.boot.autoconfigure.jdbc.DataSourceProperties.
+So, to use multiple data sources, we need to declare multiple beans with different mappings within Spring’s application context.
+
 
 DataSourceAutoConfiguration
 
@@ -27,7 +29,9 @@ DataSourceTransactionManagerAutoConfiguration
 
 JdbcTemplateAutoConfiguration
 
-将给定的 SQLException 转换为通用的 DataAccessException。
+
+
+Translate the given SQLException into a generic DataAccessException.
 
 ```java
 public interface SQLExceptionTranslator {
@@ -38,10 +42,13 @@ public interface SQLExceptionTranslator {
 > JavaBean `SQLErrorCodes` define in `spring-jdbc/src/main/resources/org/springframework/jdbc/support/sql-error-codes.xml`.
 > Can be overridden by definitions in a "`sql-error-codes.xml`" file in the root of the class path.
 
-在 Spring Boot 2 和 Spring Boot 3 中，HikariCP 是默认的连接池，它会随 `spring-boot-starter-jdbc` 或 `spring-boot-starter-data-jpa` 启动依赖传递导入，因此你无需向项目添加任何额外依赖。
-Spring Boot 会将 Hikari 特定的设置暴露给 `spring.datasource.hikari`。
 
-事务策略由 org.springframework.transaction.PlatformTransactionManager 接口定义：
+With Spring Boot 2 and Spring Boot 3, HikariCP is the default connection pool and it is transitively imported with either `spring-boot-starter-jdbc` or `spring-boot-starter-data-jpa` starter dependency, so you don’t need to add any extra dependency to your project.
+Spring Boot will expose Hikari-specific settings to `spring.datasource.hikari`. 
+
+
+
+A transaction strategy is defined by the org.springframework.transaction.PlatformTransactionManager interface:
 ```java
 public interface PlatformTransactionManager {
 
@@ -54,17 +61,21 @@ public interface PlatformTransactionManager {
 }
 ```
 
-TransactionDefinition 接口指定了：
+The TransactionDefinition interface specifies:
 
-- Isolation：此事务与其他事务的隔离程度。例如，此事务能否看到其他事务的未提交写入？
-- Propagation：通常，在事务范围内执行的所有代码都将在该事务中运行。但是，你可以选择指定在已存在事务上下文的情况下执行事务方法时的行为。例如，代码可以在现有事务中继续运行（常见情况）；或者可以挂起现有事务并创建新事务。Spring 提供了 EJB CMT 中所有熟悉的事务传播选项。要阅读有关 Spring 中事务传播语义的信息，请参见第 16.5.7 节"事务传播"。
-- Timeout：此事务在超时并被底层事务基础设施自动回滚之前的运行时间。
-- Read-only status：当你的代码只读取但不修改数据时，可以使用只读事务。在某些情况下，只读事务可以作为有用的优化，例如使用 Hibernate 时。
+- Isolation: The degree to which this transaction is isolated from the work of other transactions. For example, can this transaction see uncommitted writes from other transactions?
+- Propagation: Typically, all code executed within a transaction scope will run in that transaction. However, you have the option of specifying the behavior in the event that a transactional method is executed when a transaction context already exists. For example, code can continue running in the existing transaction (the common case); or the existing transaction can be suspended and a new transaction created. Spring offers all of the transaction propagation options familiar from EJB CMT. To read about the semantics of transaction propagation in Spring, see Section 16.5.7, “Transaction propagation”.
+- Timeout: How long this transaction runs before timing out and being rolled back automatically by the underlying transaction infrastructure.
+- Read-only status: A read-only transaction can be used when your code reads but does not modify data. Read-only transactions can be a useful optimization in some cases, such as when you are using Hibernate.
+
+
+
 
 ## Programmatic transaction
 
-核心方法是 execute，支持实现 TransactionCallback 接口的事务代码。
-此模板处理事务生命周期和可能的异常，因此无论是 TransactionCallback 实现还是调用代码都不需要显式处理事务。
+The central method is execute, supporting transactional code that implements the TransactionCallback interface. 
+This template handles the transaction lifecycle and possible exceptions such that neither the TransactionCallback implementation nor the calling code needs to explicitly handle transactions.
+
 
 ```java
 public class TransactionTemplate extends DefaultTransactionDefinition
@@ -72,8 +83,9 @@ public class TransactionTemplate extends DefaultTransactionDefinition
 		}
 ```
 
-由 `TransactionTemplate.execute` 在事务上下文中调用。无需关心事务本身，但可以通过给定的状态对象获取和影响当前事务的状态，例如设置 rollback-only。
-回调抛出的 RuntimeException 被视为强制回滚的应用异常。异常会传播给模板的调用者。
+Gets called by `TransactionTemplate.execute` within a transactional context. Does not need to care about transactions itself, although it can retrieve and influence the status of the current transaction via the given status object, e.g. setting rollback-only.
+A RuntimeException thrown by the callback is treated as application exception that enforces a rollback. An exception gets propagated to the caller of the template.
+
 
 ```java
 @FunctionalInterface
@@ -98,54 +110,59 @@ public abstract class TransactionCallbackWithoutResult implements TransactionCal
 }
 ```
 
+
 ## Declarative transaction
 
-Spring Framework 的声明式事务管理是通过 Spring [面向切面编程](/docs/CS/Framework/Spring/AOP.md) (AOP) 实现的。
-AOP 与事务元数据的结合产生了一个 AOP 代理，它使用 TransactionInterceptor 结合合适的 PlatformTransactionManager 实现来围绕方法调用驱动事务。
+The Spring Framework’s declarative transaction management is made possible with Spring [aspect-oriented programming](/docs/CS/Framework/Spring/AOP.md) (AOP).
+The combination of AOP with transactional metadata yields an AOP proxy that uses a TransactionInterceptor in conjunction with an appropriate PlatformTransactionManager implementation to drive transactions around method invocations.
 
-从概念上讲，在事务代理上调用方法看起来是这样的：
+Conceptually, calling a method on a transactional proxy looks like this:
 
 ![](https://docs.spring.io/spring-framework/docs/4.2.x/spring-framework-reference/html/images/tx.png)
 
-直接在 Java 源代码中声明事务语义使得声明更加接近受影响的代码。
+ Declaring transaction semantics directly in the Java source code puts the declarations much closer to the affected code.
+
+
 
 ### Transactional
 
-描述单个方法或类上的事务属性。
+Describes a transaction attribute on an individual method or on a class.
 
-当此注解在类级别声明时，它作为声明类及其子类的所有方法的默认值。
-注意，它不适用于向上类层次结构的祖先类；继承的方法需要在子类级别重新声明才能参与子类级别的注解。
-有关方法可见性约束的详细信息，请参阅参考手册的事务管理部分。
+When this annotation is declared at the class level, it applies as a default to all methods of the declaring class and its subclasses. 
+Note that it does not apply to ancestor classes up the class hierarchy; inherited methods need to be locally redeclared in order to participate in a subclass-level annotation. 
+For details on method visibility constraints, consult the Transaction Management  section of the reference manual.
 
-此注解类型通常与 Spring 的 org.springframework.transaction.interceptor.RuleBasedTransactionAttribute 类直接可比，
-实际上 AnnotationTransactionAttributeSource 会直接将数据转换为后者，因此 Spring 的事务支持代码不必了解注解。
+This annotation type is generally directly comparable to Spring's org.springframework.transaction.interceptor.RuleBasedTransactionAttribute class, 
+and in fact AnnotationTransactionAttributeSource will directly convert the data to the latter class, so that Spring's transaction support code does not have to know about annotations. 
 
-**如果没有自定义回滚规则，事务将在 RuntimeException 和 Error 上回滚，但不会在受检异常上回滚。**
+**If no custom rollback rules apply, the transaction will roll back on RuntimeException and Error but not on checked exceptions.**
 
-有关此注解属性的语义的具体信息，请参阅 TransactionDefinition 和 `org.springframework.transaction.interceptor.TransactionAttribute` 的 javadocs。
+For specific information about the semantics of this annotation's attributes, consult the TransactionDefinition and `org.springframework.transaction.interceptor.TransactionAttribute` javadocs.
 
-此注解通常与由 `org.springframework.transaction.PlatformTransactionManager` 管理的线程绑定事务一起使用，将事务暴露给当前执行线程内的所有数据访问操作。
+This annotation commonly works with thread-bound transactions managed by a `org.springframework.transaction.PlatformTransactionManager`, exposing a transaction to all data access operations within the current execution thread. 
 
-**注意：这不会传播到方法中启动的新线程。**
+**Note: This does NOT propagate to newly started threads within the method.**
 
-或者，此注解可以标记由 org.springframework.transaction.ReactiveTransactionManager 管理的响应式事务，后者使用 Reactor 上下文而不是线程局部变量。
-因此，所有参与的数据访问操作需要在同一个响应式管道中的同一个 Reactor 上下文中执行。
+Alternatively, this annotation may demarcate a reactive transaction managed by a org.springframework.transaction.ReactiveTransactionManager which uses the Reactor context instead of thread-local variables. 
+As a consequence, all participating data access operations need to execute within the same Reactor context in the same reactive pipeline.
+
 
 > [!NOTE]
->
-> When using proxies, you should apply the `@Transactional` annotation only to methods with public visibility.
-> If you do annotate protected, private or package-visible methods with the `@Transactional` annotation, no error is raised, but the annotated method does not exhibit the configured transactional settings.
+> 
+> When using proxies, you should apply the `@Transactional` annotation only to methods with public visibility. 
+> If you do annotate protected, private or package-visible methods with the `@Transactional` annotation, no error is raised, but the annotated method does not exhibit the configured transactional settings. 
 > Consider the use of AspectJ (see below) if you need to annotate non-public methods.
 
-@Transactional 注解是元数据，指定接口、类或方法必须具有事务语义；
-例如，"当调用此方法时，启动一个全新的只读事务，挂起任何现有事务"。
-默认的 @Transactional 设置如下：
 
-- Propagation 设置为 PROPAGATION_REQUIRED。
-- Isolation 级别为 ISOLATION_DEFAULT。
-- 事务为读/写。
-- 事务超时默认为底层事务系统的默认超时，如果不支持超时则为无。
-- 任何 RuntimeException 触发回滚，任何受检异常不会回滚。
+The @Transactional annotation is metadata that specifies that an interface, class, or method must have transactional semantics; 
+for example, "start a brand new read-only transaction when this method is invoked, suspending any existing transaction". 
+The default @Transactional settings are as follows:
+
+- Propagation setting is PROPAGATION_REQUIRED.
+- Isolation level is ISOLATION_DEFAULT.
+- Transaction is read/write.
+- Transaction timeout defaults to the default timeout of the underlying transaction system, or to none if timeouts are not supported.
+- Any RuntimeException triggers rollback, and any checked Exception does not.
 
 ```java
 //class TransactionalRepositoryProxyPostProcessor
@@ -157,41 +174,49 @@ private TransactionAttribute computeTransactionAttribute(Method method, Class<?>
 }
 ```
 
+
+
+
+
+
+
 ### Propagation
 
-表示用于 TransactionDefinition 接口的事务传播行为的枚举。
+Enumeration that represents transaction propagation behaviors for use TransactionDefinition interface.
+ 
+
 
 > [!NOTE]
->
-> Note that isolation level and timeout settings will not get applied unless an actual new transaction gets started.
-> As only `PROPAGATION_REQUIRED`, `PROPAGATION_REQUIRES_NEW` and `PROPAGATION_NESTED` can cause that, it usually doesn't make sense to specify those settings in other cases.
+> 
+> Note that isolation level and timeout settings will not get applied unless an actual new transaction gets started. 
+As only `PROPAGATION_REQUIRED`, `PROPAGATION_REQUIRES_NEW` and `PROPAGATION_NESTED` can cause that, it usually doesn't make sense to specify those settings in other cases.
 
 <!-- tabs:start -->
 ##### **PROPAGATION_REQUIRED**
-`PROPAGATION_REQUIRED` 强制执行物理事务，如果当前范围尚无事务，则本地创建；如果已存在为更大范围定义的"外部"事务，则参与其中。在同一线程中的常见调用栈安排中，这是一个很好的默认设置（例如，服务外观委托给多个仓库方法，其中所有底层资源都必须参与服务级事务）。
+`PROPAGATION_REQUIRED` enforces a physical transaction, either locally for the current scope if no transaction exists yet or participating in an existing 'outer' transaction defined for a larger scope. This is a fine default in common call stack arrangements within the same thread (for example, a service facade that delegates to several repository methods where all the underlying resources have to participate in the service-level transaction).
 
-当传播设置为 `PROPAGATION_REQUIRED` 时，每个应用此设置的方法都会创建一个逻辑事务范围。
-每个这样的逻辑事务范围可以独立确定 rollback-only 状态，外部事务范围在逻辑上独立于内部事务范围。
-在标准 `PROPAGATION_REQUIRED` 行为的情况下，所有这些范围都映射到同一个物理事务。
-因此，在内部事务范围中设置的 rollback-only 标记确实会影响外部事务实际提交的机会。
+When the propagation setting is `PROPAGATION_REQUIRED`, a logical transaction scope is created for each method upon which the setting is applied. 
+Each such logical transaction scope can determine rollback-only status individually, with an outer transaction scope being logically independent from the inner transaction scope. 
+In the case of standard `PROPAGATION_REQUIRED` behavior, all these scopes are mapped to the same physical transaction. 
+So a rollback-only marker set in the inner transaction scope does affect the outer transaction’s chance to actually commit.
 
-然而，在内部事务范围设置 rollback-only 标记的情况下，外部事务尚未决定自己回滚，因此回滚（由内部事务范围静默触发）是意外的。
-**此时会抛出相应的 `UnexpectedRollbackException`。**
-这是预期的行为，这样事务的调用者永远不会被误导以为提交已执行而实际上并未执行。
-因此，如果内部事务（外部调用者未察觉）静默地将事务标记为 rollback-only，外部调用者仍然调用 commit。
-外部调用者需要收到 `UnexpectedRollbackException`，以明确指示已执行回滚。
+However, in the case where an inner transaction scope sets the rollback-only marker, the outer transaction has not decided on the rollback itself, so the rollback (silently triggered by the inner transaction scope) is unexpected. 
+**A corresponding `UnexpectedRollbackException` is thrown at that point.**
+This is expected behavior so that the caller of a transaction can never be misled to assume that a commit was performed when it really was not. 
+So, if an inner transaction (of which the outer caller is not aware) silently marks a transaction as rollback-only, the outer caller still calls commit. 
+The outer caller needs to receive an `UnexpectedRollbackException` to indicate clearly that a rollback was performed instead.
+
 
 ##### **PROPAGATION_REQUIRES_NEW**
 
-`PROPAGATION_REQUIRES_NEW` 与 PROPAGATION_REQUIRED 相反，总是为每个受影响的事务范围使用独立的物理事务，从不参与外部范围的现有事务。
-在这种安排中，底层资源事务是不同的，因此可以独立提交或回滚，外部事务不受内部事务回滚状态的影响，内部事务的锁在其完成后立即释放。
-这种独立的内部事务还可以声明自己的隔离级别、超时和只读设置，而不会继承外部事务的特性。
+`PROPAGATION_REQUIRES_NEW`, in contrast to PROPAGATION_REQUIRED, always uses an independent physical transaction for each affected transaction scope, never participating in an existing transaction for an outer scope. In such an arrangement, the underlying resource transactions are different and, hence, can commit or roll back independently, with an outer transaction not affected by an inner transaction’s rollback status and with an inner transaction’s locks released immediately after its completion. Such an independent inner transaction can also declare its own isolation level, timeout, and read-only settings and not inherit an outer transaction’s characteristics.
+
 
 ##### **PROPAGATION_NESTED**
 
-`PROPAGATION_NESTED` 使用一个带有多个保存点的物理事务，它可以回滚到这些保存点。
-**这种部分回滚允许内部事务范围触发其范围的回滚，而外部事务能够继续物理事务，尽管某些操作已被回滚。**
-此设置通常映射到 JDBC 保存点，因此仅适用于 JDBC 资源事务。
+`PROPAGATION_NESTED` uses a single physical transaction with multiple savepoints that it can roll back to. 
+**Such partial rollbacks let an inner transaction scope trigger a rollback for its scope, with the outer transaction being able to continue the physical transaction despite some operations having been rolled back.** 
+This setting is typically mapped onto JDBC savepoints, so it works only with JDBC resource transactions.
 
 <!-- tabs:end -->
 
@@ -231,7 +256,7 @@ public interface TransactionDefinition {
 
 ## TransactionManager
 
-由 MyBatis、Hibernate、JTA 实现。
+Implementation by MyBatis, Hibernate, JTA.
 
 ```java
 public interface PlatformTransactionManager extends TransactionManager {
@@ -244,10 +269,10 @@ public interface PlatformTransactionManager extends TransactionManager {
 }
 ```
 
-用于声明式事务管理的 AOP Alliance MethodInterceptor，使用通用的 Spring 事务基础设施（PlatformTransactionManager / org.springframework.transaction.ReactiveTransactionManager）。
-派生自 TransactionAspectSupport 类，该类包含与 Spring 底层事务 API 的集成。
-TransactionInterceptor 简单地按正确顺序调用相关的超类方法，例如 invokeWithinTransaction。
-TransactionInterceptors 是线程安全的。
+AOP Alliance MethodInterceptor for declarative transaction management using the common Spring transaction infrastructure (PlatformTransactionManager/ org.springframework.transaction.ReactiveTransactionManager).
+Derives from the TransactionAspectSupport class which contains the integration with Spring's underlying transaction API. 
+TransactionInterceptor simply calls the relevant superclass methods such as invokeWithinTransaction in the correct order.
+TransactionInterceptors are thread-safe.
 ```java
 public class TransactionInterceptor extends TransactionAspectSupport implements MethodInterceptor, Serializable {
 }
@@ -467,8 +492,8 @@ public abstract class TransactionAspectSupport implements BeanFactoryAware, Init
 
 ### TransactionSynchronizationManager
 
-为当前线程注册一个新的事务同步。通常由资源管理代码调用。
-注意，同步可以实现 `org.springframework.core.Ordered` 接口。它们将根据其顺序值（如果有）按顺序执行。
+Register a new transaction synchronization for the current thread. Typically called by resource management code.
+Note that synchronizations can implement the `org.springframework.core.Ordered` interface. They will be executed in an order according to their order value (if any).
 
 ```java
 public abstract class TransactionSynchronizationManager {
@@ -538,31 +563,35 @@ public interface TransactionSynchronization extends Flushable {
 
 AbstractRoutingDataSource
 
+
 ### Rollback Rules
 
-基于模式使用 `contains()`
+Pattern-based use `contains()`
 
 ## Tuning
 
 ### 事务失效
 
-Spring 相关
-- 未被 Spring 管理
-- 多线程调用 数据库连接可能会不一样 事务不同, 例如使用 @Async 的函数是不支持事务 但函数内部调用的事务方法支持事务
-- 事务传播特性设置不使用事务（较少）
 
-声明式事务基于 [AOP](/docs/CS/Framework/Spring/AOP.md) 故导致函数无法被代理的情况
-- 函数 access flag 非 public
-- 函数是 final 或者 static
+Spring相关
+- 未被Spring管理
+- 多线程调用 数据库连接可能会不一样 事务不同, 例如使用@Async的函数是不支持事务 但函数内部调用的事务方法支持事务
+- 事务传播特性设置不使用事务(较少)
+
+
+声明式事务基于[AOP](/docs/CS/Framework/Spring/AOP.md) 故导致函数无法被代理的情况
+- 函数access flag非 public
+- 函数是final或者static
 - 当前类里其它方法内部调用
 
 异常相关
-- catch 住异常后 Spring 无法感知异常做回滚处理
+- catch住异常后Spring无法感知异常做回滚处理
 - 设置的回滚异常和实际抛出异常不对应
-- 同个事务里子事务标记回滚 但是在外层 catch 住后 事务 commit `UnexpectedRollbackException`
+- 同个事务里子事务标记回滚 但是在外层catch住后 事务commit `UnexpectedRollbackException`
 
 其它情况
 - 表不支持事务
+
 
 ### 长事务
 
@@ -575,24 +604,26 @@ Spring 相关
 - 数据库回滚时间长；
 - 在主从架构中会导致主从延时变大。
 
-服务系统开始出现故障：数据库监控平台一直收到告警短信，数据库连接不足，出现大量死锁；日志显示调用流程引擎接口出现大量超时；同时一直提示 CannotGetJdbcConnectionException，数据库连接池连接占满。
+服务系统开始出现故障：数据库监控平台一直收到告警短信，数据库连接不足，出现大量死锁；日志显示调用流程引擎接口出现大量超时；同时一直提示CannotGetJdbcConnectionException，数据库连接池连接占满。
+
 
 Solution
 
 长事务少用 `@Transactional` 使用编程式事务管理
 
-拆分粒度
-- select 放到事务外
-- 减少 remote call, 发 MQ 消息, 其它 Redis MongoDB, 使用重试+补偿实现最终一致性
-- 数据分批处理
+拆分粒度 
+- select放到事务外
+- 减少remote call, 发MQ消息, 其它Redis MongoDB, 使用重试+补偿实现最终一致性
+- 数据分批处理 
 
-可延时的行为 在事务外发送 MQ 消息 异步处理
+可延时的行为 在事务外发送MQ消息 异步处理
 
 ## Links
 
 - [Spring](/docs/CS/Framework/Spring/Spring.md)
 - [Transaction](/docs/CS/SE/Transaction.md)
 - [Transaction - MySQL](/docs/CS/DB/MySQL/Transaction.md)
+
 
 ## References
 1. [Transaction Management - Spring](https://docs.spring.io/spring-framework/docs/current/reference/html/data-access.html#transaction)

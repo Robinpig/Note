@@ -1,7 +1,7 @@
 ## Introduction
 
-MyBatis 通过内部日志工厂提供日志信息。
-内部日志工厂将日志信息委托给以下日志实现之一：
+MyBatis provides logging information through the use of an internal log factory. 
+The internal log factory will delegate logging information to one of the following log implementations:
 
 - SLF4J
 - Apache Commons Logging
@@ -9,11 +9,11 @@ MyBatis 通过内部日志工厂提供日志信息。
 - Log4j
 - JDK logging
 
-MyBatis 根据运行时自省选择日志实现。
-MyBatis 日志工厂会使用它找到的第一个日志实现（按上述顺序搜索）。
-如果 MyBatis 未找到任何上述实现，则禁用日志。
+The logging solution chosen is based on runtime introspection by the internal MyBatis log factory. 
+The MyBatis log factory will use the first logging implementation it finds (implementations are searched in the above order). 
+If MyBatis finds none of the above implementations, then logging will be disabled.
 
-### [如何选择不同的日志实现](https://mybatis.org/mybatis-3/logging.html)
+### [How to select a different logging implementation ](https://mybatis.org/mybatis-3/logging.html)
 
 
 
@@ -47,13 +47,13 @@ public interface Log {
 
 ### LogFactory
 
-通过 `Constructor::newInstance()` 获取 Log
+getLog by using `Constructor::newInstance()`
 
 ```java
 public final class LogFactory {
 
   /**
-   * 供支持标记的日志实现使用的标记
+   * Marker to be used by logging implementations that support markers
    */
   public static final String MARKER = "MYBATIS";
 
@@ -85,9 +85,9 @@ public final class LogFactory {
 
 
 
-因此日志的顺序在 static 块中确定：
+So the order of log is in static block:
 
-**useSlf4jLogging** 优先
+**useSlf4jLogging** 1st
 
 ```java
 private static void tryImplementation(Runnable runnable) {

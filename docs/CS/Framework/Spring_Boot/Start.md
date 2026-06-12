@@ -1,6 +1,6 @@
 ## Introduction
 
-我们来讨论一下 Spring Boot 是如何启动的。
+We would like to talk about how Spring Boot startup.
 
 
 ```
@@ -65,7 +65,7 @@ public static ConfigurableApplicationContext run(Class<?>[] primarySources, Stri
 
 ## new SpringApplication instance
 
-创建一个新的 SpringApplication 实例。应用上下文将从指定的主 sources 中加载 beans（详见类级别文档）。可以在调用 run(String...) 之前自定义该实例。
+Create a new SpringApplication instance. The application context will load beans from the specified primary sources (see class-level documentation for details. The instance can be customized before calling run(String...).
 
 1. deduceFromClasspath
 2. load ApplicationContextInitializer
@@ -165,12 +165,12 @@ public ConfigurableApplicationContext run(String... args) {
 
 
 - `SpringFactoriesLoader.loadFactoryNames(type, classLoader)`
-  - 使用给定的 class loader 从 {@value #FACTORIES_RESOURCE_LOCATION} 加载给定类型的工厂实现的全限定类名。
+  - Load the fully qualified class names of factory implementations of the given type from {@value #FACTORIES_RESOURCE_LOCATION}, using the given class loader.
 - `AnnotationAwareOrderComparator.sort(instances)`
-  - 使用默认的 AnnotationAwareOrderComparator 对给定列表进行排序。针对大小为 0 或 1 的列表优化以跳过排序，避免不必要的数组提取。
+  - Sort the given list with a default AnnotationAwareOrderComparator. Optimized to skip sorting for lists with size 0 or 1, in order to avoid unnecessary array extraction.
 
 
-*AnnotationAwareOrderComparator* 是 *OrderComparator* 的扩展，支持 Spring 的 org.springframework.core.Ordered 接口以及 @Order 和 @Priority 注解，Ordered 实例提供的 order 值会覆盖静态定义的注解值（如果有）。
+*AnnotationAwareOrderComparator* is an extension of *OrderComparator* that supports Spring's org.springframework.core.Ordered interface as well as the @Order and @Priority annotations, with an order value provided by an Ordered instance overriding a statically defined annotation value (if any).
 
 ```java
 private SpringApplicationRunListeners getRunListeners(String[] args){
@@ -210,7 +210,7 @@ private<T> List<T> createSpringFactoriesInstances(Class<T> type,Class<?>[]parame
 
 
 
-`创建 ApplicationStartingEvent 并使用给定事件调用给定监听器。`
+`new ApplicationStartingEvent() and invoke the given listener with the given event.`
 
 ### prepareEnvironment
 
@@ -245,7 +245,7 @@ private void configureIgnoreBeanInfo(ConfigurableEnvironment environment) {
 
 ### createApplicationContext
 
-用于创建 *ApplicationContext* 的策略方法。默认情况下，该方法会优先使用任何显式设置的应用上下文或应用上下文类，然后回退到合适的默认值。
+Strategy method used to create the *ApplicationContext*. By default this method will respect any explicitly set application context or application context class before falling back to a suitable default.
 
 ```java
 protected ConfigurableApplicationContext createApplicationContext() {
@@ -299,9 +299,47 @@ static WebApplicationType deduceFromApplicationContext(Class<?> applicationConte
 
 ### loadFactories
 
-在 AutoConfigurationImportSelector 类中，**getAutoConfigurationEntry** 方法加载配置。
 
-通过 **SpringFactoriesLoader** 从 `META-INF/spring.factories` 获取资源。
+
+@SpringBootApplication
+
+```java
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+@Inherited
+@SpringBootConfiguration
+@EnableAutoConfiguration
+@ComponentScan(excludeFilters = { @Filter(type = FilterType.CUSTOM, classes = TypeExcludeFilter.class),
+      @Filter(type = FilterType.CUSTOM, classes = AutoConfigurationExcludeFilter.class) })
+public @interface SpringBootApplication {}
+```
+
+@SpringBootConfiguration
+
+```java
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+@Configuration
+public @interface SpringBootConfiguration {}
+```
+
+@EnableAutoConfiguration
+
+```java
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+@Inherited
+@AutoConfigurationPackage//Indicates that the package containing the annotated class should be registered with AutoConfigurationPackages
+@Import(AutoConfigurationImportSelector.class)
+public @interface EnableAutoConfiguration {}
+```
+
+In class AutoConfigurationImportSelector, **getAutoConfigurationEntry** load configurations.
+
+getResources from `META-INF/spring.factories` by **SpringFactoriesLoader**.
 
 ```java
 //Return the AutoConfigurationEntry based on the AnnotationMetadata of the importing @Configuration class.
@@ -396,7 +434,7 @@ private void prepareContext(ConfigurableApplicationContext context, Configurable
 
 ### postProcessApplicationContext
 
-`对 ApplicationContext 应用任何相关的后处理。子类可以根据需要应用额外的处理。`
+`Apply any relevant post processing the ApplicationContext. Subclasses can apply additional processing as required.`
 
 ```java
 protected void postProcessApplicationContext(ConfigurableApplicationContext context) {
@@ -420,7 +458,7 @@ protected void postProcessApplicationContext(ConfigurableApplicationContext cont
 
 ### applyInitializers
 
-在上下文刷新之前应用所有 ApplicationContextInitializers。
+Apply any ApplicationContextInitializers to the context before it is refreshed.
 
 ```java
 @SuppressWarnings({ "rawtypes", "unchecked" })
@@ -436,7 +474,7 @@ protected void applyInitializers(ConfigurableApplicationContext context) {
 
 ### load
 
-`将 beans 加载到应用上下文中。`
+`Load beans into the application context.`
 
 ```java
 protected void load(ApplicationContext context, Object[] sources) {
@@ -459,13 +497,13 @@ protected void load(ApplicationContext context, Object[] sources) {
 
 ### listeners.contextLoaded
 
-`添加将在上下文事件（如上下文刷新和关闭）时收到通知的 ApplicationListeners。注意，如果上下文尚未激活，在此注册的任何 ApplicationListener 将在刷新时应用；如果上下文已激活，则将与当前事件多播器动态应用。`
+`Add ApplicationListeners that will be notified on context events such as context refresh and context shutdown. Note that any ApplicationListener registered here will be applied on refresh if the context is not active yet, or on the fly with the current event multicaster in case of a context that is already active.`
 
 ### refreshContext
 
 see [AbstractApplicationContext#refresh()](/docs/CS/Framework/Spring/IoC.md?id=refresh),
 
-在 `onRefresh` 中创建 webServer
+create webServer in `onRefresh`
 
 ```java
 // ServletWebServerApplicationContext
@@ -481,7 +519,7 @@ protected void onRefresh() {
 }
 ```
 
-在 `finishRefresh` 中启动 webServer
+Start webServer in `finishRefresh`
 
 ```java
 // org.springframework.boot.web.servlet.context.WebServerStartStopLifecycle
@@ -496,19 +534,19 @@ class WebServerStartStopLifecycle implements SmartLifecycle {
 }
 ```
 
-`org.springframework.boot.web.server.WebServer` 是一个简单接口，代表一个完全配置好的 web 服务器（例如 Tomcat、Jetty、Netty）。允许启动和停止服务器。
+`org.springframework.boot.web.server.WebServer` is a simple interface that represents a fully configured web server (for example Tomcat, Jetty, Netty). Allows the server to be started and stopped.
 
 ### afterRefresh
 
-`不执行任何操作`
+`do nothing`
 
 ### listeners.started
 
-`上下文已刷新，应用已启动，但 CommandLineRunners 和 ApplicationRunners 尚未被调用。`
+`The context has been refreshed and the application has started but CommandLineRunners and ApplicationRunners have not been called.`
 
 ### callRunners
 
-`运行 ApplicationRunner 和 CommandLineRunner`
+`run ApplicationRunner and CommandLineRunner`
 
 ```java
 private void callRunners(ApplicationContext context, ApplicationArguments args) {

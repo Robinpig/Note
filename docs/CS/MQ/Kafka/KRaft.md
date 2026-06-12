@@ -1,8 +1,9 @@
 ## Introduction
 
-如果选择使用新的仲裁控制器运行 Kafka，
-所有以前由 Kafka 控制器和 ZooKeeper 承担的元数据职责都合并到这个新服务中，在 Kafka 集群内部运行。
-仲裁控制器也可以在专用硬件上运行，如果你的用例有这种需求。
+
+If you opt to run Kafka using the new quorum controller,
+all metadata responsibilities previously undertaken by the Kafka controller and ZooKeeper are merged into this one new service, running inside the Kafka cluster itself. 
+The quorum controller can also run on dedicated hardware should you have a use case that demands it.
 
 <div style="text-align: center;">
 
@@ -51,45 +52,48 @@ RaftManager
 
 ### state
 
-此类负责管理当前节点的状态并确保
-只有有效的状态转换。下面我们定义可能的状态转换以及
-它们如何被触发：
+This class is responsible for managing the current state of this node and ensuring
+only valid state transitions. Below we define the possible state transitions and
+how they are triggered:
 
-Unattached|Resigned 转换为：
-Unattached: 在了解到更高 epoch 的新选举后
-Voted: 在授予投票给候选者后
-Candidate: 在选举超时过期后
-Follower: 在发现具有相等或更大 epoch 的 leader 后
+Unattached|Resigned transitions to:
+Unattached: After learning of a new election with a higher epoch
+Voted: After granting a vote to a candidate
+Candidate: After expiration of the election timeout
+Follower: After discovering a leader with an equal or larger epoch
 
-Voted 转换为：
-Unattached: 在了解到更高 epoch 的新选举后
-Candidate: 在选举超时过期后
+Voted transitions to:
+Unattached: After learning of a new election with a higher epoch
+Candidate: After expiration of the election timeout
 
-Candidate 转换为：
-Unattached: 在了解到更高 epoch 的新选举后
-Candidate: 在选举超时过期后
-Leader: 在获得多数投票后
+Candidate transitions to:
+Unattached: After learning of a new election with a higher epoch
+Candidate: After expiration of the election timeout
+Leader: After receiving a majority of votes
 
-Leader 转换为：
-Unattached: 在了解到更高 epoch 的新选举后
-Resigned: 在正常关闭时
+Leader transitions to:
+Unattached: After learning of a new election with a higher epoch
+Resigned: When shutting down gracefully
 
-Follower 转换为：
-Unattached: 在了解到更高 epoch 的新选举后
-Candidate: 在 fetch 超时过期后
-Follower: 在发现具有更大 epoch 的 leader 后
+Follower transitions to:
+Unattached: After learning of a new election with a higher epoch
+Candidate: After expiration of the fetch timeout
+Follower: After discovering a leader with a larger epoch
 
-Observer 遵循更简单的状态机。Voted/Candidate/Leader/Resigned
-状态对于 observer 是不可能的，因此唯一可能的转换
-是在 Unattached 和 Follower 之间。
+Observers follow a simpler state machine. The Voted/Candidate/Leader/Resigned
+states are not possible for observers, so the only transitions that are possible
+are between Unattached and Follower.
 
-Unattached 转换为：
-Unattached: 在了解到更高 epoch 的新选举后
-Follower: 在发现具有相等或更大 epoch 的 leader 后
+Unattached transitions to:
+Unattached: After learning of a new election with a higher epoch
+Follower: After discovering a leader with an equal or larger epoch
 
-Follower 转换为：
-Unattached: 在了解到更高 epoch 的新选举后
-Follower: 在发现具有更大 epoch 的 leader 后
+Follower transitions to:
+Unattached: After learning of a new election with a higher epoch
+Follower: After discovering a leader with a larger epoch
+
+
+
 
 ```scala
 class KafkaRaftClient {

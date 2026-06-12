@@ -1,7 +1,7 @@
 ## Introduction
 
-某些方法如 `ByteBuf.readBytes(int)` 如果返回的缓冲区未释放或未添加到 out List，将导致内存泄漏。
-使用派生缓冲区如 `ByteBuf.readSlice(int)` 可以避免内存泄漏。
+Some methods such as `ByteBuf.readBytes(int)` will cause a memory leak if the returned buffer is not released or added to the out List.
+Use derived buffers like `ByteBuf.readSlice(int)` to avoid leaking memory.
 
 在 4.1.52.Final 之前 Netty 内存池是基于 jemalloc3 的设计思想实现的，由于在该版本的实现中，内存规格的粒度设计的比较粗，可能会引起比较严重的内存碎片问题。所以为了近一步降低内存碎片，Netty 在  4.1.52.Final  版本中重新基于 jemalloc4 的设计思想对内存池进行了重构，通过将内存规格近一步拆分成更细的粒度，以及重新设计了内存分配算法尽量将内存碎片控制在比较小的范围内
 随后在 4.1.75.Final 版本中，Netty 为了近一步降低不必要的内存消耗，将 ChunkSize 从原来的 16M 改为了 4M 。而且在默认情况下不在为普通的用户线程提供内存池的 Thread Local 缓存。在兼顾性能的前提下，将不必要的内存消耗尽量控制在比较小的范围内。
@@ -1043,10 +1043,10 @@ void add(DefaultHandle<?> handle) {
 }
 ```
 
-我们维护一个按线程分组的队列集合，每个新线程（非 Stack 所有者）回收对象时只追加一次：当 Stack 中的元素用尽时，我们遍历此集合并回收其中可重用的对象。这使得我们能够以最小的线程同步代价实现所有对象的回收。
+we keep a queue of per-thread queues, which is appended to once only, each time a new thread other than the stack owner recycles: when we run out of items in our stack we iterate this collection to scavenge those that can be reused. this permits us to incur minimal thread synchronisation whilst still recycling all items.
 
-我们将 Thread 存储在 WeakReference 中，否则在 Thread 死亡后，由于 DefaultHandle 会持有 Stack 的引用，我们可能是唯一仍然持有 Thread 强引用的对象。
-最大的问题是如果不使用 WeakReference，当用户在某处存储了 DefaultHandle 的引用且从未清除（或未及时清除）时，Thread 可能根本无法被回收。
+We store the Thread in a WeakReference as otherwise we may be the only ones that still hold a strong Reference to the Thread itself after it died because DefaultHandle will hold a reference to the Stack.
+The biggest issue is if we do not use a WeakReference the Thread may not be able to be collected at all if the user will store a reference to the DefaultHandle somewhere and never clear this reference (or not clear it in a timely manner).
 
 ```java
 // a queue that makes only moderate guarantees about visibility: items are seen in the correct order,
@@ -1363,7 +1363,7 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
 
 ## Recv Allocator
 
-估算 buf 的大小，实际分配使用 Allocator
+guess size of buf, actual allocate using Allocator
 
 ## Type
 
@@ -1373,23 +1373,23 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
 
 ## PoolChunk
 
-符号说明：以下术语很重要：
+Notation: The following terms are important:
 
-- page  - 可分配的最小内存单元
-- run   - 一组连续的 page
-- chunk - 一组连续的 run
+- page  - a page is the smallest unit of memory chunk that can be allocated
+- run   - a run is a collection of pages
+- chunk - a chunk is a collection of runs
 
 chunkSize = maxPages * pageSize
 
-首先我们分配一个大小为 chunkSize 的字节数组。
-每当需要创建指定大小的 ByteBuf 时，我们在字节数组中搜索第一个有足够空闲空间的位置，
-并返回一个编码了此偏移信息的 long 类型 handle，
-（此内存段随后被标记为已保留，因此始终只由一个 ByteBuf 使用，不会更多）
+To begin we allocate a byte array of size = chunkSize 
+Whenever a ByteBuf of given size needs to be created we search for the first position in the byte array 
+that has enough empty space to accommodate the requested size and return a (long) handle that encodes this offset information, 
+(this memory segment is then marked as reserved so it is always used by exactly one ByteBuf and no more)
 
-为简化起见，所有大小都根据 PoolArena.size2SizeIdx(int) 方法归一化。
-这确保了当请求大小 > pageSize 的内存段时，normalizedCapacity 等于 SizeClasses 中最接近的下一个大小。
+For simplicity all sizes are normalized according to PoolArena.size2SizeIdx(int) method. 
+This ensures that when we request for memory segments of size > pageSize the normalizedCapacity equals the next nearest size in SizeClasses.
 
-Chunk 的布局如下：
+A chunk has the following layout:
 ```
     /-----------------\
     | run             |
@@ -1416,38 +1416,38 @@ Chunk 的布局如下：
     \-----------------/
 ```
 
-handle：
+handle:
 
-handle 是一个 long 整数，run 的位布局如下：
-oooooooo oooooooo ssssssss ssssssue bbbbbbbb bbbbbbbb bbbbbbbb bbbbbbbb
-o: runOffset（page 在 chunk 中的偏移量），15bit
-s: 此 run 的 size（page 数量），15bit
-u: isUsed？，1bit
-e: isSubpage？，1bit
-b: subpage 的 bitmapIdx，如果不是 subpage 则为 0，32bit
+a handle is a long number, the bit layout of a run looks like:
+oooooooo ooooooos ssssssss ssssssue bbbbbbbb bbbbbbbb bbbbbbbb bbbbbbbb
+o: runOffset (page offset in the chunk), 15bit
+s: size (number of pages) of this run, 15bit
+u: isUsed?, 1bit
+e: isSubpage?, 1bit
+b: bitmapIdx of subpage, zero if it's not subpage, 32bit
 
 
 
-runsAvailMap：
+runsAvailMap:
 
-管理所有 run（已使用和未使用）的映射。
-对于每个 run，其起始 runOffset 和结束 runOffset 存储在 runsAvailMap 中。
+a map which manages all runs (used and not in used).
+For each run, the first runOffset and last runOffset are stored in runsAvailMap.
 key: runOffset
 value: handle
 
-runsAvail：
+runsAvail:
 
-[PriorityQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=priorityqueue) 数组。
-每个队列管理相同大小的 run。
-Run 按偏移量排序，因此我们总是分配偏移量较小的 run。
+an array of [PriorityQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=priorityqueue).
+Each queue manages same size of runs.
+Runs are sorted by offset, so that we always allocate runs with smaller offset.
 
 
-### 算法
+### Algorithm
 
-在分配 run 时，我们更新 runsAvailMap 和 runsAvail 中的值以保持属性。
-初始化 -
-开始时，我们存储初始 run，即整个 chunk。
-初始 run：
+As we allocate runs, we update values stored in runsAvailMap and runsAvail so that the property is maintained.
+Initialization -
+In the beginning we store the initial run which is the whole chunk.
+The initial run:
 - runOffset = 0
 - size = chunkSize
 - isUsed = no
@@ -1456,22 +1456,22 @@ Run 按偏移量排序，因此我们总是分配偏移量较小的 run。
 
 #### allocateRun
 
-1. 根据 size 在 runsAvails 中查找第一个可用的 run
-2. 如果 run 的 page 数大于请求的 page 数，则拆分它，并将尾部 run 保存以供以后使用
+1. find the first avail run using in runsAvails according to size
+2. if pages of run is larger than request pages then split it, and save the tailing run for later using
 
 
 #### allocateSubpage
 
-1. 根据 size 查找未满的 subpage。
-   如果已存在则直接返回，否则分配新的 PoolSubpage 并调用 init()，注意此 subpage 对象在 init() 时会被添加到 PoolArena 的 subpagesPool 中
-2. 调用 subpage.allocate()
+1. find a not full subpage according to size.
+   if it already exists just return, otherwise allocate a new PoolSubpage and call init() note that this subpage object is added to subpagesPool in the PoolArena when we init() it
+2. call subpage.allocate()
 
 #### free
 
-1. 如果是 subpage，将 slab 归还到此 subpage 中
-2. 如果 subpage 未使用或是 run，则开始释放此 run
-3. 合并连续的可用 run
-4. 保存合并后的 run
+1. if it is a subpage, return the slab back into this subpage
+2. if the subpage is not used or it is a run, then start free this run
+3. merge continuous avail runs
+4. save the merged run
 
 
 

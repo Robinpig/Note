@@ -1,56 +1,59 @@
 ## Introduction
 
-在计算中，缓存是一种高速数据存储层，通常存储瞬态数据子集，以便将来对该数据的请求能够比访问主存储位置更快地得到响应。
-缓存允许你高效地复用先前检索或计算的数据。
+In computing, a cache is a high-speed data storage layer which stores a subset of data, typically transient in nature, so that future requests for that data are served up faster than is possible by accessing the data’s primary storage location.
+Caching allows you to efficiently reuse previously retrieved or computed data.
 
-缓存中的数据通常存储在 RAM 等快速访问硬件中，也可能与软件组件配合使用。
-缓存的主要目的是通过减少访问底层较慢存储层的需要来提高数据检索性能。
-以容量换取速度，缓存通常临时存储数据子集，这与数据通常完整且持久的数据库形成对比。
+The data in a cache is generally stored in fast access hardware such as RAM (Random-access memory) and may also be used in correlation with a software component.
+A cache's primary purpose is to increase data retrieval performance by reducing the need to access the underlying slower storage layer.
+Trading off capacity for speed, a cache typically stores a subset of data transiently, in contrast to databases whose data is usually complete and durable.
 
-缓存可以在各种技术层面应用和利用，包括操作系统、网络层（包括 CDN 和 DNS）、Web 应用程序和数据库。
-对于许多读密集型应用工作负载（如问答门户、游戏、媒体共享和社交网络），可以使用缓存来显著减少延迟并提高 IOPS。
-缓存信息可以包括数据库查询结果、计算密集型计算、API 请求/响应以及 HTML、JavaScript 和图像文件等 Web 资源。
-处理数据集的计算密集型工作负载（如推荐引擎和高性能计算模拟）也受益于作为缓存的内存数据层。
-在这些应用中，非常大的数据集必须跨数百个节点的机器集群实时访问。
-由于底层硬件的速度，在基于磁盘的存储中操作这些数据是这些应用的显著瓶颈。
 
-在实现缓存层时，了解被缓存数据的有效性很重要。
-成功的缓存会产生高命中率，这意味着数据在获取时存在。
-缓存未命中发生在获取的数据不在缓存中时。
-可以应用 TTL 等控制来相应地使数据过期。
-另一个考虑因素是缓存环境是否需要高可用性，这可以通过 Redis 等内存引擎来满足。
-在某些情况下，内存层可以用作独立的数据存储层，而不是缓存来自主位置的数据。
-在这种情况下，为内存引擎中的常驻数据定义适当的 RTO 和 RPO 以确定是否合适很重要。
-不同内存引擎的设计策略和特性可以应用于满足大多数 RTO 和 RPO 要求。
+
+Caches can be applied and leveraged throughout various layers of technology including Operating Systems, Networking layers including Content Delivery Networks (CDN) and DNS, web applications, and Databases.
+You can use caching to significantly reduce latency and improve IOPS for many read-heavy application workloads, such as Q&A portals, gaming, media sharing, and social networking.
+Cached information can include the results of database queries, computationally intensive calculations, API requests/responses and web artifacts such as HTML, JavaScript, and image files.
+Compute-intensive workloads that manipulate data sets, such as recommendation engines and high-performance computing simulations also benefit from an In-Memory data layer acting as a cache.
+In these applications, very large data sets must be accessed in real-time across clusters of machines that can span hundreds of nodes.
+Due to the speed of the underlying hardware, manipulating this data in a disk-based store is a significant bottleneck for these applications.
+
+When implementing a cache layer, it’s important to understand the validity of the data being cached.
+A successful cache results in a high hit rate which means the data was present when fetched.
+A cache miss occurs when the data fetched was not present in the cache.
+Controls such as TTLs (Time to live) can be applied to expire the data accordingly.
+Another consideration may be whether or not the cache environment needs to be Highly Available, which can be satisfied by In-Memory engines such as Redis.
+In some cases, an In-Memory layer can be used as a standalone data storage layer in contrast to caching data from a primary location.
+In this scenario, it’s important to define an appropriate RTO (Recovery Time Objective--the time it takes to recover from an outage) and
+RPO (Recovery Point Objective--the last point or transaction captured in the recovery) on the data resident in the In-Memory engine to determine whether or not this is suitable.
+Design strategies and characteristics of different In-Memory engines can be applied to meet most RTO and RPO requirements.
 
 ![Cache](img/Cache.png)
 
 
-| 层级         | 客户端侧                                                              | DNS                                                                                 | Web                                                                              | 应用                                                | 数据库                                                   |
-| ------------ | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------- |
-| 用例         | 加速从网站（浏览器或设备）检索 Web 内容                                  | 域名解析加速从 Web/应用服务器检索 Web 内容                                             | 管理 Web 会话（服务端）                                                            | 加速应用性能和数据访问                               | 减少数据库查询请求相关的延迟                               |
-| 技术         | HTTP 缓存头、浏览器                                                    | DNS 服务器                                                                          | HTTP 缓存头、CDN、反向代理、Web 加速器、键值存储                                   | 键值数据存储、本地缓存                               | 数据库缓冲区、键值数据存储                                 |
+| Layer        | Client-Side                                                           | DNS                                                                              | Web                                                                           | App                                                | Database                                               |
+| ------------ | --------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------ |
+| Use Case     | Accelerate retrieval of web content from websites (browser or device) | Domain to IP ResolutionAccelerate retrieval of web content from web/app servers. | Manage Web Sessions (server side)                                             | Accelerate application performance and data access | Reduce latency associated with database query requests |
+| Technologies | HTTP Cache Headers, Browsers                                          | DNS Servers                                                                      | HTTP Cache Headers, CDNs, Reverse Proxies, Web Accelerators, Key/Value Stores | Key/Value data stores, Local caches                | Database buffers, Key/Value data stores                |
 
 ### Benefits of Caching
 
-- **提高应用性能**
-  因为内存比磁盘快几个数量级，从内存缓存读取数据极快（亚毫秒级）。
-  这种显著更快的数据访问提高了应用程序的整体性能。
-- **降低数据库成本**
-  单个缓存实例可以提供数十万 IOPS，可能取代多个数据库实例，从而降低总成本。
-  如果主数据库按吞吐量收费，这尤其重要。在这些情况下，价格节省可能达到几十个百分点。
-- **减少后端负载**
-  通过将读负载的很大部分从后端数据库重定向到内存层，缓存可以减少数据库负载，防止其在负载下性能下降，甚至在流量高峰时崩溃。
-- **可预测的性能**
-  现代应用中的一个常见挑战是处理应用使用高峰。例如超级碗或选举日的社交应用、黑色星期五的电商网站等。
-  数据库负载增加导致获取数据的延迟更高，使整体应用性能不可预测。通过利用高吞吐量的内存缓存，可以缓解此问题。
-- **消除数据库热点**
-  在许多应用中，一小部分数据（如名人资料或热门产品）可能比其他数据更频繁地被访问。
-  这可能导致数据库中的热点，可能需要根据最常用数据的吞吐量要求过度配置数据库资源。
-  将常用 key 存储在内存缓存中，可以减轻过度配置的需要，同时为最常访问的数据提供快速且可预测的性能。
-- **提高读吞吐量（IOPS）**
-  除了更低的延迟，内存系统还提供比相应基于磁盘的数据库高得多的请求速率。
-  用作分布式 side-cache 的单个实例可以每秒处理数十万个请求。
+- Improve Application Performance
+  Because memory is orders of magnitude faster than disk (magnetic or SSD), reading data from in-memory cache is extremely fast (sub-millisecond).
+  This significantly faster data access improves the overall performance of the application.
+- Reduce Database Cost
+  A single cache instance can provide hundreds of thousands of IOPS (Input/output operations per second), potentially replacing a number of database instances, thus driving the total cost down.
+  This is especially significant if the primary database charges per throughput. In those cases the price savings could be dozens of percentage points.
+- Reduce the Load on the Backend
+  By redirecting significant parts of the read load from the backend database to the in-memory layer, caching can reduce the load on your database, and protect it from slower performance under load, or even from crashing at times of spikes.
+- Predictable Performance
+  A common challenge in modern applications is dealing with times of spikes in application usage. Examples include social apps during the Super Bowl or election day, eCommerce websites during Black Friday, etc.
+  Increased load on the database results in higher latencies to get data, making the overall application performance unpredictable. By utilizing a high throughput in-memory cache this issue can be mitigated.
+- Eliminate Database Hotspots
+  In many applications, it is likely that a small subset of data, such as a celebrity profile or popular product, will be accessed more frequently than the rest.
+  This can result in hot spots in your database and may require overprovisioning of database resources based on the throughput requirements for the most frequently used data.
+  Storing common keys in an in-memory cache mitigates the need to overprovision while providing fast and predictable performance for the most commonly accessed data.
+- Increase Read Throughput (IOPS)
+  In addition to lower latency, in-memory systems also offer much higher request rates (IOPS) relative to a comparable disk-based database.
+  A single instance used as a distributed side-cache can serve hundreds of thousands of requests per second.
 
 
 缓存带来一系列好处的同时，也注定需要付出一定的代价。
@@ -92,54 +95,54 @@
 
 ## Caching Strategies
 
-从数据库缓存数据时，可以实施 Redis 和 Memcached 的缓存模式，包括主动和被动方法。
-选择实施的模式应直接与缓存和应用目标相关。
+When you are caching data from your database, there are caching patterns for Redis and Memcached that you can implement, including proactive and reactive approaches.
+The patterns you choose to implement should be directly related to your caching and application objectives.
 
-两种常见的方法是 cache-aside（延迟加载）和 write-through（直写）。
-cache-aside 缓存在数据被请求后更新。write-through 缓存在主数据库更新时立即更新。
-两种方法中，应用程序本质上都在管理缓存的数据及其缓存时间。
+Two common approaches are cache-aside or lazy loading (a reactive approach) and write-through (a proactive approach).
+A cache-aside cache is updated after the data is requested. A write-through cache is updated immediately when the primary database is updated.
+With both approaches, the application is essentially managing what data is being cached and for how long.
 
-一个合适的缓存策略包括有效使用 write-through 和数据的延迟加载，并设置适当的过期时间以保持数据的相关性和精简。
+A proper caching strategy includes effective use of both write-through and lazy loading of your data and setting an appropriate expiration for the data to keep it relevant and lean.
 
 <!-- tabs:start -->
 
 ### **Cache-Aside (Lazy Loading)**
 
-Cache-aside 是可用的最常见的缓存策略。
-基本的数据检索逻辑可以总结如下：
+A cache-aside cache is the most common caching strategy available. 
+The fundamental data retrieval logic can be summarized as follows:
 
-1. 当应用程序需要从数据库读取数据时，首先检查缓存以确定数据是否可用。
-2. 如果数据可用（缓存命中），返回缓存数据，并向调用方发出响应。
-3. 如果数据不可用（缓存未命中），则查询数据库获取数据。
-   然后缓存填充从数据库检索的数据，并将数据返回给调用方。
+1. When your application needs to read data from the database, it checks the cache first to determine whether the data is available.
+2. If the data is available (a cache hit), the cached data is returned, and the response is issued to the caller.
+3. If the data isn’t available (a cache miss), the database is queried for the data.
+   The cache is then populated with the data that is retrieved from the database, and the data is returned to the caller.
 
 ![](https://cdn-images-1.readmedium.com/v2/resize:fit:800/1*CmM4Gk6rRqmlSL22SEymXg.png)
 
-这种方法有几个优点：
+This approach has a couple of advantages:
 
-- 缓存只包含应用程序实际请求的数据，有助于保持缓存大小的成本效益。
-- 实施这种方法简单直接，能立即带来性能提升，无论使用的是封装了延迟缓存的应用程序框架还是自定义应用逻辑。
+- The cache contains only data that the application actually requests, which helps keep the cache size cost-effective.
+- Implementing this approach is straightforward and produces immediate performance gains, whether you use an application framework that encapsulates lazy caching or your own custom application logic.
 
-将 cache-aside 作为唯一缓存模式的一个缺点是，因为数据仅在缓存未命中后加载到缓存中，初始响应时间会增加一些开销，因为需要额外的缓存和数据库往返。
+A disadvantage when using cache-aside as the only caching pattern is that because the data is loaded into the cache only after a cache miss, some overhead is added to the initial response time because additional roundtrips to the cache and database are needed.
 
 ### **Write-Through**
 
-Write-through 缓存颠倒了缓存填充的顺序。不是在缓存未命中后延迟加载数据到缓存，而是在主数据库更新后立即主动更新缓存。基本的数据检索逻辑可以总结如下：
+A write-through cache reverses the order of how the cache is populated. Instead of lazy-loading the data in the cache after a cache miss, the cache is proactively updated immediately following the primary database update. The fundamental data retrieval logic can be summarized as follows:
 
-1. 应用程序、批处理或后端进程更新主数据库。
-2. 紧接着，缓存中的数据也随之更新。
+1. The application, batch, or backend process updates the primary database.
+2. Immediately afterward, the data is also updated in the cache.
 
-Write-through 模式几乎总是与延迟加载一起实现。如果应用程序因数据不存在或已过期而遇到缓存未命中，则执行延迟加载模式来更新缓存。
+The write-through pattern is almost always implemented along with lazy loading. If the application gets a cache miss because the data is not present or has expired, the lazy loading pattern is performed to update the cache.
 
 ![](https://cdn-images-1.readmedium.com/v2/resize:fit:800/1*jqEFeug5DzxyZm-cygN6wA.png)
 
-Write-through 方法有几个优点：
+The write-through approach has a couple of advantages:
 
-- 因为缓存与主数据库保持一致，数据在缓存中被找到的可能性更大。
-  这反过来带来更好的整体应用性能和用户体验。
-- 数据库性能最优，因为执行了更少的数据库读取。
+- Because the cache is up-to-date with the primary database,there is a much greater likelihood that the data will be found in the cache.
+  This, in turn, results in better overall application performance and user experience.
+- The performance of your database is optimal because fewer database reads are performed.
 
-Write-through 方法的一个缺点是，不常请求的数据也会写入缓存，导致缓存更大、成本更高。
+A disadvantage of the write-through approach is that infrequently-requested data is also written to the cache, resulting in a larger and more expensive cache.
 
 ### **Write-Around**
 
@@ -229,25 +232,26 @@ Write Behind Caching 模式与 Read/Write Through 模式类似，也由数据存
 因此，这两个概念之间存在一些重叠，对于某些缓存策略来说，失效比其他策略更简单。例如，使用"通过缓存写入"方法时，缓存会在每次写入时更新，因此无需额外实现。但是，删除可能不会被反映，因此可能需要应用逻辑来显式处理。
 
 
-可以通过对缓存 key 应用 TTL（生存时间）或过期时间来控制缓存数据的新鲜度。
-经过设定的时间后，key 从缓存中删除，需要访问原始数据存储以获取更新后的数据。
+You can control the freshness of your cached data by applying a time to live (TTL) or expiration to your cached keys.
+After the set time has passed, the key is deleted from the cache, and access to the origin data store is required along with reaching the updated data.
 
-两个原则可以帮助确定适当的 TTL 和要实施的缓存模式类型。
-首先，需要了解底层数据的变化频率。
-其次，需要评估将过时数据而非更新后数据返回给应用程序的风险。
 
-例如，将静态或参考数据（即很少更新的数据）保持更长时间的有效期是有意义的，在底层数据更新时对缓存进行 write-through。
-对于经常变化的动态数据，可能希望应用较低的 TTL，使数据的过期频率与主数据库匹配。
-这降低了返回过时数据的风险，同时仍然提供缓冲来减轻数据库请求压力。
+Two principles can help you determine the appropriate TTLs to apply and the types of caching patterns to implement.
+First, it’s important that you understand the rate of change of the underlying data.
+Second, it’s important that you evaluate the risk of outdated data being returned back to your application instead of its updated counterpart.
 
-即使只缓存几分钟或几秒的数据，适当地对缓存 key 应用 TTL 也可以带来巨大的性能提升和更好的用户体验。
+For example, it might make sense to keep static or reference data (that is, data that is seldom updated) valid for longer periods of time with write-throughs to the cache when the underlying data gets updated.
+With dynamic data that changes often, you might want to apply lower TTLs that expire the data at a rate of change that matches that of the primary database.
+This lowers the risk of returning outdated data while still providing a buffer to offload database requests.
 
-在缓存 key 上应用 TTL 时的另一个最佳实践是向 TTL 添加一些时间抖动。
-这减少了缓存数据过期时出现数据库重负载的可能性。
-例如，缓存产品信息的场景。
-如果所有产品数据同时过期，并且应用处于高负载下，则后端数据库必须满足所有产品请求。
-根据负载情况，这可能会给数据库带来过大压力，导致性能不佳。
-通过在 TTL 中添加轻微抖动（随机生成的时间值），可以减轻后端数据库的压力，并减少缓存引擎因删除过期 key 而产生的 CPU 使用。
+It’s also important to recognize that, even if you are only caching data for minutes or seconds versus longer durations, appropriately applying TTLs to your cached keys can result in a huge performance boost and an overall better user experience with your application.
+
+Another best practice when applying TTLs to your cache keys is to add some time jitter to your TTLs.
+This reduces the possibility of heavy database load occurring when your cached data expires.
+Take, for example, the scenario of caching product information.
+If all your product data expires at the same time and your application is under heavy load, then your backend database has to fulfill all the product requests.
+Depending on the load, that could generate too much pressure on your database, resulting in poor performance.
+By adding slight jitter to your TTLs, a randomly-generated time value (for example, TTL = your initial TTL value in seconds + jitter) would reduce the pressure on your backend database and also reduce the CPU use on your cache engine as a result of deleting expired keys.
 
 ## 缓存驱逐
 
@@ -264,53 +268,55 @@ Evictions occur when cache memory is overfilled or is greater than the maxmemory
 
 ### Eviction policy
 
-下表总结了驱逐策略：
+
+The following table summarizes eviction policies:
+
 
 | Eviction Policy | Description | 适用场景                                       |
 |----------|------------|--------------------------------------------|
-| LRU             | 最近最少使用   | 非常适合通用缓存                                   |
-| FIFO            | 先进先出      | 适用于缓存可预测使用时间的数据                            |
-| LFU             | 最不经常使用    | 适用于具有稳定访问模式 长期频繁访问数据的应用程序  访问模式会显著变化场景不适用  |
-| TTL             | 生存时间      | 不适用于有效性不会随时间自然失效的数据，以及基于其他因素需要无限期保留在缓存中的数据 |
-| Random          | 随机         | 当访问模式不可预测 其它模式都不适用时                       |
+| LRU             |            | 非常适合通用缓存                                   |
+| FIFO            |            | 适用于缓存可预测使用时间的数据                            |
+| LFU             |            | 适用于具有稳定访问模式 长期频繁访问数据的应用程序  访问模式会显著变化场景不适用  |
+| TTL             |            | 不适用于有效性不会随时间自然失效的数据，以及基于其他因素需要无限期保留在缓存中的数据 |
+| Random          |            | 当访问模式不可预测 其它模式都不适用时                        |
 
-选择合适的驱逐策略的好方法是考虑集群中存储的数据以及 key 被驱逐的后果。
-通常，基于 LRU 的策略对于基本缓存用例更常见。
-然而，根据目标，可能希望使用更适合需求的 TTL 或随机驱逐策略。
+A good strategy in selecting an appropriate eviction policy is to consider the data stored in your cluster and the outcome of keys being evicted.
+Generally, least recently used (LRU)-based policies are more common for basic caching use cases.
+However, depending on your objectives, you might want to use a TTL or random-based eviction policy that better suits your requirements.
 
-此外，如果集群出现驱逐，通常表明应该 scale up（使用更大内存的节点）或 scale out（添加更多节点）以适应更多数据。
-此规则的例外是故意依赖缓存引擎通过驱逐来管理 key（也称为 LRU 缓存）。
+Also, if you are experiencing evictions with your cluster, it is usually a sign that you should scale up (that is, use a node with a larger memory footprint) or scale out (that is, add more nodes to your cluster) to accommodate the additional data.
+An exception to this rule is if you are purposefully relying on the cache engine to manage your keys by means of eviction, also referred to an LRU cache.
 
 ## CPU Caching
 
-[CPU 缓存](/docs/CS/CO/Cache.md)
+[CPU Caching](/docs/CS/CO/Cache.md)
 
 ## Memory Caching
 
-内存缓存（通常简称为缓存）是一种技术，其中计算机应用程序临时将数据存储在计算机主内存（即 RAM）中，以便快速检索数据。
-用于临时存储的 RAM 称为缓存。
-由于访问 RAM 比访问硬盘驱动器或网络等其他介质快得多，缓存通过更快的数据访问帮助应用程序运行更快。
-当应用程序表现出重复访问之前访问过的数据的常见模式时，缓存尤其有效。
-缓存对于存储耗时计算的数据也很有用。通过将计算结果存储在缓存中，系统避免重复计算从而节省时间。
+Memory caching (often simply referred to as caching) is a technique in which computer applications temporarily store data in a computer’s main memory (i.e., random access memory, or RAM) to enable fast retrievals of that data.
+The RAM that is used for the temporary storage is known as the cache.
+Since accessing RAM is significantly faster than accessing other media like hard disk drives or networks, caching helps applications run faster due to faster access to data.
+Caching is especially efficient when the application exhibits a common pattern in which it repeatedly accesses data that was previously accessed.
+Caching is also useful to store data calculations that are otherwise time-consuming to compute. By storing the calculations in a cache, the system saves time by avoiding the repetition of the calculation.
 
 ## CDN
 
-当 Web 流量在地理上分散时，在全球复制整个基础设施并不总是可行的，当然也不经济。
-CDN 使你能够利用其全球边缘位置网络，向客户提供 Web 内容（如视频、网页、图像等）的缓存副本。
-为了减少响应时间，CDN 利用离客户或原始请求位置最近的边缘位置来减少响应时间。
-由于 Web 资产从缓存提供，吞吐量显著提高。对于动态数据，许多 CDN 可以配置为从源服务器检索数据。
+When your web traffic is geo-dispersed, it’s not always feasible and certainly not cost effective to replicate your entire infrastructure across the globe.
+A CDN provides you the ability to utilize its global network of edge locations to deliver a cached copy of web content such as videos, webpages, images and so on to your customers.
+To reduce response time, the CDN utilizes the nearest edge location to the customer or originating request location in order to reduce the response time.
+Throughput is dramatically increased given that the web assets are delivered from cache. For dynamic data, many CDNs can be configured to retrieve data from the origin servers.
 
-## DNS Caching
+## Domain Name System (DNS) Caching
 
-互联网上的每个域名请求基本上都会查询 DNS 缓存服务器，以解析域名关联的 IP 地址。
-DNS 缓存在多个层级发生，包括 OS、ISP 和 DNS 服务器。
+Every domain request made on the internet essentially queries DNS cache servers in order to resolve the IP address associated with the domain name.
+DNS caching can occur on many levels including on the OS, via ISPs and DNS servers.
 
 ## Client Caching
 
-在向观众提供 Web 内容时，通过缓存图像、HTML 文档、视频等 Web 资源并消除磁盘读取和服务器负载，可以大大减少获取这些资源所涉及的延迟。
-可以在服务器端和客户端使用各种 Web 缓存技术。
-服务端 Web 缓存通常涉及利用 Web 代理，该代理保留来自其前方 Web 服务器的 Web 响应，有效降低其负载和延迟。
-客户端 Web 缓存可以包括基于浏览器的缓存，该缓存保留先前访问过的 Web 内容的缓存版本。
+When delivering web content to your viewers, much of the latency involved with retrieving web assets such as images, html documents, video, etc. can be greatly reduced by caching those artifacts and eliminating disk reads and server load.
+Various web caching techniques can be employed both on the server and on the client side.
+Server side web caching typically involves utilizing a web proxy which retains web responses from the web servers it sits in front of, effectively reducing their load and latency.
+Client side web caching can include browser based caching which retains a cached version of the previously visited web content.
 
 页面缓存
 
@@ -457,97 +463,97 @@ removalListener提交到异步Executor中执行，每个缓存条目移除时都
 
 ## Database Cache
 
-数据库缓存通过消除主数据库上的不必要压力（通常以频繁访问的读数据的形式）来补充主数据库。
-缓存本身可以存在于多个区域，包括数据库中、应用程序中或作为独立层。
-以下是三种最常见的数据库缓存类型：
+A database cache supplements your primary database by removing unnecessary pressure on it, typically in the form of frequently-accessed read data.
+The cache itself can live in several areas, including in your database, in the application, or as a standalone layer.
+The following are the three most common types of database caches:
 
-- **数据库集成缓存**
-  某些数据库（如 Amazon Aurora）提供集成缓存，在数据库引擎内管理，并具有内置的 write-through 能力。
-  当底层数据变化时，数据库自动更新缓存。应用程序层不需要做任何事来使用此缓存。
-  集成缓存的缺点在于其大小和能力。集成缓存通常限于数据库实例分配给缓存的可用内存，不能用于其他目的（如与其他实例共享数据）。
-- **本地缓存**
-  本地缓存在应用程序内存储常用数据。
-  这使数据检索比其他缓存架构更快，因为它消除了与检索数据相关的网络流量。
-  一个主要缺点是，在应用程序中，每个节点都有自己的常驻缓存，以断开连接的方式工作。
-  存储在单个缓存节点中的信息（无论是缓存的数据库行、Web 内容还是会话数据）无法与其他本地缓存共享。
-  这在分布式环境中带来挑战，因为信息共享对于支持可扩展的动态环境至关重要。
-  由于大多数应用使用多个应用服务器，如果每个服务器都有自己的缓存，跨服务器协调值成为主要挑战。
-  此外，发生故障时，本地缓存中的数据丢失，必须重新填充，这实际上抵消了缓存的效果。
-  远程缓存缓解了这些大部分缺点。
-- **远程缓存**
-  远程缓存是专用于在内存中存储缓存数据的独立实例。
-  远程缓存在专用服务器上存储，通常基于键值 NoSQL 存储构建，如 [Redis](/docs/CS/DB/Redis/Redis.md) 和 [Memcached](/docs/CS/DB/Memcached.md)。
-  每个缓存节点每秒可提供数十万个（甚至高达百万个）请求。
-  远程缓存请求的平均延迟在亚毫秒级，比请求基于磁盘的数据库快一个数量级。
-  在这种速度下，本地缓存很少需要。
-  远程缓存是分布式环境的理想选择，因为它们作为连接的集群工作，所有不同的系统都可以利用。
-  然而，当网络延迟是一个问题时，可以应用使用本地和远程缓存的双层缓存策略。
-  由于增加的复杂性，通常只在需要时才使用。
-  对于远程缓存，数据缓存和数据有效性管理的编排由使用它的应用程序和/或进程管理。
-  缓存本身不直接连接到数据库，而是与其相邻使用。
+- Database-integrated caches
+  Some databases, such as Amazon Aurora, offer an integrated cache that is managed within the database engine and has built-in write-through capabilities.
+  The database updates its cache automatically when the underlying data changes. Nothing in the application tier is required to use this cache.
+  The downside of integrated caches is their size and capabilities. Integrated caches are typically limited to the available memory that is allocated to the cache by the database instance and can’t be used for other purposes, such as sharing data with other instances.
+- Local caches
+  A local cache stores your frequently-used data within your application.
+  This makes data retrieval faster than with other caching architectures because it removes network traffic that is associated with retrieving data.
+  A major disadvantage is that among your applications, each node has its own resident cache working in a disconnected manner.
+  The information that is stored in an individual cache node (whether it’s cached database rows, web content, or session data) can’t be shared with other local caches.
+  This creates challenges in a distributed environment where information sharing is critical to support scalable dynamic environments.
+  Because most applications use multiple application servers, coordinating the values across them becomes a major challenge if each server has its own cache.
+  In addition, when outages occur, the data in the local cache is lost and must be rehydrated, which effectively negates the cache.
+  The majority of these disadvantages are mitigated with remote caches.
+- Remote caches
+  A remote cache (or side cache) is a separate instance (or separate instances) dedicated for storing the cached data in-memory.
+  Remote caches are stored on dedicated servers and are typically built on key/ value NoSQL stores, such as [Redis](/docs/CS/DB/Redis/Redis.md) and [Memcached](/docs/CS/DB/Memcached.md).
+  They provide hundreds of thousands of requests (and up to a million) per second per cache node.
+  The average latency of a request to a remote cache is on the sub-millisecond timescale, which, in the order of magnitude, is faster than a request to a disk-based database.
+  At these speeds, local caches are seldom necessary.
+  Remote caches are ideal for distributed environments because they work as a connected cluster that all your disparate systems can utilize.
+  However, when network latency is a concern, you can apply a two-tier caching strategy that uses a local and remote cache together.
+  It’s typically used only when needed because of the complexity it adds.
+  With remote caches, the orchestration between caching the data and managing the validity of the data is managed by your applications and/or processes that use it.
+  The cache itself is not directly connected to the database but is used adjacently to it.
 
 MySQL query cache
 
-### 关系数据库缓存技术
+### Relational Database Caching Techniques
 
 #### Cache ResultSet
 
-从关系数据库查询数据的基本模式包括执行 SQL 语句并遍历返回的 ResultSet 对象游标以检索数据库行。
-当想要缓存返回的数据时，可以应用多种技术。
-然而，最好选择一种简化数据访问模式和/或优化架构目标的方法。
+The basic paradigm when you query data from a relational database includes executing SQL statements and iterating over the returned ResultSet object cursor to retrieve the database rows.
+There are several techniques you can apply when you want to cache the returned data.
+However, it’s best to choose a method that simplifies your data access pattern and/or optimizes the architectural goals that you have for your application.
 
-遍历 ResultSet 游标可以从数据库行中检索字段和值。从那时起，应用程序可以选择在何处以及如何使用该数据。
+Iterating over the ResultSet cursor lets you retrieve the fields and values from the database rows. From that point, the application can choose where and how to use that data.
 
-缓存包含获取的数据库行的序列化 ResultSet 对象。
+Cache a serialized ResultSet object that contains the fetched database row.
 
-- 优点：当数据检索逻辑被抽象时（例如在 DAO 层中），消费代码只期望 ResultSet 对象，不需要知道其来源。
-  ResultSet 对象可以被遍历，无论它来自数据库还是从缓存反序列化，这大大减少了集成逻辑。
-  此模式可应用于任何关系数据库。
-- 缺点：数据检索仍然需要从 ResultSet 对象游标提取值，不能进一步简化数据访问；它只减少了数据检索延迟。
+- Advantage:Whendataretrievallogicisabstracted(forexample,asinaDataAccessObjectorDAO layer), the consuming code expects only a ResultSet object and does not need to be made aware of its origination.
+  A ResultSet object can be iterated over, regardless of whether it originated from the database or was deserialized from the cache, which greatly reduces integration logic.
+  This pattern can be applied to any relational database.
+- Disadvantage:DataretrievalstillrequiresextractingvaluesfromtheResultSetobjectcursoranddoes not further simplify data access; it only reduces data retrieval latency.
 
-注意：缓存行时，它必须是可序列化的。以下示例使用 CachedRowSet 实现实现此目的。使用 Redis 时，它以字节数组值存储。
+Note: When you cache the row, it’s important that it’s serializable. The following example uses a CachedRowSet implementation for this purpose. When you are using Redis, this is stored as a byte array value.
 
-以下代码将 CachedRowSet 对象转换为字节数组，然后将该字节数组存储为 Redis 字节数组值。实际的 SQL 语句作为 key 存储并转换为字节。
+The following code converts the CachedRowSet object into a byte array and then stores that byte array as a Redis byte array value. The actual SQL statement is stored as the key and converted into bytes.
 
-将 SQL 语句存储为 key 的一个优点是它实现了透明的缓存抽象层，隐藏了实现细节。
-另一个好处是无需在自定义 key ID 和执行的 SQL 语句之间创建任何额外的映射。
-在 Redis 中设置数据时，会应用以毫秒指定的过期时间。
-对于延迟缓存/cache aside，首先查询缓存，然后才对数据库执行查询。为了隐藏实现细节，使用 DAO 模式并暴露一个通用方法供应用程序检索数据。
+One advantage of storing the SQL statement as the key is that it enables a transparent caching abstraction layer that hides the implementation details.
+The other added benefit is that you don’t need to create any additional mappings between a custom key ID and the executed SQL statement.
+At the time of setting data in the Redis, you are applying the expiry time, which is specified in milliseconds.
+For lazy caching/cache aside, you would initially query the cache before executing the query against the database. To hide the implementation details, use the DAO pattern and expose a generic method for your application to retrieve the data.
 
-假设应用程序框架不能用于抽象缓存实现，如何最好地缓存返回的数据库数据？
+Assuming that your application framework can’t be used to abstract your caching implementation, how do you best cache the returned database data?
 
-对于将回顾的所有其他缓存技术，应该为 Redis key 建立命名约定。
-一个好的命名约定是应用程序和开发人员容易预测的。冒号分隔的层次结构是常见 key 命名约定，如 object:type:id。
+For all other caching techniques that we’ll review, you should establish a naming convention for your Redis keys.
+A good naming convention is one that is easily predictable to applications and developers. A hierarchical structure separated by colons is a common naming convention for keys, such as object:type:id.
 
 #### Select Fields
 
-将获取的数据库行子集缓存到应用程序可以消费的自定义结构中。
+Cache a subset of a fetched database row into a custom structure that can be consumed by your applications.
 
-- 优点：此方法易于实现。
-  将特定的检索字段和值存储到 JSON 或 XML 等结构中，然后将该结构 SET 到 Redis 字符串中。
-  选择的格式应符合应用程序的数据访问模式。
-- 缺点：应用程序在查询特定数据时使用不同类型的对象（例如 Redis 字符串和数据库结果）。
-  此外，需要解析整个结构以检索与之关联的各个属性。
+- Advantage: This approach is easy to implement.
+  You essentially store specific retrieved fields and values into a structure such as JSON or XML and then SET that structure into a Redis string.
+  The format you choose should be something that conforms to your application’s data access pattern.
+- Disadvantage: Your application is using different types of objects when querying for particular data (for example, Redis string and database results).
+  In addition, you are required to parse through the entire structure to retrieve the individual attributes associated with it.
 
 ##### Aggregate Structures
 
-将获取的数据库行缓存到特定的数据结构中，以简化应用程序的数据访问。
+Cache the fetched database row into a specific data structure that can simplify the application’s data access.
 
-- 优点：将 ResultSet 对象转换为简化访问的格式（如 Redis Hash）时，应用程序可以更有效地使用该数据。
-  此技术通过减少遍历 ResultSet 对象或解析存储在字符串中的 JSON 等结构的需求，简化了数据访问模式。
-  此外，使用聚合数据结构（如 Redis Lists、Sets 和 Hashes）提供了各种与设置和获取数据相关的属性级命令，并消除了在利用数据之前处理数据的开销。
-- 缺点：应用程序在查询特定数据时使用不同类型的对象（例如 Redis Hash 和数据库结果）。
+- Advantage: When converting the ResultSet object into a format that simplifies access, such as a Redis Hash, your application is able to use that data more effectively.
+  This technique simplifies your data access pattern by reducing the need to iterate over a ResultSet object or by parsing a structure like a JSON object stored in a string.
+  In addition, working with aggregate data structures, such as Redis Lists, Sets, and Hashes provides various attribute level commands associated with setting and getting data, and eliminating the overhead associated with processing the data before being able to leverage it.
+- Disadvantage: Your application is using different types of objects when querying for particular data (for example, Redis Hash and database results).
 
-与 JSON 不同，将数据存储为 Redis hash 的额外好处是可以查询其中的单个属性。
-假设对于给定请求，只想响应与客户 Hash 关联的特定属性，如客户姓名和地址。
-Redis 支持这种灵活性，以及各种其他功能，如在 map 中添加和删除单个属性。
+Unlike JSON, the added benefit of storing your data as a hash in Redis is that you can query for individual attributes within it.
+Say that for a given request you only want to respond with specific attributes associated with the customer Hash, such as the customer name and address.
+This flexibility is supported in Redis, along with various other features, such as adding and deleting individual attributes in a map.
 
 #### Cache Serialized Application Object Entities
 
-将获取的数据库行子集缓存到应用程序可以消费的自定义结构中。
+Cache a subset of a fetched database row into a custom structure that can be consumed by your applications.
 
-- 优点：使用简单的序列化和反序列化技术在应用程序原生状态下使用应用程序对象。这可以通过最小化数据转换逻辑来快速加速应用程序性能。
-- 缺点：高级应用程序开发用例。
+- Pro: Use application objects in their native application state with simple serializing and deserializing techniques. This can rapidly accelerate application performance by minimizing data transformation logic.
+- Con: Advanced application development use case.
 
 ## Distributed Cache
 
@@ -587,42 +593,44 @@ Cache-Aside下:
 
 ## Cache Issues
 
-缓存穿透、缓存击穿、缓存雪崩
+Cache Penetration, Cache Breakdown, Cache Avalanche
 
 ### Cache Penetration
 
-缓存穿透是指查询某个不存在的数据，由于缓存是在命中时才写入的，在容错考虑下，如果从存储层找不到数据，则不会写入缓存，这将导致每次请求该不存在的数据都要到存储层查询，失去了缓存的意义。
+Cache penetration refers to querying a certain non-existent data, because the cache is written when it hits, and in fault-tolerant consideration, if the data can not be found from the storage layer,
+it will not write to the cache, which will lead to the non-existent data every request to the storage layer to query, losing the meaning of the cache.
 
-流量高时，DB 可能会挂掉。如果有人频繁使用不存在的 key 攻击我们的应用，这就是一个漏洞。
+When traffic is high, DB may hang up. If someone attacks our application frequently by using nonexistent keys, this is a vulnerability.
 
-对请求进行前置校验，过载保护。
+对请求进行前置校验 过载保护
 
-解决方案
 
-- 通过 Bloom 过滤器拦截。
-- 空结果也缓存，但过期时间很短，不超过 5 分钟。
+Solution
+
+- Intercept through a Bloom filter.
+- Empty results are cached, but the expiration time is very short, not more than 5 minutes.
 
 ### Cache Avalanche
 
-缓存雪崩是指设置缓存时使用相同的过期时间，导致缓存在某个时间同时失效，所有请求都转发到 DB。
-DB 瞬时压力过大。
+Cache avalanche refers to an avalanche in which the same expiration time is used to set the cache, which causes the cache to fail at the same time at a certain time, and all requests are forwarded to DB.
+DB is under excessive instantaneous pressure.
 
-解决方案
+Solution
 
-- 使用同步或排队确保缓存以单线程写入，避免故障发生时大量并发请求落到底层存储系统。
-- 为缓存的过期时间添加随机值，如 1-5 分钟。
+- Synchronization or queuing is used to ensure that the cache is written in a single thread, thus avoiding the large number of concurrent requests falling on the underlying storage system when failures occur.
+- Add a random value to the cache’s expiration time, such as 1-5 minutes.
 
 ### Cache Breakdown
 
-对于某些设置了过期时间的 key，如果这些 key 可能在某个时间点被并发访问，就是非常"热"的数据。
+For some keys with expiration time, if these keys may be accessed concurrently at some point in time, it is a very “hot” data.
 
-当缓存在某个时间点过期时，恰好有大量并发请求访问这个 key。
-这些请求发现缓存过期后，通常从后端加载数据并设置回缓存。
-此时，大量并发请求可能瞬间压垮后端 DB。
+When the cache expires at a certain point, there are a lot of concurrent requests for this key just at this point.
+These requests find that cache expiration usually loads data from the back end and sets it back to the cache.
+At this time, large concurrent requests may overwhelm the back-end DB instantaneously.
 
-解决方案
+Solution
 
-- 避免过多请求同时访问数据库。
+- Avoid too many requests accessing DataBases.
 
 
 收集缓存监控信息 流处理如Flink判断是否是hot key 再通过监控系统通知到应用做处理 缓存集群需要查看是否均匀

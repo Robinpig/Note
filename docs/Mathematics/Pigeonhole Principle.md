@@ -1,12 +1,13 @@
 ## Introduction
 
 
-鸽巢原理如下：
+The pigeonhole principle is the following:
 
-如果将 m 个物体放入 n 个盒子中，且 m > n，则某个盒子中至少包含两个物体。
+If m objects are placed into n bins, where m > n, then some bin contains at least two objects.
 
-- 使用鸽巢原理：
-  - 找到要分配的 m 个物体。
-  - 找到要分配到的 n < m 个桶。
-  - 根据鸽巢原理得出结论：某个桶中必定有两个物体。
-- 如何继续的细节取决于你正在进行的特定证明。
+
+- To use the pigeonhole principle:
+ - Find the m objects to distribute.
+ - Find the n < m buckets into which to distribute them.
+ - Conclude by the pigeonhole principle that there must be two objects in some bucket.
+- The details of how to proceeds from there are specific to the particular proof you're doing.

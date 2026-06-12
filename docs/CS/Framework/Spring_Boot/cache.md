@@ -1,8 +1,9 @@
 ## Introduction
 
-缓存抽象的自动配置。
-当通过 `@EnableCaching` 启用缓存时，必要时会创建一个 CacheManager。
-缓存存储可以自动检测或通过配置显式指定。
+
+
+Auto-configuration for the cache abstraction. Creates a CacheManager if necessary when caching is enabled via `@EnableCaching`.
+Cache store can be auto-detected or specified explicitly via configuration.
 
 ```java
 package org.springframework.boot.autoconfigure.cache;
@@ -42,7 +43,7 @@ public enum CacheType {
 
 
 
-默认使用 `ConcurrentMapCacheManager`
+default `ConcurrentMapCacheManager`
 
 ```java
 

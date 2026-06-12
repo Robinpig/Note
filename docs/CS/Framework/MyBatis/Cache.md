@@ -2,7 +2,7 @@
 
 
 
-### Cache 层次结构
+### Cache Hierarchy
 
 `package org.apache.ibatis.cache`
 
@@ -10,17 +10,17 @@
 
 
 
-每个 namespace 会创建一个 Cache 实例。
+One instance of cache will be created for each namespace.
 
-Cache 实现必须有一个接收 String 类型 cache id 作为参数的构造函数。
+The cache implementation must have a constructor that receives the cache id as an String parameter.
 
-MyBatis 会将 namespace 作为 id 传递给构造函数。
+MyBatis will pass the namespace as id to the constructor.
 
 ```java
-// Cache 提供者的 SPI 接口。
+// SPI for cache providers.
 public interface Cache {
 
-  // 此缓存的标识符
+  //The identifier of this cache
   String getId();
 
   void putObject(Object key, Object value);
@@ -28,25 +28,28 @@ public interface Cache {
   Object getObject(Object key);
 
   /**
-   * 从 3.3.0 版本开始，此方法仅在回滚期间调用，
-   * 用于恢复之前缓存中缺失的值。
-   * 这允许阻塞缓存释放之前可能加在 key 上的锁。
-   * 阻塞缓存在值为 null 时加锁，当值再次可用时释放锁。
-   * 这样其他线程将等待值可用，而不是直接访问数据库。
+   * As of 3.3.0 this method is only called during a rollback 
+   * for any previous value that was missing in the cache.
+   * This lets any blocking cache to release the lock that 
+   * may have previously put on the key.
+   * A blocking cache puts a lock when a value is null 
+   * and releases it when the value is back again.
+   * This way other threads will wait for the value to be 
+   * available instead of hitting the database.
    */
   Object removeObject(Object key);
 
   /**
-   * 清空此缓存实例
+   * Clears this cache instance
    */  
   void clear();
 
-  // 可选。核心不调用此方法。
+  // Optional. This method is not called by the core.
   int getSize();
   
   /** 
-   * 可选。从 3.2.6 开始，核心不再调用此方法。
-   * 缓存所需的任何锁定必须由缓存提供者内部提供。
+   * Optional. As of 3.2.6 this method is no longer called by the core.
+   * Any locking needed by the cache must be provided internally by the cache provider.
    */
   ReadWriteLock getReadWriteLock();
 
@@ -71,9 +74,7 @@ public MyCache(final String id) {
 
 ## BlockingCache
 
-简单的阻塞装饰器，是 EhCache 的 BlockingCache 装饰器的简单低效版本。
-当在缓存中找不到元素时，它会在缓存 key 上设置锁。
-这样其他线程将等待该元素填充完成，而不是直接访问数据库。
+`Simple blocking decorator Simple and inefficient version of EhCache's BlockingCache decorator. It sets a lock over a cache key when the element is not found in cache. This way, other threads will wait until this element is filled instead of hitting the database.`
 
 
 
@@ -103,12 +104,12 @@ public class BlockingCache implements Cache {
     return value;
   }
 }  
-   
+  
 ```
 
 
 
-首次获取缓存时创建新的 [ReentrantLock](/docs/CS/Java/JDK/Concurrency/ReentrantLock.md)
+new [ReentrantLock](/docs/CS/Java/JDK/Concurrency/ReentrantLock.md) when first get Cache
 
 ```java
 private ReentrantLock getLockForKey(Object key) {
@@ -145,9 +146,9 @@ private void releaseLock(Object key) {
 
 ## FifoCache
 
-FIFO（先进先出）缓存装饰器
+`FIFO (first in, first out) cache decorator`
 
-使用 LinkedList 实现 Deque
+`Use LinkedList implements Deque`
 
 ```java
 @Override
@@ -169,7 +170,7 @@ private void cycleKeyList(Object key) {
 
 ## LruCache
 
-使用 LinkedHashMap，大小为 1024
+`new LinkedHashMap and size is 1024`
 
 ```java
 public class LruCache implements Cache {
@@ -224,15 +225,15 @@ public class LruCache implements Cache {
 
 ## SynchronizedCache
 
-使用 synchronized 装饰 Cache 的 put 和 get 方法
+`decorate put and get methods of Cache with synchronized`
 
 
 
-## 二级缓存
+## 2ndCache
 
-@CacheNamespace
+@CacheNamespace 
 
-在 [CachingExecutor](/docs/CS/Framework/MyBatis/Executor.md) 中启用二级缓存
+enable 2nd level cache in [CachingExecutor](/docs/CS/Framework/MyBatis/Executor.md)
 
 ### TransactionalCacheManager
 
@@ -274,10 +275,8 @@ public class TransactionalCacheManager {
 
 
 ### TransactionalCache
-二级缓存的事务缓冲区。
-此类持有所有要在 Session 期间添加到二级缓存的条目。
-当调用 commit 时，条目被发送到缓存；如果 Session 回滚，则丢弃条目。
-已添加阻塞缓存支持。因此任何返回缓存未命中的 get() 之后都会执行 put()，以便释放与 key 关联的任何锁。
+The 2nd level cache transactional buffer.
+This class holds all cache entries that are to be added to the 2nd level cache during a Session. Entries are sent to the cache when commit is called or discarded if the Session is rolled back. Blocking cache support has been added. Therefore any get() that returns a cache miss will be followed by a put() so any lock associated with the key can be released.
 
 
 ```java

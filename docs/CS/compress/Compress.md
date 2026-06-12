@@ -2,32 +2,29 @@
 
 ## Data Compression
 
-数据压缩通过部分消除固有的冗余来减少发送或存储的数据量。
-当我们产生数据时就会产生冗余。
-通过数据压缩，我们使传输和存储更加高效，同时保持数据的完整性。
+Compressing data can reduce the amount of data to be sent or stored by partially eliminating inherent redundancy. Redundancy is created when we produce data.
+Through data compression, we make transmission and storage more efficient, and at the same time, we preserve the integrity of the data.
 
-### 无损数据压缩
+### Lossless Data Compression
 
-在无损数据压缩中，数据的完整性得以保持。
-原始数据与压缩和解压后的数据完全相同，因为这些方法中的压缩和解压算法互为精确逆运算：过程中没有任何数据丢失。
-冗余数据在压缩时被移除，在解压时重新添加。
+In lossless data compression, the integrity of the data is preserved.
+The original data and the data after compression and decompression are exactly the same because, in these methods, the compression and decompression algorithms are exact inverses of each other: no part of the data is lost in the process.
+Redundant data is removed in compression and added during decompression.
 
-当我们不能承受任何数据丢失时，通常使用无损压缩方法。
-例如，压缩文本文件或应用程序时绝不能丢失数据。
+Lossless compression methods are normally used when we cannot afford to lose any data. For example, we must not lose data when we compress a text file or an application program.
 
-本节讨论三种无损压缩方法：游程编码、Huffman 编码和 Lempel Ziv 算法。
+We discuss three lossless compression methods in this section: run-length encoding, Huffman coding, and the Lempel Ziv algorithm.
 
-游程编码可能是最简单的压缩方法。
-它可以用于压缩任何符号组合构成的数据。
-它不需要知道符号出现的频率（Huffman 编码需要），当数据表示为 0 和 1 时效率非常高。
+Run-length encoding is probably the simplest method of compression. It can be used to compress data made of any combination of symbols.
+It does not need to know the frequency of occurrence of symbols (as is necessary for Huffman coding) and can be very efficient if data is represented as 0s and 1s.
 
-Huffman 编码为出现更频繁的符号分配更短的编码，为出现较少的符号分配更长的编码。
+Huffman coding assigns shorter codes to symbols that occur more frequently and longer codes to those that occur less frequently.
 
-Lempel Ziv (LZ) 编码以其发明者（Abraham Lempel 和 Jacob Ziv）命名，是一类称为基于字典编码的算法示例。
-其思想是创建一个通信会话期间使用的字符串字典（表）。
-如果发送方和接收方都有该字典的副本，则先前遇到的字符串可以用其在字典中的索引来替代，从而减少传输的信息量。
+Lempel Ziv (LZ) encoding, named after its inventors (Abraham Lempel and Jacob Ziv), is an example of a category of algorithms called dictionary-based encoding.
+The idea is to create a dictionary (a table) of strings used during the communication session.
+If both the sender and the receiver have a copy of the dictionary, then previously encountered strings can be substituted by their index in the dictionary to reduce the amount of information transmitted.
 
-### 有损数据压缩
+### Lossy Data Compression
 
 
 ## Links

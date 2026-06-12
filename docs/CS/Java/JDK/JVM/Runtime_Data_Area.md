@@ -1,31 +1,31 @@
 ## Introduction
 
-Runtime Data Area 分为五个主要组件：
+The Runtime Data Area is divided into five major components:
 
-1.  **Method Area（方法区）** – 所有类级别的数据，如运行时常量池、字段和方法数据、方法和构造函数的代码，都存储在这里。每个 JVM 只有一个方法区，它是一个共享资源。
-2.  **Heap Area（堆区）** – 所有对象及其对应的实例变量和数组将存储在这里。每个 JVM 也只有一个堆区。由于 Method Area 和 Heap Area 为多个线程共享内存，存储的数据不是线程安全的。
-3.  **Stack Area（栈区）** – 每个线程都会创建一个单独的运行时栈。每次方法调用都会在栈内存中创建一个条目，称为 Stack Frame。所有局部变量都在栈内存中创建。栈区是线程安全的，因为它不是共享资源。Stack Frame 分为三个子实体：
-    1.  **Local Variable Array（局部变量数组）** – 与方法相关的局部变量数量及其对应的值将存储在这里。
-    2.  **Operand stack（操作数栈）** – 如果需要执行任何中间操作，操作数栈充当执行操作的运行时工作空间。
-    3.  **Frame data（帧数据）** – 与方法对应的所有符号都存储在这里。在发生 **异常** 的情况下，catch 块信息将保留在帧数据中。
-4.  **PC Registers（PC 寄存器）** – 每个线程都有单独的 PC 寄存器，用于保存当前执行指令的地址，一旦指令执行完毕，PC 寄存器将更新为下一条指令。
-5.  **Native Method stacks（本地方法栈）** – Native Method Stack 保存本地方法信息。每个线程都会创建一个单独的本地方法栈。
+1.  **Method Area** – All the class level data such as the run-time constant pool, field, and method data, and the code for methods and constructors, are stored here. There is only one method area per JVM, and it is a shared resource.
+2.  **Heap Area** – All the Objects and their corresponding instance variables and arrays will be stored here. There is also one Heap Area per JVM. Since the Method and Heap areas share memory for multiple threads, the data stored is not thread-safe.
+3.  **Stack Area** – For every thread, a separate runtime stack will be created. For every method call, one entry will be made in the stack memory which is called Stack Frame. All local variables will be created in the stack memory. The stack area is thread-safe since it is not a shared resource. The Stack Frame is divided into three subentities:
+    1.  **Local Variable Array** – Related to the method how many local variables are involved and the corresponding values will be stored here.
+    2.  **Operand stack** – If any intermediate operation is required to perform, operand stack acts as runtime workspace to perform the operation.
+    3.  **Frame data** – All symbols corresponding to the method is stored here. In the case of any **exception** , the catch block information will be maintained in the frame data.
+4.  **PC Registers** – Each thread will have separate PC Registers, to hold the address of current executing instruction once the instruction is executed the PC register will be updated with the next instruction.
+5.  **Native Method stacks** – Native Method Stack holds native method information. For every thread, a separate native method stack will be created.
 
 ## Heap
 
-Java 虚拟机有一个在所有 Java 虚拟机线程之间共享的堆。
-堆是运行时数据区，所有类实例和数组的内存都从这里分配。
+The Java Virtual Machine has a heap that is shared among all Java Virtual Machine threads.
+The heap is the run-time data area from which memory for all class instances and arrays is allocated.
 
-堆在虚拟机启动时创建。
-对象的堆存储由**自动存储管理系统**（称为垃圾收集器）回收；
-对象永远不会被显式释放。
-Java 虚拟机不假设特定类型的自动存储管理系统，
-存储管理技术可根据实现者的系统要求选择。
+The heap is created on virtual machine start-up.
+Heap storage for objects is reclaimed by an `automatic storage management system` (known as a garbage collector);
+objects are never explicitly deallocated.
+The Java Virtual Machine assumes no particular type of automatic storage management system,
+and the storage management technique may be chosen according to the implementor’s system requirements.
 
-堆可以是固定大小的，也可以根据计算需要扩展，如果不需要更大的堆则可以收缩。
-堆的内存不需要是连续的。
+The heap may be of a fixed size or may be expanded as required by the computation and may be contracted if a larger heap becomes unnecessary.
+The memory for the heap does not need to be contiguous.
 
-如果计算需要的堆比自动存储管理系统可提供的更多，Java 虚拟机将抛出 `OutOfMemoryError`。
+If a computation requires more heap than can be made available by the automatic storage management system, the Java Virtual Machine throws an `OutOfMemoryError`.
 
 
 在VM启动时 初始化TLAB前初始化heap

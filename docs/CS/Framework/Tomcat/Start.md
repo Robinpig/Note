@@ -1,81 +1,83 @@
 ## Introduction
 
-Tomcat 使用 `org.apache.catalina.startup` 包中的两个类来启动：Catalina 和 Bootstrap。
-Catalina 类用于启动和停止 Server 对象，以及解析 Tomcat 配置文件 server.xml。
-Bootstrap 类是入口点，它创建 Catalina 实例并调用其 process 方法。
-理论上，这两个类可以合并，但为了支持多种运行 Tomcat 的模式，提供了多个 bootstrap 类。
-例如，前述的 Bootstrap 类用于将 Tomcat 作为独立应用程序运行。
+Tomcat startup using two classes in the `org.apache.catalina.startup` package, Catalina and Bootstrap.
+The Catalina class is used to start and stop a Server object as well as parse the Tomcat configuration file, server.xml.
+The Bootstrap class is the entry point that creates an instance of Catalina and calls its process method.
+In theory, these two classes could have been merged.
+However, to support more than one mode of running Tomcat, a number of bootstrap classes are provided.
+For example, the aforementioned Bootstrap class is used for running Tomcat as a stand-alone application.
 
-为方便用户，Tomcat 还附带了批处理文件和 shell 脚本，可以轻松启动和停止 servlet 容器。
-借助这些批处理文件和 shell 脚本，用户无需记住运行 Bootstrap 类的 java.exe 选项，只需运行相应的批处理文件或 shell 脚本即可。
+For user's convenience, Tomcat also comes with the batch files and shell scripts to start and stop the servlet container easily.
+With the help of these batch files and shell scripts, the user does not need to remember the options for the java.exe program to run the Bootstrap class.
+Instead, he/she can just run the appropriate batch file or shell script.
 
 ## Lifecycle
 
-组件生命周期方法的通用接口。
-Catalina 组件可以实现此接口（以及它们所支持功能的适当接口），以**提供一致的方式来启动和停止组件**。
+Common interface for component life cycle methods.
+Catalina components may implement this interface (as well as the appropriate interface(s) for the functionality they support) in order to *provide a consistent mechanism to start and stop the component*.
 
-支持 Lifecycle 的组件的有效状态转换如下：
+The valid state transitions for components that support Lifecycle are:
 
 ```
             start()
   -----------------------------
   |                           |
   | init()                    |
-  NEW -»-- INITIALIZING        |
-  | |           |              |     ------------------«-----------------------
-  | |           |auto          |     |                                        |
-  | |          \|/    start() \|/   \|/     auto          auto         stop() |
-  | |      INITIALIZED --»-- STARTING_PREP --»- STARTING --»- STARTED --»---  |
-  | |         |                                                            |  |
-  | |destroy()|                                                            |  |
-  | --»-----«--    ------------------------«--------------------------------  ^
-  |     |          |                                                          |
-  |     |         \|/          auto                 auto              start() |
-  |     |     STOPPING_PREP ----»---- STOPPING ------»----- STOPPED -----»-----
-  |    \|/                               ^                     |  ^
-  |     |               stop()           |                     |  |
-  |     |       --------------------------                     |  |
-  |     |       |                                              |  |
-  |     |       |    destroy()                       destroy() |  |
-  |     |    FAILED ----»------ DESTROYING ---«-----------------  |
-  |     |                        ^     |                          |
-  |     |     destroy()          |     |auto                      |
-  |     --------»-----------------    \|/                         |
-  |                                 DESTROYED                     |
-  |                                                               |
-  |                            stop()                             |
-  ----»-----------------------------»------------------------------
+ NEW -»-- INITIALIZING        |
+ | |           |              |     ------------------«-----------------------
+ | |           |auto          |     |                                        |
+ | |          \|/    start() \|/   \|/     auto          auto         stop() |
+ | |      INITIALIZED --»-- STARTING_PREP --»- STARTING --»- STARTED --»---  |
+ | |         |                                                            |  |
+ | |destroy()|                                                            |  |
+ | --»-----«--    ------------------------«--------------------------------  ^
+ |     |          |                                                          |
+ |     |         \|/          auto                 auto              start() |
+ |     |     STOPPING_PREP ----»---- STOPPING ------»----- STOPPED -----»-----
+ |    \|/                               ^                     |  ^
+ |     |               stop()           |                     |  |
+ |     |       --------------------------                     |  |
+ |     |       |                                              |  |
+ |     |       |    destroy()                       destroy() |  |
+ |     |    FAILED ----»------ DESTROYING ---«-----------------  |
+ |     |                        ^     |                          |
+ |     |     destroy()          |     |auto                      |
+ |     --------»-----------------    \|/                         |
+ |                                 DESTROYED                     |
+ |                                                               |
+ |                            stop()                             |
+ ----»-----------------------------»------------------------------
 
 ```
 
-任何状态都可以转换为 FAILED。
+Any state can transition to FAILED.
 
-- 当组件处于 STARTING_PREP、STARTING 或 STARTED 状态时调用 start() 无效。
-- 当组件处于 NEW 状态时调用 start() 会在进入 start() 方法后立即调用 init()。
-- 当组件处于 STOPPING_PREP、STOPPING 或 STOPPED 状态时调用 stop() 无效。
-- 当组件处于 NEW 状态时调用 stop() 会将组件转换为 STOPPED。
-  这通常发生在组件启动失败且未启动所有子组件时。
-  当组件停止时，它会尝试停止所有子组件——即使那些未启动的。
+- Calling start() while a component is in states STARTING_PREP, STARTING or STARTED has no effect.
+- Calling start() while a component is in state NEW will cause init() to be called immediately after the start() method is entered.
+- Calling stop() while a component is in states STOPPING_PREP, STOPPING or STOPPED has no effect.
+- Calling stop() while a component is in state NEW transitions the component to STOPPED.
+  This is typically encountered when a component fails to start and does not start all its sub-components.
+  When the component is stopped, it will try to stop all sub-components - even those it didn't start.
 
-Lifecycle 中最重要的方法是 start 和 stop。
-组件提供这些方法的实现，以便其父组件可以启动和停止它。
-另外三个方法——addLifecycleListener、findLifecycleListeners 和 removeLifecycleListener——与监听器相关。
-组件可以有对该组件中发生的事件感兴趣的监听器。
-当事件发生时，对该事件感兴趣的监听器将收到通知。
-Lifecycle 实例可以触发的六个事件的名称在接口的 public static final Strings 中定义。
+The most important methods in Lifecycle are start and stop.
+A component provides implementations of these methods so that its parent component can start and stop it.
+The other three methods—addLifecycleListener, findLifecycleListeners, and removeLifecycleListener—are related to listeners.
+A component can have listeners that are interested in an event that occurs in that component.
+When an event occurs, the listener interested in that event will be notified.
+The names of the six events that can be triggered by a Lifecycle instance are defined in public static final Strings of the interface.
 
 ## Bootstrap
 
-Tomcat 支持多种配置和启动方式——最常见和稳定的是基于 server.xml 的方式，在 `org.apache.catalina.startup.Bootstrap` 中实现。
+Tomcat supports multiple styles of configuration and startup - the most common and stable is server.xml-based, implemented in `org.apache.catalina.startup.Bootstrap`.
 
-启动入口：
+Start entrance:
 
 ```shell
 startup.sh -> catalina.sh start ->java -jar org.apache.catalina.startup.Bootstrap.main()
 ```
 
 1. [invoke Catalina](/docs/CS/Framework/Tomcat/Start.md?id=invoke-Catalina)
-2. 通过反射调用 [org.apache.catalina.startup.Catalina#load()](/docs/CS/Framework/Tomcat/Start.md?id=load) 和 [org.apache.catalina.startup.Catalina#start](/docs/CS/Framework/Tomcat/Start.md?id=start)
+2. invoke [org.apache.catalina.startup.Catalina#load()](/docs/CS/Framework/Tomcat/Start.md?id=load) and [org.apache.catalina.startup.Catalina#start](/docs/CS/Framework/Tomcat/Start.md?id=start) by Reflection
 
 ```java
 //Bootstrap.java
@@ -118,7 +120,7 @@ public static void main(String[] args) {
 
 ### invoke Catalina
 
-初始化 daemon。
+Initialize daemon.
 
 [initClassLoaders](/docs/CS/Framework/Tomcat/ClassLoader.md?id=initClassLoaders)
 
@@ -207,11 +209,12 @@ public void load() {
 
 #### initInternal
 
-模板方法模式。
+Template method pattern
 
-为组件启动做准备。此方法应在对象创建后执行任何所需的初始化。将按以下顺序触发 LifecycleEvents：
+Prepare the component for starting. This method should perform any initialization required post object creation.
+The following LifecycleEvents will be fired in the following order:
 
-1. INIT_EVENT：组件初始化成功完成后触发。
+1. INIT_EVENT: On the successful completion of component initialization.
 
 ```java
 // LifecycleBase
@@ -279,12 +282,12 @@ protected void initInternal() throws LifecycleException {
 
 ### start
 
-启动流程：
+Start Flow:
 
-1. 启动 Server
-2. 启动 Service
-3. 启动 [Connector](/docs/CS/Framework/Tomcat/Connector.md)
-4. 注册 [Shutdown Hooks](/docs/CS/Java/JDK/JVM/destroy.md?id=shutdown-hooks)
+1. start Server
+2. start Service
+3. start [Connector](/docs/CS/Framework/Tomcat/Connector.md)
+4. register [Shutdown Hooks](/docs/CS/Java/JDK/JVM/destroy.md?id=shutdown-hooks)
 
 ```java
 //org.apache.catalina.startup.Catalina.java
@@ -335,13 +338,14 @@ public void start() {
 
 #### startInternal
 
-为此组件公开方法（属性 getter/setter 和生命周期方法除外）的活跃使用做好准备。
-在利用该组件的任何公开方法（属性 getter/setter 和生命周期方法除外）之前，应先调用此方法。
-将按以下顺序触发 LifecycleEvents：
+Prepare for the beginning of active use of the public methods other than property getters/setters and life cycle methods of this component. 
+This method should be called before any of the public methods other than property getters/setters and life cycle methods of this component are utilized. 
+The following LifecycleEvents will be fired in the following order:
 
-1. BEFORE_START_EVENT：在方法开始时触发。此时状态转换为 LifecycleState.STARTING_PREP。
-2. START_EVENT：在方法执行过程中，当可以安全地对任何子组件调用 start() 时触发。此时状态转换为 LifecycleState.STARTING，公开方法（属性 getter/setter 和生命周期方法除外）可以开始使用。
-3. AFTER_START_EVENT：在方法结束时，即将返回之前触发。此时状态转换为 LifecycleState.STARTED。
+1. BEFORE_START_EVENT: At the beginning of the method. It is as this point the state transitions to LifecycleState.STARTING_PREP.
+2. START_EVENT: During the method once it is safe to call start() for any child components.
+   It is at this point that the state transitions to LifecycleState.STARTING and that the public methods other than property getters/setters and life cycle methods may be used.
+3. AFTER_START_EVENT: At the end of the method, immediately before it returns. It is at this point that the state transitions to LifecycleState.STARTED.
 
 ```java
 // LifecycleBase
@@ -409,7 +413,8 @@ public class StandardService extends LifecycleMBeanBase implements Service {
 
 ##### StandardContext
 
-在 startInternal 里触发了 ServletContextListener。
+在startInternal里fire了 ServletContextListener
+
 
 ```java
 public boolean listenerStart() {
@@ -435,23 +440,32 @@ public boolean listenerStart() {
     }
 ```
 
-Tomcat 首先会加载进 ContextLoaderListener。
 
-这里可以通过 Spring MVC 的 [ContextLoaderListener](/docs/CS/Framework/Spring/MVC.md?id=ContextLoaderListener) 进行初始化。
+tomcat首先会加载进ContextLoaderListener
+
+这里可以通过 Spring MVC 的 [ContextLoaderListener](/docs/CS/Framework/Spring/MVC.md?id=ContextLoaderListener) 进行初始化
+
+
+
+
 
 #### stopInternal
 
-优雅地终止此组件公开方法（属性 getter/setter 和生命周期方法除外）的活跃使用。
+Gracefully terminate the active use of the public methods other than property getters/setters and life cycle methods of this component.
 
-- 一旦触发 STOP_EVENT，公开方法（属性 getter/setter 和生命周期方法除外）不应再被使用。将按以下顺序触发 LifecycleEvents：
-- BEFORE_STOP_EVENT：在方法开始时触发。此时状态转换为 LifecycleState.STOPPING_PREP。
-- STOP_EVENT：在方法执行过程中，当可以安全地对任何子组件调用 stop() 时触发。此时状态转换为 LifecycleState.STOPPING，公开方法（属性 getter/setter 和生命周期方法除外）不再可用。
-- AFTER_STOP_EVENT：在方法结束时，即将返回之前触发。此时状态转换为 LifecycleState.STOPPED。
+- Once the STOP_EVENT is fired, the public methods other than property getters/setters and life cycle methods should not be used. 
+  The following LifecycleEvents will be fired in the following order:
+- BEFORE_STOP_EVENT: At the beginning of the method. It is at this point that the state transitions to LifecycleState.STOPPING_PREP.
+- STOP_EVENT: During the method once it is safe to call stop() for any child components. 
+  It is at this point that the state transitions to LifecycleState.STOPPING and that the public methods other than property getters/setters and life cycle methods may no longer be used.
+- AFTER_STOP_EVENT: At the end of the method, immediately before it returns. 
+  It is at this point that the state transitions to LifecycleState.STOPPED.
 
-注意，如果从 LifecycleState.FAILED 转换，上述三个事件仍会触发，但组件会直接从 LifecycleState.FAILED 转换为 LifecycleState.STOPPING，跳过 LifecycleState.STOPPING_PREP。
+Note that if transitioning from LifecycleState.FAILED then the three events above will be fired
+but the component will transition directly from LifecycleState.FAILED to LifecycleState.STOPPING, bypassing LifecycleState.STOPPING_PREP
 
 ```java
-// LifecycleBase
+// // LifecycleBase
 @Override
 public final synchronized void stop() throws LifecycleException {
 

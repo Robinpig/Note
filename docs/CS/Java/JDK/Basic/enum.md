@@ -1,30 +1,30 @@
 ## Introduction
 
-**`enum` 关键字在 Java 5 中引入。** 它表示一种特殊类型的类，**总是继承 *java.lang.Enum* 类。**
-**Java enum**，也称为 Java *枚举类型*，是一种其**字段由一组固定的常量组成**的类型。
-enum 的根本目的是**强制执行编译时类型安全**。
+**The `enum` keyword was introduced in Java 5.** It denotes a special type of class that **always extends the *java.lang.Enum* class.**
+**Java enum**, also called Java *enumeration type*, is a type whose **fields consist of a fixed set of constants**.
+The very purpose of enum is to **enforce compile time type safety**.
 
-当你创建 enum 时，编译器会为你生成一个关联的类。
-这个类自动继承自 java.lang.Enum，它提供了某些能力：
+When you create an enum, an associated class is produced for you by the compiler.
+This class is automatically inherited from java.lang.Enum, which provides certain capabilities:
 
-ordinal() 方法生成一个 int，指示每个 enum 实例的声明顺序，从零开始。
-你始终可以安全地使用 == 比较 enum 实例，并且 equals() 和 hashCode() 会自动为你创建。
-Enum 类实现了 Comparable，因此有一个 compareTo() 方法，并且它也是 Serializable 的。
+The ordinal() method produces an int indicating the declaration order of each enum instance, starting from zero.
+You can always safely compare enum instances using ==, and equals() and hashCode() are automatically created for you.
+The Enum class is Comparable, so there’s a compareTo() method, and it is also Serializable.
 
-如果你在 enum 实例上调用 getDeclaringClass()，你将找到封闭的 enum 类。
-name() 方法生成与其声明完全相同的名称，这也是 toString() 返回的结果。
-valueOf() 是 Enum 的静态成员，生成与传递给它的 String 名称对应的 enum 实例，如果没有匹配项则抛出异常。
+If you call getDeclaringClass() on an enum instance, you’ll find out the enclosing enum class.
+The name() method produces the name exactly as it is declared, and this is what you get with toString(), as well.
+valueOf() is a static member of Enum, and produces the enum instance that corresponds to the String name you pass to it, or throws an exception if there’s no match.
 
-虽然 enums 看起来像是一种新的数据类型，但该关键字只是在生成 enum 的类时产生一些编译器行为，因此在许多方面你可以将 enum 视为任何其他类。
-事实上，enums 就是类，并且有自己的方法。
+Although enums appear to be a new data type, the keyword only produces some compiler behavior while generating a class for the enum, so in many ways you can treat an enum as if it were any other class.
+In fact, enums are classes and have their own methods.
 
-一个特别好的特性是 enums 可以在 switch 语句中使用。
-由于 switch 旨在从有限的一组可能性中进行选择，因此它是 enum 的理想匹配。注意 enum 名称如何能产生更清晰的意图表达。
-通常，你可以将 enum 用作创建数据类型的另一种方式，然后将结果投入使用。
+An especially nice feature is the way that enums can be used inside switch statements.
+Since a switch is intended to select from a limited set of possibilities, it’s an ideal match for an enum. Notice how enum names can produce a much clearer expression of intent.
+In general you can use an enum as if it were another way to create a data type, then just put the results to work.
 
-**使用 "==" 而非 equals 来比较枚举类型。**
+**Comparing Enum Types Using “==”  rather than equals.**
 
-**使用 enums 替代 int 常量。**
+**Use enums instead of int constants**.
 
 `finalize` is final
 
@@ -77,42 +77,42 @@ private Enum<?> readEnum(boolean unshared) throws IOException {
 
 ### EnumSet
 
-*EnumSet* 是一个专门的 *Set* 实现，旨在与 *Enum* 类型一起使用。
+The *EnumSet* is a specialized *Set* implementation meant to be used with *Enum* types.
 
-与 *HashSet* 相比，由于内部使用了 *位向量表示*，它是特定 *Enum* 常量 *Set* 的一种非常高效和紧凑的表示。它提供了传统的基于 *int* 的"位标志"的类型安全替代方案，允许我们编写更简洁、更易读和可维护的代码。
+It is a very efficient and compact representation of a particular *Set* of *Enum* constants when compared to a *HashSet*, owing to the internal *Bit Vector Representation* that is used. And it provides a type-safe alternative to traditional *int*-based “bit flags”, allowing us to write concise code that is more readable and maintainable.
 
-*EnumSet* 是一个抽象类，有两个实现称为 *RegularEnumSet* 和 *JumboEnumSet*，在实例化时根据 enum 中常量的数量选择其中一个。
+The *EnumSet* is an abstract class that has two implementations called *RegularEnumSet* and *JumboEnumSet*, one of which is chosen depending on the number of constants in the enum at the time of instantiation.
 
-因此，在大多数需要处理 enum 常量集合的场景中（如子集、添加、删除以及批量操作如 *containsAll* 和 *removeAll*），使用此 Set 通常是个好主意；如果只想迭代所有可能的常量，则使用 *Enum.values()*。
+Therefore it is always a good idea to use this set whenever we want to work with a collection of enum constants in most of the scenarios (like subsetting, adding, removing, and for bulk operations like *containsAll* and *removeAll*) and use *Enum.values()* if you just want to iterate over all possible constants.
 
 ### EnumMap
 
-*EnumMap* 是一个专门的 *Map* 实现，旨在使用 enum 常量作为键。与对应的 *HashMap* 相比，它是一种高效和紧凑的实现，内部表示为数组：
+*EnumMap* is a specialized *Map* implementation meant to be used with enum constants as keys. It is an efficient and compact implementation compared to its counterpart *HashMap* and is internally represented as an array:
 
 ## Constant-Specific Methods
 
 ### Chain of Responsibility with enums
 
-在责任链设计模式中，你创建多种不同的方式来解决问题，并将它们链接在一起。
-当请求发生时，它沿着链传递，直到某个解决方案可以处理该请求。
+In the Chain of Responsibility design pattern, you create a number of different ways to solve a problem and chain them together.
+When a request occurs, it is passed along the chain until one of the solutions can handle the request.
 
-你可以使用常量特定方法轻松实现简单的责任链。
-考虑一个邮局的模型，它试图以尽可能通用的方式处理每件邮件，但必须继续尝试，直到最终将邮件视为死信。
-每次尝试可以被认为是一个 Strategy（另一种设计模式），整个列表一起构成一个责任链。
+You can easily implement a simple Chain of Responsibility with constant-specific methods.
+Consider a model of a post office, which tries to deal with each piece of mail in the most general way possible, but must keep trying until it ends up treating the mail as a dead letter.
+Each attempt can be thought of as a Strategy (another design pattern), and the entire list together is a Chain of Responsibility.
 
-我们从描述一件邮件开始。
-所有感兴趣的不同特征都可以使用 enums 来表达。
-由于 Mail 对象是随机生成的，降低（例如）一件邮件被给予 GeneralDelivery 的 YES 概率的最简单方法是创建更多的非 YES 实例，所以 enum 定义一开始看起来有点奇怪。
+We start by describing a piece of mail.
+All the different characteristics of interest can be expressed using enums.
+Because Mail objects are randomly generated, the easiest way to reduce the probability of (for example) a piece of mail being given a YES for GeneralDelivery is to create more non-YES instances, so the enum definitions look a little funny at first.
 
 ### State Machines with enums
 
-枚举类型可以成为创建状态机的理想选择。
-状态机可以处于有限数量的特定状态。
-机器通常根据输入从一个状态移动到下一个状态，但也有瞬态状态；机器一旦完成任务就会离开这些状态。
+Enumerated types can be ideal for creating state machines.
+A state machine can be in a finite number of specific states.
+The machine normally moves from one state to the next based on an input, but there are also transient states; the machine moves out of these as soon as their task is performed.
 
-每个状态都有某些允许的输入，不同的输入将机器的状态改变为不同的新状态。
-因为 enums 限制了可能情况的集合，它们对于枚举不同的状态和输入非常有用。
-每个状态通常也有某种关联的输出。
+There are certain allowable inputs for each state, and different inputs change the state of the machine to different new states.
+Because enums restrict the set of possible cases, they are useful for enumerating the different states and inputs.
+Each state also typically has some kind of associated output.
 
 ## Links
 

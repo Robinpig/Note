@@ -2,9 +2,9 @@
 
 Introduction
 
-_JCache_ 是 Java 缓存 API。
-它由 [JSR107](https://github.com/jsr107/jsr107spec) 定义。
-它为开发者定义了一个标准的 Java 缓存 API，并为实现者定义了一个标准的 [SPI](/docs/CS/Java/JDK/Basic/SPI.md)。
+_JCache_ is the Java caching API.
+It was defined by [JSR107](https://github.com/jsr107/jsr107spec).
+It defines a standard Java Caching API for use by developers and a standard [SPI](/docs/CS/Java/JDK/Basic/SPI.md) for use by implementers.
 
 ```xml
 <dependency>
@@ -62,7 +62,9 @@ Guava cache
 持久化
 缓存一致性 同步
 
+
 ## Comparison
+
 
 |              | 持久化 | 集群  | 轻量化 | 附加功能 | 兼容其它缓存框架 |
 |--------------| ------ |-----|-----|------| --- |
@@ -70,6 +72,8 @@ Guava cache
 | Guava Cache  |   :x:             | :x:      | :white_check_mark:   |   :x:    |  :x:      | :x: |
 | Caffeine     |   :x:             | :x:      | :white_check_mark:   |   :x:    |  :x:      | :x: |
 | Spring Cache |     :x:     | :x: |  :white_check_mark:   |    :x:    | :white_check_mark: |
+
+
 
 ## Links
 

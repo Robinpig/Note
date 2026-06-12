@@ -1,14 +1,16 @@
 ## Introduction
 
-Queue 接口指定了可以在队列尾部添加元素、在头部移除元素以及查看队列中有多少元素。
-当你需要收集对象并以"先进先出"的方式检索它们时，可以使用 Queue。
+A queue interface specifies that you can add elements at the tail end of the queue, remove them at the head, and find out how many elements are in the queue. 
+You use a queue when you need to collect objects and retrieve them in a “first in, first out” fashion.
 
-Queue 提供了额外的插入、提取和检查操作。
+Queues provide additional insertion, extraction, and inspection operations.
 
-这些方法中的每一种都有两种形式：一种在操作失败时抛出异常，另一种返回特殊值（根据操作的不同为 null 或 false）。
+Each of these methods exists in two forms: one throws an exception if the operation fails, the other returns a special
+value (either null or false, depending on the operation).
 
-后一种插入操作形式专门为容量受限的 Queue 实现设计；
-在大多数实现中，插入操作不会失败。Queue 方法的总结：
+The latter form of the insert operation is designed specifically for use with capacity-restricted Queue implementations;
+in most implementations, insert operations cannot fail. Summary of Queue methods
+
 
 |         | Throws exception | Returns special value |
 | ------- | ---------------- | --------------------- |
@@ -16,13 +18,13 @@ Queue 提供了额外的插入、提取和检查操作。
 | Remove  | `remove()`       | `poll()`              |
 | Examine | `element()`      | `peek()`              |
 
-Queue **通常但不一定**以 `FIFO（先进先出）` 的方式对元素排序。
-例外情况包括优先级队列（priority queues），它根据提供的比较器或元素的自然顺序对元素排序，
-以及 LIFO 队列（或栈），它以 LIFO（后进先出）方式对元素排序。
-无论使用何种排序方式，队列的头部都是调用 remove() 或 poll() 将移除的元素。
-在 FIFO 队列中，所有新元素都插入到队列尾部。
-其他类型的队列可能使用不同的放置规则。
-每个 Queue 实现必须指定其排序属性。
+Queues **typically, but do not necessarily**, order elements in a `FIFO (first-in-first-out)` manner.
+Among the exceptions are priority queues, which order elements according to a supplied comparator, or the elements' natural ordering,
+and LIFO queues (or stacks) which order the elements LIFO (last-in-first-out).
+Whatever the ordering used, the head of the queue is that element which would be removed by a call to remove() or poll().
+In a FIFO queue, all new elements are inserted at the tail of the queue.
+Other kinds of queues may use different placement rules.
+Every Queue implementation must specify its ordering properties.
 
 <div style="text-align: center;">
 
@@ -96,6 +98,7 @@ public interface Queue<E> extends Collection<E> {
 
 #### Queue Method Equivalent Deque Method
 
+
 | Queue Method | Equivalent Deque Method |
 | ------------ | ----------------------- |
 | add(e)       | addLast(e)              |
@@ -107,9 +110,10 @@ public interface Queue<E> extends Collection<E> {
 
 #### Comparison of Stack and Deque methods
 
-Deque 也可以用作 LIFO（后进先出）栈。应优先使用此接口而非传统的 `Stack` 类。
-当 Deque 用作栈时，元素从 Deque 的头部压入和弹出。
-Stack 方法与 Deque 方法的对应关系如下表所示：
+Deques can also be used as LIFO (Last-In-First-Out) stacks. This interface should be used in preference to the legacy `Stack` class.
+When a deque is used as a stack, elements are pushed and popped from the beginning of the deque.
+Stack methods are precisely equivalent to Deque methods as indicated in the table below:
+
 
 | Stack Method | Equivalent Deque Method |
 | ------------ | ----------------------- |
@@ -119,22 +123,22 @@ Stack 方法与 Deque 方法的对应关系如下表所示：
 
 ### ArrayDeque
 
-Deque 接口的可调整大小数组实现。
-ArrayDeque 没有容量限制；它们会根据需要增长以支持使用。
-它们不是线程安全的；在缺乏外部同步的情况下，不支持多线程并发访问。
-禁止 null 元素。当用作栈时，此类可能比 Stack 更快，当用作队列时，比 LinkedList 更快。
+Resizable-array implementation of the Deque interface.
+Array deques have no capacity restrictions; they grow as necessary to support usage.
+They are not thread-safe; in the absence of external synchronization, they do not support concurrent access by multiple threads.
+Null elements are prohibited. This class is likely to be faster than Stack when used as a stack, and faster than LinkedList when used as a queue.
 
-大多数 ArrayDeque 操作以均摊常数时间运行。例外情况包括 remove、removeFirstOccurrence、removeLastOccurrence、contains、iterator.remove() 和批量操作，这些操作都以线性时间运行。
+Most ArrayDeque operations run in amortized constant time. Exceptions include remove, removeFirstOccurrence, removeLastOccurrence, contains, iterator.remove(), and the bulk operations, all of which run in linear time.
 
-此类的 iterator 方法返回的迭代器是快速失败的：
-如果在迭代器创建后的任何时间修改了 Deque，除了通过迭代器自身的 remove 方法之外，以任何方式修改，迭代器通常将抛出 **ConcurrentModificationException**。
-因此，在面对并发修改时，迭代器快速而干净地失败，而不是在未来的某个不确定时间冒任意非确定性行为的风险。
+The iterators returned by this class's iterator method are fail-fast:
+If the deque is modified at any time after the iterator is created, in any way except through the iterator's own remove method, the iterator will generally throw a **ConcurrentModificationException**.
+Thus, in the face of concurrent modification, the iterator fails quickly and cleanly, rather than risking arbitrary, non-deterministic behavior at an undetermined time in the future.
 
-注意，迭代器的快速失败行为无法得到保证，因为一般来说，在存在非同步并发修改的情况下无法做出任何硬性保证。
-快速失败迭代器会尽最大努力抛出 ConcurrentModificationException。
-因此，编写依赖于此异常来确保正确性的程序是错误的：迭代器的快速失败行为应仅用于检测 bug。
+Note that the fail-fast behavior of an iterator cannot be guaranteed as it is, generally speaking, impossible to make any hard guarantees in the presence of unsynchronized concurrent modification.
+Fail-fast iterators throw ConcurrentModificationException on a best-effort basis.
+Therefore, it would be wrong to write a program that depended on this exception for its correctness: the fail-fast behavior of iterators should be used only to detect bugs.
 
-此类及其迭代器实现了 Collection 和 Iterator 接口的所有可选方法。
+This class and its iterator implement all of the optional methods of the Collection and Iterator interfaces.
 
 ```java
     /*
@@ -183,8 +187,8 @@ ArrayDeque 没有容量限制；它们会根据需要增长以支持使用。
 
 ## ConcurrentLinkedQueue
 
-无界队列
-head 和 tail 为 volatile
+unbounded queue
+head tail volatile
 
 ```java
 
@@ -245,25 +249,26 @@ private static class Node<E> {
  private transient volatile Node<E> tail;
 ```
 
-CAS 操作
+cas
 
 ## PriorityQueue
 
-基于优先级堆的无界优先级队列。
-优先级队列的元素根据其自然顺序或由队列构造时提供的 Comparator 进行排序，具体取决于使用的构造函数。
-优先级队列不允许 null 元素。
-依赖自然顺序的优先级队列也不允许插入不可比较的对象（否则可能导致 ClassCastException）。
+An unbounded priority queue based on a priority heap. 
+The elements of the priority queue are ordered according to their natural ordering, or by a Comparator provided at queue construction time, depending on which constructor is used.
+A priority queue does not permit null elements. 
+A priority queue relying on natural ordering also does not permit insertion of non-comparable objects (doing so may result in ClassCastException).
 
-此队列的头部是指定顺序下的最小元素。
-如果多个元素并列最小值，则头部是这些元素之一——并列关系被任意打破。
-队列检索操作 poll、remove、peek 和 element 访问队列头部的元素。
-优先级队列是无界的，但有一个内部容量，用于控制存储队列元素的数组大小。
-它始终至少与队列大小相同。随着元素添加到优先级队列，其容量会自动增长。
-增长策略的细节未指定。
+The head of this queue is the least element with respect to the specified ordering. 
+If multiple elements are tied for least value, the head is one of those elements -- ties are broken arbitrarily. 
+The queue retrieval operations poll, remove, peek, and element access the element at the head of the queue.
+A
+priority queue is unbounded, but has an internal capacity governing the size of an array used to store the elements on the queue. 
+It is always at least as large as the queue size. As elements are added to a priority queue, its capacity grows automatically. 
+The details of the growth policy are not specified.
 
-此类及其迭代器实现了 Collection 和 Iterator 接口的所有可选方法。
-iterator() 方法提供的 Iterator 和 spliterator() 方法提供的 Spliterator 不保证以任何特定顺序遍历优先级队列的元素。
-如果需要有序遍历，请考虑使用 Arrays.sort(pq.toArray())。
+This class and its iterator implement all of the optional methods of the Collection and Iterator interfaces. 
+The Iterator provided in method iterator() and the Spliterator provided in method spliterator() are not guaranteed to traverse the elements of the priority queue in any particular order. 
+If you need ordered traversal, consider using Arrays.sort(pq.toArray()).
 
 |             |              |        |
 | ----------- | ------------ | ------ |
@@ -379,14 +384,15 @@ private static <T> void siftDownUsingComparator(
 
 ## BlockingQueue
 
-一种额外支持以下操作的 Queue：
+A Queue that additionally supports operations that:
 
-1. 在检索元素时等待队列变为非空
-2. 在存储元素时等待队列中的空间变为可用
+1. wait for the queue to become non-empty when retrieving an element
+2. wait for space to become available in the queue when storing an element.
 
-BlockingQueue 方法有四种形式，以不同的方式处理不能立即满足但可能在将来某个时刻满足的操作：一种抛出异常，第二种返回特殊值（根据操作为 null 或 false），第三种无限期阻塞当前线程直到操作成功，第四种在放弃前仅阻塞给定的最大时间限制。
+BlockingQueue methods come in four forms, with different ways of handling operations that cannot be satisfied immediately, but may be satisfied at some point in the future: one throws an exception, the second returns a special value (either null or false, depending on the operation), the third blocks the current thread indefinitely until the operation can succeed, and the fourth blocks for only a given maximum time limit before giving up.
 
-这些方法总结在下表中：
+These methods are summarized in the following table:
+
 
 |             | Throws exception | Special value | Blocks         | Times out            |
 | ----------- | ---------------- | ------------- | -------------- | -------------------- |
@@ -394,17 +400,17 @@ BlockingQueue 方法有四种形式，以不同的方式处理不能立即满足
 | **Remove**  | remove()         | poll()        | take()         | poll(time, unit)     |
 | **Examine** | element()        | peek()        | not applicable | not applicable       |
 
-BlockingQueue **不接受 null 元素**。尝试 add、put 或 offer null 元素时，实现会抛出 **NullPointerException**。null 被用作哨兵值来表示 *poll* 操作失败。
+A BlockingQueue **does not accept null elements**. Implementations throw **NullPointerException** on attempts to add, put or offer a null. A null is used as a sentinel value to indicate failure of *poll* operations.
 
-BlockingQueue 可以是容量受限的。在任何给定时间，它可能有一个剩余容量，超过该容量就不能再 put 元素而不阻塞。没有任何内部容量限制的 BlockingQueue 总是报告剩余容量为 Integer.MAX_VALUE。
+A BlockingQueue may be capacity bounded. At any given time it may have a remainingCapacity beyond which no additional elements can be put without blocking. A BlockingQueue without any intrinsic capacity constraints always reports a remaining capacity of Integer.MAX_VALUE.
 
-BlockingQueue 实现主要设计用于生产者-消费者队列，但也支持 Collection 接口。例如，可以使用 remove(x) 从队列中删除任意元素。然而，这些操作通常效率不高，仅适用于偶尔使用的情况，例如当排队消息被取消时。
+BlockingQueue implementations are designed to be used primarily for producer-consumer queues, but additionally support the Collection interface. So, for example, it is possible to remove an arbitrary element from a queue using remove(x). However, such operations are in general not performed very efficiently, and are intended for only occasional use, such as when a queued message is cancelled.
 
-BlockingQueue 实现是线程安全的。所有排队方法都使用内部锁或其他形式的并发控制原子地实现其效果。然而，批量 Collection 操作 addAll、containsAll、retainAll 和 removeAll 不一定是原子执行的，除非实现中另有指定。因此，例如，addAll(c) 可能在仅添加了 c 中的部分元素后失败（抛出异常）。
+BlockingQueue implementations are thread-safe. All queuing methods achieve their effects atomically using internal locks or other forms of concurrency control. However, the bulk Collection operations addAll, containsAll, retainAll and removeAll are not necessarily performed atomically unless specified otherwise in an implementation. So it is possible, for example, for addAll(c) to fail (throwing an exception) after adding only some of the elements in c.
 
-BlockingQueue 本身不支持任何类型的"关闭"或"关闭"操作来指示不再添加更多项。此类功能的需求和使用往往依赖于实现。例如，一种常见策略是生产者插入特殊的流结束或毒对象，消费者在取出时相应地解释它们。
+A BlockingQueue does not intrinsically support any kind of "close" or "shutdown" operation to indicate that no more items will be added. The needs and usage of such features tend to be implementation-dependent. For example, a common tactic is for producers to insert special end-of-stream or poison objects, that are interpreted accordingly when taken by consumers.
 
-使用示例，基于典型的生产者-消费者场景。注意，BlockingQueue 可以安全地与多个生产者和多个消费者一起使用。
+Usage example, based on a typical producer-consumer scenario. Note that a BlockingQueue can safely be used with multiple producers and multiple consumers.
 
 ### Example
 
@@ -444,8 +450,9 @@ class Producer implements Runnable {
  }
 ```
 
-**内存一致性效应**：与其他并发集合一样，线程中将对象放入 BlockingQueue 之前的操作 happens-before 另一线程中访问或移除该元素之后的操作。
-此接口是 Java Collections Framework 的成员。
+**Memory consistency effects**: As with other concurrent collections, actions in a thread prior to placing an object into a BlockingQueue happen-before actions subsequent to the access or removal of that element from the BlockingQueue in another thread.
+This interface is a member of the Java Collections Framework.
+
 
 | Blocking Queue Name   | Description      |
 | --------------------- | ---------------- |
@@ -459,7 +466,7 @@ class Producer implements Runnable {
 
 ### ArrayBlockingQueue
 
-1 个 [ReentrantLock](/docs/CS/Java/JDK/Concurrency/ReentrantLock.md) 和 2 个 Condition
+1 [ReentrantLock](/docs/CS/Java/JDK/Concurrency/ReentrantLock.md) and 2 conditions
 
 ```java
 /** Main lock guarding all access */
@@ -519,7 +526,7 @@ public ArrayBlockingQueue(int capacity, boolean fair,
 
 ### LinkedBlockingQueue
 
-takeLock 和 putLock
+takeLock and putLock
 
 ```java
 /** Lock held by take, poll, etc */
@@ -571,22 +578,22 @@ public void put(E e) throws InterruptedException {
 
 ### SynchronousQueue
 
-一种阻塞队列，其中**每个插入操作必须等待另一个线程的相应删除操作，反之亦然**。
-同步队列**没有任何内部容量，甚至连容量为 1 都没有**。
+A blocking queue in which **each insert operation must wait for a corresponding remove operation by another thread, and vice versa**.
+A synchronous queue **does not have any internal capacity, not even a capacity of one**.
 
-队列的头部是第一个排队插入线程试图添加到队列的元素；如果
-没有这样的排队线程，则没有可用于删除的元素，poll() 将返回 null。
+The head of the queue is the element that the first queued inserting thread is trying to add to the queue; if there is
+no such queued thread then no element is available for removal and poll() will return null.
 
-对于其他 Collection 方法（例如 contains），SynchronousQueue 充当空集合。此
-队列不允许 null 元素。
+For purposes of other Collection methods (for example contains), a SynchronousQueue acts as an empty collection. This
+queue does not permit null elements.
 
-SynchronousQueue 类似于 CSP 和 Ada 中使用的 rendezvous 通道。
-它们非常适合交接设计，在
-一个线程中运行的对象必须与另一个线程中运行的对象同步，以便向它传递一些
-信息、事件或任务。
-此类支持可选的公平策略，用于排序等待的生产者和消费者线程。默认情况下，此
-顺序不保证。然而，将 fair 设置为 true 构造的队列以 FIFO 顺序授予线程访问权限。
-此类及其迭代器实现了 Collection 和 Iterator 接口的所有可选方法。
+Synchronous queues are similar to rendezvous channels used in CSP and Ada. 
+They are well suited for handoff designs, in
+which an object running in one thread must sync up with an object running in another thread in order to hand it some
+information, event, or task.
+This class supports an optional fairness policy for ordering waiting producer and consumer threads. By default, this
+ordering is not guaranteed. However, a queue constructed with fairness set to true grants threads access in FIFO order.
+This class and its iterator implement all of the optional methods of the Collection and Iterator interfaces.
 
 ```java
 public class SynchronousQueue<E> extends AbstractQueue<E>
@@ -617,8 +624,8 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
 }
 ```
 
-不能 peek 同步队列，因为元素只有在尝试删除时才存在。
-不能迭代，因为没有任何东西可迭代。
+You cannot peek at a synchronous queue because an element is only present when you try to remove it.
+You cannot iterate as there is nothing to iterate.
 
 ```java
    public E peek() {
@@ -644,7 +651,7 @@ public class SynchronousQueue<E> extends AbstractQueue<E>
 
 #### transfer
 
-两者都调用 *transfer()*，*put* 发送一个参数
+both of them call *transfer()*, and *put* send a param
 
 ```java
 // Adds the specified element to this queue, waiting if necessary for another thread to receive it.
@@ -668,12 +675,12 @@ public E take() throws InterruptedException {
 
 #### TransferStack
 
-基本算法是循环尝试以下三种操作之一：
+Basic algorithm is to loop trying one of three actions:
 
-1. 如果栈显然为空或已包含相同模式的节点，尝试将节点压入栈并等待匹配，返回匹配项，如果取消则返回 null。
-2. 如果栈显然包含互补模式的节点，尝试将履行节点压入栈，与相应的等待节点匹配，将两者从栈中弹出，并返回匹配项。由于其他线程执行操作 3，匹配或取消链接实际上可能不是必需的：
-3. 如果栈顶已经持有另一个履行节点，通过执行其匹配和/或弹出操作来帮助它，
-   然后继续。帮助的代码与履行的代码基本相同，除了它不返回该项。
+1. If apparently empty or already containing nodes of same mode, try to push node on stack and wait for a match, returning it, or null if cancelled.
+2. If apparently containing node of complementary mode, try to push a fulfilling node on to stack, match with corresponding waiting node, pop both from stack, and return matched item. The matching or unlinking might not actually be necessary because of other threads performing action 3:
+3. If top of stack already holds another fulfilling node, help it out by doing its match and/or pop
+   operations, and then continue. The code for helping is essentially the same as for fulfilling, except that it doesn't return the item.
 
 ```java
 /** 
@@ -756,14 +763,15 @@ static final class SNode {
 
 #### TransferQueue
 
-基本算法是循环尝试以下两种操作之一：
+Basic algorithm is to loop trying to take either of
+two actions:
 
-1. 如果队列显然为空或持有相同模式的节点，尝试将节点添加到等待者队列，等待被履行（或取消）并返回匹配项。
-2. 如果队列显然包含等待项，并且此调用是互补模式，尝试通过 CAS 设置等待节点的 item 字段并将其出队来履行，然后返回匹配项。
+1. If queue apparently empty or holding same-mode nodes, try to add node to queue of waiters, wait to be fulfilled (or cancelled) and return matching item.
+2. If queue apparently contains waiting items, and this call is of complementary mode, try to fulfill by CAS'ing item field of waiting node and dequeuing it, and then returning matching item.
 
-在每种情况下，顺便检查并尝试帮助推进其他阻塞/慢速线程的 head 和 tail。
+In each case, along the way, check for and try to help advance head and tail on behalf of other stalled/slow threads.
 
-循环以 null 检查开始，防止看到未初始化的 head 或 tail 值。这在当前的 SynchronousQueue 中永远不会发生，但如果调用者持有对 transferer 的非 volatile/final 引用，则可能发生。这里还是有检查，因为它在循环顶部放置了 null 检查，这通常比将它们隐式散布要快。
+The loop starts off with a null check guarding against seeing uninitialized head or tail values. This never happens in current SynchronousQueue, but could if callers held non-volatile/final ref to the transferer. The check is here anyway because it places null checks at top of loop, which is usually faster than having them implicitly interspersed.
 
 ```java
 E transfer(E e, boolean timed, long nanos) {
@@ -878,6 +886,7 @@ private transient volatile int allocationSpinLock;
 
 ## Thread-Safe Queues
 
+
 | Queue                 | Boundary           | Lock     | Struct     |
 | --------------------- | ------------------ |----------| ---------- |
 | ArrayBlockingQueue    | bounded            | 1 lock   | arrayList  |
@@ -887,12 +896,15 @@ private transient volatile int allocationSpinLock;
 | PriorityBlockingQueue | unbounded          | lock     | heap       |
 | DealyQueue            | unbounded          | lock     | heap       |
 
+
 队列的底层一般分成三种：数组、链表和堆。其中，堆一般情况下是为了实现带有优先级特性的队列，暂且不考虑。
 
-我们就从数组和链表两种数据结构来看，基于数组线程安全的队列，比较典型的是 ArrayBlockingQueue，它主要通过加锁的方式来保证线程安全；基于链表的线程安全队列分成 LinkedBlockingQueue 和 ConcurrentLinkedQueue 两大类，前者也通过锁的方式来实现线程安全，而后者以及上面表格中的 LinkedTransferQueue 都是通过原子变量 compare and swap（以下简称"CAS"）这种不加锁的方式来实现的。
+我们就从数组和链表两种数据结构来看，基于数组线程安全的队列，比较典型的是ArrayBlockingQueue，它主要通过加锁的方式来保证线程安全；基于链表的线程安全队列分成LinkedBlockingQueue和ConcurrentLinkedQueue两大类，前者也通过锁的方式来实现线程安全，而后者以及上面表格中的LinkedTransferQueue都是通过原子变量compare and swap（以下简称“CAS”）这种不加锁的方式来实现的。
 
-通过不加锁的方式实现的队列都是无界的（无法保证队列的长度在确定的范围内）；而加锁的方式，可以实现有界队列。
-在稳定性要求特别高的系统中，为了防止生产者速度过快，导致内存溢出，只能选择有界队列；同时，为了减少 Java 的垃圾回收对系统性能的影响，会尽量选择 array/heap 格式的数据结构。这样筛选下来，符合条件的队列就只有 ArrayBlockingQueue。
+通过不加锁的方式实现的队列都是无界的（无法保证队列的长度在确定的范围内）；而加锁的方式，可以实现有界队列
+在稳定性要求特别高的系统中，为了防止生产者速度过快，导致内存溢出，只能选择有界队列；同时，为了减少Java的垃圾回收对系统性能的影响，会尽量选择array/heap格式的数据结构。这样筛选下来，符合条件的队列就只有ArrayBlockingQueue。
+
+
 
 ## Links
 
