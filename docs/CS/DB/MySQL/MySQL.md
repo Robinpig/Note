@@ -2,7 +2,11 @@
 
 [MySQL Server](https://www.mysql.com/), the world's most popular open source database, and MySQL Cluster, a real-time, open source **transactional** database.
 
-## Installing MySQL
+## Installation
+
+MySQL 启动配置文件读取顺序是按照 /etc/my.cnf -> /etc/mysql/my.cnf -> /usr/local/mysql/etc/my.cnf -> ~/.my.cnf，以最后的参数文件为准；Windows 环境下配置文件后缀名可能是 ini
+
+Linux 下 数据库路径默认 /usr/local/mysql/data, 链接指向 /opt/mysql_data
 
 <!-- tabs:start -->
 
@@ -11,6 +15,7 @@
 [Installing and Upgrading MySQL](https://dev.mysql.com/doc/refman/8.0/en/installing.html)
 
 MySQL 8.4 的 "mysql_native_password is not loaded" 插件未加载错误
+## Installing MySQL
 
 Windows修改my.ini文件
 
@@ -91,6 +96,8 @@ mysqld --verbose --help | grep -A 1 "Default options"
 Use gdb/lldb to debug
 
 ## Architecture
+
+MySQL 被设计成一个单进程多线程架构的数据库，与SQL Server 比较类似，但与 Oracle 多进程的架构有所不同。
 
 大体来说，MySQL 可以分为 Server 层和存储引擎层两部分
 
