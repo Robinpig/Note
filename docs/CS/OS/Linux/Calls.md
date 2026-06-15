@@ -516,14 +516,13 @@ Default: 0
 Perform a listen. Basically, we allow the protocol to do anything necessary for a listen, and if that works, we mark the socket as ready for listening.
 
 1. sockfd_lookup_light
-2. set backlog
+2. set backlog，取系统的 `cat /proc/sys/net/core/somaxconn` 和调用函数传入的 `backlog` 的最小值
 3. call inet_listen/sock_no_listen
 
-get somaxconn by `cat /proc/sys/net/core/somaxconn`, and `max_ack_backlog = Min(backlog, net.core.somaxconn)`
 
-限制了全连接队列大小和半连接个数 
-
-listen 可以重复调用，重复调用 listen 可修改 backlog，
+> [!TIP]
+>
+> listen 可以重复调用，重复调用 listen 可修改 backlog，
 
 
 ```c
@@ -535,6 +534,7 @@ SYSCALL_DEFINE2(listen, int, fd, int, backlog)
 
 int __sys_listen(int fd, int backlog)
 {
+       // 根据fd获取socket内核对象
        sock = sockfd_lookup_light(fd, &err, &fput_needed);
        if (sock) {
               somaxconn = sock_net(sock->sk)->core.sysctl_somaxconn;
@@ -547,11 +547,7 @@ int __sys_listen(int fd, int backlog)
 }
 ```
 
-We call the protocol - specifi c listen function finally.
-This is `sock->ops->listen()`. For the *PF_INET* protocol family, `sock->ops` is set to `inet_stream_ops`.
-So, we are calling `listen()` function from `inet_stream_ops`, *[inet_listen()](/docs/CS/OS/Linux/Calls.md?id=inet_listen)*.
-
-call `inet_listen`
+sock->ops->listen 指针指向的是 [`inet_listen()`](/docs/CS/OS/Linux/Calls.md?id=inet_listen) 函数
 
 ```c
 // net/ipv4/af_inet.c
@@ -572,11 +568,38 @@ set sk_max_ack_backlog = backlog
 // af_inet.c
 int inet_listen(struct socket *sock, int backlog)
 {
-       WRITE_ONCE(sk->sk_max_ack_backlog, backlog);
-      
-       if (old_state != TCP_LISTEN) {
-              err = inet_csk_listen_start(sk, backlog);
-       }
+	struct sock *sk = sock->sk;
+	int err = -EINVAL;
+	lock_sock(sk);
+	err = __inet_listen_sk(sk, backlog);
+}
+
+int __inet_listen_sk(struct sock *sk, int backlog)
+{
+	unsigned char old_state = sk->sk_state;
+	int err, tcp_fastopen;
+
+	if (!((1 << old_state) & (TCPF_CLOSE | TCPF_LISTEN)))
+		return -EINVAL;
+    // 全连接队列长度
+	WRITE_ONCE(sk->sk_max_ack_backlog, backlog);
+	// 当原状态非listen时，执行逻辑
+	if (old_state != TCP_LISTEN) {
+		tcp_fastopen = READ_ONCE(sock_net(sk)->ipv4.sysctl_tcp_fastopen);
+		if ((tcp_fastopen & TFO_SERVER_WO_SOCKOPT1) &&
+		    (tcp_fastopen & TFO_SERVER_ENABLE) &&
+		    !inet_csk(sk)->icsk_accept_queue.fastopenq.max_qlen) {
+			fastopen_queue_tune(sk, backlog);
+			tcp_fastopen_init_key_once(sock_net(sk));
+		}
+
+		err = inet_csk_listen_start(sk);
+		if (err)
+			return err;
+
+		tcp_call_bpf(sk, BPF_SOCK_OPS_TCP_LISTEN_CB, 0, NULL);
+	}
+	return 0;
 }
 ```
 
@@ -586,35 +609,41 @@ inet_connection_sock see [socket](/docs/CS/OS/Linux/net/socket.md?id=inet_connec
 
 ```c
 // net/ipv4/iinet_connection_sock.c
-int inet_csk_listen_start(struct sock *sk, int backlog)
+int inet_csk_listen_start(struct sock *sk)
 {
-       struct inet_connection_sock *icsk = inet_csk(sk);
-       struct inet_sock *inet = inet_sk(sk);
-       int err = -EADDRINUSE;
+	struct inet_connection_sock *icsk = inet_csk(sk);
+	struct inet_sock *inet = inet_sk(sk);
+	int err;
 
-       reqsk_queue_alloc(&icsk->icsk_accept_queue);
+	err = inet_ulp_can_listen(sk);
+	if (unlikely(err))
+		return err;
 
-       sk->sk_ack_backlog = 0;
-       inet_csk_delack_init(sk);
+    // 接收队列的申请和初始化
+	reqsk_queue_alloc(&icsk->icsk_accept_queue);
 
-       /* There is race window here: we announce ourselves listening,
-        * but this transition is still not validated by get_port().
-        * It is OK, because this socket enters to hash table only
-        * after validation is complete.
-        */
-       inet_sk_state_store(sk, TCP_LISTEN);
-       if (!sk->sk_prot->get_port(sk, inet->inet_num)) {
-              inet->inet_sport = htons(inet->inet_num);
+	sk->sk_ack_backlog = 0;
+	inet_csk_delack_init(sk);
 
-              sk_dst_reset(sk);
-              err = sk->sk_prot->hash(sk); /** enter to listen haah table  **/
+	/* There is race window here: we announce ourselves listening,
+	 * but this transition is still not validated by get_port().
+	 * It is OK, because this socket enters to hash table only
+	 * after validation is complete.
+	 */
+	inet_sk_state_store(sk, TCP_LISTEN);
+	err = sk->sk_prot->get_port(sk, inet->inet_num);
+	if (!err) {
+		inet->inet_sport = htons(inet->inet_num);
 
-              if (likely(!err))
-                     return 0;
-       }
+		sk_dst_reset(sk);
+		err = sk->sk_prot->hash(sk);
 
-       inet_sk_set_state(sk, TCP_CLOSE);
-       return err;
+		if (likely(!err))
+			return 0;
+	}
+
+	inet_sk_set_state(sk, TCP_CLOSE);
+	return err;
 }
 ```
 
@@ -928,20 +957,18 @@ void reqsk_queue_alloc(struct request_sock_queue *queue)
 ```c
 // request_sock.h 
 struct request_sock_queue {
-       spinlock_t            rskq_lock;
-       u8                   rskq_defer_accept; /** User waits for some data after accept() */
+	spinlock_t		rskq_lock;
+	u8			rskq_defer_accept;
+	u8			synflood_warned;
 
-       u32                  synflood_warned;
-       atomic_t              qlen;
-       atomic_t              young;
+	atomic_t		qlen;
+	atomic_t		young;
 
-       /** FIFO established children    */
-       struct request_sock    *rskq_accept_head;
-       struct request_sock    *rskq_accept_tail;
-   
-       struct fastopen_queue  fastopenq;  /* Check max_qlen != 0 to determine
-                                        * if TFO is enabled.
-                                        */
+	struct request_sock	*rskq_accept_head;
+	struct request_sock	*rskq_accept_tail;
+	struct fastopen_queue	fastopenq;  /* Check max_qlen != 0 to determine
+					     * if TFO is enabled.
+					     */
 };
 ```
 

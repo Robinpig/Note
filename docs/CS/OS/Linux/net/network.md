@@ -1338,15 +1338,16 @@ static int enqueue_to_backlog(struct sk_buff *skb, int cpu,
 
 ## 本机网络IO
 
-本机网络IO不需要经过网卡，节约了一些驱动上的开销
-
-发送数据不需要经过 Ring Buffer的驱动队列，直接将skb 通过软中断传递给接收协议栈。但是系统调用、协议栈、网络设备子系统、“驱动”程序都走了一遍
-
-如果需要绕过协议栈的开销，需要使用eBPF的 scokmap 和 sk redirect
+本机网络IO不需要经过真实的网卡，节约了一些驱动上的开销
+发送数据不需要经过 Ring Buffer 的驱动队列，直接将 skb 通过软中断传递给接收协议栈。
+但是系统调用、协议栈、网络设备子系统、“驱动”程序都走了一遍
+如果需要绕过协议栈的开销，需要使用 eBPF 的 sockmap 和 sk redirect
 
 > [!TIP]
 >
-> 本机IP 192.168.0.x 和 127.0.0.1 没什么差别，都走虚拟的环回设备IO。因为内核在设置IP的时候，把所有的本机IP都初始化到local路由表⾥了，类型写死了是RTN_LOCAL。在后⾯的路由项选择的时候发现类型是RTN_LOCAL就选择环回IO设备
+> 本机IP 192.168.0.x 和 127.0.0.1 没什么差别，都走虚拟的环回设备IO。
+> 因为内核在设置IP的时候，把所有的本机IP都初始化到local路由表⾥了，类型写死了是RTN_LOCAL。
+> 在后⾯的路由项选择的时候发现类型是RTN_LOCAL就选择环回IO设备
 
 Recall the dev init func, the default backlog poll func is `process_backlog`.
 

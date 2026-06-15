@@ -4,25 +4,63 @@
 
 说来也是巧最近在看 Dubbo 源码，然后发现了一处很奇怪的代码，于是就有了这篇文章，让我们来看一下这段代码，它属于 `ChannelEventRunnable`，这个 runnable 是 Dubbo IO 线程创建，将此任务扔到业务线程池中处理。
 
-![Image](https://mmbiz.qpic.cn/mmbiz_png/azicia1hOY6QibEh7mVicEt6icC8A9fpiaJYa990hp2fibELUY5Z2jZkCZ8A5D03amaUicHHRElosdiceRIj963tIuKIib2A/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
+```java
+@Override
+    public void run() {
+        InternalThreadLocalMap internalThreadLocalMap = InternalThreadLocalMap.getAndRemove();
+        try {
+            if (state == ChannelState.RECEIVED) {
+                try {
+                    handler.received(channel, message);
+                } catch (Exception e) {
+           
+                }
+            } else {
+                switch (state) {
+                    case CONNECTED:
+                        try {
+                            handler.connected(channel);
+                        } catch (Exception e) {
+                         
+                        }
+                        break;
+                    case DISCONNECTED:
+                        try {
+                            handler.disconnected(channel);
+                        } catch (Exception e) {
+                         
+                        }
+                        break;
+                    case SENT:
+                        try {
+                            handler.sent(channel, message);
+                        } catch (Exception e) {
+                       
+                        }
+                        break;
+                    case CAUGHT:
+                        try {
+                            handler.caught(channel, exception);
+                        } catch (Exception e) {
+                   
+                        }
+                        break;
+                    default:
+              
+                }
+            }
+        } finally {
+            InternalThreadLocalMap.set(internalThreadLocalMap);
+        }
+    }
+
+```
+
+
 
 看到没，把 `state == ChannelState.RECEIVED` 拎出来独立一个 if，而其他的 state 还是放在 switch 里面判断。
 
 
-
-我当时脑子里就来回扫描，想想这个到底有什么花头，奈何知识浅薄一脸懵逼。
-
-于是就开始了一波探险之旅！
-
-## 原来是 CPU 分支预测
-
-遇到问题当然是问搜索引擎了，一般而言我会同时搜索各大引擎，咱这也不说谁比谁好，反正有些时候度娘还是不错的，比如这次搜索度娘给的结果比较靠前，google 较靠后。
-
-一般搜索东西我都喜欢先在官网上搜，找不到了再放开搜，所以先这么搜 `site:xxx.com key`。
-
-
-
-## Dubbo 官网的博客
 
 > 现代 CPU 都支持分支预测 (branch prediction) 和指令流水线 (instruction pipeline)，这两个结合可以极大提高 CPU 效率。对于像简单的 if 跳转，CPU 是可以比较好地做分支预测的。但是对于 switch 跳转，CPU 则没有太多的办法。switch 本质上是根据索引，从地址数组里取地址再跳转。
 
@@ -30,9 +68,7 @@
 
 然后又因为一个 channel 建立了之后，**超过99.9%情况它的 state 都是 ChannelState.RECEIVED**，因此就把这个状态给挑出来，这样就能利用 CPU 分支预测机制来提高代码的执行效率。
 
-并且还给出了 Benchmark 的代码，就是通过随机生成 100W 个 state，并且 99.99% 是  ChannelState.RECEIVED，然后按照以下两种方式来比一比（这 benchSwitch 官网的例子名字打错了，我一开始没发现后来校对文章才发现）。
 
-![Image](https://mmbiz.qpic.cn/mmbiz_png/azicia1hOY6QibEh7mVicEt6icC8A9fpiaJYa9bXA8OwP98jsiaNSgIqyxLiaPulmYkjMia50iandlO0EbnozmxnoBjbcVLg/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
 
 虽然博客也给出了它的对比结果，但是我还是本地来跑一下看看结果如何，其实 JMH 不推荐在 ide 里面跑，但是我懒，直接 idea 里面跑了。
 

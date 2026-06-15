@@ -1,5 +1,17 @@
 ## Introduction
 
+进程调度的两个核心问题：选择哪个和执行多久
+
+在Linux的调度器实现中，对于实时进程和普通用户进程是分开考虑的
+
+- 实时任务采用多优先级任务队列，优先级高的进程拥有绝对优先，同优先级的进程可以采用FIFO或者是时间片轮转来分配CPU，对应策略是 SCHED_FIFO 和 SCHED_RR
+
+- 普通用户进程采用改进的时间片轮转-完全公平调度器，调度策略 SCHED_OTHER。
+
+  在这个策略中，优先级的作用并不是绝对保证高优先级的任务优先调度，而影响的是被调度后的CPU时间片
+
+
+
 
 进程执行在CPU上，所以CPU需要记录正在和将要运行在它上的进程的情况， 内核以 rq (runqueue)结构体描述它
 
@@ -13,7 +25,7 @@ rq、CPU和task_struct之间的关系表
 | cpu_rq (cpu)               | CPU对应的rq |
  | task_rq (p)                | cpu_rq (task_cpu( p)), 进程所屈的rq |
  | cpu_curr (cpu)             | (cpu_rq (cpu) ->curr), CPU当前执行的进程 |
- 
+
 
 
 
