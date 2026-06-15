@@ -1,6 +1,20 @@
 
 
-## SynchronizedStack
+## Introduction
+
+
+
+## Processor 对象池
+
+
+
+
+SynchronizedStack 使用 AtomicInteger 维护栈顶索引 + Object[] 数组，无锁、低 GC、适合单线程生产者/消费者场景。
+池大小可通过 processorCache 属性配置（默认 200，-1 表示无界，0 表示禁用池）。
+每个 Processor 绑定一对 Request/Response，实现请求上下文复用
+
+
+### SynchronizedStack
 
 This is intended as a (mostly) GC-free alternative to [java.util.concurrent.ConcurrentLinkedQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=ConcurrentLinkedQueue) when the requirement is to create a pool of re-usable objects with no requirement to shrink the pool. 
 The aim is to provide the bare minimum of required functionality as quickly as possible with minimum garbage.
@@ -189,4 +203,18 @@ public class StandardContext extends ContainerBase
     }
 }
 ```
+
+## Buffer
+
+
+ByteBuffer 管理策略
+
+
+Tomcat 8.0 及之前：使用全局 NioBufferPool 缓存 DirectByteBuffer。
+
+Tomcat 8.5+：移除全局池，改为 Per-Socket 局部复用 + 严格 recycle()。原因是：
+
+- 全局池在多线程下易成为竞争热点
+- 现代 JVM（G1/ZGC）对短期对象回收已高度优化
+- DirectByteBuffer 分配成本下降，但 clear() 复用仍必要
 

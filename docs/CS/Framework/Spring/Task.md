@@ -443,7 +443,8 @@ public interface TaskScheduler {
 }
 ```
 
-The simplest method is the one named `schedule` that takes only a `Runnable` and a `Date`. That causes the task to run once after the specified time. All of the other methods are capable of scheduling tasks to run repeatedly. The fixed-rate and fixed-delay methods are for simple, periodic execution, but the method that accepts a `Trigger` is much more flexible.
+The simplest method is the one named `schedule` that takes only a `Runnable` and a `Date`. 
+That causes the task to run once after the specified time. All of the other methods are capable of scheduling tasks to run repeatedly. The fixed-rate and fixed-delay methods are for simple, periodic execution, but the method that accepts a `Trigger` is much more flexible.
 
 #### implementations
 
@@ -451,6 +452,8 @@ As with Spring’s `TaskExecutor` abstraction, the primary benefit of the `TaskS
 
 Whenever external thread management is not a requirement, a simpler alternative is a local `ScheduledExecutorService` setup within the application, which can be adapted through Spring’s `ConcurrentTaskScheduler`. As a convenience, Spring also provides a `ThreadPoolTaskScheduler`, which internally delegates to a `ScheduledExecutorService` to provide common bean-style configuration along the lines of `ThreadPoolTaskExecutor`. These variants work perfectly fine for locally embedded thread pool setups in lenient application server environments, as well — in particular on Tomcat and Jetty.
 
+
+ThreadPoolTaskScheduler 默认线程数只有 1，多个定时任务会串行执行。而且它同时实现了 TaskExecutor，可能被 @Async 误用造成混淆。
 
 
 ### Trigger
@@ -538,7 +541,6 @@ public class SchedulingConfiguration {
 ```
 
 
-
 #### ScheduledAnnotationBeanPostProcessor
 
 ***Bean post-processor that registers methods annotated with @Scheduled to be invoked by a TaskScheduler according to the "fixedRate", "fixedDelay", or "cron" expression provided via the annotation.***
@@ -571,18 +573,11 @@ public Object postProcessAfterInitialization(Object bean, String beanName) {
             });
       if (annotatedMethods.isEmpty()) {
          this.nonAnnotatedClasses.add(targetClass);
-         if (logger.isTraceEnabled()) {
-            logger.trace("No @Scheduled annotations found on bean class: " + targetClass);
-         }
       }
       else {
          // Non-empty set of methods
          annotatedMethods.forEach((method, scheduledAnnotations) ->
                scheduledAnnotations.forEach(scheduled -> processScheduled(scheduled, method, bean)));
-         if (logger.isTraceEnabled()) {
-            logger.trace(annotatedMethods.size() + " @Scheduled methods processed on bean '" + beanName +
-                  "': " + annotatedMethods);
-         }
       }
    }
    return bean;
@@ -757,6 +752,12 @@ public static Method selectInvocableMethod(Method method, @Nullable Class<?> tar
 ```
 
 ## Tuning
+
+
+@Async 用 TaskExecutor，@Scheduled 用 TaskScheduler，两者相互独立，不要混用。
+
+但是有一个问题就是 TaskScheduler 的默认实现 ThreadPoolTaskScheduler，它其实也实现了 TaskExecutor，所以在一些配置复杂的场景中，它可能会被当作 TaskExecutor 来使用。
+我们要避免 @Async 底层实际使用 ThreadPoolTaskScheduler，导致出现预期之外的情况
 
 ### 异步失效
 
