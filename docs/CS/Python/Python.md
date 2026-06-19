@@ -2,12 +2,23 @@
 
 [Python](https://www.python.org/) is a programming language that lets you work quickly and integrate systems more effectively.
 
-## Install
+## Installation
 
 发行版
 
 - Anaconda
 
+
+
+## Library
+
+
+
+安装时使用 `-i https://pypi.tuna.tsinghua.edu.cn/simple` 指定镜像
+
+```shell
+pip3 install numpy -i https://pypi.tuna.tsinghua.edu.cn/simple
+```
 
 
 [标准库](https://docs.python.org/3/library/)
@@ -62,9 +73,6 @@ Notebook
 
 嵌入 Markdown
 iPython 创建好 .ipynb 文件后，在 markdown 使用 <iframe> 标签，就可以将完成嵌入
-
-
-
 
 
 
