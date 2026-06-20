@@ -2,14 +2,14 @@
 
 
 
-Connectors、handlers 和全局线程池。
+Connectors, handlers and a global thread pool.
 
 
 SelectorManager
 ManagedSelector
 
 
-ByteBufPool 可重用对象，ConcurrentLinkedDeque
+ByteBufPool re-usable objects , ConcurrentLinkedDeque
 
 ## Architecture
 
@@ -39,17 +39,17 @@ Handler 就行了。
 
 ### Acceptor
 
-Connector 会执行一定数量的 acceptor 任务到传给构造函数的 Executor 服务。
-Acceptor 任务在 connector 运行时循环执行，并重复调用抽象的 accept(int) 方法。
-accept 方法的实现必须：
-- 阻塞等待新连接
-- 接受连接（例如 socket accept）
-- 执行连接的配置（例如 socket 配置）
-- 调用 getDefaultConnectionFactory() 的 ConnectionFactory.newConnection(Connector, EndPoint) 方法来创建新的 Connection 实例
+The connector will execute a number of acceptor tasks to the Exception service passed to the constructor. 
+The acceptor tasks run in a loop while the connector is running and repeatedly call the abstract accept(int) method. 
+The implementation of the accept method must:
+- block waiting for new connections
+- accept the connection (eg socket accept)
+- perform any configuration of the connection (eg. socket configuration)
+- call the getDefaultConnectionFactory() ConnectionFactory.newConnection(Connector, EndPoint) method to create a new Connection instance.
 
-默认的 acceptor 任务数量是 1 和可用 CPU 数除以 8 中的最小值。
-拥有更多的 acceptor 可以减少新连接速率较高的服务器的延迟（例如没有 keep-alive 的 HTTP/1.0）。
-通常默认值对于现代持久连接协议（HTTP/1.1、HTTP/2 等）已经足够。
+The default number of acceptor tasks is the minimum of 1 and the number of available CPUs divided by 8. 
+Having more acceptors may reduce the latency for servers that see a high rate of new connections (eg HTTP/1.0 without keep-alive). 
+Typically the default is sufficient for modern persistent protocols (HTTP/1.1, HTTP/2 etc.)
 
 ```java
 public abstract class AbstractConnector extends ContainerLifeCycle implements Connector, Dumpable
@@ -99,11 +99,11 @@ ProduceExecuteConsume、ExecuteProduceConsume
 在低线程情况下，就执行 ProduceExecuteConsume 策略，I/O 侦测用专门的线程处理，I/O 事件的处理扔给线程池处理，其实就是放到线程池的队列里慢慢处理。
 ## Handler
 
-处理任何版本（HTTP/1.1、HTTP/2 或 HTTP/3）的 HTTP 请求的 Jetty 组件。Handler 是一个 Request.Handler，增加了 LifeCycle 行为，以及允许将 Handler 组织为树结构的变体。
+A Jetty component that handles HTTP requests, of any version (HTTP/1.1, HTTP/2 or HTTP/3). A Handler is a Request.Handler with the addition of LifeCycle behaviours, plus variants that allow organizing Handlers as a tree structure.
 
-Handler 可以包装 Request、Response 和/或 Callback，然后将包装后的实例转发给其子节点，使它们看到修改后的请求；和/或拦截请求内容的读取；和/或拦截响应的生成；和/或拦截回调的完成。
+Handlers may wrap the Request, Response and/or Callback and then forward the wrapped instances to their children, so that they see a modified request; and/or to intercept the read of the request content; and/or intercept the generation of the response; and/or to intercept the completion of the callback.
 
-Handler 是一个 Invocable，实现必须在调用 handle(Request, Response, Callback) 时遵守它们声明的 Invocable.InvocationType。
+A Handler is an Invocable and implementations must respect the Invocable.InvocationType they declare within calls to handle(Request, Response, Callback).
 
 Handler实现了 Servlet 规范中的 Servlet、Filter 和 Listener 功能中的一个或者多个
 

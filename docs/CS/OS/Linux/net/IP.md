@@ -2,9 +2,10 @@
 
 ### ip_append_data
 
-ip_append_data() 和 ip_append_page() 可以从多个数据片段创建一个大的 IP 数据报。
-每个片段将保持在套接字上，直到调用 ip_push_pending_frames()。
-每个片段可以是页或非页数据。
+ip_append_data() and ip_append_page() can make one large IP datagram
+from many pieces of data. Each pieces will be holded on the socket
+until ip_push_pending_frames() is called. Each piece can be a page
+or non-page data.
 
 Not only UDP, other transport protocols - e.g. raw sockets - can use
 this interface potentially.

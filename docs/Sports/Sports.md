@@ -1,7 +1,7 @@
 ## Introduction
 
-运动生理学是体育运动的生理学。
-它是健康相关专业之一，涉及对运动的急性反应和慢性适应的研究。
+Exercise physiology is the physiology of physical exercise. 
+It is one of the allied health professions, and involves the study of the acute responses and chronic adaptations to exercise.
 
 
 

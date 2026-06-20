@@ -1,36 +1,37 @@
 ## Introduction
 
-排序是将对象序列重新排列，使其按某种逻辑顺序排列的过程。
-所有计算机系统都有排序算法的实现，供系统和用户使用。
+Sorting is the process of rearranging a sequence of objects so as to put them in some logical order.
+All computer systems have implementations of sorting algorithms, for use by the system and by users.
 
-排序算法分为两种基本类型：
-就地排序（仅使用少量内存，可能是一个小的函数调用栈或常数个实例变量）和需要额外内存来保存待排序数组的另一副本的排序。
+The sorting algorithms divide into two basic types:
+those that sort in place and use no extra memory except perhaps for a small functioncall stack or a constant number of instance variables, and those that need enough extra memory to hold another copy of the array to be sorted.
 
-## 排序算法的分类
 
-排序算法通常根据以下参数进行分类。
+## Classification of Sorting Algorithms
 
-**按比较次数**
+Sorting algorithms are generally categorized based on the following parameters.
 
-在这种方法中，排序算法根据比较次数进行分类。
-对于基于比较的排序算法，最佳情况行为是 O(nlogn)，最坏情况行为是 $O(n^2)$。
-基于比较的排序算法通过键比较操作来评估列表中的元素，对于大多数输入至少需要 O(nlogn) 次比较。
-稍后我们将讨论一些非比较（线性）排序算法，如计数排序、桶排序、基数排序等。
-线性排序算法对输入施加了一些限制以改善复杂度。
+**By Number of Comparisons**
 
-**按交换次数**
+In this method, sorting algorithms are classified based on the number of comparisons.
+For comparison based sorting algorithms, best case behavior is O(nlogn) and worst case behavior is $O(n^2)$.
+Comparison-based sorting algorithms evaluate the elements of the list by key comparison operation and need at least O(nlogn) comparisons for most inputs.
+Later in this chapter we will discuss a few non – comparison (linear) sorting algorithms like Counting sort, Bucket sort, Radix sort, etc.
+Linear Sorting algorithms impose few restrictions on the inputs to improve the complexity
 
-在这种方法中，排序算法根据交换次数（也称为逆序数）进行分类。
+**By Number of Swaps**
 
-**按内存使用**
+In this method, sorting algorithms are categorized by the number of swaps (also called inversions).
 
-一些排序算法是"就地"的，它们需要 O(1) 或 O(logn) 的内存来临时创建辅助位置以进行排序。
+**By Memory Usage**
 
-**按递归**
+Some sorting algorithms are “in place” and they need O(1) or O(logn) memory to create auxiliary locations for sorting the data temporarily.
 
-排序算法要么是递归的（快速排序），要么是非递归的（选择排序和插入排序），还有一些算法两者兼用（归并排序）。
+**By Recursion**
 
-**按稳定性**
+Sorting algorithms are either recursive quick sort or non-recursive selection sort, and insertion sort, and there are some algorithms which use both (merge sort).
+
+**By Stability**
 
 稳定性是指相等的元素经过排序之后相对顺序是否发生了改变。
 拥有稳定性这一特性的算法会让原本有相等键值的纪录维持相对次序，即如果一个排序算法是稳定的，当有两个相等键值的纪录 𝑅 和 𝑆，且在原本的列表中 𝑅 出现在 𝑆 之前，在排序过的列表中 𝑅 也将会是在 𝑆 之前。
@@ -38,55 +39,63 @@
 基数排序、计数排序、插入排序、冒泡排序、归并排序是稳定排序。
 选择排序、堆排序、快速排序、希尔排序不是稳定排序
 
-**按自适应性**
 
-对于少数排序算法，复杂度会基于输入的有序程度而变化（快速排序：输入的有序程度影响运行时间）。
-考虑这一点的算法被称为自适应性排序算法。
 
-另一种排序算法的分类方式是：
+**By Adaptability**
 
-- 内部排序
-  在排序期间仅使用主存的排序算法称为内部排序算法。这类算法假设对所有内存具有高速随机访问能力。
-- 外部排序
-  在排序期间使用外部存储器（如磁带或磁盘）的排序算法属于此类。
+With a few sorting algorithms, the complexity changes based on pre-sortedness quick sort: pre- sortedness of the input affects the running time. 
+Algorithms that take this into account are known to be adaptive.
 
-| Sort   | Avg Time   | Avg Space  | Best Time   | Best Space  | Bad Time    | Bad Space   |
-| ------ | ---------- | ---------- | ----------- | ----------- | ----------- | ----------- |
-| Bubble | $O(n^2)$   | $O(1)$     | $O(n)$      | $O(1)$      | $O(n^2)$    | $O(1)$      |
-| Select | $O(n^2)$   | $O(1)$     | $O(n^2)$    | $O(1)$      | $O(n^2)$    | $O(1)$      |
-| Insert | $O(n^2)$   | $O(n^2)$   | $O(n)$      | $O(1)$      | $O(n^2)$    | $O(n^2)$    |
-| Shell  | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$  | $O(nlogn)$  | $O(nlogn)$  | $O(n)$      |
-| Heap   | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$  | $O(nlogn)$  | $O(nlogn)$  | $O(n)$      |
-| Merge  | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$  | $O(nlogn)$  | $O(nlogn)$  | $O(n)$      |
-| Quick  | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$  | $O(nlogn)$  | $O(n^2)$    | $O(n)$      |
-| Radix  | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$  | $O(nlogn)$  | $O(nlogn)$  | $O(n)$      |
-| Bucket | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$  | $O(nlogn)$  | $O(nlogn)$  | $O(n)$      |
-| Tree   | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$  | $O(nlogn)$  | $O(nlogn)$  | $O(n)$      |
+Another method of classifying sorting algorithms is:
 
-在讨论了经典的[选择排序](/docs/CS/Algorithms/sort?id=Selection-Sort)、[插入排序](/docs/CS/Algorithms/sort?id=Insertion-Sort)、
-[希尔排序](/docs/CS/Algorithms/sort?id=Shell-Sort)、[归并排序](/docs/CS/Algorithms/sort?id=Merge-Sort)、
-[快速排序](/docs/CS/Algorithms/sort?id=Quick-Sort)和[堆排序](/docs/CS/Algorithms/sort?id=Heap-Sort)算法之后，我们将考虑实际问题和应用。
+- Internal Sort
+  Sort algorithms that use main memory exclusively during the sort are called internal sorting algorithms. This kind of algorithm assumes high-speed random access to all memory.
+- External Sort
+  Sorting algorithms that use external memory, such as tape or disk, during the sort come under this category.
 
-假设你有一组 n 个数字，想要确定第 k 大的数。这被称为*选择问题*。
 
-我们考虑两类排序算法。
+| Sort   | Avg Time   | Avg Space  | Best Time  | Best Space | Bad Time   | Bad Space |
+| ------ | ---------- | ---------- | ---------- | ---------- | ---------- | --------- |
+| Bubble | $O(n^2)$   | $O(1)$     | $O(n)$     | $O(1)$     | $O(n^2)$   | $O(1)$    |
+| Select | $O(n^2)$   | $O(1)$     | $O(n^2)$   | $O(1)$     | $O(n^2)$   | $O(1)$    |
+| Insert | $O(n^2)$   | $O(n^2)$   | $O(n)$     | $O(1)$     | $O(n^2)$   | $O(n^2)$  |
+| Shell  | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(n)$    |
+| Heap   | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(n)$    |
+| Merge  | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(n)$    |
+| Quick  | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(n^2)$   | $O(n)$    |
+| Radix  | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(n)$    |
+| Bucket | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(n)$    |
+| Tree   | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(nlogn)$ | $O(n)$    |
 
-第一类算法利用待排序元素的结构。
-例如，如果待排序元素是固定范围 0 到 m-1 内的整数，那么我们可以在 $O(n + m)$ 时间内对 n 个元素进行排序；
-如果待排序元素是固定字母表上的字符串，那么字符串序列可以在与字符串总长度成线性比例的时间内完成排序。
 
-第二类算法假设待排序元素没有结构。基本操作是一对元素之间的比较。
-对于此类算法，我们将看到，对 n 个元素的序列进行排序至少需要 n log n 次比较。
-我们给出两种 $O(nlogn)$ 排序算法——堆排序（最坏情况下为 $O(nlogn)$）和快速排序（期望情况下为 $O(nlogn)$）。
+
+
+After considering the classic [selection sort](/docs/CS/Algorithms/sort?id=Selection-Sort) [insertion sort](/docs/CS/Algorithms/sort?id=Insertion-Sort),
+[shellsort](/docs/CS/Algorithms/sort?id=Shell-Sort), [mergesort](/docs/CS/Algorithms/sort?id=Merge-Sort), 
+[quicksort](/docs/CS/Algorithms/sort?id=Quick-Sort), and [heapsort](/docs/CS/Algorithms/sort?id=Heap-Sort) algorithms, we will consider practical issues and applications.
+
+Suppose you have a group of n numbers and would like to determine the kth largest. This is known as the _selection problem_.
+
+We consider two classes of sorting algorithms.
+
+The first class of algorithms makes use of the structure of the elements to be sorted.
+For example. if the elements to be sorted are integers in a fixed range 0 to m - 1, then we can sort a sequence of /1 eleme Qts. in $O(n + m)$ time;
+if the elements to be sorted are strings over a fixed alphabet, then a sequence of strings can be sorted in time linearly proportional to the sum of the lengths of the strings.
+
+The second class of algorithms assumes no structure on the elements to be sorted. The basic operation is a comparison between a pair of elements.
+
+With algorithms of this nature we shall see that at least n log /1 comparisons are needed to sort a sequence of n elements.
+We give two $O(nlogn)$ sorting algorithms-Heapsort. which is $O(nlogn)$ in the worst case, and Quicksort, which is $O(nlogn)$ in the expected case.
+
 
 ## Bubble Sort
 
-冒泡排序是最简单的排序算法。它通过从第一个元素到最后一个元素迭代输入数组，比较每对元素并在需要时交换它们。
-冒泡排序持续迭代，直到不再需要交换。
-该算法的名称来源于较小的元素"冒泡"到列表顶部的过程。
-通常，插入排序的性能优于冒泡排序。
-一些研究人员建议不应教授冒泡排序，因为它简单但时间复杂度高。
-冒泡排序相比其他实现唯一的显著优势是它可以检测输入列表是否已经排序。
+Bubble sort is the simplest sorting algorithm. It works by iterating the input array from the first element to the last, comparing each pair of elements and swapping them if needed.
+Bubble sort continues its iterations until no more swaps are needed.
+The algorithm gets its name from the way smaller elements “bubble” to the top of the list.
+Generally, insertion sort has better performance than bubble sort.
+Some researchers suggest that we should not teach bubble sort because of its simplicity and high time complexity.
+The only significant advantage that bubble sort has over other implementations is that it can detect whether the input list is already sorted or not.
 
 ```
 public static void swap (int[] A, int i, int j) {
@@ -96,17 +105,17 @@ public static void swap (int[] A, int i, int j) {
 }
 ```
 
-有几种算法可以在 $O(nlogn)$ 时间内对 n 个数字进行排序。
-归并排序和堆排序在最坏情况下达到这个上界；快速排序在平均情况下达到。
-这些算法共享一个有趣的特性：它们确定的排序顺序仅基于输入元素之间的比较。
-我们称这样的排序算法为*比较排序*。
+Several algorithms that can sort n numbers in $O(nlogn)$ time.
+Merge sort and heapsort achieve this upper bound in the worst case; quicksort achieves it on average.
+These algorithms share an interesting property: the sorted order they determine is based only on comparisons between the input elements.
+We call such sorting algorithms *comparison sorts*.
 
-任何比较排序在最坏情况下必须进行 $O(nlogn)$ 次比较才能对 n 个元素进行排序。
-因此，归并排序和堆排序是渐近最优的，不存在更快（超过常数因子）的比较排序。
+Any comparison sort must make $O(nlogn)$ comparisons in the worst case to sort *n* elements.
+Thus, merge sort and heapsort are asymptotically optimal, and no comparison sort exists that is faster by more than a constant factor.
 
-我们研究三种线性时间排序算法——计数排序、基数排序和桶排序。
-当然，这些算法使用比较之外的操作来确定排序顺序。
-因此，$O(nlogn)$ 下界不适用于它们。
+We examine three sorting algorithms—counting sort, radix sort, and bucket sort—that run in linear time.
+Of course, these algorithms use operations other than comparisons to determine the sorted order.
+Consequently, the $O(nlogn)$ lower bound does not apply to them.
 
 ```java
 for(int i = 0; i < nums.length; i++){
@@ -116,120 +125,131 @@ for(int i = 0; i < nums.length; i++){
 }
 ```
 
+
+
+
+
 ## Selection Sort
 
-选择排序是一种就地排序算法。选择排序适用于小文件。
-它用于对具有非常大的值和小的键的文件进行排序。
-这是因为选择是基于键进行的，并且仅在需要时才进行交换。
-该算法称为*选择排序*，因为它重复选择最小的元素。
+Selection sort is an in-place sorting algorithm. Selection sort works well for small files.
+It is used for sorting the files with very large values and small keys.
+This is because selection is made based on keys and swaps are made only when required.
+This algorithm is called *selection sort* since it repeatedly selects the smallest element.
 
-一种最简单的排序算法工作原理如下：
+One of the simplest sorting algorithms works as follows:
 
-- 首先，找到数组中最小的元素，并与第一个条目交换（如果第一个条目已经是最小的，则与自身交换）。
-- 然后，找到下一个最小的元素，并与第二个条目交换。
-- 继续这个过程，直到整个数组排序完成。
+- First, find the smallest item in the array and exchange it with the first entry (itself if the first entry is already the smallest).
+- Then, find the next smallest item and exchange it with the second entry.
+- Continue in this way until the entire array is sorted.
 
-选择排序使用约 $N^2/2$ 次比较和 N 次交换来对长度为 N 的数组进行排序。
+Selection sort uses ~ $N^2/2$ compares and `N` exchanges to sort an array of length N.
 
-这种方法被称为*选择排序*，因为它通过重复选择剩余的最小元素来工作。
+This method is called _selection sort_ because it works by repeatedly selecting the smallest remaining item.
 
 > [!NOTE]
 >
-> 选择排序是一种简单且易于理解和实现的排序方法，其特点如下：
+> Selection sort is a simple sorting method that is easy to understand and to implement and is characterized by the following two signature properties:
 >
-> - 运行时间对输入不敏感。
-> - 数据移动量最小。
+> - Running time is insensitive to input.
+> - Data movement is minimal.
 
 ## Insertion sort
 
-插入排序是一种简单且高效的比较排序。
-在该算法中，每次迭代从输入数据中移除一个元素，并将其插入到正在排序的列表中的正确位置。
-从输入中移除的元素选择是随机的，这个过程重复进行，直到所有输入元素都经过处理。
+Insertion sort is a simple and efficient comparison sort.
+In this algorithm, each iteration removes an element from the input data and inserts it into the correct position in the list being sorted.
+The choice of the element being removed from the input is random and this process is repeated until all input elements have gone through.
 
-插入排序对具有不同键的随机顺序长度为 N 的数组，平均使用 $N^2/4$ 次比较和 $N^2/4$ 次交换。
-最坏情况是 $N^2/2$ 次比较和 $N^2/2$ 次交换，最好情况是 N-1 次比较和 0 次交换。
+Insertion sort uses `N^2/4` compares and `N^2/4` exchanges to sort a randomly ordered array of length N with distinct keys, on the average.
+The worst case is `N^2/2` compares and `N^2/2` exchanges and the best case is N  1 compares and 0 exchanges.
 
-插入排序使用的交换次数等于数组中的逆序数，
-比较次数至少等于逆序数，至多等于逆序数加上数组大小减 1。
+The number of exchanges used by insertion sort is equal to the number of inversions in the array,
+and the number of compares is at least equal to the number of inversions and at most equal to the number of inversions plus the array size minus 1.
+
+
+
+
+
+
 
 ## Heap Sort
 
-时间复杂度：当我们从堆中移除元素时，值变得有序（因为最大元素始终是根）。
-由于插入算法和删除算法的时间复杂度都是 $O(logn)$（其中 n 是堆中元素的数量），
-堆排序算法的时间复杂度为 $O(nlogn)$。
+Time complexity: As we remove the elements from the heap, the values become sorted (since maximum elements are always root only).
+Since the time complexity of both the insertion algorithm and deletion algorithm is $O(logn)$ (where n is the number of items in the heap), 
+the time complexity of the heap sort algorithm is $O(nlogn)$.
 
 ## Merge Sort
 
 > [!NOTE]
 >
-> 自顶向下的归并排序对任何长度为 N 的数组进行排序时，使用 $½NlgN$ 到 $NlgN$ 次比较。
+> Top-down mergesort uses between $½NlgN$ and $NlgN$ compares to sort any array of length N.
 >
-> 自顶向下的归并排序对长度为 N 的数组进行排序时，最多使用 $6NlgN$ 次数组访问。
+> Top-down mergesort uses at most $6NlgN$ array accesses to sort an array of length N.
 
 ```java
 public class Merge {
-    private static Comparable[] aux;
+    private static Comparable[] aux; // auxiliary array for merges
 
     public static void sort(Comparable[] a) {
-        aux = new Comparable[a.length];
+        aux = new Comparable[a.length]; // Allocate space just once.
         sort(a, 0, a.length - 1);
     }
 
-    private static void sort(Comparable[] a, int lo, int hi) {
+    private static void sort(Comparable[] a, int lo, int hi) { // Sort a[lo..hi].
         if (hi <= lo) return;
         int mid = lo + (hi - lo) / 2;
-        sort(a, lo, mid);
-        sort(a, mid + 1, hi);
-        merge(a, lo, mid, hi);
+        sort(a, lo, mid); // Sort left half.
+        sort(a, mid + 1, hi); // Sort right half.
+        merge(a, lo, mid, hi); // Merge results (code on page 271).
     }
 }
 ```
 
-自底向上的归并排序
+Bottom-up mergesort
 
 > [!NOTE]
 >
-> 自底向上的归并排序对长度为 N 的数组进行排序时，使用 ½NlgN 到 NlgN 次比较，最多 6NlgN 次数组访问。
+> Bottom-up mergesort uses between ½NlgN and NlgN compares and at most 6NlgN array accesses to sort an array of length N.
 
-没有基于比较的排序算法能够保证用少于 lg(N!) ~ NlgN 次比较对 N 个元素进行排序。
+No compare-based sorting algorithm can guarantee to sort N items with fewer than lg(N!) ~ NlgN compares.
 
 ## Quick Sort
 
-与归并排序一样，快速排序是一种分治算法。
-它选择一个元素作为枢轴，并将给定数组围绕选定的枢轴进行分区。
-有许多不同版本的快速排序，以不同的方式选择枢轴。
+Like Merge Sort, QuickSort is a Divide and Conquer algorithm.
+It picks an element as a pivot and partitions the given array around the picked pivot.
+There are many different versions of quickSort that pick pivot in different ways.
 
-- 始终选择第一个元素作为枢轴。
-- 始终选择最后一个元素作为枢轴（以下实现）
-- 随机选择一个元素作为枢轴。
-- 选择中位数作为枢轴。
+- Always pick the first element as a pivot.
+- Always pick the last element as a pivot (implemented below)
+- Pick a random element as a pivot.
+- Pick median as the pivot.
 
-快速排序的关键过程是 partition()。
-分区的目标是，给定一个数组和数组中的元素 x 作为枢轴，
-将 x 放在排序数组中的正确位置，并将所有小于 x 的元素放在 x 之前，将所有大于 x 的元素放在 x 之后。
-所有这一切应该在线性时间内完成。
+The key process in quickSort is a partition().
+The target of partitions is, given an array and an element x of an array as the pivot, 
+put x at its correct position in a sorted array and put all smaller elements (smaller than x) before x, and put all greater elements (greater than x) after x.
+All this should be done in linear time.
 
-分区算法：
-有多种方式进行分区，以下伪代码采用了 CLRS 书中给出的方法。
-逻辑很简单，我们从最左边的元素开始，跟踪小于（或等于）元素的索引 i。
-遍历时，如果发现更小的元素，则将当前元素与 arr[i] 交换。
-否则，忽略当前元素。
+Partition Algorithm:
+<br>
+There can be many ways to do partition, following pseudo-code adopts the method given in the CLRS book.
+The logic is simple, we start from the leftmost element and keep track of the index of smaller (or equal to) elements as i.
+While traversing, if we find a smaller element, we swap the current element with arr[i].
+Otherwise, we ignore the current element.
 
-递归 QuickSort 函数的伪代码：
+Pseudo Code for recursive QuickSort function:
 
 ```python
-/* low  –> 起始索引,  high  –> 结束索引 */
+/* low  –> Starting index,  high  –> Ending index */
 quickSort(arr[], low, high) {
     if (low < high) {
-        /* pi 是分区索引，arr[pi] 现在位于正确位置 */
+        /* pi is partitioning index, arr[pi] is now at right place */
         pi = partition(arr, low, high);
-        quickSort(arr, low, pi – 1);  // 在 pi 之前
-        quickSort(arr, pi + 1, high); // 在 pi 之后
+        quickSort(arr, low, pi – 1);  // Before pi
+        quickSort(arr, pi + 1, high); // After pi
     }
 }
 ```
 
-示例：
+Example:
 
 ```go
 func quickSort(array []int, low int, high int) []int {
@@ -274,36 +294,38 @@ func main() {
 
 ### Picking the Pivot
 
-一个安全的方法是随机选择枢轴。
+A safe course is merely to choose the pivot randomly.
 
-三数取中分区
+Median-of-Three Partitioning
 
 > [!NOTE]
 >
-> 一个常见的解决方案是不要对小文件递归使用快速排序，而是使用对小文件高效的排序算法，如插入排序。
+> A common solution is not to use quicksort recursively for small files, but instead use a sorting algorithm that is efficient for small files, such as insertion sort.
 
 ### Randomized QuickSort
 
-选择子数组的第一个元素作为枢轴仅需要 $O(1)$ 时间，但可能导致快速排序运行时间为 $O(n^2)$。
-选择中位数元素作为枢轴保证了总体运行时间为 $O(nlogn)$，但更加耗时（尽管仍是线性时间）。
-我们能否两全其美？是否有一种简单且轻量的方式来选择枢轴元素，使其导致数组大致平衡的划分？答案是肯定的，关键思路是使用随机化。
+Choosing the first element of a subarray as the pivot takes only $O(1)$ time but can cause QuickSort to run in $O(n^2)$ time.
+Choosing the median element as the pivot guarantees an overall running time of $O(nlogn)$ but is much more time-consuming (if still linear-time).
+Can we have the best of both worlds? Is there a simple and lightweight way to choose a pivot element that leads to a roughly balanced split of the array? The answer is yes, and the key idea is to use randomization.
 
-> 对于每个长度 n 且 n > 1 的输入数组，随机化快速排序的平均运行时间为 $O(nlogn)$。
+> For every input array of length n $ 1, the average running time of randomized QuickSort is $O(nlogn)$.
 
-该算法不会花费时间分配和管理额外内存（与[归并排序](/docs/CS/Algorithms/sort?id=MergeSort)不同）。
+The algorithm doesn’t spend time allocating and managing additional memory (unlike [MergeSort](/docs/CS/Algorithms/sort?id=MergeSort)).
 
 ## Shell Sort
 
-希尔排序（也称为递减增量排序）由 Donald Shell 发明。
-这种排序算法是插入排序的泛化。插入排序对已接近排序的输入高效工作。
-希尔排序也称为 n-间隔插入排序。
-与仅比较相邻元素不同，希尔排序进行多次遍历，并使用相邻元素之间的各种间隔（最终以间隔 1 或经典的插入排序结束）。
-在插入排序中，比较在相邻元素之间进行。
-每次插入排序比较最多消除 1 个逆序。
-希尔排序中使用的变化是，在算法的最后一步之前避免比较相邻元素。
-因此，希尔排序的最后一步实际上就是插入排序算法。
-它通过允许比较和交换较远的元素来改进插入排序。
-这是比较排序算法中第一个获得低于二次复杂度的算法。
+Shell sort (also called diminishing increment sort) was invented by Donald Shell.
+This sorting algorithm is a generalization of insertion sort. Insertion sort works efficiently on input that is already almost sorted.
+Shell sort is also known as n-gap insertion sort.
+Instead of comparing only the adjacent pair, shell sort makes several passes and uses various gaps between adjacent elements (ending with the gap of 1 or classical insertion sort).
+In insertion sort, comparisons are made between the adjacent elements.
+At most 1 inversion is eliminated for each comparison done with insertion sort.
+The variation used in shell sort is to avoid comparing adjacent elements until the last step of the algorithm.
+So, the last step of shell sort is effectively the insertion sort algorithm.
+It improves insertion sort by allowing the comparison and exchange of elements that are far away.
+This is the first algorithm which got less than quadratic complexity among comparison sort algorithms.
+
+
 
 ## Tim Sort
 
@@ -315,15 +337,19 @@ Timsort 的核心思想是通过识别和利用数据集中已有的有序性，
 2. **扩展 Run**：如果识别的 Run 长度小于 `MIN_RUN`，则使用插入排序对其进行扩展。
 3. **归并 Run**：Timsort 维护一个特殊的栈，采用特定的归并策略将栈中已有的 Run 合并成更大的有序序列
 
+
+
 首先，Timsort 会从左向右扫描数组，识别出连续的有序序列，这些有序序列被称为 Run：
 
 - **升序 Run**：如果后一个元素大于等于前一个元素，则继续扩展 Run。
 - **降序 Run**：如果后一个元素小于前一个元素，则继续扩展 Run，随后将该 Run 反转为升序
 
-为了提高小规模数据的排序效率，Timsort 引入了一个 Run 最小的长度 `MIN_RUN`。其值一般根据待排序数组的长度动态计算，通常为 32 至 64 之间。
+为了提高小规模数据的排序效率，Timsort 引入了一个 Run 最小的长度 `MIN_RUN`。其值一般根据待排序数组的长度动态计算，通常为 3232![32](data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7) 至 6464![64](data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7) 之间。
 
 - 如果识别的 Run 长度大于等于 `MIN_RUN`，则不需要额外操作，直接将 Run 压入栈中。
 - 如果识别的 Run 长度小于 `MIN_RUN`，则使用二分插入排序将该 Run 的后续元素插入到 Run 中，直到 Run 的长度达到 `MIN_RUN`，然后将其压入栈中。
+
+
 
 在 Timsort 中，归并排序是通过 **栈** 来管理和控制的。栈中保存了已经识别出的有序的 Run，并通过特定的归并规则控制栈中 Run 的合并，其目的是在合并时保持序列的平衡性和稳定性
 
@@ -343,80 +369,98 @@ Timsort 是一种稳定的排序算法，即相同元素在排序后仍然保持
 
 为进一步提升归并效率，Timsort 引入了 **加速模式（Galloping Mode）**。在标准的归并过程中，算法会逐一比较两个 Run 中的元素，将较小的元素放入结果数组。然而，如果一侧的 Run 中有大量连续元素比另一侧的当前元素要小，逐一比较会造成不必要的开销。
 
-为了解决这一问题，Timsort 设定了一个阈值 `Min_Gallop`（默认值为 7）。当一侧 Run 中的元素连续比较胜利的次数达到 `Min_Gallop` 时，算法会进入加速模式，快速定位元素位置，其具体步骤如下：
+为了解决这一问题，Timsort 设定了一个阈值 `Min_Gallop`（默认值为 77![7](data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7)）。当一侧 Run 中的元素连续比较胜利的次数达到 `Min_Gallop` 时，算法会进入加速模式，快速定位元素位置，其具体步骤如下：
 
-1. **指数查找**：从当前位置开始，算法以指数增长的步长 (1,2,4,8,…) 在一侧的 Run 中查找，直到找到一个区间，使得目标元素位于该区间内。
+1. **指数查找**：从当前位置开始，算法以指数增长的步长 (1,2,4,8,…)(1,2,4,8,…)![(1, 2, 4, 8, \dots)](data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7) 在一侧的 Run 中查找，直到找到一个区间，使得目标元素位于该区间内。
 2. **二分查找**：一旦确定了包含目标元素的区间，算法会在该区间内使用二分查找，精确定位目标元素的位置。
 
 通过这种方式，Timsort 可以跳过大量不必要的比较，快速处理一侧 Run 中连续的、较小（或较大）的元素，将它们批量移动到合并结果中。
 
 然而，加速模式并非在所有情况下都更高效。在某些数据分布下，加速模式可能导致更多的比较次数。为此，Timsort 采用了动态调整策略：
 
-- **阈值调整**：维护一个可变的 `Min_Gallop` 参数。当加速模式表现良好（即连续多次从同一 Run 中选取元素）时，`Min_Gallop` 减 1，鼓励继续使用加速模式；当加速模式效果不佳（频繁在两个 Run 之间切换）时，`Min_Gallop` 加 1，降低加速模式的使用频率。
+- **阈值调整**：维护一个可变的 `Min_Gallop` 参数。当加速模式表现良好（即连续多次从同一 Run 中选取元素）时，`Min_Gallop` 减 11![1](data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7)，鼓励继续使用加速模式；当加速模式效果不佳（频繁在两个 Run 之间切换）时，`Min_Gallop` 加 11![1](data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7)，降低加速模式的使用频率。
 
-通过动态调整 `Min_Gallop` 的值，算法能够根据实际数据情况，在普通归并模式和加速模式之间取得平衡。对于部分有序或高度有序的数据，加速模式可以显著提高效率，使 Timsort 的性能接近 $O(n)$；而对于随机数据，算法会逐渐倾向于使用普通归并，从而保证 $O(n \log n)$ 的时间复杂度
+通过动态调整 `Min_Gallop` 的值，算法能够根据实际数据情况，在普通归并模式和加速模式之间取得平衡。对于部分有序或高度有序的数据，加速模式可以显著提高效率，使 Timsort 的性能接近 𝑂(𝑛)O(n)![O(n)](data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7)；而对于随机数据，算法会逐渐倾向于使用普通归并，从而保证 𝑂(𝑛log⁡𝑛)O(nlog⁡n)![O(n \log n)](data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7) 的时间复杂度
 
 Timsort 的时间复杂度取决于数据的有序性：
 
-- 最优情况：$O(n)$
-  - 当数据已经有序或近似有序时，算法识别出的 Run 长度接近 n，归并次数减少，复杂度趋近于 $O(n)$。
-- 最坏情况：$O(n \log n)$
-  - 在数据完全无序的情况下，每一个 Run 的长度都接近 1，因此需要 $O(\log n)$ 次归并，每次归并的代价为 $O(n)$，总复杂度为 $O(n \log n)$。
+- 最优情况：$𝑂(𝑛)$
+  - 当数据已经有序或近似有序时，算法识别出的 Run 长度接近 𝑛n![n](data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7)，归并次数减少，复杂度趋近于 𝑂(𝑛)O(n)![O(n)](data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7)。
+- 最坏情况：$𝑂(𝑛log⁡𝑛)$
+  - 在数据完全无序的情况下，每一个 Run 的长度都接近 11![1](data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7)，因此需要 𝑂(log⁡𝑛)O(log⁡n)![O(\log n)](data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7) 次归并，每次归并的代价为 𝑂(𝑛)O(n)![O(n)](data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7)，总复杂度为 𝑂(𝑛log⁡𝑛)O(nlog⁡n)![O(n \log n)](data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7)。
 
-对于空间复杂度，由于 Timsort 大致需要额外的 $O(n)$ 空间用于存储栈和临时缓冲区，因此总的空间复杂度为 $O(n)$
+
+
+对于空间复杂度，由于 Timsort 大致需要额外的 𝑂(𝑛)O(n)![O(n)](data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7) 空间用于存储栈和临时缓冲区，因此总的空间复杂度为 𝑂(𝑛)
+
+
+
+
 
 ## Bucket Sort
 
+
+
+
+
+
+
 ## Counting Sort
+
+
+
+
 
 ## Radix Sort
 
-与计数排序和桶排序类似，这种排序算法也假设对输入元素有一定了解。
-假设要排序的输入值来自 d 进制。这意味着所有数字都是 d 位数。
+Similar to Counting sort and Bucket sort, this sorting algorithm also assumes some kind of information about the input elements.
+Suppose that the input values to be sorted are from base d. That means all numbers are d-digit numbers.
 
-在基数排序中，首先根据最后一位（最低有效位）对元素进行排序。
-这些结果再根据第二位（次低有效位）进行排序。
-对所有数字继续这个过程，直到达到最高有效位。使用某种稳定排序按最后一位进行排序。
-然后按次低有效位进行稳定排序，然后按第三位，依此类推。
-如果使用计数排序作为稳定排序，总时间为 $O(nd) ≈ O(n)$。
-基数排序有时被称为*卡片排序*。
+In Radix sort, first sort the elements based on the last digit [the least significant digit].
+These results are again sorted by second digit [the next to least significant digit].
+Continue this process for all digits until we reach the most significant digits. Use some stable sort to sort them by last digit.
+Then stable sort them by the second least significant digit, then by the third, etc.
+If we use Counting sort as the stable sort, the total time is $O(nd) ≈ O(n)$.
+Radix sort is sometimes known as *card sort*.
 
-算法：
+Algorithm:
 
-1. 取每个元素的最低有效位。
-2. 根据该位对元素列表进行排序，但保持具有相同位的元素的顺序（这是稳定排序的定义）。
-3. 对每个更高有效位重复排序。
+1. Take the least significant digit of each element.
+2. Sort the list of elements based on that digit, but keep the order of elements with the same digit (this is the definition of a stable sort).
+3. Repeat the sort with each more significant digit.
 
-基数排序的速度取决于内部基本操作。如果操作不够高效，基数排序可能比其他算法（如快速排序和归并排序）更慢。
-这些操作包括子列表的插入和删除函数，以及提取所需位的过程。
-如果数字的长度不相等，则需要测试是否有额外的数字需要排序。
-这可能是基数排序中最慢的部分之一，也是最难提高效率的部分之一。
+The speed of Radix sort depends on the inner basic operations. If the operations are not efficient enough, Radix sort can be slower than other algorithms such as Quick sort and Merge sort.
+These operations include the insert and delete functions of the sub-lists and the process of isolating the digit we want.
+If the numbers are not of equal length then a test is needed to check for additional digits that need sorting.
+This can be one of the slowest parts of Radix sort and also one of the hardest to make efficient.
 
-由于基数排序依赖于数字或字母，它不如其他排序灵活。
-对于每种不同类型的数据，基数排序需要重写，如果排序顺序改变，排序需要再次重写。
-简而言之，基数排序需要更多时间编写，并且很难编写一个能处理所有类型数据的通用基数排序。
+Since Radix sort depends on the digits or letters, it is less flexible than other sorts.
+For every different type of data, Radix sort needs to be rewritten, and if the sorting order changes, the sort needs to be rewritten again.
+In short, Radix sort takes more time to write, and it is very difficult to write a general purpose Radix sort that can handle all kinds of data.
 
-对于许多需要快速排序的程序，基数排序是一个不错的选择。
-尽管如此，还有更快的排序，这也是基数排序没有像某些其他排序那样被广泛使用的原因之一。
+For many programs that need a fast sort, Radix sort is a good choice.
+Still, there are faster sorts, which is one reason why Radix sort is not used as much as some other sorts.
 
-时间复杂度：$O(nd) ≈ O(n)$，如果 d 很小。
+Time Complexity: $O(nd) ≈ O(n)$, if d is small.
+
+## 
 
 ## Tree Sort
 
-树排序使用二叉搜索树。它涉及扫描输入的每个元素，并将其放置在二叉搜索树中的正确位置。
-这有两个阶段：
+Tree sort uses a binary search tree. It involves scanning each element of the input and placing it into its proper position in a binary search tree.
+This has two phases:
 
-- 第一阶段是使用给定的数组元素创建一个二叉搜索树。
-- 第二阶段是执行中序遍历，从而得到一个排序后的数组。
+- First phase is creating a binary search tree using the given array elements.
+- Second phase is traversing the given binary search tree in inorder, thus resulting in a sorted array.
 
-这种方法的平均比较次数为 $O(nlogn)$。
-但在最坏情况下，比较次数达到 $O(n^2)$，当排序树是斜树时会出现这种情况。
+The average number of comparisons for this method is $O(nlogn)$.
+But in worst case, the number of comparisons is reduced by $O(n^2)$, a case which arises when the sort tree is skew tree.
 
 ## External Sort
 
-无法在主存中执行而必须在磁盘或磁带上完成的排序也非常重要。这种排序称为外部排序。
+Sorts that cannot be performed in main memory and must be done on disk or tape are also quite important. This type of sorting, known as external sorting.
 
-归并是外部排序的核心思想。
+Merging is the central idea of external sorts.
 
 外部排序的步骤:
 
@@ -426,6 +470,8 @@ Timsort 的时间复杂度取决于数据的有序性：
 相比于内部排序 外部排序有个较大的时间消耗在IO上 归并阶段时每次归并都是遍历全部的文件 为了减少IO次数 可以通过增加更多的归并路数, 从而降低归并层数
 
 构建二叉堆记录出最近
+
+
 
 ### Multiway Merge
 

@@ -1,14 +1,14 @@
-## 简介
+## Introduction
 
-> 参见 [TCP](/docs/CS/CN/TCP/TCP.md)
+> See [TCP](/docs/CS/CN/TCP/TCP.md)
 
-TCP 套接字是*流式套接字*的一个例子。
+TCP sockets are an example of *stream sockets*.
 
 ## tcp_init
 
-由 [inet_init](/docs/CS/OS/Linux/net/network.md?id=init-inet) 调用 tcp_init
+call tcp_init by [inet_init](/docs/CS/OS/Linux/net/network.md?id=init-inet)
 
-计算大小并分配主要的 established 和 bind bucket 哈希表。
+Size and allocate the main established and bind bucket hash tables.
 
 ```c
 

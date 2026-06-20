@@ -1,6 +1,7 @@
 ## Introduction
 
-[Jackson](https://github.com/FasterXML/jackson) 一直被称为"Java JSON 库"或"Java 上最好的 JSON 解析器"。或者简称为"JSON for Java"。
+[Jackson](https://github.com/FasterXML/jackson) has been known as "the Java JSON library" or "the best JSON parser for Java". Or simply as "JSON for Java".
+
 
 ## Links
 - [Gson](/docs//CS/Java/Gson.md)

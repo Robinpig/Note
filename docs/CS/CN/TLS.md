@@ -1,93 +1,107 @@
-## 简介
+## Introduction
 
 > HTTPS = [HTTP](/docs/CS/CN/HTTP/HTTP.md) + TLS/SSL
 
-TLS 是一个客户端/服务器协议，旨在为两个应用之间的连接提供安全性。
-虽然 TLS 可以用于任何底层传输协议之上，但该协议的最初目标是加密 HTTP 流量。
-使用 TLS 加密的 HTTP 通常被称为 HTTPS。
-按照惯例，TLS 加密的 Web 流量默认使用端口 443 交换，而未加密的 HTTP 默认使用端口 80。
+TLS is a client/server protocol, designed to support security for a connection between two applications. 
+Although TLS can be used on top of any low-level transport protocol, the original goal of the protocol was to encrypt HTTP traffic.
+HTTP encrypted using TLS is commonly referred to as HTTPS. 
+TLS-encrypted web traffic is by convention exchanged on port 443 by default, while unencrypted HTTP uses port 80 by default. 
 
-## 协议
 
-记录协议（Record protocol）为客户端和服务器之间交换的数据对象提供分片、压缩、完整性保护和加密，
-而握手协议（handshake protocols）建立身份、执行认证、指示告警，并为记录协议在每个连接上提供唯一的密钥材料。
-握手协议包括四个特定协议：握手协议（Handshake protocol）、告警协议（Alert protocol）、更改密码规范协议（Change Cipher Spec protocol）和应用数据协议（application data protocol）。
 
-更改密码规范协议用于更改当前操作参数。
-这是通过首先使用握手协议设置一个"待定"状态，然后指示从当前状态切换到待定状态（然后成为当前状态）来完成的。
-只有在待定状态准备就绪后才允许这种切换。
-TLS 依赖五种加密操作：数字签名、流密码加密、分组密码加密、AEAD 和公钥加密。对于完整性保护，TLS 记录层使用 HMAC。
-对于密钥生成，TLS 1.2 使用基于 HMAC with SHA-256 的 PRF。TLS 还集成一个可选的压缩算法，在首次建立连接时协商。
+## Protocols
 
-HTTPS 仍然是 TLS 的一个重要用例。
+The Record protocol provides fragmentation, compression, integrity protection, and encryption for data objects exchanged between clients and servers, 
+and the handshake protocols establish identities, perform authentication, indicate alerts, and provide unique key material for the Record protocol to use on each connection. 
+The handshaking protocols comprise four specific protocols: the Handshake protocol, the Alert protocol, the Change Cipher Spec protocol, and the application data protocol. 
 
-### 记录协议
+The Change Cipher Spec protocol is used to change the current operating parameters. 
+This is accomplished by first using the Handshake protocol to set up a “pending” state, followed by an indication to switch from the current state to the pending state (which then becomes the current state). 
+Such switching is allowed only after the pending state has been readied. 
+TLS depends on five cryptographic operations: digital signing, stream cipher encryption, block cipher encryption, AEAD, and public key encryption. For integrity protection, the TLS record layer uses HMAC. 
+For key generation, TLS 1.2 uses a PRF based on HMAC with SHA-256. TLS also integrates an optional compression algorithm that is negotiated when a connection is first established.
 
-记录协议使用一组可扩展的记录内容类型值来标识被多路复用的消息类型（即哪个高层协议）。
-在任何给定时刻，记录协议有一个活动当前连接状态和另一组称为待定连接状态的状态参数。
-每个连接状态进一步分为读状态和写状态。
-每个这些状态指定了用于通信的压缩算法、加密算法和 MAC 算法，以及任何必要的密钥和参数。
-当密钥更改时，首先使用握手协议设置待定状态，然后同步操作（通常使用密码更改协议完成）将当前状态设置为等于待定状态。
-首次初始化时，所有状态都设置为 NULL 加密、无压缩和无 MAC 处理。
+HTTPS remains an important use case for TLS.
 
-### 握手协议
+### Record Protocol
 
-TLS 有三个子协议，执行与 IPsec 中 IKE 大致相当的任务。
-更具体地说，这些其他协议由记录层用于多路复用和多路分解的编号标识，称为握手协议（22）、
-告警协议（21）和密码更改协议（20）。
-密码更改协议非常简单。它由一条包含单个字节的消息组成，其值为 1。
-该消息的目的是向对端指示希望从当前状态切换到待定状态。接收此消息会将读待定状态移动到当前状态，并指示记录层尽快转换到待定写状态。
-此消息由客户端和服务器都使用。
+The Record protocol uses an extensible set of record content type values to identify which message type (i.e., which of the higher-layer protocols) is being multiplexed. 
+At any given point in time, the Record protocol has an active current connection state and another set of state parameters called the pending connection state. 
+Each connection state is further divided into a read state and a write state. 
+Each of these states specifies a compression algorithm, encryption algorithm, and MAC algorithm to be used for communication, along with any necessary keys and parameters. 
+When a key is changed, the pending state is first set up using the Handshake protocol, and then a synchronization operation (usually accomplished using the Cipher Change protocol) sets the current state equal to the pending state. 
+When first initialized, all states are set up with NULL encryption, no compression, and no MAC processing.
 
-告警协议用于从 TLS 连接的一端向另一端传递状态信息。
-这可以包括终止条件（致命错误或受控关闭）或非致命错误条件。
-截至 [RFC5246] 发布，标准中定义了 24 条告警消息。其中超过一半始终是致命的（例如，错误的 MAC、缺失或未知消息、算法失败）。
 
-握手协议设置相关的连接操作参数。
-它允许 TLS 端点实现六个主要目标：协商算法和交换用于形成对称加密密钥的随机值、
-建立算法操作参数、交换证书并执行相互认证、生成会话特定密钥、
-向记录层提供安全参数，并验证所有这些操作是否正确执行。
+### Handshaking Protocols
 
-### 重新协商
+There are three subprotocols to TLS, which perform tasks roughly equivalent to those performed by IKE in IPsec. 
+More specifically, these other protocols are identified by numbers used for multiplexing and demultiplexing by the record layer and are called the Handshake protocol (22), 
+Alert protocol (21), and Cipher Change protocol (20). 
+The Cipher Change protocol is very simple. It consists of one message containing a single byte that has the value 
+1. The purpose of the message is to indicate to the peer a desire to change from the current to the pending state. Receiving such a message moves the read pending state to the current state and causes an indication to the record layer to transition to the pending write state as soon as possible. 
+   This message is used by both client and server.
 
-TLS 支持在保持同一连接的同时重新协商加密连接参数的能力。这可以由服务器或客户端发起。
-如果服务器希望重新协商连接参数，它生成一个 HelloRequest 消息，客户端回复一个新的 ClientHello 消息，开始重新协商过程。
-客户端也能够自发地生成这样的 ClientHello 消息，无需服务器提示。
 
-TLS 的主要目标是在两个通信对端之间提供安全通道；对底层传输的唯一要求是可靠、有序的数据流。
-具体来说，安全通道应提供以下属性：
+The Alert protocol is used to deliver status information from one end of a TLS connection to another. 
+This can include terminating conditions (either fatal errors or controlled shutdowns) or nonfatal error conditions. 
+As of the publication of [RFC5246], 24 alert messages were defined in standards. More than half of them are always fatal (e.g., bad MACs, missing or unknown messages, algorithm failures).
 
-- **认证（Authentication）：**
-  通道的服务器端总是经过认证的；客户端端可选认证。
-  认证可以通过非对称加密（例如 RSA、椭圆曲线数字签名算法（ECDSA）、Edwards-Curve 数字签名算法（[EdDSA](https://www.rfc-editor.org/rfc/rfc8032)）或对称预共享密钥（PSK）进行。
+The Handshake protocol sets up the relevant connection operating parameters. 
+It allows the TLS endpoints to achieve six major objectives: agree on algorithms and exchange random values used in forming symmetric encryption keys, 
+establish algorithm operating parameters, exchange certificates and perform mutual authentication, generate a session-specific secret, 
+provide security parameters to the record layer, and verify that all of these operations have executed properly. 
 
-- **机密性（Confidentiality）：**
-  建立后通过通道发送的数据仅端点可见。
-  TLS 不隐藏其传输数据的长度，但端点可以填充 TLS 记录以模糊长度，提高对抗流量分析技术的保护。
 
-- **完整性（Integrity）：**
-  建立后通过通道发送的数据不能被攻击者修改而不被检测到。
 
-即使面临完全控制网络的攻击者，这些属性也应保持，如 [RFC3552](https://www.rfc-editor.org/rfc/rfc3552) 所述。
-参见附录 E 了解相关安全属性的更完整说明。
+### Renegotiation
 
-TLS 由两个主要组件组成：
-- **握手协议**，用于认证通信双方、协商加密模式和参数，并建立共享密钥材料。
-  握手协议设计为抗篡改；主动攻击者不应能够强制对端协商与连接不受攻击时不同的参数。
-- **记录协议**，使用握手协议建立的参数来保护通信双方之间的流量。
-  记录协议将流量分成一系列记录，每个记录使用流量密钥独立保护。
+TLS supports the ability to renegotiate cryptographic connection parameters while maintaining the same connection. This can be initiated by either the server or the client. 
+If the server wishes to renegotiate the connection parameters, it generates a HelloRequest message, and the client responds with a new ClientHell message, which begins the renegotiation procedure. 
+The client is also able to generate such a ClientHello message spontaneously, without prompting from the server.
 
-TLS 是应用协议无关的；高层协议可以在 TLS 之上透明分层。
-然而，TLS 标准没有规定协议如何通过 TLS 增加安全性；
-如何发起 TLS 握手以及如何解释交换的认证证书，留给运行在 TLS 之上的协议的设计者和实现者判断。
+The primary goal of TLS is to provide a secure channel between two communicating peers; the only requirement from the underlying transport is a reliable, in-order data stream.  
+Specifically, the secure channel should provide the following properties:
 
-TLS 支持三种基本密钥交换模式：
+-  Authentication: 
+   The server side of the channel is always authenticated; the client side is optionally authenticated.
+   Authentication can happen via asymmetric cryptography (e.g., RSA, the Elliptic Curve Digital Signature Algorithm (ECDSA), or the Edwards-Curve Digital Signature Algorithm ([EdDSA](https://www.rfc-editor.org/rfc/rfc8032)) or a symmetric pre-shared key (PSK).
 
-- (EC)DHE（有限域或椭圆曲线上的 Diffie-Hellman）
-- PSK-only
-- PSK with (EC)DHE
+-  Confidentiality: 
+   Data sent over the channel after establishment is only visible to the endpoints.  
+   TLS does not hide the length of the data it transmits, though endpoints are able to pad TLS records in order to obscure lengths and improve protection against traffic analysis techniques.
 
-### 安全
+-  Integrity: 
+   Data sent over the channel after establishment cannot be modified by attackers without detection.
+
+These properties should be true even in the face of an attacker who has complete control of the network, as described in [RFC3552](https://www.rfc-editor.org/rfc/rfc3552).  
+See Appendix E for a more complete statement of the relevant security properties.
+
+TLS consists of two primary components:
+-  A handshake protocol that authenticates the communicating parties, negotiates cryptographic modes and parameters, and establishes shared keying material.  
+   The handshake protocol is designed to resist tampering; an active attacker should not be able to force the peers to negotiate different parameters than they would if the connection were not under attack.
+-  A record protocol that uses the parameters established by the handshake protocol to protect traffic between the communicating peers.  
+   The record protocol divides traffic up into a series of records, each of which is independently protected using the traffic keys.
+
+
+
+
+
+TLS is application protocol independent; higher-level protocols can layer on top of TLS transparently.  
+The TLS standard, however, does not specify how protocols add security with TLS; 
+how to initiate TLS handshaking and how to interpret the authentication certificates exchanged are left to the judgment of the designers and implementors of protocols that run on top of TLS.
+
+
+
+
+TLS supports three basic key exchange modes:
+
+-  (EC)DHE (Diffie-Hellman over either finite fields or elliptic curves)
+-  PSK-only
+-  PSK with (EC)DHE
+
+
+### security
 
 verified certifcation
 
@@ -111,11 +125,11 @@ CA
 密文后，发送给服务器，服务器解密后，用相同的摘要算法算出发送过来的明文，通过比较客户端携带
 的「指纹」和当前算出的「指纹」做比较，若「指纹」相同，说明数据是完整的。
 
-加密（Encryption）
+Encryption
 
-数据完整性（Data integrity）
+Data integrity
 
-认证（Authentication）
+Authentication
 
 SSL
 
@@ -125,12 +139,12 @@ TLS
 
 `Transport Layer Security`
 
-密钥对（key pairs）
+key pairs
 
-- 私钥在服务器（private key in Server）
-- 公钥（public key）
+- private key in Server
+- public key
 
-密钥交换算法 - 签名算法 - 对称加密算法 - (分组模式) - 摘要算法
+密钥交换算法 - signature algorithms - 对称加密算法 - (分组模式) - 摘要算法
 
 CA
 
@@ -146,19 +160,20 @@ SSL/TLS 协议建立流程:
 
 1. ClientHello
 
-   client->server, 发送客户端随机数、支持的协议版本、算法列表
+   client->server, send Client Random, support protocol version, algorithm list
 2. ServerHello
 
-   检查协议版本和算法列表，返回服务器随机数和 CA
-3. 客户端响应
+   check protocol version and algorithm list, return with Server Random CA
+3. client response
 
-   检查 CA，从 CA 获取公钥，
-   创建预主密钥并发送
-4. 服务器响应
+   check CA, get public key from CA ,
 
-   获取预主密钥，计算私钥
+   create pre-master key and send
+4. server response
 
-## 版本
+   get pre-master key, calc private key
+
+## Version
 
 ### 1.2
 
@@ -168,22 +183,22 @@ SSL/TLS 协议建立流程:
 
 1 RTT
 
-ECDHE 而非 RSA
+ECDHE rather than RSA
 
 0 RTT
 
-摘要算法（Digest Algorithm）
+Digest Algorithm
 
-## 握手
+## Handshaking
 
-TLS 握手协议涉及以下步骤：
+The TLS Handshake Protocol involves the following steps:
 
-- 交换 hello 消息以协商算法，交换*随机值*，并检查会话恢复。
-- 交换*必要的加密参数*以允许客户端和服务器就*预主密钥*达成一致。
-- 交换证书和加密信息以允许客户端和服务器相互认证。
-- 从预主密钥和交换的随机值生成主密钥。
-- 向记录层提供安全参数。
-- 允许客户端和服务器验证其对端计算了相同的安全参数，并且握手未受到攻击者篡改。
+-  Exchange hello messages to agree on algorithms, exchange *random values*, and check for session resumption.
+-  Exchange the *necessary cryptographic parameters* to allow the client and server to agree on a *premaster secret*.
+-  Exchange certificates and cryptographic information to allow the client and server to authenticate themselves.
+-  Generate a master secret from the premaster secret and exchanged random values.
+-  Provide security parameters to the record layer.
+-  Allow the client and server to verify that their peer has calculated the same security parameters and that the handshake occurred without tampering by an attacker.
 
 1.2
 
@@ -191,24 +206,28 @@ TLS 握手协议涉及以下步骤：
 Client                                               Server
 
    ClientHello                  -------->
-                                                    ServerHello
-                                                   Certificate*
-                                             ServerKeyExchange*
-                                            CertificateRequest*
-                                 <--------      ServerHelloDone
+                                                   ServerHello
+                                                  Certificate*
+                                            ServerKeyExchange*
+                                           CertificateRequest*
+                                <--------      ServerHelloDone
    Certificate*
    ClientKeyExchange
    CertificateVerify*
    [ChangeCipherSpec]
    Finished                     -------->
-                                             [ChangeCipherSpec]
-                                 <--------             Finished
+                                            [ChangeCipherSpec]
+                                <--------             Finished
    Application Data             <------->     Application Data
 
-          完整握手消息流
+          Message flow for a full handshake
 ```
 
-## 0-RTT 和反重放
+
+## 0-RTT and Anti-Replay
+
+
+
 
 DES
 
@@ -216,7 +235,11 @@ unsafe
 
 AES
 
-## 参考文献
+
+
+
+
+## References
 
 1. [RFC 2246 - The TLS Protocol Version 1.0](https://www.rfc-editor.org/rfc/rfc2246.html)
 2. [RFC 4346 - The Transport Layer Security (TLS) Protocol Version 1.1](https://www.rfc-editor.org/rfc/rfc4346.html)

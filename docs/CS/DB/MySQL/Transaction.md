@@ -1,69 +1,70 @@
-## 简介
+## Introduction
 
-要实现大规模、繁忙或高可靠性的数据库应用程序，从不同数据库系统移植大量代码，
-或调优 MySQL 性能，理解 `InnoDB` 锁机制和 `InnoDB` 事务模型非常重要。
+To implement a large-scale, busy, or highly reliable database application, to port substantial code from a different database system,
+or to tune MySQL performance, it is important to understand `InnoDB` locking and the `InnoDB` transaction model.
 
-## InnoDB 和 ACID 模型
+## InnoDB and the ACID Model
 
-`InnoDB` 事务模型旨在将多版本数据库的最佳特性与传统两阶段锁相结合。
-`InnoDB` 在行级别执行锁定，默认情况下以 Oracle 风格运行查询作为[非锁定一致性读](/docs/CS/DB/MySQL/Transaction.md?id=consistent-read)。
-`InnoDB` 中的锁信息以空间高效的方式存储，因此无需锁升级。
-通常，允许多个用户锁定 `InnoDB` 表中的每一行或任何随机子集，而不会导致 `InnoDB` 内存耗尽。
+The `InnoDB` transaction model aims combine the best properties of a multi-versioning database with traditional two-phase locking.
+`InnoDB` performs locking at the row level and runs queries as [nonlocking consistent reads](/docs/CS/DB/MySQL/Transaction.md?id=consistent-read) by default, in the style of Oracle.
+The lock information in `InnoDB` is stored space-efficiently so that lock escalation is not needed.
+Typically, several users are permitted to lock every row in `InnoDB` tables, or any random subset of the rows, without causing `InnoDB` memory exhaustion.
 
-和 ACID 事务关系：
 
-- 原子性、一致性和持久性依靠 redo log 和 Undo Log
-- 隔离性依靠 Lock 和 MVCC
+ 和ACID事务关系
 
-SQL 记录执行流程：
+- 原子性、一致性和持久性是redo log 和 Undo Log
+- 隔离性是Lock 和 MVCC
+
+在sql记录执行流程
 
 ![](./img/execute.png)
 
-### 事务隔离级别
+### Transaction Isolation Levels
 
 #### READ UNCOMMITTED
 
-在 `READ UNCOMMITTED` 级别运行的事务**不发出共享锁来阻止其他事务修改当前事务读取的数据**。
-`READ UNCOMMITTED` 事务也不会被排他锁阻塞，这些排他锁会阻止当前事务读取已被其他事务修改但未提交的行。
-**此选项的效果等同于在事务的所有 SELECT 语句中在所有表上设置 NOLOCK。**
+Transactions running at the `READ UNCOMMITTED` level **do not issue shared locks to prevent other transactions from modifying data read by the current transaction**.
+`READ UNCOMMITTED` transactions are also not blocked by exclusive locks that would prevent the current transaction from reading rows that have been modified but not committed by other transactions.
+**This option has the same effect as setting NOLOCK on all tables in all SELECT statements in a transaction.**
 
 #### READ COMMITTED
 
-每次一致性读，即使在同一事务内，也会设置并读取自己的**新快照。**
+Each consistent read, even within the same transaction, sets and reads its own **fresh snapshot.**
 
-**由于禁用了间隙锁，可能会出现`幻读`问题，因为其他会话可以向间隙中插入新行**。
+**Because gap locking is disabled, `phantom row` problems may occur, as other sessions can insert new rows into the gaps**.
 
-`READ COMMITTED` 隔离级别仅支持基于行的二进制日志记录。
-如果在使用 `READ COMMITTED` 时设置了 `binlog_format=MIXED`，服务器会自动使用基于行的日志记录。
+Only row-based binary logging is supported with the `READ COMMITTED` isolation level. If you use `READ COMMITTED` with `binlog_format=MIXED`, the server automatically uses row-based logging.
 
-使用 `READ COMMITTED` 还有其他效果：
+Using `READ COMMITTED` has additional effects:
 
-- 对于 `UPDATE` 或 `DELETE` 语句，`InnoDB` 仅持有其更新或删除的行的锁。
-  MySQL 评估完 `WHERE` 条件后，会释放不匹配行的记录锁。
-  这大大降低了死锁的概率，但死锁仍可能发生。
-- 对于 `UPDATE` 语句，如果某行已被锁定，`InnoDB` 执行"半一致性读"，
-  将最新的已提交版本返回给 MySQL，以便 MySQL 判断该行是否匹配 `UPDATE` 的 `WHERE` 条件。
-  如果该行匹配（需要更新），MySQL 再次读取该行，此时 `InnoDB` 要么锁定它，要么等待其上的锁。
+- For `UPDATE` or `DELETE` statements, `InnoDB` holds locks only for rows that it updates or deletes.
+  Record locks for nonmatching rows are released after MySQL has evaluated the `WHERE` condition.
+  This greatly reduces the probability of deadlocks, but they can still happen.
+- For `UPDATE` statements, if a row is already locked, `InnoDB` performs a “semi-consistent” read,
+  returning the latest committed version to MySQL so that MySQL can determine whether the row matches the `WHERE` condition of the `UPDATE`.
+  If the row matches (must be updated), MySQL reads the row again and this time `InnoDB` either locks it or waits for a lock on it.
 
 #### REPEATABLE READ
 
-这是 InnoDB 的默认隔离级别。
-同一事务内的一致性读**读取首次读取建立的快照**（任何 SELECT 或 UPDATE/INSERT/DELETE）。
-这意味着如果在同一事务内发出多个普通（非锁定）SELECT 语句，这些 SELECT 语句彼此之间也是一致的。
+This is the default isolation level for InnoDB.
+Consistent reads within the same transaction **read the snapshot established by the first read**(any SELECT or UPDATE/INSERT/DELETE).
+This means that if you issue several plain (nonlocking) SELECT statements within the same transaction, these SELECT statements are consistent also with respect to each other.
 
-对于锁定读（带 FOR UPDATE 或 LOCK IN SHARE MODE 的 SELECT）、UPDATE 和 DELETE 语句，锁定取决于语句是使用具有唯一搜索条件的唯一索引还是范围型搜索条件。
+For locking reads (SELECT with FOR UPDATE or LOCK IN SHARE MODE), UPDATE, and DELETE statements, locking depends on whether the statement uses a unique index with a unique search condition or a range-type search condition.
 
-- 对于具有唯一搜索条件的唯一索引，InnoDB 仅锁定找到的索引记录，而不锁定其前面的间隙。
-- 对于其他搜索条件，InnoDB 锁定扫描的索引范围，使用间隙锁或 next-key 锁阻塞其他会话向该范围覆盖的间隙插入数据。
+- For a unique index with a unique search condition, InnoDB locks only the index record found, not the gap before it.
+- For other search conditions, InnoDB locks the index range scanned, using gap locks or next-key locks to block insertions by other sessions into the gaps covered by the range.
 
 > [!TIP]
 >
-> 最佳实践是不在应用程序中混用存储引擎。
-> 失败的事务可能导致不一致的结果，因为某些部分可以回滚而其他部分不能。
+> It is best practice to not mix storage engines in your application. Failed transactions can lead to inconsistent results as some parts can roll back and others cannot.
 
-## 事务
 
-```sql
+## Transaction
+
+事务是怎样开启的
+```
 /*  1 */ BEGIN
 /*  2 */ BEGIN WORK
 /*  3 */ START TRANSACTION
@@ -71,21 +72,23 @@ SQL 记录执行流程：
 /*  5 */ START TRANSACTION READ ONLY
 /*  6 */ START TRANSACTION WITH CONSISTENT SNAPSHOT
 /*  7 */ START TRANSACTION WITH CONSISTENT SNAPSHOT, READ WRITE
+
 ```
 
+语句 1 ~ 8 中：
 语句 1 ~ 4：用于开始一个新的读写事务。
 语句 5：用于开始一个新的只读事务。
 这两类语句都不需立即创建一致性读视图，事务的启动将延迟至实际需要时。
 语句 6 ~ 7：用于开始一个新的读写事务。
 语句 8：用于开始一个新的只读事务。
-这两类语句都会先启动事务，随后立即创建一致性读视图。
+这两类语句都会先启动事务，随后立即创建一致性读视图
 
-常用于开始一个事务的语句，大概非 BEGIN 莫属了。
+常用于开始一个事务的语句，大概非 BEGIN 莫属了
 BEGIN 语句主要做两件事：
 辞旧：提交老事务。
 迎新：准备新事务。
 
-BEGIN 语句会判断当前连接中是否有可能存在未提交事务，判断逻辑为：当前连接的线程是否被打上了 OPTION_NOT_AUTOCOMMIT 或 OPTION_BEGIN 标志位。
+BEGIN 语句会判断当前连接中是否有可能存在未提交事务，判断逻辑为：当前连接的线程是否被打上了 OPTION_NOT_AUTOCOMMIT 或 OPTION_BEGIN 标志位
 
 ```c++
 inline bool in_multi_stmt_transaction_mode() const {
@@ -94,12 +97,13 @@ inline bool in_multi_stmt_transaction_mode() const {
 ```
 
 只要 variables.option_bits 包含其中一个标志位，就说明当前连接中可能存在未提交事务。
-BEGIN 语句想要开始一个新事务，就必须先执行一次提交操作，把可能未提交的事务给提交了。
-然后给当前连接的线程打上 OPTION_BEGIN 标志，并不会马上启动一个新的事务。
+BEGIN 语句想要开始一个新事务，就必须先执行一次提交操作，把可能未提交的事务给提交了
+然后给当前连接的线程打上 OPTION_BEGIN 标志 并不会马上启动一个新的事务
+
 
 InnoDB 读写表中数据的操作都在事务中执行，开始一个事务的方式有两种：
 手动：通过 BEGIN、START TRANSACTION 语句以及它们的扩展形式开始一个事务。
-自动：直接执行一条 SQL 语句，InnoDB 会自动开始一个事务，SQL 语句执行完成之后，又会自动提交这个事务。
+自动：直接执行一条 SQL 语句，InnoDB 会自动开始一个事务，SQL 语句执行完成之后，又会自动提交这个事务
 这两种方式开始的事务，都用来执行用户 SQL 语句，属于用户事务。
 InnoDB 有时候也需要自己执行一些 SQL 语句，为了和用户 SQL 做区分，我们把这些 SQL 称为内部 SQL。
 内部 SQL 也需要在事务中执行，执行这些 SQL 的事务就是内部事务。
@@ -109,96 +113,122 @@ InnoDB 有几种场景会使用内部事务，以下是其中主要的三种：
 以 ib_dict_stats 线程为例，它计算各表、索引的统计信息之后，会使用内部事务执行内部 SQL，更新 mysql.innodb_table_stats、mysql.innodb_index_stats 表中的统计信息。
 为了实现原子操作，DDL 语句执行过程中，InnoDB 会使用内部事务执行内部 SQL，插入一些数据到 mysql.innodb_ddl_log 表中。
 
-由于要存放事务 ID、事务状态、Undo 日志编号、事务所属的用户线程等信息，每个事务都有一个与之对应的对象，我们称之为事务对象。
-每个事务对象都要占用内存，如果每启动一个事务都要为事务对象分配内存，释放事务时又要释放内存，会降低数据库性能。
+
+由于要存放事务 ID、事务状态、Undo 日志编号、事务所属的用户线程等信息，每个事务都有一个与之对应的对象，我们称之为事务对象
+每个事务对象都要占用内存，如果每启动一个事务都要为事务对象分配内存，释放事务时又要释放内存，会降低数据库性能
 
 ```c++
 struct Pool {
   typedef Type value_type;
 
+  // FIXME: Add an assertion to check alignment and offset is
+  // as we expect it. Also, sizeof(void*) can be 8, can we improve on this.
   struct Element {
     Pool *m_pool;
     value_type m_type;
   };
 
  private:
-  /** 指向最后一个元素的指针 */
+  /** Pointer to the last element */
   Element *m_end;
-  /** 指向第一个元素的指针 */
+
+  /** Pointer to the first element */
   Element *m_start;
-  /** 块大小（字节） */
+
+  /** Size of the block in bytes */
   size_t m_size;
-  /** 已用空间的上限 */
+
+  /** Upper limit of used space */
   Element *m_last;
-  /** 按指针地址排序的优先级队列 */
+
+  /** Priority queue ordered on the pointer addresses. */
   pqueue_t m_pqueue;
-  /** 使用的锁策略 */
+
+  /** Lock strategy to use */
   LockStrategy m_lock_strategy;
 };
 ```
 
 为了避免频繁分配、释放内存对数据库性能产生影响，InnoDB 引入了事务池（Pool），用于管理事务。
-MySQL 在启动过程中会创建事务池管理器，负责事务池的管理。
+MySQL在启动过程中会创建事务池管理器 负责事务池的管理
 
 ```c++
-/** 创建 trx_t 池 */
+/** Create the trx_t pool */
 void trx_pool_init() {
   trx_pools = ut::new_withkey<trx_pools_t>(UT_NEW_THIS_FILE_PSI_KEY,
                                            MAX_TRX_BLOCK_SIZE);
+
   ut_a(trx_pools != nullptr);
 }
 ```
 
+
 ```c++
-/** trx_t 池管理器 */
+/** The trx_t pool manager */
 static trx_pools_t *trx_pools;
-/** 每个 trx_t 池的大小（字节） */
+
+/** Size of on trx_t pool in bytes. */
 static const ulint MAX_TRX_BLOCK_SIZE = 1024 * 1024 * 4;
 ```
-
-每个事务池能用来存放事务对象的内存是 4M。
+每个事务池能用来存放事务对象的内存是4M
 创建事务池的过程中，InnoDB 会分配一块 4M 的内存用于存放事务对象。
-每个事务对象的大小为 992 字节，4M 内存能够存放 4194304 / 992 = 4228 个事务对象。
+每个事务对象的大小为 992 字节，4M 内存能够存放 4194304 / 992 = 4228 个事务对象
 
-事务池有一个队列，用于存放已经初始化的事务对象，称为事务队列。
-InnoDB 初始化事务池的过程中，不会初始化全部的 4228 块小内存，只会初始化最前面的 16 块小内存，得到 16 个事务对象并放入事务队列。
+
+事务池有一个队列，用于存放已经初始化的事务对象 称为事务队列
+InnoDB 初始化事务池的过程中，不会初始化全部的 4228 块小内存，只会初始化最前面的 16 块小内存，得到 16 个事务对象并放入事务队列
 
 ```c++
 Pool(size_t size) : m_end(), m_start(), m_size(size), m_last() {
     ut_a(size >= sizeof(Element));
+
     m_lock_strategy.create();
+
     ut_a(m_start == nullptr);
+
     m_start = reinterpret_cast<Element *>(
         ut::zalloc_withkey(UT_NEW_THIS_FILE_PSI_KEY, m_size));
+
     m_last = m_start;
+
     m_end = &m_start[m_size / sizeof(*m_start)];
-    /* 注意：只初始化一小部分，即使我们已经分配了所有内存。
-    这是必需的，因为如果我们在前端实例化太多互斥锁，
-    PFS (MTR) 的结果会发生变化。 */
+
+    /* Note: Initialise only a small subset, even though we have
+    allocated all the memory. This is required only because PFS
+    (MTR) results change if we instantiate too many mutexes up
+    front. */
+
     init(std::min(size_t(16), size_t(m_end - m_start)));
+
     ut_ad(m_pqueue.size() <= size_t(m_last - m_start));
   }
 ```
-
-MySQL 运行过程中，如果这 16 个事务对象都正在被使用，InnoDB 需要一个新的事务对象时，会一次性初始化剩余的 4212 个事务对象并放入事务池的事务队列。
+MySQL 运行过程中，如果这 16 个事务对象都正在被使用，InnoDB 需要一个新的事务对象时，会一次性初始化剩余的 4212 个事务对象并放入事务池的事务队列
 
 ```c++
 Type *get() {
     Element *elem;
+
     m_lock_strategy.enter();
+
     if (!m_pqueue.empty()) {
       elem = m_pqueue.top();
       m_pqueue.pop();
+
     } else if (m_last < m_end) {
-      /* 初始化剩余的元素 */
+      /* Initialise the remaining elements. */
       init(m_end - m_last);
+
       ut_ad(!m_pqueue.empty());
+
       elem = m_pqueue.top();
       m_pqueue.pop();
     } else {
       elem = nullptr;
     }
+
     m_lock_strategy.exit();
+
     return (elem != nullptr ? &elem->m_type : nullptr);
   }
 ```
@@ -206,41 +236,43 @@ Type *get() {
 给事务分配对象时，会按照这个顺序：
 先从事务池的事务队列中分配一个对象。
 如果事务队列中没有可用的事务对象，就初始化事务池的剩余小块内存，从得到的事务对象中分配一个对象。
-如果所有事务池都没有剩余未初始化的小块内存，就创建一个新的事务池，并从中分配一个事务对象。
+如果所有事务池都没有剩余未初始化的小块内存，就创建一个新的事务池，并从中分配一个事务对象
 
 分配一个事务对象，得到的是一个出厂设置的对象，这个对象的各属性值都已经是初始状态了。
 分配事务对象之后，InnoDB 还会对事务对象的几个属性再做一次初始化工作，把这几个属性再一次设置为初始值，其实就是对这些属性做了重复的赋值操作。
-这些属性中，有必要提一下的是事务状态（trx->state）。出厂设置的事务对象，事务状态是 TRX_STATE_NOT_STARTED，表示事务还没有开始。
+这些属性中，有必要提一下的是事务状态（trx->state）。出厂设置的事务对象，事务状态是 TRX_STATE_NOT_STARTED，表示事务还没有开始
+
 
 除了给几个属性重复赋值，还会改变另外两个属性的值：
-trx->in_innodb：给这个属性值加上 TRX_FORCE_ROLLBACK_DISABLE 标志，防止这个事务被其它线程触发回滚操作。事务后续执行过程中，这个标志可能会被清除。
-trx->lock.autoinc_locks：分配一块内存空间，用于存放 autoinc 锁结构。事务执行过程中需要为 auto_increment 字段生成自增值时使用。
+trx->in_innodb：给这个属性值加上 TRX_FORCE_ROLLBACK_DISABLE 标志，防止这个事务被其它线程触发回滚操作。事务后续执行过程中，这个标志可能会被清除，我们就不展开介绍了。
+trx->lock.autoinc_locks：分配一块内存空间，用于存放 autoinc 锁结构。事务执行过程中需要为 auto_increment 字段生成自增值时使用
+
 
 我们查询 information_schema.innodb_trx 表，能看到当前正在执行的事务有哪些，这些事务来源于两个链表。
-为用户事务分配一个事务对象之后，还有一件非常重要的事，就是把事务对象放入其中一个链表的最前面：
-
+为用户事务分配一个事务对象之后，还有一件非常重要的事，就是把事务对象放入其中一个链表的最前面，代码是这样的：
 ```c++
 UT_LIST_ADD_FIRST(trx_sys->mysql_trx_list, trx);
 ```
-
 从上面的代码可以看到，这个链表就是 trx_sys->mysql_trx_list，它只会记录用户事务。
-至于内部事务，并不会放入 trx_sys->mysql_trx_list 链表。等到真正启动事务时，事务对象会被放入另一个链表。
+至于内部事务，并不会放入 trx_sys->mysql_trx_list 链表。等到真正启动事务时，事务对象会被放入另一个链表
+
+
 
 ### 启动事务
 
-启动事务最重要的事情之一，就是修改事务状态到 `TRX_STATE_ACTIVE`。
+启动事务最重要的事情之一，就是修改事务状态到 `TRX_STATE_ACTIVE`
+
 
 ```c++
 trx->state.store(TRX_STATE_ACTIVE, std::memory_order_relaxed)
 ```
-
-事务启动于执行第一条 SQL 语句时。如果第一条 SQL 语句是 select、update、delete，InnoDB 会以读事务的身份启动新事务。
+事务启动于执行第一条 SQL 语句时，如果第一条 SQL 语句是 select、update、delete，InnoDB 会以读事务的身份启动新事务
 
 ```c++
-/** 启动一个事务。 */
+/** Starts a transaction. */
 static void trx_start_low(
-    trx_t *trx,      /*!< in: 事务 */
-    bool read_write) /*!< in: 如果是读写事务则为 true */
+    trx_t *trx,      /*!< in: transaction */
+    bool read_write) /*!< in: true if read-write transaction */
 {
   ut_ad(!trx->in_rollback);
   ut_ad(!trx->is_recovered);
@@ -258,7 +290,7 @@ static void trx_start_low(
 
   ++trx->version;
 
-  /* 检查是否为 AUTOCOMMIT SELECT */
+  /* Check whether it is an AUTOCOMMIT SELECT */
   trx->auto_commit = (trx->api_trx && trx->api_auto_commit) ||
                      thd_trx_is_auto_commit(trx->mysql_thd);
 
@@ -274,7 +306,7 @@ static void trx_start_low(
   trx->persists_gtid = false;
 
 #ifdef UNIV_DEBUG
-  /* 如果事务是 DD attachable trx，它应该是 AC-NL-RO
+  /* If the transaction is DD attachable trx, it should be AC-NL-RO
   (AutoCommit-NonLocking-ReadOnly) trx */
   if (trx->is_dd_trx) {
     ut_ad(trx->read_only);
@@ -284,14 +316,16 @@ static void trx_start_low(
   }
 #endif /* UNIV_DEBUG */
 
-  /* 注意，trx->start_time 设置时未使用 std::memory_order_release，
-  并且下面的 trx->state 既未在临界区内设置（由 trx_sys->mutex 保护），
-  也未使用 std::memory_order_release。
-  这对于下面代码中的只读事务是可能的。
-  这可能导致 buf_pool_resize 线程内关于事务持续时间过长的错误消息。
-  决定为只读事务保留此问题，因为提供修复方案以确保此类事务的状态信息
-  始终一致需要更多工作。
-  TODO: 检查此微优化在 ARM 上的性能提升。 */
+  /* Note, that trx->start_time is set without std::memory_order_release,
+  and it is possible that trx->state below is set neither within critical
+  section protected by trx_sys->mutex nor, with std::memory_order_release.
+  That is possible for read-only transactions in code further below.
+  This can result in an incorrect message printed to error log inside the
+  buf_pool_resize thread about transaction lasting too long. The decision
+  was to keep this issue for read-only transactions as it was, because
+  providing a fix which would guarantee that state of printed information
+  about such transactions is always consistent, would take much more work.
+  TODO: check performance gain from this micro-optimization on ARM. */
 
   if (trx->mysql_thd != nullptr) {
     trx->start_time.store(thd_start_time(trx->mysql_thd),
@@ -304,39 +338,41 @@ static void trx_start_low(
                           std::memory_order_relaxed);
   }
 
-  /* trx->no 的初始值：TRX_ID_MAX 用于
+  /* The initial value for trx->no: TRX_ID_MAX is used in
   read_view_open_now: */
 
   trx->no = TRX_ID_MAX;
 
   ut_a(ib_vector_is_empty(trx->lock.autoinc_locks));
 
-  /* 此值仅由检查锁系统队列的线程读取，
-  在将此 trx 入队的线程释放队列的 latch 之后。 */
+  /* This value will only be read by a thread inspecting lock sys queue after
+  the thread which enqueues this trx releases the queue's latch. */
   trx->lock.schedule_weight.store(0, std::memory_order_relaxed);
 
-  /* 如果此事务来自 trx_allocate_for_mysql()，
-  trx->in_mysql_trx_list 将持有。在这种情况下，trx->state
-  的更改必须受 trx_sys->mutex 保护，以便
-  lock_print_info_all_transactions() 有一致的视图。 */
+  /* If this transaction came from trx_allocate_for_mysql(),
+  trx->in_mysql_trx_list would hold. In that case, the trx->state
+  change must be protected by the trx_sys->mutex, so that
+  lock_print_info_all_transactions() will have a consistent view. */
 
   ut_ad(!trx->in_rw_trx_list);
 
-  /* 我们倾向于过度断言，这使代码有些复杂。
-  例如，事务状态可以更早设置，但由于某些
-  trx 列表断言被不必要的触发，我们被迫在
-  trx_sys_t::mutex 保护下设置它。 */
+  /* We tend to over assert and that complicates the code somewhat.
+  e.g., the transaction state can be set earlier but we are forced to
+  set it under the protection of the trx_sys_t::mutex because some
+  trx list assertions are triggered unnecessarily. */
 
-  /* 默认情况下，所有事务都在只读列表中，除非它们是
-  非锁定自动提交只读事务或后台（内部）事务。
-  注意：显式标记为只读的事务可以写入临时表，
-  我们也将其放在 RO 列表中。 */
+  /* By default all transactions are in the read-only list unless they
+  are non-locking auto-commit read only transactions or background
+  (internal) transactions. Note: Transactions marked explicitly as
+  read only can write to temporary tables, we put those on the RO
+  list too. */
 
   if (!trx->read_only &&
       (trx->mysql_thd == nullptr || read_write || trx->ddl_operation)) {
     trx_assign_rseg_durable(trx);
 
-    /* 仅当事务更新临时表时才分配临时 rseg */
+    /* Temporary rseg is assigned only if the transaction
+    updates a temporary table */
     DEBUG_SYNC_C("trx_sys_before_assign_id");
 
     trx_sys_mutex_enter();
@@ -362,8 +398,9 @@ static void trx_start_low(
     trx->id = 0;
 
     if (!trx_is_autocommit_non_locking(trx)) {
-      /* 如果这是一个向临时表写入数据的只读事务，
-      则需要事务 ID 才能写入临时表。 */
+      /* If this is a read-only transaction that is writing
+      to a temporary table then it needs a transaction id
+      to write to the temporary table. */
 
       if (read_write) {
         trx_sys_mutex_enter();
@@ -400,13 +437,15 @@ static void trx_start_low(
 作为读事务的特例，只读事务也要遵守读事务的规则，事务 ID 应该为 0。
 只读事务操作系统表、用户普通表，只能读取表中数据，事务 ID 为 0（即不分配事务 ID）没问题。
 只读事务操作用户临时表，可以改变表中数据，而用户临时表也支持事务 ACID 特性中的 3 个（ACI），这就需要分配事务 ID 了。
-如果只读事务执行的第一条 SQL 语句就是插入记录到用户临时表的 insert，事务启动过程中会分配事务 ID。
+如果只读事务执行的第一条 SQL 语句就是插入记录到用户临时表的 insert，事务启动过程中会分配事务 ID
+
 
 如果事务执行的第一条 SQL 语句是 insert，这个事务就会以读写事务的身份启动。
 读写事务的启动过程，主要会做这几件事：
 - 为用户普通表分配回滚段，用于写 Undo 日志。
 - 分配事务 ID。
 - 把事务对象加入 trx_sys->rw_trx_list 链表。这个链表记录了所有读写事务。
+
 
 ```c++
 UT_LIST_ADD_FIRST(trx_sys->rw_trx_list, trx);
@@ -421,7 +460,7 @@ static inline void trx_add_to_rw_trx_list(trx_t *trx) {
 
 用户事务以什么身份启动，取决于执行的第一条 SQL 是什么。
 和用户事务不一样，InnoDB 启动内部事务都是为了改变表中数据，所以，内部事务都是读写事务。
-作为读写事务，所有内部事务都会加入到 trx_sys->rw_trx_list 链表中。
+作为读写事务，所有内部事务都会加入到 trx_sys->rw_trx_list 链表中
 
 在 update 或 delete 语句执行过程中，读事务就会变成读写事务。
 发生变化的具体时间点，又取决于这两类 SQL 语句更新或删除记录的第一个表是什么类型。
@@ -429,7 +468,8 @@ static inline void trx_add_to_rw_trx_list(trx_t *trx) {
 加意向排他锁时，如果以下三个条件成立，InnoDB 就会把这个事务变成读写事务：
 事务还没有为用户普通表分配回滚段。
 事务 ID 为 0，说明这个事务现在还是读事务。
-事务的只读标识 trx->read_only = false，说明这个事务可以变成读写事务。
+事务的只读标识 trx->read_only = false，说明这个事务可以变成读写事务
+
 
 读事务变成读写事务，InnoDB 主要做 3 件事：
 分配事务 ID。
@@ -442,7 +482,7 @@ static inline void trx_add_to_rw_trx_list(trx_t *trx) {
 事务已经启动了。
 事务 ID 为 0，说明这个事务现在还是读事务。
 事务的只读标识 trx->read_only = false，说明这个事务可以变成读写事务。
-有一点需要说明，改变用户临时表的数据触发读事务变成读写事务，不会分配用户临时表回滚段，需要等到为某个用户临时表第一次写 Undo 日志时才分配。
+有一点需要说明，改变用户临时表的数据触发读事务变成读写事务，不会分配用户临时表回滚段，需要等到为某个用户临时表第一次写 Undo 日志时才分配
 
 在 select 语句执行过程中，读事务不会变成读写事务；这条 SQL 语句执行完之后、事务提交之前，第一次执行 insert、update、delete 语句时，读事务才会变成读写事务。
 一个读事务变成读写事务的操作，只会发生一次，发生变化的具体时间点，取决于最先碰到哪种 SQL 语句。
@@ -450,28 +490,42 @@ static inline void trx_add_to_rw_trx_list(trx_t *trx) {
 执行插入操作之前，如果以下三个条件成立，InnoDB 就会把这个事务变成读写事务：
 事务已经启动了。
 事务 ID 为 0，说明这个事务现在还是读事务。
-事务的只读标识 trx->read_only = false，说明这个事务可以变成读写事务。
+事务的只读标识 trx->read_only = false，说明这个事务可以变成读写事务
 
 只读事务不能改变（插入、更新、删除）系统表、用户普通表的数据，但是能改变用户临时表的数据。
-改变用户临时表的数据，同样需要为事务分配事务 ID，为用户临时表分配回滚段。根据只读事务执行的第一条 SQL 语句不同，这两个操作发生的时间点也可以分为两类：
+改变用户临时表的数据，同样需要为事务分配事务 ID，为用户临时表分配回滚段。根据只读事务执行的第一条 SQL 语句不同，这两个操作发生的时间点也可以分为两类
 在 update 或 delete 语句执行过程中，server 层触发 InnoDB 更新或删除记录之后，InnoDB 执行更新或删除操作之前，如果以下三个条件成立，InnoDB 就为这个事务分配事务 ID、为用户临时表分配回滚段:
 事务已经启动了。
 事务 ID 为 0。
-事务是个只读事务（trx->read_only = true）。
+事务是个只读事务（trx->read_only = true）
 
-## 锁
 
-InnoDB 使用两阶段锁定协议。
-它在事务期间的任何时候都可以获取锁，但在 COMMIT 或 ROLLBACK 之前不会释放锁。
-它同时释放所有锁。
-前面描述的锁机制都是隐式的。
-InnoDB 根据隔离级别自动处理锁。
+
+
+
+```c++
+
+```
+
+```c++
+
+```
+
+
+
+## Locking
+
+InnoDB uses a two-phase locking protocol.
+It can acquire locks at any time during a transaction, but it does not release them until a COMMIT or ROLLBACK.
+It releases all the locks at the same time.
+The locking mechanisms described earlier are all implicit.
+InnoDB handles locks automatically, according to your isolation level.
 
 > TODO:
 >
 > [MySQL · 源码分析 · MySQL deadlock cause by lock inherit](http://mysql.taobao.org/monthly/2024/03/02/)
 
-### 锁类型
+### Locking Types
 
 ```sql
 mysql> select * from information_schema.innodb_locks;
@@ -479,386 +533,435 @@ mysql> select * from information_schema.innodb_lock_waits;
 mysql> select * from information_schema.innodb_trx;
 ```
 
-行级锁仅在服务器层实现。
+row-level locking only be implemented at server level.
 
-#### 共享锁和排他锁
+#### Shared and Exclusive Locks
 
-`InnoDB` 实现标准的**行级锁**，有两种类型的锁：共享（`S`）锁和排他（`X`）锁。
+`InnoDB` implements standard **row-level locking** where there are two types of locks, shared (`S`) locks and exclusive (`X`) locks.
 
-- 共享（`S`）锁允许持有锁的事务读取一行。
-- 排他（`X`）锁允许持有锁的事务更新或删除一行。
+- A shared (`S`) lock permits the transaction that holds the lock to read a row.
+- An exclusive (`X`) lock permits the transaction that holds the lock to update or delete a row.
 
-如果事务 `T1` 在行 `r` 上持有共享（`S`）锁，则来自不同事务 `T2` 对行 `r` 的锁请求处理如下：
+If transaction `T1` holds a shared (`S`) lock on row `r`, then requests from some distinct transaction `T2` for a lock on row `r` are handled as follows:
 
-- `T2` 对 `S` 锁的请求可以立即授予。因此，`T1` 和 `T2` 都在 `r` 上持有 `S` 锁。
-- `T2` 对 `X` 锁的请求不能立即授予。
+- A request by `T2` for an `S` lock can be granted immediately. As a result, both `T1` and `T2` hold an `S` lock on `r`.
+- A request by `T2` for an `X` lock cannot be granted immediately.
 
-如果事务 `T1` 在行 `r` 上持有排他（`X`）锁，则来自不同事务 `T2` 对 `r` 的任何类型锁请求都不能立即授予。
-相反，事务 `T2` 必须等待事务 `T1` 释放其在行 `r` 上的锁。
+If a transaction `T1` holds an exclusive (`X`) lock on row `r`, a request from some distinct transaction `T2` for a lock of either type on `r` cannot be granted immediately.
+Instead, transaction `T2` has to wait for transaction `T1` to release its lock on row `r`.
 
-#### 意向锁
+#### Intention Locks
 
-`InnoDB` 支持*多粒度锁定*，允许行锁和表锁共存。
-例如，`LOCK TABLES ... WRITE` 语句在指定表上获取排他锁（`X` 锁）。
-为使多粒度锁定可行，`InnoDB` 使用意向锁。
-意向锁是**表级**锁，指示事务稍后需要对表中某行获取哪种类型的锁（共享或排他）。
-有两种类型的意向锁：
+`InnoDB` supports *multiple granularity locking* which permits coexistence of row locks and table locks.
+For example, a statement such as `LOCK TABLES ... WRITE` takes an exclusive lock (an `X` lock) on the specified table.
+To make locking at multiple granularity levels practical, `InnoDB` uses intention locks.
+Intention locks are **table-level** locks that indicate which type of lock (shared or exclusive) a transaction requires later for a row in a table.
+There are two types of intention locks:
 
-- 意向共享锁（`IS`）表示事务打算在表中的各个行上设置*共享*锁。
-- 意向排他锁（`IX`）表示事务打算在表中的各个行上设置排他锁。
+- An intention shared lock (`IS`) indicates that a transaction intends to set a *shared* lock on individual rows in a table.
+- An intention exclusive lock (`IX`) indicates that a transaction intends to set an exclusive lock on individual rows in a table.
 
-例如，`SELECT ... FOR SHARE` 设置 `IS` 锁，`SELECT ... FOR UPDATE` 设置 `IX` 锁。
+For example, `SELECT ... FOR SHARE` sets an `IS` lock, and `SELECT ... FOR UPDATE` sets an `IX` lock.
 
-意向锁协议如下：
+The intention locking protocol is as follows:
 
-- 在事务可以获取表中某行的共享锁之前，它必须首先获取表的 `IS` 锁或更强的锁。
-- 在事务可以获取表中某行的排他锁之前，它必须首先获取表的 `IX` 锁。
+- Before a transaction can acquire a shared lock on a row in a table, it must first acquire an `IS` lock or stronger on the table.
+- Before a transaction can acquire an exclusive lock on a row in a table, it must first acquire an `IX` lock on the table.
 
-表级锁类型兼容性总结如下表：
+Table-level lock type compatibility is summarized in the following matrix.
+
 
 |      | `X`      | `IX`       | `S`        | `IS`       |
 | :--- | :------- | :--------- | :--------- | :--------- |
-| `X`  | 冲突 | 冲突   | 冲突   | 冲突   |
-| `IX` | 冲突 | 兼容 | 冲突   | 兼容 |
-| `S`  | 冲突 | 冲突   | 兼容 | 兼容 |
-| `IS` | 冲突 | 兼容 | 兼容 | 兼容 |
+| `X`  | Conflict | Conflict   | Conflict   | Conflict   |
+| `IX` | Conflict | Compatible | Conflict   | Compatible |
+| `S`  | Conflict | Conflict   | Compatible | Compatible |
+| `IS` | Conflict | Compatible | Compatible | Compatible |
 
-#### 记录锁
+#### Record Locks
 
-记录锁是索引记录上的锁。
-例如，`SELECT c1 FROM t WHERE c1 = 10 FOR UPDATE;` 阻止任何其他事务插入、更新或删除 `t.c1` 值为 `10` 的行。
+A record lock is a lock on an index record.
+For example, `SELECT c1 FROM t WHERE c1 = 10 FOR UPDATE;` prevents any other transaction from inserting, updating, or deleting rows where the value of `t.c1` is `10`.
 
-**记录锁始终锁定索引记录**，即使表没有定义索引。
-对于这种情况，`InnoDB` 创建一个隐藏的聚簇索引并使用该索引进行记录锁定。
+**Record locks always lock index records**, even if a table is defined with no indexes.
+For such cases, `InnoDB` creates a hidden clustered index and uses this index for record locking.
 
-#### 间隙锁
+#### Gap Locks
 
-**间隙锁是索引记录之间间隙上的锁，或者是第一个索引记录之前或最后一个索引记录之后间隙上的锁。**
-例如，`SELECT c1 FROM t WHERE c1 BETWEEN 10 and 20 FOR UPDATE;` 阻止其他事务向列 `t.c1` 插入值 `15`，
-无论该列中是否已存在任何此类值，因为范围内的所有现有值之间的间隙都被锁定。
+**A gap lock is a lock on a gap between index records, or a lock on the gap before the first or after the last index record.**
+For example, `SELECT c1 FROM t WHERE c1 BETWEEN 10 and 20 FOR UPDATE;` prevents other transactions from inserting a value of `15` into column `t.c1`,
+whether or not there was already any such value in the column, because the gaps between all existing values in the range are locked.
 
-**间隙可以跨越单个索引值、多个索引值，甚至可以是空的。**
+**A gap might span a single index value, multiple index values, or even be empty.**
 
-间隙锁是性能和并发性之间的权衡，在某些事务隔离级别中使用，而在其他级别中不使用。
+Gap locks are part of the tradeoff between performance and concurrency, and are used in some transaction isolation levels and not others.
 
-*对于使用唯一索引搜索唯一行的语句，不需要间隙锁。*
-（这不包括搜索条件仅包含多列唯一索引的部分列的情况；这种情况下确实会发生间隙锁。）
+*Gap locking is not needed for statements that lock rows using a unique index to search for a unique row.*
+(This does not include the case that the search condition includes only some columns of a multiple-column unique index; in that case, gap locking does occur.)
 
-如果 `id` 没有索引或具有非唯一索引，则该语句会锁定前面的间隙。
+If `id` is not indexed or has a nonunique index, the statement does lock the preceding gap.
 
-还值得注意的是，不同事务可以在同一间隙上持有冲突的锁。
-例如，事务 A 可以在一个间隙上持有共享间隙锁（gap S-lock），而事务 B 在同一间隙上持有排他间隙锁（gap X-lock）。
-允许冲突的间隙锁的原因是，如果从索引中清理了一条记录，不同事务在该记录上持有的间隙锁必须合并。
+It is also worth noting here that conflicting locks can be held on a gap by different transactions.
+For example, transaction A can hold a shared gap lock (gap S-lock) on a gap while transaction B holds an exclusive gap lock (gap X-lock) on the same gap.
+The reason conflicting gap locks are allowed is that if a record is purged from an index, the gap locks held on the record by different transactions must be merged.
 
-`InnoDB` 中的间隙锁是"纯粹抑制性的"，意味着其唯一目的是阻止其他事务向间隙插入数据。
-间隙锁可以共存。一个事务获取的间隙锁不会阻止另一个事务在同一间隙上获取间隙锁。
-**共享和排他间隙锁之间没有区别。它们彼此不冲突，并且执行相同的功能。**
+Gap locks in `InnoDB` are “purely inhibitive”, which means that their only purpose is to prevent other transactions from inserting to the gap.
+Gap locks can co-exist. A gap lock taken by one transaction does not prevent another transaction from taking a gap lock on the same gap.
+**There is no difference between shared and exclusive gap locks. They do not conflict with each other, and they perform the same function.**
 
-间隙锁可以显式禁用。如果将事务隔离级别更改为 `READ COMMITTED`，则会禁用间隙锁。
-在这种情况下，间隙锁在搜索和索引扫描中被禁用，仅用于外键约束检查和重复键检查。
+Gap locking can be disabled explicitly. This occurs if you change the transaction isolation level to `READ COMMITTED`.
+In this case, gap locking is disabled for searches and index scans and is used only for foreign-key constraint checking and duplicate-key checking.
 
-使用 `READ COMMITTED` 隔离级别还有其他效果。
-*不匹配行的记录锁在 MySQL 评估完 `WHERE` 条件后释放。对于 `UPDATE` 语句，`InnoDB` 执行"半一致性读"，
-将最新的已提交版本返回给 MySQL，以便 MySQL 判断该行是否匹配 `UPDATE` 的 `WHERE` 条件。*
+There are also other effects of using the `READ COMMITTED` isolation level.
+*Record locks for nonmatching rows are released after MySQL has evaluated the `WHERE` condition. For `UPDATE` statements, `InnoDB` does a “semi-consistent” read,
+such that it returns the latest committed version to MySQL so that MySQL can determine whether the row matches the `WHERE` condition of the `UPDATE`.*
 
-#### Next-Key 锁
+#### Next-Key Locks
 
-**Next-Key 锁是索引记录上的记录锁和索引记录之前间隙上的间隙锁的组合。**
+**A next-key lock is a combination of a record lock on the index record and a gap lock on the gap before the index record.**
 
-`InnoDB` 执行行级锁定的方式是，当它搜索或扫描表索引时，会在遇到的索引记录上设置共享或排他锁。
-因此，**行级锁实际上是索引记录锁**。
-*索引记录上的 next-key 锁也会影响该索引记录之前的"间隙"。*
-也就是说，next-key 锁是一个索引记录锁加上该索引记录之前间隙上的间隙锁。
-如果一个会话在索引中的记录 `R` 上持有共享或排他锁，则另一个会话不能按索引顺序在 `R` 之前的间隙中插入新的索引记录。
+`InnoDB` performs row-level locking in such a way that when it searches or scans a table index, it sets shared or exclusive locks on the index records it encounters.
+Thus, **the row-level locks are actually index-record locks**.
+*A next-key lock on an index record also affects the “gap” before that index record.*
+That is, a next-key lock is an index-record lock plus a gap lock on the gap preceding the index record.
+If one session has a shared or exclusive lock on record `R` in an index, another session cannot insert a new index record in the gap immediately before `R` in the index order.
 
-对于最后一个区间，next-key 锁锁定索引中最大值之上的间隙以及值高于索引中任何实际值的"supremum"伪记录。
-Supremum 不是真正的索引记录，因此实际上，此 next-key 锁仅锁定最大索引值之后的间隙。
+For the last interval, the next-key lock locks the gap above the largest value in the index and the “supremum” pseudo-record having a value higher than any value actually in the index.
+The supremum is not a real index record, so, in effect, this next-key lock locks only the gap following the largest index value.
 
 > [!NOTE]
 >
-> 默认情况下，`InnoDB` 在 `REPEATABLE READ` 事务隔离级别下运行。
-> 在这种情况下，**`InnoDB` 使用 next-key 锁进行搜索和索引扫描，这可以防止`幻读`**。
+> By default, `InnoDB` operates in `REPEATABLE READ` transaction isolation level.
+> In this case, **`InnoDB` uses next-key locks for searches and index scans, which prevents `phantom rows`**.
 
-#### 插入意向锁
+#### Insert Intention Locks
 
-**插入意向锁是 `INSERT` 操作在行插入之前设置的一种间隙锁**。
-此锁表示插入意图，使得多个插入到同一索引间隙的事务如果不在间隙内的同一位置插入，则无需相互等待。
-假设有索引记录值为 4 和 7。
-尝试分别插入值 5 和 6 的不同事务，在获取插入行的排他锁之前，各自使用插入意向锁锁定 4 和 7 之间的间隙，
-但不会互相阻塞，因为这些行不冲突。
+**An insert intention lock is a type of gap lock set by `INSERT` operations prior to row insertion**.
+This lock signals the intent to insert in such a way that multiple transactions inserting into the same index gap need not wait for each other if they are not inserting at the same position within the gap.
+Suppose that there are index records with values of 4 and 7.
+Separate transactions that attempt to insert values of 5 and 6, respectively, each lock the gap between 4 and 7 with insert intention locks prior to obtaining the exclusive lock on the inserted row,
+but do not block each other because the rows are nonconflicting.
 
-#### 自增锁
+#### AUTO-INC Locks
 
-`AUTO-INC` 锁是事务在向具有 `AUTO_INCREMENT` 列的表插入数据时获取的特殊表级锁。
-在最简单的情况下，如果一个事务正在向表中插入值，任何其他事务必须等待才能向该表执行自己的插入操作，
-以便第一个事务插入的行获得连续的主键值。
+An `AUTO-INC` lock is a special table-level lock taken by transactions inserting into tables with `AUTO_INCREMENT` columns.
+In the simplest case, if one transaction is inserting values into the table, any other transactions must wait to do their own inserts into that table,
+so that rows inserted by the first transaction receive consecutive primary key values.
 
-`innodb_autoinc_lock_mode` 变量控制用于自增锁定的算法。
-它允许你在可预测的自增值顺序和插入操作的最大并发性之间进行权衡。
+The `innodb_autoinc_lock_mode` variable controls the algorithm used for auto-increment locking.
+It allows you to choose how to trade off between predictable sequences of auto-increment values and maximum concurrency for insert operations.
+
 
 ```sql
 SHOW VARIABLES LIKE 'innodb_autoinc_lock_mode'; -- 2
 ```
 
-Update & Delete 加锁：
+We cannot create yet another interval as we already contain one. 
+This situation can happen. 
+Assume innodb_autoinc_lock_mode>=1 and 
+CREATE TABLE T(A INT AUTO_INCREMENT PRIMARY KEY) ENGINE=INNODB;
+
+INSERT INTO T VALUES (NULL),(NULL),(1025),(NULL);
+      
+Then InnoDB will reserve [1,4] (because of 4 rows) then [1026,1026]. 
+Only the first interval is important for statement-based binary logging as it tells the starting point. 
+So we ignore the second interval:
+
+
+Update & Delete 加锁
 
 ClusterIndex
-- 命中：都是 X 锁
-- 未命中：只有 RR 加 GAP 锁
+
+命中 都是X锁
+
+未命中 只有RR加GAP锁
 
 Second Unique Index
-- 命中：二级索引和聚簇索引都是 X 锁
-- 未命中：只有 RR 在二级索引加 GAP 锁
+命中 二级索引和聚簇索引都是X锁
+
+未命中 只有RR在二级索引加GAP锁
 
 二级非唯一索引
-- 命中：RC 对两个索引加 X 锁；RR 对二级索引加 X 和 GAP 锁，对 Cluster 索引加 X 锁
-- 未命中：只有 RR 在二级索引加 GAP 锁
 
-INSERT 语句加锁：
+命中 RC对两个索引加X锁 RR对二级索引加X和GAP锁 对Cluster索引加X锁
 
-- 为了防止幻读，如果记录之间加有 GAP 锁，此时不能 INSERT。
-- 如果 INSERT 的记录和已有记录造成唯一键冲突，此时不能 INSERT。
+未命中 只有RR在二级索引加GAP锁
 
-### 源代码
+
+INSERT语句加锁
+
+- 为了防止幻读，如果记录之间加有GAP锁，此时不能INSERT。
+- 如果INSERT的记录和已有记录造成唯一键冲突，此时不能INSERT。
+
+
+### Source Code
 
 ```cpp
-/** 锁模式和类型 */
+
+/** Lock modes and types */
 /** @{ */
 #define LOCK_MODE_MASK                          \
-  0xFUL /*!< 用于从锁的 type_mode 字段提取模式的掩码 */
-/** 锁类型 */
-#define LOCK_TABLE 16 /*!< 表锁 */
-#define LOCK_REC 32   /*!< 记录锁 */
+  0xFUL /*!< mask used to extract mode from the \
+        type_mode field in a lock */
+/** Lock types */
+#define LOCK_TABLE 16 /*!< table lock */
+#define LOCK_REC 32   /*!< record lock */
 #define LOCK_TYPE_MASK                                \
-  0xF0UL /*!< 用于从锁的 type_mode 字段提取锁类型的掩码 */
+  0xF0UL /*!< mask used to extract lock type from the \
+         type_mode field in a lock */
 #if LOCK_MODE_MASK & LOCK_TYPE_MASK
 #error "LOCK_MODE_MASK & LOCK_TYPE_MASK"
 #endif
 
 #define LOCK_WAIT                          \
-  256 /*!< 等待锁标志；设置时表示锁尚未授予，\
-      仅在等待队列中等待轮到自己 */
-/* 精确模式 */
+  256 /*!< Waiting lock flag; when set, it \
+      means that the lock has not yet been \
+      granted, it is just waiting for its  \
+      turn in the wait queue */
+/* Precise modes */
 #define LOCK_ORDINARY                     \
-  0 /*!< 此标志表示普通的 next-key 锁，\
-    相对于 LOCK_GAP 或 LOCK_REC_NOT_GAP */
+  0 /*!< this flag denotes an ordinary    \
+    next-key lock in contrast to LOCK_GAP \
+    or LOCK_REC_NOT_GAP */
 #define LOCK_GAP                                     \
-  512 /*!< 设置此位时，表示锁仅持有在记录之前的间隙上；\
-      例如，间隙上的 x-lock 不授予修改设置此位的记录的权限；\
-      当记录从索引记录链中移除时会创建此类锁 */
+  512 /*!< when this bit is set, it means that the   \
+      lock holds only on the gap before the record;  \
+      for instance, an x-lock on the gap does not    \
+      give permission to modify the record on which  \
+      the bit is set; locks of this type are created \
+      when records are removed from the index chain  \
+      of records */
 #define LOCK_REC_NOT_GAP                            \
-  1024 /*!< 此位表示锁仅在索引记录上，不阻塞向索引记录之前的间隙插入；\
-       用于使用唯一键检索记录时，也用于锁定普通 SELECT（非 UPDATE 或 DELETE \
-       的一部分）且用户已设置 READ COMMITTED 隔离级别时 */
+  1024 /*!< this bit means that the lock is only on \
+       the index record and does NOT block inserts  \
+       to the gap before the index record; this is  \
+       used in the case when we retrieve a record   \
+       with a unique key, and is also used in       \
+       locking plain SELECTs (not part of UPDATE    \
+       or DELETE) when the user has set the READ    \
+       COMMITTED isolation level */
 #define LOCK_INSERT_INTENTION                                             \
-  2048                       /*!< 当放置等待间隙类型记录锁请求以让索引记录的插入\
-                          等待其他事务在间隙上没有冲突锁时设置此位；\
-                          注意，当等待锁被授予或锁被继承到相邻记录时，\
-                          此标志保持设置 */
-#define LOCK_PREDICATE 8192  /*!< 谓词锁 */
-#define LOCK_PRDT_PAGE 16384 /*!< 页面锁 */
+  2048                       /*!< this bit is set when we place a waiting \
+                          gap type record lock request in order to let    \
+                          an insert of an index record to wait until      \
+                          there are no conflicting locks by other         \
+                          transactions on the gap; note that this flag    \
+                          remains set when the waiting lock is granted,   \
+                          or if the lock is inherited to a neighboring    \
+                          record */
+#define LOCK_PREDICATE 8192  /*!< Predicate lock */
+#define LOCK_PRDT_PAGE 16384 /*!< Page lock */
 ```
 
-### 死锁
+### Deadlocks
 
-死锁是指不同事务无法继续执行的情况，因为每个事务都持有另一个事务需要的锁。
-由于两个事务都在等待资源变为可用，因此两者都不会释放其持有的锁。
+A deadlock is a situation where different transactions are unable to proceed because each holds a lock that the other needs.
+Because both transactions are waiting for a resource to become available, neither ever release the locks it holds.
 
-#### 最小化和处理死锁
+#### Minimize and Handle Deadlocks
 
-可以通过以下技术应对死锁并降低其发生概率：
+You can cope with deadlocks and reduce the likelihood of their occurrence with the following techniques:
 
-- 随时执行 `SHOW ENGINE INNODB STATUS` 以确定最近一次死锁的原因。这有助于调整应用程序以避免死锁。
+- At any time, issue `SHOW ENGINE INNODB STATUS` to determine the cause of the most recent deadlock. That can help you to tune your application to avoid deadlocks.
 - `SHOW FULL PROCESSLIST`
-- 查看 information_schema 中的 `INNODB_TRX`、`INNODB_LOCKS`、`INNODB_LOCK_WAITS` 表。
-- 如果频繁的死锁警告引起关注，可通过启用 `innodb_print_all_deadlocks` 变量收集更广泛的调试信息。
-  每个死锁（不仅是最新的一个）的信息都会记录到 MySQL [错误日志]()中。
-  调试完成后禁用此选项。
-- 始终准备好从事务因死锁而失败时重新发起事务。死锁并不危险，只需重试即可。
-- 保持事务短小精悍，使其不易发生冲突。
-- 完成一组相关更改后立即提交事务，使其不易发生冲突。特别是，不要让交互式 **mysql** 会话长时间处于未提交事务状态。
-- 如果使用*锁定读*（`SELECT ... FOR UPDATE` 或 `SELECT ... FOR SHARE`），尝试使用较低的隔离级别，如 `READ COMMITTED`。
-- 在事务中修改多个表或同一表中不同的行集时，每次都按一致的顺序执行这些操作。
-  这样事务会形成定义良好的队列，不会发生死锁。
-  例如，将数据库操作组织到应用程序内的函数中，或调用存储过程，而不是在不同位置编写多个相似的 `INSERT`、`UPDATE` 和 `DELETE` 语句序列。
-- 为表添加精心选择的索引，使查询扫描更少的索引记录并设置更少的锁。使用 `EXPLAIN SELECT` 确定 MySQL 服务器认为哪些索引最适合你的查询。
-- 减少锁定。如果允许 `SELECT` 从旧快照返回数据，则不要添加 `FOR UPDATE` 或 `FOR SHARE` 子句。
-  使用 `READ COMMITTED` 隔离级别在这里很有用，因为同一事务内的每次一致性读都读取自己的新快照。
-- 如果其他方法都无效，使用表级锁序列化事务。对事务性表（如 `InnoDB` 表）正确使用 `LOCK TABLES` 的方法是使用 `SET autocommit = 0`（不是 `START TRANSACTION`）开始事务，然后执行 `LOCK TABLES`，
-  并在显式提交事务之前不调用 `UNLOCK TABLES`。例如，如果需要写入表 `t1` 并从表 `t2` 读取，可以这样做：
+- table `INNODB_TRX`, `INNODB_LOCKS`, `INNODB_LOCK_WAITS` in information_schema
+- If frequent deadlock warnings cause concern, collect more extensive debugging information by enabling the `innodb_print_all_deadlocks` variable.
+  Information about each deadlock, not just the latest one, is recorded in the MySQL [error log]().
+  Disable this option when you are finished debugging.
+- Always be prepared to re-issue a transaction if it fails due to deadlock. Deadlocks are not dangerous. Just try again.
+- Keep transactions small and short in duration to make them less prone to collision.
+- Commit transactions immediately after making a set of related changes to make them less prone to collision. In particular, do not leave an interactive **mysql** session open for a long time with an uncommitted transaction.
+- If you use *locking reads* (`SELECT ... FOR UPDATE` or `SELECT ... FOR SHARE`), try using a lower isolation level such as `READ COMMITTED`.
+- When modifying multiple tables within a transaction, or different sets of rows in the same table, do those operations in a consistent order each time.
+  Then transactions form well-defined queues and do not deadlock.
+  For example, organize database operations into functions within your application, or call stored routines, rather than coding multiple similar sequences of `INSERT`, `UPDATE`, and `DELETE` statements in different places.
+- Add well-chosen indexes to your tables so that your queries scan fewer index records and set fewer locks. Use `EXPLAIN SELECT` to determine which indexes the MySQL server regards as the most appropriate for your queries.
+- Use less locking. If you can afford to permit a `SELECT` to return data from an old snapshot, do not add a `FOR UPDATE` or `FOR SHARE` clause to it.
+  Using the `READ COMMITTED` isolation level is good here, because each consistent read within the same transaction reads from its own fresh snapshot.
+- If nothing else helps, serialize your transactions with table-level locks. The correct way to use `LOCK TABLES` with transactional tables,
+  such as `InnoDB` tables, is to begin a transaction with `SET autocommit = 0` (not `START TRANSACTION`) followed by `LOCK TABLES`,
+  and to not call `UNLOCK TABLES` until you commit the transaction explicitly. For example, if you need to write to table `t1` and read from table `t2`, you can do this:
 
-  表级锁阻止对表的并发更新，以降低系统响应能力的代价避免死锁。
-- 另一种序列化事务的方法是创建一个仅包含一行的辅助"信号量"表。
-  让每个事务在访问其他表之前先更新该行。这样，所有事务都以串行方式发生。
-  注意，在这种情况下 `InnoDB` 的即时死锁检测算法也有效，因为序列化锁是行级锁。
-  使用 MySQL 表级锁时，必须使用超时方法来解决死锁。
+  Table-level locks prevent concurrent updates to the table, avoiding deadlocks at the expense of less responsiveness for a busy system.
+- Another way to serialize transactions is to create an auxiliary “semaphore” table that contains just a single row.
+  Have each transaction update that row before accessing other tables. In that way, all transactions happen in a serial fashion.
+  Note that the `InnoDB` instant deadlock detection algorithm also works in this case, because the serializing lock is a row-level lock.
+  With MySQL table-level locks, the timeout method must be used to resolve deadlocks.
 
-#### 死锁检测
+#### Deadlock Detection
 
-一种自动检测**死锁**何时发生，并自动**回滚**涉及的某个**事务**（称为**牺牲者**）的机制。
-可以使用 `innodb_deadlock_detect` 配置选项禁用死锁检测。
+A mechanism that automatically detects when a **deadlock** occurs, and automatically **rolls back** one of the **transactions** involved (the **victim**).
+Deadlock detection can be disabled using the `innodb_deadlock_detect` configuration option.
 
-#### 示例
+#### examples
 
-参见 [mysql-deadlocks - github](https://github.com/aneasystone/mysql-deadlocks)
+see [mysql-deadlocks - github](https://github.com/aneasystone/mysql-deadlocks)
 
 ## MVCC
 
-在并发控制理论中，有两种处理冲突的方式：
+In Concurrency Control theory, there are two ways you can deal with conflicts:
 
-- 可以避免冲突，使用悲观锁定机制（例如读/写锁、两阶段锁定）。
-- 可以允许冲突发生，但需要使用乐观锁定机制检测冲突（例如逻辑时钟、MVCC）。
+- You can avoid them, by employing a pessimistic locking mechanism (e.g. Read/Write locks, Two-Phase Locking)
+- You can allow conflicts to occur, but you need to detect them using an optimistic locking mechanism (e.g. logical clock, MVCC)
 
-由于 MVCC（多版本并发控制）是一种非常流行的并发控制技术（不仅在关系数据库系统中），本文将解释其工作原理。
+Because MVCC (Multi-Version Concurrency Control) is such a prevalent Concurrency Control technique (not only in relational database systems, in this article, I’m going to explain how it works.
 
-当 [ACID 事务属性](/docs/CS/SE/Transaction.md?id=ACID) 首次被定义时，默认要求可串行化。为提供严格的可串行化事务结果，采用了 [2PL（两阶段锁定）](https://vladmihalcea.com/2pl-two-phase-locking/) 机制。使用 2PL 时，每次读取都需要获取共享锁，而写操作需要获取排他锁。
+When the [ACID transaction properties](/docs/CS/SE/Transaction.md?id=ACID) were first defined, Serializability was assumed. And to provide a Strict Serializable transaction outcome, the [2PL (Two-Phase Locking)](https://vladmihalcea.com/2pl-two-phase-locking/) mechanism was employed. When using 2PL, every read requires a shared lock acquisition, while a write operation requires taking an exclusive lock.
 
-- 共享锁阻塞写入者，但允许其他读取者获取相同的共享锁。
-- 排他锁同时阻塞竞争同一锁的读取者和写入者。
+- a shared lock blocks Writers, but it allows other Readers to acquire the same shared lock
+- an exclusive lock blocks both Readers and Writers concurring for the same lock
 
-然而，锁定会导致争用，而争用会影响可扩展性。[Amdahl 定律](https://en.wikipedia.org/wiki/Amdahl's_law) 或 [通用可扩展性定律](http://www.perfdynamics.com/Manifesto/USLscalability.html) 展示了争用如何影响响应时间加速。
+However, locking incurs contention, and contention affects scalability. The [Amdhal’s Law](https://en.wikipedia.org/wiki/Amdahl's_law) or the [Universal Scalability Law](http://www.perfdynamics.com/Manifesto/USLscalability.html) demonstrate how contention can affect response Time speedup.
 
-因此，数据库研究人员提出了一种不同的并发控制模型，试图将锁定降至最低，使得：
+For this reason, database researchers have come up with a different Concurrency Control model which tries to reduce locking to a bare minimum so that:
 
-- 读取者不阻塞写入者。
-- 写入者不阻塞读取者。
+- Readers don’t block Writers
+- Writers don’t block Readers
 
-唯一仍可能产生争用的场景是两个并发事务尝试修改同一条记录，因为一旦修改，行将一直锁定到修改该事务提交或回滚为止。
+The only use case that can still generate contention is when two concurrent transactions try to modify the same record since, once modified, a row is always locked until the transaction that modified this record either commits or rolls back.
 
-为实现上述读取者/写入者非锁定行为，并发控制机制必须操作同一记录的多个版本，因此这种机制称为多版本并发控制（MVCC）。
+In order to specify the aforementioned Reader/Writer non-locking behavior, the Concurrency Control mechanism must operate on multiple versions of the same record, hence this mechanism is called Multi-Version Concurrency Control (MVCC).
 
-虽然 2PL 相当标准化，但 MVCC 没有标准实现，每个数据库采用略有不同的方法。本文将使用 PostgreSQL，因为它的 MVCC 实现最容易可视化。
+While 2PL is pretty much standard, there’s no standard MVCC implementation, each database taking a slightly different approach. In this article, we are going to use PostgreSQL since its MVCC implementation is the easiest one to visualize.
 
-Oracle 和 MySQL 使用 [undo log](/docs/CS/DB/MySQL/undolog.md) 捕获未提交的更改，以便将行重建到其先前已提交的版本，而 PostgreSQL 将所有行版本存储在表数据结构中。
+While Oracle and MySQL use the [undo log](/docs/CS/DB/MySQL/undolog.md) to capture uncommitted changes so that rows can be reconstructed to their previously committed version, PostgreSQL stores all row versions in the table data structure.
 
-### InnoDB 多版本
+### InnoDB Multi-Versioning
 
-InnoDB 通过为每个启动的事务分配事务 ID 来实现 MVCC。
-该 ID 在事务首次读取任何数据时分配。
-当在该事务中修改记录时，会向 undo log 写入一条解释如何撤销该更改的 undo 记录，
-并将事务的回滚指针指向该 undo log 记录。
-这样事务就能在需要时找到回滚路径。
+InnoDB implements MVCC by assigning a transaction ID for each transaction that starts.
+That ID is assigned the first time the transaction reads any data.
+When a record is modified within that transaction, an undo record that explains how to revert that change is written to the undo log,
+and the rollback pointer of the transaction is pointed at that undo log record.
+This is how the transaction can find the way to roll back if needed.
 
-当不同会话读取聚簇键索引记录时，InnoDB 会比较记录的事务 ID 与该会话的 ReadView。
-如果记录在当前状态下不应可见（修改它的事务尚未提交），
-则跟踪并应用 undo log 记录，直到会话到达一个可见的事务 ID。
-此过程可能会一直循环到将整行删除的 undo 记录，向 ReadView 指示该行不存在。
+When a different session reads a cluster key index record, InnoDB compares the record’s transaction ID versus the read view of that session.
+If the record in its current state should not be visible (the transaction that altered it has not yet committed),
+the undo log record is followed and applied until the session reaches a transaction ID that is eligible to be visible.
+This process can loop all the way to an undo record that deletes this row entirely, signaling to the read view that this row does not exist.
 
-事务中的记录通过设置记录"info flags"中的"deleted"位来删除。
-这也在 undo log 中作为"删除删除标记"进行跟踪。
+Records in a transaction are deleted by setting a “deleted” bit in the “info flags” of the record.
+This is also tracked in the undo log as a “remove delete mark.”
 
-还值得注意的是，所有 undo log 写入也会记录到 redo log，因为 undo log 写入是服务器崩溃恢复过程的一部分，并且是事务性的。
-这些 redo 和 undo log 的大小也在高并发事务性能中起着重要作用。
+It is also worth noting that all undo log writes are also redo logged because the undo log writes are part of the server crash recovery process and are transactional.
+The size of these redo and undo logs also plays a large part in how transactions at high concurrency perform.
 
-所有这些额外记录的结果是，大多数读取查询从不获取锁。
-它们只以最快速度读取数据，确保只选择符合条件的行。
-缺点是存储引擎必须在每行中存储更多数据，检查行时做更多工作，并处理一些额外的维护操作。
+The result of all this extra record keeping is that most read queries never acquire locks.
+They simply read data as fast as they can, making sure to select only rows that meet the criteria.
+The drawbacks are that the storage engine has to store more data with each row, do more work when examining rows, and handle some additional housekeeping operations.
 
-MVCC 仅与 REPEATABLE READ 和 READ COMMITTED 隔离级别配合使用。
-READ UNCOMMITTED 不与 MVCC 兼容，因为查询不读取适合其事务版本的版本；它们始终读取最新版本。
-SERIALIZABLE 不与 MVCC 兼容，因为读取会锁定它们返回的每一行。
+MVCC works only with the REPEATABLE READ and READ COMMITTED isolation levels.
+READ UNCOMMITTED isn’t MVCC compatible because queries don’t read the row version that’s appropriate for their transaction version; they read the newest version, no matter what.
+SERIALIZABLE isn’t MVCC compatible because reads lock every row they return.
 
-`InnoDB` 是一个多版本存储引擎。
-它保留已修改行的旧版本信息，以支持并发和回滚等事务特性。
-**此信息存储在 undo 表空间中的 rollback segment 数据结构中。**
-`InnoDB` 使用 rollback segment 中的信息执行事务回滚所需的 undo 操作。
-它还使用该信息为一致性读构建行的早期版本。
+`InnoDB` is a multi-version storage engine.
+It keeps information about old versions of changed rows to support transactional features such as concurrency and rollback.
+**This information is stored in undo tablespaces in a data structure called a rollback segment.**
+`InnoDB` uses the information in the rollback segment to perform the undo operations needed in a transaction rollback.
+It also uses the information to build earlier versions of a row for a consistent read.
 
-在内部，`InnoDB` 为存储在数据库中的每一行添加三个字段：
+Internally, `InnoDB` adds three fields to each row stored in the database:
 
-- 6 字节的 `DB_TRX_ID` 字段标识最后插入或更新该行的事务的事务标识符。
-  此外，删除在内部被视为一种更新，其中行中的特殊位被设置为标记为已删除。
-- 7 字节的 `DB_ROLL_PTR` 字段称为回滚指针。回滚指针指向写入 rollback segment 的 **undo log** 记录。
-  如果该行已更新，则 undo log 记录包含重建该行更新前内容所需的信息。
-- 6 字节的 `DB_ROW_ID` 字段包含随着新行的插入而单调递增的行 ID。
-  如果 `InnoDB` 自动生成聚簇索引，则该索引包含行 ID 值。否则，`DB_ROW_ID` 列不会出现在任何索引中。
+- A 6-byte `DB_TRX_ID` field indicates the transaction identifier for the last transaction that inserted or updated the row.
+  Also, a deletion is treated internally as an update where a special bit in the row is set to mark it as deleted.
+- A 7-byte `DB_ROLL_PTR` field called the roll pointer. The roll pointer points to an **undo log** record written to the rollback segment.
+  If the row was updated, the undo log record contains the information necessary to rebuild the content of the row before it was updated.
+- A 6-byte `DB_ROW_ID` field contains a row ID that increases monotonically as new rows are inserted.
+  If `InnoDB` generates a clustered index automatically, the index contains row ID values. Otherwise, the `DB_ROW_ID` column does not appear in any index.
 
-Rollback segment 中的 undo log 分为 insert undo log 和 update undo log。
-Insert undo log 仅在事务回滚时需要，事务提交后即可丢弃。
-Update undo log 也用于一致性读，但只有在不再存在任何事务时才能丢弃，
-这些事务的 `InnoDB` 已分配快照，而该快照在一致性读中可能需要 update undo log 中的信息来构建数据库行的早期版本。
+Undo logs in the rollback segment are divided into insert and update undo logs.
+Insert undo logs are needed only in transaction rollback and can be discarded as soon as the transaction commits.
+Update undo logs are used also in consistent reads, but they can be discarded only after there is no transaction present for
+which `InnoDB` has assigned a snapshot that in a consistent read could require the information in the update undo log to build an earlier version of a database row.
 
-建议定期提交事务，包括仅发出一致性读的事务。否则，
-`InnoDB` 无法丢弃 update undo log 中的数据，rollback segment 可能变得过大，填满其所在的 undo 表空间。
+It is recommend that you commit transactions regularly, including transactions that issue only consistent reads. Otherwise,
+`InnoDB` cannot discard data from the update undo logs, and the rollback segment may grow too big, filling up the undo tablespace in which it resides.
 
-Rollback segment 中 undo log 记录的物理大小通常小于对应的已插入或已更新行。
-可以使用此信息计算 rollback segment 所需的空间。
+The physical size of an undo log record in the rollback segment is typically smaller than the corresponding inserted or updated row.
+You can use this information to calculate the space needed for your rollback segment.
 
-在 `InnoDB` 多版本方案中，当使用 SQL 语句删除行时，该行并非立即从数据库中物理删除。
-`InnoDB` 仅在丢弃为该删除写入的 update undo log 记录时，才物理删除相应的行及其索引记录。
-此删除操作称为清理（purge），速度相当快，通常与执行删除的 SQL 语句所需时间相同。
+In the `InnoDB` multi-versioning scheme, a row is not physically removed from the database immediately when you delete it with an SQL statement.
+`InnoDB` only physically removes the corresponding row and its index records when it discards the update undo log record written for the deletion.
+This removal operation is called a purge, and it is quite fast, usually taking the same order of time as the SQL statement that did the deletion.
 
-如果在表中以大致相同的速率以小批量插入和删除行，
-清理线程可能会开始滞后，表可能因"死"行而变得越来越大，导致一切受磁盘限制且非常缓慢。
-在这种情况下，应限制新行操作，并通过调整 `innodb_max_purge_lag` 系统变量为清理线程分配更多资源。
+If you insert and delete rows in smallish batches at about the same rate in the table,
+the purge thread can start to lag behind and the table can grow bigger and bigger because of all the “dead” rows, making everything disk-bound and very slow.
+In such cases, throttle new row operations, and allocate more resources to the purge thread by tuning the `innodb_max_purge_lag` system variable.
 
-### 多版本和辅助索引
+### Multi-Versioning and Secondary Indexes
 
-`InnoDB` 多版本并发控制（MVCC）对辅助索引的处理与聚簇索引不同。
-聚簇索引中的记录在原位更新，其隐藏的系统列指向 undo log 条目，从中可以重建记录的早期版本。
-与聚簇索引记录不同，辅助索引记录不包含隐藏的系统列，也不在原位更新。
+`InnoDB` multiversion concurrency control (MVCC) treats secondary indexes differently than clustered indexes.
+Records in a clustered index are updated in-place, and their hidden system columns point undo log entries from which earlier versions of records can be reconstructed.
+Unlike clustered index records, secondary index records do not contain hidden system columns nor are they updated in-place.
 
-当辅助索引列被更新时，旧辅助索引记录被标记为删除，插入新记录，标记为删除的记录最终被清理。
-**当辅助索引记录被标记为删除或辅助索引页被新事务更新时，`InnoDB` 在聚簇索引中查找数据库记录。**
-在聚簇索引中，检查记录的 `DB_TRX_ID`，如果记录在读取事务启动后已被修改，则从 undo log 中检索正确的记录版本。
+When a secondary index column is updated, old secondary index records are delete-marked, new records are inserted, and delete-marked records are eventually purged.
+**When a secondary index record is delete-marked or the secondary index page is updated by a newer transaction, `InnoDB` looks up the database record in the clustered index.**
+In the clustered index, the record's `DB_TRX_ID` is checked, and the correct version of the record is retrieved from the undo log if the record was modified after the reading transaction was initiated.
 
-- 如果辅助索引记录被标记为删除或辅助索引页被新事务更新，则不使用[覆盖索引](/docs/CS/DB/MySQL/Transaction.md?id=covering_index)技术。
-  `InnoDB` 不在索引结构中返回值，而是在聚簇索引中查找记录。
-- 如果启用了[索引条件下推（ICP）](/docs/CS/DB/MySQL/Optimization.md?id=Index_Condition_Pushdown_Optimization)优化，并且 `WHERE` 条件的部分内容可以仅使用索引字段进行评估，
-  MySQL 服务器仍会将这部分 `WHERE` 条件下推到存储引擎，使用索引进行评估。
-  - 如果未找到匹配记录，则避免聚簇索引查找。
-  - 如果找到匹配记录，即使是在标记为删除的记录中，`InnoDB` 也会在聚簇索引中查找记录。
+- If a secondary index record is marked for deletion or the secondary index page is updated by a newer transaction, the [covering index](/docs/CS/DB/MySQL/Transaction.md?id=covering_index) technique is not used.
+  Instead of returning values from the index structure, `InnoDB` looks up the record in the clustered index.
+- If the [index condition pushdown (ICP)](/docs/CS/DB/MySQL/Optimization.md?id=Index_Condition_Pushdown_Optimization) optimization is enabled, and parts of the `WHERE` condition can be evaluated using only fields from the index,
+  the MySQL server still pushes this part of the `WHERE` condition down to the storage engine where it is evaluated using the index.
+  - If no matching records are found, the clustered index lookup is avoided.
+  - If matching records are found, even among delete-marked records, `InnoDB` looks up the record in the clustered index.
 
-### 锁定读
+### Locking Reads
 
-对 `InnoDB` 表执行**锁定**操作的 `SELECT` 语句。可以是 `SELECT ... FOR UPDATE` 或 `SELECT ... LOCK IN SHARE MODE`。根据事务的**隔离级别**，可能产生**死锁**。与**非锁定读**相对。在**只读事务**中不允许用于全局表。
+A `SELECT` statement that also performs a **locking** operation on an `InnoDB` table. Either `SELECT ... FOR UPDATE` or `SELECT ... LOCK IN SHARE MODE`. It has the potential to produce a **deadlock**, depending on the **isolation level** of the transaction. The opposite of a **non-locking read**. Not allowed for global tables in a **read-only transaction**.
 
-`SELECT ... FOR SHARE` 在 MySQL 8.0.1 中取代了 `SELECT ... LOCK IN SHARE MODE`，但 `LOCK IN SHARE MODE` 仍保留以向后兼容。
+`SELECT ... FOR SHARE` replaces `SELECT ... LOCK IN SHARE MODE` in MySQL 8.0.1, but `LOCK IN SHARE MODE` remains available for backward compatibility.
 
-### 一致性读
+### Consistent Reads
 
-**一致性读**意味着 `InnoDB` 使用多版本技术向查询提供数据库在某个时间点的快照。查询可以看到在该时间点之前已提交事务所做的更改，而看不到之后或未提交事务所做的更改。此规则的例外是，查询可以看到同一事务中先前语句所做的更改。此异常会导致以下现象：
-如果更新了表中的某些行，`SELECT` 可以看到已更新行的最新版本，但也可能看到任何行的旧版本。如果其他会话同时更新同一张表，该异常意味着可能看到数据库中从未存在过的表状态。
+A `consistent read` means that `InnoDB` uses multi-versioning to present to a query a snapshot of the database at a point in time. The query sees the changes made by transactions that committed before that point in time, and no changes made by later or uncommitted transactions. The exception to this rule is that the query sees the changes made by earlier statements within the same transaction. This exception causes the following anomaly:
+If you update some rows in a table, a `SELECT` sees the latest version of the updated rows, but it might also see older versions of any rows. If other sessions simultaneously update the same table, the anomaly means that you might see the table in a state that never existed in the database.
 
-- 如果事务隔离级别是 `REPEATABLE READ`（默认级别），同一事务内的所有一致性读都读取该事务中首次此类读取建立的快照。可以通过提交当前事务然后发出新查询来获取更新的快照。
-- 对于 `READ COMMITTED` 隔离级别，事务内的每次一致性读都设置并读取自己的新快照。
+- If the transaction isolation level is `REPEATABLE READ` (the default level), all consistent reads within the same transaction read the snapshot established by the first such read in that transaction. You can get a fresher snapshot for your queries by committing the current transaction and after that issuing new queries.
+- With `READ COMMITTED` isolation level, each consistent read within a transaction sets and reads its own fresh snapshot.
 
-一致性读是 `InnoDB` 在 `READ COMMITTED` 和 `REPEATABLE READ` 隔离级别下处理 `SELECT` 语句的默认模式。一致性读不对其访问的表设置任何锁，因此其他会话可以在对表执行一致性读的同时自由修改这些表。
+Consistent read is the default mode in which `InnoDB` processes `SELECT` statements in `READ COMMITTED` and `REPEATABLE READ` isolation levels. A consistent read does not set any locks on the tables it accesses, and therefore other sessions are free to modify those tables at the same time a consistent read is being performed on the table.
 
-假设你在默认的 `REPEATABLE READ` 隔离级别下运行。当发出一致性读（即普通的 `SELECT` 语句）时，`InnoDB` 为事务提供一个时间点，查询根据该时间点查看数据库。**如果另一个事务删除了一行并在你的时间点分配后提交，你看不到该行已被删除。插入和更新同理。**
+Suppose that you are running in the default `REPEATABLE READ` isolation level. When you issue a consistent read (that is, an ordinary `SELECT` statement), `InnoDB` gives your transaction a timepoint according to which your query sees the database. **If another transaction deletes a row and commits after your timepoint was assigned, you do not see the row as having been deleted. Inserts and updates are treated similarly.**
 
-**数据库状态的快照适用于事务内的 `SELECT` 语句，不一定适用于 `DML` 语句**。
+**The snapshot of the database state applies to `SELECT` statements within a transaction, not necessarily to `DML` statements`**.
 
-如果插入或修改了一些行然后提交了该事务，另一个并发的 `REPEATABLE READ` 事务发出的 `DELETE` 或 `UPDATE` 语句**可能会影响这些刚提交的行，即使该会话无法查询到它们**。如果一个事务更新或删除了由不同事务提交的行，这些更改确实对当前事务可见。
+If you insert or modify some rows and then commit that transaction, a `DELETE`or `UPDATE`statement issued from another concurrent `REPEATABLE READ` transaction **could affect those just-committed rows, even though the session could not query them**. If a transaction does update or delete rows committed by a different transaction, those changes do become visible to the current transaction.
 
-RR 为何不能解决幻读？
 
-在其它事务中新增的 record，若本次事务中有其它事务更新，则会重新生成快照读，形成幻读。
 
-## 事务流程
+RR 为何不能解决 Photom Read?
 
-首次启动事务时：
-1. 分配事务 ID (TRX_ID)，可能写入 TRX_SYS 页面中的最高事务 ID 字段。如果字段发生变化，TRX_SYS 页面修改记录会写入 redo log。
-2. 基于分配的事务 ID 创建 ReadView。
+在其它事务中新增的record, 若本次事务中有其它事务更新, 则会重新生成快照读 形成幻读
 
-记录修改：
-每次 UPDATE 修改记录时：
 
-- 分配 undo log 空间。
-- 将记录中的先前值复制到 undo log。
-- undo log 修改记录写入 redo log。
-- 在缓冲池中修改页面；回滚指针指向 undo log 中写入的先前版本。
-- 页面修改记录写入 redo log。
-- 页面标记为"脏"（需要刷入磁盘）。
 
-事务提交：
-当事务提交时（隐式或显式）：
+## Transaction flow
 
-- Undo log 页面状态设置为"purge"（表示不再需要时可以清理）。
-- Undo log 修改记录写入 redo log。
-- Redo log 缓冲区刷入磁盘（取决于 innodb_flush_log_at_trx_commit 的设置）。
 
-系统列：
+
+When the transaction is first started:
+1. A transaction ID (TRX_ID) is assigned and may be written to the highest transaction ID field in the TRX_SYS page. A record of the TRX_SYS page modification is redo logged if the field
+2. A read view is created based on the assigned TRX_ID.
+
+
+Record modification
+Each time the UPDATE modifies a record:
+
+Undo log space is allocated.
+Previous values from record are copied to undo log.
+Record of undo log modifications are written to redo log.
+Page is modified in buffer pool; rollback pointer is pointed to previous version written in undo log.
+Record of page modifications are written to redo log.
+Page is marked as “dirty” (needs to be flushed to disk). Therefore the answer is yes.
+Transaction commit
+When the transaction is committed (implicitly or explicitly):
+
+Undo log page state is set to “purge” (meaning it can be cleaned up when it’s no longer needed).
+Record of undo log modifications are written to redo log.
+Redo log buffer is flushed to disk (depending on the setting of innodb_flush_log_at_trx_commit).
+
+
+
+System Columns
 
 1. DATA_ROW_ID
 2. DATA_TRX_ID
@@ -866,18 +969,20 @@ RR 为何不能解决幻读？
 
 ```c
 // dict0dict.cc
-/** 向表对象添加系统列。 */
+/** Adds system columns to a table object. */
 void dict_table_add_system_columns(dict_table_t *table, mem_heap_t *heap) {
   ut_ad(table);
   ut_ad(table->n_def == (table->n_cols - table->get_n_sys_cols()));
   ut_ad(table->magic_n == DICT_TABLE_MAGIC_N);
   ut_ad(!table->cached);
 
-  /* 注意：系统列必须按以下顺序添加
-  （以便可以通过 DATA_ROW_ID 等的数值来索引）
-  并作为表内存对象的最后一列。
-  聚簇索引不会始终物理包含所有系统列。
-  内部表不需要 DB_ROLL_PTR，因为这些表关闭了 UNDO 日志记录。 */
+  /* NOTE: the system columns MUST be added in the following order
+  (so that they can be indexed by the numerical value of DATA_ROW_ID,
+  etc.) and as the last columns of the table memory object.
+  The clustered index will not always physically contain all system
+  columns.
+  Intrinsic table don't need DB_ROLL_PTR as UNDO logging is turned off
+  for these tables. */
 
   dict_mem_table_add_col(table, heap, "DB_ROW_ID", DATA_SYS,
                          DATA_ROW_ID | DATA_NOT_NULL, DATA_ROW_ID_LEN, false);
@@ -890,8 +995,8 @@ void dict_table_add_system_columns(dict_table_t *table, mem_heap_t *heap) {
                            DATA_ROLL_PTR | DATA_NOT_NULL, DATA_ROLL_PTR_LEN,
                            false);
 
-    /* 此检查提醒，如果向程序添加了新的系统列，
-    应在此处处理 */
+    /* This check reminds that if a new system column is added to
+    the program, it should be dealt with here */
   }
 }
 ```
@@ -904,41 +1009,41 @@ trx_sys_t:
 
 ```c
 // trx0sys.h
-/** 事务系统中心内存数据结构。 */
+/** The transaction system central memory data structure. */
 struct trx_sys_t {  
 	TrxSysMutex mutex;
   
-  MVCC *mvcc; /** 多版本并发控制管理器 */
+  MVCC *mvcc; /** Multi version concurrency control manager */
  
-  /** 活跃 RW 事务的最小 trx->id（rw_trx_ids 中的最小值）。
-  受 trx_sys_t::mutex 保护，但可能在没有互斥锁的情况下读取。 */
+  /** Minimum trx->id of active RW transactions (minimum in the rw_trx_ids).
+  Protected by the trx_sys_t::mutex but might be read without the mutex. */
   std::atomic<trx_id_t> min_active_trx_id;
   
-  std::atomic<trx_id_t> rw_max_trx_id; /** 存在或曾经存在过的读写事务的最大 trx id。 */
+  std::atomic<trx_id_t> rw_max_trx_id; /** Max trx id of read-write transactions which exist or existed. */
   
- /** 用于 MVCC 快照的读写事务 ID 数组。ReadView 会
-  对这些事务的快照进行处理，其更改对 ReadView 不可见。
-  我们应在内存提交和释放锁之前从列表中移除事务，
-  以确保正确的移除顺序和一致性的快照。 */
+ /** Array of Read write transaction IDs for MVCC snapshot. A ReadView would
+  take a snapshot of these transactions whose changes are not visible to it.
+  We should remove transactions from the list before committing in memory and
+  releasing locks to ensure right order of removal and consistent snapshot. */
   trx_ids_t rw_trx_ids;
   
-  Rsegs rsegs; /** 指向 rollback segment 的指针向量。 */
+  Rsegs rsegs; /** Vector of pointers to rollback segments. */
   
-  Rsegs tmp_rsegs; /** 指向临时表空间中 rollback segment 的指针向量； */
+  Rsegs tmp_rsegs; /** Vector of pointers to rollback segments within the temp tablespace; */
   
-  /** 在 TRX_SYS 页面中发现的 undo 表空间 ID 列表。
-  这不能是 trx_sys_t 对象的一部分，因为它在该对象
-  创建之前就已初始化。 */
+  /** A list of undo tablespace IDs found in the TRX_SYS page.
+  This cannot be part of the trx_sys_t object because it is initialized before
+  that object is created. */
   extern Space_Ids *trx_sys_undo_spaces; 
   // ...
  };
 ```
 
-MVCC ReadView：
+MVCC read view
 
 ```c
 // read0read.h
-/** MVCC ReadView 管理器 */
+/** The MVCC read view manager */
 class MVCC {
  
   public:
@@ -958,82 +1063,92 @@ class MVCC {
  private:
   typedef UT_LIST_BASE_NODE_T(ReadView, m_view_list) view_list_t;
 
-  /** 可供重用的空闲视图。 */
+  /** Free views ready for reuse. */
   view_list_t m_free;
 
-  /** 活跃和已关闭的视图，关闭的视图的
-  创建者事务 ID 设置为 TRX_ID_MAX */
+  /** Active and closed views, the closed views will have the
+  creator trx id set to TRX_ID_MAX */
   view_list_t m_views;
 }
 ```
 
 ```c
 // read0types.h
-/** ReadView 列出那些一致性读不应看到其数据库修改的事务的事务 ID。 */
+/** Read view lists the trx ids of those transactions for which a consistent
+read should not see the modifications to the database. */
 class ReadView {
 
  private:
-  /** 读不应看到任何事务 ID >= 此值的事务。
-  换句话说，这是"高水位线"。 */
+  /** The read should not see any transaction with trx id >= this
+  value. In other words, this is the "high water mark". */
   trx_id_t m_low_limit_id;
 
-  /** 读应看到所有严格小于 (<) 此值的事务 ID。
-  换句话说，这是"低水位线"。 */
+  /** The read should see all trx ids which are strictly
+  smaller (<) than this value.  In other words, this is the
+  low water mark". */
   trx_id_t m_up_limit_id;
 
-  /** 创建事务的事务 ID，对空闲视图设置为 TRX_ID_MAX */
+  /** trx id of creating transaction, set to TRX_ID_MAX for free
+  views. */
   trx_id_t m_creator_trx_id;
 
-  /** 拍摄此快照时活跃的 RW 事务集合 */
+  /** Set of RW transactions that was active when this snapshot
+  was taken */
   ids_t m_ids;
 
-  /** 视图不需要查看事务编号严格小于 (<) 此值的 undo 日志：
-  如果其他视图不需要，可以在清理时移除 */
+  /** The view does not need to see the undo logs for transactions
+  whose transaction number is strictly smaller (<) than this value:
+  they can be removed in purge if not needed by other views */
   trx_id_t m_low_limit_no;
 
 #ifdef UNIV_DEBUG
-  /** 不超过此低限制的 ReadView 不需要访问
-  undo log 记录进行 MVCC。如果清理因 GTID 持久化而阻塞，
-  此值可能高于 m_low_limit_no。当前用于调试
-  变量 INNODB_PURGE_VIEW_TRX_ID_AGE。 */
+  /** The low limit number up to which read views don't need to access
+  undo log records for MVCC. This could be higher than m_low_limit_no
+  if purge is blocked for GTID persistence. Currently used for debug
+  variable INNODB_PURGE_VIEW_TRX_ID_AGE. */
   trx_id_t m_view_low_limit_no;
 #endif /* UNIV_DEBUG */
 
-  /** 已"关闭"的 AC-NL-RO 事务视图。 */
+  /** AC-NL-RO transaction view that has been "closed". */
   bool m_closed;
 }
 ```
 
 #### ReadView
 
-`mysqldump` 使用 `START TRANSACTION WITH CONSISTENT SNAPSHOT` 获取 ReadView。
+`mysqldump` use `START TRANSACTION WITH CONSISTENT SNAPSHOT` get a read view
 
 row_search_mvcc -> lock_clust_rec_cons_read_sees
 
-调用 changes_visible：
+call changes_visible
 
 ```c
-/** 检查记录在一致性读中是否可见。
- @return 如果可见返回 true，否则应该检索记录的早期版本 */
+
+/** Checks that a record is seen in a consistent read.
+ @return true if sees, or false if an earlier version of the record
+ should be retrieved */
 bool lock_clust_rec_cons_read_sees(
-    const rec_t *rec,     /*!< in: 应读取或跳过的用户记录 */
-    dict_index_t *index,  /*!< in: 聚簇索引 */
+    const rec_t *rec,     /*!< in: user record which should be read or
+                          passed over by a read cursor */
+    dict_index_t *index,  /*!< in: clustered index */
     const ulint *offsets, /*!< in: rec_get_offsets(rec, index) */
-    ReadView *view)       /*!< in: 一致性读视图 */
+    ReadView *view)       /*!< in: consistent read view */
 {
   ut_ad(index->is_clustered());
   ut_ad(page_rec_is_user_rec(rec));
   ut_ad(rec_offs_validate(rec, index, offsets));
 
-  /* 临时表不跨连接共享，不同连接的事务
-  不能同时操作同一临时表，因此临时表的读取
-  始终是一致性读。 */
+  /* Temp-tables are not shared across connections and multiple
+  transactions from different connections cannot simultaneously
+  operate on same temp-table and so read of temp-table is
+  always consistent read. */
   if (srv_read_only_mode || index->table->is_temporary()) {
     ut_ad(view == nullptr || index->table->is_temporary());
     return (true);
   }
 
-  /* 注意，我们在持有搜索系统 latch 时调用此函数。 */
+  /* NOTE that we call this function while holding the search
+  system latch. */
 
   trx_id_t trx_id = row_get_rec_trx_id(rec, index, offsets);
 
@@ -1044,9 +1159,12 @@ bool lock_clust_rec_cons_read_sees(
 row_search_mvcc -> trx_assign_read_view -> MVCC::view_open -> ReadView::prepare
 
 ```cpp
+
 /**
-打开一个 ReadView，其中在此时间点之前序列化的事务在视图中可见。
-@param id		创建者事务 ID */
+Opens a read view where exactly the transactions serialized before this
+point in time are seen in the view.
+@param id		Creator transaction id */
+
 void ReadView::prepare(trx_id_t id) {
   ut_ad(trx_sys_mutex_own());
 
@@ -1064,7 +1182,7 @@ void ReadView::prepare(trx_id_t id) {
     m_ids.clear();
   }
 
-  /* 第一个活跃事务具有最小 ID。 */
+  /* The first active transaction has the smallest id. */
   m_up_limit_id = !m_ids.empty() ? m_ids.front() : m_low_limit_id;
 
   ut_a(m_up_limit_id <= m_low_limit_id);
@@ -1074,13 +1192,14 @@ void ReadView::prepare(trx_id_t id) {
 }
 ```
 
-changes_visible:
+changes_visible
 
 ```c
-  /** 检查 id 的更改是否可见。
-  @param[in]	id	要检查的事务 ID
-  @param[in]	name	表名
-  @return 视图是否看到 id 的修改 */
+
+  /** Check whether the changes by id are visible.
+  @param[in]	id	transaction id to check against the view
+  @param[in]	name	table name
+  @return whether the view sees the modifications of id. */
   bool changes_visible(trx_id_t id, const table_name_t &name) const
       MY_ATTRIBUTE((warn_unused_result)) {
     ut_ad(id > 0);
@@ -1105,7 +1224,8 @@ changes_visible:
 ```
 
 ```c
-/** 当更新不引起字段大小变化时原位更新记录。 */
+
+/** Updates a record when the update causes no size changes in its fields.  */
 dberr_t btr_cur_update_in_place(ulint flags, btr_cur_t *cursor, ulint *offsets,
                                 const upd_t *update, ulint cmpl_info,
                                 que_thr_t *thr, trx_id_t trx_id, mtr_t *mtr) {
@@ -1113,18 +1233,18 @@ dberr_t btr_cur_update_in_place(ulint flags, btr_cur_t *cursor, ulint *offsets,
   rec = btr_cur_get_rec(cursor);
   
   // ...
-  /* 插入缓冲区树永远不应原位更新。 */
+  /* The insert buffer tree should never be updated in place. */
   // ...
   
-  /* 检查压缩页面上是否有足够的空间。 */
+  /* Check that enough space is available on the compressed page. */
  // ...
 
-  /* 执行锁检查和 undo 日志记录 */
+  /* Do lock checking and undo logging */
   err = btr_cur_upd_lock_and_undo(flags, cursor, offsets, update, cmpl_info,
                                   thr, mtr, &roll_ptr);
 
   if (!(flags & BTR_KEEP_SYS_FLAG) && !index->table->is_intrinsic()) {
-    // 更新 trx_id, roll_ptr
+    // update trx_id, roll_ptr
     row_upd_rec_sys_fields(rec, nullptr, index, offsets, thr_get_trx(thr),
                            roll_ptr);
   }
@@ -1134,7 +1254,7 @@ dberr_t btr_cur_update_in_place(ulint flags, btr_cur_t *cursor, ulint *offsets,
 
  // ...
   
-  // 写 redo log
+  // write redo log
   btr_cur_update_in_place_log(flags, rec, index, update, trx_id, roll_ptr, mtr);
 
   return (err);
@@ -1143,25 +1263,28 @@ dberr_t btr_cur_update_in_place(ulint flags, btr_cur_t *cursor, ulint *offsets,
 
 #### prepare
 
-1. 设置 insert_undo 和 update_undo
+1. set insert_undo & update_undo
 2. redo log
 
 ```c
 // trx0trx.cc
-/** 为给定回滚段准备事务。
- @return lsn_t: 为调度回滚段提交分配的 LSN */
+/** Prepares a transaction for given rollback segment.
+ @return lsn_t: lsn assigned for commit of scheduled rollback segment */
 static lsn_t trx_prepare_low(
+
     // ...
   
-    /* 将 undo log 段状态从 TRX_UNDO_ACTIVE 改为
-    TRX_UNDO_PREPARED：这些对文件数据结构的修改
-    在 LSN 的序列化点上定义了文件层面的事务为已准备。 */
+    /* Change the undo log segment states from TRX_UNDO_ACTIVE to
+    TRX_UNDO_PREPARED: these modifications to the file data
+    structure define the transaction as prepared in the file-based
+    world, at the serialization point of lsn. */
 
     rseg->latch();
 
     if (undo_ptr->insert_undo != nullptr) {
-      /* 无需在此获取 trx->undo_mutex，
-      因为此事务的 prepare 只允许单个 OS 线程执行。 */
+      /* It is not necessary to obtain trx->undo_mutex here
+      because only a single OS thread is allowed to do the
+      transaction prepare for this transaction. */
       trx_undo_set_state_at_prepare(trx, undo_ptr->insert_undo, false, &mtr);
     }
 
@@ -1174,8 +1297,10 @@ static lsn_t trx_prepare_low(
 
     rseg->unlatch();
   
+  
     /*--------------*/
-    /* 此 mtr 提交使事务在文件层面变为已准备。 */
+    /* This mtr commit makes the transaction prepared in
+    file-based world. */
     mtr_commit(&mtr);
     /*--------------*/
 
@@ -1189,35 +1314,48 @@ static lsn_t trx_prepare_low(
 
 #### commit
 
-如果事务涉及 insert，则 [截断 undo logs](/docs/CS/DB/MySQL/undolog.md?id=Truncate)。
+If transaction involves insert then [truncate undo logs](/docs/CS/DB/MySQL/undolog.md?id=Truncate).
 
-如果事务涉及 update，则将 rollback segments 添加到清理队列。
+If transaction involves update then add rollback segments
+to purge queue.
 
-仅在 MySQL 二进制日志记录开启且克隆在最终阶段确保了提交顺序时，更新 trx sys header 中的最新 MySQL binlog 名称和偏移量信息。
+Update the latest MySQL binlog name and offset information
+in trx sys header only if MySQL binary logging is on and clone
+is has ensured commit order at final stage.
 
 ```c
-/** 提交事务和 mini-transaction。
-@param[in,out] trx 事务
-@param[in,out] mtr Mini-transaction（将被提交），如果 trx 未做任何修改则为 null */
+
+/** Commits a transaction and a mini-transaction.
+@param[in,out] trx Transaction
+@param[in,out] mtr Mini-transaction (will be committed), or null if trx made no
+modifications */
 void trx_commit_low(trx_t *trx, mtr_t *mtr) {
     assert_trx_nonlocking_or_in_list(trx)
+  
+  
   
   bool serialised;
 
     serialised = trx_write_serialisation_history(trx, mtr);
+  
+
 }
 
-/** 为事务分配其历史序列化编号，并将
- update UNDO log 记录写入分配的回滚段。
- @return 如果写入序列化日志则返回 true */
+
+
+
+/** Assign the transaction its history serialisation number and write the
+ update UNDO log record to the assigned rollback segment.
+ @return true if a serialisation log was written */
 static bool trx_write_serialisation_history(
-    trx_t *trx, /*!< in/out: 事务 */
+    trx_t *trx, /*!< in/out: transaction */
     mtr_t *mtr) /*!< in/out: mini-transaction */
 {
   
   // ...
   
-  /* 如果事务涉及 insert 则截断 undo logs */
+  
+  /* If transaction involves insert then truncate undo logs. */
   if (trx->rsegs.m_redo.insert_undo != nullptr) {
     trx_undo_set_state_at_finish(trx->rsegs.m_redo.insert_undo, mtr);
   }
@@ -1228,25 +1366,36 @@ static bool trx_write_serialisation_history(
 
   bool serialised = false;
   
-  /* 如果事务涉及 update，则将 rollback segments 添加到清理队列 */
+  
+  /* If transaction involves update then add rollback segments
+  to purge queue. */
 
-   /* 将设置 trx->no 并将 rseg 添加到清理队列 */
+   /* Will set trx->no and will add rseg to purge queue. */
     serialised = trx_serialisation_number_get(trx, redo_rseg_undo_ptr,
                                               temp_rseg_undo_ptr)
- 
-  /* 仅在 MySQL 二进制日志记录开启且克隆在最终阶段确保了提交顺序时，
-  更新 trx sys header 中的最新 MySQL binlog 名称和偏移量信息 */
+  
+
+  /* Update the latest MySQL binlog name and offset information
+  in trx sys header only if MySQL binary logging is on and clone
+  is has ensured commit order at final stage. */
   if (Clone_handler::need_commit_order()) {
     trx_sys_update_mysql_binlog_offset(trx, mtr);
   }
+
 }
 
-/** 设置事务序列化编号。
- @return 如果事务编号已添加到 serialisation_list 则返回 true */
+
+
+/** Set the transaction serialisation number.
+ @return true if the transaction number was added to the serialisation_list. */
 static bool trx_serialisation_number_get(
-    trx_t *trx,                         /*!< in/out: 事务 */
-    trx_undo_ptr_t *redo_rseg_undo_ptr, /*!< in/out: 在引用的 undo rseg 中设置事务序列化编号 */
-    trx_undo_ptr_t *temp_rseg_undo_ptr) /*!< in/out: 在引用的 undo rseg 中设置事务序列化编号 */
+    trx_t *trx,                         /*!< in/out: transaction */
+    trx_undo_ptr_t *redo_rseg_undo_ptr, /*!< in/out: Set trx
+                                        serialisation number in
+                                        referred undo rseg. */
+    trx_undo_ptr_t *temp_rseg_undo_ptr) /*!< in/out: Set trx
+                                        serialisation number in
+                                        referred undo rseg. */
 {
   bool added_trx_no;
   trx_rseg_t *redo_rseg = nullptr;
@@ -1254,9 +1403,10 @@ static bool trx_serialisation_number_get(
 
   // ...
 
-  /* 如果回滚段非空，则新的 trx_t::no 不能小于
-  回滚段中已存在的任何 trx_t::no。用户线程仅在
-  回滚段为空时产生事件。 */
+  /* If the rollack segment is not empty then the
+  new trx_t::no can't be less than any trx_t::no
+  already in the rollback segment. User threads only
+  produce events when a rollback segment is empty. */
   if ((redo_rseg != nullptr && redo_rseg->last_page_no == FIL_NULL) ||
       (temp_rseg != nullptr && temp_rseg->last_page_no == FIL_NULL)) {
     TrxUndoRsegs elem;
@@ -1281,40 +1431,44 @@ static bool trx_serialisation_number_get(
 
   return (added_trx_no);
 }
+
 ```
 
-## 分布式事务
+## Distributed Transaction
 
-XA：隔离级别必须为 `SERIALIZABLE`
+XA : isolation level must be `SERIALIZABLE`
 
 - RM
 - TM
 
-## 调优
 
-大事务示例：
-- 一次性地操作大量数据，比如用 delete 语句删除太多数据、update 语句更新太多数据。
-- 大表 DDL。ALTER TABLE table_name ADD COLUMN scene INT DEFAULT 0 语句，会对所有现存的行记录进行扫描，并为每一行记录添加这个新列，并设置该列的默认值。
+## Tuning
 
-大事务的危害：
-- 大事务执行期间，一直持有锁，其他事务无法访问这些资源，可能会导致阻塞、延迟甚至数据库死锁，影响系统可用性。
-- 大事务可能需要很长时间才能完成并释放数据库连接等系统资源，可能导致服务器负载升高，极端情况下可能导致 MySQL 服务器宕机。
-- 大事务执行较慢，从库根据 binlog 重放时间可能较久，主从延迟。
-- 大事务涉及多个步骤，难以管理，一个步骤出错都会影响事务的最终结果；并且大事务回滚时间长，可能导致系统负载增加、可用性降低、数据不一致等问题。
+大事务示例
+- 一次性地操作大量数据，比如用delete语句删除太多数据、update语句更新太多数据
+- 大表DDL。ALTER TABLE table_name ADD COLUMN scene INT DEFAULT 0 语句，会对所有现存的行记录进行扫描，并为每一行记录添加这个新列，并设置该列的默认值
 
-如何优化大事务：
-- 如果业务允许，拆分为多个小事务。
-- 优化事务中的慢查询。
-- 避免在事务中进行 RPC 远程调用。
-- 将 Spring 声明式事务改为编程式事务，控制事务的粒度。
-- 避免大批量操作，控制好锁的粒度与持有时间。
+大事务的危害
+- 大事务执行期间，一直持有锁，其他事务无法访问这些资源，可能会导致阻塞、延迟甚至数据库死锁，影响系统可用性
+- 大事务，可能需要很长时间才能完成并释放数据库连接等系统资源，可能导致服务器负载升高，极端情况下可能导致MySQL服务器宕机
+- 大事务执行较慢，从库根据binlog重放时间可能较久，主从延迟
+- 大事务涉及多个步骤，难以管理，一个步骤出错都会影响事务的最终结果；并且大事务回滚时间长，可能导致系统负载增加、可用性降低、数据不一致等问题
 
-## 链接
+如何优化大事务
+- 如果业务允许，拆分为多个小事务
+- 优化事务中的慢查询
+- 避免在事务中 进行RPC远程调用
+- 将Spring声明式事务改为编程式事务，控制事务的粒度
+- 避免大批量操作，控制好锁的粒度与持有时间
 
-- [InnoDB 存储引擎](/docs/CS/DB/MySQL/InnoDB.md)
-- [事务](/docs/CS/SE/Transaction.md)
 
-## 参考
+
+## Links
+
+- [InnoDB Storage Engine](/docs/CS/DB/MySQL/InnoDB.md)
+- [Transaction](/docs/CS/SE/Transaction.md)
+
+## References
 
 1. [How does a relational database work](https://vladmihalcea.com/how-does-a-relational-database-work/)
 2. [Detailed explanation of MySQL mvcc mechanism](https://developpaper.com/detailed-explanation-of-mysql-mvcc-mechanism/)

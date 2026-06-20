@@ -1,6 +1,10 @@
 ## Introduction
 
-Retrofit 是一个适用于 Android 和 Java 的类型安全 HTTP 客户端。
+Retrofit is a type-safe HTTP client for Android and Java.
+
+
+
+
 
 ## Links
 

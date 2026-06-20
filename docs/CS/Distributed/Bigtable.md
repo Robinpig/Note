@@ -1,182 +1,196 @@
 ## Introduction
 
-Bigtable 是一个用于管理结构化数据的分布式存储系统，设计用于扩展到非常大的规模：跨数千台廉价服务器的 PB 级数据。
-Bigtable 实现了几个目标：广泛的适用性、可扩展性、高性能和高可用性。
+Bigtable is a distributed storage system for managing structured data that is designed to scale to a very large size: petabytes of data across thousands of commodity servers.
+Bigtable has achieved several goals: wide applicability, scalability, high performance, and high availability.
 
-在许多方面，Bigtable 类似于数据库：它与数据库共享许多实现策略。
-并行数据库和主存数据库已经实现了可扩展性和高性能，但 Bigtable 提供了与这些系统不同的接口。
-Bigtable 不支持完整的关系数据模型；相反，它为客户端提供了一个简单的数据模型，支持对数据布局和格式的动态控制，
-并允许客户端推理底层存储中数据表示的位置属性。
-数据使用行和列名称进行索引，这些名称可以是任意字符串。
-Bigtable 还将数据视为未解释的字符串，尽管客户端经常将各种形式的结构化和半结构化数据序列化到这些字符串中。
-客户端可以通过仔细选择模式来控制其数据的位置。
-最后，Bigtable 模式参数允许客户端动态控制是从内存还是从磁盘提供数据。
+In many ways, Bigtable resembles a database: it shares many implementation strategies with databases.
+Parallel databases and main-memory databases have achieved scalability and high performance, but Bigtable provides a different interface than such systems. 
+Bigtable does not support a full relational data model; instead, it provides clients with a simple data model that supports dynamic control over data layout and format, 
+and allows clients to reason about the locality properties of the data represented in the underlying storage.
+Data is indexed using row and column names that can be arbitrary strings. 
+Bigtable also treats data as uninterpreted strings, although clients often serialize various forms of structured and semi-structured data into these strings. 
+Clients can control the locality of their data through careful choices in their schemas. 
+Finally, Bigtable schema parameters let clients dynamically control whether to serve data out of memory or from disk.
 
 ## Data Model
 
-Bigtable 是一个稀疏的、分布式的、持久的、多维有序映射。
-该映射由行键、列键和时间戳索引；映射中的每个值都是一个未解释的字节数组。
+A Bigtable is a sparse, distributed, persistent multidimensional sorted map. 
+The map is indexed by a row key, column key, and a timestamp; each value in the map is an uninterpreted array of bytes.
 
 ```
 (row:string, column:string, time:int64) → string
 ```
 
+
+
 ## Architecture
 
-Bigtable 构建在 Google 的其他几个基础设施组件之上。
-Bigtable 使用分布式 [Google File System](/docs/CS/Distributed/GFS.md) 来存储日志和数据文件。
-Bigtable 集群通常运行在一个共享机器池中，该池运行各种其他分布式应用程序，Bigtable 进程通常与其他应用程序的进程共享同一台机器。
-Bigtable 依赖集群管理系统来调度作业、管理共享机器上的资源、处理机器故障以及监控机器状态。
+Bigtable is built on several other pieces of Google infrastructure. 
+Bigtable uses the distributed [Google File System](/docs/CS/Distributed/GFS.md) to store log and data files.
+A Bigtable cluster typically operates in a shared pool of machines that run a wide variety of other distributed applications, and Bigtable processes often share the same machines with processes from other applications. 
+Bigtable depends on a cluster management system for scheduling jobs, managing resources on shared machines, dealing with machine failures, and monitoring machine status.
 
-Google 的 SSTable 文件格式在内部用于存储 Bigtable 数据。
-SSTable 提供了一个持久的、有序的不可变键值映射，其中键和值都是任意的字节字符串。
-提供了查找与指定键关联的值以及在指定键范围内迭代所有键值对的操作。
-在内部，每个 SSTable 包含一系列块（通常每个块大小为 64KB，但可配置）。
-块索引（存储在 SSTable 末尾）用于定位块；索引在 SSTable 打开时加载到内存中。
-查找可以通过一次磁盘寻道完成：我们首先通过在内存索引中执行二分查找来找到合适的块，然后从磁盘读取相应的块。
-可选地，SSTable 可以完全映射到内存中，这允许我们在不接触磁盘的情况下执行查找和扫描。
 
-Bigtable 依赖一个称为 [Chubby](/docs/CS/Distributed/Chubby.md) 的高可用持久分布式锁服务。
-Bigtable 将 Chubby 用于多种任务：确保任何时候最多只有一个活跃的 master；存储 Bigtable 数据的引导位置；
-发现 tablet server 并最终确定 tablet server 死亡；存储 Bigtable 模式信息（每个表的列族信息）；以及存储访问控制列表。
-**如果 Chubby 长时间不可用，Bigtable 将变得不可用。**
+The Google SSTable file format is used internally to store Bigtable data. 
+An SSTable provides a persistent, ordered immutable map from keys to values, where both keys and values are arbitrary byte strings. 
+Operations are provided to look up the value associated with a specified key, and to iterate over all key/value pairs in a specified key range. 
+Internally, each SSTable contains a sequence of blocks (typically each block is 64KB in size, but this is configurable). 
+A block index (stored at the end of the SSTable) is used to locate blocks; the index is loaded into memory when the SSTable is opened. 
+A lookup can be performed with a single disk seek: we first find the appropriate block by performing a binary search in the in-memory index, and then reading the appropriate block from disk. 
+Optionally, an SSTable can be completely mapped into memory, which allows us to perform lookups and scans without touching disk.
 
-**Bigtable 实现有三个主要组件：一个链接到每个客户端的库、一个 master 服务器和许多 tablet server。**
-Tablet server 可以动态添加（或移除）到集群以适应工作负载的变化。
 
-Master 负责将 tablet 分配给 tablet server，检测 tablet server 的添加和过期，平衡 tablet server 的负载，以及 GFS 中文件的垃圾回收。
-此外，它还处理模式更改，如表和列族的创建。
+Bigtable relies on a highly-available and persistent distributed lock service called [Chubby](/docs/CS/Distributed/Chubby.md).
+Bigtable uses Chubby for a variety of tasks: to ensure that there is at most one active master at any time; to store the bootstrap location of Bigtable data; 
+to discover tablet servers and finalize tablet server deaths; to store Bigtable schema information (the column family information for each table); and to store access control lists. 
+**If Chubby becomes unavailable for an extended period of time, Bigtable becomes unavailable.**
 
-每个 tablet server 管理一组 tablet（通常每个 tablet server 有十到一千个 tablet）。
-Tablet server 处理其已加载的 tablet 的读写请求，并拆分已经变得过大的 tablet。
 
-与许多单 master 分布式存储系统一样，客户端数据不经过 master：客户端直接与 tablet server 通信进行读写。
-由于 Bigtable 客户端不依赖 master 获取 tablet 位置信息，大多数客户端从不与 master 通信。
-因此，master 在实践中负载较轻。
+**The Bigtable implementation has three major components: a library that is linked into every client, one master server, and many tablet servers.** 
+Tablet servers can be dynamically added (or removed) from a cluster to accomodate changes in workloads.
 
-Bigtable 集群存储多个表。每个表由一组 tablet 组成，每个 tablet 包含与一个行范围相关的所有数据。最初，每个表只包含一个 tablet。
-随着表的增长，它会自动拆分为多个 tablet，默认情况下每个 tablet 大约 100-200 MB。
+The master is responsible for assigning tablets to tablet servers, detecting the addition and expiration of tablet servers, balancing tablet-server load, and garbage collection of files in GFS. 
+In addition, it handles schema changes such as table and column family creations.
+
+Each tablet server manages a set of tablets (typically we have somewhere between ten to a thousand tablets per tablet server). 
+The tablet server handles read and write requests to the tablets that it has loaded, and also splits tablets that have grown too large.
+
+As with many single-master distributed storage systems, client data does not move through the master: clients communicate directly with tablet servers for reads and writes. 
+Because Bigtable clients do not rely on the master for tablet location information, most clients never communicate with the master. 
+As a result, the master is lightly loaded in practice.
+
+A Bigtable cluster stores a number of tables. Each table consists of a set of tablets, and each tablet contains all data associated with a row range. Initially, each table consists of just one tablet. 
+As a table grows, it is automatically split into multiple tablets, each approximately 100-200 MB in size by default.
 
 ### Tablet
 
-我们使用类似于 B+ 树的三层层次结构来存储 tablet 位置信息。
+We use a three-level hierarchy analogous to that of a B+ tree to store tablet location information.
 
 ![Tablet location hierarchy](./img/Bigtable-Tablet.png)
 
-第一层是存储在 Chubby 中的一个文件，包含 root tablet 的位置。
-Root tablet 包含特殊 METADATA 表中所有 tablet 的位置。
-每个 METADATA tablet 包含一组用户 tablet 的位置。
-Root tablet 只是 METADATA 表中的第一个 tablet，但被特殊处理——它永远不会被拆分——以确保 tablet 位置层次结构不超过三层。
+The first level is a file stored in Chubby that contains the location of the root tablet. 
+The root tablet contains the location of all tablets in a special METADATA table.
+Each METADATA tablet contains the location of a set of user tablets. 
+The root tablet is just the first tablet in the METADATA table, but is treated specially—it is never split—to ensure that the tablet location hierarchy has no more than three levels.
 
-METADATA 表在行键下存储 tablet 的位置，行键是对 tablet 的表标识符及其结束行的编码。
-每个 METADATA 行在内存中存储约 1KB 的数据。
-在 128 MB METADATA tablet 的适度限制下，我们的三层位置方案足以寻址 $2^34$ 个 tablet（或 128 MB tablet 下的 $2^61$ 字节）。
+The METADATA table stores the location of a tablet under a row key that is an encoding of the tablet’s table identifier and its end row. 
+Each METADATA row stores approximately 1KB of data in memory. 
+With a modest limit of 128 MB METADATA tablets, our three-level location scheme is sufficient to address $2^34$ tablets (or $2^61$ bytes in 128 MB tablets).
 
-客户端库缓存 tablet 位置。
-如果客户端不知道 tablet 的位置，或者发现缓存的位置信息不正确，它会递归地在 tablet 位置层次结构中向上查找。
-如果客户端的缓存为空，位置算法需要三次网络往返，包括一次从 Chubby 读取。
-如果客户端的缓存已过期，位置算法可能需要多达六次往返，因为过期的缓存条目只有在未命中时才会被发现（假设 METADATA tablet 不会频繁移动）。
-虽然 tablet 位置存储在内存中，因此不需要 GFS 访问，但我们通过在常见情况下让客户端库预取 tablet 位置来进一步降低成本：
-它在读取 METADATA 表时读取多个 tablet 的元数据。
+The client library caches tablet locations. 
+If the client does not know the location of a tablet, or if it discovers that cached location information is incorrect, then it recursively moves up the tablet location hierarchy.
+If the client’s cache is empty, the location algorithm requires three network round-trips, including one read from Chubby. 
+If the client’s cache is stale, the location algorithm could take up to six round-trips, because stale cache entries are only discovered upon misses (assuming that METADATA tablets do not move very frequently).
+Although tablet locations are stored in memory, so no GFS accesses are required, we further reduce this cost in the common case by having the client library prefetch tablet locations: 
+it reads the metadata for more than one tablet whenever it reads the METADATA table.
 
-我们还在 METADATA 表中存储辅助信息，包括与每个 tablet 相关的所有事件的日志（例如，服务器何时开始为其服务）。
-此信息有助于调试和性能分析。
+We also store secondary information in the METADATA table, including a log of all events pertaining to each tablet (such as when a server begins serving it). 
+This information is helpful for debugging and performance analysis.
 
 #### Tablet Assignment
 
-每个 tablet 一次分配给一个 tablet server。
-Master 维护活跃 tablet server 的集合，以及 tablet 到 tablet server 的当前分配，包括哪些 tablet 未分配。
-当出现未分配的 tablet，并且有足够空间的 tablet server 可用时，master 通过向 tablet server 发送 tablet 加载请求来分配该 tablet。
+Each tablet is assigned to one tablet server at a time. 
+The master keeps track of the set of live tablet servers, and the current assignment of tablets to tablet servers, including which tablets are unassigned. 
+When a tablet is unassigned, and a tablet server with sufficient room for the tablet is available, the master assigns the tablet by sending a tablet load request to the tablet server.
 
-Bigtable 使用 Chubby 来跟踪 tablet server。
-当 tablet server 启动时，它在特定 Chubby 目录中创建并获取一个唯一命名文件上的排他锁。
-Master 监控此目录（服务器目录）以发现 tablet server。
-如果 tablet server 失去其排他锁（例如，由于网络分区导致服务器丢失其 Chubby 会话），它将停止服务其 tablet。
-（Chubby 提供了一种高效机制，允许 tablet server 在不产生网络流量的情况下检查它是否仍然持有锁。）
-只要文件仍然存在，tablet server 将尝试重新获取其文件上的排他锁。
-如果文件不再存在，则 tablet server 将永远无法再服务，因此它会自行终止。
-每当 tablet server 终止时（例如，因为集群管理系统正在从集群中移除 tablet server 的机器），它会尝试释放其锁，以便 master 更快地重新分配其 tablet。
+Bigtable uses Chubby to keep track of tablet servers.
+When a tablet server starts, it creates, and acquires an exclusive lock on, a uniquely-named file in a specific Chubby directory. 
+The master monitors this directory(the servers directory) to discover tablet servers. 
+A tablet server stops serving its tablets if it loses its exclusive lock: e.g., due to a network partition that caused the server to lose its Chubby session. 
+(Chubby provides an efficient mechanism that allows a tablet server to check whether it still holds its lock without incurring network traffic.) 
+A tablet server will attempt to reacquire an exclusive lock on its file as long as the file still exists. 
+If the file no longer exists, then the tablet server will never be able to serve again, so it kills itself. 
+Whenever a tablet server terminates (e.g., because the cluster management system is removing the tablet server’s machine from the cluster), it attempts to release its lock so that the master will reassign its tablets more quickly.
 
-现有 tablet 的集合仅在以下情况下发生变化：创建或删除表、两个现有 tablet 合并为一个更大的 tablet、或现有 tablet 拆分为两个更小的 tablet。
-Master 能够跟踪这些更改，因为除了最后一种情况外，所有更改都由它发起。
+
+
+
+The set of existing tablets only changes when a table is created or deleted, two existing tablets are merged to form one larger tablet, or an existing tablet is split into two smaller tablets. 
+The master is able to keep track of these changes because it initiates all but the last.
+
 
 #### Tablet Serving
 
-Tablet 的持久状态存储在 GFS 中。
-更新提交到存储重做记录的提交日志。
-在这些更新中，最近提交的存储在内存中的排序缓冲区（称为 memtable）中；较旧的更新存储在一系列 SSTable 中。
-为了恢复 tablet，tablet server 从 METADATA 表读取其元数据。
-此元数据包含组成 tablet 的 SSTable 列表和一组重做点，这些是指向可能包含该 tablet 数据的任何提交日志的指针。
-服务器将 SSTable 的索引读入内存，并通过应用自重做点以来已提交的所有更新来重建 memtable。
+The persistent state of a tablet is stored in GFS. 
+Updates are committed to a commit log that stores redo records. 
+Of these updates, the recently committed ones are stored in memory in a sorted buffer called a memtable; the older updates are stored in a sequence of SSTables. 
+To recover a tablet, a tablet server reads its metadata from the METADATA table. 
+This metadata contains the list of SSTables that comprise a tablet and a set of a redo points, which are pointers into any commit logs that may contain data for the tablet. 
+The server reads the indices of the SSTables into memory and reconstructs the memtable by applying all of the updates that have committed since the redo points.
 
-如果 master 将 tablet 从一个 tablet server 移动到另一个，源 tablet server 首先对该 tablet 执行 minor compaction。
-此压缩通过减少 tablet server 提交日志中未压缩状态的数量来缩短恢复时间。
-完成此压缩后，tablet server 停止服务该 tablet。
-在实际卸载 tablet 之前，tablet server 执行另一次（通常非常快速的）minor compaction，以消除在第一次 minor compaction 期间到达的 tablet server 日志中任何剩余的未压缩状态。
-在第二次 minor compaction 完成后，可以在另一个 tablet server 上加载该 tablet，而无需恢复任何日志条目。
+
+If the master moves a tablet from one tablet server to another, the source tablet server first does a minor compaction on that tablet. 
+This compaction reduces recovery time by reducing the amount of uncompacted state in the tablet server’s commit log. 
+After finishing this compaction, the tablet server stops serving the tablet. 
+Before it actually unloads the tablet, the tablet server does another (usually very fast) minor compaction to eliminate any remaining uncompacted state in the tablet server’s log that arrived while the first minor compaction was being performed. 
+After this second minor compaction is complete, the tablet can be loaded on another tablet server without requiring any recovery of log entries.
+
 
 ## Compaction
 
-随着写入操作的执行，memtable 的大小会增加。
-当 memtable 大小达到阈值时，memtable 被冻结，创建新的 memtable，并将冻结的 memtable 转换为 SSTable 写入 GFS。
-此 *minor compaction* 过程有两个目标：减少 tablet server 的内存使用，以及减少此服务器宕机时从提交日志读取的数据量。
-压缩期间传入的读写操作可以继续。
+As write operations execute, the size of the memtable increases. 
+When the memtable size reaches a threshold, the memtable is frozen, a new memtable is created, and the frozen memtable is converted to an SSTable and written to GFS. 
+This *minor compaction* process has two goals:it shrinks the memory usage of the tablet server, and it reduces the amount of data that has to be read from the commit log during recovery if this server dies. 
+Incoming read and write operations can continue while compactions occur.
 
-每次 minor compaction 都会创建一个新的 SSTable。
-如果这种行为不加检查地继续下去，读取操作可能需要合并来自任意数量 SSTable 的更新。
-相反，我们通过定期在后台执行 *merging compaction* 来限制此类文件的数量。
-Merging compaction 读取几个 SSTable 和 memtable 的内容，并写出一个新的 SSTable。
-压缩完成后，输入的 SSTable 和 memtable 可以被丢弃。
+Every minor compaction creates a new SSTable. 
+If this behavior continued unchecked, read operations might need to merge updates from an arbitrary number of SSTables. 
+Instead, we bound the number of such files by periodically executing a *merging compaction* in the background. 
+A merging compaction reads the contents of a few SSTables and the memtable, and writes out a new SSTable. 
+The input SSTables and memtable can be discarded as soon as the compaction has finished.
 
-将所有 SSTable 重写为恰好一个 SSTable 的 merging compaction 称为 *major compaction*。
-非 major compaction 产生的 SSTable 可能包含特殊的删除条目，以抑制仍然活跃的旧 SSTable 中的已删除数据。
-而 major compaction 产生的 SSTable 不包含删除信息或已删除的数据。Bigtable 循环遍历其所有 tablet，并定期对它们应用 major compaction。
-这些 major compaction 使 Bigtable 能够回收已删除数据占用的资源，并确保已删除数据及时从系统中消失，这对于存储敏感数据的服务非常重要。
+A merging compaction that rewrites all SSTables into exactly one SSTable is called a *major compaction*. 
+SSTables produced by non-major compactions can contain special deletion entries that suppress deleted data in older SSTables that are still live. 
+A major compaction, on the other hand, produces an SSTable that contains no deletion information or deleted data. Bigtable cycles through all of its tablets and regularly applies major compactions to them. 
+These major compactions allow Bigtable to reclaim resources used by deleted data, and also allow it to ensure that deleted data disappears from the system in a timely fashion, which is important for services that store sensitive data.
 
 ## Refinements
 
 ### Caching
 
-为了提高读取性能，tablet server 使用两级缓存。
-Scan Cache 是较高级别的缓存，缓存 SSTable 接口返回给 tablet server 代码的键值对。
-Block Cache 是较低级别的缓存，缓存从 GFS 读取的 SSTable 块。
-Scan Cache 对于倾向于重复读取相同数据的应用程序最有用。
-Block Cache 对于倾向于读取接近最近读取数据的数据的应用程序很有用（例如，顺序读取，或热行内同一 locality group 中不同列的随机读取）。
+To improve read performance, tablet servers use two levels of caching. 
+The Scan Cache is a higher-level cache that caches the key-value pairs returned by the SSTable interface to the tablet server code. 
+The Block Cache is a lower-level cache that caches SSTables blocks that were read from GFS. 
+The Scan Cache is most useful for applications that tend to read the same data repeatedly. 
+The Block Cache is useful for applications that tend to read data that is close to the data they recently read (e.g., sequential reads, or random reads of different columns in the same locality group within a hot row).
+
 
 ### Bloom filters
 
-Bloom filter 允许我们询问一个 SSTable 是否可能包含指定行/列对的任何数据。
-对于某些应用程序，少量用于存储 Bloom filter 的 tablet server 内存可以大幅减少读取操作所需的磁盘寻道次数。
-我们使用 Bloom filter 还意味着大多数对不存在的行或列的查找不需要访问磁盘。
+A Bloom filter allows us to ask whether an SSTable might contain any data for a specified row/column pair. 
+For certain applications, a small amount of tablet server memory used for storing Bloom filters drastically reduces the number of disk seeks required for read operations. 
+Our use of Bloom filters also implies that most lookups for non-existent rows or columns do not need to touch disk.
 
 ### Commit log
 
-如果我们为每个 tablet 将提交日志保存在单独的日志文件中，GFS 中将同时写入大量文件。
-根据每个 GFS 服务器上底层文件系统实现的不同，这些写入可能会导致大量磁盘寻道，以写入不同的物理日志文件。
-此外，每个 tablet 拥有单独的日志文件也会降低 group commit 优化的效果，因为 group 往往会更小。
-为了解决这些问题，我们将变更追加到每个 tablet server 的单个提交日志中，将不同 tablet 的变更混合在同一个物理日志文件中。
+If we kept the commit log for each tablet in a separate log file, a very large number of files would be written concurrently in GFS. 
+Depending on the underlying file system implementation on each GFS server, these writes could cause a large number of disk seeks to write to the different physical log files. 
+In addition, having separate log files per tablet also reduces the effectiveness of the group commit optimization, since groups would tend to be smaller. 
+To fix these issues, we append mutations to a single commit log per tablet server, co-mingling mutations for different tablets in the same physical log file.
 
-使用一个日志在正常操作期间带来了显著的性能优势，但使恢复复杂化。
-当 tablet server 宕机时，它服务的 tablet 将被移动到大量其他 tablet server：每个服务器通常加载原始服务器的一小部分 tablet。
-为了恢复某个 tablet 的状态，新的 tablet server 需要从原始 tablet server 写入的提交日志中重新应用该 tablet 的变更。
-然而，这些 tablet 的变更混合在同一个物理日志文件中。
-一种方法是让每个新的 tablet server 读取完整的提交日志文件，并仅应用其需要恢复的 tablet 所需的条目。
-然而，在这种方案下，如果 100 台机器每台都从宕机的 tablet server 分配到一个 tablet，那么日志文件将被读取 100 次（每台服务器一次）。
+Using one log provides significant performance benefits during normal operation, but it complicates recovery. 
+When a tablet server dies, the tablets that it served will be moved to a large number of other tablet servers: each server typically loads a small number of the original server’s tablets. 
+To recover the state for a tablet, the new tablet server needs to reapply the mutations for that tablet from the commit log written by the original tablet server. 
+However, the mutations for these tablets were co-mingled in the same physical log file. 
+One approach would be for each new tablet server to read this full commit log file and apply just the entries needed for the tablets it needs to recover. 
+However, under such a scheme, if 100 machines were each assigned a single tablet from a failed tablet server, then the log file would be read 100 times (once by each server).
 
-我们通过首先按键 `<table, row name, log sequence number>` 的顺序对提交日志条目进行排序来避免重复的日志读取。
-在排序后的输出中，特定 tablet 的所有变更是连续的，因此可以通过一次磁盘寻道后跟顺序读取来高效读取。
-为了并行化排序，我们将日志文件划分为 64 MB 的段，并在不同的 tablet server 上并行排序每个段。
-此排序过程由 master 协调，并在 tablet server 指示需要从某个提交日志文件恢复变更时启动。
+We avoid duplicating log reads by first sorting the commit log entries in order of the keys `<table, row name, log sequence number>`. 
+In the sorted output, all mutations for a particular tablet are contiguous and can therefore be read efficiently with one disk seek followed by a sequential read. 
+To parallelize the sorting, we partition the log file into 64 MB segments, and sort each segment in parallel on different tablet servers. 
+This sorting process is coordinated by the master and is initiated when a tablet server indicates that it needs to recover mutations from some commit log file.
 
-将提交日志写入 GFS 有时会因多种原因导致性能问题（例如，参与写入的 GFS 服务器机器崩溃，或者到达特定三台 GFS 服务器所经过的网络路径遇到网络拥塞或负载过高）。
-为了保护变更免受 GFS 延迟尖峰的影响，每个 tablet server 实际上有两个日志写入线程，每个写入自己的日志文件；一次只有一个线程处于活跃使用状态。
-如果活跃日志文件的写入性能不佳，日志文件写入会切换到另一个线程，提交日志队列中的变更由新活跃的日志写入线程写入。
-日志条目包含序列号，以允许恢复过程消除由此日志切换过程导致的重复条目。
+Writing commit logs to GFS sometimes causes performance hiccupsfor a variety of reasons (e.g., a GFS server machine involved in the write crashes, or the network paths traversed to reach the particular set of three GFS servers is suffering network congestion, or is heavily loaded). 
+To protect mutations from GFS latency spikes, each tablet server actually has two log writing threads, each writing to its own log file; only one of these two threads is actively in use at a time. 
+If writes to the active log file are performing poorly, the log file writing is switched to the other thread, and mutations that are in the commit log queue are written by the newly active log writing thread. 
+Log entries contain sequence numbers to allow the recovery process to elide duplicated entries resulting from this log switching process.
+
 
 ## Links
 
 - [Google](/docs/CS/Distributed/Google.md)
 - [GFS](/docs/CS/Distributed/GFS.md)
+
 
 ## References
 

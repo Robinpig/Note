@@ -1,30 +1,30 @@
-## 简介
+## Introduction
 
-TCP 连接涉及客户端和服务器端的设置，以使两端能够通信。
+TCP connection involves a client and server side setup for the two ends to communicate.
 
-- 客户端需要进行两个系统调用 socket() 和 connect() 来连接到服务器。
-- 服务器需要创建监听套接字，以便客户端可以生成连接请求。
-  为此，服务器需要进行四个系统调用：socket()、bind()、listen() 和 accept()。
+- The client has to make two systemcalls, socket() and connect(), to connect to the server.
+- The server has to make arrangements to create a listening socket so that the client can generate request to connect to this socket.
+  To make such an arrangement, the server has to make four systemcalls: socket(), bind(), listen(), and accept().
 
-我们将研究每个系统调用在内核中的实现。
+We will study the implementation of each systemcall in the kernel.
 
-我们看到了进行 socket 系统调用时发生的情况。
-我们向 socket() 传递协议族和类型，它会执行涉及初始化 BSD 和协议套接字操作的所有初始设置。这包括初始化 socket 和 sock 结构。
+We saw what happens when we make a socket systemcall.
+We pass protocol family and type to socket(), and this does all the initial setup that involves initializing BSD and protocol socket operations. This involves initializing socket and sock structures.
 
-现在我们需要在套接字上完成其余工作，该套接字已通过客户端和服务器的 socket() 调用以不同方式初始化。
+Now we need to do the rest of the work on the socket, which is already initialized by a call to socket() for client and server in different ways.
 
-现在我们将研究客户端和服务器端与 TCP 连接设置相关的内核数据结构的细节。
+Now we will study the details of the kernel data structures associated with TCP connection setup on both client and server side.
 
-调用 bind() 时服务器进行端口分配的细节。
-这也详细说明了当服务器生成特定端口分配请求时如何解决冲突。
-我们将研究 SYN 队列设计，其中监听套接字的开放连接请求首先驻留，直到连接完全建立（三次握手完成）。
+The details of port allocation by the server when we call bind().
+This also details how the conflicts are resolved when the server generates a request for specific port allocation.
+We will study the SYN queue design where the open connection request for the listening socket fi rst sits until the connection is completely established (three-way handshake is over).
 
-我们还将看到当 TCP 连接建立时，开放连接请求如何从 SYN 队列移动到 accept 队列。
+We will also see how the open connection request is moved from the SYN queue to the accept queue when the TCP connection is established.
 
-最后，我们将看到如何通过调用 accept() 从 accept 队列中取出已建立的连接。
-类似地，我们将看到客户端如何向服务器生成连接请求（向监听服务器发送 SYN 段）。
+Finally, we will see how the established connections are taken off the accept queue by making accept() call.
+Similarly, we will see how the client generates a connection request to the server (sends SYN segment to the listening server).
 
-我们不会涉及 IP 和链路层细节，但肯定会涵盖内核中与客户端-服务器连接设置相关的所有内容。
+We will not cover the IP and link layer details but will surely cover everything that is associated with the client – server connection setup in the kernel.
 
 ```dot
 digraph {

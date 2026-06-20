@@ -1,24 +1,25 @@
 ## Introduction
 
-容器化是将软件代码与运行该代码所需的操作系统库和依赖项打包在一起，创建一个轻量级可执行文件——称为容器——可在任何基础设施上一致运行。
-容器比虚拟机更便携、更高效，已成为现代云原生应用的事实标准计算单元。
+Containerization is the packaging of software code with just the operating system (OS) libraries and dependencies required to run the code to create a single lightweight executable—called a container—that runs consistently on any infrastructure.
+More portable and resource-efficient than virtual machines (VMs), containers have become the de facto compute units of modern cloud-native applications.
 
-容器化使开发人员能够更快、更安全地创建和部署应用程序。
-传统方法中，代码在特定的计算环境中开发，当转移到新位置时，通常会导致 bug 和错误。
-例如，当开发人员将代码从桌面计算机转移到 VM，或从 Linux 转移到 Windows 操作系统时。
-容器化通过将应用程序代码与相关的配置文件、库和运行所需的依赖项捆绑在一起来消除此问题。
-这个单一的软件包或"容器"与主机操作系统分离，因此独立且可移植——能够在任何平台或云上运行，无任何问题。
+Containerization allows developers to create and deploy applications faster and more securely. 
+With traditional methods, code is developed in a specific computing environment which, when transferred to a new location, often results in bugs and errors. 
+For example, when a developer transfers code from a desktop computer to a VM or from a Linux to a Windows operating system. 
+Containerization eliminates this problem by bundling the application code together with the related configuration files, libraries, and dependencies required for it to run. 
+This single package of software or “container” is abstracted away from the host operating system, and hence, 
+it stands alone and becomes portable—able to run across any platform or cloud, free of issues.
 
-容器与虚拟机：
+Container via Virtual Machine:
 
-- **容器**<br/>
-  容器是应用层的抽象，将代码和依赖项打包在一起。
-  多个容器可以在同一台机器上运行，并与其他容器共享 OS 内核，每个容器作为用户空间中的隔离进程运行。
-  容器比 VM 占用更少的空间（容器镜像通常为几十 MB），可以处理更多应用程序，需要更少的 VM 和操作系统。
-- **虚拟机**<br/>
-  虚拟机是物理硬件的抽象，将一台服务器变成多台服务器。
-  虚拟机监控程序允许在同一台机器上运行多个 VM。
-  每个 VM 包含完整的操作系统副本、应用程序、必要的二进制文件和库——占用几十 GB。VM 启动也可能较慢。
+- **Container**<br/>
+  Containers are an abstraction at the app layer that packages code and dependencies together. 
+  Multiple containers can run on the same machine and share the OS kernel with other containers, each running as isolated processes in user space. 
+  Containers take up less space than VMs (container images are typically tens of MBs in size), can handle more applications and require fewer VMs and Operating systems.
+- **Virtual Machine**<br/>
+  Virtual machines (VMs) are an abstraction of physical hardware turning one server into many servers.
+  The hypervisor allows multiple VMs to run on a single machine.
+  Each VM includes a full copy of an operating system, the application, necessary binaries and libraries – taking up tens of GBs. VMs can also be slow to boot.
 
 根据容器运行时的资源隔离和虚拟化方式，可以将目前的主流虚拟化 + 容器技术分为这么几类：
 

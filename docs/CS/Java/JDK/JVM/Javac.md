@@ -1,7 +1,8 @@
 ## Introduction
 
-javac 在编译期间进行的优化很少，
-生成的字节码在使用反汇编工具（如标准 `javap`）查看时，仍然相当可读且可识别为 Java 代码。
+Very few optimizations are done during compilation by javac, 
+and the resulting bytecode is still quite readable and recognizable as Java code when viewed in a disassembly tool, 
+such as the standard `javap`.
 
 
 

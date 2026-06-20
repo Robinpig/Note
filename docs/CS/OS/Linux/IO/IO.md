@@ -4,11 +4,11 @@ unbuffered I/O
 
 open read write lseek close
 
-在 UNIX 系统上，大多数文件 I/O 只需使用五个函数即可完成：open、read、write、lseek 和 close。
-这些函数通常被称为**无缓冲 I/O**。
+Most file I/O on a UNIX system can be performed using only five functions: open, read, write, lseek, and close.
+These functions are often referred to as unbuffered I/O.
 
-历史上，`buffer_head` 用于映射页面内的单个块，当然也作为通过文件系统和块层进行 I/O 的单位。
-如今，基本的 I/O 单位是 `bio`，而 `buffer_head` 用于提取块映射（通过 `get_block_t` 调用）、跟踪页面内的状态（通过 `page_mapping`）以及为了向后兼容而包装 `bio` 提交（例如 `submit_bh`）。
+Historically, a buffer_head was used to map a single block within a page, and of course as the unit of I/O through the filesystem and block layers.
+Nowadays the basic I/O unit is the bio, and buffer_heads are used for extracting block mappings (via a get_block_t call), for tracking state within a page (via a page_mapping) and for wrapping bio submission for backward compatibility reasons (e.g. submit_bh).
 
 ```c
 struct buffer_head {
@@ -33,7 +33,7 @@ struct buffer_head {
 };
 ```
 
-块层及更低层（即驱动和堆叠驱动）的主要 I/O 单位
+main unit of I/O for the block layer and lower layers (ie drivers and stacking drivers)
 
 ```c
 struct bio {
@@ -103,22 +103,22 @@ struct bio {
 
 ## DirectIO
 
-__generic_file_write_iter - 向文件写入数据
-@iocb:	IO 状态结构体（文件、偏移量等）
-@from:	包含待写入数据的 iov_iter
+__generic_file_write_iter - write data to a file
+@iocb:	IO state structure (file, offset, etc.)
+@from:	iov_iter with data to write
 
-此函数负责完成向文件写入数据的所有工作。
-它执行所有基本检查，移除文件的 SUID 位，更新修改时间，并根据我们是执行直接 IO 还是标准缓冲写入来调用相应的子程序。
+This function does all the work needed for actually writing data to a file.
+It does all basic checks, removes SUID from the file, updates modification times and calls proper subroutines depending on whether we do direct IO or a standard buffered write.
 
-除非我们在块设备或类似不需要加锁的对象上工作，否则它期望已获取 i_mutex。
+It expects i_mutex to be grabbed unless we work on a block device or similar object which does not need locking at all.
 
-此函数**不**负责在 O_SYNC 写入时同步数据。
-调用方需自行处理。这主要是因为我们希望在 i_mutex 之外进行同步。
+This function does *not* take care of syncing data in case of O_SYNC write.
+A caller has to handle it. This is mainly due to the fact that we want to avoid syncing under i_mutex.
 
-返回值：
+Return:
 
-* 已写入的字节数，即使是截断写入也是如此
-* 如果完全没有写入任何数据，则返回负的错误码
+* number of bytes written, even for truncated writes
+* negative error code if no data has been written at all
 
 ```c
 ssize_t __generic_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
@@ -283,32 +283,34 @@ out:
 
 ## BIO
 
-阻塞式系统调用
+Blocking system calls
 
 Read/write
+
+
 
 ## NIO
 
 select/poll/epoll
 
-仅支持网络套接字和管道
+only support network sockets and pipes
 
-数据库使用 **`O_DIRECT`**
+Databases  **`O_DIRECT`**
 
-直接 IO，不使用操作系统页缓存
+Direct IO, don't use os page cache
 
-零拷贝 IO
+Zero-Copy IO
 
 ## AIO
 
-原生 IO
+Native IO
 
 [Design Notes on Asynchronous I/O (aio) for Linux](http://lse.sourceforge.net/io/aionotes.txt)
 
 libaio
 
-- 仅支持直接 IO
+- ony support Direct IO
 
 Io_uring
 
-绕过 IO
+bypass IO

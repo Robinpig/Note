@@ -1,16 +1,19 @@
 ## Introduction
 
-[Java 命名和目录接口（JNDI）](https://docs.oracle.com/javase/jndi/tutorial/getStarted/overview/index.html)是一个应用程序编程接口（API），为使用 Java 编程语言编写的应用程序提供命名和目录功能。它被定义为独立于任何特定的目录服务实现。因此，可以以通用的方式访问各种目录——新的、新兴的和已部署的。
+The [Java Naming and Directory InterfaceTM (JNDI)](https://docs.oracle.com/javase/jndi/tutorial/getStarted/overview/index.html) is an application programming interface (API) that provides naming and directory functionality to applications written using the JavaTM programming language. It is defined to be independent of any specific directory service implementation. Thus a variety of directories--new, emerging, and already deployed--can be accessed in a common way.
 
-JNDI 架构由一个 API 和一个[服务提供者接口（SPI）](/docs//CS/Java/JDK/Basic/SPI.md)组成。Java 应用程序使用 JNDI API 来访问各种命名和目录服务。SPI 使各种命名和目录服务能够透明地插入，从而允许使用 JNDI API 的 Java 应用程序访问它们的服务。参见下图。
+The JNDI architecture consists of an API and a [service provider interface (SPI)](/docs//CS/Java/JDK/Basic/SPI.md). Java applications use the JNDI API to access a variety of naming and directory services. The SPI enables a variety of naming and directory services to be plugged in transparently, thereby allowing the Java application using the JNDI API to access their services. See the following figure.
 
-要使用 JNDI，你必须拥有 JNDI 类和一个或多个服务提供者。Java 2 SDK v1.3 为以下命名/目录服务包含了三个服务提供者：
+To use the JNDI, you must have the JNDI classes and one or more service providers. The Java 2 SDK, v1.3 includes three service providers for the following naming/directory services:
 
 - Lightweight Directory Access Protocol (LDAP)
 - Common Object Request Broker Architecture (CORBA) Common Object Services (COS) name service
 - Java Remote Method Invocation (RMI) Registry
 
-其他服务提供者可以从 JNDI 网站下载或从其他供应商处获得。
+
+Other service providers can be downloaded from the JNDI Web site or obtained from other vendors. 
+
+
 
 ## Links
 

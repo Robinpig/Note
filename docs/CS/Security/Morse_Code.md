@@ -1,11 +1,14 @@
-## 简介
+## Introfuction
 
-摩尔斯电码是一种古老的编码消息系统，用于使用信号和节奏发送电报信息。
-在书面通信中，摩尔斯电码使用点和划来表示有限数量的字母、数字、标点符号和给定消息的特殊字符。
-当通过声音、无线电信号或光闪烁发送消息时，点表示短的哔哔声或点击或闪光，划表示较长的。
+Morse code is an old system of encoding messages that is used to send telegraphic information using signals and rhythm. 
+In written communication, Morse code uses dots and dashes to represent a limited number of alphabet letters, numbers, punctuation and special characters of a given message. 
+When messages are sent by sound, radio signals or light flashes, dots are short beeps or clicks or flashes, and dashes are longer ones.
 
-摩尔斯电码中有三种不同的符号：短的（通常称为'dit'）、长的（称为'dah'）和停顿。
-dah 的长度是 dit 的三倍，停顿的长度与 dit 相同。
+
+
+There are three different symbols in Morse code; there's a short one, usually called 'dit', a long one, called 'dah', and the pause. 
+A dah is three times as long as a dit, and the pause has the same length as the dit.
+
 
 <div style="text-align: center;">
 
@@ -17,8 +20,11 @@ dah 的长度是 dit 的三倍，停顿的长度与 dit 相同。
 Fig.1. International Morse Code
 </p>
 
-如今，摩尔斯电码可以通过智能手机应用或 Web 应用轻松生成，
-这些应用接收文本作为输入，并以可复制文本或可下载音频形式输出摩尔斯电码。
-其作为发送秘密消息方法的用途已被更强大的加密技术所取代，这些技术由先进的现代计算机提供。
 
-## 链接
+Today, Morse codes can be easily generated through smartphone applications or through a web application, 
+which take text as input and outputs the Morse code in copyable text or downloadable audio form.
+Its usage as a method of sending secret messages has become obsolete in favor of more powerful encryption techniques provided by advanced modern computer machines.
+
+
+## Links
+

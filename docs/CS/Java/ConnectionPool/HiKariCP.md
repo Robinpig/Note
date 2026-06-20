@@ -1,34 +1,38 @@
 ## Introduction
 
-[HikariCP](https://github.com/brettwooldridge/HikariCP) 包含许多微优化，单独来看几乎不可测量，但组合在一起能够提升整体性能。
-其中一些优化以毫秒级的分摊成本衡量，分布在数百万次调用中。
+[HikariCP](https://github.com/brettwooldridge/HikariCP) contains many micro-optimizations that individually are barely measurable, but together combine as a boost to overall performance.
+Some of these optimizations are measured in fractions of a millisecond amortized over millions of invocations.
+
+
+
+
 
 ### ArrayList
 
-一个非平凡（性能方面）的优化是消除了 ConnectionProxy 中用于跟踪已打开 Statement 实例的 ArrayList<Statement>。
-当 Statement 关闭时，必须将其从该集合中移除；当 Connection 关闭时，必须遍历集合并关闭所有打开的 Statement 实例，最后清空集合。
-Java 的 ArrayList，为了通用目的而明智地设计，在每个 `get(int index)` 调用上执行范围检查。
-然而，由于我们可以保证范围安全，这种检查仅仅是开销。
+One non-trivial (performance-wise) optimization was eliminating the use of an ArrayList<Statement> instance in the ConnectionProxy used to track open Statement instances.
+When a Statement is closed, it must be removed from this collection, and when the Connection is closed it must iterate the collection and close any open Statement instances, and finally must clear the collection.
+The Java ArrayList, wisely for general purpose use, performs a range check upon every `get(int index)` call.
+However, because we can provide guarantees about our ranges, this check is merely overhead.
 
-此外，`remove(Object)` 实现从头到尾扫描，
-但 JDBC 编程中的常见模式是在使用后立即关闭 Statement，或者按打开的逆序关闭。
-对于这些情况，从尾部开始扫描的性能更好。
-因此，ArrayList<Statement> 被替换为自定义类 FastList，它消除了范围检查并执行**从尾到头**的移除扫描。
+Additionally, the `remove(Object)` implementation performs a scan from head to tail,
+however common patterns in JDBC programming are to close Statements immediately after use, or in reverse order of opening.
+For these cases, a scan that starts at the tail will perform better.
+Therefore, ArrayList<Statement> was replaced with a custom class FastList which eliminates range checking and performs removal scans **from tail to head**.
 
 Link: [ArrayList - JDK](/docs/CS/Java/JDK/Collection/List.md?id=ArrayList)
 
 ### ConcurrentBag
 
-HikariCP 包含一个称为 ConcurrentBag 的自定义无锁集合。
-该思路借鉴自 C# .NET 的 ConcurrentBag 类，但内部实现有很大不同。
-ConcurrentBag 提供：
+HikariCP contains a custom lock-free collection called a ConcurrentBag.
+The idea was borrowed from the C# .NET ConcurrentBag class, but the internal implementation quite different.
+The ConcurrentBag provides...
 
-- 无锁设计
-- ThreadLocal 缓存
-- 队列窃取
-- 直接交接优化
+- A lock-free design
+- ThreadLocal caching
+- Queue-stealing
+- Direct hand-off optimizations
 
-...从而实现了高度并发、极低延迟，并最大程度减少了伪共享的发生。
+...resulting in a high degree of concurrency, extremely low latency, and minimized occurrences of false-sharing.
 
 ### Invocation
 
@@ -54,8 +58,9 @@ ConcurrentBag  --> HikariPool: PoolEntry
 
 HikariPool -> ProxyFactory : createProxyConnection
 ProxyFactory --> HikariPool: ProxyConnection
-HikariPool --> HikariDataSource: Connection"
+HikariPool --> HikariDataSource: Connection”
 ```
+
 
 ```java
 public class HikariDataSource extends HikariConfig implements DataSource, Closeable {
@@ -104,7 +109,9 @@ public class HikariDataSource extends HikariConfig implements DataSource, Closea
 }
 ```
 
+
 ## ProxyConnection
+
 
 Closing statements can cause connection eviction, so this must run before the conditional below
 
@@ -164,9 +171,10 @@ public abstract class ProxyConnection implements Connection {
 }
 ```
 
+
 ## Connection
 
-将 HikariCP 的 idleTimeout 和 maxLifeTime 设置配置为比 MySQL 的 wait_timeout 少一分钟。
+Configure your HikariCP idleTimeout and maxLifeTime settings to be one minute less than the wait_timeout of MySQL.
 
 ## Links
 

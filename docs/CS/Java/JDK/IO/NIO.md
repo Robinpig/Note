@@ -1,11 +1,11 @@
 ## Introduction
 
-*Java* *NIO*（New IO）是一种替代的 Java IO API。
-注意：有时 NIO 被认为是指 *Non-blocking IO*。
-然而，这并不是 NIO 最初的含义。
-此外，部分 NIO API 实际上是阻塞的——例如文件 API——因此"非阻塞"这个标签会有些误导。
+*Java* *NIO* (New IO) is an alternative IO API for Java. 
+Note: Sometimes NIO is claimed to mean *Non-blocking IO* . 
+However, this is not what NIO meant originally. 
+Also, parts of the NIO APIs are actually blocking - e.g. the file APIs - so the label "Non-blocking" would be slightly misleading.
 
-下表总结了 Java NIO 和 IO 之间的主要区别。
+The table below summarizes the main differences between Java NIO and IO.
 
 | IO              | NIO             |
 | --------------- | --------------- |
@@ -15,32 +15,33 @@
 
 
 
-Java NIO 使你可以执行非阻塞 IO。
-例如，一个线程可以请求 channel 将数据读入 buffer。
-当 channel 将数据读入 buffer 时，线程可以执行其他操作。一旦数据读入 buffer，线程就可以继续处理它。
-写入数据到 channel 也是如此。
+Java NIO enables you to do non-blocking IO. 
+For instance, a thread can ask a channel to read data into a buffer.
+While the channel reads data into the buffer, the thread can do something else. Once data is read into the buffer, the thread can then continue processing it. 
+The same is true for writing data to channels.
 
 
 
-在 NIO 中，你使用 channel 和 buffer 进行操作。数据总是从 channel 读入 buffer，或从 buffer 写入 channel。
+In NIO you work with channels and buffers. Data is always read from a channel into a buffer, or written from a buffer to a channel.
 
 ## Channels
 
-Java NIO Channels 与流类似，但有一些区别：
+Java NIO Channels are similar to streams with a few differences:
 
-* 你可以对 Channel 进行读写操作。流通常是单向的（读取或写入）。
-* Channel 可以异步读写。
-* Channel 总是从 Buffer 读取数据或向 Buffer 写入数据。
+* You can both read and write to a Channels. Streams are typically one-way (read or write).
+* Channels can be read and written asynchronously.
+* Channels always read to, or write from, a Buffer.
 
-Channel 表示与实体（如硬件设备、文件、网络 socket 或能够执行一个或多个不同 I/O 操作（例如读取或写入）的程序组件）的开放连接。
-Channel 要么打开要么关闭。Channel 在创建时打开，一旦关闭就保持关闭。一旦 Channel 关闭，任何尝试在其上调用 I/O 操作都将抛出 ClosedChannelException。
-可以通过调用其 isOpen 方法来测试 Channel 是否打开。
+A channel represents an open connection to an entity such as a hardware device, a file, a network socket, or a program component that is capable of performing one or more distinct I/O operations, for example reading or writing.
+A channel is either open or closed. A channel is open upon creation, and once closed it remains closed. Once a channel is closed, any attempt to invoke an I/O operation upon it will cause a ClosedChannelException to be thrown.
+Whether or not a channel is open may be tested by invoking its isOpen method.
 
-通常，Channel 旨在支持多线程安全访问，如扩展和实现此接口的接口和类的规范所述。
+Channels are, in general, intended to be safe for multithreaded access as described in the specifications of the interfaces and classes that extend and implement this interface.
 
-Socket 拥有 Channel 当且仅当该 Channel 本身是通过 `SocketChannel.open` 或 `ServerSocketChannel.accept` 方法创建的。
+A socket will have a channel if, and only if, the channel itself was created via the `SocketChannel.open` or `ServerSocketChannel.accept` methods.
 
-以下是 Java NIO 中最重要的 Channel 实现：
+
+Here are the most important Channel implementations in Java NIO:
 
 * SocketChannel
 * ServerSocketChannel
@@ -54,35 +55,36 @@ Socket 拥有 Channel 当且仅当该 Channel 本身是通过 `SocketChannel.ope
 
 #### Connect
 
-连接此 channel 的 socket。
+Connects this channel's socket.
 
-如果此 channel 处于非阻塞模式，则调用此方法会启动非阻塞连接操作。
-- 如果连接立即建立（如同本地连接可能发生的情况），则此方法返回 true。
-- 否则此方法返回 false，连接操作稍后必须通过调用 finishConnect 方法完成。
+If this channel is in non-blocking mode then an invocation of this method initiates a non-blocking connection operation.
+- If the connection is established immediately, as can happen with a local connection, then this method returns true.
+- Otherwise this method returns false and the connection operation must later be completed by invoking the finishConnect method.
 
-如果此 channel 处于阻塞模式，则调用此方法将阻塞，直到建立连接或发生 I/O 错误。
+If this channel is in blocking mode then an invocation of this method will block until the connection is established or an I/O error occurs.
 
-此方法执行与 Socket 类完全相同的安全检查。
-也就是说，如果已安装安全管理器，则此方法验证其 checkConnect 方法是否允许连接到给定远程端点的地址和端口号。
+This method performs exactly the same security checks as the Socket class.
+That is, if a security manager has been installed then this method verifies that its checkConnect method permits connecting to the address and port number of the given remote endpoint.
 
-此方法可以随时调用。
-如果在此方法调用过程中对此 channel 调用了读取或写入操作，则该操作将首先阻塞，直到此调用完成。
-如果连接尝试启动但失败，即如果此方法的调用抛出已检查异常，则 channel 将被关闭。
+This method may be invoked at any time.
+If a read or write operation upon this channel is invoked while an invocation of this method is in progress then that operation will first block until this invocation is complete.
+If a connection attempt is initiated but fails, that is, if an invocation of this method throws a checked exception, then the channel will be closed.
 
 
 ### FileChannel
 
 
-FileChannel 可安全地被多个并发线程使用。
+File channels are safe for use by multiple concurrent threads.
 
-FileChannel 通过调用此类定义的 open 方法之一创建。
-也可以从现有的 FileInputStream、FileOutputStream 或 RandomAccessFile 对象调用其 getChannel 方法获得 FileChannel，
-该方法返回连接到同一底层文件的 FileChannel。
-当从现有流或随机访问文件获取 FileChannel 时，FileChannel 的状态与返回该 channel 的对象的状态密切相关。
-显式地或通过读取/写入字节来更改 channel 的位置，都将更改原始对象的文件位置，反之亦然。
-通过 FileChannel 更改文件长度将更改原始对象看到的长度，反之亦然。
-通过写入字节更改文件内容将更改原始对象看到的内容，反之亦然。
-关闭 channel 将关闭原始对象。
+
+A file channel is created by invoking one of the open methods defined by this class. 
+A file channel can also be obtained from an existing FileInputStream, FileOutputStream, or RandomAccessFile object by invoking that object's getChannel method,
+which returns a file channel that is connected to the same underlying file.
+Where the file channel is obtained from an existing stream or random access file then the state of the file channel is intimately connected to that of the object whose getChannel method returned the channel.
+Changing the channel's position, whether explicitly or by reading or writing bytes, will change the file position of the originating object, and vice versa.
+Changing the file's length via the file channel will change the length seen via the originating object, and vice versa.
+Changing the file's content by writing bytes will change the content seen by the originating object, and vice versa.
+Closing the channel will close the originating object.
 
 
 
@@ -441,35 +443,37 @@ public abstract class ServerSocketChannel extends AbstractSelectableChannel impl
 
 ## Buffers
 
-Buffer 本质上是一个内存块，你可以向其中写入数据，之后可以再次读取。
-这个内存块被包装在 NIO Buffer 对象中，该对象提供了一组便于操作内存块的方法。
+A buffer is essentially a block of memory into which you can write data, which you can then later read again. 
+This memory block is wrapped in a NIO Buffer object, which provides a set of methods that makes it easier to work with the memory block.
 
-特定原始类型数据的容器。
 
-Buffer 是特定原始类型元素的线性、有限序列。除了其内容外，Buffer 的基本属性包括容量（capacity）、界限（limit）和位置（position）：
+A container for data of a specific primitive type.
 
-- Buffer 的容量是其包含的元素数量。Buffer 的容量从不负且从不改变。
-- Buffer 的界限是不应被读取或写入的第一个元素的索引。Buffer 的界限从不负且从不超过其容量。
-- Buffer 的位置是下一个要读取或写入的元素的索引。Buffer 的位置从不负且从不超过其界限。
+A buffer is a linear, finite sequence of elements of a specific primitive type. Aside from its content, the essential properties of a buffer are its capacity, limit, and position:
 
-每个非 boolean 原始类型都有一个此类的子类。
+- A buffer's capacity is the number of elements it contains. The capacity of a buffer is never negative and never changes.
+- A buffer's limit is the index of the first element that should not be read or written. A buffer's limit is never negative and is never greater than its capacity.
+- A buffer's position is the index of the next element to be read or written. A buffer's position is never negative and is never greater than its limit.
 
-标记与重置（Marking and resetting）
+There is one subclass of this class for each non-boolean primitive type.
+
+Marking and resetting
 
 > The following invariant holds for the mark, position, limit, and capacity values:
 >
 > 0 <= mark <= position <= limit <= capacity
 
-只读缓冲区（Read-only buffers）
+Read-only buffers
 
-每个 Buffer 都是可读的，但并非每个 Buffer 都是可写的。每个 Buffer 类的修改方法被指定为可选操作，在只读 Buffer 上调用时将抛出 ReadOnlyBufferException。
-只读 Buffer 不允许更改其内容，但其 mark、position 和 limit 值是可变的。可以通过调用其 isReadOnly 方法来确定 Buffer 是否为只读。
+Every buffer is readable, but not every buffer is writable. The mutation methods of each buffer class are specified as optional operations that will throw a ReadOnlyBufferException when invoked upon a read-only buffer.
+A read-only buffer does not allow its content to be changed, but its mark, position, and limit values are mutable. Whether or not a buffer is read-only may be determined by invoking its isReadOnly method.
 
-线程安全
+Thread safety
 
-**Buffer 不适合多线程并发使用。** 如果 Buffer 将被多个线程使用，则应通过适当的同步来控制对 Buffer 的访问。
+**Buffers are not safe for use by multiple concurrent threads.** If a buffer is to be used by more than one thread then access to the buffer should be controlled by appropriate synchronization.
 
-容量、位置和界限（Capacity, Position and Limit）
+
+Capacity, Position and Limit
 
 ```java
 public abstract class Buffer {
@@ -549,7 +553,7 @@ class HeapByteBuffer extends ByteBuffer {
 
 ### ByteBuffer
 
-Byte buffer 要么是 direct 要么是 non-direct。对于 direct byte buffer，Java 虚拟机将尽最大努力直接在其上执行原生 I/O 操作。也就是说，它将尝试避免在每次调用底层操作系统的原生 I/O 操作之前（或之后）将 buffer 的内容复制到中间 buffer（或从中间 buffer 复制）。
+A byte buffer is either direct or non-direct. Given a direct byte buffer, the Java virtual machine will make a best effort to perform native I/ O operations directly upon it. That is, it will attempt to avoid copying the buffer's content to (or from) an intermediate buffer before (or after) each invocation of one of the underlying operating system's native I/ O operations.
 
 ```java
 public abstract class ByteBuffer
@@ -565,9 +569,9 @@ public abstract class ByteBuffer
 }
 ```
 
-Direct byte buffer 可以通过调用此类的 allocateDirect 工厂方法创建。此方法返回的 buffer 通常比 non-direct buffer 具有更高的分配和释放成本。Direct buffer 的内容可能位于常规垃圾回收堆之外，因此它们对应用程序内存占用的影响可能不明显。因此建议 primarily 为大而长寿命的、受底层系统原生 I/O 操作影响的 buffer 分配 direct buffer。通常，最好仅在 direct buffer 能带来可衡量的程序性能提升时才分配它们。
-Direct byte buffer 也可以通过将文件区域直接映射到内存来创建。Java 平台的实现可以选择支持通过 JNI 从原生代码创建 direct byte buffer。如果这些类型的 buffer 实例引用了不可访问的内存区域，则尝试访问该区域不会更改 buffer 的内容，并且会在访问时或稍后抛出未指定的异常。
-可以通过调用其 isDirect 方法来确定 byte buffer 是 direct 还是 non-direct。提供此方法是为了可以在性能关键代码中进行显式 buffer 管理。
+A direct byte buffer may be created by invoking the allocateDirect factory method of this class. The buffers returned by this method typically have somewhat higher allocation and deallocation costs than non-direct buffers. The contents of direct buffers may reside outside of the normal garbage-collected heap, and so their impact upon the memory footprint of an application might not be obvious. It is therefore recommended that direct buffers be allocated primarily for large, long-lived buffers that are subject to the underlying system's native I/ O operations. In general it is best to allocate direct buffers only when they yield a measurable gain in program performance.
+A direct byte buffer may also be created by mapping a region of a file directly into memory. An implementation of the Java platform may optionally support the creation of direct byte buffers from native code via JNI. If an instance of one of these kinds of buffers refers to an inaccessible region of memory then an attempt to access that region will not change the buffer's content and will cause an unspecified exception to be thrown either at the time of the access or at some later time.
+Whether a byte buffer is direct or non-direct may be determined by invoking its isDirect method. This method is provided so that explicit buffer management can be done in performance-critical code.
 
 
 NIO 又根据 Buffer 背后的数据存储内存不同分为了：HeapBuffer，DirectBuffer，MappedBuffer
@@ -637,7 +641,7 @@ public abstract class ByteBuffer extends Buffer implements Comparable<ByteBuffer
 
 ### MappedByteBuffer
 
-一种 direct byte buffer，其内容是文件的内存映射区域。
+A direct byte buffer whose content is a memory-mapped region of a file.
 
 MappedByteBuffer属于映射buffer（自己看看虚拟内存），但是DirectByteBuffer只是说明该部分内存是JVＭ在直接内存区分配的连续缓冲区，并不一是映射的。也就是说MappedByteBuffer应该是DirectByteBuffer的子类，但是为了方便和优化，把MappedByteBuffer作为了DirectByteBuffer的父类。另外，虽然MappedByteBuffer在逻辑上应该是DirectByteBuffer的子类，而且MappedByteBuffer的内存的GC和直接内存的GC类似（和堆GC不同），但是分配的MappedByteBuffer的大小不受-XX:MaxDirectMemorySize参数影响。
 MappedByteBuffer封装的是内存映射文件操作，也就是只能进行文件IO操作。MappedByteBuffer是根据mmap产生的映射缓冲区，这部分缓冲区被映射到对应的文件页上，属于直接内存在用户态，通过MappedByteBuffer可以直接操作映射缓冲区，而这部分缓冲区又被映射到文件页上，操作系统通过对应内存页的调入和调出完成文件的写入和写出
@@ -662,7 +666,7 @@ public abstract class MappedByteBuffer
 }
 ```
 
-Mapped byte buffer 通过 FileChannel.map 方法创建。
+Mapped byte buffers are created via the FileChannel.map method.
 
 映射信息封装到Unmapper中
 ```java
@@ -1263,23 +1267,23 @@ EXPORT_SYMBOL(filemap_fault);
 
 ## Selectors
 
-Selector 是一个可以监视多个 channel 事件（如：连接打开、数据到达等）的对象。
-因此，单个线程可以监视多个 channel 的数据。
+A selector is an object that can monitor multiple channels for events (like: connection opened, data arrived etc.). 
+Thus, a single thread can monitor multiple channels for data.
 
 轮询注册的channel状态
 SelectorProvider sychronized 单例
 依据不同JDK生成不同的Selector实现类
 调用OS的接口创建FD
 
-可选择的 channel 在 selector 上的注册由 SelectionKey 对象表示。Selector 维护三组 selection key：
+A selectable channel's registration with a selector is represented by a SelectionKey object. A selector maintains three sets of selection keys:
 
-- key 集包含表示此 selector 当前 channel 注册的 key。此集合由 keys 方法返回。
-- selected-key 集是 key 的集合，其中每个 key 的 channel 在先前将 key 添加或更新到集中的选择操作期间，被检测为准备好执行该 key 的 interest 集中标识的至少一个操作。
-  此集合由 selectedKeys 方法返回。selected-key 集始终是 key 集的子集。
-- cancelled-key 集是已被取消但其 channel 尚未注销的 key 的集合。
-  此集合不能直接访问。cancelled-key 集始终是 key 集的子集。
+- The key set contains the keys representing the current channel registrations of this selector. This set is returned by the keys method.
+- The selected-key set is the set of keys such that each key's channel was detected to be ready for at least one of the operations identified in the key's interest set during a prior selection operation that adds keys or updates keys in the set. 
+  This set is returned by the selectedKeys method. The selected-key set is always a subset of the key set.
+- The cancelled-key set is the set of keys that have been cancelled but whose channels have not yet been deregistered. 
+  This set is not directly accessible. The cancelled-key set is always a subset of the key set.
 
-在新建的 selector 中，所有三个集合都是空的。
+All three sets are empty in a newly-created selector.
 
 
 [Epoll](https://hg.openjdk.org/jdk/jdk/file/d8327f838b88/src/java.base/linux/classes/sun/nio/ch/EPollSelectorImpl.java)
@@ -1322,80 +1326,82 @@ See [Netty EventLoop - Selector](/docs/CS/Framework/Netty/EventLoop.md?id=Select
 
 ### Selection
 
-选择操作查询底层操作系统以获取每个已注册 channel 准备好执行由其 key 的 interest 集标识的任何操作的更新。有两种形式的选择操作：
+A selection operation queries the underlying operating system for an update as to the readiness of each registered channel to perform any of the operations identified by its key's interest set. There are two forms of selection operation:
 
-- select()、select(long) 和 selectNow() 方法将准备好执行操作的 channel 的 key 添加到 selected-key 集，或更新已在 selected-key 集中的 key 的 ready-operation 集。
-- select(Consumer)、select(Consumer, long) 和 selectNow(Consumer) 方法在每个准备好执行操作的 channel 的 key 上执行操作。这些方法不会添加到 selected-key 集。
+- The select(), select(long), and selectNow() methods add the keys of channels ready to perform an operation to the selected-key set, or update the ready-operation set of keys already in the selected-key set.
+- The select(Consumer), select(Consumer, long), and selectNow(Consumer) methods perform an action on the key of each channel that is ready to perform an operation. These methods do not add to the selected-key set.
 
-添加到 selected-key 集的选择操作
 
-在每个选择操作期间，key 可能会被添加和删除到 selector 的 selected-key 集，并可能从其 key 和 cancelled-key 集中删除。选择由 select()、select(long) 和 selectNow() 方法执行，涉及三个步骤：
+Selection operations that add to the selected-key set
 
-- cancelled-key 集中的每个 key 从其所属的每个 key 集中移除，并且其 channel 被注销。此步骤使 cancelled-key 集为空。
-- 查询底层操作系统以获取每个剩余 channel 准备好执行由其 key 的 interest 集标识的任何操作的更新。
-  对于一个至少准备好一个此类操作的 channel，执行以下两种操作之一：
-  - 如果 channel 的 key 尚未在 selected-key 集中，则将其添加到该集，并修改其 ready-operation 集以标识 channel 现在被报告为准备好的确切操作。
-    先前在 ready 集中记录的任何 readiness 信息将被丢弃。
-  - 否则 channel 的 key 已在 selected-key 集中，因此修改其 ready-operation 集以标识 channel 被报告为准备好的任何新操作。
-    先前在 ready 集中记录的任何 readiness 信息将被保留；换句话说，底层系统返回的 ready 集按位分离到 key 的当前 ready 集中。
-- 如果在此步骤开始时 key 集中的所有 key 都具有空的 interest 集，则 selected-key 集和任何 key 的 ready-operation 集都不会更新。
-- 如果在步骤（2）进行过程中有任何 key 被添加到 cancelled-key 集，则它们将按照步骤（1）处理。
+During each selection operation, keys may be added to and removed from a selector's selected-key set and may be removed from its key and cancelled-key sets. Selection is performed by the select(), select(long), and selectNow() methods, and involves three steps:
 
-选择操作是否阻塞等待一个或多个 channel 变为就绪，以及阻塞多长时间，是这三种选择方法之间唯一的本质区别。
+- Each key in the cancelled-key set is removed from each key set of which it is a member, and its channel is deregistered. This step leaves the cancelled-key set empty.
+- The underlying operating system is queried for an update as to the readiness of each remaining channel to perform any of the operations identified by its key's interest set as of the moment that the selection operation began.
+  For a channel that is ready for at least one such operation, one of the following two actions is performed:
+  - If the channel's key is not already in the selected-key set then it is added to that set and its ready-operation set is modified to identify exactly those operations for which the channel is now reported to be ready.
+    Any readiness information previously recorded in the ready set is discarded.
+  - Otherwise the channel's key is already in the selected-key set, so its ready-operation set is modified to identify any new operations for which the channel is reported to be ready.
+    Any readiness information previously recorded in the ready set is preserved; in other words, the ready set returned by the underlying system is bitwise-disjoined into the key's current ready set.
+- If all of the keys in the key set at the start of this step have empty interest sets then neither the selected-key set nor any of the keys' ready-operation sets will be updated.
+- If any keys were added to the cancelled-key set while step (2) was in progress then they are processed as in step (1).
 
-在选定 key 上执行操作的选择操作
+Whether or not a selection operation blocks to wait for one or more channels to become ready, and if so for how long, is the only essential difference between the three selection methods.
 
-在每个选择操作期间，key 可能会从 selector 的 key、selected-key 和 cancelled-key 集中删除。选择由 select(Consumer)、select(Consumer, long) 和 selectNow(Consumer) 方法执行，涉及三个步骤：
+election operations that perform an action on selected keys
 
-- cancelled-key 集中的每个 key 从其所属的每个 key 集中移除，并且其 channel 被注销。此步骤使 cancelled-key 集为空。
-- 查询底层操作系统以获取每个剩余 channel 准备好执行由其 key 的 interest 集标识的任何操作的更新。
-  对于一个至少准备好一个此类操作的 channel，将 channel 的 key 的 ready-operation 集设置为标识 channel 准备好的确切操作，并调用指定给 select 方法的操作来消费该 channel 的 key。
-  在调用该操作之前，先前在 ready 集中记录的任何 readiness 信息将被丢弃。
-  或者，当一个 channel 准备好多个操作时，该操作可能会被多次调用，每次使用该 channel 的 key 和 ready-operation 集（修改为 channel 准备好的操作的子集）。
-  当对同一个 key 多次调用该操作时，其 ready-operation 集永远不会包含在同一选择操作中先前调用该操作时该集合中包含的操作位。
-- 如果在步骤（2）进行过程中有任何 key 被添加到 cancelled-key 集，则它们将按照步骤（1）处理。
+During each selection operation, keys may be removed from the selector's key, selected-key, and cancelled-key sets. Selection is performed by the select(Consumer), select(Consumer, long), and selectNow(Consumer) methods, and involves three steps:
+
+- Each key in the cancelled-key set is removed from each key set of which it is a member, and its channel is deregistered. This step leaves the cancelled-key set empty.
+- The underlying operating system is queried for an update as to the readiness of each remaining channel to perform any of the operations identified by its key's interest set as of the moment that the selection operation began.
+  For a channel that is ready for at least one such operation, the ready-operation set of the channel's key is set to identify exactly the operations for which the channel is ready and the action specified to the select method is invoked to consume the channel's key.
+  Any readiness information previously recorded in the ready set is discarded prior to invoking the action.
+  Alternatively, where a channel is ready for more than one operation, the action may be invoked more than once with the channel's key and ready-operation set modified to a subset of the operations for which the channel is ready.
+  Where the action is invoked more than once for the same key then its ready-operation set never contains operation bits that were contained in the set at previous calls to the action in the same selection operation.
+- If any keys were added to the cancelled-key set while step (2) was in progress then they are processed as in step (1).
 
 
 ### Concurrency
 
-Selector 及其 key 集可安全地被多个并发线程使用。但其 selected-key 集和 cancelled-key 集则不然。
+A Selector and its key set are safe for use by multiple concurrent threads. Its selected-key set and cancelled-key set, however, are not.
 
-选择操作按顺序在 selector 本身和 selected-key 集上同步。它们还在上述步骤（1）和（3）期间在 cancelled-key 集上同步。
+The selection operations synchronize on the selector itself, on the selected-key set, in that order. They also synchronize on the cancelled-key set during steps (1) and (3) above.
 
-在选择操作进行期间对 selector 的 key 的 interest 集所做的更改对该操作没有影响；它们将在下一次选择操作中可见。
+Changes made to the interest sets of a selector's keys while a selection operation is in progress have no effect upon that operation; they will be seen by the next selection operation.
 
-Key 可以随时被取消，channel 可以随时被关闭。因此，key 出现在 selector 的一个或多个 key 集中并不表示该 key 有效或其 channel 是打开的。
-应用程序代码应小心同步并在必要时检查这些条件，如果有其他线程可能取消 key 或关闭 channel。
+Keys may be cancelled and channels may be closed at any time. Hence the presence of a key in one or more of a selector's key sets does not imply that the key is valid or that its channel is open.
+Application code should be careful to synchronize and check these conditions as necessary if there is any possibility that another thread will cancel a key or close a channel.
 
-在 selection 操作中阻塞的线程可以通过以下三种方式之一被其他线程中断：
+A thread blocked in a selection operation may be interrupted by some other thread in one of three ways:
 
-- 通过调用 selector 的 wakeup 方法，
-- 通过调用 selector 的 close 方法，或
-- 通过调用阻塞线程的 interrupt 方法，在这种情况下，其中断状态将被设置，并且 selector 的 wakeup 方法将被调用。
+- By invoking the selector's wakeup method,
+- By invoking the selector's close method, or
+- By invoking the blocked thread's interrupt method, in which case its interrupt status will be set and the selector's wakeup method will be invoked.
 
-close 方法以与 selection 操作相同的顺序在 selector 及其 selected-key 集上同步。
+The close method synchronizes on the selector and its selected-key set in the same order as in a selection operation.
 
-Selector 的 key 集可安全地被多个并发线程使用。
-从 key 集进行的检索操作通常不会阻塞，因此可能与向该集添加新注册的操作重叠，或与从该集中删除 key 的选择操作的取消步骤重叠。
-迭代器和 spliterator 返回反映该集在迭代器/spliterator 创建时或自创建以来某一时刻状态的元素。它们不会抛出 ConcurrentModificationException。
+A Selector's key set is safe for use by multiple concurrent threads.
+Retrieval operations from the key set do not generally block and so may overlap with new registrations that add to the set, or with the cancellation steps of selection operations that remove keys from the set.
+Iterators and spliterators return elements reflecting the state of the set at some point at or since the creation of the iterator/spliterator. They do not throw ConcurrentModificationException.
 
-Selector 的 selected-key 集通常不能安全地被多个并发线程使用。
-如果这样的线程可能直接修改该集，则应通过对该集本身进行同步来控制访问。
-该集的 iterator 方法返回的迭代器是快速失败的（fail-fast）：如果在创建迭代器后以任何方式修改该集（除了调用迭代器自身的 remove 方法之外），则将抛出 java.util.ConcurrentModificationException。
+A selector's selected-key set is not, in general, safe for use by multiple concurrent threads.
+If such a thread might modify the set directly then access should be controlled by synchronizing on the set itself.
+The iterators returned by the set's iterator methods are fail-fast: If the set is modified after the iterator is created, in any way except by invoking the iterator's own remove method, then a java.util.ConcurrentModificationException will be thrown.
 
 
 ### select
 
-选择一组其对应 channel 已准备好进行 I/O 操作的 key。
+Selects a set of keys whose corresponding channels are ready for I/O operations.
 
-`select()` 和 `select(timeout)` 方法都执行阻塞选择操作。
-并且只有在至少选择一个 channel、调用了此 selector 的 wakeup 方法或当前线程被中断时（以先发生者为准）才返回。
-`select(timeout)` 方法也会在给定的超时期限到期后返回。
-此方法不提供实时保证：它通过调用 Object.wait(long) 方法来调度超时。
+Both `select()` and `select(timeout)` methods perform a blocking selection operation.
+And return only after at least one channel is selected, this selector's wakeup method is invoked, or the current thread is interrupted, whichever comes first.
+The `select(timeout)` method  also returns after the given timeout period expires.
+This method does not offer real-time guarantees: It schedules the timeout as if by invoking the Object.wait(long) method.
 
-`selectNow()` 方法执行非阻塞选择操作。
-如果自上次选择操作以来没有 channel 变为可选择，则此方法立即返回零。
-调用此方法会清除之前任何 wakeup 方法调用的效果。
+
+The `selectNow()` method performs a non-blocking selection operation.
+If no channels have become selectable since the previous selection operation then this method immediately returns zero.
+Invoking this method clears the effect of any previous invocations of the wakeup method.
 
 ```java
 
@@ -1408,15 +1414,15 @@ public abstract int selectNow() throws IOException;
 
 ### wakeup
 
-导致第一个尚未返回的选择操作立即返回。
+Causes the first selection operation that has not yet returned to return immediately.
 
-如果另一个线程当前在 selection 操作中阻塞，则该调用将立即返回。
-如果当前没有 selection 操作在进行，则下一次 selection 操作调用将立即返回，除非在此期间调用了 selectNow() 或 selectNow(Consumer)。
-在任何情况下，该调用返回的值可能非零。
-后续的 selection 操作将像往常一样阻塞，除非在此期间再次调用此方法。
+If another thread is currently blocked in a selection operation then that invocation will return immediately.
+If no selection operation is currently in progress then the next invocation of a selection operation will return immediately unless selectNow() or selectNow(Consumer) is invoked in the meantime.
+In any case the value returned by that invocation may be non-zero.
+Subsequent selection operations will block as usual unless this method is invoked again in the meantime.
 > [!TIP]
 >
-> 在两个连续的选择操作之间多次调用此方法与仅调用一次效果相同。
+> Invoking this method more than once between two successive selection operations has the same effect as invoking it just once.
 
 ```java
 public abstract Selector wakeup();

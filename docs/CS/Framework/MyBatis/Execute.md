@@ -1,7 +1,9 @@
 ## Introduction
 
-1. 获取 Mapper
-2. 执行 SQL
+1. getMapper
+2. execute
+
+
 
 
 
@@ -18,7 +20,7 @@ SqlSession.selectList() → Executor.query() → StatementHandler → ParameterH
 
 ## mapper
 
-通过 Session 获取 mapper，然后使用 mapper
+Session get mapper , then use mapper
 
 
 
@@ -59,7 +61,7 @@ public class MapperRegistry {
 
 
 
-使用 JDK `Proxy.newProxyInstance`
+Use JDK `Proxy.newProxyInstance`
 
 ```java
 public class MapperProxyFactory<T> {
@@ -75,7 +77,7 @@ public class MapperProxyFactory<T> {
 }
 ```
 
-创建 `MapperMethod`
+new `MapperMethod`
 
 ```java
 public class MapperProxy<T> implements InvocationHandler, Serializable {
@@ -141,7 +143,7 @@ public MapperMethod(Class<?> mapperInterface, Method method, Configuration confi
 
 
 
-## 执行 SQL
+## execute SQL
 
 
 
@@ -200,7 +202,7 @@ public Object execute(SqlSession sqlSession, Object[] args) {
 
 
 
-由 [Executor](/docs/CS/Framework/MyBatis/Executor.md) 执行
+execute by [Executor](/docs/CS/Framework/MyBatis/Executor.md)
 
 ```java
 // DefaultSession

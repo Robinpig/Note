@@ -1,86 +1,316 @@
-## 简介
+## Introduction
 
-[MULTI](https://redis.io/commands/multi)、[EXEC](https://redis.io/commands/exec)、[DISCARD](https://redis.io/commands/discard) 和 [WATCH](https://redis.io/commands/watch) 是 Redis 事务的基础。
-它们允许在一个步骤中执行一组命令，并提供两个重要保证：
+Redis Transactions allow the execution of a group of commands in a single step, they are centered around the commands `MULTI`, `EXEC`, `DISCARD` and `WATCH`.
+Redis Transactions make two important guarantees:
 
-- 事务中的所有命令都被序列化并按顺序执行。在 Redis 事务执行过程中，不会出现另一个客户端发出的请求被中断服务的情况。这保证了命令作为单个隔离操作被执行。
-- 所有命令要么全部被处理，要么全部不被处理，因此 Redis 事务也是原子的。EXEC 命令触发事务中所有命令的执行，因此如果客户端在调用 EXEC 命令之前失去与服务器的连接，则不会执行任何操作；如果调用 EXEC 命令，则执行所有操作。使用 append-only file 时，Redis 确保使用单个 write(2) 系统调用将事务写入磁盘。这样，在服务器崩溃的情况下，要么事务的全部内容都已记录，要么没有记录任何内容。
+* All the commands in a transaction are serialized and executed sequentially.
+  A request sent by another client will never be served **in the middle** of the execution of a Redis Transaction.
+  This guarantees that the commands are executed as a single isolated operation.
+* The `EXEC` command triggers the execution of all the commands in the transaction, so if a client loses the connection to the server in the context of a transaction before calling the `EXEC` command none of the operations are performed,
+  instead if the `EXEC` command is called, all the operations are performed.
+  When using the [append-only file](/docs/CS/DB/Redis/persist.md?id=AOF) Redis makes sure to use a single write(2) syscall to write the transaction on disk.
+  However if the Redis server crashes or is killed by the system administrator in some hard way it is possible that only a partial number of operations are registered.
+  Redis will detect this condition at restart, and will exit with an error. Using the `redis-check-aof` tool it is possible to fix the append only file that will remove the partial transaction so that the server can start again.
 
-从 2.2 版本开始，Redis 还提供了乐观锁，以 check-and-set (CAS) 方式实现。
+Starting with version 2.2, Redis allows for an extra guarantee to the above two, in the form of optimistic locking in a way very similar to a check-and-set (CAS) operation.
 
-## 用法
+## Errors and rollbacks
 
-使用 `MULTI` 命令进入 Redis 事务。该命令始终回复 `OK`。
-此时用户可以发出多个命令。Redis 不会立即执行这些命令，而是将它们排队。
-调用 `EXEC` 后，将执行所有命令。
+During a transaction it is possible to encounter two kind of command errors:
 
-作为替代方案，可以调用 `DISCARD` 刷新事务队列并退出事务。
+- A command may fail to be queued, so there may be an error before EXEC is called.
+  For instance the command may be syntactically wrong (wrong number of arguments, wrong command name, ...), or there may be some critical condition like an out of memory condition (if the server is configured to have a memory limit using the maxmemory directive).
+- A command may fail after EXEC is called, for instance since we performed an operation against a key with the wrong value (like calling a list operation against a string value).
 
-```shell
-> MULTI
-OK
-> INCR foo
-QUEUED
-> INCR bar
-QUEUED
-> EXEC
-1) (integer) 1
-2) (integer) 1
+Starting with Redis 2.6.5, the server will detect an error during the accumulation of commands.
+It will then refuse to execute the transaction returning an error during EXEC, discarding the transaction.
+Errors happening after EXEC instead are not handled in a special way: all the other commands will be executed even if some command fails during the transaction.
+
+**Redis does not support rollbacks of transactions** since supporting rollbacks would have a significant impact on the simplicity and performance of Redis.
+
+
+
+
+
+#### **为什么不支持事务回滚？**
+
+Redis 官方文档的解释如下：
+
+> If you have a relational databases background, the fact that Redis commands can fail during a transaction, but still Redis will execute the rest of the transaction instead of rolling back, may look odd to you.
+>
+> However there are good opinions for this behavior:
+>
+>- Redis commands can fail only if called with a wrong syntax (and the problem is not detectable during the command queueing), or against keys holding the wrong data type: this means that in practical terms a failing command is the result of a programming errors, and a kind of error that is very likely to be detected during development, and not in production.
+>- Redis is internally simplified and faster because it does not need the ability to roll back.
+
+An argument against Redis point of view is that bugs happen, however it should be noted that in general the roll back does not save you from programming errors. For instance if a query increments a key by 2 instead of 1, or increments the wrong key, there is no way for a rollback mechanism to help. Given that no one can save the programmer from his or her errors, and that the kind of errors required for a Redis command to fail are unlikely to enter in production, we selected the simpler and faster approach of not supporting roll backs on errors.
+
+
+
+
+
+这里不支持事务回滚，指的是不支持运行时错误的事务回滚
+
+## process
+
+表示事务状态
+```c
+typedef struct multiState {
+    multiCmd *commands;     /* Array of MULTI commands */
+    int count;              /* Total number of MULTI commands */
+    int cmd_flags;          /* The accumulated command flags OR-ed together.
+                               So if at least a command has a given flag, it
+                               will be set in this field. */
+    int cmd_inv_flags;      /* Same as cmd_flags, OR-ing the ~flags. so that it
+                               is possible to know if all the commands have a
+                               certain flag. */
+    size_t argv_len_sums;    /* mem used by all commands arguments */
+    int alloc_count;         /* total number of multiCmd struct memory reserved. */
+} multiState;
+```
+进入事务状态后 把命令暂存到队列
+
+Redis执行事务时可能会遇到三种错误
+- 语法错误
+- 命令报错 正确的命令依旧会被执行 不能保证原子性
+- Redis忽然宕机
+
+
+Redis事务没有事务隔离级别的概念 
+
+
+Redis是基于内存存储的 无论是RDB还是AOF都无法完全保证数据不丢失
+
+### multi
+
+queueMultiCommand in [processCommand](/docs/CS/DB/Redis/server.md?id=processCommand)
+
+### Exec
+
+```c
+
+void execCommand(client *c) {
+    int j;
+    robj **orig_argv;
+    int orig_argc;
+    struct redisCommand *orig_cmd;
+    int was_master = server.masterhost == NULL;
+
+    if (!(c->flags & CLIENT_MULTI)) {
+        addReplyError(c,"EXEC without MULTI");
+        return;
+    }
+
+    /* EXEC with expired watched key is disallowed*/
+    if (isWatchedKeyExpired(c)) {
+        c->flags |= (CLIENT_DIRTY_CAS);
+    }
 ```
 
-## 事务中的错误
+Check if we need to abort the EXEC because:
 
-在事务期间，可能会遇到两种命令错误：
+1. Some WATCHed key was touched.
+2. There was a previous error while queueing commands.
 
-- 命令可能入队失败，因此在调用 `EXEC` 之前就会出错。
-  例如，命令可能在语法上错误（参数数量错误、命令名错误等），或者存在一些关键条件，如内存不足（如果服务器配置了 `maxmemory` 限制）。
-- 在调用 `EXEC` 之后，命令可能失败。例如，对具有错误值的键执行操作（如对字符串值调用列表操作）。
+A failed EXEC in the first case returns a multi bulk nil object (technically it is not an error but a special behavior), while in the second an EXECABORT error is returned.
 
-在 `EXEC` 调用之前，客户端可以通过检查命令入队时的回复来发现错误：如果某个命令入队时返回 QUEUED，则正确入队；否则 Redis 返回错误。
-如果在命令入队时发生错误，大多数客户端将中止事务并丢弃它。
+```c
+    if (c->flags & (CLIENT_DIRTY_CAS|CLIENT_DIRTY_EXEC)) {
+        addReply(c, c->flags & CLIENT_DIRTY_EXEC ? shared.execaborterr :
+                                                   shared.nullarray[c->resp]);
+        discardTransaction(c);
+        return;
+    }
 
-但从 Redis 2.6.5 开始，服务器会记住在命令累积期间发生的错误，在 `EXEC` 时拒绝该事务，并自动丢弃事务（与 `DISCARD` 的效果相同）。
+    uint64_t old_flags = c->flags;
 
-相反，在 `EXEC` 之后发生的错误不会以特殊方式处理：即使事务中的某些命令失败，所有其他命令也会继续执行。
-
-## 为什么 Redis 不支持回滚
-
-Redis 内部简化且速度更快，因为它不需要回滚能力。
-
-## 使用 WATCH 实现 CAS
-
-`WATCH` 用于为 Redis 事务提供 check-and-set (CAS) 行为。
-
-监视的键会被检查是否有更改，以决定是否中止事务（如果至少有一个被监视的键在 `EXEC` 之前被修改，整个事务将中止并返回 `nil`）。
-
-```shell
-WATCH mykey
-val = GET mykey
-val = val + 1
-MULTI
-SET mykey $val
-EXEC
+    /* we do not want to allow blocking commands inside multi */
+    c->flags |= CLIENT_DENY_BLOCKING;
 ```
 
-使用上述代码，如果在执行 `WATCH` 之后且 `EXEC` 调用之前有另一个客户端修改了 `mykey` 的值，事务将失败。
+Exec all the queued commands.
+Unwatch ASAP otherwise we'll waste CPU cycles
 
-### WATCH 说明
+```c
+    unwatchAllKeys(c);
 
-`WATCH` 可以多次调用。简单来说，`WATCH` 调用会标记要在之后检查更改的键（在 `EXEC` 时被检查）。从调用 `WATCH` 的那一刻起，Redis 会跟踪键是否被修改。如果在调用 `WATCH` 和 `EXEC` 之间，键被修改或删除，`EXEC` 将失败。
+    server.in_exec = 1;
 
-在 `EXEC` 被调用（无论成功与否）并且连接关闭后，所有 `WATCH` 都会被清除。此外，还可以使用 `UNWATCH` 命令（不带参数）刷新所有监视的键。
+    orig_argv = c->argv;
+    orig_argc = c->argc;
+    orig_cmd = c->cmd;
+    addReplyArrayLen(c,c->mstate.count);
+    for (j = 0; j < c->mstate.count; j++) {
+        c->argc = c->mstate.commands[j].argc;
+        c->argv = c->mstate.commands[j].argv;
+        c->cmd = c->mstate.commands[j].cmd;
 
-### 不使用 WATCH 的 CAS
+        /* ACL permissions are also checked at the time of execution in case
+         * they were changed after the commands were queued. */
+        int acl_errpos;
+        int acl_retval = ACLCheckAllPerm(c,&acl_errpos);
+        if (acl_retval != ACL_OK) {
+            char *reason;
+            switch (acl_retval) {
+            case ACL_DENIED_CMD:
+                reason = "no permission to execute the command or subcommand";
+                break;
+            case ACL_DENIED_KEY:
+                reason = "no permission to touch the specified keys";
+                break;
+            case ACL_DENIED_CHANNEL:
+                reason = "no permission to access one of the channels used "
+                         "as arguments";
+                break;
+            default:
+                reason = "no permission";
+                break;
+            }
+            addACLLogEntry(c,acl_retval,acl_errpos,NULL);
+            addReplyErrorFormat(c,
+                "-NOPERM ACLs rules changed between the moment the "
+                "transaction was accumulated and the EXEC call. "
+                "This command is no longer allowed for the "
+                "following reason: %s", reason);
+        } else {
+            call(c,server.loading ? CMD_CALL_NONE : CMD_CALL_FULL);
+            serverAssert((c->flags & CLIENT_BLOCKED) == 0);
+        }
 
-`WATCH` 如上所述。但也可以不使用 `WATCH` 而仅使用 `INCR`（Redis 已经在旧值上增加了，其他人无法[覆盖/覆盖]它）来创建原子递增。
+        /* Commands may alter argc/argv, restore mstate. */
+        c->mstate.commands[j].argc = c->argc;
+        c->mstate.commands[j].argv = c->argv;
+        c->mstate.commands[j].cmd = c->cmd;
+    }
 
-实际上，`GET` 和 `SET` 也可用于以非原子方式递增，因为每个客户端 `GET` 该值，递增，`SET` 回新值。
-该递增在并发访问时不太安全，因为其他客户端可能同时执行相同操作，最终覆盖一方。
+    // restore old DENY_BLOCKING value
+    if (!(old_flags & CLIENT_DENY_BLOCKING))
+        c->flags &= ~CLIENT_DENY_BLOCKING;
 
-### Redis 脚本和事务
+    c->argv = orig_argv;
+    c->argc = orig_argc;
+    c->cmd = orig_cmd;
+    discardTransaction(c);
+```
 
-Redis 脚本是事务性的，因此你可以通过使用脚本实现 CAS 和其他效果。
+Make sure the EXEC command will be propagated as well if MULTI was already propagated.
 
-## 链接
+If inside the MULTI/EXEC block this instance was suddenly switched from master to slave (using the SLAVEOF command), the initial MULTI was propagated into the replication backlog, but the rest was not.
+We need to make sure to at least terminate the backlog with the final EXEC.
 
-- [Redis](/docs/CS/DB/Redis/Redis.md)
+```c
+    if (server.propagate_in_transaction) {
+        int is_master = server.masterhost == NULL;
+        server.dirty++;
+        if (server.repl_backlog && was_master && !is_master) {
+            char *execcmd = "*1\r\n$4\r\nEXEC\r\n";
+            feedReplicationBacklog(execcmd,strlen(execcmd));
+        }
+        afterPropagateExec();
+    }
+
+    server.in_exec = 0;
+}
+```
+
+## Watch
+
+`WATCH` is used to provide a check-and-set (CAS) behavior to Redis transactions.
+It is a command that will make the EXEC conditional: we are asking Redis to perform the transaction only if none of the WATCHed keys were modified.
+This includes modifications made by the client, like write commands, and by Redis itself, like expiration or eviction.
+If keys were modified between when they were WATCHed and when the EXEC was received, the entire transaction will be aborted instead, and EXEC returns a Null reply to notify that the transaction failed.
+
+### watchForKey
+
+The implementation uses a per-DB hash table mapping keys to list of clients
+WATCHing those keys, so that given a key that is going to be modified we can mark all the associated clients as dirty.
+
+Also every client contains a list of WATCHed keys so that's possible to un-watch such keys when the client is freed or when UNWATCH is called.
+In the client->watched_keys list we need to use watchedKey structures as in order to identify a key in Redis we need both the key name and the DB.
+
+```c
+// multi.c
+typedef struct watchedKey {
+    robj *key;
+    redisDb *db;
+} watchedKey;
+
+void watchForKey(client *c, robj *key) {
+    list *clients = NULL;
+    listIter li;
+    listNode *ln;
+    watchedKey *wk;
+
+    /* Check if we are already watching for this key */
+    listRewind(c->watched_keys,&li);
+    while((ln = listNext(&li))) {
+        wk = listNodeValue(ln);
+        if (wk->db == c->db && equalStringObjects(key,wk->key))
+            return; /* Key already watched */
+    }
+```
+
+This key is not already watched in this DB. Let's add it
+
+```c
+    clients = dictFetchValue(c->db->watched_keys,key);
+    if (!clients) {
+        clients = listCreate();
+        dictAdd(c->db->watched_keys,key,clients);
+        incrRefCount(key);
+    }
+    listAddNodeTail(clients,c);
+    /* Add the new key to the list of keys watched by this client */
+    wk = zmalloc(sizeof(*wk));
+    wk->key = key;
+    wk->db = c->db;
+    incrRefCount(key);
+    listAddNodeTail(c->watched_keys,wk);
+}
+```
+
+### signalModifiedKey
+
+Every time a key in the database is modified the function `signalModifiedKey()` is called.
+
+```c
+// db.c
+void signalModifiedKey(client *c, redisDb *db, robj *key) {
+    touchWatchedKey(db,key);
+    trackingInvalidateKey(c,key);
+}
+```
+
+"Touch" a key, so that if this key is being WATCHed by some client the next EXEC will fail.
+
+```c
+// multi.c
+void touchWatchedKey(redisDb *db, robj *key) {
+    list *clients;
+    listIter li;
+    listNode *ln;
+
+    if (dictSize(db->watched_keys) == 0) return;
+    clients = dictFetchValue(db->watched_keys, key);
+    if (!clients) return;
+
+    /* Mark all the clients watching this key as CLIENT_DIRTY_CAS */
+    /* Check if we are already watching for this key */
+    listRewind(clients,&li);
+    while((ln = listNext(&li))) {
+        client *c = listNodeValue(ln);
+
+        c->flags |= CLIENT_DIRTY_CAS;
+    }
+}
+```
+
+## RedisCommand
+
+## Links
+
+- [Redis](/docs/CS/DB/Redis/Redis.md?id=persistence)
+
+## References
+
+1. [Redis Transactions](https://redis.io/docs/manual/transactions/)

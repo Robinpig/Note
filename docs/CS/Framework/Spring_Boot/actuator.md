@@ -1,8 +1,9 @@
 
 ## Introduction
 
-spring-boot-actuator 模块提供了 Spring Boot 的所有生产就绪功能。
-启用这些功能的推荐方式是添加对 `spring-boot-starter-actuator` Starter 的依赖。
+
+The spring-boot-actuator module provides all of Spring Boot’s production-ready features. 
+The recommended way to enable the features is to add a dependency on the `spring-boot-starter-actuator`‘Starter’.
 
 ```groovy
 dependencies {
@@ -13,13 +14,13 @@ dependencies {
 
 
 
-Actuator 端点让你监控应用并与之交互。
-每个端点都可以启用或禁用，并通过 HTTP 或 JMX 暴露（使其可远程访问）。
-端点只有在同时启用和暴露时才被视为可用。内置端点仅在可用时才会被自动配置。
+Actuator endpoints let you monitor and interact with your application. 
+Each individual endpoint can be enabled or disabled and exposed (made remotely accessible) over HTTP or JMX. 
+An endpoint is considered to be available when it is both enabled and exposed. The built-in endpoints will only be auto-configured when they are available. 
 
-要更改暴露哪些端点，请使用以下特定于技术的 include 和 exclude 属性。
-include 属性列出了要暴露的端点的 ID。
-* 可用于选择所有端点。
+To change which endpoints are exposed, use the following technology-specific include and exclude properties.
+The include property lists the IDs of the endpoints that are exposed. 
+* can be used to select all endpoints. 
 ```properties
 management.endpoints.web.exposure.include=*
 ```
@@ -28,7 +29,7 @@ management.endpoints.web.exposure.include=*
 
 
 
-注入 `HttpTraceRepository`，从 `/actuator/httptrace` 获取 cookie
+inject `HttpTraceRepository`, get cookie from `/actuator/httptrace`
 
 ```java
 @Bean
@@ -41,12 +42,12 @@ public HttpTraceRepository traceRepository(){
 
 
 
-从 `/actuator/env` 获取数据源 URL
+get datasource url from `/actuactor/env`
 
-从 `/actuator/heapdump` 获取所有信息
+Get all things from `/actuator/heapdump`
 
 ```
 jhat heapdump
 ```
 
-数据源位于 `org.springframework.boot.autoconfigure.jdbc.DataSourceProperties` 实例中
+datasource in instance of `org.springframework.boot.autoconfigure.jdbc.DataSourceProperties`

@@ -1,60 +1,59 @@
 ## Introduction
 
-Cloud Native 是一种应用开发风格，鼓励轻松采用持续交付和以价值为导向的开发方面的最佳实践。
-一个相关的原则是构建 12-factor 应用，其中开发实践与交付和运营目标保持一致——例如，通过使用声明式编程、管理和监控。
-Cloud Native 不太关乎应用驻留在何处，而更关乎其构建和部署方式。
-云原生应用由称为微服务的离散、可复用组件组成，这些组件旨在集成到任何云环境中。
+Cloud Native is a style of application development that encourages easy adoption of best practices in the areas of continuous delivery and value-driven development. 
+A related discipline is that of building 12-factor Applications, in which development practices are aligned with delivery and operations goals-for instance, by using declarative programming and management and monitoring.
+Cloud native refers less to where an application resides and more to how it is built and deployed. 
+A cloud native application consists of discrete, reusable components that are known as microservices that are designed to integrate into any cloud environment.
 
-- 云原生应用由称为微服务的离散、可复用组件组成，这些组件旨在集成到任何云环境中。
-- 这些微服务作为构建块，通常打包在容器中。
-- 微服务作为一个整体协同工作构成应用，但每个都可以独立扩展、持续改进，并通过自动化和编排过程快速迭代。
-- 每个微服务的灵活性增加了云原生应用的敏捷性和持续改进能力。
+- A cloud native application consists of discrete, reusable components that are known as microservices that are designed to integrate into any cloud environment.
+- These microservices act as building blocks and are often packaged in containers.
+- Microservices work together as a whole to comprise an application, yet each can be independently scaled, continuously improved, and quickly iterated through automation and orchestration processes.
+- The flexibility of each microservice adds to the agility and continuous improvement of cloud-native applications.
 
-> "云原生技术是指工程师和软件人员利用云计算构建更快、更具弹性的技术，并且他们这样做是为了快速满足客户需求。" —Priyanka Sharma, Cloud Native Computing Foundation
+> “Cloud-native technology is when engineers and software people utilize cloud computing to build tech that’s faster and more resilient, and they do that to meet customer demand really quickly.” —Priyanka Sharma, Cloud Native Computing Foundation
 
 ## Principles for cloud-native architecture
 
-为云而架构的原则，也称为云原生架构，关注如何针对云的独特能力优化系统架构。
-传统架构倾向于为固定、高成本的基础设施进行优化，这需要大量手动工作来修改。
-因此传统架构专注于相对较小的固定数量组件的弹性和性能。
-然而在云中，这种固定基础设施的意义要小得多，因为云按使用量收费（因此减少占用空间可以节省成本），并且自动化也更容易（因此自动扩缩容容易得多）。
-因此，云原生架构专注于通过水平扩展、分布式处理和自动化替换故障组件来实现弹性和规模。
+The principle of architecting for the cloud, a.k.a. cloud-native architecture, focuses on how to optimize system architectures for the unique capabilities of the cloud.
+Traditional architecture tends to optimize for a fixed, high-cost infrastructure, which requires considerable manual effort to modify.
+Traditional architecture therefore focuses on the resilience and performance of a relatively small fixed number of components.
+In the cloud however, such a fixed infrastructure makes much less sense because cloud is charged based on usage (so you save money when you can reduce your footprint) and it’s also much easier to automate (so automatically scaling-up and down is much easier).
+Therefore, cloud-native architecture focuses on achieving resilience and scale though horizontal scaling, distributed processing, and automating the replacement of failed components.
 
-> 唯一不变的是变化
+> The only constant is change
 
 ### Principle 1: Design for automation
 
-自动化一直是软件系统的最佳实践，但云使得自动化的基础设施及其之上的组件变得前所未有的容易。
-尽管前期投入通常较高，但倾向于自动化解决方案几乎总是在中期得到回报——不仅在人力投入方面，而且在系统的弹性和性能方面。
-自动化过程修复、扩展和部署系统的速度远比人工快。
-正如我们稍后将讨论的，云中的架构不是一次性交易，自动化也不例外——当发现系统需要采取行动的新方式时，也会发现需要自动化的新事物。
+Automation has always been a best practice for software systems, but cloud makes it easier than ever to automate the infrastructure as well as components that sit above it.
+Although the upfront investment is often higher, favouring an automated solution will almost always pay off in the medium term in terms of effort, but also in terms of the resilience and performance of your system.
+Automated processes can repair, scale, deploy your system far faster than people can.
+As we discuss later on, architecture in the cloud is not a one-shot deal, and automation is no exception—as you find new ways that your system needs to take action, so you will find new things to automate.
 
 ### Principle 2: Be smart with state
 
-存储"状态"，无论是用户数据（如用户购物车中的商品或员工编号）还是系统状态（如运行中的作业实例数量、生产中运行的代码版本），是架构分布式云原生系统中最困难的部分。
-因此，应有意地设计系统在何时以及如何存储状态，并尽可能设计无状态组件。
+Storing of 'state', be that user data (e.g., the items in the users shopping cart, or their employee number) or system state (e.g., how many instances of a job are running, what version of code is running in production), is the hardest aspect of architecting a distributed, cloud-native architecture.
+You should therefore architect your system to be intentional about when, and how, you store state, and design components to be stateless wherever you can.
 
 ### Principle 3: Favor managed services
 
-云不仅仅是基础设施。大多数云提供商提供丰富的托管服务，提供各种功能，免除管理后端软件或基础设施的麻烦。
-然而，许多组织对利用这些服务持谨慎态度，因为他们担心被特定提供商"锁定"。
-这是合理的担忧，但托管服务通常可以为组织节省大量时间和运营开销。
+Cloud is more than just infrastructure. Most cloud providers offer a rich set of managed services, providing all sorts of functionality that relieve you of the headache of managing the backend software or infrastructure.
+However, many organizations are cautious about taking advantage of these services because they are concerned about being 'locked in' to a given provider.
+This is a valid concern, but managed services can often save the organization hugely in time and operational overhead.
 
 ### Principle 4: Practice defense in depth
 
-传统架构非常信任边界安全，粗略地说就是加固的网络边界，内部有"可信事物"，外部有"不可信事物"。
-不幸的是，这种方法始终容易受到内部攻击以及鱼叉式网络钓鱼等外部威胁的攻击。
-此外，提供灵活和移动工作的压力不断增加，进一步削弱了网络边界。
-云原生架构起源于面向互联网的服务，因此始终需要处理外部攻击。
-因此，它们通过在各个组件之间应用身份验证，并最小化组件之间的信任（即使它们是"内部"组件），来采用纵深防御方法。
-结果是没有"内部"和"外部"之分。
+Traditional architectures place a lot of faith in perimeter security, crudely a hardened network perimeter with 'trusted things' inside and 'untrusted things' outside.
+Unfortunately, this approach has always been vulnerable to insider attacks, as well as external threats such as spear phishing.
+Moreover, the increasing pressure to provide flexible and mobile working has further undermined the network perimeter.
+Cloud-native architectures have their origins in internet-facing services, and so have always needed to deal with external attacks.
+Therefore they adopt an approach of defense-in-depth by applying authentication between each component, and by minimizing the trust between those components (even if they are 'internal'). As a result, there is no 'inside' and 'outside'.
 
 ### Principle 5: Always be architecting
 
-云原生系统的核心特征之一是它始终在演进，架构也是如此。
-作为云原生架构师，应始终寻求完善、简化和改进系统架构，随着组织需求的变化、IT 系统格局的变化以及云提供商自身能力的变化而变化。
-虽然这无疑需要持续投入，但过去的经验很清楚：为了演进、成长和响应，IT 系统需要保持活力并不断变化。
-僵化、固化的 IT 系统会迅速使组织陷入停滞，无法应对新的威胁和机遇。
+One of the core characteristics of a cloud-native system is that it’s always evolving, and that's equally true of the architecture.
+As a cloud-native architect, you should always seek to refine, simplify and improve the architecture of the system, as the needs of the organization change, the landscape of your IT systems change, and the capabilities of your cloud provider itself change.
+While this undoubtedly requires constant investment, the lessons of the past are clear: to evolve, grow, and respond, IT systems need to live and breathe and change.
+Dead, ossifying IT systems rapidly bring the organization to a standstill, unable to respond to new threats and opportunities.
 
 
 ## 趋势

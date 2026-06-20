@@ -1,49 +1,49 @@
-## 简介
+## Introduction
 
-作为一种资产，信息需要受到保护以抵御攻击。
-为了安全，信息需要隐藏在未经授权的访问之外（*机密性*），防止未经授权的更改（*完整性*），并在授权实体需要时可用（*可用性*）。
+As an asset, information needs to be secured from attacks.
+To be secure, information needs to be hidden from unauthorized access (*confidentiality*), protected from unauthorized change(*integrity*), and available to an authorized entity when it is needed (*availability*).
 
-### 攻击
+### Attacks
 
-通常，两种类型的攻击威胁信息的机密性：窃听和流量分析。
+In general, two types of attacks threaten the confidentiality of information: snooping and traffic analysis.
 
-数据的完整性可能受到几种攻击的威胁：修改、冒充、重放和否认。
+The integrity of data can be threatened by several kinds of attacks: modification, masquerading, replaying, and repudiation.
 
-我们只提到一种威胁可用性的攻击：*拒绝服务*。
+We mention only one attack threatening availability: *denial of service*.
 
-### 服务与技术
+### Services and techniques
 
-ITU-T 定义了一些安全服务以实现安全目标并防止攻击。
-这些服务中的每一个都旨在防止一个或多个攻击，同时维护安全目标。安全目标的实际实现需要一些技术。
-如今有两种主流技术：一种非常通用（密码学），一种专门（隐写术）。
+ITU-T defines some security services to achieve security goals and prevent attacks.
+Each of these services is designed to prevent one or more attacks while maintaining security goals. The actual implementation of security goals needs some techniques.
+Two techniques are prevalent today: one is very general (cryptography) and one is specific (steganography).
 
-#### 密码学
+#### Cryptography
 
-密码学一词源于希腊语，意为"秘密书写"。然而，我们使用这个术语来指代转换消息以使其安全且不受攻击的科学和艺术。
-虽然过去密码学仅指使用密钥对消息进行加密和解密，但如今它被定义为涉及三种不同的机制：对称密钥加密、非对称密钥加密和哈希。
+Cryptography, a word with Greek origins, means ‘secret writing’. However, we use the term to refer to the science and art of transforming messages to make them secure and immune to attacks.
+Although in the past cryptography referred only to the encryption and decryption of messages using secret keys, today it is defined as involving three distinct mechanisms: symmetric-key encipherment, asymmetric-key encipherment, and hashing.
 
-#### 隐写术
+#### Steganography
 
-隐写术一词源于希腊语，意为"覆盖书写"，与密码学（意为"秘密书写"）形成对比。
-密码学意味着通过加密隐藏消息的内容；隐写术意味着通过用其他东西覆盖来隐藏消息本身。
+The word steganography, with origins in Greek, means ‘covered writing’, in contrast to cryptography, which means ‘secret writing’.
+Cryptography means concealing the contents of a message by enciphering; steganography means concealing the message itself by covering it with something else.
 
-### 机密性
+### Confidentiality
 
-机密性可以通过使用密码来实现。密码可以分为两大类：对称密钥和非对称密钥。
+Confidentiality can be achieved using ciphers. Ciphers can be divided into two broad categories: symmetric-key and asymmetric-key.
 
-### 消息完整性
+### Message integrity
 
-保持文档完整性的一种方法是通过使用*指纹*。
-为了保持消息的完整性，消息通过一种称为**加密哈希函数**的算法。
-该函数创建消息的压缩映像，称为摘要，可以像指纹一样使用。
+One way to preserve the integrity of a document is through the use of a *fingerprint*.
+To preserve the integrity of a message, the message is passed through an algorithm called a **cryptographic hash function**.
+The function creates a compressed image of the message, called a digest, that can be used like a fingerprint.
 
 > The message digest needs to be safe from change.
 
-MAC 使用哈希函数和密钥的组合提供消息完整性和消息认证。
+A MAC provides message integrity and message authentication using a combination of a hash function and a secret key.
 
-### 数字签名
+### Digital signature
 
-数字签名使用一对私钥-公钥。
+A digital signature uses a pair of private–public keys.
 
 ### 故障演练
 
@@ -51,14 +51,15 @@ MAC 使用哈希函数和密钥的组合提供消息完整性和消息认证。
 
 故障主要分三类
 
-- **中间件服务故障**，如模拟 hsf 调用方异常，tddl 调用异常等。
+- **中间件服务故障**，如模拟hsf调用方异常，tddl调用异常等。
 - **机器故障**，如网络延迟，网络丢包等。
-- **第三方故障**，如 mysql 响应延迟等。
+- **第三方故障**，如mysql响应延迟等。
 
 故障演练的范围可以细化到应用，机房，甚至某个具体虚拟机。
 
-参考 alibaba Monkeyking
+参考alibaba Monkeyking
 
-## 链接
+
+## Links
 
 - [CS](/docs/CS/CS.md)

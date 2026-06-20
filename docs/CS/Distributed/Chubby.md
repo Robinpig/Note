@@ -1,154 +1,155 @@
 ## Introduction
 
-Chubby 为松耦合分布式系统提供粗粒度锁以及可靠的存储。
-Chubby 的接口非常类似于带有 advisory lock 的分布式文件系统，但设计重点是可性和可靠性，而非高性能。
+Chubby provide *coarse-grained* locking as well as reliable storage for a *loosely-coupled* distributed system.
+Chubby provides an interface much like a distributed file system with advisory locks, but the design emphasis is on availability and reliability, as opposed to high performance.
 
-[Google File System](/docs/CS/Distributed/GFS.md) 使用 Chubby 锁来指定 GFS master 服务器，
-Bigtable 以多种方式使用 Chubby：选举 master、让 master 发现其控制的服务器，以及允许客户端找到 master。
-此外，GFS 和 Bigtable 都使用 Chubby 作为众所周知且可用的位置来存储少量元数据；
-实际上，它们将 Chubby 用作其分布式数据结构的根。
+[Google File System](/docs/CS/Distributed/GFS.md) uses a Chubby lock to appoint a GFS master server, 
+and Bigtable uses Chubby in several ways: to elect a master, to allow the master to discover the servers it controls, and to permit clients to find the master.
+In addition, both GFS and Bigtable use Chubby as a well-known and available location to store a small amount of meta-data; 
+in effect they use Chubby as the root of their distributed data structures.
 
-异步共识由 [Paxos](/docs/CS/Distributed/Consensus/Paxos.md) 协议解决。
+Asynchronous consensus is solved by the [Paxos](/docs/CS/Distributed/Consensus/Paxos.md) protocol.
 
 ## Design
 
-- 选择锁服务，而非基于共识的库或服务。
-- 选择**提供小文件服务**，以允许被选出的主节点通告自身及其参数，而非构建和维护第二个服务。
-- 一个通过 Chubby 文件通告其主节点的服务可能有数千个客户端。因此，它们必须允许数千个客户端观察此文件，最好不需要许多服务器。
-- 复制服务的客户端和副本可能希望知道服务主节点何时发生变化。这表明事件通知机制对于避免轮询很有用。
-- 即使客户端不需要定期轮询文件，许多客户端也会这样做；这是支持众多开发者的结果。因此，文件的缓存是可取的。
-- 开发者对非直观的缓存语义感到困惑，因此他们更喜欢**一致性缓存**。
-- 为了避免经济损失和法律责任，我们提供了安全机制，包括**访问控制**。
-- 一个可能让一些读者感到惊讶的选择是，他们不期望锁的使用是细粒度的（即锁可能只持有很短的时间，几秒或更少）；相反，他们期望粗粒度的使用。
-  粗粒度锁对锁服务器施加的负载要小得多。
-  特别是，锁的获取速率通常仅与客户端应用程序的事务速率弱相关。
+- Chose a lock service, as opposed to a library or service for consensus.
+- Chose to **serve small-files** to permit elected primaries to advertise themselves and their parameters, rather than build and maintain a second service.
+- A service advertising its primary via a Chubby file may have thousands of clients. Therefore, they must allow thousands of clients to observe this file, preferably without needing many servers.
+- Clients and replicas of a replicated service may wish to know when the service’s primary changes. This suggests that an event notification mechanism would be useful to avoid polling.
+- Even if clients need not poll files periodically, many will; this is a consequence of supporting many developers. Thus, caching of files is desirable.
+- Developers are confused by non-intuitive caching semantics, so they prefer **consistent caching**.
+- To avoid both financial loss and jail time, we provide security mechanisms, including **access control**.
+- A choice that may surprise some readers is that they do not expect lock use to be fine-grained, in which they might be held only for a short duration (seconds or less); instead, they expect coarse-grained use.
+  Coarse-grained locks impose far less load on the lock server.
+  In particular, the lock-acquisition rate is usually only weakly related to the transaction rate of the client applications.
 
-**细粒度锁**可能只持有很短的时间（几秒或更少）。
-**粗粒度锁**可能持有相当长的时间，也许是几小时或几天。
+The *fine-grained* lock might be held only for a short duration (seconds or less).
+The *coarse-grained* lock might be held for a considerable time, perhaps hours or days.
 
-粗粒度锁对锁服务器施加的负载要小得多。
-特别是，锁的获取速率通常仅与客户端应用程序的事务速率弱相关。
-粗粒度锁很少被获取，因此临时的锁服务器不可用对客户端的延迟影响较小。
-另一方面，锁在客户端之间的转移可能需要昂贵的恢复过程，因此不希望锁服务器故障转移导致锁丢失。
-因此，粗粒度锁最好能在锁服务器故障后继续存在，这样做开销的担忧很小，并且此类锁允许数量适中的锁服务器以较低的可用性为大量客户端提供充分服务。
+Coarse-grained locks impose far less load on the lock server.
+In particular, the lock-acquisition rate is usually only weakly related to the transaction rate of the client applications.
+Coarse-grained locks are acquired only rarely, so temporary lock server unavailability delays clients less.
+On the other hand, the transfer of a lock from client to client may require costly recovery procedures, so one would not wish a fail-over of a lock server to cause locks to be lost.
+Thus, it is good for coarsegrained locks to survive lock server failures, there is little concern about the overhead of doing so, and such locks allow many clients to be adequately served by a modest number of lock servers with somewhat lower availability.
 
-细粒度锁会导致不同的结论。
-即使锁服务器短暂不可用也可能导致许多客户端停滞。
-性能和按需添加新服务器的能力非常重要，因为锁服务处的事务速率随客户端的总事务速率增长。
-通过不在锁服务器故障后维护锁来减少锁的开销是有利的，并且由于锁持有时间短，偶尔丢失锁的时间惩罚并不严重。
-（客户端必须做好在网络分区期间丢失锁的准备，因此锁服务器故障转移时丢失锁不会引入新的恢复路径。）
+Fine-grained locks lead to different conclusions.
+Even brief unavailability of the lock server may cause many clients to stall.
+Performance and the ability to add new servers at will are of great concern because the transaction rate at the lock service grows with the combined transaction rate of clients.
+It can be advantageous to reduce the overhead of locking by not maintaining locks across lock server failure, and the time penalty for dropping locks every so often is not severe because locks are held for short periods.
+(Clients must be prepared to lose locks during network partitions, so the loss of locks on lock server fail-over introduces no new recovery paths.)
 
 ## System structure
 
-Chubby 有两个通过 RPC 通信的主要组件：一个服务器，和一个客户端应用程序链接的库；参见图 1。
-Chubby 客户端和服务器之间的所有通信都由客户端库中介。
+Chubby has two main components that communicate via RPC: a server, and a library that client applications link against; see Figure 1.
+All communication between Chubby clients and the servers is mediated by the client library.
 
 ![Figure 1: System structure](./img/Chubby.png)
 
-一个 Chubby cell 由一小群服务器（通常是五台）组成，称为副本，其放置旨在减少相关性故障的可能性（例如，在不同的机架中）。
-副本使用分布式共识协议选举 master，master 必须获得大多数副本的投票，加上这些副本的承诺：在称为 master lease 的几秒间隔内不会选举不同的 master。
-只要 master 继续赢得多数投票，master lease 就会被副本定期续期。
+A Chubby cell consists of a small set of servers (typically five) known as replicas, placed so as to reduce the likelihood of correlated failure (for example, in different racks).
+The replicas use a distributed consensus protocol to elect a master; the master must obtain votes from a majority of the replicas, plus promises that those replicas will not elect a different master for an interval of a few seconds known as the master lease.
+The master lease is periodically renewed by the replicas provided the master continues to win a majority of the vote.
 
-副本维护一个简单数据库的副本，但**只有 master 发起对该数据库的读写**。
-所有其他副本仅从 master 复制更新，更新通过共识协议发送。
+The replicas maintain copies of a simple database, but **only the master initiates reads and writes of this database**.
+All other replicas simply copy updates from the master, sent using the consensus protocol.
 
-写入请求通过共识协议传播到所有副本；当写入已达到 cell 中大多数副本时，这些请求被确认。
-读取请求仅由 master 满足；只要 master lease 未过期，这就是安全的，因为不可能存在其他 master。
+Write requests are propagated via the consensus protocol to all replicas; such requests are acknowledged when the write has reached a majority of the replicas in the cell.
+Read requests are satisfied by the master alone; this is safe provided the master lease has not expired, as no other master can possibly exist.
 
-客户端通过向 DNS 中列出的副本发送 master 位置请求来找到 master。
-非 master 副本通过返回 master 的身份来响应此类请求。
+Clients find the master by sending master location requests to the replicas listed in the DNS.
+Non-master replicas respond to such requests by returning the identity of the master
 
-如果 master 失败，其他副本在其 master lease 过期时运行选举协议；新的 master 通常会在几秒内被选出。
+If a master fails, the other replicas run the election protocol when their master leases expire; a new master will typically be elected in a few seconds.
 
-如果副本失败且数小时未恢复，一个简单的替换系统从空闲池中选择一台新机器并在其上启动锁服务器二进制文件。
-然后它更新 DNS 表，将故障副本的 IP 地址替换为新副本的 IP 地址。当前 master 定期轮询 DNS 并最终注意到更改。
-然后它在 cell 的数据库中更新 cell 成员的列表；该列表通过正常的复制协议在所有成员间保持一致。
-与此同时，新副本从存储在文件服务器上的备份和活跃副本的更新组合中获取数据库的最新副本。
-一旦新副本处理了当前 master 正在等待提交的请求，该副本就被允许在选举新 master 时投票。
+If a replica fails and does not recover for a few hours, a simple replacement system selects a fresh machine from a free pool and starts the lock server binary on it.
+It then updates the DNS tables, replacing the IP address of the failed replica with that of the new one. The current master polls the DNS periodically and eventually notices the change.
+It then updates the list of the cell’s members in the cell’s database; this list is kept consistent across all the members via the normal replication protocol.
+In the meantime, the new replica obtains a recent copy of the database from a combination of backups stored on file servers and updates from active replicas.
+Once the new replica has processed a request that the current master is waiting to commit, the replica is permitted to vote in the elections for new master.
 
-Chubby 导出的文件系统接口类似于 UNIX，但更简单。
+Chubby exports a file system interface similar to, but simpler than that of UNIX.
 
-每个 Chubby 文件和目录都可以充当读写锁：要么一个客户端句柄可以以独占（writer）模式持有锁，要么任意数量的客户端句柄可以以共享（reader）模式持有锁。
-与大多数程序员熟悉的 mutex 一样，锁是 *advisory* 的。
+Each Chubby file and directory can act as a reader-writer lock: either one client handle may hold the lock in exclusive (writer) mode, or any number of client handles may hold the lock in shared (reader) mode.
+Like the mutexes known to most programmers, locks are *advisory*.
 
-在 Chubby 中，以任一模式获取锁都需要写权限，这样无特权的 reader 就无法阻止 writer 取得进展。
-事件在相应操作发生后传递。
-因此，如果客户端被告知文件内容已更改，则保证在随后读取文件时看到新数据（或更新的数据）。
+In Chubby, acquiring a lock in either mode requires write permission so that an unprivileged reader cannot prevent a writer from making progress.
+Events are delivered after the corresponding action has taken place.
+Thus, if a client is informed that file contents have changed, it is guaranteed to see the new data (or data that is yet more recent) if it subsequently reads the file.
 
 ## Events
 
-Chubby 客户端在创建句柄时可以订阅一系列事件。
-这些事件通过 Chubby 库的回调异步传递给客户端。
+Chubby clients may subscribe to a range of events when they create a handle.
+These events are delivered to the client asynchronously via an up-call from the Chubby library
 
 ## Caching
 
-为了减少读取流量，Chubby 客户端将文件数据和节点元数据（包括文件不存在信息）缓存在一致、写直达的内存缓存中。
-缓存由下面描述的租约机制维护，并通过 master 发送的失效通知保持一致性，master 维护每个客户端可能正在缓存的内容列表。
-该协议确保客户端看到 Chubby 状态的一致视图，或者看到错误。
+To reduce read traffic, Chubby clients cache file data and node meta-data (including file absence) in a consistent, write-through cache held in memory.
+The cache is maintained by a lease mechanism described below, and kept consistent by invalidations sent by the master, which keeps a list of what each client may be caching.
+The protocol ensures that clients see either a consistent view of Chubby state, or an error.
 
-- 由于所有请求都经过 master，因此通过缓存来减轻此负载。
-- 每个客户端的缓存是写直达的，并且所有客户端的缓存保持一致。
-- 所有缓存仅在"租约期"内维护。
+- Since all requests go through the master, caching is done to alleviate this load.
+- The caches at each client are right through and the caches at all clients are kept consistent.
+- All caches are maintained only till the “lease period”.
 
-当文件数据或元数据将要更改时，修改会被阻塞，同时 master 向可能缓存了该数据的每个客户端发送数据失效通知；此机制位于 KeepAlive RPC 之上。
+When file data or meta-data is to be changed, the modification is blocked while the master sends invalidations for the data to every client that may have cached it; this mechanism sits on top of KeepAlive RPCs.
 
-缓存协议很简单：它在更改时使缓存数据失效，从不更新它。
+The caching protocol is simple: it invalidates cached data on a change, and never updates it.
 
-客户端将 Chubby 句柄视为指向支持各种操作的不透明结构的指针。
-句柄仅通过 Open() 创建，通过 Close() 销毁。
+Clients see a Chubby handle as a pointer to an opaque structure that supports various operations.
+Handles are created only by Open(), and destroyed with Close().
 
 ## KeepAlive
 
-Chubby session 是 Chubby cell 和 Chubby 客户端之间的关系；它存在于一段时间间隔内，并通过称为 KeepAlive 的定期握手来维护。
-除非 Chubby 客户端另有说明，否则只要其 session 有效，客户端的句柄、锁和缓存数据都保持有效。
+A Chubby session is a relationship between a Chubby cell and a Chubby client; it exists for some interval of time, and is maintained by periodic handshakes called KeepAlives.
+Unless a Chubby client informs the master otherwise, the client’s handles, locks, and cached data all remain valid provided its session remains valid.
 
-客户端在首次联系 Chubby cell 的 master 时请求新 session。
-它在终止时显式结束 session，或者在 session 空闲时（没有打开句柄且一分钟内没有调用）显式结束。
+A client requests a new session on first contacting the master of a Chubby cell.
+It ends the session explicitly either when it terminates, or if the session has been idle(with no open handles and no calls for a minute).
 
-每个 session 都有一个关联的租约——一段延伸到未来的时间间隔，在此期间 master 保证不会单方面终止 session。
-此间隔的结束称为 session lease timeout。
-Master 可以将此超时自由地进一步推进到未来，但不能将其向后移动。
+Each session has an associated lease—an interval of time extending into the future during which the master guarantees not to terminate the session unilaterally.
+The end of this interval is called the session lease timeout.
+The master is free to advance this timeout further into the future, but may not move it backwards in time.
 
-Master 在三种情况下推进租约超时：创建 session 时，master 故障转移时（见下文），以及响应来自客户端的 KeepAlive RPC 时。
+The master advances the lease timeout in three circumstances: on creation of the session, when a master fail-over occurs (see below), and when it responds to a KeepAlive RPC from the client.
 
-除了延长客户端租约外，KeepAlive 回复还用于将事件和缓存失效信息传回客户端。当需要传递事件或失效信息时，master 允许 KeepAlive 提前返回。
+As well as extending the client’s lease, the KeepAlive reply is used to transmit events and cache invalidations back to the client. The master allows a KeepAlive to return early when an event or invalidation is to be delivered.
 
-TCP 的退避策略不考虑更高级别的超时（如 Chubby 租约），因此基于 TCP 的 KeepAlive 在网络高度拥塞时导致了许多 session 丢失。
-我们被迫通过 UDP 而非 TCP 发送 KeepAlive RPC；UDP 没有拥塞避免机制，因此我们更倾向于仅在必须满足高级别时间界限时使用 UDP。
+TCP’s back off policies pay no attention to higher-level timeouts such as Chubby leases, so TCP-based KeepAlives led to many lost sessions at times of high network congestion.
+We were forced to send KeepAlive RPCs via UDP rather than TCP; UDP has no congestion avoidance mechanisms, so we would prefer to use UDP only when high-level timebounds must be met.
 
 ## Failover
 
-当 master 失败或以其他方式失去 master 身份时，它会丢弃关于 session、句柄和锁的内存状态。
-Session 租约的权威计时器在 master 上运行，因此在选出新 master 之前，session 租约计时器会停止；这是合法的，因为它等同于延长客户端租约。
-如果 master 选举快速完成，客户端可以在其本地（近似）租约计时器过期之前联系新 master。
-如果选举花费很长时间，客户端会刷新其缓存并在尝试找到新 master 的同时等待宽限期。
-因此，宽限期允许 session 在超过正常租约超时的故障转移期间得以维持。
+When a master fails or otherwise loses mastership, it discards its in-memory state about sessions, handles, and locks.
+The authoritative timer for session leases runs at the master, so until a new master is elected the session lease timer is stopped; this is legal because it is equivalent to extending the client’s lease. 
+If a master election occurs quickly, clients can contact the new master before their local (approximate) lease timers expire. 
+If the election takes a long time, clients flush their caches and wait for the grace period while trying to find the new master.
+Thus the grace period allows sessions to be maintained across fail-overs that exceed the normal lease timeout.
 
-在此期间，客户端无法确定其租约是否已在 master 处过期。
-它不会拆除其 session，但会阻塞其 API 上的所有应用程序调用，以防止应用程序观察到不一致的数据。
-在宽限期开始时，Chubby 库向应用程序发送一个 jeopardy 事件，以允许其暂停，直到可以确定其 session 的状态。
+During this period, the client cannot be sure whether its lease has expired at the master. 
+It does not tear down its session, but it blocks all application calls on its API to prevent the application from observing inconsistent data.
+At the start of the grace period, the Chubby library sends a jeopardy event to the application to allow it to quiesce itself until it can be sure of the status of its session.
 
-一旦客户端联系到新 master，客户端库和 master 会协作，向应用程序提供未发生故障的假象。
+Once a client has contacted the new master, the client library and master co-operate to provide the illusion to the application that no failure has occurred.
+
 
 ## Backup
 
-由于 Chubby 不使用基于路径的权限，因此每次文件访问在数据库中只需一次查找。
-每隔几小时，每个 Chubby cell 的 master 将其数据库的快照写入不同建筑物中的 GFS 文件服务器。
-使用独立的建筑物可确保备份在建筑物损坏时幸存，并且备份不会在系统中引入循环依赖；同一建筑物中的 GFS cell 可能依赖 Chubby cell 来选举其 master。
+Because Chubby does not use path-based permissions, a single lookup in the database suffices for each file access.
+Every few hours, the master of each Chubby cell writes a snapshot of its database to a GFS file server in a different building.
+The use of a separate building ensures both that the backup will survive building damage, and that the backups introduce no cyclic dependencies in the system; a GFS cell in the same building potentially might rely on the Chubby cell for electing its master.
 
-备份既提供了灾难恢复，也提供了初始化新替换副本数据库的方法，而无需对正在服役的副本施加负载。
+Backups provide both disaster recovery and a means for initializing the database of a newly replaced replica without placing load on replicas that are in service.
 
-Chubby 允许将文件集合从一个 cell 镜像到另一个 cell。
-镜像速度很快，因为文件很小，并且事件机制会在文件被添加、删除或修改时立即通知镜像代码。
-如果没有网络问题，更改会在远低于一秒的时间内反映到全球数十个镜像中。
-如果镜像不可达，它将保持不变，直到连接恢复。
-然后通过比较校验和来识别已更新的文件。
+Chubby allows a collection of files to be mirrored from one cell to another.
+Mirroring is fast because the files are small and the event mechanism informs the mirroring code immediately if a file is added, deleted, or modified.
+Provided there are no network problems, changes are reflected in dozens of mirrors world-wide in well under a second.
+If a mirror is unreachable, it remains unchanged until connectivity is restored.
+Updated files are then identified by comparing their checksums.
 
-镜像最常用于将配置文件复制到分布在世界各地的各种计算集群。
+Mirroring is used most commonly to copy configuration files to various computing clusters distributed around the world.
 
 ## Scaling
 
-两种熟悉的机制——代理和分区——预计将使 Chubby 能够进一步扩展。
+Two familiar mechanisms, proxies and partitioning, that they expect will allow Chubby to scale further.
 
 ## Links
 

@@ -1,55 +1,61 @@
 ## Introduction
 
-Eureka 是一个基于 RESTful（Representational State Transfer）的服务，主要用于 AWS 云环境中的中间层服务发现、负载均衡和故障转移。它在 Netflix 中间件基础设施中扮演着关键角色。
+Eureka is a RESTful (Representational State Transfer) service that is primarily used in the AWS cloud for the purpose of discovery, load balancing and failover of middle-tier servers. It plays a critical role in Netflix mid-tier infra.
 
-Eureka 还附带了一个基于 Java 的客户端组件，即 **Eureka Client**，它使与服务交互变得更加容易。
-该客户端还内置了一个负载均衡器，可执行基本的轮询负载均衡。
 
-当 Eureka 服务器启动时，它会尝试从相邻节点获取所有实例注册信息。
-如果从某个节点获取信息时出现问题，服务器会尝试所有对等节点，直到放弃。
-如果服务器成功获取所有实例，它会根据这些信息设置应接收的续约阈值。
-如果任何时刻续约数量低于配置的百分比阈值（15 分钟内低于 85%），服务器会停止过期实例，以保护当前的实例注册信息。
+Eureka also comes with a Java-based client component,the **Eureka Client**, which makes interactions with the service much easier.
+The client also has a built-in load balancer that does basic round-robin load balancing.
 
-在 Netflix 中，上述保护机制称为**自我保护**模式，主要用于一组客户端与 Eureka Server 之间发生网络分区的情况。
-在对等节点之间发生网络故障时，可能发生以下情况：
+When the Eureka server comes up, it tries to get all of the instance registry information from a neighboring node. 
+If there is a problem getting the information from a node, the server tries all of the peers before it gives up. 
+If the server is able to successfully get all of the instances, it sets the renewal threshold that it should be receiving based on that information.
+If any time, the renewals falls below the percent configured for that value (below 85% within 15 mins), the server stops expiring instances to protect the current instance registry information.
 
-* 对等节点间的心跳复制可能会失败，服务器检测到这种情况后进入自我保护模式，保护当前状态。
-* 注册可能发生在孤立的服务器上，某些客户端可能看到新的注册信息，而其他客户端可能看不到。
+In Netflix, the above safeguard is called as `self-preservation` mode and is primarily used as a protection in scenarios where there is a network partition between a group of clients and the Eureka Server.
+In the case of network outages between peers, following things may happen.
 
-网络连接恢复稳定后，情况会自动纠正。
-当对等节点能够正常通信时，注册信息会自动传输给那些缺少该信息的服务器。
-总之，在网络故障期间，服务器会尽可能地保持弹性，
-但在此期间客户端的服务器视图可能不一致。
+* The heartbeat replications between peers may fail and the server detects this situation and enters into a self-preservation mode protecting the current state.
+* Registrations may happen in an orphaned server and some clients may reflect new registrations while the others may not.
 
-在这种情况下，服务器会尽力保护已有的信息。
-在大规模故障的情况下，这可能导致客户端获取到已不存在的实例。
-客户端必须确保能够应对 eureka server 返回不存在或无响应的实例的情况。
-最好的保护策略是快速超时并尝试其他服务器。
+The situation autocorrects itself after the network connectivity is restored to a stable state.
+When the peers are able to communicate fine, the registration information is automatically transferred to the servers that do not have them.
+The bottom line is, during the network outages, the server tries to be as resilient as possible,
+but there is a possibility of clients having different views of the servers during that time.
 
-eureka 分为以下几个部分
+In these scenarios, the server tries to protect the information it already has. 
+There may be scenarios in case of a mass outage that this may cause the clients to get the instances that do not exist anymore.
+The clients must make sure they are resilient to eureka server returning an instance that is non-existent or un-responsive. 
+The best protection in these scenarios is to timeout quickly and try other servers.
+
+
+
+eureka分为以下几个部分
 
 - [server](/docs/CS/Framework/eureka/Server.md)
 - [client](/docs/CS/Framework/eureka/Client.md)
+
+
+
 
 ## Beat
 
 InstanceResource.renewLease()
 
-Eureka client 需要每 30 秒通过发送心跳来续约租期。续约通知 Eureka server 该实例仍然存活。
-如果服务器在 90 秒内未收到续约，则会从注册表中移除该实例。
-不建议更改续约间隔，因为服务器会利用该信息判断客户端到服务器的通信是否存在广泛问题。
+Eureka client needs to renew the lease by sending heartbeats every 30 seconds. The renewal informs the Eureka server that the instance is still alive. 
+If the server hasn't seen a renewal for 90 seconds, it removes the instance out of its registry. 
+It is advisable not to change the renewal interval since the server uses that information to determine if there is a wide spread problem with the client to server communication.
 
 ### Fetch Registry
-Eureka client 从服务器获取注册表信息并在本地缓存。
-之后, 客户端使用这些信息查找其他服务。
-这些信息通过获取上次获取周期与当前周期之间的增量更新来定期更新（每 30 秒）。
-增量信息在服务端保留较长时间（约 3 分钟），因此增量获取可能会返回相同的实例。
-Eureka client 会自动处理重复信息。
+Eureka clients fetches the registry information from the server and caches it locally.
+After that, the clients use that information to find other services. 
+This information is updated periodically (every 30 seconds) by getting the delta updates between the last fetch cycle and the current one.
+The delta information is held longer (for about 3 mins) in the server, hence the delta fetches may return the same instances again. 
+The Eureka client automatically handles the duplicate information.
 
-获取增量后，Eureka client 通过比较服务器返回的实例数量来与服务器核对信息，如果因某些原因信息不匹配，
-则会重新获取完整的注册表信息。
-Eureka server 缓存增量、完整注册表以及单个应用的压缩负载，同时也缓存相同信息的未压缩版本。
-负载支持 JSON/XML 格式。Eureka client 使用 jersey apache client 以压缩 JSON 格式获取信息。
+After getting the deltas, Eureka client reconciles the information with the server by comparing the instance counts returned by the server and if the information does not match for some reason,
+the whole registry information is fetched again.
+Eureka server caches the compressed payload of the deltas, whole registry and also per application as well as the uncompressed information of the same.
+The payload also supports both JSON/XML formats. Eureka client gets the information in compressed JSON format using jersey apache client.
 
 ## Cache
 
@@ -83,7 +89,7 @@ public class ResponseCacheImpl implements ResponseCache {
 ```
 
 ### Cancel
-Eureka client 在关闭时向 Eureka server 发送取消请求。这会从服务器的实例注册表中移除该实例，从而有效地将其从流量中移除。
+Eureka client sends a cancel request to Eureka server on shutdown. This removes the instance from the server's instance registry thereby effectively taking the instance out of traffic.
 ```java
 @Configuration(proxyBeanMethods = false)
 	@ConditionalOnMissingRefreshScope
@@ -104,11 +110,11 @@ Eureka client 在关闭时向 Eureka server 发送取消请求。这会从服务
 }
 ```
 ### Time Lag
-Eureka client 的所有操作可能需要一些时间才能在 Eureka server 以及其他 Eureka client 上反映出来。这是因为 Eureka server 上的负载缓存会定期刷新以更新新信息。Eureka client 也定期获取增量。因此，更改传播到所有 Eureka client 可能需要长达 2 分钟的时间。
+All operations from Eureka client may take some time to reflect in the Eureka servers and subsequently in other Eureka clients. This is because of the caching of the payload on the eureka server which is refreshed periodically to reflect new information. Eureka clients also fetch deltas periodically. Hence, it may take up to 2 mins for changes to propagate to all Eureka clients.
 ## Cluster Sync
 
-将 InstanceInfo 信息注册到本地，并将此信息复制到所有对等 Eureka 节点。
-如果这是来自其他副本节点的复制事件，则不再复制。
+Registers the information about the InstanceInfo and replicates this information to all peer eureka nodes.
+If this is replication event from other replica nodes then it is not replicated.
 
 ```java
 @Singleton
@@ -129,7 +135,7 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
 
 ### Replica
 
-将所有实例变更复制到对等 Eureka 节点，但不包括发往本节点的复制流量。
+Replicates all instance changes to peer eureka nodes except for replication traffic to this node.
 
 ```java
 @Singleton
@@ -198,11 +204,11 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
 
 ## EndpointUtils
 
-从属性文件中获取所有 Eureka 服务 URL 列表，供 Eureka client 使用。
+Get the list of all eureka service urls from properties file for the eureka client to talk to.
 
 Region Zone
 
-1 个 application 对应 1 个 region，多个 zones
+1 application 1 region, multiple zones
 
 ```java
 // com.netflix.discovery.endpoint.EndpointUtils
@@ -258,7 +264,7 @@ public PeerAwareInstanceRegistryImpl(EurekaServerConfig serverConfig, EurekaClie
 
 *recentCanceledQueue and recentRegisteredQueue are use a capacity **1000 CircularQueue***
 
-CircularQueue 委托了一个 **[ArrayBlockingQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=ArrayBlockingQueue)** 并重写了 offer 方法。
+CircularQueue delegate a **[ArrayBlockingQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=ArrayBlockingQueue)** and override offer method.
 
 ```java
 public abstract class AbstractInstanceRegistry implements InstanceRegistry {
@@ -295,6 +301,7 @@ Eureka1.0 存在问题
 1. 订阅者获取的服务信息是全量的 对内存压力大 在多数据中心部署时订阅者其实只需要获取同数据中心的即可
 2. 订阅者定时pull 实时性不够好 且存在空pull浪费
 3. Eureka Server的peer节点对每个写请求都会转发到其它的peer节点 对于不断增加的写请求只能通过提高配置来解决
+
 
 Eureka2.0改进
 1. pull模式转向push 实现更小粒度 服务按需订阅的功能

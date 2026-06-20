@@ -1,28 +1,28 @@
 ## Introduction
 
-Shenandoah 是一个开源的**基于区域、低暂停、并行且并发**的垃圾回收（GC）算法，**针对大堆**应用程序。
+Shenandoah is an open-source **region-based low-pause parallel and concurrent** garbage collection (GC) algorithm **targeting large heap** applications.
 
-快照开始时并发标记和 Brooks 风格的间接指针并发压缩使得 GC 暂停时间显著缩短，且持续时间与应用程序的存活数据大小无关。
-我们在 OpenJDK 中对 Shenandoah 的实现允许我们与成熟的生产质量 GC 算法进行比较测试。
+Snapshot At the Beginning Concurrent Marking and Brooks-style indirection pointer concurrent compaction enable significantly shorter GC pauses with durations that are independent of the application’s live data size.
+Our implementation of Shenandoah in OpenJDK allows us to do comparison testing with mature production quality GC algorithms.
 
-现代机器拥有比以往更多的内存和处理器。服务级别协议（SLA）应用程序保证 10-500ms 的响应时间。
-为了达到该目标的低端，我们需要垃圾回收算法足够高效，允许程序在可用内存中运行，
-同时也要优化到从不中断正在运行的程序超过几毫秒。
+Modern machines have more memory and more processors than ever before. Service Level Agreement (SLA) applications guarantee response times of 10-500ms.
+In order to meet the lower end of that goal we need garbage collection algorithms which are efficient enough to allow programs to run in the available memory,
+but also optimized to never interrupt the running program for more than a handful of milliseconds.
 
-仅仅查找这些引用可能需要扫描整个堆。
-并发压缩很复杂，因为在移动可能正在使用的对象的同时，还必须原子地更新对该对象的所有引用，使其指向新位置。
-GC 线程和 mutator 线程复制对象，并使用原子比较并交换（CAS）来更新转发指针。
-如果多个 GC 和 mutator 线程竞争移动同一个对象，只有一个 CAS 会成功。
-引用在下一个并发标记 GC 阶段期间更新。
+Simply finding those references may require scanning the entire heap.
+Concurrent compaction is complicated because along with moving a potentially in-use object, you also have to atomically update all references to that object to point to the new location.
+The GC threads and the mutator threads copy the objects and use an atomic compare and swap (CAS) to update the forwarding pointer.
+If multiple GC and mutator threads were competing to move the same object only one CAS would succeed.
+References are updated during the next concurrent marking gc phase.
 
-编译器仅在运行 Shenandoah 收集器时发出屏障。
+The compilers emit barriers only when running the Shenandoah collector.
 
-其代价是 Shenandoah 比其他算法需要更多空间。
+The trade off is that Shenandoah requires more space than other algorithms.
 
 ### Object Layout
 
-Shenandoah 的对象布局为每个对象增加了一个额外的字。
-这个字直接位于对象之前，仅在使用 Shenandoah 收集器时分配。
+The object layout for Shenandoah adds an additional word per object.
+This word is located directly preceding the object and is only allocated when using the Shenandoah collector.
 
 
 
@@ -40,13 +40,14 @@ Fig.1. Shenandoah Object layout
 
 ### Heap Layout
 
-堆被划分为大小相等的区域。
-一个区域可能包含新分配的对象、长期存活的对象或两者的混合。
-在 GC 周期中可以选择任何区域的子集进行回收
+The heap is broken up into equal sized regions.
+A region may contain newly allocated objects, long lived objects, or a mix of both.
+Any subset of the regions may be chosen to be collected during a GC cycle
 
-- 堆划分、大对象区域等与 G1 类似
-- 默认首先回收垃圾区域
-- 默认不分代，没有年轻/老年代分离，即使是暂时的
+- Heap division, humongous regions, etc
+  are similar to G1
+- Collects garbage regions first by default
+- Not generational by default, no young/old separation, even temporally
 - Tracking inter-region references is not
   needed by default
 

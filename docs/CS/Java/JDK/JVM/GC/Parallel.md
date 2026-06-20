@@ -1,25 +1,25 @@
 ## Overview
 
-并行收集器（在此也称为**吞吐量收集器**）是一种类似于串行收集器的分代收集器；
-主要区别在于使用**多个线程**来加速垃圾回收。
-并行收集器通过命令行选项 `-XX:+UseParallelGC` 启用。
-默认情况下，使用此选项时，minor 和 major 回收都并行执行，以进一步减少垃圾回收开销。
+The parallel collector (also referred to here as the **throughput collector)** is a generational collector similar to the serial collector;
+the primary difference is that **multiple threads** are used to speed up garbage collection.
+The parallel collector is enabled with the command-line option `-XX:+UseParallelGC`.
+By default, with this option, both minor and major collections are executed in parallel to further reduce garbage collection overhead.
 
-在具有 N 个硬件线程（N 大于 8）的机器上，并行收集器使用 N 的固定分数作为垃圾回收器线程数。
-对于较大的 N 值，该分数约为 5/8。当 N 低于 8 时，使用的数字为 N。在选定平台上，该分数降至 5/16。
-垃圾回收器线程的具体数量可以通过命令行选项调整（稍后描述）。
-在具有一个处理器的机器上，由于并行执行所需的开销（例如同步），并行收集器可能不如串行收集器性能好。
-然而，在具有中等至大堆的应用程序中，它在具有两个处理器的机器上通常比串行收集器略好，
-并且在具有两个以上处理器时通常显著优于串行收集器。
+On a machine with N hardware threads where N is greater than 8, the parallel collector uses a fixed fraction of N as the number of garbage collector threads.
+The fraction is approximately 5/8 for large values of N. At values of N below 8, the number used is N. On selected platforms, the fraction drops to 5/16.
+The specific number of garbage collector threads can be adjusted with a command-line option (which is described later).
+On a host with one processor, the parallel collector will likely not perform as well as the serial collector because of the overhead required for parallel execution (for example, synchronization).
+However, when running applications with medium-sized to large-sized heaps, it generally outperforms the serial collector by a modest amount on machines with two processors,
+and usually performs significantly better than the serial collector when more than two processors are available.
 
-垃圾回收器线程的数量可以通过命令行选项 `-XX:ParallelGCThreads=<N>` 控制。
-如果使用命令行选项进行显式堆调优，则并行收集器所需良好性能的堆大小与串行收集器所需相同。
-然而，启用并行收集器应该使回收暂停更短。
-由于多个垃圾回收器线程参与 minor 回收，回收期间从年轻代晋升到老年代可能导致一些碎片。
-参与 minor 回收的每个垃圾回收器线程都会为晋升保留一部分老年代，将可用空间划分到这些"晋升缓冲区"可能导致碎片效应。
-减少垃圾回收器线程数并增加老年代大小将减少此碎片效应。
+The number of garbage collector threads can be controlled with the command-line option `-XX:ParallelGCThreads=<N>`.
+If explicit tuning of the heap is being done with command-line options, then the size of the heap needed for good performance with the parallel collector is the same as needed with the serial collector.
+However, enabling the parallel collector should make the collection pauses shorter.
+Because multiple garbage collector threads are participating in a minor collection, some fragmentation is possible due to promotions from the young generation to the tenured generation during the collection.
+Each garbage collection thread involved in a minor collection reserves a part of the tenured generation for promotions and the division of the available space into these "promotion buffers" can cause a fragmentation effect.
+Reducing the number of garbage collector threads and increasing the size of the tenured generation will reduce this fragmentation effect.
 
-在 Full GC 时跳过死亡对象
+Skip dead objects at Full GC
 
 
 | Arg                              | Default | Comment                                                                                                      |
@@ -33,11 +33,11 @@
 
 
 
-ParallelScavengeHeap 是 Parallel GC 的 CollectedHeap 实现。
+ParallelScavengeHeap is the implementation of CollectedHeap for Parallel GC.
 
-堆预先在单个连续块中保留，分为两部分，老年代和年轻代。
-老年代位于较低地址，年轻代位于较高地址。
-两代之间的边界地址是固定的。在一代内部，提交的内存向较高地址增长。
+The heap is reserved up-front in a single contiguous block, split into two parts, the old and young generation. 
+The old generation resides at lower addresses, the young generation at higher addresses. 
+The boundary address between the generations is fixed. Within a generation, committed memory grows towards higher addresses.
 
 ```cpp
 //
@@ -64,15 +64,15 @@ class ParallelScavengeHeap : public CollectedHeap {
 
 ### invoke
 
-此方法应包含调用 full GC 的所有堆特定策略。
-invoke_no_policy() 只会尝试压缩堆；它不会执行进一步操作。
-如果我们需要由于策略原因退出、在 full GC 之前进行 scavenge，或任何其他专门行为，需要在此添加。
+This method should contain all heap-specific policy for invoking a full collection.
+invoke_no_policy() will only attempt to compact the heap; it will do nothing further.
+If we need to bail out for policy reasons, scavenge before full gc, or any other specialized behavior, it needs to be added here.
 
-注意，此方法应仅在 safepoint 时从 vm_thread 调用。
+Note that this method should only be called from the vm_thread while at a safepoint.
 
-注意，soft ref 策略中的 all_soft_refs_clear 标志
-可能为 true，因为此方法可以在没有中间活动的情况下调用。
-例如当堆空间紧张并正在采取全面措施释放空间时。
+Note that the all_soft_refs_clear flag in the soft ref policy
+may be true because this method can be called without intervening activity.
+For example when the heap space is tight and full measure are being taken to free space.
 
 ```cpp
 void PSParallelCompact::invoke(bool maximum_heap_compaction) {

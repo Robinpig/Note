@@ -1,23 +1,29 @@
-## 介绍
+## Introduction
 
-Redis Cluster 是 Redis 的分布式实现，其设计目标按重要性排序如下：
+Redis Cluster is a distributed implementation of Redis with the following goals in order of importance in the design:
 
-- 高性能和线性可扩展性，最高支持 1000 个节点。没有代理，使用异步复制，不对值执行合并操作。
-- 可接受的写入安全性：系统尽力保留来自连接到大多数主节点的客户端的所有写入。
-  通常存在一小段时间窗口，已确认的写入可能会丢失。当客户端处于少数分区时，丢失已确认写入的时间窗口更大。
-- 可用性：Redis Cluster 能够容忍分区，只要大多数主节点可达，且每个不可达的主节点至少有一个可达的副本。
-  此外，通过副本迁移，没有副本复制的主节点将从拥有多个副本的主节点那里获得一个副本。
+- High performance and linear scalability up to 1000 nodes. There are no proxies, asynchronous replication is used, and no merge operations are performed on values.
+- Acceptable degree of write safety: the system tries (in a best-effort way) to retain all the writes originating from clients connected with the majority of the master nodes. 
+  Usually there are small windows where acknowledged writes can be lost. Windows to lose acknowledged writes are larger when clients are in a minority partition.
+- Availability: Redis Cluster is able to survive partitions where the majority of the master nodes are reachable and there is at least one reachable replica for every master node that is no longer reachable. 
+  Moreover using replicas migration, masters no longer replicated by any replica will receive one from a master which is covered by multiple replicas.
+
+
 
 使用命令 `./create-cluster start` 就可以急速创建一个 Redis 集群
 
-为什么 Redis Cluster 使用 16384 个槽？
 
-> 原因是：
+
+
+why redis-cluster use 16384 slots?
+
+> The reason is:
 >
-> 1. 正常的心跳包携带节点的完整配置，可以以幂等方式替换旧配置以更新旧配置。这意味着它们包含节点的槽配置，以原始形式使用 16k 槽需要 2k 空间，但使用 65k 槽则需要 prohibitive 的 8k 空间。
-> 2. 同时，由于其他设计权衡，Redis Cluster 不太可能扩展到超过 1000 个主节点。
+> 1. Normal heartbeat packets carry the full configuration of a node, that can be replaced in an idempotent way with the old in order to update an old config. This means they contain the slots configuration for a node, in raw form, that uses 2k of space with16k slots, but would use a prohibitive 8k of space using 65k slots.
+> 2. At the same time it is unlikely that Redis Cluster would scale to more than 1000 mater nodes because of other design tradeoffs.
 >
-因此 16k 在范围内恰到好处，既能确保在最多 1000 个主节点下每个主节点有足够的槽，又能将槽配置作为原始位图轻松传播。请注意，在小型集群中，位图很难压缩，因为当 N 很小时，位图会有很大比例的位被设置。
+So 16k was in the right range to ensure enough slots per master with a max of 1000 maters, but a small enough number to propagate the slot configuration as a raw bitmap easily. Note that in small clusters the bitmap would be hard to compress because when N is small the bitmap would have slots/N bits set that is a large percentage of bits set.
+
 
 clusterState
 
@@ -100,9 +106,11 @@ typedef struct clusterNode {
 } clusterNode;
 ```
 
+
+
 ## cron
 
-每秒执行 10 次
+This is executed 10 times every second
 
 ```c
 void clusterCron(void) {
@@ -205,7 +213,7 @@ void clusterCron(void) {
     dictReleaseIterator(di);
 ```
 
-每 10 次迭代 ping 一次随机节点，这样我们通常每秒 ping 一个随机节点。
+Ping some random node 1 time every 10 iterations, so that we usually ping one random node every second.
 
 ```c
     if (!(iteration % 10)) {
@@ -371,7 +379,7 @@ void clusterCron(void) {
 
 ### sendPing
 
-向指定节点发送 PING 或 PONG 包，确保添加足够的 gossip 信息。
+Send a PING or PONG packet to the specified node, making sure to add enough gossip information.
 
 ```c
 void clusterSendPing(clusterLink *link, int type) {
@@ -531,14 +539,13 @@ void clusterSetMaster(clusterNode *n) {
 
 Redis Cluster 在运行时，每个实例上都会保存 Slot 和实例的对应关系（也就是 Slot 映射表），以及自身的状态信息。
 
-为了让集群中的每个实例都知道其它所有实例的状态信息，实例之间会按照一定的规则进行通信。
-这个规则就是 Gossip 协议。
+为了让集群中的每个实例都知道其它所有实例的状态信息，实例之间会按照一定的规则进行通信。这个规则就是 Gossip 协议
 
-实例之间使用 Gossip 协议进行通信时，通信开销受到通信消息大小和通信频率这两方面的影响，
-消息越大、频率越高，相应的通信开销也就越大。
+例间使用 Gossip 协议进行通信时，通信开销受到通信消息大小和通信频率这两方面的影响，
+消息越大、频率越高，相应的通信开销也就越大
 
-最初我们不知道自己的"名字"，但一旦连接到第一个节点，就会使用 getsockname() 函数找到它。
-然后我们将在后续所有消息中使用这个地址。
+Initially we don't know our "name", but we'll find it once we connect to the first node, using the getsockname() function.
+Then we'll use this address for all the next messages.
 
 ```c
 typedef struct {
@@ -554,8 +561,7 @@ typedef struct {
 } clusterMsgDataGossip;
 ```
 
-集群节点超时是指节点必须不可达的毫秒数，才能被视为故障状态。
-大多数其他内部时间限制是节点超时的倍数。
+Cluster node timeout is the amount of milliseconds a node must be unreachable for it to be considered in failure state. Most other internal time limits are a multiple of the node timeout.
 
 ```
 cluster-node-timeout 15000
@@ -587,13 +593,12 @@ cluster-node-timeout 15000
 
 ### handshake
 
-如果指定地址尚未有正在进行的握手，则启动握手。
-如果握手成功启动，返回非零值。
-如果出错，返回零并设置 errno 为以下值之一：
 
-- EAGAIN - 该地址已有正在进行的握手。
-- EINVAL - IP 或端口无效。
+Start a handshake with the specified address if there is not one already in progress. Returns non-zero if the handshake was actually started. 
+On error zero is returned and errno is set to one of the following values:
 
+- EAGAIN - There is already a handshake in progress for this address.
+- EINVAL - IP or port are not valid. */
 ```c
 int clusterStartHandshake(char *ip, int port, int cport) {
     clusterNode *n;
@@ -653,13 +658,13 @@ int clusterStartHandshake(char *ip, int port, int cport) {
 
 ### handleSlave
 
-如果我们是从节点，且我们正在服务的非零数量的哈希槽的主节点处于 FAIL 状态，则会调用此函数。
+This function is called if we are a slave node and our master serving a non-zero amount of hash slots is in FAIL state.
 
-此函数的目标是：
+The goal of this function is:
 
-1. 检查我们是否能够执行故障转移，我们的数据是否最新？
-2. 尝试通过主节点选举。
-3. 执行故障转移并通知所有其他节点。
+1. To check if we are able to perform a failover, is our data updated?
+2. Try to get elected by masters.
+3. Perform the failover informing all the other nodes.
 
 ```c
 void clusterHandleSlaveFailover(void) {
@@ -736,8 +741,8 @@ void clusterHandleSlaveFailover(void) {
      * elapsed, we can setup a new one. */
     if (auth_age > auth_retry_time) {
         server.cluster->failover_auth_time = mstime() +
-             500 + /* Fixed delay of 500 milliseconds, let FAIL msg propagate. */
-             random() % 500; /* Random delay between 0 and 500 milliseconds. */
+            500 + /* Fixed delay of 500 milliseconds, let FAIL msg propagate. */
+            random() % 500; /* Random delay between 0 and 500 milliseconds. */
         server.cluster->failover_auth_count = 0;
         server.cluster->failover_auth_sent = 0;
         server.cluster->failover_auth_rank = clusterGetSlaveRank();
@@ -836,9 +841,9 @@ void clusterHandleSlaveFailover(void) {
 
 ### replace Leader
 
-此函数实现自动和手动故障转移的最后部分，其中从节点获取其主节点的哈希槽，并传播新配置。
+This function implements the final part of automatic and manual failovers, where the slave grabs its master's hash slots, and propagates the new configuration.
 
-注意，调用者需要确保节点已经获得了新的配置纪元。
+Note that it's up to the caller to be sure that the node got a new configuration epoch already.
 
 ```c
 void clusterFailoverReplaceYourMaster(void) {
@@ -874,13 +879,18 @@ void clusterFailoverReplaceYourMaster(void) {
 
 ## Tuning
 
-无法将命令分发到 Redis Cluster，因为键在不同的槽中。
-可能原因：JedisCluster 操作的 Key 不在同一个 Slot（槽）中。
-解决方法：通过 Hash tags 对 Key 进行改造。
+
+No way to dispatch this command to Redis Cluster because keys have different slots
+可能原因：JedisCluster操作的Key不在同一个Slot（槽）中。
+解决方法：通过Hash tags对Key进行改造
+
+
+
 
 ## Links
 
 - [Redis](/docs/CS/DB/Redis/Redis.md)
+
 
 ## References
 

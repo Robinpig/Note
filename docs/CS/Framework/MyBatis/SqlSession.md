@@ -25,7 +25,7 @@ openSession
 - openSessionFromDataSource
 - openSessionFromConnection
 
-两者都创建 **Executor** 和 **DefaultSqlSession**
+Both of them create **Executor** and **DefaultSqlSession**
 
 ```java
 public class SqlSessionManager implements SqlSessionFactory, SqlSession {
@@ -93,7 +93,7 @@ public class SqlSessionManager implements SqlSessionFactory, SqlSession {
 
 ### SqlSessionManager
 
-使用 `Proxy.newProxyInstance()` 执行
+`use Proxy.newProxyInstance() to execute`
 
 ```java
 public class SqlSessionManager implements SqlSessionFactory, SqlSession {
@@ -113,10 +113,10 @@ public class SqlSessionManager implements SqlSessionFactory, SqlSession {
 }
 ```
 
-SqlSessionManager 与 DefaultSqlSessionFactory 的主要不同点在于 SqlSessionManager 提供了两种模式，在 SqlSessionInterceptor 的 invoke 里处理
+SqlSessionManager 与 DefaultSqlSessionFactory 的主要不同点 SqlSessionManager 提供了两种模式 在SqlSessionInterceptor的invoke里处理
 
 - 同一线程每次通过 SqlSessionManager 对象访问数据库时，都会创建新的 SqlSession 对象完成数据库操作
-- 通过 localSqlSession 这个 ThreadLocal 变量，记录与当前线程绑定的 SqlSession 对象，供当前线程循环使用
+- 通过 localSqlSession 这 ThreadLocal 变量，记录与当前线程绑定的 SqlSession 对象，供当前线程循环使用
 
 #### SqlSessionInterceptor
 
@@ -154,8 +154,8 @@ private class SqlSessionInterceptor implements InvocationHandler {
 
 ## SqlSession
 
-SqlSession 是与 MyBatis 交互的主要 Java 接口。
-通过此接口，你可以执行命令、获取 mapper 和管理事务。
+The primary Java interface for working with MyBatis.
+Through this interface you can execute commands, get mappers and manage transactions.
 
 ```java
 
@@ -185,7 +185,7 @@ public class DefaultSqlSession implements SqlSession {
 }
 ```
 
-所有 select 方法都调用 `Executor.query()`
+`all of select method invoke Executor.query()`
 
 ![DefaultSqlSession](img/DefaultSqlSession-query.png)
 

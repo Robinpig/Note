@@ -1,42 +1,42 @@
 ## Introduction
 
-**什么是对象？**<br>
-对象是相关状态和行为的软件捆绑包。软件对象通常用于模拟日常生活中发现的现实世界对象。
+**What is an Object?**<br>
+An object is a software bundle of related state and behavior. Software objects are often used to model the real-world objects that you find in everyday life.
 
-**什么是类？**<br>
-类是创建对象的蓝图或原型。
+**What Is a Class?**<br>
+A class is a blueprint or prototype from which objects are created.
 
-**什么是继承？**<br>
-继承为组织和管理软件提供了一种强大而自然的机制。
+**What Is Inheritance?**<br>
+Inheritance provides a powerful and natural mechanism for organizing and structuring your software.
 
-**什么是接口？**<br>
-接口是类与外部世界之间的契约。当类实现接口时，它承诺提供该接口发布的行为。
+**What Is an Interface?**<br>
+An interface is a contract between a class and the outside world. When a class implements an interface, it promises to provide the behavior published by that interface.
 
 ## What is an Object?
 
 > “We cut nature up, organize it into concepts, and ascribe significances as we do, largely because we are parties to an agreement that holds throughout our speech community and is codified in the patterns of our language ... we cannot talk at all except by subscribing to the organization and classification of data which the agreement decrees.” Benjamin Lee Whorf (1897-1941)
 
-Alan Kay 总结了 SmallTalk（第一个成功的面向对象语言，也是启发 Java 的语言）的五个基本特征。
-这些特征代表了纯正的面向对象编程方法：
+Alan Kay summarized five basic characteristics of SmallTalk, the first successful object-oriented language and a language that inspired Java.
+These characteristics represent a pure approach to object-oriented programming:
 
-- **一切都是对象**
-- **程序是一堆通过发送消息相互告知该做什么的对象**
-- **每个对象都有自己的内存，由其他对象组成**
-- **每个对象都有一个类型**
-- **特定类型的所有对象都可以接收相同的消息**
+- **Everything is an object**
+- **A program is a bunch of objects telling each other what to do by sending messages**
+- **Each object has its own memory made up of other objects**
+- **Every object has a type**
+- **All objects of a particular type can receive the same messages**
 
-Grady Booch 对对象给出了更简洁的描述：
+Grady Booch offers an even more succinct description of an object:
 
 > *An object has state, behavior and identity.*
 
-这意味着对象可以有内部数据（提供状态）、方法（产生行为），并且每个对象可以与其他对象唯一区分——具体来说，每个对象在内存中有唯一的地址。
+This means that an object can have internal data (which gives it state), methods (to produce behavior), and each object can be uniquely distinguished from every other object—to put this in a concrete sense, each object has a unique address in memory.
 
 ### Access Control
 
-我们可以将领域分为类创建者（创建新数据类型的人）和客户端程序员（在应用中使用数据类型的类消费者）。
-客户端程序员的目的是收集一个充满类的工具箱，用于快速应用开发。
-类创建者的目的是构建一个只向客户端程序员暴露必要内容而隐藏其他所有内容的类。’s necessary to the client programmer and keeps everything else hidden.<br>
-为什么？因为如果它’s 隐藏了，客户端程序员就不能’t access it, which means the class creator can change the hidden portion at will without worrying about the impact on anyone else.
+We can break up the playing field into class creators (those who create new data types) and client programmers (the class consumers who use the data types in their applications).
+The goal of the client programmer is to collect a toolbox full of classes to use for rapid application development.
+The goal of the class creator is to build a class that exposes only what’s necessary to the client programmer and keeps everything else hidden.<br>
+Why? Because if it’s hidden, the client programmer can’t access it, which means the class creator can change the hidden portion at will without worrying about the impact on anyone else.
 The hidden portion usually represents the tender insides of an object that could easily be corrupted by a careless or uninformed client programmer, so hiding the implementation reduces program bugs.
 
 All relationships need boundaries, respected by all parties involved.

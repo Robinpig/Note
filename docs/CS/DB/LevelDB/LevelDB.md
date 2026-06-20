@@ -1,12 +1,12 @@
 ## Introduction
 
-[LevelDB](https://github.com/google/leveldb) 是 Google 开发的一个快速键值存储库，提供从字符串键到字符串值的有序映射。
-LevelDB 是一个基于 [LSMtrees](/docs/CS/Algorithms/tree/LSM.md) 的广泛使用的键值存储，其灵感来源于 [BigTable](/docs/CS/Distributed/Bigtable.md)。
-LevelDB 支持范围查询、快照以及其他在现代应用程序中有用的特性。
+[LevelDB](https://github.com/google/leveldb) is a fast key-value storage library written at Google that provides an ordered mapping from string keys to string values.
+LevelDB is a widely used key-value store based on [LSMtrees](/docs/CS/Algorithms/tree/LSM.md) that is inspired by [BigTable](/docs/CS/Distributed/Bigtable.md).
+LevelDB supports range queries, snapshots, and other features that are useful in modern applications.
 
 ## Architecture
 
-LevelDB 的整体架构如图 1 所示。
+The overall architecture of LevelDB is shown in Figure 1.
 
 <div style="text-align: center;">
 
@@ -15,29 +15,30 @@ LevelDB 的整体架构如图 1 所示。
 </div>
 
 <p style="text-align: center;">
-Fig.1. LevelDB architecture.
+Fig.1. LevelDB architecture. 
 <br>
-对于 LevelDB，插入一个键值对需要经过多个步骤：(1) 日志文件；(2) memtable；(3) 不可变 memtable；(4) L0 中的 SSTable；(5) 压缩到更深的层级。
+For LevelDB, inserting a key-value pair goes through many steps: (1) the log file; (2) the memtable; (3) the immutable memtable; (4) a SSTable in L0; (5) compacted to further levels.
 </p>
 
-LevelDB 的主要数据结构包括一个磁盘日志文件、两个内存中的有序跳表（memtable 和不可变 memtable），以及七个级别（L0 到 L6）的磁盘 Sorted String Table（SSTable）文件。
-LevelDB 初始时将插入的键值对存储在日志文件和内存中的 memtable 中。
-一旦 memtable 满了，LevelDB 会切换到新的 memtable 和日志文件来处理后续的用户插入。
-在后台，之前的 memtable 被转换为不可变 memtable，然后压缩线程将其刷新到磁盘，在级别 0（L0）生成一个新的 SSTable 文件（通常约为 2 MB）；之前的日志文件被丢弃。
-每个级别的所有文件大小都有限制，并随级别编号以十倍因子增加。
-例如，L1 所有文件的大小限制为 10 MB，而 L2 的限制为 100 MB。
-为了维持大小限制，一旦级别 Li 的总大小超过其限制，压缩线程将从 Li 中选择一个文件，与 Li+1 中所有重叠的文件进行合并排序，并生成新的 Li+1 SSTable 文件。
-压缩线程持续工作，直到所有级别都在其大小限制之内。
-此外，在压缩过程中，LevelDB 确保特定级别中除 L0 外的所有文件在其键范围内不重叠；L0 中的文件键可以相互重叠，因为它们是从 memtable 直接刷新的。
+The main data structures in LevelDB are an ondisk log file, two in-memory sorted skiplists (memtable and immutable memtable), and seven levels (L0 to L6) of on-disk Sorted String Table (SSTable) files.
+LevelDB initially stores inserted key-value pairs in a log file and the in-memory memtable. 
+Once the memtable is full, LevelDB switches to a new memtable and log file to handle further inserts from the user.
+In the background, the previous memtable is converted into an immutable memtable, and a compaction thread then flushes it to the disk, generating a new SSTable file (about 2 MB usually) at level 0 (L0); the previous log file is discarded.
+The size of all files in each level is limited, and increases by a factor of ten with the level number.
+For example, the size limit of all files at L1 is 10 MB, while the limit of L2 is 100 MB.
+To maintain the size limit, once the total size of a level Li exceeds its limit, the compaction thread will choose one file from Li, merge
+sort with all the overlapped files of Li+1, and generate new Li+1 SSTable files.
+The compaction thread continues until all levels are within their size limits.
+Also, during compaction, LevelDB ensures that all files in a particular level, except L0, do not overlap in their keyranges; keys in files of L0 can overlap with each other since they are directly flushed from memtable.
 
-为了执行查找操作，LevelDB 首先搜索 memtable，然后是不可变 memtable，最后按顺序搜索 L0 到 L6 的文件。
-定位随机键所需的文件搜索次数受最大级别数的限制，因为除 L0 外，单个级别内的文件键不重叠。
-由于 L0 中的文件可能包含重叠的键，一次查找可能会搜索 L0 中的多个文件。
-为了避免较大的查找延迟，如果 L0 中的文件数大于 8，LevelDB 会减慢前台写入流量，以等待压缩线程将一些文件从 L0 压缩到 L1。
+To serve a lookup operation, LevelDB searches the memtable first, immutable memtable next, and then files L0 to L6 in order.
+The number of file searches required to locate a random key is bounded by the maximum number of levels, since keys do not overlap between files within a single level, except in L0.
+Since files in L0 can contain overlapping keys, a lookup may search multiple files at L0.
+To avoid a large lookup latency, LevelDB slows down the foreground write traffic if the number of files at L0 is bigger than eight, in order to wait for the compaction thread to compact some files from L0 to L1.
 
 ## Data Types
 
-键和值是任意字节数组。键在键值存储内根据用户指定的比较器函数进行排序。
+Keys and values are arbitrary byte arrays. The keys are ordered within the key value store according to a user-specified comparator function.
 
 ### Slice
 
@@ -124,8 +125,8 @@ Code
 
 ### Comparator
 
-Comparator 对象提供了在用作 sstable 或数据库中键的切片之间的全序关系。
-Comparator 实现必须是线程安全的，因为 leveldb 可能会从多个线程并发调用其方法。
+A Comparator object provides a total order across slices that are used as keys in an sstable or a database.
+A Comparator implementation must be thread-safe since leveldb may invoke its methods concurrently from multiple threads.
 
 ```c
 class LEVELDB_EXPORT Comparator {
@@ -253,22 +254,23 @@ class LEVELDB_EXPORT Iterator {
 
 ### Status
 
-你可能已经注意到上面的 `leveldb::Status` 类型。
-leveldb 中大多数可能遇到错误的函数都返回此类型的值。
-你可以检查结果是否正常，并打印相关的错误消息：
+You may have noticed the `leveldb::Status` type above. 
+Values of this type are returned by most functions in leveldb that may encounter an error.
+You can check if such a result is ok, and also print an associated error message:
 
 ```c++
 leveldb::Status s = ...;
 if (!s.ok()) cerr << s.ToString() << endl;
 ```
 
+
 ## Operations
 
 ### Open
 
-leveldb 数据库有一个名称，对应于文件系统目录。
-数据库的所有内容都存储在此目录中。
-以下示例展示了如何打开一个数据库，并在必要时创建它：
+A leveldb database has a name which corresponds to a file system directory. 
+All of the contents of database are stored in this directory. 
+The following example shows how to open a database, creating it if necessary:
 
 ```c++
 #include <cassert>
@@ -523,8 +525,8 @@ WritableFile
 
 ## Cache
 
-数据库的内容存储在文件系统中的一组文件中，每个文件存储一系列压缩块。
-如果 options.block_cache 非 NULL，则用于缓存常用的未压缩块内容。
+The contents of the database are stored in a set of files in the filesystem and each file stores a sequence of compressed blocks.
+If options.block_cache is non-NULL, it is used to cache frequently used uncompressed block contents.
 
 ```c++
 #include "leveldb/cache.h"
@@ -538,11 +540,11 @@ delete db
 delete options.block_cache;
 ```
 
-注意，缓存保存的是未压缩数据，因此应根据应用程序级别的数据大小进行调整，无需考虑压缩带来的缩减。
-（压缩块的缓存留给操作系统缓冲缓存或客户端提供的任何自定义 Env 实现。）
+Note that the cache holds uncompressed data, and therefore it should be sized according to application level data sizes, without any reduction from compression.
+(Caching of compressed blocks is left to the operating system buffer cache, or any custom Env implementation provided by the client.)
 
-当执行批量读取时，应用程序可能希望禁用缓存，以便批量读取处理的数据不会置换掉大部分缓存内容。
-可以通过每个迭代器的选项来实现：
+When performing a bulk read, the application may wish to disable caching so that the data processed by the bulk read does not end up displacing most of the cached contents.
+A per-iterator option can be used to achieve this:
 
 ```c++
 leveldb::ReadOptions options;
@@ -644,6 +646,7 @@ bool MemTable::Get(const LookupKey& key, std::string* value, Status* s) {
 MaxHeight = 12
 
 Random() % 4 = 0
+
 
 | Height | Probability         |
 | -------- | --------------------- |

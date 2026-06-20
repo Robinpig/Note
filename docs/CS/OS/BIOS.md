@@ -1,18 +1,21 @@
-## 简介
+## Introduction
 
-在计算机中，BIOS（基本输入/输出系统，也称为系统 BIOS、ROM BIOS、BIOS ROM 或 PC BIOS）
-是固件，用于为操作系统和程序提供运行时服务，并在启动过程（上电启动）期间执行硬件初始化。
+In computing, BIOS (`Basic Input/Output System`, also known as the System BIOS, ROM BIOS, BIOS ROM or PC BIOS)
+is firmware used to provide runtime services for operating systems and programs and to perform hardware initialization during the booting process (power-on startup).
 
-现代 PC 中的 BIOS 初始化并测试系统硬件组件（上电自检），
-并从大容量存储设备加载引导加载程序，然后由引导加载程序初始化内核。
-在 DOS 时代，BIOS 为键盘、显示器、存储和其他输入/输出（I/O）设备提供 BIOS 中断调用，标准化了应用程序和操作系统的接口。
-较新的操作系统在启动后不再使用 BIOS 中断调用。
 
-大多数 BIOS 实现是专门为与特定计算机或主板型号配合工作而设计的，通过与各种设备（尤其是系统芯片组）交互来实现。
-最初，BIOS 固件存储在 PC 主板上的 ROM 芯片中。
-在后来的计算机系统中，BIOS 内容存储在闪存中，因此可以在不将芯片从主板取下的情况下重写。
-这允许终端用户轻松更新 BIOS 固件，从而可以添加新功能或修复错误，
-但也使得计算机有可能被 BIOS rootkit 感染。此外，失败的 BIOS 升级可能导致主板变砖。
+The BIOS in modern PCs initializes and tests the system hardware components (Power-on self-test),
+and loads a boot loader from a mass storage device which then initializes a kernel.
+In the era of DOS, the BIOS provided BIOS interrupt calls for the keyboard, display, storage,
+and other input/output (I/O) devices that standardized an interface to application programs and the operating system.
+More recent operating systems do not use the BIOS interrupt calls after startup.
+
+
+Most BIOS implementations are specifically designed to work with a particular computer or motherboard model, by interfacing with various devices especially system chipset.
+Originally, BIOS firmware was stored in a ROM chip on the PC motherboard.
+In later computer systems, the BIOS contents are stored on flash memory so it can be rewritten without removing the chip from the motherboard.
+This allows easy, end-user updates to the BIOS firmware so new features can be added or bugs can be fixed,
+but it also creates a possibility for the computer to become infected with BIOS rootkits. Furthermore, a BIOS upgrade that fails could brick the motherboard.
 
 ## Legacy BIOS
 

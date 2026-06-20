@@ -1,104 +1,122 @@
-## 简介
+## Introduction
 
-重做日志（redo log）是在 `InnoDB` 存储引擎层面产生的。
-重做日志用于崩溃恢复。
-**重做日志是物理日志，记录的是"在某个数据页上做了什么修改"**。
+The redo log is a disk-based data structure used during crash recovery to correct data written by incomplete transactions.
+During normal operations, the redo log encodes requests to **change table data**(except SELECT/SHOW) that result from SQL statements or low-level API calls.
+Modifications that did not finish updating the data files before an unexpected shutdown are replayed automatically during initialization, and before connections are accepted.
 
-写入机制：`InnoDB` 先写重做日志，再更新内存（Buffer Pool），最后将内存中的脏页刷入磁盘。
-**WAL（Write-Ahead Logging）**：在将数据页写入磁盘之前，先确保重做日志已写入磁盘。
+By default, the redo log is **physically represented on disk** by two 5MB files named `ib_logfile0` and `ib_logfile1`.
+MySQL writes to the redo log files in a **circular fashion**.
+Data in the redo log is encoded in terms of records affected; this data is collectively referred to as redo.
+The passage of data through the redo log is represented by an ever-increasing `LSN` value.
 
-### 基本概念
+```mysql
+mysql> show variables like 'innodb_log_file_size';
+innodb_log_file_size	50331648  -- 48M
 
-- `LSN`（Log Sequence Number）日志序列号，单调递增
-- `log group` 日志组，是一个逻辑概念，由多个重做日志文件组成
-- `redo log file` 存储重做日志的物理文件
 
-### 配置
-
-```ini
-# 指定重做日志文件组中文件的数量，默认为 2
-innodb_log_files_in_group=2
-# 指定每个 redo log file 的大小，默认 48M
-innodb_log_file_size=50331648
-# 指定重做日志所在的路径
-innodb_log_group_home_dir=./
+mysql> show variables like 'innodb_log_files_in_group';
+innodb_log_files_in_group	2
 ```
 
-### 关键特性
+Redo log write into [Log Buffer](/docs/CS/DB/MySQL/memory.md?id=Log_buffer), then flush to disk.
 
-1. **崩溃安全**：即使数据库崩溃，重启后可通过重做日志恢复未写入磁盘的修改。
-2. **顺序写入**：重做日志是顺序追加写入的，性能优于随机写磁盘。
-3. **循环写入**：重做日志文件是固定大小的，采用循环写入方式。
+### LSN
 
-```c
-// log0log.cc
+Acronym for “`log sequence number`”. This arbitrary, ever-increasing value represents a point in time corresponding to operations recorded in the `redo log`.
+(This point in time is regardless of **transaction** boundaries; it can fall in the middle of one or more transactions.)
+It is used internally by `InnoDB` during **crash recovery** and for managing the **buffer pool**.
+
+The LSN became an **8-byte unsigned integer** in MySQL 5.6.3 when the redo log file size limit increased from 4GB to 512GB.
+
+flushed_to_disk_lsn
+
+write_lsn
+
+checkpoint_lsn
+
+## Format
+
+<div style="text-align: center;">
+
+```dot
+digraph g {
+  node [shape = record,height=.1];
+  node0[label = "<f0> type |<f1> space ID|<f2> page number|<f3> data "];
+} 
 ```
 
-### Mini-Transaction (mtr)
+</div>
 
-```c
-/** A mini-transaction. */
-class mtr_t {
-    struct mtr_log_t {
-        /** log section allocated from xc_buf for log */
-        mlog_buf_t m_log;
-        /** log section for short term use like log data collection */
-        mlog_buf_t m_short_log;
-        /** log section for long term use like log data collection */
-        mlog_buf_t m_long_log;
-    };
-    /** Log */
-    mtr_log_t m_log;
-    /** Memo stack for storing pointers to objects that have been latched */
-    mtr_memo_t m_memo;
-    /** List of modifications */
-    mtr_buf_t m_modifications;
-    /** Nested calls */
-    ulint m_nested;
-    /** User provided */
-    trx_t *m_user_trx;
-    /** Indicates if the mtr made any modifications */
-    bool m_made_dirty;
-    /** Flags */
-    ulint m_flags;
-    /** Log mode */
-    mtr_log_mode_t m_log_mode;
-    /** Inside ibuf or not */
-    bool m_inside_ibuf;
-    /** Whether we have modified the page and will write the block to the tablespace later */
-    bool m_modified_ht;
-};
-```
+<p style="text-align: center;">
+Fig.1. Redo log structure.
+</p>
 
-### 2PC
+### Group Commit for Redo Log Flushing
 
-Redo Log 的两阶段提交：
+`InnoDB`, like any other ACID-compliant database engine, flushes the `redo log` of a transaction before it is committed.
 
-1. **Prepare 阶段**：将事务的修改写入 redo log，并将事务标记为 prepare 状态。
-2. **Commit 阶段**：将事务的修改写入 binlog，然后将 redo log 中对应的事务标记为 commit 状态。
+`InnoDB` uses `group commit` functionality to group multiple flush requests together to avoid one flush for each commit. With group commit,
+`InnoDB` issues a single write to the log file to perform the commit action for multiple user transactions that commit at about the same time, significantly improving throughput.
 
-```c
-// Include/xa.h
-struct xid_t {
-    long gtrid;
-    long bqual;
-    long formatID;
-};
-```
+> [!NOTE]
+>
+> **Group Commit**:
+>
+> An InnoDB optimization that performs some low-level I/O operations (log write) once for a set of `commit` operations, rather than flushing and syncing separately for each commit.
 
-### 写入流程
+innodb_flush_log_at_trx_commit
 
-1. 事务修改数据页（在 Buffer Pool 中）。
-2. 将修改操作记录到 redo log buffer 中。
-3. 事务提交时，将 redo log buffer 中的日志刷入 redo log file（磁盘）。
-4. 将脏页刷入磁盘（由 checkpoint 或后台线程完成）。
+- 0  fsync everytime
+- 1
+- 2
 
-MySQL 8.0 对 redo log 做了一些优化，包括：
+prepare -->  write binlog  --> commit
 
-1. **并发写入优化**：通过引入 `log_writer`、`log_flusher`、`log_write_notifier`、`log_flush_notifier` 和 `log_closer` 等线程，将 redo log 的写入、刷盘、通知等操作解耦，提高并发性能。
-2. **Dedicated Log Writer Threads**：引入专门的日志写入线程，减轻用户线程的负担。
-3. **Lock-free 读取**：通过无锁数据结构，提升 log buffer 的读取性能。
+## Configuration
 
-## 链接
+Configure the `innodb_log_write_ahead_size` configuration option to avoid “`read-on-write`”. This option defines the write-ahead block size for the redo log.
+Valid values for innodb_log_write_ahead_size are multiples of the InnoDB log file block size (2n). The minimum value is the InnoDB log file block size (512).
 
-- [InnoDB Redo Log](/docs/CS/DB/MySQL/InnoDB.md?id=redolog)
+## Archiving
+
+Backup utilities that copy redo log records may sometimes fail to keep pace with redo log generation while a backup operation is in progress, resulting in lost redo log records due to those records being overwritten.
+This issue most often occurs when there is significant MySQL server activity during the backup operation, and the redo log file storage media operates at a faster speed than the backup storage media.
+The redo log archiving feature, introduced in MySQL 8.0.17, addresses this issue by sequentially writing redo log records to an archive file in addition to the redo log files.
+Backup utilities can copy redo log records from the archive file as necessary, thereby avoiding the potential loss of data.
+
+Activating redo log archiving typically has a minor performance cost due to the additional write activity.
+
+Writing to the redo log archive file does not impede normal transactional logging except in the case that the redo log archive file storage media operates at a much slower rate than the redo log file storage media, and there is a large backlog of persisted redo log blocks waiting to be written to the redo log archive file. In this case, the transactional logging rate is reduced to a level that can be managed by the slower storage media where the redo log archive file resides.
+
+## Optimization
+
+Consider the following guidelines for optimizing redo logging:
+
+* Make your redo log files big, even as big as the [buffer pool](/docs/CS/DB/MySQL/memory.md?id=buffer_pool).
+  When `InnoDB` has written the redo log files full, it must write the modified contents of the buffer pool to disk in a `checkpoint`.
+  Small redo log files cause many unnecessary disk writes.
+  Although historically big redo log files caused lengthy recovery times, recovery is now much faster and you can confidently use large redo log files.
+* Consider increasing the size of the [log buffer](/docs/CS/DB/MySQL/memory.md?id=Log_buffer).
+  A large log buffer enables large transactions to run without a need to write the log to disk before the transactions `commit`.
+  Thus, if you have transactions that update, insert, or delete many rows, making the log buffer larger saves disk I/O.
+* Configure the innodb_log_write_ahead_size configuration option to avoid “read-on-write”.
+* Optimize the use of spin delay by user threads waiting for flushed redo. Spin delay helps reduce latency.
+  During periods of low concurrency, reducing latency may be less of a priority, and avoiding the use of spin delay during these periods may reduce energy consumption.
+  During periods of high concurrency, you may want to avoid expending processing power on spin delay so that it can be used for other work.
+* MySQL 8.0.11 introduced dedicated log writer threads for writing redo log records from the log buffer to the system buffers and flushing the system buffers to the redo log files.
+  Previously, individual user threads were responsible those tasks.
+  Dedicated log writer threads can improve performance on high-concurrency systems, but for low-concurrency systems, disabling dedicated log writer threads provides better performance.
+
+## Summary
+
+> [!WARNING]
+>
+> ***Do not disable redo logging on a production system.***
+
+## Links
+
+- [InnoDB Storage Engine](/docs/CS/DB/MySQL/InnoDB.md?id=innodb-on-disk-structures)
+
+## References
+
+1. [Optimizing InnoDB Redo Logging](https://dev.mysql.com/doc/refman/8.0/en/optimizing-innodb-logging.html)

@@ -1,21 +1,29 @@
-## 简介
+## Introduction
 
-适用于 Linux 的 Windows 子系统（WSL）让开发者可以直接在 Windows 上安装 Linux 发行版（如 Ubuntu、OpenSUSE、Kali、Debian、Arch Linux 等），并使用 Linux 应用程序、工具和 Bash 命令行工具，无需传统虚拟机或双系统设置的额外开销。
+he Windows Subsystem for Linux (WSL) lets developers install a Linux  distribution (such as Ubuntu, OpenSUSE, Kali, Debian, Arch Linux, etc)  and use Linux applications, utilities, and Bash command-line tools  directly on Windows, unmodified, without the overhead of a traditional  virtual machine or dualboot setup.
 
-安装
+
+
+Install
 
 ```shell
 wsl --install
 ```
 
-打开 Windows PowerShell
 
-修改完配置后使用如下命令 shutdown 后重启加载配置
+
+
+
+Open Windows PowerShell
+
+修改完配置后使用如下命令shutdown后重启加载配置
 ```shell
 wsl --shutdown
 ```
 
-避免高 CPU/内存占用
+
+
+Avoid high CPU/memory used.
 
 使用 **.wslconfig** 为 WSL 上运行的所有已安装的发行版配置**全局设置**。
 
@@ -58,24 +66,29 @@ debugConsole=true
 sparseVhd=true
 ```
 
-查看 memory
+查看memory
 ```shell
 cat /proc/meminfo
 ```
 
-WSL 查看 Windows 本地磁盘 C
+
+WSL 查看Windows本地磁盘 C
 
 ```shell
 cd /mnt/c
 ```
 
-Windows 访问 WSL 目录 在目录下执行 `explorer.exe`
+Windows 访问 WSL 目录  在目录下执行 `explorer.exe`
 
-## 链接
+
+
+
+## Links
 
 - [Windows](/docs/CS/OS/Windows/Windows.md)
 
-## 参考
+## References
 
 1. [示例 .wslconfig 文件](https://learn.microsoft.com/zh-cn/windows/wsl/wsl-config)
 2. [Windows 10 中配置 WSL2 与 Ubuntu（进阶）](https://rich1e.github.io/workspace/Windows10%E4%B8%AD%E9%85%8D%E7%BD%AEWSL2%E4%B8%8EUbuntu%EF%BC%88%E8%BF%9B%E9%98%B6%EF%BC%89.html)
+

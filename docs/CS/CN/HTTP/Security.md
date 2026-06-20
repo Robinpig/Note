@@ -1,48 +1,48 @@
-## 简介
+## Introduction
 
 ## CORS
 
-**跨域资源共享（CORS）**是一种基于 HTTP 头的机制，允许服务器指示除自身以外的任何来源（域名、协议或端口），浏览器应允许从中加载资源。
-CORS 还依赖于一种机制，浏览器向托管跨域资源的服务器发出"预检"请求，以检查服务器是否允许实际请求。
-在该预检中，浏览器发送指示实际请求中将使用的 HTTP 方法和头部。
+**Cross-Origin Resource Sharing (CORS)** is an HTTP-header based mechanism that allows a server to indicate any origins (domain, scheme, or port) other than its own from which a browser should permit loading resources.
+CORS also relies on a mechanism by which browsers make a "preflight" request to the server hosting the cross-origin resource, in order to check that the server will permit the actual request.
+In that preflight, the browser sends headers that indicate the HTTP method and headers that will be used in the actual request.
 
-出于安全原因，浏览器限制从脚本发起的跨域 HTTP 请求。
-这意味着使用这些 API 的 Web 应用只能从加载应用的同一来源请求资源，除非来自其他来源的响应包含正确的 CORS 头。
+For security reasons, browsers restrict cross-origin HTTP requests initiated from scripts.
+This means that a web application using those APIs can only request resources from the same origin the application was loaded from unless the response from other origins includes the right CORS headers.
 
-CORS 机制支持浏览器和服务器之间的安全跨域请求和数据传输。
-现代浏览器在 XMLHttpRequest 或 Fetch 等 API 中使用 CORS，以减轻跨域 HTTP 请求的风险。
+The CORS mechanism supports secure cross-origin requests and data transfers between browsers and servers.
+Modern browsers use CORS in APIs such as XMLHttpRequest or Fetch to mitigate the risks of cross-origin HTTP requests.
 
-CORS 不是针对跨域攻击（如[跨站请求伪造（CSRF）](/docs/CS/CN/HTTP/Security.md?id=CSRF)）的防护。
+CORS is not a protection against cross-origin attacks such as [cross-site request forgery (CSRF)](/docs/CS/CN/HTTP/Security.md?id=CSRF).
 
-### 访问控制场景
+### Access Control Scenarios
 
-#### 简单请求
+#### Simple requests
 
-某些请求不会触发 CORS 预检。
-这些称为简单请求，尽管 Fetch 规范（定义了 CORS）不使用该术语。
+Some requests don't trigger a CORS preflight.
+Those are called simple requests, though the Fetch spec (which defines CORS) doesn't use that term.
 
-此操作在客户端和服务器之间执行简单交换，使用 CORS 头处理权限：
+This operation performs a simple exchange between the client and the server, using CORS headers to handle the privileges:
 
-请求
+Req
 
 ```http
 GET /resources/public-data/ HTTP/1.1
 Origin: https://normal-website.com
 ```
 
-响应
+Resp
 
 ```http
 HTTP/1.1 200 OK
 Access-Control-Allow-Origin: https://normal-website.com
 ```
 
-这种 Origin 和 Access-Control-Allow-Origin 头的模式是访问控制协议最简单的用法。
+This pattern of the Origin and Access-Control-Allow-Origin headers is the simplest use of the access control protocol.
 
-#### 预检请求
+#### Preflighted requests
 
-与简单请求不同，对于"预检"请求，浏览器首先使用 OPTIONS 方法向其他来源的资源发送 HTTP 请求，以确定实际请求是否安全发送。
-此类跨域请求需要预检，因为它们可能对用户数据有影响。
+Unlike simple requests, for "preflighted" requests the browser first sends an HTTP request using the OPTIONS method to the resource on the other origin, in order to determine if the actual request is safe to send.
+Such cross-origin requests are preflighted since they may have implications for user data.
 
 ```http
 OPTIONS /doc HTTP/1.1
@@ -57,38 +57,38 @@ Access-Control-Allow-Headers: X-PINGOTHER, Content-Type
 Access-Control-Max-Age: 86400
 ```
 
-预检请求完成后，发送实际请求。
+Once the preflight request is complete, the real request is sent.
 
-#### 带凭证的请求
+#### Requests with credentials
 
 ### CSRF
 
-**跨站请求伪造（CSRF）**是一种 Web 安全漏洞，允许攻击者诱导用户执行他们不打算执行的操作。
-它允许攻击者部分绕过同源策略，该策略旨在防止不同网站相互干扰。
+**Cross-site request forgery (CSRF)** is a web security vulnerability that allows an attacker to induce users to perform actions that they do not intend to perform.
+It allows an attacker to partly circumvent the same origin policy, which is designed to prevent different websites from interfering with each other.
 
-CSRF 攻击可能发生需要三个关键条件：
+For a CSRF attack to be possible, three key conditions must be in place:
 
-* **相关操作。** 应用中存在攻击者有理由诱发的操作。
-  这可能是特权操作（如修改其他用户的权限）或任何涉及用户特定数据的操作（如更改用户自己的密码）。
-* **基于 Cookie 的会话处理。** 执行该操作涉及发出一个或多个 HTTP 请求，应用仅依赖会话 Cookie 来标识发出请求的用户。
-  没有其他机制来跟踪会话或验证用户请求。
-* **无不可预测的请求参数。** 执行操作的请求不包含攻击者无法确定或猜测其值的参数。
-  例如，当导致用户更改密码时，如果攻击者需要知道现有密码的值，则该功能不易受攻击。
+* **A relevant action.** There is an action within the application that the attacker has a reason to induce.
+  This might be a privileged action (such as modifying permissions for other users) or any action on user-specific data (such as changing the user's own password).
+* **Cookie-based session handling.** Performing the action involves issuing one or more HTTP requests, and the application relies solely on session cookies to identify the user who has made the requests.
+  There is no other mechanism in place for tracking sessions or validating user requests.
+* **No unpredictable request parameters.** The requests that perform the action do not contain any parameters whose values the attacker cannot determine or guess.
+  For example, when causing a user to change their password, the function is not vulnerable if an attacker needs to know the value of the existing password.
 
-#### 防止 CSRF 攻击
+#### Preventing CSRF attacks
 
-防御 CSRF 攻击最稳健的方法是在相关请求中包含 [CSRF 令牌](https://portswigger.net/web-security/csrf/tokens)。
-该令牌应具有：
+The most robust way to defend against CSRF attacks is to include a [CSRF token](https://portswigger.net/web-security/csrf/tokens) within relevant requests. 
+The token should be:
 
-* 与一般会话令牌一样，具有高熵且不可预测。
-* 绑定到用户的会话。
-* 在执行相关操作之前，始终严格验证。
+* Unpredictable with high entropy, as for session tokens in general.
+* Tied to the user's session.
+* Strictly validated in every case before the relevant action is executed.
 
-## 链接
+## Links
 
-- [计算机网络](/docs/CS/CN/CN.md)
+- [Computer Network](/docs/CS/CN/CN.md)
 - [HTTP](/docs/CS/CN/HTTP/HTTP.md)
 
-## 参考文献
+## References
 
 1. [MDN Web Docs HTTP](https://developer.mozilla.org/en-US/docs/Web/HTTP)

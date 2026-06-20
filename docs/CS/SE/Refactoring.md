@@ -1,23 +1,23 @@
 ## Introduction
 
-重构是一个在不创建新功能的前提下改进代码的系统性过程，可以将混乱转化为干净的代码和简单的设计。
+Refactoring is a systematic process of improving code without creating new functionality that can transform a mess into clean code and simple design.
 
-复用的代码更难维护，改动的影响面更不易确定，对已有未知代码的改动更具不确定性。
-重复代码的必要性。
-请求参数和 DAO 的实体不会使用同一个对象，即使它们的内容基本一致。
-过早优化是万恶之源。
+复用的代码更难维护 改动的影响面更不易确定 对已有未知代码的改动更具不确定性
+重复代码的必要性
+请求参数和DAO的实体不会使用同一个对象 即使它们的内容基本一致
+过早优化是万恶之源
 
-编程的基本规则之一是，没有例程应该超过一页。
-这是通过将程序分解为模块来实现的。每个模块是一个逻辑单元，完成特定工作。
-通过调用其他模块来保持较小规模。模块化有几个优点：
+One of the basic rules concerning programming is that no routine should ever exceed a page.
+This is accomplished by breaking the program down into modules. Each module is a logical unit and does a specific job.
+Its size is kept small by calling other modules. Modularity has several advantages.
 
-- 首先，调试小程序比调试大程序容易得多。
-- 其次，多人同时开发模块化程序更容易。
-- 第三，编写良好的模块化程序将某些依赖项仅放在一个例程中，使更改更容易。
+- First, it is much easier to debug small routines than large routines.
+- Second, it is easier for several people to work on a modular program simultaneously.
+- Third, a well-written modular program places certain dependencies in only one routine, making changes easier.
 
-例如，如果需要以某种格式写入输出，有一个例程来完成这一点非常重要。
-如果打印语句分散在整个程序中，修改将花费更长的时间。
-全局变量和副作用不好的观念直接源于模块化好的观念。
+For instance, if output needs to be written in a certain format, it is certainly important to have one routine to do this.
+If printing statements are scattered throughout the program, it will take considerably longer to make modifications.
+The idea that global variables and side effects are bad is directly attributable to the idea that modularity is good.
 
 
 

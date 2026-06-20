@@ -1,24 +1,30 @@
 ## Introduction
 
-[Apache Doris](https://doris.apache.org/) 是一个基于 MPP 架构的高性能实时分析型数据库，以其极致的速度和易用性著称。
-在海量数据下，它只需要亚秒级响应时间即可返回查询结果，既能支持高并发点查询场景，也能支持高吞吐复杂分析场景。
-所有这些特性使 Apache Doris 成为报表分析、即时查询、统一数据仓库和数据湖查询加速等场景的理想工具。
-在 Apache Doris 上，用户可以构建各种应用，如用户行为分析、A/B 测试平台、日志检索分析、用户画像分析和订单分析等。
+[Apache Doris](https://doris.apache.org/) is a high-performance, real-time analytical database based on MPP architecture, known for its extreme speed and ease of use. It only requires a sub-second response time to return query results under massive data and can support not only high-concurrent point query scenarios but also high-throughput complex analysis scenarios. All this makes Apache Doris an ideal tool for scenarios including report analysis, ad-hoc query, unified data warehouse, and data lake query acceleration. On Apache Doris, users can build various applications, such as user behavior analysis, AB test platform, log retrieval analysis, user portrait analysis, and order analysis.
 
-如下图所示，Apache Doris 架构简洁明了，仅包含两种进程。
+As shown in the figure below, the Apache Doris architecture is simple and neat, with only two types of processes.
 
-- Frontend (FE)：用户请求访问、查询解析与规划、元数据管理、节点管理等。
-- Backend (BE)：数据存储和查询计划执行
+- Frontend (FE): user request access, query parsing and planning, metadata management, node management, etc.
+- Backend (BE): data storage and query plan execution
 
-两种进程均可水平扩展，单个集群最多可支持数百台机器和数十 PB 的存储容量。
-这两种进程通过一致性协议保证服务的高可用性和数据的高可靠性。
-这种高度集成的架构设计大大降低了分布式系统的运维成本。
+Both types of processes are horizontally scalable, and a single cluster can support up to hundreds of machines and tens of petabytes of storage capacity. And these two types of processes guarantee high availability of services and high reliability of data through consistency protocols. This highly integrated architecture design greatly reduces the operation and maintenance cost of a distributed system.
 
-Doris 使用**列式存储引擎**，按列对数据进行编码、压缩和读取。
+![](https://dev-to-uploads.s3.amazonaws.com/uploads/articles/mnz20ae3s23vv3e9ltmi.png)
+
+
+
+Doris uses a **columnar storage engine**, which encodes, compresses, and reads data by column. 
+
+
 
 ## Links
 
 - [ClickHouse](/docs/CS/DB/ClickHouse.md)
 - [Druid](/docs/CS/DB/Druid.md)
 
+
+
 ## References
+
+
+

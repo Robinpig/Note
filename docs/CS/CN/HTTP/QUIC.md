@@ -1,272 +1,274 @@
-## 简介
+## Introduction
 
-*快速 UDP 互联网连接*（Quick UDP Internet Connections）
+*Quick UDP Internet Connections*
 
-> QUIC 在单个资源流内保持有序性。
+> QUIC retains ordering within a single resource stream.
+
 
 <div style="text-align: center;">
 
-![图 1：HTTP/3](./img/HTTP3.png)
+![Fig.1. HTTP/3](./img/HTTP3.png)
 
 </div>
 
 <p style="text-align: center;">
-图 1：HTTP/3 over QUIC 协议栈概览。
+Fig.1. HTTP/3 over QUIC stack overview.
 </p>
 
-## 快速握手
+## Fast handshakes
 
 0-RTT
 
-QUIC 加密和密码学认证传输数据和协议本身，防止中间盒检查或修改协议头部，并在过程中使协议面向未来。
-QUIC 还内置了版本控制（是的，TCP 没有版本控制），这使我们能够根据未来需求自由考虑深度和广泛的更改。
-版本控制还允许我们考虑可以构建、调优和部署在 POP 内的替代版本，我们接下来将讨论这一点。
+QUIC encrypts and cryptographically authenticates both the transport data and the protocol itself, preventing middleboxes from inspecting or modifying the protocol header and future-proofing the protocol in the process.
+QUIC also has versioning built in (yes, there is no versioning in TCP), which gives us the freedom to consider deep and wide changes as the future requires.
+Versioning also allows us to consider alternative versions that we can build, tune, and deploy within our POPs, as we’ll now discuss.
 
-我们预期 QUIC 有两个主要计算成本来源：
+We anticipated two major sources of computational cost for QUIC:
 
-确认处理：典型 TCP 连接中的大部分数据包只携带确认信息。
-TCP 确认在内核中处理，发送方和接收方都是如此。
-QUIC 在用户空间执行这些操作，导致用户-内核边界上更多的数据拷贝和更多的上下文切换。
-此外，TCP 确认是明文，而 QUIC 确认是加密的，增加了在 QUIC 中发送和接收确认的成本。
+Acknowledgement processing: A large fraction of packets in a typical TCP connection carry only acknowledgements.
+TCP acknowledgements are processed within the kernel, both at the sender and the receiver.
+QUIC does these in user space, resulting in more data copies across the user-kernel boundary and more context switches.
+Additionally, TCP acknowledgements are in plaintext, while QUIC acknowledgements are encrypted, increasing the cost of sending and receiving acknowledgements in QUIC.
 
-每数据包发送方开销：内核了解 TCP 连接，可以记住和重用在连接中所有数据包中预期保持不变的状态。
-例如，内核通常只需要在连接开始时查找目标地址的路由或应用防火墙规则一次。
-由于内核没有 QUIC 连接的状态，这些内核操作在每个发出的 QUIC 数据包上都会执行。
+Per-packet sender overhead: The kernel knows about TCP connections, and can remember and reuse state that is expected to remain unchanged for all packets sent in a connection.
+For instance, the kernel needs to typically only look up the route for the destination address or apply firewall rules once at the start of the connection.
+Since the kernel has no connection state for QUIC connections, these kernel operations are performed on every outgoing QUIC packet.
 
-由于 QUIC 在用户空间运行，这些成本高于 TCP。
-这是因为 QUIC 发送或接收的每个数据包都要跨越用户-内核边界，这被称为上下文切换。
+Since QUIC runs in user space, these costs are higher with QUIC than with TCP.
+This is because every packet that is either sent or received by QUIC crosses the user-kernel boundary, which is known as a context switch.
 
-这个实验展示了改进 quicly 效率的明确路径：降低确认频率，使用 GSO 合并数据包，并尽可能使用大数据包大小。
+This experiment showed a clear path forward for improving quicly’s efficiency: reducing acknowledgement frequency, coalescing packets with GSO, and using as large a packet size as possible.
 
 ## TLS
 
-## 拥塞控制
+## Congestion Control
 
-QUIC 提供的拥塞控制信号是通用的，设计为支持不同的发送方算法。
-发送方可以单方面选择使用不同的算法，例如 CUBIC。
+The signals QUIC provides for congestion control are generic and are designed to support different sender-side algorithms. 
+A sender can unilaterally choose a different algorithm to use, such as CUBIC .
 
 ### ECN
 
-如果路径已验证支持显式拥塞通知（ECN）[RFC3168]，QUIC 将 IP 头部的拥塞经历（CE）码点视为拥塞信号。
-本文档规定了当对端报告的 ECN-CE 计数增加时端点的响应；参见 [QUIC-TRANSPORT] 的第 13.4.2 节。
+If a path has been validated to support Explicit Congestion Notification (ECN) [RFC3168], QUIC treats a Congestion Experienced (CE) codepoint in the IP header as a signal of congestion. 
+This document specifies an endpoint's response when the peer-reported ECN-CE count increases; see Section 13.4.2 of [QUIC-TRANSPORT].
 
-## 连接迁移
 
-QUIC 连接并不严格绑定到单个网络路径。
-连接迁移使用连接标识符来允许连接转移到新的网络路径。
-在此版本 QUIC 中，只有客户端能够迁移。
-这种设计还允许连接在网络拓扑或地址映射发生变化后继续存在，例如 NAT 重新绑定可能导致的变更。
 
-使用连接 ID 使得连接能够在端点地址（IP 地址和端口）发生变化时继续存活，例如由端点迁移到新网络引起的变更。
-本节描述了端点迁移到新地址的过程。
+## Connection Migration
 
-QUIC 的设计依赖端点在握手期间保持稳定的地址。
-某些不支持连接迁移的情况：
+QUIC connections are not strictly bound to a single network path.
+Connection migration uses connection identifiers to allow connections to transfer to a new network path.
+Only clients are able to migrate in this version of QUIC now.
+This design also allows connections to continue after changes in network topology or address mappings, such as might be caused by NAT rebinding.
 
-- 在握手确认之前，端点不得发起连接迁移，如 [QUIC-TLS](/docs/CS/CN/HTTP/QUIC.md?id=TLS) 所定义。
-- 如果对端发送了 disable_active_migration 传输参数，端点不得发起连接迁移。
+The use of a connection ID allows connections to survive changes to endpoint addresses (IP address and port), such as those caused by an endpoint migrating to a new network.
+This section describes the process by which an endpoint migrates to a new address.
 
-如果对端发送了 `disable_active_migration` 传输参数，端点也不得从不同的本地地址向对端在握手期间使用的地址发送数据包（包括探测数据包），
-除非端点已根据来自对端的 `preferred_address` 传输参数采取行动。
-如果对端违反此要求，端点必须要么丢弃该路径上的传入数据包而不生成*无状态重置*（Stateless Reset），要么继续进行路径验证并允许对端迁移。
-生成*无状态重置*或关闭连接将允许网络中的第三方通过欺骗或操纵观察到的流量来导致连接关闭。
+The design of QUIC relies on endpoints retaining a stable address for the duration of the handshake.
+Some situations that do not allow connection migration:
 
-并非所有对端地址的变更都是故意的活跃迁移。
-对端可能经历 NAT 重新绑定：由于中间盒（通常是 NAT）导致的地址变更，为一个流分配新的出站端口甚至新的出站 IP 地址。
-如果端点检测到对端地址的任何变更，必须执行路径验证，除非已事先验证该地址。
+- An endpoint MUST NOT initiate connection migration before the handshake is confirmed, as defined in [QUIC-TLS](/docs/CS/CN/HTTP/QUIC.mdIC.md?id=TLS).
+- An endpoint MUST NOT initiate connection migration if the peer sent the disable_active_migration transport parameter.
 
-当端点在发送数据包方面没有经过验证的路径时，它可以选择丢弃连接状态。
-支持连接迁移的端点可以在丢弃连接状态之前等待新路径变为可用。
+If the peer sent the `disable_active_migration` transport parameter, an endpoint also MUST NOT send packets (including probing packets) from a different local address to the address the peer used during the handshake,
+unless the endpoint has acted on a `preferred_address` transport parameter from the peer.
+If the peer violates this requirement, the endpoint MUST either drop the incoming packets on that path without generating a *Stateless Reset* or proceed with path validation and allow the peer to migrate.
+Generating a *Stateless Reset* or closing the connection would allow third parties in the network to cause connections to close by spoofing or otherwise manipulating observed traffic.
 
-本文档将连接迁移限制到新的客户端地址，但第 9.6 节中描述的情况除外。客户端负责发起所有迁移。
-服务器在从某个地址看到非探测数据包之前，不会向该客户端地址发送非探测数据包。
-如果客户端从未知的服务器地址接收到数据包，客户端必须丢弃这些数据包。
+Not all changes of peer address are intentional, or active, migrations.
+The peer could experience NAT rebinding: a change of address due to a middlebox, usually a NAT, allocating a new outgoing port or even a new outgoing IP address for a flow.
+An endpoint MUST perform path validation if it detects any change to a peer's address, unless it has previously validated that address.
 
-### 连接迁移分类
+When an endpoint has no validated path on which to send packets, it MAY discard connection state.
+An endpoint capable of connection migration MAY wait for a new path to become available before discarding connection state.
 
-#### ACM 和 PCM
+This document limits migration of connections to new client addresses, except as described in Section 9.6.  Clients are responsible for initiating all migrations.
+Servers do not send non-probing packets toward a client address until they see a non-probing packet from that address.  If a client receives packets from an unknown server address, the client MUST discard these packets.
 
-主动连接迁移（Active Connection Migration）和被动连接迁移（Passive Connection Migration）
+### Classification of Connection Migration
 
-#### VCM 和 HCM
+#### ACM and PCM
 
-垂直连接迁移（Vertical Connection Migration）和水平连接迁移（Horizontal Connection Migration）
+Active Connection Migration and Passive Connection Migration
 
-#### CCM 和 SCM
+#### VCM and HCM
 
-客户端连接迁移（Client Connection Migration）和服务器连接迁移（Server Connection Migration）
+Vertical Connection Migration and Horizontal Connection Migration
 
-#### SPCM 和 MPCM
+#### CCM and SCM
 
-单路径连接迁移（Single-path Connection Migration）和多路径连接迁移（Multi-path Connection Migration）
+Client Connection Migration and Server Connection Migration
 
-### 连接迁移策略
+#### SPCM and MPCM
 
-- 故障转移模式（Failover Mode）
-- 待机模式（Standby Mode）
-- 聚合模式（Aggregation Mode）
-- 负载均衡模式（Load Balance Mode）
+Single-path Connection Migration and Multi-path Connection Migration
 
-除 PCM 外，其他连接迁移可以由 RTT、丢包率、超时、ECN 或应用信号触发。
+### Connection Migration Strategy
 
-### 路径验证
+- Failover Mode
+- Standby Mode
+- Aggregation Mode
+- Load Balance Mode
 
-路径验证由两个对端在连接迁移期间使用，以验证地址变更后的可达性。
-在路径验证中，端点测试特定本地地址和特定对端地址之间的可达性，其中地址是 IP 地址和端口的二元组。
+Except for PCM, other connection migrations can be triggered by RTT, packet loss rate, timeout, ECN or application signals.
 
-路径验证测试发送到对端路径上的数据包是否被该对端接收。
-路径验证用于确保从迁移对端接收的数据包不携带伪造的源地址。
+### Path Verification
 
-端点发送包含随机数的 PATH_CHALLENGE 帧以初始化路径验证。
-每个端点在连接建立期间验证其对端的地址。因此，迁移端点可以向其对端发送数据，知道对端愿意在其当前地址接收。
+Path validation is used by both peers during connection migration to verify reachability after a change of address.
+In path validation, endpoints test reachability between a specific local address and a specific peer address, where an address is the 2-tuple of IP address and port.
 
-大多数连接迁移必须执行路径验证，除非端点已验证该路径，原因是验证路径的可达性和安全性。
-但在某些特殊情况下，连接迁移发起方应被允许直接发送数据包，无需等待对端的路径确认。
-条件是确保连接迁移响应方接收的数据包不携带伪造的源地址。
+Path validation tests that packets sent on a path to a peer are received by that peer.
+Path validation is used to ensure that packets received from a migrating peer do not carry a spoofed source address.
 
-端点可以使用 PATH_CHALLENGE 帧（type=0x1a）来检查对端的可达性，并在连接迁移期间进行路径验证。
+The endpoint sends a PATH_CHALLENGE frame containing a random number to initialize path verification.
+Each endpoint validates its peer's address during connection establishment. Therefore, a migrating endpoint can send to its peer knowing that the peer is willing to receive at the peer's current address.
 
-### 探测新路径
+Path verification MUST be performed for most connection migrations, unless the endpoints have verified the path, the reason is to verify the reachability and security of the path.
+But in some special cases, the connection migration initiator should be allowed to send data packets directly without path confirmation from the peer.
+The condition is to ensure that the packet received by connection migration responder does not carry a spoofed source address.
 
-端点可以在将连接迁移到新的本地地址之前，使用路径验证从新的本地地址探测对端的可达性。
-路径验证失败仅仅意味着新路径对此连接不可用。
-**路径验证失败不会导致连接结束，除非没有可用的替代路径。**
+Endpoints can use PATH_CHALLENGE frames (type=0x1a) to check reachability to the peer and for path validation during connection migration.
 
-PATH_CHALLENGE、PATH_RESPONSE、NEW_CONNECTION_ID 和 PADDING 帧是"探测帧"，所有其他帧是"非探测帧"。
-仅包含探测帧的数据包是"探测数据包"，包含任何其他帧的数据包是"非探测数据包"。
+### Probing a New Path
 
-### 发起连接迁移
+An endpoint MAY probe for peer reachability from a new local address using path validation prior to migrating the connection to the new local address.
+Failure of path validation simply means that the new path is not usable for this connection.
+**Failure to validate a path does not cause the connection to end unless there are no valid alternative paths available.**
 
-端点可以通过从新地址发送包含非探测帧的数据包来将连接迁移到新的本地地址。
+PATH_CHALLENGE, PATH_RESPONSE, NEW_CONNECTION_ID, and PADDING frames are "probing frames", and all other frames are "non-probing frames".
+A packet containing only probing frames is a "probing packet", and a packet containing any other frame is a "non-probing packet".
 
-每个端点在连接建立期间验证其对端的地址。
-因此，迁移端点可以向其对端发送数据，知道对端愿意在其当前地址接收。
-因此，端点可以在没有首先验证对端地址的情况下迁移到新的本地地址。
+### Initiating Connection Migration
 
-为了在新路径上建立可达性，端点在新路径上发起路径验证。
-端点可以将路径验证推迟到对端向其新地址发送下一个非探测帧之后。
+An endpoint can migrate a connection to a new local address by sending packets containing non-probing frames from that address.
 
-迁移时，新路径可能不支持端点当前的发送速率。
-因此，端点重置其拥塞控制器和 RTT 估计。
+Each endpoint validates its peer's address during connection establishment.
+Therefore, a migrating endpoint can send to its peer knowing that the peer is willing to receive at the peer's current address.
+Thus, an endpoint can migrate to a new local address without first validating the peer's address.
 
-新路径可能不具有相同的 [ECN 能力]()。
+To establish reachability on the new path, an endpoint initiates path validation on the new path.
+An endpoint MAY defer path validation until after a peer sends the next non-probing frame to its new address.
 
-### 响应连接迁移
+When migrating, the new path might not support the endpoint's current sending rate.
+Therefore, the endpoint resets its congestion controller and RTT estimate.
 
-从新的对端地址接收到包含非探测帧的数据包表明对端已迁移到该地址。
+The new path might not have the same [ECN capability]().
 
-如果接收方允许迁移，它必须向新的对端地址发送后续数据包，并且如果验证尚未进行，必须发起路径验证（第 8.2 节）以验证对端的地址所有权。
-如果接收方没有来自对端的未使用连接 ID，它将无法在新路径上发送任何内容，直到对端提供一个；参见第 9.5 节。
+### Responding to Connection Migration
 
-端点仅根据最高编号的非探测数据包更改其发送数据包所去的地址。
-这确保在接收到重排序的数据包的情况下，端点不会向旧的对端地址发送数据包。
+Receiving a packet from a new peer address containing a non-probing frame indicates that the peer has migrated to that address.
 
-端点可以向未经验证的对端地址发送数据，但必须防范第 9.3.1 和 9.3.2 节所述的潜在攻击。
-如果对端地址最近出现过，端点可以跳过对端地址的验证。
-特别是，如果在检测到某种形式的虚假迁移后端点返回到先前验证的路径，跳过地址验证并恢复丢包检测和拥塞状态可以减少攻击对性能的影响。
+If the recipient permits the migration, it MUST send subsequent packets to the new peer address and MUST initiate path validation(Section 8.2) to verify the peer's ownership of the address if validation is not already underway.
+If the recipient has no unused connection IDs from the peer, it will not be able to send anything on the new path until the peer provides one; see Section 9.5.
 
-更改发送非探测数据包所去的地址后，端点可以放弃对其他地址的任何路径验证。
+An endpoint only changes the address to which it sends packets in response to the highest-numbered non-probing packet.
+This ensures that an endpoint does not send packets to an old peer address in the case that it receives reordered packets.
 
-从新的对端地址接收数据包可能是由对端的 NAT 重新绑定引起的。
+An endpoint MAY send data to an unvalidated peer address, but it MUST protect against potential attacks as described in Sections 9.3.1 and 9.3.2.
+An endpoint MAY skip validation of a peer address if that address has been seen recently.
+In particular, if an endpoint returns to a previously validated path after detecting some form of spurious migration, skipping address validation and restoring loss detection and congestion state can reduce the performance impact of the attack.
 
-验证新的客户端地址后，服务器应向客户端发送新的地址验证令牌（第 8 节）。
+After changing the address to which it sends non-probing packets, an endpoint can abandon any path validation for other addresses.
 
-### 对端地址欺骗
+Receiving a packet from a new peer address could be the result of a NAT rebinding at the peer.
 
-对端可能伪造其源地址，以导致端点向不愿意的主机发送过多数据。
-如果端点发送的数据量远多于欺骗方，连接迁移可能被用来放大攻击者可以向受害者生成的数据量。
+After verifying a new client address, the server SHOULD send new address validation tokens (Section 8) to the client.
 
-如第 9.3 节所述，端点需要验证对端的新地址以确认对端拥有该新地址。
-在对端地址被确认为有效之前，端点限制发送到该地址的数据量；参见第 8 节。
-在没有此限制的情况下，端点可能被用于对不知情受害者的拒绝服务攻击。
+### Peer Address Spoofing
 
-如果端点按上述方式跳过对端地址的验证，则不需要限制其发送速率。
+It is possible that a peer is spoofing its source address to cause an endpoint to send excessive amounts of data to an unwilling host.
+If the endpoint sends significantly more data than the spoofing peer, connection migration might be used to amplify the volume of data that an attacker can generate toward a victim.
 
-### 路径上地址欺骗
+As described in Section 9.3, an endpoint is required to validate a peer's new address to confirm the peer's possession of the new address.
+Until a peer's address is deemed valid, an endpoint limits the amount of data it sends to that address; see Section 8.
+In the absence of this limit, an endpoint risks being used for a denial-of- service attack against an unsuspecting victim.
 
-路径上的攻击者可以通过复制和转发带有伪造地址的数据包使其在原始数据包之前到达，从而引发虚假的连接迁移。
-带有伪造地址的数据包将被视为来自迁移连接，原始数据包将被视为重复并被丢弃。
-在虚假迁移之后，源地址的验证将失败，因为该源地址的实体即使想也没有必要的密钥来读取或响应发送给它的 PATH_CHALLENGE 帧。
+If an endpoint skips validation of a peer address as described above, it does not need to limit its sending rate.
 
-要保护连接不因这种虚假迁移而失败，当新对端地址的验证失败时，端点必须恢复使用最后验证的对端地址。
-此外，从合法对端地址接收具有更高数据包编号的数据包将触发另一次连接迁移。
-这将导致虚假迁移地址的验证被放弃，从而遏制攻击者注入单个数据包所引发的迁移。
+### On-Path Address Spoofing
 
-如果端点没有关于最后验证的对端地址的状态，必须通过丢弃所有连接状态来静默关闭连接。
-这将导致连接上的新数据包被一般性处理。
-例如，端点可以发送无状态重置（Stateless Reset）以响应任何进一步的传入数据包。
+An on-path attacker could cause a spurious connection migration by copying and forwarding a packet with a spoofed address such that it arrives before the original packet.
+The packet with the spoofed address will be seen to come from a migrating connection, and the original packet will be seen as a duplicate and dropped.
+After a spurious migration, validation of the source address will fail because the entity at the source address does not have the necessary cryptographic keys to read or respond to the PATH_CHALLENGE frame that is sent to it even if it wanted to.
 
-### 路径外数据包转发
+To protect the connection from failing due to such a spurious migration, an endpoint MUST revert to using the last validated peer address when validation of a new peer address fails.
+Additionally, receipt of packets with higher packet numbers from the legitimate peer address will trigger another connection migration.
+This will cause the validation of the address of the spurious migration to be abandoned, thus containing migrations initiated by the attacker injecting a single packet.
+
+If an endpoint has no state about the last validated peer address, it MUST close the connection silently by discarding all connection state.
+This results in new packets on the connection being handled generically.
+For instance, an endpoint MAY send a Stateless Reset in response to any further incoming packets.
+
+### Off-Path Packet Forwarding
 
 ```
-  (在连接迁移之前)
-   +--------------+   非探测数据包    +--------------+
-   |    客户端     |  ------------------->  |              |
-   |(源 IP: 1)   |  <-------------------  |              |
-   +--------------+   非探测数据包    |              |
+  (Before connection migration)
+   +--------------+   Non-probing Packet   +--------------+
+   |    Client    |  ------------------->  |              |
+   |(Source IP: 1)|  <-------------------  |              |
+   +--------------+   Non-probing Packet   |              |
           |                                |              |
           |                                |              |
           |                                |              |
           v                                |              |
-   +--------------+   非探测数据包    |              |
+   +--------------+   Non-probing Packet   |              |
    |              |  ------------------->  |              |
    |              |  <-------------------  |              |
-   |              |   非探测数据包    |              |
+   |              |   Non-probing Packet   |              |
    |              |                        |              |
-   |              |                        |    服务器     |
-   |              |     探测数据包     |              |
+   |              |                        |    Server    |
+   |              |     Probing Packet     |              |
    |              |    (PATH_CHALLENGE)    |              |
-   |    客户端     |  <-------------------  |              |
-   |(源 IP: 2)   |  ------------------->  |              |
-   |              |     探测数据包     |              |
+   |    Client    |  <-------------------  |              |
+   |(Source IP: 2)|  ------------------->  |              |
+   |              |     Probing Packet     |              |
    |              |     (PATH_RESPONSE)    |              |
    |              |                        |              |
-   |              |     探测数据包     |              |
+   |              |     Probing Packet     |              |
    |              |    (PATH_CHALLENGE)    |              |
    |              |  ------------------->  |              |
    |              |  <-------------------  |              |
-   |              |     探测数据包     |              |
+   |              |     Probing Packet     |              |
    |              |     (PATH_RESPONSE)    |              |
    +--------------+                        +--------------+
-  (连接迁移之后)
+   (After connection migration)
 ```
 
-端点接收到包含来自对端的非探测帧的新对端地址的数据包，表明连接迁移发起方已迁移到此地址。
+The endpoint receives a packet containing the new peer address of the non-probing frame from the peer, indicating that the connection migration initiator has migrated to this address.
 
-连接迁移后，端点需要重置拥塞控制参数。
+After the connection is migrated, the endpoints need to reset the congestion control parameters.
 
-## 丢包检测和拥塞控制
+## Loss Detection and Congestion Control
 
-## 额外内容
+## Bonus
 
-### 多路复用
+### multplexing
 
-如果是这样，我们可能会想知道为什么一开始需要多路复用？进一步来说：
-HTTP/2 甚至 HTTP/3，因为多路复用是它们相比 HTTP/1.1 拥有的主要特性之一。
+If that’s the case, we might wonder why we would need multplexing at all? And by extension:
+HTTP/2 and even HTTP/3, as multiplexing is one of the main features they have that HTTP/1.1 doesn’t.
 
-- 首先，某些可以增量处理/渲染的文件确实受益于多路复用。
-  例如渐进式图像就是这种情况。
-- 其次，如上所述，如果某个文件比其他文件小得多，它会更早被下载，同时不会过多延迟其他文件。
-- 第三，多路复用允许更改响应的顺序，并为更高优先级的响应中断低优先级的响应。
+- Firstly, some files that can be processed/rendered incrementally do profit from multiplexing.
+  This is for example the case for progressive images.
+- Secondly, as also discussed above, it can be useful if one of the files is much smaller than the others, as it will be downloaded earlier while not delaying the others by too much.
+- Thirdly, multiplexing allows changing the order of responses and interrupting a low priority response for a higher priority one.
 
-### 传输层拥塞控制
+### Transport Congestion Control
 
-QUIC 和 HTTP/3 将面临类似的挑战，因为像 HTTP/2 一样，HTTP/3 将使用单个底层 QUIC 连接。
-你可能会说 QUIC 连接在概念上有点像多个 TCP 连接，因为每个 QUIC 流可以被视为一个 TCP 连接，因为丢包检测是在每流基础上进行的。
-然而，关键的是，QUIC 的拥塞控制仍然在连接级别进行，而不是逐流。
-这意味着，即使流在概念上是独立的，它们都仍然影响 QUIC 的单一、每连接的拥塞控制器，如果任何流上发生丢包，都会导致减速。
-换句话说，单一的 HTTP/3+QUIC 连接仍然不会像 6 个 HTTP/1.1 连接那样增长，类似于一个连接上的 HTTP/2+TCP 并不更快。
+QUIC and HTTP/3 will see similar challenges, as like HTTP/2, HTTP/3 will use a single underlying QUIC connection.
+You might then say that a QUIC connection is conceptually a bit like multiple TCP connections, as each QUIC stream can be seen as one TCP connection, because loss detection is done on a per-stream basis.
+Crucially however, QUIC’s congestion control is still done at the connection level, and not per-stream.
+This means that even though the streams are conceptually independent, they all still impact QUIC’s singular, per-connection congestion controller, causing slowdowns if there is loss on any of the stream.
+Put differently: the single HTTP/3+QUIC connection still won’t grow as fast as the 6 HTTP/1.1 connections, similar to how HTTP/2+TCP over one connection wasn’t faster.
 
 [quicly](https://github.com/h2o/quicly)
 
-## 链接
+## Links
 
-- [计算机网络](/docs/CS/CN/CN.md)
+- [Computer Network](/docs/CS/CN/CN.md)
 - [HTTP](/docs/CS/CN/HTTP/HTTP.md)
 
-## 参考文献
+## References
 
 1. [QUIC](https://quicwg.org/)
 2. [RFC 9000 - QUIC: A UDP-Based Multiplexed and Secure Transport](https://datatracker.ietf.org/doc/rfc9000/)
-3. [RFC 9002 - QUIC Loss Detection and Congestion Control](https://datatracker.ietf.org/doc/rfc9002/)
-4. [知乎专栏 QUIC](https://www.zhihu.com/column/c_1303002298995113984)
+2. [RFC 9002 - QUIC Loss Detection and Congestion Control](https://datatracker.ietf.org/doc/rfc9002/)
+3. [知乎专栏 QUIC](https://www.zhihu.com/column/c_1303002298995113984)

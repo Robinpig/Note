@@ -44,9 +44,9 @@ public class Hello {
 #include<jni.h>
 ```
 
-JVM 的指针
+Pointer of JVM
 
-JNIEnv 的指针：*env
+Pointer of JNIEnv : *env
 
 JNI_createJavaVM
 
@@ -193,9 +193,9 @@ static jint JNI_CreateJavaVM_inner(JavaVM **vm, void **penv, void *args) {
 
 JNI_DestroyJavaVM
 
-例如
+for example
 
-java -jar spring-application.jar 使用 Java Launcher  -> JNI -> libjvm.so
+java -jar spring-application.jar  using Java Launcher   - -   JNI - - > libjvm.so
 
 ## register
 
@@ -300,7 +300,7 @@ address NativeLookup::lookup(const methodHandle& method, TRAPS) {
 
 ## Thread
 
-native 中的状态为 RUNNABLE
+state in native is RUNNABLE
 
 ## JNI and safepoint
 

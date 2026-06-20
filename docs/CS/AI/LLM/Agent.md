@@ -32,7 +32,25 @@ Agent 的使用
 
 
 
+AGENTS.md is an open standard for agent-specific documentation. 
 
+```markdown
+
+# AGENTS.md
+## Dev Environment
+- How to set up and navigate
+## Standards
+- Code style, naming, patterns
+## Testing
+- How to run and write tests
+## Docs Reference
+| Topic | File |
+|-------|------|
+| API contracts | docs/api.md |
+| Architecture | docs/architecture.md |
+| Deployment | docs/deploy.md |
+
+```
 
 
 

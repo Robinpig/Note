@@ -1,8 +1,8 @@
 ## Introduction
 
-[GNU](https://www.gnu.org/home.en.html) 是一个自由软件操作系统——即它尊重用户的自由。
-GNU 操作系统由 GNU 软件包（GNU 项目专门发布的程序）以及第三方发布的自由软件组成。
-GNU 的开发使得使用计算机时可以避免使用践踏自由的软件成为可能。
+[GNU](https://www.gnu.org/home.en.html) is an operating system that is free software—that is, it respects users' freedom. 
+The GNU operating system consists of GNU packages (programs specifically released by the GNU Project) as well as free software released by third parties.
+The development of GNU made it possible to use a computer without software that would trample your freedom.
 
 ## Links
 

@@ -1,22 +1,32 @@
 ## Introduction
 
-在实现中采用 oop/klass 二分法的一个原因是我们不希望每个对象中都有一个 C++ vtbl 指针。
-因此，普通的 oop 没有任何虚函数。
+One reason for the oop/klass dichotomy in the implementation is that we don't want a C++ vtbl pointer in every object.
+Thus, normal oops don't have any virtual functions.
 <br/>
-相反，它们将所有"虚"函数转发给它们的 klass，klass 确实有一个 vtbl，并根据对象的实际类型执行 C++ 分发。
+Instead, they forward all "virtual" functions to their klass, which does have a vtbl and does the C++ dispatch depending on the object's actual type.
+
+
+
+
+
+
 
 ## Klass
 
-Klass 提供：
+A Klass provides:
 
-1. 语言级别的类对象（方法字典等）
-2. 为对象提供 VM 分发行为
+1. language level class object (method dictionary etc.)
+2. provide vm dispatch behavior for the object
 
-这两个功能合并到一个 C++ 类中。
+
+
+Both functions are combined into one C++ class.
+
+
 
 ### Klass hierarchy
 
-Klass 层次结构与 oop 层次结构是分开的。
+The klass hierarchy is separate from the oop hierarchy.
 
 <div style="text-align: center;">
 
@@ -198,8 +208,8 @@ ALWAYSINLINE void InstanceKlass::oop_oop_iterate_oop_maps(oop obj, OopClosureTyp
 }
 ```
 
-遍历对象中的 oop 是 GC 代码中的热点路径。
-通过强制内联以下函数，我们获得了与之前基于宏的实现相似的 GC 性能。
+The iteration over the oops in objects is a hot path in the GC code.
+By force inlining the following functions, we get similar GC performance as the previous macro based implementation.
 
 ```cpp
 template <typename T, class OopClosureType>

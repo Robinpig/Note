@@ -1,27 +1,29 @@
 
-强度削弱
+Reduction in Strength 
 
-用更简单的操作替换昂贵的操作
+Replace costly operation with simpler one
 
-用移位、加法替代乘法或除法
-- 取决于机器
-- 取决于乘法或除法指令的成本
-  - 在 Intel Nehalem 上，整数乘法需要 3 个 CPU 周期
+Shift, add instead of multiply or divide
+- Utility machine dependent
+- Depends on cost of multiply or divide instruction
+  - On Intel Nehalem, integer multiply requires 3 CPU cycles
 
-识别乘积序列
+Recognize sequence of products
 
-共享公共子表达式
 
-获得高性能
+Share Commmon Subexpressions
 
-- 好的编译器和编译选项
-- 不要做傻事
-  - 注意隐藏的算法低效
-  - 编写对编译器友好的代码
-    - 注意优化障碍：过程调用和内存引用
-  - 仔细检查最内层循环（大多数工作在此完成）
-- 针对机器调优代码
-  - 利用指令级并行性
-  - 避免不可预测的分支
-  - 使代码对缓存友好
+
+Getting High Performance
+
+- Good compiler and flags
+- Don't do anything stupid
+  - Watch out for hidden algorithmic inefficiencies
+  - Write compiler-friendly code  
+    - Watch out for optimization blockers: procedure calls & memory references
+  - Look carefully at innermost loops(where most work is done)  
+- Tune code for machine
+  - Exploit instruction-level parallelism
+  - Avoid unpredictable branches
+  - Make code cache friendly
     

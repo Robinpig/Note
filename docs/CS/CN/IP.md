@@ -1,29 +1,34 @@
-## 简介
+## Introduction
 
-IP 是 TCP/IP 协议族中的主力协议。所有 TCP、UDP、ICMP 和 IGMP 数据都以 IP 数据报的形式传输。
-**IP 提供尽力而为、无连接的数据报交付服务。**
+IP is the workhorse protocol of the TCP/IP protocol suite. All TCP, UDP, ICMP, and IGMP data gets transmitted as IP datagrams. 
+**IP provides a best-effort, connectionless datagram delivery service.**
 
-所谓"尽力而为"，是指不保证 IP 数据报能成功到达目的地。
-虽然 IP 不会不必要地丢弃所有流量，但它对其试图传递的数据包的命运不作任何保证。
-当出现问题时，例如路由器暂时耗尽缓冲区，IP 有一个简单的错误处理算法：丢弃一些数据（通常是最后到达的数据报）。
-任何所需的可靠性必须由上层（如 TCP）提供。
-IPv4 和 IPv6 都使用这种基本的尽力而为交付模型。
+By “best-effort” we mean there are no guarantees that an IP datagram gets to its destination successfully. 
+Although IP does not simply drop all traffic unnecessarily, it provides no guarantees as to the fate of the packets it attempts to deliver. 
+When something goes wrong, such as a router temporarily running out of buffers, IP has a simple error-handling algorithm: throw away some data (usually the last datagram that arrived). 
+Any required reliability must be provided by the upper layers (e.g., TCP). 
+IPv4 and IPv6 both use this basic best-effort delivery model.
 
-无连接这个术语意味着：
-- IP 不会在网络元素（即路由器内）维护相关数据报的任何连接状态信息；每个数据报独立于所有其他数据报处理。
-- 这也意味着 IP 数据报可能乱序交付。
-- IP 数据报还可能发生其他情况：可能在传输过程中被复制，或者数据可能因错误而被修改。
+The term connectionless means that: 
+- IP does not maintain any connection state information about related datagrams within the network elements (i.e., within the routers); each datagram is handled independently from all other others. 
+- This also means that IP datagrams can be delivered out of order. 
+- Other things can happen to IP datagrams as well: they may be duplicated in transit, and they may have their data altered as the result of errors. 
 
-同样，需要 IP 之上的某些协议（通常是 TCP）处理所有这些潜在问题，以便为应用程序提供无差错的交付抽象。
+Again, some protocol above IP (usually TCP) has to handle all of these potential problems in order to provide an error-free delivery abstraction for applications.
 
-IPv4 的官方规范在 [RFC0791] 中给出。一系列 RFC 描述了 IPv6，从 [RFC2460] 开始。
+The official specification for IPv4 is given in [RFC0791]. A series of RFCs describe IPv6, starting with [RFC2460].
 
-## IPv4 和 IPv6 头部
 
-*生存时间*字段（TTL）设置了数据报可以通过的路由器数量的上限。
-它由发送方初始化为某个值（[RFC1122] 推荐 64，但 128 或 255 也不少见），并由每个转发数据报的路由器减 1。
-当此字段达到 0 时，数据报被丢弃，并通过 ICMP 消息通知发送方。
-这可以防止数据包在出现不希望的路由循环时永远困在网络中。
+## IPv4 and IPv6 Headers
+
+
+
+The *Time-to-Live* field, or *TTL*, sets an upper limit on the number of routers through which a datagram can pass. 
+It is initialized by the sender to some value (64 is recommended [RFC1122], although 128 or 255 is not uncommon) and decremented by 1 by every router that forwards the datagram. 
+When this field reaches 0, the datagram is thrown away, and the sender is notified with an ICMP message. 
+This prevents packets from getting caught in the network forever should an unwanted routing loop occur.
+
+
 
 地址分类
 
@@ -49,6 +54,8 @@ C类地址
 
 主机号全为1代表所有主机，用于组播
 
+
+
 路由器默认不转发直接广播，只转发本地广播
 
 D E类地址没有主机号
@@ -57,15 +64,21 @@ D类用于多播 E类暂未使用
 
 前4位为1110为多播地址，即224.0.0.0 ~ 239.255.255.255
 
+
+
 CIDR
 
 a.b.c.d/x
 
 /x 前x位为网络号
 
+
+
 子网掩码&IP地址=网络号
 
 子网地址号
+
+
 
 MTU
 
@@ -75,17 +88,30 @@ MSS can be set through iptables while send SYNC
 iptables -A FORWARD -p tcp --tcp-flags SYN SYN -j TCPMSS -set-mss 1400
 ```
 
+
 Default unsupport fragment.
+
+
+
 
 IPv6
 
-## 涉及 IP 的攻击
 
-没有认证或加密（或 IPv6 中禁用了这些功能），IP 欺骗攻击是可能的。
+
+
+## Attacks Involving IP
+
+
+Without authentication or encryption (or when it is disabled for IPv6), IP spoofing attacks are possible.
+
 
 ## IPSec
 
-## 链接
 
-- [计算机网络](/docs/CS/CN/CN.md)
+
+
+
+## Links
+
+- [Computer Network](/docs/CS/CN/CN.md)
 - [Linux IP](/docs/CS/OS/Linux/net/IP.md)
