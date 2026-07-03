@@ -59,6 +59,11 @@ public Flux<String> helloStream(@RequestParam(value = "input", defaultValue = "�
 https://bailian.console.aliyun.com/?tab=model#/api-key&userCode=okjhlpr5 也支持这套 OpenAI规范
 
 
+
+## Agentic Patterns
+
+
+
 ## 监控
 
 
