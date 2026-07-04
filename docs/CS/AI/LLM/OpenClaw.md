@@ -6,7 +6,7 @@ OpenClaw 的架构可以概括为：**“网关驱动（Gateway-driven） + 本�
 
 它的核心哲学是：**Gateway（网关）只是控制平面，真正的产品是那个无处不在的助手。** 它不依赖于云端 SaaS，而是将 AI 的能力通过统一的控制平面，分发到你日常使用的所有 20 多种通讯软件中
 
-
+## Architecture
 
 OpenClaw 的架构可以清晰地划分为以下五个核心层：
 
@@ -51,9 +51,6 @@ OpenClaw 的架构可以清晰地划分为以下五个核心层：
 
 
 
-
-
-
 ## SubAgent
 
 
@@ -78,7 +75,23 @@ sessions_spawn 是 OpenClaw 框架中用于创建子代理的核心工具。通�
 
 
 
+
 ## Links
+
+
+
+
+
+
+
+## References
+
+1. [深入理解OpenClaw技术架构与实现原理（上）-阿里云开发者社区](https://developer.aliyun.com/article/1717849)
+1. [深入理解OpenClaw技术架构与实现原理（下）-阿里云开发者社区](https://developer.aliyun.com/article/1719929)
+
+
+
+
 
 
 
