@@ -22,13 +22,29 @@
 
 ## Advance
 
+一个成熟的Agent系统，都由以下几个核心模块组成：
 
+![image](https://img2024.cnblogs.com/blog/2238006/202604/2238006-20260410152514831-2098084564.png)
+
+
+
+## Tool
+
+
+
+
+
+
+
+## Memory
 
 会话管理
 
+
+
+
+
 上下文
-
-
 
 ## Practice
 
@@ -67,10 +83,6 @@ AGENTS.md is an open standard for agent-specific documentation.
 
 
 ## Pattern
-
-一个成熟的Agent系统，都由以下几个核心模块组成：
-
-![image](https://img2024.cnblogs.com/blog/2238006/202604/2238006-20260410152514831-2098084564.png)
 
 六种核心设计模式
 
@@ -122,7 +134,7 @@ Tool Use 也是Function Calling
 
 
 
-## SubAgent
+### SubAgent
 
 
 为什么需要SubAgent？
@@ -132,8 +144,13 @@ Tool Use 也是Function Calling
 - 成本控制 上下文限制
 - 
 
+如何设计SubAgent
 
-如何设计子
+
+
+
+
+
 
 
 ## Links
