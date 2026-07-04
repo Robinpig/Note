@@ -1,9 +1,10 @@
 ## Introduction
 
-client-go是一个调用kubernetes集群资源对象API的客户端，即通过client-go实现对kubernetes集群中资源对象（包括deployment、service、ingress、replicaSet、pod、namespace、node等）的增删改查等操作
+client-go是一个调用kubernetes集群资源对象API的客户端，即通过client-go访问 kube-apiserver 实现对kubernetes集群中资源对象（包括deployment、service、ingress、replicaSet、pod、namespace、node等）的增删改查等操作
 大部分对kubernetes进行前置API封装的二次开发都通过client-go这个第三方包来实现
 
-client-go` 支持四种客户端对象，分别是 `RESTClient`，`ClientSet`，`DynamicClient` 和 `DiscoveryClient
+client-go 支持四种客户端对象，分别是 `RESTClient`，`ClientSet`，`DynamicClient` 和 `DiscoveryClient`
+每种客户端适用的场景不同，主要是对 `HTTP Request` 做了层层封装
 其中，`RESTClient` 是最基础的客户端对象，它封装了 `HTTP Request`，实现了 `RESTful` 风格的 `API`
 `ClientSet` 基于 `RESTClient`，封装了对于 `Resource` 和 `Version` 的请求方法
 `DynamicClient` 相比于 `ClientSet` 提供了全资源，包括自定义资源的请求方法 `DiscoveryClient` 用于发现 `kube-apiserver` 支持的资源组，资源版本和资源信息
@@ -17,10 +18,6 @@ strict digraph {
     RESTClient -> kubeconfig
 }
 ```
-
-
-
-每种客户端适用的场景不同，主要是对 `HTTP Request` 做了层层封装
 
 
 kubeconfig用于管理访问kube-apiserver的配置信息
