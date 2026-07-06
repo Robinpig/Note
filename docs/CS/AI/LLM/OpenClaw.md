@@ -50,6 +50,55 @@ OpenClaw 的架构可以清晰地划分为以下五个核心层：
 
 
 
+## Memory
+
+OpenClaw 的所有核心记忆都以纯文本 Markdown 文件的形式存储在用户的本地文件系统中（通常位于 ~/.openclaw/workspace/memory/ 目录下）
+
+
+OpenClaw 的内置记忆系统模仿了人类的海马体-新皮层记忆巩固机制，分为短期和长期两层
+GitHub
+：
+短期/每日记忆（Daily Logs）：系统会自动创建 memory/YYYY-MM-DD.md 文件，作为每日的追加日志（append-only）
+博客园
+。在每次会话（Session）启动时，系统会自动加载“今天”和“昨天”的日志，为 AI 提供最新的短期上下文
+en.1991421.cn
+。
+长期/核心记忆（Curated Memory）：MEMORY.md 文件用于存储经过提炼的长期记忆
+GitHub
+。这里存放着用户的核心偏好、重要事实、长期项目状态等需要永久记住的信息。
+记忆巩固（Consolidation）：系统会通过特定的机制（如 Memory Hook 或子代理），定期审查每日的短期日志，并将其中重要的信息提取、总结并写入到 MEMORY.md 中，完成从短期到长期的“记忆巩固”
+GitHub
+。
+
+
+
+
+虽然源文件是 Markdown，但为了实现高效的检索，OpenClaw 在底层实现了向量化和索引机制：
+本地 SQLite 向量库：OpenClaw 会将 MEMORY.md 和 memory/*.md 等文件切分成块（例如约 400 个 Token，80 个 Token 的重叠），生成向量嵌入，并存储在本地每个 Agent 专属的 SQLite 数据库中（如 ~/.openclaw/memory/.sqlite）[[8], [10]]。
+Active Memory（主动记忆）：这是一个可选的、由插件拥有的阻塞型记忆子代理（sub-agent）
+docs.openclaw.ai
+。它会在 AI 生成主要回复之前运行，根据当前对话自动在向量库中搜索相关记忆，并将其注入到上下文中。
+Memory Hooks（记忆钩子）：系统通过会话记忆钩子（session-memory hook）监听对话事件（如会话结束或特定触发词），自动将上下文刷新并持久化到记忆文件中
+lucaberton.com
+。
+
+### Multi-Slot Memory
+
+OpenClaw 的内置 Markdown 系统虽然优秀，但在处理超大规模上下文或复杂知识图谱时可能存在瓶颈。为此，OpenClaw 设计了多插槽记忆架构（Multi-Slot Memory Architecture）
+GitHub
+。
+这意味着 OpenClaw 支持插件化替换，用户可以完全替换默认的记忆提供者，接入更高级的第三方方案
+GitHub
+。
+社区生态与高级插件：
+QMD (Query-Memory-Database)：一种混合检索引擎，能大幅提升记忆召回率[[14], [16]]。
+Mem0 / MemSearch：第三方记忆插件，提供跨会话的持久化记忆、多层级架构或知识图谱支持[[2], [9], [17]]。
+Obsidian 集成：用户可以直接将 Obsidian 笔记库作为外部大脑接入 OpenClaw
+GitHub
+。
+分层记忆（Hierarchical Memory）：用轻量级索引+下钻详情文件来替代扁平的 MEMORY.md，以解决记忆文件过大导致的 Token 消耗问题[[6], [11]]。
+总结
+
 
 ## SubAgent
 
@@ -88,14 +137,3 @@ sessions_spawn 是 OpenClaw 框架中用于创建子代理的核心工具。通�
 
 1. [深入理解OpenClaw技术架构与实现原理（上）-阿里云开发者社区](https://developer.aliyun.com/article/1717849)
 1. [深入理解OpenClaw技术架构与实现原理（下）-阿里云开发者社区](https://developer.aliyun.com/article/1719929)
-
-
-
-
-
-
-
-
-
-
-
