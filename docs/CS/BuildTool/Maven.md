@@ -200,6 +200,18 @@ If no scope is listed, it means the dependency is omitted.`import`
 > However, if a library you depend on extends a class from another library, both must be available at compile time. For this reason,
 > compile time dependencies remain as compile scope even when they are transitive.
 
+
+
+使用maven的配置从远程仓库下载jar包到本地仓库
+
+
+
+```shell
+mvn dependency:get -DgroupId=com.alibaba -DartifactId=fastjson -Dversion=1.2.70
+```
+
+
+
 ## Lifecycle
 
 ## Clean Lifecycle
