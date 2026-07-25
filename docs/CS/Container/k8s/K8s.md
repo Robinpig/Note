@@ -153,44 +153,23 @@ kube::golang::build_binaries
 容器环境构建
 
 ```shell
-# 构建所有平台
-make release
-
 # 构建当前平台
 make quick-release
 ```
 
-调用到build/release.sh脚本
+报错 Device not configured template parsing error: template: :1:19: executing "" at <.NetworkSettings.IPAddress>: map has no entry for key "IPAddress"
 
-```go
 
-# Set up the context directory for the kube-build image and build it.
-function kube::build::build_image() {
-  mkdir -p "${LOCAL_OUTPUT_BUILD_CONTEXT}"
-  # Make sure the context directory owned by the right user for syncing sources to container.
-  chown -R ${USER_ID}:${GROUP_ID} "${LOCAL_OUTPUT_BUILD_CONTEXT}"
 
-  cp /etc/localtime "${LOCAL_OUTPUT_BUILD_CONTEXT}/"
-
-  cp build/build-image/Dockerfile "${LOCAL_OUTPUT_BUILD_CONTEXT}/Dockerfile"
-  cp build/build-image/rsyncd.sh "${LOCAL_OUTPUT_BUILD_CONTEXT}/"
-  dd if=/dev/urandom bs=512 count=1 2>/dev/null | LC_ALL=C tr -dc 'A-Za-z0-9' | dd bs=32 count=1 2>/dev/null > "${LOCAL_OUTPUT_BUILD_CONTEXT}/rsyncd.password"
-  chmod go= "${LOCAL_OUTPUT_BUILD_CONTEXT}/rsyncd.password"
-
-  kube::build::update_dockerfile
-  kube::build::set_proxy
-  kube::build::docker_build "${KUBE_BUILD_IMAGE}" "${LOCAL_OUTPUT_BUILD_CONTEXT}" 'false'
-
-  # Clean up old versions of everything
-  kube::build::docker_delete_old_containers "${KUBE_BUILD_CONTAINER_NAME_BASE}" "${KUBE_BUILD_CONTAINER_NAME}"
-  kube::build::docker_delete_old_containers "${KUBE_RSYNC_CONTAINER_NAME_BASE}" "${KUBE_RSYNC_CONTAINER_NAME}"
-  kube::build::docker_delete_old_containers "${KUBE_DATA_CONTAINER_NAME_BASE}" "${KUBE_DATA_CONTAINER_NAME}"
-  kube::build::docker_delete_old_images "${KUBE_BUILD_IMAGE_REPO}" "${KUBE_BUILD_IMAGE_TAG_BASE}" "${KUBE_BUILD_IMAGE_TAG}"
-
-  kube::build::ensure_data_container
-  kube::build::sync_to_container
-}
 ```
+vim build/common.sh
+```
+
+寻找    NetworkSettings.IPAddress
+
+将这一整行直接替换/修改为：
+
+container_ip="127.0.0.1"
 
 
 
@@ -239,7 +218,7 @@ Control Plane主要包含以下组件
 工作节点主要包含以下组件:
 
 - [kubelet](/docs/CS/Container/k8s/kubelet.md) 是在每个节点上运行的主要 “节点代理” 用于接收、处理、上报kube-apiserver下发的任务
-- [kube-proxy](/docs/CS/Container/k8s/kube-proxy.md)
+- [kube-proxy](/docs/CS/Container/k8s/kube-proxy.md) 负责 Kubernetes Service 与 Pod 资源对象间的通信以及提供负载均衡服务，接收 kubelet 的指令
 - Container-Runtime 负责提供容器的基础管理服务 接收 `kubelet` 的指令
 
 
@@ -247,6 +226,22 @@ Control Plane主要包含以下组件
 除此之外, Kubernetes官方提供了命令行工具（CLI），用户可以通过[kubectl]()以命令行交互的方式与Kubernetes API Server进行通信，通信协议使用HTTP/JSON
 
 Kubernetes系统使用client-go作为Go语言的官方编程式交互客户端库，提供对Kubernetes API Server服务的交互访问 k8s其它组件与apiserver的通信也是基于client-go实现
+
+
+
+## Resource
+
+K8s是基于API的基础设施，K8s中的概念都被抽象成各种资源，不同的资源拥有不同的功能。在K8s中对各种资源的操作都是基于API来完成的，K8s通过kube-apiserver 提供一系列REST API来完成对资源的基本操作。
+
+REST API是K8s的基础结构，K8s中所有内容均被视为API对象。
+
+
+
+
+
+K8s源码中所有API资源都通过APIGroup、APIVersions、APIResource 这3个数据结构存放。
+
+执行 kubelet api-versions -v 10 命令可以查看 K8s 中所有API版本和HTTP请求详细信息。
 
 
 
@@ -540,7 +535,7 @@ WAR包容器的类型不再是一个普通容器，而是一个Init Container类
 这些属性的共同特征是，它们描述的是“机器”这个整体，而不是里面运行的“程序”
 
 
-PodSpec is a description of a pod
+PodSpec 资源定义
 
 ```go
 type PodSpec struct {
@@ -551,106 +546,63 @@ type PodSpec struct {
 	Containers []Container
 	// +optional
 	RestartPolicy RestartPolicy
-	// Optional duration in seconds the pod needs to terminate gracefully. May be decreased in delete request.
-	// Value must be non-negative integer. The value zero indicates delete immediately.
-	// If this value is nil, the default grace period will be used instead.
-	// The grace period is the duration in seconds after the processes running in the pod are sent
-	// a termination signal and the time when the processes are forcibly halted with a kill signal.
-	// Set this value longer than the expected cleanup time for your process.
-	// +optional
+
 	TerminationGracePeriodSeconds *int64
-	// Optional duration in seconds relative to the StartTime that the pod may be active on a node
-	// before the system actively tries to terminate the pod; value must be positive integer
-	// +optional
+
 	ActiveDeadlineSeconds *int64
-	// Set DNS policy for the pod.
-	// Defaults to "ClusterFirst".
-	// Valid values are 'ClusterFirstWithHostNet', 'ClusterFirst', 'Default' or 'None'.
-	// DNS parameters given in DNSConfig will be merged with the policy selected with DNSPolicy.
-	// To have DNS options set along with hostNetwork, you have to specify DNS policy
-	// explicitly to 'ClusterFirstWithHostNet'.
-	// +optional
+
 	DNSPolicy DNSPolicy
-	// NodeSelector is a selector which must be true for the pod to fit on a node
-	// +optional
+
 	NodeSelector map[string]string
 
-	// ServiceAccountName is the name of the ServiceAccount to use to run this pod
-	// The pod will be allowed to use secrets referenced by the ServiceAccount
 	ServiceAccountName string
-	// AutomountServiceAccountToken indicates whether a service account token should be automatically mounted.
-	// +optional
+
 	AutomountServiceAccountToken *bool
 
-	// NodeName is a request to schedule this pod onto a specific node.  If it is non-empty,
-	// the scheduler simply schedules this pod onto that node, assuming that it fits resource
-	// requirements.
-	// +optional
 	NodeName string
-	// SecurityContext holds pod-level security attributes and common container settings.
-	// Optional: Defaults to empty.  See type description for default values of each field.
-	// +optional
+
 	SecurityContext *PodSecurityContext
-	// ImagePullSecrets is an optional list of references to secrets in the same namespace to use for pulling any of the images used by this PodSpec.
-	// If specified, these secrets will be passed to individual puller implementations for them to use.  For example,
-	// in the case of docker, only DockerConfig type secrets are honored.
-	// +optional
+
 	ImagePullSecrets []LocalObjectReference
 	// Specifies the hostname of the Pod.
 	// If not specified, the pod's hostname will be set to a system-defined value.
 	// +optional
 	Hostname string
-	// If specified, the fully qualified Pod hostname will be "<hostname>.<subdomain>.<pod namespace>.svc.<cluster domain>".
-	// If not specified, the pod will not have a domainname at all.
-	// +optional
+
 	Subdomain string
 	// If specified, the pod's scheduling constraints
 	// +optional
 	Affinity *Affinity
-	// If specified, the pod will be dispatched by specified scheduler.
-	// If not specified, the pod will be dispatched by default scheduler.
-	// +optional
+
 	SchedulerName string
 	// If specified, the pod's tolerations.
 	// +optional
 	Tolerations []Toleration
-	// HostAliases is an optional list of hosts and IPs that will be injected into the pod's hosts
-	// file if specified. This is only valid for non-hostNetwork pods.
-	// +optional
+
 	HostAliases []HostAlias
-	// If specified, indicates the pod's priority. "SYSTEM" is a special keyword
-	// which indicates the highest priority. Any other name must be defined by
-	// creating a PriorityClass object with that name.
-	// If not specified, the pod priority will be default or zero if there is no
-	// default.
-	// +optional
+
 	PriorityClassName string
-	// The priority value. Various system components use this field to find the
-	// priority of the pod. When Priority Admission Controller is enabled, it
-	// prevents users from setting this field. The admission controller populates
-	// this field from PriorityClassName.
-	// The higher the value, the higher the priority.
-	// +optional
+
 	Priority *int32
-	// Specifies the DNS parameters of a pod.
-	// Parameters specified here will be merged to the generated DNS
-	// configuration based on DNSPolicy.
-	// +optional
+
 	DNSConfig *PodDNSConfig
 }
 ```
 
 
+
+
+
 Pod生命周期的变化，主要体现在Pod API对象的 Status 部分，这是它除了Metadata和Spec之外的第三个重要字段。其中，pod.status.phase，就是Pod的当前状态，它有如下几种可能的情况：
 
-    Pending。这个状态意味着，Pod的YAML文件已经提交给了Kubernetes，API对象已经被创建并保存在Etcd当中。但是，这个Pod里有些容器因为某种原因而不能被顺利创建。比如，调度不成功。
-
+- Pending。这个状态意味着，Pod的YAML文件已经提交给了Kubernetes，API对象已经被创建并保存在Etcd当中。但是，这个Pod里有些容器因为某种原因而不能被顺利创建。比如，调度不成功。
+  
     Running。这个状态下，Pod已经调度成功，跟一个具体的节点绑定。它包含的容器都已经创建成功，并且至少有一个正在运行中。
-
+    
     Succeeded。这个状态意味着，Pod里的所有容器都正常运行完毕，并且已经退出了。这种情况在运行一次性任务时最为常见。
-
+    
     Failed。这个状态下，Pod里至少有一个容器以不正常的状态（非0的返回码）退出。这个状态的出现，意味着你得想办法Debug这个容器的应用，比如查看Pod的Events和日志。
-
+    
     Unknown。这是一个异常状态，意味着Pod的状态不能持续地被kubelet汇报给kube-apiserver，这很有可能是主从节点（Master和Kubelet）间的通信出现了问题
 
 Pod对象的Status字段，还可以再细分出一组Conditions。这些细分状态的值包括：PodScheduled、Ready、Initialized，以及Unschedulable。它们主要用于描述造成当前Status的具体原因是什么。

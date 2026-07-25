@@ -12,6 +12,10 @@ Pod出现CrashLoopBackOff状态，就想到大概率是Pod内服务自身的原�
 
 
 
+Pod中主要包含三类容器：Init容器、普通容器和临时容器，分别对应 InitContainers、Containers、EphermeralContainers字段。每一类容器都是数组类型，支持多个元素。其中Init容器和普通容器的每个元素都是Container类型的，临时容器则使用特殊的 EphemeralContainer 类型。
+
+
+
 
 
 ## Links
