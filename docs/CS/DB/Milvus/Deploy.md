@@ -1,6 +1,8 @@
 ## Introduction
 
-本文主要是介绍一种在生产环境可用的基于Docker Compose 的 三节点 Milvus集群部署方案
+本文主要是介绍一种在生产环境可用的基于Docker Compose 的 三节点 Milvus集群部署方案。
+
+> **版本说明**：§1–§5 基于 **Milvus 2.4.11**，使用外部 Kafka 3.4.1 KRaft（二进制部署）作为消息队列；§6 介绍 **Milvus 3.x** 使用内置 Woodpecker 替代外部 MQ 后的部署差异。
 
 ## 0. 交付件概述
 
@@ -22,8 +24,8 @@ Host 模式下消除了 Docker NAT 转发开销，但也要求端口规划不得
 
 | 变更项 | 官方默认 | 本方案 |
 |--------|---------|--------|
-| 消息队列 | NATS / RocksMQ（单机内置） | **Apache Kafka 3.4.0 KRaft** |
-| 集群模式 | 无（单机）或单独部署 | 3 节点 KRaft 集群（combined `broker,controller`） |
+| 消息队列 | NATS / RocksMQ（单机内置） | **Apache Kafka 3.4.1 KRaft（二进制部署）** |
+| 集群模式 | 无（单机）或单独部署 | 3 节点 KRaft 集群（combined `broker,controller`），宿主机进程直跑，不经过 Docker |
 | ZooKeeper | 需额外部署（Kafka 传统模式） | **无需 ZooKeeper**（KRaft 内置 Raft 选主） |
 
 Kafka KRaft 替代 NATS 是 Milvus 生产环境中大吞吐场景的推荐方案，支持消息持久化、多消费者和水平扩展。
@@ -86,10 +88,12 @@ Host 模式下所有容器共享宿主机网络栈，组件共用 `9091` 必然�
 │   └── images/
 │       └── milvus_etcd.tar            # etcd 3.5.5 离线镜像
 │
-├── kafka-cluster/                     # Kafka KRaft 部署（§2）
+├── kafka-cluster/                     # Kafka KRaft 二进制部署（§2）
 │   ├── deploy-kafka.sh                # 安装脚本（Node1 版本，需按节点修改 NODE_ID 与 IP）
-│   ├── data/                          # Kafka 数据目录（首次部署自动创建）
-│   └── kafka-3.4.0.tar               # Bitnami Kafka 3.4.0 离线镜像
+│   ├── kafka_2.13-3.4.1.tgz           # 官方二进制包（wget 下载，见 §2.3）
+│   ├── kafka_2.13-3.4.1/              # 解压后的 Kafka 安装目录
+│   ├── data/                          # Kafka 日志数据目录 log.dirs（首次部署自动创建）
+│   └── logs/                          # Kafka 运行日志（LOG_DIR）
 │
 ├── milvus/                            # Milvus 分布式部署（§3）
 │   ├── docker-compose.yaml            # 三节点统一 compose 文件（按节点修改环境变量）
@@ -125,16 +129,20 @@ Host 模式下所有容器共享宿主机网络栈，组件共用 `9091` 必然�
 
 ### 0.4 版本基线
 
-| 组件 | 固定版本 | 镜像 |
+| 组件 | 固定版本 | 分发方式 |
 |------|----------|------|
-| etcd | 3.5.5 | `quay.io/coreos/etcd:v3.5.5` |
-| Kafka | **3.4.0**（KRaft 模式） | `kafka:3.4.0`  |
-| Milvus | v2.4.11 | `milvusdb/milvus:v2.4.11` |
-| Attu | v2.4 | `zilliz/attu:latest` |
+| etcd | 3.5.5 | 镜像 `quay.io/coreos/etcd:v3.5.5` |
+| Kafka | **3.4.1**（KRaft 模式，Scala 2.13 构建） | 二进制包 `kafka_2.13-3.4.1.tgz`，宿主机进程直跑 |
+| Milvus | v2.4.11 | 镜像 `milvusdb/milvus:v2.4.11` |
+| Attu | v2.4 | 镜像 `zilliz/attu:latest` |
 
-> Kafka 3.4.0 KRaft 模式运行无需 ZooKeeper。生产环境推荐使用 `confluentinc/cp-kafka:3.4.0`（Confluent 打包，内置 KRaft 支持），也可使用 `apache/kafka:3.4.0` 官方镜像。
-> 本次使用的镜像来源是 
-`docker pull swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/bitnami/kafka:3.4.0`
+> Kafka 3.4.1 KRaft 模式运行无需 ZooKeeper，也不经过 Docker。二进制包从 Apache 官方归档下载：
+>
+> ```bash
+> wget https://archive.apache.org/dist/kafka/3.4.1/kafka_2.13-3.4.1.tgz
+> ```
+>
+> Kafka 3.4.x 运行依赖 **JDK 11+**，部署前需在三台节点预先安装 JDK（如 `yum install -y java-11-openjdk` 或 `apt install -y openjdk-11-jdk`）。
 
 ### 0.5 端口规划（Host 模式独占）
 
@@ -187,7 +195,7 @@ localhost="193.195.129.57"
 path="/aiapp/mid/etcd"
 
 # 设置安装包目录执行权限
-chmod -R 777 "${path}"
+chmod -R 755 "${path}"
 
 # etcd安装
 etcdInstall() {
@@ -203,7 +211,12 @@ etcdInstall() {
             -e ETCD_AUTO_COMPACTION_RETENTION=1000 \
             -e ETCD_QUOTA_BACKEND_BYTES=4294967296 \
             -e ETCD_SNAPSHOT_COUNT=50000 \
-            -v "/aiapp/mid/etcd:/etcd" \
+            --user $(id -u):$(id -g) \
+            --log-driver json-file \
+            --log-opt max-size=100m \
+            --log-opt max-file=7 \
+            -v "/aiapp/mid/etcd/data:/etcd-data" \
+            -v "/aiapp/mid/etcd/logs:/etcd/logs" \
             quay.io/coreos/etcd:v3.5.5 \
             etcd \
             --name etcd-node1 \
@@ -212,7 +225,9 @@ etcdInstall() {
             --initial-cluster etcd-node1=http://193.195.129.57:2380,etcd-node2=http://193.195.129.58:2380,etcd-node3=http://193.195.129.59:2380 \
             --advertise-client-urls=http://${localhost}:2379 \
             --listen-client-urls http://0.0.0.0:2379 \
-            --data-dir /etcd
+            --log-outputs=/etcd/logs/etcd.log \
+            --log-level=info \
+            --data-dir /etcd-data
     else
         echo "跳过Etcd安装！"
     fi
@@ -220,6 +235,8 @@ etcdInstall() {
 
 etcdInstall
 ```
+
+> **注意**：不建议将系统日志目录挂载进容器。以上脚本基于 etcd v3.5.5。
 
 ### 1.3 调优参数
 
@@ -276,18 +293,21 @@ docker exec -T etcd etcdctl \
 > Host 模式下，etcd 的 2379/2380 端口直接暴露在宿主机网络接口上。防火墙规则必须严格限制 2380 仅允许三台 Milvus 节点互访（参见部署流程文档 §5.4）。
 
 
-## 2. Kafka 3.4.0 KRaft
+## 2. Kafka 3.4.1 KRaft（二进制部署）
 
 ### 2.1 项目说明
 
-- **网络模式**：`network_mode: host`
-- **数据卷**：`/aiapp/mid/kafka-cluster/data` 挂载到容器 `/bitnami/kafka`
+- **部署方式**：官方二进制包 `kafka_2.13-3.4.1.tgz`，解压后以宿主机进程直接运行（不使用 Docker）
+- **运行依赖**：JDK 11+（KRaft 模式无需 ZooKeeper）
+- **安装目录**：`/aiapp/mid/kafka-cluster/kafka_2.13-3.4.1/`
+- **数据目录**：`/aiapp/mid/kafka-cluster/data`（`log.dirs`）
+- **日志目录**：`/aiapp/mid/kafka-cluster/logs`（`LOG_DIR`）
+- **监听端口**：进程直接绑定宿主机网卡，`9092`（PLAINTEXT 客户端）/ `9093`（CONTROLLER 集群通信）
 - **集群规模**：3 节点 KRaft 集群（combined `broker,controller` 角色，容忍 1 节点故障）
-- **依赖**：无（KRaft 模式无需 ZooKeeper）
 
 ### 2.2 Kafka KRaft 集群设计
 
-Kafka 3.4.0 KRaft 模式下，每个节点同时承担 Broker（数据存储与读写）和 Controller（元数据管理 + 选主）两个角色：
+Kafka 3.4.1 KRaft 模式下，每个节点同时承担 Broker（数据存储与读写）和 Controller（元数据管理 + 选主）两个角色：
 
 ```text
                        ┌──────────────────────┐
@@ -314,7 +334,7 @@ Kafka 3.4.0 KRaft 模式下，每个节点同时承担 Broker（数据存储与�
 
 ### 2.3 安装脚本
 
-以下是Kafka安装脚本 Node1 版本（`193.195.129.57`）
+以下是 Kafka 安装脚本 Node1 版本（`193.195.129.57`）。脚本完成：下载二进制包 → 解压 → 生成 `server.properties` → `kafka-storage.sh format` 格式化元数据 → 后台启动。
 
 ```bash
 #!/bin/bash
@@ -322,87 +342,169 @@ Kafka 3.4.0 KRaft 模式下，每个节点同时承担 Broker（数据存储与�
 # 环境变量
 # 服务器地址
 localhost="193.195.129.57"
+# 本节点 node.id（Node1=1, Node2=2, Node3=3）
+node_id="1"
 # 安装包目录
 path="/aiapp/mid/kafka-cluster"
-
-# 设置安装目录执行权限
-chmod -R 777 "${path}"
+kafka_version="3.4.1"
+scala_version="2.13"
+kafka_pkg="kafka_${scala_version}-${kafka_version}"
+kafka_home="${path}/${kafka_pkg}"
+# KRaft 集群 ID，三个节点必须完全一致（22 位 base64，可用 kafka-storage.sh random-uuid 生成）
+cluster_id="MkU3OEVBNTcwNTJENDM5Qk"
+quorum_voters="1@193.195.129.57:9093,2@193.195.129.58:9093,3@193.195.129.59:9093"
 
 # Kafka安装
 kafkainstall() {
-        read -p "即将安装Kafka，是否安装 (y/n) : " isY
-        if [ "$isY" = "y" ]
-        then
-                echo "加载镜像..."
-                docker load -i kafka-3.4.0.tar
-                echo "准备目录..."
-                if [ ! -d "${path}/data" ]; then
-                    mkdir -p ${path}/data
-                fi
-                chown 1001:1001 -R ${path}/data
-                chmod 755 -R ${path}/data/
-                echo "运行Kafka镜像..."
-                # 修改node 和 node id
-                docker run -d --name kafka-node1 \
-                        --network host \
-                        -e KAFKA_ENABLE_KRAFT=yes \
-                        -e KAFKA_CFG_PROCESS_ROLES=controller,broker \
-                        -e KAFKA_CFG_NODE_ID=1 \
-                        -e KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER \
-                        -e KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093 \
-                        -e KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT \
-                        -e KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://${localhost}:9092 \
-                        -e KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=1@193.195.129.57:9093,2@193.195.129.58:9093,3@193.195.129.59:9093 \
-                        -e KAFKA_KRAFT_CLUSTER_ID=MkU3OEVBNTcwNTJENDM5Qk \
-                        -e ALLOW_PLAINTEXT_LISTENER=yes \
-                        -v ${path}/data:/bitnami/kafka \
-                        bitnami/kafka:3.4.0
-        else
-                echo "跳过Kafka安装！"
+    read -p "即将安装Kafka，是否安装 (y/n) : " isY
+    if [ "$isY" = "y" ]
+    then
+        # 前置检查：JDK 11+
+        if ! java -version 2>&1 | grep -Eq '"(11|1[2-9]|[2-9][0-9])\.'; then
+            echo "未检测到 JDK 11+，请先安装 JDK（yum install -y java-11-openjdk 或 apt install -y openjdk-11-jdk）"
+            exit 1
         fi
+
+        echo "下载 Kafka 二进制包..."
+        cd "${path}"
+        if [ ! -f "${kafka_pkg}.tgz" ]; then
+            wget https://archive.apache.org/dist/kafka/${kafka_version}/${kafka_pkg}.tgz
+        fi
+
+        echo "解压..."
+        tar -xzf "${kafka_pkg}.tgz"
+
+        echo "准备数据与日志目录..."
+        mkdir -p "${path}/data" "${path}/logs"
+
+        echo "生成 KRaft server.properties..."
+        cat > "${kafka_home}/config/kraft/server.properties" <<EOF
+process.roles=broker,controller
+node.id=${node_id}
+controller.quorum.voters=${quorum_voters}
+
+listeners=PLAINTEXT://:9092,CONTROLLER://:9093
+advertised.listeners=PLAINTEXT://${localhost}:9092
+controller.listener.names=CONTROLLER
+listener.security.protocol.map=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+inter.broker.listener.name=PLAINTEXT
+
+num.partitions=1
+offsets.topic.replication.factor=3
+transaction.state.log.replication.factor=3
+transaction.state.log.min.isr=2
+
+log.dirs=${path}/data
+log.retention.hours=168
+log.segment.bytes=1073741824
+EOF
+
+        echo "格式化 KRaft 元数据存储（cluster.id=${cluster_id}）..."
+        # 注意：format 只能在首次部署执行一次，重复执行会清空已格式化的元数据
+        if [ ! -f "${path}/data/meta.properties" ]; then
+            "${kafka_home}/bin/kafka-storage.sh" format -t "${cluster_id}" \
+                -c "${kafka_home}/config/kraft/server.properties"
+        else
+            echo "meta.properties 已存在，跳过 format"
+        fi
+
+        echo "启动 Kafka..."
+        export LOG_DIR="${path}/logs"
+        export KAFKA_HEAP_OPTS="-Xms2G -Xmx2G"
+        "${kafka_home}/bin/kafka-server-start.sh" -daemon \
+            "${kafka_home}/config/kraft/server.properties"
+
+        echo "Kafka 启动完成，日志见 ${path}/logs/server.log"
+    else
+        echo "跳过Kafka安装！"
+    fi
 }
 
-# Kafka运行
 kafkainstall
 ```
 
-### 2.4 Node2 / Node3 变体
-
-| 参数 | Node1（57） | Node2（58） | Node3（59） |
-|------|------------|------------|------------|
-| `KAFKA_NODE_ID` | `1` | `2` | `3` |
-| `KAFKA_ADVERTISED_LISTENERS` | `PLAINTEXT://193.195.129.57:9092` | `PLAINTEXT://193.195.129.58:9092` | `PLAINTEXT://193.195.129.59:9092` |
-
-**以下参数三个节点完全一致**：
-
-```yaml
-CLUSTER_ID: "MkU3OEVBNTcwNTJENDM5Qk"                   # 同一集群使用相同 ID
-KAFKA_CONTROLLER_QUORUM_VOTERS: "1@193.195.129.57:9093,2@193.195.129.58:9093,3@193.195.129.59:9093"
-```
-
->
->  **CLUSTER_ID 生成**：在任意一台节点执行 `echo "MkU3OEVBNTcwNTJENDM5Qk" | base64 -d > /dev/null 2>&1 || echo "使用以下命令生成：kafka-storage random-uuid"`，或者直接使用 docker 执行：
+> **停止 / 重启**：
 >
 > ```bash
-> docker run --rm confluentinc/cp-kafka:3.4.0 kafka-storage random-uuid
+> # 停止
+> export LOG_DIR=/aiapp/mid/kafka-cluster/logs
+> /aiapp/mid/kafka-cluster/kafka_2.13-3.4.1/bin/kafka-server-stop.sh
+> # 重启（先停后启）
+> /aiapp/mid/kafka-cluster/kafka_2.13-3.4.1/bin/kafka-server-start.sh -daemon \
+>     /aiapp/mid/kafka-cluster/kafka_2.13-3.4.1/config/kraft/server.properties
 > ```
-> 将输出值填入三个节点的 `CLUSTER_ID` 环境变量。
+
+> **生产环境建议使用 systemd 托管进程**（开机自启、崩溃重启）。`kafka.service` 示例（注意 systemd 下不要加 `-daemon`）：
+>
+> ```ini
+> [Unit]
+> Description=Apache Kafka KRaft
+> After=network.target
+>
+> [Service]
+> Type=simple
+> Environment="LOG_DIR=/aiapp/mid/kafka-cluster/logs"
+> Environment="KAFKA_HEAP_OPTS=-Xms2G -Xmx2G"
+> ExecStart=/aiapp/mid/kafka-cluster/kafka_2.13-3.4.1/bin/kafka-server-start.sh /aiapp/mid/kafka-cluster/kafka_2.13-3.4.1/config/kraft/server.properties
+> ExecStop=/aiapp/mid/kafka-cluster/kafka_2.13-3.4.1/bin/kafka-server-stop.sh
+> Restart=always
+> LimitNOFILE=65536
+>
+> [Install]
+> WantedBy=multi-user.target
+> ```
+
+### 2.4 Node2 / Node3 变体
+
+脚本中仅需修改两处变量：
+
+| 变量 | Node1（57） | Node2（58） | Node3（59） |
+|------|------------|------------|------------|
+| `node_id` | `1` | `2` | `3` |
+| `localhost` | `193.195.129.57` | `193.195.129.58` | `193.195.129.59` |
+
+生成的 `server.properties` 中对应差异项：
+
+| 配置项 | Node1（57） | Node2（58） | Node3（59） |
+|------|------------|------------|------------|
+| `node.id` | `1` | `2` | `3` |
+| `advertised.listeners` | `PLAINTEXT://193.195.129.57:9092` | `PLAINTEXT://193.195.129.58:9092` | `PLAINTEXT://193.195.129.59:9092` |
+
+**以下配置三个节点完全一致**：
+
+```properties
+cluster.id（format 时使用）= MkU3OEVBNTcwNTJENDM5Qk
+controller.quorum.voters=1@193.195.129.57:9093,2@193.195.129.58:9093,3@193.195.129.59:9093
+```
+
+> **CLUSTER_ID 生成**：在任意一台节点解压后的安装目录下执行，输出值填入三个节点脚本的 `cluster_id` 变量：
+>
+> ```bash
+> /aiapp/mid/kafka-cluster/kafka_2.13-3.4.1/bin/kafka-storage.sh random-uuid
+> ```
+>
+> 三个节点必须使用**同一个** cluster.id 分别 format，且 format 只能在首次启动前执行一次。
 
 ### 2.5 验证命令
 
 ```bash
-# 检查容器状态
-docker ps
+# 检查 Kafka 进程（Kafka 进程主类为 kafka.Kafka）
+jps | grep Kafka
+ps -ef | grep 'kafka.Kafka' | grep -v grep
 
-# 验证 Kafka 进程监听端口（Host 模式下直接检查宿主机）
+# 验证 Kafka 监听端口（进程直接绑定宿主机网卡）
 ss -tlnp | grep -E '9092|9093'
 
-# 验证 KRaft 集群状态（在任意节点执行）
-docker exec -T kafka-node1 \
-  kafka-metadata-quorum --bootstrap-server 193.195.129.57:9092,193.195.129.58:9092,193.195.129.59:9092 \
+# 验证 KRaft 集群状态（在任意节点安装目录下执行）
+/aiapp/mid/kafka-cluster/kafka_2.13-3.4.1/bin/kafka-metadata-quorum.sh \
+  --bootstrap-server 193.195.129.57:9092,193.195.129.58:9092,193.195.129.59:9092 \
   describe --status
 
 # 期望输出：LeaderId 存在，QuorumState 为 QuorumLeader 或 Follower
+
+# 查看 broker 注册情况（应列出 3 个节点 id: 1,2,3）
+/aiapp/mid/kafka-cluster/kafka_2.13-3.4.1/bin/kafka-broker-api-versions.sh \
+  --bootstrap-server 193.195.129.57:9092,193.195.129.58:9092,193.195.129.59:9092 | awk -F: '{print $1}'
 ```
 
 ## 3. Milvus
@@ -411,28 +513,23 @@ docker exec -T kafka-node1 \
 
 - **网络模式**：`network_mode: host`（所有 Milvus 组件）
 - **数据卷**：`/data/milvus/volumes` 挂载到容器 `/var/lib/milvus`
-- **消息队列**：Kafka 3.4.0（`MQ_TYPE=kafka`）
+- **消息队列**：Kafka 3.4.1 KRaft 二进制部署（`MQ_TYPE=kafka`）
 - **MinIO 统一入口**：F5 VIP `172.1.0.88:9000`，bucket `milvus-sunklm`
 - **etcd 端点**：通过宿主机 IP:2379 访问
 - **Kafka 端点**：通过宿主机 IP:9092 访问
 
-> [!WARNNING]
+> [!WARNING]
 >
-> 部署 Milvus 需确认 Etcd,Kafka 和 对象存储（兼容MinIO）可用
+> 部署 Milvus 需确认 Etcd、Kafka 和对象存储（兼容 MinIO）可用
 
 
 ### 3.2 安装配置（docker-compose）
 
-需要确认的地方
-- ETCD_ENDPOINTS
+部署前需重点确认以下配置项：
 
-- MINIO的配置
-
-- MQ配置
-
-  
-
-
+- **ETCD_ENDPOINTS**：三节点 etcd 地址；
+- **MinIO 配置**：对象存储入口、AccessKey/SecretKey、bucket；
+- **MQ 配置**：`MQ_TYPE=kafka` 及 `KAFKA_BROKER_LIST`。
 
 > [!NOTE]
 > 
@@ -447,6 +544,8 @@ version: '3.8'
 
 # ==================== 环境变量定义 ====================
 x-milvus-env: &milvus-env
+  # HOST_IP 在每节点的 .env 中设置为本机 IP（57/58/59），供 coordinator 注册地址使用
+  HOST_IP: "${HOST_IP}"
   ETCD_ENDPOINTS: "193.195.129.57:2379,193.195.129.58:2379,193.195.129.59:2379"
   MINIO_ADDRESS: "${MINIO_ADDRESS}"
   MINIO_ACCESS_KEY_ID: "${MINIO_ACCESS_KEY_ID}"
@@ -460,24 +559,35 @@ x-milvus-env: &milvus-env
   QUERYNODE_LOAD_MEMORY_LIMIT_FACTOR: "0.8"
   DATASEGMENT_MAX_SIZE: "1024"
   LOG_LEVEL: "info"
+  LOG_FORMAT: "json"
+  # Milvus 文件日志轮转配置
+  # maxSize 单位通常是 MB
+  # maxAge 单位通常是天
+  # maxBackups 是保留的历史文件数量
+  LOG_FILE_MAXSIZE: "100"
+  LOG_FILE_MAXAGE: "7"
+  LOG_FILE_MAXBACKUPS: "5"
   COMMON_SECURITY_AUTHORIZATIONENABLED: "true"
-  OPENBLAS_NUM_THREADS: 1
-  OMP_NUM_THREADS: 1
-  GOTO_NUM_THREADS: 1
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "100m"
+    max-file: "7"
 
 # ==================== 公共模板定义 ====================
 x-milvus-common: &milvus-common
   image: milvusdb/milvus:v2.4.11
+  user: "xxxx:xxxx"
   restart: always
   network_mode: host
+  logging: *default-logging
   security_opt:
     - seccomp:/aiapp/mid/milvus/milvus-seccomp.json
   ulimits:
     nofile:
       soft: 65536
       hard: 65536
-  volumes:
-    - /data/milvus/volumes:/var/lib/milvus
   deploy: &base-deploy
     resources:
       limits:
@@ -495,6 +605,10 @@ services:
       ROOT_COORD_ADDRESS: rootcoord
       ROOT_COORD_ENABLE_ACTIVE_STANDBY: true
     container_name: milvus-rootcoord
+    volumes:
+    # 数据与日志在宿主机上为同级目录，避免嵌套挂载导致遮蔽
+      - /data/milvus/rootcoord/data:/var/lib/milvus
+      - /data/milvus/rootcoord/logs:/var/lib/milvus/logs
     command: ["milvus", "run", "rootcoord"]
 
   datacoord:
@@ -505,6 +619,7 @@ services:
       DATA_COORD_PORT: 13333
       DATA_COORD_ADDRESS: datacoord
       DATA_COORD_ENABLE_ACTIVE_STANDBY: true
+      LOG_FILE_ROOTPATH: /var/lib/milvus/logs/datacoord
     container_name: milvus-datacoord
     command: ["milvus", "run", "datacoord"]
 
@@ -514,8 +629,9 @@ services:
       <<: *milvus-env
       METRICS_PORT: 9993
       QUERY_COORD_PORT: 19531
-      QUERY_COORD_ADDRESS: querycoord
+      QUERY_COORD_ADDRESS: "${HOST_IP}"
       QUERY_COORD_ENABLE_ACTIVE_STANDBY: true
+      LOG_FILE_ROOTPATH: /var/lib/milvus/logs/querycoord
     container_name: milvus-querycoord
     command: ["milvus", "run", "querycoord"]
 
@@ -523,13 +639,18 @@ services:
     <<: *milvus-common
     environment:
       <<: *milvus-env
-      GOTO_NUM_THREADS: 1
       METRICS_PORT: 9994
       INDEX_COORD_PORT: 22930
-      INDEX_COORD_ADDRESS: indexcoord
+      INDEX_COORD_ADDRESS: "${HOST_IP}"
       INDEX_COORD_ENABLE_ACTIVE_STANDBY: true
+      LOG_FILE_ROOTPATH: /var/lib/milvus/logs/indexcoord
     container_name: milvus-indexcoord
     command: ["milvus", "run", "indexcoord"]
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1g
 
   # ============== 工作节点  ==============
   proxy:
@@ -537,6 +658,7 @@ services:
     environment:
       <<: *milvus-env
       METRICS_PORT: 9995
+      LOG_FILE_ROOTPATH: /var/lib/milvus/logs/proxy
     container_name: milvus-proxy
     command: ["milvus", "run", "proxy"]
     deploy:
@@ -550,6 +672,7 @@ services:
     environment:
       <<: *milvus-env
       METRICS_PORT: 9996
+      LOG_FILE_ROOTPATH: /var/lib/milvus/logs/datanode
     container_name: milvus-datanode
     command: ["milvus", "run", "datanode"]
     deploy:
@@ -563,6 +686,7 @@ services:
     environment:
       <<: *milvus-env
       METRICS_PORT: 9997
+      LOG_FILE_ROOTPATH: /var/lib/milvus/logs/querynode
     container_name: milvus-querynode
     command: ["milvus", "run", "querynode"]
     deploy:
@@ -576,6 +700,7 @@ services:
     environment:
       <<: *milvus-env
       METRICS_PORT: 9998
+      LOG_FILE_ROOTPATH: /var/lib/milvus/logs/indexnode
     container_name: milvus-indexnode
     command: ["milvus", "run", "indexnode"]
     deploy:
@@ -685,7 +810,259 @@ attuInstall
 > - Kafka 三节点全部启动后，**必须确认 KRaft 元数据 quorum** 再启动 Milvus；
 > - Host 模式下端口直接暴露，启动前务必确认端口未被占用。
 
+---
 
+## 6. Milvus 3.x + Woodpecker
+
+### 6.1 Woodpecker 概述
+
+Milvus 3.x 引入了 **Woodpecker** 作为内置的 WAL（Write-Ahead Log）/ 流存储引擎，**完全取代了 Kafka、Pulsar、NATS、RocksMQ 等外部消息队列**。
+
+在 Milvus 2.x 架构中，外部 MQ 承担三项核心职责：
+
+1. **WAL**：Proxy 将写入操作追加到 MQ，DataNode 消费并持久化；
+2. **事件总线**：组件间通过 MQ Topic 传递增量数据；
+3. **流回放**：QueryNode 通过消费 MQ 重建内存视图。
+
+Woodpecker 将上述能力内建到 Milvus 自身：
+
+| 维度 | 2.x（外部 MQ） | 3.x（Woodpecker） |
+|------|---------------|-------------------|
+| 部署形态 | 独立 Kafka/Pulsar 集群 | Milvus 内置，无需独立部署 |
+| 数据持久化 | MQ 自身存储（Kafka segment / Pulsar BookKeeper） | Woodpecker 日志段直接写入对象存储 / 本地盘 |
+| 副本一致性 | 依赖 MQ 副本机制（KRaft / BookKeeper） | 内置 Raft 协议复制日志 |
+| 运维复杂度 | 需维护 MQ 集群的版本、扩缩容、磁盘 | 与 Milvus 生命周期统一管理 |
+| 资源开销 | 额外 JVM 堆内存、page cache | 无额外进程，与 Milvus 共享资源 |
+
+> Woodpecker 的核心设计目标是消除外部 MQ 的运维负担和资源冗余，同时针对 Milvus 的写入模式（顺序追加、按 segment 消费）做日志存储优化。
+
+### 6.2 部署拓扑变更
+
+移除 Kafka 集群后，三节点部署从 **etcd + Kafka + Milvus** 三层简化为 **etcd + Milvus** 两层：
+
+| 节点 IP | 2.x 部署组件 | 3.x 部署组件 |
+|---------|-------------|-------------|
+| 193.195.129.57 | etcd-node1 + kafka-node1 + Milvus 8 组件 + Attu | etcd-node1 + Milvus 8 组件 + Attu |
+| 193.195.129.58 | etcd-node2 + kafka-node2 + Milvus 8 组件 | etcd-node2 + Milvus 8 组件 |
+| 193.195.129.59 | etcd-node3 + kafka-node3 + Milvus 8 组件 | etcd-node3 + Milvus 8 组件 |
+
+**启动依赖链简化**：
+
+```
+2.x:  etcd quorum → Kafka KRaft quorum → Milvus
+3.x:  etcd quorum → Milvus（Woodpecker 随 Milvus 自启）
+```
+
+不再需要 Kafka 数据目录（`/aiapp/mid/kafka-cluster/data`）、Kafka 二进制安装目录（`kafka_2.13-3.4.1/`）以及 `deploy-kafka.sh` 脚本。
+
+### 6.3 端口规划变更
+
+移除 Kafka 后释放以下端口：
+
+| 端口 | 2.x 用途 | 3.x |
+|------|---------|-----|
+| 9092 | Kafka 客户端连接（PLAINTEXT） | **释放** |
+| 9093 | Kafka Controller 通信 | **释放** |
+
+Woodpecker 作为 Milvus 内置组件，复用 Milvus 已有的内部通信端口，**不引入额外的宿主机端口监听**。其余端口规划（etcd 2379/2380、Milvus Proxy 19530、Metrics 9991–9998 等）保持不变。
+
+### 6.4 docker-compose 配置变更
+
+#### 6.4.1 移除的配置
+
+`x-milvus-env` 中删除所有 Kafka 相关环境变量：
+
+```yaml
+# 以下配置在 3.x 中移除
+KAFKA_BROKER_LIST: "193.195.129.57:9092,193.195.129.58:9092,193.195.129.59:9092"
+MQ_TYPE: "kafka"
+```
+
+#### 6.4.2 Woodpecker 配置
+
+Milvus 3.x 中 Woodpecker 作为默认 WAL 引擎，`MQ_TYPE` 默认为 `woodpecker`（或已移除该配置项）。Woodpecker 的数据目录、副本数等通过 `woodpecker.*` 配置项控制，在 docker-compose 中映射为大写环境变量。典型配置如下：
+
+```yaml
+x-milvus-env: &milvus-env
+  HOST_IP: "${HOST_IP}"
+  ETCD_ENDPOINTS: "193.195.129.57:2379,193.195.129.58:2379,193.195.129.59:2379"
+  # ... MinIO / 日志 / 鉴权等配置与 2.x 相同 ...
+
+  # 3.x：Woodpecker WAL 配置
+  # 具体环境变量名以对应 3.x 版本官方配置参考为准
+  WOODPECKER_PATH: "/var/lib/milvus/woodpecker"    # WAL 日志存储路径
+  WOODPECKER_REPLICATION_FACTOR: "3"                 # 日志副本数（建议等于节点数，容忍 1 节点故障）
+```
+
+> **注意**：Woodpecker 的具体环境变量名称、默认值和可用配置项随 Milvus 3.x 小版本迭代可能调整。部署前应以目标版本的官方配置参考（`milvus.yaml` 中 `woodpecker` 段）为准。
+
+#### 6.4.3 数据卷
+
+Woodpecker 的日志数据需要持久化。在各服务的 `volumes` 中确保 Woodpecker 路径被挂载到宿主机：
+
+```yaml
+volumes:
+  - /data/milvus/rootcoord/data:/var/lib/milvus
+  # Woodpecker 日志随 /var/lib/milvus 统一持久化，
+  # 无需单独挂载（WOODPECKER_PATH 在该目录下）
+```
+
+#### 6.4.4 镜像版本
+
+```yaml
+x-milvus-common: &milvus-common
+  image: milvusdb/milvus:v3.0.0   # 替换为实际部署的 3.x 版本
+```
+
+### 6.5 资源规划调整
+
+移除 Kafka 后，单节点可回收 Kafka 占用的资源（典型为 2–4 GB 内存 + 1–2 CPU 核）。这部分余量可分配给 QueryNode / IndexNode 以提升查询和索引性能：
+
+| 组件 | 2.x 内存 | 3.x 内存（建议） | 说明 |
+|------|---------|-----------------|------|
+| Kafka（每节点） | ~2–4 GB | **0**（移除） | — |
+| QueryNode | 6 GB | **7–8 GB** | 可吸收 Kafka 释放的内存 |
+| Woodpecker（内置） | 0（共享） | ~1–2 GB（共享） | 内置日志缓存，包含在 Milvus 进程内 |
+
+实际分配应根据数据规模和查询负载压测调整。
+
+### 6.6 迁移注意事项
+
+从 2.x + Kafka 升级到 3.x + Woodpecker 需要注意：
+
+1. **数据迁移**：2.x 中残留在 Kafka 中的未消费 WAL 数据必须在升级前由 DataNode 完全消费并生成 segment。升级前确认所有 MsgStream 消费位点已追平（lag = 0）。
+2. **版本路径**：Milvus 3.x 可能要求先升级到特定的 2.x 小版本作为跳板，再升级到 3.x。具体升级路径参考官方升级指南。
+3. **配置清理**：升级前备份并清理 `milvus.yaml` 中所有 `kafka.*` / `pulsar.*` 配置段，避免 3.x 启动时因无法识别配置而报错。
+4. **WAL 回放**：3.x 首次启动时，Woodpecker 从对象存储中加载已有 segment 重建日志视图，首次启动时间可能长于常规重启。
+5. **回滚限制**：Woodpecker 的日志格式与 Kafka 不兼容，升级到 3.x 后无法直接回滚到 2.x + Kafka。升级前务必做好 etcd 快照和对象存储备份。
+
+### 6.7 验证要点
+
+3.x 部署的验证与 §3.3 基本一致，额外确认：
+
+```bash
+# 确认 Woodpecker 日志目录已创建并写入
+ls -la /data/milvus/rootcoord/data/woodpecker/
+
+# 确认无 Kafka 连接报错（日志中不应出现 kafka client 相关错误）
+docker logs milvus-proxy --tail 50 | grep -i -E 'woodpecker|kafka|mq'
+
+# 写入验证：通过 Python SDK 插入数据后确认 Woodpecker 日志段增长
+python3 -c "
+from pymilvus import connections, Collection, FieldSchema, CollectionSchema, DataType
+connections.connect(host='193.195.129.57', port='19530')
+print('Milvus 版本:', connections.get_connection_addr('default'))
+# 后续插入/搜索验证逻辑同 2.x
+"
+```
+
+### 6.8 版本基线（3.x）
+
+| 组件 | 版本 | 镜像 |
+|------|------|------|
+| etcd | 3.5.5 | `quay.io/coreos/etcd:v3.5.5` |
+| ~~Kafka~~ | ~~3.4.1~~ | **已移除，由 Woodpecker 替代** |
+| Milvus | 3.x | `milvusdb/milvus:v3.x`（以实际版本为准） |
+| Attu | 3.x 对应版本 | `zilliz/attu:latest` |
+
+
+
+## 7. Prometheus 监控
+
+Milvus 官方指标可视化仪表盘：
+```shell
+wget https://raw.githubusercontent.com/milvus-io/milvus/refs/heads/master/deployments/monitor/grafana/milvus-dashboard.json
+```
+
+因为Milvus目前主要是kubernetes部署的，所以需要适配一下
+
+修改prometheus.yml
+
+2.4.x版本
+
+```yml
+# Milvus rootcoord
+- job_name: 'milvus-rootcoord'
+  static_configs:
+  - targets: ['193.195.129.57:9991','193.195.129.58:9991','193.195.129.59:9991']
+    labels:
+      namespace: "milvus-docker"
+      app_kubernetes_io_name: "milvus"
+      app_kubernetes_io_instance: "milvus-cluster"
+      app_kubernetes_io_component: "rootcoord"
+
+#Milvus datacoord
+- job_name: 'milvus-datacoord'
+  static_configs:
+  - targets: ['193.195.129.57:9992','193.195.129.58:9992','193.195.129.59:9992']
+    labels:
+      namespace: "milvus-docker"
+      app_kubernetes_io_name: "milvus"
+      app_kubernetes_io_instance: "milvus-cluster"
+      app_kubernetes_io_component: "datacoord"
+
+# Milvus querycoord
+- job_name: 'milvus-querycoord'
+  static_configs:
+  - targets: ['193.195.129.57:9993','193.195.129.58:9993','193.195.129.59:9993']
+    labels:
+      namespace: "milvus-docker"
+      app_kubernetes_io_name: "milvus"
+      app_kubernetes_io_instance: "milvus-cluster"
+      app_kubernetes_io_component: "querycoord"
+
+# Milvus indexcoord
+- job_name: 'milvus-indexcoord'
+  static_configs:
+  - targets: ['193.195.129.57:9994','193.195.129.58:9994','193.195.129.59:9994']
+    labels:
+      namespace: "milvus-docker"
+      app_kubernetes_io_name: "milvus"
+      app_kubernetes_io_instance: "milvus-cluster"
+      app_kubernetes_io_component: "indexcoord"
+
+# Milvus proxy
+- job_name: 'milvus-proxy'
+  static_configs:
+  - targets: ['193.195.129.57:9995','193.195.129.58:9995','193.195.129.59:9995']
+    labels:
+      namespace: "milvus-docker"
+      app_kubernetes_io_name: "milvus"
+      app_kubernetes_io_instance: "milvus-cluster"
+      app_kubernetes_io_component: "proxy"
+
+# Milvus datanode
+- job_name: 'milvus-datanode'
+  static_configs:
+  - targets: ['193.195.129.57:9996','193.195.129.58:9996','193.195.129.59:9996']
+    labels:
+      namespace: "milvus-docker"
+      app_kubernetes_io_name: "milvus"
+      app_kubernetes_io_instance: "milvus-cluster"
+      app_kubernetes_io_component: "datanode"
+
+
+# Milvus querynode
+- job_name: 'milvus-querynode'
+  static_configs:
+  - targets: ['193.195.129.57:9997','193.195.129.58:9997','193.195.129.59:9997']
+    labels:
+      namespace: "milvus-docker"
+      app_kubernetes_io_name: "milvus"
+      app_kubernetes_io_instance: "milvus-cluster"
+      app_kubernetes_io_component: "querynode"
+
+
+# Milvus indexnode
+- job_name: 'milvus-indexnode'
+  static_configs:
+  - targets: ['193.195.129.57:9998','193.195.129.58:9998','193.195.129.59:9998']
+    labels:
+      namespace: "milvus-docker"
+      app_kubernetes_io_name: "milvus"
+      app_kubernetes_io_instance: "milvus-cluster"
+      app_kubernetes_io_component: "indexnode"
+```
 
 ## Links
 
