@@ -338,6 +338,23 @@ nohup /node_exporter --web.listen-address=":9100" >>nohup.out &
 # 容器内存使用量（排除 k8s 基础设施容器）
 container_memory_working_set_bytes{container!="", image!=""}
 ```
+启动
+
+```shell
+docker run-it \
+  --volume=/:/rootfs:ro \
+  --volume=/var/run:/var/run:ro \
+  --volume=/sys:/sys:ro \
+  --volume=/var/lib/docker:/var/lib/docker:ro \
+  --volume=/dev/disk/:/dev/disk:ro \
+  --publish=9080:8080 \
+  --detach=true \
+  --name=cadvisor \
+  --privileged \
+  --device=/dev/kmsg \
+  ghcr.io/google/cadvisor:v0.60.5
+```
+
 
 ### blackbox_exporter
 
@@ -382,6 +399,11 @@ EOF
 - Pushgateway 中的数据不会过期，任务失败后旧数据会一直存在，需要主动 DELETE 或在指标中附带时间戳
 - 多实例任务推送同一组标签会互相覆盖，应确保标签能区分实例
 - 不适合替代常规服务（长期运行的服务应暴露 /metrics 被抓取）
+
+
+
+
+
 
 ## Alerting
 
