@@ -38,3 +38,6 @@ The prisoners' dilemma is a common game theory example and one that adequately s
 
 ## Links
 
+- [Economics](/docs/Economics/Economics.md) — 经济学索引（微观/宏观/思想史）
+- [Zermelo](/docs/Economics/Zermelo.md) — 零和博弈与逆向归纳的早期定理
+- [Algorithmic Game Theory](/docs/CS/Algorithms/Algorithmic_Game_Theory.md) — Minimax、α-β 剪枝、MCTS
