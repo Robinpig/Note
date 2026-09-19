@@ -66,3 +66,6 @@ $$
 
 ## Links
 
+- [Mathematics](/docs/Mathematics/Mathematics.md)
+- [Number Theory](/docs/Mathematics/Number_Theory.md)
+- [Linear Algebra](/docs/Mathematics/Linear_Algebra.md)

@@ -1,171 +1,125 @@
 ## Introduction
 
-## Primary Math
+数学研究**数量、结构、空间与变化**，是计算机科学的底层语言。本库从 CS 视角组织数学笔记：不追求纯数学的完备证明，而关注「哪些数学对象在哪些工程场景中被使用、它们之间如何相互支撑」。
 
-Primary math, also referred to as elementary math or early math, is a category of mathematics that covers topics that are typically learned in early education.
-The topics learned in primary math, including tools, concepts, etc., provide a foundation for learning mathematics.
-They include topics such as numbers, counting, arithmetic, measurement, basic data visualization and analysis, and more.
+本页是数学领域的**总纲与分支学科目录**：先给出分支学科清单，再逐门学科说明它研究什么、入口在哪。离散与连续两条主线贯穿始终，几篇以小见大的趣味例题（斐波那契、鸽巢、考拉兹）挂在对应分支下。
 
-Below are some of the key topics in primary math.
+## 分支学科
 
-### Exponents
+<div class="kb-home">
 
-```tex
-\begin{aligned}
+### 主要分支
 
-X^AX^B  &= X^{A+B} \\
-\frac{X^A}{X^B} &=X^{A-B} \\
-(X^A)^B&=X^{AB} \\
-X^N+X^N&=X{2N} \\
-2^N+2^N&=2^{N+1}
+<div class="kb-grid kb-grid-sm">
 
-\end{aligned}
-```
+<div class="kb-card">
 
-### Logarithms
+### [集合论与数理逻辑](/docs/Mathematics/Set_Theory_Logic.md)
 
-In computer science, all logarithms are to base 2 unless specified otherwise.
+数学的通用语言与证明基础：集合、映射、形式系统与可计算性
 
-DEFINITION: x^a = b if and only if $ \log_x{b} = a $
+</div>
 
-```tex
-\begin{aligned}
+<div class="kb-card">
 
-\log_A({B}) &=\frac{\log_C{A}}{\log_B{A}}; \space C>0 \\
+### [代数](/docs/Mathematics/Algebra.md)
 
-\log{AB} &=\log{A}+\log{B}
+从算术到结构：群、环、域与多项式
 
-\end{aligned}
-```
+</div>
 
-### Series
+<div class="kb-card">
 
-```tex
-\sum_{i=0}^{N}2^i=2^{N+1}-1
-```
+### [几何](/docs/Mathematics/Geometry.md)
 
-### Modular Arithmetic
+形状、大小、位置与变换：平面、解析、非欧与微分几何
 
-The P Word
+</div>
 
-## 韦达定理
+<div class="kb-card">
 
-代数基本定理：几次方程有几个根
+### [拓扑学](/docs/Mathematics/Topology.md)
 
-求一元二次方程
+连续变形下不变的性质：连通、紧、同胚——「橡皮泥几何」
 
-$$
-ax^2+bx+c=0 (a\neq 0)
-$$
+</div>
 
-两根
+<div class="kb-card">
 
-$$
-x_1+x_2=-{b\over a}
-$$
+### [数学分析](/docs/Mathematics/Real_Analysis.md)
 
-And
+以极限为基石，严格研究实数、函数、级数与连续
 
-$$
-x_1x_2={c\over a}
-$$
+</div>
 
-so
+<div class="kb-card">
 
-$$
-x_{1,2}={-b \pm \sqrt{b^2-4ac} \over 2a }
-$$
+### [数值分析](/docs/Mathematics/Numerical_Analysis.md)
 
-高次方程下：
+有限精度下的近似算法：误差、稳定性与数值解
 
-## 行列式
+</div>
 
-线性变换面积/体积缩放比例
+<div class="kb-card">
 
-当行列式为0时，为向量处于同一平面、直线、点
+### [离散数学](/docs/Mathematics/Discrete_Math.md)
 
-空间定向改变时，行列式为负数
+可数、分立的对象：CS 的理论核心
 
-![determinant](./images/determinant.png)
+</div>
 
-ad-bc
+<div class="kb-card">
 
-## Newton's method
+### [组合数学](/docs/Mathematics/Combinatorics.md)
 
-```tex
-X_{k+1} = X_k - \frac{f(X_k)}{f'(X_k)}, k=1,2,...
-```
+计数、安排与结构：有多少、怎么排、存在吗
 
-## Pure Mathematics
+</div>
 
-## Algebra
+<div class="kb-card">
 
-Algebra is a branch of mathematics in which arithmetic is extended to deal with unknown numbers or relationships using letters and other symbols.
-It is a broad branch that is used to some degree in almost all other areas of mathematics.
-As such, for those who seek to pursue virtually any higher study of mathematics, it is important to have a strong grasp of algebra.
+### [数论](/docs/Mathematics/Number_Theory.md)
 
-The letters or symbols used in algebra are called variables.
+整数的性质：从同余到现代密码学
 
-Elementary algebra includes concepts such as variables and algebraic notation,
-simplifying expressions, equations, properties of equality and inequality, substitution, solving algebraic equations, and more.
-These form the foundation that will eventually allow us to approach more difficult algebraic and mathematical topics.
+</div>
 
-## Geometry
+<div class="kb-card">
 
-Geometry is a branch of mathematics that includes the study of shape, size, and other properties of figures.
-It is one of the oldest branches of mathematics and may have been used even in prehistoric times.
+### [概率论与数理统计](/docs/Mathematics/Probability_Statistics.md)
 
-### Plane Geometry
+随机现象模型与数据推断：ML 的数学地基
 
-A point indicates a location in space. It has no dimension and is represented by a dot. Points are typically labeled with capital letters.
+</div>
 
-A line has one dimension, its length, and is represented with a line containing arrows indicating it extends in either direction indefinitely.
-Two non-overlapping points determine a unique line and we can name the line with those two points or any other two points on the line.
+</div>
 
-A plane has two dimensions, length and width, and forms a flat surface (such as a piece of notebook paper) extending in both directions indefinitely.
-A plane can be named by three noncollinear points or by a letter.
+</div>
 
-### Solid Geometry
+## 离散与连续：两条主线
 
-Solid geometry is the branch of geometry.
-The solids are polyhedra (plural for polyhedron) or non-polyhedra.
+数学通常被划分为**离散数学**与**连续数学**两条主线，本库的所有分支都可归位：
 
-A polyhedron is a solid whose faces are polygons.
+- **离散数学**研究分立、可数的对象（整数、图、逻辑命题）。它是计算机科学的理论底座：算法正确性、数据库关系模型、编译原理、密码学都建立在集合、逻辑、图论与组合之上。入口见 [离散数学](/docs/Mathematics/Discrete_Math.md)，子领域含 [组合数学](/docs/Mathematics/Combinatorics.md) 与 [数论](/docs/Mathematics/Number_Theory.md)。
+- **连续数学**研究可无限细分的对象（实数、连续函数、流形）。它描述物理世界与信号，并为机器学习提供优化与概率工具：以 [集合论与数理逻辑](/docs/Mathematics/Set_Theory_Logic.md) 为语言，经 [代数](/docs/Mathematics/Algebra.md) 与 [几何](/docs/Mathematics/Geometry.md) 展开，在 [数学分析](/docs/Mathematics/Real_Analysis.md) 与 [微积分](/docs/Mathematics/Calculus.md) 中处理变化，在 [拓扑学](/docs/Mathematics/Topology.md) 中观察整体形状，最后由 [数值分析](/docs/Mathematics/Numerical_Analysis.md) 与 [概率论与数理统计](/docs/Mathematics/Probability_Statistics.md) 落地为可计算、可推断的工程方法。
 
-A non-polyhedron is a solid that has all or partly curved surfaces.
+两条主线并非割裂：[线性代数](/docs/Mathematics/Linear_Algebra.md) 既是代数的核心对象（向量空间），又是离散结构与连续空间的桥梁；[微积分](/docs/Mathematics/Calculus.md) 之于 [数学分析](/docs/Mathematics/Real_Analysis.md) 如同初等代数之于抽象代数——前者是直观入口，后者是严格框架。
 
-There are numerous branches of geometry that are classified based on various criteria such as the methods of study,
-the types of objects studied, and more.
+## 趣味例题
 
-**Analytic Geometry**
+几篇以小见大的例题笔记，分别挂在对应分支下：
 
-Analytic geometry is the study of plane and solid geometry that uses Algebra and incorporates the two-dimensional coordinate plane or three-dimensional coordinate plane.
-It is sometimes referred to as coordinate geometry for this reason.
-
-Since analytic geometry uses Algebra and the coordinate planes for geometric figures,
-it tends to be more numerical in nature, and thus has proven to be an important branch of mathematics used by engineers and physicists.
-
-**Euclidean Geometry**
-
-Euclidean geometry is the study of plane and solid geometry which uses axioms,
-postulates, and deductive reasoning to prove theorems about geometric concepts.
-
-**Non-Euclidean Geometry**
-
-Non-Euclidean geometry typically uses most of the ideas of Euclidean geometry but uses a different version of Euclid's parallel postulate.
-In Euclidean geometry two parallel lines never intersect.
-In Non-Euclidean geometry, parallel lines can intersect depending on which type of geometry is chosen.
-There are two basic types: Spherical and Hyperbolic Non-Euclidean geometries.
-
-Think of folding a plane in Euclidean geometry onto a sphere or a hyperboloid (a three-dimensional hyperbola).
-The lines are bent and circular or elliptical in spherical geometry, and parabolic or hyperbolic in hyperbolic geometry.
-
-## Calculus
-
-[Calculus](/docs/Mathematics/Mathematics.md) is a branch of mathematics that is the study of change.
-We use calculus to help explain the physical world around us.
-Disciplines such as physics, statistics, economics, and medicine,
-use calculus to not only explain the problems and issues that confront them,
-but also to construct models that can be used to predict future events or to describe past events.
+- [斐波那契数列](/docs/Mathematics/Fibonacii.md) —— 矩阵快速幂与黄金比，归入 [数论](/docs/Mathematics/Number_Theory.md)
+- [鸽巢原理](/docs/Mathematics/Pigeonhole%20Principle.md) —— 存在性证明的利器，归入 [组合数学](/docs/Mathematics/Combinatorics.md)
+- [考拉兹猜想](/docs/Mathematics/Callatz%20conjecture.md) —— 3n+1 的未解之谜，归入 [数论](/docs/Mathematics/Number_Theory.md)
 
 ## Links
+
+- [Linear Algebra](/docs/Mathematics/Linear_Algebra.md)
+- [Calculus](/docs/Mathematics/Calculus.md)
+- [MATLAB](/docs/CS/Tool/MATLAB.md)
+
+## References
+
+1. [Mathematics Subject Classification (AMS)](https://mathscinet.ams.org/mathscinet/msc/msc2020.html)
+2. [3Blue1Brown](https://www.3blue1brown.com/)

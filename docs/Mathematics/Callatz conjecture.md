@@ -1,9 +1,6 @@
 ## Introduction
 
 
-
-
-
 对任意正整数 n($n\in Z^+$) 若n为偶数则除以二, 若n为奇数则乘3再减1, 如此反复, 其结果最终必然达到1
 
 $$
@@ -16,7 +13,6 @@ f(n) =
 $$
 
 
-
 ```java
 
 public static int calltz(int num){
@@ -24,7 +20,8 @@ public static int calltz(int num){
 	if( num % 2 == 0){
 		num = num/2;
 	} else {
-		
+
+
 	}
 
 }
@@ -34,13 +31,12 @@ public static int calltz(int num){
 
 考拉兹猜想"在变化过程中必然遵循的一条规律-白言规则。它指出：按照考拉兹猜想的运算规则，任一正整数都将会转变到LiKe第二数列{3^n-1∣n∈Z+}中的数；所得3^n-1 将会变为更小的3^n-1并最终变为8回到1
 
-https://cloud.tencent.com/developer/article/2041862?cps_key=1d358d18a7a17b4a6df8d67a62fd3d3d
-
-
-
-
-
 
 ## Links
 
-- []
+- [Mathematics](/docs/Mathematics/Mathematics.md)
+- [Number Theory](/docs/Mathematics/Number_Theory.md)
+
+## References
+
+1. [考拉兹猜想详解](https://cloud.tencent.com/developer/article/2041862?cps_key=1d358d18a7a17b4a6df8d67a62fd3d3d)
