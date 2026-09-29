@@ -4,6 +4,10 @@ he Windows Subsystem for Linux (WSL) lets developers install a Linux  distributi
 
 
 
+> [!NOTE]
+>
+> 前置条件 WIndows功能里需要开启WSL
+
 Install
 
 ```shell

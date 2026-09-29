@@ -4,10 +4,6 @@ kube-controller-manager是一个守护进程，内嵌随 Kubernetes 一起发布
 在 Kubernetes 中，每个控制器是一个控制回路，通过 API 服务器监视集群的共享状态， 并尝试进行更改以将当前状态转为期望状态
 Controller Manager由负责不同资源的多个 Controller 构成，共同负责集群内的 Node、Pod、Endpoint、Namespace、ServiceAccount、ResourceQuota 等所有资源的管理
 
-kube-controller-manager负责确保k8s的实际状态收敛到所需状态
-
-
-
 几乎每种特定资源都有特定的 Controller 维护管理以保持预期状态，而 Controller Manager 的职责便是把所有的 Controller 聚合起来：
 
 - 提供基础设施降低 Controller 的实现复杂度
@@ -18,9 +14,7 @@ Controller Manager具备高可用性（即多实例同时运行），即基于Et
 抢先获取锁的实例被称为Leader节点（即领导者节点），并运行kube-controller-manager组件的主逻辑；而未获取锁的实例被称为Candidate节点（即候选节点），运行时处于阻塞状态
 在Leader节点因某些原因退出后，Candidate节点则通过领导者选举机制参与竞选，成为Leader节点后接替kube-controller-manager的工作
 
-
-
-
+kube-controller-manager负责确保k8s的实际状态收敛到所需状态
 kube-controller-manager中运行了多个控制器 控制器通过Informer机制监听资源对象的Add、Update、Delete事件 并且通过Reconcile调谐机制更新资源对象的状态
 
 辅助 Controller Manager 完成事件分发的是 client-go

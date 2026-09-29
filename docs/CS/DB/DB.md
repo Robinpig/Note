@@ -97,6 +97,18 @@ Storing values that have the same data type together (e.g., numbers with other n
 Column-oriented databases should not be mixed up with wide column stores, such as BigTable or HBase, where data is represented as a multidimensional map, columns are grouped into column families (usually storing data of the same type), and inside each column family, data is stored row-wise. This layout is best for storing data retrieved by a key or a sequence of keys.
 
 
+
+### vector
+
+随着数据脱离了传统数据库整齐的行和列，开始以文本、图片、音频、代码以及关系图的形式存在，一种新的数据处理方式变得必要。向量数据库应运而生来应对这一变化。它们通过将数据表示为由嵌入生成的高维向量来存储意义，而不是标签。在这个空间里，相似性变成了一个距离问题，而不是关键词匹配。这使得向量数据库在现代AI系统中不可或缺，比如语义搜索、推荐引擎、RAG流水线、欺诈检测和多模态助手，因为相关性依赖于上下文和意图，而不是精确匹配。它们的兴起也反映了从基于规则的软件向基于表示的学习的转变，在这种学习中，理解来自于潜在空间中的接近性。
+
+向量数据库旨在存储和管理高维数据，而传统数据库管理系统（DBMS）难以有效处理这些数据。
+这种创新的数据库利用称为向量的数学表示，向量可包含多个维度，通常从数十到数千不等，具体取决于数据的复杂度。
+这些向量由多种数据生成，包括文本、图片、音频和视频，使得复杂的分析和检索能力超越了简单的关键词匹配。  
+向量数据库促进了快速且精确的相似性搜索，使其在机器学习、自然语言处理和计算机视觉等领域应用中不可或缺。
+它们还支持大型语言模型（LLM）的集成，增强了语义搜索、实时知识检索等任务的能力，并减少了LLM输出中常见的“幻觉”错误
+
+
 ## Architecture
 
 Database management systems use a client/server model, where database system instances (nodes) take the role of servers, and application instances take the role of clients.

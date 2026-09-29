@@ -1,7 +1,5 @@
 ## Introduction
 
-
-
 kube-apiserver 是 kubernetes 中唯一与 etcd 直接交互的一个组件，在k8s中所有组件都通过kube-apiserver操作资源对象
 
 它主要提供了以下几个功能：
@@ -23,7 +21,7 @@ kube-apiserver 共由 3 个组件构成（Aggregator、KubeAPIServer、APIExtens
 
 
 
-
+## init
 
 kube-apiserver组件启动后的第一件事情是将Kubernetes所支持的资源注册到Scheme资源注册表中，这样后面启动的逻辑才能够从Scheme资源注册表中拿到资源信息并启动和运行APIExtensionsServer、KubeAPIServer、AggregatorServer这3种服务
 

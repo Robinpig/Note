@@ -107,8 +107,17 @@ ingest.geoip.downloader.enabled: false
 
 ##### **Docker**
 
-[Install Elasticsearch with Docker](https://www.elastic.co/guide/en/elasticsearch/reference/current/docker.html)
 
+可以通过环境变量禁用所有安全功能, 添加 -e "xpack.security.enabled=false"
+
+```shell
+docker run -d --name elasticsearch \
+  -p 9200:9200 -p 9300:9300 \
+  -e "discovery.type=single-node" \
+  -e "ES_JAVA_OPTS=-Xms1g -Xmx1g" \
+  -e "xpack.security.enabled=false" \
+  docker.elastic.co/elasticsearch/elasticsearch:8.1.3
+```
 
 
 <!-- tabs:end -->

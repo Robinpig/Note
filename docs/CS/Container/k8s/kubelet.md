@@ -1,6 +1,8 @@
 ## Introduction
 
-kubelet用于节点管理 运行在每个k8s节点上 kubelet用来接收、处理、上报kube-apiserver下发的任务 kubelet在启动时会向kube-apiserver注册节点自身信息 它主要负责所在节点上的pod资源对象的管理
+kubelet用于节点管理 运行在每个k8s节点上 kubelet用来接收、处理、上报kube-apiserver下发的任务 kubelet在启动时会向kube-apiserver注册节点自身信息 它主要负责所在节点上的pod资源对象的管理，例如，Pod资源对象的创建、修改、监控、删除、驱逐及Pod生命周期管理。
+
+kubelet会定期监控所在节点的资源使用情况，并上报 kube-apiserver。这些资源数据可以帮助kube-scheduler为 Pod 资源对象预选节点。kubelet 也会清理所在节点的镜像和容器，保证节点上的镜像不会占满磁盘空间，可以释放资源。
 
 kubelet的3种标准化接口分别用于CRI、CNI和CSI
 

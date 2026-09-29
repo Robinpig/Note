@@ -50,3 +50,8 @@ agent-browser
 
 - [Agent](/docs/CS/AI/Agent.md)
 
+
+
+## Refences
+
+1. [Agent Skill规范、构建与设计模式-阿里云开发者社区](https://developer.aliyun.com/article/1734589?spm=a2c6h.24874632.expert-profile.25.16451bb6N2zngb)

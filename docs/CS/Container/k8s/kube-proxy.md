@@ -1,10 +1,8 @@
 ## Introduction
 
-kube-proxy用于节点上的网络代理 运行在k8s的每个节点上
+kube-proxy用于节点上的网络代理 运行在k8s的每个节点上。它监听kube-apiserver的Service和Endpoints的资源变化，并通过iptables、ipvs等配置负载均衡器，为一组Pod提供统一的TCP/UDP流量转发和负载均衡功能。
 
-
-
-kube-proxy是管理Pod-to-Service和Extend-to-Service 网络的非常重要的组件之一
+kube-proxy是管理Pod-to-Service和Extend-to-Service 网络的非常重要的组件之一。kube-proxy相当于代理模型，负责将某个IP:Port的请求转发给专用网络上的相应服务或应用。但是kube-proxy与其它负载均衡服务的区别在于，kube-proxy只向Kubernetes Service及其后端Pod资源对象发出请求。
 
 入口函数在 cmd/kube-proxy/proxy.go
 
