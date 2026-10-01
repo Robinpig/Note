@@ -125,6 +125,10 @@ These specifications are part of the Jakarta EE platform.
 
 
 
+## Recommender System
+
+A [recommender system](/docs/CS/RecommenderSystem/RecommenderSystem.md) is an information filtering system that predicts user preferences and suggests items — part of the "search, recommendation and advertising" stack, built on [machine learning](/docs/CS/AI/ML/ML.md) rather than being a subfield of AI itself.
+
 ## Other Topics
 
 
