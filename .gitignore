@@ -46,3 +46,7 @@ replay_pid*.log
 /package.json
 /package-lock.json
 
+
+# ai
+.claude
+.opencode
