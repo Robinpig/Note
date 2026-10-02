@@ -46,6 +46,8 @@ replay_pid*.log
 /package.json
 /package-lock.json
 
+# exclude AI tools
+.workbuddy
 
 # ai
 .claude

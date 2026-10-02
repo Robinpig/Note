@@ -30,6 +30,100 @@
       margin-left: auto;
       margin-right: auto;
     }
+
+    /* ---------- home page: README.md (.kb-home) ---------- */
+    .kb-home h1 {
+      font-size: 2.1rem;
+      letter-spacing: -0.5px;
+      margin-bottom: 0.4rem;
+    }
+    .kb-home .kb-lead {
+      margin: 0 0 14px;
+      font-size: 1.02rem;
+      line-height: 1.75;
+      opacity: 0.85;
+    }
+    .kb-home .kb-stats {
+      display: inline-block;
+      margin: 2px 0 22px;
+      padding: 5px 14px;
+      border-radius: 999px;
+      background: rgba(128, 128, 128, 0.12);
+      font-size: 0.85rem;
+      opacity: 0.85;
+    }
+    .kb-home .kb-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 16px;
+      margin: 16px 0 10px;
+    }
+    .kb-home .kb-grid-sm {
+      grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+      gap: 12px;
+    }
+    .kb-home .kb-card {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid rgba(128, 128, 128, 0.25);
+      border-radius: 12px;
+      padding: 14px 16px 16px;
+      background: rgba(128, 128, 128, 0.045);
+      transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+    }
+    .kb-home .kb-card::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 auto 0;
+      height: 3px;
+      background: linear-gradient(90deg, var(--theme-color, #42b983), rgba(66, 185, 131, 0.12));
+      opacity: 0.8;
+    }
+    .kb-home .kb-card:hover {
+      transform: translateY(-3px);
+      box-shadow: 0 10px 22px rgba(0, 0, 0, 0.10);
+      border-color: var(--theme-color, #42b983);
+    }
+    .kb-home .kb-card h3 {
+      margin: 0 0 6px !important;
+      padding: 0;
+      border: none !important;
+      font-size: 1.02rem;
+      font-weight: 600;
+    }
+    .kb-home .kb-card h3 a { color: inherit; text-decoration: none; }
+    .kb-home .kb-card h3 a:hover { color: var(--theme-color, #42b983); text-decoration: none; }
+    .kb-home .kb-card p {
+      margin: 0 0 10px;
+      font-size: .88rem;
+      line-height: 1.85;
+      opacity: 0.8;
+    }
+    .kb-home .kb-grid > .kb-card p code { font-size: .8rem; }
+    .kb-home .kb-card code {
+      display: inline-block;
+      padding: 1px 8px;
+      border-radius: 999px;
+      background: rgba(128, 128, 128, 0.18);
+      font-size: .78rem;
+      font-weight: 400;
+      opacity: 0.9;
+    }
+    .kb-home .kb-route {
+      padding: 12px 18px;
+      border-left: 3px solid var(--theme-color, #42b983);
+      border-radius: 0 10px 10px 0;
+      background: rgba(128, 128, 128, 0.05);
+      line-height: 2;
+    }
+    .kb-home details {
+      margin: 8px 0 20px;
+      padding: 10px 16px;
+      border: 1px dashed rgba(128, 128, 128, 0.3);
+      border-radius: 10px;
+    }
+    .kb-home details summary { cursor: pointer; font-weight: 600; }
+    .kb-home table { display: table; width: 100%; }
   </style>
 
 
@@ -132,11 +226,7 @@
       tabComments: true,      // default
       tabHeadings: true       // default
     },
-    toc: {
-      scope: '.markdown-section',
-      headings: 'h1, h2, h3',
-      title: 'Table of Contents',
-    },
+    // docsify-toc 已移除：整站不再生成页内 Table of Contents（导航以首页目录 + 每篇笔记的 Links 区为准）
     share: {
       reddit: true,
       linkedin: true,
@@ -242,8 +332,6 @@
 <script src="//unpkg.com/docsify-share/build/index.min.js"></script>
 <script src="https://unpkg.com/docsify-progress@1.0.3/dist/progress.js"></script>
 
-
-<script src="https://unpkg.com/docsify-toc@1.0.0/dist/toc.js"></script>
 
 <script src="https://unpkg.com/docsify-footer-enh/dist/docsify-footer-enh.min.js"></script>
 
