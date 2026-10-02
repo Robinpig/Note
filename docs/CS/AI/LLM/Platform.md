@@ -79,6 +79,8 @@ n8n、Make、Zapier Agents、Gumloop、Relay.app、Lindy、Relevance AI、Voicef
 
 [LangGraph](/docs/CS/Framework/LangTool/LangGraph.md)、CrewAI、OpenAI Agents SDK、Claude Agent SDK、[Pydantic AI](/docs/CS/Framework/PydanticAI.md)。
 
+这一派内部的层次关系（Harness / Framework / Runtime / Platform）与选型路径，见 [LLM 应用开发框架](/docs/CS/AI/LangTools.md)。
+
 其中 Pydantic AI 的定位最"反平台"：它不做画布也不做运维台，只解决**单个类型安全的 Agent 如何可靠地嵌进真实代码库**（结构化输出校验、依赖注入、用量硬约束、OpenTelemetry 追踪）。画布表达不出来的那些东西，答案往往就在这里。
 
 画布表达不了的东西在这里表达：多 Agent 监督/分工、自定义记忆、持久执行与断点恢复、逐节点超时。代价是你要自己承担编排、托管、观测、提示词版本管理和 on-call。它是"什么时候应该离开平台"那一节的答案（见下文）。

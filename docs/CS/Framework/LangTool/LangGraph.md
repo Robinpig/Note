@@ -7,7 +7,7 @@ LangGraph为任何长时间运行的有状态工作流或代理提供低级支�
 - 持久执行：构建能够在故障中持久存在并可以长时间运行的代理，从停止的地方继续执行。
 - 人机协作：通过在任何点检查和修改代理状态来纳入人工监督。
 - 全面的记忆：创建具有短期工作记忆（用于持续推理）和跨会话长期记忆的有状态代理。
-- 使用LangSmith进行调试：通过可视化工具深入了解复杂的代理行为，这些工具可以跟踪执行路径、捕获状态转换并提供详细的运行时指标。
+- 使用 [LangSmith](/docs/CS/Framework/LangTool/LangSmith.md) 进行调试：通过可视化工具深入了解复杂的代理行为，这些工具可以跟踪执行路径、捕获状态转换并提供详细的运行时指标。
 - 生产就绪的部署：使用专为处理有状态、长时间运行的工作流的独特挑战而设计的可扩展基础设施，自信地部署复杂的代理系统
 
 ## Installation
@@ -38,15 +38,24 @@ graph.invoke({"messages": [{"role": "user", "content": "hi!"}]})
 
 
 
-LangGraph 的本质是将工作流抽象为图（Graph），以下三个核心概念：
-State（状态）：这是图的“记忆”。它是一个字典（或 Pydantic 模型），在节点之间传递。每个节点读取状态、处理数据，然后返回更新后的状态。
-Nodes（节点）：图中的“工作者”。通常是 Python 函数，负责执行具体任务（如调用 LLM、查询数据库、执行代码等）。节点接收当前 State，返回需要更新的 State 字段。
-Edges（边）：图中的“路线”。定义节点之间的流转逻辑。
-普通边（Normal Edge）：A 执行完必定去 B。
-条件边（Conditional Edge）：根据当前 State 的值，决定下一步去 B 还是去 C（这是实现 Agent 思考循环的关键）
+## 三个核心概念
+
+LangGraph 的本质是把工作流抽象成图（Graph），三个核心概念：
+
+| 概念 | 角色 | 说明 |
+| --- | --- | --- |
+| State（状态） | 图的"记忆" | 字典或 Pydantic 模型，在节点之间传递；每个节点读取状态、处理数据、返回需要更新的字段 |
+| Nodes（节点） | 图中的"工作者" | 通常是 Python 函数，执行调用 LLM、查数据库、跑代码等具体任务 |
+| Edges（边） | 图中的"路线" | 定义节点之间的流转逻辑 |
+
+边分两种：**普通边（Normal Edge）** 表示 A 执行完必定去 B；**条件边（Conditional Edge）** 根据当前 State 的值决定下一步去 B 还是 C——这是实现 Agent 思考循环的关键。
+
+设计渊源值得一提：LangGraph 受 Google **Pregel** 与 **Apache Beam** 影响，公开接口则借鉴 **NetworkX**，所以它的心智模型是"超步（superstep）推进 + 图 API"。
 
 
 
+
+## 图的基本形状
 
 <!-- tabs:start -->
 
@@ -225,9 +234,9 @@ if __name__ == "__main__":
 <!-- tabs:end -->
 
 
-接下来引入 LLM，
+## 接入 LLM
 
-前提
+图本身跑通了，真正要用起来还得把 LLM 接进去。下面用 DeepSeek（兼容 OpenAI 接口，可直接套 `ChatOpenAI`）演示，前提是装上集成包：
 
 ```shell
 pip install --upgrade langgraph langchain-openai langchain-core
@@ -499,7 +508,7 @@ from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, START, END, MessagesState
 from langgraph.prebuilt import ToolNode
 # 🌟 新增导入：内存检查点 (用于实现多轮记忆)
-from langgraph.checkpoint.memory import MemorySaver 
+from langgraph.checkpoint.memory import InMemorySaver 
 
 # ==========================================
 # 0. 配置 DeepSeek 模型
@@ -552,8 +561,8 @@ workflow.add_edge(START, "agent")
 workflow.add_conditional_edges("agent", should_continue, {"tools": "tools", "end": END})
 workflow.add_edge("tools", "agent")
 
-# 🌟 核心修改 1：实例化 MemorySaver
-memory = MemorySaver()
+# 🌟 核心修改 1：实例化内存检查点
+memory = InMemorySaver()
 
 # 🌟 核心修改 2：编译时传入 checkpointer
 app = workflow.compile(checkpointer=memory)
@@ -613,25 +622,53 @@ if __name__ == "__main__":
             print(f"\n❌ 发生错误: {e}")
 ```
 
-##### **人工介入**
+## 持久化与记忆
 
-```py
+LangGraph 的"记忆"由两套机制分工，别混：
 
-```
+| 机制 | 作用域 | 存什么 | 典型实现 |
+| --- | --- | --- | --- |
+| Checkpointer | 单个 thread（短期） | 图的 State 快照，每一步执行后落一次 | `InMemorySaver`、`SqliteSaver`、`PostgresSaver` |
+| Store | 跨 thread（长期） | 应用自定义的键值数据，如用户偏好、事实 | `InMemoryStore` 及各类持久化后端 |
 
+编译时挂上 checkpointer（`workflow.compile(checkpointer=memory)`），运行时传同一个 `thread_id`，LangGraph 就会自动加载上一次的 State——这就是上面多轮对话示例的原理，也是断点恢复、时间旅行调试的基础。
 
-<!-- tabs:end -->
+> [!WARNING]
+> **旧教程里的 `MemorySaver` 现已改名 `InMemorySaver`**（仍在 `langgraph.checkpoint.memory`），两者都只存内存、进程重启即丢，生产要换 `SqliteSaver` / `PostgresSaver`。另外 `PostgresSaver` 的 `thread_id` 存在一个有长度上限的列里，**建议控制在 255 字符以内**。
 
+顺带一提，checkpoint 系列包（尤其 `langgraph-checkpoint-postgres`）与核心 `langgraph` **不锁步发版**，版本错配会导致 checkpoint 读写报错（例如新包查询了旧 schema 里不存在的列），升级时务必成套 pin 住。
+
+## 人在环路
+
+LangGraph 把人工介入做成运行时原语，而不是让应用层自己轮询：
+
+- **静态断点**：`compile(interrupt_before=[...], interrupt_after=[...])`，在指定节点前后无条件暂停。
+- **动态中断**：在节点函数体里调用 `interrupt()`，按业务条件决定要不要停下来等人。
+- **恢复与改写**：暂停后的状态留在 checkpoint 里，人审完再用 `Command` 带着修正后的状态继续跑。
+
+这也是它和 [Dify](/docs/CS/AI/LLM/Dify.md) 这类画布平台的分界线——审批闸门、断点恢复是代码级能力，画布很难表达得同样精确。
+
+## 版本演进
+
+| 版本 | 时间 | 关键变化 |
+| --- | --- | --- |
+| 1.0 | 2025-10 | 与 LangChain 1.0 同步发布；**完全向后兼容**，唯一显著变化是 `langgraph.prebuilt` 命名空间弃用、等价 helper 移到 `langchain.agents`（`create_react_agent` → `create_agent`）；要求 Python ≥ 3.10 |
+| 1.1 | 2026-03 | 类型安全与开发体验：`stream()` 统一为带类型的 `StreamPart`，`invoke()` 返回可自动转型的 `GraphOutput`（`.value` / `.interrupts`）；新增 `create_supervisor` 支持 supervisor 多 Agent 模式 |
+| 1.2 | 2026-05 | 可靠性：`DeltaChannel`（beta，只记录每超步的增量）、按节点超时（墙钟 + 空闲）、节点级错误处理器（可实现 Saga 补偿）、`RunControl` 协作式优雅停机并留下可恢复 checkpoint |
+
+⚠️ **LangGraph Platform 已经不再叫这个名字**——它被并入 [LangSmith](/docs/CS/Framework/LangTool/LangSmith.md) 产品线，现在叫 **LangSmith Deployment**。查部署文档时要按新名字找。
 
 ## Links
 
-- [LangChain](/docs/CS/Framework/LangTool/LangChain.md) — LangChain 生态与 LangGraph 的位置
-- [Langflow](/docs/CS/Framework/LangTool/Langflow.md) — 把 LangGraph 式流程搬到画布上，可导出 Python
-- [Pydantic AI](/docs/CS/Framework/PydanticAI.md) — 类型优先的替代路线
-- [Agent](/docs/CS/AI/LLM/Agent.md) / [Harness](/docs/CS/AI/LLM/Harness.md) — 编排之上的工程面
-
-
+- [LangChain](/docs/CS/Framework/LangTool/LangChain.md)
+- [Langflow](/docs/CS/Framework/LangTool/Langflow.md)
+- [LangTools](/docs/CS/AI/LangTools.md)
+- [Pydantic AI](/docs/CS/Framework/PydanticAI.md)
+- [Agent](/docs/CS/AI/LLM/Agent.md)
+- [Harness](/docs/CS/AI/LLM/Harness.md)
 
 ## References
 
-1. [LangGraph中文文档](https://langchain-doc.cn/v1/python/langgraph/overview.html)
+1. [LangGraph overview](https://docs.langchain.com/oss/python/langgraph/overview)
+2. [Persistence（checkpointer 与 store）](https://docs.langchain.com/oss/python/langgraph/persistence)
+3. [LangGraph中文文档](https://langchain-doc.cn/v1/python/langgraph/overview.html)

@@ -46,6 +46,8 @@ LLM 在结构上就是"把 [Transformer](/docs/CS/AI/Transformer.md) 的 decoder
 
 画布和代码也不必二选一：[Langflow](/docs/CS/Framework/LangTool/Langflow.md) 允许一边可视化编排一边改组件源码、导出成 Python；而团队本就 Python 为主、希望类型系统直接约束 LLM 输出时，[Pydantic AI](/docs/CS/Framework/PydanticAI.md) 是从第一天就按生产标准设计的那一派。
 
+以上都是"用别人的平台"。另一条路是自己攒：[LangChain](/docs/CS/Framework/LangTool/LangChain.md) 给出模型与工具的跨厂商抽象，[LangGraph](/docs/CS/Framework/LangTool/LangGraph.md) 在它下面给出有状态图运行时——循环重试、断点恢复、人工审批闸门都落在这一层。这条代码框架线与平台线各自适合谁、同层还有哪些玩家，[LLM 应用开发框架](/docs/CS/AI/LangTools.md) 画了一张横向地图。
+
 ## Links
 
 - [AI](/docs/CS/AI/AI.md)
