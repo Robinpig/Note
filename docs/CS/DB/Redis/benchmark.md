@@ -39,4 +39,3 @@ SET: 305871.56 requests per second
 ## References
 
 1. [Redis 性能测试](https://www.runoob.com/redis/redis-benchmarks.html)
-

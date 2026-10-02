@@ -58,5 +58,3 @@ Whenever entries are written to a ledger, those entries are striped across the e
 ## Links
 
 - [Apache Pulsar](/docs/CS/MQ/Pulsar/Pulsar.md)
-
-

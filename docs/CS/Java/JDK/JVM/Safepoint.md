@@ -849,4 +849,3 @@ Xlog:safepoint
 3. [JVM internals basics - Stop-the-world phase (safepoints) - how it works?](https://krzysztofslusarski.github.io/2020/11/13/stw.html)
 4. [JDK-8223051 support loops with long (64b) trip counts](https://bugs.openjdk.org/browse/JDK-8223051)
 5. [Analyzing gc logs](https://stackoverflow.com/questions/29666057/analyzing-gc-logs)
-

@@ -50,6 +50,3 @@ Our own main features are:
 
 
 - [Linux](/docs/CS/OS/Linux/Linux.md)
-
-
-

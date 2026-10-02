@@ -56,4 +56,3 @@ SVD 是工程上最重要的分解：它把任意线性变换拆成「旋转 →
 - [MATLAB](/docs/CS/Tool/MATLAB.md)
 
 ## References
-

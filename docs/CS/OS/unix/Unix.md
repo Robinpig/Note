@@ -112,4 +112,3 @@ The success of PCs is in large part due to the fact that, by making all hardware
 ## References
 
 1. [The Good, the Bad, and the Ugly: The Unix Legacy](http://herpolhode.com/rob/ugly.pdf)
-

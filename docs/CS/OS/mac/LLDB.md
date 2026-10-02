@@ -21,6 +21,3 @@ For users already familiar with [GDB](/docs/CS/C/GDB.md) there is a cheat sheet 
 ## References
 
 1. [LLDB调试器使用简介 | 南峰子的技术博客 (southpeak.github.io)](https://southpeak.github.io/2015/01/25/tool-lldb/)
-
-
-

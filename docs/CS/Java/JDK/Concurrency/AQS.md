@@ -1109,6 +1109,3 @@ AbstractOwnableSynchronizer
 
 
 ## References
-
-
-

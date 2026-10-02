@@ -319,4 +319,3 @@ Index Scan
 
 
 ## References
-

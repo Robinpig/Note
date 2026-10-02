@@ -217,9 +217,3 @@ device node 通过父节点、子节点和兄弟节点三个指针维护各个�
 - [Linux](/docs/CS/OS/Linux/Linux.md)
 - [udev](/docs/CS/OS/Linux/dev/udev.md)
 - [sysfs](/docs/CS/OS/Linux/fs/sysfs.md)
-
-
-
-
-
-

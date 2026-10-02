@@ -166,5 +166,3 @@ func (rsc *ReplicaSetController) Run(ctx context.Context, workers int) {
 - [K8s 架构与四条主链路](/docs/CS/Container/k8s/Architecture.md)
 - [controller-manager](/docs/CS/Container/k8s/controller-manager.md)
 - [client-go](/docs/CS/Container/k8s/client-go.md)
-
-

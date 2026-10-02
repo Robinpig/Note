@@ -92,4 +92,3 @@ sudo apt install libgconf-2-4
 ## Links
 
 - [Linux](/docs/CS/OS/Linux/Linux.md)
-

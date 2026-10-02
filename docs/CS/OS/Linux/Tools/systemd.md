@@ -20,5 +20,3 @@ systemd 支持 SysV 和 LSB 初始脚本，可以替代 sysvinit。除此之外�
 ## References
 
 1. [探索Systemd](https://doc.embedfire.com/lubancat/build_and_deploy/zh/latest/building_image/using_systemd/using_systemd.html)
-
-

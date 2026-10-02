@@ -25,6 +25,3 @@ Doris uses a **columnar storage engine**, which encodes, compresses, and reads d
 
 
 ## References
-
-
-

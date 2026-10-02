@@ -482,6 +482,3 @@ it is relatively easy to swap out a readwrite lock for an exclusive one if profi
 
 
 1. [](https://www.jianshu.com/p/c4af8c70ff99)
-
-
-

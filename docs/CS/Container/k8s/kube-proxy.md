@@ -365,4 +365,3 @@ kube-proxy 只是"规则生产者"这一角色，要理解它在整条链路中�
 ## References
 
 - [K8s Service 底层原理：ClusterIP 与流量转发](https://mp.weixin.qq.com/s/-B8rs7vFRKciPlhNVECKFQ)
-

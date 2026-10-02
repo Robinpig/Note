@@ -493,4 +493,3 @@ To create your own observations (which will lead to metrics and traces), you can
 
 - [Spring Boot Reference](https://docs.spring.io/spring-boot/reference/)
 - [阿里云 SCA 学习站 - Spring Boot 核心特性](https://sca.aliyun.com/learn/spring-boot/core/)
-

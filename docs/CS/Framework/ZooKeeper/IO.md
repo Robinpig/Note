@@ -1375,6 +1375,3 @@ private boolean startConnection(Socket sock, Long sid) throws IOException {
 ## References
 
 1. [Reactor网络IO - Thinking In Code](https://www.ktyhub.com/zh/chapter_zookeeper/14-reactor-io/)
-
-
-

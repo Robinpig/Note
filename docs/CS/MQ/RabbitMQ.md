@@ -41,6 +41,3 @@ The purpose of exchanges is to route all messages that flow through them to one 
 ## Links
 
 - [MQ](/docs/CS/MQ/MQ.md?id=rocketmq)
-
-
-

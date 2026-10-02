@@ -27,4 +27,3 @@ tigervncserver -xstartup /usr/bin/gnome-session -localhost no
 
 
 ## Links
-

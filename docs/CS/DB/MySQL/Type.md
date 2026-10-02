@@ -26,4 +26,3 @@ MySQL 数据库中常见的日期类型有 YEAR、DATE、TIME、DATETIME、TIMES
 ## Links
 
 - [MySQL](/docs/CS/DB/MySQL/MySQL.md)
-

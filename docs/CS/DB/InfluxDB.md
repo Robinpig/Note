@@ -16,4 +16,3 @@ It is able to run either with a write ahead log or completely off object storage
 
 ## References
 1.[influxdata](https://www.influxdata.com/)
-

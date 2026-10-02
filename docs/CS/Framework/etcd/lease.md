@@ -54,5 +54,3 @@ etcd Lessor主循环每隔500ms执行一次撤销Lease检查（RevokeExpiredLeas
 
 
 ## References
- 
-

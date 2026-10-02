@@ -168,4 +168,3 @@ Eureka 的
 负载均衡是由 ribbon 来完成的， 而 Consul 则是由 Fabio 做负载均衡。  
 
 ## Links
-

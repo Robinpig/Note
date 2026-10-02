@@ -31,5 +31,3 @@ Spring Cloud Consul features:
 
 
 ## Links
-
-

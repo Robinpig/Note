@@ -25,5 +25,3 @@ f'(x) =
 - [Real Analysis](/docs/Mathematics/Real_Analysis.md)
 
 ## References
-
-

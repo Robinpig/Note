@@ -2774,4 +2774,3 @@ func (m *Mutex) TryLock(ctx context.Context) error {
 1. [raft 工程化案例之 etcd 源码实现](https://zhuanlan.zhihu.com/p/600893553)
 2. [etcd 源码分析](https://www.zhihu.com/column/c_1574793366772060162)
 3. [etcd Raft库解析](https://www.codedump.info/post/20180922-etcd-raft/)
-

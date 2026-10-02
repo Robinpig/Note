@@ -174,5 +174,3 @@ flush cache to memory and execute code
 
 
 ## References
-
-

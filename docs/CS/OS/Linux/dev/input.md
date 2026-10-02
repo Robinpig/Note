@@ -14,5 +14,3 @@ input子系统有两个核心数据结构，input_dev和input_handler。顾名�
 ## Links
 
 - [Linux dev](/docs/CS/OS/Linux/dev/device.md)
-
-

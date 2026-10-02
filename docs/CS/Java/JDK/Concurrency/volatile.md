@@ -88,4 +88,3 @@ LOCK指令前缀功能如下：
 1. [The "Double-Checked Locking is Broken" Declaration](https://www.cs.umd.edu/~pugh/java/memoryModel/DoubleCheckedLocking.html)
 2. [关于汇编：在x86上，哪个更好的写障碍是：lock + addl或xchgl？](https://www.codenong.com/4232660/)
 3. [汇编指令的LOCK指令前缀](https://dslztx.github.io/blog/2019/06/08/%E6%B1%87%E7%BC%96%E6%8C%87%E4%BB%A4%E7%9A%84LOCK%E6%8C%87%E4%BB%A4%E5%89%8D%E7%BC%80/)
-

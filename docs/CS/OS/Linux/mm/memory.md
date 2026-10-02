@@ -1441,4 +1441,3 @@ SYSCALL_DEFINE1(brk, unsigned long, brk)
 ## References
 
 1. []()
-

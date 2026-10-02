@@ -27,4 +27,3 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 ## References
 
 - [uv 官方文档](https://docs.astral.sh/uv/)
-

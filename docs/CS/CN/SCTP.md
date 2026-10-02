@@ -61,5 +61,3 @@ Therefore, in lieu of keeping an entire connection in TIME_WAIT, SCTP instead pl
 
 ## Links
 - [Computer Network](/docs/CS/CN/CN.md)
-
-

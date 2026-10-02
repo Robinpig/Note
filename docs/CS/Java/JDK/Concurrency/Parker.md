@@ -420,6 +420,3 @@ void os::PlatformEvent::unpark() {
 - [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
 - [AQS](/docs/CS/Java/JDK/Concurrency/AQS.md)
 - [synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md)
-
-
-

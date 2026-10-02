@@ -196,5 +196,3 @@ class FIFOMutex {
 ## Links
 - [synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md)
 - [AQS](/docs/CS/Java/JDK/Concurrency/AQS.md)
-
-

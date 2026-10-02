@@ -112,6 +112,3 @@ static void update_curr_rt(struct rq *rq)
 - [fair](/docs/CS/OS/Linux/proc/fair.md)
 - [Scheduling 理论](/docs/CS/OS/scheduling.md)
 - [Processes 知识地图](/docs/CS/OS/Linux/proc/README.md)
-
-
-

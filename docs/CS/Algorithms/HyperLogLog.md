@@ -29,4 +29,3 @@ The count and merge operations depend on the number of registers m and have a th
 In some implementations ([Redis](/docs/CS/DB/Redis/struct/HyperLogLog.md)) the number of registers is fixed and the cost is considered to be ${\displaystyle O(1)}$ in the documentation.
 
 ## Links
-

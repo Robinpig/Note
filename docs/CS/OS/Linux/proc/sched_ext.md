@@ -616,4 +616,3 @@ SCX_OPS_DEFINE(simple_ops,
 
 1. [sched-ext documentation — The Linux Kernel documentation](https://www.kernel.org/doc/html/latest/scheduler/sched-ext.html)
 2. [sched_ext schedulers and tools](https://github.com/sched-ext/scx)
-

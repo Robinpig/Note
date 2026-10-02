@@ -34,4 +34,3 @@ PostgreSQL 的BTree 索引的实现就是采用 B-Link-Tree的 L&Y 方案，但�
 
 1. [PostgreSQL BTree(B-Link-Tree变种) 索引基本实现原理](https://zhuanlan.zhihu.com/p/639226810)
 1. [PosegreSQL blink-tree 实现](https://zhuanlan.zhihu.com/p/715415896)
-

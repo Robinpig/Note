@@ -295,4 +295,3 @@ private static final VarHandle AA = MethodHandles.arrayElementVarHandle(int[].cl
 - [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
 
 ## References
-

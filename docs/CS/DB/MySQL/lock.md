@@ -424,7 +424,3 @@ static void lock_wait_update_schedule_and_check_for_deadlocks() {
 ## References
 
 1. [MySQL 死锁检测源码分析](https://leviathan.vip/2020/02/02/mysql-deadlock-check/)
-
-
-
-
