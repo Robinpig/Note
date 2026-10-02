@@ -4,7 +4,7 @@ LangChain 是把 LLM 组装成应用的**高层框架**：用一套跨厂商的�
 
 2025 年 10 月发布的 **LangChain 1.0** 是一次收缩式重构。三年 v0.x 的社区反馈集中在两点——抽象太重、包面太散——1.0 的回应是把整个包收敛到一件事上：**Agent = Model + Harness**。只留 `create_agent` 一个高层入口，定制走 middleware，并承诺 2.0 之前不再破坏性变更。
 
-先分清它和 [LangGraph](/docs/CS/Framework/LangTool/LangGraph.md) 的关系：**LangChain 是组件层与高层 Agent 入口，LangGraph 是它下面的状态机运行时**。`create_agent` 编译出来就是一张 LangGraph 图，持久化、流式、人在环路都由那层提供。
+先分清它和 [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md) 的关系：**LangChain 是组件层与高层 Agent 入口，LangGraph 是它下面的状态机运行时**。`create_agent` 编译出来就是一张 LangGraph 图，持久化、流式、人在环路都由那层提供。
 
 ## 官方四层定位
 
@@ -12,10 +12,10 @@ LangChain Inc. 把自家产品切成四层，这套划分比"框架对比框架"
 
 | 层 | 产品 | 职责 |
 | --- | --- | --- |
-| Harness | [Deep Agents](/docs/CS/Framework/LangTool/DeepAgents.md) | 自带规划、子 Agent、虚拟文件系统、上下文压缩的"整车" |
+| Harness | [Deep Agents](/docs/CS/AI/LLM/LangTool/DeepAgents.md) | 自带规划、子 Agent、虚拟文件系统、上下文压缩的"整车" |
 | Framework | **LangChain** | 模型/工具抽象与 Agent 循环，高层入口 `create_agent` |
-| Runtime | [LangGraph](/docs/CS/Framework/LangTool/LangGraph.md) | 持久执行、流式、人在环路、持久化 |
-| Platform | [LangSmith](/docs/CS/Framework/LangTool/LangSmith.md) | 追踪、评测、提示管理、部署（含 LangGraph Studio 图调试器） |
+| Runtime | [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md) | 持久执行、流式、人在环路、持久化 |
+| Platform | [LangSmith](/docs/CS/AI/LLM/LangTool/LangSmith.md) | 追踪、评测、提示管理、部署（含 LangGraph Studio 图调试器） |
 
 自下而上能力递减、开箱即用程度递增。选型原则与 [Harness](/docs/CS/AI/LLM/Harness.md) 里的判断一致：**越靠上越省事，越靠下越可控**；只有当上层补的东西你用不上时，往下退一层才划算。
 
@@ -104,9 +104,9 @@ result["messages"][-1].content_blocks   # 跨厂商统一的输出结构
 
 ## Links
 
-- [LangGraph](/docs/CS/Framework/LangTool/LangGraph.md)
-- [LangChain4j](/docs/CS/Framework/LangTool/LangChain4j.md)
-- [Langflow](/docs/CS/Framework/LangTool/Langflow.md)
+- [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md)
+- [LangChain4j](/docs/CS/AI/LLM/LangTool/LangChain4j.md)
+- [Langflow](/docs/CS/AI/LLM/LangTool/Langflow.md)
 - [LangTools](/docs/CS/AI/LangTools.md)
 - [Harness](/docs/CS/AI/LLM/Harness.md)
 - [Agent](/docs/CS/AI/LLM/Agent.md)

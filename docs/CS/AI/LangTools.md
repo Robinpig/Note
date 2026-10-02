@@ -10,17 +10,17 @@
 
 | 层 | 产品 | 职责 |
 | --- | --- | --- |
-| Harness | [Deep Agents](/docs/CS/Framework/LangTool/DeepAgents.md) | 自带规划、子 Agent、虚拟文件系统、上下文压缩的"整车" |
-| Framework | [LangChain](/docs/CS/Framework/LangTool/LangChain.md) | 模型/工具抽象与 Agent 循环（`create_agent`） |
-| Runtime | [LangGraph](/docs/CS/Framework/LangTool/LangGraph.md) | 持久执行、流式、人在环路、持久化 |
-| Platform | [LangSmith](/docs/CS/Framework/LangTool/LangSmith.md) | 追踪、评测、提示管理与部署（原 LangGraph Platform） |
+| Harness | [Deep Agents](/docs/CS/AI/LLM/LangTool/DeepAgents.md) | 自带规划、子 Agent、虚拟文件系统、上下文压缩的"整车" |
+| Framework | [LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md) | 模型/工具抽象与 Agent 循环（`create_agent`） |
+| Runtime | [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md) | 持久执行、流式、人在环路、持久化 |
+| Platform | [LangSmith](/docs/CS/AI/LLM/LangTool/LangSmith.md) | 追踪、评测、提示管理与部署（原 LangGraph Platform） |
 
 这四层自上而下能力递减、开箱即用程度递增；越靠上越省事，越靠下越可控。
 
 家族内还有两个横向分支值得单独记：
 
-- [LangChain4j](/docs/CS/Framework/LangTool/LangChain4j.md)——同一套理念的 Java 实现（Spring Boot / Quarkus 集成），适合"给现有后端加一个会用工具的助手"，而不必另起 Python 服务。
-- [Langflow](/docs/CS/Framework/LangTool/Langflow.md)——把 LangChain 组件做成可视化画布，可导出 Python 或发布成 API，走"先可视化验证、再落回代码"的路径。
+- [LangChain4j](/docs/CS/AI/LLM/LangTool/LangChain4j.md)——同一套理念的 Java 实现（Spring Boot / Quarkus 集成），适合"给现有后端加一个会用工具的助手"，而不必另起 Python 服务。
+- [Langflow](/docs/CS/AI/LLM/LangTool/Langflow.md)——把 LangChain 组件做成可视化画布，可导出 Python 或发布成 API，走"先可视化验证、再落回代码"的路径。
 
 ## 同层的其他玩家
 
@@ -33,12 +33,12 @@
 
 ## 怎么选
 
-- **要标准 tool-calling Agent，且预期会换模型** → [LangChain](/docs/CS/Framework/LangTool/LangChain.md)
-- **要长任务开箱即用：规划、文件系统、子 Agent 都现成** → [Deep Agents](/docs/CS/Framework/LangTool/DeepAgents.md)
-- **要多步长任务、人工审批、断点恢复** → [LangGraph](/docs/CS/Framework/LangTool/LangGraph.md)
-- **团队主力是 Java 后端** → [LangChain4j](/docs/CS/Framework/LangTool/LangChain4j.md)
-- **想先把流程搭出来看看效果** → [Langflow](/docs/CS/Framework/LangTool/Langflow.md)，或直接用[平台](/docs/CS/AI/LLM/Platform.md)
-- **要追踪、评测与部署上线** → [LangSmith](/docs/CS/Framework/LangTool/LangSmith.md)
+- **要标准 tool-calling Agent，且预期会换模型** → [LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md)
+- **要长任务开箱即用：规划、文件系统、子 Agent 都现成** → [Deep Agents](/docs/CS/AI/LLM/LangTool/DeepAgents.md)
+- **要多步长任务、人工审批、断点恢复** → [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md)
+- **团队主力是 Java 后端** → [LangChain4j](/docs/CS/AI/LLM/LangTool/LangChain4j.md)
+- **想先把流程搭出来看看效果** → [Langflow](/docs/CS/AI/LLM/LangTool/Langflow.md)，或直接用[平台](/docs/CS/AI/LLM/Platform.md)
+- **要追踪、评测与部署上线** → [LangSmith](/docs/CS/AI/LLM/LangTool/LangSmith.md)
 - **只有一两次模型调用** → 直接用厂商 SDK 最快，框架反而是负担
 
 ## 上手准备
@@ -64,10 +64,10 @@ llm = ChatOpenAI(model="gpt-4", temperature=0)
 
 ## Links
 
-- [LangChain](/docs/CS/Framework/LangTool/LangChain.md)
-- [LangGraph](/docs/CS/Framework/LangTool/LangGraph.md)
-- [LangChain4j](/docs/CS/Framework/LangTool/LangChain4j.md)
-- [Langflow](/docs/CS/Framework/LangTool/Langflow.md)
+- [LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md)
+- [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md)
+- [LangChain4j](/docs/CS/AI/LLM/LangTool/LangChain4j.md)
+- [Langflow](/docs/CS/AI/LLM/LangTool/Langflow.md)
 - [Pydantic AI](/docs/CS/Framework/PydanticAI.md)
 - [Platform](/docs/CS/AI/LLM/Platform.md)
 

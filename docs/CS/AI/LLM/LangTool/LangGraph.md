@@ -7,7 +7,7 @@ LangGraph为任何长时间运行的有状态工作流或代理提供低级支�
 - 持久执行：构建能够在故障中持久存在并可以长时间运行的代理，从停止的地方继续执行。
 - 人机协作：通过在任何点检查和修改代理状态来纳入人工监督。
 - 全面的记忆：创建具有短期工作记忆（用于持续推理）和跨会话长期记忆的有状态代理。
-- 使用 [LangSmith](/docs/CS/Framework/LangTool/LangSmith.md) 进行调试：通过可视化工具深入了解复杂的代理行为，这些工具可以跟踪执行路径、捕获状态转换并提供详细的运行时指标。
+- 使用 [LangSmith](/docs/CS/AI/LLM/LangTool/LangSmith.md) 进行调试：通过可视化工具深入了解复杂的代理行为，这些工具可以跟踪执行路径、捕获状态转换并提供详细的运行时指标。
 - 生产就绪的部署：使用专为处理有状态、长时间运行的工作流的独特挑战而设计的可扩展基础设施，自信地部署复杂的代理系统
 
 ## Installation
@@ -656,12 +656,12 @@ LangGraph 把人工介入做成运行时原语，而不是让应用层自己轮�
 | 1.1 | 2026-03 | 类型安全与开发体验：`stream()` 统一为带类型的 `StreamPart`，`invoke()` 返回可自动转型的 `GraphOutput`（`.value` / `.interrupts`）；新增 `create_supervisor` 支持 supervisor 多 Agent 模式 |
 | 1.2 | 2026-05 | 可靠性：`DeltaChannel`（beta，只记录每超步的增量）、按节点超时（墙钟 + 空闲）、节点级错误处理器（可实现 Saga 补偿）、`RunControl` 协作式优雅停机并留下可恢复 checkpoint |
 
-⚠️ **LangGraph Platform 已经不再叫这个名字**——它被并入 [LangSmith](/docs/CS/Framework/LangTool/LangSmith.md) 产品线，现在叫 **LangSmith Deployment**。查部署文档时要按新名字找。
+⚠️ **LangGraph Platform 已经不再叫这个名字**——它被并入 [LangSmith](/docs/CS/AI/LLM/LangTool/LangSmith.md) 产品线，现在叫 **LangSmith Deployment**。查部署文档时要按新名字找。
 
 ## Links
 
-- [LangChain](/docs/CS/Framework/LangTool/LangChain.md)
-- [Langflow](/docs/CS/Framework/LangTool/Langflow.md)
+- [LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md)
+- [Langflow](/docs/CS/AI/LLM/LangTool/Langflow.md)
 - [LangTools](/docs/CS/AI/LangTools.md)
 - [Pydantic AI](/docs/CS/Framework/PydanticAI.md)
 - [Agent](/docs/CS/AI/LLM/Agent.md)

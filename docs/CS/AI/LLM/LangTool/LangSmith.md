@@ -7,7 +7,7 @@ LangSmith 是 LangChain Inc. 的商业侧产品，官方定位是 **Agent Engine
 - **它是框架无关的**。不是 LangChain 的专属调试器：官方提供 Python / TypeScript / Go / Java SDK，主流 Agent 框架都有原生追踪，还能通过 OpenTelemetry 接入任意技术栈。
 - **它改过名字**。原来的 **LangGraph Platform 已被并入 LangSmith 产品线，现在叫 LangSmith Deployment**。查部署文档、翻旧教程时都要按新名字找。
 
-在家族里的位置是**最上面一层（Platform）**：下面的 [LangChain](/docs/CS/Framework/LangTool/LangChain.md) 与 [LangGraph](/docs/CS/Framework/LangTool/LangGraph.md) 负责把 Agent 跑起来，它负责让你看见跑得怎么样，并把它推进生产。
+在家族里的位置是**最上面一层（Platform）**：下面的 [LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md) 与 [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md) 负责把 Agent 跑起来，它负责让你看见跑得怎么样，并把它推进生产。
 
 ## 模块划分
 
@@ -63,9 +63,9 @@ export LANGSMITH_API_KEY=<your-api-key>
 
 ## Links
 
-- [LangChain](/docs/CS/Framework/LangTool/LangChain.md)
-- [LangGraph](/docs/CS/Framework/LangTool/LangGraph.md)
-- [Deep Agents](/docs/CS/Framework/LangTool/DeepAgents.md)
+- [LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md)
+- [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md)
+- [Deep Agents](/docs/CS/AI/LLM/LangTool/DeepAgents.md)
 - [LangTools](/docs/CS/AI/LangTools.md)
 - [Harness](/docs/CS/AI/LLM/Harness.md)
 - [Platform](/docs/CS/AI/LLM/Platform.md)

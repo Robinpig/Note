@@ -4,7 +4,7 @@ Langflow 是一个开源的**低代码可视化 LLM 应用编排工具**：把�
 
 它的出身值得记一笔：2023 年由 Logspace（巴西的一家咨询公司）发起，**最初只是 LangChain 的一层可视化外壳**，后来长成了独立的编排工具；2024 年 4 月 DataStax 收购 Logspace；2025 年 2 月 IBM 宣布收购 DataStax，于是 Langflow 现在挂着 "DataStax, an IBM company" 的名头，但**核心代码依旧是 MIT 许可**，免费、可自托管、可商用，这一点从未改变。
 
-它与 [LangChain](/docs/CS/Framework/LangTool/LangChain.md) 是同源兄弟（编译出来的 flow 就是 LangChain 代码），与 [LangGraph](/docs/CS/Framework/LangTool/LangGraph.md) 是互补关系（后者是代码层状态机，Langflow 是它之上的画布），与 [Dify](/docs/CS/AI/LLM/Dify.md) / [Flowise](/docs/CS/AI/LLM/Platform.md) 属同一赛道的不同选择。
+它与 [LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md) 是同源兄弟（编译出来的 flow 就是 LangChain 代码），与 [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md) 是互补关系（后者是代码层状态机，Langflow 是它之上的画布），与 [Dify](/docs/CS/AI/LLM/Dify.md) / [Flowise](/docs/CS/AI/LLM/Platform.md) 属同一赛道的不同选择。
 
 ## 它的核心差异化：可视化不锁死你
 
@@ -52,14 +52,14 @@ cd langflow/docker_example && docker compose up -d
 | Python 团队做 RAG 原型，之后可能转成代码 | **Langflow**（同赛道最快，且能落回 Python） |
 | 想要开箱即用的 LLM 应用平台成品（多人协作、日志、评测、限流） | [Dify](/docs/CS/AI/LLM/Dify.md) |
 | 前端 / Node 技术栈，想 15 分钟出个能聊的知识库 | Flowise |
-| 要深度控制状态机、长任务、断点恢复 | [LangGraph](/docs/CS/Framework/LangTool/LangGraph.md) |
+| 要深度控制状态机、长任务、断点恢复 | [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md) |
 | 业务流程自动化为主，AI 只是其中一步 | n8n |
 
 Langflow 最适合的是**"先快速验证、后慢慢落地"**这条路径：原型阶段用它把 LLM 应用搭出来验证想法，确认可行后再把关键流程导出成代码接入自有工程体系。反过来，如果需求只是"调几个 API 的小脚本"，上画布是负担而非帮助。
 
 ## Links
 
-- [LangChain4j](/docs/CS/Framework/LangTool/LangChain4j.md)
+- [LangChain4j](/docs/CS/AI/LLM/LangTool/LangChain4j.md)
 - [LangTools](/docs/CS/AI/LangTools.md)
 - [MCP](/docs/CS/AI/LLM/MCP.md)
 - [RAG](/docs/CS/AI/RAG.md)

@@ -30,7 +30,7 @@
 
 ### AI 线
 
-[人工智能](/docs/CS/AI/AI.md) → [大模型](/docs/CS/AI/LLM/LLM.md) → [Agent](/docs/CS/AI/LLM/Agent.md) → [MCP](/docs/CS/AI/LLM/MCP.md) → [LangGraph](/docs/CS/Framework/LangTool/LangGraph.md)
+[人工智能](/docs/CS/AI/AI.md) → [大模型](/docs/CS/AI/LLM/LLM.md) → [Agent](/docs/CS/AI/LLM/Agent.md) → [MCP](/docs/CS/AI/LLM/MCP.md) → [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md)
 
 从机器学习基础到 LLM 应用与 Agent 工程实践。
 
@@ -260,11 +260,6 @@ These specifications are part of the Jakarta EE platform.
 [Flink](/docs/CS/Framework/Flink/Flink.md)
 
 
-##### LangChain 生态
-
-[LangChain](/docs/CS/Framework/LangTool/LangChain.md)（Agent 框架）、[LangGraph](/docs/CS/Framework/LangTool/LangGraph.md)（编排运行时）、[Deep Agents](/docs/CS/Framework/LangTool/DeepAgents.md)（开箱 harness）、[LangSmith](/docs/CS/Framework/LangTool/LangSmith.md)（追踪、评测与部署）构成四层，地图见 [LLM 应用开发框架](/docs/CS/AI/LangTools.md)。
-
-
 ## Software Engineering
 
 [Software Engineering](/docs/CS/SE/Engineering.md)
@@ -340,6 +335,10 @@ The test simply compares the intelligent behavior of a human being with that of 
 An interrogator asks a set of questions that are forwarded to both a computer and a human being.
 The interrogator receives two sets of responses, but does not know which set comes from the human and which set from the computer.
 After careful examination of the two sets, if the interrogator cannot definitely tell which set has come from the computer and which from the human, the computer has passed the Turing test for intelligent behavior.
+
+### LangChain 生态
+
+[LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md)（Agent 框架）、[LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md)（编排运行时）、[Deep Agents](/docs/CS/AI/LLM/LangTool/DeepAgents.md)（开箱 harness）、[LangSmith](/docs/CS/AI/LLM/LangTool/LangSmith.md)（追踪、评测与部署）构成四层，地图见 [LLM 应用开发框架](/docs/CS/AI/LangTools.md)。
 
 ## Links
 

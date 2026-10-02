@@ -13,8 +13,8 @@ Deep Agents 是 LangChain 官方给出的 **agent harness**——一个开箱即
 | 层 | 产品 | 你需要自己写多少 |
 | --- | --- | --- |
 | Harness | **Deep Agents** | 最少：`create_deep_agent()` 就自带规划、文件系统、子 Agent、上下文管理 |
-| Framework | [LangChain](/docs/CS/Framework/LangTool/LangChain.md) 的 `create_agent` | 中等：给模型、工具、提示，middleware 自己挑 |
-| Runtime | [LangGraph](/docs/CS/Framework/LangTool/LangGraph.md) | 最多：节点、边、状态全自己画 |
+| Framework | [LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md) 的 `create_agent` | 中等：给模型、工具、提示，middleware 自己挑 |
+| Runtime | [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md) | 最多：节点、边、状态全自己画 |
 
 对应到 [Harness](/docs/CS/AI/LLM/Harness.md) 的判断方法：**上层替你把模型缺口补上了，只有当它补的东西你用不上（或反过来在拖后腿）时，才往下退一层**。官方给的选择线很干脆——要全副 harness 用 Deep Agents，要更轻的 harness 用 `create_agent`，当 agent loop 本身形状就不对时下到 LangGraph。
 
@@ -67,16 +67,16 @@ result = agent.invoke(
 ## 什么时候用它
 
 - **长任务、需要规划与自我管理上下文**（深度调研、代码迁移、批量分析）→ Deep Agents
-- **单轮或轻量多轮、上下文装得下** → 用 [LangChain](/docs/CS/Framework/LangTool/LangChain.md) 的 `create_agent` 更轻
-- **需要精确控制每一步的确定性流程** → 下到 [LangGraph](/docs/CS/Framework/LangTool/LangGraph.md) 自己画图
+- **单轮或轻量多轮、上下文装得下** → 用 [LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md) 的 `create_agent` 更轻
+- **需要精确控制每一步的确定性流程** → 下到 [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md) 自己画图
 
 反过来说，如果你只需要"问一次答一次"，harness 带来的文件系统与待办机制纯属负担——那点复杂度换不来任何可靠性。
 
 ## Links
 
-- [LangChain](/docs/CS/Framework/LangTool/LangChain.md)
-- [LangGraph](/docs/CS/Framework/LangTool/LangGraph.md)
-- [LangSmith](/docs/CS/Framework/LangTool/LangSmith.md)
+- [LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md)
+- [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md)
+- [LangSmith](/docs/CS/AI/LLM/LangTool/LangSmith.md)
 - [LangTools](/docs/CS/AI/LangTools.md)
 - [Harness](/docs/CS/AI/LLM/Harness.md)
 - [Agent](/docs/CS/AI/LLM/Agent.md)

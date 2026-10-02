@@ -47,7 +47,7 @@ AI
 
 ## Links
 
-- [OS](/docs/CS/AI/OS/OS.md)
+- [OS](/docs/CS/OS/OS.md)
 
 
 ## References
