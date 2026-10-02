@@ -161,7 +161,7 @@ Docker、Kubernetes、CNI、Ingress、Helm
 
 **工程与工具** —— [框架与中间件](/docs/CS/Framework/Spring/Spring.md) · [软件工程](/docs/CS/SE/Engineering.md) · [构建工具](/docs/CS/BuildTool/BuildTools.md) · [工具(Vim)](/docs/CS/Tool/Vim.md) · [日志](/docs/CS/log/Log.md) · [编译器](/docs/CS/Compiler/Compiler.md) · [设计模式](/docs/CS/DesignPatterns/DesignPatterns.md) · [前端(Node.js)](/docs/CS/front-end/Nodejs.md) · [浏览器](/docs/CS/Browser/Browser.md) · [版本控制](/docs/CS/VCS/VCS.md) · [压缩](/docs/CS/compress/Compress.md)
 
-**理论与智能** —— [算法](/docs/CS/Algorithms/Algorithms.md) · [人工智能](/docs/CS/AI/AI.md) · [安全](/docs/CS/Security/Security.md)
+**理论与智能** —— [算法](/docs/CS/Algorithms/Algorithms.md) · [人工智能](/docs/CS/AI/AI.md) · [推荐系统](/docs/CS/RecommenderSystem/RecommenderSystem.md) · [安全](/docs/CS/Security/Security.md)
 
 </details>
 
@@ -286,6 +286,10 @@ These specifications are part of the Jakarta EE platform.
 [Circuit Breaker](/docs/CS/SE/CircuitBreaker.md)
 
 
+
+## Recommender System
+
+A [recommender system](/docs/CS/RecommenderSystem/RecommenderSystem.md) is an information filtering system that predicts user preferences and suggests items — part of the "search, recommendation and advertising" stack, built on [machine learning](/docs/CS/AI/ML/ML.md) rather than being a subfield of AI itself.
 
 ## Other Topics
 

@@ -34,7 +34,7 @@ Note/
 └── wiki/、knowledge-base/、outputs/   空占位，不要改
 ```
 
-`docs/CS/` 下共 35 个主题目录 + `img/`。主要子树与入口：
+`docs/CS/` 下按主题分目录（另有 `img/` 存放配图，不算笔记）。主要子树与入口：
 
 | 领域       | 目录                | 入口与说明                                                                                          |
 | :------- | :---------------- | :--------------------------------------------------------------------------------------------- |
@@ -49,6 +49,7 @@ Note/
 | 软件工程     | `CS/SE/`          | 入口 [Engineering.md](/docs/CS/SE/Engineering.md)（`SE/SE.md` 不存在）                               |
 | 云原生      | `CS/Container/`   | [Container.md](/docs/CS/Container/Container.md)（`Docker/`、`k8s/`）                              |
 | 人工智能     | `CS/AI/`          | [AI.md](/docs/CS/AI/AI.md)；`LLM/` 是 agent 平台专题，入口 [LLM.md](/docs/CS/AI/LLM/LLM.md)；`NLP/`      |
+| 推荐系统     | `CS/RecommenderSystem/` | [RecommenderSystem.md](/docs/CS/RecommenderSystem/RecommenderSystem.md)；召回、排序、冷启动、偏差、评估、在线架构、广告（**不是 `AI/` 的子目录**） |
 | 消息队列     | `CS/MQ/`          | [MQ.md](/docs/CS/MQ/MQ.md)                                                                     |
 | Golang   | `CS/Go/`          | [Go.md](/docs/CS/Go/Go.md)                                                                     |
 
