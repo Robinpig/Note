@@ -429,7 +429,7 @@ int udp_push_pending_frames(struct sock *sk)
 }
 ```
 
-call [ip_send_skb](/docs/CS/OS/Linux/net/IP.md?id=ip_send_skb)
+call [ip_send_skb](/docs/CS/OS/Linux/net/IP.md)
 ```c
 
 static int udp_send_skb(struct sk_buff *skb, struct flowi4 *fl4,
@@ -447,5 +447,5 @@ static int udp_send_skb(struct sk_buff *skb, struct flowi4 *fl4,
 
 ## Links
 
-- [Linux Network](/docs/CS/OS/Linux/Linux.md?id=Network)
-- [UDP](/docs/CS/CN/UDP.md)
+- [网络知识地图](/docs/CS/OS/Linux/net/README.md)
+- [Linux](/docs/CS/OS/Linux/Linux.md)

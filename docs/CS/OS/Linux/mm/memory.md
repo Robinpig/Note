@@ -34,7 +34,7 @@ Linux 内核使用页式内存管理，应用程序给出的内存地址是虚�
 ## boot
 
 
-内核的正式入口是 [start_kernel](/docs/CS/OS/Linux/Start.md) , 但实际上在它之前我们就需要访问内存了， 那么首先要做的就是识别系统中的内存， 由 detect_memo-1 y实现。
+内核的正式入口是 [start_kernel](/docs/CS/OS/Linux/boot/Start.md) , 但实际上在它之前我们就需要访问内存了， 那么首先要做的就是识别系统中的内存， 由 detect_memo-1 y实现。
 
 根据硬件和BIOS的配置，detect_memory依次调用detect_memory_e820、 detect_memo1-y_e801 和 detect_memory_88, 最终哪一个函数起作用取决于硬件和 BIOS 的配置
 三者都是通过与 BIOS 通信实现的， 给 BIOS 发送 OxlS 中断， 根据 BIOS 反馈的信息提取内存信息。
@@ -326,8 +326,6 @@ page 与物理页帧是一一对应关系，OS在初始化时会根据物理内�
 内核会在 mm_init 函数中调用 mm_alloc_pgd，并在 mm_alloc_pgd 函数中通过调用 pgd_alloc 为子进程分配其独立的顶级页表起始地址，赋值给子进程 struct mm_struct 结构中的 pgd 属性
 
 ```c
-
-```c
 struct mm_struct {
 	// ...
 	pgd_t * pgd;
@@ -510,7 +508,7 @@ void switch_mm_irqs_off(struct mm_struct *unused, struct mm_struct *next,
 
 
 
-[init](/docs/CS/OS/Linux/init.md) 
+[init](/docs/CS/OS/Linux/boot/init.md) 
 
 
 - 调用e820__memory_setup 将检测结果保存到 e820-table 全局数据结构中
@@ -848,7 +846,7 @@ void __init setup_arch(char **cmdline_p)
 
 
 Set up kernel memory allocators
-called by [start_kernel](/docs/CS/OS/Linux/init.md?id=start_kernel)
+called by [start_kernel](/docs/CS/OS/Linux/boot/init.md?id=start_kernel)
 ```c
 // init/main.c
 static void __init mm_init(void)
@@ -1129,176 +1127,9 @@ struct page {
 
 ### zone
 
-Because of hardware limitations, the kernel cannot treat all pages as identical. Some pages, because of their physical address in memory, cannot be used for certain tasks. 
-Because of this limitation, the kernel divides pages into different *zones*.
+zone 的完整 `struct zone` 字段定义与语义（watermark / lowmem_reserve / pageset / zone_start_pfn / spanned_pages / present_pages / managed_pages / free_area 等）见 [物理内存 pm.md](pm.md?id=zone)。本节作为 init 流程的一环，只关注 boot 期如何建立并填充这些 zone 结构。
 
-```c
-// linux/mmzone.h
-
-#define ASYNC_AND_SYNC 2
-
-struct zone {
-	/* Read-mostly fields */
-
-	/* zone watermarks, access with *_wmark_pages(zone) macros */
-	unsigned long _watermark[NR_WMARK];
-	unsigned long watermark_boost;
-
-	unsigned long nr_reserved_highatomic;
-
-	/*
-	 * We don't know if the memory that we're going to allocate will be
-	 * freeable or/and it will be released eventually, so to avoid totally
-	 * wasting several GB of ram we must reserve some of the lower zone
-	 * memory (otherwise we risk to run OOM on the lower zones despite
-	 * there being tons of freeable ram on the higher zones).  This array is
-	 * recalculated at runtime if the sysctl_lowmem_reserve_ratio sysctl
-	 * changes.
-	 */
-	long lowmem_reserve[MAX_NR_ZONES];
-
-#ifdef CONFIG_NUMA
-	int node;
-#endif
-	struct pglist_data	*zone_pgdat;
-	struct per_cpu_pageset __percpu *pageset;
-	/*
-	 * the high and batch values are copied to individual pagesets for
-	 * faster access
-	 */
-	int pageset_high;
-	int pageset_batch;
-
-#ifndef CONFIG_SPARSEMEM
-	/*
-	 * Flags for a pageblock_nr_pages block. See pageblock-flags.h.
-	 * In SPARSEMEM, this map is stored in struct mem_section
-	 */
-	unsigned long		*pageblock_flags;
-#endif /* CONFIG_SPARSEMEM */
-
-	/* zone_start_pfn == zone_start_paddr >> PAGE_SHIFT */
-	unsigned long		zone_start_pfn;
-
-	/*
-	 * spanned_pages is the total pages spanned by the zone, including
-	 * holes, which is calculated as:
-	 * 	spanned_pages = zone_end_pfn - zone_start_pfn;
-	 *
-	 * present_pages is physical pages existing within the zone, which
-	 * is calculated as:
-	 *	present_pages = spanned_pages - absent_pages(pages in holes);
-	 *
-	 * managed_pages is present pages managed by the buddy system, which
-	 * is calculated as (reserved_pages includes pages allocated by the
-	 * bootmem allocator):
-	 *	managed_pages = present_pages - reserved_pages;
-	 *
-	 * cma pages is present pages that are assigned for CMA use
-	 * (MIGRATE_CMA).
-	 *
-	 * So present_pages may be used by memory hotplug or memory power
-	 * management logic to figure out unmanaged pages by checking
-	 * (present_pages - managed_pages). And managed_pages should be used
-	 * by page allocator and vm scanner to calculate all kinds of watermarks
-	 * and thresholds.
-	 *
-	 * Locking rules:
-	 *
-	 * zone_start_pfn and spanned_pages are protected by span_seqlock.
-	 * It is a seqlock because it has to be read outside of zone->lock,
-	 * and it is done in the main allocator path.  But, it is written
-	 * quite infrequently.
-	 *
-	 * The span_seq lock is declared along with zone->lock because it is
-	 * frequently read in proximity to zone->lock.  It's good to
-	 * give them a chance of being in the same cacheline.
-	 *
-	 * Write access to present_pages at runtime should be protected by
-	 * mem_hotplug_begin/end(). Any reader who can't tolerant drift of
-	 * present_pages should get_online_mems() to get a stable value.
-	 */
-	atomic_long_t		managed_pages;
-	unsigned long		spanned_pages;
-	unsigned long		present_pages;
-#ifdef CONFIG_CMA
-	unsigned long		cma_pages;
-#endif
-
-	const char		*name;
-
-#ifdef CONFIG_MEMORY_ISOLATION
-	/*
-	 * Number of isolated pageblock. It is used to solve incorrect
-	 * freepage counting problem due to racy retrieving migratetype
-	 * of pageblock. Protected by zone->lock.
-	 */
-	unsigned long		nr_isolate_pageblock;
-#endif
-
-#ifdef CONFIG_MEMORY_HOTPLUG
-	/* see spanned/present_pages for more description */
-	seqlock_t		span_seqlock;
-#endif
-
-	int initialized;
-
-	/* Write-intensive fields used from the page allocator */
-	ZONE_PADDING(_pad1_)
-
-	/* free areas of different sizes */
-	struct free_area	free_area[MAX_ORDER];
-
-	/* zone flags, see below */
-	unsigned long		flags;
-
-	/* Primarily protects free_area */
-	spinlock_t		lock;
-
-	/* Write-intensive fields used by compaction and vmstats. */
-	ZONE_PADDING(_pad2_)
-
-	/*
-	 * When free pages are below this point, additional steps are taken
-	 * when reading the number of free pages to avoid per-cpu counter
-	 * drift allowing watermarks to be breached
-	 */
-	unsigned long percpu_drift_mark;
-
-#if defined CONFIG_COMPACTION || defined CONFIG_CMA
-	/* pfn where compaction free scanner should start */
-	unsigned long		compact_cached_free_pfn;
-	/* pfn where compaction migration scanner should start */
-	unsigned long		compact_cached_migrate_pfn[ASYNC_AND_SYNC];
-	unsigned long		compact_init_migrate_pfn;
-	unsigned long		compact_init_free_pfn;
-#endif
-
-#ifdef CONFIG_COMPACTION
-	/*
-	 * On compaction failure, 1<<compact_defer_shift compactions
-	 * are skipped before trying again. The number attempted since
-	 * last failure is tracked with compact_considered.
-	 * compact_order_failed is the minimum compaction failed order.
-	 */
-	unsigned int		compact_considered;
-	unsigned int		compact_defer_shift;
-	int			compact_order_failed;
-#endif
-
-#if defined CONFIG_COMPACTION || defined CONFIG_CMA
-	/* Set to true when the PG_migrate_skip bits should be cleared */
-	bool			compact_blockskip_flush;
-#endif
-
-	bool			contiguous;
-
-	ZONE_PADDING(_pad3_)
-	/* Zone statistics */
-	atomic_long_t		vm_stat[NR_VM_ZONE_STAT_ITEMS];
-	atomic_long_t		vm_numa_stat[NR_VM_NUMA_STAT_ITEMS];
-} ____cacheline_internodealigned_in_smp;
-```
+> 注意：本节原有的 `struct zone` 完整定义已合并至 [pm.md](pm.md?id=zone)，避免重复维护。
 
 ### kmalloc
 
@@ -1604,6 +1435,7 @@ SYSCALL_DEFINE1(brk, unsigned long, brk)
 
 ## Links
 
+- [内存管理知识地图](/docs/CS/OS/Linux/mm/README.md)
 - [Linux](/docs/CS/OS/Linux/Linux.md)
 
 ## References

@@ -128,5 +128,6 @@ sudo systemctl disable unattended-upgrades
 
 ## Links
 
-
+- [发行版知识地图](/docs/CS/OS/Linux/Distribution/README.md)
+- [Debian](/docs/CS/OS/Linux/Distribution/Debian.md) — Ubuntu 的母发行版
 - [Linux](/docs/CS/OS/Linux/Linux.md)

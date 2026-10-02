@@ -128,7 +128,7 @@ And thus the context switch is complete.
 ## Architecture
 
 - [Processes and Threads](/docs/CS/OS/process.md)
-- [Memory Management](/docs/CS/OS/memory/memory.md)
+- [Memory Management](/docs/CS/OS/memory.md)
 - [File Systems](/docs/CS/OS/file.md)
 - [Input/Output](/docs/CS/OS/IO.md)
 - [Security](/docs/CS/OS/Security.md)
@@ -177,7 +177,7 @@ As long as there is no need for per-core concurrency, they are probably a good c
 
 ## Lifecycle
 
-[BootLoader](/docs/CS/OS/BootLoader.md)
+[BootLoader](/docs/CS/OS/BootLoader.md) 负责把内核装入内存并移交控制权；Linux 上最常用的实现是遵循 Multiboot 规范的 [GRUB](/docs/CS/OS/Boot/Grub.md)。
 
 
 ## OSs
@@ -205,6 +205,11 @@ DOS是1979年由微软公司为IBM个人电脑开发的MS-DOS,它是一个单用
 随着智能手机和平板电脑的兴起 IOS 和 [Android](/docs/CS/OS/Android/Android.md) 成为移动设备的主流操作系统
 
 [xv6](/docs/CS/OS/xv6/xv6.md) 是 MIT 开发的一个教学用的完整的类 Unix 操作系统，并且在 MIT 的操作系统课程 6.828 中使用
+
+除 xv6 之外，常见的教学/实战入门内核还有：用 Rust 重写 OS 实验的 [rCore](/docs/CS/OS/rCore.md)（RISC-V + SBI，清华 rCore-Tutorial）；
+川合秀实《30天自制操作系统》的 [osask](/docs/CS/OS/osask.md)（从 16 位实模式一路写到 GUI）；
+以及混合内核教学项目 [BookOS](/docs/CS/OS/Book/BookOS.md)（xbook2）。
+它们通常运行在 [Bochs](/docs/CS/OS/Bochs.md) 或 [QEMU](/docs/CS/OS/qemu.md) 模拟器上，由 [GRUB](/docs/CS/OS/Boot/Grub.md) 之类的 Bootloader 加载。
 
 
 [Fuchsia](/docs/CS/OS/Fuchsia/Fuchsia.md) 是Google开发的操作系统，与基于Linux内核的ChromeOS和Android等不同，
@@ -242,10 +247,14 @@ run the code to create a single lightweight executable—called a container—th
 
 ## Links
 
+- [Linux](/docs/CS/OS/Linux/Linux.md)
+- [Parallel（并行调度：Work-Stealing/二选一）](/docs/CS/OS/Parallel.md)
+- [Android 调度](/docs/CS/OS/Android/schedule.md)
+- [命令与 ELF（command）](/docs/CS/OS/command.md)
 - [Computer Organization](/docs/CS/CO/CO.md)
 - [Data Structures and Algorithms](/docs/CS/Algorithms/Algorithms.md)
 - [Computer Network](/docs/CS/CN/CN.md)
-- [Distributed system](/docs/CS/Distributed/Distributed)
+- [Distributed system](/docs/CS/Distributed/Distributed.md)
 
 ## References
 

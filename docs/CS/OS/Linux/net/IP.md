@@ -328,5 +328,6 @@ error:
 
 ## Links
 
-- [Linux Network](/docs/CS/OS/Linux/Linux.md?id=Network)
+- [网络知识地图](/docs/CS/OS/Linux/net/README.md)
 - [IP](/docs/CS/CN/IP.md)
+- [Linux](/docs/CS/OS/Linux/Linux.md)

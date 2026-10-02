@@ -1,6 +1,6 @@
 ## Introduction
 
-mmap() creates a new mapping in the virtual address space of the calling process.
+mmap() 在调用进程的虚拟地址空间中创建一段新的映射。
 
 > [!NOTE]
 > 
@@ -11,13 +11,13 @@ mmap() creates a new mapping in the virtual address space of the calling process
 
 在进程虚拟内存空间的布局中，有一段叫做文件映射与匿名映射区的虚拟内存区域，当我们在用户态应用程序中调用 mmap 进行内存映射的时候，所需要的虚拟内存就是在这个区域中划分出来的
 
-In computing, mmap(2) is a POSIX-compliant Unix system call that maps files or devices into memory.
-It is a method of memory-mapped file I/O.
-It implements demand paging because file contents are not immediately read from disk and initially use no physical RAM at all.
-The actual reads from disk are performed after a specific location is accessed, in a lazy manner.
+在计算机领域，mmap(2) 是一个符合 POSIX 标准的 Unix 系统调用，用于将文件或设备映射到内存中。
+它是内存映射文件 I/O（memory-mapped file I/O）的一种方法。
+它采用按需分页（demand paging）机制：文件内容不会立即从磁盘读入，初始时完全不占用物理内存。
+直到某个具体位置被访问时，才会以惰性（lazy）方式真正从磁盘读取。
 
-The mmap system call has been used in various database implementations as an alternative for implementing a buffer pool,
-although this created a different set of problems that could realistically only be fixed using a buffer pool.
+mmap 系统调用曾在多种数据库实现中被用作缓冲池（buffer pool）的替代方案，
+但这也带来了一系列不同的问题，而这些问题实际上只能靠缓冲池本身才能解决。
 
 > [Are You Sure You Want to Use MMAP in Your Database Management System?](https://db.cs.cmu.edu/papers/2022/cidr2022-p13-crotty.pdf)
 
@@ -28,6 +28,8 @@ mmap 有两种映射方式，一种是匿名映射，常用于进程动态的向
 
 当我们调用 mmap 之后，OS 内核只是会为我们分配一段虚拟内存，然后将虚拟内存与磁盘文件进行映射，整个过程都只是在和虚拟内存打交道，并未出现任何物理内存的身影
 
+这句话还差一半：**mmap 建立的是 VMA，不是页表**。此时这段地址在内核眼里只是"一段约定了性质的虚拟区间"，页表树上连对应的 PTE 表都还没分配。直到第一次真正访问这段地址触发缺页，内核才沿地址逐级把页表建出来（`p4d_alloc` / `pud_alloc` / `pmd_alloc`）并填入 PTE。所以"只和虚拟内存打交道"的假象，本质是**页表树的按需生长**在兜底——见 [页表](/docs/CS/OS/Linux/mm/pagetable.md?id=惰性生长：缺页时逐级建表)。对称地，munmap 一侧也不只是删掉 VMA：页表要沿 [free_pgtables](/docs/CS/OS/Linux/mm/pagetable.md?id=释放页表：递归下降) 自顶向下逐级回收，并走 [mmu_gather](/docs/CS/OS/Linux/mm/pagetable.md?id=mmu_gather：批量-tlb-失效) 批量失效 TLB。
+
 
 ```c
 #include <sys/mman.h>
@@ -36,23 +38,21 @@ void *mmap(void addr[.length], size_t length, int prot, int flags, int fd, off_t
 int munmap(void addr[.length], size_t length);
 ```
 
-The starting address for the new mapping is specified in addr.  The length argument specifies the length of the mapping (which must be greater than 0).
+新映射的起始地址由 addr 指定。length 参数指定映射的长度（必须大于 0）。
 
-If addr is NULL, then the kernel chooses the (page-aligned)address at which to create the mapping; this is the most portable method of creating a new mapping.
-If addr is not NULL, then the kernel takes it as a hint about where to place the mapping; on Linux,
-the kernel will pick a nearby page boundary (but always above or equal to the value specified by /proc/sys/vm/mmap_min_addr) and attempt to create the mapping there.
-If another mapping already exists there, the kernel picks a new address that may or may not depend on the hint.
-The address of the new mapping is returned as the result of the call.
+若 addr 为 NULL，内核会自动选择一个（页对齐的）地址来创建映射，这是可移植性最好的方式。
+若 addr 非 NULL，内核把它当作放置映射位置的提示（hint）；在 Linux 上，内核会选取附近的一个页边界（但总是在 /proc/sys/vm/mmap_min_addr 指定值之上或与之相等）并尽量在那里创建映射。
+如果该处已有别的映射，内核会另选一个地址，这个新地址可能与提示有关，也可能无关。
+新映射的地址作为系统调用的返回值返回。
 
-The contents of a file mapping (as opposed to an anonymous mapping; see MAP_ANONYMOUS below),
-are initialized using length bytes starting at offset offset in the file (or other object) referred to by the file descriptor fd.
-offset must be a multiple of the page size as returned by sysconf(_SC_PAGE_SIZE).
+文件映射（与匿名映射相对，见下方 MAP_ANONYMOUS）的内容，会用文件描述符 fd 所指文件（或对象）中从 offset 偏移开始的 length 字节来初始化。
+offset 必须是页大小（由 sysconf(_SC_PAGE_SIZE) 返回）的整数倍。
 
-After the mmap() call has returned, the file descriptor, fd, can be closed immediately without invalidating the mapping.
+mmap() 调用返回后，文件描述符 fd 可以立即关闭，这不会使映射失效。
 
-A file is mapped in multiples of the page size.
-For a file that is not a multiple of the page size, the remaining bytes in the partial page at the end of the mapping are zeroed when mapped, and modifications to that region are not written out to the file.
-The effect of changing the size of the underlying file of a mapping on the pages that correspond to added or removed regions of the file is unspecified.
+文件以页大小的整数倍进行映射。
+对于不是页大小整数倍的文件，映射末尾那部分零头页中的剩余字节在映射时被清零，对该区域的修改也不会写回文件。
+改变映射底层文件的大小，对映射中对应文件新增或删除区域的那些页所产生的影响，是未定义的（unspecified）。
 
 offset在调用过程中转换成了页数 `ksys_mmap_pgoff` 传入的参数 `pgoff` 就是 off >> PAGE_SHIFT , 即 page offset
 
@@ -172,7 +172,7 @@ unsigned long vm_mmap_pgoff(struct file *file, unsigned long addr,
 }
 ```
 
-populate and/or mlock pages within a range of address space
+在一段地址空间范围内，预先调入（populate）和/或锁定（mlock）页面。
 
 ```c
 int __mm_populate(unsigned long start, unsigned long len, int ignore_errors)
@@ -229,7 +229,7 @@ int __mm_populate(unsigned long start, unsigned long len, int ignore_errors)
 }
 ```
 
-populate a range of pages in the vma.
+在 vma 中预先调入一段范围的页面。
 
 ```c
 long populate_vma_page_range(struct vm_area_struct *vma,
@@ -415,13 +415,28 @@ out:
 }
 ```
 
+### 与 v7.2.7 的差异
+
+上面这两段 `populate_vma_page_range()` / `__get_user_pages()` 摘录自较早的内核版本（约 5.x）。对照 v7.2.7，几处已经变了：
+
+| 旧版 | v7.2.7 | 说明 |
+|---|---|---|
+| `__get_user_pages(mm, start, nr_pages, gup_flags, pages, vmas, locked)` | `__get_user_pages(mm, start, nr_pages, gup_flags, pages, locked)` | `vmas` 输出参数已彻底移除；需要 VMA 的场景改用单页接口 `get_user_page_vma_remote()`（内部 `vma_lookup()`） |
+| `struct follow_page_context ctx = { NULL }` | 裸 `unsigned long page_mask = 0` | `follow_page_context` 结构已不存在，`pgmap` 引用改由别处管理 |
+| `gup_flags \|= FOLL_NUMA;`（慢路径无条件补） | **该行已删除** | `FOLL_NUMA` 已改名 `FOLL_HONOR_NUMA_FAULT`，且不再是慢路径的默认行为——它现在只在快路径的白名单里出现，等于交给调用者显式选择 |
+| `i = follow_hugetlb_page(mm, vma, pages, vmas, ...)` | **该函数已不存在** | hugetlb 并入通用 `follow_page_mask()` → `follow_pmd_mask()` → `follow_huge_pmd()` 路径 |
+| `BUG_ON(gup_flags & FOLL_NOWAIT);` | 随 hugetlb 分支一并删除 | v7.2.7 在 `__get_user_pages_locked()` 里另有 `WARN_ON_ONCE(pages_done == 0 && !(flags & FOLL_NOWAIT))` 承担对应约束 |
+| `start = untagged_addr(start);` | `start = untagged_addr_remote(mm, start);` | 目标 mm 可能不是当前进程，标签解析必须针对目标 mm |
+
+这张表也从侧面说明一件事：**GUP 是内核里改动相对频繁的一块**。上面这些改动大多与 pin 机制（`FOLL_PIN` 系列重构）、hugetlb 路径归并、以及 VMA 索引迁移到 maple tree 有关。完整的 GUP 机制——慢路径与快路径、`FOLL_*` 标志表、pin 计数的编码、以及 pin 对迁移/回收/COW/soft-dirty 的反作用——见 [GUP 与 pin 页](/docs/CS/OS/Linux/mm/gup.md)。
+
 ### do_mmap
 
 do_mmap 是 mmap 系统调用的核心函数，内核会在这里完成内存映射的整个流程
 
 > `sysctl_max_map_count` throw ENOMEM 需要调用程序做处理
 >
-> - [在Java里会抛出OOM: Map failed异常](/docs/CS/Java/JDK/IO/NIO.md?id=MappedByteBuffer)
+> - [在Java里会抛出OOM: Map failed异常](/docs/CS/Java/JDK/IO/NIO.md?id=mappedbytebuffer)
 
 
 - get_unmapped_area
@@ -432,11 +447,11 @@ do_mmap 是 mmap 系统调用的核心函数，内核会在这里完成内存映
 // mm/mmap.c
 unsigned long do_mmap(struct file *file, unsigned long addr,
 			unsigned long len, unsigned long prot,
-			unsigned long flags, unsigned long pgoff,
-			unsigned long *populate, struct list_head *uf)
+			unsigned long flags, vm_flags_t vm_flags,
+			unsigned long pgoff, unsigned long *populate,
+			struct list_head *uf)
 {
 	struct mm_struct *mm = current->mm;
-	vm_flags_t vm_flags;
 	int pkey = 0;
 
 	*populate = 0;
@@ -496,7 +511,7 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 	 * to. we assume access permissions have been handled by the open
 	 * of the memory object, so we don't do any here.
 	 */
-	vm_flags = calc_vm_prot_bits(prot, pkey) | calc_vm_flag_bits(flags) |
+	vm_flags |= calc_vm_prot_bits(prot, pkey) | calc_vm_flag_bits(file, flags) |
 			mm->def_flags | VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC;
 
 	if (flags & MAP_LOCKED)
@@ -635,10 +650,12 @@ int mlock_future_check(struct mm_struct *mm, unsigned long flags,
 
 mmap 的调用
 
-mmap_region 主要做三件事：初妎化 vm_ area_struct 对象、完成映射，以及将对象 插入maple_tree。
+mmap_region 主要做三件事：初始化 vm_area_struct 对象、完成映射，以及将对象插入 maple_tree（VMA 的索引结构，见 [maple tree](/docs/CS/OS/Linux/mm/maple_tree.md)）。
+
+> 6.12 中 `mmap_region()` 是一层薄封装，先做 MDWE（memory deny write execute）检查，再调用内部的 `__mmap_region()`，下面贴的主体即 `__mmap_region` 的逻辑。
 
 
-非匿名映射的情况下 mmap最终还是靠驱动提供的文件mmap操作实现的(file-> f_op-> mmap), 也就是说 mmap 究竟产生了什么效果最终是由驱动决定的
+非匿名映射的情况下 mmap最终还是靠驱动提供的文件mmap操作实现的(file->f_op->mmap), 也就是说 mmap 究竟产生了什么效果最终是由驱动决定的
 
 ```c
 unsigned long mmap_region(struct file *file, unsigned long addr,
@@ -926,11 +943,11 @@ static const struct vm_operations_struct shmem_vm_ops = {
 };
 ```
 
-驱动完成映射的方式殷有以下几类
-- 第一类，驱动有属千自己的物理内存，多为MMIO, 直接完成映射
+驱动完成映射的方式主要有以下几类
+- 第一类，驱动有自己的物理内存，多为MMIO, 直接完成映射
 - 第二类与第一类类似，只不过物理内存不是现成的，需要先申请内存然后做映射
-- 第三类， 驱动的mmap 并不提供映射操作，由异常触发实际映射动作 mmap返回后， 实际上并没有完成内存映射的动作，返回的只是没有物理内存与之对应的虚拟地址。
-  稍后访问该地址会导致内存访间异常，内核处理该异常则会回调驱动的vm_operations_struct的fault操作， 驱动的fault操作中， 一般需要申请物理内存赋值给vm_fault的page字段并完成自身的逻辑，内核会完成虚拟内存和物理内存的映射。
+- 第三类， 驱动的mmap 并不提供映射操作，由异常触发实际映射动作 mmap 返回后，实际上并没有完成内存映射的动作，返回的只是没有物理内存与之对应的虚拟地址。
+  稍后访问该地址会导致内存访问异常，内核处理该异常则会回调驱动的vm_operations_struct的fault操作， 驱动的fault操作中， 一般需要申请物理内存赋值给vm_fault的page字段并完成自身的逻辑，内核会完成虚拟内存和物理内存的映射。
 
 
 
@@ -939,32 +956,37 @@ static const struct vm_operations_struct shmem_vm_ops = {
 
 ## munmap
 
+munmap 是 mmap 的对称操作，用于解除一段虚拟地址空间的映射。用户态 `munmap(addr, length)` 最终走到内核的 `vm_munmap()`：它在持有 `mmap_write_lock` 的前提下调用 `do_vmi_munmap()`，遍历目标区间内的每个 VMA，逐个拆除页表项并回收对应物理页——文件页根据是否脏而回写或丢弃，匿名页释放回伙伴系统；区间回收后该段虚拟地址不再合法，再次访问会触发 SIGSEGV。
+
 ## Tuning
 
-Don't use it in DBMS
+不要在数据库管理系统（DBMS）中使用 mmap
 
-Transactional Safety
+事务安全性（Transactional Safety）
 
-OS can flush dirty pages at any time and we can't stop it.
+操作系统可以在任意时刻刷写脏页，而我们对此无能为力。
 
-- OS COW(MongoDB)
-- User COW(SQLite, MonetDB)
-- Shadow Paging(LMDB)
+- 操作系统写时复制（OS COW，MongoDB）
+- 用户态写时复制（User COW，SQLite、MonetDB）
+- 影子分页（Shadow Paging，LMDB）
 
-I/O Stalls
+I/O 阻塞（I/O Stalls）
 
-Memory Cache pages are transparent and every read causes an I/O stall.
+内存缓存页对应用是透明的，每一次读都可能引发一次 I/O 阻塞。
 
-- OS hints
+- 操作系统层面的提示
 
-Error Handling
+错误处理（Error Handling）
 
-Validating pages is cumbersome and any access can cause a SIGBUS.
+校验页面很麻烦，任何一次访问都可能触发 SIGBUS。
 
-Performance Issues
+性能问题（Performance Issues）
 
 ## Links
 
+- [物理内存地图（mm 枢纽）](/docs/CS/OS/Linux/mm/README.md)
+- [虚拟内存](/docs/CS/OS/Linux/mm/vm.md)
+- [物理内存主线](/docs/CS/OS/Linux/mm/pm.md)
 - [IO](/docs/CS/OS/Linux/IO/IO.md)
 
 ## References

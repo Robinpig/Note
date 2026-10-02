@@ -43,7 +43,7 @@ cat /proc/vmstat | egrep "dirty|writeback"
 ```
 
 
-当内存水位低于watermark low时，就会唤醒kswapd进行后台回收，然后kswapd会一直回收到watermark high。
+当内存水位低于watermark low时，就会唤醒kswapd进行后台回收，然后kswapd会一直回收到watermark high（水位线与 kswapd 的完整机制见 [内存回收（Reclaim）](/docs/CS/OS/Linux/mm/Reclaim.md)）。
 那么，我们可以增大min_free_kbytes这个配置选项来及早地触发后台回收
 vm.min_free_kbytes = 4194304
 对于大于等于128G的系统而言，将min_free_kbytes设置为4G比较合理，这是我们在处理很多这种问题时总结出来的一个经验值，既不造成较多的内存浪费，又能避免掉绝大多数的直接内存回收。
@@ -255,6 +255,66 @@ static int bdi_init(struct backing_dev_info *bdi)
 
 
 
+
+## 页缓存的索引：address_space
+
+page cache 按**文件**组织：每个 inode 对应一个 `struct address_space`，打开同一文件的所有 `struct file` 共享它，缓存页在里边按**文件内偏移**索引：
+
+```c
+struct address_space {
+	struct inode	*host;             /* 属主 inode */
+	struct xarray	i_pages;           /* 页缓存索引（5.19 前为 radix_tree_root page_tree） */
+	struct rw_semaphore invalidate_lock;
+	gfp_t		gfp_mask;
+	unsigned long	nrpages;           /* 缓存页总数 */
+	pgoff_t		writeback_index;   /* 回写起始偏移 */
+	const struct address_space_operations *a_ops;  /* readpage/writepage/direct_IO 等回调 */
+} __attribute__((aligned(sizeof(long))));
+```
+
+radix_tree 时代的关键设计（读老代码仍会遇到；6.x 已演进为 XArray，`radix_tree_lookup` → `xa_load`，但"按 offset 索引 + 标记向上传播"的设计未变）：
+
+- 节点含 64 个 `slots` 指针与 `offset`/`count`，叶子指向 `struct page`（`page->index` 为文件内页偏移，`page->mapping` 指回 address_space）；
+- 深度决定容量：4K 页 + 64 分支时，深 1 可索引 256K，深 2 16M，深 6 达 64T；
+- **tags 标记**：`tags[0]` 脏页（PG_dirty）、`tags[1]` 回写中（PG_writeback）。标记沿路径**向上传播**——某页变脏，其全部祖先节点的对应 tag 位都置 1，回写线程（见 [write back](#write-back)）沿标记可以整棵跳过干净子树，不必扫全文件。
+
+查找入口 `find_get_page`/`pagecache_get_page`：把 offset 按 6 位一段逐层下钻定位；未命中则 `__page_cache_alloc` 分配新页、`add_to_page_cache_lru` 同时挂进页缓存与 LRU。
+
+## 文件读取路径与预读
+
+Buffered 读的内核主干是 `generic_file_read_iter` → `generic_file_buffered_read`（Direct 分流见下一节）：
+
+```c
+for (;;) {
+	page = find_get_page(mapping, index);          /* 查 page cache */
+	if (!page) {
+		page_cache_sync_readahead(...);            /* 未命中：同步预读，本次要等 IO */
+		page = find_get_page(mapping, index);
+	}
+	if (PageReadahead(page))
+		page_cache_async_readahead(...);           /* 读到预读窗口边界：异步预读，不等 IO */
+	ret = copy_page_to_iter(page, offset, nr, iter);   /* 拷给用户缓冲 */
+}
+```
+
+预读（readahead）利用**空间局部性**，让磁盘 IO 与 CPU 消费重叠。`struct file_ra_state`（挂在 `struct file` 上）维护状态：`start`/`size`（当前窗口）、`async_size`（预读窗口）、`ra_pages`（上限，默认 32 页）、`prev_pos`。`ondemand_readahead` 的增长策略：初次读约 4 页，检测到顺序命中就把窗口**加倍**直至上限；检测到随机访问（偏移跳跃）则收缩或禁用。
+
+预读的触发入口：read 未命中（同步预读）、命中 `PageReadahead` 页（异步预读）、`posix_fadvise`（NORMAL 默认窗口 / SEQUENTIAL 翻倍 / RANDOM 禁用或按 2MB 块 / WILLNEED 立即预读）、`readahead(2)` 系统调用、mmap 缺页、`madvise(MADV_WILLNEED)`。
+
+## Buffered IO 与 Direct IO
+
+`generic_file_read_iter` 按 `IOCB_DIRECT` 分流，两种方式对比（以 ext4 为例）：
+
+| | Buffered IO（默认） | Direct IO（`O_DIRECT`） |
+| :-- | :-- | :-- |
+| 读路径 | 磁盘 → DMA → page cache → CPU 拷到用户缓冲 | 磁盘 → DMA 直达用户缓冲（`a_ops->direct_IO` → `__blockdev_direct_IO`） |
+| 读拷贝 | 2 次（Java `HeapByteBuffer` 场景 3 次，见 [Java NIO](/docs/CS/Java/JDK/IO/NIO.md)） | 1 次（Java Heap 场景 2 次） |
+| 写拷贝 | 2 次（用户 → page cache 标脏 → 异步回写 DMA） | 1 次（用户缓冲直接 DMA） |
+| 一致性 | 内核负责回写与 [write back](#write-back) | 绕过 page cache，应用自管 |
+| 约束 | 无 | 偏移、缓冲地址、长度均须按磁盘块（通常 4K）对齐 |
+| 适用 | 通用 | 数据库自带缓存、随机读、避免双重缓存 |
+
+Java 10 前 JDK 不支持 `O_DIRECT`（可借 Jaydio）；JDK 10+ 用 `FileChannel.open(p, ExtendedOpenOption.DIRECT)`。ext4 写路径的日志（Journal/Order/WriteBack）见 [ext4](/docs/CS/OS/Linux/fs/ext4.md)。
 
 ## fault
 
@@ -1348,7 +1408,8 @@ Linux内核主要是通过/proc和/sys把系统信息导出给用户，当你不
 
 ## Links
 
-- [Linux Memory](/docs/CS/OS/Linux/mm/memory.md)
+- [内存管理知识地图](/docs/CS/OS/Linux/mm/README.md)
+- [Java NIO](/docs/CS/Java/JDK/IO/NIO.md)
 
 
 

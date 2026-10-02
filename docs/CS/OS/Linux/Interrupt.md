@@ -989,7 +989,7 @@ enum
 
 ### init_softirq
 
-called by [start_kernel](/docs/CS/OS/Linux/init.md?id=start_kernel)
+called by [start_kernel](/docs/CS/OS/Linux/boot/init.md?id=start_kernel)
 
 ```c
 // 
@@ -1351,6 +1351,10 @@ static void __tasklet_schedule_common(struct tasklet_struct *t,
 }
 ```
 
+tasklet 与 softirq 都运行在中断上下文，**不能睡眠**。若推后的工作要拿 mutex、要做 I/O、可能触发内存回收，
+就得交给 [workqueue](/docs/CS/OS/Linux/workqueue.md)——它在进程上下文由内核线程执行，
+是下半部三件套里唯一允许睡眠的一档，也因此有线程调度开销。
+
 ## syscall
 
 ```c
@@ -1363,3 +1367,4 @@ static void __tasklet_schedule_common(struct tasklet_struct *t,
 
 - [Linux](/docs/CS/OS/Linux/Linux.md)
 - [Interrupt](/docs/CS/OS/interrupt.md)
+- [timer 时间子系统](/docs/CS/OS/Linux/timer.md)

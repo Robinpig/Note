@@ -1,874 +1,445 @@
 ## Introduction
 
-Shared application/kernel submission and completion ring pairs, for supporting fast/efficient IO.
+io_uring 是 Linux 5.1（2019，Jens Axboe）引入的**异步 I/O 接口**：应用与内核通过**共享的两个环形队列**——submission queue（SQ）提交请求、completion queue（CQ）收割结果——来协作，使一次 I/O 可以做到提交与完成都不阻塞、甚至完全不触发系统调用。
 
-A note on the read/write ordering memory barriers that are matched between the application and kernel side.
+要理解它解决的痛点，先看两条老路的局限：
 
-After the application reads the CQ ring tail, it must use an appropriate smp_rmb() to pair with the smp_wmb() the kernel uses before writing the tail (using smp_load_acquire to read the tail will do).
-It also needs a smp_mb() before updating CQ head (ordering the entry load(s) with the head store), pairing with an implicit barrier through a control-dependency in io_get_cqe (smp_store_release to store head will do).
-Failure to do so could lead to reading invalid CQ entries.
+- **epoll 只是"就绪通知"，不是异步**。它告诉应用"数据已在内核缓冲区就绪"，但阶段②（数据从内核拷到用户空间）仍要应用自己调 `read` 完成。海量连接下，每个请求至少是 `epoll_wait` + `read`/`write` 多次系统调用，上下文切换成本随连接数增长。
+- **Linux Native AIO（libaio / `io_submit`）长期残废**。它只在 **O_DIRECT** 下才真正异步，对 buffered I/O、网络 socket 大多仍会阻塞在提交路径，接口设计陈旧、错误处理反直觉。
 
-Likewise, the application must use an appropriate smp_wmb() before writing the SQ tail (ordering SQ entry stores with the tail store), which pairs with smp_load_acquire in io_get_sqring (smp_store_release to store the tail will do).
-And it needs a barrier ordering the SQ head load before writing new SQ entries (smp_load_acquire to read head will do).
+io_uring 把"提交一批操作"与"收割一批结果"都做成内存中共享环上的读写，并把网络、文件、甚至 `accept`/`openat`/`send`/`futex` 等非传统 I/O 操作都纳入同一套异步框架，让阶段①、阶段②都可由内核完成、完成后再通知，是 Linux 上最接近 Windows IOCP 的真异步接口。本笔记对照内核 **v6.12** 源码梳理：共享环设计 → UAPI 数据结构 → 三种工作模式 → 四个系统调用 → 一个请求的完整生命周期 → 固定资源与高级特性 → io-wq 回退与安全限制。
 
-When using the SQ poll thread (IORING_SETUP_SQPOLL), the application needs to check the SQ flags for IORING_SQ_NEED_WAKEUP *after* updating the SQ tail; a full memory barrier smp_mb() is needed between.
+## 共享环形设计
 
-Also see the examples in the liburing library:
+### SQ 与 CQ：单生产者单消费者
 
-git://git.kernel.dk/liburing
-io_uring also uses READ/WRITE_ONCE() for _any_ store or load that happens from data shared between the kernel and application.
-This is done both for ordering purposes, but also to ensure that once a value is loaded from data that the application could potentially modify, it remains stable.
+SQ 和 CQ 都是**单生产者 / 单消费者**（SPSC）的环形队列，但读写方向相反：
 
-SQ and CQ both of them are one-Producer-one-Consumer queue which shared in user space and kernel space.
+| 环 | 生产者（写 tail） | 消费者（写 head） |
+| --- | --- | --- |
+| SQ 提交环 | 应用填入待执行操作 | 内核取走执行 |
+| CQ 完成环 | 内核填入完成结果 | 应用收割 |
 
-app consume CQ don't need change to kernel space
+内核维护 SQ 的 head 和 CQ 的 tail；应用维护 SQ 的 tail 和 CQ 的 head。双方通过 head/tail 两个索引判断环中有多少条目，索引与 `ring_mask`（= 环大小 − 1）按位与得到下标，因此**环大小必须是 2 的幂**。
 
-Three modes:
+关键在于：这些环和 SQE/CQE 数组都被 mmap 进了用户空间，**应用提交请求、收割完成只是在写/读自己进程地址空间里的内存，不必每步都陷入内核**——可以批量填充多个 SQE 后只在必要时通知内核一次。
 
-1. Interrupt driven
-2. polled
-3. kernel polled
+### 内存屏障
 
+共享内存的两端必须用配对的内存屏障保证可见性。应用侧的规则：
 
+- 写入 SQ tail 之前，需要 `smp_wmb()`（保证先写好 SQE 内容、再推进 tail），与内核读 tail 的 `smp_load_acquire` 配对；用 `smp_store_release` 写 tail 即可。
+- 读取 CQ tail 之后、读 CQE 之前，需要 `smp_rmb()`，与内核写 tail 前的 `smp_wmb()` 配对；更新 CQ head 之前需要 `smp_mb()`，用 `smp_store_release` 存 head。
+- 使用 SQPOLL 时，应用更新 SQ tail **之后**再检查 `IORING_SQ_NEED_WAKEUP` 标志，中间需要一次完整的 `smp_mb()`。
 
-io_uring 结构体中包含需要使用到的 SQ和CQ ，以及需要关联的文件FD， 和相关的配置参数falgs;
+内核对任何发生在与应用共享数据上的读写都使用 `READ_ONCE()` / `WRITE_ONCE()`，既保证顺序，也确保一旦从（可能被应用篡改的）共享内存加载了值，该值在内核里保持稳定。
 
-```c
-struct io_uring {
-    struct io_uring_sq sq;
-    struct io_uring_cq cq;
-    int ring_fd;
-};
-```
+## UAPI 数据结构
 
-sq 和 cq
-```
-struct io_uring_sq {
-    unsigned *khead;
-    unsigned *ktail;
-    unsigned *kring_mask;
-    unsigned *kring_entries;
-    unsigned *kflags;
-    unsigned *kdropped;
-    unsigned *array;
-    struct io_uring_sqe *sqes;
+### SQE：提交项
 
-    unsigned sqe_head;
-    unsigned sqe_tail;
-
-    size_t ring_sz;
-};
-
-struct io_uring_cq {
-    unsigned *khead;
-    unsigned *ktail;
-    unsigned *kring_mask;
-    unsigned *kring_entries;
-    unsigned *koverflow;
-    struct io_uring_cqe *cqes;
-
-    size_t ring_sz;
-};
-```
-
-
-### io_ring_ctx
+`struct io_uring_sqe` 是应用描述"要做什么"的定长结构，**固定 64 字节**（内核用 `BUILD_BUG_ON(sizeof(struct io_uring_sqe) != 64)` 强校验）。定义见 `include/uapi/linux/io_uring.h`：
 
 ```c
-
-struct io_ring_ctx {
-	/* const or read-mostly hot data */
-	struct {
-		struct percpu_ref	refs;
-
-		struct io_rings		*rings;
-		unsigned int		flags;
-		unsigned int		compat: 1;
-		unsigned int		drain_next: 1;
-		unsigned int		eventfd_async: 1;
-		unsigned int		restricted: 1;
-		unsigned int		off_timeout_used: 1;
-		unsigned int		drain_active: 1;
-	} ____cacheline_aligned_in_smp;
-
-	/* submission data */
-	struct {
-		struct mutex		uring_lock;
-
+struct io_uring_sqe {
+	__u8	opcode;		/* type of operation for this sqe */
+	__u8	flags;		/* IOSQE_ flags */
+	__u16	ioprio;		/* ioprio for the request */
+	__s32	fd;		/* file descriptor to do IO on */
+	union {
+		__u64	off;	/* offset into file */
+		__u64	addr2;
+		struct {
+			__u32	cmd_op;
+			__u32	__pad1;
+		};
+	};
+	union {
+		__u64	addr;	/* pointer to buffer or iovecs */
+		__u64	splice_off_in;
+	};
+	__u32		len;	/* buffer size or number of iovecs */
+	union {
+		__kernel_rwf_t	rw_flags;
+		__u32		fsync_flags;
+		__u16		poll_events;
+		__u32		poll32_events;
+		__u32		sync_range_flags;
+		__u32		msg_flags;
+		__u32		timeout_flags;
+		__u32		accept_flags;
+		__u32		cancel_flags;
+		__u32		open_flags;
+		__u32		statx_flags;
+		__u32		fadvise_advice;
+		__u32		splice_flags;
+		__u32		msg_ring_flags;
+		__u32		uring_cmd_flags;
+		__u32		futex_flags;
+		/* ... 更多操作的 flags ... */
+	};
+	__u64	user_data;	/* data to be passed back at completion time */
+	union {
+		__u16	buf_index;	/* index into fixed buffers */
+		__u16	buf_group;	/* for grouped buffer selection */
+	} __attribute__((packed));
+	__u16	personality;
+	union {
+		__s32	splice_fd_in;
+		__u32	file_index;
+		__u32	optlen;
+	};
+	union {
+		struct {
+			__u64	addr3;
+			__u64	__pad2[1];
+		};
+		__u64	optval;
 		/*
-		 * Ring buffer of indices into array of io_uring_sqe, which is
-		 * mmapped by the application using the IORING_OFF_SQES offset.
-		 *
-		 * This indirection could e.g. be used to assign fixed
-		 * io_uring_sqe entries to operations and only submit them to
-		 * the queue when needed.
-		 *
-		 * The kernel modifies neither the indices array nor the entries
-		 * array.
+		 * If the ring is initialized with IORING_SETUP_SQE128, then
+		 * this field is used for 80 bytes of arbitrary command data
 		 */
-		u32			*sq_array;
-		struct io_uring_sqe	*sq_sqes;
-		unsigned		cached_sq_head;
-		unsigned		sq_entries;
-		struct list_head	defer_list;
-
-		/*
-		 * Fixed resources fast path, should be accessed only under
-		 * uring_lock, and updated through io_uring_register(2)
-		 */
-		struct io_rsrc_node	*rsrc_node;
-		struct io_file_table	file_table;
-		unsigned		nr_user_files;
-		unsigned		nr_user_bufs;
-		struct io_mapped_ubuf	**user_bufs;
-
-		struct io_submit_state	submit_state;
-		struct list_head	timeout_list;
-		struct list_head	ltimeout_list;
-		struct list_head	cq_overflow_list;
-		struct xarray		io_buffers;
-		struct xarray		personalities;
-		u32			pers_next;
-		unsigned		sq_thread_idle;
-	} ____cacheline_aligned_in_smp;
-
-	/* IRQ completion list, under ->completion_lock */
-	struct list_head	locked_free_list;
-	unsigned int		locked_free_nr;
-
-	const struct cred	*sq_creds;	/* cred used for __io_sq_thread() */
-	struct io_sq_data	*sq_data;	/* if using sq thread polling */
-
-	struct wait_queue_head	sqo_sq_wait;
-	struct list_head	sqd_list;
-
-	unsigned long		check_cq_overflow;
-
-	struct {
-		unsigned		cached_cq_tail;
-		unsigned		cq_entries;
-		struct eventfd_ctx	*cq_ev_fd;
-		struct wait_queue_head	poll_wait;
-		struct wait_queue_head	cq_wait;
-		unsigned		cq_extra;
-		atomic_t		cq_timeouts;
-		unsigned		cq_last_tm_flush;
-	} ____cacheline_aligned_in_smp;
-
-	struct {
-		spinlock_t		completion_lock;
-
-		spinlock_t		timeout_lock;
-
-		/*
-		 * ->iopoll_list is protected by the ctx->uring_lock for
-		 * io_uring instances that don't use IORING_SETUP_SQPOLL.
-		 * For SQPOLL, only the single threaded io_sq_thread() will
-		 * manipulate the list, hence no extra locking is needed there.
-		 */
-		struct list_head	iopoll_list;
-		struct hlist_head	*cancel_hash;
-		unsigned		cancel_hash_bits;
-		bool			poll_multi_queue;
-	} ____cacheline_aligned_in_smp;
-```
-### io_uring_init
-
-```c
-__initcall(io_uring_init);
-```
-```c
-static int __init io_uring_init(void)
-{
-#define __BUILD_BUG_VERIFY_ELEMENT(stype, eoffset, etype, ename) do { \
-       BUILD_BUG_ON(offsetof(stype, ename) != eoffset); \
-       BUILD_BUG_ON(sizeof(etype) != sizeof_field(stype, ename)); \
-} while (0)
-
-#define BUILD_BUG_SQE_ELEM(eoffset, etype, ename) \
-       __BUILD_BUG_VERIFY_ELEMENT(struct io_uring_sqe, eoffset, etype, ename)
-       BUILD_BUG_ON(sizeof(struct io_uring_sqe) != 64);
-       BUILD_BUG_SQE_ELEM(0,  __u8,   opcode);
-       BUILD_BUG_SQE_ELEM(1,  __u8,   flags);
-       BUILD_BUG_SQE_ELEM(2,  __u16,  ioprio);
-       BUILD_BUG_SQE_ELEM(4,  __s32,  fd);
-       BUILD_BUG_SQE_ELEM(8,  __u64,  off);
-       BUILD_BUG_SQE_ELEM(8,  __u64,  addr2);
-       BUILD_BUG_SQE_ELEM(16, __u64,  addr);
-       BUILD_BUG_SQE_ELEM(16, __u64,  splice_off_in);
-       BUILD_BUG_SQE_ELEM(24, __u32,  len);
-       BUILD_BUG_SQE_ELEM(28,     __kernel_rwf_t, rw_flags);
-       BUILD_BUG_SQE_ELEM(28, /* compat */   int, rw_flags);
-       BUILD_BUG_SQE_ELEM(28, /* compat */ __u32, rw_flags);
-       BUILD_BUG_SQE_ELEM(28, __u32,  fsync_flags);
-       BUILD_BUG_SQE_ELEM(28, /* compat */ __u16,  poll_events);
-       BUILD_BUG_SQE_ELEM(28, __u32,  poll32_events);
-       BUILD_BUG_SQE_ELEM(28, __u32,  sync_range_flags);
-       BUILD_BUG_SQE_ELEM(28, __u32,  msg_flags);
-       BUILD_BUG_SQE_ELEM(28, __u32,  timeout_flags);
-       BUILD_BUG_SQE_ELEM(28, __u32,  accept_flags);
-       BUILD_BUG_SQE_ELEM(28, __u32,  cancel_flags);
-       BUILD_BUG_SQE_ELEM(28, __u32,  open_flags);
-       BUILD_BUG_SQE_ELEM(28, __u32,  statx_flags);
-       BUILD_BUG_SQE_ELEM(28, __u32,  fadvise_advice);
-       BUILD_BUG_SQE_ELEM(28, __u32,  splice_flags);
-       BUILD_BUG_SQE_ELEM(32, __u64,  user_data);
-       BUILD_BUG_SQE_ELEM(40, __u16,  buf_index);
-       BUILD_BUG_SQE_ELEM(40, __u16,  buf_group);
-       BUILD_BUG_SQE_ELEM(42, __u16,  personality);
-       BUILD_BUG_SQE_ELEM(44, __s32,  splice_fd_in);
-       BUILD_BUG_SQE_ELEM(44, __u32,  file_index);
-
-       BUILD_BUG_ON(sizeof(struct io_uring_files_update) !=
-                   sizeof(struct io_uring_rsrc_update));
-       BUILD_BUG_ON(sizeof(struct io_uring_rsrc_update) >
-                   sizeof(struct io_uring_rsrc_update2));
-
-       /* ->buf_index is u16 */
-       BUILD_BUG_ON(IORING_MAX_REG_BUFFERS >= (1u << 16));
-
-       /* should fit into one byte */
-       BUILD_BUG_ON(SQE_VALID_FLAGS >= (1 << 8));
-
-       BUILD_BUG_ON(ARRAY_SIZE(io_op_defs) != IORING_OP_LAST);
-       BUILD_BUG_ON(__REQ_F_LAST_BIT > 8 * sizeof(int));
-
-       req_cachep = KMEM_CACHE(io_kiocb, SLAB_HWCACHE_ALIGN | SLAB_PANIC |
-                            SLAB_ACCOUNT);
-       return 0;
+		__u8	cmd[0];
+	};
 };
 ```
-### io_uring_setup
 
-#### io_uring_params
+大量 union 是因为不同操作复用同一批字段：`read`/`write` 用 `addr`(缓冲地址)+`len`+`off`；`readv`/`writev` 用 `addr` 指向 iovec、`len` 为 iovec 个数；`splice` 用 `splice_off_in`+`splice_fd_in`；`uring_cmd` 把末尾当命令数据。这样无论何种操作都能塞进同一条 64 字节表项。
 
-Passed in for io_uring_setup(2). Copied back with updated info on success
+### CQE：完成项
 
 ```c
-struct io_uring_params {
-	__u32 sq_entries;
-	__u32 cq_entries;
-	__u32 flags;
-	__u32 sq_thread_cpu;
-	__u32 sq_thread_idle;
-	__u32 features;
-	__u32 wq_fd;
-	__u32 resv[3];
-	struct io_sqring_offsets sq_off;
-	struct io_cqring_offsets cq_off;
+struct io_uring_cqe {
+	__u64	user_data;	/* sqe->user_data value passed back */
+	__s32	res;		/* result code for this event */
+	__u32	flags;
+
+	/*
+	 * If the ring is initialized with IORING_SETUP_CQE32, then this field
+	 * contains 16-bytes of padding, doubling the size of the CQE.
+	 */
+	__u64 big_cqe[];
 };
 ```
-Sets up an aio uring context, and returns the fd. Applications asks for a ring size, we return the actual sq/cq ring sizes (among other things) in the params structure passed in.
 
-```cpp
-// fs/io_uring.c
+`user_data` 原样回填提交时的值，应用靠它把完成项关联回自己的请求（不必是指针，也可放请求 id）；`res` 是结果——成功时是字节数等，失败时是负的 errno；`flags` 携带 `IORING_CQE_F_*` 信息，如 multishot 是否还有后续、是否使用了 provided buffer。
 
+### 共享页 io_rings
+
+SQ 与 CQ 的 head/tail、mask、计数等元数据放在同一个 mmap 页 `struct io_rings`（定义在 `include/linux/io_uring_types.h`），`cqes[]` 柔性数组紧随其后：
+
+```c
+struct io_rings {
+	/*
+	 * Head and tail offsets into the ring; the offsets need to be
+	 * masked to get valid indices.
+	 *
+	 * The kernel controls head of the sq ring and the tail of the cq ring,
+	 * and the application controls tail of the sq ring and the head of the
+	 * cq ring.
+	 */
+	struct io_uring		sq, cq;
+	u32			sq_ring_mask, cq_ring_mask;
+	u32			sq_ring_entries, cq_ring_entries;
+	u32			sq_dropped;
+	atomic_t		sq_flags;
+	u32			cq_flags;
+	u32			cq_overflow;
+	struct io_uring_cqe	cqes[] ____cacheline_aligned_in_smp;
+};
+```
+
+应用通过 `io_uring_setup` 返回的 `sq_off` / `cq_off`（各字段在共享页内的偏移）定位 head/tail/mask 等，因此同一份结构可以在内核与不同版本的 liburing 之间稳定演进。三个 mmap 偏移量是固定的魔数：`IORING_OFF_SQ_RING = 0`、`IORING_OFF_CQ_RING = 0x8000000`、`IORING_OFF_SQES = 0x10000000`，分别映射 SQ/CQ 元数据页和 SQE 数组。
+
+### opcode：一个接口承载所有操作
+
+v6.12 已支持 60 多种 opcode，远不止读写。常见分类：
+
+| 类别 | 代表 opcode |
+| --- | --- |
+| 文件读写 | `READV`/`WRITEV`、`READ`/`WRITE`、`READ_FIXED`/`WRITE_FIXED` |
+| 文件操作 | `OPENAT`/`OPENAT2`、`CLOSE`、`FTRUNCATE`、`STATX`、`FADVISE`、`MADVISE` |
+| 目录/路径 | `MKDIRAT`、`SYMLINKAT`、`LINKAT`、`RENAMEAT`、`UNLINKAT` |
+| 网络 | `SOCKET`、`BIND`、`LISTEN`、`ACCEPT`、`CONNECT`、`SEND`/`RECV`、`SENDMSG`/`RECVMSG`、`SHUTDOWN`、`EPOLL_CTL` |
+| 零拷贝 | `SEND_ZC`、`SENDMSG_ZC` |
+| 轮询/超时 | `POLL_ADD`/`POLL_REMOVE`、`TIMEOUT`/`TIMEOUT_REMOVE` |
+| 同步原语 | `FUTEX_WAIT`/`FUTEX_WAKE`/`FUTEX_WAITV`、`WAITID` |
+| 其它 | `NOP`、`URING_CMD`（设备特定命令）、`MSG_RING`（环间通信）、`PROVIDE_BUFFERS`、`SPLICE`/`TEE` |
+
+这意味着一条提交链可以表达"accept → recv → 读文件 → send"这种完整工作流，全部在同一个异步上下文里推进。
+
+## 三种工作模式
+
+`io_uring_setup` 的 flags 决定内核如何收割完成，三种模式性能与适用场景不同：
+
+| 模式 | 关键 flag | 完成如何被发现 | 适用 |
+| --- | --- | --- | --- |
+| 中断驱动（默认） | 无 | I/O 完成触发中断，内核填 CQE | 通用，文件/网络 buffered I/O |
+| 轮询模式 | `IORING_SETUP_IOPOLL` | 应用或内核主动轮询块层完成（无中断） | O_DIRECT、低延迟 NVMe，需要设备支持 |
+| 内核轮询线程 | `IORING_SETUP_SQPOLL` | 内核 SQPOLL 线程持续轮询 SQ，连提交都免系统调用 | 极高 IOPS、极致低延迟 |
+
+**IOPOLL** 下没有传统中断，请求完成后需要有人调用 io_poll 去收割块层 completion；`io_uring_enter` 中若同时设了 `SETUP_IOPOLL` 且没有 `SQPOLL`，等待走 `io_iopoll_check` 而非默认的 `io_cqring_wait`。
+
+**SQPOLL** 会创建一个内核线程（任务名 `iou-sqp-*`），持续轮询关联环的 SQ：应用写完 SQE、推进 tail 后，线程会自己取走提交，**正常情况下完全无需 `io_uring_enter`**。线程空闲超过 `sq_thread_idle` 毫秒会睡眠，此时内核在 SQ flags 里置 `IORING_SQ_NEED_WAKEUP`，应用发现后要用带 `IORING_ENTER_SQ_WAKEUP` 的 `io_uring_enter` 唤醒它。`IORING_SETUP_SQ_AFF` 可把该线程绑定到指定 CPU（`sq_thread_cpu`）。
+
+IOPOLL 与 SQPOLL 同时开启时，应用连完成轮询都不用做——`io_sq_thread` 一并承担提交与完成轮询，减少 CPU 消耗与 uring_lock 争用。
+
+## 四个系统调用
+
+### io_uring_setup：创建环
+
+```c
 SYSCALL_DEFINE2(io_uring_setup, u32, entries,
 		struct io_uring_params __user *, params)
 {
 	return io_uring_setup(entries, params);
 }
-
-static long io_uring_setup(u32 entries, struct io_uring_params __user *params)
-{
-	struct io_uring_params p;
-	int i;
-
-	if (copy_from_user(&p, params, sizeof(p)))
-		return -EFAULT;
-	for (i = 0; i < ARRAY_SIZE(p.resv); i++) {
-		if (p.resv[i])
-			return -EINVAL;
-	}
-
 ```
-```c
-	if (p.flags & ~(IORING_SETUP_IOPOLL | IORING_SETUP_SQPOLL |
-			IORING_SETUP_SQ_AFF | IORING_SETUP_CQSIZE |
-			IORING_SETUP_CLAMP | IORING_SETUP_ATTACH_WQ |
-			IORING_SETUP_R_DISABLED))
-		return -EINVAL;
 
-	return  io_uring_create(entries, &p, params);
-}
+应用传入期望的环大小 `entries` 和 `io_uring_params`，内核返回一个 ring fd，并把实际的 SQ/CQ 大小、特性位、各字段偏移写回 params。内核把 SQ 大小向上取整到 2 的幂；CQ 默认是 SQ 的两倍（因为应用可能临时超出 SQ 深度），设 `IORING_SETUP_CQSIZE` 则用应用指定值。限制为 `IORING_MAX_ENTRIES` / `IORING_MAX_CQ_ENTRIES`，超限且没有 `IORING_SETUP_CLAMP` 则报错。
 
-```
-#### io_uring_create
+核心创建逻辑在 `io_uring_create`：分配 `io_ring_ctx` → `io_allocate_scq_urings` 建立共享环 → 若需要则 `io_sq_offload_create` 起 SQPOLL 线程 → 回填 `sq_off`/`cq_off` 偏移和 `features` → 最后 `io_uring_install_fd` 安装 fd（放到最后，避免有人在初始化完成前就 close 它）。
 
-```c
-static int io_uring_create(unsigned entries, struct io_uring_params *p,
-                        struct io_uring_params __user *params)
-{
-       struct io_ring_ctx *ctx;
-       struct file *file;
-       int ret;
-
-       if (!entries)
-              return -EINVAL;
-       if (entries > IORING_MAX_ENTRIES) {
-              if (!(p->flags & IORING_SETUP_CLAMP))
-                     return -EINVAL;
-              entries = IORING_MAX_ENTRIES;
-       }
-```
-Use twice as many entries for the CQ ring. It's possible for the
-application to drive a higher depth than the size of the SQ ring,
-since the sqes are only used at submission time. This allows for
-some flexibility in overcommitting a bit. If the application has
-set IORING_SETUP_CQSIZE, it will have passed in the desired number
-of CQ ring entries manually.
-
-```c
-       p->sq_entries = roundup_pow_of_two(entries);
-       if (p->flags & IORING_SETUP_CQSIZE) {
-              /*
-               * If IORING_SETUP_CQSIZE is set, we do the same roundup
-               * to a power-of-two, if it isn't already. We do NOT impose
-               * any cq vs sq ring sizing.
-               */
-              if (!p->cq_entries)
-                     return -EINVAL;
-              if (p->cq_entries > IORING_MAX_CQ_ENTRIES) {
-                     if (!(p->flags & IORING_SETUP_CLAMP))
-                            return -EINVAL;
-                     p->cq_entries = IORING_MAX_CQ_ENTRIES;
-              }
-              p->cq_entries = roundup_pow_of_two(p->cq_entries);
-              if (p->cq_entries < p->sq_entries)
-                     return -EINVAL;
-       } else {
-              p->cq_entries = 2 * p->sq_entries;
-       }
-
-       ctx = io_ring_ctx_alloc(p);
-       if (!ctx)
-              return -ENOMEM;
-       ctx->compat = in_compat_syscall();
-       if (!capable(CAP_IPC_LOCK))
-              ctx->user = get_uid(current_user());
-
-       /*
-        * This is just grabbed for accounting purposes. When a process exits,
-        * the mm is exited and dropped before the files, hence we need to hang
-        * on to this mm purely for the purposes of being able to unaccount
-        * memory (locked/pinned vm). It's not used for anything else.
-        */
-       mmgrab(current->mm);
-       ctx->mm_account = current->mm;
-
-       ret = io_allocate_scq_urings(ctx, p);
-       if (ret)
-              goto err;
-
-       ret = io_sq_offload_create(ctx, p);
-       if (ret)
-              goto err;
-       /* always set a rsrc node */
-       ret = io_rsrc_node_switch_start(ctx);
-       if (ret)
-              goto err;
-       io_rsrc_node_switch(ctx, NULL);
-
-       memset(&p->sq_off, 0, sizeof(p->sq_off));
-       p->sq_off.head = offsetof(struct io_rings, sq.head);
-       p->sq_off.tail = offsetof(struct io_rings, sq.tail);
-       p->sq_off.ring_mask = offsetof(struct io_rings, sq_ring_mask);
-       p->sq_off.ring_entries = offsetof(struct io_rings, sq_ring_entries);
-       p->sq_off.flags = offsetof(struct io_rings, sq_flags);
-       p->sq_off.dropped = offsetof(struct io_rings, sq_dropped);
-       p->sq_off.array = (char *)ctx->sq_array - (char *)ctx->rings;
-
-       memset(&p->cq_off, 0, sizeof(p->cq_off));
-       p->cq_off.head = offsetof(struct io_rings, cq.head);
-       p->cq_off.tail = offsetof(struct io_rings, cq.tail);
-       p->cq_off.ring_mask = offsetof(struct io_rings, cq_ring_mask);
-       p->cq_off.ring_entries = offsetof(struct io_rings, cq_ring_entries);
-       p->cq_off.overflow = offsetof(struct io_rings, cq_overflow);
-       p->cq_off.cqes = offsetof(struct io_rings, cqes);
-       p->cq_off.flags = offsetof(struct io_rings, cq_flags);
-
-       p->features = IORING_FEAT_SINGLE_MMAP | IORING_FEAT_NODROP |
-                     IORING_FEAT_SUBMIT_STABLE | IORING_FEAT_RW_CUR_POS |
-                     IORING_FEAT_CUR_PERSONALITY | IORING_FEAT_FAST_POLL |
-                     IORING_FEAT_POLL_32BITS | IORING_FEAT_SQPOLL_NONFIXED |
-                     IORING_FEAT_EXT_ARG | IORING_FEAT_NATIVE_WORKERS |
-                     IORING_FEAT_RSRC_TAGS;
-
-       if (copy_to_user(params, p, sizeof(*p))) {
-              ret = -EFAULT;
-              goto err;
-       }
-
-       file = io_uring_get_file(ctx);
-       if (IS_ERR(file)) {
-              ret = PTR_ERR(file);
-              goto err;
-       }
-
-       /*
-```
-Install ring fd as the very last thing, so we don't risk someone having closed it before we finish setup
-
-```c
-       ret = io_uring_install_fd(ctx, file);
-       if (ret < 0) {
-              /* fput will clean it up */
-              fput(file);
-              return ret;
-       }
-
-       trace_io_uring_create(ret, ctx, p->sq_entries, p->cq_entries, p->flags);
-       return ret;
-err:
-       io_ring_ctx_wait_and_kill(ctx);
-       return ret;
-}
-```
-#### io_sq_thread
-
-```c
-
-static int io_sq_thread(void *data)
-{
-	struct io_sq_data *sqd = data;
-	struct io_ring_ctx *ctx;
-	unsigned long timeout = 0;
-	char buf[TASK_COMM_LEN];
-	DEFINE_WAIT(wait);
-
-	snprintf(buf, sizeof(buf), "iou-sqp-%d", sqd->task_pid);
-	set_task_comm(current, buf);
-
-	if (sqd->sq_cpu != -1)
-		set_cpus_allowed_ptr(current, cpumask_of(sqd->sq_cpu));
-	else
-		set_cpus_allowed_ptr(current, cpu_online_mask);
-	current->flags |= PF_NO_SETAFFINITY;
-
-	mutex_lock(&sqd->lock);
-	while (1) {
-		bool cap_entries, sqt_spin = false;
-
-		if (io_sqd_events_pending(sqd) || signal_pending(current)) {
-			if (io_sqd_handle_event(sqd))
-				break;
-			timeout = jiffies + sqd->sq_thread_idle;
-		}
-
-		cap_entries = !list_is_singular(&sqd->ctx_list);
-		list_for_each_entry(ctx, &sqd->ctx_list, sqd_list) {
-			int ret = __io_sq_thread(ctx, cap_entries);
-
-			if (!sqt_spin && (ret > 0 || !list_empty(&ctx->iopoll_list)))
-				sqt_spin = true;
-		}
-		if (io_run_task_work())
-			sqt_spin = true;
-
-		if (sqt_spin || !time_after(jiffies, timeout)) {
-			cond_resched();
-			if (sqt_spin)
-				timeout = jiffies + sqd->sq_thread_idle;
-			continue;
-		}
-
-		prepare_to_wait(&sqd->wait, &wait, TASK_INTERRUPTIBLE);
-		if (!io_sqd_events_pending(sqd) && !current->task_works) {
-			bool needs_sched = true;
-
-			list_for_each_entry(ctx, &sqd->ctx_list, sqd_list) {
-				io_ring_set_wakeup_flag(ctx);
-
-				if ((ctx->flags & IORING_SETUP_IOPOLL) &&
-				    !list_empty_careful(&ctx->iopoll_list)) {
-					needs_sched = false;
-					break;
-				}
-				if (io_sqring_entries(ctx)) {
-					needs_sched = false;
-					break;
-				}
-			}
-
-			if (needs_sched) {
-				mutex_unlock(&sqd->lock);
-				schedule();
-				mutex_lock(&sqd->lock);
-			}
-			list_for_each_entry(ctx, &sqd->ctx_list, sqd_list)
-				io_ring_clear_wakeup_flag(ctx);
-		}
-
-		finish_wait(&sqd->wait, &wait);
-		timeout = jiffies + sqd->sq_thread_idle;
-	}
-
-	io_uring_cancel_generic(true, sqd);
-	sqd->thread = NULL;
-	list_for_each_entry(ctx, &sqd->ctx_list, sqd_list)
-		io_ring_set_wakeup_flag(ctx);
-	io_run_task_work();
-	mutex_unlock(&sqd->lock);
-
-	complete(&sqd->exited);
-	do_exit(0);
-}
-
-```
-### io_uring_enter
+### io_uring_enter：提交与等待
 
 ```c
 SYSCALL_DEFINE6(io_uring_enter, unsigned int, fd, u32, to_submit,
-              u32, min_complete, u32, flags, const void __user *, argp,
-              size_t, argsz)
-{
-       struct io_ring_ctx *ctx;
-       int submitted = 0;
-       struct fd f;
-       long ret;
-
-       io_run_task_work();
-
-       if (unlikely(flags & ~(IORING_ENTER_GETEVENTS | IORING_ENTER_SQ_WAKEUP |
-                            IORING_ENTER_SQ_WAIT | IORING_ENTER_EXT_ARG)))
-              return -EINVAL;
-
-       f = fdget(fd);
-       if (unlikely(!f.file))
-              return -EBADF;
-
-       ret = -EOPNOTSUPP;
-       if (unlikely(f.file->f_op != &io_uring_fops))
-              goto out_fput;
-
-       ret = -ENXIO;
-       ctx = f.file->private_data;
-       if (unlikely(!percpu_ref_tryget(&ctx->refs)))
-              goto out_fput;
-
-       ret = -EBADFD;
-       if (unlikely(ctx->flags & IORING_SETUP_R_DISABLED))
-              goto out;
-
+		u32, min_complete, u32, flags, const void __user *, argp,
+		size_t, argsz)
 ```
-For SQ polling, the thread will do all submissions and completions.
-Just return the requested submit count, and wake the thread if we were asked to.
 
-```c
-       ret = 0;
-       if (ctx->flags & IORING_SETUP_SQPOLL) {
-              io_cqring_overflow_flush(ctx);
+这是提交与等待的入口，一次调用可同时完成两件事：
 
-              if (unlikely(ctx->sq_data->thread == NULL)) {
-                     ret = -EOWNERDEAD;
-                     goto out;
-              }
-              if (flags & IORING_ENTER_SQ_WAKEUP)
-                     wake_up(&ctx->sq_data->wait);
-              if (flags & IORING_ENTER_SQ_WAIT) {
-                     ret = io_sqpoll_wait_sq(ctx);
-                     if (ret)
-                            goto out;
-              }
-              submitted = to_submit;
-       } else if (to_submit) {
-              ret = io_uring_add_tctx_node(ctx);
-              if (unlikely(ret))
-                     goto out;
-              mutex_lock(&ctx->uring_lock);
-              submitted = io_submit_sqes(ctx, to_submit);
-              mutex_unlock(&ctx->uring_lock);
+- `to_submit`：提交 SQ 中指定数量的待处理项（非 SQPOLL 模式下走 `io_submit_sqes`）；
+- `min_complete` + `IORING_ENTER_GETEVENTS`：阻塞等待至少这么多个完成，可带超时与要屏蔽的信号集（`argp`）。
 
-              if (submitted != to_submit)
-                     goto out;
-       }
-       if (flags & IORING_ENTER_GETEVENTS) {
-              const sigset_t __user *sig;
-              struct __kernel_timespec __user *ts;
+SQPOLL 模式下提交与完成都由 SQ 线程负责，此调用只是按需唤醒线程（`IORING_ENTER_SQ_WAKEUP`）或等待 SQ 被消费（`IORING_ENTER_SQ_WAIT`）。
 
-              ret = io_get_ext_arg(flags, argp, &argsz, &ts, &sig);
-              if (unlikely(ret))
-                     goto out;
-
-              min_complete = min(min_complete, ctx->cq_entries);
-```
-When SETUP_IOPOLL and SETUP_SQPOLL are both enabled, user space applications don't need to do io completion events
-polling again, they can rely on io_sq_thread to do polling work, which can reduce cpu usage and uring_lock contention.
-
-```c
-              if (ctx->flags & IORING_SETUP_IOPOLL &&
-                  !(ctx->flags & IORING_SETUP_SQPOLL)) {
-                     ret = io_iopoll_check(ctx, min_complete);
-              } else {
-                     ret = io_cqring_wait(ctx, min_complete, sig, argsz, ts);
-              }
-       }
-
-out:
-       percpu_ref_put(&ctx->refs);
-out_fput:
-       fdput(f);
-       return submitted ? submitted : ret;
-}
-```
-### io_uring_register
+### io_uring_register：注册固定资源
 
 ```c
 SYSCALL_DEFINE4(io_uring_register, unsigned int, fd, unsigned int, opcode,
-              void __user *, arg, unsigned int, nr_args)
-{
-       struct io_ring_ctx *ctx;
-       long ret = -EBADF;
-       struct fd f;
-
-       f = fdget(fd);
-       if (!f.file)
-              return -EBADF;
-
-       ret = -EOPNOTSUPP;
-       if (f.file->f_op != &io_uring_fops)
-              goto out_fput;
-
-       ctx = f.file->private_data;
-
-       io_run_task_work();
-
-       mutex_lock(&ctx->uring_lock);
-       ret = __io_uring_register(ctx, opcode, arg, nr_args);
-       mutex_unlock(&ctx->uring_lock);
-       trace_io_uring_register(ctx, opcode, ctx->nr_user_files, ctx->nr_user_bufs,
-                                                 ctx->cq_ev_fd != NULL, ret);
-out_fput:
-       fdput(f);
-       return ret;
-}
+		void __user *, arg, unsigned int, nr_args)
 ```
-```c
-static int __io_uring_register(struct io_ring_ctx *ctx, unsigned opcode,
-                            void __user *arg, unsigned nr_args)
-       __releases(ctx->uring_lock)
-       __acquires(ctx->uring_lock)
-{
-       int ret;
 
-       /*
-        * We're inside the ring mutex, if the ref is already dying, then
-        * someone else killed the ctx or is already going through
-        * io_uring_register().
-        */
-       if (percpu_ref_is_dying(&ctx->refs))
-              return -ENXIO;
+用于注册长期复用的资源（文件、缓冲、凭证等），是热路径性能优化的关键，详见后文「固定资源」。
 
-       if (ctx->restricted) {
-              if (opcode >= IORING_REGISTER_LAST)
-                     return -EINVAL;
-              opcode = array_index_nospec(opcode, IORING_REGISTER_LAST);
-              if (!test_bit(opcode, ctx->restrictions.register_op))
-                     return -EACCES;
-       }
+### io_uring：收割 CQ 不需要系统调用
 
-       if (io_register_op_must_quiesce(opcode)) {
-              ret = io_ctx_quiesce(ctx);
-              if (ret)
-                     return ret;
-       }
+应用收割 CQ 完全是读共享内存：比较 CQ head/tail、取出 CQE、处理后推进 head。只有当需要阻塞等待新完成、或 CQ 环溢出需要内核补刷时才进入内核。
 
-       switch (opcode) {
-       case IORING_REGISTER_BUFFERS:
-              ret = io_sqe_buffers_register(ctx, arg, nr_args, NULL);
-              break;
-       case IORING_UNREGISTER_BUFFERS:
-              ret = -EINVAL;
-              if (arg || nr_args)
-                     break;
-              ret = io_sqe_buffers_unregister(ctx);
-              break;
-       case IORING_REGISTER_FILES:
-              ret = io_sqe_files_register(ctx, arg, nr_args, NULL);
-              break;
-       case IORING_UNREGISTER_FILES:
-              ret = -EINVAL;
-              if (arg || nr_args)
-                     break;
-              ret = io_sqe_files_unregister(ctx);
-              break;
-       case IORING_REGISTER_FILES_UPDATE:
-              ret = io_register_files_update(ctx, arg, nr_args);
-              break;
-       case IORING_REGISTER_EVENTFD:
-       case IORING_REGISTER_EVENTFD_ASYNC:
-              ret = -EINVAL;
-              if (nr_args != 1)
-                     break;
-              ret = io_eventfd_register(ctx, arg);
-              if (ret)
-                     break;
-              if (opcode == IORING_REGISTER_EVENTFD_ASYNC)
-                     ctx->eventfd_async = 1;
-              else
-                     ctx->eventfd_async = 0;
-              break;
-       case IORING_UNREGISTER_EVENTFD:
-              ret = -EINVAL;
-              if (arg || nr_args)
-                     break;
-              ret = io_eventfd_unregister(ctx);
-              break;
-       case IORING_REGISTER_PROBE:
-              ret = -EINVAL;
-              if (!arg || nr_args > 256)
-                     break;
-              ret = io_probe(ctx, arg, nr_args);
-              break;
-       case IORING_REGISTER_PERSONALITY:
-              ret = -EINVAL;
-              if (arg || nr_args)
-                     break;
-              ret = io_register_personality(ctx);
-              break;
-       case IORING_UNREGISTER_PERSONALITY:
-              ret = -EINVAL;
-              if (arg)
-                     break;
-              ret = io_unregister_personality(ctx, nr_args);
-              break;
-       case IORING_REGISTER_ENABLE_RINGS:
-              ret = -EINVAL;
-              if (arg || nr_args)
-                     break;
-              ret = io_register_enable_rings(ctx);
-              break;
-       case IORING_REGISTER_RESTRICTIONS:
-              ret = io_register_restrictions(ctx, arg, nr_args);
-              break;
-       case IORING_REGISTER_FILES2:
-              ret = io_register_rsrc(ctx, arg, nr_args, IORING_RSRC_FILE);
-              break;
-       case IORING_REGISTER_FILES_UPDATE2:
-              ret = io_register_rsrc_update(ctx, arg, nr_args,
-                                         IORING_RSRC_FILE);
-              break;
-       case IORING_REGISTER_BUFFERS2:
-              ret = io_register_rsrc(ctx, arg, nr_args, IORING_RSRC_BUFFER);
-              break;
-       case IORING_REGISTER_BUFFERS_UPDATE:
-              ret = io_register_rsrc_update(ctx, arg, nr_args,
-                                         IORING_RSRC_BUFFER);
-              break;
-       case IORING_REGISTER_IOWQ_AFF:
-              ret = -EINVAL;
-              if (!arg || !nr_args)
-                     break;
-              ret = io_register_iowq_aff(ctx, arg, nr_args);
-              break;
-       case IORING_UNREGISTER_IOWQ_AFF:
-              ret = -EINVAL;
-              if (arg || nr_args)
-                     break;
-              ret = io_unregister_iowq_aff(ctx);
-              break;
-       case IORING_REGISTER_IOWQ_MAX_WORKERS:
-              ret = -EINVAL;
-              if (!arg || nr_args != 2)
-                     break;
-              ret = io_register_iowq_max_workers(ctx, arg);
-              break;
-       default:
-              ret = -EINVAL;
-              break;
-       }
+## 一个请求的生命周期
 
-       if (io_register_op_must_quiesce(opcode)) {
-              /* bring the ctx back to life */
-              percpu_ref_reinit(&ctx->refs);
-              reinit_completion(&ctx->ref_comp);
-       }
-       return ret;
-}
-```
-### io_uring_submit
+下面跟踪一条普通 `READ` SQE 从提交到完成在内核里走过的路径（v6.12）。
 
-Submit sqes acquired from io_uring_get_sqe() to the kernel.
-Returns number of sqes submitted
+### ① 分配请求对象 io_kiocb
+
+每个 SQE 在内核对应一个 `struct io_kiocb`（io_uring 的内核 I/O 控制块）。它从专用 slab 缓存 `req_cachep`（`KMEM_CACHE(io_kiocb, ...)`）分配，并有 per-context 的请求缓存做批量补充，避免每个请求都走 slab 分配器。`io_kiocb` 是连接一切的枢纽，关键字段：
 
 ```c
-// tools/io_uring/queue.c
-int io_uring_submit(struct io_uring *ring)
+struct io_kiocb {
+	union {
+		struct file		*file;
+		struct io_cmd_data	cmd;
+	};
+
+	u8				opcode;
+	u8				iopoll_completed;
+	u16				buf_index;
+	unsigned			nr_tw;
+	io_req_flags_t			flags;	/* REQ_F_* flags */
+
+	struct io_cqe			cqe;
+	struct io_ring_ctx		*ctx;
+	struct task_struct		*task;
+
+	union {
+		struct io_mapped_ubuf	*imu;	/* registered buffer */
+		struct io_buffer	*kbuf;	/* selected provided buffer */
+		struct io_buffer_list	*buf_list;
+	};
+	union {
+		struct io_wq_work_node	comp_list;
+		__poll_t		apoll_events;
+	};
+
+	struct io_rsrc_node		*rsrc_node;
+	atomic_t			refs;
+	struct io_task_work		io_task_work;
+	struct hlist_node		hash_node;
+	struct async_poll		*apoll;
+	void				*async_data;
+	atomic_t			poll_refs;
+	struct io_kiocb			*link;
+	const struct cred		*creds;
+	struct io_wq_work		work;
+
+	struct {
+		u64			extra1;
+		u64			extra2;
+	} big_cqe;
+};
+```
+
+提交主循环 `io_submit_sqes` 每次先 `io_alloc_req` 取一个 `io_kiocb`，再 `io_get_sqe` 取出应用填的 SQE（经 SQ index array 一层间接，`IORING_SETUP_NO_SQARRAY` 可去掉），交给 `io_submit_sqe`。
+
+### ② 初始化 io_init_req
+
+`io_submit_sqe` 先调 `io_init_req`，把 SQE 的内容搬进 `io_kiocb` 并做校验：
+
+```c
+static int io_init_req(struct io_ring_ctx *ctx, struct io_kiocb *req,
+		       const struct io_uring_sqe *sqe)
 {
-       struct io_uring_sq *sq = &ring->sq;
-       const unsigned mask = *sq->kring_mask;
-       unsigned ktail, ktail_next, submitted, to_submit;
-       int ret;
+	const struct io_issue_def *def;
+	unsigned int sqe_flags;
+	u8 opcode;
 
-       /*
-        * If we have pending IO in the kring, submit it first. We need a
-        * read barrier here to match the kernels store barrier when updating
-        * the SQ head.
-        */
-       read_barrier();
-       if (*sq->khead != *sq->ktail) {
-              submitted = *sq->kring_entries;
-              goto submit;
-       }
+	/* req is partially pre-initialised, see io_preinit_req() */
+	req->opcode = opcode = READ_ONCE(sqe->opcode);
+	/* same numerical values with corresponding REQ_F_*, safe to copy */
+	sqe_flags = READ_ONCE(sqe->flags);
+	req->flags = (__force io_req_flags_t) sqe_flags;
+	req->cqe.user_data = READ_ONCE(sqe->user_data);
+	req->file = NULL;
+	req->rsrc_node = NULL;
+	req->task = current;
 
-       if (sq->sqe_head == sq->sqe_tail)
-              return 0;
+	if (unlikely(opcode >= IORING_OP_LAST)) {
+		req->opcode = 0;
+		return io_init_fail_req(req, -EINVAL);
+	}
+	def = &io_issue_defs[opcode];
+	/* ...校验 flags、调用 def->prep 做操作特定准备... */
+```
 
-       /*
-        * Fill in sqes that we have queued up, adding them to the kernel ring
-        */
-       submitted = 0;
-       ktail = ktail_next = *sq->ktail;
-       to_submit = sq->sqe_tail - sq->sqe_head;
-       while (to_submit--) {
-              ktail_next++;
-              read_barrier();
+每个 opcode 在 `io_issue_defs[opcode]`（`struct io_issue_def`）里登记了自己的 `prep`（准备/校验）、`issue`（实际下发）函数和能力位，是一套典型的 opcode 分发表。注意这里读 SQE 都用 `READ_ONCE`——因为 SQE 在用户映射内存里，可能被应用随时改动。
 
-              sq->array[ktail & mask] = sq->sqe_head & mask;
-              ktail = ktail_next;
+### ③ 下发 io_queue_sqe → io_issue_sqe
 
-              sq->sqe_head++;
-              submitted++;
-       }
+普通请求经 `io_queue_sqe`，它先以内联、非阻塞方式尝试一次：
 
-       if (!submitted)
-              return 0;
+```c
+static inline void io_queue_sqe(struct io_kiocb *req)
+{
+	int ret;
 
-       if (*sq->ktail != ktail) {
-              /*
-               * First write barrier ensures that the SQE stores are updated
-               * with the tail update. This is needed so that the kernel
-               * will never see a tail update without the preceeding sQE
-               * stores being done.
-               */
-              write_barrier();
-              *sq->ktail = ktail;
-              /*
-               * The kernel has the matching read barrier for reading the
-               * SQ tail.
-               */
-              write_barrier();
-       }
+	ret = io_issue_sqe(req, IO_URING_F_NONBLOCK|IO_URING_F_COMPLETE_DEFER);
 
-submit:
-       ret = io_uring_enter(ring->ring_fd, submitted, 0,
-                            IORING_ENTER_GETEVENTS, NULL);
-       if (ret < 0)
-              return -errno;
-
-       return ret;
+	/*
+	 * We async punt it if the file wasn't marked NOWAIT, or if the file
+	 * doesn't support non-blocking read/write attempts
+	 */
+	if (unlikely(ret))
+		io_queue_async(req, ret);
 }
 ```
 
+`IO_URING_F_NONBLOCK` 要求"绝不能阻塞"，`IO_URING_F_COMPLETE_DEFER` 表示"完成先攒着、批量提交结束再统一刷 CQ"。`io_issue_sqe` 调对应操作的 `issue` 函数（如读文件走 `io_read`、网络走相应 handler）。这一步有三种结果，决定请求走向。
+
+### ④ 三条去路
+
+1. **内联完成（inline completion）**：操作当场就能完成（如数据已在 PageCache、或一个非阻塞的纯计算操作），结果直接写入 `req->cqe`，请求随后进入批量完成列表，等这一批提交结束统一刷进 CQ 环——整条路径不睡眠、不额外调度。
+
+2. **挂起等待（poll / arm poll）**：暂时不能完成（如 socket 无数据、文件需块 I/O）。`io_issue_sqe` 返回 `-EAGAIN`，`io_queue_async` 调 `io_arm_poll_handler` 注册一个轮询/等待项，数据就绪时由内核回调（如协议栈 `sock_def_readable` 触发）把请求重新排队执行，类似 epoll 的等待机制但由 io_uring 自管。
+
+3. **异步线程回退（io-wq）**：操作不支持非阻塞、必须在阻塞上下文中完成时（典型是 buffered I/O 遇到需要等待的情况），`io_queue_async` 走 `io_queue_iowq`，把请求丢给 **io-wq** 线程池阻塞执行，应用线程完全不被阻塞。
+
+### ⑤ 完成并回填 CQE
+
+执行完成后，结果写进 `req->cqe.res`/`flags`。绝大多数路径用**延迟完成**（`IO_URING_F_COMPLETE_DEFER`），在批量提交结束的 `io_submit_state_end` → `io_submit_flush_completions` 里一次性把攒下的完成项填进 CQ 环，摊薄开销。真正填 CQE 的是 `io_fill_cqe_req`：
+
+```c
+static __always_inline bool io_fill_cqe_req(struct io_ring_ctx *ctx,
+					    struct io_kiocb *req)
+{
+	struct io_uring_cqe *cqe;
+
+	if (unlikely(!io_get_cqe(ctx, &cqe)))
+		return false;
+
+	memcpy(cqe, &req->cqe, sizeof(*cqe));
+	if (ctx->flags & IORING_SETUP_CQE32) {
+		memcpy(cqe->big_cqe, &req->big_cqe, sizeof(*cqe));
+		memset(&req->big_cqe, 0, sizeof(req->big_cqe));
+	}
+	return true;
+}
+```
+
+若 CQ 环已满（应用没及时收割），`io_get_cqe` 失败，完成项进入 `cq_overflow_list` 并累加 `cq_overflow` 计数，等应用腾出空间后由内核补刷。io-wq 线程里的完成走 `io_req_complete_post`，单独加锁填 CQE。完成回填后释放对 `io_kiocb` 的引用，最后一个引用把对象还回请求缓存。
+
+### task_work：借提交者的上下文收尾
+
+有些完成工作（如把数据 fixup、收割 multishot）必须在**提交该请求的那个用户进程上下文**里、且需要 `mm` 时才能做。内核不能在硬中断或别的 CPU 上随意强行打断，于是用 **task_work** 机制：`io_req_task_work_add` 把一个回调挂到提交任务的 `task->task_works` 链表，等该任务下次要进入/返回内核（返回用户态前）时执行。
+
+应用侧每次进入 `io_uring_enter` 也会先 `io_run_task_work()` 主动跑掉攒下的 task_work，`io_handle_tw_list` 逐个取出、在持有 `uring_lock` 的情况下调用对应回调（如 `io_poll_task_func`、`io_req_rw_complete`）。为减少无谓的 IPI（核间中断），还有两个优化 flag：
+
+- `IORING_SETUP_COOP_TASKRUN`：协作式运行——等任务反正要切换时再做 task_work，而不是强制用 IPI 打断正在用户态运行的任务；
+- `IORING_SETUP_DEFER_TASKRUN`：把 task_work 推迟到真正需要事件（如 `io_uring_enter` 等 GETEVENTS）时才跑。
+
+## 固定资源与高级特性
+
+### Fixed files（固定文件表）
+
+正常 I/O 每个请求要用 `fget`/`fput` 引用 fd，底层有原子操作与锁。`io_uring_register`（`IORING_REGISTER_FILES` / `..._FILES2`）可预先把一组文件注册进 `ctx->file_table`，之后 SQE 设 `IOSQE_FIXED_FILE`、用 `file_index` 下标引用，走 `io_file_get_fixed`，**每次 I/O 省去 fget/fput 的原子开销**。可用 `FILES_UPDATE`/`FILES_UPDATE2` 增量更新，`IORING_REGISTER_FILE_ALLOC_RANGE` 注册一个可自动分配的槽位区间。
+
+### Registered buffers（固定缓冲）
+
+`IORING_REGISTER_BUFFERS` 预注册一组用户缓冲，内核把它们 [pin 在内存](/docs/CS/OS/Linux/mm/gup.md?id=longterm-的代价)（`io_mapped_ubuf`），之后 `READ_FIXED`/`WRITE_FIXED` 或带 `buf_index` 的操作直接用，免去每次 I/O 的 `pin_user_pages`/解 pin 开销，并支持块层的固定缓冲快速路径。
+
+### Provided buffers（按需提供缓冲组）
+
+对于"事先不知道数据多大"的读（典型是服务器 recv），可以用 `PROVIDE_BUFFERS` 或注册 **buffer ring**（`IORING_REGISTER_PBUF_RING`）提供一个缓冲组。SQE 设 `IOSQE_BUFFER_SELECT` + `buf_group`，请求就绪时内核自动从组里挑一个缓冲、把缓冲 ID 放进 CQE 的高 16 位（`IORING_CQE_F_BUFFER`）返回，应用无需提前为每个连接挂起一个缓冲。基于共享环的 PBUF ring 连缓冲的提交/回收都可在用户态完成；`IOU_PBUF_RING_INC` 支持增量消费大缓冲。
+
+### 链式操作与 multishot
+
+- **`IOSQE_IO_LINK` / `IOSQE_IO_HARDLINK`**：把多个 SQE 串成一条链，前一个成功才执行下一个，可表达"open→read→close""recv→处理→send"工作流；配 `LINK_TIMEOUT` 可给整链加超时。
+- **multishot**：`POLL_ADD`、`ACCEPT`、`RECV` 等支持 multishot 标志，一条 SQE 在事件反复到来时**持续产生多个 CQE**，每次 CQE 带 `IORING_CQE_F_MORE` 表示"还有后续"，省去反复重新注册。
+- **`IOSQE_CQE_SKIP_SUCCESS`**：请求成功时不产生 CQE（失败仍产生），适合纯串联、只关心异常的中间步骤。
+
+### 零拷贝与 buffer select 网络发送
+
+`SEND_ZC` / `SENDMSG_ZC` 走内核零拷贝发送（与 `MSG_ZEROCOPY` 同源），完成后用带 `IORING_CQE_F_NOTIF` 的通知 CQE 告知内核何时可释放承载页；`IORING_SEND_ZC_REPORT_USAGE` 可让内核报告是否真的零拷贝、还是退回了拷贝。
+
+### 环间通信 MSG_RING
+
+`IORING_OP_MSG_RING` 允许一个环向另一个环直接投递数据（`IORING_MSG_DATA`）甚至传递一个已注册的 fd（`IORING_MSG_SEND_FD`），可用于在同一进程多个环或线程的工作者之间做无锁的工作交接，而不必经额外 IPC。
+
+### URING_CMD 与 SQE128/CQE32
+
+`IORING_OP_URING_CMD` 让设备驱动注册自己的命令（如 NVMe passthrough、某些网卡/存储命令），配合 `IORING_SETUP_SQE128`（SQE 扩到 128 字节承载 80 字节命令数据）和 `IORING_SETUP_CQE32`（CQE 扩到 32 字节、多 16 字节回传）传递大块命令与结果。
+
+## io-wq：异步回退线程池
+
+当请求无法非阻塞完成、又不能让提交线程阻塞时，io_uring 用 **io-wq**（内核 worker pool，`io_uring/io-wq.c`）在线程上下文阻塞执行。它的 worker 分两类：
+
+- `IO_WQ_BOUND`：受 CPU 亲和性约束、可在需要时阻塞（类似 bound workqueue），用于会阻塞在文件系统/块层的操作；
+- `IO_WQ_UNBOUND`：不绑核，用于不受阻塞位置约束的后台工作。
+
+每个 io_ring_ctx 默认有自己的 io-wq，也可通过 `IORING_SETUP_ATTACH_WQ`（传 `wq_fd`）让多个环共享一个线程池；可用 `IORING_REGISTER_IOWQ_MAX_WORKERS` 限制 worker 数、`IORING_REGISTER_IOWQ_AFF` 设置 worker 的 CPU 亲和性。io-wq 使 io_uring 即使面对只支持阻塞语义的旧文件系统也能对外呈现统一的异步接口——内联完成、poll、io-wq 三条路径对应用透明。
+
+## 安全与限制
+
+io_uring 把大量内核操作暴露到共享内存接口，历史上多次成为本地提权漏洞的来源，因此内核加了多层限制：
+
+- **环禁用态**：`IORING_SETUP_R_DISABLED` 让环创建后暂不可提交，注册完资源和限制策略后再用 `IORING_REGISTER_ENABLE_RINGS` 启用。
+- **restriction（限制策略）**：`IORING_REGISTER_RESTRICTIONS` 可限定该环允许哪些 SQE opcode、哪些 SQE flags、哪些 register 操作，常用于把环交给可信度较低的组件（如沙箱、seccomp 用户）。
+- **特权与记账**：注册固定缓冲（pin 内存）需要相应的 locked-memory 额度，`io_uring_create` 中对非 `CAP_IPC_LOCK` 用户做记账；很多发行版（如部分容器默认 seccomp）会封禁 io_uring 系统调用。
+- 实际部署在容器/多租户环境中时，应通过 seccomp 或 sysctl 控制 io_uring 的可用性，不应默认对不可信工作负载开放。
 
 ## Links
 
-- [IO](/docs/CS/OS/Linux/IO/IO.md)
-
+- [IO 总览（五种模型）](/docs/CS/OS/Linux/IO/IO.md)
+- [multiplexing（select/poll/epoll）](/docs/CS/OS/Linux/IO/multiplexing.md)
+- [epoll 详解](/docs/CS/OS/Linux/IO/epoll.md)
+- [DPDK（内核旁路）](/docs/CS/OS/Linux/IO/DPDK.md)
+- [零拷贝 ZeroCopy](/docs/CS/OS/Linux/ZeroCopy.md)
 
 ## References
 
-1. [An Introduction to the io_uring Asynchronous I/O Framework](https://blogs.oracle.com/site/linux/post/an-introduction-to-the-io-uring-asynchronous-io-framework)
-2. [Improved_Storage_Performance_Using_the_New_Linux_Kernel_I.O_Interface](https://www.snia.org/sites/default/files/SDC/2019/presentations/Storage_Performance/Kariuki_John_Verma_Vishal_Improved_Storage_Performance_Using_the_New_Linux_Kernel_I.O_Interface.pdf)
-3. [Efficient IO with io_uring](https://kernel.dk/io_uring.pdf)
-4. [What’s new with io_uring](https://kernel.dk/io_uring-whatsnew.pdf)
+1. [Efficient IO with io_uring — Jens Axboe](https://kernel.dk/io_uring.pdf)
+2. [What's new with io_uring — Jens Axboe](https://kernel.dk/io_uring-whatsnew.pdf)
+3. [io_uring documentation — kernel.org](https://www.kernel.org/doc/html/latest/io_uring/index.html)
+4. [io_uring(7) — Linux manual page](https://man7.org/linux/man-pages/man7/io_uring.7.html)
+5. [An Introduction to the io_uring Asynchronous I/O Framework — Oracle Linux](https://blogs.oracle.com/site/linux/post/an-introduction-to-the-io-uring-asynchronous-io-framework)

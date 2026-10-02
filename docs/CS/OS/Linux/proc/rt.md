@@ -2,6 +2,23 @@
 
 sched_rt_entity 结构体充当 rq 和 task_struct 的媒介
 
+### 实时策略
+
+实时调度类覆盖 `SCHED_FIFO` 与 `SCHED_RR`（外加 `SCHED_DEADLINE`，见 [DL](/docs/CS/OS/Linux/proc/sche.md?id=dl)）：
+
+- **SCHED_FIFO**：没有时间片概念，同优先级先进先出，一直运行到阻塞、主动让出或被更高优先级抢占。
+- **SCHED_RR**：同优先级按时间片轮转，默认 100ms（`sched_rr_timeslice`，可通过 `/proc/sys/kernel/sched_rr_timeslice_ms` 调整），片用尽后排到同优先级队尾。
+
+无论哪种策略，只要存在可运行的实时任务，它就绝对先于 fair/idle 类运行。
+
+### 实时优先级
+
+实时优先级 `rt_priority` 取值 1~99（`chrt -f 99 pid`），内核换算为 prio 0~98（数值越小优先级越高）；普通任务的 nice 映射到 100~139。每个 CPU 的 rt_rq 内部用 `rt_prio_array` 组织：100 个链表 + 一张位图，`sched_find_first_bit` 一步定位最高优先级队列，查找 O(1)——这正是从 O(1) 调度器继承的数据结构。
+
+### RT throttling
+
+实时任务无限运行会把整个系统拖死（包括看门狗、ssh），因此内核默认限制实时任务每 `sched_rt_period_us`（1s）内最多运行 `sched_rt_runtime_us`（950ms），即 95% 的 CPU 时间；剩余 5% 留给普通任务。耗尽后 `sched_rt_runtime_exceeded()` 将 rt_rq 打上 throttle 并 `resched_curr`，下个周期由 `do_start_rt_bandwidth` 启动的定时器补充带宽。下面的 `update_curr_rt` 就是这个检查的实现。关闭方式：`sysctl -w kernel.sched_rt_runtime_us=-1`。
+
 
 
 
@@ -85,18 +102,6 @@ static void update_curr_rt(struct rq *rq)
 }
 ```
 
-task_fork_fair 在普通进程被创建时调用
-```c
-/*
- * called on fork with the child task as argument from the parent's context
- *  - child not yet on the tasklist
- *  - preemption disabled
- */
-static void task_fork_fair(struct task_struct *p)
-{
-	set_task_max_allowed_capacity(p);
-}
-```
 
 
 
@@ -104,6 +109,9 @@ static void task_fork_fair(struct task_struct *p)
 ## Links
 
 - [sched](/docs/CS/OS/Linux/proc/sche.md)
+- [fair](/docs/CS/OS/Linux/proc/fair.md)
+- [Scheduling 理论](/docs/CS/OS/scheduling.md)
+- [Processes 知识地图](/docs/CS/OS/Linux/proc/README.md)
 
 
 

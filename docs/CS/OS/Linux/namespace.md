@@ -44,7 +44,44 @@ pivot_root() changes the root directory and the current working directory of eac
 On the other hand, pivot_root() does not change the caller's current working directory (unless it is on the old root directory), and thus it should be followed by a chdir("/") call.
 
 
+
+
+对于每一种 namespace，Linux在启动时都有一套默认值，定义在 kernel/nsproxy.c 中。
+
+
+Linux启动有个 INIT_TASK 0号进程，也叫idle进程，固定使用这个默认的 init_nsproxy。
+
+
+
+
+
+
+## 容器如何使用 namespace
+
+容器 = 一组 namespace + 一个 rootfs + 一套 cgroup 限额。以 `docker run` 为例，runc 的启动路径正是教科书式的三步（伪代码见 [LXC](/docs/CS/OS/Linux/LXC.md)）：
+
+1. **clone 创建容器主进程**：`CLONE_NEWPID|CLONE_NEWNS|CLONE_NEWUSER|CLONE_NEWNET|CLONE_NEWIPC|CLONE_NEWUTS` 一并指定，子进程一出生就活在全新的视图里（clone 的共享机制见 [pthread](/docs/CS/OS/Linux/proc/pthread.md)——同样的系统调用，flags 决定了是线程还是容器）；
+2. **pivot_root 切换根文件系统**：把 overlayfs 挂载好的容器 rootfs 变成新的 `/`，配合 `chdir("/")`，进程从此"看不见"宿主机文件系统；
+3. **exec 用户指定的入口程序**：映像替换后成为容器内的 PID 1。
+
+各 namespace 在容器里的可观察现象：PID ns 让容器内 `ps` 只看到自己；NET ns 给容器独立的网卡与端口空间（veth pair 怎么接进来见 [Docker 网络](/docs/CS/Container/Docker/net.md)）；UTS ns 让每个容器有自己的 hostname。
+
+### setns 加入已有 namespace
+
+`docker exec` / `kubectl exec` / `nsenter` 的底层都是 setns(2)：打开目标进程的 `/proc/PID/ns/xxx` 拿到 namespace 句柄，再 setns 把当前线程"搬"进去。
+
+这也是 [Pod 的 pause 容器](/docs/CS/Container/k8s/Pod.md?id=pause-容器)的实现机制：pause 先创建并持有 Network/IPC/UTS namespace，业务容器逐项 setns join 进来——因此业务容器崩溃重建不影响 Pod IP，只有 pause 重建才会。
+
+观察：`ls -l /proc/$$/ns/`，两个进程某项 namespace 的链接数与 inode 号相同即共享之。
+
+`setns` 需要一个宿主 PID 才能拿到 `/proc/PID/ns/*` 句柄，所以"先找到容器对应的进程"是 `nsenter` 的前置步骤；反过来从某个 PID 反查它属于哪个容器要靠 `/proc/PID/cgroup`，两侧的完整命令见 [容器定位](/docs/CS/Container/locate.md)。
+
 ## Links
 
 - [Linux](/docs/CS/OS/Linux/Linux.md)
 - [Container](/docs/CS/Container/Container.md)
+- [LXC](/docs/CS/OS/Linux/LXC.md) — clone + pivot_root 最小容器伪代码
+- [Docker 网络](/docs/CS/Container/Docker/net.md) — NET namespace 与 veth pair
+- [Pod](/docs/CS/Container/k8s/Pod.md) — pause 容器持有哪些 namespace
+- [容器定位](/docs/CS/Container/locate.md) — PID ↔ 容器双向换算与 nsenter 实践
+- [容器知识地图](/docs/CS/Container/README.md)

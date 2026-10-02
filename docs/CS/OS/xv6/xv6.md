@@ -1542,8 +1542,7 @@ xv6进程只保存父子关系
 
 ## Device
 
-
-
+xv6 的设备驱动模型、MMIO、UART 控制台与 virtio-blk 磁盘中断的完整分析见 [xv6 设备管理](/docs/CS/OS/xv6/device.md)。
 
 
 
@@ -1552,6 +1551,9 @@ xv6进程只保存父子关系
 
 - [Operating Systems](/docs/CS/OS/OS.md)
 - [Linux](/docs/CS/OS/Linux/Linux.md)
+- [xv6 设备管理](/docs/CS/OS/xv6/device.md)
+- [QEMU](/docs/CS/OS/qemu.md)
+- [Bochs](/docs/CS/OS/Bochs.md)
 
 ## References
 

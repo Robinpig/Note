@@ -116,7 +116,10 @@ static int a20_test(int loops)
 链接脚本最终会把大量编译好的二进制文件（.o文件）合并为一个二进制可执行文件，也就是把每一个二进制文件整合到一个大文件中
 这个大文件有一个总的代码/数据/未初始化数据段，这个链接脚本在Linux内核里面其实就是vmlinux.lds.S文件
 
+上面这段代码最终会变成什么、怎么变成的，属于构建环节：`.config` 怎么定、`make` 编出哪些产物、`vmlinux` 如何被压成 `bzImage`，见 [内核构建](/docs/CS/OS/Linux/build.md)。本目录只负责"镜像拿到手之后发生的事"。
+
 
 ## Links
 
 - [Linux](/docs/CS/OS/Linux/Linux.md)
+- [boot](/docs/CS/OS/Linux/boot/README.md)

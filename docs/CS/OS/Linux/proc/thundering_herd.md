@@ -1063,7 +1063,7 @@ static void __wake_up_common_lock(struct wait_queue_head *wq_head, unsigned int 
 
 ## epoll
 
-See [epoll wait](/docs/CS/OS/Linux/epoll.md?id=add_wait_queue) and [wake up](/docs/CS/OS/Linux/epoll.md?id=ep_poll_callback)
+See [epoll wait](/docs/CS/OS/Linux/IO/epoll.md?id=add_wait_queue) and [wake up](/docs/CS/OS/Linux/IO/epoll.md?id=ep_poll_callback)
 
 #### wake_up_poll
 
@@ -1094,13 +1094,59 @@ void __wake_up(struct wait_queue_head *wq_head, unsigned int mode,
 EXPORT_SYMBOL(__wake_up);
 ```
 
+## Socket 阻塞读与唤醒
+
+Socket 的阻塞 `read` 是等待队列最典型的应用（收包路径见 [network Ingress](/docs/CS/OS/Linux/net/network.md?id=ingress)）。
+
+阻塞侧：`tcp_recvmsg` 在接收队列上循环，队列空才睡：
+
+```c
+int tcp_recvmsg(struct sock *sk, struct msghdr *msg, ...)
+{
+	skb_queue_walk(&sk->sk_receive_queue, skb) {
+		/* 队列有数据：直接拷贝给用户返回 */
+	}
+	/* 队列空：准备睡眠 */
+	sk_wait_data(sk, &timeo);
+}
+
+int sk_wait_data(struct sock *sk, long *timeo)
+{
+	DEFINE_WAIT(wait);   /* wait.private = current, func = autoremove_wake_function */
+
+	prepare_to_wait(sk_sleep(sk), &wait, TASK_INTERRUPTIBLE);  /* 挂入 sk->sk_wq */
+	rc = sk_wait_event(sk, timeo, !skb_queue_empty(&sk->sk_receive_queue)); /* 复查条件后睡眠 */
+}
+```
+
+`DEFINE_WAIT` 把 `autoremove_wake_function` 绑进等待项——被唤醒后自动把自己从队列摘除，睡一次就完，不需要手动 `finish_wait`。
+
+唤醒侧：数据到达后，协议栈把 skb 挂进接收队列，随后调用 socket 注册好的 `sk_data_ready` 回调（TCP 即 `sock_def_readable`）：
+
+```c
+void sock_def_readable(struct sock *sk)
+{
+	wq = rcu_dereference(sk->sk_wq);
+	if (skwq_has_sleeper(wq))
+		wake_up_interruptible_sync_poll(&wq->wait, EPOLLIN | EPOLLPRI ...);
+}
+```
+
+`wake_up` 遍历等待队列，对每个等待项调用其 `func`（`autoremove_wake_function` → [try_to_wake_up](#try_to_wake_up)）。它唤醒的是**这一个 socket** 的等待者；而 accept 场景是多个进程睡在**同一个 listening socket** 上才会互相踩踏——这正是下文 [epoll](#epoll) 与 Nginx 讨论的惊群问题。
+
 ## Nginx
 
 multiple process
 
 `ngx_event_accept` default disable
 
+Nginx 侧的实现细节：
+
+- 多 worker 竞争 accept 的惊群由 [accept mutex](/docs/CS/CN/nginx/nginx.md) 解决：`ngx_use_accept_mutex` 开启时，worker 通过 `ngx_trylock_accept_mutex` 抢锁，抢到者把 listen fd 加入 epoll，抢不到者只处理已有连接（配合 `accept_mutex_delay` 避免活锁）。
+- 新内核也可改用 `EPOLLEXCLUSIVE`（Linux 4.5+）让内核只唤醒一个等待者，与本文 [wait](/docs/CS/OS/Linux/proc/thundering_herd.md?id=wait) 节的 `WQ_FLAG_EXCLUSIVE` 是同一个思想在内核/应用两层的体现。
+
 ## Links
 
 - [processes](/docs/CS/OS/Linux/proc/process.md)
+- [Processes 知识地图](/docs/CS/OS/Linux/proc/README.md)
 - [network](/docs/CS/OS/Linux/net/network.md)

@@ -45,6 +45,8 @@ System
 - DTrace
 - SystemTap
 - perf
+- ftrace (tracefs: tracepoint / kprobe / function tracer)
+- BPF / eBPF (cBPF filter -> verifier + maps; BCC / bpftrace)
 
 Process
 
@@ -176,6 +178,8 @@ ps
 
 ## Network
 
+网络工具的分层详解（telnet/nc/ss/mtr/ethtool/tcpdump/tc + 排障路径）见 [network 工具专文](/docs/CS/OS/Linux/Tools/network.md)。
+
 iputils
 - ping
 - arping
@@ -206,7 +210,7 @@ iproute2
 /proc/net/
 ```
 
-netlink see RFC 3549
+[netlink](/docs/CS/OS/Linux/net/netlink.md)（RFC 3549）
 
 
 nc
@@ -214,3 +218,7 @@ nc
 
 ## Links
 
+- [网络工具（network）](/docs/CS/OS/Linux/Tools/network.md)
+- [curl](/docs/CS/OS/Linux/Tools/curl.md)
+- [Linux](/docs/CS/OS/Linux/Linux.md)
+- [ELF 与 execve 命令](/docs/CS/OS/command.md)

@@ -30,9 +30,9 @@ Linux 支持 NUMA (Non Uniform Memory Access)。物理内存管理的第一个�
 
 > 可以通过 `lscpu` 来查看系统当前Socket 和节点的布局情况
 
-On NUMA machines, each NUMA node would have a pg_data_t to describe it's memory layout.
-On UMA machines there is a single pglist_data which describes the whole memory.
-Memory statistics and page replacement data structures are maintained on a per-zone basis.
+在 NUMA 机器上，每个 NUMA 节点都会有一个 pg_data_t 来描述其内存布局。
+在 UMA 机器上则只有一个 pglist_data 来描述整片内存。
+内存统计信息与页回收（page reclaim）相关的数据结构都以 per-zone（按 zone）为单位维护。
 
 
 ## node
@@ -154,67 +154,239 @@ typedef struct pglist_data {
 
 ## Zone
 
-Often hardware poses restrictions on how different physical memory ranges can be accessed. 
-In some cases, devices cannot perform DMA to all the addressable memory. 
-In other cases, the size of the physical memory exceeds the maximal addressable size of virtual memory and special actions are required to access portions of the memory.
-Linux groups memory pages into zones according to their possible usage.
-For example, ZONE_DMA will contain memory that can be used by devices for DMA, ZONE_HIGHMEM will contain memory that is not permanently mapped into kernel’s address space and ZONE_NORMAL will contain normally addressed pages.
-The actual layout of the memory zones is hardware dependent as not all architectures define all zones, and requirements for DMA are different for different platforms.
+硬件常常会对不同物理内存区间的访问方式施加限制。
+某些情况下，设备无法对所有可寻址内存执行 DMA。
+另一些情况下，物理内存的大小超过了虚拟内存可寻址的上限，需要借助特殊手段才能访问其中一部分内存。
+Linux 根据内存页可能的用途将它们划分为不同的 zone。
+例如，ZONE_DMA 存放可供设备做 DMA 的内存；ZONE_HIGHMEM 存放没有永久映射到内核地址空间的内存；ZONE_NORMAL 存放按常规方式寻址的页。
+zone 的实际布局依赖于具体硬件——并非所有架构都定义了全部 zone，而且不同平台对 DMA 的要求也不同。
 
+许多多处理器机器是 NUMA（Non-Uniform Memory Access，非一致内存访问）系统。
+在这类系统中，内存被划分成多个 bank，根据与处理器的“距离”不同而有不同的访问延迟。
+每个 bank 称为一个 node，Linux 为每个 node 构建一套独立的内存管理子系统。
+一个 node 拥有自己的一套 zone、空闲页与已用页链表，以及各种统计计数器。
+关于 NUMA 的更多细节可参考《What is NUMA?》与《NUMA Memory Policy》。
 
-Many multi-processor machines are NUMA - Non-Uniform Memory Access - systems. 
-In such systems the memory is arranged into banks that have different access latency depending on the “distance” from the processor. 
-Each bank is referred to as a node and for each node Linux constructs an independent memory management subsystem.
-A node has its own set of zones, lists of free and used pages and various statistics counters.
-You can find more details about NUMA in What is NUMA?` and in NUMA Memory Policy.
+### struct zone
 
+zone 的核心数据结构是 `struct zone`（linux/mmzone.h）。每个 zone 管理一段连续的物理页区间，并维护自己的空闲链表、水位线与统计。下面列出与物理内存分配最直接相关的字段（完整定义见源码）：
+
+```c
+// linux/mmzone.h
+
+#define ASYNC_AND_SYNC 2
+
+struct zone {
+	/* Read-mostly fields */
+
+	/* zone watermarks, access with *_wmark_pages(zone) macros */
+	unsigned long _watermark[NR_WMARK];
+	unsigned long watermark_boost;
+
+	unsigned long nr_reserved_highatomic;
+
+	/*
+	 * We don't know if the memory that we're going to allocate will be
+	 * freeable or/and it will be released eventually, so to avoid totally
+	 * wasting several GB of ram we must reserve some of the lower zone
+	 * memory (otherwise we risk to run OOM on the lower zones despite
+	 * there being tons of freeable ram on the higher zones).  This array is
+	 * recalculated at runtime if the sysctl_lowmem_reserve_ratio sysctl
+	 * changes.
+	 */
+	long lowmem_reserve[MAX_NR_ZONES];
+
+#ifdef CONFIG_NUMA
+	int node;
+#endif
+	struct pglist_data	*zone_pgdat;
+	struct per_cpu_pageset __percpu *pageset;
+	/*
+	 * the high and batch values are copied to individual pagesets for
+	 * faster access
+	 */
+	int pageset_high;
+	int pageset_batch;
+
+#ifndef CONFIG_SPARSEMEM
+	/*
+	 * Flags for a pageblock_nr_pages block. See pageblock-flags.h.
+	 * In SPARSEMEM, this map is stored in struct mem_section
+	 */
+	unsigned long		*pageblock_flags;
+#endif /* CONFIG_SPARSEMEM */
+
+	/* zone_start_pfn == zone_start_paddr >> PAGE_SHIFT */
+	unsigned long		zone_start_pfn;
+
+	/*
+	 * spanned_pages is the total pages spanned by the zone, including
+	 * holes, which is calculated as:
+	 * 	spanned_pages = zone_end_pfn - zone_start_pfn;
+	 *
+	 * present_pages is physical pages existing within the zone, which
+	 * is calculated as:
+	 *	present_pages = spanned_pages - absent_pages(pages in holes);
+	 *
+	 * managed_pages is present pages managed by the buddy system, which
+	 * is calculated as (reserved_pages includes pages allocated by the
+	 * bootmem allocator):
+	 *	managed_pages = present_pages - reserved_pages;
+	 *
+	 * cma pages is present pages that are assigned for CMA use
+	 * (MIGRATE_CMA).
+	 *
+	 * So present_pages may be used by memory hotplug or memory power
+	 * management logic to figure out unmanaged pages by checking
+	 * (present_pages - managed_pages). And managed_pages should be used
+	 * by page allocator and vm scanner to calculate all kinds of watermarks
+	 * and thresholds.
+	 *
+	 * Locking rules:
+	 *
+	 * zone_start_pfn and spanned_pages are protected by span_seqlock.
+	 * It is a seqlock because it has to be read outside of zone->lock,
+	 * and it is done in the main allocator path.  But, it is written
+	 * quite infrequently.
+	 *
+	 * The span_seq lock is declared along with zone->lock because it is
+	 * frequently read in proximity to zone->lock.  It's good to
+	 * give them a chance of being in the same cacheline.
+	 *
+	 * Write access to present_pages at runtime should be protected by
+	 * mem_hotplug_begin/end(). Any reader who can't tolerant drift of
+	 * present_pages should get_online_mems() to get a stable value.
+	 */
+	atomic_long_t		managed_pages;
+	unsigned long		spanned_pages;
+	unsigned long		present_pages;
+#ifdef CONFIG_CMA
+	unsigned long		cma_pages;
+#endif
+
+	const char		*name;
+
+#ifdef CONFIG_MEMORY_ISOLATION
+	/*
+	 * Number of isolated pageblock. It is used to solve incorrect
+	 * freepage counting problem due to racy retrieving migratetype
+	 * of pageblock. Protected by zone->lock.
+	 */
+	unsigned long		nr_isolate_pageblock;
+#endif
+
+#ifdef CONFIG_MEMORY_HOTPLUG
+	/* see spanned/present_pages for more description */
+	seqlock_t		span_seqlock;
+#endif
+
+	int initialized;
+
+	/* Write-intensive fields used from the page allocator */
+	ZONE_PADDING(_pad1_)
+
+	/* free areas of different sizes */
+	struct free_area	free_area[MAX_ORDER];
+
+	/* zone flags, see below */
+	unsigned long		flags;
+
+	/* Primarily protects free_area */
+	spinlock_t		lock;
+
+	/* Write-intensive fields used by compaction and vmstats. */
+	ZONE_PADDING(_pad2_)
+
+	/*
+	 * When free pages are below this point, additional steps are taken
+	 * when reading the number of free pages to avoid per-cpu counter
+	 * drift allowing watermarks to be breached
+	 */
+	unsigned long percpu_drift_mark;
+
+#if defined CONFIG_COMPACTION || defined CONFIG_CMA
+	/* pfn where compaction free scanner should start */
+	unsigned long		compact_cached_free_pfn;
+	/* pfn where compaction migration scanner should start */
+	unsigned long		compact_cached_migrate_pfn[ASYNC_AND_SYNC];
+	unsigned long		compact_init_migrate_pfn;
+	unsigned long		compact_init_free_pfn;
+#endif
+
+#ifdef CONFIG_COMPACTION
+	/*
+	 * On compaction failure, 1<<compact_defer_shift compactions
+	 * are skipped before trying again. The number attempted since
+	 * last failure is tracked with compact_considered.
+	 * compact_order_failed is the minimum compaction failed order.
+	 */
+	unsigned int		compact_considered;
+	unsigned int		compact_defer_shift;
+	int			compact_order_failed;
+#endif
+
+#if defined CONFIG_COMPACTION || defined CONFIG_CMA
+	/* Set to true when the PG_migrate_skip bits should be cleared */
+	bool			compact_blockskip_flush;
+#endif
+
+	bool			contiguous;
+
+	ZONE_PADDING(_pad3_)
+	/* Zone statistics */
+	atomic_long_t		vm_stat[NR_VM_ZONE_STAT_ITEMS];
+	atomic_long_t		vm_numa_stat[NR_VM_NUMA_STAT_ITEMS];
+} ____cacheline_internodealigned_in_smp;
+```
 ## Page cache
 
-The physical memory is volatile and the common case for getting data into the memory is to read it from files.
-Whenever a file is read, the data is put into the page cache to avoid expensive disk access on the subsequent reads.
-Similarly, when one writes to a file, the data is placed in the page cache and eventually gets into the backing storage device. 
-The written pages are marked as dirty and when Linux decides to reuse them for other purposes, it makes sure to synchronize the file contents on the device with the updated data.
+物理内存是易失的，把数据装进内存最常见的方式就是从文件读取。
+每次读取文件时，数据都会被放进 page cache（页缓存），以避免后续读取时再付出昂贵的磁盘访问开销。
+类似地，向文件写入时，数据也会先放进 page cache，最终才落盘到后端存储设备。
+被写入的页会被标记为 dirty（脏页），当 Linux 决定把这些页另作他用时，会确保将设备上文件内容与更新后的数据同步。
 
 ## Anonymous Memory
 
-The anonymous memory or anonymous mappings represent memory that is not backed by a filesystem. 
-Such mappings are implicitly created for program’s stack and heap or by explicit calls to mmap(2) system call. 
-Usually, the anonymous mappings only define virtual memory areas that the program is allowed to access. 
-The read accesses will result in creation of a page table entry that references a special physical page filled with zeroes.
-When the program performs a write, a regular physical page will be allocated to hold the written data. 
-The page will be marked dirty and if the kernel decides to repurpose it, the dirty page will be swapped out.
+anonymous memory（匿名内存）/ anonymous mappings（匿名映射）表示没有文件作为后端支撑的内存。
+这类映射会隐式地为程序的栈和堆创建，也可以由显式调用 mmap(2) 系统调用创建。
+通常，匿名映射只定义程序允许访问的虚拟内存区域。
+读访问会创建一个页表项，指向一个填充为零的特殊物理页。
+当程序执行写操作时，才会分配一个普通的物理页来存放写入的数据。
+该页会被标记为脏页，如果内核决定回收它，这个脏页会被换出（swap out）。
 
 ## Reclaim
 
-Throughout the system lifetime, a physical page can be used for storing different types of data. 
-It can be kernel internal data structures, DMA’able buffers for device drivers use, data read from a filesystem, memory allocated by user space processes etc.
-
-Depending on the page usage it is treated differently by the Linux memory management. 
-The pages that can be freed at any time, either because they cache the data available elsewhere, for instance, on a hard disk, or because they can be swapped out, again, to the hard disk, are called reclaimable. 
-The most notable categories of the reclaimable pages are page cache and anonymous memory.
-In most cases, the pages holding internal kernel data and used as DMA buffers cannot be repurposed, and they remain pinned until freed by their user. Such pages are called unreclaimable. 
-However, in certain circumstances, even pages occupied with kernel data structures can be reclaimed. For instance, in-memory caches of filesystem metadata can be re-read from the storage device and therefore it is possible to discard them from the main memory when system is under memory pressure.
-The process of freeing the reclaimable physical memory pages and repurposing them is called (surprise!) reclaim. 
-Linux can reclaim pages either asynchronously or synchronously, depending on the state of the system. 
-When the system is not loaded, most of the memory is free and allocation requests will be satisfied immediately from the free pages supply. 
-As the load increases, the amount of the free pages goes down and when it reaches a certain threshold (low watermark), an allocation request will awaken the kswapd daemon. 
-It will asynchronously scan memory pages and either just free them if the data they contain is available elsewhere, or evict to the backing storage device (remember those dirty pages?). 
-As memory usage increases even more and reaches another threshold - min watermark - an allocation will trigger direct reclaim. 
-In this case allocation is stalled until enough memory pages are reclaimed to satisfy the request.
+在系统的整个生命周期里，一个物理页可以用来存放不同类型的数据。
+它可以存放内核内部数据结构、供设备驱动使用的 DMA 缓冲、从文件系统读取的数据、用户空间进程分配的内存等。
+根据页的不同用途，Linux 内存管理对它们的处理方式也不同。
+那些随时可以被释放的页——要么因为它们缓存了别处（例如硬盘上）已有的数据，要么因为它们可以被换出到硬盘——被称为可回收页（reclaimable）。
+最典型的可回收页就是 page cache 与 anonymous memory。
+大多数情况下，持有内核内部数据、用作 DMA 缓冲的页不能被挪作他用，它们会一直被钉住（pinned），直到使用者主动释放，这类页被称为不可回收页（unreclaimable）。
+不过在某些情况下，即便装着内核数据结构的页也可以被回收。例如文件系统元数据的内存缓存可以从存储设备重新读回，因此在系统内存紧张时，可以把它们从主存中丢弃。
+释放可回收的物理内存页并重新分配用途的过程，就是所谓的回收（reclaim）。
+根据系统状态，Linux 可以异步或同步地进行回收。
+系统空闲时，大部分内存是空闲的，分配请求会立即从空闲页供给中得到满足。
+随着负载上升，空闲页数量下降，当降到某个阈值（low watermark，低水位线）时，一次分配请求会唤醒 kswapd 守护进程。
+kswapd 会异步地扫描内存页：如果页中数据在别处有副本就直接释放，否则就将其回写到后端存储设备（还记得那些脏页吗？）。
+当内存使用量进一步上升、触及另一个阈值——min watermark（最小水位线）时，分配会触发直接回收（direct reclaim）。
+这种情况下，分配会被阻塞，直到回收出足够多的内存页来满足请求。
 
 Compaction
 
-As the system runs, tasks allocate and free the memory and it becomes fragmented. 
-Although with virtual memory it is possible to present scattered physical pages as virtually contiguous range, sometimes it is necessary to allocate large physically contiguous memory areas.
-Such need may arise, for instance, when a device driver requires a large buffer for DMA, or when THP allocates a huge page. 
-Memory compaction addresses the fragmentation issue.
-This mechanism moves occupied pages from the lower part of a memory zone to free pages in the upper part of the zone. When a compaction scan is finished free pages are grouped together at the beginning of the zone and allocations of large physically contiguous areas become possible.
-Like reclaim, the compaction may happen asynchronously in the kcompactd daemon or synchronously as a result of a memory allocation request.
+随着系统运行，任务不断地分配和释放内存，内存会逐渐碎片化。
+虽然借助虚拟内存可以把零散的物理页呈现为虚拟上连续的区间，但有时仍必须分配大片物理上连续的内存区域。
+例如，当设备驱动需要一个大的 DMA 缓冲，或者 THP（透明大页）要分配一个 huge page 时，就会出现这种需求。
+内存规整（memory compaction）正是用来解决碎片化问题的。
+这一机制把 zone 下半部分已占用的页搬到上半部分的空闲页上；规整扫描结束后，空闲页会集中到 zone 的起始处，于是对大块物理连续内存的分配便成为可能。
+和回收一样，规整既可以异步地发生在 kcompactd 守护进程中，也可以作为内存分配请求的结果同步发生。
 ## OOM killer
-It is possible that on a loaded machine memory will be exhausted and the kernel will be unable to reclaim enough memory to continue to operate. 
-In order to save the rest of the system, it invokes the OOM killer.
-The OOM killer selects a task to sacrifice for the sake of the overall system health. 
-The selected task is killed in a hope that after it exits enough memory will be freed to continue normal operation.
+
+在负载较高的机器上，内存有可能被耗尽，内核无法回收出足够的内存以维持运转。
+为了保全系统的其余部分，内核会调用 OOM killer（内存耗尽杀手）。
+OOM killer 会挑选一个任务作为牺牲品，以保全整个系统的健康。
+被选中的任务会被杀死，期望它退出后能释放足够内存，使系统恢复正常运转。
+
+触发时机、`select_bad_process` / `oom_badness` 打分、`oom_kill_process` 与 `oom_reaper` 异步收割、memcg 局部 OOM 与 `oom_score_adj` 的完整展开，见独立笔记 [OOM killer](/docs/CS/OS/Linux/mm/oom.md)。
 
 ## memory model
 
@@ -594,7 +766,7 @@ static int vmap_range_noflush(unsigned long addr, unsigned long end,
 #define __alloc_pages(...)			alloc_hooks(__alloc_pages_noprof(__VA_ARGS__))
 ```
 
-This is the 'heart' of the zoned buddy allocator.
+这是分 zone 伙伴分配器（zoned buddy allocator）的“心脏”。
 ```c
 struct page *__alloc_pages_noprof(gfp_t gfp, unsigned int order,
                                   int preferred_nid, nodemask_t *nodemask)
@@ -662,6 +834,7 @@ struct page *__alloc_pages_noprof(gfp_t gfp, unsigned int order,
 EXPORT_SYMBOL(__alloc_pages_noprof);
 ```
 
+上面 `out:` 段的 `__memcg_kmem_charge_page()` 是 memcg 给内核对象记账的关卡：带 `__GFP_ACCOUNT` 的分配要向 memcg 报账，记不上账就把已经拿到的页还回去。所以 `alloc_pages()` 返回 NULL 未必是系统没内存，也可能是 **memcg 配额到顶**——这是容器里"内存明明还有却分配失败"的常见来路（见 [cgroup 内存控制（memcg）](/docs/CS/OS/Linux/mm/memcg.md)）。
 
 ```c
 // include/linux/gfp.h
@@ -943,7 +1116,7 @@ try_this_zone:
 }
 ```
 
-Allocate a page from the given zone. Use pcplists for order-0 allocations.
+从指定的 zone 分配一个页。对于 order-0 的分配使用 per-CPU 空闲链表（pcplist）。
 
 
 ```c
@@ -1018,7 +1191,7 @@ failed:
     return NULL;
 }
 ```
-Lock and remove page from the per-cpu list
+加锁并从 per-CPU 链表（pcp list）中摘下页。
 
 ```c
 static struct page *rmqueue_pcplist(struct zone *preferred_zone,
@@ -1121,7 +1294,7 @@ static int rmqueue_bulk(struct zone *zone, unsigned int order,
 }
 ```
 
-Go through the free lists for the given migratetype and remove the smallest available page from the freelists
+遍历指定 migratetype 的空闲链表，从 freelist 中取出可用的最小页。
 
 
 ```c
@@ -1194,434 +1367,57 @@ out:
 
 ### alloc_pages_slowpath
 
-当进入＿alloc_pages_slowpath时，往往意味着伙伴系统中可用的连续内存不足
+当进入 `__alloc_pages_slowpath` 时，往往意味着伙伴系统中可用的连续内存不足，可能有多种情况：
 
+- **空闲内存够、但碎片太多**：找不到连续的大块内存，需要内存压缩（`__alloc_pages_direct_compact`）；
+- **空闲内存不足**：需要把已占用的内存释放出来，这就是内存回收（reclaim）。
+
+回收有个前提——不能丢数据。可回收页要么在别处有副本（如文件页），要么能被换出到磁盘、需要时再换回来（如匿名页），所以回收之前要先保证这些内容有去处。
+
+`__alloc_pages_slowpath` 的主干调用链：
+
+```
 __alloc_pages_slowpath
   - wake_all_kswapds
+  - get_page_from_freelist
   - __alloc_pages_direct_compact
   - __gfp_pfmemalloc_flags
-  - get_page_from_freelist
-  - __alloc_pages_direct_reclaim - __perform_reclaim - try_to_free_pages - shrink_zones - shrink_node
-    - prepare_scan_count
-    - shrink_node_memcgs
-      - shrink_lruvec
-        - get_scan_count
-        - shrink_list
-          - shrink_inactive_list
-          - lru_add_drain
-          - isolate_lru_follos
-          - shrink_follo_list
-          - follo_check_references
-          - add_to_swap
-          - try_to_unmap
-          - pageout
-          - free_unref_page_list
-          - move_follos_to_lru
-          - free_unref_page_list
-        - shrink_active_list
-          - lru_add_drain
-          - islate_lr_follos
-          - follo_referenced
-          - move_follos_to_lru
-          - free_unref_page_list
-      - shrink_slab
-
-
-当进入_alloc_pages_slowpath时，往往意味着伙伴系统中可用的连续内存不足，可能有多种情况。
-第1种情况，空闲内存足够，但内存碎片过多，找不到连续的大段内存  此时需要进行compact _alloc_pages_direct_compact 			
-第2种情况，空闲内存不足， 需要释放一些已经被占用的内存，这就是内存回收，也就是reclaim
-
-内存释放之前需要保证现有内存内容不丢失 一种方法是对被换出的部分进行落盘 需要时再加载回来
-
-
-
-#### try_to_free_pages
-
-某一次内存回收过程中扫描哪些node、 过程中可以进行哪些操作以及退出条件等控制了整个 扫描过程。这些由scan_control结构体定义，调用栈中 try_to_free_pages函数为它赋值
-
-```c
-unsigned long try_to_free_pages(struct zonelist *zonelist, int order,
-                                gfp_t gfp_mask, nodemask_t *nodemask)
-{
-    unsigned long nr_reclaimed;
-    struct scan_control sc = {
-        .nr_to_reclaim = SWAP_CLUSTER_MAX,
-        .gfp_mask = current_gfp_context(gfp_mask),
-        .reclaim_idx = gfp_zone(gfp_mask),
-        .order = order,
-        .nodemask = nodemask,
-        .priority = DEF_PRIORITY,
-        .may_writepage = !laptop_mode,
-        .may_unmap = 1,
-        .may_swap = 1,
-    };
-
-    /*
-	 * scan_control uses s8 fields for order, priority, and reclaim_idx.
-	 * Confirm they are large enough for max values.
-	 */
-    BUILD_BUG_ON(MAX_PAGE_ORDER >= S8_MAX);
-    BUILD_BUG_ON(DEF_PRIORITY > S8_MAX);
-    BUILD_BUG_ON(MAX_NR_ZONES > S8_MAX);
-
-    /*
-	 * Do not enter reclaim if fatal signal was delivered while throttled.
-	 * 1 is returned so that the page allocator does not OOM kill at this
-	 * point.
-	 */
-    if (throttle_direct_reclaim(sc.gfp_mask, zonelist, nodemask))
-        return 1;
-
-    set_task_reclaim_state(current, &sc.reclaim_state);
-    trace_mm_vmscan_direct_reclaim_begin(order, sc.gfp_mask);
-
-    nr_reclaimed = do_try_to_free_pages(zonelist, &sc);
-
-    trace_mm_vmscan_direct_reclaim_end(nr_reclaimed);
-    set_task_reclaim_state(current, NULL);
-
-    return nr_reclaimed;
-}
+  - __alloc_pages_direct_reclaim → __perform_reclaim → try_to_free_pages → shrink_zones → shrink_node
+      - prepare_scan_count
+      - shrink_node_memcgs
+        - shrink_lruvec
+          - get_scan_count
+          - shrink_list
+            - shrink_inactive_list
+              - lru_add_drain
+              - isolate_lru_folios
+              - shrink_folio_list
+                - folio_check_references
+                - add_to_swap
+                - try_to_unmap
+                - pageout
+                - move_folios_to_lru
+                - free_unref_page_list
+            - shrink_active_list
+        - shrink_slab
+  - __alloc_pages_may_oom → out_of_memory
 ```
 
-
-```c
-struct scan_control {
-    /* How many pages shrink_list() should reclaim */
-    unsigned long nr_to_reclaim;
-
-    /*
-	 * Nodemask of nodes allowed by the caller. If NULL, all nodes
-	 * are scanned.
-	 */
-    nodemask_t	*nodemask;
-
-    /*
-	 * The memory cgroup that hit its limit and as a result is the
-	 * primary target of this reclaim invocation.
-	 */
-    struct mem_cgroup *target_mem_cgroup;
-
-    /*
-	 * Scan pressure balancing between anon and file LRUs
-	 */
-    unsigned long	anon_cost;
-    unsigned long	file_cost;
-
-    /* Can active folios be deactivated as part of reclaim? */
-    #define DEACTIVATE_ANON 1
-    #define DEACTIVATE_FILE 2
-    unsigned int may_deactivate:2;
-    unsigned int force_deactivate:1;
-    unsigned int skipped_deactivate:1;
-
-    /* Writepage batching in laptop mode; RECLAIM_WRITE */
-    unsigned int may_writepage:1;
-
-    /* Can mapped folios be reclaimed? */
-    unsigned int may_unmap:1;
-
-    /* Can folios be swapped as part of reclaim? */
-    unsigned int may_swap:1;
-
-    /* Not allow cache_trim_mode to be turned on as part of reclaim? */
-    unsigned int no_cache_trim_mode:1;
-
-    /* Has cache_trim_mode failed at least once? */
-    unsigned int cache_trim_mode_failed:1;
-
-    /* Proactive reclaim invoked by userspace through memory.reclaim */
-    unsigned int proactive:1;
-
-    /*
-	 * Cgroup memory below memory.low is protected as long as we
-	 * don't threaten to OOM. If any cgroup is reclaimed at
-	 * reduced force or passed over entirely due to its memory.low
-	 * setting (memcg_low_skipped), and nothing is reclaimed as a
-	 * result, then go back for one more cycle that reclaims the protected
-	 * memory (memcg_low_reclaim) to avert OOM.
-	 */
-    unsigned int memcg_low_reclaim:1;
-    unsigned int memcg_low_skipped:1;
-
-    unsigned int hibernation_mode:1;
-
-    /* One of the zones is ready for compaction */
-    unsigned int compaction_ready:1;
-
-    /* There is easily reclaimable cold cache in the current node */
-    unsigned int cache_trim_mode:1;
-
-    /* The file folios on the current node are dangerously low */
-    unsigned int file_is_tiny:1;
-
-    /* Always discard instead of demoting to lower tier memory */
-    unsigned int no_demotion:1;
-
-    /* Allocation order */
-    s8 order;
-
-    /* Scan (total_size >> priority) pages at once */
-    s8 priority;
-
-    /* The highest zone to isolate folios for reclaim from */
-    s8 reclaim_idx;
-
-    /* This context's GFP mask */
-    gfp_t gfp_mask;
-
-    /* Incremented by the number of inactive pages that were scanned */
-    unsigned long nr_scanned;
-
-    /* Number of pages freed so far during a call to shrink_zones() */
-    unsigned long nr_reclaimed;
-
-    struct {
-        unsigned int dirty;
-        unsigned int unqueued_dirty;
-        unsigned int congested;
-        unsigned int writeback;
-        unsigned int immediate;
-        unsigned int file_taken;
-        unsigned int taken;
-    } nr;
-
-    /* for recording the reclaimed slab by now */
-    struct reclaim_state reclaim_state;
-};
-```
-
-
-#### shrink_lruvec
-```c
-static void shrink_lruvec(struct lruvec *lruvec, struct scan_control *sc)
-{
-	unsigned long nr[NR_LRU_LISTS];
-	unsigned long targets[NR_LRU_LISTS];
-	unsigned long nr_to_scan;
-	enum lru_list lru;
-	unsigned long nr_reclaimed = 0;
-	unsigned long nr_to_reclaim = sc->nr_to_reclaim;
-	bool proportional_reclaim;
-	struct blk_plug plug;
-
-	get_scan_count(lruvec, sc, nr);
-	memcpy(targets, nr, sizeof(nr));
-
-	proportional_reclaim = (!cgroup_reclaim(sc) && !current_is_kswapd() &&
-				sc->priority == DEF_PRIORITY);
-
-	blk_start_plug(&plug);
-	while (nr[LRU_INACTIVE_ANON] || nr[LRU_ACTIVE_FILE] ||
-					nr[LRU_INACTIVE_FILE]) {
-		unsigned long nr_anon, nr_file, percentage;
-		unsigned long nr_scanned;
-
-		for_each_evictable_lru(lru) {
-			if (nr[lru]) {
-				nr_to_scan = min(nr[lru], SWAP_CLUSTER_MAX);
-				nr[lru] -= nr_to_scan;
-
-				nr_reclaimed += shrink_list(lru, nr_to_scan,
-							    lruvec, sc);
-			}
-		}
-
-		cond_resched();
-
-		if (nr_reclaimed < nr_to_reclaim || proportional_reclaim)
-			continue;
-
-		nr_file = nr[LRU_INACTIVE_FILE] + nr[LRU_ACTIVE_FILE];
-		nr_anon = nr[LRU_INACTIVE_ANON] + nr[LRU_ACTIVE_ANON];
-
-		if (!nr_file || !nr_anon)
-			break;
-
-		if (nr_file > nr_anon) {
-			unsigned long scan_target = targets[LRU_INACTIVE_ANON] +
-						targets[LRU_ACTIVE_ANON] + 1;
-			lru = LRU_BASE;
-			percentage = nr_anon * 100 / scan_target;
-		} else {
-			unsigned long scan_target = targets[LRU_INACTIVE_FILE] +
-						targets[LRU_ACTIVE_FILE] + 1;
-			lru = LRU_FILE;
-			percentage = nr_file * 100 / scan_target;
-		}
-
-		/* Stop scanning the smaller of the LRU */
-		nr[lru] = 0;
-		nr[lru + LRU_ACTIVE] = 0;
-
-
-		lru = (lru == LRU_FILE) ? LRU_BASE : LRU_FILE;
-		nr_scanned = targets[lru] - nr[lru];
-		nr[lru] = targets[lru] * (100 - percentage) / 100;
-		nr[lru] -= min(nr[lru], nr_scanned);
-
-		lru += LRU_ACTIVE;
-		nr_scanned = targets[lru] - nr[lru];
-		nr[lru] = targets[lru] * (100 - percentage) / 100;
-		nr[lru] -= min(nr[lru], nr_scanned);
-	}
-	blk_finish_plug(&plug);
-	sc->nr_reclaimed += nr_reclaimed;
-
-	if (can_age_anon_pages(lruvec_pgdat(lruvec), sc) &&
-	    inactive_is_low(lruvec, LRU_INACTIVE_ANON))
-		shrink_active_list(SWAP_CLUSTER_MAX, lruvec,
-				   sc, LRU_ACTIVE_ANON);
-}
-```
-
-#### shrink_list
-
-```c
-static unsigned long shrink_list(enum lru_list lru, unsigned long nr_to_scan,
-				 struct lruvec *lruvec, struct scan_control *sc)
-{
-	if (is_active_lru(lru)) {
-		if (sc->may_deactivate & (1 << is_file_lru(lru)))
-			shrink_active_list(nr_to_scan, lruvec, sc, lru);
-		else
-			sc->skipped_deactivate = 1;
-		return 0;
-	}
-
-	return shrink_inactive_list(nr_to_scan, lruvec, sc, lru);
-}
-```
-
-shrink_inactive_list
-```c
-static unsigned long shrink_inactive_list(unsigned long nr_to_scan,
-		struct lruvec *lruvec, struct scan_control *sc,
-		enum lru_list lru)
-{
-	LIST_HEAD(folio_list);
-	unsigned long nr_scanned;
-	unsigned int nr_reclaimed = 0;
-	unsigned long nr_taken;
-	struct reclaim_stat stat;
-	bool file = is_file_lru(lru);
-	enum vm_event_item item;
-	struct pglist_data *pgdat = lruvec_pgdat(lruvec);
-	bool stalled = false;
-
-	while (unlikely(too_many_isolated(pgdat, file, sc))) {
-		if (stalled)
-			return 0;
-
-		/* wait a bit for the reclaimer. */
-		stalled = true;
-		reclaim_throttle(pgdat, VMSCAN_THROTTLE_ISOLATED);
-
-		/* We are about to die and free our memory. Return now. */
-		if (fatal_signal_pending(current))
-			return SWAP_CLUSTER_MAX;
-	}
-
-	lru_add_drain();
-
-	spin_lock_irq(&lruvec->lru_lock);
-
-	nr_taken = isolate_lru_folios(nr_to_scan, lruvec, &folio_list,
-				     &nr_scanned, sc, lru);
-
-	__mod_node_page_state(pgdat, NR_ISOLATED_ANON + file, nr_taken);
-	item = PGSCAN_KSWAPD + reclaimer_offset();
-	if (!cgroup_reclaim(sc))
-		__count_vm_events(item, nr_scanned);
-	__count_memcg_events(lruvec_memcg(lruvec), item, nr_scanned);
-	__count_vm_events(PGSCAN_ANON + file, nr_scanned);
-
-	spin_unlock_irq(&lruvec->lru_lock);
-
-	if (nr_taken == 0)
-		return 0;
-
-	nr_reclaimed = shrink_folio_list(&folio_list, pgdat, sc, &stat, false);
-
-	spin_lock_irq(&lruvec->lru_lock);
-	move_folios_to_lru(lruvec, &folio_list);
-
-	__mod_lruvec_state(lruvec, PGDEMOTE_KSWAPD + reclaimer_offset(),
-					stat.nr_demoted);
-	__mod_node_page_state(pgdat, NR_ISOLATED_ANON + file, -nr_taken);
-	item = PGSTEAL_KSWAPD + reclaimer_offset();
-	if (!cgroup_reclaim(sc))
-		__count_vm_events(item, nr_reclaimed);
-	__count_memcg_events(lruvec_memcg(lruvec), item, nr_reclaimed);
-	__count_vm_events(PGSTEAL_ANON + file, nr_reclaimed);
-	spin_unlock_irq(&lruvec->lru_lock);
-
-	lru_note_cost(lruvec, file, stat.nr_pageout, nr_scanned - nr_reclaimed);
-
-	/*
-	 * If dirty folios are scanned that are not queued for IO, it
-	 * implies that flushers are not doing their job. This can
-	 * happen when memory pressure pushes dirty folios to the end of
-	 * the LRU before the dirty limits are breached and the dirty
-	 * data has expired. It can also happen when the proportion of
-	 * dirty folios grows not through writes but through memory
-	 * pressure reclaiming all the clean cache. And in some cases,
-	 * the flushers simply cannot keep up with the allocation
-	 * rate. Nudge the flusher threads in case they are asleep.
-	 */
-	if (stat.nr_unqueued_dirty == nr_taken) {
-		wakeup_flusher_threads(WB_REASON_VMSCAN);
-		/*
-		 * For cgroupv1 dirty throttling is achieved by waking up
-		 * the kernel flusher here and later waiting on folios
-		 * which are in writeback to finish (see shrink_folio_list()).
-		 *
-		 * Flusher may not be able to issue writeback quickly
-		 * enough for cgroupv1 writeback throttling to work
-		 * on a large system.
-		 */
-		if (!writeback_throttling_sane(sc))
-			reclaim_throttle(pgdat, VMSCAN_THROTTLE_WRITEBACK);
-	}
-
-	sc->nr.dirty += stat.nr_dirty;
-	sc->nr.congested += stat.nr_congested;
-	sc->nr.unqueued_dirty += stat.nr_unqueued_dirty;
-	sc->nr.writeback += stat.nr_writeback;
-	sc->nr.immediate += stat.nr_immediate;
-	sc->nr.taken += nr_taken;
-	if (file)
-		sc->nr.file_taken += nr_taken;
-
-	trace_mm_vmscan_lru_shrink_inactive(pgdat->node_id,
-			nr_scanned, nr_reclaimed, &stat, sc->priority, file);
-	return nr_reclaimed;
-}
-```
-
+回收这条链本身已足够复杂：水位线与 kswapd 的唤醒时机、LRU 链表如何老化、`scan_control` 怎么决定扫描范围、`shrink_folio_list` 如何逐页判去留、shrinker 与 memcg 回收——都已独立成篇，见 [内存回收（Reclaim）](/docs/CS/OS/Linux/mm/Reclaim.md)。分配彻底失败后退化到 OOM killer 的终局见 [OOM killer](/docs/CS/OS/Linux/mm/oom.md)。
 
 ## free
 
-Free pages allocated with alloc_pages().
+释放由 alloc_pages() 分配的页。
+- page：由 alloc_pages() 返回的页指针。
+- order：分配的阶（order）。
 
-- page: The page pointer returned from alloc_pages().
-- order: The order of the allocation.
+该函数可以释放非复合页（non-compound）的多页分配。它不会检查传入的 @order 是否与分配时的 order 一致，因此很容易造成内存泄漏。释放超过已分配大小的内存大概率会触发告警。
 
-This function can free multi-page allocations that are not compound
-pages.  It does not check that the @order passed in matches that of
-the allocation, so it is easy to leak memory.  Freeing more memory
-than was allocated will probably emit a warning.
+如果该页最后一次引用是投机性的（speculative），它会由 put_page() 释放，而 put_page() 只会释放非复合分配中的第一页。
 
-If the last reference to this page is speculative, it will be released
-by put_page() which only frees the first page of a non-compound
-allocation.
+为了防止剩余的页被泄漏，这里会释放后续各页。如果你想用页的引用计数来决定何时释放这次分配，应当分配一个复合页（compound page），并使用 put_page() 而非 __free_pages()。
 
-To prevent the remaining pages from being leaked, we free
-the subsequent pages here.  If you want to use the page's reference
-count to decide when to free the allocation, you should allocate a
-compound page, and use put_page() instead of __free_pages().
-
-Context: May be called in interrupt context or while holding a normal spinlock, but not in NMI context or while holding a raw spinlock.
+调用上下文（Context）：可以在中断上下文或持有普通自旋锁时调用，但不能在 NMI 上下文或持有 raw spinlock 时调用。
 
 ```c
 void __free_pages(struct page *page, unsigned int order)
@@ -1895,7 +1691,7 @@ static void __free_pages_ok(struct page *page, unsigned int order,
 
 ## Links
 
-- [Linux Memory](/docs/CS/OS/Linux/mm/memory.md)
+- [内存管理知识地图](/docs/CS/OS/Linux/mm/README.md)
 
 ## References
 

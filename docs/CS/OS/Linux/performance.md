@@ -78,6 +78,9 @@ void get_avenrun(unsigned long *loads, unsigned long offset, int shift)
 ```
 
 set sched_timer.function = tick_nohz_handler
+
+补充：v7.2.7 里这段代码已改用 `hrtimer_setup()`（不再单独给 `function` 赋值），tick 模拟的完整机制见 [timer 时间子系统](/docs/CS/OS/Linux/timer.md)。
+
 ```c
 void tick_setup_sched_timer(bool hrtimer)
 {
@@ -246,6 +249,15 @@ void calc_global_load(void)
 	calc_global_nohz();
 }
 ```
+
+## Links
+
+- [Introduction](/docs/CS/OS/Linux/0.11.md)
+- [Introduction](/docs/CS/OS/Linux/Calls.md)
+- [Overview](/docs/CS/OS/Linux/Experience.md)
+- [Introduction](/docs/CS/OS/Linux/Interrupt.md)
+- [Introduction](/docs/CS/OS/Linux/LXC.md)
+- [Introduction](/docs/CS/OS/Linux/Linux.md)
 
 ## References
 1. [Linux Load Averages: Solving the Mystery](https://www.brendangregg.com/blog/2017-08-08/linux-load-averages.html)

@@ -281,36 +281,49 @@ out:
 }
 ```
 
+## 五种 IO 模型
+
+一次读操作可以拆成两个阶段：**①数据准备**（数据从网卡/磁盘到达内核缓冲区——Socket 接收队列或 page cache）与**②数据拷贝**（内核空间 → 用户空间缓冲区）。阻塞/非阻塞与同步/异步这两组容易混淆的概念，分别对应两个阶段的行为：
+
+- **阻塞 vs 非阻塞**：看**阶段①**。数据未就绪时，阻塞 IO 让线程睡眠（内核机制见 [Socket 阻塞读与唤醒](/docs/CS/OS/Linux/proc/thundering_herd.md?id=socket-阻塞读与唤醒)）；非阻塞 IO 立即返回 `EWOULDBLOCK`，由用户轮询；
+- **同步 vs 异步**：看**阶段②**。同步 IO 的数据拷贝由用户线程在内核态完成（epoll 就绪后仍要自己 `read`）；异步 IO 两阶段全部由内核完成后通知用户（Windows IOCP、Linux io_uring）。
+
+| 模型 | 阶段① | 阶段② | 典型实现 |
+| :-- | :-- | :-- | :-- |
+| 阻塞 IO (BIO) | 阻塞等待 | 阻塞拷贝 | 传统 socket read |
+| 非阻塞 IO | 轮询返回 `EWOULDBLOCK` | 阻塞拷贝 | `O_NONBLOCK` |
+| IO 多路复用 | select/poll/epoll 批量等待 | 阻塞拷贝 | [multiplexing](/docs/CS/OS/Linux/IO/multiplexing.md) |
+| 信号驱动 | SIGIO 通知就绪 | 阻塞拷贝 | `sigaction`；TCP 不适用（信号不携带信息、易溢出），UDP 可用 |
+| 异步 IO | 内核完成 | 内核完成并通知 | Windows IOCP、Linux [io_uring](/docs/CS/OS/Linux/IO/io_uring.md)（5.1+） |
+
+上层线程模型（Reactor/Proactor）与 Netty 的落地见 [Reactor 线程模型](/docs/CS/Framework/Netty/EventLoop.md?id=reactor-线程模型)。
+
 ## BIO
 
-Blocking system calls
+阻塞系统调用：`read`/`write` 数据未就绪时线程睡眠。并发模型是**一连接一线程**，连接数受线程成本限制，适合 C10K 以下的内部系统。
 
-Read/write
+## NIO（非阻塞）
 
+`O_NONBLOCK` 下读操作无数据立即返回 `EWOULDBLOCK`，写操作"能写多少写多少"（返回已写字节数）。可以用少量线程轮询大量连接，但轮询本身是密集的系统调用 + 上下文切换，连接多时开销反而剧增——真正解决 C10K 的是把"等待"也批量化：
 
+## 多路复用
 
-## NIO
+select/poll/epoll 用一个系统调用同时等待大量 fd，机制与演进详见 [multiplexing](/docs/CS/OS/Linux/IO/multiplexing.md) 与 [epoll](/docs/CS/OS/Linux/IO/epoll.md)。核心差异一句话：select 是固定 1024 的位图 + 每次全量拷贝 fd 集合 + O(n) 遍历；epoll 用红黑树管理 fd（免全量拷贝）、就绪链表 `rdllist`（免遍历）、就绪回调 `ep_poll_callback`（免内核轮询）。
 
-select/poll/epoll
-
-only support network sockets and pipes
-
-Databases  **`O_DIRECT`**
-
-Direct IO, don't use os page cache
-
-Zero-Copy IO
+不经过 page cache 的读写是 Direct IO（数据库等自带缓存的场景），见上文 [DirectIO](#directio) 与 [ZeroCopy](/docs/CS/OS/Linux/ZeroCopy.md)。
 
 ## AIO
 
-Native IO
+Native AIO（libaio）只支持 Direct IO，一直不温不火；io_uring（5.1+，Jens Axboe）用共享环形缓冲区提交/收割 IO，把真异步带上了 Linux，见 [io_uring](/docs/CS/OS/Linux/IO/io_uring.md)。
 
-[Design Notes on Asynchronous I/O (aio) for Linux](http://lse.sourceforge.net/io/aionotes.txt)
+参考：[Design Notes on Asynchronous I/O (aio) for Linux](http://lse.sourceforge.net/io/aionotes.txt)
 
-libaio
+## Links
 
-- ony support Direct IO
-
-Io_uring
-
-bypass IO
+- [multiplexing](/docs/CS/OS/Linux/IO/multiplexing.md)
+- [epoll](/docs/CS/OS/Linux/IO/epoll.md)
+- [io_uring](/docs/CS/OS/Linux/IO/io_uring.md)
+- [thundering herd（Socket 阻塞读）](/docs/CS/OS/Linux/proc/thundering_herd.md)
+- [Netty EventLoop（Reactor 线程模型）](/docs/CS/Framework/Netty/EventLoop.md)
+- [ZeroCopy](/docs/CS/OS/Linux/ZeroCopy.md)
+- [DPDK](/docs/CS/OS/Linux/IO/DPDK.md)

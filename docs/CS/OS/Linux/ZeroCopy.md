@@ -63,6 +63,13 @@ The sendfile system call was introduced to simplify the transmission of data ove
 Introduction of sendfile not only reduces data copying, it also reduces context switches.
 
 
+## Links
+
+- [IO Models](/docs/CS/OS/Linux/IO/IO.md)
+- [DPDK](/docs/CS/OS/Linux/IO/DPDK.md)
+- [io_uring](/docs/CS/OS/Linux/IO/io_uring.md)
+- [network stack](/docs/CS/OS/Linux/net/network.md)
+
 ## References
 
 1. [Zero Copy I: User-Mode Perspective](https://www.linuxjournal.com/article/6345?page=0,0)

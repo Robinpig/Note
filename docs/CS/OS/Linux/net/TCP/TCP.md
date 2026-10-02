@@ -6,7 +6,7 @@ TCP sockets are an example of *stream sockets*.
 
 ## tcp_init
 
-call tcp_init by [inet_init](/docs/CS/OS/Linux/net/network.md?id=init-inet)
+call tcp_init by [inet_init](/docs/CS/OS/Linux/net/network.md?id=init)
 
 Size and allocate the main established and bind bucket hash tables.
 
@@ -169,7 +169,7 @@ struct proto tcp_prot = {
 
 ## Send
 
-[systemcall send](/docs/CS/OS/Linux/Calls.md?id=send) with TCP protocol -> tcp_sendmsg
+[systemcall send](/docs/CS/OS/Linux/Calls.md) with TCP protocol -> tcp_sendmsg
 
 push:
 
@@ -274,7 +274,7 @@ This routine actually transmits TCP packets queued in by tcp_do_sendmsg().
 This is used by both the initial transmission and possible later retransmissions.
 
 All SKB's seen here are completely headerless.
-It is our job to **build the TCP header**, and **pass the packet down to [IP](/docs/CS/OS/Linux/net/IP.md?id=ip_queue_xmit)** so it can do the same plus pass the packet off to the device.
+It is our job to **build the TCP header**, and **pass the packet down to [IP](/docs/CS/OS/Linux/net/IP.md)** so it can do the same plus pass the packet off to the device.
 
 > [!NOTE]
 >
@@ -909,7 +909,23 @@ static unsigned int tcp_model_timeout(struct sock *sk,
 
 同样受timeout限制
 
+### 与 v7.2.7 的差异
+
+上面两段摘录来自旧版本，函数结构一致但有三处变化：
+
+1. **RTO 上界不再是全局常量**。`tcp_model_timeout()` 里的 `ilog2(TCP_RTO_MAX / rto_base)` 改成了 `ilog2(tcp_rto_max(sk) / rto_base)`（`net/ipv4/tcp_timer.c:194`），RTO 上界已可逐 socket 配置（`icsk_rto_max`）。
+2. **SYN 重传新增线性退避**。`tcp_write_timeout()` 的 SYN 分支引入了 `sysctl_tcp_syn_linear_timeouts`：SYN_SENT 状态下前半段超时走**线性**退避而非指数退避（`net/ipv4/tcp_timer.c:677-685`），同时把这个值加到放弃阈值上。上面摘录里那句 `expired = icsk->icsk_retransmits >= retry_until` 现在比较的是 `max_retransmits`（含线性部分）。
+3. **新增两个钩子**：字段访问统一加了 `READ_ONCE()`（并发注解）；函数末尾新增 BPF 的 `BPF_SOCK_OPS_RTO_CB` 回调，以及 `timeout_rehash` 计数——RTO 会触发重选发送哈希（`__sk_rethink_txhash_reset_dst()`），试图绕过 ECMP 上的故障路径。
+
+### 重传时机的另一半
+
+本节讲的是"RTO 到点之后怎么办"。但**这个超时值是怎么算出来的、以及内核靠什么在 RTO 之前就判出丢包**，是另外一半：RTT 怎么测（Jacobson 算法与 Karn 校正在 Linux 的两处落地）、SACK 计分板的六态状态机、RACK 的时间域判据、TLP 怎么处理尾包丢失，见 [Retransmission](/docs/CS/OS/Linux/net/TCP/Retransmission.md)。
+
+其中一条值得先记住：**v7.2.7 上 RACK 与 TLP 默认开启**，本节这套以重复 ACK 为主线的叙述，在支持 SACK 的连接上已经不是主路径——`tcp_identify_packet_loss()` 只在连接不支持 SACK 时才走 dupthresh。
+
 ## Congestion Control
+
+上面这套"丢包 = 拥塞信号"的推理只适用于**基于丢包的算法**（Reno / CUBIC）。内核把拥塞控制做成了插件体系，按信号源分其实有四类：丢包、延迟、ECN、建模。框架层本身（`tcp_congestion_ops` 契约、五态状态机、PRR 削减、undo 机制）见 [拥塞控制框架](/docs/CS/OS/Linux/net/TCP/Congestion.md)；本篇下面各节讲的是框架里的代码摘录与 CUBIC 的实现。
 
 Congestion control is essentially ”feedback-control”
 
@@ -1217,7 +1233,7 @@ static void tcp_fastretrans_alert(struct sock *sk, const u32 prior_snd_una,
 }
 ```
 
-### Congestion cControl Interface
+### Congestion Control Interface
 
 ```c
 
@@ -1835,7 +1851,7 @@ void tcp_send_fin(struct sock *sk)
 
 ### rcv ACK
 
-see [tcp_rcv_state_process](/docs/CS/OS/Linux/net/TCP/TCP.md?id=tcp_rcv_state_process)
+see [tcp_rcv_state_process](/docs/CS/OS/Linux/net/TCP/TCP.md)
 
 #### tcp_time_wait
 
@@ -2335,11 +2351,11 @@ close decrement ref, when ref=0, close both sides.
 
 shutdown could close one side
 
-like [send FIN in Active Close](/docs/CS/OS/Linux/net/TCP/TCP.md?id=send-FIN)
+like [send FIN in Active Close](/docs/CS/OS/Linux/net/TCP/TCP.md?id=send-fin)
 
 ### rcv ACK
 
-see [tcp_rcv_state_process](/docs/CS/OS/Linux/net/TCP/TCP.md?id=tcp_rcv_state_process)
+see [tcp_rcv_state_process](/docs/CS/OS/Linux/net/TCP/TCP.md)
 
 TIME_WAIT 60s
 
@@ -2408,8 +2424,13 @@ tcp_v4_rcv 网络层报文 对于合法并且处于不在挥手状态的数据�
 
 ## Links
 
-- [Linux Network](/docs/CS/OS/Linux/Linux.md?id=Network)
-- [TCP](/docs/CS/CN/TCP/TCP.md)
+- [网络知识地图](/docs/CS/OS/Linux/net/README.md)
+- [TCP 连接建立](/docs/CS/OS/Linux/net/TCP/Connection_Setup.md)
+- [拥塞控制框架](/docs/CS/OS/Linux/net/TCP/Congestion.md)
+- [缓冲内存与自动调优](/docs/CS/OS/Linux/net/TCP/Buffer.md)
+- [丢包与重传](/docs/CS/OS/Linux/net/TCP/Retransmission.md)
+- [BBR](/docs/CS/OS/Linux/net/TCP/BBR.md)
+- [Linux](/docs/CS/OS/Linux/Linux.md)
 
 ## References
 

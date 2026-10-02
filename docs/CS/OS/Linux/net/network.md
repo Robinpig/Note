@@ -49,20 +49,20 @@ Linux 的软中断都是在专⻔的内核线程 [ksoftirqd](/docs/CS/OS/Linux/I
 
 linux 内核通过调⽤ subsys_initcall 来初始化各个⼦系统，在源代码⽬录⾥你可以 grep 出许多对这个函数的调⽤。这⾥我们要说的是⽹络⼦系统的初始化，会执⾏到 net_dev_init 函数
 
-> initcall see [kernel_init](/docs/CS/OS/Linux/init.md?id=kernel_init)
+> initcall see [kernel_init](/docs/CS/OS/Linux/boot/init.md?id=kernel_init)
 
-Initialize the DEV module.
+初始化 DEV 模块。
 <br/>
-At boot time this walks the device list and unhooks any devices that fail to initialise (normally hardware not present) and leaves us with a valid list of present and active devices.
+引导时遍历设备列表，把初始化失败（通常是硬件不存在）的设备摘除，最终得到一份存在且可用的设备清单。
 <br/>
-This is called single threaded during boot, so no need to take the rtnl semaphore.
+这一步在引导期单线程执行，因此不需要持有 rtnl 信号量。
 
 1. 在这个函数⾥，会为每个 CPU 都申请⼀个 softnet_data 数据结构，在这个数据结构⾥的
 poll_list 是等待驱动程序将其 poll 函数注册进来
 2.  open_softirq 注册了每⼀种软中断都注册⼀个处理函数。 `NET_TX_SOFTIRQ` 的处理函数为 `net_tx_action`，`NET_RX_SOFTIRQ` 的为 `net_rx_action`。这个注册的⽅式是记录在 softirq_vec 变量⾥的。ksoftirqd 线程收到软中断的时候，也会使⽤这个变量
-来找到每⼀种软中断对应的处理函数 register func with [softirq](/docs/CS/OS/Linux/Interrupt.md?id=open_softirq)
-- [net_rx_action](/docs/CS/OS/Linux/net/network.mdk.md?id=net_rx_action) receive func
-- [net_tx_action](/docs/CS/OS/Linux/net/network.mdk.md?id=net_tx_action) transmit func
+来找到每⼀种软中断对应的处理函数 注册处理函数见 [softirq](/docs/CS/OS/Linux/Interrupt.md?id=open_softirq)
+- [net_rx_action](/docs/CS/OS/Linux/net/network.md?id=net_rx_action) 接收处理函数
+- [net_tx_action](/docs/CS/OS/Linux/net/network.md?id=net_tx_action) 发送处理函数
 
 
 ```c
@@ -91,7 +91,7 @@ static int __init net_dev_init(void)
 
 ### 协议栈注册
 
-内核实现了⽹络层的1P协议，也实现了传输层的TCP协议和UDP协议。这些协议对应的实现西数分别是 `ip_rcv()`、`tcp_v4_rcv()` 和 `udp_rcv() `
+内核实现了⽹络层的IP协议，也实现了传输层的TCP协议和UDP协议。这些协议对应的实现函数分别是 `ip_rcv()`、`tcp_v4_rcv()` 和 `udp_rcv() `
 fs_initcall 调⽤ inet init 后开始⽹络协议栈注册，通过inet init， 将这些函数注册到 `inet_protos` 和 `ptype_base` 数据结构中
 
 1. IP
@@ -124,8 +124,8 @@ static int __init inet_init(void)
 
 #### inet_add_protocol
 
-Add a protocol handler to the networking stack.
-The passed &packet_type is linked into kernel lists and may not be freed until it has been removed from the kernel lists.
+向网络栈添加一个协议处理函数。
+传入的处理对象会被链接进内核链表，在从链表移除之前不可释放。
 
 ```c
 // net/ipv4/protocol.c
@@ -179,9 +179,9 @@ static inline struct list_head *ptype_head(const struct packet_type *pt)
 ### 网卡驱动初始化
 
 每⼀个驱动程序（不仅仅包括⽹卡驱动程序）会使⽤ `module_init` 向内核注册⼀个初始化函数，当驱动程序被加载时，内核会调⽤这个函数
-The igb initialization function (igb_init_module) and its registration with module_init can be found in `drivers/net/ethernet/intel/igb/igb_main.c`.
+igb 的初始化函数（igb_init_module）以及它通过 module_init 完成的注册，位于 `drivers/net/ethernet/intel/igb/igb_main.c`。
 
-The bulk of the work to initialize the device happens with the call to `pci_register_driver`.
+设备初始化的大部分工作发生在调用 `pci_register_driver` 时。
 
 ```c
 //  igb_main.c
@@ -196,7 +196,7 @@ static int __init igb_init_module(void)
 module_init(igb_init_module);
 ```
 
-register a new pci driver
+注册一个新的 PCI 驱动
 
 ```c
 #define pci_register_driver(driver)		\
@@ -225,18 +225,18 @@ int driver_register(struct device_driver *drv)
 
 #### probe
 
-The probe function is quite basic, and only needs to perform a device's early init, and then register our network device with the kernel.
+probe 函数相当基础，只需完成设备的早期初始化，然后向内核注册网络设备。
 
-The `igb_probe` function does some important network device initialization.
-In addition to the PCI specific work, it will do more general networking and network device work:
+`igb_probe` 会做一些重要的网络设备初始化。
+除了 PCI 相关工作，它还会完成更通用的网络与网络设备工作：
 
-1. The `struct net_device_ops` is registered.
-2. `ethtool` operations are registered.
-3. The default MAC address is obtained from the NIC.
-4. `net_device` feature flags are set.
-5. And lots more.
+1. 注册 `struct net_device_ops`；
+2. 注册 `ethtool` 操作；
+3. 从网卡读取默认 MAC 地址；
+4. 设置 `net_device` 的特性标志；
+5. 以及其它许多工作。
 
-ndo_open func.
+ndo_open 函数。
 
 ```c
 static const struct net_device_ops igb_netdev_ops = {
@@ -247,12 +247,12 @@ static const struct net_device_ops igb_netdev_ops = {
 
 ### 启动网卡
 
-call open function -> allocate RX TX memory
+调用 open 函数 -> 分配收发（RX/TX）内存
 
-__igb_open - Called when a network interface is made active
+__igb_open —— 当网络接口被激活时调用
 
-The open entry point is called when a network interface is made active by the system (IFF_UP).
-At this point all resources needed for transmit and receive operations are allocated, the interrupt handler is registered with the OS, the watchdog timer is started, and the stack is notified that the interface is ready.
+当系统激活网络接口（IFF_UP）时调用 open 入口。
+此时会分配收发所需的全部资源、向系统注册中断处理函数、启动看门狗定时器，并通知协议栈接口已就绪。
 
 ```c
 static int __igb_open(struct net_device *netdev, bool resuming)
@@ -290,10 +290,10 @@ static int __igb_open(struct net_device *netdev, bool resuming)
 
 #### setup descriptors
 
-- igb_tx_buffer array
-- e1000_adv_tx_desc DMA array
+- igb_tx_buffer 数组
+- e1000_adv_tx_desc 的 DMA 数组
 
-check RX/TX overruns:
+检查 RX/TX overruns：
 
 ```shell
 ifconfig | grep overruns
@@ -369,7 +369,7 @@ static int igb_request_irq(struct igb_adapter *adapter)
 
 igb_init_interrupt_scheme -> igb_alloc_q_vector
 
-initialize NAPI with `igb_poll`
+用 `igb_poll` 初始化 NAPI
 
 
 ```c
@@ -384,9 +384,9 @@ static int igb_alloc_q_vector(struct igb_adapter *adapter,
 }
 ```
 
-##### igb_request_msix
+#### igb_request_msix
 
-register [igb_msix_ring](/docs/CS/OS/Linux/net/network.mdk.md?id=igb_msix_ring)
+注册 [igb_msix_ring](/docs/CS/OS/Linux/net/network.md?id=igb_msix_ring)
 
 
 ```c
@@ -444,7 +444,7 @@ static int igb_request_msix(struct igb_adapter *adapter)
 
 ### send
 
-Send a datagram down a socket.
+沿 socket 向下发送一个数据报。
 
 ```c
 // net/socket.c
@@ -475,7 +475,7 @@ int __sys_sendto(int fd, void __user *buff, size_t len, unsigned int flags, ...)
 sock_sendmsg -> sock_sendmsg_nosec -> inet_sendmsg ->
 
 - [udp_sendmsg](/docs/CS/OS/Linux/net/UDP.md?id=udp_sendmsg)
-- or [tcp_sendmsg](/docs/CS/OS/Linux/net/TCP/TCP.md?id=send)
+- 或 [tcp_sendmsg](/docs/CS/OS/Linux/net/TCP/TCP.md?id=send)
 
 ```c
 int inet_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
@@ -488,15 +488,15 @@ int inet_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 
 ### ip_queue_xmit
 
-Both `ip_queue_xmit` and `ip_send_skb` call [ip_local_out](/docs/CS/OS/Linux/net/IP.md?id=ip_local_out)
+`ip_queue_xmit` 与 `ip_send_skb` 都会调用 [ip_local_out](/docs/CS/OS/Linux/net/IP.md)
 
 <!-- tabs:start -->
 
 ##### **ip_queue_xmit**
 
-Called by [tcp_transmit_skb](/docs/CS/OS/Linux/net/TCP/TCP.md?id=tcp_transmit_skb)
+由 [tcp_transmit_skb](/docs/CS/OS/Linux/net/TCP/TCP.md?id=tcp_transmit_skb) 调用
 
-Note: skb->sk can be different from sk, in case of tunnels
+注意：隧道场景下 skb->sk 可能与 sk 不同
 
 ```c
 int __ip_queue_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl,
@@ -509,7 +509,7 @@ int __ip_queue_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl,
 
 ##### **ip_send_skb**
 
-Called by [UDP](/docs/CS/OS/Linux/net/UDP.md?id=transmit)
+由 [UDP](/docs/CS/OS/Linux/net/UDP.md?id=transmit) 调用
 
 ```c
 
@@ -572,7 +572,7 @@ static int __ip_finish_output(struct net *net, struct sock *sk, struct sk_buff *
 
 ip_finish_output2 -> neigh_output -> neigh_hh_output
 
-call dev_queue_xmit
+调用 dev_queue_xmit
 
 ```c
 // include/net/neighbour.h
@@ -586,23 +586,20 @@ static inline int neigh_hh_output(const struct hh_cache *hh, struct sk_buff *skb
 
 ### dev_queue_xmit
 
-transmit a buffer
+发送一个缓冲区
 
-Queue a buffer for transmission to a network device.
-The caller must have set the device and priority and built the buffer before calling this function.
-The function can be called from an interrupt.
+把缓冲区排队、准备发送给网络设备。
+调用者在调用本函数前必须已设置好设备与优先级，并构造好缓冲区。
+本函数可在中断中调用。
 
-A negative errno code is returned on a failure.
-A success does not guarantee the frame will be transmitted as it may be dropped due to congestion or traffic shaping.
+失败时返回负的 errno；成功也不保证帧一定被发出——它可能因拥塞或流量整形被丢弃。
 
-I notice this method can also return errors from the queue disciplines, including NET_XMIT_DROP, which is a positive value.
-So, errors can also be positive.
+要注意本方法也可能返回来自排队规则（qdisc）的错误值，包括正值的 NET_XMIT_DROP，因此错误也可能是正值。
 
-Regardless of the return value, the skb is consumed, so it is currently difficult to retry a send to this method.
-(You can bump the ref count before sending to hold a reference for retry if you are careful.)
+无论返回什么，skb 都会被消耗，所以目前很难对本方法做发送重试。
+（若足够小心，可在发送前增加引用计数、保留引用以便重试。）
 
-When calling this method, interrupts MUST be enabled.
-This is because the BH enable code must have IRQs enabled so that it will not deadlock.
+调用本方法时必须开启中断，因为下半部（BH）的使能代码要求 IRQ 已开启，否则会死锁。
 
 ```c
 // net/core/dev.c
@@ -646,9 +643,11 @@ static inline int __dev_xmit_skb(struct sk_buff *skb, struct Qdisc *q,
 
 #### qdisc_run
 
-The qdisc will either transmit the data directly if it can, or queue it up to be sent during the NET_TX softirq.
+qdisc 能直接发送就直接发送，否则把数据排队、留待 NET_TX 软中断发送。
 
-raise NET_TX_SOFTIRQ if quota <= 0 in order to execute net_tx_action and recall `qdisc_run` func
+qdisc 内部的入队分类、调度与整形算法（pfifo_fast / fq_codel / HTB / TBF 等）见 [Qdisc](/docs/CS/OS/Linux/net/Qdisc.md)，这里只看驱动出队发送的过程。
+
+当 quota <= 0 时触发 NET_TX_SOFTIRQ，以便执行 net_tx_action 并再次调用 `qdisc_run`
 
 > NET_TX_SOFTIRQ类型的软中断只会在发送网络包时并且当用户线程的CPU quota用尽时，才会触发。剩下的接受过程中触发的软中断类型以及发送完数据触发的软中断类型均为 NET_RX_SOFTIRQ
 > 所以这就是你在服务器上查看 /proc/softirqs，一般 NET_RX都要比 NET_TX大很多的的原因
@@ -711,7 +710,7 @@ static __latent_entropy void net_tx_action(struct softirq_action *h)
 
 #### dev_hard_start_xmit
 
-finally call [ndo_start_xmit](/docs/CS/OS/Linux/net/IP.md?id=ndo_start_xmit) by different adapters.
+最终由不同网卡驱动调用 [ndo_start_xmit](/docs/CS/OS/Linux/net/IP.md)。
 
 ```c
 static inline bool qdisc_restart(struct Qdisc *q, int *packets)
@@ -833,9 +832,8 @@ static int igb_tx_map(struct igb_ring *tx_ring,
 
 ### transmission completion
 
-After the transmission NIC will raise a `hard IRQ` to signal its completion.
-The driver will handle this IRQ (turn it off) and schedule (`soft IRQ`) the NAPI poll system.
-NAPI will handle the receive packets signaling and free the RAM.
+发送完成后，网卡会触发一个硬中断（hard IRQ）通知完成。
+驱动会处理该中断（关闭中断），并调度（软中断）NAPI 轮询机制，由 NAPI 处理接收包信号并释放内存。
 
 数据发送完毕后，网卡设备会向CPU发送一个硬中断，CPU调用网卡驱动程序注册的硬中断响应程序，在硬中断响应中触发NET_RX_SOFTIRQ类型的软中断，
 在软中断的回调函数igb_poll中清理释放 sk_buffer，清理网卡发送队列（RingBuffer），解除 DMA 映射
@@ -917,9 +915,9 @@ RingBuffer是网卡在启动的时候分配和初始化的环形缓冲队列。�
 网卡硬中断响应程序会为网络数据帧创建内核数据结构 sk_buffer，并将网络数据帧拷贝到sk_buffer中。然后发起软中断请求，通知内核有新的网络数据帧到达
 
 
-This function is registered when the [NIC is active](/docs/CS/OS/Linux/net/network.mdk.md?id=open-NIC), in order to handle hard interrupts
+本函数在[网卡激活](/docs/CS/OS/Linux/net/network.md)时注册，用于处理硬中断
 
-Driver will `schedule a NAPI`(raise a `soft IRQ (NET_RX_SOFTIRQ)`).
+驱动会 `schedule a NAPI`（触发 `soft IRQ (NET_RX_SOFTIRQ)`）。
 
 ```c
 static irqreturn_t igb_msix_ring(int irq, void *data)
@@ -937,7 +935,7 @@ static irqreturn_t igb_msix_ring(int irq, void *data)
 
 #### napi_schedule
 
-call [raise_softirq_irqoff](/docs/CS/OS/Linux/Interrupt.md?id=raise_softirq) to invoke [net_rx_action](/docs/CS/OS/Linux/net/network.mdk.md?id=net_rx_action)
+调用 [raise_softirq_irqoff](/docs/CS/OS/Linux/Interrupt.md?id=raise_softirq) 触发 [net_rx_action](/docs/CS/OS/Linux/net/network.md?id=net_rx_action)
 
 ```c
 // net/core/net.c
@@ -958,6 +956,8 @@ static inline void ____napi_schedule(struct softnet_data *sd,
 
 > 网卡硬中断响应程序中发出的软中断请求也会在这个CPU绑定的ksoftirqd线程中响应。所以如果发现Linux软中断，CPU消耗都集中在一个核上的话，那么就需要调整硬中断的CPU亲和性来打散硬中断
 
+NAPI 本身的机制——`napi_struct` 的状态位与 SCHED/MISSED 竞态、`net_rx_action` 的 budget 与 repoll 三条去路、`napi_complete_done()` 的中断延迟打开、GRO 攒批、backlog 与 RPS——见 [NAPI](/docs/CS/OS/Linux/net/NAPI.md)。本页只讲它在整条上行里的位置。
+
 ```c
 // net/core/dev.c
 static __latent_entropy void net_rx_action(struct softirq_action *h)
@@ -975,7 +975,7 @@ static __latent_entropy void net_rx_action(struct softirq_action *h)
 
 #### poll
 
-napi_poll function
+napi_poll 函数
 
 ```c
 static int igb_poll(struct napi_struct *napi, int budget)
@@ -1055,7 +1055,7 @@ static gro_result_t napi_skb_finish(struct napi_struct *napi,
 
 napi_gro_receive -> napi_skb_finish -> gro_normal_one
 -> gro_normal_list -> netif_receive_skb_list_internal
--> __netif_receive_skb_list -> __netif_receive_skb_list_core -> __netif_receive_skb_core(contains [tcpdump](/docs/CS/CN/Tools/tcpdump.md))
+-> __netif_receive_skb_list -> __netif_receive_skb_list_core -> __netif_receive_skb_core（其中含 [tcpdump](/docs/CS/CN/Tools/tcpdump.md) 的处理点）
 
 #### netif_receive_skb
 
@@ -1084,7 +1084,7 @@ static int __netif_receive_skb_core(struct sk_buff **pskb, bool pfmemalloc,
 }
 ```
 
-goto protocol func
+转到协议处理函数
 
 ```c
 static inline int deliver_skb(struct sk_buff *skb,
@@ -1100,9 +1100,9 @@ static inline int deliver_skb(struct sk_buff *skb,
 
 ### ip_rcv
 
-IP receive entry point
+IP 接收入口
 
-execute ip_rcv_finish after NF_HOOK iptables [netfilter](/docs/CS/CN/Tools/netfilter.md)
+经过 NF_HOOK（iptables，见 [netfilter](/docs/CS/CN/Tools/netfilter.md)）后执行 ip_rcv_finish
 
 ```c
 int ip_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt,
@@ -1144,7 +1144,7 @@ static int ip_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 
 ip_rcv_finish_core
 
-Input packet from network to transport.
+把来自网络的包送往传输层。
 
 ```c
 static inline int dst_input(struct sk_buff *skb)
@@ -1156,7 +1156,7 @@ static inline int dst_input(struct sk_buff *skb)
 
 #### ip_local_deliver
 
-Deliver IP Packets to the higher protocol layers.
+把 IP 包递交给更高层协议。
 
 ```c
 int ip_local_deliver(struct sk_buff *skb)
@@ -1176,7 +1176,7 @@ int ip_local_deliver(struct sk_buff *skb)
 
 `ip_local_deliver_finish` ->`ip_protocol_deliver_rcu`
 
-It calls the L4 protocol(`tcp_v4_rcv` or `udp_rcv`)
+它调用 L4 协议（`tcp_v4_rcv` 或 `udp_rcv`）
 
 ```c
 void ip_protocol_deliver_rcu(struct net *net, struct sk_buff *skb, int protocol)
@@ -1194,15 +1194,15 @@ void ip_protocol_deliver_rcu(struct net *net, struct sk_buff *skb, int protocol)
 
 ### l4 rcv
 
-Data is added to receive buffers attached to sockets by protocol layers.
+协议层把数据挂到属于 socket 的接收缓冲区。
 
-tail skb queue and invoke func `sk_data_ready` to wake up 1 process.
+把 skb 加入接收队列尾部，并调用 `sk_data_ready` 唤醒一个进程。
 
 <!-- tabs:start -->
 
 ##### **tcp_v4_rcv**
 
-tcp_queue_rcv and sk_data_ready in [tcp_rcv_established](/docs/CS/OS/Linux/net/TCP/TCP.md?id=tcp_rcv_established)
+tcp_queue_rcv 与 sk_data_ready 见 [tcp_rcv_established](/docs/CS/OS/Linux/net/TCP/TCP.md?id=tcp_rcv_established)
 
 ```c
 int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
@@ -1265,7 +1265,7 @@ int __udp_enqueue_schedule_skb(struct sock *sk, struct sk_buff *skb)
 
 #### sk_data_ready
 
-`sk_data_ready` = `sock_def_readable` , see [Socket](/docs/CS/OS/Linux/net/socket.md?id=sock_init_data)
+`sk_data_ready` = `sock_def_readable` , 见 [Socket](/docs/CS/OS/Linux/net/socket.md?id=sock_init_data)
 
 ```c
 void sock_def_readable(struct sock *sk)
@@ -1281,37 +1281,39 @@ void sock_def_readable(struct sock *sk)
 
 [wake_up_interruptible_sync_poll](/docs/CS/OS/Linux/proc/thundering_herd.md?id=wake-up), wake up and invoke callback func
 
-## Native IO
+## 本机网络 IO
+
+本机网络 IO 不需要经过真实网卡，节省了驱动层面的一些开销：发送数据不必走 Ring Buffer 的驱动队列，直接把 skb 通过软中断传递给接收协议栈。但系统调用、协议栈、网络设备子系统、“驱动”程序都完整走了一遍。如果需要绕过协议栈的开销，可以使用 eBPF 的 sockmap 与 sk redirect。
 
 > [!NOTE]
 >
-> Native IO without hard irq.
+> 本机 IO 不经过硬中断。
 
-### Native Egress
+> [!TIP]
+>
+> 本机 IP 192.168.0.x 和 127.0.0.1 没什么差别，都走虚拟的环回设备 IO。
+> 因为内核在设置 IP 时，把所有本机 IP 都初始化到 local 路由表里了，类型写死为 RTN_LOCAL。
+> 在后面路由项选择时发现类型是 RTN_LOCAL，就选择环回 IO 设备。
 
-Recall the [egress flow](/docs/CS/OS/Linux/net/network.mdk.md?id=ndo_start_xmit), the loopback driver register `net_device_ops`:
+### 环回发送
+
+回顾[发送流程](/docs/CS/OS/Linux/net/network.md?id=ndo_start_xmit)，环回驱动注册的 `net_device_ops` 为：
 
 ```c
-
 static const struct net_device_ops loopback_ops = {
 	.ndo_start_xmit  = loopback_xmit,
 };
 
-atic netdev_tx_t loopback_xmit(struct sk_buff *skb,
+static netdev_tx_t loopback_xmit(struct sk_buff *skb,
 				 struct net_device *dev)
 {
 	skb_orphan(skb);
 
 	__netif_rx(skb);
 }
-
 ```
 
-#### __netif_rx
-
-tail input_pkt_queue with skb
-
-[Schedule NAPI](/docs/CS/OS/Linux/net/network.mdk.md?id=napi_schedule) for backlog device
+`__netif_rx` 把 skb 加入 per-CPU 的 backlog 队列（input_pkt_queue），并为 backlog 设备[调度 NAPI](/docs/CS/OS/Linux/net/network.md?id=napi_schedule)：
 
 ```c
 int __netif_rx(struct sk_buff *skb)
@@ -1331,25 +1333,14 @@ static int enqueue_to_backlog(struct sk_buff *skb, int cpu,
     ...
     __skb_queue_tail(&sd->input_pkt_queue, skb);
     input_queue_tail_incr_save(sd, qtail);
-  
+
     napi_schedule_rps(sd);
 }
 ```
 
-## 本机网络IO
+### backlog 轮询
 
-本机网络IO不需要经过真实的网卡，节约了一些驱动上的开销
-发送数据不需要经过 Ring Buffer 的驱动队列，直接将 skb 通过软中断传递给接收协议栈。
-但是系统调用、协议栈、网络设备子系统、“驱动”程序都走了一遍
-如果需要绕过协议栈的开销，需要使用 eBPF 的 sockmap 和 sk redirect
-
-> [!TIP]
->
-> 本机IP 192.168.0.x 和 127.0.0.1 没什么差别，都走虚拟的环回设备IO。
-> 因为内核在设置IP的时候，把所有的本机IP都初始化到local路由表⾥了，类型写死了是RTN_LOCAL。
-> 在后⾯的路由项选择的时候发现类型是RTN_LOCAL就选择环回IO设备
-
-Recall the dev init func, the default backlog poll func is `process_backlog`.
+回顾设备初始化函数，backlog 默认的 poll 函数是 `process_backlog`：它把 input_pkt_queue 挂到 process_queue，再逐个出队调用 [__netif_receive_skb](/docs/CS/OS/Linux/net/network.md?id=netif_receive_skb)，让包进入与真实网卡一致的协议栈接收路径。
 
 ```c
 static int __init net_dev_init(void)
@@ -1358,15 +1349,7 @@ static int __init net_dev_init(void)
 	    ...
 		sd->backlog.poll = process_backlog;
 	}
-```
-
-#### process_backlog
-
-tail process_queue with input_pkt_queue
-
-call [__netif_receive_skb](/docs/CS/OS/Linux/net/network.mdk.md?id=netif_receive_skb) with process_queue
-
-```c
+}
 
 static int process_backlog(struct napi_struct *napi, int quota)
 {
@@ -1394,7 +1377,7 @@ static int process_backlog(struct napi_struct *napi, int quota)
 
 1. OS `/proc/sys/fs/file-max`
 2. Process fs.nr_open
-3. User process in `/etc/security/limits.conf`
+3. 用户进程在 `/etc/security/limits.conf` 中配置
 
 ```shell
 > cat /proc/sys/fs/file-max 
@@ -1476,35 +1459,61 @@ ls /sys/class/net/eth0/queues
 
 ```
 
-### GSO
+### 多核扩展 RSS / RPS / RFS / XPS
 
-Generic Segmentation Offload
+背景：现代服务器是多 CPU + 多队列网卡，但中断默认集中在某一个 CPU，单 CPU 处理协议栈会先于网卡打满。这一组机制沿"接收中断 → 协议栈处理 → 应用消费 → 发送"链路，把负载和缓存亲和性分散到多核。按软硬与方向区分：
 
+| 机制 | 方向 | 硬件/软件 | 解决的问题 |
+| :-- | :-- | :-- | :-- |
+| RSS | 接收 | 网卡硬件 | 把不同流的中断 / 接收队列分散到多 CPU |
+| RPS | 接收 | 内核软件 | 软件版 RSS，把协议栈处理分散到多 CPU |
+| RFS | 接收 | 内核软件(可硬件加速) | 把流导向"消费它的应用"所在 CPU，保缓存命中 |
+| XPS | 发送 | 内核软件 | 让每个 CPU 优先用特定发送队列，避免争抢 |
 
-#### TSO
+**RSS（Receive Side Scaling）**：网卡对每个包算一个哈希（通常基于四元组，可用 Toeplitz），按一张**间接表（indirection table）**把不同流映射到不同接收队列，每个队列的中断再通过 `smp_affinity` 绑到不同 CPU——于是收包从第一跳就并行。配置：`ethtool -x eth0` 看间接表、`ethtool -X` 改权重。
 
-TCP Segmentation Offload
-
-OS split segmentation to n * MSS, and let device to split MSS
-
-
-GRO
+**RPS（Receive Packet Steering）**：单队列网卡或 RSS 粒度不够时，在 `netif_rx`（驱动把包交给协议栈）之后、按 SKB 的 `rxhash` 把包通过 IPI 投递到目标 CPU 的 per-CPU backlog，让**协议栈处理**（而非仅中断）分散到多核。目标 CPU 由 rx-queue 的 `rps_cpus` 掩码决定：
 
 ```shell
-ethtool -k enp0s3 | grep offload
+# 让 rx 队列 0 的协议栈处理可分散到 CPU 0-15
+echo ffff > /sys/class/net/eth0/queues/rx-0/rps_cpus
 ```
 
+**RFS（Receive Flow Steering）**：RPS 只按哈希静态分散，可消费该 socket 的应用在另一个 CPU，仍有 cache miss 和跨核 IPI。RFS 进一步把流导向**应用所在 CPU**：内核维护一张全局 socket 流表（应用每次 recv/send 更新它期望的 CPU），各 rx 队列再维护一张设备流表记录该流当前被送往的 CPU，两表一致才投递，避免乱序；硬件支持时由网卡做 **aRFS（加速 RFS）**。配置：
 
 ```shell
-ethtool -k enp0s3 tso off
+sysctl -w net.core.rps_sock_flow_entries=32768            # 全局表容量
+echo 2048 > /sys/class/net/eth0/queues/rx-0/rps_flow_cnt # 每队列表容量
+```
+
+**XPS（Transmit Packet Steering）**：发送方向，为每个 tx 队列配置"由哪些 CPU 使用"的掩码，使某 CPU 发包时优先选亲和的队列——避免多个 CPU 争抢同一队列的 `__QUEUE_STATE_*` 锁，也让发送完成中断尽量回到发起 CPU。较新的 `xps_rxqs` 还能让发送队列选择跟随接收队列的 CPU：
+
+```shell
+echo ff > /sys/class/net/eth0/queues/tx-0/xps_cpus
+```
+
+### 分段与聚合卸载 TSO / GSO / GRO
+
+核心思想是**让协议栈尽量处理少而大的 SKB**，把"切成 MSS 大小"或"合并多个包"的工作尽量推迟到驱动（硬件能做就交给硬件），减少上层处理次数与每包开销。
+
+**GSO（Generic Segmentation Offload）**：协议栈上层只需生成一个可能超过 MSS 的大 SKB，把分段**推迟到提交给驱动之前**；若网卡不支持硬件分段，内核在最后一刻用软件切成 n 个 MSS。这样上层的队列、拥塞、重传逻辑都只需处理一个段。
+
+**TSO（TCP Segmentation Offload）**：GSO 在 TCP 场景的硬件实现——内核把大 SKB 交给网卡，由网卡硬件切成多个 MSS 再发出去。对应还有 UFO（UDP）、以及通用的 `GSO` 隧道场景。
+
+**GRO（Generic Receive Offload）**：接收方向的"反向 TSO"。NAPI 轮询时，`napi_gro_receive` 把属于**同一条流**且连续到达的多个小包（TCP 为主，也覆盖 UDP 隧道 / VXLAN 等）在驱动层聚合成一个大 SKB，再上交给协议栈，显著降低高 PPS 下的每包开销。聚合在以下情况必须 flush：遇到带 TCP PSH、超出 GRO 最大尺寸、超过聚合时间、或属于不同流。它取代了早期的 **LRO**（网卡硬件的接收聚合，过于激进、可能破坏转发，只适合本机终止的流量）。
+
+```shell
+ethtool -k eth0 | grep -E 'tcp-segmentation|generic-receive|generic-segmentation'
+ethtool -K eth0 tso off gro off gso off   # 按需开关（基准测试时常临时关闭以排除干扰）
 ```
 
 ### I/O AT
 
-- Network Flow Affinity
-- Asynchronous Lower Copy with DMA
-- Optimize Packet
+- 网络流亲和性（Network Flow Affinity）
+- 基于 DMA 的异步底层拷贝（Asynchronous Lower Copy）
+- 优化数据包
 
 ## Links
 
-Return [Linux](/docs/CS/OS/Linux/Linux.md)
+- [网络知识地图](/docs/CS/OS/Linux/net/README.md)
+- [Linux](/docs/CS/OS/Linux/Linux.md)

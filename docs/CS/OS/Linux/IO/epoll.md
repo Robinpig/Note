@@ -1,27 +1,23 @@
 ## Introduction
 
-
 ```shell
 #include <sys/epoll.h>
 ```
 
-The  epoll  API  performs  a similar task to `poll`: monitoring multiple file descriptors to see if I/O is possible on any of them. 
-The epoll API can be used either as an edge-triggered or a level-triggered interface and scales well to large numbers of watched file descriptors. 
-The following system calls are provided to create and manage an epoll instance:
+epoll 是 Linux 特有的 I/O 事件通知机制，功能与 `poll` 类似——监控多个文件描述符、等待其中任意一个可进行 I/O——但它把"维护关注集合"和"等待就绪"拆开，并以回调驱动、只返回就绪 fd，因此在被监控描述符数量很大时仍能保持高性能。epoll 支持边沿触发（edge-triggered）和水平触发（level-triggered）两种通知方式。使用它要经过三个系统调用：
 
-* epoll_create(2)  creates  a  new epoll instance and returns a file descriptor referring to that instance.  
-  (The more recent epoll_create1(2) extends the functionality of epoll_create(2).)
-* Interest in particular file descriptors is then registered via epoll_ctl(2).  
-  The set of file descriptors currently  registered on an epoll instance is sometimes called an epoll set.
-* epoll_wait(2) waits for I/O events, blocking the calling thread if no events are currently available.
+- `epoll_create(2)` / `epoll_create1(2)`：创建一个 epoll 实例，返回指向它的文件描述符；
+- `epoll_ctl(2)`：向实例中注册/修改/删除感兴趣的文件描述符，当前注册在一个 epoll 实例上的集合称为 epoll set；
+- `epoll_wait(2)`：等待 I/O 事件，没有就绪事件时阻塞调用线程。
 
+一个最小的使用骨架：
 
 ```c
 int main(){
   listen(lfd, ...);
   cfd1 = accept(...);
   cfd2 = accept(...);
-  
+
   efd = epoll_create(...);
   epoll_ctl(efd, EPOLL_CTL_ADD, cfd1, ...);
   epoll_ctl(efd, EPOLL_CTL_ADD, cfd2, ...);
@@ -115,7 +111,7 @@ return fd;
 
 ### eventpoll
 
-This structure is stored inside the "private_data" member of the file structure and represents the main data structure for the eventpoll interface.
+这个结构保存在 file 的 `private_data` 中，是 eventpoll 接口的核心数据结构。
 
 - wq 存储等待进程
 - rdlist for ready file descriptors
@@ -149,7 +145,7 @@ struct eventpoll {
 
 ## epoll_ctl
 
-The following function implements the controller interface for the eventpoll file that enables the insertion/removal/change of file descriptors inside the interest set.
+下面是 eventpoll 文件的控制接口实现，负责在关注集合中插入、删除或修改文件描述符。
 
 1. create epitem
 2. Add socket to wait queue, set callback `ep_poll_callback`
@@ -264,8 +260,7 @@ static int ep_insert(struct eventpoll *ep, const struct epoll_event *event,
 
 
 
-Each file descriptor added to the eventpoll interface will have an entry of this type linked to the "rbr" RB tree.
-Avoid increasing the size of this struct, there can be many thousands of these on a server and we do not want this to take another cache line.
+每个添加到 eventpoll 的文件描述符都会有一个对应的 epitem，挂在红黑树 `rbr` 上。注意不要增大这个结构——服务器上可能有成千上万个，多占一个缓存行都会显著增加内存开销。
 
 ```c
 struct epitem {
@@ -288,9 +283,9 @@ struct epitem {
 
 #### ep_ptable_queue_proc
 
-Initialize the poll table using the queue callback = `ep_poll_callback` which will be invoked at [sk_data_ready](/docs/CS/OS/Linux/net/network.md?id=sk_data_ready).
+初始化 poll table，队列回调设为 `ep_poll_callback`，它会在 [sk_data_ready](/docs/CS/OS/Linux/net/network.md?id=sk_data_ready) 时被调用。
 
-This is the callback that is used to add our wait queue to the target file wakeup lists.
+这个回调负责把我们的等待队列添加到目标文件的唤醒链表上。
 ```c
 static void ep_ptable_queue_proc(struct file *file, wait_queue_head_t *whead,
 				 poll_table *pt)
@@ -334,7 +329,7 @@ void add_wait_queue_exclusive(struct wait_queue_head *wq_head, struct wait_queue
 
 #### ep_item_poll
 
-Differs from `ep_eventpoll_poll()` in that internal callers already have the ep->mtx so we need to start from depth=1, such that mutex_lock_nested() is correctly annotated.
+与 `ep_eventpoll_poll()` 的区别在于：内部调用者已经持有 ep->mtx，所以这里要从 depth=1 开始，让 `mutex_lock_nested()` 能正确标注锁的嵌套层级。
 
 ```c
 
@@ -426,9 +421,9 @@ static int do_epoll_wait(int epfd, struct epoll_event __user *events,
 
 ### ep_poll
 
-Retrieves ready events, and delivers them to the caller-supplied event buffer.
-- if ep_events_available, ep_send_events
-- else wait 
+取出就绪事件，投递到调用者提供的事件缓冲区。
+- 若 ep_events_available 有事件，走 ep_send_events
+- 否则挂起等待
 
 
 
@@ -465,11 +460,11 @@ static int ep_poll(struct eventpoll *ep, struct epoll_event __user *events,
 
 #### ep_events_available
 
-Checks if ready events might be available.
+检查是否可能存在就绪事件。
 
-This call is racy: We may or may not see events that are being added to the ready list under the lock (e.g., in IRQ callbacks). 
-- For cases with a non-zero timeout, this thread will check the ready list under lock and will add to the wait queue. 
-- For cases with a zero timeout, the user by definition should not care and will have to recheck again.
+这个检查是有竞态的：我们不一定能看到正在锁保护下被加入就绪链表的事件（如中断回调里添加的）。
+- 对于非零超时，本线程随后会在锁内再次检查就绪链表，并把自己加进等待队列；
+- 对于零超时，调用方本就只做探测，需要自行再次确认。
 
 ```c
 
@@ -485,9 +480,9 @@ static inline int ep_events_available(struct eventpoll *ep)
 
 #### init_wait
 
-Internally init_wait() uses `default_wake_function()`, thus wait entry is removed from the wait queue on each wakeup. Why it is important? In case of several waiters each new wakeup will hit the next waiter, giving it the chance to harvest new event. 
+init_wait() 内部用的是 `default_wake_function()`，等待项在每次唤醒后会从等待队列移除。为什么这很重要？当有多个等待者时，每次新的唤醒会命中下一个等待者，让它也有机会收割新事件。
 
-Otherwise wakeup can be lost. This is also good performance-wise, because on normal wakeup path no need to call `__remove_wait_queue()` explicitly, thus ep->lock is not taken, which halts the event delivery.
+否则唤醒可能丢失。这在性能上也有好处：正常唤醒路径上不必显式调用 `__remove_wait_queue()`，从而不必取 ep->lock——取锁会中断事件投递。
 
 ```c
 // include/linux/wait.h
@@ -557,8 +552,8 @@ static inline void __add_wait_queue(struct wait_queue_head *wq_head, struct wait
 
 
 #### ep_send_events
-Try to transfer events to user space. In case we get 0 events and there's still timeout left over, we go trying again in search of more luck.
-call [ep_item_poll](/docs/CS/OS/Linux/epoll.md?id=ep_item_poll)
+尝试把事件转交到用户空间。若一个事件都没取到、且还有剩余超时，就再循环碰运气。
+调用 [ep_item_poll](/docs/CS/OS/Linux/IO/epoll.md?id=ep_item_poll)
 
 ```c
 
@@ -745,15 +740,14 @@ schedule_hrtimeout_range_clock(ktime_t *expires, u64 delta,
 
 #### ep_poll_callback
 
-This is the callback that is passed to the wait queue wakeup mechanism. It is called by the stored file descriptors when they have events to report.
-This callback takes a read lock in order not to contend with concurrent events from another file descriptor, thus all modifications to ->rdllist or ->ovflist are lockless.  Read lock is paired with the write lock from ep_scan_ready_list(), which stops all list modifications and guarantees that lists state is seen correctly.
+这个回调被传给等待队列的唤醒机制：当被监控的文件描述符有事件要报告时调用它。
+它取读锁以避免与来自其它文件描述符的并发事件争抢，因此对 ->rdllist 和 ->ovflist 的所有修改都是无锁的。读锁与 ep_scan_ready_list() 持有的写锁配对——后者会暂停所有链表修改、保证链表状态被正确读取。
 
-Another thing worth to mention is that ep_poll_callback() can be called concurrently for the same @epi from different CPUs if poll table was inited with several wait queues entries.  Plural wakeup from different CPUs of a
-single wait queue is serialized by wq.lock, but the case when multiple wait queues are used should be detected accordingly.  This is detected using cmpxchg() operation.
+另一点值得注意：如果 poll table 初始化时注册了多个等待队列项，ep_poll_callback() 可能在不同 CPU 上针对同一个 @epi 被并发调用。单个等待队列来自不同 CPU 的多次唤醒由 wq.lock 串行化；但用到多个等待队列时需要专门检测重复，这通过 cmpxchg() 操作完成。
 
-1. get epitem from wait
-2. add event to ready list
-3. Wake up ( if active ) both the eventpoll wait list and the ->poll() wait list.
+1. 从 wait 取出 epitem
+2. 把事件加入就绪链表
+3. 若 eventpoll 等待链表和 ->poll() 等待链表处于活动状态，唤醒它们
 
 ep_pol_callback ->`ep_poll_safewake`->[wake_up_poll](/docs/CS/OS/Linux/proc/thundering_herd.md?id=wake_up_poll)
 
@@ -863,263 +857,78 @@ out_unlock:
 
 ```
 
-
-
 ## ET & LT
 
+epoll 通知就绪的时机有两种，决定上层事件循环怎么写。
 
+**LT（水平触发，默认）**：只要 fd 的条件仍然成立（数据没被读完、仍可写），每次 `epoll_wait` 都会通知它。语义与 `poll(2)` 完全一致，可以看作"一个更快的 poll"，编程简单、不易漏事件，代价是可能重复通知。
 
-Level-triggered and edge-triggered
-The epoll event distribution interface is able to behave both as edge-triggered (ET) and as level-triggered (LT).
-The difference between the two mechanisms can be described as follows.  
-Suppose that this scenario happens:
-1. The file descriptor that represents the read side of a pipe (rfd) is registered on the epoll instance.
-2. A pipe writer writes 2 kB of data on the write side of the pipe.
-3. A call to epoll_wait(2) is done that will return rfd as a ready file descriptor.
-4. The pipe reader reads 1 kB of data from rfd.
-5. A call to epoll_wait(2) is done.
+**ET（边沿触发）**：只在 fd 状态"从无到有"发生变化时通知一次，之后即使数据没读完也不再通知。用一个经典场景说明：pipe 写端写入 2KB → `epoll_wait` 返回读端就绪 → 读端只读走 1KB → 再次 `epoll_wait`。若以 `EPOLLET` 注册，第二次调用会一直阻塞，尽管缓冲区里还剩 1KB——因为边沿事件已在第一次被消费、状态没有再变化，等待者可能因此饿死。
 
-If the rfd file descriptor has been added to the epoll  interface  using  the  EPOLLET  (edge-triggered)  flag,  the  call  to
-epoll_wait(2)  done  in step 5 will probably hang despite the available data still present in the file input buffer; meanwhile
-the remote peer might be expecting a response based on the data it already sent. 
-The reason for this is  that  edge-triggered mode  delivers events only when changes occur on the monitored file descriptor.  
-So, in step 5 the caller might end up waiting for some data that is already present inside the input buffer. 
-In the above example,  an  event  on  rfd  will  be  generated because  of the write done in 2 and the event is consumed in 3.
-Since the read operation done in 4 does not consume the whole buffer data, the call to epoll_wait(2) done in step 5 might block indefinitely.
+所以用 ET 必须遵守两条规则：
 
-An application that employs the EPOLLET flag should use nonblocking file descriptors to avoid having a blocking read or  write starve  a  task  that  is  handling  multiple file descriptors. 
-The suggested way to use epoll as an edge-triggered (EPOLLET) interface is as follows:
+1. 把 fd 设为**非阻塞**，避免一次阻塞读写卡住处理多个 fd 的任务；
+2. 收到事件后用循环一直 read/write，直到返回 `EAGAIN`，确认本次就绪的数据已被完全处理。
 
-1.  with nonblocking file descriptors; and
-2.  by waiting for an event only after read(2) or write(2) return EAGAIN.
+对包/令牌型文件（数据报 socket、规范模式终端），只能靠读到 `EAGAIN` 判断结束；对流式文件（pipe、FIFO、流 socket），也可通过"请求读 N 字节但返回少于 N"判断数据已耗尽。ET 减少了通知次数、配合非阻塞 I/O 性能更高，是高性能框架的主流选择，但代价是编程更易出错。
 
+**EPOLLONESHOT**：即使在 ET 下，一个 fd 也可能因多次数据到达而产生多个事件。设了 `EPOLLONESHOT` 后，epoll 在交付一次事件后就禁用该 fd，必须由调用方用 `epoll_ctl(EPOLL_CTL_MOD)` 重新武装，适合需要严格控制"同一 fd 同时只有一个线程处理"的场景。
 
+LT 与 ET 的分叉点在 `ep_send_events` 的内核逻辑里：事件拷给用户空间后，检查该 fd 的模式——若既不是 ET 也不是 ONESHOT，就把 epitem **重新挂回 rdllist**，于是下次 `epoll_wait` 仍会通知（LT）；ET 则不挂回，等待下一次状态变化。
 
-By contrast, when used as a level-triggered interface (the default, when EPOLLET is not specified), epoll is simply  a  faster poll(2), and can be used wherever the latter is used since it shares the same semantics.
-    
-Since even with edge-triggered epoll, multiple events can be generated upon receipt of multiple chunks of data, the caller has the option to specify the EPOLLONESHOT flag, 
-to tell epoll to disable the associated file descriptor after the receipt  of  an event  with  epoll_wait(2).   
-When  the  EPOLLONESHOT  flag  is specified, it is the caller's responsibility to rearm the file descriptor using epoll_ctl(2) with EPOLL_CTL_MOD.
-
-Interaction with autosleep
-If the system is in autosleep mode via /sys/power/autosleep and an event happens which wakes the device from sleep, the device driver  will  keep  the  device awake only until that event is queued.  
-To keep the device awake until the event has been processed, it is necessary to use the epoll_ctl(2) EPOLLWAKEUP flag.
-
-When the EPOLLWAKEUP flag is set in the events field for a struct epoll_event, the system will be kept awake from  the  moment the  event  is queued, through the epoll_wait(2) call which returns the event until the subsequent epoll_wait(2) call. 
-If the event should keep the system awake beyond that time, then a separate wake_lock should be taken before the second epoll_wait(2)
-call.
-
-/proc interfaces
-The following interfaces can be used to limit the amount of kernel memory consumed by epoll:
-/proc/sys/fs/epoll/max_user_watches (since Linux 2.6.28)
-This  specifies  a limit on the total number of file descriptors that a user can register across all epoll instances on the system. 
-The limit is per real user ID. 
-Each registered file descriptor costs roughly 90 bytes on a 32-bit kernel, and roughly 160 bytes on a 64-bit kernel. 
-Currently, the default value for max_user_watches is 1/25 (4%) of the available low memory, divided by the registration cost in bytes.
-
-
-lt/et 模式区别的核心逻辑在 epoll_wait 的内核实现 ep_send_events_proc 函数里，就绪队列
-
-epoll_wait 的相关工作流程：
-
-- 当内核监控的 fd 产生用户关注的事件，内核将 fd (epi)节点信息添加进就绪队列。
-- 内核发现就绪队列有数据，唤醒进程工作。
-- 内核先将 fd 信息从就绪队列中删除。
-- 然后将 fd 对应就绪事件信息从内核空间拷贝到用户空间。
-- 事件数据拷贝完成后，内核检查事件模式是 lt 还是 et，如果不是 et，重新将 fd 信息添加回就绪队列，下次重新触发 epoll_wait。
-
-
-
-## Example for suggested usage
-
-While the usage of epoll when employed as a level-triggered interface does have the same semantics as poll(2), the  edge-triggered  usage  requires  more clarification to avoid stalls in the application event loop.  
-In this example, listener is a non‐ blocking socket on which listen(2) has been called.  
-The function do_use_fd() uses the new ready file descriptor until  EAGAIN is  returned  by  either read(2) or write(2).  
-An event-driven state machine application should, after having received EAGAIN, 
-record its current state so that at the next call to do_use_fd() it will continue to read(2) or write(2) from where it stopped before.
+一个 ET 模式的最小服务端骨架：监听 socket 就绪后 `accept` 出新连接、设为非阻塞、以 `EPOLLIN | EPOLLET` 注册；已连接 fd 就绪则循环处理到 `EAGAIN`。
 
 ```c
 #define MAX_EVENTS 10
-           struct epoll_event ev, events[MAX_EVENTS];
-           int listen_sock, conn_sock, nfds, epollfd;
+struct epoll_event ev, events[MAX_EVENTS];
+int listen_sock, epollfd;
 
-           /* Code to set up listening socket, 'listen_sock',
-              (socket(), bind(), listen()) omitted */
+epollfd = epoll_create1(0);
+ev.events = EPOLLIN;
+ev.data.fd = listen_sock;
+epoll_ctl(epollfd, EPOLL_CTL_ADD, listen_sock, &ev);
 
-           epollfd = epoll_create1(0);
-           if (epollfd == -1) {
-               perror("epoll_create1");
-               exit(EXIT_FAILURE);
-           }
-
-           ev.events = EPOLLIN;
-           ev.data.fd = listen_sock;
-           if (epoll_ctl(epollfd, EPOLL_CTL_ADD, listen_sock, &ev) == -1) {
-               perror("epoll_ctl: listen_sock");
-               exit(EXIT_FAILURE);
-           }
-
-           for (;;) {
-               nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
-               if (nfds == -1) {
-                   perror("epoll_wait");
-                   exit(EXIT_FAILURE);
-               }
-
-               for (n = 0; n < nfds; ++n) {
-                   if (events[n].data.fd == listen_sock) {
-                       conn_sock = accept(listen_sock,
-                                          (struct sockaddr *) &addr, &addrlen);
-                       if (conn_sock == -1) {
-                           perror("accept");
-                           exit(EXIT_FAILURE);
-                       }
-                       setnonblocking(conn_sock);
-                       ev.events = EPOLLIN | EPOLLET;
-                       ev.data.fd = conn_sock;
-                       if (epoll_ctl(epollfd, EPOLL_CTL_ADD, conn_sock,
-                                   &ev) == -1) {
-                           perror("epoll_ctl: conn_sock");
-                           exit(EXIT_FAILURE);
-                       }
-                   } else {
-                       do_use_fd(events[n].data.fd);
-                   }
-               }
-           }
+for (;;) {
+	int nfds = epoll_wait(epollfd, events, MAX_EVENTS, -1);
+	for (int n = 0; n < nfds; ++n) {
+		if (events[n].data.fd == listen_sock) {
+			int conn_sock = accept(listen_sock, NULL, NULL);
+			setnonblocking(conn_sock);
+			ev.events = EPOLLIN | EPOLLET;
+			ev.data.fd = conn_sock;
+			epoll_ctl(epollfd, EPOLL_CTL_ADD, conn_sock, &ev);
+		} else {
+			/* 循环 read/write 直到 EAGAIN */
+			do_use_fd(events[n].data.fd);
+		}
+	}
+}
 ```
 
-When  used as an edge-triggered interface, for performance reasons, it is possible to add the file descriptor inside the epoll interface (EPOLL_CTL_ADD) once by specifying (EPOLLIN|EPOLLOUT).  
-This allows you  to  avoid  continuously  switching  between EPOLLIN and EPOLLOUT calling epoll_ctl(2) with EPOLL_CTL_MOD.
+ET 使用上的两个常见坑：
 
-Questions and answers
-Q0  What is the key used to distinguish the file descriptors registered in an epoll set?
+- **饿死其它 fd**：一个 fd 有海量数据时，若一直埋头 drain 它，其它 fd 会迟迟得不到处理。解法是维护应用自己的就绪列表、标记 fd 状态，在所有就绪 fd 间轮转，而不是死磕一个。
+- **事件缓存与 fd 提前关闭**：若一次 `epoll_wait` 返回多个事件、处理 #47 时关闭了 #13 的 fd，缓存里 #13 的记录就成了悬空引用。应在关闭时同步 `EPOLL_CTL_DEL` 并把它在缓存中标记为已移除。
 
-       A0  The  key  is the combination of the file descriptor number and the open file description (also known as an "open file han‐
-           dle", the kernel's internal representation of an open file).
-    
-       Q1  What happens if you register the same file descriptor on an epoll instance twice?
-    
-       A1  You will probably get EEXIST.  However, it is possible to  add  a  duplicate  (dup(2),  dup2(2),  fcntl(2)  F_DUPFD)  file
-           descriptor  to  the  same  epoll  instance.   This  can  be a useful technique for filtering events, if the duplicate file
-           descriptors are registered with different events masks.
-    
-       Q2  Can two epoll instances wait for the same file descriptor?  If so, are events reported to both epoll file descriptors?
-    
-       A2  Yes, and events would be reported to both.  However, careful programming may be needed to do this correctly.
-    
-       Q3  Is the epoll file descriptor itself poll/epoll/selectable?
-    
-       A3  Yes.  If an epoll file descriptor has events waiting, then it will indicate as being readable.
-    
-       Q4  What happens if one attempts to put an epoll file descriptor into its own file descriptor set?
-    
-       A4  The epoll_ctl(2) call fails (EINVAL).  However, you can add an epoll file descriptor inside another epoll file  descriptor
-           set.
-    
-       Q5  Can I send an epoll file descriptor over a UNIX domain socket to another process?
-    
-       A5  Yes,  but  it does not make sense to do this, since the receiving process would not have copies of the file descriptors in
-           the epoll set.
-    
-       Q6  Will closing a file descriptor cause it to be removed from all epoll sets automatically?
-    
-       A6  Yes, but be aware of the following point.  A file descriptor is a reference to an open  file  description  (see  open(2)).
-           Whenever  a  file descriptor is duplicated via dup(2), dup2(2), fcntl(2) F_DUPFD, or fork(2), a new file descriptor refer‐
-           ring to the same open file description is created.  An open file description continues to exist until all file descriptors
-           referring  to  it  have  been  closed.  A file descriptor is removed from an epoll set only after all the file descriptors
-           referring to the underlying open file description have been closed (or before if the file descriptor is explicitly removed
-           using  epoll_ctl(2)  EPOLL_CTL_DEL).   This  means that even after a file descriptor that is part of an epoll set has been
-           closed, events may be reported for that file descriptor if other file descriptors referring to the  same  underlying  file
-           description remain open.
-    
-       Q7  If more than one event occurs between epoll_wait(2) calls, are they combined or reported separately?
-    
-       A7  They will be combined.
-    
-       Q8  Does an operation on a file descriptor affect the already collected but not yet reported events?
-    
-       A8  You  can do two operations on an existing file descriptor.  Remove would be meaningless for this case.  Modify will reread
-           available I/O.
+## 资源限制
 
-Q9  Do I need to continuously read/write a file descriptor until EAGAIN when using the EPOLLET flag (edge-triggered  behavior)
-?
-
-       A9  Receiving an event from epoll_wait(2) should suggest to you that such file descriptor is ready for the requested I/O oper‐
-           ation.  You must consider it ready until the next (nonblocking) read/write yields EAGAIN.  When and how you will  use  the
-           file descriptor is entirely up to you.
-    
-           For packet/token-oriented files (e.g., datagram socket, terminal in canonical mode), the only way to detect the end of the
-           read/write I/O space is to continue to read/write until EAGAIN.
-    
-           For stream-oriented files (e.g., pipe, FIFO, stream socket), the condition that the read/write I/O space is exhausted  can
-           also  be  detected  by checking the amount of data read from / written to the target file descriptor.  For example, if you
-           call read(2) by asking to read a certain amount of data and read(2) returns a lower number of bytes, you can  be  sure  of
-           having  exhausted  the read I/O space for the file descriptor.  The same is true when writing using write(2).  (Avoid this
-           latter technique if you cannot guarantee that the monitored file descriptor always refers to a stream-oriented file.)
-
-Possible pitfalls and ways to avoid them o Starvation (edge-triggered)
-
-       If there is a large amount of I/O space, it is possible that by trying to drain it the other  files  will  not  get  processed
-       causing starvation.  (This problem is not specific to epoll.)
-    
-       The  solution  is  to  maintain  a  ready list and mark the file descriptor as ready in its associated data structure, thereby
-       allowing the application to remember which files need to be processed but still round robin amongst all the ready files.  This
-       also supports ignoring subsequent events you receive for file descriptors that are already ready.
-    
-       o If using an event cache...
-    
-       If  you  use  an event cache or store all the file descriptors returned from epoll_wait(2), then make sure to provide a way to
-       mark its closure dynamically (i.e.,  caused  by  a  previous  event's  processing).   Suppose  you  receive  100  events  from
-       epoll_wait(2),  and in event #47 a condition causes event #13 to be closed.  If you remove the structure and close(2) the file
-       descriptor for event #13, then your event cache might still say there are events waiting for that file descriptor causing con‐
-       fusion.
-    
-       One solution for this is to call, during the processing of event 47, epoll_ctl(EPOLL_CTL_DEL) to delete file descriptor 13 and
-       close(2), then mark its associated data structure as removed and link it to a cleanup list.  If you  find  another  event  for
-       file  descriptor 13 in your batch processing, you will discover the file descriptor had been previously removed and there will
-       be no confusion.
-
-VERSIONS
-The epoll API was introduced in Linux kernel 2.5.44.  Support was added to glibc in version 2.3.2.
-
-CONFORMING TO
-The epoll API is Linux-specific.  Some other systems provide similar mechanisms, for example, FreeBSD has kqueue, and  Solaris
-has /dev/poll.
-
-NOTES
-The  set  of  file  descriptors that is being monitored via an epoll file descriptor can be viewed via the entry for the epoll
-file descriptor in the process's /proc/[pid]/fdinfo directory.  See proc(5) for further details.
-
-       The kcmp(2) KCMP_EPOLL_TFD operation can be used to test whether a file descriptor is present in an epoll instance.
-
-SEE ALSO
-epoll_create(2), epoll_create1(2), epoll_ctl(2), epoll_wait(2), poll(2), select(2)
-
-COLOPHON
-This page is part of release 4.15 of the Linux man-pages project.  A description of the project, information  about  reporting
-bugs, and the latest version of this page, can be found at https://www.kernel.org/doc/man-pages/.
-
-
+`/proc/sys/fs/epoll/max_user_watches`（Linux 2.6.28+）限制一个真实用户在系统所有 epoll 实例上能注册的 fd 总数。每个注册项在 32 位内核约占 90 字节、64 位约 160 字节；默认值为可用低端内存的约 4% 除以单项开销。epoll API 自内核 2.5.44 引入、glibc 2.3.2 起支持，是 Linux 特有接口（FreeBSD 对应 kqueue）。某进程正在监控的 fd 集合可在 `/proc/[pid]/fdinfo` 中查看。
 
 ## Summary
 
-1. `epoll_create` create `eventpoll`
-2. `epoll_ctl` add/modify/delete socket to rbr
-3. `epoll_wait` check if in ready list, or else add ep->wq and schedule
-4. Woken up, recheck list
+1. `epoll_create` 创建 `eventpoll`
+2. `epoll_ctl` 把 socket 加入/修改/移出红黑树
+3. `epoll_wait` 检查就绪链表，否则挂进 ep->wq 调度睡眠
+4. 被回调唤醒后重新检查就绪链表并返回
 
-
-
-1. socket get data
-2. epitem add to ready list
-3. Wake up process from wq
-
+数据面：socket 收到数据 → epitem 被加入就绪链表 → 从 wq 唤醒等待进程。
 
 ## Links
 
-- [IO](/docs/CS/OS/IO.md)
+- [I/O 与多路复用（目录枢纽）](/docs/CS/OS/Linux/IO/README.md)
+- [multiplexing（select/poll）](/docs/CS/OS/Linux/IO/multiplexing.md)
+- [io_uring](/docs/CS/OS/Linux/IO/io_uring.md)
 
 ## References
 
-1. [man - epoll - I/O event notification facility](https://man7.org/linux/man-pages/man7/epoll.7.html)
+1. [epoll(7) — I/O event notification facility](https://man7.org/linux/man-pages/man7/epoll.7.html)

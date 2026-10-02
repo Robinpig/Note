@@ -16,7 +16,8 @@ sys_call_table数组的定义：
 该函数也非常简单，就是直接返回错误码 -ENOSYS，表示系统调用非法。
 sys_call_table数组定义的地方好像只设置了默认值，并没有设置真正的系统调用函数
 
-我们再回头仔细看下sys_call_table数组的定义，它在设置完默认值之后，后面还include了一个名为asm/syscalls_64.h的头文件 这个头文件是编译时生成的 makefile中使用了syscalltbl.sh脚本和syscall_64.tbl模板文件来生成这个syscalls_64.h头文件。
+我们再回头仔细看下sys_call_table数组的定义，它在设置完默认值之后，后面还include了一个名为asm/syscalls_64.h的头文件 
+这个头文件是编译时生成的 makefile中使用了syscalltbl.sh脚本和syscall_64.tbl模板文件来生成这个syscalls_64.h头文件。
 
 来看下生成的syscalls_64.h头文件：
 
@@ -84,7 +85,7 @@ __visible noinstr bool do_syscall_64(struct pt_regs *regs, int nr)
 efi stub是linux的一个feature，它可以通过配置 CONFIG_EFI_STUB 来开启和关闭。
 它的实现原理是，按照 uefi 指定的 pecoff 格式，将内核伪装成一个 uefi application，这样在支持 uefi 的各种硬件上，就可以按照 uefi 协议，直接启动linux内核了。
 
-linux内核efi stub有关pecoff 格式定义的部分都在 arch/x86/boot/header.S 这个文件里
+Linux 内核efi stub有关pecoff 格式定义的部分都在 arch/x86/boot/header.S 这个文件里
 
 
 ```c
@@ -351,8 +352,6 @@ static int move_addr_to_user(struct sockaddr_storage *kaddr, int klen,
 ```
 
 ### inet_bind
-
-```c
 
 ```c
 const struct proto_ops inet_stream_ops = {
@@ -863,7 +862,7 @@ static inline void sk_acceptq_added(struct sock *sk)
 
 #### inet_csk_reqsk_queue_add
 
-Called by [TCP connect request](/docs/CS/OS/Linux/net/TCP/TCP.md?id=tcp_conn_request)
+Called by [TCP connect request](/docs/CS/OS/Linux/net/TCP/TCP.md)
 
 call `sk_acceptq_added`
 
@@ -990,7 +989,7 @@ All received ACK packets must first be matched against the fully established con
 On SYN Queue match, the kernel removes the item from the SYN Queue, happily creates a fully fledged connection (specifically: struct inet_sock), and adds it to the Accept Queue.
 
 SYN queue - logic queue
-see [qlen and max_syn_backlog](/docs/CS/OS/Linux/net/TCP/TCP.md?id=tcp_conn_request)
+see [qlen and max_syn_backlog](/docs/CS/OS/Linux/net/TCP/TCP.md)
 
 ```c
 

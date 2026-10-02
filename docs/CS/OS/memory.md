@@ -296,7 +296,7 @@ If a heavily used page is removed, it will probably have to be brought back in q
 The best possible page replacement algorithm is easy to describe but impossible to actually implement.
 
 The only problem with this algorithm is that it is unrealizable. At the time of the page fault, the operating system has no way of knowing when each of the pages will be referenced next.
-(We saw a similar situation earlier with the [shortest-job-first scheduling algorithm](/docs/CS/OS/process.md?id=shortest-job-first)—how can the system tell which job is shortest?)
+(We saw a similar situation earlier with the [shortest-job-first scheduling algorithm](/docs/CS/OS/process.md)—how can the system tell which job is shortest?)
 Still, by running a program on a simulator and keeping track of all page references, it is possible to implement optimal page replacement on the second run by using the page-reference information collected during the first run.
 
 ### NRU Algorithm

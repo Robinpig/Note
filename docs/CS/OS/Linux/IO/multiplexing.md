@@ -1,8 +1,8 @@
 ## Introduction
 
-select() allows a program to monitor multiple file descriptors, waiting until one or more of the file descriptors become "ready" for some class of I/O operation (e.g., input possible). A file descriptor is considered ready if it is possible to perform a corresponding I/O operation (e.g., read(2), or a sufficiently small write(2)) without blocking.
+I/O 多路复用（multiplexing）让一个线程能**同时监控多个文件描述符**，阻塞等待其中任意一个就绪。核心问题是：怎么用一次系统调用，等待大量 fd 中的某一个变得可读、可写或出现异常？
 
-poll() performs a similar task to select(2): it waits for one of a set of file descriptors to become ready to perform I/O.
+`select` 和 `poll` 是这条路线的前两代接口，工作机理几乎相同——内核每次都要遍历传入的全部 fd、检查就绪情况，再把结果拷回用户空间；两者只在描述符集合的表示方式上有差别。理解它们的实现，是理解第三代 `epoll` 为何高性能的前提。本笔记对照内核源码逐函数梳理 select、poll 的完整链路，`epoll` 单独成篇。
 
 ## select
 
@@ -276,7 +276,7 @@ poll相当于是改进版的select，但是工作原理基本和select没有本�
 `poll`调用返回时，每个描述符`fd`上产生的事件均被保存在`revents`成员内
 和`select`类似，`timeout`参数用来指定超时时间(ms)
 
-pollfd 使用时间分离的方式 每次调用无需重新设置pollfd对象 且不会反悔潮湿时间 无需重新设置
+pollfd 用事件与结果分离的方式：关注的事件放 `events`、返回的结果写 `revents`，互不覆盖，因此每次调用无需重新设置 pollfd 对象。
 ```c
 struct pollfd {
 	int fd;
@@ -407,3 +407,9 @@ select,poll的性能瓶颈主要体现在下面三个地方：
 | 最大连接     | 1024      | 理论上无      | 理论上无        |
 | 是否适合大连接数 | 否         | 否         | 是           |
 |          |           |           |             |
+
+## Links
+
+- [I/O 与多路复用（目录枢纽）](/docs/CS/OS/Linux/IO/README.md)
+- [IO 总览（五种模型）](/docs/CS/OS/Linux/IO/IO.md)
+- [io_uring](/docs/CS/OS/Linux/IO/io_uring.md)

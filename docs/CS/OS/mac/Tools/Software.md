@@ -121,7 +121,7 @@ REMOTE=https://mirrors.tuna.tsinghua.edu.cn/git/ohmyzsh.git sh install.sh
 
 ### autojump
 
-1. make sure [Homebrew](/docs/CS/OS/mac/Tools/Software.md?id=Homebrew) already installed
+1. make sure [Homebrew](/docs/CS/OS/mac/Tools/Software.md?id=homebrew) already installed
 2. vim .zshrc
    1. Add autojump after `plugins=`, for example plugins=(git autojump)
    2. Add a new row below `[[ -s $(brew --prefix)/etc/profile.d/autojump.sh ]] && . $(brew --prefix)/etc/profile.d/autojump.sh`

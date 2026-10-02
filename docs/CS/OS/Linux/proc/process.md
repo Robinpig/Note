@@ -22,20 +22,19 @@ For this purpose, Unix uses two mechanisms called fork and exec.
 
 ## task struct
 
-The Linux kernel internally represents processes as tasks, via the structure `task struct`.
-Unlike other OS approaches (which make a distinction between a process, lightweight process, and thread), Linux uses the task structure to represent any execution context.
-Therefore, a single-threaded process will be represented with one task structure and a multithreaded process will have one task structure for each of the user-level threads.
-Finally, the kernel itself is multithreaded, and has kernel-level threads which are not associated with any user process and are executing kernel code.
+Linux 内核在内部通过 `task struct` 结构将进程表示为任务
+与其他操作系统方法（区分进程、轻量级进程和线程）不同，Linux 使用任务结构来表示任何执行上下文。因此，单线程进程将由一个任务结构表示，而多线程进程的每个用户级线程将拥有一个任务结构。
+最后，内核本身是多线程的，并且有内核级线程，这些线程不属于任何用户进程，而是在执行内核代码。
 
-task_struct 中封装了很多资源
+`task_struct` 中封装了很多资源
 
 > 实时的空间进程布局可以在`/proc/PID/maps`文件中查看到
 
 task_struct字段表
 
+
 <table>
 <thead>
-
 <tr>
 <th>字段</th>
 <th>类型</th>
@@ -198,6 +197,9 @@ exit_signal</td>
 </tbody>
 </table>
 
+
+task_struct 结构体定义
+
 ```c
 struct task_struct {
     // Linux 通过 pid 来区分进程 相同进程下的线程的 tgid 是相同的 
@@ -220,7 +222,7 @@ struct task_struct {
 
     /* -1 unrunnable, 0 runnable, >0 stopped: */
     volatile long                state;
-  
+    /* 优先级 进程调度 */
     int                         prio;
     int                         static_prio;
     int                         normal_prio;
@@ -228,7 +230,7 @@ struct task_struct {
     struct sched_info             sched_info;
   
     struct list_head              tasks;
-  
+    // 地址空间
     struct mm_struct              *mm;
     struct mm_struct              *active_mm;
   
@@ -267,9 +269,12 @@ static __always_inline struct task_struct *get_current(void)
 sp_el0 里面存放的是 init_task, 即 thread_info 地址, thread_info 在 struct task_struct 的开始处
 p->thread_info->cpu
 
-### pid
 
-内核需要为每一个进程/线程都分配一个进程号。
+<!-- tabs:start -->
+
+##### **pid**
+
+内核需要为每一个进程/线程都分配一个唯一的进程号，对于没有创建线程的进程来说，tgid 和 pid是相同的。假如一个进程创建了很多线程，这些线程的pid不同， tgid是相同的。对于普通用户程序获取进程id返回的是 tgid。
 如果每个使用过的进程号如果使用传统的 int 变量来存储的话会消耗很大的内存
 早期版本为了节省内存 使用bitmap存储pid 每个bit表示一个pid 占用内存小 同时局部性较好 提高CPU缓存命中率
 
@@ -279,15 +284,14 @@ p->thread_info->cpu
 
 [Replace PID bitmap allocation with IDR AP](https://lwn.net/Articles/735675/) 并入到了 Linux 4.15 的版本中
 
-我们在用户空间引用或者使用进程的时候不能
-直接使用task_slrn(,l, 一般悄况下使用的是进程id
+我们在用户空间引用或者使用进程的时候不能直接使用task_slrn(,l, 一般情况下使用的是进程id
 
 内核定义了pid结构体作为id和task_struct的桥梁
 
 
-### state
+##### **state**
 
-进程的状态由task_struct的 `__state` 字段表示
+进程的状态由task_struct的 `state` 字段表示
 
 Task state bitmask. NOTE! These bits are also encoded in fs/proc/array.c: get_task_state().
 
@@ -318,23 +322,6 @@ Confusing, but this way modifying one set can't modify the other one by mistake.
 #define TASK_NOLOAD			0x0400
 #define TASK_NEW			0x0800
 #define TASK_STATE_MAX			0x1000
-
-/* Convenience macros for the sake of set_current_state: */
-#define TASK_KILLABLE			(TASK_WAKEKILL | TASK_UNINTERRUPTIBLE)
-#define TASK_STOPPED			(TASK_WAKEKILL | __TASK_STOPPED)
-#define TASK_TRACED			(TASK_WAKEKILL | __TASK_TRACED)
-
-#define TASK_IDLE			(TASK_UNINTERRUPTIBLE | TASK_NOLOAD)
-
-/* Convenience macros for the sake of wake_up(): */
-#define TASK_NORMAL			(TASK_INTERRUPTIBLE | TASK_UNINTERRUPTIBLE)
-
-/* get_task_state(): */
-#define TASK_REPORT			(TASK_RUNNING | TASK_INTERRUPTIBLE | \
-					 TASK_UNINTERRUPTIBLE | __TASK_STOPPED | \
-					 __TASK_TRACED | EXIT_DEAD | EXIT_ZOMBIE | \
-					 TASK_PARKED)
-
 ```
 
 进程的标志由 task_strnct 的flags字段表示，
@@ -351,11 +338,11 @@ Confusing, but this way modifying one set can't modify the other one by mistake.
 | PF_KTHREAD |  进程是一个内核线程 |
 
 
-### group
+##### **group**
 
 同一个线程组的线程， 它们的task_struct都通过thread_group字段链接到同一个链表中，链表的头为线程组领导进程的task_ struct 的 thread_ group字段， 可以据此来遍历线程组，
 
-### relation
+##### **relation**
 
 
 内核定义了一个使用频率很高的宏current,它是指向当前进程的Las k _strucl的指针。
@@ -368,7 +355,11 @@ hot. current_task, current 通过获取当前CPU 上变量的值得到
 
 这棵进程树就是由 task_struct 下的parent、children、sibling等字段来表示的 这几个字段将系统中的所有task串成了一棵树
 
-### mm
+sched
+
+
+
+##### **mm**
 
 对于用户进程来说 整个进程虚拟内存空间部分都是由 [mm_struct](/docs/CS/OS/Linux/mm/vm.md) 来表示的
 进程运行时 在用户态需要的内存数据 如代码 全局变量和 mmap 内存映射都是通过其进行内存查找和寻址的
@@ -381,13 +372,13 @@ hot. current_task, current 通过获取当前CPU 上变量的值得到
        struct mm_struct              *active_mm;
 ```
 
-### fs
+##### **fs**
 
 进程的文件位置等信息是由 [fs_struct](/docs/CS/OS/Linux/fs/fs.md) 来描述的
 
 进程使用files_struct 记录文件描述符的使用情况
 
-### namespace
+##### **namespace**
 
 A structure to contain pointers to all per-process namespaces - fs (mount), uts, network, sysvipc, etc.
 
@@ -411,6 +402,10 @@ struct nsproxy {
 	struct cgroup_namespace *cgroup_ns;
 };
 ```
+
+
+<!-- tabs:end -->
+
 
 ## init task
 
@@ -900,10 +895,16 @@ Ok, this is the main fork-routine.
 It copies the process, and if successful kick-starts it and waits for it to finish using the VM if required.
 args->exit_signal is expected to be checked for sanity by the caller.
 
-1. copy_process
-2. wake_up_new_task 添加到调度队列
+1. copy_process 生成一个新的 task_struct
+2. wake_up_new_task 将新的 task_struct 添加到调度队列
 
 wait_for_vfork_done if **vfork** -- avoid dirty data and deadlock
+
+
+
+创建进程和创建线程传入的flags 不相同
+- 进程只有一个 SIGCHLD
+- 线程创建传入 CLONE_VM,CLONE_FS,CLONE_FILES
 
 ```c
 // kernel/fork.c
@@ -1062,6 +1063,8 @@ int arch_dup_task_struct(struct task_struct *dst, struct task_struct *src)
 ```
 
 #### copy_files
+
+进程之间是独立的，新进程需要复制一份独立的 files；线程创建时传入flag CLONE_FILES，增加引用计数即完成
 
 ```c
 static int copy_files(unsigned long clone_flags, struct task_struct *tsk,
@@ -2717,5 +2720,6 @@ rb_add_cached(struct rb_node *node, struct rb_root_cached *tree,
 ```
 ## Links
 
+- [Processes 知识地图](/docs/CS/OS/Linux/proc/README.md)
 - [Linux](/docs/CS/OS/Linux/Linux.md)
 - [OS Process](/docs/CS/OS/process.md)

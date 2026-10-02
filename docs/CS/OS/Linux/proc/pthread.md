@@ -80,3 +80,7 @@ Pthread_mutex_unlock(&lock);
 ## Links
 
 - [processes](/docs/CS/OS/Linux/proc/process.md)
+- [语言运行时与内核任务](/docs/CS/OS/Linux/proc/runtime.md) — Java/Go 如何使用 pthread 与 clone
+- [futex](/docs/CS/OS/Linux/Lock/futex.md) — pthread mutex/cond 的内核实现基础
+- [Lock 总览](/docs/CS/OS/Linux/Lock/README.md) — 内核同步原语对照
+- [Processes 知识地图](/docs/CS/OS/Linux/proc/README.md)

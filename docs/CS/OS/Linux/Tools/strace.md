@@ -27,7 +27,7 @@ strace提供了多种参数来定制跟踪的行为：
 
 ## Links
 
-
+- [ptrace](/docs/CS/OS/Linux/proc/ptrace.md) — strace 的内核底座：syscall-stop 与 PTRACE_GET_SYSCALL_INFO
 
 ## References
 1. [strace(1) — Linux manual page](http://man7.org/linux/man-pages/man1/strace.1.html)

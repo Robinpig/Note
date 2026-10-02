@@ -55,3 +55,6 @@ MODULE_ALIAS("my test");
 ## Links
 
 - [Linux](/docs/CS/OS/Linux/Linux.md)
+- [LKM](/docs/CS/OS/Linux/module/LKM.md)
+- [sysfs](/docs/CS/OS/Linux/fs/sysfs.md)
+- [udev](/docs/CS/OS/Linux/dev/udev.md)

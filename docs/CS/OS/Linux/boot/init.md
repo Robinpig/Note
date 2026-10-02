@@ -210,7 +210,7 @@ asmlinkage __visible void __init __no_sanitize_address start_kernel(void)
 ```c       
        trap_init();
 ```
-[Init memory](/docs/CS/OS/Linux/memory.md?id=init)
+[Init memory](/docs/CS/OS/Linux/mm/memory.md?id=init)
 ```c
        mm_init();
 
@@ -255,7 +255,7 @@ Allow workqueue creation and work item queueing/cancelling early.  Work item exe
        /* init some links before init_ISA_irqs() */
        early_irq_init();
 ```
-[Init IRQ](/docs/CS/OS/Linux/Interrupt.md?id=init_IRQ)
+[Init IRQ](/docs/CS/OS/Linux/Interrupt.md?id=init_irq)
 ```c
        init_IRQ();
 ```
@@ -384,7 +384,7 @@ Allow workqueue creation and work item queueing/cancelling early.  Work item exe
 ```
 
 
-call rest_init -> [kernel_init](/docs/CS/OS/Linux/init.md?id=kernel_init)
+call rest_init -> [kernel_init](/docs/CS/OS/Linux/boot/init.md?id=kernel_init)
 ```c
        /* Do the rest non-__init'ed, we're now alive */
        arch_call_rest_init();

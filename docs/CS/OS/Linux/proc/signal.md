@@ -355,7 +355,7 @@ int do_sigaction(int sig, struct k_sigaction *act, struct k_sigaction *oact)
 
 ### get_signal
 
-get_signal 的核心是一个循环
+get_signal 的核心是一个循环；若任务正被跟踪，取出的信号在交给处理函数之前会先交给 [ptrace](/docs/CS/OS/Linux/proc/ptrace.md)——`ptrace_signal()` 让它进入 signal-delivery-stop 停在 `TASK_TRACED`，等 tracer 检查、放行或改写信号后才继续：
 ```c
 bool get_signal(struct ksignal *ksig)
 {
@@ -784,3 +784,4 @@ badframe:
 ## Links
 
 - [processes](/docs/CS/OS/Linux/proc/process.md)
+- [Processes 知识地图](/docs/CS/OS/Linux/proc/README.md)

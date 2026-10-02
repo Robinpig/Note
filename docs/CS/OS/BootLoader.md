@@ -135,7 +135,8 @@ head.S
 
 
 
-目前常见的 Bootloader 有 Grub 和 U-Boot
+目前常见的 Bootloader 有 [GRUB](/docs/CS/OS/Boot/Grub.md) 和 U-Boot。
+GRUB 实现了 Multiboot 规范，xv6 等教学内核也可以在 ELF 中嵌入 multiboot header 后由 GRUB 直接引导。
 
 并不是每一个OS都需要 Bootloader, 但是 Bootloader的存在使得内核的启动和硬件解耦合 并支持多系统选择启动 有的甚至支持网络加载内核
 随着 UEFI 的发展 内核与 UEFI 配合可以完成整个启动过程 不需要 Bootloader的参与
@@ -144,6 +145,9 @@ head.S
 ## Links
 
 - [Operating Systems](/docs/CS/OS/OS.md)
+- [BIOS 与 UEFI](/docs/CS/OS/BIOS.md)
+- [GRUB](/docs/CS/OS/Boot/Grub.md)
+- [Bochs](/docs/CS/OS/Bochs.md)
 
 
 ## References

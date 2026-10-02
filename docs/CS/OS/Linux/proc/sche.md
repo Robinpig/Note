@@ -696,6 +696,10 @@ chrt -f -p 1 pid
 
 > [Android](/docs/CS/OS/Android/schedule.md)更多的是实时的任务
 
+nice 值只作用于普通（fair/EEVDF）任务：范围 -20 ~ 19，对应内核优先级 100 ~ 139（`MAX_RT_PRIO = 100`，0 ~ 99 被实时任务占用）。nice 并不改变"谁先跑"的绝对顺序——实时类永远先于 fair 类——它改变的是每个实体在时间片内分到的权重（见 [vruntime 与权重](/docs/CS/OS/Linux/proc/fair.md?id=vruntime-与权重)）。
+
+调整策略与优先级的用户态入口：`sched_setscheduler()` / `chrt`（策略+实时优先级）、`nice`/`renice`（普通任务权重）、`taskset`（CPU 亲和性）。
+
 
 ## init
 
@@ -788,6 +792,13 @@ O(n)调度器发布于1992年，该调度器算法比较简洁，从就绪队列
 它为每个CPU维护一组进程优先级队列，每个优先级一个队列，这样在选择下一个进程时，只需要查询优先级队列相应的位图即可知道哪个队列中有就绪进程，所以查询时间为常数O(1)。
 O(1)调度器在处理某些交互式进程时依然存在问题，特别是在有一些测试场景下导致交互式进程反应缓慢
 另外，它对NUMA的支持也不完善，因此大量难以维护和阅读的代码被加入该调度器代码实现中
+
+后续演进：
+
+- **CFS**（2.6.23，Ingo Molnar）：以红黑树按 vruntime 组织，每次挑最左节点，追求"理想公平时间"下的完全公平。
+- **EEVDF**（6.6）：在公平性之上引入 lag 与 virtual deadline，用 slice 控制延迟，取代经典 CFS 的 gran/buddy 启发式（见 [fair](/docs/CS/OS/Linux/proc/fair.md?id=eevdf)）。
+- **sched_ext**（6.12，`CONFIG_SCHED_CLASS_EXT`）：用 BPF 实现可编程调度类，可在线接管普通任务的调度，详见 [sched_ext](/docs/CS/OS/Linux/proc/sched_ext.md)——前文 rq 结构体中的 `scx` 字段与 `ext_sched_class` 即来源于此。
+- 实时类语义保持不变：FIFO/RR/DEADLINE 按优先级绝对先于普通任务（见 [rt](/docs/CS/OS/Linux/proc/rt.md)、[DL](#dl)）。
 
 
 
@@ -1357,6 +1368,31 @@ SYM_FUNC_END(__switch_to_asm)
 .popsection
 ```
 
+## preemption
+
+抢占分两步：**置位**与**切换**，两步是解耦的。
+
+置位：任何认为"应该换人"的场合只设置 `TIF_NEED_RESCHED` 标志，并不立刻切换。典型来源：
+
+- 时钟节拍 `scheduler_tick()` → 调度类 `task_tick()`：EEVDF 中 slice 用尽、RT 中 RR 时间片轮转、RT 带宽超限；
+- 唤醒 `try_to_wake_up()` → `check_preempt_curr()`：被唤醒任务比当前任务更值得运行；
+- `sched_setscheduler()` 改优先级、负载均衡迁移、`yield` 等。
+
+切换：在最近的安全点检查标志并调用 `__schedule(preempt=true)`：
+
+- 返回用户态前（syscall / 中断 / 异常返回路径）；
+- 内核态可抢占点：`CONFIG_PREEMPTION=y` 时的 `preempt_enable()`（对应 `preempt_schedule()`）、中断返回内核态（对应 `preempt_schedule_irq()`）；
+- 不可抢占内核中则是 `cond_resched()` 或显式 `schedule()`。
+
+内核抢占模型（`CONFIG_PREEMPT_*`）从宽松到严格：`PREEMPT_NONE`（吞吐优先，适合服务器）→ `PREEMPT_VOLUNTARY`（桌面默认）→ `PREEMPT`（低延迟）→ `PREEMPT_RT` 实时补丁（6.12 起大部分能力已并入主线）。
+
+## 观测与调参
+
+- 关键 sysctl（`/proc/sys/kernel/`）：`sched_base_slice`（EEVDF 基础时间片，0.75ms 起，随 CPU 数放大）、`sched_migration_cost_ns`（迁移代价，影响负载均衡激进度）、`sched_rt_period_us` / `sched_rt_runtime_us`（RT 带宽，默认 1s / 0.95s）、`sched_rr_timeslice_ms`。
+- `/proc/sched_debug`、`/sys/kernel/debug/sched/`：各 rq/cfs_rq 的 min_vruntime、负载与调度域拓扑。
+- `perf sched`（延迟分析：`record`/`latency`/`map`）、eBPF/schedstat：调度延迟分布统计，见 [Perf](/docs/CS/OS/Linux/Tools/Perf.md)、[eBPF](/docs/CS/OS/Linux/Tools/eBPF.md)。
+- `taskset` / `chrt` / `nice`：亲和性（[affinity](#affinity)）、实时策略、优先级。
+
 ## affinity
 
 ### set affinity
@@ -1648,3 +1684,4 @@ Fig.1. Idle 进程流程
 ## Links
 
 - [processes](/docs/CS/OS/Linux/proc/process.md)
+- [Processes 知识地图](/docs/CS/OS/Linux/proc/README.md)

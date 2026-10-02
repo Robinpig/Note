@@ -52,7 +52,7 @@ see system calls:
 1. [socket](/docs/CS/OS/Linux/net/socket.md?id=create)
 2. [bind](/docs/CS/OS/Linux/Calls.md?id=bind)
 3. [listen](/docs/CS/OS/Linux/Calls.md?id=listen)
-4. [connect](/docs/CS/OS/Linux/Calls.md?id=connect)
+4. [connect](/docs/CS/OS/Linux/Calls.md)
 5. [send](/docs/CS/OS/Linux/net/TCP/TCP.md?id=send)
 6. [recv](/docs/CS/OS/Linux/net/TCP/TCP.md?id=recv)
 
@@ -1301,4 +1301,5 @@ static void tcp_v4_reqsk_send_ack(const struct sock *sk, struct sk_buff *skb,
 
 ## Links
 
-- [docs/CS/OS/Linux/TCP](/docs/CS/OS/Linux/net/TCP/TCP.md)
+- [网络知识地图](/docs/CS/OS/Linux/net/README.md)
+- [Linux](/docs/CS/OS/Linux/Linux.md)

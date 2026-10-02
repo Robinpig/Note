@@ -863,7 +863,7 @@ static struct fs_context *alloc_fs_context(struct file_system_type *fs_type,
 Make all filesystems support this unconditionally
 
 call `init_fs_context` by file_system_type:
-1. [sockfs](/docs/CS/OS/Linux/net/socket.md?id=sockfs_init_fs_context)
+1. [sockfs](/docs/CS/OS/Linux/net/socket.md)
 
 ```c
 	
@@ -1076,4 +1076,9 @@ Writing To Disk Sequentially
 
 ## Links
 
+- [文件管理机制](/docs/CS/OS/Linux/fs/README.md)
 - [Linux](/docs/CS/OS/Linux/Linux.md)
+- [ext4](/docs/CS/OS/Linux/fs/ext4.md)
+- [proc](/docs/CS/OS/Linux/fs/proc.md)
+- [sysfs](/docs/CS/OS/Linux/fs/sysfs.md)
+- [Minix](/docs/CS/OS/Linux/fs/Minix.md)

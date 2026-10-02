@@ -131,3 +131,4 @@ public void refresh(String text) {
 ## Links
 - [Operating Systems](/docs/CS/OS/OS.md)
 - [Linux](/docs/CS/OS/Linux/Linux.md)
+- [Android 调度（cpuset/EAS/uclamp/Binder PI）](/docs/CS/OS/Android/schedule.md)

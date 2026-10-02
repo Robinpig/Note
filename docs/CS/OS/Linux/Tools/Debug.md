@@ -315,3 +315,12 @@ Can not log in through UI(SSH works fine) after restart.
 
 1. [gdb 调试 Linux 内核网络源码](https://wenfh2020.com/2021/05/19/gdb-kernel-networking/)
 2. [libxkbcommon.so.0: no version information available after installing VSCode update](https://stackoverflow.com/questions/66058683/libxkbcommon-so-0-no-version-information-available-after-installing-vscode-upda)
+
+## Links
+
+- [Introduction](/docs/CS/OS/Linux/Tools/BPF.md)
+- [Introduction](/docs/CS/OS/Linux/Tools/CMD.md)
+- [Introduction](/docs/CS/OS/Linux/Tools/Perf.md)
+- [introduction](/docs/CS/OS/Linux/Tools/Termux.md)
+- [Introduction](/docs/CS/OS/Linux/Tools/Tools.md)
+- [Introduction](/docs/CS/OS/Linux/Tools/VNC.md)

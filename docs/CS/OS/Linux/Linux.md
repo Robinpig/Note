@@ -20,7 +20,7 @@ Linux系统诞生于1991年10月5日
   - [Ubuntu](/docs/CS/OS/Linux/Distribution/Ubuntu.md)
 - SuSE Linux
 - Arch Linux
-- Kail Linux
+- Kali Linux
 - [OpenSuse]()
 - [Android](/docs/CS/OS/Android/Android.md)
 
@@ -61,711 +61,23 @@ Linux在最初是宏内核架构 同时也逐渐融入了微内核的精华 如�
 
 ## Kernel
 
+内核源码的获取、阅读与构建单独成篇：怎么装源码包、用 ctags / bootlin 读代码、`.config` 配置、`make` 构建与 `bzImage` 的拼接机制，见 [内核构建](/docs/CS/OS/Linux/build.md)。
 
+想读一份**读得完的 Linux**，可以看 0.11 版本 [Linux 0.11](/docs/CS/OS/Linux/0.11.md)：1991 年的内核源码展开后仅 325KB，却已具备进程调度、信号、块设备与文件系统的雏形，用 [Bochs](/docs/CS/OS/Bochs.md) 就能跑起来。它和 xv6 / rCore 那类**教学内核**不是一回事——0.11 是 Linux 自己的早期版本，是现代内核的直系祖先，不是为教学另写的简化系统。它的启动部分（`boot/bootsect.s` → `setup.s` → `head.S` 三段接力）与现代差异极大，正好和下面的启动链对照着看这套机制是怎么演化过来的。
 
-### Read
+## Boot
 
-执行 ctags -R 生成索引文件 tags
+镜像编出来之后怎么跑起来，是 [启动链](/docs/CS/OS/Linux/boot/README.md) 的主题：上电 → BootLoader → 内核解压 → `start_kernel` → init → systemd。这是 `Linux/` 下唯一一条严格单向的时间轴，[init](/docs/CS/OS/Linux/boot/init.md) 讲用户态第一号进程与运行级，[U-Boot](/docs/CS/OS/Linux/boot/U-Boot.md) 与 [arm](/docs/CS/OS/Linux/boot/arm.md) 覆盖嵌入式侧的引导器与架构差异。
 
-- ctrl + ] 进入函数定义
-- g, ctrl + ] 进入函数定义 可选择
-- ctrl + o 返回
+## 内核协同链路
 
-打开vim后 加载tags文件
-
-```shell
-:set tags=tags
-```
-
-> 在线阅读 [bootlin](https://elixir.bootlin.com/linux/v6.11/source)
-
-#### Directory
-
-目录结构
-
-
-| Directory |                                                                                                                                                                                                                |  |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | - |
-| kernel    | The kernel directory contains the code for the components at the heart of the kernel.                                                                                                                          |  |
-| arch      | arch/ holds all architecture-specific files, both include files and C and Assembler sources.<br />There is a separate subdirectory for each processor architecture supported by the kernel.                    |  |
-| crypto    | crypto/ contains the files of the crypto layer (which is not discussed in this book).<br />It includesimplementations of various ciphers that are needed primarily to support IPSec (encrypted IP connection). |  |
-| mm        | High-level memory management resides in mm/.                                                                                                                                                                   |  |
-| fs        | fs/ holds the source code for all filesystem implementations.                                                                                                                                                  |  |
-| include   | include/ contains all header files with publicly exported functions.                                                                                                                                           |  |
-| init      | The code needed to initialize the kernel is held in init/.                                                                                                                                                     |  |
-| ipc       | The implementation of the System V IPC mechanism resides in ipc/.                                                                                                                                              |  |
-| lib       | lib/ contains generic library routines that can be employed by all parts of the kernel,<br />including data structures to implement various trees and data compression routines.                               |  |
-| net       | net/ contains the network implementation, which is split into a core section and a section to implement the individual protocols                                                                               |  |
-| security  | The security/ directory is used for security frameworks and key management for cryptography.                                                                                                                   |  |
-| scripts   | scripts/ contains all scripts and utilities needed to compile the kernel or to perform other useful tasks.                                                                                                     |  |
-| drivers   | drivers/ occupies the lion’s share of the space devoted to the sources.                                                                                                                                       |  |
-| firmware  |                                                                                                                                                                                                                |  |
-| virt      |                                                                                                                                                                                                                |  |
-| usr       |                                                                                                                                                                                                                |  |
-| tools     |                                                                                                                                                                                                                |  |
-| block     | block device                                                                                                                                                                                                   |  |
-
-```shell
-usr/src/kernels/
-```
-
-内核源码根目录下的Makefile Kconfig Kbuild是与内核配置、编译相关的文件
-
-- [Init](/docs/CS/OS/Linux/init.md)
-
-内核中可供调用的函数通常需要EXPORT
-
-
-
-### Build
-
-> [!TIP]
->
-> 最佳推荐环境是 Linux物理机 > Linux虚拟机 > Docker容器
-
-
-
-[Linux 0.11](/docs/CS/OS/Linux/0.11.md)
-
-
-调试环境需要安装qemu+gdb
-
-需要准备如下：
-
-- 带调试信息的内核vmlinux
-- 一个压缩的内核vmlinuz bzImage/Image
-- 一份裁剪过的文件系统initrd/initramfs
-
-vmlinux 是生成的内核二进制文件它是一个没有压缩的镜像
-
-- **Image**是vmlinux经过OBJCOPY后生成的纯二进制映像文件
-- **zImage**是Image经过压缩后形成的一种映像压缩文件
-- **uImage**是在zImage基础上在前面64字节加上内核信息后的映像压缩文件，供uboot使用
-
-fs可以通过不同的tools来构建
-
-- buildroot
-
-编译busybox时因为内存不足出现如下错误 可在Docker Desktop中看到内存占用很高, 创建较大内存的容器后重新make
-
-> gcc: fatal error: Killed signal terminated program cc1
-
-出现如下问题 需要 设置disable Applets->Shells->ash->job control
-
-> can't access tty; job control turned off
-
-编译Linux主要分两部分
-
-- kernel 下载[aliyun mirror](https://mirrors.aliyun.com/linux-kernel/v6.x/?spm=a2c6h.25603864.0.0.596f43c0uwxjrK)
-- fs 通常使用的是busybox
-
-#### Build Configuration
-
-qemu启动只携带kernel会error `unable to mount root fs`
-
-
-
-常见的根文件系统
-buildroot 和 busybox 无包管理工具
-
-
-
-<!-- tabs:start -->
-
-
-
-##### **kernel**
-
-依赖
-
-```shell
-sudo apt-get install -y  procps  vim  bc bison build-essential cpio  flex  libelf-dev  libncurses-dev gcc g++ make libssl-dev
-
-```
-
-Linux 内核的构建过程会查找 `.config` 文件。顾名思义，这是一个配置文件，用于指定 Linux 内核的所有可能的配置选项。这是必需的文件。
-
-获取 Linux 内核的 `.config` 文件有两种方式
-
-使用你的 Linux 发行版的配置作为基础（**推荐做法**）
-
-```shell
-### Debian 和 Fedora 及其衍生版：
-$ cp /boot/config-"$(uname -r)" .config
-
-### Arch Linux 及其衍生版：
-$ zcat /proc/config.gz > .config
-```
-
-使用默认的，通用的配置
-
-
-```shell
-make defconfig
-```
-
-
-
-无论使用 Linux 发行版的配置并更新它，还是使用 `defconfig` 目标创建新的 `.config` 文件，你都可能希望熟悉如何修改这个配置文件 使用 `make menuconfig` 修改更方便
-
-
-> Kernel hacking ---> Compile-time checks and compiler options 开启GDB Scripts
-
-
-| 编译报错 | 解决方法 |
-| --- | --- |
-| No rule to make target 'debian/certs/debian-uefi-certs.pem | vim .config 文件 remove包含 debian 的key配置 |
-
-
-
-
-
-
-
-##### **busybox**
-
-
-
-> Busybox 配置时需要disable Applets->Shells->ash->job control
-> 否则将在linux启动后报错 can't access tty,job control turned off
-
-
-```shell
-
-make
-
-make install  CONFIG_PREFIX=../busybox
-```
-
-
-创建文件夹
-
-```shell
-mkdir -p {home,bin,sbin,etc,proc,sys,usr/{bin,sbin}}
-```
-
-制作临时的init
-
-vim shell.c
-
-```shell
-#include<stdio.h>
-
-int main()
-{
-	while(1)
-	{
-    printf("Hello World!");
-    scanf("%d");	
-	}
-}
-```
-
-
-
-打包init文件
-```shell
-gcc main.c  -static -o init
-
-echo "init" | cpio -H newc -o > init.cpio
-qemu-system-x86_64 -kernel linux-6.13.5/arch/x86/boot/bzImage  -initrd init.cpio
-```
-
-
-配置用户文件
-/etc/passwd 文件包含了所有系统用户账户列表以及每个用户的基本配置信息
-
-```
-# /etc/passwd
-root:x:0:0:Linux User,,,:/root:/bin/sh
-
-# /etc/group
-tty:x:0:
-
-# /etc/shadow
-root::::::::
-```
-
-正式配置init
-
-```shell
-#!/bin/sh
-
-mount -t proc none /proc
-mount -t sysfs none /sys
-
-echo -e "\nBoot took $(cut -d' ' -f1 /proc/uptime) seconds\n"
-
-mkdir -p /home/admin
-
-mount -n -t tmpfs none /dev
-
-mknod -m 622 /dev/console c 5 1
-mknod -m 666 /dev/null c 1 3
-mknod -m 666 /dev/zero c 1 5
-mknod -m 666 /dev/ptmx c 5 2
-mknod -m 666 /dev/tty c 5 0 # <--
-mknod -m 444 /dev/random c 1 8
-mknod -m 444 /dev/urandom c 1 9
-mknod -m 666 /dev/ttyAMA0 c 5 3
-
-chown admin:tty /dev/console
-chown admin:tty /dev/ptmx
-chown admin:tty /dev/tty
-chown admin:tty /dev/ttyAMA0 
-
-exec /bin/sh
-```
-
-
-
-打包busybox
-```shell
-find . -print0 | cpio --null -ov --format=newc | gzip -9 > ../busybox.cpio.gz
-```
-
-
-
-
-
-<!-- tabs:end -->
-
-
-
-
-```shell
-qemu-system-x86_64  -kernel linux-6.13.5/arch/x86/boot/bzImage  -initrd busybox/busybox.cpio.gz  -nographic -append "console=ttyS0"
-```
-
-
-
-
-grub的配置
-
-
-
-
-
-```shell
-sudo grub-install --target=x86_64-efi --efi-directory=$(realpath mnt) --bootloader-id=GRUB  --removable --recheck
-```
-
-
-
-
-
-
-
-```shell
-
-qemu-system-x86_64  -drive file=./linux.img -bios /usr/share/ovmf/OVMF.fd -m 1G -serial stdio
-```
-
-
-
-
-
-#### Build examples
-
-<!-- tabs:start -->
-
-##### **Ubuntu**
-
-```shell
- wget https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.10.3.tar.xz
- 
- tar Jxf linux-6.10.3.tar.xz
-```
-
-> 异常: gelf.h: No such file or directory
->
-> sudo apt install libelf-dev
-
-```shell
-sudo apt install libelf-dev
-
-
-zcat /proc/config.gz > .config
-
-```
-
-> make[1]: *** No rule to make target 'debian/canonical-certs.pem', needed by 'certs/x509_certificate_list'.  Stop.
-> make: *** [Makefile:1809: certs] Error 2
->
-> scripts/config --disable SYSTEM_TRUSTED_KEYS
-
-##### **ARM Ubuntu**
-
-> 基于[奔跑吧 Linux内核 入门篇]()
-
-```shell
-wget https://github.com/runninglinuxkernel/runninglinuxkernel_5.0/archive/refs/heads/rlk_5.0.zip
-unzip rlk_5.0.zip
-mv runninglinuxkernel_5.0-rlk_5.0/ runninglinuxkernel_5.0
-
-cd runninglinuxkernel_5.0/
-sudo ./run_rlk_arm64.sh build_kernel
-sudo ./run_rlk_arm64.sh build_rootfs
-./run_rlk_arm64.sh run
-```
-
-##### **ARM Mac**
-
-```shell
-brew install make
-brew install aarch64-elf-gcc
-brew install openssl@1.1
-```
-
-内核源码同级新建include目录，拷贝[elf.h](https://raw.githubusercontent.com/bminor/glibc/master/elf/elf.h)文件到其中
-
-> 由于macOS环境已经定义了uuid_t从而引发了重复定义的错误
->
-> error: member reference base type 'typeof (((struct tee_client_device_id )0)->uuid)' (aka 'unsigned char [16]') is not a structure or union uuid.b[15])
-
-scripts/mod/file2alias.c文件中
-
-```
-typedef struct {
-        __u8 b[16];
- } uuid_le;
-
-#ifdef __APPLE__
-#define uuid_t compat_uuid_t
-#endif
-
- typedef struct {
-        __u8 b[16];
- } uuid_t;
-```
-
-```shell
-/opt/homebrew/opt/make/libexec/gnubin/make ARCH=arm64 CROSS_COMPILE=aarch64-elf- HOSTCFLAGS="-I../include -I/opt/homebrew/opt/openssl@1.1/include/" HOSTLDFLAGS="-L/opt/homebrew/opt/openssl@1.1/lib/" -j8
-
-# 去掉CONFIG_KVM选项避免不必要的报错
-# [ ] Virtualization  ----
-/opt/homebrew/opt/make/libexec/gnubin/make ARCH=arm64 CROSS_COMPILE=aarch64-elf- menuconfig
-```
-
-> https://ixx.life/notes/cross-compile-linux-on-macos/
-
-查看vmlinux文件
-
-```shell
-file vmlinux
-```
-
-##### **x86 Mac**
-
-```shell
-
-```
-
-##### **x86 Docker**
-
-> 参考[Linux核心概念详解 - 1. 调试环境](https://s3.shizhz.me/s3e1)
-
-需要一个能够编译 Linux Kernel 的 Docker 镜像 新建目录 $HOME/linux/docker:
-在该目录下创建文件 build-kernel.sh 并写入如下内容：
-
-```shell
-#!/bin/bash
-
-cd /workspace/linux-5.12.14
-make O=../obj/linux/ -j$(nproc)
-```
-
-在该目录下创建文件 start-gdb.sh 并写入如下内容：
-
-```shell
-#!/bin/bash
-
-echo 'add-auto-load-safe-path /workspace/linux-5.12.14/scripts/gdb/vmlinux-gdb.py' > /root/.gdbinit # 让 gdb 能够顺利加载内核的调试脚本，如果在下一节编译 Linux Kernel 时下载的是另一版本的 Linux Kernel 代码，请修改这里的版本号
-cd /workspace/obj/linux/
-gdb vmlinux -ex "target remote :1234" # 启动 gdb 远程调试内核
-```
-
-创建文件 Dockerfile 并写入如下内容：
-
-```dockerfile
-FROM --platform=linux/amd64 dockerproxy.cn/debian:10.8-slim
-
-RUN apt-get update
-RUN apt install -y apt-transport-https ca-certificates \
-    && echo 'deb https://mirrors.tuna.tsinghua.edu.cn/debian/ buster main contrib non-free \n\
-    deb https://mirrors.tuna.tsinghua.edu.cn/debian/ buster-updates main contrib non-free \n\
-    deb https://mirrors.tuna.tsinghua.edu.cn/debian-security buster/updates main contrib non-free\n'\
-    > /etc/apt/sources.list \
-    && apt update && apt-get install -y \
-    procps \
-    vim \
-    bc \
-    bison \
-    build-essential \
-    cpio \
-    flex \
-    libelf-dev \
-    libncurses-dev \
-    libssl-dev \
-    vim-tiny \
-    qemu-kvm \
-    gdb
-ADD ./start-gdb.sh /usr/local/bin
-ADD ./build-kernel.sh /usr/local/bin
-RUN chmod a+x /usr/local/bin/*.sh
-WORKDIR /workspace
-```
-
-通过如下命令构建镜像：
-
-```shell
-docker build --platform=linux/amd64 -t linux-builder .
-```
-
-下载最新稳定版的内核代码：
-
-```shell
-cd $HOME/linux/
-wget https://cdn.kernel.org/pub/linux/kernel/v5.x/linux-5.12.14.tar.xz
-tar -xvJf linux-5.12.14.tar.xz
-```
-
-创建编译结果的输出目录：
-
-```shell
-mkdir -p $HOME/linux/obj
-```
-
-进入目录 $HOME/linux/ 并运行如下命令，进入容器编译内核：
-
-```shell
-docker run --platform=linux/amd64 -it --name linux-builder -v $HOME/linux:/workspace linux-builder
-```
-
-在容器内进入解压后内核源代码目录，并配置 Kernel 的编译选项：
-
-```shell
-cd /workspace/linux-5.12.14
-make O=../obj/linux menuconfig
-```
-
-
-编译kernel
-
-> Mac的APFS文件系统默认case insensitive, 导致make的xt_TCPMSS.o变成xt_tcpmss.o
-> 需要修改Makefile里变成xt_tcpmss.o
-
-```shell
-bash build-kernel.sh
-```
-
-下载 busybox 到工作目录并解压:
-
-```shell
-
-cd $HOME/linux
-wget https://busybox.net/downloads/busybox-1.33.1.tar.bz2
-tar -vxjf busybox-1.33.1.tar.bz2
-```
-
-回到编译内核的容器 linux-builder 中，对 busybox 进行编译配置：
-
-```shell
-
-mkdir -p /workspace/obj/busybox # 创建 busybox 的编译输出目录
-cd /workspace/busybox-1.33.1
-make O=../obj/busybox menuconfig
-```
-
-最后一条命令会打开配置目录，选中 Settings ---> Build static binary (no shared libs)
-
-然后通过如下命令编译并安装 busybox:
-
-```shell
-cd /workspace/obj/busybox/
-make -j$(nproc)
-make install
-```
-
-使用 busybox 构建一个极简的 initramfs, 能引导 Linux 启动并进入一个 shell 环境就足够。在容器中回到目录 /workspace 执行如下命令：
-
-```shell
-mkdir -p /workspace/initramfs/busybox
-cd !$
-mkdir -p {bin,sbin,etc,proc,sys,usr/{bin,sbin}}
-cp -av /workspace/obj/busybox/_install/* .
-```
-
-此时我们已经将 busybox 生成的可执行文件全部拷贝到了对应目录，但还缺少一个 init 程序，可以简单写一个 shell 脚本来充当 init, 将如下内容写入文件 /workspace/initramfs/busybox/init 中：
-
-```shell
-#!/bin/sh
-
-mount -t proc none /proc
-mount -t sysfs none /sys
-
-echo -e "\nBoot took $(cut -d' ' -f1 /proc/uptime) seconds\n"
-
-exec /bin/sh
-```
-
-为文件添加可执行权限：
-
-```shell
-chmod a+x /workspace/initramfs/busybox/init
-```
-
-通过如下命令将所有内容打包：
-
-```shell
-cd /workspace/initramfs/busybox
-
-find . -print0 \
-| cpio --null -ov --format=newc \
-| gzip -9 > /workspace/obj/initramfs-busybox.cpio.gz
-```
-
-文件 /workspace/obj/initramfs-busybox.cpio.gz 便是最终的 initramfs, 该文件会在启动内核时作为参数传递给 qemu.
-
-运行
-
-```shell
-qemu-system-x86_64 -kernel /workspace/obj/linux/arch/x86_64/boot/bzImage -initrd /workspace/obj/initramfs-busybox.cpio.gz -nographic -append "console=ttyS0"
-```
-
-##### **ARM Docker**
-
-ARM配置操作基本同x86 以下列出的是不同点
-
-Dockerfile增加
-
-```dockerfile
-
-ENV PATH /path/to/qemu-aarch64-static:$PATH
-ENV LD_LIBRARY_PATH /path/to/qemu-aarch64-static/usr/lib:$LD_LIBRARY_PATH
-```
-
-
-启动
-
-```shell
-qemu-system-aarch64 -s -S -name vm2 -M virt -cpu cortex-a57 -m 4096M -kernel /workspace/obj/linux/arch/arm64/boot/Image -initrd /workspace/obj/initramfs-busybox.cpio.gz -nographic -append nokaslr root="/dev/ram init=/init console=ttyAMA0"
-```
-
-<!-- tabs:end -->
-
-#### config
-
-Linux 内核的构建过程会查找 .config 文件。顾名思义，这是一个配置文件，用于指定 Linux 内核的所有可能的配置选项。这是必需的文件。
-获取 Linux 内核的 .config 文件有两种方式：
-
-- 使用你的 Linux 发行版的配置作为基础（推荐做法）
-- 使用默认的，通用的配置
-
-Linux 发行版的 Linux 内核配置文件会在以下两个位置之一：
-
-- 大多数 Linux 发行版，如 Debian 和 Fedora 及其衍生版，将会把它存在 /boot/config-$(uname -r)。
-- 一些 Linux 发行版，比如 Arch Linux 将它整合在了 Linux 内核中。所以，可以在 /proc/config.gz 找到。
-
-```shell
-cp /boot/config-${uname -r} .config
-```
-
-make 方式
-
-```shell
-export ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu-
-
-make allnoconfig
-make menuconfig
-```
-
-过程中遇到问题需要关闭功能 例如CONFIG_DEBUG_INFO_BIF=N时需要重新设置.config
-
-- 运行脚本关闭: scripts/config --disable CONFIG_DEBUG_INFO_BIF
-- 在menuconfig上设置
-
-menuconfig是Linux平台用于管理代码工程、模块及功能的实用工具
-menuconfig 其实只能算是一个“前端”，用于支撑它、决定它拥有什么配置项的“后端”则被称为 Kconfig
-
-Kconfig参考文档位于 ./Document/kbuild/kconfig-language.rst
-
-Kconfig常用的几个知识点有以下五个：
-
-1. config模块
-2. menuconfig模块
-3. menu模块
-4. choice模块
-5. if 与 depends on 模块
-
-```
-General setup  --->   
-  [*] Initial RAM filesystem and RAM disk (initramfs/initrd) support  
-  [*] Configure standard kernel features (expert users)  ---> 
-
-Executable file formats  --->
-  [*] Kernel support for ELF binaries 
-  [*] Kernel support for scripts starting with #! 
-
-Device Drivers  --->  
-  Generic Driver Options  --->
-    [*] Maintain a devtmpfs filesystem to mount at /dev
-    [*]   Automount devtmpfs at /dev, after the kernel mounted the rootfs 
-
-Device Drivers  ---> 
-  Character devices  ---> 
-    Serial drivers  ---> 
-      [*] ARM AMBA PL010 serial port support 
-        [*]   Support for console on AMBA serial port
-      [*] ARM AMBA PL011 serial port support  
-        [*]   Support for console on AMBA serial port   
-
-File systems  --->  
-  [*] Second extended fs support
-  [*] The Extended 4 (ext4) filesystem 
-
-Device Drivers  ---> 
-  [*] Block devices  ---> 
-    [*]   RAM block device support
-```
-
-#### makefile
-
-install.sh脚本文件只是完成复制的功能 将bzImage文件复制到vmlinuz
-
-```makefile
-#linux/arch/x86/boot/Makefile
-install:
-        sh $(srctree)/$(src)/install.sh $(KERNELRELEASE) $(obj)/bzImage \
-                System.map "$(INSTALL_PATH)"
-```
-
-生成bzImage文件需要三个依赖文件：setup.bin、vmlinux.bin，linux/arch/x86/boot/tools目录下的build
-
-```makefile
-#linux/arch/x86/boot/Makefile
-$(obj)/bzImage: $(obj)/setup.bin $(obj)/vmlinux.bin $(obj)/tools/build FORCE
-        $(call if_changed,image)
-        @$(kecho) 'Kernel: $@ is ready' ' (#'`cat .version`')'
-```
-
-build只是一个HOSTOS下的应用程序，它的作用就是将setup.bin、vmlinux.bin两个文件拼接成一个bzImage文件
-
-vmlinux.bin文件依赖于linux/arch/x86/boot/compressed/目录下的vmlinux目标
-
-```makefile
-#linux/arch/x86/boot/Makefile
-OBJCOPYFLAGS_vmlinux.bin := -O binary -R .note -R .comment -S
-$(obj)/vmlinux.bin: $(obj)/compressed/vmlinux FORCE
-        $(call if_changed,objcopy)
-```
-
-linux/arch/x86/boot/compressed目录下的vmlinux是由该目录下的head_32.o或者head_64.o、cpuflags.o、error.o、kernel.o、misc.o、string.o 、cmdline.o 、early_serial_console.o等文件以及piggy.o链接而成的
-
-setup.bin文件是由objcopy命令根据setup.elf生成的
-setup.bin文件正是由/arch/x86/boot/目录下一系列对应的程序源代码文件编译链接产生
+想先看"进程 × 内存 × 网络 × 中断如何协同完成一件事"，见横向贯通枢纽 [内核协同链路](/docs/CS/OS/Linux/Architecture.md)——以 Nginx 一次请求为锚，端到端串联各子系统。下面各章为按子系统组织的纵向笔记。
 
 ## Processes
+
+Linux 进程管理的链路总图见 [Processes](/docs/CS/OS/Linux/proc/README.md)（创建 fork → 表示 task_struct → 装载 exec → 调度 EEVDF/RT → 睡眠唤醒 → 信号 → 退出回收）。
+
+跨进程观测与控制由 [ptrace](/docs/CS/OS/Linux/proc/ptrace.md) 承担：它建立 tracer / tracee 关系，让 tracee 在系统调用边界、信号投递、fork/exec/exit 等事件上停下，tracer 再读写其内存与寄存器——[strace](/docs/CS/OS/Linux/Tools/strace.md) 与 GDB 都建立在其上。
 
 Applications, servers, and other programs running under Unix are traditionally referred to as [processes](/docs/CS/OS/Linux/proc/process.md).
 Each process is assigned address space in the virtual memory of the CPU.
@@ -831,46 +143,138 @@ If it's not, it should go back to sleeping on the condition variable, waiting fo
 
 [thundering herd](/docs/CS/OS/Linux/proc/thundering_herd.md)
 
+## Lock
+
+内核同步原语笔记集中在 [Lock/](/docs/CS/OS/Linux/Lock/README.md) 目录下：
+
+- [Lock 总览](/docs/CS/OS/Linux/Lock/README.md) — 分类、对比表与选型（目录首页）
+- [原子操作与内存屏障](/docs/CS/OS/Linux/Lock/atomic.md) — 所有锁的实现基石
+- [spinlock](/docs/CS/OS/Linux/Lock/spinlock.md) — 忙等锁与中断相关的 API 矩阵
+- [mutex](/docs/CS/OS/Linux/Lock/mutex.md)
+- [rwlock / rwsem / seqlock](/docs/CS/OS/Linux/Lock/rwsem.md)
+- [semaphore / completion](/docs/CS/OS/Linux/Lock/semaphore.md)
+- [RCU](/docs/CS/OS/Linux/Lock/RCU.md)
+- [futex](/docs/CS/OS/Linux/Lock/futex.md)
+- [per-CPU 变量](/docs/CS/OS/Linux/Lock/percpu.md) — 以数据隔离代替同步
+- [跨进程同步](/docs/CS/OS/Linux/Lock/ipc-sync.md) — 信号量/文件锁/process-shared mutex
+
 ## Interrupt
 
 - [Interrupt](/docs/CS/OS/Linux/Interrupt.md)
 - [System calls](/docs/CS/OS/Linux/Calls.md)
+- [workqueue](/docs/CS/OS/Linux/workqueue.md) — 把工作推后到进程上下文由 kworker 执行，下半部里唯一可睡眠的一档
+- [timer 时间子系统](/docs/CS/OS/Linux/timer.md) — 时钟源与 timekeeping、jiffies 与 NO_HZ 节拍、时间轮与 hrtimer、vDSO 与 POSIX 定时器
+
+## Device Driver
+
+设备驱动（设备模型、bus 上的 match/probe 绑定、字符/块/网络三类接口、sysfs/udev 用户侧管理）的链路总图见 [设备驱动](/docs/CS/OS/Linux/dev/README.md)：
+
+- [设备模型 device](/docs/CS/OS/Linux/dev/device.md) — kobject/kset/ktype、cdev、device tree
+- [字符设备驱动 char](/docs/CS/OS/Linux/dev/char.md) — dev_t 设备号、chrdevs/cdev_map 三层映射、chrdev_open 换 fops、miscdevice
+- [块设备驱动 block](/docs/CS/OS/Linux/dev/block.md) — gendisk/request_queue、bio→request、blk-mq 多队列
+- [udev](/docs/CS/OS/Linux/dev/udev.md) — 用户态设备管理、uevent、稳定命名、自动加载
+- [input](/docs/CS/OS/Linux/dev/input.md) — 输入设备子系统
 
 ## memory
 
-- [memory](/docs/CS/OS/Linux/mm/memory.md)
-- [slab](/docs/CS/OS/Linux/mm/slab.md)
+- [内存管理知识地图](/docs/CS/OS/Linux/mm/README.md) — boot探测→物理内存→slab/虚拟内存→页缓存→回收→OOM，memcg 横切的链路总图
+- [物理内存 pm](/docs/CS/OS/Linux/mm/pm.md) — node/zone/内存模型/memblock/buddy/alloc/free
+- [虚拟内存 vm](/docs/CS/OS/Linux/mm/vm.md) — mm_struct/VMA/page fault/vmalloc
+- [页表 pagetable](/docs/CS/OS/Linux/mm/pagetable.md) — 多级布局与层级折叠、表项位与软件位复用、ptdesc 页表页、缺页时逐级惰性生长、free_pgtables 递归下降、mmu_gather 批量 TLB 失效与页表页延迟释放
+- [GUP 与 pin 页](/docs/CS/OS/Linux/mm/gup.md) — 慢路径 follow_page_mask/faultin_page、快路径关中断无锁遍历与"先 pin 再验证 PTE"协议、GUP_PIN_COUNTING_BIAS 编码、pin 对迁移/回收/COW/soft-dirty 的反作用、FOLL_LONGTERM 落点合规
+- [maple tree](/docs/CS/OS/Linux/mm/maple_tree.md) — 替换 VMA 红黑树的 RCU 安全区间树：节点形态与位编码、ma_state 游标、九种 store 分类、gap 空洞记账
+- [slab](/docs/CS/OS/Linux/mm/slab.md) — buddy 之上的小对象分配器
 - [mmap](/docs/CS/OS/Linux/mm/mmap.md)
 - [PageCache](/docs/CS/OS/Linux/mm/PageCache.md)
+- [内存回收 Reclaim](/docs/CS/OS/Linux/mm/Reclaim.md) — 水位线/kswapd/LRU 老化/shrinker/memcg 回收
+- [多代 LRU MGLRU](/docs/CS/OS/Linux/mm/MGLRU.md) — 多代组织、页表 accessed 位老化，替代传统 LRU
+- [内存压缩 Compaction](/docs/CS/OS/Linux/mm/Compaction.md) — 双扫描器、kcompactd、主动压缩，整理物理连续块
+- [NUMA 平衡](/docs/CS/OS/Linux/mm/Numa.md) — AutoNUMA hinting fault 迁移、mempolicy、zone_reclaim_mode
+- [OOM killer](/docs/CS/OS/Linux/mm/oom.md) — oom_badness 打分、oom_reaper 收割、memcg 局部 OOM
+- [mempool](/docs/CS/OS/Linux/mm/mempool.md) — 紧急内存池
+- [cgroup 内存控制 memcg](/docs/CS/OS/Linux/mm/memcg.md) — 按 cgroup 层级记账、限额、局部回收与 OOM
+- [内核启动与内存初始化 memory](/docs/CS/OS/Linux/mm/memory.md) — boot 流程，非总入口
 
 ## fs
 
-- [fs](/docs/CS/OS/Linux/fs/fs.md)
+Linux 文件管理（"一切皆文件"、VFS 四大对象 super_block/inode/dentry/file、注册与挂载、路径查找、读写经 PageCache 到块层）的链路总图见 [文件管理机制](/docs/CS/OS/Linux/fs/README.md)：
+
+- [VFS 详解 fs](/docs/CS/OS/Linux/fs/fs.md)
+- [ext4](/docs/CS/OS/Linux/fs/ext4.md)、[XFS](/docs/CS/OS/Linux/fs/xfs.md) — 分配组并行、B+ 树家族、逻辑日志与 CIL/AIL
+- [Minix](/docs/CS/OS/Linux/fs/Minix.md)
+- [jbd2 日志](/docs/CS/OS/Linux/fs/jbd2.md) — 事务/commit 六阶段/checkpoint/恢复三趟扫描
+- [overlayfs](/docs/CS/OS/Linux/fs/overlayfs.md) — 联合挂载：lower/upper 分层、whiteout、copy-up
+- [proc](/docs/CS/OS/Linux/fs/proc.md)、[sysfs](/docs/CS/OS/Linux/fs/sysfs.md)
 
 ## IO
 
+Linux I/O 机制（两阶段、五种 I/O 模型、select→poll→epoll 多路复用演进、ET/LT 与 Reactor、io_uring 真异步、DPDK 内核旁路）的链路总图见 [I/O 与多路复用](/docs/CS/OS/Linux/IO/README.md)：
+
 - [IO](/docs/CS/OS/Linux/IO/IO.md)
+- [multiplexing](/docs/CS/OS/Linux/IO/multiplexing.md)、[epoll](/docs/CS/OS/Linux/IO/epoll.md)
 - [io_uring](/docs/CS/OS/Linux/IO/io_uring.md)
+- [DPDK](/docs/CS/OS/Linux/IO/DPDK.md)
+- [零拷贝 ZeroCopy](/docs/CS/OS/Linux/ZeroCopy.md) — `sendfile`/`mmap`/`splice` 等绕过内核↔用户态拷贝的接口与适用边界
 
 ## Network
 
-- [network](/docs/CS/OS/Linux/net/network.md)
-- [socket](/docs/CS/OS/Linux/net/socket.md)
-- [IP](/docs/CS/OS/Linux/net/IP.md)
-- [TCP](/docs/CS/OS/Linux/net/TCP/TCP.md)
-- [UDP](/docs/CS/OS/Linux/net/UDP.md)
+Linux 网络子系统（socket 抽象、协议栈收发、NAPI 软中断、TCP 建连与拥塞）的结构与笔记导航见 [网络知识地图](/docs/CS/OS/Linux/net/README.md)：
+
+- [network](/docs/CS/OS/Linux/net/network.md)、[socket](/docs/CS/OS/Linux/net/socket.md)、[IP](/docs/CS/OS/Linux/net/IP.md)
+- [TCP](/docs/CS/OS/Linux/net/TCP/README.md) 子目录按连接生命周期组织：[TCP 实现详解](/docs/CS/OS/Linux/net/TCP/TCP.md)、[建连](/docs/CS/OS/Linux/net/TCP/Connection_Setup.md)、[丢包与重传](/docs/CS/OS/Linux/net/TCP/Retransmission.md)、[拥塞控制框架](/docs/CS/OS/Linux/net/TCP/Congestion.md)、[BBR](/docs/CS/OS/Linux/net/TCP/BBR.md)、[缓冲内存](/docs/CS/OS/Linux/net/TCP/Buffer.md)、[UDP](/docs/CS/OS/Linux/net/UDP.md)
+- [netfilter](/docs/CS/OS/Linux/net/netfilter.md)（conntrack / NAT / iptables·nftables）
+- [Route](/docs/CS/OS/Linux/net/Route.md)（FIB / 策略路由 / ECMP）、[Neighbor](/docs/CS/OS/Linux/net/Neighbor.md)（NUD 状态机 / ARP / hh_cache）
+- [netlink](/docs/CS/OS/Linux/net/netlink.md)（rtnetlink / generic netlink，内核↔用户态配置通道）
+- [Qdisc](/docs/CS/OS/Linux/net/Qdisc.md)（fq_codel / HTB / TBF，队列调度与整形）、[Virtual](/docs/CS/OS/Linux/net/Virtual.md)（bridge / veth / bonding / VXLAN 虚拟设备）
+- [NAPI](/docs/CS/OS/Linux/net/NAPI.md)（收包主线：napi_struct 状态机、net_rx_action 与 budget、GRO、backlog/RPS）
+- [IPv6](/docs/CS/OS/Linux/net/IPv6.md)（fib6 / NDP / SLAAC）、[ICMP](/docs/CS/OS/Linux/net/ICMP.md)（ping / PMTU / 差错反馈）
+
+## Virtualization
+
+- [KVM](/docs/CS/OS/Linux/KVM.md) — 三个 fd 模型、vCPU 运行循环与 fastpath、VMX 双模式、EPT 二维页表、irqfd/ioeventfd
+
+## Data structures
+
+内核自己实现的通用容器集中在 [struct](/docs/CS/OS/Linux/struct/README.md)：[list](/docs/CS/OS/Linux/struct/list.md)（双向循环链表，内核最基础的容器）、[hlist](/docs/CS/OS/Linux/struct/hlist.md)（省掉头指针的哈希表桶链）、[xarray](/docs/CS/OS/Linux/struct/xarray.md)（替代 radix tree 的稀疏数组）、[llist](/docs/CS/OS/Linux/struct/struct.md)（无锁单向栈；文件名叫 `struct.md` 但只讲 llist，是历史命名错位）。它们被各子系统反复复用，选型差异见该目录首页。
 
 ## Loadable kernel module
 
+模块把驱动与功能做成可运行时装卸的目标文件：[LKM](/docs/CS/OS/Linux/module/LKM.md) 讲加载/卸载与符号导出，[模块开发](/docs/CS/OS/Linux/module/module.md) 讲 Makefile 与调试。编进内核时 `module_init` 会落到 `device_initcall`，与启动链的 initcall 阶段是同一套机制——两篇的分工见 [module](/docs/CS/OS/Linux/module/README.md)。
+
+## Distribution
+
+发行版 = 内核 + 用户态工具 + 包管理的完整打包，谱系与选型见 [发行版知识地图](/docs/CS/OS/Linux/Distribution/README.md)：
+
+- [Debian](/docs/CS/OS/Linux/Distribution/Debian.md)、[Ubuntu](/docs/CS/OS/Linux/Distribution/Ubuntu.md)、[Kali](/docs/CS/OS/Linux/Distribution/Kali.md)、[Raspberry Pi OS](/docs/CS/OS/Linux/Distribution/Rasp.md)
+- [Fedora](/docs/CS/OS/Linux/Distribution/Fedora.md)、[CentOS](/docs/CS/OS/Linux/Distribution/CentOS.md)、[Rocky Linux](/docs/CS/OS/Linux/Distribution/Rocky.md)
+- [Arch](/docs/CS/OS/Linux/Distribution/Arch.md)、[Omarchy](/docs/CS/OS/Linux/Distribution/Omarchy.md)、[NixOS](/docs/CS/OS/Linux/Distribution/NixOS.md)
+
+## Performance
+
+线上问题往往不是"不知道机制"，而是**指标读错了**。[性能排查](/docs/CS/OS/Linux/performance.md) 从最容易被误读的 **load average** 切入：它统计的不只是可运行任务，还包括处在**不可中断睡眠**（D 状态）的任务——所以磁盘 I/O 阻塞会把 load 推高，而此时 CPU 可能很闲，照着 CPU 使用率排查会完全跑偏。笔记顺着 `scheduler_tick` 与 `/proc/loadavg` 讲清这三个数是怎么算出来的，另含 CPU 侧的观测口径。
+
 ## Commands
 
-可以通过man查看命令
+命令行速查与工具笔记都在 [Tools](/docs/CS/OS/Linux/Tools/README.md)：目录首页按用途串起 16 篇工具笔记——[perf](/docs/CS/OS/Linux/Tools/Perf.md) 与 [ftrace](/docs/CS/OS/Linux/Tools/ftrace.md) 做性能剖析与追踪、[eBPF](/docs/CS/OS/Linux/Tools/eBPF.md) 做动态插桩、[strace](/docs/CS/OS/Linux/Tools/strace.md) 看系统调用、[Debug](/docs/CS/OS/Linux/Tools/Debug.md) 收调试手段。
 
-> [Linux命令搜索](https://wangchujiang.com/linux-command/)
+要注意目录里的 [Tools.md](/docs/CS/OS/Linux/Tools/Tools.md) 与首页**不是一回事**：它是命令速查表（按功能罗列常用命令与参数），不链任何笔记；首页才是笔记导航。查命令用法看前者，查某个工具的机制原理看后者。
+
+命令用法也可以直接 man，或用 [Linux命令搜索](https://wangchujiang.com/linux-command/)。
 
 ## Links
 
 - [Operating Systems](/docs/CS/OS/OS.md)
+- [Security](/docs/CS/OS/Security.md)
+- [SELinux](/docs/CS/OS/Linux/SELinux.md)
+- [namespace](/docs/CS/OS/Linux/namespace.md)
+- [cgroup](/docs/CS/OS/Linux/cgroup.md)
+- [LXC](/docs/CS/OS/Linux/LXC.md)
+- [LKM](/docs/CS/OS/Linux/module/LKM.md)
+- [module development](/docs/CS/OS/Linux/module/module.md)
+- [sysfs](/docs/CS/OS/Linux/fs/sysfs.md)
+- [ext4](/docs/CS/OS/Linux/fs/ext4.md)
+- [udev](/docs/CS/OS/Linux/dev/udev.md)
+- [Swap](/docs/CS/OS/Linux/Swap.md)
 
 ## 参考书籍
 

@@ -25,7 +25,7 @@ These virtual machines are isolated from each other.
 这两类hypervis01的差别并不是绝对的
 
 
-KVM 的全称是Kernel-Based Virtual Machines ,在Linux上它是内核的一部分， 可以实现CPU和内存虚拟化。但它本身并不是一个纯软件的方案， 需要硬件支持， 比如Intel-VT和AMD-V
+KVM 的全称是Kernel-Based Virtual Machines ,在Linux上它是内核的一部分， 可以实现CPU和内存虚拟化。但它本身并不是一个纯软件的方案， 需要硬件支持， 比如Intel-VT和AMD-V。把 KVM 落到源码层面——三个 fd 模型、vCPU 运行循环、VMX 双模式与 EPT 二维页表——见 [KVM](/docs/CS/OS/Linux/KVM.md)。
 
 
 

@@ -144,6 +144,7 @@ vim visudo
 
 ## Links
 
+- [发行版知识地图](/docs/CS/OS/Linux/Distribution/README.md)
 - [Linux](/docs/CS/OS/Linux/Linux.md)
 
 ## References

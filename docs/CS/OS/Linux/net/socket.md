@@ -30,7 +30,7 @@ struct packet_type {
 
 ### sock_init
 
-[Init](/docs/CS/OS/Linux/init.md)
+[Init](/docs/CS/OS/Linux/boot/init.md)
 
 call register_filesystem
 
@@ -1162,6 +1162,8 @@ struct inet_timewait_sock {
 
 ### Route
 
+路由查找的表本体（FIB）与查找过程见 [Route](/docs/CS/OS/Linux/net/Route.md)，本章只列查找返回的结果对象。
+
 #### dst_entry
 
 ```c
@@ -1658,7 +1660,7 @@ get pf by RCU and call inet_create
 ```
 
 
-call [inet_create](/docs/CS/OS/Linux/net/socket.mdt.md?id=inet_create)
+call [inet_create](/docs/CS/OS/Linux/net/socket.md?id=inet_create)
 ```c
 // net/ipv4/af_inet.c
 static const struct net_proto_family inet_family_ops = {
@@ -1809,4 +1811,7 @@ buffer maxsize 64K
 
 ## Links
 
-- [Linux TCP](/docs/CS/OS/Linux/net/TCP/TCP.md)
+- [网络知识地图](/docs/CS/OS/Linux/net/README.md)
+- [TCP](/docs/CS/OS/Linux/net/TCP/TCP.md)
+- [惊群效应](/docs/CS/OS/Linux/proc/thundering_herd.md)
+- [Linux](/docs/CS/OS/Linux/Linux.md)

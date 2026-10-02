@@ -1,47 +1,16 @@
 ## Introduction
 
-The [physical memory](/docs/CS/OS/Linux/mm/pm.md) in a computer system is a limited resource and even for systems that support memory hotplug there is a hard limit on the amount of memory that can be installed. 
-The physical memory is not necessarily contiguous; it might be accessible as a set of distinct address ranges. 
-Besides, different CPU architectures, and even different implementations of the same architecture have different views of how these address ranges are defined.
-All this makes dealing directly with physical memory quite complex and to avoid this complexity a concept of virtual memory was developed.
+计算机系统中的[物理内存](/docs/CS/OS/Linux/mm/pm.md)是一种有限资源，即便是支持内存热插拔的系统，可安装的内存总量也有硬上限。物理内存未必连续，可能呈现为一组互不相连的地址区间；此外不同 CPU 架构（甚至同一架构的不同实现）对这些地址区间如何划分有着不同视角。这些都让直接操作物理内存相当复杂，于是抽象出"虚拟内存"这一概念来屏蔽这些复杂度。
 
-The virtual memory abstracts the details of physical memory from the application software, allows to keep only needed information in the physical memory (demand paging) and provides a mechanism for the protection and controlled sharing of data between processes.
-With virtual memory, each and every memory access uses a virtual address. 
-When the CPU decodes an instruction that reads (or writes) from (or to) the system memory, it translates the virtual address encoded in that instruction to a physical address that the memory controller can understand.
+虚拟内存把物理内存的细节从应用软件中抽象出来，仅把需要的信息保留在物理内存中（按需分页 / demand paging），并为进程间提供保护机制与受控的数据共享。有了虚拟内存，每一次内存访问用的都是虚拟地址；当 CPU 译码一条读写内存的指令时，会把指令中编码的虚拟地址翻译成内存控制器能理解的物理地址。
 
-The physical system memory is divided into page frames, or pages. 
-The size of each page is architecture specific. 
-Some architectures allow selection of the page size from several supported values; this selection is performed at the kernel build time by setting an appropriate kernel configuration option.
+物理系统内存被划分为页帧（page frame，简称页），页的大小与架构相关；某些架构允许在内核构建期从几种受支持的页大小中选取。
 
-Each physical memory page can be mapped as one or more virtual pages. 
-These mappings are described by page tables that allow translation from a virtual address used by programs to the physical memory address. 
-The page tables are organized hierarchically.
+每个物理内存页可被映射为一个或多个虚拟页，这些映射由页表（page table）描述，页表完成"程序使用的虚拟地址 → 物理内存地址"的翻译，且页表是分层组织的。层级最底层的表项存放软件实际使用的物理页地址；更上层的表项存放下一层页表所在的物理地址。顶层页表的指针存放在一个寄存器里；CPU 做地址翻译时，用该寄存器访问顶层页表，再以虚拟地址的高位索引顶层表项，借由下一段虚拟地址位索引下一层，如此层层下钻，虚拟地址的最低几位则是页内偏移。
 
-The tables at the lowest level of the hierarchy contain physical addresses of actual pages used by the software. 
-The tables at higher levels contain physical addresses of the pages belonging to the lower levels. 
-The pointer to the top level page table resides in a register. 
-When the CPU performs the address translation, it uses this register to access the top level page table. 
-The high bits of the virtual address are used to index an entry in the top level page table. 
-That entry is then used to access the next level in the hierarchy with the next bits of the virtual address as the index to that level page table.
-The lowest bits in the virtual address define the offset inside the actual page.
+地址翻译需要多次访存，而访存相对 CPU 速度很慢。为避免把宝贵的 CPU 周期耗费在地址翻译上，CPU 维护了一份翻译缓存，称为 TLB（Translation Lookaside Buffer）。TLB 通常相当稀缺，工作集很大的应用会因 TLB miss 而性能受损。现代许多 CPU 架构允许直接用页表的较高层级映射大页：例如 x86 上可用二级、三级页表项映射 2M 甚至 1G 的大页。Linux 中这类页称为 huge page。使用大页能显著降低 TLB 压力、提升命中率，从而改善整体性能。
 
-
-
-The address translation requires several memory accesses and memory accesses are slow relatively to CPU speed.
-To avoid spending precious processor cycles on the address translation, CPUs maintain a cache of such translations called Translation Lookaside Buffer (or TLB). 
-Usually TLB is pretty scarce resource and applications with large memory working set will experience performance hit because of TLB misses.
-Many modern CPU architectures allow mapping of the memory pages directly by the higher levels in the page table. 
-For instance, on x86, it is possible to map 2M and even 1G pages using entries in the second and the third level page tables. 
-In Linux such pages are called huge. 
-Usage of huge pages significantly reduces pressure on TLB, improves TLB hit-rate and thus improves overall system performance.
-
-There are two mechanisms in Linux that enable mapping of the physical memory with the huge pages. 
-The first one is HugeTLB filesystem, or hugetlbfs. 
-It is a pseudo filesystem that uses RAM as its backing store. 
-For the files created in this filesystem the data resides in the memory and mapped using huge pages. 
-
-Another, more recent, mechanism that enables use of the huge pages is called Transparent HugePages, or THP. 
-Unlike the hugetlbfs that requires users and/or system administrators to configure what parts of the system memory should and can be mapped by the huge pages, THP manages such mappings transparently to the user and hence the name.
+Linux 提供两种用大页映射物理内存的机制。其一是 HugeTLB 文件系统（hugetlbfs），它是一种以 RAM 为后备存储的伪文件系统，其中创建的文件数据驻留内存并以大页映射。其二是较新的透明大页（Transparent HugePages，THP）：与需要用户/管理员显式配置哪些内存可用大页映射的 hugetlbfs 不同，THP 对用户完全透明地管理这些映射，故名"透明"。
 
 ## vm space
 
@@ -83,24 +52,24 @@ Linux虚拟内存空间整体布局
 0x0000 7FFF FFFF F000 - 0xFFFF 8000 0000 0000 范围内的地址的高 16 位 不全为 0 也不全为 1
 
 
-直接映射区是唯一的L ow Memory( x86)映射的区域
+直接映射区是唯一的Low Memory（x86）映射的区域
 
 
 
 `VMALLOC_START` 和 `VMALLOC_END` 之间的空间为动态映射区，它是内核线性空间中最灵活的区
-其他几个区都有固定的角色， 它们不能满足的需求， 都可以由动态映射区来满足， 常见的 iorcmap、[mmap](/docs/CS/OS/Linux/mm/mmap.md) 一般都需要使用它
+其他几个区都有固定的角色， 它们不能满足的需求， 都可以由动态映射区来满足， 常见的 ioremap、[mmap](/docs/CS/OS/Linux/mm/mmap.md) 一般都需要使用它
 
 使用动态映射区需要申请一段属千该区域的线性区间，内核提供了 `get_vm_area` 函数族来满足该需求，它们的区别在于参数不同，但最终都通过调用 `__get_vm_area_node` 函数实现
 
 
-getv m_area传递的参数为VMLA LOC_STRA T和VMALLOC_END。内核会将已使用的动态映射区的线性区间记录下来，每一个区间以vmap_area结构体表示
+get_vm_area 传递的参数为 VMALLOC_START 和 VMALLOC_END。内核会将已使用的动态映射区的线性区间记录下来，每一个区间以vmap_area结构体表示
 
 
 
 get_vm_area_node
 
 `__get_vm_area_node` 会查找一个没有被占用的合适的区间，如果找到则将该区间记录到红黑树和链表中，然后利用得到的 `vmap_area` 对象给 `vm_struct` 对象赋俏并返回
-`vm_struct` 结构体县其他模块可见的，`vmap_area` 结构体是动态映射区内部使用的。
+`vm_struct` 结构体是其他模块可见的，`vmap_area` 结构体是动态映射区内部使用的。
 
 ```c
 
@@ -609,6 +578,8 @@ VMA 目前是通过一个红黑树（rbtree，red-black tree）的变种来管�
 
 maple tree属于Btree类型
 
+6.1 起 VMA 索引已实际由 maple tree 接管（紧邻的 rbtree 一段描述的是切换前的历史方案，保留作为演进对照）。节点布局、RCU 无锁读、写路径的九种 store 分类与 gap 空洞记账的完整展开见 [maple tree](/docs/CS/OS/Linux/mm/maple_tree.md)。
+
 
 ```
 struct maple_tree {
@@ -632,6 +603,86 @@ This is the case with the MAPLE_USE_RCU flag, which indicates the tree is curren
 This mode was added to allow the tree to reuse nodes instead of re-allocating and RCU freeing nodes when there is a single user.
 
 leaf node（叶子节点）中最多包含 16 个元素，而 internal node（内部节点）中最多包含 10 个元素
+
+VMA 的插入与查找由以下函数完成：
+
+### insert_vm_struct
+```c
+
+/* Insert vm structure into process list sorted by address
+ * and into the inode's i_mmap tree.  If vm_file is non-NULL
+ * then i_mmap_rwsem is taken here.
+ */
+int insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vma)
+{
+	struct vm_area_struct *prev;
+	struct rb_node **rb_link, *rb_parent;
+
+	if (find_vma_links(mm, vma->vm_start, vma->vm_end,
+			   &prev, &rb_link, &rb_parent))
+		return -ENOMEM;
+	if ((vma->vm_flags & VM_ACCOUNT) &&
+	     security_vm_enough_memory_mm(mm, vma_pages(vma)))
+		return -ENOMEM;
+
+	/*
+	 * The vm_pgoff of a purely anonymous vma should be irrelevant
+	 * until its first write fault, when page's anon_vma and index
+	 * are set.  But now set the vm_pgoff it will almost certainly
+	 * end up with (unless mremap moves it elsewhere before that
+	 * first wfault), so /proc/pid/maps tells a consistent story.
+	 *
+	 * By setting it to reflect the virtual start address of the
+	 * vma, merges and splits can happen in a seamless way, just
+	 * using the existing file pgoff checks and manipulations.
+	 * Similarly in do_mmap and in do_brk_flags.
+	 */
+	if (vma_is_anonymous(vma)) {
+		BUG_ON(vma->anon_vma);
+		vma->vm_pgoff = vma->vm_start >> PAGE_SHIFT;
+	}
+
+	vma_link(mm, vma, prev, rb_link, rb_parent);
+	return 0;
+}
+```
+
+
+### find_vma
+Look up the first VMA which satisfies  addr < vm_end,  NULL if none.
+```c
+// mm/mmap.c
+struct vm_area_struct *find_vma(struct mm_struct *mm, unsigned long addr)
+{
+	struct rb_node *rb_node;
+	struct vm_area_struct *vma;
+
+	/* Check the cache first. */
+	vma = vmacache_find(mm, addr);
+	if (likely(vma))
+		return vma;
+
+	rb_node = mm->mm_rb.rb_node;
+
+	while (rb_node) {
+		struct vm_area_struct *tmp;
+
+		tmp = rb_entry(rb_node, struct vm_area_struct, vm_rb);
+
+		if (tmp->vm_end > addr) {
+			vma = tmp;
+			if (tmp->vm_start <= addr)
+				break;
+			rb_node = rb_node->rb_left;
+		} else
+			rb_node = rb_node->rb_right;
+	}
+
+	if (vma)
+		vmacache_update(addr, vma);
+	return vma;
+}
+```
 
 ### load binary
 
@@ -1206,19 +1257,146 @@ do_page_fault()
 
 
 
-These routines also need to handle stuff like marking pages dirty
-and/or accessed for architectures that don't do it in hardware (most
-RISC architectures).  The early dirtying is also good on the i386.
+这些例程还要负责为不在硬件里做脏/访问标记的架构（多数 RISC 架构）标记页面为脏和/或已访问；在 i386 上提前置脏也有好处。
 
-There is also a hook called "update_mmu_cache()" that architectures
-with external mmu caches can use to update those (ie the Sparc or
-PowerPC hashed page tables that act as extended TLBs).
+还有一个名为 update_mmu_cache() 的钩子，拥有外部 MMU 缓存的架构（如 Sparc、PowerPC 的哈希页表，它充当扩展 TLB）可用它来更新那些缓存。
 
-We enter with non-exclusive mmap_lock (to exclude vma changes, but allow
-concurrent faults).
+进入时持有非独占的 mmap_lock（用以排除 VMA 变更，但允许缺页并发）。mmap_lock 可能因 flags 与返回值而被释放，详见 filemap_fault() 与 __folio_lock_or_retry()。
 
-The mmap_lock may have been released depending on flags and our return value.
-See filemap_fault() and __folio_lock_or_retry().
+上面的链路只讲了"谁来处理缺页"，还有一半没讲：**处理过程中页表是怎么被建出来的**。`__handle_mm_fault()` 在进入 `handle_pte_fault()` 之前，会沿地址逐级确保页表存在——`pgd_offset()` 直接取（`mm->pgd` 随进程创建、永不回收），再由 `p4d_alloc()` / `pud_alloc()` / `pmd_alloc()` 按需分配缺失的中间层，最后才落到 PTE。也就是说**页表是随地址被访问而逐步长出来的树**，进程刚启动时页表几乎是空的，稀疏地址空间只在实际用到的分支上花钱。这条路径、以及页表页自身如何表示与回收，见 [页表](/docs/CS/OS/Linux/mm/pagetable.md?id=惰性生长：缺页时逐级建表)；缺页在 PTE 里填完映射后必须让 TLB 失效，其批量机制见 [mmu_gather](/docs/CS/OS/Linux/mm/pagetable.md?id=mmu_gather：批量-tlb-失效)。
+
+`handle_mm_fault()` 的调用者也不止 CPU 的异常入口：内核自己会主动触发缺页——[GUP](/docs/CS/OS/Linux/mm/gup.md) 在页表里找不到页时，就调一次 `faultin_page()` 让缺页路径去建，然后回到自己的循环重试。这条通路给缺页侧带来了原本没有的语义：R/O 长期 pin 一个匿名页时不能走写缺页（那会把页弄脏、也不符合"我只读"的声明），而是用 [`FAULT_FLAG_UNSHARE`](/docs/CS/OS/Linux/mm/gup.md?id=慢路径：跟着页表走，走不通就缺页) 把共享关系提前拆开、但不写——`faultin_page()` 里对这两个标志的互斥有明确的 `VM_WARN_ON_ONCE`，因为它们是两件不同的事。
+
+### page_fault
+
+```c
+// arch/arc/mm/fault.c
+> 以下以 ARC 架构的 `do_page_fault()` 为例展示缺页入口的处理流程：
+
+void do_page_fault(unsigned long address, struct pt_regs *regs)
+{
+	struct vm_area_struct *vma = NULL;
+	struct task_struct *tsk = current;
+	struct mm_struct *mm = tsk->mm;
+	int sig, si_code = SEGV_MAPERR;
+	unsigned int write = 0, exec = 0, mask;
+	vm_fault_t fault = VM_FAULT_SIGSEGV;	/* handle_mm_fault() output */
+	unsigned int flags;			/* handle_mm_fault() input */
+
+	/*
+	 * NOTE! We MUST NOT take any locks for this case. We may
+	 * be in an interrupt or a critical region, and should
+	 * only copy the information from the master page table,
+	 * nothing more.
+	 */
+	if (address >= VMALLOC_START && !user_mode(regs)) {
+		if (unlikely(handle_kernel_vaddr_fault(address)))
+			goto no_context;
+		else
+			return;
+	}
+
+	/*
+	 * If we're in an interrupt or have no user
+	 * context, we must not take the fault..
+	 */
+	if (faulthandler_disabled() || !mm)
+		goto no_context;
+
+	if (regs->ecr_cause & ECR_C_PROTV_STORE)	/* ST/EX */
+		write = 1;
+	else if ((regs->ecr_vec == ECR_V_PROTV) &&
+	         (regs->ecr_cause == ECR_C_PROTV_INST_FETCH))
+		exec = 1;
+
+	flags = FAULT_FLAG_DEFAULT;
+	if (user_mode(regs))
+		flags |= FAULT_FLAG_USER;
+	if (write)
+		flags |= FAULT_FLAG_WRITE;
+
+	perf_sw_event(PERF_COUNT_SW_PAGE_FAULTS, 1, regs, address);
+retry:
+	mmap_read_lock(mm);
+
+	vma = find_vma(mm, address);
+	if (!vma)
+		goto bad_area;
+	if (unlikely(address < vma->vm_start)) {
+		if (!(vma->vm_flags & VM_GROWSDOWN) || expand_stack(vma, address))
+			goto bad_area;
+	}
+
+	/*
+	 * vm_area is good, now check permissions for this memory access
+	 */
+	mask = VM_READ;
+	if (write)
+		mask = VM_WRITE;
+	if (exec)
+		mask = VM_EXEC;
+
+	if (!(vma->vm_flags & mask)) {
+		si_code = SEGV_ACCERR;
+		goto bad_area;
+	}
+
+	fault = handle_mm_fault(vma, address, flags, regs);
+
+	/* Quick path to respond to signals */
+	if (fault_signal_pending(fault, regs)) {
+		if (!user_mode(regs))
+			goto no_context;
+		return;
+	}
+
+	/*
+	 * Fault retry nuances, mmap_lock already relinquished by core mm
+	 */
+	if (unlikely((fault & VM_FAULT_RETRY) &&
+		     (flags & FAULT_FLAG_ALLOW_RETRY))) {
+		flags |= FAULT_FLAG_TRIED;
+		goto retry;
+	}
+
+bad_area:
+	mmap_read_unlock(mm);
+
+	/*
+	 * Major/minor page fault accounting
+	 * (in case of retry we only land here once)
+	 */
+	if (likely(!(fault & VM_FAULT_ERROR)))
+		/* Normal return path: fault Handled Gracefully */
+		return;
+
+	if (!user_mode(regs))
+		goto no_context;
+
+	if (fault & VM_FAULT_OOM) {
+		pagefault_out_of_memory();
+		return;
+	}
+
+	if (fault & VM_FAULT_SIGBUS) {
+		sig = SIGBUS;
+		si_code = BUS_ADRERR;
+	}
+	else {
+		sig = SIGSEGV;
+	}
+
+	tsk->thread.fault_address = address;
+	force_sig_fault(sig, si_code, (void __user *)address);
+	return;
+
+no_context:
+	if (fixup_exception(regs))
+		return;
+
+	die("Oops", regs, address);
+}
+```
 
 ```c
 static vm_fault_t handle_pte_fault(struct vm_fault *vmf)
@@ -1766,11 +1944,11 @@ oom:
 }
 ```
 
+这段 `do_wp_page()`（写时复制的核心）里有一处容易略过的调用：`mem_cgroup_charge(new_page, mm, GFP_KERNEL)`——**新页在挂上页表之前必须先向 memcg 报到**，记不上账就走 `oom_free_new` 释放并返回 `VM_FAULT_OOM`。也就是说 COW 失败不一定是物理内存不够，也可能是 memcg 配额到顶；紧随其后的 `cgroup_throttle_swaprate()` 则是 memcg 对 swap 读入的限速（见 [cgroup 内存控制（memcg）](/docs/CS/OS/Linux/mm/memcg.md)）。
+
 ## vmalloc
 
-Linux provides a variety of APIs for memory allocation.
-You can allocate small chunks using kmalloc or kmem_cache_alloc families, large virtually contiguous areas using vmalloc and its derivatives, or you can directly request pages from the page allocator with alloc_pages.
-It is also possible to use more specialized allocators, for instance cma_alloc or zs_malloc.
+Linux 提供多种内存分配 API：小块可用 kmalloc 或 kmem_cache_alloc 系列；大块的虚拟连续区域用 vmalloc 及其衍生函数；也可以直接用 alloc_pages 向页分配器要页。此外还有更专门的分配器，如 cma_alloc、zs_malloc。
 
 
 
@@ -1823,7 +2001,7 @@ void __init vmalloc_init(void)
 }
 ```
 
-Allocate enough pages to cover @size from the page level allocator with @gfp_mask flags.  Map them into contiguous kernel virtual space, using a pagetable protection of @prot
+从页级分配器申请足够覆盖 @size 的页面（带 @gfp_mask 标志），再把它们映射到连续的线性内核虚拟空间，页表保护位用 @prot。
 
 ```c
 void *__vmalloc(unsigned long size, gfp_t gfp_mask)
@@ -1948,9 +2126,14 @@ __alloc_vmap_area(unsigned long size, unsigned long align,
 
 ## Links
 
-- [Linux Memory](/docs/CS/OS/Linux/mm/memory.md)
+- [物理内存地图（mm 枢纽）](/docs/CS/OS/Linux/mm/README.md)
+- [物理内存主线](/docs/CS/OS/Linux/mm/pm.md)
+- [页缓存](/docs/CS/OS/Linux/mm/PageCache.md)
 
 ## References
 
-1. [一步一图带你深入理解 Linux 虚拟内存管理](https://mp.weixin.qq.com/s?__biz=Mzg2MzU3Mjc3Ng==&mid=2247486732&idx=1&sn=435d5e834e9751036c96384f6965b328&chksm=ce77cb4bf900425d33d2adfa632a4684cf7a63beece166c1ffedc4fdacb807c9413e8c73f298&token=1931867638&lang=zh_CN&scene=21#wechat_redirect)
+1. [Linux kernel Documentation: Memory Management (kernel.org)](https://www.kernel.org/doc/html/latest/mm/index.html)
+2. [Linux Source: mm/memory.c (Bootlin Elixir)](https://elixir.bootlin.com/linux/latest/source/mm/memory.c)
+
+3. [一步一图带你深入理解 Linux 虚拟内存管理](https://mp.weixin.qq.com/s?__biz=Mzg2MzU3Mjc3Ng==&mid=2247486732&idx=1&sn=435d5e834e9751036c96384f6965b328&chksm=ce77cb4bf900425d33d2adfa632a4684cf7a63beece166c1ffedc4fdacb807c9413e8c73f298&token=1931867638&lang=zh_CN&scene=21#wechat_redirect)
 2. [Introducing maple trees](https://lwn.net/Articles/845507/)
