@@ -64,4 +64,4 @@ unsigned char *lpFirst(unsigned char *lp) {
 
 ## Links
 
-- [Redis Struct](/docs/CS/DB/Redis/struct.md?id=lists)
+- [Redis Struct](/docs/CS/DB/Redis/struct/struct.md?id=lists)

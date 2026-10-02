@@ -213,7 +213,7 @@ Configuring InnoDB Buffer Pool Prefetching (Read-Ahead)
 
 
 A `read-ahead` request is an I/O request to prefetch multiple pages in the `buffer pool` asynchronously, in anticipation of impending need for these pages.
-The requests bring in all the pages in one [extent](/docs/CS/DB/MySQL/memory.md?id=extend). `InnoDB` uses two read-ahead algorithms to improve I/O performance:
+The requests bring in all the pages in one [extent](/docs/CS/DB/MySQL/memory.md?id=extent). `InnoDB` uses two read-ahead algorithms to improve I/O performance:
 
 **Linear** read-ahead is a technique that predicts what pages might be needed soon based on pages in the buffer pool being accessed sequentially.
 You control when `InnoDB` performs a read-ahead operation by adjusting the number of sequential page accesses required to trigger an asynchronous read request, using the configuration parameter `innodb_read_ahead_threshold`.
@@ -271,7 +271,7 @@ Other kinds of change buffering do work for unique indexes.
 
 ![Content is described in the surrounding text.](https://dev.mysql.com/doc/refman/8.0/en/images/innodb-change-buffer.png)
 
-Unlike [clustered indexes](/docs/CS/DB/MySQL/Index.md?id=Clustered_and_Secondary_Indexes), secondary indexes are usually nonunique, and inserts into secondary indexes happen in a relatively random order.
+Unlike [clustered indexes](/docs/CS/DB/MySQL/Index.md?id=clustered-and-secondary-indexes), secondary indexes are usually nonunique, and inserts into secondary indexes happen in a relatively random order.
 Similarly, deletes and updates may affect secondary index pages that are not adjacently located in an index tree.
 Merging cached changes at a later time, when affected pages are read into the buffer pool by other operations,
 avoids substantial random access I/O that would be required to read secondary index pages into the buffer pool from disk.

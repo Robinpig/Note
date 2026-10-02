@@ -203,7 +203,7 @@ void daemonize(void) {
 
 ## initServerConfig
 
-1. Set properties of [redisServer](/docs/CS/DB/Redis/server.md?id=Server)
+1. Set properties of [redisServer](/docs/CS/DB/Redis/server.md?id=server)
 2. initCommandTable array -> dict
 3. initConfigValues
 
@@ -423,7 +423,7 @@ void loadServerConfig(char *filename, char *options) {
 
 1. setupSignalHandlers
 2. createSharedObjects
-3. [aeCreateEventLoop](/docs/CS/DB/Redis/ae.md?id=aeCreateEventLoop)
+3. [aeCreateEventLoop](/docs/CS/DB/Redis/ae.md?id=aecreateeventloop)
 4. open TCP listening socket and Unix domain socket
 5. Create the Redis databases and initialize other internal state
 6. aeCreateTimeEvent
@@ -1072,7 +1072,7 @@ static void acceptCommonHandler(connection *conn, int flags, char *ip) {
 ##### createClient
 
 1. Set conn NonBlock & TcpNoDelay
-2. set [readQueryFromClient](/docs/CS/DB/Redis/start.md?id=readQueryFromClient) to ReadHandler
+2. set [readQueryFromClient](/docs/CS/DB/Redis/start.md?id=readqueryfromclient) to ReadHandler
 
 ```c
 client *createClient(connection *conn) {
@@ -1183,7 +1183,7 @@ Following is an explanation of what precisely `aeCreateFileEvent` does when call
 
 This completes the initialization of Redis event loop.
 
-初始化了 aeFileEvent，存放在 eventLoop 中的events[] 内。并且调用 [aeApiAddEvent()](/docs/CS/DB/Redis/ae.md?id=Events)，将监听端口的描述符注册到创建的内核队列中
+初始化了 aeFileEvent，存放在 eventLoop 中的events[] 内。并且调用 [aeApiAddEvent()](/docs/CS/DB/Redis/ae.md?id=events)，将监听端口的描述符注册到创建的内核队列中
 
 ```c
 // ae.c
@@ -1408,8 +1408,8 @@ void initThreadedIO(void) {
 ##### IOThreadMain
 
 IO循环处理
-- IO_THREADS_OP_WRITE [writeToClient](/docs/CS/DB/Redis/start.md?id=writeToClient)
-- IO_THREADS_OP_READ [readQueryFromClient](/docs/CS/DB/Redis/start.md?id=readQueryFromClient)
+- IO_THREADS_OP_WRITE [writeToClient](/docs/CS/DB/Redis/start.md?id=writetoclient)
+- IO_THREADS_OP_READ [readQueryFromClient](/docs/CS/DB/Redis/start.md?id=readqueryfromclient)
 
 ```c
 void *IOThreadMain(void *myid) {
@@ -1605,7 +1605,7 @@ int postponeClientRead(client *c) {
 
 #### handleClientsWithPendingReadsUsingThreads
 
-主线程在执行 [beforeSleep](/docs/CS/DB/Redis/ae.md?id=beforeSleep) 函数时会调用 handleClientsWithPendingReadsUsingThreads 将clients通过RoundRobin方式分配给 I/O 线程绑定队列  i o_thread_list, I/O 线程从队列中获取任务执行 socket 读取和解析
+主线程在执行 [beforeSleep](/docs/CS/DB/Redis/ae.md?id=beforesleep) 函数时会调用 handleClientsWithPendingReadsUsingThreads 将clients通过RoundRobin方式分配给 I/O 线程绑定队列  i o_thread_list, I/O 线程从队列中获取任务执行 socket 读取和解析
 之后主线程也会执行一部分的命令读取与解析 而命令的执行需要等待所有I/O线程完成解析后才开始
 
 如果未开启I/O多线程模型 则需要主线程独立完成流程
@@ -1870,7 +1870,7 @@ int prepareClientToWrite(client *c) {
 
 #### handleClientsWithPendingWritesUsingThreads
 
-下一次时间循环时 [beforeSleep](/docs/CS/DB/Redis/ae.md?id=beforeSleep) 函数会调用 handleClientsWithPendingWrites 把 clients_pending_write 队列的数据分配给I/O线程和main线程
+下一次时间循环时 [beforeSleep](/docs/CS/DB/Redis/ae.md?id=beforesleep) 函数会调用 handleClientsWithPendingWrites 把 clients_pending_write 队列的数据分配给I/O线程和main线程
 
 分配完成后由负责的 I/O 线程或者主线程调用 `writeToClient` 函数把命令执行结果发送回客户端
 

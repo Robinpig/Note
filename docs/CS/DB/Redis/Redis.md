@@ -149,7 +149,7 @@ Redis将启动的这些服务抽象成一个全局的结构体 [redisServer](/do
 
 [Redis启动流程](/docs/CS/DB/Redis/start.md)
 
-[Redis命令执行流程](/docs/CS/DB/Redis/start.md?id=do)
+[Redis命令执行流程](/docs/CS/DB/Redis/start.md)
 
 图源 [redis 异步网络通信流程 - 单线程](https://www.processon.com/view/5eab75227d9c0869dab46472)
 
@@ -692,8 +692,9 @@ CLIENT LIST
 
 ## Links
 
-- [DataBases](/docs/CS/DB/DB.md?id=Redis)
+- [DataBases](/docs/CS/DB/DB.md?id=redis)
 - [Pika](/docs/CS/DB/Pika.md)
+- Java 客户端：[Jedis](/docs/CS/DB/Redis/Jedis.md) / [Lettuce](/docs/CS/DB/Redis/Lettuce.md) / [Redisson](/docs/CS/DB/Redis/Redisson.md)
 
 ## References
 

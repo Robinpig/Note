@@ -141,7 +141,7 @@ void psetexCommand(client *c) {
 
 debug object key
 
-1. 16bytes for [redisObject](/docs/CS/DB/Redis/redisDb.md?id=redisObject)
+1. 16bytes for [redisObject](/docs/CS/DB/Redis/redisDb.md?id=redisobject)
 2. 3bytes for capacity +len +flags
 3. 1byte for NULL
 
@@ -294,8 +294,8 @@ robj *createEmbeddedStringObject(const char *ptr, size_t len) {
 
 zmolloc twice
 
-1. [createObject](/docs/CS/DB/Redis/struct/struct.mdruct.md?id=createobject)
-2. [sdsnewlen in sdsfromlonglong](/docs/CS/DB/Redis/SDS?id=sdsnewlen)
+1. [createObject](/docs/CS/DB/Redis/struct/struct.md?id=object)
+2. [sdsnewlen in sdsfromlonglong](/docs/CS/DB/Redis/struct/SDS.md?id=sdsnewlen)
 
 ```c
 // object.c
@@ -440,7 +440,7 @@ The setGenericCommand() function implements the SET operation with differen opti
 If ok_reply is NULL "+OK" is used.
 If abort_reply is NULL, "$-1" is used.
 
-[genericSetKey](/docs/CS/DB/Redis/redisDb.md?id=genericSetKey)
+[genericSetKey](/docs/CS/DB/Redis/redisDb.md?id=genericsetkey)
 
 ```c
 // t_string.c
@@ -690,11 +690,11 @@ SDS的特征
 - use sdsclear rather than sdsfree
 - Encoding
   - encoding int value in ptr
-  - encoding embstr value memory close to [redisObject](/docs/CS/DB/Redis/redisDb.md?id=redisObject)
+  - encoding embstr value memory close to [redisObject](/docs/CS/DB/Redis/redisDb.md?id=redisobject)
 
 ## Links
 
-- [Redis Struct](/docs/CS/DB/Redis/struct/struct.mdruct.md?id=Strings)
+- [Redis Struct](/docs/CS/DB/Redis/struct/struct.md?id=strings)
 
 ## References
 

@@ -182,10 +182,10 @@ index -1
 
 ## hset
 
-1. [lookupKeyWrite in db](/docs/CS/DB/Redis/redisDb.md?id=redisObject)
-2. [createQuicklistObject](/docs/CS/DB/Redis/struct/list.mdlist.md?id=quicklistCreate)
+1. [lookupKeyWrite in db](/docs/CS/DB/Redis/redisDb.md?id=redisobject)
+2. [createQuicklistObject](/docs/CS/DB/Redis/struct/list.md)
 3. [dbAdd](/docs/CS/DB/Redis/redisDb.md?id=add)
-4. [hashTypeTryConversion](/docs/CS/DB/Redis/struct/hash.mdhash.md?id=hashTypeTryConversion)
+4. [hashTypeTryConversion](/docs/CS/DB/Redis/struct/hash.md?id=hashtypetryconversion)
 
 ```c
 // server.c
@@ -273,7 +273,7 @@ void hashTypeConvert(robj *o, int enc) {
 }
 ```
 
-call [dictCreate](/docs/CS/DB/Redis/struct/hash.mdhash.md?id=create)
+call [dictCreate](/docs/CS/DB/Redis/struct/hash.md?id=create)
 
 ```c
 void hashTypeConvertListpack(robj *o, int enc) {
@@ -670,7 +670,7 @@ However because `SCAN` has very little state associated (just the cursor) it has
 
 ## Links
 
-- [Redis Struct](/docs/CS/DB/Redis/struct/struct.mdruct.md?id=hashes)
+- [Redis Struct](/docs/CS/DB/Redis/struct/struct.md?id=hashes)
 
 ## References
 

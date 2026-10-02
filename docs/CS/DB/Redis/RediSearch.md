@@ -30,7 +30,7 @@ src/redis-server redis.conf --loadmodule ../RediSearch/src/redisearch.so
 
 ## Links
 
-- [Redis](/docs/CS/DB/Redis/Redis.md?id=struct)
+- [Redis](/docs/CS/DB/Redis/struct/struct.md)
 
 
 ## References

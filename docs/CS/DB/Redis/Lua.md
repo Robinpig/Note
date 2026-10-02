@@ -17,7 +17,7 @@ An alternative synchronous (non forked) debugging model is available on demand, 
 
 ## Links
 
-- [Redis](/docs/CS/DB/Redis/Redis.md?id=struct)
+- [Redis](/docs/CS/DB/Redis/struct/struct.md)
 
 ## References
 1. [Redis Lua scripts debugger](https://redis.io/topics/ldb)

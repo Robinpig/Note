@@ -2002,4 +2002,4 @@ MemoryContext   生命周期管理者
 3. [Simple Dictionary of PostgreSQL Internals](https://wiki.postgresql.org/wiki/Developer_FAQ)
 4. [PG Internals Mailing List Archive](https://www.postgresql.org/list/pgsql-hackers/)
 5. *The Internals of PostgreSQL*（Hironobu Suzuki，电子书）
-6. [bcAndCarl 文章](https://www.zhihu.com/people/neowu-99/posts)（知乎）
+6. [bcAndCarl 文章](https://www.zhihu.com/people/neowu-99/posts)

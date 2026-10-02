@@ -899,8 +899,15 @@ LevelDB supports range queries, snapshots, and other features that are useful in
 
 ### Column Store
 
+[ClickHouse](/docs/CS/DB/ClickHouse.md) is an open-source column-oriented OLAP database; [Doris](/docs/CS/DB/Doris.md) is a MySQL-protocol compatible MPP analytical warehouse. See also [InfluxDB](/docs/CS/DB/InfluxDB.md) for time-series workloads.
 
 ### Document Store
+
+[MongoDB](/docs/CS/DB/MongoDB.md) stores data as BSON documents with a flexible schema, embedding one-to-many relationships inside the parent document; it supports the aggregation pipeline, WiredTiger MVCC storage, replica sets and sharding.
+
+### Key-Value / In-Memory Alternatives
+
+[SSDB](/docs/CS/DB/SSDB.md) is a Redis-protocol compatible, disk-backed (LevelDB) key-value store; [Pika](/docs/CS/DB/Pika.md) is a similar RocksDB-backed implementation; [Dragonfly](/docs/CS/DB/Dragonfly.md) is a high-performance in-memory alternative.
 
 ### Graph
 
@@ -1064,13 +1071,23 @@ Other fuzzy search techniques go in the direction of document classification and
 
 ## Links
 
-
-
+- [MySQL](/docs/CS/DB/MySQL/MySQL.md)
+- [MongoDB](/docs/CS/DB/MongoDB.md)
+- [Oracle](/docs/CS/DB/Oracle/Oracle.md)
+- [PostgreSQL](/docs/CS/DB/PostgreSQL/PostgreSQL.md)
+- [Redis](/docs/CS/DB/Redis/Redis.md)
+- [SSDB](/docs/CS/DB/SSDB.md) / [Pika](/docs/CS/DB/Pika.md) / [Dragonfly](/docs/CS/DB/Dragonfly.md)
+- [BLink-Tree](/docs/CS/DB/BLink-Tree.md)
+- [WAL](/docs/CS/DB/WAL.md) / [Indexes](/docs/CS/DB/Index.md)
+- [ClickHouse](/docs/CS/DB/ClickHouse.md)
+- [RocksDB](/docs/CS/DB/RocksDB/RocksDB.md)
+- [Cassandra](/docs/CS/DB/Cassandra.md)
+- [H2](/docs/CS/DB/h2/H2.md)
+- [NebulaGraph](/docs/CS/DB/graph/NebulaGraph.md)
+- [Druid](/docs/CS/DB/Druid.md)
+- [Valkey](/docs/CS/DB/Valkey.md)
 
 
 ## References
 
 1. [NoSQL Database Systems - A Survey and Decision Guidance](https://www.baqend.com/files/nosql-survey.pdf)
-1. [Database System Implementation Second Edition]()
-1. [Database System Concepts Seven Edition]()
-1. [Database Systems Design, Implementation, and Management]()

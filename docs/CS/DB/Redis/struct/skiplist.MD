@@ -2,7 +2,7 @@
 
 跳表结点的结构定义
 
-- ele is a [sds](/docs/CS/DB/Redis/struct/SDS.md/SDS.md)
+- ele is a [sds](/docs/CS/DB/Redis/struct/SDS.md)
 - order by score, then ele
 - *backward 便于倒序查找
 - level[] 跳表层级

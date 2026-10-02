@@ -31,9 +31,9 @@ digraph  {
 
 
 
-[hash](/docs/CS/DB/Redis/struct/hash.mdhash.md) and [zset](/docs/CS/DB/Redis/struct/zset.mdzset.md) default use ziplist.
+[hash](/docs/CS/DB/Redis/struct/hash.md) and [zset](/docs/CS/DB/Redis/struct/zset.md) default use ziplist.
 
-[list use quicklist( based on ziplist)](/docs/CS/DB/Redis/struct/list.mdlist.md?id=quicklist).
+[list use quicklist( based on ziplist)](/docs/CS/DB/Redis/struct/list.md).
 
 Hashes are encoded using a memory efficient data structure when they have a small number of entries, and the biggest entry does not exceed a given threshold.
 These thresholds can be configured using the following directives.
@@ -107,7 +107,7 @@ zlentry struct
 >
 > 255用于zlend
 
-prevrawlen 1byte or 5 bytes, sometimes will [prevrawlen cascadeUpdate](/docs/CS/DB/Redis/struct/zset.mdzset.md?id=cascadeUpdate)
+prevrawlen 1byte or 5 bytes, sometimes will [prevrawlen cascadeUpdate](/docs/CS/DB/Redis/struct/zset.md)
 
 We use this function to receive information about a ziplist entry.
 Note that this is not how the data is actually encoded, is just what we get filled by a function in order to operate more easily.

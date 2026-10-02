@@ -6,7 +6,7 @@ or to tune MySQL performance, it is important to understand `InnoDB` locking and
 ## InnoDB and the ACID Model
 
 The `InnoDB` transaction model aims combine the best properties of a multi-versioning database with traditional two-phase locking.
-`InnoDB` performs locking at the row level and runs queries as [nonlocking consistent reads](/docs/CS/DB/MySQL/Transaction.md?id=consistent-read) by default, in the style of Oracle.
+`InnoDB` performs locking at the row level and runs queries as [nonlocking consistent reads](/docs/CS/DB/MySQL/Transaction.md?id=consistent-reads) by default, in the style of Oracle.
 The lock information in `InnoDB` is stored space-efficiently so that lock escalation is not needed.
 Typically, several users are permitted to lock every row in `InnoDB` tables, or any random subset of the rows, without causing `InnoDB` memory exhaustion.
 
@@ -806,7 +806,7 @@ In Concurrency Control theory, there are two ways you can deal with conflicts:
 
 Because MVCC (Multi-Version Concurrency Control) is such a prevalent Concurrency Control technique (not only in relational database systems, in this article, I’m going to explain how it works.
 
-When the [ACID transaction properties](/docs/CS/SE/Transaction.md?id=ACID) were first defined, Serializability was assumed. And to provide a Strict Serializable transaction outcome, the [2PL (Two-Phase Locking)](https://vladmihalcea.com/2pl-two-phase-locking/) mechanism was employed. When using 2PL, every read requires a shared lock acquisition, while a write operation requires taking an exclusive lock.
+When the [ACID transaction properties](/docs/CS/SE/Transaction.md?id=acid) were first defined, Serializability was assumed. And to provide a Strict Serializable transaction outcome, the [2PL (Two-Phase Locking)](https://vladmihalcea.com/2pl-two-phase-locking/) mechanism was employed. When using 2PL, every read requires a shared lock acquisition, while a write operation requires taking an exclusive lock.
 
 - a shared lock blocks Writers, but it allows other Readers to acquire the same shared lock
 - an exclusive lock blocks both Readers and Writers concurring for the same lock
@@ -897,9 +897,9 @@ When a secondary index column is updated, old secondary index records are delete
 **When a secondary index record is delete-marked or the secondary index page is updated by a newer transaction, `InnoDB` looks up the database record in the clustered index.**
 In the clustered index, the record's `DB_TRX_ID` is checked, and the correct version of the record is retrieved from the undo log if the record was modified after the reading transaction was initiated.
 
-- If a secondary index record is marked for deletion or the secondary index page is updated by a newer transaction, the [covering index](/docs/CS/DB/MySQL/Transaction.md?id=covering_index) technique is not used.
+- If a secondary index record is marked for deletion or the secondary index page is updated by a newer transaction, the [covering index](/docs/CS/DB/MySQL/Transaction.md) technique is not used.
   Instead of returning values from the index structure, `InnoDB` looks up the record in the clustered index.
-- If the [index condition pushdown (ICP)](/docs/CS/DB/MySQL/Optimization.md?id=Index_Condition_Pushdown_Optimization) optimization is enabled, and parts of the `WHERE` condition can be evaluated using only fields from the index,
+- If the [index condition pushdown (ICP)](/docs/CS/DB/MySQL/Optimization.md?id=index-condition-pushdown-optimization) optimization is enabled, and parts of the `WHERE` condition can be evaluated using only fields from the index,
   the MySQL server still pushes this part of the `WHERE` condition down to the storage engine where it is evaluated using the index.
   - If no matching records are found, the clustered index lookup is avoided.
   - If matching records are found, even among delete-marked records, `InnoDB` looks up the record in the clustered index.
@@ -1005,7 +1005,7 @@ trx_sys_t:
 
 1. MVCC
 2. trx_id
-3. [Rsegs](/docs/CS/DB/MySQL/Transaction.md?id=Rollback_Segment)
+3. [Rsegs](/docs/CS/DB/MySQL/Transaction.md)
 
 ```c
 // trx0sys.h
@@ -1314,7 +1314,7 @@ static lsn_t trx_prepare_low(
 
 #### commit
 
-If transaction involves insert then [truncate undo logs](/docs/CS/DB/MySQL/undolog.md?id=Truncate).
+If transaction involves insert then [truncate undo logs](/docs/CS/DB/MySQL/undolog.md?id=truncate).
 
 If transaction involves update then add rollback segments
 to purge queue.

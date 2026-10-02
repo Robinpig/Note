@@ -86,7 +86,7 @@ ht_table[2] 是一个大小为2的[hash表](/docs/CS/DB/Redis/struct/hash.md)数
 > 一开始只使用 ht_table[0] 读写数据 ht_table[1] 指向NULL, 当rehash时才会创建更大的散列表 ht_table[1], 
 > rehash迁移完成后 交换 ht_table[0]  和 ht_table[1] 的指针 ht_table[1] 重新指向 NULL
 
-散列表数组中元素是[dictEntry](/docs/CS/DB/Redis/struct/hash.md?id=dicht) 类型, 链地址法处理键碰撞
+散列表数组中元素是[dictEntry](/docs/CS/DB/Redis/struct/hash.md) 类型, 链地址法处理键碰撞
 
 ```c
 // dict.h
@@ -114,7 +114,7 @@ Moreover `db.c` implements an API in order to perform certain operations on the 
 
 The most important functions inside `db.c` which are used in many command implementations are the following:
 
-* [lookupKeyRead()](/docs/CS/DB/Redis/redisDb.md?id=lookupKey) and [lookupKeyWrite()](/docs/CS/DB/Redis/redisDb.md?id=lookupKey) are used in order to get a pointer to the value associated to a given key, or `NULL` if the key does not exist.
+* [lookupKeyRead()](/docs/CS/DB/Redis/redisDb.md?id=lookupkey) and [lookupKeyWrite()](/docs/CS/DB/Redis/redisDb.md?id=lookupkey) are used in order to get a pointer to the value associated to a given key, or `NULL` if the key does not exist.
 * [dbAdd()](/docs/CS/DB/Redis/redisDb.md?id=add) and its higher level counterpart `setKey()` create a new key in a Redis database.
 * [dbDelete()](/docs/CS/DB/Redis/redisDb.md?id=delete) removes a key and its associated value.
 * `emptyDb()` removes an entire single database or all the databases defined.
@@ -153,7 +153,7 @@ Redis objects are used extensively in the Redis internals, however in order to a
 Inside `object.c` there are all the functions that operate with Redis objects at a basic level, like functions to allocate new objects, handle the reference counting and so forth. Notable functions inside this file:
 
 - `incrRefCount()` and `decrRefCount()` are used in order to increment or decrement an object reference count. When it drops to 0 the object is finally freed.
-- [createObject()](/docs/CS/DB/Redis/redisDb.md?id=createObject) allocates a new object.
+- [createObject()](/docs/CS/DB/Redis/redisDb.md?id=createobject) allocates a new object.
   There are also specialized functions to allocate string objects having a specific content, like `createStringObjectFromLongLong()` and similar functions.
 
 24bits
@@ -297,7 +297,7 @@ int expireIfNeeded(redisDb *db, robj *key) {
 }
 ```
 
-call [dictFind](/docs/CS/DB/Redis/redisDb.md?id=dictFind) to find dictEntry, then **update lfu or lru access time**
+call [dictFind](/docs/CS/DB/Redis/redisDb.md?id=dictfind) to find dictEntry, then **update lfu or lru access time**
 
 ```c
 // db.c
@@ -341,7 +341,7 @@ unsigned int LRU_CLOCK(void) {
 }
 ```
 
-[update cached mstime](/docs/CS/DB/Redis/start.md?id=updateCachedTime)
+[update cached mstime](/docs/CS/DB/Redis/start.md?id=updatecachedtime)
 
 ```c
 unsigned int getLRUClock(void) {
@@ -462,7 +462,7 @@ void genericSetKey(client *c, redisDb *db, robj *key, robj *val, int keepttl, in
 
 ### add
 
-call [dictAddRaw in hash](/docs/CS/DB/Redis/redisDb.md?id=dictAddRaw)
+call [dictAddRaw in hash](/docs/CS/DB/Redis/redisDb.md?id=dictaddraw)
 
 ```c
 // db.c
@@ -582,7 +582,7 @@ static long _dictKeyIndex(dict *d, const void *key, uint64_t hash, dictEntry **e
 
 ### overwrite
 
-1. [dictFind](/docs/CS/DB/Redis/redisDb.md?id=dictFind)
+1. [dictFind](/docs/CS/DB/Redis/redisDb.md?id=dictfind)
 2. unlink+add
 
 ```c
@@ -643,7 +643,7 @@ The lazy free list will be reclaimed in a different bio.c thread.
 int dbAsyncDelete(redisDb *db, robj *key) {
 ```
 
-[Deleting](/docs/CS/DB/Redis/redisDb.md?id=dictDelete) an entry from the expires dict will not free the sds of the key, because it is shared with the main dictionary.
+[Deleting](/docs/CS/DB/Redis/redisDb.md?id=dictdelete) an entry from the expires dict will not free the sds of the key, because it is shared with the main dictionary.
 
 ```c
     if (dictSize(db->expires) > 0) dictDelete(db->expires,key->ptr);
@@ -740,7 +740,7 @@ static dictEntry *dictGenericDelete(dict *d, const void *key, int nofree) {
 ```
 
 ## expire
-called by [beforeSleep](/docs/CS/DB/Redis/ae.md?id=beforeSleep)
+called by [beforeSleep](/docs/CS/DB/Redis/ae.md?id=beforesleep)
 
 activeExpireCycle 方法在规定的时间，分多次遍历各个数据库，从过期字典中随机检查一部分过期键的过期时间，删除其中的过期键
 

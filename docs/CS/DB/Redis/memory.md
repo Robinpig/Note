@@ -305,7 +305,7 @@ evict policy:
 #define MAXMEMORY_NO_EVICTION (7<<8)
 ```
 
-[redisObject](/docs/CS/DB/Redis/redisDb.md?id=redisObject) has `lru:LRU_BITS` and [update access time](/docs/CS/DB/Redis/redisDb.md?id=updateLFU)
+[redisObject](/docs/CS/DB/Redis/redisDb.md?id=redisobject) has `lru:LRU_BITS` and [update access time](/docs/CS/DB/Redis/redisDb.md?id=updatelfu)
 
 ```c
 // server.h
@@ -1022,7 +1022,7 @@ Small hashes are encoded in a very small space, so you should try representing y
 
 ## Links
 
-- [Redis](/docs/CS/DB/Redis/Redis.md?id=struct)
+- [Redis](/docs/CS/DB/Redis/struct/struct.md)
 
 
 ## References

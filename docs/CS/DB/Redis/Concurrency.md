@@ -261,7 +261,7 @@ o-threads 线程配置，redis.conf 配置文件默认是不开放的，默认�
 
 ## Links
 
-- [Redis](/docs/CS/DB/Redis/Redis.md?id=struct)
+- [Redis](/docs/CS/DB/Redis/struct/struct.md)
 
 ## References
 

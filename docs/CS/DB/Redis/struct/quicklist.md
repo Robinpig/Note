@@ -118,7 +118,7 @@ void listTypePush(robj *subject, robj *value, int where) {
 }
 ```
 
-call [ziplistPush](/docs/CS/DB/Redis/struct/zset.mdzset.md?id=insert)
+call [ziplistPush](/docs/CS/DB/Redis/struct/zset.md)
 
 ```c
 //quicklist.c

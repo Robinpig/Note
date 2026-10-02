@@ -8,7 +8,7 @@ Redis Transactions make two important guarantees:
   This guarantees that the commands are executed as a single isolated operation.
 * The `EXEC` command triggers the execution of all the commands in the transaction, so if a client loses the connection to the server in the context of a transaction before calling the `EXEC` command none of the operations are performed,
   instead if the `EXEC` command is called, all the operations are performed.
-  When using the [append-only file](/docs/CS/DB/Redis/persist.md?id=AOF) Redis makes sure to use a single write(2) syscall to write the transaction on disk.
+  When using the [append-only file](/docs/CS/DB/Redis/persist.md?id=aof) Redis makes sure to use a single write(2) syscall to write the transaction on disk.
   However if the Redis server crashes or is killed by the system administrator in some hard way it is possible that only a partial number of operations are registered.
   Redis will detect this condition at restart, and will exit with an error. Using the `redis-check-aof` tool it is possible to fix the append only file that will remove the partial transaction so that the server can start again.
 
@@ -83,7 +83,7 @@ Redis是基于内存存储的 无论是RDB还是AOF都无法完全保证数据�
 
 ### multi
 
-queueMultiCommand in [processCommand](/docs/CS/DB/Redis/server.md?id=processCommand)
+queueMultiCommand in [processCommand](/docs/CS/DB/Redis/server.md?id=processcommand)
 
 ### Exec
 

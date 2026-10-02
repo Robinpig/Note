@@ -118,7 +118,7 @@ typedef struct zset {
 
 ## zadd
 
-create [ziplist](/docs/CS/DB/Redis/struct/zset.mdzset.md?id=ziplist) or [skiplist](/docs/CS/DB/Redis/struct/zset.mdzset.md?id=skiplist) + [dict](/docs/CS/DB/Redis/struct/hash.mdhash.md)
+create [ziplist](/docs/CS/DB/Redis/struct/zset.md) or [skiplist](/docs/CS/DB/Redis/struct/zset.md) + [dict](/docs/CS/DB/Redis/struct/hash.md)
 
 ```c
 void zaddCommand(client *c) {
@@ -257,7 +257,7 @@ cleanup:
 
 ```
 
-using [hash table](/docs/CS/DB/Redis/struct/hash.mdhash.md) and zskiplist
+using [hash table](/docs/CS/DB/Redis/struct/hash.md) and zskiplist
 
 
 
@@ -474,4 +474,4 @@ Redis 是通过有序集合（ZSet）的方式来实现延迟消息队列的，Z
 
 ## Links
 
-- [Redis Struct](/docs/CS/DB/Redis/struct/struct.mdruct.md?id=Sorted-sets)
+- [Redis Struct](/docs/CS/DB/Redis/struct/struct.md?id=sorted-sets)

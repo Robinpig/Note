@@ -763,7 +763,7 @@ DoCompaction
 
 ## Links
 
-- [DataBases](/docs/CS/DB/DB.md?id=LevelDB)
+- [DataBases](/docs/CS/DB/DB.md?id=leveldb)
 - [RocksDB](/docs/CS/DB/RocksDB/RocksDB.md)
 
 ## References

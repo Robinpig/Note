@@ -170,4 +170,4 @@ static uint8_t intsetSearch(intset *is, int64_t value, uint32_t *pos) {
 
 ## Links
 
-- [Redis Struct](/docs/CS/DB/Redis/struct/struct.mdruct.md?id=sets)
+- [Redis Struct](/docs/CS/DB/Redis/struct/struct.md?id=sets)

@@ -445,7 +445,7 @@ For more information, see Section 15.6.3.3, “General Tablespaces”.
 It describes limits for `InnoDB` tables, indexes, tablespaces, and other aspects of the `InnoDB` storage engine.
 
 - A table can contain a maximum of 1017 columns. Virtual generated columns are included in this limit.
-- A table can contain a maximum of 64 [secondary indexes](/docs/CS/DB/MySQL/Index.md?id=secondary-index).
+- A table can contain a maximum of 64 [secondary indexes](/docs/CS/DB/MySQL/Index.md?id=clustered-and-secondary-indexes).
 - The index key prefix length limit is 3072 bytes for `InnoDB` tables that use `DYNAMIC` or `COMPRESSED` row format.
   The index key prefix length limit is 767 bytes for `InnoDB` tables that use the `REDUNDANT` or `COMPACT` row format. For example, you might hit this limit with a column prefix index of more than 191 characters on a `TEXT` or `VARCHAR` column, assuming a `utf8mb4` character set and the maximum of 4 bytes for each character.
   Attempting to use an index key prefix length that exceeds the limit returns an error.

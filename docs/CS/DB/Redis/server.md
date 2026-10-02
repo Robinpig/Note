@@ -1000,4 +1000,4 @@ client list
 
 ## Links
 
-- [Redis](/docs/CS/DB/Redis/Redis.md?id=struct)
+- [Redis](/docs/CS/DB/Redis/struct/struct.md)

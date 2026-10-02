@@ -4,7 +4,7 @@ The simplest way to understand how a program works is to understand the data str
 
 All the server configuration and in general all the shared state is defined in a global structure called [server](/docs/CS/DB/Redis/server.md), of type `struct redisServer`.
 
-Another important Redis data structure is the one defining a [client](/docs/CS/DB/Redis/server.md?id=Client).
+Another important Redis data structure is the one defining a [client](/docs/CS/DB/Redis/server.md?id=client).
 The structure has many fields, here we'll just show the main ones:
 
 ```c
@@ -22,7 +22,7 @@ struct client {
 ```
 
 As you can see in the client structure above, arguments in a command are described as `robj` structures.
-The following is the full `robj` structure, which defines a [Redis object](/docs/CS/DB/Redis/redisDb.md?id=redisObject):
+The following is the full `robj` structure, which defines a [Redis object](/docs/CS/DB/Redis/redisDb.md?id=redisobject):
 
 ```c
 typedef struct redisObject {
@@ -179,7 +179,7 @@ A few important notes about key expiration:
 
 ### Strings
 
-The Redis [String](/docs/CS/DB/Redis/struct/SDS.md/SDS.md) type is the simplest type of value you can associate with a Redis key.
+The Redis [String](/docs/CS/DB/Redis/struct/SDS.md) type is the simplest type of value you can associate with a Redis key.
 Since Redis keys are strings, when we use the string type as a value too, we are mapping a string to another string.
 Values can be strings (including binary data) of every kind, for instance you can store a jpeg image inside a value.
 A value can't be bigger than 512 MB.
@@ -190,7 +190,7 @@ That even multiple clients issuing INCR against the same key will never enter in
 
 ### Lists
 
-Redis [lists](/docs/CS/DB/Redis/struct/list.mdlist.md) are implemented via Linked Lists. This means that even if you have millions of elements inside a list, the operation of adding a new element in the head or in the tail of the list is performed  *in constant time* .
+Redis [lists](/docs/CS/DB/Redis/struct/list.md) are implemented via Linked Lists. This means that even if you have millions of elements inside a list, the operation of adding a new element in the head or in the tail of the list is performed  *in constant time* .
 
 Redis Lists are implemented with linked lists because for a database system it is crucial to be able to add elements to a very long list in a very fast way.
 
@@ -235,7 +235,7 @@ A few things to note about `BRPOP`:
 
 ### Hashes
 
-Redis [hashes](/docs/CS/DB/Redis/struct/hash.mdhash.md) look exactly how one might expect a "hash" to look, with field-value pairs.
+Redis [hashes](/docs/CS/DB/Redis/struct/hash.md) look exactly how one might expect a "hash" to look, with field-value pairs.
 
 While hashes are handy to represent  *objects* , actually the number of fields you can put inside a hash has no practical limits (other than available memory), so you can use hashes in many different ways inside your application.
 
@@ -243,7 +243,7 @@ It is worth noting that small hashes (i.e., a few elements with small values) ar
 
 ### Sets
 
-Redis [Sets](/docs/CS/DB/Redis/struct/set.md/set.md) are unordered collections of strings. 
+Redis [Sets](/docs/CS/DB/Redis/struct/set.md) are unordered collections of strings. 
 
 The `SADD` command adds new elements to a set.
 It's also possible to do a number of other operations against sets like testing if a given element already exists, performing the intersection, union or difference between multiple sets, and so forth.
@@ -319,7 +319,7 @@ Redis streams implement additional, non-mandatory features: a set of blocking op
 
 ### Shared Objects
 
-see [createSharedObjects](/docs/CS/DB/Redis/start.md?id=createSharedObjects)
+see [createSharedObjects](/docs/CS/DB/Redis/start.md?id=createsharedobjects)
 
 ### Automatic creation and removal of keys
 
@@ -365,7 +365,7 @@ It's important to note that **even when a command fails, all the other commands 
 
 We just have to repeat the operation hoping this time we'll not get a new race. This form of locking is called *optimistic locking* and is a very powerful form of locking.
 
-A [Redis script](/docs/CS/DB/Redis/struct/struct.mdruct.md?id=lua-scripts) is transactional by definition, so everything you can do with a Redis transaction, you can also do with a script, and usually the script will be both simpler and faster.
+A [Redis script](/docs/CS/DB/Redis/struct/struct.md?id=lua-scripts) is transactional by definition, so everything you can do with a Redis transaction, you can also do with a script, and usually the script will be both simpler and faster.
 
 ### PubSub
 
@@ -381,7 +381,7 @@ A [Redis script](/docs/CS/DB/Redis/struct/struct.mdruct.md?id=lua-scripts) is tr
 
 ## Links
 
-- [Redis](/docs/CS/DB/Redis/Redis.md?id=struct)
+- [Redis](/docs/CS/DB/Redis/struct/struct.md)
 
 ## References
 

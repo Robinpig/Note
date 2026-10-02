@@ -135,7 +135,7 @@ executed before performing the sensible operation. This data is also useful for 
 static unsigned long long bio_pending[BIO_NUM_OPS];
 ```
 
-called by [InitServerLast](/docs/CS/DB/Redis/start.md?id=InitServerLast)
+called by [InitServerLast](/docs/CS/DB/Redis/start.md?id=initserverlast)
 
 pthread_create
 
@@ -514,3 +514,12 @@ void emptyDbAsync(redisDb *db) {
     bioCreateLazyFreeJob(lazyfreeFreeDatabase,2,oldht1,oldht2);
 }
 ```
+
+## Links
+
+- [Introduction](/docs/CS/DB/Redis/Cache.md)
+- [Introduction](/docs/CS/DB/Redis/Concurrency.md)
+- [Introduction](/docs/CS/DB/Redis/Jedis.md)
+- [Introduction](/docs/CS/DB/Redis/Lettuce.md)
+- [Introduction](/docs/CS/DB/Redis/Lock.md)
+- [Introduction](/docs/CS/DB/Redis/Lua.md)

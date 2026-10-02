@@ -294,7 +294,7 @@ To optimize `InnoDB` transaction processing, find the ideal balance between the 
 
   To minimize the chance of this issue occurring:
 
-  - Increase the size of the [buffer pool](/docs/CS/DB/MySQL/memory.md?id=buffer_pool) so that all the data change changes can be cached rather than immediately written to disk.
+  - Increase the size of the [buffer pool](/docs/CS/DB/MySQL/memory.md?id=buffer-pool) so that all the data change changes can be cached rather than immediately written to disk.
   - Set `innodb_change_buffering=all` so that update and delete operations are buffered in addition to inserts.
   - Consider issuing `COMMIT` statements periodically during the big data change operation, possibly breaking a single delete or update into multiple statements that operate on smaller numbers of rows.
 

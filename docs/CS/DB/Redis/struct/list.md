@@ -75,8 +75,8 @@ dup free match can be override  by other method
 
 ## LPUSH
 
-1. [lookupKeyWrite in db](/docs/CS/DB/Redis/redisDb.md?id=redisObject)
-2. [createQuicklistObject](/docs/CS/DB/Redis/struct/list.mdlist.md?id=quicklistCreate)
+1. [lookupKeyWrite in db](/docs/CS/DB/Redis/redisDb.md?id=redisobject)
+2. [createQuicklistObject](/docs/CS/DB/Redis/struct/list.md)
 3. [dbAdd](/docs/CS/DB/Redis/redisDb.md?id=add)
 
 default using quicklist
@@ -154,4 +154,4 @@ BLMOVE 实现 ACK 机制
 
 ## Links
 
-- [Redis Struct](/docs/CS/DB/Redis/struct/struct.mdruct.md?id=lists)
+- [Redis Struct](/docs/CS/DB/Redis/struct/struct.md?id=lists)

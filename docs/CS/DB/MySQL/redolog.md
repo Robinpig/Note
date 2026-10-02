@@ -18,7 +18,7 @@ mysql> show variables like 'innodb_log_files_in_group';
 innodb_log_files_in_group	2
 ```
 
-Redo log write into [Log Buffer](/docs/CS/DB/MySQL/memory.md?id=Log_buffer), then flush to disk.
+Redo log write into [Log Buffer](/docs/CS/DB/MySQL/memory.md?id=log-buffer), then flush to disk.
 
 ### LSN
 
@@ -92,11 +92,11 @@ Writing to the redo log archive file does not impede normal transactional loggin
 
 Consider the following guidelines for optimizing redo logging:
 
-* Make your redo log files big, even as big as the [buffer pool](/docs/CS/DB/MySQL/memory.md?id=buffer_pool).
+* Make your redo log files big, even as big as the [buffer pool](/docs/CS/DB/MySQL/memory.md?id=buffer-pool).
   When `InnoDB` has written the redo log files full, it must write the modified contents of the buffer pool to disk in a `checkpoint`.
   Small redo log files cause many unnecessary disk writes.
   Although historically big redo log files caused lengthy recovery times, recovery is now much faster and you can confidently use large redo log files.
-* Consider increasing the size of the [log buffer](/docs/CS/DB/MySQL/memory.md?id=Log_buffer).
+* Consider increasing the size of the [log buffer](/docs/CS/DB/MySQL/memory.md?id=log-buffer).
   A large log buffer enables large transactions to run without a need to write the log to disk before the transactions `commit`.
   Thus, if you have transactions that update, insert, or delete many rows, making the log buffer larger saves disk I/O.
 * Configure the innodb_log_write_ahead_size configuration option to avoid “read-on-write”.

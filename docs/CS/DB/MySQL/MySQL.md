@@ -186,7 +186,7 @@ SHOW ENGINES;
 | **Storage limits**           | 256TB          | 64TB                                                                              |
 | **Transactions**             | No             | Yes                                                                               |
 
-[Alternative Storage Engines](/docs/CS/DB/MySQL/Engine.md)
+[Alternative Storage Engines](/docs/CS/DB/MySQL/InnoDB.md)
 
 ### schema
 
@@ -320,7 +320,11 @@ In fact, in addition to allowing writes to be delayed, caching can permit them t
 
 ## Links
 
-- [DataBases](/docs/CS/DB/DB.md?id=MySQL)
+- [DataBases](/docs/CS/DB/DB.md?id=mysql)
+- [InnoDB](/docs/CS/DB/MySQL/InnoDB.md)
+- [存储引擎](/docs/CS/DB/MySQL/plugin.md)
+- [Index](/docs/CS/DB/MySQL/Index.md)
+- [Transaction](/docs/CS/DB/MySQL/Transaction.md)
 
 ## References
 

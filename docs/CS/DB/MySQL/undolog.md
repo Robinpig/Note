@@ -1,7 +1,7 @@
 ## Introduction
 
 An undo log is a collection of undo log records associated with a **single read-write transaction**. 
-An undo log record contains information about how to undo the latest change by a transaction to a [clustered index](/docs/CS/DB/MySQL/Index.md?id=Clustered-and-Secondary-Indexes) record. 
+An undo log record contains information about how to undo the latest change by a transaction to a [clustered index](/docs/CS/DB/MySQL/Index.md?id=clustered-and-secondary-indexes) record. 
 If another transaction needs to see the original data as part of a consistent read operation, the unmodified data is retrieved from undo log records. 
 Undo logs exist within `undo log segments`, which are contained within `rollback segments`. 
 Rollback segments reside in `undo tablespaces` and in the `global temporary tablespace`.
@@ -12,8 +12,8 @@ They are used only for rollback while the server is running. This type of undo l
 
 What is undo log for:
 
-1. [Atomicity](/docs/CS/DB/MySQL/Transaction.md?id=Atomicity)
-2. [MVCC](/docs/CS/DB/MySQL/Transaction.md?id=MVCC)
+1. [Atomicity](/docs/CS/DB/MySQL/Transaction.md?id=innodb-and-the-acid-model)
+2. [MVCC](/docs/CS/DB/MySQL/Transaction.md?id=mvcc)
 
 
 

@@ -2,7 +2,18 @@
 
 本文主要是介绍一种在生产环境可用的基于Docker Compose 的 三节点 Milvus集群部署方案。
 
-> **版本说明**：§1–§5 基于 **Milvus 2.4.11**，使用外部 Kafka 3.4.1 KRaft（二进制部署）作为消息队列；§6 介绍 **Milvus 3.x** 使用内置 Woodpecker 替代外部 MQ 后的部署差异。
+### 部署方案总览
+
+各部署方案共享 §1（etcd）、§2（Kafka）的中间件部署，差异集中在 Milvus 自身的 compose 配置：
+
+| 章节 | 方案 | 消息队列 | 状态 |
+|------|------|---------|------|
+| §0–§5 | **Milvus 2.4 + Kafka** | 外部 Kafka 3.4.1 KRaft（二进制部署） | 已实现 |
+| §6 | **Milvus 3.0 + Kafka** | 外部 Kafka 3.4.1 KRaft（二进制部署） | 待补充 |
+| §7 | **Milvus 3.x + Woodpecker** | 内置 Woodpecker（3.x 默认） | 方案说明 |
+| §8 | Prometheus 监控 | — | 通用 |
+
+> **版本说明**：§0–§5 基于 **Milvus 2.4.11**，使用外部 Kafka 3.4.1 KRaft（二进制部署）作为消息队列；§6、§7 介绍 **Milvus 3.x** 的两种消息队列方案——§6 沿用外部 Kafka，§7 使用内置 Woodpecker 替代外部 MQ 后的部署差异。
 
 ## 0. 交付件概述
 
@@ -507,7 +518,7 @@ ss -tlnp | grep -E '9092|9093'
   --bootstrap-server 193.195.129.57:9092,193.195.129.58:9092,193.195.129.59:9092 | awk -F: '{print $1}'
 ```
 
-## 3. Milvus
+## 3. Milvus 2.4 + Kafka
 
 ### 3.1 项目说明
 
@@ -812,9 +823,37 @@ attuInstall
 
 ---
 
-## 6. Milvus 3.x + Woodpecker
+## 6. Milvus 3.0 + Kafka 部署（待补充）
 
-### 6.1 Woodpecker 概述
+> [!TODO]
+> 本章节后续补充 **Milvus 3.0 + 外部 Kafka** 的完整部署方案。与 §0–§5（Milvus 2.4.11 + Kafka）相比，etcd、Kafka、端口规划、Attu 等中间件部分完全复用，差异集中在 Milvus 自身的 compose 配置。
+
+### 6.1 方案说明
+
+- **镜像版本**：`milvusdb/milvus:v3.0.x`（以实际选型为准）
+- **消息队列**：继续使用外部 Kafka 3.4.1 KRaft（`MQ_TYPE=kafka`），复用 §2 的三节点集群
+- **启动依赖链**：etcd quorum → Kafka KRaft quorum → Milvus（与 2.4 相同）
+- **端口规划**：与 §0.5 保持一致，无新增端口
+
+### 6.2 与 2.4 部署的差异（初稿）
+
+| 变更项 | 2.4.11（§3） | 3.0 + Kafka |
+|--------|-------------|-------------|
+| 镜像 | `milvusdb/milvus:v2.4.11` | `milvusdb/milvus:v3.0.x` |
+| MQ 配置 | `MQ_TYPE=kafka` + `KAFKA_BROKER_LIST` | 沿用，具体环境变量名以 3.x 官方配置参考为准 |
+| Coordinator Active-Standby | `*_ENABLE_ACTIVE_STANDBY: true` | 待确认（3.x 部署形态可能有变化） |
+| 废弃配置项 | — | 清理 `milvus.yaml` 中已废弃的 `kafka.*` 参数 |
+
+### 6.3 待补充内容
+
+- [ ] 3.0 + Kafka 完整 docker-compose.yaml（三节点，Host 模式）
+- [ ] 环境变量与 2.4 的逐项对照（以 3.x 官方 `milvus.yaml` 为准）
+- [ ] 验证命令与 §3.3 的差异
+- [ ] 从 2.4 + Kafka 升级到 3.0 + Kafka 的升级路径与回滚说明
+
+## 7. Milvus 3.x + Woodpecker
+
+### 7.1 Woodpecker 概述
 
 Milvus 3.x 引入了 **Woodpecker** 作为内置的 WAL（Write-Ahead Log）/ 流存储引擎，**完全取代了 Kafka、Pulsar、NATS、RocksMQ 等外部消息队列**。
 
@@ -836,7 +875,7 @@ Woodpecker 将上述能力内建到 Milvus 自身：
 
 > Woodpecker 的核心设计目标是消除外部 MQ 的运维负担和资源冗余，同时针对 Milvus 的写入模式（顺序追加、按 segment 消费）做日志存储优化。
 
-### 6.2 部署拓扑变更
+### 7.2 部署拓扑变更
 
 移除 Kafka 集群后，三节点部署从 **etcd + Kafka + Milvus** 三层简化为 **etcd + Milvus** 两层：
 
@@ -855,7 +894,7 @@ Woodpecker 将上述能力内建到 Milvus 自身：
 
 不再需要 Kafka 数据目录（`/aiapp/mid/kafka-cluster/data`）、Kafka 二进制安装目录（`kafka_2.13-3.4.1/`）以及 `deploy-kafka.sh` 脚本。
 
-### 6.3 端口规划变更
+### 7.3 端口规划变更
 
 移除 Kafka 后释放以下端口：
 
@@ -866,9 +905,9 @@ Woodpecker 将上述能力内建到 Milvus 自身：
 
 Woodpecker 作为 Milvus 内置组件，复用 Milvus 已有的内部通信端口，**不引入额外的宿主机端口监听**。其余端口规划（etcd 2379/2380、Milvus Proxy 19530、Metrics 9991–9998 等）保持不变。
 
-### 6.4 docker-compose 配置变更
+### 7.4 docker-compose 配置变更
 
-#### 6.4.1 移除的配置
+#### 7.4.1 移除的配置
 
 `x-milvus-env` 中删除所有 Kafka 相关环境变量：
 
@@ -878,7 +917,7 @@ KAFKA_BROKER_LIST: "193.195.129.57:9092,193.195.129.58:9092,193.195.129.59:9092"
 MQ_TYPE: "kafka"
 ```
 
-#### 6.4.2 Woodpecker 配置
+#### 7.4.2 Woodpecker 配置
 
 Milvus 3.x 中 Woodpecker 作为默认 WAL 引擎，`MQ_TYPE` 默认为 `woodpecker`（或已移除该配置项）。Woodpecker 的数据目录、副本数等通过 `woodpecker.*` 配置项控制，在 docker-compose 中映射为大写环境变量。典型配置如下：
 
@@ -896,7 +935,7 @@ x-milvus-env: &milvus-env
 
 > **注意**：Woodpecker 的具体环境变量名称、默认值和可用配置项随 Milvus 3.x 小版本迭代可能调整。部署前应以目标版本的官方配置参考（`milvus.yaml` 中 `woodpecker` 段）为准。
 
-#### 6.4.3 数据卷
+#### 7.4.3 数据卷
 
 Woodpecker 的日志数据需要持久化。在各服务的 `volumes` 中确保 Woodpecker 路径被挂载到宿主机：
 
@@ -907,14 +946,14 @@ volumes:
   # 无需单独挂载（WOODPECKER_PATH 在该目录下）
 ```
 
-#### 6.4.4 镜像版本
+#### 7.4.4 镜像版本
 
 ```yaml
 x-milvus-common: &milvus-common
   image: milvusdb/milvus:v3.0.0   # 替换为实际部署的 3.x 版本
 ```
 
-### 6.5 资源规划调整
+### 7.5 资源规划调整
 
 移除 Kafka 后，单节点可回收 Kafka 占用的资源（典型为 2–4 GB 内存 + 1–2 CPU 核）。这部分余量可分配给 QueryNode / IndexNode 以提升查询和索引性能：
 
@@ -926,7 +965,7 @@ x-milvus-common: &milvus-common
 
 实际分配应根据数据规模和查询负载压测调整。
 
-### 6.6 迁移注意事项
+### 7.6 迁移注意事项
 
 从 2.x + Kafka 升级到 3.x + Woodpecker 需要注意：
 
@@ -936,7 +975,7 @@ x-milvus-common: &milvus-common
 4. **WAL 回放**：3.x 首次启动时，Woodpecker 从对象存储中加载已有 segment 重建日志视图，首次启动时间可能长于常规重启。
 5. **回滚限制**：Woodpecker 的日志格式与 Kafka 不兼容，升级到 3.x 后无法直接回滚到 2.x + Kafka。升级前务必做好 etcd 快照和对象存储备份。
 
-### 6.7 验证要点
+### 7.7 验证要点
 
 3.x 部署的验证与 §3.3 基本一致，额外确认：
 
@@ -956,7 +995,7 @@ print('Milvus 版本:', connections.get_connection_addr('default'))
 "
 ```
 
-### 6.8 版本基线（3.x）
+### 7.8 版本基线（3.x）
 
 | 组件 | 版本 | 镜像 |
 |------|------|------|
@@ -967,7 +1006,7 @@ print('Milvus 版本:', connections.get_connection_addr('default'))
 
 
 
-## 7. Prometheus 监控
+## 8. Prometheus 监控
 
 Milvus 官方指标可视化仪表盘：
 ```shell

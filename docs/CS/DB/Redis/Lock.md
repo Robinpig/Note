@@ -214,7 +214,7 @@ The analysis and  [reply here](http://antirez.com/news/101).
 
 ## Links
 
-- [Redis](/docs/CS/DB/Redis/Redis.md?id=struct)
+- [Redis](/docs/CS/DB/Redis/struct/struct.md)
 
 ## References
 

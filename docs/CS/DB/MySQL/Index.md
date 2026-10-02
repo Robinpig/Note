@@ -51,6 +51,92 @@ LIKE '%XX' 无法使用索引
 MySQL can also optimize the combination col_name = expr OR col_name IS NULL, a form that is common in resolved subqueries. EXPLAIN shows ref_or_null when this optimization is used.
 
 
+### 最左前缀与 key_len
+
+联合索引 `(a, b, c)` 本质是一棵按 `(a, b, c)` 字典序排列的 B+Tree，因此遵循**最左前缀法则（leftmost prefix）**：
+
+- 查询条件必须从索引最左列开始且不跳列：`where a=? and b=?` 能用 a、b；`where b=? and c=?`（缺 a）则用不上该索引；
+- SQL 里条件书写顺序无关，优化器会自动调整，关键是「索引列是否连续出现」；
+- 遇到范围条件会**停止右侧列使用索引**：`a=? and b>30 and c=?` 中 c 无法走索引，因为 b 之后是开区间、c 在区间内不连续；改用 `>=`/`<=`/`BETWEEN`/`LIKE 'x%'` 这类可确定边界的条件，右侧列仍可继续。
+
+用 `EXPLAIN` 的 **key_len** 判断联合索引实际用到了几列（这是最确定的验证手段，而不是凭感觉）：
+
+- 索引 `(profession, age, status)`，当条件为 `profession=? and age>30 and status='0'` 时，`>` 让 status 失效，key_len 停在用到 age 的长度；
+- 换成 `age>=30` 则三列都生效，key_len 继续变长。
+
+key_len 的计算：字符列要算「字符字节数 × 定义长度 + 是否可空(1) + 变长长度字节(2)」，例如 utf8mb4 的 `varchar(20)` 是 `20×4 + 2 + 可空1`。
+
+### 索引何时失效
+
+工程上高频的失效场景，务必结合 `EXPLAIN`（type/key/key_len/rows/Extra）验证，而不是背结论：
+
+| 场景 | 说明 |
+| --- | --- |
+| 对索引列做函数/运算 | `where YEAR(birthday)<1999`、`where age+1=31`、`where LENGTH(name)>2`，破坏有序性，改成对常量侧计算 |
+| `LIKE '%x'` / `'%x%'` | 前导通配无法定位 B+Tree 起点；`LIKE 'x%'` 可走索引（必要时用全文索引/搜索引擎解决包含匹配） |
+| 隐式类型转换 | 字符串列传数字：`where id_no=1002`（应为 `'1002'`），等于对列隐式套函数而失效；反过来数字列传字符串通常安全 |
+| `OR` | 两侧必须都能走索引才用索引，否则整段退化为全表扫描；可拆 `UNION ALL` 或保证两边都有索引 |
+| `!=` / `<>` | 普通索引通常因回表代价高而不走（要取「绝大部分行」）；主键 `!=` 行为不同，优化器可能仍用索引 |
+| `IS NULL` / `IS NOT NULL` | 取决于回表代价与数据分布，多数情况下不走普通索引，优化器按成本决定 |
+| 不满足最左前缀 | 跳过联合索引前导列 |
+| 优化器认为全表扫更便宜 | 命中行占比大、统计信息偏差、数据分布不均时，走索引大量回表反而更慢 |
+| 字符集/排序规则不一致 | 两表 join 列 collation 不同会导致隐式转换而用不上索引 |
+
+### 回表与覆盖索引
+
+- **回表（lookup / bookmark lookup）**：InnoDB 二级索引叶子只存索引列 + 主键值。先用二级索引找到主键，再拿主键去聚簇索引查整行，是两次 B+Tree 查找。
+- **覆盖索引（covering index）**：查询所需列（SELECT、WHERE、ORDER BY 涉及的列）都已包含在该索引里，无需回表，`EXPLAIN` 的 Extra 显示 `Using index`。
+- 减少回表的手段：避免 `SELECT *`，只取需要的列；把高频查询列做进联合索引（注意把 WHERE 列放前、补充 SELECT 列在后）；必要时用汇总/冗余。
+- 主键越短越好，因为每个二级索引叶子都携带主键，长主键会放大所有二级索引体积。
+
+### 全文索引
+
+普通 B+Tree 适合「整值/前缀」匹配，不适合在大段文本里找关键词。`FULLTEXT` 索引用**倒排索引（inverted index）**解决文本检索：
+
+```sql
+CREATE TABLE articles (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  title VARCHAR(200), body TEXT,
+  FULLTEXT INDEX ft_idx (title, body)
+);
+-- 或对已有表添加
+ALTER TABLE articles ADD FULLTEXT INDEX ft_idx (title, body);
+
+-- 用 NATURAL LANGUAGE MODE 检索
+SELECT * FROM articles
+WHERE MATCH(title, body) AGAINST('数据库 索引' IN NATURAL LANGUAGE MODE);
+```
+
+适用于站内文章/描述的关键词搜索；但在中文需要考虑分词（ngram parser），更复杂的相关性、海量文本检索通常直接上 [Elasticsearch](/docs/CS/Framework/ES/ES.md)。
+另外要注意：**MySQL 不支持位图索引（Bitmap Index）**。教程里出现的 `CREATE BITMAP INDEX` 是 Oracle 的语法，在 MySQL 上会报错；低基数列在 InnoDB 中一般不适合普通 B+Tree（区分度低）。
+
+### 索引碎片化
+
+长期频繁的 UPDATE/DELETE 会导致 B+Tree 页分裂与页内空洞，数据在物理上不连续，`Data_free` 增大、范围扫描的磁盘 I/O 变差：
+
+```sql
+-- 查看碎片（Data_free 是已分配但未使用的字节）
+SHOW TABLE STATUS LIKE 'tbl_name';
+
+SELECT table_name,
+       data_length, data_free,
+       ROUND(data_free/data_length*100, 2) AS frag_pct
+FROM information_schema.tables
+WHERE table_schema='db_name' AND data_free > 0;
+
+-- 重建表与索引、回收空间（低峰执行，会锁/占用额外空间，大表注意在线 DDL 与备份）
+OPTIMIZE TABLE tbl_name;                 -- MyISAM 直接整理；InnoDB 等价于重建
+ALTER TABLE tbl_name ENGINE=InnoDB;      -- 显式重建，效果相同
+```
+
+碎片比例不高（如 < 10%）通常无需处理；频繁大批量写入的表才需要周期性维护，且应在业务低峰、确认磁盘有足够剩余空间时进行。
+
+### 建索引的取舍
+
+- 适合：高频 WHERE/连接键（JOIN ON）、`ORDER BY`/`GROUP BY` 列、区分度高的列、需要唯一约束的列、大表。
+- 不适合：小表（少于约千行）、频繁更新的列（维护代价）、区分度极低的列（性别、deleted 标志，反而可能误导优化器）、过多冗余单列索引。
+- 索引不是越多越好：它占空间、拖慢写入（每次增删改都要维护所有相关索引），还会增加优化器选择成本。能被一个联合索引覆盖就别建一堆单列索引。
+
 ### Clustered and Secondary Indexes
 
 Each InnoDB table has a special index called the clustered index that stores row data. 
@@ -329,9 +415,14 @@ rocksDB的存储引擎
 ## Links
 
 - [InnoDB Storage Engine](/docs/CS/DB/MySQL/InnoDB.md?id=innodb-on-disk-structures)
+- [B-Tree](/docs/CS/DB/MySQL/B-Tree.md)
+- [存储引擎](/docs/CS/DB/MySQL/plugin.md)
+- [Optimizer](/docs/CS/DB/MySQL/Optimizer.md)
+- [Elasticsearch](/docs/CS/Framework/ES/ES.md) — 全文检索的外部方案
 
 ## References
 
 1. [A Survey of B-Tree Locking Techniques](https://15721.courses.cs.cmu.edu/spring2019/papers/06-indexes/a16-graefe.pdf)
 2. [Mysql索引(究极无敌细节版) - Cuzzz - 博客园 (cnblogs.com)](https://www.cnblogs.com/cuzzz/p/16812054.html)
+3. [MySQL进阶 1：存储引擎、索引](https://mp.weixin.qq.com/s/w3OrVDTkuCz3N2ytUwLT_A)
 
