@@ -18,6 +18,11 @@ Scikit-Learn 一切对象都遵循 Estimator 契约，学会一套 API 就会用
 
 配套约定还有：`get_params() / set_params()` 支持程序化调参与克隆；模型对象即超参数的载体，构造时传参、fit 时才碰数据。按角色分三类：**Estimator**（模型）、**Transformer**（变换）、**Pipeline**（把前者串起来）。
 
+两个容易忽略的细节：
+
+- `fit` 学到的东西一律放在**下划线后缀属性**里，与构造时传入的超参数区分开：`clf.feature_importances_`、`pca.components_`、`scaler.mean_`
+- 输入形状约定：`X` 一律二维 `[n_samples, n_features]`，`y` 为 `[n_samples]`；类别标签不必是整数
+
 ## Module Map
 
 按功能找模块，基本能覆盖经典机器学习全流程：
@@ -56,6 +61,8 @@ print(scores.mean(), scores.std())     # 5 折交叉验证的均值与波动
 > [!TIP]
 > `cross_val_score` 只做评估；`cross_validate` 还能返回 fit/predict 耗时与多条指标，更常用于实验报告。
 
+复现性与切分要点：所有带随机性的 estimator 都要显式传 `random_state`；类别不平衡时 `train_test_split(..., stratify=y)` 必加，保证各折类别比例一致；训练时用 `class_weight="balanced"` 让少数类获得更高权重，比过采样更省事的起点。
+
 ## Tuning
 
 超参数搜索的两个标准工具：
@@ -88,6 +95,7 @@ print(grid.best_params_, grid.best_score_)
 
 - **优点**：API 统一、上手快、文档质量高；覆盖经典 ML 全流程；Pipeline/ColumnTransformer 工程化成熟；社区生态（与 pandas、joblib、XGBoost 等无缝衔接）
 - **缺点**：不做 GPU 加速与深度学习训练；对超大数据集（内存装不下的表）需要 Dask-ML 等扩展；强化学习、图学习等新范式不在其范围
+- **选型边界**：样本千万级或特征极稀疏时改用 XGBoost / LightGBM；非结构化数据（图像/文本/语音）交给 [PyTorch](/docs/CS/AI/PyTorch.md) / [TensorFlow](/docs/CS/AI/TensorFlow.md)——不过 `TfidfVectorizer + LogisticRegression` 仍是文本分类极难超越的强基线
 
 ## Links
 
