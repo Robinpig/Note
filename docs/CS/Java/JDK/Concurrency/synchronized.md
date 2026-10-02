@@ -36,7 +36,7 @@ ACC_SYNCHRONIZED
 
 
 ### MarkWord
-[MarkWord](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=MarkWord) in [Oop](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=oop) header.
+[MarkWord](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=markword) in [Oop](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=oop) header.
 
 
 ## Process
@@ -657,7 +657,7 @@ Mark Word = pointer to Displaced Mark Word
 #### ObjectSynchronizer::slow_enter
 1. is_neutral, cas set mark
 2. has_locker, set_displaced_header
-3. [ObjectSynchronizer::inflate](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=inflate) then [ObjectMonitor::enter](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=ObjectMonitorenter)
+3. [ObjectSynchronizer::inflate](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=inflate) then [ObjectMonitor::enter](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=objectmonitorenter)
 
 ```cpp
 // synchronizer.cpp
@@ -1278,7 +1278,7 @@ void ObjectMonitor::enter(TRAPS) {
 1. tryLock
 2. trySpin
 3. wrap to node add push "Self" onto **the front of the _cxq(ContentionList)**
-4. tryLock and trySpin in a loop with [ParkEvent](/docs/CS/Java/JDK/Concurrency/Parker.md?id=ParkEvent)
+4. tryLock and trySpin in a loop with [ParkEvent](/docs/CS/Java/JDK/Concurrency/Parker.md?id=parkevent)
    1. if tryLock and trySpin fail, park self
    2. unpark in exit by other Thread
 5. Unlink Self from the cxq or EntryList.

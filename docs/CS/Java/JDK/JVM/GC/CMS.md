@@ -13,7 +13,7 @@ Minor collections can interleave with an ongoing major cycle, and are done in a 
 
 Before CMS, Serial, Parallel all STW.
 
-CMS for Old GC, and Young GC still a pause by [other collectors(ParNew)](/docs/CS/Java/JDK/JVM/ParNew.md).
+CMS for Old GC, and Young GC still a pause by [other collectors(ParNew)](/docs/CS/Java/JDK/JVM/GC/GC.md).
 
 - Initial Mark(STW)
 - Concurrent Mark

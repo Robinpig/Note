@@ -194,6 +194,7 @@ Volatile Variables
 - Ad-hoc Thread Confinement
 - Stack Confinement
 - [ThreadLocal](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md)
+- [ScopedValue](/docs/CS/Java/JDK/Concurrency/ScopedValues.md) — ThreadLocal 在请求上下文场景的不可变替代品（JDK 25 转正）
 
 #### Immutability
 
@@ -212,7 +213,7 @@ Volatile Variables
 
 The ConcurrentLinkedQueue class supplies an efficient scalable thread-safe non-blocking FIFO queue.
 The ConcurrentLinkedDeque class is similar, but additionally supports the java.util.Deque interface.
-Five implementations in java.util.concurrent support the extended [BlockingQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=BlockingQueue) interface, that defines blocking versions of put and take:
+Five implementations in java.util.concurrent support the extended [BlockingQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=blockingqueue) interface, that defines blocking versions of put and take:
 LinkedBlockingQueue, ArrayBlockingQueue, SynchronousQueue, PriorityBlockingQueue, and DelayQueue.
 The different classes cover the most common usage contexts for producer-consumer, messaging, parallel tasking, and related concurrent designs.
 
@@ -223,10 +224,10 @@ The BlockingDeque interface extends BlockingQueue to support both FIFO and LIFO 
 
 Besides Queues, this package supplies Collection implementations designed for use in multithreaded contexts:
 
-- [ConcurrentHashMap](/docs/CS/Java/JDK/Collection/Map.md?id=ConcurrentHashMap),
-- [ConcurrentSkipListMap](/docs/CS/Java/JDK/Collection/Map.md?id=ConcurrentSkipListMap),
+- [ConcurrentHashMap](/docs/CS/Java/JDK/Collection/Map.md?id=concurrenthashmap),
+- [ConcurrentSkipListMap](/docs/CS/Java/JDK/Collection/Map.md?id=concurrentskiplistmap),
 - ConcurrentSkipListSet,
-- [CopyOnWriteArrayList](/docs/CS/Java/JDK/Collection/List.md?id=CopyOnWriteArrayList),
+- [CopyOnWriteArrayList](/docs/CS/Java/JDK/Collection/List.md?id=copyonwritearraylist),
 - and CopyOnWriteArraySet.
 
 When many threads are expected to access a given collection, a ConcurrentHashMap is normally preferable to a synchronized HashMap,
@@ -267,7 +268,7 @@ Latches can be used to ensure that certain activities do not proceed until other
 - Waiting until all the parties involved in an activity, for instance the players in a multi-player game, are ready to proceed.
   In this case, the latch reaches the terminal state after all the players are ready.
 
-[CountDownLatch](/docs/CS/Java/JDK/Concurrency/CountDownLatch.md?id=Introduction) is a flexible latch implementation.
+[CountDownLatch](/docs/CS/Java/JDK/Concurrency/CountDownLatch.md?id=introduction) is a flexible latch implementation.
 It allows one or more threads to wait for a set of events to occur.
 The latch state consists of a counter initialized to a positive number, representing the number of events to wait for.
 The countDown method decrements the counter, indicating that an event has occurred, and the await methods wait for the counter to reach zero, which happens when all the events have occurred.
@@ -278,11 +279,11 @@ FutureTask is used by the Executor framework to represent asynchronous tasks, an
 
 ##### Semaphores
 
-Counting [semaphores](/docs/CS/Java/JDK/Concurrency/Semaphore.md?id=Introduction) are used to control the number of activities that can access a certain resource or perform a given action at the same time.
+Counting [semaphores](/docs/CS/Java/JDK/Concurrency/Semaphore.md?id=introduction) are used to control the number of activities that can access a certain resource or perform a given action at the same time.
 
 ##### Barriers
 
-[CyclicBarrier](/docs/CS/Java/JDK/Concurrency/CyclicBarrier.md?id=Introduction) allows a fixed number of parties to rendezvous repeatedly at a barrier point and is useful in parallel iterative algorithms
+[CyclicBarrier](/docs/CS/Java/JDK/Concurrency/CyclicBarrier.md?id=introduction) allows a fixed number of parties to rendezvous repeatedly at a barrier point and is useful in parallel iterative algorithms
 that break down a problem into a fixed number of independent subproblems.
 Threads call await when they reach the barrier point, and await blocks until all the threads have reached the barrier point.
 If all threads meet at the barrier point, the barrier has been successfully passed, in which case all threads are released and the barrier is reset so it can be used again.
@@ -290,12 +291,12 @@ If a call to await times out or a thread blocked in await is interrupted, then t
 If the barrier is successfully passed, await returns a unique arrival index for each thread, which can be used to “elect” a leader that takes some special action in the next iteration.
 CyclicBar rier also lets you pass a barrier action to the constructor; this is a Runnable that is executed (in one of the subtask threads) when the barrier is successfully passed but before the blocked threads are released.
 
-Another form of barrier is [Exchanger](/docs/CS/Java/JDK/Concurrency/Exchanger.md?id=Introduction), a two-party barrier in which the parties exchange data at the barrier point.
+Another form of barrier is [Exchanger](/docs/CS/Java/JDK/Concurrency/Exchanger.md?id=introduction), a two-party barrier in which the parties exchange data at the barrier point.
 Exchangers are useful when the parties perform asymmetric activities, for example when one thread fills a buffer with data and the other thread consumes the data from the buffer;
 these threads could use an Exchanger to meet and exchange a full buffer for an empty one.
 When two threads exchange objects via an Exchanger, the exchange constitutes a safe publication of both objects to the other party.
 
-[Phaser](/docs/CS/Java/JDK/Concurrency/Phaser.md?id=Introduction) is a reusable synchronization barrier, similar in functionality to CyclicBarrier and CountDownLatch but supporting more flexible usage.
+[Phaser](/docs/CS/Java/JDK/Concurrency/Phaser.md?id=introduction) is a reusable synchronization barrier, similar in functionality to CyclicBarrier and CountDownLatch but supporting more flexible usage.
 
 ### Summary of Fundamentals
 
@@ -424,7 +425,7 @@ Context switches are not free; thread scheduling requires manipulating shared da
 ### Memory Model
 
 - [JMM](/docs/CS/Java/JDK/Concurrency/JMM.md)
-- [CAS](/docs/CS/Java/JDK/Basic/unsafe.md?id=CAS)
+- [CAS](/docs/CS/Java/JDK/Basic/unsafe.md?id=cas)
 
 ### Explicit Locks
 
@@ -510,6 +511,9 @@ volatile
 
 - [JDK](/docs/CS/Java/JDK/JDK.md)
 - [C++ Concurrency](/docs/CS/C++/Concurrency.md)
+- [ThreadLocal](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md)
+- [ScopedValue](/docs/CS/Java/JDK/Concurrency/ScopedValues.md)
+- [VirtualThread](/docs/CS/Java/JDK/Concurrency/VirtualThread.md)
 
 ## References
 

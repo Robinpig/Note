@@ -1,6 +1,6 @@
 ## Introduction
 
-Provides a framework for [implementing blocking locks](/docs/CS/Java/JDK/Concurrency/Concurrency.md?id=Locks) and related [synchronizers](/docs/CS/Java/JDK/Concurrency/Concurrency.md?id=synchronizers) (semaphores, events, etc) that rely on first-in-first-out (**FIFO**) [wait queues](/docs/CS/Java/JDK/Concurrency/AQS.md?id=Wait-Queue). 
+Provides a framework for [implementing blocking locks](/docs/CS/Java/JDK/Concurrency/Concurrency.md?id=locking) and related [synchronizers](/docs/CS/Java/JDK/Concurrency/Concurrency.md?id=synchronizers) (semaphores, events, etc) that rely on first-in-first-out (**FIFO**) [wait queues](/docs/CS/Java/JDK/Concurrency/AQS.md?id=wait-queue). 
 
 This class is designed to be a useful basis for most kinds of synchronizers that rely on a single atomic int value to represent state. 
 
@@ -1100,7 +1100,7 @@ AbstractOwnableSynchronizer
 
 1. [ReentrantLock](/docs/CS/Java/JDK/Concurrency/ReentrantLock.md)
 2. [ReentrantReadWriteLcok](/docs/CS/Java/JDK/Concurrency/ReadWriteLock.md)
-3. [ThreadPoolExecutor.Worker](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md?id=Worker)
+3. [ThreadPoolExecutor.Worker](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md?id=worker)
 
 
 ## Links

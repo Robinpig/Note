@@ -516,7 +516,7 @@ c2i是指编译模式到解释模式（Compiler-to-Interpreter），i2c是指解
 
 ## c2
 
-[CompilerThread](/docs/CS/Java/JDK/JVM/Thread.md?id=CompilerThread) -> `C2Compiler::compile_method`
+[CompilerThread](/docs/CS/Java/JDK/JVM/Thread.md?id=compilerthread) -> `C2Compiler::compile_method`
 
 ### compile_method
 

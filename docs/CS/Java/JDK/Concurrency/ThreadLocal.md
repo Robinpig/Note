@@ -550,3 +550,4 @@ if (inheritThreadLocals && parent.inheritableThreadLocals != null)
 - [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
 - [Thread](/docs/CS/Java/JDK/Concurrency/Thread.md)
 - [ThreadLocalRandom](/docs/CS/Java/JDK/Concurrency/ThreadLocalRandom.md)
+- [ScopedValue](/docs/CS/Java/JDK/Concurrency/ScopedValues.md) — 不可变、有界生命周期的替代方案

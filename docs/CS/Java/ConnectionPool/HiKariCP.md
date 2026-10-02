@@ -19,7 +19,7 @@ however common patterns in JDBC programming are to close Statements immediately 
 For these cases, a scan that starts at the tail will perform better.
 Therefore, ArrayList<Statement> was replaced with a custom class FastList which eliminates range checking and performs removal scans **from tail to head**.
 
-Link: [ArrayList - JDK](/docs/CS/Java/JDK/Collection/List.md?id=ArrayList)
+Link: [ArrayList - JDK](/docs/CS/Java/JDK/Collection/List.md?id=arraylist)
 
 ### ConcurrentBag
 

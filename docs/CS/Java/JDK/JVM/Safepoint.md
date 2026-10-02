@@ -459,7 +459,7 @@ bool ObjectSynchronizer::is_cleanup_needed() {
 
 ##### some inline cache buffers is non-empty
 
-check if [StubQueue](/docs/CS/Java/JDK/JVM/interpreter.md?id=StubQueue) is non-empty
+check if [StubQueue](/docs/CS/Java/JDK/JVM/interpreter.md?id=stubqueue) is non-empty
 ```cpp
 // icBuffer.cpp
 lass InlineCacheBuffer: public AllStatic {
@@ -837,7 +837,7 @@ Xlog:safepoint
 ## Links
 
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
-- [VMThread](/docs/CS/Java/JDK/JVM/Thread.md?id=VMThread)
+- [VMThread](/docs/CS/Java/JDK/JVM/Thread.md?id=vmthread)
 
 
 

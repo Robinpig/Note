@@ -103,9 +103,9 @@ private void init(ThreadGroup g, Runnable target, String name,
 ### Example
 
 1. create a thread extends Thread directly
-2. use [ThreadLocalExecutor](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md?id=ThreadPoolExecutor)
-3. use [CompletableFuture](/docs/CS/Java/JDK/Concurrency/Future.md?id=CompletableFuture) submit task
-4. use [FutureTask](/docs/CS/Java/JDK/Concurrency/Future.md?id=FutureTask)
+2. use [ThreadLocalExecutor](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md?id=threadpoolexecutor)
+3. use [CompletableFuture](/docs/CS/Java/JDK/Concurrency/Future.md?id=completablefuture) submit task
+4. use [FutureTask](/docs/CS/Java/JDK/Concurrency/Future.md?id=futuretask)
 
 
 
@@ -176,7 +176,7 @@ public synchronized void start() {
 private native void start0();
 ```
 
-call [JVM_StartThread](/docs/CS/Java/JDK/Concurrency/Thread.md?id=JVM_StartThread)
+call [JVM_StartThread](/docs/CS/Java/JDK/Concurrency/Thread.md?id=jvm_startthread)
 ```c
 //Thread.c
 static JNINativeMethod methods[] = {
@@ -255,7 +255,7 @@ size_t (an unsigned type), which may be 32 or 64-bit depending on the platform.
       NOT_LP64(if (size > SIZE_MAX) size = SIZE_MAX;)
       size_t sz = size > 0 ? (size_t) size : 0;
 ```
-call [new JavaThread](/docs/CS/Java/JDK/Concurrency/Thread.md?id=JavaThreadJavaThread)
+call [new JavaThread](/docs/CS/Java/JDK/Concurrency/Thread.md?id=javathreadjavathread)
 ```cpp
       native_thread = new JavaThread(&thread_entry, sz);
 
@@ -680,7 +680,7 @@ When an object is first created, its wait set is empty. Elementary actions that 
 Wait sets are manipulated solely through the methods `Object``.``wait`, `Object``.``notify`, and `Object``.``notifyAll`.
 
 ### wait
-**The current thread must own [this object's monitor](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=ObjectMonitor).** use `CHECK_OWNER`.
+**The current thread must own [this object's monitor](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=objectmonitor).** use `CHECK_OWNER`.
 
 > [!NOTE]
 > 
@@ -1429,7 +1429,7 @@ JVM_END
 1. `OSThread::set_interrupted(true)`
 2. `ParkEvent::park`
 
-When `ParkEvent::unpark` by [interrupt()](/docs/CS/Java/JDK/Concurrency/Thread.md?id=JVM_Interrupt), use `OSThread::set_interrupted(true)` at next iteration.
+When `ParkEvent::unpark` by [interrupt()](/docs/CS/Java/JDK/Concurrency/Thread.md?id=jvm_interrupt), use `OSThread::set_interrupted(true)` at next iteration.
 
 ```cpp
 // os_posix.cpp

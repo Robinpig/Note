@@ -292,7 +292,7 @@ In addition to serving as a standalone class, this class provides protected func
 
 
 
-see [Piggybacking on Synchronization - JMM](/docs/CS/Java/JDK/Concurrency/JMM.md?id=Piggybacking-on-Synchronization)
+see [Piggybacking on Synchronization - JMM](/docs/CS/Java/JDK/Concurrency/JMM.md?id=piggybacking-on-synchronization)
 
 ```java
 public class FutureTask<V> implements RunnableFuture<V> {
@@ -1236,8 +1236,8 @@ private static Object reportJoin(Object r) {
 
 - [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
 - [ThreadPool](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md)
-- [RxJava](/docs/CS/Java/RxJava/RxJava.md)
-- [Reactor](/docs/CS/Java/reactor/Reactor.md)
+- [RxJava](/docs/CS/Framework/RxJava/RxJava.md)
+- [Reactor](/docs/CS/Framework/reactor/Reactor.md)
 
 ## References
 1. [FutureTask.isDone returns true when task has not yet completed](https://bugs.openjdk.java.net/browse/JDK-8073704)

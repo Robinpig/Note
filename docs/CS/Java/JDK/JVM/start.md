@@ -33,7 +33,7 @@ java.exe 或者 javaw.exe 最终都是调用到 main函数
 
 
 
-main-> JLI_Launch -> JVMInit -> ContinueInNewThread -> 使用 pthread_create() 创建线程执行 [JavaMain](/docs/CS/Java/JDK/JVM/start.md?id=JavaMain) 函数
+main-> JLI_Launch -> JVMInit -> ContinueInNewThread -> 使用 pthread_create() 创建线程执行 [JavaMain](/docs/CS/Java/JDK/JVM/start.md?id=javamain) 函数
 
 ```c
 // main.c
@@ -113,7 +113,7 @@ CallJavaMainInNewThread(jlong stack_size, void* args) {
 #### JavaMain
 
 - InitializeJVM  -> JNI_CreateJavaVM -> [Thread.create_vm](/docs/CS/Java/JDK/JVM/start.md?id=create_vm)
-- [Invoke main method](/docs/CS/Java/JDK/JVM/start.md?id=MainClass)
+- [Invoke main method](/docs/CS/Java/JDK/JVM/start.md?id=mainclass)
 - [DestroyJavaVM](/docs/CS/Java/JDK/JVM/destroy.md?id=destroy_vm)
 
 ```cpp
@@ -392,7 +392,7 @@ see [JEP 270: Reserved Stack Areas for Critical Sections](https://openjdk.java.n
   JvmtiExport::transition_pending_onload_raw_monitors();
 ```
 
-Create the [VMThread](/docs/CS/Java/JDK/JVM/Thread.md?id=VMThread)
+Create the [VMThread](/docs/CS/Java/JDK/JVM/Thread.md?id=vmthread)
 
 ```cpp
   { 
@@ -404,7 +404,7 @@ Create the [VMThread](/docs/CS/Java/JDK/JVM/Thread.md?id=VMThread)
     }
 ```
 
-Wait for the VM thread to become ready, and [VMThread::run](/docs/CS/Java/JDK/JVM/Thread.md?id=VMThreadrun) to initialize Monitors can have spurious returns, must always check another state flag.
+Wait for the VM thread to become ready, and [VMThread::run](/docs/CS/Java/JDK/JVM/Thread.md?id=vmthreadrun) to initialize Monitors can have spurious returns, must always check another state flag.
 
 ```cpp
     {
@@ -482,7 +482,7 @@ Wait for the VM thread to become ready, and [VMThread::run](/docs/CS/Java/JDK/JV
     Chunk::start_chunk_pool_cleaner_task();
 ```
 
-[Start the service thread](/docs/CS/Java/JDK/JVM/Thread.md?id=ServiceThreadinitialize)
+[Start the service thread](/docs/CS/Java/JDK/JVM/Thread.md?id=servicethreadinitialize)
 
 The service thread enqueues JVMTI deferred events and does various hashtable and other cleanups.
 Needs to start before the compilers start posting events.
@@ -491,7 +491,7 @@ Needs to start before the compilers start posting events.
   ServiceThread::initialize();
 ```
 
-[Start the monitor deflation thread](/docs/CS/Java/JDK/JVM/Thread.md?id=MonitorDeflationThreadinitialize):
+[Start the monitor deflation thread](/docs/CS/Java/JDK/JVM/Thread.md?id=monitordeflationthreadinitialize):
 
 ```
   MonitorDeflationThread::initialize();
@@ -611,7 +611,7 @@ cache the [system and platform class loaders](/docs/CS/Java/JDK/JVM/ClassLoader.
     MutexLocker ml(PeriodicTask_lock);
 ```
 
-Make sure the WatcherThread can be started by [WatcherThread::start()](/docs/CS/Java/JDK/JVM/Thread.md?id=WatcherThreadstart) or by dynamic enrollment.
+Make sure the WatcherThread can be started by [WatcherThread::start()](/docs/CS/Java/JDK/JVM/Thread.md?id=watchedthread) or by dynamic enrollment.
 
 ```cpp
     WatcherThread::make_startable();
@@ -673,7 +673,7 @@ init [CodeCache](/docs/CS/Java/JDK/JVM/CodeCache.md?id=init)
   os_init_globals();
 ```
 
-init [stub](/docs/CS/Java/JDK/JVM/JavaCall?id=init)
+init [stub](/docs/CS/Java/JDK/JVM/JavaCall.md?id=init)
 
 ```cpp
   stubRoutines_init1();

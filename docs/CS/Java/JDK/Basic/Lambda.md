@@ -38,7 +38,7 @@ A fold function runs over all elements in a structure (for lists usually left-to
 This can be used to combine all elements of a structure into one value, for example:
 
 Like local and anonymous classes, lambda expressions can capture variables; they have the same access to local variables of the enclosing scope.
-However, unlike local and anonymous classes, lambda expressions do not have any [shadowing](/docs/CS/Java/JDK/Basic/Object.md?id=Shadowing) issues.
+However, unlike local and anonymous classes, lambda expressions do not have any [shadowing](/docs/CS/Java/JDK/Basic/Object.md?id=shadowing) issues.
 Lambda expressions are lexically scoped. This means that they do not inherit any names from a supertype or introduce a new level of scoping.
 Declarations in a lambda expression are interpreted just as they are in the enclosing environment.
 

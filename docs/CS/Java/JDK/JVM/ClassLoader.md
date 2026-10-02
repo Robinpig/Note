@@ -430,7 +430,7 @@ static native Class<?> defineClass2(ClassLoader loader, String name, java.nio.By
 
 > [!TIP]
 >
-> Both [loadClass](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=loadClass) and [defineClass](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=defineClass) call [create_from_stream](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=create_from_stream)
+> Both [loadClass](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=loadclass) and [defineClass](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=defineclass) call [create_from_stream](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=create_from_stream)
 
 #### loadClass
 
@@ -537,7 +537,7 @@ void ClassFileParser::parse_stream(const ClassFileStream* const stream,
   // verify
 ```
 
-allocate [Constant Pool](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=Constant-Pool)
+allocate [Constant Pool](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=constant-pool)
 
 ```
   _cp = ConstantPool::allocate(_loader_data, cp_size, CHECK);
@@ -1418,10 +1418,10 @@ bool InstanceKlass::link_class_or_fail(TRAPS) {
 ```
 
 
-1. [verification](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=Verification)
-2. [Rewriting](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=Rewriting) after verification but before the first method of the class is executed
+1. [verification](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=verification)
+2. [Rewriting](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=rewriting) after verification but before the first method of the class is executed
 3. relocate jsrs and link methods after they are all rewritten
-4. [Initialize_vtable](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=initialize_vtable) and [initialize_itable](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=initialize_itable)
+4. [Initialize_vtable](/docs/CS/Java/JDK/JVM/Oop-Klass.md) and [initialize_itable](/docs/CS/Java/JDK/JVM/Oop-Klass.md)
 5. set_init_state
 
 
@@ -1730,7 +1730,7 @@ void Rewriter::rewrite_Object_init(const methodHandle& method, TRAPS) {
     switch (opcode) {
 ```
 
-rewrite if override [Object.finalize()](/docs/CS/Java/JDK/Basic/Object.md?id=finalize) and call [Finalizer.register()](/docs/CS/Java/JDK/Basic/Ref.md?id=register)
+rewrite if override [Object.finalize()](/docs/CS/Java/JDK/Basic/Object.md?id=finalize) and call [Finalizer.register()](/docs/CS/Java/JDK/Basic/Ref.md?id=register_finalizer)
 
 ```cpp
       case Bytecodes::_return: *bcs.bcp() = Bytecodes::_return_register_finalizer; break;
@@ -2350,7 +2350,7 @@ redefineClasses(JNIEnv * jnienv, JPLISAgent * agent, jobjectArray classDefinitio
 }
 ```
 
-redefine_single_class by [VMThread](/docs/CS/Java/JDK/JVM/Thread.md?id=VMThread)
+redefine_single_class by [VMThread](/docs/CS/Java/JDK/JVM/Thread.md?id=vmthread)
 
 Install the redefinition of a class:
 

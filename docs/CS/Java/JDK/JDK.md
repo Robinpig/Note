@@ -209,8 +209,8 @@ Java 相对于其它现代语言主要的优势还是生态庞大
 
 ## Links
 
-
-
+- [OOP](/docs/CS/Java/OOP.md)
+- [编程语言横向对比](/docs/CS/Languages.md)
 
 ## References
 

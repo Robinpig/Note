@@ -117,4 +117,8 @@ void frame::oops_do_internal(OopClosure* f, CodeBlobClosure* cf, RegisterMap* ma
 }
 ```
 
+## Links
 
+- [Java Virtual Machine Stack](/docs/CS/Java/JDK/JVM/Stack.md) — 字节码规范层面的栈帧（局部变量表/操作数栈/动态链接/返回地址）
+- [Runtime Data Area](/docs/CS/Java/JDK/JVM/Runtime_Data_Area.md)
+- [JVM](/docs/CS/Java/JDK/JVM/JVM.md)

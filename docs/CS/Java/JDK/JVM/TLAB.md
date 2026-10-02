@@ -94,7 +94,7 @@ void ThreadLocalAllocBuffer::startup_initialization() {
   Thread::current()->tlab().initialize();
 }
 ```
-每个[JavaThread::run](/docs/CS/Java/JDK/Concurrency/Thread.md?id=JavaThreadrun)时会先分配TLAB
+每个[JavaThread::run](/docs/CS/Java/JDK/Concurrency/Thread.md?id=javathreadrun)时会先分配TLAB
 
 ```c
 // thread.cpp

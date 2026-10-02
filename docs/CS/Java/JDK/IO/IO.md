@@ -227,6 +227,12 @@ Java NIO 提供了与传统 IO API 不同的 IO 编程模型
 
 [IOCP](https://hg.openjdk.org/jdk/jdk/file/d8327f838b88/src/java.base/windows/classes/sun/nio/ch/Iocp.java)
 
+## io_uring
+
+Linux 5.1 引入的 [io_uring](/docs/CS/OS/Linux/IO/io_uring.md) 通过 SQ/CQ ring 批量提交 I/O，
+JDK 主线尚未内置支持，Java 侧通过 [JUring](/docs/CS/Java/JDK/IO/Uring.md)（FFM API）或 Netty incubator transport 接入，
+也是补齐 NIO 文件 I/O 阻塞短板的候选方向，详见 [Uring](/docs/CS/Java/JDK/IO/Uring.md)。
+
 ## File
 
 Read all lines from a file as a Stream. Unlike readAllLines, this method does not read all lines into a List, but instead populates lazily as the stream is consumed.
@@ -265,7 +271,10 @@ Linux下由于没有这种异步 IO 技术，所以使用的是epoll 对异步 I
 
 ## Links
 
-
+- [NIO](/docs/CS/Java/JDK/IO/NIO.md)
+- [Direct Buffer](/docs/CS/Java/JDK/IO/Direct_Buffer.md)
+- [Uring (io_uring)](/docs/CS/Java/JDK/IO/Uring.md)
+- [Netty](/docs/CS/Framework/Netty/Netty.md)
 
 ## References
 

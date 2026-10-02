@@ -341,14 +341,14 @@ allowCoreThreadTimeOut
 Sets the maximum allowed number of threads. This overrides any value set in the constructor.
 If the new value is smaller than the current value, excess existing threads will be terminated when they next become idle.
 
-- [Hystrix](/docs/CS/Framework/Spring_Cloud/Hystrix.md?id=HystrixThreadPool)
+- [Hystrix](/docs/CS/Framework/Spring_Cloud/Hystrix.md?id=hystrixthreadpool)
 
 #### prestartCoreThread
 
 By default, **even core threads are initially created and started only when new tasks arrive**, but this can be overridden dynamically using method prestartCoreThread or prestartAllCoreThreads.
 You probably want to prestart threads if you construct the pool with a non-empty queue.
 
-- [Tomcat](/docs/CS/Framework/Tomcat/threads.md?id=StandardThreadExecutor)
+- [Tomcat](/docs/CS/Framework/Tomcat/threads.md?id=standardthreadexecutor)
 - [Dubbo]()
 
 #### allowsCoreThreadTimeOut
@@ -514,7 +514,7 @@ public ThreadPoolExecutor(int corePoolSize,
 
 ### BlockingQueue
 
-Any [BlockingQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=BlockingQueue) may be used to transfer and hold submitted tasks. The use of this queue interacts with pool sizing:
+Any [BlockingQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=blockingqueue) may be used to transfer and hold submitted tasks. The use of this queue interacts with pool sizing:
 
 - If fewer than corePoolSize threads are running, the Executor always prefers adding a new thread rather than queuing.
 - If corePoolSize or more threads are running, the Executor always prefers queuing a request rather than adding a new thread.
@@ -1096,7 +1096,7 @@ void interruptIfStarted() {
 
 > [ExecutorService::shutdownNow may block invokeAll indefinitely](https://bugs.openjdk.org/browse/JDK-8160037)
 
-shutdownNow returns a list of never-started tasks, while [invokeAll](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md?id=invokeAll)  waits for all tasks to be completed,
+shutdownNow returns a list of never-started tasks, while [invokeAll](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md?id=invokeall)  waits for all tasks to be completed,
 so it seems natural for it to hang if the never-started task list is simply discarded.
 It is possible for the caller of shutdownNow to cancel all returned tasks, releasing the caller of invokeAll.
 
@@ -1128,7 +1128,7 @@ VariableLinkedBlockingQueue
 
 #### setWorkQueueSize
 
-[LinkedBlockingQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=LinkedBlockingQueue) can not change capacity.
+[LinkedBlockingQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=linkedblockingqueue) can not change capacity.
 
 Or we can override a LinkedBlockingQueue to allow resizing thread safe.
 

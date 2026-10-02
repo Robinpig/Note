@@ -769,7 +769,7 @@ update_inherited_vtable
 
 ### initialize_vtable
 
-called when [Linking Class](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=Linking)
+called when [Linking Class](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=linking)
 
 Revised lookup semantics   introduced 1.3 (Kestrel beta)
 
@@ -1188,7 +1188,7 @@ void klassItable::setup_itable_offset_table(InstanceKlass* klass) {
 
 
 而itable的方法表itableMethod需要等到方法连接时才会初始化 
-在[InstanceKlass::link_class_impl()](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=Linking)函数中完成方法连接后会初始化vtable与itable
+在[InstanceKlass::link_class_impl()](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=linking)函数中完成方法连接后会初始化vtable与itable
 
 
 

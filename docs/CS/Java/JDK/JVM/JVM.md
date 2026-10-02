@@ -202,7 +202,7 @@ These libraries are usually present in the form of .dll or .so files. These nati
 
 虚拟机和Java沟通的两座桥梁是JNI和JavaCalls，Java层使用JNI进入JVM层，而JVM层使用JavaCalls进入Java层。JavaCalls可以在HotSpot VM中调用Java方法，main方法执行也是使用这种JavaCalls实现的
 
-[JavaCalls](/docs/CS/Java/JDK/JVM/JavaCall?id=JavaCalls) and [JNI](/docs/CS/Java/JDK/Basic/JNI.md)
+[JavaCalls](/docs/CS/Java/JDK/JVM/JavaCall.md?id=javacalls) and [JNI](/docs/CS/Java/JDK/Basic/JNI.md)
 
 ```dot
 strict digraph {
@@ -862,7 +862,7 @@ inline HeapWord* TenuredSpace::allocate(size_t size) {
 
 ### initialize
 
-clear_mem & set [markWord](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=MarkWord)
+clear_mem & set [markWord](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=markword)
 
 ```cpp
 // share/gc/shared/memAllocator.cpp
@@ -2188,6 +2188,9 @@ with jvisualvm
 ## Links
 
 - [JDK](/docs/CS/Java/JDK/JDK.md)
+- [Runtime Data Area](/docs/CS/Java/JDK/JVM/Runtime_Data_Area.md)
+- [Java Virtual Machine Stack](/docs/CS/Java/JDK/JVM/Stack.md)
+- [frame](/docs/CS/Java/JDK/JVM/frame.md)
 
 ## References
 

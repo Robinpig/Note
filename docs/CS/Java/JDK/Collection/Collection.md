@@ -291,7 +291,7 @@ if (modCount != expectedModCount) {
 
 ### Fail-Safe
 
-For example [CopyOnWriteArrayList](/docs/CS/Java/JDK/Collection/List.md?id=CopyOnWriteArrayList).
+For example [CopyOnWriteArrayList](/docs/CS/Java/JDK/Collection/List.md?id=copyonwritearraylist).
 
 ConcurrentHashMap UNSAFE.getObjectVolatile
 

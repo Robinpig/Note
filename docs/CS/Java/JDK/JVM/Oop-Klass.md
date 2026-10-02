@@ -427,7 +427,7 @@ In the HotSpot JVM, object headers support many different features:
 
 The layout of Oops is:
 
-- [markWord](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=MarkWord)
+- [markWord](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=markword)
 - [Klass*](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=klass)    // 32 bits if compressed but declared 64 in LP64.
 - length    // shares klass memory or allocated after declared fields if array Oop.
 
@@ -476,7 +476,7 @@ unused:21 size:35 -->| cms_free:1 unused:7 ------------------>| (COOPs && CMS fr
 ```
 
 - hash contains the identity hash value: largest value is 31 bits, see os::random().  
-  Also, 64-bit vm's require a hash value no bigger than 32 bits because they will not properly generate a mask larger than that: see library_call.cpp and c1_CodePatterns_sparc.cpp.(see [HashCode](/docs/CS/Java/JDK/Basic/Object.md?id=hashCode))
+  Also, 64-bit vm's require a hash value no bigger than 32 bits because they will not properly generate a mask larger than that: see library_call.cpp and c1_CodePatterns_sparc.cpp.(see [HashCode](/docs/CS/Java/JDK/Basic/Object.md?id=hashcode))
 - the biased lock pattern is used to bias a lock toward a given thread.
   When this pattern is set in the low three bits, the lock is either biased toward a given thread or "anonymously" biased, indicating that it is possible for it to be biased. 
   When the lock is biased toward a given thread, locking and unlocking can be performed by that thread without using atomic operations.

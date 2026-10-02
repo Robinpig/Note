@@ -53,3 +53,12 @@ handing off the filled one to the thread emptying the buffer.
 ```
 
 **Memory consistency effects**: For each pair of threads that successfully exchange objects via an Exchanger, actions prior to the exchange() in each thread happen-before those subsequent to a return from the corresponding exchange() in the other thread.
+
+## Links
+
+- [Introduction](/docs/CS/Java/JDK/Concurrency/AQS.md)
+- [Introduction](/docs/CS/Java/JDK/Concurrency/Atomic.md)
+- [Introduction](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
+- [Introduction](/docs/CS/Java/JDK/Concurrency/CountDownLatch.md)
+- [Introduction](/docs/CS/Java/JDK/Concurrency/CyclicBarrier.md)
+- [Introduction](/docs/CS/Java/JDK/Concurrency/ForkJoinPool.md)

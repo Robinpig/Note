@@ -356,3 +356,12 @@ private void getDefaultPRNG(boolean setSeed, byte[] seed) {
 ## Reference
 
 1. [ThreadLocalRandom - 加多](https://ifeve.com/%e5%b9%b6%e5%8f%91%e5%8c%85%e4%b8%adthreadlocalrandom%e7%b1%bb%e5%8e%9f%e7%90%86%e5%89%96%e6%9e%90/)
+
+## Links
+
+- [Introduction](/docs/CS/Java/JDK/Concurrency/AQS.md)
+- [Introduction](/docs/CS/Java/JDK/Concurrency/Atomic.md)
+- [Introduction](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
+- [Introduction](/docs/CS/Java/JDK/Concurrency/CountDownLatch.md)
+- [Introduction](/docs/CS/Java/JDK/Concurrency/CyclicBarrier.md)
+- [Introduction](/docs/CS/Java/JDK/Concurrency/Exchanger.md)

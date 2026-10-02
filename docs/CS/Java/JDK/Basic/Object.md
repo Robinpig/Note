@@ -431,7 +431,7 @@ intptr_t ObjectSynchronizer::FastHashCode(Thread * Self, oop obj) {
   if (hash == 0) {
 ```
 
-[get_next_hash](/docs/CS/Java/JDK/Basic/Object.md?id=get_next_hash) and merge into [markWord](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=MarkWord)
+[get_next_hash](/docs/CS/Java/JDK/Basic/Object.md?id=get_next_hash) and merge into [markWord](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=markword)
 
 ```cpp
     hash = get_next_hash(Self, obj);
@@ -527,7 +527,7 @@ public String toString() {
 
 **Avoid finalizers and cleaners.**
 
-see [load Class](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=rewrite_Object_init) when override finalizer
+see [load Class](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=rewrite_object_init) when override finalizer
 
 ```java
 protected void finalize() throws Throwable { }
@@ -541,7 +541,7 @@ the sole exception is when you need to manage objects that hold resources acquir
 
 ### wait & notify
 
-Prefer concurrency utilities to wait and notify . See [Thread](/docs/CS/Java/JDK/Concurrency/Thread.md?id=Order)
+Prefer concurrency utilities to wait and notify . See [Thread](/docs/CS/Java/JDK/Concurrency/Thread.md)
 
 ## Serialization
 
@@ -559,7 +559,7 @@ Implement Serializable with great caution:
 2. A second cost of implementing Serializable is that it increases the likelihood of bugs and security holes.
 3. A third cost of implementing Serializable is that it increases the testing burden associated with releasing a new version of a class.
 
-Write readObject methods defensively. For instance control, prefer [enum](/docs/CS/Java/JDK/Basic/enum.md?id=Serialization) types to.
+Write readObject methods defensively. For instance control, prefer [enum](/docs/CS/Java/JDK/Basic/enum.md?id=serialization) types to.
 
 ## Classes
 
@@ -681,7 +681,7 @@ You cannot declare an interface inside a block; interfaces are inherently static
 You cannot declare static initializers or member interfaces in a local class.
 A local class can have static members provided that they are constant variables. (A constant variable is a variable of primitive type or type that is declared final and initialized with a compile-time constant expression. A compile-time constant expression is typically a string or an arithmetic expression that can be evaluated at compile time
 
-Declarations of a type (such as a variable) in a local class [shadow](/docs/CS/Java/JDK/Basic/Object.md?id=Shadowing) declarations in the enclosing scope that have the same name.
+Declarations of a type (such as a variable) in a local class [shadow](/docs/CS/Java/JDK/Basic/Object.md?id=shadowing) declarations in the enclosing scope that have the same name.
 
 ### Anonymous Classes
 
@@ -718,7 +718,7 @@ Like local classes, anonymous classes can capture variables; they have the same 
 
 - An anonymous class has access to the members of its enclosing class.
 - An anonymous class cannot access local variables in its enclosing scope that are not declared as or effectively final.final
-- Like a nested class, a declaration of a type (such as a variable) in an anonymous class [shadows](/docs/CS/Java/JDK/Basic/Object.md?id=Shadowing) any other declarations in the enclosing scope that have the same name.
+- Like a nested class, a declaration of a type (such as a variable) in an anonymous class [shadows](/docs/CS/Java/JDK/Basic/Object.md?id=shadowing) any other declarations in the enclosing scope that have the same name.
 
 Anonymous classes also have the same restrictions as local classes with respect to their members:
 

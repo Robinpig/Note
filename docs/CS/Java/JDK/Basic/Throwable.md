@@ -89,7 +89,7 @@ OutOfMemoryError: direct memory
 OutOfMemoryError: map failed
 
 
-[File MMAP](/docs/CS/Java/JDK/IO/NIO.md?id=MappedByteBuffer)时，如果系统内存不足，就会抛出这个异常
+[File MMAP](/docs/CS/Java/JDK/IO/NIO.md?id=mappedbytebuffer)时，如果系统内存不足，就会抛出这个异常
 
 
 这种情况下，考虑：
@@ -133,7 +133,7 @@ OutOfMemoryError: reason stack_trace_with_native_method
 
 #### InterruptedException
 
-See [Interrupts](/docs/CS/Java/JDK/Concurrency/Thread.md?id=Interruptions) in Thread.
+See [Interrupts](/docs/CS/Java/JDK/Concurrency/Thread.md?id=interruptions) in Thread.
 
 ## create Exception
 

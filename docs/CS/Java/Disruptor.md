@@ -10,7 +10,7 @@ the Disruptor has evolved into a framework that developers can use to do much of
 
 目前，包括Apache Storm、Camel、Log4j 2在内的很多知名项目都应用了Disruptor以获取高性能
 
-Java内置的[并发队列](/docs/CS/Java/JDK/Collection/Queue.md?id=BlockingQueue) 底层实现一般分成三种：数组、链表和堆
+Java内置的[并发队列](/docs/CS/Java/JDK/Collection/Queue.md?id=blockingqueue) 底层实现一般分成三种：数组、链表和堆
 例如 ArrayBlockingQueue有三个成员变量： - takeIndex：需要被取走的元素下标 - putIndex：可被元素插入的位置的下标 - count：队列中元素的数量
 
 这三个变量很容易放到一个缓存行中，但是之间修改没有太多的关联。所以每次修改，都会使之前缓存的数据失效，从而不能完全达到共享的效果
@@ -118,6 +118,15 @@ Disruptor 的解决：在 Sequence 类的实现中，通过缓存行填充（Cac
 复杂事件处理（CEP）、实时流计算。
 系统内部模块间的高性能异步解耦。
 
+
+## Links
+
+- [Introduction](/docs/CS/Java/AspectJ.md)
+- [Introduction](/docs/CS/Java/Codec.md)
+- [Introduction](/docs/CS/Java/Ehcache.md)
+- [Introduction](/docs/CS/Java/Gson.md)
+- [Introduction](/docs/CS/Java/Guava_Cache.md)
+- [Introduction](/docs/CS/Java/JCache.md)
 
 ## References
 

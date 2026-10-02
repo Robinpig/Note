@@ -310,7 +310,7 @@ In order to support this style of filter the container must support the followin
 
 ## Listeners
 
-Spring 就实现了自己的监听器[ContextLoaderListener](/docs/CS/Framework/Spring/MVC.md?id=ContextLoaderListener)，来监听 ServletContext 的启动事件，
+Spring 就实现了自己的监听器[ContextLoaderListener](/docs/CS/Framework/Spring/MVC.md?id=contextloaderlistener)，来监听 ServletContext 的启动事件，
 目的是当 Servlet 容器启动时，init 全局的ApplicationContext方便后续的WebApplicationContext使用
 ## Sessions
 

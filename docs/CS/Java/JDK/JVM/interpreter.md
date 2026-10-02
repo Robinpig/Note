@@ -10,9 +10,9 @@ using the evaluation stack to hold intermediate values.
 This file contains the platform-independent parts of the **abstract interpreter** and the **abstract interpreter generator**.
 
 Organization of the interpreter(s).
-There exists two different interpreters in hotpot an assembly language version (aka [template interpreter](/docs/CS/Java/JDK/JVM/interpreter.md?id=TemplateInterpreter) and a high level language version(aka [c++ interpreter](/docs/CS/Java/JDK/JVM/interpreter.md?id=CppInterpreter)).
+There exists two different interpreters in hotpot an assembly language version (aka [template interpreter](/docs/CS/Java/JDK/JVM/interpreter.md?id=templateinterpreter) and a high level language version(aka [c++ interpreter](/docs/CS/Java/JDK/JVM/interpreter.md?id=cppinterpreter)).
 
-The interpreter code in [StubQueue](/docs/CS/Java/JDK/JVM/interpreter.md?id=StubQueue)
+The interpreter code in [StubQueue](/docs/CS/Java/JDK/JVM/interpreter.md?id=stubqueue)
 
 ```cpp
 

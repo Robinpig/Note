@@ -706,7 +706,7 @@ final class Finalizer extends FinalReference<Object> {
 
 #### register_finalizer
 
-rewrite _return to _return_register_finalizer while [rewrite_Object_init](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=rewrite_Object_init).
+rewrite _return to _return_register_finalizer while [rewrite_Object_init](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=rewrite_object_init).
 
 ```cpp
 
@@ -724,7 +724,7 @@ Register finalizable objects at end of
 -XX:+/-RegisterFinalizersAtInit
 ```
 
-call `Finalizer#register()` after  [allocation](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=allocate_instance)
+call `Finalizer#register()` after  [allocation](/docs/CS/Java/JDK/JVM/Oop-Klass.md)
 
 ```cpp
 // instanceKlass.cpp

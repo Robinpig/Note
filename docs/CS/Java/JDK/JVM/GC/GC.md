@@ -7,7 +7,7 @@ However, it should meet the standard JVM specification of working with the objec
 
 ## GC Algorithms
 
-Recall the [gc algorithms](/docs/CS/memory/GC.md?id=Tracing-garbage-collection), the JVM using tracing.
+Recall the [gc algorithms](/docs/CS/memory/GC.md?id=tracing-garbage-collection), the JVM using tracing.
 
 **What are Garbage Collection Roots in Java?**
 

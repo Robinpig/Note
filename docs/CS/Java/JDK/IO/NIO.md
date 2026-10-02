@@ -124,7 +124,7 @@ public class FileChannelImpl extends FileChannel {
 }
 ```
 
-当我们使用 HeapByteBuffer 传入 FileChannel 的 read or write 方法对文件进行读写时，JDK 会首先创建一个临时的 DirectByteBuffer，对于 `FileChannel#read` 来说，JDK 在 native 层会将 read 系统调用从文件中读取的内容首先存放到这个临时的 DirectByteBuffer 中，然后在拷贝到 HeapByteBuffer 中返回
+当我们使用 HeapByteBuffer 传入 FileChannel 的 read or write 方法对文件进行读写时，JDK 会首先创建一个临时的 DirectByteBuffer，对于 `FileChannel#read` 来说，JDK 在 native 层会将 read 系统调用从文件中读取的内容首先存放到这个临时的 DirectByteBuffer 中，然后在拷贝到 HeapByteBuffer 中返回——这一步的内核背景（page cache、预读、Buffered/Direct IO 的拷贝次数对比）见 [PageCache](/docs/CS/OS/Linux/mm/PageCache.md?id=buffered-io-与-direct-io)。
 
 ```java
 public class IOUtil {
@@ -1322,7 +1322,7 @@ public static SelectorProvider create() {
     }
 ```
 
-See [Netty EventLoop - Selector](/docs/CS/Framework/Netty/EventLoop.md?id=Selector).
+See [Netty EventLoop - Selector](/docs/CS/Framework/Netty/EventLoop.md?id=selector).
 
 ### Selection
 
@@ -1430,6 +1430,12 @@ public abstract Selector wakeup();
 
 
 ## Links
+
+- [PageCache](/docs/CS/OS/Linux/mm/PageCache.md) — FileChannel 读写最终落到的 page cache 与预读
+- [Direct_Buffer](/docs/CS/Java/JDK/IO/Direct_Buffer.md)
+- [epoll](/docs/CS/OS/Linux/IO/epoll.md)
+- [io_uring](/docs/CS/Java/JDK/IO/Uring.md) — Java 侧经 JUring / Netty incubator 接入
+- [IO](/docs/CS/OS/Linux/IO/IO.md) — 五种 IO 模型与两阶段辨析
 
 ## Reference
 
