@@ -1670,6 +1670,7 @@ func stealWork(now int64) (gp *g, inheritTime bool, rnow, pollUntil int64, newWo
 ## Links
 
 - [Concurrency](/docs/CS/Go/Concurrency/Concurrency.md)
+- [语言运行时与内核任务](/docs/CS/OS/Linux/proc/runtime.md) — M 与内核调度的关系、futex/netpoller 对照
 
 ## References
 1. [Golang 程序启动流程分析](https://blog.tianfeiyu.com/2021/07/01/golang_bootstrap/#more)

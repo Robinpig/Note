@@ -660,7 +660,7 @@ The stored procedure needs to be performed in lock-step across all partitions to
 Since cross-partition transactions have additional coordination overhead, they are vastly slower than single-partition transactions.
 
 Whether transactions can be single-partition depends very much on the structure of the data used by the application.
-Simple key-value data can often be partitioned very easily, but data with multiple secondary indexes is likely to require a lot of crosspartition coordination (see [Partitioning and Secondary Indexes](/docs/CS/Distributed/Partition.md?id=Partitioning-and-Secondary-Indexes)).
+Simple key-value data can often be partitioned very easily, but data with multiple secondary indexes is likely to require a lot of crosspartition coordination (see [Partitioning and Secondary Indexes](/docs/CS/Distributed/Partition.md?id=secondary-indexes)).
 
 Serial execution of transactions has become a viable way of achieving serializable isolation within certain constraints:
 

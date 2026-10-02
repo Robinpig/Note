@@ -1,4 +1,4 @@
-# Model
+## Model
 
 
 
@@ -16,3 +16,11 @@ $$
 
 $F_n = \frac{1}{5}(\phi^n - \phi^{'n})$ where $\phi = \frac{1+\sqrt{5}}{2} $ and $\phi^{'} = 1- \phi $
 
+## Links
+
+- [Introduction](/docs/CS/Algorithms/Algorithmic_Game_Theory.md)
+- [Introduction](/docs/CS/Algorithms/Algorithms.md)
+- [Introduction](/docs/CS/Algorithms/Amortized.md)
+- [Introduction](/docs/CS/Algorithms/Backtracking.md)
+- [Introduction](/docs/CS/Algorithms/Bits.md)
+- [Introduction](/docs/CS/Algorithms/Computational_Geometry.md)

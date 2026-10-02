@@ -9,7 +9,7 @@ AsyncAppenderBase.Worker thread created by this appender takes events from the h
 and dispatches them to the single appender attached to this appender.
 
 
-[ArrayBlockingQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=ArrayBlockingQueue)
+[ArrayBlockingQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=arrayblockingqueue)
 
 
 ```java

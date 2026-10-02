@@ -10,6 +10,14 @@ GDB can do four main kinds of things (plus other things in support of these) to 
 
 
 
+```shell
+# Ubuntu
+apt install gcc g++ make gdb
+# CentOS
+yum install gcc gcc-c++ make gdb
+```
+
+
 GDB主要由三个子系统组成 分别是
 
 - user interface
@@ -51,7 +59,7 @@ continue (c)        # 继续执行到下一个断点
 
 
 
-based on `ptrace`(Linux)
+based on [ptrace](/docs/CS/OS/Linux/proc/ptrace.md)（Linux）
 
 [see man7 ptrace](https://man7.org/linux/man-pages/man2/ptrace.2.html)
 

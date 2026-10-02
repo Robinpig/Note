@@ -342,7 +342,7 @@ ios:
 
 Guava Cache
 
-Caffeine
+[Caffeine](/docs/CS/SE/Caffeine.md)（W-TinyLFU 命中率优化、时间轮过期，详见专文）
 
 本地缓存更适合存储一些变化频率极低，数据量较小的场景，诸如基础数据、配置了类型的数据缓存等
 
@@ -643,7 +643,7 @@ Redis里可以使用zset取最近访问的一定数量的请求ip zrang排序发
 
 尽量使用预防式方案
 
-[Circular Breaker](/docs/CS/SE/CircuitBreaker.md) 服务降级 请求限流这些都是属于 “有损” 方案 影响用户体验
+[Circuit Breaker](/docs/CS/SE/CircuitBreaker.md) 服务降级 请求限流这些都是属于 “有损” 方案 影响用户体验
 
 ## Tuning
 
@@ -663,6 +663,13 @@ RDB 简单来说就是快照文件，也就是当 Redis 执行 SAVE 或者 BGSAV
 我们这节课还重点解决了 Redis 中和过期时间有关的问题，分别是：Redis 具体是怎么处理过期 key 的？懒惰删除加定期删除。Redis 为什么不立刻删除？实现立刻删除的代价太高。Redis 是怎么控制定期删除的开销的？总的来说是控制执行时间。怎么控制 Redis 的定期删除频率？通过 hz 参数和 dynamic-hz 参数控制。从库是怎么处理过期 key 的？查询返回 NULL，删除等主库命令。Redis 持久化怎么处理过期 key？对于 RDB 来说，主库不读不写，从库原封不动。对于 AOF 来说，正常追加 DEL 命令，重写则是不管。
 
 ## Links
+
+- [Caffeine](/docs/CS/SE/Caffeine.md)
+- [JetCache](/docs/CS/SE/JetCache.md)
+- [Redis](/docs/CS/DB/Redis/Redis.md)
+- [CircuitBreaker](/docs/CS/SE/CircuitBreaker.md)
+- [RateLimiter](/docs/CS/SE/RateLimiter.md)
+- [LRU](/docs/CS/Algorithms/LRU.md)
 
 ## References
 

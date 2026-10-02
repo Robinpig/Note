@@ -49,6 +49,8 @@ find `c.ServerApp.root.dir`
 ## Links
 
 - [Python](/docs/CS/Python/Python.md)
+- [uv](/docs/CS/Python/uv.md) — 更快的现代替代方案
+- [Python 目录首页](/docs/CS/Python/README.md)
 
 
 

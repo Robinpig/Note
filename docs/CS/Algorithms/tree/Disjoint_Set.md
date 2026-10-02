@@ -79,4 +79,4 @@ void Union(int x, int y){
 
 ## Links
 
-- [Tree](/docs//Cs/Algorithms/Tree.md)
+- [Tree](/docs/CS/Algorithms/tree/tree.md)

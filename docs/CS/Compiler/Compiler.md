@@ -365,6 +365,11 @@ LLVM = clang + lllvm
 
 ## Links
 
+- [TypeScript 编译器](/docs/CS/TypeScript/Compiler.md)
+- [TypeScript](/docs/CS/TypeScript/TypeScript.md)
+- [GCC](/docs/CS/Compiler/GCC.md)
+- [ELF](/docs/CS/Compiler/ELF.md)
+
 ## References
 
 1. [Compilers: Principles, Techniques, and Tools]()

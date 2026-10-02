@@ -556,3 +556,5 @@ func (c *Cond) Signal() {
 ## Links
 
 - [Concurrency](/docs/CS/Go/Concurrency/Concurrency.md)
+- [Lock 实现](/docs/CS/Go/Concurrency/Lock.md) — Mutex 的 fast/slow path 与饥饿模式
+- [atomic](/docs/CS/Go/atomic.md)

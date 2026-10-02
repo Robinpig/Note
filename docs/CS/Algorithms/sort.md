@@ -70,9 +70,9 @@ Another method of classifying sorting algorithms is:
 
 
 
-After considering the classic [selection sort](/docs/CS/Algorithms/sort?id=Selection-Sort) [insertion sort](/docs/CS/Algorithms/sort?id=Insertion-Sort),
-[shellsort](/docs/CS/Algorithms/sort?id=Shell-Sort), [mergesort](/docs/CS/Algorithms/sort?id=Merge-Sort), 
-[quicksort](/docs/CS/Algorithms/sort?id=Quick-Sort), and [heapsort](/docs/CS/Algorithms/sort?id=Heap-Sort) algorithms, we will consider practical issues and applications.
+After considering the classic [selection sort](/docs/CS/Algorithms/sort.md?id=selection-sort) [insertion sort](/docs/CS/Algorithms/sort.md?id=insertion-sort),
+[shellsort](/docs/CS/Algorithms/sort.md?id=shell-sort), [mergesort](/docs/CS/Algorithms/sort.md?id=merge-sort), 
+[quicksort](/docs/CS/Algorithms/sort.md?id=quick-sort), and [heapsort](/docs/CS/Algorithms/sort.md?id=heap-sort) algorithms, we will consider practical issues and applications.
 
 Suppose you have a group of n numbers and would like to determine the kth largest. This is known as the _selection problem_.
 
@@ -310,7 +310,7 @@ Can we have the best of both worlds? Is there a simple and lightweight way to ch
 
 > For every input array of length n $ 1, the average running time of randomized QuickSort is $O(nlogn)$.
 
-The algorithm doesn’t spend time allocating and managing additional memory (unlike [MergeSort](/docs/CS/Algorithms/sort?id=MergeSort)).
+The algorithm doesn’t spend time allocating and managing additional memory (unlike [MergeSort](/docs/CS/Algorithms/sort.md?id=merge-sort)).
 
 ## Shell Sort
 

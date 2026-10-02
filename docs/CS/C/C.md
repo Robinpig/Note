@@ -9,8 +9,9 @@ C 语言是一种通用的、面向过程式的计算机程序设计语言。197
 
 ## Memory
 
-
 [glibc](/docs/CS/C/glibc.md)
+
+堆分配 `malloc`/`free` 不是系统调用，而是用户态 ptmalloc 对 `brk`/`mmap` 的封装：chunk、arena、bin 的完整链路见 [malloc](/docs/CS/C/malloc.md)。
 
 - malloc()
   分配内存并返回其地址，但并不进行初始化，存储具体数据未指定类型。

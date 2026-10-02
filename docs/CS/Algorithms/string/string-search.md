@@ -44,7 +44,7 @@ Although the Θ((n – m + 1)m) worst-case running time of this algorithm is no 
 It also generalizes nicely to other pattern-matching problems.
 Then describes a string-matching algorithm that begins by constructing a finite automaton specifically designed to search for occurrences of the given pattern P in a text.
 This algorithm takes $O(m |∑|)$ preprocessing time, but only Θ(n) matching time.
-We present the similar, but much cleverer, [Knuth-Morris-Pratt (or KMP) algorithm](/docs/CS/Algorithms/string-search?id=KMP), which has the same $O(n)$ matching time, but it reduces the preprocessing time to only $O(m)$.
+We present the similar, but much cleverer, [Knuth-Morris-Pratt (or KMP) algorithm](/docs/CS/Algorithms/string/string-search.md?id=kmp), which has the same $O(n)$ matching time, but it reduces the preprocessing time to only $O(m)$.
 
 A completely different approach appears which examines suffix arrays and the longest common prefix array.
 You can use these arrays not only to find a pattern in a text, but also to answer other questions,

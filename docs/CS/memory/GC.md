@@ -631,7 +631,7 @@ Note that the mark-sweep collector imposes constraints upon the heap layout.
   In practice, given a node, sweep must be able to find the next node even in the presence of padding introduced between objects in order to observe alignment requirements.
 
 From the viewpoint of the garbage collector, mutator threads perform just three operations
-of interest, New, Read and Write, which each collection algorithm must redefine appropriately (the default definitions were given in "[Mutator read and write operations](/docs/CS/memory/GC.md?id=Mutator-read-and-write-operations)").
+of interest, New, Read and Write, which each collection algorithm must redefine appropriately (the default definitions were given in "[Mutator read and write operations](/docs/CS/memory/GC.md?id=mutator-read-and-write-operations)").
 
 
 
@@ -1333,7 +1333,7 @@ As we shall see that hybrid collectors are possible, combining tracing collectio
 
 So far we have assumed a monolithic approach to garbage collection: all objects are managed by the same collection algorithm and all are collected at the same time.
 However there is no reason why this should be so and substantial performance benefits accrue from a more discriminating treatment of objects.
-The best known example is [generational collection](/docs/CS/memory/GC.md?id=Generational-garbage-collection), which segregates objects by age and preferentially collects younger objects.
+The best known example is [generational collection](/docs/CS/memory/GC.md?id=generational-garbage-collection), which segregates objects by age and preferentially collects younger objects.
 There are many reasons why it might be beneficial to treat different categories of object in different ways.
 Some but not all of these reasons are related to the collector technology that might be used to manage them.
 Objects can be managed either by a direct algorithm (such as reference counting) or by an indirect, tracing algorithm.

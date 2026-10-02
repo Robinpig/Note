@@ -459,3 +459,11 @@ but this is generally acceptable in view of the protection being given against e
 ## Links
 
 - [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
+- [Binary Tree](/docs/CS/Algorithms/tree/Binary-Tree.md)
+- [Red-Black Tree](/docs/CS/Algorithms/tree/Red-Black-Tree.md)
+- [B-tree](/docs/CS/Algorithms/tree/B-tree.md)
+- [Trie](/docs/CS/Algorithms/tree/Trie.md)
+- [Suffix Tree](/docs/CS/Algorithms/tree/Suffix_Tree.md)
+- [Huffman Tree](/docs/CS/Algorithms/tree/Huffman-Tree.md)
+- [Segment Tree](/docs/CS/Algorithms/tree/Segment-Tree.md)
+- [LSM Tree](/docs/CS/Algorithms/tree/LSM.md)

@@ -78,4 +78,5 @@ gin.Context 作为处理 http 请求的通用数据结构，不可避免地会�
 
 ## Links
 
-- [Golang](/docs/CS/Go/Go.md?id=Frameworks)
+- [Golang](/docs/CS/Go/Go.md)
+- [Echo](/docs/CS/Go/Echo.md) — 同类极简 Web 框架对照

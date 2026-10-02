@@ -41,5 +41,5 @@ Linux 的基数树实现在 `lib/radix-tree.c` 中，Linux 并不是对一个字
 
 ## Links
 
-- [Trees](/docs/CS/Algorithms/tree/tree.md?id=Radix)
+- [Trees](/docs/CS/Algorithms/tree/tree.md)
 - [Trie](/docs/CS/Algorithms/tree/Trie.md)

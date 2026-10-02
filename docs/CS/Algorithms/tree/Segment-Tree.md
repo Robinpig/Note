@@ -18,7 +18,7 @@
 ## Links
 
 
-- [Trees](/docs/CS/Algorithms/tree/tree.md?id=LSM)
+- [Trees](/docs/CS/Algorithms/tree/tree.md?id=lsm-trees)
 
 
 

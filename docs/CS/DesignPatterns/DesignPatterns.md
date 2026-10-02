@@ -204,9 +204,9 @@ step by step to build a object
 
 
 
-### Strategy
+### [Strategy](/docs/CS/DesignPatterns/StrategyPattern.md)
 
-
+封装一族可互换的算法，消除 if-else 分支：支付方式、折扣、路由策略；Spring 中用 `Map<String, Strategy>` 注入路由。
 
 ### Command
 
@@ -229,9 +229,9 @@ step by step to build a object
 
 
 
-### Proxy
+### [Proxy](/docs/CS/DesignPatterns/ProxyPattern.md)
 
-
+代理控制对象访问：远程代理（RPC stub）、虚拟代理（懒加载）、保护代理、智能引用；JDK 动态代理（接口）与 CGLIB（子类）是 Spring AOP 的基础。
 
 ### Composite
 
@@ -247,7 +247,7 @@ step by step to build a object
 
 ### Bridge
 
+## Links
 
-
-
-
+- [Introduction](/docs/CS/DesignPatterns/ProxyPattern.md)
+- [Introduction](/docs/CS/DesignPatterns/StrategyPattern.md)

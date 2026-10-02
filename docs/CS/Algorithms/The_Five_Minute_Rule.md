@@ -20,6 +20,15 @@ A one-minute rule applies to pages used in two-pass sequential algorithms like s
 Compared with 1987, the most fundamental change may be that CPU power should be measured not in instructions but in cache line replacements.
 Trading off space and time seems like a new problem in an environment with multiple levels in the memory hierarchy.
 
+## Links
+
+- [Introduction](/docs/CS/Algorithms/Algorithmic_Game_Theory.md)
+- [Introduction](/docs/CS/Algorithms/Algorithms.md)
+- [Introduction](/docs/CS/Algorithms/Amortized.md)
+- [Introduction](/docs/CS/Algorithms/Backtracking.md)
+- [Introduction](/docs/CS/Algorithms/Bits.md)
+- [Introduction](/docs/CS/Algorithms/Computational_Geometry.md)
+
 ## References
 
 1. [The 5 Minute Rule for Trading Memory for Disc Accesses and the 5 Byte Rule for Trading Memory for CPU Time](http://notes.stephenholiday.com/Five-Minute-Rule.pdf)

@@ -163,3 +163,8 @@ Pointers to distinct zero-size variables may or may not be equal
 
 
 Go 的函数可以返回多个值
+
+## Links
+
+- [Introduction](/docs/CS/Go/struct/array.md)
+- [Introduction](/docs/CS/Go/struct/map.md)

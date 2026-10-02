@@ -1,5 +1,172 @@
 ## Introduction
 
+本页是计算机科学的**总纲与主题目录**：先给出 `docs/CS/` 下全部主题目录的清单，再逐门学科说明它研究什么、入口在哪。
+
+## 从哪开始
+
+<div class="kb-grid">
+
+<div class="kb-card">
+
+### 内核线
+
+[操作系统](/docs/CS/OS/OS.md) → [Linux](/docs/CS/OS/Linux/Linux.md) → [进程管理](/docs/CS/OS/Linux/proc/README.md) → [调度器](/docs/CS/OS/scheduling.md) → [同步原语](/docs/CS/OS/Linux/Lock/README.md) → [内存管理](/docs/CS/OS/memory.md)
+
+从 `task_struct` 一路读到调度、锁与内存，全程对照内核源码。
+
+</div>
+
+<div class="kb-card">
+
+### 后端线
+
+[计算机网络](/docs/CS/CN/CN.md) → [数据库](/docs/CS/DB/DB.md) → [分布式系统](/docs/CS/Distributed/Distributed.md) → [消息队列](/docs/CS/MQ/MQ.md) → [云原生](/docs/CS/Container/Container.md)
+
+服务端工程师的主干路径，覆盖协议、存储、一致性到部署。
+
+</div>
+
+<div class="kb-card">
+
+### AI 线
+
+[人工智能](/docs/CS/AI/AI.md) → [大模型](/docs/CS/AI/LLM/LLM.md) → [Agent](/docs/CS/AI/LLM/Agent.md) → [MCP](/docs/CS/AI/LLM/MCP.md)
+
+从机器学习基础到 LLM 应用与 Agent 工程实践。
+
+</div>
+
+</div>
+
+## 主题目录
+
+<div class="kb-home">
+
+### 主要主题
+
+<div class="kb-grid kb-grid-sm">
+
+<div class="kb-card">
+
+### [操作系统](/docs/CS/OS/OS.md)
+
+进程、调度、内存、文件系统、同步原语
+
+</div>
+
+<div class="kb-card">
+
+### [数据库](/docs/CS/DB/DB.md)
+
+索引与存储引擎、事务与隔离级别、分布式数据库
+
+</div>
+
+<div class="kb-card">
+
+### [框架与中间件](/docs/CS/Framework/Spring/Spring.md)
+
+Spring、Netty、Tomcat、Dubbo、ZooKeeper、etcd
+
+</div>
+
+<div class="kb-card">
+
+### [Java](/docs/CS/Java/JDK/JDK.md)
+
+JDK 与 JVM、并发、集合、性能调优
+
+</div>
+
+<div class="kb-card">
+
+### [算法](/docs/CS/Algorithms/Algorithms.md)
+
+数据结构、复杂度分析、经典题型
+
+</div>
+
+<div class="kb-card">
+
+### [分布式系统](/docs/CS/Distributed/Distributed.md)
+
+一致性、共识、分布式事务、追踪与可观测性
+
+</div>
+
+<div class="kb-card">
+
+### [计算机网络](/docs/CS/CN/CN.md)
+
+TCP/IP、HTTP、DNS、Socket 与高性能 IO
+
+</div>
+
+<div class="kb-card">
+
+### [软件工程](/docs/CS/SE/Engineering.md)
+
+架构、并发、缓存、限流熔断、工程实践
+
+</div>
+
+<div class="kb-card">
+
+### [人工智能](/docs/CS/AI/AI.md)
+
+LLM、Agent、RAG、MCP 与机器学习基础
+
+</div>
+
+<div class="kb-card">
+
+### [Golang](/docs/CS/Go/Go.md)
+
+语法、运行时、GMP 调度与并发模型
+
+</div>
+
+<div class="kb-card">
+
+### [消息队列](/docs/CS/MQ/MQ.md)
+
+Kafka、RocketMQ、Pulsar 与消息语义
+
+</div>
+
+<div class="kb-card">
+
+### [云原生](/docs/CS/Container/Container.md)
+
+Docker、Kubernetes、CNI、Ingress、Helm
+
+</div>
+
+</div>
+
+<details>
+<summary>展开全部主题目录</summary>
+
+**总览与速查** —— [CS 总纲](/docs/CS/CS.md) · [术语表](/docs/CS/term.md) · [编程语言横向对比](/docs/CS/Languages.md)
+
+**系统与底层** —— [操作系统](/docs/CS/OS/OS.md) · [组成原理](/docs/CS/CO/CO.md) · [内存](/docs/CS/memory/memory.md) · [汇编](/docs/CS/assembly/assembly.md) · [GNU](/docs/CS/GNU/GNU.md)
+
+**网络与分布式** —— [计算机网络](/docs/CS/CN/CN.md) · [分布式系统](/docs/CS/Distributed/Distributed.md) · [消息队列](/docs/CS/MQ/MQ.md)
+
+**云原生与部署** —— [云原生](/docs/CS/Container/Container.md) · [云计算](/docs/CS/Cloud/Cloud.md)
+
+**数据与存储** —— [数据库](/docs/CS/DB/DB.md) · [区块链](/docs/CS/Blockchain/Blockchain.md) · [大数据](/docs/CS/BigData/BigData.md)
+
+**编程语言** —— [Java](/docs/CS/Java/JDK/JDK.md) · [Golang](/docs/CS/Go/Go.md) · [C](/docs/CS/C/C.md) · [Python](/docs/CS/Python/Python.md) · [C++](/docs/CS/C++/C++.md) · [TypeScript](/docs/CS/TypeScript/TypeScript.md) · [Rust](/docs/CS/Rust/Rust.md) · [Scala](/docs/CS/Scala/Scala.md)
+
+**工程与工具** —— [框架与中间件](/docs/CS/Framework/Spring/Spring.md) · [软件工程](/docs/CS/SE/Engineering.md) · [构建工具](/docs/CS/BuildTool/BuildTools.md) · [工具(Vim)](/docs/CS/Tool/Vim.md) · [日志](/docs/CS/log/Log.md) · [编译器](/docs/CS/Compiler/Compiler.md) · [设计模式](/docs/CS/DesignPatterns/DesignPatterns.md) · [前端(Node.js)](/docs/CS/front-end/Nodejs.md) · [浏览器](/docs/CS/Browser/Browser.md) · [版本控制](/docs/CS/VCS/VCS.md) · [压缩](/docs/CS/compress/Compress.md)
+
+**理论与智能** —— [算法](/docs/CS/Algorithms/Algorithms.md) · [人工智能](/docs/CS/AI/AI.md) · [安全](/docs/CS/Security/Security.md)
+
+</details>
+
+</div>
+
 ## Computer Organization
 
 [Computer Organization](/docs/CS/CO/CO.md)
@@ -22,7 +189,7 @@ A [computer network](/docs/CS/CN/CN.md) is a set of computers sharing resources 
 
 ## Distributed Systems
 
-A [distributed system](/docs/CS/Distributed/Distributed) is one in which components located at networked computers communicate and coordinate their actions only by passing messages.
+A [distributed system](/docs/CS/Distributed/Distributed.md) is one in which components located at networked computers communicate and coordinate their actions only by passing messages.
 This definition leads to the following especially significant characteristics of distributed systems:
 concurrency of components, lack of a global clock and independent failures of components.
 
@@ -39,20 +206,7 @@ Cloud native technologies and architectures typically consist of some combinatio
 
 ## Programming Languages
 
-
-| Programming Language                      | Compile Type | Memory Management | Func Call |
-|-------------------------------------------|--------------|-------------------|-----------|
-| [C](/docs/CS/C/C.md)                      |              |                   | Register  |
-| [C++](/docs/CS/C++/C++.md)                |              |                   |           |
-| [Golang](/docs/CS/Go/Go.md)               |              | GC                | Stack     |
-| [Java](/docs/CS/Java/JDK/JDK.md)          |              | GC                | Stack     |
-| [Python](/docs/CS/Python/Python.md)       |              | GC                |           |
-| [Rust](/docs/CS/Rust/Rust.md)             |              |                   |           |
-| [Scala](/docs/CS/Scala/Scala.md)          |              |                   |           |
-| [Flutter](/docs/CS/Flutter.md)            |              |                   |           |
-| [Assembly](/docs/CS/assembly/assembly.md) |              |                   |           |
-
-不同语言的函数调用耗时有较大差异
+各语言的**入口列表、特性对比与适用场景**统一见 [编程语言横向对比](/docs/CS/Languages.md)。
 
 
 ## Frameworks
@@ -110,13 +264,21 @@ These specifications are part of the Jakarta EE platform.
 
 [Software Engineering](/docs/CS/SE/Engineering.md)
 
+[Architecture](/docs/CS/SE/Architecture.md)
+
 [Concurrency](/docs/CS/SE/Concurrency.md)
 
 [Cache](/docs/CS/SE/Cache.md)
 
+[Caffeine](/docs/CS/SE/Caffeine.md)
+
 [Lock](/docs/CS/SE/Lock.md)
 
 [Transaction](/docs/CS/SE/Transaction.md)
+
+[Workflow](/docs/CS/SE/Workflow.md)
+
+[Test](/docs/CS/SE/Test.md)
 
 
 [Limiter](/docs/CS/SE/RateLimiter.md)
@@ -169,6 +331,12 @@ The test simply compares the intelligent behavior of a human being with that of 
 An interrogator asks a set of questions that are forwarded to both a computer and a human being.
 The interrogator receives two sets of responses, but does not know which set comes from the human and which set from the computer.
 After careful examination of the two sets, if the interrogator cannot definitely tell which set has come from the computer and which from the human, the computer has passed the Turing test for intelligent behavior.
+
+## Links
+
+- [进程知识地图](/docs/CS/OS/Linux/proc/README.md)
+- [同步原语](/docs/CS/OS/Linux/Lock/README.md)
+- [容器知识地图](/docs/CS/Container/README.md)
 
 ## References
 

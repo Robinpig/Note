@@ -167,6 +167,10 @@ flush cache to memory and execute code
 - [Operating Systems](/docs/CS/OS/OS.md)
 - [Data Structures and Algorithms](/docs/CS/Algorithms/Algorithms.md)
 - [Computer Network](/docs/CS/CN/CN.md)
+- [Cache 层次](/docs/CS/CO/Cache.md)
+- [多处理器内存（UMA/NUMA）](/docs/CS/CO/memory.md)
+- [PCIe 总线](/docs/CS/CO/PCI.md)
+- [RISC-V](/docs/CS/CO/RISC-V.md)
 
 
 ## References

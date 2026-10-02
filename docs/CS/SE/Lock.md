@@ -73,7 +73,7 @@ As for optimistic lock, database access libraries like Hibernate usually provide
 
 - [Redis](/docs/CS/DB/Redis/Lock.md) uses libraries that implement a lock algorithm like [ShedLock](https://github.com/lukas-krecan/ShedLock), and [Redisson](https://github.com/redisson/redisson/wiki/8.-Distributed-locks-and-synchronizers).
   The first one provides lock implementation using also other systems like MongoDB, DynamoDB, and more.
-- [Zookeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md?id=lock) provides some recipes about locking.
+- [Zookeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md) provides some recipes about locking.
 - [Hazelcast](https://hazelcast.com/blog/long-live-distributed-locks/) offers a lock system based on his [CP subsystem](https://docs.hazelcast.org/docs/3.12.3/manual/html-single/index.html#cp-subsystem).
 - [有赞 Bond](https://tech.youzan.com/bond/)
 
@@ -230,6 +230,15 @@ void Zem_post(Zem_t *s) {
 
 We use just one lock and one condition variable, plus a state variable to track the value of the semaphore.
 Curiously, building condition variables out of semaphores is a much trickier proposition.
+
+## Links
+
+- [Introduction](/docs/CS/SE/APM.md)
+- [Introduction](/docs/CS/SE/Architecture.md)
+- [Computer Composition Principle](/docs/CS/SE/Basic.md)
+- [Introduction](/docs/CS/SE/Bug.md)
+- [Introduction](/docs/CS/SE/Cache.md)
+- [Introduction](/docs/CS/SE/Caffeine.md)
 
 ## References
 

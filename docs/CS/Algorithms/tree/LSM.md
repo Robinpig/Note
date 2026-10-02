@@ -442,7 +442,7 @@ A large body of research has been conducted to re- duce the write amplification 
 
 One way to optimize write amplification is to apply tiering since it has much lower write amplification than leveling.
 This will lead to worse query performance and space utilization.
-The improvements in this category can all be viewed as some variants of the partitioned [tiering design with vertical or horizontal grouping](/docs/CS/Algorithms/tree/LSM.mdSM.md?id=Tiering-Merge_Policy).
+The improvements in this category can all be viewed as some variants of the partitioned [tiering design with vertical or horizontal grouping](/docs/CS/Algorithms/tree/LSM.md?id=tuning-merge-policies).
 
 The WriteBuffer(WB) Tree can be viewed as a variant of the partitioned tiering design with vertical grouping.
 It has made the following modifications.
@@ -803,7 +803,7 @@ For statistics that are not mergeable, multiple synopses are kept to improve the
 
 ## Links
 
-- [Trees](/docs/CS/Algorithms/tree/tree.md?id=LSM)
+- [Trees](/docs/CS/Algorithms/tree/tree.md?id=lsm-trees)
 
 ## References
 

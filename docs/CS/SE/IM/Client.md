@@ -25,3 +25,10 @@ Android进程和Service的保活，是困扰Android开发人员的一大顽疾�
 
 关于用户手动设置关闭神隐模式的体验问题：
 上面也说了，qq和微信这样的大牌是被MIUI特殊照顾的，其它app就没那么好待遇了，只能自已在UI和功能体验上下功夫了：比如像ios一样，推送通知这样的权限申请时给一个提示框，友好一点，引导用户去解决它（对于你的app一说，首次安装运行时如果是运行在MIUI下，就引导用户去解决这个神隐模式问题了）
+
+## Links
+
+- [Introduction](/docs/CS/SE/IM/DTIM.md)
+- [Introduction](/docs/CS/SE/IM/IM.md)
+- [Introduction](/docs/CS/SE/IM/MQTT.md)
+- [Introduction](/docs/CS/SE/IM/闲鱼IM.md)

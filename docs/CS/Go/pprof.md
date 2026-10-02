@@ -35,3 +35,4 @@ pprof开启后，每隔一段时间（10ms）就会收集下当前的堆栈信�
 ## Links
 
 - [Golang](/docs/CS/Go/Go.md)
+- [Tool（pprof/trace）](/docs/CS/Go/Tool.md)

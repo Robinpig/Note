@@ -68,9 +68,9 @@ We rely on probability to analyze hash-table operations, but you can understand 
 
 [Graph](/docs/CS/Algorithms/graph/graph.md)
 
+[PageRank](/docs/CS/Algorithms/PageRank.md) — 链接分析与随机游走平稳分布
 
-
-[Disjoing Set](/docs/CS/Algorithms/Disjoint-Ser.md)
+[Disjoing Set](/docs/CS/Algorithms/tree/Disjoint_Set.md)
 
 [BloomFilter](/docs/CS/Algorithms/struct/BloomFilter.md)
 
@@ -207,8 +207,9 @@ The greatest common divisor (gcd) of two integers is the largest integer that di
 
 Text-editing programs frequently need to find all occurrences of a pattern in the text.
 Typically, the text is a document being edited, and the pattern searched for is a particular word supplied by the user.
-Efficient algorithms for this problem—called “[string matching](/docs/CS/Algorithms/string-search)”—can greatly aid the responsiveness of the text-editing program.
+Efficient algorithms for this problem—called “[string matching](/docs/CS/Algorithms/string/string-search.md)”—can greatly aid the responsiveness of the text-editing program.
 
+- [Enumeration](/docs/CS/Algorithms/Enumeration.md) — 暴力枚举与剪枝
 - [Dynamic Programming](/docs/CS/Algorithms/DP/DP.md)
 - [Greedy Programming](/docs/CS/Algorithms/Greedy.md)
 - [Amortized Analysis](/docs/CS/Algorithms/Amortized.md)
@@ -267,7 +268,13 @@ Raft
 
 ### Compression Algorithms
 
-### 
+- [JPEG](/docs/CS/Algorithms/JPEG.md) — 有损图像压缩（DCT + 量化 + 游程/[Huffman](/docs/CS/Algorithms/tree/Huffman-Tree.md)）
+
+### Game Search
+
+- [Algorithmic Game Theory](/docs/CS/Algorithms/Algorithmic_Game_Theory.md) — Minimax、α-β 剪枝、PVS、MCTS/UCT
+
+###
 
 Gale–Shapley algorithm (also known as the Deferred Acceptance algorithm).
 Gale Shapley Algorithm is an efficient algorithm that is used to solve the Stable Matching problem. 

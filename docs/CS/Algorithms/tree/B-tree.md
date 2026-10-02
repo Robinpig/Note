@@ -241,7 +241,7 @@ Better space utilization can be obtained if, instead of always splitting a node 
 
 ## Links
 
-- [Trees](/docs/CS/Algorithms/tree/tree.md?id=B-Trees)
+- [Trees](/docs/CS/Algorithms/tree/tree.md?id=b-trees)
 
 ## References
 

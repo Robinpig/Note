@@ -45,7 +45,7 @@ func listUser(w http.ResponseWriter, r *http.Request) {
 ```
 
 当Go服务器接收到客户端请求时会根据WriteTimeout添加定时器 超时时 定时器会设置Go服务与客户端连接为已超时 
-当Go服务处理完该HTTP请求时准备向客户端返回响应 发现连接已超时 所以关闭了与客户端的 TCP 连接 从而导致网关返回 [502状态码](/docs/CS/CN/HTTP/HTTP.md?id=Response)
+当Go服务处理完该HTTP请求时准备向客户端返回响应 发现连接已超时 所以关闭了与客户端的 TCP 连接 从而导致网关返回 [502状态码](/docs/CS/CN/HTTP/HTTP.md?id=response)
 
 
 ```go

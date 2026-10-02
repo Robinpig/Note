@@ -51,7 +51,7 @@ But this very abstraction is ideal for supporting all kinds of messaging, data f
 The two problems a log solves—ordering changes and distributing data—are even more important in distributed data systems.
 Agreeing upon an ordering for updates (or agreeing to disagree and coping with the side-effects) are among the core design problems for these systems.
 
-The log-centric approach to distributed systems arises from a simple observation that I will call the [State Machine Replication Principle](/docs/CS/Distributed/Consensus/Consensus.md?id=Replicated-State-Machines).
+The log-centric approach to distributed systems arises from a simple observation that I will call the [State Machine Replication Principle](/docs/CS/Distributed/Consensus/Consensus.md?id=replicated-state-machines).
 
 > If two identical, deterministic processes begin in the same state and get the same inputs in the same order, they will produce the same output and end in the same state.
 
@@ -145,6 +145,12 @@ But shlepping bytes between storage systems is not the end of the story. It turn
 What exactly is stream processing?
 
 ## Log Compaction
+
+## Links
+
+- [install node 10.23.0](/docs/CS/log/Install Gitbook.md)
+- [Introduction](/docs/CS/log/Micrometer.md)
+- [Introduction](/docs/CS/log/logback.md)
 
 ## References
 
