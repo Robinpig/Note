@@ -2608,6 +2608,11 @@ The majority side becomes the available cluster and the minority side is unavail
 ## Links
 
 - [K8s](/docs/CS/Container/k8s/K8s.md)
+- [K8s 中的 etcd 存储](/docs/CS/Container/k8s/etcd.md)
+- [treeIndex（内存键索引）](/docs/CS/Framework/etcd/treeIndex.md)
+- [boltdb（底层存储引擎）](/docs/CS/Framework/etcd/boltdb.md)
+- [MVCC（多版本并发控制）](/docs/CS/Framework/etcd/MVCC.md)
+- [raft（共识模块）](/docs/CS/Framework/etcd/raft.md)
 
 ## References
 

@@ -41,7 +41,7 @@
 
 
 
-Spring Cloud的AbstractAutoServiceRegistration 的onApplicationEvent 在start 方法里调用子类实现的[register](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md?id=AbstractAutoServiceRegistration)函数
+Spring Cloud的AbstractAutoServiceRegistration 的onApplicationEvent 在start 方法里调用子类实现的[register](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md?id=abstractautoserviceregistration)函数
 
 
 
@@ -601,7 +601,7 @@ class BeatTask implements Runnable {
 
 Random for load balance
 
-请求[url = /v1/ns/instance](/docs/CS/Framework/nacos/registry.md?id=InstanceController) 注册
+请求[url = /v1/ns/instance](/docs/CS/Framework/nacos/registry.md?id=instancecontroller) 注册
 
 ```java
 public class NamingHttpClientProxy extends AbstractNamingClientProxy {
@@ -714,7 +714,7 @@ public class EphemeralClientOperationServiceImpl implements ClientOperationServi
 ```
 #### handle events
 
-publishInfo被添加到Client下ConcurrentHashMap, 发布[ClientChangedEvent](/docs/CS/Framework/Spring_Cloud/nacos/registry.md?id=ClientChangedEvent), sync数据到其它server
+publishInfo被添加到Client下ConcurrentHashMap, 发布[ClientChangedEvent](/docs/CS/Framework/nacos/registry.md?id=clientchangedevent), sync数据到其它server
 ```java
 public abstract class AbstractClient implements Client {
 
@@ -915,7 +915,7 @@ public class DistroFilter implements Filter {
 
 ### InstanceController
 
-当客户端使用[HTTP注册](/docs/CS/Framework/nacos/registry.md?id=reqApi)会走到此处
+当客户端使用[HTTP注册](/docs/CS/Framework/nacos/registry.md?id=reqapi)会走到此处
 
 <!-- tabs:start -->
 

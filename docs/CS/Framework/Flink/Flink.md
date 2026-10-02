@@ -184,6 +184,8 @@ kubectl create -f flink-configuration-configmap.yaml
 
 ## JobManager
 
+JobManager 内部组件（Dispatcher / ResourceManager / JobMaster）、作业生命周期与高可用的完整拆解见 [JobManager](/docs/CS/Framework/Flink/JobManager.md)。
+
 JobManager是整个集群的管理节点，负责接收和执行来自客户端提交的JobGraph。
 
 JobManager也会负责整个任务的Checkpoint协调工作，内部负责协调和调度提交的任务，并将JobGraph转换为ExecutionGraph结构，然后通过调度器调度并执行ExecutionGraph的节点。
@@ -200,6 +202,8 @@ Checkpoint Coordinator
 
 ## TaskManager
 
+Slot 资源切分、Task 执行、Data Exchange/Shuffle、Checkpoint 快照、内存管理与 RPC 的完整分析见 [TaskManager](/docs/CS/Framework/Flink/TaskManager.md)。
+
 Task Execution
 
 Shuffle Environment
@@ -213,6 +217,8 @@ Network Manager
 Memory Management
 
 ## Client
+
+Client 执行用户 main()、构建 StreamGraph 并优化为 JobGraph 后提交集群的完整提交流程见 [Client](/docs/CS/Framework/Flink/Client.md)；图的四层演进与数据 push/shuffle 模型见 [Dataflow](/docs/CS/Framework/Flink/Dataflow.md)。
 
 JobGraph Generate
 
@@ -371,4 +377,18 @@ Execution Environment
 
 ## Links
 
+- [Dataflow 数据流与四层图](/docs/CS/Framework/Flink/Dataflow.md)
+- [Client](/docs/CS/Framework/Flink/Client.md)
+- [JobManager](/docs/CS/Framework/Flink/JobManager.md)
+- [TaskManager](/docs/CS/Framework/Flink/TaskManager.md)
+- [Storm](/docs/CS/Framework/Flink/Storm.md)
 - [Spark](/docs/CS/Framework/Spark/Spark.md)
+- [Yarn](/docs/CS/Framework/Hadoop/Yarn.md)
+- [MapReduce](/docs/CS/Framework/Hadoop/MapReduce.md)
+- [Kafka](/docs/CS/MQ/Kafka/Kafka.md)
+
+## References
+
+1. [Apache Flink Documentation](https://nightlies.apache.org/flink/flink-docs-stable/)
+2. [Flink Concepts - Architecture](https://nightlies.apache.org/flink/flink-docs-stable/docs/concepts/flink-architecture/)
+3. [Apache Flink 官方中文文档](https://flink.apache.org/zh/)

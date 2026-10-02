@@ -687,7 +687,7 @@ But, it's possible to add metric collection capabilities to any feign client.
 
 ## Links
 
-- [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md?id=RPC)
+- [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md?id=rpc)
 
 ## References
 

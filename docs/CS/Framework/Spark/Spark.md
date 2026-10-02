@@ -48,7 +48,7 @@ However, Spark also lets programmers create two restricted types of shared varia
 
 ## Architecture
 
-Spark is built on top of [Mesos](/docs/CS/Distributed/Cluster_Scheduler.md?id=Mesos), a “cluster operating system” that lets multiple parallel applications share a cluster in a fine-grained manner and provides an API for applications to launch tasks on a cluster.
+Spark is built on top of [Mesos](/docs/CS/Distributed/Cluster_Scheduler.md?id=mesos), a “cluster operating system” that lets multiple parallel applications share a cluster in a fine-grained manner and provides an API for applications to launch tasks on a cluster.
 This allows Spark to run alongside existing cluster computing frameworks, such as Mesos ports of Hadoop and MPI, and share data with them.
 In addition, building on Mesos greatly reduced the programming effort that had to go into Spark.
 
@@ -79,7 +79,7 @@ Spark Streaming 属于 Spark API 的扩展
 
 ## Links
 
-- [Mesos](/docs/CS/Distributed/Cluster_Scheduler.md?id=Mesos)
+- [Mesos](/docs/CS/Distributed/Cluster_Scheduler.md?id=mesos)
 - [MapReduce](/docs/CS/Distributed/MapReduce.md)
 
 ## References

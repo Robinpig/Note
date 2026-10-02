@@ -22,5 +22,15 @@ The project includes these modules:
 
 ## Links
 
+- [HDFS 分布式文件系统](/docs/CS/Framework/Hadoop/HDFS.md)
+- [YARN 资源调度](/docs/CS/Framework/Hadoop/Yarn.md)
+- [MapReduce 计算模型](/docs/CS/Framework/Hadoop/MapReduce.md)
+- [分布式 MapReduce 概念](/docs/CS/Distributed/MapReduce.md)
+- [Spark](/docs/CS/Framework/Spark/Spark.md)
+- [Flink](/docs/CS/Framework/Flink/Flink.md)
+- [HBase](/docs/CS/Distributed/HBase.md)
 
 ## References
+
+1. [Apache Hadoop Official Documentation](https://hadoop.apache.org/docs/stable/)
+2. [Hadoop: YARN & HDFS Architecture](https://hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-hdfs/HdfsDesign.html)

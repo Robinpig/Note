@@ -601,7 +601,7 @@ actual FilterRegistrationBean
 
 Filter will be create when web server start
 
-see [FilterChain.doFilter() in Tomcat](/docs/CS/Framework/Tomcat/Connector.md?id=doFilter)
+see [FilterChain.doFilter() in Tomcat](/docs/CS/Framework/Tomcat/Connector.md?id=dofilter)
 
 Spring MVC provides fine-grained support for CORS configuration through annotations on controllers.
 However, when used with [Spring Security](/docs/CS/Framework/Spring/Security.md), we advise relying on the built-in CorsFilter that must be ordered ahead of Spring Security’s chain of filters.
@@ -626,6 +626,33 @@ However, **individual writes to the response remain blocking (and are performed 
 Another fundamental difference is that **Spring MVC does not support asynchronous or reactive types in controller method arguments (for example, @RequestBody, @RequestPart, and others)**,
 nor does it have any explicit support for asynchronous and reactive types as model attributes.
 Spring WebFlux does support all that.
+
+### 选型：DeferredResult vs Callable
+
+| 返回值 | 线程模型 | 适用场景 |
+|---|---|---|
+| `Callable<V>` | Spring 把任务提交给受管的 `TaskExecutor`，在独立线程执行 | 只是想把阻塞计算从容器线程挪走 |
+| `DeferredResult<V>` | 线程完全由应用自己控制（MQ 回调、另一个线程、事件）再 `setResult()` | 结果由外部异步事件产生（长轮询、服务间回调、聚合多个下游） |
+| `ResponseBodyEmitter` / `SseEmitter` | 多次写出 | 流式输出 / Server-Sent Events |
+| `StreamingResponseBody` | 直接写 OutputStream | 原始字节流、文件下载 |
+
+## CORS
+
+Spring MVC 对 CORS 提供多层支持，核心是判断请求是否带 `Origin` 头并据此决定是否回写 `Access-Control-*` 响应头：
+
+- **方法/类级**：`@CrossOrigin(origins = "...", methods = {...})`，放在 controller 方法或类上；
+- **全局配置**：实现 `WebMvcConfigurer.addCorsMappings(CorsRegistry)`，对路径模式统一配置 allowed origins、methods、credentials、maxAge；
+- **过滤器级**：`CorsFilter` + `UrlBasedCorsConfigurationSource`，用于在 DispatcherServlet 之前（如与 [Spring Security](/docs/CS/Framework/Spring/Security.md) 集成时）就处理预检请求。
+
+预检（preflight）是带 `OPTIONS` 方法和 `Access-Control-Request-Method` 头的请求，由框架根据配置直接应答，不进入控制器方法。细粒度控制还可用 `CorsConfiguration` 按请求动态决定放行策略。
+
+## HTTP Cache
+
+Spring MVC 支持标准的 HTTP 缓存协商，避免重复传输未变化的资源：
+
+- **`CacheControl`**：构造 `Cache-Control` 指令（`maxAge`、`noCache`、`cachePublic` 等），配合 `ResponseEntity` 设置；
+- **ETag / ShallowEtagHeaderFilter**：过滤器对响应内容计算 MD5 作为 ETag，下次请求带 `If-None-Match` 且内容未变时直接返回 304（无 body）——这是"浅 ETag"，省的是带宽而非服务器计算；
+- **Last-Modified**：控制器方法注入 `WebRequest`，用 `request.checkNotModified(lastModified)` 协商，未修改返回 304 并跳过方法体执行，能真正省服务器开销。
 
 ## Extension
 
@@ -863,3 +890,5 @@ server.ssl.key-store-password=secretpassword
 
 1. [Spring Web MVC](https://docs.spring.io/spring-framework/docs/current/reference/html/web.html#mvc)
 2. [Spring MVC 实现原理与源码解析系统 —— 精品合集](https://www.iocoder.cn/Spring-MVC/good-collection/?title)
+3. [阿里云 SCA 学习站 - Web MVC](https://sca.aliyun.com/learn/spring/web-servlet/mvc/)
+4. [阿里云 SCA 学习站 - Web Clients](https://sca.aliyun.com/learn/spring/web-servlet/rest-clients/)

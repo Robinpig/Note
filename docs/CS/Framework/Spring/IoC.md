@@ -897,7 +897,7 @@ Implementations of BeanDefinitionRegistryPostProcessor:
 
 - ConfigurationClassPostProcessor
 - DubboAutoConfiguration
-- [MyBatis MapperScannerConfigurer](/docs/CS/Framework/MyBatis/MyBatis-Spring.md?id=MapperScan)
+- [MyBatis MapperScannerConfigurer](/docs/CS/Framework/MyBatis/MyBatis-Spring.md?id=mapperscan)
 
 ```java
 public abstract class AbstractApplicationContext {
@@ -1228,13 +1228,13 @@ Bean lifecycle:
 he Spring framework, by default, initializes all singleton beans eagerly at the application startup and put them in application context.
 
 1. resolve aliases to canonical beanName
-2. [eagerly check singleton cache](/docs/CS/Framework/Spring/IoC.md?id=getSingleton), allows for an early reference to a currently created singleton (resolving a [circular reference](/docs/CS/Framework/Spring/IoC.md?id=circular-references)).
-   1. [Get the object if the non-null bean instance](/docs/CS/Framework/Spring/IoC.md?id=getObjectForBeanInstance)
+2. [eagerly check singleton cache](/docs/CS/Framework/Spring/IoC.md?id=getsingleton), allows for an early reference to a currently created singleton (resolving a [circular reference](/docs/CS/Framework/Spring/IoC.md?id=circular-references)).
+   1. [Get the object if the non-null bean instance](/docs/CS/Framework/Spring/IoC.md?id=getobjectforbeaninstance)
 3. or else check isPrototypeCurrentlyInCreation
 4. getBean from parentBeanFactory
 5. merge BeanDefinition
 6. check dependOn
-7. [createBean](/docs/CS/Framework/Spring/IoC.md?id=createBean)
+7. [createBean](/docs/CS/Framework/Spring/IoC.md?id=createbean)
 
 ```java
 public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport implements ConfigurableBeanFactory {
@@ -1442,7 +1442,7 @@ spring.main.allow-circular-references=false
 >
 > Self-injection can also create a circular dependency.
 
-See [doCreateBean](/docs/CS/Framework/Spring/IoC.md?id=doCreateBean):
+See [doCreateBean](/docs/CS/Framework/Spring/IoC.md?id=docreatebean):
 
 1. isSingleton
 2. allowCircularReferences
@@ -1711,7 +1711,7 @@ Post-process the given object that has been obtained from the FactoryBean.
 The resulting object will get exposed for bean references.
 
 - The default implementation simply returns the given object as-is.
-- Subclasses may override this, for example, to apply [post-processors](/docs/CS/Framework/Spring/IoC.md?id=PostBean).
+- Subclasses may override this, for example, to apply [post-processors](/docs/CS/Framework/Spring/IoC.md?id=postbean).
 
 <!-- tabs:start -->
 
@@ -1756,7 +1756,7 @@ public abstract class FactoryBeanRegistrySupport extends DefaultSingletonBeanReg
 
 ##### BeanPostProcessor
 
-Factory hook that allows for custom modification of new bean instances — for example, checking for marker interfaces or [wrapping beans with proxies(AOP)](/docs/CS/Framework/Spring/AOP.md?id=createProxy).
+Factory hook that allows for custom modification of new bean instances — for example, checking for marker interfaces or [wrapping beans with proxies(AOP)](/docs/CS/Framework/Spring/AOP.md?id=createproxy).
 
 Typically, post-processors that populate beans via marker interfaces or the like will implement postProcessBeforeInitialization, while post-processors that wrap beans with proxies will normally implement postProcessAfterInitialization.
 
@@ -1787,7 +1787,7 @@ public interface BeanPostProcessor {
 ### createBean
 
 1. Prepare method overrides
-2. resolveBeforeInstantiation([AOP](/docs/CS/Framework/Spring/AOP.md?id=Create-Proxy)) if bean not null
+2. resolveBeforeInstantiation([AOP](/docs/CS/Framework/Spring/AOP.md?id=create-proxy)) if bean not null
 3. doCreateBean
 
 ```
@@ -1846,7 +1846,7 @@ protected Object createBean(String beanName, RootBeanDefinition mbd, @Nullable O
 
 Apply before-instantiation post-processors, resolving whether there is a before-instantiation shortcut for the specified bean.
 
-call [BeanPostProcessor](/docs/CS/Framework/Spring/IoC.md?id=postBean) if bean != null.
+call [BeanPostProcessor](/docs/CS/Framework/Spring/IoC.md?id=postbean) if bean != null.
 
 ```
 @Nullable

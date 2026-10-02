@@ -16,7 +16,7 @@ Both [Spring MVC](/docs/CS/Framework/Spring/MVC.md) and Spring WebFlux support a
 
 ## Start Server
 
-[AbstractApplicationContext#refresh()](/docs/CS/Framework/Spring/IoC.md?id=abstractapplicationcontextrefresh)-> finishRefresh -> LifecycleProcessor#onRefresh() -> DefaultLifecycleProcessor#startBeans() -> DefaultLifecycleProcessor#doStart()
+[AbstractApplicationContext#refresh()](/docs/CS/Framework/Spring/IoC.md?id=refresh)-> finishRefresh -> LifecycleProcessor#onRefresh() -> DefaultLifecycleProcessor#startBeans() -> DefaultLifecycleProcessor#doStart()
 -> WebServerStartStopLifecycle#start() -> NettyWebServer#start()
 
 ```java
@@ -52,7 +52,7 @@ private void startDaemonAwaitThread(DisposableServer disposableServer) {
 }
 ```
 
-reactor.netty.tcp.TcpServerBind#bind() invoke [io.netty.bootstrap.ServerBootstrap#bind()](/docs/CS/Framework/Netty/Bootstrap.md?id=serverbootstrapbind-)
+reactor.netty.tcp.TcpServerBind#bind() invoke [io.netty.bootstrap.ServerBootstrap#bind()](/docs/CS/Framework/Netty/Bootstrap.md?id=bind)
 ```java
 // reactor.netty.tcp.TcpServerBind#bind()
 public Mono<? extends DisposableServer> bind(ServerBootstrap b) {

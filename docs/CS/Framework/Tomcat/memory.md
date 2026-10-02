@@ -16,7 +16,7 @@ SynchronizedStack 使用 AtomicInteger 维护栈顶索引 + Object[] 数组，�
 
 ### SynchronizedStack
 
-This is intended as a (mostly) GC-free alternative to [java.util.concurrent.ConcurrentLinkedQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=ConcurrentLinkedQueue) when the requirement is to create a pool of re-usable objects with no requirement to shrink the pool. 
+This is intended as a (mostly) GC-free alternative to [java.util.concurrent.ConcurrentLinkedQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=concurrentlinkedqueue) when the requirement is to create a pool of re-usable objects with no requirement to shrink the pool. 
 The aim is to provide the bare minimum of required functionality as quickly as possible with minimum garbage.
 
 This is a unbound stack and depended on maxConnection.
@@ -218,3 +218,11 @@ Tomcat 8.5+：移除全局池，改为 Per-Socket 局部复用 + 严格 recycle(
 - 现代 JVM（G1/ZGC）对短期对象回收已高度优化
 - DirectByteBuffer 分配成本下降，但 clear() 复用仍必要
 
+## Links
+
+- [Introduction](/docs/CS/Framework/Tomcat/ClassLoader.md)
+- [Introduction](/docs/CS/Framework/Tomcat/Connector.md)
+- [Introduction](/docs/CS/Framework/Tomcat/Start.md)
+- [Introduction](/docs/CS/Framework/Tomcat/Tomcat.md)
+- [Introduction](/docs/CS/Framework/Tomcat/WebSocket.md)
+- [Introduction](/docs/CS/Framework/Tomcat/threads.md)

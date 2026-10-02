@@ -436,7 +436,7 @@ private synchronized Future startSync() throws IllegalStateException {
 ### doExport
 
 
-Invoked after publish ContextRefreshedEvent in [Spring finishRefresh](/docs/CS/Framework/Spring/IoC.md?id=finishRefresh)
+Invoked after publish ContextRefreshedEvent in [Spring finishRefresh](/docs/CS/Framework/Spring/IoC.md?id=finishrefresh)
 
 ```java
 public class DubboBootstrapApplicationListener extends OnceApplicationContextEventListener implements Ordered {
@@ -510,7 +510,7 @@ export either local or remote, not both
 
 if remote:
 
-1. use [ProxyFactory](/docs/CS/Framework/Dubbo/Start.md?id=proxy) wrap Invoker
+1. use [ProxyFactory](/docs/CS/Framework/Dubbo/Start.md?id=createproxy) wrap Invoker
 2. may export no registries
 3. may only injvm
 4. add monitor
@@ -834,7 +834,7 @@ public <T> Exporter<T> export(Invoker<T> invoker) throws RpcException {
 
 ### createProxy
 
-all of scenarios need to create [Proxy](/docs/CS/Framework/Dubbo/Start.md?id=proxy) :
+all of scenarios need to create [Proxy](/docs/CS/Framework/Dubbo/Start.md?id=createproxy) :
 
 1. shouldJvmRefer
 2. one registry

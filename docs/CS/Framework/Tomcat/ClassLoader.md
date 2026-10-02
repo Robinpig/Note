@@ -81,7 +81,7 @@ The locations searched by this class loader are defined by the `common.loader` p
 The Webapp class loader is created for each web application that is deployed in a single Tomcat instance.
 All unpacked classes and resources in the `/WEB-INF/classes` directory of your web application, plus classes and resources in JAR files under the `/WEB-INF/lib` directory of your web application, are made visible to this web application, but not to other ones.
 
-As mentioned above, the web application class loader diverges from the default [Java delegation model](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=Delegation-model).
+As mentioned above, the web application class loader diverges from the default [Java delegation model](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=delegation-model).
 When a request to load a class from the web application's WebappX class loader is processed, this class loader will look in the local repositories first, instead of delegating before looking.
 There are exceptions. Classes which are part of the JRE base classes cannot be overridden.
 There are some exceptions such as the XML parser components which can be overridden using the upgradeable modules feature.

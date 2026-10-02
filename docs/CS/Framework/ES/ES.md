@@ -223,6 +223,7 @@ ES的查询分为两个阶段
 
 ## Inverted Index
 
+ES 的倒排索引、不可变 segment、段合并与 shard/segment 层级关系由底层的 [Lucene](/docs/CS/Framework/ES/Lucene.md) 提供；查询/更新中嵌入动态逻辑（Painless）见 [Scripting](/docs/CS/Framework/ES/Script.md)。
 
 
 ### KD Tree
@@ -301,7 +302,19 @@ curl -POST '127.0.0.1:9200/_cat/shards?v'
 ```
 
 
+## Links
+
+- [Lucene（底层检索引擎）](/docs/CS/Framework/ES/Lucene.md)
+- [Cluster 集群与 Query Then Fetch](/docs/CS/Framework/ES/Cluster.md)
+- [Scripting / Painless](/docs/CS/Framework/ES/Script.md)
+- [Kibana](/docs/CS/Framework/ES/Kibana.md)
+- [Beats / Filebeat](/docs/CS/Framework/ES/Beats.md)
+- [Logstash](/docs/CS/Framework/ES/Logstash.md)
+- [OpenSearch](/docs/CS/Framework/ES/OpenSearch.md)
+- [Kafka](/docs/CS/MQ/Kafka/Kafka.md)
+
 ## References
 
-1. [Searching numb3rs in 5.0](https://www.elastic.co/blog/searching-numb3rs-in-5-0)
-2. [伴鱼数据库之慢日志系统](https://tech.ipalfish.com/blog/2020/07/21/tidb_slowlog/)
+1. [Elasticsearch Reference](https://www.elastic.co/guide/en/elasticsearch/reference/current/index.html)
+2. [Searching numb3rs in 5.0](https://www.elastic.co/blog/searching-numb3rs-in-5-0)
+3. [伴鱼数据库之慢日志系统](https://tech.ipalfish.com/blog/2020/07/21/tidb_slowlog/)

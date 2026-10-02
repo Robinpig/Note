@@ -11,3 +11,7 @@ RPC 通常有较重的处理逻辑，因此无法串行处理 I/O。而 Go 的�
 
 
 ## Links
+
+- [Kitex](/docs/CS/Framework/kitex.md) — 基于 Netpoll 的 Go RPC 框架
+- [Netty](/docs/CS/Framework/Netty/Netty.md) — 设计借鉴来源
+- [epoll](/docs/CS/OS/Linux/IO/epoll.md)

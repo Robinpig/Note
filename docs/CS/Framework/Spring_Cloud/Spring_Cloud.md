@@ -1,6 +1,6 @@
 ## Introduction
 
-[Spring Cloud](https://docs.spring.io/spring-cloud/docs/current/reference/html/) provides tools for developers to quickly build some of the common patterns in [distributed systems](/docs/CS/Distributed/Distributed)
+[Spring Cloud](https://docs.spring.io/spring-cloud/docs/current/reference/html/) provides tools for developers to quickly build some of the common patterns in [distributed systems](/docs/CS/Distributed/Distributed.md)
 (e.g. configuration management, service discovery, circuit breakers, intelligent routing, micro-proxy, control bus, one-time tokens, global locks, leadership election, distributed sessions, cluster state).
 Coordination of distributed systems leads to boiler plate patterns, and using Spring Cloud developers can quickly stand up services and applications that implement those patterns.
 They will work well in any distributed environment, including the developer’s own laptop, bare metal data centres, and managed platforms such as Cloud Foundry.
@@ -57,7 +57,7 @@ Fig.1. Spring Cloud architecture
 
 In the cloud, applications can’t always know the exact location of other services.
 A service registry, such as `Netflix Eureka`, or a sidecar solution, such as `HashiCorp Consul`, can help.
-Spring Cloud provides `DiscoveryClient` implementations for popular registries such as [Eureka](/docs/CS/Framework/Spring_Cloud/Eureka.md), [Consul](/docs/CS/Framework/Spring_Cloud/Consul.md), [Zookeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md), and even [Kubernetes](/docs/CS/Container/k8s/K8s.md)' built-in system.
+Spring Cloud provides `DiscoveryClient` implementations for popular registries such as [Eureka](/docs/CS/Framework/eureka/Eureka.md), [Consul](/docs/CS/Framework/Spring_Cloud/Consul.md), [Zookeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md), and even [Kubernetes](/docs/CS/Container/k8s/K8s.md)' built-in system.
 There’s also a [Spring Cloud Load Balancer](https://spring.io/guides/gs/spring-cloud-loadbalancer/) to help you distribute the load carefully among your service instances.
 
 
@@ -150,6 +150,13 @@ Spring Cloud Commons provides a /service-registry actuator endpoint. This endpoi
 > Add Spring Cloud LoadBalancer starter to your project in order to use it.
 > Then, BlockingLoadBalancerClient or ReactiveLoadBalancer is used underneathto create a full physical address.
 
+`/service-registry` 端点细节：GET 返回当前 `Registration` 状态；POST 带 `{"status": "..."}` 的 JSON 修改状态，可取值取决于具体实现——Eureka 为 `UP`、`DOWN`、`OUT_OF_SERVICE`、`UNKNOWN`。置为 `OUT_OF_SERVICE` 即优雅下线：实例保留注册但不再接收流量。
+
+Commons 还提供两个与发现相关的通用能力：
+
+- **健康指标**：自动装配 `DiscoveryClientHealthIndicator`，并聚合各实现提供的 `DiscoveryHealthIndicator` 成复合 HealthIndicator。可用 `spring.cloud.discovery.client.health-indicator.enabled=false` 关闭，`...include-description=false` 避免 description 冒泡到聚合状态。
+- **多注册中心排序**：`DiscoveryClient` 继承 `Ordered`（默认 0），自定义实现可重写 `getOrder()`；Spring Cloud 自带实现可用属性排序，如 `spring.cloud.consul.discovery.order`、`eureka.client.order`。
+
 A load-balanced RestTemplate can be configured to retry failed requests.
 By default, this logic is disabled.
 For the non-reactive version (with RestTemplate), you can enable it by adding Spring Retry to your application’s classpath.
@@ -159,8 +166,8 @@ For the reactive version (with WebTestClient), you need to set `spring.cloud.loa
 
 实现ServiceRegistry并在register方法里做注册逻辑
 
-- [Nacos](/docs/CS/Framework/Spring_Cloud/nacos/registry.md?id=Client-Registry)
-- [Eureka](/docs/CS/Framework/Spring_Cloud/Eureka.md)
+- [Nacos](/docs/CS/Framework/nacos/registry.md?id=client-registry)
+- [Eureka](/docs/CS/Framework/eureka/Eureka.md)
 
 ```java
 public abstract class AbstractAutoServiceRegistration<R extends Registration>
@@ -223,7 +230,7 @@ But as microservices became more popular, modern lightweight independent and dec
 
 [Spring Cloud Gateway](/docs/CS/Framework/Spring_Cloud/gateway.md) gives you precise control of your API layer, integrating Spring Cloud service discovery and client-side load-balancing solutions to simplify configuration and maintenance.
 
-Zuul
+它是 Netflix [Zuul](/docs/CS/Framework/Spring_Cloud/Zuul.md)（阻塞式、pre/route/post 过滤器链）的现代替代品；Zuul 1 集成已在 Spring Cloud 2020.0 移除。
 
 ## Cloud configuration
 
@@ -280,7 +287,30 @@ As long as Spring Boot Actuator and Spring Config Client are on the classpath an
 
 ### Config Refresh
 
-use [Spring RefreshEventListener](/docs/CS/Framework/Spring/IoC.md?id=EventListener).
+use [Spring RefreshEventListener](/docs/CS/Framework/Spring/IoC.md).
+
+配置变更的传播依赖 `EnvironmentChangeEvent`：监听到该事件后，应用会做两件标准动作——
+
+1. 重新绑定上下文中所有 `@ConfigurationProperties` bean；
+2. 按 `logging.level.*` 中的新值重设日志级别。
+
+Config Client 默认**不轮询**远程配置：横向扩容的实例集群各自轮询既浪费又不一致，推荐由 [Spring Cloud Bus](https://spring.io/projects/spring-cloud-bus)（消息总线）把 `EnvironmentChangeEvent` 一次性广播给所有实例。可用 `/actuator/env` 验证变更是否绑定成功。
+
+`@ConfigurationProperties` 重绑定覆盖不了需要对整个 bean 做原子刷新的场景（如持有连接池的 `DataSource`），这时用 `@RefreshScope`：
+
+- 刷新作用域的 bean 是**惰性代理**，方法调用时才从作用域缓存取真实实例；
+- `/actuator/refresh`（或 JMX）调用 `RefreshScope.refreshAll()` 清空缓存，下一次方法调用即按新配置重建实例——旧连接的持有者可以把手头工作做完；
+- 对"不可变"的 bean 可在 `spring.cloud.refresh.extra-refreshable` 中显式声明类名。
+
+> 注意：`@RefreshScope` 加在 `@Configuration` 类上不会让其中所有 `@Bean` 自动进入刷新作用域，需要逐个标注。
+
+Bootstrap 相关补充：
+
+- 远程属性默认高优先级、不可被本地覆盖；需配置中心侧设置 `spring.cloud.config.allowOverride=true` 才放开，配合 `overrideNone` / `overrideSystemProperties` 控制本地配置和系统属性的位置。
+- 可通过实现 `PropertySourceLocator` 并注册到 `META-INF/spring.factories` 的 `BootstrapConfiguration` 键，插入自定义引导属性源（如从数据库取配置）。
+- **Spring Cloud 2020.0 起 Bootstrap 默认禁用**，改为 `spring.config.import` 机制（如 `spring.config.import=configserver:http://...`）引入配置中心，`bootstrap.yml` 需显式引入 `spring-cloud-starter-bootstrap` 才生效。
+
+与刷新相关的 Actuator 端点：`/actuator/env`（更新 Environment 并重绑定）、`/actuator/refresh`（重载引导上下文 + 刷新 RefreshScope bean）、`/actuator/restart`（重启上下文，默认禁用）、`/actuator/pause` 与 `/actuator/resume`（调用 Lifecycle 的 stop/start）。
 
 ## Load Balancer
 
@@ -306,7 +336,7 @@ If you do not have Caffeine in the classpath, the DefaultLoadBalancerCache, whic
 ## Circuit Breaker
 
 Distributed systems can be unreliable. Requests might encounter timeouts or fail completely.
-A circuit breaker can help mitigate these issues, and Spring Cloud Circuit Breaker gives you the choice of three popular options: [Resilience4J](/docs/CS/Framework/Spring_Cloud/Resilience4j.md), [Sentinel](/docs/CS/Framework/Spring_Cloud/Sentinel/Sentinel.md), or [Hystrix](/docs/CS/Framework/Spring_Cloud/Hystrix.md).
+A circuit breaker can help mitigate these issues, and Spring Cloud Circuit Breaker gives you the choice of three popular options: [Resilience4J](/docs/CS/Framework/Spring_Cloud/Resilience4j.md), [Sentinel](/docs/CS/Framework/Sentinel/Sentinel.md), or [Hystrix](/docs/CS/Framework/Spring_Cloud/Hystrix.md).
 
 [Spring Retry]()
 
@@ -367,6 +397,10 @@ Specifically, Spring Cloud Sleuth
   By default it sends them to a Zipkin collector service on localhost (port 9411).
   Configure the location of the service using `spring.zipkin.baseUrl`.
 
+## Messaging
+
+[Spring Cloud Stream](/docs/CS/Framework/Spring_Cloud/Stream.md) provides a unified, binder-based programming model for message-driven microservices: business code stays middleware-neutral while a pluggable Binder adapts Kafka, RabbitMQ, or RocketMQ. As of 3.x it favors the functional model (`Supplier` / `Function` / `Consumer`) over the legacy `@StreamListener`.
+
 ## RPC
 
 - [Feign](/docs/CS/Framework/Spring_Cloud/Feign.md)
@@ -385,7 +419,7 @@ Spring Cloud Contract provides contract-based testing support for REST and messa
 
 Spring Cloud Netflix project provides Netflix OSS integrations for Spring Boot apps through autoconfiguration and binding to the Spring Environment and other Spring programming model idioms.
 
-- The patterns provided include Service Discovery ([Eureka](/docs/CS/Framework/Spring_Cloud/Eureka.md)).
+- The patterns provided include Service Discovery ([Eureka](/docs/CS/Framework/eureka/Eureka.md)).
 
 > Circuit Breaker (Hystrix), Intelligent Routing (Zuul) and Client Side Load Balancing (Ribbon).
 
@@ -403,6 +437,18 @@ It contains all the components required to develop distributed applications, mak
 
 - [Spring Framework](/docs/CS/Framework/Spring/Spring.md)
 - [Spring Boot](/docs/CS/Framework/Spring_Boot/Spring_Boot.md)
+- [Spring Cloud Config](/docs/CS/Framework/Spring_Cloud/Config.md)
+- [Spring Cloud Gateway](/docs/CS/Framework/Spring_Cloud/gateway.md)
+- [Zuul](/docs/CS/Framework/Spring_Cloud/Zuul.md)
+- [Ribbon](/docs/CS/Framework/Spring_Cloud/Ribbon.md)
+- [LoadBalancer](/docs/CS/Framework/Spring_Cloud/LoadBalancer.md)
+- [Hystrix](/docs/CS/Framework/Spring_Cloud/Hystrix.md)
+- [Resilience4j](/docs/CS/Framework/Spring_Cloud/Resilience4j.md)
+- [OpenFeign](/docs/CS/Framework/Spring_Cloud/Feign.md)
+- [Spring Cloud Stream](/docs/CS/Framework/Spring_Cloud/Stream.md)
+- [Spring Cloud Sleuth](/docs/CS/Framework/Spring_Cloud/Sleuth.md)
 
 ## References
 1. [Eureka! Why You Shouldn’t Use ZooKeeper for Service Discovery](https://medium.com/knerd/eureka-why-you-shouldnt-use-zookeeper-for-service-discovery-4932c5c7e764)
+2. [阿里云 SCA 学习站 - Spring Cloud Commons 通用抽象](https://sca.aliyun.com/learn/spring-cloud/spring-cloud-commons/)
+3. [阿里云 SCA 学习站 - Spring Cloud Context 应用上下文](https://sca.aliyun.com/learn/spring-cloud/spring-cloud-context/)

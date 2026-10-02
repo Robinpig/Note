@@ -84,7 +84,7 @@ When a DataNode starts up, it scans through its local file system, generates a l
 
 ## Links
 
-- [Hadoop](/docs/CS/Java/Hadoop/Hadoop.md)
+- [Hadoop](/docs/CS/Framework/Hadoop/Hadoop.md)
 - [GFS](/docs/CS/Distributed/GFS.md)
 
 ## References

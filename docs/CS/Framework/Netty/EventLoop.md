@@ -159,6 +159,34 @@ public Future<?> shutdownGracefully(long quietPeriod, long timeout, TimeUnit uni
 }
 ```
 
+## Reactor 线程模型
+
+Reactor 的核心思想：用少量事件循环线程批量等待 IO 事件（epoll/select，见 [multiplexing](/docs/CS/OS/Linux/IO/multiplexing.md)），就绪后分发给处理逻辑。按"事件循环线程 × 业务处理"的组合分三种形态：
+
+| 形态 | 结构 | 瓶颈 |
+| :-- | :-- | :-- |
+| 单 Reactor 单线程 | 一个线程包揽 accept + read/write + 业务 | 一个慢 handler 拖死全局（Redis 6.0 前） |
+| 单 Reactor 多线程 | Reactor 只管 IO，业务丢线程池 | Reactor 是单点，高并发时 IO 线程抢不过来 |
+| 主从 Reactor 多线程 | MainReactor 管 accept，SubReactor 管 read/write | Netty 的默认形态 |
+
+Netty 的对应关系：
+
+- `bossGroup` = **MainReactor**：只处理 accept，把新连接注册到某个 `workerGroup` 的 EventLoop 上；
+- `workerGroup` = **SubReactor**：默认线程数 `CPU 核数 × 2`（`-Dio.netty.eventLoopThreads` 可调），每个 EventLoop 绑一个线程、管多个 Channel，在单线程内**无锁串行**处理这些 Channel 的全部事件与 Pipeline；
+- 耗时业务应转交业务线程池，避免阻塞 EventLoop。
+
+```java
+// 单 Reactor 单线程
+EventLoopGroup group = new NioEventLoopGroup(1);
+serverBootstrap.group(group);
+// 主从 Reactor 多线程
+EventLoopGroup bossGroup = new NioEventLoopGroup(1);
+EventLoopGroup workerGroup = new NioEventLoopGroup();   // 默认 CPU × 2
+serverBootstrap.group(bossGroup, workerGroup);
+```
+
+与 Proactor 的分野：Reactor 关心"**就绪**"——内核通知 fd 可读，用户线程自己拷贝（同步 IO）；Proactor 关心"**完成**"——内核完成拷贝后回调（Windows IOCP）。Linux 的 epoll 属于前者，所以 NIO/Netty 都是 Reactor 模型；io_uring 补上真异步后，Proactor 才有了 Linux 落地（见 [io_uring](/docs/CS/OS/Linux/IO/io_uring.md)）。
+
 ## EventLoopGroup
 
 Special EventExecutorGroup which allows [registering Channels](/docs/CS/Framework/Netty/Channel.md?id=register) that get processed for later selection during the event loop.
@@ -411,7 +439,7 @@ private static Queue<Runnable> newTaskQueue0(int maxPendingTasks) {
 
 ## Selector
 
-See [Selector](/docs/CS/Java/JDK/IO/NIO.md?id=Selectors)
+See [Selector](/docs/CS/Java/JDK/IO/NIO.md?id=selectors)
 
 ### openSelector
 
@@ -729,9 +757,9 @@ private void doStartThread() {
 
 NioEventLoop 每次循环的处理流程
 
-1. [select](/docs/CS/Framework/Netty/EventLoop.md?id=select) get ready Channels, [rebuildSelector](/docs/CS/Framework/Netty/EventLoop.md?id=rebuildSelector) if IOException occurs
-2. [processSelectedKeys](/docs/CS/Framework/Netty/EventLoop.md?id=processSelectedKey)
-3. Ensure we always [run tasks](/docs/CS/Framework/Netty/EventLoop.md?id=runAllTasks).
+1. [select](/docs/CS/Framework/Netty/EventLoop.md?id=select) get ready Channels, [rebuildSelector](/docs/CS/Framework/Netty/EventLoop.md?id=rebuildselector) if IOException occurs
+2. [processSelectedKeys](/docs/CS/Framework/Netty/EventLoop.md?id=processselectedkey)
+3. Ensure we always [run tasks](/docs/CS/Framework/Netty/EventLoop.md?id=runalltasks).
 
 'wakenUp.compareAndSet(false, true)' is always evaluated before calling 'selector.wakeup()' to reduce the wake-up overhead. (Selector.wakeup() is an expensive operation.)
 However, there is a race condition in this approach.
@@ -761,7 +789,7 @@ NioEventLoop  无锁串行化的设计不仅使系统吞吐量达到最大化，
 
 
 Always handle shutdown even if the loop processing threw an exception.
-And [closeAll](/docs/CS/Framework/Netty/EventLoop.md?id=closeAll) before shut down
+And [closeAll](/docs/CS/Framework/Netty/EventLoop.md?id=closeall) before shut down
 
 ```java
 public final class NioEventLoop extends SingleThreadEventLoop {
@@ -960,7 +988,7 @@ private void select(boolean oldWakenUp) throws IOException {
 
 ### processSelectedKey
 
-call [Channel#finishConnect()](/docs/CS/Framework/Netty/Channel.md?id=finishConnect)
+call [Channel#finishConnect()](/docs/CS/Framework/Netty/Channel.md?id=finishconnect)
 
 ```java
 private void processSelectedKeys() {
@@ -1282,7 +1310,7 @@ private void closeAll() {
 }
 ```
 
-unsafe.close( ) in [Channel](/docs/CS/Framework/Netty/Channel.md )
+unsafe.close( ) in [Channel](/docs/CS/Framework/Netty/Channel.md)
 
 ## Implementation
 
@@ -1290,7 +1318,7 @@ unsafe.close( ) in [Channel](/docs/CS/Framework/Netty/Channel.md )
 
 > [!NOTE]
 > 
-> See [epoll_ctl](/docs/CS/OS/Linux/epoll.md?id=epoll_ctl)
+> See [epoll_ctl](/docs/CS/OS/Linux/IO/epoll.md?id=epoll_ctl)
 
 ```java
 class EpollEventLoop extends SingleThreadEventLoop {
@@ -1321,7 +1349,7 @@ class EpollEventLoop extends SingleThreadEventLoop {
 
 > [!NOTE]
 >
-> See [epoll_wait](/docs/CS/OS/Linux/epoll.md?id=epoll_wait)
+> See [epoll_wait](/docs/CS/OS/Linux/IO/epoll.md?id=epoll_wait)
 
 ```java
 class EpollEventLoop extends SingleThreadEventLoop {
@@ -1474,3 +1502,5 @@ Create an [AffinityThreadFactory](https://github.com/OpenHFT/Java-Thread-Affinit
 ## Links
 
 - [Netty](/docs/CS/Framework/Netty/Netty.md)
+- [multiplexing](/docs/CS/OS/Linux/IO/multiplexing.md) — Reactor 依赖的 IO 多路复用
+- [IO](/docs/CS/OS/Linux/IO/IO.md) — 五种 IO 模型与同步/异步辨析

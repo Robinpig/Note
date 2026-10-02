@@ -321,10 +321,10 @@ public final void register(EventLoop eventLoop, final ChannelPromise promise) {
 
 **AbstractChannel$AbstracrUnsafe#register0** execute below methods:
 
-1. 调用 JDK 底层 [java.nio.channels.SelectableChannel](/docs/CS/Java/JDK/IO/NIO.md?id=Channel) 进行注册
+1. 调用 JDK 底层 [java.nio.channels.SelectableChannel](/docs/CS/Java/JDK/IO/NIO.md?id=channels) 进行注册
 2. `ChannelPipeline#invokeHandlerAddedIfNeeded()` 调用 ChannelInitializer 实现的 initChannel() 方法做 pipeline的初始化
 3. [ChannelPipeline#fireChannelRegistered()](/docs/CS/Framework/Netty/ChannelHandler.md?id=firechannelactive)
-4. 调用 pipeline.fireChannelActive() 方法触发 channelActive 事件 最终调用到 [AbstractChannel#beginRead()](/docs/CS/Framework/Netty/ChannelHandler.md?id=beginread) 
+4. 调用 pipeline.fireChannelActive() 方法触发 channelActive 事件 最终调用到 [AbstractChannel#beginRead()](/docs/CS/Framework/Netty/ChannelHandler.md) 
 
 
 register0() 主要做了四件事：调用 JDK 底层进行 Channel 注册、触发 handlerAdded 事件、触发 channelRegistered 事件、Channel 当前状态为活跃时，触发 channelActive 事件

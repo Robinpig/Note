@@ -264,7 +264,7 @@ public PeerAwareInstanceRegistryImpl(EurekaServerConfig serverConfig, EurekaClie
 
 *recentCanceledQueue and recentRegisteredQueue are use a capacity **1000 CircularQueue***
 
-CircularQueue delegate a **[ArrayBlockingQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=ArrayBlockingQueue)** and override offer method.
+CircularQueue delegate a **[ArrayBlockingQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=arrayblockingqueue)** and override offer method.
 
 ```java
 public abstract class AbstractInstanceRegistry implements InstanceRegistry {
@@ -310,7 +310,12 @@ Eureka2.0改进
 
 # Links
 
-- [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md?id=service-registry)
+- [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md?id=serviceregistry)
+
+## Links
+
+- [Introduction](/docs/CS/Framework/eureka/Client.md)
+- [Introduction](/docs/CS/Framework/eureka/Server.md)
 
 ## References
 

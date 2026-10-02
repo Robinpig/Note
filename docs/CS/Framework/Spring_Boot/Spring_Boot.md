@@ -48,6 +48,33 @@ If you need to find out what auto-configuration is currently being applied, and 
 
 
 
+## SpringApplication
+
+`SpringApplication` 提供了一个通过 `main()` 方法启动 Spring 应用的便捷入口，启动流程除了创建并刷新 ApplicationContext，还提供一组运行时扩展点：
+
+- **启动失败处理（FailureAnalyzers）**：启动异常会经 `FailureAnalyzer` 转成可读的错误信息；也可用 `SpringApplication.addListeners()` 注册 `ApplicationFailedListener`。
+- **延迟初始化**：`spring.main.lazy-initialization=true` 让 bean 在首次被需要时才创建。可加快启动、降低启动期资源占用，但首次请求变慢，且运行期才暴露 bean 配置问题，需配合 Actuator 预热 JVM。
+- **自定义 banner**：`banner.txt` / `banner.gif` 或 `SpringApplication.setBanner()`。
+- **Fluent Builder API**：`SpringApplicationBuilder` 支持父子上下文、多 profile 链式启动。
+- **Web 环境判定**：依据类路径决定 `SERVLET` / `REACTIVE` / `NONE`，可用 `spring.main.web-application-type` 显式覆盖。
+- **应用参数**：实现 `ApplicationRunner` / `CommandLineRunner` 的 bean 会在上下文就绪后执行（前者拿到解析后的 `ApplicationArguments`，后者拿到原始字符串数组），多个 Runner 可用 `@Order` 排序。
+- **优雅退出**：bean 实现 `ExitCodeGenerator` 可向 JVM 返回自定义退出码。
+
+### 可用性探针（Liveness / Readiness）
+
+Spring Boot 在 Actuator 中暴露应用可用性状态，供 Kubernetes 探针消费：
+
+- **Liveness State（存活）**：内部状态是否正常、是否需要重启。liveness 失败意味着应用已不可自愈，平台应重建实例。
+- **Readiness State（就绪）**：是否能接收流量。readiness 失败时平台暂时不路由请求，但不杀实例。
+
+对应 `/actuator/health/liveness` 与 `/actuator/health/readiness`，可通过 `AvailabilityChangeEvent` 编程式更新状态，或自定义 `AvailabilityState`。
+
+### 应用事件
+
+启动过程会按顺序发布应用事件（`ApplicationStartingEvent` → `ApplicationEnvironmentPreparedEvent` → `ApplicationContextInitializedEvent` → `ApplicationPreparedEvent` → `ApplicationStartedEvent` → `ApplicationReadyEvent` → 失败时 `ApplicationFailedEvent`）。
+
+> 注意事件监听器的注册时机：通过 `SpringApplication.addListeners()` 或 `META-INF/spring.factories` 注册的监听器才能收到上下文创建**之前**的早期事件；用 `@Component`/`@EventListener` 注册的只能收到上下文刷新之后的事件。
+
 ## Starter
 
 Dependency management is a critical aspects of any complex project. And doing this manually is less than ideal; the more time you spent on it the less time you have on the other important aspects of the project.
@@ -146,6 +173,32 @@ public final class ConfigurationPropertiesBean {
 }
 ```
 
+#### 配置加载顺序与优先级
+
+外部配置按从高到低的优先级覆盖（高优先级先命中）：命令行参数 → 系统属性 → 操作系统环境变量 → `application-{profile}.yml`（jar 包外优先于包内）→ `application.yml`。具体可用 `config/import` 或属性 `spring.config.location` / `spring.config.additional-location` 改变搜索位置：
+
+- `spring.config.location`：**替换**默认位置，只从给定位置加载；
+- `spring.config.additional-location`：在默认位置之外**追加**搜索位置；
+- 支持 optional 前缀和通配符位置，`spring.config.import=optional:file:./etc/` 可在文件缺失时不报错。
+
+单个文件可用 `---` 分隔多文档（multi-document），通过 `spring.config.activate.on-profile` 按 profile 激活。
+
+#### 宽松绑定（Relaxed Binding）
+
+`@ConfigurationProperties` 的属性名匹配是宽松的，同一属性多种写法都能绑定：kebab-case（`my-prefix.remote-timeout`，**推荐**）、camelCase、underscore、环境变量大写。但 `@Value` 占位符不支持宽松绑定，必须写精确 key——这也是优先用类型安全配置而非散落 `@Value` 的原因之一。
+
+还支持：
+
+- **构造函数绑定**：用 `@ConstructorBinding`（Spring Boot 3 中 record/单一构造器自动绑定），属性可不暴露 setter，天然不可变；
+- **第三方类配置**：在任意 `@Bean` 方法上加 `@ConfigurationProperties` 给第三方对象绑定；
+- **校验**：类上加 `@Validated`，字段用 JSR-303 注解（`@Min`、`@NotBlank` 等），启动时校验失败直接 fail-fast；
+- **`@ConfigurationProperties` vs `@Value`**：前者支持松散绑定、SpEL 之外的元数据、校验、复杂类型与 IDE 提示；后者适合零散的单值注入。
+
+#### Profiles
+
+- `spring.profiles.active` 激活 profile；`spring.profiles.group` 可把一组 profile 定义成逻辑组（如 `production: [proddb,prodmq]`）。
+- profile 也可通过 `setAdditionalProfiles()` 编程式设置。
+- 配置文件按 `application-{profile}.yml` 约定加载，可用 `spring.profiles.include` 引入其他 profile 文件。
 
 
 ## Web
@@ -435,4 +488,9 @@ To create your own observations (which will lead to metrics and traces), you can
 - [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md)
 - Splunk
 - Solr
+
+## References
+
+- [Spring Boot Reference](https://docs.spring.io/spring-boot/reference/)
+- [阿里云 SCA 学习站 - Spring Boot 核心特性](https://sca.aliyun.com/learn/spring-boot/core/)
 

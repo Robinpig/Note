@@ -27,7 +27,7 @@ change password in conf/tomcat-users.xml
 
 Catalina is a very sophisticated piece of software, which was elegantly designed and developed.
 It is also modular too.<br>
-Catalina is consisting of two main modules: the [connector](/docs/CS/Framework/Tomcat/Connector.md) and the [container](/docs/CS/Framework/Tomcat/Tomcat.md?id=Container).
+Catalina is consisting of two main modules: the [connector](/docs/CS/Framework/Tomcat/Connector.md) and the [container](/docs/CS/Framework/Tomcat/Tomcat.md?id=container).
 
 
 <div style="text-align: center;">

@@ -42,7 +42,7 @@ public ServerBootstrap group(EventLoopGroup parentGroup, EventLoopGroup childGro
 
 ## bind
 
-1. [initAndRegister channel](/docs/CS/Framework/Netty/Bootstrap.md?id=initAndRegister)
+1. [initAndRegister channel](/docs/CS/Framework/Netty/Bootstrap.md?id=initandregister)
 2. doBind0 端口绑定 注册 OP_ACCEPT 事件到 Channel
 
 ```java
@@ -349,12 +349,12 @@ private void initChild(final Channel child) {
 
 ### register
 
-[AbstractChannel$AbstractUnsafe#register()](/docs/CS/Framework/Netty/Channel.md?id=register) submit a Runnable of register0 to [EventLoop#execute()](/docs/CS/Framework/Netty/Eventloop.md?id=nioeventloopexecute).
+[AbstractChannel$AbstractUnsafe#register()](/docs/CS/Framework/Netty/Channel.md?id=register) submit a Runnable of register0 to [EventLoop#execute()](/docs/CS/Framework/Netty/EventLoop.md?id=eventloopgroup).
 
 **AbstractChannel$AbstractUnsafe#register0** execute follow methods:
 
-1. [ChannelPipeline#fireChannelRegistered()](/docs/CS/Framework/Netty/ChannelHandler.md?id=channelpipelinefirechannelactive-)
-2. [AbstractChannel#beginRead()](/docs/CS/Framework/Netty/Channel.md?id=abstractchannelbeginread-)
+1. [ChannelPipeline#fireChannelRegistered()](/docs/CS/Framework/Netty/ChannelHandler.md?id=firechannelactive)
+2. [AbstractChannel#beginRead()](/docs/CS/Framework/Netty/Channel.md?id=beginread)
 
 ### doBind0
 

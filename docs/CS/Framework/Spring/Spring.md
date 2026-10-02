@@ -31,6 +31,8 @@ The most well known of these enhancements is autoconfiguration, where Spring Boo
 Foremost amongst these is the Spring Framework’s [Inversion of Control (IoC)](/docs/CS/Framework/Spring/IoC.md) container. 
 A thorough treatment of the Spring Framework’s IoC container is closely followed by comprehensive coverage of Spring’s [Aspect-Oriented Programming (AOP)](/docs/CS/Framework/Spring/AOP.md) technologies.
 
+Spring’s [Resource](/docs/CS/Framework/Spring/Resource.md) abstraction (`org.springframework.core.io.Resource` / `ResourceLoader`) provides a uniform way to access low-level resources (classpath, filesystem, URL, `ServletContext`).
+
 [AOT](/docs/CS/Framework/Spring/AOT.md) processing can be used to optimize your application ahead-of-time. It is typically used for native image deployment using GraalVM.
 
 
@@ -42,8 +44,11 @@ At the center of Spring MVC is the concept of a *controller*, a class that handl
 In the case of a browser-facing application, a controller responds by optionally populating model data and passing the request on to a view to produce HTML that’s returned to the browser.
 
 [Spring WebFlux](/docs/CS/Framework/Spring/webflux.md) web frameworks.
+响应式编程范式（Reactive Streams、Reactor、背压）与架构理念见 [Reactive](/docs/CS/Framework/Spring/Reactive.md)。
 
 ### Data Access
+
+[Spring Data](/docs/CS/Framework/Spring/Data.md) 提供统一的 Repository 抽象与异常体系转换（`DataAccessException` / `SQLErrorCodeSQLExceptionTranslator`），各存储由独立子项目适配。
 
 Spring Data’s mission is to provide a familiar and consistent,  Spring-based programming model for data access while still retaining the special traits of the underlying data store.
 
@@ -67,10 +72,11 @@ Spring Framework’s integration with a number of technologies.
 
 #### REST Clients
 
-The Spring Framework provides two choices for making calls to REST endpoints:
+The Spring Framework provides three choices for making calls to REST endpoints:
 
-- RestTemplate: The original Spring REST client with a synchronous, template method API.
+- [RestTemplate](/docs/CS/Framework/Spring/RestClient.md): The original Spring REST client with a synchronous, template method API. In maintenance mode since 5.0.
 - WebClient: a non-blocking, reactive alternative that supports both synchronous and asynchronous as well as streaming scenarios.
+- HTTP Interface: a declarative Java interface with exchange annotations, backed by a generated proxy (Spring 6).
 
 Callback interface that can be used to customize the ClientHttpRequest sent from a RestTemplate.
 ```java
@@ -89,7 +95,7 @@ public interface RestTemplateRequestCustomizer<T extends ClientHttpRequest> {
 
 [Cache Abstraction](/docs/CS/Framework/Spring/Cache.md)
 
-[Spring Security](/docs/CS/Framework/Spring/Security.md)
+[Spring Security](/docs/CS/Framework/Spring/Security.md)，其 OAuth2 Client / Resource Server 支持见 [Spring OAuth](/docs/CS/Framework/Spring/OAuth.md)；集群会话共享见 [Spring Session](/docs/CS/Framework/Spring/Session.md)。
 
 #### AI
 
@@ -145,6 +151,19 @@ shutdown: graceful
 
 ## Links
 
+- [IoC Container](/docs/CS/Framework/Spring/IoC.md)
+- [AOP](/docs/CS/Framework/Spring/AOP.md)
+- [Spring MVC](/docs/CS/Framework/Spring/MVC.md)
+- [Spring WebFlux](/docs/CS/Framework/Spring/webflux.md)
+- [Spring Data](/docs/CS/Framework/Spring/Data.md)
+- [Spring Transaction](/docs/CS/Framework/Spring/Transaction.md)
+- [Spring Security](/docs/CS/Framework/Spring/Security.md)
+- [Spring OAuth](/docs/CS/Framework/Spring/OAuth.md)
+- [Spring Session](/docs/CS/Framework/Spring/Session.md)
+- [Spring Cache](/docs/CS/Framework/Spring/Cache.md)
+- [Reactive](/docs/CS/Framework/Spring/Reactive.md)
+- [AOT / Native](/docs/CS/Framework/Spring/AOT.md)
+- [Spring Test](/docs/CS/Framework/Spring/Test.md)
 - [Spring Boot](/docs/CS/Framework/Spring_Boot/Spring_Boot.md)
 - [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md)
 

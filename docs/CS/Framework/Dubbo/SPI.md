@@ -262,7 +262,7 @@ private Class<?> getAdaptiveExtensionClass() {
 
 #### createAdaptiveExtensionClass
 
-**create Dynamic Class** by [AdaptiveClassCodeGenerator](/docs/CS/Framework/Dubbo/SPi.md?id=AdaptiveClassCodeGenerator)
+**create Dynamic Class** by [AdaptiveClassCodeGenerator](/docs/CS/Framework/Dubbo/SPI.md?id=adaptiveclasscodegenerator)
 
 ```java
 private Class<?> createAdaptiveExtensionClass() {
@@ -668,7 +668,7 @@ public T getOriginalInstance(String name) {
 
 Wrap extensions like AOP
 
-invoke [injectExension](/docs/CS/Framework/Dubbo/SPI.md?id=injectExension)
+invoke [injectExension](/docs/CS/Framework/Dubbo/SPI.md?id=injectextension)
 
 ```java
 @SuppressWarnings("unchecked")

@@ -826,8 +826,8 @@ deactivate el
 deactivate el
 ```
 
-1. [Create EventLoopGroup](/docs/CS/Framework/Netty/EventLoop.md?id=create-nioeventloopgroup)
-2. [Create ServerBootstrap](/docs/CS/Framework/Netty/Bootstrap.md?id=create-serverbootstrap)
+1. [Create EventLoopGroup](/docs/CS/Framework/Netty/EventLoop.md?id=create-eventloopgroup)
+2. [Create ServerBootstrap](/docs/CS/Framework/Netty/Bootstrap.md?id=bind)
 3. Set [Channel](/docs/CS/Framework/Netty/Channel.md)
 4. Set [ChannelHandler](/docs/CS/Framework/Netty/ChannelHandler.md)
 5. Option
@@ -884,8 +884,14 @@ AllocateByteBuf
 - [Flink](/docs/CS/Framework/Flink/Flink.md)
 - [RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md)
 - [Cassandra](/docs/CS/DB/Cassandra.md)
-- [Hadoop](/docs/CS/Java/Hadoop/Hadoop.md)
+- [Hadoop](/docs/CS/Framework/Hadoop/Hadoop.md)
 - [ElasticSearch](/docs/CS/Framework/ES/ES.md)
+- [流量整形 TrafficShaping](/docs/CS/Framework/Netty/Limiter.md)
+- [TCP Fast Open 支持](/docs/CS/Framework/Netty/TPO.md)
+- [Channel](/docs/CS/Framework/Netty/Channel.md)
+- [ChannelHandler](/docs/CS/Framework/Netty/ChannelHandler.md)
+- [EventLoop](/docs/CS/Framework/Netty/EventLoop.md)
+- [ByteBuf](/docs/CS/Framework/Netty/ByteBuf.md)
 
 ## References
 

@@ -33,8 +33,8 @@ spring.cloud.sentinel.transport.dashboard = localhost:8080
 
 3. Test using JMeter
 
-- [How Sentinel works](/docs/CS/Framework/Spring_Cloud/Sentinel)
-- [CircuitBreaker](/docs/CS/Framework/Spring_Cloud/Sentinel/CircuitBreaker.md)
+- [How Sentinel works](/docs/CS/Framework/Sentinel/Sentinel.md)
+- [CircuitBreaker](/docs/CS/Framework/Sentinel/CircuitBreaker.md)
 
 
 

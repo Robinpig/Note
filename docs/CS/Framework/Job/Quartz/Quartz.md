@@ -139,6 +139,14 @@ Quartz不尽如人意的地方：
 - 问题三：调度逻辑和QuartzJobBean耦合在同一个项目中，这将导致一个问题，在调度任务数量逐渐增多，同时调度任务逻辑逐渐加重的情况下，此时调度系统的性能将大大受限于业务；
 - 问题四：quartz底层以“抢占式”获取DB锁并由抢占成功节点负责运行任务，会导致节点负载悬殊非常大；而XXL-JOB通过执行器实现“协同分配式”运行任务，充分发挥集群优势，负载各节点均衡
 
+## Links
+
+- [Introduction](/docs/CS/Framework/Job/DolphinScheduler.md)
+- [Introduction](/docs/CS/Framework/Job/ElasticJob.md)
+- [Introduction](/docs/CS/Framework/Job/PowerJob.md)
+- [Introduction](/docs/CS/Framework/Job/ScheduleX.md)
+- [Introduction](/docs/CS/Framework/Job/xxl-job.md)
+
 ## References
 
 1. [Quartz Configuration Reference](http://www.quartz-scheduler.org/documentation/2.4.0-SNAPSHOT/configuration.html)

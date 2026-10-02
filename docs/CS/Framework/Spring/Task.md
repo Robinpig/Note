@@ -360,7 +360,7 @@ protected Executor getDefaultExecutor(@Nullable BeanFactory beanFactory) {
 
 *Delegate for actually executing the given task with the chosen executor.*
 
-[CompletableFuture.supplyAsync()](/docs/CS/Java/JDK/Concurrency/Future.md?id=CompeletedFuture)
+[CompletableFuture.supplyAsync()](/docs/CS/Java/JDK/Concurrency/Future.md?id=completablefuture)
 
 ```java
 //AsyncExecutionAspectSupport#doSubmit()
@@ -517,6 +517,31 @@ public class MyTask {
    }
 }
 ```
+
+#### @Scheduled 参数语义
+
+| 属性 | 含义 |
+|---|---|
+| `fixedRate` / `fixedRateString` | 固定**频率**：从每次任务**开始**计时，间隔到点就尝试触发；任务执行慢于周期时不会并发执行（默认单线程），表现为任务排队 |
+| `fixedDelay` / `fixedDelayString` | 固定**延迟**：从每次任务**完成**到下一次开始之间等待 |
+| `initialDelay` / `initialDelayString` | 首次执行前的等待毫秒数，只对 fixedRate/fixedDelay 生效 |
+| `cron` | cron 表达式（秒 分 时 日 月 周），如 `"*/5 * * * * MON-FRI"`；值为 `"-"`（`Scheduled.CRON_DISABLED`）表示禁用 |
+| `zone` | cron 解析所用时区，默认 JVM 默认时区 |
+
+`cron`、`fixedDelay`、`fixedRate` 三者**必须且只能指定一个**，否则启动报错（对应源码里的 `Exactly one of ...` 断言）。cron 触发不支持 initialDelay。
+
+#### 启用方式
+
+`@EnableScheduling` 负责扫描 `@Scheduled`，`@EnableAsync` 负责 `@Async`，两者独立，按需开启：
+
+```java
+@Configuration
+@EnableAsync
+@EnableScheduling
+public class AppConfig { }
+```
+
+需要更细粒度控制时实现 `SchedulingConfigurer` / `AsyncConfigurer`，可以指定自定义的 `TaskScheduler` / `TaskExecutor`。
 
 
 
@@ -751,6 +776,19 @@ public static Method selectInvocableMethod(Method method, @Nullable Class<?> tar
 }
 ```
 
+## Quartz Integration
+
+对于需要持久化、misfire 处理、集群调度等复杂场景，Spring 提供了对 [Quartz](/docs/CS/Framework/Job/Quartz/Quartz.md) 的集成，核心是几个 `FactoryBean`：
+
+- `JobDetailFactoryBean`：配置 Quartz 的 `JobDetail`（Job 类型、名称、组、是否持久化等）。
+- `MethodInvokingJobDetailFactoryBean`：不需要写 Quartz Job 类，直接调用某个 Spring bean 的指定方法。
+- `SchedulerFactoryBean`：在 Spring 容器中装配 Quartz `Scheduler`，注入 triggers、jobDetails、线程池、数据源（支持 JDBC JobStore 集群）。
+- Trigger 用 `SimpleTriggerFactoryBean`（简单周期）或 `CronTriggerFactoryBean`（cron 表达式）。
+
+注入关系是：JobDetail → Trigger（引用 JobDetail）→ Scheduler（聚合多个 Trigger）。Spring 还负责让 Job 实例能感知容器（`SchedulerContext`、Spring 管理的 JobFactory），从而在 Job 里注入 Spring bean。
+
+轻量需求优先用 `@Scheduled`；需要调度信息持久化到数据库、应用重启后恢复、多节点抢占执行时再上 Quartz。
+
 ## Tuning
 
 
@@ -784,3 +822,4 @@ Spring相关
 
 - [Spring 5.2.x doc](https://docs.spring.io/spring-framework/docs/5.2.x/spring-framework-reference/integration.html#scheduling)
 - [浅析Spring中Async注解底层异步线程池原理｜得物技术](https://mp.weixin.qq.com/s/FySv5L0bCdrlb5MoSfQtAA)
+- [阿里云 SCA 学习站 - 执行任务和任务计划](https://sca.aliyun.com/learn/spring/integration/scheduling/)

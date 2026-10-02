@@ -220,5 +220,5 @@ public class FilteringWebHandler implements WebHandler {
 
 ## Links
 
-- [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md?id=gateway)
+- [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md?id=api-gateway)
 - [Spring Webflux](/docs/CS/Framework/Spring/webflux.md)

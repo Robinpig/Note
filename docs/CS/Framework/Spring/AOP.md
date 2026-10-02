@@ -11,7 +11,7 @@ As [AspectJ](/docs/CS/Java/AspectJ.md) uses compile time and classload time weav
 
 AOP is used in the Spring Framework to:
 
-- provide declarative enterprise services, especially as a replacement for EJB declarative services. The most important such service is [declarative transaction management](/docs/CS/Framework/Spring/Transaction.md?id=Declarative-transaction).
+- provide declarative enterprise services, especially as a replacement for EJB declarative services. The most important such service is [declarative transaction management](/docs/CS/Framework/Spring/Transaction.md?id=declarative-transaction).
 - allow users to implement custom aspects, complementing their use of OOP with AOP.
 
 
@@ -478,7 +478,7 @@ Spring AOP uses either JDK dynamic proxies or CGLIB to create the proxy for a gi
 
 ![](img/AnnotationAwareAspectJAutoProxyCreator.png)
 
-`AbstractAutoProxyCreator` implements [BeanPostProcessor](/docs/CS/Framework/Spring/IoC.md?id=BeanPostProcessor)
+`AbstractAutoProxyCreator` implements [BeanPostProcessor](/docs/CS/Framework/Spring/IoC.md?id=beanpostprocessor)
 
 ### postProcessBeforeInstantiation
 
@@ -872,6 +872,57 @@ public class MethodBeforeAdviceInterceptor implements MethodInterceptor, BeforeA
 }
 ```
 
+## Spring AOP APIs
+
+除 `@AspectJ` 注解和 XML 声明外，Spring 还提供一套底层编程式 API（Spring 1.2 风格，至今完全支持），适合需要动态组装切面的框架代码。
+
+### Pointcut API
+
+切点由 `ClassFilter`（匹配类型）和 `MethodMatcher`（匹配方法）组合而成，`Pointcuts` 工具类支持交并运算：
+
+- `union(p1, p2)`：任一匹配即可；
+- `intersection(p1, p2)`：两者都要匹配；
+- 常用实现：`NameMatchMethodPointcut`（按方法名）、`JdkRegexpMethodPointcut`（正则）、`AspectJExpressionPointcut`（AspectJ 表达式，注解风格底层也用它）。
+
+### Advice 类型与 Advisor
+
+| Advice | 接口 | 语义 |
+|---|---|---|
+| Before | `MethodBeforeAdvice` | 方法执行前 |
+| AfterReturning | `AfterReturningAdvice` | 正常返回后 |
+| Around | `MethodInterceptor` | 环绕，控制是否 proceed（最通用） |
+| Throws | `ThrowsAdvice` | 标记接口，按 `afterThrowing` 方法签名匹配异常类型 |
+
+`Advisor` = Pointcut + Advice；`DefaultPointcutAdvisor` 是最常用的组合实现。
+
+### 编程式创建代理
+
+```java
+ProxyFactory factory = new ProxyFactory(new MyService());
+factory.addAdvice(new MethodInterceptor() {
+    @Override
+    public Object invoke(MethodInvocation mi) throws Throwable {
+        // before
+        Object ret = mi.proceed();
+        // after
+        return ret;
+    }
+});
+MyService proxy = (MyService) factory.getProxy();
+```
+
+`ProxyFactoryBean` 则把同样的配置搬进 XML/`@Bean`，并可通过 `setProxyTargetClass(true)` 在 JDK 动态代理与 CGLIB 之间切换（选择策略见文末对照表）。
+
+### TargetSource
+
+`TargetSource` 决定代理每次调用时"目标对象从哪来"，是 AOP 里少有人知但很强大的扩展点：
+
+- `SingletonTargetSource`：默认，持有单例目标；
+- `PrototypeTargetSource`：每次方法调用创建一个新目标；
+- `ThreadLocalTargetSource`：每个线程一个目标（配合池化/线程绑定状态）；
+- `HotSwappableTargetSource`：运行期热替换目标对象（配置热切换、蓝绿切换的底层手段之一）；
+- `CommonsPool2TargetSource`：目标对象池化，让有状态/创建昂贵的对象可复用。
+
 ## Summary
 
 
@@ -901,3 +952,5 @@ set `spring.objenesis.ignore = true`  to invoke the constructor of the class, bu
 ## References
 
 1. [Aspect Oriented Programming with Spring](https://docs.spring.io/spring-framework/reference/core/aop.html)
+2. [阿里云 SCA 学习站 - AOP 编程（上）](https://sca.aliyun.com/learn/spring/core/aop/)
+3. [阿里云 SCA 学习站 - AOP 编程（下）](https://sca.aliyun.com/learn/spring/core/aop-api/)

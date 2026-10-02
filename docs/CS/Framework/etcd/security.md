@@ -1,4 +1,4 @@
-# Introduction
+## Introduction
 
 
 etcd鉴权体系架构由控制面和数据面组成

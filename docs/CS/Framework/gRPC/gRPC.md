@@ -14,3 +14,5 @@ In gRPC, a client application can directly call a method on a server application
 ## Links
 
 - [Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md)
+- [Kitex](/docs/CS/Framework/kitex.md) — Go RPC 框架对照
+- [Protocol Buffers](/docs/CS/Distributed/RPC/ProtoBuf.md)

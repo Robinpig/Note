@@ -110,7 +110,7 @@ static WebApplicationType deduceFromClasspath() {
 2. prepareEnvironment
 3. configureIgnoreBeanInfo
 4. createApplicationContext
-5. getSpringFactoriesInstances -> [SpringFactoriesLoader.loadSpringFactories()](/docs//CS/Framework/Spring_Boot/Start.md?id=LoadFactories)
+5. getSpringFactoriesInstances -> [SpringFactoriesLoader.loadSpringFactories()](/docs/CS/Framework/Spring_Boot/Start.md?id=loadfactories)
 6. prepareContext
 7. refreshContext
 8. afterRefresh

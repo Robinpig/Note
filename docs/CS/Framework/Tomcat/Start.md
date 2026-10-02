@@ -76,7 +76,7 @@ Start entrance:
 startup.sh -> catalina.sh start ->java -jar org.apache.catalina.startup.Bootstrap.main()
 ```
 
-1. [invoke Catalina](/docs/CS/Framework/Tomcat/Start.md?id=invoke-Catalina)
+1. [invoke Catalina](/docs/CS/Framework/Tomcat/Start.md?id=invoke-catalina)
 2. invoke [org.apache.catalina.startup.Catalina#load()](/docs/CS/Framework/Tomcat/Start.md?id=load) and [org.apache.catalina.startup.Catalina#start](/docs/CS/Framework/Tomcat/Start.md?id=start) by Reflection
 
 ```java
@@ -122,7 +122,7 @@ public static void main(String[] args) {
 
 Initialize daemon.
 
-[initClassLoaders](/docs/CS/Framework/Tomcat/ClassLoader.md?id=initClassLoaders)
+[initClassLoaders](/docs/CS/Framework/Tomcat/ClassLoader.md?id=initclassloaders)
 
 ```java
 //Bootstrap.java
@@ -443,7 +443,7 @@ public boolean listenerStart() {
 
 tomcat首先会加载进ContextLoaderListener
 
-这里可以通过 Spring MVC 的 [ContextLoaderListener](/docs/CS/Framework/Spring/MVC.md?id=ContextLoaderListener) 进行初始化
+这里可以通过 Spring MVC 的 [ContextLoaderListener](/docs/CS/Framework/Spring/MVC.md?id=contextloaderlistener) 进行初始化
 
 
 

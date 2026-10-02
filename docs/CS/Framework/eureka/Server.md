@@ -65,7 +65,7 @@ Eureka Server首先是个web容器
 
 ### EurekaServerBootstrap
 
-EurekaServer在SpringCloud中的启动分析与 [EurekaBootStrap](/docs/CS/Framework/eureka/Server.md?id=EurekaBootStrap) 类似
+EurekaServer在SpringCloud中的启动分析与 [EurekaBootStrap](/docs/CS/Framework/eureka/Server.md?id=eurekabootstrap) 类似
 
 @EnableEurekaServer开启 使用自动配置EurekaServerAutoConfiguration
 ```java
@@ -377,7 +377,7 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
 
 ResponseCacheImpl 初始化
 
-- 在 ResponseCacheImpl 初始化的时候通过 [ConcurrentHashMap](/docs/CS/Java/JDK/Collection/Map.md?id=ConcurrentHashMap) 构建一级只读缓存 readOnlyCacheMap；
+- 在 ResponseCacheImpl 初始化的时候通过 [ConcurrentHashMap](/docs/CS/Java/JDK/Collection/Map.md?id=concurrenthashmap) 构建一级只读缓存 readOnlyCacheMap；
 - 通过 [Guava]() 创建的 readWriteCacheMap expire timeout = 180s
 - readOnlyCacheMap 会通过定时任务 TimerTask 从 readWriteCacheMap 构建二级读写缓存进行比对更新(每 30 秒执行一次)
 - 在 ResponseCacheImpl 中还提供了 invalidate 方法进行手动过期，当 Eureka Server 发生了服务注册、下线、故障会自动过期该缓存

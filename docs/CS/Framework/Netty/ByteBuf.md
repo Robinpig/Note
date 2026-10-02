@@ -1,6 +1,6 @@
 ## Introduction
 
-Netty uses its own buffer API instead of NIO [ByteBuffer](/docs/CS/Java/JDK/IO/NIO.md?id=Buffer) to represent a sequence of bytes.
+Netty uses its own buffer API instead of NIO [ByteBuffer](/docs/CS/Java/JDK/IO/NIO.md?id=buffers) to represent a sequence of bytes.
 This approach has significant advantages over using ByteBuffer. 
 Netty's new buffer type, ChannelBuffer has been designed from the ground up to address the problems of ByteBuffer and to meet the daily needs of network application developers. 
 To list a few cool features:

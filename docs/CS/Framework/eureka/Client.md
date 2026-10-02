@@ -493,7 +493,7 @@ public class EurekaAutoServiceRegistration implements AutoServiceRegistration,
 #### registry
 
 1. init DiscoveryClient
-2. notify [StatusChangeListener](/docs/CS/Framework/Spring_Cloud/Eureka.md?id=Status-Change)
+2. notify [StatusChangeListener](/docs/CS/Framework/eureka/Eureka.md)
 
 > [!NOTE]
 >
