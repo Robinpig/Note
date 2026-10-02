@@ -93,10 +93,73 @@ panic("unreachable")
 }
 ```
 
-## 
+## 控制器注册表与启动链路
 
-Controller Manager 在 `cmd/kube-controller-manager/app/controllermanager.go` 的 `NewControllerInitializers` 函数中初始化了所有的 Controller
+Controller Manager 在启动时把一组控制器**描述**（descriptor）注册进注册表。早期版本是 `cmd/kube-controller-manager/app/controllermanager.go` 里的 `NewControllerInitializers()` 函数，**v1.36 已改为 `controller_descriptor.go` 中的 `KnownControllers()`**：
+
+```go
+// cmd/kube-controller-manager/app/controller_descriptor.go:116
+func KnownControllers() []string { ... }
+func ControllersDisabledByDefault() []string { ... }
+```
+
+启动链路（`controllermanager.go:148` 起）依次是：`s.Config(...)` 读取配置 → `CreateControllerContext` 建 Informer 工厂 → `BuildControllers` 构造各控制器 → `InformerFactory.Start` → `close(InformersStarted)` → `RunControllers` 逐个起 goroutine。
+
+控制器之间并非同时起来，`RunControllers` 会给每个控制器套一层随机抖动 `wait.Jitter(ControllerStartInterval, ControllerStartJitterMaxFactor)`，避免同时启动的雷同效应。
+
+卷相关有三个同源但目录不同的控制器：`persistentvolume-binder`（PV/PVC 绑定与供给，`pkg/controller/volume/persistentvolume/`）、`attachdetach`（把卷挂到节点，`pkg/controller/volume/attachdetach/`）、`volume-expander`（扩容，代码里已自述 deprecated，`pkg/controller/volume/expand/expand_controller.go:71`）。前两个是 [持久化存储](/docs/CS/Container/k8s/Storage.md) 链路的主干；另有三个只守护 finalizer 的小控制器（`pvprotection` / `pvcprotection` / `vacprotection`），它们的角色在 [删除与级联](/docs/CS/Container/k8s/Deletion.md) 里有完整说明。
+
+证书与身份相关的是另一组：`csrsigning`（**四个**独立签发放：kubelet-serving / kubelet-client / kube-apiserver-client / legacy-unknown，`pkg/controller/certificates/signer/`）、`csrapproving`（审批，走 SAR）、`csrcleaner`（清理）、`root-ca-cert-publisher`（往每个 namespace 发 `kube-root-ca.crt`）、`kube-apiserver-serving-clustertrustbundle-publisher`（Beta 默认关闭），另有两个**默认禁用**的 `bootstrapsigner` 与 `tokencleaner`。这条链路见 [身份与证书](/docs/CS/Container/k8s/Identity.md)。
+
+## reconcile 模板
+
+每个控制器都跑同一个模板：**从 Informer 拿到事件 → 只把对象 key 放进 WorkQueue → worker 取出 key → 从本地缓存读最新状态 → 对比期望与实际 → 写回 apiserver**。
+
+关键在于队列里只有 key 而非对象，这使得丢事件、重复事件、崩溃重启都不致命。完整的去重机制（`dirty` / `processing` 双集合）与限速参数见 [client-go](/docs/CS/Container/k8s/client-go.md?id=workqueue)，控制器实现可对照 [ReplicaSet Controller](/docs/CS/Container/k8s/ReplicaSetController.md)。
+
+> [!NOTE]
+> 一个容易忽略的内存优化：`CreateControllerContext` 会为 SharedInformerFactory 注入一个 transform，把每个对象的 `ManagedFields` 直接丢弃。这个字段只用于 server-side apply 的字段归属追踪，控制器用不上，但在大规模集群里能省下可观的内存。
+
+## Leader Election
+
+多实例通过 apiserver 上的资源锁竞争 Leader，获取锁的实例运行主逻辑，其余阻塞等待。
+
+> [!WARNING]
+> **只有 `leases` 一种锁类型还可用**。endpoints、configmaps、endpointsleases、configmapsleases 在 v1.36 中已全部移除，传入这些值会直接返回 error 要求迁移到 leases。
+
+默认参数：
+
+| 参数 | 默认值 |
+|---|---|
+| ResourceNamespace | kube-system |
+| ResourceName | kube-controller-manager |
+| LeaseDuration | 30s |
+| RenewDeadline | 15s |
+| RetryPeriod | 5s |
+
+选主失败或失去 Leader 身份时默认行为是**直接退出进程**（`klog.FlushAndExit(1)`），而不是降级继续运行。这是刻意的：避免两个实例同时认为自己有写权限。开启 `ControllerManagerReleaseLeaderElectionLockOnExit` 后改为主动释放租约，让接管更快。
+
+## v1.36 变更要点
+
+| 项 | 变化 |
+|---|---|
+| 控制器注册表 | `NewControllerInitializers()` → `KnownControllers()` |
+| Leader election 锁 | 仅 `leases`，其余返回 error |
+| 调度/缓存相关目录 | `pkg/scheduler/internal/` → `pkg/scheduler/backend/` |
+| resync 周期 | `MinResyncPeriod` 默认 **12h**，乘 `rand.Float64()+1` → 实际区间 **[12h, 24h)**，刻意错开避免多个控制器 lock-step（`cmd/kube-controller-manager/app/controllermanager.go:191`） |
+| 驱逐职责拆分 | `taint-eviction-controller` 独立成控制器（`SeparateTaintEvictionController` 1.34 起 GA 锁定），nodelifecycle 只负责判活与打污点 |
 
 ## Links
 
 - [K8s](/docs/CS/Container/k8s/K8s.md)
+- [K8s 架构与四条主链路](/docs/CS/Container/k8s/Architecture.md)
+- [client-go](/docs/CS/Container/k8s/client-go.md)
+- [ReplicaSet Controller](/docs/CS/Container/k8s/ReplicaSetController.md)
+- [scheduler](/docs/CS/Container/k8s/scheduler.md)
+- [容器知识地图](/docs/CS/Container/README.md)
+
+## References
+
+1. [kube-controller-manager v1.36.4 source](https://github.com/kubernetes/kubernetes/tree/v1.36.4/cmd/kube-controller-manager)
+2. [Kubernetes Controllers](https://kubernetes.io/docs/concepts/architecture/controller/)
+3. [Leader Election](https://kubernetes.io/docs/concepts/architecture/leases/)

@@ -300,6 +300,9 @@ syncLoop is the main loop for processing changes. It watches for changes from th
 For any new change seen, will run a sync against desired state and running state. 
 If no changes are seen to the configuration, will synchronize the last known desired state every sync-frequency seconds. Never returns.
 
+> [!NOTE]
+> 下方源码来自早期版本。v1.36 中签名已全面上下文化：`syncLoop(ctx, updates, handler)`、`syncLoopIteration(ctx, ...)`，且 select 的 case 从四路增加到了**七路**——除 configCh / plegCh / syncCh / housekeepingCh 之外，新增了 livenessManager、readinessManager、startupManager 三路 probe 结果与 `containerManager.Updates()` 设备变更。任何 probe 失败都会直接触发对应 Pod 的 sync，不必等下一轮定时。
+
 ```go
 func (kl *Kubelet) syncLoop(updates <-chan kubetypes.PodUpdate, handler SyncHandler) {
 	glog.Info("Starting kubelet main sync loop.")
@@ -819,18 +822,82 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 }
 ```
 
+> 这一步（`WaitForAttachAndMount`）是 Pod 卡在 `ContainerCreating` 的主要来源：它会**阻塞该 Pod 的 sync goroutine 最多 2 分 3 秒**（`podAttachAndMountTimeout`，`volume_manager.go:75`），而且等的不是本地操作，是「kubelet 上报 `VolumesInUse` → controller attach 并写 `VolumesAttached` → kubelet 读到」这一整圈经由 etcd 的异步往返。完整链路与逐层排查见 [持久化存储](/docs/CS/Container/k8s/Storage.md)。
 
+## podWorkers 状态机
 
+每个 Pod 有独立的 podWorker 与一条容量为 1 的事件通道。v1.36 的状态机是**三态**而非两态：
 
+```go
+// pkg/kubelet/pod_workers.go:110
+SyncPod         PodWorkerState = iota  // 启动与正常运行
+TerminatingPod                          // 停止容器
+TerminatedPod                           // 清理完毕并写最终状态
+```
 
+`UpdatePod` 的去重机制很有代表性——**单槽覆盖**：`pendingUpdate` 只有一格，配合容量为 1 且非阻塞写的 channel。高频更新最终只会合并成"最新一次配置 + 一次通知"，旧值被直接丢弃。这是 kubelet 能在频繁 update 下保持稳定并发控的关键。
+
+> [!IMPORTANT]
+> 优雅删除的 grace period **只能缩短，不能延长**。这是明确的设计约束，避免在驱逐与滚动更新叠加时无限推迟删除。
+
+终止阶段的另一条细节：Unprepare DRA 资源必须发生在**容器全部停止之后、写 API 状态之前**，顺序错会导致资源泄漏。
+
+## PLEG
+
+PLEG（Pod Lifecycle Event Generator）负责发现"容器实际发生了什么"，是 kubelet 感知运行时状态的唯一途径。事件类型有五种：`ContainerStarted`、`ContainerDied`、`ContainerRemoved`、`PodSync`、`ContainerChanged`（`ContainerChanged` 实际会被过滤，不上报）。
+
+> [!WARNING]
+> **Evented PLEG 到现在仍是 Alpha，默认关闭**。它的 feature spec 从 1.26 起就没再改过，只有一条记录。常见误解是它已经 GA 或取代了轮询 PLEG——都不是。
+> 
+> 真实关系是"叠加而非替代"：开启 Evented 之后，**Generic PLEG 依然被创建并运行**，只是 relist 周期从 1s 放宽到 300s 作为兜底；Evented PLEG 以 1s 周期分享同一个事件通道，作为更及时的信息源。
+
+默认（不开启 Evented）的 relist 参数：
+
+| 参数 | 值 |
+|---|---|
+| relist 周期 | 1s |
+| relist 健康阈值 | 3min |
+
+v1.36 新增了 `PLEGOnDemandRelist`（Beta，默认开启）：允许对单个 Pod 按需触发 relist，队列容量 200。SyncPod 结束后会通过 `postSync` 主动请求一次，把状态感知延迟从"等下一轮全局 relist"降到"立刻"。
+
+## 三个 outward 接口的现状
+
+kubelet 自己不实现这三种接口，而是通过插件契约把它们交给外部实现。v1.36 的边界较早期版本有明显变化：
+
+| 接口 | v1.36 现状 |
+|---|---|
+| **CRI** | 唯一运行路径。`pkg/kubelet/cri/` 已搬出为独立模块 `k8s.io/cri-client`；dockershim **彻底不存在**（仅剩一处过时注释） |
+| **CNI** | **完全移出 kubelet 代码树**。kubelet 不再调用任何 CNI 插件，只能通过 CRI 回报的 `NetworkReady` condition 感知网络就绪状态 |
+| **CSI** | kubelet 不实现，但握有衔接链：pluginwatcher 监听插件 socket 目录 → in-tree CSI plugin 完成注册 → volumemanager reconciler 挂载 |
+
+> [!NOTE]
+> CNI 出树这件事的直接影响：**排查网络问题时，kubelet 日志里已经找不到任何 CNI 调用记录**。网络不通要去看 containerd / CRI-O 侧以及 CRI 的 `RuntimeStatus`。
+
+cAdvisor 目前仍在依赖中，但已降级为 CRI stats provider 的 fallback（`PodAndContainerStatsFromCRI` 至今仍是 Alpha 且默认关闭）。
+
+## v1.36 结构性变更
+
+| 变更 | 说明 |
+|---|---|
+| `pkg/kubelet/cri/` → `k8s.io/cri-client` | 拆成独立 staging 模块，另新增 `k8s.io/cri-streaming` |
+| `kuberuntime_pod.go` → `kuberuntime_sandbox.go` | 文件改名 |
+| `pkg/kubelet/network/cni` 出树 | 该目录下只剩 `dns/` |
+| `kubecontainer.DoPodAdmission` 移除 | 准入提前到 `HandlePodAdditions` → `allocationManager.AddPod` |
+| syncLoop / syncPod 上下文化 | 全面改用 ctx 替代 `stopCh` |
+| `eviction` 默认阈值 | Linux：`memory.available=100Mi`、`nodefs.available=10%`、`imagefs.available=15%` |
+
+kubelet 侧的**节点压力驱逐**是完整独立于控制器的一套机制：每 10s 轮询水位，越线就本地杀一个 Pod，并把压力写成 Node condition 上报，**全程不经过 apiserver 删除 Pod 对象**。完整链路与默认阈值见 [驱逐](/docs/CS/Container/k8s/Eviction.md)。
+
+kubelet 另一条常被忽略的自主链路是**自己的身份**：它要生成密钥、构造 CSR、等审批、把证书落到 `kubelet-client-current.pem`，之后在生命周期的 70%~90% 处自动轮换；服务端证书还需要 `--rotate-server-certificates` 与 gate `RotateKubeletServerCertificate` 双条件。完整过程见 [身份与证书](/docs/CS/Container/k8s/Identity.md)。
 
 ## Links
 
 - [K8s](/docs/CS/Container/k8s/K8s.md)
-
-
-
-
+- [K8s 架构与四条主链路](/docs/CS/Container/k8s/Architecture.md)
+- [Pod](/docs/CS/Container/k8s/Pod.md)
+- [client-go](/docs/CS/Container/k8s/client-go.md)
+- [containerd 运行时](/docs/CS/Container/k8s/containerd.md)
+- [容器知识地图](/docs/CS/Container/README.md)
 
 ## References
 

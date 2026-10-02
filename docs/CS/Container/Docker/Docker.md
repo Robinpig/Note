@@ -186,24 +186,15 @@ The specific features are as follows:
          
 
 ## Under Hood
+Docker 底层技术主要包括 Namespaces、Cgroups 和 rootfs，三者都是内核机制：
 
+| 机制 | 作用 | 内核笔记 |
+| :-- | :-- | :-- |
+| Namespace | 访问隔离：PID/NET/MNT/IPC/UTS/USER 等视图隔离 | [namespace](/docs/CS/OS/Linux/namespace.md?id=容器如何使用-namespace) |
+| Cgroups | 资源限额：CPU/MEM/IO 配额与记账 | [cgroup](/docs/CS/OS/Linux/cgroup.md?id=cpu-限制如何落到调度器) |
+| rootfs（overlayfs） | 文件系统隔离与分层镜像 | [LXC](/docs/CS/OS/Linux/LXC.md)（clone + pivot_root 伪代码） |
 
-
-Docker 底层技术主要包括 Namespaces，Cgroups 和 rootfs。
-
-Namespace 的作用是访问隔离，Linux Namespaces 机制提供 种资源隔离方案。每个 Namespace 下的资源，对于其他 Namespace 下的资源都是不可见的。
-
-Cgroup 主要用来资源控制，CPU\MEM\宽带等。提供的 种可以限制、记录、隔离进程组所使用的物理资源机制，实现进程资源控制。
-
-rootfs 的作用是文件系统隔离
-
-
-
-
-
-
-
-
+一条 `docker run` 在内核层面发生的事：`clone(CLONE_NEW*)` 创建隔离视图 → `pivot_root` 切换 rootfs → 把 PID 写入 `cgroup.procs` 纳入限额 → `exec` 入口程序，完整路径见 [namespace 的容器组装](/docs/CS/OS/Linux/namespace.md?id=容器如何使用-namespace)。网络的 veth/bridge/NAT 细节见 [Docker 网络](/docs/CS/Container/Docker/net.md)。
 
 ## Architecture
 
@@ -378,6 +369,105 @@ docker-compose并没有解决负载均衡的问题。因此需要借助其他工
 
 
 
+## Tools
+
+拿到一个已经跑起来的容器或一个现成的镜像，最常见的需求是"反推"出它是怎么启动的、Dockerfile 长什么样。
+
+### runlike
+
+[runlike](https://github.com/lavie/runlike) 用于从**运行中的容器**反推出它的 `docker run` 命令。
+容器往往不是手工起的，而是 compose、k8s 或前任同事留下的，没有启动命令时，runlike 可以还原出端口、挂载、环境变量、restart 策略等完整启动参数。
+
+```shell
+# 用完即弃的别名方式，无需安装
+alias runlike="docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+  assaflavie/runlike"
+
+# 或 pip 安装
+pip install runlike
+```
+
+```shell
+# 输出可直接复制执行的 docker run 命令
+runlike <container_name_or_id>
+
+# -p 将参数拆成多行，可读性更好
+runlike -p <container_name_or_id>
+
+# 只输出命令而不执行
+runlike --no-name <container>
+```
+
+本质上 runlike 就是把 `docker inspect` 的输出（HostConfig、Config、NetworkSettings 等）解析后拼装回 CLI 参数，因此它只能还原 Docker 记录下来的信息，无法还原构建时的意图。
+
+### Whaler / Dedockify
+
+[Whaler](https://github.com/P3GLEG/Whaler) 是一个 Go 程序，用于从**镜像**中还原 Dockerfile 及各层信息。
+镜像的每一层 metadata 里本来就带有 `created_by`（对应构建时执行的指令），Whaler 把这些元数据逆序解析，重建出 Dockerfile。它还会顺带：
+
+- 搜索各层中潜在的密钥/敏感文件（审计利器）
+- 提取 `ADD`/`COPY` 指令加入的文件
+- 展示端口、运行用户、环境变量等信息
+
+```shell
+# 最简单的方式：以镜像方式运行，会自动 pull 目标镜像
+alias whaler="docker run -t --rm -v /var/run/docker.sock:/var/run/docker.sock:ro \
+  pegleg/whaler"
+
+whaler -sV=1.36 nginx:latest
+
+# -x 将各层导出到当前目录，-v 打印全部细节
+whaler -x -v nginx:latest
+
+# 源码编译
+go get -u github.com/P3GLEG/Whaler && cd $GOPATH/src/github.com/P3GLEG/Whaler && go build .
+```
+
+输出示例（还原出的 Dockerfile + 层信息）：
+
+```plain
+FROM ubuntu:20.04
+RUN apt-get update && apt-get install -y nginx
+COPY ./index.html /var/www/html/
+ENV NGINX_PORT=80
+EXPOSE 80
+```
+
+配套的还有 [Dedockify](https://github.com/mrhavens/Dedockify)，思路相同、更轻量：
+
+```shell
+docker run --rm \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  mrhavens/dedockify <image_id>
+```
+
+注意还原出的 Dockerfile 是"近似等价"的：`MAINTAINER`/`LABEL` 可能丢失，构建期用到的 build args、build context 里的临时文件无法恢复。它适合审计、学习和排查"这个镜像里到底装了什么"，而不是官方构建脚本。
+
+### 对比
+
+| 工具 | 作用对象 | 输出 | 典型场景 |
+| ---- | -------- | ---- | -------- |
+| runlike | 运行中的容器 | `docker run` 命令 | 容器迁移、重建 compose 配置 |
+| Whaler / Dedockify | 镜像 | Dockerfile + 层信息 | 镜像审计、学习他人构建方式 |
+| docker history | 镜像 | 层指令列表（`--no-trunc` 可看全） | 快速粗查，不想拉工具时 |
+| dive | 镜像 | 交互式逐层浏览文件系统 | 分析镜像体积、寻找可精简层 |
+
+`docker history --no-trunc <image>` 是不依赖任何第三方工具的"穷人版 whaler"，先看它往往就够了。
+
+### dfimage
+
+[dfimage](https://github.com/stephensek/rancher-tools/tree/master/dfimage) 也是同类工具，从镜像元数据反推 Dockerfile：
+
+```shell
+alias dfimage="docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
+  alpine/dfimage"
+dfimage -sV=1.36 <image>
+```
+
+### 安全提示
+
+这类工具都以 `docker.sock` 挂载运行，等价于给容器 root 级权限访问 Docker daemon，只应在可信环境使用。反推出来的配置里可能包含敏感的环境变量和密钥，注意脱敏。
+
 ## Tuning
 
 Docker 性能高度依赖于 Linux 内核的 cgroup v2、调度器和 I/O 子系统
@@ -399,6 +489,8 @@ Docker 性能高度依赖于 Linux 内核的 cgroup v2、调度器和 I/O 子系
 性能调查遵循结构化工作流程。从症状观察开始：当应用变慢时，检查延迟直方图和百分位分布，以了解延迟的严重程度和分布。
 
 层级诊断从应用分析器（如 Go 的 pprof 或 Java 的 VisualVM）开始，经过 `docker inspect HostConfig` 检查容器资源限制，到利用 `top` 或 `htop` 进行主机级分析，最终到使用 `perf record` 生成火焰图的内核级调查。
+
+主机级分析与内核级分析之间隔着一层换算：`top` 里那个吃 CPU 的进程要先把自己的容器身份认出来（`docker inspect -f '{{.State.Pid}}'` 正向查，`cat /proc/PID/cgroup` 反向查），之后 `perf -p`、读取容器的 `/proc/PID/{stack,fd,mountinfo}`、`nsenter` 才有着落，见 [容器定位](/docs/CS/Container/locate.md)。
 
 
 
@@ -427,6 +519,10 @@ I/O 常常成为无声的瓶颈，尽管 CPU 和内存充足，却限制了吞�
 
 - [Container](/docs/CS/Container/Container.md)
 - [Kubernetes](/docs/CS/Container/k8s/K8s.md)
+- [Docker 网络](/docs/CS/Container/Docker/net.md)
+- [containerd 运行时](/docs/CS/Container/k8s/containerd.md)
+- [容器定位](/docs/CS/Container/locate.md)
+- [容器知识地图](/docs/CS/Container/README.md)
 
 ## References
 

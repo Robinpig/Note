@@ -842,3 +842,4 @@ func (jm *Controller) manageJob(ctx context.Context, job *batch.Job, jobCtx *syn
 ## Links
 
 - [controller manager](/docs/CS/Container/k8s/controller-manager.md)
+- [K8s 架构与四条主链路](/docs/CS/Container/k8s/Architecture.md)

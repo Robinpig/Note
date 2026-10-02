@@ -396,6 +396,8 @@ type CoreV1Interface interface {
 
 ## Informer
 
+> [!WARNING]
+> 以下描述基于 **DeltaFIFO**。从 **Kubernetes v1.36 起，默认队列已经换成 RealFIFO**（`InOrderInformers` 已 GA 且 LockToDefault，不可关闭），同一 key 的多次变更不再被合并。老的手写 informer 代码如果依赖"同一 key 只会被处理一次"的旧语义，行为会发生变化。详见下文「队列实现的变化」。
 
 
 在Informer架构设计中，有多个核心组件，分别介绍如下。 
@@ -436,18 +438,155 @@ Informer是可以共享使用的 也称为Shared Informer 同一类资源Informe
 
 Resync机制会将Indexer本地存储中的资源对象同步到DeltaFIFO中，并将这些资源对象设置为Sync的操作类型。Resync函数在Reflector中定时执行，它的执行周期由NewReflector函数传入的resyncPeriod参数设定
 
+> [!IMPORTANT]
+> resync 的真实语义极易被误解，有三点必须说清楚：
+> 
+> 1. **`Reflector.Resync` 不发起任何 apiserver 请求**，它只是调用 `store.Resync()`，把本地缓存里的对象重新投递一遍 Sync delta。最终 handler 收到的是 `OnUpdate(old, new)` 且 `old == new`。
+> 2. **周期性的全量 re-LIST 只在 watch 断连时发生**，与 resync 毫无关系。
+> 3. **`HasSynced()` 与 resync 完全无关**（源码注释里明确写了 "This is unrelated to 'resync'"），它标记的是本地缓存是否已经灌满第一轮数据。
+> 
+> 另外，resync 事件只会投递给**显式请求了 resync 的 handler**——分发时会按 listener 是否订阅来过滤。
+> kube-controller-manager 的 resync 周期实际落在 **12h~24h** 之间（`MinResyncPeriod` 默认 12h，`ResyncPeriod()` 里乘 `rand.Float64() + 1`，即因子落在 `[1, 2)`），刻意随机化以避免多个控制器 lock-step 同时打爆 apiserver。回源码核对：`cmd/kube-controller-manager/app/controllermanager.go:191`、`staging/src/k8s.io/controller-manager/config/v1alpha1/defaults.go:31`。
 
+### 队列实现的变化
 
+v1.36 最容易被忽略的底层改动：Informer 的队列从 `DeltaFIFO` 换成了 `RealFIFO`。选择逻辑在 `tools/cache/controller.go` 的 `newQueueFIFO` 里：
 
+```go
+if clientgofeaturegate.FeatureGates().Enabled(clientgofeaturegate.InOrderInformers) {
+	options := RealFIFOOptions{...}
+	if clientgofeaturegate.FeatureGates().Enabled(clientgofeaturegate.AtomicFIFO) {
+		options.AtomicEvents = true
+		options.UnlockWhileProcessing = ...
+	}
+	f := NewRealFIFOWithOptions(options)
+} else {
+	f := NewDeltaFIFOWithOptions(...)   // 1.36 中此分支已不可达
+}
+```
 
+| 对比项 | DeltaFIFO（已不可达） | RealFIFO（当前默认） |
+|---|---|---|
+| 内部结构 | `map[string]Deltas` + `queue []string` | `items []Delta` 扁平切片 |
+| 同一 key 多次变更 | **合并**成一条 Deltas | **逐条独立投递**，保持顺序 |
+| Pop 处理期间 | 全程持 FIFO 锁 | 满足条件时释放锁（UnlockWhileProcessing） |
+| 批量消费 | 不支持 | 支持 PopBatch，默认批大小 1000 |
+| 原子事件 | 无 | ReplacedAll / SyncAll 单条携带全量对象列表 |
 
+连带影响：默认路径下 `KnownObjects == nil`，DeltaFIFO 那套靠 knownObjects 做删除判定与去重的逻辑不再生效，改由 `reconcileReplacement` 在消费侧对账。
 
+### 拉取方式的演进：流式 list
 
+v1.36 另一处影响握手方式的改动是 **WatchList（流式 list）**：Reflector 不再"先 LIST 再 WATCH"，而是直接发一个 `watch=true` + `sendInitialEvents=true` 的请求，由服务端把"当前全量"作为一串合成的 ADDED 事件流回来，最后用一个带 `k8s.io/initial-events-end` 注解的 BOOKMARK 收尾。
+
+客户端侧由**独立的** `WatchListClient` gate 控制，1.35 起默认开启：
+
+| 层 | gate | v1.36 状态 |
+|---|---|---|
+| client-go | `WatchListClient` | Beta，默认 true |
+| kube-apiserver | `WatchList` | Beta，默认 true |
+
+判定逻辑只有两行（`tools/cache/reflector.go:361`）：gate 开着、且 listerWatcher 没声明"不支持该语义"。服务端不支持时会**自动回退**到传统 List 并打一条日志——生产集群里看到 "Falling back to regular list" 是正常现象，不是故障。
+
+两处容易搞错的细节：
+
+- `WatchListPageSize` 只影响传统 List 的分页，对流式 list **无效**（流式路径不设 `Limit`）。
+- 流式 list 收到结束 BOOKMARK 后会**复用同一条 watch 流**继续收增量，不重新建连。
+
+服务端如何合成这串事件、以及缓存层怎么服务这类请求，见 [watch cache 读路径底座](/docs/CS/Container/k8s/WatchCache.md)。
+
+## WorkQueue
+
+Informer 负责把数据搬到缓存并触发回调，**真正的业务解耦发生在 WorkQueue**。它在 `client-go/util/workqueue/` 下，值得单独看，因为它的双集合设计是整套声明式模型的关键一环。
+
+> [!TIP]
+> WorkQueue 里放的**只有 `namespace/name` 这样一个字符串，没有对象**。worker 取出 key 之后必须重新从 lister 读最新状态。队列里没有对象，这是"水平触发"能成立的前提。
+
+核心是 `dirty` 与 `processing` 两个集合：
+
+```go
+func (q *Type) Add(item interface{}) {
+	q.cond.L.Lock()
+	defer q.cond.L.Unlock()
+	if q.shuttingDown { return }
+	if q.dirty.Has(item) {            // 已在待处理集合 → 幂等丢弃
+		return
+	}
+	q.dirty.Insert(item)
+	if q.processing.Has(item) {       // 正在处理 → 只标脏，不入队
+		return
+	}
+	q.queue.Push(item)
+	q.cond.Signal()
+}
+
+func (q *Type) Done(item interface{}) {
+	q.processing.Delete(item)
+	if q.dirty.Has(item) {            // 处理期间又被标脏 → 重新入队
+		q.queue.Push(item)
+		q.cond.Signal()
+	}
+}
+```
+
+不变式：`queue` 中的元素绝不在 `processing` 集合中。由此得出两个性质——同一 key 不会被两个 worker 同时 Get 到（**串行**）；而 `dirty` 保证处理期间到达的事件不会丢失（**丢的是"值"，不是"信号"**）。
+
+限速是三层嵌套：基础类型（dirty/processing）→ delayingType（最小堆 + 10s heartbeat 兜底）→ rateLimitingType。默认参数：
+
+| 参数 | 值 |
+|---|---|
+| per-item 指数退避基数 | 5ms |
+| per-item 退避上限 | 1000s |
+| 全局 token bucket QPS | 10 |
+| 全局 bucket burst | 100 |
+
+退避序列为 `5ms × 2^(n-1)`，即 5ms → 10ms → 20ms → … → 82s。控制器通常设有最大重试次数（Deployment 为 15 次），超过才丢弃并记录 error。
+
+## reconcile 循环
+
+把所有部件拼起来，就是几乎每个控制器都在复制的同一个模板：
+
+```go
+func (dc *DeploymentController) processNextWorkItem(ctx context.Context) bool {
+	key, quit := dc.queue.Get()      // 阻塞取出一个 key
+	if quit { return false }
+	defer dc.queue.Done(key)         // 必须配对，否则该 key 永久锁死在 processing
+	err := dc.syncHandler(ctx, key)
+	dc.handleErr(ctx, err, key)
+	return true
+}
+
+func (dc *DeploymentController) handleErr(ctx context.Context, err error, key string) {
+	if err == nil { dc.queue.Forget(key); return }
+	if dc.queue.NumRequeues(key) < maxRetries {
+		dc.queue.AddRateLimited(key)  // 带退避重新入队
+		return
+	}
+	utilruntime.HandleError(err)
+	dc.queue.Forget(key)              // 超过上限才放弃
+}
+```
+
+`syncHandler` 内部则是：拆 key → 从 lister 取对象 → `DeepCopy()` 防止污染缓存 → 对比期望与实际 → 写 apiserver。注意这里**遇错不做任何缓存清理**，只是重新入队，错误处理全靠"下一次再读一遍最新状态重算"。
+
+这个模板之所以能自愈，正因为队列里只有 key：中间丢多少次事件都无所谓，只要最后一次被看到，系统就收敛到正确状态。
+
+具体的控制器实现可对照 [ReplicaSet Controller](/docs/CS/Container/k8s/ReplicaSetController.md)（级联 RS/Pod 的关系维护）与 [Job Controller](/docs/CS/Container/k8s/jobController.md)（终态与重试语义）。
+
+> [!NOTE]
+> 因为 resync 会投递大量 `old == new` 的无变化事件，控制器里常见 `if cur.ResourceVersion == old.ResourceVersion { return }` 这样的显式过滤（如 Deployment controller 的 `updateReplicaSet`），专门用来砍掉 resync 噪音。
 
 ## Links
 
-- [Kubernetes](/docs/CS/Container/k8s/K8s.md)
+- [watch cache 读路径底座](/docs/CS/Container/k8s/WatchCache.md)
+- [K8s 架构与四条主链路](/docs/CS/Container/k8s/Architecture.md)
+- [controller-manager](/docs/CS/Container/k8s/controller-manager.md)
+- [apiserver](/docs/CS/Container/k8s/apiserver.md)
+- [ReplicaSet Controller](/docs/CS/Container/k8s/ReplicaSetController.md)
+- [容器知识地图](/docs/CS/Container/README.md)
 
 ## References
 
 1. [Kubernetes: client-go 源码剖析（一）](https://www.cnblogs.com/xingzheanan/p/17904625.html)
+2. [client-go v1.36.4 source](https://github.com/kubernetes/kubernetes/tree/v1.36.4/staging/src/k8s.io/client-go)
+3. [Kubernetes Controllers](https://kubernetes.io/docs/concepts/architecture/controller/)

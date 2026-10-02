@@ -77,6 +77,45 @@ func Run(runOptions *options.ServerRunOptions, stopCh <-chan struct{}) error {
 
 ### CreateServerChain
 
+> [!WARNING]
+> 本节引用的是 Kubernetes 早期版本（约 1.9~1.13）的源码摘录。其中的 `createAPIExtensionsServer`、`CreateKubeAPIServer`、`createAggregatorServer` 三个函数在 **v1.36 中均已不存在**，`insecureServingOptions` 与 `KUBE_API_VERSIONS` 也早已移除。下方代码仅用于对照演进脉络，实际实现请以 v1.36 的写法为准。
+
+三层 delegation 的方向一直没变，但构造方式改成了各层 config 自带 `New` 方法：
+
+```go
+// cmd/kube-apiserver/app/server.go:176 —— v1.36.4
+func CreateServerChain(config CompletedConfig) (*aggregatorapiserver.APIAggregator, error) {
+	notFoundHandler := notfoundhandler.New(config.KubeAPIs.ControlPlane.Generic.Serializer,
+		genericapifilters.NoMuxAndDiscoveryIncompleteKey)
+	apiExtensionsServer, err := config.ApiExtensions.New(genericapiserver.NewEmptyDelegateWithCustomHandler(notFoundHandler))
+	if err != nil {
+		return nil, err
+	}
+	crdAPIEnabled := config.ApiExtensions.GenericConfig.MergedResourceConfig.ResourceEnabled(
+		apiextensionsv1.SchemeGroupVersion.WithResource("customresourcedefinitions"))
+
+	kubeAPIServer, err := config.KubeAPIs.New(apiExtensionsServer.GenericAPIServer)
+	if err != nil {
+		return nil, err
+	}
+
+	// aggregator comes last in the chain
+	aggregatorServer, err := controlplaneapiserver.CreateAggregatorServer(config.Aggregator,
+		kubeAPIServer.ControlPlane.GenericAPIServer,
+		apiExtensionsServer.Informers.Apiextensions().V1().CustomResourceDefinitions(),
+		crdAPIEnabled, apiVersionPriorities)
+	if err != nil {
+		return nil, err
+	}
+
+	return aggregatorServer, nil
+}
+```
+
+aggregator 在最外层对外服务，匹配不到路由就往下抛给 kubeAPIServer，再往下抛给 apiextensions。每层都会各自完整跑一遍 filter chain——一个请求最多穿过三次链，这是灵活性换来的代价。
+
+以下为早期版本摘录：
+
 1. createAPIExtensionsServer
 
 2. CreateKubeAPIServer
@@ -256,6 +295,116 @@ func createAggregatorServer(aggregatorConfig *aggregatorapiserver.Config, delega
 
 
 
+## 写链路
+
+一个 `POST /api/v1/namespaces/default/pods` 从进来到落盘，要穿过两道结构：外层是上文的三层 delegation，内层是 GenericAPIServer 的 filter chain 加上 handler 到存储的路径。
+
+### filter chain 顺序
+
+`DefaultBuildHandlerChain` 位于 `staging/src/k8s.io/apiserver/pkg/server/config.go:1036`。它的写法是**自内向外**层层包裹，因此实际执行顺序与代码阅读顺序相反——从最后一个 return 往回推，才是请求真正流过的次序：
+
+| 执行序 | Filter | 源码行 | 要点 |
+|---|---|---|---|
+| 1 | `WithAuditInit` | `:1116` | 最外层，保证连 panic 的请求也能留下审计记录 |
+| 2 | `WithPanicRecovery` | `:1115` | 必须在 RequestInfo 之外，才能拿到 ns/resource 去写日志 |
+| 3 | `WithRequestInfo` | `:1112` | 解析出 verb / namespace / resource，后续一切依赖它 |
+| 4 | `WithRequestReceivedTimestamp` | `:1113` | 记录收到时刻，后面的 deadline 以它为起点算 |
+| 5 | `WithRequestDeadline` / `WithTimeoutForNonLongRunningRequests` | `:1090` `:1088` | 长跑请求（watch / exec）豁免超时，非长跑超时返回 504 |
+| 6 | `WithAuthentication` | `:1077` | 失败走 `failedHandler` 返回 401，不再往下走 |
+| 7 | `WithAudit` | `:1064` | 请求级三段审计（Request / Response / Panic） |
+| 8 | `WithConstrainedImpersonation` | `:1056` | 1.36 起默认开启，否则回落到旧 `WithImpersonation` |
+| 9 | `WithPriorityAndFairness` | `:1048` | 默认 APF；`FlowControl == nil` 时降级为 `WithMaxInFlightLimit` |
+| 10 | `WithAuthorization` | `:1040` | **最内层**，RBAC / Node / Webhook 联合判定 |
+
+> [!TIP]
+> **APF 排在 Authorization 之前**。给请求分流只需要 user（来自认证）和 RequestInfo（来自上一层），完全不需要鉴权结果，所以先排队再鉴权。
+
+认证器本身是一条 union 链，按序尝试 requestheader、x509、token file、ServiceAccount、Bootstrap Token、JWT/OIDC、webhook。
+
+### 从 handler 到 etcd
+
+路由装在 `endpoints/installer.go`，落入 `handlers.CreateResource` 之后：
+
+```
+CreateResource      解码 → 清系统字段 → managedFields 合并
+  mutating admission   按 AllOrderedPlugins 顺序修改对象
+    Store.Create       FillObjectMetaSystemFields（UID 在本地生成）
+      BeforeCreate     PrepareForCreate → Validate → validating admission
+        DryRunnableStorage → CacheDelegator → etcd3 store
+```
+
+注意两个容易含糊的点：
+
+1. **UID 不由 etcd 决定**，而是 apiserver 本地 `uuid.NewUUID()` 生成后再写入对象；
+2. **写请求完全绕过 watchCache**，`CacheDelegator.Create` 直接透传给底层 etcd3 store。watchCache 只服务于读和 watch。
+
+最终落库是一次 etcd 事务：
+
+```go
+// staging/src/k8s.io/apiserver/pkg/storage/etcd3/store.go:317
+txnResp, err := s.client.Kubernetes.OptimisticPut(ctx, preparedKey, newData, 0,
+	kubernetes.PutOptions{LeaseID: lease})
+...
+err = s.decoder.Decode(data, out, txnResp.Revision)
+```
+
+创建时 `expectedRevision` 为 0，等价于 `Compare(ModRevision == 0)`，天然实现"key 不存在才写"，这就是 409 Conflict 的来源。
+
+### resourceVersion 的出处
+
+这是很多人含糊的地方，直接给结论：**RV 就是 etcd 事务响应的 `Header.Revision`**，不是独立维护的版本计数器。链路是：
+
+```
+OptimisticPut → txnResp.Revision (= txnResp.Header.Revision)
+  → decoder.Decode(data, out, revision)
+    → versioner.UpdateObject → SetResourceVersion
+```
+
+写之前 `PrepareObjectForStorage` 会把 RV 和 SelfLink 清空，所以 RV 只由 etcd 决定，客户端永远带不进来。
+
+更新路径走 `GuaranteedUpdate` + 同样的 Compare-And-Put，冲突后重试——**全程无锁**。
+
+> [!NOTE]
+> 删除走的是同一套 `GuaranteedUpdate` 与同一套 etcd 事务（`OptimisticDelete`，`staging/src/k8s.io/apiserver/pkg/storage/etcd3/store.go:434`），但语义完全不同：**一次 DELETE 通常不删任何东西**，只写 `metadata.deletionTimestamp`，真正的删除由 GC 与 kubelet 接力完成。这条反向链路见 [删除与级联](/docs/CS/Container/k8s/Deletion.md)。
+
+### etcd 客户端换代
+
+v1.36 依赖 etcd **v3.6.8**，写操作从手写 `clientv3.Txn` 改为 kubernetes-mode client 的 `OptimisticPut`：
+
+```go
+// vendor/go.etcd.io/etcd/client/v3/kubernetes/client.go:83
+txn := k.KV.Txn(ctx).If(
+	clientv3.Compare(clientv3.ModRevision(key), "=", expectedRevision),
+).Then(clientv3.OpPut(key, string(value), clientv3.WithLease(opts.LeaseID)))
+if opts.GetOnFailure {
+	txn = txn.Else(clientv3.OpGet(key))
+}
+```
+
+新增的 `GetOnFailure` 把"冲突时的当前值"随事务一并返回，**更新失败重试时省掉一轮 Get**。
+
+### 读链路：写完之后谁来读
+
+写路径的尽头是 etcd，但**读路径大多不碰 etcd**。apiserver 为每个 group-resource 维护一个 `Cacher`（`staging/src/k8s.io/apiserver/pkg/storage/cacher/cacher.go:263`）：它先从 etcd 拉一次全量填进内存 btree 与环形缓冲，之后持续 watch；所有客户端的 List / Watch 都由这份内存结构服务。于是"N 个 informer"被收敛成"1 条到 etcd 的 watch"。
+
+读请求进来时先过 `CacheDelegator` 的分流决策（`cacher/delegator/interface.go:40`）：`resourceVersionMatch` 与 `continue` 的组合决定这次请求走缓存还是透传 etcd。缓存层内部的滑动窗口、`410` / `504` / `429` 三种错误的分野、以及流式 list 的合成都收在单独的笔记里，见 [watch cache 读路径底座](/docs/CS/Container/k8s/WatchCache.md)。
+
+### 职责边界：apiserver 不签发证书
+
+写链路的另一端有一件事 apiserver 刻意不做：**签发证书**。客户端的 CSR 由 apiserver 收下并落库，但"批准"要走一次 `SubjectAccessReview`，真正签名的是 kube-controller-manager 里持有 CA 私钥的 `CertificateAuthority.Sign`；apiserver 只负责校验请求方有没有资格。同理 **ServiceAccount token 的签发与校验都用 apiserver 自己的密钥对，与集群 CA 完全无关**——`--client-ca-file` 与 `--service-account-key-file` 是两套互不背书的信任根。这条边界见 [身份与证书](/docs/CS/Container/k8s/Identity.md)。
+
 ## Links
 
-- [K8s](/docs/CS/Container/k8s/K8s.md)
+- [K8s 架构与四条主链路](/docs/CS/Container/k8s/Architecture.md)
+- [watch cache 读路径底座](/docs/CS/Container/k8s/WatchCache.md)
+- [访问控制](/docs/CS/Container/k8s/acl.md)
+- [etcd 存储](/docs/CS/Container/k8s/etcd.md)
+- [client-go](/docs/CS/Container/k8s/client-go.md)
+- [容器知识地图](/docs/CS/Container/README.md)
+
+## References
+
+1. [kube-apiserver v1.36.4 source](https://github.com/kubernetes/kubernetes/tree/v1.36.4/cmd/kube-apiserver)
+2. [Kubernetes API Concepts](https://kubernetes.io/docs/reference/using-api/api-concepts/)
+3. [API Access Control](https://kubernetes.io/docs/concepts/security/controlling-access/)
+4. [Dynamic Admission Control](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/)

@@ -52,6 +52,8 @@ minikube status
 [kubeadm](/docs/CS/Container/k8s/kubeadm.md) 选择了一种妥协方案：
 把kubelet直接运行在宿主机上，然后使用容器部署其他的Kubernetes组件
 
+
+
 ### Installing kubeadm, kubelet and kubectl
 
 You will install these packages on all of your machines:
@@ -205,6 +207,10 @@ Fig.1. Kubernetes cluster architecture
 
 K8s架构分为Control Plane 和 Worker Node两部分
 
+> [!TIP]
+> 本文按组件展开。若想先看**全局串联**——四条主链路（写请求到账、控制回路、调度决策、kubelet 落地）如何从同一个模型上长出来，以及 ResourceVersion、OwnerReference、水平触发这三个贯穿全局的契约，见 [K8s 架构与四条主链路](/docs/CS/Container/k8s/Architecture.md)。该篇基于 v1.36.4 源码，并附有一条"v1.36 反直觉清单"。
+
+
 Control Plane基于[etcd](/docs/CS/Framework/etcd/etcd.md) 做分布式键值存储 一个具有数据副本的最小可运行集群必须至少有3个etcd节点 生产环境建议创建5个节点
 Etcd集群存储Kubernetes系统集群的状态和元数据，其中包括所有Kubernetes资源对象信息、集群节点信息等
 Kubernetes将所有数据存储至Etcd集群中前缀为`/registry`的目录下
@@ -218,7 +224,7 @@ Control Plane主要包含以下组件
 工作节点主要包含以下组件:
 
 - [kubelet](/docs/CS/Container/k8s/kubelet.md) 是在每个节点上运行的主要 “节点代理” 用于接收、处理、上报kube-apiserver下发的任务
-- [kube-proxy](/docs/CS/Container/k8s/kube-proxy.md) 负责 Kubernetes Service 与 Pod 资源对象间的通信以及提供负载均衡服务，接收 kubelet 的指令
+- [kube-proxy](/docs/CS/Container/k8s/kube-proxy.md) 负责把 Service 与 EndpointSlice 翻译成节点上的负载均衡规则（iptables / IPVS / nftables），独立 watch apiserver，不受 kubelet 指挥
 - Container-Runtime 负责提供容器的基础管理服务 接收 `kubelet` 的指令
 
 
@@ -483,10 +489,13 @@ Today it supports runc and Kata Containers as the container runtimes but any OCI
 CRI-O supports OCI container images and can pull from any container registry. 
 It is a lightweight alternative to using Docker, Moby or rkt as the runtime for Kubernetes.
 
+目前主流生产环境使用的是 **containerd**：它本身不是 K8s 组件，而是一个独立的通用运行时（Docker 底层也是它），通过 CRI Plugin 接入 K8s。kubelet 发出 CRI 请求之后，containerd 内部如何翻译、如何准备 rootfs、如何通过 shim 与 runc 落地到内核，见 [containerd](/docs/CS/Container/k8s/containerd.md)。
+
 
 
 ### Pod
 
+Pod 是 K8s 最小调度单元，其 pause 容器机制、生命周期、QoS 分级与优雅终止的详解见 [Pod](/docs/CS/Container/k8s/Pod.md)。
 
 有了Pod之后，我们希望能一次启动多个应用的实例，这样就需要Deployment这个Pod的多实例管理器；而有了这样一组相同的Pod后，我们又需要通过一个固定的IP地址和端口以负载均衡的方式访问它，于是就有了Service
 
@@ -1539,6 +1548,8 @@ func (ds *dockerService) createContainerLogSymlink(containerID string) error {
 
 ### Service
 
+Service 的四种类型（ClusterIP / NodePort / LoadBalancer / ExternalName）、Endpoints 服务发现机制与 kube-proxy 转发模式见 [Service](/docs/CS/Container/k8s/Service.md)。
+
 ServiceSpec describes the attributes that a user creates on a service
 
 ```go
@@ -1651,6 +1662,8 @@ type ServiceSpec struct {
 
 ### Ingress
 
+Ingress 是七层（HTTP/HTTPS）路由规则的声明式抽象，Ingress 资源与 Ingress Controller 的关系、流量路径及 Gateway API 演进见 [Ingress](/docs/CS/Container/k8s/Ingress.md)。
+
 IngressSpec describes the Ingress the user wishes to exist.
 
 ```go
@@ -1688,18 +1701,42 @@ type IngressSpec struct {
 
 [Kubernetes 网络模型](/docs/CS/Container/k8s/net.md) 设计的一个基本原则是 每个Pod都拥有一个独立的 IP 地址 并假定所有的 Pod 都在一个可以直接联通、扁平的网络空间
 
+这条链路在实现上被切成两段：**Pod 网络的建立权交给了容器运行时**——kubelet 只发 CRI 的 `RunPodSandbox`，CNI 插件由 containerd / CRI-O 调用，`pkg/kubelet/network/` 在 v1.36 只剩 DNS 相关代码；**Service 网络的实现权在 kube-proxy**，它把 Service/EndpointSlice 翻译成内核规则，数据面在 iptables / IPVS / nftables 三者中选一（v1.36 默认仍是 iptables）。一个报文从出 netns、命中规则、DNAT 到 conntrack 反向还原的完整旅程见 [K8s 网络](/docs/CS/Container/k8s/net.md)。
+
 
 
 ## Resource Management
 
+资源管理围绕 `requests` / `limits` 两个声明展开：requests 决定调度放置，limits 由 [Cgroup](/docs/CS/OS/Linux/cgroup.md) 强制执行。由此推导出 Guaranteed / Burstable / BestEffort 三档 QoS，它是**内核 OOM killer** 挑 victim 的依据（经 `oom_score_adj`），详见 [Pod 资源与 QoS](/docs/CS/Container/k8s/Pod.md?id=资源与-qos)。
+
+注意不要把 OOM killer 与 kubelet 驱逐混为一谈：**kubelet 的节点压力驱逐排序并不看 QoS**，而是按"是否超过 request → priority → 绝对用量"排序。节点侧的保障机制（资源预留、驱逐阈值与两套 eviction 的分野）见 [驱逐](/docs/CS/Container/k8s/Eviction.md)。
+
 ## Scheduling
+
+调度由 kube-scheduler 完成：先 predicates（预选）过滤不可用节点，再 priorities（优选）打分选出最优节点，调度框架支持以插件方式扩展每个阶段。详见 [scheduler](/docs/CS/Container/k8s/scheduler.md)。
+
+## Scaling
+
+Pod 数量由扩缩容机制动态决定：手动用 `kubectl scale`；自动由 HPA 根据 `期望副本数 = ceil(当前副本数 × 当前平均利用率 / 目标利用率)` 调整副本数，配合 VPA（纵向调整 requests/limits）与 Cluster Autoscaler（Node 池扩缩）构成完整的弹性体系。原理、冷却期、指标类型与实战案例见 [扩缩容与 HPA](/docs/CS/Container/k8s/Scaling.md)。
 
 ## Storage Management
 
+K8s 存储分为两层抽象：
+
+- **Volume**：Pod 级存储，随 Pod 生命周期（emptyDir）或独立于 Pod（hostPath、PV）；
+- **PV / PVC / StorageClass**：声明式存储供给——用户只声明 PVC（要多少、什么模式），StorageClass 触发动态供给创建 PV，解耦"存储使用"与"存储实现"。
+
+从 PVC 到容器里一个目录，这条链路要穿过四个执行体（PV controller → AttachDetach controller → kubelet VolumeManager → kuberuntime），中途经由 etcd 做两次异步交接。完整过程见 [持久化存储](/docs/CS/Container/k8s/Storage.md)。
+
+集群状态的持久化（所有 API 对象的存储分层与 watch 机制）见 [etcd](/docs/CS/Container/k8s/etcd.md)。
 
 ## Others
 
 K8s 集群是一个具有严格 [acl](/docs/CS/Container/k8s/acl.md) 控制机制的安全系统
+
+这套控制机制背后是**三套彼此独立的身份体系**：组件/节点用 x509 客户端证书（信任根是集群 CA）、工作负载用 ServiceAccount JWT（签发与校验都在 apiserver 内部，与集群 CA 无关）、v1.36 起还有 Beta 中的 Pod 证书。节点首次加入时的"鸡生蛋"问题由 bootstrap token 解决，日常则由证书 70%~90% 生命周期处的自动轮换维持。完整链路见 [身份与证书](/docs/CS/Container/k8s/Identity.md)。
+
+容器运行时链路（kubelet → CRI → containerd → shim → runc）见 [containerd](/docs/CS/Container/k8s/containerd.md)。部署工具链：[kubeadm](/docs/CS/Container/k8s/kubeadm.md) 负责引导集群，[Helm](/docs/CS/Container/k8s/Helm.md) 负责应用包管理，日常操作见 [kubectl](/docs/CS/Container/k8s/kubectl.md)，故障排查速查见 [Issues](/docs/CS/Container/k8s/Issues.md)。
 
 ## Summary
 
@@ -1710,6 +1747,19 @@ K8s 改变了传统的应用部署发布的方式，给容器化的应用服务�
 ## Links
 
 - [Docker](/docs/CS/Container/Docker/Docker.md)
+- [Container](/docs/CS/Container/Container.md)
+- [Pod](/docs/CS/Container/k8s/Pod.md)
+- [K8s 网络](/docs/CS/Container/k8s/net.md)
+- [etcd 存储](/docs/CS/Container/k8s/etcd.md)
+- [访问控制](/docs/CS/Container/k8s/acl.md)
+- [Service](/docs/CS/Container/k8s/Service.md)
+- [Ingress](/docs/CS/Container/k8s/Ingress.md)
+- [扩缩容与 HPA](/docs/CS/Container/k8s/Scaling.md)
+- [containerd 运行时](/docs/CS/Container/k8s/containerd.md)
+- [kubectl](/docs/CS/Container/k8s/kubectl.md)
+- [Helm](/docs/CS/Container/k8s/Helm.md)
+- [常见问题排查](/docs/CS/Container/k8s/Issues.md)
+- [容器知识地图](/docs/CS/Container/README.md)
 
 
 ## References

@@ -256,3 +256,6 @@ func (im *realImageGCManager) freeSpace(bytesToFree int64, freeTime time.Time) (
 ## Links
 
 - [Kubernetes](/docs/CS/Container/k8s/K8s.md)
+- [删除与级联完整链路](/docs/CS/Container/k8s/Deletion.md)
+- [K8s 架构与四条主链路](/docs/CS/Container/k8s/Architecture.md)
+- [controller-manager](/docs/CS/Container/k8s/controller-manager.md)
