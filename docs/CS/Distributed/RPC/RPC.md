@@ -205,14 +205,14 @@ In data base work it is common for a client to request a server to perform an op
 With RPC, the server must wait until all the tuples have been found before making the reply.
 If the operation of finding all the tuples is a time consuming one, the client may be idle for a long time waiting for the last tuple to be found.
 
-Now [gRPC](/docs/CS/Distributed/RPC/grpc.md) and Finagle support to build stream clients and servers.
+Now [gRPC](/docs/CS/Framework/gRPC/gRPC.md) and Finagle support to build stream clients and servers.
 
 
 [Thrift](/docs/CS/Distributed/RPC/Thrift.md)
 
 [Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md)
 
-kitex
+[Kitex](/docs/CS/Framework/kitex.md)：字节跳动开源的 Go RPC 框架，默认 Thrift + [Netpoll](/docs/CS/Framework/Netpoll.md)
 
 Motan：微博内部使用的 RPC 框架，于 2016 年对外开源，仅支持 Java 语言
 
@@ -222,7 +222,14 @@ Tars：腾讯内部使用的 RPC 框架，于 2017 年对外开源，仅支持 C
 
 ## Links
 
-- [Distributed Systems](/docs/CS/Distributed/Distributed)
+- [Distributed Systems](/docs/CS/Distributed/Distributed.md)
+- [Marshalling](/docs/CS/Distributed/RPC/Marshalling.md) — 各类数据编码格式与兼容性
+- [Protocol Buffers](/docs/CS/Distributed/RPC/ProtoBuf.md)
+- [Thrift](/docs/CS/Distributed/RPC/Thrift.md)
+- [Fury](/docs/CS/Distributed/RPC/Fury.md) — JIT + 元数据共享的高性能序列化
+- [RESTful](/docs/CS/Distributed/RPC/RESTful.md) — 与 RPC 相对的资源风格
+- [gRPC](/docs/CS/Framework/gRPC/gRPC.md)
+- [Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md)
 
 ## References
 1. [RFC 647 - Procedure Call Protocol Documents，Version 2](https://datatracker.ietf.org/doc/rfc647/)

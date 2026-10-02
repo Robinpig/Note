@@ -71,7 +71,7 @@ public class NetworkClient implements KafkaClient {
 Begin connecting to the given address and add the connection to this nioSelector associated with the given id number.
 Note that this call only initiates the connection, which will be completed on a future poll(long) call. Check connected() to see which (if any) connections have completed after a given poll call.
 
-immediatelyConnectedKeys see [JDK NIO](/docs/CS/Java/JDK/IO/IO.md?id=Connect) and will finishConnect
+immediatelyConnectedKeys see [JDK NIO](/docs/CS/Java/JDK/IO/IO.md?id=socket) and will finishConnect
 
 ```java
 public void connect(String id, InetSocketAddress address, int sendBufferSize, int receiveBufferSize) throws IOException {
@@ -182,7 +182,7 @@ public void connect(String id, InetSocketAddress address, int sendBufferSize, in
 
 ### send
 
-called by [Producer Sender](/docs/CS/MQ/Kafka/Producer.md?id=Sender)
+called by [Producer Sender](/docs/CS/MQ/Kafka/Producer.md?id=sender)
 ```java
 public class NetworkClient implements KafkaClient {
     public void send(ClientRequest request, long now) {
@@ -281,7 +281,7 @@ Queue the given request for sending in the subsequent poll(long) calls
 
 Do actual reads and writes to sockets.
 
-call [Selector.poll()](/docs/CS/MQ/Kafka/Network.md?id=Selector)
+call [Selector.poll()](/docs/CS/MQ/Kafka/Network.md?id=selector)
 
 ```java
 public class NetworkClient implements KafkaClient {

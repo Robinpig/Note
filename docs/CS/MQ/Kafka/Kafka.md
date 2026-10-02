@@ -108,7 +108,7 @@ This replication is performed at the level of topic-partitions.
 
 ### Message Delivery Semantics
 
-Recall the [message delivery semantics](/docs/CS/MQ/MQ.md?id=Message-Delivery-Semantics).
+Recall the [message delivery semantics](/docs/CS/MQ/MQ.md?id=message-delivery-semantics).
 
 Now let's describe the semantics from the point-of-view of the consumer.
 All replicas have the exact same log with the same offsets. The consumer controls its position in this log.
@@ -882,7 +882,13 @@ kafka的log文件是以分区为单位的 日志未采用mmap
 
 ## Links
 
-- [MQ](/docs/CS/MQ/MQ.md?id=Kafka)
+- [MQ](/docs/CS/MQ/MQ.md?id=kafka)
+- [Producer](/docs/CS/MQ/Kafka/Producer.md)
+- [Consumer](/docs/CS/MQ/Kafka/Consumer.md)
+- [Broker](/docs/CS/MQ/Kafka/Broker.md)
+- [Streams（流处理库）](/docs/CS/MQ/Kafka/Streams.md)
+- [Connect](/docs/CS/MQ/Kafka/Connect.md)
+- [Replica](/docs/CS/MQ/Kafka/Replica.md) / [KRaft](/docs/CS/MQ/Kafka/KRaft.md)
 
 ## References
 

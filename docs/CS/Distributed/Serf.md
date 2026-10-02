@@ -13,4 +13,11 @@ Consul is a tool for service discovery and configuration. It provides high level
 
 Serf can also be used for service discovery and orchestration, but it is built on an eventually consistent gossip model, with no centralized servers. It provides a number of features, including group membership, failure detection, event broadcasts and a query mechanism. However, Serf does not provide any of the high-level features of Consul.
 
+## Links
 
+- [Introduction](/docs/CS/Distributed/Architecture.md)
+- [Introduction](/docs/CS/Distributed/Azure.md)
+- [Introduction](/docs/CS/Distributed/Bigtable.md)
+- [Introduction](/docs/CS/Distributed/Borg.md)
+- [Introduction](/docs/CS/Distributed/Byzantine.md)
+- [Introduction](/docs/CS/Distributed/CAP.md)

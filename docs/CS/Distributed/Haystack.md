@@ -90,6 +90,15 @@ Store machines reduce their main memory footprints by 20% through these two tech
 Since disks are generally better at performing large sequential writes instead of small random writes, we batch uploads together when possible.
 Fortunately, many users upload entire albums to Facebook instead of single pictures, providing an obvious opportunity to batch the photos in an album together.
 
+## Links
+
+- [Introduction](/docs/CS/Distributed/Architecture.md)
+- [Introduction](/docs/CS/Distributed/Azure.md)
+- [Introduction](/docs/CS/Distributed/Bigtable.md)
+- [Introduction](/docs/CS/Distributed/Borg.md)
+- [Introduction](/docs/CS/Distributed/Byzantine.md)
+- [Introduction](/docs/CS/Distributed/CAP.md)
+
 ## References
 
 1. [Finding a needle in Haystack: Facebook’s photo storage](https://www.usenix.org/legacy/event/osdi10/tech/full_papers/Beaver.pdf)

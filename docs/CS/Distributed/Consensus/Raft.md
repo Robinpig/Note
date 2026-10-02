@@ -1,6 +1,6 @@
 ## Introduction
 
-[Raft](https://raft.github.io/) 是一种共识算法，旨在易于理解。它在容错性和性能上相当于 [Paxos](/docs/CS/Distributed/Consensus/Paxos.mds/Paxos.md)。区别在于它被分解为相对独立的子问题，并且清晰地处理了构建实际系统所需的所有主要部分。
+[Raft](https://raft.github.io/) 是一种共识算法，旨在易于理解。它在容错性和性能上相当于 [Paxos](/docs/CS/Distributed/Consensus/Paxos.md)。区别在于它被分解为相对独立的子问题，并且清晰地处理了构建实际系统所需的所有主要部分。
 
 ## Basics
 
@@ -278,7 +278,7 @@ The leader decides when it is safe to apply a log entry to the state machines; s
 Raft guarantees that committed entries are durable and will eventually be executed by all of the available state machines.
 A log entry is committed once the leader that created the entry has replicated it on a majority of the servers (e.g., entry 7 in Figure 3).
 This also commits all preceding entries in the leader’s log, including entries created by previous leaders.
-[Membership change](/docs/CS/Distributed/Consensus/Raft.md?id=Membership-changes) discusses some subtleties when applying this rule after leader changes, and it also shows that this definition of commitment is safe.
+[Membership change](/docs/CS/Distributed/Consensus/Raft.md?id=membership-changes) discusses some subtleties when applying this rule after leader changes, and it also shows that this definition of commitment is safe.
 The leader keeps track of the highest index it knows to be committed, and it includes that index in future AppendEntries RPCs (including heartbeats) so that the other servers eventually find out.
 Once a follower learns that a log entry is committed, it applies the entry to its local state machine (in log order).
 
@@ -675,7 +675,7 @@ In the Pre-Vote algorithm, a candidate only increments its term if it first lear
 ## Links
 
 - [Consensus](/docs/CS/Distributed/Consensus/Consensus.md)
-- [Paxos](/docs/CS/Distributed/Consensus/Paxos.mds/Paxos.md)
+- [Paxos](/docs/CS/Distributed/Consensus/Paxos.md)
 
 ## References
 

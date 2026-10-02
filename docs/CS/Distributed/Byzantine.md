@@ -285,7 +285,10 @@ However, when extremely high reliability is required, such assumptions cannot be
 
 ## Links
 
-- [Distributed Systems](/docs/CS/Distributed/Distributed)
+- [Distributed Systems](/docs/CS/Distributed/Distributed.md)
+- [PBFT](/docs/CS/Distributed/Consensus/PBFT.md) — 实用拜占庭容错协议
+- [PoW](/docs/CS/Distributed/Consensus/PoW.md) — 开放网络中的拜占庭共识
+- [Consensus](/docs/CS/Distributed/Consensus/Consensus.md)
 
 ## References
 

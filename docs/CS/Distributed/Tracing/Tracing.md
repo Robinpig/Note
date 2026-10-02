@@ -9,6 +9,9 @@ Each pillar has a distinct role to play in infrastructure and application monito
 Working with these pillars individually, or using different tools for each one, does not guarantee observability.
 But by combining your metrics, traces, and logs into a single solution, you can create a successful observability approach.
 
+[OpenTelemetry](/docs/CS/Distributed/Tracing/Otel.md) 定义了一套统一的方式来生成并关联这三个信号——
+详见其 [Signals](/docs/CS/Distributed/Tracing/Otel.md#signals) 与 [Correlating the Three Signals](/docs/CS/Distributed/Tracing/Otel.md#correlating-the-three-signals) 章节。
+
 ### Metrics
 
 Metrics are numeric values that represent and describe the overall behavior of a service or component measured over time.
@@ -133,12 +136,15 @@ Each SpanContext encapsulates the following state:
 
 OpenTelemetry is an `Observability` framework and toolkit designed to create and manage _telemetry data_ such as `traces`, `metrics`, and `logs`. 
 Crucially, OpenTelemetry is vendor- and tool-agnostic, meaning that it can be used with a broad variety of Observability backends, 
-including open source tools like [Jaeger](/docs/CS/Distributed/Tracing/Jaeger.md) and [Prometheus](/docs/CS/Distributed/Tracing/Prometheus.md), as well as commercial offerings. 
+including open source tools like [Jaeger](/docs/CS/Distributed/Tracing/Jaeger.md) and [Prometheus](/docs/CS/Distributed/Tracing/Prometheus/Prometheus.md), as well as commercial offerings. 
 OpenTelemetry is a Cloud Native Computing Foundation (CNCF) project.
 
 OpenTelemetry is not an observability back-end like Jaeger, Prometheus, or commercial vendors.
 OpenTelemetry is focused on the generation, collection, management, and export of telemetry data.
 The storage and visualization of that data is intentionally left to other tools.
+
+See [OpenTelemetry](/docs/CS/Distributed/Tracing/Otel.md) for details (API/SDK, Collector, OTLP, signals, instrumentation),
+including how it relates to OpenTracing and to tracing backends like Jaeger/Zipkin/SkyWalking.
 
 
 
@@ -146,7 +152,14 @@ The storage and visualization of that data is intentionally left to other tools.
 
 ## Links
 
-- [Distributed Systems](/docs/CS/Distributed/Distributed)
+- [Distributed Systems](/docs/CS/Distributed/Distributed.md)
+- [OpenTelemetry](/docs/CS/Distributed/Tracing/Otel.md)
+- [Jaeger](/docs/CS/Distributed/Tracing/Jaeger.md)
+- [Zipkin](/docs/CS/Distributed/Tracing/Zipkin.md)
+- [SkyWalking](/docs/CS/Distributed/Tracing/SkyWalking.md)
+- [Prometheus](/docs/CS/Distributed/Tracing/Prometheus/Prometheus.md)
+- [Grafana](/docs/CS/Distributed/Tracing/Grafana.md)
+- [Micrometer](/docs/CS/log/Micrometer.md)
 
 
 ## References

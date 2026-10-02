@@ -1,5 +1,7 @@
 ## Introduction
 
+事件模块是对内核 I/O 多路复用机制（[epoll](/docs/CS/OS/Linux/IO/epoll.md) 等）的封装，worker 在事件循环中调用 `ngx_epoll_process_events` 处理网络事件。
+
 
 ```c
 // event/ngx_event.h
@@ -91,3 +93,5 @@ ngx_epoll_process_events
 ## Links
 
 - [nginx](/docs/CS/CN/nginx/nginx.md)
+- [epoll](/docs/CS/OS/Linux/IO/epoll.md)
+- [Processes 知识地图](/docs/CS/OS/Linux/proc/README.md)

@@ -29,7 +29,7 @@ Comparsion with nginx
 
 ## Links
 
-- [nginx](/docs/CS/CN/nginx//nginx.md)
+- [nginx](/docs/CS/CN/nginx/nginx.md)
 - [HTTP](/docs/CS/CN/HTTP/HTTP.md)
 
 ## References

@@ -412,6 +412,12 @@ PoS，Proof of Stake）
 ## Links
 
 - [Distributed Systems](/docs/CS/Distributed/Distributed.md)
+- [Paxos](/docs/CS/Distributed/Consensus/Paxos.md)
+- [Raft](/docs/CS/Distributed/Consensus/Raft.md)
+- [PBFT](/docs/CS/Distributed/Consensus/PBFT.md) — 拜占庭容错状态机复制
+- [PoW](/docs/CS/Distributed/Consensus/PoW.md) — 无许可网络的工作量证明
+- [Byzantine Generals](/docs/CS/Distributed/Byzantine.md)
+- [Blockchain](/docs/CS/Blockchain/Blockchain.md) — 共识算法在无许可链上的应用
 
 ## References
 

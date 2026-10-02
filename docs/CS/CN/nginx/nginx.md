@@ -243,6 +243,8 @@ The processes can communicate using shared memory for shared cache data, session
 
 nginx的master进程的进程ID，默认情况下，放在nginx.pid文件中，该文件所在的目录一般是/usr/local/nginx/logs 或者 /var/run
 
+这套多进程模型正是内核进程机制的落地：master 通过 [fork](/docs/CS/OS/Linux/proc/process.md?id=fork)（`kernel_clone`/`copy_process`）创建 worker，通过[信号](/docs/CS/OS/Linux/proc/signal.md)（`SIGHUP` reload、`SIGQUIT` 优雅退出、`NGX_CHANGEBIN_SIGNAL`）管理 worker 生命周期，平滑升级依赖 [exec](/docs/CS/OS/Linux/proc/process.md?id=exec) 替换进程映像；worker 间用共享内存 + mutex 共享状态，并依赖 accept mutex 规避 [惊群](/docs/CS/OS/Linux/proc/thundering_herd.md)。完整对照表见 [Processes 知识地图 × Nginx](/docs/CS/OS/Linux/proc/README.md)。
+
 
 ## Struct
 
@@ -831,10 +833,6 @@ ngx_spawn_process(ngx_cycle_t *cycle, ngx_spawn_proc_pt proc, void *data,
             return NGX_INVALID_PID;
         }
 
-        ngx_log_debug2(NGX_LOG_DEBUG_CORE, cycle->log, 0,
-                       "channel %d:%d",
-                       ngx_processes[s].channel[0],
-                       ngx_processes[s].channel[1]);
 
         if (ngx_nonblocking(ngx_processes[s].channel[0]) == -1) {
             ngx_log_error(NGX_LOG_ALERT, cycle->log, ngx_errno,
@@ -1118,6 +1116,7 @@ gdb /usr/sbin/nginx <core file>
 ## Links
 
 - [Computer Network](/docs/CS/CN/CN.md)
+- [Processes 知识地图](/docs/CS/OS/Linux/proc/README.md) — 内核进程机制 × Nginx 对照表
 
 
 ## References

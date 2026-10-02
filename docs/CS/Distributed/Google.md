@@ -50,7 +50,7 @@ Google clusters follow three key design principles:
 
 ## Links
 
-- [Distributed Systems](/docs/CS/Distributed/Distributed)
+- [Distributed Systems](/docs/CS/Distributed/Distributed.md)
 
 ## References
 

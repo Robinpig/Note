@@ -20,7 +20,7 @@ A single scheduler process runs on one machine (e.g., the `JobTracker` in Hadoop
 This is simple and uniform, and has led to increasingly sophisticated schedulers being developed.
 As an example, see the [Paragon](http://dl.acm.org/citation.cfm?id=2451125) and [Quasar](http://dl.acm.org/citation.cfm?id=2541941) schedulers, which use a machine learning approach to avoid negative interference between workloads competing for resources.
 
-Most clusters run different types of applications today (as opposed to, say, just [Hadoop MapReduce](/docs/CS/Java/Hadoop/MapReduce.md) jobs in the early days).
+Most clusters run different types of applications today (as opposed to, say, just [Hadoop MapReduce](/docs/CS/Framework/Hadoop/MapReduce.md) jobs in the early days).
 However, maintaining a single scheduler implementation that handles mixed (heterogeneous) workloads can be tricky, for several reasons:
 
 1. It is quite reasonable to expect a scheduler to treat long-running service jobs and batch analytics jobs differently.
@@ -34,7 +34,7 @@ Overall, this sounds like the makings of an engineering nightmare – and the ne
 Two-level scheduling architectures address this problem by separating the concerns of **resource allocation** and  **task placement** .
 This allows the task placement logic to be tailored towards specific applications, but also maintains the ability to share the cluster between them.
 
-The [Mesos](/docs/CS/Distributed/Cluster_Scheduler.md?id=Mesos) cluster manager pioneered this approach, and [YARN](http://dl.acm.org/citation.cfm?id=2523633) supports a limited version of it.
+The [Mesos](/docs/CS/Distributed/Cluster_Scheduler.md?id=mesos) cluster manager pioneered this approach, and [YARN](http://dl.acm.org/citation.cfm?id=2523633) supports a limited version of it.
 In Mesos, resources are *offered* to application-level schedulers (which may pick and choose from them), while YARN allows the application-level schedulers to *request*resources (and receive allocations in  return).
 Figure 1b shows the general idea: workload-specific schedulers (S0–S2) interact with a resource manager that carves out dynamic partitions of the cluster resources for each workload.
 This is a very flexible approach that allows for custom, workload-specific scheduling policies.
@@ -230,6 +230,15 @@ In the following, we first explain the basic structure of the flow network, and 
 - Load-spreading policy
 - Quincy policy
 - Network-aware policy
+
+## Links
+
+- [Introduction](/docs/CS/Distributed/Architecture.md)
+- [Introduction](/docs/CS/Distributed/Azure.md)
+- [Introduction](/docs/CS/Distributed/Bigtable.md)
+- [Introduction](/docs/CS/Distributed/Borg.md)
+- [Introduction](/docs/CS/Distributed/Byzantine.md)
+- [Introduction](/docs/CS/Distributed/CAP.md)
 
 ## References
 

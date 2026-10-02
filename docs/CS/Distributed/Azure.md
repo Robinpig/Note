@@ -134,6 +134,15 @@ The partition layer has three main architectural components: a Partition Manager
 
 ![Partition layer](./img/Azure_Partition_Layer.png)
 
+## Links
+
+- [Introduction](/docs/CS/Distributed/Architecture.md)
+- [Introduction](/docs/CS/Distributed/Bigtable.md)
+- [Introduction](/docs/CS/Distributed/Borg.md)
+- [Introduction](/docs/CS/Distributed/Byzantine.md)
+- [Introduction](/docs/CS/Distributed/CAP.md)
+- [Introduction](/docs/CS/Distributed/Chubby.md)
+
 ## References
 
 1. [Windows Azure Storage: A Highly Available Cloud Storage Service with Strong Consistency](https://www.sigops.org/s/conferences/sosp/2011/current/2011-Cascais/11-calder-online.pdf)

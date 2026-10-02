@@ -320,7 +320,7 @@ public class RouteInfoManager {
 }
 ```
 
-Use [ReentrantReadWriteLock](/docs/CS/Java/JDK/Concurrency/Lock.md?id=Read-Write-Lock)
+Use [ReentrantReadWriteLock](/docs/CS/Java/JDK/Concurrency/Lock.md?id=lock)
 
 RouteInfoManager
 

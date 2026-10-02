@@ -588,7 +588,7 @@ The most recent events are also kept in memory and available for continuous onli
 ## Links
 
 - [Google](/docs/CS/Distributed/Google.md)
-- [HDFS](/docs/CS/Distributed/HDFS.md)
+- [HDFS](/docs/CS/Framework/Hadoop/HDFS.md)
 - 
 
 ## References

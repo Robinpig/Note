@@ -472,7 +472,7 @@ This allows the producer to batch together individual records for efficiency.
 4. ensureValidRecordSize
 5. new interceptCallback
 6. append into buffer
-7. if buffer if full or new buffer, wakeup [Sender](/docs/CS/MQ/Kafka/Producer.md?id=Sender) which is responsible for sending those batches of records to the appropriate Kafka brokers.
+7. if buffer if full or new buffer, wakeup [Sender](/docs/CS/MQ/Kafka/Producer.md?id=sender) which is responsible for sending those batches of records to the appropriate Kafka brokers.
 
 ```plantuml
 actor Actor

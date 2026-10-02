@@ -105,7 +105,7 @@ In the case of Paxos, this optimization is known as Multi-Paxos.
 
 ## Links
 
-- [Distributed Systems](/docs/CS/Distributed/Distributed)
+- [Distributed Systems](/docs/CS/Distributed/Distributed.md)
 
 ## References
 

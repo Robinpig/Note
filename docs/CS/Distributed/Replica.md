@@ -12,7 +12,7 @@ There are several reasons why you might want to replicate data:
 If the data that you’re replicating does not change over time, then replication is easy: you just need to copy the data to every node once, and you’re done.
 All of the difficulty in replication lies in handling changes to replicated data.
 
-We will discuss three popular algorithms for replicating changes between nodes: single-leader, [multi-leader](/docs/CS/Distributed/Replica.md?id=Multi-Leader-Replication),
+We will discuss three popular algorithms for replicating changes between nodes: single-leader, [multi-leader](/docs/CS/Distributed/Replica.md?id=multi-leader-replication),
 and [leaderless replication](/docs/CS/Distributed/Replica.md?id=leaderless-replication).
 Almost all distributed databases use one of these three approaches.
 There are many trade-offs to consider with replication: for example, whether to use synchronous or asynchronous replication, and how to handle failed replicas.
@@ -973,7 +973,7 @@ We also touched on methods for resolving conflicts by merging together concurren
 
 ## Links
 
-- [Distributed Systems](/docs/CS/Distributed/Distributed)
+- [Distributed Systems](/docs/CS/Distributed/Distributed.md)
 - [Partitioning](/docs/CS/Distributed/Partition.md)
 
 ## References

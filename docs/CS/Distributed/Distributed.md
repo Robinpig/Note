@@ -237,7 +237,7 @@ Even though crashes, race conditions, and disk failures do occur, the transactio
 We will now continue along the same lines, and seek abstractions that can allow an application to ignore some of the problems with distributed systems.
 For example, one of the most important abstractions for distributed systems is *consensus*: that is, getting all of the nodes to agree on something.
 
-There is some similarity between distributed consistency models and the hierarchy of [transaction isolation levels](/docs/CS/SE/Transaction.md?id=Isolation-Levels).
+There is some similarity between distributed consistency models and the hierarchy of [transaction isolation levels](/docs/CS/SE/Transaction.md?id=isolation-levels).
 But while there is some overlap, they are mostly independent concerns: transaction isolation is primarily about avoiding race conditions due to concurrently executing transactions,
 whereas distributed consistency is mostly about coordinating the state of replicas in the face of delays and faults.
 
@@ -274,7 +274,7 @@ Fig.1. Consistency Models
 
 Linearizability is one of the strongest single-object consistency models, and implies that every operation appears to take place atomically, in some order, consistent with the **real-time ordering** of those operations: e.g., if operation A completes before operation B begins, then B should logically take effect after A.
 
-When real-time constraints are not important, but you still want every process to observe the same total order, try [sequential consistency](/docs/CS/Distributed/Distributed?id=Sequential-Consistency)
+When real-time constraints are not important, but you still want every process to observe the same total order, try [sequential consistency](/docs/CS/Distributed/Distributed.md?id=sequential-consistency)
 
 Concurrent operations are represented as one of the possible sequential histories for which visibility properties hold.
 There is some indeterminism in linearizability, as there may exist more than one way in which the events can be ordered.
@@ -369,7 +369,7 @@ if operation A completes before operation B begins, then B should logically take
 
 ##### Linearizability Versus Serializability
 
-Linearizability is easily confused with [serializability](/docs/CS/SE/Transaction.md?id=Serializability), as both words seem to mean something like “can be arranged in a sequential order.”
+Linearizability is easily confused with [serializability](/docs/CS/SE/Transaction.md?id=serializability), as both words seem to mean something like “can be arranged in a sequential order.”
 However, they are two quite different guarantees, and it is important to distinguish between them:
 
 - Serializability is an isolation property of transactions, where every transaction may read and write multiple objects (rows, documents, records).
@@ -446,7 +446,7 @@ Without the recency guarantee of linearizability, race conditions between these 
 
 Linearizability is not the only way of avoiding this race condition, but it’s the simplest to understand.
 If you control the additional communication channel (like in the case of the message queue, but not in the case of Alice and Bob),
-you can use alternative approaches similar to what we discussed in “[Reading Your Own Writes](/docs/CS/Distributed/Replica.md?id=Read-after-write)”, at the cost of additional complexity
+you can use alternative approaches similar to what we discussed in “[Reading Your Own Writes](/docs/CS/Distributed/Replica.md?id=read-after-write)”, at the cost of additional complexity
 
 ##### Implementing Linearizable Systems
 
@@ -641,7 +641,7 @@ but some threads will have only a few messages in common, so there might be no s
 In a causally consistent system, we get session guarantees for the application, ensuring the view of the database is consistent with its own actions, even if it executes read and write requests against different,
 potentially inconsistent, servers.
 These guarantees are: monotonic reads, monotonic writes, read-your-writes, writes-follow-reads. 
-You can find more information on these [session models](/docs/CS/Distributed/Distributed?id=Session-Models).
+You can find more information on these [session models](/docs/CS/Distributed/Distributed.md?id=session-models).
 
 Causal consistency can be implemented using logical clocks and sending context metadata with every message, summarizing which operations logically precede the current one.
 When the update is received from the server, it contains the latest version of the context. Any operation can be processed only if all operations preceding it have already been applied.
@@ -657,7 +657,7 @@ Instead, they detect and handle conflicts: in COPS, this is done by checking the
 
 [Eventually Consistent - Revisited](https://www.allthingsdistributed.com/2008/12/eventually_consistent.html)
 
-In “[Replication Lag](/docs/CS/SE/Transaction.md?id=Replication-Lag)” we looked at some timing issues that occur in a replicated database.
+In “[Replication Lag](/docs/CS/SE/Transaction.md)” we looked at some timing issues that occur in a replicated database.
 If you look at two database nodes at the same moment in time, you’re likely to see different data on the two nodes, because write requests arrive on different nodes at different times.
 These inconsistencies occur no matter what replication method the database uses (single-leader, multi-leader, or leaderless replication).
 
@@ -1280,8 +1280,10 @@ zookeeper
 ## Links
 
 - [Operating Systems](/docs/CS/OS/OS.md)
-- [Encoding](/docs/CS/Security/Marshalling)
+- [Encoding](/docs/CS/Distributed/RPC/Marshalling.md)
 - [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md)
+- [Mesos（两级调度内核）](/docs/CS/Distributed/Mesos.md)
+- [Consensus](/docs/CS/Distributed/Consensus/Consensus.md)
 
 ## References
 

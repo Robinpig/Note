@@ -24,3 +24,6 @@ Such logs are often important for forensic (i.e., legal and prosecuritorial) pur
 ## Links
 
 - [Computer Network](/docs/CS/CN/CN.md)
+- [Attack](/docs/CS/CN/Attack.md)
+- [VPN](/docs/CS/CN/VPN.md)
+- [TLS](/docs/CS/CN/TLS.md)
