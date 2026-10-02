@@ -26,7 +26,7 @@
 
 | 框架 | 定位 | 什么时候选它 |
 | --- | --- | --- |
-| [Pydantic AI](/docs/CS/Framework/PydanticAI.md) | 类型优先的 Python Agent 框架 | 团队本就吃 Pydantic 的类型约束，要的是能嵌进真实代码库的 Agent |
+| [Pydantic AI](/docs/CS/AI/LLM/PydanticAI.md) | 类型优先的 Python Agent 框架 | 团队本就吃 Pydantic 的类型约束，要的是能嵌进真实代码库的 Agent |
 | CrewAI | 角色扮演式多 Agent | 快速搭"一组角色分工协作"的原型 |
 | OpenAI Agents SDK | 厂商原生 Agent SDK | 只用 OpenAI，或想跟着官方路线走 |
 | Claude Agent SDK | 厂商原生 Agent SDK | 同上，且更偏"在开发机上干活的编码 Agent" |
@@ -68,7 +68,7 @@ llm = ChatOpenAI(model="gpt-4", temperature=0)
 - [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md)
 - [LangChain4j](/docs/CS/AI/LLM/LangTool/LangChain4j.md)
 - [Langflow](/docs/CS/AI/LLM/LangTool/Langflow.md)
-- [Pydantic AI](/docs/CS/Framework/PydanticAI.md)
+- [Pydantic AI](/docs/CS/AI/LLM/PydanticAI.md)
 - [Platform](/docs/CS/AI/LLM/Platform.md)
 
 ## References
