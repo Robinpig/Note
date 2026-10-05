@@ -67,7 +67,8 @@ Note/
 2026-10 新增的第七领域，与 `Psychology/` 同为「分支学科枢纽页 + 各分支页」结构：
 
 - `Medicine/Medicine.md` 是该领域**唯一总纲**；分支页为 `Basic_Medicine.md`、`Clinical_Medicine.md`、`Diagnosis.md`、`Public_Health.md`、`Medical_History_Ethics.md`。
-- 护理学是**唯一有子目录**的分支：`Medicine/Nursing/` 下 `Nursing.md`（总纲）+ `Nursing_Fundamentals.md`、`Clinical_Nursing.md`、`Maternal_Pediatric_Nursing.md`、`Nursing_Management_Ethics.md`。新增护理学内容一律放 `Nursing/`，不要在 `Medicine/` 根下平铺。
+- 护理学是**唯一有子目录**的分支：`Medicine/Nursing/` 下 `Nursing.md`（总纲）+ 11 篇分支页，按**基础层 / 场景层 / 延伸层**三层组织——基础层 `Nursing_Fundamentals.md`；场景层 `Clinical_Nursing.md`、`Maternal_Pediatric_Nursing.md`、`Psychiatric_Nursing.md`、`OR_Sterile_Supply.md`、`Emergency_Disaster_Nursing.md`、`Palliative_Care.md`、`Gerontological_Nursing.md`；延伸层 `Community_Home_Nursing.md`、`Nursing_Research_Education.md`、`Nursing_Informatics.md`；`Nursing_Management_Ethics.md` 贯穿全部。新增护理学内容一律放 `Nursing/`，不要在 `Medicine/` 根下平铺。
+- ⚠️ **医学 × CS 的固定交叉点**：`Nursing/Nursing_Informatics.md` 是本库医学与计算机科学**最直接**的交叉页（决策支持、远程护理、可穿戴、AI 辅助），链向 `CS/AI/AI.md` 与 `CS/AI/LLM/LLM.md`。写 AI 相关医学内容时**从这篇转链**，不要重复叙述 AI 原理。
 - ⚠️ **内容口径：学科框架为主，谨慎写临床细节**。剂量、诊疗路径、指南推荐等级、各类指标阈值、给药方案与器械参数**不收录**——它们随指南更新而变化，写死必然过时且有出错风险。需要时只写「关注点与判断逻辑」，并在页首用 `> [!WARNING]` 块声明「不收录具体规程，以最新指南与机构规范为准」。
 - ⚠️ 医学笔记用**中文术语 + 英文原名**（如「循证医学（evidence-based medicine）」首次出现时），这是本库其他领域（CS/哲学/心理学）一致的做法。
 - 医学与本库其他领域的固定交叉点：`Sports/Anatomy.md`（解剖）、`Psychology/Biological_Psychology.md`（生理基础）、`Philosophy/Ethics.md`（伦理四原则的哲学源流）、`Mathematics/Probability_Statistics.md`（研究设计与统计推断）、`CS/AI/AI.md`（AI 辅助决策的算法责任）。新增医学页时优先链到这些已有页，不要重复新建。

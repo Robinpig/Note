@@ -8,6 +8,16 @@
 >
 > 本页讨论护理学的**学科框架与专业理论**，不收录具体操作规程、剂量换算与流程——这类内容须以所在机构与所在地区的规范为准。
 
+本库在护理学上的组织方式也反映了这个判断：**先按「照护发生在哪里」分层，再按「照护的特殊性」分科**。下面这批分支因此不是并列的清单，而是三条线索的组合——
+
+**基础层**（[护理学基础](/docs/Medicine/Nursing/Nursing_Fundamentals.md)）提供概念、理论、评估与沟通，是所有分支共用的底座。
+
+**场景层**按人群与场所切分：住院期间的[临床护理](/docs/Medicine/Nursing/Clinical_Nursing.md)、[母婴与儿科护理](/docs/Medicine/Nursing/Maternal_Pediatric_Nursing.md)、[精神与心理护理](/docs/Medicine/Nursing/Psychiatric_Nursing.md)、[手术室与消毒供应中心](/docs/Medicine/Nursing/OR_Sterile_Supply.md)、[急救与灾害护理](/docs/Medicine/Nursing/Emergency_Disaster_Nursing.md)，以及生命末期与功能衰退时期的[安宁疗护](/docs/Medicine/Nursing/Palliative_Care.md)与[老年护理](/docs/Medicine/Nursing/Gerontological_Nursing.md)。
+
+**延伸层**则越过医院围墙与单一职业边界：[社区与家庭护理](/docs/Medicine/Nursing/Community_Home_Nursing.md)把场所移到患者生活与长期照护体系，[护理科研与教育](/docs/Medicine/Nursing/Nursing_Research_Education.md)与[护理信息化](/docs/Medicine/Nursing/Nursing_Informatics.md)则处理这个专业如何产出证据、维持自身能力、以及与计算机科学交汇。
+
+贯穿其中的仍是[护理管理与伦理法律](/docs/Medicine/Nursing/Nursing_Management_Ethics.md)——排班质量、法规边界与职业风险不是某一科室的附属议题，而是让所有分支得以成立的条件。
+
 ## 分支学科
 
 <div class="kb-home">
@@ -26,7 +36,7 @@
 
 ### [临床护理](/docs/Medicine/Nursing/Clinical_Nursing.md)
 
-各专科的照护要点：内外科、重症、急诊与康复
+各专科的照护要点：内外科、肿瘤、透析、重症与康复
 
 </div>
 
@@ -35,6 +45,70 @@
 ### [母婴与儿科护理](/docs/Medicine/Nursing/Maternal_Pediatric_Nursing.md)
 
 面对生命起点阶段的照护：孕期、分娩、新生儿与儿童
+
+</div>
+
+<div class="kb-card">
+
+### [安宁疗护与临终照护](/docs/Medicine/Nursing/Palliative_Care.md)
+
+不再以治愈为目标时如何照护：症状控制、沟通与家属支持
+
+</div>
+
+<div class="kb-card">
+
+### [老年护理](/docs/Medicine/Nursing/Gerontological_Nursing.md)
+
+以功能而非年龄为轴：失能预防、谵妄与痴呆、跌倒与多重用药
+
+</div>
+
+<div class="kb-card">
+
+### [社区与家庭护理](/docs/Medicine/Nursing/Community_Home_Nursing.md)
+
+把照护搬出病房：延续护理、社区卫生、家庭照护与长期照护
+
+</div>
+
+<div class="kb-card">
+
+### [精神与心理护理](/docs/Medicine/Nursing/Psychiatric_Nursing.md)
+
+主诉不可靠、行为不可预测的环境：危机干预、约束伦理与去污名
+
+</div>
+
+<div class="kb-card">
+
+### [急救与灾害护理](/docs/Medicine/Nursing/Emergency_Disaster_Nursing.md)
+
+在资源与需求严重失衡时照护：急诊分诊、伤情分级与灾害伦理
+
+</div>
+
+<div class="kb-card">
+
+### [手术室与消毒供应中心](/docs/Medicine/Nursing/OR_Sterile_Supply.md)
+
+外科的隐性基础设施：无菌技术、核查纪律与器械再处理链条
+
+</div>
+
+<div class="kb-card">
+
+### [护理科研与教育](/docs/Medicine/Nursing/Nursing_Research_Education.md)
+
+专业如何维持自己：循证护理、研究方法与专业发展路径
+
+</div>
+
+<div class="kb-card">
+
+### [护理信息化与智慧护理](/docs/Medicine/Nursing/Nursing_Informatics.md)
+
+信息系统如何支撑照护，以及数据与算法在医疗场景中的特有风险
 
 </div>
 
