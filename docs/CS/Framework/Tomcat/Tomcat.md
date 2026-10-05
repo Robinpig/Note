@@ -5,6 +5,8 @@
 Different versions of Apache Tomcat are available for different versions of the specifications.
 The mapping between the specifications and the respective [Apache Tomcat Versions](https://tomcat.apache.org/whichversion.html).
 
+读下面所有小节之前先校准版本坐标：本页与 [Connector](/docs/CS/Framework/Tomcat/Connector.md)、[threads](/docs/CS/Framework/Tomcat/threads.md) 等篇按 9.0/10.1 时代的源码摘写，机制叙述成立但类名与默认值已在 11 变化（`AbstractJsseEndpoint`、`-ClientPoller`、APR 后端、`maxParameterCount` 等）。哪些结论过期、哪些符号已消失，统一记在 [Version_Migration](/docs/CS/Framework/Tomcat/Version_Migration.md)，该篇同时充当子树的勘误表。
+
 
 ### Debug Tomcat
 
@@ -28,6 +30,8 @@ change password in conf/tomcat-users.xml
 Catalina is a very sophisticated piece of software, which was elegantly designed and developed.
 It is also modular too.<br>
 Catalina is consisting of two main modules: the [connector](/docs/CS/Framework/Tomcat/Connector.md) and the [container](/docs/CS/Framework/Tomcat/Tomcat.md?id=container).
+
+Connector 与 Container 描述的是「请求怎么流动」。在这棵树起来之后，还有第三个方向的问题：应用是怎么被塞进这棵树的 —— war 落盘、展开、描述符合并、Context 启动这条链，以及绕开 `server.xml` 的内嵌编程入口，见 [Deployment](/docs/CS/Framework/Tomcat/Deployment.md)。
 
 
 <div style="text-align: center;">
@@ -470,6 +474,36 @@ Session 有过期时间，因此 Tomcat 会开启后台线程定期的轮询，�
 
 ## Log
 
+Tomcat 自带一套日志实现 JULI（`org.apache.juli`），它不是「又一个 log4j」，而是**为「一个 JVM 里跑多个 webapp，每个 webapp 要自己的日志配置」这个问题设计的 JULI 补丁**。三个部分各有各的存在理由：
+
+**门面层** `juli/logging/`：`Log` 接口 + `LogFactory`。工厂默认直接落到 JDK 日志上：
+
+```java
+// juli/logging/LogFactory.java:112-118
+public Log getInstance(String name) throws LogConfigurationException {
+    if (discoveredLogConstructor == null) {
+        return DirectJDKLog.getInstance(name);
+    }
+
+    try {
+        return discoveredLogConstructor.newInstance(name);
+```
+
+`discoveredLogConstructor` 是反射发现的结果——注释里那句「only those 2 methods need to change to use a different direct logger」说明了设计意图：换后端只需替换 `Log` 实现，Tomcat 内部代码永远只依赖 `Log`/`LogFactory`。这也是为什么 Tomcat 能把日志桥到 logback/log4j2 而不改一行容器代码。
+
+**管理器层** `juli/ClassLoaderLogManager.java`：
+
+```java
+// org/apache/juli/ClassLoaderLogManager.java:44
+public class ClassLoaderLogManager extends LogManager {
+```
+
+关键在类注释里那句「Map containing the classloader information, **keyed per classloader**. A weak hashmap is used to ensure no class loader is kept alive by this map」（`:84` 附近）。也就是说 `Logger`/`Handler` 的配置是**按类加载器分桶**的：`readConfiguration(getClassLoader())`（`:302`）会去找该 webapp 自己的 `META-INF/context.xml` 关联的 logging 配置。用弱引用是必须的——否则日志配置会把已经 undeploy 的 classloader 永久钉住，变成一类典型的内存泄漏。
+
+**落盘层** `juli/FileHandler.java`（`:80` `extends Handler`）与 `juli/AsyncFileHandler.java`（`:41` `extends FileHandler`，内部 `LoggerExecutorService extends ThreadPoolExecutor`，`:193`）。异步版本存在的原因很实际：JDK 自带的 `FileHandler` 在写盘时持有锁，高并发下日志会成为吞吐瓶颈。格式化器提供 `OneLineFormatter`（把多行堆栈压成一行，方便日志采集）、`JsonFormatter`、`VerbatimFormatter`、`JdkLoggerFormatter`，另有 `DateFormatCache` 缓存日期格式化结果——日期格式化在老 JDK 上是相当贵的一次 `synchronized` 调用。
+
+一个和容器行为耦合的细节：`StandardContext` 的 `swallowOutput` 属性控制是否捕获应用在 `System.out`/`err` 上的裸打印并转进容器日志，配合的是 coyote 侧的 `SystemLogHandler`。生产环境一般保持开启，否则应用的 `printStackTrace()` 会散落到 `catalina.out` 而脱离日志格式。
+
 ## DefaultServlet
 
 The default resource-serving servlet for most web applications, used to serve static resources such as HTML pages and images.
@@ -612,14 +646,17 @@ public class StandardRoot extends LifecycleMBeanBase implements WebResourceRoot 
 跟 Servlet 不同的地方在于，Tomcat 会给每一个 WebSocket 连接创建一个 Endpoint实例。
 
 
-omcat 的 WebSocket 加载是通过 ServletContainerInitializer 机制完成
+Tomcat 的 WebSocket 加载是通过 ServletContainerInitializer 机制完成
 
 UpgradeProcessor
 
-当WebSocket 的握手请求到来时，HttpProtocolHandler 首先接收到这个请求，在处理这个 HTTP 请求时，Tomcat 通过一个特殊的 Filter 判断该当HTTP 请求是否是一个WebSocket Upgrade 请求（即包含Upgrade:websocket的 HTTP 头信息），如果是，则在 HTTP 响应里添加 WebSocket 相关的响应头信息，并进行协议升级
+当 WebSocket 的握手请求到来时，处理它的仍然是普通的 HTTP 协议实现（`AbstractProtocol` 的子类，走 `Http11Processor` 那条链）。Tomcat 在判断出 `Upgrade: websocket` 头后，回 `101 Switching Protocols` 并加上 WebSocket 响应头，然后完成协议升级。
 
-用 UpgradeProtocolHandler 替换当前的HttpProtocolHandler，相应的，把当前 Socket 的Processor 替换成 UpgradeProcessor，同时 Tomcat 会创建 WebSocket Session 实例和 Endpoint 实例，并跟当前的 WebSocket 连接一一对应起来。
-这个 WebSocket 连接不会立即关闭，并且在请求处理中，不再使用原有的HttpProcessor，而是用专门的 UpgradeProcessor，UpgradeProcessor 最终会调用相应的 Endpoint 实例来处理请求
+升级的具体动作是把这条连接的 processor 换成 `org.apache.coyote.http11.upgrade` 包下的类：`UpgradeProcessorBase` 是公共基类，`UpgradeProcessorInternal` 由容器内的 `HttpUpgradeHandler` 驱动（WebSocket 走这条），`UpgradeProcessorExternal` 留给外部代码直接读写。与此同时 Tomcat 创建 WebSocket Session 实例与 Endpoint 实例，与这条连接一一对应。连接不会立即关闭，后续帧不再经过原来的 `Http11Processor`，而是由升级后的 processor 直接交给对应的 Endpoint。
+
+> [!WARNING]
+>
+> 本节旧版写的 `HttpProtocolHandler` 与 `UpgradeProtocolHandler` **在 11.0.26 源码里都不存在**（catalina / coyote / websocket 三个模块全树零命中）。真实的抽象是接口 `org.apache.coyote.UpgradeProtocol`（HTTP/2 就是它的一个实现，见 [HTTP2](/docs/CS/Framework/Tomcat/HTTP2.md)）与 `AbstractProtocol` 这一对，协议查找走 `getUpgradeProtocol(name)` 查表，不存在「替换 ProtocolHandler」这种动作。
 
 
 ![alt text](./img/WebSocket.png)
@@ -632,7 +669,7 @@ WebSocket 实现不需要关注具体 I/O 模型的细节，从而实
 现了与具体 I/O 方式的解耦
 
 
-## 对象池
+## Buffer pool
 
 Tomcat连接器中 SocketWrapper 和 SocketProcessor
 
@@ -916,16 +953,36 @@ JVM tuning
 
 ### 故障处理
 
+排障时先分清症状属于哪一层，因为三层的观测手段完全不同：
 
+**连接层**（收不进新连接、连接数打满）。看 `LimitLatch` 与 `maxConnections`（11 里默认 **8192**，`AbstractEndpoint.java:1016`）——注意旧资料里的 10000 是已删除的 APR connector 的默认值。`Acceptor` 线程卡在 accept 之外通常是 `accept-count`（backlog）耗尽，用 `ss -ltnp` 看 `Recv-Q` 即可确认，不必进 JVM。
 
+**线程层**（请求排队、响应变慢但连接正常）。看 `maxThreads` 与 `TaskQueue` 的互动：`getSubmittedCount()` 大于 `getPoolSize()` 才允许建新线程，所以「线程数没到 maxThreads 却在排队」是正常表现而不是故障。jstack 里线程名可作快速判据：`Catalina-exec-N` 是常规工作线程，`Catalina-virt-N` 说明 `useVirtualThreads` 生效了（此时池相关参数全部失效，见 [threads](/docs/CS/Framework/Tomcat/threads.md)）。怀疑有请求卡死时挂 `StuckThreadDetectionValve`（见 [Valve](/docs/CS/Framework/Tomcat/Valve.md)），它会在阈值超时后打印堆栈而不是等你手动 dump。
 
+**容器层**（个别应用异常、500 与 404 混淆）。`Context` 的状态机是关键：启动失败会停在 `FAILED` 而不会拖垮整个 Engine，所以「Tomcat 起来了但某个 app 全 404」通常是 `StandardContext.startInternal` 中途失败，去 `localhost.<date>.log` 找第一条异常，而不是看 `catalina.out`。
+
+**摘流与停机**。优雅停机由 `StandardService` 的 `gracefulStopAwaitMillis` 驱动（`:112`，**默认 0，即不等待**），它调用 `AbstractEndpoint.awaitConnectionsClose(waitMillis)`（`:2475`）等在途请求收尾，之后 `Connector.pause()`（`:1229`）停接新连接。默认值为 0 意味着**开箱 Tomcat 的「优雅停机」实际上不等**——滚动发布时出现请求被截断，先检查这个属性而不是怀疑负载均衡。执行器侧还有 `executorTerminationTimeoutMillis`（`AbstractEndpoint.java:968`，默认 5000）。
+
+## How to read this subtree
+
+本页讲的是「请求怎么在对象树里流动」。这棵树本身如何被装配起来、以及几个子系统各自的机制，分散在下面这些篇里，它们按因果顺序排列而不是按重要性：
+
+`Connector` 与 `Container` 是同一棵树的两半，但只有 Connector 有源码级专篇（[Connector](/docs/CS/Framework/Tomcat/Connector.md)），容器侧此前一直是缺口——四件套的父子关系、子容器生命周期如何递归、名字到容器的两套解析、后台处理线程的调度拓扑，都在 [Container](/docs/CS/Framework/Tomcat/Container.md)。紧接着的问题是「请求进了 Context 之后依次经过谁」，那是 [Valve](/docs/CS/Framework/Tomcat/Valve.md) 的范围：Pipeline 的装配语义（只能插到 basic 之前、无前插 API）与 30 多个内置 Valve 各自解决什么。
+
+认证与授权是另一条独立的链，它不由 Valve 驱动而是由 `Authenticator` 与 `Realm` 协作完成，且必须理解 JASPIC 前置与 SSO 的放置位置才能配对，见 [Security](/docs/CS/Framework/Tomcat/Security.md)。它下面一层是传输：11 里 APR native 后端已经整体移除、TLS 只剩 JSSE 与 OpenSSL 两条实现路线，多证书与 SNI 的配置模型因此完全变了，见 [TLS](/docs/CS/Framework/Tomcat/TLS.md)。同一层再往上，HTTP/2 在 Tomcat 里不是连接器而是可插拔的 `UpgradeProtocol` 实现，双层并发上限与 push 的移除都在 [HTTP2](/docs/CS/Framework/Tomcat/HTTP2.md)。
+
+应用是怎么被塞进这棵树的（war 探测、描述符合并顺序、内嵌编程入口）见 [Deployment](/docs/CS/Framework/Tomcat/Deployment.md)；进程起来又停不干净的问题见上面的「故障处理」节。
+
+最后一条必读：本目录里 [Connector](/docs/CS/Framework/Tomcat/Connector.md)、[memory](/docs/CS/Framework/Tomcat/memory.md) 等篇的源码摘写自 9.0/10.1 时代，机制成立而类名与默认值已变。哪些结论过期、哪些符号已消失，统一记在 [Version_Migration](/docs/CS/Framework/Tomcat/Version_Migration.md)，那一篇同时充当本子树的勘误表。与 Jetty、Undertow 的维度对照见 [compare](/docs/CS/Framework/Tomcat/compare.md)。
 
 ## Links
-- [threads](/docs/CS/Framework/Tomcat/threads.md)
-- [WebSocket](/docs/CS/Framework/Tomcat/WebSocket.md)
-- [memory](/docs/CS/Framework/Tomcat/memory.md)
-- [Netty](/docs/CS/Framework/Netty/Netty.md)
-- [Jetty](/docs/CS/Framework/Jetty/Jetty.md)
+
+- [Container](/docs/CS/Framework/Tomcat/Container.md)
+- [Valve](/docs/CS/Framework/Tomcat/Valve.md)
+- [Security](/docs/CS/Framework/Tomcat/Security.md)
+- [TLS](/docs/CS/Framework/Tomcat/TLS.md)
+- [HTTP2](/docs/CS/Framework/Tomcat/HTTP2.md)
+- [三容器横向对照](/docs/CS/Framework/Tomcat/compare.md)
 
 ## References
 

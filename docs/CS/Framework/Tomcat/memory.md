@@ -9,25 +9,42 @@
 
 
 
-SynchronizedStack 使用 AtomicInteger 维护栈顶索引 + Object[] 数组，无锁、低 GC、适合单线程生产者/消费者场景。
-池大小可通过 processorCache 属性配置（默认 200，-1 表示无界，0 表示禁用池）。
-每个 Processor 绑定一对 Request/Response，实现请求上下文复用
+SynchronizedStack 用**普通 `int` 索引 + `synchronized` 方法**维护一个 `Object[]` 栈，目标是「尽量不产生垃圾」而不是「无锁」。栈顶索引不是 `AtomicInteger`，`push`/`pop`/`clear`/`setLimit` 全部是同步方法（`util/collections/SynchronizedStack.java:90`、`:110`、`:122`、`:136`）；它靠「对象池本来就只在回收路径上被零散访问」这一前提换取实现简单，而**不是**靠 CAS。
 
+池大小由 `processorCache` 属性配置，默认 200（`AbstractProtocol.java:192`）。每个 Processor 绑定一对 Request/Response，实现请求上下文复用。
 
 ### SynchronizedStack
 
 This is intended as a (mostly) GC-free alternative to [java.util.concurrent.ConcurrentLinkedQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=concurrentlinkedqueue) when the requirement is to create a pool of re-usable objects with no requirement to shrink the pool. 
 The aim is to provide the bare minimum of required functionality as quickly as possible with minimum garbage.
 
-This is a unbound stack and depended on maxConnection.
+字段与「满」的语义（`util/collections/SynchronizedStack.java`）：
 
 ```java
-public class SynchronizedStack<T> {
+    public static final int DEFAULT_SIZE = 128;      // :31
+    private static final int DEFAULT_LIMIT = -1;     // :36
+    private int size;                                // :41
+    private int limit;                               // :46  -1 表示不设上限
+    private int index = -1;                          // :51  普通 int，不是 AtomicInteger
+    private Object[] stack;                          // :56
 
-    public static final int DEFAULT_SIZE = 128;
-    private static final int DEFAULT_LIMIT = -1;
-}
+    public synchronized boolean push(T obj) {        // :90
+        index++;
+        if (index == size) {
+            if (limit == -1 || size < limit) {
+                expand();
+            } else {
+                index--;
+                return false;                        // 池已满，归还方拿不到位置
+            }
+        }
+        stack[index] = obj;
 ```
+
+两个容易被略过的点：
+
+1. **`push` 会返回 false**，因此「归还对象」这件事必须能失败。调用方（processor 回收路径）拿回 false 时直接丢弃对象，让 GC 处理——所以 `limit` 一旦设小，行为是「静默退化成一个不缓存对象的容器」，而不是阻塞或报错。
+2. **无界时它永不收缩**（`limit == -1` 的分支只 `expand()`）。这就是类注释里那句「no requirement to shrink the pool」的真实代价：峰值连接数会被池长期记住。想避免这种内存驻留，只能靠 `processorCache` 显式设上限。
 
 ## Delay analysis
 
@@ -220,9 +237,13 @@ Tomcat 8.5+：移除全局池，改为 Per-Socket 局部复用 + 严格 recycle(
 
 ## Links
 
-- [Introduction](/docs/CS/Framework/Tomcat/ClassLoader.md)
-- [Introduction](/docs/CS/Framework/Tomcat/Connector.md)
-- [Introduction](/docs/CS/Framework/Tomcat/Start.md)
-- [Introduction](/docs/CS/Framework/Tomcat/Tomcat.md)
-- [Introduction](/docs/CS/Framework/Tomcat/WebSocket.md)
-- [Introduction](/docs/CS/Framework/Tomcat/threads.md)
+- [Tomcat](/docs/CS/Framework/Tomcat/Tomcat.md)
+- [Connector](/docs/CS/Framework/Tomcat/Connector.md)
+- [threads](/docs/CS/Framework/Tomcat/threads.md)
+- [Container](/docs/CS/Framework/Tomcat/Container.md)
+- [ClassLoader](/docs/CS/Framework/Tomcat/ClassLoader.md)
+- [Version_Migration](/docs/CS/Framework/Tomcat/Version_Migration.md)
+
+## References
+
+- [Tomcat 11.0 API: SynchronizedStack](https://tomcat.apache.org/tomcat-11.0-doc/api/org/apache/tomcat/util/collections/SynchronizedStack.html)

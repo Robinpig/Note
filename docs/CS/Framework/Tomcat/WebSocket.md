@@ -147,3 +147,11 @@ public class UpgradeProcessorInternal extends UpgradeProcessorBase {
 ## Links
 
 - [Tomcat](/docs/CS/Framework/Tomcat/Tomcat.md)
+- [Connector](/docs/CS/Framework/Tomcat/Connector.md)
+- [HTTP2](/docs/CS/Framework/Tomcat/HTTP2.md)
+- [Deployment](/docs/CS/Framework/Tomcat/Deployment.md)
+
+## References
+
+1. [Jakarta WebSocket 2.2 Specification](https://jakarta.ee/specifications/websocket/2.2/)
+2. [Tomcat WebSocket API Documentation](https://tomcat.apache.org/tomcat-11.0-doc/websocketapi/index.html)

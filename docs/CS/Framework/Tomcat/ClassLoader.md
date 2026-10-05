@@ -39,6 +39,10 @@ Therefore, to enable reloading of a context, you need to add a Context element f
 Note Whenever the container associated with a loader needs a servlet class, i.e. when its invoke method is called, the container first calls the loader's getClassLoader method to obtain the class loader.
 The container then calls the loadClass method of the class loader to load the servlet class.
 
+> [!WARNING]
+>
+> **本页的 `WebappClassLoaderBase` 摘录写于 10.1 时代。** 层级结构、delegate 顺序与 `loadClass` 主流程在 11.0.26 仍然成立（`Bootstrap.initClassLoaders` 的 Server/Shared loader、`ParallelWebappClassLoader` 作为默认 loader 均已复核），但 SecurityManager 相关分支已整体删除：`PermissionCheck` 接口、`securityManager != null` 判断、`checkPackageAccess`、`PrivilegedJavaseGetResource` 在 11 源码里都不存在。逐条对照见 [Version_Migration](/docs/CS/Framework/Tomcat/Version_Migration.md)。
+
 ## ClassLoader hierarchy
 
 When Tomcat is started, it creates a set of class loaders that are organized into the following parent-child relationships, where the parent class loader is above the child class loader:
@@ -405,7 +409,10 @@ public abstract class WebappClassLoaderBase extends URLClassLoader
 
 - [ClassLoader](/docs/CS/Java/JDK/JVM/ClassLoader.md)
 - [Tomcat](/docs/CS/Framework/Tomcat/Tomcat.md)
+- [Container](/docs/CS/Framework/Tomcat/Container.md)
+- [Deployment](/docs/CS/Framework/Tomcat/Deployment.md)
+- [Version_Migration](/docs/CS/Framework/Tomcat/Version_Migration.md)
 
 ## References
 
-1. [Class Loader How-To](https://tomcat.apache.org/tomcat-10.1-doc/class-loader-howto.html)
+1. [Class Loader How-To](https://tomcat.apache.org/tomcat-11.0-doc/class-loader-howto.html)

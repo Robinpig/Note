@@ -31,23 +31,38 @@ protected int maxQueueSize = Integer.MAX_VALUE;
 server.tomcat.max-threads=xx
 ```
 
+11.0.26 的 `startInternal` 只剩四步，旧笔记里那段 `if (prestartminSpareThreads)` 已经不存在了：
+
 ```java
-// StandardThreadExecutor
-@Override
+// StandardThreadExecutor.java:122-131 (11.0.26)
 protected void startInternal() throws LifecycleException {
 
     taskqueue = new TaskQueue(maxQueueSize);
-    TaskThreadFactory tf = new TaskThreadFactory(namePrefix,daemon,getThreadPriority());
-    executor = new ThreadPoolExecutor(getMinSpareThreads(), getMaxThreads(), maxIdleTime, TimeUnit.MILLISECONDS,taskqueue, tf);
+    TaskThreadFactory tf = new TaskThreadFactory(namePrefix, daemon, getThreadPriority());
+    executor = new ThreadPoolExecutor(getMinSpareThreads(), getMaxThreads(), maxIdleTime, TimeUnit.MILLISECONDS,
+            taskqueue, tf);
     executor.setThreadRenewalDelay(threadRenewalDelay);
-    if (prestartminSpareThreads) {
-        executor.prestartAllCoreThreads();
-    }
     taskqueue.setParent(executor);
 
     setState(LifecycleState.STARTING);
 }
 ```
+
+`prestartminSpareThreads` 属性被整体删除，但**核心线程预启动并没有消失**——它下沉进了线程池构造函数，变成无条件执行：
+
+```java
+// util/threads/ThreadPoolExecutor.java:1082-1089
+this.corePoolSize = corePoolSize;
+this.maximumPoolSize = maximumPoolSize;
+this.workQueue = workQueue;
+this.keepAliveTime = unit.toNanos(keepAliveTime);
+this.threadFactory = threadFactory;
+this.handler = handler;
+
+prestartAllCoreThreads();
+```
+
+因此「配置 `<Executor>` 后进程启动就有 minSpareThreads 个线程」在 11 里仍然是对的，只是**不再可关**。判断依据也随之改变：想看预启动行为要读 `ThreadPoolExecutor` 构造函数，而不是在 `StandardThreadExecutor` 里找一个已经不存在的开关。同理 `threadRenewalDelay`（`:98`）现在是唯一的构造后调优项，它服务于线程替换（renew）而非池大小。
 
 ## ThreadPoolExecutor
 
@@ -149,6 +164,71 @@ public class TaskQueue extends LinkedBlockingQueue<Runnable> {
 }
 ```
 
+## Virtual threads
+
+11.0.26 里虚拟线程是 `createExecutor()` 的一个分支，而不是新的 endpoint：
+
+```java
+// util/net/AbstractEndpoint.java:1934-1945
+public void createExecutor() {
+    internalExecutor = true;
+    if (getUseVirtualThreads()) {
+        executor = new VirtualThreadExecutor(getName() + "-virt-");
+    } else {
+        TaskQueue taskqueue = new TaskQueue(maxQueueSize);
+        TaskThreadFactory tf = new TaskThreadFactory(getName() + "-exec-", daemon, getThreadPriority());
+        executor = new ThreadPoolExecutor(getMinSpareThreads(), getMaxThreads(), getThreadsMaxIdleTime(),
+                TimeUnit.MILLISECONDS, taskqueue, tf);
+        taskqueue.setParent((ThreadPoolExecutor) executor);
+    }
+}
+```
+
+`useVirtualThreads` 默认 `false`（`:1094`，setter `:1101`）。开启后**上面整节讲的 `TaskQueue`、`maxThreads`、`minSpareThreads`、`maxQueueSize` 全部失效**——因为不再有池，也就没有「队列满了再扩线程」这套语义，线程名从 `Catalina-exec-N` 变成 `Catalina-virt-N`。
+
+实现刻意走反射，以便同一份二进制在低于虚拟线程要求的 JRE 上仍可加载：
+
+```java
+// util/threads/VirtualThreadExecutor.java:32-58
+public class VirtualThreadExecutor extends AbstractExecutorService {
+
+    private final CountDownLatch shutdown = new CountDownLatch(1);
+
+    private final JreCompat jreCompat = JreCompat.getInstance();
+
+    private Object threadBuilder;
+
+    public VirtualThreadExecutor(String namePrefix) {
+        threadBuilder = jreCompat.createVirtualThreadBuilder(namePrefix);
+    }
+
+    @Override
+    public void execute(Runnable command) {
+        if (isShutdown()) {
+            throw new RejectedExecutionException(
+                    sm.getString("virtualThreadExecutor.taskRejected", command.toString(), this.toString()));
+        }
+        jreCompat.threadBuilderStart(threadBuilder, command);
+    }
+```
+
+字段类型是 `Object threadBuilder` 而不是 `Thread.Builder`，这是「Tomcat 11 的 Java 基线是 17，而虚拟线程要 21」这个矛盾的解法：基线以下不报错，只是这个开关不可用。
+
+`server.xml` 里还可以显式声明一个虚拟线程执行器（给 `<Connector executor="...">` 用），它走另一个类：
+
+```java
+// catalina/core/StandardVirtualThreadExecutor.java:38
+public class StandardVirtualThreadExecutor extends LifecycleMBeanBase implements Executor {
+```
+
+两者的区别值得记住：`AbstractEndpoint` 内置的是 `util` 里那个（生命周期归 endpoint），而声明式的 `StandardVirtualThreadExecutor` 是 `org.apache.catalina.Executor`，受容器生命周期与 JMX 管理，可以被多个 connector 共享。
+
+⚠️ 网上常见的 `protocolHandlerVirtualThreadExecutorDefault` 这个属性名在 11.0.26 的 catalina 与 coyote 源码里**零命中**，不要按它去配。判断属性是否存在，用 `grep -rn "<属性名>" java/org/apache/tomcat/` 或直接查 11.0 的 config 文档，比查博客可靠。
+
+调优上的真实取舍：虚拟线程消除了「工作线程池排队」这一层，但**没有**消除 `maxConnections`（它限制的是已接受的连接，见 [Connector](/docs/CS/Framework/Tomcat/Connector.md)），也没有让 `LimitLatch` 失效。用 `-virt-` 线程名去 jstack/JFR 里确认这条路是否真的生效，比读配置更可靠。与 Jetty 的做法差异见 [Jetty Threading](/docs/CS/Framework/Jetty/Threading.md)。
+
 ## Links
 
 - [Tomcat](/docs/CS/Framework/Tomcat/Tomcat.md)
+- [Version_Migration](/docs/CS/Framework/Tomcat/Version_Migration.md)
+

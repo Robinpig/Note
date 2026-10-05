@@ -4,7 +4,7 @@ The reactive-stack web framework, [Spring WebFlux](https://docs.spring.io/spring
 It is fully non-blocking, supports [reactive streams](http://www.reactive-streams.org/) back pressure, and runs on such servers as Netty, Undertow, and Servlet 3.1+ containers.
 
 > [!NOTE]
-> 部署环境在 7.x 一代有两处变化：Spring Boot 4 **不再支持 Undertow**（尚未兼容 Jakarta Servlet 6.1），响应式应用默认用 Reactor Netty 或 Jetty；`WebClient` 也从 WebFlux starter 中独立出来，改由 `spring-boot-starter-webclient` 引入。
+> 部署环境在 7.x 一代有两处变化：Spring Boot 4 **不再支持 Undertow**（尚未兼容 Jakarta Servlet 6.1，容器现状见 [Undertow](/docs/CS/Framework/Undertow/Undertow.md)），响应式应用默认用 Reactor Netty 或 Jetty；`WebClient` 也从 WebFlux starter 中独立出来，改由 `spring-boot-starter-webclient` 引入。
 
 
 ### Concurrency Model

@@ -50,7 +50,7 @@ Spring 5 引入 [Spring WebFlux](/docs/CS/Framework/Spring/webflux.md)，与基�
 | 维度 | Spring MVC | Spring WebFlux |
 | ---- | ---- | ---- |
 | 编程模型 | 同步阻塞，一请求一线程 | 异步非阻塞，少量事件循环线程扛大量连接 |
-| 容器 | Servlet 容器（Tomcat） | Netty / Servlet 3.1+ 异步容器 / Undertow |
+| 容器 | Servlet 容器（[Tomcat](/docs/CS/Framework/Tomcat/Tomcat.md)） | Netty / Servlet 3.1+ 异步容器 / [Undertow](/docs/CS/Framework/Undertow/Undertow.md) |
 | 返回类型 | 对象 / `ResponseEntity` | `Mono` / `Flux` |
 | 适配场景 | 传统 CRUD、阻塞 JDBC | 高并发连接、流式、需端到端非阻塞（WebClient + R2DBC） |
 | 背压 | 无 | 端到端 |

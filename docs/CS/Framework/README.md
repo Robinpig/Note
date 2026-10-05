@@ -58,8 +58,10 @@ digraph framework_index {
 ## 网络与 RPC
 
 - [Netty](/docs/CS/Framework/Netty/Netty.md)：NIO 框架，内存池、编解码器、零拷贝、事件循环。
-- [Tomcat](/docs/CS/Framework/Tomcat/Tomcat.md)：Servlet/JSP 容器与连接器、线程模型。
-- [Jetty](/docs/CS/Framework/Jetty/Jetty.md)：轻量容器与嵌入式服务器。
+- [Tomcat](/docs/CS/Framework/Tomcat/Tomcat.md)：Servlet/JSP 容器子树（11.0.x）——连接器、容器与 Pipeline、认证与 TLS、HTTP/2、部署与内嵌 API。
+- [Jetty](/docs/CS/Framework/Jetty/Jetty.md)：轻量容器与嵌入式服务器子树（12.1.x）——核心与 EE 层解耦、连接与线程模型、请求推进链路、非阻塞 IO 抽象。
+- [Undertow](/docs/CS/Framework/Undertow/Undertow.md)：基于 XNIO 的非阻塞容器子树（2.4.x）——exchange 与 dispatch、handler 链与 predicate、Servlet 部署层。
+- 三者的线程模型、Servlet 依赖位置与版本线差异对照见 [三容器横向对照](/docs/CS/Framework/Tomcat/compare.md)。
 - [gRPC](/docs/CS/Framework/gRPC/gRPC.md)：跨语言 RPC 框架，配合 Protobuf。
 - [kitex](/docs/CS/Framework/kitex.md)（Go）、[Netpoll](/docs/CS/Framework/Netpoll.md)（Go）、[evio](/docs/CS/Framework/evio.md)（Go）：Go 生态的 RPC/网络库。
 - [Pandora](/docs/CS/Framework/Pandora.md)：容器内进程管理与网络接管，常与多进程后端服务配合。

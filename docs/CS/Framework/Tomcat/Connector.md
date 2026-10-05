@@ -8,6 +8,10 @@ Connector负责:
 三个组件负责以上职能, 分别是 EndPoint、Processor和 Adapter。
 EndPoint 负责提供字节流给 Processor，Processor 负责提供 Tomcat Request 对象给 Adapter，Adapter 负责提供 ServletRequest 对象给容器
 
+> [!WARNING]
+>
+> **本页源码摘录写于 9.0/10.1 时代，机制叙述仍然成立，类名与默认值已变。** 已确认的偏差：`NioEndpoint` 现在继承 `AbstractNetworkChannelEndpoint` 而非 `AbstractJsseEndpoint`；`maxConnections` 默认是 **8192**（`AbstractEndpoint.java:1016`），10000 属于已删除的 APR connector；Poller 线程名是 `-Poller`（`NioEndpoint.java:541`）而非 `-ClientPoller`；`SelectorPool` 已整体删除；`Globals.IS_SECURITY_ENABLED` 与 `AccessController.doPrivileged` 分支随 SecurityManager 支持一起移除；文末 `## APR` 一节描述的 native connector 在 11 已不存在。完整对照见 [Version_Migration](/docs/CS/Framework/Tomcat/Version_Migration.md)。
+
 ## ProtocolHandler
 
 I/O模型很多都与应用层协议解析在一起, 设置ProtocolHandler, 子类实现各种应用层协议与I/O的组合
@@ -1708,6 +1712,7 @@ APR使用堆外内存和C程序库 再通过sendfile减少copy
 ## Links
 
 - [Tomcat](/docs/CS/Framework/Tomcat/Tomcat.md)
+- [Version_Migration](/docs/CS/Framework/Tomcat/Version_Migration.md)
 
 ## References
 
