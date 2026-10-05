@@ -1,11 +1,8 @@
 ## Introduction
 
-Similar to the transaction support, the [caching abstraction](https://docs.spring.io/spring-framework/docs/current/reference/html/integration.html#cache) allows consistent use of various caching solutions with minimal impact on the code.
-As with other services in the Spring Framework, the caching service is an abstraction (not a cache implementation) and requires the use of actual storage to store the cache data — that is, 
-the abstraction frees you from having to write the caching logic but does not provide the actual data store. 
-This abstraction is materialized by the `org.springframework.cache.Cache` and `org.springframework.cache.CacheManager` interfaces.
+与事务支持类似，Spring 的[缓存抽象](https://docs.spring.io/spring-framework/docs/current/reference/integration/cache.html)让我们可以用一致的方式使用各种缓存方案，对业务代码侵入极小。和其他 Spring 服务一样，缓存服务**只是一层抽象（不是缓存实现）**，必须配合真实的存储后端才能存放数据——抽象帮你省掉了手写缓存逻辑，但不提供实际的数据仓库。这层抽象由两个核心接口承载：`org.springframework.cache.Cache` 与 `org.springframework.cache.CacheManager`。
 
-Spring provides a few implementations of that abstraction: [JDK java.util.concurrent.ConcurrentMap](/docs/CS/Java/JDK/Collection/Map.md?id=concurrenthashmap) based caches, Ehcache 2.x, Gemfire cache, Caffeine, and JSR-107 compliant caches (such as Ehcache 3.x).
+Spring 提供多种该抽象的实现：[JDK java.util.concurrent.ConcurrentMap](/docs/CS/Java/JDK/Collection/Map.md?id=concurrenthashmap) 支撑的内存缓存、Caffeine（本地缓存首选）、Ehcache 3.x（JSR-107 / JCache 兼容）、GemFire、Redis 等。Ehcache 2.x 已停止维护，实践中如仍见到，通常是老项目遗留。
 
 To use the cache abstraction, you need to take care of two aspects:
 
@@ -117,9 +114,9 @@ public abstract class AbstractCacheManager implements CacheManager, Initializing
 
 ### Cacheable
 
-Cacheable not support to set expire time.
+`@Cacheable` 本身**不支持直接设置过期时间**——TTL 由具体后端（Caffeine spec、Ehcache XML、Redis 配置）控制，而不是注解层面。
 
-Many extensions resolve keys and get time by override the KeyGenerator and CacheManger.
+很多扩展通过自定义 `KeyGenerator` 与 `CacheManager` 来绕开这个限制，例如为不同缓存配置不同过期策略（见下文 Storage Backends 与 Boot 侧 `spring.cache.redis.*`）。
 
 ### 注解声明式缓存
 
@@ -306,9 +303,14 @@ public class CacheInterceptor extends CacheAspectSupport implements MethodInterc
 ```
 
 
-### Cache
+### Cache 接口
 
-Implement Cache.
+`Cache` 代表一个**命名缓存**，`CacheManager.getCache(name)` 拿到它。关键方法：
+
+- `get(Object key)` 返回 `Cache.ValueWrapper`（命中为 null 表示未命中）；`get(Object key, Class<T> type)` 直接返回反序列化后的目标类型对象。
+- `put(key, value)` / `putIfAbsent(key, value)`：写入；`putIfAbsent` 是原子语义，常用于无锁防重复加载。
+- `evict(key)` / `invalidate()`：删除单个 key / 清空整个缓存。
+- `getNativeCache()`：拿到底层真实存储（如 `ConcurrentMap`、`RedisTemplate`），做抽象未覆盖的底层操作。
 
 ```java
 public interface Cache {
@@ -365,9 +367,14 @@ Spring Boot 下只要引入对应 starter 并配 `spring.cache.type`/`spring.cac
 
 关于 TTL/TTI/淘汰策略：Spring 抽象不提供统一 API，这些特性由具体后端配置（如 Caffeine spec、Ehcache XML）。
 
-## Summary
+## 缓存一致性
 
-TODO: Cache Consistency
+缓存与数据源的一致性是缓存抽象**不替你解决**的部分，需要应用层自己设计：
+
+- **写后失效（Write-Through / Write-Around）**：更新数据库后主动 `@CacheEvict` / `@CachePut`，最常用。注意 `@CacheEvict` 默认在方法**返回后**才执行，若方法位于 `@Transactional` 内且事务回滚，缓存清除**不会回滚**——会出现"数据库回滚了但缓存已被清空"的脏读窗口（详见 [Spring Boot 缓存](/docs/CS/Framework/Spring_Boot/cache.md) 的事务小节）。
+- **并发加载（get-if-absent-then-put）默认无锁**：同一 key 可能被多个线程同时回源；`sync = true` 可让底层 provider 在计算期间加锁防击穿，但仅对单缓存、且部分 provider 支持。
+- **多进程 / 多节点**：抽象本身不做跨进程同步，要么接受各节点独立副本（可能短暂不一致），要么用分布式缓存（Redis 等），或在更新时主动广播失效。
+- **读写策略选择**：读多写少、可容忍短暂不一致的场景适合缓存；强一致要求的写入路径不宜引入缓存。
 
 
 ## Links

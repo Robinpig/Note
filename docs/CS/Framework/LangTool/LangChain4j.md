@@ -69,6 +69,7 @@ LangChain4j Agentic 框架提供了多种工作流编排模式，按自主程度
 - [RAG](/docs/CS/AI/RAG.md) — 检索增强生成
 - [MCP](/docs/CS/AI/LLM/MCP.md) — 工具接入的标准化协议（对散落 @Tool 的协议化替代）
 - [Retrofit](/docs/CS/Java/Retrofit.md) — 同为动态代理声明式接口的设计先例
+- [AI](/docs/CS/Framework/Spring/AI.md)
 
 ## References
 

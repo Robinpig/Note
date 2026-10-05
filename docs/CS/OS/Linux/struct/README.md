@@ -14,7 +14,11 @@
 
 [struct](/docs/CS/OS/Linux/struct/struct.md) 记录的是 **llist**（无锁单链表）。它解决的是"**不能加锁的上下文里怎么挂链**"：中断上半部需要关掉所有中断，一旦加锁系统就会失去响应，所以那里只能用 `cmpxchg` 做 CAS 的无锁插入。代价是能力受限——`llist_del_first()` 只允许**单个**消费者调用，多个消费者同时删除时只能用 `llist_del_all()` 整体摘除。
 
-> 需要留意：`struct.md` 这个文件名的覆盖面远大于它的实际内容（只讲了 llist），是早期沿用下来的名字。本目录的数据结构地图以本页为准。
+> [!NOTE]
+>
+> `struct.md` 这个文件名的覆盖面远大于它的实际内容（只讲了 llist），是早期沿用下来的名字。本目录的数据结构地图以本页为准。
+
+llist 有三处容易踩的坑，都在该篇展开：`llist_del_first()` 取出的是**最新加入的**那个（头插 LIFO，与其他容器的 FIFO 直觉相反）；**多消费者用 `del_first` 会互踩**（它做的是两段式改 `head->first->next`）；以及它**依赖 `CONFIG_ARCH_HAVE_NMI_SAFE_CMPXCHG`**（NMI 可能打断 cmpxchg 中途，所以不能用在 NMI 处理器里）。
 
 ## 从链表到索引树
 

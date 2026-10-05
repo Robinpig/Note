@@ -4,6 +4,17 @@
 Kafka is a distributed system consisting of servers and clients that communicate via a high-performance [TCP network protocol](/docs/CS/CN/TCP/TCP.md).
 It can be deployed on bare-metal hardware, virtual machines, and containers in on-premise as well as cloud environments.
 
+> 版本基线：**4.3.1**（`gradle.properties:17` `version=4.3.1`），2026-06-25 发布。
+> 维护线只有三条：**4.3.1 / 4.2.2 / 4.1.2**；**4.0 线与 3.9 线已 EOL**。官方一年发 3 个 release（约每 4 个月），**不发 LTS 标记**。
+>
+> ⚠️ 4.x 相对 3.x 是**大版本级重构**：`kafka.log` 包已迁到 `storage` 模块的 `org.apache.kafka.storage.internals.log`（全树 `.scala` 只剩 309 个），`connect-runtime` 改名 `connect/runtime`，ZooKeeper 模式彻底移除。照旧资料写必错 —— 逐条对照见 [Storage](/docs/CS/MQ/Kafka/Storage.md) 与 [Security](/docs/CS/MQ/Kafka/Security.md)。
+
+## 主题导航
+
+Kafka 的主线是「**顺序写的日志** + **独立于日志的复制协议** + **两种消费模型**」，三者各成一篇：
+
+存储侧要落到 segment 滚动、稀疏索引与 retention 优先级（以及「Kafka 用 sendfile 而 RocketMQ 用 mmap」这个决定功能边界的取舍）见 [Storage](/docs/CS/MQ/Kafka/Storage.md)；控制面见 [KRaft](/docs/CS/MQ/Kafka/KRaft.md)，副本机制见 [Replica](/docs/CS/MQ/Kafka/Replica.md)；消费侧除经典的 partition 独占式 [Consumer](/docs/CS/MQ/Kafka/Consumer.md) 外，4.x 新增了记录级共享的 [ShareGroup](/docs/CS/MQ/Kafka/ShareGroup.md)（KIP-932，4.2.0 GA）。生态侧 [Connect](/docs/CS/MQ/Kafka/Connect.md)、[Streams](/docs/CS/MQ/Kafka/Streams.md)、[MirrorMaker](/docs/CS/MQ/Kafka/MirrorMaker.md) 都是构建在 Kafka 之上的独立子系统，安全配置见 [Security](/docs/CS/MQ/Kafka/Security.md)。
+
 > [Kafka Design](https://kafka.apache.org/documentation/#design)
 >
 > We designed Kafka to be able to act as a unified platform for handling all the real-time data feeds a large company might have. To do this we had to think through a fairly broad set of use cases.
@@ -889,6 +900,13 @@ kafka的log文件是以分区为单位的 日志未采用mmap
 - [Streams（流处理库）](/docs/CS/MQ/Kafka/Streams.md)
 - [Connect](/docs/CS/MQ/Kafka/Connect.md)
 - [Replica](/docs/CS/MQ/Kafka/Replica.md) / [KRaft](/docs/CS/MQ/Kafka/KRaft.md)
+- [Storage（存储引擎与 sendfile 零拷贝）](/docs/CS/MQ/Kafka/Storage.md)
+- [ShareGroup（共享消费组）](/docs/CS/MQ/Kafka/ShareGroup.md)
+- [Security（鉴权与 ACL）](/docs/CS/MQ/Kafka/Security.md)
+- [Network](/docs/CS/MQ/Kafka/Network.md)
+- [ConsumerFlow（poll 主链路与排查）](/docs/CS/MQ/Kafka/ConsumerFlow.md)
+- [Timer（多层时间轮）](/docs/CS/MQ/Kafka/Timer.md)
+- [MirrorMaker](/docs/CS/MQ/Kafka/MirrorMaker.md)
 
 ## References
 

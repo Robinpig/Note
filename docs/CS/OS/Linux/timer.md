@@ -1033,6 +1033,7 @@ perf stat -e timer:hrtimer_expire_entry,timer:hrtimer_start -a sleep 1
 - [cgroup](/docs/CS/OS/Linux/cgroup.md)
 - [ftrace](/docs/CS/OS/Linux/Tools/ftrace.md)
 - [性能观测](/docs/CS/OS/Linux/performance.md)
+- [Nginx Event](/docs/CS/CN/nginx/event.md) — 用户态为何自建时间缓存（`ngx_time_update`）而不频繁 `gettimeofday`
 
 ## References
 

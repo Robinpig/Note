@@ -11,7 +11,7 @@
 
 因此有两条硬约束：**文件名与目录名就是笔记标识**（重命名/移动会同时打断 Obsidian 双链和 docsify 绝对路径链接）；**笔记必须同时满足 docsify 渲染和 Obsidian 阅读**。
 
-规模：`docs/` 下约千篇 Markdown，六个领域，`CS/` 是绝对主体，其余五个领域合计仅数十篇。
+规模：`docs/` 下约千篇 Markdown，七个领域，`CS/` 是绝对主体。
 
 **不要在文档里写任何文件总数或目录篇数**：`README.md`、`docs/CS/CS.md`、本文件一律不标注篇数，新增/删除笔记不需要回头改数字。需要精确值时现场跑脚本（见「统计各目录篇数」）。
 
@@ -20,15 +20,16 @@
 ```
 Note/
 ├── index.html          docsify 入口 + 全站配置（插件、主题、首页 CSS）
-├── README.md           站点首页（同时也是 GitHub 仓库首页）—— 只做总入口：学习路径 + 六大领域入口
+├── README.md           站点首页（同时也是 GitHub 仓库首页）—— 只做总入口：学习路径 + 各大领域入口
 ├── AGENTS.md           本文件
 ├── docs/               全部笔记内容
 │   ├── CS/             CS 主体
 │   ├── Mathematics/    分支学科枢纽页 + 各分支
+│   ├── Medicine/       医学与护理学：学科框架为主，见下节
 │   ├── Psychology/     分支学科枢纽页 + 各分支
 │   ├── Philosophy/
 │   ├── Economics/
-│   └── Sports/         以上五个领域均为少量读书摘录
+│   └── Sports/         Philosophy/Economics/Sports 为少量读书摘录
 ├── out/                IDE 编译产物副本 —— 只读，不要改
 ├── src/                忽略，不要改
 └── wiki/、knowledge-base/、outputs/   空占位，不要改
@@ -59,7 +60,17 @@ Note/
 
 跨领域索引页：`docs/CS/CS.md`（CS 总纲 + 全部主题目录清单）、`docs/CS/term.md`（术语表）、`docs/CS/Languages.md`（语言横向对比）。各目录下的 `README.md` 会被 docsify 当作该目录首页（如 `CS/OS/Linux/proc/README.md` 是进程知识地图）。
 
-**首页与总纲的分工**：`README.md` 只做**总入口**（学习路径 + 六大领域卡片，每个领域一张独立卡片，不合并），不放任何 CS 主题清单；`docs/CS/CS.md` 是 CS 的**唯一目录来源**（主题卡片 + 主题目录全展开 + 各学科定义）。不要在两处各写一份主题列表。
+**首页与总纲的分工**：`README.md` 只做**总入口**（学习路径 + 各领域卡片，每个领域一张独立卡片，不合并），不放任何 CS 主题清单；`docs/CS/CS.md` 是 CS 的**唯一目录来源**（主题卡片 + 主题目录全展开 + 各学科定义）。不要在两处各写一份主题列表。
+
+## 医学 / 护理学笔记的组织（`docs/Medicine/`）
+
+2026-10 新增的第七领域，与 `Psychology/` 同为「分支学科枢纽页 + 各分支页」结构：
+
+- `Medicine/Medicine.md` 是该领域**唯一总纲**；分支页为 `Basic_Medicine.md`、`Clinical_Medicine.md`、`Diagnosis.md`、`Public_Health.md`、`Medical_History_Ethics.md`。
+- 护理学是**唯一有子目录**的分支：`Medicine/Nursing/` 下 `Nursing.md`（总纲）+ `Nursing_Fundamentals.md`、`Clinical_Nursing.md`、`Maternal_Pediatric_Nursing.md`、`Nursing_Management_Ethics.md`。新增护理学内容一律放 `Nursing/`，不要在 `Medicine/` 根下平铺。
+- ⚠️ **内容口径：学科框架为主，谨慎写临床细节**。剂量、诊疗路径、指南推荐等级、各类指标阈值、给药方案与器械参数**不收录**——它们随指南更新而变化，写死必然过时且有出错风险。需要时只写「关注点与判断逻辑」，并在页首用 `> [!WARNING]` 块声明「不收录具体规程，以最新指南与机构规范为准」。
+- ⚠️ 医学笔记用**中文术语 + 英文原名**（如「循证医学（evidence-based medicine）」首次出现时），这是本库其他领域（CS/哲学/心理学）一致的做法。
+- 医学与本库其他领域的固定交叉点：`Sports/Anatomy.md`（解剖）、`Psychology/Biological_Psychology.md`（生理基础）、`Philosophy/Ethics.md`（伦理四原则的哲学源流）、`Mathematics/Probability_Statistics.md`（研究设计与统计推断）、`CS/AI/AI.md`（AI 辅助决策的算法责任）。新增医学页时优先链到这些已有页，不要重复新建。
 
 ## Linux 内核笔记的组织（当前主力方向）
 
@@ -68,20 +79,40 @@ Note/
 - **`Linux/Linux.md` 是唯一枢纽**，全库被引最多的文件，**不要改名**（`Linux/` 下没有 `README.md` 是全库常态，127 个目录都缺）。
 - **`Linux/` 根目录放横切机制**（不属于单一子系统）：`Interrupt.md`、`Calls.md`、`timer.md`、`workqueue.md`、`LXC.md` / `namespace.md` / `cgroup.md` / `SELinux.md`、`KVM.md`、`Swap.md`、`ZeroCopy.md`、`performance.md`、`Architecture.md`、`Experience.md`、`build.md`。
 - **子系统各建子目录**：`proc/`（进程/调度/信号/IPC）、`mm/`、`fs/`、`net/`、`IO/`、`Lock/`、`dev/`、`boot/`（启动链）、`module/`、`struct/`（内核数据结构）、`Tools/`、`Distribution/`。
+- **较新的两个子目录**（2026-10 新增，各有独立 README 枢纽）：`cgroup/`（v2 三篇：知识地图 / 控制器接口 / 委派实践；根目录的 `cgroup.md` 保留为 **v1 视角**入口）、`PM/`（电源管理六篇：知识地图 / cpuidle / cpufreq / suspend / runtime PM / devfreq）。
 - **新增子目录后必须回 `Linux.md` 挂入口**（踩过：目录迁移完忘了挂，新目录的 README 引用数一度为 0）。
 - ⚠️ **`Linux/0.11.md` 讲的是 Linux 自己 1991 年的早期版本**（`bootsect.s` / `setup.s` / `head.S` / `init/main.c`），是现代内核的直系祖先，**不是教学内核**，不要迁到 `OS/` 根或与 xv6 / rCore / osask 并列。
-- ⚠️ **`OS/Boot/` 与 `OS/Linux/boot/` 是两个不同目录**：前者只有旧的 `Grub.md`，启动链主题在后者（`README.md` / `Start.md` / `init.md` / `U-Boot.md` / `arm.md`）。
+- ⚠️ **`OS/Boot/` 与 `OS/Linux/boot/` 是两个不同目录**：前者只有旧的 `Grub.md`，启动链主题在后者（`README.md` / `Start.md` / `init.md` / `U-Boot.md` / `arm.md` / `crash.md`）。
 - ⚠️ `mm/memory.md` 是 **boot 阶段的初始化笔记**，**不是内存子系统总入口**（全站有旧链接把它当 "Linux Memory"，属历史错配）。
+- ⚠️ **`struct/struct.md` 只讲 llist**，文件名覆盖面远大于内容，是历史沿用名；`struct/` 的地图以 `struct/README.md` 为准。同理 `Tools/Tools.md`（命令速查表）与 `Tools/README.md`（笔记导航）**不是一回事**。
+- ⚠️ **标题避免用全角标点**（如 `## freezer：冻结与终止`）：`validate_links.py` 的 `anchors_of()` 会按全角冒号把标题切成两个锚点，与 docsify 的 `slugify()` 行为不一致，导致 BAD ANCHOR 误报。中英混排标题用**半角空格**分隔（`## freezer 冻结与终止`）。
 
-**内核源码核实**：以**本机源码树 `/Users/robin/Tools/linux-7.2.7`（v7.2.7）为准**，直接 Read / Grep，快且不限流。需要其它版本时才回退：
+**内核源码核实**（2026-10-05 实测修订）：**本机已无 Linux 源码树**（旧记的 `/Users/robin/Tools/linux-7.2.7` 路径不存在，`/Users/robin` 这个用户也没有）。改用远程端点，**tag 用 `v7.2`**（真实 tag 是 `v7.2` = 7.2.0，**`v7.2.7` 不存在**，写错会拿到 404 HTML）：
 
 ```bash
-curl -s "https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain/<path>?h=v6.12"
+K="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain"
+curl -sL -m 40 "$K/kernel/panic.c?h=v7.2"          # → 纯文本源码
 ```
 
-（GitHub raw 会 429；elixir / bootlin 的 raw 返回 HTML，不可用。现代内核头文件拆得很细，io_uring 拆进 `io_uring/`、overlayfs 有 `params.h`，按旧印象找不到宏时先 `ls` 确认文件清单；结构体定义常是换行式 `struct foo`，搜 `^struct foo$`。）
+**其它端点现状**：`elixir.bootlin.com` 已被 Anubis 反爬**全站拦截**（`/source`、`?raw=1`、`/A/` 简写、`/api/v1/source/` 全返回 4.4KB 的 "Making sure you're not a bot!"，HTTP 200 但无内容）—— 人工浏览可用，**不可自动化**。GitHub API 403 限流、raw 会 429。
 
-**版本事实陷阱**：sysctl / feature gate **存在 ≠ 它还生效**。判断"当前实际行为"要读**消费方函数读的是哪个变量**以及**默认值代码**，只看 sysctl 表条目或 gate 状态会写出过时结论。
+**四个必须知道的操作坑**（都实测踩过）：
+
+1. **判断文件是否存在不能只看 `curl -w %{http_code}`** —— 该状态码会因缓存给出过期值（曾把 404 的 2932 字节 HTML 当成正常响应，导致"文件存在"的错误结论，进而引用了不存在的符号）。可靠做法：`wc -l` 看行数 + `head -1` 判断是否 `<!DOCTYPE html>`。
+2. **猜路径极易落空，v7.2 大量文件已搬迁/改名**。用 tree 页取真实清单（比 `Makefile` 反推更准，能拿到未被当前配置编译的文件）：
+   ```bash
+   curl -sL "https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/fs/btrfs?h=v7.2" \
+     | grep -oE "fs/btrfs/[a-z0-9_-]+\.(h|c)" | sort -u
+   ```
+   搬迁大户：`kernel/tty.c` → 拆成 `drivers/tty/tty_{io,ioctl,jobctrl,buffer,ldisc}.c`；`kernel/crash.c` → `kernel/crash_core.c` + `crash_reserve.c`；`fs/fuse/fuse.h` → `fuse_i.h` + `dev.h`；`drivers/input/core.c` → `input.c`；`fs/btrfs/*.h` 改**下划线命名**（`block-group.h`/`delayed-ref.h`）。
+3. **结构体定义可能不在你以为的头文件里** —— 例如 btrfs 核心定义搬到了 **uapi 头** `include/uapi/linux/btrfs_tree.h`；`struct btrfs_key` 不在 `fs/btrfs/` 下。
+4. **大批量 grep 偶发返回空结果**：在单次会话里对确认含目标串的大文件（数千行）执行 `grep` 曾多次返回空，而同样的检索经 Grep 工具或落盘后 `grep` 均正常。**若 grep 结果与预期矛盾，落盘后重试或改用 Grep 工具，不要据此认定"符号不存在"** —— 这类"不存在"的结论往往正是旧资料里 API 已删除的来源。
+
+**文件命名反推**：某目录的头文件常与 Makefile 里的 `.o` 名同源（下划线）；`/include/uapi/linux/` 下的类型定义优先于私有头。
+
+**API 迁移强度**（v7.x 相较旧资料改动极大，写作时**必须逐个核实符号是否存在**）：`cpuidle_go_billiard()` 已删、`struct suspend_ops`→`platform_suspend_ops`（成员全变）、cpufreq 的 `name` 从函数指针变定长数组且 `target` 已 Deprecated、`pci_iomap*`→`pcim_*`、`struct spi_master`→`spi_controller`、FUSE 的 `FUSE_CAP_*` 去 `CAP_` 中缀且语义翻转、`FUSE_OPT` 宏移除。**凭印象写必错**。
+
+**版本事实陷阱**：sysctl / feature gate **存在 ≠ 它还生效**。判断"当前实际行为"要读**消费方函数读的是哪个变量**以及**默认值代码**，只看 sysctl 表条目或 gate 状态会写出过时结论。同类陷阱还有两条：① 官方文档可能过时于源码（如 kdump.rst 写 "at least 256M" 而 `DEFAULT_CRASH_KERNEL_LOW_SIZE` 已是 128 MiB）——**常量以源码为准**；② 符号"存在 ≠ 仍是原语义"（`FUSE_INIT_RESERVED` 占 bit 31 导致 64 位能力从 bit 32 起）。
 
 **移动笔记的固定流程**：`git mv` → 脚本全库精确替换旧路径 → grep 复核残留 → **回枢纽页补新目录入口** → 全库死链扫描（路径必须 `urllib.parse.unquote`，否则 `%20` 误报）。同时告知用户 GitHub Pages 上被收藏的 URL 有 404 风险。
 
@@ -116,12 +147,12 @@ Markdown 增强写法：
    - `[A-Z]+` → 小写。**对纯 ASCII 标题等价于整串小写**（`MarkWord` → `markword`，`M` 与 `W` 都被小写）；差异只在非 ASCII 大写字母（`École` 保留 `É`）。
    - 删**半角**标点（ASCII 标点 + `\u2000-206F` + `\u2E00-2E7F`）→ **全角标点（：）（，、）与 `→` 一律保留** → 空白转 `-` → 数字开头前缀 `_` → markdown 链接 `[文本](url)` 只留「文本」。
    - 例：`限额接口（cgroup v2）` → **`限额接口（cgroup-v2）`**；`注意（Attention）` → **`注意（attention）`**。
-   - 算不准就当场跑：
+   - 算不准就当场跑（`slugify()` 定义在 `validate_links.py`，可直接 import）：
 
      ```bash
-     python3 -c "import sys;sys.path.insert(0,'.workbuddy/tools');from validate_anchors import slug;print(slug('标题'))"
+     python3 -c "import sys;sys.path.insert(0,'.workbuddy/tools');from validate_links import slugify;print(slugify('标题'))"
      ```
-   - ⚠️ `validate_anchors.py` 已于 2026-10-02 按上游重写：旧版是「整串小写 + 删所有标点」，会把含全角标点的好链接误报成死链。另：全库有 54 个文件存在**同文件内重复标题**，docsify 会给第 2、3 个追加 `-1`／`-2` 后缀（工具已支持）。
+   - ⚠️ `slugify()` 已于 2026-10-02 按 docsify 上游重写：旧版是「整串小写 + 删所有标点」，会把含全角标点的好链接误报成死链。另：全库有 54 个文件存在**同文件内重复标题**，docsify 会给第 2、3 个追加 `-1`／`-2` 后缀（`anchors_of()` 已支持）。
    - **改标题会断既有锚点**：动手前先 `grep -rn "<file>.md?id=<slug>" docs/`，有引用就把旧标题保留为独立小节，不要合并掉。
 4. **`## Links`** 放 1~6 条最相关的**站内**笔记，只写 `- [标题](/docs/....md)` 一行，**链接后不加任何后缀说明**；正文里已出现过的内部链接不重复列入；新增笔记后要回填相关笔记的 Links，形成双向链接。
 5. **`## References`** 位于全文最后（`## Links` 之后），放外部文章 / 论文 / 官方文档，每条只写一行 `[标题](链接)`，不加后缀说明。**KEP / RFC / issue 编号必须核实再写**（凭印象填编号、或照旧目录 slug 写 URL，都会 404）。
@@ -149,12 +180,31 @@ Markdown 增强写法：
 
 ## 校验工具（`.workbuddy/tools/`，不进站点）
 
-| 脚本                              | 用途                                                          |
-| :------------------------------ | :---------------------------------------------------------- |
-| `validate_note.py <file>`       | 单篇：内部 `/docs/...` 链接是否存在 + 代码围栏是否成对                           |
-| `validate_anchors.py <file\|dir...>` | `?id=slug` 是否真实存在于目标文件标题（支持文件或目录，也可 `import` 出 `slug()` 复用） |
+| 脚本 | 用途 |
+| :--- | :--- |
+| `validate_links.py <file\|dir...>` | **主力校验**：死链 DEAD / 坏锚点 BAD ANCHOR / 相对链接 RELATIVE / 西里尔字母 CYRILLIC（均致命）+ 中英夹杂 GARBLED（告警）。可 `import` 出 `slugify()` 复用 |
+| `analyze_crosslinks.py [dir...]` | 量化链入/链出、孤立页、弱链出页；`--gate --min-indegree N` 做密度门禁 |
+| `fix_garbled.py [dir...]` | 修 `validate_links.py` 报的 GARBLED（在 CJK 与 Latin 边界补空格） |
+| `find_hub_gaps.py [dir...]` | 定位 hub 页 `## Links` 中未链到的子笔记 |
+| `fix_framework_hublinks.py` | 阶段①：框架内 hub 页 Links 补齐，消除孤立页 |
+| `fix_framework_crosslinks.py` | 阶段②：跨框架双向链接矩阵 |
 
-**全库跑 `validate_anchors.py` 约 1.5 分钟（千余篇）；按目录跑更快。**
+`validate_links.py` 的选项：`--verbose` 逐行打印 GARBLED 告警（默认只汇总计数）、`--strict` 把 GARBLED 也当致命。退出码 0 = 通过。
+
+```bash
+python3 .workbuddy/tools/validate_links.py docs/CS/Framework/etcd   # 按目录
+python3 .workbuddy/tools/validate_links.py docs/CS/Framework        # 按框架
+python3 .workbuddy/tools/validate_links.py docs/CS/OS/Linux         # Linux 内核子树
+bash scripts/kb-check.sh                                          # CI 同款：两个子树全校验 + 密度门禁
+```
+
+**CI 门禁范围**（`.github/workflows/ci.yml` + `scripts/kb-check.sh`）：覆盖 **Framework 与 Linux 内核两个子树**，push/PR 时跑。门禁规则为「无孤立页 + 平均链入 ≥ 3.5」，弱链出页仅告警不阻断。Linux 子树当前 153 篇、平均链入 6.86、孤立页 0。
+
+> [!WARNING]
+>
+> `analyze_crosslinks.py --gate` 失败时**退出码为 1**。写 shell 门禁脚本时若只把它放在中间位置，`set -e` 不会捕获（只看最后一条命令的退出码），会出现"打印了不通过却仍然 exit 0"的假通过。`scripts/kb-check.sh` 用 `check()` 包装函数显式检查每一步的退出码——**改这个脚本时务必保留该包装**。
+
+**全库跑 `validate_links.py` 约 1.5 分钟（千余篇）；按目录跑更快。**
 
 站内死链扫描（在仓库根执行，**路径必须 unquote**，否则含 `%20` 的路径全误报）：
 

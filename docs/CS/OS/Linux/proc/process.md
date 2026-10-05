@@ -2723,3 +2723,4 @@ rb_add_cached(struct rb_node *node, struct rb_root_cached *tree,
 - [Processes 知识地图](/docs/CS/OS/Linux/proc/README.md)
 - [Linux](/docs/CS/OS/Linux/Linux.md)
 - [OS Process](/docs/CS/OS/process.md)
+- [nginx](/docs/CS/CN/nginx/nginx.md) — fork 多 worker、信号驱动生命周期、exec 热升级的真实样本

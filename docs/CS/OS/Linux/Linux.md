@@ -143,6 +143,26 @@ If it's not, it should go back to sleeping on the condition variable, waiting fo
 
 [thundering herd](/docs/CS/OS/Linux/proc/thundering_herd.md)
 
+## Container resources
+
+Linux 用两套互补机制把进程分组：namespace 管**隔离与视图**（每个容器看到什么），cgroup 管**资源记账与限额**（每组能用多少）。两者相互独立，容器能力是它们叠加的结果。
+
+cgroup 的完整机制在 [cgroup 知识地图](/docs/CS/OS/Linux/cgroup/README.md) —— 从 v2 的统一层级与 no-internal-process 规则，到各控制器暴露的文件与语义（[控制器接口](/docs/CS/OS/Linux/cgroup/controllers.md)），再到容器里的委派实践与排查路径（[委派与容器实践](/docs/CS/OS/Linux/cgroup/delegation.md)）。v1 时代的概念与逐项对照保留在 [cgroup](/docs/CS/OS/Linux/cgroup.md)。
+
+与之配套的 namespace 机制（pid / net / mnt / uts / ipc / time / cgroup 七种，以及 `unshare` / `setns` 的进入退出流程）见 [namespace](/docs/CS/OS/Linux/namespace.md)；把它组合成可用的隔离环境是 [LXC](/docs/CS/OS/Linux/LXC.md) 的主题。
+
+## Device buses
+
+设备驱动挂在总线上工作。Linux 把总线抽象成"设备发现 + 匹配 + 绑定"三段流程，设备树描述硬件拓扑，driver model 负责把 driver 和 device 配对 —— 这条链路总图见 [dev 总线族](/docs/CS/OS/Linux/dev/bus.md)，涵盖 PCI、USB、I2C、SPI，以及它们共用的 regmap、pinctrl/GPIO、时钟三套支撑设施。
+
+## Power management
+
+电源管理是一个倒金字塔：越底层节能越彻底、对系统行为要求越苛刻。入口见 [PM 知识地图](/docs/CS/OS/Linux/PM/README.md)，按层展开为 [cpuidle](/docs/CS/OS/Linux/PM/cpuidle.md)（CPU 空闲挂起）、[cpufreq](/docs/CS/OS/Linux/PM/cpufreq.md)（频率调节）、[runtime PM](/docs/CS/OS/Linux/PM/runtimepm.md)（单设备按需断电）、[suspend](/docs/CS/OS/Linux/PM/suspend.md)（整机睡眠）、[devfreq](/docs/CS/OS/Linux/PM/devfreq.md)（非 CPU 设备调频）五层。
+
+## Crash dump
+
+内核 panic 后现场的寄存器与内存仍有巨大调试价值，Linux 提供两条互补路径：**kexec/kdump** 跳过正常启动直接进入第二内核导出完整内存镜像（要占一块常驻内存，但完整）；**pstore** 在崩溃前把日志写进掉电不丢的存储区（几乎不占资源，但只有日志）。两者的调用链、`crashkernel` 参数语义、ramoops 后端与排查手段见 [boot/crash](/docs/CS/OS/Linux/boot/crash.md)。
+
 ## Lock
 
 内核同步原语笔记集中在 [Lock/](/docs/CS/OS/Linux/Lock/README.md) 目录下：
@@ -271,6 +291,8 @@ Linux 网络子系统（socket 抽象、协议栈收发、NAPI 软中断、TCP �
 - [LXC](/docs/CS/OS/Linux/LXC.md)
 - [LKM](/docs/CS/OS/Linux/module/LKM.md)
 - [module development](/docs/CS/OS/Linux/module/module.md)
+- [cgroup 知识地图](/docs/CS/OS/Linux/cgroup/README.md)
+- [namespace](/docs/CS/OS/Linux/namespace.md)
 - [sysfs](/docs/CS/OS/Linux/fs/sysfs.md)
 - [ext4](/docs/CS/OS/Linux/fs/ext4.md)
 - [udev](/docs/CS/OS/Linux/dev/udev.md)

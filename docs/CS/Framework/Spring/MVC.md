@@ -1,9 +1,8 @@
 ## Introduction
 
-[Spring Web MVC](https://docs.spring.io/spring-framework/docs/current/reference/html/web.html#mvc) is the original web framework built on the Servlet API and has been included in the Spring Framework from the very beginning.
-The formal name, “Spring Web MVC,” comes from the name of its source module (spring-webmvc), but it is more commonly known as “Spring MVC”.
+[Spring Web MVC](https://docs.spring.io/spring-framework/reference/web/webmvc.html) 是构建在 Servlet API 之上的原始 Web 框架，从 Spring Framework 诞生起就在其中。它的正式名称 "Spring Web MVC" 来自源码模块名（spring-webmvc），但更常被叫做 "Spring MVC"。
 
-Parallel to Spring Web MVC, Spring Framework 5.0 introduced a reactive-stack web framework whose name, [“Spring WebFlux”](/docs/CS/Framework/Spring/webflux.md) is also based on its source module (spring-webflux).
+与 Spring Web MVC 并行，Spring Framework 5.0 引入了响应式技术栈的 Web 框架 [Spring WebFlux](/docs/CS/Framework/Spring/webflux.md)，其名称同样源自源码模块（spring-webflux）。
 
 ### DispatcherServlet
 
@@ -14,8 +13,7 @@ This model is flexible and supports diverse workflows.
 The DispatcherServlet, as any Servlet, needs to be declared and mapped according to the Servlet specification by using Java configuration or in web.xml.
 In turn, the DispatcherServlet uses Spring configuration to discover the delegate components it needs for request mapping, view resolution, exception handling, and more.
 
-比
-如 Spring MVC 中的 DispatcherServlet，就是在 init 方法里创建了自己的 Spring 容器
+比如 Spring MVC 中的 DispatcherServlet，就是在 init 方法里创建了自己的 Spring 容器
 
 <!-- tabs:start -->
 
@@ -516,18 +514,26 @@ public class DispatcherServlet extends FrameworkServlet {
 
 ## Advice
 
-ContollerAdvice只能拦截控制器中的异常，换言之，只能拦截500之类的异常，但是对于404这样不会进入控制器处理的异常不起作用
-springboot会将所有的异常发送到路径为server.error.path（application.properties中可配置，默认为”/error”）的控制器方法中进行处理，
+ControllerAdvice 只能拦截控制器中抛出的异常；对 404 这类**未进入控制器**（无匹配处理器）的异常不起作用。
 
-通过重写AbstractErrorController 自定义异常处理
+Spring Boot 会把这类容器级异常统一转发到 `server.error.path`（默认 `/error`）的控制器处理，数据来自 `ErrorAttributes`：
 
 ```java
 @Controller
-@RequestMapping("/server/error")
-public class CustomErrHandleController extends AbstractErrorController
-{
+public class CustomErrorController implements ErrorController {
+
+    @RequestMapping("/error")
+    public ResponseEntity<Map<String, Object>> handle(HttpServletRequest request) {
+        // 自行组织响应，或实现自定义 ErrorAttributes
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("path", request.getRequestURI()));
+    }
 }
 ```
+
+> [!NOTE]
+> 早期的 `AbstractErrorController` 已废弃，现行为 `ErrorController` 接口 + `BasicErrorController` 默认实现。
+
+异常处理的完整体系（`@ExceptionHandler`、`ProblemDetail` / RFC 9457、校验异常、错误响应国际化）见 [统一异常处理与 Problem Details](/docs/CS/Framework/Spring/Exception.md)。
 
 
 ## Chain
@@ -646,6 +652,35 @@ Spring MVC 对 CORS 提供多层支持，核心是判断请求是否带 `Origin`
 
 预检（preflight）是带 `OPTIONS` 方法和 `Access-Control-Request-Method` 头的请求，由框架根据配置直接应答，不进入控制器方法。细粒度控制还可用 `CorsConfiguration` 按请求动态决定放行策略。
 
+## 路径匹配：PathPattern 与 AntPathMatcher
+
+Spring 5.3 起引入 `PathPatternParser`，Spring 6 / Boot 3 起 MVC 与 WebFlux **默认用它替代 `AntPathMatcher`** 做 URL 路径匹配；到 7.x，`AntPathMatcher` 在 HTTP 请求映射场景已**被弃用**，仅保留给非 Web 的内部用途（如资源路径匹配）。
+
+- `PathPattern` 针对 URI 路径做了专门优化（预解析为结构化 token，约束 `**` 仅出现在末尾），性能与可读性都更好。
+- `AntPathMatcher` 是通用 Ant 风格匹配器，语法更灵活（任意位置 `**`、多段通配），但每次匹配都要重新解析模式串。
+- 需要切回老匹配器时，Boot 配 `spring.mvc.pathmatch.matching-strategy=ANT_PATH_MATCHER`；但响应式 WebFlux 在 7.x 已不再支持回退到 Ant，只能使用 PathPattern。
+- 对 URL 路径应写 PathPattern 语法（如 `/users/{id}`、`/files/**`），不要写 Ant 专属写法（如 `**/foo/*` 出现在路径中间），否则在 7.x 下可能直接报错而非悄悄失效。
+
+## API Versioning
+
+Framework 7.0 给 MVC 与 WebFlux 加上了**一等公民的 API 版本化**，不必再靠手写 `/v1`、`/v2` 路径前缀来区分版本。版本直接声明在映射注解上：
+
+```java
+@RestController
+public class AccountController {
+
+    @GetMapping(url = "/accounts/{id}", version = "1.1")
+    Account getAccountV1_1(@PathVariable Long id) { ... }
+
+    @GetMapping(url = "/accounts/{id}", version = "2.0")
+    Account getAccountV2(@PathVariable Long id) { ... }
+}
+```
+
+- 版本解析来源可配置（请求路径、请求头、查询参数、媒体类型），由 `ApiVersionStrategy` 统一决定解析、校验与匹配规则。
+- 支持把某个版本标记为**弃用**，并按 RFC 9745 输出 `Deprecation` / `Sunset` 等响应头通知客户端。
+- 客户端侧 `RestClient`、`WebClient`、HTTP Interface 通过 `ApiVersionInserter` 写入版本；测试侧的 `WebTestClient` 与 `MockMvc` 也有对应支持。
+
 ## HTTP Cache
 
 Spring MVC 支持标准的 HTTP 缓存协商，避免重复传输未变化的资源：
@@ -731,7 +766,8 @@ public class WebConfiguration implements WebMvcConfigurer {
 
     @Override
     public void configureMessageConverters(List<HttpMessageConverter<?>> converters) {
-        converters.add(0, new MappingJackson2HttpMessageConverter());
+        // 7.0 起 Jackson 3 的 JSON 转换器（旧名 MappingJackson2HttpMessageConverter）
+        converters.add(0, new JacksonJsonHttpMessageConverter());
     }
 }
 ```

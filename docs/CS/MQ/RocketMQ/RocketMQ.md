@@ -591,20 +591,19 @@ public class SendMessageTraceHookImpl implements SendMessageHook {
 
 ### 消息过滤
 
-tag
+两级过滤：Tag 精确匹配与 SQL92 属性级表达式。实现落在 Broker 读路径的「ConsumeQueue 预筛 → 读 CommitLog 精判 → 客户端 tag 精确匹配」三级链上，SQL92 由 JavaCC 解析的 AST 解释执行（非 Calcite），且 Broker 端 `enablePropertyFilter` **默认关闭** —— 细节见 [消息过滤](/docs/CS/MQ/RocketMQ/Filter.md)。
 
 ### 事务消息
 
-
+2PC + 补偿：先存 half 消息（改写 topic 故对消费者不可见），本地事务执行完再定论；结果丢失时 Broker 以 30s 间隔单向 RPC 回查 Producer，最多 15 次后丢弃。不保证强一致 —— 细节见 [事务消息](/docs/CS/MQ/RocketMQ/Transaction.md)。
 
 ### 延时消息
 
-延时队列
-
-
+18 级固定延迟队列（`messageDelayLevel`，`1s 5s 10s 30s 1m ... 1h 2h`），5.x 另引入时间轮实现（`timerWheelEnable` 默认开启）支持更大范围与更高精度。
 
 ### 死信队列
 
+消费失败超过重试次数后进入 `%DLQ%group`，可由 `mqadmin` 查看与重投。
 
 
 
@@ -699,12 +698,13 @@ RocketMQ 消息消费端会从 3 个维度进行限流：
 ## Links
 
 - [MQ](/docs/CS/MQ/MQ.md?id=rocketmq)
-- [Namesrv](/docs/CS/MQ/RocketMQ/Namesrv.md)
-- [Broker](/docs/CS/MQ/RocketMQ/Broker.md)
-- [Producer](/docs/CS/MQ/RocketMQ/Producer.md)
-- [Consumer](/docs/CS/MQ/RocketMQ/Consumer.md)
 - [Remoting（通信模块）](/docs/CS/MQ/RocketMQ/Remoting.md)
 - [Dledger](/docs/CS/MQ/RocketMQ/Dledger.md)
+- [Cluster](/docs/CS/MQ/RocketMQ/Cluster.md)
+- [LiteTopic](/docs/CS/MQ/RocketMQ/LiteTopic.md)
+- [Spring Cloud Alibaba](/docs/CS/Framework/Spring_Cloud/Alibaba.md)
+
+消息可靠性与数据面细节分散在几篇专题里：存储引擎的三类文件、mmap 与刷盘两阶段见 [Store](/docs/CS/MQ/RocketMQ/Store.md)，2PC + 补偿的事务消息链路见 [事务消息](/docs/CS/MQ/RocketMQ/Transaction.md)，Tag/SQL92 过滤的实现位置与开关见 [消息过滤](/docs/CS/MQ/RocketMQ/Filter.md)，而 5.x 的无状态 Proxy、gRPC SDK 仓库归属与 POP 模型见 [RocketMQ 5.x](/docs/CS/MQ/RocketMQ/RocketMQ5.md)。
 
 ## References
 

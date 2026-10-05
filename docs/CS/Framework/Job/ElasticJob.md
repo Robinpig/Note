@@ -36,6 +36,8 @@ ElasticJob-Cloud uses Mesos to manage and isolate resources.
 
 - [xxl-job](/docs/CS/Framework/Job/xxl-job.md)
 - [ElasticJob](/docs/CS/Framework/Job/ElasticJob.md)
+- [Task](/docs/CS/Framework/Spring/Task.md)
+- [ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)
 
 
 ## References

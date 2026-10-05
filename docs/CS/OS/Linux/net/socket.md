@@ -1815,3 +1815,4 @@ buffer maxsize 64K
 - [TCP](/docs/CS/OS/Linux/net/TCP/TCP.md)
 - [惊群效应](/docs/CS/OS/Linux/proc/thundering_herd.md)
 - [Linux](/docs/CS/OS/Linux/Linux.md)
+- [Nginx Event](/docs/CS/CN/nginx/event.md) — `accept4()`、非阻塞 socket 与事件循环的工程实现

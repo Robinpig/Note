@@ -1,7 +1,6 @@
 ## Introduction
 
-
-Spring 对其它分布式任务调度框架 大多都采用了processor的接口方案，用户通过接口继承实现调度任务即可，或者使用提供的方法注解，由框架自动生成代理processor
+Spring 对其它分布式任务调度框架大多采用 processor 接口方案：用户通过继承接口实现调度任务，或使用框架提供的方法注解，由框架自动生成代理 processor。
 
 ## Async
 
@@ -11,9 +10,9 @@ Spring 对其它分布式任务调度框架 大多都采用了processor的接口
 
 #### Abstraction
 
-Executors are the JDK name for the concept of thread pools. The “executor” naming is due to the fact that there is no guarantee that the underlying implementation is actually a pool. An executor may be single-threaded or even synchronous. Spring’s abstraction hides implementation details between the Java SE and Java EE environments.
+`Executors` 是 JDK 对线程池概念的命名。“executor” 这个叫法源于底层实现未必真的是池——它可能是单线程的，甚至是同步执行的。Spring 的抽象把 Java SE 与 Java EE 环境下的实现细节屏蔽掉。
 
-Spring’s `TaskExecutor` interface is identical to the `java.util.concurrent.Executor` interface. In fact, originally, **its primary reason for existence was to abstract away the need for Java 5 when using thread pools**. The interface has a single method (`execute(Runnable task)`) that accepts a task for execution based on the semantics and configuration of the thread pool.
+Spring 的 `TaskExecutor` 接口与 `java.util.concurrent.Executor` 接口完全一致。实际上它最初存在的首要理由，就是在用到线程池时**屏蔽对 Java 5 的依赖**。该接口只有一个方法 `execute(Runnable task)`，按照线程池的语义与配置接收一个待执行任务。
 
 ```java
 @FunctionalInterface
@@ -23,36 +22,48 @@ public interface TaskExecutor extends Executor {
 }
 ```
 
-The `TaskExecutor` was originally created to give other Spring components an abstraction for thread pooling where needed. Components such as the `ApplicationEventMulticaster`, JMS’s `AbstractMessageListenerContainer`, and Quartz integration all use the `TaskExecutor` abstraction to pool threads. However, if your beans need thread pooling behavior, you can also use this abstraction for your own needs.
+TaskExecutor 最初是为 Spring 其它组件提供线程池抽象而创建的。像 `ApplicationEventMulticaster`、JMS 的 `AbstractMessageListenerContainer`、以及 Quartz 集成等组件都用 `TaskExecutor` 抽象来做线程池。不过，如果你的 bean 也需要线程池行为，同样可以用这个抽象。
 
 
 
  
-Spring includes a number of pre-built implementations of `TaskExecutor`. In all likelihood, you should never need to implement your own. The variants that Spring provides are as follows:
+Spring 内置了若干 `TaskExecutor` 实现，绝大多数情况下你都不需要自己实现。Spring 提供的变体如下：
 
-- `SyncTaskExecutor`: This implementation does not run invocations asynchronously. Instead, each invocation takes place in the calling thread. It is primarily used in situations where multi-threading is not necessary, such as in simple test cases.
-- `SimpleAsyncTaskExecutor`: This implementation does not reuse any threads. Rather, it starts up a new thread for each invocation. However, it does support a concurrency limit that blocks any invocations that are over the limit until a slot has been freed up. If you are looking for true pooling, see `ThreadPoolTaskExecutor`, later in this list.
-- `ConcurrentTaskExecutor`: This implementation is an adapter for a `java.util.concurrent.Executor` instance. There is an alternative (`ThreadPoolTaskExecutor`) that exposes the `Executor` configuration parameters as bean properties. There is rarely a need to use `ConcurrentTaskExecutor` directly. However, if the `ThreadPoolTaskExecutor` is not flexible enough for your needs, `ConcurrentTaskExecutor` is an alternative.
-- `ThreadPoolTaskExecutor`: This implementation is most commonly used. It exposes bean properties for configuring a `java.util.concurrent.ThreadPoolExecutor` and wraps it in a `TaskExecutor`. If you need to adapt to a different kind of `java.util.concurrent.Executor`, we recommend that you use a `ConcurrentTaskExecutor` instead.
-- `WorkManagerTaskExecutor`: This implementation uses a CommonJ `WorkManager` as its backing service provider and is the central convenience class for setting up CommonJ-based thread pool integration on WebLogic or WebSphere within a Spring application context.
-- `DefaultManagedTaskExecutor`: This implementation uses a JNDI-obtained `ManagedExecutorService` in a JSR-236 compatible runtime environment (such as a Java EE 7+ application server), replacing a CommonJ WorkManager for that purpose.
+- `SyncTaskExecutor`：不异步执行，每次调用都在调用线程内完成。主要用于不需要多线程的场景，例如简单测试用例。
+- `SimpleAsyncTaskExecutor`：不复用线程，每次调用都启动一个新线程。但它支持并发上限，超过上限的调用会被阻塞直到有空闲槽位。如果需要真正的池化，请看本列表后面的 `ThreadPoolTaskExecutor`。
+- `ConcurrentTaskExecutor`：对 `java.util.concurrent.Executor` 实例的适配器。另有 `ThreadPoolTaskExecutor` 把 Executor 的配置参数以 bean 属性的形式暴露出来。直接用 `ConcurrentTaskExecutor` 的情况很少；但若 `ThreadPoolTaskExecutor` 不够灵活，`ConcurrentTaskExecutor` 可以作为替代。
+- `ThreadPoolTaskExecutor`：最常用。它把 `java.util.concurrent.ThreadPoolExecutor` 的配置以 bean 属性形式暴露，并包装成 `TaskExecutor`。如果你要适配其它类型的 `java.util.concurrent.Executor`，建议改用 `ConcurrentTaskExecutor`。
+- `WorkManagerTaskExecutor`：以 CommonJ `WorkManager` 作为底层服务提供者，是在 WebLogic / WebSphere 的 Spring 应用上下文里搭建 CommonJ 线程池集成的核心便捷类。
+- `DefaultManagedTaskExecutor`：在兼容 JSR-236 的运行环境（如 Java EE 7+ 应用服务器）里通过 JNDI 获取 `ManagedExecutorService` 来使用，以此取代 CommonJ 的 WorkManager。
 
 
 从TaskExecutionProperties和TaskExecutionAutoConfiguration两个配置类我们看到
 Spring自动装载的ThreadPoolTaskExecutor线程池对象的参数：核心线程数=8；最大线程数=Integer.MAX_VALUE；队列大小=Integer.MAX_VALUE
 
-如果在使用Async注解时没有指定自定义的线程池会出现以下几种情况：
-- 当Spring容器中有且仅有一个TaskExecutor实例时，Spring会用这个线程池来处理Async注解的异步任务，这可能会踩坑，如果这个TaskExecutor实例是第三方jar引入的，可能会出现很诡异的问题。
-- Spring创建一个核心线程数=8、最大线程数=Integer.MAX_VALUE、队列大小=Integer.MAX_VALUE的线程池来处理Async注解的异步任务，这时候也可能会踩坑，由于线程池参数设置不合理，核心线程数=8，队列大小过大，如果有大批量并发任务，可能会出现OOM。
-- Spring创建SimpleAsyncTaskExecutor实例来处理Async注解的异步任务，SimpleAsyncTaskExecutor不是一个好的线程池实现类，SimpleAsyncTaskExecutor根据需要在当前线程或者新线程中执行异步任务。如果当前线程已经有空闲线程可用，任务将在当前线程中执行，否则将创建一个新线程来执行任务。由于这个线程池没有线程管理的能力，每次提交任务都实时创建新城，所以如果任务量大，会导致性能下降
+如果在使用 Async 注解时没有指定自定义的线程池会出现以下几种情况：
+- 当 Spring 容器中有且仅有一个 TaskExecutor 实例时，Spring 会用这个线程池来处理 Async 注解的异步任务，这可能会踩坑，如果这个 TaskExecutor 实例是第三方 jar 引入的，可能会出现很诡异的问题。
+- Spring 创建一个核心线程数=8、最大线程数=Integer.MAX_VALUE、队列大小=Integer.MAX_VALUE 的线程池来处理 Async 注解的异步任务，这时候也可能会踩坑，由于线程池参数设置不合理，核心线程数=8，队列大小过大，如果有大批量并发任务，可能会出现 OOM。
+- Spring 创建 SimpleAsyncTaskExecutor 实例来处理 Async 注解的异步任务，SimpleAsyncTaskExecutor 不是一个好的线程池实现类，SimpleAsyncTaskExecutor 根据需要在当前线程或者新线程中执行异步任务。如果当前线程已经有空闲线程可用，任务将在当前线程中执行，否则将创建一个新线程来执行任务。由于这个线程池没有线程管理的能力，每次提交任务都实时创建新城，所以如果任务量大，会导致性能下降
 
 
+
+### 虚拟线程
+
+Java 21 的虚拟线程（Virtual Threads）在 Framework 7 / Boot 4 中已是一等公民，一行配置即可让 Web 请求处理、`@Async` 执行、任务调度全部跑在虚拟线程上：
+
+```properties
+spring.threads.virtual.enabled=true
+```
+
+开启后 Spring 会换上 `VirtualThreadTaskExecutor` 等实现，业务代码无需改动。虚拟线程把"线程即昂贵资源"的假设取消了，让阻塞式编程在高并发下重新可行；但仍需注意两点：`synchronized` 块可能造成载体线程 pinning，以及 `ThreadLocal` 的滥用（可考虑 `ScopedValue`）。
+
+与虚拟线程配套的声明式并发限制由 `@ConcurrencyLimit` 提供（Framework 7 从 Spring Retry 收编进来），用于限制某方法的并发执行数，避免下游被打爆。
 
 ### Async
 
 
 
-**The default advice mode for processing `@Async` annotations is `proxy`** which allows for interception of calls through the proxy only. Local calls within the **same class cannot get intercepted** that way. For a more advanced mode of interception, consider switching to `aspectj` mode in combination with compile-time or load-time weaving.
+处理 `@Async` 注解的**默认 advice 模式是 `proxy`**，这意味着只有经由代理发起的调用才会被拦截。**同一个类内部的本地调用无法被这种方式拦截**。若需要更高级的拦截（包括内部调用），可切换到 `aspectj` 模式，配合编译期织入或加载期织入使用。
 
 ### Example
 
@@ -65,7 +76,7 @@ public class AppConfig {
 
 
 
-Even methods that return a value can be invoked asynchronously. However, such methods are required to have a `Future`-typed return value. This still provides the benefit of asynchronous execution so that the caller can perform other tasks prior to calling `get()` on that `Future`. The following example shows how to use `@Async` on a method that returns a value:
+即便是有返回值的方法也能异步调用。不过这类方法的返回值类型必须是 `Future`。这仍然带来异步执行的好处——调用方可以在调用该 `Future` 的 `get()` 之前先去做别的事。下面这个例子演示了如何在有返回值的方法上使用 `@Async`：
 
 ```java
 @Async
@@ -80,10 +91,10 @@ Future<String> returnSomething(int i) {
 
 #### EnableAsync
 
-The mode attribute controls how advice is applied: 
+mode 属性控制 advice 的施加方式：
 
-- If the mode is AdviceMode.PROXY (the default), then the other attributes control the behavior of the proxying. Please note that proxy mode allows for interception of calls through the proxy only; local calls within the same class cannot get intercepted that way.
-- Note that if the mode is set to AdviceMode.ASPECTJ, then the value of the proxyTargetClass attribute will be ignored. Note also that in this case the spring-aspects module JAR must be present on the classpath, with compile-time weaving or load-time weaving applying the aspect to the affected classes. There is no proxy involved in such a scenario; local calls will be intercepted as well.
+- 若 mode 为 AdviceMode.PROXY（默认），其余属性控制代理的行为。注意代理模式下只有经由代理的调用会被拦截；同一个类内部的本地调用无法被这种方式拦截。
+- 若 mode 设为 AdviceMode.ASPECTJ，则 proxyTargetClass 属性的值会被忽略。此时 classpath 上必须存在 spring-aspects 模块 JAR，并由编译期织入或加载期织入把切面作用到受影响的类上。这种场景下没有代理，本地调用也会被拦截。
 
 ```java
 @Target({ElementType.TYPE})
@@ -167,9 +178,9 @@ void setConfigurers(Collection<AsyncConfigurer> configurers) {
 
 #### AsyncAnnotationBeanPostProcessor
 
-*Bean post-processor that automatically applies asynchronous invocation behavior to any bean that carries the Async annotation at class or method-level by adding a corresponding AsyncAnnotationAdvisor to the exposed proxy (either an existing AOP proxy or a newly generated proxy that implements all of the target's interfaces).*
+*Bean 后置处理器：为任何在类或方法级别标注了 Async 注解的 bean 自动施加异步调用行为，做法是向暴露出来的代理（既可以是已有的 AOP 代理，也可以是新生成的、实现了目标所有接口的代理）追加一个对应的 AsyncAnnotationAdvisor。*
 
-*override setBeanFactory method from **BeanFactoryAware***
+*重写来自 **BeanFactoryAware** 的 setBeanFactory 方法*
 
 ```java
 @Override
@@ -189,8 +200,8 @@ public void setBeanFactory(BeanFactory beanFactory) {
 
 #### AsyncAnnotationAdvisor
 
-***Advisor that activates asynchronous method execution through the Async annotation.** This annotation can be used at the method and type level in implementation classes as well as in service interfaces.*
-*This advisor detects the EJB 3.1 javax.ejb.Asynchronous annotation as well, treating it exactly like Spring's own Async. Furthermore, a custom async annotation type may get **specified through the "asyncAnnotationType" property**.*
+***通过 Async 注解激活异步方法执行的 Advisor。** 该注解既可用于实现类的方法级与类型级，也可用于服务接口。*
+*该 advisor 也能识别 EJB 3.1 的 javax.ejb.Asynchronous 注解，把它当作 Spring 自己的 Async 一样处理。此外，还可以通过 **"asyncAnnotationType" 属性**指定一个自定义的异步注解类型。*
 
 ```java
 @SuppressWarnings("unchecked")
@@ -238,7 +249,7 @@ public void setAsyncAnnotationType(Class<? extends Annotation> asyncAnnotationTy
 
 #### AnnotationAsyncExecutionInterceptor
 
-*getDefaultExecutor searches for a unique TaskExecutor bean in the context, or for an Executor bean named "taskExecutor" otherwise.If neither of the two is resolvable, this implementation will return null.*
+*getDefaultExecutor 会在容器里查找唯一的 TaskExecutor bean，否则查找名为 "taskExecutor" 的 Executor bean。若两者都无法解析，该实现返回 null。*
 
 ```java
 /**
@@ -257,9 +268,9 @@ public void configure(@Nullable Supplier<Executor> defaultExecutor,
 
 #### AsyncExecutionInterceptor
 
-*AOP Alliance MethodInterceptor that processes method invocations asynchronously, using a given **AsyncTaskExecutor**. Typically used with the **org.springframework.scheduling.annotation.Async** annotation.*
-*In terms of target method signatures, any parameter types are supported. However, the return type is constrained to either void or java.util.concurrent.Future. In the latter case, the Future handle returned from the proxy will be an actual asynchronous Future that can be used to track the result of the asynchronous method execution. However, since the target method needs to implement the same signature, it will have to return a temporary Future handle that just passes the return value through (like Spring's **org.springframework.scheduling.annotation.AsyncResult** or EJB 3.1's javax.ejb.AsyncResult).*
-*When the return type is **java.util.concurrent.Future**, any exception thrown during the execution can be accessed and managed by the caller. With void return type however, such exceptions cannot be transmitted back. In that case an **AsyncUncaughtExceptionHandler** can be registered to process such exceptions.*
+*AOP Alliance 的 MethodInterceptor，使用给定的 **AsyncTaskExecutor** 异步处理方法调用。通常与 **org.springframework.scheduling.annotation.Async** 注解配合使用。*
+*就目标方法签名而言，任何参数类型都支持；但返回值类型被限定为 void 或 java.util.concurrent.Future。在后一种情况下，代理返回的 Future 句柄是一个真正的异步 Future，可用于追踪异步方法的执行结果。不过由于目标方法需要实现同样的签名，它只能返回一个临时的 Future 句柄把返回值透传过去（类似 Spring 的 **org.springframework.scheduling.annotation.AsyncResult** 或 EJB 3.1 的 javax.ejb.AsyncResult）。*
+*当返回类型是 **java.util.concurrent.Future** 时，执行期间抛出的任何异常都能被调用方获取并处理；而 void 返回类型下异常无法回传，此时可以注册一个 **AsyncUncaughtExceptionHandler** 来处理这类异常。*
 
 ```java
 public class AsyncExecutionInterceptor extends AsyncExecutionAspectSupport implements MethodInterceptor, Ordered {}
@@ -310,7 +321,7 @@ public Object invoke(final MethodInvocation invocation) throws Throwable {
 
 #### determineAsyncExecutor
 
-*Determine the specific executor to use when executing the given method. Should preferably return an AsyncListenableTaskExecutor implementation.*
+*确定执行给定方法时要使用的具体 executor，最好返回一个 AsyncListenableTaskExecutor 实现。*
 
 ```java
 //AsyncExecutionAspectSupport#determineAsyncExecutor()
@@ -414,7 +425,7 @@ protected Object doSubmit(Callable<Object> task, AsyncTaskExecutor executor, Cla
 
 #### Abstraction
 
-In addition to the `TaskExecutor` abstraction, Spring 3.0 introduced a `TaskScheduler` with a variety of methods for scheduling tasks to run at some point in the future. The following listing shows the `TaskScheduler` interface definition:
+除了 `TaskExecutor` 抽象，Spring 3.0 还引入了 `TaskScheduler`，它提供多种把任务安排在未来某个时刻运行的方法。下面的清单展示了 `TaskScheduler` 接口定义：
 
 ```java
 public interface TaskScheduler {
@@ -443,14 +454,14 @@ public interface TaskScheduler {
 }
 ```
 
-The simplest method is the one named `schedule` that takes only a `Runnable` and a `Date`. 
-That causes the task to run once after the specified time. All of the other methods are capable of scheduling tasks to run repeatedly. The fixed-rate and fixed-delay methods are for simple, periodic execution, but the method that accepts a `Trigger` is much more flexible.
+最简单的方法是名为 `schedule` 的那个，它只接收 `Runnable` 与 `Date`。
+它使任务在指定时间之后运行一次。其余方法都能把任务安排成重复执行。fixed-rate 与 fixed-delay 方法用于简单的周期执行，而接受 `Trigger` 的方法要灵活得多。
 
 #### implementations
 
-As with Spring’s `TaskExecutor` abstraction, the primary benefit of the `TaskScheduler` arrangement is that an application’s scheduling needs are decoupled from the deployment environment. This abstraction level is particularly relevant when deploying to an application server environment where threads should not be created directly by the application itself. For such scenarios, Spring provides a `TimerManagerTaskScheduler` that delegates to a CommonJ `TimerManager` on WebLogic or WebSphere as well as a more recent `DefaultManagedTaskScheduler` that delegates to a JSR-236 `ManagedScheduledExecutorService` in a Java EE 7+ environment. Both are typically configured with a JNDI lookup.
+与 Spring 的 `TaskExecutor` 抽象一样，`TaskScheduler` 机制的主要好处是让应用的调度需求与部署环境解耦。在应用服务器环境里线程不应由应用自身直接创建，这种抽象层级就显得尤为关键。针对这类场景，Spring 提供了 `TimerManagerTaskScheduler`（在 WebLogic / WebSphere 上委托给 CommonJ 的 `TimerManager`），以及较新的 `DefaultManagedTaskScheduler`（在 Java EE 7+ 环境里委托给 JSR-236 的 `ManagedScheduledExecutorService`）。两者通常都通过 JNDI 查找来配置。
 
-Whenever external thread management is not a requirement, a simpler alternative is a local `ScheduledExecutorService` setup within the application, which can be adapted through Spring’s `ConcurrentTaskScheduler`. As a convenience, Spring also provides a `ThreadPoolTaskScheduler`, which internally delegates to a `ScheduledExecutorService` to provide common bean-style configuration along the lines of `ThreadPoolTaskExecutor`. These variants work perfectly fine for locally embedded thread pool setups in lenient application server environments, as well — in particular on Tomcat and Jetty.
+若不需要外部线程管理，更简单的方式是在应用内部搭建一个本地 `ScheduledExecutorService`，并通过 Spring 的 `ConcurrentTaskScheduler` 适配它。作为便利，Spring 还提供了 `ThreadPoolTaskScheduler`，它在内部委托给 `ScheduledExecutorService`，从而提供类似 `ThreadPoolTaskExecutor` 的 bean 风格配置。这些变体在本地的嵌入式线程池场景里都很好用，在宽松的应用服务器环境（特别是 Tomcat 和 Jetty）下同样如此。
 
 
 ThreadPoolTaskScheduler 默认线程数只有 1，多个定时任务会串行执行。而且它同时实现了 TaskExecutor，可能被 @Async 误用造成混淆。
@@ -458,7 +469,7 @@ ThreadPoolTaskScheduler 默认线程数只有 1，多个定时任务会串行执
 
 ### Trigger
 
-The `Trigger` interface is essentially inspired by JSR-236 which, as of Spring 3.0, was not yet officially implemented. The basic idea of the `Trigger` is that execution times may be determined based on past execution outcomes or even arbitrary conditions. If these determinations do take into account the outcome of the preceding execution, that information is available within a `TriggerContext`. The `Trigger` interface itself is quite simple, as the following listing shows:
+`Trigger` 接口的灵感基本来自 JSR-236，而在 Spring 3.0 时该规范尚未正式实现。`Trigger` 的基本思想是：执行时间可以基于过往的执行结果、甚至任意条件来确定。如果这些判定确实参考了上一次执行的结果，那么相关信息可从 `TriggerContext` 中获取。`Trigger` 接口本身相当简单，如下所示：
 
 ```java
 public interface Trigger {
@@ -467,7 +478,7 @@ public interface Trigger {
 }
 ```
 
-The `TriggerContext` is the most important part. It encapsulates all of the relevant data and is open for extension in the future, if necessary. The `TriggerContext` is an interface (a `SimpleTriggerContext` implementation is used by default). The following listing shows the available methods for `Trigger` implementations.
+`TriggerContext` 是最关键的部分。它封装了所有相关数据，并预留了未来扩展的空间。`TriggerContext` 是一个接口（默认使用 `SimpleTriggerContext` 实现）。下面的清单展示了 `Trigger` 实现可用的那些方法。
 
 ```java
 public interface TriggerContext {
@@ -482,13 +493,13 @@ public interface TriggerContext {
 
 #### Implementations
 
-Spring provides two implementations of the `Trigger` interface. The most interesting one is the `CronTrigger`. It enables the scheduling of tasks based on cron expressions. For example, the following task is scheduled to run 15 minutes past each hour but only during the 9-to-5 “business hours” on weekdays:
+Spring 提供了 `Trigger` 接口的两个实现。最有趣的是 `CronTrigger`，它基于 cron 表达式来安排任务。例如，下面这个任务被安排在每个小时过去 15 分钟后运行，但仅限于工作日的 9 点到 17 点“办公时间”：
 
 ```
 scheduler.schedule(task, new CronTrigger("0 15 9-17 * * MON-FRI"));
 ```
 
-The other implementation is a `PeriodicTrigger` that accepts a fixed period, an optional initial delay value, and a boolean to indicate whether the period should be interpreted as a fixed-rate or a fixed-delay. Since the `TaskScheduler` interface already defines methods for scheduling tasks at a fixed rate or with a fixed delay, those methods should be used directly whenever possible. The value of the `PeriodicTrigger` implementation is that you can use it within components that rely on the `Trigger` abstraction. For example, it may be convenient to allow periodic triggers, cron-based triggers, and even custom trigger implementations to be used interchangeably. Such a component could take advantage of dependency injection so that you can configure such `Triggers` externally and, therefore, easily modify or extend them.
+另一个实现是 `PeriodicTrigger`，它接受一个固定周期、一个可选的初始延迟值，以及一个布尔值用于指明该周期应解释为 fixed-rate 还是 fixed-delay。由于 `TaskScheduler` 接口已经定义了以固定速率或固定延迟调度任务的方法，应优先直接使用那些方法。`PeriodicTrigger` 的价值在于你可以在依赖 `Trigger` 抽象的组件里使用它。例如，让周期触发器、基于 cron 的触发器、乃至自定义触发器实现可以互换使用会非常方便；这样的组件可以利用依赖注入，让你在外部配置这些 `Triggers`，从而轻松修改或扩展它们。
 
 
 
@@ -496,7 +507,7 @@ The other implementation is a `PeriodicTrigger` that accepts a fixed period, an 
 
 #### Example
 
-Enables Spring's scheduled task execution capability. To be used on @Configuration classes as follows:
+启用 Spring 的定时任务执行能力，用在 `@Configuration` 类上，如下所示：
 
 ```java
    @Configuration
@@ -506,7 +517,7 @@ Enables Spring's scheduled task execution capability. To be used on @Configurati
    }
 ```
 
-This enables detection of @Scheduled annotations on any Spring-managed bean in the container. For example, given a class MyTask
+这会让容器里任意 Spring 管理的 bean 上的 `@Scheduled` 注解被扫描到。例如，给定一个 MyTask 类
 
 
 ```java
@@ -568,9 +579,9 @@ public class SchedulingConfiguration {
 
 #### ScheduledAnnotationBeanPostProcessor
 
-***Bean post-processor that registers methods annotated with @Scheduled to be invoked by a TaskScheduler according to the "fixedRate", "fixedDelay", or "cron" expression provided via the annotation.***
-This post-processor is automatically registered by Spring's <task:annotation-driven> XML element, and also by the @EnableScheduling annotation.
-Autodetects any SchedulingConfigurer instances in the container, allowing for customization of the scheduler to be used or for fine-grained control over task registration (e.g. registration of Trigger tasks. See the @EnableScheduling javadocs for complete usage details.
+***Bean 后置处理器：把标注了 @Scheduled 的方法注册为由 TaskScheduler 按照注解提供的 "fixedRate"、"fixedDelay" 或 "cron" 表达式来调用。***
+该后置处理器由 Spring 的 <task:annotation-driven> XML 元素自动注册，也由 @EnableScheduling 注解自动注册。
+会自动发现容器里的任何 SchedulingConfigurer 实例，从而可以定制所使用的调度器，或对任务注册做细粒度控制（例如注册 Trigger 任务）。完整用法见 @EnableScheduling 的 javadoc。
 
 
 
@@ -753,7 +764,7 @@ protected Runnable createRunnable(Object target, Method method) {
 
 
 
-cannot be invoke:
+无法被调用：
 
 - private 
 - static
@@ -803,12 +814,12 @@ public static Method selectInvocableMethod(Method method, @Nullable Class<?> tar
 
 @Async基于[AOP](/docs/CS/Framework/Spring/AOP.md)
 - 函数access flag非 public
-- 函数是final或者static
+- 函数是 final 或者 static
 - 当前类里其它方法内部调用
 
 Spring相关
-- 未被Spring管理
-- @Async方法返回值必须是void或者Future
+- 未被 Spring 管理
+- @Async 方法返回值必须是 void 或者 Future
 
 ### 线程池
 
@@ -817,9 +828,13 @@ Spring相关
 ## Links
 
 - [Spring](/docs/CS/Framework/Spring/Spring.md)
+- [AOP](/docs/CS/Framework/Spring/AOP.md)
+- [Transaction](/docs/CS/Framework/Spring/Transaction.md)
+- [AOP](/docs/CS/Framework/Spring/AOP.md)
+- [Transaction](/docs/CS/Framework/Spring/Transaction.md)
 
 ## References
 
-- [Spring 5.2.x doc](https://docs.spring.io/spring-framework/docs/5.2.x/spring-framework-reference/integration.html#scheduling)
-- [浅析Spring中Async注解底层异步线程池原理｜得物技术](https://mp.weixin.qq.com/s/FySv5L0bCdrlb5MoSfQtAA)
+- [Spring Framework 7.x 文档 - 任务执行与调度](https://docs.spring.io/spring-framework/reference/integration/scheduling.html)
+- [浅析 Spring 中 Async 注解底层异步线程池原理｜得物技术](https://mp.weixin.qq.com/s/FySv5L0bCdrlb5MoSfQtAA)
 - [阿里云 SCA 学习站 - 执行任务和任务计划](https://sca.aliyun.com/learn/spring/integration/scheduling/)

@@ -1257,6 +1257,7 @@ if (unlikely(ZERO_OR_NULL_PTR(x)))对地址做非零判断，接着virt_to_head_
 ## Links
 
 - [内存管理知识地图（mm 枢纽）](/docs/CS/OS/Linux/mm/README.md)
+- [Nginx Memory](/docs/CS/CN/nginx/memory.md) — 用户态自研内存池，以及共享内存里那套「按页 slab」的实现
 
 
 ## References

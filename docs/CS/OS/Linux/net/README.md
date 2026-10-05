@@ -55,6 +55,8 @@ IP 层还需要一条"控制与反馈"回路，这就是 **ICMP**（协议号 1�
 
 内核视角要记住一点：网络收发本质是**中断 + 软中断 + 等待队列唤醒**驱动的生产者-消费者过程，与进程调度、内存分配（SKB 来自专门的 slab 分配）紧密耦合，并非孤立的协议代码。
 
+这套机制在用户态最典型的落地就是 nginx：它在协议栈之上用少量 worker + epoll 事件循环承接海量连接，四层的 [stream](/docs/CS/CN/nginx/stream.md) 与三层的 [HTTP](/docs/CS/CN/nginx/HTTP.md) 是两套平行实现；[HTTP/3](/docs/CS/CN/nginx/http3.md) 更进一步——它绕开内核 TCP，在 worker 里自己实现了 QUIC 的可靠传输，内核只负责 UDP 收发。内核侧机制与 nginx 侧实现的逐项对照见 [Nginx Event](/docs/CS/CN/nginx/event.md) 与 [内核协同链路](/docs/CS/OS/Linux/Architecture.md)。
+
 ## Links
 
 - [Linux](/docs/CS/OS/Linux/Linux.md)

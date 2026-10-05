@@ -81,6 +81,8 @@ Spark Streaming 属于 Spark API 的扩展
 
 - [Mesos](/docs/CS/Distributed/Cluster_Scheduler.md?id=mesos)
 - [MapReduce](/docs/CS/Distributed/MapReduce.md)
+- [Flink](/docs/CS/Framework/Flink/Flink.md)
+- [Hadoop](/docs/CS/Framework/Hadoop/Hadoop.md)
 
 ## References
 

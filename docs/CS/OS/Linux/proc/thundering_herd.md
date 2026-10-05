@@ -1136,17 +1136,27 @@ void sock_def_readable(struct sock *sk)
 
 ## Nginx
 
-multiple process
+Nginx 的多进程模型是 accept 惊群最典型的场景：master 先 bind + listen，再 fork 出多个 worker，**所有 worker 默认都可能被同一个 listen fd 上的可读事件唤醒**。它在四层上依次退让，且按源码判定顺序**互斥**（`ngx_event_process_init`）：
 
-`ngx_event_accept` default disable
+| 手段 | 生效条件 | 层次 |
+| :-- | :-- | :-- |
+| `listen ... reuseport` | 内核 ≥ 3.9 且显式写了 `reuseport` | 每个 worker 各持一个监听 socket，内核按四元组哈希分流——**从根上不存在竞争** |
+| accept mutex | `accept_mutex on`，且 master + `worker_processes > 1` | 应用层自旋锁：抢到锁的 worker 才把 listen fd 加进 epoll |
+| `EPOLLEXCLUSIVE` | 用 epoll 且 `worker_processes > 1`（自动启用，无需配置） | 内核唤醒时只挑一个等待者，与本文 [wait](#wait) 节的 `WQ_FLAG_EXCLUSIVE` 同一思想 |
+| 都不满足 | 单 worker / 非 epoll 平台 | 直接注册，回到惊群 |
 
-Nginx 侧的实现细节：
+几个源码级细节：
 
-- 多 worker 竞争 accept 的惊群由 [accept mutex](/docs/CS/CN/nginx/nginx.md) 解决：`ngx_use_accept_mutex` 开启时，worker 通过 `ngx_trylock_accept_mutex` 抢锁，抢到者把 listen fd 加入 epoll，抢不到者只处理已有连接（配合 `accept_mutex_delay` 避免活锁）。
-- 新内核也可改用 `EPOLLEXCLUSIVE`（Linux 4.5+）让内核只唤醒一个等待者，与本文 [wait](/docs/CS/OS/Linux/proc/thundering_herd.md?id=wait) 节的 `WQ_FLAG_EXCLUSIVE` 是同一个思想在内核/应用两层的体现。
+- **`accept_mutex` 自 1.11.3 起默认 off**（`ngx_conf_init_value(ecf->accept_mutex, 0)`），`accept_mutex_delay` 默认 500ms。所以「nginx 靠 accept mutex 解决惊群」在现代版本上已不成立——默认路径是 `EPOLLEXCLUSIVE`，而 `reuseport` 更彻底。
+- 判定顺序在 `src/event/ngx_event.c` 里是一串**顺序 `continue`**：`reuseport` 命中即注册并 `continue`；否则有 accept mutex 就 `continue`（等抢到锁再加）；否则若支持 `EPOLLEXCLUSIVE` 则带 `NGX_EXCLUSIVE_EVENT` 注册；最后才是普通注册。
+- accept mutex 生效时，worker 在 `ngx_process_events_and_timers` 里用 `ngx_trylock_accept_mutex` 抢锁，同时把 `epoll_wait` 的超时压到不超过 `accept_mutex_delay`——避免「锁刚被释放而自己还在睡」的活锁。
+- **过载保护**：`ngx_accept_disabled = connection_n / 8 - free_connection_n`，每次 accept 成功后重算；主循环里只要它 > 0 就只递减、不抢锁，即连接用掉超过 7/8 时主动退出 accept 竞争。accept 出错（典型 EMFILE）时被置为 1，同样让出。
+
+一次 accept 唤醒在内核侧的完整链路是 `tcp_v4_rcv` → `sk_data_ready` → `wake_up_interruptible_sync_poll`，与服务端 `epoll_wait` 的等待队列机制对应，见 [network](/docs/CS/OS/Linux/net/network.md)。Nginx 侧的事件循环、连接池与 accept 流程实现见 [Event](/docs/CS/CN/nginx/event.md)。
 
 ## Links
 
 - [processes](/docs/CS/OS/Linux/proc/process.md)
 - [Processes 知识地图](/docs/CS/OS/Linux/proc/README.md)
 - [network](/docs/CS/OS/Linux/net/network.md)
+- [Nginx Event](/docs/CS/CN/nginx/event.md)

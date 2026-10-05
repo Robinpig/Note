@@ -32,6 +32,9 @@ Nacos 的关键特性包括:
   Nacos allows you to manage all of your services and metadata from the perspective of a microservices platform builder. 
   This includes managing service description, life cycle, service static dependencies analysis, service health status, service traffic management，routing and security rules, service SLA, and first line metrics.
 
+> [!NOTE]
+> 版本基线（2026-10 核实）：**Nacos 3.2.4**（2026-08-27 发布，Java 17）为当前稳定版，3.2.x 是活跃维护线；**2.5.4**（2026-08-27，Java 8）为 2.x 遗留线，供 JDK8 用户；**3.3.0-RC**（2026-09-21）为待发候选。3.0.0 GA 于 2025-04-25（首个 3.x，gRPC 原生，Java 17 起）。3.x 与 2.x 差异：默认鉴权策略加强（3.3+ Docker 镜像默认开启 Client API 鉴权）、`/v3` API 上下文、PostgreSQL 等多数据源插件。
+
 ## Installation
 
 Run and Debug
@@ -559,11 +562,48 @@ Windows下阿里云盘的SyncAppServer.exe占用了端口9848导致启动失败
 
 
 
+## 与 etcd 对照
+
+Nacos 与 etcd 定位有交集也有分野：etcd 是**通用的强一致 KV 协调底座**，Nacos 是**配置中心 + 服务注册中心**（完整维度矩阵见 [etcd 横向对照](/docs/CS/Framework/etcd/compare.md)）。
+
+| 维度 | Nacos | etcd |
+| :--- | :--- | :--- |
+| 定位 | 配置中心 + 服务注册发现 | 通用 CP KV 协调 |
+| 一致性（服务发现） | **默认 AP**（Distro，最终一致，分区可分歧） | **始终 CP**（Raft） |
+| 一致性（配置 / CP） | CP，基于 **JRaft**（简化 Raft 实现） | CP，基于 etcd-raft |
+| 数据模型 | namespace / group / service / instance + 配置（dataId/group） | 扁平 KV + 前缀 |
+| 持久化依赖 | **需 MySQL** 存配置（外部依赖，会挂） | 零外部依赖（bbolt 单文件） |
+| Watch | 长轮询 + gRPC 推送（2.x） | gRPC 双向流，按 revision 回溯 |
+| 服务发现 | **原生主打**（Spring / Dubbo 生态成熟） | 需自行封装 |
+| 配置管理 | **原生版本化、专用** | 仅 KV，无版本化特性 |
+| 语言 / 依赖 | Java | Go，单二进制 |
+
+**最大差异是可用性取向。** Nacos 的服务发现默认走 AP（Distro 协议，分区时各节点可独立响应、允许短暂分歧），把"注册中心不因网络分区全挂"看得比强一致更重；etcd 始终 CP，分区时少数派不可用但数据绝不分歧。Nacos 的配置模块与 CP 模式才用 JRaft（自研简化 Raft）保证一致——与 etcd 全量 Raft 不同。
+
+**运维依赖是另一道分水岭。** Nacos 需要 MySQL 持久化配置，多一个会挂的外部组件；etcd 单二进制 + 一个 data-dir，零外部依赖。Nacos 用 Java（JVM 开销），etcd 用 Go（更轻）。
+
+**选型**：要配置中心 + 注册中心开箱即用（尤其 Spring Cloud Alibaba / Dubbo）→ Nacos；要云原生通用协调底座、K8s 后端、或需要 Txn 原子事务与线性一致读 → etcd。两者都常被拿来和 ZooKeeper、Consul 比较（见 [etcd 横向对照](/docs/CS/Framework/etcd/compare.md)）。
+
 ## Links
 
 
 
 - [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md)
+- [etcd](/docs/CS/Framework/etcd/etcd.md)
+- [etcd 横向对照](/docs/CS/Framework/etcd/compare.md)
+- [ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)
+- [Eureka](/docs/CS/Framework/eureka/Eureka.md)
+- [Spring Cloud Alibaba](/docs/CS/Framework/Spring_Cloud/Alibaba.md)
+- [Nacos 目录索引](/docs/CS/Framework/nacos/README.md)
+- [JRaft（CP 共识）](/docs/CS/Framework/nacos/jraft.md)
+- [Storage（存储与持久化）](/docs/CS/Framework/nacos/storage.md)
+- [Client（客户端 SDK）](/docs/CS/Framework/nacos/client.md)
+- [Security（鉴权与 RBAC）](/docs/CS/Framework/nacos/security.md)
+- [Monitoring（监控）](/docs/CS/Framework/nacos/monitoring.md)
+- [Troubleshooting（故障排查）](/docs/CS/Framework/nacos/troubleshooting.md)
+- [一致性抽象层](/docs/CS/Framework/nacos/consistency.md)
+- [Distro（AP 协议深潜）](/docs/CS/Framework/nacos/distro.md)
+- [Config Push（配置推送深潜）](/docs/CS/Framework/nacos/config-push.md)
 
 ## References
 1. [Quick Start for Nacos Spring Boot Projects](https://nacos.io/en-us/docs/quick-start-spring-boot.html)

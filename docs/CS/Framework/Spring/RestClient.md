@@ -1,14 +1,18 @@
 ## Introduction
 
-Spring Framework 为调用 REST 端点提供了三种客户端，定位互补：
+Spring Framework 为调用 REST 端点提供四种客户端，定位互补：
 
-| 客户端 | 编程模型 | 阻塞模型 | 状态 |
+| 客户端 | 编程模型 | 阻塞模型 | 当前定位 |
 |---|---|---|---|
-| `RestTemplate` | template method（`getForObject` / `postForEntity` / `exchange`） | 同步阻塞 | 维护模式，只接受小改动和 bugfix |
-| `WebClient` | 函数式、流式 API（`WebClient.create().get().retrieve()`） | 非阻塞，基于 Reactor，支持背压 | 推荐新项目使用 |
-| HTTP Interface | 声明式 Java 接口 + 注解，由动态代理实现 | 底层可接 `WebClient`（响应式）或 `RestClient`（同步） | Spring 6 新增 |
+| `RestClient` | fluent API（`get().uri(...).retrieve()`），支持函数式请求定制 | 同步阻塞 | **7.x 新代码首选**（6.1 引入） |
+| `RestTemplate` | template method（`getForObject` / `postForEntity` / `exchange`） | 同步阻塞 | 维护模式；**7.1 弃用、8.0 移除** |
+| `WebClient` | 函数式、流式 API（`WebClient.create().get().retrieve()`） | 非阻塞，基于 Reactor，支持背压 | 响应式 / 高并发场景 |
+| HTTP Interface | 声明式 Java 接口 + 注解，由动态代理实现 | 底层可接 `WebClient`（响应式）或 `RestClient`（同步） | Spring 6 引入，7.0 起支持分组注册 |
 
-三者都构建在同一个 `HttpMessageConverter` 体系之上，请求都由 `ClientHttpRequestFactory` 发出（默认 JDK `HttpURLConnection`，可切换 Apache HttpComponents、OkHttp、Netty）。
+四者都构建在同一个 `HttpMessageConverter` 体系之上，请求都由 `ClientHttpRequestFactory` 发出（默认 JDK `HttpURLConnection`，可切换 Apache HttpComponents、OkHttp、Netty）。
+
+> [!WARNING]
+> Framework 7.0 起 Jackson 3 成为默认 JSON 实现，消息转换器随之改名：`MappingJackson2HttpMessageConverter` → `JacksonJsonHttpMessageConverter`，`MappingJackson2XmlHttpMessageConverter` → `JacksonXmlHttpMessageConverter`，基类 `AbstractJackson2HttpMessageConverter` → `AbstractJacksonHttpMessageConverter`。旧类名仍在 `spring-web` 中但已标注 `forRemoval`。
 
 ## RestTemplate
 
@@ -64,8 +68,9 @@ RestTemplate template = new RestTemplate(new HttpComponentsClientHttpRequestFact
 | `StringHttpMessageConverter` | `text/*`，读写 String |
 | `FormHttpMessageConverter` | `application/x-www-form-urlencoded`，以及 multipart 写入 |
 | `ByteArrayHttpMessageConverter` | 字节数组，默认 `application/octet-stream` |
-| `MappingJackson2HttpMessageConverter` | `application/json`，基于 Jackson `ObjectMapper` |
-| `MappingJackson2XmlHttpMessageConverter` | `application/xml`，基于 Jackson XML |
+| `JacksonJsonHttpMessageConverter` | `application/json`，基于 Jackson 3 的 `JsonMapper`（7.0 起；旧名 `MappingJackson2HttpMessageConverter`） |
+| `JacksonXmlHttpMessageConverter` | `application/xml`，基于 Jackson XML（旧名 `MappingJackson2XmlHttpMessageConverter`） |
+| `KotlinSerializationJsonHttpMessageConverter` | `application/json`，基于 kotlinx.serialization |
 | `MarshallingHttpMessageConverter` | 基于 Spring OXM `Marshaller`/`Unmarshaller` 的 XML |
 | `BufferedImageHttpMessageConverter` | `java.awt.image.BufferedImage` |
 
@@ -95,6 +100,28 @@ value.setSerializationView(User.WithoutPasswordView.class);
 RequestEntity<?> request = RequestEntity.post(URI.create("https://example.com/user")).body(value);
 template.exchange(request, String.class);
 ```
+
+## RestClient
+
+`RestClient` 是 Spring 6.1 引入的同步客户端，把 `RestTemplate` 的模板方法与 `WebClient` 的 fluent API 结合——既保留同步阻塞的直观性，又提供链式、可组合的调用写法。7.x 中它是同步调用的标准选择：
+
+```java
+RestClient client = RestClient.builder()
+        .baseUrl("https://api.example.com")
+        .defaultHeader("Accept", "application/json")
+        .build();
+
+Person person = client.get()
+        .uri("/people/{id}", 42)
+        .retrieve()
+        .body(Person.class);
+```
+
+- `retrieve()` 按状态码自动处理错误（默认 4xx / 5xx 抛 `RestClientResponseException`），`exchange()` 则把请求与响应完全交给回调。
+- 底层复用与 `RestTemplate` 相同的 `ClientHttpRequestFactory` 与消息转换器，可由 `RestClient.create(restTemplate)` 从既有 `RestTemplate` 平滑迁移。
+
+> [!NOTE]
+> 7.0 起 `RestClientResponseException.getRawStatusCode()` 已移除，改用 `getStatusCode()` 直接与 `HttpStatusCode` 比较。
 
 ## WebClient
 
@@ -144,6 +171,25 @@ HttpServiceProxyFactory factory = HttpServiceProxyFactory
         .builder(WebClientAdapter.forClient(client)).build();
 RepositoryService service = factory.createClient(RepositoryService.class);
 ```
+
+### 分组注册（7.0）
+
+当 HTTP 接口多到几十上百个时，逐个手工构造 `HttpServiceProxyFactory` 会很啰嗦。7.0 引入 `@ImportHttpServices` 按"组"批量注册：框架自动创建代理并注册为 Bean，同一组共享一个客户端配置。
+
+```java
+@Configuration(proxyBeanMethods = false)
+@ImportHttpServices(group = "weather", types = {FreeWeather.class, CommercialWeather.class})
+static class HttpServicesConfiguration extends AbstractHttpServiceRegistrar {
+
+    @Bean
+    RestClientHttpServiceGroupConfigurer groupConfigurer() {
+        return groups -> groups.filterByName("weather")
+                .configureClient((group, builder) -> builder.defaultHeader("User-Agent", "My-Application"));
+    }
+}
+```
+
+`HttpServiceProxyRegistry` 在此之上提供按类型或组查询代理的统一入口。
 
 ### 支持的方法参数
 

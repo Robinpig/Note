@@ -1,18 +1,15 @@
 ## Introduction
 
-Aspect-Oriented Programming (AOP) complements Object-Oriented Programming (OOP) by providing another way of thinking about program structure.
-The key unit of modularity in OOP is the class, whereas in AOP the unit of modularity is the aspect.
-Aspects enable the modularization of concerns such as transaction management that cut across multiple types and objects. (Such concerns are often termed crosscutting concerns in AOP literature.)
+面向切面编程（AOP）是对面向对象编程（OOP）的补充，它提供了另一种思考程序结构的方式。OOP 中模块化的基本单位是类，而 AOP 中模块化的基本单位是切面（aspect）。切面让那些横切多个类型和对象的关注点（如事务管理）得以模块化。（这类关注点在 AOP 文献中常被称为横切关注点。）
 
-One of the key components of Spring is the AOP framework.
-While the Spring IoC container does not depend on AOP, meaning you do not need to use AOP if you don't want to, AOP complements Spring IoC to provide a very capable middleware solution.
+Spring 的关键组件之一就是 AOP 框架。虽然 Spring IoC 容器并不依赖 AOP（你完全可以不用 AOP），但 AOP 与 IoC 互补，提供了一套非常强大的中间件方案。
 
-As [AspectJ](/docs/CS/Java/AspectJ.md) uses compile time and classload time weaving, Spring AOP makes use of runtime weaving.
+[AspectJ](/docs/CS/Java/AspectJ.md) 使用编译期与类加载期织入，而 Spring AOP 采用运行期织入。
 
-AOP is used in the Spring Framework to:
+在 Spring Framework 中，AOP 用于：
 
-- provide declarative enterprise services, especially as a replacement for EJB declarative services. The most important such service is [declarative transaction management](/docs/CS/Framework/Spring/Transaction.md?id=declarative-transaction).
-- allow users to implement custom aspects, complementing their use of OOP with AOP.
+- 提供声明式企业服务，尤其是作为 EJB 声明式服务的替代；其中最重要的就是[声明式事务管理](/docs/CS/Framework/Spring/Transaction.md?id=declarative-transaction)。
+- 允许用户实现自定义切面，用 AOP 补充 OOP 的使用。
 
 
 If the target object to be proxied implements at least one interface, a JDK dynamic proxy is used. All of the interfaces implemented by the target type are proxied. 
@@ -188,7 +185,7 @@ protected void initBeanFactory(ConfigurableListableBeanFactory beanFactory) {
 
 *AspectJAwareAdvisorAutoProxyCreator subclass that processes all **AspectJ annotation aspects** in the current application context, as well as Spring Advisors.*
 Any AspectJ annotated classes will automatically be recognized, and their advice applied if Spring AOP's proxy-based model is capable of applying it. This covers method execution joinpoints.
-If the [aop:include](aop:include) element is used, only @AspectJ beans with names matched by an include pattern will be considered as defining aspects to use for Spring auto-proxying.
+若使用了 `aop:include` 元素，则只有名称匹配 include 模式的 `@AspectJ` Bean 才会被视为用于 Spring 自动代理的切面。
 
 Processing of Spring Advisors follows the rules established in `org.springframework.aop.framework.autoproxy.AbstractAdvisorAutoProxyCreator`.
 
@@ -872,6 +869,15 @@ public class MethodBeforeAdviceInterceptor implements MethodInterceptor, BeforeA
 }
 ```
 
+## AOP 与 AOT / Native Image 注意
+
+AOP 代理（JDK 动态代理 / CGLIB）依赖运行期反射生成代理类，在 [AOT](/docs/CS/Framework/Spring/AOT.md) / GraalVM native image 下属于"动态能力"，需要显式 hint：
+
+- **JDK 动态代理**：要求目标**接口**在构建期可见（native 下接口本身通常在类路径，一般无需额外 hint）。
+- **CGLIB 代理**：需要目标**类**的构造函数与方法可被反射访问，且 CGLIB 生成的子类要在封闭世界里被允许——框架对 `@EnableAspectJAutoProxy` / `@Transactional` 等内置切面会自动贡献 hint，但**自定义的 `@Aspect` 类、Advisor、以及被代理的目标 Bean** 若通过非常规方式装配，可能漏 hint，表现为 native 下代理创建失败或方法不被拦截。
+- 排查手段同 [AOT](/docs/CS/Framework/Spring/AOT.md)：用 `native-image` 报错栈定位缺失的反射 / 代理 hint，必要时在 `RuntimeHintsRegistrar` 中补对目标类的 `INVOKE_DECLARED_CONSTRUCTORS` / `INVOKE_PUBLIC_METHODS`，或借 GraalVM Tracing Agent 生成 reachability metadata。
+- 在 native 下更稳妥的做法是尽量让 AOP 走框架自动配置路径（标准 `@Transactional`、`@Cacheable`、Spring Security 等），避免手写 `ProxyFactory` + 反射式 Advisor。
+
 ## Spring AOP APIs
 
 除 `@AspectJ` 注解和 XML 声明外，Spring 还提供一套底层编程式 API（Spring 1.2 风格，至今完全支持），适合需要动态组装切面的框架代码。
@@ -948,6 +954,9 @@ set `spring.objenesis.ignore = true`  to invoke the constructor of the class, bu
 ## Links
 
 - [Spring](/docs/CS/Framework/Spring/Spring.md)
+- [Spring 缓存抽象](/docs/CS/Framework/Spring/Cache.md)
+- [Spring Security](/docs/CS/Framework/Spring/Security.md)
+- [Spring 校验](/docs/CS/Framework/Spring/Validation.md)
 
 ## References
 

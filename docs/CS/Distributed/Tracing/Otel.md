@@ -3,7 +3,7 @@
 ## Introduction
 
 [OpenTelemetry](https://opentelemetry.io/)（简称 OTel）是一个 `可观测性`（Observability）框架和工具集，用于创建和管理 `traces`、`metrics`、`logs` 等 _遥测数据_（telemetry data）。
-它是 Cloud Native Computing Foundation（CNCF）项目，2019 年由 [OpenTracing](/docs/CS/Distributed/Tracing/Tracing.md#opentracing) 与 OpenCensus 两个项目合并而成。
+它是 Cloud Native Computing Foundation（CNCF）项目，2019 年由 [OpenTracing](/docs/CS/Distributed/Tracing/Tracing.md?id=opentracing) 与 OpenCensus 两个项目合并而成。
 
 关键在于，OpenTelemetry 与厂商和工具无关（vendor- and tool-agnostic），可以对接各种可观测性后端，
 既包括 [Jaeger](/docs/CS/Distributed/Tracing/Jaeger.md)、[Prometheus](/docs/CS/Distributed/Tracing/Prometheus/Prometheus.md) 这类开源工具，也包括各类商业产品。
@@ -25,7 +25,7 @@ OpenTelemetry **源自**分布式追踪，但如今已经 **超出**了追踪的
 
 在 OTel 出现之前，追踪插桩分散在两个相互竞争的 CNCF/Google 项目中：
 
-- [OpenTracing](/docs/CS/Distributed/Tracing/Tracing.md#opentracing)：厂商中立的追踪 **API 规范**（Span、SpanContext、`ChildOf`/`FollowsFrom` 引用——数据模型见 [Tracing](/docs/CS/Distributed/Tracing/Tracing.md)）。
+- [OpenTracing](/docs/CS/Distributed/Tracing/Tracing.md?id=opentracing)：厂商中立的追踪 **API 规范**（Span、SpanContext、`ChildOf`/`FollowsFrom` 引用——数据模型见 [Tracing](/docs/CS/Distributed/Tracing/Tracing.md)）。
 - OpenCensus：Google 出品，把追踪与指标插桩打进同一套库，并附带共享的 agent/Collector。
 
 2019 年两个社区合并为 OpenTelemetry：吸收了 OpenTracing 的 API 规范思路，也继承了 OpenCensus 开箱即用的 SDK/Collector 路线。OpenTracing 与 OpenCensus 均已归档，OpenTelemetry 是它们的继任者。OpenTracing 的数据模型（span 树、tags → attributes、logs → events、baggage）几乎原样延续到了 OTel。

@@ -1035,6 +1035,10 @@ So mostly we use multiple producers for multiple servers.
 ## Links
 
 - [Kafka](/docs/CS/MQ/Kafka/Kafka.md)
+- [Storage（幂等与事务的存储前提）](/docs/CS/MQ/Kafka/Storage.md)
+- [Broker（append 路径）](/docs/CS/MQ/Kafka/Broker.md)
+- [ShareGroup（消费侧）](/docs/CS/MQ/Kafka/ShareGroup.md)
+- [Security（sasl/ssl 配置）](/docs/CS/MQ/Kafka/Security.md)
 
 
 ## References

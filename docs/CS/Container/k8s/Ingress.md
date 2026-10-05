@@ -150,7 +150,8 @@ metadata:
 | Service (LoadBalancer) | 四层 | 公网 TCP 入口 | 非 HTTP 业务（MySQL、TCP 长连接） |
 | Ingress | 七层 HTTP/HTTPS | 域名、路径、证书、限流、灰度 | Web、API、前端公网业务 |
 
-- Gateway API 是 Ingress 的下一代标准（v1.0 已 GA）：把"谁配路由（HTTPRoute）"与"谁来承载（Gateway）"解耦，支持角色分离，正逐步取代 Ingress API 的新需求场景。
+- Gateway API 是 Ingress 的下一代标准：把"谁配路由（HTTPRoute）"与"谁来承载（Gateway）"解耦，支持角色分离，正逐步取代 Ingress API 的新需求场景。当前稳定版为 **v1.6.2**（2026-09），其中 Gateway / GatewayClass / HTTPRoute 已在 v1.0.0 获得 GA 的 v1 API，GAMMA（服务网格支持）自 v1.1.0 起进入标准通道。Gateway API CRD 需自行单独安装，不由任何网格或网关项目代管。
+- ingress-nginx 已于 **2026-03 终止维护**（仓库转只读，已有部署不被破坏），迁移方向是 Gateway API。各网关实现的迁移成本与状态见 [Istio](/docs/CS/Framework/Istio/Envoy.md) 的网关生态横评；`Higress`、`Traefik`、`APISIX` 等实现均已提供 Gateway API 支持。
 
 ## Links
 

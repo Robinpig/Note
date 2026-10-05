@@ -785,3 +785,4 @@ badframe:
 
 - [processes](/docs/CS/OS/Linux/proc/process.md)
 - [Processes 知识地图](/docs/CS/OS/Linux/proc/README.md)
+- [nginx](/docs/CS/CN/nginx/nginx.md) — 完整的信号表，以及 reload / 优雅退出 / 热升级如何全靠信号驱动

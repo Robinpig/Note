@@ -928,6 +928,7 @@ ET 使用上的两个常见坑：
 - [I/O 与多路复用（目录枢纽）](/docs/CS/OS/Linux/IO/README.md)
 - [multiplexing（select/poll）](/docs/CS/OS/Linux/IO/multiplexing.md)
 - [io_uring](/docs/CS/OS/Linux/IO/io_uring.md)
+- [Nginx Event](/docs/CS/CN/nginx/event.md)
 
 ## References
 

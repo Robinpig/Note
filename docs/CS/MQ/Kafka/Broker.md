@@ -3698,6 +3698,11 @@ log.roll.jitter.ms > 0 通过给日志段切分执行时间加一个扰动值的
 ## Links
 
 - [Kafka](/docs/CS/MQ/Kafka/Kafka.md)
+- [Storage（log 段、滚动、retention）](/docs/CS/MQ/Kafka/Storage.md)
+- [KRaft（控制面）](/docs/CS/MQ/Kafka/KRaft.md)
+- [Replica](/docs/CS/MQ/Kafka/Replica.md)
+- [ShareGroup](/docs/CS/MQ/Kafka/ShareGroup.md)
+- [Security](/docs/CS/MQ/Kafka/Security.md)
 
 
 ## References

@@ -296,7 +296,7 @@ out:
 | 信号驱动 | SIGIO 通知就绪 | 阻塞拷贝 | `sigaction`；TCP 不适用（信号不携带信息、易溢出），UDP 可用 |
 | 异步 IO | 内核完成 | 内核完成并通知 | Windows IOCP、Linux [io_uring](/docs/CS/OS/Linux/IO/io_uring.md)（5.1+） |
 
-上层线程模型（Reactor/Proactor）与 Netty 的落地见 [Reactor 线程模型](/docs/CS/Framework/Netty/EventLoop.md?id=reactor-线程模型)。
+上层线程模型（Reactor/Proactor）落到真实服务端上有两种样本：多进程 + epoll 的 Reactor 见 [Nginx Event](/docs/CS/CN/nginx/event.md)，多线程 Reactor 见 [Reactor 线程模型](/docs/CS/Framework/Netty/EventLoop.md?id=reactor-线程模型)。
 
 ## BIO
 
@@ -324,6 +324,5 @@ Native AIO（libaio）只支持 Direct IO，一直不温不火；io_uring（5.1+
 - [epoll](/docs/CS/OS/Linux/IO/epoll.md)
 - [io_uring](/docs/CS/OS/Linux/IO/io_uring.md)
 - [thundering herd（Socket 阻塞读）](/docs/CS/OS/Linux/proc/thundering_herd.md)
-- [Netty EventLoop（Reactor 线程模型）](/docs/CS/Framework/Netty/EventLoop.md)
 - [ZeroCopy](/docs/CS/OS/Linux/ZeroCopy.md)
 - [DPDK](/docs/CS/OS/Linux/IO/DPDK.md)

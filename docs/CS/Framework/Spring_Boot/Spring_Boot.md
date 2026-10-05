@@ -3,18 +3,25 @@
 [Spring Boot](https://docs.spring.io/spring-boot/index.html) makes it easy to create stand-alone, production-grade Spring based Applications that you can "just run".
 
 - [How to start Spring Boot Application?](/docs/CS/Framework/Spring_Boot/Start.md)
-- [Actuator](Actuator.md)
+- [Actuator](/docs/CS/Framework/Spring_Boot/actuator.md)
 
 ## Architecture
 
 **Convention Over Configuration**
 
-spring-boot
-spring-boot-autoconfigure
+Boot 3.x 及之前，几乎所有自动配置都装在单一的 `spring-boot-autoconfigure` jar 里，任何应用都会整包加载。Boot 4.0 把这套自动配置拆成 **70 多个模块**（`spring-boot-autoconfigure-jdbc`、`-jpa`、`-web`、`-security`、`-cache`、`-actuator` …），每个 starter 只拉取自己需要的模块：
 
-spring-boot-starters
+| 模块 | 职责 |
+| :-- | :-- |
+| `spring-boot` | 核心：`SpringApplication`、`Environment`、事件与生命周期 |
+| `spring-boot-autoconfigure-*` | 按技术拆分的自动配置模块 |
+| `spring-boot-starter-*` | 依赖描述符，聚合「自动配置模块 + 第三方库」 |
+| `spring-boot-test-*` | 按技术拆分的测试支持 |
 
-spring-boot-test
+好处是包体更小、IDE 补全不再提示无关配置项、GraalVM native image 只处理真正用到的模块。代价是自定义 starter 或手工引入自动配置类的项目需要同步改包名与依赖。
+
+> [!WARNING]
+> 由于包名与模块都有重构，官方强烈不建议在同一个 artifact 里同时支持 Boot 3 与 Boot 4。
 
 ## AutoConfiguration
 
@@ -44,6 +51,7 @@ If you need to find out what auto-configuration is currently being applied, and 
 
 
 
+自动配置的注册清单（`.imports`）、加载管线、条件注解与自定义 starter 的写法见 [SPI](/docs/CS/Framework/Spring/SPI.md)。
 [How to start Spring Boot Application?](/docs/CS/Framework/Spring_Boot/Start.md)
 
 
@@ -89,6 +97,23 @@ A full Spring Boot starter for a library may contain the following components:
 - The `starter` module that provides a dependency to the autoconfigure module as well as the library and any additional dependencies that are typically useful. In a nutshell, adding the starter should be enough to start using that library.
 
 > You may combine the auto-configuration code and the dependency management in a single module if you don’t need to separate those two concerns.
+
+#### Boot 4 的 starter 改名
+
+为与模块名对齐，若干 starter 在 4.0 更名，旧名保留但已弃用：
+
+| 旧名（Boot 3.x） | 新名（Boot 4.0） |
+| :-- | :-- |
+| `spring-boot-starter-web` | `spring-boot-starter-webmvc` |
+| `spring-boot-starter-aop` | `spring-boot-starter-aspectj` |
+| `spring-boot-starter-oauth2-client` | `spring-boot-starter-security-oauth2-client` |
+| `spring-boot-starter-oauth2-resource-server` | `spring-boot-starter-security-oauth2-resource-server` |
+| `spring-boot-starter-oauth2-authorization-server` | `spring-boot-starter-security-oauth2-authorization-server` |
+| `spring-boot-starter-web-services` | `spring-boot-starter-webservices` |
+
+此外 `WebClient`、`RestClient` 也从原先的 WebFlux / Web starter 中独立出来，各有 starter。
+
+需要"先跑起来再重构"的迁移场景，可改用 classic starter（`spring-boot-starter-classic`、`spring-boot-starter-test-classic`）：它们聚合全部模块但排除其传递依赖，行为接近 Boot 3。
 
 ### Externalized Configuration
 
@@ -189,7 +214,7 @@ public final class ConfigurationPropertiesBean {
 
 还支持：
 
-- **构造函数绑定**：用 `@ConstructorBinding`（Spring Boot 3 中 record/单一构造器自动绑定），属性可不暴露 setter，天然不可变；
+- **构造函数绑定**：用 `@ConstructorBinding`（Boot 3 起 record 或单一构造器已自动绑定，无需显式标注），属性可不暴露 setter，天然不可变；
 - **第三方类配置**：在任意 `@Bean` 方法上加 `@ConfigurationProperties` 给第三方对象绑定；
 - **校验**：类上加 `@Validated`，字段用 JSR-303 注解（`@Min`、`@NotBlank` 等），启动时校验失败直接 fail-fast；
 - **`@ConfigurationProperties` vs `@Value`**：前者支持松散绑定、SpEL 之外的元数据、校验、复杂类型与 IDE 提示；后者适合零散的单值注入。
@@ -222,11 +247,11 @@ resolve request order:
 
 ## Test
 
-### Junit5
+Boot 侧测试（切片测试、模块化 test starter、`@MockitoBean`、`RestTestClient`、Testcontainers）见 [Spring Boot 测试](/docs/CS/Framework/Spring_Boot/Test.md)；TestContext 框架本身见 [Spring Test](/docs/CS/Framework/Spring/Test.md)。
 
-It's need JDK15 to build Junit5,.
+### JUnit
 
-#### 
+Boot 4 默认使用 **JUnit 6**（Jupiter 编程模型）；Spring Framework 7.0 起 JUnit 4 支持已弃用，`SpringRunner` 一类不再推荐。
 
 #### Annotations
 
@@ -238,9 +263,9 @@ It's need JDK15 to build Junit5,.
 
 ##### @SpringBootTest
 
-> [!TIP]
+> [!WARNING]
 >
-> If you are using JUnit 4, do not forget to also add @RunWith(SpringRunner.class) to your test, otherwise the annotations will be ignored.
+> Boot 4 里 `@SpringBootTest` **不再自动配置** `MockMvc` / `WebClient` / `TestRestTemplate`，需显式加 `@AutoConfigureMockMvc` 等注解；`@MockBean` / `@SpyBean` 已移除，改用 `@MockitoBean` / `@MockitoSpyBean`。详见 [Spring Boot 测试](/docs/CS/Framework/Spring_Boot/Test.md)。
 
 @AutoConfigureMockMvc
 
@@ -475,9 +500,9 @@ To create your own observations (which will lead to metrics and traces), you can
 ## Issues
 
 
-启动报错 SnakeYAML在读取YAML文件时出现的java.nio.charset.MalformedInputException:Input length
+启动报错 SnakeYAML 在读取 YAML 文件时出现的 java.nio.charset.MalformedInputException:Input length
 
-确认yaml文件编码 可能是文件编码是UTF-8 然后存在中文字符导致
+确认 yaml 文件编码 可能是文件编码是 UTF-8 然后存在中文字符导致
 
 
 
@@ -486,6 +511,7 @@ To create your own observations (which will lead to metrics and traces), you can
 
 - [Spring Framework](/docs/CS/Framework/Spring/Spring.md)
 - [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md)
+- [cache](/docs/CS/Framework/Spring_Boot/cache.md)
 - Splunk
 - Solr
 

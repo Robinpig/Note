@@ -55,6 +55,7 @@ futex_wake(uaddr, nr);       /* 唤醒最多 nr 个等待者 */
 | pthread | mutex / cond | 直接基于 futex（见 [pthread](/docs/CS/OS/Linux/proc/pthread.md)） |
 | Java | `synchronized`、`LockSupport.park` | ObjectMonitor / [Parker](/docs/CS/Java/JDK/Concurrency/Parker.md) 基于 pthread mutex+cond，即 futex |
 | Go | `sync.Mutex` 慢路径 | runtime 自研 semaphore 直接调 `futex`；**channel 的 `gopark` 不走 futex**（纯用户态） |
+| nginx | `ngx_shmtx_t`（跨 worker 共享内存锁） | **不走 futex**：原子 CAS + 指数退避自旋（`spin = 2048`、`ngx_cpu_pause`）+ POSIX 信号量睡眠（`sem_wait` / `sem_post`），见 [Nginx Memory](/docs/CS/CN/nginx/memory.md) |
 | 用户态工具 | `futex(2)`、`FUTEX_WAITV` | 多地址批量等待，用于多锁/多事件场景 |
 
 对照细节见 [语言运行时与内核任务](/docs/CS/OS/Linux/proc/runtime.md?id=阻塞与唤醒：futex-是桥梁)。
@@ -72,5 +73,4 @@ futex_wake(uaddr, nr);       /* 唤醒最多 nr 个等待者 */
 - [等待队列与惊群](/docs/CS/OS/Linux/proc/thundering_herd.md)
 - [pthread](/docs/CS/OS/Linux/proc/pthread.md)
 - [跨进程同步](/docs/CS/OS/Linux/Lock/ipc-sync.md) — 跨进程 futex / robust mutex / PI 的应用场景
-- [语言运行时与内核任务](/docs/CS/OS/Linux/proc/runtime.md)
 - [Futexs（理论）](/docs/CS/OS/process.md?id=futexs)

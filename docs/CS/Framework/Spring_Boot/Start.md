@@ -73,8 +73,11 @@ Create a new SpringApplication instance. The application context will load beans
 4. deduceMainApplicationClass
 
 
-getSpringFactoriesInstances方法是SpringBoot的核心SPI机制，它从META-INF/spring.factories文件中加载指定类型的实现类
-这种机制使得SpringBoot具有极高的可扩展性，开发者也可以通过自定义spring.factories来注入自己的扩展点
+getSpringFactoriesInstances 方法是 SpringBoot 的核心 SPI 机制，它从 META-INF/spring.factories 文件中加载指定类型的实现类（`ApplicationContextInitializer`、`ApplicationListener` 等）
+这种机制使得 SpringBoot 具有极高的可扩展性，开发者也可以通过自定义 spring.factories 来注入自己的扩展点
+
+> [!WARNING]
+> 注意区分：`spring.factories` 在 Boot 4 中仍用于注册上述**扩展点**，但**自动配置**自 Boot 3.0 起已改用 `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`，详见 [SPI](/docs/CS/Framework/Spring/SPI.md)。
 
 ```java
 public SpringApplication(ResourceLoader resourceLoader, Class<?>... primarySources) {

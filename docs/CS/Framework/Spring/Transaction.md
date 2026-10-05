@@ -1,13 +1,13 @@
 ## Introduction
 
-The Spring Framework provides a consistent abstraction for transaction management that delivers the following benefits:
+Spring Framework 提供了一致的事务管理抽象，带来这些收益：
 
-- Consistent programming model across different transaction APIs such as Java Transaction API (JTA), JDBC, Hibernate, Java Persistence API (JPA), and Java Data Objects (JDO).
-Support for declarative transaction management.
-- - Simpler API for programmatic transaction management than complex transaction APIs such as JTA.
-- Excellent integration with Spring’s data access abstractions.
+- **跨事务 API 的一致编程模型**：JTA、JDBC、Hibernate、JPA、JDO 等都能用同一套方式编写事务代码。
+- **声明式事务支持**：用 `@Transactional` 等注解替代命令式样板。
+- **比 JTA 等复杂 API 更简单的编程式事务**：`TransactionTemplate` 封装了生命周期与异常。
+- **与 Spring 数据访问抽象的良好集成**。
 
-Let’s remember what declaring a data source in Spring Boot looks like in application.yml:
+先回顾一下 Spring Boot 里声明数据源在 `application.yml` 中的样子：
 
 
 ```yaml
@@ -16,11 +16,11 @@ spring:
     url: ...
     username: ...
     password: ...
-    driverClassname: ...
+    driver-class-name: ...
 ```
 
-Spring maps these settings to an instance of org.springframework.boot.autoconfigure.jdbc.DataSourceProperties.
-So, to use multiple data sources, we need to declare multiple beans with different mappings within Spring’s application context.
+Spring 把这些配置映射到 `org.springframework.boot.autoconfigure.jdbc.DataSourceProperties` 的实例。
+因此，若要使用多个数据源，就需要在 Spring 应用上下文里声明多个对应不同映射的 Bean。
 
 
 DataSourceAutoConfiguration
@@ -31,7 +31,7 @@ JdbcTemplateAutoConfiguration
 
 
 
-Translate the given SQLException into a generic DataAccessException.
+将给定的 `SQLException` 翻译成统一的 `DataAccessException`。
 
 ```java
 public interface SQLExceptionTranslator {
@@ -39,11 +39,11 @@ public interface SQLExceptionTranslator {
 	DataAccessException translate(String task, @Nullable String sql, SQLException ex);
 }
 ```
-> JavaBean `SQLErrorCodes` define in `spring-jdbc/src/main/resources/org/springframework/jdbc/support/sql-error-codes.xml`.
-> Can be overridden by definitions in a "`sql-error-codes.xml`" file in the root of the class path.
+> `SQLErrorCodes` 这个 JavaBean 定义在 `spring-jdbc/src/main/resources/org/springframework/jdbc/support/sql-error-codes.xml`。
+> 也可以在 classpath 根目录放一份 `sql-error-codes.xml` 来覆盖默认定义。
 
 
-With Spring Boot 2 and Spring Boot 3, HikariCP is the default connection pool and it is transitively imported with either `spring-boot-starter-jdbc` or `spring-boot-starter-data-jpa` starter dependency, so you don’t need to add any extra dependency to your project.
+从 Spring Boot 2 起直到当前的 Boot 4，HikariCP 一直是默认连接池，由 `spring-boot-starter-jdbc` 或 `spring-boot-starter-data-jpa` 传递引入，通常无需额外声明依赖。
 Spring Boot will expose Hikari-specific settings to `spring.datasource.hikari`. 
 
 
@@ -135,9 +135,9 @@ For details on method visibility constraints, consult the Transaction Management
 This annotation type is generally directly comparable to Spring's org.springframework.transaction.interceptor.RuleBasedTransactionAttribute class, 
 and in fact AnnotationTransactionAttributeSource will directly convert the data to the latter class, so that Spring's transaction support code does not have to know about annotations. 
 
-**If no custom rollback rules apply, the transaction will roll back on RuntimeException and Error but not on checked exceptions.**
+**若未自定义回滚规则，事务只在遇到 RuntimeException 与 Error 时回滚，受检异常（checked exception）不会触发回滚。**
 
-For specific information about the semantics of this annotation's attributes, consult the TransactionDefinition and `org.springframework.transaction.interceptor.TransactionAttribute` javadocs.
+关于该注解各属性的语义细节，参见 `TransactionDefinition` 与 `org.springframework.transaction.interceptor.TransactionAttribute` 的 javadoc。
 
 This annotation commonly works with thread-bound transactions managed by a `org.springframework.transaction.PlatformTransactionManager`, exposing a transaction to all data access operations within the current execution thread. 
 
@@ -148,10 +148,8 @@ As a consequence, all participating data access operations need to execute withi
 
 
 > [!NOTE]
-> 
-> When using proxies, you should apply the `@Transactional` annotation only to methods with public visibility. 
-> If you do annotate protected, private or package-visible methods with the `@Transactional` annotation, no error is raised, but the annotated method does not exhibit the configured transactional settings. 
-> Consider the use of AspectJ (see below) if you need to annotate non-public methods.
+>
+> 使用代理模式时，`@Transactional` 应只标在 **public** 可见性的方法上。若标在 protected / private / 包级可见方法上，不会报错，但该方法**不会**表现出配置的事务行为。若确实需要给非 public 方法加事务，应考虑使用 AspectJ 织入（见下文）。
 
 
 The @Transactional annotation is metadata that specifies that an interface, class, or method must have transactional semantics; 
@@ -254,9 +252,11 @@ public interface TransactionDefinition {
 
 ## TransactionProxyFactoryBean
 
+早期 XML 风格的代理工厂 Bean，现在基本被 `@Transactional` + 自动代理取代，了解即可。
+
 ## TransactionManager
 
-Implementation by MyBatis, Hibernate, JTA.
+实现方包括 MyBatis、Hibernate、JTA。响应式场景下还有 `ReactiveTransactionManager`，它配合 Reactor 的 `Context` 而非 ThreadLocal 来传递事务状态（见下文「响应式事务」）。
 
 ```java
 public interface PlatformTransactionManager extends TransactionManager {
@@ -561,12 +561,21 @@ public interface TransactionSynchronization extends Flushable {
 
 ## Multi-DataSource
 
-AbstractRoutingDataSource
-
+多数据源场景下，Spring 不替你做事务跨库协调。常见做法有两种：用 `AbstractRoutingDataSource` 做读写分离 / 分库路由（一个 `DataSource` 内部按 key 切换真实数据源，事务仍在同一库内）；跨库分布式事务则需引入 JTA / Seata 等外部协调器。
 
 ### Rollback Rules
 
 Pattern-based use `contains()`
+
+## 响应式事务
+
+在 WebFlux / R2DBC 这类响应式栈里，没有"当前线程"承载事务，Spring 用 Reactor 的 `Context` 而不是 `ThreadLocal` 来传递事务状态。对应接口是 `ReactiveTransactionManager`：
+
+- `@Transactional` 标注的响应式方法（返回 `Mono` / `Flux`，或 Kotlin `suspend` 函数）由响应式子栈处理；
+- **所有参与的数据访问操作必须处在同一个 Reactor `Context` / 同一条响应式 pipeline 内**，否则 `Context` 丢失，事务不生效；
+- 回滚规则、传播行为（`PROPAGATION_REQUIRED` 等）语义与命令式事务一致，但底层用 Reactor 算子实现，不能在响应式链里随意 `subscribe()` 到别的线程或切出新 `Context`。
+
+声明式事务的 AOP 代理（见 [AOP](/docs/CS/Framework/Spring/AOP.md)）在响应式场景由 `TransactionalOperator` / `ReactiveTransactionInterceptor` 承载，而非 `TransactionInterceptor`。
 
 ## Tuning
 
@@ -574,20 +583,20 @@ Pattern-based use `contains()`
 
 
 Spring相关
-- 未被Spring管理
+- 未被 Spring 管理
 - 多线程调用 数据库连接可能会不一样 事务不同, 例如使用@Async的函数是不支持事务 但函数内部调用的事务方法支持事务
 - 事务传播特性设置不使用事务(较少)
 
 
 声明式事务基于[AOP](/docs/CS/Framework/Spring/AOP.md) 故导致函数无法被代理的情况
 - 函数access flag非 public
-- 函数是final或者static
+- 函数是 final 或者 static
 - 当前类里其它方法内部调用
 
 异常相关
-- catch住异常后Spring无法感知异常做回滚处理
+- catch 住异常后 Spring 无法感知异常做回滚处理
 - 设置的回滚异常和实际抛出异常不对应
-- 同个事务里子事务标记回滚 但是在外层catch住后 事务commit `UnexpectedRollbackException`
+- 同个事务里子事务标记回滚 但是在外层 catch 住后 事务commit `UnexpectedRollbackException`
 
 其它情况
 - 表不支持事务
@@ -613,16 +622,19 @@ Solution
 
 拆分粒度 
 - select放到事务外
-- 减少remote call, 发MQ消息, 其它Redis MongoDB, 使用重试+补偿实现最终一致性
+- 减少remote call, 发 MQ 消息, 其它Redis MongoDB, 使用重试+补偿实现最终一致性
 - 数据分批处理 
 
-可延时的行为 在事务外发送MQ消息 异步处理
+可延时的行为 在事务外发送 MQ 消息 异步处理
 
 ## Links
 
 - [Spring](/docs/CS/Framework/Spring/Spring.md)
 - [Transaction](/docs/CS/SE/Transaction.md)
 - [Transaction - MySQL](/docs/CS/DB/MySQL/Transaction.md)
+- [Spring JPA](/docs/CS/Framework/Spring/JPA.md)
+- [Spring 事件](/docs/CS/Framework/Spring/Event.md)
+- [Spring 缓存抽象](/docs/CS/Framework/Spring/Cache.md)
 
 
 ## References

@@ -1,13 +1,31 @@
 ## Introduction
 
+Spring Cloud Gateway 是 Spring Cloud 的 API 网关实现，定位是 Netflix Zuul 的替代品：
 
+| | Zuul 1 | Spring Cloud Gateway |
+| :-- | :-- | :-- |
+| IO 模型 | 同步阻塞（Servlet，一请求一线程） | 响应式（WebFlux + Netty）或 Servlet 两种 |
+| 集成范围 | Spring Cloud Netflix | Spring Cloud 一等公民 |
+| 状态 | 自 Spring Cloud 2020.0（Ilford）起从 Netflix 集成中移除 | 现行推荐 |
 
-|       | Zuul | Gateway                            |
-| ----- | ---- | ---------------------------------- |
-| basic |      | webflux, only support spring cloud |
-|       |      |                                    |
-|       |      |                                    |
+### 5.x 的两个 flavor
 
+Gateway 5.0（Spring Cloud 2025.1 Oakwood / Boot 4）把网关拆成**两个独立实现**，一个应用只能选其一：
+
+| flavor | 运行时 | 路由定义 | starter |
+| :-- | :-- | :-- | :-- |
+| 响应式（WebFlux） | Netty，事件循环 | YAML `routes:` 或 `RouteLocator` DSL | `spring-cloud-starter-gateway-server-webflux` |
+| Servlet（WebMVC） | Tomcat，阻塞模型 | 函数式 `RouterFunction` bean 或 YAML | `spring-cloud-starter-gateway-server-webmvc` |
+
+> [!WARNING]
+> 升级到 5.x 时 artifact 名与配置根路径都变了，**照抄旧教程里的 `spring.cloud.gateway.routes` 会静默失效**：
+>
+> | 旧（3.x / 4.x） | 新（5.x） |
+> | :-- | :-- |
+> | `spring-cloud-starter-gateway` | `spring-cloud-starter-gateway-server-webflux` |
+> | `spring-cloud-starter-gateway-mvc` | `spring-cloud-starter-gateway-server-webmvc` |
+> | `spring.cloud.gateway.routes` | `spring.cloud.gateway.server.webflux.routes` |
+> | `spring.cloud.gateway.mvc.routes` | `spring.cloud.gateway.server.webmvc.routes` |
 
 ### How it works
 
@@ -218,7 +236,34 @@ public class FilteringWebHandler implements WebHandler {
 ```
 
 
+## RequestRateLimiter
+
+`RequestRateLimiter` 是内置的限流 GatewayFilter，默认实现是基于 Redis + Lua 脚本的令牌桶（`RedisRateLimiter`），需要引入 `spring-boot-starter-data-redis-reactive`：
+
+```yaml
+spring:
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: rate_limited
+              uri: http://downstream
+              filters:
+                - name: RequestRateLimiter
+                  args:
+                    redis-rate-limiter.replenishRate: 10   # 令牌补充速率（个/秒）
+                    redis-rate-limiter.burstCapacity: 20   # 桶容量，即允许的突发量
+                    key-resolver: "#{@userKeyResolver}"    # 限流维度
+```
+
+`key-resolver` 引用容器里的 `KeyResolver` bean，决定"按什么维度限流"——按用户、按 IP、按 API 路径各不相同；`burstCapacity` 设为 0 可直接拒绝全部请求，用于紧急熔断。
+
 ## Links
 
 - [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md?id=api-gateway)
 - [Spring Webflux](/docs/CS/Framework/Spring/webflux.md)
+- [Spring MVC](/docs/CS/Framework/Spring/MVC.md)
+- [统一异常处理](/docs/CS/Framework/Spring/Exception.md)
+- [Spring Security](/docs/CS/Framework/Spring/Security.md)
+- [Higress](/docs/CS/Framework/Higress/Higress.md)

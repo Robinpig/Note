@@ -10,7 +10,7 @@ Working with these pillars individually, or using different tools for each one, 
 But by combining your metrics, traces, and logs into a single solution, you can create a successful observability approach.
 
 [OpenTelemetry](/docs/CS/Distributed/Tracing/Otel.md) 定义了一套统一的方式来生成并关联这三个信号——
-详见其 [Signals](/docs/CS/Distributed/Tracing/Otel.md#signals) 与 [Correlating the Three Signals](/docs/CS/Distributed/Tracing/Otel.md#correlating-the-three-signals) 章节。
+详见其 [Signals](/docs/CS/Distributed/Tracing/Otel.md?id=signals) 与 [Correlating the Three Signals](/docs/CS/Distributed/Tracing/Otel.md?id=correlating-the-three-signals) 章节。
 
 ### Metrics
 
