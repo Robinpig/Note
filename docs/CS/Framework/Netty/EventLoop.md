@@ -1312,6 +1312,150 @@ private void closeAll() {
 
 unsafe.close( ) in [Channel](/docs/CS/Framework/Netty/Channel.md)
 
+## IoHandler
+
+上面 [`run`](/docs/CS/Framework/Netty/EventLoop.md?id=run) 一节是经典形态：`NioEventLoop` 自己持有 `Selector`，把 select / processSelectedKeys / runAllTasks 全部写在 `run()` 里。问题是 epoll、kqueue 各自也要抄一遍同样的线程骨架，只是 IO 语义不同。
+
+Netty 4.2 因此把「这一轮具体怎么做 IO」从 EventLoop 中抽成 `IoHandler` 接口：EventLoop 只负责线程、任务队列与生命周期，IO 处理交给可替换的 handler。这样同一套 loop 骨架可以接 NIO、epoll、kqueue 乃至 io_uring 后端，也让 IO 逻辑能脱离线程模型单独测试。以下三段源码应与 `### run` 对照阅读——它们做的是同一件事，只是换了一代接口。
+
+### EventLoop.Unsafe
+
+`EventLoop` 在一个 Channel 注册之后，就负责它的全部 I/O 操作。一个 EventLoop 实例通常服务于多个 Channel，具体分配由实现细节与内部策略决定。
+
+```java
+public interface EventLoop extends OrderedEventExecutor, EventLoopGroup {
+
+    /**
+     * Returns an <em>internal-use-only</em> object that provides unsafe operations.
+     */
+    Unsafe unsafe();
+
+    /**
+     * <em>Unsafe</em> operations that should <em>never</em> be called from user-code. These methods
+     * are only provided to implement the actual transport, and must be invoked from the {@link EventLoop} itself.
+     */
+    interface Unsafe {
+        /**
+         * Register the {@link Channel} to the {@link EventLoop}.
+         */
+        void register(Channel channel) throws Exception;
+
+        /**
+         * Deregister the {@link Channel} from the {@link EventLoop}.
+         */
+        void deregister(Channel channel) throws Exception;
+    }
+}
+```
+
+`Unsafe` 是给 transport 实现用的内部出口：注册与解绑 Channel 必须发生在 EventLoop 线程上，所以它被挂进 EventLoop 而不是 Channel。
+
+### IoHandler 接口
+
+`IoHandler` 直接继承 `EventLoop.Unsafe`，即注册能力是 IO 处理的前置部分。除 `wakeup(boolean)` 之外，所有方法都必须在 EventLoop 线程上执行，用户代码不应直接调用。
+
+```java
+public interface IoHandler extends EventLoop.Unsafe {
+    /**
+     * Run the IO handled by this {@link IoHandler}. The {@link IoExecutionContext} should be used
+     * to ensure we not execute too long and so block the processing of other task that are
+     * scheduled on the {@link EventLoop}. This is done by taking {@link IoExecutionContext#delayNanos(long)} or
+     * {@link IoExecutionContext#deadlineNanos()} into account.
+     *
+     * @return the number of {@link Channel} for which I/O was handled.
+     */
+    int run(IoExecutionContext context);
+
+    // Wakeup the IoHandler, which means if any operation blocks it should be unblocked and return as soon as possible.
+    void wakeup(boolean inEventLoop);
+
+    // Prepare to destroy this IoHandler. This method will be called before destroy() and may be called multiple times.
+    void prepareToDestroy();
+
+    /**
+     * Destroy the {@link IoHandler} and free all its resources.
+     */
+    void destroy();
+}
+```
+
+注意 `run(IoExecutionContext)` 的签名变化：经典版 `run()` 自己判断 `hasTasks()` 和下次定时任务到期时间，新版把这两个决策收进 `IoExecutionContext`（`canBlock()` / `delayNanos()` / `deadlineNanos()`），由外层 EventLoop 提供，handler 只问不猜。返回值也不再是「是否处理过」，而是本轮处理 IO 的 Channel 数量。
+
+### NioHandler
+
+`NioHandler` 是 `IoHandler` 的 NIO 实现。它与 `### run` 里的 `NioEventLoop.run()` 结构一致——同样处理 `wakenUp` 竞态、同样在 Selector 损坏时 `rebuildSelector()`——区别在于阻塞判断来自 `runner.canBlock()`，而 `select()` 只负责等待就绪事件，ready key 的处理交给 `processSelectedKeys()`。
+
+call [processSelectedKeys](/docs/CS/Framework/Netty/EventLoop.md?id=processselectedkey)
+
+```java
+// NioHandler
+@Override
+public int run(IoExecutionContext runner) {
+    int handled = 0;
+    try {
+        try {
+            switch (selectStrategy.calculateStrategy(selectNowSupplier, !runner.canBlock())) {
+                case SelectStrategy.CONTINUE:
+                    return 0;
+
+                case SelectStrategy.BUSY_WAIT:
+                    // fall-through to SELECT since the busy-wait is not supported with NIO
+
+                case SelectStrategy.SELECT:
+                    select(runner, wakenUp.getAndSet(false));
+
+                    // 'wakenUp.compareAndSet(false, true)' is always evaluated
+                    // before calling 'selector.wakeup()' to reduce the wake-up
+                    // overhead. (Selector.wakeup() is an expensive operation.)
+                    //
+                    // However, there is a race condition in this approach.
+                    // The race condition is triggered when 'wakenUp' is set to
+                    // true too early.
+                    //
+                    // 'wakenUp' is set to true too early if:
+                    // 1) Selector is waken up between 'wakenUp.set(false)' and
+                    //    'selector.select(...)'. (BAD)
+                    // 2) Selector is waken up between 'selector.select(...)' and
+                    //    'if (wakenUp.get()) { ... }'. (OK)
+                    //
+                    // In the first case, 'wakenUp' is set to true and the
+                    // following 'selector.select(...)' will wake up immediately.
+                    // Until 'wakenUp' is set to false again in the next round,
+                    // 'wakenUp.compareAndSet(false, true)' will fail, and therefore
+                    // any attempt to wake up the Selector will fail, too, causing
+                    // the following 'selector.select(...)' call to block
+                    // unnecessarily.
+                    //
+                    // To fix this problem, we wake up the selector again if wakenUp
+                    // is true immediately after selector.select(...).
+                    // It is inefficient in that it wakes up the selector for both
+                    // the first case (BAD - wake-up required) and the second case
+                    // (OK - no wake-up required).
+
+                    if (wakenUp.get()) {
+                        selector.wakeup();
+                    }
+                    // fall through
+                default:
+            }
+        } catch (IOException e) {
+            // If we receive an IOException here its because the Selector is messed up. Let's rebuild
+            // the selector and retry. https://github.com/netty/netty/issues/8566
+            rebuildSelector();
+            handleLoopException(e);
+            return 0;
+        }
+
+        cancelledKeys = 0;
+        needsToSelectAgain = false;
+        handled = processSelectedKeys();
+    } catch (Throwable t) {
+        handleLoopException(t);
+    }
+    return handled;
+}
+```
+
 ## Implementation
 
 ### Epoll
@@ -1502,5 +1646,8 @@ Create an [AffinityThreadFactory](https://github.com/OpenHFT/Java-Thread-Affinit
 ## Links
 
 - [Netty](/docs/CS/Framework/Netty/Netty.md)
-- [multiplexing](/docs/CS/OS/Linux/IO/multiplexing.md) — Reactor 依赖的 IO 多路复用
-- [IO](/docs/CS/OS/Linux/IO/IO.md) — 五种 IO 模型与同步/异步辨析
+- [Bootstrap](/docs/CS/Framework/Netty/Bootstrap.md)
+- [Channel](/docs/CS/Framework/Netty/Channel.md)
+- [MpscLinkedQueue](/docs/CS/Framework/Netty/MpscLinkedQueue.md)
+- [Linux IO 多路复用](/docs/CS/OS/Linux/IO/multiplexing.md)
+- [Linux IO 模型](/docs/CS/OS/Linux/IO/IO.md)

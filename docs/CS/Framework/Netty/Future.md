@@ -1,12 +1,20 @@
-## 
+## Introduction
 
-### Future Hierarchy
+Netty 的 I/O 操作全是异步的：`bind` / `connect` / `write` 立刻返回一个「结果占位符」，真正的完成状态稍后由 EventLoop 线程写入。这个占位符就是 Future，Netty 在它之上做了两件事——补齐 JDK Future 的短板，以及把「读结果」和「写结果」拆成两个接口。
+
+`java.util.concurrent.Future` 只能阻塞在 `get()` 上，既无法区分「完成但失败」与「被取消」，也无法在完成时自动触发回调。Netty 的 `Future` 因此增加 `isSuccess()` / `cause()` 表达三态结果，并用 `addListener` 把等待变成非阻塞注册，避免业务线程 park 在 EventLoop 上（`checkDeadLock()` 甚至会主动拒绝在 loop 内 await）。
+
+可写的另一半交给 `Promise`：只有它提供 `setSuccess` / `setFailure`，因此 transport 内部用它写结果，而暴露给用户的 API 一律声明成只读的 `Future`，用户无法伪造完成状态。`ChannelFuture` / `ChannelPromise` 则是这对接口在 channel 维度的特化，额外携带 `channel()` 上下文。
+
+按下面顺序读：先看 Future Hierarchy 的类型谱系，再看接口层（`Future` → `ChannelFuture`、`Promise` → `ChannelPromise`），最后看实现层（`AbstractFuture` → `DefaultPromise` → `DefaultChannelPromise`）。
+
+## Future Hierarchy
 
 ![Future](img/Future.png)
 
 
 
-### Future
+## Future
 
 ```java
 /**
@@ -123,7 +131,7 @@ public interface Future<V> extends java.util.concurrent.Future<V> {
 
 
 
-### ChannelFuture
+## ChannelFuture
 
 
 
@@ -150,7 +158,7 @@ public interface Future<V> extends java.util.concurrent.Future<V> {
 
 
 
-### Promise
+## Promise
 
 **Special Future which is writable.**
 
@@ -200,7 +208,7 @@ public interface Promise<V> extends Future<V> {
 
 
 
-### ChannelPromise
+## ChannelPromise
 
 **Special ChannelFuture which is writable.**
 
@@ -221,7 +229,7 @@ public interface ChannelPromise extends ChannelFuture, Promise<Void> {
 
 
 
-### AbstractFuture
+## AbstractFuture
 
 AbstractFuture provide two  get methods
 
@@ -259,7 +267,7 @@ public abstract class AbstractFuture<V> implements Future<V> {
 }
 ```
 
-### DefaultPromise
+## DefaultPromise
 
 
 
@@ -360,7 +368,7 @@ private void notifyListeners() {
 
 
 
-### DefaultChannelPromise
+## DefaultChannelPromise
 
 The default ChannelPromise implementation. It is recommended to use `Channel.newPromise()` to create a new ChannelPromise rather than calling the constructor explicitly.
 
@@ -377,7 +385,9 @@ public class DefaultChannelPromise extends DefaultPromise<Void> implements Chann
 ## Links
 
 - [Netty](/docs/CS/Framework/Netty/Netty.md)
-
+- [Channel](/docs/CS/Framework/Netty/Channel.md)
+- [Bootstrap](/docs/CS/Framework/Netty/Bootstrap.md)
+- [EventLoop](/docs/CS/Framework/Netty/EventLoop.md)
 
 ## References
 1. [method io.netty.util.concurrent.DefaultPromise#cancel/isDone violates contract?](https://github.com/netty/netty/issues/7712)

@@ -25,7 +25,6 @@ digraph netty_index {
 ## 启动与引导
 
 - [Bootstrap](/docs/CS/Framework/Netty/Bootstrap.md)：客户端 / 服务端引导，事件循环组与 ChannelPipeline 装配。
-- [NewEventLoop](/docs/CS/Framework/Netty/NewEventLoop.md)：`NioEventLoopGroup` 与线程数配置（`2 × CPU` 之类默认值）。
 
 ## 事件循环与线程模型
 
