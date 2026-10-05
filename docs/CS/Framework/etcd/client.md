@@ -331,12 +331,220 @@ func (c *Client) unaryClientInterceptor(optFuncs ...retryOption) grpc.UnaryClien
 	}
 }
 ```
+## Best practices
+
+前面的源码分析已能看出客户端在重试与故障转移上的设计取向，这一节把这些取向整理成可落地的配置建议。
+
+> [!NOTE]
+> 本节源码引用基于 etcd **v3.5.34**（`client/v3/retry.go`）。配置项默认值以 `client/v3/config.go` 为准，不同版本略有差异，上生产前请对照所用版本核对。
+
+### 重试语义
+
+etcd 客户端把 RPC 分为两类，采用**截然不同**的重试策略。定义在 `client/v3/retry.go`：
+
+```go
+type retryPolicy uint8
+
+const (
+	repeatable retryPolicy = iota
+	nonRepeatable
+)
+```
+
+**读操作**（Get、Range 等）标记为 `repeatable`，判定函数只放行 `Unavailable`：
+
+```go
+// isSafeRetryImmutableRPC returns "true" when an immutable request is safe for retry.
+//
+// immutable requests (e.g. Get) should be retried unless it's
+// an obvious server-side error (e.g. rpctypes.ErrRequestTooLarge).
+//
+// Returning "false" means retry should stop, since client cannot
+// handle itself even with retries.
+func isSafeRetryImmutableRPC(err error) bool {
+	eErr := rpctypes.Error(err)
+	if serverErr, ok := eErr.(rpctypes.EtcdError); ok && serverErr.Code() != codes.Unavailable {
+		// interrupted by non-transient server-side or gRPC-side error
+		// client cannot handle itself (e.g. rpctypes.ErrCompacted)
+		return false
+	}
+	// only retry if unavailable
+	ev, ok := status.FromError(err)
+	if !ok {
+		// all errors from RPC is typed "grpc/status.(*statusError)"
+		// (ref. https://github.com/grpc/grpc-go/pull/1782)
+		//
+		// if the error type is not "grpc/status.(*statusError)",
+		// it could be from "Dial"
+		// TODO: do not retry for now
+		// ref. https://github.com/grpc/grpc-go/issues/1581
+		return false
+	}
+	return ev.Code() == codes.Unavailable
+}
+```
+
+**写操作**（Put、Delete、Txn）根本不进重试循环——`retryKVClient.Put` 连 `withRetryPolicy` 都没传：
+
+```go
+func (rkv *retryKVClient) Range(ctx context.Context, in *pb.RangeRequest, opts ...grpc.CallOption) (resp *pb.RangeResponse, err error) {
+	return rkv.kc.Range(ctx, in, append(opts, withRetryPolicy(repeatable))...)
+}
+
+func (rkv *retryKVClient) Put(ctx context.Context, in *pb.PutRequest, opts ...grpc.CallOption) (resp *pb.PutResponse, err error) {
+	return rkv.kc.Put(ctx, in, opts...)
+}
+
+func (rkv *retryKVClient) DeleteRange(ctx context.Context, in *pb.DeleteRangeRequest, opts ...grpc.CallOption) (resp *pb.DeleteRangeResponse, err error) {
+	return rkv.kc.DeleteRange(ctx, in, opts...)
+}
+
+func (rkv *retryKVClient) Txn(ctx context.Context, in *pb.TxnRequest, opts ...grpc.CallOption) (resp *pb.TxnResponse, err error) {
+	return rkv.kc.Txn(ctx, in, opts...)
+}
+```
+
+那写操作遇到 `Unavailable` 怎么办？由外层的 `retryUnaryInvoker` 兜底，但它把写操作的许可压到极窄——只在**连接都还没建起来**时才允许重试：
+
+```go
+// isSafeRetryMutableRPC returns "true" when a mutable request is safe for retry.
+//
+// mutable requests (e.g. Put, Delete, Txn) should only be retried
+// when the status code is codes.Unavailable when initial connection
+// has not been established (no endpoint is up).
+//
+// Returning "false" means retry should stop, otherwise it violates
+// write-at-most-once semantics.
+func isSafeRetryMutableRPC(err error) bool {
+	if ev, ok := status.FromError(err); ok && ev.Code() != codes.Unavailable {
+		// not safe for mutable RPCs
+		// e.g. interrupted by non-transient error that client cannot handle itself,
+		// or transient error while the connection has already been established
+		return false
+	}
+	desc := rpctypes.ErrorDesc(err)
+	return desc == "there is no address available" || desc == "there is no connection available"
+}
+```
+
+> [!WARNING]
+> **这是 etcd 客户端最重要的设计取舍**：写操作保证 **at-most-once** 而非 at-least-once。原因很直接——客户端无法判断"请求没到达"和"请求已提交但响应丢失"的区别，重试一个可能已成功的 Put 就会造成重复写。
+>
+> 实践含义：**应用层必须自己处理写请求的失败**。收到 `Unavailable` 的 Put 不能盲目重试，正确做法是重新读回目标 key 判断是否已生效，或用带 CAS 的 Txn 保证幂等。
+
+对照 [troubleshooting.md](/docs/CS/Framework/etcd/troubleshooting.md) 的错误码表，可以看出这套策略与 gRPC 语义的一处错配：`database space exceeded` 的 code 是 `ResourceExhausted`(8)，落在 gRPC 官方"可重试"集合里，但 etcd 自己的 `isSafeRetry*` 只放行 `Unavailable`——所以 NOSPACE 不会被客户端自动重试，这个坑实际上被客户端挡住了。
+
+### 配置项
+
+| 配置项 | 默认值 | 说明 |
+| :--- | :--- | :--- |
+| `Endpoints` | 无（必填） | 成员地址列表，支持 `http://`、`https://`、`unix://`；为空时 `New` 直接报错 |
+| `DialTimeout` | **2s** | 建立 gRPC 连接的超时 |
+| `DialKeepAliveTime` | 0（禁用） | 客户端主动 ping 探测连接存活的间隔 |
+| `DialKeepAliveTimeout` | **20s** | keep-alive 探测等待响应的超时，超时则断开 |
+| `AutoSyncInterval` | 0（关闭） | 周期性 `MemberList` 拉取最新成员并更新 Endpoints |
+| `MaxCallSendMsgSize` | **2 MiB** | 请求发送字节上限 |
+| `MaxCallRecvMsgSize` | `math.MaxInt32` | 响应接收字节上限 |
+| `MaxUnaryRetries` | — | Unary RPC 最大重试次数 |
+| `BackoffWaitBetween` | **250ms** | 重试退避的基础等待时间 |
+| `BackoffJitterFraction` | **0.5** | 退避抖动系数，范围 [0,1) |
+| `RejectOldCluster` | false | 拒绝连接低于"当前主版本前一 minor"的旧集群 |
+| `TLS` | nil | 客户端 TLS 凭据，配 [双向认证](/docs/CS/Framework/etcd/security.md)时必填 |
+| `Username` / `Password` / `Token` | 空 | 用户名密码认证，或直接用已获取的 token（二者互斥） |
+
+几处需要结合场景判断的：
+
+> [!TIP]
+> **`AutoSyncInterval` 默认关闭**，但集群扩缩容后客户端的 endpoints 会变陈旧。生产环境如果 etcd 成员会变动，建议开启（如 `10m`）；如果集群规模固定，关掉可以省掉周期性 `MemberList`。
+
+> [!TIP]
+> **`DialKeepAliveTime` 默认是禁用的**。不开启时，僵死连接（对端进程已死但 TCP 未及时断开）要靠 gRPC 自身的 keepalive 或请求超时才发现。生产建议开启并设为 `30s` 左右，配合默认的 `DialKeepAliveTimeout: 20s`。
+
+> [!WARNING]
+> **批量写入必须同步调大两侧限制**。`MaxCallSendMsgSize` 默认 2 MiB，但真正卡住的往往是服务端：`--max-request-bytes`（默认 1.5 MiB）。批量导入数据时客户端调大而不动服务端，会得到 `etcdserver: request is too large`。
+
+### 一致性读
+
+`Range` 默认是**线性一致读**（需走 [ReadIndex](/docs/CS/Framework/etcd/raft.md) 与 leader 确认，多一次网络往返，本地集群约 1~5ms）。proto 里对此有明确说明：
+
+```protobuf
+// serializable sets the range request to use serializable member-local reads.
+// Range requests are linearizable by default; linearizable requests have higher
+// latency and lower throughput than serializable requests but reflect the current
+// consensus of the cluster. For better performance, in exchange for possible stale
+// reads, a serializable range request is served locally without needing to reach
+// consensus with other nodes in the cluster.
+bool serializable = 7;
+```
+
+可容忍读旧数据的场景（如 informer 缓存刷新）应显式请求 serializable：
+
+```go
+// 线性一致（默认）：保证读到最新
+resp, err := client.Get(ctx, "/registry/pods/default/my-pod")
+
+// 序列化读：可能读到略旧数据，但省掉一次网络往返
+resp, err := client.Get(ctx, "/registry/pods/default/my-pod", clientv3.WithSerializable())
+```
+
+判据是数据的性质：**参与准入/调度决策的数据必须线性读；仅用于展示或缓存预热的可以 serializable**。
+
+### Lease 与 KeepAlive
+
+[lease](/docs/CS/Framework/etcd/lease.md) 的续期由客户端的 `KeepAlive` 循环自动完成，但有两个坑：
+
+```go
+// 首次 keepalive 截止时间在真实 TTL 未知前按 defaultTTL = 5 * time.Second 处理
+// NoLease = 0 表示不挂载租约
+// 请求失败后的重连等待为 500ms
+```
+
+> [!WARNING]
+> **TTL 设定要留足续期冗余**。续期循环是周期性的，遇到网络抖动或 GC 停顿会漏掉某次续期；若 TTL 设得过短（如 2s），一次抖动就可能让 key 被误删。建议 TTL ≥ 5s，并理解客户端内部的 5s 首次等待与 500ms 重连间隔这两个常量。
+
+若自动续期循环因意外错误终止，客户端返回 `ErrKeepAliveHalted`——**此时续期已失效**，但 `KeepAliveOnce` 仍可单次续租，可以据此判断是继续用还是重建连接。
+
+> [!NOTE]
+> 服务端侧还有一个对应机制：leader 切换后 TTL 的自动续期问题由 `CheckPointScheduledLeases` 定时任务同步给 follower（见 [lease.md](/docs/CS/Framework/etcd/lease.md)）。客户端 KeepAlive 与服务端 checkpoint 是配套的两侧机制。
+
+### 范围查询语义
+
+`Range` 的 `range_end` 有几种约定，容易踩错（来自 `api/etcdserverpb/rpc.proto`）：
+
+| `range_end` 取值 | 含义 |
+| :--- | :--- |
+| 未设置 | 只查 `key` 这一个 key |
+| `'\0'` | 所有 ≥ `key` 的 key（等价 `--from-key`） |
+| `key + 1`（如 `"aa"+1 == "ab"`） | 所有以 `key` 为前缀的 key（等价 `--prefix`） |
+| 其他 key | 半开区间 `[key, range_end)`，**含 key 不含 range_end** |
+| 两者都是 `'\0'` | 全部 key |
+
+```shell
+$ etcdctl get foo foo3     # foo3 不含在内
+foo = bar
+foo1 = bar1
+foo2 = bar2
+```
+
+> [!TIP]
+> 区间是**左闭右开**的。想闭区间得显式算 `range_end = 目标key + 1`。
+
 ## Links
 
 - [etcd](/docs/CS/Framework/etcd/etcd.md)
+- [lease（TTL 与续期机制）](/docs/CS/Framework/etcd/lease.md)
+- [watch（订阅与断线重连）](/docs/CS/Framework/etcd/watch.md)
+- [troubleshooting（错误码与可重试性）](/docs/CS/Framework/etcd/troubleshooting.md)
+- [security（TLS 与鉴权）](/docs/CS/Framework/etcd/security.md)
+- [naming（gRPC naming/resolver watch 式服务发现）](/docs/CS/Framework/etcd/naming.md)
+- [concurrency（clientv3 分布式原语，基于本客户端的 Session）](/docs/CS/Framework/etcd/concurrency.md)
 
 
 
 ## References
 
 1. [【深入浅出etcd系列】4. 客户端](https://bbs.huaweicloud.com/blogs/100128)
+2. [etcd client/v3/retry.go (v3.5.34)](https://github.com/etcd-io/etcd/blob/server/v3.5.34/client/v3/retry.go)
+3. [etcd client/v3/config.go (v3.5.34)](https://github.com/etcd-io/etcd/blob/server/v3.5.34/client/v3/config.go)
+4. [etcd API reference - RangeRequest](https://etcd.io/docs/v3.5/dev-guide/api_reference_v3/)
+5. [Interacting with etcd](https://etcd.io/docs/v3.7/dev-guide/interacting_v3/)

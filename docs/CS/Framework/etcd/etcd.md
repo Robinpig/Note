@@ -1,5 +1,8 @@
 ## Introduction
 
+> [!NOTE]
+> **版本基线**：etcd **3.7.2**（维护线 3.6.15 / 3.5.34），生产建议 3.5.x。v3.6 起 `--enable-v2` 与 `experimental-enable-v2v3` 已移除。默认配额 2 GB、建议上限 8 GB；`/livez`、`/readyz` 健康端点自 v3.5.12 引入。详见 [cluster.md](/docs/CS/Framework/etcd/cluster.md) 的版本基线表。
+
 etcd is a distributed reliable key-value store for the most critical data of a distributed system, with a focus on being:
 
 * *Simple*: well-defined, user-facing API (gRPC)
@@ -12,6 +15,17 @@ etcd 通过 Raft 协议进行 leader 选举和数据备份，对外提供高可�
 同时它还可以提供服务发现、分布式锁、分布式数据队列、分布式通知和协调、集群选举等功能
 
 > etcd这个名字来源于unix的“/etc”文件夹和分布式系统(“D”istribute system)的D，组合在一起表示etcd是用于存储分布式配置的信息存储服务
+
+## 版本基线
+
+本文的源码路径、签名与流程描述以 **etcd 3.7.2** 为准（`api/version/version.go`）。其中一条结构性变化最影响读码：**raft 已外置为独立 module `go.etcd.io/raft/v3`（v3.7.0）**，主仓库不再包含 Raft 算法实现，只保留调用侧（`server/etcdserver/bootstrap.go` + `server/etcdserver/raft.go`）。
+
+| 项 | 值 |
+| :--- | :--- |
+| 最新稳定版 | **3.7.2** |
+| 维护分支 | 3.6.15 / 3.5.34 |
+| Raft 实现 | 外置 `go.etcd.io/raft/v3` v3.7.0 |
+| 主仓库 raft 调用侧 | `server/etcdserver/bootstrap.go`、`server/etcdserver/raft.go` |
 
 etcd 是 Kubernetes 的后端唯一存储实现
 
@@ -171,7 +185,7 @@ main()                                etcdmain/main.go
    |   | |-EtcdServer.start()           执行服务器开始服务请求所需的任何初始化
    |   |   |-wait.New()               新建WaitGroup组以及一些管道服务
    |   |   |-EtcdServer.run()         etcdserver/raft.go 启动应用层的处理协程
-   |   |   | |-raft.start()             启动处理协程
+   |   |   | |-raftNode.start(rh)       启动处理协程（rh 为 raftReadyHandler）
    |   |-Etcd.servePeers()            启动集群内部通讯
    |   | |-etcdhttp.NewPeerHandler()  新建http.Handler来处理etcd中其他成员请求
    |   | |-srv.Serve()                配置http服务
@@ -612,19 +626,20 @@ NewServer()  etcdserver/server.go 通过配置创建一个新的EtcdServer对象
  |-stats.NewServerStats()              配置server状态
  |-stats.NewLeaderStats()             成为Leader状态
  |-srv=&EtcdServer{raft.newRaftNode() …}新建etcdserver对象，并初始化raft对象运行
- | |-raft.RestartNode()  若无其他成员则重启节点
- | |-raft.StartNode()    若有则新启节点
- |   |-setupNode()                     配置节点
- |   | |-rn = NewRawNode()                 raft/node.go 新建一个type node struct对象
- |   | |-rn.Bootstrap(peers)                  通过追加配置来初始化RawNode
- |   |   |-raft.becomeFollower()             成为Follower状态
- |   | |-n := newNode(rn)                   封装rawNode
- |   |-go node.run()                     循环运行节点监听任务
+ | |-bootstrappedRaft.newRaftNode()   bootstrap.go 构造 raftNode 包装器
+ |   |-raft.RestartNode()            若无其他成员则重启节点（外置 go.etcd.io/raft/v3）
+ |   |-raft.StartNode(cfg, peers)    若有则新启节点（外置 go.etcd.io/raft/v3）
+ |   |-newRaftNode(cfg)              etcdserver/raft.go 把 raft.Node 包成 raftNode
+ |-go raftNode.start(rh)              etcdserver/raft.go 启动 Ready 处理协程
 |-lease.NewLessor()                 恢复Lessor状态 mvcc.New
  |- mvcc.New()                      新建mvcc存储管理对象
  |-auth.NewAuthStore()             
- 
+
 ```
+
+> [!NOTE]
+> **3.7 的 raft 已外置**：旧版这里的 `rn = NewRawNode()`（`raft/node.go`）、`raft.becomeFollower()`、`n := newNode(rn)`、`go node.run()` 在 3.7.2 的**主仓库里已全部不存在**——算法实现搬到了独立 module `go.etcd.io/raft/v3`（v3.7.0）。全仓库 grep `raft.RawNode` / `NewRawNode` **零命中**（含测试），也没有 `server/etcdserver/api/raft/` 目录。主仓库的角色退化为**调用侧**：`server/etcdserver/bootstrap.go` 的 `bootstrappedRaft.newRaftNode` 调外置的 `raft.RestartNode` / `raft.StartNode` 拿到一个 `raft.Node`，再交给 `server/etcdserver/raft.go` 的 `newRaftNode(cfg raftNodeConfig) *raftNode`（`:123`）包成 `raftNode`，最后由 `raftNode.start(rh *raftReadyHandler)`（`:174`）把外置 raft 的 `Ready` 事件接到 etcdserver 的 apply 管线。想读 `becomeFollower`、`node.run()` 这类状态机函数要去外置仓库找。
+
 
 serveCtx:serve
 
@@ -2527,6 +2542,8 @@ etcd社区基于以上介绍的事务特性，提供了一个简单的事务框�
 
 ## Tuning
 
+flag 级默认值（max-txn-ops、snapshot-count、quota-backend-bytes、backend-batch-* 等）与逐项调优建议见 [tuning](/docs/CS/Framework/etcd/tuning.md)；下面先讲心跳/选举/磁盘/网络/CPU 的调优原理。
+
 The default settings in etcd should work well for installations on a local network where the average network latency is low. However, when using etcd across multiple data centers or over networks with high latency, the heartbeat interval and election timeout settings may need tuning.
 The network isn’t the only source of latency. Each request and response may be impacted by slow disks on both the leader and follower. Each of these timeouts represents the total time from request to successful response from the other machine.
 
@@ -2605,14 +2622,48 @@ The majority side becomes the available cluster and the minority side is unavail
 - Consul提供了原生的分布式锁、健康检查、服务发现机制支持，让业务可以更省心，不过etcd和ZooKeeper也都有相应的库，帮助你降低工作量
 - 多数据中心。在多数据中心支持上，只有Consul是天然支持的，虽然它本身不支持数据自动跨数据中心同步，但是它提供的服务发现机制、[Prepared Query](https://www.consul.io/api-docs/query)功能，赋予了业务在一个可用区后端实例故障时，可将请求转发到最近的数据中心实例。而etcd和ZooKeeper并不支持
 
+## 陷阱清单
+
+> [!WARNING]
+> 这篇覆盖的是启动与 Raft 接线流程，最容易踩的是**照旧文文章节名去源码里找文件**：
+
+1. **`raft/node.go`、`NewRawNode()`、`becomeFollower()` 在 3.7.2 主仓库里不存在** —— raft 已外置为 `go.etcd.io/raft/v3` v3.7.0。全仓库 grep `raft.RawNode` / `NewRawNode` **零命中**（含测试）。主仓库只有调用侧：`newRaftNode`（`server/etcdserver/raft.go`）与 `raftNode.start(rh *raftReadyHandler)`（同行）。旧教程里的 `server/etcdserver/api/raft/` 目录同样不存在。
+2. **`raftNode.start` 有参数** —— 签名是 `start(rh *raftReadyHandler)`，不是无参的 `start()`。这个 `rh` 就是把 `Ready` 接到 apply 管线的回调。
+3. **`raft.RestartNode()` 与 `raft.StartNode(cfg, peers)` 二选一** —— 由 `bootstrappedRaft.newRaftNode` 里的 `len(b.peers) == 0` 决定（`server/etcdserver/bootstrap.go`）。想理解全新集群与重启恢复的差异，从这个分支读起。
+4. **两个 `newRaftNode` 同名不同层** —— `bootstrap.go` 的方法是 `bootstrappedRaft.newRaftNode`（方法），`raft.go:123` 的 `newRaftNode(cfg raftNodeConfig) *raftNode` 是包级函数（构造 `raftNode`）。前者调后者。
+5. **`Lease` 是结构体不是接口** —— 在 `server/lease/lease.go`；接口是 `Lessor`（`server/lease/lessor.go`）。同理 `Lessor` 里**没有** `LeaseTimeToLive` / `LeaseKeepAlive`，那是 `EtcdServer` 的方法。
+6. **启动流程里的路径会随版本搬家** —— 例如 v3 时代的 `server/etcdserver/errors.go` 在 3.7 已移入 `server/etcdserver/errors/` 子包。读老文章里的路径前先 Glob 确认。
+
 ## Links
 
+- [etcd 目录索引（按层导航）](/docs/CS/Framework/etcd/README.md)
+- [etcd](/docs/CS/Framework/etcd/etcd.md)
 - [K8s](/docs/CS/Container/k8s/K8s.md)
 - [K8s 中的 etcd 存储](/docs/CS/Container/k8s/etcd.md)
 - [treeIndex（内存键索引）](/docs/CS/Framework/etcd/treeIndex.md)
 - [boltdb（底层存储引擎）](/docs/CS/Framework/etcd/boltdb.md)
 - [MVCC（多版本并发控制）](/docs/CS/Framework/etcd/MVCC.md)
 - [raft（共识模块）](/docs/CS/Framework/etcd/raft.md)
+- [lease](/docs/CS/Framework/etcd/lease.md)
+- [watch](/docs/CS/Framework/etcd/watch.md)
+- [compact](/docs/CS/Framework/etcd/compact.md)
+- [security](/docs/CS/Framework/etcd/security.md)
+- [net](/docs/CS/Framework/etcd/net.md)
+- [client](/docs/CS/Framework/etcd/client.md)
+- [tracker（ProgressTracker 与流控）](/docs/CS/Framework/etcd/tracker.md)
+- [cluster（集群运维与备份恢复）](/docs/CS/Framework/etcd/cluster.md)
+- [monitoring（监控与指标阈值）](/docs/CS/Framework/etcd/monitoring.md)
+- [troubleshooting（常见故障排查）](/docs/CS/Framework/etcd/troubleshooting.md)
+- [compare（etcd / ZooKeeper / Nacos / Consul 对比）](/docs/CS/Framework/etcd/compare.md)
+- [gateway（gRPC-gateway REST 与 grpc-proxy）](/docs/CS/Framework/etcd/gateway.md)
+- [embed（嵌入式 etcd）](/docs/CS/Framework/etcd/embed.md)
+- [read（etcdserver 读路径：linearizable / serializable）](/docs/CS/Framework/etcd/read.md)
+- [concurrency（clientv3 分布式原语）](/docs/CS/Framework/etcd/concurrency.md)
+- [tuning（运维调优旋钮与默认值）](/docs/CS/Framework/etcd/tuning.md)
+- [naming（gRPC naming/resolver 服务发现）](/docs/CS/Framework/etcd/naming.md)
+- [v2（v2 vs v3 与迁移）](/docs/CS/Framework/etcd/v2.md)
+- [ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)
+- [Nacos](/docs/CS/Framework/nacos/Nacos.md)
 
 ## References
 

@@ -212,6 +212,9 @@ etcdserver从Raft模块获取到以上消息和日志条目后，作为Leader，
 ## Links
 
 - [etcd](/docs/CS/Framework/etcd/etcd.md)
+- [troubleshooting（NOSPACE 告警与 compact/defrag 处置）](/docs/CS/Framework/etcd/troubleshooting.md)
+- [concurrency（STM 的 readSet 依赖 revision）](/docs/CS/Framework/etcd/concurrency.md)
+- [read（线性读如何等 apply 到指定 revision）](/docs/CS/Framework/etcd/read.md)
 
 
 
