@@ -27,6 +27,13 @@ Dubbo 还支持在一个应用中指定多个注册中心，并将服务根据�
 
 对于部分注册中心类型（如 Zookeeper、Nacos 等），Dubbo 会默认同时将其用作元数据中心和配置中心（建议保持默认开启状态）
 
+> [!WARNING]
+> **版本基线：本文混杂了多个 Dubbo 时代的实现，务必对照阅读。** 核实基准为 Apache Dubbo **3.3.6**（`apache/dubbo` tag `dubbo-3.3.6`）。该版本主仓库的 `dubbo-registry/` **只有 5 个模块**：`dubbo-registry-api`、`dubbo-registry-multicast`、`dubbo-registry-multiple`、`dubbo-registry-nacos`、`dubbo-registry-zookeeper`。因此：
+>
+> - **主仓库只有 Nacos 与 ZooKeeper 两个注册中心实现**，服务发现主线只需看这两节。
+> - **Redis / Consul / Eureka / Etcd 均不在主仓库**，它们属于 `org.apache.dubbo.extensions` 生态仓库，需显式引入依赖。下文 `RedisRegistry` 一节保留的是 **2.6.x 时代**的实现原文，仅作历史参考。
+> - `Registry` / `AbstractRegistry` / `FailbackRegistry` / `RegistryDirectory` 几节的核心机制仍成立，但字段、线程池与工厂类已有演进，各节提示块标注了具体差异。
+
 
 
 Dubbo 中注册中心模块的核心组件包含`Registry`、`RegistryFactory`、`Directory`和`NotifyListener`组件。
@@ -1019,6 +1026,9 @@ public void unsubscribe(URL url, NotifyListener listener) {
 
 ### NacosRegistry
 
+> [!WARNING]
+> **本节基于 2.7.x 的 `NacosRegistry` 展开，3.3.6 的实现类已明显增多。** 3.3.6 的 `dubbo-registry-nacos` 目录下除 `NacosRegistry` / `NacosRegistryFactory` 外，还新增了四个类：`NacosServiceDiscovery` 与 `NacosServiceDiscoveryFactory`（应用级服务发现）、`NacosConnectionManager`（订阅与连接的集中管理）、`NacosAggregateListener`（监听聚合）、`NacosNamingServiceWrapper`（Nacos NamingService 适配层）。读下文代码时注意这些新增职责在 2.7.x 版本里是没有的。
+
 当Dubbo使用3.0.0及以上版本时，需要使用Nacos 2.0.0及以上版本。
 
 服务名前缀为 providers: 的信息为服务提供者的元信息，consumers: 则代表服务消费者的元信息
@@ -1109,6 +1119,9 @@ public void registerInstance(String serviceName, String groupName, Instance inst
 
 
 ### ZookeeperRegistry
+
+> [!WARNING]
+> **本节工厂代码是 2.7.x 的形态。** 3.3.6 中 `ZookeeperTransporter` 已被 `ZookeeperClientManager` 取代，底层 Curator 客户端为 `Curator5ZookeeperClient`（3.3.6 同时仍保留 `CuratorZookeeperClient`），`ZookeeperRegistry` 的构造函数签名随之改变。新增的类 `ZookeeperServiceDiscovery` 承担应用级服务发现，`AbstractZookeeperClient` 是客户端抽象层——这些在下文代码中均未出现。
 
 Dubbo 使用 ZooKeeper 作为注册中心时 只会创建持久节点和顺序节点两种 对创建的顺序没有要求
 
@@ -1443,7 +1456,8 @@ private class RegistryChildListenerImpl implements ChildListener {
 
 ### RedisRegistry
 
-
+> [!WARNING]
+> **本节实现对应 Dubbo 2.6.x 时代，在 3.3.6 主仓库中 `RedisRegistry` 与 `RedisRegistryFactory` 均已不存在。** Redis 注册中心已移至 `org.apache.dubbo.extensions:dubbo-registry-redis`，需显式引入依赖。下方代码保留原文，用于理解「Redis 用 hash 存实例 + Pub/Sub 广播变更」这一经典设计（2.7.x 起 `doRegister` 改为 `hset` + `publish` 并支持 expire 过期），**不是当前版本的实现**。
 
 ```java
 public class RedisRegistryFactory extends AbstractRegistryFactory {
@@ -1737,6 +1751,8 @@ private void doNotify(Collection<String> keys, URL url, Collection<NotifyListene
 
 ### Etcd
 
+> [!NOTE]
+> Etcd 注册中心**从 Dubbo 3 起不再内嵌在主仓库**，需单独引入 `org.apache.dubbo.extensions` 下的独立模块。主仓库 `dubbo-registry/` 的 5 个模块中不含 etcd（3.3.6 已实测确认）。下面依赖坐标里的 `3.3.0` 是撰写时的版本号，使用时请按 extensions 仓库当前版本对齐。
 
 从 Dubbo3 开始，etcd 注册中心适配已经不再内嵌在 Dubbo 中 使用前需要单独引入独立的模块
 
@@ -1771,6 +1787,9 @@ Connecting the registry needs to support the contract:
 6. Support session=60000 session timeout or expiration settings.
 
 ### AbstractRegistryFactory
+
+> [!WARNING]
+> **3.3.6 已用 `RegistryManager` 取代了这里的静态单例。** 下方 `LOCK` / `REGISTRIES` / `destroyed` 这套 `static` 字段是 2.7.x 的实现：在 3.3.6 中注册中心的创建与缓存由 `org.apache.dubbo.registry.RegistryManager` 统一管理，`AbstractRegistryFactory` 不再持有全局静态注册表。读这段代码理解「注册中心实例按地址复用」的意图仍然有效，但**照抄这段字段定义到 3.x 代码里是错的**。
 
 ```java
 // AbstractRegistryFactory. (SPI, Singleton, ThreadSafe)
@@ -2405,6 +2424,8 @@ public class RegistryDirectory<T> extends DynamicDirectory<T> {
 ## Links
 
 - [Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md)
+- [config](/docs/CS/Framework/Dubbo/config.md)
+- [Mesh](/docs/CS/Framework/Dubbo/Mesh.md)
 
 
 

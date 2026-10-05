@@ -1,1171 +1,1281 @@
 ## Introduction
 
-基于 Dubbo 3.0.8 版本的源码，其启动流程的核心，是引入了分层模型（域模型）和独立的发布器（`Deployer`），以此来解耦服务与应用的启动逻辑。总的来说，一个完整流程由 `DubboBootstrap`（传统 API 入口）或 Spring 事件监听器（Spring Boot 集成入口）触发，经由发布器串联起配置加载、模型初始化到最终的服务导出/引用等步骤
+写 Dubbo 启动流程最容易踩的坑，是把 2.7 时代那份「`DubboBootstrap.start()` 里依次做五件事」的流程图当成 3.x 的实现照抄。这份笔记最早的版本自述「基于 Dubbo 3.0.8」，其中 `DubboBootstrap#start()`、`ServiceConfig` 导出链、停机链、Spring 集成四处全是 3.0.x 的旧形态。本文按 **Apache Dubbo 3.3.6** 逐文件核对后重写，核心结论是：
 
-![Dubbo启动流程图](./img/Dubbo启动流程图.svg)
-
-
-
-## Spring Boot
-
-Dubbo 与 Spring Boot 的集成，核心就是利用 Spring Boot 的自动装配机制，将 Dubbo 的各个核心组件注册到 Spring 容器中，从而启动 RPC 服务。整个过程主要分为自动配置、服务暴露和服务引用三大环节
-
-
-
-##### **Dubbo2.7**
-
-以下是 Dubbo 接入 Spring Boot 的完整时序图，包含自动配置、服务暴露和服务引用的核心交互
-
-```mermaid
-sequenceDiagram
-    participant App as Spring Boot 应用
-    participant SC as Spring 容器
-    participant DAA as DubboAutoConfiguration
-    participant SABPP as ServiceAnnotationBeanPostProcessor
-    participant RABPP as ReferenceAnnotationBeanPostProcessor
-    participant SB as ServiceBean
-    participant PF as ProxyFactory
-    participant Proto as Protocol (DubboProtocol)
-    participant Reg as 注册中心 (Zookeeper)
-    participant RB as ReferenceBean
-    participant Proxy as 远程服务代理
-
-    Note over App,Proxy: 1. 自动配置与组件注册阶段
-    App->>SC: 启动 @SpringBootApplication + @EnableDubbo
-    SC->>DAA: 加载 spring.factories 自动配置
-    DAA-->>SC: 导入 Dubbo 核心组件
-    SC->>SABPP: 注册 ServiceAnnotationBeanPostProcessor
-    SC->>RABPP: 注册 ReferenceAnnotationBeanPostProcessor
-
-    Note over App,Proxy: 2. Bean 扫描与包装阶段
-    SC->>SABPP: 扫描 Dubbo @Service 注解
-    SABPP->>SC: 为每个服务创建 ServiceBean 并注册
-    SC->>RABPP: 扫描 @Reference 注解字段
-    RABPP->>SC: 为每个引用创建 ReferenceBean 并注册
-
-    Note over App,Proxy: 3. 服务提供者暴露服务 (监听容器刷新事件)
-    SC-->>SB: 发送 ContextRefreshedEvent
-    SB->>SB: export() 触发服务暴露
-    SB->>PF: 通过 ProxyFactory 创建 Invoker (ref → Invoker)
-    PF-->>SB: 返回 Invoker
-    SB->>Proto: Protocol.export(Invoker)
-    Proto->>Proto: 启动 Netty Server (默认 20880)
-    Proto->>Reg: 注册服务 URL 到注册中心
-    Reg-->>Proto: 注册成功
-    Proto-->>SB: 返回 Exporter
-    SB-->>SC: 服务暴露完成
-
-    Note over App,Proxy: 4. 服务消费者引用服务 (依赖注入阶段)
-    SC->>RABPP: 处理 @Reference 注入
-    RABPP->>RB: 调用 ReferenceBean.getObject()
-    RB->>RB: init() 初始化引用
-    RB->>PF: 通过 Protocol 创建远程 Invoker (订阅/直连)
-    PF-->>RB: 返回 Invoker
-    RB->>PF: ProxyFactory.getProxy(Invoker)
-    PF-->>RB: 返回服务接口的动态代理
-    RB-->>RABPP: 返回代理对象
-    RABPP-->>SC: 注入到 @Reference 字段
-
-    Note over App,Proxy: 5. 运行时调用 (最终由代理通过 Netty 调用远程服务)
-```
-
-启动步骤：
-
-1. 启动类@EnableDubbo -> Spring Boot启动
-2. 加载spring.factories -> DubboAutoConfiguration（自动配置）
-3. DubboComponentScanRegistrar注册ServiceAnnotationBeanPostProcessor和ReferenceAnnotationBeanPostProcessor到Spring容器。
-4. Spring刷新容器，后置处理器处理阶段：
-   a. ServiceAnnotationBeanPostProcessor处理@Service，为每个服务创建ServiceBean实例并注册。
-   b. ReferenceAnnotationBeanPostProcessor处理@Reference，为每个引用创建ReferenceBean并注册（或延迟处理？）
-5. 容器刷新完成，发布ContextRefreshedEvent。
-6. ServiceBean监听到事件，调用export()。
-7. ServiceBean调用ProxyFactory.getInvoker(ref)创建Invoker。
-8. 调用Protocol.export(invoker)，启动Netty Server，注册到Registry。
-9. 同时，ReferenceAnnotationBeanPostProcessor在依赖注入阶段或SmartInitializingSingleton阶段（实际是在postProcessAfterInitialization或通过ReferenceBean初始化），调用ReferenceBean.getObject()创建代理。
-10. ReferenceBean创建Invoker（从Registry订阅或直连），然后ProxyFactory.getProxy(invoker)生成代理，注入到字段
-
-
-
-##### **Dubbo3**
-
-在 Spring 或 Spring Boot 环境中，启动过程不再需要手动编码调用 `DubboBootstrap`。框架会通过内置的 `DubboDeployApplicationListener` 监听 Spring 容器的 `ContextRefreshedEvent` 事件来触发启动
-
-```mermaid
-sequenceDiagram
-    participant App as Spring Boot应用
-    participant Context as Spring容器
-    participant DDAL as DubboDeployApplicationListener
-    participant DCAL as DubboConfigApplicationListener
-    participant SABPP as ServiceAnnotationBeanPostProcessor
-    participant RABPP as ReferenceAnnotationBeanPostProcessor
-    participant SB as ServiceBean
-    participant RB as ReferenceBean
-    participant Registry as 注册中心 (支持双注册)
-
-    Note over App, Registry: 1. Spring Boot启动阶段 (@EnableDubbo)
-    App->>Context: SpringApplication.run()
-    Context->>DCAL: 触发 ApplicationEnvironmentPreparedEvent
-    DCAL->>DCAL: 预加载和绑定 dubbo. 配置
-
-    Note over App, Registry: 2. 后置处理器注册阶段
-    Context->>SABPP: 实例化 ServiceAnnotationBeanPostProcessor
-    Context->>RABPP: 实例化 ReferenceAnnotationBeanPostProcessor
-    SABPP->>SABPP: scanServiceBeans() 扫描 @DubboService
-    SABPP->>Context: 为每个服务创建 ServiceBean 并注册
-    RABPP->>RABPP: 扫描 @DubboReference 注入点
-    RABPP->>Context: 创建 ReferenceBean 并注册
-
-    Note over App, Registry: 3. 容器刷新与启动阶段
-    Context->>DDAL: 触发 ContextRefreshedEvent
-    DDAL->>DDAL: 获取所有 ServiceBean
-    loop 遍历所有服务
-        DDAL->>SB: export()
-        SB->>SB: doExportUrls()
-        SB->>Registry: 双注册: 应用级 + 接口级
-        Registry-->>SB: 注册成功
-    end
-    DDAL-->>Context: 所有服务暴露完成
-
-    Note over App, Registry: 4. 服务引用阶段
-    RABPP->>RB: 处理 @DubboReference 字段
-    RB->>RB: getObject() 获取代理
-    RB->>Registry: 双订阅: 应用级 + 接口级
-    RB->>RB: createProxy() 创建远程调用代理
-    RB-->>RABPP: 返回代理对象
-```
-
- Spring Boot 3.x + Dubbo 3.x 的启动步骤：
-
-1. **配置加载**：`DubboConfigApplicationListener` 监听 `ApplicationEnvironmentPreparedEvent`，读取 `dubbo.*` 配置并绑定到配置对象。
-2. **后置处理器注册**：Spring 容器注册 `ServiceAnnotationBeanPostProcessor` 和 `ReferenceAnnotationBeanPostProcessor`。
-3. **扫描服务提供者**：`ServiceAnnotationBeanPostProcessor` 扫描 `@DubboService` 注解的类，为每个服务生成 `ServiceBean` 并注册到容器。
-4. **暴露服务**：`ContextRefreshedEvent` 触发 `DubboDeployApplicationListener`，调用 `ServiceBean.export()`，执行双注册（同时写入应用级和接口级元数据），并启动 `Triple` 协议服务器。
-5. **引用服务**：`ReferenceAnnotationBeanPostProcessor` 处理 `@DubboReference` 注入点，调用 `ReferenceBean.getObject()` 创建代理，通过双订阅从注册中心获取地址列表，生成远程调用代理
-
-
-
-
-## DubboBootstrap
-
-Dubbo3 往云原生的方向走自然要针对云原生应用的应用启动，应用运行，应用发 布等信息做一些建模，这个 DubboBootstrap 就是用来启动 Dubbo 服务的。类似 于 Netty 的 Bootstrap 类型和 ServerBootstrap 启动器
-
-
+**`DubboBootstrap` 从未被删除，也未被 `ApplicationDeployer` 取代——被取代的只是它的内部实现。** 3.3.6 里这个类仍有 891 行，`initialize()`（`:211`）、`start()`（`:218`）、`start(boolean)`（`:229`）、`asyncStart()`（`:246`）、`stop()`（`:256`）、`takeoverMode`（`:360/365`）全部可用。它内部只持有一个 `ApplicationDeployer` 字段（`:104`），`start()` 全文三行：
 
 ```java
+// dubbo-config/dubbo-config-api/src/main/java/org/apache/dubbo/config/bootstrap/DubboBootstrap.java:218-221
 public DubboBootstrap start() {
-    // 1. 状态检查与初始化
-    if (started.compareAndSet(false, true)) {
-        // 2. 核心初始化（配置、模型等）
-        initialize(); 
-        // 3. 暴露服务
-        exportServices();
-        // 4. 暴露元数据服务
-        exportMetadataService();
-        // 5. 注册服务实例（服务发现）
-        registerServiceInstance();
-        // 6. 引用服务
-        referServices();
-    }
+    this.start(true);
     return this;
 }
 ```
 
-### initialize
+老笔记里那五步（`exportServices` / `exportMetadataService` / `registerServiceInstance` / `referServices`）**已全部下沉到 `DefaultApplicationDeployer`**。把「类还在」误读成「实现没变」，是这一代笔记最普遍的错误。
 
-`initialize()` 是整个启动流程的基础，它负责搭建 Dubbo 运行所需的核心骨架，主要完成以下几件事：
+第二个坑在 Spring 集成。3.3.6 里 `ServiceBean` **不再监听任何事件**（`ServiceBean.java:42-47` 的 `implements` 列表里没有 `ApplicationListener`），导出服务由 `DubboDeployApplicationListener` 驱动，而它**不遍历 `ServiceBean`、不调 `export()`，只调 `deployer.start()`**（`:160-189`）。「容器刷新 → `ServiceBean` 收到事件 → 调 `export()`」这条 2.7 直觉链路，在 3.3.6 已经不存在。
 
-1. **初始化配置 (ConfigManager)**：`ConfigManager` 负责从各类配置源（如 API、XML、Properties、配置中心）加载和合并配置信息，形成统一的配置视图。
-2. **搭建领域模型 (ApplicationModel)**：Dubbo 3.x 引入了分层模型，`ApplicationModel` 是应用级的根模型，代表着整个 Dubbo 应用，它管理所有模块和全局配置。
-3. **创建模块模型 (ModuleModel)**：`ModuleModel` 是模块级模型，通常对应一个 RPC 服务模块，管理着服务发布和引用的具体逻辑。
-4. **初始化发布器 (Deployer)**：发布器是 Dubbo 3.x 中用于管理启动和关闭逻辑的核心组件，包括 `ApplicationDeployer` 和 `ModuleDeployer`。
-5. **初始化环境组件 (Environment)**：负责系统属性、环境变量等配置的管理。
-6. **预热缓存**：包括加载本地缓存的服务列表、启动配置中心监听器等。
+第三个坑是停机。旧笔记整段 `DubboShutdownHook.destroyAll()`（遍历 `ExtensionLoader.getLoadedExtensions()` 逐个 `protocol.destroy()`）在 3.3.6 里**整段查不到**，public 入口改成 `run()`（`:75-84`）→ 私有 `doDestroy()`（`:86-144`），协议销毁下沉到 `FrameworkModelCleaner`。
+
+> [!NOTE]
+> 版本基线：Apache Dubbo **3.3.6**，本文所有代码块与行号均逐文件核对自源码 tag `dubbo-3.3.6`。消费者侧的引用链、Filter、心跳、超时在 [Consumer](/docs/CS/Framework/Dubbo/Consumer.md)，集群接口基座在 [cluster](/docs/CS/Framework/Dubbo/cluster.md)。
+
+![Dubbo启动流程图](./img/Dubbo启动流程图.svg)
+
+## DubboBootstrap
+
+`DubboBootstrap` 是编程式入口，形态上类似 Netty 的 `Bootstrap`——本身不干活，只把请求转给 `ApplicationDeployer`。
 
 ```java
-@Override
-public void initialize() {
-    if (initialized) {
-        return;
+// dubbo-config/dubbo-config-api/src/main/java/org/apache/dubbo/config/bootstrap/DubboBootstrap.java:79-104（节选）
+public final class DubboBootstrap {
+    // ...
+    private final ApplicationDeployer applicationDeployer;
+```
+
+生命周期方法全部是薄封装：
+
+```java
+// dubbo-config/dubbo-config-api/src/main/java/org/apache/dubbo/config/bootstrap/DubboBootstrap.java:211-262（节选）
+    public void initialize() {
+        applicationDeployer.initialize();
     }
-    // Ensure that the initialization is completed when concurrent calls
-    synchronized (startLock) {
+
+    public DubboBootstrap start() {
+        this.start(true);
+        return this;
+    }
+
+    public DubboBootstrap start(boolean wait) {
+        Future future = applicationDeployer.start();
+        if (wait) {
+            try {
+                future.get();
+            } catch (Exception e) {
+                throw new IllegalStateException("await dubbo application start finish failure", e);
+            }
+        }
+        return this;
+    }
+
+    public Future asyncStart() {
+        return applicationDeployer.start();
+    }
+
+    public DubboBootstrap stop() throws IllegalStateException {
+        destroy();
+        return this;
+    }
+
+    public void destroy() {
+        applicationModel.destroy();
+    }
+```
+
+`start(boolean wait)` 的 `wait` 语义是「是否阻塞等启动完成」，`asyncStart()` 直接返回 `Future` 供调用方自行等待。`stop()` 调 `destroy()`，后者只是 `applicationModel.destroy()`——**销毁的语义边界是 ApplicationModel，不是 Deployer**。
+
+### takeoverMode
+
+`DubboBootstrap` 用 `takeoverMode` 表达「启动/关闭由谁接管」（`BootstrapTakeoverMode`，枚举值 `SPRING, MANUAL, AUTO, SERVLET`，`:29-34`），默认值 `AUTO`（`DubboBootstrap.java:90`）。语义是「env 会在 `ServiceConfig#export()` 完成后自动初始化」。
+
+| 取值 | 含义 |
+|---|---|
+| `SPRING` | 生命周期由 Spring 容器控制 |
+| `MANUAL` | 由用户控制，所有服务 init 完后需自己调 `start()` |
+| `AUTO` | `ServiceConfig#export()` 完成时自动初始化 |
+| `SERVLET` | 由 Servlet 容器控制 |
+
+`setBootstrap()` 里有一处细节：只有当 takeoverMode **不是** `MANUAL` 时才会被覆写成 `SPRING`（`DubboBootstrapApplicationListener.java:73-75`）。手动接管的应用不会被 Spring 覆盖。
+
+### initialize
+
+`initialize()` 搭的是 Dubbo 运行所需的骨架，`DefaultApplicationDeployer#initialize` 的顺序即依赖顺序：
+
+```java
+// dubbo-config/dubbo-config-api/src/main/java/org/apache/dubbo/config/deploy/DefaultApplicationDeployer.java:210-246
+    @Override
+    public void initialize() {
         if (initialized) {
             return;
         }
-        onInitialize();
-        // register shutdown hook
-        registerShutdownHook();
-        startConfigCenter();
-        loadApplicationConfigs();
-        initModuleDeployers();
-        initMetricsReporter();
-        initMetricsService();
-        // @since 2.7.8
-        startMetadataCenter();
-        initialized = true;
+        // Ensure that the initialization is completed when concurrent calls
+        synchronized (startLock) {
+            if (initialized) {
+                return;
+            }
+            onInitialize();
+
+            // register shutdown hook
+            registerShutdownHook();
+
+            startConfigCenter();
+            loadApplicationConfigs();
+            initModuleDeployers();
+            initMetricsReporter();
+            initMetricsService();
+
+            // @since 3.2.3
+            initObservationRegistry();
+
+            // @since 2.7.8
+            startMetadataCenter();
+
+            initialized = true;
+
+            if (logger.isInfoEnabled()) {
+                logger.info(getIdentifier() + " has been initialized!");
+            }
+        }
     }
-}
 ```
 
-## Deploy
+逐项说明：
 
-无论是哪种入口，最终都会进入框架层，依赖由 **分层模型** 和 **发布器** 协同完成的启动过程
+- `onInitialize()`：创建 `ConfigManager`、初始化 `Environment`（系统属性与环境变量）。
+- `registerShutdownHook()`：注册 JVM 关闭钩子，见 [Shutdown](#shutdown)。
+- `startConfigCenter()`：连接配置中心，启动动态配置监听。
+- `loadApplicationConfigs()`：`configManager.loadConfigs()`，从 API / XML / Properties / 配置中心加载并合并成应用级配置。
+- `initModuleDeployers()`：先 `applicationModel.getDefaultModule()` 确保默认模块存在，再逐个 `moduleModel.getDeployer().initialize()`。
+- `initMetricsReporter()` / `initMetricsService()` / `initObservationRegistry()`：可观测三件套。**`initObservationRegistry()` 是 3.2.3 才有的**（`:234-235`），旧笔记里没有。
+- `startMetadataCenter()`：启动元数据中心（2.7.8 引入）。
 
-发布器包含
+`initialized` 标志 + `synchronized (startLock)` 的双层检查保证并发调用只初始化一次。
 
-- 应用发布器ApplicationDeployer用于初始化并启动应用程序实例
-- 模块发布器ModuleDeployer 模块（服务）的导出/引用服务
+> [!TIP]
+> 整个 `initialize()` 里没有一行「加载 SPI 扩展」——扩展加载是 `ExtensionLoader` 的懒加载行为，`initialize()` 只保证 `ConfigManager` / `Environment` / 各 Deployer 就位。把 `initialize()` 理解成「把 Dubbo 启动起来」是最常见的误读，它只到「骨架搭好」为止。
 
-两种发布器有各自的接口，他们都继承了抽象的发布器AbstractDeployer 封装了一些公共的操作比如状态切换，状态查询的逻辑
+## Deployer 分层
+
+启动的实际执行者是发布器，分两层：
+
+- `ApplicationDeployer`：初始化并启动应用实例（`dubbo-common/src/main/java/org/apache/dubbo/common/deploy/ApplicationDeployer.java`）
+- `ModuleDeployer`：导出 / 引用模块内的服务（同目录 `ModuleDeployer.java`）
+
+两者都继承 `Deployer<E extends ScopeModel>`（同目录 `Deployer.java`），该接口提供状态机方法：`isPending()` / `isRunning()` / `isStarted()` / `isStarting()` / `isStopping()` / `isStopped()` / `isCompletion()`，以及 `initialize()` / `start()` / `stop()`。`AbstractDeployer` 封装了状态切换与锁实现。
+
+> [!NOTE]
+> `ApplicationDeployer` / `ModuleDeployer` 接口在 **`dubbo-common`** 模块的 `org.apache.dubbo.common.deploy` 包，不在 `dubbo-config`。实现类 `DefaultApplicationDeployer` / `DefaultModuleDeployer` 才在 `dubbo-config-api` 的 `org.apache.dubbo.config.deploy` 包。接口下沉到 dubbo-common 是为了让 `ServiceConfig` 等配置类能在不依赖 dubbo-config 的情况下引用生命周期抽象。
 
 ### ApplicationDeployer::start
 
-
-
-initialize包含注册中心和元数据中心等初始化 而doStart 是服务的
+`start()` 处理状态机的所有分支，核心是 `isCompletion()` 这个条件：
 
 ```java
-public Future start() {
-    synchronized (startLock) {
+// dubbo-config/dubbo-config-api/src/main/java/org/apache/dubbo/config/deploy/DefaultApplicationDeployer.java:677-716
+    @Override
+    public Future start() {
+        synchronized (startLock) {
+            if (isStopping() || isStopped() || isFailed()) {
+                throw new IllegalStateException(getIdentifier() + " is stopping or stopped, can not start again");
+            }
+
+            try {
+                // maybe call start again after add new module, check if any new module
+                boolean hasPendingModule = hasPendingModule();
+
+                if (isStarting()) {
+                    if (hasPendingModule) {
+                        startModules();
+                    }
+                    // if it is starting, reuse previous startFuture
+                    return startFuture;
+                }
+
+                // if is started and no new module, just return
+                if ((isStarted() || isCompletion()) && !hasPendingModule) {
+                    return CompletableFuture.completedFuture(false);
+                }
+
+                // pending -> starting : first start app
+                // started -> starting : re-start app
+                onStarting();
+
+                initialize();
+                doStart();
+            } catch (Throwable e) {
+                onFailed(getIdentifier() + " start failure", e);
+                throw e;
+            }
+
+            return startFuture;
+        }
+    }
+```
+
+四个分支：
+
+1. **停止中/已停止/已失败** → 直接抛 `IllegalStateException`，不允许重启。
+2. **正在启动中** → 若有 pending 模块则先启动它们，然后**复用上次的 `startFuture`**（不重复启动）。
+3. **已启动或已完成，且无新模块** → 返回一个**已完成但值为 false** 的 `CompletableFuture`。注意判断条件是 `(isStarted() || isCompletion())`——**旧笔记只写了 `isStarted()`，漏掉 `isCompletion()`**。`isCompletion()` 表示「启动流程已走完但应用还活着」的状态，只判 `isStarted()` 会导致这类重复调用把流程重跑一遍。
+4. **其余情况** → `onStarting()` 切状态 → `initialize()` → `doStart()`。
+
+`doStart()` 与 `startModules()`：
+
+```java
+// dubbo-config/dubbo-config-api/src/main/java/org/apache/dubbo/config/deploy/DefaultApplicationDeployer.java:734-774
+    private void doStart() {
+        startModules();
+
+        // prepare application instance
+        //        prepareApplicationInstance();
+
+        // Ignore checking new module after start
+        //        executorRepository.getSharedExecutor().submit(() -> { ... while (isStarting()) { ... } ... });
+    }
+
+    private void startModules() {
+        // ensure init and start internal module first
+        prepareInternalModule();
+
+        // filter and start pending modules, ignore new module during starting, throw exception of module start
+        for (ModuleModel moduleModel : applicationModel.getModuleModels()) {
+            if (moduleModel.getDeployer().isPending()) {
+                moduleModel.getDeployer().start();
+            }
+        }
+    }
+```
+
+`doStart()` 里 `prepareApplicationInstance()` 与「启动后持续检查新模块」的守护任务**都被注释掉了**——只有 `startModules()` 生效。注释里保留了设计意图，说明这两块曾计划启用但当前未启用。读 3.x 源码时看到成片注释代码要留神：它们是历史遗留，不是待完成的 TODO。
+
+`startModules()` 的两个要点：`prepareInternalModule()` 保证 Dubbo 自身用的内部模块先启动（否则内部服务要先依赖应用级服务会死锁）；循环里只启 `isPending()` 的模块，启动期间新增的模块会被忽略。
+
+### ModuleDeployer
+
+`DefaultModuleDeployer` 是真正做导出/引用动作的地方。`start()` 第一件事是反向依赖应用级 deployer：
+
+```java
+// dubbo-config/dubbo-config-api/src/main/java/org/apache/dubbo/config/deploy/DefaultModuleDeployer.java:155-160
+    @Override
+    public Future start() throws IllegalStateException {
+        // initialize，maybe deadlock applicationDeployer lock & moduleDeployer lock
+        applicationDeployer.initialize();
+
+        return startSync();
+    }
+```
+
+这行注释点出了锁顺序问题：应用级 deployer 启动时会调 `moduleModel.getDeployer().start()`，若模块级反过来先调应用级 `initialize()`，就可能互相持锁。所以顺序必须是**应用级先 initialize，模块级再 start**。
+
+`startSync()` 的主干：
+
+```java
+// dubbo-config/dubbo-config-api/src/main/java/org/apache/dubbo/config/deploy/DefaultModuleDeployer.java:162-203（节选）
+    private synchronized Future startSync() throws IllegalStateException {
         if (isStopping() || isStopped() || isFailed()) {
             throw new IllegalStateException(getIdentifier() + " is stopping or stopped, can not start again");
         }
 
         try {
-            // maybe call start again after add new module, check if any new module
-            boolean hasPendingModule = hasPendingModule();
-
-            if (isStarting()) {
-                // currently, is starting, maybe both start by module and application
-                // if it has new modules, start them
-                if (hasPendingModule) {
-                    startModules();
-                }
-                // if it is starting, reuse previous startFuture
+            if (isStarting() || isStarted() || isCompletion()) {
                 return startFuture;
             }
 
-            // if is started and no new module, just return
-            if (isStarted() && !hasPendingModule) {
-                return CompletableFuture.completedFuture(false);
-            }
-
-            // pending -> starting : first start app
-            // started -> starting : re-start app
-            onStarting();
-
+            onModuleStarting();
             initialize();
 
-            doStart();
-        } catch (Throwable e) {
-            onFailed(getIdentifier() + " start failure", e);
-            throw e;
-        }
+            // export services
+            exportServices();
 
-        return startFuture;
-    }
-}
+            // prepare application instance
+            // exclude internal module to avoid wait itself
+            if (moduleModel != moduleModel.getApplicationModel().getInternalModule()) {
+                applicationDeployer.prepareInternalModule();
+            }
+
+            // refer services
+            referServices();
+
+            // if no async export/refer services, just set started
+            if (asyncExportingFutures.isEmpty() && asyncReferringFutures.isEmpty()) {
+                onModuleStarted();
+                registerServices();
+                checkReferences();
+                onModuleCompletion();
+                completeStartFuture(true);
+            } else {
+                // 提交到共享线程池，等异步导出/引用完成后收尾
+            }
 ```
 
+与旧笔记的三处差异：守卫条件多了 `isCompletion()`（`:168`）；注册服务前多一步 `onModuleCompletion()`（`:200`）；异步分支存在（`asyncExportingFutures` / `asyncReferringFutures` 非空时提交到 `frameworkExecutorRepository.getSharedExecutor()`）。
 
-
-### doStart
-
-发布服务 先启动内部服务，再启动外部服务 不论是内部服务还是外部服务调用的代码逻辑都是模块发布器 ModuleDeployer 的 start()方法，
+`exportServices()` 遍历的是 `configManager.getServices()`，不是 Spring Bean：
 
 ```java
-private void doStart() {
-    startModules();
-}
-
-private void startModules() {
-    // ensure init and start internal module first
-    prepareInternalModule();
-
-    // filter and start pending modules, ignore new module during starting, throw exception of module start
-    for (ModuleModel moduleModel : applicationModel.getModuleModels()) {
-        if (moduleModel.getDeployer().isPending()) {
-        moduleModel.getDeployer().start();
+// dubbo-config/dubbo-config-api/src/main/java/org/apache/dubbo/config/deploy/DefaultModuleDeployer.java:440-444
+    private void exportServices() {
+        for (ServiceConfigBase sc : configManager.getServices()) {
+            exportServiceInternal(sc);
         }
     }
-}
 ```
 
+`exportServiceInternal`（`:463`）里，若配置了异步导出则 `CompletableFuture.runAsync` 到 `executorRepository.getServiceExportExecutor()` 并把 future 收进 `asyncExportingFutures`（`:477`）；否则同步调用 `sc.export()` 或 `sc.export(RegisterTypeEnum.AUTO_REGISTER_BY_DEPLOYER)`（`:495`）。
 
+## Spring Boot 集成
 
+Dubbo 与 Spring Boot 的集成靠 Spring 的事件机制触发，共三个关键类：
 
-容错设置帮我们尽可能保障服务稳定调用，但调用也有流量高低之分，流量低的时候可能你发 现不了什么特殊情况，一旦流量比较高，你可能会发现提供方总是有那么几台服务器流量特别 高，另外几个服务器流量特别低。 这是因为 Dubbo 默认使用的是 loadbalance="random" 随机类型的负载均衡策略，为了尽 可能雨露均沾调用到提供方各个节点，你可以继续设置 loadbalance="roundrobin" 来进 行轮询调用
+| 类 | 状态 | 职责 |
+|---|---|---|
+| `DubboConfigApplicationListener` | 存在 | 绑定 `dubbo.*` 配置 |
+| `DubboDeployApplicationListener` | 存在 | 驱动 `deployer.start()` / `moduleModel.destroy()` |
+| `DubboBootstrapApplicationListener` | 存在（已 `@Deprecated`） | 兼容 2.7.x 的 takeover 逻辑 |
+| `ServiceBean` | 存在，**但不监听事件** | 只是 `ServiceConfig` 的 Spring Bean 载体 |
 
+### 启动时序
 
-Dubbo 线程池总数默认是固定的，200 个，
+```mermaid
+sequenceDiagram
+    participant App as Spring Boot 应用
+    participant SC as Spring 容器
+    participant DCAL as DubboConfigApplicationListener
+    participant SABPP as ServiceAnnotationPostProcessor
+    participant RABPP as ReferenceAnnotationBeanPostProcessor
+    participant SB as ServiceBean
+    participant DDAL as DubboDeployApplicationListener
+    participant MD as ModuleDeployer
+    participant SCfg as ServiceConfig
+    participant Reg as 注册中心
 
-采用上下文对象来存储，那异步化的结果也就毋庸置疑存储在上下文对象中。
+    Note over App,Reg: 1. 配置绑定（环境准备）
+    App->>SC: SpringApplication.run()
+    SC->>DCAL: ApplicationEnvironmentPreparedEvent
+    DCAL->>DCAL: 预加载并绑定 dubbo.* 配置
 
-Dubbo 异步实现原理
+    Note over App,Reg: 2. Bean 扫描与注册
+    SC->>SABPP: 实例化后置处理器
+    SABPP->>SABPP: scanServiceBeans() 扫描 @DubboService
+    SABPP->>SC: 为每个服务注册 ServiceBean
+    SC->>RABPP: 实例化后置处理器
+    RABPP->>SC: 扫描 @DubboReference 注入点并注册 ReferenceBean
 
-首先，还是定义线程池对象，在 Dubbo 中 RpcContext.startAsync 方法意味着异步模式的开 启：
+    Note over App,Reg: 3. 容器刷新触发启动（关键：不遍历 ServiceBean）
+    SC->>DDAL: ContextRefreshedEvent
+    DDAL->>MD: deployer.start()
+    MD->>MD: exportServices() 遍历 configManager.getServices()
+    MD->>SCfg: sc.export()
+    SCfg->>Reg: 注册 URL（接口级 + 应用级）
 
-最终是通过 CAS 原子性的方式创建了一个 java.util.concurrent.CompletableFuture 对象，这个对象就存储在当前的上下文 org.apache.dubbo.rpc.RpcContextAttachment 对象中。
+    Note over App,Reg: 4. 引用服务（懒加载）
+    RABPP->>SCfg: getObject() 创建代理
+    SCfg->>Reg: 订阅地址列表
+```
 
-asyncContext 富含上下文信息，只需要把这个所谓的 asyncContext 对象传入到子线程 中，然后将 asyncContext 中的上下文信息充分拷贝到子线程中，这样，子线程处理所需要的 任何信息就不会因为开启了异步化处理而缺失
+四步流程对应源码：
 
-Dubbo 用 asyncContext.write 写入异步结果，通过 write 方法的查看，最终我们的异步化结果 是存入了 java.util.concurrent.CompletableFuture 对象中，这样拦截处只需要调用 java.util.concurrent.CompletableFuture#get(long timeout, TimeUnit unit) 方法就可以很轻松地 拿到异步化结果了。
+1. **配置加载**：`DubboConfigApplicationListener` 监听 `ApplicationEnvironmentPreparedEvent`，把 `dubbo.*` 绑定到配置对象。
+2. **后置处理器注册**：`ServiceAnnotationPostProcessor` 与 `ReferenceAnnotationBeanPostProcessor` 注册进容器；前者扫描 `@DubboService` 生成 `ServiceBean`（`scanServiceBeans()` 在 `ServiceAnnotationPostProcessor.java:205`），后者处理 `@DubboReference` 注入点。
+3. **暴露服务**：`ContextRefreshedEvent` → `DubboDeployApplicationListener` → `deployer.start()` → `DefaultModuleDeployer.exportServices()` → `sc.export()`。
+4. **引用服务**：`ReferenceAnnotationBeanPostProcessor` 处理注入点，`ReferenceBean.getObject()` 创建代理。
 
-
-日志追踪 使用FIlter
-隐式传递trace id 到rpc context中
+关键在于第 3 步。`DubboDeployApplicationListener` 的实现：
 
 ```java
-@Override
-public Future start() throws IllegalStateException {
-    // initialize，maybe deadlock applicationDeployer lock & moduleDeployer lock
-    applicationDeployer.initialize();
+// dubbo-config/dubbo-config-spring/src/main/java/org/apache/dubbo/config/spring/context/DubboDeployApplicationListener.java:160-189
+    private void onContextRefreshedEvent(ContextRefreshedEvent event) {
+        ModuleDeployer deployer = moduleModel.getDeployer();
+        Assert.notNull(deployer, "Module deployer is null");
+        Object singletonMutex = LockUtils.getSingletonMutex(applicationContext);
+        // start module
+        Future future = null;
+        synchronized (singletonMutex) {
+            future = deployer.start();
+        }
 
-    return startSync();
-}
+        // if the module does not start in background, await finish
+        if (!deployer.isBackground()) {
+            try {
+                future.get();
+            } catch (InterruptedException e) {
+                logger.warn(...);
+            } catch (Exception e) {
+                logger.warn(...);
+            }
+        }
+    }
 ```
 
+**它不遍历 `ServiceBean`、不调 `ServiceBean.export()`，只调 `deployer.start()`。** 遍历 `configManager.getServices()` 的逻辑在 `DefaultModuleDeployer.exportServices()`（`:440-444`）。旧笔记里「`DDAL` 获取所有 `ServiceBean` → 循环 `SB.export()`」的描述与 3.3.6 不符。
 
+`synchronized (singletonMutex)` 是为了与 Spring 的单例初始化锁互斥，避免 Dubbo 启动期间容器还在建单例。`isBackground()` 为 false 时才 `future.get()` 阻塞等待；后台启动模式下直接返回。
+
+`ServiceBean` 只是一层 Spring 适配：
 
 ```java
-private synchronized Future startSync() throws IllegalStateException {
-    if (isStopping() || isStopped() || isFailed()) {
-        throw new IllegalStateException(getIdentifier() + " is stopping or stopped, can not start again");
-    }
-
-    try {
-        if (isStarting() || isStarted()) {
-            return startFuture;
-        }
-
-        onModuleStarting();
-
-        initialize();
-
-        // export services
-        exportServices();
-
-        // prepare application instance
-        // exclude internal module to avoid wait itself
-        if (moduleModel != moduleModel.getApplicationModel().getInternalModule()) {
-            applicationDeployer.prepareInternalModule();
-        }
-
-        // refer services
-        referServices();
-
-        // if no async export/refer services, just set started
-        if (asyncExportingFutures.isEmpty() && asyncReferringFutures.isEmpty()) {
-            // publish module started event
-            onModuleStarted();
-
-            // register services to registry
-            registerServices();
-
-            // check reference config
-            checkReferences();
-
-            // complete module start future after application state changed
-            completeStartFuture(true);
-        } else {
-            frameworkExecutorRepository.getSharedExecutor().submit(() -> {
-                try {
-                    // wait for export finish
-                    waitExportFinish();
-                    // wait for refer finish
-                    waitReferFinish();
-
-                    // publish module started event
-                    onModuleStarted();
-
-                    // register services to registry
-                    registerServices();
-
-                    // check reference config
-                    checkReferences();
-                } catch (Throwable e) {
-                    onModuleFailed(getIdentifier() + " start failed: " + e, e);
-                } finally {
-                    // complete module start future after application state changed
-                    completeStartFuture(true);
-                }
-            });
-        }
-
-    } catch (Throwable e) {
-        onModuleFailed(getIdentifier() + " start failed: " + e, e);
-        throw e;
-    }
-
-    return startFuture;
-}
+// dubbo-config/dubbo-config-spring/src/main/java/org/apache/dubbo/config/spring/ServiceBean.java:42-47
+public class ServiceBean<T> extends ServiceConfig<T>
+        implements InitializingBean,
+                DisposableBean,
+                ApplicationContextAware,
+                BeanNameAware,
+                ApplicationEventPublisherAware {
 ```
 
+五个接口里**没有 `ApplicationListener`**，也没有任何事件订阅能力。旧笔记「`ServiceBean` 监听到事件，调用 `export()`」的链路在 3.3.6 已不存在。
 
+### 兼容路径
 
-### ModuleDeployer
+`DubboBootstrapApplicationListener` 是 2.7.x 时代的类，3.3.6 里标了 `@Deprecated`（`:47`），但仍在：
 
-`initialize()` 完成后，Dubbo 进入**模块启动阶段**，主要逻辑由 `DefaultApplicationDeployer` 推动，并由 `ModuleDeployer` 执行具体的模块生命周期管理。其核心流程如下：
+```java
+// dubbo-config/dubbo-config-spring/src/main/java/org/apache/dubbo/config/spring/context/DubboBootstrapApplicationListener.java:48
+public class DubboBootstrapApplicationListener implements ApplicationListener, ApplicationContextAware, Ordered {
+```
 
-1. **初始化**：`ModuleDeployer` 实例化，并加载该模块的专属配置。
-2. **准备**：校验模块配置、解析服务依赖等。
-3. **启动**：开始执行模块级别的启动逻辑，进入**阶段三**。
-4. **发布**：模块成功启动后，广播 `ModuleDeployedEvent` 事件，通知系统模块就绪
+与旧笔记的三处差异：
 
-`ModuleDeployer` 的启动，标志着 Dubbo 进入核心业务启动阶段
+| 旧笔记 | 3.3.6 |
+|---|---|
+| `extends OnceApplicationContextEventListener` | `implements ApplicationListener, ApplicationContextAware, Ordered`，**不再继承** `OnceApplicationContextEventListener`（`:48`） |
+| `onContextRefreshedEvent` 只调 `dubboBootstrap.start()` | 有 `takeoverMode == SPRING` 判断，且调 `moduleModel.getDeployer().start()`（`:119-123`） |
+| `ContextClosedEvent` 时调 `DubboShutdownHook.getDubboShutdownHook().run()` | 调 `moduleModel.getDeployer().stop()`（`:125-131`），`getDubboShutdownHook()` 那行已被注释掉 |
 
+```java
+// dubbo-config/dubbo-config-spring/src/main/java/org/apache/dubbo/config/spring/context/DubboBootstrapApplicationListener.java:119-131
+    private void onContextRefreshedEvent(ContextRefreshedEvent event) {
+        if (bootstrap.getTakeoverMode() == BootstrapTakeoverMode.SPRING) {
+            moduleModel.getDeployer().start();
+        }
+    }
 
+    private void onContextClosedEvent(ContextClosedEvent event) {
+        if (bootstrap.getTakeoverMode() == BootstrapTakeoverMode.SPRING) {
+            // will call dubboBootstrap.stop() through shutdown callback.
+            // bootstrap.getApplicationModel().getBeanFactory().getBean(DubboShutdownHook.class).run();
+            moduleModel.getDeployer().stop();
+        }
+    }
+```
 
+`:128` 那行注释掉的 `getBean(DubboShutdownHook.class).run()` 是旧实现残留——3.3.6 的停机走 `deployer.stop()`。
 
-
-模块启动后，`start()` 方法会继续调用 `exportServices` 和 `referServices` 来执行具体的服务操作，这也是服务治理的核心环节
+> [!WARNING]
+> `SpringExtensionFactory` 这个类在 3.3.6 **全仓库不存在**（grep 零匹配）。它承接的职责已改由 `ExtensionInjector` 体系提供，SPI 注册在 `dubbo-common/src/main/resources/META-INF/dubbo/internal/org.apache.dubbo.common.extension.ExtensionInjector`：`adaptive` / `spi` / `scopeBean` 三项。老笔记里「`SpringExtensionFactory.addApplicationContext()` 里调 `DubboShutdownHook.getDubboShutdownHook().unregister()`」的代码整段都不存在——而且 `DubboShutdownHook.getDubboShutdownHook()` 这个静态方法在 3.3.6 也**已不存在**，实例需 `new DubboShutdownHook(applicationModel)`（`:62`）再从 bean factory 取。
 
 ## Provider
 
-提供者启动的核心是暴露服务，供消费者调用。该过程主要由 `ServiceConfig` 类完成
+提供者启动的核心是暴露服务，由 `ServiceConfig` 完成。
 
-`ServiceConfig.export()` 内部会调用 `doExportUrls()`，完成如下关键步骤：
+### export 入口
 
-1. **前置准备**：再次进行配置校验、接口赋值等。
-2. **生成 URL**：根据 `ApplicationConfig`、`RegistryConfig`、`ProtocolConfig` 等配置构建 URL，并**将本地服务实现封装成 `Invoker`**，它是 Dubbo 中调用处理的核心实体。
-3. **协议暴露**：调用 `Protocol.export(invoker)` 方法。Dubbo 会根据 URL 协议（如 `dubbo` 或 `tri`）进行不同的暴露逻辑：
-   - 启动对应的网络服务器（如 Netty Server）。
-   - 将服务接口、IP、端口等信息注册到配置的注册中心（如 Zookeeper）。
-4. **事件分发**：服务暴露完成后，会发送 `ServiceConfigExportedEvent` 事件，用于触发后续操作，如服务映射。
-
-### doExport
-
-
-Invoked after publish ContextRefreshedEvent in [Spring finishRefresh](/docs/CS/Framework/Spring/IoC.md?id=finishrefresh)
+3.3.6 的 `export` **多了 `RegisterTypeEnum` 参数**（`ServiceConfig.java:311`）：
 
 ```java
-public class DubboBootstrapApplicationListener extends OnceApplicationContextEventListener implements Ordered {
-
+// dubbo-config/dubbo-config-api/src/main/java/org/apache/dubbo/config/ServiceConfig.java:311-323（节选）
     @Override
-    public void onApplicationContextEvent(ApplicationContextEvent event) {
-        if (DubboBootstrapStartStopListenerSpringAdapter.applicationContext == null) {
-            DubboBootstrapStartStopListenerSpringAdapter.applicationContext = event.getApplicationContext();
+    public void export(RegisterTypeEnum registerType) {
+        if (this.exported) {
+            return;
         }
-        if (event instanceof ContextRefreshedEvent) {
-            onContextRefreshedEvent((ContextRefreshedEvent) event);
-        } else if (event instanceof ContextClosedEvent) {
-            onContextClosedEvent((ContextClosedEvent) event);
+
+        if (getScopeModel().isLifeCycleManagedExternally()) {
+            // prepare model for reference
+            getScopeModel().getDeployer().prepare();
+        } else {
+            // ensure start module, compatible with old api usage
+            getScopeModel().getDeployer().start();
         }
-    }
-
-    private void onContextRefreshedEvent(ContextRefreshedEvent event) {
-        dubboBootstrap.start();
-    }
-}
 ```
 
+这段是 3.x 生命周期语义的体现：如果模型的生命周期由外部（Spring）管理，只 `prepare()`；否则自己 `start()`，兼容老 API 用法。
+
+`RegisterTypeEnum` 四个值（`dubbo-common/.../common/constants/RegisterTypeEnum.java`）：
+
+| 取值 | 语义 |
+|---|---|
+| `NEVER_REGISTER` | 永不注册，任何命令（如 QoS-online）也不行 |
+| `MANUAL_REGISTER` | 可由命令注册，但默认不注册 |
+| `AUTO_REGISTER_BY_DEPLOYER` | 由 deployer 在启动后注册（延迟发布，防止服务在全部就绪前被调用） |
+| `AUTO_REGISTER` | 导出服务时立即注册 |
+
+`doExport` 是 `export` 的下一层：
 
 ```java
-// ServiceConfig#doExport()
-protected synchronized void doExport() {
-    if (exported) {
-        return;
+// dubbo-config/dubbo-config-api/src/main/java/org/apache/dubbo/config/ServiceConfig.java:552-565
+    protected synchronized void doExport(RegisterTypeEnum registerType) {
+        if (unexported) {
+            throw new IllegalStateException("The service " + interfaceClass.getName() + " has already unexported!");
+        }
+        if (exported) {
+            return;
+        }
+
+        if (StringUtils.isEmpty(path)) {
+            path = interfaceName;
+        }
+        doExportUrls(registerType);
+        exported();
     }
-    exported = true;
-
-    if (StringUtils.isEmpty(path)) {
-        path = interfaceName;
-    }
-    doExportUrls();
-    bootstrap.setReady(true);
-}
-```
-#### doExportUrls
-
-```java
-private void doExportUrls() {
-  ServiceRepository repository = ApplicationModel.getServiceRepository();
-  ServiceDescriptor serviceDescriptor = repository.registerService(getInterfaceClass());
-  repository.registerProvider(
-    getUniqueServiceName(),
-    ref,
-    serviceDescriptor,
-    this,
-    serviceMetadata
-  );
-
-  List<URL> registryURLs = ConfigValidationUtils.loadRegistries(this, true);
-
-  int protocolConfigNum = protocols.size();
-  for (ProtocolConfig protocolConfig : protocols) {
-    String pathKey = URL.buildKey(getContextPath(protocolConfig)
-                                  .map(p -> p + "/" + path)
-                                  .orElse(path), group, version);
-    // In case user specified path, register service one more time to map it to path.
-    repository.registerService(pathKey, interfaceClass);
-    doExportUrlsFor1Protocol(protocolConfig, registryURLs, protocolConfigNum);
-  }
-}
-
 ```
 
-##### doExportUrlsFor1Protocol
-
-export either local or remote, not both
-
-if remote:
-
-1. use [ProxyFactory](/docs/CS/Framework/Dubbo/Start.md?id=createproxy) wrap Invoker
-2. may export no registries
-3. may only injvm
-4. add monitor
-5. export registry
-
-
+**旧笔记里的 `bootstrap.setReady(true)` 在 3.3.6 已不存在**（`dubbo-config-api` 整模块 grep `setReady` 零匹配）。原来的「标记就绪」语义改由末尾的 `exported()` 承担：
 
 ```java
-// ServiceConfig
-private void doExportUrlsFor1Protocol(ProtocolConfig protocolConfig, List<URL> registryURLs, int protocolConfigNum) {
-    String name = protocolConfig.getName();
-    if (StringUtils.isEmpty(name)) {
-        name = DUBBO;
-    }
-
-    Map<String, String> map = new HashMap<String, String>();
-    map.put(SIDE_KEY, PROVIDER_SIDE);
-
-    ServiceConfig.appendRuntimeParameters(map);
-    AbstractConfig.appendParameters(map, getMetrics());
-    AbstractConfig.appendParameters(map, getApplication());
-    AbstractConfig.appendParameters(map, getModule());
-    // remove 'default.' prefix for configs from ProviderConfig
-    // appendParameters(map, provider, Constants.DEFAULT_KEY);
-    AbstractConfig.appendParameters(map, provider);
-    AbstractConfig.appendParameters(map, protocolConfig);
-    AbstractConfig.appendParameters(map, this);
-    MetadataReportConfig metadataReportConfig = getMetadataReportConfig();
-    if (metadataReportConfig != null && metadataReportConfig.isValid()) {
-        map.putIfAbsent(METADATA_KEY, REMOTE_METADATA_STORAGE_TYPE);
-    }
-    if (CollectionUtils.isNotEmpty(getMethods())) {
-        for (MethodConfig method : getMethods()) {
-            AbstractConfig.appendParameters(map, method, method.getName());
-            String retryKey = method.getName() + RETRY_SUFFIX;
-            if (map.containsKey(retryKey)) {
-                String retryValue = map.remove(retryKey);
-                if (FALSE_VALUE.equals(retryValue)) {
-                    map.put(method.getName() + RETRIES_SUFFIX, ZERO_VALUE);
-                }
+// dubbo-config/dubbo-config-api/src/main/java/org/apache/dubbo/config/ServiceConfig.java:397-416
+    protected void exported() {
+        exported = true;
+        List<URL> exportedURLs = this.getExportedUrls();
+        exportedURLs.forEach(url -> {
+            if (url.getParameter(SERVICE_NAME_MAPPING_KEY, false)) {
+                ServiceNameMapping serviceNameMapping = ServiceNameMapping.getDefaultExtension(getScopeModel());
+                ScheduledExecutorService scheduledExecutor = getScopeModel()
+                        .getBeanFactory()
+                        .getBean(FrameworkExecutorRepository.class)
+                        .getSharedScheduledExecutor();
+                mapServiceName(url, serviceNameMapping, scheduledExecutor);
             }
-            List<ArgumentConfig> arguments = method.getArguments();
-            if (CollectionUtils.isNotEmpty(arguments)) {
-                for (ArgumentConfig argument : arguments) {
-                    // convert argument type
-                    if (argument.getType() != null && argument.getType().length() > 0) {
-                        Method[] methods = interfaceClass.getMethods();
-                        // visit all methods
-                        if (methods.length > 0) {
-                            for (int i = 0; i < methods.length; i++) {
-                                String methodName = methods[i].getName();
-                                // target the method, and get its signature
-                                if (methodName.equals(method.getName())) {
-                                    Class<?>[] argtypes = methods[i].getParameterTypes();
-                                    // one callback in the method
-                                    if (argument.getIndex() != -1) {
-                                        if (argtypes[argument.getIndex()].getName().equals(argument.getType())) {
-                                            AbstractConfig
-                                                    .appendParameters(map, argument, method.getName() + "." + argument.getIndex());
-                                        } else {
-                                            throw new IllegalArgumentException("");
-                                        }
-                                    } else {
-                                        // multiple callbacks in the method
-                                        for (int j = 0; j < argtypes.length; j++) {
-                                            Class<?> argclazz = argtypes[j];
-                                            if (argclazz.getName().equals(argument.getType())) {
-                                                AbstractConfig.appendParameters(map, argument, method.getName() + "." + j);
-                                                if (argument.getIndex() != -1 && argument.getIndex() != j) {
-                                                    throw new IllegalArgumentException("");
-                        }		}		}		}		}		}		}
-                    } else if (argument.getIndex() != -1) {
-                        AbstractConfig.appendParameters(map, argument, method.getName() + "." + argument.getIndex());
-                    } else {throw new IllegalArgumentException("");}
-            }		}
-        } // end of methods for
-    }
+        });
 
-    if (ProtocolUtils.isGeneric(generic)) {
-        map.put(GENERIC_KEY, generic);
-        map.put(METHODS_KEY, ANY_VALUE);
-    } else {
-        String revision = Version.getVersion(interfaceClass, version);
-        if (revision != null && revision.length() > 0) {
-            map.put(REVISION_KEY, revision);
+        onExported();
+
+        if (hasRegistrySpecified()) {
+            getScopeModel().getDeployer().getApplicationDeployer().exportMetadataService();
         }
+    }
+```
 
-        String[] methods = Wrapper.getWrapper(interfaceClass).getMethodNames();
-        if (methods.length == 0) {
-            map.put(METHODS_KEY, ANY_VALUE);
+三件事：置 `exported = true`、触发服务名映射（应用级发现时用）、调 `onExported()` 发 `ServiceConfigExportedEvent`，最后在指定了注册中心时调应用级 deployer 导出元数据服务。
+
+### doExportUrls
+
+```java
+// dubbo-config/dubbo-config-api/src/main/java/org/apache/dubbo/config/ServiceConfig.java:568-594（节选）
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private void doExportUrls(RegisterTypeEnum registerType) {
+        ModuleServiceRepository repository = getScopeModel().getServiceRepository();
+        ServiceDescriptor serviceDescriptor;
+        final boolean serverService = ref instanceof ServerService;
+        if (serverService) {
+            serviceDescriptor = ((ServerService) ref).getServiceDescriptor();
+            // for stub service, path always interface name or IDL package name
+            this.path = serviceDescriptor.getInterfaceName();
+            repository.registerService(serviceDescriptor);
         } else {
-            map.put(METHODS_KEY, StringUtils.join(new HashSet<String>(Arrays.asList(methods)), ","));
+            serviceDescriptor = repository.registerService(getInterfaceClass());
         }
-    }
+        providerModel = new ProviderModel(
+                serviceMetadata.getServiceKey(),
+                ref,
+                serviceDescriptor,
+                getScopeModel(),
+                serviceMetadata,
+                interfaceClassLoader);
 
-    /**
-     * Here the token value configured by the provider is used to assign the value to ServiceConfig#token
-     */
-    if (ConfigUtils.isEmpty(token) && provider != null) {
-        token = provider.getToken();
-    }
+        // Compatible with dependencies on ServiceModel#getServiceConfig(), and will be removed in a future version
+        providerModel.setConfig(this);
 
-    if (!ConfigUtils.isEmpty(token)) {
-        if (ConfigUtils.isDefault(token)) {
-            map.put(TOKEN_KEY, UUID.randomUUID().toString());
-        } else {
-            map.put(TOKEN_KEY, token);
+        providerModel.setDestroyRunner(getDestroyRunner());
+        repository.registerProvider(providerModel);
+```
+
+与旧笔记的差异：
+
+| 旧笔记 | 3.3.6 |
+|---|---|
+| `ApplicationModel.getServiceRepository()`（静态） | `getScopeModel().getServiceRepository()`（`:569`） |
+| 直接 `repository.registerProvider(getUniqueServiceName(), ref, ...)` 六参 | 先构造 `ProviderModel` 对象（`:582-588`），再 `registerProvider(providerModel)`（`:594`） |
+| 无 `ServerService` 分支 | 有 `ref instanceof ServerService` 判断（stub 服务走 `getServiceDescriptor()`） |
+| 无 `providerModel` 字段 | 构造后 `setConfig(this)`（兼容旧依赖）、`setDestroyRunner(...)` |
+
+`ServerService` 是 Triple / gRPC stub 服务的标记接口，实现它的 ref 自带 `ServiceDescriptor`，路径取 IDL 包名而非接口名。
+
+循环部分与旧版基本一致：
+
+```java
+// dubbo-config/dubbo-config-api/src/main/java/org/apache/dubbo/config/ServiceConfig.java:596-611（节选）
+        List<URL> registryURLs = !Boolean.FALSE.equals(isRegister())
+                ? ConfigValidationUtils.loadRegistries(this, true)
+                : Collections.emptyList();
+
+        for (ProtocolConfig protocolConfig : protocols) {
+            String pathKey = URL.buildKey(
+                    getContextPath(protocolConfig).map(p -> p + "/" + path).orElse(path), group, version);
+            // stub service will use generated service name
+            if (!serverService) {
+                // In case user specified path, register service one more time to map it to path.
+                repository.registerService(pathKey, interfaceClass);
+            }
+            doExportUrlsFor1Protocol(protocolConfig, registryURLs, registerType);
         }
-    }
-    //init serviceMetadata attachments
-    serviceMetadata.getAttachments().putAll(map);
 
-    // export service
-    String host = findConfigedHosts(protocolConfig, registryURLs, map);
-    Integer port = findConfigedPorts(protocolConfig, name, map, protocolConfigNum);
-    URL url = new URL(name, host, port, getContextPath(protocolConfig).map(p -> p + "/" + path).orElse(path), map);
+        providerModel.setServiceUrls(urls);
+```
 
-    // You can customize Configurator to append extra parameters
-    if (ExtensionLoader.getExtensionLoader(ConfiguratorFactory.class)
-            .hasExtension(url.getProtocol())) {
-        url = ExtensionLoader.getExtensionLoader(ConfiguratorFactory.class)
-                .getExtension(url.getProtocol()).getConfigurator(url).configure(url);
-    }
+两处小差异：`registryURLs` 增加了 `isRegister()` 前置判断（`:596-598`）；`registerService(pathKey, ...)` 被包在 `if (!serverService)` 里；末尾多了 `providerModel.setServiceUrls(urls)`（`:611`）——**旧笔记没有这一行**，意味着 3.x 会把导出的 URL 回写到 ProviderModel 上，供后续查询与元数据上报使用。
 
-    String scope = url.getParameter(SCOPE_KEY);
-    // don't export when none is configured
-    if (!SCOPE_NONE.equalsIgnoreCase(scope)) {
+### doExportUrlsFor1Protocol
 
-        // export to local if the config is not remote (export to remote only when config is remote)
-        if (!SCOPE_REMOTE.equalsIgnoreCase(scope)) {
-            exportLocal(url);
+3.3.6 把这个方法大幅瘦身了。原来 170 多行的「手工拼 map」逻辑被抽成三个方法：
+
+```java
+// dubbo-config/dubbo-config-api/src/main/java/org/apache/dubbo/config/ServiceConfig.java:614-633
+    private void doExportUrlsFor1Protocol(
+            ProtocolConfig protocolConfig, List<URL> registryURLs, RegisterTypeEnum registerType) {
+        Map<String, String> map = buildAttributes(protocolConfig);
+
+        // remove null key and null value
+        map.keySet().removeIf(key -> StringUtils.isEmpty(key) || StringUtils.isEmpty(map.get(key)));
+        // init serviceMetadata attachments
+        serviceMetadata.getAttachments().putAll(map);
+
+        URL url = buildUrl(protocolConfig, map);
+
+        processServiceExecutor(url);
+
+        if (CollectionUtils.isEmpty(registryURLs)) {
+            registerType = RegisterTypeEnum.NEVER_REGISTER;
         }
-        // export to remote if the config is not local (export to local only when config is local)
-        if (!SCOPE_LOCAL.equalsIgnoreCase(scope)) {
-            if (CollectionUtils.isNotEmpty(registryURLs)) {
-                for (URL registryURL : registryURLs) {
-                    if (SERVICE_REGISTRY_PROTOCOL.equals(registryURL.getProtocol())) {
-                        url = url.addParameterIfAbsent(SERVICE_NAME_MAPPING_KEY, "true");
-                    }
+        exportUrl(url, registryURLs, registerType);
 
-                    //if protocol is only injvm ,not register
-                    if (LOCAL_PROTOCOL.equalsIgnoreCase(url.getProtocol())) {
-                        continue;
-                    }
-                    url = url.addParameterIfAbsent(DYNAMIC_KEY, registryURL.getParameter(DYNAMIC_KEY));
-                    URL monitorUrl = ConfigValidationUtils.loadMonitor(this, registryURL);
-                    if (monitorUrl != null) {
-                        url = url.addParameterAndEncoded(MONITOR_KEY, monitorUrl.toFullString());
-                    }
+        initServiceMethodMetrics(url);
+    }
+```
 
-                    // For providers, this is used to enable custom proxy to generate invoker
-                    String proxy = url.getParameter(PROXY_KEY);
-                    if (StringUtils.isNotEmpty(proxy)) {
-                        registryURL = registryURL.addParameter(PROXY_KEY, proxy);
-                    }
+三个抽出的方法：`buildAttributes(ProtocolConfig)`（`:680`，原来那堆 `appendParameters` 拼 map 的活）、`buildUrl(ProtocolConfig, Map)`（`:821`，算 host/port 后 `new URL` 并 `setScopeModel` + `setServiceModel`）、`initServiceMethodMetrics(URL)`（`:635`，按 methods 逐个发 `MetricsEventBus.publish`）。
 
-                    Invoker<?> invoker = PROXY_FACTORY.getInvoker(ref, (Class) interfaceClass,
-                            registryURL.addParameterAndEncoded(EXPORT_KEY, url.toFullString()));
-                    DelegateProviderMetaDataInvoker wrapperInvoker = new DelegateProviderMetaDataInvoker(invoker, this);
+**无注册中心时强制改成 `NEVER_REGISTER`**（`:627-629`）——这是 3.x 新增的判断，旧笔记没有。
 
-                    Exporter<?> exporter = PROTOCOL.export(wrapperInvoker);
-                    exporters.add(exporter);
-                }
-            } else { // no registries
-                Invoker<?> invoker = PROXY_FACTORY.getInvoker(ref, (Class) interfaceClass, url);
-                DelegateProviderMetaDataInvoker wrapperInvoker = new DelegateProviderMetaDataInvoker(invoker, this);
+`exportUrl` 承接 scope 判断与本地/远程分流：
 
-                Exporter<?> exporter = PROTOCOL.export(wrapperInvoker);
-                exporters.add(exporter);
+```java
+// dubbo-config/dubbo-config-api/src/main/java/org/apache/dubbo/config/ServiceConfig.java:861-887（节选）
+    private void exportUrl(URL url, List<URL> registryURLs, RegisterTypeEnum registerType) {
+        String scope = url.getParameter(SCOPE_KEY);
+        // don't export when none is configured
+        if (!SCOPE_NONE.equalsIgnoreCase(scope)) {
+
+            // export to local if the config is not remote
+            if (!SCOPE_REMOTE.equalsIgnoreCase(scope)) {
+                exportLocal(url);
             }
 
-            MetadataUtils.publishServiceDefinition(url);
-        }
-    }
-    this.urls.add(url);
-}
+            // export to remote if the config is not local
+            if (!SCOPE_LOCAL.equalsIgnoreCase(scope)) {
+                // export to extra protocol is used in remote export
+                String extProtocol = url.getParameter(EXT_PROTOCOL, "");
+                List<String> protocols = new ArrayList<>();
+
+                if (StringUtils.isNotBlank(extProtocol)) {
+                    // export original url
+                    url = URLBuilder.from(url)
+                            .addParameter(IS_PU_SERVER_KEY, Boolean.TRUE.toString())
+                            .build();
+                }
+
+                url = exportRemote(url, registryURLs, registerType);
+                if (!isGeneric(generic) && !getScopeModel().isInternal()) {
+                    MetadataUtils.publishServiceDefinition(url, providerModel.getServiceModel(), getApplicationModel());
+                }
 ```
 
+`scope=none` 两边都不导出；`scope=remote` 只导远程；`scope=local` 只导本地；不配则两边都导。新增的 `EXT_PROTOCOL` 支持「一个服务额外导出到其它协议」，主 URL 打 `IS_PU_SERVER_KEY` 标记，额外协议的 URL 打 `IS_EXTRA` 标记。
 
+远端导出走 `exportRemote`（`:914`），逐个注册中心处理，包括 `SERVICE_NAME_MAPPING_KEY`、`MONITOR_KEY`（3.x 用 `putAttribute` 而非 `addParameterAndEncoded`）、`PROXY_KEY` 透传，以及 injvm 短路：`if (LOCAL_PROTOCOL.equalsIgnoreCase(url.getProtocol())) continue;`。
 
-if has Registry
+真正调 `Protocol.export` 的地方：
+
+```java
+// dubbo-config/dubbo-config-api/src/main/java/org/apache/dubbo/config/ServiceConfig.java:964-981
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private void doExportUrl(URL url, boolean withMetaData, RegisterTypeEnum registerType) {
+        if (!url.getParameter(REGISTER_KEY, true)) {
+            registerType = RegisterTypeEnum.MANUAL_REGISTER;
+        }
+        if (registerType == RegisterTypeEnum.NEVER_REGISTER
+                || registerType == RegisterTypeEnum.MANUAL_REGISTER
+                || registerType == RegisterTypeEnum.AUTO_REGISTER_BY_DEPLOYER) {
+            url = url.addParameter(REGISTER_KEY, false);
+        }
+
+        Invoker<?> invoker = proxyFactory.getInvoker(ref, (Class) interfaceClass, url);
+        if (withMetaData) {
+            invoker = new DelegateProviderMetaDataInvoker(invoker, this);
+        }
+        Exporter<?> exporter = protocolSPI.export(invoker);
+        ConcurrentHashMapUtils.computeIfAbsent(exporters, registerType, k -> new CopyOnWriteArrayList<>())
+                .add(exporter);
+    }
+```
+
+三个 `RegisterTypeEnum` 值（`NEVER_REGISTER` / `MANUAL_REGISTER` / `AUTO_REGISTER_BY_DEPLOYER`）都会把 URL 的 `REGISTER_KEY` 置 false，只有 `AUTO_REGISTER` 保留注册行为。另注意 `exporters` 是 `Map<RegisterTypeEnum, List<Exporter>>`，按注册类型分组，取消注册时要按类型取。
 
 ### RegistryProtocol
 
-TODO, replace RegistryProtocol completely in the future.
-
-doLocalExport by actual Protocol, such as `DubboProtocol`
-
-closure by `ExporterChangeableWrapper`
+`RegistryProtocol` 是「协议 + 注册」的胶水层——它自己不开 Netty Server，只把导出委托给真正的协议（`DubboProtocol` 等），再补上注册中心的部分。
 
 ```java
-// RegistryProtocol#export()
-@Override
-public <T> Exporter<T> export(final Invoker<T> originInvoker) throws RpcException {
-    URL registryUrl = getRegistryUrl(originInvoker);
-    // url to export locally
-    URL providerUrl = getProviderUrl(originInvoker);
+// dubbo-registry/dubbo-registry-api/src/main/java/org/apache/dubbo/registry/integration/RegistryProtocol.java:272-301
+    @Override
+    public <T> Exporter<T> export(final Invoker<T> originInvoker) throws RpcException {
+        URL registryUrl = getRegistryUrl(originInvoker);
+        // url to export locally
+        URL providerUrl = getProviderUrl(originInvoker);
 
-    // Subscribe the override data
-    // FIXME When the provider subscribes, it will affect the scene : a certain JVM exposes the service and call
-    //  the same service. Because the subscribed is cached key with the name of the service, it causes the
-    //  subscription information to cover.
-    final URL overrideSubscribeUrl = getSubscribedOverrideUrl(providerUrl);
-    final OverrideListener overrideSubscribeListener = new OverrideListener(overrideSubscribeUrl, originInvoker);
-    overrideListeners.put(overrideSubscribeUrl, overrideSubscribeListener);
+        // Subscribe the override data
+        final URL overrideSubscribeUrl = getSubscribedOverrideUrl(providerUrl);
+        final OverrideListener overrideSubscribeListener = new OverrideListener(overrideSubscribeUrl, originInvoker);
+        ConcurrentHashMap<URL, Set<NotifyListener>> overrideListeners =
+                getProviderConfigurationListener(overrideSubscribeUrl).getOverrideListeners();
+        ConcurrentHashMapUtils.computeIfAbsent(overrideListeners, overrideSubscribeUrl, k -> new ConcurrentHashSet<>())
+                .add(overrideSubscribeListener);
 
-    providerUrl = overrideUrlWithConfig(providerUrl, overrideSubscribeListener);
-    // export invoker
-    final ExporterChangeableWrapper<T> exporter = doLocalExport(originInvoker, providerUrl);
+        providerUrl = overrideUrlWithConfig(providerUrl, overrideSubscribeListener);
+        // export invoker
+        final ExporterChangeableWrapper<T> exporter = doLocalExport(originInvoker, providerUrl);
 
-    // url to registry
-    final Registry registry = getRegistry(originInvoker);
-    final URL registeredProviderUrl = getUrlToRegistry(providerUrl, registryUrl);
+        // url to registry
+        final Registry registry = getRegistry(registryUrl);
+        final URL registeredProviderUrl = customizeURL(providerUrl, registryUrl);
 
-    // decide if we need to delay publish
-    boolean register = providerUrl.getParameter(REGISTER_KEY, true);
-    if (register) {
-        registry.register(registeredProviderUrl);
-    }
+        // decide if we need to delay publish (provider itself and registry should both need to register)
+        boolean register = providerUrl.getParameter(REGISTER_KEY, true) && registryUrl.getParameter(REGISTER_KEY, true);
+        if (register) {
+            register(registry, registeredProviderUrl);
+        }
 
-    // register stated url on provider model
-    registerStatedUrl(registryUrl, registeredProviderUrl, register);
+        // register stated url on provider model
+        registerStatedUrl(registryUrl, registeredProviderUrl, register);
 
-
-    exporter.setRegisterUrl(registeredProviderUrl);
-    exporter.setSubscribeUrl(overrideSubscribeUrl);
-
-    // Deprecated! Subscribe to override rules in 2.6.x or before.
-    registry.subscribe(overrideSubscribeUrl, overrideSubscribeListener);
-
-    notifyExport(exporter);
-    //Ensure that a new exporter instance is returned every time export
-    return new DestroyableExporter<>(exporter);
-}
+        exporter.setRegisterUrl(registeredProviderUrl);
+        exporter.setSubscribeUrl(overrideSubscribeUrl);
+        exporter.setNotifyListener(overrideSubscribeListener);
+        exporter.setRegistered(register);
 ```
 
-
-
-#### doLocalExport
+后半段是 2.6.x 兼容代码的退场闸门：
 
 ```java
-// RegistryProtocol#doLocalExport()
-@SuppressWarnings("unchecked")
-private <T> ExporterChangeableWrapper<T> doLocalExport(final Invoker<T> originInvoker, URL providerUrl) {
-    String key = getCacheKey(originInvoker);
+// dubbo-registry/dubbo-registry-api/src/main/java/org/apache/dubbo/registry/integration/RegistryProtocol.java:310-320
+        ApplicationModel applicationModel = getApplicationModel(providerUrl.getScopeModel());
+        if (applicationModel
+                .modelEnvironment()
+                .getConfiguration()
+                .convert(Boolean.class, ENABLE_26X_CONFIGURATION_LISTEN, true)) {
+            if (!registry.isServiceDiscovery()) {
+                // Deprecated! Subscribe to override rules in 2.6.x or before.
+                registry.subscribe(overrideSubscribeUrl, overrideSubscribeListener);
+            }
+        }
 
-    return (ExporterChangeableWrapper<T>) bounds.computeIfAbsent(key, s -> {
+        notifyExport(exporter);
+        // Ensure that a new exporter instance is returned every time export
+        return new DestroyableExporter<>(exporter);
+    }
+```
+
+与旧笔记的六处差异：
+
+| # | 旧笔记 | 3.3.6 |
+|---|---|---|
+| 1 | `overrideListeners.put(...)` 直接 put | 先取 `getProviderConfigurationListener(url).getOverrideListeners()`，再 `ConcurrentHashMapUtils.computeIfAbsent(...).add(...)`（`:283-286`） |
+| 2 | `getRegistry(originInvoker)` | `getRegistry(registryUrl)`，**参数从 Invoker 改成 URL**（`:293`） |
+| 3 | `getUrlToRegistry(providerUrl, registryUrl)` | 改名 `customizeURL(providerUrl, registryUrl)`（`:294`） |
+| 4 | `providerUrl.getParameter(REGISTER_KEY, true)` | `&& registryUrl.getParameter(REGISTER_KEY, true)`，**新增 registryUrl 侧判断**（`:297`） |
+| 5 | 无 | 新增 `exporter.setNotifyListener(...)` 与 `exporter.setRegistered(register)`（`:307-308`） |
+| 6 | 直接 `registry.subscribe(...)` | 被 `ENABLE_26X_CONFIGURATION_LISTEN` 开关 + `!registry.isServiceDiscovery()` 双重包裹（`:311-319`） |
+
+第 4 处值得强调：注释写得很清楚「provider itself and registry should both need to register」——**两处都配了不注册才不注册**，任一侧显式关闭都会生效。
+
+第 6 处是 2.6.x 兼容代码的退场开关。应用级发现（`registry.isServiceDiscovery()` 为 true）下已经没有 `override://` 规则的概念，不需要订阅；而 `ENABLE_26X_CONFIGURATION_LISTEN` 允许整体关掉这段历史包袱。
+
+`doLocalExport` 与旧笔记差异不大，但 key 变成了二级：
+
+```java
+// dubbo-registry/dubbo-registry-api/src/main/java/org/apache/dubbo/registry/integration/RegistryProtocol.java:349-360
+    private <T> ExporterChangeableWrapper<T> doLocalExport(final Invoker<T> originInvoker, URL providerUrl) {
+        String providerUrlKey = getProviderUrlKey(originInvoker);
+        String registryUrlKey = getRegistryUrlKey(originInvoker);
         Invoker<?> invokerDelegate = new InvokerDelegate<>(originInvoker, providerUrl);
-        return new ExporterChangeableWrapper<>((Exporter<T>) protocol.export(invokerDelegate), originInvoker);
-    });
-}
+
+        ReferenceCountExporter<?> exporter =
+                exporterFactory.createExporter(providerUrlKey, () -> protocol.export(invokerDelegate));
+        return (ExporterChangeableWrapper<T>) ConcurrentHashMapUtils.computeIfAbsent(
+                ConcurrentHashMapUtils.computeIfAbsent(bounds, providerUrlKey, k -> new ConcurrentHashMap<>()),
+                registryUrlKey,
+                s -> new ExporterChangeableWrapper<>((ReferenceCountExporter<T>) exporter, originInvoker));
+    }
 ```
 
+旧笔记用的是单 key `getCacheKey(originInvoker)` + `bounds.computeIfAbsent`。3.3.6 改成 `providerUrlKey` → `registryUrlKey` 两级缓存，并引入 `ReferenceCountExporter` 做引用计数（同一服务被多个注册中心导出时，底层 Exporter 只建一次，按计数决定何时真正 unexport）。`bounds` 的类型也从单层 Map 变成了嵌套 Map。
 
-
-`DubboProtocol#export()` -> openServer ->createServer ->  Exchangers.bind() -> HeaderExchangeServer -> Transporters.bind() -> NettyTransporter -> new NettyServer() -> doOpen -> `ServerBootstrap#bind()`
+### DubboProtocol#export
 
 ```java
-@Override
-public <T> Exporter<T> export(Invoker<T> invoker) throws RpcException {
-    URL url = invoker.getUrl();
+// dubbo-rpc/dubbo-rpc-dubbo/src/main/java/org/apache/dubbo/rpc/protocol/dubbo/DubboProtocol.java:336-364
+    @Override
+    public <T> Exporter<T> export(Invoker<T> invoker) throws RpcException {
+        checkDestroyed();
+        URL url = invoker.getUrl();
 
-    // export service.
-    String key = serviceKey(url);
-    DubboExporter<T> exporter = new DubboExporter<T>(invoker, key, exporterMap);
-    exporterMap.addExportMap(key, exporter);
+        // export service.
+        String key = serviceKey(url);
+        DubboExporter<T> exporter = new DubboExporter<>(invoker, key, exporterMap);
 
-    //export an stub service for dispatching event
-    Boolean isStubSupportEvent = url.getParameter(STUB_EVENT_KEY, DEFAULT_STUB_EVENT);
-    Boolean isCallbackservice = url.getParameter(IS_CALLBACK_SERVICE, false);
-    if (isStubSupportEvent && !isCallbackservice) {
-        String stubServiceMethods = url.getParameter(STUB_EVENT_METHODS_KEY);
-        if (stubServiceMethods == null || stubServiceMethods.length() == 0) {}
+        // export a stub service for dispatching event
+        boolean isStubSupportEvent = url.getParameter(STUB_EVENT_KEY, DEFAULT_STUB_EVENT);
+        boolean isCallbackService = url.getParameter(IS_CALLBACK_SERVICE, false);
+        if (isStubSupportEvent && !isCallbackService) {
+            String stubServiceMethods = url.getParameter(STUB_EVENT_METHODS_KEY);
+            if (stubServiceMethods == null || stubServiceMethods.length() == 0) {
+                if (logger.isWarnEnabled()) {
+                    logger.warn(
+                            PROTOCOL_UNSUPPORTED, "", "",
+                            "consumer [" + url.getParameter(INTERFACE_KEY)
+                                    + "], has set stub proxy support event ,but no stub methods founded.");
+                }
+            }
+        }
+
+        openServer(url);
+        optimizeSerialization(url);
+
+        return exporter;
     }
-
-    openServer(url);
-    optimizeSerialization(url);
-
-    return exporter;
-}
 ```
 
+三处修正：开头新增 `checkDestroyed()`（`:337`）；两个 `Boolean` 包装类型改成原始 `boolean`（`:345-346`）；原来空着的 `if` 体补了 warn 日志（`:349-358`）。
 
+另外注意 `exporterMap.addExportMap(key, exporter)` 被**去掉了**——3.3.6 只构造 `DubboExporter`，注册表维护交给 `ExporterChangeableWrapper` 那一层。`openServer(url)` 才是真正开 Netty Server 的入口，后续链路是 `openServer` → `createServer` → `Exchangers.bind()` → `HeaderExchangeServer` → `Transporters.bind()` → `NettyTransporter` → `NettyServer#doOpen` → `ServerBootstrap#bind()`。
 
 ### exportLocal
 
 ```java
-/** ServiceConfig#exportLocal()
- * always export injvm
- */
-private void exportLocal(URL url) {
-    URL local = URLBuilder.from(url)
-            .setProtocol(LOCAL_PROTOCOL)
-            .setHost(LOCALHOST_VALUE)
-            .setPort(0)
-            .build();
-    Exporter<?> exporter = PROTOCOL.export(
-            PROXY_FACTORY.getInvoker(ref, (Class) interfaceClass, local));
-    exporters.add(exporter);
-}
-
-// InjvmProtocol#export()
-@Override
-public <T> Exporter<T> export(Invoker<T> invoker) throws RpcException {
-  String serviceKey = invoker.getUrl().getServiceKey();
-  InjvmExporter<T> tInjvmExporter = new InjvmExporter<>(invoker, serviceKey, exporterMap);
-  exporterMap.addExportMap(serviceKey, tInjvmExporter);
-  return tInjvmExporter;
-}
+// dubbo-config/dubbo-config-api/src/main/java/org/apache/dubbo/config/ServiceConfig.java:986-998
+    /**
+     * always export injvm
+     */
+    private void exportLocal(URL url) {
+        URL local = URLBuilder.from(url)
+                .setProtocol(LOCAL_PROTOCOL)
+                .setHost(LOCALHOST_VALUE)
+                .setPort(0)
+                .build();
+        local = local.setScopeModel(getScopeModel()).setServiceModel(providerModel);
+        local = local.addParameter(EXPORTER_LISTENER_KEY, LOCAL_PROTOCOL);
+        doExportUrl(local, false, RegisterTypeEnum.AUTO_REGISTER);
+        logger.info("[SERVICE_PUBLISH][METADATA_REGISTER] Export dubbo service " + interfaceClass.getName()
+                + " to local registry url : " + local);
+    }
 ```
 
+与旧笔记的差异：不再直接 `PROTOCOL.export(PROXY_FACTORY.getInvoker(...))`，而是**统一走 `doExportUrl(local, false, RegisterTypeEnum.AUTO_REGISTER)`**；新增 `setScopeModel(...).setServiceModel(providerModel)` 挂上模型上下文，以及 `addParameter(EXPORTER_LISTENER_KEY, LOCAL_PROTOCOL)` 标记来源。第二个参数 `withMetaData=false` 表示不包 `DelegateProviderMetaDataInvoker`。
 
+对应地，`InjvmProtocol#export` 也被简化成一行：
 
+```java
+// dubbo-rpc/dubbo-rpc-injvm/src/main/java/org/apache/dubbo/rpc/protocol/injvm/InjvmProtocol.java:74-76
+    @Override
+    public <T> Exporter<T> export(Invoker<T> invoker) throws RpcException {
+        return new InjvmExporter<>(invoker, invoker.getUrl().getServiceKey(), exporterMap);
+    }
+```
 
+**`exporterMap.addExportMap(serviceKey, tInjvmExporter)` 不再需要手动调用**——`InjvmExporter` 构造器内部已经处理了注册。旧笔记里那两行手动注册是多余的。
 
 ## Consumer
 
-服务消费者的启动过程相对“懒”，`referServices()` 方法并不立即发起远程连接，而是**为每个 `ReferenceConfig` 创建一个动态代理对象**。这个代理对象直到业务代码第一次调用其方法时，才会触发真正的服务引用和连接建立，这是一种**懒加载机制**，可以有效避免启动耗时过长。
+消费者侧「懒」：`referServices()` 不立即建连，而是先为每个 `ReferenceConfig` 创建动态代理，代理要等业务代码第一次调方法时才触发真正的引用与连接建立。
 
-
-
-### createProxy
-
-all of scenarios need to create [Proxy](/docs/CS/Framework/Dubbo/Start.md?id=createproxy) :
-
-1. shouldJvmRefer
-2. one registry
-3. multiple registries
-4. Cluster
+`ReferenceConfig#createProxy` 在 3.3.6 已重构为「四步分工」，旧笔记那段把四种场景塞在一个方法里的写法是 3.0.x 形态：
 
 ```java
-// ReferenceConfig
-@SuppressWarnings({"unchecked", "rawtypes", "deprecation"})
-private T createProxy(Map<String, String> map) {
-    if (shouldJvmRefer(map)) {	// injvm or same JVM
-        URL url = new URL(LOCAL_PROTOCOL, LOCALHOST_VALUE, 0, interfaceClass.getName()).addParameters(map);
-        invoker = REF_PROTOCOL.refer(interfaceClass, url);
-    } else {
+// dubbo-config/dubbo-config-api/src/main/java/org/apache/dubbo/config/ReferenceConfig.java:490-523
+    @SuppressWarnings({"unchecked"})
+    private T createProxy(Map<String, String> referenceParameters) {
         urls.clear();
-        if (url != null && url.length() > 0) { // user specified URL, could be peer-to-peer address, or register center's address.
-            String[] us = SEMICOLON_SPLIT_PATTERN.split(url);
-            if (us != null && us.length > 0) {
-                for (String u : us) {
-                    URL url = URL.valueOf(u);
-                    if (StringUtils.isEmpty(url.getPath())) {
-                        url = url.setPath(interfaceName);
-                    }
-                    if (UrlUtils.isRegistry(url)) {
-                        urls.add(url.addParameterAndEncoded(REFER_KEY, StringUtils.toQueryString(map)));
-                    } else {
-                        urls.add(ClusterUtils.mergeUrl(url, map));
-                    }
-                }
-            }
-        } else { // assemble URL from register center's configuration
-            // if protocols not injvm checkRegistry
-            if (!LOCAL_PROTOCOL.equalsIgnoreCase(getProtocol())) {
-                checkRegistry();
-                List<URL> us = ConfigValidationUtils.loadRegistries(this, false);
-                if (CollectionUtils.isNotEmpty(us)) {
-                    for (URL u : us) {
-                        URL monitorUrl = ConfigValidationUtils.loadMonitor(this, u);
-                        if (monitorUrl != null) {
-                            map.put(MONITOR_KEY, URL.encode(monitorUrl.toFullString()));
-                        }
-                        urls.add(u.addParameterAndEncoded(REFER_KEY, StringUtils.toQueryString(map)));
-                    }
-                }
-                if (urls.isEmpty()) {
-                    throw new IllegalStateException("");
-                }
-            }
+
+        meshModeHandleUrl(referenceParameters);
+
+        if (StringUtils.isNotEmpty(url)) {
+            // user specified URL, could be peer-to-peer address, or register center's address.
+            parseUrl(referenceParameters);
+        } else {
+            // if protocols not in jvm checkRegistry
+            aggregateUrlFromRegistry(referenceParameters);
+        }
+        createInvoker();
+
+        if (logger.isInfoEnabled()) {
+            logger.info("Referred dubbo service: [" + referenceParameters.get(INTERFACE_KEY) + "]."
+                    + (ProtocolUtils.isGeneric(referenceParameters.get(GENERIC_KEY))
+                            ? " it's GenericService reference"
+                            : " it's not GenericService reference"));
         }
 
+        URL consumerUrl = new ServiceConfigURL(
+                CONSUMER_PROTOCOL,
+                referenceParameters.get(REGISTER_IP_KEY),
+                0,
+                referenceParameters.get(INTERFACE_KEY),
+                referenceParameters);
+        consumerUrl = consumerUrl.setScopeModel(getScopeModel());
+        consumerUrl = consumerUrl.setServiceModel(consumerModel);
+        MetadataUtils.publishServiceDefinition(consumerUrl, consumerModel.getServiceModel(), getApplicationModel());
+
+        // create service proxy
+        return (T) proxyFactory.getProxy(invoker, ProtocolUtils.isGeneric(generic));
+    }
+```
+
+与旧笔记的差异：
+
+| 旧笔记 | 3.3.6 |
+|---|---|
+| `shouldJvmRefer(map)` 在最外层，整个方法被 if/else 包住 | **不在这里**。`meshModeHandleUrl` → `parseUrl` / `aggregateUrlFromRegistry` → `createInvoker()` 三步 |
+| `SEMICOLON_SPLIT_PATTERN.split(url)` 在主流程 | 移入 `parseUrl()`（`:605`） |
+| `REF_PROTOCOL.refer(...)` | `protocolSPI.refer(...)` |
+| `Cluster.getCluster(cluster, false)` | `Cluster.getCluster(getScopeModel(), cluster, false)`，**有 ScopeModel 首参** |
+| `new StaticDirectory(invokers)` | `new StaticDirectory(curUrl, invokers)`，**多 URL 参数** |
+| `new URL(CONSUMER_PROTOCOL, ...)` | `new ServiceConfigURL(...)`，并 `setScopeModel` + `setServiceModel` |
+| `MetadataUtils.publishServiceDefinition(consumerURL)` 单参 | **三参** `(consumerUrl, consumerModel.getServiceModel(), getApplicationModel())` |
+
+`shouldJvmRefer`（`:854`）仍然存在，但被挪进了配置校验链与 `InjvmProtocol.isInjvmRefer` 的判断里，不再是 `createProxy` 的外层分支。
+
+```java
+// dubbo-config/dubbo-config-api/src/main/java/org/apache/dubbo/config/ReferenceConfig.java:669-712（节选）
+    private void createInvoker() {
         if (urls.size() == 1) {
-            invoker = REF_PROTOCOL.refer(interfaceClass, urls.get(0));
+            URL curUrl = urls.get(0);
+            invoker = protocolSPI.refer(interfaceClass, curUrl);
+            // registry url, mesh-enable and unloadClusterRelated is true, not need Cluster.
+            if (!UrlUtils.isRegistry(curUrl) && !curUrl.getParameter(UNLOAD_CLUSTER_RELATED, false)) {
+                List<Invoker<?>> invokers = new ArrayList<>();
+                invokers.add(invoker);
+                invoker = Cluster.getCluster(getScopeModel(), Cluster.DEFAULT)
+                        .join(new StaticDirectory(curUrl, invokers), true);
+            }
         } else {
-            List<Invoker<?>> invokers = new ArrayList<Invoker<?>>();
-            URL registryURL = null;
+            List<Invoker<?>> invokers = new ArrayList<>();
+            URL registryUrl = null;
             for (URL url : urls) {
                 // For multi-registry scenarios, it is not checked whether each referInvoker is available.
-                // Because this invoker may become available later.
-                invokers.add(REF_PROTOCOL.refer(interfaceClass, url));
+                invokers.add(protocolSPI.refer(interfaceClass, url));
 
                 if (UrlUtils.isRegistry(url)) {
-                    registryURL = url; // use last registry url
+                    registryUrl = url; // use last registry url
                 }
             }
 
-            if (registryURL != null) { // registry url is available
+            if (registryUrl != null) {
                 // for multi-subscription scenario, use 'zone-aware' policy by default
-                String cluster = registryURL.getParameter(CLUSTER_KEY, ZoneAwareCluster.NAME);
-                // The invoker wrap sequence would be: ZoneAwareClusterInvoker(StaticDirectory) -> FailoverClusterInvoker(RegistryDirectory, routing happens here) -> Invoker
-                invoker = Cluster.getCluster(cluster, false).join(new StaticDirectory(registryURL, invokers));
-            } else { // not a registry url, must be direct invoke.
-                String cluster = CollectionUtils.isNotEmpty(invokers)
-                        ?
-                        (invokers.get(0).getUrl() != null ? invokers.get(0).getUrl().getParameter(CLUSTER_KEY, ZoneAwareCluster.NAME) :
-                                Cluster.DEFAULT)
-                        : Cluster.DEFAULT;
-                invoker = Cluster.getCluster(cluster).join(new StaticDirectory(invokers));
+                String cluster = registryUrl.getParameter(CLUSTER_KEY, ZoneAwareCluster.NAME);
+                invoker = Cluster.getCluster(registryUrl.getScopeModel(), cluster, false)
+                        .join(new StaticDirectory(registryUrl, invokers), false);
+            } else {
+                if (CollectionUtils.isEmpty(invokers)) {
+                    throw new IllegalArgumentException("invokers == null");
+                }
+                URL curUrl = invokers.get(0).getUrl();
+                String cluster = curUrl.getParameter(CLUSTER_KEY, Cluster.DEFAULT);
+                invoker =
+                        Cluster.getCluster(getScopeModel(), cluster).join(new StaticDirectory(curUrl, invokers), true);
             }
         }
     }
-    URL consumerURL = new URL(CONSUMER_PROTOCOL, map.remove(REGISTER_IP_KEY), 0, map.get(INTERFACE_KEY), map);
-    MetadataUtils.publishServiceDefinition(consumerURL);
-
-    // create service proxy
-    return (T) PROXY_FACTORY.getProxy(invoker, ProtocolUtils.isGeneric(generic));
-}
 ```
 
+三个分支的 `join` 第二个参数分别是 `true` / `false` / `true`，`getCluster` 的 ScopeModel 首参来源也不同（`getScopeModel()` vs `registryUrl.getScopeModel()`）。单 URL 场景加了 `UNLOAD_CLUSTER_RELATED` 判断——mesh 场景下不需要 Cluster 包装。多注册中心场景保留 `zone-aware` 默认策略。
 
+> [!NOTE]
+> 这段与 [Consumer](/docs/CS/Framework/Dubbo/Consumer.md) 中的代码块一致。消费者侧的引用链、迁移（`MigrationInvoker`）、Filter、心跳与超时处理都在那一篇，本文不重复。
 
-### refer
+### refer 与 protocolBindingRefer
+
+`RegistryProtocol#refer` 分派到 `doRefer`：
 
 ```java
-// RegistryProtocol
-@Override
-@SuppressWarnings("unchecked")
-public <T> Invoker<T> refer(Class<T> type, URL url) throws RpcException {
-    url = getRegistryUrl(url);
-    Registry registry = getRegistry(url); // getRegistry
-    if (RegistryService.class.equals(type)) {
-        return proxyFactory.getInvoker((T) registry, type, url);
+// dubbo-registry/dubbo-registry-api/src/main/java/org/apache/dubbo/registry/integration/RegistryProtocol.java:578-596
+    protected <T> Invoker<T> doRefer(
+            Cluster cluster, Registry registry, Class<T> type, URL url, Map<String, String> parameters) {
+        Map<String, Object> consumerAttribute = new HashMap<>(url.getAttributes());
+        consumerAttribute.remove(REFER_KEY);
+        String p = isEmpty(parameters.get(PROTOCOL_KEY)) ? CONSUMER : parameters.get(PROTOCOL_KEY);
+        URL consumerUrl = new ServiceConfigURL(
+                p,
+                null,
+                null,
+                parameters.get(REGISTER_IP_KEY),
+                0,
+                getPath(parameters, type),
+                parameters,
+                consumerAttribute);
+        url = url.putAttribute(CONSUMER_URL_KEY, consumerUrl);
+        ClusterInvoker<T> migrationInvoker = getMigrationInvoker(this, cluster, registry, type, url, consumerUrl);
+        return interceptInvoker(migrationInvoker, url, consumerUrl);
     }
-
-    // group="a,b" or group="*"
-    Map<String, String> qs = StringUtils.parseQueryString(url.getParameterAndDecoded(REFER_KEY));
-    String group = qs.get(GROUP_KEY);
-    if (group != null && group.length() > 0) {
-        if ((COMMA_SPLIT_PATTERN.split(group)).length > 1 || "*".equals(group)) {
-            return doRefer(Cluster.getCluster(MergeableCluster.NAME), registry, type, url, qs);
-        }
-    }
-
-    Cluster cluster = Cluster.getCluster(qs.get(CLUSTER_KEY));
-    return doRefer(cluster, registry, type, url, qs);
-}
-
-
-protected <T> Invoker<T> doRefer(Cluster cluster, Registry registry, Class<T> type, URL url, Map<String, String> parameters) {
-  URL consumerUrl = new URL(CONSUMER_PROTOCOL, parameters.remove(REGISTER_IP_KEY), 0, type.getName(), parameters);
-  ClusterInvoker<T> migrationInvoker = getMigrationInvoker(this, cluster, registry, type, url, consumerUrl);
-  return interceptInvoker(migrationInvoker, url, consumerUrl);
-}
 ```
 
+与旧笔记相比：URL 类型从 `new URL(...)` 换成 `new ServiceConfigURL(...)`；新增 `consumerAttribute`（把 URL attributes 拷出来并移除 `REFER_KEY`）；`getPath` 对泛化调用走 `parameters.get(INTERFACE_KEY)` 而非 `type.getName()`。返回类型是 `ClusterInvoker<T>` 而非 `Invoker<T>`，因为要经 `interceptInvoker` 交给 `RegistryProtocolListener` 处理（迁移监听器就在这里挂上）。
 
-
-
+协议侧的 refer 链路（3.3.6 与旧笔记差异明显）：
 
 ```java
-// AbstractProtocol
-@Override
-public <T> Invoker<T> refer(Class<T> type, URL url) throws RpcException {
-  return new AsyncToSyncInvoker<>(protocolBindingRefer(type, url));
-}
-
-
-protected abstract <T> Invoker<T> protocolBindingRefer(Class<T> type, URL url) throws RpcException;
-
-// DubboProtocol
-@Override
-public <T> Invoker<T> protocolBindingRefer(Class<T> serviceType, URL url) throws RpcException {
-  optimizeSerialization(url);
-
-  // create rpc invoker.
-  DubboInvoker<T> invoker = new DubboInvoker<T>(serviceType, url, getClients(url), invokers);
-  invokers.add(invoker);
-
-  return invoker;
-}
-
-private ExchangeClient[] getClients(URL url) {
-  // whether to share connection
-  int connections = url.getParameter(CONNECTIONS_KEY, 0);
-  // if not configured, connection is shared, otherwise, one connection for one service
-  if (connections == 0) {
-    /*
-             * The xml configuration should have a higher priority than properties.
-             */
-    String shareConnectionsStr = url.getParameter(SHARE_CONNECTIONS_KEY, (String) null);
-    connections = Integer.parseInt(StringUtils.isBlank(shareConnectionsStr) ? ConfigUtils.getProperty(SHARE_CONNECTIONS_KEY,
-                                                                                                      DEFAULT_SHARE_CONNECTIONS) : shareConnectionsStr);
-    return getSharedClient(url, connections).toArray(new ExchangeClient[0]);
-  } else {
-    ExchangeClient[] clients = new ExchangeClient[connections];
-    for (int i = 0; i < clients.length; i++) {
-      clients[i] = initClient(url);
-    }
-    return clients;
-  }
-
-}
-
-private ExchangeClient initClient(URL url) {
-
-    // client type setting.
-    String str = url.getParameter(CLIENT_KEY, url.getParameter(SERVER_KEY, DEFAULT_REMOTING_CLIENT));
-
-    url = url.addParameter(CODEC_KEY, DubboCodec.NAME);
-    // enable heartbeat by default
-    url = url.addParameterIfAbsent(HEARTBEAT_KEY, String.valueOf(DEFAULT_HEARTBEAT));
-
-    // BIO is not allowed since it has severe performance issue.
-    if (str != null && str.length() > 0 && !ExtensionLoader.getExtensionLoader(Transporter.class).hasExtension(str)) {
-        throw new RpcException("Unsupported client type: " + str + "," +
-                " supported client type is " +
-                StringUtils.join(ExtensionLoader.getExtensionLoader(Transporter.class).getSupportedExtensions(), " "));
+// dubbo-rpc/dubbo-rpc-api/src/main/java/org/apache/dubbo/rpc/protocol/AbstractProtocol.java:135-141
+    @Override
+    public <T> Invoker<T> refer(Class<T> type, URL url) throws RpcException {
+        return protocolBindingRefer(type, url);
     }
 
-    ExchangeClient client;
-    try {
-        // connection should be lazy
-        if (url.getParameter(LAZY_CONNECT_KEY, false)) {
-            client = new LazyConnectExchangeClient(url, requestHandler);
-
-        } else {
-            client = Exchangers.connect(url, requestHandler);
-        }
-
-    } catch (RemotingException e) {
-        throw new RpcException("Fail to create remoting client for service(" + url + "): " + e.getMessage(), e);
-    }
-
-    return client;
-}
+    @Deprecated
+    protected abstract <T> Invoker<T> protocolBindingRefer(Class<T> type, URL url) throws RpcException;
 ```
+
+**旧笔记的 `new AsyncToSyncInvoker<>(protocolBindingRefer(type, url))` 在 3.3.6 里不成立**——`AsyncToSyncInvoker` 这个类在整棵源码树中已不存在（`find` 零结果），同步阻塞的职责上移到 `AbstractInvoker#waitForResultIfSync`（`AbstractInvoker.java:280-293`），在 `InvokeMode.SYNC` 时调 `asyncResult.get(timeout, TimeUnit.MILLISECONDS)`。
+
+`DubboProtocol` 侧：
+
+```java
+// dubbo-rpc/dubbo-rpc-dubbo/src/main/java/org/apache/dubbo/rpc/protocol/dubbo/DubboProtocol.java:434-450
+    @Override
+    public <T> Invoker<T> refer(Class<T> type, URL url) throws RpcException {
+        checkDestroyed();
+        return protocolBindingRefer(type, url);
+    }
+
+    @Override
+    public <T> Invoker<T> protocolBindingRefer(Class<T> serviceType, URL url) throws RpcException {
+        checkDestroyed();
+        optimizeSerialization(url);
+
+        // create rpc invoker.
+        DubboInvoker<T> invoker = new DubboInvoker<>(serviceType, url, getClients(url), invokers);
+        invokers.add(invoker);
+
+        return invoker;
+    }
+```
+
+`getClients` 的返回类型从 `ExchangeClient[]` 变成了 `ClientsProvider`（`:452`），共享连接时返回 `getSharedClient(url, connections)`，独占连接时返回 `new ExclusiveClientsProvider(clients)`（`:469-471`）。这是一个延迟建连的抽象——不必在 `refer` 阶段就把所有 `ExchangeClient` 建出来。`initClient`（`:541`）里也多了两步：把 `InstanceAddressURL` 替换成 `ServiceConfigURL`（`:565-572`，因为前者会把参数写进 ServiceInstance 导致多服务共享参数），以及用 `UrlUtils.getHeartbeat(url)` 取心跳间隔。
 
 ## ProxyFactory
 
-- javassist
-- Cglib
+`ProxyFactory` 负责两个方向的转换：服务引用 `getInvoker`（本地对象 → Invoker）与服务暴露 `getProxy`（Invoker → 本地代理对象）。
 
 ```java
-/**
- * ProxyFactory. (API/SPI, Singleton, ThreadSafe)
- */
-@SPI("javassist")
+// dubbo-rpc/dubbo-rpc-api/src/main/java/org/apache/dubbo/rpc/ProxyFactory.java:29-48（节选）
+@SPI(value = "javassist", scope = FRAMEWORK)
 public interface ProxyFactory {
 
-    /**
-     * create proxy.
-     *
-     * @param invoker
-     * @return proxy
-     */
     @Adaptive({PROXY_KEY})
     <T> T getProxy(Invoker<T> invoker) throws RpcException;
 
-    /**
-     * create proxy.
-     *
-     * @param invoker
-     * @return proxy
-     */
     @Adaptive({PROXY_KEY})
     <T> T getProxy(Invoker<T> invoker, boolean generic) throws RpcException;
 
-    /**
-     * create invoker.
-     *
-     * @param <T>
-     * @param proxy
-     * @param type
-     * @param url
-     * @return invoker
-     */
     @Adaptive({PROXY_KEY})
     <T> Invoker<T> getInvoker(T proxy, Class<T> type, URL url) throws RpcException;
-
 }
 ```
 
+`@SPI` 注解多了 `scope = FRAMEWORK`（`:29`），三个方法的签名与旧笔记一致。
 
+内置扩展只有 **4 个**（`dubbo-rpc/dubbo-rpc-api/src/main/resources/META-INF/dubbo/internal/org.apache.dubbo.rpc.ProxyFactory`）：
 
+```properties
+# dubbo-rpc/dubbo-rpc-api/src/main/resources/META-INF/dubbo/internal/org.apache.dubbo.rpc.ProxyFactory
+stub=org.apache.dubbo.rpc.proxy.wrapper.StubProxyFactoryWrapper
+jdk=org.apache.dubbo.rpc.proxy.jdk.JdkProxyFactory
+javassist=org.apache.dubbo.rpc.proxy.javassist.JavassistProxyFactory
+nativestub=org.apache.dubbo.rpc.stub.StubProxyFactory
+```
 
+> [!WARNING]
+> **`Cglib` 在 3.3.6 中完全不存在**（全仓库无 Cglib 代理实现）。旧笔记「javassist / Cglib」两项的写法在 3.x 已失效，实际是 `stub`（包装器）/ `jdk` / `javassist` / `nativestub` 四项。
+
+类名未变但实现方式变了：`JavassistProxyFactory` 现在是「javassist 主路径 + JDK 兜底」的混合策略。
+
+```java
+// dubbo-rpc/dubbo-rpc-api/src/main/java/org/apache/dubbo/rpc/proxy/javassist/JavassistProxyFactory.java:40-53（节选）
+    private final JdkProxyFactory jdkProxyFactory = new JdkProxyFactory();
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public <T> T getProxy(Invoker<T> invoker, Class<?>[] interfaces) {
+        try {
+            return (T) Proxy.getProxy(interfaces).newInstance(new InvokerInvocationHandler(invoker));
+        } catch (Throwable fromJavassist) {
+            // try fall back to JDK proxy factory
+            try {
+                T proxy = jdkProxyFactory.getProxy(invoker, interfaces);
+                logger.error(
+                        PROXY_FAILED, "", "",
+                        "Failed to generate proxy by Javassist failed. Fallback to use JDK proxy success. "
+                                + "Interfaces: " + Arrays.toString(interfaces),
+                        fromJavassist);
+                return proxy;
+            } catch (Throwable fromJdk) {
+```
+
+主路径仍用 `org.apache.dubbo.common.bytecode.Proxy`（Javassist 字节码生成），但捕获所有异常后回落到 `JdkProxyFactory`。`getInvoker` 同理（`:80-95`）。这解决了 Javassist 在 JDK 新版本上生成字节码失败导致服务无法启动的问题。
 
 ## Shutdown
 
-destroy registries and protocols(servers then clients), wait for pending tasks completed.
+停机的目标是：销毁注册中心与协议（先服务端后客户端）、等在途任务跑完、并让消费者及时知道「这个 Provider 要走了」。
 
-优雅停机的实现
+优雅停机的完整链路：
 
-1. 收到信号 Spring触发容器销毁事件
-2. provider 取消服务注册元信息
-3. consumer 收到最新地址列表(不包含停机地址)
-4. provider 对 Consumer 响应 Dubbo 协议发送readonly报文 通知 Consumer 服务不可用
-5. provider 等待已经执行任务执行结束 并拒绝新任务执行
+1. 收到信号（Spring 触发容器销毁事件，或 JVM shutdown hook）
+2. Provider 取消服务注册元信息
+3. Consumer 收到最新地址列表（不含停机地址）
+4. Provider 对 Consumer 发送 **readonly 报文**通知服务不可用
+5. Provider 等待已执行任务结束，并拒绝新任务
 
-> 2.6.3 后修复了一些停机bug 原因为Spring也同时注册了 shutdown hooks 并发线程执行可能引用已销毁资源导致报错 例如Dubbo发现 Spring已经关闭上下文状态导致访问Spring资源报错
-
-### Shutdown Hooks
-
-The [shutdown hook](/docs/CS/Java/JDK/JVM/destroy.md?id=shutdown-hooks) thread to do the clean up stuff.
-This is a **singleton** in order to ensure there is only one shutdown hook registered. 
-
-Because ApplicationShutdownHooks use `java.util.IdentityHashMap` to store the shutdown hooks.
+第 4 步的报文发送与接收两侧都能在源码里定位。发送侧：
 
 ```java
-public class DubboShutdownHook extends Thread {
-    /**
-     * Destroy all the resources, including registries and protocols.
-     */
-    public void destroyAll() {
-        if (!destroyed.compareAndSet(false, true)) {
-            return;
+// dubbo-config/dubbo-config-api/src/main/java/org/apache/dubbo/config/DubboShutdownHook.java:86-95
+    private void doDestroy() {
+        int timeout = ConfigurationUtils.getServerShutdownTimeout(applicationModel);
+        ConfigurationUtils.setExpectedShutdownTime(System.currentTimeMillis() + timeout);
+
+        // send readonly for shutdown hook
+        List<GracefulShutdown> gracefulShutdowns =
+                GracefulShutdown.getGracefulShutdowns(applicationModel.getFrameworkModel());
+        for (GracefulShutdown gracefulShutdown : gracefulShutdowns) {
+            gracefulShutdown.readonly();
         }
-        // destroy all the registries
-        AbstractRegistryFactory.destroyAll();
-        // destroy all the protocols
-        ExtensionLoader<Protocol> loader = ExtensionLoader.getExtensionLoader(Protocol.class);
-        for (String protocolName : loader.getLoadedExtensions()) {
-            try {
-                Protocol protocol = loader.getLoadedExtension(protocolName);
-                if (protocol != null) {
-                    protocol.destroy();
-                }
-            } catch (Throwable t) {
-                logger.warn(t.getMessage(), t);
+```
+
+接收侧在 `HeaderExchangeHandler.handlerEvent`（`HeaderExchangeHandler.java:77-84`）：收到 `READONLY_EVENT` 就给 channel 打 `CHANNEL_ATTRIBUTE_READONLY_KEY = TRUE` 标记；`DubboInvoker.isAvailable()` 检查这个标记（`DubboInvoker.java:169`），有标记则视为不可用。
+
+> [!NOTE]
+> 「Provider 发 readonly 报文通知 Consumer 服务不可用」这个描述在 3.3.6 **依然成立**，对应 `DubboShutdownHook.java:90-95` 与 `GracefulShutdown.java:24-30`。旧笔记这一点是对的，保留。
+
+`GracefulShutdown` 接口本身只有三个成员（`dubbo-rpc/dubbo-rpc-api/.../rpc/GracefulShutdown.java:23-31`）：`readonly()` / `writeable()` / 静态 `getGracefulShutdowns(FrameworkModel)`。实现类 `DubboGracefulShutdown` 遍历 `dubboProtocol.getServers()` 的所有 channel 逐个发事件请求，发送失败只 warn 不抛异常——停机路径上的异常会掩盖真正的错误。
+
+### Shutdown Hook
+
+```java
+// dubbo-config/dubbo-config-api/src/main/java/org/apache/dubbo/config/DubboShutdownHook.java:41-84（节选）
+public class DubboShutdownHook extends Thread {
+    // ...
+    private final AtomicBoolean destroyed = new AtomicBoolean(false);
+
+    /**
+     * Whether ignore listen on shutdown hook?
+     */
+    private final boolean ignoreListenShutdownHook;
+
+    public DubboShutdownHook(ApplicationModel applicationModel) {
+        super("DubboShutdownHook");
+        this.applicationModel = applicationModel;
+        Assert.notNull(this.applicationModel, "ApplicationModel is null");
+        ignoreListenShutdownHook = Boolean.parseBoolean(
+                ConfigurationUtils.getProperty(applicationModel, CommonConstants.IGNORE_LISTEN_SHUTDOWN_HOOK));
+        // ...
+    }
+
+    @Override
+    public void run() {
+        if (!ignoreListenShutdownHook && destroyed.compareAndSet(false, true)) {
+            if (logger.isInfoEnabled()) {
+                logger.info("Run shutdown hook now.");
+            }
+            doDestroy();
+        }
+    }
+```
+
+`doDestroy()`（`:86-144`）的完整顺序：
+
+1. 读 `server.shutdown.timeout` 并调 `ConfigurationUtils.setExpectedShutdownTime(...)`——设置预期停机时间，供优雅停机等待逻辑使用。
+2. 遍历 `GracefulShutdown` 发 readonly（见上）。
+3. 检查是否有模块绑定在 Spring 上（`module.isLifeCycleManagedExternally()`）。若有，则**轮询等待 Spring 侧销毁完成**，最多等 `timeout` 毫秒，每 10ms 检查一次。
+4. 若仍未销毁，`applicationModel.destroy()`。
+
+第 3 步的等待是为了「避免 Dubbo 与 Spring 的停机冲突」——源码注释写得很直白。这解决了 2.6.3 之后的一批停机 bug：Spring 也注册了 shutdown hook，两边并发执行可能引用已销毁的资源。
+
+> [!WARNING]
+> **旧笔记的 `DubboShutdownHook.destroyAll()` 在 3.3.6 中已不存在**，包括里面「`AbstractRegistryFactory.destroyAll()` + 遍历 `ExtensionLoader.getLoadedExtensions()` 逐个 `protocol.destroy()`」的整段逻辑。3.3.6 改为 `run()` → `doDestroy()`，最终只调 `applicationModel.destroy()`（`:142`），协议销毁下沉到 `FrameworkModelCleaner`。源码里甚至留了注释解释为什么不直接销毁协议（`DefaultApplicationDeployer.java:1150-1156`）：协议是框架级的，一个框架下多个应用共用，销毁协议要等所有应用都停。
+>
+> 同理，**`DubboShutdownHook.getDubboShutdownHook()` 静态方法也不存在**（3.3.6 需 `new DubboShutdownHook(applicationModel)`）。唯一残留引用是 `DubboBootstrapApplicationListener.java:128` 那行**已被注释掉**的代码。
+
+停机回调机制也在 3.x 挪了位置。`ShutdownHookCallback` 现在在 `dubbo-common/src/main/java/org/apache/dubbo/common/lang/`（不在 `common/hooks/`），触发点在 `DefaultApplicationDeployer#executeShutdownCallbacks`（`:1168-1172`）——它从 bean factory 取 `ShutdownHookCallbacks` bean 并调 `callback()`，这个调用发生在 `postDestroy()` 里（`:1148`），即注册中心与元数据中心销毁之后、状态置为 stopped 之前。
+
+### 应用级 stop
+
+`DefaultApplicationDeployer#stop()` 只有一行（`:1081-1083`）：`applicationModel.destroy()`。真正做事的是 `preDestroy()`：
+
+```java
+// dubbo-config/dubbo-config-api/src/main/java/org/apache/dubbo/config/deploy/DefaultApplicationDeployer.java:1086-1104
+    @Override
+    public void preDestroy() {
+        synchronized (destroyLock) {
+            if (isStopping() || isStopped()) {
+                return;
+            }
+            onStopping();
+
+            offline();
+            unregisterServiceInstance();
+            unexportMetricsService();
+            unRegisterShutdownHook();
+            if (asyncMetadataFuture != null) {
+                asyncMetadataFuture.cancel(true);
             }
         }
     }
-}
 ```
 
-### Spring Extension
+`offline()` 遍历各模块的 `ModuleServiceRepository`，把每个 `ProviderModel` 的 `RegisterStatedURL` 逐个反注册（对应停机链路第 2 步「取消服务注册元信息」），并把 `statedUrl.setRegistered(false)`。
 
-```java
-package org.apache.dubbo.config.spring.extension;
-        
-public class SpringExtensionFactory implements ExtensionFactory, Lifecycle {
-    public static void addApplicationContext(ApplicationContext context) {
-        CONTEXTS.add(context);
-        if (context instanceof ConfigurableApplicationContext) {
-            ((ConfigurableApplicationContext) context).registerShutdownHook();
-            // see https://github.com/apache/dubbo/issues/7093
-            DubboShutdownHook.getDubboShutdownHook().unregister();
-        }
-    }
-}
+> [!TIP]
+> `ready` / `readonly` 这两个状态在 3.3.6 里**已不属于 Dubbo 生命周期状态机**。`Deployer` 接口的状态方法是 `isPending` / `isRunning` / `isStarted` / `isCompletion` / `isStarting` / `isStopping` / `isStopped`，没有 `isReady`。旧笔记 `doExport()` 里的 `bootstrap.setReady(true)` 在 3.3.6 的 `dubbo-config-api` 里 grep 零匹配。想在启动完成后做点什么，位置是 `exported()` 里的 `onExported()`，或者挂 `DeployListener`。
 
-public class DubboBootstrapApplicationListener implements ApplicationListener, ApplicationContextAware, Ordered {
+## 陷阱清单
 
-    private void onContextClosedEvent(ContextClosedEvent event) {
-        if (dubboBootstrap.getTakeoverMode() == BootstrapTakeoverMode.SPRING) {
-            // will call dubboBootstrap.stop() through shutdown callback.
-            DubboShutdownHook.getDubboShutdownHook().run();
-        }
-    }
-}
-```
-
+| # | 说法 | 3.3.6 事实 |
+|---|---|---|
+| 1 | `DubboBootstrap` 已被 `ApplicationDeployer` 取代 | **类未被删除也未被取代**，891 行完整存在。被取代的只是内部实现——所有方法委派给 `applicationDeployer` 字段（`DubboBootstrap.java:104`） |
+| 2 | `DubboBootstrap.start()` 里有五步 | 只有三行，全委派（`:218-221`）。五步已下沉到 `DefaultApplicationDeployer` |
+| 3 | `start()` 同步跑完 | `start(true)` 阻塞 `future.get()`，`asyncStart()` 返回 `Future`；两者都只是 `applicationDeployer.start()` 的包装 |
+| 4 | `DefaultApplicationDeployer.initialize()` 缺可观测步骤 | 3.2.3 起有 `initObservationRegistry()`（`:234-235`） |
+| 5 | `ApplicationDeployer.start()` 用 `isStarted()` 判重 | 条件是 `(isStarted() \|\| isCompletion()) && !hasPendingModule`（`:698`），漏掉 `isCompletion()` 会重跑流程 |
+| 6 | `ServiceConfig.export()` 无参 | 签名是 `export(RegisterTypeEnum)`（`:311`） |
+| 7 | `doExport()` 末尾调 `bootstrap.setReady(true)` | **已不存在**（`dubbo-config-api` 整模块零匹配），改调 `exported()`（`:397-416`） |
+| 8 | `doExportUrls()` 直接 `registerProvider` 六参 | 先构造 `ProviderModel`（`:582-588`）再 `registerProvider(providerModel)`（`:594`）；且用 `getScopeModel().getServiceRepository()` 而非静态 `ApplicationModel.getServiceRepository()` |
+| 9 | `doExportUrls()` 没有 `setServiceUrls` | 末尾有 `providerModel.setServiceUrls(urls)`（`:611`） |
+| 10 | `RegistryProtocol#export` 用 `getUrlToRegistry` | 改名 `customizeURL`（`RegistryProtocol.java:294`） |
+| 11 | `getRegistry(originInvoker)` | `getRegistry(registryUrl)`，参数从 Invoker 改成 URL（`:293`） |
+| 12 | `register` 只看 `providerUrl` | `providerUrl && registryUrl` 两侧都判断（`:297`） |
+| 13 | `overrideListeners.put(...)` | 改为 `getProviderConfigurationListener(...).getOverrideListeners()` + `computeIfAbsent().add()`（`:283-286`） |
+| 14 | 无条件 `registry.subscribe(...)` | 被 `ENABLE_26X_CONFIGURATION_LISTEN` 开关 + `!registry.isServiceDiscovery()` 双重包裹（`:311-319`） |
+| 15 | `RegistryProtocol` 有 `destroyAll` 式协议遍历销毁 | 没有；协议销毁下沉到 `FrameworkModelCleaner` |
+| 16 | `ServiceConfig#exportLocal` 直接 `PROTOCOL.export(...)` | 统一走 `doExportUrl(local, false, RegisterTypeEnum.AUTO_REGISTER)`，并 `setScopeModel` + `setServiceModel` + `EXPORTER_LISTENER_KEY`（`:986-998`） |
+| 17 | `InjvmProtocol#export` 需手动 `addExportMap` | 只 `return new InjvmExporter<>(...)` 一行（`InjvmProtocol.java:74-76`） |
+| 18 | `DubboProtocol#export` 用 `Boolean` 包装类型 | 原始 `boolean`；开头有 `checkDestroyed()`；空 if 体补了 warn（`DubboProtocol.java:337/345-346/349-358`） |
+| 19 | `ReferenceConfig#createProxy` 里 `shouldJvmRefer` 在最外层 | 已拆为 `meshModeHandleUrl` → `parseUrl` / `aggregateUrlFromRegistry` → `createInvoker`；`createInvoker` 用 `protocolSPI` + 带 ScopeModel 的 `Cluster.getCluster` + 带 URL 的 `StaticDirectory`（`ReferenceConfig.java:490-523/669-712`） |
+| 20 | `AbstractProtocol.refer` 包 `AsyncToSyncInvoker` | **`AsyncToSyncInvoker` 类在 3.3.6 不存在**；同步阻塞上移到 `AbstractInvoker#waitForResultIfSync`（`:280-293`） |
+| 21 | `MetadataUtils.publishServiceDefinition(consumerURL)` 单参 | 三参 `(consumerUrl, consumerModel.getServiceModel(), getApplicationModel())` |
+| 22 | ProxyFactory 有 Cglib 实现 | **Cglib 在 3.3.6 完全不存在**；SPI 只有 `stub` / `jdk` / `javassist` / `nativestub` 四项 |
+| 23 | `ProxyFactory` 的 `@SPI("javassist")` | `@SPI(value = "javassist", scope = FRAMEWORK)`（`ProxyFactory.java:29`） |
+| 24 | JavassistProxyFactory 只有一条路径 | 主路径 + JDK 兜底（`:50` 起 `catch` 后 `jdkProxyFactory.getProxy`） |
+| 25 | `DubboShutdownHook.destroyAll()` 遍历销毁 protocol | **该方法不存在**。3.3.6 是 `run()` → `doDestroy()` → `applicationModel.destroy()`（`:75-84/86-144`） |
+| 26 | `DubboShutdownHook.getDubboShutdownHook()` 静态方法 | **不存在**，需 `new DubboShutdownHook(applicationModel)`（`:62`）；唯一残留引用是被注释掉的（`DubboBootstrapApplicationListener.java:128`） |
+| 27 | 存在 `SpringExtensionFactory` 类 | **3.3.6 全仓库不存在**，职责改由 `ExtensionInjector`（`adaptive` / `spi` / `scopeBean`）提供 |
+| 28 | `ServiceBean` 监听 `ContextRefreshedEvent` 调 `export()` | **不监听任何事件**（`ServiceBean.java:42-47` 无 `ApplicationListener`） |
+| 29 | `DubboDeployApplicationListener` 遍历 `ServiceBean` 调 `export()` | **不遍历**，只调 `deployer.start()`（`:160-189`）；遍历 `configManager.getServices()` 的逻辑在 `DefaultModuleDeployer.exportServices()`（`:440-444`） |
+| 30 | `DubboBootstrapApplicationListener extends OnceApplicationContextEventListener` | `implements ApplicationListener, ApplicationContextAware, Ordered`，不再继承（`:48`），且整个类已 `@Deprecated`（`:47`） |
+| 31 | `ContextClosedEvent` 调 `DubboShutdownHook.getDubboShutdownHook().run()` | 调 `moduleModel.getDeployer().stop()`（`:125-131`） |
+| 32 | `ShutdownHookCallback` 在 `common/hooks/` | 在 `dubbo-common/.../common/lang/`，触发点是 `DefaultApplicationDeployer#executeShutdownCallbacks`（`:1168-1172`） |
 
 ## Links
 
 - [Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md)
+- [Consumer](/docs/CS/Framework/Dubbo/Consumer.md)
+- [config](/docs/CS/Framework/Dubbo/config.md)
+- [cluster](/docs/CS/Framework/Dubbo/cluster.md)
+- [Router](/docs/CS/Framework/Dubbo/Router.md)
+- [Protocol](/docs/CS/Framework/Dubbo/Protocol.md)
+
+## References
+
+- [Apache Dubbo 源码 tag dubbo-3.3.6](https://github.com/apache/dubbo/tree/dubbo-3.3.6)
+- [DubboBootstrap.java](https://github.com/apache/dubbo/blob/dubbo-3.3.6/dubbo-config/dubbo-config-api/src/main/java/org/apache/dubbo/config/bootstrap/DubboBootstrap.java)
+- [DefaultApplicationDeployer.java](https://github.com/apache/dubbo/blob/dubbo-3.3.6/dubbo-config/dubbo-config-api/src/main/java/org/apache/dubbo/config/deploy/DefaultApplicationDeployer.java)
+- [ServiceConfig.java](https://github.com/apache/dubbo/blob/dubbo-3.3.6/dubbo-config/dubbo-config-api/src/main/java/org/apache/dubbo/config/ServiceConfig.java)
+- [RegistryProtocol.java](https://github.com/apache/dubbo/blob/dubbo-3.3.6/dubbo-registry/dubbo-registry-api/src/main/java/org/apache/dubbo/registry/integration/RegistryProtocol.java)
+- [DubboShutdownHook.java](https://github.com/apache/dubbo/blob/dubbo-3.3.6/dubbo-config/dubbo-config-api/src/main/java/org/apache/dubbo/config/DubboShutdownHook.java)
