@@ -1,3 +1,21 @@
+## 版本基线
+
+> [!NOTE]
+>
+> 本篇及整个 `JVM/` 子树的**版本口径**：最新 **JDK 27**（2026-09-15 GA，非 LTS），**LTS 基线为 JDK 25**（Premier 至 2030-09），下个 LTS 是 JDK 29。子树的整体版本基线见 [JDK 枢纽页](/docs/CS/Java/JDK/JDK.md?id=版本基线)。
+
+读到旧口径表述时以本基线为准。JVM 域最容易被写错的默认行为变化：
+
+| JEP | Release | 变化 |
+| :-- | :-- | :-- |
+| [JEP 523](https://openjdk.org/jeps/523) | 27 | **G1 成为所有环境的默认 GC**，废止了「受限环境（单 CPU / 堆 < 1792 MB）回落 Serial」这条自 JDK 9 起的老规则 |
+| [JEP 534](https://openjdk.org/jeps/534) | 27 | **紧凑对象头默认启用**（96→64 bit）。履历：JEP 450（24 引入）→ JEP 519（25 转正式）→ 534（27 默认） |
+| [JEP 363](https://openjdk.org/jeps/363) | 14 | **移除 CMS**（`gc/cms` 目录删除）。弃用见 [JEP 291](https://openjdk.org/jeps/291)（9） |
+| [JEP 377](https://openjdk.org/jeps/377) | 15 | ZGC 由实验特性转为**产品特性**（不再需要 `-XX:+UnlockExperimentalVMOptions`） |
+| [JEP 439](https://openjdk.org/jeps/439) | 21 | **分代 ZGC**；后续非分代模式在 24 移除 |
+
+其他跨版本易错点：**JEP 214**（9）移除了 CMS 的年轻代组合，`ParNew` 与 CMS 的搭配从此不再可选；`-XX:+PrintGCDetails` 自 **JEP 271**（9）起被统一的 `-Xlog:gc*` 取代；**永久代（PermGen）自 JDK 8 起移除**，代之以 [Metaspace](/docs/CS/Java/JDK/JVM/Metaspace.md)（`-XX:MaxPermSize` / `-XX:PermSize` 会报 Unrecognized VM option）。
+
 ## Introduction
 
 JVM is the core of the [Java ecosystem](/docs/CS/Java/JDK/JDK.md), and makes it possible for Java-based software programs to follow the "write once, run anywhere" approach.
@@ -2205,24 +2223,24 @@ JVM 笔记沿「类加载 → 运行时数据区 → 执行引擎 → 运行时�
 1. [Java T point](https://www.javatpoint.com/jvm-java-virtual-machine)
 2. [The Java® Virtual Machine Specification Java SE 17 Edition](https://docs.oracle.com/javase/specs/jvms/se17/html/)
 3. [深入理解Java虚拟机（第3版）- 周志明](https://book.douban.com/subject/34907497/)
-4. [Java虚拟机精讲]()
-5. [实战JAVA虚拟机 JVM故障诊断与性能优化]()
-6. [自己动手写Java虚拟机]()
-7. [深入浅出：Java虚拟机设计与实现]()
-8. [揭秘Java虚拟机：JVM设计原理与实现]()
-9. [虚拟机设计与实现：以JVM为例]()
-10. [深入解析Java虚拟机HotSpot]()
-11. [HotSpot实战]()
-12. [深入Java虚拟机：JVM G1 GC的算法与实现]()
-13. [深入探索JVM垃圾回收]()
-14. [JVM G1源码分析和调优]()
-15. [新一代垃圾回收器-ZGC设计与实现]()
-16. [深入剖析Java虚拟机 : 源码剖析与实例详解（基础卷）]()
+4. Java虚拟机精讲
+5. 实战JAVA虚拟机 JVM故障诊断与性能优化
+6. 自己动手写Java虚拟机
+7. 深入浅出：Java虚拟机设计与实现
+8. 揭秘Java虚拟机：JVM设计原理与实现
+9. 虚拟机设计与实现：以JVM为例
+10. 深入解析Java虚拟机HotSpot
+11. HotSpot实战
+12. 深入Java虚拟机：JVM G1 GC的算法与实现
+13. 深入探索JVM垃圾回收
+14. JVM G1源码分析和调优
+15. 新一代垃圾回收器-ZGC设计与实现
+16. 深入剖析Java虚拟机 : 源码剖析与实例详解（基础卷）
 17. [HotSpot Glossary of Terms](https://openjdk.org/groups/hotspot/docs/HotSpotGlossary.html)
-18. [JRockit权威指南：深入理解JVM]()
-19. [垃圾回收算法与实现]()
-20. [深入理解Android：Java虚拟机ART]()
-21. [垃圾回收算法手册-自动内存管理的艺术]()
-22. [GraalVM与Java静态编译]()
+18. JRockit权威指南：深入理解JVM
+19. 垃圾回收算法与实现
+20. 深入理解Android：Java虚拟机ART
+21. 垃圾回收算法手册-自动内存管理的艺术
+22. GraalVM与Java静态编译
 23. [JVM ,Java paper](https://www.cnblogs.com/WCFGROUP/p/6373416.html)
 24. [文章导航 - 深入剖析Java虚拟机HotSpot](https://mp.weixin.qq.com/s/uG9CNGypYtJptoDMUtZwMg)

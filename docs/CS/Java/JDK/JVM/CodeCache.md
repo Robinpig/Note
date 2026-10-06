@@ -1,5 +1,10 @@
 ## Introduction
 
+## 版本基线
+
+> [!NOTE]
+> **版本口径**：JDK 8 是单一 Code Cache；自 **JEP 197**（Release 9）起按生命周期切成 **non-method / profiled / non-profiled 三段**，分别由 `-XX:NonNMethodCodeHeapSize`、`-XX:ProfiledCodeHeapSize`、`-XX:NonProfiledCodeHeapSize` 控制，`-XX:ReservedCodeCacheSize` 变成三段之和。默认初始 2496KB、Reserved 240MB（64 位 Server）。详见 [JVM 版本基线](/docs/CS/Java/JDK/JVM/JVM.md?id=版本基线)。
+
 CodeCache 
 
 CodeBlob Types

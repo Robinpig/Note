@@ -1,5 +1,10 @@
 ## Introduction
 
+## 版本基线
+
+> [!NOTE]
+> **版本口径**：`Method` 是 HotSpot 内部的「元数据 + 执行入口」合一结构，`ConstMethod`（常量池、方法计数器、字节码）自 **HotSpot 21（JDK 21 前后）拆分**出来后独立演进，JDK 24/25 的紧凑对象头改动也牵动 `Method*` 的隐式偏移计算。读旧文章时注意区分「有 `Method` 但无独立 `ConstMethod`」的旧结构。详见 [JVM 版本基线](/docs/CS/Java/JDK/JVM/JVM.md?id=版本基线)。
+
 HotSpot VM通过Method类保存方法的元信息。Method用来保存方法中的一些常见信息，如运行时的解释入口和编译入口
 Method实例表示一个Java方法，因为一个应用有成千上万个方法，所以保证Method类在内存中的布局紧凑非常重要。为了方便回收垃圾，Method把所有的指针变量和方法都放在了Method内存布局的前面
 Java方法本身的不可变数据如字节码等用ConstMethod表示，可变数据如Profile统计的性能数据等用MethodData表示，它们都可以在Method中通过指针访问。

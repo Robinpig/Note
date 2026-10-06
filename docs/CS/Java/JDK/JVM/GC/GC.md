@@ -411,7 +411,11 @@ Because at least one processor is used for garbage collection during the concurr
 
 ### CMS
 
-[JEP 291: Deprecate the Concurrent Mark Sweep (CMS) Garbage Collector](https://openjdk.java.net/jeps/291)
+[JEP 291: Deprecate the Concurrent Mark Sweep (CMS) Garbage Collector](https://openjdk.org/jeps/291) → [JEP 363: Remove the Concurrent Mark Sweep (CMS) Garbage Collector](https://openjdk.org/jeps/363)
+
+> [!WARNING]
+>
+> CMS 自 **JDK 14 起已从 HotSpot 移除**（`gc/cms` 目录整体删除）。在命令行传 `-XX:+UseConcMarkSweepGC` 只会得到 `Ignoring option UseConcMarkSweepGC; support was removed in <version>` 警告，然后**回退到默认收集器继续运行**——不报错，容易被忽略。机制与历史详见 [CMS 页](/docs/CS/Java/JDK/JVM/GC/CMS.md)。
 
 ### G1
 

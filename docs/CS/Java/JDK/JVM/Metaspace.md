@@ -154,12 +154,12 @@ Otherwise it owns two - one for the Klass* objects from the class space, one for
 
 ## Links
 
-- [Introduction](/docs/CS/Java/JDK/JVM/ClassFile.md)
-- [Introduction](/docs/CS/Java/JDK/JVM/ClassLoader.md)
-- [Introduction](/docs/CS/Java/JDK/JVM/CodeCache.md)
-- [Introduction](/docs/CS/Java/JDK/JVM/ExecutionEngine.md)
-- [Introduction](/docs/CS/Java/JDK/JVM/Graal.md)
-- [Overview](/docs/CS/Java/JDK/JVM/JIT.md)
+- [ClassFile](/docs/CS/Java/JDK/JVM/ClassFile.md)
+- [ClassLoader](/docs/CS/Java/JDK/JVM/ClassLoader.md)
+- [CodeCache](/docs/CS/Java/JDK/JVM/CodeCache.md)
+- [ExecutionEngine](/docs/CS/Java/JDK/JVM/ExecutionEngine.md)
+- [Graal](/docs/CS/Java/JDK/JVM/Graal.md)
+- [JIT](/docs/CS/Java/JDK/JVM/JIT.md)
 
 ## References
 

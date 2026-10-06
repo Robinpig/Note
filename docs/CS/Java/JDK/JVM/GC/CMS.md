@@ -1,5 +1,22 @@
 ## Introduction
 
+> [!WARNING]
+>
+> **CMS 已被移除，本篇仅作历史与源码阅读材料。**
+>
+> - **JEP 291**（Release **9**）弃用 CMS：`-XX:+UseConcMarkSweepGC` 开始打印弃用警告。
+> - **JEP 363**（Release **14**）**移除** CMS：HotSpot 源码树中整个 `gc/cms` 目录被删除，仅 CMS 专属的选项也一并移除。此后在命令行传 `-XX:+UseConcMarkSweepGC` 只会得到
+>
+>   ```text
+>   Java HotSpot(TM) 64-Bit Server VM warning: Ignoring option UseConcMarkSweepGC; support was removed in <version>
+>   ```
+>
+>   然后**回退到默认收集器继续运行**——不是报错退出，容易被忽略。
+>
+> 迁移路径：G1（`-XX:+UseG1GC`）是官方指定的继任者，低延迟大堆场景可选 ZGC 或 Shenandoah。本文描述的并发模式失败、浮动垃圾、i-cms 增量模式等机制在现役收集器中已无对应实现。
+>
+> 同理，文中提到的**增量模式（i-cms）**本身早在 **Java SE 8 就已弃用**（`incremental mode is being deprecated in Java SE 8`），随着 CMS 一起消失。
+
 The Concurrent Mark Sweep (CMS) collector is designed for applications that **prefer shorter garbage collection pauses** and that can afford to **share processor resources with the garbage collector while the application is running**. 
 Typically applications that have a relatively large set of long-lived data (a large tenured generation) and run on machines with two or more processors tend to benefit from the use of this collector. 
 However, this collector should be considered for any application with a low pause time requirement. The CMS collector is enabled with the command-line option `-XX:+UseConcMarkSweepGC`.
@@ -31,7 +48,7 @@ UseParNewGC                              := true
 UseCMSBestFit
 
 
-#### Concurrent Mode Failure
+### Concurrent Mode Failure
 The CMS collector uses one or more garbage collector threads that run simultaneously with the application threads with the goal of completing the collection of the tenured generation before it becomes full. 
 As described previously, in normal operation, the CMS collector does most of its tracing and sweeping work with the application threads still running, so only brief pauses are seen by the application threads. 
 
@@ -42,31 +59,31 @@ then the application is paused and the collection is completed with all the appl
 The inability to complete a collection concurrently is referred to as `concurrent mode failure` and indicates the need to adjust the CMS collector parameters. 
 If a concurrent collection is interrupted by an explicit garbage collection (`System.gc()`) or for a garbage collection needed to provide information for diagnostic tools, then a `concurrent mode interruption` is reported.
 
-#### Excessive GC Time and OutOfMemoryError
+### Excessive GC Time and OutOfMemoryError
 The CMS collector throws an OutOfMemoryError if too much time is being spent in garbage collection: if more than 98% of the total time is spent in garbage collection and less than 2% of the heap is recovered, then an OutOfMemoryError is thrown. This feature is designed to prevent applications from running for an extended period of time while making little or no progress because the heap is too small. If necessary, this feature can be disabled by adding the option -XX:-UseGCOverheadLimit to the command line.
 
 **The policy is the same as that in the parallel collector, except that time spent performing concurrent collections is not counted toward the 98% time limit. In other words, only collections performed while the application is stopped count toward excessive GC time. Such collections are typically due to a concurrent mode failure or an explicit collection request (for example, a call to `System.gc`).**
 
-#### Floating Garbage
+### Floating Garbage
 The CMS collector, like all the other collectors in Java HotSpot VM, is a tracing collector that identifies at least all the reachable objects in the heap. In the parlance of Richard Jones and Rafael D. Lins in their publication Garbage Collection: Algorithms for Automated Dynamic Memory, it is an `incremental update collector`. **Because application threads and the garbage collector thread run concurrently during a major collection, objects that are traced by the garbage collector thread may subsequently become unreachable by the time collection process ends.** Such unreachable objects that have not yet been reclaimed are referred to as floating garbage. The amount of floating garbage depends on the duration of the concurrent collection cycle and on the frequency of reference updates, also known as mutations, by the application. Furthermore, because the young generation and the tenured generation are collected independently, each acts a source of roots to the other. As a rough guideline, try increasing the size of the tenured generation by 20% to account for the floating garbage. Floating garbage in the heap at the end of one concurrent collection cycle is collected during the next collection cycle.
 
-#### Pauses
+### Pauses
 The CMS collector pauses an application twice during a concurrent collection cycle. The first pause is to mark as live the objects directly reachable from the roots (for example, object references from application thread stacks and registers, static objects and so on) and from elsewhere in the heap (for example, the young generation). This first pause is referred to as the `initial mark pause`. The second pause comes at the end of the concurrent tracing phase and finds objects that were missed by the concurrent tracing due to updates by the application threads of references in an object after the CMS collector had finished tracing that object. This second pause is referred to as the `remark pause`.
 
-#### Concurrent Phases
+### Concurrent Phases
 The concurrent tracing of the reachable object graph occurs between the initial mark pause and the remark pause. During this concurrent tracing phase one or more concurrent garbage collector threads may be using processor resources that would otherwise have been available to the application. As a result, compute-bound applications may see a commensurate fall in application throughput during this and other concurrent phases even though the application threads are not paused. After the remark pause, a concurrent sweeping phase collects the objects identified as unreachable. Once a collection cycle completes, the CMS collector waits, consuming almost no computational resources, until the start of the next major collection cycle.
 
-#### Starting a Concurrent Collection Cycle
+### Starting a Concurrent Collection Cycle
 With the serial collector a major collection occurs whenever the tenured generation becomes full and all application threads are stopped while the collection is done. In contrast, the start of a concurrent collection must be timed such that the collection can finish before the tenured generation becomes full; otherwise, the application would observe longer pauses due to concurrent mode failure. There are several ways to start a concurrent collection.
 
 Based on recent history, the CMS collector maintains estimates of the time remaining before the tenured generation will be exhausted and of the time needed for a concurrent collection cycle. Using these dynamic estimates, a concurrent collection cycle is started with the aim of completing the collection cycle before the tenured generation is exhausted. These estimates are padded for safety, because concurrent mode failure can be very costly.
 
 A concurrent collection also starts if the occupancy of the tenured generation exceeds an initiating occupancy (a percentage of the tenured generation). The default value for this initiating occupancy threshold is approximately `92%`, but the value is subject to change from release to release. This value can be manually adjusted using the command-line option `-XX:CMSInitiatingOccupancyFraction=<N>`, where <N> is an integral percentage (0 to 100) of the tenured generation size.
 
-#### Scheduling Pauses
+### Scheduling Pauses
 The pauses for the young generation collection and the tenured generation collection occur independently. They do not overlap, but may occur in quick succession such that the pause from one collection, immediately followed by one from the other collection, can appear to be a single, longer pause. To avoid this, the CMS collector attempts to schedule the remark pause roughly midway between the previous and next young generation pauses. This scheduling is currently not done for the initial mark pause, which is usually much shorter than the remark pause.
 
-#### Incremental Mode
+### Incremental Mode
 Note that the incremental mode is being deprecated in Java SE 8 and may be removed in a future major release.
 
 The CMS collector can be used in a mode in which the concurrent phases are done incrementally. Recall that during a concurrent phase the garbage collector thread is using one or more processors. The incremental mode is meant to lessen the effect of long concurrent phases by periodically stopping the concurrent phase to yield back the processor to the application. This mode, referred to here as i-cms, divides the work done concurrently by the collector into small chunks of time that are scheduled between young generation collections. This feature is useful when applications that need the low pause times provided by the CMS collector are run on machines with small numbers of processors (for example, 1 or 2).
@@ -134,3 +151,5 @@ The initial mark pause is typically short relative to the minor collection pause
 
 ## References
 1. [Concurrent Mark Sweep (CMS) Collector](https://docs.oracle.com/javase/8/docs/technotes/guides/vm/gctuning/cms.html)
+2. [JEP 291: Deprecate the Concurrent Mark Sweep (CMS) Garbage Collector](https://openjdk.org/jeps/291)
+3. [JEP 363: Remove the Concurrent Mark Sweep (CMS) Garbage Collector](https://openjdk.org/jeps/363)

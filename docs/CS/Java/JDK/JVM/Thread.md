@@ -1,5 +1,10 @@
 ## Introduction
 
+## 版本基线
+
+> [!NOTE]
+> **版本口径**：本页讲的是 **HotSpot 内部线程**（`JavaThread` / `NonJavaThread` 及其子类 `VMThread`、`CompilerThread`、`ServiceThread`、`MonitorDeflationThread` 等），**不是** Java 层的 `java.lang.Thread`。JDK 19/21 引入的**虚拟线程**（[JEP 425](https://openjdk.org/jeps/425) / [JEP 440](https://openjdk.org/jeps/440)，Loom）在 HotSpot 里有独立实现载体，不体现为"多一个 Thread 子类"，详见 [Loom](/docs/CS/Java/JDK/Loom.md) 与 [VirtualThread](/docs/CS/Java/JDK/Concurrency/VirtualThread.md)。详见 [JVM 版本基线](/docs/CS/Java/JDK/JVM/JVM.md?id=版本基线)。
+
 All Thread subclasses must be either JavaThread or NonJavaThread.
 
 Class hierarchy

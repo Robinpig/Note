@@ -4,6 +4,11 @@
 
 
 
+## 版本基线
+
+> [!NOTE]
+> **版本口径**：符号表与字符串驻留集（StringTable）在 **JDK 7** 经历过一次大重构（`SymbolTable` 与 `StringTable` 拆分），JDK 8 引入 `ConcurrentHashTable` 并发化，JDK 10+ 逐步替换为 `ConcurrentHashMap` 支撑的弱引用实现。并发查找的可用性随版本变化明显。详见 [JVM 版本基线](/docs/CS/Java/JDK/JVM/JVM.md?id=版本基线)。
+
 ```c++
 
 class SymbolTable : public AllStatic {

@@ -1,5 +1,18 @@
 ## Introduction
 
+## 版本基线
+
+> [!NOTE]
+> **版本口径**：类加载沿 `loadClass → linkClass → initialize` 三阶段。
+>
+> **JDK 9（JEP 261，模块系统）是真正的分水岭**：内置加载器由「扩展委派模型」的两级简化为**三级**，`ExtClassLoader` 被**合并进 PlatformClassLoader**，其宿主 `sun.misc.Launcher` **在 JDK 9 起已从 OpenJDK 源码树移除**（`src/java.base/share/classes/sun/misc/` 目录在主干为空）。三者现均实现于 `jdk.internal.loader.ClassLoaders`（`BootClassLoader` / `PlatformClassLoader` / `AppClassLoader`，均继承 `BuiltinClassLoader`）。
+>
+> ⚠️ **常见误解：「JDK 17 移除了系统类加载器」是错的。** 主干 `ClassLoader.java` 中 `getSystemClassLoader()` 依然存在（`initSystemClassLoader()` 亦在），JDK 17 引入的是 `ClassLoaders.AppClassLoader` 的**平滑替换**（`Holder.scl` 可被应用自定义），并非删除系统加载器这一角色。准确说法：**系统（应用）加载器始终存在，只是命名与实现从 JDK 8 的 `URLClassLoader` 体系演进为 JDK 9+ 的 `BuiltinClassLoader` 体系。**
+>
+> 另一个易错点：`getSystemClassLoader()` 名字里的 "system" 指的是**「系统类路径上的类」**（`-cp` / classpath），**不是**「引导/系统级加载器」——引导加载器是 `null`。
+>
+> Java 9+ 应用默认不再用 `-Xbootclasspath` 追加类，改用 `--module-path` / `-p`；`-Xbootclasspath/p:` 仅在编译期（`javac -Xbootclasspath/p:`）保留。详见 [JVM 版本基线](/docs/CS/Java/JDK/JVM/JVM.md?id=版本基线)。
+
 When you compile a .java source file, it is converted into byte code as a .class file.
 
 JVM类加载的时机主要基于 **首次主动使用** 的原则
@@ -29,6 +42,17 @@ It is mainly responsible for three activities.
 Fig.1. ClassLoader
 </p>
 
+## 本篇导航
+
+本篇源码密度高（近 2800 行，其中约 2000 行为 HotSpot 源码），按「规范概念 → HotSpot 实现 → 实用排查」三段展开：
+
+- **委派模型** —— [Delegation model](#delegation-model)：三级内置加载器、[Parallel](#parallel)（并行加载）、[load source](#load-source)（类文件来源）、[Destroy delegate model](#destroy-delegate-model)（销毁委派）、[自定义加载器示例](#user-classloader-sample)
+- **类加载器的 JVM 内部表示** —— [init](#init)（`ClassLoaderType` 枚举）、[Class Lifetime](#class-lifetime)（加载器自身如何被管理）
+- **Loading（加载）** —— [Loading](#loading) 总述、[load Class](#load-class)、[create_from_stream](#create_from_stream)（总入口）、[parse_stream](#parse_stream) 与 [create_instance_klass](#create_instance_klass)（解析与建 Klass，两步分离的原因）、[post_process_parsed_stream](#post_process_parsed_stream)
+- **Linking（链接）** —— [Linking](#linking) 总述、[Verification](#verification)、[Rewriting](#rewriting)（改字节码的三个硬约束）、[link_methods](#link_methods)、[Preparation](#preparation)、[Resolution](#resolution)（惰性解析）
+- **Initialization（初始化）** —— [Initialization](#initialization) 总述（`<clinit>` 语义与线程安全）、[call_class_initializer](#call_class_initializer)
+- **运行期重定义与卸载** —— [redefine Class](#redefine-class)（Instrumentation / hotswap）、[Unloading](#unloading) 与[卸载的触发条件](#卸载的触发条件)（类加载器泄漏）
+
 ## Delegation model
 
 The ClassLoader class uses a **delegation model** to search for classes and resources.
@@ -52,10 +76,13 @@ The Java run-time has the following built-in class loaders:
 
 
 > [!NOTE]
-> 
-> 随着JVM的迭代，在不同的 JDK 版本中，类加载器也在发生着变化
-> 从JDK 9开始，JVM 引入了新的模块系统JPMS（Java Platform Module System），将 Java 核心库分成了一系列的模块，每个模块只包含相关的功能，使得代码更加清晰和可维护。原本的引导类加载器也被拆分成了两个不同的加载器，分别是平台类加载器（Platform ClassLoader）和系统类加载器（System ClassLoader）
-> 而到了JDK 11，为了提高性能，JVM 使用类数据共享（CDS）技术，允许不同的 Java 进程共享相同的 JVM 类元数据。到JDK 17的时候，JVM 则是直接移除了系统类加载器，所有的类加载操作由原本的应用类加载器接管。这个改动简化了 JVM 架构，也减小潜在的安全风险
+>
+> 随着 JVM 的迭代，类加载器在不同 JDK 版本中发生了很大变化：
+>
+> - **JDK 8 及以前**：扩展委派模型（extension delegation）。引导加载器（`null`）→ 扩展加载器（`ExtClassLoader`，负责 `ext` 目录的 JAR）→ 应用加载器（`URLClassLoader`，负责 `CLASSPATH`）。扩展加载器由 `sun.misc.Launcher` 的内部类 `ExtClassLoader` 实现。
+> - **JDK 9 起（JEP 261 模块系统）**：引入 JPMS，内置加载器简化为**三级**——引导（`BootClassLoader`）、平台（`PlatformClassLoader`）、应用（`AppClassLoader`）。**`ExtClassLoader` 被合并进 `PlatformClassLoader`**（平台加载器顺带承担了原扩展加载器的职责），`sun.misc.Launcher` 被移除，三者统一实现为 `jdk.internal.loader.BuiltinClassLoader` 的子类。
+> - **JDK 11**：为降低启动开销引入 **CDS（Class Data Sharing）**，不同 Java 进程可共享类元数据。
+> - **JDK 17 及以后**：**系统类加载器并未被移除**。`ClassLoader.getSystemClassLoader()` 依然存在（`initSystemClassLoader()` 亦在主干），变化在于它可被应用自定义——`ClassLoaders.AppClassLoader` 通过 `Holder.scl` 实现了**平滑替换**：应用可以在 classpath 上提供自己的实现（如 Spring Boot 的 `LaunchedURLClassLoader`、容器环境的实现）来替换默认应用加载器。
 
 Here are ClassLoaders in **JDK17**:
 
@@ -219,8 +246,67 @@ protected ClassLoader(){
 -Xlog: class+load=info # JDK11
 ```
 
+#### 动手写一个自定义加载器
+
+上面是 JVM 提供的骨架，实际开发中要自己实现加载逻辑。最小可用版本——**先委派父加载器，父加载不到才自己找**：
+
+```java
+public class MyClassLoader extends ClassLoader {
+
+    private final Path dir;
+
+    public MyClassLoader(Path dir, ClassLoader parent) {
+        super(parent);
+        this.dir = dir;
+    }
+
+    @Override
+    protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+        synchronized (getClassLoadingLock(name)) {
+            // 1) 先委派：保证核心类不被重复加载，也避免破坏委派模型的安全性
+            Class<?> c = findLoadedClass(name);
+            if (c == null) {
+                try {
+                    c = super.loadClass(name, false);
+                } catch (ClassNotFoundException ignored) {
+                    // 父加载器找不到，才走自己的逻辑
+                }
+            }
+            // 2) 父加载器没有 → 自己按类名映射到文件
+            if (c == null) {
+                byte[] bytes = Files.readAllBytes(dir.resolve(name.replace('.', '/') + ".class"));
+                c = defineClass(name, bytes, 0, bytes.length);
+            }
+            // 3) resolve 交回本加载器完成链接与初始化
+            if (resolve) resolveClass(c);
+            return c;
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        Path dir = Path.of("classes");
+        try (var cl = new MyClassLoader(dir, ClassLoader.getSystemClassLoader())) {
+            Class<?> c = cl.loadClass("com.example.Foo");
+            System.out.println(c.getClassLoader());        // MyClassLoader
+            System.out.println(String.class.getClassLoader()); // null（引导加载器）
+        }
+    }
+}
+```
+
+四个必须注意的点：
+
+1. **`getClassLoadingLock(name)`** —— 同一个类名必须用同一把锁，否则**并行加载同一个类会得到两个不同的 `Class` 对象**，引发极其难查的 `ClassCastException` / `LinkageError`。
+2. **`findLoadedClass` 先查缓存** —— 避免重复定义，也是「同一加载器对同一名字只定义一次」这条规则的实现点。
+3. **不能破坏委派模型** —— 若把 `super.loadClass` 去掉，`java.lang.Object` 就会被自定义加载器加载一份，产生**两个互不兼容的 `Object` 类**，在传递对象时直接 `ClassCastException`。
+4. **自定义加载器也可能泄漏** —— 加载器对象若被静态集合、`ThreadLocal`、JDBC DriverManager 等持有，其加载的类永不卸载（见 [Unloading](#unloading)）。
+
+> [!TIP]
+> 现代 JDK 中，自定义加载器若不重写 `loadClass`，可以直接继承 `ClassLoader` 的默认实现（内部用 `findClass` 扩展点）。多数场景**只需要重写 `findClass`**，比整套重写 `loadClass` 更安全。
+
 ## init
 
+HotSpot 把「类加载器」也建模为 JVM 内的元对象，用一个**枚举**区分三种内置加载器。这个枚举是后续很多判断的入口——`klass` 创建时会记下自己的加载器类型，VM 走到某些路径时需要据此分支。
 
 ```c
 class ClassLoader: AllStatic {
@@ -232,6 +318,19 @@ class ClassLoader: AllStatic {
   };
 
   // Load individual .class file
+```
+
+三个值与 Java 层的对应关系：
+
+| HotSpot 枚举 | Java 层可见形态 | 负责范围 |
+| :-- | :-- | :-- |
+| `BOOT_LOADER` | `null`（`getClassLoader()` 返回 null） | `java.base` 等核心模块，用 native 代码实现，不经 Java |
+| `PLATFORM_LOADER` | `getPlatformClassLoader()` | JDK 平台模块（JDK 9 起合并了原 `ExtClassLoader` 的职责） |
+| `APP_LOADER` | `getSystemClassLoader()` / `getClassLoader()` | 应用 classpath 与 module path |
+
+> [!TIP]
+> **加载器类型 ≠ 类的可见性范围**。VM 内部只做上述三分类，但**实际委派关系由 Java 侧的 parent 链决定**——自定义加载器可以挂在任意位置，也可以并行 capable（见下文 [Parallel](#parallel)）。`ClassLoaderType` 是 HotSpot 的内部简化，不是 Java 规范的概念。
+
   static InstanceKlass* load_class(Symbol* class_name, bool search_append_only, TRAPS);
 };
 ```
@@ -488,8 +587,7 @@ jni_DefineClass -----+----- JVM_DefineClass
 
 ### create_from_stream
 
-1. [parse_stream](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=parse_stream)
-2. [create_instance_klass](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=create_instance_klass)
+这是「把一个 class 文件流变成 `InstanceKlass`」的总入口，只有两步：**解析**（[parse_stream](#parse_stream)）+ **建 Klass**（[create_instance_klass](#create_instance_klass)）。真正的重量都在这两步里，本函数只负责串流程。
 
 ```cpp
 // klassFactory.cpp
@@ -512,11 +610,25 @@ InstanceKlass* KlassFactory::create_from_stream(ClassFileStream* stream,
 
   InstanceKlass* result = parser.create_instance_klass(old_stream != stream, *cl_inst_info, CHECK_NULL);
 
+```
+
+几个值得注意的点：
+
+- **`BROADCAST`（publicity level）** —— HotSpot 内部把「类名是否是 public」单独拎成一个参数，而不是混在访问标志里。这个开关影响**类的可见性与反射访问检查**，在 JDK 9 的模块系统下尤其重要（跨模块访问要额外检查模块是否 `exports` 该包）。
+- **`check_class_file_load_hook`** —— 提供 `-Xverify:none` 之外的另一类干预点（字节码插桩 agent 的挂载位置），并支持**类文件缓存**（`cached_class_file`）。**隐藏类（hidden class）跳过此步**，因为它们由 JVM 内部生成、来源不是磁盘文件。
+- **`loader_data`（`ClassLoaderData*`）** —— HotSpot 用它把「元数据」按加载器组织起来，卸载时能整块释放（见 [Unloading](#unloading)）。这是 HotSpot 内部结构，Java 层不可见。
+- `old_stream != stream` 表示流是否被 hook 替换过（比如走了缓存），据此决定 `changed` 标志。
+
+> [!NOTE]
+> `ClassLoaderData`（CLD）是 HotSpot 的**内部**元数据容器，与 Java 层的 `ClassLoader` **不是同一个东西**：一个 Java `ClassLoader` 可以对应多个 CLD（模块化的「一个加载器管多个模块」就是如此），反之亦然。Java 代码拿不到也用不到它。
+
   return result;
 }
 ```
 
 ### parse_stream
+
+`ClassFileParser` 的构造函数就是整个解析流程的骨架：**先 parse，再 post-process**，两步都已拆成独立函数。
 
 ```cpp
 ClassFileParser::ClassFileParser(...) {
@@ -527,6 +639,18 @@ ClassFileParser::ClassFileParser(...) {
   post_process_parsed_stream(stream, _cp, CHECK);
 }
 ```
+
+**为什么分成两步**（这是 HotSpot 类加载最值得理解的设计）：
+
+| 阶段 | 做什么 | 为什么必须分开 |
+| :-- | :-- | :-- |
+| `parse_stream` | 逐字节读取 class 文件：常量池、字段、方法、属性**全部先塞进 `_cp` 等临时容器**，不做语义决策 | 纯数据摄入，**不依赖其它类是否已加载**，因此可并行做（[BROADCAST](#create_from_stream) 级别） |
+| `post_process_parsed_stream` | 遍历刚建好的常量池，**解析符号引用**（如 `java/lang/Object` → 真实的 `Klass*`）、建立 `vtable`/`itable`、填 `oop_map` | 这一步**必须能触发「加载另一个类」**，而加载另一个类又可能回调回来，形成递归 |
+
+这个切分是**递归加载能够安全发生**的关键：解析阶段只记录「我引用了谁」，把「那个类是谁」推迟到后处理阶段统一解决，从而避免解析中途就去查一个可能尚未加载的类。
+
+> [!WARNING]
+> 由此引出一个常被误解的行为：**`new` 一个类不一定会立刻触发完整的链接与初始化**。解析（loading）已在前面发生，但 `getfield`/`invokevirtual` 等指令才真正触发 [Resolution](#resolution) 与 [Initialization](#initialization)。这也是「初始化顺序 surprises」（如 `static` 字段在构造器里读为 0）的根源。
 
 parse_stream
 
@@ -1588,6 +1712,17 @@ Rewrite the byte codes of all of the methods of a class.
 
 **Rewriting must happen after verification but before the first method of the class is executed.**
 
+这个「改写字节码」的时机与位置是硬约束，理解它就理解了为什么很多操作**必须发生在类初始化之前**：
+
+- **必须在验证之后** —— 验证器只认**原始字节码**。若先把 `invokespecial` 改写成别的东西，验证器看到的就不是规范要求的字节码，验证结果会失真（也会让 `StackMapTable` 的偏移量对不上）。
+- **必须在该类第一个方法执行之前** —— 一旦方法被执行，它的字节码就可能已经被解释器或 JIT 编译成机器码；此时再改写原始字节码，运行中的代码与字节码就**不一致**了。
+- **恰好一次** —— 重复改写会让常量池索引、栈映射表、`vtable`/`itable` 布局全部错位。代码里用 `is_rewritten()` 状态位来保证幂等。
+
+> [!WARNING]
+> 违反「初始化前改写」是很多疑难问题的根源，典型症状是 **`IncompatibleClassChangeError` / `NoSuchMethodError` / `VerifyError` 只在运行到特定分支时才出现**——因为那条分支上的方法恰好是**第一个被执行的**方法，此时才触发本应早已完成的改写/链接步骤。
+>
+> 想在类加载时改字节码，正确的接入点是 `java.lang.instrument.ClassFileTransformer`（由 [Java Agent](/docs/CS/Java/JDK/Agent.md) 注册），它被保证在**验证之前**调用，因此改写是安全的。常见用途：APM 探针（SkyWalking、Arthas）、Mock 增强（Mockito inline）、代码覆盖率。
+
 ```cpp
 // InstanceKlass.cpp
 void InstanceKlass::rewrite_class(TRAPS) {
@@ -2041,7 +2176,15 @@ Many Java Virtual Machine instructions - *anewarray*, *checkcast*, *getfield*, *
 
 Resolution is the process of dynamically determining one or more concrete values from a symbolic reference in the run-time constant pool. Initially, all symbolic references in the run-time constant pool are unresolved.
 
-Lazy linked, loading other classes can be done after Initiailzation. It will run with no error when link a Error Class which not used.
+> [!NOTE]
+> **解析时机是「可以惰性」，不是「必须惰性」。** 《规范》允许实现**立即**解析（eagerly），HotSpot 采取的是**惰性解析**（lazy resolution）：符号引用在真正被用到时才解析，这样加载一个类不会连带把一堆用不到的类也拉进来。
+>
+> 原文那句 “Lazy linked, loading other classes can be done after Initiailzation. It will run with no error when link a Error Class which not used.” 想表达的大致是「链接阶段把用不到的类留到初始化之后再加载也不会出错」，但表述不准——**`Error` 类同样会被正常校验**（只要字节码合法），而「何时解析」由各指令触发，不由「初始化之后」这个时间点决定。
+
+**惰性解析带来的两个可见后果**：
+
+1. **`NoClassDefFoundError` 出现的位置可能很晚** —— 类明明在 classpath 上，却可能在第一次执行到某条指令时才抛异常，而不是在启动时。这排查「类找不到」类问题时很关键：报错栈指向的是**触发解析的那条字节码**，不一定是类的加载点。
+2. **类初始化是有序且线程安全的** —— 同一时刻只有一个线程执行 `<clinit>`，其他线程阻塞等待（见 [Initialization](#initialization)）。解析虽惰性，但一旦解析结果被缓存，后续直接复用。
 
 ## Initialization
 
@@ -2635,6 +2778,20 @@ void VM_RedefineClasses::redefine_single_class(jclass the_jclass,
 use ClassLoaderDataGraph::classed_do can iterate all loaded class when GC
 
 ClassLoaderDataGraph::classes_do
+
+### 卸载的触发条件
+
+类 unloading 是「**可达性驱动**」的：只有当定义某个类的 `ClassLoader`、该类本身、以及它加载的所有类**全部不可达**时，这个类才可能被回收。注意是「可能」——真正释放发生在一次 **full GC**（或并发标记的Remark 阶段结束时），普通 young GC 不碰 metaspace。
+
+因此常见的内存泄漏形态是**类加载器泄漏**：一个本该被回收的加载器因为被某个静态字段、线程上下文、`ThreadLocal` 或 JDBC 驱动注册表引用而一直可达，于是它加载的所有类都无法卸载，最终表现为 `Metaspace` 持续增长直到 `OutOfMemoryError: Metaspace`。
+
+> [!TIP]
+> 排查「Metaspace 涨」的常用手段：
+> - `-XX:+PrintClassHistogram`（类加载统计，可看哪个加载器加载的类最多）
+> - JFR 的 `jdk.ClassLoad` 事件（见 [JFR](/docs/CS/Java/Tools/JFR.md)）
+> - `jcmd <pid> GC.class_stats`（需诊断选项）
+>
+> 关键判断：**问题的根因几乎总是「加载器没被回收」，而不是「类加载太多」**。堆上 `Class` 对象本身是普通堆对象，卸载类时它们也随之回收。
 
 ## Links
 

@@ -1,5 +1,12 @@
 ## Introduction
 
+## 版本基线
+
+> [!NOTE]
+> **版本口径**：HotSpot 至今仍有**两套解释器**——汇编模板解释器（`templateinterpreter`，各平台主流路径，OpenJDK 主干 `src/hotspot/share/interpreter/templateInterpreter.cpp`）与 C++ 解释器（`bytecodeInterpreter`，位于 `interpreter/zero/` 子目录，**未随时间移除**）。两者关系是**主/备**而非「新/旧」：Zero 是**可移植回退实现**，在没有模板解释器的平台上顶上去（`zeroInterpreterGenerator.cpp` 负责用 C++ 生成同等语义的代码）。因此「C++ 解释器已被移除」是常见误解——`interpreter/zero/` 目录在 OpenJDK 主干仍完整存在。
+>
+> 另外，**JVMCI 编译器**（Graal，`-XX:+UseJVMCICompiler`）启用后会接管编译，但解释器仍用于尚未编译的方法。详见 [JVM 版本基线](/docs/CS/Java/JDK/JVM/JVM.md?id=版本基线)。
+
 TemplateInterpreter
 
 ## AbstractInterpreter
@@ -2048,7 +2055,29 @@ Do you remember `lock addl` in [volatile](/docs/CS/Java/JDK/Concurrency/volatile
 
 ## CppInterpreter
 
-BytecodeInterpreter
+HotSpot 的第二套解释器是 `bytecodeInterpreter`（**C++ 实现**），在 OpenJDK 主干中位于 `src/hotspot/share/interpreter/zero/` 目录：
+
+```text
+src/hotspot/share/interpreter/zero/
+├── bytecodeInterpreter.cpp        # C++ 解释器主循环
+├── bytecodeInterpreter.hpp
+├── bytecodeInterpreter.inline.hpp
+├── zeroInterpreter.hpp           # 帧管理
+├── zeroInterpreterGenerator.cpp  # 用 C++ 生成解释器代码
+└── zeroInterpreterGenerator.hpp
+```
+
+**它不是历史遗留的废弃代码**，而是一套**可移植回退实现（portable fallback）**：
+
+- 模板解释器需要为每个平台手写汇编（`templateTable.cpp` + 各 `cpu/<arch>/vm/templateTable_<arch>.cpp`），架构支持成本很高；
+- Zero 解释器用纯 C++ 实现《规范》语义，**不需要为每个字节码写平台相关汇编**，能在没有模板解释器的平台上工作（典型如 `zero` 平台，也用于调试对照）；
+- `zeroInterpreterGenerator` 负责把它接入解释器框架，使其与模板解释器对上层（`Interpreter`、`AbstractInterpreter`）暴露一致的接口。
+
+> [!WARNING]
+>
+> 常见误解是「C++ 解释器已被 HotSpot 移除，现代 JVM 只有模板解释器」——**这是错的**。`interpreter/zero/` 在 OpenJDK 主干（master）仍完整存在。准确说法是：**模板解释器是各主流平台的主路径，C++ 解释器是备路径**，二者并存。
+
+它的主循环同样是「`switch` 嵌在 `while` 循环里」，按 PC 指向的 opcode 分派，只是全部用 C++ 表达（常配合 GCC 的 computed goto 优化分派效率），并在执行过程中周期性地检查安全点。
 
 ## Links
 

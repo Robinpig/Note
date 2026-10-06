@@ -1,5 +1,10 @@
 ## Introduction
 
+## 版本基线
+
+> [!NOTE]
+> **版本口径**：启动链按 `main() → JVM_Init → init_globals → universe_init → initialize_heap → interpreter_init_code` 展开，主干长期稳定，但**各阶段的插入点随版本增删**（如 JVMCI 编译器的 `force_JVMCI_intialization`、容器感知 `UseContainerSupport` 自 JDK 8u191/10 起生效）。读旧版文章时注意函数名与顺序的细微差异。详见 [JVM 版本基线](/docs/CS/Java/JDK/JVM/JVM.md?id=版本基线)。
+
 ## build
 
 [Building the JDK](https://github.com/openjdk/jdk/blob/master/doc/building.md)
