@@ -16,25 +16,26 @@ jobs:
         with:
           python-version: '3.13'
 
+      # 脚本随仓库入库（scripts/），不再位于被 .gitignore 忽略的 .workbuddy/ 下。
       # 两个活跃子树分别校验。GARBLED 为低置信度告警，默认不阻断；
       # 如需零乱码，追加 --strict。
       - name: 站内链接校验 · Framework
         run: |
-          python3 .workbuddy/tools/validate_links.py docs/CS/Framework
+          python3 scripts/validate_links.py docs/CS/Framework
 
       - name: 站内链接校验 · Linux 内核
         run: |
-          python3 .workbuddy/tools/validate_links.py docs/CS/OS/Linux
+          python3 scripts/validate_links.py docs/CS/OS/Linux
 
       # 门禁规则：无孤立页 + 平均链入 >= 阈值。
       # 弱链出页（只链 hub 的叶子节点）按 KB 规范属正常，仅告警不阻断。
       - name: 交叉链接密度门禁 · Framework
         run: |
-          python3 .workbuddy/tools/analyze_crosslinks.py \
+          python3 scripts/analyze_crosslinks.py \
             --gate --min-indegree 3.5
 
       - name: 交叉链接密度门禁 · Linux 内核
         run: |
-          python3 .workbuddy/tools/analyze_crosslinks.py \
+          python3 scripts/analyze_crosslinks.py \
             --root "$PWD/docs/CS/OS" --dirs Linux \
             --gate --min-indegree 3.5

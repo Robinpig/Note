@@ -41,6 +41,14 @@ replay_pid*.log
 **/*.java
 **/*.py
 
+# 例外：KB 质量校验脚本必须随仓库分发（上面 **/*.py 会误伤它们）。
+# 放在 scripts/ 下，任何机器与 CI 克隆后即可直接运行。
+!scripts/*.py
+
+# Python 字节码缓存（运行上面的脚本会生成）
+__pycache__/
+*.pyc
+
 # exclude node files
 /node_modules/
 /package.json
