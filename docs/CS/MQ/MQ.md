@@ -2,10 +2,10 @@
 
 在计算机科学中，消息队列与邮箱（mailbox）是软件工程中的组件，通常用于进程间通信（IPC），或用于同一进程内的线程间通信。它们借助队列来传递消息 —— 即传递控制权或内容。组通信系统（group communication）提供的是类似的功能。
 
-消息队列做的事本质上只有两件：**把数据可靠地存起来**，以及**把数据高效地递给需要它的一方**。围绕这两件事，各家在模型、协议、存储与运维上做出了不同取舍，形成了不同的适用场景。本文先给出三个主流开源产品（Kafka / RocketMQ / Pulsar）的定位差异与选型建议，再逐层展开消息系统、协议、存储、客户端、模型、特性与常见问题；最后给出各产品的子目录导航。
+消息队列做的事本质上只有两件：**把数据可靠地存起来**，以及**把数据高效地递给需要它的一方**。围绕这两件事，各家在模型、协议、存储与运维上做出了不同取舍，形成了不同的适用场景。本文先给出三个主流开源产品（Kafka / RocketMQ / Pulsar）的定位差异与选型建议，再逐层展开消息系统、协议、存储、客户端、模型、特性与常见问题；最后给出各产品的子目录导航。除这三个深度笔记外，本目录还收录 RabbitMQ 与 NATS / ActiveMQ / NSQ / ZeroMQ 四篇其他队列速览（见 [目录导航](#目录导航)）。
 
 > [!NOTE]
-> 本目录收录的三个产品笔记都标注了**经源码核实的版本基线与纠错点** —— 三者都在 4.x 附近经历了版本级重构（Kafka 4.3.1 / RocketMQ 5.5.1 / Pulsar 4.2.4），网上流传的中文资料大多停留在 2.x/3.x，照抄容易出错。
+> 本目录的 Kafka / RocketMQ / Pulsar 三篇深度笔记都标注了**经源码核实的版本基线与纠错点** —— 三者都在 4.x 附近经历了版本级重构（Kafka 4.3.1 / RocketMQ 5.5.1 / Pulsar 4.2.4），网上流传的中文资料大多停留在 2.x/3.x，照抄容易出错。其余队列（NATS / ActiveMQ / NSQ / ZeroMQ）的版本基线亦以官网最新稳定版为准单独核实，正文均标注当前版本。
 
 ```dot
 digraph MQ {
@@ -76,7 +76,28 @@ digraph MQ {
 - [Apache Kafka](/docs/CS/MQ/Kafka/Kafka.md) —— 事件流平台
 - [Apache RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md) —— 业务消息队列
 - [Apache Pulsar](/docs/CS/MQ/Pulsar/Pulsar.md) —— 云原生存算分离队列
-- [RabbitMQ](/docs/CS/MQ/RabbitMQ.md) —— 轻量队列，Erlang 实现
+- [RabbitMQ](/docs/CS/MQ/RabbitMQ.md) —— 轻量队列，Erlang 实现，**路由能力最强**
+- [NATS (JetStream)](/docs/CS/MQ/NATS.md) —— 轻量高吞吐，subject 路由 + 可叠加持久化
+- [ActiveMQ Artemis](/docs/CS/MQ/ActiveMQ.md) —— JMS 企业级broker，多协议互操作
+- [NSQ](/docs/CS/MQ/NSQ.md) —— Go 实时分布式，去中心化无 SPOF
+- [ZeroMQ](/docs/CS/MQ/ZeroMQ.md) —— brokerless 消息库，拓扑自组
+
+## Other Message Queues
+
+除上面三个深度笔记（Kafka / RocketMQ / Pulsar）与 RabbitMQ 外，下列队列代表了几类不同的架构取舍，适合作为「补充/速览」对照阅读。细节见各自页面。
+
+| 产品 | 当前版本 | 存储模型 | 投递语义 | 消费模型 | 典型场景 |
+| ---- | -------- | -------- | -------- | -------- | -------- |
+| [NATS (JetStream)](/docs/CS/MQ/NATS.md) | v2.15.0 | Core 无存储；JetStream 用 memory/file | Core at-most-once；JetStream at-least-once | subject + stream/consumer（push/pull） | 实时数据流、边缘计算、agent 间通信 |
+| [ActiveMQ Artemis](/docs/CS/MQ/ActiveMQ.md) | 2.57.0 | 文件 journal（AIO/NIO/MAPPED）+ 可选 JDBC | at-least-once；exactly-once 经 XA / 去重 | JMS 目的地（queue/topic、共享订阅、消息组） | Java/Jakarta 企业集成、多协议互操作 |
+| [NSQ](/docs/CS/MQ/NSQ.md) | v1.3.0 | 内存优先、超限溢写 diskqueue | at-least-once（可能重复） | push + RDY 流控；topic→channel 广播、channel→consumer 均分 | 实时日志/事件聚合、任务队列 |
+| [ZeroMQ](/docs/CS/MQ/ZeroMQ.md) | libzmq 4.3.5 | 无（纯内存 socket 缓冲） | 因模式而异，默认不保证 | 应用自组拓扑，无 broker / 消费组 | 低延迟 IPC、分布式 mesh、自建 broker |
+
+> [!TIP]
+> 这四个都不以「分区日志 + 消费者位移」为核心：NATS 走 subject、Artemis 走 JMS 目的地、NSQ 走 topic/channel、ZeroMQ 根本是库而非 broker。选型时先把「是否需要分区顺序与重放」想清楚，再决定要不要上 Kafka。
+
+> [!NOTE]
+> Redis 也能客串消息队列（Pub/Sub / Streams），但它在 DB 目录已有[专篇](/docs/CS/DB/Redis/MQ.md)，本文不重复收录，需要时在 DB 侧查阅。
 
 ## Message System
 
@@ -745,6 +766,11 @@ topic 数量增多时 Kafka 吞吐会明显下降而 RocketMQ 稳定，原因在
 - 不支持消息批量，为单条消息优化，难以承载高吞吐
 - 用 Erlang 编写，故障排查时阅读源码有一定门槛
 
+**它的真正长处是路由能力而非吞吐**：生产者从不直接投递队列，而是先进 exchange，由 exchange 按 binding规则分发。这是它与「分区日志 + 位点消费」路线最本质的差异 —— 见 [RabbitMQ](/docs/CS/MQ/RabbitMQ.md) 的路由与队列类型部分。
+
+> [!WARNING]
+> **4.3 是一次大版本**：元数据存储换成 Khepri（Raft），CQv1 存储引擎与全部网络分区处理策略被移除，最低要求 Erlang/OTP 27.0。其中 `consumer_timeout` 从 4.3 起**只对 quorum queue 生效**，classic 与 stream 永不评估它 —— 这是排查「配了没生效」时最常见的原因。
+
 ### Kafka
 
 [Apache Kafka](/docs/CS/MQ/Kafka/Kafka.md) 的主线是「顺序写的日志 + 独立于日志的复制协议 + 两种消费模型」。存储侧要落到 segment 滚动、稀疏索引、retention 配置优先级，以及「Kafka 用 sendfile、RocketMQ 用 mmap」这个决定功能边界的取舍，见 [Storage](/docs/CS/MQ/Kafka/Storage.md)；控制面见 [KRaft](/docs/CS/MQ/Kafka/KRaft.md)，副本机制见 [Replica](/docs/CS/MQ/Kafka/Replica.md)；消费侧除经典的 partition 独占式 [Consumer](/docs/CS/MQ/Kafka/Consumer.md) 与 [Producer](/docs/CS/MQ/Kafka/Producer.md) 外，4.x 新增了记录级共享的 [ShareGroup](/docs/CS/MQ/Kafka/ShareGroup.md)；网络层见 [Network](/docs/CS/MQ/Kafka/Network.md)；生态侧的 [Connect](/docs/CS/MQ/Kafka/Connect.md)、[Streams](/docs/CS/MQ/Kafka/Streams.md)、[MirrorMaker](/docs/CS/MQ/Kafka/MirrorMaker.md) 都是构建在 Kafka 之上的独立子系统；鉴权与 ACL 见 [Security](/docs/CS/MQ/Kafka/Security.md)。
@@ -797,6 +823,11 @@ RobustMQ 是 RocketMQ 的商业化发行版（由 Apache RocketMQ 团队与腾�
 
 > [!WARNING]
 > 原表「High Availability and Failover」一行称 ActiveMQ「requires a ZooKeeper server」—— 该说法针对 levelDB 引擎，且与 Kafka 4.x 已无关：**Kafka 自 4.0 起彻底移除 ZooKeeper**，KRaft 是唯一模式。
+
+> [!NOTE]
+> 表中「DLedger Controller」的措辞对应的是早期 5.x 资料。经 5.5.1 源码核实，**DLedger 模式已在源码中标记废弃**（`BrokerStartup.java:47-49` 的 `DLEDGER_COMMIT_LOG_DEPRECATION_WARNING`），官方推荐的替代路径是独立的 **Controller 模式**——且 Controller 自身默认仍用 DLedger 组做 Raft（`ControllerConfig.controllerType = "DLedger"`）。两者的开关默认都是 `false`，详见 [Cluster](/docs/CS/MQ/RocketMQ/Cluster.md)。
+>
+> 另需注意表中未列出的 [RabbitMQ](/docs/CS/MQ/RabbitMQ.md) 4.3：元数据存储换成 Khepri（Raft）后，集群可用性同样要求**多数派节点在线**，少数派侧操作直接超时。
 
 
 选型比较
@@ -866,6 +897,10 @@ RocketMQ 和 Kafka 相比，在架构上做了减法，在功能上做了加法�
 - [Apache RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md) —— 业务消息队列
 - [Apache Pulsar](/docs/CS/MQ/Pulsar/Pulsar.md) —— 云原生存算分离队列
 - [RabbitMQ](/docs/CS/MQ/RabbitMQ.md)
+- [NATS (JetStream)](/docs/CS/MQ/NATS.md) —— 轻量高吞吐，subject 路由 + 可叠加持久化
+- [ActiveMQ Artemis](/docs/CS/MQ/ActiveMQ.md) —— JMS 企业级 broker，多协议互操作
+- [NSQ](/docs/CS/MQ/NSQ.md) —— Go 实时分布式，去中心化无 SPOF
+- [ZeroMQ](/docs/CS/MQ/ZeroMQ.md) —— brokerless 消息库，拓扑自组
 
 按机制横向阅读（有些机制是跨产品通用的，可对照读）：
 

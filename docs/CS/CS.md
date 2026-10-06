@@ -196,7 +196,7 @@ concurrency of components, lack of a global clock and independent failures of co
 
 ## MQ
 
-[MQ](/docs/CS/MQ/MQ.md)（[Kafka](/docs/CS/MQ/Kafka/Kafka.md) · [RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md) · [Pulsar](/docs/CS/MQ/Pulsar/Pulsar.md) · [RabbitMQ](/docs/CS/MQ/RabbitMQ.md)）
+[MQ](/docs/CS/MQ/MQ.md)（[Kafka](/docs/CS/MQ/Kafka/Kafka.md) · [RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md) · [Pulsar](/docs/CS/MQ/Pulsar/Pulsar.md) · [RabbitMQ](/docs/CS/MQ/RabbitMQ.md) · [NATS](/docs/CS/MQ/NATS.md) · [ActiveMQ](/docs/CS/MQ/ActiveMQ.md) · [NSQ](/docs/CS/MQ/NSQ.md) · [ZeroMQ](/docs/CS/MQ/ZeroMQ.md)）
 
 ## Cloud Native
 
@@ -246,7 +246,7 @@ MyBatis can use simple XML or Annotations for configuration and map primitives, 
 
 ##### Tomcat
 
-[The Apache Tomcat® software](/docs/CS/Framework/Tomcat/Tomcat.md) is an open source implementation of the Jakarta Servlet, Jakarta Server Pages,
+[Tomcat](/docs/CS/Framework/Tomcat/Tomcat.md) is an open source implementation of the Jakarta Servlet, Jakarta Server Pages,
 Jakarta Expression Language, Jakarta WebSocket, Jakarta Annotations and Jakarta Authentication specifications.
 These specifications are part of the Jakarta EE platform.
 

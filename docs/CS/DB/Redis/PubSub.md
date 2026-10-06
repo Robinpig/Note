@@ -1,31 +1,27 @@
 ## Introduction
 
+[SUBSCRIBE](https://redis.io/commands/subscribe)、[UNSUBSCRIBE](https://redis.io/commands/unsubscribe) 与 [PUBLISH](https://redis.io/commands/publish) 实现了 [发布/订阅（Publish/Subscribe）](http://en.wikipedia.org/wiki/Publish/subscribe) 消息范式：发送者（publisher）并不针对特定接收者（subscriber）发送消息，而是按频道（channel）分类发布；订阅者只接收自己感兴趣的频道消息，双方彼此解耦，从而得到更好的可扩展性与更动态的网络拓扑。
 
+> [!NOTE]
+> `redis-cli` 一旦进入订阅态就不再接受其它命令，只能按 `Ctrl-C` 退出订阅模式。
 
-[SUBSCRIBE](https://redis.io/commands/subscribe), [UNSUBSCRIBE](https://redis.io/commands/unsubscribe) and [PUBLISH](https://redis.io/commands/publish) implement the [Publish/Subscribe messaging paradigm](http://en.wikipedia.org/wiki/Publish/subscribe) where (citing Wikipedia) senders (publishers) are not programmed to send their messages to specific receivers (subscribers). Rather, published messages are characterized into channels, without knowledge of what (if any) subscribers there may be. Subscribers express interest in one or more channels, and only receive messages that are of interest, without knowledge of what (if any) publishers there are. This decoupling of publishers and subscribers can allow for greater scalability and a more dynamic network topology.
+Pub/Sub 即发即弃、不持久化，离线订阅者会永久丢失消息，更适合"在线推送、丢一两条无妨"的场景（实时通知、行情广播、配置热更新等）。若需要持久化、ACK 与重投，应改用 [Streams（Redis 作为 MQ）](/docs/CS/DB/Redis/MQ.md)。
 
-Please note that `redis-cli` will not accept any commands once in subscribed mode and can only quit the mode with `Ctrl-C`.
+## Database & Scoping
 
+Pub/Sub 与 key space 完全无关，它在任何层面都不与 key 空间互相干扰，包括逻辑数据库编号（db number）。
 
-### Database & Scoping
-Pub/Sub has no relation to the key space. It was made to not interfere with it on any level, including database numbers.
+在 db 10 上发布的消息，db 1 上的订阅者同样能收到。
 
-Publishing on db 10, will be heard by a subscriber on db 1.
-
-If you need scoping of some kind, prefix the channels with the name of the environment (test, staging, production, ...).
-
-
-
-
-
-Redis 定时任务
-
-通过开启 Keyspace Notifications 和 Pub/Sub 消息订阅的方式，可以拿到每个键值过期的事件，我们利用这个机制实现了给每个人开启一个定时任务的功能，过期事件中我们可以获取到过期键的 key 值，在 key 值中我们可以存储每个用户的 id，例如“user_1001”的方式，其中数字部分表示用户的编号，通过此编号就可以完成给对应人发送消息通知的功能
+如果确实需要隔离（如区分 test / staging / production 环境），只能在频道名上加前缀。
 
 ## Links
 
-- [Redis](/docs/CS/DB/Redis/struct/struct.md)
-
+- [Redis](/docs/CS/DB/Redis/Redis.md)
+- [Redis 作为 MQ（Streams 消费者组、ACK 等）](/docs/CS/DB/Redis/MQ.md)
 
 ## References
-1. []()
+
+1. Redis Pub/Sub 官方文档：https://redis.io/docs/latest/develop/interact/pubsub/
+2. SUBSCRIBE 命令参考：https://redis.io/commands/subscribe/
+3. PUBLISH 命令参考：https://redis.io/commands/publish/

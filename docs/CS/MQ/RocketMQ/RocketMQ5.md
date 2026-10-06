@@ -192,7 +192,15 @@ proxy  remoting  srvutil  store  style  test  tieredstore  tools
 | 主备冷备（无切换）| 两副本备节点资源利用率低；主宕机时**特殊类型消息**（延时/事务）存在可用性问题 |
 | Raft 多副本 | 高度串行化；基于多数派的确认机制扩展只读副本不够灵活；无法很好支持两机房对等部署、异地多中心 |
 
-5.x 融合两者优势，提出 **DLedger Controller** 作为管控节点，将选主逻辑插件化并优化数据复制实现。它是**轻量级、可拔插的**选主组件，既可部署在 NameServer 中，也可部署在本地。
+5.x 融合两者优势，提出 **Controller** 作为管控节点，将选主逻辑插件化并优化数据复制实现。它是**轻量级、可拔插的**选主组件，既可部署在 NameServer 中，也可部署在本地。
+
+> [!WARNING]
+> **早期资料把这条路径写成「DLedger Controller」，在 5.5.1 中已不准确**，需分三层理解：
+> - **Broker DLedger 模式已废弃** —— 源码常量 `DLEDGER_COMMIT_LOG_DEPRECATION_WARNING`（`BrokerStartup.java:47-49`）写明 "Use Controller mode for new deployments"，启动即打警告。**但官方 5.x 文档页至今没标 deprecation**
+> - **Controller 模式是推荐路径**，与 DLedger 模式**互斥**，同开直接 `System.exit(-4)`
+> - **Controller 自身默认仍用 DLedger 组做 Raft** —— `ControllerConfig.controllerType = "DLedger"`，jRaft 需显式配置。所以「废弃 DLedger」指的是 **Broker 侧的 Raft 接管**，不是整个生态不再用它
+>
+> 两个开关默认都是 `false`，5.x 默认仍是传统主从。详见 [Cluster](/docs/CS/MQ/RocketMQ/Cluster.md)。
 
 ## 5.x 限制与坑
 

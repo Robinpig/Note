@@ -9,6 +9,24 @@ Dledger 作为一个轻量级的 Java Library，它的作用就是将 Raft 有�
 Dledger 只做一件事情，就是 CommitLog
 Dledger 的定位就是把上一层的 StateMachine 给去除，只留下 CommitLog。这样的话，系统就只需要实现一件事：就是把操作日志变得高可用和高可靠。
 
+> [!WARNING]
+> **DLedger 在 5.5.1 中已被源码标记废弃**，而官方文档页至今未标注 —— 写方案前必读。本页的架构描述在 5.5.1 源码中依然成立（类都在），但**新部署不应再选它**，替代路径见 [Cluster](/docs/CS/MQ/RocketMQ/Cluster.md)。
+>
+> 源码常量证据（`BrokerStartup.java:47-49`）：
+> ```java
+> static final String DLEDGER_COMMIT_LOG_DEPRECATION_WARNING =
+>     "Broker DLedger mode is deprecated and may be removed in a future release. " +
+>         "Use Controller mode for new deployments.";
+> ```
+> 启动时由 `warnIfDLedgerCommitLogEnabled` 输出（同文件 `:258`）。
+>
+> 三条容易被文档误导的点：
+> - **官方 5.0 文档页（`/docs/bestPractice/02dledger`）完全没有 deprecation 标注**，措辞仍是「部署指南」—— 只有源码知道这件事
+> - **不存在 `org.apache.rocketmq.dledger` 这个包**，真实位置是 `store/.../store/dledger/` 与 `broker/.../broker/dledger/`
+> - 顶层模块列表**没有** dledger 模块，它是外部依赖 `io.openmessaging.storage:dledger`
+>
+> 另需注意：启用 DLedger 会**强制 `brokerId = -1`**（`BrokerStartup.java:211-213`），且 **broker 不向 NameServer 注册**（`BrokerController.java:1976`），路由改由 DLedger 组内自维护 —— 升级迁移时极易踩坑。
+
 这样做对消息系统还有非常特别的含义。消息系统里面如果还采用 StateMachine + CommitLog 的方式，会出现 double IO 的问题，因为消息本省可以理解为是一个操作记录。
 所以 Dledger 会提供一些对原生 CommitLog 访问的 API。通过这些 API 可以直接去访问 CommitLog。这样的话，只需要写入一次就可以拿到写入的内容。
 Dledger 对外提供的是简单的 API，如下图 6 所示。可以把它理解为一个可以无限写入操作记录的文件，可以不停 append，每一个 append 的记录会加上一个编号。
@@ -96,8 +114,9 @@ RocketMQ 原来的架构里是有 CommitLog 的，现在用 Dledger 去替代原
 
 ## Links
 
+- [Cluster（三代 HA 架构与 DLedger → Controller 迁移）](/docs/CS/MQ/RocketMQ/Cluster.md)
 - [Broker](/docs/CS/MQ/RocketMQ/Broker.md)
-
+- [Store（CommitLog 存储引擎）](/docs/CS/MQ/RocketMQ/Store.md)
 
 ## References
 
