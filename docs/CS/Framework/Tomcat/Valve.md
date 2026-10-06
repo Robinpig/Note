@@ -106,6 +106,8 @@
 | 错误呈现 | `ErrorReportValve` / `JsonErrorReportValve` / `ProxyErrorReportValve` | 默认错误页 / JSON 错误体 / 代理到静态错误页 | `showReport=true`、`showServerInfo=true` | Host（自动装配） |
 | 会话持久 | `PersistentValve` | 非粘滞 LB + `PersistentManager` 的按请求加载/保存 | `filter`、`semaphoreFairness=true`、`semaphoreBlockOnAcquire=true`、`semaphoreAcquireUninterruptibly=true` | Context 语义，允许挂 Host / Engine |
 
+上表只覆盖 `catalina/valves/` 包。集群模块（catalina-ha）另有两颗同样走 Valve 契约的实现：`ReplicationValve`（复制触发器）与 `JvmRouteBinderValve`（failover 后改写 session id 的 jvmRoute 后缀），它们的挂载位置与复制时序见 [Cluster](/docs/CS/Framework/Tomcat/Cluster.md)。错误呈现一族的输出细节（`showServerInfo` 的信息泄露面、`ERROR_*` attributes 的设置点、哪些状态码会断 keep-alive）单独成篇，见 [ErrorPage](/docs/CS/Framework/Tomcat/ErrorPage.md)。
+
 几处需要额外解释的判断：
 
 **访问日志不是「链上打点」。** 这四个实现都走 `AbstractAccessLogValve`，其 `invoke()` 只做两件事：需要 TLS 属性时提前取一次（防 NIO2 断连后丢失）、把 pattern 元素 `cache(request)`，然后交给 next（`valves/AbstractAccessLogValve.java:768-781`）。真正写日志的 `log(request, response, time)` 由 `CoyoteAdapter` 收尾时通过 `Container.logAccess()` 触发（`connector/CoyoteAdapter.java:392-414`），`ContainerBase.logAccess()` 再沿父级回溯（`core/ContainerBase.java:862-876`）。所以：

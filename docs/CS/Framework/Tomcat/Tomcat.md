@@ -470,7 +470,8 @@ HttpServletRequest 的 getSession 方法时，由 Web 容器（比如 Tomcat）�
 Tomcat 的 Session 管理器提供了多种持久化方案来存储 Session，通常会采用高性能的存
 储方式，比如 Redis，并且通过集群部署的方式，防止单点故障，从而提升高可用。同时，
 Session 有过期时间，因此 Tomcat 会开启后台线程定期的轮询，如果 Session 过期了就
-将 Session 失效
+将 Session 失效。容器内置的跨节点复制（不走 Redis，靠 tribes 组播与 TCP 复制
+delta）见 [Cluster](/docs/CS/Framework/Tomcat/Cluster.md)。
 
 ## Log
 
@@ -972,6 +973,8 @@ JVM tuning
 认证与授权是另一条独立的链，它不由 Valve 驱动而是由 `Authenticator` 与 `Realm` 协作完成，且必须理解 JASPIC 前置与 SSO 的放置位置才能配对，见 [Security](/docs/CS/Framework/Tomcat/Security.md)。它下面一层是传输：11 里 APR native 后端已经整体移除、TLS 只剩 JSSE 与 OpenSSL 两条实现路线，多证书与 SNI 的配置模型因此完全变了，见 [TLS](/docs/CS/Framework/Tomcat/TLS.md)。同一层再往上，HTTP/2 在 Tomcat 里不是连接器而是可插拔的 `UpgradeProtocol` 实现，双层并发上限与 push 的移除都在 [HTTP2](/docs/CS/Framework/Tomcat/HTTP2.md)。
 
 应用是怎么被塞进这棵树的（war 探测、描述符合并顺序、内嵌编程入口）见 [Deployment](/docs/CS/Framework/Tomcat/Deployment.md)；进程起来又停不干净的问题见上面的「故障处理」节。
+
+请求路径之外还有三条支线：JSP 从 URL 到 `_jspService` 的运行期编译链（parse / validate / generate / compile / load，以及 `work/` 目录的成因）见 [Jasper](/docs/CS/Framework/Tomcat/Jasper.md)；错误页的三层兜底（应用 `<error-page>` → Context 错误页集合 → [ErrorReportValve](/docs/CS/Framework/Tomcat/ErrorPage.md) 的默认报告）与 `showServerInfo` 这类信息泄露面见 ErrorPage；跨节点的 Session 复制（DeltaManager / BackupManager / ReplicatedMap 三种模型与 tribes 拦截器栈）见 [Cluster](/docs/CS/Framework/Tomcat/Cluster.md)。
 
 最后一条必读：本目录里 [Connector](/docs/CS/Framework/Tomcat/Connector.md)、[memory](/docs/CS/Framework/Tomcat/memory.md) 等篇的源码摘写自 9.0/10.1 时代，机制成立而类名与默认值已变。哪些结论过期、哪些符号已消失，统一记在 [Version_Migration](/docs/CS/Framework/Tomcat/Version_Migration.md)，那一篇同时充当本子树的勘误表。与 Jetty、Undertow 的维度对照见 [compare](/docs/CS/Framework/Tomcat/compare.md)。
 

@@ -239,7 +239,7 @@ SCI 的发现走 `startup/WebappServiceLoader`（全文 239 行），类注释�
 | `:4650` | `loadOnStartup(findChildren())` 按 `load-on-startup` 升序初始化 servlet | 返回 `false` → 启动失败 |
 | `:4689` | 任何异常走 `setState(LifecycleState.FAILED)`           | context 永久不可用，见下           |
 
-`initializers` 是 `StandardContext` 里的 `LinkedHashMap<ServletContainerInitializer, Set<Class<?>>>`（`:229`），由 `ContextConfig` 在解析阶段灌入（`:1343`），`stopInternal` 时清空（`:5022`）。**LinkedHashMap 不是随手选的**：SCI 的调用顺序必须等于发现顺序（容器先、应用后），否则像 JSP / Weld 这类互相依赖的 SCI 就会随机失败。
+`initializers` 是 `StandardContext` 里的 `LinkedHashMap<ServletContainerInitializer, Set<Class<?>>>`（`:229`），由 `ContextConfig` 在解析阶段灌入（`:1343`），`stopInternal` 时清空（`:5022`）。**LinkedHashMap 不是随手选的**：SCI 的调用顺序必须等于发现顺序（容器先、应用后），否则像 JSP / Weld 这类互相依赖的 SCI 就会随机失败。`JasperInitializer` 正是这些 SCI 之一（注册 JSP 编译上下文与 TLD 相关逻辑），从 URL 到 `_jspService` 的完整编译链见 [Jasper](/docs/CS/Framework/Tomcat/Jasper.md)。
 
 这里有个和 docsify 站点上常见描述不一致的语义：**`filterStart()` 或 `loadOnStartup()` 失败不会让 Tomcat 退出，只会让这个 context 变成"存在但不可用"**。表现为该应用所有请求返回 `404`（对 `Mapper` 来说它根本没 available），而其他应用照常服务，日志里只有一条 `Context [...] startup failed`。这也是 `autoDeploy` 场景下最难排查的一类问题：war 已经展开、目录存在、`Host` 里能查到这个 `Context`，但它不接流量。
 
@@ -337,6 +337,8 @@ tomcat.getServer().await();                  // 阻塞，交给 Server 的 shutd
 边界很清楚：动 war 或动描述符 → 换 `docBase`、可能重新展开；动 `WEB-INF/web.xml` → 复用现有目录，走 stop/start。后者还要满足 `Context.getReloadable()` 且 `WEB-INF/classes` 里出现变化时通过 `HostConfig` 的 `reload(DeployedApplication, File, String)`（`:1434`）完成，真正的 session 迁移与旧 webapp ClassLoader 释放语义见 [Tomcat 的 Adavance](/docs/CS/Framework/Tomcat/Tomcat.md?id=adavance)，本篇不重复。
 
 并行部署的回收是另一条路：`ContextName` 会把 `app##v2.war` 解析成同一 `path` 下的新版本，`checkUndeploy()`（`:1694` 起）按名字排序比较相邻项，若旧版本 `Manager.getActiveSessions()`（集群下用 `getActiveSessionsFull()`）为 `0`，就 `undeploy()` 并用 `-1` 哨兵清掉它的全部 redeploy 资源。**"旧版本先活着直到没人用"是并行部署的全部难点**，而它的实现只是这一段字符串排序。
+
+把一个 war 批量同步到集群所有节点的对应物是 `FarmWarDeployer` + `WarWatcher`（watch 目录轮询 + 文件消息分片传输），它挂在 `ClusterDeployer` 契约下，见 [Cluster](/docs/CS/Framework/Tomcat/Cluster.md)。
 
 ## Pitfalls
 

@@ -122,7 +122,7 @@ It also caches the names of classes it has failed to find, so that the next time
 CommonClassLoader 能加载的类都可以被 CatalinaClassLoader 和 SharedClassLoader 用，而 CatalinaClassLoader 和 SharedClassLoader 能加载的类则与对方相互隔离。
 WebAppClassLoader 可以使用 SharedClassLoader 加载到的类，但各个 WebAppClassLoader 实例之间相互隔离。
 
-共享的第三方 JAR 包加载特定 Web 应用的类，是通过把该应用的 `WebappClassLoader` 设为线程上下文类加载器（TCCL）来解决的——这一步发生在 `ContextHandler`/`StandardContext` 的 `bind()`/`unbind()` 里，见 [Container](/docs/CS/Framework/Tomcat/Container.md)。
+共享的第三方 JAR 包加载特定 Web 应用的类，是通过把该应用的 `WebappClassLoader` 设为线程上下文类加载器（TCCL）来解决的——这一步发生在 `StandardContext.bind()` / `unbind()` 里，见 [Container](/docs/CS/Framework/Tomcat/Container.md)。
 
 ## CommonLoader
 

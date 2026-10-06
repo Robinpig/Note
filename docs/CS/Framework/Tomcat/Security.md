@@ -157,6 +157,8 @@ CLIENT-CERT 见下一节。SPNEGO 走 `GSSContext.acceptSecContext`（`CAT/authe
 
 再认证语义在 11 变复杂了。`requireReauthentication`（`SingleSignOn.java:110/185/220`）为 true 时 SSO 不代填 Principal，`AuthenticatorBase.checkForCachedAuthentication()`（`:981`）按 `ssoReauthenticationMode`（`DEFAULT`/`PRINCIPAL`/`PASSWORD`/`FULL`，`:236`、`:1544-1562`）决定用缓存 Principal 还是用缓存用户名口令去 `sso.reauthenticate()`（`:1098-1120`）。类注释列出了五种 auth-method 的回退方式，并点明 CLIENT-CERT 与 SPNEGO 场景下只缓存 Principal 不够用（`SingleSignOn.java:60-83`）。
 
+跨节点的 SSO 表共享由集群模块的 `ClusterSingleSignOn` 承担（把注册/注销动作变成 tribes 消息广播），机制与放置约束见 [Cluster](/docs/CS/Framework/Tomcat/Cluster.md)。
+
 ## Credential storage and CredentialHandler
 
 `CAT/CredentialHandler.java:23` 只有两个方法：`matches(input, stored)` 与 `mutate(input)`（生成存储值）。`RealmBase.authenticate(username, credentials)`（`CAT/realm/RealmBase.java:377-415`）先查存储值，查不到时仍调用 `getCredentialHandler().mutate(credentials)` 消耗一次散列时间，避免通过响应时延枚举用户；比对命中才 `getPrincipal(username)`。

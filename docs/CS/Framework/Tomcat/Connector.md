@@ -1340,7 +1340,7 @@ public boolean isProcessing() {
 
 `upload timeout` 的切换逻辑常被误解：解析完请求头后把读超时改成 `connectionUploadTimeout`（等请求体），请求处理完再改回 `connectionTimeout`（等下一个请求）。所以「客户端发完 header 就慢慢发 body」占用连接的时间由前者控制，而不是 `connectionTimeout`。
 
-返回值的判定顺序也值得记：错误优先于异步，异步优先于升级，`openSocket && !readComplete` 才返回 `LONG`。这解释了为什么半包请求（header 读了一半）不会被 recycle——它带着 request 一起挂在 socket 上，下次可读时继续。
+返回值的判定顺序也值得记：错误优先于异步，异步优先于升级，`openSocket && !readComplete` 才返回 `LONG`。这解释了为什么半包请求（header 读了一半）不会被 recycle——它带着 request 一起挂在 socket 上，下次可读时继续。顺带一提，`statusDropsConnection()`（`Http11Processor.java:212`）决定哪些响应码直接断开 keep-alive（400 / 408 / 411 / 413 / 414 / 500 / 501 / 503），而错误响应本身的呈现策略（应用 `<error-page>` → Context 错误页 → 默认报告阀）见 [ErrorPage](/docs/CS/Framework/Tomcat/ErrorPage.md)。
 
 ### Adapter
 

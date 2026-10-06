@@ -21,6 +21,8 @@ Tomcat 是少数在同一个三年窗口里同时改动了**四件事**的基础
 
 Java 基线与 EE 代次的对应（17 / Servlet 6.1 / Pages 4.0 / EL 6.0 / WebSocket 2.2 / Authentication 3.1 / Annotations 3.0）来自官方版本映射页，与镜像目录 `tomcat-*-11.0.26` 一致。
 
+JSP 侧的代次（Pages 4.0）落到实现上就是 Jasper 生成代码的行为约定，从 `.jsp` 到 Servlet 的编译链见 [Jasper](/docs/CS/Framework/Tomcat/Jasper.md)。
+
 ## The javax to jakarta watershed
 
 这是唯一一条**不可绕过**的分水岭，其它破坏性变更都有临时兼容手段，这条没有。
