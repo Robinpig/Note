@@ -31,5 +31,5 @@ RAG 是解决其中一些挑战的一种方法。它会重定向 LLM，从权威
 - [LLM](/docs/CS/AI/LLM/LLM.md)
 - [Transformer](/docs/CS/AI/Transformer.md)
 - [NLP](/docs/CS/AI/NLP/NLP.md)
-- [Agent](/docs/CS/AI/LLM/Agent.md)
+- [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md)
 - [AI](/docs/CS/AI/AI.md)

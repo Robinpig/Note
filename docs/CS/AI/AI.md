@@ -16,14 +16,15 @@ AI
 │   ├── CNN → 图像 [CV]
 │   ├── RNN/LSTM → 序列（已被 Transformer 取代）
 │   ├── [Transformer](/docs/CS/AI/Transformer.md) / 注意力机制 → [LLM]
+│   │   └── 具体模型与厂商 → [模型总览](/docs/CS/AI/LLM/Model/Overview.md)（DeepSeek、OpenAI、Claude、Gemini、Qwen、开源阵营、本地部署）
 │   └── GAN / Diffusion → 生成式模型
 ├── 应用方向
 │   ├── [NLP]：分类、NER、翻译、摘要、对话、语义检索
 │   ├── [CV]：分类、检测、分割、OCR、视频理解、图像生成
 │   ├── 推荐系统、语音识别、搜索排序
 │   └── [RAG]：检索增强生成，连接私域知识与 LLM
-└── Agent 化：LLM + 工具 + 记忆 + 规划（见 LLM/Agent、MCP、A2A）
-    └── 落地形态：[LLM 应用开发平台](/docs/CS/AI/LLM/Platform.md)（Dify、Coze 等，见 LLM/ 目录）
+└── Agent 化：LLM + 工具 + 记忆 + 规划（见 [LLM/Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md)、[MCP](/docs/CS/AI/LLM/Protocol/MCP.md)、[A2A](/docs/CS/AI/LLM/Protocol/A2A.md)）
+    └── 落地形态：[LLM 应用开发平台](/docs/CS/AI/LLM/Platform/Platform.md)（Dify、Coze 等，见 LLM/ 目录）
 ```
 
 ## 三范式对比

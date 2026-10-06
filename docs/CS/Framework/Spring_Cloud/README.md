@@ -11,12 +11,12 @@ digraph cloud_index {
   node [shape=box, style="rounded,filled", fillcolor="#eef3fb", fontname="Helvetica"];
   edge [color="#555", fontsize=10];
 
-  gw [label:"网关\ngateway/Zuul", fillcolor="#fdeccb"];
-  call [label:"声明式调用与负载均衡\nFeign/LoadBalancer/Ribbon", fillcolor="#e7f4e4"];
-  resil [label:"容错与追踪\nResilience4j/Hystrix/Sleuth", fillcolor="#e4eef7"];
-  conf [label:"配置\nConfig/Consul/Alibaba", fillcolor="#f3e4f7"];
-  msg [label:"消息\nStream", fillcolor="#f7e9e4"];
-  reg [label:"注册中心\n(Nacos/Consul/Eureka)", fillcolor="#efefef"];
+  gw [label="网关\ngateway/Zuul", fillcolor="#fdeccb"];
+  call [label="声明式调用与负载均衡\nFeign/LoadBalancer/Ribbon", fillcolor="#e7f4e4"];
+  resil [label="容错与追踪\nResilience4j/Hystrix/Sleuth", fillcolor="#e4eef7"];
+  conf [label="配置\nConfig/Consul/Alibaba", fillcolor="#f3e4f7"];
+  msg [label="消息\nStream", fillcolor="#f7e9e4"];
+  reg [label="注册中心\n(Nacos/Consul/Eureka)", fillcolor="#efefef"];
 
   reg -> call;
   gw -> call;

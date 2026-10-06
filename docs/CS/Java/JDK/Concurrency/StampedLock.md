@@ -318,7 +318,6 @@ private transient volatile Node tail;
    2. 否则唤醒头结点中的读线程
    3. 如果抢占不到锁，那么就park()当前线程
 
-![img](data:image/svg+xml;utf8,<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="800" height="600"></svg>)
 
 简单地说，acquireWrite()函数就是用来争抢锁的，它的返回值就是代表当前锁状态的邮戳，同时，为了提高锁的性能，acquireWrite()使用大量的自旋重试，因此，它的代码看起来有点晦涩难懂。
 
@@ -484,13 +483,11 @@ private long acquireRead(boolean interruptible, boolean timed, long time) {
 
 acquireRead()的实现相当复杂，大体上分为这么几步：
 
-![img](data:image/svg+xml;utf8,<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="800" height="600"></svg>)
 
 总之，就是自旋，自旋再自旋，通过不断的自旋来尽可能避免线程被真的挂起，只有当自旋充分失败后，才会真正让线程去等待。
 
 下面是释放读锁的过程：
 
-![img](data:image/svg+xml;utf8,<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" version="1.1" width="800" height="600"></svg>)
 
 ### writeLock
 

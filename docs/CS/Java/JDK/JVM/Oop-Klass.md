@@ -422,7 +422,9 @@ In the HotSpot JVM, object headers support many different features:
 > [!TIP]
 >
 > [JEP 450: Compact Object Headers](https://openjdk.org/jeps/450)
-> 把对象头从 16 或 12 字节减少到 8 字节（64位平台），堆内存占用能明显降低，缓存局部性也更好，GC 压力也能减轻
+> 把对象头从 16 或 12 字节减少到 8 字节（64位平台，即 96 bit → 64 bit），堆内存占用能明显降低，缓存局部性也更好，GC 压力也能减轻。
+>
+> 转正节奏：JEP 450（JDK 24 引入）→ [JEP 519](https://openjdk.org/jeps/519)（JDK 25 转为正式产品特性，需 `-XX:+UseCompactObjectHeaders` 显式开启）→ **[JEP 534](https://openjdk.org/jeps/534)（JDK 27 起默认启用）**，27 起可用 `-XX:-UseCompactObjectHeaders` 关闭。
 
 
 The layout of Oops is:

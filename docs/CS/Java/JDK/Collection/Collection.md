@@ -513,6 +513,14 @@ private static void rotate2(List<?> list, int distance) {
 }
 ```
 
+## 本目录导航
+
+集合框架按**接口 → 实现 → 工具类**组织：
+
+- 接口与总览：本页，含 `Iterable` / `Iterator` / `ListIterator`、`Sequenced`（JDK 21 起的顺序集合）、Fail-Fast 与 Fail-Safe、`Arrays` 与 `Collections` 工具类
+- 四类实现：[List](/docs/CS/Java/JDK/Collection/List.md)、[Set](/docs/CS/Java/JDK/Collection/Set.md)、[Queue](/docs/CS/Java/JDK/Collection/Queue.md)、[Map](/docs/CS/Java/JDK/Collection/Map.md)
+- 特殊实现：[WeakHashMap](/docs/CS/Java/JDK/Collection/WeakHashMap.md)（键为弱引用的哈希表）
+
 ## Links
 
 - [JDK](/docs/CS/Java/JDK/JDK.md)

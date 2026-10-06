@@ -49,7 +49,7 @@ digraph cache_arch {
     manager [label="cache manager\n周期性清理、控制 max_size", fillcolor="#e8f0e4"];
 
     worker -> shm [label="查找/插入"];
-    shm --> disk [label="指向文件"];
+    shm -> disk [label="指向文件"];
     worker -> disk [label="读文件（sendfile）\n写临时文件后 rename"];
     loader -> shm [label="重建索引"];
     manager -> disk [label="删除过期文件"];

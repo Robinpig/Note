@@ -1,0 +1,176 @@
+## Introduction
+
+当模型能力达到一定水位后，Agent 在长任务中的表现瓶颈不在模型本身，而在于包裹模型的架构（Harness）。
+更进一步的反直觉发现是：随着模型迭代，曾经不可或缺的 Harness 组件必须被主动拆除，否则反而成为性能负担。
+一句话总结：Harness 的价值不是绝对的，它始终是对模型能力缺口的补偿面（Compensation Surface）
+。模型每强一分，补偿面就移一寸——知道何时该加、何时该减，才是真正的工程判断力
+
+> 本文是 Harness 这个主题的专页。Harness 在 [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) 四组件中的定位（它是基础设施层、Agent = LLM + Harness）在那篇里，本文不重复；这里专注三件事：Agent 会在哪四种情况下失效、Harness 做什么、以及 Runtime / Framework / Harness 三层怎么分。具体的编程 Agent 实现见 [Codex 源码剖析](/docs/CS/AI/LLM/Agent/Product/Codex.md)，能力封装机制见 [Skill](/docs/CS/AI/LLM/Agent/Theory/Skill.md)，而八项共性里最吃重的两项——权限与上下文压缩——各有一篇专页：[权限与沙箱](/docs/CS/AI/LLM/Agent/Theory/Permission.md) 与[上下文压缩](/docs/CS/AI/LLM/Agent/Theory/Compaction.md)。
+
+## Agent 的四种核心失效模式
+
+Harness 的设计要解决什么，得先看 Agent 在哪里会坏。这四种失效模式不是并列罗列，而是**从「几乎不发生」到「每天都在发生」**——越靠后越需要工程手段介入。
+
+| 失效模式 | 表现 | 根因 | 对策 |
+| :--- | :--- | :--- | :--- |
+| **上下文溢出** | 长任务跑到一半模型开始胡言乱语、丢失目标 | 全部信息堆进一个窗口，注意力被稀释 | Context Engineering：按需读取、主动压缩 → [上下文压缩](/docs/CS/AI/LLM/Agent/Theory/Compaction.md) |
+| **目标漂移** | 多步任务里每一步单看都对，整体却走偏了 | 没有全局锚点，每轮只看上一步的局部反馈 | Plan-and-Execute：先出计划再执行、Goal 外循环 |
+| **失败级联** | 一个工具调用失败后，后续步骤全在错误假设上继续 | 错误没有传播机制，Agent 不知道失败了 | 失败恢复：诊断并重试，而不是硬撑 |
+| **越界执行** | Agent 做了不该做的操作（删文件、动生产环境） | 权限模型缺失或授权粒度太粗 | 分层审批：区分自决动作与需确认动作 → [权限与沙箱](/docs/CS/AI/LLM/Agent/Theory/Permission.md) |
+
+这四条决定了 Harness 的组件清单。**八项共性**（文件操作、任务规划、工具编排、子任务委派、状态恢复、权限控制、可观测性、上下文管理）不是凭空列的，而是前四种失效模式的解法集合——每一项都能对上表里某一行。
+
+## Harness 做了什么
+
+一句话：**把「模型决定做什么」与「系统保证做得成」之间那道缝填上**。模型只输出结构化的意图，中间这一段全部是 Harness 的活。
+
+按心智 / 认知 / 行动三层看：
+
+- **心智（Motive）**——目标、计划、约束。Agent 要知道自己在干什么、边界在哪。对应 Plan-and-Execute 与 Goal 外循环
+- **认知（Cognition）**——上下文管理。哪些信息进窗口、哪些留在外部、按什么顺序、什么时候压缩。对应 Context Engineering
+- **行动（Action）**——工具编排与执行。调什么、并行还是串行、失败怎么重试、权限怎么判。对应工具调度、失败恢复、分层审批
+
+这三层与下面「三个工程层次」表里的同名概念是一回事，只是把「Harness 做了什么」换成「做在哪一层」来问。
+## Agent 开发的三个层次
+
+常被混淆的三件事："让 Agent 跑起来"、"让开发更方便"、"让 Agent 完成复杂任务"——对应三层架构：
+
+| 层次 | 代表 | 解决的问题 | 适合场景 |
+| --- | --- | --- | --- |
+| **Runtime** | LangGraph | Agent 如何可靠运行？ | 长流程、状态复杂、需要恢复或审批 |
+| **Framework** | LangChain | Agent 如何更快开发？ | 标准化 Agent 应用开发 |
+| **Harness** | Deep Agents | Agent 如何直接处理复杂任务？ | 多步骤、工具协作、高自主性任务 |
+
+- **Runtime = 操作系统**：图式执行、状态管理、持久化、人机协作（human-in-the-loop）、流式输出——不决定 Agent 做什么，负责让执行**可靠、可恢复、可管理**
+- **Framework = 标准工具箱**：模型调用统一接口、工具注册调用、Agent 循环、提示词与中间件——价值在**标准化和易用性**
+- **Harness = 布置好的工具间**：面向复杂任务预置反复出现的通用能力——**文件系统操作、任务规划、子 Agent 委派、长期记忆、上下文管理**。这些能力在简单问答里是锦上添花，处理代码库/长流程/持续协作时变成基础设施
+
+三层不是替代关系而是**分工关系**：需要最大控制力 → 深入 Runtime；快速搭标准 Agent → 用 Framework；让 Agent 面对真实复杂任务 → 用 Harness。一句话：**Runtime 解决"能稳定运行"，Framework 解决"能方便开发"，Harness 解决"能直接完成复杂任务"。**
+
+## 从提示词工程到上下文工程，再到 Harness 工程
+
+| 工程层次 | 核心问题 | 主要对象 | 典型能力 |
+| --- | --- | --- | --- |
+| Prompt Engineering | 怎么把任务说清楚？ | 指令、示例、角色、输出约束 | 角色设定、Few-shot、结构化输出 |
+| Context Engineering | 模型此刻应该看到什么？ | 文件、记忆、状态、检索结果、工具输出 | 按需读取、上下文筛选、结构化存储 |
+| Harness Engineering | 整个 Agent 如何持续完成任务？ | Agent 运行环境与工程系统 | 规划、工具编排、子 Agent、恢复、权限、观测 |
+
+三者**层层向外扩展**而非替代：提示词工程优化单次交互；上下文工程优化每一步的信息；Harness 工程优化从目标输入到任务完成的整个过程。
+
+### Prompt Stuffing 的三个问题
+
+朴素做法是把所有可能有用的信息都塞进上下文窗口，任务规模一大就会：
+
+1. **上下文溢出**：token 上限装不下
+2. **注意力稀释**：信息越多，模型越难稳定关注当前真正重要的内容
+3. **无法扩展**：能力受限于单次 Prompt，真实项目规模远超一个窗口
+
+### Context Engineering：按需获取信息
+
+以 Deep Agents 的虚拟文件系统为例：`read_file` 按需读取、`write_file` 保存中间结论、`grep`/`glob` 定位信息、大文件只读必要片段。上下文只保留当前步骤需要的信息，其余存外部环境，需要时取回——和人的工作方式一样：不会把所有文档背在脑中，而是先明确问题，再开文件、做笔记、搜资料。**上下文工程的本质不是堆 Prompt，而是为模型建立一套高效获取、筛选、保存和恢复信息的基础设施。**
+
+### Harness Engineering：成功 Agent 产品的八项共性
+
+Claude Code、Codex、Manus、Cursor 等产品定位不同，处理复杂任务时都逐渐长出相似能力——这不是巧合，任务足够复杂时它们就从锦上添花变成必需品：
+
+**Harness Engineering = 围绕模型和 Runtime，构建一套能够规划任务、管理上下文、调用工具、委派工作、控制风险并恢复执行的工程系统**（正在形成中的工程概念）。
+
+这八项不是随意罗列的清单——**每一项都能对上前面四种失效模式的解法**，也各对应本库的一篇专页或某个已有机制：
+
+| 共性 | 解决什么 | 本库哪里有 |
+| :--- | :--- | :--- |
+| **1. 文件系统操作** | 让 Agent 能「打开文件看」而不是靠猜；是 Harness 存在的基础前提 | [Codex](/docs/CS/AI/LLM/Agent/Product/Codex.md)、[DSH](/docs/CS/AI/LLM/Agent/Product/DSH.md) 的 fs 插件 |
+| **2. 任务规划** | 目标漂移的解药：先出计划再执行，而不是走一步看一步 | [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) 的 Plan-and-Execute |
+| **3. 工具编排** | 并行还是串行、失败怎么重试、结果怎么写回上下文 | [Tools](/docs/CS/AI/LLM/Protocol/Tools.md) |
+| **4. 子任务委派** | 长任务分片并行；也用于隔离污染主上下文的副作用输出 | [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) 的 SubAgent、[OpenCode](/docs/CS/AI/LLM/Agent/Product/OpenCode.md) 的三个内置子 Agent |
+| **5. 状态恢复** | 失败级联与中断的解药：让长任务能断点续跑 | [DSH](/docs/CS/AI/LLM/Agent/Product/DSH.md) 的 Session 持久化、[Codex](/docs/CS/AI/LLM/Agent/Product/Codex.md) 的 Rollout |
+| **6. 权限控制** | 越界执行的解药：区分自决动作与需确认动作 | **[权限与沙箱](/docs/CS/AI/LLM/Agent/Theory/Permission.md)** |
+| **7. 可观测性** | 让 Agent 的行为可审计——企业落地的硬前提 | [权限与沙箱](/docs/CS/AI/LLM/Agent/Theory/Permission.md) 的企业策略注入一节 |
+| **8. 上下文管理** | 上下文溢出的解药：按需读取 + 主动压缩 | **[上下文压缩](/docs/CS/AI/LLM/Agent/Theory/Compaction.md)** |
+
+其中第 6 与第 8 项是两篇独立专页——它们虽然只是八项里的两项，却是**最容易被实现错、且错了代价最大**的两项：权限配错会让 Agent 删掉不该删的文件，压缩策略配错会让长任务在十几轮后「忘记自己为什么出发」。
+
+> ⚠️ **一项值得注意的规律**：这八项里**只有第 1 项是几乎所有产品都做的**（文件操作），其余七项的实现深度在各产品间差异极大。判断一个 Agent 产品的成熟度，不是看它「有没有规划功能」，而是看**压缩策略、权限粒度、恢复语义这三项做得对不对**——前两项决定了它能不能在真实项目里跑长任务，后一项决定了它出问题时能不能接上。
+
+### 三句话总结
+
+1. 提示词工程解决**表达**问题：怎样把任务交代清楚
+2. 上下文工程解决**信息**问题：怎样让模型在正确时刻看到正确信息
+3. Harness 工程解决**系统**问题：怎样让 Agent 在真实环境中持续、可靠、可控地完成任务
+
+真正决定复杂 Agent 上限的，往往不是某一句神奇提示词，而是模型背后那套管理信息、组织行动和保障执行的工程系统。
+
+## 工程实例：Codex
+
+OpenAI Codex 是 Harness 概念的生产级实现（Rust），可以作为理解抽象概念的具体标本。本节提炼可迁移的设计；仓库目录、源码文件路径、`run_turn` 主循环与 app-server 协议等实现细节见 [Codex](/docs/CS/AI/LLM/Agent/Product/Codex.md)。
+
+四条定位：
+
+- **Harness 是循环，不是单次调用**：`run_turn` 持续把模型输出、工具结果和新输入编排成下一次采样
+- **Harness 是运行时，不是提示词模板**：工具路由、并发闸门、取消令牌、沙箱与审批，把"会说"变成"能安全地做"
+- **Harness 是集成层，不是固定 UI**：统一的线程/事件协议让 CLI、IDE、业务系统共享同一个 Agent 内核
+- **模型给出决策，Harness 负责让决策在现实环境中可执行、可控制、可恢复、可观察**
+
+### 三层边界
+
+| 层 | 职责 |
+| --- | --- |
+| Host | 外壳：CLI、IDE 扩展、业务面板 |
+| Harness | 可复用的中间层，让 Host 获得"能工作的 Agent" |
+| Model | 只输出"建议说什么、调用什么工具" |
+
+### 四种上下文粒度
+
+| 粒度 | 含义 |
+| --- | --- |
+| Thread | 项目文件夹，协议层的长期对象（可持久化、恢复、分叉） |
+| Turn | 一次工单 / 一轮完整协作 |
+| Step | 一次思考，即一次模型采样的快照 |
+| Item | 工单日志中可持久化的"事实"（一次输入、一次工具结果） |
+
+工具调用闭环：模型产生 FunctionCall → Harness 的路由器找到实现 → 执行 → 结果作为 Item 写回历史。**这个闭环的真正所有者是 Harness，不是模型**——所以工具结果必须写回模型上下文（不能只显示给用户），否则就是"刚做完就忘"。
+
+### 安全是分层叠加的
+
+Codex 把"能不能执行一个动作"拆成四层，缺一不可：
+
+| 层 | 回答的问题 |
+| --- | --- |
+| 沙箱 | 能访问什么（读写范围、网络、系统调用） |
+| 策略 | 是否符合规则（自动放行 / 确认 / 拒绝） |
+| 审批 | 是否有人允许（低风险自动放行，高风险升级给人） |
+| schema | 模型被告知什么（工具按什么方式暴露） |
+
+关键原则 **fail closed**：等待审批期间连接断开或 Turn 被中断，一律默认 Abort，绝不偷偷放行；有副作用的命令与修改文件的补丁走两条独立审批通道。
+
+### 其他可迁移的设计
+
+- **快照保证决策与执行一致**：每次采样前捕获一份不可变的运行设置（模型、路由、环境），执行时看到的就是决策时的设置
+- **状态机承接不确定性**：重试、取消、人工审批都是状态而不是异常分支；取消信号沿调用链传播到模型流、工具和审批等待
+- **UI 订阅事实流而非自存状态**：宿主只接收 Item 事件流，不自己维护一份任务状态——这是同一个内核能驱动多种 UI 的前提
+- **Harness 是外部记忆管理器**：给模型的事实与给人/系统的记录分开存放，上下文过长时压缩但保留可恢复的原始日志
+
+### 什么时候才需要 Harness
+
+单文档摘要这类简单任务直接调模型即可。出现以下特征再上 Harness：多步"观察-行动"循环、修改真实状态、需要实时人工介入、长任务、需要权限与审计。
+
+接入业务系统时的职责边界：**业务系统是 system of record，Harness 管推理动作闭环**。五个要点：
+
+1. 业务上下文结构化给出（对象 ID、字段、关联资源）
+2. 写操作设计成显式工具，带 schema 和审批（如 `create_draft_ticket`）
+3. UI 展示 Item：查了什么、改了什么、卡在哪个审批
+4. 保留取消与重连语义，任务状态不要存在前端内存里
+5. 先定风险边界（文件可写、工具只读、动作需批准），再写提示词
+
+## Links
+
+- [上下文压缩](/docs/CS/AI/LLM/Agent/Theory/Compaction.md) / [权限与沙箱](/docs/CS/AI/LLM/Agent/Theory/Permission.md) — 八项共性里最吃重的两项专页
+- [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) / [Self-Evolving](/docs/CS/AI/LLM/Agent/Practice/Self-Evolving.md)
+- [Codex](/docs/CS/AI/LLM/Agent/Product/Codex.md) / [DSH](/docs/CS/AI/LLM/Agent/Product/DSH.md) — 两个 Harness 工程实例（Codex 有源码级分析）
+- [LLM 应用开发平台](/docs/CS/AI/LLM/Platform/Platform.md) — Harness 的产品化形态：Coze / Dify 把这套执行面做成了默认件
+
+## References
+
+- [Deep Agents（一）：理解 Agent 开发的三个层次](https://mp.weixin.qq.com/s/4df6MbzPC1OKbUoWx92wJw)
+- [Deep Agents（二）：从提示词工程到上下文工程，再到 Harness 工程](https://mp.weixin.qq.com/s/xFMS__Nj3yDh7yBPH_PV4A)
+- [万字长文 | 深度解读 Codex Harness 源码](https://mp.weixin.qq.com/s/xa2xrK-LyM5Ktow2hq1vWQ)

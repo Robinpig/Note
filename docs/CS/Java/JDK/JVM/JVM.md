@@ -2185,12 +2185,20 @@ jmap -dump:format=b
 with jvisualvm
 
 
+## 本目录导航
+
+JVM 笔记沿「类加载 → 运行时数据区 → 执行引擎 → 运行时支撑」展开，垃圾回收单独成页（见末条）：
+
+- 类加载与元数据：[ClassFile](/docs/CS/Java/JDK/JVM/ClassFile.md)（class 文件格式）、[ClassLoader](/docs/CS/Java/JDK/JVM/ClassLoader.md)、[Method](/docs/CS/Java/JDK/JVM/Method.md)、[Oop-Klass](/docs/CS/Java/JDK/JVM/Oop-Klass.md)（oop / klass 二分）、[Metaspace](/docs/CS/Java/JDK/JVM/Metaspace.md)、[SymbolTable](/docs/CS/Java/JDK/JVM/SymbolTable.md)
+- 运行时数据区：[Runtime Data Area](/docs/CS/Java/JDK/JVM/Runtime_Data_Area.md)、[Stack](/docs/CS/Java/JDK/JVM/Stack.md)、[frame](/docs/CS/Java/JDK/JVM/frame.md)、[TLAB](/docs/CS/Java/JDK/JVM/TLAB.md)
+- 执行引擎与编译：[interpreter](/docs/CS/Java/JDK/JVM/interpreter.md)（模板解释器）、[c1](/docs/CS/Java/JDK/JVM/c1.md)、[JIT](/docs/CS/Java/JDK/JVM/JIT.md)（分层编译）、[CodeCache](/docs/CS/Java/JDK/JVM/CodeCache.md)、[ExecutionEngine](/docs/CS/Java/JDK/JVM/ExecutionEngine.md)、[Javac](/docs/CS/Java/JDK/JVM/Javac.md)
+- 线程与运行时支撑：[Thread](/docs/CS/Java/JDK/JVM/Thread.md)、[Safepoint](/docs/CS/Java/JDK/JVM/Safepoint.md)、[JavaCall](/docs/CS/Java/JDK/JVM/JavaCall.md)、[start](/docs/CS/Java/JDK/JVM/start.md)（构建与启动）、[destroy](/docs/CS/Java/JDK/JVM/destroy.md)（有序 / 异常关闭）
+- 性能与实验：[JMH](/docs/CS/Java/JDK/JVM/JMH.md)、[Graal](/docs/CS/Java/JDK/JVM/Graal.md)
+- 垃圾回收：[GC](/docs/CS/Java/JDK/JVM/GC/GC.md) 及其收集器分页
+
 ## Links
 
 - [JDK](/docs/CS/Java/JDK/JDK.md)
-- [Runtime Data Area](/docs/CS/Java/JDK/JVM/Runtime_Data_Area.md)
-- [Java Virtual Machine Stack](/docs/CS/Java/JDK/JVM/Stack.md)
-- [frame](/docs/CS/Java/JDK/JVM/frame.md)
 
 ## References
 

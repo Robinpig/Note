@@ -381,7 +381,7 @@ But the JVM can't exit until all the (nondaemon) threads have terminated, so fai
 #### Delayed and Periodic Tasks
 
 The Timer facility manages the execution of deferred (“run this task in 100 ms”) and periodic (“run this task every 10 ms”) tasks.
-However, Timer has some drawbacks, and [ScheduledThreadPoolExecutor](/docs/CS/Java/JDK/Concurrency/sche.md) should be thought of as its replacement.
+However, Timer has some drawbacks, and [ScheduledThreadPoolExecutor](/docs/CS/Java/JDK/sche.md) should be thought of as its replacement.
 You can construct a ScheduledThreadPoolExecutor through its constructor or through the newScheduledThreadPool factory.
 
 ## Performance
@@ -507,13 +507,20 @@ volatile
 
 
 
+## 本目录导航
+
+本页是总纲（线程安全三要素、共享对象、并发容器、Amdahl 定律与锁竞争），全目录沿「线程语义 → 锁与同步器 → 执行框架 → Loom 时代原语」四条线展开：
+
+- 线程与内存模型：[Thread](/docs/CS/Java/JDK/Concurrency/Thread.md)、[JMM](/docs/CS/Java/JDK/Concurrency/JMM.md)、[volatile](/docs/CS/Java/JDK/Concurrency/volatile.md)、[synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md)
+- 锁的基础：[Parker](/docs/CS/Java/JDK/Concurrency/Parker.md)（JVM 层阻塞原语）、[AQS](/docs/CS/Java/JDK/Concurrency/AQS.md)、[Lock](/docs/CS/Java/JDK/Concurrency/Lock.md)、[ReentrantLock](/docs/CS/Java/JDK/Concurrency/ReentrantLock.md)、[ReadWriteLock](/docs/CS/Java/JDK/Concurrency/ReadWriteLock.md)、[StampedLock](/docs/CS/Java/JDK/Concurrency/StampedLock.md)
+- 同步器与原子量：[Semaphore](/docs/CS/Java/JDK/Concurrency/Semaphore.md)、[CountDownLatch](/docs/CS/Java/JDK/Concurrency/CountDownLatch.md)、[CyclicBarrier](/docs/CS/Java/JDK/Concurrency/CyclicBarrier.md)、[Phaser](/docs/CS/Java/JDK/Concurrency/Phaser.md)、[Exchanger](/docs/CS/Java/JDK/Concurrency/Exchanger.md)、[Atomic](/docs/CS/Java/JDK/Concurrency/Atomic.md)
+- 执行框架：[ThreadPoolExecutor](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md)、[ForkJoinPool](/docs/CS/Java/JDK/Concurrency/ForkJoinPool.md)、[Future](/docs/CS/Java/JDK/Concurrency/Future.md)、[定时执行](/docs/CS/Java/JDK/sche.md)
+- Loom 与线程上下文：[ThreadLocal](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md)、[ThreadLocalRandom](/docs/CS/Java/JDK/Concurrency/ThreadLocalRandom.md)、[ScopedValue](/docs/CS/Java/JDK/Concurrency/ScopedValues.md)、[VirtualThread](/docs/CS/Java/JDK/Concurrency/VirtualThread.md)
+
 ## Links
 
 - [JDK](/docs/CS/Java/JDK/JDK.md)
 - [C++ Concurrency](/docs/CS/C++/Concurrency.md)
-- [ThreadLocal](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md)
-- [ScopedValue](/docs/CS/Java/JDK/Concurrency/ScopedValues.md)
-- [VirtualThread](/docs/CS/Java/JDK/Concurrency/VirtualThread.md)
 
 ## References
 

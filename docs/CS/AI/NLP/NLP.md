@@ -97,7 +97,7 @@ ELMo、BERT 开始，每个词的表示随上下文动态生成，歧义消解�
 - 知识密集任务：[RAG](/docs/CS/AI/RAG.md)（检索增强生成）= 向量检索相关段落 + LLM 基于段落生成，缓解幻觉与知识时效问题
 - 长文档：分块（chunking）、滑窗、重排序（reranker）、上下文压缩
 - 评估从准确率 / F1 扩展到 LLM-as-judge、忠实度、引用归因
-- Agent 化：模型通过工具调用与环境交互完成多步任务，见 [Agent](/docs/CS/AI/LLM/Agent.md)
+- Agent 化：模型通过工具调用与环境交互完成多步任务，见 [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md)
 
 ## 评估与工程常识
 

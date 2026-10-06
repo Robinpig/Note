@@ -8,12 +8,12 @@ digraph mybatis_index {
   node [shape=box, style="rounded,filled", fillcolor="#eef3fb", fontname="Helvetica"];
   edge [color="#555", fontsize=10];
 
-  sess [label:"会话\nSqlSession", fillcolor="#fdeccb"];
-  exec [label:"执行\nExecutor", fillcolor="#e7f4e4"];
-  stmt [label:"语句与映射\nStatementHandler/ResultSetHandler/Reflector/binding/KeyGenerator", fillcolor="#e4eef7"];
-  cache [label:"缓存\nCache", fillcolor="#f3e4f7"];
-  plug [label:"插件与日志\nInterceptor/Logging", fillcolor="#f7e9e4"];
-  init [label:"初始化与集成\nInit/DataSource/MyBatis-Spring", fillcolor="#efefef"];
+  sess [label="会话\nSqlSession", fillcolor="#fdeccb"];
+  exec [label="执行\nExecutor", fillcolor="#e7f4e4"];
+  stmt [label="语句与映射\nStatementHandler/ResultSetHandler/Reflector/binding/KeyGenerator", fillcolor="#e4eef7"];
+  cache [label="缓存\nCache", fillcolor="#f3e4f7"];
+  plug [label="插件与日志\nInterceptor/Logging", fillcolor="#f7e9e4"];
+  init [label="初始化与集成\nInit/DataSource/MyBatis-Spring", fillcolor="#efefef"];
 
   sess -> exec;
   exec -> stmt;

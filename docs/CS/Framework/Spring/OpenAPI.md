@@ -155,7 +155,7 @@ class OpenApiGroupsConfig {
 | Actuator | 可选把 actuator 端点也纳入文档 |
 | **MCP** | springdoc 3.x 支持把 REST API **同时暴露为 MCP 工具**，让 AI Agent 直接调用 |
 
-最后一项是值得留意的新方向：既然 OpenAPI 已经完整描述了 API 的入参出参，它天然就是一份高质量的 tool definition。springdoc 3.0.3 起支持把 API 同时注册成 MCP 工具（含"安全/会修改数据"的分类标注与人工确认环节），相关背景见 [MCP](/docs/CS/AI/LLM/MCP.md)。
+最后一项是值得留意的新方向：既然 OpenAPI 已经完整描述了 API 的入参出参，它天然就是一份高质量的 tool definition。springdoc 3.0.3 起支持把 API 同时注册成 MCP 工具（含"安全/会修改数据"的分类标注与人工确认环节），相关背景见 [MCP](/docs/CS/AI/LLM/Protocol/MCP.md)。
 
 ## 生产环境
 
@@ -182,7 +182,7 @@ class OpenApiGroupsConfig {
 - [统一异常处理](/docs/CS/Framework/Spring/Exception.md)
 - [Validation](/docs/CS/Framework/Spring/Validation.md)
 - [Spring Security](/docs/CS/Framework/Spring/Security.md)
-- [MCP](/docs/CS/AI/LLM/MCP.md)
+- [MCP](/docs/CS/AI/LLM/Protocol/MCP.md)
 
 ## References
 

@@ -284,7 +284,7 @@ From [JVM](https://book.douban.com/subject/34907497/):
 
 And
 
-![GC Collector](../img/GC-collector.png)
+![GC Collector](../img/GC-Collector.png)
 
 
 
@@ -352,6 +352,9 @@ The serial collector uses a single thread to perform all garbage collection work
 
 It's best-suited to single processor machines because it can't take advantage of multiprocessor hardware, although it can be useful on multiprocessors for applications with small data sets (up to approximately 100 MB).
 The serial collector is selected by default on certain hardware and operating system configurations, or can be explicitly enabled with the option `-XX:+UseSerialGC`.
+
+> [!WARNING]
+> 上述「受限环境默认选 Serial」的口径**在 JDK 27 已废止**（[JEP 523](https://openjdk.org/jeps/523)）：无论 CPU 数量与物理内存大小，JVM 在未显式指定收集器时一律选 G1。Serial 仍可显式启用（`-XX:+UseSerialGC`），「适合单处理器 / 小数据集」的适用场景说明依然成立。
 
 Cheney algorithm
 
@@ -547,6 +550,12 @@ GC log
 - Unable to create native threads
 
 
+
+## 本目录导航
+
+- 本页：GC 算法与分代假设、堆布局、Young GC / Full GC 与 `System.gc`、收集器横向对比与调优、内存泄漏与 OOM
+- 收集器逐篇：[Serial](/docs/CS/Java/JDK/JVM/GC/Serial.md)、[Parallel](/docs/CS/Java/JDK/JVM/GC/Parallel.md)（吞吐优先）、[CMS](/docs/CS/Java/JDK/JVM/GC/CMS.md)、[G1](/docs/CS/Java/JDK/JVM/GC/G1.md)、[Shenandoah](/docs/CS/Java/JDK/JVM/GC/Shenandoah.md)、[ZGC](/docs/CS/Java/JDK/JVM/GC/ZGC.md)、[Epsilon](/docs/CS/Java/JDK/JVM/GC/Epsilon.md)（只分配不回收）
+- 卡片表与写屏障：[CardTable](/docs/CS/Java/JDK/JVM/GC/CardTable.md)
 
 ## Links
 

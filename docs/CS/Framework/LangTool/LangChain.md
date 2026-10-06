@@ -45,7 +45,7 @@ agent.invoke(
 
 - [LangGraph](/docs/CS/Framework/LangTool/LangGraph.md) — 低级别有状态 Agent 编排运行时
 - [LangChain4j](/docs/CS/Framework/LangTool/LangChain4j.md) — Java 实现（Spring/Quarkus 集成）
-- [Harness](/docs/CS/AI/LLM/Harness.md) — Runtime/Framework/Harness 三层定位
+- [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md) — Runtime/Framework/Harness 三层定位
 - [AI](/docs/CS/Framework/Spring/AI.md)
 
 

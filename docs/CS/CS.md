@@ -30,7 +30,7 @@
 
 ### AI 线
 
-[人工智能](/docs/CS/AI/AI.md) → [大模型](/docs/CS/AI/LLM/LLM.md) → [Agent](/docs/CS/AI/LLM/Agent.md) → [MCP](/docs/CS/AI/LLM/MCP.md)
+[人工智能](/docs/CS/AI/AI.md) → [大模型](/docs/CS/AI/LLM/LLM.md) → [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) → [MCP](/docs/CS/AI/LLM/Protocol/MCP.md)
 
 从机器学习基础到 LLM 应用与 Agent 工程实践。
 
@@ -196,7 +196,7 @@ concurrency of components, lack of a global clock and independent failures of co
 
 ## MQ
 
-[MQ](/docs/CS/MQ/MQ.md)
+[MQ](/docs/CS/MQ/MQ.md)（[Kafka](/docs/CS/MQ/Kafka/Kafka.md) · [RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md) · [Pulsar](/docs/CS/MQ/Pulsar/Pulsar.md) · [RabbitMQ](/docs/CS/MQ/RabbitMQ.md)）
 
 ## Cloud Native
 
@@ -249,6 +249,18 @@ MyBatis can use simple XML or Annotations for configuration and map primitives, 
 [The Apache Tomcat® software](/docs/CS/Framework/Tomcat/Tomcat.md) is an open source implementation of the Jakarta Servlet, Jakarta Server Pages,
 Jakarta Expression Language, Jakarta WebSocket, Jakarta Annotations and Jakarta Authentication specifications.
 These specifications are part of the Jakarta EE platform.
+
+##### Jetty
+
+[Eclipse Jetty](/docs/CS/Framework/Jetty/Jetty.md) is an open-source Java HTTP server and Servlet container, usable either as a standalone
+distribution or as an embeddable library. Since version 12 its core is deliberately independent of the Servlet API, with
+Jakarta EE support supplied by separate `ee10` / `ee11` module sets.
+
+##### Undertow
+
+[Undertow](/docs/CS/Framework/Undertow/Undertow.md) is a flexible, non-blocking Java web server built on [XNIO](/docs/CS/Framework/Undertow/XNIO.md).
+Its core models a request as a single [exchange](/docs/CS/Framework/Undertow/Exchange.md) over a pluggable handler chain, with Servlet
+support layered on top rather than baked in.
 
 ##### ZooKeeper
 

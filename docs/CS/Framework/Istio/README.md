@@ -11,8 +11,8 @@ digraph istio_index {
   arch [label="架构与安装\nIstio/Install", fillcolor="#fdeccb"];
   traffic [label="流量治理\nTrafficManagement", fillcolor="#e7f4e4"];
   sec [label="安全\nSecurity", fillcolor="#e4eef7"];
-  obs [label:"可观测与排障\nObservability/Performance/Troubleshooting", fillcolor="#f3e4f7"];
-  ext [label:"扩展与形态\nWasmPlugin/Envoy/VMWorkload/Ambient/ecosystem", fillcolor="#f7e9e4"];
+  obs [label="可观测与排障\nObservability/Performance/Troubleshooting", fillcolor="#f3e4f7"];
+  ext [label="扩展与形态\nWasmPlugin/Envoy/VMWorkload/Ambient/ecosystem", fillcolor="#f7e9e4"];
   dp [label="数据面\nEnvoy sidecar / ztunnel", fillcolor="#efefef"];
 
   arch -> traffic;

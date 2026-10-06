@@ -224,8 +224,9 @@ Self-attention 的时间和空间都是 O(n²)，上下文从 4k 涨到 128k，�
 - [DL](/docs/CS/AI/DL/DL.md)
 - [CNN](/docs/CS/AI/CNN.md)
 - [PyTorch](/docs/CS/AI/PyTorch.md)
-- [Agent](/docs/CS/AI/LLM/Agent.md)
-- [DeepSeek](/docs/CS/AI/LLM/DeepSeek.md)
+- [模型总览](/docs/CS/AI/LLM/Model/Overview.md)
+- [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md)
+- [DeepSeek](/docs/CS/AI/LLM/Model/DeepSeek.md)
 
 ## References
 

@@ -628,7 +628,7 @@ if __name__ == "__main__":
 - [LangChain](/docs/CS/Framework/LangTool/LangChain.md) — LangChain 生态与 LangGraph 的位置
 - [Langflow](/docs/CS/Framework/LangTool/Langflow.md) — 把 LangGraph 式流程搬到画布上，可导出 Python
 - [Pydantic AI](/docs/CS/Framework/PydanticAI.md) — 类型优先的替代路线
-- [Agent](/docs/CS/AI/LLM/Agent.md) / [Harness](/docs/CS/AI/LLM/Harness.md) — 编排之上的工程面
+- [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) / [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md) — 编排之上的工程面
 - [AI](/docs/CS/Framework/Spring/AI.md)
 
 

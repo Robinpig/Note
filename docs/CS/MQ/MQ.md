@@ -1,73 +1,126 @@
 ## Introduction
 
-In computer science, message queues and mailboxes are software-engineering components typically used for inter-process communication (IPC), or for inter-thread communication within the same process.
-They use a queue for messaging – the passing of control or of content. Group communication systems provide similar kinds of functionality.
+在计算机科学中，消息队列与邮箱（mailbox）是软件工程中的组件，通常用于进程间通信（IPC），或用于同一进程内的线程间通信。它们借助队列来传递消息 —— 即传递控制权或内容。组通信系统（group communication）提供的是类似的功能。
+
+消息队列做的事本质上只有两件：**把数据可靠地存起来**，以及**把数据高效地递给需要它的一方**。围绕这两件事，各家在模型、协议、存储与运维上做出了不同取舍，形成了不同的适用场景。本文先给出三个主流开源产品（Kafka / RocketMQ / Pulsar）的定位差异与选型建议，再逐层展开消息系统、协议、存储、客户端、模型、特性与常见问题；最后给出各产品的子目录导航。
+
+> [!NOTE]
+> 本目录收录的三个产品笔记都标注了**经源码核实的版本基线与纠错点** —— 三者都在 4.x 附近经历了版本级重构（Kafka 4.3.1 / RocketMQ 5.5.1 / Pulsar 4.2.4），网上流传的中文资料大多停留在 2.x/3.x，照抄容易出错。
+
+```dot
+digraph MQ {
+    rankdir=TB;
+    node [shape=box, style=rounded];
+
+    subgraph cluster_store {
+        label="存储模型";
+        direction=LR;
+        multi [label="多文件路线\n每分区独立 segment"];
+        single [label="单文件路线\n共用 commitlog / ledger"];
+    }
+
+    subgraph cluster_consume {
+        label="消费模型";
+        direction=LR;
+        exclusive [label="分区独占\nConsumer Group"];
+        shared [label="记录级共享\nShare Group / 队列语义"];
+    }
+
+    subgraph cluster_compute {
+        label="计算与存储关系";
+        direction=LR;
+        coupled [label="存算一体\nKafka"];
+        split [label="存算分离\nPulsar / RocketMQ 5.x Proxy"];
+    }
+
+    cluster_store -> cluster_consume;
+    cluster_compute -> cluster_store;
+}
+```
+
+### 三个产品的定位差异
+
+理解三者差异最快的方式是问三个问题：**数据存在哪、谁来做路由、怎么扩**。
+
+| | Kafka 4.3.1 | RocketMQ 5.5.1 | Pulsar 4.2.4 |
+| -- | --------- | ------------- | ----------- |
+| 定位 | 事件流平台（日志型） | 面向业务的消息队列 | 存算分离的云原生队列 |
+| 存储路线 | **多文件**：每分区独立 segment | **单文件**：全 topic 共用 commitlog | **两级**：topic → ledger → segment → entry |
+| 存储引擎 | 自研日志系统 | 自研 CommitLog | **独立的 Apache BookKeeper** |
+| 零拷贝路线 | `FileChannel.transferTo`（内核 sendfile） | **mmap**（能拿到消息内容） | mmap + BookKeeper ledger |
+| 路由 | 客户端直连 broker | NameServer 轻量注册中心 | metadata store + bundle 切分 |
+| 扩容粒度 | 加 partition（受单文件路线限制） | 加 topic 几乎无影响 | **加 bookie**（存储层独立扩） |
+| 消息过滤 | 需自行用 Streams | Tag + SQL92（Broker 端） | Tag + SQL92（JavaCC AST） |
+| 事务消息 | 事务/幂等生产者 | 2PC + 回查（half 消息改写 topic） | TC 事务协调器（**默认关闭**） |
+| 共享消费 | 4.x 新增 ShareGroup（记录级） | 无（队列语义靠 topic 模拟） | 无（天然支持同一订阅多订阅者） |
+| 跨集群复制 | MirrorMaker v2 | 4.x 已移除内置方案 | 4.x **已移除** geo-replication |
+
+> [!IMPORTANT]
+> **零拷贝路线的差异决定了两者的功能边界**，这是本目录最值得记住的一条主线：Kafka 用 `sendfile` 只把字节搬出去，应用层拿不到消息内容，因此做不了「读到内容再过滤/改写」这类事；RocketMQ 用 `mmap` 能拿到完整消息，才可能有 Broker 端的 SQL92 表达式过滤与死信二次投递。详见 [Kafka Storage](/docs/CS/MQ/Kafka/Storage.md) 与 [RocketMQ Store](/docs/CS/MQ/RocketMQ/Store.md)。
+
+### 选型速查
+
+| 场景 | 推荐 | 理由 |
+| ---- | ---- | ---- |
+| 日志聚合、埋点、大数据管道 | **Kafka** | 吞吐与生态（Streams/Connect）最强 |
+| 业务消息、订单/通知、需要事务与延时 | **RocketMQ** | 功能完备，topic 多也不掉性能 |
+| 多租户、存算独立扩、细粒度扩容 | **Pulsar** | bundle 级卸载 + bookie 独立扩容 |
+| topic 数量极多（数千以上） | **RocketMQ** | 共用 commitlog，无文件数爆炸 |
+| 需要队列语义（多消费者抢任务） | **Pulsar** 或 Kafka 4.x ShareGroup | 记录级共享 + 逐条 ack |
+
+> [!TIP]
+> 不要迷信「Kafka 吞吐一定更高」。Kafka 的优势建立在 **partition 数量可控**的前提上 —— partition 多到一定程度，写侧会退化为随机写。RocketMQ 共用 commitlog，topic 数量对其影响小得多。
+
+### 目录导航
+
+- [Apache Kafka](/docs/CS/MQ/Kafka/Kafka.md) —— 事件流平台
+- [Apache RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md) —— 业务消息队列
+- [Apache Pulsar](/docs/CS/MQ/Pulsar/Pulsar.md) —— 云原生存算分离队列
+- [RabbitMQ](/docs/CS/MQ/RabbitMQ.md) —— 轻量队列，Erlang 实现
 
 ## Message System
 
-Within this publish/subscribe model, different systems take a wide range of approaches, and there is no one right answer for all purposes.
-To differentiate the systems, it is particularly helpful to ask the following two questions:
+在这个发布/订阅模型下，不同系统采取了差异很大的做法，没有一种方案适用于所有场景。要区分这些系统，问两个问题特别有帮助：
 
-1. What happens if the producers send messages faster than the consumers can process them?
-   Broadly speaking, there are three options: the system can drop messages, buffer messages in a queue, or apply backpressure (also known as flow control; i.e., blocking the producer from sending more messages).
-   For example, Unix pipes and TCP use backpressure: they have a small fixed-size buffer, and if it fills up, the sender is blocked until the recipient takes data out of the buffer.
-   If messages are buffered in a queue, it is important to understand what happens as that queue grows.
-   Does the system crash if the queue no longer fits in memory, or does it write messages to disk?
-   If so, how does the disk access affect the performance of the messaging system?
-2. What happens if nodes crash or temporarily go offline—are any messages lost?
-   As with databases, durability may require some combination of writing to disk and/or replication, which has a cost.
-   If you can afford to sometimes lose messages, you can probably get higher throughput and lower latency on the same hardware.
+1. **如果生产者发送消息的速度超过消费者处理的速度，会发生什么？**
+   大体上有三种选择：系统丢弃消息、把消息缓存在队列里、或者施加反压（也称流控，即阻塞生产者继续发送）。
+   例如 Unix 管道和 TCP 就是用反压：它们有一个固定大小的缓冲区，缓冲区满时发送方会被阻塞，直到接收方把数据取走。
+   如果选择缓存到队列，那么队列增长时的行为很关键 —— 队列撑爆内存时系统会崩溃吗？还是把消息写到磁盘？如果写盘，磁盘访问又如何影响消息系统的性能？
+2. **如果节点崩溃或临时离线，会丢消息吗？**
+   与数据库一样，持久性通常需要写盘和/或副本复制的某种组合，而这有成本。
+   如果能接受偶尔丢消息，那么同样的硬件上大概能获得更高的吞吐和更低的延迟。
 
-Whether message loss is acceptable depends very much on the application.
-For example, with sensor readings and metrics that are transmitted periodically, an occasional missing data point is perhaps not important, since an updated value will be sent a short time later anyway.
-However, beware that if a large number of messages are dropped, it may not be immediately apparent that the metrics are incorrect.
-If you are counting events, it is more important that they are delivered reliably, since every lost message means incorrect counters.
+消息丢失是否可接受非常取决于应用。对于周期性上报的传感器读数和指标，偶尔缺失一个数据点也许并不重要 —— 反正稍后会送来更新后的值。但要注意，如果丢弃的消息数量很大，指标不正确这件事可能不会立刻被发现；而如果是计数场景，可靠投递就重要得多 —— 每丢一条消息就意味着计数错误。
 
 ### Direct messaging from producers to consumers
 
-A number of messaging systems use direct network communication between producers and consumers without going via intermediary nodes.
+不少消息系统让生产者与消费者之间直接通过网络通信，不经过中间节点。
 
 ### Message brokers
 
-A widely used alternative is to send messages via a message broker (also known as a message queue), which is essentially a kind of database that is optimized for handling message streams.
-It runs as a server, with producers and consumers connecting to it as clients.
-Producers write messages to the broker, and consumers receive them by reading them from the broker.
+另一种广泛使用的方案是通过消息代理（message broker，也叫消息队列）来收发消息，本质上是一种针对消息流做了优化的数据库。它作为服务器运行，生产者和消费者以客户端身份连接上去 —— 生产者把消息写入代理，消费者从代理读取消息。
 
-By centralizing the data in the broker, these systems can more easily tolerate clients that come and go (connect, disconnect, and crash), and the question of durability is moved to the broker instead.
-Some message brokers only keep messages in memory, while others (depending on configuration) write them to disk so that they are not lost in case of a broker crash. Faced with slow consumers, they generally allow unbounded queueing (as opposed to dropping messages or backpressure), although this choice may also depend on the configuration.
+数据集中到代理之后，系统更容易容忍客户端的来来去去（连接、断开、崩溃），而持久性问题则转移给了代理。有些消息代理只在内存里保存消息，另一些（取决于配置）会写盘，以便代理崩溃时消息不丢。遇到慢消费者时，它们通常允许队列无界增长（而非丢弃消息或施加反压），不过这同样可能取决于配置。
 
-A consequence of queueing is also that consumers are generally asynchronous: when a producer sends a message, it normally only waits for the broker to confirm that it has buffered the message and does not wait for the message to be processed by consumers.
-The delivery to consumers will happen at some undetermined future point in time—often within a fraction of a second, but sometimes significantly later if there is a queue backlog.
+排队带来的一个结果是消费者通常是异步的：生产者发送消息时一般只等代理确认「我已经缓冲好了」，不会等消息被消费者处理完。投递会在未来某个不确定的时刻发生 —— 往往在一秒之内，但如果队列积压，也可能晚得多。
 
-#### Message brokers compared to databases
+#### Message brokers与数据库的对比
 
-Some message brokers can even participate in two-phase commit protocols using XA or JTA.
-This feature makes them quite similar in nature to databases, although there are still important practical differences between message brokers and databases:
+有些消息代理甚至能参与 XA 或 JTA 的两阶段提交协议，这让它们在本质上与数据库非常接近。不过两者之间仍有一些重要的实际差异：
 
-- Databases usually keep data until it is explicitly deleted, whereas most message brokers automatically delete a message when it has been successfully delivered to its consumers.
-  Such message brokers are not suitable for long-term data storage.
-- Since they quickly delete messages, most message brokers assume that their working set is fairly small—i.e., the queues are short.
-  If the broker needs to buffer a lot of messages because the consumers are slow (perhaps spilling messages to disk if they no longer fit in memory), each individual message takes longer to process, and the overall throughput may degrade.
-- Databases often support secondary indexes and various ways of searching for data, while message brokers often support some way of subscribing to a subset of topics matching some pattern.
-  The mechanisms are different, but both are essentially ways for a client to select the portion of the data that it wants to know about.
-- When querying a database, the result is typically based on a point-in-time snapshot of the data; if another client subsequently writes something to the database that changes the query result,
-  the first client does not find out that its prior result is now outdated (unless it repeats the query, or polls for changes).
-  By contrast, message brokers do not support arbitrary queries, but they do notify clients when data changes (i.e., when new messages become available).
+- 数据库通常一直保存数据直到被显式删除，而大多数消息代理在消息成功投递给消费者之后就自动删除它 —— 这类消息代理不适合做长期数据存储。
+- 由于会快速删除消息，大多数消息代理假定自己的**工作集相当小**，也就是队列很短。如果因为消费者太慢而需要缓冲大量消息（内存不够时可能溢写到磁盘），那么每条消息的处理耗时都会变长，整体吞吐可能下降。
+- 数据库往往支持二级索引和各种数据检索方式，而消息代理通常支持以某种方式订阅匹配特定模式的一部分 topic。机制不同，但本质上都是让客户端选择它关心的那部分数据。
+- 查询数据库时，结果通常基于某个时间点的数据快照；如果之后另一个客户端写入了会改变该查询结果的数据，第一个客户端不会得知自己先前的结果已经过期（除非它重新查询或轮询变更）。相比之下，消息代理不支持任意查询，但会在数据变化时（即有新消息可用时）通知客户端。
 
-#### Multiple consumers
+#### 多消费者
 
-When multiple consumers read messages in the same topic, two main patterns of messaging are used:
+当多个消费者读取同一个 topic 的消息时，主要有两种消息传递模式：
 
-- Load balancing
-  Each message is delivered to one of the consumers, so the consumers can share the work of processing the messages in the topic. The broker may assign messages to consumers arbitrarily.
-  This pattern is useful when the messages are expensive to process, and so you want to be able to add consumers to parallelize the processing.
-  (In AMQP, you can implement load balancing by having multiple clients consuming from the same queue, and in JMS it is called a shared subscription.)
-- Fan-out
-  Each message is delivered to all of the consumers.
-  Fan-out allows several independent consumers to each “tune in” to the same broadcast of messages, without affecting each other—the streaming equivalent of having several different batch jobs that read the same input file.
-  (This feature is provided by topic subscriptions in JMS, and exchange bindings in AMQP.)
+- **负载均衡（Load balancing）** —— 每条消息只投递给其中一个消费者，于是消费者可以分摊 topic 中消息的处理工作。代理可以任意把消息分配给各消费者。这种模式适合消息处理代价高昂的场景：你需要能通过增加消费者来并行处理。（在 AMQP 中可以让多个客户端消费同一个队列来实现负载均衡；在 JMS 中这叫共享订阅。）
+- **广播（Fan-out）** —— 每条消息都投递给所有消费者。广播让若干独立消费者各自「调频」到同一份消息流上而互不影响，相当于流处理版的「多个批处理作业读同一个输入文件」。（在 JMS 中由 topic 订阅提供，在 AMQP 中由 exchange 绑定提供。）
 
-The two patterns can be combined: for example, two separate groups of consumers may each subscribe to a topic, such that each group collectively receives all messages, but within each group only one of the nodes receives each message.
+两种模式可以组合使用：比如两组不同的消费者各自订阅同一个 topic，使得每组都收到全部消息，但组内每条消息只由其中一个节点接收。
 
 ## Protocols
 
@@ -176,6 +229,24 @@ The two patterns can be combined: for example, two separate groups of consumers 
 
 消息数据的存储格式虽然没有统一的规范，但是一般包含通用信息和业务信息两部分。通用信息主要包括时间戳、CRC、消息头、消息体、偏移量、长度、大小等信息，业务信息主要跟业务相关，包含事务、幂等、系统标记、数据来源、数据目标等信息  
 
+#### 单文件与多文件的取舍
+
+前面提到的两种落盘思路（每分区独立文件 vs 全部分区共用一个文件），在工程上可进一步归纳为单文件与多文件两种形态：
+
+|              | 单文件               | 多文件       |
+| ------------ | -------------------- | ------------ |
+| 文件大小     | 大                   | 小           |
+| 数据定位     | 需要索引辅助快速定位 | 需要索引辅助 |
+| 读取速率     | 取决于访问模式       | 取决于访问模式 |
+| 内存映射空间 | 大                   | 小           |
+| 内存映射频率 | 低                   | 高           |
+| 实现难度     | 中等                 | 较高         |
+| 使用场景     | 写多读少             | 读写均衡、多分区并发 |
+
+单文件路线（commitlog 模式）顺序写强，但按分区读取时退化为随机读；多文件路线（分区独立文件）可按文件顺序读，但文件数过多时写侧退化为随机写，且占用系统 FD。这是 Kafka 选多文件、RocketMQ/Pulsar 选单文件的根本原因。
+
+按 topic 或按分区划分文件是另一层维度：Kafka 是「分区 → 独立 segment 文件」并在文件名携带基准 offset；RocketMQ 是「全部 topic 共用一个 commitlog + 每 topic 一个 ConsumeQueue 索引」；Pulsar 则是「topic → ledger → segment → entry」两级。详见 [Kafka Storage](/docs/CS/MQ/Kafka/Storage.md) 与 [RocketMQ Store](/docs/CS/MQ/RocketMQ/Store.md)。
+
 #### 消息数据清理机制
 
 消息队列中的数据最终都会删除，时间周期短的话几小时、甚至几分钟，正常情况一天、三天、七天，长的话可能一个月，基本很少有场景需要在消息队列中存储一年的数据。
@@ -194,17 +265,13 @@ The two patterns can be combined: for example, two separate groups of consumers 
 
 ## Partitioned Logs
 
-A [log](/docs/CS/log/Log.md) is simply an append-only sequence of records on disk.
+[日志](/docs/CS/log/Log.md) 本质上就是磁盘上一条只能追加的记录序列。
 
-The same structure can be used to implement a message broker: a producer sends a message by appending it to the end of the log, and a consumer receives messages by reading the log sequentially.
-If a consumer reaches the end of the log, it waits for a notification that a new message has been appended.
+同样的结构可以用来实现消息代理：生产者把消息追加到日志末尾来发送，消费者则通过顺序读取日志来接收消息。如果消费者读到了日志末尾，就等待「有新消息被追加」的通知。
 
-In order to scale to higher throughput than a single disk can offer, the log can be partitioned.
-Different partitions can then be hosted on different machines, making each partition a separate log that can be read and written independently from other partitions.
-A topic can then be defined as a group of partitions that all carry messages of the same type.
+为了扩展到单块磁盘无法提供的吞吐，日志可以分区。不同分区可以放在不同机器上，于是每个分区都是一个独立的日志，可以独立于其他分区读写。这样，一个 topic 就定义为「一组承载同类消息的分区」。
 
-Within each partition, the broker assigns a monotonically increasing sequence number, or offset, to every message (in Figure 1, the numbers in boxes are message off‐sets).
-Such a sequence number makes sense because a partition is append-only, so the messages within a partition are totally ordered. There is no ordering guarantee across different partitions.
+在每个分区内部，代理为每条消息分配一个单调递增的序号，也就是**偏移量（offset）**（图 1 中方框里的数字就是消息的 offset）。这个序号之所以有意义，是因为分区是只能追加的 —— 分区内的消息完全有序，但**不同分区之间没有顺序保证**。
 
 <div style="text-align: center;">
 
@@ -213,70 +280,43 @@ Such a sequence number makes sense because a partition is append-only, so the me
 </div>
 
 <p style="text-align: center;">
-Fig.1. Producers send messages by appending them to a topic-partition file, and consumers read these files sequentially.
+图 1. 生产者把消息追加到 topic-partition 文件末尾，消费者顺序读取这些文件。
 </p>
 
-[Apache Kafka](/docs/CS/MQ/Kafka/Kafka.md), Amazon Kinesis Streams, and Twitter’s DistributedLog are log-based message brokers that work like this.
-Google Cloud Pub/Sub is architecturally similar but exposes a JMS-style API rather than a log abstraction.
-Even though these message brokers write all messages to disk, they are able to achieve throughput of millions of messages per second by partitioning across multiple machines, and fault tolerance by replicating messages [22, 23].
+[Apache Kafka](/docs/CS/MQ/Kafka/Kafka.md)、Amazon Kinesis Streams 和 Twitter 的 DistributedLog 都是这样工作的基于日志的消息代理。Google Cloud Pub/Sub 在架构上类似，但暴露的是 JMS 风格的 API 而非日志抽象。尽管这些消息代理都把全部消息写盘，但通过跨多机分区，它们能实现每秒数百万条消息的吞吐；通过复制消息实现容错 [22, 23]。
 
-The log-based approach trivially supports fan-out messaging, because several consumers can independently read the log without affecting each other—reading a message does not delete it from the log.
-To achieve load balancing across a group of consumers, instead of assigning individual messages to consumer clients, the broker can assign entire partitions to nodes in the consumer group.
+基于日志的方案天然支持广播式消息：多个消费者可以各自独立读日志而互不影响 —— 读一条消息并不会把它从日志里删掉。而要在一组消费者之间做负载均衡，代理不再把单条消息指派给消费者客户端，而是把**整个分区**分配给消费组中的某个节点。
 
-Each client then consumes all the messages in the partitions it has been assigned.
-Typically, when a consumer has been assigned a log partition, it reads the messages in the partition sequentially, in a straightforward single-threaded manner.
-This coarsegrained load balancing approach has some downsides:
+每个客户端于是消费它所获分配到的全部消息。通常消费者拿到一个日志分区后，就以直白的单线程方式顺序读取该分区。这种**粗粒度**负载均衡有一些缺点：
 
-- The number of nodes sharing the work of consuming a topic can be at most the number of log partitions in that topic, because messages within the same partition are delivered to the same node.i
-- If a single message is slow to process, it holds up the processing of subsequent messages in that partition (a form of head-of-line blocking.
+- 分摊某个 topic 消费工作的节点数最多等于该 topic 的分区数，因为同一分区内的消息只会投递给同一个节点。
+- 如果某条消息处理很慢，它会拖住该分区内后续所有消息的处理（这属于队头阻塞的一种）。
 
-Thus, in situations where messages may be expensive to process and you want to parallelize processing on a message-by-message basis, and where message ordering is not so important, the JMS/AMQP style of message broker is preferable.
-On the other hand, in situations with high message throughput, where each message is fast to process and where message ordering is important, the log-based approach works very well.
+因此在「消息处理代价高、且希望逐条并行处理、同时消息顺序不太重要」的场景下，JMS/AMQP 风格的消息代理更合适。反过来，在「消息吞吐高、每条消息处理都很快、且消息顺序很重要」的场景下，基于日志的方案表现非常好。
 
 ### Compaction
 
-If you only ever append to the log, you will eventually run out of disk space.
-To reclaim disk space, the log is actually divided into segments, and from time to time old segments are deleted or moved to archive storage.
-(We’ll discuss a more sophisticated way of freeing disk space later.)
+如果只往日志里追加，最终会把磁盘空间用尽。为了回收磁盘空间，日志实际上被划分为多个**段（segment）**，并会不时删除旧段或将其移入归档存储。（更精细的释放磁盘空间方式后面再讨论。）
 
-This means that if a slow consumer cannot keep up with the rate of messages, and it falls so far behind that its consumer offset points to a deleted segment, it will miss some of the messages.
-Effectively, the log implements a bounded-size buffer that discards old messages when it gets full, also known as a circular buffer or ring buffer.
-However, since that buffer is on disk, it can be quite large.
+这意味着如果某个慢消费者跟不上消息速度，落后到其消费偏移量指向一个已被删除的段时，它就会漏掉一部分消息。实际上，日志实现了一个**有界大小的缓冲区** —— 满了就丢弃旧消息，也称循环缓冲区（circular buffer / ring buffer）。不过由于这个缓冲区在磁盘上，它可以相当大。
 
-Let’s do a back-of-the-envelope calculation. At the time of writing, a typical large hard drive has a capacity of 6 TB and a sequential write throughput of 150 MB/s.
-If you are writing messages at the fastest possible rate, it takes about 11 hours to fill the drive.
-Thus, the disk can buffer 11 hours’ worth of messages, after which it will start overwriting old messages.
-This ratio remains the same, even if you use many hard drives and machines.
-In practice, deployments rarely use the full write bandwidth of the disk, so the log can typically keep a buffer of several days’ or even weeks’ worth of messages.
+来算一笔粗账：撰写本文时，一块典型的大容量硬盘容量约 6 TB，顺序写吞吐约 150 MB/s。若以最快速度写消息，大约 11 小时就能把盘写满。也就是说，磁盘能缓冲 11 小时的消息，之后便开始覆盖旧消息。这个比例在多用几块硬盘、多台机器时依然成立。实践中，部署很少用满磁盘的写带宽，所以日志通常能缓冲数天甚至数周的消息。
 
-Regardless of how long you retain messages, the throughput of a log remains more or less constant, since every message is written to disk anyway.
-This behavior is in contrast to messaging systems that keep messages in memory by default and only write them to disk if the queue grows too large:
-such systems are fast when queues are short and become much slower when they start writing to disk, so the throughput depends on the amount of history retained.
+无论保留消息多久，日志的吞吐基本保持恒定 —— 因为每条消息反正都要写盘。这与「默认把消息放内存、队列过大才落盘」的消息系统形成鲜明对比：后者在队列短的时候很快，一旦开始写盘就慢得多，吞吐取决于保留了多少历史。
 
-#### When consumers cannot keep up with producers
+#### 当消费者跟不上生产者时
 
-We discussed three choices of what to do if a consumer cannot keep up with the rate at which producers are sending messages: dropping messages, buffering, or applying backpressure.
-In this taxonomy, the log-based approach is a form of buffering with a large but fixed-size buffer (limited by the available disk space).
-If a consumer falls so far behind that the messages it requires are older than what is retained on disk, it will not be able to read those messages—so the broker effectively drops old messages that go back further than the size of the buffer can accommodate.
-You can monitor how far a consumer is behind the head of the log, and raise an alert if it falls behind significantly.
-As the buffer is large, there is enough time for a human operator to fix the slow consumer and allow it to catch up before it starts missing messages.
+前面讨论过消费者跟不上生产速度时的三种选择：丢弃消息、缓冲、施加反压。在这个分类下，基于日志的方案属于「缓冲」的一种 —— 缓冲区很大但固定（受可用磁盘空间限制）。如果消费者落后到所需消息比磁盘保留的更旧，它就读不到那些消息了 —— 也就是说代理实际上丢弃了超出缓冲区容量的更早消息。你可以监控消费者落后日志头的程度，落后严重时告警。由于缓冲区很大，有足够时间让运维人员修复慢消费者，让它赶上进度而不开始漏消息。
 
-Even if a consumer does fall too far behind and starts missing messages, only that consumer is affected; it does not disrupt the service for other consumers.
-This fact is a big operational advantage: you can experimentally consume a production log for development, testing, or debugging purposes, without having to worry much about disrupting production services.
-When a consumer is shut down or crashes, it stops consuming resources—the only thing that remains is its consumer offset.
+即使消费者确实落后太多开始漏消息，也**只影响这一个消费者**，不会干扰其他消费者的服务。这一点是重要的运维优势：你可以放心地拿生产日志做开发、测试或调试的实验性消费，而不必担心打断生产服务。消费者关闭或崩溃时，它就停止消耗资源了 —— 唯一残留的是它的消费偏移量。
 
-This behavior also contrasts with traditional message brokers, where you need to be careful to delete any queues whose consumers have been shut down—otherwise they continue unnecessarily accumulating messages and taking away memory from consumers that are still active.
+这个行为也和传统消息代理形成对照：在传统代理里，你必须小心删除那些消费者已关闭的队列，否则它们会继续无谓地累积消息、占用活跃消费者的内存。
 
-#### Replaying old messages
+#### 重放旧消息
 
-We noted previously that with AMQP- and JMS-style message brokers, processing and acknowledging messages is a destructive operation, since it causes the messages to be deleted on the broker.
-On the other hand, in a log-based message broker, consuming messages is more like reading from a file: it is a read-only operation that does not change the log.
+前面提到，在 AMQP 和 JMS 风格的消息代理中，处理并确认消息是一个**破坏性操作** —— 因为它会导致消息在代理上被删除。而基于日志的消息代理里，消费消息更像是从文件读取：这是一个只读操作，不改变日志。
 
-The only side effect of processing, besides any output of the consumer, is that the consumer offset moves forward.
-But the offset is under the consumer’s control, so it can easily be manipulated if necessary: for example, you can start a copy of a consumer with yesterday’s offsets and write the output to a different location, in order to reprocess the last day’s worth of messages.
-You can repeat this any number of times, varying the processing code.
-
-
+除了消费者的输出之外，处理消息唯一的副作用就是消费偏移量向前移动。但偏移量由消费者自己控制，因此必要时可以随意操作：比如用昨天的偏移量启动一个消费者副本、把输出写到别处，从而重新处理最近一天的消息。这个过程可以重复任意多次，每次换不同的处理逻辑。
 
 ## Client
 
@@ -444,17 +484,11 @@ Pulsar 也提供了 batchingEnabled, batchingMaxMessages, batchingMaxPublishDela
 
 ### Message Queue
 
-A message queue is a form of asynchronous service-to-service communication used in serverless and microservices architectures.
-Messages are stored on the queue until they are processed and deleted. Each message is processed only once, by a single consumer.
-Message queues can be used to decouple heavyweight processing, to buffer or batch work, and to smooth spiky workloads.
+消息队列是一种在 Serverless 与微服务架构中常用的异步服务间通信方式。消息被存放在队列中，直到被处理并删除；每条消息只会被某一个消费者处理一次。消息队列可用于解耦重量级处理、缓冲或批量聚合工作，以及平滑尖峰负载。
 
-In modern cloud architecture, applications are decoupled into smaller, independent building blocks that are easier to develop, deploy and maintain.
-Message queues provide communication and coordination for these distributed applications.
-Message queues can significantly simplify coding of decoupled applications, while improving performance, reliability and scalability.
-Message queues allow different parts of a system to communicate and process operations asynchronously.
-A message queue provides a lightweight buffer which temporarily stores messages, and endpoints that allow software components to connect to the queue in order to send and receive messages.
-The messages are usually small, and can be things like requests, replies, error messages, or just plain information. To send a message, a component called a producer adds a message to the queue.
-The message is stored on the queue until another component called a consumer retrieves the message and does something with it.
+在现代云架构中，应用被解耦成更小、更独立、易于开发部署维护的构件，消息队列为这些分布式应用提供通信与协作。它能显著简化解耦式应用的编写，同时提升性能、可靠性与可扩展性，并让系统的不同部分能够异步通信与处理操作。
+
+消息队列提供了一个轻量级缓冲区来临时存放消息，并提供端点让软件构件连接上去收发消息。消息通常很小，可以是请求、响应、错误消息或纯粹的信息。发送消息时，一个叫**生产者（producer）** 的构件把消息加入队列；消息一直存在队列里，直到另一个叫**消费者（consumer）** 的构件取走并处理它。
 
 <div style="text-align: center;">
 
@@ -463,20 +497,16 @@ The message is stored on the queue until another component called a consumer ret
 </div>
 
 <p style="text-align: center;">
-Fig.1. Message queue.
+图 1. 消息队列。
 </p>
 
-Many producers and consumers can use the queue, but each message is processed only once, by a single consumer.
-For this reason, this messaging pattern is often called one-to-one, or point-to-point, communications.
-When a message needs to be processed by more than one consumer, message queues can be combined with Pub/Sub messaging in a fanout design pattern.
+许多生产者和消费者都可以使用同一个队列，但每条消息只会被一个消费者处理一次。因此这种消息模式常被称为「一对一」或「点对点」通信。当一条消息需要被多个消费者处理时，可以把消息队列与 Pub/Sub 消息结合成扇出（fan-out）设计模式。
 
 ### Pub-Sub
 
-The Publish Subscribe model allows messages to be broadcast to different parts of a system asynchronously.
-A sibling to a message queue, a message topic provides a lightweight mechanism to broadcast asynchronous event notifications, and endpoints that allow software components to connect to the topic in order to send and receive those messages.
-To broadcast a message, a component called a publisher simply pushes a message to the topic.
-Unlike message queues, which batch messages until they are retrieved, message topics transfer messages with no or very little queuing, and push them out immediately to all subscribers.
-All components that subscribe to the topic will receive every message that is broadcast, unless a message filtering policy is set by the subscriber.
+发布订阅模型允许把消息异步广播到系统的不同部分。作为消息队列的近亲，**消息主题（topic）** 提供了一种轻量机制来广播异步事件通知，并提供端点让软件构件连接上去收发消息。要广播消息，一个叫**发布者（publisher）** 的构件只需把消息推送到主题。
+
+与消息队列（会把消息攒着直到被取走）不同，消息主题几乎不排队，会立即把消息推送给所有订阅者。除非订阅者设置了消息过滤策略，否则所有订阅了该主题的构件都会收到每一条广播消息。
 
 <div style="text-align: center;">
 
@@ -485,117 +515,95 @@ All components that subscribe to the topic will receive every message that is br
 </div>
 
 <p style="text-align: center;">
-Fig.2. Pub/Sub.
+图 2. 发布/订阅。
 </p>
 
-The subscribers to the message topic often perform different functions, and can each do something different with the message in parallel.
-The publisher doesn’t need to know who is using the information that it is broadcasting, and the subscribers don’t need to know who the message comes from.
-This style of messaging is a bit different than message queues, where the component that sends the message often knows the destination it is sending to.
+消息主题的订阅者往往各自承担不同职能，可以并行地对同一条消息做不同的处理。发布者不需要知道谁在消费它广播的信息，订阅者也不需要知道消息来自何方。这种消息风格与消息队列有微妙区别 —— 在消息队列里，发送消息的构件通常知道自己的接收方是谁。
 
 ## Features
 
 ### Message Delivery Semantics
 
-By message delivery semantics, we refer to the expected message delivery guaranties in the case of failure recovery.
-After a failure recovery, we recognize these different message delivery guarantees:
+所谓消息投递语义，指的是在故障恢复场景下所能期望的投递保证。经历故障恢复后，人们通常会区分出以下几种投递保证：
 
-- *At most once*
-  Data may have been processed but will never be processed twice. In this case, data may be lost but processing will never result in duplicate records.
-- *At-least-once*
-  Data that has been processed may be replayed and processed again. In this case, each data record is guaranteed to be processed and may result in duplicate records.
-- *Exactly once*
-  Data is processed once and only once. All data is guaranteed to be processed and no duplicate records are generated.
-  This is the most desirable guarantee for many enterprise applications, but it’s considered impossible to achieve in a distributed environment.
-- *Effectively Exactly Once*
-  is a variant of *exactly once* delivery semantics that tolerates duplicates during data processing and requires the producer side of the process to be idempotent.
-  That is, producing the same record more than once is the same as producing it only once. In practical terms, this translates to writing the data to a system that can preserve the uniqueness of keys or use a deduplication process to prevent duplicate records from being produced to an external system.
+- **至多一次（At most once）**
+  数据可能被处理过，但绝不会被处理两次。这种情况下数据可能丢失，但处理不会产生重复记录。
+- **至少一次（At-least-once）**
+  已被处理的数据可能被重放并再次处理。这种情况下每条数据都保证被处理，但可能产生重复记录。
+- **恰好一次（Exactly once）**
+  数据被处理且仅被处理一次，所有数据都保证被处理且不产生重复记录。这对许多企业应用是最理想的保证，但在分布式环境中通常被认为无法实现。
+- ** Effectively Once（实质恰好一次）**
+  是恰好一次的变体：它容忍数据处理过程中的重复，并要求流程的生产者侧是幂等的。也就是说，同一条记录被生产多次等价于只生产一次。落到实践上，就是把数据写入一个能保持 key 唯一性的系统，或用去重流程来防止重复记录被投递到外部系统。
 
 ### Push versus Pull
 
-Most message queues provide both push and pull options for retrieving messages.
+大多数消息队列都同时提供推（push）与拉（pull）两种获取消息的方式。
 
-- Pull means continuously querying the queue for new messages.
-- Push means that a consumer is notified when a message is available.
+- **拉（Pull）** 指持续查询队列中是否有新消息。
+- **推（Push）** 指有消息时通知消费者。
 
-A push-based system has difficulty dealing with diverse consumers as the broker controls the rate at which data is transferred.
-The goal is generally for the consumer to be able to consume at the maximum possible rate; unfortunately, in a push system this means the consumer tends to be overwhelmed when its rate of consumption falls below the rate of production (a denial of service attack, in essence).
-A pull-based system has the nicer property that the consumer simply falls behind and catches up when it can.
-This can be mitigated with some kind of backoff protocol by which the consumer can indicate it is overwhelmed, but getting the rate of transfer to fully utilize (but never over-utilize) the consumer is trickier than it seems.
-Previous attempts at building systems in this fashion led us to go with a more traditional pull model.
+基于推的系统在面对差异化消费者时比较棘手，因为速率由代理控制。目标通常是让消费者尽可能快地消费，但不幸的是，在推系统里这意味着一旦消费速度低于生产速度，消费者就会被压垮（本质上相当于一次拒绝服务攻击）。基于拉的系统有个更好的性质：消费者只是落后，能追上时再追上。
 
-Another advantage of a pull-based system is that it lends itself to aggressive batching of data sent to the consumer.
-A push-based system must choose to either send a request immediately or accumulate more data and then send it later without knowledge of whether the downstream consumer will be able to immediately process it.
-If tuned for low latency, this will result in sending a single message at a time only for the transfer to end up being buffered anyway, which is wasteful.
-A pull-based design fixes this as the consumer always pulls all available messages after its current position in the log (or up to some configurable max size).
-So one gets optimal batching without introducing unnecessary latency.
+这可以通过某种退避协议来缓解 —— 消费者可以表示自己不堪重负。但要让传输速率完全（且永不超量地）用满消费者能力，比看上去要棘手得多。此前尝试这样构建系统的经验让我们转向了更传统的拉模型。
 
-The deficiency of a naive pull-based system is that if the broker has no data the consumer may end up polling in a tight loop, effectively busy-waiting for data to arrive.
+基于拉的系统另一个优势是天然适合对发给消费者的数据做激进批处理。基于推的系统必须在「立即发送请求」与「先攒更多数据、稍后再发」之间做选择，且并不清楚下游消费者能否立即处理。若为了低延迟而调优成逐条发送，最终这些单条消息的传输还是会被缓冲起来，纯属浪费。基于拉的设计则解决了这个问题：消费者总是从它在日志中的当前位置之后（或某个可配置的上限内）一次性拉取所有可用消息，从而在不引入额外延迟的前提下获得最优的批量效果。
+
+朴素的拉系统有一个缺陷：如果代理没有数据，消费者可能陷入紧密轮询的空转，本质上是忙等待数据到来。
 
 ### Schedule or Delay Delivery
 
-Many message queues support setting a specific delivery time for a message. If you need to have a common delay for all messages, you can set up a delay queue.
+许多消息队列支持为消息设置特定的投递时间。如果需要让所有消息有统一的延时，可以搭建一个延时队列。
 
 ### Dead-letter Queues
 
-Sometimes, messages can't be processed because of a variety of possible issues, such as erroneous conditions within the producer or consumer application or an unexpected state change that causes an issue with your application code.
-For example, if a user places a web order with a particular product ID, but the product ID is deleted, the web store's code fails and displays an error, and the message with the order request is sent to a dead-letter queue.
+有时候消息无法被处理，原因可能五花八门：生产者或消费者应用内部出错、或者某个意外的状态变化影响了你的应用代码。比如用户用某个商品 ID 下单，但该商品 ID 已被删除，于是网店代码报错，承载该订单请求的消息就被送进了死信队列。
 
-Occasionally, producers and consumers might fail to interpret aspects of the protocol that they use to communicate, causing message corruption or loss. Also, the consumer's hardware errors might corrupt message payload.
+此外，生产者与消费者偶尔会误解它们通信所用的协议的某些方面，导致消息损坏或丢失；消费者侧的硬件故障也可能损坏消息载荷。
 
-A dead-letter queue is a queue to which other queues can send messages that can't be processed successfully.
-This makes it easy to set them aside for further inspection without blocking the queue processing or spending CPU cycles on a message that might never be consumed successfully.
+死信队列是一个特殊队列，其他队列可以把无法成功处理的消息发送进来。这样就能很方便地把它们挑出来单独检查，而不会阻塞队列处理，也不用在一条可能永远无法被成功消费的消息上白白消耗 CPU 周期。
 
-The main task of a dead-letter queue is handling message failure.
-A dead-letter queue lets you set aside and isolate messages that can’t be processed correctly to determine why their processing didn’t succeed.
-Setting up a dead-letter queue allows you to do the following:
+死信队列的主要任务是处理消息失败。它让你把无法正确处理的消息挑出来并隔离，以弄清它们为何没能被成功处理。搭建死信队列后，你可以做以下几件事：
 
-- Configure an alarm for any messages delivered to a dead-letter queue.
-- Examine logs for exceptions that might have caused messages to be delivered to a dead-letter queue.
-- Analyze the contents of messages delivered to a dead-letter queue to diagnose software or the producer’s or consumer’s hardware issues.
-- Determine whether you have given your consumer sufficient time to process messages.
+- 为任何进入死信队列的消息配置告警。
+- 检视日志中可能导致消息进入死信队列的异常。
+- 分析进入死信队列的消息内容，以诊断软件缺陷或生产者/消费者的硬件问题。
+- 判断是否给消费者留够了处理消息的时间。
 
-When should I use a dead-letter queue?
+**什么时候该用死信队列？**
 
-- Do use dead-letter queues with high-throughput, unordered queues.
-- You should always take advantage of dead-letter queues when your applications don’t depend on ordering. Dead-letter queues can help you troubleshoot incorrect message transmission operations.
-- Note: Even when you use dead-letter queues, you should continue to monitor your queues and retry sending messages that fail for transient reasons.
-- Do use dead-letter queues to decrease the number of messages and to reduce the possibility of exposing your system to poison-pill messages (messages that can be received but can’t be processed).
-- Don’t use a dead-letter queue with high-throughput, unordered queues when you want to be able to keep retrying the transmission of a message indefinitely.
-- For example, don’t use a dead-letter queue if your program must wait for a dependent process to become active or available.
-- Don’t use a dead-letter queue with a FIFO queue if you don’t want to break the exact order of messages or operations.
-- For example, don’t use a dead-letter queue with instructions in an Edit Decision List (EDL) for a video editing suite, where changing the order of edits changes the context of subsequent edits.
+- 高吞吐、无序队列**应该**用死信队列。
+- 当你的应用不依赖顺序时，一定要善用死信队列 —— 它能帮你排查消息传输中的错误。
+- 注意：即使用了死信队列，也应继续监控自己的队列，并对因瞬时原因失败的消息重试发送。
+- 用死信队列来减少消息数量、降低系统暴露于毒丸消息（能收到但无法处理的消息）之下的可能性。
+- 当你需要能无限期重试发送某条消息时，**不要**在高吞吐无序队列上用死信队列。
+- 例如，如果你的程序必须等待某个依赖进程先激活或变为可用，就不要用死信队列。
+- 如果你不想破坏消息或操作的严格顺序，就**不要**在 FIFO 队列上用死信队列。
+- 例如，视频剪辑套件中 Edit Decision List（EDL）的指令若改变顺序就会改变后续剪辑的上下文，这种场景不要用死信队列。
 
 ### Ordering
 
-Most message queues provide best-effort ordering which ensures that messages are generally delivered in the same order as they're sent, and that a message is delivered at least once.
-
-
+大多数消息队列提供的是尽力而为（best-effort）的顺序保证 —— 消息大体上按发送顺序投递，且保证至少投递一次。
 
 ### Transaction Message
 
-目前只有 RocketMQ 实现了事务消息
+目前只有 RocketMQ 实现了事务消息。
 
-其它方式实现需要和数据库事务结合进行trade off
+其他实现方式通常需要与数据库事务结合，做权衡取舍：
 
-- 如果在数据库事务提交后发消息，需要注意半消息回查需要控制在DB默认事务超时时间上，保护unknown状态
-- 结合消息表保障事务，通过消息表异步发送消息，维护后续流转状态
-
-
+- 如果在数据库事务提交后再发消息，需要注意把半消息回查控制在 DB 默认事务超时时间之内，以保护 unknown 状态。
+- 结合消息表保障事务 —— 通过消息表异步发送消息，并维护后续流转状态。
 
 ### Poison-pill Messages
 
-Poison pills are special messages that can be received, but not processed.
-They are a mechanism used in order to signal a consumer to end its work so it is no longer waiting for new inputs, and is similar to closing a socket in a client/server model.
-
-
+毒丸消息（poison pill）是一种特殊的消息：能收到，但无法被处理。它用来向消费者发出「结束工作」的信号，使其不再等待新输入，类似于客户端/服务器模型中关闭 socket。
 
 ### Message Tracing
 
-消息轨迹
+消息轨迹。
 
 ## Security
 
-Message queues will authenticate applications that try to access the queue, and allow you to use encryption to encrypt messages over the network as well as in the queue itself.
+安全同样分三层：**认证**（SASL 确认「你是谁」）→ **传输加密**（TLS）→ **授权**（ACL 确认「你能做什么」）。三者在不同产品里的落地差异很大，且默认值陷阱不少 —— 例如 Kafka 的 `authorizer.class.name` 默认是空串（等于不装任何 authorizer），而 RocketMQ 与 Pulsar 的 ACL 存储位置在 4.x 都已随架构重构迁移。具体配置与源码默认值见 [Kafka Security](/docs/CS/MQ/Kafka/Security.md)。
 
 ## Architecture
 
@@ -623,64 +631,6 @@ Message queues will authenticate applications that try to access the queue, and 
 
 RocketMQ 是业界唯一一个既支持自定义编解码，又支持成熟编解码框架的消息队列产品。RocketMQ 5.0 之前支持的 Remoting 协议是自定义编解码，5.0 之后支持的 gRPC 协议是基于 Protobuf 编解码框架  
 
-
-
-
-
-## store
-
-
-
-单文件/多文件
-
-|              | 单文件               | 多文件       |
-| ------------ | -------------------- | ------------ |
-| 文件大小     | 大                   | 小           |
-| 数据定位     | 需要索引辅助快速定位 | 需要索引辅助 |
-| 读取速率     | 块                   | 非常快       |
-| 内存映射空间 | 大                   | 小           |
-| 内存映射频率 | 低                   | 高           |
-| 实现难度     | 中等                 | 较高         |
-| 使用场景     |                      |              |
-
-
-
-根据topic分文件
-
-
-
-
-
-
-
-
-
-
-
-
-
-存储消息体结构
-
-
-
-Consumer Queue
-
-多个Consumer Group 对应不同的 consume offset
-
-
-
-
-
-注册中心 broker 元数据
-
-
-
-
-
-
-
-
-
 ## Issues
 
 ### Disk Access
@@ -691,153 +641,109 @@ mmap
 
 sendfile
 
-- Write
-- Tailing Read
-- Catch-up Read
+- 写（Write）
+- 尾读（Tailing Read）
+- 追读（Catch-up Read）
 
 ### High Availability
 
-RabbitMQ
+**RabbitMQ**
 
-Mirroring Cluster
+镜像集群（Mirroring Cluster）
 
-Kafka
+**Kafka**
 
-Topic can be multiple partitions
-
-partitions have replicate in other brokers
-
-we can only read/write leader
-
-leader will sync data to followers, return ack when most of followers sync successfully
+- 一个 topic 可以有多个分区
+- 分区在其他 broker 上有副本
+- 只能读/写 leader
+- leader 把数据同步给 follower，大多数 follower 同步成功后返回 ack
 
 ### 消息丢失
 
-消息丢失是需要消息从生产到消费整条链路上的组件协同保障的
+消息丢失需要消息从生产到消费整条链路上的组件协同保障
 
+**RabbitMQ**
 
+- 生产者确认（producer confirm）
+- broker 落盘存储
+- 消费者手动确认
 
-RabbitMQ
-
-- producer confirm
-- broker storage
-- consumer confirm manually
-
-
-
-Kafka
+**Kafka**
 
 - broker
-  - unclean.leader.election.enable = false
-  - set topic repliaction factor > 1 : at least 2 partitions
-  - set broker min.insync.replicas > 1 : at least 1 follower
-  - replication.factor = min.insync.replicas + 1
-- producer
-  - set producer acks = all : must write to all replicas then ack
-  - set producer retries = MAX : retry util success
-- consumer
-  - enable.auto.commit: false
+  - `unclean.leader.election.enable = false`
+  - 设置 topic 的 `replication.factor > 1`：至少 2 个分区副本
+  - 设置 broker 的 `min.insync.replicas > 1`：至少 1 个 follower
+  - `replication.factor = min.insync.replicas + 1`
+- 生产者
+  - 设置 `acks = all`：必须写入所有副本后才 ack
+  - 设置 `retries = MAX`：一直重试直到成功
+- 消费者
+  - `enable.auto.commit: false`
 
-Producer:
+**Producer：**
 
-正确处理返回值或者捕获异常并重发，就可以保证这个阶段的消息不会丢
+正确处理返回值或者捕获异常并重发，就可以保证这个阶段的消息不会丢。
 
-Broker:
+**Broker：**
 
-如果
-Broker 出现了故障，比如进程死掉了或者服务器宕机了，还是可能会丢失消息的
+如果 Broker 出现故障，比如进程死掉或服务器宕机，还是可能丢消息的。需要配置刷盘，并至少将消息发送到 2 个以上的节点，再给客户端回复发送确认响应。
 
-配置刷盘
-
-至少将消息发送到 2 个以上的节点，再给客户端回复发送确认响应
-
-Consumer:
+**Consumer：**
 
 在执行完所有消费业务逻辑之后，再发送消费确认。
 
 ### Duplicate Consume
 
-重复消费是无法避免的，需要消费者做好幂等性处理
+重复消费是无法避免的，需要消费者做好幂等性处理。
 
-- 消息中间件通常消息语义都是保证至少一条，也就是生产者可能在重试时就已经发送了重复的消息
-- 对于唯一的一条消息也是会存在重复消费的
-  - Broker
-    - Broker宕机、主从切换导致offset未持久化
-  - Consumer
-    - OOM、进程退出等异常情况未提交offset
-    - Full GC停顿、业务超时导致心跳丢失触发rebalance，rebalance后消费者的队列被分配给其它线程处理了，此时队列被丢弃，不提交消费进度，那就会存在重复消费
-    - 手动提交offset未捕获异常重试
-    - MQ的重试机制，例如RocketMQ的重试topic可能会导致多次消费
+- 消息中间件的语义通常都保证「至少一条」，也就是生产者可能在重试时就已经发送了重复的消息。
+- 即便对于唯一的一条消息，也可能存在重复消费：
+  - **Broker 侧**：Broker 宕机、主从切换导致 offset 未持久化。
+  - **Consumer 侧**：OOM、进程退出等异常导致未提交 offset；Full GC 停顿或业务超时引发心跳丢失触发 rebalance，rebalance 后该队列被分配给其它线程处理，此时原队列被丢弃、不提交消费进度，就会产生重复消费；手动提交 offset 时未捕获异常而重试；MQ 自身的重试机制（如 RocketMQ 的重试 topic）可能导致多次消费。
 
+**幂等性的实现**
 
-
-
-
-幂等性实现
-
-- Redis is always idempotent.
-- DB primary key is unique.
-- update wehn exist, insert when not exist.
-- every request has own message id, check if has consumed(a set).
+- Redis 天然是幂等的。
+- 数据库主键唯一。
+- 存在则更新，不存在则插入。
+- 每个请求带自己的消息 id，消费前先判断是否已消费过（用一个集合）。
 
 ### message ordering
 
-Kafka partition -> queue -> thread
-
-
+Kafka partition → queue → thread（Kafka 分区对应队列，队列再对应处理线程）
 
 ### 消息积压
 
-消息积压问题通常是消费侧的问题 因为一个 Topic 通常会被多个消费端订阅，我们只要看看其他消费组是否也积压
-
-
-
-
-
-
-
-
+消息积压问题通常出在消费侧。因为一个 topic 通常会被多个消费组订阅，只要看看其他消费组是否也积压即可。
 
 ## MQs
 
-
-
 如果没有大消息和大流量等复杂场景，是可以选用非标准消息队列产品的。比如在用户状态审核的场景中，只需要向下游传递用户 ID 和审核结果，结构简单，数量有限。这时候选择非标准消息队列比如 Redis 和 MySQL 也是可以的  
 
-
-
-早年业界消息队列演进的主要推动力在于功能（如延迟消息、事务消息、顺序消息等）、场景（实时场景、大数据场景等）、分布式集群的支持等等。近几年，随着云原生架构和Serverless 的普及，业界 MQ 主要向实时消息和流消息的融合架构、Serverless、Event、协议兼容等方面演进。从而实现计算、存储的弹性，实现集群的 Serverless 化  
+早年业界消息队列演进的主要推动力在于功能（如延迟消息、事务消息、顺序消息等）、场景（实时场景、大数据场景等）、分布式集群的支持等等。近几年，随着云原生架构和 Serverless 的普及，业界 MQ 主要向实时消息和流消息的融合架构、Serverless、Event、协议兼容等方面演进。从而实现计算、存储的弹性，实现集群的 Serverless 化
 
 - 从需求发展路径上看，消息队列的发展趋势是：消息 -> 流 -> 消息和流融合
 - 从架构发展的角度来看，消息队列的发展趋势是：单机 -> 分布式 -> 云原生/Serverless
 
-消息、流分开来看都比较好理解。
+消息与流分开来看都比较好理解。消息是业务消息，在业务架构（比如微服务架构）中用来作消息传递，做系统的消息总线，比如用户提交订单的流程；流是在大数据架构中用来做大流量时的数据削峰，比如日志的投递流转。消息和流融合就是这两件事都能做 —— 其实都是钱的原因：消息队列功能相对固定，细分市场都有领头组件，流领域目前是 Kafka 一家独大，消息领域国外是 RabbitMQ、国内是 RocketMQ。
 
-- 消息就是业务消息，在业务架构（比如微服务架构）中用来作消息传递，做系统的消息总线，比如用户提交订单的流程。
+当前开源社区用得较多的消息队列主要有 RabbitMQ、Kafka、RocketMQ 和 Pulsar 四款，各自定位差异见 [Introduction 的定位差异表](#三个产品的定位差异)。
 
-- 流，就是在大数据架构中用来做大流量时的数据削峰，比如日志的投递流转
+### 存储路线与吞吐的取舍
 
-消息和流融合就是这两个事情都能做。不过为什么会有消息和流融合的这个趋势呢
+topic 数量增多时 Kafka 吞吐会明显下降而 RocketMQ 稳定，原因在于存储路线不同：Kafka 的每个 topic-partition 对应一个物理文件，topic 变多会导致磁盘 IO 竞争；RocketMQ 所有消息存在同一个物理文件里，topic 与 partition 只是逻辑划分，因此 topic 数量增加对性能影响很小。
 
-其实都是钱的原因。虽然消息队列是基础组件，但是功能比较单一，主要是缓冲作用，在消息、流的方向上，功能需求一直是相对固定的，细分的市场也都有领头组件，流领域目前是Kafka 一家独大，消息领域的头部玩家，国外是 RabbitMQ，国内是 RocketMQ  
+> [!TIP]
+> 所以「Kafka 吞吐一定更高」的说法要加限定条件 —— 前提是 partition 数量可控。选型时若 topic 极多（数千以上），RocketMQ 的共用 commitlog 路线更稳。
 
-当前开源社区用的较多的消息队列主要有 RabbitMQ、Kafka，RocketMQ 和Pulsar 四款  
+### RabbitMQ 的取舍
 
-When the message sending and consumption ends coexist, the increasing number of topics will cause a drastic decline of Kafka's throughput, while Apache RocketMQ delivers a stable performance.
-Therefore, Kafka is more suitable for business scenarios with only a few topics and consumption ends, while Apache RocketMQ is a better choice for business scenarios with multiple topics and consumption ends.
-
-The difference is attributable to the fact that every topic and partition of Kafka correspond to one physical file.
-When the number of topics increases, the policy of deconcentrated storage of messages to disks will lead to disk IO competition to cause performance bottlenecks.
-In contrast, all the messages in Apache RocketMQ are stored in the same physical file. The number of topics and partitions is just a logic division for Apache RocketMQ.
-So the increasing number of topics won't generate a huge impact on the Apache RocketMQ performance.
-
-The Cons of Using RabbitMQ:
-
-- Once a message with RabbitMQ has been delivered it is removed from the queue.
-- RabbitMQ scales vertically and relies on getting more powerful hardware to increase throughput.
-- RabbitMQ stores messages in memory as long as there is space after which messages will be transferred to disk.
-- RabbitMQ cannot deal with high throughput, as it doesn’t support message batching, and is optimized for one message at a time instead.
-- Many of RabbitMQ’s disadvantages stem from being written in Erlang, however, it can also be difficult for a developer to read the source code and understand what’s going on when troubleshooting.
+- 消息一旦投递即从队列移除（无消费位点重放能力）
+- 纵向扩展，靠更强的硬件换吞吐
+- 内存优先，空间不足才落盘
+- 不支持消息批量，为单条消息优化，难以承载高吞吐
+- 用 Erlang 编写，故障排查时阅读源码有一定门槛
 
 ### Kafka
 
@@ -863,29 +769,34 @@ The Cons of Using RabbitMQ:
 > **4.x 相对 2.x/3.x 有大量功能移除**：`pulsar-replication`（跨地域复制）、`PulsarBackup`（备份）、`pulsar-streams`、`enableIdempotence` 幂等开关、`GoRuntimeFactory` 均已删除或改造，照旧资料写必错。
 
 
-下一代消息队列 RobustMQ
+RobustMQ 是 RocketMQ 的商业化发行版（由 Apache RocketMQ 团队与腾讯云主导），在开源版之上提供云原生部署、存算分离与多租户等企业级能力。其内核与本目录 [RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md) 同源，架构上的取舍可对照阅读。
 
 
 ### Comparison
 
+> [!NOTE]
+> 版本基线：Kafka **4.3.1**、RocketMQ **5.5.1**、Pulsar **4.2.4**。三者在 4.x 都有各自的重大重构与功能移除，下表按当前版本的能力填写。
 
-| Messaging Product              | ActiveMQ                                                     | Kafka                                                        | RocketMQ                                                     | Pulsa |
-| ------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------ | ----- |
-| Client SDK                     | Java, .NET, C++ etc.                                         | Java, Scala etc.                                             | Java, C++, Go                                                |       |
-| Protocol and Specification     | Push model, support OpenWire, STOMP, AMQP, MQTT, JMS         | Pull model, support TCP                                      | Pull model, support TCP, JMS, OpenMessaging                  |       |
-| Ordered Message                | Exclusive Consumer or Exclusive Queues can ensure ordering   | Ensure ordering of messages within a partition               | Ensure strict ordering of messages,and can scale out gracefully |       |
-| Scheduled Message              | Supported                                                    | Not Supported                                                | Supported                                                    |       |
-| Batched Message                | Not Supported                                                | Supported, with async producer                               | Supported, with sync mode to avoid message loss              |       |
-| BroadCast Message              | Supported                                                    | Not Supported                                                | Supported                                                    |       |
-| Message Filter                 | Supported                                                    | Supported, you can use Kafka Streams to filter messages      | Supported, property filter expressions based on SQL92        |       |
-| Server Triggered Redelivery    | Not Supported                                                | Not Supported                                                | Supported                                                    |       |
-| Message Storage                | Supports very fast persistence using JDBC along with a high performance journal，such as levelDB, kahaDB | High performance file storage                                | High performance and low latency file storage                |       |
-| Message Retroactive            | Supported                                                    | Supported offset indicate                                    | Supported timestamp and offset two indicates                 |       |
-| Message Priority               | Supported                                                    | Not Supported                                                | Not Supported                                                |       |
-| High Availability and Failover | Supported, depending on storage,if using levelDB it requires a ZooKeeper server | Supported                                                    | Supported, Master-Slave model, without another kit           |       |
-| Message Track                  | Not Supported                                                | Not Supported                                                | Supported                                                    |       |
-| Configuration                  | The default configuration is low level, user need to optimize the configuration parameters | Kafka uses key-value pairs format for configuration. <br />These values can be supplied either from a file or programmatically. | Work out of box,user only need to pay attention to a few configurations |       |
-| Management and Operation Tools | Supported                                                    | Supported, use terminal command to expose core metrics       | Supported, rich web and terminal command to expose core metrics |       |
+| Messaging Product              | ActiveMQ                          | Kafka 4.3.1                                | RocketMQ 5.5.1                              | Pulsar 4.2.4                                  |
+| ------------------------------ | --------------------------------- | ------------------------------------------- | -------------------------------------------- | --------------------------------------------- |
+| Client SDK                     | Java, .NET, C++ 等                 | Java, Scala 等（4.x 客户端已拆出 `AsyncKafkaConsumer`；无独立 gRPC SDK 仓库）| Java, C++, Go（gRPC SDK 在独立仓库 `apache/rocketmq-clients`）| Java, Go, Python, C++, Node.js              |
+| Protocol and Specification     | Push model, support OpenWire, STOMP, AMQP, MQTT, JMS | Pull model, 自定义二进制协议；**4.0 起 KRaft-only，已移除 ZooKeeper** | Pull model；Remoting（自定义编解码）+ 5.x gRPC（Protobuf）| Pull model，自定义二进制协议 + 独立 gRPC 端口 |
+| Ordered Message                | Exclusive Consumer or Exclusive Queues can ensure ordering | 分区内严格有序；全局有序需单分区 | Queue 内严格有序，失败进重试队列仍按序重试 | Key-shared 模式；单条有序由 KeyShared 语义保证 |
+| Scheduled Message              | Supported                         | **Not Supported**                           | Supported（18 级固定延迟 + 5.x 时间轮）        | Supported（`delayedDelivery`）                 |
+| Batched Message                | Not Supported                     | Supported（纯客户端侧 `batchingMaxMessages`）| Supported，batch 封装在 broker 侧完成          | Supported（batch entry + `num_messages_in_batch`）|
+| BroadCast Message              | Supported                         | Not Supported                               | Supported                                     | Supported                                     |
+| Message Filter                 | Supported                         | 需自行用 Streams 处理（`enablePropertyFilter` 概念不适用）| Tag + **SQL92** 两级；Broker 端 `enablePropertyFilter` **默认 false** | Tag + SQL92（JavaCC AST 解释执行，非 Calcite）|
+| Server Triggered Redelivery    | Not Supported                     | Not Supported                               | Supported（重试队列 + DLQ，超 15 次回查上限）  | Supported                                     |
+| Message Storage                | JDBC + journal（levelDB/kahaDB）   | **每分区独立 segment 文件**（多文件路线）    | **全 topic 共用单个 commitlog**（单文件路线）  | **topic → ledger → segment → entry**，BookKeeper 独立存储 |
+| Message Retroactive            | Supported                         | 按 offset 指示                             | 按时间戳与 offset 两种维度                    | 按 ledger + entry id                           |
+| Message Priority               | Supported                         | Not Supported                               | Not Supported                                 | Not Supported                                 |
+| High Availability and Failover | Supported（levelDB 时需 ZooKeeper）| **KRaft controller quorum**，动态配置 `controller.quorum.bootstrap.servers` | Master-Slave + DLedger Controller，无额外组件 | BookKeeper 三副本 ledger + 独立的元数据 quorum  |
+| Message Track                  | Not Supported                     | Not Supported                               | Supported                                     | Supported                                     |
+| Configuration                  | 默认配置较低级，需较多调优         | key-value 格式，可来自文件或程序             | 开箱可用，只需关注少数配置                    | key-value 格式；4.x 起 broker 默认值随容器化调整 |
+| Management and Operation Tools | Supported                         | 命令行 + Prometheus（`/docs/observability/`，5.1.0 起仅 broker）| 命令行 + Dashboard                             | 命令行 + Prometheus + Grafana                  |
+
+> [!WARNING]
+> 原表「High Availability and Failover」一行称 ActiveMQ「requires a ZooKeeper server」—— 该说法针对 levelDB 引擎，且与 Kafka 4.x 已无关：**Kafka 自 4.0 起彻底移除 ZooKeeper**，KRaft 是唯一模式。
 
 
 选型比较
@@ -949,11 +860,26 @@ RocketMQ 和 Kafka 相比，在架构上做了减法，在功能上做了加法�
 
 ## Links
 
-- [Apache Kafka](/docs/CS/MQ/Kafka/Kafka.md)
-- [Apache RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md)
-- [Apache Pulsar](/docs/CS/MQ/Pulsar/Pulsar.md)
+本目录按产品分三个子域，各自的入口页提供完整篇目清单与分层导航：
+
+- [Apache Kafka](/docs/CS/MQ/Kafka/Kafka.md) —— 事件流平台
+- [Apache RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md) —— 业务消息队列
+- [Apache Pulsar](/docs/CS/MQ/Pulsar/Pulsar.md) —— 云原生存算分离队列
+- [RabbitMQ](/docs/CS/MQ/RabbitMQ.md)
+
+按机制横向阅读（有些机制是跨产品通用的，可对照读）：
+
+- **存储引擎**：多文件 vs 单文件路线的取舍 → [Kafka Storage](/docs/CS/MQ/Kafka/Storage.md) · [RocketMQ Store](/docs/CS/MQ/RocketMQ/Store.md) · [Pulsar BookKeeper](/docs/CS/MQ/Pulsar/BookKeeper.md)
+- **零拷贝与内核机制**：`transferTo` vs `mmap` → [ZeroCopy](/docs/CS/OS/Linux/ZeroCopy.md)
+- **事务消息**：2PC+回查 vs 事务协调器 → [RocketMQ 事务消息](/docs/CS/MQ/RocketMQ/Transaction.md) · [Pulsar Functions 与事务](/docs/CS/MQ/Pulsar/Functions.md) · [Kafka ShareGroup](/docs/CS/MQ/Kafka/ShareGroup.md)
+- **消息过滤**：SQL92 表达式与开关 → [RocketMQ 消息过滤](/docs/CS/MQ/RocketMQ/Filter.md)
+- **控制面**：元数据与协调 → [Kafka KRaft](/docs/CS/MQ/Kafka/KRaft.md) · [Pulsar 集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md)
+- **可靠性工程**：重试、死信、幂等 → 各产品 Consumer 篇与本文 Features 章节
 
 ## References
 
 1. [Kafka vs. Apache RocketMQ™- Multiple Topic Stress Test Results](https://www.alibabacloud.com/blog/kafka-vs-rocketmq--multiple-topic-stress-test-results_69781)
 2. [OpenMessaging](https://openmessaging.cloud/design/2018/03/28/openmessaging-domain-architecture-v0.3/)
+3. [Apache Kafka 4.3.1](https://kafka.apache.org/downloads)
+4. [Apache RocketMQ 5.5.1](https://github.com/apache/rocketmq/releases)
+5. [Apache Pulsar 4.2.4](https://pulsar.apache.org/docs/)

@@ -6,6 +6,88 @@
 > 依赖 BookKeeper **4.17.3**（根 `pom.xml:185`）。
 > ⚠️ 4.x 相对 2.x/3.x 有**大量类删除与包路径迁移**（geo-replication、pulsar-streams、`enableIdempotence` 均已移除），照旧资料写必错 —— 逐条对照见 [BookKeeper](/docs/CS/MQ/Pulsar/BookKeeper.md) 与 [集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md) 的对照表。
 
+
+```dot
+digraph Pulsar {
+    rankdir=TB;
+    node [shape=box, style=rounded];
+
+    subgraph cluster_client {
+        label="客户端";
+        direction=LR;
+        producer [label="Producer"];
+        consumer [label="Consumer\nCursor"];
+        share [label="Share Consumer"];
+        function [label="Functions\nSource/Sink/Function"];
+    }
+
+    subgraph cluster_frontend {
+        label="接入层";
+        direction=LR;
+        broker [label="Broker\n无状态计算\n支持 unload"];
+        proxy [label="Proxy\n4.x 可选无状态接入"];
+    }
+
+    subgraph cluster_bundle {
+        label="路由与多租户";
+        direction=LR;
+        tenant [label="tenant\n→ namespace"];
+        bundleNode [label="bundle 切分\n按 hash 区间"];
+    }
+
+    subgraph cluster_storage {
+        label="存储层";
+        direction=LR;
+        meta [label="metadata store\nzk/etcd/rocksdb/oxia"];
+        bk [label="BookKeeper\nledger → segment → entry"];
+    }
+
+    producer -> broker;
+    consumer -> broker;
+    share -> broker;
+    function -> broker;
+    proxy -> broker;
+    broker -> bundleNode;
+    bundleNode -> meta;
+    broker -> bk;
+    bk -> meta;
+}
+```
+
+## Storage-Compute Separation
+
+Pulsar 与 Kafka 最本质的差异是**存储与计算解耦**。消息数据不在 Broker 上，而在 BookKeeper 的 ledger 里；Broker 重启或被卸载后换个节点重新加载即可继续读。这种设计换来两个 Kafka 给不了的能力：
+
+- **加 bookie 就能扩存储**（存储层独立水平扩），而 Kafka 加 broker 同时承担存储、扩容即等于换数据盘；
+- **按 namespace 粒度卸载** —— bundle 切分让 topic 可以独立迁移，而 Kafka 只能整 topic 增分区。
+
+代价是每个消息要过两层网络（Broker ↔ BookKeeper），延迟高于 Kafka 的本地读。
+
+## End-to-End Message Path
+
+客户端先通过 metadata store 查到 topic 归属的 broker 直连发送（Proxy 是 4.x 的可选无状态接入层）。Broker 收到后调 `ManagedLedger.asyncAppend`，BookKeeper 按 E/Qw/Qa 三级 quorum 写入 ledger；随后 `ReputMessageService` 异步为每个 cursor 维护消费位点。
+
+存储侧要落到 entry 与 cursor 两级的区别、ledger 层级、rollover 判定与 quorum 语义，见 [BookKeeper 存储层](/docs/CS/MQ/Pulsar/BookKeeper.md)。集群侧的 bundle 切分、`ModularLoadManager`、unload 的两条路径与分层存储的 offload 事件驱动机制，见 [集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md)。轻量计算与事务状态机见 [Functions 与事务](/docs/CS/MQ/Pulsar/Functions.md)。
+
+## Reading Guide
+
+`Pulsar` 主篇给出领域模型（tenant / namespace / topic 三级多租户）与整体架构，是理解其余篇章的前提。`Broker` 篇是本目录最长的源码级笔记（1677 行），从启动顺序、SocketServer 请求处理到 topic 加载、handleSend 流控、Controller 选举，逐层展开。`Producer` 与 `Consumer` 分别覆盖发送路径（含 `MessageRoutingMode` 的四种路由）与消费侧（`ConsumerBase`、retry、Retention、Reader），`Consumer` 篇的 Retention 一节解释了 Pulsar 特有的「消费即删除」与 cursor 独立存储。
+
+轻量计算与集群能力是两个独立方向：`Functions` 篇覆盖三种 Runtime 选型、WorkerConfig 与事务协调器；`Cluster` 篇覆盖 bundle 负载均衡、unload 与分层存储。
+
+## 4.x Removals
+
+这是 4.2.4 最需要注意的部分 —— **相对 2.x/3.x 有大量类删除与功能移除**，照旧资料写必错：
+
+> [!WARNING]
+> **已彻底移除**：`pulsar-replication` 模块（跨地域复制）、`PulsarBackup`（备份恢复）、`pulsar-streams`（并入 `pulsar-io`）、**幂等生产者开关**（`enableIdempotence` API 与配置字段双双消失，改为 `ProducerAccessMode`）、`GoRuntimeFactory`、tiered namespace 概念、`OverloadSheddingService`。
+>
+> **默认值陷阱**：**默认 quorum 是 2/2/2**（不是 `ManagedLedgerConfig` 原生的 3/2/2）—— E=2 且 W-Q=0 意味着一台 bookie 挂掉写入就阻塞；`maxUnackedMessagesPerConsumer` 是 **50000** 不是 -1；`brokerDeleteInactiveTopicsEnabled` **默认 true**；**元数据默认回退是 ZK 不是 RocksDB**（4.2.4 另提供 `etcd:` 与 `oxia:` 两个新 provider）。
+>
+> **投递语义**：普通非事务订阅是 **at-least-once**（`readPosition` 在读时推进而非 ack 时），不是 exactly-once；事务订阅才 effectively-once，且 `transactionCoordinatorEnabled` **默认关闭**。
+>
+> **SQL92 不用 Calcite**，是 JavaCC `SelectorParser` + AST 解释执行，靠 BloomFilter 优化；`enablePropertyFilter` 默认 **false**。
+
 ## 主题导航
 
 Pulsar 的独特之处在于**计算与存储彻底分离**：Broker 无状态，数据落到 BookKeeper ledger，元数据落到 metadata store。这个分层决定了它几乎所有能力（多租户、细粒度扩容、unload）的形态。
@@ -420,12 +502,18 @@ public class PulsarClientImpl implements PulsarClient {
 > 细节见 [Functions 与事务](/docs/CS/MQ/Pulsar/Functions.md)。
 
 ## Links
-
+- [MQ 总纲](/docs/CS/MQ/MQ.md)
 - [MQ](/docs/CS/MQ/MQ.md)
 - [BookKeeper 存储层](/docs/CS/MQ/Pulsar/BookKeeper.md)
 - [集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md)
 - [Functions 与事务](/docs/CS/MQ/Pulsar/Functions.md)
 - [Broker](/docs/CS/MQ/Pulsar/Broker.md)
 - [BookKeeper](/docs/CS/Framework/BooKeeper/BooKeeper.md)
-
+- [Apache Kafka](/docs/CS/MQ/Kafka/Kafka.md) —— 存算一体路线的对照
+- [Apache RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md) —— 单文件 commitlog 路线的对照
+- [etcd](/docs/CS/Framework/etcd/etcd.md) —— 可选的 metadata store 之一
+- [Flink](/docs/CS/Framework/Flink/Flink.md) —— 与 Pulsar Functions 的流处理取舍
 ## References
+1. [Apache Pulsar 4.2.4 Release](https://github.com/apache/pulsar/releases/tag/v4.2.4)
+2. [Apache Pulsar 官方文档](https://pulsar.apache.org/docs/)
+3. [Apache BookKeeper 4.17.3](https://bookkeeper.apache.org/)

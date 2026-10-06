@@ -116,10 +116,15 @@ start:
 
 
 
+## 本目录导航
+
+按「对象与类型 → 语言语义 → 本地与扩展 → 工具」四组组织：
+
+- 对象与类型：[Object](/docs/CS/Java/JDK/Basic/Object.md)（对象模型）、[PrimitiveType](/docs/CS/Java/JDK/Basic/PrimitiveType.md)（基本类型的自动变量语义）、[String](/docs/CS/Java/JDK/Basic/String.md)、[enum](/docs/CS/Java/JDK/Basic/enum.md)、[Generics](/docs/CS/Java/JDK/Basic/Generics.md)、[Lambda](/docs/CS/Java/JDK/Basic/Lambda.md)、[Annotation](/docs/CS/Java/JDK/Basic/Annotation.md)
+- 语言语义：[semantics](/docs/CS/Java/JDK/Basic/semantics.md)（Effective Java 中易被忽略的语义规则）、[Reflection](/docs/CS/Java/JDK/Basic/Reflection.md) 与 [Ref](/docs/CS/Java/JDK/Basic/Ref.md)（反射与四种引用）、[serialize](/docs/CS/Java/JDK/Basic/serialize.md)、[Throwable](/docs/CS/Java/JDK/Basic/Throwable.md)、[SPI](/docs/CS/Java/JDK/Basic/SPI.md)、[module](/docs/CS/Java/JDK/Basic/module.md)（JPMS 模块化）
+- 本地与扩展：[unsafe](/docs/CS/Java/JDK/Basic/unsafe.md)、[JNI](/docs/CS/Java/JDK/Basic/JNI.md)、[JDBC](/docs/CS/Java/JDK/Basic/JDBC.md)、[JNDI](/docs/CS/Java/JDK/Basic/JNDI.md)、[Instrumentation](/docs/CS/Java/JDK/Basic/Instrumentation.md)、[Intrinsics](/docs/CS/Java/JDK/Basic/Intrinsics.md)（编译器内建函数）
+- 工具与调度：[JDK 命令行工具](/docs/CS/Java/JDK/Basic/Tools.md)、[定时任务总览](/docs/CS/Java/JDK/sche.md)
+
 ## Links
 
 - [JDK](/docs/CS/Java/JDK/JDK.md)
-- [String](/docs/CS/Java/JDK/Basic/String.md)
-- [Reflection](/docs/CS/Java/JDK/Basic/Reflection.md)
-- [Serialization](/docs/CS/Java/JDK/Basic/serialize.md)
-- [Effective Java semantics](/docs/CS/Java/JDK/Basic/semantics.md)

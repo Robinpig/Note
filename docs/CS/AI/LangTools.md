@@ -35,5 +35,5 @@ llm = ChatOpenAI(model="gpt-4", temperature=0)
 ## Links
 
 - [LangChain](/docs/CS/Framework/LangTool/LangChain.md) / [LangGraph](/docs/CS/Framework/LangTool/LangGraph.md) / [LangChain4j](/docs/CS/Framework/LangTool/LangChain4j.md) / [Langflow](/docs/CS/Framework/LangTool/Langflow.md) — Lang 家族正式笔记
-- [Harness](/docs/CS/AI/LLM/Harness.md) — 编排框架的三层定位
+- [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md) — 编排框架的三层定位
 - [Pydantic AI](/docs/CS/Framework/PydanticAI.md) — 类型优先的 Python Agent 框架，Lang 家族的主要替代路线

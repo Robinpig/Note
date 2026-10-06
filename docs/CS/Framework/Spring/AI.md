@@ -138,7 +138,7 @@ DocumentReader（PDF/HTML/Tika） → DocumentTransformer（TokenTextSplitter �
 
 ## MCP
 
-Spring AI 提供 [MCP](/docs/CS/AI/LLM/MCP.md) 客户端与服务端两套 starter（`spring-ai-starter-mcp-client` / `spring-ai-starter-mcp-server`，传输层分 stdio 与 SSE/WebFlux 变体）：
+Spring AI 提供 [MCP](/docs/CS/AI/LLM/Protocol/MCP.md) 客户端与服务端两套 starter（`spring-ai-starter-mcp-client` / `spring-ai-starter-mcp-server`，传输层分 stdio 与 SSE/WebFlux 变体）：
 
 - 作为 **MCP Client**：应用接入任意 MCP Server，把外部工具自动注册进 `ToolCallback` 列表，与 `@Tool` 本地工具无差别使用。
 - 作为 **MCP Server**：把自有业务工具按 MCP 规范暴露，供 Claude Desktop 等任意 MCP 宿主调用，实现"一次开发、处处接入"。
@@ -156,7 +156,7 @@ Spring AI 官方参考 [Anthropic 的 Building Effective Agents](https://www.ant
 | Evaluator-optimizer | Workflow | 生成器 + 评估器循环打分迭代，直到达标 |
 | Agent（自主循环） | Agent | Tool Calling 执行循环 + ChatMemory 维持状态，模型自主决定下一步 |
 
-Agent 模式 = ChatClient + `tools()` + ChatMemory 的自然组合；更复杂的编排建议外置到工作流引擎或 [Agent 平台](/docs/CS/AI/LLM/Agent.md)。
+Agent 模式 = ChatClient + `tools()` + ChatMemory 的自然组合；更复杂的编排建议外置到工作流引擎或 [Agent 平台](/docs/CS/AI/LLM/Agent/Theory/Agent.md)。
 
 ## 监控
 
@@ -191,7 +191,7 @@ Micrometer Observation 侧自动产出 `spring.ai.chat.client` / `spring.ai.chat
 
 - [Spring](/docs/CS/Framework/Spring/Spring.md)
 - [LLM](/docs/CS/AI/LLM/LLM.md)
-- [Agent](/docs/CS/AI/LLM/Agent.md)
+- [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md)
 - [RAG](/docs/CS/AI/RAG.md)
 - [LangChain4j](/docs/CS/Framework/LangTool/LangChain4j.md)
 

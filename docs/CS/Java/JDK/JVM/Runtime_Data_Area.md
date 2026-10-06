@@ -70,7 +70,7 @@ Allocate the instance:
 
 <div style="text-align: center;">
 
-![Fig.1. Allocate](./img/Allocate.png )
+![Fig.1. Allocate](./img/Allocate.png)
 
 </div>
 

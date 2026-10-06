@@ -48,7 +48,7 @@ LangChain4j Agentic 框架提供了多种工作流编排模式，按自主程度
 | Agent 循环 | 模型多轮「思考→调工具→观察」直到给出答案 | 多步任务 |
 | 编排（workflow） | 开发者显式定义步骤与分支，模型只填空 | 合规要求高、流程固定的业务 |
 
-经验法则与 Harness 三层划分一致：**流程越确定越该写死成编排，流程越开放越交给 Agent 循环**，参见 [Harness](/docs/CS/AI/LLM/Harness.md) 的 Runtime/Framework/Harness 分层。
+经验法则与 Harness 三层划分一致：**流程越确定越该写死成编排，流程越开放越交给 Agent 循环**，参见 [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md) 的 Runtime/Framework/Harness 分层。
 
 ## 与 Python 生态的取舍
 
@@ -64,10 +64,10 @@ LangChain4j Agentic 框架提供了多种工作流编排模式，按自主程度
 ## Links
 
 - [LangChain](/docs/CS/Framework/LangTool/LangChain.md) / [LangGraph](/docs/CS/Framework/LangTool/LangGraph.md) — Python 同源框架与图编排运行时
-- [Agent](/docs/CS/AI/LLM/Agent.md) — Agent 四构成（Loop/Tools/Memory/Harness）
-- [Harness](/docs/CS/AI/LLM/Harness.md) — Runtime / Framework / Harness 三层
+- [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) — Agent 四构成（Loop/Tools/Memory/Harness）
+- [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md) — Runtime / Framework / Harness 三层
 - [RAG](/docs/CS/AI/RAG.md) — 检索增强生成
-- [MCP](/docs/CS/AI/LLM/MCP.md) — 工具接入的标准化协议（对散落 @Tool 的协议化替代）
+- [MCP](/docs/CS/AI/LLM/Protocol/MCP.md) — 工具接入的标准化协议（对散落 @Tool 的协议化替代）
 - [Retrofit](/docs/CS/Java/Retrofit.md) — 同为动态代理声明式接口的设计先例
 - [AI](/docs/CS/Framework/Spring/AI.md)
 

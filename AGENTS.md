@@ -68,6 +68,7 @@ Note/
 
 - `Medicine/Medicine.md` 是该领域**唯一总纲**；分支页为 `Basic_Medicine.md`、`Clinical_Medicine.md`、`Diagnosis.md`、`Public_Health.md`、`Medical_History_Ethics.md`。
 - 护理学是**唯一有子目录**的分支：`Medicine/Nursing/` 下 `Nursing.md`（总纲）+ 11 篇分支页，按**基础层 / 场景层 / 延伸层**三层组织——基础层 `Nursing_Fundamentals.md`；场景层 `Clinical_Nursing.md`、`Maternal_Pediatric_Nursing.md`、`Psychiatric_Nursing.md`、`OR_Sterile_Supply.md`、`Emergency_Disaster_Nursing.md`、`Palliative_Care.md`、`Gerontological_Nursing.md`；延伸层 `Community_Home_Nursing.md`、`Nursing_Research_Education.md`、`Nursing_Informatics.md`；`Nursing_Management_Ethics.md` 贯穿全部。新增护理学内容一律放 `Nursing/`，不要在 `Medicine/` 根下平铺。
+- **护理学已有第二个子目录**：`Nursing/Cardiovascular/`（2026-10 新增，8 篇），是**第一个「专科深化层」**——示范单个科室的疾病谱如何再展开。结构为 `Cardiovascular_Care.md`（总纲，含**三条贯穿主线：缺血与灌注 / 容量与压力 / 节律与电**）+ 7 篇疾病页（`Coronary_Heart_Disease.md`、`Heart_Failure.md`、`Arrhythmia.md`、`Hypertension.md`、`Valvular_Heart_Disease.md`、`Cardiomyopathy_Myocarditis.md`、`Pericardial_Disease.md`）。后续若深化其他科室（如呼吸科、消化科、糖尿病），**照此结构新建 `Nursing/<Specialty>/`，不要平铺进 `Nursing/`**。
 - ⚠️ **医学 × CS 的固定交叉点**：`Nursing/Nursing_Informatics.md` 是本库医学与计算机科学**最直接**的交叉页（决策支持、远程护理、可穿戴、AI 辅助），链向 `CS/AI/AI.md` 与 `CS/AI/LLM/LLM.md`。写 AI 相关医学内容时**从这篇转链**，不要重复叙述 AI 原理。
 - ⚠️ **内容口径：学科框架为主，谨慎写临床细节**。剂量、诊疗路径、指南推荐等级、各类指标阈值、给药方案与器械参数**不收录**——它们随指南更新而变化，写死必然过时且有出错风险。需要时只写「关注点与判断逻辑」，并在页首用 `> [!WARNING]` 块声明「不收录具体规程，以最新指南与机构规范为准」。
 - ⚠️ 医学笔记用**中文术语 + 英文原名**（如「循证医学（evidence-based medicine）」首次出现时），这是本库其他领域（CS/哲学/心理学）一致的做法。
@@ -143,8 +144,13 @@ Markdown 增强写法：
 ## 笔记写作规范（必须遵守）
 
 1. **结构顺序**：`## Introduction` 开头 → 正文小节（`##` 子主题、`###` / `####` 细节）→ `## Links` → `## References`。正文不内嵌「来源：…」引用块。
-2. **站内链接**一律用 docsify 绝对路径：`/docs/CS/OS/Linux/proc/process.md`；锚点用 `?id=slug`。
-3. **slug 规则**（2026-10-02 按 docsify v5.0.0 源码 `src/core/render/slugify.js` 逐条复核；v4.13.1 实现相同。**不要凭标题印象拼**）：
+2. **标题一律用英文，禁止汉化**（2026-10-05 用户明确要求）。正文用中文，标题保留英文原名 —— 标题是锚点来源，改名会打断全库 `?id=` 引用，且 docsify 侧边栏、搜索、跨文件锚点全部依赖它。
+   - ✅ 正文汉化、代码/配置名/产品名保留英文、References 保留原文
+   - ❌ `## Message brokers` → `## 消息代理`、`### Partitioned Logs` → `### 分区日志`
+   - **例外**：原本就是中文的标题（如 `MQ.md` 的 `### 元数据存储`、`### 消息丢失`）保持中文即可，不要反向改成英文。
+   - 若确需改标题标题语言，必须同步修全部 `?id=` 引用并重跑 `validate_links.py` —— 改完立刻验证，别留到收尾。
+3. **站内链接**一律用 docsify 绝对路径：`/docs/CS/OS/Linux/proc/process.md`；锚点用 `?id=slug`。
+4. **slug 规则**（2026-10-02 按 docsify v5.0.0 源码 `src/core/render/slugify.js` 逐条复核；v4.13.1 实现相同。**不要凭标题印象拼**）：
    - `[A-Z]+` → 小写。**对纯 ASCII 标题等价于整串小写**（`MarkWord` → `markword`，`M` 与 `W` 都被小写）；差异只在非 ASCII 大写字母（`École` 保留 `É`）。
    - 删**半角**标点（ASCII 标点 + `\u2000-206F` + `\u2E00-2E7F`）→ **全角标点（：）（，、）与 `→` 一律保留** → 空白转 `-` → 数字开头前缀 `_` → markdown 链接 `[文本](url)` 只留「文本」。
    - 例：`限额接口（cgroup v2）` → **`限额接口（cgroup-v2）`**；`注意（Attention）` → **`注意（attention）`**。
@@ -155,11 +161,10 @@ Markdown 增强写法：
      ```
    - ⚠️ `slugify()` 已于 2026-10-02 按 docsify 上游重写：旧版是「整串小写 + 删所有标点」，会把含全角标点的好链接误报成死链。另：全库有 54 个文件存在**同文件内重复标题**，docsify 会给第 2、3 个追加 `-1`／`-2` 后缀（`anchors_of()` 已支持）。
    - **改标题会断既有锚点**：动手前先 `grep -rn "<file>.md?id=<slug>" docs/`，有引用就把旧标题保留为独立小节，不要合并掉。
-4. **`## Links`** 放 1~6 条最相关的**站内**笔记，只写 `- [标题](/docs/....md)` 一行，**链接后不加任何后缀说明**；正文里已出现过的内部链接不重复列入；新增笔记后要回填相关笔记的 Links，形成双向链接。
-5. **`## References`** 位于全文最后（`## Links` 之后），放外部文章 / 论文 / 官方文档，每条只写一行 `[标题](链接)`，不加后缀说明。**KEP / RFC / issue 编号必须核实再写**（凭印象填编号、或照旧目录 slug 写 URL，都会 404）。
-6. **代码片段**：从内核 / 框架源码摘录时保持原样（含原注释），中文解释写在代码块外的段落里。
-7. **图片**放同目录或上级 `img/`，用相对路径引用。
-8. **标题语言**：中英混排，术语保留英文（`task_struct`、EEVDF、futex、sched_ext 等）；标题尽量英文或短中文，保证锚点稳定。
+5. **`## Links`** 放 1~6 条最相关的**站内**笔记，只写 `- [标题](/docs/....md)` 一行，**链接后不加任何后缀说明**；正文里已出现过的内部链接不重复列入；新增笔记后要回填相关笔记的 Links，形成双向链接。
+6. **`## References`** 位于全文最后（`## Links` 之后），放外部文章 / 论文 / 官方文档，每条只写一行 `[标题](链接)`，不加后缀说明。**KEP / RFC / issue 编号必须核实再写**（凭印象填编号、或照旧目录 slug 写 URL，都会 404）。
+7. **代码片段**：从内核 / 框架源码摘录时保持原样（含原注释），中文解释写在代码块外的段落里。
+8. **图片**放同目录或上级 `img/`，用相对路径引用。
 9. **对比与选型优先用 Markdown 表格**。
 10. 目录级索引页用 `README.md`，范式参考 [proc/README.md](/docs/CS/OS/Linux/proc/README.md)（叙述性知识地图 + 分节展开）。
 11. **枢纽页导航禁止「`## XX 笔记索引` + `笔记|内容` 两列表格」**，必须写成**有因果递进的叙述性章节**（讲清为什么需要它、解决什么问题、与相邻笔记的关系），链接嵌进句子；不必串联全部笔记。表格只用于内容型对照。同层对比型笔记（如 Coze / Dify）之间不补直接互链，横向跳转交给枢纽页。

@@ -9,6 +9,50 @@ Apache RocketMQ is used in asynchronous decoupling and load shifting scenarios.
 
 
 
+
+```dot
+digraph RocketMQ {
+    rankdir=TB;
+    node [shape=box, style=rounded];
+
+    subgraph cluster_client {
+        label="客户端";
+        direction=LR;
+        producer [label="Producer\n幂等/事务/批量"];
+        consumer [label="Consumer\nPush/Pull/POP"];
+        remoting [label="Remoting 协议\n自定义编解码"];
+        grpc [label="gRPC 协议\nProtobuf"];
+    }
+
+    subgraph cluster_route {
+        label="路由与通信";
+        direction=LR;
+        namesrv [label="NameServer\n轻量注册中心"];
+        net [label="NettyRemoting\nopaque 配对"];
+    }
+
+    subgraph cluster_broker {
+        label="Broker 与存储";
+        broker [label="BrokerController\n存储 + 副本"];
+        commitlog [label="CommitLog\n全 topic 共用 1G"];
+        cq [label="ConsumeQueue\n每 topic 一份索引"];
+        store [label="Store\n刷盘/恢复/清理"];
+    }
+
+    producer -> remoting;
+    producer -> grpc;
+    remoting -> net;
+    grpc -> net;
+    net -> namesrv;
+    net -> broker;
+    broker -> commitlog;
+    broker -> cq;
+    broker -> store;
+    commitlog -> cq [label="dispatch"];
+    consumer -> net;
+}
+```
+
 ### Domain Model
 
 <div style="text-align: center;">
@@ -467,6 +511,39 @@ check
 
 
 
+
+
+
+## End-to-End Message Path
+
+理解 RocketMQ 最快的方式是跟着一条消息走一遍：**客户端要发给谁**（NameServer 查路由）→ **消息怎么落盘**（CommitLog + 异步建 ConsumeQueue）→ **怎么被读出来**（CommitLog 随机读 + 索引定位）→ **特殊能力怎么实现**（事务靠改 topic 隐藏 half 消息，延时靠独立 topic）。
+
+**路由层**刻意做得很轻 —— NameServer 不参与数据面，只维护 topic 到 broker 的映射，客户端直连 broker 收发。通信层是自定义的 Remoting 协议（[Remoting](/docs/CS/MQ/RocketMQ/Remoting.md)），5.x 之后额外支持 gRPC。注意 Remoting 层的 `opaque` 只是**请求-响应配对序号**，不是事务 ID（这是个常见误解）。
+
+**存储层**是 RocketMQ 与 Kafka 最本质的分野：所有 topic 的消息**顺序追加到同一个 CommitLog**（默认 1 GB 一段），再由 `ReputMessageService` 异步为每个 topic 派发一份 ConsumeQueue（20 字节一条的索引）。这样一个文件就能承载海量 topic，代价是无法按消息删除、恢复逻辑复杂。存储用 mmap 而非 sendfile，因此能拿到消息内容做 SQL92 过滤与死信投递。详见 [Store](/docs/CS/MQ/RocketMQ/Store.md)。
+
+**业务能力**建立在存储之上：事务消息把 half 消息的 topic 改写成系统 topic 使其对用户不可见，再靠 30 秒一次的回查兜底（[Transaction](/docs/CS/MQ/RocketMQ/Transaction.md)）；延时消息用 18 级固定延迟队列，5.x 另加时间轮（[Broker](/docs/CS/MQ/RocketMQ/Broker.md)）；SQL92 过滤用 JavaCC 解析的 AST 解释执行，**不是 Calcite**（[Filter](/docs/CS/MQ/RocketMQ/Filter.md)）。
+
+## Reading Guide
+
+从客户端与协议入手，能理解为什么 RocketMQ 要自己实现编解码、以及 5.x 为什么要引入无状态 Proxy。`Producer` 篇讲清幂等与批量如何配合，`Consumer` 篇覆盖 Push/Pull 两种模型、Rebalance 三种策略（Range/Cooperative Sticky/eager）与并发消费的限流维度，`Remoting` 篇讲通信层与 opaque 配对。
+
+存储是本主题最厚的一篇。读 `Store` 时建议先看它的「刷盘 flush 与 commit 是两件事」一节 —— 这解释了为什么默认配置下 commit 是空操作，以及 9 个「死配置」（有字段但无消费方）的成因。随后看 `Broker` 篇的 putMessage 三步与 rollover 判定，理解「写阻塞」与「切账本」的关系。
+
+事务、过滤、5.x 架构是三个业务能力专题，彼此独立：事务看 2PC + 补偿的完整链路与半消息可见性机制；过滤看 Tag 精确匹配与 SQL92 表达式的三级过滤链；5.x 看无状态 Proxy 如何把 Broker 的计算职责剥离。
+
+历史上还有两篇背景笔记：`Notify`（RocketMQ 的前身）与 `LiteTopic`（5.5.0 新增的轻量主题类型）；`Dledger` 与 `Cluster` 则是多副本与集群高层封装。
+
+## Pitfalls
+
+> [!WARNING]
+> **默认值陷阱**：`diskMaxUsedSpaceRatio` 是 **75 不是 72**（72 是 4.x 旧值）；`maxFilterMessageSize=16000` 是**读路径扫描上限**而非文件空间；`maxTransfer*OnMessageInMemory` 实际生效值是**参数减一**（源码写 `> count - 1`）；`maxIndexNum` 与 `maxHashSlotNum` 是两个不同维度的字段（条目数 vs 槽数）。
+>
+> **死配置**：`mappedFileSwapEnable` 全家、`putMsgIndexHightWater`、`enableAsyncReput` 均有字段无消费方；实际决定 Reput 实现的是 `enableBuildConsumeQueueConcurrently`。判断配置是否生效的可靠方法：grep 其 getter 在配置类之外的调用点。
+>
+> **SQL92 默认不生效**：`enablePropertyFilter` 默认 **false**，不开启时 SQL92 订阅的 Pull 请求直接返回 `SYSTEM_ERROR`。
+>
+> **5.x 易错**：`rocketmq-client-java` **从未合入主仓库**，在独立的 `apache/rocketmq-clients`；`BrokerConfig.listenPort` 默认 **6888** 不是 10911；`mqadmin updateTopic -s` 是 `hasUnitSub` 不是写队列数（写队列数用 `-w`）。
 
 
 ## Architecture

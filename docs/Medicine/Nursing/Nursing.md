@@ -16,6 +16,8 @@
 
 **延伸层**则越过医院围墙与单一职业边界：[社区与家庭护理](/docs/Medicine/Nursing/Community_Home_Nursing.md)把场所移到患者生活与长期照护体系，[护理科研与教育](/docs/Medicine/Nursing/Nursing_Research_Education.md)与[护理信息化](/docs/Medicine/Nursing/Nursing_Informatics.md)则处理这个专业如何产出证据、维持自身能力、以及与计算机科学交汇。
 
+**专科深化层**是把某个科室的疾病谱与照护逻辑单独展开，目前是[心血管护理](/docs/Medicine/Nursing/Cardiovascular/Cardiovascular_Care.md)——它是第一个专科子目录，示范了「专科内部如何再按疾病谱组织」的方式。
+
 贯穿其中的仍是[护理管理与伦理法律](/docs/Medicine/Nursing/Nursing_Management_Ethics.md)——排班质量、法规边界与职业风险不是某一科室的附属议题，而是让所有分支得以成立的条件。
 
 ## 分支学科

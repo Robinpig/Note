@@ -209,7 +209,7 @@ class UnixFileDispatcherImpl extends FileDispatcher {
 }
 ```
 
-系统调用[read](/docs)
+系统调用 [read](/docs/CS/OS/Linux/Calls.md?id=read)
 
 ```c
 JNIEXPORT jint JNICALL

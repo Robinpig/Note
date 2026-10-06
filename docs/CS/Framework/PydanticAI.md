@@ -30,9 +30,9 @@ V2.0 的头号特性是**能力系统（capabilities）**：把横切关注点�
 - **用量与成本硬约束**：`UsageLimits` 可以设置每次 run 的请求数、token 数与**成本上限**，避免失控循环把额度烧穿（这类护栏应该在选型阶段就问清楚，而不是等账单刺痛时才补）。
 - **输出校验 + 自动重试**：不符 schema 的错误会被连同错误信息一起回灌模型重试，业务代码不必写脏数据处理。
 - **原生 OpenTelemetry**：追踪带 token 与成本指标，可直灌任何 OTLP 后端（Langfuse、Arize Phoenix、W&B Weave、MLflow）。Logfire 是同团队做的"阻力最小"路径（2025 年 3 月起提供 EU 区域与自托管），**但它是默认项不是必需品**。
-- **Pydantic Evals**：把回归评测挂进 CI，改提示词/改模型能自动卡住质量回退——对应 [Self-Evolving](/docs/CS/AI/LLM/Self-Evolving.md) 里"评测驱动自进化"的那条链路。
+- **Pydantic Evals**：把回归评测挂进 CI，改提示词/改模型能自动卡住质量回退——对应 [Self-Evolving](/docs/CS/AI/LLM/Agent/Practice/Self-Evolving.md) 里"评测驱动自进化"的那条链路。
 - **持久执行**：与 Temporal、DBOS、Prefect 有一等集成，跑几天的任务不必自己造轮子。
-- **互操作**：MCP（通过 extras）与 [A2A](/docs/CS/AI/LLM/A2A.md) 均原生支持；另有一个 Python 沙箱（Monty / CodeMode 能力）用于代码执行。
+- **互操作**：MCP（通过 extras）与 [A2A](/docs/CS/AI/LLM/Protocol/A2A.md) 均原生支持；另有一个 Python 沙箱（Monty / CodeMode 能力）用于代码执行。
 
 ## 需要注意的短板
 
@@ -58,10 +58,10 @@ V2.0 的头号特性是**能力系统（capabilities）**：把横切关注点�
 
 - [LangChain](/docs/CS/Framework/LangTool/LangChain.md)
 - [Langflow](/docs/CS/Framework/LangTool/Langflow.md)
-- [Agent](/docs/CS/AI/LLM/Agent.md)
-- [Harness](/docs/CS/AI/LLM/Harness.md)
-- [MCP](/docs/CS/AI/LLM/MCP.md)
-- [LLM 应用开发平台](/docs/CS/AI/LLM/Platform.md)
+- [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md)
+- [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md)
+- [MCP](/docs/CS/AI/LLM/Protocol/MCP.md)
+- [LLM 应用开发平台](/docs/CS/AI/LLM/Platform/Platform.md)
 
 ## References
 

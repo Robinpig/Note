@@ -26,17 +26,7 @@ This word is located directly preceding the object and is only allocated when us
 
 
 
-<div style="text-align: center;">
-
-![Fig.1. Shenandoah Object layout](img/GFS-Write-Flow.png)
-
-</div>
-
-<p style="text-align: center;">
-Fig.1. Shenandoah Object layout
-</p>
-
-![Shenandoah Object layout](../img/Shenandoah%20Object%20layout.png)
+![Fig.1. Shenandoah Object layout](../img/Shenandoah-Object-Layout.png)
 
 ### Heap Layout
 
@@ -55,7 +45,7 @@ We’ve developed an interface for GC heuristics which track allocation and recl
 We have several custom policies to decide when to start a concurrent mark and which regions to include in a collection set.
 Our default heuristic which was used for our measurements chooses only regions with 60 percent or more garbage and starts a concurrent marking cycle when 75 percent of regions have been allocated.
 
-![Shenandoah Heap layout](../img/Shenandoah%20Heap%20layout.png)
+![Fig.2. Shenandoah Heap layout](../img/Shenandoah-Heap-Layout.png)
 
 ## GC Phases
 

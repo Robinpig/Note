@@ -539,7 +539,7 @@ if (inheritThreadLocals && parent.inheritableThreadLocals != null)
 
 
 
-[TransmittableThreadLocal]([https://github.com/alibaba/transmittable-thread-local](https://github.com/alibaba/transmittable-thread-local?)) is a missing Java std lib(simple & 0-dependency) for framework/middleware, provide an enhanced InheritableThreadLocal that transmits values **between threads even using thread pooling components**.
+[TransmittableThreadLocal](https://github.com/alibaba/transmittable-thread-local) is a missing Java std lib(simple & 0-dependency) for framework/middleware, provide an enhanced InheritableThreadLocal that transmits values **between threads even using thread pooling components**.
 
 
 

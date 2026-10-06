@@ -9,6 +9,73 @@ It can be deployed on bare-metal hardware, virtual machines, and containers in o
 >
 > ⚠️ 4.x 相对 3.x 是**大版本级重构**：`kafka.log` 包已迁到 `storage` 模块的 `org.apache.kafka.storage.internals.log`（全树 `.scala` 只剩 309 个），`connect-runtime` 改名 `connect/runtime`，ZooKeeper 模式彻底移除。照旧资料写必错 —— 逐条对照见 [Storage](/docs/CS/MQ/Kafka/Storage.md) 与 [Security](/docs/CS/MQ/Kafka/Security.md)。
 
+
+```dot
+digraph Kafka {
+    rankdir=TB;
+    node [shape=box, style=rounded];
+
+    subgraph cluster_core {
+        label="核心链路";
+        direction=LR;
+        produce [label="Producer\n幂等/事务/批量"];
+        log [label="Log 存储\nsegment+稀疏索引"];
+        fetch [label="Fetch\n零拷贝 sendfile"];
+        consume [label="Consumer\n分区独占"];
+    }
+
+    subgraph cluster_control {
+        label="控制面与副本";
+        direction=LR;
+        kr [label="KRaft\ncontroller quorum"];
+        replica [label="Replica\nISR/leader 选举"];
+    }
+
+    subgraph cluster_ecosystem {
+        label="生态子系统";
+        direction=LR;
+        connect [label="Connect\n数据搬运"];
+        streams [label="Streams\n流内计算"];
+        mirror [label="MirrorMaker v2\n跨集群复制"];
+    }
+
+    produce -> log -> fetch -> consume;
+    kr -> replica;
+    kr -> log;
+    log -> connect;
+    log -> streams;
+    log -> mirror;
+}
+```
+
+## Core Path: Write to Consume
+
+Kafka 的骨架是一条顺序写的日志，所有能力都围绕它展开。理解顺序要把握三个层次：
+
+**存储层** —— 消息顺序追加到 segment 文件，靠稀疏索引（`.index` / `.timeindex`）定位，按大小或时间滚动。这里最值得记住的是它与其他产品的路线差异：Kafka 走**多文件**路线（每分区独立 segment），数据用 `FileChannel.transferTo` 零拷贝发送，应用层拿不到消息内容 —— 这也直接决定了它做不了 Broker 端内容过滤。详见 [Kafka Storage](/docs/CS/MQ/Kafka/Storage.md)。
+
+**控制面** —— 4.0 起 ZooKeeper 模式彻底移除，KRaft 成为唯一模式。controller quorum 负责分区分配与 leader 选举，通过 Raft 日志复制元数据。见 [KRaft](/docs/CS/MQ/Kafka/KRaft.md) 与 [Replica](/docs/CS/MQ/Kafka/Replica.md)。
+
+**消费层** —— 传统 Consumer Group 是「partition 独占」：一个 partition 在同一时刻只能被组内一个 consumer 消费，并发上限因此被 partition 数锁死。4.x 新增的 ShareGroup 改成「记录级共享」，让并发上限变成记录数。见 [ShareGroup](/docs/CS/MQ/Kafka/ShareGroup.md)。
+
+## Reading Guide
+
+存储与协议是理解 Kafka 的地基。存储侧要落到 segment 滚动条件、稀疏索引的 `lookup` 二分、`retention` 三级配置优先级，以及「数据文件走 sendfile、索引文件走 mmap」这个分工；网络侧要理解 `Selector` 的事件循环与 `Buffer` 池化；服务端的 fetch 路径与追加路径则分别见对应篇目。核心链路读完，再看控制面与副本 —— `leaderEpochCache` 如何防止脑裂、unclean leader election 为何默认关闭、consumer group 协议在 4.x 如何分成 classic 与 KIP-848 两套。
+
+消费侧除经典的 partition 独占式模型与 poll 主链路外，4.x 最重要的变化是 ShareGroup 带来的队列语义：记录锁、逐条 acknowledge、投递计数与自动 DLQ，这与 Consumer Group 是**不同的 group type** 而非同一开关的两档，需要分组管理的团队可以对照 [ShareGroup](/docs/CS/MQ/Kafka/ShareGroup.md) 与 [Consumer](/docs/CS/MQ/Kafka/Consumer.md) 评估迁移。
+
+生态侧的三套系统都是构建在 Kafka 之上的独立子系统，**不是 Kafka 内核的一部分**：`Connect` 解决系统间管道（但它不使用虚拟线程，这一点常被误传），`Streams` 是跑在应用内的流处理库（`exactly_once_v2` 已 GA，需注意 4.3.0 的 RocksDB 内存泄漏需直接升到 4.3.1），`MirrorMaker v2` 建在 Connect 框架上做跨集群复制（MM1 已移除）。安全方面覆盖 SASL/SSL 默认值与 ACL —— 其中 ACL 已全部迁入 KRaft metadata log。
+
+## Deprecated & Pitfalls
+
+> [!WARNING]
+> **4.x 是大版本级重构，照旧资料写必错**：
+> - `kafka.log` 包已迁到 `storage` 模块的 `org.apache.kafka.storage.internals.log`（全树 `.scala` 文件只剩 309 个）；`LogConfig` 的 retention 常量已拆到 `server-common` 模块
+> - `connect-runtime` 改名 `connect/runtime`；客户端消费逻辑下沉到 `internals/ClassicKafkaConsumer`
+> - ZooKeeper 相关类与配置**全部删除**，面对 `--zookeeper` 直接启动失败
+>
+> **默认值陷阱**：`log.retention.hours` 只是三级兜底（权威是 `.ms`）；`flush.ms` 默认 `Long.MAX_VALUE` 即**默认不主动刷盘**；`authorizer.class.name` 默认空串即**无任何 ACL 校验**；`ssl.trustmanager.algorithm` 默认是 JVM 动态值而非 `PKIX`；客户端 `group.protocol` 默认 `classic`，服务端虽已启用 KIP-848 但需显式设置。
+
 ## 主题导航
 
 Kafka 的主线是「**顺序写的日志** + **独立于日志的复制协议** + **两种消费模型**」，三者各成一篇：
@@ -892,8 +959,8 @@ kafka的log文件是以分区为单位的 日志未采用mmap
 - [Spring Kafka](/docs/CS/Framework/Spring/Kafka.md)
 
 ## Links
-
-- [MQ](/docs/CS/MQ/MQ.md?id=kafka)
+- [MQ 总纲](/docs/CS/MQ/MQ.md)
+- [MQ](/docs/CS/MQ/MQ.md?id=mqs)
 - [Producer](/docs/CS/MQ/Kafka/Producer.md)
 - [Consumer](/docs/CS/MQ/Kafka/Consumer.md)
 - [Broker](/docs/CS/MQ/Kafka/Broker.md)
@@ -907,9 +974,11 @@ kafka的log文件是以分区为单位的 日志未采用mmap
 - [ConsumerFlow（poll 主链路与排查）](/docs/CS/MQ/Kafka/ConsumerFlow.md)
 - [Timer（多层时间轮）](/docs/CS/MQ/Kafka/Timer.md)
 - [MirrorMaker](/docs/CS/MQ/Kafka/MirrorMaker.md)
-
+- [Apache Pulsar](/docs/CS/MQ/Pulsar/Pulsar.md) —— 存算分离路线的另一种答案
+- [Apache RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md) —— 业务消息场景的直接对照
+- [Flink](/docs/CS/Framework/Flink/Flink.md) —— 与 Kafka Streams 的流处理取舍
+- [ZeroCopy](/docs/CS/OS/Linux/ZeroCopy.md) —— sendfile 与 mmap 的机制细节
 ## References
-
 1. [The Log: What every software engineer should know about real-time data's unifying abstraction](https://engineering.linkedin.com/distributed-systems/log-what-every-software-engineer-should-know-about-real-time-datas-unifying)
 2. [Kafka Documentation](https://kafka.apache.org/documentation/#design)
 3. [Kafka: a Distributed Messaging System for Log Processing](http://notes.stephenholiday.com/Kafka.pdf)
@@ -918,3 +987,7 @@ kafka的log文件是以分区为单位的 日志未采用mmap
 6. [Building a Replicated Logging System with Apache Kafka](https://dl.acm.org/doi/10.14778/2824032.2824063)
 7. [huxihx](https://www.cnblogs.com/huxi2b)
 8. [关于 Kafka 的一些面试题目](https://juejin.cn/post/6844904022827073549)
+9. [Apache Kafka 4.3.1 Download](https://kafka.apache.org/downloads)
+10. [Apache Kafka Documentation](https://kafka.apache.org/documentation/)
+11. [KIP-500: Replace ZooKeeper with a Self-Managed Metadata Quorum](https://cwiki.apache.org/confluence/display/KAFKA/KIP-500%3A+Replace+ZooKeeper+with+a+Self-Managed+Metadata+Quorum)
+12. [KIP-932: Queues for Kafka](https://cwiki.apache.org/confluence/display/KAFKA/KIP-932%3A+Queues+for+Kafka)
