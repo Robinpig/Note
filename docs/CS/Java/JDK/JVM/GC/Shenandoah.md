@@ -19,6 +19,9 @@ The compilers emit barriers only when running the Shenandoah collector.
 
 The trade off is that Shenandoah requires more space than other algorithms.
 
+> [!NOTE]
+> 版本基线：Shenandoah 于 **JDK 12 作为实验特性集成（[JEP 189](https://openjdk.org/jeps/189)）**，**JDK 15 转为生产特性（[JEP 379](https://openjdk.org/jeps/379)）**，不在默认收集器之列。分代模式 **JDK 24 引入（[JEP 404](https://openjdk.org/jeps/404)，实验性）**，需 `-XX:ShenandoahGCMode=generational`；**截至 JDK 27 默认仍是 `satb` 非分代模式**，分代成为默认是 JDK 28 的目标（[JEP 535](https://openjdk.org/jeps/535)，Targeted）。
+
 ### Object Layout
 
 The object layout for Shenandoah adds an additional word per object.
@@ -244,7 +247,33 @@ Final Mark:
 
 ## Generational Shenandoah
 
+分代 Shenandoah 由 **[JEP 404](https://openjdk.org/jeps/404)（JDK 24，实验性）** 引入，把 Java 堆分为 young / old 两代，沿用"多数对象朝生夕死"的分代假设，让 GC 把工作集中在年轻、且大多已死的对象上。它与非分代（默认 `satb` 模式）并存，**截至 JDK 27 默认仍是非分代模式**，分代成为默认是 JDK 28 的目标（[JEP 535](https://openjdk.org/jeps/535)，Targeted）。
 
+### 启用方式
+
+```shell
+# JDK 24+ 实验性分代模式（需解锁实验选项）
+java -XX:+UnlockExperimentalVMOptions -XX:ShenandoahGCMode=generational
+```
+
+### 与非分代模式的区别
+
+- **双代结构**：每一代由 Shenandoah 堆中 region 的一个子集构成；任一时刻某 region 要么空闲、要么专属于 young 或 old。每代大小 = 其已占用 region + 一部分空闲 region 配额，可临时越界借用对方配额（但会加速触发收集）。
+- **复用既有机制**：分代模式复用同一个 Load Reference Barrier（支持压缩指针的 32 位 LRB）、同一个 evacuator，以及已广义化的 SATB 写屏障——SATB 缓冲区后处理时区分指向 old/young 的引用，但快路径不变。
+- **记忆集**：借用 Parallel/CMS 的 card marking 代码实现跨代引用记录，并新增"可随 mutator 并发扫描"的 remembered set 实现。
+- **收集拓扑**：young 收集与 G1 的 young 收集类似，mixed 收集（young + 部分 old）则并发进行——核心优势在于 **young 与 mixed 收集都与 mutator 并发**，而 G1 的 young/mixed 转移必须 STW。
+
+### 与 ZGC 分代对比
+
+| 维度 | Generational Shenandoah | Generational ZGC |
+| :--- | :--- | :--- |
+| 引入版本 | JDK 24（实验，JEP 404） | JDK 21（JEP 439） |
+| 成为默认 | JDK 28 目标（JEP 535, Targeted） | JDK 23 已默认（JEP 474） |
+| 写屏障 | SATB 写屏障 + 并发转移写屏障 | 着色指针 + store barrier |
+| 读屏障 | Brooks 指针读屏障（LRB） | 着色指针读屏障（load barrier） |
+| 压缩指针 | 支持（32 位 LRB） | 不支持（着色指针占用高位） |
+
+> 注意：Azul 的 C4 收集器早已分代但非开源；ZGC 分代在 JDK 21 已实现，且两者都不支持压缩对象指针。对绝大多数 heap 小于 32GB 的云负载，Shenandoah 分代支持压缩指针是相对 ZGC 分代的一个差异化优势。
 
 ## Links
 
@@ -257,4 +286,4 @@ Final Mark:
 
 1. [Shenandoah GC in JDK 13, Part I: Load Reference Barriers](https://rkennke.wordpress.com/2019/05/15/shenandoah-gc-in-jdk13-part-i-load-reference-barriers/)
 2. [JEP 379: Shenandoah: A Low-Pause-Time Garbage Collector (Production)](https://openjdk.org/jeps/379)
-2. [JEP 404: Generational Shenandoah](https://bugs.openjdk.org/browse/JDK-8260865)
+2. [JEP 404: Generational Shenandoah](https://openjdk.org/jeps/404)

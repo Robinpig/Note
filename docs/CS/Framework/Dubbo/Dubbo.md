@@ -2,6 +2,23 @@
 
 [Apache Dubbo](http://dubbo.apache.org/) 是一款易用、高性能的 WEB 和 RPC 框架，同时为构建企业级微服务提供服务发现、流量治理、可观测、认证鉴权等能力、工具与最佳实践。
 
+> [!NOTE]
+> **版本基线：3.3.6**（2026-10 逐篇核实，tarball `apache/dubbo` tag `dubbo-3.3.6`；3.2.20 为 LTS，3.4 分支开发中）。
+>
+> **3.x 与 2.x 差异极大，网上中文资料大量停留在 2.x，照抄必错。** 本目录 16/22 篇带逐篇版本标注，`Invocation`/`Protocol`/`Serialization`/`Triple`/`config` 五篇与本页同基线。
+>
+> 几个最容易记错、且「类/方法已死」级别的点：
+> - 协议名是 **`tri` 不是 `triple`**（另注册 `grpc`/`rest2`，三者皆为 `TripleProtocol` 子类）；Triple 默认序列化 **hessian2 不是 Protobuf**（仅 PB 生成类走直通）；默认端口 **50051**
+> - 路由实现全改名 **`*StateRouter`**（`ConditionRouter`/`TagRouter` **已不存在**）；条件路由**没有** `in`/`not in`/`matches`/`any`（只认 `& = != ,`）
+> - **`sent` 是「发送阻塞等写入完成」不是「不等响应」**；**没有 `oneway` 这个 key**（由 `return=false` 推导）
+> - **3.3.6 中不存在**：`SpringExtensionFactory`、`Cglib`、`destroyAll()`、`RedisMetadataReport`、`CompositeMetadataReport`、`RetryMetadataReport`、`FailZoneAwareCluster`、`mina`
+> - **`DubboBootstrap` 未被删除也未被取代**（`start()` 全文 3 行委派 `DefaultApplicationDeployer`）；`ServiceBean` 已不监听任何事件
+> - 优雅停机 key 是 **`dubbo.service.shutdown.wait`**（10000ms）；`delay` 默认 **`null`** 不是 -1
+> - 主仓库序列化实现**只有 hessian2 / fastjson2**；主仓库注册中心**只有 nacos / zookeeper**（Redis/Consul/Etcd 已外置 `org.apache.dubbo.extensions`）；`MetadataReportFactory.DEFAULT="redis"` 是**死常量**（无消费方）
+> - 认证默认 **`basic` 是 Base64 明文**；`dubbo-spring-security` **信任客户端上下文不做校验**；异常码是 `AUTHORIZATION_EXCEPTION=13` 不是 `UNAUTHORIZED`
+> - **`20888` 是死常量**（Metrics 导出走 QoS 的 `metrics` 命令，无总开关，看 classpath 有无 Micrometer）
+> - 配置优先级：**`dubbo.properties` 最低**、`-D` 最高，没有 `DefaultConfigManager`
+
 使用 Dubbo 开发的微服务原生具备相互之间的远程地址发现与通信能力，利用Dubbo 提供的丰富服务治理特性，可以实现诸如服务发现、负载均衡、流量调度等服务治理诉求。
 Dubbo 被设计为高度可扩展，用户可以方便的实现流量拦截、选址的各种定制逻辑。
 在云原生时代，Dubbo 相继衍生出了 Dubbo3、Proxyless Mesh等架构与解决方案，在易用性、超大规模微服务实践、云原生基础设施适配、安全性等几大方向上进行了全面升级。

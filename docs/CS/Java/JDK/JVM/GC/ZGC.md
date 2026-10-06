@@ -79,6 +79,9 @@ String n = person.name;
 
 ### Generational ZGC
 
+> [!NOTE]
+> 分代 ZGC 由 **[JEP 439](https://openjdk.org/jeps/439)（Release 21）** 引入；自 **[JEP 474](https://openjdk.org/jeps/474)（Release 23）** 起，分代模式成为 ZGC 的默认（`ZGenerational` 默认值由 `false` 改为 `true`），非分代模式被废弃并计划在后续版本移除（[JEP 490](https://openjdk.org/jeps/490)）。因此 **JDK 23+ 仅写 `-XX:+UseZGC` 即使用分代 ZGC**；显式 `-XX:+ZGenerational` 反而会产生废弃警告。
+
 Young/Old Generation
 
 - Exploit the fact that most objects are short-lived
@@ -93,10 +96,14 @@ Applications running with Generational ZGC should enjoy
 - Lower required heap memory overhead, and
 - Lower garbage collection CPU overhead.
 
-In a future release we intend to make Generational ZGC the default, at which point `-XX:-ZGenerational` will select non-generational ZGC.
+自 JDK 23 起 Generational ZGC 已是默认；如需（已废弃的）非分代模式可显式 `-XX:-ZGenerational`，但会得到废弃警告。
 
 ```shell
+# JDK 21/22：显式开启分代（当时非默认）
 java -XX:+UseZGC -XX:+ZGenerational
+
+# JDK 23+：分代已是默认，以下等价且不再需要 +ZGenerational
+java -XX:+UseZGC
 ```
 
 Non-generational ZGC uses both colored pointers and load barriers.

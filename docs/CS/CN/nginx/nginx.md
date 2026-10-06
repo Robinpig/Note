@@ -2,6 +2,24 @@
 
 [nginx](https://nginx.org/en/)（`engine x`）是 Igor Sysoev 于 2002 年开始编写、2004 年开源的 HTTP 服务器与反向代理，最初是为了解决 C10K 问题：同样一台机器，Apache 的 `prefork` 模型在几千并发连接时内存与上下文切换开销就压垮了系统，而 nginx 用**一个单线程事件循环 + 少量进程**就能稳住数万长连接。今天它的角色早已超出 Web Server：反向代理、负载均衡、API 网关、静态资源与缓存层、TLS 终结点，以及通用的 TCP/UDP（`stream`）与邮件（`mail`）代理。
 
+> [!NOTE]
+> **版本基线：1.31.6 mainline / 1.30.5 stable**（2026-10 逐篇核实，解官方 tarball 后 Grep 取默认值，**别凭印象**）。
+> 本目录 20/23 篇需回查本页基线；导航以本页为唯一枢纽。
+>
+> **最容易记错的几条**（默认值与直觉相反）：
+> - `accept_mutex` 默认 **off**；抢accept 的优先级是 reuseport > accept_mutex > EPOLLEXCLUSIVE > 普通
+> - upstream `keepalive` 自 **1.29.7 起默认开启**（连接池 32），**要关必须显式写 `keepalive 0`**
+> - `server` 的 `max_fails` 默认 **1**（不是 0）；`ssl_session_cache` 默认 **none**（**不等于 off**）
+> - `proxy_ssl_verify` 默认 **off**；`limit_req_status` 默认 **503**
+> - **开源版没有** `slow_start` / `queue` / `state` / `proxy_cache_purge` / `health_check`（这些是 Plus 版）
+> - `init_master` / `init_thread` / `exit_thread` **从未被调用**（配置写了不生效）
+>
+> **stream / mail 是平行实现，不是 http 的子集**：stream **没有** loc_conf/rewrite/location，也不支持 sticky/ip_hash/keepalive；同端口 http+stream 的冲突 `nginx -t` **不报错**。mail 没有 phase/变量/access_log，认证只能 `auth_http` 且**忽略 HTTP 状态码**（只看 `Auth-Status`）。
+>
+> **实测行为**（与直觉相反，值得单独记）：`worker_connections` 不足**不会启动失败**，而是走 `ngx_drain_connections()`；`access_log buffer=` 攒满或 reload 才落盘；无 `nodelay` 的 `limit_req` 在并发 < burst 时**只延迟不拒绝**。
+>
+> **`ngx_shmtx` 不用 futex** —— 是原子 CAS + 指数退避自旋 + POSIX 信号量，在 `src/core/ngx_shmtx.c`。
+
 nginx 快的原因不是某一个魔法优化，而是一组彼此咬合的设计选择：
 
 | 设计 | 带来的直接后果 |

@@ -1,5 +1,8 @@
 ## Overview
 
+> [!NOTE]
+> 版本基线：Parallel GC 是 **JDK 8 及更早版本的默认收集器**；自 **JDK 9（[JEP 248](https://openjdk.org/jeps/248)）** 起默认收集器改为 G1，**JDK 27（[JEP 523](https://openjdk.org/jeps/523)）进一步在全环境（含受限单机/小内存）默认 G1，Serial 不再被自动选中**。Parallel GC 仍可通过 `-XX:+UseParallelGC` 显式启用，适合**吞吐优先、对停顿不敏感**的服务端批量场景（如订单批处理、科学计算）。
+
 The parallel collector (also referred to here as the **throughput collector)** is a generational collector similar to the serial collector;
 the primary difference is that **multiple threads** are used to speed up garbage collection.
 The parallel collector is enabled with the command-line option `-XX:+UseParallelGC`.
@@ -61,6 +64,35 @@ class ParallelScavengeHeap : public CollectedHeap {
 }
 ```
 
+
+## 收集阶段概览
+
+Parallel GC 的堆由 `PSYoungGen`（Eden + 两个 Survivor）与 `PSOldGen` 组成，顶层实现类是 `ParallelScavengeHeap`。其收集动作分两类，且**均全程 Stop-The-World**——这是"吞吐优先"取向的代价：用更长的暂停换取更高的应用吞吐。
+
+### Young GC（Minor）
+
+- 触发：Eden 区满（分配失败，`GC (Allocation Failure)`）。
+- 过程：多个 GC 线程并行，从 GC Roots 出发扫描，把 Eden 与 from-survivor 中的存活对象复制到 to-survivor（达到晋升年龄或 survivor 放不下则晋升到 old）。完成后交换两个 survivor 空间，并由 `PSAdaptiveSizePolicy` 重新计算 survivor 大小与 tenuring threshold。
+- 失败处理：若晋升（promotion）在 old 中找不到空间，发生 **promotion failure**，会回退触发 Full GC。
+- 对应源码：`PSScavenge::invoke_no_policy`（见下节）。
+
+### Old GC / Full GC
+
+- 触发：old 区不足、promotion failure、`System.gc()`、元数据不足等。
+- 过程：`PSParallelCompact` 采用"按密度前缀（dense prefix）"的分代压缩算法，多线程并行完成 标记 → 计算目标位置 → 调整根引用 → 压缩 四个阶段；`HeapMaximumCompactionInterval` 等参数控制最大压缩频率。整个 Full GC 是长时间 STW。
+- 对应源码：`PSParallelCompact::invoke_no_policy`（见下节）。
+
+### 自适应调节（Ergonomics）
+
+`-XX:+UseAdaptiveSizePolicy`（默认开启）由 `PSAdaptiveSizePolicy` 根据每次收集的反馈（各区域占用、晋升量、GC 时间占比 `GCTimeRatio`）动态调整 Eden/Survivor/Old 大小与晋升阈值，目标是在吞吐与暂停之间达到平衡。这正是 Parallel GC 被称为"吞吐量收集器"的原因——用户通常只需设 `-Xmx` 与一个 `GCTimeRatio`/`MaxGCPauseMillis` 目标，不必手工调各代大小。
+
+### 与其它收集器对比
+
+| 维度 | Parallel | Serial | CMS / G1 / ZGC / Shenandoah |
+| :--- | :--- | :--- | :--- |
+| Old 收集 | 并行 STW 压缩 | 单线程 STW 压缩 | 并发（CMS/G1/Shenandoah/ZGC）或部分 STW（G1 转移） |
+| 线程数 | `ParallelGCThreads` | 1 | 视收集器而定 |
+| 取向 | 吞吐优先 | 最小 footprint | 低延迟 / 平衡 |
 
 ### invoke
 
@@ -684,6 +716,9 @@ PS 以前是BFS对象图的 JDK1.6更改为默认DFS ParNew 一直是 BFS
 ## Links
 
 - [Garbage Collection](/docs/CS/Java/JDK/JVM/GC/GC.md)
+- [Serial GC](/docs/CS/Java/JDK/JVM/GC/Serial.md)
+- [G1 GC](/docs/CS/Java/JDK/JVM/GC/G1.md)
+- [Safepoint](/docs/CS/Java/JDK/JVM/Safepoint.md)
 
 
 
