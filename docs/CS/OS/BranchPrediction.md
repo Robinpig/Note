@@ -254,9 +254,9 @@ CPU 本质就是取指执行，而取指执行我们来看下五大步骤，分�
 
 ## Links
 
-- [Introduction](/docs/CS/OS/BIOS.md)
-- [Introduction](/docs/CS/OS/Bochs.md)
-- [Introduction](/docs/CS/OS/BootLoader.md)
+- [BIOS](/docs/CS/OS/BIOS.md)
+- [Bochs](/docs/CS/OS/Bochs.md)
+- [BootLoader](/docs/CS/OS/BootLoader.md)
 - [Computer Systems A Programmer's Perspective Third Edition](/docs/CS/OS/CSAPP.md)
-- [Introduction](/docs/CS/OS/DTrace.md)
-- [Introduction](/docs/CS/OS/Deadlocks.md)
+- [DTrace](/docs/CS/OS/DTrace.md)
+- [Deadlocks](/docs/CS/OS/Deadlocks.md)

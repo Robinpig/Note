@@ -470,12 +470,12 @@ it is relatively easy to swap out a readwrite lock for an exclusive one if profi
 
 ## Links
 
-- [Introduction](/docs/CS/Java/JDK/Concurrency/AQS.md)
-- [Introduction](/docs/CS/Java/JDK/Concurrency/Atomic.md)
-- [Introduction](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
-- [Introduction](/docs/CS/Java/JDK/Concurrency/CountDownLatch.md)
-- [Introduction](/docs/CS/Java/JDK/Concurrency/CyclicBarrier.md)
-- [Introduction](/docs/CS/Java/JDK/Concurrency/Exchanger.md)
+- [AQS](/docs/CS/Java/JDK/Concurrency/AQS.md)
+- [Atomic](/docs/CS/Java/JDK/Concurrency/Atomic.md)
+- [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
+- [CountDownLatch](/docs/CS/Java/JDK/Concurrency/CountDownLatch.md)
+- [CyclicBarrier](/docs/CS/Java/JDK/Concurrency/CyclicBarrier.md)
+- [Exchanger](/docs/CS/Java/JDK/Concurrency/Exchanger.md)
 
 ## References
 

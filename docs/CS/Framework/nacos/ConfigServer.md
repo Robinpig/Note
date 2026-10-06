@@ -34,8 +34,8 @@ https://www.sofastack.tech/projects/sofa-registry/overview
 
 ## Links
 
-- [Introduction](/docs/CS/Framework/nacos/Diamond.md)
-- [Introduction](/docs/CS/Framework/nacos/Nacos.md)
-- [Overview](/docs/CS/Framework/nacos/config.md)
-- [Introduction](/docs/CS/Framework/nacos/nacos-spring.md)
-- [Introduction](/docs/CS/Framework/nacos/registry.md)
+- [Diamond](/docs/CS/Framework/nacos/Diamond.md)
+- [-Drat.skip=true](/docs/CS/Framework/nacos/Nacos.md)
+- [config](/docs/CS/Framework/nacos/config.md)
+- [nacos-spring](/docs/CS/Framework/nacos/nacos-spring.md)
+- [registry](/docs/CS/Framework/nacos/registry.md)

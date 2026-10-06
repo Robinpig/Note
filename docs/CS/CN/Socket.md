@@ -372,9 +372,9 @@ void error_handling(char *message)
 
 ## Links
 
-- [Introduction](/docs/CS/CN/ARP.md)
-- [Introduction](/docs/CS/CN/Attack.md)
-- [Introduction](/docs/CS/CN/C10k.md)
-- [Introduction](/docs/CS/CN/CN.md)
-- [Introduction](/docs/CS/CN/Caddy.md)
-- [Introduction](/docs/CS/CN/DHCP.md)
+- [ARP](/docs/CS/CN/ARP.md)
+- [Attack](/docs/CS/CN/Attack.md)
+- [C10k](/docs/CS/CN/C10k.md)
+- [CN](/docs/CS/CN/CN.md)
+- [Caddy](/docs/CS/CN/Caddy.md)
+- [DHCP](/docs/CS/CN/DHCP.md)

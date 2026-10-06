@@ -318,9 +318,9 @@ Can not log in through UI(SSH works fine) after restart.
 
 ## Links
 
-- [Introduction](/docs/CS/OS/Linux/Tools/BPF.md)
-- [Introduction](/docs/CS/OS/Linux/Tools/CMD.md)
-- [Introduction](/docs/CS/OS/Linux/Tools/Perf.md)
+- [libpcap 把表达式编译为 cBPF 字节码，挂到抓包 socket](/docs/CS/OS/Linux/Tools/BPF.md)
+- [CMD](/docs/CS/OS/Linux/Tools/CMD.md)
+- [Perf](/docs/CS/OS/Linux/Tools/Perf.md)
 - [introduction](/docs/CS/OS/Linux/Tools/Termux.md)
-- [Introduction](/docs/CS/OS/Linux/Tools/Tools.md)
-- [Introduction](/docs/CS/OS/Linux/Tools/VNC.md)
+- [up/down network adapter](/docs/CS/OS/Linux/Tools/Tools.md)
+- [VNC](/docs/CS/OS/Linux/Tools/VNC.md)

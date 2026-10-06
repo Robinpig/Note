@@ -18,7 +18,7 @@ RISC-V的三种启动模式
 
 ## Links
 
-- [Introduction](/docs/CS/CO/CO.md)
-- [Introduction](/docs/CS/CO/Cache.md)
-- [Introduction](/docs/CS/CO/PCI.md)
-- [Introduction](/docs/CS/CO/memory.md)
+- [CO](/docs/CS/CO/CO.md)
+- [Cache](/docs/CS/CO/Cache.md)
+- [PCI](/docs/CS/CO/PCI.md)
+- [memory](/docs/CS/CO/memory.md)

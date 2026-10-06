@@ -170,9 +170,9 @@ x86-64限制传送指令（mov）的两个操作数不能指向内存位置，�
 
 ## Links
 
-- [Introduction](/docs/CS/OS/BIOS.md)
-- [Introduction](/docs/CS/OS/Bochs.md)
-- [Introduction](/docs/CS/OS/BootLoader.md)
+- [BIOS](/docs/CS/OS/BIOS.md)
+- [Bochs](/docs/CS/OS/Bochs.md)
+- [BootLoader](/docs/CS/OS/BootLoader.md)
 - [Branch Prediction](/docs/CS/OS/BranchPrediction.md)
-- [Introduction](/docs/CS/OS/DTrace.md)
-- [Introduction](/docs/CS/OS/Deadlocks.md)
+- [DTrace](/docs/CS/OS/DTrace.md)
+- [Deadlocks](/docs/CS/OS/Deadlocks.md)

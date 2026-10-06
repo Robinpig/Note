@@ -269,12 +269,12 @@ Serverless software architecture is beneficial for accomplishing one-time tasks 
 
 ## Links
 
-- [Introduction](/docs/CS/Distributed/Azure.md)
-- [Introduction](/docs/CS/Distributed/Bigtable.md)
-- [Introduction](/docs/CS/Distributed/Borg.md)
-- [Introduction](/docs/CS/Distributed/Byzantine.md)
-- [Introduction](/docs/CS/Distributed/CAP.md)
-- [Introduction](/docs/CS/Distributed/Chubby.md)
+- [Azure](/docs/CS/Distributed/Azure.md)
+- [Bigtable](/docs/CS/Distributed/Bigtable.md)
+- [Borg](/docs/CS/Distributed/Borg.md)
+- [Byzantine](/docs/CS/Distributed/Byzantine.md)
+- [CAP](/docs/CS/Distributed/CAP.md)
+- [Chubby](/docs/CS/Distributed/Chubby.md)
 
 ## References
 

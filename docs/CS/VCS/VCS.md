@@ -45,4 +45,4 @@ GitLab
 
 ## Links
 
-- [Introduction](/docs/CS/VCS/Git.md)
+- [Git](/docs/CS/VCS/Git.md)

@@ -18,9 +18,9 @@ $F_n = \frac{1}{5}(\phi^n - \phi^{'n})$ where $\phi = \frac{1+\sqrt{5}}{2} $ and
 
 ## Links
 
-- [Introduction](/docs/CS/Algorithms/Algorithmic_Game_Theory.md)
-- [Introduction](/docs/CS/Algorithms/Algorithms.md)
-- [Introduction](/docs/CS/Algorithms/Amortized.md)
-- [Introduction](/docs/CS/Algorithms/Backtracking.md)
-- [Introduction](/docs/CS/Algorithms/Bits.md)
-- [Introduction](/docs/CS/Algorithms/Computational_Geometry.md)
+- [Algorithmic_Game_Theory](/docs/CS/Algorithms/Algorithmic_Game_Theory.md)
+- [Algorithms](/docs/CS/Algorithms/Algorithms.md)
+- [Amortized](/docs/CS/Algorithms/Amortized.md)
+- [Backtracking](/docs/CS/Algorithms/Backtracking.md)
+- [Bits](/docs/CS/Algorithms/Bits.md)
+- [Computational_Geometry](/docs/CS/Algorithms/Computational_Geometry.md)

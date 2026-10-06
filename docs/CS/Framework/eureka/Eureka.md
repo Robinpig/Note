@@ -314,8 +314,8 @@ Eureka2.0改进
 
 ## Links
 
-- [Introduction](/docs/CS/Framework/eureka/Client.md)
-- [Introduction](/docs/CS/Framework/eureka/Server.md)
+- [Client](/docs/CS/Framework/eureka/Client.md)
+- [Server](/docs/CS/Framework/eureka/Server.md)
 - [ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)
 - [Nacos](/docs/CS/Framework/nacos/Nacos.md)
 

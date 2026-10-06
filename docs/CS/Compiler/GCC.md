@@ -157,8 +157,8 @@ Ubuntu 多个版本gcc
 
 ## Links
 
-- [Introduction](/docs/CS/Compiler/Compiler.md)
-- [Introduction](/docs/CS/Compiler/ELF.md)
+- [Compiler](/docs/CS/Compiler/Compiler.md)
+- [ELF](/docs/CS/Compiler/ELF.md)
 
 ## References
 

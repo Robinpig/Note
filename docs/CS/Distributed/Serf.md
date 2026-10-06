@@ -15,9 +15,9 @@ Serf can also be used for service discovery and orchestration, but it is built o
 
 ## Links
 
-- [Introduction](/docs/CS/Distributed/Architecture.md)
-- [Introduction](/docs/CS/Distributed/Azure.md)
-- [Introduction](/docs/CS/Distributed/Bigtable.md)
-- [Introduction](/docs/CS/Distributed/Borg.md)
-- [Introduction](/docs/CS/Distributed/Byzantine.md)
-- [Introduction](/docs/CS/Distributed/CAP.md)
+- [Architecture](/docs/CS/Distributed/Architecture.md)
+- [Azure](/docs/CS/Distributed/Azure.md)
+- [Bigtable](/docs/CS/Distributed/Bigtable.md)
+- [Borg](/docs/CS/Distributed/Borg.md)
+- [Byzantine](/docs/CS/Distributed/Byzantine.md)
+- [CAP](/docs/CS/Distributed/CAP.md)

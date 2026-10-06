@@ -7,13 +7,25 @@
 `Note` 是**个人计算机知识库**，同一份 Markdown 有两种使用形态：
 
 1. **docsify 站点**：根目录 `index.html` 是站点入口与全部配置，`README.md` 是首页，内容全部在 `docs/`，通过 GitHub Pages 发布（仓库 `Robinpig/Note`，`.nojekyll` 保证下划线目录不被 Jekyll 吞掉）。
-2. **Obsidian vault**：根目录存在 `.obsidian/`，日常用 Obsidian 编辑，靠双向链接导航。
+2. **Obsidian vault**：本机通常存在 `.obsidian/`（**不入库**，别的机器上可能没有），日常用 Obsidian 编辑，靠双向链接导航。
 
 因此有两条硬约束：**文件名与目录名就是笔记标识**（重命名/移动会同时打断 Obsidian 双链和 docsify 绝对路径链接）；**笔记必须同时满足 docsify 渲染和 Obsidian 阅读**。
 
-规模：`docs/` 下约千篇 Markdown，七个领域，`CS/` 是绝对主体。
+规模：`docs/` 下约千篇 Markdown，七大领域，`CS/` 是绝对主体。
 
 **不要在文档里写任何文件总数或目录篇数**：`README.md`、`docs/CS/CS.md`、本文件一律不标注篇数，新增/删除笔记不需要回头改数字。需要精确值时现场跑脚本（见「统计各目录篇数」）。
+
+## 环境约定（跨机器 / 跨 IDE / 跨系统）
+
+本仓库会在**多台机器、多个 IDE Agent** 下被读取，所以本文件**刻意不绑定操作系统、绝对路径、也不绑定某台机器的现状**。读到下面内容时按这几条解读：
+
+- **命令一律写成 POSIX shell**（macOS / Linux 直接可用）。Windows 下用 Git Bash / WSL 执行，或自行改写成等价命令；**不要把本文件里的命令当成"只在我这台机器上验证过的脚本"**。
+- **`python3` 是"仓库约定的 Python 解释器"的写法**，不是硬性要求：Windows 上通常是 `python` 或 `py -3`，按本机情况替换即可。`scripts/kb-check.sh` 支持用 `PY=` / `NODE=` 覆盖解释器。
+- **只用相对路径**，一律相对**仓库根目录**；不要假定仓库被克隆到哪里，也不要写死任何用户目录。
+- **不要假定本机存在任何东西**（内核源码树、缓存、已装工具、上一次会话的产物）：需要时先 `ls` 确认，不存在就走远程端点、或按语义手工核对。
+- **不要假定任何 IDE 专有目录存在**：`.claude/`、`.cursor/`、`.vscode/`、`.obsidian/`、`.workbuddy/` 都只是**本机工具目录且不入版本控制**（见 `.gitignore`）；本仓库的校验脚本**已随仓库入库在 `scripts/`**，不要依赖任何本机目录。**本文件是所有 Agent 的唯一说明来源**，不要另建 IDE 专有指令文件（`CLAUDE.md`、`.cursorrules`、`copilot-instructions.md` 之类）来各写一份。
+- **凡是带"实测"字样的结论都带环境前提**（网络可达性、源码版本、工具行为）：换机器或换网络需重测。当"某台机器上一次成立"读，不要当永久事实。
+- 本文件里**不记任何会随内容变化的快照数字**（篇数、平均链入、孤立页数）——需要时现场跑脚本。
 
 ## 目录地图
 
@@ -22,6 +34,9 @@ Note/
 ├── index.html          docsify 入口 + 全站配置（插件、主题、首页 CSS）
 ├── README.md           站点首页（同时也是 GitHub 仓库首页）—— 只做总入口：学习路径 + 各大领域入口
 ├── AGENTS.md           本文件
+├── scripts/            质量门禁脚本（`kb-check.sh` + 校验工具，**随仓库入库**，见「校验工具」）
+├── .github/workflows/  CI 定义（已入库，调用 `scripts/` 下的同一批脚本）
+├── .workbuddy/         本机目录：仅 Agent 记忆（**不入库**，换机器可能没有）
 ├── docs/               全部笔记内容
 │   ├── CS/             CS 主体
 │   ├── Mathematics/    分支学科枢纽页 + 各分支
@@ -30,10 +45,12 @@ Note/
 │   ├── Philosophy/
 │   ├── Economics/
 │   └── Sports/         Philosophy/Economics/Sports 为少量读书摘录
-├── out/                IDE 编译产物副本 —— 只读，不要改
+├── out/                IDE 编译产物副本 —— 只读，不要改（本机、不入库）
 ├── src/                忽略，不要改
 └── wiki/、knowledge-base/、outputs/   空占位，不要改
 ```
+
+仓库根另有几个**与知识库正文无关的散落文件**（`电源管理-v7.2-事实清单.md`、`.verify-v7.2-btrfs-fuse.md` 是写作期的事实核实清单；`k3cfg.json` 疑似误提交，与本库无关）——**不要把它们当笔记读，也不要据此推断目录结构**。
 
 `docs/CS/` 下按主题分目录（另有 `img/` 存放配图，不算笔记）。主要子树与入口：
 
@@ -78,7 +95,7 @@ Note/
 
 `docs/CS/OS/Linux/` 是全库最活跃的子树，组织规则容易踩错：
 
-- **`Linux/Linux.md` 是唯一枢纽**，全库被引最多的文件，**不要改名**（`Linux/` 下没有 `README.md` 是全库常态，127 个目录都缺）。
+- **`Linux/Linux.md` 是唯一枢纽**，全库被引最多的文件，**不要改名**（`Linux/` 下没有 `README.md` 是全库常态——很多目录都缺，别顺手新建）。
 - **`Linux/` 根目录放横切机制**（不属于单一子系统）：`Interrupt.md`、`Calls.md`、`timer.md`、`workqueue.md`、`LXC.md` / `namespace.md` / `cgroup.md` / `SELinux.md`、`KVM.md`、`Swap.md`、`ZeroCopy.md`、`performance.md`、`Architecture.md`、`Experience.md`、`build.md`。
 - **子系统各建子目录**：`proc/`（进程/调度/信号/IPC）、`mm/`、`fs/`、`net/`、`IO/`、`Lock/`、`dev/`、`boot/`（启动链）、`module/`、`struct/`（内核数据结构）、`Tools/`、`Distribution/`。
 - **较新的两个子目录**（2026-10 新增，各有独立 README 枢纽）：`cgroup/`（v2 三篇：知识地图 / 控制器接口 / 委派实践；根目录的 `cgroup.md` 保留为 **v1 视角**入口）、`PM/`（电源管理六篇：知识地图 / cpuidle / cpufreq / suspend / runtime PM / devfreq）。
@@ -89,14 +106,22 @@ Note/
 - ⚠️ **`struct/struct.md` 只讲 llist**，文件名覆盖面远大于内容，是历史沿用名；`struct/` 的地图以 `struct/README.md` 为准。同理 `Tools/Tools.md`（命令速查表）与 `Tools/README.md`（笔记导航）**不是一回事**。
 - ⚠️ **标题避免用全角标点**（如 `## freezer：冻结与终止`）：`validate_links.py` 的 `anchors_of()` 会按全角冒号把标题切成两个锚点，与 docsify 的 `slugify()` 行为不一致，导致 BAD ANCHOR 误报。中英混排标题用**半角空格**分隔（`## freezer 冻结与终止`）。
 
-**内核源码核实**（2026-10-05 实测修订）：**本机已无 Linux 源码树**（旧记的 `/Users/robin/Tools/linux-7.2.7` 路径不存在，`/Users/robin` 这个用户也没有）。改用远程端点，**tag 用 `v7.2`**（真实 tag 是 `v7.2` = 7.2.0，**`v7.2.7` 不存在**，写错会拿到 404 HTML）：
+**内核源码核实**：**先确认本机有没有源码树**——
+
+```bash
+ls -d ~/Tools/linux-* ~/src/linux-* /usr/src/linux-* 2>/dev/null
+```
+
+有就优先用本地树（`grep` 最快，还能跨文件检索）；没有再走下面的远程端点。
+
+远程端点用 kernel.org 的 `plain` 接口。**tag 必须写 `v7.2`**（真实 tag 就是 `v7.2` = 7.2.0；**`v7.2.7` 不存在**，写错拿到的是 404 HTML，不是源码）：
 
 ```bash
 K="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain"
 curl -sL -m 40 "$K/kernel/panic.c?h=v7.2"          # → 纯文本源码
 ```
 
-**其它端点现状**：`elixir.bootlin.com` 已被 Anubis 反爬**全站拦截**（`/source`、`?raw=1`、`/A/` 简写、`/api/v1/source/` 全返回 4.4KB 的 "Making sure you're not a bot!"，HTTP 200 但无内容）—— 人工浏览可用，**不可自动化**。GitHub API 403 限流、raw 会 429。
+**端点可用性随机器与网络而变，下面只是某次实测记录，换环境必须重测**：`elixir.bootlin.com` 有 Anubis 反爬，`/source`、`?raw=1`、`/A/` 简写、`/api/v1/source/` 都可能返回 **HTTP 200 但正文是一段约 4KB 的 "Making sure you're not a bot!"** —— 人工浏览可用，自动化不可靠。GitHub API 有 403 限流、`raw` 有 429。**所以"是否真拿到了内容"要看 `wc -l` 与首行是不是 `<!DOCTYPE html>`，不要只看 HTTP 状态码。**
 
 **四个必须知道的操作坑**（都实测踩过）：
 
@@ -108,7 +133,7 @@ curl -sL -m 40 "$K/kernel/panic.c?h=v7.2"          # → 纯文本源码
    ```
    搬迁大户：`kernel/tty.c` → 拆成 `drivers/tty/tty_{io,ioctl,jobctrl,buffer,ldisc}.c`；`kernel/crash.c` → `kernel/crash_core.c` + `crash_reserve.c`；`fs/fuse/fuse.h` → `fuse_i.h` + `dev.h`；`drivers/input/core.c` → `input.c`；`fs/btrfs/*.h` 改**下划线命名**（`block-group.h`/`delayed-ref.h`）。
 3. **结构体定义可能不在你以为的头文件里** —— 例如 btrfs 核心定义搬到了 **uapi 头** `include/uapi/linux/btrfs_tree.h`；`struct btrfs_key` 不在 `fs/btrfs/` 下。
-4. **大批量 grep 偶发返回空结果**：在单次会话里对确认含目标串的大文件（数千行）执行 `grep` 曾多次返回空，而同样的检索经 Grep 工具或落盘后 `grep` 均正常。**若 grep 结果与预期矛盾，落盘后重试或改用 Grep 工具，不要据此认定"符号不存在"** —— 这类"不存在"的结论往往正是旧资料里 API 已删除的来源。
+4. **大批量 grep 偶发返回空结果**：对确认含目标串的大文件（数千行）执行 `grep` 曾多次返回空，而同样的检索改用专用搜索工具（Grep / ripgrep）或把源码落盘后再 `grep` 却正常。**若 grep 结果与预期矛盾，换检索方式重试，不要据此认定"符号不存在"** —— 这类"不存在"的结论往往正是旧资料里 API 已删除的来源。
 
 **文件命名反推**：某目录的头文件常与 Makefile 里的 `.o` 名同源（下划线）；`/include/uapi/linux/` 下的类型定义优先于私有头。
 
@@ -152,17 +177,17 @@ Markdown 增强写法：
 3. **站内链接**一律用 docsify 绝对路径：`/docs/CS/OS/Linux/proc/process.md`；锚点用 `?id=slug`。
 4. **slug 规则**（2026-10-02 按 docsify v5.0.0 源码 `src/core/render/slugify.js` 逐条复核；v4.13.1 实现相同。**不要凭标题印象拼**）：
    - `[A-Z]+` → 小写。**对纯 ASCII 标题等价于整串小写**（`MarkWord` → `markword`，`M` 与 `W` 都被小写）；差异只在非 ASCII 大写字母（`École` 保留 `É`）。
-   - 删**半角**标点（ASCII 标点 + `\u2000-206F` + `\u2E00-2E7F`）→ **全角标点（：）（，、）与 `→` 一律保留** → 空白转 `-` → 数字开头前缀 `_` → markdown 链接 `[文本](url)` 只留「文本」。
+   - 删**半角**标点（ASCII 标点 + `\u2000-206F` + `\u2E00-2E7F`）→ **全角标点（：）（，、）与 `→` 一律保留** → 空白转 `-` → 数字开头前缀 `_` → markdown 链接只保留方括号里的显示文本（如 `[文本](https://example.com)` → `text`）。
    - 例：`限额接口（cgroup v2）` → **`限额接口（cgroup-v2）`**；`注意（Attention）` → **`注意（attention）`**。
    - 算不准就当场跑（`slugify()` 定义在 `validate_links.py`，可直接 import）：
 
      ```bash
-     python3 -c "import sys;sys.path.insert(0,'.workbuddy/tools');from validate_links import slugify;print(slugify('标题'))"
+     python3 -c "import sys;sys.path.insert(0,'scripts');from validate_links import slugify;print(slugify('标题'))"
      ```
-   - ⚠️ `slugify()` 已于 2026-10-02 按 docsify 上游重写：旧版是「整串小写 + 删所有标点」，会把含全角标点的好链接误报成死链。另：全库有 54 个文件存在**同文件内重复标题**，docsify 会给第 2、3 个追加 `-1`／`-2` 后缀（`anchors_of()` 已支持）。
+   - ⚠️ `slugify()` 已于 2026-10-02 按 docsify 上游重写：旧版是「整串小写 + 删所有标点」，会把含全角标点的好链接误报成死链。另：全库存在**同文件内重复标题**，docsify 会给第 2、3 个追加 `-1`／`-2` 后缀（`anchors_of()` 已支持）。
    - **改标题会断既有锚点**：动手前先 `grep -rn "<file>.md?id=<slug>" docs/`，有引用就把旧标题保留为独立小节，不要合并掉。
-5. **`## Links`** 放 1~6 条最相关的**站内**笔记，只写 `- [标题](/docs/....md)` 一行，**链接后不加任何后缀说明**；正文里已出现过的内部链接不重复列入；新增笔记后要回填相关笔记的 Links，形成双向链接。
-6. **`## References`** 位于全文最后（`## Links` 之后），放外部文章 / 论文 / 官方文档，每条只写一行 `[标题](链接)`，不加后缀说明。**KEP / RFC / issue 编号必须核实再写**（凭印象填编号、或照旧目录 slug 写 URL，都会 404）。
+5. **`## Links`** 放 1~6 条最相关的**站内**笔记，只写一行 `- [标题](/docs/CS/OS/Linux/Linux.md)` 这种形式，**链接后不加任何后缀说明**；正文里已出现过的内部链接不重复列入；新增笔记后要回填相关笔记的 Links，形成双向链接。
+6. **`## References`** 位于全文最后（`## Links` 之后），放外部文章 / 论文 / 官方文档，每条只写一行标题加链接，不加后缀说明（形式如 `[Linux Kernel Docs](https://docs.kernel.org/)`）。**KEP / RFC / issue 编号必须核实再写**（凭印象填编号、或照旧目录 slug 写 URL，都会 404）。
 7. **代码片段**：从内核 / 框架源码摘录时保持原样（含原注释），中文解释写在代码块外的段落里。
 8. **图片**放同目录或上级 `img/`，用相对路径引用。
 9. **对比与选型优先用 Markdown 表格**。
@@ -174,7 +199,7 @@ Markdown 增强写法：
 - **不要重命名或移动 `docs/` 下已有文件 / 目录**。确需移动时必须按上面「移动笔记的固定流程」执行，并先告知用户外链有 404 风险。
 - **不要修改 `out/`**（IDE 产物副本）、`src/`、`wiki/`、`knowledge-base/`、`outputs/`。
 - `index.html` 只动配置和样式区块，**不要重排脚本加载顺序**（插件依赖 docsify 主脚本先加载）。
-- `.obsidian/`、`.claude/`、`.workbuddy/` 为工具目录，无需维护。**`.workbuddy` 是项目数据（含记忆与校验脚本），不是缓存，不要删**。
+- `.obsidian/`、`.claude/`、`.workbuddy/` 是**本机工具目录，都不入版本控制**（`.gitignore` 里忽略了 `.obsidian/`、`.claude`、`.workbuddy`）—— 换机器克隆下来可能根本不存在，**不要依赖、也不要删**。其中 **`.workbuddy` 存的是 Agent 记忆，不是缓存**；**校验脚本不在那里，在已入库的 `scripts/`**。
 - 新增链接前先确认目标文件存在。以下目录**没有同名入口文件**，别写错：
   - `CS/BuildTool/` 入口是 `BuildTools.md`（不是 `BuildTool.md`）
   - `CS/Tool/` 无 `Tool.md`，代表文件 `Vim.md`
@@ -184,27 +209,52 @@ Markdown 增强写法：
   - `CS/Framework/` 无总入口，用具体框架页
   - `docs/Test.md` 是测试页，可忽略
 
-## 校验工具（`.workbuddy/tools/`，不进站点）
+## 校验工具（`scripts/`，随仓库入库，不进站点）
 
 | 脚本 | 用途 |
 | :--- | :--- |
-| `validate_links.py <file\|dir...>` | **主力校验**：死链 DEAD / 坏锚点 BAD ANCHOR / 相对链接 RELATIVE / 西里尔字母 CYRILLIC（均致命）+ 中英夹杂 GARBLED（告警）。可 `import` 出 `slugify()` 复用 |
-| `analyze_crosslinks.py [dir...]` | 量化链入/链出、孤立页、弱链出页；`--gate --min-indegree N` 做密度门禁 |
-| `fix_garbled.py [dir...]` | 修 `validate_links.py` 报的 GARBLED（在 CJK 与 Latin 边界补空格） |
-| `find_hub_gaps.py [dir...]` | 定位 hub 页 `## Links` 中未链到的子笔记 |
-| `fix_framework_hublinks.py` | 阶段①：框架内 hub 页 Links 补齐，消除孤立页 |
-| `fix_framework_crosslinks.py` | 阶段②：跨框架双向链接矩阵 |
+| `scripts/kb-check.sh` | **一键全量门禁**（推荐入口）：链接校验 + 密度门禁 + 全库 dot 校验 + CDN 可达性（仅告警）；前几项任一不通过即非零退出 |
+| `scripts/validate_links.py <file\|dir...>` | **主力校验**：死链 DEAD / 坏锚点 BAD ANCHOR / 相对链接 RELATIVE / 西里尔字母 CYRILLIC（均致命）+ 中英夹杂 GARBLED（告警）。可 `import` 出 `slugify()` 复用 |
+| `scripts/analyze_crosslinks.py [dir...]` | 量化链入/链出、孤立页、弱链出页；`--gate --min-indegree N` 做密度门禁 |
+| `scripts/check_dot.js <dir...>` | 用站点实际加载的 viz.js 复现 dot 图渲染，防 Graphviz 语法错误导致整页白屏（需 node） |
+| `scripts/check_cdn.sh` | 逐条验证 `index.html` 的外部资源可达。**「页面完全无法渲染」时先跑这个**（需 curl） |
+| `scripts/fix_garbled.py` | 修 `validate_links.py` 报的 GARBLED（在 CJK 与 Latin 边界补空格） |
+| `scripts/find_hub_gaps.py` | 定位 hub 页 `## Links` 中未链到的子笔记 |
+| `scripts/fix_framework_hublinks.py` | 阶段①：框架内 hub 页 Links 补齐，消除孤立页 |
+| `scripts/fix_framework_crosslinks.py` | 阶段②：跨框架双向链接矩阵 |
+
+> [!NOTE]
+>
+> 这批脚本原先放在 `.workbuddy/tools/`，而那个目录被 `.gitignore` 忽略 → 新机器与 GitHub Actions 上都拿不到（CI 直接 `can't open file`）。2026-10-06 已迁到 `scripts/` 并入库，`.gitignore` 里用 `!scripts/*.py` 放行。**不要再把它们挪回被忽略的目录，也不要写死绝对路径**：脚本的仓库根一律由自身位置（`__file__` / `__dirname`）推导，可在任意 cwd 下调用。
 
 `validate_links.py` 的选项：`--verbose` 逐行打印 GARBLED 告警（默认只汇总计数）、`--strict` 把 GARBLED 也当致命。退出码 0 = 通过。
 
+## 站点白屏排查：先验 CDN，再查内容
+
+**外部依赖必须全部挂 `cdn.jsdelivr.net`，不要用 `unpkg.com` 或 `cdn.staticfile.org`**（2026-10-06 实测这两个域名连接失败，而 docsify 核心原本就挂在 unpkg 上 → **整站白屏、任何页面都打不开**，而笔记内容、链接校验、dot 图校验全绿，**极易误判成笔记写坏了**）。
+
+排查「页面无法渲染 / 白屏」的顺序：
+1. `bash scripts/check_cdn.sh` —— 外部资源是否都200。
+2. `bash scripts/kb-check.sh` —— 才是内容层面（死链 / dot 图语法）。
+
+两个 jsDelivr 坑：**包版本号可能不存在**（`docsify@4.13.0` 是 404，要用不带版本的 `docsify/lib/...`）；写脚本抽 URL 时**先剥 HTML 注释块**，否则已停用的插件（mermaid/disqus 等）会被计入而产生误报。
+⚠️ **不要用 headless Chrome 验证这个站点**：`--dump-dom` 会因 viz.js（2.4MB）挂死数分钟。用「curl 验 200 + `node --check` 验语法」代替。
+
 ```bash
-python3 .workbuddy/tools/validate_links.py docs/CS/Framework/etcd   # 按目录
-python3 .workbuddy/tools/validate_links.py docs/CS/Framework        # 按框架
-python3 .workbuddy/tools/validate_links.py docs/CS/OS/Linux         # Linux 内核子树
-bash scripts/kb-check.sh                                          # CI 同款：两个子树全校验 + 密度门禁
+python3 scripts/validate_links.py docs/CS/Framework/etcd   # 按目录
+python3 scripts/validate_links.py docs/CS/Framework        # 按框架
+python3 scripts/validate_links.py docs/CS/OS/Linux         # Linux 内核子树
+bash scripts/kb-check.sh                                   # 本地全量门禁（范围比 CI 大，见下）
 ```
 
-**CI 门禁范围**（`.github/workflows/ci.yml` + `scripts/kb-check.sh`）：覆盖 **Framework 与 Linux 内核两个子树**，push/PR 时跑。门禁规则为「无孤立页 + 平均链入 ≥ 3.5」，弱链出页仅告警不阻断。Linux 子树当前 153 篇、平均链入 6.86、孤立页 0。
+**CI 与本地脚本的范围不是一套，别当成等价**（2026-10-06 逐条比对 `.github/workflows/ci.yml` 与 `scripts/kb-check.sh`）：
+
+| 入口 | 覆盖范围 |
+| :--- | :--- |
+| `.github/workflows/ci.yml`（push / PR，ubuntu-latest） | Framework 链接校验 + Linux 链接校验 + Framework 密度门禁 + Linux 密度门禁，共 4 步 |
+| `scripts/kb-check.sh`（本地） | 上述四项 **＋ 消息队列链接校验 ＋ 全库 dot 图可渲染校验**；找不到 node 时自动跳过 dot 校验 |
+
+门禁规则为「无孤立页 + 平均链入 ≥ 3.5」，弱链出页仅告警不阻断。**快照数字不要写进本文件**，需要时现场跑脚本。
 
 > [!WARNING]
 >
@@ -240,7 +290,7 @@ for d in docs/CS/*/; do printf "%-24s %s\n" "${d#docs/CS/}" "$(find "$d" -name '
 2. 按「笔记写作规范」写正文，结尾补 `## Links` 与 `## References`。
 3. 挂进索引：所属目录的 `README.md` 或父级入口页（如 `CS/OS/Linux/Linux.md`）的叙述性章节 / 表格。
 4. 在相关笔记的 `## Links` 里补回链。
-5. 跑校验（`validate_note.py` + 死链扫描），确认无死链、无坏锚点。
+5. 跑校验（`validate_links.py` + 死链扫描），确认无死链、无坏锚点。工具不在本机时按「校验工具」一节的语义手工核对。
 
 **本地预览**
 
@@ -250,5 +300,6 @@ python3 -m http.server 8899   # 打开 http://127.0.0.1:8899/index.html
 
 ## 已知遗留问题
 
+- ✅ **校验脚本入库问题已修**（2026-10-06）：脚本原在 `.workbuddy/tools/`（被 `.gitignore` 忽略），CI 却调用它们 → 新机器与 Actions 上必然缺文件。已迁到 `scripts/`，`.gitignore` 加 `!scripts/*.py` 放行。**遗留的小不对称**：`ci.yml` 仍只跑 Framework + Linux 两项，而 `scripts/kb-check.sh` 多跑 MQ 校验与全库 dot 校验 —— 若想让 CI 与本地完全一致，把 `ci.yml` 的 4 个 step 换成一句 `bash scripts/kb-check.sh` 即可（ubuntu-latest 自带 node，可直接跑 dot 校验）。
 - 部分目录缺同名入口 md（见禁区一节），目录索引只能链接到具体笔记。
 - 全库仍有若干主题零覆盖（DAMON、dm-crypt / LUKS、md / RAID、kTLS、Landlock），部分主题偏薄（livepatch、kdump、pidfd、psi、MPTCP）。

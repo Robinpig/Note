@@ -136,12 +136,12 @@ The partition layer has three main architectural components: a Partition Manager
 
 ## Links
 
-- [Introduction](/docs/CS/Distributed/Architecture.md)
-- [Introduction](/docs/CS/Distributed/Bigtable.md)
-- [Introduction](/docs/CS/Distributed/Borg.md)
-- [Introduction](/docs/CS/Distributed/Byzantine.md)
-- [Introduction](/docs/CS/Distributed/CAP.md)
-- [Introduction](/docs/CS/Distributed/Chubby.md)
+- [Architecture](/docs/CS/Distributed/Architecture.md)
+- [Bigtable](/docs/CS/Distributed/Bigtable.md)
+- [Borg](/docs/CS/Distributed/Borg.md)
+- [Byzantine](/docs/CS/Distributed/Byzantine.md)
+- [CAP](/docs/CS/Distributed/CAP.md)
+- [Chubby](/docs/CS/Distributed/Chubby.md)
 
 ## References
 

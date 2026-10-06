@@ -50,6 +50,6 @@ if the gitbook version is over 3.2.2
 
 ## Links
 
-- [Introduction](/docs/CS/log/Log.md)
-- [Introduction](/docs/CS/log/Micrometer.md)
-- [Introduction](/docs/CS/log/logback.md)
+- [Log](/docs/CS/log/Log.md)
+- [Micrometer](/docs/CS/log/Micrometer.md)
+- [logback](/docs/CS/log/logback.md)

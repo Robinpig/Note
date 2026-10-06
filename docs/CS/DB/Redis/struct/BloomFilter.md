@@ -52,12 +52,12 @@ That is, it may claim that it has not seen an item when it has, but will never c
 
 ## Links
 
-- [Introduction](/docs/CS/DB/Redis/struct/HyperLogLog.md)
-- [Introduction](/docs/CS/DB/Redis/struct/SDS.md)
-- [Introduction](/docs/CS/DB/Redis/struct/Stream.md)
-- [Introduction](/docs/CS/DB/Redis/struct/bitmap.md)
-- [Introduction](/docs/CS/DB/Redis/struct/geo.md)
-- [Introduction](/docs/CS/DB/Redis/struct/hash.md)
+- [HyperLogLog](/docs/CS/DB/Redis/struct/HyperLogLog.md)
+- [SDS](/docs/CS/DB/Redis/struct/SDS.md)
+- [Stream](/docs/CS/DB/Redis/struct/Stream.md)
+- [bitmap](/docs/CS/DB/Redis/struct/bitmap.md)
+- [geo](/docs/CS/DB/Redis/struct/geo.md)
+- [hash](/docs/CS/DB/Redis/struct/hash.md)
 
 ## References
 

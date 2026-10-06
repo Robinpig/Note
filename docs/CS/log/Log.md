@@ -149,8 +149,8 @@ What exactly is stream processing?
 ## Links
 
 - [install node 10.23.0](/docs/CS/log/Install Gitbook.md)
-- [Introduction](/docs/CS/log/Micrometer.md)
-- [Introduction](/docs/CS/log/logback.md)
+- [Micrometer](/docs/CS/log/Micrometer.md)
+- [logback](/docs/CS/log/logback.md)
 
 ## References
 

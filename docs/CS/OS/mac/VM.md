@@ -39,7 +39,7 @@ TODO: [beamoff](https://github.com/JasF/beamoff.git) for vmware mac to fix high 
 
 ## Links
 
-- [Introduction](/docs/CS/OS/mac/Darwin.md)
-- [Introduction](/docs/CS/OS/mac/Hackintosh.md)
-- [Introduction](/docs/CS/OS/mac/LLDB.md)
-- [Introduction](/docs/CS/OS/mac/mac.md)
+- [Darwin](/docs/CS/OS/mac/Darwin.md)
+- [Hackintosh](/docs/CS/OS/mac/Hackintosh.md)
+- [LLDB](/docs/CS/OS/mac/LLDB.md)
+- [mac](/docs/CS/OS/mac/mac.md)

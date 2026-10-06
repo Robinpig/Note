@@ -58,9 +58,9 @@ FLUSH PRIVILEGES;
 
 ## Links
 
-- [Introduction](/docs/CS/DB/BLink-Tree.md)
-- [Introduction](/docs/CS/DB/Cassandra.md)
-- [Introduction](/docs/CS/DB/ClickHouse.md)
-- [Introduction](/docs/CS/DB/DB.md)
-- [Introduction](/docs/CS/DB/Doris.md)
-- [Introduction](/docs/CS/DB/Dragonfly.md)
+- [BLink-Tree](/docs/CS/DB/BLink-Tree.md)
+- [Cassandra](/docs/CS/DB/Cassandra.md)
+- [ClickHouse](/docs/CS/DB/ClickHouse.md)
+- [DB](/docs/CS/DB/DB.md)
+- [Doris](/docs/CS/DB/Doris.md)
+- [Dragonfly](/docs/CS/DB/Dragonfly.md)

@@ -24,9 +24,9 @@ Dashboard
 
 ## Links
 
-- [Introduction](/docs/CS/Distributed/Tracing/Jaeger.md)
+- [UI: http://localhost:16686](/docs/CS/Distributed/Tracing/Jaeger.md)
 - [OpenTelemetry](/docs/CS/Distributed/Tracing/Otel.md)
-- [Introduction](/docs/CS/Distributed/Tracing/Prometheus/Prometheus.md)
-- [Introduction](/docs/CS/Distributed/Tracing/SkyWalking.md)
-- [Introduction](/docs/CS/Distributed/Tracing/Tracing.md)
-- [Introduction](/docs/CS/Distributed/Tracing/Zipkin.md)
+- [下载并解压（版本可按需调整）](/docs/CS/Distributed/Tracing/Prometheus/Prometheus.md)
+- [SkyWalking](/docs/CS/Distributed/Tracing/SkyWalking.md)
+- [Tracing](/docs/CS/Distributed/Tracing/Tracing.md)
+- [Zipkin](/docs/CS/Distributed/Tracing/Zipkin.md)

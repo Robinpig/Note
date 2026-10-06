@@ -52,12 +52,12 @@ The idea that global variables and side effects are bad is directly attributable
 
 ## Links
 
-- [Introduction](/docs/CS/SE/APM.md)
-- [Introduction](/docs/CS/SE/Architecture.md)
-- [Computer Composition Principle](/docs/CS/SE/Basic.md)
-- [Introduction](/docs/CS/SE/Bug.md)
-- [Introduction](/docs/CS/SE/Cache.md)
-- [Introduction](/docs/CS/SE/Caffeine.md)
+- [APM](/docs/CS/SE/APM.md)
+- [Architecture](/docs/CS/SE/Architecture.md)
+- [Basic](/docs/CS/SE/Basic.md)
+- [Bug](/docs/CS/SE/Bug.md)
+- [Cache](/docs/CS/SE/Cache.md)
+- [Caffeine](/docs/CS/SE/Caffeine.md)
 
 ## References
 

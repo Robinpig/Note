@@ -144,6 +144,6 @@ Reference
 
 ## Links
 
-- [Introduction](/docs/CS/Java/JDK/Agent.md)
-- [Introduction](/docs/CS/Java/JDK/ASM.md)
-- [Introduction](/docs/CS/Java/JDK/JDK.md)
+- [Agent](/docs/CS/Java/JDK/Agent.md)
+- [ASM](/docs/CS/Java/JDK/ASM.md)
+- [JDK](/docs/CS/Java/JDK/JDK.md)

@@ -26,12 +26,12 @@ allows one node has two elements.
 
 ## Links
 
-- [Introduction](/docs/CS/Algorithms/tree/B-tree.md)
-- [Introduction](/docs/CS/Algorithms/tree/B_Link_Tree.md)
-- [Introduction](/docs/CS/Algorithms/tree/Binary-Tree.md)
-- [Introduction](/docs/CS/Algorithms/tree/Disjoint_Set.md)
-- [Introduction](/docs/CS/Algorithms/tree/Huffman-Tree.md)
-- [Introduction](/docs/CS/Algorithms/tree/LSM.md)
+- [B-tree](/docs/CS/Algorithms/tree/B-tree.md)
+- [B_Link_Tree](/docs/CS/Algorithms/tree/B_Link_Tree.md)
+- [Binary-Tree](/docs/CS/Algorithms/tree/Binary-Tree.md)
+- [Disjoint_Set](/docs/CS/Algorithms/tree/Disjoint_Set.md)
+- [Huffman-Tree](/docs/CS/Algorithms/tree/Huffman-Tree.md)
+- [LSM](/docs/CS/Algorithms/tree/LSM.md)
 
 ## References
 

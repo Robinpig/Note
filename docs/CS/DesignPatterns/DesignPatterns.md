@@ -249,5 +249,5 @@ step by step to build a object
 
 ## Links
 
-- [Introduction](/docs/CS/DesignPatterns/ProxyPattern.md)
-- [Introduction](/docs/CS/DesignPatterns/StrategyPattern.md)
+- [ProxyPattern](/docs/CS/DesignPatterns/ProxyPattern.md)
+- [StrategyPattern](/docs/CS/DesignPatterns/StrategyPattern.md)

@@ -84,9 +84,9 @@ func newTimer(when, period int64, f func(arg any, seq uintptr, delay int64), arg
 
 ## Links
 
-- [Introduction](/docs/CS/Go/Echo.md)
-- [Introduction](/docs/CS/Go/GC.md)
-- [Introduction](/docs/CS/Go/GMM.md)
-- [Introduction](/docs/CS/Go/Go.md)
-- [Introduction](/docs/CS/Go/Issues.md)
-- [Introduction](/docs/CS/Go/Pointer.md)
+- [Echo](/docs/CS/Go/Echo.md)
+- [GC](/docs/CS/Go/GC.md)
+- [GMM](/docs/CS/Go/GMM.md)
+- [Tests](/docs/CS/Go/Go.md)
+- [Issues](/docs/CS/Go/Issues.md)
+- [Pointer](/docs/CS/Go/Pointer.md)

@@ -111,11 +111,11 @@ JVM 提供了跨平台的内存管理、JIT 与成熟的可观测性，生态是
 
 ## Links
 
-- [Introduction](/docs/CS/Go/Go.md)
+- [Tests](/docs/CS/Go/Go.md)
 - [Scala](/docs/CS/Scala/Scala.md)
-- [Introduction](/docs/CS/Rust/Rust.md)
-- [Introduction](/docs/CS/Python/Python.md)
-- [Introduction](/docs/CS/Java/JDK/JDK.md)
+- [Rust](/docs/CS/Rust/Rust.md)
+- [Python](/docs/CS/Python/Python.md)
+- [JDK](/docs/CS/Java/JDK/JDK.md)
 - [TypeScript](/docs/CS/TypeScript/TypeScript.md)
 
 ## References

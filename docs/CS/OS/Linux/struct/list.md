@@ -86,9 +86,9 @@ static inline void __list_add(struct list_head *new,
 
 ## Links
 
-- [Introduction](/docs/CS/OS/Linux/0.11.md)
-- [Introduction](/docs/CS/OS/Linux/Calls.md)
-- [Overview](/docs/CS/OS/Linux/Experience.md)
-- [Introduction](/docs/CS/OS/Linux/Interrupt.md)
-- [Introduction](/docs/CS/OS/Linux/LXC.md)
-- [Introduction](/docs/CS/OS/Linux/Linux.md)
+- [0.11](/docs/CS/OS/Linux/0.11.md)
+- [Calls](/docs/CS/OS/Linux/Calls.md)
+- [Experience](/docs/CS/OS/Linux/Experience.md)
+- [Interrupt](/docs/CS/OS/Linux/Interrupt.md)
+- [LXC](/docs/CS/OS/Linux/LXC.md)
+- [Linux](/docs/CS/OS/Linux/Linux.md)

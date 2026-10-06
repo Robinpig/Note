@@ -252,12 +252,12 @@ void calc_global_load(void)
 
 ## Links
 
-- [Introduction](/docs/CS/OS/Linux/0.11.md)
-- [Introduction](/docs/CS/OS/Linux/Calls.md)
-- [Overview](/docs/CS/OS/Linux/Experience.md)
-- [Introduction](/docs/CS/OS/Linux/Interrupt.md)
-- [Introduction](/docs/CS/OS/Linux/LXC.md)
-- [Introduction](/docs/CS/OS/Linux/Linux.md)
+- [0.11](/docs/CS/OS/Linux/0.11.md)
+- [Calls](/docs/CS/OS/Linux/Calls.md)
+- [Experience](/docs/CS/OS/Linux/Experience.md)
+- [Interrupt](/docs/CS/OS/Linux/Interrupt.md)
+- [LXC](/docs/CS/OS/Linux/LXC.md)
+- [Linux](/docs/CS/OS/Linux/Linux.md)
 
 ## References
 1. [Linux Load Averages: Solving the Mystery](https://www.brendangregg.com/blog/2017-08-08/linux-load-averages.html)

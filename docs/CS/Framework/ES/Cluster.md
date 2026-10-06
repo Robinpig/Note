@@ -58,9 +58,9 @@ ES 的搜索采用了著名的 两阶段查询（Query Then Fetch） 机制：
 
 ## Links
 
-- [Introduction](/docs/CS/Framework/ES/Beats.md)
-- [Introduction](/docs/CS/Framework/ES/ES.md)
-- [Introduction](/docs/CS/Framework/ES/Kibana.md)
-- [Introduction](/docs/CS/Framework/ES/Logstash.md)
-- [Introduction](/docs/CS/Framework/ES/Lucene.md)
-- [Introduction](/docs/CS/Framework/ES/OpenSearch.md)
+- [Beats](/docs/CS/Framework/ES/Beats.md)
+- [disable other discovery configs](/docs/CS/Framework/ES/ES.md)
+- [config/kibana.yml](/docs/CS/Framework/ES/Kibana.md)
+- [Logstash](/docs/CS/Framework/ES/Logstash.md)
+- [Lucene](/docs/CS/Framework/ES/Lucene.md)
+- [OpenSearch](/docs/CS/Framework/ES/OpenSearch.md)

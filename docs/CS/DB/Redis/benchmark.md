@@ -29,12 +29,12 @@ SET: 305871.56 requests per second
 
 ## Links
 
-- [Introduction](/docs/CS/DB/Redis/Cache.md)
-- [Introduction](/docs/CS/DB/Redis/Concurrency.md)
-- [Introduction](/docs/CS/DB/Redis/Jedis.md)
-- [Introduction](/docs/CS/DB/Redis/Lettuce.md)
-- [Introduction](/docs/CS/DB/Redis/Lock.md)
-- [Introduction](/docs/CS/DB/Redis/Lua.md)
+- [Cache](/docs/CS/DB/Redis/Cache.md)
+- [redis.conf](/docs/CS/DB/Redis/Concurrency.md)
+- [Jedis](/docs/CS/DB/Redis/Jedis.md)
+- [Lettuce](/docs/CS/DB/Redis/Lettuce.md)
+- [Lock](/docs/CS/DB/Redis/Lock.md)
+- [Lua](/docs/CS/DB/Redis/Lua.md)
 
 ## References
 

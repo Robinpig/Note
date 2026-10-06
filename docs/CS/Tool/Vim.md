@@ -69,6 +69,6 @@ set ruler
 
 ## Links
 
-- [Introduction](/docs/CS/Tool/MATLAB.md)
-- [Introduction](/docs/CS/Tool/ffmpeg.md)
-- [Introduction](/docs/CS/Tool/gzip.md)
+- [MATLAB](/docs/CS/Tool/MATLAB.md)
+- [ffmpeg](/docs/CS/Tool/ffmpeg.md)
+- [-n 去掉 MTIME/文件名，输出可复现](/docs/CS/Tool/gzip.md)

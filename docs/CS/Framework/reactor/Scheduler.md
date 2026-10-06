@@ -28,4 +28,4 @@ public abstract class Schedulers {
 
 ## Links
 
-- [Introduction](/docs/CS/Framework/reactor/Reactor.md)
+- [Reactor](/docs/CS/Framework/reactor/Reactor.md)

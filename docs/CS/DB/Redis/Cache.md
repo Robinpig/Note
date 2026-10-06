@@ -67,9 +67,9 @@
 
 ## Links
 
-- [Introduction](/docs/CS/DB/Redis/Concurrency.md)
-- [Introduction](/docs/CS/DB/Redis/Jedis.md)
-- [Introduction](/docs/CS/DB/Redis/Lettuce.md)
-- [Introduction](/docs/CS/DB/Redis/Lock.md)
-- [Introduction](/docs/CS/DB/Redis/Lua.md)
-- [Introduction](/docs/CS/DB/Redis/PubSub.md)
+- [redis.conf](/docs/CS/DB/Redis/Concurrency.md)
+- [Jedis](/docs/CS/DB/Redis/Jedis.md)
+- [Lettuce](/docs/CS/DB/Redis/Lettuce.md)
+- [Lock](/docs/CS/DB/Redis/Lock.md)
+- [Lua](/docs/CS/DB/Redis/Lua.md)
+- [PubSub](/docs/CS/DB/Redis/PubSub.md)
