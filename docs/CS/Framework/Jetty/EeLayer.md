@@ -243,7 +243,7 @@ EE 层要同时把核心翻译成 Servlet，又把 Servlet 翻译回核心，两
   handler.put("/*", Constraint.combine(Constraint.Authorization.FORBIDDEN, Constraint.Transport.SECURE_TRANSPORT));
   ```
 
-  Servlet 的 `<security-constraint>` XML 语义由 `ee10/servlet/security/ConstraintSecurityHandler.java:61` 适配，`:444` 注释自嘲它「implements the bizarre Jakarta Servlet Spec section 13.8.1」——**规范里那些反直觉的 URL pattern / role 合并规则被刻意隔离在这一层**，核心只见 `Constraint`。
+  Servlet 的 `<security-constraint>` XML 语义由 `ee10/servlet/security/ConstraintSecurityHandler.java:61` 适配，`:444` 注释自嘲它「implements the bizarre Jakarta Servlet Spec section 13.8.1」——**规范里那些反直觉的 URL pattern / role 合并规则被刻意隔离在这一层**，核心只见 `Constraint`。`Constraint` 模型、`SecurityHandler` 的两种子类与未命中默认放行的 footgun、认证执行链与 LoginService 家族，单独成篇见 [Security](/docs/CS/Framework/Jetty/Security.md)。
 - **会话**：核心契约 `server/Session.java:29` `interface Session extends Attributes`，配 `Session.API` 包装协议（`:41-47`）。EE 侧实现 `ee10/servlet/SessionHandler.java:53` `extends AbstractSessionManager implements Handler.Singleton`，`CookieConfig`（`:107`）、`ServletSessionApi implements HttpSession, Session.API`（`:278`）、`NonServletSessionRequest extends Request.Wrapper`（`:722`）。最后一类名字本身就是这篇主题的注脚：**同一段会话既服务 `HttpSession` 也服务非 Servlet 请求**。
 
 ## How ee10 and ee11 coexist

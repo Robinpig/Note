@@ -301,7 +301,7 @@ Tomcat 侧细节见 [Tomcat 线程模型](/docs/CS/Framework/Tomcat/threads.md)�
 
 1. **acceptor 也在租线程**。每个 acceptor 从池里租 1 个线程，selector 各租 1 个，`ReservedThreadExecutor` 再租 `capacity` 个。`maxThreads` 必须显著大于这些租约之和，否则 `ThreadPoolBudget.check()` 在启动期直接 `IllegalStateException("Insufficient configured threads")`。反过来，把 `maxThreads` 调到刚好等于租用线程数会导致没有线程跑请求。
 2. **保留线程用尽表现为「不收新连接」**。`tryExecute()` 失败不阻塞、不抛异常，策略退化成 `PEC`（任务进池排队）。当池同时被慢 handler 打满时，症状是连接在 TCP 层已被 accept 但迟迟不读、客户端看到超时，而 `getBusyThreads()` 已满。看 `getAvailable()`（`ReservedThreadExecutor.java:152-155`）与 `_pcMode/_pecMode` 计数器（`AdaptiveExecutionStrategy.java:130-133`，dump 里可见）区分「策略在退化」还是「池不够」。
-3. **别把队列换成有界的**。见上文 WARN 分支；要限制并发用 `maxConnections` 或应用侧信号量，不要用队列长度做背压。
+3. **别把队列换成有界的**。见上文 WARN 分支；要限制并发用 `maxConnections` 或应用侧信号量，不要用队列长度做背压。连接数、accept 速率、低资源收缩与请求级限流的完整工具箱见 [Limiting](/docs/CS/Framework/Jetty/Limiting.md)。
 4. **minThreads 太小会让突发变慢**。默认 `min(8, max)` 意味着低峰期只有 8 条线程存活，突发时要现场创建线程；对延迟敏感的服务显式把 `minThreads` 提到接近稳态并发。
 5. **`_lowThreadsThreshold = 1`**（`QueuedThreadPool.java:119`）：可用线程低于 1 才告警，阈值很低，别指望日志能及时提示线程饥饿。
 6. **handler 申报 `BLOCKING` 会吃掉 PC 优化**。默认的 `Handler.Abstract` 就是 `BLOCKING`；纯内存/纯异步的 handler 继承 `Handler.NonBlocking` 才能真正零切换。但一旦 handler 树里有动态容器（`_dynamic`），`Server.getInvocationType()` 恒为 `BLOCKING`（`Handler.java:577-585`），全局优化被拉平——这是「动态上下文」的真实代价。
@@ -313,7 +313,7 @@ Tomcat 侧细节见 [Tomcat 线程模型](/docs/CS/Framework/Tomcat/threads.md)�
 ## Links
 
 - [Jetty 架构与组件总览](/docs/CS/Framework/Jetty/Jetty.md)
-- [Jetty Connector 与 SelectManager](/docs/CS/Framework/Jetty/Connector.md)
+- [Jetty Connector 与 SelectorManager](/docs/CS/Framework/Jetty/Connector.md)
 - [Jetty 请求处理流程](/docs/CS/Framework/Jetty/RequestFlow.md)
 - [Jetty HTTP/2 与流控](/docs/CS/Framework/Jetty/Http2.md)
 - [Tomcat 线程模型](/docs/CS/Framework/Tomcat/threads.md)

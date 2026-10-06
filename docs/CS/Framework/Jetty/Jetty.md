@@ -40,7 +40,7 @@ Fig.1. Jetty architecture
 5. `HttpChannel`（实现 `HttpChannelState`）把协议层事件翻译成上层动作，最终 `return _handlerInvoker`——**注意它返回的是 Runnable，跑在哪由调用方决定**。
 6. `HandlerInvoker` 走完 Customizer、URI 合规校验，然后 `server.handle(request, response, callback)`，返回 false 才写 404。
 
-第 4 步那个 CAS 是理解 Jetty 非阻塞语义的钥匙：**同一线程可以同步跑完整条链并继续吃 HTTP pipeline 的下一个请求；一旦链变异步，CAS 失败就 break 让出线程**。逐行拆解与端到端时序见 [RequestFlow](/docs/CS/Framework/Jetty/RequestFlow.md)，字节层（`Content.Source` 的 `read`/`demand`、`HttpParser` 的 `State`、`HttpGenerator` 的 `Result`）见 [ContentModel](/docs/CS/Framework/Jetty/ContentModel.md)。
+第 4 步那个 CAS 是理解 Jetty 非阻塞语义的钥匙：**同一线程可以同步跑完整条链并继续吃 HTTP pipeline 的下一个请求；一旦链变异步，CAS 失败就 break 让出线程**。逐行拆解与端到端时序见 [RequestFlow](/docs/CS/Framework/Jetty/RequestFlow.md)，字节层（`Content.Source` 的 `read`/`demand`、`HttpParser` 的 `State`、`HttpGenerator` 的 `Result`）见 [ContentModel](/docs/CS/Framework/Jetty/ContentModel.md)。升级协议（WebSocket）与访问控制在这棵 Handler 树上都只是普通层：前者经 `WebSocketUpgradeHandler` 的 `Handshaker` 契约完成协议切换，见 [WebSocket](/docs/CS/Framework/Jetty/WebSocket.md)；后者是核心模块 `jetty-security` 的 `SecurityHandler` 与 `Constraint` 体系，见 [Security](/docs/CS/Framework/Jetty/Security.md)。
 
 ## Threading and scheduling
 
@@ -51,7 +51,7 @@ Jetty 的线程模型重点不在池大小，而在**一个 IO 事件要跑多�
 - 每个 `ManagedSelector` 持一个 `AdaptiveExecutionStrategy`——**这就是原来的 `EatWhatYouKill`**，12 里改了名（类注释 `:88` 自己写了这条历史），并按任务是否可阻塞在 4 个子策略间自适应切换。
 - 虚拟线程走 `VirtualThreads` 反射探测 + 可替换的 `VirtualThreadPool`（它其实不是池，是 thread-per-task + 信号量）。**Jetty 没有 `VirtualThreadExecutor` 这个类**，那是 Tomcat 的实现名。
 
-细节与调参坑见 [Threading](/docs/CS/Framework/Jetty/Threading.md)，连接器侧见 [Connector](/docs/CS/Framework/Jetty/Connector.md)。
+细节与调参坑见 [Threading](/docs/CS/Framework/Jetty/Threading.md)，连接器侧见 [Connector](/docs/CS/Framework/Jetty/Connector.md)，连接与请求的外围保护开关（accept 限速/限额、低资源收缩、请求级 DoS/QoS handler）的全景见 [Limiting](/docs/CS/Framework/Jetty/Limiting.md)。
 
 ## Configuration and lifecycle
 

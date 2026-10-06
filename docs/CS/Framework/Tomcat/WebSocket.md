@@ -150,6 +150,7 @@ public class UpgradeProcessorInternal extends UpgradeProcessorBase {
 - [Connector](/docs/CS/Framework/Tomcat/Connector.md)
 - [HTTP2](/docs/CS/Framework/Tomcat/HTTP2.md)
 - [Deployment](/docs/CS/Framework/Tomcat/Deployment.md)
+- [Jetty WebSocket](/docs/CS/Framework/Jetty/WebSocket.md)
 
 ## References
 

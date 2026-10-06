@@ -353,6 +353,8 @@ Jetty 的连接级保护全部**挂在 SelectorManager 的 AcceptListener 上**,
 | `AcceptRateLimit` | `AcceptRateLimit.java:59` | 令牌桶限制**新建连接速率**, 慢启动时保护后端 |
 | `LowResourceMonitor` | `LowResourceMonitor.java:47` | 周期探测低资源, 低资源期把已有连接空闲超时压到 1s |
 
+这些保护开关与请求级 handler（`DoSHandler`/`QoSHandler`/`ThreadLimitHandler` 等）的分层清单、推荐组合与相互作用，见 [Limiting](/docs/CS/Framework/Jetty/Limiting.md)。
+
 `LowResourceMonitor` 的默认值组合容易踩:
 
 ```java

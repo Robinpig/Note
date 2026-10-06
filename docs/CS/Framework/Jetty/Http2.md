@@ -283,6 +283,8 @@ Jetty 12.1 **协议层仍然完整实现了 server push**，这与 Tomcat 11 移
 
 1. 这是**纯字符串匹配**，`h3` 这个名字由别的模块的 ConnectionFactory 申报；本镜像里**没有任何 QUIC / HTTP/3 模块**，`jetty-server` 与 `jetty-http` 里 `h3` 只出现在 `HttpVersion.HTTP_3` 枚举与若干 javadoc 中。
 2. 因此默认部署下 `AltSvcCustomizer` 的分支**不会命中，也就不发 Alt-Svc 头**——`HTTP/3` 支持与否取决于是否另行引入 Jetty 的 h3/QUIC artifact，不能从 `HTTP2ServerConnectionFactory` 的存在推断出来。
+
+WebSocket 在 HTTP/2 上的完整握手链（`RFC8441Handshaker` 如何从 CONNECT + `:protocol` 伪头接手 EndPoint）见 [WebSocket](/docs/CS/Framework/Jetty/WebSocket.md)。
 3. 反过来，`AbstractHTTP2ServerConnectionFactory` 的白名单**禁止**给 HTTP/2 工厂申报 `h3`（`:46-53`），所以 Alt-Svc 广告与 h2 工厂是解耦的：前者查全 server 的 connector 列表，后者只管自己。
 
 ## Pitfalls
