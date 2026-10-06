@@ -1,5 +1,3 @@
-## Pi
-
 ## Introduction
 
 Pi 是一个跑在终端里的 AI 编程 agent。它的特点是把能力藏在**基础操作**里，而不是堆在界面上——真正用好 Pi，靠的是会话树、`@` 引用、Shell 集成这些日常动作，而不是记一堆冷门命令。
@@ -229,6 +227,10 @@ Pi **不内置权限系统**：运行在哪个目录就能访问该目录全部�
 - **短板**：不是 Telegram/微信/Discord bot，无跨会话持久记忆，深度定制要写 TypeScript，第三方生态规模不及 [MCP](/docs/CS/AI/LLM/MCP.md) 成熟阵营，四个核心工具是刻意的极简设计而非缺失。
 
 适合想自己掌控 harness 形态、需要在同一会话切换多家模型、重视上下文干净与 token 效率、愿意锻造工作流的用户；不适合追求一站式开箱、依赖消息平台网关、或要求内置审批流的企业场景。
+
+## 内部架构
+
+Pi 的内部实现（包分层、依赖图、两层协作循环、工具批次链路、运行模式、扩展加载、构建与质量）单独整理在 [Pi 架构](/docs/CS/AI/LLM/Pi-Architecture.md)。该文基于 `git tag v1.0.0` 对实际代码核对，可与 [Agent](/docs/CS/AI/LLM/Agent.md) / [Harness](/docs/CS/AI/LLM/Harness.md) 两个抽象对照阅读。
 
 ## Links
 

@@ -48,6 +48,8 @@ LLM 在结构上就是"把 [Transformer](/docs/CS/AI/Transformer.md) 的 decoder
 
 以上都是"用别人的平台"。另一条路是自己攒：[LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md) 给出模型与工具的跨厂商抽象，[LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md) 在它下面给出有状态图运行时——循环重试、断点恢复、人工审批闸门都落在这一层。这条代码框架线与平台线各自适合谁、同层还有哪些玩家，[LLM 应用开发框架](/docs/CS/AI/LangTools.md) 画了一张横向地图。
 
+框架再往下，真在终端直接跑起来的 coding agent 产品也在这个谱系里：[Pi](/docs/CS/AI/LLM/Pi.md) 把"核心能力最小化、靠扩展叠加"做到极致，其内部运行时就是上面 Agent / Harness 抽象在 TypeScript 工程里的落地；其内部实现（包分层、两层协作循环、工具批次链路）单独整理在 [Pi 架构](/docs/CS/AI/LLM/Pi-Architecture.md)，对照本篇的 Loop / Tools / Memory / Harness 四构成看最清楚。
+
 ## Links
 
 - [AI](/docs/CS/AI/AI.md)
