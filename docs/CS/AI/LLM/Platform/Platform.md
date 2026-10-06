@@ -32,7 +32,7 @@ LLM 应用开发平台（也称 LLMOps / Agent 平台）指的是一类**可视�
 | [Dify](/docs/CS/AI/LLM/Platform/Dify.md) | 生产级 LLM 应用：工作流 + RAG + Agent + LLMOps | Python + React，Docker/K8s，云+自部署 | Apache 2.0 + 商用附加条件 | 社区与生态最成熟，RAG 管线可调项最多；近期重点在 Agent 运行时与沙箱 |
 | [Coze](/docs/CS/AI/LLM/Platform/Coze.md) | 可视化搭建 + 全生命周期观测一体化 | Go + React（依赖 Eino / FlowGram），云+自部署 | Apache 2.0 | Studio（开发）+ Loop（评测/Trace）双仓；国内渠道与中文生态友好 |
 | n8n | 通用流程自动化 + AI 节点 | Node.js，自部署为主 | Sustainable Use（fair-code，非 OSI 开源） | 400+ 外部系统集成最强；把 Agent 嵌进业务流程最合适，转售需商业授权 |
-| [Langflow](/docs/CS/Framework/LangTool/Langflow.md) | Python 侧的 LLM/RAG 原型可视化 | Python，可导出 API / MCP | MIT | 与 LangChain 生态同源，适合先在画布上试、再落到代码 |
+| [Langflow](/docs/CS/AI/LLM/LangTool/Langflow.md) | Python 侧的 LLM/RAG 原型可视化 | Python，可导出 API / MCP | MIT | 与 LangChain 生态同源，适合先在画布上试、再落到代码 |
 | Flowise | 聊天机器人与 RAG，看重出原型速度和可嵌入挂件 | Node.js/TS，可嵌入挂件 + API | 核心开源，商用条款各版本不同 | JS/TS 团队友好；从原型到可嵌入助手的路径最短 |
 | FastGPT | 知识库问答 / 文档助手 | 可视化 Flow，Docker 快速起 | Apache 2.0 + 附加条件（限制未经授权的多租户 SaaS） | 国产，自动 QA 对抽取提升召回；商业化 hosting 需看条款 |
 | [RAGFlow](/docs/CS/AI/LLM/Platform/RAGFlow.md) | 复杂文档的深度理解式 RAG | Web UI + Python SDK | Apache 2.0 | DeepDoc 解析版式/表格/扫描 PDF 是差异化点，回答可带引用溯源；门槛偏高（4C16G 起） |
@@ -77,7 +77,9 @@ n8n、Make、Zapier Agents、Gumloop、Relay.app、Lindy、Relevance AI、Voicef
 
 ### 第四类：代码框架派（不是产品，是积木）
 
-[LangGraph](/docs/CS/Framework/LangTool/LangGraph.md)、CrewAI、OpenAI Agents SDK、Claude Agent SDK、[Pydantic AI](/docs/CS/Framework/PydanticAI.md)。
+[LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md)、CrewAI、OpenAI Agents SDK、Claude Agent SDK、[Pydantic AI](/docs/CS/AI/LLM/PydanticAI.md)。
+
+这一派内部的层次关系（Harness / Framework / Runtime / Platform）与选型路径，见 [LLM 应用开发框架](/docs/CS/AI/LangTools.md)。
 
 其中 Pydantic AI 的定位最"反平台"：它不做画布也不做运维台，只解决**单个类型安全的 Agent 如何可靠地嵌进真实代码库**（结构化输出校验、依赖注入、用量硬约束、OpenTelemetry 追踪）。画布表达不出来的那些东西，答案往往就在这里。
 

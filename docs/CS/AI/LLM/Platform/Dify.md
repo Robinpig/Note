@@ -4,7 +4,7 @@ Dify（源自 "Do It For You"）是 LangGenius 出品的开源 LLM 应用开发�
 
 它的定位是**裸 LLM API 与代码框架之间的产品化中间层**：把工作流编排、RAG 管线、Agent、插件、发布渠道、日志与运维打包成一个可视化后端，把一条 LLM 应用从「几百行的 Python 脚本」变成「团队可协作、可灰度、可观测的服务」。截至 2026 年它是 GitHub 上星标数最高的 LLM 应用平台之一（十万量级），文档与社区生态也最厚。
 
-它不是一个 SaaS 聊天工具，也不是一个 Python SDK——理解这一点，是理解它和 [LangGraph](/docs/CS/Framework/LangTool/LangGraph.md)（代码框架）与 [Coze](/docs/CS/AI/LLM/Platform/Coze.md)（可视化 + 观测一体）之间取舍的前提。
+它不是一个 SaaS 聊天工具，也不是一个 Python SDK——理解这一点，是理解它和 [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md)（代码框架）与 [Coze](/docs/CS/AI/LLM/Platform/Coze.md)（可视化 + 观测一体）之间取舍的前提。
 
 ## 它在技术栈里的位置
 

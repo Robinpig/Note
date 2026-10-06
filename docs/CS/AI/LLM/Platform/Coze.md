@@ -87,7 +87,7 @@ Loop 覆盖上线前后的四个环节，正好对应 Agent 最容易"看不见"
 |----------------|------------------|
 | 面向国内业务，需要发布到飞书、抖音、微信等渠道 | 需要纯粹的"LLM 后端"，只对外提供 REST API |
 | 想要「搭建 + 调优 + 观测」一体化，不想自己接 LangSmith/自建评测 | 团队主栈是 Java/Python 且要求深度定制源码行为 |
-| 团队以产品/业务为主，低代码优先 | 需要代码级别的编排控制（用 [LangGraph](/docs/CS/Framework/LangTool/LangGraph.md) 或直接写 Harness） |
+| 团队以产品/业务为主，低代码优先 | 需要代码级别的编排控制（用 [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md) 或直接写 Harness） |
 | 认可 Go 技术栈，可接受在 Go 侧做二次开发 | 强烈依赖某种特定向量库/数据源，平台没有对应插件 |
 
 与 [Dify](/docs/CS/AI/LLM/Platform/Dify.md) 的核心取舍：**Coze 胜在"开发 + 观测"原生一体（Studio + Loop）与国内生态；Dify 胜在 RAG 管线的可调深度、社区规模与技能/插件生态。**

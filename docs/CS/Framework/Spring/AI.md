@@ -193,7 +193,7 @@ Micrometer Observation 侧自动产出 `spring.ai.chat.client` / `spring.ai.chat
 - [LLM](/docs/CS/AI/LLM/LLM.md)
 - [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md)
 - [RAG](/docs/CS/AI/RAG.md)
-- [LangChain4j](/docs/CS/Framework/LangTool/LangChain4j.md)
+- [LangChain4j](/docs/CS/AI/LLM/LangTool/LangChain4j.md)
 
 ## References
 

@@ -48,18 +48,8 @@ AI
 
 ## Links
 
-- [ML](/docs/CS/AI/ML/ML.md)
-- [DL](/docs/CS/AI/DL/DL.md)
-- [Transformer](/docs/CS/AI/Transformer.md)
-- [LLM](/docs/CS/AI/LLM/LLM.md)
-- [NLP](/docs/CS/AI/NLP/NLP.md)
-- [CV](/docs/CS/AI/CV.md)
-- [CNN](/docs/CS/AI/CNN.md)
-- [SVM](/docs/CS/AI/ML/SVM.md)
-- [PyTorch](/docs/CS/AI/PyTorch.md)
-- [TensorFlow](/docs/CS/AI/TensorFlow.md)
-- [Scikit-Learn](/docs/CS/AI/Scikit-Learn.md)
-- [RAG](/docs/CS/AI/RAG.md)
+- [OS](/docs/CS/OS/OS.md)
+
 
 ## References
 

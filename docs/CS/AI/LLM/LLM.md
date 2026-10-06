@@ -63,7 +63,11 @@ LLM 在结构上就是"把 [Transformer](/docs/CS/AI/Transformer.md) 的 decoder
 
 几个常被放在一起比的产品，差异其实比想象中大：[Coze](/docs/CS/AI/LLM/Platform/Coze.md) 的独特点是"开发 + 评测观测"原生一体（Studio 搭 agent、Loop 调效果）；[Dify](/docs/CS/AI/LLM/Platform/Dify.md) 强在 RAG 管线可调得深、插件生态成熟；[HiAgent](/docs/CS/AI/LLM/Platform/HiAgent.md) 是火山引擎面向企业私有化的那条线，核心命题是组织里的多个 Agent 如何协同分工。反过来，如果主要诉求是吃透复杂文档（表格、扫描件、带版式的 PDF），要看的不是通用平台，而是偏科生 [RAGFlow](/docs/CS/AI/LLM/Platform/RAGFlow.md)。
 
-画布和代码也不必二选一：[Langflow](/docs/CS/Framework/LangTool/Langflow.md) 允许一边可视化编排一边改组件源码、导出成 Python；而团队本就 Python 为主、希望类型系统直接约束 LLM 输出时，[Pydantic AI](/docs/CS/Framework/PydanticAI.md) 是从第一天就按生产标准设计的那一派。
+画布和代码也不必二选一：[Langflow](/docs/CS/AI/LLM/LangTool/Langflow.md) 允许一边可视化编排一边改组件源码、导出成 Python；而团队本就 Python 为主、希望类型系统直接约束 LLM 输出时，[Pydantic AI](/docs/CS/AI/LLM/PydanticAI.md) 是从第一天就按生产标准设计的那一派。
+
+以上都是"用别人的平台"。另一条路是自己攒：[LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md) 给出模型与工具的跨厂商抽象，[LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md) 在它下面给出有状态图运行时——循环重试、断点恢复、人工审批闸门都落在这一层。这条代码框架线与平台线各自适合谁、同层还有哪些玩家，[LLM 应用开发框架](/docs/CS/AI/LangTools.md) 画了一张横向地图。
+
+框架再往下，真在终端直接跑起来的 coding agent 产品也在这个谱系里：[Pi](/docs/CS/AI/LLM/Agent/Product/Pi.md) 把"核心能力最小化、靠扩展叠加"做到极致，其内部运行时就是上面 Agent / Harness 抽象在 TypeScript 工程里的落地；其内部实现（包分层、两层协作循环、工具批次链路）单独整理在 [Pi 架构](/docs/CS/AI/LLM/Pi-Architecture.md)，对照本篇的 Loop / Tools / Memory / Harness 四构成看最清楚。
 
 ## Links
 

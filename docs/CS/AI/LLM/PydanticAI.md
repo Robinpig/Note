@@ -4,7 +4,7 @@ Pydantic AI 是 Pydantic 公司（[FastAPI](https://fastapi.tiangolo.com/) 同�
 
 版本节奏值得记：V1 GA 于 **2025-09-04**，带着明确的 API 稳定性承诺；V2 于 **2026-06-23** 稳定发布，同时 V1 保留为兼容线继续维护——这在频繁 Breaking Change 的 Agent 框架圈子里是份很难得的升级记录。
 
-它与 [LangGraph](/docs/CS/Framework/LangTool/LangGraph.md) 解决的是不同层的问题：**Pydantic AI 强在"单个类型安全的 Agent 能否可靠地嵌进真实代码库"，LangGraph 强在"多步有状态图 + 检查点 + 人在环路"。** 两者并不互斥，常见组合是用 Pydantic AI 写类型安全的 Agent 作为节点，上面再架一层编排。
+它与 [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md) 解决的是不同层的问题：**Pydantic AI 强在"单个类型安全的 Agent 能否可靠地嵌进真实代码库"，LangGraph 强在"多步有状态图 + 检查点 + 人在环路"。** 两者并不互斥，常见组合是用 Pydantic AI 写类型安全的 Agent 作为节点，上面再架一层编排。
 
 ## 四个支柱
 
@@ -45,7 +45,7 @@ V2.0 的头号特性是**能力系统（capabilities）**：把横切关注点�
 
 | 需求 | 更合适 |
 |------|--------|
-| 需要 Postgres 支持的可恢复状态、时间旅行调试、图中途人工中断 | [LangGraph](/docs/CS/Framework/LangTool/LangGraph.md) |
+| 需要 Postgres 支持的可恢复状态、时间旅行调试、图中途人工中断 | [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md) |
 | 需要真正的持久执行（扛过部署、等待数天、精确一次副作用） | Temporal（用 Pydantic AI 的官方集成）优于任何框架自带的持久化 |
 | 团队已全面类型化、跑严格 mypy/pyright | **Pydantic AI**（类型驱动能在编译期就抓到连线错误） |
 | 主体是几个类型化 Agent，只是偶尔需要显式控制流 | **Pydantic AI**（官方也建议留在 Agent 层，别急着上 graph） |
@@ -56,8 +56,8 @@ V2.0 的头号特性是**能力系统（capabilities）**：把横切关注点�
 
 ## Links
 
-- [LangChain](/docs/CS/Framework/LangTool/LangChain.md)
-- [Langflow](/docs/CS/Framework/LangTool/Langflow.md)
+- [LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md)
+- [Langflow](/docs/CS/AI/LLM/LangTool/Langflow.md)
 - [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md)
 - [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md)
 - [MCP](/docs/CS/AI/LLM/Protocol/MCP.md)

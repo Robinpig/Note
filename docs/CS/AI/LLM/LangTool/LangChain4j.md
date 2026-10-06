@@ -2,7 +2,7 @@
 
 LangChain4j 是 LangChain 思想的 **Java 实现**：用统一抽象屏蔽各家大模型 API 差异，把 Prompt、记忆、工具调用、RAG、Agent 编排组装成可工程化的应用框架。它的目标用户是已经身处 Spring/Quarkus 生态、希望把 LLM 能力引入后端服务（而非另起一个 Python 服务）的 Java 团队。
 
-与 Python 版 [LangChain](/docs/CS/Framework/LangTool/LangChain.md) 的关系：**理念同源、API 各自地道**。LangChain4j 不是逐行移植，而是按 Java 习惯重新设计（Builder、接口、声明式 AiServices），并深度集成 Spring Boot / Quarkus。需要长流程有状态编排（检查点、分叉、人机协同）时，Java 侧通常直接用 Spring AI 或自研状态机，对应 Python 生态的 [LangGraph](/docs/CS/Framework/LangTool/LangGraph.md)。
+与 Python 版 [LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md) 的关系：**理念同源、API 各自地道**。LangChain4j 不是逐行移植，而是按 Java 习惯重新设计（Builder、接口、声明式 AiServices），并深度集成 Spring Boot / Quarkus。需要长流程有状态编排（检查点、分叉、人机协同）时，Java 侧通常直接用 Spring AI 或自研状态机，对应 Python 生态的 [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md)。
 
 ## 核心抽象
 
@@ -63,7 +63,7 @@ LangChain4j Agentic 框架提供了多种工作流编排模式，按自主程度
 
 ## Links
 
-- [LangChain](/docs/CS/Framework/LangTool/LangChain.md) / [LangGraph](/docs/CS/Framework/LangTool/LangGraph.md) — Python 同源框架与图编排运行时
+- [LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md) / [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md) — Python 同源框架与图编排运行时
 - [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) — Agent 四构成（Loop/Tools/Memory/Harness）
 - [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md) — Runtime / Framework / Harness 三层
 - [RAG](/docs/CS/AI/RAG.md) — 检索增强生成

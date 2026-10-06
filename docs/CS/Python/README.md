@@ -24,7 +24,7 @@
 ## 生态关联
 
 - Web 框架：[FastAPI](/docs/CS/Framework/FastAPI.md)
-- LLM 应用开发：[LangChain](/docs/CS/Framework/LangTool/LangChain.md)、[LangGraph](/docs/CS/Framework/LangTool/LangGraph.md)
+- LLM 应用开发：[LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md)、[LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md)
 - 向量数据库：[Milvus](/docs/CS/DB/Milvus/Milvus.md)
 - 内存管理对照：[GC](/docs/CS/memory/GC.md)（引用计数与分代回收在各语言运行时中的实现）
 

@@ -1,6 +1,6 @@
 ## Introduction
 
-本目录是 **Framework（框架与中间件）** 领域的入口页，收录后端与基础设施层的技术栈笔记：Java 体系（Spring / MyBatis / Dubbo）、分布式协调与服务治理（ZooKeeper / etcd / Nacos / Consul / Sentinel / Seata）、网络与 RPC（Netty / Tomcat / gRPC）、服务网格与网关（Istio / Higress）、计算与数据（Hadoop / Flink / Spark / ES）、响应式编程、以及跨语言与 AI 框架（LangTool 等）。
+本目录是 **Framework（框架与中间件）** 领域的入口页，收录后端与基础设施层的技术栈笔记：Java 体系（Spring / MyBatis / Dubbo）、分布式协调与服务治理（ZooKeeper / etcd / Nacos / Consul / Sentinel / Seata）、网络与 RPC（Netty / Tomcat / gRPC）、服务网格与网关（Istio / Higress）、计算与数据（Hadoop / Flink / Spark / ES）、响应式编程。LLM 应用开发框架（LangChain / LangGraph / Langflow / Pydantic AI 等）已迁至 [AI/LLM/LangTool/](/docs/CS/AI/LLM/LangTool/LangChain.md)，本目录仅保留指向它的入口链接。
 
 目录按**技术栈**组织，每个领域一个子目录，多数子目录以与目录同名的笔记为主入口（如 [Spring](/docs/CS/Framework/Spring/Spring.md) 是Spring 全家桶的枢纽）。若某个领域内部笔记较多且已具备完整分层（如 [etcd](/docs/CS/Framework/etcd/README.md)、[ZooKeeper](/docs/CS/Framework/ZooKeeper/README.md)、[nacos](/docs/CS/Framework/nacos/README.md)、[consul](/docs/CS/Framework/consul/README.md)），则额外提供目录首页 `README.md` 作为该领域的分层索引。
 
@@ -15,7 +15,7 @@ digraph framework_index {
   coord [label="协调与注册\nZooKeeper / etcd / Nacos / Consul", fillcolor="#e4eef7"];
   mesh [label="网格与网关\nIstio / Higress", fillcolor="#f3e4f7"];
   data [label="计算与数据\nHadoop / Flink / Spark / ES", fillcolor="#f7e9e4"];
-  ai [label="跨语言与 AI\nLangTool / 散篇", fillcolor="#efefef"];
+  ai [label="LLM 框架\n已迁至 AI/LLM/LangTool", fillcolor="#efefef"];
   ops [label="治理与运维\nJob / Sentinel / Seata / Dubbo", fillcolor="#eeeeF7"];
 
   coord -> rpc [style=dashed, color="#999"];
@@ -85,10 +85,10 @@ digraph framework_index {
 
 ## 跨语言与 AI 框架
 
-- [LangTool（LLM Agent 框架）](/docs/CS/Framework/LangTool/LangChain.md)：以 [LangChain](/docs/CS/Framework/LangTool/LangChain.md) 为主线串起 [LangGraph](/docs/CS/Framework/LangTool/LangGraph.md)、[Langflow](/docs/CS/Framework/LangTool/Langflow.md)、[LangChain4j](/docs/CS/Framework/LangTool/LangChain4j.md)——Java/Python 双生态的 Agent 编排框架。
+- [LangTool（LLM Agent 框架）](/docs/CS/AI/LLM/LangTool/LangChain.md)：以 [LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md) 为主线串起 [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md)、[Langflow](/docs/CS/AI/LLM/LangTool/Langflow.md)、[LangChain4j](/docs/CS/AI/LLM/LangTool/LangChain4j.md)——Java/Python 双生态的 Agent 编排框架。
 - [FastAPI](/docs/CS/Framework/FastAPI.md)：Python 现代 Web 框架（异步、类型注解、OpenAPI）。
 - [gorm](/docs/CS/Framework/gorm.md)：Go ORM 框架。
-- [PydanticAI](/docs/CS/Framework/PydanticAI.md)：Python 侧的类型驱动 AI Agent 框架。
+- [PydanticAI](/docs/CS/AI/LLM/PydanticAI.md)：Python 侧的类型驱动 AI Agent 框架。
 
 ## Links
 

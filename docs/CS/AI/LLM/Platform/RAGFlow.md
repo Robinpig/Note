@@ -73,7 +73,7 @@ docker compose --profile elasticsearch,cpu up -d
 | 需要给合规/法务/客户出示可追溯引用 | **RAGFlow**（chunk 可见可编辑 + 答案带引用） |
 | 语料干净，还要通用编排（多应用类型、插件市场、发布多渠道） | [Dify](/docs/CS/AI/LLM/Platform/Dify.md) |
 | 只要一个轻量的知识库问答，机器资源有限 | FastGPT / AnythingLLM（4C16G 的门槛不是每台机器都给得起） |
-| 只想快速验证一个 RAG 想法 | [Langflow](/docs/CS/Framework/LangTool/Langflow.md) 拉条 RAG 流程更快 |
+| 只想快速验证一个 RAG 想法 | [Langflow](/docs/CS/AI/LLM/LangTool/Langflow.md) 拉条 RAG 流程更快 |
 
 一句话：**RAGFlow 是"为了文档质量可以接受更高部署成本"时的答案；如果回答质量的瓶颈根本不在解析而在产品编排，它就不是那个瓶颈的解药。**
 
