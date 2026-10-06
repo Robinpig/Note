@@ -1,5 +1,9 @@
 ## Introduction
 
+> [!NOTE]
+>
+> 本篇是 **cgroup v1 视角**的通览，保留 v1 独有的概念与文件对照。v2 的完整机制已独立成篇，入口见 [cgroup 知识地图](/docs/CS/OS/Linux/cgroup/README.md)。本篇的价值在于"v1 有什么、为什么长这样"，以及和 v2 的逐项对照。
+
 从 2.6.24 版本开始，linux 内核提供了一个叫做 cgroups的特性
 cgroup 和 namespace 类似，也是将进程进行分组，但它的目的和 namespace 不一样，namespace 是为了隔离进程组之间的资源，而 cgroup 是为了对一组进程进行统一的资源监控和限制
 
@@ -19,6 +23,10 @@ cgroup 构成一棵**树**，系统中的每个进程**有且仅属于一个** c
 - 每个进程的内存限制；
 - 每个进程的块设备 I/O；
 - 哪些网络报文被识别为同一类型，以便其他应用实施流量规则。
+
+> [!WARNING]
+>
+> 下面这段 shell 是 **v1 写法**（`cpu.cfs_period_us` / `cpu.cfs_quota_us`），保留用于理解 v1 概念。v2 的等价操作是 `echo "max 100000" > cpu.max`（单文件同时含 quota 与 period，默认周期 100 ms），文件名对照见 [cgroup v1 与 v2](#cgroup-v1-与-v2)。
 
 ```shell
 cd /sys/fs/cgroup/cpu,cpuacct
@@ -96,17 +104,28 @@ memcg 的内核机制（`struct mem_cgroup`、per-memcg lruvec、页与内核对
 | | v1 | v2 |
 | :-- | :-- | :-- |
 | 挂载 | 每个 controller 独立层级（`/sys/fs/cgroup/cpu`、`memory`…） | 统一层级（`/sys/fs/cgroup` 一棵树） |
-| CPU 限额 | `cpu.cfs_quota_us` / `cpu.cfs_period_us` | `cpu.max`（"quota period"） |
-| CPU 权重 | `cpu.shares`（2~262144） | `cpu.weight`（1~10000） |
+| CPU 限额 | `cpu.cfs_quota_us` / `cpu.cfs_period_us` | `cpu.max`（"quota period"，默认 period 100 ms） |
+| CPU 突发 | 无 | `cpu.max.burst`（微秒，允许短期超支） |
+| CPU 权重 | `cpu.shares`（2~262144） | `cpu.weight`（1~10000，默认 100） |
 | 内存 | `memory.limit_in_bytes` | `memory.max` + `memory.high`（软限先回收） |
+| 冻结 | `freezer.state`（写 `FROZEN`/`THAWED`） | `cgroup.freeze`（写 `1`/`0`） |
+| 终止 | 无 | `cgroup.kill`（写 `1`，用 `kill_seq` 实现 O(1) 整组终止） |
+| 进程视图 | `tasks`（线程级） | `cgroup.procs`（进程级）+ `cgroup.threads`（线程级） |
+| 克隆配置 | `cgroup.clone_children` | 无（v2 无此概念） |
 | 结构约束 | controller 各自为政，一个进程可属不同层级 | no-internal-process：有进程的 cgroup 不能再启用 controller |
+| 同一控制器 | 独占一棵 v1 树 | 与 v1 互斥（隐式控制器可被"抢"到 v2） |
 
 容器运行时趋势：Docker 20.10+ / containerd 1.6+（K8s 1.25+）默认 v2。上文 shell 示例是 v1 写法；v2 等价操作同样是 mkdir + echo，只是文件名换成了 `cpu.max`、`memory.max`。
+
+v2 的**控制器注册机制**在 v7.2 也变了：`cgroup_subsys_register()` / `DEFINE_CGROUP_SUBSYS` 已不存在，改为 `kernel/cgroup/cgroup.c` 里的编译期静态数组。完整机制与各控制器的文件清单见 [cgroup 控制器接口](/docs/CS/OS/Linux/cgroup/controllers.md)。
 
 `/proc` 不感知 cgroup 的问题（容器内 top 显示宿主机数据）在 v2 也没有根治，生产常用 lxcfs 在容器内挂载 fuse 版 `/proc` 修正（现象与原因见 [Container](/docs/CS/Container/Container.md)）。
 
 ## Links
 
+- [cgroup 知识地图](/docs/CS/OS/Linux/cgroup/README.md)
+- [cgroup 控制器接口](/docs/CS/OS/Linux/cgroup/controllers.md)
+- [cgroup 委派与容器实践](/docs/CS/OS/Linux/cgroup/delegation.md)
 - [Linux](/docs/CS/OS/Linux/Linux.md)
 - [Container](/docs/CS/Container/Container.md)
 - [CFS 带宽控制](/docs/CS/OS/Linux/proc/fair.md?id=cfs-带宽控制)

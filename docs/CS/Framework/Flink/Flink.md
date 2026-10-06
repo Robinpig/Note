@@ -386,6 +386,7 @@ Execution Environment
 - [Yarn](/docs/CS/Framework/Hadoop/Yarn.md)
 - [MapReduce](/docs/CS/Framework/Hadoop/MapReduce.md)
 - [Kafka](/docs/CS/MQ/Kafka/Kafka.md)
+- [Hadoop](/docs/CS/Framework/Hadoop/Hadoop.md)
 
 ## References
 

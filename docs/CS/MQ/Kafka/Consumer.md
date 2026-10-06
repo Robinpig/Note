@@ -1851,6 +1851,12 @@ CommitFailedException 异常
 ## Links
 
 - [Kafka](/docs/CS/MQ/Kafka/Kafka.md)
+- [ShareGroup（4.x 新增的共享消费模型）](/docs/CS/MQ/Kafka/ShareGroup.md)
+- [Storage（消费者位点与 log 截断）](/docs/CS/MQ/Kafka/Storage.md)
+- [Broker](/docs/CS/MQ/Kafka/Broker.md)
+- [Streams（流处理库）](/docs/CS/MQ/Kafka/Streams.md)
+- [Connect](/docs/CS/MQ/Kafka/Connect.md)
+- [ConsumerFlow（poll 主链路与排查）](/docs/CS/MQ/Kafka/ConsumerFlow.md)
 
 
 ## References

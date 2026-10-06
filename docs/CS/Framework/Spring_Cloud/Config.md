@@ -5,6 +5,9 @@ PropertySource
 Strategy for locating (possibly remote) property sources for the Environment.
 Implementations should not fail unless they intend to prevent the application from starting.
 
+> [!NOTE]
+> 版本基线：Spring Cloud Config 5.0（2025.1 Oakwood）已迁移到 **Jackson 3**（`tools.jackson`），并移除了全部已弃用类与方法。另外，Bootstrap 上下文自 Spring Cloud 2020.0 起默认禁用，改用 `spring.config.import=configserver:` 引入远程配置。
+
 ```java
 public interface PropertySourceLocator {
     PropertySource<?> locate(Environment environment);
@@ -416,3 +419,6 @@ public class ClientWorker implements Closeable {
 ## Links
 
 - [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md?id=cloud-configuration)
+- [Spring IoC](/docs/CS/Framework/Spring/IoC.md)
+- [Spring Boot 入门](/docs/CS/Framework/Spring_Boot/Start.md)
+- [Spring 资源抽象](/docs/CS/Framework/Spring/Resource.md)

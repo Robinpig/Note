@@ -1,6 +1,11 @@
 ## Introduction
 
+nginx 的内存管理只有两套设施，但覆盖了全部场景：
 
+- **进程内存池（`ngx_pool_t`）**：请求级/配置级分配器，只分配不逐个释放，整个池子随生命周期一次性销毁。正文第一部分按 create → alloc → free → destroy 拆解源码。
+- **共享内存 + slab 分配器（`ngx_shm_t` + `ngx_slab_pool_t`）**：多 worker 共享状态的唯一合法通道（缓存索引、限流计数、upstream 状态、SSL session cache），分配走 slab，互斥用 `ngx_shmtx_t`。
+
+一个重要推论：nginx 里**没有逐对象 free**。内存池的生命周期与请求/cycle 绑定，`ngx_pfree` 只对 large 块有意义；理解了这一点，nginx 模块里几乎所有内存用法都能解释。
 
 ## In-progress Memory
 
@@ -451,4 +456,14 @@ void ngx_slab_free_locked(ngx_slab_pool_t *pool, void *p);
 
 ## Links
 
-- [nginx](/docs/CS/CN/nginx/nginx.md)
+- [nginx](/docs/CS/CN/nginx/nginx.md) — Struct 一节有 rbtree/radix tree 的用法
+- [Cache](/docs/CS/CN/nginx/cache.md) — 共享内存索引的消费者
+- [Upstream](/docs/CS/CN/nginx/upstream.md) — `zone` 与跨 worker 状态
+- [Event](/docs/CS/CN/nginx/event.md) — 共享内存互斥（`ngx_shmtx_t`）的使用场景
+- [slab 分配器](/docs/CS/OS/Linux/mm/slab.md) — 内核 slab，与 nginx 在共享内存里自管的那套「按页 slab」对照
+- [futex](/docs/CS/OS/Linux/Lock/futex.md) — `ngx_shmtx_t` 为什么不用 futex，而用原子自旋 + POSIX 信号量
+
+## References
+
+- <https://nginx.org/en/docs/dev/development_guide.html>（Memory allocation 一节）
+- <https://nginx.org/en/docs/http/ngx_http_upstream_module.html#zone>

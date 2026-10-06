@@ -1361,6 +1361,142 @@ public class PooledByteBufAllocator extends AbstractByteBufAllocator implements 
 }
 ```
 
+外层入口只是「先建对象再填内存」的包装，真正按 sizeIdx 分流的是下面的 `allocate(cache, buf, reqCapacity)`：
+
+```java
+// PoolArena
+PooledByteBuf<T> allocate(PoolThreadCache cache, int reqCapacity, int maxCapacity) {
+    PooledByteBuf<T> buf = newByteBuf(maxCapacity);
+    allocate(cache, buf, reqCapacity);
+    return buf;
+}
+```
+
+### Constructor
+
+默认走池化 + 堆外，除非平台不可靠或显式关闭；`pageSize` / `chunkSize` / `nHeapArena` / `nDirectArena` 全部在这一步定下来。
+
+```java
+/**
+ * Returns {@code true} if the platform has reliable low-level direct buffer access API and a user has not specified
+ * {@code -Dio.netty.noPreferDirect} option.
+ */
+public static boolean directBufferPreferred() {
+    return DIRECT_BUFFER_PREFERRED;
+}
+```
+
+pageSize 8192
+
+```java
+public PooledByteBufAllocator(boolean preferDirect, int nHeapArena, int nDirectArena, int pageSize, int maxOrder,
+                              int smallCacheSize, int normalCacheSize,
+                              boolean useCacheForAllThreads, int directMemoryCacheAlignment) {
+    super(preferDirect);
+    threadCache = new PoolThreadLocalCache(useCacheForAllThreads);
+    this.smallCacheSize = smallCacheSize;
+    this.normalCacheSize = normalCacheSize;
+    chunkSize = validateAndCalculateChunkSize(pageSize, maxOrder);
+
+    checkPositiveOrZero(nHeapArena, "nHeapArena");
+    checkPositiveOrZero(nDirectArena, "nDirectArena");
+
+    checkPositiveOrZero(directMemoryCacheAlignment, "directMemoryCacheAlignment");
+    if (directMemoryCacheAlignment > 0 && !isDirectMemoryCacheAlignmentSupported()) {
+        throw new IllegalArgumentException("directMemoryCacheAlignment is not supported");
+    }
+
+    if ((directMemoryCacheAlignment & -directMemoryCacheAlignment) != directMemoryCacheAlignment) {
+        throw new IllegalArgumentException("directMemoryCacheAlignment: "
+                + directMemoryCacheAlignment + " (expected: power of two)");
+    }
+
+    int pageShifts = validateAndCalculatePageShifts(pageSize);
+
+    if (nHeapArena > 0) {
+        heapArenas = newArenaArray(nHeapArena);
+        List<PoolArenaMetric> metrics = new ArrayList<PoolArenaMetric>(heapArenas.length);
+        for (int i = 0; i < heapArenas.length; i ++) {
+            PoolArena.HeapArena arena = new PoolArena.HeapArena(this,
+                    pageSize, pageShifts, chunkSize,
+                    directMemoryCacheAlignment);
+            heapArenas[i] = arena;
+            metrics.add(arena);
+        }
+        heapArenaMetrics = Collections.unmodifiableList(metrics);
+    } else {
+        heapArenas = null;
+        heapArenaMetrics = Collections.emptyList();
+    }
+
+    if (nDirectArena > 0) {
+        directArenas = newArenaArray(nDirectArena);
+        List<PoolArenaMetric> metrics = new ArrayList<PoolArenaMetric>(directArenas.length);
+        for (int i = 0; i < directArenas.length; i ++) {
+            PoolArena.DirectArena arena = new PoolArena.DirectArena(
+                    this, pageSize, pageShifts, chunkSize, directMemoryCacheAlignment);
+            directArenas[i] = arena;
+            metrics.add(arena);
+        }
+        directArenaMetrics = Collections.unmodifiableList(metrics);
+    } else {
+        directArenas = null;
+        directArenaMetrics = Collections.emptyList();
+    }
+    metric = new PooledByteBufAllocatorMetric(this);
+}
+```
+
+`PoolArena` 的字段布局与 `PoolChunkMetric` 契约见 [metrics](/docs/CS/Framework/Netty/memory.md?id=metrics)。
+
+### Thread Cache Trim
+
+线程本地缓存不能只进不出：`PoolThreadCache` 每个 size class 有 `freeSweepAllocationThreshold`（默认 8192）的配额，超过阈值仍没被用到的 `Entry` 会由 `trim()` 归还给 `PoolArena`，否则线程退出后缓存会一直占着 chunk。
+
+```java
+
+// Free up cached {@link PoolChunk}s if not allocated frequently enough.
+public final void trim() {
+  int free = size - allocations;
+  allocations = 0;
+
+  // We not even allocated all the number that are
+  if (free > 0) {
+    free(free, false);
+  }
+}
+
+private int free(int max, boolean finalizer) {
+    int numFreed = 0;
+    for (; numFreed < max; numFreed++) {
+        Entry<T> entry = queue.poll();
+        if (entry != null) {
+            freeEntry(entry, finalizer);
+        } else {
+            // all cleared
+            return numFreed;
+        }
+    }
+    return numFreed;
+}
+
+private  void freeEntry(Entry entry, boolean finalizer) {
+  PoolChunk chunk = entry.chunk;
+  long handle = entry.handle;
+  ByteBuffer nioBuffer = entry.nioBuffer;
+
+  if (!finalizer) {
+    // recycle now so PoolChunk can be GC'ed. This will only be done if this is not freed because of
+    // a finalizer.
+    entry.recycle();
+  }
+
+  chunk.arena.freeChunk(chunk, handle, entry.normCapacity, sizeClass, nioBuffer, finalizer);
+}
+```
+
+`freeEntry()` 最终落到 `PoolArena.freeChunk()`，见 [free](/docs/CS/Framework/Netty/memory.md?id=free)。
+
 ## Recv Allocator
 
 guess size of buf, actual allocate using Allocator
@@ -1454,17 +1590,114 @@ The initial run:
 - isSubpage = no
 - bitmapIdx = 0
 
+#### allocate
+
+chunk 层的入口，按 sizeIdx 决定走 subpage 还是整 run：
+
+```java
+// PoolChunk
+boolean allocate(PooledByteBuf<T> buf, int reqCapacity, int sizeIdx, PoolThreadCache cache) {
+    final long handle;
+    if (sizeIdx <= arena.smallMaxSizeIdx) {
+        // small
+        handle = allocateSubpage(sizeIdx);
+        if (handle < 0) {
+            return false;
+        }
+        assert isSubpage(handle);
+    } else {
+        // normal
+        // runSize must be multiple of pageSize
+        int runSize = arena.sizeIdx2size(sizeIdx);
+        handle = allocateRun(runSize);
+        if (handle < 0) {
+            return false;
+        }
+    }
+
+    ByteBuffer nioBuffer = cachedNioBuffers != null? cachedNioBuffers.pollLast() : null;
+    initBuf(buf, nioBuffer, handle, reqCapacity, cache);
+    return true;
+}
+```
+
 #### allocateRun
 
 1. find the first avail run using in runsAvails according to size
 2. if pages of run is larger than request pages then split it, and save the tailing run for later using
 
 
+
+```java
+private long allocateRun(int runSize) {
+    int pages = runSize >> pageShifts;
+    int pageIdx = arena.pages2pageIdx(pages);
+
+    synchronized (runsAvail) {
+        //find first queue which has at least one big enough run
+        int queueIdx = runFirstBestFit(pageIdx);
+        if (queueIdx == -1) {
+            return -1;
+        }
+
+        //get run with min offset in this queue
+        PriorityQueue<Long> queue = runsAvail[queueIdx];
+        long handle = queue.poll();
+
+        assert !isUsed(handle);
+
+        removeAvailRun(queue, handle);
+
+        if (handle != -1) {
+            handle = splitLargeRun(handle, pages);
+        }
+
+        freeBytes -= runSize(pageShifts, handle);
+        return handle;
+    }
+}
+```
+
 #### allocateSubpage
 
 1. find a not full subpage according to size.
    if it already exists just return, otherwise allocate a new PoolSubpage and call init() note that this subpage object is added to subpagesPool in the PoolArena when we init() it
 2. call subpage.allocate()
+
+
+```java
+/**
+ * Create / initialize a new PoolSubpage of normCapacity. Any PoolSubpage created / initialized here is added to
+ * subpage pool in the PoolArena that owns this PoolChunk
+ *
+ * @param sizeIdx sizeIdx of normalized size
+ *
+ * @return index in memoryMap
+ */
+private long allocateSubpage(int sizeIdx) {
+    // Obtain the head of the PoolSubPage pool that is owned by the PoolArena and synchronize on it.
+    // This is need as we may add it back and so alter the linked-list structure.
+    PoolSubpage<T> head = arena.findSubpagePoolHead(sizeIdx);
+    synchronized (head) {
+        //allocate a new run
+        int runSize = calculateRunSize(sizeIdx);
+        //runSize must be multiples of pageSize
+        long runHandle = allocateRun(runSize);
+        if (runHandle < 0) {
+            return -1;
+        }
+
+        int runOffset = runOffset(runHandle);
+        int elemSize = arena.sizeIdx2size(sizeIdx);
+
+        PoolSubpage<T> subpage = new PoolSubpage<T>(head, this, pageShifts, runOffset,
+                           runSize(pageShifts, runHandle), elemSize);
+
+        subpages[runOffset] = subpage;
+        return subpage.allocate();
+    }
+}
+```
 
 #### free
 
@@ -1475,7 +1708,91 @@ The initial run:
 
 
 
+`PoolArena.freeChunk()` 是归还的终点：先把 chunk 从 `PoolChunkList` 摘掉判断是否需要销毁，锁外再真正 `destroyChunk`，避免持锁期间触发 unmap。
+
+```java
+// PoolArena
+void freeChunk(PoolChunk<T> chunk, long handle, int normCapacity, SizeClass sizeClass, ByteBuffer nioBuffer,
+               boolean finalizer) {
+    final boolean destroyChunk;
+    synchronized (this) {
+        // We only call this if freeChunk is not called because of the PoolThreadCache finalizer as otherwise this
+        // may fail due lazy class-loading in for example tomcat.
+        if (!finalizer) {
+            switch (sizeClass) {
+                case Normal:
+                    ++deallocationsNormal;
+                    break;
+                case Small:
+                    ++deallocationsSmall;
+                    break;
+                default:
+                    throw new Error();
+            }
+        }
+        destroyChunk = !chunk.parent.free(chunk, handle, normCapacity, nioBuffer);
+    }
+    if (destroyChunk) {
+        // destroyChunk not need to be called while holding the synchronized lock.
+        destroyChunk(chunk);
+    }
+}
+```
+
+## PoolSubpage
+
+一个 subpage 是「一页切成的等大槽位」，用 bitmap 记录哪个槽空闲，`allocate()` 返回的就是 handle 低位里那个 `bitmapIdx`。
+
+```java
+/** PoolSubpage
+ * Returns the bitmap index of the subpage allocation.
+ */
+long allocate() {
+    if (numAvail == 0 || !doNotDestroy) {
+        return -1;
+    }
+
+    final int bitmapIdx = getNextAvail();
+    int q = bitmapIdx >>> 6;
+    int r = bitmapIdx & 63;
+    assert (bitmap[q] >>> r & 1) == 0;
+    bitmap[q] |= 1L << r;
+
+    if (-- numAvail == 0) {
+        removeFromPool();
+    }
+
+    return toHandle(bitmapIdx);
+}
+```
+
 ## metrics
+
+每个 chunk 对外暴露三个指标，`PoolChunk` 实现该接口，`PoolArena` 再把它们聚合成 `PoolArenaMetric`：
+
+```java
+/**
+ * Metrics for a chunk.
+ */
+public interface PoolChunkMetric {
+
+    /**
+     * Return the percentage of the current usage of the chunk.
+     */
+    int usage();
+
+    /**
+     * Return the size of the chunk in bytes, this is the maximum of bytes that can be served out of the chunk.
+     */
+    int chunkSize();
+
+    /**
+     * Return the number of free bytes in the chunk.
+     */
+    int freeBytes();
+}
+```
+
 
 
 为了更好的监控内存池的运行状态，Netty 为内存池中的每个组件都设计了一个对应的 Metrics 类，用于封装与该组件相关的 Metrics
@@ -1575,3 +1892,11 @@ public final class PooledByteBufAllocatorMetric implements ByteBufAllocatorMetri
 ## Links
 
 - [Netty](/docs/CS/Framework/Netty/Netty.md)
+- [ByteBuf](/docs/CS/Framework/Netty/ByteBuf.md)
+- [FastThreadLocal](/docs/CS/Framework/Netty/FastThreadLocal.md)
+- [MpscLinkedQueue](/docs/CS/Framework/Netty/MpscLinkedQueue.md)
+
+## References
+
+1. [Reference counted objects](https://netty.io/wiki/reference-counted-objects.html)
+2. [PooledByteBufAllocator (Javadoc)](https://netty.io/4.1/api/io/netty/buffer/PooledByteBufAllocator.html)

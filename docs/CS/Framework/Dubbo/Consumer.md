@@ -4,7 +4,15 @@ Dubbo 发起远程调用的时候，主要工作流程可以分为消费端和�
 
 Dubbo 在服务调用链路中提供了丰富的扩展点，覆盖了负载均衡方式、选址前后的拦截器、服务端处理拦截器等
 
+本文版本基线：Apache Dubbo **3.3.6**（原文此前未标注版本，实际代码块已对齐 3.3.6），所有包路径与类归属均逐文件核对自源码 tag `dubbo-3.3.6`。扩展点全景见 [消费者侧扩展点全景](#消费者侧扩展点全景)，Filter 的 order 排序机制见 [Filter](/docs/CS/Framework/Dubbo/Filter.md?id=order-排序机制)，负载均衡策略见 [LoadBalance](/docs/CS/Framework/Dubbo/LoadBalance.md)。
 
+> [!WARNING]
+>
+> 三个最常见的定位错误，先说在前面：
+>
+> 1. **`buildInvokerChain` 在 `dubbo-cluster`，不在 `dubbo-rpc-api`**（`DefaultFilterChainBuilder.java:38/44/83`）。
+> 2. **`HeartbeatTimerTask` 在 `dubbo-remoting-api`**，不在 `dubbo-rpc-api`——它在 `org.apache.dubbo.remoting.exchange.support.header` 包下。
+> 3. **迁移（Migration）链路在 `org.apache.dubbo.registry.client.migration`**，比 `registry` 多一层 `client`；`MigrationRule` / `MigrationStep` 还在其 `.model` **子包**下。
 
 消费端的工作流程如下：
 
@@ -342,6 +350,10 @@ protected <T> Invoker<T> interceptInvoker(ClusterInvoker<T> invoker, URL url, UR
 
 MigrationRuleHandler
 
+> [!NOTE]
+>
+> 这一整节的类都在 **`org.apache.dubbo.registry.client.migration`** 包下（注意比 `registry` 多一层 `client`），而不是 `org.apache.dubbo.registry.migration`。其中 `MigrationRule` 与 `MigrationStep` 位于再下一层的 **`model` 子包**。3.3.6 还新增了旧版没有的 `MigrationAddressComparator` / `DefaultMigrationAddressComparator` / `InvokersChangedListener` / `PreMigratingConditionChecker` / `MigrationClusterInvoker`。
+
 ```java
 @Activate
 public class MigrationRuleListener implements RegistryProtocolListener, ConfigurationListener {
@@ -468,6 +480,8 @@ protected void refreshInterfaceInvoker(CountDownLatch latch) {
             invoker.destroy();
         }
         invoker = registryProtocol.getInvoker(cluster, registry, type, url);
+            // 3.3.6 源码 RegistryProtocol.java:641-645 在此处标注：
+            // FIXME, this method is currently not used, create the right registry before enable.
     }
     setListener(invoker, () -> {
         latch.countDown();
@@ -541,6 +555,68 @@ private synchronized void calcPreferredInvoker(MigrationRule migrationRule) {
 
 
 
+## 消费者侧扩展点全景
+
+消费端一次调用会依次穿过 `ClusterFilter` → `Cluster` → `Router` → `LoadBalance` → `Filter` 五类扩展点。下面是 3.3.6 各自注册的全部实现，按调用顺序排列。
+
+### Cluster（集群容错）
+
+`Cluster` 扩展点共 **11 个**，`@SPI` 默认值是 `failover`（`Cluster.java:34-37`）：
+
+```properties
+# dubbo-cluster/src/main/resources/META-INF/dubbo/internal/org.apache.dubbo.rpc.cluster.Cluster
+mock=org.apache.dubbo.rpc.cluster.support.wrapper.MockClusterWrapper
+scope=org.apache.dubbo.rpc.cluster.support.wrapper.ScopeClusterWrapper
+failover=org.apache.dubbo.rpc.cluster.support.FailoverCluster
+failfast=org.apache.dubbo.rpc.cluster.support.FailfastCluster
+failsafe=org.apache.dubbo.rpc.cluster.support.FailsafeCluster
+failback=org.apache.dubbo.rpc.cluster.support.FailbackCluster
+forking=org.apache.dubbo.rpc.cluster.support.ForkingCluster
+available=org.apache.dubbo.rpc.cluster.support.AvailableCluster
+mergeable=org.apache.dubbo.rpc.cluster.support.MergeableCluster
+broadcast=org.apache.dubbo.rpc.cluster.support.BroadcastCluster
+zone-aware=org.apache.dubbo.rpc.cluster.support.registry.ZoneAwareCluster
+```
+
+前两个（`mock` / `scope`）是 `ClusterWrapper`，只包一层不改变行为；其余是真正的容错策略。
+
+> [!WARNING]
+>
+> **清单里没有 `migration`。** 全库 grep `migration` 只命中 `dubbo-registry-api` 的 `registry.client.migration` 包，与 `Cluster` 扩展点无关。`MigrationInvoker` 是 `MigrationClusterInvoker` 的实现，由 `RegistryProtocol.doRefer()`（`:578-594`）内部经 `getMigrationInvoker(...)` 创建，**不是一个 Cluster 扩展名**。
+>
+> 同样**不存在 `FailZoneAwareCluster` 与 `HealthCheckCluster`**（全仓 0 命中）。3.3.6 的区域容错只有 `zone-aware` 一项，且 `ZoneAwareCluster` 已极简化：`doJoin` 只返回 `new ZoneAwareClusterInvoker<>(directory)`（`ZoneAwareCluster.java:29-31`），无 `@Activate`、无自定义 `doInvoke`，真实逻辑全在 `ZoneAwareClusterInvoker` 内。
+
+### ClusterFilter（选址前）
+
+消费端选址**前**的拦截器，只有 4 个：
+
+```properties
+# dubbo-cluster/src/main/resources/META-INF/dubbo/internal/org.apache.dubbo.rpc.cluster.filter.ClusterFilter
+consumercontext=org.apache.dubbo.rpc.cluster.filter.support.ConsumerContextFilter
+consumer-classloader=org.apache.dubbo.rpc.cluster.filter.support.ConsumerClassLoaderFilter
+router-snapshot=org.apache.dubbo.rpc.cluster.router.RouterSnapshotFilter
+metricsConsumerFilter=org.apache.dubbo.rpc.cluster.filter.support.MetricsConsumerFilter
+```
+
+另外 `dubbo-cluster` 还往**普通的 `Filter`** 扩展点里塞了一个，注意扩展名带 `callback-` 前缀以免混淆：
+
+```properties
+# dubbo-cluster/src/main/resources/META-INF/dubbo/internal/org.apache.dubbo.rpc.Filter
+callback-consumer-context=org.apache.dubbo.rpc.cluster.filter.support.CallbackConsumerContextFilter
+```
+
+### Filter（选址后）
+
+`dubbo-rpc-api` 注册 18 个 `Filter`，完整清单与order 值见 [Filter](/docs/CS/Framework/Dubbo/Filter.md?id=内置-filter-清单)。
+
+### Router（选址）
+
+3.3.6 加载的是旧接口 `org.apache.dubbo.rpc.cluster.Router`（扩展名含 `condition` / `tag` / `script` 等）。`StateRouter` **不是独立 SPI**——没有 `META-INF/dubbo/internal/org.apache.dubbo.rpc.cluster.router.state.StateRouter` 文件，它是框架内部协作接口，由 `SingleRouterChain` 的 `StateRouter` 链表调用。**自定义路由仍应实现 `Router`**，详细形态见 [Router](/docs/CS/Framework/Dubbo/Router.md)。
+
+### LoadBalance（选一个）
+
+6 个扩展名（`random` / `roundrobin` / `leastactive` / `consistenthash` / `shortestresponse` / `adaptive`），见 [LoadBalance](/docs/CS/Framework/Dubbo/LoadBalance.md?id=扩展点清单)。
+
 ## Filter
 
 拦截器可以实现服务提供方和服务消费方调用过程拦截，Dubbo 本身的大多功能均基于此扩展点实现，每次远程方法执行，该拦截都会被执行，请注意对性能的影响。 
@@ -548,6 +624,14 @@ private synchronized void calcPreferredInvoker(MigrationRule migrationRule) {
 
 在 Dubbo 3 中，`Filter` 和 `ClusterFilter` 的接口签名被统一抽象到 `BaseFilter` 中，开发者可以分别实现 `Filter` 或 `ClusterFilter` 的接口来实现自己的拦截器。
 如果需要拦截返回状态，可以直接实现 `BaseFilter.Listener` 的接口，Dubbo 将自动识别，并进行调用
+
+> [!NOTE]
+>
+> **`FilterChainBuilder` 与 `DefaultFilterChainBuilder` 都在 `dubbo-cluster`**，不在 `dubbo-rpc-api`：
+> - `dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/filter/FilterChainBuilder.java`（接口）
+> - `dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/filter/DefaultFilterChainBuilder.java:38`（实现）
+>
+> 调用方是 `ProtocolFilterWrapper` 与 `AbstractCluster`。链的组装细节见 [Filter](/docs/CS/Framework/Dubbo/Filter.md?id=buildinvokerchain)。
 
 
 
@@ -594,6 +678,10 @@ public interface ClusterFilter extends BaseFilter {
 
 
 路由选址提供从多个服务提供方中选择**一批**满足条件的目标提供方进行调用的能力。 Dubbo 的路由主要需要实现 3 个接口，分别是负责每次调用筛选的 `route` 方法，负责地址推送后缓存的 `notify` 方法，以及销毁路由的 `stop` 方法。 在 Dubbo 3 中推荐实现 `StateRouter` 接口，能够提供高性能的路由选址方式
+
+> [!WARNING]
+>
+> 上句「推荐实现 `StateRouter`」在 3.3.6 语境下需要谨慎：`StateRouter` **不是 SPI 扩展点**（无对应 `META-INF/dubbo` 注册文件），由框架内部的 `Router` 适配器调用。**自定义路由应该实现 `Router`**。`StateRouter` 的价值在于高性能的 `BitList` 运算，由框架内置路由（条件 / 标签）使用。
 
 
 
@@ -665,7 +753,11 @@ public interface LoadBalance {
 
 ## Timeout
 
-
+> [!WARNING]
+>
+> **超时判定不在 `TimeoutFilter` 里，而在客户端的 `DefaultFuture.TimeoutCheckTask`。** 3.3.6 的 `TimeoutFilter.invoke` 是**直接透传**（`TimeoutFilter.java:44-46`），它只在 `onResponse` 里检查 `TIME_COUNTDOWN_KEY` 附件并打warn 日志（`:49-64`），`onError` 是空实现。也就是说：**Filter 侧只负责「事后报个警」，真正判超时、构造失败响应、通知调用方的是下面这套 `DefaultFuture` 机制。**
+>
+> `TimeoutFilter` 挂在 **Provider 端**（`@Activate(group = PROVIDER)`），所以这个 warn 日志是服务端打的，跟消费端感知到的超时不是一回事。
 
 ```java
 public class DefaultFuture extends CompletableFuture<Object> {
@@ -860,6 +952,13 @@ private void startHeartBeatTask(URL url) {
 
 ### HeartbeatTimerTask
 
+> [!NOTE]
+>
+> `HeartbeatTimerTask` 属于 **`dubbo-remoting-api`**，不在 `dubbo-rpc-api`：
+> `dubbo-remoting/dubbo-remoting-api/src/main/java/org/apache/dubbo/remoting/exchange/support/header/HeartbeatTimerTask.java`
+>
+> 宿主 `HeaderExchangeClient` / `HeaderExchangeServer` 也在同一个 `exchange/support/header` 包下，`exchange` 层与 `HeaderExchange*` 的完整指路见 [remoting](/docs/CS/Framework/Dubbo/remoting.md?id=exchange-层与-336-新增模块)。
+
 ```java
 public class HeartbeatTimerTask extends AbstractTimerTask {
 
@@ -915,6 +1014,36 @@ Dubbo 对于建立的每一个连接，同时在客户端和服务端开启了 2
 
 
 
+## 陷阱清单
+
+> [!WARNING]
+>
+> 每一条都对应一个「按旧文档 / 旧直觉写就会出错」的具体后果。
+
+1. **`buildInvokerChain` 在 `dubbo-cluster`，不在 `dubbo-rpc-api`**（`DefaultFilterChainBuilder.java:38/44/83`）。在 rpc 模块里找这个类会找不到。
+2. **`HeartbeatTimerTask` 在 `dubbo-remoting-api` 的 `exchange/support/header`**，不在 `dubbo-rpc-api`。
+3. **迁移链路在 `org.apache.dubbo.registry.client.migration`**，比 `registry` 多一层 `client`；`MigrationRule` / `MigrationStep` 还在 `.model` 子包下。
+4. **`RegistryProtocol.getInvoker(...)` 当前未被使用**——3.3.6 在 `RegistryProtocol.java:641-645` 明确标了 `// FIXME, this method is currently not used`。应用级走的是 `getServiceDiscoveryInvoker(...)`（`:635-639`）。
+5. **`ServiceDiscoveryInvoker` 类不存在**。3.3.6 改为 `RegistryProtocol.getServiceDiscoveryInvoker()` 方法 + `ServiceDiscoveryRegistryDirectory` 组合，全仓 `*ServiceDiscovery*Invoker*.java` 只剩 `ServiceDiscoveryMigrationInvoker.java`。
+6. **Cluster 扩展名里没有 `migration`**，也没有 `FailZoneAwareCluster` / `HealthCheckCluster`（全仓 0 命中）。区域容错只有 `zone-aware`。
+7. **`StateRouter` 不是 SPI 扩展点**（无对应 `META-INF/dubbo` 注册文件）。加载的是 `org.apache.dubbo.rpc.cluster.Router`，自定义路由应实现 `Router` 而非 `StateRouter`。
+8. **`TimeoutFilter` 只告警不中断**。它的 `invoke` 直接透传（`TimeoutFilter.java:44-46`），且挂在 Provider 端。真正的超时判定与失败构造在客户端 `DefaultFuture.TimeoutCheckTask`。
+9. **超时即调用失败，必须以客户端收到失败响应为准**。`TimeoutCheckTask` 主动构造 `Response` 并调 `DefaultFuture.received(...)`，响应状态按 `future.isSent()` 区分 `SERVER_TIMEOUT` / `CLIENT_TIMEOUT`（请求未发出就是客户端超时）。
+10. **`Cluster` SPI 默认值是 `failover`**，但**多注册中心订阅时 `createInvoker` 走的是 `zone-aware`**（`Consumer.md` 中 `createInvoker` 的注释「for multi-subscription scenario, use 'zone-aware' policy by default」），并以 `wrap=false` 调用 `join`，不构建 Filter 链。
+
 ## Links
 
 - [Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md)
+- [Invocation](/docs/CS/Framework/Dubbo/Invocation.md)
+- [Filter](/docs/CS/Framework/Dubbo/Filter.md)
+- [LoadBalance](/docs/CS/Framework/Dubbo/LoadBalance.md)
+- [cluster](/docs/CS/Framework/Dubbo/cluster.md)
+- [ThreadPool](/docs/CS/Framework/Dubbo/ThreadPool.md)
+
+## References
+
+1. [Apache Dubbo 3.3.6 源码（tag dubbo-3.3.6）](https://github.com/apache/dubbo/tree/dubbo-3.3.6)
+2. [dubbo-cluster 模块源码](https://github.com/apache/dubbo/tree/dubbo-3.3.6/dubbo-cluster)
+3. [dubbo-registry-api 模块源码](https://github.com/apache/dubbo/tree/dubbo-3.3.6/dubbo-registry/dubbo-registry-api)
+4. [Dubbo 应用级服务发现官方文档](https://cn.dubbo.apache.org/zh-cn/overview/core-features/service-discovery/application-level/)
+5. [Dubbo SPI 扩展点开发指南](https://cn.dubbo.apache.org/zh-cn/overview/mannual/java-sdk/reference-manual/architecture/dubbo-spi/)

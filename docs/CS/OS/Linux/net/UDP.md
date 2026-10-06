@@ -449,3 +449,4 @@ static int udp_send_skb(struct sk_buff *skb, struct flowi4 *fl4,
 
 - [网络知识地图](/docs/CS/OS/Linux/net/README.md)
 - [Linux](/docs/CS/OS/Linux/Linux.md)
+- [HTTP/3（QUIC）](/docs/CS/CN/nginx/http3.md) — 在 UDP 之上自建可靠传输，内核只负责收发包

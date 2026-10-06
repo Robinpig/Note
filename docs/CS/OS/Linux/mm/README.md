@@ -91,6 +91,7 @@ slab 解决"省"，但解决不了"绝不能失败"。块设备层做 I/O 时，
 - [Linux 内核总览](/docs/CS/OS/Linux/Linux.md)
 - [Swap 交换](/docs/CS/OS/Linux/Swap.md)
 - [cgroup](/docs/CS/OS/Linux/cgroup.md)
+- [Nginx Memory](/docs/CS/CN/nginx/memory.md) — 用户态自研内存池与共享内存 slab，与内核 slab 的对照
 
 ## References
 

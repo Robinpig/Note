@@ -63,6 +63,7 @@ Langflow 最适合的是**"先快速验证、后慢慢落地"**这条路径：�
 - [LangTools](/docs/CS/AI/LangTools.md)
 - [MCP](/docs/CS/AI/LLM/MCP.md)
 - [RAG](/docs/CS/AI/RAG.md)
+- [AI](/docs/CS/Framework/Spring/AI.md)
 
 ## References
 

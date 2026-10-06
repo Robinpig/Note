@@ -57,6 +57,32 @@ public class AuthPreFilter extends ZuulFilter {
 
 `RequestContext` 基于 `ThreadLocal`（Zuul 1），在同一条过滤器链里共享请求状态、路由目标与响应。
 
+### Built-in Filters
+
+开箱就有的一批过滤器撑起了 Zuul 的默认行为。知道它们的 `type` 与 `order`，自定义过滤器才知道该插在哪个位置：
+
+| Order | Filter | 类型 | 作用 |
+| :-- | :-- | :-- | :-- |
+| -3 | `ServletDetectionFilter` | pre | 探测请求是否走 Spring DispatcherServlet |
+| -2 | `Servlet30WrapperFilter` | pre | 包装请求以适配 Servlet 3.0 的多部分请求 |
+| -1 | `FormBodyWrapperFilter` | pre | 包装表单请求体，供下游读取 |
+| 1 | `DebugFilter` | pre | 配合 `zuul.debug.request` 打调试信息 |
+| 5 | `PreDecorationFilter` | pre | **决定路由目标**：根据路由表算出 serviceId / URL，写入 Context 供 route 阶段使用 |
+| 10 | `RibbonRoutingFilter` | route | 走 Ribbon + Hystrix 转发到 serviceId（有注册中心时的默认） |
+| 100 | `SimpleHostRoutingFilter` | route | 用 Apache HttpClient 直接转发到 URL（配 `url` 而非 `serviceId` 时） |
+| 500 | `SendForwardFilter` | route | 转发到本地 `forward:` 地址 |
+| 0 | `SendErrorFilter` | error | 把异常写成 `/error` 响应 |
+| 1000 | `SendResponseFilter` | post | 把路由拿到的响应写回客户端 |
+
+于是"我要在鉴权通过后才做XXX"这类需求，pre 过滤器的 order 应该落在 **5 之后**（否则还没算出路由目标）、**10 之前**（否则已经开始转发）。
+
+### @EnableZuulProxy vs @EnableZuulServer
+
+- `@EnableZuulProxy`：完整版，额外装配 Ribbon 路由、`Hystrix` 命令包裹、服务发现集成——绝大多数场景用这个。
+- `@EnableZuulServer`：精简版，**不含** Ribbon / Hystrix 那一层，只提供基础路由（适合 Zuul 前面已有 LB 的场景）。
+
+两者配置的差别源于 `@ConditionalOnBean(ZuulProxyMarkerConfiguration.Marker.class)`：Proxy 版标记了一个 marker bean，从而激活 Ribbon 与 Hystrix 相关的自动配置。
+
 ## Routing & Integration
 
 Zuul 1 与 Netflix 其他组件天然协作：
@@ -77,15 +103,47 @@ zuul:
 
 ## Zuul vs Gateway
 
-由于 Zuul 1 的阻塞模型在高并发长连接下的局限，以及 Netflix 进入维护模式，Spring 官方在 Spring Cloud Gateway 中用 `Route + Predicate + Filter` 的响应式模型（Reactor + Netty）取代了它，并提供更好的异步、背压与可扩展性。新项目应选 Gateway，Zuul 主要出现在存量 Spring Cloud Netflix 系统中。
+由于 Zuul 1 的阻塞模型在高并发长连接下的局限，以及 Netflix 进入维护模式，Spring 官方在 [Spring Cloud Gateway](/docs/CS/Framework/Spring_Cloud/gateway.md) 中用 `Route + Predicate + Filter` 的响应式模型（Reactor + Netty）取代了它，并提供更好的异步、背压与可扩展性。新项目应选 Gateway，Zuul 主要出现在存量 Spring Cloud Netflix 系统中。
+
+### 模型对照
+
+| 维度 | Zuul 1 | Spring Cloud Gateway |
+| ---- | ---- | ---- |
+| IO 模型 | 同步阻塞，Servlet，一请求一线程 | 异步非阻塞，Netty + Reactor |
+| 核心抽象 | `ZuulFilter`（pre / route / post / error） | `Route` = `Predicate` + `Filter` 链 |
+| 路由粒度 | 路径前缀 → serviceId 或 URL | 谓词组合（Path / Header / Method / Query / Weight…） |
+| 过滤器作用域 | 全局；靠 `shouldFilter()` 自行判断 | GlobalFilter（全局）与 GatewayFilter（按路由绑定） |
+| 请求上下文 | `RequestContext`（**ThreadLocal**） | `ServerWebExchange`（不依赖线程局部变量） |
+| 负载均衡 | 内嵌 Ribbon | [LoadBalancer](/docs/CS/Framework/Spring_Cloud/LoadBalancer.md)，`lb://` scheme |
+| 熔断降级 | 内嵌 Hystrix | Resilience4j / CircuitBreaker 抽象 |
+| 限流 | 需自行实现 | 内建 `RequestRateLimiter` |
+
+> [!NOTE]
+> `RequestContext` 依赖 ThreadLocal 是 Zuul 1 最深的模型约束：它在异步场景（异步 Servlet、自定义线程池、响应式调用）里会**静默丢失上下文**。Gateway 用 `ServerWebExchange` 传递状态，不存在这个问题。这也是 Zuul 没能通过简单改造演进下去、必须重写的原因之一。
+
+### 过滤器迁移映射
+
+| Zuul 写法 | Gateway 对应 |
+| ---- | ---- |
+| pre filter（鉴权、限流、埋点） | `GlobalFilter` 或按路由的 `GatewayFilter`，用 `Ordered` 控制顺序 |
+| route filter（自定义转发逻辑） | 通常**不需要**：`NettyRoutingFilter` 已负责转发，只有非 HTTP 传输才下沉定制 |
+| post filter（加响应头、改响应体） | `ModifyResponseBodyGatewayFilterFactory` / `AddResponseHeaderGatewayFilterFactory` |
+| error filter | `ErrorWebExceptionHandler`，或用 `ProblemDetail` 统一错误响应 |
+| `zuul.routes.<id>.path` / `serviceId` | `spring.cloud.gateway.server.webflux.routes[].predicates: Path=...` + `uri: lb://<serviceId>` |
+| `zuul.routes.<id>.url`（直连） | `uri: http://host:port` |
+
+> [!WARNING]
+> Gateway 5.x 的配置根路径已改名（`spring.cloud.gateway.server.webflux.routes`），旧前缀**不会报错也不会生效**。把 Zuul 配置迁移过来时若发现路由全部不生效，先查是不是照抄了老教程的前缀。
+
+### Zuul 与 Nginx 的关系
+
+两者常被混为一谈，实则层次不同：**Nginx 是进程外的反向代理 / LB**，走的是传输层—应用层之间的转发；**Zuul 是进程内的边缘服务**，跑在 JVM 里，因此天然能访问 Spring 的上下文（配置、服务发现、认证信息）。典型部署是 Nginx 在最外层扛连接与 TLS，Zuul 在内层做业务相关的横切。Gateway 承接的是 Zuul 的这一层，而不是 Nginx 那一层。
 
 ## Links
 
 - [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md)
-- [Spring Cloud Gateway](/docs/CS/Framework/Spring_Cloud/gateway.md)
-- [Hystrix](/docs/CS/Framework/Spring_Cloud/Hystrix.md)
-- [Ribbon](/docs/CS/Framework/Spring_Cloud/Ribbon.md)
-- [Eureka](/docs/CS/Framework/eureka/Eureka.md)
+- [统一异常处理与 ProblemDetail](/docs/CS/Framework/Spring/Exception.md)
+- [Spring MVC](/docs/CS/Framework/Spring/MVC.md)
 
 ## References
 

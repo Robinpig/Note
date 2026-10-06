@@ -1,7 +1,12 @@
 ## Introduction
 
 AOT（Ahead-Of-Time，提前编译/处理）是相对于传统 Spring 应用在**运行时**靠反射、动态代理、classpath 扫描来装配 Bean 的方式而言的。
-Spring Framework 6.0 / Spring Boot 3.0 引入了一等公民的 AOT 处理支持：在构建期分析应用的 `BeanFactory`，生成一份等价的、**直接使用代码而非反射**的 Bean 注册与初始化逻辑，从而降低运行时内存占用、缩短启动时间，并为 GraalVM Native Image 铺路。
+Spring Framework 6.0 / Spring Boot 3.0 首次引入了一等公民的 AOT 处理支持：在构建期分析应用的 `BeanFactory`，生成一份等价的、**直接使用代码而非反射**的 Bean 注册与初始化逻辑，从而降低运行时内存占用、缩短启动时间，并为 GraalVM Native Image 铺路。
+
+到 Framework 7 / Boot 4 这一代，AOT 已经从"可选优化"变成原生镜像部署的标准路径，并有两处值得注意的变化：
+
+- GraalVM 的运行时提示改为**单一文件格式的 reachability metadata**（7.0 起），不再散落在多个 `reflect-config.json` 等文件里；
+- Boot 4 的自动配置模块化让 native image 只处理应用真正引用到的模块，二进制体积与构建时间都明显下降。
 
 引入 AOT 的核心动机来自 GraalVM 的 native-image：它在构建阶段做**封闭世界假设（closed-world assumption）**静态分析，要求所有反射、动态代理、资源加载、JNI 访问都必须提前显式声明，否则运行期会因为“看不到”这些元数据而失败。
 传统 Spring 大量依赖运行时反射，无法直接通过这种静态分析，因此需要一个 AOT 阶段把运行时才确定的东西“烘焙（bake）”成构建期产物。
@@ -78,6 +83,34 @@ class MyConfiguration {
 - **Profile / 配置**：Bean 是否存在仍可由运行时 profile 决定（生成代码里保留条件分支），但类必须在构建期可见。
 - **去掉运行时动态性**：运行时动态注册 Bean、配置热刷新、运行期临时生成新字节码的类库、动态脚本等可能不兼容。
 - **延迟类加载消失**：native image 把所有代码在构建期链接，`ClassNotFoundException` 一类问题会提前暴露为构建失败——这反而是一种“左移”。
+
+## 测试与 AOT
+
+- `@SpringBootTest` 在 native 镜像下也能跑（`nativeTest` 任务），但测试本身也被编译进镜像，启动极快，适合做"上下文能否成功加载"的 smoke test（经典的 `ContextLoads` 测试）。测试里的动态 Bean / 反射同样需要 hint，否则上下文起不来。
+- Boot 构建插件的 `process-aot` 阶段也会为**测试**生成 AOT 产物（输出到 `target/spring-aot-test/`），让 `@SpringBootTest` 在普通 JVM 下也走 AOT 初始化路径，缩短测试启动。
+
+## 自定义 AOT 贡献器
+
+除了 `RuntimeHintsRegistrar`，还可以深入 Bean 定义层贡献代码：
+
+- `BeanFactoryInitializationAotProcessor`：在 BeanFactory 整体初始化阶段贡献逻辑（注册额外的 BeanDefinition、生成初始化代码）。
+- `BeanRegistrationAotProcessor`：针对**单个 Bean 注册**贡献 AOT 代码，最常用——例如为某个 Bean 生成直接 `new` 的工厂方法，替代运行期的反射构造。
+
+两者通过 `META-INF/spring/aot.factories` 或 `@Import` 注册，是框架内部自动配置（JPA、WebSocket、各 starter）贡献 AOT 代码的主要入口。
+
+## Hint 调试与生成
+
+native 构建失败最常见的两类报错：
+
+- `Unsupported feature: ...`：用了不支持的动态特性（如 `Proxy.newProxyInstance` 未声明、反射类未 hint）；
+- 运行期 `ClassNotFoundException` / `NoSuchMethodException` / JSON 绑定失败：构建期没收集到对应 hint，封闭世界"看不到"它们。
+
+排查与补齐手段：
+
+- 在 `native-image.properties` 加 `-H:+ReportExceptionStackTraces` 拿到更完整的失败栈。
+- 用 **GraalVM Tracing Agent** 在 JVM 运行期记录真实用到的反射 / 资源 / 代理 / 序列化，生成 `reachability-metadata.json` 再并入构建。这是补齐 hint 最快的方式，但记录的是"跑到的路径"，覆盖率取决于测试充分性。
+- Boot 4 用 `native-build-tools`（`org.graalvm.buildtools`）驱动构建，并把自动配置贡献的 hint 与用户 `RuntimeHintsRegistrar` 合并；第三方库应尽量提供自己的 reachability metadata（GraalVM 社区仓库 `graalvm-reachability-metadata`），而非让用户手写。
+- 反复出现"差一个 hint"时，优先看官方是否已发布该库 metadata 版本，其次用 Tracing Agent 生成，最后才手写 `RuntimeHintsRegistrar`。
 
 ## Build
 

@@ -1,18 +1,18 @@
 ## Introduction
 
-We'll introduce the concepts of **IoC**(*Inversion of Control*) and **DI**(*Dependency Injection*), as well as take a look at how these are implemented in the Spring framework.
-Inversion of Control is a principle in software engineering which transfers the control of objects or portions of a program to a container or framework.
-We most often use it in the context of **OOP**(*object-oriented programming*).
-In contrast with traditional programming, in which our custom code makes calls to a library, IoC enables a framework to take control of the flow of a program and make calls to our custom code.
-To enable this, frameworks use abstractions with additional behavior built in.
-If we want to add our own behavior, we need to extend the classes of the framework or plugin our own classes.
+我们将介绍 **IoC**（*Inversion of Control*，控制反转）和 **DI**（*Dependency Injection*，依赖注入）的概念，并了解它们是如何在 Spring 框架中实现的。
+控制反转是软件工程中的一项原则，它将对象或程序局部的控制权转移给容器或框架。
+我们最常在 **OOP**（*object-oriented programming*，面向对象编程）的语境下使用它。
+与传统编程（由我们的自定义代码调用库）不同，IoC 让框架接管程序的流程控制，并反过来调用我们的自定义代码。
+为此，框架会使用内置了额外行为的抽象。
+如果我们想加入自己的行为，就需要扩展框架的类，或把自己编写的类作为插件接入。
 
-The advantages of this architecture are:
+这种架构的优势在于：
 
-- decoupling the execution of a task from its implementation
-- making it easier to switch between different implementations
-- greater modularity of a program
-- greater ease in testing a program by isolating a component or mocking its dependencies, and allowing components to communicate through contracts
+- 将任务的执行与其实现解耦
+- 使在不同实现之间切换更加容易
+- 提升程序的模块化程度
+- 通过隔离组件或模拟其依赖来更轻松地对程序进行测试，并允许组件通过契约进行通信
 
 
 
@@ -35,35 +35,35 @@ The advantages of this architecture are:
 | websocket   | Scopes a single bean definition to the lifecycle of a`WebSocket`. <br />Only valid in the context of a web-aware Spring `ApplicationContext`.                                                                                                                           |
 
 
-Spring’s concept of a singleton bean differs from the singleton pattern as defined in the Gang of Four (GoF) patterns book.
-The GoF singleton hard-codes the scope of an object such that one and only one instance of a particular class is created per ClassLoader.
-The scope of the Spring singleton is best described as being per-container and per-bean.
-The singleton scope is the default scope in Spring.
+Spring 对 singleton Bean 的概念与 GoF（Gang of Four）设计模式书中定义的单例模式不同。
+GoF 的单例将对象的作用域硬编码为：每个 ClassLoader 只创建某一特定类的一个且唯一一个实例。
+而 Spring 的单例作用域最好描述为「每个容器、每个 Bean」。
+singleton 作用域是 Spring 中的默认作用域。
 
-The non-singleton prototype scope of bean deployment results in the creation of a new bean instance every time a request for that specific bean is made.
-That is, the bean is injected into another bean or you request it through a getBean() method call on the container.
-As a rule, you should use the prototype scope for all stateful beans and the singleton scope for stateless beans.
+非单例的 prototype 作用域意味着：每次请求该特定 Bean 时都会创建一个新的 Bean 实例。
+也就是说，当该 Bean 被注入到另一个 Bean 中，或者通过容器上的 getBean() 方法调用来请求它时。
+作为一般规则，所有有状态 Bean 应使用 prototype 作用域，无状态 Bean 应使用 singleton 作用域。
 
-In contrast to the other scopes, Spring does not manage the complete lifecycle of a prototype bean.
-The container instantiates, configures, and otherwise assembles a prototype object and hands it to the client, with no further record of that prototype instance.
-**Thus, although initialization lifecycle callback methods are called on all objects regardless of scope, in the case of prototypes,
-configured destruction lifecycle callbacks are not called.
-The client code must clean up prototype-scoped objects and release expensive resources that the prototype beans hold.**
-To get the Spring container to release resources held by prototype-scoped beans,
-try using a custom bean post-processor which holds a reference to beans that need to be cleaned up.
+与其他作用域不同，Spring 并不管理 prototype Bean 的完整生命周期。
+容器会实例化、配置并组装一个 prototype 对象，然后将其交给客户端，此后不再持有该 prototype 实例的记录。
+**因此，尽管初始化生命周期回调方法会针对所有对象（无论作用域）被调用，但对于 prototype 而言，
+配置的销毁生命周期回调不会被调用。
+客户端代码必须自行清理 prototype 作用域的对象，并释放这些 prototype Bean 持有的昂贵资源。**
+若要让 Spring 容器释放 prototype 作用域 Bean 所持有的资源，
+可以尝试使用一个自定义的 Bean 后处理器（bean post-processor），由它持有需要被清理的 Bean 的引用。
 > [!NOTE]
 >
-> In some respects, the Spring container’s role in regard to a prototype-scoped bean is a replacement for the Java new operator.
-> All lifecycle management past that point must be handled by the client.
+> 在某些方面，Spring 容器对于 prototype 作用域 Bean 的角色，相当于取代了 Java 的 new 操作符。
+> 此后的所有生命周期管理都必须由客户端负责。
 
 
 
 ### Bean name
-Derive a default bean name from the given bean definition.
-The default implementation simply builds a decapitalized version of the short class name: e.g. "mypackage.MyJdbcDao" → "myJdbcDao".
-Uncapitalize a String in JavaBeans property format, changing the first letter to lower case as per Character.toLowerCase(char), **unless the initial two letters are upper case in direct succession**.
+从给定的 Bean 定义中派生一个默认的 Bean 名称。
+默认实现只是构建短类名的首字母小写版本：例如 "mypackage.MyJdbcDao" → "myJdbcDao"。
+按照 JavaBeans 属性格式将字符串的首字母转为小写（依据 Character.toLowerCase(char)），**除非开头连续两个字母均为大写**。
 
-Note that inner classes will thus have names of the form "outerClassName.InnerClassName", which because of the period in the name may be an issue if you are autowiring by name.
+注意，内部类的名称因此会形如 "outerClassName.InnerClassName"，由于名称中包含句点，如果你按名称进行 autowiring，可能会有问题。
 
 
 ```java
@@ -79,11 +79,13 @@ Note that inner classes will thus have names of the form "outerClassName.InnerCl
 
 ### destroy
 
-The optional name of a method to call on the bean instance upon closing the application context, for example a close() method on a JDBC DataSource implementation, or a Hibernate SessionFactory object. The method must have no arguments but may throw any exception.
-As a convenience to the user, the container will attempt to infer a destroy method against an object returned from the @Bean method.
-For example, given an @Bean method returning an Apache Commons DBCP BasicDataSource, the container will notice the close() method available on that object and automatically register it as the destroyMethod.
-This 'destroy method inference' is currently limited to detecting only public, no-arg methods named '`close`' or '`shutdown`'.
-The method may be declared at any level of the inheritance hierarchy and will be detected regardless of the return type of the @Bean method (i.e., detection occurs reflectively against the bean instance itself at creation time).
+在关闭 ApplicationContext 时，要在 Bean 实例上调用的可选方法名，例如 JDBC DataSource 实现上的 close() 方法，或 Hibernate SessionFactory 对象。该方法必须无参数，但可以抛出任意异常。
+为方便用户，容器会尝试针对 @Bean 方法返回的对象推断一个销毁方法。
+例如，给定一个返回 Apache Commons DBCP BasicDataSource 的 @Bean 方法，容器会注意到该对象上可用的 close() 方法，并自动将其注册为 destroyMethod。
+这种「销毁方法推断」目前仅限于检测名为 '`close`' 或 '`shutdown`' 的 public、无参方法。
+该方法可以在继承层级的任意层级声明，并且无论 @Bean 方法的返回类型如何都会被检测到（即检测是在创建时针对 Bean 实例本身通过反射进行的）。
+
+在 7.x 中，销毁方法推断进一步覆盖实现了 `AutoCloseable` 接口的无参方法，不再局限于名为 `close` 或 `shutdown` 的方法。
 
 
 
@@ -91,17 +93,17 @@ The method may be declared at any level of the inheritance hierarchy and will be
 
 ## Container Overview
 
-The `org.springframework.beans and org.springframework.context` packages are the basis for Spring Framework’s IoC container.
-The BeanFactory interface provides an advanced configuration mechanism capable of managing any type of object.
-ApplicationContext is a sub-interface of BeanFactory.
-It adds:
+`org.springframework.beans` 与 `org.springframework.context` 这两个包是 Spring Framework 的 IoC 容器的基础。
+BeanFactory 接口提供了一种高级配置机制，能够管理任意类型的对象。
+ApplicationContext 是 BeanFactory 的子接口。
+它增加了：
 
-- Easier integration with Spring’s AOP features
-- Message resource handling (for use in internationalization)
+- 与 Spring 的 AOP 特性更轻松的集成
+- 消息资源处理（用于国际化）
 - [Event publication](/docs/CS/Framework/Spring/Event.md)
-- Application-layer specific contexts such as the WebApplicationContext for use in web applications.
+- 应用层特定的上下文，例如用于 Web 应用的 WebApplicationContext。
 
-In short, the BeanFactory provides the configuration framework and basic functionality, and the ApplicationContext adds more enterprise-specific functionality.
+简而言之，BeanFactory 提供配置框架与基础功能，而 ApplicationContext 增加了更多企业级特性。
 
 
 <div style="text-align: center;">
@@ -113,35 +115,35 @@ In short, the BeanFactory provides the configuration framework and basic functio
 <p style="text-align: center;">
 Fig.1. BeanFactory Hierarchy.
 </p>
-The interfaces *BeanFactory* and *ApplicationContext* represent the Spring IoC container.
-BeanFactory is the root interface for accessing the Spring container. It provides basic functionalities for managing beans.
-On the other hand, the ApplicationContext is a sub-interface of the BeanFactory.
-It adds:
+*BeanFactory* 与 *ApplicationContext* 这两个接口代表了 Spring 的 IoC 容器。
+BeanFactory 是访问 Spring 容器的根接口，它提供了管理 Bean 的基础功能。
+另一方面，ApplicationContext 是 BeanFactory 的子接口。
+它增加了：
 
-- Easier integration with [Spring’s AOP](/docs/CS/Framework/Spring/AOP.md) features
-- Message resource handling (for use in internationalization)
-- Event publication
-- Application-layer specific contexts such as the `WebApplicationContext` for use in web applications.
+- 与 [Spring 的 AOP](/docs/CS/Framework/Spring/AOP.md) 特性更轻松的集成
+- 消息资源处理（用于国际化）
+- 事件发布
+- 应用层特定的上下文，例如用于 Web 应用的 `WebApplicationContext`。
 
-In short, the BeanFactory provides the configuration framework and basic functionality, and the ApplicationContext adds more enterprise-specific functionality.
-This is why we use ApplicationContext as the default Spring container.
+简而言之，BeanFactory 提供配置框架与基础功能，而 ApplicationContext 增加了更多企业级特性。
+这也是我们默认使用 ApplicationContext 作为 Spring 容器的原因。
 
-In Spring, the objects that form the backbone of your application and that are managed by the Spring IoC container are called `beans`.
-**In Spring, a bean is an object that the Spring container instantiates, assembles, and manages.
-Beans, and the dependencies among them, are reflected in the configuration metadata used by a container.**
+在 Spring 中，构成应用程序主干、并由 Spring 的 IoC 容器所管理的那些对象被称为 `beans`。
+**在 Spring 中，Bean 是由 Spring 容器实例化、组装并管理的对象。
+Bean 以及它们之间的依赖关系，都体现在容器所使用的配置元数据之中。**
 
 > [!Note]
 >
-> Typically, we define service layer objects, data access objects (DAOs), presentation objects such as Struts `Action` instances, infrastructure objects such as Hibernate `SessionFactories`, JMS `Queues`, and so forth.
-> Typically, one does not configure fine-grained domain objects in the container, because it is usually the responsibility of DAOs and business logic to create and load domain objects.
+> 通常，我们会定义服务层对象、数据访问对象（DAOs）、表示层对象（如 Struts 的 `Action` 实例）、基础设施对象（如 Hibernate 的 `SessionFactories`、JMS 的 `Queues`）等等。
+> 通常，我们不会在容器中配置细粒度的领域对象，因为创建和加载领域对象通常是 DAOs 与业务逻辑的职责。
 
 ### BeanFactory
 
-This interface is implemented by objects that hold a number of bean definitions, each uniquely identified by a String name.
-Depending on the bean definition, the factory will return either an independent instance of a contained object (the Prototype design pattern),
-or a single shared instance (a superior alternative to the Singleton design pattern, in which the instance is a singleton in the scope of the factory).
-Which type of instance will be returned depends on the bean factory configuration: the API is the same.
-Since Spring 2.0, further scopes are available depending on the concrete application context (e.g. "request" and "session" scopes in a web environment).
+该接口由持有若干 Bean 定义的对象实现，每个 Bean 定义都由一个 String 名称唯一标识。
+根据 Bean 定义的不同，工厂会返回所包含对象的独立实例（Prototype 设计模式），
+或返回单一的共享实例（相对于 Singleton 设计模式更优的一种替代方案，此时实例在工厂作用域内是单例的）。
+返回哪种类型的实例取决于 Bean 工厂的配置，但 API 是相同的。
+自 Spring 2.0 起，根据具体的 ApplicationContext 还可以使用更多作用域（例如 Web 环境下的 "request" 与 "session" 作用域）。
 
 ```java
 public interface BeanFactory {
@@ -175,38 +177,39 @@ public interface BeanFactory {
 }
 ```
 
-Note that it is generally better to rely on Dependency Injection ("push" configuration) to configure application objects through setters or constructors, rather than use any form of "pull" configuration like a BeanFactory lookup.
-Spring's Dependency Injection functionality is implemented using this BeanFactory interface and its subinterfaces.
+注意，通常更推荐依赖依赖注入（"push" 配置）通过 setter 或构造器来配置应用对象，而不是使用诸如 BeanFactory 查找这类 "pull" 配置。
+Spring 的依赖注入功能正是基于这个 BeanFactory 接口及其子接口实现的。
 
-Bean factory implementations should support the standard bean lifecycle interfaces as far as possible.
-The full set of initialization methods and their standard order is:
+BeanFactory 的实现应当尽可能支持这些标准的 Bean 生命周期接口。
 
-1. BeanNameAware's setBeanName
-2. BeanClassLoaderAware's setBeanClassLoader
-3. BeanFactoryAware's setBeanFactory
-4. EnvironmentAware's setEnvironment
-5. EmbeddedValueResolverAware's setEmbeddedValueResolver
-6. ResourceLoaderAware's setResourceLoader (only applicable when running in an application context)
-7. ApplicationEventPublisherAware's setApplicationEventPublisher (only applicable when running in an application context)
-8. MessageSourceAware's setMessageSource (only applicable when running in an application context)
-9. ApplicationContextAware's setApplicationContext (only applicable when running in an application context)
-10. ServletContextAware's setServletContext (only applicable when running in a web application context)
-11. postProcessBeforeInitialization methods of BeanPostProcessors
-12. InitializingBean's afterPropertiesSet
-13. a custom init-method definition
-14. postProcessAfterInitialization methods of BeanPostProcessors
+初始化的完整方法集合及其标准顺序为：
 
-On shutdown of a bean factory, the following lifecycle methods apply:
+1. `BeanNameAware` 的 `setBeanName`
+2. `BeanClassLoaderAware` 的 `setBeanClassLoader`
+3. `BeanFactoryAware` 的 `setBeanFactory`
+4. `EnvironmentAware` 的 `setEnvironment`
+5. `EmbeddedValueResolverAware` 的 `setEmbeddedValueResolver`
+6. `ResourceLoaderAware` 的 `setResourceLoader`（仅在应用上下文环境中运行适用）
+7. `ApplicationEventPublisherAware` 的 `setApplicationEventPublisher`（仅在应用上下文环境中运行适用）
+8. `MessageSourceAware` 的 `setMessageSource`（仅在应用上下文环境中运行适用）
+9. `ApplicationContextAware` 的 `setApplicationContext`（仅在应用上下文环境中运行适用）
+10. `ServletContextAware` 的 `setServletContext`（仅在 Web 应用上下文环境中运行适用）
+11. `BeanPostProcessor` 的 `postProcessBeforeInitialization` 方法
+12. `InitializingBean` 的 `afterPropertiesSet`
+13. 自定义的 `init-method` 定义
+14. `BeanPostProcessor` 的 `postProcessAfterInitialization` 方法
 
-1. postProcessBeforeDestruction methods of DestructionAwareBeanPostProcessors
-2. DisposableBean's destroy
-3. a custom destroy-method definition
+在 BeanFactory 关闭时，以下生命周期方法生效：
+
+1. `DestructionAwareBeanPostProcessor` 的 `postProcessBeforeDestruction` 方法
+2. `DisposableBean` 的 `destroy`
+3. 自定义的 `destroy-method` 定义
 
 
 ### ApplicationContext
 
-The Spring framework provides several implementations of the ApplicationContext interface:
-`ClassPathXmlApplicationContext` and `FileSystemXmlApplicationContext` for standalone applications, and `WebApplicationContext` for web applications.
+Spring 框架提供了 ApplicationContext 接口的若干实现：
+用于独立应用的 `ClassPathXmlApplicationContext` 与 `FileSystemXmlApplicationContext`，以及用于 Web 应用的 `WebApplicationContext`。
 
 <div style="text-align: center;">
 
@@ -217,35 +220,35 @@ The Spring framework provides several implementations of the ApplicationContext 
 <p style="text-align: center;">
 Fig.2. ApplicationContext Hierarchy.
 </p>
-`spring-context` 会自动将 `spring-core`,  `spring-beans`,  `spring-aop`,  `spring-expression` 这几个基础jar包带进来
+`spring-context` 会自动将 `spring-core`,  `spring-beans`,  `spring-aop`,  `spring-expression` 这几个基础 jar 包带进来
 
 
 
 ### FactoryBean
 
-Interface to be implemented by objects used within a BeanFactory which are themselves factories for individual objects.
-If a bean implements this interface, it is used as a factory for an object to expose, not directly as a bean instance that will be exposed itself.
+该接口由在 BeanFactory 中使用、且自身又是单个对象工厂的那些对象实现。
+如果一个 Bean 实现了该接口，那么它被当作一个用于暴露对象的工厂来使用，而不是直接作为将被暴露出来的 Bean 实例。
 
 > [!NOTE]
 >
-> A bean that implements this interface cannot be used as a normal bean.
+> 实现了该接口的 Bean 不能被当作普通 Bean 使用。
 
-A FactoryBean is defined in a bean style, but **the object exposed for bean references (getObject()) is always the object that it creates**.
-FactoryBeans can support singletons and prototypes, and can either create objects lazily on demand or eagerly on startup.
-The SmartFactoryBean interface allows for exposing more fine-grained behavioral metadata.
-This interface is heavily used within the framework itself, for example for the AOP `org.springframework.aop.framework.ProxyFactoryBean` or the `org.springframework.jndi.JndiObjectFactoryBean`.
-It can be used for custom components as well; however, this is only common for infrastructure code.
+FactoryBean 以 Bean 风格定义，但**为 Bean 引用所暴露的对象（getObject()）始终是它创建出来的那个对象**。
+FactoryBean 可以支持 singleton 和 prototype，并且既可以在启动时急切地创建对象，也可以按需延迟创建。
+SmartFactoryBean 接口允许暴露更细粒度的行为元数据。
+该接口在框架内部被广泛使用，例如用于 AOP 的 `org.springframework.aop.framework.ProxyFactoryBean` 或 `org.springframework.jndi.JndiObjectFactoryBean`。
+它也可以用于自定义组件，但这通常只出现在基础设施代码中。
 
-FactoryBean is a programmatic contract.
-Implementations are not supposed to rely on annotation-driven injection or other reflective facilities. getObjectType() getObject() invocations may arrive early in the bootstrap process, even ahead of any post-processor setup.
-If you need access to other beans, implement BeanFactoryAware and obtain them programmatically.
+FactoryBean 是一项编程契约。
+其实现不应依赖注解驱动的注入或其他反射机制。getObjectType() 与 getObject() 的调用可能在引导过程的很早阶段就到达，甚至早于任何后处理器的设置。
+如果需要访问其他 Bean，应实现 BeanFactoryAware 并编程式地获取它们。
 
-**The container is only responsible for managing the lifecycle of the FactoryBean instance, not the lifecycle of the objects created by the FactoryBean.**
-Therefore, a destroy method on an exposed bean object (such as java.io.Closeable.close() will not be called automatically.
-Instead, a FactoryBean should implement DisposableBean and delegate any such close call to the underlying object.
+**容器只负责管理 FactoryBean 实例的生命周期，而不负责管理由 FactoryBean 所创建出来的对象的生命周期。**
+因此，被暴露的 Bean 对象上的销毁方法（例如 java.io.Closeable.close()）不会被自动调用。
+相反，FactoryBean 应当实现 DisposableBean，并将这类 close 调用委托给底层对象。
 
-Finally, FactoryBean objects participate in the containing BeanFactory's synchronization of bean creation.
-There is usually no need for internal synchronization other than for purposes of lazy initialization within the FactoryBean itself (or the like).
+最后，FactoryBean 对象会参与到所属 BeanFactory 对 Bean 创建的同步中。
+通常不需要额外的内部同步，除非是为了 FactoryBean 自身内部的延迟初始化（或类似目的）。
 
 ```java
 public interface FactoryBean<T> {
@@ -268,25 +271,27 @@ public interface FactoryBean<T> {
 
 ## Dependency Injection
 
-Dependency injection (DI) is a specialized form of IoC, whereby objects define their dependencies (that is, the other objects they work with) only through constructor arguments, arguments to a factory method, or properties that are set on the object instance after it is constructed or returned from a factory method.
-The IoC container then injects those dependencies when it creates the bean.
-This process is fundamentally the inverse (hence the name, Inversion of Control) of the bean itself controlling the instantiation or location of its dependencies by using direct construction of classes or a mechanism such as the Service Locator pattern.
+依赖注入（DI）是 IoC 的一种专门形式，对象仅通过构造器参数、工厂方法的参数，或在对象实例化后或经工厂方法返回后设置到对象实例上的属性来定义其依赖（即它所协作的其他对象）。
+随后 IoC 容器在创建 Bean 时注入这些依赖。
+这一过程从根本上说是「Bean 自身通过直接构造类或诸如服务定位器（Service Locator）模式等机制来控制其依赖的实例化或定位」的反向操作（因此得名控制反转）。
 
 > [!Note]
 >
-> We can achieve Inversion of Control through various mechanisms such as: Strategy design pattern, Service Locator pattern, Factory pattern, and Dependency Injection (DI).
+> 我们可以通过多种机制来实现控制反转，例如：策略设计模式、服务定位器模式、工厂模式，以及依赖注入（DI）。
 
 
 
-Dependency injection is a pattern we can use to implement IoC, where the control being inverted is setting an object's dependencies.
-**Dependency Injection in Spring can be done through constructors, setters or fields:**
+依赖注入是我们可以用来实现 IoC 的一种模式，其中被反转的控制权是「设置对象的依赖」这件事。
+**Spring 中的依赖注入可以通过构造器、setter 或字段完成：**
 
-- Constructor-Based Dependency Injection. Using constructors to create object instances is more natural from the OOP standpoint.
-- Parameter injection
-- Setter-Based Dependency Injection
-- Field-Based Dependency Injection `org.springframework.beans.factory.annotation.Autowired` / `javax.annotation.Resource` / `javax.inject.Inject`
+- 基于构造器的依赖注入。从 OOP 的角度来看，使用构造器创建对象实例更为自然。
+- 参数注入
+- 基于 setter 的依赖注入
+- 基于字段的依赖注入 `org.springframework.beans.factory.annotation.Autowired` / `jakarta.annotation.Resource` / `jakarta.inject.Inject`
 
-The table below summarizes our discussion.
+在 7.x 中，`@Autowired` 默认 `required=true`；对于可选依赖，推荐改用 `ObjectProvider` 或 `@Nullable`。
+
+下表对我们上面的讨论做了总结。
 
 
 | Scenario                                                                 | @Resource             | @Inject               | @Autowired            |
@@ -297,7 +302,7 @@ The table below summarizes our discussion.
 | Dependency injection should be handled solely by the Spring Framework    | ✗                    | ✗                    | ✔                    |
 | Matching Order                                                           | Name, Type, Qualifier | Type, Qualifier, Name | Type, Qualifier, Name |
 
-Spring doesn't support constructor injection in an abstract class.
+Spring 不支持在抽象类中使用构造器注入。
 
 
 
@@ -337,7 +342,7 @@ BeanDefinitionRegistry
 ```
 
 
-Create a new AnnotationConfigApplicationContext that needs to be populated through [register]() calls and then manually [refreshed]().
+创建一个新的 AnnotationConfigApplicationContext，需要通过 [register]() 调用来填充配置，之后再手动 [refreshed]()。
 
 
 
@@ -426,7 +431,7 @@ registerBeanDefinition
 
 ## refresh
 
-ApplicationContext 建立之后，可以通过调用refresh方法重建，销毁原先的 ApplicationContext 并重新执行一次初始化操作
+ApplicationContext 建立之后，可以通过调用 refresh 方法重建，销毁原先的 ApplicationContext 并重新执行一次初始化操作
 
 ```java
 public class AbstractApplicationContext {
@@ -489,7 +494,7 @@ public class AbstractApplicationContext {
 
 ### prepareRefresh
 
-Prepare this context for refreshing, setting its startup date and active flag as well as performing any initialization of **property sources**.
+为刷新此上下文做准备：设置其启动时间以及 active 标志，并对 **property sources** 执行必要的初始化。
 
 ```java
 public abstract class AbstractApplicationContext {
@@ -523,7 +528,7 @@ public abstract class AbstractApplicationContext {
 
 ### obtainFreshBeanFactory
 
-Tell the subclass to refresh and return the internal bean factory.
+通知子类刷新并返回内部的 BeanFactory。
 
 ```java
 public abstract class AbstractApplicationContext {
@@ -598,14 +603,14 @@ public abstract class AbstractRefreshableApplicationContext extends AbstractAppl
 
 #### customizeBeanFactory
 
-Customize the internal bean factory used by this context. Called for each refresh() attempt.
-The default implementation applies this context's "*allowBeanDefinitionOverriding*" and "*allowCircularReferences*" settings, if specified.
-Can be overridden in subclasses to customize any of DefaultListableBeanFactory's settings.
+定制此上下文所使用的内部 BeanFactory。每次调用 refresh() 时都会执行。
+默认实现会应用此上下文指定的 "*allowBeanDefinitionOverriding*" 与 "*allowCircularReferences*" 配置（若已设置）。
+子类可重写该方法，以定制 DefaultListableBeanFactory 的任何设置。
 
 #### loadBeanDefinitions
 
-A *BeanDefinition* describes a bean instance, which has property values, constructor argument values, and further information supplied by concrete implementations.
-This is just a minimal interface: The main intention is to allow a `BeanFactoryPostProcessor` to introspect and modify property values and other bean metadata.
+*BeanDefinition* 描述了一个 Bean 实例，它包含属性值、构造器参数值，以及由各具体实现提供的更多信息。
+这只是一个最小化的接口：其主要目的是允许 `BeanFactoryPostProcessor` 自省并修改属性值及其他 Bean 元数据。
 
 ```java
 public interface BeanDefinition extends AttributeAccessor, BeanMetadataElement {
@@ -623,7 +628,7 @@ public interface BeanDefinition extends AttributeAccessor, BeanMetadataElement {
 }
 ```
 
-Loads the bean definitions via an XmlBeanDefinitionReader.
+通过 XmlBeanDefinitionReader 加载 BeanDefinition。
 
 ```java
 public abstract class AbstractXmlApplicationContext extends AbstractRefreshableConfigApplicationContext {
@@ -807,7 +812,7 @@ public class DefaultListableBeanFactory {
 
 ### prepareBeanFactory
 
-Configure the factory's standard context characteristics, such as the context's ClassLoader and post-processors.
+配置工厂的标准上下文特性，例如上下文的 ClassLoader 与后置处理器（post-processors）。
 
 ```java
 public abstract class AbstractApplicationContext {
@@ -893,7 +898,7 @@ public abstract class AbstractApplicationContext {
 }
 ```
 
-Implementations of BeanDefinitionRegistryPostProcessor:
+BeanDefinitionRegistryPostProcessor 的实现类：
 
 - ConfigurationClassPostProcessor
 - DubboAutoConfiguration
@@ -1043,7 +1048,7 @@ public interface BeanFactoryPostProcessor {
 
 ### finishBeanFactoryInitialization
 
-lazy-init false in refresh()->finishBeanFactoryInitialization
+在 refresh()->finishBeanFactoryInitialization 中，lazy-init 为 false
 
 ```java
 public abstract class AbstractApplicationContext {
@@ -1079,7 +1084,7 @@ public abstract class AbstractApplicationContext {
 
 ### finishRefresh
 
-Finish the refresh of this context, invoking the LifecycleProcessor's `onRefresh()` method(start Web Application) and publishing the `ContextRefreshedEvent`.
+完成当前上下文的刷新，调用 LifecycleProcessor 的 `onRefresh()` 方法（启动 Web 应用）并发布 `ContextRefreshedEvent`。
 
 ```java
 public abstract class AbstractApplicationContext {
@@ -1104,12 +1109,13 @@ public abstract class AbstractApplicationContext {
 
 #### publishEvent
 
-Multicasts all events to all registered listeners, leaving it up to the listeners to ignore events that they are not interested in.
-Listeners will usually perform corresponding instanceof checks on the passed-in event object.
+将事件多播给所有已注册的监听器，由监听器自行决定是否忽略其不感兴趣的事件。
+监听器通常会对传入的事件对象执行相应的 instanceof 检查。
 
-**By default, all listeners are invoked in the calling thread.**
-This allows the danger of a rogue listener blocking the entire application, but adds minimal overhead.
-Specify an alternative task executor to have listeners executed in different threads, for example from a thread pool.
+**默认情况下，所有监听器都在调用线程中被调用。**
+这虽然带来了恶意监听器阻塞整个应用的风险，但也把额外开销降到最低。
+可通过指定一个替代的任务执行器（例如线程池）让监听器在不同的线程中执行。
+（Spring 7.x：当设置 `spring.threads.virtual.enabled=true` 时，`SimpleAsyncTaskExecutor` 等执行器可运行于虚拟线程。）
 
 ```java
 public class SimpleApplicationEventMulticaster extends AbstractApplicationEventMulticaster {
@@ -1149,9 +1155,9 @@ public class SimpleApplicationEventMulticaster extends AbstractApplicationEventM
 
 ## Close
 
-Register a shutdown hook named SpringContextShutdownHook with the JVM runtime, closing this context on [JVM shutdown](/docs/CS/Java/JDK/JVM/destroy.md?id=shutdown-hooks) unless it has already been closed at that time.
+向 JVM 运行时注册一个名为 SpringContextShutdownHook 的关闭钩子，在 [JVM 关闭](/docs/CS/Java/JDK/JVM/destroy.md?id=shutdown-hooks) 时关闭当前上下文（除非此时上下文已被关闭）。
 
-Delegates to doClose() for the actual closing procedure.
+实际的关闭流程委托给 doClose() 完成。
 
 ```java
 public abstract class AbstractApplicationContext extends DefaultResourceLoader implements ConfigurableApplicationContext {
@@ -1213,28 +1219,31 @@ public abstract class AbstractApplicationContext extends DefaultResourceLoader i
 
 ## Bean Lifecycle
 
-Bean lifecycle:
+Bean 生命周期：
 
-- create
-- populate
-- init
-- using
-- destroy
+- 创建（create）
+- 属性填充（populate）
+- 初始化（init）
+- 使用（using）
+- 销毁（destroy）
+
+> [!TIP]
+> Spring 7.x：`@Bean` 的 `destroyMethod` 默认会推断 `close`/`shutdown` 或实现了 `AutoCloseable` 的无参方法作为销毁方法。
 
 ![在这里插入图片描述](https://img-blog.csdnimg.cn/20191019114800284.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L2d1amlhbmduYW4=,size_16,color_FFFFFF,t_70)
 
 ## getBean
 
-he Spring framework, by default, initializes all singleton beans eagerly at the application startup and put them in application context.
+默认情况下，Spring 框架会在应用启动时急切地（eagerly）初始化所有单例 Bean，并将其放入应用上下文（application context）中。
 
-1. resolve aliases to canonical beanName
-2. [eagerly check singleton cache](/docs/CS/Framework/Spring/IoC.md?id=getsingleton), allows for an early reference to a currently created singleton (resolving a [circular reference](/docs/CS/Framework/Spring/IoC.md?id=circular-references)).
-   1. [Get the object if the non-null bean instance](/docs/CS/Framework/Spring/IoC.md?id=getobjectforbeaninstance)
-3. or else check isPrototypeCurrentlyInCreation
-4. getBean from parentBeanFactory
-5. merge BeanDefinition
-6. check dependOn
-7. [createBean](/docs/CS/Framework/Spring/IoC.md?id=createbean)
+1. 将别名解析为规范的 beanName
+2. [急切地检查单例缓存](/docs/CS/Framework/Spring/IoC.md?id=getsingleton)，允许对当前正在创建的单例进行早期引用（从而解决[循环引用](/docs/CS/Framework/Spring/IoC.md?id=circular-references)）。
+   1. [若为非空 Bean 实例则获取该对象](/docs/CS/Framework/Spring/IoC.md?id=getobjectforbeaninstance)
+3. 否则检查 isPrototypeCurrentlyInCreation
+4. 从 parentBeanFactory 获取 Bean
+5. 合并 BeanDefinition
+6. 检查 dependOn
+7. [创建 Bean](/docs/CS/Framework/Spring/IoC.md?id=createbean)
 
 ```java
 public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport implements ConfigurableBeanFactory {
@@ -1383,12 +1392,12 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 
 ### getSingleton
 
-Return the singleton object registered under the given name.
-Checks already instantiated singletons and also allows for an early reference to a currently created singleton (resolving a circular reference).
+返回以给定名称注册的单例对象。
+检查已经实例化完成的单例，并且允许对当前正在创建的单例进行早期引用（从而解决循环引用）。
 
-1. get from singletonObjects
-2. or else singletonObject == null && currently in creation (within the entire factory), get from earlySingletonObjects
-3. or singletonObject == null && allowEarlyReference, get singletonFactory from singletonFactories, put new singletonObject into earlySingletonObjects and remove singletonFactory from singletonFactories if singletonFactory != null
+1. 从 singletonObjects 获取
+2. 否则，若 singletonObject == null 且当前正在创建（在整个工厂范围内），则从 earlySingletonObjects 获取
+3. 否则，若 singletonObject == null 且 allowEarlyReference 为 true，则从 singletonFactories 获取 singletonFactory，并将新的 singletonObject 放入 earlySingletonObjects；若 singletonFactory != null，则将其从 singletonFactories 中移除
 
 
 > [!TIP]
@@ -1432,7 +1441,7 @@ public class DefaultSingletonBeanRegistry extends SimpleAliasRegistry implements
 
 #### Circular References
 
-Prohibit circular references by default.
+默认禁止循环引用。
 
 ```properties
 spring.main.allow-circular-references=false
@@ -1440,7 +1449,7 @@ spring.main.allow-circular-references=false
 
 > [!TIP]
 >
-> Self-injection can also create a circular dependency.
+> 自身注入也可能造成循环依赖。
 
 See [doCreateBean](/docs/CS/Framework/Spring/IoC.md?id=docreatebean):
 
@@ -1462,14 +1471,14 @@ public class DefaultSingletonBeanRegistry extends SimpleAliasRegistry implements
 }
 ```
 
-Obtain a reference for early access to the specified bean, typically for the purpose of resolving a circular reference.
+获取对指定 Bean 的早期访问引用，通常用于解决循环引用。
 
-This callback gives post-processors a chance to expose a wrapper early - that is, before the target bean instance is fully initialized.
-The exposed object should be equivalent to the what `postProcessBeforeInitialization` / `postProcessAfterInitialization` would expose otherwise.
+该回调让后置处理器有机会提前暴露一个包装对象——即在目标 Bean 实例完全初始化之前。
+暴露出的对象应当与 `postProcessBeforeInitialization` / `postProcessAfterInitialization` 原本会暴露的对象一致。
 
-Note that the object returned by this method will be used as bean reference unless the post-processor returns a different wrapper from said post-process callbacks.
-In other words: Those post-process callbacks may either eventually expose the same reference or alternatively return the raw bean instance from those subsequent callbacks
-(if the wrapper for the affected bean has been built for a call to this method already, it will be exposes as final bean reference by default).
+注意，除非后置处理器在上述 post-process 回调中返回了不同的包装对象，否则本方法返回的对象将被用作 Bean 引用。
+换言之：那些 post-process 回调最终要么暴露同一个引用，要么从后续回调中返回原始的 Bean 实例
+（如果受影响 Bean 的包装对象已经为本方法的调用而构建，则默认会将其作为最终的 Bean 引用暴露）。
 
 ```java
 public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFactory
@@ -1489,7 +1498,7 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 }
 ```
 
-The ProxyCreator and return it is after postInitialization if it has earlyProxyReferences
+对于 ProxyCreator，如果其持有 earlyProxyReferences，则会在 postInitialization 之后返回代理对象。
 
 ```java
 public abstract class AbstractAutoProxyCreator extends ProxyProcessorSupport
@@ -1514,13 +1523,13 @@ public abstract class AbstractAutoProxyCreator extends ProxyProcessorSupport
 	}
 ```
 
-Circular References Scenarios:
+循环引用场景：
 
 <!-- tabs:start -->
 
 ##### **Constructor Circular References**
 
-We can annotate the @Lazy annotation on the constructor parameters of cyclic dependency injection.
+我们可以在循环依赖注入的构造器参数上标注 @Lazy 注解。
 
 ```java
 @Service
@@ -1544,7 +1553,7 @@ public class BService {
 
 ##### **Prototype Circular References**
 
-Throw Exception when `getBean()` and crash with a dead loop.
+在调用 `getBean()` 时会抛出异常，并因死循环而崩溃。
 
 ```java
 @Service
@@ -1564,7 +1573,7 @@ public class BService {
 
 ##### **Raw Version Circular References**
 
-BeanPostProcessor by @Async or @Repository will return a proxy bean after initialization which will cause difference while circular references.
+由 @Async 或 @Repository 相关 BeanPostProcessor 在初始化之后返回代理 Bean，这会导致循环引用时出现差异。
 
 ```java
 @Service
@@ -1584,9 +1593,9 @@ public class BService {
 }
 ```
 
-1. We can annotate the @Lazy annotation on the fields of cyclic dependency injection.
-2. From the source code comment above, we can see that when allowRawInjectionDespiteWrapping is true,
-   it won’t take that else if and won’t throw an exception, so we can solve the error problem by setting allowRawInjectionDespiteWrapping to true, the code is as follows.
+1. 我们可以在循环依赖注入的字段上标注 @Lazy 注解。
+2. 从上面的源码注释可以看出，当 allowRawInjectionDespiteWrapping 为 true 时，
+   不会进入那个 else if 分支，也就不会抛出异常，因此可以通过将 allowRawInjectionDespiteWrapping 设置为 true 来解决该错误问题，代码如下。
 
 ```java
 @Component
@@ -1598,13 +1607,13 @@ public class MyBeanFactoryPostProcessor implements BeanFactoryPostProcessor {
 }
 ```
 
-Although this setup solves the problem, it is not recommended because it allows the early injected objects to be different from the final created objects and may result in the final generated objects not being dynamically proxied.
+虽然这样设置能解决问题，但并不推荐，因为它允许早期注入的对象与最终创建的对象不一致，并可能导致最终生成的对象无法被动态代理。
 
 <!-- tabs:end -->
 
 #### getObjectForBeanInstance
 
-Get the object for the given bean instance, either the bean instance itself or its created object in case of a FactoryBean.
+获取给定 Bean 实例对应的对象，对于普通 Bean 即实例本身，对于 FactoryBean 则是其创建出来的对象。
 
 ```java
 public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport implements ConfigurableBeanFactory {
@@ -1652,7 +1661,7 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 
 ##### getObjectFromFactoryBean
 
-Obtain an object to expose from the given FactoryBean.
+从给定的 FactoryBean 中获取一个待暴露的对象。
 
 ```java
 public abstract class FactoryBeanRegistrySupport extends DefaultSingletonBeanRegistry {
@@ -1707,11 +1716,11 @@ public abstract class FactoryBeanRegistrySupport extends DefaultSingletonBeanReg
 
 ##### postProcessObjectFromFactoryBean
 
-Post-process the given object that has been obtained from the FactoryBean.
-The resulting object will get exposed for bean references.
+对从 FactoryBean 获取到的给定对象进行后置处理。
+处理后的对象将被暴露出来供 Bean 引用使用。
 
-- The default implementation simply returns the given object as-is.
-- Subclasses may override this, for example, to apply [post-processors](/docs/CS/Framework/Spring/IoC.md?id=postbean).
+- 默认实现直接按原样返回给定的对象。
+- 子类可以重写此方法，例如用来应用 [后置处理器](/docs/CS/Framework/Spring/IoC.md?id=postbean)。
 
 <!-- tabs:start -->
 
@@ -1756,17 +1765,20 @@ public abstract class FactoryBeanRegistrySupport extends DefaultSingletonBeanReg
 
 ##### BeanPostProcessor
 
-Factory hook that allows for custom modification of new bean instances — for example, checking for marker interfaces or [wrapping beans with proxies(AOP)](/docs/CS/Framework/Spring/AOP.md?id=createproxy).
+工厂钩子（factory hook），允许对新建的 Bean 实例进行自定义修改——例如，检查标记接口（marker interfaces）或通过代理[AOP 包裹 Bean](/docs/CS/Framework/Spring/AOP.md?id=createproxy)。
 
-Typically, post-processors that populate beans via marker interfaces or the like will implement postProcessBeforeInitialization, while post-processors that wrap beans with proxies will normally implement postProcessAfterInitialization.
+通常，通过标记接口等方式填充 Bean 的后置处理器会实现 postProcessBeforeInitialization，而通过代理包裹 Bean 的后置处理器则通常会实现 postProcessAfterInitialization。
 
-An ApplicationContext can autodetect BeanPostProcessor beans in its bean definitions and apply those post-processors to any beans subsequently created.
-A plain BeanFactory allows for programmatic registration of post-processors, applying them to all beans created through the bean factory.
+ApplicationContext 能够在其 Bean 定义中自动探测 BeanPostProcessor Bean，并将这些后置处理器应用到随后创建的任何 Bean 上。
+普通的 BeanFactory 则允许以编程方式注册后置处理器，并将其应用到通过该 Bean 工厂创建的所有 Bean 上。
 
-BeanPostProcessor beans that are autodetected in an ApplicationContext will be ordered according to `org.springframework.core.PriorityOrdered` and `org.springframework.core.Ordered` semantics.
-In contrast, BeanPostProcessor beans that are registered programmatically with a BeanFactory will be applied in the order of registration;
-any ordering semantics expressed through implementing the PriorityOrdered or Ordered interface will be ignored for programmatically registered post-processors.
-Furthermore, the `@Order` annotation is not taken into account for BeanPostProcessor beans.
+在 ApplicationContext 中自动探测到的 BeanPostProcessor Bean，会按照 `org.springframework.core.PriorityOrdered` 与 `org.springframework.core.Ordered` 的语义进行排序。
+相反，以编程方式向 BeanFactory 注册的 BeanPostProcessor Bean，会按照注册顺序被应用；
+对于这类以编程方式注册的后置处理器，通过实现 PriorityOrdered 或 Ordered 接口所表达的任何排序语义都会被忽略。
+此外，`@Order` 注解对于 BeanPostProcessor Bean 是不生效的。
+
+> [!TIP]
+> Spring 7.x：对于集合类型的依赖注入（如 `List<Bean>`、`Map<String, Bean>`），`@Order`/`Ordered` 常用于对注入的集合元素进行排序。
 
 ```java
 public interface BeanPostProcessor {
@@ -1786,8 +1798,8 @@ public interface BeanPostProcessor {
 
 ### createBean
 
-1. Prepare method overrides
-2. resolveBeforeInstantiation([AOP](/docs/CS/Framework/Spring/AOP.md?id=create-proxy)) if bean not null
+1. 准备方法重写（prepare method overrides）
+2. 若 bean 不为 null，则调用 resolveBeforeInstantiation([AOP](/docs/CS/Framework/Spring/AOP.md?id=create-proxy))
 3. doCreateBean
 
 ```
@@ -1844,9 +1856,9 @@ protected Object createBean(String beanName, RootBeanDefinition mbd, @Nullable O
 
 #### resolveBeforeInstantiation
 
-Apply before-instantiation post-processors, resolving whether there is a before-instantiation shortcut for the specified bean.
+在实例化之前应用后置处理器（post-processors），判断指定的 Bean 是否存在实例化前的快捷路径（shortcut）。
 
-call [BeanPostProcessor](/docs/CS/Framework/Spring/IoC.md?id=postbean) if bean != null.
+若 bean != null，则调用 [BeanPostProcessor](/docs/CS/Framework/Spring/IoC.md?id=postbean)。
 
 ```
 @Nullable
@@ -1917,8 +1929,8 @@ public boolean isSingleton(String name) throws NoSuchBeanDefinitionException {
 #### doCreateBean
 
 1. createBeanInstance
-2. BeanDefinition PostProcessors
-3. Eagerly cache singletons to be able to resolve [circular references](/docs/CS/Framework/Spring/IoC.md?id=circular-references)
+2. BeanDefinition 后置处理器（PostProcessors）
+3. 提前缓存单例 Bean，以便解析[循环引用](/docs/CS/Framework/Spring/IoC.md?id=circular-references)
 4. populateBean
 5. initializeBean
 
@@ -2089,7 +2101,7 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 }
 ```
 
-Class
+普通类实例化（SimpleInstantiationStrategy）
 
 ```java
 // SimpleInstantiationStrategy
@@ -2129,7 +2141,7 @@ Class
 	}
 ```
 
-Cglib
+Cglib 子类化（CglibSubclassingInstantiationStrategy）
 
 ```
 // CglibSubclassingInstantiationStrategy
@@ -2184,9 +2196,11 @@ public class CglibSubclassCreator {
 
 ##### registerDisposableBeanIfNecessary
 
-See bean destroy method
+参见 Bean 销毁方法（destroy method）相关逻辑。
 
 DisposableBeanAdapter#hasDestroyMethod
+
+> 补强（Spring 7.x）：`@Bean` 的 `destroyMethod` 默认会推断名为 `close`/`shutdown` 的方法，或任意实现了 `AutoCloseable` 的无参方法，作为容器关闭时的销毁回调。
 
 #### markBeanAsCreated
 
@@ -2393,7 +2407,7 @@ public class DefaultSingletonBeanRegistry {
 
 #### populateBean
 
-Populate the bean instance in the given BeanWrapper with the property values from the bean definition.
+使用 BeanDefinition 中的属性值，为给定 BeanWrapper 内的 Bean 实例填充属性。
 
 - autowireByName
 - autowireByType
@@ -2476,11 +2490,11 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 
 ##### InstantiationAwareBeanPostProcessor
 
-Subinterface of BeanPostProcessor that adds a before-instantiation callback, and a callback after instantiation but before explicit properties are set or autowiring occurs.
-Typically used to suppress default instantiation for specific target beans, for example to create proxies with special TargetSources (pooling targets, lazily initializing targets, etc), or to implement additional injection strategies such as field injection.
+`BeanPostProcessor` 的子接口，在实例化前增加一个回调，并在实例化之后、显式属性设置或自动装配发生之前增加一个回调。
+通常用于抑制特定目标 Bean 的默认实例化，例如配合特殊的 TargetSource（目标对象池、懒加载目标对象等）创建代理，或实现额外的注入策略（如字段注入）。
 
-NOTE: This interface is a special purpose interface, mainly for internal use within the framework.
-It is recommended to implement the plain BeanPostProcessor interface as far as possible, or to derive from InstantiationAwareBeanPostProcessorAdapter in order to be shielded from extensions to this interface.
+注意：这是一个特殊用途的接口，主要供框架内部使用。
+建议尽可能直接实现普通的 `BeanPostProcessor` 接口，或继承 `InstantiationAwareBeanPostProcessorAdapter`，以避免因该接口未来扩展而受影响。
 
 ```java
 
@@ -2867,7 +2881,7 @@ private void processKeyedProperty(PropertyTokenHolder tokens, PropertyValue pv) 
 
 #### initializeBean
 
-Initialize the given bean instance, applying factory callbacks as well as init methods and bean post processors.
+初始化给定的 Bean 实例，依次应用工厂回调、初始化方法以及 Bean 后置处理器。
 
 1. invokeAwareMethods
 2. applyBeanPostProcessorsBeforeInitialization
@@ -2907,8 +2921,8 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 
 ##### invokeInitMethods
 
-Give a bean a chance to react now all its properties are set, and a chance to know about its owning bean factory (this object).
-This means checking whether the bean implements InitializingBean or defines a custom init method, and invoking the necessary callback(s) if it does.
+在 Bean 的所有属性都已设置完毕后，给予 Bean 一个作出响应的机会，同时也让它有机会感知其所属的 BeanFactory（即当前对象）。
+具体做法是检查该 Bean 是否实现了 `InitializingBean`，或是否定义了自定义的初始化方法；若是，则调用相应的回调。
 
 ```java
 public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFactory implements AutowireCapableBeanFactory {
@@ -2946,44 +2960,121 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 
 ## Message Resolution
 
-Furthermore, Spring provides two *MessageSource* implementations, *ResourceBundleMessageSource* and *StaticMessageSource*.
+`ApplicationContext` 扩展了 `MessageSource` 接口，因此容器本身就是一个国际化（i18n）消息解析器。另有 `HierarchicalMessageSource` 支持按层级向上查找父容器。
+
+### 接口契约
+
+```java
+public interface MessageSource {
+
+    // 找不到时返回默认值
+    String getMessage(String code, Object[] args, String defaultMessage, Locale locale);
+
+    // 找不到时抛 NoSuchMessageException
+    String getMessage(String code, Object[] args, Locale locale) throws NoSuchMessageException;
+
+    // 传入可解析对象（错误码 + 参数 + 默认值）
+    String getMessage(MessageSourceResolvable resolvable, Locale locale) throws NoSuchMessageException;
+}
+```
+
+参数按 `MessageFormat` 规则替换进占位符，例如 `argument.required=The {0} argument is required.`。
+
+### 容器如何找到它
+
+启动时按顺序查找：
+
+1. 容器中名为 `messageSource` 的 Bean；
+2. 都没有则找**父容器**中同名的 Bean；
+3. 仍没有则实例化一个空的 `DelegatingMessageSource` 兜底（能接收调用，但解析不出任何消息）。
+
+实现类三选一，均实现 `HierarchicalMessageSource`：
+
+| 实现 | 特点 |
+| :-- | :-- |
+| `ResourceBundleMessageSource` | 基于 JDK `ResourceBundle`，只读 classpath；**不合并同名 basename，只取第一个找到的** |
+| `ReloadableResourceBundleMessageSource` | 可读任意 Spring `Resource` 位置（file/URL），支持热重载与缓存，开发期友好 |
+| `StaticMessageSource` | 编程式 addMessage，极少使用，多用于测试 |
+
+```java
+@Bean
+public MessageSource messageSource() {
+    ResourceBundleMessageSource source = new ResourceBundleMessageSource();
+    source.setBasenames("messages", "errors");
+    source.setDefaultEncoding("UTF-8");
+    return source;
+}
+```
+
+需要在自己的 Bean 里拿到它时，实现 `MessageSourceAware` 即可被注入容器内的 `MessageSource`。
+
+### Locale 从哪来
+
+Web 场景下 Locale 由 `LocaleResolver` 决定：
+
+| 策略 | 说明 |
+| :-- | :-- |
+| `AcceptHeaderLocaleResolver` | 默认，读 `Accept-Language` 请求头，无需会话 |
+| `SessionLocaleResolver` | 存在会话中，切换后持续生效 |
+| `CookieLocaleResolver` | 存在 Cookie 中 |
+
+配合 `LocaleChangeInterceptor` 可让用户通过请求参数（如 `?lang=zh_CN`）切换语言。
+
+### Spring Boot 的自动配置
+
+Boot 检测到 classpath 根下存在默认资源文件（默认 `messages.properties`）才自动配置一个 `ResourceBundleMessageSource`；**如果只有带语言后缀的文件而没有默认文件，则不会配置 MessageSource**，国际化会静默失效。
+
+```properties
+spring.messages.basename=messages,config.i18n.messages
+spring.messages.encoding=UTF-8
+spring.messages.fallback-to-system-locale=true
+spring.messages.cache-duration=3600
+spring.messages.common-messages=classpath:my-common-messages.properties
+```
+
+常用项：`basename`（默认 `messages`）、`encoding`（UTF-8）、`fallback-to-system-locale`（true，找不到目标语言时回退系统 Locale）、`cache-duration`（不设则永久缓存）、`always-use-message-format`（false）。自定义同名 `messageSource` Bean 即整体接管。
+
+Boot 侧细节见 [Spring Boot](/docs/CS/Framework/Spring_Boot/Spring_Boot.md)。校验消息同样可走这套机制，错误码推导规则见 [校验](/docs/CS/Framework/Spring/Validation.md)；HTTP 错误响应的国际化见 [统一异常处理](/docs/CS/Framework/Spring/Exception.md)。
 
 ## BeanFactory vs ApplicationContext
 
-
-|                | BeanFactory | ApplicationContext |
-| :------------: | :---------: | :----------------: |
-|                |      -      |                    |
-|     Event     |      -      |                    |
-| ResourceLoader |      -      | multiple Resources |
-|                |            |                    |
-|                |            |                    |
-|                |            |                    |
+|                       | BeanFactory | ApplicationContext |
+| :-------------------: | :---------: | :----------------: |
+|       Bean 实例化       |  懒加载，首次 `getBean` 时创建  |     启动时预实例化所有单例     |
+|        依赖注入          |     支持      |        支持        |
+|         事件          |    不支持    | `ApplicationEventPublisher` |
+|    ResourceLoader     |    不支持    |  支持，且可通配加载多个资源  |
+|         国际化         |    不支持    |    `MessageSource`   |
+|     Environment      |    不支持    |   `EnvironmentCapable` |
+| BeanFactoryPostProcessor |   需手动注册   |      自动注册      |
+|       注解 / AOP        |   需手动装配   |  `AnnotationConfigApplicationContext` 等自动完成 |
 
 ## Usage Example
 
-ObjectProvider： a factory get defined type instances
+ObjectProvider：用于获取已定义类型实例的工厂
 
 ### Prototype
 
-Using `@Autowired` to get prototype beans will always get same bean because `AutowiredAnnotationBeanPostProcessor` only inject once
+使用 `@Autowired` 获取 prototype Bean 时，由于 `AutowiredAnnotationBeanPostProcessor` 只会注入一次，因此每次拿到的都是同一个 Bean。
 
-1. use `ApplicationContext.getBean()`
-2. use `@Lookup` Annotation a getBean method(No matter what it actually does), see `CglibSubclassingInstantiationStrategy.LookupOverrideMethodInterceptor`
-3. set `proxyMode = ScopedProxyMode.TARGET_CLASS` in `@Scope`
+1. 使用 `ApplicationContext.getBean()`
+2. 使用 `@Lookup` 注解标注一个 getBean 方法（无论其实际实现是什么），参见 `CglibSubclassingInstantiationStrategy.LookupOverrideMethodInterceptor`
+3. 在 `@Scope` 中设置 `proxyMode = ScopedProxyMode.TARGET_CLASS`
+
+> 补强（Spring 7.x）：`@Autowired` 默认 `required=true`；对于可选依赖，推荐使用 `ObjectProvider` 或 `@Nullable`，以避免强制注入失败。
 
 ### inject
 
 #### multiple implements
 
-see `BeanPostProcessor.postProcessProperties()`
+参见 `BeanPostProcessor.postProcessProperties()`
 
-1. `@Primary` at defining Bean
-2. `@Qualifier` at injecting bean
-3. InnerClass Bean
-   1. `Qualifier` outerBean.innerClass
-   2. set beanName at defining Bean
-   3. override BeanNameGenerator
+1. 定义 Bean 时使用 `@Primary`
+2. 注入 Bean 时使用 `@Qualifier`
+3. 内部类 Bean
+   1. 使用 `Qualifier` 限定 outerBean.innerClass
+   2. 定义 Bean 时显式指定 beanName
+   3. 覆写 BeanNameGenerator
 
 #### multiple beans
 
@@ -2991,19 +3082,19 @@ see `BeanPostProcessor.postProcessProperties()`
 
 #### @Value
 
-1. allows bean
-2. allows properties(probably override by default properties)
+1. 允许注入 Bean
+2. 允许注入 properties（可能会被默认 properties 覆盖）
 
 ### Lifecycle
 
-1. implements `InitializingBean`
-2. use init method with `@PostConstruct`
+1. 实现 `InitializingBean` 接口
+2. 配合 `@PostConstruct` 使用初始化方法
 
-Disposable
+Disposable（销毁）
 
 ### PropertySource
 
-Spring 3.1 also introduces the new `@PropertySource` annotation as a convenient mechanism for adding property sources to the environment.
+Spring 3.1 还引入了全新的 `@PropertySource` 注解，作为向 environment 中添加属性源的便捷机制。
 
 ```java
 @Configuration
@@ -3024,4 +3115,4 @@ public class PropertiesWithJavaConfig {
 
 1. [Intro to Inversion of Control and Dependency Injection with Spring](https://www.baeldung.com/inversion-control-and-dependency-injection-in-spring#what-is-inversion-of-control)
 2. [Inversion of Control Containers and the Dependency Injection pattern](https://martinfowler.com/articles/injection.html)
-3. [Standard and Custom Events - Spring](https://docs.spring.io/spring-framework/docs/current/reference/html/core.html#context-functionality-events)
+3. [Standard and Custom Events - Spring](https://docs.spring.io/spring-framework/reference/core/beans/context-introduction.html#context-functionality-events)

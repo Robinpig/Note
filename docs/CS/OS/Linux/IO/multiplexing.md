@@ -413,3 +413,4 @@ select,poll的性能瓶颈主要体现在下面三个地方：
 - [I/O 与多路复用（目录枢纽）](/docs/CS/OS/Linux/IO/README.md)
 - [IO 总览（五种模型）](/docs/CS/OS/Linux/IO/IO.md)
 - [io_uring](/docs/CS/OS/Linux/IO/io_uring.md)
+- [Nginx Event](/docs/CS/CN/nginx/event.md) — 三个接口在多进程服务端里的落地，含 accept 与 `EPOLLEXCLUSIVE`

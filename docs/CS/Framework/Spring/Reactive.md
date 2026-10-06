@@ -42,7 +42,10 @@ JDK 9 把该规范收进 `java.util.concurrent.Flow`。Spring 选择的实现库
 
 ## Spring WebFlux
 
-Spring 5 引入 [Spring WebFlux](/docs/CS/Framework/Spring/webflux.md)，与基于 Servlet 阻塞模型的 [Spring MVC](/docs/CS/Framework/Spring/MVC.md) 并列：
+Spring 5 引入 [Spring WebFlux](/docs/CS/Framework/Spring/webflux.md)，与基于 Servlet 阻塞模型的 [Spring MVC](/docs/CS/Framework/Spring/MVC.md) 并列（当前基线为 Framework 7 / Boot 4）：
+
+> [!TIP]
+> 到 Framework 7 / Boot 4，这个选型多了一个变量：JDK 21+ 的**虚拟线程**让阻塞式 MVC 在高并发下的线程成本大幅下降，`spring.threads.virtual.enabled=true` 即可开启。WebFlux 的价值因此回到它真正擅长的场景——流式响应、背压、大量并发下游调用，而不是"并发高就必须上响应式"。
 
 | 维度 | Spring MVC | Spring WebFlux |
 | ---- | ---- | ---- |
@@ -56,6 +59,52 @@ Spring 5 引入 [Spring WebFlux](/docs/CS/Framework/Spring/webflux.md)，与基�
 
 并非所有应用都该上响应式：在典型阻塞型业务（大量同步 ORM 访问）下，MVC + 虚拟线程往往更简单且吞吐足够；WebFlux 的价值集中在超高并发连接数、流式推送与 IO 密集的网关/聚合层。
 
+## Spring 中的响应式落地
+
+Reactive 在 Spring 全家桶里是一整条技术栈，而非只有 WebFlux：
+
+- **WebClient**：响应式 HTTP 客户端，替代命令式 `RestTemplate`（`RestTemplate` 在 Framework 7.1 已弃用、8.0 移除，新代码统一用 `WebClient` 或同步友好的 `RestClient`）。支持响应式背压、流式请求/响应、拦截器链。
+- **R2DBC / 响应式 Repository**：见 [Spring Data](/docs/CS/Framework/Spring/Data.md)，返回 `Mono`/`Flux`，与 WebFlux 端到端非阻塞。
+- **响应式 Spring Security**：`spring-security-webflux`，基于 `WebFilter` 链而非 Servlet `Filter`，认证信息经 Reactor `Context` 而非 `ThreadLocal` 传递（见下节）。
+- **响应式 Cache**：Spring 的缓存抽象**没有**标准响应式实现，`@Cacheable` 在 WebFlux handler 里要么退回同步缓存（阻塞事件循环），要么用各存储自己的响应式客户端（如 `ReactiveRedisTemplate`）手写。
+- **响应式 WebSocket / SSE**：`WebSocketHandler`、Server-Sent Events 天然契合流式推送。
+
+> [!NOTE]
+> `WebClient` 与 `RestClient` 的取舍：**非流式、调用外部 HTTP 且项目已用虚拟线程时，优先 `RestClient`**——它同步 API、零额外依赖、配合虚拟线程吞吐足够；只有需要流式响应、背压或大量并发出站调用时才上 `WebClient`。`RestTemplate` 已被弃用，但迁移路径要按场景选。
+
+## 虚拟线程 vs WebFlux 决策
+
+| 维度 | MVC + 虚拟线程（JDK 21+） | WebFlux（响应式） |
+| :--- | :--- | :--- |
+| 编程模型 | 同步阻塞，一请求一（虚拟）线程 | 异步非阻塞，`Mono`/`Flux` |
+| 学习/调试成本 | 低，栈追踪可读 | 高，需懂 Reactor 操作符与调度 |
+| 背压 | 无 | 端到端 |
+| 流式/网关聚合 | 不擅长 | 擅长 |
+| 数据库 | 阻塞 JDBC 即可（虚拟线程扛并发） | 需 R2DBC / 响应式驱动 |
+| 适用 | 典型 CRUD、内部系统 | 高并发连接、流式推送、IO 密集网关 |
+
+结论：典型阻塞型业务下 MVC + 虚拟线程往往更简单且吞吐足够；WebFlux 的价值集中在超高并发连接数、流式推送与 IO 密集的网关/聚合层。
+
+## Reactor Context 与跨切面传参
+
+响应式链里没有"当前线程"的概念，`ThreadLocal` 在 `subscribeOn`/`publishOn` 切换线程后失效。Reactor 用不可变的 **`ContextView`** 在链上携带数据，例如 Spring Security 的 `ReactiveSecurityContextHolder` 就是把认证信息放进 `Context`，而非塞进 `ThreadLocal`：
+
+```java
+Mono.just("/admin")
+    .flatMap(path -> ReactiveSecurityContextHolder.getContext()
+        .map(ctx -> "user=" + ctx.getAuthentication().getName()));
+```
+
+`Context` 必须从订阅点（publisher 源头）沿链向下传递；在 `subscribeOn` 切换的**下游**写入的 Context 不会回流到上游，这是最常踩的"取不到认证信息"原因。
+
+## 线程调度陷阱
+
+Reactor 默认在**事件循环线程**上执行，阻塞调用会卡死整条管道：
+
+- 用 `subscribeOn(Schedulers.boundedElastic())` 把阻塞任务（JDBC、同步 IO）挪到弹性线程池；
+- 用 `publishOn(Schedulers.parallel())` 切换后续操作符的执行线程（仅影响**其后**的链，不影响上游）。
+- 在 WebFlux handler 里调用阻塞 JDBC 或 `Thread.sleep`，会卡住极少数事件循环线程，反而比 MVC 更差。
+
 ## Links
 
 - [Spring](/docs/CS/Framework/Spring/Spring.md)
@@ -63,6 +112,9 @@ Spring 5 引入 [Spring WebFlux](/docs/CS/Framework/Spring/webflux.md)，与基�
 - [Spring MVC](/docs/CS/Framework/Spring/MVC.md)
 - [Reactor](/docs/CS/Framework/reactor/Reactor.md)
 - [Spring Data](/docs/CS/Framework/Spring/Data.md)
+- [Spring Security](/docs/CS/Framework/Spring/Security.md)
+- [RxJava](/docs/CS/Framework/RxJava/RxJava.md)
+- [Netty](/docs/CS/Framework/Netty/Netty.md)
 
 ## References
 

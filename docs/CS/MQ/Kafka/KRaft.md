@@ -241,6 +241,11 @@ private void handleResponse(RaftResponse.Inbound response, long currentTimeMs) {
 
 ## Links
 
+- [Kafka](/docs/CS/MQ/Kafka/Kafka.md)
+- [Security（ACL 已迁入 KRaft metadata log）](/docs/CS/MQ/Kafka/Security.md)
+- [Broker](/docs/CS/MQ/Kafka/Broker.md)
+- [ShareGroup（ShareCoordinator）](/docs/CS/MQ/Kafka/ShareGroup.md)
+- [Storage（metadata log 之外的日志存储）](/docs/CS/MQ/Kafka/Storage.md)
 
 ## References
 

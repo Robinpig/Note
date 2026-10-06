@@ -54,6 +54,14 @@ CS 视角的数学分支学科：代数、几何、分析、离散、概率统�
 
 <div class="kb-card">
 
+### [医学](/docs/Medicine/Medicine.md)
+
+基础医学、临床医学、护理学、公共卫生与医学伦理的学科框架与知识地图。
+
+</div>
+
+<div class="kb-card">
+
 ### [运动](/docs/Sports/Sports.md)
 
 读书摘录为主的运动笔记。

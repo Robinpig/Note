@@ -1303,3 +1303,4 @@ static void tcp_v4_reqsk_send_ack(const struct sock *sk, struct sk_buff *skb,
 
 - [网络知识地图](/docs/CS/OS/Linux/net/README.md)
 - [Linux](/docs/CS/OS/Linux/Linux.md)
+- [nginx](/docs/CS/CN/nginx/nginx.md) — `listen ... backlog=`、`somaxconn` 与 accept 队列的工程侧

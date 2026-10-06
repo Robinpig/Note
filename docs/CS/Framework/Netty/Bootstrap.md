@@ -610,3 +610,6 @@ public <T> B option(ChannelOption<T> option, T value) {
 ## Links
 
 - [Netty](/docs/CS/Framework/Netty/Netty.md)
+- [Future and Promise](/docs/CS/Framework/Netty/Future.md)
+- [ByteBuf](/docs/CS/Framework/Netty/ByteBuf.md)
+- [Memory Pool](/docs/CS/Framework/Netty/memory.md)

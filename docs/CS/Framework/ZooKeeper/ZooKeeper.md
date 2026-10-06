@@ -1943,9 +1943,51 @@ ZooKeeper内部存储ZKDatabase可以看作是一个简化版本的 Redis 实现
 综上所述，内存空间是 Zookeeper 的死穴，内存决定了 Zookeeper 的数据存储上限，而磁盘 I/O 决定了 Zookeeper 的写入延迟与响应速度，使得 Zookeeper 只能支持几 GB 级别的数据存储，这是 Zookeeper 最大的局限性，也是 Zookeeper 在大规模集群中的瓶颈
 
 
+## 与 etcd 对照
+
+etcd 是 ZooKeeper 在现代云原生时代最常被拿来比较的对象（完整维度矩阵见 [etcd 横向对照](/docs/CS/Framework/etcd/compare.md)）。两者都提供"一致性的分布式键值 + 协调"，但底层取舍差异很大：
+
+| 维度 | ZooKeeper | etcd |
+| :--- | :--- | :--- |
+| 共识算法 | **Zab**（原子广播，仅 Leader 写） | **Raft**（etcd-raft，Leader 经 ReadIndex 提供线性读） |
+| 数据模型 | **znode 树**（`/a/b/c`，父须存在，类型 persistent / ephemeral / container / sequential） | **扁平 key + 前缀范围**（无父约束，`get --prefix`） |
+| 读模型 | 本地读 + 客户端 watch 缓存，需 `sync()` 才保最新 | 默认线性一致（ReadIndex），可显式 serializable |
+| Watch | **一次性触发**，需重新注册（惊群来源） | gRPC 双向流，可续接且**按 revision 回溯** |
+| 临时 / 自动删除 | **ephemeral 节点**（会话结束删） | **lease**（TTL 过期删） |
+| 锁 / 选主 | ephemeral 顺序节点 + watch 前驱 | lease + CAS / Txn |
+| 历史版本 | 无（仅当前状态） | **MVCC 多版本可回溯** |
+| 权限 | digest / IP ACL | RBAC + mTLS |
+| 客户端协议 | Jute 序列化 + 私有 ZTP/RPC（难用 curl 调试） | gRPC + protobuf（通用工具可调试） |
+| 语言 / 依赖 | Java，JVM 内存开销大（数据受内存上限约束，GB 级） | Go，单二进制零外部依赖 |
+
+**核心差异在共识与读模型。** Zab 是"只写 Leader"的原子广播，Follower 不能脱离 Leader 直接服务读；etcd 的 Raft 让 Leader 通过 no-op + ReadIndex 实现线性一致读，代价是一次网络往返。ZooKeeper 因此靠客户端缓存 + watch 来扛读，但需要显式 `sync()` 才保证最新——这正是它读性能高、但一致性弱于 etcd 的原因。
+
+**数据模型决定上层写法。** znode 树让父子关系成为结构的一部分（创建子节点前父须存在），etcd 用扁平 key + 前缀模拟层级，`/` 只是 key 的一部分，写入更自由但"目录"不是一等概念。两者都能实现锁与选主，机制对应：ZK 的 ephemeral 节点 ≈ etcd 的 lease 过期删除。
+
+**选型分水岭**：ZooKeeper 是 HBase / Kafka / Hadoop 等传统大数据的历史内置依赖，Java 生态协调成熟；etcd 是 Kubernetes 后端事实标准，云原生通用协调（多租户、RBAC、Txn 事务、gRPC）一应俱全。需要"开箱注册中心"时，Nacos / Consul 比两者都更省心（见 [etcd 横向对照](/docs/CS/Framework/etcd/compare.md) 的选型表）。
+
 ## Links
 
+- [ZooKeeper 目录索引（按层导航）](/docs/CS/Framework/ZooKeeper/README.md)
+- [Zab（共识与日志复制）](/docs/CS/Framework/ZooKeeper/Zab.md)
+- [start（部署与启动）](/docs/CS/Framework/ZooKeeper/start.md)
+- [存储层 storage](/docs/CS/Framework/ZooKeeper/storage.md)
+- [请求处理器链 pipeline](/docs/CS/Framework/ZooKeeper/pipeline.md)
+- [客户端 client](/docs/CS/Framework/ZooKeeper/client.md)
+- [安全 security](/docs/CS/Framework/ZooKeeper/security.md)
+- [集群运维 cluster](/docs/CS/Framework/ZooKeeper/cluster.md)
+- [监控 monitoring](/docs/CS/Framework/ZooKeeper/monitoring.md)
+- [故障排查](/docs/CS/Framework/ZooKeeper/troubleshooting.md)
+- [IO（服务端网络层）](/docs/CS/Framework/ZooKeeper/IO.md)
+- [Jute（序列化）](/docs/CS/Framework/ZooKeeper/Jute.md)
+- [Recipes（协调原语）](/docs/CS/Framework/ZooKeeper/Recipes.md)
+- [Curator](/docs/CS/Framework/ZooKeeper/Curator.md)
 - [Chubby](/docs/CS/Distributed/Chubby.md)
+- [etcd 横向对照](/docs/CS/Framework/etcd/compare.md)
+- [etcd](/docs/CS/Framework/etcd/etcd.md)
+- [Nacos](/docs/CS/Framework/nacos/Nacos.md)
+- [Eureka](/docs/CS/Framework/eureka/Eureka.md)
+- [BooKeeper](/docs/CS/Framework/BooKeeper/BooKeeper.md)
 
 ## References
 

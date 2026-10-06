@@ -1,9 +1,13 @@
 ## Introduction
 
+Kafka 通过引入 DelayQueue 以及多层时间轮，巧妙地解决了时间轮的空推进现象和海量延时任务时间跨度大的管理问题。Kafka 中也有一个工作线程 —— **Reaper** 来推动多层时间轮的运转。
 
-Kafka 通过引入 DelayQueue 以及多层时间轮，巧妙地解决了时间轮的空推进现象和海量延时任务时间跨度大的管理问题
+> 版本基线：**4.3.1**。核心类在 `core/src/main/scala/kafka/utils/timer/`（`TimingWheel`、`TimerTaskList`、`TimerTask`、`Reaper`、`SystemTimer`）。
 
-Kafka 中也有一个工作线程 —— Reaper 来推动多层时间轮的运转
+> [!TIP]
+> 本篇的代码片段引自 Scala 版 `TimingWheel`。**Kafka 4.x 正在把核心从 Scala 迁移到 Java**（4.3.1 全树 `.scala` 文件数已大幅减少），`kafka.utils.timer` 是迁移中受影响的包之一 —— 逻辑与类名基本延续，但具体实现以你所用版本为准。
+>
+> 这条「时间轮 vs 定时器精度」的取舍与内核层的定时器机制同源，可与 [timer.md](/docs/CS/OS/Linux/timer.md) 对读。
 
 A timing wheel with size n has n buckets and can hold timer tasks in n * u time interval.
 
@@ -83,3 +87,6 @@ Reaper 线程从 delayQueue 上被唤醒，开始处理 TimerTaskList 中的延�
 ## Links
 
 - [Apache Kafka](/docs/CS/MQ/Kafka/Kafka.md)
+- [Storage（segment 滚动也用到时间语义）](/docs/CS/MQ/Kafka/Storage.md)
+- [Broker（Reaper 线程的宿主）](/docs/CS/MQ/Kafka/Broker.md)
+- [Linux timer（内核定时器机制对照）](/docs/CS/OS/Linux/timer.md)

@@ -209,15 +209,16 @@ bio 一旦提交，就离开 VFS 进入通用块层：合并、I/O 调度、blk-
 
 `fs/` 目录下的笔记按"数据真正存在哪"分成几类：
 
-- **磁盘文件系统**：数据持久化在块设备上。[Minix](/docs/CS/OS/Linux/fs/Minix.md) 结构最简单、是内核教学常用的文件系统；[ext4](/docs/CS/OS/Linux/fs/ext4.md) 是多数 Linux 发行版的默认磁盘文件系统；[XFS](/docs/CS/OS/Linux/fs/xfs.md) 面向大容量与大并发，用分配组并行、一切皆 B+ 树、逻辑日志三条主线支撑；
+- **磁盘文件系统**：数据持久化在块设备上。[Minix](/docs/CS/OS/Linux/fs/Minix.md) 结构最简单、是内核教学常用的文件系统；[ext4](/docs/CS/OS/Linux/fs/ext4.md) 是多数 Linux 发行版的默认磁盘文件系统；[XFS](/docs/CS/OS/Linux/fs/xfs.md) 面向大容量与大并发，用分配组并行、一切皆 B+ 树、逻辑日志三条主线支撑；[btrfs](/docs/CS/OS/Linux/fs/btrfs.md) 走另一条路——把 extent tree（哪些块在用）、chunk tree（逻辑到物理的映射）、fs tree（文件）分成三棵 B+ 树，靠写时复制换来**块级零成本快照**、多盘聚合与独立校验和，容器镜像分层常用它的子卷；
 - **内核伪文件系统**：数据不在磁盘、而是内核临时生成、用来**导出内核状态**。[proc](/docs/CS/OS/Linux/fs/proc.md) 呈现进程与内核信息；[sysfs](/docs/CS/OS/Linux/fs/sysfs.md) 按设备模型把系统拓扑与属性导出到 `/sys`，与设备驱动一一对应。
 - **联合文件系统**：自身不存数据，把多个目录叠成一棵树。[overlayfs](/docs/CS/OS/Linux/fs/overlayfs.md) 用"只读 lower 层 + 唯一可写 upper 层"实现写时复制，是容器镜像分层的基础。
+- **用户态文件系统**：实现跑在用户态，内核只做请求转发。[FUSE](/docs/CS/OS/Linux/fs/FUSE.md) 把每次 syscall 打包成消息送到 `/dev/fuse`，用能力位协商（批量大小、是否走 writeback 缓存）换取吞吐——SSHFS、s3fs、浏览器沙箱、容器存储驱动都建立在它之上；代价是每次 I/O 都有两次上下文切换与两次拷贝。
 
 ## 文件管理与其它子系统的咬合
 
 - **块设备**：磁盘文件系统建立在 [block](/docs/CS/OS/Linux/dev/block.md) 之上，super_block 持有 `s_bdev`，回写以 bio 为单位下发。
-- **内存**：文件内容缓存于 [PageCache](/docs/CS/OS/Linux/mm/PageCache.md)，脏页回写与 [Reclaim](/docs/CS/OS/Linux/mm/Reclaim.md) 联动。
-- **日志**：磁盘文件系统把崩溃一致性交给日志。[jbd2](/docs/CS/OS/Linux/fs/jbd2.md) 走**物理日志**：元数据按事务写进环形日志区，再经 checkpoint 写回原位并回收日志空间；它只认 `buffer_head` 与块号、不理解 inode 语义，因此与文件系统解耦，并自带 shrinker 参与内存回收。[XFS](/docs/CS/OS/Linux/fs/xfs.md) 不用 jbd2，走**逻辑日志**：记的是操作项而非磁盘块，由 CIL 合并后成批写入、AIL 跟踪"已记日志但未落盘"的元数据并据此推进日志尾部。
+- **内存**：文件内容缓存于 [PageCache](/docs/CS/OS/Linux/mm/PageCache.md)，脏页回写与 [Reclaim](/docs/CS/OS/Linux/mm/Reclaim.md) 联动。FUSE 的性能与正确性同样取决于页缓存模式（`FOPEN_DIRECT_IO` vs writeback）。
+- **日志**：磁盘文件系统把崩溃一致性交给日志。[jbd2](/docs/CS/OS/Linux/fs/jbd2.md) 走**物理日志**：元数据按事务写进环形日志区，再经 checkpoint 写回原位并回收日志空间；它只认 `buffer_head` 与块号、不理解 inode 语义，因此与文件系统解耦，并自带 shrinker 参与内存回收。[XFS](/docs/CS/OS/Linux/fs/xfs.md) 不用 jbd2，走**逻辑日志**：记的是操作项而非磁盘块，由 CIL 合并后成批写入、AIL 跟踪"已记日志但未落盘"的元数据并据此推进日志尾部。[btrfs](/docs/CS/OS/Linux/fs/btrfs.md) 两条路都不走——它用 `BTRFS_TREE_LOG_OBJECTID` 这棵写前日志树，让 `fsync` 只提交该文件相关的块。
 - **进程**：fd 表是 `files_struct`、cwd/根是 `fs_struct`，随 fork 继承，见 [进程链路](/docs/CS/OS/Linux/proc/README.md)。
 - **设备模型**：设备节点是 VFS 与 [设备驱动](/docs/CS/OS/Linux/dev/README.md) 的接缝，sysfs 直接反映 device 拓扑。
 - **内核协同全景**：一次文件读写如何串起进程调度、内存、块 I/O 与中断，见 [内核协同链路](/docs/CS/OS/Linux/Architecture.md)。
@@ -226,7 +227,9 @@ bio 一旦提交，就离开 VFS 进入通用块层：合并、I/O 调度、blk-
 
 - [VFS 详解 fs](/docs/CS/OS/Linux/fs/fs.md)
 - [ext4](/docs/CS/OS/Linux/fs/ext4.md)
+- [btrfs](/docs/CS/OS/Linux/fs/btrfs.md)
 - [Minix](/docs/CS/OS/Linux/fs/Minix.md)
+- [FUSE](/docs/CS/OS/Linux/fs/FUSE.md)
 - [proc](/docs/CS/OS/Linux/fs/proc.md)
 - [sysfs](/docs/CS/OS/Linux/fs/sysfs.md)
 

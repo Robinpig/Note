@@ -1127,9 +1127,9 @@ struct page {
 
 ### zone
 
-zone 的完整 `struct zone` 字段定义与语义（watermark / lowmem_reserve / pageset / zone_start_pfn / spanned_pages / present_pages / managed_pages / free_area 等）见 [物理内存 pm.md](pm.md?id=zone)。本节作为 init 流程的一环，只关注 boot 期如何建立并填充这些 zone 结构。
+zone 的完整 `struct zone` 字段定义与语义（watermark / lowmem_reserve / pageset / zone_start_pfn / spanned_pages / present_pages / managed_pages / free_area 等）见 [物理内存 pm.md](/docs/CS/OS/Linux/mm/pm.md?id=zone)。本节作为 init 流程的一环，只关注 boot 期如何建立并填充这些 zone 结构。
 
-> 注意：本节原有的 `struct zone` 完整定义已合并至 [pm.md](pm.md?id=zone)，避免重复维护。
+> 注意：本节原有的 `struct zone` 完整定义已合并至 [pm.md](/docs/CS/OS/Linux/mm/pm.md?id=zone)，避免重复维护。
 
 ### kmalloc
 

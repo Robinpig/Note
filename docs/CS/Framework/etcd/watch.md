@@ -262,3 +262,4 @@ etcd使用map记录了监听单个key的watcher 同时Watch特性不仅仅可以
 ## Links
 
 - [etcd](/docs/CS/Framework/etcd/etcd.md)
+- [troubleshooting（revision 已被压缩导致 watch 失效）](/docs/CS/Framework/etcd/troubleshooting.md)

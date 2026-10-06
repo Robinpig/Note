@@ -28,7 +28,21 @@ nixos-rebuild switch --rollback  # 回退到上一可用代际
 
 ## 发布节奏
 
-两个 channel：**stable**（如 24.05、25.05，每半年一个版本，代号取自花卉）与 **unstable**（跟随 master，滚动更新）。
+两个 channel：**stable**（每半年一个版本，代号取自花卉）与 **unstable**（跟随 master，滚动更新）。
+
+支持期**只有 7 个月**（比滚动发行版的"无固定周期"更严格）：
+
+| 版本 | 代号 | 发布 | 支持至 |
+| :-- | :-- | :-- | :-- |
+| NixOS 25.11 | Xantusia | 2025-11 | 2026-06-30（已 EOL） |
+| **NixOS 26.05** | **Yarara** | **2026-05-30** | **2026-12-31** |
+
+**NixOS 的支持期是全发行版里最短的**（7 个月），因为它靠"可复现构建 + 声明式升级"而非长期维护某一代来保证可靠性 —— 需要长期支持得自己做版本锁定或用 NixOps/colmq 之类的工具。
+
+### 26.05 的两个要点
+
+- **initrd 默认基于 systemd** —— 旧脚本实现已废弃，计划 26.11 移除。这意味着 initrd 生成路径变了，自定义 initrd 的做法要跟着改。
+- **弃用 x86-darwin** —— 26.05 是最后一个支持版本，26.11 起不再构建。（Nixpkgs 本身仍可单独用于其他 Linux 与 macOS，这与 NixOS 发行版是两件事。）
 
 ## 适用场景
 
@@ -36,13 +50,54 @@ nixos-rebuild switch --rollback  # 回退到上一可用代际
 - 开发环境：用 [Nix](/docs/CS/OS/Linux/Tools/Nix.md) 的 `nix-shell` / `flake.nix` 一键还原项目依赖，新人免配环境；
 - 与 [容器](/docs/CS/Container/Container.md) 互补：Nix 可导出确定性镜像，但粒度在"包 / 配置"层而非"整机快照"层。
 
-与 [Arch](/docs/CS/OS/Linux/Distribution/Arch.md) 同属"独立系"，但理念相反：Arch 追求"你亲手拼出系统、滚动最新"，NixOS 追求"声明系统、构建可复现"——一个重过程，一个重结果。
+## 排障速查
+
+```shell
+# 当前代际
+nixos-version
+readlink /run/current-system
+nix-env -q --installed             # 当前环境的包
+nix-store -q --references /run/current-system
+
+# 代际管理
+nixos-rebuild list-generations
+nixos-rebuild list-profiles
+nix profile list                  # profile 世代
+# 回滚：启动时选旧代际，或
+sudo nixos-rebuild switch --rollback
+
+# 通道
+nix-channel --list
+sudo nix-channel --set nixos-25.11 nixpkgs
+
+# 搜索包
+nix-env -qa -n chromium           # 按名
+nix search nixpkgs ripgrep        # 查 nixpkgs
+nix search nixpkgs '^firefox$' --regex
+
+# GC（NixOS 的磁盘杀手）
+nix-collect-garbage -d            # 删不可达路径
+nix-store --gc --print-dead      # 先看会删什么
+# 关键：不要删 /nix/var/nix/profiles 之外的 system
+```
+
+## 与其它子系统的接缝
+
+- Nix 的 store 与 flakes 见 [Nix](/docs/CS/OS/Linux/Tools/Nix.md)；
+- NixOS 的 systemd 服务管理与 cgroup 委派见 [systemd](/docs/CS/OS/Linux/Tools/systemd.md) 与 [cgroup 委派实践](/docs/CS/OS/Linux/cgroup/delegation.md)；
+- 声明式配置思想与 [btrfs 快照](/docs/CS/OS/Linux/fs/btrfs.md) 的"可回退"是同一类问题的两种解法。
 
 ## Links
 
 - [发行版知识地图](/docs/CS/OS/Linux/Distribution/README.md)
+- [Nix（包管理器）](/docs/CS/OS/Linux/Tools/Nix.md)
+- [Arch（理念相反的独立系）](/docs/CS/OS/Linux/Distribution/Arch.md)
+- [systemd](/docs/CS/OS/Linux/Tools/systemd.md)
 - [Linux](/docs/CS/OS/Linux/Linux.md)
 
 ## References
 
 1. [NixOS 官网](https://nixos.org/)
+2. [NixOS 26.05 release announcement](https://nixos.org/blog/announcements/2026/nixos-2605)
+3. [Nix 手册 — Package management](https://nix.dev/manual/nix/stable/package-management)
+4. [NixOS Wiki — Release channels](https://nixos.wiki/wiki/NixOS/Release)

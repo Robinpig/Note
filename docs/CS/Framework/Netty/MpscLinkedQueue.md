@@ -415,3 +415,5 @@ public class MpscUnboundedAtomicArrayQueue<E> extends BaseMpscLinkedAtomicArrayQ
 ## Links
 
 - [Netty](/docs/CS/Framework/Netty/Netty.md)
+- [EventLoop](/docs/CS/Framework/Netty/EventLoop.md)
+- [Memory Pool](/docs/CS/Framework/Netty/memory.md)

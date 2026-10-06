@@ -1,6 +1,9 @@
 ## Introduction
 
-Ribbon is a client-side load balancer that gives you a lot of control over the behavior of HTTP and TCP clients. 
+Ribbon is a client-side load balancer that gives you a lot of control over the behavior of HTTP and TCP clients.
+
+> [!WARNING]
+> Ribbon 已停止维护，能力由 **Spring Cloud LoadBalancer** 取代（见 [LoadBalancer](/docs/CS/Framework/Spring_Cloud/LoadBalancer.md)）；Spring Cloud Netflix 中的 Ribbon 集成自 2020.0 起移除。 
 It provides the following features
 
 - Load balancing
@@ -405,3 +408,5 @@ public class DynamicServerListLoadBalancer<T extends Server> extends BaseLoadBal
 ## Links
 
 - [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md?id=load-balancer)
+- [Spring IoC](/docs/CS/Framework/Spring/IoC.md)
+- [Spring RestClient](/docs/CS/Framework/Spring/RestClient.md)

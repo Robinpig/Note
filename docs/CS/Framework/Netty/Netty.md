@@ -10,13 +10,6 @@ It greatly simplifies and streamlines network programming such as TCP and UDP so
 - **Performance**: Netty has better throughput and reduced latency than core Java APIs. It is also scalable thanks to its internal pooling of resources.
 - **Security**: Complete SSL/TLS and StartTLS support.
 
-
-
-
-
-- [Future](/docs/CS/Framework/Netty/Future.md)
-- [FastThreadLocal](/docs/CS/Framework/Netty/FastThreadLocal.md)
-
 ## Architecture
 
 <div style="text-align: center;">
@@ -55,13 +48,13 @@ Fig.1. Netty logic architecture.
 </p>
 
 
-网络通信层的**核心组件**包含**BootStrap、ServerBootStrap、Channel**三个组件
+网络通信层的**核心组件**包含 Bootstrap、ServerBootstrap、Channel 三个组件
 
 
 
 [Bootstrap](/docs/CS/Framework/Netty/Bootstrap.md) 是“引导”的意思，它主要负责整个 Netty 程序的启动、初始化、服务器连接等过程，它相当于一条主线，串联了 Netty 的其他核心组件
 
-Netty 自己实现的 Channel 是以 JDK NIO Channel 为基础的，相比较于 JDK NIO，Netty 的 Channel 提供了更高层次的抽象，同时屏蔽了底层 Socket 的复杂性，赋予了 Channel 更加强大的功能
+Netty 自己实现的 [Channel](/docs/CS/Framework/Netty/Channel.md) 是以 JDK NIO Channel 为基础的，相比较于 JDK NIO，Netty 的 Channel 提供了更高层次的抽象，同时屏蔽了底层 Socket 的复杂性，赋予了 Channel 更加强大的功能
 
 
 
@@ -75,7 +68,7 @@ Netty 自己实现的 Channel 是以 JDK NIO Channel 为基础的，相比较于
 
 服务编排层的职责是负责组装各类服务，它是 Netty 的核心处理链，用以实现网络事件的动态编排和有序传播。
 
-服务编排层的核心组件包括 ChannelPipeline、ChannelHandler、ChannelHandlerContext
+服务编排层的核心组件包括 ChannelPipeline、[ChannelHandler](/docs/CS/Framework/Netty/ChannelHandler.md)、ChannelHandlerContext
 
 ## Sequence
 
@@ -855,43 +848,43 @@ OP_READ 事件的注册是在 NioSocketChannel 被注册到对应的 Reactor 中
 
 ### Memory
 
-- use primitive type rather than wrapper type(long + AtomicLongFieldUpdater rather than AtomicLong)
-- reduce object creative
-  - class field rather than instance field
-- expect map size to reduce expand, AdaptiveRecvByteBufAllocator
-- zero copy
+网络框架最主要的延迟来自对象与内存分配，Netty 的应对分三层：少分配、可预期、分配完再池化。
 
-
-AllocateByteBuf
-
-
-[Memory Pool](/docs/CS/Framework/Netty/memory.md)
-
-
+- 少分配：用原始类型代替包装类型（`long` + `AtomicLongFieldUpdater` 而非 `AtomicLong`），用类字段代替实例字段，摊薄每对象头开销
+- 可预期：`AdaptiveRecvByteBufAllocator` 按历史读取大小预测下一次 `ByteBuf` 容量，避免缓冲区与 map 反复扩容
+- 池化：`PooledByteBufAllocator` → `PoolArena` → `PoolChunk` → `PoolSubpage` 四级分配，配合 `PoolThreadCache` 线程本地缓存，见 [Memory Pool](/docs/CS/Framework/Netty/memory.md)
 
 ### Zero Copy
 
-- Direct Memory
-- Composite or wrap ByteBuf
-- FileChannel transfer
+- 用 Direct Memory 分配 `ByteBuf`，写 socket 时省掉堆到堆外的一次拷贝
+- 用 Composite 或 wrap 组合多个 `ByteBuf`，合并消息时不复制内容
+- 文件传输交给 `FileChannel.transferTo`
 
-[Future and Promise](/docs/CS/Framework/Netty/Future.md)
+## What to Read Next
+
+Netty 的组件是层层引用的，按依赖顺序读比按包结构读省力。
+
+起点是 [Bootstrap](/docs/CS/Framework/Netty/Bootstrap.md)：它把 `EventLoopGroup`、`Channel` 类型、option 和 `childHandler` 攒成一份配置，直到 `bind()` 或 `connect()` 才真正实例化并注册，因此它是穿过其余组件的那条主线。
+
+被引导起来的是线程模型。[EventLoop](/docs/CS/Framework/Netty/EventLoop.md) 说明一个 EventLoop 如何独占一个线程、如何 select 就绪事件并顺带跑任务队列，以及 4.2 之后 IO 语义怎样被抽进 `IoHandler`；它依赖的 `select` / `epoll` 能力本身记在 [Linux IO 多路复用](/docs/CS/OS/Linux/IO/multiplexing.md)。
+
+每个连接被抽象成 [Channel](/docs/CS/Framework/Netty/Channel.md)，注册、读、写、关闭这些真正落地的动作挂在 `Unsafe` 上；事件到达后不在 Channel 里处理，而是交给 [ChannelHandler](/docs/CS/Framework/Netty/ChannelHandler.md) 组成的 pipeline 传播，粘包拆包、空闲检测、异常兜底都发生在这一层。
+
+数据载荷是 [ByteBuf](/docs/CS/Framework/Netty/ByteBuf.md)，它的引用计数决定何时归还；归还之后内存在哪一级缓存里被复用属于内存池主题，统一记在 [Memory Pool](/docs/CS/Framework/Netty/memory.md)。所有异步动作的结果由 [Future and Promise](/docs/CS/Framework/Netty/Future.md) 承载，写侧背压的水位变化也靠它回报。
+
+支撑上述组件的 common 工具件各自对应一个 JDK 层面的具体缺陷：[FastThreadLocal](/docs/CS/Framework/Netty/FastThreadLocal.md) 用数组寻址替代 ThreadLocal 的哈希探测，并允许在池化对象上批量清理；[MpscLinkedQueue](/docs/CS/Framework/Netty/MpscLinkedQueue.md) 是 EventLoop 任务队列采用的单生产多消费无锁队列；[HashedWheelTimer](/docs/CS/Framework/Netty/HashedWheelTimer.md) 用时间轮把海量超时的管理成本从 O(log n) 降到 O(1)。
+
+另有两个横切专题：[流量整形 TrafficShaping](/docs/CS/Framework/Netty/Limiter.md) 讲读写速率控制及其与写水位线的相互作用；[TCP Fast Open 支持](/docs/CS/Framework/Netty/TPO.md) 说明省下一个 RTT 的能力为什么必须走 native epoll transport 才拿得到。
 
 ## Links
 
+- [Netty 目录索引（按层导航）](/docs/CS/Framework/Netty/README.md)
 - [Java NIO](/docs/CS/Java/JDK/IO/NIO.md)
 - [Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md)
 - [Flink](/docs/CS/Framework/Flink/Flink.md)
 - [RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md)
-- [Cassandra](/docs/CS/DB/Cassandra.md)
-- [Hadoop](/docs/CS/Framework/Hadoop/Hadoop.md)
 - [ElasticSearch](/docs/CS/Framework/ES/ES.md)
-- [流量整形 TrafficShaping](/docs/CS/Framework/Netty/Limiter.md)
-- [TCP Fast Open 支持](/docs/CS/Framework/Netty/TPO.md)
-- [Channel](/docs/CS/Framework/Netty/Channel.md)
-- [ChannelHandler](/docs/CS/Framework/Netty/ChannelHandler.md)
-- [EventLoop](/docs/CS/Framework/Netty/EventLoop.md)
-- [ByteBuf](/docs/CS/Framework/Netty/ByteBuf.md)
+- [Linux IO 多路复用](/docs/CS/OS/Linux/IO/multiplexing.md)
 
 ## References
 

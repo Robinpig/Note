@@ -1,6 +1,6 @@
 ## Introduction
 
-传统 [内存回收](Reclaim.md) 建立在 active / inactive 两条 LRU 之上。这套模型在大内存机器上有两个越来越明显的问题：
+传统 [内存回收](/docs/CS/OS/Linux/mm/Reclaim.md) 建立在 active / inactive 两条 LRU 之上。这套模型在大内存机器上有两个越来越明显的问题：
 
 - **判定冷热靠链表移动，代价高且粗糙**。一个页被访问后，要在 LRU lock 下从 inactive 搬到 active；为了决定谁该被回收，内核还得反复扫描大批页。TB 级内存上，链表本身和扫描开销都很可观。
 - **"最近是否用过"信息利用不充分**。传统 LRU 主要靠页的 accessed / referenced 位做有限的二次机会判断，对"通过页表被访问"和"通过文件描述符被访问"两种热度区分不足，容易把还在工作集里的页换出去，随后又 **refault**（刚回收又被读回）。

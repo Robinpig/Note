@@ -4,6 +4,30 @@
 It is the de-facto standard for securing Spring-based applications.
 Spring Security is a framework that focuses on providing both authentication and authorization to Java applications.
 
+### 版本演进
+
+Spring Security 5.7 / 6.0 是一条重要分界线，理解新旧 API 对应关系是读旧资料的前提：
+
+| 能力 | 5.x（旧） | 6.x / 7.x（现行） |
+| :-- | :-- | :-- |
+| 配置入口 | 继承 `WebSecurityConfigurerAdapter` | 声明 `SecurityFilterChain` Bean |
+| DSL 风格 | `and()` 链式拼接 | lambda DSL（`http.authorizeHttpRequests(auth -> ...)`），`and()` 在 7.0 已移除 |
+| 请求授权 | `authorizeRequests()` + `AccessDecisionManager` | `authorizeHttpRequests()` + `AuthorizationManager`（7.0 移除 `authorizeRequests`） |
+| 末端拦截器 | `FilterSecurityInterceptor` | `AuthorizationFilter` |
+| Context 传递 | `SecurityContextPersistenceFilter` | `SecurityContextHolderFilter` |
+| 方法安全 | `@EnableGlobalMethodSecurity` | `@EnableMethodSecurity` |
+| 请求匹配器 | `AntPathRequestMatcher` / `MvcRequestMatcher` | `PathPatternRequestMatcher`（7.0 移除旧匹配器） |
+
+Spring Security 6 要求 Java 17 基线（与 Spring Framework 6 / Spring Boot 3 对齐），`javax.servlet` 全面切换为 `jakarta.servlet`；Spring Security 7 延续 Java 17 基线并对齐 Jakarta EE 11。
+
+### Spring Security 7.0
+
+7.0（2025-11 GA，随 Spring Boot 4 发布）是一次大版本清理，主要是**删除全部遗留 API**并内聚模块：
+
+- **移除**：`HttpSecurity.and()`、`authorizeRequests()`、`AuthorizationManager#check`（改为 `authorize`）、`AntPathRequestMatcher` / `MvcRequestMatcher`、Password Grant（OAuth 2.0）、OpenSAML 4、`ApacheDsContainer`。
+- **模块合并**：Spring Authorization Server、Kerberos 扩展并入 Spring Security 主线；原访问决策 API（`AccessDecisionManager`、`AccessDecisionVoter`）迁到独立的 `spring-security-access` 模块。
+- **新能力**：一等公民的多因素认证（`AllAuthoritiesAuthorizationManager` + `Authentication.Builder`）、SPA 友好的 CSRF DSL（`csrf.spa()`）、基于 Password4j 的 Argon2/Scrypt 等编码器、OAuth 2.0 授权服务器默认启用 PKCE、`NimbusJwtEncoder` 构建器。
+
 ## Architecture
 
 Spring Security’s Servlet support is based on Servlet Filters, so it is helpful to look at the role of Filters generally first.
@@ -106,6 +130,11 @@ At the heart of Spring Security’s authentication model is the SecurityContextH
 ### Authentication Filters
 
 #### SecurityContextPersistenceFilter
+
+> [!WARNING]
+> `SecurityContextPersistenceFilter` 在 Spring Security 6 中已被 `SecurityContextHolderFilter` 取代。
+> 新 Filter 不再负责"读 + 存"完整生命周期：它只负责从 `SecurityContextRepository` 读取并加载 context，
+> 保存动作改由显式配置（`HttpSecurity.securityContext()`，默认仍写 HttpSession）完成。
 
 SecurityContextPersistenceFilter MUST be executed BEFORE any authentication processing mechanisms.
 Authentication processing mechanisms (e.g. BASIC, CAS processing filters etc) expect the SecurityContextHolder(default to using [MODE_THREADLOCAL](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md)) to contain a valid SecurityContext by the time they execute.
@@ -271,7 +300,6 @@ public class ProviderManager implements AuthenticationManager, MessageSourceAwar
 
 ### Username/Password
 
-
 UserDetailService
 
 ```java
@@ -293,16 +321,38 @@ public interface UserDetails extends Serializable {
 }
 ```
 
-PasswordEncoder
+`DaoAuthenticationProvider` 内部委托 `UserDetailsService.loadUserByUsername()` 加载用户，再做密码比对；
+应用接入点通常就是实现一个 `UserDetailsService` Bean（内存 / JDBC / LDAP 皆为预制实现）。
 
+### PasswordEncoder
+
+Spring Security 5 起默认使用 `DelegatingPasswordEncoder`：密码串带 `{bcrypt}` / `{argon2}` 等前缀，按前缀路由到具体编码器，并天然支持存量密码平滑升级（`upgradeEncoding`）。
+
+```java
+public interface PasswordEncoder {
+
+	String encode(CharSequence rawPassword);
+
+	boolean matches(CharSequence rawPassword, String encodedPassword);
+
+	default boolean upgradeEncoding(String encodedPassword) {
+		return false;
+	}
+}
+```
+
+| 实现要点 | 说明 |
+| :-- | :-- |
+| `BCryptPasswordEncoder` | 最常用默认选择，自带随机盐，成本因子可调（默认 10） |
+| `DelegatingPasswordEncoder` | `PasswordEncoderFactories.createDelegatingPasswordEncoder()`，按 `{id}` 前缀分发 |
+| `NoOpPasswordEncoder` | 明文，仅遗留兼容，已废弃 |
 
 ## Authorization
 
 Spring Security provides interceptors which control access to secure objects such as method invocations or web requests. 
 A pre-invocation decision on whether the invocation is allowed to proceed is made by the AccessDecisionManager.
 
-
-### AccessDecisionManager
+### AccessDecisionManager（5.x 旧 API）
 
 ```java
 public interface AccessDecisionManager {
@@ -362,6 +412,73 @@ It will also implement the proper handling of secure object invocations, namely:
        The AbstractSecurityInterceptor will take no further action when its afterInvocation(InterceptorStatusToken, Object) is called.
 5. Control again returns to the concrete subclass, along with the Object that should be returned to the caller. The subclass will then return that result or exception to the original caller.
 
+### AuthorizationManager（6.x 新 API / 7.x 已更名 authorize）
+
+Spring Security 6 用 `AuthorizationManager` 取代 `AccessDecisionManager` + `AccessDecisionVoter` 组合，投票语义收敛为一次判定调用（6.x 方法名为 `check`，**7.0 更名为 `authorize`**，`check` 已移除）：
+
+```java
+public interface AuthorizationManager<T> {
+
+	// 6.x 为 check(...)，7.0 起为 authorize(...)
+	AuthorizationDecision authorize(Supplier<Authentication> authentication, T object);
+
+	default void verify(Supplier<Authentication> authentication, T object) {
+		AuthorizationDecision decision = authorize(authentication, object);
+		if (decision != null && !decision.isGranted()) {
+			throw new AccessDeniedException("Access Denied");
+		}
+	}
+}
+```
+
+- `RequestMatcherDelegatingAuthorizationManager`：请求级分发器，按 `RequestMatcher` 路由到具体 manager（`AuthorityAuthorizationManager`、`AuthenticatedAuthorizationManager` 等静态工厂取代了 Voter）。
+- 末端拦截器从 `FilterSecurityInterceptor` 换成 `AuthorizationFilter`，由 `authorizeHttpRequests()` DSL 注册。
+- 旧 `AccessDecisionManager` 仍可通过 `AuthorizationFilter` 适配挂载，但只建议存量过渡。
+
+### Method Security
+
+```java
+@Configuration
+@EnableMethodSecurity // 取代 @EnableGlobalMethodSecurity，prePostEnabled 默认开启
+public class MethodSecurityConfig { }
+```
+
+```java
+@PreAuthorize("hasRole('ADMIN') or #userId == authentication.name")
+public User getUser(String userId) { ... }
+
+@PostAuthorize("returnObject.owner == authentication.name")
+public Order getOrder(Long orderId) { ... }
+
+@PreFilter / @PostFilter  // 对集合参数/返回值逐元素过滤
+```
+
+实现基于 Spring AOP：`AuthorizationManagerBeforeMethodInterceptor` 等拦截器在方法调用前后执行对应的 `AuthorizationManager`。
+注解可标注在接口上，支持元注解组合成自定义注解（如 `@AdminOnly`），与 `@Secured`、JSR-250 的 `@RolesAllowed` 并存。
+
+## 配置
+
+### SecurityFilterChain（6.x）
+
+```java
+@Bean
+SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    http
+        .authorizeHttpRequests(auth -> auth
+            .requestMatchers("/public/**").permitAll()
+            .requestMatchers("/admin/**").hasRole("ADMIN")
+            .anyRequest().authenticated())
+        .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+        .oauth2ResourceServer(rs -> rs.jwt(Customizer.withDefaults()));
+    return http.build();
+}
+```
+
+- 每个 `SecurityFilterChain` Bean 即一条链，多条链按 `securityMatcher` 顺序由 `FilterChainProxy` 匹配，命中即止。
+- CSRF 默认开启；纯 API + Bearer Token 的无状态场景通常显式关闭。
+- 前后端分离 + JWT 场景必配 `SessionCreationPolicy.STATELESS`，否则每请求仍会创建 HttpSession。
+- 集群场景下的会话共享由 [Spring Session](/docs/CS/Framework/Spring/Session.md) 承接。
+
 ## OAuth
 
 Spring Security supports protecting endpoints using two forms of OAuth 2.0 Bearer Tokens:
@@ -372,6 +489,20 @@ Spring Security supports protecting endpoints using two forms of OAuth 2.0 Beare
 ### Authorization Grants
 
 ### Resource Server
+
+Resource Server 侧核心抽象是 `JwtDecoder`（JWT）与 `OpaqueTokenIntegrator`（不透明令牌），
+由 `BearerTokenAuthenticationFilter` 从 `Authorization: Bearer <token>` 头提取令牌并交给 `AuthenticationManager` 认证：
+
+```java
+@Bean
+JwtDecoder jwtDecoder(@Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri}") String jwkSetUri) {
+    return NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build();
+}
+```
+
+- JWT：解码 + 验签（`NimbusJwtDecoder`，JWK Set 端点拉取公钥），`JwtAuthenticationConverter` 负责把 claim 映射成 `GrantedAuthority`。
+- Opaque Token：每请求回调授权服务器的 introspection 端点校验，代价高但支持即时吊销。
+- Client / Authorization Server 侧（登录态、令牌签发）见 [Spring OAuth](/docs/CS/Framework/Spring/OAuth.md)，协议本身见 [OAuth 2.0](/docs/CS/CN/HTTP/OAuth.md)。
 
 
 ## Init
@@ -410,4 +541,10 @@ public abstract class AbstractSecurityWebApplicationInitializer implements WebAp
 ## Links
 
 - [Spring](/docs/CS/Framework/Spring/Spring.md)
-- [OAuth](/docs/CS/CN/HTTP/OAuth.md)
+- [Spring MVC](/docs/CS/Framework/Spring/MVC.md)
+
+## References
+
+1. [Spring Security Architecture](https://docs.spring.io/spring-security/reference/servlet/architecture.html)
+2. [Spring Security 6.0 Migration Guide](https://docs.spring.io/spring-security/reference/migration-7/index.html)
+3. [Spring Security Source (GitHub)](https://github.com/spring-projects/spring-security)

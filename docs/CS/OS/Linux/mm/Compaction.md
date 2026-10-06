@@ -1,10 +1,10 @@
 ## Introduction
 
-[buddy 伙伴系统](pm.md?id=buddy)用 2 的幂次空闲块缓解外部碎片，但它无法**消除**碎片——随着系统长期运行、页不断分配释放，空闲页会逐渐以 order-0 的形式散落各处。于是出现一种尴尬：系统空闲页总量还很多，却凑不出一块物理上连续的高阶内存。
+[buddy 伙伴系统](/docs/CS/OS/Linux/mm/pm.md?id=buddy)用 2 的幂次空闲块缓解外部碎片，但它无法**消除**碎片——随着系统长期运行、页不断分配释放，空闲页会逐渐以 order-0 的形式散落各处。于是出现一种尴尬：系统空闲页总量还很多，却凑不出一块物理上连续的高阶内存。
 
 这类需求真实存在：驱动要大的 DMA 缓冲、THP（透明大页）要一个 2MB 的 huge page、内核要分配高阶的连续页表结构。**内存压缩（memory compaction，也译内存规整）** 解决的就是"有内存、但不连续"——它把 zone 一端占用的**可移动页**搬到另一端的空闲页上，搬运完成后空闲页就在 zone 的某一端聚集出连续大块。本篇讲清双扫描器模型、迁移主干、kcompactd 与主动压缩。
 
-> 注意 compaction 与 [Reclaim](Reclaim.md) 的区别：回收是"**减少**占用、把页释放掉"，压缩是"**挪动**占用、页的数据一页不少"。压缩不增加空闲页总量，只改变它们的物理排布。
+> 注意 compaction 与 [Reclaim](/docs/CS/OS/Linux/mm/Reclaim.md) 的区别：回收是"**减少**占用、把页释放掉"，压缩是"**挪动**占用、页的数据一页不少"。压缩不增加空闲页总量，只改变它们的物理排布。
 
 ## 双扫描器模型
 
@@ -126,10 +126,10 @@ if (cc->proactive_compaction) {
 
 ## 压缩与回收、OOM 的协作
 
-compaction 处在 [alloc_pages_slowpath](pm.md?id=alloc_pages_slowpath) 链的中段，与前后环节咬合：
+compaction 处在 [alloc_pages_slowpath](/docs/CS/OS/Linux/mm/pm.md?id=alloc_pages_slowpath) 链的中段，与前后环节咬合：
 
 - 压缩**需要空闲页作落脚点**，所以水位不足时慢路径会先做一轮 direct reclaim 再压缩；回收还会把 pageblock 标记为 `PG_migrate_skip`，压缩据此跳过不值得搬的块（`compact_blockskip_flush` 控制何时清这些标记）。
-- 压缩**成功**则高阶分配重试通过；压缩与回收都救不回来、连 min 水位都满足不了，才走到 [OOM killer](oom.md)。
+- 压缩**成功**则高阶分配重试通过；压缩与回收都救不回来、连 min 水位都满足不了，才走到 [OOM killer](/docs/CS/OS/Linux/mm/oom.md)。
 
 ## 调优与观察
 

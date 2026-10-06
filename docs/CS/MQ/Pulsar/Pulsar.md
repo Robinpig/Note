@@ -2,23 +2,33 @@
 
 [Pulsar](https://pulsar.apache.org) is a distributed pub-sub messaging platform with a very flexible messaging model and an intuitive client API.
 
+> 版本基线：**4.2.4**（tag `v4.2.4`，当前稳定版，2026-08-03 发布）。另有里程碑版 `v5.0.0-M1/M2`（2026-06/09），**里程碑版不是生产可用基线**。
+> 依赖 BookKeeper **4.17.3**（根 `pom.xml:185`）。
+> ⚠️ 4.x 相对 2.x/3.x 有**大量类删除与包路径迁移**（geo-replication、pulsar-streams、`enableIdempotence` 均已移除），照旧资料写必错 —— 逐条对照见 [BookKeeper](/docs/CS/MQ/Pulsar/BookKeeper.md) 与 [集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md) 的对照表。
+
+## 主题导航
+
+Pulsar 的独特之处在于**计算与存储彻底分离**：Broker 无状态，数据落到 BookKeeper ledger，元数据落到 metadata store。这个分层决定了它几乎所有能力（多租户、细粒度扩容、unload）的形态。
+
+理解存储要落到 entry 与 cursor 两级 —— 见 [BookKeeper 存储层](/docs/CS/MQ/Pulsar/BookKeeper.md)；理解集群要抓住 bundle 切分与独立 LoadManager —— 见 [集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md)；Functions 与事务在 [Functions 与事务](/docs/CS/MQ/Pulsar/Functions.md)。
+
 ## Architecture
 
 At the highest level, a Pulsar instance is composed of one or more Pulsar clusters.
-Clusters within an instance can replicate data amongst themselves.
 
 In a Pulsar cluster:
 
-- One or more brokers handles and load balances incoming messages from producers, dispatches messages to consumers, communicates with the Pulsar configuration store to handle various coordination tasks,
-  stores messages in BookKeeper instances (aka bookies), relies on a cluster-specific ZooKeeper cluster for certain tasks, and more.
+- One or more brokers handles and load balances incoming messages from producers, dispatches messages to consumers, communicates with the Pulsar configuration store to handle various coordination tasks, stores messages in BookKeeper instances (aka bookies), and more.
 - [BookKeeper](/docs/CS/Framework/BooKeeper/BooKeeper.md) cluster consisting of one or more bookies handles persistent storage of messages.
-- [ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md) cluster specific to that cluster handles coordination tasks between Pulsar clusters.
+- **Metadata store** cluster specific to that cluster handles coordination tasks.
 
 The diagram below illustrates a Pulsar cluster:
 
 ![Pulsar](./img/Architecture.png)
 
-At the broader instance level, an instance-wide ZooKeeper cluster called the configuration store handles coordination tasks involving multiple clusters, for example, [geo-replication](https://pulsar.apache.org/docs/next/concepts-replication).
+> [!WARNING]
+> 4.2.4 的元数据存储不再强依赖 ZooKeeper：`MetadataStoreFactoryImpl.java:66-73` 注册了 `memory` / `rocksdb` / `etcd` / `oxia` / `zk` **五个 provider**，可用 `metadataStoreUrl` 显式选择（4.x 新增 etcd 与 Oxia）。
+> 但**无配置时默认回退仍是 ZK**（`:97`）—— 「Pulsar 默认用 RocksDB 存元数据」不成立。
 
 ## Model
 
@@ -226,23 +236,38 @@ Clusters can replicate among themselves using [geo-replication](https://pulsar.a
 ## Metadata store
 
 The Pulsar metadata store maintains all the metadata of a Pulsar cluster, such as topic metadata, schema, broker load data, and so on.
-Pulsar uses [Apache ZooKeeper](https://zookeeper.apache.org/) for metadata storage, cluster configuration, and coordination.
-The Pulsar metadata store can be deployed on a separate ZooKeeper cluster or deployed on an existing ZooKeeper cluster.
-You can use one ZooKeeper cluster for both Pulsar metadata store and BookKeeper metadata store.
-If you want to deploy Pulsar brokers connected to an existing BookKeeper cluster, you need to deploy separate ZooKeeper clusters for Pulsar metadata store and BookKeeper metadata store respectively.
-
-> Pulsar also supports more metadata backend services, including [etcd](/docs/CS/Framework/etcd/etcd.md) and [RocksDB](/docs/CS/DB/RocksDB/RocksDB.md) (for standalone Pulsar only).
 
 In a Pulsar instance:
 
 * A configuration store quorum stores configuration for tenants, namespaces, and other entities that need to be globally consistent.
-* Each cluster has its own local ZooKeeper ensemble that stores cluster-specific configuration and coordination such as which brokers are responsible for which topics as well as ownership metadata, broker load reports, BookKeeper ledger metadata, and more.
+* Each cluster has its own metadata store that stores cluster-specific configuration and coordination such as which brokers are responsible for which topics as well as ownership metadata, broker load reports, BookKeeper ledger metadata, and more.
+
+> [!TIP]
+> 4.2.4 的 metadata store 是可插拔的（`pulsar-metadata` 模块，`MetadataStoreFactoryImpl.java:66-73`）：
+>
+> | scheme | 实现 | 适用场景 |
+> | ------ | ---- | -------- |
+> | `zk:` | `ZKMetadataStore` | 生产集群（**无配置时的默认回退**）|
+> | `rocksdb:` | `RocksdbMetadataStore` | 单机（standalone）|
+> | `etcd:` | `EtcdMetadataStore` | 4.x 新增 |
+> | `oxia:` | `OxiaMetadataStoreProvider` | 4.x 新增 |
+> | `memory:` | `LocalMemoryMetadataStore` | 测试 |
+>
+> 配置项 `metadataStoreUrl`（`ServiceConfiguration.java:139`，**默认 null**）经 `getMetadataStoreUrl()`（`:4134-4143`）三级回退：显式 URL → 已废弃的 `zookeeperServers` → 空串。
+> BookKeeper 自己的元数据可独立配置（`bookkeeperMetadataServiceUri`，`:2031`，默认空），未设置时与 Pulsar **共享同一 MetadataStore 实例**。
+
+> [!WARNING]
+> 术语纠正：BookKeeper 4.17.3 中**没有 "fragment" 这个概念**，实际术语是 **`segment`**。层级是 **ledger → segment（副本集合变更记录）→ entry**。详见 [BookKeeper 存储层](/docs/CS/MQ/Pulsar/BookKeeper.md)。
 
 ## Configuration store
 
 The configuration store maintains all the configurations of a Pulsar instance, such as clusters, tenants, namespaces, partitioned topic-related configurations, and so on.
 A Pulsar instance can have a single local cluster, multiple local clusters, or multiple cross-region clusters. Consequently, the configuration store can share the configurations across multiple clusters under a Pulsar instance.
-The configuration store can be deployed on a separate ZooKeeper cluster or deployed on an existing ZooKeeper cluster.
+
+配置项为 `configurationMetadataStoreUrl`（`ServiceConfiguration.java:168`）与 `configurationStoreServers`（`:161`），解析优先级见 `:4153-4156`（前者优先，回落后者）。
+
+> [!WARNING]
+> **4.2.4 已移除内置的跨地域复制与备份**：`pulsar-replication` 模块、`PulsarGeoReplicationGroupCoordinator`、`PulsarBackup` / `PulsarClientBackup`、配置 `backupVersion` 全部零命中。跨集群/跨地域复制需外部方案（如 MirrorMaker），备份需靠 BookKeeper 层能力。
 
 ## Persistent storage
 
@@ -385,8 +410,22 @@ public class PulsarClientImpl implements PulsarClient {
 
 ## Transaction
 
+事务协调器由 `pulsar-transaction/coordinator` 模块实现，**默认关闭**（`transactionCoordinatorEnabled = false`，`ServiceConfiguration.java:3756`）。启用后提供 7 态状态机 `Transaction.State`（`OPEN` → `COMMITTING`/`ABORTING` → `COMMITTED`/`ABORTED`，另有 `ERROR` / `TIME_OUT`），提交时向 ledger 追加 commit marker。
+
+> [!IMPORTANT]
+> **普通非事务订阅是 at-least-once，不是 exactly-once。** `readPosition` 在「读」时推进而非 ack 时，投递后崩溃会从 `markDeletePosition` 重读导致重复。
+>
+> 4.x 中**幂等开关本身已被删除** —— `enableIdempotence` API 与配置字段均零命中，改为 `ProducerAccessMode`（`Shared` 默认 / `Exclusive` / `ExclusiveWithFencing` / `WaitForExclusive`），去重由 `brokerDeduplicationEnabled`（默认 false）+ namespace/topic 策略驱动。
+>
+> 细节见 [Functions 与事务](/docs/CS/MQ/Pulsar/Functions.md)。
+
 ## Links
 
 - [MQ](/docs/CS/MQ/MQ.md)
+- [BookKeeper 存储层](/docs/CS/MQ/Pulsar/BookKeeper.md)
+- [集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md)
+- [Functions 与事务](/docs/CS/MQ/Pulsar/Functions.md)
+- [Broker](/docs/CS/MQ/Pulsar/Broker.md)
+- [BookKeeper](/docs/CS/Framework/BooKeeper/BooKeeper.md)
 
 ## References

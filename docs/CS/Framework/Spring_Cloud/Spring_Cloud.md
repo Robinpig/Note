@@ -53,6 +53,24 @@ Instead of application.yml (or .properties), you can use bootstrap.yml, keeping 
 Fig.1. Spring Cloud architecture
 </p>
 
+## 版本基线
+
+Spring Cloud 用**发布列车（release train）**编号，并与 Spring Boot 严格绑定，不能随意混搭：
+
+| 发布列车 | 代号 | 基于 | 各子项目版本 |
+| :-- | :-- | :-- | :-- |
+| **2025.1** | Oakwood | Spring Boot 4.0 / Framework 7 | 统一 5.0.0 |
+| 2025.0 | Northfields | Spring Boot 3.5 / Framework 6.2 | 4.3.x |
+
+当前基线是 **2025.1（Oakwood）**，这一代的主要变化：
+
+- 各子项目版本号统一跳到 **5.0.0**（跳过 4.0.x，与列车对齐）。
+- **Gateway 拆分为两个 flavor**：`spring-cloud-starter-gateway-server-webflux` 与 `-server-webmvc`，配置根路径同步改名，详见 [Gateway](/docs/CS/Framework/Spring_Cloud/gateway.md)。
+- **迁移到 Jackson 3**（Config、Stream、Function 等模块），并移除全部已弃用类与方法。
+- **Netflix 模块移除 `RestTemplate` 支持**；Commons、Gateway 全面加上 JSpecify 空安全注解。
+- **CircuitBreaker 新增基于 Framework 7 内建 retry 的实现**；Resilience4j 升级到 2.3.0。
+- LoadBalancer 增加 API 版本化支持，并新增对 Spring HTTP Interface Client 的自动配置。
+
 ## Service discovery
 
 In the cloud, applications can’t always know the exact location of other services.
@@ -80,6 +98,9 @@ There’s also a [Spring Cloud Load Balancer](https://spring.io/guides/gs/spring
 Spring Cloud Commons provides the `@EnableDiscoveryClient` annotation.
 This looks for implementations of the `DiscoveryClient` and `ReactiveDiscoveryClient` interfaces with `META-INF/spring.factories`.
 Implementations of the discovery client add a configuration class to `spring.factories` under the `org.springframework.cloud.client.discovery.EnableDiscoveryClient` key.
+
+> [!NOTE]
+> 上文描述的是 Boot 2 时代的做法。Boot 3.0 起**自动配置**改由 `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports` 注册（详见 [SPI](/docs/CS/Framework/Spring/SPI.md)），`spring.factories` 仅保留给非自动配置的扩展点。
 By default, implementations of DiscoveryClient auto-register the local Spring Boot server with the remote discovery server.
 This behavior can be disabled by setting `autoRegister=false` in `@EnableDiscoveryClient`.
 
@@ -114,7 +135,7 @@ public interface ServiceInstance {
 
 publishEvent(new ServletWebServerInitializedEvent
 
-Spring Cloud的AbstractAutoServiceRegistration 的onApplicationEvent 在start 方法里调用子类实现的register函数
+Spring Cloud 的 AbstractAutoServiceRegistration 的 onApplicationEvent 在 start 方法里调用子类实现的 register 函数
 
 ### ServiceRegistry
 
@@ -164,7 +185,7 @@ For the reactive version (with WebTestClient), you need to set `spring.cloud.loa
 
 ### AbstractAutoServiceRegistration
 
-实现ServiceRegistry并在register方法里做注册逻辑
+实现 ServiceRegistry 并在 register 方法里做注册逻辑
 
 - [Nacos](/docs/CS/Framework/nacos/registry.md?id=client-registry)
 - [Eureka](/docs/CS/Framework/eureka/Eureka.md)
@@ -279,7 +300,7 @@ As long as Spring Boot Actuator and Spring Config Client are on the classpath an
 
 配置中心的配置变更频率不宜太快, 应尽量小于分钟/次
 
-配置中心对于查询的QPS不会很高 和Redis等产品不是同一个定位 通常是使用长链接监听变更通知
+配置中心对于查询的 QPS 不会很高 和 Redis 等产品不是同一个定位 通常是使用长链接监听变更通知
 
 配置中心的配置同步到所有服务是需要一定时间的 是最终一致性
 
@@ -433,8 +454,11 @@ It contains all the components required to develop distributed applications, mak
 - Seata
 - RocketMQ
 
+[Spring Cloud Alibaba](/docs/CS/Framework/Spring_Cloud/Alibaba.md) 是这套组件的 Spring Cloud 适配层：Nacos 替代 Eureka/Config Server 承担注册与配置，Sentinel 承担流控熔断，Seata 承担分布式事务，RocketMQ 承担消息，SchedulerX 承担分布式调度。版本选型与 Boot 4 的迁移要点（如 `bootstrap.yml` 被 `spring.config.import` 取代）见该篇。
+
 ## Links
 
+- [Spring Cloud 目录索引（按层导航）](/docs/CS/Framework/Spring_Cloud/README.md)
 - [Spring Framework](/docs/CS/Framework/Spring/Spring.md)
 - [Spring Boot](/docs/CS/Framework/Spring_Boot/Spring_Boot.md)
 - [Spring Cloud Config](/docs/CS/Framework/Spring_Cloud/Config.md)
@@ -447,6 +471,7 @@ It contains all the components required to develop distributed applications, mak
 - [OpenFeign](/docs/CS/Framework/Spring_Cloud/Feign.md)
 - [Spring Cloud Stream](/docs/CS/Framework/Spring_Cloud/Stream.md)
 - [Spring Cloud Sleuth](/docs/CS/Framework/Spring_Cloud/Sleuth.md)
+- [Istio](/docs/CS/Framework/Istio/Istio.md)
 
 ## References
 1. [Eureka! Why You Shouldn’t Use ZooKeeper for Service Discovery](https://medium.com/knerd/eureka-why-you-shouldnt-use-zookeeper-for-service-discovery-4932c5c7e764)

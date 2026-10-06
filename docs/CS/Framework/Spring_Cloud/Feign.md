@@ -12,6 +12,9 @@ Arguments are applied to these templates in a straightforward fashion before out
 Although Feign is limited to supporting text-based APIs, it dramatically simplifies system aspects such as replaying requests.
 Furthermore, Feign makes it easy to unit test your conversions knowing this.
 
+> [!NOTE]
+> Spring Cloud OpenFeign 5.0（2025.1 Oakwood）移除了全部已弃用项；同一列车中 **Spring Cloud Netflix 模块移除了 `RestTemplate` 支持**，服务间调用统一走 Feign、HTTP Interface 或 `RestClient`。
+
 client
 - [Ribbon](/docs/CS/Framework/Spring_Cloud/Ribbon.md)(In maintenance)
 - OK Http
@@ -688,6 +691,7 @@ But, it's possible to add metric collection capabilities to any feign client.
 ## Links
 
 - [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md?id=rpc)
+- [Spring RestClient](/docs/CS/Framework/Spring/RestClient.md)
 
 ## References
 

@@ -97,6 +97,7 @@ DPDK 与内核栈是两条取向相反的路：内核栈胜在通用、完整、
 - **进程 / 调度**：阻塞读睡眠在等待队列、超时由 [hrtimer](/docs/CS/OS/Linux/timer.md) 驱动唤醒，见 [进程链路](/docs/CS/OS/Linux/proc/README.md)。
 - **网络协议栈**：socket 数据何时算"就绪"由协议栈决定，见 [网络知识地图](/docs/CS/OS/Linux/net/README.md)。
 - **内核协同全景**：一次网络请求如何串起进程、内存、网络与中断，见 [内核协同链路](/docs/CS/OS/Linux/Architecture.md)。
+- **工程落地**：本文这套「等待批量化 + 事件驱动」的标准答案是 [Nginx Event](/docs/CS/CN/nginx/event.md)——多 worker + epoll 事件循环、连接池、accept 惊群规避；`sendfile` / `aio` / `directio` 怎么选也直接决定它的静态文件与代理路径（见 [ZeroCopy](/docs/CS/OS/Linux/ZeroCopy.md)）。
 
 ## Links
 

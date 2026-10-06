@@ -77,3 +77,11 @@ CLONE_VM | CLONE_FS | CLONE_FILES | CLONE_SIGHAND | CLONE_THREAD
 - [Goroutine（GMP）](/docs/CS/Go/Concurrency/Goroutine.md)
 - [Java Thread](/docs/CS/Java/JDK/Concurrency/Thread.md)
 - [Virtual Thread](/docs/CS/Java/JDK/Concurrency/VirtualThread.md)
+
+## References
+
+1. [Linux Kernel Documentation — futex(2)](https://docs.kernel.org/man-pages/man2/futex.2.html)
+2. [clone(2) — CLONE_THREAD 等标志](https://man7.org/linux/man-pages/man2/clone.2.html)
+3. [OpenJDK — Virtual Threads](https://openjdk.org/jeps/444/)
+4. [Go runtime — goroutine 调度](https://go.dev/ref/spec)
+5. [A Malloc-Particle Malloc Implementation — futex 基础](https://www.kernel.org/doc/ols/2002/read/write/read11.pdf)

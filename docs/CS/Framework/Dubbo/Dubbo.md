@@ -95,6 +95,26 @@ Dubbo 已经实现了对 Istio 体系的全面接入，可以用 Istio 控制面
 
 <!-- tabs:end -->
 
+### 与 Spring Cloud Alibaba 的集成
+
+Dubbo 可纳入 [Spring Cloud Alibaba](/docs/CS/Framework/Spring_Cloud/Alibaba.md) 体系，复用其服务发现与微服务生态。`com.alibaba.cloud:spring-cloud-starter-dubbo` 打通了 Spring Cloud 的 `DiscoveryClient` 与 Dubbo 的 RPC 框架：Dubbo 服务通过 `DubboServiceRegistry` 注册到 [Nacos](/docs/CS/Framework/nacos/Nacos.md) 等注册中心，并被 Spring Cloud 的 `DiscoveryClient` 可见；消费侧由 `DubboLoadBalancer` 提供客户端负载均衡，复用 [Spring Cloud LoadBalancer](/docs/CS/Framework/Spring_Cloud/LoadBalancer.md) 的实例列表供给。典型依赖：
+
+```xml
+<dependency>
+  <groupId>com.alibaba.cloud</groupId>
+  <artifactId>spring-cloud-starter-dubbo</artifactId>
+</dependency>
+<dependency>
+  <groupId>com.alibaba.cloud</groupId>
+  <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+</dependency>
+```
+
+核心注解仍是 `@DubboService`（暴露服务）与 `@DubboReference`（引用服务），配合 `dubbo.scan.base-packages` 扫描、`dubbo.registry.address=spring-cloud://localhost` 接入 Spring Cloud 服务发现。
+
+> [!NOTE]
+> SCA 2025.x 的 `spring-cloud-alibaba-dependencies` BOM **不再统一托管 Dubbo 版本**（依赖管理列表与 `dubbo.version` 属性均已移除），引入 `spring-cloud-starter-dubbo` 时需自行指定 Dubbo 版本或引入 Dubbo 自身的 BOM。Dubbo 3.x 的 Triple 协议基于 HTTP/2、完全兼容 [gRPC](/docs/CS/Framework/gRPC/gRPC.md)，并支持 Unary / 双向流式通信，对网关与代理更透明，可与 Nacos、gRPC 协同用于云原生场景。
+
 Dubbo 主要有以下核心组件:
 
 - Provider:服务的提供方，通过 Jar 或者容器的方式启动服务
@@ -685,7 +705,10 @@ JavaAssist
 | hessian    | Servlet, default Jetty             | Hessian                     | Multiple short connections, Sync, HTTP |                                                                            |
 | http       | Spring HttpInvoker                 | form                        | Multiple short connections, Sync, HTTP | Unsupport upload files                                                     |
 | webservice | 传输：HTTP  序列化：SOAP文件序列化 |                             | Multiple short connections, Sync, HTTP |                                                                            |
-| Triple     |                                    | default ProtoBuf            | Single Long connection Async NIO TCP   |                                                                            |
+| tri (Triple) | Netty HTTP/2（自研 dubbo-remoting-http12） | hessian2（Protobuf 类型走 PB 直通） | Single Long connection, Async, HTTP/2 | 云原生、跨语言、需被网关或 Mesh 透明识别 |
+
+> [!WARNING]
+> 上表是 Dubbo 历史上支持过的协议全集，但 **3.3.6 主仓库的 `dubbo-rpc/` 只有 4 个模块**：`dubbo-rpc-api`、`dubbo-rpc-dubbo`、`dubbo-rpc-injvm`、`dubbo-rpc-triple`。`rmi` / `hessian` / `http` / `webservice` / `thrift` 的协议实现**已不在主仓库**（迁至 `org.apache.dubbo.extensions`），因此不是「标记为废弃」而是「不存在」。另外 Triple 的协议名是 `tri` 而不是 `triple`，默认端口 50051，默认序列化仍是 `hessian2`——详见 [Protocol](/docs/CS/Framework/Dubbo/Protocol.md) 与 [Triple](/docs/CS/Framework/Dubbo/Triple.md)。
 
 Protocol Invoker Exporter(wrapper Invoker)
 
@@ -723,8 +746,23 @@ MultiHandler
 
 ## Features
 
-延迟暴露
+延迟暴露（`delay` 默认 `null`，即不延迟）与启动预热（`warmup` 默认 10 分钟，权重按 uptime 线性恢复）属于服务治理范畴，完整机制见 [Governance](/docs/CS/Framework/Dubbo/Governance.md)。
+
+## 主题导航
+
+Dubbo 3 的能力可以按「一次调用经过哪些环节」串起来阅读：
+
+- **协议层**：Triple 协议的设计与 gRPC 兼容边界见 [Triple](/docs/CS/Framework/Dubbo/Triple.md)；Dubbo 协议的 16 字节报文格式、`Codec2` 体系与超时机制见 [Protocol](/docs/CS/Framework/Dubbo/Protocol.md)；序列化实现与 Hessian2 反序列化安全见 [Serialization](/docs/CS/Framework/Dubbo/Serialization.md)。
+- **调用层**：同步 / 异步 / 单向三种调用模式、四类 `RpcContext` 与 attachment 透传规则、泛化调用见 [Invocation](/docs/CS/Framework/Dubbo/Invocation.md)；Provider 与 Consumer 的线程模型、Dispatcher 与线程池默认值见 [ThreadPool](/docs/CS/Framework/Dubbo/ThreadPool.md)；服务鉴权的 token 校验与凭证传递见 [Auth](/docs/CS/Framework/Dubbo/Auth.md)。
+- **治理层**：条件路由与标签路由的规则语法见 [Router](/docs/CS/Framework/Dubbo/Router.md)；优雅停机、Mock 降级、QoS 与内置限流见 [Governance](/docs/CS/Framework/Dubbo/Governance.md)；凭据签名、证书体系与 mTLS 见 [Auth](/docs/CS/Framework/Dubbo/Auth.md)；指标与链路追踪见 [Metrics](/docs/CS/Framework/Dubbo/Metrics.md)。
+- **云原生**：Dubbo Mesh 在 3.3.6 主仓库的真实能力边界（以及 Proxyless 尚未落地这一事实）见 [Mesh](/docs/CS/Framework/Dubbo/Mesh.md)。
+- **配置**：七档配置来源的优先级顺序与配置中心启动链路见 [config](/docs/CS/Framework/Dubbo/config.md)。
 
 ## Links
 
 - [RPC](/docs/CS/Distributed/RPC/RPC.md)
+- [Consumer](/docs/CS/Framework/Dubbo/Consumer.md)
+- [config](/docs/CS/Framework/Dubbo/config.md)
+- [Metadata](/docs/CS/Framework/Dubbo/Metadata.md)
+- [gRPC](/docs/CS/Framework/gRPC/gRPC.md)
+- [ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)

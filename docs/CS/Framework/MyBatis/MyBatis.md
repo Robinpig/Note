@@ -129,4 +129,6 @@ Fig.1. MyBatis Infrastructure
 
 ## Links
 
+- [MyBatis 目录索引（按层导航）](/docs/CS/Framework/MyBatis/README.md)
 - [Spring Framework](/docs/CS/Framework/Spring/Spring.md)
+- [Hibernate](/docs/CS/Framework/Hibernate/Hibernate.md)

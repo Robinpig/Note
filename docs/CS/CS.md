@@ -64,9 +64,9 @@
 
 <div class="kb-card">
 
-### [框架与中间件](/docs/CS/Framework/Spring/Spring.md)
+### [框架与中间件](/docs/CS/Framework/README.md)
 
-Spring、Netty、Tomcat、Dubbo、ZooKeeper、etcd
+Spring、Netty、Tomcat、Dubbo、ZooKeeper、etcd、Consul，按技术栈分层导航
 
 </div>
 

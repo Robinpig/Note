@@ -1,6 +1,6 @@
 ## Introduction
 
-[物理内存主线](pm.md)把内存按 NUMA 切成了 node，并强调一个事实：**本地内存与远端内存的访问延迟不等价**——跨 socket 访问可能慢一倍以上。但切完 node 只是"有了位置概念"，紧接着的问题是：进程和它访问的页，初始未必待在同一个 node 上。调度器把任务放到哪个 CPU、fork 后内存落在哪个 node、内存被多个 node 上的任务共享——这些都会造成大量"远端访问"。
+[物理内存主线](/docs/CS/OS/Linux/mm/pm.md)把内存按 NUMA 切成了 node，并强调一个事实：**本地内存与远端内存的访问延迟不等价**——跨 socket 访问可能慢一倍以上。但切完 node 只是"有了位置概念"，紧接着的问题是：进程和它访问的页，初始未必待在同一个 node 上。调度器把任务放到哪个 CPU、fork 后内存落在哪个 node、内存被多个 node 上的任务共享——这些都会造成大量"远端访问"。
 
 NUMA 平衡（NUMA balancing）回答的就是"**让任务和它的数据尽量待在同一个 node 上**"。它由两套互补的机制组成：一套是内核自动进行的 **AutoNUMA**（扫描页表制造 hinting fault，按需迁移页），另一套是用户通过 **mempolicy** 显式表达的放置策略；而 `zone_reclaim_mode` 则控制分配失败时"先本地回收还是直接用远端内存"。本篇按这条顺序展开。
 
@@ -75,7 +75,7 @@ AutoNUMA 是"内核猜"，但数据库等 workload 往往更清楚自己的访�
 - `zone_reclaim_mode = 0`（多数现代发行版默认）：本地不足就**直接用远端内存**，避免为了局部性去触发回收。
 - `zone_reclaim_mode != 0`：先尝试在本地 node 回收（可叠加是否回收匿名页/拷贝页的位），可能让进程陷入 direct reclaim。
 
-这个旋钮是经典的事故来源：[Reclaim](Reclaim.md) 和 [PageCache](PageCache.md) 都记录过——系统还有近一半 free 内存，却因为开启了它而频繁 direct reclaim、业务抖动。教训是：**在内存充裕的机器上，"用一点远端内存"几乎总是比"卡在本地回收"划算**，没有明确的延迟敏感性证据不要开启。
+这个旋钮是经典的事故来源：[Reclaim](/docs/CS/OS/Linux/mm/Reclaim.md) 和 [PageCache](/docs/CS/OS/Linux/mm/PageCache.md) 都记录过——系统还有近一半 free 内存，却因为开启了它而频繁 direct reclaim、业务抖动。教训是：**在内存充裕的机器上，"用一点远端内存"几乎总是比"卡在本地回收"划算**，没有明确的延迟敏感性证据不要开启。
 
 ## 回收侧的 demote 与 promote
 

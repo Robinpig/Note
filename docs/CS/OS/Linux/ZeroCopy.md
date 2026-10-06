@@ -69,6 +69,7 @@ Introduction of sendfile not only reduces data copying, it also reduces context 
 - [DPDK](/docs/CS/OS/Linux/IO/DPDK.md)
 - [io_uring](/docs/CS/OS/Linux/IO/io_uring.md)
 - [network stack](/docs/CS/OS/Linux/net/network.md)
+- [Nginx Event](/docs/CS/CN/nginx/event.md)
 
 ## References
 

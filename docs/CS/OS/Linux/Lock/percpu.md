@@ -58,3 +58,9 @@ x86-64 上 `this_cpu_*` 通常编译成一条以 `gs:` 段基址寻址的指令�
 - [原子操作与内存屏障](/docs/CS/OS/Linux/Lock/atomic.md) — `this_cpu_*` 的单指令原子性基础
 - [spinlock](/docs/CS/OS/Linux/Lock/spinlock.md) — qspinlock 的 per-CPU 节点同样是这一思想
 - [GMP（Go 并发）](/docs/CS/Go/Concurrency/Goroutine.md)
+
+## References
+
+1. [Linux Kernel Documentation — Per-CPU Subsystem](https://docs.kernel.org/smp/per_cpu_subsystem.html)
+2. [include/linux/percpu.h](https://elixir.bootlin.com/linux/latest/source/include/linux/percpu.h)
+3. [Documentation/arch/x86/include/asm/percpu.h](https://elixir.bootlin.com/linux/latest/source/arch/x86/include/asm/percpu.h)

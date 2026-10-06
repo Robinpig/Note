@@ -841,16 +841,26 @@ The Cons of Using RabbitMQ:
 
 ### Kafka
 
-[Apache Kafka](/docs/CS/MQ/Kafka/Kafka.md) is an open-source distributed event streaming platform used by thousands of companies for high-performance data pipelines, streaming analytics, data integration, and mission-critical applications.
+[Apache Kafka](/docs/CS/MQ/Kafka/Kafka.md) 的主线是「顺序写的日志 + 独立于日志的复制协议 + 两种消费模型」。存储侧要落到 segment 滚动、稀疏索引、retention 配置优先级，以及「Kafka 用 sendfile、RocketMQ 用 mmap」这个决定功能边界的取舍，见 [Storage](/docs/CS/MQ/Kafka/Storage.md)；控制面见 [KRaft](/docs/CS/MQ/Kafka/KRaft.md)，副本机制见 [Replica](/docs/CS/MQ/Kafka/Replica.md)；消费侧除经典的 partition 独占式 [Consumer](/docs/CS/MQ/Kafka/Consumer.md) 与 [Producer](/docs/CS/MQ/Kafka/Producer.md) 外，4.x 新增了记录级共享的 [ShareGroup](/docs/CS/MQ/Kafka/ShareGroup.md)；网络层见 [Network](/docs/CS/MQ/Kafka/Network.md)；生态侧的 [Connect](/docs/CS/MQ/Kafka/Connect.md)、[Streams](/docs/CS/MQ/Kafka/Streams.md)、[MirrorMaker](/docs/CS/MQ/Kafka/MirrorMaker.md) 都是构建在 Kafka 之上的独立子系统；鉴权与 ACL 见 [Security](/docs/CS/MQ/Kafka/Security.md)。
+
+> [!WARNING]
+> **4.x 是大版本级重构**：`kafka.log` 包已迁到 `storage` 模块、全树 `.scala` 只剩 309 个；ZooKeeper 模式彻底移除（4.0 起 KRaft-only）；`connect-runtime` 改名 `connect/runtime`。
+>
+> 三条容易记错的默认值：`log.retention.hours` 只是**三级兜底**（权威是 `.ms`）；`flush.ms` 默认 `Long.MAX_VALUE`（**默认不主动刷盘**）；SSL 的 `ssl.trustmanager.algorithm` 默认是 **JVM 动态值**而非 `PKIX`。
 
 ### RocketMQ
 
 [Apache RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md)
 
+主题域内已展开的专题：存储引擎（CommitLog/ConsumeQueue/IndexFile 三类文件、mmap 预分配、flush 与 commit 的两级语义、过期清理判定阶梯）见 [Store](/docs/CS/MQ/RocketMQ/Store.md)；事务消息（half 消息改写 topic、opaque 的真实含义、回查的 30s 间隔与 15 次上限）见 [事务消息](/docs/CS/MQ/RocketMQ/Transaction.md)；消息过滤（Tag 与 SQL92 两级、三级过滤链、JavaCC AST 解释执行）见 [消息过滤](/docs/CS/MQ/RocketMQ/Filter.md)；5.x 的无状态 Proxy、gRPC SDK 独立仓库归属与 POP 无状态消费见 [RocketMQ 5.x](/docs/CS/MQ/RocketMQ/RocketMQ5.md)；高层封装见 [Dledger](/docs/CS/MQ/RocketMQ/Dledger.md) 与 [Cluster](/docs/CS/MQ/RocketMQ/Cluster.md)，通信层见 [Remoting](/docs/CS/MQ/RocketMQ/Remoting.md)。
+
 
 ### Pulsar
 
-[Pulsar](/docs/CS/MQ/Pulsar/Pulsar.md) is a distributed pub-sub messaging platform with a very flexible messaging model and an intuitive client API.
+[Pulsar](/docs/CS/MQ/Pulsar/Pulsar.md) 的独特之处是计算与存储彻底分离：Broker 无状态，数据落到 BookKeeper ledger，元数据落到可插拔的 metadata store。这个分层决定了它几乎所有能力（多租户、细粒度扩容、unload）的形态。存储侧要落到 entry 与 cursor 两级、ledger 层级与 quorum 语义见 [BookKeeper 存储层](/docs/CS/MQ/Pulsar/BookKeeper.md)；集群侧的 bundle 切分、`ModularLoadManager`、unload 与分层存储（offload 事件驱动机制）见 [集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md)；轻量计算与事务状态机见 [Functions 与事务](/docs/CS/MQ/Pulsar/Functions.md)，内部实现见 [Broker](/docs/CS/MQ/Pulsar/Broker.md) 与 [Consumer](/docs/CS/MQ/Pulsar/Consumer.md)。
+
+> [!WARNING]
+> **4.x 相对 2.x/3.x 有大量功能移除**：`pulsar-replication`（跨地域复制）、`PulsarBackup`（备份）、`pulsar-streams`、`enableIdempotence` 幂等开关、`GoRuntimeFactory` 均已删除或改造，照旧资料写必错。
 
 
 下一代消息队列 RobustMQ

@@ -1,6 +1,9 @@
 ## Introduction
 
-[Hystrix](https://github.com/Netflix/Hystrix/wiki/) is a library that helps you control the interactions between these distributed services by adding latency tolerance and fault tolerance logic. 
+[Hystrix](https://github.com/Netflix/Hystrix/wiki/) is a library that helps you control the interactions between these distributed services by adding latency tolerance and fault tolerance logic.
+
+> [!WARNING]
+> Hystrix 已停止开发，官方推荐的继任者是 [Resilience4j](/docs/CS/Framework/Spring_Cloud/Resilience4j.md)；Spring Cloud Netflix 对 Hystrix 的集成自 2020.0 起移除。本篇作为命令模式与熔断思想的经典案例保留。 
 Hystrix does this by isolating points of access between the services, stopping cascading failures across them, and providing fallback options, all of which improve your system’s overall resiliency.
 
 
@@ -251,7 +254,7 @@ execution.isolation.strategy=Semaphore
 Default TryableSemaphoreNoOp using threads in Hystrix, or else in calling thread.
 
 
-`execution.isolation.strategy`设置为THREAD时，command中的代码会放到线程池里执行，跟发起command调用的线程隔离开
+`execution.isolation.strategy`设置为 THREAD 时，command 中的代码会放到线程池里执行，跟发起 command 调用的线程隔离开
 
 > execution.isolation.strategy
 >
@@ -317,9 +320,9 @@ Hystrix会保证同一个线程池标识只会创建一个线程池：
         return threadPools.get(key);
     }
 ```
-jdk在队列满了之后会创建线程执行新任务直到线程数量达到maximumPoolSize，而hystrix在队列满了之后直接拒绝新任务，maximumSize这项配置成了摆设。
+jdk 在队列满了之后会创建线程执行新任务直到线程数量达到 maximumPoolSize，而 hystrix 在队列满了之后直接拒绝新任务，maximumSize 这项配置成了摆设。
 
-原因就在于hystrix判断队列是否满是否要拒绝新任务，没有通过jdk线程池在判断，而是自己判断的
+原因就在于 hystrix 判断队列是否满是否要拒绝新任务，没有通过 jdk 线程池在判断，而是自己判断的
 
 ```java
 public boolean isQueueSpaceAvailable() {
@@ -680,3 +683,5 @@ abstract class AbstractCommand<R> implements HystrixInvokableInfo<R>, HystrixObs
 ## Links
 
 - [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md?id=circuit-breaker)
+- [Spring AOP](/docs/CS/Framework/Spring/AOP.md)
+- [Spring Task 调度](/docs/CS/Framework/Spring/Task.md)

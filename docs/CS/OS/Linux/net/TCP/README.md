@@ -86,6 +86,7 @@ TIME_WAIT 期间 socket 已经销毁，但内核保留一个轻量的 timewait �
 - [network](/docs/CS/OS/Linux/net/network.md)
 - [NAPI](/docs/CS/OS/Linux/net/NAPI.md)
 - [Linux](/docs/CS/OS/Linux/Linux.md)
+- [nginx](/docs/CS/CN/nginx/nginx.md) — 监听队列 / backlog 的工程侧，四层 TCP 转发见 [stream](/docs/CS/CN/nginx/stream.md)
 
 ## References
 

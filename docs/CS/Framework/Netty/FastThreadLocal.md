@@ -261,3 +261,5 @@ public long rp1, rp2, rp3, rp4, rp5, rp6, rp7, rp8, rp9;
 ## Links
 
 - [Netty](/docs/CS/Framework/Netty/Netty.md)
+- [EventLoop](/docs/CS/Framework/Netty/EventLoop.md)
+- [Memory Pool](/docs/CS/Framework/Netty/memory.md)
