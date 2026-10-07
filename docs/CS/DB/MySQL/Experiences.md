@@ -51,5 +51,5 @@ MariaDB [mysql]> exit;
 - [Double-Buffer](/docs/CS/DB/MySQL/Double-Buffer.md)
 - [Index](/docs/CS/DB/MySQL/Index.md)
 - [InnoDB](/docs/CS/DB/MySQL/InnoDB.md)
-- [cd source code root](/docs/CS/DB/MySQL/MySQL.md)
+- [MySQL](/docs/CS/DB/MySQL/MySQL.md)
 - [Optimization](/docs/CS/DB/MySQL/Optimization.md)

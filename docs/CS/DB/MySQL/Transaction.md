@@ -258,7 +258,7 @@ UT_LIST_ADD_FIRST(trx_sys->mysql_trx_list, trx);
 
 
 
-### 启动事务
+### Starting a Transaction
 
 启动事务最重要的事情之一，就是修改事务状态到 `TRX_STATE_ACTIVE`
 

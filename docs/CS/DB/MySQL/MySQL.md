@@ -281,7 +281,7 @@ The mysql, information_schema, and performance_schema databases are not instru�
 
 Most of the instances, handles, and setup tables are autosized. For the _history tables, the last 10 events per thread are stored. For the _history_long tables, the lat‐ est 10,000 events per thread are stored. The maximum stored SQL text length is 1,024 bytes. The maximum SQL digest length is also 1,024 bytes. Everything that is larger is right-trimmed.
 
-### What Limits MySQL’s Performance?
+### What Limits MySQL's Performance?
 
 Many different hardware components can affect MySQL’s performance, but the most frequent bottleneck we see is CPU exhaustion. CPU saturation can happen when MySQL tries to execute too many queries in parallel or when a smaller number of queries runs for too long on the CPU.
 
