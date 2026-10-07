@@ -1,26 +1,14 @@
 ## Introduction
 
-We discussed [replication](/docs/CS/Distributed/Replica.md)—that is, having multiple copies of the same data on different nodes.
-For very large datasets, or very high query throughput, that is not sufficient: we need to break the data up into *partitions*, also known as *sharding*.
+我们讨论过 [replication](/docs/CS/Distributed/Replica.md)（复制）——即在不同的节点上保存同一份数据的多个副本。对于超大数据集或极高的查询吞吐，这还不够：我们需要把数据切分成*分区（partitions）*，也称为*分片（sharding）*。
 
-Normally, partitions are defined in such a way that each piece of data (each record, row, or document) belongs to exactly one partition.
-In effect, each partition is a small database of its own, although the database may support operations that touch multiple partitions at the same time.
+通常，分区的定义方式使得每条数据（每条记录、行或文档）恰好属于一个分区。实际上，每个分区自身就是一个小型数据库，尽管数据库可能支持同时涉及多个分区的操作。
 
-The main reason for wanting to partition data is scalability.
-Different partitions can be placed on different nodes in a shared-nothing cluster.
-Thus, a large dataset can be distributed across many disks, and the query load can be distributed across many processors.
-For queries that operate on a single partition, each node can independently execute the queries for its own partition, so query throughput can be scaled by adding more nodes.
-Large, complex queries can potentially be parallelized across many nodes, although this gets significantly harder.
+对数据进行分区的主要理由是 scalability（可扩展性）。不同的分区可以放在无共享（shared-nothing）集群的不同节点上。因此，一个大的数据集可以分布到多块磁盘上，查询负载也可以分布到多个处理器上。对于只操作单个分区的查询，每个节点可以独立执行其自身分区的查询，因此可以通过增加节点来扩展查询吞吐。大型、复杂的查询有可能跨多个节点并行化，尽管这会显著更难。
 
-Partitioning is usually combined with replication so that copies of each partition are stored on multiple nodes.
-This means that, even though each record belongs to exactly one partition, it may still be stored on several different nodes for fault tolerance.
-A node may store more than one partition.
-If a leader–follower replication model is used, the combination of partitioning and replication can look like Figure 1.
-Each partition’s leader is assigned to one node, and its followers are assigned to other nodes.
-Each node may be the leader for some partitions and a follower for other partitions.
+分区通常与复制（Replication）结合使用，使得每个分区的副本保存在多个节点上。这意味着，尽管每条记录恰好属于一个分区，它仍可能因容错而保存在若干不同的节点上。一个节点可能存储多个分区。如果使用领导者—跟随者（leader–follower）复制模型，分区与复制的结合看起来就像图 1。每个分区的领导者（leader）被分配到某个节点，其跟随者（follower）被分配到其他节点。每个节点可能既是某些分区的领导者，又是其他分区的跟随者。
 
-Everything we discussed in Chapter 5 about replication of databases applies equally to replication of partitions.
-The choice of partitioning scheme is mostly independent of the choice of replication scheme, so we will keep things simple and ignore replication in this chapter.
+关于第 5 章数据库复制的讨论，同样适用于分区的复制。分区方案的选择在很大程度上独立于复制方案的选择，因此本章为简洁起见忽略复制。
 
 <div style="text-align: center;">
 
@@ -32,26 +20,17 @@ The choice of partitioning scheme is mostly independent of the choice of replica
 Fig.1. Combining replication and partitioning: each node acts as leader for some partitions and follower for other partitions.
 </p>
 
-Our goal with partitioning is to spread the data and the query load evenly across nodes.
-If every node takes a fair share, then—in theory—10 nodes should be able to handle 10 times as much data and 10 times the read and write throughput of a single node (ignoring replication for now).
+我们进行分区的目标是将数据与查询负载均匀地分散到各个节点上。如果每个节点都承担公平的份额，那么理论上——10 个节点应当能处理单节点 10 倍的数据量以及 10 倍的读写吞吐（暂时忽略复制）。
 
-If the partitioning is unfair, so that some partitions have more data or queries than others, we call it *skewed*.
-The presence of skew makes partitioning much less effective.
-In an extreme case, all the load could end up on one partition, so 9 out of 10 nodes are idle and your bottleneck is the single busy node.
-A partition with disproportionately high load is called a *hot spot*.
+如果分区不公平，某些分区拥有比其它分区更多的数据或查询，我们称之为*倾斜（skewed）*。倾斜的存在会大大降低分区的有效性。在极端情况下，所有负载可能都落在一个分区上，于是 10 个节点中有 9 个闲置，瓶颈就是那一个繁忙的节点。负载不成比例地高的分区被称为*热点（hot spot）*。
 
-The simplest approach for avoiding hot spots would be to assign records to nodes randomly.
-That would distribute the data quite evenly across the nodes, but it has a big disadvantage: when you’re trying to read a particular item, you have no way of knowing which node it is on, so you have to query all nodes in parallel.
+避免热点最简单的做法是把记录随机分配给节点。这会把数据相当均匀地分布到节点上，但有个大缺点：当你想读取某条特定记录时，你无法知道它在哪个节点上，因此必须并行查询所有节点。
 
-We can do better.
-Let’s assume for now that you have a simple key-value data model, in which you always access a record by its primary key.
-For example, in an oldfashioned paper encyclopedia, you look up an entry by its title; since all the entries are alphabetically sorted by title, you can quickly find the one you’re looking for.
+我们可以做得更好。暂时假设你的数据模型是简单的键值（key-value）模型，总是通过主键访问记录。例如，在老式纸质百科全书中，你按标题查找条目；由于所有条目按标题字母排序，你可以快速找到想要的那个。
 
 ### Partitioning by Range
 
-One way of partitioning is to assign a continuous range of keys (from some minimum to some maximum) to each partition, like the volumes of a paper encyclopedia.
-If you know the boundaries between the ranges, you can easily determine which partition contains a given key.
-If you also know which partition is assigned to which node, then you can make your request directly to the appropriate node (or, in the case of the encyclopedia, pick the correct book off the shelf).
+一种分区方式是给每个分区分配一段连续的键范围（从某个最小值到某个最大值），就像纸质百科全书的卷册。如果你知道范围之间的边界，就能轻易确定某个键属于哪个分区。如果你还知道哪个分区分配给哪个节点，就可以直接向相应节点发起请求（或者在百科全书的情形下，从书架上取正确的那本）。
 
 <div style="text-align: center;">
 
@@ -63,38 +42,21 @@ If you also know which partition is assigned to which node, then you can make yo
 Fig.2. A print encyclopedia is partitioned by key range.
 </p>
 
-The ranges of keys are not necessarily evenly spaced, because your data may not be evenly distributed.
-For example, in Figure 2, volume 1 contains words starting with A and B, but volume 12 contains words starting with T, U, V, X, Y, and Z.
-Simply having one volume per two letters of the alphabet would lead to some volumes being much bigger than others.
-In order to distribute the data evenly, the partition boundaries need to adapt to the data.
+键的范围不一定均匀间隔，因为你的数据可能分布不均。例如，在图 2 中，第 1 卷包含以 A 和 B 开头的单词，而第 12 卷包含以 T、U、V、X、Y、Z 开头的单词。简单地每两个字母分配一卷会导致某些卷比其他的厚得多。为了均匀分布数据，分区边界需要适应数据。
 
-The partition boundaries might be chosen manually by an administrator, or the database can choose them automatically.
+分区边界可以由管理员手动选择，也可以由数据库自动选择。
 
-Within each partition, we can keep keys in sorted order.
-This has the advantage that range scans are easy, and you can treat the key as a concatenated index in order to fetch several related records in one query.
-For example, consider an application that stores data from a network of sensors, where the key is the timestamp of the measurement (year-month-day-hour-minute-second).
-Range scans are very useful in this case, because they let you easily fetch, say, all the readings from a particular month.
+在每个分区内部，我们可以让键保持有序。这样做的好处是范围扫描（range scan）很容易，并且你可以把键当作拼接索引（concatenated index）来一次性获取若干相关记录。例如，考虑一个存储传感器网络数据的应用，其键是测量的时间戳（年-月-日-时-分-秒）。范围扫描在这种情形下非常有用，因为它让你可以轻松获取比如某个月的所有读数。
 
-**However, the downside of key range partitioning is that certain access patterns can lead to hot spots.**
-If the key is a timestamp, then the partitions correspond to ranges of time—e.g., one partition per day.
-Unfortunately, because we write data from the sensors to the database as the measurements happen, all the writes end up going to the same partition (the one for today), so that partition can be overloaded with writes while others sit idle.
-To avoid this problem in the sensor database, you need to use something other than the timestamp as the first element of the key.
-For example, you could prefix each timestamp with the sensor name so that the partitioning is first by sensor name and then by time.
-Assuming you have many sensors active at the same time, the write load will end up more evenly spread across the partitions.
-Now, when you want to fetch the values of multiple sensors within a time range, you need to perform a separate range query for each sensor name.
+**然而，按键范围分区（key range partitioning）的缺点是某些访问模式会导致热点。** 如果键是时间戳，那么分区就对应时间范围——例如每天一个分区。不幸的是，因为我们是在传感器测量发生时把数据写入数据库，所有写入最终都落到同一个分区（今天的那个），于是该分区可能因写入而过载，而其它分区却闲置。为了避免传感器数据库中的这个问题，你需要用时间戳以外的东西作为键的第一个元素。例如，你可以在每个时间戳前加上传感器名称，这样分区先按传感器名称、再按时间进行。假设你同时有许多传感器在活动，写入负载就会更均匀地分散到各个分区。现在，当你想获取某个时间范围内多个传感器的值时，你需要为每个传感器名称分别执行一次范围查询。
 
 ### Partitioning by Hash
 
-Because of this risk of skew and hot spots, many distributed datastores use a hash function to determine the partition for a given key.
+由于存在倾斜和热点风险，许多分布式数据存储使用哈希函数来确定给定键所属的分区。
 
-A good hash function takes skewed data and makes it uniformly distributed.
-Say you have a 32-bit hash function that takes a string. Whenever you give it a new string, it returns a seemingly random number between 0 and $2^{32} − 1$.
-Even if the input strings are very similar, their hashes are evenly distributed across that range of numbers.
-For partitioning purposes, the hash function need not be cryptographically strong: for example, Cassandra and MongoDB use MD5, and Voldemort uses the Fowler–Noll–Vo function.
-Many programming languages have simple hash functions built in (as they are used for hash tables), but they may not be suitable for partitioning: for example, in Java’s `Object.hashCode()` and Ruby’s `Object#hash`, the same key may have a different hash value in different processes.
+一个好的哈希函数会把倾斜的数据变得均匀分布。假设你有一个 32 位哈希函数处理字符串。每当你给它一个新字符串，它返回一个看似介于 0 和 $2^{32} − 1$ 之间的随机数。即使输入字符串非常相似，它们的哈希值也均匀分布在这个数字范围内。出于分区目的，哈希函数无需具有密码学强度：例如 Cassandra 和 MongoDB 使用 MD5，Voldemort 使用 Fowler–Noll–Vo 函数。许多编程语言内置了简单的哈希函数（因为它们用于哈希表），但它们可能不适合分区：例如，Java 的 `Object.hashCode()` 和 Ruby 的 `Object#hash`，相同的键在不同进程中可能有不同的哈希值。
 
-Once you have a suitable hash function for keys, you can assign each partition a range of hashes (rather than a range of keys), and every key whose hash falls within a partition’s range will be stored in that partition.
-This is illustrated in Figure 3.
+一旦有了合适的键哈希函数，你就可以给每个分区分配一段哈希范围（而不是键范围），凡是哈希落在该分区范围内的键都会被存入该分区。这一点如图 3 所示。
 
 <div style="text-align: center;">
 
@@ -106,62 +68,35 @@ This is illustrated in Figure 3.
 Fig.3. Partitioning by hash of key.
 </p>
 
-This technique is good at distributing keys fairly among the partitions.
-The partition boundaries can be evenly spaced, or they can be chosen pseudorandomly (in which case the technique is sometimes known as *consistent hashing*).
+这种技术在把键公平地分配到各分区方面表现良好。分区边界可以均匀分布，也可以伪随机地选择（这种情况下该技术有时被称为*一致性哈希（consistent hashing）*）。
 
-Unfortunately however, by using the hash of the key for partitioning we lose a nice property of key-range partitioning: the ability to do efficient range queries.
-Keys that were once adjacent are now scattered across all the partitions, so their sort order is lost.
-In MongoDB, if you have enabled hash-based sharding mode, any range query has to be sent to all partitions.
-Range queries on the primary key are not supported by Riak, Couchbase, or Voldemort.
+然而，由于使用键的哈希来分区，我们失去了键范围分区的一个好特性：高效范围查询的能力。原本相邻的键现在散布在所有分区中，它们的排序信息丢失了。在 MongoDB 中，如果启用了基于哈希的分片模式，任何范围查询都必须发往所有分区。主键上的范围查询在 Riak、Couchbase、Voldemort 中不被支持。
 
-Cassandra achieves a compromise between the two partitioning strategies.
-A table in Cassandra can be declared with a compound primary key consisting of several columns.
-Only the first part of that key is hashed to determine the partition, but the other columns are used as a concatenated index for sorting the data in Cassandra’s SSTables.
-A query therefore cannot search for a range of values within thefirst column of a compound key, but if it specifies a fixed value for the first column, it can perform an efficient range scan over the other columns of the key.
+Cassandra 在两种分区策略之间取得了折中。Cassandra 中的表可以用由若干列组成的复合主键声明。只有该键的第一部分被哈希以确定分区，但其它列被用作拼接索引，用于在 Cassandra 的 SSTable 中对数据排序。因此查询无法在复合键的第一列内搜索值范围，但如果为第一列指定了固定值，它就能对键的其它列执行高效的范围扫描。
 
-The concatenated index approach enables an elegant data model for one-to-many relationships. For example, on a social media site, one user may post many updates.
-If the primary key for updates is chosen to be (user_id, update_timestamp), then you can efficiently retrieve all updates made by a particular user within some time interval, sorted by timestamp.
-Different users may be stored on different partitions, but within each user, the updates are stored ordered by timestamp on a single partition.
+拼接索引方法为一对多关系提供了一种优雅的数据模型。例如，在社交媒体网站上，一个用户可能发布许多更新。如果更新的主键选为 (user_id, update_timestamp)，那么你就可以高效地检索某个用户在某段时间内的所有更新，并按时间戳排序。不同的用户可能存储在不同的分区上，但在每个用户内部，更新在单个分区上按时间戳有序存储。
 
 ### Skewed Workloads and Relieving Hot Spots
 
-As discussed, hashing a key to determine its partition can help reduce hot spots.
-However, it can’t avoid them entirely: in the extreme case where all reads and writes are for the same key, you still end up with all requests being routed to the same partition.
+如前所述，对键做哈希以确定其分区有助于减少热点。然而，它无法完全避免：在极端情况下，如果所有读写都针对同一个键，你仍然会把所有请求路由到同一个分区。
 
-This kind of workload is perhaps unusual, but not unheard of: for example, on a social media site, a celebrity user with millions of followers may cause a storm of activity when they do something.
-This event can result in a large volume of writes to the same key (where the key is perhaps the user ID of the celebrity, or the ID of the action that people are commenting on).
-Hashing the key doesn’t help, as the hash of two identical IDs is still the same.
+这种负载或许不常见，但并非闻所未闻：例如，在社交媒体网站上，拥有数百万粉丝的名人用户一旦有所动作，就可能引发一阵活动风暴。这个事件会导致大量写入落到同一个键（键可能是该名人的用户 ID，或是人们评论的动作的 ID）。对键做哈希无济于事，因为两个相同 ID 的哈希仍然是相同的。
 
-Today, most data systems are not able to automatically compensate for such a highly skewed workload, so it’s the responsibility of the application to reduce the skew.
-For example, if one key is known to be very hot, a simple technique is to add a random number to the beginning or end of the key.
-Just a two-digit decimal random number would split the writes to the key evenly across 100 different keys, allowing those keys to be distributed to different partitions.
+如今，大多数数据系统无法自动补偿如此高度倾斜的负载，因此减少倾斜是应用层的责任。例如，如果已知某个键非常热，一个简单的技巧是在键的开头或结尾加上一个随机数。仅仅一个两位十进制随机数就能把该键的写入均匀拆分到 100 个不同的键上，让这些键分布到不同的分区。
 
-However, having split the writes across different keys, any reads now have to do additional work, as they have to read the data from all 100 keys and combine it.
-This technique also requires additional bookkeeping: it only makes sense to append the random number for the small number of hot keys; for the vast majority of keys with low write throughput this would be unnecessary overhead.
-Thus, you also need some way of keeping track of which keys are being split.
-Perhaps in the future, data systems will be able to automatically detect and compensate for skewed workloads; but for now, you need to think through the trade-offs for your own application.
+然而，把写入拆分到不同的键之后，任何读取现在都要做额外的工作，因为它们必须从全部 100 个键读取数据并合并。这一技巧还需要额外的簿记：只对少数热键追加随机数是合理的；对于绝大多数写吞吐很低的键而言，这将是多余的开销。因此，你还需要某种方式来记录哪些键正在被拆分。也许将来数据系统能够自动检测并补偿倾斜负载；但就目前而言，你需要为自己应用的权衡深思熟虑。
 
 ## Secondary Indexes
 
-The partitioning schemes we have discussed so far rely on a key-value data model.
-If records are only ever accessed via their primary key, we can determine the partition from that key and use it to route read and write requests to the partition responsible for that key.
-The situation becomes more complicated if secondary indexes are involved (see also “Other Indexing Structures” on page 85).
-A secondary index usually doesn’t identify a record uniquely but rather is a way of searching for occurrences of a particular value: find all actions by user 123, find all articles containing the word hogwash, find all cars whose color is red, and so on.
+我们迄今讨论的分区方案依赖于键值数据模型。如果记录永远只通过主键访问，我们可以由主键确定分区，并用它将读写请求路由到负责该键的分区。如果涉及二级索引，情况就变得更复杂了（另见第 85 页“Other Indexing Structures”）。二级索引通常不能唯一标识一条记录，而是搜索某个特定值出现之处的一种方式：找出用户 123 的所有动作、找出包含“hogwash”一词的所有文章、找出所有红色汽车，等等。
 
-Secondary indexes are the bread and butter of relational databases, and they are common in document databases too.
-Many key-value stores (such as HBase and Voldemort) have avoided secondary indexes because of their added implementation complexity, but some (such as Riak) have started adding them because they are so useful for data modeling.
-And finally, secondary indexes are the raison d’être of search servers such as Solr and Elasticsearch.
-The problem with secondary indexes is that they don’t map neatly to partitions.
-There are two main approaches to partitioning a database with secondary indexes: document-based partitioning and term-based partitioning.
+二级索引是关系型数据库的面包与黄油，在文档数据库中也很常见。许多键值存储（如 HBase 和 Voldemort）为避免增加的实现复杂度而回避二级索引，但有些（如 Riak）因为对数据建模太有用而开始添加它们。最后，二级索引是 Solr、Elasticsearch 等搜索服务器的存在理由（raison d'être）。二级索引的问题在于它们不能整齐地映射到分区。对带二级索引的数据库进行分区主要有两种方法：基于文档（document-based）的分区和基于词（term-based）的分区。
 
-### Secondary Indexes by Document
+### Document-based Secondary Indexes
 
-For example, imagine you are operating a website for selling used cars (illustrated in Figure 4).
-Each listing has a unique ID—call it the document ID—and you partition the database by the document ID (for example, IDs 0 to 499 in partition 0, IDs 500 to 999 in partition 1, etc.).
+例如，设想你运营一个二手车销售网站（如图 4 所示）。每个列表有一个唯一 ID——称为文档 ID——你按文档 ID 对数据库分区（例如分区 0 中 ID 0~499，分区 1 中 ID 500~999，等等）。
 
-You want to let users search for cars, allowing them to filter by color and by make, so you need a secondary index on color and make (in a document database these would be fields; in a relational database they would be columns).
-If you have declared the index, the database can perform the indexing automatically.
-For example, whenever a red car is added to the database, the database partition automatically adds it to the list of document IDs for the index entry color:red.
+你想让用户搜索汽车，允许他们按颜色和品牌过滤，因此你需要在 color 和 make 上建立二级索引（在文档数据库中这些是字段；在关系型数据库中这些是列）。如果你已声明索引，数据库可以自动执行索引。例如，每当一辆红色汽车被加入数据库，数据库分区就会自动把它加入索引项 color:red 的文档 ID 列表中。
 
 <div style="text-align: center;">
 
@@ -173,28 +108,17 @@ For example, whenever a red car is added to the database, the database partition
 Fig.4. Partitioning secondary indexes by document.
 </p>
 
-In this indexing approach, each partition is completely separate: each partition maintains its own secondary indexes, covering only the documents in that partition.
-It doesn’t care what data is stored in other partitions.
-Whenever you need to write to the database—to add, remove, or update a document—you only need to deal with the partition that contains the document ID that you are writing.
-For that reason, a document-partitioned index is also known as a *local index* (as opposed to a *global index*, described in the next section).
+在这种索引方式下，每个分区完全独立：每个分区维护自己的二级索引，只覆盖该分区中的文档。它不关心其他分区中存了什么数据。每当你需要写入数据库——添加、删除或更新文档——你只需处理包含你所写文档 ID 的那个分区。因此，按文档分区的索引也称为*局部索引（local index）*（与下一节描述的*全局索引（global index）*相对）。
 
-However, reading from a document-partitioned index requires care: unless you have done something special with the document IDs, there is no reason why all the cars with a particular color or a particular make would be in the same partition.
-In Figure 4, red cars appear in both partition 0 and partition 1.
-Thus, if you want to search for red cars, you need to send the query to all partitions, and combine all the results you get back.
+然而，从按文档分区的索引读取需要小心：除非你对文档 ID 做了特殊处理，否则没有理由让所有同色或同品牌的汽车在同一个分区中。在图 4 中，红色汽车同时出现在分区 0 和分区 1。因此，如果你想搜索红色汽车，需要把查询发往所有分区，并合并返回的所有结果。
 
-This approach to querying a partitioned database is sometimes known as scatter/gather, and it can make read queries on secondary indexes quite expensive.
-Even if you query the partitions in parallel, scatter/gather is prone to tail latency amplification (see “Percentiles in Practice” on page 16).
-Nevertheless, it is widely used: MongoDB, Riak, Cassandra, Elasticsearch, SolrCloud, and VoltDB all use document-partitioned secondary indexes.
-Most database vendors recommend that you structure your partitioning scheme so that secondary index queries can be served from a single partition, but that is not always possible, especially when you’re using multiple secondary indexes in a single query (such as filtering cars by color and by make at the same time).
+这种查询分区数据库的方法有时被称为 scatter/gather（分散/收集），它可能使基于二级索引的读查询相当昂贵。即使你并行查询各分区，scatter/gather 也容易出现长尾延迟放大（tail latency amplification，见第 16 页“Percentiles in Practice”）。尽管如此，它仍被广泛使用：MongoDB、Riak、Cassandra、Elasticsearch、SolrCloud、VoltDB 都使用按文档分区的二级索引。大多数数据库厂商建议你组织分区方案，使二级索引查询能由单个分区服务，但这并非总能做到，尤其是当你在单个查询中使用多个二级索引时（例如同时按颜色和品牌过滤汽车）。
 
-### Secondary Indexes by Term
+### Term-based Secondary Indexes
 
-Rather than each partition having its own secondary index (a local index), we can construct a global index that covers data in all partitions.
-However, we can’t just store that index on one node, since it would likely become a bottleneck and defeat the purpose of partitioning.
-A global index must also be partitioned, but it can be partitioned differently from the primary key index.
+与其让每个分区拥有自己的二级索引（局部索引），我们可以构建一个覆盖所有分区数据的全局索引。然而，我们不能把这个索引只存在一个节点上，因为那很可能成为瓶颈，违背分区的初衷。全局索引也必须被分区，但它可以与主键索引以不同方式分区。
 
-Figure 5 illustrates what this could look like: red cars from all partitions appear under color:red in the index, but the index is partitioned so that colors starting with the letters a to r appear in partition 0 and colors starting with s to z appear in partition 1.
-The index on the make of car is partitioned similarly (with the partition boundary being between f and h).
+图 5 展示了可能的样子：所有分区中的红色汽车都出现在索引的 color:red 下，但索引本身被分区，使得以 a~r 字母开头的颜色在分区 0，以 s~z 开头的颜色在分区 1。按汽车品牌建的索引也类似分区（分区边界在 f 和 h 之间）。
 
 <div style="text-align: center;">
 
@@ -206,61 +130,43 @@ The index on the make of car is partitioned similarly (with the partition bounda
 Fig.5. Partitioning secondary indexes by term.
 </p>
 
-We call this kind of index term-partitioned, because the term we’re looking for determines the partition of the index. Here, a term would be color:red, for example.
-The name term comes from full-text indexes (a particular kind of secondary index), where the terms are all the words that occur in a document.
-As before, we can partition the index by the term itself, or using a hash of the term.
-Partitioning by the term itself can be useful for range scans (e.g., on a numeric property, such as the asking price of the car), whereas partitioning on a hash of the term gives a more even distribution of load.
+我们称这类索引为按词分区（term-partitioned），因为我们寻找的词决定了索引所在的分区。这里，词可以是 color:red。词（term）这个名字来自全文索引（一种特殊的二级索引），其中词是文档中出现的所有单词。如前所述，我们可以按词本身对索引分区，也可以使用词的哈希。按词本身分区对范围扫描很有用（例如对数值属性，如汽车的要价），而按词的哈希分区则能更均匀地分布负载。
 
-The advantage of a global (term-partitioned) index over a document-partitioned index is that it can make reads more efficient: rather than doing scatter/gather over all partitions, a client only needs to make a request to the partition containing the term that it wants.
-However, the downside of a global index is that writes are slower and more complicated, because a write to a single document may now affect multiple partitions of the index (every term in the document might be on a different partition, on a different node).
+全局（按词分区）索引相对于按文档分区索引的优势在于读取更高效：不必对所有分区做 scatter/gather，客户端只需向包含目标词的分区发起请求。然而，全局索引的缺点是写入更慢、更复杂，因为对单个文档的写入现在可能影响索引的多个分区（文档中的每个词可能在不同的分区、不同的节点上）。
 
-In an ideal world, the index would always be up to date, and every document written to the database would immediately be reflected in the index.
-However, in a term partitioned index, that would require a distributed transaction across all partitions affected by a write, which is not supported in all databases.
+在理想世界中，索引总是最新的，写入数据库的每条文档都立即反映到索引中。然而，在按词分区的索引中，那需要跨所有受写入影响的分区执行分布式事务，而这并非所有数据库都支持。
 
-In practice, updates to global secondary indexes are often asynchronous (that is, if you read the index shortly after a write, the change you just made may not yet be reflected in the index).
-For example, Amazon DynamoDB states that its global secondary indexes are updated within a fraction of a second in normal circumstances, but may experience longer propagation delays in cases of faults in the infrastructure.
-Other uses of global term-partitioned indexes include Riak’s search feature and the Oracle data warehouse, which lets you choose between local and global indexing.
+实践中，全局二级索引的更新通常是异步的（也就是说，如果你在写入后不久读取索引，你刚做的改动可能尚未反映到索引中）。例如，Amazon DynamoDB 表示其全局二级索引在正常情况下于一秒内更新，但在基础设施故障时可能经历更长的传播延迟。全局按词分区索引的其它用途包括 Riak 的搜索功能，以及 Oracle 数据仓库（让你在局部与全局索引之间选择）。
 
-## Rebalancing Partitions
+## Partition Rebalancing
 
-Over time, things change in a database:
+随着时间推移，数据库中的情况会变化：
 
-- The query throughput increases, so you want to add more CPUs to handle the load.
-- The dataset size increases, so you want to add more disks and RAM to store it.
-- A machine fails, and other machines need to take over the failed machine’s responsibilities.
+- 查询吞吐增加，你想添加更多 CPU 来处理负载。
+- 数据集大小增加，你想添加更多磁盘和 RAM 来存储它。
+- 一台机器故障，其它机器需要接管故障机器的职责。
 
-All of these changes call for data and requests to be moved from one node to another.
-The process of moving load from one node in the cluster to another is called *rebalancing*.
-No matter which partitioning scheme is used, rebalancing is usually expected to meet some minimum requirements:
+所有这些变化都要求把数据和请求从一个节点迁移到另一个节点。把负载从集群中的一个节点迁移到另一个节点的过程称为*再平衡（rebalancing）*。无论使用哪种分区方案，再平衡通常期望满足一些最低要求：
 
-- After rebalancing, the load (data storage, read and write requests) should be shared fairly between the nodes in the cluster.
-- While rebalancing is happening, the database should continue accepting reads and writes.
-- No more data than necessary should be moved between nodes, to make rebalancing fast and to minimize the network and disk I/O load.
+- 再平衡之后，负载（数据存储、读写请求）应在集群中的节点间公平共享。
+- 再平衡进行期间，数据库应继续接受读写。
+- 节点之间移动的数据不应超过必要，以使再平衡快速，并最小化网络与磁盘 I/O 负载。
 
-### Strategies for Rebalancing
+### Rebalancing Strategies
 
-There are a few different ways of assigning partitions to nodes. Let’s briefly discuss each in turn.
+把分区分配给节点有几种不同方式。我们依次简要讨论每种。
 
-#### How not to do it: hash mod N
+#### Counter-example: Hash Modulo N
 
-When partitioning by the hash of a key, we said earlier (Figure 3) that it’s best to divide the possible hashes into ranges and assign each range to a partition (e.g., assign key to partition 0 if 0 ≤ hash(key) < b0, to partition 1 if b0 ≤ hash(key) < b1, etc.).
-Perhaps you wondered why we don’t just use mod (the % operator in many programming languages).
-For example, hash(key) mod 10 would return a number between 0 and 9 (if we write the hash as a decimal number, the hash mod 10 would be the last digit).
-If we have 10 nodes, numbered 0 to 9, that seems like an easy way of assigning each key to a node.
+当按键的哈希分区时，我们前面（图 3）说过，最好把可能的哈希值分成若干范围，每个范围分配给一个分区（例如，若 0 ≤ hash(key) < b0 则分配给分区 0，若 b0 ≤ hash(key) < b1 则分配给分区 1，等等）。你也许会疑惑我们为何不直接用取模（mod，许多编程语言中的 % 运算符）。例如，hash(key) mod 10 会返回 0 到 9 之间的一个数（如果把哈希写成十进制数，hash mod 10 就是最后一位）。如果我们有 10 个编号为 0~9 的节点，这看似是给每个键分配节点的简便方法。
 
-The problem with the mod N approach is that if the number of nodes N changes, most of the keys will need to be moved from one node to another.
-For example, say hash(key) = 123456. If you initially have 10 nodes, that key starts out on node 6 (because 123456 mod 10 = 6).
-When you grow to 11 nodes, the key needs to move to node 3 (123456 mod 11 = 3), and when you grow to 12 nodes, it needs to move to node 0 (123456 mod 12 = 0). Such frequent moves make rebalancing excessively expensive.
-We need an approach that doesn’t move data around more than necessary.
+mod N 方法的问题在于：如果节点数 N 改变，大多数键都需要从一个节点迁移到另一个。例如，设 hash(key) = 123456。如果你最初有 10 个节点，该键起始在节点 6（因为 123456 mod 10 = 6）。当你扩展到 11 个节点时，该键需要移到节点 3（123456 mod 11 = 3）；当你扩展到 12 个节点时，它需要移到节点 0（123456 mod 12 = 0）。如此频繁的迁移使再平衡代价过高。我们需要一种不会不必要地搬移数据的方法。
 
-#### Fixed number of partitions
+#### Fixed Number of Partitions
 
-Fortunately, there is a fairly simple solution: create many more partitions than there are nodes, and assign several partitions to each node.
-For example, a database running on a cluster of 10 nodes may be split into 1,000 partitions from the outset so that approximately 100 partitions are assigned to each node.
+幸运的是，有一个相当简单的方案：创建比节点数多得多的分区，给每个节点分配若干个分区。例如，运行在 10 节点集群上的数据库一开始可以拆成 1000 个分区，这样每个节点大约分配 100 个分区。
 
-Now, if a node is added to the cluster, the new node can steal a few partitions from every existing node until partitions are fairly distributed once again.
-This process is illustrated in Figure 6.
-If a node is removed from the cluster, the same happens in reverse.
+现在，如果向集群添加一个节点，新节点可以从每个现有节点“偷”几个分区，直到分区再次公平分布。图 6 展示了这一过程。如果移除一个节点，情况相反。
 
 <div style="text-align: center;">
 
@@ -272,103 +178,59 @@ If a node is removed from the cluster, the same happens in reverse.
 Fig.6. Adding a new node to a database cluster with multiple partitions per node.
 </p>
 
-Only entire partitions are moved between nodes. The number of partitions does not change, nor does the assignment of keys to partitions.
-The only thing that changes is the assignment of partitions to nodes.
-This change of assignment is not immediate it takes some time to transfer a large amount of data over the network—so the old assignment of partitions is used for any reads and writes that happen while the transfer is in progress.
+只有整个分区在节点间移动。分区的数量不变，键到分区的分配也不变。唯一改变的是分区到节点的分配。这个分配的改变不是立即生效——在网络上传输大量数据需要一些时间——因此在传输进行期间发生的任何读写仍使用旧的分区分配。
 
-In principle, you can even account for mismatched hardware in your cluster: by assigning more partitions to nodes that are more powerful, you can force those nodes to take a greater share of the load.
-This approach to rebalancing is used in Riak, Elasticsearch, Couchbase, and Voldemort.
+原则上，你甚至可以在集群中考虑到硬件不匹配：通过给更强大的节点分配更多分区，你可以迫使这些节点承担更大的负载份额。Riak、Elasticsearch、Couchbase、Voldemort 都使用了这种再平衡方法。
 
-In this configuration, the number of partitions is usually fixed when the database is first set up and not changed afterward.
-Although in principle it’s possible to split and merge partitions (see the next section), a fixed number of partitions is operationally simpler, and so many fixed-partition databases choose not to implement partition splitting.
-Thus, the number of partitions configured at the outset is the maximum number of nodes you can have, so you need to choose it high enough to accommodate future growth.
-However, each partition also has management overhead, so it’s counterproductive to choose too high a number.
+在这种配置中，分区的数量通常在数据库初次建立时固定，之后不再改变。尽管原则上可以拆分和合并分区（见下一节），但固定数量的分区在运维上更简单，因此许多固定分区的数据库选择不实现分区拆分。因此，初始配置的分区数就是你能拥有的最大节点数，你需要把它设得足够高以容纳未来的增长。然而，每个分区也有管理开销，所以设得太高会适得其反。
 
-Choosing the right number of partitions is difficult if the total size of the dataset is highly variable (for example, if it starts small but may grow much larger over time).
-Since each partition contains a fixed fraction of the total data, the size of each partition grows proportionally to the total amount of data in the cluster.
-If partitions are very large, rebalancing and recovery from node failures become expensive.
-But if partitions are too small, they incur too much overhead. The best performance is achieved when the size of partitions is “just right,” neither too big nor too small, which can be hard to achieve if the number of partitions is fixed but the dataset size varies.
+在数据集总大小高度可变时（例如一开始很小但随时间可能大幅增长），选择正确的分区数是困难的。由于每个分区包含总数据的固定比例，每个分区的大小随集群数据总量成比例增长。如果分区非常大，再平衡和从节点故障中恢复就会很昂贵。但如果分区太小，它们又会产生过多开销。当分区大小“恰到好处”、既不太大也不太小时性能最佳，而在分区数固定但数据集大小变化时这很难实现。
 
-#### Dynamic partitioning
+#### Dynamic Partitioning
 
-For databases that use key range partitioning, a fixed number of partitions with fixed boundaries would be very inconvenient: if you got the boundaries wrong, you could end up with all of the data in one partition and all of the other partitions empty.
-Reconfiguring the partition boundaries manually would be very tedious.
+对于使用键范围分区的数据库，固定数量且边界固定的分区会非常不便：如果你把边界搞错了，可能所有数据都在一个分区，其它分区全空。手动重新配置分区边界会非常繁琐。
 
-For that reason, key range–partitioned databases such as HBase and RethinkDB create partitions dynamically.
-When a partition grows to exceed a configured size (on HBase, the default is 10 GB), it is split into two partitions so that approximately half of the data ends up on each side of the split.
-Conversely, if lots of data is deleted and a partition shrinks below some threshold, it can be merged with an adjacent partition.
-This process is similar to what happens at the top level of a B-tree.
-Each partition is assigned to one node, and each node can handle multiple partitions, like in the case of a fixed number of partitions.
-After a large partition has been split, one of its two halves can be transferred to another node in order to balance the load.
-In the case of HBase, the transfer of partition files happens through HDFS, the underlying distributed filesystem.
+因此，基于键范围分区的数据库（如 HBase 和 RethinkDB）会动态创建分区。当一个分区增长到超过配置的大小（HBase 默认 10 GB）时，它被拆成两个分区，使得大约一半数据落在拆分的两侧。反之，如果删除大量数据导致某分区缩小到某个阈值以下，它可以与相邻分区合并。这个过程类似于 B 树顶层发生的情况。每个分区分配给一个节点，每个节点可以处理多个分区，就像固定数量分区的情况。一个大的分区被拆分后，它的两半之一可以被转移到另一个节点以平衡负载。在 HBase 中，分区文件的传输通过底层分布式文件系统 HDFS 完成。
 
-**An advantage of dynamic partitioning is that the number of partitions adapts to the total data volume.**
-If there is only a small amount of data, a small number of partitions is sufficient, so overheads are small; if there is a huge amount of data, the size of each individual partition is limited to a configurable maximum.
+**动态分区的一个优势是分区数能适应数据总量。** 如果数据量很小，少量分区就足够，开销也小；如果数据量巨大，每个单独分区的大小被限制在可配置的最大值。
 
-However, a caveat is that an empty database starts off with a single partition, since there is no a priori information about where to draw the partition boundaries.
-While the dataset is small—until it hits the point at which the first partition is split—all writes have to be processed by a single node while the other nodes sit idle.
-To mitigate this issue, HBase and MongoDB allow an initial set of partitions to be configured on an empty database (this is called pre-splitting).
-In the case of key-range partitioning, pre-splitting requires that you already know what the key distribution is going to look like.
+然而，一个告诫是：空数据库开始时只有一个分区，因为没有先验信息来确定分区边界画在哪里。在数据集很小——直到第一次分区被拆分之前——所有写入都必须由单个节点处理，而其它节点闲置。为缓解这个问题，HBase 和 MongoDB 允许在空数据库上配置一组初始分区（这称为预拆分，pre-splitting）。在键范围分区的情况下，预拆分要求你已经知道键分布会是什么样子。
 
-Dynamic partitioning is not only suitable for key range–partitioned data, but can equally well be used with hash-partitioned data.
+动态分区不仅适用于键范围分区的数据，同样也适用于哈希分区的数据。
 
-#### Partitioning proportionally to nodes
+#### Partitioning Proportionally to Nodes
 
-With dynamic partitioning, the number of partitions is proportional to the size of the dataset, since the splitting and merging processes keep the size of each partition between some fixed minimum and maximum.
-On the other hand, with a fixed number of partitions, the size of each partition is proportional to the size of the dataset.
-In both of these cases, the number of partitions is independent of the number of nodes.
+在动态分区中，分区数与数据集大小成正比，因为拆分与合并过程把每个分区的大小保持在某个固定的最小与最大之间。另一方面，在固定数量分区中，每个分区的大小与数据集大小成正比。在这两种情况下，分区数都与节点数无关。
 
-A third option, used by Cassandra and Ketama, is to make the number of partitions proportional to the number of nodes—in other words, to have a fixed number of partitions per node.
-In this case, the size of each partition grows proportionally to the dataset size while the number of nodes remains unchanged, but when you increase the number of nodes, the partitions become smaller again.
-Since a larger data volume generally requires a larger number of nodes to store, this approach also keeps the size of each partition fairly stable.
+第三种选项，由 Cassandra 和 Ketama 使用，是让分区数与节点数成正比——换言之，每个节点有固定数量的分区。在这种情况下，当节点数不变时，每个分区的大小随数据集大小成比例增长；但当你增加节点数时，分区又变小了。由于更大的数据量通常需要更多节点来存储，这种方法也使每个分区的大小相当稳定。
 
-When a new node joins the cluster, it randomly chooses a fixed number of existing partitions to split, and then takes ownership of one half of each of those split partitions while leaving the other half of each partition in place.
-The randomization can produce unfair splits, but when averaged over a larger number of partitions (in Cassandra, 256 partitions per node by default), the new node ends up taking a fair share of the load from the existing nodes.
-Cassandra 3.0 introduced an alternative rebalancing algorithm that avoids unfair splits.
+当新节点加入集群时，它随机选择固定数量的现有分区进行拆分，然后占有每个被拆分分区的一半，而另一半留在原位。随机化可能产生不公平的拆分，但在更多分区上平均后（Cassandra 默认每个节点 256 个分区），新节点最终会从现有节点拿走公平的负载份额。Cassandra 3.0 引入了一种替代的再平衡算法，避免了不公平的拆分。
 
-Picking partition boundaries randomly requires that hash-based partitioning is used (so the boundaries can be picked from the range of numbers produced by the hash function).
-Indeed, this approach corresponds most closely to the original definition of consistent hashing.
-Newer hash functions can achieve a similar effect with lower metadata overhead.
+随机选取分区边界要求使用基于哈希的分区（这样边界才能从哈希函数产生的数字范围中选取）。实际上，这种方法与一致性哈希（consistent hashing）的原始定义最为接近。更新的哈希函数可以用更低的元数据开销达到类似效果。
 
 ### Automatic or Manual Rebalancing
 
-There is one important question with regard to rebalancing that we have glossed over: does the rebalancing happen automatically or manually?
+关于再平衡有一个重要问题我们一直回避：再平衡是自动发生还是手动发生？
 
-There is a gradient between fully automatic rebalancing (the system decides automatically when to move partitions from one node to another, without any administrator interaction) and
-fully manual (the assignment of partitions to nodes is explicitly configured by an administrator, and only changes when the administrator explicitly reconfigures it).
-For example, Couchbase, Riak, and Voldemort generate a suggested partition assignment automatically, but require an administrator to commit it before it takes effect.
+在完全自动再平衡（系统自动决定何时把分区从一个节点迁移到另一个，无需任何管理员介入）与完全手动（分区到节点的分配由管理员显式配置，且只有管理员显式重新配置时才会改变）之间存在一个连续谱。例如，Couchbase、Riak、Voldemort 会自动生成建议的分区分配，但需要管理员提交后才能生效。
 
-Fully automated rebalancing can be convenient, because there is less operational work to do for normal maintenance. However, it can be unpredictable.
-Rebalancing is an expensive operation, because it requires rerouting requests and moving a large amount of data from one node to another.
-If it is not done carefully, this process can overload the network or the nodes and harm the performance of other requests while the rebalancing is in progress.
+全自动再平衡可能很方便，因为日常运维的工作更少。然而，它可能不可预测。再平衡是一个昂贵的操作，因为它需要重新路由请求，并在节点间搬移大量数据。如果做得不仔细，这个过程可能使网络或节点过载，并在再平衡进行期间损害其它请求的性能。
 
-Such automation can be dangerous in combination with automatic failure detection.
-For example, say one node is overloaded and is temporarily slow to respond to requests.
-The other nodes conclude that the overloaded node is dead, and automatically rebalance the cluster to move load away from it.
-This puts additional load on the overloaded node, other nodes, and the network—making the situation worse and potentially causing a cascading failure.
+这种自动化与自动故障检测结合可能很危险。例如，假设一个节点过载并暂时响应缓慢。其它节点断定该过载节点已死，并自动再平衡集群以把负载从它身上移开。这给过载节点、其它节点和网络都增加了负载——使情况更糟，并可能导致级联故障。
 
-For that reason, it can be a good thing to have a human in the loop for rebalancing.
-It’s slower than a fully automatic process, but it can help prevent operational surprises.
+因此，在再平衡中让人类参与可能是件好事。它比全自动过程慢，但有助于防止运维上的意外。
 
 ## Request Routing
 
-We have now partitioned our dataset across multiple nodes running on multiple machines.
-But there remains an open question: when a client wants to make a request, how does it know which node to connect to?
-As partitions are rebalanced, the assignment of partitions to nodes changes.
-Somebody needs to stay on top of those changes in order to answer the question: if I want to read or write the key “foo”, which IP address and port number do I need to connect to?
+现在我们已经把数据集分区到运行在多台机器上的多个节点。但还有一个悬而未决的问题：当客户端想发起请求时，它如何知道该连接哪个节点？随着分区被再平衡，分区到节点的分配会变化。有人需要掌握这些变化以回答这个问题：如果我想读写键“foo”，需要连接哪个 IP 地址和端口号？
 
-This is an instance of a more general problem called service discovery, which isn’t limited to just databases.
-Any piece of software that is accessible over a network has this problem, especially if it is aiming for high availability (running in a redundant configuration on multiple machines).
-Many companies have written their own inhouse service discovery tools, and many of these have been released as open source.
+这是更一般问题——服务发现（service discovery）的一个实例，它不限于数据库。任何可通过网络访问的软件都有这个问题，尤其是当它追求高可用性（在多台机器上以冗余配置运行）时。许多公司编写了自己的内部服务发现工具，其中许多已作为开源发布。
 
-On a high level, there are a few different approaches to this problem (illustrated in Figure 7):
+高层上，这个问题有几种不同的方法（如图 7 所示）：
 
-1. Allow clients to contact any node (e.g., via a round-robin load balancer).
-   If that node coincidentally owns the partition to which the request applies, it can handle the request directly; otherwise, it forwards the request to the appropriate node, receives the reply, and passes the reply along to the client.
-2. Send all requests from clients to a routing tier first, which determines the node that should handle each request and forwards it accordingly.
-   This routing tier does not itself handle any requests; it only acts as a partition-aware load balancer.
-3. Require that clients be aware of the partitioning and the assignment of partitions to nodes. In this case, a client can connect directly to the appropriate node, without any intermediary.
-   In all cases, the key problem is: how does the component making the routing decision (which may be one of the nodes, or the routing tier, or the client) learn about changes in the assignment of partitions to nodes?
+1. 允许客户端联系任意节点（例如通过轮询负载均衡器）。如果该节点碰巧拥有请求所属的分区，它可以直接处理请求；否则，它把请求转发给相应节点，收到回复后再转给客户端。
+2. 先把来自客户端的所有请求发往一个路由层，由它确定应由哪个节点处理每个请求并相应转发。这个路由层本身不处理任何请求；它只充当分区感知的负载均衡器。
+3. 要求客户端感知分区以及分区到节点的分配。这种情况下，客户端可以直接连到相应节点，无需任何中介。在所有情况下，关键问题是：做出路由决策的组件（可能是某个节点、路由层或客户端）如何得知分区到节点分配的变化？
 
 <div style="text-align: center;">
 
@@ -380,12 +242,9 @@ On a high level, there are a few different approaches to this problem (illustrat
 Fig.7. Three different ways of routing a request to the right node.
 </p>
 
-This is a challenging problem, because it is important that all participants agree, otherwise requests would be sent to the wrong nodes and not handled correctly.
-There are protocols for achieving consensus in a distributed system, but they are hard to implement correctly.
+这是一个具有挑战性的问题，因为重要的是所有参与者都达成一致，否则请求会被发往错误的节点而得不到正确处理。分布式系统中有达成一致的协议，但很难正确实现。
 
-Many distributed data systems rely on a separate coordination service such as ZooKeeper to keep track of this cluster metadata, as illustrated in Figure 8.
-Each node registers itself in ZooKeeper, and ZooKeeper maintains the authoritative mapping of partitions to nodes. Other actors, such as the routing tier or the partitioning-aware client, can subscribe to this information in ZooKeeper.
-Whenever a partition changes ownership, or a node is added or removed, ZooKeeper notifies the routing tier so that it can keep its routing information up to date.
+许多分布式数据系统依赖单独的协调服务（如 ZooKeeper）来跟踪这类集群元数据，如图 8 所示。每个节点在 ZooKeeper 中注册自己，ZooKeeper 维护分区到节点的权威映射。其它角色（如路由层或分区感知的客户端）可以订阅 ZooKeeper 中的这些信息。每当分区变更所有权，或添加、移除节点时，ZooKeeper 都会通知路由层，使它保持路由信息最新。
 
 <div style="text-align: center;">
 
@@ -397,32 +256,22 @@ Whenever a partition changes ownership, or a node is added or removed, ZooKeeper
 Fig.8. Using ZooKeeper to keep track of assignment of partitions to nodes.
 </p>
 
-For example, LinkedIn’s Espresso uses Helix for cluster management (which in turn relies on ZooKeeper), implementing a routing tier as shown in Figure 8.
-HBase, SolrCloud, and Kafka also use ZooKeeper to track partition assignment.
-MongoDB has a similar architecture, but it relies on its own config server implementation and mongos daemons as the routing tier.
+例如，LinkedIn 的 Espresso 使用 Helix 做集群管理（后者又依赖 ZooKeeper），实现了如图 8 所示的路由层。HBase、SolrCloud、Kafka 也使用 ZooKeeper 跟踪分区分配。MongoDB 有类似的架构，但它依赖自己的配置服务器实现和 mongos 守护进程作为路由层。
 
-Cassandra and Riak take a different approach: they use a gossip protocol among the nodes to disseminate any changes in cluster state.
-Requests can be sent to any node, and that node forwards them to the appropriate node for the requested partition.
+Cassandra 和 Riak 采取不同的方法：它们在节点间使用 gossip 协议（Gossip）来传播集群状态的任何变化。请求可以发往任意节点，该节点再把它转发给请求所属分区的相应节点。
 
-This model puts more complexity in the database nodes but avoids the dependency on an external coordination service such as ZooKeeper.
-Couchbase does not rebalance automatically, which simplifies the design.
-Normally it is configured with a routing tier called moxi, which learns about routing changes from the cluster nodes.
+这种模型把更多复杂性放在数据库节点中，但避免了对 ZooKeeper 等外部协调服务的依赖。Couchbase 不自动再平衡，这简化了设计。通常它配置一个称为 moxi 的路由层，从集群节点学习路由变化。
 
-When using a routing tier or when sending requests to a random node, clients still need to find the IP addresses to connect to.
-These are not as fast-changing as the assignment of partitions to nodes, so it is often sufficient to use DNS for this purpose.
+当使用路由层或把请求发往随机节点时，客户端仍需要找到要连接的 IP 地址。这些地址不像分区到节点的分配那样变化频繁，因此通常只需用 DNS 即可。
 
 ## Parallel Query Execution
 
-So far we have focused on very simple queries that read or write a single key (plus scatter/gather queries in the case of document-partitioned secondary indexes).
-This is about the level of access supported by most NoSQL distributed datastores.
+到目前为止，我们聚焦于读写单个键（以及按文档分区二级索引情形下的 scatter/gather 查询）这类非常简单的查询。这大致是大多数 NoSQL 分布式数据存储支持的访问层级。
 
-However, *massively parallel processing* (MPP) relational database products, often used for analytics, are much more sophisticated in the types of queries they support.
-A typical data warehouse query contains several join, filtering, grouping, and aggregation operations.
-The MPP query optimizer breaks this complex query into a number of execution stages and partitions, many of which can be executed in parallel on different nodes of the database cluster.
-Queries that involve scanning over large parts of the dataset particularly benefit from such parallel execution.
-Fast parallel execution of data warehouse queries is a specialized topic, and given the business importance of analytics, it receives a lot of commercial interest.
+然而，*大规模并行处理（MPP，massively parallel processing）*关系型数据库产品（常用于分析）在支持的查询类型上成熟得多。一个典型的数据仓库查询包含若干连接、过滤、分组和聚合操作。MPP 查询优化器把这个复杂查询拆成若干执行阶段和分区，其中许多可以在数据库集群的不同节点上并行执行。涉及扫描数据集很大一部分的查询尤其受益于这种并行执行。数据仓库查询的快速并行执行是一个专门的主题，鉴于分析的业务重要性，它受到大量商业关注。
 
 ## Summary
+
 
 ## Links
 

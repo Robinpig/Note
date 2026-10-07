@@ -1475,7 +1475,7 @@ void aeMain(aeEventLoop *eventLoop) {
 }
 ```
 
-## 命令执行
+## Command Execution
 
 这里看一下命令的执行流程
 

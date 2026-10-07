@@ -6,7 +6,7 @@
 
 看这条链有个额外好处：它把前面几条纵向链路（[进程](/docs/CS/OS/Linux/proc/README.md)、[内存](/docs/CS/OS/Linux/mm/README.md)、[网络](/docs/CS/OS/Linux/net/README.md)）的**初始化顺序**交代清楚了——为什么某些子系统必须早于另一些，答案就在这里的 initcall 分级里。
 
-## 全景：五段接力
+## Panorama: The Five-stage Relay
 
 **① 固件**。上电自检后，BIOS/UEFI 按启动顺序找到可引导设备，把引导扇区读进内存并交出控制权。这个阶段系统还处于实模式，只能寻址 1 MiB。
 
@@ -18,7 +18,7 @@
 
 **⑤ `rest_init()` 与 1 号进程**。`rest_init()` 做三件事：把当前上下文交给 idle 线程、创建 `kthreadd`（2 号，负责后续所有内核线程的派生）、创建 `kernel_init`（1 号）。`kernel_init` 里跑完 `do_initcalls()` 后，就 `execve` 掉自己变成用户态第一个进程——至此内核初始化结束，后续的挂载硬盘、加载模块都改用系统调用完成了。
 
-## initcall：初始化顺序为什么是硬约束
+## initcall: Why Initialization Order Is a Hard Constraint
 
 上面第 ⑤ 步里 `do_initcalls()` 是整条链最耗时的一段，也是理解"内核为什么能有序启动"的关键。所有用 `xxx_initcall` 注册的函数被分成若干 **level**，按 level 从低到高依次调用；`module_init` 编进内核后对应的其实是 `device_initcall`，处于较后的 level。
 
@@ -26,7 +26,7 @@
 
 同一篇里还有一个容易被忽略的差异：level 后缀带 `s` 的（sync）比不带 `s` 的后执行；`rootfs_initcall` 则插在 level 5 和 6 之间，专门用来起一个线程**异步**解压 initramfs，缩短启动时间。
 
-## 镜像：vmlinux 与 bzImage 的分工
+## Images: The Division of Labor Between vmlinux and bzImage
 
 引导器加载的 `bzImage` 由两个独立编译的产物拼成，理解这一点对排查启动初期问题很关键：
 
@@ -48,7 +48,7 @@ quiet_cmd_image = BUILD   $@
 
 调试启动崩溃时要注意区分：**`vmlinux` 是带完整符号表的 ELF**，`bzImage` 是给引导器用的压缩镜像。`gdb`、`addr2line` 这类工具只能吃前者。
 
-## 观测启动过程
+## Observing the Boot Process
 
 启动阶段的问题最难查，因为此时磁盘、网络、日志系统都还不可用。两个内核参数直接可用（均见 `Documentation/admin-guide/kernel-parameters.txt`）：
 

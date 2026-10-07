@@ -26,7 +26,7 @@ digraph spring_index {
 }
 ```
 
-## 核心容器（Core）
+## Core Container (Core)
 
 Spring 的地基。围绕 Bean 的生命周期与容器扩展机制展开。
 
@@ -37,14 +37,14 @@ Spring 的地基。围绕 Bean 的生命周期与容器扩展机制展开。
 - [SpEL](/docs/CS/Framework/Spring/SpEL.md)：表达式语言，配置绑定与运行时计算的基础。
 - [Exception](/docs/CS/Framework/Spring/Exception.md)：异常体系与错误处理。
 
-## 数据访问
+## Data Access
 
 - [Data](/docs/CS/Framework/Spring/Data.md)：`JdbcTemplate` / JdbcClient、事务集成、R2DBC。
 - [JPA](/docs/CS/Framework/Spring/JPA.md)：JPA 与 Hibernate 集成、实体映射、懒加载与会话语义。
 - [Transaction](/docs/CS/Framework/Spring/Transaction.md)：声明式与编程式事务、传播行为、`@Transactional` 失效场景。
 - [Cache](/docs/CS/Framework/Spring/Cache.md)：缓存抽象（`@Cacheable`）、CacheManager、自定义缓存接入。
 
-## Web 与响应式
+## Web and Reactive
 
 - [MVC](/docs/CS/Framework/Spring/MVC.md)：Spring MVC 请求处理链路、DispatcherServlet、参数解析。
 - [webflux](/docs/CS/Framework/Spring/webflux.md)：WebFlux 响应式 Web 栈，与虚拟线程（`spring.threads.virtual.enabled`）取舍。
@@ -52,7 +52,7 @@ Spring 的地基。围绕 Bean 的生命周期与容器扩展机制展开。
 - [RestClient](/docs/CS/Framework/Spring/RestClient.md)：同步 HTTP 客户端（`RestTemplate` 的现代替代）。
 - [WebSocket](/docs/CS/Framework/Spring/WebSocket.md)：WebSocket 与消息通信。
 
-## 集成与消息
+## Integration and Messaging
 
 - [AMQP](/docs/CS/Framework/Spring/AMQP.md)：Spring AMQP（RabbitMQ）。
 - [Kafka](/docs/CS/Framework/Spring/Kafka.md)：Spring for Apache Kafka，消费语义与 `AckMode`（默认 `BATCH` 是 at-least-once，精准控须 `MANUAL_IMMEDIATE`）。
@@ -61,14 +61,14 @@ Spring 的地基。围绕 Bean 的生命周期与容器扩展机制展开。
 - [Task](/docs/CS/Framework/Spring/Task.md)：异步任务与调度、`@Async`。
 - [Event](/docs/CS/Framework/Spring/Event.md)：应用事件（`@TransactionalEventListener` 的 `fallbackExecution` 默认 false 易丢事件）。
 
-## 安全与横切
+## Security and Cross-Cutting
 
 - [Security](/docs/CS/Framework/Spring/Security.md)：Spring Security 7（过滤器链、方法安全、配置新范式；SAS 已并入 7.0）。
 - [OAuth](/docs/CS/Framework/Spring/OAuth.md)：OAuth2 / OIDC 客户端与服务端（`spring.security.oauth2.*`）。
 - [Session](/docs/CS/Framework/Spring/Session.md)：会话管理（Redis / JDBC Session）。
 - [Validation](/docs/CS/Framework/Spring/Validation.md)：Bean Validation。
 
-## 测试与进阶
+## Testing and Advanced Topics
 
 - [Test](/docs/CS/Framework/Spring/Test.md)：测试支持（`@MockitoBean` 取代 `@MockBean`；测试依赖拆 `xxx-test` starter）。
 - [AOT](/docs/CS/Framework/Spring/AOT.md)：Ahead-of-Time 编译（经 `aot.factories`），配合 GraalVM native。

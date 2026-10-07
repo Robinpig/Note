@@ -9,24 +9,30 @@
     # 分析整个 Framework（默认根）
     python3 analyze_crosslinks.py
 
-    # 只分析部分主题子目录
+    # 只分析部分主题子目录（--dirs 接根目录下的顶层子目录名，可多个）
     python3 analyze_crosslinks.py --dirs Spring Spring_Boot Spring_Cloud
 
     # 指定其它根（例如整个 CS）
-    python3 analyze_crosslinks.py --root /abs/path/Note/docs/CS
+    python3 analyze_crosslinks.py --root "$PWD/docs/CS"
 
     # CI 密度门禁：出现孤立页 / 弱链出页 / 平均链入低于阈值则以退出码 1 失败
     python3 analyze_crosslinks.py --dirs Spring Spring_Boot Spring_Cloud --gate --min-indegree 4.0
+
+站内链接的识别形如 `](/docs/xxx.md)`，**带 `?id=` 与 `#` 片段的链接同样计入**，
+路径会先 unquote（`%20` 等转义与含空格的目录是常见写法）。根目录下的散文件（如
+`CS.md`、`Languages.md`）不计入图的节点，只统计各主题子目录。
 """
 import os
 import re
 import sys
 from collections import defaultdict
+from urllib.parse import unquote
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # 仓库根（脚本在 scripts/ 下）
 DEFAULT_ROOT = os.path.join(REPO, "docs", "CS", "Framework")
 
-LINK_RE = re.compile(r"\]\((/docs/[^\s)]+\.md)\)")
+# 站内链接：/docs/xxx.md，允许后接 ?id=slug 或 #slug（docsify 锚点写法）
+LINK_RE = re.compile(r"\]\((/docs/[^)\s]+?\.md)(?:[?#][^)\s]*)?\)")
 
 # 不在站内链接图范围内的外部链接类型
 _SKIP_PREFIXES = ("http://", "https://", "mailto:", "#", "?")
@@ -77,8 +83,15 @@ def main(argv):
             gate = True; i += 1
         elif a == "--min-indegree":
             min_indegree = float(argv[i + 1]); i += 2
+        elif a in ("-h", "--help"):
+            print(__doc__); return 0
         else:
-            print("未知参数:", a); return 2
+            # 位置参数不受支持：目录一律走 --root / --dirs，避免误当路径传入
+            print("未知参数: %s" % a)
+            print("用法: analyze_crosslinks.py [--root <目录>] [--dirs <子目录>...] "
+                  "[--gate] [--min-indegree N]")
+            print("（目录清单请用 --dirs，例：--dirs Spring Spring_Boot；-h 看完整说明）")
+            return 2
 
     files = collect(root, dirs)
 
@@ -97,7 +110,8 @@ def main(argv):
             if not target.startswith("/docs/"):
                 continue
             # /docs/CS/Framework/Spring/IoC.md -> Spring/IoC.md (相对 root)
-            abs_target = os.path.join(REPO, target.lstrip("/"))
+            # 先 unquote：站内存在含空格与 %20 的路径，不还原会漏计边
+            abs_target = os.path.join(REPO, unquote(target).lstrip("/"))
             rel = os.path.relpath(abs_target, root).replace(os.sep, "/")
             if rel in files:
                 if rel == key:

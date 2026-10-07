@@ -7,7 +7,7 @@ mutex 只能"一个持锁者"，也没有跨上下文的能力。内核还需要
 
 两者都会睡眠，因此只能在进程上下文（获取侧）使用，语义与用户态的 POSIX 信号量/条件变量同源，理论部分见 [Semaphores](/docs/CS/OS/process.md?id=semaphores)。
 
-## 信号量
+## Semaphores
 
 ```c
 DEFINE_SEMAPHORE(sem);            /* 计数为 1，同一时刻一个持有者 */
@@ -56,7 +56,7 @@ complete_all(&done);               /* 唤醒所有等待者（用于"事件永�
 - 重复等待同一个 completion 需要 `reinit_completion()` 重置计数；
 - 典型场景：驱动 probe 等待设备初始化完成、模块加载等待依赖就绪、`kthread` 启动握手（等线程真正跑起来）。
 
-## 等待队列：更底层的通用设施
+## Wait Queue: A Lower-Level Generic Facility
 
 completion 和信号量的睡眠最终都落到**等待队列**（wait queue）上：
 
@@ -71,7 +71,7 @@ wake_up_interruptible(&wq);
 
 `wait_event` 宏内部就是"设置状态 → 入队 → 检查条件 → 睡眠 → 循环"的经典模式；`up()`/`complete()` 的内核实现同样是 `wake_up` 等待队列。等待队列的睡眠与唤醒路径（含惊群问题）详见 [thundering herd](/docs/CS/OS/Linux/proc/thundering_herd.md?id=wait)。
 
-## 选择建议
+## Selection Recommendations
 
 - 只有"一个持锁者"且需要所有权语义 → [mutex](/docs/CS/OS/Linux/Lock/mutex.md)；
 - 需要计数、或必须在中断中唤醒 → **semaphore**；

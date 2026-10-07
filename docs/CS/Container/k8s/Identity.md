@@ -22,7 +22,7 @@
 
 ---
 
-## 第一段：静态 PKI —— 信任的起点是谁持有私钥
+## Segment 1: Static PKI — The Starting Point of Trust Is Who Holds the Private Key
 
 集群搭建时，管理员手工（或 kubeadm 自动）生成一批证书。要紧的只有一件事：**私钥在谁手里**。
 
@@ -49,9 +49,9 @@
 
 ---
 
-## 第二段：节点身份的鸡生蛋，以及它的解法
+## Segment 2: The Chicken-and-egg of Node Identity, and Its Solution
 
-### 2.1 环出在哪
+### 2.1 Where the Loop Is
 
 kubelet 首次启动时，磁盘上没有任何证书。它需要：
 
@@ -62,7 +62,7 @@ kubelet 首次启动时，磁盘上没有任何证书。它需要：
 
 解法不是"给 kubelet 一个长期凭据"，而是**给它一个短期、权限极窄的一次性凭据，用它换完证书就作废**。这个凭据就是 bootstrap token。
 
-### 2.2 bootstrap token 的形态
+### 2.2 The Shape of the Bootstrap Token
 
 | 项 | 值 | 出处 |
 |---|---|---|
@@ -90,7 +90,7 @@ Secret 里的 key 决定这个 token 能干什么（`types.go:38-74`）：
 >
 > **token 过期不会让 Secret 消失。** authenticator 只是拒绝（`:129`），删除动作归 `tokencleaner` 管，而它**默认是关闭的**（见 2.5）。
 
-### 2.3 `cluster-info` 的签名：为什么 token 能自带信任
+### 2.3 Signature of `cluster-info`: Why the Token Carries Trust
 
 新节点除了 token，还必须知道"apiserver 是谁、要不要信他的证书"。这份信息的载体是 `kube-public/cluster-info` ConfigMap 的 `kubeconfig` key。但**怎么证明这份 kubeconfig 没被人篡改**？——用 bootstrap token 自己签。
 
@@ -103,7 +103,7 @@ Secret 里的 key 决定这个 token 能干什么（`types.go:38-74`）：
 
 这套设计的隐含结论很干净：**撤销一个 bootstrap token，就等于撤销指向它的那份签名**——因为第 3 步只为当前有效的 token 生成签名。
 
-### 2.4 第一次握手与 CSR
+### 2.4 First Handshake and CSR
 
 kubelet 侧入口是 `bootstrap.LoadClientCert`，最终落到 `requestNodeCertificate`（`pkg/kubelet/certificate/bootstrap/bootstrap.go:317`）：
 
@@ -118,7 +118,7 @@ kubelet 侧入口是 `bootstrap.LoadClientCert`，最终落到 `requestNodeCerti
 > [!WARNING]
 > **第一份 CSR 的 Subject 是"节点身份"，不是 bootstrap 用户身份。** CN 是 `system:node:<nodeName>`，而**不是** `system:bootstrap:<id>`。很多人以为 bootstrap token 的 username 会出现在证书里——不会。token 只用于"我有资格申请"，申请的东西是节点证书。
 
-### 2.5 CSR 的审批：走的是授权查询，不是硬编码
+### 2.5 CSR Approval: Uses Authorization Query, Not Hardcoding
 
 审批控制器只有**两个** recognizer（`pkg/controller/certificates/approver/sarapprove.go:62-76`）：
 
@@ -136,7 +136,7 @@ kubelet 侧入口是 `bootstrap.LoadClientCert`，最终落到 `requestNodeCerti
 
 前者是"新节点首次换证"，后者是"老节点自己轮换"——**这是两条权限不同的路**，不要混。另外 `system:node-bootstrapper`（`policy.go:447`）只给 `create/get/list/watch certificatesigningrequests`，作用是"能提交 CSR"，不含批准。
 
-### 2.6 签发与回收
+### 2.6 Issuance and Revocation
 
 kube-controller-manager 里注册了**四个** signing controller（`pkg/controller/certificates/signer/signer.go`）：
 
@@ -155,9 +155,9 @@ kube-controller-manager 里注册了**四个** signing controller（`pkg/control
 
 ---
 
-## 第三段：证书落盘与轮换
+## Segment 3: Certificate Persistence and Rotation
 
-### 3.1 磁盘布局
+### 3.1 Disk Layout
 
 `NewFileStore(prefix, ...)` 生成的文件名规则是 `<prefix>-<qualifier>.pem`（`staging/src/k8s.io/client-go/util/certificate/certificate_store.go:315-317`）。kubelet 用两个前缀：
 
@@ -168,7 +168,7 @@ kube-controller-manager 里注册了**四个** signing controller（`pkg/control
 
 每次轮换写一个新文件 `kubelet-client-2006-01-02-15-04-05.pem`，再原子替换 `-current` symlink（`certificate_store.go:205-206`、`:303-311`）。目录权限 `0755`，文件权限 `0600`（`:208`、`:213`）。旧版本路径 `kubelet-client.crt` / `.key` 仍作为回退被读取（`:164-165`）。
 
-### 3.2 阈值：70% 到 90%
+### 3.2 Threshold: 70% to 90%
 
 ```go
 var jitteryDuration = func(totalDuration float64) time.Duration {
@@ -183,7 +183,7 @@ var jitteryDuration = func(totalDuration float64) time.Duration {
 
 没有 `certRenewalPercent` 之类的可配置项；轮换阈值不可调。
 
-### 3.3 失败与重试
+### 3.3 Failure and Retry
 
 | 情形 | 行为 | 出处 |
 |---|---|---|
@@ -192,7 +192,7 @@ var jitteryDuration = func(totalDuration float64) time.Duration {
 | **失败上限** | **没有**。kubelet 不因轮换失败而崩溃 | — |
 | 重启时 | store 里有未过期证书就直接复用，**不换证** | `:504-514` |
 
-### 3.4 服务端证书轮换要过两道门
+### 3.4 Server Certificate Rotation Must Pass Two Gates
 
 ```go
 if kubeCfg.ServerTLSBootstrap && utilfeature.DefaultFeatureGate.Enabled(features.RotateKubeletServerCertificate) {
@@ -202,7 +202,7 @@ if kubeCfg.ServerTLSBootstrap && utilfeature.DefaultFeatureGate.Enabled(features
 
 另一个容易踩的点：服务端 CSR 模板**至少需要一个 IP SAN**，否则 `newGetTemplateFn` 返回 nil，kubelet 干脆不申请（`kubelet.go:51-61`）。
 
-### 3.5 transport 侧的动态加载
+### 3.5 Dynamic Loading on the Transport Side
 
 `transport.go` 把证书读取挂成 `GetClientCertificate` 回调，直接返回 `clientCertificateManager.Current()`（`:92-98`）。另有一个每 10 秒的检查：若发现 `Current()` 变了，就 `CloseAll()` 把所有连接踢掉强制重握手——**不是重建 transport，而是断连接**（`:147-152`、`:156`）。
 
@@ -216,9 +216,9 @@ if kubeCfg.ServerTLSBootstrap && utilfeature.DefaultFeatureGate.Enabled(features
 
 ---
 
-## 第四段：ServiceAccount Token
+## Segment 4: ServiceAccount Token
 
-### 4.1 两种 token 并存
+### 4.1 Two Kinds of Tokens Coexist
 
 | | legacy | bound |
 |---|---|---|
@@ -233,7 +233,7 @@ if kubeCfg.ServerTLSBootstrap && utilfeature.DefaultFeatureGate.Enabled(features
 > [!CAUTION]
 > 移除的只是"**自动创建**"。legacy authenticator 仍在 apiserver 启动时注册，所以**手工创建的 Secret 依然会被填入 token，也依然能被认证**（`pkg/serviceaccount/legacy.go`）。这不是漏洞，是设计上的兼容出口。
 
-### 4.2 默认有效期 3607 秒
+### 4.2 Default Validity Period 3607 Seconds
 
 ```go
 WarnOnlyBoundTokenExpirationSeconds = 60*60 + 7
@@ -245,7 +245,7 @@ WarnOnlyBoundTokenExpirationSeconds = 60*60 + 7
 
 `--service-account-max-token-expiration` 默认 **0（无上限）**，只有配成非 0 时才会裁剪超长请求（`token.go:222-225`）。
 
-### 4.3 claims 与校验时机
+### 4.3 Claims and Verification Timing
 
 JWT 的 `kubernetes.io` 段包含命名空间、ServiceAccount 的 name/uid，以及可选的 pod / node / secret 的 name/uid（`pkg/serviceaccount/claims.go:56-63`）。注意 **JWT 只存 name + uid，不存 kind / apiVersion**。
 
@@ -264,7 +264,7 @@ JWT 的 `kubernetes.io` 段包含命名空间、ServiceAccount 的 name/uid，�
 
 **文件会自己更新**：kubelet 在 80% TTL 时用 atomic writer 重写 token 文件，容器里长期运行的进程只要重新读文件就能拿到新 token。但**把 token 读进环境变量的做法不会更新**。
 
-### 4.5 校验侧
+### 4.5 Verification Side
 
 apiserver 用 `JWTTokenAuthenticator`，默认 RS256（也支持 ES256/384/512，`jwt.go:127,155-161`）。`--service-account-key-file` 接受**多个**文件，校验时逐个尝试所有公钥（`:360-371`）——这是 SA 签名密钥轮换的机制。OIDC discovery 与 JWKS 端点注册在 `pkg/routes/openidmetadata.go:78`（`/openid/v1/jwks`）。
 
@@ -274,9 +274,9 @@ apiserver 用 `JWTTokenAuthenticator`，默认 RS256（也支持 ES256/384/512�
 
 ---
 
-## 第五段：v1.36 的新面孔
+## Segment 5: New Faces in v1.36
 
-### 5.1 PodCertificateRequest —— 工作负载直接要 x509
+### 5.1 PodCertificateRequest — Workload Requests x509 Directly
 
 v1.34 Alpha 引入、v1.35 转 Beta 的 `PodCertificateRequest`（`certificates.k8s.io/v1beta1`），在 v1.36 里的 gate 状态是：
 
@@ -291,7 +291,7 @@ PodCertificateRequest: {
 
 它的设计意图和 CSR 完全不同：**请求内容只有一句话——"Pod X 向 signer Y 要证书"**。私钥由 **kubelet** 生成，kubelet 负责建 PCR、等签发、把 key 与证书链挂进 Pod 文件系统；**node 限制的强制在 apiserver 侧**。Kubernetes 自带**零个**应用 signer，签发交给第三方。
 
-### 5.2 ClusterTrustBundle —— 取代 `kube-root-ca.crt`
+### 5.2 ClusterTrustBundle — Replaces `kube-root-ca.crt`
 
 `rootcacertpublisher` 现在的行为是往**每一个** namespace 发布同名 ConfigMap `kube-root-ca.crt`，数据 key 为 `ca.crt`（`pkg/controller/certificates/rootcacertpublisher/publisher.go:42`、`:205`）；Namespace informer 的 Add 与 Update 都入队（`:74-76`、`:152`、`:157`）。
 
@@ -309,7 +309,7 @@ ClusterTrustBundle: {
 
 `pkg/features/kube_features.go:1320-1323`（**默认关闭**）。发布的对象名由 signerName 派生：`/` 换成 `:`，再接 `:` + sha256(CA bundle) 的前 12 位（`pkg/controller/certificates/clustertrustbundlepublisher/publisher.go:372-376`）。接线时优先 v1beta1，discovery 不到就回退 v1alpha1（`cmd/kube-controller-manager/app/certificates.go:326`）。
 
-### 5.3 v1.36 新增的 gate
+### 5.3 New Gate Added in v1.36
 
 ```go
 ReloadKubeletClientCAFile: {
@@ -319,7 +319,7 @@ ReloadKubeletClientCAFile: {
 
 `pkg/features/kube_features.go:1886-1888`——**v1.36 新引入，Beta 即默认开启**。它让 kubelet 可以在不重启的情况下重载客户端 CA 文件。
 
-### 5.4 清理节奏
+### 5.4 Cleanup Cadence
 
 `csrcleaner` 是唯一会删 CSR 的组件，常量写在 `pkg/controller/certificates/cleaner/cleaner.go:45-50`：
 
@@ -335,7 +335,7 @@ ReloadKubeletClientCAFile: {
 
 ---
 
-## 全链路对照表
+## Whole-chain Comparison Table
 
 | 阶段 | 触发者 | 凭据 | 校验方 | 结果 |
 |---|---|---|---|---|
@@ -353,7 +353,7 @@ ReloadKubeletClientCAFile: {
 
 ---
 
-## v1.36 反直觉清单
+## v1.36 Counterintuitive List
 
 1. **ServiceAccount token 与集群 CA 是两套完全独立的信任根。** `--client-ca-file` 不认 SA token，`--service-account-key-file` 也不认客户端证书。
 2. **`PermissiveSigningPolicy` 不覆写 Subject**（`policies.go:68-112`），只清扩展、强制 `IsCA=false`、夹紧 NotAfter。约束 Subject 的是审批，不是签发。
@@ -375,7 +375,7 @@ ReloadKubeletClientCAFile: {
 
 ---
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 | 症状 | 先查什么 | 常见原因 |
 |---|---|---|

@@ -77,7 +77,7 @@ docker run --rm -d -p 16686:16686 -p 4317:4317 -p 4318:4318 \
 
 应用侧只需把 OTel exporter 指向 `http://localhost:4318`（OTLP/HTTP）或 `4317`（OTLP/gRPC）即可，无需引入 Jaeger 专有客户端。
 
-## Jaeger vs Zipkin
+## Jaeger and Zipkin
 
 | 维度 | Jaeger | [Zipkin](/docs/CS/Distributed/Tracing/Zipkin.md) |
 | --- | --- | --- |

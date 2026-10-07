@@ -12,7 +12,7 @@
 
 一个先要说清的前提：**绝大多数缓冲调优只在用户没有显式设置时生效**。`SO_SNDBUF` / `SO_RCVBUF` 一旦被 `setsockopt` 设置，内核就置上 `SOCK_SNDBUF_LOCK` / `SOCK_RCVBUF_LOCK`，此后自动调优全线停摆。这是个很常见的踩坑点——"我调大缓冲区想提速"，结果反而锁死了内核的自适应。
 
-## 三道闸门：从"想发一个包"到"真的能发"
+## Three Gates: From 'Want to Send a Packet' to 'Actually Can Send'
 
 发送一个 skb 之前，内存要走三次判断。入口是 `tcp_stream_alloc_skb()`（`net/ipv4/tcp.c:926`）：
 
@@ -51,7 +51,7 @@ struct sk_buff *tcp_stream_alloc_skb(struct sock *sk, gfp_t gfp,
 
 注意失败路径：分配失败时**先宣布内存压力，再收缩 sndbuf**，而不是直接返回错误。这是一次自我驯服——承认系统内存紧张，把这条连接的发送上限压低。
 
-### 闸门一：sk_forward_alloc 的批量预取
+### Gate 1: Batch Prefetch of sk_forward_alloc
 
 ```c
 static inline bool sk_wmem_schedule(struct sock *sk, int size)
@@ -86,7 +86,7 @@ int __sk_mem_schedule(struct sock *sk, int size, int kind)
 
 为什么要批量？因为**全局计数器是原子变量，高频连接上每次分配都去加减它会成为热点**。批量预取把"每 skb 一次原子操作"降为"每 4KB 一次"。代价是 socket 会短暂地"占着不用"，这也是为什么内存压力判断里要把 `sk_forward_alloc` 算进 socket 的占用量。
 
-### 闸门二：__sk_mem_raise_allocated 的四道判据
+### Gate 2: The Four Criteria of __sk_mem_raise_allocated
 
 这是全局内存控制的核心（`net/core/sock.c:3338` 起）：
 
@@ -167,7 +167,7 @@ int __sk_mem_schedule(struct sock *sk, int size, int kind)
 
 判据是 `tcp_mem[2] > socket 数 × 本 socket 占用页数`——也就是"**如果每个 socket 都像我这样用，总共会不会超硬上限**"。不会就放行。这是一个很漂亮的公平性近似：不用维护全局排序，用一个乘法就把"低于平均占用"的 socket 挑出来。注意这里的 `sk_forward_alloc` 被算进占用，防止靠囤积额度来绕过。
 
-### 闸门三：memcg 的第二层账
+### Gate 3: The Second-level Account of memcg
 
 ```c
 	if (mem_cgroup_sk_enabled(sk)) {
@@ -180,7 +180,7 @@ int __sk_mem_schedule(struct sock *sk, int size, int kind)
 
 TCP 内存同时受**全局计数器**和 **memcg 限额**两重约束，任一超限都拒绝。这是容器场景里容易被忽略的一点：`tcp_mem` 没超限不代表能分配，cgroup 的 memory limit 也在管。释放侧对应 `mem_cgroup_sk_uncharge()`。
 
-### 被拒之后：对 TCP 流的特殊处理
+### After Rejection: Special Handling for TCP Flows
 
 ```c
 suppress_allocation:
@@ -203,7 +203,7 @@ suppress_allocation:
 
 SOCK_STREAM 有个特殊规则：**如果 socket 已经在自己的 sndbuf 上限附近，就强制放行**。注释解释了理由——这种情况下内核不能阻塞等待（TCP 发送路径不能睡眠），只能强制记账放行。memcg 那边用 `__GFP_NOFAIL` 硬充。
 
-## 全局：sysctl_tcp_mem 三档怎么来的
+## Global: How the Three Tiers of sysctl_tcp_mem Are Derived
 
 `sysctl_tcp_mem` 是**开机自动算的**（`tcp_init_mem()`），不是固定值。它按系统总内存的页数量级分档，所以在一台 4GB 的机器和一台 256GB 的机器上完全不同。查看与调整：
 
@@ -232,9 +232,9 @@ void tcp_enter_memory_pressure(struct sock *sk)
 
 一个巧妙之处：`tcp_memory_pressure` 不是 bool，而是**进入压力时的 jiffies 时间戳**。`cmpxchg(0 → val)` 保证只记录第一次，退出时（`tcp_leave_memory_pressure`）用它算出压力持续了多久并累加到 `TCPMEMORYPRESSURESCHRONO` 计数器。于是"系统经历过多少次内存压力"和"累计压力时长"两个指标都从同一个变量里出来了。`val--` 那行是处理 jiffies 恰好为 0 的边界情况（0 被用作"无压力"哨兵）。
 
-## 每 socket：wmem / rmem 三元组
+## Per-socket: wmem / rmem Triple
 
-### 默认值的由来
+### Origin of the Default Value
 
 ```c
 	/* Set per-socket limits to no more than 1/128 the pressure threshold */
@@ -257,7 +257,7 @@ void tcp_enter_memory_pressure(struct sock *sk)
 
 `1/128` 这个比例（`PAGE_SHIFT - 7`）是关键约束：**单个 socket 的上限不超过压力阈值的 1/128**，防止少数连接吃光全局配额。
 
-### 发送缓冲扩展：tcp_sndbuf_expand
+### Send Buffer Expansion: tcp_sndbuf_expand
 
 连接进入 ESTABLISHED 时，`tcp_init_buffer_space()` 会调 `tcp_sndbuf_expand()`（`net/ipv4/tcp_input.c:605`）：
 
@@ -293,7 +293,7 @@ void tcp_enter_memory_pressure(struct sock *sk)
 2. **默认 2 倍余量来自"快速恢复需要"**：注释点名 CUBIC 需要 1.7 倍，向上取整到 2 还额外留了"应用对 EPOLLOUT 反应慢"的缓冲。
 3. **拥塞算法可以覆盖这个倍数**——`ca_ops->sndbuf_expand`。BBR 返回 **3**（`tcp_bbr.c:1082`），理由是"BBR 即使在恢复期也可能慢启动"。这是拥塞算法影响内存占用的一个直接接口。
 
-### 内存压力下收缩：sk_stream_moderate_sndbuf
+### Shrink Under Memory Pressure: sk_stream_moderate_sndbuf
 
 ```c
 static inline void sk_stream_moderate_sndbuf(struct sock *sk)
@@ -314,17 +314,17 @@ static inline void sk_stream_moderate_sndbuf(struct sock *sk)
 
 逻辑是"**把 sndbuf 压到当前已排队量的一半**"，但不低于 `SOCK_MIN_SNDBUF`。开头那个 `SOCK_SNDBUF_LOCK` 检查就是前面说的：**用户显式设过 `SO_SNDBUF` 的连接不参与收缩**。
 
-### SOCK_SNDBUF_LOCK 的陷阱
+### The Pitfall of SOCK_SNDBUF_LOCK
 
 再强调一次这条链：`setsockopt(SO_SNDBUF)` → `sk_userlocks |= SOCK_SNDBUF_LOCK` → `tcp_sndbuf_expand()` 被跳过（`tcp_init_buffer_space()` 里 `if (!(sk->sk_userlocks & SOCK_SNDBUF_LOCK))`）、`sk_stream_moderate_sndbuf()` 直接返回。
 
 所以**在高 BDP 链路上手动设 `SO_SNDBUF` 往往会降低性能**，除非你算出来的值确实比内核自动调优的上限更合适。同理 `SO_RCVBUF` 会锁死接收侧 DRS。
 
-## 接收缓冲自动调优：DRS
+## Receive Buffer Auto-tuning: DRS
 
 发送缓冲的大小主要由 cwnd 决定（相对好算），接收缓冲则难得多——它要同时容纳"网络上正在飞的数据"和"应用调度延迟期间堆积的数据"。内核的做法是**持续测量应用实际读取速率，据此反推需要多大的缓冲**。
 
-### 两段缓冲模型
+### Two-segment Buffer Model
 
 `tcp_input.c:637` 的注释讲得很清楚：
 
@@ -339,7 +339,7 @@ static inline void sk_stream_moderate_sndbuf(struct sock *sk)
 
 `rcv_ssthresh` 是"慢启动阶段"用的更严格的窗口上限，服务于两个目标（注释里的 check#1 / check#2）：强制发送端能做首部预测（header prediction），以及防止因窗口误判导致接收队列被裁剪。
 
-### 测量：tcp_rcv_space_adjust
+### Measurement: tcp_rcv_space_adjust
 
 每次数据被复制到用户空间后调用（`tcp_input.c:960`）：
 
@@ -363,7 +363,7 @@ static inline void sk_stream_moderate_sndbuf(struct sock *sk)
 
 注释里有个值得记的细节：这里**刻意不刷新 `tp->tcp_mstamp`**，理由是某些平台上 `ktime_get()` 很贵，用上次缓存的值对 DRS 来说精度够了。
 
-### 增长：tcp_rcvbuf_grow 的两个分支
+### Growth: The Two Branches of tcp_rcvbuf_grow
 
 ```c
 	/* DRS is always one RTT late. */
@@ -408,9 +408,9 @@ static inline void sk_stream_moderate_sndbuf(struct sock *sk)
 
 最后增长会同步更新 `window_clamp`，保证通告窗口跟上。上限是 `tcp_rmem[2]`。
 
-## 一个容易算错的换算：字节数 ≠ 内存量
+## An Easy-to-miscalculate Conversion: Bytes != Memory
 
-### truesize 与 scaling_ratio
+### truesize and scaling_ratio
 
 skb 的 `truesize` 是它实际占用的内存（含 skb 结构、按 2 的幂取整的 head、shared_info 等），而 `skb->len` 是它承载的数据字节数。两者的比值**随 TSO/GRO 剧烈变化**：
 
@@ -459,7 +459,7 @@ static inline int tcp_win_from_space(const struct sock *sk, int space)
 
 ⚠️ **版本差异**：旧内核（以及大量网上资料、调优文档）用的是 `sysctl_tcp_adv_win_scale` 的固定移位换算（`space - (space >> tcp_adv_win_scale)`）。v7.2.7 上 `sysctl_tcp_adv_win_scale` 这个 sysctl 仍然存在（默认 1），但 **`tcp_win_from_space()` 已经不看它了**——实际生效的是 per-socket 的 `scaling_ratio`。照旧文档调这个 sysctl 不会有效果。
 
-### 三个换算函数
+### Three Conversion Functions
 
 ```c
 static inline int tcp_space(const struct sock *sk)
@@ -479,7 +479,7 @@ static inline int tcp_full_space(const struct sock *sk)
 
 `tcp_space()` 是当前可通告的窗口（扣掉 backlog 和已用），`tcp_full_space()` 是缓冲全空时的理论上限。反向换算 `tcp_space_from_win()` 用于从"想要的窗口"反推"需要多大的 rcvbuf"（DRS 里就用它）。
 
-## TSO / GSO 对缓冲的影响
+## Impact of TSO / GSO on Buffering
 
 发送侧一次能聚合多少，由 `tcp_xmit_size_goal()` 决定（`net/ipv4/tcp.c:957`）：
 
@@ -505,7 +505,7 @@ static inline int tcp_full_space(const struct sock *sk)
 
 拥塞算法也能干预这个：`tcp_congestion_ops.min_tso_segs` 回调可以覆盖 `sysctl_tcp_min_tso_segs`。BBR 的实现是低速时强制段数为 1（`tcp_bbr.c:300`），避免低带宽下攒大包造成突发。
 
-## TCP 选项的空间成本
+## TCP Option Space Cost
 
 选项不是免费的，它们直接从 MSS 里扣：
 
@@ -533,7 +533,7 @@ static inline int tcp_full_space(const struct sock *sk)
 
 `tcp_measure_rcv_mss()` 末尾那句注释 "Account for possibly-removed options" 就是在处理这个：内核可能在接收路径上剥掉选项，此时要相应调整 `rcv_mss`。
 
-## 观测
+## Observation
 
 ```bash
 # 全局三档（单位：页）与当前用量
@@ -555,7 +555,7 @@ ss -tm
 
 内存压力相关的两个计数器来自前面那个 jiffies 技巧：`TcpMemoryPressures`（进入次数）与 `TcpMemoryPressuresChrono`（累计毫秒，由 `tcp_leave_memory_pressure()` 累加）。
 
-## 与其他笔记的关系
+## Relationship with Other Notes
 
 - **[Retransmission](/docs/CS/OS/Linux/net/TCP/Retransmission.md)**：timestamp 选项（12 字节）是 RTT 测量的载体，SACK 选项（8 字节/块）是丢包反馈的载体——两者都是本篇讲的选项成本的主要来源。
 - **[BBR](/docs/CS/OS/Linux/net/TCP/BBR.md)**：BBR 通过 `sndbuf_expand = 3` 和 `min_tso_segs` 两个回调直接参与缓冲管理，比 CUBIC 更激进。

@@ -2,7 +2,7 @@
 
 Consul 用 **Serf**（HashiCorp 基于 SWIM 算法实现的 gossip 库）做成员发现、故障检测与事件广播。它和 [Raft](/docs/CS/Framework/consul/raft.md) 是两套独立机制：Raft 管"状态一致"，Serf 管"谁在集群里、谁挂了"。这是 etcd（静态 peer 列表）和 ZooKeeper（静态 peer 列表）都没有的原生能力——也是 Consul 能平滑扩缩 server、做跨数据中心联邦的基础。
 
-## 两套 gossip 池
+## Two Sets of gossip Pools
 
 Consul 维护**两套独立的 Serf 池**：
 
@@ -11,7 +11,7 @@ Consul 维护**两套独立的 Serf 池**：
 
 端口：LAN `8301`（TCP+UDP）、WAN `8302`（TCP+UDP）。阻塞这两个端口的入/出站都会扰乱 gossip 导致集群不稳。
 
-## 故障检测（SWIM）
+## Failure Detection (SWIM)
 
 Serf 采用 SWIM（Scalable Weakly-consistent Infection-style Process Group Membership）风格的探测：
 
@@ -22,7 +22,7 @@ Serf 采用 SWIM（Scalable Weakly-consistent Infection-style Process Group Memb
 > [!TIP]
 > gossip 对延迟敏感：官方参考架构要求同 DC 内 **平均 RTT < 50ms、p99 RTT < 100ms**。跨可用区部署时若 RTT 过高，会出现频繁 `suspicion`、server 被误判 failed、进而触发 Raft 重选。此时应调 `serf_lan` 重传或把 server 收敛到更近的 AZ（见 [Tuning](/docs/CS/Framework/consul/tuning.md)）。
 
-## 网络坐标（Network Coordinates）
+## Network Coordinates
 
 Serf 顺带估算各节点的**网络坐标**（基于 Vivaldi 算法的分布式 RTT 模型），Consul 据此能：
 
@@ -31,7 +31,7 @@ Serf 顺带估算各节点的**网络坐标**（基于 Vivaldi 算法的分布�
 
 这是 etcd / ZooKeeper 完全不具备的原生能力——它们要么靠外部 LB，要么靠人工选址。
 
-## 加密：对称密钥环（keyring）
+## Encryption: Symmetric Keyring
 
 LAN / WAN gossip 流量可用**对称密钥环**加密（`encrypt` 配置，Base64 编码的 16 字节密钥，`consul keygen` 生成）。特性：
 
@@ -43,7 +43,7 @@ LAN / WAN gossip 流量可用**对称密钥环**加密（`encrypt` 配置，Base
 > [!WARNING]
 > gossip 加密只是"链路对称加密 + 认证"，**不等于 ACL 授权**。任何拿到密钥的节点都能加入集群并读 catalog。真正的访问控制仍靠 [Security](/docs/CS/Framework/consul/security.md) 的 ACL + mTLS。
 
-## 与 etcd / ZooKeeper 对照
+## Comparison with etcd / ZooKeeper
 
 | 维度 | Consul（Serf） | etcd | ZooKeeper |
 | :--- | :--- | :--- | :--- |

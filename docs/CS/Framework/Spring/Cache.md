@@ -118,7 +118,7 @@ public abstract class AbstractCacheManager implements CacheManager, Initializing
 
 很多扩展通过自定义 `KeyGenerator` 与 `CacheManager` 来绕开这个限制，例如为不同缓存配置不同过期策略（见下文 Storage Backends 与 Boot 侧 `spring.cache.redis.*`）。
 
-### 注解声明式缓存
+### Annotation-Based Declarative Cache
 
 Spring 提供五个缓存注解：
 
@@ -137,7 +137,7 @@ Spring 提供五个缓存注解：
 public Book findBook(ISBN isbn) { ... }
 ```
 
-#### Key 生成
+#### Key Generation
 
 默认的 `SimpleKeyGenerator` 规则：无参 → `SimpleKey.EMPTY`；单参 → 该参数本身；多参 → 包含全部参数的 `SimpleKey`。参数需要有正确的 `hashCode()`/`equals()`。
 
@@ -153,7 +153,7 @@ public Book findBook(ISBN isbn) { ... }
 
 也可以实现 `org.springframework.cache.interceptor.KeyGenerator` 并通过 `keyGenerator = "myKeyGenerator"` 指定。注意 `key` 与 `keyGenerator` 互斥，同时设置会抛异常。
 
-#### 条件缓存
+#### Conditional Cache
 
 - `condition`：方法执行**前**求值，为 false 则完全不走缓存（既不查也不存）。
 - `unless`：方法执行**后**求值（可用 `#result`），为 true 则不缓存本次结果。
@@ -166,7 +166,7 @@ public Book findBook(String name) { ... }
 
 `#result` 指向业务实体本身而非 `Optional` 包装器；返回值可能为 null 时用安全导航 `#result?.field`。常用 SpEL 上下文还有 `#root.methodName`、`#root.target`、`#root.args[0]`、`#root.caches[0].name`。
 
-#### 同步加载
+#### Synchronous Loading
 
 默认缓存抽象不加锁，并发下同一 key 可能被多个线程重复计算。`sync = true` 让底层 Cache 提供方在计算期间锁定该条目（核心框架自带的 CacheManager 均支持）：
 
@@ -175,7 +175,7 @@ public Book findBook(String name) { ... }
 public Foo executeExpensiveOperation(String id) { ... }
 ```
 
-#### CachePut 与 CacheEvict 的注意点
+#### Notes on CachePut and CacheEvict
 
 - 不要在同一方法上混用 `@CachePut` 与 `@Cacheable`：后者会跳过方法执行，前者强制执行，语义冲突。
 - `@CacheEvict(allEntries = true)` 一次清空整个缓存区，此时指定的 key 会被忽略；`beforeInvocation = true` 让回收发生在方法执行之前（默认成功执行后才回收，方法被缓存跳过或抛异常则不回收）。`void` 方法可以配合 `@CacheEvict` 使用（只作触发器），但不能配 `@Cacheable`。
@@ -303,7 +303,7 @@ public class CacheInterceptor extends CacheAspectSupport implements MethodInterc
 ```
 
 
-### Cache 接口
+### Cache Interface
 
 `Cache` 代表一个**命名缓存**，`CacheManager.getCache(name)` 拿到它。关键方法：
 
@@ -367,7 +367,7 @@ Spring Boot 下只要引入对应 starter 并配 `spring.cache.type`/`spring.cac
 
 关于 TTL/TTI/淘汰策略：Spring 抽象不提供统一 API，这些特性由具体后端配置（如 Caffeine spec、Ehcache XML）。
 
-## 缓存一致性
+## Cache Consistency
 
 缓存与数据源的一致性是缓存抽象**不替你解决**的部分，需要应用层自己设计：
 

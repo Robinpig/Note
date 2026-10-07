@@ -1,96 +1,64 @@
 ## Introduction
 
-Paxos is a family of distributed algorithms used to reach consensus.
+Paxos 是 Lamport 提出的一族分布式共识算法，用于让一组节点就某个值达成一致。它包含单值 Paxos（Basic Paxos）与多值 Paxos（Multi-Paxos）等变体，是后续 Raft、ZAB 等算法的理论源头，但工程上以「难理解」著称。
 
 ## Basic-Paxos
 
-Paxos defines three roles: *proposers*, *acceptors*, and *learners*. Each node can take multiple roles, even all of them.
+Paxos 定义了三个角色：*proposers*（提议者）、*acceptors*（接受者）、*learners*（学习者）。每个节点可同时承担多个角色，甚至全部。
 
-- **Proposers** A proposer can propose a value.
-- **Acceptors** The acceptors cooperate in some way to choose a single proposed value.
-- **Learners** A learner can learn what value has been chosen.
+- **Proposers**：提出候选值。
+- **Acceptors**：协作从多个提案中选出一个。
+- **Learners**：得知最终被选中的值。
 
-Assume that nodes can communicate with one another by sending messages.
-We use the customary asynchronous, **non-Byzantine model**, in which:
+Paxos 假设节点通过消息通信，采用经典的**非拜占庭异步模型**：
 
-- Agents operate at arbitrary speed, may fail by stopping, and may restart.
-  Since all agents may fail after a value is chosen and then restart, a solution is impossible unless some information can be remembered by an agent that has failed and restarted.
-- Messages can take arbitrarily long to be delivered, can be duplicated, and can be lost, but they are not corrupted.
+- 节点以任意速度运行，可能因停机而失效，也可能重启。由于所有节点都可能在某个值被选中后失效并重启，除非某个节点能记住它已接受/已选定的值，否则无解。
+- 消息可任意延迟、重复、丢失，但不会被篡改（非拜占庭）。
 
-Assume a collection of processes that can propose values.
-A consensus algorithm ensures that a single one among the proposed values is chosen.
-If no value is proposed, then no value should be chosen.
-If a value has been chosen, then processes should be able to learn the chosen value.
+假设一组进程可提出值。共识算法保证在被提出的多个值中只选出一个；若无人提值，则不选任何值；一旦某值被选中，进程应能学习到该值。
 
-The safety requirements for consensus are:
+共识的安全要求：
 
-- Only a value that has been proposed may be chosen,
-- Only a single value is chosen, and
-- A process never learns that a value has been chosen unless it actually has been.
+- 只有被提出过的值才能被选中；
+- 至多一个值被选中；
+- 一个进程绝不会「学到」某个值被选中，除非它确实被选中了。
 
 ### Choosing a Value
 
-Single acceptor is unsatisfactory because the failure of the acceptor makes any further progress impossible.
-Instead of a single acceptor, let’s use multiple acceptor agents.
-A proposer sends a proposed value to a set of acceptors.
-To ensure that only a single value is chosen, we can let a large enough set consist of any majority of the agents.
+单一接受者无法满足要求——它一旦失效，整个系统便无法推进。因此使用多个接受者：提议者把候选值发给一组接受者。为保证只选中一个值，我们让「足够大的接受者集合」等于任意多数派（majority）。
 
-Paxos nodes must know how many acceptors a majority is.
+Paxos 节点必须知道「多数派」是多少个接受者。算法分两个阶段运行：
 
-We see that the algorithm operates in the following two phases.
+| | proposer | acceptor |
+| --- | --- | --- |
+| **Phase 1** | 提议者选一个提案编号 n，向多数派接受者发送编号为 n 的 prepare 请求。 | 若接受者收到的 prepare 请求编号 n 大于它已响应的任何 prepare 请求，则回应一个承诺：不再接受编号小于 n 的任何提案，并返回它已接受过的编号最大的提案（若有）。 |
+| **Phase 2** | 若提议者收到多数派对 prepare(n) 的回应，则向这些接受者发送 accept 请求，提案编号为 n、值为 v；v 取回应中编号最大的已接受提案的值，若回应均未报告任何提案则可为任意值。 | 若接受者收到编号为 n 的 accept 请求，除非它已回应过编号大于 n 的 prepare 请求，否则接受该提案。 |
 
-
-|             | proposer                                                                                                                                                                                                                                                                                                                                      | acceptor                                                                                                                                                                                                                                                                                                       |
-| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Phase 1** | A proposer selects a proposal number n and sends a prepare request with number n to a majority of acceptors.                                                                                                                                                                                                                                  | If an acceptor receives a prepare request with number n greater than that of any prepare request to which it has already responded, then it responds to the request with a promise not to accept any more proposals numbered less than n and with the highest-numbered proposal (if any) that it has accepted. |
-| **Phase 2** | If the proposer receives a response to its prepare requests(numbered n) from a majority of acceptors, then it sends an accept request to each of those acceptors for a proposal numbered n with a value v, where v is the value of the highest-numbered proposal among the responses, or is any value if the responses reported no proposals. | If an acceptor receives an accept request for a proposal numbered n, it accepts the proposal unless it has already responded to a prepare request having a number greater than n.                                                                                                                              |
-
-A proposer can make multiple proposals, so long as it follows the algorithm for each one.
-It can abandon a proposal in the middle of the protocol at any time. (Correctness is maintained, even though requests and/or responses for the proposal may arrive at their destinations long after the proposal was abandoned.)
-It is probably a good idea to abandon a proposal if some proposer has begun trying to issue a higher-numbered one.
-Therefore, if an acceptor ignores a prepare or accept request because it has already received a prepare request with a higher number, then it should probably inform the proposer, who should then abandon its proposal.
-This is a performance optimization that does not affect correctness.
+一个提议者可以发起多个提案，只要对每个提案都遵循上述算法。它也可以在中途随时放弃某个提案（正确性不受影响，即使该提案的请求/响应在放弃后很久才到达）。若已有其它提议者开始发起编号更高的提案，放弃当前提案通常是明智之举。因此，若接受者因已收到更高编号的 prepare 而忽略某个 prepare/accept 请求，它应通知提议者，让其放弃——这是一个不影响正确性的性能优化。
 
 ### Learning a Chosen Value
 
-To learn that a value has been chosen, a learner must find out that a proposal has been accepted by a majority of acceptors.
+学习者要知道某个值被选中，必须发现该值已被多数派接受。
 
-The acceptors could respond with their acceptances to some set of distinguished learners, each of which can then inform all the learners when a value has been chosen.
-Using a larger set of distinguished learners provides greater reliability at the cost of greater communication complexity.
+接受者可以把它们的接受结果回报给一组「指定的学习者」，由其中任一学习者在该值被选中时通知所有学习者。指定的学习者越多，可靠性越高，但通信开销也越大。
 
-Because of message loss, a value could be chosen with no learner ever finding out.
-The learner could ask the acceptors what proposals they have accepted, but failure of an acceptor could make it impossible to know whether or not a majority had accepted a particular proposal.
-In that case, learners will find out what value is chosen only when a new proposal is chosen.
-If a learner needs to know whether a value has been chosen, it can have a proposer issue a proposal, using the algorithm described above.
+由于消息可能丢失，某个值可能已被选中却没有任何学习者知晓。学习者可以主动向接受者询问它们接受了哪些提案，但接受者失效时可能无法确定多数派是否接受了某个提案；此时学习者只能等下一个提案被选中时才能得知。若学习者必须知道某值是否已选中，可让一个提议者发起新提案（沿用上述算法）。
 
-If enough of the system (proposer, acceptors, and communication network) is working properly, liveness can therefore be achieved by electing a single distinguished proposer.
-FLP implies that a reliable algorithm for electing a proposer must use either randomness or real time—for example, by using timeouts.
-However, safety is ensured regardless of the success or failure of the election.
+只要系统足够多部分（提议者、接受者、网络）正常工作，通过选出一个唯一的 distinguished proposer（主提议者），即可实现活性。FLP 表明：选举这样的提议者必然依赖随机性或真实时间（如超时），但无论选举成功与否，安全性始终成立。
 
-In normal operation, a single server is elected to be the leader, which acts as the distinguished proposer (the only one that tries to issue proposals) in all instances of the consensus algorithm.
+在正常操作中，系统选出一个 leader，它在所有共识实例中充当 distinguished proposer（唯一发起提案者）。
 
-In the Paxos consensus algorithm, the value to be proposed is not chosen until phase 2.
-After completing phase 1 of the proposer’s algorithm, either the value to be proposed is determined or else the proposer is free to propose any value.
+Basic-Paxos 中，要决定的值在 phase 2 才被选定。提议者完成 phase 1 后，要么值已确定，要么可以自由提议任意值。
 
-This discussion of the normal operation of the system assumes that there is always a single leader, except for a brief period between the failure of the current leader and the election of a new one.
-In abnormal circumstances, the leader election might fail.
-If no server is acting as leader, then no new commands will be proposed. If multiple servers think they are leaders, then they can all propose values in the same instance of the consensus algorithm, which could prevent any value from being chosen.
-However, safety is preserved—two different servers will never disagree on the value chosen as the i th state machine command. Election of a single leader is needed only to ensure progress.
+上述正常操作假设总有一个 leader，仅在当前 leader 失效与新 leader 选出的短暂窗口内例外。异常情况下 leader 选举可能失败：若无节点充当 leader，则不会有新命令被提议；若多个节点自认 leader，它们会在同一共识实例中各提各的值，可能导致没有任何值被选中。但安全性仍被保持——两个不同的服务器绝不会对「第 i 条状态机命令选中的值」产生分歧。选出单一 leader 只是为了推进，而非为了安全。
 
-Since failure of the leader and election of a new one should be rare events, the effective cost of executing a state machine command—that is, of achieving consensus on the command/value—is the cost of executing only phase 2 of the consensus algorithm.
-It can be shown that phase 2 of the Paxos consensus algorithm has the minimum possible cost of any algorithm for reaching agreement in the presence of faults.
-Hence, the Paxos algorithm is essentially optimal.
+由于 leader 失效与重新选举应是罕见事件，执行一条状态机命令（即对命令/值达成共识）的有效代价，就等于只执行共识算法的 phase 2。可以证明，Basic-Paxos 的 phase 2 是在存在故障情况下达成一致代价的理论下界，因此 Paxos 本质上是最优的。
 
-Paxos nodes must be persistent: they can't forget what they accepted.
+Paxos 节点必须是**持久化**的：它们不能忘记自己接受过什么。
 
-A Paxos run aims at reaching a single consensus.
-Once a consensus is reached, it cannot progress to another consensus.
+一次 Paxos 运行只达成一个共识；一旦达成共识，无法再推进到下一个共识。
 
-If the set of servers can change, then there must be some way of determining what servers implement what instances of the consensus algorithm.
-The easiest way to do this is through the state machine itself.
-The current set of servers can be made part of the state and can be changed with ordinary state-machine commands.
-We can allow a leader to get α commands ahead by letting the set of servers that execute instance $i + \alpha$ of the consensus algorithm be specified by the state after execution of the i th state machine command.
-This permits a simple implementation of an arbitrarily sophisticated reconfiguration algorithm.
+若服务器集合会变化，则必须有一种方式确定由哪些服务器来实现哪些共识实例。最简单的做法是通过状态机自身：把当前服务器集合作为状态的一部分，用普通状态机命令来变更它。通过让第 i 个状态机命令执行后的状态来指定第 i+α 个共识实例的服务器集合，leader 可以超前 α 条命令，从而支持任意复杂的重配置算法。
 
 [Revisiting the Paxos algorithm](http://citeseer.ist.psu.edu/viewdoc/download;jsessionid=C6EF80E450719CD5457C0E85CCDD0999?doi=10.1.1.44.5607&rep=rep1&type=pdf)
 
@@ -100,69 +68,59 @@ This permits a simple implementation of an arbitrarily sophisticated reconfigura
 
 ### Algorithmic Challenges
 
-Dick corruption
+Multi-Paxos 在工程落地时要解决几类问题，下面挑最关键的几个展开。
 
-Master leases
+#### Master leases
+
+Distinguished proposer（leader）的稳定性决定了协议能否长期高效推进。Master lease 是一种常见优化：leader 向 acceptors 申请一段时间内的"主租约"，在租约有效期内其他节点不得发起新的 proposal，从而省去每次 value 都要重跑 phase-1 的 prepare 开销；租约到期前需续约，过期则允许重新竞选。它本质是"用时间边界换通信量"，但要小心时钟漂移与租约长度对可用性的影响。
 
 #### Epoch numbers
 
-From the time when the master replica receives the request to the moment the request causes an update of the underlying database, the replica may have lost its master status.
-It may even have lost master status and regained it again.
-We needed a mechanism to reliably detect master turnover and abort operations if necessary.
+从 master replica 收到请求到该请求真正更新底层数据库的期间，该 replica 可能已失去 master 身份，甚至可能失去后又重新获得。我们需要一种机制来可靠检测 master turnover，并在必要时中止操作。
 
-> We solved this problem by introducing a global epoch number with the following semantics.
-> Two requests for the epoch number at the master replica receive the same value iff that replica was master continuously for the time interval between the two requests.
+> 解决办法是引入一个全局 epoch number，语义如下：若 master replica 上两次请求拿到的 epoch number 相同，当且仅当该 replica 在这两次请求之间持续保持 master 身份。
 
 #### Group membership
 
-Practical systems must be able to handle changes in the set of replicas.
-This is referred to as the group membership problem.
+实际系统必须能处理副本集合的变化，这被称为 group membership 问题。
 
 #### Snapshots
 
-the repeated application of a con- sensus algorithm to create a replicated log will lead to an ever growing log.
-This has two problems: it requires un- bounded amounts of disk space; and perhaps worse, it may result in unbounded recovery time since a recovering replica has to replay a potentially long log before it has fully caught up with other replicas.
+反复应用共识算法来维护复制日志，会导致日志无限增长，带来两个问题：需要无界的磁盘空间；更糟的是，恢复中的副本必须重放可能很长的日志才能追上其它副本，导致恢复时间无界。
 
-Since the log is typically a sequence of operations to be applied to some data structure, and thus implicitly (through replay) represents a persistent form of that data structure,
-the problem is to find an alternative persistent representation for the data structure at hand.
-An obvious mechanism is to persist – or snapshot – the data structure directly, at which point the log of operations lead- ing to the current state of the data structure is no longer needed.
-For example, if the data structure is held in mem- ory, we take a snapshot by serializing it on disk.
-If the data structure is kept on disk, a snapshot may just be an on-disk copy of it.
+由于日志通常是对某个数据结构施加操作序列，并通过重放隐式表示该数据结构的持久化形态，问题就转化为：为该数据结构寻找另一种持久化表示。最直接的机制是把数据结构本身持久化（snapshot），此后到达当前状态所需的操作日志便不再必要。例如数据结构在内存中，则序列化到磁盘即为快照；若在磁盘上，则快照可能只是其磁盘副本。
 
-The persistent state of a replica now comprises a log and a snapshot that have to be maintained consistently.
-The log is fully under the framework’s control, while the snapshot format is application-specific.
-Some aspects of the snapshot machin- ery are of particular interest:
+副本的持久化状态由此包含一份日志与一份快照，二者须保持一致。日志完全由框架控制，而快照格式由应用定义。快照机制中几个值得关注的点：
 
-- The snapshot and log need to be mutually consistent. Each snapshot needs to have information about its contents relative to the fault-tolerant log.
-- Taking a snapshot takes time and in some situations we cannot afford to freeze a replica’s log while it is taking a snapshot.
-- Taking a snapshot may fail.
-- While in catch-up, a replica will attempt to obtain missing log records.
-- We needed a mechanism to locate recent snapshots.
+- 快照与日志须相互一致：每个快照都需记录它与故障容错日志的相对位置信息。
+- 生成快照需要时间，某些场景下无法在快照期间冻结副本日志。
+- 快照本身可能失败。
+- 追赶（catch-up）期间，副本会尝试获取缺失的日志记录。
+- 需要一种机制来定位最近的快照。
 
-Database transactions
+与单值 Paxos 一样，Multi-Paxos 也衍生出针对不同故障模型与部署形态的变体，常见的有：
 
-Cascade
-
-- Disk Paxos
-- Cheap Paxos
+- **Disk Paxos**：将 acceptor 状态放在磁盘，可容忍接受者内存丢失。
+- **Cheap Paxos**：用少量辅助节点降低多数派所需的全量节点数。
 
 ## Fast Paxos
 
-- EPaxos
+Fast Paxos 由 Lamport 提出，旨在通过让 acceptor 在 fast round 里直接接受提案、减少到达一致所需的消息延迟（理想情况下只需 1 轮而非 2 轮）。它在 phase-2 引入 "any" 值协调以处理冲突，代价是安全性论证更复杂、需要更大的 quorum。
+
+- **EPaxos（Egalitarian Paxos）**：由 CMU/IBM Research 提出，是一种无主（leaderless）、对网络延迟不敏感的共识。每个副本都可独立发起提案，通过依赖图的「序贯化」在乱序提交时仍能保证一致性，特别适合跨地域部署。
 
 ## Vertical Paxos
 
+Vertical Paxos 是 Paxos 家族的一个变体，将共识协议拆分为两部分：稳态协议（steady state protocol）与重配置协议（reconfiguration protocol）。
 
-Vertical Paxos is a variant of the Paxos algorithm family.
-It divides a consensus protocol into two parts, i.e., a steady state protocol and a reconfiguration protocol.
-
-- Flexible Paxos
-- CASPaxos
-- Mencius
+- **Flexible Paxos**：放宽了「phase-1 quorum 与 phase-2 quorum 必须相交」的经典约束，允许二者分别选取，只要它们的交集非空即可，从而在不牺牲安全性的前提下提升灵活性。
+- **CASPaxos**：一种无领袖（leaderless）、基于 Paxos 的共识方案，用「状态机复制 + 因果收敛」的思路实现集群成员的动态变更，适合强一致的配置存储。
+- **Mencius**：由微软研究院提出，针对多节点/多核场景优化吞吐的 Paxos 变体，通过让不同的 leader 轮流负责不同实例来消除冲突。
 
 ## Links
 
 - [Consensus](/docs/CS/Distributed/Consensus/Consensus.md)
+- [Raft](/docs/CS/Distributed/Consensus/Raft.md) — 以可理解性为设计目标的崩溃容错共识，Paxos 之后的主流落地选择
 
 ## References
 

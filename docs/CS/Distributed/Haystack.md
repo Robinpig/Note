@@ -2,93 +2,93 @@
 
 ## Architecture
 
-The Haystack architecture consists of 3 core components: the Haystack Store, Haystack Directory, and Haystack Cache.
-The Store encapsulates the persistent storage system for photos and is the only component that manages the filesystem metadata for photos.
-We organize the Store’s capacity by *physical volumes*.
-The Directory maintains the logical to physical mapping along with other application metadata, such as the logical volume where each photo resides and the logical volumes with free space.
-The Cache functions as our internal CDN, which shelters the Store from requests for the most popular photos and provides insulation if upstream CDN nodes fail and need to refetch content.
+Haystack 架构由 3 个核心组件组成：Haystack Store、Haystack Directory 和 Haystack Cache。
+Store 封装了照片的持久化存储系统，并且是唯一管理照片文件系统元数据的组件。
+我们按*物理卷（physical volumes）*组织 Store 的容量。
+Directory 维护逻辑到物理的映射，以及其他应用元数据，例如每张照片所在的逻辑卷，以及有空闲空间的逻辑卷。
+Cache 充当我们的内部 CDN，它使 Store 免于处理最热门照片的请求，并在上游 CDN 节点故障需要重新获取内容时提供隔离（insulation）。
 
-Below figure illustrates how the Store, Directory, and Cache components fit into the canonical interactions between a user’s browser, web server, CDN, and storage system.
-In the Haystack architecture the browser can be directed to either the CDN or the Cache.
-Note that while the Cache is essentially a CDN, to avoid confusion we use ‘CDN’ to refer to external systems and ‘Cache’ to refer to our internal one that caches photos.
-Having an internal caching infrastructure gives us the ability to reduce our dependence on external CDNs.
+下图展示了 Store、Directory 和 Cache 组件如何融入用户浏览器、Web 服务器、CDN 与存储系统之间的典型交互。
+在 Haystack 架构中，浏览器可被定向到 CDN 或 Cache。
+注意，虽然 Cache 本质上是一个 CDN，但为避免混淆，我们用“CDN”指外部系统，用“Cache”指我们内部缓存照片的那个。
+拥有内部缓存基础设施使我们能够减少对外部 CDN 的依赖。
 
-When a user visits a page the web server uses the Directory to construct a URL for each photo.
-The URL contains several pieces of information, each piece corresponding to the sequence of steps from when a user’s browser contacts the CDN (or Cache) to ultimately retrieving a photo from a machine in the Store.
+当用户访问一个页面时，Web 服务器使用 Directory 为每张照片构造一个 URL。
+该 URL 包含若干信息片段，每片对应从用户浏览器联系 CDN（或 Cache）到最终从 Store 中某台机器取回照片的一系列步骤。
 
-The CDN can lookup the photo internally using only the last part of the URL: the logical volume and the photo id.
-If the CDN cannot locate the photo then it strips the CDN address from the URL and contacts the Cache.
-The Cache does a similar lookup to find the photo and, on a miss, strips the Cache address from the URL and requests the photo from the specified Store machine.
-Photo requests that go directly to the Cache have a similar workflow except that the URL is missing the CDN specific information.
+CDN 可以仅使用 URL 的最后部分——逻辑卷与照片 id——在内部查找照片。
+如果 CDN 无法定位照片，它就从 URL 中去掉 CDN 地址并联系 Cache。
+Cache 做类似的查找以寻找照片，未命中时则从 URL 去掉 Cache 地址，并向指定的 Store 机器请求照片。
+直接发往 Cache 的照片请求工作流程类似，只是 URL 缺少 CDN 特定的信息。
 
 ![Serving a photo](./img/Haystack_Serving.png)
 
-Below figure illustrates the upload path in Haystack.
-When a user uploads a photo she first sends the data to a web server.
-Next, that server requests a write-enabled logical volume from the Directory.
-Finally, the web server assigns a unique id to the photo and uploads it to each of the physical volumes mapped to the assigned logical volume.
+下图展示了 Haystack 中的上传路径。
+当用户上传照片时，她首先把数据发给一个 Web 服务器。
+接着，该服务器向 Directory 请求一个可写（write-enabled）的逻辑卷。
+最后，Web 服务器为照片分配一个唯一 id，并将其上传到映射到所分配逻辑卷的每个物理卷。
 
 ![Uploading a photo](./img/Haystack_Uploading.png)
 
 ### Haystack Directory
 
-The Directory serves four main functions.
+Directory 承担四个主要功能。
 
-- First, it provides a mapping from logical volumes to physical volumes. Web servers use this mapping when uploading photos and also when constructing the image URLs for a page request.
-- Second, the Directory load balances writes across logical volumes and reads across physical volumes.
-- Third, the Directory determines whether a photo request should be handled by the CDN or by the Cache. This functionality lets us adjust our dependence on CDNs.
-- Fourth, the Directory identifies those logical volumes that are read-only either because of operational reasons or because those volumes have reached their storage capacity. We mark volumes as read-only at the granularity of machines for operational ease.
+- 第一，它提供从逻辑卷到物理卷的映射。Web 服务器在上传照片以及为页面请求构造图像 URL 时使用该映射。
+- 第二，Directory 在逻辑卷间均衡写负载，在物理卷间均衡读负载。
+- 第三，Directory 决定一个照片请求应由 CDN 还是由 Cache 处理。这一功能让我们能调整对 CDN 的依赖。
+- 第四，Directory 识别那些只读的逻辑卷，原因可能是运维需要，也可能是这些卷已达存储容量。为运维方便，我们以机器粒度将卷标记为只读。
 
 ### Haystack Cache
 
-The Cache receives HTTP requests for photos from CDNs and also directly from users’ browsers.
-We organize the Cache as a distributed hash table and use a photo’s id as the key to locate cached data.
-If the Cache cannot immediately respond to the request, then the Cache fetches the photo from the Store machine identified in the URL and replies to either the CDN or the user’s browser as appropriate.
+Cache 接收来自 CDN 以及直接来自用户浏览器的 HTTP 照片请求。
+我们把 Cache 组织为一个分布式哈希表（distributed hash table），并用照片 id 作为键来定位缓存数据。
+如果 Cache 无法立即响应请求，则它从 URL 标识的 Store 机器获取照片，并视情况回复 CDN 或用户浏览器。
 
-It caches a photo only if two conditions are met: (a) the request comes directly from a user and not the CDN and (b) the photo is fetched from a writeenabled Store machine.
+只有在两个条件都满足时它才缓存照片：(a) 请求直接来自用户而非 CDN；(b) 照片来自一台可写（write-enabled）的 Store 机器。
 
-The justification for the first condition is that our experience with the NFS-based design showed post-CDN caching is ineffective as it is unlikely that a request that misses in the CDN would hit in our internal cache.
-The reasoning for the second is indirect.
+第一个条件的理由是：我们在基于 NFS 的设计中的经验表明，CDN 之后的缓存无效，因为 CDN 未命中的请求不太可能命中我们的内部缓存。
+第二个条件的理由则是间接的。
 
 ### Haystack Store
 
-The interface to Store machines is intentionally basic.
-Reads make very specific and well-contained requests asking for a photo with a given id, for a certain logical volume, and from a particular physical Store machine.
-The machine returns the photo if it is found. Otherwise, the machine returns an error.
-Each Store machine manages multiple physical volumes.
+Store 机器的接口刻意保持简单。
+读请求提出非常具体且自包含的请求：要求给定 id、特定逻辑卷、来自特定物理 Store 机器的照片。
+如果找到，机器返回照片；否则返回错误。
+每台 Store 机器管理多个物理卷。
 
-### Index File
+### Index Files
 
-Store machines use an important optimization—the index file—when rebooting.
-While in theory a machine can reconstruct its in-memory mappings by reading all of its physical volumes, doing so is time-consuming as the amount of data (terabytes worth) has to all be read from disk.
-Index files allow a Store machine to build its in-memory mappings quickly, shortening restart time.
+Store 机器在重启时使用一个重要的优化——索引文件（index file）。
+虽然理论上一台机器可以通过读取其所有物理卷来重建内存映射，但这样做很耗时，因为必须将所有数据（数 TB 量级）从磁盘读出。
+索引文件让 Store 机器能够快速构建其内存映射，缩短重启时间。
 
-Store machines maintain an index file for each of their volumes.
-The index file is a checkpoint of the inmemory data structures used to locate needles efficiently on disk.
-An index file’s layout is similar to a volume file’s, containing a superblock followed by a sequence of index records corresponding to each needle in the superblock.
-These records must appear in the same order as the corresponding needles appear in the volume file.
+Store 机器为它的每个卷维护一个索引文件。
+索引文件是用于在磁盘上高效定位 needle 的内存数据结构的检查点。
+索引文件的布局类似于卷文件：包含一个超级块（superblock），后跟与超级块中每个 needle 对应的索引记录序列。
+这些记录的出现顺序必须与对应 needle 在卷文件中的出现顺序相同。
 
-## Optimizations
+## Optimization
 
-### Compaction
+### Compression
 
-Compaction is an online operation that reclaims the space used by deleted and duplicate needles (needles with the same key and alternate key).
-A Store machine compacts a volume file by copying needles into a new file while skipping any duplicate or deleted entries. During compaction, deletes go to both files.
-Once this procedure reaches the end of the file, it blocks any further modifications to the volume and atomically swaps the files and in-memory structures.
-We use compaction to free up space from deleted photos.
-The pattern for deletes is similar to photo views: young photos are a lot more likely to be deleted.
+Compaction 是一种在线操作，回收被删除和重复 needle（具有相同键和备用键的 needle）占用的空间。
+Store 机器通过将 needle 复制到新文件、同时跳过任何重复或已删除条目的方式来压缩卷文件。压缩期间，删除操作同时写入两个文件。
+一旦该过程到达文件末尾，它阻止对该卷的任何进一步修改，并原子地交换文件与内存结构。
+我们用 Compaction 释放被删除照片占用的空间。
+删除的模式与照片浏览类似：较新的照片更可能被删除。
 
-### Saving more memory
+### Saving More Memory
 
-As described, a Store machine maintains an in-memory data structure that includes flags, but our current system only uses the flags field to mark a needle as deleted.
-We eliminate the need for an in-memory representation of flags by setting the offset to be 0 for deleted photos.
-In addition, Store machines do not keep track of cookie values in main memory and instead check the supplied cookie after reading a needle from disk.
-Store machines reduce their main memory footprints by 20% through these two techniques.
+如前所述，Store 机器维护一个包含标志位（flags）的内存数据结构，但我们当前的系统只用 flags 字段将 needle 标记为已删除。
+我们把已删除照片的偏移量（offset）设为 0，从而无需内存中表示 flags。
+此外，Store 机器不在主内存中跟踪 cookie 值，而是在从磁盘读取一个 needle 后检查所提供的 cookie。
+Store 机器通过这两项技术将其主内存占用减少了 20%。
 
-### Batch upload
+### Batch Upload
 
-Since disks are generally better at performing large sequential writes instead of small random writes, we batch uploads together when possible.
-Fortunately, many users upload entire albums to Facebook instead of single pictures, providing an obvious opportunity to batch the photos in an album together.
+由于磁盘通常更擅长大顺序写而非小随机写，我们在可能时批量上传。
+幸运的是，许多用户向 Facebook 上传整个相册而非单张照片，这提供了将相册中照片批量处理的明显机会。
 
 ## Links
 

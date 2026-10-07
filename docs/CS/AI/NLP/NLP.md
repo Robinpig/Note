@@ -34,7 +34,7 @@
 
 怎么把一段文字变成模型能算的东西？这条主线经历了四代：
 
-### 词袋与 One-Hot
+### Bag of Words and One-Hot
 
 把文档看成词的集合，不考虑顺序：每个词一维，出现记 1 或计次数。简单、稀疏、丢语序（"我打他"与"他打我"相同）。
 
@@ -48,17 +48,17 @@ $$
 
 其中 $N$ 是文档总数、$\mathrm{df}(t)$ 是包含词 t 的文档数。停用词（"的、了"）被自动压低。sklearn 的 `TfidfVectorizer` 一行可用（见 [Scikit-Learn](/docs/CS/AI/Scikit-Learn.md)），文本特征工程的更多套路见 [FeatureEngineering](/docs/CS/AI/ML/FeatureEngineering.md)。
 
-### 词向量 Word Embedding
+### Word Embedding
 
 One-Hot 向量互相正交、表达不了"猫和狗相似"。Word2Vec（2013）在**稠密低维空间**里让语义相近的词彼此靠近——"king − man + woman ≈ queen" 是它的标志性结果。两套架构：CBOW（上下文预测中心词）与 Skip-gram（中心词预测上下文），配合负采样训练。同代还有基于共现矩阵分解的 GloVe、引入子词的 FastText。
 
 静态词向量的局限：**一词多义无法处理**——"苹果"在任何句子里都是同一个向量。
 
-### 上下文相关表示
+### Context-Dependent Representations
 
 ELMo、BERT 开始，每个词的表示随上下文动态生成，歧义消解从"规则和统计"变成"从海量文本中学"。这就是预训练语言模型的起点，通往 [LLM](/docs/CS/AI/LLM/LLM.md)。
 
-### 子词切分 Subword
+### Subword
 
 开放词表问题用**子词切分**解决：BPE（字节对编码，从字符出发逐步合并最高频相邻对）、WordPiece（BERT 用，合并能使似然增益最大的对）、SentencePiece（T5 用，直接在原始文本上操作、不依赖预分词）。罕见词被拆成片段，词表压到 3–10 万，兼顾未登录词覆盖与序列长度。
 
@@ -91,7 +91,7 @@ ELMo、BERT 开始，每个词的表示随上下文动态生成，歧义消解�
 | T5 / BART | encoder-decoder | 文本到文本 / 去噪 | 翻译、摘要等 seq2seq 任务 |
 | Embedding 模型（Sentence-BERT、E5、bge） | 双塔 encoder | 对比学习 | 句/文档编码为向量做语义检索，是 [RAG](/docs/CS/AI/RAG.md) 的检索端 |
 
-## LLM 时代的任务形态
+## Task Forms in the LLM Era
 
 - 分类 / NER 等判别任务：少样本提示或指令微调，必要时用约束解码 / function calling 输出结构化 JSON
 - 知识密集任务：[RAG](/docs/CS/AI/RAG.md)（检索增强生成）= 向量检索相关段落 + LLM 基于段落生成，缓解幻觉与知识时效问题
@@ -99,7 +99,7 @@ ELMo、BERT 开始，每个词的表示随上下文动态生成，歧义消解�
 - 评估从准确率 / F1 扩展到 LLM-as-judge、忠实度、引用归因
 - Agent 化：模型通过工具调用与环境交互完成多步任务，见 [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md)
 
-## 评估与工程常识
+## Evaluation and Engineering Knowledge
 
 - 分类指标：accuracy 之外，不平衡场景看 precision/recall/F1、宏平均/微平均；检索看 MRR、nDCG、Recall@k
 - BLEU（n-gram 重叠）评翻译、ROUGE（召回向）评摘要——都是表层指标，与人的判断相关性有限，正逐步被 LLM 评审替代

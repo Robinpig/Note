@@ -8,7 +8,7 @@ llist（lock-less list）是内核里最轻量的容器：**只有一个指针�
 >
 > **文件名的历史错位**：本文件叫 `struct.md`，属于 `struct/` 目录下，但内容只讲 **llist**。这是早期沿用的名字。`struct/` 目录的数据结构地图以 [README](/docs/CS/OS/Linux/struct/README.md) 为准。
 
-## 数据结构
+## Data Structures
 
 ```c
 struct llist_head {
@@ -41,7 +41,7 @@ static inline void init_llist_node(struct llist_node *node);
 	container_of(ptr, type, member)
 ```
 
-## llist_add：无锁插入
+## llist_add: Lock-free Insertion
 
 ```c
 static inline bool __llist_add(struct llist_node *new, struct llist_head *head);
@@ -58,7 +58,7 @@ static inline bool llist_add(struct llist_node *new, struct llist_head *head);
 
 用 `try_cmpxchg` 而不是"读 → 改 → 写"三步，是因为多生产者并发时必须保证不丢元素。`llist_add` 返回值表示"是否成功成为第一个"（仅用于调试并发场景）。
 
-### 批量插入
+### Batch Insertion
 
 ```c
 static inline bool llist_add_batch(struct llist_node *new_first,
@@ -68,7 +68,7 @@ static inline bool llist_add_batch(struct llist_node *new_first,
 
 一次性挂一整条链（`new_first` 到 `new_last`），**只做一次 CAS**。适合"一批对象已经串好，一次性移交"的场景，比逐个 `llist_add` 少 N-1 次原子操作。
 
-## llist_del_first：单消费者删除
+## llist_del_first: Single-consumer Deletion
 
 ```c
 struct llist_node *llist_del_first(struct llist_head *head);
@@ -85,7 +85,7 @@ struct llist_node *llist_del_first(struct llist_head *head);
 
 **取出的是"最新加入的"那个**（因为是头插）—— 这一点与其他容器的 FIFO 直觉相反，容易写错。
 
-### 为什么只能单消费者
+### Why Only a Single Consumer
 
 头文件把限制写得很明确：
 
@@ -101,7 +101,7 @@ struct llist_node *llist_del_first(struct llist_head *head);
 
 **多消费者只能用 `llist_del_all()`**（整体摘下整条链，原子地换掉 `head->first`），或者自己在消费者之间加锁。
 
-### 条件删除
+### Conditional Deletion
 
 ```c
 bool llist_del_first_this(struct llist_head *head, struct llist_node *this);
@@ -121,7 +121,7 @@ bool llist_del_first_this(struct llist_head *head, struct llist_node *this);
 
 `llist_del_first_this()` **没有 `NULL` 检查** —— 链空时 `entry` 为 NULL，与 `this` 不等，返回 false。所以调用者**总是能安全调用，不需要先判空**。
 
-## llist_del_all：多消费者
+## llist_del_all: Multiple Consumers
 
 ```c
 static inline struct llist_node *llist_del_all(struct llist_head *head);
@@ -137,7 +137,7 @@ static inline struct llist_node *llist_del_all(struct llist_head *head);
 
 即摘下后就是一条普通单向链表，可以顺序遍历（但**遍历期间不可再并发添加**，需要自己保证）。
 
-## 遍历
+## Traversal
 
 ```c
 static inline bool llist_empty(const llist_head *head);
@@ -148,7 +148,7 @@ static inline struct llist_node *llist_next(struct llist_node *node);
 
 头文件里有两个遍历相关的宏（`llist_entry` 的 pos 形式），但它们要求调用者自己保证遍历期间链表不被并发修改。
 
-## 内存序：三个关键点
+## Memory Ordering: Three Key Points
 
 llist 的正确性完全依赖内存序，这是它最容易出错的地方：
 
@@ -166,7 +166,7 @@ llist 的正确性完全依赖内存序，这是它最容易出错的地方：
 
 **用 `READ_ONCE` 而不是裸读**是因为 `next` 可能被并发写（另一个消费者在 CAS）。裸读可能被编译器重排或合并，导致读到不一致的值。
 
-## NMI 限制
+## NMI Constraints
 
 `lib/llist.c` 的头注释给出了一条硬约束：
 
@@ -181,7 +181,7 @@ llist 的正确性完全依赖内存序，这是它最容易出错的地方：
 
 这解释了 llist 的典型使用场景（中断上半部而非 NMI）：普通中断关中断后不会被同优先级打断，CAS 是原子的；NMI 则不同。
 
-## 其他操作
+## Other Operations
 
 ```c
 static inline bool llist_on_list(const struct llist_node *node);
@@ -190,7 +190,7 @@ struct llist_node *llist_reverse_order(struct llist_head *head);
 
 `llist_reverse_order()` 把链反转（因为头插导致 LIFO，反转后变 FIFO）。`lib/llist.c` 只有 94 行 —— **整个 llist 的实现只有三个函数**（`llist_del_first` / `llist_del_first_this` / `llist_reverse_order`），加与遍历都在头文件 inline。
 
-## 何时该用 llist
+## When to Use llist
 
 | 场景 | 建议 |
 | :-- | :-- |
@@ -204,7 +204,7 @@ struct llist_node *llist_reverse_order(struct llist_head *head);
 
 内核里的实际用法：`fs/` 的 `file` / `dentry` 缓存、终端层（`n_tty` 的 read 队列）、部分驱动的 pending 队列。共同点是"**中断里挂、进程上下文取**"。
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 llist 本身没有 sysfs 接口。相关排查手段：
 

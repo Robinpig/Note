@@ -10,7 +10,7 @@ OOM（Out-Of-Memory）是页分配器慢路径的**最后手段**：kswapd 异�
 2. **杀谁**——`select_bad_process()` 遍历进程、`oom_badness()` 打分；
 3. **怎么杀**——`oom_kill_process()` 发 SIGKILL、`oom_reaper` 异步收割匿名页。
 
-## 触发路径
+## Trigger Paths
 
 分配慢路径里，回收与压缩都失败后进入 `__alloc_pages_may_oom()`，最终调用 `out_of_memory()`：
 
@@ -92,7 +92,7 @@ unlock:
 - **task_will_free_mem(current)**：如果触发分配的进程自己正在退出（收到 SIGKILL 等），直接选中它——让它快点退出释放内存，不必连累别人；
 - `is_memcg_oom`：memcg 限额触发的 OOM 只在**该 cgroup 的进程集合里**挑选，见下文 [memcg OOM](?id=memcg-oom)。
 
-## select_bad_process 与 oom_badness
+## select_bad_process and oom_badness
 
 选victim 的逻辑：遍历所有进程，对每个进程调用 `oom_badness()` 打分，取分最高者。
 
@@ -194,7 +194,7 @@ reaper 拿 victim 的 `mm`，**不需要 mmap_write_lock**（只需读锁 + 逐 
 
 cgroup v2 的 `memory.max` 超限时，触发的是**memcg 局部 OOM**：`is_memcg_oom()` 为真，`select_bad_process()` 只遍历**该 memcg 的进程**（`mem_cgroup_scan_tasks`），杀出的进程必然是容器自己的——这就是"容器 OOM 不殃及宿主机"的机制保证，也是 K8s `OOMKilled`（退出码 137）的内核来路。memcg 侧的记账、限额与"high 只节流不杀"的对照见 [cgroup 内存控制（memcg）](/docs/CS/OS/Linux/mm/memcg.md)。
 
-K8s 层面的 QoS 等级正是通过 `oom_score_adj` 落地的：Guaranteed Pod 设 `-997`，BestEffort 设 `1000`，Burstable 按 `min(max(2, 1000 - memoryRequestBytes/memoryLimitBytes*1000), 999)` 计算——节点级 OOM 时 BestEffort 最先被杀，Guaranteed 最后。对照表见 [Pod 资源与 QoS](/docs/CS/Container/k8s/Pod.md?id=资源与-qos)。
+K8s 层面的 QoS 等级正是通过 `oom_score_adj` 落地的：Guaranteed Pod 设 `-997`，BestEffort 设 `1000`，Burstable 按 `min(max(2, 1000 - memoryRequestBytes/memoryLimitBytes*1000), 999)` 计算——节点级 OOM 时 BestEffort 最先被杀，Guaranteed 最后。对照表见 [Pod 资源与 QoS](/docs/CS/Container/k8s/Pod.md?id=resources-and-qos)。
 
 ## Links
 

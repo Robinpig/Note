@@ -2,7 +2,7 @@
 
 **Apache DolphinScheduler**（海豚调度）是一个分布式、易扩展的**可视化 DAG（有向无环图）工作流任务调度系统**。它的核心目标是解决大数据处理、数据仓库建设以及日常复杂业务场景中的**任务编排与调度**问题。
 
-#### 核心特点与功能：
+#### Core Features and Functions:
 
 1. **可视化 DAG 拖拽**：这是它最大的卖点。用户可以通过 Web 界面直接拖拽任务节点、连线来定义任务依赖关系，无需编写复杂的代码或 XML 配置文件，极大地降低了使用门槛。
 2. **丰富的任务类型支持**：原生支持 Shell、Python、Spark、Flink、MapReduce、Hive SQL、DataX、SQOOP、Flink 等主流大数据和脚本组件。
@@ -29,7 +29,7 @@ DolphinScheduler 的架构可以清晰地划分为五个逻辑层：
 
 
 
-## 工作流
+## Workflow
 
 一个工作流从提交到执行完毕，其内部流转过程如下：
 
@@ -49,3 +49,4 @@ DolphinScheduler 的架构可以清晰地划分为五个逻辑层：
 - Airflow
 - Prefect
 - Kestra
+- [Scheduled Task](/docs/CS/SE/Scheduled_Task.md)

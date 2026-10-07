@@ -801,7 +801,7 @@ public class StandardContext extends ContainerBase implements Context, Notificat
 }
 ```
 
-#### 热部署
+#### Hot Deployment
 
 热部署过程中 Context 容器被销毁了，执行行为在 Host 
 
@@ -879,7 +879,7 @@ export JAVA_OPTS="${JAVA_OPTS} -Dcom.sun.management.jmxremote.authenticate=false
 
 ## Tuning
 
-### 启动速度
+### Startup Speed
 
 清理不必要的 Web 应用 删除掉 webapps 文件夹下不需要的工程，一般是 host-manager、
 example、doc 等这些默认的工程
@@ -952,7 +952,7 @@ Tomcat 7 以上的版本依赖 Java 的 SecureRandom 类来生成随
 JVM tuning
 
 
-### 故障处理
+### Fault Handling
 
 排障时先分清症状属于哪一层，因为三层的观测手段完全不同：
 

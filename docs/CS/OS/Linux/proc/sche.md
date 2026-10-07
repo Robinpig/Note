@@ -696,7 +696,7 @@ chrt -f -p 1 pid
 
 > [Android](/docs/CS/OS/Android/schedule.md)更多的是实时的任务
 
-nice 值只作用于普通（fair/EEVDF）任务：范围 -20 ~ 19，对应内核优先级 100 ~ 139（`MAX_RT_PRIO = 100`，0 ~ 99 被实时任务占用）。nice 并不改变"谁先跑"的绝对顺序——实时类永远先于 fair 类——它改变的是每个实体在时间片内分到的权重（见 [vruntime 与权重](/docs/CS/OS/Linux/proc/fair.md?id=vruntime-与权重)）。
+nice 值只作用于普通（fair/EEVDF）任务：范围 -20 ~ 19，对应内核优先级 100 ~ 139（`MAX_RT_PRIO = 100`，0 ~ 99 被实时任务占用）。nice 并不改变"谁先跑"的绝对顺序——实时类永远先于 fair 类——它改变的是每个实体在时间片内分到的权重（见 [vruntime 与权重](/docs/CS/OS/Linux/proc/fair.md?id=vruntime-and-weight)）。
 
 调整策略与优先级的用户态入口：`sched_setscheduler()` / `chrt`（策略+实时优先级）、`nice`/`renice`（普通任务权重）、`taskset`（CPU 亲和性）。
 
@@ -1386,7 +1386,7 @@ SYM_FUNC_END(__switch_to_asm)
 
 内核抢占模型（`CONFIG_PREEMPT_*`）从宽松到严格：`PREEMPT_NONE`（吞吐优先，适合服务器）→ `PREEMPT_VOLUNTARY`（桌面默认）→ `PREEMPT`（低延迟）→ `PREEMPT_RT` 实时补丁（6.12 起大部分能力已并入主线）。
 
-## 观测与调参
+## Observation and Tuning Parameters
 
 - 关键 sysctl（`/proc/sys/kernel/`）：`sched_base_slice`（EEVDF 基础时间片，0.75ms 起，随 CPU 数放大）、`sched_migration_cost_ns`（迁移代价，影响负载均衡激进度）、`sched_rt_period_us` / `sched_rt_runtime_us`（RT 带宽，默认 1s / 0.95s）、`sched_rr_timeslice_ms`。
 - `/proc/sched_debug`、`/sys/kernel/debug/sched/`：各 rq/cfs_rq 的 min_vruntime、负载与调度域拓扑。

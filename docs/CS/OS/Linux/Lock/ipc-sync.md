@@ -5,7 +5,7 @@
 - **另一端可能崩溃**：持锁的进程死了，锁由谁释放？（robust futex / 文件锁的自动回收就是为此设计）；
 - **对方不是你的线程**：没有共享的地址空间，锁字必须放在双方都能看到的内存（共享内存/文件映射）或有内核中介（文件锁、命名信号量）。
 
-## POSIX 信号量
+## POSIX Semaphores
 
 两种形态，实现都是"futex 字 + 计数"（无竞争时纯用户态，见 [futex](/docs/CS/OS/Linux/Lock/futex.md)）：
 
@@ -25,7 +25,7 @@ sem_destroy(&shared_sem);
 - 命名信号量依附 `/dev/shm`，**不会随进程退出消失**——忘记 `sem_unlink` 就是资源泄漏，`ls /dev/shm` 可查；
 - 无名信号量的生命周期完全由使用者管理，配合 `mmap(MAP_SHARED)` 是共享内存互斥的最简方案。
 
-## System V 信号量
+## System V Semaphores
 
 比 POSIX 早三十年的老接口（XSI），至今仍被老代码和数据库使用：
 
@@ -40,7 +40,7 @@ semop(id, &op, 1);                           /* P 操作 */
 - `SEM_UNDO`：进程退出时内核自动回滚它的全部操作——**崩溃友好**，是它相对 POSIX 命名信号量的优点；
 - 遗留问题：信号量对象本身仍需显式 `IPC_RMID`；`ipcs -s` 查看，全局数量受 `semmns` 等内核参数限制。
 
-## 文件锁
+## File Locks
 
 把"锁"挂在文件上，由内核中介，天然跨无亲缘关系的进程：
 
@@ -62,7 +62,7 @@ fcntl(fd, F_OFD_SETLK, &fl);  /* Linux 3.15+：锁挂在 open file description *
 
 文件锁最大的优势是**崩溃安全**：进程终止时内核自动释放其全部文件锁（`/proc/locks` 可见），无需 robust 机制。此外 `F_SETLEASE`（租约锁）还能在文件被他人打开时收到信号通知。
 
-## 进程共享的 pthread 原语
+## Process-Shared pthread Primitives
 
 pthread 的 mutex/cond/rwsem 也能跨进程：放进共享内存，并置 process-shared 属性——底层就是**共享 futex**（内核用 inode+offset 而非匿名地址做键）：
 
@@ -79,9 +79,9 @@ pthread_mutexattr_setrobust(&attr, PTHREAD_MUTEX_ROBUST);
 
 持锁进程死亡时，内核通过 robust list 把 futex 字标记为 `FUTEX_OWNER_DIED`，下一个加锁者得到 `EOWNERDEAD`，调用 `pthread_mutex_consistent()` 声明数据已恢复一致后继续使用。这是共享内存互斥的**崩溃安全**标准方案（数据库、浏览器多进程架构都在用）。
 
-需要优先级反转保护时，再加 `PTHREAD_PRIO_INHERIT`（落到 `FUTEX_LOCK_PI`，内核侧由 rt_mutex 承接，见 [mutex](/docs/CS/OS/Linux/Lock/mutex.md?id=rt_mutex-与优先级继承)）。
+需要优先级反转保护时，再加 `PTHREAD_PRIO_INHERIT`（落到 `FUTEX_LOCK_PI`，内核侧由 rt_mutex 承接，见 [mutex](/docs/CS/OS/Linux/Lock/mutex.md?id=rt_mutex-and-priority-inheritance)）。
 
-## 选择
+## Choosing
 
 | 场景 | 推荐 |
 | :-- | :-- |
@@ -93,7 +93,7 @@ pthread_mutexattr_setrobust(&attr, PTHREAD_MUTEX_ROBUST);
 
 各机制的载体对比与 IPC 全景（pipe/消息队列/共享内存/socket）见 [IPC 总览](/docs/CS/OS/Linux/proc/IPC.md)；理论视角见 [Semaphores](/docs/CS/OS/process.md?id=semaphores)。
 
-## 观测与调试
+## Observation and Debugging
 
 - `ipcs -s`（System V 信号量）、`ls -la /dev/shm`（命名 POSIX 信号量与共享内存）；
 - `/proc/locks`：当前全部文件锁（类型、持有进程、范围）；

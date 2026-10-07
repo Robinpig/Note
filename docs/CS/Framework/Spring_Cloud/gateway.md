@@ -8,7 +8,7 @@ Spring Cloud Gateway 是 Spring Cloud 的 API 网关实现，定位是 Netflix Z
 | 集成范围 | Spring Cloud Netflix | Spring Cloud 一等公民 |
 | 状态 | 自 Spring Cloud 2020.0（Ilford）起从 Netflix 集成中移除 | 现行推荐 |
 
-### 5.x 的两个 flavor
+### Two Flavors of 5.x
 
 Gateway 5.0（Spring Cloud 2025.1 Oakwood / Boot 4）把网关拆成**两个独立实现**，一个应用只能选其一：
 

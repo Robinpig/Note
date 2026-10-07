@@ -10,7 +10,7 @@ Transformer 是 2017 年 Google 在《Attention Is All You Need》中提出的�
 
 今天的 BERT、GPT、LLaMA、Qwen、DeepSeek、ViT、Diffusion Transformer 全是它的变体。理解 Transformer 的每一层在计算什么，是理解上下文窗口、KV cache、幻觉、量化、长文本外推这些工程问题的前提。
 
-## 动机：为什么用 Self-Attention 替代循环
+## Motivation: Why Use Self-Attention Instead of Recurrence
 
 原论文用三个指标对比三种序列层：每层的计算复杂度、**顺序操作数**（不可并行的步骤数）、**最大路径长度**（任意两位置间的最长信息传播路径）。
 
@@ -22,7 +22,7 @@ Transformer 是 2017 年 Google 在《Attention Is All You Need》中提出的�
 
 n 为序列长度，d 为表示维度，k 为卷积核宽度。Trade-off 很清楚：self-attention 在序列长度上是 **平方代价**，换来的是常数级的路径长度和完全并行。当 n < d（2017 年的典型场景，n≈512、d≈512）时 self-attention 甚至更快；而随着模型变宽、语境变长，n² 这一项最终成为长上下文的全部瓶颈（见后文"长上下文的代价"）。
 
-## 整体结构
+## Overall Structure
 
 原始 Transformer 是完整的 encoder-decoder（为机器翻译设计）：
 
@@ -56,9 +56,9 @@ Linear(d_model → vocab_size) → Softmax → 下一个 token 概率分布
 
 原始 base 配置：N=6 层、d_model=512、h=8 个头（每个头 d_k=d_v=64）、d_ff=2048、dropout 0.1。现代 LLM 没有 encoder，只堆叠 decoder block（见"三种架构流派"）。
 
-## Attention 的核心：Scaled Dot-Product Attention
+## Core of Attention: Scaled Dot-Product Attention
 
-### 直觉：一次可微的字典检索
+### Intuition: A Differentiable Dictionary Lookup
 
 把每个 token 的表示拆成三个角色：
 
@@ -68,7 +68,7 @@ Linear(d_model → vocab_size) → Softmax → 下一个 token 概率分布
 
 每个 token 用自己的 q 和所有 token 的 k 做点积得到相关性分数，softmax 归一化成权重，再对所有的 v 做加权求和。整个过程只是矩阵乘法和 softmax，**处处可微，处处并行**。
 
-### 公式
+### Formula
 
 $$
 \text{Attention}(Q, K, V) = \text{softmax}\left(\frac{QK^T}{\sqrt{d_k}}\right)V
@@ -76,7 +76,7 @@ $$
 
 形状：Q ∈ R^{n×d_k}，K ∈ R^{m×d_k}，V ∈ R^{m×d_v}；输出 R^{n×d_v}。自注意力时 m=n。
 
-### 为什么要除以 √d_k
+### Why Divide by √d_k
 
 这是全文最容易被人忽略却最关键的一步。假设 q、k 各分量独立、均值 0、方差 1，那么点积 q·k 的方差是 d_k（各项累加），标准差是 √d_k。当 d_k=64 时，点积典型值在 ±8 附近；若不缩放，这些大值经过 softmax 后分布会极度尖锐（一个权重接近 1，其余接近 0），softmax 的输出梯度正比于 p(1-p)，几乎处处为 0 —— **梯度消失，模型训不动**。除以 √d_k 把logits 拉回单位方差，让 softmax 保持"软"，保留可学习的分布。
 
@@ -95,7 +95,7 @@ $$
 
 工程意义：头数是并行切分维度，也是后续 MQA/GQA 压缩 KV cache 的抓手（把 K/V 的头数减少，Query 头数不变）。
 
-## 三种 Attention 的位置与作用
+## Positions and Roles of the Three Attention Types
 
 | 位置 | Q 来源 | K/V 来源 | 掩码 | 作用 |
 |------|--------|----------|------|------|
@@ -117,7 +117,7 @@ $$
 - 这里的"position-wise"指**同一层内所有位置共享参数、但位置之间不做交互**——交互交给 attention 层完成。两类层交替，构成了"混信息 / 加工信息"的节奏。
 - 现代模型普遍把 ReLU 换成 **SwiGLU**（LLaMA、PaLM、Qwen、DeepSeek）：引入一个门控分支 `SiLU(xW_gate) ⊙ (xW_up)` 再投影回 d_model，同参数量下效果更好，代价是多一个矩阵；稀疏化的 MoE 也正是在这一层做的（见"现代 LLM 的改进清单"）。
 
-## 残差与归一化：Pre-LN vs Post-LN
+## Residuals and Normalization: Pre-LN vs Post-LN
 
 原始论文用 **Post-LN**：`LayerNorm(x + Sublayer(x))`，LayerNorm 放在残差相加之后。这条路径需要精细的学习率 warmup（原配方：4000 步 warmup、Adam β₂=0.98、label smoothing 0.1），深层模型容易训练发散。
 
@@ -125,11 +125,11 @@ $$
 
 为什么是 LayerNorm 而不是 BatchNorm：BatchNorm 依赖 batch 维统计量，而序列任务里 batch 内样本长度不一、padding 位置会污染统计量；推理时的 running statistics 在小 batch / 长序列下也不稳定。LayerNorm 对每个样本自身的特征维做归一化，与 batch 大小无关，天然适配自回归推理。LLaMA 之后更进一步用 **RMSNorm**（去掉减均值、只保留均方根缩放），计算更省且效果相当。
 
-## 位置编码
+## Positional Encoding
 
 Self-attention 本身是**置换不变**的——打乱输入顺序，输出只是相应打乱，模型完全感知不到"顺序"。必须显式注入位置信息。
 
-### Sinusoidal（原始）
+### Sinusoidal (Original)
 
 $$
 \text{PE}_{(pos,\,2i)} = \sin\left(\frac{pos}{10000^{2i/d_{model}}}\right),\quad
@@ -138,7 +138,7 @@ $$
 
 不同维度对应不同频率的波：低维索引是高频、波长极短，高维索引近乎低频单调，整体构成一组从"逐位变化"到"整句量级"的多分辨率时钟。它的好处是无需学习参数、并且位置间存在线性关系（任意固定偏移 k 的 PE 可由 PE(pos) 线性变换得到），理论上可外推到训练时没见过的长度；实践中外推能力有限。
 
-### RoPE（旋转位置编码，现代主流）
+### RoPE (Rotary Position Embedding, Modern Mainstream)
 
 LLaMA、PaLM、Qwen、GLM 等采用。思路是在复数域里对 q、k 做一次角度为 pos·θ 的旋转：
 
@@ -152,7 +152,7 @@ $$
 
 不改动 embedding，直接在 attention score 上加一个与距离成正比的偏置 `-k·|m-n|`（每个头斜率不同），近处的 token 天然更受关注。好处是推理时对任意长度都成立且实现极简，BLOOM、MPT 使用。
 
-## Decoder 与自回归生成
+## Decoder and Autoregressive Generation
 
 训练时 decoder 一次性吃进整句：causal mask 保证位置 i 只能attend 到 ≤ i 的位置，于是一个 batch 里每个位置都能并行预测下一个 token（teacher forcing），这就是 Transformer 训练效率远超 RNN 的直接来源。
 
@@ -179,7 +179,7 @@ $$
 
 这也是为什么长 prompt 的首字延迟（TTFT）主要看算力，而生成速度主要看显存带宽与 batch 策略。
 
-## 长上下文的代价与优化
+## Cost and Optimization of Long Context
 
 Self-attention 的时间和空间都是 O(n²)，上下文从 4k 涨到 128k，注意力部分代价是 900 多倍（30²）。应对路线：
 
@@ -187,7 +187,7 @@ Self-attention 的时间和空间都是 O(n²)，上下文从 4k 涨到 128k，�
 - **近似注意力**：Longformer（滑窗 + 全局 token）、Reformer（LSH 分桶）、Performer（核方法线性化）、Linformer（低秩投影）等把复杂度降到线性或 O(n log n)，代价是精度损失与场景适配。
 - **稀疏 / 压缩 KV**：只保留部分历史 KV（滑窗、重击者 token、token 合并），用检索的方式按需加载（见 [RAG](/docs/CS/AI/RAG.md) 的检索思路在 decode 阶段的变体）。
 
-## 三种架构流派
+## Three Architectural Paradigms
 
 | 流派 | 代表 | 预训练目标 | 擅长 | 现状 |
 |------|------|-----------|------|------|
@@ -197,7 +197,7 @@ Self-attention 的时间和空间都是 O(n²)，上下文从 4k 涨到 128k，�
 
 为什么 decoder-only 赢了：参数利用率高（一套参数同时做理解和生成）、训练目标与真实推理形态完全一致、cross-attention 的额外开销与并发/缓存复杂度被省掉，且规模定律在它身上验证得最好。
 
-## 与现代 LLM 相关的几个运作细节
+## Several Operational Details Related to Modern LLM
 
 - **Tokenizer 先于模型**：BPE / WordPiece / SentencePiece 把文本切成子词，词表通常 3–15 万；中文通常一个字接近 1–2 个 token，这也是计费与上下文长度估算的口径（见 [NLP](/docs/CS/AI/NLP/NLP.md)）。
 - **采样策略**：temperature 缩放 logits 控制分布陡峭度，top-p（核采样）/ top-k 截断长尾，beam search 适合翻译而容易让对话变啰嗦，repeat penalty 压制循环。
@@ -205,7 +205,7 @@ Self-attention 的时间和空间都是 O(n²)，上下文从 4k 涨到 128k，�
 - **Scaling Law**：Chinchilla 给出的经验配比是每 1 参数约 20 个训练 token；超出数据配比的欠训练模型反而浪费算力。涌现能力（ICL、CoT）随之出现。
 - **幻觉的结构性来源**：模型只学到了 token 分布而非事实数据库，"下一个 token 最可能是什么" 与 "什么是真的" 是两件事 —— [RAG](/docs/CS/AI/RAG.md) 正是从外部补上这一环。
 
-## 现代 LLM 相对原始 Transformer 的改进清单
+## Improvement List of Modern LLM over the Original Transformer
 
 一句话总结：**原始 Transformer 的骨架没变，每个零件都被换过一轮。**
 

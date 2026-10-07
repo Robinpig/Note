@@ -813,7 +813,7 @@ PriorityQueue<ScheduledFutureTask<?>> scheduledTaskQueue() {
 
 Netty 对于单个时间轮的优化方式就是记录下 remainingRounds，从而减少 bucket 过多的内存占用。
 
-### 时间轮和 PriorityQueue 对比
+### Timing Wheel vs PriorityQueue Comparison
 
 看完上面的时间复杂度对比，你可能会觉得：
 
@@ -837,3 +837,4 @@ for(Tasks task : tasks) {
 - [EventLoop](/docs/CS/Framework/Netty/EventLoop.md)
 - [ChannelHandler](/docs/CS/Framework/Netty/ChannelHandler.md)
 - [Bootstrap](/docs/CS/Framework/Netty/Bootstrap.md)
+- [Scheduled Task](/docs/CS/SE/Scheduled_Task.md)

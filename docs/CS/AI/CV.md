@@ -18,25 +18,25 @@
 | Tracking 多目标跟踪 | 帧间同一目标 ID | 检测 + 卡尔曼滤波 + 匈牙利匹配（SORT / DeepSORT） |
 | Generation 生成 | 图像/视频 | GAN、Diffusion（Stable Diffusion）、DiT |
 
-### Image Classification 图像分类
+### Image Classification
 
 输出整图类别。CNN 的主战场，基准是 ImageNet（1000 类）；常见预训练骨干 ResNet、VGG、EfficientNet，迁移学习用"预训练骨干 + 换头微调"几乎是一切视觉任务的起手式。
 
-### Object Detection 目标检测
+### Object Detection
 
 输出多个**边界框 + 类别 + 置信度**。两大流派：
 
 - **两阶段（two-stage）**：先产生候选区域（Region Proposal）再分类回归——R-CNN → Fast R-CNN → **Faster R-CNN**（区域建议网络 RPN 端到端）。精度高、速度慢
 - **单阶段（one-stage）**：一次前向直接出框——**YOLO** 系列（把检测当回归问题，实时）、SSD。速度快，小目标精度历来略逊；**RetinaNet** 用 Focal Loss 压住海量易分负样本的损失权重，把单阶段精度拉回两阶段水平
 
-### Segmentation 分割
+### Segmentation
 
 - **语义分割（Semantic Segmentation）**：逐像素分类，同类不区分个体——FCN 开创全卷积路数，**U-Net**（对称编码器-解码器 + 跳跃连接）是医学影像与通用分割的常青结构
 - **实例分割（Instance Segmentation）**：逐像素 + 区分个体——**Mask R-CNN** 在 Faster R-CNN 上加一条掩码分支
 - 全景分割（Panoptic）= 语义 + 实例的合并任务
 - **SAM**（Segment Anything）把分割重构成**以点/框/文本为 prompt 的零样本基础模型**任务：在超大规模掩码数据上预训练，无需针对新类别训练即可分割任意物体
 
-### 其它任务
+### Other Tasks
 
 人脸识别（分类 → 度量学习）、OCR（检测 DBNet + 识别 CRNN 两阶段）、姿态估计（OpenPose、MediaPipe）、深度与光流（立体匹配、RAFT、单目深度估计）、图像生成（GAN、扩散模型、DiT）与多模态理解（图文对齐，通往 [LLM](/docs/CS/AI/LLM/LLM.md) 的视觉-语言模型）。
 
@@ -70,7 +70,7 @@ $$
 
 IoU 超过阈值（常取 0.5）才算检出成功。**mAP（mean Average Precision）**：对每个类别算 PR 曲线下的 AP，再对类别取平均——mAP@0.5、mAP@0.5:0.95 是检测论文的标准报告口径。分割的 Dice 系数与 IoU 高度相关。分类指标见 [ML](/docs/CS/AI/ML/ML.md) 的评价指标一节。
 
-## 数据与预处理
+## Data and Preprocessing
 
 图像在进入网络前是张量：RGB 三通道、像素值 0–255；常见预处理是 resize / center-crop、归一化到均值 0 方差 1。视频多一个时间维，用 3D 卷积或抽帧后走 2D 网络。图像压缩原理（YCbCr、DCT、量化、Huffman）见 [JPEG](/docs/CS/Algorithms/JPEG.md)。
 
@@ -88,7 +88,7 @@ model = resnet50(weights=weights).eval()
 
 检测 / 分割同理：`torchvision.models.detection.fasterrcnn_resnet50_fpn`、`maskrcnn_resnet50_fpn` 开箱即用（文档见下）。
 
-## 工程实践
+## Engineering Practice
 
 - 数据是主战场：采集与标注规范、类别不平衡（过采样 / Focal Loss）、分辨率与长宽比处理、增强策略（Mosaic、Copy-Paste）
 - 部署：模型量化（INT8）、蒸馏、TensorRT / ONNX Runtime 加速；端侧用 MobileNet、YOLO-nano 一类轻量结构

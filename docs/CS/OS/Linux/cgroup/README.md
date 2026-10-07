@@ -14,7 +14,7 @@ ls /sys/fs/cgroup
 
 v1 则是每控制器一个独立挂载点：`/sys/fs/cgroup/cpu`、`/sys/fs/cgroup/memory`、`/sys/fs/cgroup/pids` 等，各自是一棵完整树。
 
-## 三类位掩码：理解 v2 的关键
+## Three Classes of Bitmasks: The Key to Understanding v2
 
 源码里用三个位掩码刻画控制器的归属，全局定义在 `kernel/cgroup/cgroup.c`：
 
@@ -61,7 +61,7 @@ bool cgrp_dfl_visible;
 
 `cgrp_dfl_visible` 在 `cgroup_get_tree()` 里才被置 `true` —— 也就是说**v2 层级在你第一次挂载它之前根本不在文件系统中出现**。这个设计是为了让 v1 时代的脚本继续看到旧的挂载布局。
 
-## 统一层级：一棵树装所有控制器
+## Unified Hierarchy: One Tree Holds All Controllers
 
 v1 时代每个控制器各建一棵树，于是"CPU 限额"和"内存限额"在两个互不相干的树里，进程迁移、限额联动全都要额外处理。v2 把它们合并成**一棵 kernfs 树**，每个控制器在每个 cgroup 目录下有自己的一组文件。
 
@@ -117,7 +117,7 @@ v1 时代每个控制器各建一棵树，于是"CPU 限额"和"内存限额"在
 
 即 `list_add_rcu()` 之后一旦出错，引用计数已经交出去了，**无法安全回滚**。
 
-## no-internal-process：v2 最反直觉的规则
+## no-internal-process: The Most Counterintuitive Rule of v2
 
 v2 有一条初学者必踩的规则：**一个非根 cgroup 上有进程时，不能在该 cgroup 上启用控制器**（不能写 `+cpu`）。源码：
 
@@ -141,7 +141,7 @@ echo "+cpu +memory" > /sys/fs/cgroup/cgroup.subtree_control
 echo $$ > /sys/fs/cgroup/mygroup/cgroup.procs
 ```
 
-### 三处豁免
+### Three Exemptions
 
 `cgroup_migrate_add_task()` 里这条规则有两处豁免，都以 `cgroup_can_be_thread_root()` 为条件：
 
@@ -202,7 +202,7 @@ static bool cgroup_is_mixable(struct cgroup *cgrp)
 
 **根 cgroup 不受 no-internal-process 约束** —— 这就是为什么系统级限制（`/sys/fs/cgroup/cpu.max`）可以直接在根上设，而子组不行。
 
-## threaded 模式：线程级计费
+## threaded Mode: Thread-Level Accounting
 
 threaded 模式是 v2 特有的能力，用来解决"进程级记账 vs 线程级记账"的矛盾。在一个标了 `threaded` 的 cgroup 里，**进程被当作线程看待**，因此可以塞进进程（绕过 no-internal-process），同时每个线程单独计费。
 
@@ -251,7 +251,7 @@ static bool cgroup_is_threaded(struct cgroup *cgrp)
 
 `brekage` 应为 `breakage`。
 
-## 挂载选项
+## Mount Options
 
 `cgroup2_parse_param()` 定义了 v2 挂载时**全部**可用的 mount options——数量比多数人预期的少：
 
@@ -306,7 +306,7 @@ static void apply_cgroup_root_flags(unsigned int root_flags)
 
 这个判断是理解"容器里为什么改不了这些选项"的答案 —— 见 [委派与命名空间](#委派与命名空间)。
 
-## 进程迁移
+## Process Migration
 
 v2 的迁移接口是 `cgroup_migrate_execute()`，由 `cgroup_migrate_add_task()` 逐个添任务后统一执行。写入 `cgroup.procs`（按线程组）与 `cgroup.threads`（按线程）是两条不同路径。
 
@@ -325,7 +325,7 @@ v2 的迁移接口是 `cgroup_migrate_execute()`，由 `cgroup_migrate_add_task(
 
 因为后续 rebind 可能禁用控制器从而新建 css_set，但**新建数量不会超过现有 css_set 数量**，所以预分配 2 倍一定够。
 
-## 委派与命名空间
+## Delegation and Namespace
 
 `cgroup_do_get_tree()` 里有一段决定"这次挂载看到什么"的逻辑：
 
@@ -349,16 +349,16 @@ v2 的迁移接口是 `cgroup_migrate_execute()`，由 `cgroup_migrate_add_task(
 
 这个机制的另一面就是 `apply_cgroup_root_flags()` 里的 `if (current->nsproxy->cgroup_ns == &init_cgroup_ns)` —— **在容器内 `mount -o memory_recursiveprot` 会静默无效**（flag 不被应用，但也不报错）。这类"静默失效"是容器场景下最难查的一类问题。
 
-## 与其它子系统的接缝
+## Interfaces with Other Subsystems
 
 - **内存**：cgroup memory 控制器的记账与回收走 [memcg](/docs/CS/OS/Linux/mm/memcg.md)，那是本 KB 里最详细的 cgroup 相关笔记。
 - **调度器**：`cpu` 控制器的 cgroup 公平性由 fair 调度器的 vruntime 记账实现，见 [fair](/docs/CS/OS/Linux/proc/fair.md) 的 CFS 带宽控制。
-- **冻结**：`cgroup.freeze` 与 `cgroup.kill` 是 cgroup 核心自带的两个文件（v2 无独立 freezer 控制器），语义与 v1 的 `freezer.state` 差异见 [控制器接口](/docs/CS/OS/Linux/cgroup/controllers.md?id=freezer-冻结与终止)。
+- **冻结**：`cgroup.freeze` 与 `cgroup.kill` 是 cgroup 核心自带的两个文件（v2 无独立 freezer 控制器），语义与 v1 的 `freezer.state` 差异见 [控制器接口](/docs/CS/OS/Linux/cgroup/controllers.md?id=freezer-freeze-and-terminate)。
 - **namespace**：cgroup namespace 与 pid/network namespace 的配合见 [namespace](/docs/CS/OS/Linux/namespace.md)。
 - **容器**：委派的实践侧（systemd `Delegate=`、`cgroups=private`）见 [cgroup 委派与容器实践](/docs/CS/OS/Linux/cgroup/delegation.md)。
 - **控制文件接口**：各控制器的文件与可调参数见 [cgroup 控制器接口](/docs/CS/OS/Linux/cgroup/controllers.md)。
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 ```shell
 # 层级总览
@@ -373,10 +373,10 @@ cat /sys/fs/cgroup/mygroup/cgroup.procs              # 直接成员（进程视�
 cat /sys/fs/cgroup/mygroup/cgroup.threads            # 直接成员（线程视图）
 cat /sys/fs/cgroup/mygroup/cgroup.type               # domain / domain threaded / threaded
 
-# 启用失败排查（最常见）
-# -EBUSY = 有进程时启控制器 → 先建子组再放进程
-# -EBUSY = 控制器已在 v1 挂载 → 先 umount v1 那棵树
 # -EINVAL = 该控制器不支持 v2（查 inhibit_ss_mask）
+# -EBUSY = Starting Controller with Processes Present -> Create Child Group First Then Add Processes
+# -EBUSY = Controller Already Mounted on v1 -> umount the v1 Tree First
+# -EINVAL = This Controller Does Not Support v2 (check inhibit_ss_mask)
 
 # 内存/IO 压力
 cat /sys/fs/cgroup/mygroup/memory.pressure

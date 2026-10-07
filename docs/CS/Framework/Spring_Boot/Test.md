@@ -14,7 +14,7 @@
 > - 默认使用 **JUnit 6**，JUnit 4 已弃用。
 > - 测试依赖按技术拆分：Web 层加 `spring-boot-starter-webmvc-test`，REST 客户端加 `spring-boot-starter-restclient-test`；迁移期可用 `spring-boot-starter-test-classic` 兜底。
 
-## 测试依赖：从"一个 starter"到"按技术拆分"
+## Test Dependencies: From "One starter" to "Split by Technology"
 
 Boot 4 把单一的 `spring-boot-autoconfigure` 拆成上百个模块，测试支持也随之拆分。**一个 starter 对应一个 test starter**，用哪层就加哪个：
 
@@ -42,7 +42,7 @@ Boot 4 把单一的 `spring-boot-autoconfigure` 拆成上百个模块，测试�
 
 迁移期不想一次性理清依赖，可以用 `spring-boot-starter-test-classic`——它把所有模块打进一个 POM（但不含第三方库），先跑起来再逐步收窄。踩过一次的典型症状是：`@AutoConfigureTestRestTemplate` 加了却报 `NoClassDefFoundError: RestTemplateBuilder`，根因是缺 `spring-boot-restclient` 模块。
 
-## 切片测试
+## Slice Testing
 
 切片（slice）测试只启动应用的一层，是"速度"与"可信度"之间的主要调节旋钮。Boot 4 把各切片的注解搬进了各自的模块，包名普遍变了：
 
@@ -79,7 +79,7 @@ class OrderControllerTest {
 > [!NOTE]
 > `@WebMvcTest` 的组件扫描只包含 Web 相关类型（Controller、Advice、Converter、Filter 等），**`@Configuration` 类不算 Web 组件**。因此自定义的 `SecurityFilterChain` 不会被扫进来，切片里跑的是 Boot 的默认安全链——表现为本该公开的 GET 返回 401、POST 返回 403。解决办法是 `@Import(SecurityConfig.class)` 把它和它依赖的 Bean 一起导入。
 
-## 覆盖 Bean：@MockitoBean
+## Override Bean: @MockitoBean
 
 ```java
 @SpringBootTest
@@ -100,7 +100,7 @@ class OrderServiceTest {
 - 每个测试方法结束后自动 reset。
 - `@MockitoBean` 会让上下文缓存 key 发生变化——不同的 mock 组合对应不同的上下文，直接影响测试套件耗时。
 
-## Web 层与 REST 客户端测试
+## Web Layer and REST Client Testing
 
 三种客户端，按"启动成本"排序：
 
@@ -133,7 +133,7 @@ class OrderApiTest {
 > [!TIP]
 > `MockMvcTester`（Spring Framework 6.2 引入，`org.springframework.test.web.servlet.assertj.MockMvcTester`）是 MockMvc 的 AssertJ 封装，写法是 `assertThat(mvc.get().uri("/orders")).hasStatusOk()`，比 `andExpect` 链更接近现代断言习惯，可以在 `@WebMvcTest` 里直接注入。
 
-## 数据层测试
+## Data Layer Testing
 
 ```java
 @DataJpaTest                                                     // 事务 + 自动回滚
@@ -177,7 +177,7 @@ class UserServiceIntegrationTest {
 >
 > 另外，事务回滚只覆盖数据库：写出去的文件、发出的邮件、投递的消息都不会回滚；而**延迟到提交时才触发的约束冲突**也不会暴露。
 
-## 外部依赖：Testcontainers
+## External Dependency: Testcontainers
 
 真实依赖（数据库、Kafka、Redis）用 `spring-boot-testcontainers` + `@ServiceConnection`，容器由 Testcontainers 管理，连接信息自动注入（Repository 与查询映射的基础见 [JPA](/docs/CS/Framework/Spring/JPA.md)）：
 
@@ -204,7 +204,7 @@ static void props(DynamicPropertyRegistry registry) {
 
 注意 `@DynamicPropertySource` 方法会参与上下文缓存 key 的计算——写在不同的测试类里会导致不同的上下文。
 
-## 上下文缓存
+## Context Cache
 
 TestContext 框架加载完 `ApplicationContext` 后会缓存复用，**缓存 key 由一组配置参数唯一确定**：
 
@@ -231,7 +231,7 @@ public abstract class AbstractIntegrationTest {
 
 上下文被污染时用 `@DirtiesContext` 标记，让它下一次重建——代价是重建成本，别滥用。
 
-## JUnit 6 与 @Nested
+## JUnit 6 and @Nested
 
 Boot 4 默认 JUnit 6，Spring 7 的 `SpringExtension` 要求 JUnit Jupiter 6.0+；JUnit 4 支持（`SpringRunner`、`SpringClassRule` 等）在 7.0 起弃用。
 
@@ -245,11 +245,11 @@ class OrderTest { /* @Nested ... */ }
 
 也可以全局设置 `spring.test.extension.context.scope=test_class`（7.0.7+ 支持，可用 `-D` 传入）；`@SpringExtensionConfig` 的优先级高于该属性。若测试类用了 `@TestInstance(Lifecycle.PER_CLASS)`，则始终是类作用域，配置不生效。
 
-## 自动配置自身的测试
+## Testing of Auto-Configuration Itself
 
 写 starter 或自动配置时，用 `ApplicationContextRunner`（及其 Web / Reactive 变体）断言条件装配结果，并用 `ImportCandidates` 断言类确实被登记进了 `.imports` 清单——这两件事的坑与做法见 [Spring Boot 自动配置 SPI](/docs/CS/Framework/Spring/SPI.md)。
 
-## 常见陷阱
+## Common Pitfalls
 
 | 陷阱 | 现象 | 处理 |
 |---|---|---|

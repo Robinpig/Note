@@ -17,9 +17,9 @@
 
 本文分成三段讲：apiserver 如何把删除变成两阶段（对应 [apiserver](/docs/CS/Container/k8s/apiserver.md) 的写链路镜像）、GC 如何级联（对应 [垃圾回收](/docs/CS/Container/k8s/GC.md) 的运行时行为）、kubelet 如何真正停容器并触发最终删除（对应 [kubelet](/docs/CS/Container/k8s/kubelet.md) 的三态机）。
 
-## 第一段：apiserver 把一次删除拆成两次写
+## Segment 1: apiserver Splits One Deletion into Two Writes
 
-### BeforeDelete：删除语义的核心
+### BeforeDelete: Core of Deletion Semantics
 
 删除的整个判定逻辑压缩在一个函数里 —— `rest.BeforeDelete`（`staging/src/k8s.io/apiserver/pkg/registry/rest/delete.go:75`）。它在一个 DELETE 请求里**被调用两次**：
 
@@ -36,7 +36,7 @@ if objectMeta.GetDeletionTimestamp() != nil {   // 已经在删除中 → 走二
 
 这个 `!= nil` 把一次 DELETE 分成截然不同的两条路径。
 
-### 第一次删除：只打时间戳，不删东西
+### First Deletion: Only Timestamp, Do Not Delete Anything
 
 ```go
 // staging/src/k8s.io/apiserver/pkg/registry/rest/delete.go:163-165
@@ -58,7 +58,7 @@ objectMeta.SetDeletionGracePeriodSeconds(options.GracePeriodSeconds)
 > [!TIP]
 > **202 Accepted 的条件极窄**：只有 `!wasDeleted && OrphanDependents != nil && !*OrphanDependents` 才返回 202（`handlers/delete.go:188-190`）。日常删 Pod 不会遇到。
 
-### 第二次删除：宽限期被压成 0
+### Second Deletion: grace period Compressed to 0
 
 当对象已经有 `deletionTimestamp` 时，`BeforeDelete` 走另一套逻辑。最重要的一条规则在 `delete.go:123-128`：**grace period 只能缩短，不能延长**。
 
@@ -72,7 +72,7 @@ if period >= *objectMeta.GetDeletionGracePeriodSeconds() {
 
 这条路径就是 kubelet 在容器停完之后发 `DELETE?gracePeriodSeconds=0` 时走的：宽限期被压成 0，`store.go:1114` 判定 `lastGraceful == 0`，于是走到 `store.go:1215` 真正调 etcd 删除。
 
-### Finalizer：唯一的删除 veto 权
+### Finalizer: The Only Deletion Veto Power
 
 finalizer 的权威定义注释在 `staging/src/k8s.io/apimachinery/pkg/apis/meta/v1/types.go:263-279`，三句话讲清了全部语义：
 
@@ -86,7 +86,7 @@ finalizer 的权威定义注释在 `staging/src/k8s.io/apimachinery/pkg/apis/met
 
 那么，谁有资格摘 finalizer？答案是**任何对该对象有 update 权限且知道该 finalizer 名字的客户端**。Kubernetes 没有 central finalizer registry，这只是个约定：`protect.foo.io/my-lock` 意味着"我还没处理完，别删"。
 
-### 最终删除的触发点在 UPDATE 里
+### The Trigger for Final Deletion Is in UPDATE
 
 这一点很容易看漏：当最后一个 finalizer 被摘掉时的那次 `PUT`，会顺带把对象删掉。
 
@@ -102,9 +102,9 @@ return oldMeta.GetDeletionGracePeriodSeconds() == nil || *oldMeta.GetDeletionGra
 
 **所以"清空 finalizers 的那个 PUT 请求"就是真正的删除请求**，这在排查时很有用：如果你用 `kubectl patch` 摘掉最后一个 finalizer，那个 patch 请求本身就已经把对象删掉了，返回给你的 200 里带着最终对象。
 
-## 第二段：GC 如何处理级联
+## Segment 2: How GC Handles Cascading
 
-### 谁写了 `foregroundDeletion`——不是 GC
+### Who Wrote `foregroundDeletion` — Not GC
 
 这是本条链路最大的认知纠正。**GC controller 从不添加 finalizer**，整个包里只有 `removeFinalizer`（`pkg/controller/garbagecollector/operations.go:104`）。
 
@@ -128,7 +128,7 @@ store.go:1083   existingAccessor.SetFinalizers(newFinalizers)
 
 GC 在这里扮演的角色是"先把活干完，再去销假"，而不是"锁住对象"。
 
-### 三种级联模式
+### Three Cascading Modes
 
 | 模式 | finalizer | 处理入口 | 位置 |
 |---|---|---|---|
@@ -150,7 +150,7 @@ GC 在这里扮演的角色是"先把活干完，再去销假"，而不是"锁�
 > [!WARNING]
 > `rest.DeleteDependents` 这个常量名有严重的历史包袱——它**不是** foreground。`store.go:973` 的默认返回值 false 意味着"不加 finalizer，直接删，让 GC 后台收尾"，即 background。别被名字骗了。
 
-### Foreground 到底"阻塞"在哪里
+### Where Foreground Actually 'Blocks'
 
 常见说法是"foreground deletion 会阻塞直到依赖删除完成"。这个描述会引起误解——**没有任何 goroutine 卡住**。
 
@@ -179,7 +179,7 @@ return nil    // ← 立即返回，worker 马上处理下一个 item
 
 **这个顺序天然是自底向上的叶子优先**，没有任何拓扑排序代码。
 
-### 图是怎么维护的
+### How the Graph Is Maintained
 
 GC 最特别的一点是它的 informer 是**动态跟随 discovery 变化**的：
 
@@ -193,9 +193,9 @@ GC 最特别的一点是它的 informer 是**动态跟随 discovery 变化**的�
 
 worker 并发数默认 20（`garbagecollector/config/v1alpha1/defaults.go:38-40` 的 `ConcurrentGCSyncs`），但 `Run` 里每个 i 起**两个** goroutine（`garbagecollector.go:172-179`），所以实际是 40 个。
 
-## 第三段：kubelet 如何真正停掉容器
+## Segment 3: How kubelet Actually Stops the Container
 
-### 三态机，而不是两态
+### Three-state Machine, Not Two-state
 
 kubelet 侧的每个 Pod 都有一个专属 goroutine `podWorkerLoop`（`pod_workers.go:1245`），它的状态是**从时间戳推导**出来的（`pod_workers.go:436-444`）：
 
@@ -213,7 +213,7 @@ func (s *podSyncStatus) WorkType() PodWorkerState {
 
 还有一处设计很妙：`pendingUpdate` 会被**直接覆盖**而不是排队（`pod_workers.go:989`），配合 buffered=1 的 channel 和非阻塞 send（`:995-998`）。中间态允许丢失，但 `terminatingAt`、`gracePeriod` 这类单调量存在 `podSyncStatus` 里而非随 update 走。这是刻意选择的语义：**worker 看到的永远是最新意图，不必重放历史**。
 
-### SyncPod 已经不处理删除了
+### SyncPod No Longer Handles Deletion
 
 这一点相对旧版本是架构性变化。`pkg/kubelet/kuberuntime/kuberuntime_manager.go` **全文没有 `DeletionTimestamp`**——旧版本里"`SyncPod` 检测到 `DeletionTimestamp` 就走 kill 分支"的设计已经完全移除，职责移交给了 `podWorkerLoop` 的 `WorkType == TerminatingPod` 分支。
 
@@ -226,7 +226,7 @@ func (s *podSyncStatus) WorkType() PodWorkerState {
 5. `UnprepareDynamicResources` —— 释放 DRA 资源，必须在容器停后、写终态前（`:2391-2395`）
 6. 再次 `SetPodStatus` 写带 exit code 的终态（`:2402`）
 
-### preStop 是占用宽限期的
+### preStop Occupies the grace period
 
 `kuberuntime_container.go:894-896`：
 
@@ -240,7 +240,7 @@ preStop 拿到的就是当前剩余的 grace period 作为上限，跑完之后*
 
 hook 超时就发生在 `executePreStopHook` 内部（`kuberuntime_container.go:799-806`）的一个 `select` 里。注意 hook 超时后**那个 goroutine 不会被 kill**，`killContainer` 也不等它——它会自己跑完，但已经不影响容器下线。
 
-### 容器是并行杀的，且 force delete 不是立即的
+### Containers Are Killed in Parallel, and force delete Is Not Immediate
 
 `kuberuntime_container.go:944-957`：所有容器各起一个 goroutine，共享同一份完整 grace period。所以 Pod 的整体耗时 ≈ max(单个容器)，不是累加。唯一例外是有 sidecar（restartable init container）时会启用串行化（`:936-943`）。
 
@@ -259,7 +259,7 @@ hook 超时就发生在 `executePreStopHook` 内部（`kuberuntime_container.go:
 
 至于 SIGTERM → SIGKILL 这两个信号，kubelet **只传一个 timeout 给 runtime**（`kuberuntime_container.go:913` 的 `StopContainer(ctx, id, gracePeriod)`），信号级别的转换完全由 containerd / CRI-O 内部完成。
 
-### grace period 到底谁优先
+### Who Actually Takes Priority in the grace period
 
 `pod_workers.go:1009-1040` 的 `calculateEffectiveGracePeriod`，优先级顺序：
 
@@ -274,7 +274,7 @@ hook 超时就发生在 `executePreStopHook` 内部（`kuberuntime_container.go:
 
 顺带一提：**v1.36 仍然不支持 per-container termination grace period**。`Container` struct 里只有 `StopSignal`，没有 `TerminationGracePeriodSeconds`。唯一更细粒度的是**探针级**（`Probe.TerminationGracePeriodSeconds`），且只在 `reasonStartupProbe` / `reasonLivenessProbe` 时生效，不影响正常删除路径。
 
-### 第二次 DELETE 在 status manager，不在 podWorkers
+### Second DELETE Is in status manager, Not podWorkers
 
 这是本次核实最意外的一条。网上常见说法是 "podWorkers 发第二次删除"，**在 v1.36 不成立** —— `pod_workers.go` 和 `kubelet_pods.go` 里都搜不到删除调用。
 
@@ -321,7 +321,7 @@ digraph deletion {
 }
 ```
 
-### 没有人倒计时 grace period
+### No One Counts Down the grace period
 
 这是第二份反直觉结论。kubelet **从不基于 `deletionTimestamp` 做任何时间运算**（在 `pkg/kubelet` 下搜 `DeletionTimestamp` 相关的 `Add`/`Sub`/`Since`/`Until` 零命中）。
 
@@ -337,7 +337,7 @@ digraph deletion {
 
 **结论：一个 Pod 卡在 Terminating 且节点 Ready 时，kubelet 是唯一的解除者。** PodGC 帮不上忙。
 
-### PodGC 只兜底四类异常
+### PodGC Only Backstops Four Types of Anomalies
 
 `pkg/controller/podgc/gc_controller.go:117-134` 的四个 panel：
 
@@ -350,7 +350,7 @@ digraph deletion {
 
 注意 `gcTerminating` 在 v1.36 **已经不再基于 grace 超时**——历史上的"terminating 超时回收"行为已移除，现在只针对被标记 out-of-service 的节点。检查周期 `gcCheckPeriod = 20s`。
 
-## 为什么 namespace 特别容易卡
+## Why namespace Especially Easily Gets Stuck
 
 namespace 的删除之所以成为经典难题，是因为它把上面所有机制叠在了一起，而且它的 finalizer 形式还不一样。
 
@@ -384,7 +384,7 @@ kubectl get namespace foo -o yaml
 > [!NOTE]
 > `OrderedNamespaceDeletion` 在 1.34 起已 GA 且 LockToDefault（`kube_features.go:1748-1751`），v1.36 无法关闭。效果是**必须先清完 pods 才碰其他资源**（`namespaced_resources_deleter.go:531-563`）。所以现在 namespace 卡住时，通常就是在等 pods。
 
-## v1.36 反直觉清单
+## v1.36 Counterintuitive List
 
 以下每条都回源码核实过，且与常见认知相反：
 
@@ -404,7 +404,7 @@ kubectl get namespace foo -o yaml
 | 存在 `implicitRefs` / `managePodLoop` / `StartPodTermination` | 全部**已移除**，Now single goroutine `podWorkerLoop` | 全仓 grep 零命中 |
 | per-container terminationGracePeriod 可用了 | 仍是 Pod 级；只有**探针级**例外 | `types.go:4198`；Container 无该字段 |
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 | 现象 | 先看这里 | 命令 |
 |---|---|---|

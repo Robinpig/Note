@@ -25,7 +25,7 @@ Dubbo 被设计为高度可扩展，用户可以方便的实现流量拦截、�
 
 Dubbo 在很多大企业内部衍生出了独立版本，比如在阿里巴巴内部就基于 Dubbo3 衍生出了 [HSF3](/docs/CS/Framework/HSF/HSF.md)
 
-### Dubbo 和其它框架的比较
+### Comparison of Dubbo and Other Frameworks
 
 很多开发者经常会问到 Apache Dubbo 与 Spring Cloud、gRPC 以及一些 Service Mesh 项目如 Istio 的关系
 
@@ -112,7 +112,7 @@ Dubbo 已经实现了对 Istio 体系的全面接入，可以用 Istio 控制面
 
 <!-- tabs:end -->
 
-### 与 Spring Cloud Alibaba 的集成
+### Integration with Spring Cloud Alibaba
 
 Dubbo 可纳入 [Spring Cloud Alibaba](/docs/CS/Framework/Spring_Cloud/Alibaba.md) 体系，复用其服务发现与微服务生态。`com.alibaba.cloud:spring-cloud-starter-dubbo` 打通了 Spring Cloud 的 `DiscoveryClient` 与 Dubbo 的 RPC 框架：Dubbo 服务通过 `DubboServiceRegistry` 注册到 [Nacos](/docs/CS/Framework/nacos/Nacos.md) 等注册中心，并被 Spring Cloud 的 `DiscoveryClient` 可见；消费侧由 `DubboLoadBalancer` 提供客户端负载均衡，复用 [Spring Cloud LoadBalancer](/docs/CS/Framework/Spring_Cloud/LoadBalancer.md) 的实例列表供给。典型依赖：
 
@@ -765,7 +765,7 @@ MultiHandler
 
 延迟暴露（`delay` 默认 `null`，即不延迟）与启动预热（`warmup` 默认 10 分钟，权重按 uptime 线性恢复）属于服务治理范畴，完整机制见 [Governance](/docs/CS/Framework/Dubbo/Governance.md)。
 
-## 主题导航
+## Topic Navigation
 
 Dubbo 3 的能力可以按「一次调用经过哪些环节」串起来阅读：
 

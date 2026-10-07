@@ -10,7 +10,7 @@ ptrace 的实现横跨三层：
 
 本文按「关系如何建立 → 停止如何发生 → 事件如何上报 → 数据如何读写 → 架构层怎么做 → 安全边界在哪」的顺序展开，源码对照 Linux v7.2.7。
 
-## 为什么需要这么一个系统调用
+## Why Such a System Call Is Needed
 
 一个调试器需要三件事，而这三件事都是"越过进程边界"的，普通系统调用一个都做不了：
 
@@ -20,7 +20,7 @@ ptrace 的实现横跨三层：
 
 ptrace 的答案是一个**二元关系 + 停止状态机**：先在两个 task 之间建立 tracer / tracee 关系（通过改写 `task_struct` 的父子指针复用进程模型的既有语义），之后由 tracee 在各种事件点上主动**陷入内核并睡眠**，tracer 用 `waitpid` 收事件、用 ptrace 请求读写状态、用 resume 类请求放行。
 
-## 系统调用入口
+## System Call Entry
 
 用户态看到的是四个参数：
 
@@ -89,9 +89,9 @@ SYSCALL_DEFINE4(ptrace, long, request, long, pid, unsigned long, addr,
 
 注意分发顺序是**架构优先**：`arch_ptrace()` 先处理，不认识的请求才回落到通用的 `ptrace_request()`。所以 `PTRACE_GETREGS` 这类架构相关的由 x86 自己实现，而 `PTRACE_SETOPTIONS` 这类与架构无关的由通用层处理。
 
-## 建立关系：TRACEME 与 ATTACH / SEIZE
+## Establishing the Relationship: TRACEME and ATTACH / SEIZE
 
-### PTRACE_TRACEME：让当前进程被父进程跟踪
+### PTRACE_TRACEME: Let the Current Process Be Traced by Its Parent
 
 最短的一条路，只是把自己标记上、把 parent 指向 real_parent：
 
@@ -122,7 +122,7 @@ static int ptrace_traceme(void)
 
 典型用法是"fork + 子进程 TRACEME + exec"，这样 tracer 能保证从程序第一条指令起就在场。
 
-### PTRACE_ATTACH / PTRACE_SEIZE：从外部附加
+### PTRACE_ATTACH / PTRACE_SEIZE: Attaching from Outside
 
 ```c
 static int ptrace_attach(struct task_struct *task, long request,
@@ -206,7 +206,7 @@ static int ptrace_attach(struct task_struct *task, long request,
 - **正在退出（`exit_state`）的任务不能附加**；
 - **`cred_guard_mutex`** 把 attach 与 exec 的计算凭证阶段互斥开：被跟踪时 SUID/SGID 程序的凭证计算规则不同，若与 exec 交叠会算出错误结果；这里用可中断的 mutex 获取，被信号打断返回 `-ERESTARTNOINTR`。
 
-### 关系的表示：parent 指针与 ptrace_entry
+### Representing the Relationship: parent Pointer and ptrace_entry
 
 建立关系的核心动作是 `__ptrace_link()`——把 child 挂进 tracer 的 `ptraced` 链表，并把 `child->parent` 改成 tracer：
 
@@ -243,7 +243,7 @@ static inline int ptrace_reparented(struct task_struct *child)
 | `exit_code` | — | wait 侧读到的状态码，`(event << 8) | SIGTRAP` |
 | `jobctl` | — | 停止/陷阱状态位，见下节 |
 
-### ATTACH 与 SEIZE 的分歧：要不要发 SIGSTOP
+### ATTACH vs SEIZE: Whether to Send SIGSTOP
 
 ```c
 static inline void ptrace_set_stopped(struct task_struct *task, bool seize)
@@ -283,7 +283,7 @@ static inline void ptrace_set_stopped(struct task_struct *task, bool seize)
 
 `JOBCTL_TRAPPING` 是 attach 的**握手位**：tracer 设置它之后 `wait_on_bit()`，直到 tracee 真正进入 `__TASK_TRACED` 才返回，这样 attach 返回时 tracee 一定已经停稳。
 
-## 停止状态：jobctl 位图与 TASK_TRACED
+## Stopped State: jobctl Bitmap and TASK_TRACED
 
 `task->jobctl` 的低 16 位是"最后一次组停止的信号号"，高位是一组标志（`include/linux/sched/jobctl.h`）：
 
@@ -302,7 +302,7 @@ static inline void ptrace_set_stopped(struct task_struct *task, bool seize)
 
 两个互斥的状态位值得注意：`JOBCTL_STOPPED` 由 `do_signal_stop()`（作业控制的 SIGSTOP/SIGTSTP）设置，`JOBCTL_TRACED` 由 `ptrace_stop()` 设置。ptrace 的很多复杂性就来自"**组停止与 ptrace 停止是两套状态，但一个任务可能同时参与两者**"。
 
-## 停止的核心：ptrace_stop
+## The Core of Stopping: ptrace_stop
 
 所有 ptrace 停止最终都汇入 `ptrace_stop()`（`kernel/signal.c`），它被注释为"**This should be the path for all ptrace stops**"：
 
@@ -428,7 +428,7 @@ static int ptrace_stop(int exit_code, int why, unsigned long message,
 
 `exit_code` 的返回值就是 tracer 注入的信号（0 表示不带信号继续）。
 
-### 对外入口：ptrace_notify
+### External Entry Point: ptrace_notify
 
 ```c
 int ptrace_notify(int exit_code, unsigned long message)
@@ -448,7 +448,7 @@ int ptrace_notify(int exit_code, unsigned long message)
 
 那个 `BUG_ON` 定下了一条 ABI 铁律：**ptrace 事件上报的等待状态码高 8 位是事件号、低 8 位必须是 SIGTRAP**，tracer 用 `status >> 8` 取出 `PTRACE_EVENT_*`。
 
-## 冻结：PTRACE_FROZEN
+## Freeze: PTRACE_FROZEN
 
 tracer 读写 tracee 状态时，tracee 必须"绝对不动"。`ptrace_check_attach()` 负责这件事：
 
@@ -510,7 +510,7 @@ static inline void signal_wake_up(struct task_struct *t, bool fatal)
 
 `looks_like_a_spurious_pid()` 是一个针对 exec 竞态的补丁：exec 时 `de_thread()` 可能更换线程组 leader 的 pid，而 `PTRACE_EVENT_EXEC` 还没被 wait 走，此时按 pid 找回来的任务已经不是原来那个，应当拒绝操作。
 
-## 事件上报：PTRACE_EVENT_*
+## Event Reporting: PTRACE_EVENT_*
 
 事件开关编码在 `task->ptrace` 的高位，每个 `PTRACE_EVENT_*` 对应一个 bit：
 
@@ -563,7 +563,7 @@ static inline void ptrace_event(int event, unsigned long message)
 
 `PTRACE_EVENT_STOP` 的 128 是刻意挑的——它不在 `PTRACE_O_MASK`（0xff）里，因此**无法通过 `PTRACE_SETOPTIONS` 打开**，只能由内核在特定时机直接置位（SEIZE 附加时、组停止时、INTERRUPT 时）。这正是 SEIZE 能区分"组停止"与"信号投递停止"的机制。
 
-## 系统调用拦截：syscall-stop
+## System Call Interception: syscall-stop
 
 这是 strace 的全部工作原理。入口侧的顺序在 `include/linux/entry-common.h` 里写得非常明确：
 
@@ -649,7 +649,7 @@ static inline void ptrace_report_syscall_exit(struct pt_regs *regs, int step)
 #define PTRACE_EVENTMSG_SYSCALL_EXIT	2
 ```
 
-### 一次性拿到全部信息：PTRACE_GET_SYSCALL_INFO
+### Getting Everything at Once: PTRACE_GET_SYSCALL_INFO
 
 老式做法是多次 ptrace 调用（读 nr、读六个参数、读返回值），每个系统调用两次 stop，代价高。`PTRACE_GET_SYSCALL_INFO`（v5.3+）把这些打包成一次读取：
 
@@ -714,7 +714,7 @@ struct ptrace_syscall_info {
 		syscall_set_arguments(child, regs, args);
 ```
 
-### 与 seccomp 的配合
+### Cooperation with seccomp
 
 seccomp 过滤器的返回值 `SECCOMP_RET_TRACE` 专门用来把决策交给 tracer：
 
@@ -754,7 +754,7 @@ seccomp 过滤器的返回值 `SECCOMP_RET_TRACE` 专门用来把决策交给 tr
 
 三条规则由此确定：tracer 未开启 `PTRACE_O_TRACESECCOMP` 时该调用直接 `-ENOSYS`；tracer 可以把 nr 改成 -1 来**跳过**这个系统调用；tracer 死后 seccomp 过滤器会重新求值（`recheck_after_trace`）。
 
-## 读写 tracee 的内存
+## Reading and Writing the tracee's Memory
 
 `PTRACE_PEEKDATA` / `POKEDATA` 走的是通用层，最终落到 `access_remote_vm()`：
 
@@ -802,9 +802,9 @@ int ptrace_access_vm(struct task_struct *tsk, unsigned long addr,
 
 `ptrace_readdata()` / `ptrace_writedata()` 是块读写版本，用栈上 128 字节缓冲分批处理，部分成功时返回已拷贝字节数（这也是为什么 ptrace 读写失败常常看到 `-EIO` 而不是 `-EFAULT`）。
 
-## 寄存器：两条路
+## Registers: Two Paths
 
-### 架构直连：PTRACE_GETREGS / PEEKUSR（x86）
+### Direct Architecture Access: PTRACE_GETREGS / PEEKUSR (x86)
 
 ```c
 	case PTRACE_GETREGS:	/* Get all gp regs from the child. */
@@ -827,7 +827,7 @@ int ptrace_access_vm(struct task_struct *tsk, unsigned long addr,
 		}
 ```
 
-### 通用抽象：PTRACE_GETREGSET / SETREGSET
+### Generic Abstraction: PTRACE_GETREGSET / SETREGSET
 
 这条路按 **ELF core dump 的 note 类型**（`NT_PRSTATUS`、`NT_PRFPREG`、`NT_X86_XSTATE` 等）索引，好处是"**调试器读寄存器**"与"**core dump 写寄存器段**"共用同一套布局定义。抽象是 `struct user_regset_view`，按类型线性查找：
 
@@ -850,9 +850,9 @@ find_regset(const struct user_regset_view *view, unsigned int type)
 
 x86-64 的 view 由 `task_user_regset_view()` 根据任务是否 32 位来选（`user_x86_64_view` / `user_x86_32_view`），这就是 64 位调试器能正确解析 32 位 tracee 寄存器的原因。
 
-## 单步与断点
+## Single-Step and Breakpoints
 
-### 单步：EFLAGS.TF
+### Single-Step: EFLAGS.TF
 
 x86 的单步靠设置 EFLAGS 的 TF 位，`enable_step()` 分单指令步与分支步（block step）：
 
@@ -893,7 +893,7 @@ static void enable_step(struct task_struct *child, bool block)
 
 分支步走 MSR 的 BTF 位，只在 `set_task_blockstep()` 里改 `DEBUGCTLMSR`，并且注释强调"只有在任务不是 running 时才安全——依赖于 `ptrace_freeze_traced()`"。
 
-### 硬件断点：DR0-DR3 走 hw_breakpoint
+### Hardware Breakpoints: DR0-DR3 via hw_breakpoint
 
 调试寄存器不是直接写 MSR，而是注册成 perf 的硬件断点对象：
 
@@ -930,11 +930,11 @@ static int ptrace_set_breakpoint_addr(struct task_struct *tsk, int nr,
 
 所以 **x86 只有 4 个硬件断点槽**（DR0-DR3），而且和 [perf](/docs/CS/OS/Linux/Tools/Perf.md) 抢同一组寄存器；exec 时内核会 `flush_ptrace_hw_breakpoint()` 清掉它们（见 [process](/docs/CS/OS/Linux/proc/process.md) 的 exec 部分）。
 
-### 软件断点：内核不参与
+### Software Breakpoints: Kernel Does Not Participate
 
 GDB 下的 `break *addr` 是调试器自己用 `PTRACE_POKEDATA` 把目标地址的一个字节替换成 `0xCC`（`int3`）实现的：命中断点后 CPU 产生 SIGTRAP、tracee 进入 signal-delivery-stop，调试器读完状态再把原字节写回、把 PC 回退一步。**内核里没有任何"设置断点"的 ptrace 请求**——这层完全是用户态的事，代价是需要可写映射（`FOLL_FORCE` 正是为此存在）。
 
-## 恢复与分离
+## Recovery and Detach
 
 ### ptrace_resume
 
@@ -985,7 +985,7 @@ GDB 下的 `break *addr` 是调试器自己用 `PTRACE_POKEDATA` 把目标地址
 
 `PTRACE_SYSEMU` 是给用户态内核（UML）用的：它让系统调用**根本不执行**，只上报并让 tracee 以为得到了返回值。
 
-### PTRACE_INTERRUPT 与 PTRACE_LISTEN
+### PTRACE_INTERRUPT and PTRACE_LISTEN
 
 这两个是 SEIZE 专属（`if (unlikely(!seized ...)) break;`），用来在不干扰信号语义的前提下做"**暂停但不恢复**"与"**恢复但继续监听**"：
 
@@ -1037,7 +1037,7 @@ static int *task_stopped_code(struct task_struct *p, bool ptrace)
 
 于是 tracer 可以"让 tracee 继续跑（在组停止意义上），同时仍然收得到它后续的事件"。
 
-### 分离：ptrace_detach 与 __ptrace_unlink
+### Detach: ptrace_detach and __ptrace_unlink
 
 ```c
 void __ptrace_unlink(struct task_struct *child)
@@ -1090,7 +1090,7 @@ void __ptrace_unlink(struct task_struct *child)
 
 函数头注释还点明了一个可见的中间态：分离时 tracee 要经历 `TRACED → RUNNING → STOPPED`，**这个中间的 RUNNING 对 tracer 也是可见的**，若 tracer 立刻重新 attach 并发一个 `WNOHANG` 的 wait，可能失败。
 
-### tracer 退出：exit_ptrace
+### tracer Exit: exit_ptrace
 
 ```c
 void exit_ptrace(struct task_struct *tracer, struct list_head *dead)
@@ -1109,7 +1109,7 @@ void exit_ptrace(struct task_struct *tracer, struct list_head *dead)
 
 `PTRACE_O_EXITKILL` 是给"tracer 死了 tracee 也别活"的场景（如沙箱）用的；默认的语义是**静默分离，tracee 继续运行**。另外，被跟踪会阻止僵尸被正常回收（父通知被 tracer 截走），所以 `__ptrace_detach()` 里还要补发通知或直接标记 `EXIT_DEAD` 自回收。
 
-## 安全边界
+## Security Boundary
 
 ### __ptrace_may_access
 
@@ -1221,7 +1221,7 @@ ptrace 的授权检查被 `/proc`、process_vm_readv 等复用，所以它不属
 
 对应 sysctl `/proc/sys/kernel/yama/ptrace_scope`。容器环境里常见"宿主机能 ptrace 容器内进程"的越界风险，正是因为 CAP_SYS_PTRACE 在容器里往往被保留——这也是 [namespace](/docs/CS/OS/Linux/namespace.md) 隔离不住 ptrace 的原因之一。
 
-## 使用者与对照
+## Users and Comparison
 
 | 用户态工具 | 依赖的 ptrace 能力 |
 | --- | --- |

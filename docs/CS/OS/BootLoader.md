@@ -72,7 +72,7 @@ A bootloader is a program written to load a more complex kernel.
 
 
 
-#### 操作系统
+#### Operating System
 
 控制权转交给操作系统后，操作系统的内核首先被载入内存。
 

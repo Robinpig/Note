@@ -10,6 +10,7 @@ Goroutine = Golang + Coroutine。Goroutine是golang实现的协程，是用户�
 
 ## GMP
 
+> 调度器的整体策略、调度循环、工作窃取与抢占机制详见 [GMP 调度](/docs/CS/Go/GMM.md)；本节聚焦 g / m / p 三者结构与状态，以及 goroutine 视角的创建与生命周期。
 
 在GMP模型中，
 
@@ -117,6 +118,61 @@ type p struct {
 
 
 
+
+## State Machine
+
+每个 goroutine 在 `runtime.g` 结构里用 `atomicstatus` 字段记录当前状态，运行时借此判断能否调度、是否需要唤醒。Go 核心状态如下：
+
+| 状态 | 含义 |
+| --- | --- |
+| `_Gidle` | 刚分配、尚未初始化（仅在 g 从 gfree 取出后短暂存在） |
+| `_Grunnable` | 处于运行队列中，等待被某个 P 调度执行 |
+| `_Grunning` | 正在某个 M 上运行用户代码 |
+| `_Gsyscall` | 正在执行系统调用，M 此时被该 G 独占 |
+| `_Gwaiting` | 因 channel / 锁 / GC / 网络等阻塞，等待被唤醒；唤醒后转回 `_Grunnable` |
+| `_Gdead` | 已退出或尚未启用，挂在 P 的 `gfree` 链表上等待复用 |
+| `_Gcopystack` | 栈正在被移动（连续栈的 copystack 期间） |
+| `_Gscan*` | 前缀标志位（如 `_Gscanrunnable`），与上面按位或，表示 GC 正在扫描该 G 的栈，期间不能被调度 |
+
+典型生命周期转换：
+
+- 创建：`_Gidle` → `_Grunnable`（进入 P 本地 runq，可被窃取）
+- 调度：`_Grunnable` → `_Grunning`（execute 绑定 M/P 后运行）
+- 阻塞（channel / 锁 / 网络）：`_Grunning` → `_Gwaiting`（gopark，解绑 M）
+- 唤醒：`_Gwaiting` → `_Grunnable`（被对端 goready 后重新入队）
+- 系统调用：`_Grunning` → `_Gsyscall`（handoff 把 P 让给其他 M）；返回后 → `_Grunnable`
+- 退出：`_Grunning` → `_Gdead`（goexit0 回收，见[生命周期与退出](#生命周期与退出)）
+
+`_Gscan` 位是 GC 安全点的关键：GC 必须先把 G 置为 `_Gscanrunnable` 才能扫描其栈上的指针，扫描完成再恢复。
+
+## Stack Model (Contiguous Stack)
+
+goroutine 能以 2KB 的初始栈支持百万级并发，靠的是**连续栈（contiguous stack）**机制——栈随需要动态增长、也在空闲时收缩，而不像 OS 线程那样固定 8MB。
+
+**历史：从分段栈到连续栈。** Go 1.3 之前使用分段栈（stack segments），栈不够时在堆上分配新段并链式串联；但若函数恰好在栈边界频繁调用，会反复分配/回收段造成"热分裂（hot split）"性能抖动。Go 1.3 起改为连续栈：每次增长直接分配一块更大的**整块**栈，把旧栈内容整体搬过去。
+
+**增长流程：**
+
+- 每个 `g` 用 `stack.lo` / `stack.hi` 记录栈边界，`stackguard0` 作为溢出哨兵（位于栈顶附近）。
+- 函数 prologue 会检查 SP 是否越过 `stackguard0`，若剩余空间不足，编译器插入的桩会跳到 `morestack`（汇编），由运行时接管。
+- 运行时 `newstack` 调用 `copystack`：分配一块**两倍于当前**的新栈，用 `memmove` 把旧栈内容整体复制到新栈，并**修正所有指向旧栈的指针**（栈上本地变量指针、goroutine 内部指针如 `g.sched` 等），随后更新 `g.stack` 与 `stackguard0`，再回到原执行点继续。
+- 栈上限：64 位平台 1GB（`maxstacksize`），32 位 250MB。
+
+**收缩流程：** `shrinkstack` 在 GC 扫描 goroutine 栈、或 goroutine 退出时被调用；若实际用量远低于已分配大小，就把栈缩回接近最小（2KB），把多余内存归还 mcache / heap，避免长生命周期 goroutine 长期占用大栈。
+
+> 连续栈的"复制 + 改指针"是 Go 能做到极小初始栈的根本原因，也是 goroutine 切换比线程轻量的来源之一。源码落点：`runtime/stack.go`（`copystack` / `newstack` / `shrinkstack`）、`runtime/asm_amd64.s`（`morestack`）。
+
+## Creation: newproc and newproc1
+
+`go f(a, b)` 并非直接调用函数，而是被编译器翻译为对 `runtime.newproc` 的调用，再由它转交 `runtime.newproc1` 完成 goroutine 的实体创建。
+
+- 编译器在 `cmd/compile` 的语句处理阶段，把 `go` 语句改写成 `newproc(fn, &args)`，并把调用者的 PC/SP 一并传入，使新 goroutine 拥有独立的执行起点。
+- `newproc1` 先从当前 P 的 `gfree` 链表尝试**复用**一个空闲的 `g`（避免每次分配），没有可用 `g` 才通过 `malg` 分配新 `g` 并初始化其 2KB 栈。
+- **参数按值拷贝**：`go` 语句的实参会从调用者栈直接复制到新 `g` 的栈上——因为 Go 的传参是值语义，新 goroutine 必须持有自己的副本，否则调用者栈复用后会读到错误数据。
+- 初始化 `g.sched`（gobuf）：把返回地址设为 `goexit`（函数体跑完后落回 goexit 做回收），PC 指向目标函数 `f`，SP 指向新栈。状态从 `_Gidle` 转为 `_Grunnable`，加入当前 P 的本地 runq（也可能进全局队列），随后便可被调度或被其他 P 工作窃取。
+- `go` 语句本身是**非阻塞**的：调用后立即返回，函数 `f` 何时真正运行完全由调度器决定，不保证先后顺序。
+
+> 调度器侧如何取 G（本地队列 → 全局队列 → netpoll → 工作窃取）详见 [GMP 调度](/docs/CS/Go/GMM.md)；创建后的回收见[生命周期与退出](#生命周期与退出)。
 
 ## start
 
@@ -515,274 +571,8 @@ goroutine创建时优先加入本地队列 可被其它P/M窃取
 
 ## main
 
+> 主 goroutine 的创建与 `runtime.main` 的完整启动流程（含 `rt0_go` 启动汇编与 `runtime.main` 源码）已在上方 [`## start`](#start) 章节列出，本节只补充 main goroutine 启动之后、运行时如何按需创建新的 OS 线程 M。
 
-
-
-```asm
-// asm_amd64.s
-TEXT runtime·rt0_go(SB),NOSPLIT|NOFRAME|TOPFRAME,$0
-	// copy arguments forward on an even stack
-	MOVQ	DI, AX		// argc
-	MOVQ	SI, BX		// argv
-	SUBQ	$(5*8), SP		// 3args 2auto
-	ANDQ	$~15, SP
-	MOVQ	AX, 24(SP)
-	MOVQ	BX, 32(SP)
-
-	// create istack out of the given (operating system) stack.
-	// _cgo_init may update stackguard.
-	MOVQ	$runtime·g0(SB), DI
-	LEAQ	(-64*1024)(SP), BX
-	MOVQ	BX, g_stackguard0(DI)
-	MOVQ	BX, g_stackguard1(DI)
-	MOVQ	BX, (g_stack+stack_lo)(DI)
-	MOVQ	SP, (g_stack+stack_hi)(DI)
-
-	// find out information about the processor we're on
-	MOVL	$0, AX
-	CPUID
-	CMPL	AX, $0
-	JE	nocpuinfo
-
-	CMPL	BX, $0x756E6547  // "Genu"
-	JNE	notintel
-	CMPL	DX, $0x49656E69  // "ineI"
-	JNE	notintel
-	CMPL	CX, $0x6C65746E  // "ntel"
-	JNE	notintel
-	MOVB	$1, runtime·isIntel(SB)
-
-	// update stackguard after _cgo_init
-	MOVQ	$runtime·g0(SB), CX
-	MOVQ	(g_stack+stack_lo)(CX), AX
-	ADDQ	$const_stackGuard, AX
-	MOVQ	AX, g_stackguard0(CX)
-	MOVQ	AX, g_stackguard1(CX)
-
-
-	LEAQ	runtime·m0+m_tls(SB), DI
-	CALL	runtime·settls(SB)
-
-	// store through it, to make sure it works
-	get_tls(BX)
-	MOVQ	$0x123, g(BX)
-	MOVQ	runtime·m0+m_tls(SB), AX
-	CMPQ	AX, $0x123
-	JEQ 2(PC)
-	CALL	runtime·abort(SB)
-ok:
-	// set the per-goroutine and per-mach "registers"
-	get_tls(BX)
-	LEAQ	runtime·g0(SB), CX
-	MOVQ	CX, g(BX)
-	LEAQ	runtime·m0(SB), AX
-
-	// save m->g0 = g0
-	MOVQ	CX, m_g0(AX)
-	// save m0 to g0->m
-	MOVQ	AX, g_m(CX)
-
-	CLD				// convention is D is always left cleared
-
-	// Check GOAMD64 requirements
-	// We need to do this after setting up TLS, so that
-	// we can report an error if there is a failure. See issue 49586.
-
-	CALL	runtime·check(SB)
-
-	MOVL	24(SP), AX		// copy argc
-	MOVL	AX, 0(SP)
-	MOVQ	32(SP), AX		// copy argv
-	MOVQ	AX, 8(SP)
-	CALL	runtime·args(SB)
-	CALL	runtime·osinit(SB)
-	CALL	runtime·schedinit(SB)
-
-	// create a new goroutine to start program
-	MOVQ	$runtime·mainPC(SB), AX		// entry
-	PUSHQ	AX
-	CALL	runtime·newproc(SB)
-	POPQ	AX
-
-	// start this M
-	CALL	runtime·mstart(SB)
-
-	CALL	runtime·abort(SB)	// mstart should never return
-	RET
-	
-// mainPC is a function value for runtime.main, to be passed to newproc.
-// The reference to runtime.main is made via ABIInternal, since the
-// actual function (not the ABI0 wrapper) is needed by newproc.
-DATA	runtime·mainPC+0(SB)/8,$runtime·main<ABIInternal>(SB)
-GLOBL	runtime·mainPC(SB),RODATA,$8
-```
-
-
-
-
-
-
-
-The main goroutine
-
-
-```go
-func main() {
-    mp := getg().m
-
-    // Racectx of m0->g0 is used only as the parent of the main goroutine.
-    // It must not be used for anything else.
-    mp.g0.racectx = 0
-
-    // Max stack size is 1 GB on 64-bit, 250 MB on 32-bit.
-    // Using decimal instead of binary GB and MB because
-    // they look nicer in the stack overflow failure message.
-    if goarch.PtrSize == 8 {
-        maxstacksize = 1000000000
-    } else {
-        maxstacksize = 250000000
-    }
-
-    // An upper limit for max stack size. Used to avoid random crashes
-    // after calling SetMaxStack and trying to allocate a stack that is too big,
-    // since stackalloc works with 32-bit sizes.
-    maxstackceiling = 2 * maxstacksize
-
-    // Allow newproc to start new Ms.
-    mainStarted = true
-
-    if haveSysmon {
-        systemstack(func() {
-            newm(sysmon, nil, -1)
-        })
-    }
-
-    // Lock the main goroutine onto this, the main OS thread,
-    // during initialization. Most programs won't care, but a few
-    // do require certain calls to be made by the main thread.
-    // Those can arrange for main.main to run in the main thread
-    // by calling runtime.LockOSThread during initialization
-    // to preserve the lock.
-    lockOSThread()
-
-    if mp != &m0 {
-        throw("runtime.main not on m0")
-    }
-
-    // Record when the world started.
-    // Must be before doInit for tracing init.
-    runtimeInitTime = nanotime()
-    if runtimeInitTime == 0 {
-        throw("nanotime returning zero")
-    }
-
-    if debug.inittrace != 0 {
-        inittrace.id = getg().goid
-        inittrace.active = true
-    }
-
-    doInit(runtime_inittasks) // Must be before defer.
-
-    // Defer unlock so that runtime.Goexit during init does the unlock too.
-    needUnlock := true
-    defer func() {
-        if needUnlock {
-            unlockOSThread()
-        }
-    }()
-
-    gcenable()
-
-    main_init_done = make(chan bool)
-    if iscgo {
-        if _cgo_pthread_key_created == nil {
-            throw("_cgo_pthread_key_created missing")
-        }
-
-        if _cgo_thread_start == nil {
-            throw("_cgo_thread_start missing")
-        }
-        if GOOS != "windows" {
-            if _cgo_setenv == nil {
-                throw("_cgo_setenv missing")
-            }
-            if _cgo_unsetenv == nil {
-                throw("_cgo_unsetenv missing")
-            }
-        }
-        if _cgo_notify_runtime_init_done == nil {
-            throw("_cgo_notify_runtime_init_done missing")
-        }
-
-        // Set the x_crosscall2_ptr C function pointer variable point to crosscall2.
-        if set_crosscall2 == nil {
-            throw("set_crosscall2 missing")
-        }
-        set_crosscall2()
-
-        // Start the template thread in case we enter Go from
-        // a C-created thread and need to create a new thread.
-        startTemplateThread()
-        cgocall(_cgo_notify_runtime_init_done, nil)
-    }
-
-    // Run the initializing tasks. Depending on build mode this
-    // list can arrive a few different ways, but it will always
-    // contain the init tasks computed by the linker for all the
-    // packages in the program (excluding those added at runtime
-    // by package plugin). Run through the modules in dependency
-    // order (the order they are initialized by the dynamic
-    // loader, i.e. they are added to the moduledata linked list).
-    for m := &firstmoduledata; m != nil; m = m.next {
-        doInit(m.inittasks)
-    }
-
-    // Disable init tracing after main init done to avoid overhead
-    // of collecting statistics in malloc and newproc
-    inittrace.active = false
-
-    close(main_init_done)
-
-    needUnlock = false
-    unlockOSThread()
-
-    if isarchive || islibrary {
-        // A program compiled with -buildmode=c-archive or c-shared
-        // has a main, but it is not executed.
-        return
-    }
-    fn := main_main // make an indirect call, as the linker doesn't know the address of the main package when laying down the runtime
-    fn()
-    if raceenabled {
-        runExitHooks(0) // run hooks now, since racefini does not return
-        racefini()
-    }
-
-    // Make racy client program work: if panicking on
-    // another goroutine at the same time as main returns,
-    // let the other goroutine finish printing the panic trace.
-    // Once it does, it will exit. See issues 3934 and 20018.
-    if runningPanicDefers.Load() != 0 {
-        // Running deferred functions should not take long.
-        for c := 0; c < 1000; c++ {
-            if runningPanicDefers.Load() == 0 {
-                break
-            }
-            Gosched()
-        }
-    }
-    if panicking.Load() != 0 {
-        gopark(nil, nil, waitReasonPanicWait, traceBlockForever, 1)
-    }
-    runExitHooks(0)
-
-    exit(0)
-    for {
-        var x *int32
-        *x = 0
-    }
-}
-```
 runtime.newm 会创建一个存储待执行函数和处理器的新结构体 runtime.m。运行时执行系统监控不需要处理器，系统监控的 Goroutine 会直接在创建的线程上运行
 
 ```go
@@ -927,7 +717,7 @@ Go scheduler 会不断循环调用 runtime.schedule() 去调度 goroutines，而
 
 
 
-### 调度时机
+### Scheduling Timing
 
 
 主动让渡
@@ -1188,7 +978,7 @@ TEXT gogo<>(SB), NOSPLIT, $0
 	JMP	BX
 ```
 
-### 抢占
+### Preemption
 
 为了让每个协程都有执行的机会，并且最大化利用CPU资源，Go语言在初始化时会启动一个特殊的线程来执行系统监控任务。
 系统监控在一个独立的M上运行，不用绑定逻辑处理器P，系统监控每隔10ms会检测是否有准备就绪的网络协程，并放置到全局队列中。
@@ -1666,6 +1456,43 @@ func stealWork(now int64) (gp *g, inheritTime bool, rnow, pollUntil int64, newWo
     return nil, false, now, pollUntil, ranTimer
 }
 ```
+
+## Lifecycle and Exit
+
+一个 goroutine 从 `_Grunnable` 被调度运行，到彻底回收，经历明确的收尾路径：
+
+- 函数体执行完毕（或显式调用 `runtime.Goexit`）时，控制权落到 `goexit`（汇编）：它把栈切回 g0 的系统栈，并把返回地址重置为 `goexit1`，确保收尾始终在调度栈上进行。
+- `goexit1` 通过 `mcall(goexit0)` 切换到 g0 并调用 `goexit0`：把 `g` 的状态置为 `_Gdead`，解绑 `g.m` 与 `g.p`，调用 `gfput` 把 `g` 归还到当前 P 的 `gfree` 链表（供后续 `newproc1` 复用，避免反复分配/释放），最后调用 `schedule()` 继续调度下一个 goroutine。
+
+**主动退出**：`runtime.Goexit()` 会立即终止当前 goroutine，但会先执行已注册的 `defer`；它不会被任何机制"恢复"，类似于 goroutine 级别的 `os.Exit`（不过仍跑 defer）。
+
+**不能从外部强制结束**：Go 刻意不提供"kill 某个 goroutine"的 API。一个 goroutine 只能靠自己 `return`、或通过对 channel / `context` 信号**协作式**退出。这既是避免数据竞争的设计前提，也是 goroutine 泄漏（见下）频发的根源——如果没人发退出信号，它就会永远阻塞。
+
+## goroutine Leak
+
+goroutine 泄漏指：本应退出回收的 goroutine，因某种原因永远阻塞在 `_Gwaiting`、无法回到 `_Gdead`，随着时间累积持续占用内存与调度资源。
+
+**常见成因：**
+
+- **channel 永久阻塞**：向无人接收的 channel 发送、或从永远不会有发送者的 channel 接收；或 `close` 后接收方的 `for range` 循环没被正确终止。
+- **`select` 无 `default`**：当所有 `case` 都未就绪且缺少 `ctx.Done()` / `default` 分支时，`select` 会永久阻塞。
+- **锁未释放 / 死锁**：goroutine 等待一把永远拿不到的 mutex（如持有锁的 goroutine 先阻塞在别处）。
+- **`time.After` 在循环里滥用**：每次迭代都 `time.After(d)`，定时器在触发前不会被 GC，短时间高频循环会堆积大量待触发 timer 与其关联的 goroutine 引用。
+- **`context` 未 cancel**：派生的 goroutine 永久 `select { case <-ctx.Done(): }`，而上游忘记调用 `cancel()`。
+
+**诊断：**
+
+- `runtime.NumGoroutine()` 观察数量是否只增不减；
+- `net/http/pprof` 暴露 `/debug/pprof/goroutine`，用 `go tool pprof` 查看阻塞栈；
+- `runtime/trace` 能可视化每个 goroutine 的创建 / 阻塞 / 退出时间线。
+
+**预防：**
+
+- 用 `context.Context` 传递取消信号，所有长生命周期 goroutine 的 `select` 都监听 `ctx.Done()`；
+- 用 `errgroup.Group` 统一派发、等待与取消；
+- 用 `done` channel 广播退出；
+- `select` 必带 `default` 或 `ctx.Done()` 分支；
+- 循环里用 `time.NewTimer` + `Stop()` 替代 `time.After`。
 
 ## Links
 

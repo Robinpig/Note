@@ -24,9 +24,9 @@
 
 大多数 Spring 应用选 Flyway——够用且心智负担最小。
 
-## Flyway 的核心机制
+## Flyway Core Mechanism
 
-### 迁移脚本命名
+### Migration Script Naming
 
 ```text
 src/main/resources/db/migration/
@@ -41,7 +41,7 @@ src/main/resources/db/migration/
 
 两者的心智模型区别很关键：**版本化是历史的一步；可重复是期望的终态**。视图、函数、触发器、存储过程这类声明式对象适合用 `R__`——一次 `CREATE OR REPLACE VIEW` 就能表达最终形态，比堆一堆 `V8__tweak_view`、`V9__tweak_view_again` 干净得多。
 
-### 执行历史表
+### Execution History Table
 
 Flyway 在目标库建一张 `flyway_schema_history`，每条记录含版本号、描述、checksum、执行时间、耗时、成功与否。正因为有这张表，Flyway 才知道"从哪里继续执行"。
 
@@ -53,7 +53,7 @@ from flyway_schema_history order by installed_rank;
 > [!WARNING]
 > **不要手工改这张表**，也不要"先把脚本改了再跑"——checksum 不匹配会直接导致启动失败，而且这是有意为之的保护。要修正历史脚本的错误，应当**再写一个新版本迁移**，而不是回头篡改已执行过的脚本。
 
-### 与 Flyway 10+ 的模块拆分
+### Module Split with Flyway 10+
 
 Flyway 从 10 起把各数据库的特化实现拆成了独立模块（如 `flyway-database-postgresql`）。现代版本只引 `flyway-core` 往往会缺类型支持：
 
@@ -68,7 +68,7 @@ Flyway 从 10 起把各数据库的特化实现拆成了独立模块（如 `flyw
 </dependency>
 ```
 
-## Liquibase 的概念
+## Liquibase Concepts
 
 Liquibase 用 **changeset** 而非文件作为最小单位，每个 changeset 由 `id` + `author` + `file` 三元组唯一标识（因此文件名本身不带版本号）：
 
@@ -95,7 +95,7 @@ databaseChangeLog:
 
 执行历史落在 `DATABASECHANGELOG` 表（外加 Liquibase 用来加锁的 `DATABASECHANGELOGLOCK`）。回滚、tag、diff、按上下文（context）选择性执行都是 Liquibase 的强项。
 
-## Boot 4 的坑：必须用 starter
+## Boot 4 Pitfall: Must Use a Starter
 
 > [!WARNING]
 > Boot 4 把自动配置从单一的 `spring-boot-autoconfigure` 拆成了 70+ 个按技术划分的模块。这意味着：**仅仅把第三方 jar 放进 classpath 已经不足以触发自动配置**。
@@ -121,7 +121,7 @@ databaseChangeLog:
 > [!TIP]
 > 这条规律适用于 Boot 4 的所有"此前没有专属 starter"的技术。**行业级教训**：如果一个 Spring 集成"既没生效也没报错"，先检查 `spring-boot-starter-*` 是否到位，而不是只检查底层 jar。同类问题在 [Spring Batch 6](/docs/CS/Framework/Spring/Batch.md) 上也出现过——默认换成了内存 JobRepository，一样是静默失效。
 
-## 与 JPA schema 生成的关系
+## Relationship with JPA schema Generation
 
 这条几乎是必踩：
 
@@ -146,7 +146,7 @@ spring:
 
 `validate` 是个不错的中间选择：它让 Hibernate 启动时核对实体与表结构是否匹配，不匹配就启动失败——相当于给"迁移脚本忘了写"加了一道保险。
 
-## 工程实践
+## Engineering Practice
 
 | 主题 | 建议 |
 | ---- | ---- |
@@ -160,7 +160,7 @@ spring:
 
 最后一点值得展开：自动迁移在启动时执行，意味着**部署即改表**。CI 环境下很方便，但生产里有几个隐患——多实例并发启动时谁来执行（需要锁，工具自带）、执行失败时是否允许应用继续启动、权限是否够。稳妥做法是让迁移成为流水线的独立阶段，应用启动只做 `validate`。
 
-## 模块化项目的迁移
+## Migration of Modular Projects
 
 如果应用采用模块化组织（见 [Spring Modulith](/docs/CS/Framework/Spring/Modulith.md)），可以为**每个模块配独立的迁移脚本目录**——模块自己维护它的表结构，避免所有人往一个全局 `db/migration` 里挤。这是 Modulith 2.0 支持的能力。
 

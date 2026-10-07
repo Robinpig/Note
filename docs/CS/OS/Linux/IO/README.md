@@ -9,7 +9,7 @@ I/O（输入输出）是进程与外界交换数据的机制：读磁盘、读�
 
 真正的工程难题是 **C10K**：一台服务器同时维持上万连接，若一连接一个线程去阻塞等待，线程的内存与调度开销会压垮系统；若让少量线程不停轮询所有连接，轮询本身又是密集的系统调用。Linux 的解法沿一条清晰的演进路线展开：先把"等待多个 fd"**批量化**（select → poll → epoll，即 I/O 多路复用），再把整个 I/O 变成内核侧的**真异步**（io_uring），极端高性能场景则干脆**绕过内核**（DPDK）。本页是 `IO/` 目录的链路总图，按这条因果线串联各篇笔记。
 
-## 五种 I/O 模型
+## Five I/O Models
 
 | 模型 | 阶段① 数据准备 | 阶段② 数据拷贝 | 典型实现 |
 | --- | --- | --- | --- |
@@ -19,9 +19,9 @@ I/O（输入输出）是进程与外界交换数据的机制：读磁盘、读�
 | 信号驱动 IO | SIGIO 通知就绪 | 阻塞拷贝 | sigaction（TCP 少用、UDP 可用） |
 | 异步 IO (AIO) | 内核完成 | 内核完成并通知 | Windows IOCP、Linux io_uring |
 
-阻塞读让线程在等待队列上睡眠、数据就绪再唤醒的内核机制，见 [Socket 阻塞读与唤醒](/docs/CS/OS/Linux/proc/thundering_herd.md?id=socket-阻塞读与唤醒)。各模型的完整源码与 Direct I/O 说明见 [IO 总览](/docs/CS/OS/Linux/IO/IO.md)。
+阻塞读让线程在等待队列上睡眠、数据就绪再唤醒的内核机制，见 [Socket 阻塞读与唤醒](/docs/CS/OS/Linux/proc/thundering_herd.md?id=socket-blocking-read-and-wakeup)。各模型的完整源码与 Direct I/O 说明见 [IO 总览](/docs/CS/OS/Linux/IO/IO.md)。
 
-## 多路复用的演进：select → poll → epoll
+## Evolution of Multiplexing: select → poll → epoll
 
 多路复用的核心问题是：**怎么用一个系统调用，同时等待大量 fd 中的任意一个就绪？** 三代接口对这个问题给出了越来越优的答案。完整机制与源码见 [multiplexing](/docs/CS/OS/Linux/IO/multiplexing.md)。
 
@@ -56,20 +56,20 @@ epoll 高性能靠三个内核结构支撑，完整字段与流程见 [epoll](/d
 | 适用连接规模 | 小 | 小 | 大（万级） |
 | 触发模式 | 水平 | 水平 | 水平 LT + 边沿 ET |
 
-## ET 与 LT：epoll 的两种触发
+## ET and LT: Two Trigger Modes of epoll
 
 `epoll_wait` 通知就绪的时机有两种，决定了上层怎么写循环，详见 [epoll 的 ET & LT](/docs/CS/OS/Linux/IO/epoll.md?id=et--lt)：
 
 - **LT（水平触发，默认）**：只要 fd 的数据没被读完，每次 `epoll_wait` 都还会通知它。编程简单、不易漏事件，但可能重复通知；
 - **ET（边沿触发）**：只在状态"从无到有"变化时通知一次，之后即使没读完也不再通知。必须把 fd 设为非阻塞、用循环一次性 read 到 `EWOULDBLOCK`，否则会丢事件。ET 减少了通知次数、配合非阻塞读写性能更高，是高性能框架的主流选择。
 
-## 从 epoll 到 Reactor
+## From epoll to Reactor
 
-多路复用本身只是"等事件"，把它组织成事件循环就是 **Reactor 模式**：一个或少量线程跑 `epoll_wait`，事件到达后分派给预先注册的处理器（accept / read / decode / write），从而用少量线程承载海量连接。这正是 Nginx、Redis（LT）、Netty（ET）共同的骨架。上层线程模型的结构与 Netty 落地见 [Reactor 线程模型](/docs/CS/Framework/Netty/EventLoop.md?id=reactor-线程模型)。
+多路复用本身只是"等事件"，把它组织成事件循环就是 **Reactor 模式**：一个或少量线程跑 `epoll_wait`，事件到达后分派给预先注册的处理器（accept / read / decode / write），从而用少量线程承载海量连接。这正是 Nginx、Redis（LT）、Netty（ET）共同的骨架。上层线程模型的结构与 Netty 落地见 [Reactor 线程模型](/docs/CS/Framework/Netty/EventLoop.md?id=reactor-thread-model)。
 
 注意 epoll 仍是**同步**模型：它只通知"数据已在内核就绪"，之后应用仍要自己调 `read` 把数据拷出来（阶段②由用户线程做）。要真正连拷贝都交给内核，需要异步 I/O。
 
-## 真异步：io_uring
+## True Asynchronous: io_uring
 
 传统 Linux Native AIO（libaio）只支持 Direct I/O、一直不温不火。**io_uring**（Linux 5.1+，Jens Axboe）用应用与内核**共享的两个环形队列**提交和收割 I/O，把真正的异步带上了 Linux：
 
@@ -79,7 +79,7 @@ epoll 高性能靠三个内核结构支撑，完整字段与流程见 [epoll](/d
 
 io_uring 让阶段①、阶段②都由内核完成、完成后再通知，是 Linux 上最接近 Windows IOCP 的真异步接口；它还能与 io-wq、固定文件/缓冲注册等结合减少拷贝。完整结构与提交链路见 [io_uring](/docs/CS/OS/Linux/IO/io_uring.md)。
 
-## 内核旁路：DPDK
+## Kernel Bypass: DPDK
 
 追求极限小包吞吐（千万~上亿 pps）时，连内核协议栈的中断、`sk_buff` 分配、多次拷贝和系统调用都成了瓶颈。**DPDK** 直接在用户态重构整条数据面，见 [DPDK](/docs/CS/OS/Linux/IO/DPDK.md)：
 
@@ -90,7 +90,7 @@ io_uring 让阶段①、阶段②都由内核完成、完成后再通知，是 L
 
 DPDK 与内核栈是两条取向相反的路：内核栈胜在通用、完整、与 VFS/协议栈集成；DPDK 胜在专用、可控、线速，典型用于 OVS-DPDK、NFV、5G UPF、软件负载均衡。
 
-## I/O 与其它子系统的边界
+## Boundary Between I/O and Other Subsystems
 
 - **PageCache / 块层**：缓冲读写经 [PageCache](/docs/CS/OS/Linux/mm/PageCache.md)，回写以 bio 进入 [块设备层](/docs/CS/OS/Linux/dev/block.md)；多路复用等的是"fd 就绪"，磁盘 I/O 等的是"块完成"。
 - **零拷贝**：减少阶段②拷贝的技术（sendfile、splice、mmap）见 [ZeroCopy](/docs/CS/OS/Linux/ZeroCopy.md)。

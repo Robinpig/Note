@@ -4,7 +4,7 @@
 
 因此块设备驱动从不直接对接 read/write 系统调用，而是站在一条**分层 I/O 栈**的底端：文件系统 → PageCache → `bio` → 通用块层（block layer）→ `request` → I/O 调度器 → 多队列派发 → 驱动硬件队列。本页从驱动视角讲清这条链：用 `gendisk` 描述一个磁盘、用 `request_queue` 承载请求、用 blk-mq 把请求派到硬件，以及驱动如何把一个磁盘注册进设备模型。
 
-## 三个核心对象
+## Three Core Objects
 
 写块驱动前先分清三个极易混淆的结构。它们在 6.12 里的关系是：**`gendisk` 描述物理磁盘，`block_device` 描述一个可打开的块设备节点，`request_queue` 负责排队和下发 I/O**。
 
@@ -98,7 +98,7 @@ struct request_queue {
 
 三者关系一句话：**一个 gendisk 持有一个 request_queue，并对应一个整盘 block_device（part0）；整盘和每个分区的 block_device 都指回同一个 gendisk、共享同一个 request_queue**。
 
-## 操作集：block_device_operations
+## Operations Set: block_device_operations
 
 块驱动通过 `block_device_operations`（`include/linux/blkdev.h`）交出能力。它和字符设备的 `file_operations` 长得像，但内核在 6.12 里已经把传统的 `request_fn` 请求函数彻底移除，改为两种现代形态：
 
@@ -130,7 +130,7 @@ struct block_device_operations {
 		bdev_set_flag(disk->part0, BD_HAS_SUBMIT_BIO);
 ```
 
-## 注册一个磁盘
+## Registering a Disk
 
 现代块驱动的注册流程（6.12）大致四步：分配 tag_set 与磁盘 → 填 gendisk → 注册块设备号（可选）→ 添加磁盘。
 
@@ -190,7 +190,7 @@ static inline int add_disk(struct gendisk *disk)
 
 注销走反向流程：`del_gendisk()` 摘除并触发分区清理，再 `put_disk()` 释放 gendisk（内部连带清理 request_queue），最后 `blk_mq_free_tag_set()` 释放 tag_set。注意 6.12 里旧的 `blk_cleanup_disk()` 已不存在，统一由 `put_disk()` 处理。
 
-## I/O 栈：bio 如何变成硬件命令
+## I/O Stack: How a bio Becomes a Hardware Command
 
 磁盘注册好后，一次写请求是怎么落到硬件的？自顶向下：
 
@@ -212,7 +212,7 @@ static inline int add_disk(struct gendisk *disk)
 
 **bio-based** 驱动直接收到 bio；**request-based** 驱动则由 `blk_mq_submit_bio` 把 bio 转化/合并进一个 `request`，再经 blk-mq 派发。
 
-## blk-mq：多队列派发
+## blk-mq: Multi-Queue Dispatch
 
 传统块层只有一把队列锁，多核高 IOPS 的 SSD/NVMe 下锁竞争严重。**blk-mq（block multi-queue）**把队列分两层，是现代 request-based 驱动的核心：
 
@@ -260,7 +260,7 @@ struct blk_mq_ops {
 
 `queue_rq` 里驱动把 request 翻译成硬件命令（填 SQE、挂 DMA 描述符、敲门铃），命令完成后由中断触发 `blk_mq_complete_request` 结束 request、再逐层 `bio_endio` 唤醒等待者。
 
-## bio-based 与 request-based
+## bio-based vs request-based
 
 | 维度 | bio-based | request-based（blk-mq） |
 | --- | --- | --- |
@@ -272,7 +272,7 @@ struct blk_mq_ops {
 
 简单判据：**数据最终要发给真实硬件、受命令队列约束，用 blk-mq；I/O 在内存里就被消化、驱动自己消费 bio，用 submit_bio**。
 
-## 与文件系统和 PageCache 的边界
+## Boundary with the File System and Page Cache
 
 块驱动是块 I/O 的终点，但它不关心文件——文件系统负责把"文件 + 偏移"翻译成"扇区区间"并构造 bio，块层和驱动只看到扇区。这条边界有几个直接推论：
 

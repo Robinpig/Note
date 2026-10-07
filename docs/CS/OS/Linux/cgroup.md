@@ -87,19 +87,19 @@ struct css_set {
 
 
 
-## CPU 限制如何落到调度器
+## How CPU Limit Reaches the Scheduler
 
-容器 CPU 限额（`docker --cpus=1.5` / K8s `resources.limits.cpu: "1500m"`）最终换算为 quota/period 写进 cgroup；内核侧由 **task_group** 承接——cpu 子系统的 `cgroup_subsys_state` 对应一个 task_group，其下每个 CPU 各有一个受配额约束的 cfs_rq。每个周期内配额耗尽即触发 throttle，整个 cfs_rq 被摘出调度，组内进程全部暂停到下个周期补足配额——这就是容器被 **CPU throttling** 的根源（实现细节见 [CFS 带宽控制](/docs/CS/OS/Linux/proc/fair.md?id=cfs-带宽控制)）。
+容器 CPU 限额（`docker --cpus=1.5` / K8s `resources.limits.cpu: "1500m"`）最终换算为 quota/period 写进 cgroup；内核侧由 **task_group** 承接——cpu 子系统的 `cgroup_subsys_state` 对应一个 task_group，其下每个 CPU 各有一个受配额约束的 cfs_rq。每个周期内配额耗尽即触发 throttle，整个 cfs_rq 被摘出调度，组内进程全部暂停到下个周期补足配额——这就是容器被 **CPU throttling** 的根源（实现细节见 [CFS 带宽控制](/docs/CS/OS/Linux/proc/fair.md?id=cfs-bandwidth-control)）。
 
 注意与实时任务区分：RT 任务受 [RT throttling](/docs/CS/OS/Linux/proc/rt.md?id=rt-throttling) 约束（默认 95%），与 CFS 配额是两套独立机制。
 
-## 内存限制与 OOM
+## Memory Limit and OOM
 
 内存的资源分配由 **memory controller**（内核里的 **memcg**）承担：它把内存用量沿 cgroup 层级记账，并提供一组限额（v2 `memory.max` / `memory.high`，v1 `memory.limit_in_bytes`）。超限的处理分三档——越过 `memory.high` 只**节流**、不杀进程；越过 `memory.max` 先在**本组内**做局部回收；回收不出来才在**该 memcg 的进程集合里**挑 victim 做 OOM kill。
 
 memcg 的内核机制（`struct mem_cgroup`、per-memcg lruvec、页与内核对象两条记账路径、全部接口语义与层级保护、K8s QoS 映射与排障口径）已独立成篇，见 [cgroup 内存控制（memcg）](/docs/CS/OS/Linux/mm/memcg.md)。本节只留在 cgroup 通用机制里的那一层关系：**memcg 只是挂在 cgroup 层级上的一个 controller**，因此它的限额同样受"越靠近根越不可被覆盖"这条层级规则约束（见 [Introduction](#introduction)）。容器被 OOM kill、退出码 137（OOMKilled）这一现象层记录见 [Issues](/docs/CS/Container/k8s/Issues.md)。
 
-## cgroup v1 与 v2
+## cgroup v1 vs v2
 
 | | v1 | v2 |
 | :-- | :-- | :-- |
@@ -128,6 +128,6 @@ v2 的**控制器注册机制**在 v7.2 也变了：`cgroup_subsys_register()` /
 - [cgroup 委派与容器实践](/docs/CS/OS/Linux/cgroup/delegation.md)
 - [Linux](/docs/CS/OS/Linux/Linux.md)
 - [Container](/docs/CS/Container/Container.md)
-- [CFS 带宽控制](/docs/CS/OS/Linux/proc/fair.md?id=cfs-带宽控制)
+- [CFS 带宽控制](/docs/CS/OS/Linux/proc/fair.md?id=cfs-bandwidth-control)
 - [RT throttling](/docs/CS/OS/Linux/proc/rt.md?id=rt-throttling)
 - [容器知识地图](/docs/CS/Container/README.md)

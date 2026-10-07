@@ -407,7 +407,7 @@ mvn test -Dmaven.surefire.debug
 
 ## Tuning
 
-### 依赖冲突
+### Dependency Conflicts
 
 检查依赖
 ```

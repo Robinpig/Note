@@ -6,7 +6,7 @@
 
 > 注意 compaction 与 [Reclaim](/docs/CS/OS/Linux/mm/Reclaim.md) 的区别：回收是"**减少**占用、把页释放掉"，压缩是"**挪动**占用、页的数据一页不少"。压缩不增加空闲页总量，只改变它们的物理排布。
 
-## 双扫描器模型
+## Two-Scanner Model
 
 compaction 在一个 zone 上启动两个方向相反的扫描器，这是它最核心的设计：
 
@@ -28,13 +28,13 @@ if (compact_scanners_met(cc)) {
 
 两个扫描器的位置会缓存到 `struct zone` 里（`compact_cached_migrate_pfn[]` / `compact_cached_free_pfn`），下次压缩可以从上次的位置继续，不必每次从头扫。
 
-## 什么样的页能搬：movable 是前提
+## What Pages Can Be Moved: Movable as a Prerequisite
 
 压缩只能搬**可移动（movable）**的页——移动一个页意味着把数据复制到新物理页、再改所有映射它的页表项。用户态的匿名页、page cache 文件页都可移动；但持有内核内部数据、被 pin 住、或正在写回的页无法安全移动，扫描时直接跳过（异步模式下脏页/写回页也会被跳过）。
 
 这也解释了 buddy 为什么要给空闲块标注 migratetype：可移动页被尽量集中在同一类 pageblock 里，压缩时才能成片地搬；不可移动页造成的"空洞"是压缩也救不回来的根本碎片。
 
-## compact_zone 主干
+## compact_zone Main Path
 
 `compact_zone()` 是规整一个 zone 的主循环（`mm/compaction.c`）。每轮先判断是否结束，再隔离一批源页、迁移到目标页：
 
@@ -61,7 +61,7 @@ while ((ret = compact_finished(cc)) == COMPACT_CONTINUE) {
 
 关键在 `migrate_pages()` 的两个回调：`compaction_alloc` 每搬一个源页，就从空闲扫描器已隔离的 `cc->freepages` 里取一个目标页；没有现成目标页时，它会推动空闲扫描器再向前隔离一批。迁移失败、没搬成的页由 `putback_movable_pages()` 放回，不丢数据。
 
-## 压缩力度：compact_priority
+## Compaction Intensity: compact_priority
 
 压缩能"多坚持地搬"由 `enum compact_priority` 决定，值越小力度越大（与回收 priority 类似）：
 
@@ -79,7 +79,7 @@ enum compact_priority {
 
 异步（ASYNC）用于后台守护、不能阻塞，遇到锁争抢或脏页就跳过；直接压缩默认 SYNC_LIGHT；只有极难满足的分配才升级到 SYNC_FULL。
 
-## 结果与门槛：compact_result / compaction_suitable
+## Result and Threshold: compact_result / compaction_suitable
 
 `compact_zone()` / `try_to_compact_pages()` 返回 `enum compact_result`，区分这次规整的结局：
 
@@ -95,7 +95,7 @@ enum compact_priority {
 
 是否值得启动压缩，先由 `compaction_suitable()` 按**水位线**把关：空闲页若低于一定余量，压缩缺少"搬运落脚"的目标页、纯属白费，此时 `COMPACT_SKIPPED`，转而走回收。这正对应慢路径里"先回收一点、再压缩"的常见组合。
 
-## kcompactd：后台规整
+## kcompactd: Background Compaction
 
 和回收有 kswapd 一样，每个 node 有一个 **kcompactd** 守护线程（线程句柄与参数挂在 `pg_data_t` 上：`kcompactd` / `kcompactd_max_order` / `kcompactd_highest_zoneidx` / `kcompactd_wait`）。压缩由此分两种触发方式：
 
@@ -104,7 +104,7 @@ enum compact_priority {
 
 为避免"明知会失败还反复压缩"，zone 维护了一套**推迟（defer）**计数——`compact_considered` / `compact_defer_shift` / `compact_order_failed`，一次失败后会跳过随后若干次压缩请求，直到间隔足够或条件改变。
 
-## 主动压缩：proactive compaction
+## Proactive Compaction
 
 除了被动等分配失败，内核还能在系统空闲时**提前**规整碎片，即主动压缩（5.14+），由 `/proc/sys/vm/compaction_proactiveness` 控制（范围 0–100，0 关闭，值越高越积极）。它周期性地给每个 zone 计算一个 **fragmentation score（碎片指数）**，分数高于阈值才唤醒 kcompactd：
 
@@ -124,14 +124,14 @@ if (cc->proactive_compaction) {
 
 主动压缩刻意"点到为止"：kswapd 在跑就让路、碎片分数降到水位以下即收，避免在没人需要高阶页时白耗 CPU。主动压缩以 `order = -1` 调用，表示不是为某个具体阶服务、而是整体改善布局。
 
-## 压缩与回收、OOM 的协作
+## Cooperation among Compaction, Reclaim, and OOM
 
 compaction 处在 [alloc_pages_slowpath](/docs/CS/OS/Linux/mm/pm.md?id=alloc_pages_slowpath) 链的中段，与前后环节咬合：
 
 - 压缩**需要空闲页作落脚点**，所以水位不足时慢路径会先做一轮 direct reclaim 再压缩；回收还会把 pageblock 标记为 `PG_migrate_skip`，压缩据此跳过不值得搬的块（`compact_blockskip_flush` 控制何时清这些标记）。
 - 压缩**成功**则高阶分配重试通过；压缩与回收都救不回来、连 min 水位都满足不了，才走到 [OOM killer](/docs/CS/OS/Linux/mm/oom.md)。
 
-## 调优与观察
+## Tuning and Observation
 
 | 接口 / 指标 | 用途 |
 | --- | --- |

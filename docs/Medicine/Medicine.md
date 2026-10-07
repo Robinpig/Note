@@ -8,17 +8,17 @@
 >
 > 本库定位为**学科框架与知识地图**：讲清「一门学科研究什么、方法论是什么、各分支如何咬合」。剂量、具体诊疗路径、指南推荐等级等**易随证据更新的临床细节不在收录范围内**，临床决策请以最新指南与执业规范为准。
 
-## 分支学科
+## Branch Disciplines
 
 <div class="kb-home">
 
-### 主要分支
+### Major Branches
 
 <div class="kb-grid kb-grid-sm">
 
 <div class="kb-card">
 
-### [基础医学](/docs/Medicine/Basic_Medicine.md)
+### [Basic Medicine](/docs/Medicine/Basic_Medicine.md)
 
 疾病的分子与细胞基础：解剖生理、生化、病理、药理、免疫与微生物
 
@@ -26,7 +26,7 @@
 
 <div class="kb-card">
 
-### [临床医学](/docs/Medicine/Clinical_Medicine.md)
+### [Clinical Medicine](/docs/Medicine/Clinical_Medicine.md)
 
 从症状到诊断到治疗：内科学、外科学、妇产科学、儿科学与诊断学
 
@@ -34,7 +34,7 @@
 
 <div class="kb-card">
 
-### [护理学](/docs/Medicine/Nursing/Nursing.md)
+### [Nursing](/docs/Medicine/Nursing/Nursing.md)
 
 照护这一专业本身：护理理论、临床护理、护理管理与伦理法律
 
@@ -42,7 +42,7 @@
 
 <div class="kb-card">
 
-### [公共卫生与流行病学](/docs/Medicine/Public_Health.md)
+### [Public Health and Epidemiology](/docs/Medicine/Public_Health.md)
 
 以人群而非个体为单位：疾病分布、影响因素、预防与卫生政策
 
@@ -50,7 +50,7 @@
 
 <div class="kb-card">
 
-### [医学史与医学伦理](/docs/Medicine/Medical_History_Ethics.md)
+### [History of Medicine and Medical Ethics](/docs/Medicine/Medical_History_Ethics.md)
 
 医学如何变成今天的样子：解剖学传统、希波克拉底传统与现代伦理
 
@@ -60,7 +60,7 @@
 
 </div>
 
-## 基础 → 临床 一条自下而上的链
+## Basics → Clinical: A Bottom-Up Chain
 
 医学的知识生产是**分层递进**的，这条链解释了各分支为何不能互相替代：
 
@@ -72,13 +72,13 @@
 
 最后一层是**照护与预防**。[护理学](/docs/Medicine/Nursing/Nursing.md)覆盖的是临床医学之外的另一半工作：不是「治」，而是「护」——监测生命体征、执行医嘱、健康教育、康复与心理支持，并在连续住院过程里维持治疗的有效性。而[公共卫生与流行病学](/docs/Medicine/Public_Health.md)把视野从单个患者放大到**人群**：疫苗接种、筛查、控烟、饮水与食品安全，收益不在床旁而在统计口径里。
 
-## 贯穿全部层次的两个维度
+## Two Dimensions throughout All Levels
 
 **规范维度。** 医学的危险性使它从一开始就伴随自我约束：从希波克拉底誓言的「不伤害」，到《赫尔辛基宣言》的伦理原则，到知情同意与患者自主权，再到现代的生命伦理四原则（不伤害、有利、尊重自主、公正）。这条线索由[医学史与医学伦理](/docs/Medicine/Medical_History_Ethics.md)梳理，它解释了为什么即使在技术能力最强的时代，医学仍然需要外部规范而非仅靠专业自律。
 
 **证据维度。** 从解剖刀到随机对照试验，从病例系列到真实世界研究，医学一直在追问同一个问题——「你怎么知道这是有效的」。[公共卫生与流行病学](/docs/Medicine/Public_Health.md)提供研究设计与统计推断的语言，[基础医学](/docs/Medicine/Basic_Medicine.md)提供机制解释，[临床医学](/docs/Medicine/Clinical_Medicine.md)则提供真实世界中的疗效检验——三者构成同一套证据循环的不同半径。
 
-## 专题笔记
+## Special Topic Notes
 
 以小见大的专题，分别挂在对应分支下：
 

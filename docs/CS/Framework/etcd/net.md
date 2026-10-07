@@ -11,7 +11,7 @@ etcd 成员之间的 Raft 消息不走客户端端口（默认 2379），而是�
 > [!NOTE]
 > **版本基线**：全文行号与签名取自 **etcd v3.7.2**（`server/etcdserver/api/rafthttp/`，16 个非测试文件）。核对方式为逐条打开源码确认，凡结论均附 `文件:行号`；未在源码中找到的符号会显式标注"查不到"，不做记忆推断。3.7.2 的双通道架构本身与 3.5 一脉相承，**变的只是签名与入口，不是设计**。
 
-## 为什么分 Stream 与 Pipeline 两条通道
+## Why Split Stream and Pipeline Channels
 
 动机只有一个：**消息体积差了几个数量级，传输策略必须分开**。心跳消息（`MsgHeartbeat`）只有几十到几百字节，而快照（`MsgSnap`）小至几 KB、大至几 GB（`http.go:46-55` 的注释解释了为什么快照的元数据上限单独放宽到 64 MB，而真正的 DB 快照是流式传输的）。
 
@@ -39,7 +39,7 @@ func (p *peer) pick(m *raftpb.Message) (writec chan<- *raftpb.Message, picked st
 
 优先级是：**快照 → pipeline**；**`MsgApp` → 专用优化流 `msgAppV2Writer`**；**其余 → 通用流 `writer`**；流不可用（`writec()` 返回 `working == false`，见 `stream.go:310`）时兜底 pipeline。这也解释了 peer 结构体里为什么有**两个** `streamWriter`：普通流与 MsgApp 优化流各一个。
 
-### 四个 HTTP 路径
+### Four HTTP Paths
 
 接收侧由 `Transport.Handler()`（`transport.go:158-168`）注册四个前缀（常量在 `http.go:58-66`）：
 
@@ -65,7 +65,7 @@ func (t *Transport) Handler() http.Handler {
 }
 ```
 
-## Transport：整个网络层的持有者
+## Transport: The Holder of the Entire Network Layer
 
 `Transport` 定义在 `transport.go:98-132`，是 `Transporter` 接口（`transport.go:43-90`）的唯一实现。字段按用途分四组：
 
@@ -142,7 +142,7 @@ func (t *Transport) Start() error {
 
 两个 RoundTripper 是**分开构造**的（`newStreamRoundTripper` 在 `util.go:59`，`NewRoundTripper` 在 `util.go:47`），因为长连接需要连接池复用与不同的超时策略。`DialRetryFrequency` 落在 Transport 上，但注释说"每个 peer 一个独立限流器"——实际限流器建在 `startPeer` 里给两个 `streamReader`（`peer.go:216`、`peer.go:227`），默认值 `rate.Every(100ms)` 意味着**每个 reader 每秒最多重拨 10 次**。
 
-### Send：向下分发到 peer 或 remote
+### Send: Dispatch Downstream to Peer or Remote
 
 `Send` 收到一批消息后逐条查表（`transport.go:176-210`）：先看 `peers`，再看 `remotes`，都没有就丢弃并打 Debug 日志。这里有两个容易忽略的细节：
 
@@ -183,7 +183,7 @@ func (t *Transport) Send(msgs []*raftpb.Message) {
 > [!TIP]
 > `remote.send`（`remote.go:54`）的注释与 `peer.send` 不同：它区分 "overloaded network"（连接仍活跃但缓冲满）与普通丢弃两种措辞，因为 remote 没有 stream 通道，缓冲更容易打满。
 
-### AddPeer：peer 的唯一创建点
+### AddPeer: The Sole Creation Point for Peer
 
 ```go
 // server/etcdserver/api/rafthttp/transport.go:296
@@ -213,7 +213,7 @@ func (t *Transport) AddPeer(id types.ID, us []string) {
 
 三个要点：`t.peers == nil` 说明 `Start()` 没跑或 `Stop()` 已执行，直接 **panic**——`Start` 必须先于其他方法调用；重复 AddPeer 幂等返回；建完 peer 还要把它注册到**两个** prober 上，这样 `/raft/probing` 端点才能持续测量到该 peer 的 RTT。
 
-## Peer 与 startPeer
+## Peer and startPeer
 
 `Peer` 接口（`peer.go:63-91`）只有 7 个方法，注意**全是小写**——它是 rafthttp 包内部的约定，不对外暴露：
 
@@ -284,7 +284,7 @@ type peer struct {
 }
 ```
 
-### startPeer 起了哪些 goroutine
+### What goroutines startPeer Starts
 
 `startPeer`（`peer.go:131-234`）是初始化的总入口。它按顺序做了四件事，每件都伴随后台 goroutine：
 
@@ -335,7 +335,7 @@ type peer struct {
 
 原因是 `r.Process` 在处理提案时可能阻塞（无 leader 时要等），如果两个 channel 共用一个 goroutine，一条卡住的提案会把心跳、投票响应的处理一起拖死。缓冲区大小也是按这个前提定的：`recvc` 是 `recvBufSize = 4096`（`peer.go:43`），`propc` 是 `maxPendingProposals = 4096`（`peer.go:50`，注释论证了"一次 leader 选举最多 1 秒、并发提案者少于 4096"所以够用）。
 
-### send：非阻塞投递，满了就丢
+### send: Non-Blocking Delivery, Drop When Full
 
 ```go
 // server/etcdserver/api/rafthttp/peer.go:236
@@ -373,7 +373,7 @@ func (p *peer) send(m *raftpb.Message) {
 
 `isMsgApp` / `isMsgSnap` 是两个只有一行的辅助函数（`peer.go:351`、`:353`），用 `GetType()` 而非直接取字段。
 
-## Stream 通道
+## Stream Channel
 
 全在 `stream.go`（718 行）。核心是**两对** reader/writer，通过 HTTP 长连接对接：
 
@@ -440,7 +440,7 @@ func isLinkHeartbeatMessage(m *raftpb.Message) bool {
 
 握手头在 `stream.go:592-599` 设置：`X-Server-From`、`X-Server-Version`、`X-Min-Cluster-Version`、`X-Etcd-Cluster-ID`、`X-Raft-To`。`X-Raft-To` 是防串线的关键——服务端会校验它等于自己的 ID（`http.go:434`），不匹配返回 412。
 
-## Pipeline 通道
+## Pipeline Channel
 
 全在 `pipeline.go`（179 行），结构简单得多：一个 `msgc` 缓冲 + 4 个 `handle` goroutine + 每次一个 POST。
 
@@ -534,14 +534,14 @@ func (p *pipeline) handle() {
 
 `picker.unreachable(u)` 在每条失败路径上都被调用：`urlPicker` 据此把该 endpoint 标记为不可用，后续 `pick()` 会优先选其他 peerURL。多个 peerURL 是官方推荐的高可用部署形态（[cluster.md](/docs/CS/Framework/etcd/cluster.md) 的成员管理一节）。
 
-### 快照走独立路径
+### Snapshot Uses an Independent Path
 
 快照**不走 pipeline 的 post**，而是 `snapshotSender`（`snapshot_sender.go`，199 行）。`peer.sendSnap`（`peer.go:268`）只是 `go p.snapSender.send(m)`，真正的发送在 `snapshot_sender.go:67`：POST 到 `RaftSnapshotPrefix`（`/raft/snapshot`），Content-Type 是 `application/octet-stream`，body 由 `createSnapBody`（`snapshot_sender.go:185`）从 `snap.Message` 里流出。
 
 > [!TIP]
 > 快照为什么要单独一个 sender 而不塞进 pipeline？因为 `snap.Message` 内嵌的是 `io.ReadCloser` 而不是 `[]byte`（`snap/message.go:34-40` 的注释："This avoid copying the entire snapshot into a byte array, which consumes a lot of memory"）。若走 pipeline 就得先全量读进内存，一个几 GB 的快照会直接把进程打爆。流式发送是**唯一**可行方案。
 
-## Handler 实现与消息编解码
+## Handler Implementation and Message Codec
 
 三个 Handler 都在 `http.go`（543 行），共同的骨架是：校验 HTTP 方法 → 校验集群兼容性（`checkClusterCompatibilityFromHeader`，`http.go:471`，比对 `X-Etcd-Cluster-ID` 与 `X-Server-Version`）→ `addRemoteFromRequest`（`util.go:199`，顺手把对端登记进 remotes）→ 解码 → `Raft.Process` → 写状态码。
 
@@ -595,7 +595,7 @@ func (p *pipeline) handle() {
 
 关键点：它用 `messageDecoder.decodeLimit(snapshotLimitByte)` 解码而非 `proto.Unmarshal`，上限放宽到 64 MB（`snapshotLimitByte`，`http.go:55`）——因为 raft 消息信封里嵌了快照元数据与成员信息；**真正的 DB 快照是请求体的剩余部分**，由 `h.snapshotter.SaveDBFrom(r.Body, m.Snapshot.Metadata.GetIndex())`（`http.go:277`）流式落盘。解完码还要校验 `m.GetType() != raftpb.MsgSnap` 就拒收（`http.go:251`）。
 
-### 编解码器
+### Codec
 
 | 编解码器 | 文件 | 线格式 | 用在哪 |
 | :--- | :--- | :--- | :--- |
@@ -614,7 +614,7 @@ MsgApp 优化格式才是 rafthttp 里唯一"自己造轮子"的地方。`msgapp
 
 `AppEntries` 之所以能省掉 index/term，是因为它只在 Raft 的 replicate 状态发送，此时 index 与 term 完全可预测——编码器在 `msgappv2_codec.go:93` 用 `enc.index == m.GetIndex() && enc.term == m.GetLogTerm() && m.GetLogTerm() == m.GetTerm()` 判定能否退化到紧凑形式。写缓冲区预分配 1 MB（`msgAppV2BufSize`，`msgappv2_codec.go:36`）。
 
-## 消息类型归属
+## Message Type Attribution
 
 这是 3.7 之后最需要更新的一张认知表。**所有消息类型都在外部模块 `go.etcd.io/raft/v3/raftpb` 里**（`go.mod:37` 声明 `go.etcd.io/raft/v3 v3.7.0`），etcd 主仓库里没有 `raftpb` 目录。
 
@@ -635,7 +635,7 @@ MsgApp 优化格式才是 rafthttp 里唯一"自己造轮子"的地方。`msgapp
 > [!WARNING]
 > 3.7.2 的 rafthttp 里还有两类消息**不属于 raft**：`linkHeartbeatMessage`（链路层保活，见上文）与 `MsgUnreachable` 类错误反馈（`r.ReportUnreachable`，`transport.go:39`）。前者不被 `Process` 消费，后者根本不走上行通道。
 
-## 陷阱清单
+## Pitfall List
 
 > [!WARNING]
 > 这一节的每一条都对应"按旧版印象读 3.7.2 源码会得出的错误结论"。

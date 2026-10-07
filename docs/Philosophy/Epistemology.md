@@ -4,7 +4,7 @@
 
 它与 [形而上学](/docs/Philosophy/Metaphysics.md) 互为镜像：形而上学问「世界是什么样」，认识论问「我们凭什么认为自己知道世界是什么样」。
 
-## 知识的定义与 Gettier 问题
+## Definition of Knowledge and the Gettier Problem
 
 长期主流的是**三元定义（JTB）**：知识 = 被证成的真信念（Justified True Belief）。
 
@@ -14,7 +14,7 @@
 - **德性认识论（virtue epistemology）**：知识是认知德性的产物。
 - **不可挫败证成**：不存在被忽略的反例证据。
 
-## 知识的来源
+## Sources of Knowledge
 
 | 立场 | 主张 | 代表 |
 | --- | --- | --- |
@@ -24,14 +24,14 @@
 
 归纳问题（Hume）是经验论的地震：无论观察到多少只白天鹅，都无法逻辑地保证「所有天鹅皆白」。这根刺后来由 [科学哲学](/docs/Philosophy/Philosophy_of_Science.md) 与概率/统计推断从不同方向回应。
 
-## 怀疑论与回应
+## Skepticism and Responses
 
 - **笛卡尔式怀疑**：感官可能欺骗、梦境难辨、甚至可能有「恶魔」系统性误导——由此出发寻找不可怀疑的基点（「我思故我在」）。
 - **摩尔式回应**：与其接受怀疑论前提，不如说「我有一双手」这类常识信念比任何怀疑论证都更确定。
 - **语境主义**：讨论「知道」的标准随语境（哲学讲堂 vs 日常生活）而变。
 - **可靠主义/外在主义**：只要过程可靠，主体无需知道自己被证成。
 
-## 证成的结构与真理
+## Structure of Justification and Truth
 
 | 问题 | 选项 |
 | --- | --- |

@@ -6,9 +6,9 @@ Agent 上下文压缩（context compaction）指长会话逼近上下文窗口�
 
 本文所有行为细节均以官方文档与源码为准（核实日期 2026-10-05）。各家术语差异很大，但收敛成同一套骨架：**触发阈值 / 保留策略 / 摘要生成方式 / 可恢复性 / 失败处理 / 缓存交互**。
 
-## 通用机制
+## General Mechanism
 
-### 触发阈值 绝对值、百分比还是双水位
+### Trigger Threshold: Absolute, Percentage or Dual-Watermark
 
 **没有统一答案，实际有四种流派**，且阈值几乎都是「可配的」而非硬编码。
 
@@ -44,7 +44,7 @@ thresholdTokens = floor(min(W × thresholdRatio, W − O − headroomTokens))
 所以「两级水位」的实质是**前瞻水位 + 事后兜底**，而非两个渐进的水位线。`maxOverflowRetries` 默认 `1`，即溢出后最多重试一次压缩。
 来源：[`compaction.zh.md`](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/subsystems/compaction.zh.md)、[`index.ts`](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/compaction/compaction-basic/src/index.ts)
 
-### 保留策略 是 token 预算而非「最近 N 轮」
+### Retention Policy Is a token Budget, Not 'Recent N Turns'
 
 **「保留最近 N 轮」是民间简化说法。** 除 Gemini CLI 的 `maxSessionTurns`（-1 = 无限，且它触发的是**新开会话**而非压缩）外，主流实现全部按 **token 预算**而非轮数：
 
@@ -66,7 +66,7 @@ thresholdTokens = floor(min(W × thresholdRatio, W − O − headroomTokens))
 
 **切点必须避开工具调用配对。** 这是硬约束不是优化：DSH 用 `toolPairingBalancedBefore/After` 校验区间两端，`basic-region.ts:selectCompactableRange` 从后往前累积 token 时若不满足配对就继续前移；Pi 的合法切点是「user 消息 / assistant 消息 / BashExecution / 自定义消息」，**绝不切在 tool result 上**（必须与其 tool call 相伴）。DSH 额外保证位于 surface 节点 0 的 `system/message` 永不被遮蔽。
 
-### 摘要由谁生成 几乎总是一次额外的 LLM 调用
+### Who Generates the Summary: Almost Always an Extra LLM Call
 
 **除 Claude Code 与 DSH 有复用缓存的优化外，摘要基本都是一次全新的、独立的 LLM 调用**——这直接意味着额外成本与延迟。
 
@@ -89,7 +89,7 @@ thresholdTokens = floor(min(W × thresholdRatio, W − O − headroomTokens))
 
 DSH 官方明确提到「基于 tokenizer 或模板的后端是实现同一接口的兄弟包」，且 `summarize()` 是唯一的子类钩子——**纯算法摘要是官方预留的扩展点**，但仓库内未提供该后端。
 
-### 可恢复性 「遮蔽而非删除」并非常态
+### Recoverability: 'Obscuring Rather Than Deleting' Is Not the Norm
 
 **这是本主题最容易被写错的一条。** DSH 的 append-only 日志确实让原文永远在盘上，但**其他家不是这样**：
 
@@ -110,7 +110,7 @@ DSH 的 Agent Note 把这一点讲得很直白：
 
 **结论：「遮蔽而非删除」是 DSH 一家的架构选择，不是行业通例。** 底层日志保留原文 ≠ 模型能取回。
 
-### 失败处理 留一把锁，不要半应用状态
+### Failure Handling: Leave a Lock, Avoid Half-Applied State
 
 压缩是「读—调模型—写」的多步事务，中途崩溃最怕留下不一致状态。各家的做法收敛到同一原则：**用日志标记对做锁，锁释放放在最后**。
 
@@ -139,7 +139,7 @@ Claude Code 的失败语义不同且更微妙：`PreCompact` 退出码 2 可阻�
 
 Codex 的 `PreCompactHookOutcome::Stopped` 直接 `TurnAborted`。OpenCode 与 Pi 在压缩失败时保留原始投影（Pi 明确「保留 omission edits、不追加 compaction、不调度内部重试」）。
 
-### 与 KV cache 和前缀缓存的交互
+### Interaction with KV Cache and Prefix Cache
 
 **「压缩必然导致前缀缓存失效」——对最终状态成立，但过程中有一处关键例外，且这个例外是各家优化重点。**
 
@@ -160,7 +160,7 @@ Claude Code 走的是同一思路，且给出了成本量化：「为了生成�
 
 Pi 的做法值得单独记：**「Summarization requests disable prompt-cache writes because these one-off prompts are unlikely to be reused.」**——反向利用缓存机制。
 
-### 副作用 官方承认的能力损失
+### Side Effects: Officially Acknowledged Capability Loss
 
 **压缩导致后续能力下降是公开承认的，不是猜测。** Codex 在每次压缩后向用户发一条警告：
 
@@ -172,7 +172,7 @@ Claude Code 的对应表述：「你的请求和关键代码片段被保留；**
 
 另一个反复出现的隐性代价：**「不可分单元」无法被压缩**。DSH 明列：「部分不可分单元与仅 envelope 溢出仍不在表层压缩范围内——恢复无法缩减系统／工具／前缀、拆分不可分的非工具节点，或修复不可剪枝剩余部分仍超出窗口的工具单元。」Claude Code 的 thrashing 错误正是这个问题的产物。
 
-## 各家实现对比
+## Comparison of Implementations Across Vendors
 
 | 维度 | Claude Code | Codex | Pi | DSH | OpenCode |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -183,22 +183,22 @@ Claude Code 的对应表述：「你的请求和关键代码片段被保留；**
 | **手动命令** | `/compact [instructions]`、`/autocompact [auto\|<tokens>]` | `/compact` | `/compact [instructions]` | `/compact`（需挂 `dsh-command-compact`） | `/compact` |
 | **Hook / 配置项** | `PreCompact`（可 `exit 2`阻止；入参 `trigger`、`custom_instructions`）、`PostCompact`（入参 `trigger`、`compact_summary`，**无决策控制**）；`CLAUDE_CODE_AUTO_COMPACT_WINDOW`、`CLAUDE_CODE_DISABLE_1M_CONTEXT`、`CLAUDE_CODE_MAX_CONTEXT_TOKENS` | `PreCompact`/`PostCompact` hook（`trigger` 字段）；`compact_prompt`、`experimental_compact_prompt_file` 覆盖摘要提示词；`model_post_turn_compact_threshold_percent` | `session_before_compact`（可 `cancel` 或提供自定义 summary）、`session_compact_failed`、`session_before_tree`；`compaction.{enabled,reserveTokens,keepRecentTokens}` + `modelOverrides` | `compaction/start\|summary\|end` 会话事件 + `compaction/summary-error` waterfall；`thresholdRatio`/`headroomTokens`/`retainRatio`/`retainTokens`/`compactionRetries`/`maxOverflowRetries`/`modelPolicies`/`auto` | `compaction.{auto,prune,tail_turns,preserve_recent_tokens,reserved}`；`experimental_compact_prompt_file`；plugin 钩子 `experimental.*` |
 
-### 其他值得记的实现
+### Other Worth-Remembering Implementations
 
 - **Gemini CLI**（`google-gemini/gemini-cli`）：`chatCompression.contextPercentageThreshold` **默认 0.7**，同时管自动压缩与 `/compress`。另有独立的 `summarizeToolOutput.{tool}.tokenBudget`（**仅支持 `run_shell_command`，默认关闭**）与 `model.maxSessionTurns`（-1 无限，超限则**新开 chat**而非压缩）。来源：[PR #5721](https://github.com/google-gemini/gemini-cli/pull/5721)
 - **OpenCode 的工具结果剪枝**：`PRUNE_PROTECT = 40_000`、`PRUNE_MINIMUM = 20_000`、`TOOL_OUTPUT_MAX_CHARS = 2_000`，且 **`PRUNE_PROTECTED_TOOLS = ["skill"]`**——skill 工具输出永不被剪。倒序遍历时遇`turns < 2` 跳过、遇 `msg.info.summary` 或 `time.compacted` 停止。默认 `prune: false`。
 - **Codex 的 token-budget 压缩**（`compact_token_budget.rs`）：一条**完全跳过模型/服务端摘要**的路径——「Token-budget compaction skips model/server summarization and installs a fresh context window instead」，但仍建模为压缩生命周期，使 compact hooks 与 `ContextCompaction` turn item 观察到同一套生命周期。另注意 Codex 的压缩有 **local / remote 两种实现**（`compact_remote_v2.rs` 系列）。
 - **Aider**：官方命令表里**没有 `/compact`，只有 `/clear`**（"Clear the chat history"）与 `/drop`（"Remove files from the chat session to free up context space"）——它用**丢弃**而非摘要来管理上下文，与主流做法相反。
 
-## 陷阱与易踩点
+## Pitfalls and Easy Mistakes
 
-### 「压缩后不可恢复」是普遍情况吗
+### Is 'Irreversible After Compaction' the General Case?
 
 **分层回答，否则容易写成两个极端。** 「模型看不到原文」是**普遍**的；「原文还在盘上」在 DSH / Codex / Pi / Claude Code 上也**普遍**；但「模型能主动取回」**几乎不存在**，唯一例外是社区扩展 `pi-vcc` 的 `vcc_recall`。
 
 所以正确表述是：**压缩对模型不可逆（irreversible from the model's current context），但对持有 transcript / session log 的宿主可恢复。** 写「压缩后内容丢失」过度简化，写「压缩不丢任何东西」则是误导——两者都错。DSH 的 Agent Note 标题就是精确表述：**Recallable compaction**（*Compaction is irreversible from the model's current context*）。
 
-### 手动 `/compact` 与自动压缩的触发时机一致吗
+### Is Manual /compact Triggered at the Same Time as Automatic Compaction?
 
 **不一致，且差异有实质后果。** Claude Code 官方明说「The automatic pass works the same way as the `/compact` step in the timeline」——**流程一致但触发条件不同**：自动压缩有窗口阈值，`/compact` 无视阈值立即执行。Gemini CLI 更明确：「a value between 0 and 1 that applies to both automatic compression and the manual `/compress` command」——阈值同时作用于两者。
 
@@ -206,7 +206,7 @@ DSH 的差异最结构化：`compactIfNeeded(agent, trigger, signal)` 用于自�
 
 还有一个易忽略的差异：**自动压缩可以 PreCompact 阻止，手动也可以**——但阻止后的行为不同（见上文失败处理节）。
 
-### 压缩会丢 skill 加载状态或系统提示词吗
+### Does Compaction Lose Skill Load State or System Prompt?
 
 **这是本主题里最值得单列的一条，因为「压缩把 skill 正文压掉了」是**部分**成立的担忧——精确的失效边界很少有人写清。**
 
@@ -237,7 +237,7 @@ OpenCode 从另一侧防这个问题：`PRUNE_PROTECTED_TOOLS = ["skill"]` 把 s
 
 **推论：Claude Code 的 skill 设计是「按需加载 + 压缩后按配额重新注入」，与本库 [Skill.md](/docs/CS/AI/LLM/Agent/Theory/Skill.md) 记录的「skill 正文一旦加载就跨轮持续占用上下文」是同一机制的两面。** 压缩不会让正文永久消失，但会让**大 skill 退化成开头几行**——这比消失更隐蔽，因为模型仍「认为」skill 可用。
 
-### OpenCode 小模型压缩的成本与收益边界
+### OpenCode Small-Model Compression: Cost and Benefit Boundaries
 
 **先纠正一个流传的说法：`small_model` 不是「压缩专用小模型」。** 源码里 `small_model` 的 schema 描述是「Small model to use for tasks **like title generation**」，`getSmallModel` 由 `Provider` 提供，优先级列表是 `gemini-flash` / `gpt-nano` / `claude-haiku`。
 
@@ -260,7 +260,7 @@ const model = agent.model
 - **代价 3（官方警告）**：Claude Code 明确**不会**在压缩时回落到窗口更小的模型：「Claude Code won't fall back to a model with a smaller context window than the primary's, since **summarizing there would cut off part of the conversation first**」——小窗口模型的摘要请求本身就装不下输入。`model-config` 里的 fallback chain 也遵循此规则。这是压缩选模型时最容易被忽略的硬约束。
 - **配置位置混淆**：`reserved` / `preserve_recent_tokens` / `tail_turns` 属于 `compaction.*`；`small_model` 是**顶层**键，不在 `compaction` 下。
 
-### Claude Code 的压缩时机 与「超过 50 轮就 compact」这个民间经验
+### Claude Code's Compaction Timing and the Folk Rule of 'Compact After 50 Turns'
 
 **这个民间经验与官方机制不符，且方向上错了一半。**
 
@@ -314,7 +314,7 @@ const model = agent.model
 29. [google-gemini/gemini-cli — PR #5721（chatCompression.contextPercentageThreshold）](https://github.com/google-gemini/gemini-cli/pull/5721)
 30. [aider.chat — In-chat commands](https://aider.chat/docs/usage/commands.html)
 
-## 未查到项
+## Items Not Found
 
 以下内容在本次核实中**未能从官方源确认**，正文中未据此下结论：
 

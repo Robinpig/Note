@@ -26,7 +26,7 @@
 
 ## Core Concepts
 
-### 回报 Return
+### Return
 
 从时刻 t 起的累积折扣奖励：
 
@@ -34,7 +34,7 @@ $$
 G_t=r_{t+1}+\gamma r_{t+2}+\gamma^2 r_{t+3}+\dots=\sum_{k=0}^{\infty}\gamma^k r_{t+k+1}
 $$
 
-### 策略与价值函数
+### Policy and Value Function
 
 - **策略（Policy）** $\pi(a\mid s)$：在状态 s 下选动作 a 的规则，学习的最终目标
 - **状态价值函数** $v_\pi(s)=\mathbb{E}_\pi[G_t\mid s_t=s]$：按策略 π 从状态 s 出发的期望回报
@@ -42,7 +42,7 @@ $$
 
 两者通过策略加权联系：$v_\pi(s)=\sum_a \pi(a\mid s)\,q_\pi(s,a)$。
 
-### 贝尔曼方程
+### Bellman Equation
 
 对回报按首项拆开：$G_t=r_{t+1}+\gamma G_{t+1}$，取期望即得价值函数的递归——**贝尔曼方程**。一步推导：
 
@@ -53,7 +53,7 @@ $$
 
 当前价值 = 即时奖励 + 折扣后的下一状态价值。几乎所有 RL 算法都是围绕"如何估计/优化这个递归"展开的。
 
-### 贝尔曼最优方程
+### Bellman Optimality Equation
 
 最优策略 $\pi^*$ 对应的价值函数 $v^*,q^*$ 满足带 max 的递归——**贝尔曼最优方程**：
 
@@ -68,7 +68,7 @@ $$
 
 求价值函数/策略有三条技术路线，区别在于"要不要模型"与"用什么目标更新"：
 
-### 动态规划 Dynamic Programming
+### Dynamic Programming
 
 已知模型 $p(s',r\mid s,a)$（model-based）时，直接迭代解贝尔曼（最优）方程：
 
@@ -79,13 +79,13 @@ $$
 v_{k+1}(s)=\max_a\sum_{s',r}p(s',r\mid s,a)\left[r+\gamma v_k(s')\right]
 $$
 
-### 蒙特卡洛 Monte Carlo
+### Monte Carlo
 
 无模型：跑完整条轨迹，用实际回报 $G_t$ 的均值估计 $v_\pi(s)$。
 
 - 无偏，但方差大；必须等 episode 结束才能更新，不适合持续任务
 
-### 时序差分 Temporal Difference
+### Temporal Difference
 
 无模型 + **自举（bootstrapping）**：不等轨迹结束，用"即时奖励 + 折扣后的当前估计"当目标：
 

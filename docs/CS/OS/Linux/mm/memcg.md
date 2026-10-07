@@ -13,7 +13,7 @@
 
 > 一个容易忽略的前提：memcg **记账的对象是页（folio），不是进程**。进程只是"当前正在替哪个组要内存"的上下文。理解这一点，才能明白为什么页迁移、页缓存、slab 对象都需要各自处理 memcg 归属。
 
-## memcg 在 mm 里的落点
+## Where memcg Lands in mm
 
 memcg 不是一个漂浮在内存子系统之外的模块，它改写了内存管理的三个基本事实：
 
@@ -190,13 +190,13 @@ shrink_node()
        └─ shrink_lruvec()      ← 针对某个 memcg 的 lruvec
 ```
 
-`iter`（`mem_cgroup_reclaim_iter`）记录"上次扫到哪"，避免每次都从头扫。当 `scan_control.target_mem_cgroup` 非空时（即 `memory.max` 超限触发的局部回收），遍历被限制在目标 memcg 及其子树内——**这就是容器超限时不会去动别的容器的页的原因**，细节见 [内存回收](/docs/CS/OS/Linux/mm/Reclaim.md?id=memcg-回收)。
+`iter`（`mem_cgroup_reclaim_iter`）记录"上次扫到哪"，避免每次都从头扫。当 `scan_control.target_mem_cgroup` 非空时（即 `memory.max` 超限触发的局部回收），遍历被限制在目标 memcg 及其子树内——**这就是容器超限时不会去动别的容器的页的原因**，细节见 [内存回收](/docs/CS/OS/Linux/mm/Reclaim.md?id=memcg-reclaim)。
 
-## 记账：页与内核对象
+## Accounting: Pages and Kernel Objects
 
 memcg 有两条记账路径，对应两类资源。
 
-### 页记账（page charge）
+### Page Accounting (page charge)
 
 页记账发生在页**被某个 memcg 首次使用**的时刻，而不是分配时刻：
 
@@ -227,7 +227,7 @@ static inline void mem_cgroup_uncharge(struct folio *folio)
 
 内部流程的核心是 `try_charge_memcg()`：把用量加上 `nr_pages`，然后逐级检查当前 memcg 及其祖先是否越过边界——**先看 `memory.high` 决定是否节流，再看 `memory.max` 决定是否回收或 OOM**。charge 失败时调用方必须回滚（`uncharge`），页迁移时记账要跟着页走。
 
-### 对象记账（kmem charge）
+### Object Accounting (kmem charge)
 
 slab 里的内核对象（`kmalloc`、`kmem_cache_alloc`）也能算到 memcg 头上，前提是分配时带 `__GFP_ACCOUNT` 且该 cache 被标记为需要记账。路径与页不同，走的是 `obj_cgroup`：
 
@@ -244,9 +244,9 @@ void obj_cgroup_uncharge(struct obj_cgroup *objcg, size_t size);
 
 `__GFP_ACCOUNT` 还影响 kmalloc 的"隐式记账"：内核为带 `SLAB_ACCOUNT` 的 cache 建了 `kmalloc-cg-*` 系列，使 `kmalloc(__GFP_ACCOUNT)` 落到专门的池子里。**这也是容器内 slab 用量能被独立统计的原因**——`memory.stat` 的 `slab_reclaimable` / `slab_unreclaimable` 才有意义。
 
-## 限额接口（cgroup v2）
+## Limit Interface (cgroup v2)
 
-memcg 的用户态视图是一组文件。v2 把它们统一放在 `<cgroup>/memory.*`（v1 的对应名见 [cgroup v1 与 v2](/docs/CS/OS/Linux/cgroup.md?id=cgroup-v1-与-v2)）。
+memcg 的用户态视图是一组文件。v2 把它们统一放在 `<cgroup>/memory.*`（v1 的对应名见 [cgroup v1 与 v2](/docs/CS/OS/Linux/cgroup.md?id=cgroup-v1-vs-v2)）。
 
 | 接口 | 读写 | 语义 | 默认 |
 | :-- | :-- | :-- | :-- |
@@ -267,7 +267,7 @@ memcg 的用户态视图是一组文件。v2 把它们统一放在 `<cgroup>/mem
 
 `memory.high` 与 `memory.max` 可以带 `O_NONBLOCK` 打开，此时**同步回收（和 max 时的 OOM kill）被绕过**：管理员进程改限额不会让自己的 CPU 卡在回收上，代价是目标组要等到下一次 charge 请求才真正受约束——这也意味着用量可能在限额下方"滞留"一段时间。
 
-## 超限之后：三条路径
+## After Exceeding Limits: Three Paths
 
 这是 memcg 最需要分清的一点——**同一个"内存超了"，走哪条路取决于越过的是哪条线**：
 
@@ -294,7 +294,7 @@ memcg 的用户态视图是一组文件。v2 把它们统一放在 `<cgroup>/mem
 
 注意文档强调的一点：**默认配置下，普通 0 阶分配总会成功**，除非 OOM killer 恰好选中了当前任务。反之，有些分配**不会**触发 OOM——调用方可能改成返回 `-ENOMEM`（用户态可见）或静默失败（如磁盘预读）。
 
-## 层级保护：low / min 的有效边界
+## Hierarchical Protection: Effective Boundaries of low / min
 
 `memory.low` / `memory.min` 不是绝对数值，而是**相对于回收目标**生效的——这是最容易配错的地方。
 
@@ -315,7 +315,7 @@ root - ... - A - B - C
 1. **保护值不是越大越好**。`memory.min` 配得过高会把内存"锁死"，连本该被回收的冷页也动不了；一旦所有组都受保护、一点内存都收不回来，内核只剩下 OOM 一条路——这正是文档里"会导致持续 OOM"的警告。
 2. 想表达"不在乎兄弟间谁先被回收"时，用 `memory_recursiveprot` 挂载选项，而不是给所有后代都配一个有限值（后者会污染 `memory.events:low` 的语义）。
 
-## memory.stat 与 memory.events：排障口径
+## memory.stat and memory.events: Troubleshooting Scope
 
 ### memory.stat
 
@@ -346,7 +346,7 @@ root - ... - A - B - C
 | | `pgscan_kswapd` / `pgsteal_kswapd` | 后台 kswapd 完成的部分 |
 | | `pgscan_proactive` / `pgsteal_proactive` | 由 `memory.reclaim` 主动回收触发的部分 |
 | | `pglazyfree` / `pglazyfreed` | 延迟到内存压力时才释放 / 已回收的延迟释放页 |
-| refault | `workingset_refault_anon` / `_file` | 刚被回收就被重新读入的次数——**反抖动的关键信号**，对应 [Reclaim](/docs/CS/OS/Linux/mm/Reclaim.md?id=lru-链表与页面老化) 的 workingset |
+| refault | `workingset_refault_anon` / `_file` | 刚被回收就被重新读入的次数——**反抖动的关键信号**，对应 [Reclaim](/docs/CS/OS/Linux/mm/Reclaim.md?id=lru-list-and-page-aging) 的 workingset |
 | | `workingset_activate_anon` / `_file` | refault 后直接被判定为工作集活动页、重新激活 |
 | THP | `anon_thp` / `file_thp` / `shmem_thp` | 各类 THP 占用 |
 | | `thp_fault_alloc` / `thp_collapse_alloc` | 缺页直接分配 / 折叠产生的 THP |
@@ -373,7 +373,7 @@ root - ... - A - B - C
 
 一个实用判据：**`oom_kill` 有值但 `max` 很小**，说明是全局内存压力下被全局 OOM 波及；**`max` 与 `oom` 同步增长**，才是 memcg 限额自己触发的局部 OOM。
 
-## 与 K8s / 容器的映射
+## Mapping to K8s / Containers
 
 memcg 是容器内存隔离的全部内核基础，K8s 层的字段最终都落到上面这些文件上：
 
@@ -381,13 +381,13 @@ memcg 是容器内存隔离的全部内核基础，K8s 层的字段最终都落�
 | :-- | :-- |
 | `resources.limits.memory` | `memory.max`（v2） / `memory.limit_in_bytes`（v1） |
 | `resources.requests.memory` | `memory.low`（kubelet 的 MemoryQoS 特性，cgroup v2）——让节点回收时优先动超过 request 的部分 |
-| Pod QoS 等级 | `oom_score_adj`：Guaranteed 设 `-997`、BestEffort 设 `1000`、Burstable 按 `min(max(2, 1000 - memoryRequestBytes/memoryLimitBytes*1000), 999)` 计算（对照表见 [Pod](/docs/CS/Container/k8s/Pod.md?id=资源与-qos)） |
+| Pod QoS 等级 | `oom_score_adj`：Guaranteed 设 `-997`、BestEffort 设 `1000`、Burstable 按 `min(max(2, 1000 - memoryRequestBytes/memoryLimitBytes*1000), 999)` 计算（对照表见 [Pod](/docs/CS/Container/k8s/Pod.md?id=resources-and-qos)） |
 | 容器被杀、退出码 137 | memcg 局部 OOM 触发 `SIGKILL` → `OOMKilled`（排障路径见 [Issues](/docs/CS/Container/k8s/Issues.md)） |
 | 容器内 `free`/`top` 显示宿主机数据 | `/proc` 不感知 cgroup（v2 也未根治），生产用 lxcfs 修正 |
 
 一个常见误解值得点破：**QoS 等级（`oom_score_adj`）管的是"全局 OOM 时先杀谁"，`memory.max` 管的是"这个容器能不能超限"**——两套机制，两个出口。Guaranteed Pod 在节点全局 OOM 时最后被杀，但如果它自己的 `memory.max` 到顶，照样在容器内被 OOM。
 
-## 调优与陷阱
+## Tuning and Pitfalls
 
 - **别用 `memory.stat` 的等式对账**：`inactive_foo + active_foo ≠ foo`（口径不同），`kernel` / `sock` / `pswp*` / `pgscan*` 等标注非 per-node 的条目不进 `memory.numa_stat`。
 - **`memory.high` 才该是日常旋钮**：它节流但不杀，给了管理侧反应时间；`memory.max` 是最后防线。文档的建议是——high 可以超额配置（high 之和 > 可用内存），让全局内存压力按实际用量去分配。

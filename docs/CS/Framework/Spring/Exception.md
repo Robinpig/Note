@@ -34,7 +34,7 @@ public class GlobalExceptionHandler {
 - **方法参数**可注入 `HttpServletRequest`、`HttpServletResponse`、`Exception`、`HandlerMethod`、`WebRequest`、`Locale`；**返回值**可以是 `ResponseEntity`、`ProblemDetail`、被 `@ResponseStatus` 标注的对象等。
 - `@ControllerAdvice` **只能拦截进入控制器的异常**，404（无处理器）、415、请求体解析失败前的一些容器级错误不会流到这里——这是下一个话题。
 
-## 声明 HTTP 状态的三种方式
+## Three Ways to Declare HTTP Status
 
 | 方式 | 写法 | 适用场景 |
 | :-- | :-- | :-- |
@@ -86,7 +86,7 @@ detail → problemDetail.[异常类全限定名][后缀]
 
 生产环境建议自定义这些消息，避免把框架内部实现细节暴露给调用方。
 
-## 校验失败的处理
+## Handling of Validation Failures
 
 校验异常有三类，来源不同，都建议统一映射为 400 并回传字段级错误列表：
 
@@ -111,7 +111,7 @@ public ProblemDetail handleValidation(MethodArgumentNotValidException ex) {
 
 `HandlerMethodValidationException` 提供 `visitResults(Visitor)` 回调，可按参数类型（`RequestParam` / `PathVariable` / `RequestHeader` / `ModelAttribute`）分别取错，比手写遍历更清晰。校验细节与消息码推导见 [校验](/docs/CS/Framework/Spring/Validation.md)。
 
-## 兜底路径：没进控制器的异常
+## Fallback Path: Exceptions Not Entering the Controller
 
 `@ControllerAdvice` 拦不到 404、容器级解析失败等异常。Servlet 容器会把它们转到错误页，Boot 则统一转发到 `server.error.path`（默认 `/error`）由 `BasicErrorController` 渲染，数据来自 `ErrorAttributes`（即默认的 `timestamp` / `status` / `error` / `path` 结构）。
 
@@ -122,7 +122,7 @@ server.error.include-message=always     # 默认 never，按需放开
 
 自定义该行为的方式是定义 `ErrorController` 实现或 `ErrorAttributes`，而不是早期的 `AbstractErrorController`（已废弃）。MVC 侧的调度细节见 [Spring MVC](/docs/CS/Framework/Spring/MVC.md)。
 
-## 客户端侧解析错误响应
+## Client-Side Parsing of Error Responses
 
 调用方可以用同一套模型反序列化错误体，不必自己拼 JSON：
 
@@ -136,7 +136,7 @@ try {
 
 `WebClient` 侧对应 `WebClientResponseException`，用法一致。客户端选型见 [Spring REST 客户端](/docs/CS/Framework/Spring/RestClient.md)。
 
-## 实践建议
+## Practice Recommendations
 
 - 自定义业务异常继承 `ErrorResponseException`，让它自带状态与结构，避免在 advice 里写大量 `if-else` 映射。
 - 区分「可预期业务错误」（4xx，body 给用户看）与「未预期系统错误」（5xx，body 只给追踪 ID，细节进日志）。

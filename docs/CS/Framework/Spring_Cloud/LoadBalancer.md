@@ -18,7 +18,7 @@ public interface ReactiveLoadBalancer<T> {
 > [!NOTE]
 > Spring Cloud LoadBalancer 5.0（2025.1 Oakwood）新增两项能力：支持**按 API 版本**选择实例（与 Framework 7 的 API 版本化打通），以及为 **Spring HTTP Interface Client** 提供自动配置——声明式接口客户端同样自动享受负载均衡，不必再手工包装。
 
-## 内置算法
+## Built-in Algorithms
 
 | 实现 | 行为 |
 | :-- | :-- |
@@ -57,7 +57,7 @@ ServiceInstanceListSupplier.builder()
         .build(context);
 ```
 
-### 各层职责
+### Responsibilities of Each Layer
 
 | Supplier | 职责 | builder 方法 |
 | :-- | :-- | :-- |
@@ -72,7 +72,7 @@ ServiceInstanceListSupplier.builder()
 | `SameInstancePreferenceServiceInstanceListSupplier` | 优先复用上次选中的实例（Zookeeper `StickyRule` 的替代品） | `.withSameInstancePreference()` |
 | `RequestBasedStickySessionServiceInstanceListSupplier` | 按 cookie（`sc-lb-instance-id`）粘到固定实例 | `.withRequestBasedStickySession()` |
 
-### 顺序有讲究
+### Order Matters
 
 > [!WARNING]
 > `withCaching()` **必须紧跟在从网络取实例的那一层之后、任何过滤层之前**。写反的后果是"缓存的是已过滤后的结果"：zone 变化、健康状态变化都无法反映到缓存里，且 TTL 到期前一直错下去——同样是不报错只失效的一类问题。
@@ -89,12 +89,12 @@ spring:
                                      # request-based-sticky-session / subset / api-version
 ```
 
-### Zone 感知的两个坑
+### Two Pitfalls of Zone Awareness
 
 1. **zone 来源**：客户端侧 zone 由各 `DiscoveryClient` 的特定配置决定（如 Eureka 是 `eureka.instance.metadata-map.zone`）。目前**只有 Eureka 会自动把 zone 传给 LoadBalancer**，[Consul](/docs/CS/Framework/Spring_Cloud/Consul.md)、[Nacos](/docs/CS/Framework/nacos/Nacos.md) 等需要手工设置 `spring.cloud.loadbalancer.zone`。不设的话 zone 为 null，该 supplier 直接返回全部实例——**配了 `zone-preference` 却毫无效果是常见现象**。
 2. **实例侧 zone** 取自 `ServiceInstance` 元数据里 key 为 `zone` 的值，注册时要把 zone 写进 tags / metadata。
 
-## 按服务定制
+## Customize per Service
 
 ```java
 @Configuration
@@ -121,7 +121,7 @@ public class MyConfiguration {
 > [!TIP]
 > AOT / GraalVM 原生镜像自 4.0.0 起支持，但**必须显式声明 serviceId**（通过 `@LoadBalancerClient` 的 `value`/`name`，或 `eager-load.clients`）。原生镜像跑不通动态创建子上下文，没有显式声明就会出现"运行时报找不到 LoadBalancer client"。
 
-## 自定义策略：金丝雀路由
+## Custom Strategy: Canary Routing
 
 下面是一个完整的自定义实现——按请求 Header 里的流量标记把测试流量导向金丝雀节点（示例中其他部分省略，重点在 `choose` 与 `getInstanceResponse` 两段）：
 
@@ -186,7 +186,7 @@ public class CanaryRule implements ReactorServiceInstanceLoadBalancer {
 - **这套 `RequestData` 取 Header 的写法只对 WebClient 有效**。`RestTemplate` 走的是 `HttpRequest` 上下文，Feign / `RestClient` 又是另一套，需要各自适配。这也是"WebClient 上调通了、别处不生效"的原因。
 - 空列表必须返回 `EmptyResponse` 而不是抛异常——异常会让上层重试逻辑误判为调用失败。
 
-## 可观测性
+## Observability
 
 ```yaml
 spring:

@@ -2,7 +2,7 @@
 
 Consul 的接入极其多元：**无需私有 SDK**——普通 `dig` / `curl` / `consul` CLI 就能注册、发现、查状态。这与 ZooKeeper 的 Jute 私有协议、etcd 强依赖 gRPC 客户端（见 [etcd client](/docs/CS/Framework/etcd/client.md)）形成对比。本篇覆盖 go-client（官方 SDK）、DNS 调试、HTTP API、CLI 与服务注册。
 
-## go-client（官方 SDK）
+## go-client (Official SDK)
 
 官方 `github.com/hashicorp/consul/api` 包按子系统拆分 client：
 
@@ -20,7 +20,7 @@ Consul 的接入极其多元：**无需私有 SDK**——普通 `dig` / `curl` /
 > [!TIP]
 > 阻塞查询在 SDK 里用 `QueryOptions{WaitIndex: lastIndex, WaitTime: 5*time.Minute}`；Consul 2.0 起 agent 的 `read_timeout`/`write_timeout` 提到 **15 分钟**（原 30 秒），长轮询不再被超时打断。
 
-## DNS 调试（无需 SDK）
+## DNS Debugging (No SDK Required)
 
 ```bash
 dig @127.0.0.1 -p 8600 web.service.consul      # A 记录：健康实例
@@ -53,7 +53,7 @@ consul operator raft list-peers   # Raft peer 集
 consul snapshot save/restore <f>  # 快照（见 Cluster）
 ```
 
-## 服务注册与检查
+## Service Registration and Check
 
 服务可在 agent 配置文件声明，或用 API/SDK 动态注册：
 
@@ -69,7 +69,7 @@ consul snapshot save/restore <f>  # 快照（见 Cluster）
 
 检查失败会自动从 DNS / 健康查询剔除（[Discovery](/docs/CS/Framework/consul/discovery.md) 的健康检查段）。Sidecar（Envoy）注册还会占用 `21000–21255` 自动分配端口。
 
-## 与 etcd clientv3 对照
+## Comparison with etcd clientv3
 
 | 维度 | Consul client | etcd clientv3 |
 | :--- | :--- | :--- |

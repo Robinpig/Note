@@ -124,7 +124,7 @@ public class FileChannelImpl extends FileChannel {
 }
 ```
 
-当我们使用 HeapByteBuffer 传入 FileChannel 的 read or write 方法对文件进行读写时，JDK 会首先创建一个临时的 DirectByteBuffer，对于 `FileChannel#read` 来说，JDK 在 native 层会将 read 系统调用从文件中读取的内容首先存放到这个临时的 DirectByteBuffer 中，然后在拷贝到 HeapByteBuffer 中返回——这一步的内核背景（page cache、预读、Buffered/Direct IO 的拷贝次数对比）见 [PageCache](/docs/CS/OS/Linux/mm/PageCache.md?id=buffered-io-与-direct-io)。
+当我们使用 HeapByteBuffer 传入 FileChannel 的 read or write 方法对文件进行读写时，JDK 会首先创建一个临时的 DirectByteBuffer，对于 `FileChannel#read` 来说，JDK 在 native 层会将 read 系统调用从文件中读取的内容首先存放到这个临时的 DirectByteBuffer 中，然后在拷贝到 HeapByteBuffer 中返回——这一步的内核背景（page cache、预读、Buffered/Direct IO 的拷贝次数对比）见 [PageCache](/docs/CS/OS/Linux/mm/PageCache.md?id=buffered-io-and-direct-io)。
 
 ```java
 public class IOUtil {

@@ -4,7 +4,7 @@
 
 本页是 `dev/` 目录的链路总图，沿一条因果主线展开：内核先拿到**硬件信息**，据此抽象出 `device`；驱动以 `device_driver` 形式注册，二者在 **bus（总线）** 上按 match 规则相遇、经 **probe 绑定**；绑定后驱动通过**字符 / 块 / 网络三类接口**把能力暴露给用户态，而 **sysfs + udev** 在用户侧呈现和管理这些设备。记住一句：**设备模型是骨架，bus 上的 match/probe 是心脏，三类设备接口是对外窗口**。
 
-## 基座：kobject 与设备模型
+## Foundation: kobject and the Device Model
 
 设备模型最底层是统一的引用计数与层次构件，这部分见 [device](/docs/CS/OS/Linux/dev/device.md)：
 
@@ -14,7 +14,7 @@
 
 这三者回答"设备对象如何被计数、组织、导出"，但它们本身不区分设备类型——真正描述"一个具体设备 / 一个具体驱动"的是下面三支柱。
 
-## 三支柱：device、driver、bus
+## Three Pillars: device, driver, bus
 
 设备模型的核心是三个结构的关系。
 
@@ -40,7 +40,7 @@ struct bus_type {
 
 总线掌握"哪个驱动配哪个设备"的规则——PCI/USB 上是按厂商/设备 ID 匹配，platform/设备树场景按 `compatible` 字符串匹配。没有 bus，device 和 driver 只是两份互不相干的注册表。
 
-## 心脏：match 与 probe 绑定
+## The Core: match and probe Binding
 
 设备与驱动的**绑定（binding）**是设备驱动链最关键的事件，无论设备先到还是驱动先到，逻辑相同：
 
@@ -53,7 +53,7 @@ struct bus_type {
 
 > 设备被拔出或驱动卸载时走反向流程：调驱动的 `remove()` 释放资源、解除绑定，从 sysfs 消失并广播 remove uevent。
 
-## 硬件信息从哪来：device tree / ACPI
+## Where Hardware Information Comes From: Device Tree / ACPI
 
 驱动要 probe，前提是内核知道"机器上有什么设备、资源如何分配"。这套信息有两大来源：
 
@@ -71,7 +71,7 @@ struct of_device_id {
 
 还有一类 **platform device**：并非真实物理总线、而是内核自己描述的设备（SoC 内集成外设），它同样走 device + driver + match/probe，只是 bus 换成虚拟的 platform bus。
 
-## 对外窗口：三类设备接口
+## External Window: Three Types of Device Interfaces
 
 设备绑定后，用户程序怎么用它？Linux 按设备形态分三类接口，驱动通过实现对应的操作集把能力交出去：
 
@@ -83,7 +83,7 @@ struct of_device_id {
 
 三类设备的共同点：都内嵌/关联 `device` 结构，因此自动获得设备模型的命名、sysfs、电源管理、热插拔能力，驱动不必各自实现。
 
-## 用户侧：sysfs 与 udev
+## User Space: sysfs and udev
 
 内核设备模型需要一个对外的呈现面，由两者承担：
 
@@ -92,11 +92,11 @@ struct of_device_id {
 
 冷启动时 udev 经 coldplug 对已存在设备"补发" add 事件，使热插拔与冷启动走同一套规则——至此内核发现设备 → 驱动绑定 → 用户态可见的链路闭环。
 
-## 专项子系统：input
+## Specialized Subsystem: input
 
 鼠标、键盘、传感器这类"不断产生事件"的设备有专门的 **input 子系统**（[input](/docs/CS/OS/Linux/dev/input.md)），它把设备端（`input_dev`，驱动报告事件）与处理端（`input_handler`，定义如何处理事件）解耦：驱动只负责上报按键/坐标等 input 事件，不必关心事件最终是写进 `/dev/input/eventX` 还是交给系统其他部分。这是设备驱动中"分层解耦"的典型。
 
-## 驱动与其它子系统的咬合
+## How Drivers Interface with Other Subsystems
 
 - **内存**：驱动申请的缓冲最终来自 [buddy/slab](/docs/CS/OS/Linux/mm/README.md)；DMA 用到的连续内存常由 CMA 提供，这也是 zone 里要给可移动页分组的原因之一。
 - **中断**：驱动在 probe 里 `request_irq` 注册中断处理，设备就绪后由硬中断驱动接收流程，见 [Interrupt](/docs/CS/OS/Linux/Interrupt.md)。

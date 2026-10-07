@@ -33,7 +33,7 @@ Transport：Netpoll（默认，NIO） / 标准库 net（BIO，可切换）
 
 - **多协议与传输**：Thrift（默认，含 Kitex 自研的带元信息传输协议 TTHeader）、gRPC/Protobuf，可在同端口做多协议探测；支持连接多路复用（mux）、长连接池。
 - **服务治理**：客户端侧服务发现与负载均衡、超时控制、重试、备份请求、熔断、限流、会话/粒度级治理，均设计为可插拔扩展。
-- **泛化调用（Generic Call）**：无需生成的 stub、不依赖具体 IDL 类型即可发起调用，适合网关、测试平台等不能依赖每个服务 SDK 的场景，动机见 [RPC 泛化调用](/docs/CS/Distributed/RPC/RPC.md?id=泛化调用)。
+- **泛化调用（Generic Call）**：无需生成的 stub、不依赖具体 IDL 类型即可发起调用，适合网关、测试平台等不能依赖每个服务 SDK 的场景，动机见 [RPC 泛化调用](/docs/CS/Distributed/RPC/RPC.md?id=generalized-invocation)。
 - **可扩展性**：几乎所有横切能力（registry、loadbalance、circuit breaker、tracer、transporter、codec）都以接口暴露，方便对接自研基础设施。
 
 ## Compare

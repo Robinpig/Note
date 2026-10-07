@@ -32,3 +32,5 @@
 ## Links
 
 - [Golang](/docs/CS/Go/Go.md)
+- [GIL](/docs/CS/Python/GIL.md)
+- [Asyncio](/docs/CS/Python/Asyncio.md)

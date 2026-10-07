@@ -19,7 +19,7 @@ const hello: string = "Hello World!"
 console.log(hello)
 ```
 
-## 三条设计约束，决定了它长这样
+## Three Design Constraints That Shaped It
 
 TypeScript 的很多"不完美"其实不是设计失误，而是三条硬约束推出来的必然结果：
 
@@ -42,7 +42,7 @@ TypeScript 的很多"不完美"其实不是设计失误，而是三条硬约束�
 
 这个取舍对上层使用者有一个很实际的推论：**`interface` 和 `type` 在运行时完全不存在**。`typeof`、`instanceof`、`Array.isArray` 有运行时语义，`SomeInterface` 没有。想对外部输入做校验，必须在运行时再写一份 schema（zod、valibot、io-ts 这类库的存在意义就在于此），或者反过来让 schema 成为唯一真相源、用 `z.infer` 导出类型。
 
-## 类型擦除的确切含义
+## The Precise Meaning of Type Erasure
 
 ```typescript
 // 输入
@@ -70,7 +70,7 @@ function greet(u) {
 
 正因为这四项"擦不掉"，它们无法被**只做删类型的工具**（Node 的 `--experimental-strip-types`、esbuild 的 transform）正确处理。TS 5.8 为此引入了 `--erasableSyntaxOnly`，把这些"不可擦除语法"直接标为错误——一旦打开，你的代码就能被任何 type-stripping 工具链直接吃下。
 
-### 类型怎样绕开 tsc 直接运行
+### How Types Bypass tsc and Run Directly
 
 TS 的类型擦除粒度足够简单，于是各类运行时选择跳过 `tsc` 直接strip：
 
@@ -83,7 +83,7 @@ TS 的类型擦除粒度足够简单，于是各类运行时选择跳过 `tsc` �
 
 这张表引出一个工程上常见的分工：`tsc --noEmit`（或 TS 7 的 check）负责**正确性**，esbuild / swc / Vite 负责**产出**，两者解耦。
 
-## 版本演进：从自托管到 Go 原生
+## Version Evolution: From Self-Hosted to Go-Native
 
 TypeScript 编译器前 14 年一直是**自托管（self-hosted）**的——用 TypeScript 写自己，编译成 JS 跑在 Node / V8 上。2025 年 3 月，微软宣布把整套编译器与语言服务移植到 Go，项目代号 **Corsa**（原 Strada 指代旧的 JS 实现）。这次移植在 2026 年落地：
 
@@ -121,7 +121,7 @@ TS 7 的核心事实，见 [TypeScript 编译器](/docs/CS/TypeScript/Compiler.m
 > [!WARNING]
 > 从 6.0 平滑到 7.0 的前置条件是：在 6.0 下开启 `stableTypeOrdering`、不使用 `ignoreDeprecations`、且没有弃用告警。官方的做法是**先升 6.0 并清干净告警**，再跳 7.0。
 
-## 类型系统的骨架
+## The Skeleton of the Type System
 
 深入部分见 [TypeScript 类型系统](/docs/CS/TypeScript/TypeSystem.md)，这里只列决定日常写法的四条：
 
@@ -130,7 +130,7 @@ TS 7 的核心事实，见 [TypeScript 编译器](/docs/CS/TypeScript/Compiler.m
 3. **泛型 + `infer`**：TS 的类型层是一门函数式语言——有递归、有条件分支、有模式匹配，可以在编译期"计算"类型。类型体操由此而来，也由此容易失控。
 4. **`any` 与 `unknown`**：`any` 关闭检查并具有传染性，`unknown` 是类型安全的顶层类型，必须先收窄才能用。**消灭 `any` 是 TS 工程收益的第一杠杆**。
 
-## 它解决什么，不解决什么
+## What It Solves, What It Doesn't
 
 | 常见期待 | 实际情况 |
 |----------|----------|
@@ -141,11 +141,11 @@ TS 7 的核心事实，见 [TypeScript 编译器](/docs/CS/TypeScript/Compiler.m
 | 让重构变安全 | **可以**，这是最大的真实收益 |
 | 让跨模块契约显式化 | **可以**，尤其在 monorepo 与多人协作里 |
 
-## 工程配置的入口
+## Entry Point for Project Configuration
 
 `tsconfig.json` 不是一个配置文件那么简单，它定义了**一个编译单元的边界**：哪些文件属于这个 program、这些文件的模块世界长什么样。TS 7 之后 `strict` 成为默认，理解 strict 家族每一项在管什么就更重要了。细节见 [tsconfig 工程配置](/docs/CS/TypeScript/Tsconfig.md)。
 
-## 运行环境的关系图
+## Diagram of the Runtime Environment
 
 ```
    TypeScript (类型层，编译期)

@@ -40,7 +40,7 @@ func main() {
 
 
 
-## 原理
+## Principles
 
 Gin 是在 Golang HTTP 标准库 net/http 基础之上的再封装
 在 net/http 的既定框架下，gin 所做的是提供了一个 gin.Engine 对象作为 Handler 注入其中，从而实现路由注册/匹配、请求处理链路的优化

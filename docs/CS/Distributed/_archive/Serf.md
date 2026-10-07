@@ -15,9 +15,6 @@ Serf can also be used for service discovery and orchestration, but it is built o
 
 ## Links
 
-- [Architecture](/docs/CS/Distributed/Architecture.md)
-- [Azure](/docs/CS/Distributed/Azure.md)
-- [Bigtable](/docs/CS/Distributed/Bigtable.md)
-- [Borg](/docs/CS/Distributed/Borg.md)
-- [Byzantine](/docs/CS/Distributed/Byzantine.md)
-- [CAP](/docs/CS/Distributed/CAP.md)
+- [Distributed Systems](/docs/CS/Distributed/Distributed.md)
+- [Gossip](/docs/CS/Distributed/_archive/Gossip.md) — Serf 正是基于 SWIM gossip 的成员管理实现
+- [Consensus](/docs/CS/Distributed/Consensus/Consensus.md) — gossip 维护最终一致的成员视图，与强一致共识互补

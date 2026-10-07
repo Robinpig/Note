@@ -19,6 +19,7 @@ Pub/Sub 与 key space 完全无关，它在任何层面都不与 key 空间互�
 
 - [Redis](/docs/CS/DB/Redis/Redis.md)
 - [Redis 作为 MQ（Streams 消费者组、ACK 等）](/docs/CS/DB/Redis/MQ.md)
+- [Scheduled Task](/docs/CS/SE/Scheduled_Task.md)
 
 ## References
 

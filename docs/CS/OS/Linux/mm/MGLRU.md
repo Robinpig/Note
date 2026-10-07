@@ -7,7 +7,7 @@
 
 多代 LRU（Multi-Gen LRU，简称 MGLRU，内核 6.1 合入）针对这两点重造：把可回收页按"**代（generation）**"组织，越年轻的代越热，回收时优先扫描最老的代；判断一页在某代内有没有被用过，则直接批量**走查页表、读 accessed 位**，而不是频繁移动链表。本篇讲清它的结构、老化与驱逐两条主线。
 
-## generation 与滑动窗口
+## Generation and Sliding Window
 
 MGLRU 的核心数据结构是挂在 lruvec 上的 `struct lru_gen_folio`（定义见 `include/linux/mmzone.h`）。它用两个单调递增的序号划定一个**滑动窗口**：
 
@@ -39,7 +39,7 @@ struct lru_gen_folio {
 
 > `min_seq` 对匿名和文件分开记录（`min_seq[ANON_AND_FILE]`），因为干净文件页不受 swap 限制、总能驱逐；当 swap 空间不足时，允许文件页的 `min_seq` 单独前进、把匿名页甩在后面。
 
-## tier：文件描述符访问热度
+## Tier: File Descriptor Access Heat
 
 除了按"代"区分新旧，MGLRU 还在每代内部按 **tier（层级）** 区分"通过文件描述符被反复访问"的热度：
 
@@ -49,7 +49,7 @@ struct lru_gen_folio {
 
 一个页通过 fd 被访问 N 次，就落在第 `order_base_2(N)` 层。关键好处是**跨 tier 只改 folio->flags 上的位、不用拿 LRU lock**，所以 buffered I/O 热路径上几乎零成本；驱逐时再用 `avg_refaulted` / `avg_total` 的指数移动平均，统计反复 refault 的页是不是真热点、值不值得保护。代（时间维度）+ 层（fd 访问维度）共同刻画了一页的冷热。
 
-## aging：走查页表、推进新生代
+## Aging: Walking the Page Table and Advancing the Young Generation
 
 回收要解决的第一个问题是"哪些页其实还在被用"。MGLRU 的 **aging（老化）** 不搬链表，而是批量**走查各进程的页表**：对页表项读 accessed（young）位——
 
@@ -71,13 +71,13 @@ do {
 
 aging 被刻意做得**懒惰**：`should_run_aging()` 检查代的数量与各代页的分布，理想状态是保持 `MIN_NR_GENS+1` 代、每页均匀分布，没到需要老化的程度就不扫，以此把页表走查的开销降到最低。
 
-## eviction：从最老代驱逐
+## Eviction: Evicting from the Oldest Generation
 
 第二个问题是"真正要回收时回收谁"。**eviction（驱逐）** 经 `lru_gen_shrink_lruvec()` → `try_to_shrink_lruvec()` → `evict_folios()`，从 `min_seq` 指向的最老代开始取页。代内的链表是**懒排序**的（注释 "lazily sorted on eviction"）——平时不维护顺序，只在要驱逐时才对这一批页整理，省掉了传统 LRU 持续的链表维护。
 
 驱逐对页的最终处置，仍复用传统回收的判定：干净文件页直接释放、脏页先回写、匿名页换出到 [Swap](/docs/CS/OS/Linux/Swap.md)。驱逐完一整代后把 `min_seq` 推进，下一轮再从更年轻的代取。这与 NUMA hinting / 内存压缩的页迁移也有协作：页被隔离迁移时会从代链表上摘下（见 `lru_gen_add_folio` / `lru_gen_del_folio`）。
 
-## 与传统 LRU 的对照
+## Comparison with the Traditional LRU
 
 | 维度 | 传统 active/inactive LRU | MGLRU |
 | --- | --- | --- |
@@ -88,7 +88,7 @@ aging 被刻意做得**懒惰**：`should_run_aging()` 检查代的数量与各�
 | 大内存适配 | 扫描与链表开销高 | Bloom filter + 懒惰 aging，扫描更省 |
 | 可观测兼容 | native | 最年轻两代映射为 active 计数 |
 
-## 接口与调优
+## Interface and Tuning
 
 通过 `/sys/kernel/mm/lru_gen/` 控制，`enabled` 是个位掩码：
 

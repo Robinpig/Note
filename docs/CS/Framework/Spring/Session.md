@@ -29,7 +29,7 @@ Spring Session 的核心机制是 Servlet 规范里的 **Filter 拦截 + 请求�
 
 响应时用 `HttpSessionIdResolver` 把 session id 写回客户端，默认实现是 cookie（名为 `SESSION`）。
 
-### 写回时机：flushMode 与 saveMode
+### Write-Back Timing: flushMode and saveMode
 
 两个容易混淆的配置，管的是"什么时候把 session 写回存储"：
 
@@ -44,7 +44,7 @@ Spring Session 的核心机制是 Servlet 规范里的 **Filter 拦截 + 请求�
 > [!WARNING]
 > 典型的静默 Bug 是**分布式下 session 属性更新丢失**：两个请求并发修改同一 session，默认的 `ON_SAVE` 让后完成的那次整体覆盖前者。这类问题不会报错，只会表现为"偶发的登录态/购物车内容回滚"。session 一旦承担写状态，就要按共享可变状态来审视，必要时换成把状态放到 DB / Redis 自己维护的数据结构里。
 
-### Session ID 的传递载体
+### Carrier of Session ID Transmission
 
 默认用 cookie（`CookieHttpSessionIdResolver`）。移动端 / 前后端分离场景常用 Header：
 
@@ -87,13 +87,13 @@ spring:
 > [!NOTE]
 > `RedisIndexedSessionRepository` 依赖 Redis **keyspace notification** 做过期事件清理（另有一个 key 维护"用户 → sessionId"索引）。Redis 侧若禁用该特性（`notify-keyspace-events` 未开启），过期 session 不会被及时清理，表现为 Redis 里 key 持续堆积。这在托管 Redis（云厂商默认常关）上很常见。
 
-### Redis Session 结构要点
+### Redis Session Structure Notes
 
 - session 以 `spring:session:sessions:<id>` 存储，属性序列化到 hash；
 - 另用一个有序集合记录过期时间，后台任务清理，因此 TTL 不是完全精确依赖 Redis key 过期；
 - session id 本身是 base64 编码的 UUID，写到 cookie 里要注意别让网关/中间件截断。
 
-### 序列化选型
+### Serialization Selection
 
 默认 **JDK 序列化**：同版本应用集群可用，但跨语言读不了、类名或字段变更会导致反序列化失败、且二进制不可读难以排障。
 
@@ -111,11 +111,11 @@ RedisSerializer<Object> springSessionDefaultRedisSerializer() {
 >
 > 换的时候要留意两点：一是 **JSON 反序列化需要类型信息**，默认类型信息未开启时会把对象还原成 `LinkedHashMap`，取字段时抛 `ClassCastException`；二是已有 Redis 里的存量会话是按旧格式写的，**灰度期必须兼容读写，否则升级瞬间所有在线用户被踢下线**。稳妥做法是先用新的 namespace 双写一段时间，或直接接受一次全量登出。
 
-## Spring Session 与安全
+## Spring Session and Security
 
 Spring Security 默认基于 `HttpSession` 保存 `SecurityContext`，接入 Spring Session 后登录态也随之集中化，天然支持集群下的登录共享。
 
-### 会话创建策略
+### Session Creation Strategy
 
 ```java
 http.sessionManagement(session -> session
@@ -126,7 +126,7 @@ http.sessionManagement(session -> session
 
 注意这套策略**只约束 Spring Security 自己**，不约束业务代码——应用照样可以 `getSession()` 创建会话。`STATELESS` 配 JWT/OAuth2 时常见，此时 Spring Session 基本无用武之地。
 
-### 并发会话控制
+### Concurrent Session Control
 
 限制同一账号同时在线的会话数：
 
@@ -147,7 +147,7 @@ http.sessionManagement(session -> session
 > [!NOTE]
 > Security 6.5 起提供了函数式重载 `maximumSessions(SessionLimit)`，可以按 authentication 动态返回上限（例如管理员不限、普通用户限 1），替代过去只能写死整数的做法。
 
-### WebSocket 关联
+### WebSocket Association
 
 Spring Session 还能把 HTTP session 与 WebSocket 会话关联起来，让长连接复用同一份登录态。做法是让 `WebSocketHandshakeInterceptor` 在握手阶段从 HTTP session 取出认证信息，效果是 STOMP 的 `@MessageMapping` 方法里能拿到同一个 Principal。
 

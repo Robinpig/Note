@@ -1,4 +1,4 @@
-# Nacos 的 CP 共识：JRaft
+# Nacos CP Consensus: JRaft
 
 ## Introduction
 
@@ -11,7 +11,7 @@ Nacos 的「配置中心」与「命名里的持久实例」需要**强一致 + 
 
 换句话说，同一个 naming 模块里，**临时实例走 Distro、持久实例走 JRaft**——这是 Nacos 一致性模型最容易混淆的点。
 
-## 为什么配置侧用 Raft
+## Why Raft Is Used on the Config Side
 
 配置变更的应用语义要求「读己之写」「全局有序」「不丢」：
 
@@ -21,7 +21,7 @@ Nacos 的「配置中心」与「命名里的持久实例」需要**强一致 + 
 
 这些正好是 Raft 的强项：单一 Leader 定序、日志复制到多数派、提交后应用。etcd 的 etcd-raft、ZooKeeper 的 Zab 也是为同样的诉求服务，只是 Nacos 选了 JRaft 并把它限定在 CP 子系统内（etcd / ZK 是全程 Raft/Zab）。
 
-## 组件与启动链路
+## Components and Startup Chain
 
 Nacos 把一个 CP 数据类型抽象成 `LogProcessor4CP`：每种需要 Raft 一致的数据（配置、持久实例元数据……）注册自己的 processor，Raft 日志提交后由对应 processor 应用到内存状态机。启动链路大致是：
 
@@ -39,7 +39,7 @@ Nacos 把一个 CP 数据类型抽象成 `LogProcessor4CP`：每种需要 Raft �
 - **StateMachine = LogProcessor4CP**：JRaft 的 `StateMachine.onApply(task)` 在 Nacos 侧由 `LogProcessor4CP` 实现，把已提交日志落到内存结构 + 外部 DB。
 - **多数派**：写入成功的判定是「日志复制到半数以上节点」，与 etcd / ZK 一致。
 
-## Leader 选举
+## Leader Election
 
 JRaft 遵循标准 Raft 选举：
 
@@ -50,7 +50,7 @@ JRaft 遵循标准 Raft 选举：
 
 Nacos 集群里 CP 侧同一时刻只有一个 Leader；`nacos_monitor{name='leaderStatus'}`（见 [Monitoring](/docs/CS/Framework/nacos/monitoring.md)）可观测当前节点是否为 Leader。
 
-## 日志复制与提交
+## Log Replication and Commit
 
 一次 CP 写（例如 `publishConfig`）的路径：
 
@@ -63,7 +63,7 @@ Nacos 集群里 CP 侧同一时刻只有一个 Leader；`nacos_monitor{name='lea
 
 只有 committed 的日志才对读可见——这保证了 `readAfterWrite` 与崩溃恢复后日志不丢（已提交日志不会被新 Leader 覆盖）。
 
-## 快照
+## Snapshot
 
 Raft 日志会无限增长，JRaft 通过**快照（Snapshot）**给日志「瘦身」：
 
@@ -71,7 +71,7 @@ Raft 日志会无限增长，JRaft 通过**快照（Snapshot）**给日志「瘦
 - 新加入节点或落后太多的节点，可先拉快照再追增量日志，避免重放全部历史。
 - 快照与「外部 DB（MySQL）里的 config_info」是两套：DB 是 Nacos 的业务持久层，Raft 快照是共识层自身的恢复点。
 
-## 成员变更
+## Member Change
 
 集群扩缩容时 CP 侧要改 Raft group 的成员（peers）：
 
@@ -79,7 +79,7 @@ Raft 日志会无限增长，JRaft 通过**快照（Snapshot）**给日志「瘦
 - 成员变更本身是 Raft 日志的一种，需经多数派提交，保证「加/减节点」过程不丢 committed 日志。
 - 变更期间注意：新旧 peer 列表重叠的过渡窗口，Nacos 要求 `cluster.conf` / 地址服务器里的成员与 Raft group 成员保持一致，否则会出现「成员列表不一致 → 数据不一致」（见 [Troubleshooting](/docs/CS/Framework/nacos/troubleshooting.md)）。
 
-## 端口（与 Distro / gRPC 区分）
+## Port (Distinguish from Distro / gRPC)
 
 Nacos 把同一个 `server.port`（默认 8848）派生出一组端口，容易混淆：
 
@@ -92,7 +92,7 @@ Nacos 把同一个 `server.port`（默认 8848）派生出一组端口，容易�
 
 JRaft 只在 CP 节点间用 7848 通信；Distro（AP）走另一套临时实例同步通道。集群部署必须保证 7848 在节点间互通，否则 CP 侧选不出 Leader 或日志复制失败。
 
-## 与 etcd-raft / Zab 的对照
+## Comparison with etcd-raft / Zab
 
 三者都解决「单 Leader 定序 + 多数派复制 + 提交后应用」，差异在**作用范围**：
 

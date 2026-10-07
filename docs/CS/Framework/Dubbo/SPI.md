@@ -12,7 +12,7 @@ Dubbo 没有直接使用 Java 原生的 [SPI](/docs/CS/Java/JDK/Basic/SPI.md)，
 
 本文版本基线：**Apache Dubbo 3.3.6**（tag `dubbo-3.3.6`）。所有代码块、SPI 文件内容、方法签名均逐文件核对自源码树，代码块首行注释给出文件路径与行号。本篇不重复 [Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md?id=scopemodel) 里 ScopeModel 的模型树与生命周期叙述，只讲**它如何决定扩展加载与实例归属**；扩展点的实际用法见 [Filter](/docs/CS/Framework/Dubbo/Filter.md) 与 [cluster](/docs/CS/Framework/Dubbo/cluster.md)。
 
-## 为什么不直接用 Java SPI
+## Why Not Use Java SPI Directly
 
 这一节的思想在 3.3.6 里没有变化，是理解 Dubbo 扩展设计的动机基础。Java SPI 的主要缺陷有五个：
 
@@ -34,7 +34,7 @@ tri=org.apache.dubbo.rpc.protocol.tri.TripleProtocol
 
 理由与 `@SPI` 注解的 javadoc 一致：如果扩展实现的静态字段或方法引用了第三方库，第三方库缺失时类初始化就会失败。若用旧格式（只写类名），Dubbo 连扩展的 id 都拿不到，无法把异常映射回具体扩展；改成 key-value 后，至少能报出「加载 `xxx` 扩展失败」并附上真实原因。
 
-## @SPI 注解
+## @SPI Annotation
 
 3.3.6 的定义只有这么几行：
 
@@ -84,7 +84,7 @@ public interface Protocol {
 | `InfraAdapter` / `DataStore` / `StatusChecker` | `@SPI(scope = APPLICATION)` | `InfraAdapter.java:29` 等 |
 | `ExtensionInjector` | `@SPI(scope = SELF)` | `ExtensionInjector.java:22` |
 
-### ExtensionScope 的四个取值
+### Four Values of ExtensionScope
 
 ```java
 // dubbo-common/src/main/java/org/apache/dubbo/common/extension/ExtensionScope.java
@@ -98,9 +98,9 @@ public enum ExtensionScope {
 
 这四条约束不是装饰性的注释，而是 `ExtensionDirector` 实际路由的依据，见下一节。
 
-## ScopeModel：扩展实例属于哪个模型
+## ScopeModel: Which Model an Extension Instance Belongs To
 
-### 三层模型
+### Three-Layer Model
 
 Dubbo 3.x 把「静态单例」拆成了一棵模型树，三个节点都继承 `ScopeModel`（`ScopeModel.java:41`）：
 
@@ -131,7 +131,7 @@ protected void initialize() {
 > [!TIP]
 > `addClassLoader` 会**递归加到所有父模型**（`ScopeModel.java:227-236`），也就是说子模型加的 ClassLoader 对父模型同样可见。这是子类加载器场景下扩展能被父层找到的原因。
 
-### ExtensionDirector：scope 的实际执行者
+### ExtensionDirector: The Actual Executor of scope
 
 `ExtensionDirector` 逐层对应一个 `ScopeModel`，它实现的查找逻辑类似 ClassLoader 的双亲委派，但**第一道门是 scope 匹配**：
 
@@ -214,7 +214,7 @@ private boolean isScopeMatched(Class<?> type) {
 > [!NOTE]
 > `SELF` 只在 `loader == null` 时才创建，且不走父委派。这正是 `ExtensionInjector` 选 `SELF` 的原因：依赖注入器必须**每个模型一份**，否则 ModuleModel 想注入依赖时会拿到 ApplicationModel 或 FrameworkModel 的注入器，跨作用域泄漏。
 
-### 拿 ExtensionLoader 的正确姿势
+### The Correct Way to Get ExtensionLoader
 
 三个层次，从旧到新：
 
@@ -263,7 +263,7 @@ public static <T> ExtensionLoader<T> getExtensionLoader(Class<T> type, ScopeMode
 > [!TIP]
 > `ScopeModelUtil.getExtensionLoader(Class, ScopeModel)` 这个签名**在 `ScopeModelUtil` 上，不在 `ExtensionLoader` 上**。`ExtensionLoader` 上那个只有单参版本，而且已废弃。
 
-### 模型的销毁
+### Model Destruction
 
 `ScopeModel.destroy()`（`ScopeModel.java:117-141`）按 `onDestroy → 逐个 removeClassLoader → beanFactory.destroy → extensionDirector.destroy()` 的顺序收尾；`ExtensionDirector.destroy()` 再逐个调 `ExtensionLoader.destroy()`，后者销毁自己缓存的 `Disposable` 扩展实例（`ExtensionLoader.java:249-278`）。销毁后 `ExtensionLoader` 的 `destroyed` 标志置位，所有取实例的入口都会先 `checkDestroyed()` 抛异常：
 
@@ -276,9 +276,9 @@ private void checkDestroyed() {
 }
 ```
 
-## ExtensionLoader 核心字段与生命周期
+## ExtensionLoader Core Fields and Lifecycle
 
-### 字段
+### Fields
 
 3.3.6 的字段列表与旧版差异极大。三个静态 Map 里的 `EXTENSION_LOADERS` / `EXTENSION_INSTANCES` **已删除**，`objectFactory` **已改名**为 `injector` 且类型从 `ExtensionFactory` 变成 `ExtensionInjector`：
 
@@ -345,7 +345,7 @@ ExtensionLoader(Class<?> type, ExtensionDirector extensionDirector, ScopeModel s
 
 `type == ExtensionInjector.class` 时注入器为 `null`，防止 `injectExtension` 递归注入自己。
 
-### 获取扩展的五步
+### Five Steps to Obtain an Extension
 
 `getExtension(name, wrap)` 的双检锁结构与旧版一致，但入口多了两道校验（`ExtensionLoader.java:557-566`）：
 
@@ -370,11 +370,11 @@ public T getExtension(String name, boolean wrap) {
 
 流程仍是五步：解析配置文件 → 加载实现类 → 实例化 → 依赖注入 → 包装类处理并返回。
 
-## 加载流程
+## Loading Process
 
 四个加载方法的签名在 3.3.6 全部变了，且中间插入了 `LoadingStrategy` 对象与 `special_spi.properties` 机制。
 
-### getExtensionClasses：锁换了
+### getExtensionClasses: Lock Changed
 
 ```java
 // dubbo-common/src/main/java/org/apache/dubbo/common/extension/ExtensionLoader.java:955-981
@@ -403,7 +403,7 @@ private Map<String, Class<?>> getExtensionClasses() {
 
 与旧版的 `synchronized (cachedClasses)` 相比只是换成了显式 `ReentrantLock`（配合 `try/finally`），但注意 `loadExtensionClasses()` 现在**抛 `InterruptedException`**，所以整个方法体被 try 包裹并转成 `IllegalStateException`。
 
-### loadExtensionClasses：传 strategy 对象
+### loadExtensionClasses: Pass strategy Object
 
 ```java
 // dubbo-common/src/main/java/org/apache/dubbo/common/extension/ExtensionLoader.java:987-1003
@@ -433,7 +433,7 @@ private Map<String, Class<?>> loadExtensionClasses() throws InterruptedException
 
 `LoadingStrategy` 在 3.x 是一组可插拔策略（`DubboLoadingStrategy` 用 `META-INF/dubbo/internal/` 且 `overridden() == true`），比旧版的四个散装参数多了 `includedPackages` / `onlyExtensionClassLoaderPackages` 等过滤维度。
 
-### loadDirectory：签名全变 + special_spi
+### loadDirectory: Signature Fully Changed + special_spi
 
 ```java
 // dubbo-common/src/main/java/org/apache/dubbo/common/extension/ExtensionLoader.java:1005-1021
@@ -497,7 +497,7 @@ private void loadDirectoryInternal(
 
 注意这里的 `scopeModel.getClassLoaders()`——这就是替代旧 `findClassLoader()` 的东西。`findClassLoader()` 在 3.3.6 里已经被删除，`ExtensionLoader` 中搜不到该方法；`ScopeModel.getClassLoaders()` 返回的是该模型及其所有父模型累积的 ClassLoader 集合（`ScopeModel.java:252-254`）。
 
-### loadResource：三个过滤维度
+### loadResource: Three Filtering Dimensions
 
 ```java
 // dubbo-common/src/main/java/org/apache/dubbo/common/extension/ExtensionLoader.java:1139-1189
@@ -551,7 +551,7 @@ private void loadResource(
 
 `#` 注释与空行裁剪仍然在 `getResourceContent` 里做，语义没变。
 
-### loadClass：首参是 ClassLoader + onClass 条件加载
+### loadClass: First Arg Is ClassLoader + onClass Conditional Loading
 
 ```java
 // dubbo-common/src/main/java/org/apache/dubbo/common/extension/ExtensionLoader.java:1266-1307
@@ -649,7 +649,7 @@ private void saveInExtensionClass(Map<String, Class<?>> extensionClasses, Class<
 }
 ```
 
-### createExtension：postProcess 三步
+### createExtension: Three Steps of postProcess
 
 `createExtension` 的骨架（AOP 包装 + 注入 + 初始化）没变，但实例创建与前后置处理都改了：
 
@@ -713,7 +713,7 @@ private T createExtension(String name, boolean wrap) {
 
 注意匹配条件比旧版更完整：旧版是 `wrapper == null || (contains(matches, name) && !contains(mismatches, name))`，3.3.6 补了 `ArrayUtils.isEmpty(wrapper.matches())` 分支，即**`matches` 为空表示匹配全部**。这一点与 `@Wrapper` 的 javadoc 一致，但旧代码里会漏判。
 
-## Adaptive 扩展生成
+## Adaptive Extension Generation
 
 ### getAdaptiveExtension
 
@@ -847,9 +847,9 @@ Protocol extension = (Protocol) scopeModel.getExtensionLoader(Protocol.class).ge
 
 也就是说 3.x 的自适应扩展**在运行时按 URL 携带的 `ScopeModel` 决定用哪个加载器**，这正是「同一个 `Protocol` 接口在多个应用里各自持有自己的 `Protocol` 实例」能成立的机制基础。旧版的生成代码是 `ExtensionLoader.getExtensionLoader(Protocol.class)`——写死了全局静态容器。
 
-## 激活与排序
+## Activation and Sorting
 
-### getActivateExtension 重写
+### getActivateExtension Override
 
 3.3.6 的实现与旧版差异集中在三点：**两级缓存**、**`containsExtension` 取代 `loadedNames` 去重**、**`DEFAULT_KEY` 分支重写**。
 
@@ -961,7 +961,7 @@ private boolean isActive(String[][] keyPairs, URL url) {
 
 `key:v` 精确匹配值，`key` 只要非空即命中；任一 key 命中就激活。
 
-### 排序：ActivateComparator
+### Sorting: ActivateComparator
 
 旧笔记写的 `ActivateComparator.COMPARATOR` 静态常量**已不存在**。3.3.6 是实例字段，通过构造入参拿 `ExtensionDirector`：
 
@@ -989,7 +989,7 @@ public class ActivateComparator implements Comparator<Class<?>> {
 
 ## IoC：ExtensionInjector
 
-### ExtensionFactory 已废弃
+### ExtensionFactory Is Deprecated
 
 3.3.6 里 `ExtensionFactory` 还在，但标了 `@Deprecated`，Javadoc 直接写「use `ExtensionInjector` instead」，并且 `@SPI` 是 `FRAMEWORK` 作用域：
 
@@ -1037,7 +1037,7 @@ public interface ExtensionInjector extends ExtensionAccessorAware {
 
 方法名从 `getExtension` 变成了 `getInstance`，实现类全部改名 `*ExtensionInjector`。
 
-### 三个实现与 SPI 文件
+### Three Implementations and SPI Files
 
 `ExtensionFactory` 的 SPI 文件**不存在**（已核实），只有 `ExtensionInjector` 的，三行：
 
@@ -1135,7 +1135,7 @@ private T injectExtension(T instance) {
 
 ![Compiler](img/Compiler.png)
 
-### 接口：双签名的兼容期
+### Interface: Compatibility Period of Dual Signatures
 
 3.3.6 的 `Compiler` 是**两个 default 方法互相委托**的结构，旧的两参签名标了 `@Deprecated`：
 
@@ -1182,7 +1182,7 @@ javassist=org.apache.dubbo.common.compiler.support.JavassistCompiler
 
 `AdaptiveCompiler` 通过 `DEFAULT_COMPILER`（由 `ApplicationConfig#setCompiler()` 设置）决定用哪个实现，未设置则用 `@SPI("javassist")` 声明的默认值。
 
-### JavassistCompiler 与 JdkCompiler
+### JavassistCompiler and JdkCompiler
 
 这两个类**仍在 `dubbo-common` 的 `org.apache.dubbo.common.compiler.support` 包**，类名、`NAME` 常量、结构都没有变化。`JavassistCompiler` 依然是「正则解析源码 → `CtClassBuilder` → `toClass`」这条路：
 
@@ -1230,7 +1230,7 @@ Dubbo AOP 用 wrapper 模式实现，一个类要成为 AOP wrapper 必须同时
 
 排序由 `@Wrapper(order = ...)` 控制，默认 `0`；`matches` 为空表示全匹配，`mismatches` 永远排除。加载后 `cachedWrapperClasses` 按 `WrapperComparator` 排序并反转，再逐层包裹。
 
-## 关键机制速查
+## Quick Reference of Key Mechanisms
 
 | 机制 | 3.3.6 位置 | 要点 |
 | --- | --- | --- |
@@ -1253,7 +1253,7 @@ Dubbo AOP 用 wrapper 模式实现，一个类要成为 AOP wrapper 必须同时
 | 编译器接口 | `Compiler.java:25-53` | 三参为主，两参 `@Deprecated` |
 | 生命周期 | `ExtensionLoader.java:249-285` | `destroy()` / `checkDestroyed()` |
 
-## 陷阱清单
+## Pitfall List
 
 1. **`@SPI` 没有 `dependencies`，也没有 `order`。** 排序看 `@Activate(order = ...)`，默认 `0`（`Activate.java:93`），升序排列，值越小越靠前。
 2. **`ExtensionLoader.getExtensionLoader(Class)` 已 `@Deprecated`**，且 `resetExtensionLoader(Class)` 是空方法体（`ExtensionLoader.java:241-247`）。新入口是 `scopeModel.getExtensionLoader(type)` 或 `ScopeModelUtil.getExtensionLoader(type, scopeModel)`。`getExtensionLoader(Class, ScopeModel)` 这个签名在 `ScopeModelUtil` 上，**不在 `ExtensionLoader` 上**。

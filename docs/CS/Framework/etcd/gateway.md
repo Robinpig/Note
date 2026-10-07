@@ -18,9 +18,9 @@
 
 三者都不是集群成员、不参与 Raft、不持久化数据，挂掉不影响 etcd 集群本身可用性。[etcd.md](/docs/CS/Framework/etcd/etcd.md) 的启动流程只把 server 本身讲完了，这三个入口在这里补全。
 
-## etcd gateway：L4 TCP 代理
+## etcd gateway: L4 TCP Proxy
 
-### 命令与 flag
+### Commands and Flags
 
 命令注册在 `server/etcdmain/gateway.go`：`newGatewayCommand()`（`:52`，`Use: "gateway <subcommand>"`）→ `newGatewayStartCommand()`（`:62`，`Short: "start the gateway"`），由 `init()`（`:47-49`）挂到 `rootCmd`。唯一子命令是 `start`。
 
@@ -44,7 +44,7 @@ etcd gateway start \
 
 没有 `--namespace`、没有 `--resolver-prefix`——**那些是 grpc-proxy 的 flag，不是 gateway 的**。
 
-### 实现：纯 TCP 转发
+### Implementation: Pure TCP Forwarding
 
 `startGateway`（`gateway.go:93-181`）的流程是：DNS 发现端点 → `stripSchema`（`gateway.go:82`）去掉 URL scheme → 把 `host:port` 拼成 `net.SRV` → `net.Listen` → 构造 `tcpproxy.TCPProxy` → `tp.Run()`。核心只有这几行：
 
@@ -70,9 +70,9 @@ etcd gateway start \
 > [!WARNING]
 > **这就是"纯 TCP"的全部含义。** 因为不解析 gRPC 帧，gateway **无法**做 watch 合并、lease 合并、namespace 隔离，也**无法**感知后端是否健康——`pick()` 只能靠 `net.Dial` 成功与否判断存活（`tryReactivate`，`userspace.go:41`，直接 Dial 一次再关掉）。同时它对**所有**流量一视同仁，包括 etcd 自己的 peer 流量（2380）与客户端流量（2379）——虽然实际部署不会这么用，但架构上它并不区分。把 L7 能力指望在它身上是最常见的误判。
 
-## etcd grpc-proxy start：L7 网关
+## etcd grpc-proxy start: L7 Gateway
 
-### 代码位置
+### Code Location
 
 **不在顶层 `grpc-proxy/`**——3.7.2 顶层没有这个目录。实际位置是 `server/proxy/grpcproxy/`，属于 `go.etcd.io/etcd/server/v3` module，包注释（`server/proxy/grpcproxy/doc.go:15`）自报家门：`// Package grpcproxy is an OSI level 7 proxy for etcd v3 API requests.`
 
@@ -97,7 +97,7 @@ etcd grpc-proxy start \
 
 客户端此后把请求打给 proxy 的 `--listen-addr`，proxy 转发到后端某一台 etcd。
 
-### 四项能力
+### Four Capabilities
 
 **1. Scalable watch（watch 合并）**
 
@@ -128,7 +128,7 @@ etcd grpc-proxy start --endpoints=localhost:2379 \
 etcdctl --endpoints=127.0.0.1:23790 put my-key abc   # 集群里实为 my-prefix/my-key
 ```
 
-### 服务发现与可观测性
+### Service Discovery and Observability
 
 proxy 可以把自己注册进 etcd 供客户端发现，机制与 [naming.md](/docs/CS/Framework/etcd/naming.md) 同源（proxy 作为 consumer 去 Watch 一个 prefix）：
 
@@ -146,7 +146,7 @@ etcd grpc-proxy start --endpoints=localhost:2379 \
 > [!WARNING]
 > 主接口同时服务 HTTP/2 与 HTTP/1.1。若按上面例子配了 TLS，用 `curl` 打 `/metrics`、`/health` 时需显式 `--http1.1`，否则协议协商失败拿不到响应。改用 `--metrics-addr` 起的独立接口则无此限制。
 
-### 3.7 新增 flag
+### 3.7 New Flags
 
 | flag | 位置 | 作用 |
 | :--- | :--- | :--- |
@@ -159,13 +159,13 @@ etcd grpc-proxy start --endpoints=localhost:2379 \
 
 前两个带 `experimental` 前缀的选项默认**关闭**，语义随版本变，别写死在运维脚本里当稳定契约。
 
-### 与集群运维的关系
+### Relationship with Cluster Operations
 
 proxy 不参与 Raft、不持有数据，因此**不计入 quorum**，挂掉不影响集群可用性，可随意水平扩缩。但它也是单点：所有经它的客户端请求都收敛到 proxy 选中的那一台 etcd，所以更适合"大量 watch/lease、读多写少"的扇出场景，而非替代多 endpoint 直连。成员变更、配额、备份恢复仍见 [cluster.md](/docs/CS/Framework/etcd/cluster.md)，客户端侧重试与一致性读语义见 [client.md](/docs/CS/Framework/etcd/client.md)。
 
-## grpc-gateway（REST 网关）已改为 flag
+## grpc-gateway (REST Gateway) Changed to Flag
 
-### 子命令形态已不存在
+### Subcommand Form No Longer Exists
 
 3.7.2 的 `server/etcdmain/` 只有 9 个非测试文件（`config.go` / `doc.go` / `etcd.go` / `gateway.go` / `grpc_proxy.go` / `grpc_proxy_logger.go` / `help.go` / `main.go` / `util.go`），**没有** `grpc_gateway.go`。分发逻辑在 `main.go:31`：
 
@@ -188,7 +188,7 @@ proxy 不参与 Raft、不持有数据，因此**不计入 quorum**，挂掉不�
 
 `grpc-gateway` 不在 case 列表里，会掉到 `startEtcdOrProxyV2`——被当成启动 server 的参数解析，结果是启动失败或报未知 flag，不会启动任何网关。
 
-### 现在的形态：etcd server 的启动 flag
+### Current Form: etcd server Startup Flags
 
 配置字段在 `server/embed/config.go:438`：
 
@@ -229,7 +229,7 @@ etcd --enable-grpc-gateway \
 
 marshaler 的选项值得注意（`serve.go:344-355`）：`UseProtoNames: true` + `EmitUnpopulated: false` + `DiscardUnknown: true`。也就是 **JSON 字段名用 proto 的原始下划线命名**（`range_end` 而非 `rangeEnd`），未知字段静默忽略。`server/embed/etcd.go:837` 那处是给 gateway 反向 dial 后端用的连接工厂。
 
-### REST 路径
+### REST Path
 
 路径前缀 `/v3/`，与 gRPC method 一一对应：
 
@@ -255,7 +255,7 @@ curl -L http://localhost:2379/v3/kv/range \
 > [!WARNING]
 > 走网关的写请求与直连 gRPC 走**同一条 Raft 链路**，一致性语义不变；但多一跳序列化，且 JSON 的 base64 心智负担大（做前缀扫描要自己算 `range_end` 的 base64）。**生产路径仍推荐直连 gRPC 客户端**。网关更适合调试与异构客户端接入。
 
-## cache 模块与本篇叙事的张力
+## Tension Between the cache Module and This Narrative
 
 3.7 顶层新增了独立 Go module `cache/`（`cache/go.mod:1` 是 `module go.etcd.io/etcd/cache/v3`，并登记在 `go.work` 的 `use` 列表里）。它是一个**客户端侧**的实验性缓存库：`Cache` 类型（`cache/cache.go:44`）为某个 key-prefix 维护一份 watch，把事件通过 `demux` 扇出给本地多个 watcher，并维护 `store`（最近一次观测到的快照）。
 
@@ -268,7 +268,7 @@ curl -L http://localhost:2379/v3/kv/range \
 > [!TIP]
 > 选型上：要在**客户端进程内**省掉 watch 的重复与序列化开销，用 `cache/`（注意它标了 Experimental）；要在**网络层**做多客户端的 watch/lease 合并与 namespace 隔离，用 `etcd grpc-proxy start`。两者不是替代关系，且**不能叠加使用**。
 
-## 陷阱清单
+## Pitfall List
 
 > [!WARNING]
 > 每一条都对应"按旧版印象操作 3.7.2 会踩的坑"。

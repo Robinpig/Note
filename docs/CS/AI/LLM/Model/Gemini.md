@@ -6,7 +6,7 @@
 
 Google 的档位命名是 **Pro／Flash／Flash-Lite** 三档，与 OpenAI 的四档、Anthropic 的四档都不同，**价格阶梯也是三家里最陡的**：经济档的 Flash 比旗舰 Pro 便宜 2.7 倍输入、4 倍输出，而同一家把最贵模型的缓存存储价定到 Flash 的 9 倍——同一套缓存机制在两个模型上的经济性完全不同。
 
-## 当前型号
+## Current Models
 
 | 模型 | API ID | 发布 | 状态 | 上下文 | 最大输出 | 知识截止 |
 | :--- | :--- | :--- | :--- | :---: | ---: | :--- |
@@ -29,7 +29,7 @@ Google 的档位命名是 **Pro／Flash／Flash-Lite** 三档，与 OpenAI 的�
 - **3.1 Pro 不支持 Computer Use。** 想用 computer use 只能走 `gemini-3.7-flash`（官方在预览文档里明确指向 3.7 Flash），而 3.8 Flash 的 computer use 标注为 Preview。一个旗舰模型的能力空缺，值得记一笔。
 - **旧的 Gemini 2.5 全家正在退场，且日期比一般公告更紧。** `gemini-2.5-pro`、`gemini-2.5-flash`、`gemini-2.5-flash-lite` 在 Gemini Developer API 的关停日是 **2026-10-16**，在 Agent Platform Gemini API（原 Vertex AI）是 **2026-10-20**（[Firebase 官方文档](https://firebase.google.cn/docs/ai-logic/faq-and-troubleshooting)）。两个平台日期不同，只有同时用两边才看得出差别。退役前一个月会封锁新访问，关停后请求返回 404。官方把退役日定义为「最早可能日」，只可能推迟不会提前。
 
-## Gemini 4 Argon 前沿档位
+## Gemini 4 Argon Frontier Tier
 
 2026-09-30 Google 公布 Gemini 4 家族首个型号 [Argon](https://blog.google/intl/en-mena/company-news/technology/gemini-4-argon-our-next-era-of-frontier-intelligence/)，这是本库写作时点 Google 最新的前沿模型，也是 Google 首次把输出上限从 64K 提到 **1M token**。
 
@@ -48,7 +48,7 @@ Google 的档位命名是 **Pro／Flash／Flash-Lite** 三档，与 OpenAI 的�
 
 内部用例里最具体的一个是 Argon agent 修改 Google 的 `libgav1`：替换 3.2 万行 SIMD 代码，产出与原视频输出逐位一致、**比原 Rust 移植版快 2.7 倍**的安全 Rust 实现。这类数字是厂商自报，不可作受控对比，但可作为「长周期软件工程」这条能力线的存在性证据。
 
-## 定价 四档服务与阶梯加价
+## Pricing: Four Tiers of Service and Tiered Markup
 
 价格单位为美元／百万 token，全部为付费层（Paid tier）数据。
 
@@ -80,7 +80,7 @@ Google 的档位命名是 **Pro／Flash／Flash-Lite** 三档，与 OpenAI 的�
 
 **Batch 与 Flex 价格相同但语义不同**：Batch 是异步接口，Flex 是同步接口、只是降级延迟与可用性。两者同价时按「能不能等」选，而不是按价选。Priority 买的是服务等级，不是更高的输出质量，不要因为「表格里有」就选它。
 
-## 陷阱一 促销价 2026-12-31 到期
+## Pitfall One: Promo Price Expires 2026-12-31
 
 Google 在发布时就同时公示了两套价，`gemini-3.6-flash`、`gemini-3.7-flash`、`gemini-3.8-flash` 共享同一张时间表：
 
@@ -99,7 +99,7 @@ Google 在发布时就同时公示了两套价，`gemini-3.6-flash`、`gemini-3.
 
 > 来源等级说明：3.8／3.7／3.6 Flash 的促销价与 2027 倍率由多个二手源一致给出并与本库既有的 Overview.md 记录一致；官方定价页的 zh-cn 快照本次返回的范围覆盖 3.6／3.5／3.1 各档但未截到 3.8 与 3.7 两行，故此三行标注为二手源。缓存存储的 $0.50→$1.00 只找到二手源，官方页面快照中 3.5／3.1 各档显示的是 $1.00。
 
-## 陷阱二 thinking token 按输出价计费
+## Pitfall Two: thinking token Billed at Output Price
 
 **这是三家里最激进的计费口径。** 官方定价表里每一行的输出价都标注「含思考 token」（官方页原文：「输出价格（包括思考 token）」），也就是说 `total_thought_tokens` 与 `candidatesTokenCount` 一起按输出单价计费。
 
@@ -120,7 +120,7 @@ Google 在发布时就同时公示了两套价，`gemini-3.6-flash`、`gemini-3.
 
 一个粗算例（2026 促销价，Standard，未缓存）：20 万输入 + 2 万思考 + 5 千可见输出 = `0.2×0.75 + 0.025×3.75 = $0.24375`。若只把 5 千可见输出计入，就少算了 2 万思考 token 的钱。
 
-## 陷阱三 缓存有两个计费表
+## Pitfall Three: Cache Has Two Billing Tables
 
 Gemini 的上下文缓存（context caching）**同时产生两笔费用**，只算读价一定算错：
 
@@ -137,7 +137,7 @@ Gemini 的上下文缓存（context caching）**同时产生两笔费用**，只
 
 缓存的折扣力度本身在 Google 是全行业最深的之一——缓存读只有标准输入价的 **0.1×**（Anthropic 的 Fable 5.1 是 0.025×、Opus 5.5 是 0.05×，但它们的无台阶结构另有优势）。长系统提示、重复前缀的负载在这里收益最直接。
 
-## 陷阱四 200K 台阶是整单重算
+## Pitfall Four: 200K Step Triggers Whole-Order Recompute
 
 **Gemini 3.1 Pro 是三家里唯一有「公开的旗舰长上下文加价台阶」的模型**，且它加的幅度比 OpenAI 更狠：
 
@@ -150,7 +150,7 @@ Gemini 的上下文缓存（context caching）**同时产生两笔费用**，只
 
 **Flash 系没有这个问题**：3.1～3.8 Flash 的官方定价表**没有长上下文 token 档**，官方快照明确写「Its published Gemini Developer API table does not add a separate long-context token tier」。大 prompt 贵只是因为 token 更多，不是单价跳档。
 
-## Grounding 与工具计费
+## Grounding and Tool Billing
 
 **Grounding（接地）把「一次 API 调用」变成「一次调用 + N 次搜索」，N 不可控**，这是 agentic 负载里第二个账单黑洞。
 
@@ -165,7 +165,7 @@ Gemini 的上下文缓存（context caching）**同时产生两笔费用**，只
 
 其他按量工具（代码执行等）同样独立计费，不含在 token 价里。
 
-## 免费层与付费层
+## Free Tier and Paid Tier
 
 官方定价页把三个层级并排列出，差异不只是价格：
 
@@ -187,7 +187,7 @@ Gemini 的上下文缓存（context caching）**同时产生两笔费用**，只
 
 **免费层 Pro 已于 2026-04-01 移出**（`gemini-3.1-pro-preview`、`gemini-3-pro-preview`、`gemini-2.5-pro` 全部改为仅付费），Flash 与 Flash-Lite 保留免费但日配额收紧。注意这一改动**没有单独的 changelog 公告**，是通过 API 报错「This model requires a billing-enabled project」发现的——Google 只更新了定价文档。另外付费层自 2026-04-01 起新增了 Flex 与 Priority 两个按需档。
 
-## 思考控制 thinking_level
+## Thinking Control thinking_level
 
 Gemini 的推理旋钮是 `thinking_level`（3.x）或 `thinking_budget`（2.5），通过 OpenAI 兼容层则映射为 `reasoning_effort`。官方给出的完整映射表：
 
@@ -204,7 +204,7 @@ Gemini 的推理旋钮是 `thinking_level`（3.x）或 `thinking_budget`（2.5�
 - **3.8 Flash 的默认 thinking level 是 `medium`，而 Gemini 3 Pro 的默认是 `high`。**在 Pro 上调好的 prompt 迁到 Flash 之后推理量会自动变少，除非显式设 level。
 - **thinking 关不掉。** 官方原文：设 `reasoning_effort="none"` 只对 **2.5 系非Pro 模型**有效；**Gemini 2.5 Pro 与全部 3 系模型的 reasoning 无法关闭**。这与 Anthropic 的 adaptive thinking 不可关是同一类锁定，但方向相反——Anthropic 是没有关闭开关，Google 是有开关但新一代没有。
 
-## 基准
+## Benchmarks
 
 厂商自报，且各家评测集、effort 设定与 harness 都不同，**不是受控对比**。Terminal-Bench 在不同厂商那里甚至不是同一版本（Claude／OpenAI 用 4.0，Google 的 3.8 Flash 被记录的是 2.1），**跨厂商比这个分数是错的**。
 
@@ -222,7 +222,7 @@ Gemini 侧真正值得注意的不是绝对分数，是两个第三方定位：*
 
 第三方也记录了一个成本侧的平衡点：**AA 测到 3.8 Flash 在长周期文档工作流上完成的任务数是 3.7 Flash 的三倍以上**。按任务计价时，Flash 内部换代的收益比标价看起来大得多。
 
-## 协议兼容
+## Protocol Compatibility
 
 **Gemini API 官方支持 OpenAI SDK 与 OpenAI REST 兼容层**，这一点三家都有，但 Google 的实现细节值得写清。
 
@@ -253,7 +253,7 @@ model    = "google/gemini-3.5-flash"
 
 **Gemini API 不提供 Anthropic SDK 兼容 Base URL。** 这与 DeepSeek 不同——DeepSeek 提供 `https://api.deepseek.com/anthropic`，让 Claude Code／Claude Agent SDK 零改动接入。Google 侧的做法是通过 OpenAI 兼容层间接接入，且 thinking 控制的参数名不同（见上一节的映射表），迁移代码时不能想当然地沿用 `thinking: {type: ...}`。
 
-## AI Studio 与 Gemini Enterprise Agent Platform
+## AI Studio and Gemini Enterprise Agent Platform
 
 ⚠️ **Vertex AI 已于 2026-04-22（Cloud Next）改名 Gemini Enterprise Agent Platform**，旧名 Vertex AI 在文档与控制台里会与新名共存一段时间。这是一次品牌重构而非新产品，底层服务名不变（`aiplatform.googleapis.com`）。迁移期的命名对照里最容易踩的几个：
 
@@ -289,7 +289,7 @@ model    = "google/gemini-3.5-flash"
 
 来源等级：10% 加价只找到二手源（精英云中文页，与 Overview.md 记录的Anthropic／OpenAI 加价幅度一致），**未能确认 2026-07-01 这个生效日期**，官方页面未取到。
 
-## Gemma 开放权重系列
+## Gemma Open-Weight Series
 
 **Gemma 4 于 2026-03-31 至 04-02 发布，是 Gemma 家族第一次采用 Apache 2.0**——此前 Gemma 3 用的是带限制的 Gemma Terms of Use。如果你在 2026-04 之前因为许可问题排除了 Gemma，这个理由现在不成立了。
 

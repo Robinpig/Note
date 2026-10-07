@@ -257,7 +257,7 @@ BPF 调度器的全部能力就是一张回调表 `struct sched_ext_ops`（定�
 
 `name` 会成为这个调度器的标识，`SCX_OPS_NAME_LEN` 为 128。
 
-## 生命周期
+## Lifecycle
 
 一个普通任务从诞生到退场，SCX 侧的调用序列是：
 
@@ -342,7 +342,7 @@ enum scx_kf_mask {
 };
 ```
 
-## 安全网
+## Safety Net
 
 把调度策略交给第三方代码，最大的风险是**调度器写错导致整机停摆**。sched_ext 用两层兜底化解：
 看门狗负责发现，卸载路径负责恢复。
@@ -450,7 +450,7 @@ static void task_tick_scx(struct rq *rq, struct task_struct *curr, int queued)
 
 这套设计让"试一个新调度器"的代价上限变得可接受：最坏情况是卡 `timeout_ms` 毫秒后自动回落。
 
-## 实例：scx_simple
+## Example: scx_simple
 
 内核自带的 `tools/sched_ext/scx_simple.bpf.c` 是最短的完整范例——默认实现**全局加权 vtime 公平调度**，
 也可切到 FIFO。先看骨架：
@@ -581,7 +581,7 @@ SCX_OPS_DEFINE(simple_ops,
 对照这张表回看 ops 全景：一个能跑的调度器最少只需 `enqueue` + `dispatch`，
 其余都是可选的优化与钩子。`init` 标为 `SLEEPABLE`，因为创建 DSQ 需要分配。
 
-## 与其它子系统的边界
+## Boundaries with Other Subsystems
 
 - **cgroup**：`CONFIG_EXT_GROUP_SCHED` 打开后，cgroup 的创建/销毁/迁移/权重变更都会回调 BPF 侧
   （`cgroup_init`、`cgroup_prep_move`、`cgroup_move`、`cgroup_set_weight` 等），
@@ -595,7 +595,7 @@ SCX_OPS_DEFINE(simple_ops,
 - **BPF 基础设施**：整个机制建立在 BPF `struct_ops` 之上，verifier 负责校验安全性，
   见 [eBPF](/docs/CS/OS/Linux/Tools/eBPF.md)。
 
-## 编译、装载与观测
+## Compilation, Loading, and Observation
 
 开启 `CONFIG_SCHED_CLASS_EXT` 并打开 BPF 支持后，内核侧就位。调度器本身是普通 BPF 对象，
 由用户态程序（如 `scx_simple`、`scx_lavd`）通过 libbpf 的 `struct_ops` 接口加载；

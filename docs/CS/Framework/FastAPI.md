@@ -44,7 +44,7 @@ uvicorn main:app --reload
 
 ## Request
 
-### Pydantic 请求体
+### Pydantic Request Body
 
 用 Pydantic `BaseModel` 声明请求体，FastAPI 会自动完成 JSON 解析、类型校验（失败返回 422）和 OpenAPI schema 生成。
 
@@ -62,7 +62,7 @@ async def create_item(item: Item):
     return {"item_name": item.name, "price_with_tax": item.price * 1.13}
 ```
 
-### 参数来源
+### Parameter Sources
 
 | 来源 | 声明方式 | 示例 |
 |---|---|---|
@@ -73,7 +73,7 @@ async def create_item(item: Item):
 | Cookie | `Cookie()` | `session_id: str \| None = Cookie()` |
 | 表单/文件 | `Form()` / `UploadFile` | `file: UploadFile` |
 
-### 响应模型
+### Response Model
 
 通过 `response_model` 声明输出结构，可做字段过滤（如隐藏内部字段）和文档生成：
 
@@ -139,7 +139,7 @@ HTTP Request
 
 与传统 WSGI（Flask + Gunicorn 同步模型）不同，ASGI 原生支持异步、WebSocket 和长连接，请求不再被一个请求一个线程的模型限制。
 
-### 中间件与生命周期
+### Middleware and Lifespan
 
 ```py
 import time
@@ -170,7 +170,7 @@ app.add_middleware(
 
 ## Deployment
 
-### 多 worker
+### Multiple Workers
 
 生产环境用 Uvicorn 的多 worker 模式，或 Gunicorn 管理 Uvicorn worker（支持优雅重启）：
 
@@ -180,11 +180,11 @@ uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
 gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker
 ```
 
-### 反向代理
+### Reverse Proxy
 
 单机前置 [Nginx](/docs/CS/CN/nginx/nginx.md) 处理 TLS、静态文件和负载均衡，把 `/api` 反代到 Uvicorn（`proxy_pass http://127.0.0.1:8000`）。容器化部署时 Nginx 与 Uvicorn 分容器编排即可。
 
-### 文档与调试
+### Documentation and Debugging
 
 启动后访问：
 
@@ -194,10 +194,12 @@ gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker
 
 ## Links
 
-- [Python](/docs/CS/Python/README.md) — Python 笔记目录
-- [LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md) — 同为 Python 生态框架
-- [Nginx](/docs/CS/CN/nginx/nginx.md) — 生产环境反向代理
-- [Concurrency](/docs/CS/SE/Concurrency.md) — 协程与并发模型对照
+- [README](/docs/CS/Python/README.md)
+- [Typing](/docs/CS/Python/Typing.md)
+- [Asyncio](/docs/CS/Python/Asyncio.md)
+- [LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md)
+- [Nginx](/docs/CS/CN/nginx/nginx.md)
+- [Concurrency](/docs/CS/SE/Concurrency.md)
 
 ## References
 

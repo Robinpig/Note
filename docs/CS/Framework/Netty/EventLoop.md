@@ -159,7 +159,7 @@ public Future<?> shutdownGracefully(long quietPeriod, long timeout, TimeUnit uni
 }
 ```
 
-## Reactor 线程模型
+## Reactor Thread Model
 
 Reactor 的核心思想：用少量事件循环线程批量等待 IO 事件（epoll/select，见 [multiplexing](/docs/CS/OS/Linux/IO/multiplexing.md)），就绪后分发给处理逻辑。按"事件循环线程 × 业务处理"的组合分三种形态：
 
@@ -1350,7 +1350,7 @@ public interface EventLoop extends OrderedEventExecutor, EventLoopGroup {
 
 `Unsafe` 是给 transport 实现用的内部出口：注册与解绑 Channel 必须发生在 EventLoop 线程上，所以它被挂进 EventLoop 而不是 Channel。
 
-### IoHandler 接口
+### IoHandler Interface
 
 `IoHandler` 直接继承 `EventLoop.Unsafe`，即注册能力是 IO 处理的前置部分。除 `wakeup(boolean)` 之外，所有方法都必须在 EventLoop 线程上执行，用户代码不应直接调用。
 

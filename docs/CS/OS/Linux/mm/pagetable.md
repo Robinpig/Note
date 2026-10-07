@@ -13,7 +13,7 @@
 
 > 本篇源码全部对照本机 `v7.2.7` 源码树核实。页表是内核里**跨架构差异最大**的子系统之一（x86/arm64/riscv 的层级数、位布局、flush 方式都不同），本篇以 **x86-64** 为主线，通用部分标出 `include/asm-generic/` 的实现。
 
-## 为什么是多级
+## Why It Is Multi-Level
 
 最朴素的方案是一张平铺的映射表：虚拟页号做下标，表项存物理页号。64 位机器上若支持 48 位虚拟地址（4 级页表的常见配置），虚拟页号有 `2^48 / 4096 = 2^36` 个，每项 8 字节：
 
@@ -29,7 +29,7 @@
 
 各级的"扇出"取 512（9 位）= `PAGE_SIZE / sizeof(entry) = 4096 / 8`——**一张表恰好占一页**。这是个刻意的设计：页表页可以像普通页一样从 buddy 分配、被换出、被回收，不需要任何特殊机制。
 
-## x86-64 的层级布局
+## The Hierarchical Layout of x86-64
 
 4 级页表把 48 位虚拟地址切成 5 段（4 个索引 + 1 个页内偏移）：
 
@@ -97,7 +97,7 @@ unsigned int ptrs_per_p4d __ro_after_init = 1;
 #define pgtable_l5_enabled() cpu_feature_enabled(X86_FEATURE_LA57)
 ```
 
-## 折叠：不存在的层级
+## Collapse: Non-Existent Levels
 
 如果内核为每个架构都写一遍"4 级怎么走、5 级怎么走"，代码量会爆炸。Linux 的解法是**折叠（folding）**：把不存在的层抽象成"恒等映射"，让上层代码写同一份遍历逻辑。
 
@@ -138,7 +138,7 @@ x86-64 上三种折叠的实际状态：
 
 对比 32 位无 PAE 的 x86：只有两级，PUD 与 PMD 都折叠。这解释了为什么通用代码里到处是 `#ifndef __PAGETABLE_*_FOLDED`——**同一份 `mm/memory.c` 要同时服务 2、3、4、5 级页表的架构**。
 
-## 表项里有什么
+## What Is Inside an Entry
 
 一个页表项是 64 位，前 12 位是标志位（因为页对齐，低 12 位在物理地址中必然为 0，可以挪用），其余位存物理页帧号。
 
@@ -244,7 +244,7 @@ PGD/P4D/PUD/PMD 层指向下一级表的表项**必须置 RW**，否则它下面
 
 bit 1 在 swap 项里表示"该页被换出时是脏的"，而它在别处又表示 RW，所以取用时必须先判 `present == 0`。这套编码与 [Swap](/docs/CS/OS/Linux/Swap.md) 的 `swp_entry_t` 共同构成了非存在 PTE 的完整语义空间。
 
-## 页表页是特殊的页：ptdesc
+## Page Table Pages Are Special Pages: ptdesc
 
 页表页本身也是从 buddy 分配的一页，但在内核里的"身份"与普通页不同。早期内核直接复用 `struct page` 的 union 字段描述页表页，代码里到处是"这个 page 其实是页表"的隐含约定。6.4 起引入 `struct ptdesc` 把它显式化：
 
@@ -345,7 +345,7 @@ enum pt_flags {
 
 页表页靠 `PT_kernel` 区分"内核页表"与"用户页表"，这个区别在释放路径上导致完全不同的行为（见下节）。
 
-## 分配与构造
+## Allocation and Construction
 
 分配一个页表页就是分配一个复合页，然后把它当作 ptdesc 看：
 
@@ -393,7 +393,7 @@ static inline bool pagetable_pte_ctor(struct mm_struct *mm,
 
 注意 `mm != &init_mm` 这个判断：内核页表（`init_mm`）的 PTE 页不加锁，因为内核地址空间不并发修改用户 PTE。这是页表锁配置的第一处分叉。
 
-### 页表锁的三种配置
+### Three Configurations of the Page Table Lock
 
 页表的并发保护不是一件简单的事。`include/linux/mm.h` 里的三档配置：
 
@@ -438,7 +438,7 @@ static inline spinlock_t *pte_lockptr(struct mm_struct *mm, pmd_t *pmd)
 
 split ptlock 是并行缺页性能的关键。没有它，多线程进程的缺页会全部卡在 `mm->page_table_lock` 上。
 
-### 惰性生长：缺页时逐级建表
+### Lazy Growth: Building Tables Level by Level on Page Fault
 
 进程启动时页表几乎是空的。**页表是随着地址空间被访问而逐步长出来的**，这个"长"的过程就在缺页路径里：
 
@@ -497,7 +497,7 @@ static inline pud_t *pud_alloc(struct mm_struct *mm, p4d_t *p4d,
 
 **`retry_pud` 是 THP 竞争的产物。** `create_huge_pud` 与 `pmd_alloc` 可能并发在同一 pud 项上动作，`pud_trans_unstable()` 检测到中间态就重试整段。
 
-### 竞态处理与写屏障
+### Race Handling and Write Barriers
 
 真正干活的 `__pud_alloc` 展示了页表分配的标准竞态模式：
 
@@ -567,7 +567,7 @@ void pmd_install(struct mm_struct *mm, pmd_t *pmd, pgtable_t *pte)
 
 语义与 `__pud_alloc`/`__pmd_alloc` 完全等价，只是先写了竞态输的分支。另外它没有 `mm_inc_nr_*` 调用——因为 **`mm_struct` 里根本没有 `nr_p4ds` 计数器**（只有 `nr_ptes` / `nr_pmds` / `nr_puds`）。P4D 层的表数量在 5 级下也很少，不值得单独记账。
 
-### 内核页表与 PTI 影子
+### Kernel Page Tables and the PTI Shadow
 
 新进程的 PGD 不是凭空建的，它要从"内核模板"复制内核那一半：
 
@@ -624,7 +624,7 @@ PTI（页表隔离，Meltdown 缓解）在这里又叠了一层：用户态执�
  */
 ```
 
-### 释放：内核页表的异步路径
+### Release: Asynchronous Path for Kernel Page Tables
 
 释放是分配的反向操作，但多了一条分叉：
 
@@ -667,9 +667,9 @@ static void kernel_pgtable_work_func(struct work_struct *work)
 
 这与 SVA（Shared Virtual Addressing）有关：设备可以拿到与 CPU 相同的虚拟地址空间视图，其 IOMMU 侧也有翻译缓存。内核页表被释放时，必须确保设备侧的翻译也失效。把这件事从同步路径挪到 workqueue，是为了不把 IOMMU 的失效延迟压在调用者身上。
 
-## 遍历与并发
+## Traversal and Concurrency
 
-### 纯算术的偏移
+### Pure Arithmetic Offsets
 
 前三层的遍历就是加法与掩码，没有任何内存访问：
 
@@ -682,7 +682,7 @@ pmd = pmd_offset(pud, address);
 
 每一级都是"取表项里的物理地址 → 转成内核虚拟地址 → 加上本层索引"。直到最后一级才有真正的"页表页遍历"语义。
 
-### pte_offset_map 家族：语义在 v6.11 后变过
+### The pte_offset_map Family: Semantics Changed after v6.11
 
 拿到 pmd 之后访问 PTE 表，是页表并发里最微妙的一步。现代内核的接口不是"算个指针"，而是一个**可能失败的映射操作**：
 
@@ -746,7 +746,7 @@ static unsigned long pmdp_get_lockless_start(void)
 
 它关中断的原因在注释里：某些配置下 pmd 分高低两半读，屏障无法保证两次读来自同一个版本；但**关中断能阻止其间的 TLB flush**，从而保证匹配。这又是"用关中断换取读一致性"的老手法，与 GUP-fast 的做法同源。
 
-### 加锁版本与重试
+### Locked Version and Retry
 
 需要修改 PTE 的路径用带锁版本：
 
@@ -823,7 +823,7 @@ pte_t *pte_offset_map_rw_nolock(struct mm_struct *mm, pmd_t *pmd,
 
 `free_pgtables()` **不拿页表锁就释放页表**，也可能完全不用 RCU。所以像 khugepaged 这样的"局外人"，在 VMA 已经从 mm 摘除、或 `mm_users` 已归零之后，**绝对不能**再用 `pte_offset_map()` 系列去碰它。
 
-## 释放页表：递归下降
+## Releasing Page Tables: Recursive Descent
 
 页表的释放是一条自顶向下的递归链：
 
@@ -890,7 +890,7 @@ static void free_pte_range(struct mmu_gather *tlb, pmd_t *pmd,
 
 `0` 在地址空间里既是"最底"（`addr`/`floor`）又是"最顶"（`end`/`ceiling` 用 0 表示 2^64），所以比较一律要用 `end - 1` / `ceiling - 1`。
 
-### 入口：free_pgtables 的新签名
+### Entry: The New Signature of free_pgtables
 
 v7.2.7 的入口签名与老版本完全不同：
 
@@ -932,9 +932,9 @@ void free_pgtables(struct mmu_gather *tlb, struct unmap_desc *unmap)
 
 `unlink_anon_vmas()` 的调用位置也有讲究，注释写明：**在释放页表之前必须先把 VMA 从 rmap 和 truncate 路径上摘除**，否则回收器可能通过 rmap 找到一张正在被拆的 VMA。
 
-## mmu_gather：批量 TLB 失效
+## mmu_gather: Batch TLB Invalidation
 
-### 核心不变量
+### Core Invariants
 
 页表改完，TLB 里的旧翻译就成了谎言。但"改一个 PTE 立刻刷一次 TLB"是不可行的——一次 `munmap` 可能撤销几十万个页，每个都发一条 IPI 会让系统瘫痪。
 
@@ -961,7 +961,7 @@ void free_pgtables(struct mmu_gather *tlb, struct unmap_desc *unmap)
 
 `mmu_gather` 就是把这三步**在时间上拉开、在空间上批量**的载体。
 
-### 结构
+### Structure
 
 ```c
 struct mmu_gather {
@@ -1018,7 +1018,7 @@ static inline unsigned long tlb_get_unmap_shift(struct mmu_gather *tlb)
 
 这不只是优化。有些架构（arm64）的 TLB 失效指令**必须指定层级**，且"刷 4K"与"刷 2M"是不同的指令。若只清了 pmd 项却按 PAGE 粒度去刷，某些硬件的翻译缓存不会失效。x86 不需要这种精确性，但通用代码必须为所有架构负责。
 
-### 批处理与两处上限
+### Batching and Two Upper Bounds
 
 页释放也批量化。指针数组就地放在结构里，用一段"借用后续空间"的技巧：
 
@@ -1069,7 +1069,7 @@ struct mmu_gather_batch {
 
 `encode_page(page, flags)` / `encoded_page_flags()` / `encode_nr_pages()`——因为 `struct page` 指针天然对齐，低位空闲，正好用来记 `ENCODED_PAGE_BIT_DELAY_RMAP` 和"后面还跟一个 nr_pages 项"。这与 [list.md](/docs/CS/OS/Linux/struct/list.md) 里 `hlist` 借用低位的思路同源：**在指针里抠位**是不增加任何存储的元数据方案。
 
-### 四级释放宏的层级对应
+### Hierarchical Correspondence of the Four-Level Free Macros
 
 下面这组宏最容易记错对应关系：
 
@@ -1104,7 +1104,7 @@ struct mmu_gather_batch {
 
 三个宏都会置 `tlb->freed_tables = 1`，它让 `tlb_flush_mmu_tlbonly()` 知道"有表结构被拆了，必须真刷"，也是 `tlb_finish_mmu()` 里触发全量刷新的条件之一。
 
-### 生命周期
+### Lifecycle
 
 ```c
 tlb_gather_mmu(tlb, mm)        /* 或 fullmm 版本 / vma 版本 */
@@ -1176,7 +1176,7 @@ void tlb_finish_mmu(struct mmu_gather *tlb)
 
 `mm_tlb_flush_nested()` 检测到**有别的线程也在做批处理式的 PTE 修改**时，直接升级为 fullmm 全量刷。原因是两个线程各自攒批、各自延迟失效，交错起来可能让对方的失效被"吞掉"，宁可暴力刷一遍。
 
-## 页表页的延迟释放
+## Deferred Release of Page Table Pages
 
 页表页不能用完就 `free_page()`，这是与普通页最本质的区别。原因在注释里：
 
@@ -1215,7 +1215,7 @@ void tlb_finish_mmu(struct mmu_gather *tlb)
 
 逻辑链条是：
 
-1. **[GUP-fast](/docs/CS/OS/Linux/mm/gup.md?id=快路径：关中断、无锁遍历页表) 之类的软件遍历器是无锁的**，只靠"遍历期间关中断"防身（见前文 `pmdp_get_lockless_start`）；
+1. **[GUP-fast](/docs/CS/OS/Linux/mm/gup.md?id=fast-path-disabling-interrupts-lockless-page-table-walk) 之类的软件遍历器是无锁的**，只靠"遍历期间关中断"防身（见前文 `pmdp_get_lockless_start`）；
 2. 靠 IPI 做 TLB 失效的架构上，"摘除 → 刷 TLB → 释放"的顺序**天然**与关中断的遍历者同步——因为关中断会推迟 TLB flush 的完成，遍历者不可能看到已释放的页；
 3. 但**不用 IPI 的架构**（硬件跨 CPU 同步、或半虚拟化交给 hypervisor）没有这个副作用，必须显式延迟释放；
 4. 手段就是**批量 + `call_rcu`**，选用 sched RCU 变体，因为"关中断/关抢占同时也阻塞了 RCU 宽限期"。
@@ -1290,7 +1290,7 @@ void pte_free_defer(struct mm_struct *mm, pgtable_t pgtable)
 }
 ```
 
-## TLB 与 shootdown
+## TLB and Shootdown
 
 TLB 是 MMU 内部的一张缓存表，缓存"虚拟页号 → 物理页帧 + 权限"的最近翻译结果。一次翻译命中 TLB 时，MMU **根本不读页表**——这意味着**改了页表但没刷 TLB，新的翻译不会生效**。
 
@@ -1344,7 +1344,7 @@ static inline void tlb_end_vma(struct mmu_gather *tlb, struct vm_area_struct *vm
 
 `VM_PFNMAP` / `VM_MIXEDMAP`（直接映射设备内存或原始 PFN 的 VMA）没有页帧可追踪，`munmap` 与 `unmap_mapping_range` 之间可能出现"TLBI 尚未生效但 VMA 已摘除"的窗口，导致后者提前返回。所以对这类 VMA，`tlb_free_vmas()` 会在 unlink 前**强制先刷一遍**。
 
-## delayed_rmap：TLB 与 rmap 的顺序
+## delayed_rmap: Ordering between TLB and rmap
 
 这是 v7.2.7 里一个精妙的顺序约束。回看前文 zap 路径的五步，其中第四步在有条件时会被**推迟**：
 
@@ -1436,7 +1436,7 @@ S390 同步刷远端 TLB、UP 根本没有远端 TLB——两者都不存在那�
 
 **小 folio 走单页路径、大 folio 走批量路径**，注释说明这是为了让"小 folio 这个最常见情况尽可能快"。`folio_pte_batch()` 检查连续的 PTE 是否属于同一个大 folio 且属性一致，是带 `max_nr` 上限的保守扫描。
 
-## 页表回收
+## Page Table Reclaim
 
 长跑进程有一个隐蔽的泄漏：反复 `mmap`/`munmap` 会把页表页堆起来。每一次新的映射可能触发新的 PTE 表分配，而 munmap 释放时若地址范围不满足"整层无其他 VMA"的条件，那一层表就留着了。空表本身不占多少，但数量会累积。
 
@@ -1505,7 +1505,7 @@ static bool zap_empty_pte_table(struct mm_struct *mm, pmd_t *pmd,
 
 页表回收是个"锦上添花"的机制——不参与正确性，只在恰当的时候省下几页内存。所以它的每一步都以"拿不到锁就放弃""条件不满足就跳过"的方式退让，绝不阻塞主流程。
 
-## 与其它子系统的咬合
+## Interaction with Other Subsystems
 
 **与 VMA 的关系**：VMA 是"约定"，页表是"兑现"。VMA 记录"这段地址是文件映射、可写、可执行"；页表记录"这个 4K 页现在映射到哪个物理页帧"。缺页处理就是把前者的性质翻译成后者的具体表项。这也解释了为什么 `free_pgtables()` 必须先 `unlink_anon_vmas()`——拆页表之前得先把 VMA 从所有反向索引里摘掉。
 
@@ -1519,7 +1519,7 @@ static bool zap_empty_pte_table(struct mm_struct *mm, pmd_t *pmd,
 
 **与锁子系统**：`ptl` 的三种配置（见前文表格）本身就是 [Lock](/docs/CS/OS/Linux/Lock/README.md) 里"锁粒度与争用"主题在页表上的具体化。而 `mmap_lock` → per-VMA lock 的演进（`vma_start_write`、`pte_offset_map_*_nolock`），是把一把大锁拆成细粒度锁之后，**迫使页表接口暴露新的"不加锁"变体**这一连锁反应的实例。
 
-## 观测与排障
+## Observation and Troubleshooting
 
 | 手段 | 看什么 |
 |---|---|

@@ -1,4 +1,4 @@
-# Istio 性能调优
+# Istio Performance Tuning
 
 ## Introduction
 
@@ -13,7 +13,7 @@
 >
 > 即：**1.31 文档站的资源与延迟数字是 1.24 实测数据的沿用，不是 1.31 重新测量。** 引用时必须标注 1.24。
 
-## 官方数据（标注 1.24）
+## Official Data (Labeled 1.24)
 
 测试条件：1000 http req/s、1 KB payload。
 
@@ -37,7 +37,7 @@
 
 延迟机制上有一条值得引用的说明：Envoy 在响应发回客户端**之后**才收集 raw telemetry，该时间不计入单请求总耗时，但因 worker 仍被占用会推高**下一个请求的排队等待**——所以它影响的是平均与尾延迟，而非单请求延迟。
 
-## 最核心的调优项：CPU limit 决定 worker 线程数
+## Most Critical Tuning Item: CPU limit Determines Worker Thread Count
 
 这是本篇最实用、也最容易踩的一条。
 
@@ -71,7 +71,7 @@ if proxyConfig.Concurrency == nil {
 
 **调优实操**：给 sidecar 设 CPU limit 时必须同时想清楚线程数。CPU limit 设 1 核但实际需要吞吐时，线程数会被限死；不设 limit 又会让 concurrency 跟随宿主机核数（在大核机器上线程过多）。两者都要成对考虑。
 
-## 启动与优雅停机
+## Startup and Graceful Shutdown
 
 | 参数 | 1.31 状态 | 默认 |
 | :-- | :-- | :-- |
@@ -89,7 +89,7 @@ if proxyConfig.Concurrency == nil {
 >
 > 注入时若等于默认值会被剔除（写不写默认值等价）。
 
-## 不要收紧熔断阈值
+## Do Not Tighten Circuit-Breaking Thresholds
 
 Istio 把 4 个 circuit breaker 阈值**全部设为 `MaxUint32`**（等于取消限制），源码注释解释了原因（`cluster_traffic_policy.go:472-483`）：
 
@@ -111,7 +111,7 @@ Istio 把 4 个 circuit breaker 阈值**全部设为 `MaxUint32`**（等于取�
 > [!NOTE]
 > **`outlierDetection` 与地域感知 failover 是隐式联动的。** proto 注释：配置 `OutlierDetection` 会**自动激活 locality-aware failover**（Envoy 用异常检测状态决定何时切到下一个 locality）。要抑制须显式设 `localityLbSetting.enabled: false`。
 
-## 负载均衡与预热
+## Load Balancing and Warmup
 
 - `localityLbSetting` **默认启用**（`mesh.go:85-87`）
 - `warmupDurationSecs` **确认 deprecated**（`cluster_traffic_policy.go:423`），但代码保留兼容分支，**仍可生效**
@@ -122,7 +122,7 @@ Istio 把 4 个 circuit breaker 阈值**全部设为 `MaxUint32`**（等于取�
 > [!NOTE]
 > **`adaptiveConcurrency` 在 Istio 侧没有 API。** 全仓唯一命中是 `filter_types.gen.go:130` 的自动生成全量 filter 类型导入清单——**不是** Istio 对它的启用或推荐。`ProxyConfig` / `Telemetry` 都没有对应字段。要用只能通过 `EnvoyFilter` 手动 patch，且**官方未给出任何性能数据或推荐**。
 
-## DNS 代理
+## DNS Proxy
 
 > [!IMPORTANT]
 > **`ISTIO_META_DNS_CAPTURE` 默认 `false`**（常被搞反）。源码注册：`env.Register("ISTIO_META_DNS_CAPTURE", false, ...)`。它只出现在 **preview profile**，default/stable 都不含。
@@ -143,9 +143,9 @@ Istio 把 4 个 circuit breaker 阈值**全部设为 `MaxUint32`**（等于取�
 >
 > 同样**不存在**的：`ISTIO_META_HTTP10`、`ISTIO_META_FALLBACK_LEGACY_ISTIO_MUX_ENABLED`（均为 Go 文件零命中）。
 
-## 控制面调优
+## Control Plane Tuning
 
-### 配置规模：4M 是硬边界
+### Config Scale: 4M is a Hard Boundary
 
 `pilot_xds_config_size_bytes` 的 buckets 注释（`pilot/pkg/xds/monitoring.go:110-112`）直接给出了判断依据：
 
@@ -154,7 +154,7 @@ Istio 把 4 个 circuit breaker 阈值**全部设为 `MaxUint32`**（等于取�
 
 即 **4M = gRPC 默认上限，10M 开始有系统性压力，40M 是支持上界**。这个 4 MiB 就是 `ISTIO_GPRC_MAXRECVMSGSIZE`（`pilot/pkg/features/tuning.go:33-37`），也正是 ztunnel 重连 WDS 请求超限失败的同一个常量——`grpc.MaxRecvMsgSize(maxRecvMsgSize)` 应用在 istiod 的 gRPC server 上。
 
-### 推送节流与并发
+### Push Throttling and Concurrency
 
 | 变量 | 默认值 | 作用 |
 | :-- | :-- | :-- |
@@ -178,7 +178,7 @@ Istio 把 4 个 circuit breaker 阈值**全部设为 `MaxUint32`**（等于取�
 
 `pilot_debounce_time` 的语义要读准：是「**首个**配置进入 debouncing 到合并推送入队」的延迟，**包含 pushContext 初始化时间**。
 
-### 开关清单（逐个核实，区分已移除）
+### Switch List (Verify One by One, Distinguish Removed)
 
 **真实存在**：
 
@@ -205,7 +205,7 @@ Istio 把 4 个 circuit breaker 阈值**全部设为 `MaxUint32`**（等于取�
 > [!WARNING]
 > `PILOT_ENABLE_HEADLESS_SERVICE_POD_LISTENERS` 在 `pilot/pkg/networking/core/tls.go:198` 的**注释**里仍被提及（写「enabled (by default)」）——属**过时注释残留**，容易误判为仍存在。
 
-### `Sidecar` 收敛与 istiod 扩容
+### `Sidecar` Convergence and istiod Scaling
 
 `Sidecar` 会收敛这 6 类配置：`Endpoints` / `ServiceEntry` / `VirtualService` / `DestinationRule` / `Sidecar` / `PeerAuthentication`。
 
@@ -221,7 +221,7 @@ Istio 把 4 个 circuit breaker 阈值**全部设为 `MaxUint32`**（等于取�
 > [!NOTE]
 > `warmup` 之外的 `PILOT_CONVERT_SIDECAR_SCOPE_CONCURRENCY`（默认 1）已 deprecated。
 
-## 日志级别
+## Log Level
 
 | 组件 | 默认 |
 | :-- | :-- |
@@ -237,13 +237,13 @@ Istio 把 4 个 circuit breaker 阈值**全部设为 `MaxUint32`**（等于取�
 
 追踪采样率同理——`PILOT_TRACE_SAMPLING` 默认 **1.0**（demo profile 为 100），但**官方没有给 1% 采样的性能影响数据**。不可编造「1% 采样节省 X% CPU」这类数字。
 
-## 基准工具
+## Benchmarking Tools
 
 官方只列三项，**全不含版本号**：[fortio.org](https://fortio.org/)（constant throughput load testing）、[nighthawk](https://github.com/envoyproxy/nighthawk)（基于 Envoy）、[isotope](https://github.com/istio/tools/tree/release-1.31/isotope)（合成应用，可配拓扑）。
 
 `istioctl x benchmark` **不存在**。基准脚本在独立仓 `istio/tools`（`perf/benchmark`、`perf/load`），不在主仓 tarball 内。
 
-## 官方推荐调优清单（含证据强度）
+## Official Recommended Tuning List (With Evidence Strength)
 
 | # | 推荐项 | 证据 |
 | :-- | :-- | :-- |
@@ -261,7 +261,7 @@ Istio 把 4 个 circuit breaker 阈值**全部设为 `MaxUint32`**（等于取�
 | 12 | **不要收紧熔断阈值** | ✅ 有源码注释说明 503 因果 |
 | 13 | 用 `Sidecar` 收敛 egress 范围 | 官方推荐 + 源码确认收敛 6 类配置 |
 
-## 官方未给量化数据的项（不可编造）
+## Items Without Official Quantitative Data (Do Not Fabricate)
 
 - 关闭 mTLS 能省多少 CPU
 - telemetry filter（logging/tracing/metrics）的具体开销百分比
@@ -272,7 +272,7 @@ Istio 把 4 个 circuit breaker 阈值**全部设为 `MaxUint32`**（等于取�
 - 各 `PILOT_ENABLE_*` 开关的性能收益
 - P90/P99 的具体数值（仅存在于位图）
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 | 现象 | 先查 |
 | :-- | :-- |

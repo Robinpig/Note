@@ -11,7 +11,7 @@ Qdisc 把"什么时候发、发哪个"的策略从协议栈里抽离出来，做
 
 [network](/docs/CS/OS/Linux/net/network.md) 的 Egress 一章讲的是 `dev_queue_xmit → qdisc_run → sch_direct_xmit` 这条**驱动 qdisc 出队并发送**的机械过程；本篇聚焦 qdisc 内部——**入队时怎么分类调度、怎么整形、有哪些内置算法**。
 
-## 在发送路径上的位置
+## Position on the Send Path
 
 ```
 协议栈 ip_local_out / neigh
@@ -48,7 +48,7 @@ if (q->enqueue) {
 
 `enqueue` 回调是否存在，是"可调度 qdisc"与"空 qdisc（如 `noqueue`、回环设备）"的分水岭。
 
-## 核心数据结构
+## Core Data Structures
 
 每个 qdisc 是一个 `Qdisc` 对象，挂在某个发送队列上（多队列网卡通过 `mq` qdisc 让每个硬件队列再各挂一个子 qdisc）。
 
@@ -87,11 +87,11 @@ struct Qdisc {
 - 当前进程直接在 `__qdisc_run` 里循环 dequeue 发送，直到配额（`dev_tx_weight`）用尽；
 - 配额用尽或队列暂时无法发送（设备 busy）时，把 qdisc 通过 `next_sched` 挂到本 CPU `softnet_data->output_queue`，触发 `NET_TX_SOFTIRQ`，由 [net_tx_action](/docs/CS/OS/Linux/net/network.md?id=net_tx_action) 稍后继续 `qdisc_run`。
 
-## 无类 qdisc：classless
+## Classless qdisc: classless
 
 **Classless qdisc 不区分子类**，对所有包一视同仁（或只看包自身的优先级标记），结构简单，是绝大多数网卡的默认选择。
 
-### pfifo_fast（历史默认）
+### pfifo_fast (Historical Default)
 
 基于 skb 优先级（`skb->priority`，可由 IP header 的 TOS 字段映射）放入三个 band：
 
@@ -100,7 +100,7 @@ struct Qdisc {
 
 它提供了基础优先级，但**每个 band 内部不保证公平**，一条大流仍可能饿死同 band 的其它流，也没有主动队列管理。现代内核默认已改为 fq_codel。
 
-### fq_codel（现代默认）
+### fq_codel (Modern Default)
 
 **fq_codel = fair queueing + CoDel**，是当前内核的默认 qdisc（`CONFIG_DEFAULT_NET_SCH`），针对缓冲膨胀设计：
 
@@ -115,18 +115,18 @@ struct Qdisc {
 - 每流维护发送时间，早于时间的包不发，从而实现 pacing（把拥塞窗口允许的突发均匀摊到一个 RTT 上），配合 BBR / EDT（earliest departure time）模型效果最好；
 - 高优先级包（如本地环路、TCP 重传标记）有独立的高优先 band。
 
-### tbf：令牌桶整形
+### tbf: Token Bucket Shaping
 
 **TBF（token bucket filter）只做一件事——把发送速率整形到配置带宽**：
 
 - 桶里以固定速率积累令牌，包发送要消耗对应字节数的令牌；令牌不够就排队等待；
 - 允许短时突发（桶可积蓄一定令牌），但长期平均速率被严格限制。云主机按带宽 / 流量计费、容器限速常以它为底层。
 
-## 有类 qdisc：classful
+## Classful qdisc: classful
 
 **Classful qdisc 是一棵树**：根 qdisc 下挂多个 **class（类）**，每个类可以再挂自己的 qdisc 或子类，叶子类最终排队真实的包。配合**分类器（classifier，如 u32、fwmark、route）**把包归入不同类，从而对不同流量区别对待。
 
-### HTB：层级令牌桶
+### HTB: Hierarchical Token Bucket
 
 **HTB（hierarchical token bucket）是最常用的带宽管理 qdisc**，在 TBF 之上引入层级：
 
@@ -134,7 +134,7 @@ struct Qdisc {
 - 子类带宽不够时可向父类**借用空闲带宽**，父类再在其子类间仲裁；
 - 典型用法：给不同用户 / 业务划固定带宽保底，空闲时互相借用、但不超过各自上限。
 
-### 优先级 qdisc（prio）
+### Priority qdisc (prio)
 
 pfifo_fast 的 classful 版本：固定三个 band，按过滤器分类，严格优先服务低 band。适合"语音/信令必须绝对优先、数据尽力而为"，但高优先级类持续有包时低优先类会被饿死。
 
@@ -142,7 +142,7 @@ pfifo_fast 的 classful 版本：固定三个 band，按过滤器分类，严格
 
 用曲线而非单一速率描述服务，可以同时对带宽和延迟做保证，适合需要严格延迟 SLA 的场景，配置比 HTB 复杂。
 
-## ingress qdisc：入方向的特殊节点
+## ingress qdisc: Special Node for the Ingress Direction
 
 上面的 qdisc 都挂在 **egress（发送）**。接收方向默认没有排队调度（包由 NAPI 直接收上来），但内核提供了一个 **ingress qdisc**：
 
@@ -150,7 +150,7 @@ pfifo_fast 的 classful 版本：固定三个 band，按过滤器分类，严格
 - 它不是真正排队（没有队列、不做调度），更像一个**只做裁决的钩子**，在协议栈处理前就过滤或重定向；
 - 现代高性能入向处理更多直接用 **XDP**（驱动层，甚至网卡 offload），见 [eBPF](/docs/CS/OS/Linux/Tools/eBPF.md)。ingress qdisc 是 tc 侧的等价入口。
 
-## 分类器与动作
+## Classifier and Actions
 
 有类 qdisc / ingress qdisc 要靠**分类器（filter/classifier）**决定包进哪个类或执行什么动作：
 
@@ -159,7 +159,7 @@ pfifo_fast 的 classful 版本：固定三个 band，按过滤器分类，严格
 - **route**：依据路由结果分类；bpf：挂载 eBPF 程序做分类，灵活度最高；
 - **动作（action）**：police 限速、mirred 重定向/镜像、vlan push/pop、nat 等，可在分类后执行。
 
-## 与用户态的接口：tc
+## Interface with User Space: tc
 
 所有 qdisc / class / filter 的增删改查通过 **`tc`（iproute2）** 命令完成，底层走 [netlink](/docs/CS/OS/Linux/net/netlink.md) 的 rtnetlink（`RTM_NEWQDISC`/`RTM_NEWTFILTER` 等）：
 

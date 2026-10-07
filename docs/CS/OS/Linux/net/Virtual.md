@@ -12,7 +12,7 @@ Linux 里"网卡"并不只对应一块物理硬件。**内核把网络设备抽�
 
 容器"怎么用"这些设备组网（bridge/host 模式、跨主机方案）见 [Docker 网络](/docs/CS/Container/Docker/net.md) 与 [K8s 网络](/docs/CS/Container/k8s/net.md)，namespace 的创建见 [namespace](/docs/CS/OS/Linux/namespace.md)；本篇聚焦**内核侧它们各自怎么实现收发包**。
 
-## 统一前提：net_device 与收发复用
+## Unified Premise: net_device and Send/Receive Multiplexing
 
 每个虚拟设备都注册为一个 `net_device`，有自己的 `net_device_ops`。协议栈对它和物理网卡一视同仁：
 
@@ -21,11 +21,11 @@ Linux 里"网卡"并不只对应一块物理硬件。**内核把网络设备抽�
 
 理解这两个回调就抓住了全部虚拟设备的本质：**`ndo_start_xmit` 决定"发出去的包软件上怎么处理"，`netif_rx` 决定"怎么让一个包像是被自己收到"**。
 
-## bridge：软件交换机
+## bridge: Software Switch
 
 **bridge 是一台内核里的二层交换机（switch）**。物理网卡、veth 等可以" enslave "（挂载）成 bridge 的端口（port）。bridge 本身也是一个 `net_device`（`br0`），拥有 IP 时它同时是该二层网络的网关。
 
-### 入口：从端口收到帧
+### Entry: Receiving Frames from the Port
 
 普通设备收到帧后走 `netif_receive_skb`，其内部会调用 `rx_handler`。设备被加入 bridge 时，内核给它注册了 `br_handle_frame` 作为 `rx_handler`，于是这个端口收到的帧被截走、交给 bridge 的转发逻辑，而不再按普通三层协议栈处理：
 
@@ -56,7 +56,7 @@ rx_handler_result_t br_handle_frame(struct sk_buff **pskb)
 }
 ```
 
-### 学习与转发：fdb
+### Learning and Forwarding: fdb
 
 bridge 维护一张 **fdb（forwarding database，转发数据库）**，等价于交换机的 MAC 地址表：
 
@@ -66,15 +66,15 @@ bridge 维护一张 **fdb（forwarding database，转发数据库）**，等价�
   - 未命中（未知单播）或目的是广播 / 组播 → 从除入端口外的所有端口**泛洪**（`br_flood`）；
   - 目的 MAC 是 bridge 自己（如网关流量）→ 上交本机协议栈（`br_pass_frame_up`，把 `skb->dev` 改写为 `br0` 再走 `netif_rx`）。
 
-### STP：避免环路
+### STP: Avoid Loops
 
 多台 bridge 用多条链路连接会形成二层环路，广播帧无限循环。bridge 实现了 **STP（spanning tree protocol，802.1D）**：交换 BPDU、选举根桥、把部分端口置为 blocking（只收 BPDU、不转发数据），逻辑上断环。端口状态机 `DISABLED → LISTENING → LEARNING → FORWARDING` 决定一个端口能否学习和转发。现代部署常用无环的上层设计或 RSTP/MSTP。
 
-### 端口隔离与 VLAN
+### Port Isolation and VLAN
 
 bridge 还支持 port isolation（端口之间互不可达、只能上行）和 per-port VLAN（`br_handle_vlan`，结合下一节的 802.1Q），用于精细的二层隔离。
 
-## veth：一根虚拟网线的两头
+## veth: Two Ends of a Virtual Network Cable
 
 **veth 是成对出现的虚拟网卡（veth pair）**，从一头 `ndo_start_xmit` 发出的包，会立刻从另一头的接收路径冒出来，像一根两端各插一个设备的网线。它的实现极简：
 
@@ -105,7 +105,7 @@ static netdev_tx_t veth_xmit(struct sk_buff *skb, struct net_device *dev)
 
 较新内核为 veth 引入了 NAPI 收包（`veth_poll`）和 XDP 支持（`veth_forward_skb` 里的 `xdp_prog`），让容器高 PPS 场景能批量化、并在驱动层跑 XDP，而不是每个包都立即走 `netif_rx`。
 
-## bonding / team：多网卡绑定
+## bonding / team: Multi-NIC Bonding
 
 **bonding 把多块物理网卡聚合成一个逻辑 `net_device`（`bond0`）**，提供：
 
@@ -114,7 +114,7 @@ static netdev_tx_t veth_xmit(struct sk_buff *skb, struct net_device *dev)
 
 实现上，成员网卡的 `rx_handler` 被设为 `bond_handle_frame`，收帧时把 `skb->dev` 改写为 `bond0` 上交，使上层只见一个接口；发送时 bond 的 `ndo_start_xmit` 按模式选一个成员实际发出。**team** 是 bonding 的现代化替代：把策略（选路、链路检测）做成 userspace 程序，内核只保留精简的快速路径，扩展性更好。云环境里 bond 常用于保证管理网 / 业务网高可用。
 
-## VLAN（802.1Q）：一网卡划分多网段
+## VLAN (802.1Q): Splitting One NIC into Multiple Network Segments
 
 **802.1Q VLAN 在以太网帧头插入 4 字节 VLAN tag（VID 1~4094）**，让一张物理网卡承载多个相互隔离的二层网络。内核为每个 VID 创建一个 `vlan` 类型的 `net_device`（如 `eth0.100`）：
 
@@ -123,7 +123,7 @@ static netdev_tx_t veth_xmit(struct sk_buff *skb, struct net_device *dev)
 
 现代网卡普遍支持 VLAN tag 的插入 / 剥离 offload，快路径里 tag 不实际进 skb 数据，而记录在 `skb->vlan_tci`，由硬件完成。
 
-## VXLAN 与隧道：跨三层的 overlay
+## VXLAN and Tunnels: Cross-layer-3 Overlay
 
 二层网络受限于物理范围，且 VLAN 只有 4094 个。**VXLAN 把整个二层帧封装进 UDP（目的端口 4789），加 8 字节 VXLAN header（含 24 bit VNI，约 1600 万段），通过底层三层 IP 网络（underlay）送达另一台宿主机**，再解封装还原原始帧。对容器而言，这让分布在不同宿主机上的容器像接在同一个大二层交换机里。
 

@@ -12,7 +12,7 @@ Spring Data 的价值有两层：
 > [!NOTE]
 > 当前基线（2026-10 核实）为 **Spring Data 2025.1（代号，对应于 Boot 4 一代，patch 到 2025.1.7）**。Spring Data 采用**日历版本号**（2024.0、2024.1、2025.0、2025.1 …），没有 "7.x" 这种大版本号——不要与 Spring Framework 7 混淆。Boot 4 一代绑定的就是 2025.1。
 
-## 模块家族
+## Module Family
 
 | 模块 | 存储形态 | 关键抽象 | 备注 |
 | :--- | :--- | :--- | :--- |
@@ -52,9 +52,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
 查询方法的来源按优先级：方法名派生查询（query derivation）→ `@Query` 显式声明 → 存储特定注解（如 `@Aggregation`）。
 
-## 派生查询细节
+## Derived Query Details
 
-### 方法名关键字
+### Method Name Keywords
 
 派生查询的方法名由**主题关键字 + 条件属性 + 比较词**拼成。主题关键字决定动作：
 
@@ -65,7 +65,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
 比较词涵盖 `And` / `Or` / `Between` / `LessThan` / `GreaterThan` / `Like` / `StartingWith` / `Containing` / `In` / `IgnoreCase` 等。
 
-### 属性表达式与下划线消歧
+### Property Expressions and Underscore Disambiguation
 
 嵌套属性可以直接写在方法名里：`findByAddressZipCode` 表示 `user.address.zipCode`。但当 `User` 同时拥有 `addressZipCode` 字段和 `address.zipCode` 路径时会产生**歧义**——此时用**下划线显式界定路径**：
 
@@ -76,14 +76,14 @@ List<User> findByAddress_ZipCode(String zip);
 
 下划线因此是保留字，属性名本身含下划线时需转义（`_`）为 `__`。
 
-### 分页：Page 与 Slice
+### Pagination: Page and Slice
 
 `Pageable` 分页有两种返回：
 
 - `Page<T>`：会**额外执行一条 count 查询**得到总条数（`totalElements` / `totalPages`），适合"跳页 + 显示总页数"的传统分页。
 - `Slice<T>`：**不查总数**，只通过 `limit+1` 判断"是否还有下一页"（`hasNext()`）。适合"无限滚动 / 下拉加载更多"，省掉昂贵的 count。
 
-### 限定结果与去重
+### Limit Results and Deduplicate
 
 ```java
 User findFirstByOrderByCreatedAtDesc();        // 取第一条
@@ -93,7 +93,7 @@ Stream<User> findDistinctByCity(String city);  // 去重（Distinct）
 
 `Stream` 返回类型用法上需注意：它在遍历结束后要关闭底层游标，通常配合 try-with-resources。
 
-### 更新 / 删除：@Modifying
+### Update / Delete: @Modifying
 
 派生查询默认只生成 SELECT。要写改/删语句，用 `@Query` + `@Modifying`：
 
@@ -108,7 +108,7 @@ int deactivateInactive(@Param("s") Status s, @Param("before") Instant before);
 > [!TIP]
 > `findById` 返回 `Optional`，未命中是**空 Optional 而非异常**；而用 `CrudRepository.getReferenceById`（延迟引用）或老式 `findOne` 时，未命中才可能抛 `EmptyResultDataAccessException`。派生 `List` 查询则永远返回空集合、不抛异常。
 
-## Projection（投影）
+## Projection
 
 只取实体的一部分字段时，用投影避免把整个聚合拖出来：
 
@@ -125,7 +125,7 @@ int deactivateInactive(@Param("s") Status s, @Param("before") Instant before);
   // repo.findByCity("BJ", UserName.class);
   ```
 
-## Auditing（审计字段）
+## Auditing (Audit Fields)
 
 用注解自动填充创建/修改时间与人：
 
@@ -141,17 +141,17 @@ class Order {
 
 再在主配置上 `@EnableJpaAuditing`，并提供一个 `AuditorAware<T>` Bean 告诉框架"当前操作人是谁"（从 Security 上下文取）。时间字段也可标在 `@MappedSuperclass` 基类上让所有实体继承。
 
-## 基础设施与 save 语义
+## Infrastructure and save Semantics
 
 `CrudRepository.save` 在 JPA 实现里等价于 `entityManager.merge`——即**按 ID 是否存在决定插入或更新**，区分不了"新对象"与"游离对象"，这点在 Hibernate 7 下更彻底（persist 路径被统一为 merge 语义，详见 [Spring JPA](/docs/CS/Framework/Spring/JPA.md)）。需要严格"新对象才 insert"的语义时，自己用 `Persistable` 接口暴露 `isNew()` 让 Spring Data 判断。
 
 `JpaRepository` 还提供 `flush()`、`saveAndFlush()`、`getById` 等 JPA 专属方法；底层通过 `JpaEntityInformation` 抽象出 ID 与 `isNew` 判定，与具体 JPA 提供方解耦。
 
-### 构建期查询编译
+### Build-Time Query Compilation
 
 Spring Data 2025.1（Boot 4 一代）会把符合条件的 repository 派生查询在**构建期**编译成实现，而不是等到运行期再用 `PartTree` 解析方法名、拼装查询。收益是启动更快，并把查询语法错误提前到编译阶段暴露；对 [AOT](/docs/CS/Framework/Spring/AOT.md) / native image 尤其重要，因为构建期产物不再依赖运行期的反射解析。
 
-## 各存储模块简述
+## Brief Description of Each Storage Module
 
 ### JDBC
 

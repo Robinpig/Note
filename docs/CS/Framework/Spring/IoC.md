@@ -2962,7 +2962,7 @@ public abstract class AbstractAutowireCapableBeanFactory extends AbstractBeanFac
 
 `ApplicationContext` 扩展了 `MessageSource` 接口，因此容器本身就是一个国际化（i18n）消息解析器。另有 `HierarchicalMessageSource` 支持按层级向上查找父容器。
 
-### 接口契约
+### Interface Contract
 
 ```java
 public interface MessageSource {
@@ -2980,7 +2980,7 @@ public interface MessageSource {
 
 参数按 `MessageFormat` 规则替换进占位符，例如 `argument.required=The {0} argument is required.`。
 
-### 容器如何找到它
+### How the Container Finds It
 
 启动时按顺序查找：
 
@@ -3008,7 +3008,7 @@ public MessageSource messageSource() {
 
 需要在自己的 Bean 里拿到它时，实现 `MessageSourceAware` 即可被注入容器内的 `MessageSource`。
 
-### Locale 从哪来
+### Where Locale Comes From
 
 Web 场景下 Locale 由 `LocaleResolver` 决定：
 
@@ -3020,7 +3020,7 @@ Web 场景下 Locale 由 `LocaleResolver` 决定：
 
 配合 `LocaleChangeInterceptor` 可让用户通过请求参数（如 `?lang=zh_CN`）切换语言。
 
-### Spring Boot 的自动配置
+### Spring Boot Auto-Configuration
 
 Boot 检测到 classpath 根下存在默认资源文件（默认 `messages.properties`）才自动配置一个 `ResourceBundleMessageSource`；**如果只有带语言后缀的文件而没有默认文件，则不会配置 MessageSource**，国际化会静默失效。
 

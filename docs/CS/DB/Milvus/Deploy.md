@@ -2,7 +2,7 @@
 
 本文主要是介绍一种在生产环境可用的基于Docker Compose 的 三节点 Milvus集群部署方案。
 
-### 部署方案总览
+### Deployment Plan Overview
 
 各部署方案共享 §1（etcd）、§2（Kafka）的中间件部署，差异集中在 Milvus 自身的 compose 配置：
 
@@ -15,13 +15,13 @@
 
 > **版本说明**：§0–§5 基于 **Milvus 2.4.11**，使用外部 Kafka 3.4.1 KRaft（二进制部署）作为消息队列；§6、§7 介绍 **Milvus 3.x** 的两种消息队列方案——§6 沿用外部 Kafka，§7 使用内置 Woodpecker 替代外部 MQ 后的部署差异。
 
-## 0. 交付件概述
+## 0. Deliverables Overview
 
-### 0.1 设计变更说明
+### 0.1 Design Change Notes
 
 本部署方案相较于 Milvus 官方默认部署方式，基于生产环境三节点分布式集群做了以下关键变更：
 
-#### 网络模式变更
+#### Network Mode Changes
 
 | 变更项 | 官方默认 | 本方案 |
 |--------|---------|--------|
@@ -31,7 +31,7 @@
 
 Host 模式下消除了 Docker NAT 转发开销，但也要求端口规划不得冲突、防火墙策略精确到位。
 
-#### 消息队列变更
+#### Message Queue Changes
 
 | 变更项 | 官方默认 | 本方案 |
 |--------|---------|--------|
@@ -41,7 +41,7 @@ Host 模式下消除了 Docker NAT 转发开销，但也要求端口规划不得
 
 Kafka KRaft 替代 NATS 是 Milvus 生产环境中大吞吐场景的推荐方案，支持消息持久化、多消费者和水平扩展。
 
-#### Metrics 端口分配
+#### Metrics Port Allocation
 
 | 变更项 | 官方默认 | 本方案 |
 |--------|---------|--------|
@@ -50,7 +50,7 @@ Kafka KRaft 替代 NATS 是 Milvus 生产环境中大吞吐场景的推荐方案
 
 Host 模式下所有容器共享宿主机网络栈，组件共用 `9091` 必然冲突。本方案将 8 个 Milvus 组件 Metrics 端口拆分为 `9991-9998`，按组件角色逐一分配。
 
-#### Coordinator 高可用
+#### Coordinator High Availability
 
 | 变更项 | 官方默认 | 本方案 |
 |--------|---------|--------|
@@ -59,7 +59,7 @@ Host 模式下所有容器共享宿主机网络栈，组件共用 `9091` 必然�
 
 四个 Coordinator（RootCoord、DataCoord、QueryCoord、IndexCoord）均启用 Active-Standby 模式，每个节点上的 Coordinator 实例可互相热备，容忍单节点故障。
 
-#### 资源隔离
+#### Resource Isolation
 
 | 变更项 | 官方默认 | 本方案 |
 |--------|---------|--------|
@@ -90,7 +90,7 @@ Host 模式下所有容器共享宿主机网络栈，组件共用 `9091` 必然�
 总计                32G
 ```
 
-### 0.2 项目结构
+### 0.2 Project Structure
 
 ```
 <部署节点 IP：193.195.129.57/58/59>
@@ -131,14 +131,14 @@ Host 模式下所有容器共享宿主机网络栈，组件共用 `9091` 必然�
 
 > 每台节点上 Milvus 的 8 个组件（rootcoord、datacoord、querycoord、indexcoord、proxy、datanode、querynode、indexnode）全部启动，四个 Coordinator 通过 `ENABLE_ACTIVE_STANDBY` 实现跨节点热备。
 
-### 0.3 硬性约束
+### 0.3 Hard Constraints
 
 - 跨主机连接必须使用节点 IP（`193.195.129.57/58/59`），不得使用 Docker 容器名或 localhost；
 - 每个项目独立启停、独立验证、独立维护；
 - **Host 网络模式下，端口冲突由运维保证** —— etcd `2379/2380`、Kafka `9092/9093`、Milvus Proxy `19530`、Milvus Metrics `9991-9998`；
 - **同一宿主机上的每个 Milvus 组件必须配置不同的 `METRICS_PORT`**，禁止继续共用默认端口 `9091`。
 
-### 0.4 版本基线
+### 0.4 Version Baseline
 
 | 组件 | 固定版本 | 分发方式 |
 |------|----------|------|
@@ -155,7 +155,7 @@ Host 模式下所有容器共享宿主机网络栈，组件共用 `9091` 必然�
 >
 > Kafka 3.4.x 运行依赖 **JDK 11+**，部署前需在三台节点预先安装 JDK（如 `yum install -y java-11-openjdk` 或 `apt install -y openjdk-11-jdk`）。
 
-### 0.5 端口规划（Host 模式独占）
+### 0.5 Port Planning (Host Mode Exclusive)
 
 Host 网络模式下，所有容器直接监听宿主机 IP 上的端口。三台节点端口规划完全对称。Kafka 已占用 `9092/9093`，Milvus Metrics 不得复用这两个端口，也不得继续使用默认 `9091`：
 
@@ -183,9 +183,9 @@ Host 网络模式下，所有容器直接监听宿主机 IP 上的端口。三�
 
 
 
-## 1. etcd 部署
+## 1. etcd Deployment
 
-### 1.1 项目说明
+### 1.1 Project Description
 
 - **项目目录**：`/aiapp/mid/etcd/`
 - **网络模式**：`network_mode: host`
@@ -194,13 +194,13 @@ Host 网络模式下，所有容器直接监听宿主机 IP 上的端口。三�
 - **集群规模**：3 节点 Raft（quorum=2，容忍 1 节点故障）
 
 
-### 1.2 安装脚本
+### 1.2 Installation Script
 
 ```bash
 #!/bin/bash
 
-# 环境变量
 # 服务器地址
+# Server Address
 localhost="193.195.129.57"
 # 安装包目录
 path="/aiapp/mid/etcd"
@@ -249,7 +249,7 @@ etcdInstall
 
 > **注意**：不建议将系统日志目录挂载进容器。以上脚本基于 etcd v3.5.5。
 
-### 1.3 调优参数
+### 1.3 Tuning Parameters
 
 另外的调优环境变量参数, 可以考虑添加
 
@@ -267,7 +267,7 @@ etcdInstall
 
 
 
-### 1.4 Node2 / Node3 变体
+### 1.4 Node2 / Node3 Variants
 
 仅需要替换脚本中两处 
 - localhost 的IP为宿主机IP
@@ -281,7 +281,7 @@ etcdInstall
 
 `ETCD_INITIAL_CLUSTER` 三个节点完全一致，无需修改。
 
-### 1.5 验证命令
+### 1.5 Verification Commands
 
 ```bash
 # 检查容器状态
@@ -304,9 +304,9 @@ docker exec -T etcd etcdctl \
 > Host 模式下，etcd 的 2379/2380 端口直接暴露在宿主机网络接口上。防火墙规则必须严格限制 2380 仅允许三台 Milvus 节点互访（参见部署流程文档 §5.4）。
 
 
-## 2. Kafka 3.4.1 KRaft（二进制部署）
+## 2. Kafka 3.4.1 KRaft (Binary Deployment)
 
-### 2.1 项目说明
+### 2.1 Project Description
 
 - **部署方式**：官方二进制包 `kafka_2.13-3.4.1.tgz`，解压后以宿主机进程直接运行（不使用 Docker）
 - **运行依赖**：JDK 11+（KRaft 模式无需 ZooKeeper）
@@ -316,7 +316,7 @@ docker exec -T etcd etcdctl \
 - **监听端口**：进程直接绑定宿主机网卡，`9092`（PLAINTEXT 客户端）/ `9093`（CONTROLLER 集群通信）
 - **集群规模**：3 节点 KRaft 集群（combined `broker,controller` 角色，容忍 1 节点故障）
 
-### 2.2 Kafka KRaft 集群设计
+### 2.2 Kafka KRaft Cluster Design
 
 Kafka 3.4.1 KRaft 模式下，每个节点同时承担 Broker（数据存储与读写）和 Controller（元数据管理 + 选主）两个角色：
 
@@ -343,15 +343,15 @@ Kafka 3.4.1 KRaft 模式下，每个节点同时承担 Broker（数据存储与�
                     1@57:9093,2@58:9093,3@59:9093
 ```
 
-### 2.3 安装脚本
+### 2.3 Installation Script
 
 以下是 Kafka 安装脚本 Node1 版本（`193.195.129.57`）。脚本完成：下载二进制包 → 解压 → 生成 `server.properties` → `kafka-storage.sh format` 格式化元数据 → 后台启动。
 
 ```bash
 #!/bin/bash
 
-# 环境变量
 # 服务器地址
+# Server Address
 localhost="193.195.129.57"
 # 本节点 node.id（Node1=1, Node2=2, Node3=3）
 node_id="1"
@@ -465,7 +465,7 @@ kafkainstall
 > WantedBy=multi-user.target
 > ```
 
-### 2.4 Node2 / Node3 变体
+### 2.4 Node2 / Node3 Variants
 
 脚本中仅需修改两处变量：
 
@@ -496,7 +496,7 @@ controller.quorum.voters=1@193.195.129.57:9093,2@193.195.129.58:9093,3@193.195.1
 >
 > 三个节点必须使用**同一个** cluster.id 分别 format，且 format 只能在首次启动前执行一次。
 
-### 2.5 验证命令
+### 2.5 Verification Commands
 
 ```bash
 # 检查 Kafka 进程（Kafka 进程主类为 kafka.Kafka）
@@ -520,7 +520,7 @@ ss -tlnp | grep -E '9092|9093'
 
 ## 3. Milvus 2.4 + Kafka
 
-### 3.1 项目说明
+### 3.1 Project Description
 
 - **网络模式**：`network_mode: host`（所有 Milvus 组件）
 - **数据卷**：`/data/milvus/volumes` 挂载到容器 `/var/lib/milvus`
@@ -534,7 +534,7 @@ ss -tlnp | grep -E '9092|9093'
 > 部署 Milvus 需确认 Etcd、Kafka 和对象存储（兼容 MinIO）可用
 
 
-### 3.2 安装配置（docker-compose）
+### 3.2 Installation Configuration (docker-compose)
 
 部署前需重点确认以下配置项：
 
@@ -721,7 +721,7 @@ services:
           memory: 4g
 ```
 
-### 3.3 验证命令
+### 3.3 Verification Commands
 
 ```bash
 # 检查 8 个 Milvus 容器全部运行
@@ -733,8 +733,8 @@ ss -tlnp | grep -E '19530|999[1-8]|53100|13333|19531|22930'
 # 检查 Proxy 健康状态（通过 metrics 端点）
 curl -s http://193.195.129.57:9995/metrics | head -20
 
-# 验证 Milvus 组件列表（通过 Proxy 的 gRPC 接口）
 # 方式一：使用 milvus-cli（需额外安装）
+# Method 1: Use milvus-cli (Requires Additional Installation)
 # milvus-cli --host 193.195.129.57 --port 19530
 
 # 方式二：使用 Python SDK 验证连接（可选）
@@ -765,7 +765,7 @@ docker logs milvus-indexnode --tail 20
 
 ## 4. Attu
 
-### 4.1 项目说明
+### 4.1 Project Description
 
 Attu 是 Milvus 的 Web 运维控制台，用于验证Milvus集群部署状态和基本操作。
 
@@ -774,13 +774,13 @@ Attu 是 Milvus 的 Web 运维控制台，用于验证Milvus集群部署状态�
 - **部署节点**：仅 `193.195.129.57`（Node1）
 - **依赖**：Milvus Proxy（`19530`）正常运行
 
-### 4.2 安装脚本
+### 4.2 Installation Script
 
 ```bash
 #!/bin/bash
 
-# 环境变量
 # 服务器地址
+# Server Address
 localhost="193.195.129.57"
 # 安装包目录
 path="/aiapp/mid/attu"
@@ -808,13 +808,13 @@ attuInstall() {
 attuInstall
 ```
 
-### 4.3 访问说明
+### 4.3 Access Instructions
 
 - **Web 控制台**：`http://193.195.129.57:28000`
 - **Milvus 连接地址**：`http://193.195.129.57:19530`
 - Attu 与 Milvus 部署在同一台机器上，所以 `HOST_URL` 和 `MILVUS_URL` 均为 `localhost`
 
-## 5. 总结
+## 5. Summary
 
 > **首次启动要点**：
 > - etcd 三节点全部启动后，**必须确认 quorum** 再启动 Kafka；
@@ -823,19 +823,19 @@ attuInstall
 
 ---
 
-## 6. Milvus 3.0 + Kafka 部署（待补充）
+## 6. Milvus 3.0 + Kafka Deployment (To Be Supplemented)
 
 > [!TODO]
 > 本章节后续补充 **Milvus 3.0 + 外部 Kafka** 的完整部署方案。与 §0–§5（Milvus 2.4.11 + Kafka）相比，etcd、Kafka、端口规划、Attu 等中间件部分完全复用，差异集中在 Milvus 自身的 compose 配置。
 
-### 6.1 方案说明
+### 6.1 Solution Description
 
 - **镜像版本**：`milvusdb/milvus:v3.0.x`（以实际选型为准）
 - **消息队列**：继续使用外部 Kafka 3.4.1 KRaft（`MQ_TYPE=kafka`），复用 §2 的三节点集群
 - **启动依赖链**：etcd quorum → Kafka KRaft quorum → Milvus（与 2.4 相同）
 - **端口规划**：与 §0.5 保持一致，无新增端口
 
-### 6.2 与 2.4 部署的差异（初稿）
+### 6.2 Differences from 2.4 Deployment (Draft)
 
 | 变更项 | 2.4.11（§3） | 3.0 + Kafka |
 |--------|-------------|-------------|
@@ -844,7 +844,7 @@ attuInstall
 | Coordinator Active-Standby | `*_ENABLE_ACTIVE_STANDBY: true` | 待确认（3.x 部署形态可能有变化） |
 | 废弃配置项 | — | 清理 `milvus.yaml` 中已废弃的 `kafka.*` 参数 |
 
-### 6.3 待补充内容
+### 6.3 To Be Supplemented
 
 - [ ] 3.0 + Kafka 完整 docker-compose.yaml（三节点，Host 模式）
 - [ ] 环境变量与 2.4 的逐项对照（以 3.x 官方 `milvus.yaml` 为准）
@@ -853,7 +853,7 @@ attuInstall
 
 ## 7. Milvus 3.x + Woodpecker
 
-### 7.1 Woodpecker 概述
+### 7.1 Woodpecker Overview
 
 Milvus 3.x 引入了 **Woodpecker** 作为内置的 WAL（Write-Ahead Log）/ 流存储引擎，**完全取代了 Kafka、Pulsar、NATS、RocksMQ 等外部消息队列**。
 
@@ -875,7 +875,7 @@ Woodpecker 将上述能力内建到 Milvus 自身：
 
 > Woodpecker 的核心设计目标是消除外部 MQ 的运维负担和资源冗余，同时针对 Milvus 的写入模式（顺序追加、按 segment 消费）做日志存储优化。
 
-### 7.2 部署拓扑变更
+### 7.2 Deployment Topology Changes
 
 移除 Kafka 集群后，三节点部署从 **etcd + Kafka + Milvus** 三层简化为 **etcd + Milvus** 两层：
 
@@ -894,7 +894,7 @@ Woodpecker 将上述能力内建到 Milvus 自身：
 
 不再需要 Kafka 数据目录（`/aiapp/mid/kafka-cluster/data`）、Kafka 二进制安装目录（`kafka_2.13-3.4.1/`）以及 `deploy-kafka.sh` 脚本。
 
-### 7.3 端口规划变更
+### 7.3 Port Planning Changes
 
 移除 Kafka 后释放以下端口：
 
@@ -905,9 +905,9 @@ Woodpecker 将上述能力内建到 Milvus 自身：
 
 Woodpecker 作为 Milvus 内置组件，复用 Milvus 已有的内部通信端口，**不引入额外的宿主机端口监听**。其余端口规划（etcd 2379/2380、Milvus Proxy 19530、Metrics 9991–9998 等）保持不变。
 
-### 7.4 docker-compose 配置变更
+### 7.4 docker-compose Configuration Changes
 
-#### 7.4.1 移除的配置
+#### 7.4.1 Removed Configuration
 
 `x-milvus-env` 中删除所有 Kafka 相关环境变量：
 
@@ -917,7 +917,7 @@ KAFKA_BROKER_LIST: "193.195.129.57:9092,193.195.129.58:9092,193.195.129.59:9092"
 MQ_TYPE: "kafka"
 ```
 
-#### 7.4.2 Woodpecker 配置
+#### 7.4.2 Woodpecker Configuration
 
 Milvus 3.x 中 Woodpecker 作为默认 WAL 引擎，`MQ_TYPE` 默认为 `woodpecker`（或已移除该配置项）。Woodpecker 的数据目录、副本数等通过 `woodpecker.*` 配置项控制，在 docker-compose 中映射为大写环境变量。典型配置如下：
 
@@ -935,7 +935,7 @@ x-milvus-env: &milvus-env
 
 > **注意**：Woodpecker 的具体环境变量名称、默认值和可用配置项随 Milvus 3.x 小版本迭代可能调整。部署前应以目标版本的官方配置参考（`milvus.yaml` 中 `woodpecker` 段）为准。
 
-#### 7.4.3 数据卷
+#### 7.4.3 Data Volumes
 
 Woodpecker 的日志数据需要持久化。在各服务的 `volumes` 中确保 Woodpecker 路径被挂载到宿主机：
 
@@ -946,14 +946,14 @@ volumes:
   # 无需单独挂载（WOODPECKER_PATH 在该目录下）
 ```
 
-#### 7.4.4 镜像版本
+#### 7.4.4 Image Versions
 
 ```yaml
 x-milvus-common: &milvus-common
   image: milvusdb/milvus:v3.0.0   # 替换为实际部署的 3.x 版本
 ```
 
-### 7.5 资源规划调整
+### 7.5 Resource Planning Adjustments
 
 移除 Kafka 后，单节点可回收 Kafka 占用的资源（典型为 2–4 GB 内存 + 1–2 CPU 核）。这部分余量可分配给 QueryNode / IndexNode 以提升查询和索引性能：
 
@@ -965,7 +965,7 @@ x-milvus-common: &milvus-common
 
 实际分配应根据数据规模和查询负载压测调整。
 
-### 7.6 迁移注意事项
+### 7.6 Migration Notes
 
 从 2.x + Kafka 升级到 3.x + Woodpecker 需要注意：
 
@@ -975,7 +975,7 @@ x-milvus-common: &milvus-common
 4. **WAL 回放**：3.x 首次启动时，Woodpecker 从对象存储中加载已有 segment 重建日志视图，首次启动时间可能长于常规重启。
 5. **回滚限制**：Woodpecker 的日志格式与 Kafka 不兼容，升级到 3.x 后无法直接回滚到 2.x + Kafka。升级前务必做好 etcd 快照和对象存储备份。
 
-### 7.7 验证要点
+### 7.7 Verification Points
 
 3.x 部署的验证与 §3.3 基本一致，额外确认：
 
@@ -995,7 +995,7 @@ print('Milvus 版本:', connections.get_connection_addr('default'))
 "
 ```
 
-### 7.8 版本基线（3.x）
+### 7.8 Version Baseline (3.x)
 
 | 组件 | 版本 | 镜像 |
 |------|------|------|
@@ -1006,7 +1006,7 @@ print('Milvus 版本:', connections.get_connection_addr('default'))
 
 
 
-## 8. Prometheus 监控
+## 8. Prometheus Monitoring
 
 Milvus 官方指标可视化仪表盘：
 ```shell

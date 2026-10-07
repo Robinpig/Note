@@ -20,11 +20,11 @@ metadata store（pulsar-metadata）
   /namespace/{tenant}/{ns}/{hash}  ← bundle 归属（ephemeral 节点）
 ```
 
-## 4.2.4 的大规模重构（照旧资料写必错）
+## 4.2.4 Large-Scale Refactoring (Writing from Old Docs Will Be Wrong)
 
 这是本篇最重要的部分。Pulsar 4.x 相对 2.x/3.x 有**大量类删除与包路径迁移**，网上流传的中文资料几乎全部停留在 2.x。
 
-### 类名对照表
+### Class Name Mapping Table
 
 | 旧资料中的类 | 4.2.4 实际情况 |
 | ------------ | --------------- |
@@ -48,7 +48,7 @@ metadata store（pulsar-metadata）
 > [!WARNING]
 > `EntryBatchOp` / `GroupWriteOp` 被删除意味着 **managed-ledger 不再做 group commit**。这是 4.x 与 2.x 最大的实现差异之一：批量合并的职责上移到了 broker，写入延迟特性与 2.x 不同。
 
-### 字段名对照表
+### Field Name Mapping Table
 
 `LedgerInfo` 现在是 protobuf（`MLDataFormats.proto:55-62`）：
 
@@ -85,9 +85,9 @@ message LedgerInfo {
 messagesConsumedCounter = -getNumberOfEntries(Range.openClosed(position, ledger.getLastPosition()));
 ```
 
-## 写入路径
+## Write Path
 
-### 完整链路
+### Complete Chain
 
 ```
 producer.sendAsync
@@ -127,7 +127,7 @@ ledger.asyncAddEntry(duplicateBuffer, this, addOpCount);
 > [!NOTE]
 > 方法名是 **`asyncAddEntry`**，不是 `asyncWriteEntry`（旧资料常写后者）。
 
-### quorum 由 BookKeeper 负责，managed-ledger 不参与
+### quorum Handled by BookKeeper, managed-ledger Not Involved
 
 `ManagedLedgerImpl.java:4684-4685` —— 创建 ledger 时一次性把 E/Qw/Qa 交给 BookKeeper：
 
@@ -141,9 +141,9 @@ bookKeeper.asyncCreateLedger(config.getEnsembleSize(), config.getWriteQuorumSize
 > [!TIP]
 > 推论：这三项**不在** BookKeeper client 配置里设置，而是每次创建 ledger 时随 metadata 传递。所以改 quorum 只影响**新建**的 ledger，已有 ledger 的 E/Qw/Qa 不可变。
 
-## Rollover（切账本）
+## Rollover (Ledger Switching)
 
-### 封口判定
+### Sealing Determination
 
 `currentLedgerIsFull()`（`ManagedLedgerImpl.java:4431-4458`）是唯一判定：
 
@@ -178,9 +178,9 @@ private static long getMaximumRolloverTimeMs(ManagedLedgerConfig config) {
 
 另有一个独立触发点 `checkInactiveLedgerAndRollOver()`（`:5145-5174`）：`inactiveLedgerRollOverTimeMs > 0` 且距最后写入超时 → CAS 到 `ClosingLedger` 并 `asyncClose`，**但不立即新建 ledger**（`:5168` 注释说明：topic 长期不活跃场景）。
 
-## 默认值对照表
+## Default Value Comparison Table
 
-### 账本相关（`ManagedLedgerConfig` 原生值 vs broker 侧覆盖后）
+### Ledger-related (`ManagedLedgerConfig` Native Values vs broker-side Override)
 
 `ManagedLedgerConfig`（`managed-ledger/src/main/java/org/apache/bookkeeper/mledger/ManagedLedgerConfig.java`）：
 
@@ -212,7 +212,7 @@ private static long getMaximumRolloverTimeMs(ManagedLedgerConfig config) {
 >
 > 顺带一提：`ManagedLedgerConfig:2230-2232` 的注释指出 **sticky reads 仅在 E == Qw 时生效**，默认 2/2/2 恰好满足。
 
-### 缓存相关（`ManagedLedgerFactoryConfig`）
+### Cache-related (`ManagedLedgerFactoryConfig`)
 
 > [!WARNING]
 > 缓存类配置**不在 `ManagedLedgerConfig`** 而在 `ManagedLedgerFactoryConfig`。旧资料把 `cacheEvictionInterval` 写进 MLConfig 是错的。
@@ -231,7 +231,7 @@ private static long getMaximumRolloverTimeMs(ManagedLedgerConfig config) {
 > [!TIP]
 > broker 侧把 `maxCacheSize` 默认改成 **JVM 直接内存的 1/5**（而非固定 128MB），是为了适配容器化环境 —— 这是与官方文档 128MB 的实质差异。
 
-### `managedLedgerCacheEvictionFrequency = 0` 的真实含义
+### `managedLedgerCacheEvictionFrequency = 0` True Meaning
 
 > [!WARNING]
 > **不表示「关闭」** —— 这是个易误判处。`ServiceConfiguration.java:4240-4246`：
@@ -255,9 +255,9 @@ private static long getMaximumRolloverTimeMs(ManagedLedgerConfig config) {
 > ```
 > 水位 0.9，即缓存用到 90% 时按 LRU 淘汰到该水位。
 
-## 读路径
+## Read Path
 
-### 缓存数据结构是跳表不是链表
+### Cache Data Structure Is Skip List, Not Linked List
 
 `RangeEntryCacheImpl`（`impl/cache/RangeEntryCacheImpl.java:59`）内部：
 
@@ -276,7 +276,7 @@ this.entries = new ConcurrentSkipListMap();
 > [!WARNING]
 > 旧资料说缓存是 `LinkedList` —— 4.2.4 是 **`ConcurrentSkipListMap`**。
 
-### 消息解析不再用 magic number
+### Message Parsing No Longer Uses magic number
 
 `Commands.parseMessageMetadata`（`pulsar-common/.../protocol/Commands.java:469-485`）：
 
@@ -294,7 +294,7 @@ public static void parseMessageMetadata(ByteBuf buffer, MessageMetadata msgMetad
 
 `MessageImpl<T>` 实际路径：`pulsar-client/src/main/java/org/apache/pulsar/client/impl/MessageImpl.java:64`（**不在 compression/impl 下**）。
 
-### MessageId 是 protobuf
+### MessageId Is protobuf
 
 `PulsarApi.proto:59-69`：
 
@@ -319,9 +319,9 @@ Java 侧：
 
 即**四元组 (ledgerId, entryId, partitionIndex, batchIndex) + batchSize + ackSet**，比 2.x 多了 chunk 与 batchSize。
 
-## BookKeeper 侧
+## BookKeeper Side
 
-### 术语：segment 不是 fragment
+### Terminology: segment Is Not fragment
 
 > [!WARNING]
 > BookKeeper 4.17.3 源码中**没有 "fragment" 这个术语**，实际是 **`segment`**。
@@ -353,7 +353,7 @@ message LedgerMetadataFormat {
 > - `ackQuorumSize` 是**独立字段**（:9），不在 `quorumSize` 里。
 > - 「一个 ledger 固定写 E 个 bookie」**不严谨** —— `segment` 记录了 ensemble 变更历史，ensemble 可通过 ensemble change 调整。
 
-### quorum 确认逻辑
+### quorum Confirmation Logic
 
 `PendingAddOp.java`：
 
@@ -398,7 +398,7 @@ return failed() > (writeQuorumSize - ackQuorumSize);
 > [!NOTE]
 > **`minBookies` 在 4.17.3 中未查到**（grep 返回空）。相近能力以 `enforceMinNumFaultDomainsForWrite` / `minNumRacksPerWriteQuorum` 形式存在。
 
-### entry 落盘：先 LedgerStorage 再 Journal
+### entry Persistence: LedgerStorage First, Then Journal
 
 `BookieImpl.java:957-993` `addEntryInternal`：
 
@@ -424,7 +424,7 @@ getJournal(ledgerId).logAddEntry(entry, ackBeforeSync, cb, ctx);   // 992  再�
 >
 > 这与「写满内存才刷盘」的旧描述完全不同 —— 内存压力不再驱动刷盘。
 
-### LedgerHandle 已合并
+### LedgerHandle Has Been Merged
 
 `client/LedgerHandle.java:94`（2384 行）：
 
@@ -434,7 +434,7 @@ public class LedgerHandle implements WriteHandle
 
 `LedgerHandleImpl` / `PackagePrivateLedgerHandleImpl` **均不存在**。引用 `LedgerHandleImpl.asyncWriteEntry` 会指向不存在的类。
 
-## 元数据存储：4.x 重要变化
+## Metadata Storage: Important Changes in 4.x
 
 > [!IMPORTANT]
 > metadata store 实现注册在 `pulsar-metadata/.../MetadataStoreFactoryImpl.java:66-73`：
@@ -473,7 +473,7 @@ public String getMetadataStoreUrl() {
 
 `metadataStoreUrl` 字段（`:139`）**无默认值（null）**。
 
-### bookkeeperMetadataServiceUri 的作用
+### Role of bookkeeperMetadataServiceUri
 
 ```java
 // ServiceConfiguration.java:4173-4182
@@ -491,7 +491,7 @@ public String getBookkeeperMetadataStoreUrl() {
 - 分离判定 `isBookkeeperMetadataStoreSeparated()`（`:4169-4171`）= `StringUtils.isNotBlank(bookkeeperMetadataServiceUri)`
 - 未分离时**共享 MetadataStore 实例**（`BookKeeperClientFactoryImpl.java:142-146`）：`bkConf.setProperty(AbstractMetadataDriver.METADATA_STORE_INSTANCE, store)`
 
-## 元数据 key 规范
+## Metadata key Specification
 
 > [!WARNING]
 > 旧资料的 `/admin/namespaces`、`/admin/persistent`、`LOCAL_`/`GLOBAL_` 前缀**全不存在**。真实只有两个前缀常量（`pulsar-broker-common/.../broker/resources/BaseResources.java:52-53`）：
@@ -516,7 +516,7 @@ public String getBookkeeperMetadataStoreUrl() {
 > [!TIP]
 > bundle 归属是**独立的 ephemeral 节点树**（`/namespace/...`），与 `/admin/policies` 分开。这也解释了为什么 unload 后归属信息仍在（节点未被真正删除）而元数据仍可读。
 
-## 删除路径
+## Delete Path
 
 `ManagedLedgerImpl` 的删除调用链：
 
@@ -539,15 +539,15 @@ asyncDeleteLedger / FromBookKeeper / WithRetry                // :3488-3559
 
 保留清理遍历 `ledgers` + `retentionTimeMs` / `retentionSizeInMB`，`currentLedger` 始终跳过。
 
-## 压缩（compaction）
+## Compaction
 
-### 已整体重写
+### Already Rewritten as a Whole
 
 `CompactedLedger` / `CompactedLedgerImpl` / `CompactorImpl` / `PulsarCompaction` / `AsyncCompaction` **全部不存在**。
 
 4.2.4 压缩代码在 **`pulsar-broker/src/main/java/org/apache/pulsar/compaction/`**（包名从 `org.apache.pulsar.broker.compaction` 改来），18 个类，含 `AbstractTwoPhaseCompactor`、`CompactedTopic`、`CompactorTool`、`PublishingOrderCompactor`、`EventTimeOrderCompactor`、`StrategicTwoPhaseCompactor`。
 
-### 排序 key 是 partition_key
+### Sort key Is partition_key
 
 `AbstractTwoPhaseCompactor.java:457-473` `extractKeyAndSize`：
 
@@ -562,7 +562,7 @@ proto：`PulsarApi.proto:117` `optional string partition_key = 6;`、`:139` `par
 > [!NOTE]
 > `partition_key_b64_encoded` 用于长度超过 `partition_key` 字段限制时改 Base64 编码存储 —— 读路径需判断这个标记。
 
-### 两阶段算法
+### Two-phase Algorithm
 
 - **Phase 1**（`:137-175`）：顺序读，累积 `Map<String, T> latestForKey`（key → 最新 MessageId），产出 `PhaseOneResult(first, to, lastReadId, latestForKey)`（`:490-499`）。
 - **Phase 2**（`:271-363`）：**重新读一遍**，仅当 `latestForKey.get(key).equals(id)` 才写出（`:311-312`）。
@@ -572,7 +572,7 @@ proto：`PulsarApi.proto:117` `optional string partition_key = 6;`、`:139` `par
 > [!IMPORTANT]
 > 有序性范围需要注意：`latestForKey` 是**单个 compacted ledger 内**的 map，且 compaction 是 **topic 级**操作（`Compactor.compact(String topic)`，`:58`）。因此保证的是 **topic 全量 compaction 后新 compacted ledger 内按 key 有序**，**不是**跨 compacted ledger / 跨运行轮次的全局有序。
 
-### 触发方式已变
+### Trigger Method Has Changed
 
 | 旧资料 | 4.2.4 实际 |
 | ------ | --------- |
@@ -586,7 +586,7 @@ proto：`PulsarApi.proto:117` `optional string partition_key = 6;`、`:139` `par
 
 输出走独立 ledger：`COMPACTED_TOPIC_LEDGER_PROPERTY = "CompactedTopicLedger"`（`:37`）、digest `CRC32`（`:38`）。入口 `RawReader.create(pulsar, topic, COMPACTION_SUBSCRIPTION, false, false)`（`:59`）。
 
-## 需要打假的常见说法
+## Common Claims That Need Debunking
 
 | 说法 | 4.2.4 实况 |
 | ---- | --------- |
@@ -598,7 +598,7 @@ proto：`PulsarApi.proto:117` `optional string partition_key = 6;`、`:139` `par
 | 「BookKeeper 缓存用 LinkedList」 | ❌ 是 `ConcurrentSkipListMap` |
 | 「用 magic number 校验消息格式」 | ❌ 4.x 改为 broker entry metadata 前缀 + checksum + 4 字节 size 三层跳过 |
 
-## 未查到清单
+## List Not Found
 
 以下项目在 4.2.4 / BK 4.17.3 **全仓零命中**，不要凭记忆补：
 

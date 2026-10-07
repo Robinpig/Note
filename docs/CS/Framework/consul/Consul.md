@@ -7,7 +7,7 @@ Consul 的架构分两面：**控制面（control plane）**维护一个中心�
 > [!NOTE]
 > 版本与许可：当前主线 **2.0.4**（2026-09-09 发布；2.0 分支 2026-05-24 GA，支持至 2028-04-30），维护线 1.22.x（安全支持至 2026-10-31）/ 1.21.x；1.20 已于 2026-05 EOL。自 **1.18.0（2023-08）起改为 Business Source License（BSL）1.1**，1.17 及更早为 MPL；选型商业场景需注意许可约束（详见 [版本与许可](#版本与许可)）。HashiCorp 已于 2025-02-27 被 IBM 收购，但 Consul 的 BSL 许可模型未变。
 
-## 版本与许可
+## Version and License
 
 | 项 | 值 |
 | :--- | :--- |
@@ -20,7 +20,7 @@ Consul 的架构分两面：**控制面（control plane）**维护一个中心�
 
 BSL 与纯粹开源（如 etcd 的 Apache-2.0）不同：它在限定场景下对商业使用收费，但源码可见、可自部署。在"和 etcd / Nacos 对比"时，许可是 Consul 常被提及的取舍点之一。
 
-## 架构总览
+## Architecture Overview
 
 每个 Consul 节点跑一个 **agent**，agent 有两种模式：
 
@@ -62,7 +62,7 @@ digraph consul_arch {
 }
 ```
 
-## 共识与成员发现（Raft + Serf）
+## Consensus and Member Discovery (Raft + Serf)
 
 Consul 同时用两套分布式机制，各管一摊：
 
@@ -71,7 +71,7 @@ Consul 同时用两套分布式机制，各管一摊：
 - **网络坐标（network coordinates）**：Serf 顺带算出各节点的网络坐标，估算任意两节点 RTT。Consul 据此能返回**最近的服务节点**，或在故障时 failover 到下一个最近的机房——这是 etcd / ZooKeeper 没有的原生能力。
 - **Autopilot**（1.4+）：自动化 Raft 运维安全，如稳定的 server 集合、平滑的 leader 转移，降低运维误操作风险。
 
-## 数据模型
+## Data Model
 
 Consul 的状态由三块组成：
 
@@ -79,7 +79,7 @@ Consul 的状态由三块组成：
 - **服务目录（catalog）**：services、nodes、health checks 的关系表，由 server 维护。服务注册来源有三：agent 配置文件、HTTP API、或 DNS；catalog 与"本地 agent 注册"分离（agent 挂了不影响 catalog 中已由 server 确认的服务）。
 - **健康检查（health check）**：类型覆盖 `script` / `HTTP` / `TCP` / `gRPC` / `TTL`。检查失败的服务会从 DNS / 健康查询中剔除，流量不再路由到它。
 
-## 服务发现
+## Service Discovery
 
 服务注册并伴随健康检查后，消费方有三种发现入口：
 
@@ -89,7 +89,7 @@ Consul 的状态由三块组成：
 
 **阻塞查询（blocking query）**：HTTP 带 `index` + `wait` 参数做长轮询，服务端在状态变更或超时前挂起返回——语义上比 watch 灵活、但不支持 etcd 那种按 `revision` 历史回溯。
 
-## 服务网格（Consul service mesh）
+## Service Mesh (Consul service mesh)
 
 Consul 的差异化王牌。早期叫 **Connect**，现统称 **Consul service mesh**：
 
@@ -100,7 +100,7 @@ Consul 的差异化王牌。早期叫 **Connect**，现统称 **Consul service m
 
 这套"注册 + mTLS + 意图"全家桶，是 etcd（只做 KV，网格要自己拿 Envoy 拼）、ZooKeeper（无原生网格）、Nacos（无原生网格）都不内置的。
 
-## 多数据中心
+## Multi-Data Center
 
 Consul **原生多数据中心**，这是它和竞品最硬的差异点之一：
 
@@ -111,25 +111,25 @@ Consul **原生多数据中心**，这是它和竞品最硬的差异点之一：
 > [!TIP]
 > 与 etcd 对比：etcd 集群是单一 Raft 组，跨数据中心需要外部复制（如机架间异步），Consul 把"多活 DC + 就近 failover"做成一等能力。代价是 Consul 的跨 DC 一致性弱（各 DC 自己一致，不保证全局线性）。
 
-## API 与客户端
+## API and Client
 
 - **多协议接入**：HTTP API（8500）+ gRPC（8502，xDS）+ DNS（8600）+ CLI `consul`。无需私有 SDK 即可用通用工具（curl、dig）调试——对比 ZooKeeper 的 Jute 私有协议，这是 Consul 运维友好的来源。
 - **配置**：HCL 文件，`consul agent -config-file=<f>` 或 `-config-dir=<dir>` 合并；新节点用 `retry_join` / `retry_join_wan` 自动加入集群或跨 DC。
 
-## 安全
+## Security
 
 - **ACL**：令牌（token）+ 策略（policy）。**出厂默认 `allow`、且 ACL 默认不启用**（`acl.enabled=false`）；生产强烈建议 `acl.enabled=true` 且 `default_policy="deny"`（新 DC 直接 deny，已运行集群先 allow 过渡，待令牌分发完毕再切 deny）。`acl_datacenter` 指定存放 ACL 的权威 DC。
 - **传输加密**：RPC 走 TLS；gossip 用对称密钥环（keyring）加密；服务网格内 mTLS 由 Consul CA 托管。
 - 对比 etcd 的 RBAC + mTLS、ZooKeeper 的 digest / IP ACL、Nacos 的 ACL，Consul 的 ACL 体系最贴近"零信任网络"的默认收口。
 
-## 运维
+## Operations
 
 - **端口**：server RPC `8300`、Serf LAN `8301`（TCP/UDP）、Serf WAN `8302`（TCP/UDP）、HTTP `8500`、DNS `8600`（TCP/UDP）、gRPC/xDS `8502`、CLI RPC `8400`（legacy）。防火墙需放行同 DC 全套 + 跨 DC 的 `8302`。
 - **监控**：Prometheus 指标在 `/v1/agent/metrics?format=prometheus`（1.4/1.5+），也可走 statsd；关键指标含 Raft 任期 / 提交延时、Serf 成员数、leader 切换、健康检查失败数。
 - **备份**：`consul snapshot save` 对 Raft 状态做快照（含 KV + catalog + ACL）；WAN 各 DC 独立，需分别备份。
 - **升级**：Autopilot 保证 server 集合稳定；跨大版本（尤其 1.x → 2.0）需看官方升级指南与 BSL 许可变化。
 
-## 调优
+## Tuning
 
 - **Server 数量**：3（小集群）或 5（生产），过多拖慢 Raft 提交；不要为"高可用"堆到 7+。
 - **Raft**：`-data-dir` 放低延迟磁盘；WAL 与快照分离；调 `raft_multiplier` 平衡响应速度与心跳开销。
@@ -137,7 +137,7 @@ Consul **原生多数据中心**，这是它和竞品最硬的差异点之一：
 - **ACL / 网格**：开启 ACL 后所有调用需 token，务必先配策略再切默认 deny；sidecar 资源按业务 QPS 预留。
 - **客户端缓存**：读多写少且可容忍短暂陈旧的发现场景，开 agent 缓存降低 server 压力。
 
-## 与 etcd / ZooKeeper / Nacos 对照
+## Comparison with etcd / ZooKeeper / Nacos
 
 Consul 和 etcd / ZooKeeper / Nacos 都提供"一致性的分布式键值 + 协调能力"，但定位分野明显（完整矩阵见 [etcd 横向对照](/docs/CS/Framework/etcd/compare.md)）：
 

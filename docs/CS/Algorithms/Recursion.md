@@ -34,7 +34,6 @@ else
 ```
 
 ## Recursion versus Iteration
-
 While discussing recursion, the basic question that comes to mind is: which way is better? – iteration or recursion?
 The answer to this question depends on what we are trying to do. A recursive approach mirrors the problem that we are trying to solve.
 A recursive approach makes it simpler to solve a problem that may not have the most obvious of answers.
@@ -65,8 +64,7 @@ Iteration
 * Some problems are best suited for recursive solutions while others are not.
 
 
-## 递归优化
-
+## Optimizing Recursion
 比较初级的递归实现可能递归次数太多，容易超时。这时需要对递归进行优化
 
 分治（Divide and Conquer），字面上的解释是「分而治之」，就是把一个复杂的问题分成两个或更多的相同或相似的子问题，直到最后子问题可以简单的直接求解，原问题的解即子问题的解的合并
@@ -78,6 +76,48 @@ Iteration
 尾递归函数，部分高级语言编译器会进行优化，减少不必要的堆栈生成，使得程序栈维持固定的层数，不会出现栈溢出的情况
 
 
+
+## Solving Recurrences: The Fibonacci Sequence
+斐波那契数列是最经典的递推例子，它的定义本身就是递推式：
+
+$$
+F(x) = \begin{cases} 0, & x = 0 \\ 1, & x = 1 \\ F_{x-1} + F_{x-2}, & x \geq 2 \end{cases}
+$$
+
+按递推式直接翻译成代码即得朴素递归，问题是**重复计算**：`F(n)` 会递归展开成一棵深度为 n 的递归树，其中 `F(1)`、`F(2)` 等被反复求值，时间复杂度为 $O(\varphi^n)$（$\varphi$ 为黄金比）。这正是前面「复合-interest 规则（compound interest rule）」警告的情形。
+
+几种改进路径，复杂度依次跃升：
+
+| 方法 | 时间复杂度 | 说明 |
+| --- | --- | --- |
+| 朴素递归 | $O(\varphi^n)$ | 直接照搬递推式，大量重复子问题 |
+| 记忆化（自顶向下） | $O(n)$ | 每个子问题只算一次，借哈希表或数组缓存 |
+| 递推（自底向上） | $O(n)$ | 顺着定义式从小到大迭代，只保留相邻两项 |
+| 矩阵快速幂 | $O(\log n)$ | 把递推写成矩阵形式，用矩阵幂加速 |
+| 快倍增（fast doubling） | $O(\log n)$ | 借助斐波那契的倍增恒等式直接折半 |
+
+其中**递推写法**是把递推式化为迭代的最直接体现——只保留 `pre1`、`pre2` 两个变量滚动前进，空间复杂度降到 $O(1)$：
+
+```java
+long fib(int n) {
+    if (n < 2) return n;
+    long pre2 = 0, pre1 = 1;
+    for (int i = 2; i <= n; i++) {
+        long cur = pre1 + pre2;
+        pre2 = pre1;
+        pre1 = cur;
+    }
+    return pre1;
+}
+```
+
+递推式还能给出**闭式解**，无需逐项计算直接求值：
+
+$$
+F_n = \frac{1}{\sqrt{5}}\left(\varphi^n - \psi^n\right), \qquad \varphi = \frac{1+\sqrt{5}}{2},\ \ \psi = \frac{1-\sqrt{5}}{2}
+$$
+
+不过该式由 Binet 提出是为了**证明** $F_n$ 恒为整数，实践中反而不如记忆化或快倍增：浮点误差在大 n 时会失效，且闭式解推导远比代码复杂。「知道有闭式解」和「用闭式解」是两件事。
 
 ## Example Algorithms of Recursion
 
@@ -93,7 +133,7 @@ Iteration
 
 ## Links
 
-- [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
-- [algorithm analysis](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
+- [数据结构](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
+- [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
 
 ## References

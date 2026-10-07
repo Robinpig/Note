@@ -19,9 +19,9 @@ Kubernetes 里 **"eviction" 这个词指两套完全无关的机制**，它们�
 
 ---
 
-## 第一段：节点还活着吗 —— 心跳与判活
+## Segment 1: Is the Node Still Alive — Heartbeat and Liveness
 
-### 两套心跳是 OR 关系
+### Two Sets of Heartbeats Are OR Relationship
 
 节点心跳有两路，很多人以为 Lease 取代了 Node status，其实**两者并存，任意一路到达即视为存活**：
 
@@ -43,7 +43,7 @@ Lease 对象放在 `kube-node-lease` 命名空间（`v1.NamespaceNodeLease`，`s
 
 `NodeLease` 这个 feature gate 在 v1.36 **已经彻底移除**，没有任何开关，Lease 心跳无条件启用。
 
-### 判活：50s，不是 40s
+### Liveness: 50s, Not 40s
 
 `monitorNodeHealth`（`node_lifecycle_controller.go:653`）每 **5s** 跑一轮（`nodeMonitorPeriod`），对每个节点调 `tryUpdateNodeHealth`（`:813`）。判定只有一行：
 
@@ -62,7 +62,7 @@ if nc.now().After(nodeHealth.probeTimestamp.Add(gracePeriod)) {
 > [!WARNING]
 > **`nodeMonitorGracePeriod` 默认 50s，不是流传甚广的 40s。** 40s 是 kubelet 侧 `NodeLeaseDurationSeconds` 的默认值，两者被混为一谈很久了。源码注释（`defaults.go:40-45`）解释了 50s 的来历：它必须大于 HTTP2_PING_TIMEOUT(30s) + HTTP2_READ_IDLE_TIMEOUT(15s) 之和。
 
-### 超时之后：写的是 Unknown，不是 False
+### After Timeout: Writes Unknown, Not False
 
 这是最容易搞错的一处。controller **永远不会把 Ready 写成 `False`**——`False` 只能由 kubelet 自己上报（比如 kubelet 主动发现 containerd 挂了）。controller 在超时后写的是 **`Unknown`**，对应污点 `node.kubernetes.io/unreachable`：
 
@@ -87,9 +87,9 @@ condition.Message = "Kubelet stopped posting node status."
 
 ---
 
-## 第二段：打污点 —— 两条通路，两套限速
+## Segment 2: Setting Taints — Two Paths, Two Rate Limits
 
-### NoSchedule：同步，快
+### NoSchedule: Synchronous, Fast
 
 `doNoScheduleTaintingPass`（`:523`）由 8 个 worker 消费 `nodeUpdateQueue`，由 Node informer 事件驱动。它按一张映射表把 condition 翻译成污点：
 
@@ -111,7 +111,7 @@ nodeConditionToTaintKeyStatusMap = map[v1.NodeConditionType]map[v1.ConditionStat
 
 **这一步是 kubelet 驱逐与调度器之间的唯一桥梁**：kubelet 上报 `MemoryPressure=True` → 这里转成 `node.kubernetes.io/memory-pressure:NoSchedule` → 调度器的 `TaintToleration` 插件拦住新 Pod。kubelet 自己从不写压力污点（见第四段）。
 
-### NoExecute：异步，限速
+### NoExecute: Asynchronous, Rate-limited
 
 `doNoExecuteTaintingPass`（`:578`）每 **100ms** 轮询（`scheduler.NodeEvictionPeriod`，`scheduler/rate_limited_queue.go:35`），从 `zoneNoExecuteTainter[zone]` 出队。但真正的节流在令牌桶里：
 
@@ -134,7 +134,7 @@ case stateFullDisruption:    newQPS = nc.enterFullDisruptionFunc(zoneSize)  // �
 
 0.1 QPS + burst 1 意味着 **Normal 状态下大约 10 秒才能污点化一个节点**。这是刻意的：节点故障时要给运维留出反应时间，不能一瞬间把整个集群的 Pod 全删了。
 
-### 分区三态
+### Partition Three-state
 
 `ComputeZoneState`（`:1264`）把每个 zone 归入三态之一：
 
@@ -156,9 +156,9 @@ default:
 
 ---
 
-## 第三段：污点驱逐 —— 谁真的删了 Pod
+## Segment 3: Taint Eviction — Who Actually Deleted the Pod
 
-### 它已经不是 node controller 的了
+### It Is No Longer node controller's
 
 这是 v1.36 最重要的一处结构性变化。网上几乎所有教程都说"node controller 负责驱逐 Pod"，但在 v1.36：
 
@@ -178,7 +178,7 @@ SeparateTaintEvictionController: {
 
 完全通过 etcd 里的对象解耦。
 
-### 决策核心：processPodOnNode
+### Decision Core: processPodOnNode
 
 `pkg/controller/tainteviction/taint_eviction.go:451` 是全部的判定逻辑：
 
@@ -207,7 +207,7 @@ SeparateTaintEvictionController: {
 > [!WARNING]
 > **"没写 tolerationSeconds 就立刻驱逐"是错的，恰恰相反——没写意味着无限容忍。** 默认那 300 秒是 `DefaultTolerationSeconds` admission 插件注入的（`plugin/pkg/admission/defaulttolerationseconds/admission.go:44`，not-ready 与 unreachable 各 300），**不是内建行为**。自己写 toleration 时漏掉 `tolerationSeconds`，Pod 会永远赖在故障节点上。
 
-### 计时的起点：controller 的进程内时钟
+### Starting Point of Timing: controller's In-process Clock
 
 `tolerationSeconds` 从哪一刻开始数？三种流传说法全都不准确：
 
@@ -238,7 +238,7 @@ if scheduledEviction != nil {
 
 有意思的是，**device taint eviction（DRA）用的是另一套**：它真的读 `TimeAdded`（`pkg/controller/devicetainteviction/device_taint_eviction.go:1231`）。同一份语义，两个控制器两种实现。
 
-### 执行：直接 DELETE，不用 Eviction subresource
+### Execution: Direct DELETE, No Eviction subresource
 
 ```go
 // taint_eviction.go:147
@@ -251,17 +251,17 @@ return c.CoreV1().Pods(ns).Delete(ctx, name, metav1.DeleteOptions{})
 
 失败重试也很粗糙——5 次 × 10ms 的紧循环（`:116-124`），失败后就不再回队列，只能等下一次事件。总窗口只有 50ms。
 
-### 并发模型
+### Concurrency Model
 
 `tainteviction.Controller` 用 **8 个 sharded worker**（`UpdateWorkerSize = 8`，`:57`），Node 与 Pod 更新**按同一个 nodeName 做 FNV 哈希分到同一个 worker**（`:317`/`:338`），这样 node worker 写 `taintedNodes` 与 pod worker 读它就不会有竞态。worker 内部 Node 更新优先于 Pod 更新（`:370-380`）。
 
 ---
 
-## 第四段：kubelet 自我保护 —— 节点压力驱逐
+## Segment 4: kubelet Self-protection — Node Pressure Eviction
 
 这套机制与前面三段**完全没有代码交集**。
 
-### 主循环
+### Main Loop
 
 `Start`（`pkg/kubelet/eviction/eviction_manager.go:188`）里已经不是老版本的 `wait.Until`：
 
@@ -293,7 +293,7 @@ go func() {
 
 **每轮最多只杀一个 Pod**（`:421-443` 的循环在成功一次后就 break）。这是刻意的保守设计：杀完一个立刻重新观测，很可能已经降压了。
 
-### 默认阈值
+### Default Threshold
 
 ```go
 // pkg/kubelet/eviction/defaults_linux.go:22-28
@@ -324,7 +324,7 @@ var DefaultEvictionHard = map[string]string{
 | 硬阈值立即驱逐的 grace | **1s** | `immediateEvictionGracePeriodSeconds`，`eviction_manager.go:62` |
 | `memory.available` 计算 | `capacity = AvailableBytes + WorkingSetBytes` | `helpers_others.go:28-33` |
 
-### 排序：不看 QoS
+### Sorting: QoS Not Considered
 
 这是另一处常见误解。三个 rank 函数（`helpers.go:816-833`）的排序关键字里**没有 QoS 等级**：
 
@@ -336,7 +336,7 @@ var DefaultEvictionHard = map[string]string{
 
 实际规则：先按"是否超过自己的 request"，再按 `priority`（低的先走，`:679`），最后按绝对用量降序。QoS 只在 **Admit 阶段**起作用（`eviction_manager.go:163-178`），而且只在"**仅有 memory pressure 一个 condition**"时才放行非 BestEffort 的 Pod；DiskPressure / PIDPressure 下一律拒绝新 Pod。
 
-### 执行：本地 kill，不走 apiserver
+### Execution: Local kill, Not Through apiserver
 
 ```go
 // eviction_manager.go:623
@@ -356,7 +356,7 @@ err := m.killPodFunc(pod, true, &gracePeriodOverride, func(status *v1.PodStatus)
 
 被驱逐的 Pod 会带 `DisruptionTarget` condition（`Reason: "TerminationByKubelet"`，`eviction_manager.go:432`）。但注意：**local storage 超限的那三种驱逐不设这个 condition**（`:546`/`:574`/`:600` 传 nil）。
 
-### 污点是谁打的
+### Who Set the Taint
 
 kubelet **只写 condition，从不写压力污点**。它唯一写 `node.Spec.Taints` 的地方是注册时的 `--register-with-taints`（`kubelet_node_status.go:325-339`）。
 
@@ -372,7 +372,7 @@ scheduler      TaintToleration 插件读 spec.taints 拒绝新 Pod 落入
 
 ---
 
-## v1.36 反直觉清单
+## v1.36 Counterintuitive List
 
 按杀伤力排序，全部已回源码复验：
 
@@ -406,7 +406,7 @@ scheduler      TaintToleration 插件读 spec.taints 拒绝新 Pod 落入
 
 ---
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 | 现象 | 该看什么 |
 |---|---|

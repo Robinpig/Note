@@ -4,10 +4,10 @@
 
 
 
-## 版本基线
+## Version Baseline
 
 > [!NOTE]
-> **版本口径**：TLAB（Thread-Local Allocation Buffer）是分代式分配器的核心，**线程私有、用完才从 Eden  refill**。注意其大小是**动态计算**的（`-XX:TLABSize` / `-XX:-UseTLAB` / `-XX:TLABRefillWasteFraction` 等仅作上下限），并非固定值，因此任何"TLAB 默认多大"的说法都要标注版本。详见 [JVM 版本基线](/docs/CS/Java/JDK/JVM/JVM.md?id=版本基线)。
+> **版本口径**：TLAB（Thread-Local Allocation Buffer）是分代式分配器的核心，**线程私有、用完才从 Eden  refill**。注意其大小是**动态计算**的（`-XX:TLABSize` / `-XX:-UseTLAB` / `-XX:TLABRefillWasteFraction` 等仅作上下限），并非固定值，因此任何"TLAB 默认多大"的说法都要标注版本。详见 [JVM 版本基线](/docs/CS/Java/JDK/JVM/JVM.md?id=version-baseline)。
 
 当前 TLAB 不够分配时，如果剩余空间小于**最大浪费空间限制**，那么这个 TLAB 会被退回 Eden，重新申请一个新的。这个剩余空间就会成为孔隙
 

@@ -16,7 +16,7 @@ etcd 通过 Raft 协议进行 leader 选举和数据备份，对外提供高可�
 
 > etcd这个名字来源于unix的“/etc”文件夹和分布式系统(“D”istribute system)的D，组合在一起表示etcd是用于存储分布式配置的信息存储服务
 
-## 版本基线
+## Version Baseline
 
 本文的源码路径、签名与流程描述以 **etcd 3.7.2** 为准（`api/version/version.go`）。其中一条结构性变化最影响读码：**raft 已外置为独立 module `go.etcd.io/raft/v3`（v3.7.0）**，主仓库不再包含 Raft 算法实现，只保留调用侧（`server/etcdserver/bootstrap.go` + `server/etcdserver/raft.go`）。
 
@@ -1865,7 +1865,7 @@ quotaKVServer::Put
 
 EtcdServer::Put -> EtcdServer::raftRquest -> EtcdServer::processInternalRaftRequestOnce -> raftNode::Propose
 
-## 消息处理
+## Message Processing
 
 消息入口
 
@@ -2021,7 +2021,7 @@ EtcdServer 会处理这个 applyc 队列，会将 snapshot 和 entries 都 apply
 
 最后调用 applyWait 的 Trigger，唤醒客户端请求的等待线程，返回客户端的请求。
 
-#### 线性读
+#### Linearizable Read
 
 当收到一个线性读请求时，它首先会从Leader获取集群最新的已提交的日志索引(committed index)
 
@@ -2622,7 +2622,7 @@ The majority side becomes the available cluster and the minority side is unavail
 - Consul提供了原生的分布式锁、健康检查、服务发现机制支持，让业务可以更省心，不过etcd和ZooKeeper也都有相应的库，帮助你降低工作量
 - 多数据中心。在多数据中心支持上，只有Consul是天然支持的，虽然它本身不支持数据自动跨数据中心同步，但是它提供的服务发现机制、[Prepared Query](https://www.consul.io/api-docs/query)功能，赋予了业务在一个可用区后端实例故障时，可将请求转发到最近的数据中心实例。而etcd和ZooKeeper并不支持
 
-## 陷阱清单
+## Pitfall List
 
 > [!WARNING]
 > 这篇覆盖的是启动与 Raft 接线流程，最容易踩的是**照旧文文章节名去源码里找文件**：

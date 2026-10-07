@@ -13,7 +13,7 @@ Pulsar Functions 是「在 broker 旁边跑一个轻量处理进程」的轻量�
       （同 JVM 线程池）    （独立 java 子进程）      （K8s Pod）
 ```
 
-## 模块结构
+## Module Structure
 
 `pulsar-functions/` 子目录：`api-java`、`runtime`、`runtime-all`、`instance`、`worker`、`proto`、`localrun`、`localrun-shaded`、`java-examples`、`java-examples-builtin`、`python-examples`、`utils`、`secrets`、`scripts`。
 
@@ -22,7 +22,7 @@ Pulsar Functions 是「在 broker 旁边跑一个轻量处理进程」的轻量�
 > **`pulsar-functions/runtime/src/main/java/org/apache/pulsar/functions/worker/WorkerConfig.java`**
 > （在 **runtime 模块**，不在 worker 模块）。
 
-## 两种部署模式
+## Two Deployment Modes
 
 | 模式 | 开关 | 位置 |
 | ---- | ---- | ---- |
@@ -38,7 +38,7 @@ Worker 端口（`WorkerConfig.java:105,110`）：
 
 `workerId` 空则惰性生成 `{hostname}-{port}`（`:95` / `:850-854`），`workerHostname` 空则 `unsafeLocalhostResolve()`（`:100` / `:858-861`）。
 
-## Runtime 选型：三个实现，无隐式默认
+## Runtime Selection: Three Implementations, No Implicit Default
 
 | Runtime | 类 | 进程模型 |
 | -------- | -- | -------- |
@@ -51,7 +51,7 @@ Worker 端口（`WorkerConfig.java:105,110`）：
 > [!WARNING]
 > **`GoRuntimeFactory` 不存在。** `pulsar-function-go/` 是**纯 Go SDK**（目录只有 `pf/`、`pb/`、`logutil/`、`go.mod`，**无任何 .java 文件**），4.x 已移除 Go runtime 实现。
 
-### runtime 选择逻辑
+### runtime Selection Logic
 
 `FunctionRuntimeManager.java:194-216`：
 
@@ -67,7 +67,7 @@ functionRuntimeFactoryClassName 非空 → 反射加载
 > [!IMPORTANT]
 > **没有隐式默认，必须显式配置。** 旧资料说「默认 `{"threads":8}`」—— 源码中**未查到**该默认值，且 `ThreadContainerFactory` 已被 `@Deprecated`（`:915`），注释明确「Deprecated in favor of using functionRuntimeFactoryClassName and functionRuntimeFactoryConfigs」。
 
-## WorkerConfig 默认值
+## WorkerConfig Defaults
 
 | 字段 | 默认值 | 行号 | 备注 |
 | ---- | ------ | ---- | ---- |
@@ -79,7 +79,7 @@ functionRuntimeFactoryClassName 非空 → 反射加载
 > - **`functionRuntimeFactoryConfig`（单数）不存在** —— 真实是 `functionRuntimeFactoryConfigs`（复数）且类型是 `Map<String,Object>`。
 > - **`functionDirectory` 不存在** —— `WorkerConfig` 无此字段，yml `:71` 是 `downloadDirectory: download/pulsar_functions`。
 
-## 三种 API：Source/Sink/Function 共用 runtime
+## Three Types of API: Source/Sink/Function Share runtime
 
 | API | 路径 | 注解 |
 | --- | ---- | ---- |
@@ -92,7 +92,7 @@ functionRuntimeFactoryClassName 非空 → 反射加载
 >
 > 同样**无 `functions/source`、`functions/sink` 包** —— `pulsar-functions/api-java/.../functions/` 下只有 `api` 一个子目录；Source/Sink 在 `pulsar-io/core`。
 
-### pulsar-io 是连接器集合
+### pulsar-io Is a Connector Collection
 
 `pulsar-io/` 含 `core` + **约 30 个 connector**（kafka / jdbc / redis / es / hbase 等）。`pulsar-io/core/.../io/core/` 里的类：`Source`、`Sink`、`PushSource`、`AbstractPushSource`、`SinkContext`、`SourceContext`、`BatchSourceTriggerer`。
 
@@ -108,7 +108,7 @@ functionRuntimeFactoryClassName 非空 → 反射加载
 
 API 侧：`api-java/.../api/WindowFunction.java`、`WindowContext.java`。
 
-### 日志主题机制
+### Log Topic Mechanism
 
 `pulsar-functions/instance/.../functions/instance/LogAppender.java`：
 
@@ -121,12 +121,12 @@ API 侧：`api-java/.../api/WindowFunction.java`、`WindowContext.java`。
 > [!NOTE]
 > **无 `PulsarLogger` 类** —— 旧资料提到的这个类不存在。
 
-## 事务
+## Transactions
 
 > [!IMPORTANT]
 > **默认关闭**：`transactionCoordinatorEnabled = false`（`ServiceConfiguration.java:3756`）。
 
-### TC 实现已改名
+### TC Implementation Has Been Renamed
 
 > [!WARNING]
 > `TransactionCoordinatorImpl` **不存在**。`pulsar-broker/.../broker/transaction/` 下**无 `coordinator` 子包**（仅 `buffer` / `exception` / `pendingack` / `recover` / `timeout` / `util`）。
@@ -145,7 +145,7 @@ API 侧：`api-java/.../api/WindowFunction.java`、`WindowContext.java`。
 
 `pulsar-transaction/` 子模块**只有 `common` 和 `coordinator`**，且 `coordinator` 内是 TC 元数据存储（`MLTransactionMetadataStore` 等），**无 TC 服务实现**。
 
-### 状态机：7 态，类名是 Transaction.State
+### State Machine: 7 States, Class Name Is Transaction.State
 
 > [!WARNING]
 > `org.apache.pulsar.transaction.impl.TransactionState` **不存在**。真实是 `pulsar-client-api/.../client/api/transaction/Transaction.java:32-79` 的**嵌套 enum `Transaction.State`**。
@@ -174,7 +174,7 @@ abort:  OPEN → ABORTING → ABORTED
 
 客户端实现 `TransactionImpl.java`：`commit()`(184) 先 `checkState(OPEN, COMMITTING)`(186) 再置 `COMMITTING`(188)，失败回滚 `internalAbort`(191) 并可能置 `ERROR`(200)；`abort()`(215) 同构；`checkState`(264)。
 
-### 两阶段提交：commit marker 写入 ledger
+### Two-phase Commit: commit marker Written to Ledger
 
 ```java
 // pulsar-broker/.../transaction/buffer/impl/TopicTransactionBuffer.java:455-458
@@ -184,7 +184,7 @@ topic.getManagedLedger().asyncAddEntry(commitMarker, new AsyncCallbacks.AddEntry
 
 marker 走普通 entry 写入路径 —— 即事务提交标记与其他消息一样追加到 ledger。
 
-### 事务配置默认值
+### Transaction Default Configuration
 
 | 字段 | 默认值 | 行号 |
 | ---- | ------ | ---- |
@@ -212,7 +212,7 @@ marker 走普通 entry 写入路径 —— 即事务提交标记与其他消息�
 > - `transactionSnapshotPeriodSeconds` —— 不存在，对应的是**分段快照**机制（`transactionBufferSnapshotMinTimeInMillis=5000` + `...MaxTransactionCount=1000`）
 > - `transactionMaxPendingAck` —— 不存在
 
-### 事务内部 topic 常量
+### Internal Transaction topic Constants
 
 `pulsar-common/.../common/naming/SystemTopicNames.java`：
 
@@ -232,7 +232,7 @@ marker 走普通 entry 写入路径 —— 即事务提交标记与其他消息�
 >
 > 所有事务 topic 落在 `pulsar/system`（`NamespaceName.SYSTEM_NAMESPACE`）。
 
-## 幂等生产者：开关本身已被删除
+## Idempotent Producer: The Switch Itself Has Been Removed
 
 > [!IMPORTANT]
 > **这是本篇最反直觉的发现**：4.2.4 中 **幂等开关已被彻底移除**，不是「默认开」也不是「默认关」。
@@ -259,7 +259,7 @@ marker 走普通 entry 写入路径 —— 即事务提交标记与其他消息�
 >
 > 所以问题「4.x 是否默认开启幂等」的答案是：**该开关已不存在，问题本身失效**。
 
-## 投递语义
+## Delivery Semantics
 
 | 场景 | 语义 | 依据 |
 | ---- | ---- | ---- |
@@ -270,7 +270,7 @@ marker 走普通 entry 写入路径 —— 即事务提交标记与其他消息�
 > [!WARNING]
 > 笼统说「Pulsar 是 exactly-once」是**错误的**。准确表述：普通非事务订阅是 at-least-once，仅在事务订阅范围内提供 exactly-once 效果，且需 `transactionCoordinatorEnabled=true`（默认关闭）。
 
-## 实践选型
+## Practical Selection
 
 | 需求 | 方案 | 说明 |
 | ---- | ---- | ---- |
@@ -288,7 +288,7 @@ marker 走普通 entry 写入路径 —— 即事务提交标记与其他消息�
 >
 > 是否仍在官方 roadmap 上积极维护属**项目状态判断、非源码可核实** —— 4.2.4 tarball 内无 release notes / roadmap（`site2/` 目录不存在），**未查到**，建议查 Apache 官方 4.x 发布说明佐证。
 
-## 需要打假的常见说法
+## Common Claims That Need Debunking
 
 | 说法 | 4.2.4 实况 |
 | ---- | --------- |
@@ -305,7 +305,7 @@ marker 走普通 entry 写入路径 —— 即事务提交标记与其他消息�
 | 「Pulsar Functions 是已废弃功能」 | ❌ 仍是完整子系统，仅 Go runtime 与 pulsar-streams 收缩 |
 | 「`PulsarLogger` 是日志 topic 的类」 | ❌ 不存在，真实是 `LogAppender` |
 
-## 未查到清单
+## List Not Found
 
 - `functionRuntimeFactoryConfigs` 的 `{"threads":8}` 默认值（源码与 yml 均无）
 - `numFunctionPackageReplicas` 在 `WorkerConfig` 的字段级默认值（仅 yml 中为 1）

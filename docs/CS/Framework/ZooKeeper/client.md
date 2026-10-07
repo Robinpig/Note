@@ -7,7 +7,7 @@ ZooKeeper 的 Java 客户端是 `org.apache.zookeeper.ZooKeeper`：它线程安�
 > [!NOTE]
 > 版本基线：持久化 watch（`addWatch`，递归/标准）自 3.6.0 起；当前主线 3.9.6。客户端 3.5+ 与 3.9 服务端完全兼容。
 
-## 连接串与 chroot
+## Connection String and chroot
 
 ```java
 ZooKeeper zk = new ZooKeeper(
@@ -19,7 +19,7 @@ ZooKeeper zk = new ZooKeeper(
 - **connectString**：逗号分隔的 `host:port` 列表。客户端随机选一个建连；断开后在新会话期内会尝试其他地址（受 `sessionTimeout` 约束）。
 - **chroot**（可选，形如 `/app`）：把该客户端的所有路径自动加前缀 `/app`，实现多应用共享一个集群时的命名空间隔离，等价于"逻辑多租户"（配合 ACL 见 [security](/docs/CS/Framework/ZooKeeper/security.md)）。底层就是服务端把请求 path 拼上 chroot。
 
-## 会话生命周期
+## Session Lifecycle
 
 ```dot
 digraph "Session" {
@@ -44,7 +44,7 @@ digraph "Session" {
 - **会话超时**：`sessionTimeout` 必须在服务端 `minSessionTimeout` ~ `maxSessionTimeout` 之间（默认 `2×tickTime` ~ `20×tickTime`）。客户端发心跳（ping）续租；若服务端在 `sessionTimeout` 内未收到任何包，判定会话过期。
 - **过期后果（不可逆）**：该会话创建的 **ephemeral 节点被删除**，已注册的 watch 全部失效，客户端必须新建 `ZooKeeper` 实例。这是 `SessionExpiredException` 必须当作"致命、重建"而不是"重试"的根本原因。
 
-## Watcher：一次性语义
+## Watcher: One-Shot Semantics
 
 ZooKeeper 的 watch 是**一次性**的——触发一次后就被注销，需重新注册才能继续接收：
 
@@ -66,7 +66,7 @@ zk.getData("/app/config", new Watcher() {
 
 读路径上的 watch 与本地读语义见 [pipeline](/docs/CS/Framework/ZooKeeper/pipeline.md)；Kleppmann 的经典文章指出一次性 watch 正是 ZooKeeper 分布式锁的脆弱点之一（见 [Recipes](/docs/CS/Framework/ZooKeeper/Recipes.md)）。
 
-## 异常分类与重试策略
+## Exception Classification and Retry Strategy
 
 所有异常都派生自 `KeeperException`（服务端返回码）或 `IOException`（网络）。常见：
 
@@ -85,7 +85,7 @@ zk.getData("/app/config", new Watcher() {
 - **SessionExpired**：不是重试能解决的，必须 `new ZooKeeper(...)` 重建会话，并重新 `addAuthInfo`、重新注册 watch。
 - Curator 的 `RetryNTimes` / `RetryUntilElapsed` / `ExponentialBackoffRetry` 已封装了 `ConnectionLoss` 的安全重试与幂等判断，强烈建议直接用 Curator 而非裸客户端。
 
-## ACL 与认证
+## ACL and Authentication
 
 ```java
 zk.addAuthInfo("digest", "alice:secret".getBytes());      // 注入身份
@@ -96,11 +96,11 @@ zk.create("/app/secrets", data,
 - 详见节点级 ACL 的 scheme 与权限位：[security](/docs/CS/Framework/ZooKeeper/security.md)。
 - 注意：`delete` 权限在**父节点**，不意外的"删不掉子节点"多因父节点缺 `d` 位。
 
-## Jute 序列化
+## Jute Serialization
 
-ZooKeeper 的线格式与磁盘格式都用自研的 **Jute**（源自 Hadoop）：记录实现 `org.apache.jute.Record`，经 `OutputArchive` / `InputArchive`（`BinaryInputArchive` / `BinaryOutputArchive` 等）序列化。请求体、事务体、快照都靠它编解码——这也是 ZK 协议"难用 curl 直接调试"的原因（对比 etcd 的 protobuf/gRPC，见 [与 etcd 对照](/docs/CS/Framework/ZooKeeper/ZooKeeper.md?id=与-etcd-对照)）。深入见 [Jute](/docs/CS/Framework/ZooKeeper/Jute.md)。
+ZooKeeper 的线格式与磁盘格式都用自研的 **Jute**（源自 Hadoop）：记录实现 `org.apache.jute.Record`，经 `OutputArchive` / `InputArchive`（`BinaryInputArchive` / `BinaryOutputArchive` 等）序列化。请求体、事务体、快照都靠它编解码——这也是 ZK 协议"难用 curl 直接调试"的原因（对比 etcd 的 protobuf/gRPC，见 [与 etcd 对照](/docs/CS/Framework/ZooKeeper/ZooKeeper.md?id=comparison-with-etcd)）。深入见 [Jute](/docs/CS/Framework/ZooKeeper/Jute.md)。
 
-## 最佳实践
+## Best Practices
 
 - **每进程一个 `ZooKeeper` 实例**：客户端内部线程安全且自带连接池语义，不要每次调用 new 一个——会刷爆会话与连接数（看 [monitoring](/docs/CS/Framework/ZooKeeper/monitoring.md) 的 `zk_num_alive_connections`）。
 - **统一在默认 Watcher 处理会话状态**：`Expired` / `Disconnected` / `AuthFailed` 必须有兜底，否则 watch 静默失效你还以为在监听。

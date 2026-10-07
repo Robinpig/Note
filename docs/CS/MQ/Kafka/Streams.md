@@ -4,7 +4,7 @@ Kafka Streams 是 Kafka 官方提供的**客户端流处理库**（Java 库，�
 
 > 版本基线：**4.3.1**（`gradle.properties:17`）。
 
-## 核心抽象
+## Core Abstraction
 
 - **KStream**：记录流，每条消息是一次独立事实（如点击事件），语义近似无限表的 INSERT。
 - **KTable**：变更日志流，同 key 后写覆盖先写，逻辑上是一张持续更新的表（物化视图）。
@@ -23,7 +23,7 @@ KafkaStreams streams = new KafkaStreams(builder.build(), props);
 streams.start();
 ```
 
-## 关键配置默认值
+## Key Configuration Defaults
 
 `streams/src/main/java/org/apache/kafka/streams/StreamsConfig.java`：
 
@@ -54,7 +54,7 @@ streams.start();
 > [!NOTE]
 > **`cache.max.wait.ms` 在 4.3.1 中不存在**（全文件零匹配）—— 已随 record cache 弃用移除，缓存改为纯 size-based（`statestore.cache.max.bytes`）。
 
-### consumer 内部覆盖值
+### consumer Internal Override Values
 
 `StreamsConfig.java:1322-1328` 的 `CONSUMER_DEFAULT_OVERRIDES`：
 
@@ -74,7 +74,7 @@ EOS 时额外加 `ISOLATION_LEVEL_CONFIG = read_committed`（`:1333`）。
 >
 > 这意味着 standalone 调试时不会自动跳到末尾，**从头消费**，容易误判。
 
-## group.protocol：两个同名枚举（易混）
+## group.protocol: Two Enums with the Same Name (Easy to Confuse)
 
 > [!WARNING]
 > Streams 与 clients 各有一个 `GroupProtocol` 枚举，**取值不同**：
@@ -90,7 +90,7 @@ EOS 时额外加 `ISOLATION_LEVEL_CONFIG = read_committed`（`:1333`）。
 
 约束：`group.instance.id`（静态成员）与 warmup replicas **仅在 `group.protocol=classic` 下可用**（`StreamsConfig.java:1565`、`:1569`）。
 
-## exactly_once_v2：已 GA
+## exactly_once_v2: GA
 
 > [!IMPORTANT]
 > **`exactly_once_v2` 是 `processing.guarantee` 的正式合法值，不是 experimental/beta。**
@@ -129,9 +129,9 @@ producer.sendOffsetsToTransaction(offsets, consumerGroupMetadata);
 > [!NOTE]
 > **Connect 侧 DLQ 前缀不同**：`errors.deadletterqueue.`（`SinkConnectorConfig.java:54`），且**有** enable 开关。两者不要混。
 
-## 4.3.0 重要变更
+## 4.3.0 Important Changes
 
-### KAFKA-20616：RocksDB native memory 泄漏
+### KAFKA-20616: RocksDB Native Memory Leak
 
 官方升级指南 `docs/streams/upgrade-guide.md:70` 原文：
 
@@ -148,7 +148,7 @@ producer.sendOffsetsToTransaction(offsets, consumerGroupMetadata);
 > [!TIP]
 > 「级联 task 关闭」是关键：单次关闭泄漏有限，但 rebalance 会同时关闭大量 task，把小泄漏放大成 OOM。所以**用了 Streams 且发生频繁 rebalance 的场景，4.3.0 风险很高**。
 
-### KIP-1270：global store 的异常处理
+### KIP-1270: Exception Handling for Global Store
 
 同一份文档记载：4.3.0 起可通过 KIP-1270 为 global store/KTable 配置 `ProcessingExceptionHandler`。
 
@@ -159,7 +159,7 @@ producer.sendOffsetsToTransaction(offsets, consumerGroupMetadata);
 >
 > 此前 `ProcessingExceptionHandler` 只作用于常规 stream task。
 
-### 其他 4.3.0 KIP
+### Other 4.3.0 KIPs
 
 | KIP | 内容 |
 | --- | ---- |
@@ -167,20 +167,20 @@ producer.sendOffsetsToTransaction(offsets, consumerGroupMetadata);
 | KIP-1259 | `state.cleanup.dir.max.age.ms` |
 | KIP-1271 / KIP-1285 | State Store 存 Headers |
 
-## 状态与容错
+## State and Fault Tolerance
 
 - 本地状态默认存在 **RocksDB**（可落盘，超内存也能跑），每个分片的状态变更同时写入 **changelog 主题**（compact 主题）；
 - 实例宕机或 rebalance 后，新 owner 从 changelog 回放重建状态；changelog 是其唯一事实来源，本地 RocksDB 只是缓存；
 - 一次处理的进度靠消费 offset（consumer group）记录，与普通 [Consumer](/docs/CS/MQ/Kafka/Consumer.md) 同一套机制；
 - `RocksDBConfigSetter`（`streams/.../state/RocksDBConfigSetter.java`）用于调优 —— Window Store 与 State Store **共用 RocksDB 引擎**，差异通过此 setter 表达。
 
-## 时间语义
+## Time Semantics
 
 - 事件时间（event time，从记录里的 timestamp 提取）、摄入时间、处理时间三选一（`TimestampExtractor`）；
 - 窗口：tumbling（不重叠）、hopping（重叠）、session（按活动间隔合并）；
 - **流时间驱动**：算子根据观察到的最大事件时间推进，基于 per-partition watermark（取该 task 各输入分区最小值），迟到记录落到下一个窗口或被 grace 宽限接收 —— 概念与 Flink watermark 同源但实现更简单。
 
-## 与 Flink / Consumer 自写的取舍
+## Trade-offs with Flink / Hand-written Consumer
 
 | 方案 | 部署形态 | 状态管理 | 适合 |
 | ---- | -------- | -------- | ---- |
@@ -192,7 +192,7 @@ producer.sendOffsetsToTransaction(offsets, consumerGroupMetadata);
 > [!IMPORTANT]
 > Streams 按 topic 分区数决定最大并行度（一个分区同一时刻只能被一个 task 处理），**扩并行度前要先扩分区**。这是与 Flink（可独立调整并行度与 key group 粒度）最实质的差异。
 
-## 需要打假的常见说法
+## Common Claims That Need Debunking
 
 | 说法 | 4.3.1 实况 |
 | ---- | --------- |
@@ -207,7 +207,7 @@ producer.sendOffsetsToTransaction(offsets, consumerGroupMetadata);
 | 「有 `BuiltInMetrics` 类」 | ❌ 4.3.1 只有 `StreamsMetrics` |
 | 「4.3.0 的 RocksDB 泄漏是 Kafka 核心问题」 | ⚠️ 是 **Streams 的 state store 层**（KAFKA-20616），4.3.1 已修复 |
 
-## 未查到清单
+## List Not Found
 
 - `max.warmup.replicas` 的默认值（`StreamsConfig.java:1004` 定义存在，未读取数值行）
 - `group.share.assignment.interval.ms` 同上

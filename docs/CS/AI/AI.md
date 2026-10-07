@@ -4,7 +4,7 @@ AI（人工智能）是研究如何让机器表现出感知、推理、学习与
 
 现代 AI 的分水岭是 2017 年 NeurIPS 上 Google 论文《Attention Is All You Need》提出的 **Transformer**（见 [Transformer](/docs/CS/AI/Transformer.md)）：它用 self-attention 取代 RNN 的顺序递推，使训练可大规模并行、规模可扩展。基于 Transformer 的 [LLM](/docs/CS/AI/LLM/LLM.md)（BERT/GPT 及后续模型）把 NLP、CV（ViT）、多模态乃至 Agent 统一到同一套预训练范式下。
 
-## 学科地图
+## Field Map
 
 ```
 AI
@@ -27,7 +27,7 @@ AI
     └── 落地形态：[LLM 应用开发平台](/docs/CS/AI/LLM/Platform/Platform.md)（Dify、Coze 等，见 LLM/ 目录）
 ```
 
-## 三范式对比
+## Comparison of Three Paradigms
 
 | 维度 | 传统机器学习 | 深度学习 | 大模型（Foundation Model） |
 |------|-------------|----------|------------------------------|
@@ -38,7 +38,7 @@ AI
 | 代表算法 | [SVM](/docs/CS/AI/ML/SVM.md)、随机森林、GBDT | [CNN](/docs/CS/AI/CNN.md)、ResNet | GPT、BERT、扩散模型 |
 | 工具 | [Scikit-Learn](/docs/CS/AI/Scikit-Learn.md)、XGBoost | [PyTorch](/docs/CS/AI/PyTorch.md)、[TensorFlow](/docs/CS/AI/TensorFlow.md) | Transformers、vLLM、推理框架 |
 
-## 关键概念脉络
+## Key Concept Thread
 
 - **偏差-方差权衡**：模型误差 = 偏差（欠拟合）+ 方差（过拟合）+ 不可约噪声；正则化、交叉验证、集成学习都在管理这对矛盾（见 [ML](/docs/CS/AI/ML/ML.md)）。
 - **优化**：梯度下降及其变体（SGD+momentum、Adam/AdamW）、学习率调度、损失函数（交叉熵、Hinge、MSE）。
@@ -46,10 +46,23 @@ AI
 - **表示学习**：从手工特征到嵌入（embedding），文本/图像/用户最终都表示为可计算相似度的向量——这是语义检索与推荐的共同底座。
 - **规模定律（Scaling Law）**：模型能力随参数、数据、算力的幂律提升，是 LLM 路线成立的经验依据；同时带来涌现能力与对齐问题（RLHF）。
 
+## The Turing Test
+
+「机器能否思考」这个问题太模糊，1950 年 Alan Turing 把它换成一个可操作的实验：让询问者向**一个人和一台机器**同时提出同一批问题，只看文本回答、不看被试是什么。经过仔细审查后，如果询问者**无法确定**哪一份回答来自机器，就认为这台机器通过了图灵测试，表现出智能行为。
+
+这个定义的价值与限度都来自同一处——它只比较**行为等效**，不追问内部机制：
+
+- 优势是绕开了「理解究竟是什么」的争论，把智能变成可判定的实验。
+- 弱点是模拟与拥有未必同一：符号操作全部正确，不等于掌握了语义（Searle 的「中文房间」即为此而设）。
+- 工程实践因此早已转向**可验证的任务基准**——代码、数学、检索与工具调用的成功率，而不是「像不像人」，见 [LLM](/docs/CS/AI/LLM/LLM.md) 与 [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md)。
+
+图灵对计算本身的形式化（图灵机、Church-Turing 论题、停机问题）见 [Computability](/docs/CS/Algorithms/Computability.md)。
+
 ## Links
 
 - [OS](/docs/CS/OS/OS.md)
-
+- [NumPy](/docs/CS/Python/NumPy.md)
+- [Ecosystem](/docs/CS/Python/Ecosystem.md)
 
 ## References
 

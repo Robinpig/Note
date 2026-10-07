@@ -962,7 +962,7 @@ public class JobScheduleHelper {
 
 
 
-### 过期处理策略
+### Expiration Handling Strategy
 
 任务调度错过触发时间时的处理策略：
 
@@ -973,7 +973,7 @@ public class JobScheduleHelper {
 
 
 
-### 日志回调
+### Logging Callback
 
 ```java
 // JobCompleteHelper
@@ -1023,7 +1023,7 @@ private ReturnT<String> callback(HandleCallbackParam handleCallbackParam) {
 
 ```
 
-### 调度FailOver
+### Scheduling FailOver
 
 执行器如若集群部署，调度中心将会感知到在线的所有执行器，如“127.0.0.1:9997, 127.0.0.1:9998, 127.0.0.1:9999”。当任务”路由策略”选择”故障转移(FAILOVER)”时，当调度中心每次发起调度请求时，会按照顺序对执行器发出心跳检测请求，第一个检测为存活状态的执行器将会被选定并发送调度请求
 
@@ -1042,3 +1042,4 @@ private ReturnT<String> callback(HandleCallbackParam handleCallbackParam) {
 - [SchedulerX](/docs/CS/Framework/Job/ScheduleX.md)
 - [ElasticJob](/docs/CS/Framework/Job/ElasticJob.md)
 - [Task](/docs/CS/Framework/Spring/Task.md)
+- [Scheduled Task](/docs/CS/SE/Scheduled_Task.md)

@@ -2726,7 +2726,7 @@ If the Queue is full, this methods removes an element from the head of the Queue
     }
 ```
 
-## ZAB 和 Raft
+## ZAB and Raft
 
 ZAB 是专为 Zookeeper 定制的非通用协议，
 

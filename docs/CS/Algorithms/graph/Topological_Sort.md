@@ -3,8 +3,7 @@
 拓扑排序（Topological sorting）要解决的问题是如何给一个有向无环图的所有节点排序
 拓扑排序的目标是将所有节点排序，使得排在前面的节点不能依赖于排在后面的节点
 
-## AOV 网
-
+## AOV Networks
 一个 AOV 网(*Activity On Vertex NetWork*) 必定是一个有向无环图，即不带有回路 与 DAG 不同的是，AOV 的活动都表示在顶点上，边表示活动（顶点）发生的先后关系
 
 若网中所有活动均可以排出先后顺序（任两个活动之间均确定先后顺序），则称网是拓扑有序的
@@ -31,8 +30,7 @@
 
 
 
-## AOE 网
-
+## AOE Networks
 AOE 网(*Activity On Edge Network*) 的定义：在带权有向图中若以顶点表示事件，有向边表示活动，边上的权值表示该活动持续的时间，这样的图简称为AOE网
 
 AOE 网应该是无环的，且存在唯一入度为零的起始顶点（源点），以及唯一出度为零的完成顶点（汇点）
@@ -55,14 +53,13 @@ AOE 网的相关基本概念
 
 
 
-## 关键路径
+## Critical Path
 AOE 网中的有些活动是可以并行进行的，所以完成整个工程的最短时间是从开始点到完成点的最长活动路径长度
 因为一项工程需要完成所有工程内的活动, 所以**最长的活动路径**也是**关键路径**，它决定工程完成的总时间
 
 
 
-## 应用
-
+## Applications
 拓扑排序可以判断图中是否有环，还可以用来判断图是否是一条链。拓扑排序可以用来求 AOE 网中的关键路径，估算工程完成的最短时间
 
 
@@ -73,3 +70,8 @@ AOE 网中的有些活动是可以并行进行的，所以完成整个工程的�
 ## Links
 
 - [graph](/docs/CS/Algorithms/graph/graph.md)
+
+## References
+
+1. [拓扑排序 - OI Wiki](https://oi-wiki.org/graph/topo/)
+2. [Topological Sort - CP-Algorithms](https://cp-algorithms.com/graph/topological-sort.html)

@@ -21,6 +21,13 @@ problems, yet still not provably intractable.
 
 The key notion behind the theory of NP-complete problems is the nondeterministic Turing machine.
 
+确定性/非确定性图灵机的形式化定义、Church-Turing 论题与停机问题的对角线证明，见 [Computability](/docs/CS/Algorithms/Computability.md)。
+
 ## Links
 
 - [Algorithms](/docs/CS/Algorithms/Algorithms.md)
+
+## References
+
+1. [复杂度 - OI Wiki](https://oi-wiki.org/basic/complexity/)
+2. [哈密顿图 - OI Wiki](https://oi-wiki.org/graph/hamilton/)

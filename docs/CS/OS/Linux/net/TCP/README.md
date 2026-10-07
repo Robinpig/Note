@@ -8,7 +8,7 @@
 
 另一个分工要说明：`docs/CS/CN/TCP/` 下的笔记讲的是**协议本身**（报文格式、状态机、为什么三次握手），本目录讲的是**Linux 怎么把它实现出来**（哪个函数发 SYN、重传计时器在哪个字段、拥塞算法怎么注册进来）。看协议概念去前者，看内核代码来这里。
 
-## 建连：握手在内核里落在哪些函数上
+## Connection Establishment: Which Functions the Handshake Lands On in the Kernel
 
 三次握手在教科书上是三个箭头，在内核里是**两个进程各走一遍跨系统调用的路径**，中间还夹着一个只在握手期存在的临时对象。
 
@@ -18,7 +18,7 @@
 
 这条路径上**两个队列的长度**（`tcp_max_syn_backlog` 与 listen backlog）决定了抗 SYN flood 的能力，`tcp_syncookies` 则是在半连接队列被打满时彻底不分配 `request_sock` 的兜底方案。完整追踪见 [Connection_Setup](/docs/CS/OS/Linux/net/TCP/Connection_Setup.md)。
 
-## 数据传输：两个方向的窗口与队列
+## Data Transfer: Windows and Queues in Both Directions
 
 连建好之后，剩下的问题就是"**能发多少**"和"**收到的怎么交给用户**"。
 
@@ -32,7 +32,7 @@
 2. **字节数 ≠ 内存量**。skb 的 `truesize` 与 `len` 的比值随 TSO/GRO 剧烈变化，v7.2.7 用 per-socket 动态测量的 `scaling_ratio` 换算，**旧的 `sysctl_tcp_adv_win_scale` 已经不参与这个换算了**（sysctl 还在，但 `tcp_win_from_space()` 不看它）。
 3. **内存核算受全局与 memcg 双重约束**，任一超限都拒绝分配；但低于最小缓冲（`tcp_wmem[0]`）的连接在压力下仍被放行。
 
-## 丢包与重传：RTO 是兜底，不是主力
+## Packet Loss and Retransmission: RTO Is the Fallback, Not the Main Force
 
 TCP 判断"包丢了"有三类判据，按代价从高到低是：**超时**（等满一个 RTO，连接停摆）、**重复 ACK 计数**（数够 N 个才算）、**时间序推断**（看这个包比已被确认的包早发多久）。
 
@@ -48,7 +48,7 @@ TCP 判断"包丢了"有三类判据，按代价从高到低是：**超时**（�
 
 [TCP](/docs/CS/OS/Linux/net/TCP/TCP.md?id=retry) 的 `## retry` 一节有 `tcp_write_timeout()` 的代码摘录，可与上一篇对照着看（注意那一段是旧版本代码，差异见该节标注）。
 
-## 拥塞控制：一个插件体系，两种流派
+## Congestion Control: A Plugin System with Two Schools
 
 内核把拥塞算法做成了**可插拔的接口**：`tcp_congestion_ops` 定义一组回调（`cong_avoid`、`ssthresh`、`undo_cwnd`、`set_state` 等），各算法注册进全局表，运行时按 sysctl 或 `setsockopt(TCP_CONGESTION)` 逐连接选择。
 
@@ -74,7 +74,7 @@ TCP 判断"包丢了"有三类判据，按代价从高到低是：**超时**（�
 3. **BBR 对丢包几乎不做乘性减**。丢包时只在恢复第一轮做 packet conservation，退出时还原 `prior_cwnd`；RTO 进 Loss 态的唯一动作是清空 `full_bw` 让模型重新收敛。
 4. **主线只有 BBR v1**。v7.2.7 的 `net/ipv4/` 下只有 `tcp_bbr.c`，BBRv2/v3 从未合入主线——讨论公平性争议时必须指定版本。
 
-## 关闭：为什么必须停留 2×MSL
+## Close: Why Must Stay 2xMSL
 
 连接不能一说再见就忘掉。主动关闭方发 FIN 后进入 FIN_WAIT，收到对端 FIN+ACK 后进入 **TIME_WAIT** 并保持 `tcp_fin_time()`（约 60 秒），原因有二：**让最后一个 ACK 有机会重传**（若对端没收到会重发 FIN），以及**让本次连接的残留报文在网络中消散**，否则复用同样四元组的新连接会收到旧包。
 

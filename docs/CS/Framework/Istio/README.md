@@ -25,26 +25,26 @@ digraph istio_index {
 }
 ```
 
-## 架构与安装
+## Architecture and Installation
 
 - [Istio](/docs/CS/Framework/Istio/Istio.md)：整体架构、Istiod 组件（Pilot / CA / Galley）、sidecar 注入、版本基线。
 - [Install](/docs/CS/Framework/Istio/Install.md)：安装方式（istioctl / Helm / Operator）、多集群与版本选择。
 
-## 流量治理
+## Traffic Management
 
 - [TrafficManagement](/docs/CS/Framework/Istio/TrafficManagement.md)：核心流量治理——VirtualService / DestinationRule / Gateway / Sidecar、路由、熔断、超时、重试、灰度。
 
-## 安全
+## Security
 
 - [Security](/docs/CS/Framework/Istio/Security.md)：mTLS（STRICT / PERMISSIVE）、AuthorizationPolicy、JWT、PeerAuthentication。
 
-## 可观测与排障
+## Observability and Troubleshooting
 
 - [Observability](/docs/CS/Framework/Istio/Observability.md)：指标（Telemetry v2）、分布式追踪、日志、流量镜像。
 - [Performance](/docs/CS/Framework/Istio/Performance.md)：性能调优、sidecar 资源、连接池、mTLS 开销。
 - [Troubleshooting](/docs/CS/Framework/Istio/Troubleshooting.md)：常见排障命令集、配置不生效、代理状态排查。
 
-## 扩展与部署形态
+## Extension and Deployment Forms
 
 - [WasmPlugin](/docs/CS/Framework/Istio/WasmPlugin.md)：Wasm 插件开发（扩展 Envoy 的首选方式）。
 - [Envoy](/docs/CS/Framework/Istio/Envoy.md)：Envoy 代理与 Istio 的关系、xDS 配置下发。

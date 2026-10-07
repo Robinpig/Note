@@ -1,4 +1,4 @@
-# Nacos 一致性抽象层与 AP/CP 路由
+# Nacos Consistency Abstraction Layer and AP/CP Routing
 
 ## Introduction
 
@@ -9,7 +9,7 @@ Nacos 有**两套**一致性抽象，容易混：
 - **新 Core 层**（`ConsistencyProtocol`）：2.0 引入，协议接口下沉到内核，`ProtocolManager` 选 `CPProtocol`(JRaftProtocol) / `APProtocol`(DistroProtocol)，`LogProcessor4CP` 作为 Raft 状态机。这是当前命名 Client 模型的主路径，[Nacos](/docs/CS/Framework/nacos/Nacos.md) 的 `## Consistency` 已详述。
 - **老 KV 层**（`ConsistencyService`）：以 key 为粒度的 KV 存储抽象，按 key 模式路由 AP/CP。本文聚焦这一层，因为它揭示了「临时实例走 Distro、持久实例走 Raft」那三行 if 的真实落点。
 
-## ConsistencyService：老 KV 层接口
+## ConsistencyService: Legacy KV Layer Interface
 
 `ConsistencyService` 定义了 KV 存储的通用能力，与具体协议无关：
 
@@ -26,7 +26,7 @@ public interface ConsistencyService {
 
 实现类分两类：**代理类**（按 key 决定走哪条路）与**真实实现类**（Distro / Raft）。
 
-## 路由：DelegateConsistencyServiceImpl
+## Routing: DelegateConsistencyServiceImpl
 
 `DelegateConsistencyServiceImpl`（bean 名 `consistencyDelegate`）是代理类，核心是按 key 路由：
 
@@ -60,7 +60,7 @@ if (value instanceof Instance && ((Instance) value).isEphemeral()) {
 
 临时实例（默认）走 AP，持久实例走 CP；没有策略模式、工厂或 SPI，就是三行 if-else，但往下各自展开几百行完全不同的逻辑。
 
-## AP 侧：EphemeralConsistencyService → Distro
+## AP Side: EphemeralConsistencyService → Distro
 
 `EphemeralConsistencyService` 的真实实现是 `DistroConsistencyServiceImpl`，底层即 [Distro](/docs/CS/Framework/nacos/distro.md) 协议：
 
@@ -69,11 +69,11 @@ if (value instanceof Instance && ((Instance) value).isEphemeral()) {
 - `Notifier` 异步把内存注册表变更应用到 `serviceMap` 并触发订阅推送。
 - 临时实例不持久化，靠心跳保活；心跳断了被摘除，重新上报再注册。
 
-## CP 侧：PersistentConsistencyService 的演进
+## CP Side: Evolution of PersistentConsistencyService
 
 持久实例 / 配置必须强一致 + 持久化，走 CP。这一层经历了演进：
 
-### 老实现：RaftConsistencyServiceImpl（1.x / 早期 2.x）
+### Old Implementation: RaftConsistencyServiceImpl (1.x / Early 2.x)
 
 `PersistentConsistencyServiceDelegateImpl` 早期直接委托 `RaftConsistencyServiceImpl`，底层是老 Raft（`raftCore.signalPublish`）：
 
@@ -82,7 +82,7 @@ if (value instanceof Instance && ((Instance) value).isEphemeral()) {
 - 用 `CountDownLatch(peers.majorityCount())` 等多数派确认（`/raft/datum/commit` HTTP 同步）。
 - 此时持久实例是**纯 Raft**，不走 Distro 双写。
 
-### 新实现：BasePersistentServiceProcessor（2.x Client 模型）
+### New Implementation: BasePersistentServiceProcessor (2.x Client Model)
 
 2.x 引入 Client 模型后，`PersistentConsistencyServiceDelegateImpl` 内部用 `switchNewPersistentService` 开关切到新实现 `BasePersistentServiceProcessor`，它**组合了两个协议**：
 
@@ -103,7 +103,7 @@ digraph persistent {
 
 这就是「双写」：持久实例既要进内存供读（AP 式读），又要过 Raft 保证一致与持久（CP 式写）。delegate 用开关平滑切换新旧实现，运维无感。
 
-## 为什么 AP + CP 能共存
+## Why AP + CP Can Coexist
 
 CAP 理论针对的是「**数据的一致性**」，不是「整个组件」。Nacos 把数据按性质拆开：
 
@@ -112,12 +112,12 @@ CAP 理论针对的是「**数据的一致性**」，不是「整个组件」。
 
 两套一致性策略的**数据存储互不影响**——Distro 的内存注册表与 Raft/JRaft 的日志 + DB 各管各的，所以一个组件内 AP 与 CP 并存不矛盾。这正是 Eureka（纯 AP）和 ZooKeeper（纯 CP）做不到的。
 
-## 配置侧 vs 命名侧
+## Config Side vs Naming Side
 
 - **配置（config）**：全程走 `PersistentConsistencyService`（JRaft）+ MySQL。配置没有「临时/持久」之分，必须强一致，因此 config 模块不接 Distro。
 - **命名（naming）**：临时实例走 Distro，持久实例走 JRaft。3.x 的 Client 模型把 naming 的写路径接到新 Core 层（`DistroProtocol` / `JRaftProtocol` + `LogProcessor4CP`），但「临时 vs 持久」的分流语义不变——持久实例仍映射到 JRaft。
 
-## 与 etcd-raft / Zab 对照
+## Comparison with etcd-raft / Zab
 
 | 维度 | Nacos | etcd | ZooKeeper |
 | :-- | :-- | :-- | :-- |

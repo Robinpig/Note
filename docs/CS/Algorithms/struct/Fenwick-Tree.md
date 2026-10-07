@@ -15,8 +15,7 @@ i       二进制   lowbit
 8       1000     8
 ```
 
-## Update / Query
-
+## Update and Query
 - `tree[i]` 维护的区间长度是 `lowbit(i)`，即覆盖原数组 `[i-lowbit(i)+1, i]` 的和。
 - **单点加**（给 i 位置加 delta）：沿 `i += lowbit(i)` 向上更新所有包含它的节点。
 - **前缀和**（求 1..i 的和）：沿 `i -= lowbit(i)` 向下，把经过的区间块相加。
@@ -35,12 +34,10 @@ long prefixSum(int i) {
 由于每一步都消/进一个低位的 1，循环次数恰为下标的二进制位数，即 O(log n)。
 
 ## Range Query
-
 树状数组原生只给前缀和，**区间和 [l, r] = prefixSum(r) − prefixSum(l−1)**。配合差分思想还能做区间更新、单点查询：
 把差分数组 D 上的「区间加」转成两个单点修改。更高阶的用法（区间加 + 区间求和）用两个 BIT 维护差分及其加权项。
 
-## Fenwick vs Segment Tree
-
+## Fenwick Tree vs Segment Tree
 | 维度 | Fenwick Tree | [Segment Tree](/docs/CS/Algorithms/tree/Segment-Tree.md) |
 | --- | --- | --- |
 | 适用运算 | 可逆的前缀聚合（和为主，也可前缀积/异或） | 任意可结合运算（min/max/gcd/区间最值/复杂合并） |

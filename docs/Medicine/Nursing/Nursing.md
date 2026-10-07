@@ -20,7 +20,7 @@
 
 贯穿其中的仍是[护理管理与伦理法律](/docs/Medicine/Nursing/Nursing_Management_Ethics.md)——排班质量、法规边界与职业风险不是某一科室的附属议题，而是让所有分支得以成立的条件。
 
-## 分支学科
+## Branch Disciplines
 
 <div class="kb-home">
 
@@ -28,7 +28,7 @@
 
 <div class="kb-card">
 
-### [护理学基础](/docs/Medicine/Nursing/Nursing_Fundamentals.md)
+### [Fundamentals of Nursing](/docs/Medicine/Nursing/Nursing_Fundamentals.md)
 
 基本概念、护理理论、评估与沟通：这一专业凭什么成立
 
@@ -36,7 +36,7 @@
 
 <div class="kb-card">
 
-### [临床护理](/docs/Medicine/Nursing/Clinical_Nursing.md)
+### [Clinical Nursing](/docs/Medicine/Nursing/Clinical_Nursing.md)
 
 各专科的照护要点：内外科、肿瘤、透析、重症与康复
 
@@ -44,7 +44,7 @@
 
 <div class="kb-card">
 
-### [母婴与儿科护理](/docs/Medicine/Nursing/Maternal_Pediatric_Nursing.md)
+### [Maternal and Pediatric Nursing](/docs/Medicine/Nursing/Maternal_Pediatric_Nursing.md)
 
 面对生命起点阶段的照护：孕期、分娩、新生儿与儿童
 
@@ -52,7 +52,7 @@
 
 <div class="kb-card">
 
-### [安宁疗护与临终照护](/docs/Medicine/Nursing/Palliative_Care.md)
+### [Palliative Care and End-of-Life Care](/docs/Medicine/Nursing/Palliative_Care.md)
 
 不再以治愈为目标时如何照护：症状控制、沟通与家属支持
 
@@ -60,7 +60,7 @@
 
 <div class="kb-card">
 
-### [老年护理](/docs/Medicine/Nursing/Gerontological_Nursing.md)
+### [Gerontological Nursing](/docs/Medicine/Nursing/Gerontological_Nursing.md)
 
 以功能而非年龄为轴：失能预防、谵妄与痴呆、跌倒与多重用药
 
@@ -68,7 +68,7 @@
 
 <div class="kb-card">
 
-### [社区与家庭护理](/docs/Medicine/Nursing/Community_Home_Nursing.md)
+### [Community and Home Nursing](/docs/Medicine/Nursing/Community_Home_Nursing.md)
 
 把照护搬出病房：延续护理、社区卫生、家庭照护与长期照护
 
@@ -76,7 +76,7 @@
 
 <div class="kb-card">
 
-### [精神与心理护理](/docs/Medicine/Nursing/Psychiatric_Nursing.md)
+### [Psychiatric and Mental Health Nursing](/docs/Medicine/Nursing/Psychiatric_Nursing.md)
 
 主诉不可靠、行为不可预测的环境：危机干预、约束伦理与去污名
 
@@ -84,7 +84,7 @@
 
 <div class="kb-card">
 
-### [急救与灾害护理](/docs/Medicine/Nursing/Emergency_Disaster_Nursing.md)
+### [Emergency and Disaster Nursing](/docs/Medicine/Nursing/Emergency_Disaster_Nursing.md)
 
 在资源与需求严重失衡时照护：急诊分诊、伤情分级与灾害伦理
 
@@ -92,7 +92,7 @@
 
 <div class="kb-card">
 
-### [手术室与消毒供应中心](/docs/Medicine/Nursing/OR_Sterile_Supply.md)
+### [Operating Room and Sterile Supply Center](/docs/Medicine/Nursing/OR_Sterile_Supply.md)
 
 外科的隐性基础设施：无菌技术、核查纪律与器械再处理链条
 
@@ -100,7 +100,7 @@
 
 <div class="kb-card">
 
-### [护理科研与教育](/docs/Medicine/Nursing/Nursing_Research_Education.md)
+### [Nursing Research and Education](/docs/Medicine/Nursing/Nursing_Research_Education.md)
 
 专业如何维持自己：循证护理、研究方法与专业发展路径
 
@@ -108,7 +108,7 @@
 
 <div class="kb-card">
 
-### [护理信息化与智慧护理](/docs/Medicine/Nursing/Nursing_Informatics.md)
+### [Nursing Informatics and Smart Nursing](/docs/Medicine/Nursing/Nursing_Informatics.md)
 
 信息系统如何支撑照护，以及数据与算法在医疗场景中的特有风险
 
@@ -116,7 +116,7 @@
 
 <div class="kb-card">
 
-### [护理管理与伦理法律](/docs/Medicine/Nursing/Nursing_Management_Ethics.md)
+### [Nursing Management, Ethics and Law](/docs/Medicine/Nursing/Nursing_Management_Ethics.md)
 
 排班、质量与安全，以及职业法规、知情同意与执业边界
 
@@ -126,7 +126,7 @@
 
 </div>
 
-## 护理学凭什么是一门专业
+## Why Nursing Qualifies as a Profession
 
 护理长期被误解为「医生的辅助执行」，这一误解源于只看到了操作的一面，看不到**判断**的一面。现代护理学用几个要素界定了专业性：
 
@@ -136,7 +136,7 @@
 
 **专业自主性**。这体现在两处：护士对**给药与操作**有核查责任（发现医嘱有疑问时必须提出，而非机械执行）；对**护理计划**有自主编制权。专业自主性与法律责任是同一件事的两面，见 [护理管理与伦理法律](/docs/Medicine/Nursing/Nursing_Management_Ethics.md)。
 
-## 照护中的关系 这一学科的独特工具
+## Relationships in Care: The Unique Tool of This Discipline
 
 护理学与多数专业学科最显著的差别，是它把**关系本身**当作专业工具而非附属技能。
 
@@ -144,7 +144,7 @@
 
 因此沟通能力在护理学里不是软技能，而是专业能力的一部分：给药前解释并取得配合、告知坏消息时陪伴家属、在患者要求与医嘱冲突时寻找第三条路。
 
-## 护理学与医学的协作关系
+## Collaborative Relationship between Nursing and Medicine
 
 两者是**协作而非从属**关系，在三个层次上交汇：
 

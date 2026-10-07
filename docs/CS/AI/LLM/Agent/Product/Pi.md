@@ -4,7 +4,7 @@ Pi 是一个跑在终端里的 AI 编程 agent。它的特点是把能力藏在*
 
 会话即数据：每次对话自动保存为一棵树，存在 `~/.pi/agent/sessions/`，每个会话是一个纯文本文件；会话记录与模型选择相互独立，同一会话里随时换模型，之前的内容不会丢。
 
-## 会话管理：Pi 的"时光机"
+## Session Management: Pi's 'Time Machine'
 
 每次对话会形成一棵**会话树**，可以随时回到任一节点，从那里重新分支开始。
 
@@ -27,7 +27,7 @@ main (当前会话)
 - **自动命名**：Pi 根据第一次对话内容给会话起名；也可手动改：`/title 我的 API 重构会话`
 - 支持查看对话记录、查看对话文件、导出对话文件
 
-## @ 引用文件
+## @ Referencing Files
 
 在输入框输入 `@`，弹出模糊搜索框，检索项目里的文件：
 
@@ -49,7 +49,7 @@ pi @README.md "帮我总结"
 
 **粘贴图片**：在支持的终端（iTerm2、Kitty）用 `Ctrl+V` 粘贴图片（Windows 用 `Alt+V`），图片自动进入 Pi 的上下文；也可以把图片拖进终端。
 
-## Shell 命令集成
+## Shell Command Integration
 
 三种前缀对应三种语义：
 
@@ -68,7 +68,7 @@ pi @README.md "帮我总结"
 
 三条命令在同一个 shell 里执行，第一条 `cd backend` 之后，后面的命令自动在 `backend` 目录下运行。
 
-## 快捷键
+## Shortcuts
 
 | 快捷键 | 作用 |
 | --- | --- |
@@ -80,12 +80,12 @@ pi @README.md "帮我总结"
 | `Ctrl+K` | 打开搜索文档 |
 | `Ctrl+D` | 关闭会话 |
 
-## 模型切换与思考级别
+## Model Switching and Thinking Level
 
 - `Ctrl+L` 打开模型选择器，输入名称搜索（如 `claude`、`gpt`），Enter 切换；再按 `Ctrl+S` 把当前模型设为**启动默认**
 - `Shift+Tab` 循环切换**思考级别**：从"不思考直接回答"（快速任务）到"深度推理"（复杂任务）
 
-## 上下文工程
+## Context Engineering
 
 Pi 启动时自动加载项目里的上下文文件，按层级叠加：
 
@@ -98,7 +98,7 @@ Pi 启动时自动加载项目里的上下文文件，按层级叠加：
 
 改完上下文文件后输入 `/reload` **立即生效**，不用重启 Pi。
 
-## 非交互模式
+## Non-Interactive Mode
 
 Pi 也能当一次性工具用，执行完输出结果后自动退出，适合脚本化调用：
 
@@ -109,7 +109,7 @@ pi "Add a Dockerfile for this project"
 pi --model claude-sonnet-4 "帮我写一个 .gitignore"
 ```
 
-## 常见问题
+## Common Issues
 
 | 问题 | 回答 |
 | --- | --- |
@@ -228,7 +228,7 @@ Pi **不内置权限系统**：运行在哪个目录就能访问该目录全部�
 
 适合想自己掌控 harness 形态、需要在同一会话切换多家模型、重视上下文干净与 token 效率、愿意锻造工作流的用户；不适合追求一站式开箱、依赖消息平台网关、或要求内置审批流的企业场景。
 
-## 内部架构
+## Internal Architecture
 
 Pi 的内部实现（包分层、依赖图、两层协作循环、工具批次链路、运行模式、扩展加载、构建与质量）单独整理在 [Pi 架构](/docs/CS/AI/LLM/Pi-Architecture.md)。该文基于 `git tag v1.0.0` 对实际代码核对，可与 [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) / [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md) 两个抽象对照阅读。
 

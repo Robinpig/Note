@@ -6,7 +6,7 @@ Overlayfs 是一个**联合挂载（union mount）**文件系统：它自己不�
 
 本文讲 overlayfs 自身的机制。VFS 层如何挂载与查找路径见 [文件管理机制](/docs/CS/OS/Linux/fs/README.md) 与 [VFS 详解](/docs/CS/OS/Linux/fs/fs.md)，底层文件系统的磁盘格式见 [ext4](/docs/CS/OS/Linux/fs/ext4.md)——overlayfs 不关心 lower/upper 各自是什么文件系统，只要它们支持它需要的那几个原语。
 
-## 三目录模型
+## Three-Directory Model
 
 一次典型挂载有四个路径：
 
@@ -33,9 +33,9 @@ mount -t overlay overlay \
 
 （`fs/overlayfs/params.h`，超过则 `pr_err("too many lower directories, limit is %d")`。）
 
-## 数据结构
+## Data Structures
 
-### ovl_fs 与层
+### ovl_fs and Layers
 
 超级块私有数据 `ovl_fs` 持有全部层：
 
@@ -92,7 +92,7 @@ struct ovl_layer {
 
 `trap` 字段防的是"层互相嵌套"：如果 upper 目录本身位于某个 lower 层之下，查找会无限递归，所以每层记一个陷阱 inode，遇到就返回 `-ELOOP`。
 
-### ovl_entry：一个 dentry 对应一条路径栈
+### ovl_entry: One dentry Maps to One Path Stack
 
 这是 overlayfs 最核心的结构——合并视图里的一个 dentry，在内存里对应**一组**真实路径：
 
@@ -132,7 +132,7 @@ struct ovl_inode {
 
 `__upperdentry` 是 upper 层里的对应项，**它的有无就是"这个文件是否已 copy-up"的判据**。`version` 用于失效目录读缓存，`lock` 串行化同一个 inode 上的 copy-up。
 
-### 状态编码：xattr
+### State Encoding: xattr
 
 overlayfs 需要把"这个文件来自哪个 lower 文件""这个目录是否已合并过"之类的元信息持久化，而它不能改底层文件系统的格式，于是全部塞进 **xattr**，命名空间是 `trusted.overlay.*`（无特权挂载时降级到 `user.overlay.*`）：
 
@@ -163,11 +163,11 @@ enum ovl_xattr {
 - **`overlay.metacopy`** —— 标记"只复制了元数据，数据还在 lower"。
 - **`overlay.impure`** —— 标记"这个 upper 目录里现在混进了来自 lower 的项"，因为合并过的目录不能再被当成纯 upper 目录处理。
 
-## 查找：路径栈如何组装
+## Lookup: How the Path Stack Is Assembled
 
 核心是 `ovl_lookup()`（`fs/overlayfs/namei.c`）。它先查 upper，再自顶向下遍历各 lower 层，把命中项填进 `ovl_entry`。
 
-### 单层查找的四种结果
+### Four Results of Single-Layer Lookup
 
 `ovl_lookup_single()` 对某一层做一次查找，结果分四种：
 
@@ -214,7 +214,7 @@ enum ovl_xattr {
 
 **④ 是普通目录** —— 继续向下一层，把结果入栈。
 
-### 主循环
+### Main Loop
 
 ```c
 	for (i = 0; !d.stop && i < ovl_numlower(poe); i++) {
@@ -232,7 +232,7 @@ enum ovl_xattr {
 
 循环条件 `!d.stop` 是 whiteout/opaque 的截断机制，其余情况下逐层收集。注意**目录会一直查到底**（为了后续读目录时能合并），而普通文件通常在第一层命中后就 `stop`。
 
-### redirect 的安全含义
+### redirect Security Implications
 
 lower 层的文件被 rename 后，仅靠路径查找会找不到它，所以 overlayfs 用 `overlay.redirect` xattr 记录新位置。但跟随 redirect 有安全后果，源码注释说得很直白：
 
@@ -256,7 +256,7 @@ lower 层的文件被 rename 后，仅靠路径查找会找不到它，所以 ov
 
 **redirect 相当于一条不受权限检查的符号链接**。所以默认不为不信任的 upper（如 U 盘）跟随。
 
-## 删除：whiteout 与 opaque
+## Deletion: whiteout and opaque
 
 删除一个**只存在于 lower 层**的文件，不能真的去改 lower（它是只读的镜像层），于是在 upper 里放一个"墓碑"：
 
@@ -282,9 +282,9 @@ lower 层的文件被 rename 后，仅靠路径查找会找不到它，所以 ov
 
 **opaque** 解决的是另一种情形：删除一个**目录**后重建同名目录。此时若继续与下层的同名目录合并，旧内容会"复活"。所以新建的 upper 目录会被标上 `overlay.opaque=y`，查找时 `stop = true`，彻底屏蔽下层。
 
-## 写时复制：copy-up
+## Copy-on-Write: copy-up
 
-### 何时触发
+### When Triggered
 
 任何对 lower 文件的**写**操作都会触发 copy-up。判定在 `ovl_open_need_copy_up()`——只读打开不需要，特殊文件（`special_file()`）不需要：
 
@@ -307,7 +307,7 @@ static bool ovl_open_need_copy_up(struct dentry *dentry, int flags)
 
 容器场景里最典型的代价来源：镜像里一个 500MB 的文件，容器里只改一个字节，也要整个复制上来。
 
-### 自底向上：先复制所有未复制的祖先
+### Bottom-Up: Copy All Uncopied Ancestors First
 
 要复制 `/a/b/c`，必须保证 `/a`、`/a/b` 已经在 upper 里存在。`ovl_copy_up_flags()` 用一个循环处理——**自顶向下找到第一个尚未 copy-up 的祖先，然后自底向上逐级复制**：
 
@@ -337,7 +337,7 @@ static bool ovl_open_need_copy_up(struct dentry *dentry, int flags)
 
 外层 `while` 保证一轮之后若目标仍未完成（父目录刚被复制，需要重来）就继续。
 
-### workdir 与原子落位
+### workdir and Atomic Placement
 
 `ovl_copy_up_workdir()` 是真正的复制动作：
 
@@ -380,7 +380,7 @@ static bool ovl_open_need_copy_up(struct dentry *dentry, int flags)
 
 `lock_rename()` 同时锁住 workdir 与目标目录，防止二者被并发移动；`temp->d_parent != c->workdir` 是一次"我手里的临时文件还在原地吗"的复核。
 
-### metacopy：只复制元数据
+### metacopy: Copy Only Metadata
 
 完整复制大文件很贵，而很多操作（`chmod`、`chown`、`touch`）只改元数据。`metacopy` 特性允许只把 inode 元数据复制上来，数据块继续留在 lower，靠 `overlay.metacopy` xattr 标记，真正写数据时再补复制：
 
@@ -400,7 +400,7 @@ static bool ovl_open_need_copy_up(struct dentry *dentry, int flags)
 			     (S_ISREG(ctx.stat.mode) || S_ISDIR(ctx.stat.mode));
 ```
 
-## 目录合并读
+## Merged Directory Read
 
 读目录要跨层去重。`ovl_dir_read_merged()` 自顶向下遍历各层，用红黑树保证同名项只保留第一次出现（即最高优先级）的那个：
 
@@ -432,7 +432,7 @@ static bool ovl_open_need_copy_up(struct dentry *dentry, int flags)
 
 结果缓存在 `ovl_inode` 的 `cache` 里，靠 `version` 字段判断是否需要重建。
 
-## inode 号与 st_dev：xino
+## inode Number and st_dev: xino
 
 一个 overlay 文件在不同时刻可能对应不同底层 inode（copy-up 前后更是如此）。若直接暴露底层 inode 号，`st_ino` 会变、且跨层可能撞号。xino 的做法是**用 inode 号的高位编码 fsid**：
 
@@ -463,7 +463,7 @@ static bool ovl_open_need_copy_up(struct dentry *dentry, int flags)
 
 这也解释了 overlayfs 的一个经典限制：底层 inode 号若真的用到了高位，会溢出到 fsid 区域，此时该文件退回非 xino 行为。
 
-## 挂载选项速查
+## Mount Options Quick Reference
 
 按"你要解决什么问题"归类：
 
@@ -477,7 +477,7 @@ static bool ovl_open_need_copy_up(struct dentry *dentry, int flags)
 | 权限 | `userxattr` | 无特权挂载时改用 `user.overlay.*` |
 | 校验 | `verity=off\|on\|require` | fsverity 摘要校验 |
 
-## 与相邻子系统的边界
+## Boundaries with Adjacent Subsystems
 
 - **容器与镜像**：容器运行时的 snapshotter 直接把镜像各层设为 `lowerdir`、容器可写层设为 `upperdir`。镜像层必须只读，否则 metacopy 与共享会失效。见 [containerd](/docs/CS/Container/k8s/containerd.md) 与 [Docker](/docs/CS/Container/Docker/Docker.md)。
 - **mount namespace**：容器看到的 `merged` 是在独立 [namespace](/docs/CS/OS/Linux/namespace.md) 里挂载的，主机上同一份 upper/lower 可以有完全不同的挂载视图。

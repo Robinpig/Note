@@ -4,7 +4,7 @@
 
 本笔记给出数值分析的 CS 视角；求导与积分的工具见 [微积分](/docs/Mathematics/Calculus.md)，矩阵分解见 [Linear Algebra](/docs/Mathematics/Linear_Algebra.md)。
 
-## 误差从哪来
+## Sources of Error
 
 | 误差类型 | 来源 | 例子 |
 | --- | --- | --- |
@@ -14,14 +14,14 @@
 
 数值方法的评价标准：**精度**（误差多小）、**稳定性**（误差是否放大）、**复杂度**（时间/空间）。
 
-## 线性系统的数值解
+## Numerical Solutions of Linear Systems
 
 - **直接法**：高斯消元 → LU 分解，精确（忽略舍入）但 $O(n^3)$。
 - **迭代法**：Jacobi/Gauss-Seidel/共轭梯度，适合稀疏大矩阵（图、有限元）。
 
 [Linear Algebra](/docs/Mathematics/Linear_Algebra.md) 的分解（LU/QR/SVD）是这些方法的结构基础；[MATLAB](/docs/CS/Tool/MATLAB.md) 的 `A\b` 会按矩阵结构自动选型。
 
-## 方程求根
+## Root-Finding
 
 牛顿法（Newton's method）用切线逼近零点：
 
@@ -31,12 +31,12 @@ $$
 
 收敛快但依赖初值与导数；割线法免去导数。求根是优化（梯度下降的特例）与方程求解的通用范式。
 
-## 插值与拟合
+## Interpolation and Fitting
 
 - **插值**：构造曲线严格过给定点（拉格朗日、样条）。
 - **拟合/最小二乘**：不过点，只在整体上最接近——无解线性系统时找列空间最近投影，见 [Linear Algebra](/docs/Mathematics/Linear_Algebra.md)。
 
-## 在 CS 中的落点
+## Applications in CS
 
 - **图形学与仿真**：物理引擎、有限元、光线追踪都依赖数值解微分方程。
 - **机器学习**：反向传播本质是链式法则的数值实现；优化器是数值分析的迭代法。

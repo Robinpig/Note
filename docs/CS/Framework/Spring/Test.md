@@ -21,7 +21,7 @@ Spring Test 是 `spring-test` 模块提供的测试支持，核心是 **TestCont
 
 `@MockitoBean` 向上下文里注入一个 Mockito mock 替换真实 Bean；`@MockitoSpyBean` 则包装真实 Bean 做部分模拟。这两个注解由 Spring Framework 6.2 引入，用来取代 Boot 侧的 `@MockBean` / `@SpyBean`——后者在 Boot 3.4 弃用、Boot 4 已移除。
 
-## 核心扩展点：TestExecutionListener
+## Core Extension Point: TestExecutionListener
 
 TestContext 的横切能力不是硬编码的，而是由一组**有序的 `TestExecutionListener`** 在测试生命周期的各个钩子（准备类、准备方法、before/after each、after 类）上协作完成。默认注册的有：
 
@@ -80,7 +80,7 @@ class UserRepositoryTest {
 
 ## Web Test
 
-### MockMvc（不真正起容器）
+### MockMvc (Does Not Actually Start a Container)
 
 `MockMvc` 提供不真正起 Servlet 容器的 HTTP 层测试，可对状态码、视图、JSON、Flash 属性做断言：
 
@@ -105,7 +105,7 @@ class UserControllerTest {
 > [!WARNING]
 > `@WebMvcTest` 的组件扫描**不包括 `@Configuration`**，自定义的 `SecurityFilterChain` 不会生效，切片里跑的是 Boot 默认安全链——表现为本该公开的 GET 变 401、POST 变 403。要带上真实安全配置需 `@Import(SecurityConfig.class)`。
 
-### 端到端：WebTestClient 与 RestTestClient
+### End-to-End: WebTestClient and RestTestClient
 
 需要真正监听端口做端到端调用时：
 
@@ -127,7 +127,7 @@ class UserApiTest {
 }
 ```
 
-## 与 JUnit 5/6 的集成
+## Integration with JUnit 5/6
 
 Spring 7 起，`SpringExtension` 默认使用**测试方法作用域**的 `ExtensionContext`（`@Nested` 嵌套测试里注入行为更一致）。需要退回"整个测试类共享一个上下文"的旧行为时：
 

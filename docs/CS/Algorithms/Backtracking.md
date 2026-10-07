@@ -55,5 +55,10 @@ def backtrack(参数):
 
 ## Links
 
-- [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
-- [algorithm analysis](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
+- [数据结构](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
+- [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
+
+## References
+
+1. [回溯法 - OI Wiki](https://oi-wiki.org/search/backtracking/)
+2. [深度优先搜索 - OI Wiki](https://oi-wiki.org/search/dfs/)

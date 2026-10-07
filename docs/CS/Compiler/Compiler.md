@@ -300,7 +300,7 @@ such things as the number and types of its arguments, the method of passing each
 The symbol table is a data structure containing a record for each variable name, with elds for the attributes of the name.
 The data structure should be designed to allow the compiler to nd the record for each name quickly and to store or retrieve data from that record quickly.
 
-## 三段式编译器
+## Three-stage Compiler
 
 传统编译器采用三段式设计
 
@@ -369,6 +369,7 @@ LLVM = clang + lllvm
 - [TypeScript](/docs/CS/TypeScript/TypeScript.md)
 - [GCC](/docs/CS/Compiler/GCC.md)
 - [ELF](/docs/CS/Compiler/ELF.md)
+- [Bytecode](/docs/CS/Python/Bytecode.md)
 
 ## References
 

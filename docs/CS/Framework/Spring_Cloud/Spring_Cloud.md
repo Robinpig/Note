@@ -53,7 +53,7 @@ Instead of application.yml (or .properties), you can use bootstrap.yml, keeping 
 Fig.1. Spring Cloud architecture
 </p>
 
-## 版本基线
+## Version Baseline
 
 Spring Cloud 用**发布列车（release train）**编号，并与 Spring Boot 严格绑定，不能随意混搭：
 

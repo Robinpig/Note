@@ -63,9 +63,9 @@ MCP连接生命周期主要分为三个阶段：
 
 
 
-## 全链路：MCP、Function Calling、SGLang 和 Agent 如何串起来
+## Full Chain: How MCP, Function Calling, SGLang and Agent Connect Together
 
-### 六个概念，先分清职责
+### Six Concepts: Clarify Responsibilities First
 
 常见误区：模型返回了 `tool_calls` 就以为工具已经执行了；接入 MCP Server 后不明白为什么还要给模型传 `tools`。根源是把三件事混成了一件——**模型生成内容、推理服务处理格式、应用执行动作**。
 
@@ -82,7 +82,7 @@ MCP连接生命周期主要分为三个阶段：
 
 Function Calling 与 MCP 不是强制绑定的：Function Calling 可以连接本地函数或普通 HTTP API；MCP 工具也可以由普通程序直接调用，不必先问模型。两者通过 Agent 中的**适配代码**衔接。
 
-### 工具先被发现，再被介绍给模型
+### Tools Are Discovered First, Then Introduced to the Model
 
 初始化两条线独立进行：
 
@@ -106,7 +106,7 @@ MCP 工具定义 → 模型 `tools` 元素的第一次关键转换——`inputSc
 
 实际适配还涉及名称限制、Schema 兼容、不同 Server 的工具重名。Agent 需维护"**模型可见工具名 → 对应 Server 和真实工具名**"的路由——模型只需知道工具用途和参数格式，不需要知道 Server 地址、连接方式或凭据。
 
-### messages 和 tools 怎样进入模型
+### How messages and tools Enter the Model
 
 用户问"北京天气怎么样？"，Agent 把问题放入 `messages`、把本轮允许的工具放入 `tools`，发起第一次推理请求。输入经过两层处理：
 
@@ -118,7 +118,7 @@ messages + tools
 
 **模型不直接读取 MCP 协议对象**——工具名称、描述、参数约束通过输入序列进入上下文。新增工具改变的是上下文和工具路由，**不需要修改模型权重**。这是通用工具使用能力（权重支撑）与具体工具接入（本轮工具说明）的区别。
 
-### 权重、推理、模板和解析器各做什么
+### What Weights, Inference, Templates and Parsers Each Do
 
 ```
 输入 token IDs
@@ -131,7 +131,7 @@ messages + tools
 - **Tool Parser** 负责识别模型原生格式、转换为 API 的 `tool_calls`——所以模型、Chat Template、Tool Parser 必须匹配
 - 三种"正确"要分清：**格式可解析**（解析器管）、**参数符合 Schema**（校验管）、**业务含义正确**（语义判断 + 业务校验管）。约束解码限制输出形式，但不保证业务答案正确；给不擅长工具使用的模型配解析器，也不会自动获得可靠的工具选择能力
 
-### 两个 call：一个提出请求，一个执行请求
+### Two Calls: One Issues a Request, One Executes It
 
 ```json
 // 模型 API → Agent 边界：模型提出的调用请求（arguments 是 JSON 字符串）
@@ -148,7 +148,7 @@ messages + tools
 - `arguments` 在模型 API 中是 JSON 字符串，Agent 需解析成对象、校验参数和执行条件再转发
 - **实际业务操作发生在 MCP Server 侧**：工具名本身没有执行能力，执行能力来自服务端代码和下游系统（天气 API / 缓存 / 数据库）
 
-### 工具返回后，为什么还要再问一次模型
+### After the Tool Returns, Why Ask the Model Again
 
 Agent 把 MCP 结果转换成 `tool` 消息追加进历史，并保留前一条 assistant 的 `tool_calls` 消息（模型才能把"请求查天气"与"返回的数据"对应起来），然后发起第二次推理：
 
@@ -160,7 +160,7 @@ Agent 把 MCP 结果转换成 `tool` 消息追加进历史，并保留前一条 
 - MCP 结果不限于文本（可能是结构化内容、图片），适配层应保留目标模型接口能接收的信息，不能一概转字符串
 - **"模型知道了刚查到的天气" = 它在当前上下文中获得了这条信息**——工具结果进入上下文，模型权重保持不变；变化的是对话内容和推理临时状态/缓存，不是重新训练
 
-### 完整时序（一轮"查北京天气"）
+### Complete Sequence (One Round of 'Checking Beijing Weather')
 
 1. Agent 提交用户问题和可用工具定义
 2. SGLang 编排输入（Chat Template → Tokenizer）、运行模型
@@ -176,7 +176,7 @@ Agent 把 MCP 结果转换成 `tool` 消息追加进历史，并保留前一条 
 - **并行**：互不依赖的调用可并行；有数据依赖（先查用户 ID 再查订单）必须等待
 - **循环控制**：Agent 需定义超时、失败处理、重试和轮数上限；有副作用的操作重试前考虑幂等性；模型继续提出动作不意味着程序必须无限循环
 
-### 八处转换 = 八个排查点
+### Eight Transformations = Eight Troubleshooting Points
 
 | 位置 | 转换 | 重点检查 |
 | --- | --- | --- |

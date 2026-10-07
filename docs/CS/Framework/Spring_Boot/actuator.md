@@ -21,11 +21,11 @@ dependencies {
 >
 > 端点注解（`@Endpoint` / `@ReadOperation` / `@Selector`）、`InfoContributor`、`httpexchanges` 相关类型**未搬家**。starter 名 `spring-boot-starter-actuator` 也没变。
 
-## 端点访问模型
+## Endpoint Access Model
 
 Boot 4 用**访问级别（access）**取代了旧的 `enabled` 开关，这是本轮升级最容易踩的一处。
 
-### 从 enabled 到 access
+### From enabled to access
 
 旧写法 `management.endpoint.<id>.enabled=true` 在 3.4 已弃用、4.0 起移除，改用三档访问级别：
 
@@ -50,7 +50,7 @@ management.endpoints.access.max-permitted=read-only
 > [!TIP]
 > `max-permitted` 是**上限**而非默认值：设为 `read-only` 后，即便某个端点被单独配成 `unrestricted`，也会被压回只读。生产环境设它是性价比最高的一条配置——防止日后新增端点意外带出写操作。
 
-### 可用 = 允许访问 + 暴露
+### Available = Allow Access + Expose
 
 这是两个独立维度，端点只有在**两者都满足**时才可用：
 
@@ -66,7 +66,7 @@ management.endpoints.web.exposure.exclude=env,beans,configprops,heapdump,threadd
 
 `exclude` 优先级高于 `include`；`*` 在 YAML 里有特殊含义，**必须加引号**。
 
-## 内置端点
+## Built-in Endpoints
 
 技术无关的端点：
 
@@ -96,7 +96,7 @@ management.endpoints.web.exposure.exclude=env,beans,configprops,heapdump,threadd
 
 Web 应用额外提供：`heapdump`（堆转储，**默认不可访问**）、`logfile`（日志文件内容，支持 Range 头）、`prometheus`（Prometheus 抓取格式，需 `micrometer-registry-prometheus`）。
 
-### 路径与发现页
+### Paths and Discovery Page
 
 默认基础路径 `/actuator`（`management.endpoints.web.base-path` 可改），`/actuator` 本身是发现页，列出所有已暴露端点的链接（`management.endpoints.web.discovery.enabled=false` 可关闭）。
 
@@ -110,16 +110,16 @@ management.server.port=8081      # 独立管理端口，独立连接器与线程
 
 这样业务请求与监控请求互不争抢连接，且该端口可以只对内网放通。
 
-## 健康检查
+## Health Check
 
-### 内置健康指示器
+### Built-in Health Indicators
 
 Boot 按 classpath 自动装配：`DataSourceHealthIndicator`、`RedisHealthIndicator`、`RabbitHealthIndicator`、`KafkaHealthIndicator`、`DiskSpaceHealthIndicator`、`PingHealthIndicator`，以及 K8s 相关的 `LivenessStateHealthIndicator` / `ReadinessStateHealthIndicator`。
 
 > [!WARNING]
 > 内置指示器大多只验证**连通性**而非**可用性**。例如 AMQP 指示器只是连上 broker 读一个服务端属性就返回 UP，它不检查队列积压与消费者数量——"broker 可达 + 零消费者 + 队列积压两小时"依然是绿色的。真正关心的业务指标要自己写指示器。
 
-### 自定义指示器
+### Custom Indicators
 
 类名去掉 `HealthIndicator` 后缀即健康项的 id（`OrdersQueueHealthIndicator` → `ordersQueue`）：
 
@@ -144,7 +144,7 @@ public class OrdersQueueHealthIndicator implements HealthIndicator {
 
 Boot 4 的 `HealthContributor` 是密封接口，`HealthIndicator` 与 `CompositeHealthContributor` 是它的两个分支；后者可把若干检查聚合到一个父节点下，让 `/actuator/health` 返回一棵树。
 
-### 详情展示与脱敏
+### Detail Display and Desensitization
 
 ```properties
 management.endpoint.health.show-details=when-authorized   # always / never / when-authorized
@@ -154,11 +154,11 @@ management.endpoint.env.show-values=when-authorized       # 环境变量同理
 
 `always` 会把数据库地址、中间件版本、异常堆栈暴露给任何能访问该端点的人，生产环境应使用 `when-authorized`。
 
-### HTTP 状态码映射
+### HTTP Status Code Mapping
 
 整体状态与返回码的对应由 `HttpCodeStatusMapper` 决定，默认 `DOWN` / `OUT_OF_SERVICE` → 503，`UP` / `UNKNOWN` → 200。反过来，**不要用状态码判断细节**，看 `status` 字段。
 
-## 健康组与 Kubernetes 探针
+## Health Group and Kubernetes Probes
 
 健康组（health group）把若干指示器打包成一个子路径：
 
@@ -183,7 +183,7 @@ management.endpoint.health.probes.add-additional-paths=true    # 额外在主端
 
 关闭阶段的语义决定了优雅停机是否可行：进入 graceful shutdown 时 readiness 先转为 `REFUSING_TRAFFIC`，K8s 摘流量，应用再处理完存量请求——配合 `server.shutdown=graceful` 才能实现无损发布。
 
-## HTTP 交换记录
+## HTTP Exchange Records
 
 旧的 `/actuator/httptrace` 与 `HttpTraceRepository` 在 Boot 3 已更名为 `httpexchanges` / `HttpExchangeRepository`：
 
@@ -208,7 +208,7 @@ management.httpexchanges.recording.include=TIME_TAKEN,REQUEST_HEADERS
 
 它记录时间戳、principal、session、请求/响应头与耗时，对排查线上问题很有用，但**只应作为开发期手段**：内存环形缓冲有上限、多实例下不聚合、重启即丢。生产的可观测性应交给 Micrometer Tracing / OpenTelemetry，参见 [Sleuth 与链路追踪](/docs/CS/Framework/Spring_Cloud/Sleuth.md)。
 
-## 自定义端点
+## Custom Endpoints
 
 `@Endpoint` 是技术无关的端点声明，`@WebEndpoint` 限定 Web 暴露，`@JmxEndpoint` 限定 JMX：
 
@@ -236,7 +236,7 @@ class FeaturesEndpoint {
 
 旧的 `@ControllerEndpoint` / `@ServletEndpoint` 已迁往 `@Endpoint` + 扩展类，新代码不要再用。
 
-## 端点安全
+## Endpoint Security
 
 Actuator 端点会泄露 Bean 结构、环境变量、配置属性，`heapdump` 更能直接导出内存中的密钥与用户数据。分三层防护：
 
@@ -263,7 +263,7 @@ SecurityFilterChain actuatorSecurity(HttpSecurity http) throws Exception {
 
 用 `EndpointRequest` 而非硬编码 `/actuator/**`，这样改基础路径时安全策略不会失效。详见 [Spring Security](/docs/CS/Framework/Spring/Security.md)。
 
-## 指标与 Prometheus
+## Metrics and Prometheus
 
 `/actuator/metrics` 提供交互式查询，`/actuator/prometheus` 提供抓取端点：
 

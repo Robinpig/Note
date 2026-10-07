@@ -13,7 +13,7 @@
 | 性能不够要并行 | 多线程 step、分区 step、并行 flow |
 | 事后要审计 | 每一步的执行时间、读写条数、提交次数都落在元数据表里 |
 
-### 批处理与调度是两回事
+### Batch Processing and Scheduling Are Two Different Things
 
 这是最容易混淆的一点：**Spring Batch 只负责"跑"，不负责"什么时候跑"**。触发时机由调度负责——可以是 `cron`、`@Scheduled`、K8s CronJob、Jenkins、也可以是外部人工触发。调度部分见 [Spring Task](/docs/CS/Framework/Spring/Task.md?id=schedule)，本文只讲执行侧。
 
@@ -24,11 +24,11 @@ void runDailySettlement() {
 }
 ```
 
-### 版本基线
+### Version Baseline
 
 Spring Batch **6.0**（2025-11 GA）是 Boot 4 / Framework 7 一代的配套版本，也是本文的写作基线。它建立在 Framework 7、Spring Data 4、Jakarta EE 11、Jackson 3 之上，Java 17 起步。6.x 对 5.x 有**一批破坏性变更**，网上大量教程（含不少 2025 年之前的）在 Batch 6 上要么编译不过，要么编译通过但行为不对，见本文最后一节。
 
-## 领域模型
+## Domain Model
 
 Batch 的元数据有一套层层嵌套的身份概念，理解它们的区别是理解"续跑"与"防重"的前提：
 
@@ -45,7 +45,7 @@ Batch 的元数据有一套层层嵌套的身份概念，理解它们的区别�
 
 而如果用**不同**的 identifying 参数启动，则是一个新的 JobInstance——哪怕业务逻辑完全一样。反过来，同参数重复启动一个已经 `COMPLETED` 的实例，会被拒绝（详见「幂等」节）。
 
-### 元数据表
+### Metadata Table
 
 JDBC 持久化时，`JobRepository` 使用 `BATCH_` 前缀的一组表：
 
@@ -58,7 +58,7 @@ JDBC 持久化时，`JobRepository` 使用 `BATCH_` 前缀的一组表：
 | `BATCH_STEP_EXECUTION` | 每个 step 的读写计数、提交/回滚计数 |
 | `BATCH_STEP_EXECUTION_CONTEXT` | Step 级 ExecutionContext（读到第几条就存在这里） |
 
-## Chunk 处理模型
+## Chunk Processing Model
 
 Spring Batch 有两种 Step：
 
@@ -99,7 +99,7 @@ new StepBuilder("importStep", jobRepository)
 > [!TIP]
 > chunk 大小的调参本质是吞吐与安全性的权衡：太小则频繁提交、事务开销大；太大则失败回滚的重做成本高、内存占用高。经验区间是 100~1000，需要按单条数据的体积和处理耗时实测。
 
-## JobRepository：Batch 6 最大的坑
+## JobRepository: The Biggest Pitfall of Batch 6
 
 这是升级 Boot 4 / Batch 6 时**唯一会静默出错、且后果最严重**的变更。
 
@@ -127,7 +127,7 @@ new StepBuilder("importStep", jobRepository)
 
 另一个相关陷阱：在 Boot 自动配置生效时，**不要加 `@EnableBatchProcessing`**——它会顶替掉 Boot 装配好的 `JobRepository` / `JobOperator`，退化为你自己手写的那份（通常就是内存版）。需要深度定制时才用，且理解它意味着放弃自动配置。
 
-## Job 与 Step 配置
+## Job and Step Configuration
 
 Batch 6 的 builder API 把此前隐式持有的依赖改为**构造期显式传入**：
 
@@ -191,7 +191,7 @@ class BatchJobService {
 
 Boot 的 `JobLauncherApplicationRunner` 会在应用启动时自动执行 detected job（可用 `spring.batch.job.enabled=false` 关掉），这是最常见的"容器一起来就跑批处理"的模式。
 
-## JobParameters 与幂等
+## JobParameters and Idempotency
 
 `JobParameters` 是每个 employee batch 作业的身份标识。Batch 6 里 `JobParameter` 变成了**不可变 record**，且名字作为字段内置其中；`JobParameters` 内部持有的不再是 `Map` 而是 `Set`：
 
@@ -223,7 +223,7 @@ If you want to run this job again, change the parameters.
 
 这是设计意图——Batch 拒绝重复执行已完成的工作。两种常规应对：给 Job 挂 `RunIdIncrementer`（每次自动补一个自增 `run.id`），或自己在参数里塞一个每次唯一的 identifying 值（时间戳、批次号）。选哪种取决于你的语义：**同一业务日期的重跑，到底应该被拒绝，还是应该被允许**。
 
-## 流程编排
+## Process Orchestration
 
 Job 不必是线性的，Batch 自带一套条件 DSL：
 
@@ -259,7 +259,7 @@ new JobBuilder("parallelJob", repo)
 
 更彻底的横向扩展是**分区（partitioning）**：`PartitionStep` 先由一个 master 步骤用 `Partitioner` 把数据切成若干网格（如按日期、按商户 ID 取模），再分发给多个 worker step 并行处理，各自独立提交事务。这是大批量场景提速的主要手段。
 
-## 容错
+## Fault Tolerance
 
 `.faultTolerant()` 打开容错开关后可用：
 
@@ -274,7 +274,7 @@ new JobBuilder("parallelJob", repo)
 > [!WARNING]
 > `skip` 是把双刃剑。跳过条数应当计入 step 的执行上下文并在 job 结束时告警：一个年久失修的作业可能因为源数据格式变更而在静静地跳过 100% 的条目，报表上却显示 COMPLETED。
 
-## 从 5.x 迁移到 6
+## Migration from 5.x to 6
 
 | 变更 | 5.x | 6.x |
 | ---- | ---- | ---- |
@@ -309,6 +309,7 @@ new JobBuilder("parallelJob", repo)
 - [Spring Transaction](/docs/CS/Framework/Spring/Transaction.md)
 - [Spring Data](/docs/CS/Framework/Spring/Data.md)
 - [Spring Boot](/docs/CS/Framework/Spring_Boot/Spring_Boot.md)
+- [Scheduled Task](/docs/CS/SE/Scheduled_Task.md)
 
 ## References
 

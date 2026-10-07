@@ -608,9 +608,42 @@ func chanparkcommit(gp *g, chanLock unsafe.Pointer) bool {
 
 
 
-## 使用
+## Blocking and Wakeup (sudog Mechanism)
 
-### 单向channel
+当 send/recv 不能立即完成（缓冲满 / 空、或无对端就绪）时，当前 G 不会忙等，而是构造一个 `sudog`（代表"一次阻塞的发送或接收"）挂到 `c.sendq` 或 `c.recvq`，随后 `gopark` 挂起，让出 P 给别的 G（调度细节见 [GMP 调度](/docs/CS/Go/GMM.md)）。
+
+- `sudog` 关键字段：`elem`（数据指针）、`g`（所属 G）、`isSelect`、`success`、`param`。阻塞期间 G 状态为 `_Gwaiting`。
+- **唤醒**：对端操作完成时（如发送方在 `chansend` 中发现 `recvq` 有等待者），调用 `send(c, sg, ...)` / `recv(c, sg, ...)` 直接把数据交给对方（绕过环形缓冲），再 `goready(gp, ...)` 将其状态置回 `_Grunnable` 并重新入调度循环；被唤醒的 G 从 `gopark` 之后继续，依据 `success` 标志返回。
+- **公平性**：`recvq` / `sendq` 是 FIFO 链表（`waitq` 的 `first` / `last`），按入队顺序唤醒——先阻塞的 G 先被服务，避免饥饿。
+
+## Collaboration with select
+
+`select` 编译为 `selectgo`，它对每个 case 调用 channel 的**非阻塞**变体（`selectnbsend` / `selectnbrecv`），并把 sudog 的 `isSelect = true`。与普通的阻塞 send/recv 不同：
+
+- select 路径下若某个 case 不能立即完成，G 会被同时挂到**多个** channel 的等待队列上（每个可通信 case 一个 sudog），由 `selectgo` 统一监听；任一 case 就绪即唤醒，且只会在被选中的那个 channel 上完成交接。
+- 这正是 `recvq` / `sendq` "一般只有一个非空" 的例外：**同一个 G 用 select 一边读、一边写同一个 channel** 时，两个队列可能同时挂有该 G 的 sudog。
+
+## Operational Semantics
+
+nil / closed / 正常三种 channel 状态，在 send / recv / close 下的行为汇总如下（详细 panic 位置见上方 `chansend` / `chanrecv` / `closechan` 源码）：
+
+| 操作 | channel 状态 | 行为 |
+| --- | --- | --- |
+| send | nil | 永久阻塞（`gopark`，永不返回） |
+| send | closed | `panic("send on closed channel")` |
+| send | 正常但缓冲满 | 阻塞等待（非阻塞变体返回 `false`） |
+| recv | nil | 永久阻塞 |
+| recv | closed 且缓冲已空 | 立即返回 `(零值, false)` |
+| recv | closed 但缓冲仍有数据 | 先取缓冲数据，取空后再返回 `(零值, false)` |
+| recv | 正常但缓冲空 | 阻塞等待（非阻塞变体返回 `(_, false)`） |
+| close | nil | `panic("close of closed channel")` |
+| close | 已关闭 | `panic("close of closed channel")` |
+| close | 正常 | 唤醒 `recvq`（接收者收零值）、`sendq`（发送者 panic） |
+
+
+## Usage
+
+### Unidirectional Channel
 
 顾名思义，单向channel指只能用于发送或接收数据，实际上也没有单向channel。
 

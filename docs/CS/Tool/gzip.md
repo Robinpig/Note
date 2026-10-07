@@ -2,7 +2,7 @@
 
 gzip 是基于 **DEFLATE**（LZ77 字典压缩 + Huffman 熵编码）的通用文件压缩格式与工具，规范见 [RFC 1952](https://datatracker.ietf.org/doc/html/rfc1952)。它与 zlib（RFC 1950，带 zlib 头+ Adler-32）同源但封装不同：gzip 带 `gzip` 魔术头与 `CRC-32` + `ISIZE` 校验，适合单文件压缩；而 `.zip`、PNG 内部也用到 DEFLATE，但容器格式各异。
 
-## 文件格式（成员结构）
+## File Format (Member Structure)
 
 一个 gzip 成员（member）头部为 10 字节固定头，后接可变头部字段与压缩数据，结尾是 8 字节 trailer：
 
@@ -18,7 +18,7 @@ gzip 是基于 **DEFLATE**（LZ77 字典压缩 + Huffman 熵编码）的通用�
 - `MTIME` = 4 字节小端，原文件修改时间；`gzip -n` 可置 0 以**去除时间戳**，使相同输入的压缩产物字节一致（便于内容寻址/校验去重）。
 - trailer：`CRC-32`（4B）+ `ISIZE`（4B，原始大小 mod 2³²）。
 
-## 常用命令与陷阱
+## Common Commands and Pitfalls
 
 ```shell
 # -n 去掉 MTIME/文件名，输出可复现
@@ -31,7 +31,7 @@ gzip -d file.gz ; gzip -k file ; gzip -9 file
 - **可复现性**：默认 gzip 会把当前时间写进 `MTIME`、把文件名写进头部，导致同一文件每次压缩出的字节不同；CI/缓存场景务必用 `gzip -n` 去掉这些非确定性字段。
 - **HTTP 传输**：服务端常对文本（js/css/json）做 `Content-Encoding: gzip`，浏览器透明解压；注意压缩是 CPU 换带宽，已压缩的格式（图片/视频）再 gzip 收益甚微。
 
-## 与其他压缩对比
+## Comparison with Other Compression
 
 | 格式 | 算法 | 特点 |
 |---|---|---|

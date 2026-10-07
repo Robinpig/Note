@@ -67,7 +67,6 @@ If there is a path from n1 to n2, then n1 is an ancestor of n2 and n2 is a desce
 If n1 != n2, then n1 is a proper ancestor of n2 and n2 is a proper descendant of n1.
 
 ## Implementation
-
 The typical declaration: keep the children of each node in a linked list of tree nodes.
 
 ```c
@@ -82,7 +81,6 @@ struct tree_node
 ```
 
 ## Tree Traversals
-
 > [!NOTE]
 >
 > The UNIX file system is not a tree, but is treelike.
@@ -96,10 +94,7 @@ struct tree_node
 
 树的经典遍历算法主要有二种：深度优先算法（DF）及广度优先算法（BF），BF 与DF 的效率其实差不多的。在有些场景，是 DF 更快，在有些场景，是 BF 更快。DF一般用 stack 数据结构，BF 一般用 queue 数据结构
 
-### levelOrder
-
-
-
+### Level Order Traversal
 层序遍历是从根节点开始 从上至下（先父节点后子节点） 从左至右（先左节点后右节点） 按顺序遍历 这就比较适用于队列FIFO的性质
 
 使用一个Queue用于保存当前层的节点 在下一层出队 获取其子节点入队
@@ -200,7 +195,6 @@ public List<List<Integer>> levelOrder(TreeNode root) {
 
 
 ## Binary Trees
-
 A tree is called binary tree if each node has zero child, one child or two children. Empty tree is also a valid binary tree.
 We can visualize a binary tree as consisting of a root and two disjoint binary trees, called the left and right subtrees of the root.
 
@@ -214,7 +208,6 @@ While traversing we should give numbering for NULL pointers also.
 A binary tree is called complete binary tree if all leaf nodes are at height h or h – 1 and also without any missing number in the sequence
 
 ### Applications of Binary Trees
-
 Following are the some of the applications where binary trees play an important role:
 
 - Expression trees are used in compilers.
@@ -225,7 +218,6 @@ Following are the some of the applications where binary trees play an important 
   on a collection of items in logarithmic time (in worst case).
 
 ### Operations on Binary Trees
-
 Basic Operations
 
 - Inserting an element into a tree
@@ -241,7 +233,6 @@ Auxiliary Operations
 - Finding the least common ancestor (LCA) for a given pair of nodes, and many more.
 
 ### Implementation
-
 Because a binary tree has at most two children, we can keep direct pointers to them.
 The declaration of tree nodes is similar in structure to that for doubly linked lists, in that a node is a structure consisting of the *key* information plus two pointers (*left* and  *right* ) to other nodes.
 
@@ -269,8 +260,7 @@ Complete Binary Tree
 
 Heap
 
-### Binary Search Tree (BSTs)
-
+### Binary Search Trees (BSTs)
 An important application of binary trees is their use in searching.
 
 The property that makes a binary tree into a binary search tree is that for every node,  *X* ,
@@ -296,7 +286,6 @@ The sum of the depths of all nodes in a tree is known as the  *internal path len
 If the input comes into a tree presorted, then a series of *inserts* will take quadratic time and give a very expensive implementation of a linked list, since the tree will consist only of nodes with no left children. One solution to the problem is to insist on an extra structural condition called *balance:* no node is allowed to get too deep.
 
 ### Binary Tree Traversals
-
 Tree traversal is like searching the tree, except that in traversal the goal is to move through the tree in a particular order. In addition, all nodes are processed in the traversal but searching stops when the required node is found.
 
 #### Traversal Possibilities
@@ -329,11 +318,8 @@ There is another traversal method which does not depend on the above orders and 
 - Level Order Traversal: This method is inspired from Breadth First Traversal (BFS of Graph algorithms).
 
 ## Generic Trees (N-ary Trees)
-
 ## Red-Black Trees
-
 ## AVL Trees
-
 An AVL (Adelson-Velskii and Landis) tree is a binary search tree with a *balance* condition.
 The balance condition must be easy to maintain, and it ensures that the depth of the tree is  $O(\log{n})$.
 The simplest idea is to require that the left and right subtrees have the same height.
@@ -346,11 +332,8 @@ In below figure the tree on the left is an AVL tree, but the tree on the right i
 ![AVL Tree](../img/AVL-Tree.png)
 
 ### Single Rotation
-
 ### Double Rotation
-
 ## Splay Trees
-
 We now describe a relatively simple data structure, known as a  *splay tree* , that guarantees that any *m* consecutive tree operations take at most  $O(m\log{n})$ time.
 
 Although this guarantee does not preclude the possibility that any *single* operation might take  $O(n)$ time,
@@ -377,12 +360,10 @@ Studies have shown that this happens much more often than one would expect.
 Splay trees also do not require the maintenance of height or balance information, thus saving space and simplifying the code to some extent (especially when careful implementations are written).
 
 ### Traversals
-
 In a level-order traveresal, all nodes at depth d are processed before any node at depth d + 1.
 Level-order traversal differs from the other traversals in that it is not done recursively; a queue is used, instead of the implied stack of recursion.
 
 ## B-Trees
-
 As previously mentioned, unbalanced trees have a worst-case complexity of O(N). Balanced trees give us an average O(log2 N). At the same time, due to low fanout (fanout is the maximum allowed number of children per node), we have to perform balancing, relocate nodes, and update pointers rather frequently. Increased maintenance costs make BSTs impractical as on-disk data structures.
 
 If we wanted to maintain a BST on disk, we’d face several problems. One problem is locality: since elements are added in random order, there’s no guarantee that a newly created node is written close to its parent, which means that node child pointers may span across several disk pages. We can improve the situation to a certain extent by modifying the tree layout and using paged binary trees.
@@ -420,12 +401,10 @@ Fig.7. Binary tree, 2-3-Tree, and B-Tree nodes side by side.
 </p>
 
 
-## LSM-trees
-
+## LSM-Trees
 The [LSM-tree](/docs/CS/Algorithms/tree/LSM.md) uses an algorithm that defers and batches index changes, migrating the changes out to disk in a particularly efficient way reminiscent of merge sort.
 
 ## Summary
-
 We have seen uses of trees in operating systems, compiler design, and searching.
 Expression trees are a small example of a more general structure known as a parse tree, which is a central data structure in compiler design.
 Parse trees are not binary, but are relatively simple extensions of expression trees (although the algorithms to build them are not quite so simple).
@@ -458,7 +437,7 @@ but this is generally acceptable in view of the protection being given against e
 
 ## Links
 
-- [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
+- [数据结构](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
 - [Binary Tree](/docs/CS/Algorithms/tree/Binary-Tree.md)
 - [Red-Black Tree](/docs/CS/Algorithms/tree/Red-Black-Tree.md)
 - [B-tree](/docs/CS/Algorithms/tree/B-tree.md)
@@ -467,3 +446,9 @@ but this is generally acceptable in view of the protection being given against e
 - [Huffman Tree](/docs/CS/Algorithms/tree/Huffman-Tree.md)
 - [Segment Tree](/docs/CS/Algorithms/tree/Segment-Tree.md)
 - [LSM Tree](/docs/CS/Algorithms/tree/LSM.md)
+
+## References
+
+1. [树的基本概念 - OI Wiki](https://oi-wiki.org/graph/tree-basic/)
+2. [AVL 树 - OI Wiki](https://oi-wiki.org/ds/avl/)
+3. [Splay 树 - OI Wiki](https://oi-wiki.org/ds/splay/)

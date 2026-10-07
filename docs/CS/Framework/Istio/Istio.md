@@ -7,17 +7,17 @@ Istio 是 CNCF 顶级项目服务网格，在不改业务代码的前提下，�
 
 Istio 有两种数据面模式：**Sidecar**（每个 Pod 注入 Envoy）与 **Ambient**（无 sidecar，节点级 ztunnel + 可选 waypoint）。二者可在同一网格内混用，可以按命名空间逐步从 L4 覆盖层升级到 L7 策略。
 
-## 架构：控制面与数据面
+## Architecture: Control Plane and Data Plane
 
 网格在逻辑上分为两层，**数据面**由一组 Envoy 代理组成，拦截并控制服务间所有网络通信，同时采集上报遥测；**控制面**负责服务发现、配置下发与证书管理，把高层路由规则翻译成 Envoy 配置并运行时推给代理。
 
-### 数据面：Envoy
+### Data Plane: Envoy
 
 Istio 使用**扩展版 Envoy**（C++）作为唯一与数据面流量交互的组件。Envoy 本身提供动态服务发现、负载均衡、TLS 终止、HTTP/2 与 gRPC 代理、断路器、健康检查、按百分比切流的渐进发布、故障注入与丰富指标。
 
 关键点：**只有 Envoy 代理接触业务流量**，控制面从不碰数据包。sidecar 部署模式的价值在于无需重构或重写应用即可获得网格能力。
 
-### 控制面：istiod
+### Control Plane: istiod
 
 istiod 提供三件事：
 
@@ -25,7 +25,7 @@ istiod 提供三件事：
 - **配置下发**：把 Traffic Management API 等高层规则细化为 Envoy 原生配置，运行时经 xDS 推送（CDS / LDS / EDS / RDS / SDS），规则变更秒级生效、**无需重启代理**。
 - **证书与身份**：istiod 自身充当 CA，为数据面签发证书以支撑 mTLS，使策略可以基于**服务身份**（而非不稳定的 L3/L4 网络标识）来实施。
 
-## 两种数据面模式
+## Two Data Plane Modes
 
 | 维度 | Sidecar 模式 | Ambient 模式 |
 | :-- | :-- | :-- |
@@ -43,11 +43,11 @@ ztunnel（Zero Trust tunnel）是**每节点**的专用代理，用 **Rust** 编
 
 waypoint 是 **Envoy 的一种部署形态**（与 sidecar 同一引擎），但**跑在业务 Pod 之外**，可独立安装、升级与扩缩容。只要 mTLS + 加密隧道 + L4 授权 + L4 遥测的场景，**只装 ztunnel 即可、无需 waypoint**；需要高级流量治理、L7 授权与 VirtualService 路由时才引入。
 
-### HBONE 隧道
+### HBONE Tunnel
 
 ztunnel 之上，传输层用的是基于 **HTTP CONNECT** 的隧道协议 **HBONE**，这是 ambient 模式在 L4 覆盖层上实现安全传输的方式。
 
-## 核心资源与请求链路
+## Core Resources and Request Chain
 
 五个 `networking.istio.io/v1` 资源各管一段，最容易记混的是职责边界：
 
@@ -81,7 +81,7 @@ Envoy              选健康实例并转发
 
 `DestinationRule` 的策略**在 VirtualService 路由规则求值之后生效**，作用于流量的「真实目的地」——它不是一个额外的网络跳数，而是 Envoy 选定真实目标后套用的策略。
 
-## 关键字段语义
+## Key Field Semantics
 
 | 字段 | 含义 |
 | :-- | :-- |
@@ -94,7 +94,7 @@ Envoy              选健康实例并转发
 
 **`VirtualService.hosts` 与 `destination.host` 的区别是最高频的踩坑点**：前者是客户端手里的地址（可以是纯虚拟的 `bookinfo.com`），后者必须是真实可路由的服务。
 
-## 流量治理语义（默认值与坑）
+## Traffic Management Semantics (Defaults and Pitfalls)
 
 - **规则顺序匹配**：`http[]` 规则**从上到下逐条求值，第一条命中即生效**，并非「最具体优先」或「最长前缀优先」。无条件/权重规则应放最后兜底。
 - **match 的 AND/OR**：同一 `match` 块内多条件是 **AND**，同一规则的多个 `match` 块之间是 **OR**。
@@ -110,9 +110,9 @@ Envoy              选健康实例并转发
 - **`Sidecar` 收窄配置的价值**：减少 Envoy 配置数量、降低大网格内存占用；1.31 还支持 `~` 前缀从导入集里**减去**命名空间（`*/*` 加 `~ns1/*` = 全量除 ns1），避免长白名单。
 - **生产优先 FQDN**：K8s 短名称仅在与目标服务同命名空间时可靠，跨命名空间建议写全 `reviews.default.svc.cluster.local`。
 
-## 1.31 的关键变化
+## 1.31 Key Changes
 
-### 流量管理
+### Traffic Management
 
 - **分区感知负载均衡**：`DestinationRule.trafficPolicy.loadBalancerSettings` 与 `MeshConfig` 新增 `zoneAwareLbSetting`，Envoy 自动把流量优先送到**与下游代理同可用区**的 endpoint，本区容量不足才溢出。与既有 `localityLbSetting` 的区别是：zone 级路由由 Envoy **自动**完成，而非靠静态百分比。
 - **网格级默认流量策略**：`MeshConfig.defaultTrafficPolicy` 让管理员设定全局 `connectionPool` 与 `outlierDetection` 基线，被所有出站集群继承；`DestinationRule` 只需覆盖想改的块，**未设字段现在继承网格基线而非 Istio 内置默认**。基线也作用于入站集群与 `PassthroughCluster`。
@@ -125,7 +125,7 @@ Envoy              选健康实例并转发
 - **多集群稳定性**：本版修复大量 ambient 问题——凭证轮换不再造成陈旧快照或丢失 endpoint shard，多集群模式的内存与 goroutine 泄漏已解决，CNI 节点代理修掉了 map 并发写 panic、fd 泄漏与 Pod 删除死锁。
 - **agentgateway 作为 waypoint**：在 1.30 实验性 gateway-only 支持之上，新增 `istio-agentgateway-waypoint` GatewayClass 以把 [agentgateway](https://agentgateway.dev) 部署为 waypoint 代理。
 
-### 安全
+### Security
 
 - **FIPS 140-3 合规策略**：`COMPLIANCE_POLICY` 新增 `fips-140-3`，强制 TLS 1.2+ 与 FIPS 兼容密码套件及 P-256/P-384 曲线；Go 组件须用 Go 1.24+ 并以 `GOFIPS140=v1.0.0` 构建。
 - **`AuthorizationPolicy` 信任域匹配**：`Source` 新增 `trustDomains` / `notTrustDomains`，可按对端证书推导出的信任域匹配或排除请求。
@@ -133,7 +133,7 @@ Envoy              选健康实例并转发
 - **xDS 生成器鉴权**：MCP 配置下发端点要求已验证的控制面身份；标准 sidecar / gateway / ztunnel 流量不受影响。
 - **Gateway API `AllowInsecureFallback`**：启用后网关会请求客户端证书并尝试验证，但未出示或验证失败仍放行，同时填充 `x-forwarded-client-cert` 交由后端自行校验。
 
-### 安装与可观测
+### Installation and Observability
 
 - Kiali 插件更新到 **v2.26.0**；ztunnel 支持 `ZTUNNEL_RESOURCE_CPU_LIMIT` / `ZTUNNEL_RESOURCE_CPU_REQUEST` 感知 CPU 的工作线程数。
 - `istioctl manifest generate -o` 把生成的清单写文件而非 stdout；`global.readerServiceAccount` 可把 `istio-reader` ClusterRole 绑到自定义 ServiceAccount。
@@ -141,7 +141,7 @@ Envoy              选健康实例并转发
 - 新增 `ENVOY_SECURE_METRICS_PORT` / `ENVOY_SECURE_MERGED_METRICS_PORT`，可在每个 sidecar 上暴露 **mTLS 保护**的 Prometheus 端点；`PILOT_AGENT_MERGE_ENVOY_STATS=false` 可关闭 Envoy 指标合并。
 - `ProxyConfig` 新增 `connectionSettings` 及面向网关代理的 `EDGE` 预设；`istioctl analyze` 新增 ServiceEntry 协议冲突与 Gateway API CRD 过期的告警。
 
-### 制品渠道变更（升级必读）
+### Artifact Channel Changes (Must-Read for Upgrade)
 
 自 1.31 起，Istio **不再向 `gcr.io/istio-release`、`registry.istio.io`、`istio-release.storage.googleapis.com` 发布制品**：
 
@@ -152,11 +152,11 @@ Envoy              选健康实例并转发
 
 官方会做「scream test」把 GCP 制品短暂下线以验证迁移：2026-09-15、10-13、11-17、12-08。**依赖原 GCP 拉取地址的 CI / 镜像加速配置需要改。**
 
-## 与 Higress 的关系
+## Relationship with Higress
 
 Higress 复用 Istio 的 xDS 协议、CRD 存储与多注册中心服务发现，其控制面的 `pilot` 是 `istiod` pilot 模块的 **fork**（不是原样依赖）。因此 Higress 天然具备 Istio 的流量治理语义，但**不能依赖 Higress 拿到原生 Istio 服务网格能力**——需要原生 mesh 语义应单独安装 Istio。二者取舍见 [Higress](/docs/CS/Framework/Higress/Higress.md)。
 
-## 安全与可观测（概览）
+## Security and Observability (Overview)
 
 完整展开见 [Security](/docs/CS/Framework/Istio/Security.md) 与 [Observability](/docs/CS/Framework/Istio/Observability.md)，此处只列最容易踩的语义。
 
@@ -175,7 +175,7 @@ Higress 复用 Istio 的 xDS 协议、CRD 存储与多注册中心服务发现�
 
 **Ambient 概览**：ztunnel 刻意只做 L3/L4（**不终止业务 HTTP、不解析业务头**），L7 能力全靠 waypoint。**默认 mTLS 模式是 `PERMISSIVE` 而非 STRICT**，且 `DISABLE` 被忽略——HBONE 恒加密不可关闭。策略在 ztunnel 上是 **fail-safe 拒绝**（ALLOW 含 L7 属性会整条不放行，DENY 则变得更严），L7 策略必须用 `targetRefs` 挂到 waypoint。详细实操见 [Ambient](/docs/CS/Framework/Istio/Ambient.md)。
 
-## 本主题笔记导航
+## Topic Notes Navigation
 
 | 笔记 | 内容 |
 | :-- | :-- |

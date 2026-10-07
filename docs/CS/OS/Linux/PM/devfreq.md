@@ -6,7 +6,7 @@ devfreq 管的是**"非 CPU 的设备该跑多快"** —— 内存控制器（DD
 
 版本基线 **v7.2**。⚠️ **一处重要重命名**：旧资料里的 `struct devfreq_devinfo` 在 v7.2 已改为 **`struct devfreq_dev_profile`**，且字段大幅精简。
 
-## 三个回调
+## Three Callbacks
 
 ```c
 struct devfreq_dev_profile {
@@ -55,7 +55,7 @@ struct devfreq_dev_profile {
 
 > ⚠️ 旧结构名 `devfreq_devinfo` 及其中的 `frequency` / `min_freq` / `max_freq` / `trans_bufsize` / `bus_width` / `target_freq` / `profile` 字段**在 v7.2 全部不存在**。频率范围改为由 `freq_table` 表达。
 
-## polling_ms 与 timer 类型
+## polling_ms and Timer Types
 
 ```c
 	unsigned int polling_ms;		/* The polling interval in ms. 0 disables polling. */
@@ -66,7 +66,7 @@ struct devfreq_dev_profile {
 
 `timer` 类型选 **deferrable**（可推迟的 timer）能让 devfreq 的周期任务避开 CPU 深度空闲期，间接省电。
 
-## governor 清单
+## Governor List
 
 `drivers/devfreq/Makefile` 的完整列表：
 
@@ -92,7 +92,7 @@ struct devfreq_dev_profile {
 
 > 旧资料里的 `simple_ondemand_sqrt` / `simple_dvfs` 在 v7.2 **不存在**。
 
-### 平台驱动
+### Platform Driver
 
 Makefile 里还有一批 SoC 专属驱动，都带 `_DEVFREQ` 后缀：
 
@@ -103,7 +103,7 @@ mtk-cci-devfreq  rk3399_dmc  sun8i-a33-mbus  tegra30-devfreq
 
 从名字能看出覆盖范围：**内存控制器**（`imx8m-ddrc`、`rk3399_dmc`）、**总线/互联**（`imx-bus`、`sun8i-a33-mbus`、`mtk-cci`）、**uncore**（`hisi_uncore_freq`）、**GPU**（`tegra30-devfreq`）。移动 SoC 是 devfreq 的主战场 —— 手机的功耗预算远比服务器紧张。
 
-## thermal 集成
+## thermal Integration
 
 `is_cooling_device` 标志把设备接入 thermal 框架：
 
@@ -113,7 +113,7 @@ mtk-cci-devfreq  rk3399_dmc  sun8i-a33-mbus  tegra30-devfreq
 
 标记为 true 后，devfreq 会向 thermal 注册成一个 cooling device，thermal 的 governor（`step_wise` / `power_allocator` / `fair` 等）可以通过降低这个"冷却设备"来间接降频。`passive` governor 走的是同一条链路，只是方向相反。
 
-## 注册与 sysfs
+## Registration and sysfs
 
 ```c
 struct devfreq *devm_devfreq_add_device(struct device *dev,
@@ -137,14 +137,14 @@ struct devfreq *devm_devfreq_add_device(struct device *dev,
 
 `/proc/interrupts` 里的 devfreq 定时器中断频率是判断"polling_ms 是否合理"的最直接方法 —— 过高说明轮询太频繁白烧电。
 
-## 与其它子系统的接缝
+## Seams with Other Subsystems
 
 - **cpufreq**：框架形态相似（policy vs devfreq），但负载来源不同，见 [cpufreq](/docs/CS/OS/Linux/PM/cpufreq.md)。
 - **runtime PM**：devfreq 可以挂在 power domain 下由 PM 核心管电源，性能请求经 `->set_performance_state()` 传入，见 [runtime PM](/docs/CS/OS/Linux/PM/runtimepm.md)。
 - **thermal**：cooling device 接入与 `passive` governor 的反向控制，见 [PM 知识地图](/docs/CS/OS/Linux/PM/README.md)。
 - **设备模型**：devfreq 是设备的一个可选能力框架，注册失败通常不阻塞 probe，见 [设备模型 device](/docs/CS/OS/Linux/dev/device.md)。
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 ```shell
 # 全局：有哪些 devfreq 设备

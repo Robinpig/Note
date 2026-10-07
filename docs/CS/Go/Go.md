@@ -11,6 +11,31 @@ Go是一种新的语言，一种并发的、带垃圾回收的、快速编译的
 >[Google style go](https://google.github.io/styleguide/go)
 >[Go Wiki: Go Code Review Comments - The Go Programming Language](https://go.dev/wiki/CodeReviewComments)
 
+## Why Go
+
+Go 是 Google 在 2009 年发布的语言，定位恰好填补 C++（太重、编译慢）与 Python（太慢、动态）之间的空白：为**大规模工程、多核机器与网络服务**而设计。它的全部取舍都围绕"让大团队低成本地协作与维护"展开：
+
+- **刻意做小**：约 25 个关键字，没有类继承、没有异常、没有模板（1.18 前），泛型也来得晚且保守——用表达力的克制换认知负担的降低，便于评审与 onboarding。
+- **并发是一等公民**：goroutine + channel 实现 CSP 模型，把高并发从"专家技能"变成"默认写法"，调度由 [GMM（GMP 模型）](/docs/CS/Go/GMM.md) 承担。
+- **工具链内建**：gofmt 统一格式，go mod / go test / go vet 开箱即用，少依赖外部生态；把"编译成单二进制"当成日常。
+- **部署友好**：静态链接、无运行时依赖，天然契合容器与云原生——[Docker](/docs/CS/Container/Docker/Docker.md)、[Kubernetes](/docs/CS/Container/k8s/K8s.md)、[etcd](/docs/CS/Framework/etcd/etcd.md) 都是它写的。
+- **标准库厚重**：net/http、crypto、encoding 等开箱即用，很多微服务不依赖框架也能直接写。
+
+代价同样明显：表达力有限（无枚举 / 可选项、泛型保守）、错误处理 verbose（`if err != nil` 遍布）、GC 不可控（不能像 Java 那样换收集器）。这些在编程语言横向对比的"适用与不适用"里有系统对照。
+
+## This Directory Contains
+
+本目录按"语言特性 → 运行时 → 工程"逐层展开，覆盖 Go 作为工程语言的全貌：
+
+- **语言基础**：[Basic](/docs/CS/Go/Go.md?id=basic) 收类型系统、字符串 / 切片、流程控制、init / error 等语法；类型内部表示见 [struct](/docs/CS/Go/struct/struct.md)（数组 / 映射 / 结构体）与 [interface](/docs/CS/Go/struct/interface.md)（iface / eface / itab）；[Generic](/docs/CS/Go/Go.md?id=generic) 是 1.18 引入的泛型；另有 [Pointer](/docs/CS/Go/Pointer.md) 与 [Reflection](/docs/CS/Go/Reflection.md)；语言机制见 [defer](/docs/CS/Go/Defer.md) 与 [panic/recover](/docs/CS/Go/Panic.md)。
+- **并发模型**：集中在 [Concurrency](/docs/CS/Go/Concurrency/Concurrency.md) 子目录——[Goroutine](/docs/CS/Go/Concurrency/Goroutine.md)、[Channel](/docs/CS/Go/Concurrency/Channel.md)、[Context](/docs/CS/Go/Concurrency/Context.md)、[Sync](/docs/CS/Go/Concurrency/Sync.md)、[Lock](/docs/CS/Go/Concurrency/Lock.md)、[select](/docs/CS/Go/Concurrency/select.md)，以及底层的 [atomic](/docs/CS/Go/atomic.md)；扩展件见 [errgroup](/docs/CS/Go/Concurrency/errgroup.md)、[singleflight](/docs/CS/Go/Concurrency/singleflight.md)，可见性规则见 [内存模型](/docs/CS/Go/Concurrency/MemoryModel.md)；并发模式与常用结构见 [并发模式](/docs/CS/Go/Concurrency/Patterns.md)；并发度上限用 [信号量 semaphore](/docs/CS/Go/Concurrency/semaphore.md)，竞争检测用 [race detector](/docs/CS/Go/Concurrency/RaceDetector.md)。
+- **运行时与调度**：[GMP 模型](/docs/CS/Go/GMM.md) 讲调度器，[runtime](/docs/CS/Go/runtime.md)、[sysmon](/docs/CS/Go/sysmon.md)、[timer](/docs/CS/Go/timer.md) 支撑其运转。
+- **内存与 GC**：[memory](/docs/CS/Go/memory.md) 与 [GC](/docs/CS/Go/GC.md) 讲内存布局与并发三色标记回收。
+- **网络**：[net](/docs/CS/Go/net.md) 与 [netpoller](/docs/CS/Go/netpoller.md) 是 Go 高并发网络的基础。
+- **编译与工具链**：[compile](/docs/CS/Go/compile.md) 讲编译过程，[Tool](/docs/CS/Go/Tool.md)（pprof / trace）讲性能剖析。
+- **标准库常用包**：[errors](/docs/CS/Go/Errors.md)（错误判定 / 包装）、[io](/docs/CS/Go/IO.md)（Reader/Writer 与装饰器）、[testing](/docs/CS/Go/Testing.md)（基准 / fuzz / httptest）；工程与依赖管理见 [Go Module](/docs/CS/Go/Module.md)。
+- **Web 与框架**：[Framework](/docs/CS/Go/Framework/Gin.md) 下有 Gin、Echo、gnet、go-resty、gorm、Zap；[Issues](/docs/CS/Go/Issues.md) 收常见错误。
+
 ## Config
 
 >  [Download and install Go](https://golang.google.cn/doc/install)
@@ -363,7 +388,7 @@ func ParseStudent() {
 
 
 
-### 指针
+### Pointer
 在 Go 语言中，指针对应的是变量在内存中的存储位置，也就说指针的值就是变量的内存地址。通过 & 可以获取一个变量的地址，也就是指针。
 常量
 
@@ -480,6 +505,23 @@ panic 有三种诞生方式：
 
 ## Generic
 
+Go 1.18（2022）引入泛型，用**类型参数（type parameters）**弥补此前只能靠 `interface{}` + 反射的空缺。核心语法：
+
+```go
+func Min[T constraints.Ordered](a, b T) T {
+    if a < b {
+        return a
+    }
+    return b
+}
+```
+
+- **约束（constraint）**：类型参数后的 `T constraints.Ordered` 就是约束，本质是"一组方法的集合"——用 interface 描述类型参数必须满足的操作。标准库 `constraints` 包提供 Ordered / Comparable 等常用约束。
+- **类型推导**：调用时常可省略 `[T]`（如 `Min(1, 2)`），由实参推导；也可显式写 `Min[int](1, 2)`。
+- **与 Java / C++ 的差异**：不像 C++ 模板在实例化点做词法展开（编译膨胀、报错滞后），也不像 Java 在运行时擦除；Go 在编译期单态化（monomorphization），错误在定义处即可报出。
+- **设计上的克制**：不支持方法上的类型参数、约束不能含字段、不做运算符重载——刻意保守，避免语言复杂度失控。
+
+泛型让 Go 终于能写类型安全的容器与算法，但日常业务代码多数仍以 interface + duck typing 解决多态。
 
 ## goroutine
 
@@ -535,7 +577,7 @@ func add(i int) {
 }
 ```
 
-使用 go build、go run、go test 这些 Go 语言工具链提供的命令时，添加 -race 标识可以帮你检查 Go 语言代码是否存在资源竞争
+使用 go build、go run、go test 这些 Go 语言工具链提供的命令时，添加 `-race` 标识（见 [竞争检测](/docs/CS/Go/Concurrency/RaceDetector.md)）可以帮你检查 Go 语言代码是否存在资源竞争
 
 
 mutex
@@ -581,16 +623,9 @@ Web
 
 
 ## Links
-- [C](/docs/CS/C/C.md)
-- [Go Concurrency](/docs/CS/Go/Concurrency/Concurrency.md)
-- [Goroutine](/docs/CS/Go/Concurrency/Goroutine.md)
-- [Channel](/docs/CS/Go/Concurrency/Channel.md)
-- [Sync 与 Lock](/docs/CS/Go/Concurrency/Lock.md)
-- [atomic](/docs/CS/Go/atomic.md)
-- [Tool（pprof/trace）](/docs/CS/Go/Tool.md)
-- [Gin](/docs/CS/Go/Framework/Gin.md) / [Echo](/docs/CS/Go/Echo.md) — Web 框架
-- [go-resty](/docs/CS/Go/Framework/go-resty.md) — HTTP 客户端
-- [Zap](/docs/CS/Go/Framework/Zap.md) — 结构化日志
+
+- [编程语言横向对比](/docs/CS/Languages.md)
+- [C](/docs/CS/C/C.md) — Go 与 C 的 cgo / FFI 关系
 
 
 ## References

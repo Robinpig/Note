@@ -45,9 +45,9 @@ MobileMSDK
 
 如果是用户高频打开的IM软件，这样也不会有太大的问题。但是闲鱼app的活跃度较低，有时候甚至依赖IM消息拉活，而且一条延迟的消息触达可能导致用户错过一笔交易，闲鱼消息不允许有这样的延迟发生。
 
-## 增加长连接重连机制
+## Add Long Connection Reconnect Mechanism
 
-### 4.1长连接为什么会中断？
+### 4.1 Why Do Long Connections Get Disconnected?
 
 有因必有果，我们先来分析下有哪些原因会导致连接中断。
 

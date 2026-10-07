@@ -567,7 +567,7 @@ public interface TransactionSynchronization extends Flushable {
 
 Pattern-based use `contains()`
 
-## 响应式事务
+## Reactive Transactions
 
 在 WebFlux / R2DBC 这类响应式栈里，没有"当前线程"承载事务，Spring 用 Reactor 的 `Context` 而不是 `ThreadLocal` 来传递事务状态。对应接口是 `ReactiveTransactionManager`：
 
@@ -579,7 +579,7 @@ Pattern-based use `contains()`
 
 ## Tuning
 
-### 事务失效
+### Transaction Invalidity
 
 
 Spring相关
@@ -602,7 +602,7 @@ Spring相关
 - 表不支持事务
 
 
-### 长事务
+### Long Transactions
 
 长事务问题
 

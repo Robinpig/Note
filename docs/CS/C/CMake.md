@@ -12,3 +12,8 @@ CMake并不直接建构出最终的软件，而是产生标准的建构档（如
 ## Links
 
 - [make](/docs/CS/C/make.md)
+- [C](/docs/CS/C/C.md)
+
+## References
+
+1. [CMake Documentation](https://cmake.org/cmake/help/latest/)

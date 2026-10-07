@@ -95,6 +95,142 @@ emptyCtx对 Context 接口方法的实现也都非常简单，无论何时调用
 
 
 
+## Four Implementation Types and the Context Tree
+
+`context` 包里真正干活的是四个具体类型，它们都实现了 `Context` 接口，并通过**嵌入（embedding）**组成一棵树：
+
+- **`emptyCtx`**：`Background` / `TODO` 的底层类型（见上方），所有树的根。
+- **`cancelCtx`**：可取消上下文，持有子节点集合与 `done` channel，是实现取消广播的核心。
+- **`timerCtx`**：**嵌入** `cancelCtx`，额外持有一个定时器，到点自动触发取消（`WithDeadline` / `WithTimeout`）。
+- **`valueCtx`**：只存一个 key-value，并链向父节点（`WithValue`）。
+
+所以 `timerCtx` 是 `cancelCtx` 的超集；`cancelCtx` / `timerCtx` 是可取消节点，`emptyCtx` / `valueCtx` 不可取消（它们未实现 `canceler` 接口，`cancel` 对他们无意义）。父节点取消时，会沿 `children` 把取消信号**递归广播**给所有后代。
+
+## cancelCtx: Core of Cancel Broadcast
+
+`cancelCtx` 的核心字段（源码 `src/context/context.go`，Go 1.14+ 把 `done` 改为 `atomic.Value` 懒存储，本质仍是首次访问创建、首次 `cancel` 关闭）：
+
+```go
+type cancelCtx struct {
+    Context                        // 嵌入父节点
+    mu       sync.Mutex            // 保护 children / err
+    done     atomic.Value          // of chan struct{}，懒创建，首次 cancel 时关闭
+    children map[canceler]struct{} // 直接子节点集合，首次 cancel 后置 nil
+    err      error                 // 首次 cancel 时设置
+}
+```
+
+### WithCancel and Attaching Child Nodes
+
+`WithCancel(parent)` 创建 `cancelCtx` 后调用 `propagateCancel(parent, child)`：若父节点实现了 `canceler` 且尚未取消，就把当前节点加入父的 `children` 集合——这就把新节点挂到了 Context 树上。返回的 `cancel` 函数只是 `child.cancel(true, Canceled)` 的包装。
+
+```go
+func WithCancel(parent Context) (Context, CancelFunc) {
+    c := &cancelCtx{}
+    c.propagateCancel(parent, c)
+    return c, func() { c.cancel(true, Canceled) }
+}
+```
+
+### cancel: Implementation of Recursive Broadcast
+
+取消的本质是 `cancelCtx.cancel`：加锁，把 `done` channel 关闭（所有监听 `Done()` 的 goroutine 同时唤醒），**遍历 `children` 对每个子节点递归调用 `cancel(false, err)`**，清空 `children`，最后若 `removeFromParent` 为真则从父节点集合里把自己摘掉。
+
+```go
+func (c *cancelCtx) cancel(removeFromParent bool, err error) {
+    c.mu.Lock()
+    if c.err != nil { // 已取消，幂等返回
+        c.mu.Unlock()
+        return
+    }
+    c.err = err
+    d, _ := c.done.Load().(chan struct{})
+    if d == nil {
+        c.done.Store(make(chan struct{}))
+    } else {
+        close(d) // 广播点：关闭 done，所有 Done() 监听者收到
+    }
+    for child := range c.children {
+        child.cancel(false, err) // 递归广播给子节点
+    }
+    c.children = nil
+    c.mu.Unlock()
+    if removeFromParent {
+        removeChild(c.Context, c) // 从父的 children 中摘除
+    }
+}
+```
+
+正是这段递归 + `close(done)`，实现了「父取消 → 所有后代 goroutine 同时收到信号」的广播语义。`Done()` 也是**懒创建** `done` channel 的（double-checked：先原子读、为 nil 再加锁建、再原子存），避免无接收者时白建 channel。
+
+> 取消是**幂等**的：第二次 `cancel` 因 `c.err != nil` 直接返回，多次调用 `CancelFunc` 安全。
+
+## timerCtx: cancelCtx with Timer
+
+`timerCtx` 在 `cancelCtx` 之上加了一个 `deadline` 和一个 `*time.Timer`：
+
+```go
+type timerCtx struct {
+    cancelCtx
+    timer    *time.Timer // 到点触发 cancel
+    deadline time.Time
+}
+```
+
+`WithDeadline(parent, d)` 的要点：
+1. 若父节点的截止时间更早（已先于 `d` 到期），直接退化为 `WithCancel(parent)`；
+2. 否则建 `timerCtx` 并 `propagateCancel` 挂树；
+3. 若 `d` 已过期（`time.Until(d) <= 0`），立即 `cancel(true, DeadlineExceeded)`；
+4. 否则 `time.AfterFunc` 注册定时器，到点调用 `c.cancel(true, DeadlineExceeded)`。
+
+`WithTimeout(parent, timeout)` 只是 `WithDeadline(parent, time.Now().Add(timeout))` 的语法糖。
+
+`timerCtx.cancel` 比 `cancelCtx.cancel` 多做一步——**先停掉自己的 timer、再调用内嵌 `cancelCtx.cancel`**，避免定时器到点后又触发一次取消：
+
+```go
+func (c *timerCtx) cancel(removeFromParent bool, err error) {
+    c.cancelCtx.cancel(removeFromParent, err)
+    if c.timer != nil {
+        c.timer.Stop()
+        c.timer = nil
+    }
+}
+```
+
+## valueCtx: Linked-List Key-Value Lookup
+
+`valueCtx` 只存一对 key-value，并把查找**委托给父节点**（不是哈希表，是一条链）：
+
+```go
+type valueCtx struct {
+    Context
+    key, val interface{}
+}
+
+func (c *valueCtx) Value(key interface{}) interface{} {
+    if c.key == key {
+        return c.val
+    }
+    return c.Context.Value(key) // 向上级联查找
+}
+
+func WithValue(parent Context, key, val interface{}) Context {
+    if key == nil {
+        panic("nil key")
+    }
+    return &valueCtx{parent, key, val}
+}
+```
+
+由此得到几个关键性质：
+- **只能读到「当前节点 → 根」这条链上的值**，兄弟节点之间互不可见——这与「context 传值要尽量少」的原则一致（值只在必要路径上透传）。
+- `WithValue` 要求 `key` 必须可比较（Go 1.21+ 会在非可比较 key 时 panic），实践中常用自定义类型或私有变量当 key 以防碰撞。
+- `valueCtx` 不实现 `canceler`，所以一个纯 `WithValue` 派生的节点不参与取消广播；它通常挂在某个可取消节点之下。
+
+## Integration with errgroup
+
+`errgroup.WithContext(parent)` 内部就是用 `WithCancel(parent)` 拿到 `(ctx, cancel)`，并在**任一子任务返回非 nil error 时自动调用 `cancel`**——把「错误聚合」与「取消广播」合二为一。`WithContext` 派生的 ctx 只负责出错时取消、**不提供超时**，需要超时就把 `context.WithTimeout` 作为父节点传进去（见 [errgroup](/docs/CS/Go/Concurrency/errgroup.md)）。这也是为什么 [并发模式](/docs/CS/Go/Concurrency/Patterns.md) 里限流 / 流水线退出都优先用 `ctx.Done()` 收口。
+
 ## Links
 
 - [Concurrency](/docs/CS/Go/Concurrency/Concurrency.md)

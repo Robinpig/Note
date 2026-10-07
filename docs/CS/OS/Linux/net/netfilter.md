@@ -4,7 +4,7 @@ netfilter 是内核协议栈里的**包过滤框架**：它在协议栈处理包
 
 它不是独立于协议栈的旁路，而是被协议栈代码用 `NF_HOOK()` 直接调用——见 [network](/docs/CS/OS/Linux/net/network.md) 收发路径中的 `NF_INET_PRE_ROUTING`、`NF_INET_LOCAL_IN`、`NF_INET_LOCAL_OUT`、`NF_INET_POST_ROUTING` 四处。概念与运维侧的入门笔记见 [netfilter 概念](/docs/CS/CN/Tools/netfilter.md)，本篇聚焦内核实现。
 
-## 五个挂载点
+## Five Mount Points
 
 对 IPv4/IPv6，netfilter 定义五个钩子（`NF_INET_*`），对应包在协议栈里的五个时机：
 
@@ -21,7 +21,7 @@ netfilter 是内核协议栈里的**包过滤框架**：它在协议栈处理包
 - **本机收发**：入向 `PRE_ROUTING → LOCAL_IN`；出向 `LOCAL_OUT → POST_ROUTING`；
 - **转发**：`PRE_ROUTING → FORWARD → POST_ROUTING`。
 
-## NF_HOOK 调用机制
+## NF_HOOK Invocation Mechanism
 
 协议栈不直接遍历规则，而是在固定位置调一个宏。以接收为例：
 
@@ -52,7 +52,7 @@ return NF_HOOK(NFPROTO_IPV4, NF_INET_PRE_ROUTING,
 
 非 `NF_ACCEPT` 的返回都会中断后续链。
 
-## 连接跟踪 conntrack
+## Connection Tracking conntrack
 
 conntrack 是 NAT 和有状态过滤的基础：它为每条"流"维护一个状态条目 `nf_conn`，用 **tuple（源/目的 IP、端口、协议号）** 唯一标识，区分原始方向与应答方向（双向 tuple）。
 
@@ -69,7 +69,7 @@ NAT 依赖 conntrack：在连接的首包上改写地址/端口并把映射记�
 - Masquerade 是 SNAT 的特化：出口 IP 动态时自动用当前出接口地址，拨号/云场景常用；
 - NAT 只能对"连接的首包"建立映射，因此规则顺序与 conntrack 状态密切相关。
 
-## 前端：iptables 与 nftables
+## Frontend: iptables and nftables
 
 netfilter 只提供内核机制，规则如何写由前端决定：
 

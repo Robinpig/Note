@@ -40,7 +40,7 @@ Linux系统以1970年1月1日0点0分0秒（UTC）为参考点，计算机更喜
 | `posix-timers.c` / `itimer.c` / `alarmtimer.c` | 用户态定时器接口 |
 | `namespace.c` | time namespace（时钟虚拟化） |
 
-## 三类硬件：clocksource / clockevent / RTC
+## Three Classes of Hardware: clocksource / clockevent / RTC
 
 这三者的分工必须先分清，否则后面所有机制都会绕晕：
 
@@ -60,9 +60,9 @@ RTC 在整条链路里的存在感极低——日常运行时内核完全不碰�
 那套接口（`/dev/rtc`、`alarmtimer`）确实是单独一条路径，但它的定位是"让系统从挂起中醒来"，
 而不是"让进程定时"——后者从来不用 RTC。
 
-## 内核怎么知道"现在"：timekeeping
+## How the Kernel Knows 'Now': timekeeping
 
-### 从 cycles 到纳秒：mult/shift
+### From cycles to Nanoseconds: mult/shift
 
 `gettimeofday`系统调用就是用来获取当前时间的，结果以timeval和timezone（时区）结构体的形式返回
 
@@ -147,7 +147,7 @@ static __always_inline void timespec64_add_ns(struct timespec64 *a, u64 ns)
 - `delta = (cycles - tkr->cycle_last) & mask` 里的按位与，是利用**无符号环绕**自动处理计数器回绕——
   这一招与 jiffies 的 `time_after()` 是同一思路（见下文「jiffies：粗粒度的时间货币」）。
 
-### 五个"现在"与 ktime_get 家族
+### Five 'Now's and the ktime_get Family
 
 timekeeper 内部维护的不是一个时间，而是**一组共享同一硬件计数器、但偏移量不同的时间轴**：
 
@@ -178,7 +178,7 @@ timekeeper 内部维护的不是一个时间，而是**一组共享同一硬件�
 `tk_xtime_coarse`（`tk_update_coarse_nsecs()`，`timekeeping.c:230`），读的时候直接取，
 既不读硬件也不做乘法——代价是精度退化到一个 tick。
 
-### 读侧为什么不用锁：shadow 与 latch seqcount
+### Why the Read Side Does Not Use Locks: shadow and latch seqcount
 
 时间读数每秒被调用上百万次，如果每次都抢锁，整个系统都会被拖垮。内核用了两层技巧让读侧**完全无锁**。
 
@@ -224,7 +224,7 @@ do {
 而普通 `ktime_get()` 用的是 `tk_core.seq`（`seqcount_raw_spinlock_t`）——它同样不阻塞读者，
 但 NMI 若恰好打断写者会导致读者自旋等待，**这就是 NMI 里必须用 `_fast_ns` 系列的唯一原因**。
 
-### 看门狗：识别撒谎的时钟源
+### Watchdog: Identifying the Lying clocksource
 
 clocksource 是硬件，会坏、会被虚拟化环境伪造、会因固件 bug 频率漂移。内核的应对是
 **拿两个时钟源互相对表**：`clocksource_watchdog`（`clocksource.c:643`）每 `HZ/2` 跑一次，
@@ -273,9 +273,9 @@ static struct tk_data timekeeper_data[TIMEKEEPERS_MAX];
 而对 aux 的校准只动它自己的 `offs_aux`（`tk_update_aux_offs()`，`timekeeping.c:87`），
 **不会影响 core 时钟源的单调性**。这是个很年轻的设计，排障时看到 `aux` 字样不必惊讶。
 
-## 节拍：jiffies 与 tick
+## Tick: jiffies and tick
 
-### jiffies：粗粒度的时间货币
+### jiffies: Coarse-grained Time Currency
 
 The following defines establish the engineering parameters of the PLL model.
 The HZ variable establishes the timer interrupt frequency, 100 Hz for the SunOS kernel, 256 Hz for the Ultrix kernel and 1024 Hz for the OSF/1 kernel.
@@ -357,7 +357,7 @@ Have the 32 bit jiffies value wrap 5 minutes after boot so jiffies wrap bugs sho
 
 转成有符号做差，就能在模 2³² 的环上正确判序。
 
-### tick 中断与 tick 设备
+### tick Interrupt and tick Device
 
 每个 CPU 有一个 tick 设备，由 `tick_check_new_device()`（`tick-common.c:326`）从注册的 clockevent 里挑：
 优先支持 oneshot 的、其次 rating 高的、且本 CPU 本地的优于非本地的。
@@ -381,7 +381,7 @@ void do_timer(unsigned long ticks)
 任意 CPU 都能接管；若某 CPU 的 tick 卡住，`tick_limited_update_jiffies64()` 会配合
 `MAX_STALLED_JIFFIES = 5` 强制补推进，避免 jiffies 长期停滞。
 
-### NO_HZ：什么时候能停
+### NO_HZ: When Can It Stop
 
 | 模式 | 行为 | 依赖 |
 |---|---|---|
@@ -408,7 +408,7 @@ if (tick_nohz_full_enabled()) {
 
 也就是说：**即使所有 CPU 都进了 dynticks，也必须留一颗 CPU 保持周期 tick 来推进 jiffies。**
 
-### 停掉之后：hrtimer 模拟 tick
+### After Stopping: hrtimer Simulates tick
 
 tick 停了，"再过 4ms 推进 jiffies"这件事由谁保证？答案是用一个 per-CPU 的 hrtimer 顶替：
 
@@ -440,7 +440,7 @@ void tick_setup_sched_timer(bool hrtimer)
 `get_next_timer_interrupt()`（`timer.c:2291`）算出"最近一个将到期的定时器或调度时刻"，
 再把本地 clockevent 编程到那一刻。
 
-### 定时器迁移与 tick broadcast
+### Timer Migration and tick broadcast
 
 tick 停下会带来两个新问题。
 
@@ -460,7 +460,7 @@ CPU 进入空闲时调 `tmigr_cpu_deactivate()` 把本 CPU 的最近到期事件
 `tick-broadcast-hrtimer.c` 还实现了一个"假广播设备"——用 `struct hrtimer bctimer` 顶替
 （rating 为 0、带 `CLOCK_EVT_FEAT_HRTIMER`），在没有独立广播硬件时兜底。
 
-### tick 依赖：谁有权说"别停"
+### tick Dependency: Who Has the Right to Say 'Don't Stop'
 
 停 tick 不是无条件的。任何子系统都可以声明"我现在需要 tick"，机制是四层掩码
 （全局 `tick_dep_mask`、per-CPU `ts->tick_dep_mask`、per-task、per-signal）：
@@ -481,7 +481,7 @@ enum tick_dep_bits {
 **任何一层置位就禁止停 tick**。其中 `TICK_DEP_BIT_POSIX_TIMER` 的存在尤其说明问题：
 CPU 时钟定时器（见后文）依赖 tick 推进，只要有人在用它，tick 就不能停。
 
-## 预约未来时刻：两类定时器
+## Reserving Future Time: Two Types of Timers
 
 ### init_timers
 
@@ -599,7 +599,7 @@ struct timer_list {
 这个接口的局限很明确：**精度只有 jiffy，且所有定时器共用一个软中断上下文**——
 所以需要毫秒以下精度或精度隔离的场景必须用 hrtimer。
 
-### 高精度：hrtimer
+### High Precision: hrtimer
 
 hrtimer 的核心是**每个 CPU 每个时钟基一棵红黑树**：
 
@@ -670,7 +670,7 @@ struct hrtimer {
 
 最后一行是要点：在新结构里 **"运行中"不是定时器自身的属性，而是它所属 base 的一个指针**。
 
-### SOFT 与 HARD
+### SOFT and HARD
 
 回调在什么上下文执行，由 mode 决定：
 
@@ -707,7 +707,7 @@ if (IS_ENABLED(CONFIG_PREEMPT_RT) && !(mode & HRTIMER_MODE_HARD))
 这是**为虚拟机优化的"懒得重编程"模式**——宁可多一次空到期，也不要在每次上下文切换时都敲硬件。
 唯一使用者是调度器的 HRTICK（见 [调度](/docs/CS/OS/Linux/proc/sche.md)）。
 
-### 一次到期的完整路径
+### The Complete Path of One Expiration
 
 硬中断侧入口是 `hrtimer_interrupt()`（`hrtimer.c:2192`）：
 
@@ -768,7 +768,7 @@ retry:
 走完回调后，只有"返回 `HRTIMER_RESTART` 且当前未重新入队"才重新插入（`:2054`）——
 这道判断正是用来兜住"回调里已经自己重排过"的情况。
 
-### 时钟被改之后：clock_was_set
+### After the Clock Is Changed: clock_was_set
 
 `settimeofday` 把 REALTIME 向前跳了一小时，那些按**绝对 REALTIME** 排的定时器就会立刻全部到期——
 这显然不对。处理机制是 `clock_was_set()`（`hrtimer.c:975`）：重算各基 offset，
@@ -778,7 +778,7 @@ retry:
 成本优化在 `update_needs_ipi()`（`:902`）：先读每个 CPU 的 `clock_was_set_seq`，
 若已跟上说明远端处理过了，**省掉一次 IPI**；只对真正需要重编程的 CPU 发 `retrigger_next_event`。
 
-### 睡眠是怎么实现的
+### How Sleep Is Implemented
 
 `nanosleep` 不是单独一套机制，它就是"建一个 hrtimer 把自己唤醒"：
 
@@ -807,7 +807,7 @@ destroy_hrtimer_on_stack(&t.timer);
 把到期时刻放到 `[expires, expires+slack]` 区间内任意一点，让相近的定时器一起醒来，
 CPU 因而能多睡一会儿。`usleep_range()` 的区间参数最终就是落到这里。
 
-## 用户态看到的接口
+## Interfaces Visible to User Space
 
 原文列出的三个结构体是这一层的"数据契约"，v7.2.7 与它们完全一致：
 
@@ -844,7 +844,7 @@ struct timezone {
 };
 ```
 
-### clock_gettime 为什么不进内核
+### Why clock_gettime Does Not Enter the Kernel
 
 因为内核把算"现在"所需的那几个数**直接映射进了用户地址空间**（VVAR 页）：
 `update_vsyscall`（`kernel/time/vsyscall.c:18`）把 `tkr_mono` / `tkr_raw` 的
@@ -864,7 +864,7 @@ struct timezone {
 所以"`clock_gettime` 永不进内核"是错的，**它的开销取决于当前时钟源**。
 现在 `getrandom` 也走了 vDSO（`__vdso_getrandom`）。
 
-### 四种定时唤醒接口
+### Four Timer Wakeup Interfaces
 
 | 接口 | 载体 | 精度 | 到期动作 | 适用 |
 |---|---|---|---|---|
@@ -912,7 +912,7 @@ static enum hrtimer_restart posix_timer_fn(struct hrtimer *timer)
 
 `SIGEV_THREAD` 并不是内核起的线程——**内核只投递信号，线程由 glibc 在用户态创建**。
 
-### CPU 时钟：基于记账而非墙上时间
+### CPU Clock: Accounting-based, Not Wall-clock Time
 
 `CLOCK_PROCESS_CPUTIME_ID` / `CLOCK_THREAD_CPUTIME_ID` 以及 `ITIMER_VIRTUAL` / `ITIMER_PROF`
 的基础**不是时间，而是 CPU 时间记账**（utime / stime 的累加）。几个直接后果：
@@ -950,7 +950,7 @@ static enum hrtimer_restart posix_timer_fn(struct hrtimer *timer)
 两个坑：offset 必须在有任务进入该 ns **之前**设好；一旦有任务进入就被冻结，
 再写 `/proc/self/timens_offsets` 返回 `-EACCES`（`namespace.c:312`）。
 
-## 与其它子系统的接缝
+## Interfaces with Other Subsystems
 
 这条链路几乎被所有异步机制复用，几处主要在：
 
@@ -963,7 +963,7 @@ static enum hrtimer_restart posix_timer_fn(struct hrtimer *timer)
 - **虚拟化**：KVM 里 guest 的时间来自 host 的 TSC 与 kvm-clock，[KVM](/docs/CS/OS/Linux/KVM.md)
   的 `hva_to_pfn` 与 EPT 也决定了时间读数的开销。
 
-## 反直觉清单
+## Counterintuitive List
 
 1. **`HRTIMER_MAX_CLOCK_BASES` 是 8 不是 4**——四个硬基加四个软基，初始化时靠 `MAX/2` 定位软基起点。
 2. **`hrtimer_resolution` 的初值是 `LOW_RES_NSEC`，而 `LOW_RES_NSEC = TICK_NSEC`**
@@ -996,7 +996,7 @@ static enum hrtimer_restart posix_timer_fn(struct hrtimer *timer)
     也从 `void (*)(struct softirq_action *)` 变成了 **`void (*)(void)`**（`interrupt.h:607`）——
     照老书抄代码会编译不过。
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 ```bash
 # 当前时钟源与候选（被看门狗降级时 current 会变）

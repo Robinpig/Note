@@ -4,7 +4,7 @@
 
 本笔记给出集合与逻辑的 CS 视角；代数结构见 [代数](/docs/Mathematics/Algebra.md)，连续基础见 [数学分析](/docs/Mathematics/Real_Analysis.md)。
 
-## 集合、关系与函数
+## Sets, Relations, and Functions
 
 - **集合**：无序、互异的元素总体；并、交、补、幂集。
 - **关系**：笛卡尔积的子集；等价关系（自反/对称/传递）划分集合。
@@ -12,19 +12,19 @@
 
 数据库的关系模型、类型系统的子类型，本质都是集合与关系，见 [离散数学](/docs/Mathematics/Discrete_Math.md)。
 
-## 命题与一阶逻辑
+## Propositions and First-Order Logic
 
 - **命题逻辑**：用 ∧ ∨ ¬ → 组合原子命题，真值表与推理规则。
 - **一阶逻辑**：加入量词 ∀ ∃ 与谓词，可表达「对所有 x 存在 y…」。
 - **证明**：自然演绎、归结原理——自动定理证明与形式验证的基础。
 
-## 可计算性
+## Computability
 
-- **图灵机**：tape + 控制器 + 读写头，形式化「算法」；详见 [CS 总纲的图灵机](/docs/CS/CS.md?id=the-turing-machine)。
+- **图灵机**：tape + 控制器 + 读写头，形式化「算法」；详见 [可计算性理论](/docs/CS/Algorithms/Computability.md?id=the-turing-machine)。
 - **丘奇-图灵论题**：凡算法可做的，图灵机都能做（是论题非定理）。
 - **停机问题**：不可判定——存在「无法写出程序判断」的问题，划定计算的边界。
 
-## 在 CS 中的落点
+## Applications in CS
 
 - **类型系统**：类型即集合，子类型即子集；Curry-Howard 同构把「程序」与「证明」对应。
 - **形式验证**：用逻辑证明程序正确，见 [软件工程](/docs/CS/SE/Engineering.md)。

@@ -6,7 +6,7 @@ cpufreq 管的是**"CPU 有活干时跑多快"**。与 [cpuidle](/docs/CS/OS/Lin
 
 版本基线 **v7.2**。⚠️ **本篇开头就有一处重要重构**：v7.2 的 `struct cpufreq_driver` 与旧资料差异很大，`set_freq` / `correct_target` 已消失，取而代之的是 `setpolicy` / `fast_switch` / `adjust_perf`。
 
-## 结构：policy 才是主角
+## Structure: policy Is the Protagonist
 
 理解 cpufreq 的关键是把 **policy**（策略）放在第一位，而不是"某个 CPU 的频率"。
 
@@ -50,7 +50,7 @@ struct cpufreq_policy {
 
 > ⚠️ **v7.2 的变化**：`struct cpufreq_policy` **没有** `jiffies` / `policy_cpu` / `rcu` / `arch_hook` / `target_freq` 字段。`cpu` 字段的注释说明它现在专指"管理该 policy 的那个 CPU，必须在线"。
 
-### 三个标志位的含义
+### Meaning of the Three Flag Bits
 
 ```c
 	/*
@@ -70,7 +70,7 @@ struct cpufreq_policy {
 - `strict_target` —— 对应 governor 设置了 `CPUFREQ_GOV_STRICT_TARGET`。
 - `efficiencies_available` —— 频率表里有"不高效"的频率点。注释说明了它的实际后果：**"This indicates if the relation flag CPUFREQ_RELATION_E can be honored"** —— 关系标记 `E` 能否被兑现。
 
-### 频率约束：三个 freq_qos
+### Frequency Constraints: Three freq_qos
 
 ```c
 	struct freq_constraints	constraints;
@@ -81,7 +81,7 @@ struct cpufreq_policy {
 
 `min` / `max` 由 PM QoS 的频率约束部分维护 —— **用户态写 `scaling_min_freq` 走的就是这条路**。`boost_freq_req` 是 boost 的独立通道。
 
-## 驱动接口：v7.2 的重构
+## Driver Interface: The v7.2 Refactoring
 
 ```c
 struct cpufreq_driver {
@@ -148,7 +148,7 @@ struct cpufreq_driver {
 };
 ```
 
-### 值得注意的几点
+### A Few Notable Points
 
 **① `name` 是定长数组，不是函数指针**
 
@@ -202,7 +202,7 @@ struct cpufreq_driver {
 
 时机要求很精确：**policy 初始化完成后、governor 启动前**。energy model 需要 policy 的频率表和 OPP 数据来建立"性能 ↔ 功耗"曲线，governor 依赖它做决策 —— 顺序反了就拿不到。
 
-## 频率表
+## Frequency Table
 
 ```c
 struct cpufreq_frequency_table {
@@ -233,7 +233,7 @@ struct cpufreq_frequency_table {
 	idx = cpufreq_frequency_table_target(policy, target_freq, min, max, relation);
 ```
 
-## governor 清单
+## Governor List
 
 `drivers/cpufreq/Makefile` 里的完整列表（v7.2 governor 全部平铺在该目录，**没有 `governors/` 子目录**）：
 
@@ -251,17 +251,17 @@ struct cpufreq_frequency_table {
 
 另有两个非 governor 的平台实现：`cpufreq-dt.o`（设备树）、`virtual-cpufreq.o`（虚拟 CPU）。
 
-### ondemand 与 conservative 的差别
+### Differences Between ondemand and conservative
 
 两者的区别只在**升频策略**：ondemand 一次性跳到最高，`conservative` 每次只加一档。前者响应快但功耗尖峰明显，后者平缓。
 
 `userspace` 是最简单也最可控的 —— 完全由用户态决定，写 `scaling_cur_freq` 直接生效，不看负载。固定频率跑的机器（高频游戏、视频转码、某些延迟敏感服务）常用它避开调频抖动。
 
-## schedutil：与调度器直接对话
+## schedutil: Talking Directly with the Scheduler
 
 schedutil 是现代内核的默认 governor。它的特殊之处在于**不自己算 util，而是直接向调度器要**。
 
-### 取 util 的路径
+### Path to Obtain util
 
 ```c
 static void sugov_get_util(struct sugov_cpu *sg_cpu, unsigned long boost)
@@ -285,7 +285,7 @@ static void sugov_get_util(struct sugov_cpu *sg_cpu, unsigned long boost)
 
 `scx_switched_all()` 是个状态判断 —— **如果系统全面切到 sched_ext，就不再叠加 fair 的 boost**（两者语义会冲突）。
 
-### 算目标频率
+### Computing the Target Frequency
 
 ```c
 static unsigned int get_next_freq(struct sugov_policy *sg_policy,
@@ -309,7 +309,7 @@ static unsigned int get_next_freq(struct sugov_policy *sg_policy,
 
 `get_capacity_ref_freq()` 拿到的是"容量参考频率"，在支持 scale invariance 的平台上，参考频率对应的 util 比例对所有频率都成立 —— 这是上面 `adjust_perf` 注释里提到的机制。
 
-### 一个优化：缓存
+### An Optimization: Caching
 
 ```c
 	if (freq == sg_policy->cached_raw_freq && !sg_policy->need_freq_update)
@@ -318,7 +318,7 @@ static unsigned int get_next_freq(struct sugov_policy *sg_policy,
 
 util 没变就复用上次结果，**不重新查频率表**。调频本身有代价（可能触发电压切换），所以避免无谓的重新解析很重要。
 
-### IO boost 的特殊处理
+### Special Handling of IO Boost
 
 ```c
 /**
@@ -333,7 +333,7 @@ util 没变就复用上次结果，**不重新查频率表**。调频本身有�
 
 **I/O boost 的衰减机制**：I/O 唤醒的 boost 只保留一个 tick；隔超过一个 tick 才有新 boost 请求时，**从 `IOWAIT_BOOST_MIN` 起步而不是全量**。注释说明了理由 —— "ignoring sporadic wakeups from IO"，避免被零星的 I/O 唤醒推高频率，浪费能量。
 
-## 与 cgroup 的交互
+## Interaction with cgroup
 
 `cpu.max` 的限流与 cpufreq 的关系是双向的：
 
@@ -343,7 +343,7 @@ util 没变就复用上次结果，**不重新查频率表**。调频本身有�
 
 详见 [cgroup 控制器接口](/docs/CS/OS/Linux/cgroup/controllers.md) 的 cpu 控制器一节。
 
-## 与 suspend 的交互
+## Interaction with suspend
 
 policy 里有专门的 suspend 频率：
 
@@ -355,7 +355,7 @@ policy 里有专门的 suspend 频率：
 
 `->bios_limit()` 则是让 BIOS 报告的功率上限生效（thermal 限制导致的降频）。
 
-## sysfs 接口
+## sysfs Interface
 
 ```
 /sys/devices/system/cpu/cpu0/cpufreq/
@@ -379,7 +379,7 @@ policy 里有专门的 suspend 频率：
 
 读频率的两个接口有区别：`scaling_cur_freq` 是快路径（可能滞后），需要准确值时读 `cpuinfo_cur_freq`。
 
-## 与其它子系统的接缝
+## Seams with Other Subsystems
 
 - **调度器**：schedutil 直接取 util，见 [fair](/docs/CS/OS/Linux/proc/fair.md)；sched_ext 侧的 per-CPU 性能需求见 [sched_ext](/docs/CS/OS/Linux/proc/sched_ext.md)。
 - **cgroup**：见 [cgroup 控制器接口](/docs/CS/OS/Linux/cgroup/controllers.md)。
@@ -388,7 +388,7 @@ policy 里有专门的 suspend 频率：
 - **suspend**：睡眠前切固定频率，见 [suspend](/docs/CS/OS/Linux/PM/suspend.md)。
 - **时钟框架**：`policy->clk` 由 CCF 管理，频率设置最终落到 clk 上，见 [dev 总线族](/docs/CS/OS/Linux/dev/bus.md)。
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 ```shell
 # 当前状态

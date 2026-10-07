@@ -406,7 +406,7 @@ config get appendonly
 AOF 日志是主线程执行，将日志写入磁盘过程中，如果磁盘压力大就会导致写磁盘很慢，导致后续的「写」指令阻塞。
 
 
-### 同步频率
+### Synchronization Frequency
 
 你可以配置 Redis 将数据 `fsync` 到磁盘的频率。
 有三个选项：

@@ -84,12 +84,12 @@ class MyConfiguration {
 - **去掉运行时动态性**：运行时动态注册 Bean、配置热刷新、运行期临时生成新字节码的类库、动态脚本等可能不兼容。
 - **延迟类加载消失**：native image 把所有代码在构建期链接，`ClassNotFoundException` 一类问题会提前暴露为构建失败——这反而是一种“左移”。
 
-## 测试与 AOT
+## Testing and AOT
 
 - `@SpringBootTest` 在 native 镜像下也能跑（`nativeTest` 任务），但测试本身也被编译进镜像，启动极快，适合做"上下文能否成功加载"的 smoke test（经典的 `ContextLoads` 测试）。测试里的动态 Bean / 反射同样需要 hint，否则上下文起不来。
 - Boot 构建插件的 `process-aot` 阶段也会为**测试**生成 AOT 产物（输出到 `target/spring-aot-test/`），让 `@SpringBootTest` 在普通 JVM 下也走 AOT 初始化路径，缩短测试启动。
 
-## 自定义 AOT 贡献器
+## Custom AOT Contributor
 
 除了 `RuntimeHintsRegistrar`，还可以深入 Bean 定义层贡献代码：
 
@@ -98,7 +98,7 @@ class MyConfiguration {
 
 两者通过 `META-INF/spring/aot.factories` 或 `@Import` 注册，是框架内部自动配置（JPA、WebSocket、各 starter）贡献 AOT 代码的主要入口。
 
-## Hint 调试与生成
+## Hint Debugging and Generation
 
 native 构建失败最常见的两类报错：
 

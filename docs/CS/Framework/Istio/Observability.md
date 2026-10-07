@@ -1,4 +1,4 @@
-# Istio 可观测性
+# Istio Observability
 
 ## Introduction
 
@@ -6,7 +6,7 @@ Istio 的可观测性建立在「**每个代理自带完整指标与日志**」�
 
 版本基线：**Istio 1.31.1**（2026-09-21 发布，1.31.0 于 2026-08-31），官方支持 Kubernetes **1.32 ~ 1.36**。以下默认值与字段名逐条核实自 `istio/istio` 与 `istio/api` 的 `release-1.31` 分支源码、1.31 change-notes 及 istio.io 版本化文档；凡官方未给出的一律标注「未查到」，不凭印象填充。
 
-## 核心机制：三个信号与一条链路
+## Core Mechanism: Three Signals and One Chain
 
 Istio 的可观测性由三个独立信号组成，各自由 `Telemetry` CRD 的一个字段承载：
 
@@ -21,7 +21,7 @@ Istio 的可观测性由三个独立信号组成，各自由 `Telemetry` CRD 的
 > [!TIP]
 > 装完 Istio 后 `istio_requests_total` 立刻就有了，不需要写任何 `Telemetry` 资源——默认 metrics provider 就是 `prometheus`。`Telemetry` 资源是用来**改**这个默认的，不是用来**开启**它的。
 
-## `Telemetry` 的覆盖语义（最容易写错的地方）
+## `Telemetry` Override Semantics (The Easiest Place to Get Wrong)
 
 **`Telemetry` 是完全覆盖（override），不是叠加（additive）。**
 
@@ -57,9 +57,9 @@ spec:
 > [!NOTE]
 > 官方 task 页的 YAML 里混用了 `telemetry.istio.io/v1` 与 `v1alpha1` 两种 apiVersion。两者**都 served 且 schema 相同**——`v1` 只是 `v1alpha1` 的类型别名（`istio/api` 的 `telemetry/v1/` 目录下唯一文件就是 `telemetry_alias.gen.go`，内容为 `type Telemetry = v1alpha1.Telemetry`）。但 **CRD 的 storage version 是 `v1alpha1`**，落盘与 Go 类型均为 v1alpha1。写 `v1` 没问题，知道这一点即可。
 
-## 指标：默认就在，但要防基数爆炸
+## Metrics: On by Default, But Guard Against Cardinality Explosion
 
-### 四类核心 HTTP 指标
+### Four Core HTTP Metrics
 
 `istio-proxy` 默认导出（类型为 Istio 术语，对应 Envoy 的 counter 与 histogram）：
 
@@ -80,7 +80,7 @@ TCP 与 gRPC 另有独立指标：
 - TCP（COUNTER）：`istio_tcp_sent_bytes_total`、`istio_tcp_received_bytes_total`、`istio_tcp_connections_opened_total`、`istio_tcp_connections_closed_total`
 - gRPC（COUNTER）：`istio_request_messages_total`（client 发出）、`istio_response_messages_total`（server 发出）
 
-### `reporter` 标签：source 还是 destination
+### `reporter` Label: source or destination
 
 这是最高频的查询错误。官方原文：
 
@@ -96,7 +96,7 @@ TCP 与 gRPC 另有独立指标：
 - `source_principal` / `destination_principal`：启用 PeerAuthentication 后才有值。
 - 大量标签在缺失时取**字面量 `unknown`**（如 `source_workload`、`source_app`），不是空串。
 
-### 控制面指标
+### Control Plane Metrics
 
 `pilot_xds_push_time`、`pilot_proxy_convergence_time` 这类来自 `pilot/pkg/xds/monitoring.go`，是判断「配置下发慢」还是「代理收敛慢」的关键：
 
@@ -115,7 +115,7 @@ TCP 与 gRPC 另有独立指标：
 > [!TIP]
 > 排查「配置改了但没生效」时，`pilot_proxy_convergence_time` 是最有判别力的指标：它大说明控制面下发慢，它小而用户仍看到旧行为，则大概率是 Envoy 侧没应用（如 `PILOT_ENABLE` 相关开关或代理未 ready）。
 
-### 高基数标签：官方点名的只有 `destination_service`
+### High-Cardinality Label: Only `destination_service` Is Named by Officials
 
 FAQ「How can I manage short-lived metrics?」给出的四条途径：
 
@@ -131,15 +131,15 @@ FAQ「How can I manage short-lived metrics?」给出的四条途径：
 
 生产级方案官方推荐 **hierarchical federation + recording rules**，并给出把 `istio_*` 聚合为 `workload:istio_*` 的现成规则（`sum without(instance, kubernetes_namespace, kubernetes_pod_name)`）。注意 quick-start 安装的 Prometheus **只保留 6 小时**数据。
 
-## 追踪：默认不发，但采样率是 1%
+## Tracing: Off by Default, But Sampling Rate Is 1%
 
-### 默认没有 tracing provider
+### No Tracing Provider by Default
 
 默认安装**不设** `defaultProviders.tracing`，所以**不会主动上报 span**。但 `meshConfig.enableTracing` 默认为 `true`，采样率配置也在（1%），只是没有 provider 去消费。
 
 内建的三个默认 provider（`DefaultMeshConfig()`）分别是：`prometheus`（metrics）、`stackdriver`（legacy 且有限）、`envoy`（access logging，path `/dev/stdout`）。
 
-### provider 的准确名称
+### provider Exact Name
 
 `ExtensionProvider.provider` 是 oneof，各类型对应不同字段，**名称容易记错**：
 
@@ -152,7 +152,7 @@ FAQ「How can I manage short-lived metrics?」给出的四条途径：
 > [!NOTE]
 > **OTel Collector 不能作为 metrics provider**。源码 `pilot/pkg/networking/core/tracing.go` 明确把 `Prometheus` 等归入「不支持 tracing 的 provider」并返回 `provider %T does not support tracing`——它只能出现在 `tracing` 里，不能出现在 `metrics` 里。
 
-### 采样率默认 1%，但有两个坑
+### Sampling Rate Defaults to 1%, But Has Two Pitfalls
 
 **坑一：`randomSamplingPercentage` 的 proto 注释写「Defaults to 0%」，而实际生效默认是 1%。** 两者不矛盾，语义层级不同：0% 是「该字段未设置」的 proto 语义，实际值由 pilot 的优先级链决定（`tracing.go`）：
 
@@ -164,7 +164,7 @@ provider.sampler > Telemetry.randomSamplingPercentage > defaultConfig.tracing.sa
 
 **坑二：配了自定义 sampler 时，Istio 侧采样率被强制设为 100。** 源码注释：「so all spans arrive at the sampler for its decision」——全部 span 发给 sampler 由它决策。由此可推：若要用 Collector 做 tail-based sampling，Istio 侧必须设 100%，代价是 Envoy→Collector 流量显著上升。（官方未给出量化的性能影响数据。）
 
-### B3 仍是默认，W3C 需显式开启
+### B3 Still Default, W3C Requires Explicit Enablement
 
 `ZipkinTracingProvider` 的 `traceContextOption`：
 
@@ -180,15 +180,15 @@ provider.sampler > Telemetry.randomSamplingPercentage > defaultConfig.tracing.sa
 
 1.31 新增 `Tracing.disableContextPropagation`（默认 false）：置 true 后不再向上游注入 `traceparent`/`tracestate`/`X-B3-*`，**用于 egress gateway 防信息泄漏**，不影响 span 上报。
 
-### OpenTelemetry 集成
+### OpenTelemetry Integration
 
 支持 **OTLP over gRPC 或 HTTP**，由 `OpenTelemetryTracingProvider.grpc` / `.http` 配置，**两者只能配一个**（proto 与官方 task 页都明确「Only one exporter can be configured at a time」），未设时走 gRPC。
 
 1.31 还新增了 **Dynatrace 自适应采样器**（`dynatraceSampler`，`rootSpansPerMinute` 未设或为 0 时默认 1000）。
 
-## 访问日志
+## Access Log
 
-### meshConfig 的两个字段与两个不同的默认值
+### meshConfig Two Fields with Two Different Defaults
 
 字段在 **`MeshConfig`**（不是 `ProxyConfig`）上，1.31 中**均无 `[deprecated = true]` 标记**，官方参考页也未标 DEPRECATED——所以「已废弃」在 1.31 查不到官方依据，只是实践上已被 Telemetry/provider 机制取代。
 
@@ -222,7 +222,7 @@ provider.sampler > Telemetry.randomSamplingPercentage > defaultConfig.tracing.sa
 
 `EnvoyFileAccessLogProvider` 字段：`path`（默认 `/dev/stdout`）、`log_format`（oneof）、`omit_empty_values`（text 模式下空值由 `-` 改为空串；json 模式下省略 null key）。当前支持的自定义 formatter 只有 3 个：`%CEL`、`%METADATA`、`%REQ_WITHOUT_QUERY`。
 
-### 按条件开关日志用 `filter`（CEL）
+### Conditional Log Toggle via `filter` (CEL)
 
 字段路径 `spec.accessLogging[].filter.expression`，官方给的表达式示例：
 
@@ -247,9 +247,9 @@ filter:
 > [!TIP]
 > `match.mode` 只能按 `CLIENT` / `SERVER` / `CLIENT_AND_SERVER` 粗粒度分流，**做不到按状态码分流**——那种需求必须用 `filter`。
 
-## 周边工具与 1.31 变更
+## Peripheral Tools and 1.31 Changes
 
-### Prometheus 抓取：合并端点与新增注解
+### Prometheus Scraping: Merged Endpoints and New Annotations
 
 默认**指标合并是开启的**（`enablePrometheusMerge` 默认 `true`），合并端点为 **`:15020/stats/prometheus`**。单个 pod 可用 `prometheus.istio.io/merge-metrics: "false"` 关闭。
 
@@ -261,7 +261,7 @@ filter:
 > [!NOTE]
 > 1.31 **没有**出现「Prometheus 抓取配置从 `kubernetes-pod-endpoints` 改为 `pod-scrape-configs`」这类改名——`samples/addons/prometheus.yaml` 全文不含这两个名称（该文件是 prometheus-community chart 的渲染产物，1.31 用的是 `kubernetes-pods` job）。istiod 的抓取 job 名为 `istiod`，Envoy 为 `envoy-stats`，靠 `__meta_kubernetes_endpoint_port_name` 匹配。全局默认 `scrape_interval: 15s`、`scrape_timeout: 10s`、`evaluation_interval: 1m`。
 
-### Kiali 与 Grafana
+### Kiali and Grafana
 
 `samples/addons` **未废弃**，1.31 仍在用，含 `grafana.yaml`、`jaeger.yaml`、`kiali.yaml`、`loki.yaml`、`prometheus.yaml`、`zipkin.yaml`、`skywalking.yaml`，以及 `extras/` 下的 `prometheus-operator.yaml` 与 1.31 新增的 `prometheus-secure-metrics.yaml`。
 
@@ -270,7 +270,7 @@ filter:
 
 Grafana dashboards 由 jsonnet + helm template 生成到 `manifests/addons/dashboards/*.gen.json`，共 7 个：`pilot-dashboard`、`ztunnel-dashboard`、`istio-performance-dashboard`、`istio-workload-dashboard`、`istio-service-dashboard`、`istio-mesh-dashboard`、`istio-extension-dashboard`，并拆成两个 ConfigMap 以避开 K8s size 限制。
 
-### 1.31 可观测性变更全景
+### 1.31 Observability Changes Overview
 
 **新增**：多目标 Prometheus 抓取注解；两个安全指标端口环境变量；`istio_cni_plugin_requests_total{response_code}`（CNI add 事件计数）；`istio_agent_scrape_failures_total{type="application"}`；Zipkin `TraceContextOption`；Dynatrace sampler。
 
@@ -283,7 +283,7 @@ Grafana dashboards 由 jsonnet + helm template 生成到 `manifests/addons/dashb
 - **`PILOT_SPAWN_UPSTREAM_SPAN_FOR_GATEWAY` 已移除**——gateway 请求生成 upstream span 现为**始终启用**，原设 `false` 的配置不再有任何作用。
 - **`PILOT_ENABLE_ISTIO_TAGS` 已移除**——功能由 `Telemetry` 的 `enableIstioTags` 字段承载（默认 true）。
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 | 现象 | 先查 |
 | :-- | :-- |

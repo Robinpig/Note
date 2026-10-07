@@ -80,3 +80,9 @@ void Union(int x, int y){
 ## Links
 
 - [Tree](/docs/CS/Algorithms/tree/tree.md)
+
+## References
+
+1. [并查集 - OI Wiki](https://oi-wiki.org/ds/dsu/)
+2. [Disjoint Set Union - CP-Algorithms](https://cp-algorithms.com/data_structures/disjoint_set_union.html)
+3. [并查集复杂度 - OI Wiki](https://oi-wiki.org/ds/dsu-complexity/)

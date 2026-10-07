@@ -5,17 +5,14 @@
 
 
 
-## 应用
-
-### 判断整数奇偶
-
+## Applications
+### Parity Check
 判断一个整数的奇偶性，可以利用其二进制表示的最低位。
 偶数的二进制最低位为 0，奇数的最低位为 1。因此，通过将该数与 1 进行按位与运算即可快速判断
 
 
 
-### 交换两个整数
-
+### Swap Two Integers
 通过按位异或运算，可以无需临时变量实现两个整数的交换（仅适用于整数类型）
 
 ```
@@ -27,14 +24,12 @@ a ^= b
 
 
 
-### 判断某数是否为 2 的幂次方
-
+### Check Whether a Number Is a Power of Two
 判断一个数 X 是否为 2 的幂，可以利用位运算：只需判断 `X & (X - 1) == 0` 是否成立
 
 
 
-### 位运算的常用操作总结
-
+### Summary of Common Bit Operations
 | 序号 | 操作描述                 | 位运算表达式                    | 示例                                                  |
 | :--: | :----------------------- | :------------------------------ | :---------------------------------------------------- |
 |  1   | 将最低位的 1 置为 0      | `x & (x - 1)`                   | `100101000 -> 100100000`                              |
@@ -60,7 +55,7 @@ a ^= b
 
 ## Links
 
-- [Algorithm Analysis](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
+- [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
 
 ## References
 

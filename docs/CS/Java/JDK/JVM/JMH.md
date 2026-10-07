@@ -7,14 +7,14 @@ One of the positive aspects of working with microbenchmarks is that it exposes t
 - Discuss your results as publicly as you can, and in the company of your peers.
 - Be prepared to be wrong a lot and to have your thinking challenged repeatedly.
 
-## 版本基线
+## Version Baseline
 
 > [!NOTE]
 > **版本口径**：JMH（Java Microbenchmark Harness）是 OpenJDK 官方微基准框架，当前版本 **1.37**。它随 OpenJDK 源码一起分发（`test/micro/`），因此**可用 `java -jar benchmarks.jar` 直接跑 JDK 自带的微基准**——这也是验证「本机性能基线是否正常」最快的途径。
 >
 > **JFR 与 JMH 是两回事**：[JFR](https://openjdk.org/jeps/328)（JEP 328，Release 11）是随 JDK 内置、面向**生产诊断**的飞行记录器，详见 [Tools/JFR](/docs/CS/Java/Tools/JFR.md)；JMH 面向**开发期严谨测量**，需要外部依赖（`jmh-core` + `jmh-annprocess`）。选错工具是常见误区，见下文「JFR vs JMH vs async-profiler」。
 
-## 为什么手写计时不可信
+## Why Handwritten Timing Is Unreliable
 
 微基准最大的陷阱是**你测的不是你以为的那个东西**。JIT 会在你没意识到的地方改写代码：
 
@@ -27,9 +27,9 @@ One of the positive aspects of working with microbenchmarks is that it exposes t
 
 JMH 的核心价值就是把上述因素**全部显式控制住**：强制预热迭代、Blackhole 消费结果防 DCE、独立 fork 进程、给出统计置信区间。
 
-## 核心机制
+## Core Mechanism
 
-### Benchmark 与注解
+### Benchmark and Annotations
 
 ```java
 import org.openjdk.jmh.annotations.*;
@@ -77,7 +77,7 @@ public class MyBenchmark {
 | `@BenchmarkMode` | `Throughput`（ops/s）、`AverageTime`（ns/op）、`SampleTime`（分位数）、`SingleShotTime` | 测延迟分布用 `SampleTime` 而非 `AverageTime` |
 | `Blackhole` | 消费结果防 DCE | 比单纯「返回个值」更严格，适合结果无意义的方法 |
 
-### 为什么必须 fork
+### Why Must fork
 
 `@Fork(0)`（在当前 JVM 内跑）几乎总是错的：
 
@@ -98,7 +98,7 @@ public void consume(Blackhole bh) {
 
 `Blackhole` 把结果吃掉，让 JIT **无法证明计算无用**，因而不能删除。日志里的 `Blackhole mode: compiler (auto-detected)` 表示 JMH 自动选了最强的一种 blackhole 实现。返回值的写法也能防 DCE，但强度不如 `Blackhole`。
 
-## 测量模式怎么选
+## How to Choose Measurement Mode
 
 | 模式 | 输出 | 适用 |
 | :-- | :-- | :-- |
@@ -109,7 +109,7 @@ public void consume(Blackhole bh) {
 
 调优时先用 `AverageTime` 找热点，验延迟看 `SampleTime`——**别用 `AverageTime` 推断尾延迟**。
 
-## 常见反模式
+## Common Anti-patterns
 
 ```java
 // ❌ 错误：循环里计时
@@ -143,7 +143,7 @@ long cost = System.nanoTime() - start;
 >
 > 经验搭配：**JFR 常开做生产诊断**（成本极低），**async-profiler 做事后 CPU 归因**，**JMH 用于开发期定性能**。JFR 与 async-profiler 互补而非竞争：前者覆盖更广的事件面（GC / 锁 / IO），后者在 CPU 归因上更锐利。
 
-## 跑起来
+## Run It
 
 用官方 archetype 起项目（当前 archetype 版本 1.37）：
 
@@ -172,7 +172,7 @@ java -jar target/benchmarks.jar -p size=1024
 > [!WARNING]
 > `@Fork(1) -wi 1 -i 1` 只能用来「确认能跑起来」，**绝不能作为性能结论**——预热与统计量都不足。
 
-## 跑 JDK 自带的微基准
+## Run JDK's Built-in Microbenchmarks
 
 因为 JMH 随 OpenJDK 分发，装了 JDK 就能直接跑官方基准，无需任何外部依赖：
 

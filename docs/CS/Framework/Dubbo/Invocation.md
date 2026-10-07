@@ -8,7 +8,7 @@ Dubbo 的一次调用，表面看就是「代理对象方法进、结果出」�
 
 本文基于 Apache Dubbo **3.3.6** 官方源码，所有默认值标注文件与行号。
 
-## 调用模式：async / return / sent / timeout
+## Invocation Modes: async / return / sent / timeout
 
 四个参数常量分散在三个模块，这是第一个容易找错的地方：
 
@@ -79,7 +79,7 @@ if (isOneway) {
 
 也就是说，`return=false` 时请求干脆不带 twoway 标志、发出即返回一个默认结果，根本不会进入 async 分支。**oneway 优先于 async。**
 
-### `sent` 的真实语义
+### The Actual Semantics of `sent`
 
 `sent` 传给了 `currentClient.send(request, isSent)`，最终在 Netty 通道上体现为「是否阻塞等这次写入完成」：
 
@@ -97,7 +97,7 @@ if (sent) {
 > [!WARNING]
 > 这里还有一个默认值不一致的细节：运行时读取的默认值是 `false`（`DubboInvoker.java:129` 的 `getMethodParameter(..., SENT_KEY, false)`），但配置层 `MethodConfig.java:322-334` 在构造时会把 `sent` 补成 `true`。两者作用于不同阶段，排查「为什么发了但没报错」时要注意以运行时读取为准。
 
-## 异步返回值
+## Async Return Value
 
 Dubbo 3 推荐的异步写法是**方法签名直接返回 `CompletableFuture`**，框架据此识别：
 
@@ -148,7 +148,7 @@ public <T> Future<T> getFuture() {
 > [!NOTE]
 > `RpcContext.getFuture()` 方法**自身并没有** `@Deprecated` 标注，被废弃的是它的宿主 `getContext()`。网上「`getFuture()` 已废弃」的说法不准确，准确的表述是「`getContext()` 已废弃，因此整条 `RpcContext.getContext().xxx` 链路都不推荐」。
 
-## 四类 Context
+## Four Categories of Context
 
 Dubbo 3 把原来的 `RpcContext` 单例拆成了四类语义化 Context，源码注释就是最好的说明：
 
@@ -211,9 +211,9 @@ public RpcContextAttachment setObjectAttachment(String key, Object value) {
 
 **结论：Provider 想回传数据给 Consumer，必须用 `RpcContext.getServerContext().setAttachment(...)`；用 `getServerAttachment()` 写只会留在本机。**
 
-## attachment 的三条透传路径
+## Three Transparent Paths of attachment
 
-### 消费者 → 提供者
+### Consumer -> Provider
 
 `ConsumerContextFilter` 负责把消费者写的 attachment 打包进 invocation：
 
@@ -248,7 +248,7 @@ if (CollectionUtils.isNotEmptyMap(attachments)) {
 }
 ```
 
-### 提供者 → 消费者（回传）
+### Provider -> Consumer (Callback)
 
 只有写进 Response 的那两类 attachment 会随响应回去：
 
@@ -275,7 +275,7 @@ public void onResponse(Result appResponse, Invoker<?> invoker, Invocation invoca
 }
 ```
 
-### 隐式参数的自动透传（A → B → C）
+### Automatic Transparent Passing of Implicit Parameters (A -> B -> C)
 
 当 Provider B 又要作为消费者调用下游 C 时，B 收到的上游 attachment 会自动带进新请求——这就是「隐式参数透传」的源码依据，**实现点在 `ConsumerContextFilter` 而不是 `AbstractClusterInvoker`**：
 
@@ -290,7 +290,7 @@ public void onResponse(Result appResponse, Invoker<?> invoker, Invocation invoca
 > [!WARNING]
 > `AbstractClusterInvoker.java:348-351` 里确实有一段与 "binding attachments into invocation" 相关的代码，但它**已被注释掉**，不是现行透传路径。任何引用该处解释透传行为的说法都已过时。
 
-## 泛化调用
+## Generic Invocation
 
 泛化调用让消费方在没有服务接口 API 包的情况下发起调用，入口是 `GenericService`：
 
@@ -371,7 +371,7 @@ public static boolean needWrap(MethodDescriptor methodDescriptor, Class<?>[] par
 > [!NOTE]
 > 「Triple 不支持泛化调用」的说法在 3.3.6 源码里找不到依据。`TripleInvoker`、`ReflectionPackableMethod` 都对 `$invoke` 有显式支持分支。
 
-## 陷阱清单
+## Pitfall List
 
 | 直觉写法 | 源码实际 | 后果 |
 | :--- | :--- | :--- |

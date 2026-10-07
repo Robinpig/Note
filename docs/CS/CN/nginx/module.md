@@ -4,7 +4,7 @@ nginx 的可扩展性几乎完全建立在模块上：编译期决定模块清�
 
 本文讲清三件事：**模块在 nginx 里以什么结构存在**（`ngx_module_t` 与两级 ctx）、**指令如何接进配置系统**（`ngx_command_t` 位掩码）、**四类模块各怎么写**（content handler / 过滤器 / 变量 / upstream）。最后给可直接编译的最小骨架。事实基于 **nginx 1.31.6** 源码。
 
-## ngx_module_t：一切模块的骨架
+## ngx_module_t: The Skeleton of All Modules
 
 每个编译进 nginx 的模块最终都是一个 `ngx_module_t` 实例（`src/core/ngx_module.h:227`）：
 
@@ -52,7 +52,7 @@ struct ngx_module_s {
 | `exit_process` | worker 退出前 | 清理 |
 | `exit_master` | master 退出前 | 清理共享资源 |
 
-### NGX_MODULE_V1 与二进制兼容
+### NGX_MODULE_V1 and Binary Compatibility
 
 写模块时开头那两行宏不是装饰：
 
@@ -68,7 +68,7 @@ struct ngx_module_s {
 
 `NGX_MODULE_SIGNATURE` 是一串由 34 个 `0/1` 组成的字符串，记录编译时启用的特性（是否有 SSL、是否 IPv6、zlib……）。加载动态模块时逐位比对，不一致就报 `"module ... is not binary compatible"`。所以**动态模块必须与主二进制用同样的 configure 参数编译**。
 
-## ngx_command_t：把指令接进配置系统
+## ngx_command_t: Connect Directives into Configuration System
 
 ```c
 typedef struct {
@@ -116,7 +116,7 @@ ngx_http_set_stub_status(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 
 自带 `ngx_conf_set_*_slot` 系列现成回调可用：`set_flag_slot`、`set_str_slot`、`set_size_slot`、`set_msec_slot`、`set_num_slot`、`set_enum_slot`、`set_complex_value_slot` 等，绝大多数指令不用自己写 set 函数。
 
-## HTTP 模块上下文：八个回调
+## HTTP Module Context: Eight Callbacks
 
 HTTP 模块的 `ctx` 是 `ngx_http_module_t`（`src/http/ngx_http_config.h:24`）：
 
@@ -149,16 +149,16 @@ typedef struct {
 
 stream 模块上下文是它的子集：只有 main/srv 两级，没有 loc。
 
-## 四类模块写法
+## Four Types of Module Writing
 
-### 1. content handler（处理请求）
+### 1. content handler (Handle Request)
 
 两种挂法：
 
 - **`clcf->handler = my_handler;`**（在指令回调里，如上面的 `stub_status`）——一个 location 只能有一个
 - **在 `postconfiguration` 里往 `cmcf->phases[NGX_HTTP_..._PHASE].handlers` push**——可叠加、可多模块共存，见 [HTTP 的阶段机制](/docs/CS/CN/nginx/HTTP.md)
 
-### 2. 过滤模块（改响应）
+### 2. Filter Module (Modify Response)
 
 过滤链是**编译期静态链表**，注册就是头插：
 
@@ -176,7 +176,7 @@ ngx_http_not_modified_filter_init(ngx_conf_t *cf)
 
 放在 `postconfiguration` 里调用。链尾固定是 `ngx_http_write_filter`，所以 **`--add-module` 的顺序决定你的 filter 在链里的位置**（越晚注册越靠外，越先看到响应头）。body filter 同理（`ngx_http_top_body_filter` / `ngx_http_next_body_filter`）。
 
-### 3. 注册变量
+### 3. Register Variables
 
 ```c
 static ngx_int_t
@@ -195,9 +195,9 @@ ngx_http_my_module_preconfiguration(ngx_conf_t *cf)
 }
 ```
 
-**必须在 `preconfiguration`**：变量的 index 在配置解析阶段就被指令引用（`ngx_http_get_variable_index()`），太晚注册会让引用它的指令解析失败。flags 见 [Configuration 的变量一节](/docs/CS/CN/nginx/config.md?id=变量)。
+**必须在 `preconfiguration`**：变量的 index 在配置解析阶段就被指令引用（`ngx_http_get_variable_index()`），太晚注册会让引用它的指令解析失败。flags 见 [Configuration 的变量一节](/docs/CS/CN/nginx/config.md?id=variables)。
 
-### 4. upstream 模块（对接上游）
+### 4. upstream Module (Connect Upstream)
 
 一个上游协议模块（如 proxy/fastcgi/memcached）要填 `ngx_http_upstream_t` 的一组回调，**1.31.6 中实际被调用的有五个**：
 
@@ -215,9 +215,9 @@ ngx_http_my_module_preconfiguration(ngx_conf_t *cf)
 
 自定义负载均衡算法实现 `ngx_http_upstream_peer_t` 的 `init / get / free`（平滑加权轮询的源码见 [Upstream](/docs/CS/CN/nginx/upstream.md)），最短范本是 `ngx_http_upstream_random_module.c`。
 
-## 编译接入
+## Compile Integration
 
-### config 脚本
+### config Script
 
 第三方模块目录里放一个 `config` shell 脚本，`configure --add-module=/path` 会 source 它。现代写法（`auto/module`）需要设置这些变量：
 
@@ -241,7 +241,7 @@ ngx_module_order=
 - `ngx_module_link` 由 configure 自动置 `YES`（静态）或 `DYNAMIC`（`--add-dynamic-module`）
 - filter 模块的链上顺序可以用 `ngx_module_order` 显式指定
 
-### 静态 vs 动态
+### Static vs Dynamic
 
 | 方式 | configure | 加载 |
 | :-- | :-- | :-- |
@@ -250,9 +250,9 @@ ngx_module_order=
 
 动态模块受 `NGX_MODULE_SIGNATURE` 约束：主二进制重新 configure 后，所有 `.so` 必须用相同参数重编。**reload 换动态模块版本时，新老二进制签名不一致会直接加载失败**，这比协议变更更容易踩。
 
-## 最小骨架：可直接编译
+## Minimal Skeleton: Directly Compilable
 
-### hello handler 模块
+### hello handler Module
 
 ```c
 #include <ngx_config.h>
@@ -342,7 +342,7 @@ ngx_http_hello(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 }
 ```
 
-### header filter 模块
+### header filter Module
 
 ```c
 static ngx_http_output_header_filter_pt  ngx_http_next_header_filter;
@@ -374,7 +374,7 @@ ngx_http_hello_filter_init(ngx_conf_t *cf)
 
 （把 `ngx_http_hello_filter_init` 填进 ctx 的 `postconfiguration` 即可。）
 
-## 陷阱清单
+## Pitfall List
 
 1. **`init_master` / `init_thread` / `exit_thread` 不会被调用**，填 `NULL` 即可——很多教程还煞有介事地介绍 init_master，1.31.6 全树零引用。
 2. **`abort_request` 是死钩子**，只赋值不调用。

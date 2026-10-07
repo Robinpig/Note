@@ -6,7 +6,7 @@ maple tree 是内核里用于**把区间映射到指针**的数据结构：key �
 
 本文源码取自本地内核源码树 `/Users/robin/Tools/linux-7.2.7`（v7.2.7），涉及 `include/linux/maple_tree.h` 与 `lib/maple_tree.c`（7050 行）。
 
-## 为什么 VMA 不能继续用红黑树
+## Why VMA Can No Longer Use a Red-Black Tree
 
 红黑树索引 VMA 的方式是：拿 `vm_start` 当 key 插入一棵 rbtree。这个方案在内核里躺了二十年，问题也积累了同样久，归纳起来是三条：
 
@@ -24,7 +24,7 @@ maple tree 针对这三点分别给出答案：
 
 需要澄清一个常见误解：maple tree **不是** xarray 的替代品。页缓存（`address_space->i_pages`）仍用 xarray——它是下标索引、扇出固定为 64 的 radix 树，擅长"按 offset 查 page"；maple tree 擅长"按区间查对象、且要找空洞"。两者在内核里并存。
 
-## 节点：256 字节里的四种形态
+## Nodes: Four Forms within 256 Bytes
 
 所有 maple 节点都装在同一个 256 字节的 `struct maple_node` 里，靠 union 解释成不同形态：
 
@@ -73,7 +73,7 @@ struct maple_node {
 
 于是 64 位机上：叶子/内部节点各 16 个 slot、15 个 pivot；带空洞记账的内部节点（arange64）用 10 个 slot、9 个 pivot，空出来的字节正好放 `gap[10]`。这也是很多资料里"叶子最多 16 项、内部最多 10 项"说法的由来。
 
-### pivot 与 slot 的对应
+### Correspondence between Pivot and Slot
 
 B 树里叫 key 的东西，maple tree 叫 **pivot**，原因是它描述的是区间而非唯一点：pivot 与同下标 slot 的取值是**闭区间包含**关系。源码开头的注释画得很清楚：
 
@@ -92,7 +92,7 @@ B 树里叫 key 的东西，maple tree 叫 **pivot**，原因是它描述的是�
 
 即：slot[i] 覆盖的区间是 `pivot[i-1]+1 .. pivot[i]`，两端由父节点（或根节点的 `0` 与 `ULONG_MAX`）隐含给出。所以 16 个 slot 只需要 15 个 pivot。
 
-### 四种节点类型
+### Four Node Types
 
 ```c
 enum maple_type {
@@ -114,7 +114,7 @@ enum maple_type {
 
 `ma_is_leaf()` / `ma_is_dense()` 之所以能用 `<` 比较，是因为 `enum maple_type` 的取值顺序被刻意安排成"稠密 < 叶子 < 内部"。
 
-### metadata：避免每次都扫描
+### Metadata: Avoiding Scanning Every Time
 
 每个节点（除 dense）尾部带两个字节的元数据：
 
@@ -127,7 +127,7 @@ struct maple_metadata {
 
 `end` 记录节点里最后一个有效 slot 的下标，`gap` 记录最大空洞所在的偏移。查找"节点末尾在哪"、更新空洞时就不必扫描整个 pivot 数组。
 
-## 位编码：指针里挤出来的信息
+## Bit Encoding: Information Packed into Pointers
 
 maple tree 大量使用"指针对齐、低位空闲"的技巧。节点 256 字节对齐，低 8 位（`MAPLE_NODE_MASK = 255UL`）全部可以做标记：
 
@@ -168,7 +168,7 @@ struct maple_tree {
 - `MT_FLAGS_LOCK_EXTERN`：不用内部的 `ma_lock`，改由调用者的锁保护（mmap 场景就是 `mmap_lock`），配合 lockdep 的 `ma_external_lock` 做持有检查。
 - `MT_FLAGS_HEIGHT_MASK`：树的高度直接编在 flags 里，`mt_height()` 取出来即可。
 
-## 游标 ma_state：一次操作的全部上下文
+## Cursor ma_state: All Context of One Operation
 
 maple tree 的 API 分两层：简单 API（`mtree_load` / `mtree_store` / `mtree_insert` …）每次从根开始；高级 API 则用 `struct ma_state` 作为游标，**跨多次操作保留位置**，避免重复下降。
 
@@ -208,7 +208,7 @@ struct ma_state {
 
 初始化用宏 `MA_STATE(name, mt, first, end)`，把 `min` 设为 0、`max` 设为 `ULONG_MAX`、`status` 设为 `ma_start`。
 
-## 查找：从根下降到叶子
+## Lookup: Descending from Root to Leaf
 
 `mas_start()` 先把三种树形态分开：
 
@@ -308,7 +308,7 @@ dead_node:
 
 注意 pivot 数组只有 15 项、每项 8 字节，线性扫描比二分更划算（cache 友好）。
 
-## RCU：读侧不拿锁的代价与实现
+## RCU: The Cost and Implementation of the Lockless Read Side
 
 maple tree 的读侧并发靠两件事：**写侧整节点替换** + **读侧死节点检测**。
 
@@ -378,7 +378,7 @@ static void ma_free_rcu(struct maple_node *node)
 
 所以在 `mas_wr_store_type()` 里，append 分支额外要求 `!mt_in_rcu(mas->tree)`。
 
-## 写路径：先分类，再预分配，最后落位
+## Write Path: Classify First, Then Preallocate, Then Place
 
 一次写操作被拆成三步，核心思想是**写之前就知道要几个节点**，把内存分配挪到持锁之前（或允许睡眠的时机）完成：
 
@@ -397,7 +397,7 @@ static inline void mas_wr_preallocate(struct ma_wr_state *wr_mas, void *entry)
 }
 ```
 
-### 第一步：分类
+### Step 1: Classification
 
 `enum store_type` 有九种，写操作首先要判断自己属于哪一类：
 
@@ -459,7 +459,7 @@ enum store_type {
 
 读法是从便宜到昂贵：能原地改最好（`exact_fit` / `append` / `slot_store`），实在不行才动结构。其中 `new_end` 是"写完之后这个节点会有多少个 slot"，用它和两类阈值比较——低于 `mt_min_slots[]` 说明节点太空、需要向邻居借（rebalance）；达到 `mt_slots[]` 说明装不下、需要分裂（split）。两个阈值分别是 6 和 16（`range_64`：`16/2-2` 与 `16`）。
 
-### 第二步：算要几个节点
+### Step 2: Counting How Many Nodes Are Needed
 
 ```c
 	switch (mas->store_type) {
@@ -493,7 +493,7 @@ enum store_type {
 
 默认是 `height * 3 + 1`（最坏情况每层都可能分裂成三份）。原地写不用分配；RCU 下的 `node_store` 固定只要 1 个（换掉一个节点）。
 
-### 节点从哪来：slab sheaf 批量预取
+### Where Nodes Come From: Batch Prefetch with slab sheaf
 
 v7.2.7 里 maple 节点的分配已经改用 slab 的 **sheaf** 机制（一次预取一批对象，避免写路径上反复调用分配器）。`ma_state` 里的 `sheaf` 字段就是为此而设：
 
@@ -535,7 +535,7 @@ out:
 }
 ```
 
-### 第三步：分配不到怎么办
+### Step 3: What If Allocation Fails
 
 写操作通常持着锁（可能是 spinlock），不能睡眠分配。于是 `mas_alloc_nodes()` 一律先用 `GFP_NOWAIT` 试，失败就把 `mas->node` 编成 `-ENOMEM`，交给 `mas_nomem()` 处理：允许睡眠且锁是自己的（非外部锁）时，**放锁 → 用调用方的 gfp 分配 → 重新持锁 → 重走**。
 
@@ -583,7 +583,7 @@ retry:
 
 调用方也可以反过来做：先 `mas_preallocate()` 把节点备好，再在绝不失败的上下文里 `mas_store_prealloc()`（VMA 操作就大量使用这个模式）。
 
-### 落位：九种 store 各走各的路
+### Placement: Nine Stores Each Taking Its Own Path
 
 ```c
 	switch (mas->store_type) {
@@ -648,7 +648,7 @@ struct ma_topiary {
 
 （topiary 本义是"修剪造型的灌木"，这里借指"剪下来待处理的节点串"。）
 
-## gap：为空洞搜索付出的记账成本
+## Gap: Accounting Cost Paid for Hole Search
 
 有些树不仅要"查区间"，还要"找一段够大的空隙"——VMA 布局就是典型。`MT_FLAGS_ALLOC_RANGE` 打开的正是这项能力，代价是每个 arange64 节点多带一个 `gap[]` 数组：
 
@@ -723,9 +723,9 @@ next_slot:
 
 外层 `mas_awalk()` 在"下降 / 回溯 / 找到 / 失败（-EBUSY）"四态间循环，最终 `mas_empty_area()` 给出最低可用地址，`mas_empty_area_rev()` 给出最高可用地址。
 
-## 内核里的使用者
+## Users in the Kernel
 
-### 进程地址空间
+### Process Address Space
 
 `mm_struct` 里那棵树的 flags 把三种能力全开了——需要找空洞、锁由调用方（mmap_lock）提供、要支持无锁读：
 
@@ -765,7 +765,7 @@ struct vma_iterator {
 
 而 [mmap](/docs/CS/OS/Linux/mm/mmap.md) 布局时的"找一段空闲地址"，正是 gap 机制的用武之地：自低向高的 `unmapped_area()` 调 `vma_iter_area_lowest()`（即 `mas_empty_area()`），自高向低的 `unmapped_area_topdown()` 调 `vma_iter_area_highest()`（即 `mas_empty_area_rev()`）。相比红黑树时代遍历 VMA 链表逐个比对地址窗口，这里一次下降就能定位候选空洞。
 
-### 其他用户
+### Other Users
 
 同一套 API 也被用在这些地方：
 
@@ -774,7 +774,7 @@ struct vma_iterator {
 - `drivers/iommu/iommufd`、`drivers/gpu/drm/nouveau/nouveau_uvmm`：用户态驱动的虚拟地址/IOVA 空间管理。
 - `lib/alloc_tag.c`、`fs/libfs.c`：内核内部的区间记账。
 
-## 与 rbtree、xarray 的取舍
+## Trade-offs with rbtree and xarray
 
 | | rbtree | xarray | maple tree |
 | --- | --- | --- | --- |
@@ -787,7 +787,7 @@ struct vma_iterator {
 
 一句话选型：**按整数下标查对象用 xarray，按区间查对象、还要找空洞用 maple tree**；需要严格的顺序语义或自己管锁的场景，rbtree 依然在位。
 
-## 调试与验证
+## Debugging and Verification
 
 maple tree 自带相当完善的可观测设施：
 

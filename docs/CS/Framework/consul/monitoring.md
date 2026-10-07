@@ -2,12 +2,12 @@
 
 Consul 的运维可观测性来自 **telemetry**（指标导出）+ **健康检查端点** + **agent 缓存**。本篇给出关键指标表与告警项，对标 etcd 的 [monitoring](/docs/CS/Framework/etcd/monitoring.md)。
 
-## Telemetry 导出
+## Telemetry Export
 
 - 两种后端：**statsd**（push，默认）与 **prometheus**（pull，推荐）。Prometheus 通过 agent 的 `/v1/agent/metrics?format=prometheus` 暴露（1.4+ 通用，当前 2.0 默认启用该端点）。
 - 配置：`telemetry { prometheus_retention_time = "24h" }` 控制本地缓存时长；`metrics_prefix` 可改前缀（默认 `consul`）。
 
-## 关键指标表
+## Key Metrics Table
 
 | 指标前缀 | 关注点 | 告警建议 |
 | :--- | :--- | :--- |
@@ -22,7 +22,7 @@ Consul 的运维可观测性来自 **telemetry**（指标导出）+ **健康检�
 > [!TIP]
 > 真正反映"集群还能不能写"的是 `consul_server_is_leader` + `consul_autopilot_failure_tolerance` + `raft_leader_lastContact`。绿灯（health 页 200）不等于能写——务必监控这三个而非只看存活。
 
-## 健康检查端点
+## Health Check Endpoint
 
 | 端点 | 用途 | ACL |
 | :--- | :--- | :--- |
@@ -33,11 +33,11 @@ Consul 的运维可观测性来自 **telemetry**（指标导出）+ **健康检�
 
 2.0 起健康检查语义沿用：写路径依赖 leader，读（目录）可走本地 stale。
 
-## Agent 缓存
+## Agent Cache
 
 client agent 缓存 catalog / health 结果（[Discovery](/docs/CS/Framework/consul/discovery.md) 的 stale 读）。缓存降低 server 压力，但 ACL 缓存受 `acl.*_ttl`（默认 30s）约束——ACL 变更最多 30s 后生效。监控 agent 的缓存命中与反熵同步延迟可提前发现"发现结果陈旧"。
 
-## 告警项建议
+## Suggested Alert Items
 
 1. **无 leader / leader 频繁易主**：写不可用，查 [Raft](/docs/CS/Framework/consul/raft.md) 与磁盘 IO。
 2. **`FailureTolerance` 下降**：有 server 被 Autopilot 挡在投票圈外（常因 `max_trailing_logs` 超限），查慢节点。

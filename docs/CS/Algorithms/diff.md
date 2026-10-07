@@ -20,16 +20,12 @@ git diff 的实现里，其实就内置有多个不同的 diff 算法
 
 git diff 默认算法：Myers 差分算法
 
-## Myers
-
-
-
-
-
-
-
-
-
+## The Myers Diff Algorithm
 ## Links
 
-- [Algorithm Analysis](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
+- [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
+
+## References
+
+1. [An O(ND) Difference Algorithm and Its Variations (Myers, Algorithmica)](https://doi.org/10.1007/BF01840446)
+2. [git-diff - Git 官方文档](https://git-scm.com/docs/git-diff)

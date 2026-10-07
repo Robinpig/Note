@@ -11,7 +11,7 @@
 
 本文把这条链路自上而下串起来：**API 对象 → kubelet → CRI 运行时 → CNI 插件 → 内核 netfilter/ipvs → conntrack**，并说明 kube-proxy 三种数据面模式在 v1.36 的真实状态。单个组件的细节在 [kube-proxy](/docs/CS/Container/k8s/kube-proxy.md) 与 [Service](/docs/CS/Container/k8s/Service.md) 里，本文负责把它们接起来。
 
-## 三层职责分离
+## Three-layer Responsibility Separation
 
 K8s 网络有三层职责，容易混淆但实现路径完全不同：
 
@@ -23,9 +23,9 @@ K8s 网络有三层职责，容易混淆但实现路径完全不同：
 
 一个容易被忽略的事实：**kube-proxy 名字里有 "proxy"，但它不转发任何流量**。它只把 Service/EndpointSlice 的变化翻译成内核规则，转发全部发生在内核的 netfilter 或 ipvs 子系统中。这也解释了为什么它能被 eBPF 方案整体替换——被替换的是"规则的生产者"，不是"流量的转发者"。
 
-## Pod 网络：从 API 对象到 veth
+## Pod Network: From API Object to veth
 
-### kubelet 已经不碰 CNI
+### kubelet No Longer Touches CNI
 
 这是理解 K8s 网络最重要的边界：**kubelet 不调用 CNI，容器运行时才调用**。
 
@@ -33,7 +33,7 @@ K8s 网络有三层职责，容易混淆但实现路径完全不同：
 
 所以 `/etc/cni/net.d/*.conflist` 和 `/opt/cni/bin/*` 归 **containerd / CRI-O** 读取与执行，K8s 主仓库对"CNI 是什么、怎么被调用"只字不提。这带来一个直接的排障结论：**CNI 装错了，日志要去运行时侧看，不在 kubelet 日志里**。
 
-### CRI 上的网络契约
+### Network Contract on CRI
 
 既然网络交给了运行时，kubelet 与运行时之间就必须有一个接口约定，这个约定就是 CRI 的 `PodSandboxConfig`（`staging/src/k8s.io/cri-api/pkg/apis/runtime/v1/api.proto:560-580`）：
 
@@ -50,7 +50,7 @@ K8s 网络有三层职责，容易混淆但实现路径完全不同：
 
 一个值得记的细节：`PodSandboxStatus` 里回传的网络信息（`PodSandboxNetworkStatus`，`:648-653`）**只有 `ip` 和 `additional_ips` 两个字段，没有 MAC**。注释还特意写明 "Currently ignored for pods sharing the host networking namespace"（`:647`）——hostNetwork Pod 的这条状态是空的。
 
-### Pod IP 是怎么写进 Status 的
+### How Pod IP Is Written into Status
 
 链路很短，但每一步都在不同文件里：
 
@@ -62,7 +62,7 @@ K8s 网络有三层职责，容易混淆但实现路径完全不同：
 
 **hostNetwork Pod 是个例外**：它的 IP 根本不来自 sandbox，而是直接继承节点 IP（`kubelet_pods.go:2024-2035`）。所以一个 hostNetwork Pod 的 `PodIP` 等于它所在节点的 `NodeIP`。
 
-### sandbox 的建立、重建与回收
+### Establishing, Rebuilding, and Recycling the sandbox
 
 沙箱（pause 容器）是网络命名空间的载体。kubelet 侧只做三件事：决定要不要重建、发 `RunPodSandbox`、发 `StopPodSandbox`。
 
@@ -70,7 +70,7 @@ K8s 网络有三层职责，容易混淆但实现路径完全不同：
 
 删除是两阶段的：`killPodWithSyncResult` 先调 `StopPodSandbox` 停掉网络（`kuberuntime_manager.go:1991`），而 `RemovePodSandbox` 由 GC 异步执行（`kuberuntime_gc.go:185`）。CNI 的 DEL 调用发生在运行时侧，**不在 kubelet**。
 
-### hostNetwork：没有独立网络命名空间
+### hostNetwork: No Independent Network Namespace
 
 `NetworkNamespaceForPod` 对 hostNetwork Pod 返回 `NODE`（`util.go:82-87`），同时 `hostname` 字段不再设置（`kuberuntime_sandbox.go:100-111`）。它仍然是一个"沙箱"，但共享节点的 netns，因此：
 
@@ -78,7 +78,7 @@ K8s 网络有三层职责，容易混淆但实现路径完全不同：
 - 端口直接落在节点上，两个 hostNetwork Pod 抢同一端口必然失败；
 - 它不需要 CNI 为它分配地址。
 
-### DNS 与 /etc/hosts：kubelet 仅剩的网络职责
+### DNS and /etc/hosts: The Only Network Responsibility Left for kubelet
 
 网络建立虽然交出去了，**DNS 配置的构造权仍在 kubelet 手里**：`pkg/kubelet/network/dns/dns.go` 的 `Configurer` 负责把 Pod 的 `dnsPolicy` 翻译成 `runtimeapi.DNSConfig`（`dns.go:386`），再经 `generatePodSandboxConfig` 塞进 `podSandboxConfig.DnsConfig`（`kuberuntime_sandbox.go:98`）。四个 dnsPolicy 的分支在 `getPodDNSType`（`dns.go:304`）：
 
@@ -91,7 +91,7 @@ K8s 网络有三层职责，容易混淆但实现路径完全不同：
 
 search 域由 `generateSearchesForDNSClusterFirst` 派生（`dns.go:165-175`），默认 options 只有一个 `ndots:5`（`dns.go:44`）。`/etc/hosts` 也是 kubelet 生成的（`kubelet_pods.go:417,460`），与 CNI 无关。
 
-## CNI 插件
+## CNI Plugin
 
 CNI（Container Network Interface）是 CNCF 的网络插件规范：运行时在创建 Pod sandbox 时，通过执行 CNI 二进制并传入 JSON 配置，由插件完成网络设备创建、IP 分配、路由写入。K8s 本身不实现任何网络功能，只定义"Pod 必须能被直接访问"这个约束。
 
@@ -100,7 +100,7 @@ CNI 插件的核心工作可以拆成两件事：
 - **IPAM**（IP Address Management）：为 Pod 分配 IP，常见有 host-local（每节点预分配网段）、Whereabouts 等；
 - **数据面**：把 Pod 的流量送到正确的地方，主要有三种流派。
 
-### 主流方案对比
+### Comparison of Mainstream Solutions
 
 | 方案 | 隧道/路由方式 | 数据面 | 特点 |
 |------|--------------|--------|------|
@@ -112,9 +112,9 @@ CNI 插件的核心工作可以拆成两件事：
 
 典型的单节点侧落脚点是：Pod netns 里一张 `eth0`，对应宿主机侧的一对 veth，宿主机侧 veth 接入网桥或直接挂在路由表上，IP 由 IPAM 从节点子网里切出来。这些设备在 `ip link` 里可见，也是排障时最先看的地方。
 
-## Service 数据面：虚拟 IP 到内核规则
+## Service Data Plane: From Virtual IP to Kernel Rules
 
-### 三种模式的现状
+### Status of the Three Modes
 
 `ProxyMode` 常量只有四个取值（`pkg/proxy/apis/config/types.go:253-256`）：
 
@@ -133,7 +133,7 @@ gate GA 的含义是"这个实现被认可、可以用"，不等于"它是默认
 
 顺带一提，nftables 模式在默认值上有自己的特殊处理：它会把 `NodePortAddresses` 默认设为 `NodePortAddressesPrimary`（`server_linux.go:53-55`）。
 
-### iptables：规则挂在哪儿
+### iptables: Where the Rules Hang
 
 所有挂载关系集中在 `iptablesJumpChains` 这一个切片里（`pkg/proxy/iptables/proxier.go:377-390`），共 12 条：
 
@@ -153,7 +153,7 @@ gate GA 的含义是"这个实现被认可、可以用"，不等于"它是默认
 
 **`KUBE-PROXY-FIREWALL` 三个方向全挂**。它是 `loadBalancerSourceRanges` 的实现载体——LB VIP 既可能从外部进 INPUT、也可能跨节点走 FORWARD、还可能被本机进程访问走 OUTPUT，三个方向都得过滤。
 
-### 两级分发与抽签式负载均衡
+### Two-level Distribution and Lottery-based Load Balancing
 
 每个 Service 端口被翻译成两级自定义链：
 
@@ -178,7 +178,7 @@ $ iptables-save | grep KUBE-SVC
 
 `externalTrafficPolicy: Local` 且有外部流量时，还会用 `KUBE-SVL-` 链只放本节点后端；而 ClientIP 亲和则用 `-m recent` 模块实现——先写 `--rcheck --seconds <超时>` 命中已知来源，到达 SEP 链时再 `--set` 记录（`proxier.go:1448-1467`、`proxier.go:1253-1254`）。后端被摘除时对应 SEP 链被删，recent 列表随之失效。
 
-### IPVS：哈希表与 kube-ipvs0
+### IPVS: Hash Table and kube-ipvs0
 
 IPVS 基于内核 LVS，把 Service 规则放进哈希表，查找复杂度 O(1)，并支持多种调度算法（`rr` 轮询是默认值）。但它**不是纯 IPVS**——节点上仍要写一批 iptables 规则和 ipset。
 
@@ -216,7 +216,7 @@ IPVS 启动时还会写一批 sysctl（`proxier.go:281-320`），其中 `conn_re
 
 其余设置：`net/ipv4/vs/conntrack=1`、`expire_nodest_conn=1`、`expire_quiescent_template=1`、`ip_forward=1`，另有 `strictARP` 时的 `arp_ignore`。**iptables 与 nftables 模式不设置 `ip_forward`**——只有 IPVS 这么做。
 
-### nftables：verdict map 取代逐 Service 建链
+### nftables: verdict map Replaces Per-Service Chain Creation
 
 nftables 模式建一张自己的表 `kube-proxy`（`pkg/proxy/nftables/proxier.go:58`），表里既有 nat 型 base chain 也有 filter 型，分别挂在 prerouting / output / postrouting（`:60-68`）。这与 iptables 只借用内核保留表（`nat` / `filter`）的做法根本不同——nftables 没有保留表，各家组件各建各的表，互不干扰。
 
@@ -232,7 +232,7 @@ map serviceIPsMap { type ipv4_addr . inet_proto . inet_service : verdict }
 
 内核门槛是硬要求：nftables 模式要求内核 **≥ 5.13**（`pkg/util/kernel/constants.go:52` 的 `NFTablesKubeProxyKernelVersion`），不满足直接启动失败。源码里留了个逃生门——环境变量 `KUBE_PROXY_NFTABLES_SKIP_KERNEL_VERSION_CHECK` 非空即跳过检查（`pkg/proxy/nftables/supported.go:64-71`），理由是"发行版应该有和内核特性匹配的 nft 二进制"，检查内核只是代理指标。
 
-### 亲和与拓扑路由
+### Affinity and Topology Routing
 
 两个容易混淆的概念在这里分道扬镳。
 
@@ -258,7 +258,7 @@ v1.36 的状态有两个变化，都容易踩：
 
 EndpointSlice 的分片上限也不是 API 常量：`MaxEndpointsPerSlice` 默认 **100**，定义在控制器的默认值函数里（`pkg/controller/endpointslice/config/v1alpha1/defaults.go:38-39`），属于可配置项而非协议上限。
 
-## 一个报文的完整旅程
+## A Packet’s Complete Journey
 
 把上面几节串起来。假设 Pod A（`10.244.1.5`）访问 `nginx-service` 的 ClusterIP `10.96.0.168:80`，后端是 Pod B（`10.244.2.7`）：
 
@@ -272,7 +272,7 @@ EndpointSlice 的分片上限也不是 API 常量：`MaxEndpointsPerSlice` 默�
 
 第 7 步是整个设计的支点：**DNAT 只在包出去时做一次，回包的"反 DNAT"完全由 conntrack 完成**。这也意味着 kube-proxy 写的规则本身是无状态的——状态机的工作全部托付给 conntrack。
 
-## conntrack：让无状态规则变成有状态
+## conntrack: Turning Stateless Rules into Stateful
 
 理解了上一个环节，就能理解为什么 conntrack 是 K8s 网络里最容易被忽视、又最容易出故障的部分。
 
@@ -294,7 +294,7 @@ conntrack 自身的容量与超时也由 kube-proxy 调优（`pkg/proxy/conntrac
 
 排障时的手动工具：`conntrack -L` 看条目、`conntrack -D -p udp --dport <port>` 手动清理。
 
-## NetworkPolicy：规范在 K8s，执行在 CNI
+## NetworkPolicy: Defined in K8s, Enforced in CNI
 
 `NetworkPolicy` 是本仓库里"存在感最弱"的 API 之一：`pkg/apis/networking/types.go:28` 定义了类型，`pkg/registry/networking/networkpolicy/` 只有 REST 存储与校验——**没有任何执行实现**。策略的落地完全在 CNI 插件侧（Calico、Cilium 等），所以 Flannel 用户会发现自己写的 NetworkPolicy 完全没生效。
 
@@ -306,7 +306,7 @@ conntrack 自身的容量与超时也由 kube-proxy 调优（`pkg/proxy/conntrac
 
 所以"配了策略反而全断了"是预期行为，不是 bug——加一条策略就把该方向的白名单模式打开了。
 
-## eBPF：绕过 netfilter 的另一条路
+## eBPF: Another Path Around netfilter
 
 Cilium 这类 eBPF 方案走的是完全不同的路径：它不生成 iptables/ipvs 规则，而是把 Service 的 DNAT 逻辑编译成 eBPF 程序，挂在网卡的 tc/XDP 钩子上，在包进入 netfilter **之前**就完成改写，连 conntrack 也不用内核的（自己维护一个 map）。
 
@@ -320,7 +320,7 @@ Cilium 这类 eBPF 方案走的是完全不同的路径：它不生成 iptables/
 
 K8s 主仓库里没有任何 eBPF 数据面实现，`ProxyMode` 也只有那四个取值。
 
-## 与 Docker 网络的关系
+## Relationship with Docker Networking
 
 Docker 自带一套网络实现（CNM 模型 + docker0 网桥），但 K8s 不使用它：kubelet 启动 Pod 时会以 `POD` 命名空间模式创建 sandbox，由运行时调用 CNI 插件接管网络。原因有两点：
 
@@ -329,7 +329,7 @@ Docker 自带一套网络实现（CNM 模型 + docker0 网桥），但 K8s 不�
 
 单机层面的机制是共享的：veth pair、Linux bridge、iptables NAT 这些 [Linux 网络](/docs/CS/OS/Linux/net/network.md) 基础设施，在 Docker 和 CNI 插件里扮演同样的角色，区别只在于组网拓扑。
 
-## 反直觉清单
+## Counterintuitive List
 
 1. **kubelet 不调用 CNI**。`pkg/kubelet/network/` 只剩 `dns/`，CNI 由 containerd/CRI-O 调用，容器网络故障的日志不在 kubelet 里。
 2. **`NFTablesProxyMode` gate 已 GA 且锁定，但默认模式仍是 iptables**（`server_linux.go:48-51`）。gate GA 只说"能用"，不说"默认"。

@@ -1,25 +1,47 @@
 ## Introduction
 
+C++ 在 C 之上叠加了面向对象、泛型与 RAII，核心理念是**零成本抽象（zero-overhead abstraction）**：你不为没用到的抽象付费，用到的抽象与手写代码等价。代价是语言表面积巨大、编译慢、错误信息冗长。
 
-C++ blends the C language with support for object-oriented programming and for generic programming.
+## Knowledge System
 
+本目录按「对象模型 → 资源管理 → 泛型 → 内存 → 标准库 → 并发 → 工程」逐层展开：
 
-## Tutorial
+- **对象模型与类型**：[对象模型](/docs/CS/C++/ObjectModel.md)讲内存布局、vtable 与虚分发，是理解多态与 [RTTI](/docs/CS/C++/RTTI.md) 的地基；[初始化](/docs/CS/C++/Init.md)梳理最易错的值 / 列表 / 拷贝初始化与「最令人头疼的解析」。
+- **资源管理（RAII）**：[智能指针](/docs/CS/C++/SmartPtr.md)（unique / shared / weak）把 `new` / `delete` 封装进生命周期；[移动语义](/docs/CS/C++/Move.md)（右值引用、完美转发、Rule of Five）让资源转移零拷贝。
+- **泛型**：[模板](/docs/CS/C++/Templates.md)（SFINAE、可变参数、C++20 Concepts、CRTP）是 STL 与元编程的基石。
+- **内存**：[内存与 new/delete](/docs/CS/C++/Memory.md)讲分配 / 构造两步骤、placement new 与 `std::pmr` 分配器模型；[未定义行为](/docs/CS/C++/UB.md)汇总越界、溢出、数据竞争等标准不保证的雷区。
+- **标准库**：[STL](/docs/CS/C++/STL.md)（容器 / 迭代器 / 算法 / `string_view` / `span`）是日常最高频的一半。
+- **并发**：[Concurrency](/docs/CS/C++/Concurrency.md)覆盖 `std::thread`、future / promise、latch / barrier、原子与六种内存序。
+- **标准演进**：[C++ 标准演进](/docs/CS/C++/Standard.md)（C++11 → 20 → 23 → 26）对照各版本特性与 `-std=` / ABI 稳定性。
+- **工程框架**：[muduo](/docs/CS/C++/muduo.md)是现代 C++ 网络编程（one loop per thread）的代表库。
 
-Mac
+## A Few Points Worth Remembering
 
+- `std::sort` 是**内省排序**（introsort）：快排为主、递归过深转堆排、小子区间用插入排序——见 [STL](/docs/CS/C++/STL.md)。
+- **RAII** 是 C++ 资源管理的万能钥匙：任何「获取即构造、释放即析构」的资源（锁、文件、连接）都应包进对象，详见 [智能指针](/docs/CS/C++/SmartPtr.md)。
+- 与 [C](/docs/CS/C/C.md) 共享底层（同用堆、同踩 UB），但多了构造 / 析构、类型安全与模板元编程。
 
-VS Code
+## Toolchain
 
-打开VScode，进入 `Extensions` 模块，搜索以下扩展并安装：
+C++ 与 C 共用构建与调试基建：CMake / make 见 [C 的 make](/docs/CS/C/make.md) 与 [CMake](/docs/CS/C/CMake.md)，调试器见 [GDB](/docs/CS/C/GDB.md)。
 
-C/C++
-C/C++ Clang Command Adapter
-Code Runner
+## Comparison with Adjacent Languages
 
+- 和 [Go](/docs/CS/Go/Go.md) 比：Go 用 GC 与 goroutine 换开发效率，C++ 用显式控制换性能与抽象。
+- 和 [Rust](/docs/CS/Rust/Rust.md) 比：Rust 把所有权 / 借用检查移到编译期，C++ 把所有权交给程序员（靠智能指针自律）。
+- 和 [Java](/docs/CS/Java/Java.md) 比：Java 的对象总是在堆、靠 JVM GC，C++ 对象可在栈也可在堆、析构确定性释放。
 
-.vscode文件夹下文件配置
+## Quick Start (VS Code Environment)
 
+Mac 下用 VS Code 写 C++ 的常用配置。
+
+打开 VScode，进入 `Extensions` 模块，搜索以下扩展并安装：
+
+- C/C++
+- C/C++ Clang Command Adapter
+- Code Runner
+
+`.vscode` 文件夹下文件配置：
 
 <!-- tabs:start -->
 
@@ -81,7 +103,6 @@ Code Runner
 }
 ```
 
-
 ###### **launch.json**
 
 ```json
@@ -105,57 +126,17 @@ Code Runner
 }
 ```
 
-
 <!-- tabs:end -->
-
-## Basic concepts
-
-
-Resource Acquisition Is Initialization or RAII, is a C++ programming technique which binds the life cycle of a resource that must be acquired before use 
-(allocated heap memory, thread of execution, open socket, open file, locked mutex, disk space, database connection—anything that exists in limited supply) 
-to the lifetime of an object.
-
-
-
-
-### Types
-
-
-## Initialization
-
-
-
-
-c++ 的std::sort是内省排序：
-
-1. 大部分情况下是快排，三数中值法选pivot
-
-2. 当快排的递归深度超过阈值时转为堆排序
-
-3. 当子区间长度小于阈值时，直接使用插入排序
-
-
-## Concurrency
-
-[Concurrency](/docs/CS/C++/Concurrency.md)
-
-
-
-Frameworks
-
-
-
-- [muduo](/docs/CS/C++/muduo.md)
-
-
-
 
 ## Links
 
 - [C](/docs/CS/C/C.md)
+- [编程语言横向对比](/docs/CS/Languages.md)
 - [Java JDK](/docs/CS/Java/JDK/JDK.md)
-
+- [Go](/docs/CS/Go/Go.md)
+- [Rust](/docs/CS/Rust/Rust.md)
 
 ## References
 
-1. [C++ language](https://en.cppreference.com/w/cpp/language)
+1. [cppreference](https://en.cppreference.com/w/cpp)
+1. [ISO C++](https://isocpp.org/)

@@ -32,7 +32,7 @@ Errors happening after EXEC instead are not handled in a special way: all the ot
 
 
 
-#### **为什么不支持事务回滚？**
+#### **Why Transaction Rollback Is Not Supported?**
 
 Redis 官方文档的解释如下：
 

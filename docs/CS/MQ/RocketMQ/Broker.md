@@ -1241,7 +1241,7 @@ RocketMQ 使用的 commitLog 引入了什么问题
 
 RocketMQ 支持两种延迟消息：固定延迟级别（如 1s、5s）与指定时间点（如 2024-05-20 12:00:00），核心是通过系统 Topic 与时间轮算法实现
 
-### 固定延迟
+### Fixed Delay
 
 固定延迟消息的实现依赖 `SCHEDULE_TOPIC_XXXX` 系统 Topic，流程如下：
 
@@ -1397,7 +1397,7 @@ DeliverDelayedMessageTimerTask#run 调用了 executeOnTimeUp方法
 
 
 
-### 指定时间点
+### Specify Point in Time
 
 指定时间点的延迟消息依赖 `rmq_sys_wheel_timer` 系统 Topic 与时间轮算法（`TimerWheel`），流程如下：
 

@@ -4,7 +4,7 @@
 
 本笔记给出 CS 视角的核心骨架；与微积分的关系见 [Calculus](/docs/Mathematics/Calculus.md)，应用见 [CNN](/docs/CS/AI/CNN.md)（卷积/张量）与 [MATLAB](/docs/CS/Tool/MATLAB.md)（矩阵运算工程化）。
 
-## 核心对象
+## Core Objects
 
 | 对象 | 直观含义 |
 | --- | --- |
@@ -18,7 +18,7 @@
 
 行列式的几何意义在 [Mathematics](/docs/Mathematics/Mathematics.md) 笔记已有图示：`det = ad-bc`，为 0 表示向量被压到同一平面/直线/点，负值表示空间定向翻转。
 
-## 三大观点：方程组 / 矩阵 / 线性变换
+## Three Perspectives: Systems of Equations / Matrix / Linear Transformations
 
 同一个问题的三种视角，是理解线代的关键：
 
@@ -28,7 +28,7 @@
 
 例如 `Ax=b`，方程视角是「解线性系统」，几何视角是「变换 A 把哪个向量送到 b」。当 A 不可逆（秩亏、det=0）时解可能不存在或不唯一——这正是最小二乘要解决的问题：无解时在列空间上找最近投影 $A\hat{x}\approx b$。
 
-## 关键分解
+## Key Decomposition
 
 | 分解 | 形式 | 用途 |
 | --- | --- | --- |
@@ -39,7 +39,7 @@
 
 SVD 是工程上最重要的分解：它把任意线性变换拆成「旋转 → 沿坐标轴缩放 → 再旋转」，奇异值衡量各方向的信息量，截断小奇异值即得低秩近似（PCA 的另一种表述）。
 
-## 在 CS 中的落点
+## Applications in CS
 
 - **图形学**：模型/视图/投影矩阵把三维点一路变换到屏幕像素；四元数处理旋转。
 - **机器学习/深度学习**：数据是特征向量、权重是矩阵、全连接层就是 `y=Wx+b`；反向传播依赖多元微积分 + 张量运算，见 [CNN](/docs/CS/AI/CNN.md)。

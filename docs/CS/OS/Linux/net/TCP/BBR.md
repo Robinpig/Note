@@ -10,9 +10,9 @@ BBR 的解法是换一个观测量：**不去猜拥塞，而是直接测量这�
 
 内核头注释里那句话值得记住：**BBR 需要 fq qdisc 配合**。准确说法是"没有 fq 也能跑，但会退化"——`bbr_init()` 里把 `sk_pacing_status` 置成 `SK_PACING_NEEDED`，如果底层 qdisc 不做 pacing，内核就退回**每 socket 一个高精度定时器**的软件 pacing，能工作但 CPU 开销高得多、精度也差。
 
-## 建模：BBR 到底在测什么
+## Modeling: What Exactly Does BBR Measure
 
-### 两个量，以及为什么不能同时测
+### Two Quantities, and Why They Cannot Be Measured Simultaneously
 
 BBR 的整个算法建立在两个测量值上：
 
@@ -33,7 +33,7 @@ BDP = BtlBw × RTprop
 
 这个数就是"让管道刚好填满、且队列为零"所需的 inflight 字节数。BBR 的全部目标就是**让 inflight 稳定在 BDP 附近**——比它小则带宽浪费，比它大则产生排队延迟。对比一下 CUBIC：CUBIC 是在用丢包去"碰"这个点，碰到了就乘性减，然后三次函数爬回去，整个过程围绕最优点在振荡；BBR 是直接算出这个点在哪。
 
-### 定点数：BW_SCALE 与 BBR_SCALE
+### Fixed-point Numbers: BW_SCALE and BBR_SCALE
 
 内核里没有浮点，所有速率和增益都是定点整数。`tcp_bbr.c:75-79` 定义了两级放大：
 
@@ -66,7 +66,7 @@ static u64 bbr_rate_bytes_per_sec(struct sock *sk, u64 rate, int gain)
 
 注意 `bbr_pacing_margin_percent = 1`（`tcp_bbr.c:148`）：**平均 pacing 速率刻意比估计带宽低 1%**。这不是误差补偿，是设计的一部分——注释说得很直白，目的是"把网络往更短的队列、更低的延迟方向推"，代价是理论吞吐的 1%。
 
-### BtlBw：windowed max 的三槽算法
+### BtlBw: Windowed Max Three-slot Algorithm
 
 滤波器用的是 Kathleen Nichols 的 windowed min/max（`lib/win_minmax.c`），只占三个槽位、每次更新 O(1)：
 
@@ -92,7 +92,7 @@ if (!rs->is_app_limited || bw >= bbr_max_bw(sk)) {
 1. **窗口长度是 10，单位是 round trip 而不是时间**。`bbr_bw_rtts = CYCLE_LEN + 2 = 10`（`tcp_bbr.c:134`），传入的 `t` 是 `bbr->rtt_cnt`。也就是说窗口是"最近 10 个 packet-timed round"，不是"最近 10 个 RTT 时长"。
 2. **app-limited 样本被过滤掉，除非它不低于当前模型**。如果应用没数据可发，测出来的 delivery rate 反映的是应用行为而不是网络能力，直接用会把带宽估计拖下去、导致无谓的降速。所以只有 `bw >= bbr_max_bw(sk)` 的 app-limited 样本才被采纳。
 
-### RTprop：10 秒窗口与"机会主义"采样
+### RTprop: 10-second Window and 'Opportunistic' Sampling
 
 min RTT 的更新在 `bbr_update_min_rtt()`（`tcp_bbr.c:942`）：
 
@@ -111,7 +111,7 @@ if (rs->rtt_us >= 0 &&
 
 这里有一处很漂亮的观察（注释里写明了）：**交互式应用（Web、RPC、视频分片）往往不需要主动进 PROBE_RTT**。它们在 10 秒内天然存在静默期或低速期，速率低到足以把瓶颈队列排空，这时候的 RTT 样本自然就是 RTprop，min 滤波器会自动"捡"到它。只有持续满速发送的长连接才需要付出 PROBE_RTT 的代价。
 
-### 时间基准：packet-timed round，不是墙钟
+### Time Base: packet-timed round, Not Wall Clock
 
 这是 BBR 里最反直觉、也最容易被忽略的设计。绝大多数基于时间的算法用墙钟（jiffies / µs）衡量"过了一轮"，BBR 用的是**包序驱动的 round**：
 
@@ -133,9 +133,9 @@ if (rs->rtt_us >= 0 &&
 
 `round_start` 这个标志在 BBR 里到处都是——它是几乎所有状态推进的前提条件（`bbr_check_full_bw_reached`、`bbr_lt_bw_sampling`、`bbr_update_ack_aggregation` 都以它为门）。
 
-## 状态机：四个 mode 与两套增益
+## State Machine: Four modes and Two Sets of Gains
 
-### 状态图与增益表
+### State Diagram and Gain Table
 
 `enum bbr_mode`（`tcp_bbr.c:82`）只有四个状态，每个状态同时决定两个增益（`bbr_update_gains()`，`tcp_bbr.c:988`）：
 
@@ -170,7 +170,7 @@ if (rs->rtt_us >= 0 &&
 
 `pacing_gain` 决定**发多快**（`sk_pacing_rate`），`cwnd_gain` 决定**最多允许多少 inflight**（`snd_cwnd`）。两者分开是 BBR 的核心机制：**速率由 pacing 控制，cwnd 只是一个安全上界**。
 
-### STARTUP：为什么是 2/ln(2)
+### STARTUP: Why 2/ln(2)
 
 ```c
 static const int bbr_high_gain  = BBR_UNIT * 2885 / 1000 + 1;
@@ -195,7 +195,7 @@ static const int bbr_high_gain  = BBR_UNIT * 2885 / 1000 + 1;
 
 注意这个判据**只在 `round_start` 且非 app-limited 时才推进**（`tcp_bbr.c:880`），再次体现 packet-timed round 的作用。
 
-### DRAIN：用 1/2.885 排空
+### DRAIN: Drain with 1/2.885
 
 ```c
 static const int bbr_drain_gain = BBR_UNIT * 1000 / 2885;
@@ -214,7 +214,7 @@ static const int bbr_drain_gain = BBR_UNIT * 1000 / 2885;
 
 即"网络中的包数已经降到 1.0×BDP 以下"。
 
-### PROBE_BW：8 相增益循环
+### PROBE_BW: 8-phase Gain Cycle
 
 稳态是 BBR 花时间最多的地方。增益在一个 8 元素数组里循环（`tcp_bbr.c:163`）：
 
@@ -270,7 +270,7 @@ static const int bbr_pacing_gain[] = {
 
 用的是 `delivered_mstamp`（最后一个交付包的时间戳）而不是当前时间——这样衡量的是"数据实际在网络里流动了多久"，把发送端的空闲时间排除掉。
 
-### PROBE_RTT：2% 的代价
+### PROBE_RTT: The 2% Cost
 
 ```c
 static const u32 bbr_probe_rtt_mode_ms = 200;
@@ -283,9 +283,9 @@ static const u32 bbr_cwnd_min_target = 4;
 
 退出后回哪个状态由 `bbr_reset_mode()` 决定（`tcp_bbr.c:627`）——**取决于是否曾达到过满带宽**：满了回 PROBE_BW，没满回 STARTUP 重新填管道。
 
-## 一个 ACK 上发生什么：bbr_main 的调用链
+## What Happens on One ACK: The Call Chain of bbr_main
 
-### 调度点：cong_control 与 cong_avoid 的分岔
+### Scheduling Point: The Fork Between cong_control and cong_avoid
 
 BBR 之所以能完全绕开内核的拥塞状态机，是因为它注册的是 `cong_control` 而不是 `cong_avoid`。分岔点在 `tcp_cong_control()`（`net/ipv4/tcp_input.c:3858`）：
 
@@ -317,7 +317,7 @@ static void tcp_cong_control(struct sock *sk, u32 ack, u32 acked_sacked,
 
 头文件里对这两个回调的分工有明确说明（`include/net/tcp.h:1327`）：`cong_avoid` 适用于"想复用内核标准 Reno/CUBIC 式丢包响应、ECN、pacing 计算"的算法；`cong_control` 适用于"想要完全自定义行为"的算法。
 
-### bbr_main：三步
+### bbr_main: Three Steps
 
 ```c
 __bpf_kfunc static void bbr_main(struct sock *sk, u32 ack, int flag, const struct rate_sample *rs)
@@ -352,7 +352,7 @@ static void bbr_update_model(struct sock *sk, const struct rate_sample *rs)
 
 顺序是有讲究的：先更新带宽与 RTT 这两个**观测量**，再据此推进**状态机**，最后才算出**增益**给下一步用。也就是说每个 ACK 的处理都是"先修正模型，再按模型行动"。
 
-### bbr_set_pacing_rate：只升不降的例外
+### bbr_set_pacing_rate: The Exception That Only Increases
 
 ```c
 static void bbr_set_pacing_rate(struct sock *sk, u32 bw, int gain)
@@ -372,7 +372,7 @@ static void bbr_set_pacing_rate(struct sock *sk, u32 bw, int gain)
 
 默认行为是**只允许 pacing 速率上升，不允许下降**——除非已经达到满带宽。原因是带宽滤波器的 max 值只会随时间窗口滑出才下降，而**主动降速会自我强化**（降速 → 测到更低带宽 → 再降速），形成负反馈陷阱。所以在 STARTUP 阶段（还没确认满带宽）速率单调不减。
 
-### bbr_set_cwnd：唯一会"砍"窗口的地方
+### bbr_set_cwnd: The Only Place That 'Cuts' the Window
 
 ```c
 	target_cwnd = bbr_bdp(sk, bw, gain);
@@ -400,7 +400,7 @@ done:
 
 关键分支：**只有在确认填满管道之后才允许把 cwnd 砍到目标值以下**（`min(cwnd + acked, target_cwnd)`）；在 STARTUP 期间 cwnd 只增不减。最后 PROBE_RTT 阶段无条件压到 4 包。
 
-### bbr_bdp 与 quantization budget
+### bbr_bdp and Quantization Budget
 
 ```c
 static u32 bbr_bdp(struct sock *sk, u32 bw, int gain)
@@ -438,7 +438,7 @@ BDP 算出来之后还要加一个"量化预算"（`tcp_bbr.c:396`）：
 2. **向上取偶数**——减少延迟 ACK 的发生（滑动窗口协议每两个包回一个 ACK，奇数窗口会导致最后那个包的 ACK 被延迟）。
 3. **PROBE_BW 第 0 相再 +2**——保证即使 BDP 很小，探测相位也能把 inflight 推到 BDP 之上。
 
-### EDT 感知的 inflight：为什么"在飞行中"不等于"在网络里"
+### EDT-aware inflight: Why 'In Flight' Does Not Equal 'In the Network'
 
 这是一个容易被忽略但很关键的细节。有了 fq qdisc 的 EDT（Earliest Departure Time）pacing 之后，**很多 skb 其实还排在发送端的 pacing 层里，带着一个未来的出发时间**，它们算在 `packets_in_flight` 里但并不在网络中。BBR 关心的是后者：
 
@@ -465,9 +465,9 @@ static u32 bbr_packets_in_net_at_edt(struct sock *sk, u32 inflight_now)
 
 这个函数用在三处：DRAIN 退出判据、PROBE_BW 相位推进判据、以及 `bbr_is_next_cycle_phase()` 的 inflight 比较。
 
-## 三个容易被忽略的子机制
+## Three Easily Overlooked Sub-mechanisms
 
-### ACK 聚合补偿：extra_acked
+### ACK Aggregation Compensation: extra_acked
 
 问题场景：接收端（或中间设备）把多个 ACK 攒起来一起发，形成"ACK 突发"。突发之间是一段静默，BBR 在这段静默里会因为没有 ACK 而停止发送，管道出现空洞。
 
@@ -487,7 +487,7 @@ static u32 bbr_packets_in_net_at_edt(struct sock *sk, u32 inflight_now)
 
 另外注意 `bbr_full_bw_reached(sk)` 是补偿的前提：管道还没填满时不加这个补偿。
 
-### 流量整形器检测：LT bandwidth sampling
+### Traffic Shaper Detection: LT bandwidth sampling
 
 令牌桶整形（policer）在网络里很常见（SIGCOMM 2016 的 "An Internet-Wide Analysis of Traffic Policing"）。面对 policer，BBR 的带宽探测会持续撞上令牌耗尽导致的丢包，探测行为本身变得有害。
 
@@ -531,7 +531,7 @@ static u32 bbr_packets_in_net_at_edt(struct sock *sk, u32 inflight_now)
 - **app-limited 就重置**（`tcp_bbr.c:718`）：避免低估。
 - **间隔长度限制**：至少 4 个 round（`bbr_lt_intvl_min_rtts`），超过 `4 × 4 = 16` 个 round 就重置。
 
-### 丢包时怎么办：packet conservation
+### What to Do on Packet Loss: Packet Conservation
 
 BBR 的核心不响应丢包，但完全无视丢包会让丢包率失控。折中方案在 `bbr_set_cwnd_to_recover_or_restore()`（`tcp_bbr.c:481`）：
 
@@ -590,9 +590,9 @@ BBR 的核心不响应丢包，但完全无视丢包会让丢包率失控。折�
 
 进入 Loss 状态（即 RTO 触发）时，清空 `full_bw`（重新探测管道是否满）、把这次当成一轮结束、并给 LT 采样器喂一个"丢了 1 个包"的合成样本。这是 BBR 对 RTO 唯一的直接反应——它**不乘性减窗口**，只是让模型重新收敛。
 
-## BBR 与内核其他部分的接口
+## BBR Interface with Other Kernel Parts
 
-### tcp_congestion_ops 注册
+### tcp_congestion_ops Registration
 
 ```c
 static struct tcp_congestion_ops tcp_bbr_cong_ops __read_mostly = {
@@ -633,7 +633,7 @@ static struct tcp_congestion_ops tcp_bbr_cong_ops __read_mostly = {
 
 **`SK_PACING_NEEDED`** 就是前面说的 pacing 要求：没有 fq qdisc 时内核用每 socket 一个 hrtimer 的软件 pacing 兜底。
 
-### 观测：ss 能看到什么
+### Observation: What ss Can See
 
 `bbr_get_info()`（`tcp_bbr.c:1108`）通过 `INET_DIAG_BBRINFO` 暴露内部状态：
 
@@ -651,7 +651,7 @@ static struct tcp_congestion_ops tcp_bbr_cong_ops __read_mostly = {
 
 `ss -ti` 里看到的 `bbr:(bw:..., mrtt:..., pacing_gain:..., cwnd_gain:...)` 就是这个。带宽拆成 lo/hi 两个 u32 是因为字节/秒的值可能超过 32 位。
 
-### 启用方式
+### How to Enable
 
 ```bash
 # 确认模块可用
@@ -666,7 +666,7 @@ tc qdisc replace dev eth0 root fq
 
 Kconfig 里 `DEFAULT_TCP_CONG` 的默认值仍是 `cubic`（`net/ipv4/Kconfig`），BBR 需要显式选。
 
-## 局限与争议
+## Limitations and Controversies
 
 如实记录，不粉饰：
 
@@ -677,7 +677,7 @@ Kconfig 里 `DEFAULT_TCP_CONG` 的默认值仍是 `cubic`（`net/ipv4/Kconfig`�
 5. **BBRv2 / v3 不在主线内核**。v7.2.7 的 `net/ipv4/` 下只有 `tcp_bbr.c`。想要 BBRv2 的行为需要用 Google 的分支或第三方补丁，评估时必须分清版本。
 6. **需要 fq 才能发挥**。没有 EDT pacing 时退化为 per-socket hrtimer，精度和 CPU 开销都变差。
 
-## 与其他笔记的关系
+## Relationship with Other Notes
 
 BBR 不是孤立的一块，它依赖的三个上游都在本目录其他笔记里：
 

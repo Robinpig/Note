@@ -20,7 +20,7 @@ MirrorMaker v2（MM2）把一个 Kafka 集群的 topic、配置、ACL 与消费�
   （三个 connector 都跑在 Connect 分布式集群上）
 ```
 
-## 4.x 状态
+## 4.x Status
 
 > [!IMPORTANT]
 > **MM2 在 4.x 仍是官方推荐的跨集群复制方案，未被 Connect 的其他 connector 取代。**
@@ -37,7 +37,7 @@ MirrorMaker v2（MM2）把一个 Kafka 集群的 topic、配置、ACL 与消费�
 >
 > 即「MM1 与 MM2 并存」的说法已过时，现在只有 MM2。
 
-## 三个 Connector 的分工
+## Division of Labor Among Three Connectors
 
 `connect/mirror/src/main/java/org/apache/kafka/connect/mirror/` 完整类清单：
 
@@ -56,18 +56,18 @@ MirrorMaker v2（MM2）把一个 Kafka 集群的 topic、配置、ACL 与消费�
 >
 > `MirrorSourceConnector.java:84` → `class MirrorSourceConnector extends SourceConnector`，未标 deprecated。
 
-## 关键配置默认值
+## Key Configuration Defaults
 
 `connect/mirror/src/main/java/org/apache/kafka/connect/mirror/MirrorConnectorConfig.java` 等：
 
-### 集群标识
+### Cluster Identifier
 
 | 配置名 | 默认值 | 出处 |
 | ------ | ------ | ---- |
 | `source.cluster.alias` | `source` | MirrorConnectorConfig.java:75 |
 | `target.cluster.alias` | `target` | :78 |
 
-### 复制策略
+### Replication Strategy
 
 | 配置名 | 默认值 | 出处 |
 | ------ | ------ | ---- |
@@ -75,7 +75,7 @@ MirrorMaker v2（MM2）把一个 Kafka 集群的 topic、配置、ACL 与消费�
 | `replication.policy.separator` | `,` | MirrorClientConfig.java:57 |
 | `replication.policy.internal.topic.separator.enabled` | **true** | MirrorClientConfig.java:66 |
 
-### 内部 topic
+### Internal topic
 
 | 配置名 | 默认值 | 出处 |
 | ------ | ------ | ---- |
@@ -86,7 +86,7 @@ MirrorMaker v2（MM2）把一个 Kafka 集群的 topic、配置、ACL 与消费�
 | `replication.factor`（远端 topic）| **2** | MirrorSourceConfig.java:37 |
 | `heartbeats.replication.enabled` | true | MirrorConnectorConfig.java:95 |
 
-### 周期与刷新
+### Cycle and Refresh
 
 | 配置名 | 默认值 | 出处 |
 | ------ | ------ | ---- |
@@ -105,7 +105,7 @@ MirrorMaker v2（MM2）把一个 Kafka 集群的 topic、配置、ACL 与消费�
 | `consumer.poll.timeout.ms` | 1000 | MirrorSourceConfig.java:59 |
 | `offset.lag.max` | 100 | MirrorSourceConfig.java:89 |
 
-### 转发与过滤
+### Forwarding and Filtering
 
 | 配置名 | 默认值 | 出处 |
 | ------ | ------ | ---- |
@@ -121,7 +121,7 @@ MirrorMaker v2（MM2）把一个 Kafka 集群的 topic、配置、ACL 与消费�
 >
 > group 侧同理：`MirrorCheckpointConfig.java:31,34`。
 
-## 内部 topic 名是动态拼接的
+## Internal topic Name Is Dynamically Concatenated
 
 > [!IMPORTANT]
 > **没有 `checkpoint.topic` 这样的配置项** —— 内部 topic 名由 `DefaultReplicationPolicy` 动态生成。
@@ -140,13 +140,13 @@ MirrorMaker v2（MM2）把一个 Kafka 集群的 topic、配置、ACL 与消费�
 > [!NOTE]
 > **`__cluster_metadata` 不是 MM2 的目标 topic** —— 它是 **KRaft 集群自身的 metadata log**（`clients/.../internals/Topic.java:30`）。MM2 复制 ACL 时是从源集群读 ACL 再在目标集群**重新创建**（`sync.topic.acls.*`），不是往 `__cluster_metadata` 写。
 
-## Exactly-once 支持
+## Exactly-once Support
 
 `MirrorSourceConnector.java:91` 定义 `EXACTLY_ONCE_SUPPORT_CONFIG = "exactly.once.support"`，`:254` 判断 `"required".equals(...)` 并在 `:257-260` 注入 ConfigValue 做校验。
 
 取值与 Connect 一致：**`requested`（默认）/ `required`**，无 `disabled`/`enabled`。见 [Connect](/docs/CS/MQ/Kafka/Connect.md)。
 
-## 需要打假的常见说法
+## Common Claims That Need Debunking
 
 | 说法 | 4.3.1 实况 |
 | ---- | --------- |
@@ -158,7 +158,7 @@ MirrorMaker v2（MM2）把一个 Kafka 集群的 topic、配置、ACL 与消费�
 | 「目标集群有 `__cluster_metadata` 供 MM2 写入」 | ❌ 那是 KRaft 自身的 metadata log |
 | 「MM2 是独立进程」 | ❌ 是 **Connect connector**，跑在 Connect 分布式集群上 |
 
-## 未查到清单
+## List Not Found
 
 - MM2 在 4.x 相对 3.x 的新增特性（本次仅核实源码现状，未逐版本比对 changelog）
 - `metric.names.format` 的完整可选值（默认 `legacy`，`MirrorConnectorConfig.java:128`，已标 Deprecated）

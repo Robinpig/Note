@@ -10,3 +10,4 @@ Scala combines object-oriented and functional programming in one concise, high-l
 - [include "os_posix.hpp"](/docs/CS/Java/JDK/JVM/JVM.md)
 - [Loom](/docs/CS/Java/JDK/Loom.md)
 - [Agent](/docs/CS/Java/JDK/Agent.md)
+- [编程语言横向对比](/docs/CS/Languages.md)

@@ -6,7 +6,7 @@
 
 Claude Code 这个命令行工具另有专篇 [Claude Code](/docs/CS/AI/LLM/Agent/Product/ClaudeCode.md)。本文只记模型本身。
 
-## 当前阵容
+## Current Lineup
 
 | 模型 | API ID | 发布 | 上下文 | 最大输出 | 输入 | 输出 | 知识截止 |
 | :--- | :--- | :--- | :--- | :---: | :---: | :---: | :--- |
@@ -19,7 +19,7 @@ Claude Code 这个命令行工具另有专篇 [Claude Code](/docs/CS/AI/LLM/Agen
 
 同平台还有 **Claude Mythos 5.1**：与 Fable 5.1 **同一个底层模型、不同 safeguards**，只通过 trusted access programs（Project Glasswing）向经过审核的网络安全与生命科学机构开放，不在公开定价页里。
 
-## 能力档位与 effort
+## Capability Tiers and effort
 
 Claude 的推理控制是 **effort 参数**，取值 `low / medium / high / xhigh / max`，配合 **adaptive thinking**——始终开启且**无法关闭**。
 
@@ -37,7 +37,7 @@ Claude 的推理控制是 **effort 参数**，取值 `low / medium / high / xhig
 - **工具调用也变了**：强制工具使用（`tool_choice` 为 `any` 或指定 `tool`）在 Opus 5.5 与 Fable 5.1 上直接报错；旧的 `computer_20251124` computer use 工具在 Claude API 与 Google Cloud 上不再接受，需改用 `computer_toolset_20260801`。
 - **另一个不报错但会静默改变响应形状的改动**：工具调用之间的文本现在放在 thinking block 里，默认 display 设置下这些 block 的 text 为空。**把这段文本当进度更新流式推给用户的应用，在两次工具调用之间会突然安静下来**，直到显式设置一个能返回该文本的 display 值。
 
-## 定价与缓存
+## Pricing and Caching
 
 | 模型 | 输入 | 5 分钟缓存写入 | 1 小时缓存写入 | 缓存读取 | 相对缓存倍率 |
 | :--- | :---: | :---: | :---: | :---: | :---: |
@@ -57,13 +57,13 @@ Claude 的推理控制是 **effort 参数**，取值 `low / medium / high / xhig
 - **fast mode 目前只有 Opus 5.5 有**，价格 2 倍标准价（$8／$40），宣称最高约 2.5× 速度。Sonnet 5.5 没有 fast mode。
 - **US-only inference 单价1.1×**（输入与输出），与 OpenAI 的区域处理加价幅度一致。Bedrock 上按区域定价，见下方多平台一节。
 
-## 参数量 未公开
+## Parameter Count: Not Disclosed
 
 **Anthropic 从未官方公开过任何 Claude 模型的参数量。** Opus 5.5 与 Sonnet 5.5 的官方模型页与系统卡都只描述训练方法（「在大型多样化数据集上预训练，之后进行大量后训练以对齐 Claude 宪法」），**不给参数量、不给权重规模、不给 dense 还是 MoE、不给层数与专家数**。
 
 网上流传的「Opus 5T／Sonnet 1T」等数字来源是马斯克在讨论 xAI Colossus 2 算力时的一句比较（说 Grok 是Sonnet 的一半、Opus 的十分之一），以及各类二手推算，**都不是 Anthropic 的披露**。这类数字连对应哪一版模型都不确定，不要写进技术方案。官方唯一给出的规模相关表述是「Opus 5.5 服务所需的算力低于 Opus 5」——这是计算效率声明，不能反推参数。
 
-## Sonnet 5.5 的安全变更
+## Sonnet 5.5 Security Changes
 
 Sonnet 5.5 是这一代最容易被低估的模型，它带了两项**其他 Sonnet 没有的**机制：
 
@@ -90,7 +90,7 @@ Claude 的型号历史比 OpenAI 更连续，但2026 年 6 月发生了一件值
 
 其他版本节点：Opus 4.6 → 4.7 → 4.8 → Opus 5（2026-07-24，接近 Fable 5 智能水平、价格减半）→ Opus 5.5。Opus 5.5 单位价格比 Opus 5 低 20%（$5→$4、$25→$20），缓存读取低 60%，Anthropic 称综合token 用量下降后典型负载**总成本降约 40%**——**这是复合降价，不是单价降价**，两个因子都会动。Opus 5 与 4.6／4.8 同价（$5／$25）、Sonnet 4.6（$3／$15）也更贵，**当前每一档里最新的型号都是最便宜的或并列最便宜的**。
 
-## 基准
+## Benchmarks
 
 厂商自报，且两家选的评测集不同、effort 设定与 harness 不同，**不是受控对比**。
 
@@ -113,7 +113,7 @@ Claude 的型号历史比 OpenAI 更连续，但2026 年 6 月发生了一件值
 - **FrontierCode v1.1 会惩罚越界改动**，即使改动本身质量高。Sonnet 5.5 在 max effort 下得分反而低于 xhigh，因为更常调用 Claude Code 的 code-review skill（把评审拆给多个子智能体），两次出现超时或超范围编辑。**这个基准对「爱干净」的模型有系统性偏差**。
 - Sonnet 5.5 的 GDPval-AA 与 AA-Briefcase 由 Artificial Analysis 跑，Chartography 来自 Surge AI；OpenAI 同期修复了 GPT-6 Sol 图像理解的 bug，公开数字可能未反映。
 
-## 多平台
+## Multi-Platform
 
 同一批模型在五个平台上架，价格一致：
 
@@ -129,7 +129,7 @@ Claude 的型号历史比 OpenAI 更连续，但2026 年 6 月发生了一件值
 
 `claude-opus-5-5` 这类**不带日期后缀的名字是便利别名**，会解析到固定快照（Haiku 4.5 是 `claude-haiku-4-5` → `claude-haiku-4-5-20251001`）。要真正锁死行为就用带日期的快照。
 
-## 模型选择建议
+## Model Selection Recommendations
 
 - **不确定就用 `claude-opus-5-5`**。Anthropic 自己在每个模型页都写这句：Opus 5.5 在多数工作上达到 Fable 5.1 的水平，价格只有 Fable 5.1 的 40%。只有当你在更高 effort 下自建评测仍然不够时，才需要为 Fable 5.1 的 2.5 倍溢价买单。
 - **主力编码与知识工作用 `claude-sonnet-5-5`**。与 Sonnet 5 同价（$2／$10），但更快 30%+、每任务 token 数更少，**Anthropic 估算每任务成本最多降 30%**——省的是 token 量不是费率，这与 2026 年多数「价格不变但推理 token 暴涨」的升级方向相反，值得在自己流量上验证。Sonnet 5.5 也是 Claude Code 生态里的默认档。

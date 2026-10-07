@@ -57,7 +57,7 @@ Fielding 给出的 REST 约束（满足全部才是真正的 REST，多数所谓
 从而服务端可以在不破坏老客户端的前提下调整 URI 与流程。HATEOAS 是统一接口约束里「最常被省略」的一条，
 绝大多数业务 API 只做到资源 + HTTP 方法，属 Richardson 成熟度模型的第 2 级，HATEOAS 才是第 3 级。
 
-## REST vs RPC
+## REST and RPC
 
 | 维度 | RESTful | RPC（gRPC/Dubbo 等） |
 | --- | --- | --- |

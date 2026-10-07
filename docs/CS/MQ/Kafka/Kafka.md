@@ -76,7 +76,7 @@ Kafka 的骨架是一条顺序写的日志，所有能力都围绕它展开。�
 >
 > **默认值陷阱**：`log.retention.hours` 只是三级兜底（权威是 `.ms`）；`flush.ms` 默认 `Long.MAX_VALUE` 即**默认不主动刷盘**；`authorizer.class.name` 默认空串即**无任何 ACL 校验**；`ssl.trustmanager.algorithm` 默认是 JVM 动态值而非 `PKIX`；客户端 `group.protocol` 默认 `classic`，服务端虽已启用 KIP-848 但需显式设置。
 
-## 主题导航
+## Topic Navigation
 
 Kafka 的主线是「**顺序写的日志** + **独立于日志的复制协议** + **两种消费模型**」，三者各成一篇：
 
@@ -926,7 +926,7 @@ Broker replica.fetch.max.bytes
 Consumer fetch.message.max.bytes
 ```
 
-### 消息丢失
+### Message Loss
 
 - Producer: Kafka只对“已提交”的消息（committed message）做有限度的持久化保证 - ACK and ISR
   - send是异步 可设置retry和callback
@@ -936,7 +936,7 @@ Consumer fetch.message.max.bytes
   - 新增分区时 消费auto.offset.reset earliest
   - 使用多线程消费消息时关闭自动提交 需注意消息重复
 
-### 消息重复
+### Message Duplication
 
 - Producer idempotent and transaction
 - Consumer

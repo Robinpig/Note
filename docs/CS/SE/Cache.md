@@ -63,7 +63,7 @@ Design strategies and characteristics of different In-Memory engines can be appl
 
 
 
-### 缓存特征
+### Cache Characteristics
 
 命中率
 
@@ -224,7 +224,7 @@ Write Behind Caching 模式与 Read/Write Through 模式类似，也由数据存
 
 
 
-## 缓存失效
+## Cache Invalidation
 
 
 缓存策略与如何从缓存中加载和检索数据有关，而缓存失效则更多的与记录系统和缓存之间的数据一致性和新鲜度有关。
@@ -253,7 +253,7 @@ If all your product data expires at the same time and your application is under 
 Depending on the load, that could generate too much pressure on your database, resulting in poor performance.
 By adding slight jitter to your TTLs, a randomly-generated time value (for example, TTL = your initial TTL value in seconds + jitter) would reduce the pressure on your backend database and also reduce the CPU use on your cache engine as a result of deleting expired keys.
 
-## 缓存驱逐
+## Cache Eviction
 
 缓存驱逐与缓存失效类似，都是删除旧的缓存记录。但两者区别在于，当缓存已满，无法再容纳任何记录时，就需要进行缓存驱逐。
 
@@ -564,7 +564,7 @@ Cache a subset of a fetched database row into a custom structure that can be con
 | Memcached | 是    | 只有K/V       | 无 不支持灾难恢复 | 多线程                |
 
 
-## 缓存一致性
+## Cache Consistency
 
 大多数情况下都是最终一致性 要实现强一致性需要有分布式锁的设计 或者队列处理 降低性能
 

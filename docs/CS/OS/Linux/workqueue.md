@@ -11,7 +11,7 @@
 与 [softirq 和 tasklet](/docs/CS/OS/Linux/Interrupt.md?id=softirq) 相比，workqueue 的唯一本质区别是
 **运行在进程上下文，因此可以睡眠**。代价是它有线程调度开销，不适合高频、极低延迟的场景。
 
-## 下半部三件套
+## The Bottom-half Trio
 
 Linux 的"下半部"其实有三套机制，它们不是替代关系，而是按**能否睡眠**分层：
 
@@ -30,7 +30,7 @@ Linux 的"下半部"其实有三套机制，它们不是替代关系，而是按
 6.12 还新增了 **BH workqueue**（`WQ_BH`），它在 softirq 上下文执行、开销接近 tasklet，
 但复用 workqueue 的 API 与并发管理——相当于补上了"不睡眠但要简单接口"这一档。
 
-## 五层数据结构
+## Five-layer Data Structures
 
 workqueue 的实现把"队列"拆成了五层，理解它们的分工是读懂源码的前提：
 
@@ -225,7 +225,7 @@ struct worker {
 worker 是真正的 kworker 线程**。多个 workqueue 可以共享同一个 pool，pool 里的 worker
 不挑队列，来什么活干什么活。
 
-## 三类 worker pool
+## Three Classes of worker pool
 
 **per-CPU pool（默认）**：每个 CPU 两个标准池（`NR_STD_WORKER_POOLS = 2`，普通与高优先级）。
 好处是缓存局部性好；坏处是它会**打破 CPU 的空闲状态**——从中断里提交一个工作项，
@@ -250,7 +250,7 @@ worker 是真正的 kworker 线程**。多个 workqueue 可以共享同一个 po
 系统因此多出两个预置队列：`system_bh_wq` 与 `system_bh_highpri_wq`，注释里写得很明白——
 "convenience interface to softirq"。
 
-## 创建 workqueue
+## Creating workqueue
 
 ```c
 __printf(1, 4) struct workqueue_struct *
@@ -328,7 +328,7 @@ alloc_workqueue(const char *fmt, unsigned int flags, int max_active, ...);
 `schedule_work()` 就是往 `system_wq` 上提交——所以别往它上面挂长跑任务，
 文档明确说"Don't queue works which can run for too long"。
 
-## 提交：从 queue_work 到 worklist
+## Submission: From queue_work to worklist
 
 所有提交 API 最终都汇到 `__queue_work()`：
 
@@ -425,7 +425,7 @@ retry:
 
 先看 `inactive_works` 是否为空，是为了在 `max_active` 变化时不打乱提交顺序。
 
-## 执行：worker 线程的主循环
+## Execution: The Main Loop of worker Threads
 
 worker 就是一个内核线程，主循环在 `worker_thread()`：
 
@@ -535,7 +535,7 @@ static void process_scheduled_works(struct worker *worker)
 }
 ```
 
-## 并发管理 CMWQ
+## Concurrency Management CMWQ
 
 "需要几个线程"是 workqueue 最核心的设计问题。早期实现是每个队列固定几个线程，
 结果要么不够用、要么浪费。现代内核用 **CMWQ（Concurrency Managed Workqueue）**：
@@ -644,7 +644,7 @@ void wq_worker_tick(struct task_struct *task)
 }
 ```
 
-## 兜底：rescuer 与 mayday
+## Fallback: rescuer and mayday
 
 有一个场景会让 CMWQ 死锁：**内存回收路径要用到 workqueue**，但创建新 worker 本身
 需要分配内存。内存紧张时"分配 worker → 要回收 → 回收要用 workqueue → 需要 worker"，
@@ -677,7 +677,7 @@ static void send_mayday(struct work_struct *work)
 统计里有专门的 `PWQ_STAT_MAYDAY` 与 `PWQ_STAT_RESCUED` 两个计数——正常运行的系统里
 它们应该始终为 0，非 0 说明发生过资源危机。
 
-## 控制与观测
+## Control and Observation
 
 **等待与取消**是调用方最常用的操作：`flush_work()` 等某个工作项跑完，
 `flush_workqueue()` 等队列清空，`cancel_work_sync()` / `cancel_delayed_work_sync()`
@@ -695,7 +695,7 @@ static void send_mayday(struct work_struct *work)
 - `CONFIG_DEBUG_OBJECTS_WORK` 与 lockdep 会校验 work 的生命周期与锁依赖，
   `process_one_work()` 末尾还会检查工作函数有没有泄漏 atomic/RCU/锁。
 
-## 与其它子系统的边界
+## Boundaries with Other Subsystems
 
 - **中断与 softirq**：上半部提交工作是最典型用法；6.12 起 `WQ_BH` / `system_bh_wq`
   把工作放回 softirq 上下文，与 [softirq](/docs/CS/OS/Linux/Interrupt.md?id=softirq) 直接衔接。

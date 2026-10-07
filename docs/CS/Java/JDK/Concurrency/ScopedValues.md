@@ -5,7 +5,7 @@ ScopedValue 提供一种**安全、高效地在线程内及跨线程共享不可
 （JEP 446/464/481/487），最终在 **JDK 25 转正（JEP 506）**。在大量 [VirtualThread](/docs/CS/Java/JDK/Concurrency/VirtualThread.md)
 并发的程序中，它的优势尤其明显。
 
-## ThreadLocal 的问题
+## ThreadLocal Issues
 
 ThreadLocal 能做到「每个线程一份变量」，但作为上下文传递手段有几个结构性缺陷：
 

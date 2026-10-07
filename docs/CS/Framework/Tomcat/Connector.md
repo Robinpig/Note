@@ -450,7 +450,7 @@ public void run() {
 
 另一处删除：9.x 在 `catch (Throwable t)` 里有一段 APR 专属判断（`t instanceof Error && e.getError() == 233`，为 HP-UX 上的 accept 假错误降级别，bug 50273）。APR 移除后这段连带消失，现在只剩一行 `log.error`。
 
-摘流与停机的完整路径（`pause()`、`resume()`、`closeServerSocketGraceful()`、`awaitConnectionsClose()`、`Acceptor.stopMillis()`）见 [Tomcat 的故障处理一节](/docs/CS/Framework/Tomcat/Tomcat.md?id=故障处理)。
+摘流与停机的完整路径（`pause()`、`resume()`、`closeServerSocketGraceful()`、`awaitConnectionsClose()`、`Acceptor.stopMillis()`）见 [Tomcat 的故障处理一节](/docs/CS/Framework/Tomcat/Tomcat.md?id=fault-handling)。
 
 ### setSocketOptions
 

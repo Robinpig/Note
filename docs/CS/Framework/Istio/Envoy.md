@@ -5,15 +5,15 @@ Istio 的 sidecar、gateway、waypoint 都是 **Envoy**。理解 Istio 的行为
 > [!NOTE]
 > 版本基线（2026-10 核实）：**Envoy v1.39.2**（2026-10-01 发布）。注意两个易错点：① GitHub `releases/latest` 指针**滞后**，仍返回 v1.39.1（2026-08-27），v1.39.2 虽已正式发布但 `latest` 未更新；② Envoy 官方文档站 `latest` 对应的是 **1.40.0-dev 开发分支快照**，引用具体默认值应改用版本化 URL 避免漂移。Envoy 仍在并行维护多个 minor 分支（2026-10-01 同日发布 v1.39.2 / v1.38.5 / v1.37.7 / v1.36.11），不是单线。
 
-## Envoy 在网格中的位置
+## Envoy Position in the Mesh
 
 Istio 使用**扩展版 Envoy**（C++）作为**唯一与数据面流量交互的组件**。sidecar、ingress gateway、waypoint 是同一内核的三种部署形态——这也是为什么 waypoint 能直接复用 sidecar 的全部 L7 能力。
 
 Envoy 自身提供的能力：动态服务发现、负载均衡、TLS 终止、HTTP/2 与 gRPC 代理、断路器、健康检查、按百分比切流的渐进发布、故障注入与丰富指标。
 
-## xDS 与配置层级
+## xDS and Configuration Hierarchy
 
-### 8 种资源类型
+### 8 Resource Types
 
 官方 xDS 协议完整枚举是 8 种（常被误认为 5 种）：
 
@@ -34,7 +34,7 @@ Envoy 自身提供的能力：动态服务发现、负载均衡、TLS 终止、H
 - **EDS 的粒度限制**：xDS 以整个命名资源为单位更新，**目前不能只对某个 EDS 资源中的单个 endpoint 做增量更新**。
 - **Delta xDS 只支持 gRPC 双向流**（`There is no REST version of Incremental xDS yet.`）；SotW 则支持 gRPC、REST-JSON。
 
-### ADS 的 make-before-break 顺序
+### ADS make-before-break Ordering
 
 官方推荐的更新顺序（也是 Istio 推送顺序的依据）：
 
@@ -45,7 +45,7 @@ CDS（先加新 Cluster）→ EDS（提供端点）→ LDS（加引用它们的 
 
 目的是「确保路由开始引用新资源之前，新资源已经可用」，减少更新期间的流量黑洞。
 
-### 处理链层级
+### Processing Chain Hierarchy
 
 ```text
 Listener（配置树根，Envoy 启动时获取全部 Listener）
@@ -58,9 +58,9 @@ Listener（配置树根，Envoy 启动时获取全部 Listener）
 
 容易忽略的一点：**route table 归 HCM 所有，被所有 HTTP filter 共享**，不只是 router 用。官方举例：内置限流过滤器会查询 route table 决定是否调用全局限流服务，router 只是「主要消费者」。
 
-## 匹配语义（两处高频误解）
+## Matching Semantics (Two Common Misconceptions)
 
-### vhost 匹配：4 级优先级
+### vhost matching: 4-Level Priority
 
 官方明确顺序：
 
@@ -71,7 +71,7 @@ Listener（配置树根，Envoy 启动时获取全部 Listener）
 
 约束：`The longest wildcards match first`；**整个 route configuration 中只能有一个 vhost 用 `*`**；**域名跨 vhost 重复会导致配置加载失败**。
 
-### route 匹配：没有「精确优先」
+### route matching: No "Exact First"
 
 这是最容易写错的一处。`RouteMatch` 的路径匹配器是**互斥 oneof**：
 
@@ -79,7 +79,7 @@ Listener（配置树根，Envoy 启动时获取全部 Listener）
 
 **这些匹配器之间不存在「精确路径自动优先于前缀」「前缀自动最长优先」的全局优先级**，规则纯顺序优先：`The first route that matches will be used.` 因此 catch-all 路由（`prefix: /`）必须放在具体路由之后。
 
-### Generic Matching 引擎
+### Generic Matching Engine
 
 Envoy 新增的替代方案（在 vhost 上挂 `matcher`，动作为 `Route`/`RouteList`）：
 
@@ -94,7 +94,7 @@ Envoy 新增的替代方案（在 vhost 上挂 `matcher`，动作为 `Route`/`Ro
 > - `safe_regex` 的类型是 `type.matcher.v3.RegexMatcher`，仅在 `RouteAction.regex_rewrite` 示例中见到「Google's RE2 engine」措辞；**「google_re2 是唯一支持引擎」未找到原文依据**。另外 Generic Matching 页提到的 regex matcher 官方措辞是 **Hyperscan**，两者不要混用。
 > - CEL 当前主要落点是 **RBAC/授权与访问日志策略表达式**及 External API。
 
-## 扩展机制
+## Extension Mechanism
 
 ### Wasm
 
@@ -105,15 +105,15 @@ Envoy 新增的替代方案（在 vhost 上挂 `matcher`，动作为 `Route`/`Ro
 - **执行模型**：Wasm 模块在配置时于**主线程加载**，主实例克隆到各 worker 线程；**worker 线程不共享 Wasm 执行实例和运行时内存**。异步/阻塞操作委托给 Envoy，完成后回调插件。
 - 通过 `proxy_call_foreign_function` 暴露 CEL 能力：`expr_create` / `expr_evalute`（官方拼写如此）/ `expr_delete`。
 
-### 内置扩展点过滤器
+### Built-in Extension Point Filters
 
 `ext_authz`、`ext_proc`、`lua`、`wasm`、`rate_limit`、`router`（均已确认存在于官方文档）。
 
-### EnvoyFilter 是 Istio CRD，不是 Envoy 特性
+### EnvoyFilter is an Istio CRD, Not an Envoy Feature
 
 Istio 1.31 新增 `MERGE_AND_REPLACE_LIST` 补丁操作（行为像 MERGE，但 list 字段**整体替换**而非追加），适用于 `CLUSTER` / `LISTENER` / `FILTER_CHAIN` / `ROUTE_CONFIGURATION` / `VIRTUAL_HOST` / `HTTP_ROUTE` 六类 patch target；**嵌套在 Any 类型 filter 配置内部的 list 仍为 MERGE 语义**。
 
-## 自适应并发（Adaptive Concurrency Filter）
+## Adaptive Concurrency (Adaptive Concurrency Filter)
 
 Envoy 内置过滤器，**在 Envoy 侧默认启用**：
 
@@ -126,7 +126,7 @@ enabled:
 > [!WARNING]
 > 必须区分两个「默认」：这是 **Envoy 侧过滤器自身启用默认**，**与 Istio 是否为 sidecar/waypoint 下发该过滤器是两回事**——Istio 1.31 官方文档**无** Istio 默认启用 adaptive concurrency 的证据。
 
-### 算法（两个易错公式）
+### Algorithm (Two Error-Prone Formulas)
 
 ```text
 gradient = minRTT + B × sampleRTT      B = minRTT × buffer_pct
@@ -139,7 +139,7 @@ limit_new = gradient × limit_old + headroom
 
 官方示例默认值（**是示例而非产品默认**）：`sample_aggregate_percentile: 90`、`concurrency_update_interval: 0.1s`、`min_concurrency_limit: 25`、`min_concurrency: 50`、`jitter: 10`（0~6s 随机延迟）、`interval: 60s`、`request_count: 50`。
 
-### 两个运维陷阱
+### Two Operations Traps
 
 1. **minRTT 测量窗口内 503 可能明显增加**，官方称 `This is expected`，建议开 reset/503 重试，可用 `min_concurrency_limit` 降低影响；官方推荐 **`previous_hosts` retry predicate**。
 2. **过滤器必须位于 healthcheck 过滤器之后**，否则健康检查流量被采样会污染 minRTT 精度。
@@ -148,7 +148,7 @@ limit_new = gradient × limit_old + headroom
 
 ## Gateway API
 
-### 版本与通道
+### Version and Channel
 
 **当前最新稳定版 v1.6.2（2026-09-03）**——注意不是 v1.2/v1.3。近期序列：v1.6.2 (2026-09-03) → v1.6.1 (2026-07-16) → v1.6.0 (2026-06-29)，上一 minor 线 v1.5.1 (2026-03-14)。
 
@@ -192,7 +192,7 @@ limit_new = gradient × limit_old + headroom
 
 1.31 还新增 `PILOT_ENABLE_STRICT_GATEWAY_MERGING`（**默认开启**）阻止 Istio `Gateway` CRD 与托管 Gateway API `Gateway` 跨 namespace 合并——两套 Gateway 混用时的隔离机制。
 
-## 网关实现横评
+## Gateway Implementation Comparison
 
 版本全部现场取自 GitHub API（2026-10）：
 
@@ -211,7 +211,7 @@ limit_new = gradient × limit_old + headroom
 
 Envoy Gateway v1.9 破坏性变更中与生态最相关：TCPRoute/UDPRoute 改用 `gateway.networking.k8s.io/v1`，**必须把 Gateway API CRD 升到 v1.6**，否则 **TCP/UDP route 会被静默跳过**；Lua `EnvoyExtensionPolicy` 默认禁用需显式 `enableLua`。
 
-### ingress-nginx 退役的生态影响
+### ingress-nginx Retirement Ecosystem Impact
 
 Kubernetes SIG Network 与安全响应委员会宣布 ingress-nginx 退役，**维护于 2026-03 终止**，此后不再有 release、bugfix 或安全更新；仓库转只读，**已有部署不会被破坏**（Helm chart 与镜像仍可获取）。
 

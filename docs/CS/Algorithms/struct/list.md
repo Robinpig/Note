@@ -12,6 +12,11 @@ Each structure contains the element and a pointer to a structure containing its 
 
 ## Links
 
-- [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
+- [数据结构](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
 - [stack](/docs/CS/Algorithms/struct/stack.md)
 - [queue](/docs/CS/Algorithms/struct/queue.md)
+
+## References
+
+1. [链表 - OI Wiki](https://oi-wiki.org/ds/linked-list/)
+2. [Slow and Two Pointers (Floyd's Cycle Detection) - CP-Algorithms](https://cp-algorithms.com/others/tortoise_and_hare.html)

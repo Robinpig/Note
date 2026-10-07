@@ -7,8 +7,7 @@
 
 
 
-## 快慢指针
-
+## Floyd's Cycle Detection
 对于链表找环路的问题，有一个通用的解法——快慢指针（Floyd 判圈法）
 给定两个指针，分别命名为 slow 和 fast，起始位置在链表的开头
 每次 fast 前进两步，slow 前进一步。如果 fast可以走到尽头，那么说明没有环路；如果 fast 可以无限走下去，那么说明一定有环路，且一定存在一个时刻 slow 和 fast 相遇
@@ -17,17 +16,14 @@
 
 
 
-## 滑动窗口
-
-
-
-
-
-
-
-
+## Sliding Window
 ## Links
 
 - [Array](/docs/CS/Algorithms/struct/array.md)
 - [Linked List](/docs/CS/Algorithms/struct/linked-list.md)
 - [Algorithm Design](/docs/CS/Algorithms/Algorithms.md)
+
+## References
+
+1. [双指针 - OI Wiki](https://oi-wiki.org/misc/two-pointer/)
+2. [Slow and Two Pointers (Floyd's Cycle Detection) - CP-Algorithms](https://cp-algorithms.com/others/tortoise_and_hare.html)

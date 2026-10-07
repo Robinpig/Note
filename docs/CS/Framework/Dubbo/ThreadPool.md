@@ -10,9 +10,9 @@ Dubbo 的线程模型分两层：**Dispatcher** 决定「哪些通道事件交�
 
 版本基线：Apache Dubbo **3.3.6**，源码 tag `dubbo-3.3.6`。本文所有 SPI 名、默认值、行号均取自该 tag 的官方源码文件。`Dispatcher` / `ChannelHandler` / `Transporter` 的接口结构已在 [remoting.md](/docs/CS/Framework/Dubbo/remoting.md) 展开，本文不重复，只聚焦线程模型选型、线程池参数默认值与消费端线程模型。
 
-## Dispatcher：五种派发模型
+## Dispatcher: Five Dispatch Models
 
-### 默认值与兼容 key
+### Default Values and Compatible key
 
 `Dispatcher` 的 SPI 默认扩展名是 `all`：
 
@@ -33,7 +33,7 @@ public interface Dispatcher {
 > [!NOTE]
 > `@Adaptive` 的 key 列表里除了正式的 `dispatcher`，还挂了拼错的 `dispather` 与 `channel.handler` 两个兼容 key，源码注释写明是历史遗留。配置里写 `dispather=direct` 在 3.3.6 上仍然生效，但不要在新配置里使用。
 
-### 五个扩展名与事件分流
+### Five Extension Names and Event Diversion
 
 SPI 注册文件共注册 5 个扩展名：
 
@@ -58,7 +58,7 @@ connection=org.apache.dubbo.remoting.transport.dispatcher.connection.ConnectionO
 
 `all` 是「什么都丢给业务线程池」：IO 线程只负责读写，不碰业务逻辑。`connection` 的关键在于 connected/disconnected 被路由到一个**单线程、按序执行**的连接事件池，保证同一连接的建连/断连事件不被乱序处理，避免连接状态机错乱——这是它在长连接频繁重建场景下的价值。
 
-### 什么时候会绕过线程池
+### When the Thread Pool Is Bypassed
 
 `direct` 与 `execution` 都会在特定条件下**不使用业务线程池**，直接在 IO 线程上调用下游 handler：
 
@@ -109,9 +109,9 @@ public void received(Channel channel, Object message) throws RemotingException {
 
 `getPreferredExecutorService(message)` 来自 `WrappedChannelHandler`：当 message 自带 executor（例如同步调用挂的 `ThreadlessExecutor`）时优先用它，否则用共享业务池。这正是消费端同步调用「回包在调用线程上被消费」的机制入口。
 
-## ThreadPool：四种实现与默认参数
+## ThreadPool: Four Implementations and Default Parameters
 
-### `@SPI` 默认是 fixed，`limited` 是死常量
+### `@SPI` Defaults to fixed, `limited` Is a Dead Constant
 
 ```java
 // dubbo-common/src/main/java/org/apache/dubbo/common/threadpool/ThreadPool.java:29-38
@@ -142,7 +142,7 @@ limited=org.apache.dubbo.common.threadpool.support.limited.LimitedThreadPool
 eager=org.apache.dubbo.common.threadpool.support.eager.EagerThreadPool
 ```
 
-### 四个实现的行为对照
+### Behavior Comparison of Four Implementations
 
 | 扩展名 | core / max | 空闲回收 | 兜底异常策略 | 适用 |
 | :--- | :--- | :--- | :--- | :--- |
@@ -156,7 +156,7 @@ eager=org.apache.dubbo.common.threadpool.support.eager.EagerThreadPool
 
 `eager` 的特殊之处在队列：它把 `queues <= 0` 归一成 `1` 再构造 `TaskQueue`，由 `EagerThreadPoolExecutor` 在 core 线程忙时**优先创建新线程**而不是入队，用来对抗「core 已满、任务却在无界队列里排队导致 max 形同虚设」的问题。
 
-### queues 的三态语义
+### Three-State Semantics of queues
 
 只有 `queues` 是三态。以 `FixedThreadPool` 为例：
 
@@ -190,11 +190,11 @@ if (queues == 0) {
 > [!TIP]
 > `queues` 传任意负值效果相同（只要有界队列与无界队列二选一），不要指望 `-1` / `-100` 代表不同的容量。真正能调容量的是 `>0` 的数值。
 
-## 消费端线程模型
+## Consumer Thread Model
 
 消费端是误解最集中的地方，分四点讲清楚。
 
-### 默认 `cached` 从何而来
+### Where the Default `cached` Comes From
 
 Provider 与 Consumer 走的是两套默认。`CommonConstants.java:133,135` 分别定义：
 
@@ -223,7 +223,7 @@ private void initExecutor(URL url) {
 
 注意用的是 `addParameterIfAbsent`：**只有 URL 上完全没有 `threadpool` 时才填 `cached`**，用户显式配置优先。Triple 协议的流式调用另有 `TripleProtocol.getOrCreateStreamExecutor`（:197-199）用同样的 `DEFAULT_CLIENT_THREADPOOL` 兜底。
 
-### 消费端线程池是全局共享的
+### The Consumer Thread Pool Is Globally Shared
 
 `DefaultExecutorRepository` 对消费者返回一个固定 key，所有消费者共用一个池：
 
@@ -239,7 +239,7 @@ private String getConsumerKey(ServiceModel serviceModel) {
 
 所以「给某个 Reference 单独调 `threads`」在消费端语义上要注意：池是按 `Integer.MAX_VALUE` 这个 key 建的，第一个消费者建池时的参数会决定之后所有消费者共享的那个池。想隔离得另想办法，而不是改单个 Reference 的 `threads`。
 
-### 同步调用不占消费端线程池
+### Synchronous Calls Do Not Occupy the Consumer Thread Pool
 
 这是最容易被忽略的一点。`AbstractInvoker.getCallbackExecutor` 在同步模式下返回 `ThreadlessExecutor`：
 
@@ -259,7 +259,7 @@ protected ExecutorService getCallbackExecutor(URL url, Invocation inv) {
 > [!NOTE]
 > 由此可推：「调大消费端 `threads` 能提高同步 RPC 吞吐」是错的。同步调用受限于调用方线程数与下游延迟，消费端池规模与它无关。要提升的是发起调用的业务线程池（通常是 Tomcat / 自有 Executor），不是 Dubbo 的消费端池。
 
-### 多 Reference 默认共享一条连接
+### Multiple References Share One Connection by Default
 
 Dubbo 协议下，`connections` 默认 `0` 表示**共享连接**：
 
@@ -315,9 +315,9 @@ private SharedClientsProvider getSharedClient(URL url, int connectNum) {
 > [!WARNING]
 > 默认情况下，**同一消费端进程里多个线程、多个 `@DubboReference` 调用同一个 Provider 地址，共用同一条 TCP 长连接**。这不是「每个 Reference 一条连接」。共享连接的代价是单连接成为吞吐与队头阻塞的瓶颈；`shareconnections` 调大或改用 `connections=N`（独占模式）才会得到多条连接。Triple 走 HTTP/2，多路复用特性让共享连接的影响小很多，但连接数仍由这些参数控制。
 
-## 线程模型调优
+## Thread Model Tuning
 
-### 场景到配置的映射
+### Mapping from Scenario to Configuration
 
 | 场景特征 | Dispatcher | ThreadPool | 关键参数 | 理由 |
 | :--- | :--- | :--- | :--- | :--- |
@@ -329,7 +329,7 @@ private SharedClientsProvider getSharedClient(URL url, int connectNum) {
 
 关于 `eager` 的适用性：它的 `TaskQueue` 只在 core 线程都忙时触发扩容，因此必须配合一个**很小的队列**。若给 `eager` 配一个大队列，任务会先排队，扩容时机被推迟，反而退化。
 
-### IO 线程数与 `iothreads`
+### IO Thread Count and `iothreads`
 
 `iothreads` 与业务线程池无关，它控制 Netty EventLoop 线程数，默认：
 
@@ -364,7 +364,7 @@ workerGroup = new NioEventLoopGroup(
 > [!TIP]
 > `iothreads` 一般**不需要调**。`min(CPU+1, 32)` 对绝大多数机器已经够用，盲目调大会增加上下文切换。真正该调的是业务线程池；而如果业务真的跑到了 IO 线程上（用了 `direct`），那才需要关注 `iothreads`。
 
-## 默认值汇总表
+## Default Value Summary Table
 
 | 项 | 默认值 | 来源 | 是否被 `getPositiveParameter` 兜底 |
 | :--- | :--- | :--- | :--- |
@@ -381,7 +381,7 @@ workerGroup = new NioEventLoopGroup(
 | `connections`（Dubbo 协议） | `0`（共享连接） | `DubboProtocol.java:453` | — |
 | `shareconnections` | `1` | `dubbo-rpc-dubbo/Constants.java:27` | — |
 
-## 陷阱清单
+## Pitfall List
 
 | 直觉写法 / 印象 | 源码实际 | 后果 |
 | :--- | :--- | :--- |

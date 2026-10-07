@@ -1,4 +1,4 @@
-# Istio Wasm 插件开发
+# Istio Wasm Plugin Development
 
 ## Introduction
 
@@ -9,7 +9,7 @@ Wasm 插件是 Istio 唯一「不改二进制就能加逻辑」的扩展机制�
 
 版本基线：**Istio 1.31.1**（2026-09-21 发布）。所有 CRD 字段核实自 `istio/istio@1.31.1` 的 `manifests/charts/base/files/crd-all.gen.yaml`（CRD schema 为权威，373-733 行）与 `istio/api` 的 `extensions/v1alpha1/wasm.proto`；仓库状态为 `api.github.com` 实测。
 
-## `WasmPlugin` CRD 字段速查
+## `WasmPlugin` CRD Field Quick Reference
 
 API group/version：**`extensions.istio.io/v1alpha1`**（1.31 中仍是 alpha，无 v1beta1/v1）。
 
@@ -48,7 +48,7 @@ API group/version：**`extensions.istio.io/v1alpha1`**（1.31 中仍是 alpha，
 >
 > **`type` 默认不是 `Istio::Envoy::Proxy`**，实际默认行为为 **HTTP**。
 
-## `WasmPlugin` → `TrafficExtension` 翻译
+## `WasmPlugin` → `TrafficExtension` Translation
 
 这是 1.31 的结构性变化。官方概念文档原文：
 
@@ -72,7 +72,7 @@ graph LR
 >
 > 二者不是「二选一替代」，而是「新旧两层封装」。
 
-## `WasmPlugin` vs `EnvoyFilter` 选型
+## `WasmPlugin` vs `EnvoyFilter` Selection
 
 | | `WasmPlugin` / `TrafficExtension` | `EnvoyFilter` |
 | :-- | :-- | :-- |
@@ -89,7 +89,7 @@ graph LR
 >
 > 官方对 EnvoyFilter 的警告原文：*"EnvoyFilter exposes internal implementation details that may change at any time. Please use extreme caution, especially around upgrades."*
 
-## 可用扩展点：只有 2 种 filter 类型
+## Available Extension Points: Only 2 Filter Types
 
 Istio 自己只用两种 wasm filter（`pkg/wellknown` + `pkg/convert.go`）：
 
@@ -105,7 +105,7 @@ envoy.extensions.filters.network.wasm.v3.Wasm    ← type: NETWORK
 >
 > 真正想挂到那些扩展点，路径是 `EnvoyFilter`（`applyTo` + `context`），而它**在 waypoint 上不可用**。
 
-## SDK 与仓库（实测状态，2026-10）
+## SDK and Repositories (Tested Status, 2026-10)
 
 > [!WARNING]
 > **记忆中的大量仓库名在 1.31 已不存在。** 实测 404 清单：
@@ -144,15 +144,15 @@ envoy.extensions.filters.network.wasm.v3.Wasm    ← type: NETWORK
 >
 > 另外 `webassemblyhub.io` 当前 **HTTP 520 不可用**；istio.io 的旧路径 `/v1.31/docs/ops/extensions/wasm/` 已 404，新路径是 `/docs/tasks/extensibility/wasm-modules/`。
 
-## 开发实操（以 Go 为例）
+## Development Practice (Using Go as Example)
 
-### Step 1 — 依赖
+### Step 1 — Dependencies
 
 ```go
 require github.com/proxy-wasm/proxy-wasm-go-sdk v0.0.0-<pseudo-version>
 ```
 
-### Step 2 — 编写 handler
+### Step 2 — Write Handler
 
 > [!WARNING]
 > **回调方法名与旧版教程不同。** `OnProxyStart` / `OnStreamComplete` / `OnContextCreate` / `OnContextDelete` / `OnLocalReply` 在当前 SDK 中**不存在**——那是旧版 API。
@@ -198,7 +198,7 @@ func (ctx *helloWorld) OnPluginStart(pluginConfigurationSize int) types.OnPlugin
 
 接口定义位置：`VMContext` / `PluginContext` / `TcpContext` / `HttpContext`。
 
-### Step 3 — 构建
+### Step 3 — Build
 
 SDK `Makefile` 的权威命令：
 
@@ -213,7 +213,7 @@ env GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o main.wasm ./main.go
 >
 > **`wasm-opt` 也不是必需**：在三个仓库中均无提及。Rust 侧靠 `opt-level=3 + lto=true + codegen-units=1` 在编译期优化。体积优化是有价值的工程实践，但**优化后必须重新计算 sha256**。
 
-### Step 4 — 部署清单
+### Step 4 — Deployment Manifest
 
 ```yaml
 apiVersion: extensions.istio.io/v1alpha1
@@ -244,7 +244,7 @@ spec:
 | 二进制大小上限 | `ISTIO_WASM_MAX_BINARY_SIZE_BYTES`，**默认 256MB** |
 | 模块缓存 | 每个 proxy 各自缓存，生命周期随 Pod，按 checksum 命名（`<sha256>.wasm`） |
 
-## 挂 waypoint 与 Issue 60530
+## Attaching Waypoint and Issue 60530
 
 1.31 之前，`WasmPlugin` 用 `targetRefs` 指向 Service 时会导致 **waypoint crash-loop**。
 
@@ -255,7 +255,7 @@ spec:
 >
 > 踩到这个坑时看到的报错措辞是 **TrafficExtension** 而不是 WasmPlugin——因为翻译已完成。
 
-## 本地调试
+## Local Debugging
 
 > [!WARNING]
 > **`istioctl proxy-config wasm` 不存在。** `istioctl/pkg/proxyconfig` 全部子命令是：`cluster`、`all`、`listener`、`envoy-stats`、`log`、`route`、`endpoint`、`eds`、`bootstrap`、`secret`、`rootca-compare`、`ecds`。
@@ -274,11 +274,11 @@ istioctl proxy-config ecds --file envoy-config.json
 >
 > （代码事实：`ecds` 子命令复用了 `edsPath`（`?include_eds=true`）作为 dump 路径，疑似疏漏；实际影响未验证。）
 
-## 安全边界：这不是访问控制机制
+## Security Boundary: This Is Not an Access Control Mechanism
 
 这是本章最重要的一节。
 
-### 沙箱能隔离什么
+### What the Sandbox Can Isolate
 
 官方文档对 Wasm 的定位是「**Full VM sandbox — a crash is contained to the plugin**」，且「A programming error or crash in one plugin doesn't affect other plugins」。
 
@@ -288,7 +288,7 @@ istioctl proxy-config ecds --file envoy-config.json
 
 fail-open 的实现方式：agent 转换失败时插入 RBAC filter 兜底（`allow` = 放行全部 / `deny` = 拒绝全部），stat prefix `wasm-default-allow` / `wasm-default-deny`。
 
-### 插件能访问什么
+### What Plugins Can Access
 
 | 类别 | 内容 |
 | :-- | :-- |
@@ -298,7 +298,7 @@ fail-open 的实现方式：agent 转换失败时插入 RBAC filter 兜底（`al
 | Stats / Logging | 指标与日志 |
 | `vmConfig.valueFrom: HOST` | **读取宿主 proxy 的环境变量** |
 
-### 插件能看到明文数据
+### Plugins Can See Plaintext Data
 
 已核实的事实链：
 
@@ -312,7 +312,7 @@ fail-open 的实现方式：agent 转换失败时插入 RBAC filter 兜底（`al
 >
 > mTLS 只保护「客户端 ↔ sidecar/waypoint」这一段，**不保护「sidecar/waypoint ↔ 后端应用」这一段**。一旦流量进入代理，插件即可见明文。
 
-### 因此风险评估的含义
+### Therefore the Meaning of Risk Assessment
 
 | 事实 | 推论 |
 | :-- | :-- |
@@ -328,7 +328,7 @@ fail-open 的实现方式：agent 转换失败时插入 RBAC filter 兜底（`al
 > [!WARNING]
 > **未核实的项不要写**：「沙箱无文件系统访问」（文档未明说）、**「无网络访问」（与文档冲突，文档明确列出 call out API）**、单个插件的 CPU/内存硬上限（只查到二进制大小 256MB 与 HTTP 拉取超时；V8 VM 级资源限制属 Envoy 侧，未取证）。
 
-## 常见失败模式
+## Common Failure Modes
 
 | 现象 | 排查 |
 | :-- | :-- |
@@ -341,7 +341,7 @@ fail-open 的实现方式：agent 转换失败时插入 RBAC filter 兜底（`al
 | 认证插件失效且放行 | 检查 `failStrategy` 是否为 `FAIL_OPEN`（应改 `FAIL_CLOSE`） |
 | 插件看不到 header | 检查 `phase` 位置与 `match.mode`（CLIENT/SERVER） |
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 | 层次 | 手段 |
 | :-- | :-- |

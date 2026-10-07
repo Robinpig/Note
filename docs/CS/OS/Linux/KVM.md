@@ -18,7 +18,7 @@ KVM（Kernel-based Virtual Machine）不是一个独立的虚拟机软件，而�
 
 第二个关键是**所有控制面都是 fd + ioctl**，没有自定义系统调用。本节后面会看到，一个虚拟机被拆成三个 fd，且第三个 fd 的数据交互不走 read/write，而是 mmap 共享页——这个取舍直接决定了 KVM 的性能特征。
 
-## 三个 fd 模型
+## Three fd Models
 
 KVM 把虚拟机的一切都表达成文件描述符，形成一条三层链：
 
@@ -28,9 +28,9 @@ open("/dev/kvm")          →  kvm fd     系统级：查询能力、创建 VM
        └─ KVM_CREATE_VCPU →  vcpu fd    vCPU 级：KVM_RUN、读写寄存器
 ```
 
-### ① /dev/kvm：一个 misc 设备
+### ① /dev/kvm: A misc Device
 
-KVM 复用了 [miscdevice](/docs/CS/OS/Linux/dev/char.md?id=快捷方式：miscdevice) 机制，主设备号固定 10、次设备号 `KVM_MINOR`：
+KVM 复用了 [miscdevice](/docs/CS/OS/Linux/dev/char.md?id=shortcut-miscdevice) 机制，主设备号固定 10、次设备号 `KVM_MINOR`：
 
 ```c
 static struct file_operations kvm_chardev_ops = {
@@ -66,7 +66,7 @@ static struct miscdevice kvm_dev = {
 
 即：第 0 页是 `struct kvm_run`（**每次退出的原因与数据都写在这里**），x86 上第 1 页是 PIO 数据页，第 2 页是合并 MMIO 环形缓冲；若启用了脏页环，后面还跟着若干页。
 
-### ② VM fd 与 vCPU fd：匿名 inode
+### ② VM fd and vCPU fd: Anonymous inode
 
 后两个 fd 都不是真实文件，而是用 `anon_inode_getfd()` 造出来的匿名 inode：
 
@@ -140,7 +140,7 @@ static vm_fault_t kvm_vcpu_fault(struct vm_fault *vmf)
 
 所以内核代码里出现的是 `vcpu->run->immediate_exit__unsafe`——那个 `__unsafe` 后缀不是变量名的一部分，而是编译器层面的提醒。
 
-### ③ struct kvm_run：退出信息
+### ③ struct kvm_run: Exit Information
 
 ```c
 /* for KVM_RUN, returned by mmap(vcpu_fd, offset=0) */
@@ -177,9 +177,9 @@ struct kvm_run {
 
 union 尾部那个 `padding[256]` 是为了固定大小——结构体大小是 ABI 的一部分，不能随内核演进变动。
 
-## 数据结构
+## Data Structures
 
-### struct kvm：一个虚拟机
+### struct kvm: A Virtual Machine
 
 ```c
 struct kvm {
@@ -209,7 +209,7 @@ struct kvm {
 - **`buses[]`** 是 I/O 总线数组，把 PIO 与 MMIO 注册的设备按总线号分桶——这是设备模拟的挂接点。
 - **`mmu_notifier`**：host 侧换页/回收内存时要通知 KVM 拆掉对应的 EPT 映射，否则 guest 会访问到已回收的物理页。
 
-### struct kvm_vcpu：一个虚拟 CPU
+### struct kvm_vcpu: A Virtual CPU
 
 ```c
 struct kvm_vcpu {
@@ -256,7 +256,7 @@ struct kvm_vcpu {
 
 **`requests`** 是一个位图，表示"下次进入 guest 前必须先处理的事"：`KVM_REQ_TLB_FLUSH`、`KVM_REQ_MMU_SYNC`、`KVM_REQ_CLOCK_UPDATE`、`KVM_REQ_NMI`、`KVM_REQ_TRIPLE_FAULT`……请求方只需 `kvm_make_request()` 置位 + 必要时 kick，真正处理集中在进入 guest 前的一个地方。这是典型的"请求—延迟执行"模式，和 [workqueue](/docs/CS/OS/Linux/workqueue.md) 里 pending 队列的思路同源：把并发写变成串行处理，简化加锁。
 
-### struct kvm_memory_slot：guest 内存的注册单位
+### struct kvm_memory_slot: The Registration Unit of Guest Memory
 
 guest 的物理内存不是 KVM 分配的，而是 **QEMU 先 mmap 一大块 userspace 内存，再告诉内核"这段对应 guest 物理地址 X"**。这个对应关系就叫 memslot：
 
@@ -306,7 +306,7 @@ id 哈希表的桶数是 `1 << 7`，注释解释了为什么是 7：
 
 slot 数量上限是 `KVM_MEM_SLOTS_NUM = SHRT_MAX`（32767）。
 
-## ioctl 的三层分组
+## ioctl's Three-layer Grouping
 
 ioctl 编号按作用对象分了三段，看编号就能判断属于哪层：
 
@@ -318,7 +318,7 @@ ioctl 编号按作用对象分了三段，看编号就能判断属于哪层：
 
 VM 级里最要紧的是 `KVM_SET_USER_MEMORY_REGION`，它就是前面 memslot 的注册接口；`KVM_CREATE_IRQCHIP` 决定中断芯片由内核建模还是留给 QEMU——这个选择会改变很多退出路径的走向。
 
-## vCPU 运行循环
+## vCPU Run Loop
 
 一切收敛到一个 ioctl：`KVM_RUN`。QEMU 的每个 vCPU 有一个宿主线程，线程主体就是一个循环：反复发 `KVM_RUN`，按返回的 `exit_reason` 处理，再发下一次。内核侧入口很简单：
 
@@ -355,7 +355,7 @@ static long kvm_vcpu_ioctl(struct file *filp,
 
 x86 上 `kvm_arch_vcpu_ioctl_run()` 落到两层循环。
 
-### 外层：vcpu_run —— 决定"有没有必要回到用户态"
+### Outer Layer: vcpu_run — Decide Whether to Return to User Space
 
 ```c
 static int vcpu_run(struct kvm_vcpu *vcpu)
@@ -393,7 +393,7 @@ static int vcpu_run(struct kvm_vcpu *vcpu)
 
 `KVM_EXIT_IRQ_WINDOW_OPEN` 是个精巧的设计：当有待注入中断但 guest 当前关中断（IF=0）时，内核不是干等，而是退出告诉 QEMU"我先出来了，等 guest 开中断的那一刻再叫我"——QEMU 下一轮 `KVM_RUN` 时内核才注入。
 
-### 内层：vcpu_enter_guest —— 进入前把所有请求处理掉
+### Inner Layer: vcpu_enter_guest — Handle All Requests Before Entering
 
 进入 guest 之前有一段很长的"请求兑现"清单：
 
@@ -491,7 +491,7 @@ static __always_inline void guest_context_enter_irqoff(void)
 }
 ```
 
-### 真正的进入：一个循环
+### The Real Entry: A Loop
 
 ```c
 	for (;;) {
@@ -572,7 +572,7 @@ static int __kvm_emulate_halt(struct kvm_vcpu *vcpu, int state, int reason)
 
 **这就是 `KVM_CREATE_IRQCHIP` 的价值**：中断芯片在内核里时，guest 执行 HLT 只是一次 fastpath 重入；在用户态时，每次 HLT 都要退出到 QEMU——而 idle 的 guest 每秒会 HLT 成千上万次。
 
-## VM-Exit 的分派
+## VM-Exit Dispatch
 
 硬件退出原因到处理函数的映射是一张静态数组，用退出码直接索引：
 
@@ -606,7 +606,7 @@ static const int kvm_vmx_max_exit_handlers =
 
 数组形式（而非 switch）的好处是分派为一次间接跳转，且新增退出码只是加一行。这张表也是理解"哪些操作会退出"的最好索引：CPUID、RDMSR/WRMSR、CR 访问、I/O 指令、HLT、PAUSE、EPT 违规、APIC 访问……
 
-## CPU 虚拟化：VMX 双模式
+## CPU Virtualization: VMX Dual Modes
 
 Intel VT-x 引入了 root / non-root 两种运行模式，host 在 root、guest 在 non-root，两者都有完整的 ring0–ring3。切换由 VMCS（Virtual Machine Control Structure）这块内存控制，KVM 里每个 vCPU 一个 VMCS，用 `vmcs_writel()` 写字段。
 
@@ -687,9 +687,9 @@ fastpath_t vmx_vcpu_run(struct kvm_vcpu *vcpu, bool force_immediate_exit)
 
 `is_guest_mode()` 为真说明是**嵌套虚拟化**——guest 自己也是个 hypervisor，它里面还有一层 guest。KVM 支持 L1 管理 L2，代价是 VMCS 要做影子同步（`nested` 那一大坨状态机）。
 
-## 内存虚拟化
+## Memory Virtualization
 
-### 三级地址转换
+### Three-level Address Translation
 
 guest 的一次内存访问要过两级翻译，因此有四类地址：
 
@@ -736,11 +736,11 @@ kvm_pfn_t __gfn_to_pfn_memslot(const struct kvm_memory_slot *slot, gfn_t gfn,
 
 要点：GPA→HVA 是**纯算术、绝不失败**（除非 GPA 不在任何 slot 里，返回 `KVM_PFN_NOSLOT`）；真正的开销在 HVA→PFN，它走的是 host 的页表与 `get_user_pages()`——也就是说 **guest 的内存就是 QEMU 进程的普通匿名页**，会被 host 的 [虚拟内存管理](/docs/CS/OS/Linux/mm/vm.md) 换出、回收、透明大页合并。KVM 不额外持有内存。
 
-这里的 `get_user_pages()` 用的是**普通引用**（配 `put_page()`），而不是 pin（配 `unpin_user_page()`）——所以 guest 内存才换得出去、迁得动。这个选择正是"KVM 不额外持有内存"的实现依据：如果改成 [长期 pin](/docs/CS/OS/Linux/mm/gup.md?id=longterm-的代价)，guest 的每一页都会被钉死在非 movable zone 里，host 的内存热插拔、CMA、乃至回收都会连带失效。
+这里的 `get_user_pages()` 用的是**普通引用**（配 `put_page()`），而不是 pin（配 `unpin_user_page()`）——所以 guest 内存才换得出去、迁得动。这个选择正是"KVM 不额外持有内存"的实现依据：如果改成 [长期 pin](/docs/CS/OS/Linux/mm/gup.md?id=the-cost-of-longterm)，guest 的每一页都会被钉死在非 movable zone 里，host 的内存热插拔、CMA、乃至回收都会连带失效。
 
 反过来说，host 换出页面时必须通知 KVM 拆 EPT 映射，这就是 `struct kvm.mmu_notifier` 的作用：它是 host 内存管理向虚拟化层开的回调口。
 
-### 两种模式：影子页表 vs 二维页表
+### Two Modes: Shadow Page Table vs Two-dimensional Page Table
 
 **影子页表（shadow paging）**：硬件只有一套页表，KVM 就维护一份"GVA→HPA"的影子页表给硬件用，guest 自己那份 GVA→GPA 的页表被 KVM 藏起来（把 guest CR3 换成影子页表的物理地址）。guest 每次改页表都要退出，KVM 同步影子页表。代价极高，但因为硬件不要求，是老 CPU 上的唯一选择。
 
@@ -804,7 +804,7 @@ union kvm_mmu_page_role {
 
 `direct:1` —— 置位表示"直接映射"（TDP，页表里就是 GPA→HPA），清零表示影子页表。影子页表的 role 位多得多是为了**缓存复用**：guest 的 CR0/CR4/EFER/SMEP/SMAP 任一改变，已有的影子页就作废；所以 role 把这些条件编码进一个 u32，作为哈希键判断能否复用。TDP 模式下这些条件大部分不影响 GPA→HPA，role 自然简单得多——这也是 EPT 快的根本原因之一。
 
-### EPT 违规的处理
+### Handling EPT Violations
 
 两层翻译下，缺页由硬件在 EPT 那层报出：
 
@@ -836,7 +836,7 @@ static int handle_ept_violation(struct kvm_vcpu *vcpu)
 
 值得对比的是：原生缺页的地址在 CR2，而 EPT 违规的 GPA 在 **VMCS 的 `GUEST_PHYSICAL_ADDRESS` 字段**里。硬件之所以把地址存在 VMCS 而不是 CR2，正因为此时有两层地址——CR2 里是 GVA，VMCS 里才是 GPA。随后 KVM 按"是 EPT 没映射，还是 guest 页表本身不允许"分流：前者自己填 EPT 项即可（不退出），后者要**向 guest 注入一个缺页异常**（让 guest OS 自己处理，和真机一样）。
 
-## 中断虚拟化
+## Interrupt Virtualization
 
 中断芯片（PIC / IOAPIC / LAPIC）可以建在内核（`KVM_CREATE_IRQCHIP`），也可以留给 QEMU。在内核时，注入路径完全在内核完成，QEMU 不参与。
 
@@ -864,7 +864,7 @@ static int handle_ept_violation(struct kvm_vcpu *vcpu)
 
 irqfd 的典型用途是**设备直通（VFIO）**：物理设备的中断直接进 guest，不经过 QEMU。
 
-## 设备 I/O 与 ioeventfd
+## Device I/O and ioeventfd
 
 guest 访问设备（端口 I/O 或 MMIO）会退出，内核查 `kvm->buses[]` 找注册的设备：命中内核设备就在内核处理；否则以 `KVM_EXIT_IO` / `KVM_EXIT_MMIO` 退出给 QEMU 模拟。
 
@@ -917,7 +917,7 @@ ioeventfd 的另一半是 **vhost**：数据面本身也搬进内核。`/dev/vho
 
 这与 [io_uring](/docs/CS/OS/Linux/IO/io_uring.md) 的思路同构：把高频数据面从"用户态轮询 + 系统调用"改成"内核态共享环 + eventfd 通知"。
 
-## 调度与抢占
+## Scheduling and Preemption
 
 一个 vCPU 就是一个普通的 host 线程（QEMU 的线程），因此受 [调度器](/docs/CS/OS/Linux/proc/sche.md) 完全管辖：会被抢占、会睡眠、会被 cgroup 限流。这是借用 host 内核的直接好处，也是 KVM 与 Xen 架构上的根本差异。
 
@@ -928,7 +928,7 @@ ioeventfd 的另一半是 **vhost**：数据面本身也搬进内核。`/dev/vho
 - **`halt_poll_ns`**（在 `struct kvm_vcpu` 里）：guest 执行 HLT 后不立刻睡，先轮询一会儿看会不会马上有中断。这是用一点 CPU 换掉一次睡眠/唤醒的延迟，与 [NAPI](/docs/CS/OS/Linux/net/NAPI.md) 收包时"先轮询再开中断"的权衡如出一辙。
 - **steal time**：告诉 guest "你的时间被 host 拿走了多少"，让 guest 内的调度与计费不至于错乱。
 
-## 观测与限制
+## Observation and Limitations
 
 - `/dev/kvm` 是唯一的入口，权限由文件权限控制，容器里要跑虚拟机必须给它。
 - `KVM_CHECK_EXTENSION` 是能力协商接口——QEMU 启动时会挨个查询，不要假设能力存在。

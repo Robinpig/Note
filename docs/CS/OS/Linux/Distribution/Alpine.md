@@ -22,7 +22,7 @@ Alpine = **musl libc** + **BusyBox** + **OpenRC** + **apk**。这四样都是嵌
 
 > **loongarch64（龙芯）与 riscv64 都在支持列表里** —— 这让它在国产化与嵌入式场景里比多数发行版覆盖更广。
 
-## musl 与 glibc 的具体差异
+## Specific Differences between musl and glibc
 
 这是 Alpine 一切取舍的根源，也是踩坑的源头。Alpine 官方 wiki 的表述很直接：
 
@@ -41,13 +41,13 @@ Alpine = **musl libc** + **BusyBox** + **OpenRC** + **apk**。这四样都是嵌
 
 > **128 KiB 栈是最隐蔽的杀手** —— 程序能启动（无 lazy binding 让错误提前暴露，这反而是好事），但在深递归或大栈帧时崩栈，错误信息还可能指向看似无关的地方。
 
-### gcompat：不是解决方案
+### gcompat: Not a Solution
 
 Alpine 提供 `gcompat`（glibc 兼容层），但官方定位是**给简单二进制用的部分桥接**，不是 glibc 的替代品。它能跑一部分预编译程序，但依赖完整 glibc 语义的东西仍然不行。
 
 **判断能否用 Alpine 的实用标准**：这个镜像是否发布了 `musllinux` wheel？PEP 656 定义了 `musllinux` 平台标签，**musl 在各发行版间 ABI 兼容，但不与 glibc 构建兼容**。有 `musllinux` wheel 就没问题；只有 `manylinux`（glibc）就不行。
 
-## 容器镜像：真实体积
+## Container Image: Actual Size
 
 实测压缩体积（linux/amd64，Docker registry，2026-08）：
 
@@ -69,7 +69,7 @@ Alpine 提供 `gcompat`（glibc 兼容层），但官方定位是**给简单二�
 
 Alpine 官方项目自己的说法是"一个容器不超过 8 MB"。
 
-## 三个必做的 Dockerfile 修正
+## Three Required Dockerfile Fixes
 
 Alpine 镜像的"极简"是把双刃剑 —— 以下三项**必须在构建时显式补上**，否则会在事故现场才发现：
 
@@ -80,9 +80,9 @@ FROM alpine:3.24
 RUN apk add --no-cache tzdata
 ENV TZ=Asia/Shanghai
 
-# ② DNS 解析问题（musl 不走 NSS）
-#    测试：getent hosts example.com  vs  nslookup example.com
 #    两者结果不一致 = 命中此问题
+#    Test: getent hosts example.com vs nslookup example.com
+#    Both Results Inconsistent = Hit This Issue
 
 # ③ node-gyp / pip 源码编译需要构建依赖
 RUN apk add --no-cache --virtual .build-deps python3 make g++ musl-dev linux-headers \
@@ -97,7 +97,7 @@ RUN apk add --no-cache --virtual .build-deps python3 make g++ musl-dev linux-hea
 - **node-gyp** 编译原生模块需 `python3` `make` `g++` `musl-dev`；
 - **pip** 在没有对应 `musllinux` wheel 时会**从源码编译**，需 `gcc` `musl-dev` `linux-headers`。
 
-## 内核机制关联
+## Kernel Mechanism Association
 
 Alpine 在容器里的特殊性：
 
@@ -105,7 +105,7 @@ Alpine 在容器里的特殊性：
 - **cgroup v2 与 namespace** 由宿主内核提供，见 [cgroup 知识地图](/docs/CS/OS/Linux/cgroup/README.md) 与 [namespace](/docs/CS/OS/Linux/namespace.md)。
 - **CPU 基线（x86-64-v3）** —— Alpine 默认 v1 基线（与 Debian/Ubuntu/Fedora 一致），这在老 CPU 上反而是优势，见 [发行版知识地图](/docs/CS/OS/Linux/Distribution/README.md) 的微架构级别对照表。
 
-## OpenRC 而非 systemd
+## OpenRC instead of systemd
 
 Alpine 用 **OpenRC** 做 init，服务管理语法与 systemd 完全不同：
 
@@ -119,7 +119,7 @@ rc-update show                       # 列出各 runlevel
 
 runlevel 概念（`default`、`boot`、`sysinit` 等）继承自 BSD，与 systemd 的 target 不是一一对应。**从 Debian/Ubuntu 迁到 Alpine（或反过来）时，这套要重新学**。
 
-## 为什么 Alpine 适合容器
+## Why Alpine Is Suitable for Containers
 
 | 优势 | 机制 |
 | :-- | :-- |
@@ -130,7 +130,7 @@ runlevel 概念（`default`、`boot`、`sysinit` 等）继承自 BSD，与 syste
 
 > **最后一条常被误解**：`qemu-binfmt` 服务从 3.24 起被弃用，官方给出的原因正是 **"新默认配置阻止 setuid 程序授予权限"** —— 这被解读为一个安全改进。想执行 setuid 的外来架构二进制，需复制 `/usr/lib/binfmt.d/qemu-*.conf` 手动加 `C` flag。**这是一个刻意的取舍，不是配置疏漏。**
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 ```shell
 # libc 到底是 musl 还是 glibc
@@ -179,7 +179,7 @@ apk add musl-dev                   # 本机编译
 musl-gcc --version
 ```
 
-## 与其它子系统的接缝
+## Interfaces with Other Subsystems
 
 - 容器与 cgroup v2 / namespace 的关系，见 [Container](/docs/CS/Container/Container.md) 与 [cgroup](/docs/CS/OS/Linux/cgroup/README.md)。
 - CPU 微架构基线（Alpine 用 v1，老 CPU 友好），见 [发行版知识地图](/docs/CS/OS/Linux/Distribution/README.md)。

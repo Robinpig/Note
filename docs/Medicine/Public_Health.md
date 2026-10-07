@@ -4,7 +4,7 @@
 
 本页是公共卫生的**知识地图**：先给出分支清单，再说明流行病学作为公共卫生方法论内核的作用，最后说明这一学科特有的伦理约束——为什么它必须以「群体利益」为默认立场。
 
-## 主要分支
+## Major Branches
 
 <div class="kb-home">
 
@@ -12,7 +12,7 @@
 
 <div class="kb-card">
 
-### 流行病学
+### Epidemiology
 
 疾病频率、分布与决定因素的测量方法：描述、关联与因果推断
 
@@ -20,7 +20,7 @@
 
 <div class="kb-card">
 
-### 预防医学与健康促进
+### Preventive Medicine and Health Promotion
 
 一级预防（病因预防）、二级预防（早发现早治疗）、三级预防（康复）三级防线
 
@@ -28,7 +28,7 @@
 
 <div class="kb-card">
 
-### 卫生统计学
+### Health Statistics
 
 研究设计与统计推断：抽样、偏倚、混杂、效应量与不确定性表达
 
@@ -36,7 +36,7 @@
 
 <div class="kb-card">
 
-### 环境卫生与职业卫生
+### Environmental and Occupational Health
 
 水、空气、食物、居住与工作场所的健康风险及其控制
 
@@ -44,7 +44,7 @@
 
 <div class="kb-card">
 
-### 卫生政策与卫生经济学
+### Health Policy and Health Economics
 
 资源配置、支付方式与卫生系统：技术之外的制度性约束
 
@@ -54,7 +54,7 @@
 
 </div>
 
-## 流行病学 公共卫生的方法论内核
+## Epidemiology: The Methodological Core of Public Health
 
 流行病学是这门学科的方法论底座，它回答三类问题：
 
@@ -66,7 +66,7 @@
 
 这套方法论向上支撑了[临床医学](/docs/Medicine/Clinical_Medicine.md)的循证实践——所谓「循证」，本质就是把「最好的证据」操作化为「偏倚风险最低的研究设计」，而这也是当前证据等级排序正从「按研究类型」转向「按偏倚与适用性」的原因。
 
-## 三级预防 公共卫生最实用的框架
+## Three Levels of Prevention: The Most Practical Framework in Public Health
 
 预防医学的三级预防框架是全领域最通用的一张地图：
 
@@ -76,7 +76,7 @@
 
 三级预防的顺序也解释了公共卫生的公共卫生属性：**优先做一级预防，是能用最小代价换取最大人群健康的路径**。
 
-## 群体优先的伦理张力
+## Ethical Tension of Group Priority
 
 公共卫生的默认立场是**群体利益优先**，这与临床的「个体利益优先」存在结构性张力：
 
@@ -84,7 +84,7 @@
 
 同样地，资源分配必然意味着**有人被排到队尾**：筛查先覆盖谁、疫苗优先给哪类人、稀缺设备分配给哪种结局的病人。这类判断是卫生政策与[医学伦理](/docs/Medicine/Medical_History_Ethics.md)的交界处，它无法由技术回答，只能由透明的标准和公开的讨论来决定。
 
-## 数据是公共卫生的原料
+## Data Is the Raw Material of Public Health
 
 公共卫生依赖长期、连续、可比较的人群数据：出生与死亡统计、法定传染病报告、监测系统、医院与保险数据。这些数据的质量直接决定结论质量，而现实中常见的三个问题值得警惕：
 

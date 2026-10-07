@@ -4,7 +4,7 @@ Dubbo 发起远程调用的时候，主要工作流程可以分为消费端和�
 
 Dubbo 在服务调用链路中提供了丰富的扩展点，覆盖了负载均衡方式、选址前后的拦截器、服务端处理拦截器等
 
-本文版本基线：Apache Dubbo **3.3.6**（原文此前未标注版本，实际代码块已对齐 3.3.6），所有包路径与类归属均逐文件核对自源码 tag `dubbo-3.3.6`。扩展点全景见 [消费者侧扩展点全景](#消费者侧扩展点全景)，Filter 的 order 排序机制见 [Filter](/docs/CS/Framework/Dubbo/Filter.md?id=order-排序机制)，负载均衡策略见 [LoadBalance](/docs/CS/Framework/Dubbo/LoadBalance.md)。
+本文版本基线：Apache Dubbo **3.3.6**（原文此前未标注版本，实际代码块已对齐 3.3.6），所有包路径与类归属均逐文件核对自源码 tag `dubbo-3.3.6`。扩展点全景见 [消费者侧扩展点全景](#消费者侧扩展点全景)，Filter 的 order 排序机制见 [Filter](/docs/CS/Framework/Dubbo/Filter.md?id=order-sorting-mechanism)，负载均衡策略见 [LoadBalance](/docs/CS/Framework/Dubbo/LoadBalance.md)。
 
 > [!WARNING]
 >
@@ -555,11 +555,11 @@ private synchronized void calcPreferredInvoker(MigrationRule migrationRule) {
 
 
 
-## 消费者侧扩展点全景
+## Consumer-Side Extension Point Overview
 
 消费端一次调用会依次穿过 `ClusterFilter` → `Cluster` → `Router` → `LoadBalance` → `Filter` 五类扩展点。下面是 3.3.6 各自注册的全部实现，按调用顺序排列。
 
-### Cluster（集群容错）
+### Cluster (Cluster Fault Tolerance)
 
 `Cluster` 扩展点共 **11 个**，`@SPI` 默认值是 `failover`（`Cluster.java:34-37`）：
 
@@ -586,7 +586,7 @@ zone-aware=org.apache.dubbo.rpc.cluster.support.registry.ZoneAwareCluster
 >
 > 同样**不存在 `FailZoneAwareCluster` 与 `HealthCheckCluster`**（全仓 0 命中）。3.3.6 的区域容错只有 `zone-aware` 一项，且 `ZoneAwareCluster` 已极简化：`doJoin` 只返回 `new ZoneAwareClusterInvoker<>(directory)`（`ZoneAwareCluster.java:29-31`），无 `@Activate`、无自定义 `doInvoke`，真实逻辑全在 `ZoneAwareClusterInvoker` 内。
 
-### ClusterFilter（选址前）
+### ClusterFilter (Before Address Selection)
 
 消费端选址**前**的拦截器，只有 4 个：
 
@@ -605,17 +605,17 @@ metricsConsumerFilter=org.apache.dubbo.rpc.cluster.filter.support.MetricsConsume
 callback-consumer-context=org.apache.dubbo.rpc.cluster.filter.support.CallbackConsumerContextFilter
 ```
 
-### Filter（选址后）
+### Filter (After Address Selection)
 
-`dubbo-rpc-api` 注册 18 个 `Filter`，完整清单与order 值见 [Filter](/docs/CS/Framework/Dubbo/Filter.md?id=内置-filter-清单)。
+`dubbo-rpc-api` 注册 18 个 `Filter`，完整清单与order 值见 [Filter](/docs/CS/Framework/Dubbo/Filter.md?id=built-in-filter-list)。
 
-### Router（选址）
+### Router (Address Selection)
 
 3.3.6 加载的是旧接口 `org.apache.dubbo.rpc.cluster.Router`（扩展名含 `condition` / `tag` / `script` 等）。`StateRouter` **不是独立 SPI**——没有 `META-INF/dubbo/internal/org.apache.dubbo.rpc.cluster.router.state.StateRouter` 文件，它是框架内部协作接口，由 `SingleRouterChain` 的 `StateRouter` 链表调用。**自定义路由仍应实现 `Router`**，详细形态见 [Router](/docs/CS/Framework/Dubbo/Router.md)。
 
-### LoadBalance（选一个）
+### LoadBalance (Select One)
 
-6 个扩展名（`random` / `roundrobin` / `leastactive` / `consistenthash` / `shortestresponse` / `adaptive`），见 [LoadBalance](/docs/CS/Framework/Dubbo/LoadBalance.md?id=扩展点清单)。
+6 个扩展名（`random` / `roundrobin` / `leastactive` / `consistenthash` / `shortestresponse` / `adaptive`），见 [LoadBalance](/docs/CS/Framework/Dubbo/LoadBalance.md?id=extension-point-list)。
 
 ## Filter
 
@@ -957,7 +957,7 @@ private void startHeartBeatTask(URL url) {
 > `HeartbeatTimerTask` 属于 **`dubbo-remoting-api`**，不在 `dubbo-rpc-api`：
 > `dubbo-remoting/dubbo-remoting-api/src/main/java/org/apache/dubbo/remoting/exchange/support/header/HeartbeatTimerTask.java`
 >
-> 宿主 `HeaderExchangeClient` / `HeaderExchangeServer` 也在同一个 `exchange/support/header` 包下，`exchange` 层与 `HeaderExchange*` 的完整指路见 [remoting](/docs/CS/Framework/Dubbo/remoting.md?id=exchange-层与-336-新增模块)。
+> 宿主 `HeaderExchangeClient` / `HeaderExchangeServer` 也在同一个 `exchange/support/header` 包下，`exchange` 层与 `HeaderExchange*` 的完整指路见 [remoting](/docs/CS/Framework/Dubbo/remoting.md?id=exchange-layer-and-new-modules-in-336)。
 
 ```java
 public class HeartbeatTimerTask extends AbstractTimerTask {
@@ -1014,7 +1014,7 @@ Dubbo 对于建立的每一个连接，同时在客户端和服务端开启了 2
 
 
 
-## 陷阱清单
+## Pitfall List
 
 > [!WARNING]
 >

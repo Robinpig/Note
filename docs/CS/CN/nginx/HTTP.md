@@ -6,7 +6,7 @@ worker 进程在一个 `for` 循环里反复调用事件模块检测网络事件
 
 本文按请求的生命周期展开：连接 → 解析 → 阶段 → 内容 → 过滤 → 结束 → 长连接。配置与 location 匹配见 [Configuration](/docs/CS/CN/nginx/config.md)，上游交互见 [Upstream](/docs/CS/CN/nginx/upstream.md)。
 
-## 连接建立与请求解析
+## Connection Establishment and Request Parsing
 
 ```c
 // http/ngx_http_request.c
@@ -71,9 +71,9 @@ r->write_event_handler = ngx_http_core_run_phases;
 ngx_http_core_run_phases(r);
 ```
 
-## 阶段机制
+## Phase Mechanism
 
-### 11 个阶段
+### 11 Phases
 
 ```c
 // http/ngx_http_core_module.h
@@ -108,7 +108,7 @@ typedef enum {
 
 > 易错点：`try_files` 和 `mirror` 在 **PRECONTENT**，不是 CONTENT。
 
-### 从二维到一维：phase engine
+### From Two-Dimensional to One-Dimensional: phase engine
 
 配置期每个模块往 `cmcf->phases[阶段]` 这个数组里 push handler；解析完成后 `ngx_http_init_phase_handlers()` 把 11 个数组**展开成一维数组**，并给每个 handler 配一个 checker：
 
@@ -144,7 +144,7 @@ ngx_http_core_run_phases(ngx_http_request_t *r)
 
 > **checker 的返回值语义与 handler 完全不同**：`checker` 返回 `NGX_OK` = 交出控制权（退出循环），返回 `NGX_AGAIN` = 继续下一个 handler。这是理解阶段机制最容易搞反的地方。
 
-### checker 语义表
+### checker Semantics Table
 
 | checker | handler 返回 | checker 行为 | 返回给 run_phases |
 | :-- | :-- | :-- | :-- |
@@ -163,7 +163,7 @@ ngx_http_core_run_phases(ngx_http_request_t *r)
 
 > ⚠️ **rewrite checker 里 `NGX_OK` 会导致 `finalize_request`**，不是"成功继续"。所以 rewrite 模块的 handler 要让流程继续必须返回 `NGX_DECLINED`。这是最常见的误读。
 
-### 展开算法的两个跳转点
+### Two Jump Points of the Expansion Algorithm
 
 `server_rewrite_index` 与 `location_rewrite_index` 记录了两个"入口"，供内部重定向使用：
 
@@ -173,7 +173,7 @@ ngx_http_core_run_phases(ngx_http_request_t *r)
 
 另外展开时 handler 是**倒序写入**的（`j = nelts-1 → 0`），所以同一阶段内**后注册的模块先执行**；`ph->next` 指向下一阶段的第一个 handler。
 
-### LOG 阶段的特殊性
+### Specificity of LOG Phase
 
 LOG 阶段**不进 phase engine**（展开循环的上界是 `i < NGX_HTTP_LOG_PHASE`）。它在请求销毁时由框架直接同步调用：
 
@@ -191,7 +191,7 @@ ngx_http_log_request(ngx_http_request_t *r)
 }
 ```
 
-### CONTENT 阶段为什么特殊
+### Why CONTENT Phase Is Special
 
 ```c
 ngx_int_t
@@ -226,7 +226,7 @@ ngx_http_core_content_phase(ngx_http_request_t *r, ngx_http_phase_handler_t *ph)
 - 一旦 location 有 content handler，CONTENT 阶段数组里的 `static` / `index` / `autoindex` **一个都不会跑**；
 - 全跑完都是 `NGX_DECLINED` 的结果：`/` 结尾 → 403（无 index），否则 404。
 
-## 过滤链
+## Filter Chain
 
 响应是分两步发出去的：先跑 header 过滤链，再跑 body 过滤链。
 
@@ -274,7 +274,7 @@ slice → not_modified → range_body → copy → headers → userid → gunzip
 
 > 一个容易忽略的细节：**header 链尾 `ngx_http_header_filter` 会直接调用 `ngx_http_write_filter`**，绕过整个 body 过滤链。所以响应头不会被 gzip / sub / charset 等 body filter 处理。
 
-## 子请求与 posted requests
+## Subrequests and posted requests
 
 子请求（subrequest）是 nginx 内部"在自己的请求里再发一个请求"，用于 `mirror`、`auth_request`、`SSI`、`addition`、`slice`、`image_filter` 等。
 
@@ -306,9 +306,9 @@ ngx_http_run_posted_requests(ngx_connection_t *c)
 
 `ngx_http_finalize_request()` → `ngx_http_finalize_connection()` 的末尾会调用 `ngx_http_run_posted_requests()`，所以"主请求结束"不等于"连接结束"——可能还有子请求在跑。
 
-## 响应发送与连接收尾
+## Response Sending and Connection Finalization
 
-### 发送路径
+### Send Path
 
 ```
 ngx_http_send_header()  →  header 过滤链  →  ngx_http_header_filter  →  ngx_http_write_filter
@@ -386,7 +386,7 @@ http {
 - `quic_bpf` 用于 `reuseport` 场景下的连接路由，解决 QUIC 连接迁移（Connection ID 路由）跨 worker 的问题；
 - 客户端先走 HTTP/2，通过 `Alt-Svc` 发现 HTTP/3 后升级。
 
-## 流量拷贝
+## Traffic Copy
 
 将生产环境的流量拷贝到预上线环境或测试环境，这样做有很多好处：
 
@@ -426,7 +426,7 @@ location = /mirror {
 
 注意：镜像子请求的响应**被丢弃**，因此它不会影响主请求的响应，但会消耗连接与上游资源——镜像目标挂掉或很慢时，会通过占用连接间接影响主流程，务必给镜像目标设置极短的超时。
 
-## 状态码速查（nginx 特有）
+## Status Code Quick Reference (nginx-Specific)
 
 | 状态码 | 含义 | 常见原因 |
 | :-- | :-- | :-- |

@@ -12,7 +12,6 @@ Generally, we treat them as exceptions.
 
 
 ## Stack ADT
-
 The following operations make a stack an ADT.
 For simplicity, assume the data is an integer type.
 
@@ -36,7 +35,6 @@ In the Stack ADT, operations pop and top cannot be performed if the stack is emp
 Trying to push an element in a full stack throws an exception.
 
 ## Applications
-
 Following are some of the applications in which stacks play an important role.
 
 **Direct applications**
@@ -56,7 +54,6 @@ Following are some of the applications in which stacks play an important role.
 - Component of other data structures (Example: [Simulating queues]())
 
 ## Implementation
-
 There are many ways of implementing stack ADT; given below are the commonly used methods.
 
 - Simple array based implementation
@@ -74,7 +71,6 @@ There are many ways of implementing stack ADT; given below are the commonly used
 
 
 ### Comparison of Implementations
-
 **Comparing Incremental Strategy and Doubling Strategy**
 
 We compare the incremental strategy and doubling strategy by analyzing the total time T(n) needed to perform a series of n push operations.
@@ -105,6 +101,12 @@ Linked List Implementation
 
 ## Links
 
-- [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
+- [数据结构](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
 - [list](/docs/CS/Algorithms/struct/list.md)
 - [queue](/docs/CS/Algorithms/struct/queue.md)
+
+## References
+
+1. [栈 - OI Wiki](https://oi-wiki.org/ds/stack/)
+2. [Queue and Stack - CP-Algorithms](https://cp-algorithms.com/data_structures/stack_queue_modification.html)
+3. [队列 - OI Wiki](https://oi-wiki.org/ds/queue/)

@@ -7,7 +7,7 @@
 
 两者不是二选一：生产环境通常同时开，pstore 保证"至少能看到最后几行"，kdump 保证"能看到全貌"。本文按内核源码里的实际调用链展开，版本基线 **v7.2**（所有行号与常量均在该版本核实）。
 
-## panic 的分叉点
+## panic: The Fork Point
 
 一切从 `panic()` 开始。它是个薄封装，真正的逻辑在 `vpanic()`（`kernel/panic.c`），而**决定"跳去 kdump"的那一行**就在其中：
 
@@ -42,7 +42,7 @@ void vpanic(const char *fmt, va_list args)
 
 另外注意 `__crash_kexec(NULL)` 是**绕过 `panic_cpu` 检查**的直接调用：此刻已经确认本 CPU 是第一个进入 panic 的那个（`panic_try_start()` 抢到了 `panic_cpu`），无需再判断。
 
-## panic_cpu：为什么只有一个 CPU 干这件事
+## panic_cpu: Why Only One CPU Does This
 
 panic 可能多路并发（一个 CPU 在 oops 处理中 panic，另一个 CPU 同时被中断打进来）。内核用单一原子变量选举出"负责 panic 的 CPU"：
 
@@ -73,7 +73,7 @@ bool panic_on_other_cpu(void);   /* 别处正在 panic —— 本 CPU 要立刻�
 
 `panic_on_other_cpu()` 的注释写得很有意思："When true, the local CPU should immediately release any printing resources that may be needed by the panic CPU" —— 这是多核 panic 里 console 锁争用的处理依据。
 
-## 停掉其他 CPU：crash_smp_send_stop
+## Stopping Other CPUs: crash_smp_send_stop
 
 `__crash_kexec()` 拿到 kexec 锁后，真正的第一步是把其他 CPU 全部按停。`kernel/panic.c` 的 `panic_other_cpus_shutdown()` 特意区分了两条路径：
 
@@ -106,7 +106,7 @@ void kdump_nmi_shootdown_cpus(void)
 
 用 NMI 而不是 IPI，是因为**目的 CPU 此刻可能已经关中断、甚至正卡在坏掉的路径上**，IPI 需要对方正常响应中断上下文。NMI 不可屏蔽，是崩溃场景下唯一可靠的信号。注意 `crash_save_cpu(regs, cpu)` —— 每个被停的 CPU 都把自己的寄存器状态存下来，这正是转储里各 CPU 栈的来源。
 
-## native_machine_crash_shutdown：x86 关机序列
+## native_machine_crash_shutdown: x86 Shutdown Sequence
 
 停完其他 CPU，x86 走 `native_machine_crash_shutdown()`。函数头注释说明了它的设计原则："The minimum amount of code to allow a kexec'd kernel to run successfully needs to happen here." 顺序上有一批不可省的硬件操作：
 
@@ -136,7 +136,7 @@ void kdump_nmi_shootdown_cpus(void)
 - **`enc_kexec_begin()` / `enc_kexec_finish()` 这对调用是 v7.x 的加密内存保护协作点**。注释解释了非崩溃 kexec 与崩溃 kexec 的调用时机差异：前者调度器还在跑，回调可以等所有在途的 shared↔private 转换完成；后者在只剩一个 CPU、中断已关时调用，**只能检测竞争并上报**，无法等待。
 - `tdx_sys_disable()` 与 `x86_virt_emergency_disable_virtualization_cpu()` 是 TDX / 虚拟化环境的紧急关闭，防止第二内核在宿主与 Guest 状态不一致时启动。
 
-## 内存预留：crashkernel
+## Memory Reservation: crashkernel
 
 kdump 需要一块内存放第二内核。关键点是这块区域**必须从内核的线性映射里摘掉**，否则运行中的 DMA 会把转储镜像写花。源码注释直接点明了这个后果："This ensures that ongoing Direct Memory Access (DMA) from the system kernel does not corrupt the dump-capture kernel."
 
@@ -155,7 +155,7 @@ struct resource crashk_low_res = { /* 同上，另一个名字 */ };
 
 `/proc/iomem` 里能看到名为 "Crash kernel" 的两段，这个 resource 结构就是它对应的内核对象。
 
-### crashkernel 参数的完整语法
+### Complete Syntax of the crashkernel Parameter
 
 解析入口是 `parse_crashkernel()`，源码在 `kernel/crash_reserve.c`。语法分两支，由命令行里**有没有冒号**决定（`__parse_crashkernel()`）：
 
@@ -173,7 +173,7 @@ struct resource crashk_low_res = { /* 同上，另一个名字 */ };
 1. **多个 `crashkernel=` 时取最后一个**。`get_last_crashkernel()` 循环 `strstr()` 找出所有匹配项，只有最后一个生效——被 grub 追加了参数的场景下这很容易踩坑。
 2. **带后缀的项不参与"简单式"匹配**。`get_last_crashkernel()` 在无后缀查找时会跳过所有已知后缀结尾的项，所以 `crashkernel=512M,high` 不会顶掉一个纯 `crashkernel=` 的解析。
 
-### 三个关键常量
+### Three Key Constants
 
 来自 `include/linux/crash_reserve.h`：
 
@@ -187,7 +187,7 @@ struct resource crashk_low_res = { /* 同上，另一个名字 */ };
 - `CRASH_ADDR_LOW_MAX` = 4 GiB 就是"DMA 无法触及"的硬件边界，也解释了 `crashk_low_res` 的存在意义。
 - ⚠️ **`DEFAULT_CRASH_KERNEL_LOW_SIZE` 在 v7.2 是 128 MiB**。内核文档（`Documentation/admin-guide/kdump/kdump.rst`）写的是 "at least 256M"，这是**过时**的——`reserve_crashkernel_generic()` 在自动降级到高端内存时会用这个常量作为低内存预留量，以源码为准。
 
-### 自动选址的降级逻辑
+### Degradation Logic of Automatic Address Selection
 
 `reserve_crashkernel_generic()` 用 `memblock_phys_alloc_range()` 搜地址，两轮降级值得记：
 
@@ -205,11 +205,11 @@ struct resource crashk_low_res = { /* 同上，另一个名字 */ };
 
 `kmemleak_ignore_phys()` 这一步不做好，kmemleak 会持续扫描这块已保留但不可读的内存，误报大量泄漏。
 
-### CMA 版本的 v7.2 新形态
+### New Form in CMA v7.2
 
 `reserve_crashkernel_cma()` 在 v7.2 里支持**分块降级**：声明 CMA 失败时把请求大小**折半重试**（`request_size = roundup(request_size / 2, PAGE_SIZE)`），最多积累 `CRASHKERNEL_CMA_RANGES_MAX`（4）个区间。原因是转储内核只需要一个连续大区，但系统可能已经被别的 CMA 占用切碎了。
 
-## kexec 装载崩溃内核
+## Loading the Crash Kernel with kexec
 
 `kexec_load()` 的用户态入口最终进 `do_kexec_load()`（`kernel/kexec.c`）。崩溃内核与普通 kexec 共用同一段代码，靠 `KEXEC_ON_CRASH` 标志区分，加载到不同的全局槽位：
 
@@ -255,7 +255,7 @@ struct resource crashk_low_res = { /* 同上，另一个名字 */ };
 
 **vmcoreinfo 必须在 `machine_kexec_prepare()` 之后拷贝**。VMCOREINFO 是转储文件里描述"哪些内存段包含哪些内核变量"的那段元数据，gdb 和 crash 靠它定位结构体。
 
-## __crash_kexec：跳过去
+## __crash_kexec: Skipping Past
 
 ```c
 void __noclone __crash_kexec(struct pt_regs *regs)
@@ -283,7 +283,7 @@ void __noclone __crash_kexec(struct pt_regs *regs)
 
 `crash_cma_clear_pending_dma()` 也很关键：如果用 CMA 承载崩溃内核，崩溃前可能有正在进行的 DMA 往那块内存写。它 `mdelay(CMA_DMA_TIMEOUT_SEC * 1000)` 硬等一小段时间。
 
-## ELF core header：把内存描述成文件
+## ELF core header: Describing Memory as a File
 
 转储内核实现在 ELF 格式。构造逻辑在 `crash_prepare_elf64_headers()`，用 `walk_system_ram_res()` 遍历所有 System RAM 区间，为每段生成一个 `PT_LOAD` 段。源码里一段注释解释了段数为何要留余量：
 
@@ -317,17 +317,17 @@ void crash_save_cpu(struct pt_regs *regs, int cpu)
 
 `struct elf_prstatus` 是 ELF 规范里表示"一个进程/线程的寄存器快照"的标准结构。`crash_notes_memory_init()`（`subsys_initcall`）在启动早期把这块内存标为保留，pstore/ ramoops 那套"崩溃后仍可读"的机制与它同源。
 
-## 转储捕获内核：/proc/vmcore
+## Dumping the Capture Kernel: /proc/vmcore
 
 第二内核启动后，旧内核的内存通过 **`/proc/vmcore`** 暴露为一个可读文件。`fs/proc/vmcore.c` 有 1700 余行，核心是 `vmcore_read()` —— 它遍历 ELF 段表，对每个 `PT_LOAD` 段用 `copy_to_user()` 把物理页映射进用户空间。
 
 这带来一个重要后果：**读 vmcore 的开销与被转储的内存量成正比**，所以大内存机器上应该用 `makedumpfile` 之类的工具做过滤/压缩（`-d 31` 表示只导出内核数据段），而不是 `cp /proc/vmcore`。
 
-## pstore：廉价但完整的日志
+## pstore: Cheap but Complete Log
 
 pstore 是 panic 前就把日志写进持久存储的机制，代码在 `fs/pstore/`。它注册为一个文件系统，重启后从 `/sys/fs/pstore` 读回，文件名形如 `dmesg-ramoops-0`、`console-ramoops-0`。
 
-### 类型枚举
+### Type Enumeration
 
 `include/linux/pstore.h` 里的类型表（源码注释明确要求数组顺序与枚举一致）：
 
@@ -356,7 +356,7 @@ Dmesg（内核日志）、Console（全量控制台，含 panic 前的普通输�
 #define PSTORE_FLAGS_PMSG	BIT(3)
 ```
 
-### update_ms：一个"默认关闭"的运行时行为
+### update_ms: A "Disabled by Default" Runtime Behavior
 
 `fs/pstore/platform.c` 里有个容易误解的参数：
 
@@ -373,7 +373,7 @@ MODULE_PARM_DESC(update_ms, "milliseconds before pstore updates its content "
 
 `pstore_init()` 挂在 `late_initcall`，也就是在几乎所有子系统就绪之后才注册。
 
-### 压缩
+### Compression
 
 `PSTORE_COMPRESS` 在 v7.2 **默认 y**（Kconfig 里 `default y`），用 zlib 的 deflate：
 
@@ -394,7 +394,7 @@ static int pstore_compress(const void *in, void *out,
 
 `PSTORE_DEFAULT_KMSG_BYTES` 默认 **10240**（10 KiB），且 Kconfig 明确说 "Can be enlarged if needed, not recommended to shrink it"。
 
-### 后端：ramoops
+### Backend: ramoops
 
 最常用的后端是 ramoops（模块名 `ramoops.ko`，因为历史原因模块名与 pstore 不同），`fs/pstore/ram.c` 有 800 余行。参数表：
 
@@ -434,13 +434,13 @@ enum kmsg_dump_reason {
 
 即 **`KMSG_DUMP_EMERG` / `SHUTDOWN` 默认不记录**，需要显式 `printk.always_kmsg_dump`。`max_reason=0` 时则由这个参数决定。
 
-### 另一个后端：pstore/blk
+### Another Backend: pstore/blk
 
 `pstore_blk` 把记录写到块设备（如 U 盘或 SATA 盘），参数用 `pstore_blk.<backend>.<option>=` 形式（`blk_size`、`blkdev`、`erasesize`、`cache_size` 等），设备上要有 pstore 专用的分区。适合服务器上不想占用 precious 保留内存、且能容忍"写盘在崩溃时可能不完整"的场景。
 
 `fs/pstore/Makefile` 里的后端清单：`ramoops`（`ram.o ram_core.o`）、`pstore_zone`、`pstore_blk`、以及 `PSTORE_FTRACE` 与 `PSTORE_PMSG` 两个附加能力。
 
-## 进程级 core dump
+## Per-process core dump
 
 panic 是整机级事件，而单个进程的异常退出是进程级事件。后者由 `core_pattern` / `core_pipe_limit` 管控，走的是另一条路 —— 但它们常被混为一谈，需要分清。
 
@@ -450,7 +450,7 @@ panic 是整机级事件，而单个进程的异常退出是进程级事件。�
 
 这一块与 KB 里已有的 [coredump](https://stackoverflow.com/questions/793859) 主题相关，但机制在用户态工具侧（`gcore`、systemd-coredump、gdb），不在内核的崩溃转储链里，因此不展开。
 
-## 观测与排障
+## Observation and Troubleshooting
 
 | 目的 | 手段 |
 | :-- | :-- |
@@ -470,14 +470,14 @@ panic 是整机级事件，而单个进程的异常退出是进程级事件。�
 
 在中断上下文出错、init 进程出错、或 `panic_on_oops=1` 时直接转 panic。**其余 oops 不会自动 panic**，如果内核没挂但行为异常，想拿转储需要手动 `echo 1 > /proc/sys/kernel/panic_on_oops` 或直接 `sysrq` 触发。
 
-## 与其它子系统的接缝
+## Seams with Other Subsystems
 
 - **启动链**：崩溃转储是启动链的**反向**过程 —— 绕过固件与 bootloader，直接由内核跳进第二内核。与 [Start](/docs/CS/OS/Linux/boot/Start.md) 讲的正常引导恰好相反，`machine_kexec()` 之后没有 `setup.bin` 的实模式代码，也没有 [U-Boot](/docs/CS/OS/Linux/boot/U-Boot.md) 那套流程。
 - **内存管理**：`crashk_res` 从线性映射摘除、避开 buddy 分配，本质是 [pm](/docs/CS/OS/Linux/mm/pm.md) 里 memblock 阶段的一次特殊保留；CMA 版本则与 `mm/gup.md` 里记的 CMA 机制同源。
 - **设备模型**：pstore 是个文件系统（`fs/pstore/`），ramoops 通过 `platform_device` 注册 —— 走的是 [dev/device.md](/docs/CS/OS/Linux/dev/device.md) 那套 model/probe 绑定。
 - **调试工具**：`crash`、`gdb` 解析 vmcore 的前提是符号表与 vmlinux 匹配，调试环境搭建见 [Debug](/docs/CS/OS/Linux/Tools/Debug.md)。
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 ```shell
 # 崩溃内核是否已装载

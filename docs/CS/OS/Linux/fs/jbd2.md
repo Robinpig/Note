@@ -4,7 +4,7 @@
 
 JBD2（journaling block device, v2）是 Linux 的通用日志层，源自 ext3、现被 ext4 与 ocfs2 使用。它是**块设备层**的日志：只认块号与 `buffer_head`，不理解 inode 或目录语义，因此与具体文件系统解耦；文件系统负责声明"我要改哪些块"，JBD2 负责原子提交与恢复。本文讲 JBD2 自身的机制——[ext4.md](/docs/CS/OS/Linux/fs/ext4.md) 从文件系统视角讲的挂载模式与特性，这里不再重复。
 
-## 一致性不是免费的：三种 data 模式
+## Consistency Is Not Free: Three data Modes
 
 日志只保证**元数据**的结构一致。用户数据是否进日志是可配的，三种模式的差别全在数据块与元数据日志的相对顺序：
 
@@ -16,9 +16,9 @@ JBD2（journaling block device, v2）是 Linux 的通用日志层，源自 ext3�
 
 `data=ordered` 的默认地位来自一个权衡：它避免了 writeback 模式的**安全性**问题（元数据先落盘、指向尚未写入的新块，于是文件里出现上一次使用该块的残留内容——这是真实的越权泄露风险），又不必像 journal 模式那样把每个数据块写两遍。它的实现靠 commit 阶段的一个强制 flush，见后文 "阶段二 T_FLUSH"。
 
-## 磁盘布局
+## Disk Layout
 
-### 日志超级块
+### Log Superblock
 
 日志区第一个块是 `journal_superblock_s`（`include/linux/jbd2.h`），全部字段**大端**：
 
@@ -56,7 +56,7 @@ typedef struct journal_superblock_s
 
 `s_start` 是整个恢复逻辑的开关：**它为零当且仅当日志是干净卸载的**。挂载时看到 `s_start == 0` 就直接跳过恢复，这也是 `jbd2_journal_recover()` 里的第一条快路径判断。
 
-### 五种描述符块
+### Five Descriptor Blocks
 
 日志区里只有五类块，开头都带 `journal_header_t`，靠 `h_blocktype` 区分：
 
@@ -99,7 +99,7 @@ typedef struct journal_block_tag_s
 
 `JBD2_FLAG_ESCAPE` 对应一个容易忽略的坑：如果某个元数据块的**前四个字节恰好等于 JBD2_MAGIC_NUMBER（`0xc03b3998`）**，恢复扫描会把它误认成描述符块头。`jbd2_journal_write_metadata_buffer()` 检测到这个就把首 4 字节清零再写（`jbd2_data_do_escape()`），并在 tag 上打 ESCAPE 标记，读回时还原。
 
-### commit 块与校验和的演进
+### commit Block and Checksum Evolution
 
 ```c
 struct commit_header {
@@ -117,13 +117,13 @@ struct commit_header {
 
 校验和有三代，互斥：`CHECKSUM`（v1，整块算一个和放在 commit 块）、`CSUM_V2`（每个元数据块自带 crc32c，commit 块存 `crc32c(uuid+commit_block)`）、`CSUM_V3`（tag 用 32 位完整校验和）。内核能识别的范围由 `JBD2_KNOWN_INCOMPAT_FEATURES` 列出，未知的不兼容位会拒绝挂载。
 
-### 日志是环形缓冲区
+### The Log Is a Circular Buffer
 
 日志区大小固定（ext4 默认按文件系统大小算，上限 102400 块），写满就绕回开头复用。三个指针维护它：`j_head`（下一个可写的块）、`j_tail`（最老的、还不能覆盖的块）、`j_free`。**`j_tail` 只能由 checkpoint 推进**——这就是 checkpoint 存在的全部理由：把已提交事务的元数据真正写回原位，然后宣布"这些日志块可以覆盖了"。
 
-## 内存数据结构
+## In-Memory Data Structures
 
-### journal_t：三态事务与环形指针
+### journal_t: Three-State Transactions and Circular Pointers
 
 ```c
 struct journal_s
@@ -162,7 +162,7 @@ struct journal_s
 
 一个事务在生命周期里依次经过三个位置：**running**（接受新 handle）→ **committing**（正在写日志）→ **checkpoint**（已提交，元数据待回原位）。同一时刻 running 与 committing 各至多一个，checkpoint 是一个链表。三个指针各自有不同的锁（`j_state_lock` / `j_list_lock`），这是 JBD2 能高并发的根本。
 
-### handle_t：以额度为单位
+### handle_t: Measured in Credits
 
 文件系统的一次逻辑操作持有一个 handle：
 
@@ -187,7 +187,7 @@ struct jbd2_journal_handle
 
 `h_total_credits` 是**预算**——调用方在 `jbd2_journal_start()` 时必须声明"我最多会弄脏多少块"。这是为了避免日志在提交中途耗尽空间：既然日志是环形且大小已知，就必须事先记账。估少了会被强制重启事务（`jbd2_journal_restart()`），估多了浪费并发度。
 
-### transaction_t：九个状态与五个链表
+### transaction_t: Nine States and Five Linked Lists
 
 ```c
 	enum {
@@ -215,7 +215,7 @@ struct jbd2_journal_handle
 | `t_checkpoint_list` | 提交后仍待写回原位的缓冲区 |
 | `t_shadow_list` | 正在被日志 IO 影射的缓冲区，与 IO 缓冲区一一对应 |
 
-### journal_head：缓冲区在日志里的归属
+### journal_head: Buffer Belonging in the Log
 
 每个被日志跟踪的 `buffer_head` 挂一个 `journal_head`，其 `b_jlist` 取五种之一：
 
@@ -228,9 +228,9 @@ struct jbd2_journal_handle
 
 `BJ_Shadow` 值得单独提：commit 时元数据块的内容被复制到一块临时 IO 缓冲（`jbd2_journal_write_metadata_buffer()`），原缓冲区进入 Shadow 状态——**此时它还在内存中且内容与日志一致，但不允许再改**，直到日志 IO 完成后被重新归类为 `BJ_Forget`。这就是"元数据写两遍"的第一遍。
 
-## 事务生命周期
+## Transaction Lifecycle
 
-### 启动 handle
+### Starting a handle
 
 `start_this_handle()`（`fs/jbd2/transaction.c`）做四件事：检查额度合法性、等 barrier、把额度计入 running 事务、把 handle 挂到当前进程（`current->journal_info`）。
 
@@ -276,7 +276,7 @@ barrier 是给 `jbd2_journal_lock_updates()` 之类需要"冻结"日志的操作
 
 事务打开期间的所有分配都禁止递归回文件系统——否则一次 GFP 分配触发回写、回写又想启动事务，就自锁了。
 
-### 关闭 handle：同步批处理
+### Closing a handle: Synchronous Batching
 
 `jbd2_journal_stop()` 里有一段不写进教科书但影响很大的优化。同步 handle（fsync 路径）并不立刻提交，而是**先睡一小会儿，等别的线程搭便车进来**：
 
@@ -328,7 +328,7 @@ barrier 是给 `jbd2_journal_lock_updates()` 之类需要"冻结"日志的操作
 
 `PF_MEMALLOC` 那一半条件是同一类破环：内存告急时的写者不能在这里等 IO 完成。
 
-## Commit：从 T_LOCKED 到 T_FINISHED
+## Commit: From T_LOCKED to T_FINISHED
 
 提交由内核线程 **kjournald2**（`kthread_run(kjournald2, ..., "jbd2/%s")`，名字里的 `%s` 是设备名）驱动。它平时睡在 `j_wait_commit` 上，被唤醒的条件是"有人请求提交"或"running 事务超龄"；默认提交间隔 `JBD2_DEFAULT_MAX_COMMIT_AGE` 为 5 秒（`j_commit_interval = HZ * 5`，可用挂载选项 `commit=N` 改）：
 
@@ -342,7 +342,7 @@ barrier 是给 `jbd2_journal_lock_updates()` 之类需要"冻结"日志的操作
 
 线程主体是一个 `loop`：只要 `j_commit_sequence != j_commit_request` 就调 `jbd2_journal_commit_transaction()`。
 
-### 阶段一：T_LOCKED —— 封锁并等待
+### Phase One: T_LOCKED - Lock Down and Wait
 
 ```c
 	J_ASSERT(commit_transaction->t_state == T_RUNNING);
@@ -354,7 +354,7 @@ barrier 是给 `jbd2_journal_lock_updates()` 之类需要"冻结"日志的操作
 
 `jbd2_journal_wait_updates()` 等 `t_updates` 归零，即所有已打开的 handle 都关闭。进入 `T_SWITCH` 后，本事务不再接受新 handle（reserved 的除外，见前文）。此后清理 `t_reserved_list` 里没用上的缓冲区，并在提交前先尝试清一遍 checkpoint 链表——**"在提交之前做，因为它可能释放内存"**，而提交过程本身要分配大量临时缓冲。
 
-### 阶段二：T_FLUSH —— 数据先落盘
+### Phase Two: T_FLUSH - Data to Disk First
 
 ```c
 	commit_transaction->t_state = T_FLUSH;
@@ -373,7 +373,7 @@ barrier 是给 `jbd2_journal_lock_updates()` 之类需要"冻结"日志的操作
 
 把 `j_running_transaction` 置空、唤醒 barrier 等待者，然后 **`journal_submit_data_buffers()` 先下发数据块**——这一行就是 `data=ordered` 语义的物理实现：数据先于元数据日志落盘，保证元数据绝不会指向尚未写入的数据块。
 
-### 阶段三：T_COMMIT —— 写描述符与元数据
+### Phase Three: T_COMMIT - Write Descriptors and Metadata
 
 随后是主循环：为每个元数据块分配日志块号、复制到临时 IO 缓冲、在描述符块里写 tag，攒够一批就 `submit_bh()`：
 
@@ -431,7 +431,7 @@ start_journal_io:
 
 注意描述符块与它描述的元数据块是**同一批下发**的，而不是"先写描述符确认再写数据"——顺序由后文的 flush 保证。
 
-### 阶段四、五：等 IO 与写 commit 记录
+### Phases Four and Five: Wait for IO and Write commit Records
 
 ```c
 	jbd2_debug(3, "JBD2: commit phase 3\n");
@@ -472,7 +472,7 @@ start_journal_io:
 
 **一个事务是否"已提交"，完全取决于这个 commit 块是否完整落盘**（配合 flush 保证前面的描述符与元数据先到）。恢复时看不到合法 commit 块的事务会被整体丢弃，即使它的元数据块已经躺在日志里。
 
-### async commit：把等待挪到后面
+### async commit: Deferring the Wait
 
 启用 `JBD2_FEATURE_INCOMPAT_ASYNC_COMMIT` 后，commit 块的提交位置从阶段五提前到阶段三**之前**：
 
@@ -488,7 +488,7 @@ start_journal_io:
 
 也就是说，先发 commit 块，再等元数据 IO。这是拿"多一次 flush"换"少一次串行等待"——正确性靠 `blkdev_issue_flush()` 在 commit 块之前确立顺序，代价是慢盘上未必划算。
 
-### 阶段六：移交 checkpoint
+### Phase Six: Hand Over checkpoint
 
 ```c
 	jbd2_debug(3, "JBD2: commit phase 6\n");
@@ -504,7 +504,7 @@ start_journal_io:
 
 `BJ_Forget` 的缓冲区在此重新判定：仍脏的进新事务的 checkpoint 链表，已不脏的直接释放。事务随后进入 `T_FINISHED` 并被摘除。
 
-## Checkpoint：回收日志空间
+## Checkpoint: Reclaiming Log Space
 
 提交完成**不等于**元数据回到原位——它现在有**两份**：日志里一份（用于恢复），文件系统原位一份（旧的，待更新）。checkpoint 就是把第二份写对，然后回收第一份占用的日志空间。
 
@@ -538,7 +538,7 @@ start_journal_io:
 
 checkpoint 由两部分触发：日志空间压力，以及 `jbd2_journal_shrink_checkpoint_list()` 注册的 **shrinker**——内存回收会顺带帮你回收日志空间（`journal->j_shrinker`）。
 
-## Recovery：崩溃后的三趟扫描
+## Recovery: Three-Pass Scan After a Crash
 
 `jbd2_journal_recover()` 先检查快路径，然后跑三趟：
 
@@ -584,7 +584,7 @@ checkpoint 由两部分触发：日志空间压力，以及 `jbd2_journal_shrink
 
 `noload` 挂载选项走的是另一条路：`jbd2_journal_skip_recovery()` 只跑 `PASS_SCAN`（为了告诉用户丢了多少事务并初始化序号），然后丢弃全部日志内容。
 
-## Revoke：阻止重放旧记录
+## Revoke: Preventing Replay of Old Records
 
 revoke 解决的问题很具体：块 B 在事务 100 里被写进日志，随后被释放并重新分配给文件 Y，接着 X 又改了 B。如果崩溃恢复把事务 100 的记录重放到 B 上，就会用 X 的旧内容覆盖 Y 的数据。所以**释放块时必须记一条 revoke**，恢复时据此跳过旧记录。
 
@@ -623,7 +623,7 @@ revoke 解决的问题很具体：块 B 在事务 100 里被写进日志，随�
 
 多出来的"有效位"是为了区分"还没查过"和"查过、确定没被 revoke"，避免每次都做哈希查找。
 
-## 屏障与持久性语义
+## Barriers and Persistence Semantics
 
 日志的正确性依赖**顺序**：描述符 + 元数据必须先于 commit 块到达盘上。这个顺序由 `JBD2_BARRIER` 标志下的 `blkdev_issue_flush()` 建立，而非靠下发顺序（块层会重排）。所以 **`barrier=0`（或 `nobarrier`）会破坏日志的崩溃语义**，在有写缓存且掉电不保的设备上等于放弃保护。
 
@@ -643,7 +643,7 @@ revoke 解决的问题很具体：块 B 在事务 100 里被写进日志，随�
 
 外部日志（external journal，`j_fs_dev != j_dev`）要额外 flush 一次文件系统设备，因为两个设备各有独立的写缓存，跨设备的顺序没有隐式保证。
 
-## 观测与调优
+## Observation and Tuning
 
 每个日志设备在 `/proc/fs/jbd2/<dev>/info` 暴露统计，`jbd2_seq_info_show()` 输出的字段及含义：
 
@@ -662,7 +662,7 @@ revoke 解决的问题很具体：块 B 在事务 100 里被写进日志，随�
 
 调优选项主要是三个：`commit=N`（提交间隔，默认 5 秒）、`journal_async_commit`（异步提交）、日志大小（创建时指定）。三者都是在"崩溃后丢多少"与"平时有多快"之间取舍——提交间隔越长，崩溃时丢的越多。
 
-## 与相邻子系统的边界
+## Boundaries with Adjacent Subsystems
 
 - **PageCache 与 buffer_head**：JBD2 操作的是 `buffer_head` 而非 page，`data=ordered` 的 flush 对象是文件数据页，两者通过 `t_inode_list` 关联（ext4 用它跟踪需要特殊处理的 inode）。见 [PageCache](/docs/CS/OS/Linux/mm/PageCache.md)。
 - **块层**：日志写入最终经 `submit_bh()` 下发到 [块设备栈](/docs/CS/OS/Linux/dev/block.md)；日志设备通常是文件系统内的一个隐藏 inode（ext4 默认 inode 8），因此日志本身也是一次普通的文件块写入，只是绕过了文件系统自己的分配路径（`j_bmap` 回调）。

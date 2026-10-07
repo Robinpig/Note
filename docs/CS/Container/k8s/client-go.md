@@ -448,7 +448,7 @@ Resync机制会将Indexer本地存储中的资源对象同步到DeltaFIFO中，�
 > 另外，resync 事件只会投递给**显式请求了 resync 的 handler**——分发时会按 listener 是否订阅来过滤。
 > kube-controller-manager 的 resync 周期实际落在 **12h~24h** 之间（`MinResyncPeriod` 默认 12h，`ResyncPeriod()` 里乘 `rand.Float64() + 1`，即因子落在 `[1, 2)`），刻意随机化以避免多个控制器 lock-step 同时打爆 apiserver。回源码核对：`cmd/kube-controller-manager/app/controllermanager.go:191`、`staging/src/k8s.io/controller-manager/config/v1alpha1/defaults.go:31`。
 
-### 队列实现的变化
+### Changes in Queue Implementation
 
 v1.36 最容易被忽略的底层改动：Informer 的队列从 `DeltaFIFO` 换成了 `RealFIFO`。选择逻辑在 `tools/cache/controller.go` 的 `newQueueFIFO` 里：
 
@@ -475,7 +475,7 @@ if clientgofeaturegate.FeatureGates().Enabled(clientgofeaturegate.InOrderInforme
 
 连带影响：默认路径下 `KnownObjects == nil`，DeltaFIFO 那套靠 knownObjects 做删除判定与去重的逻辑不再生效，改由 `reconcileReplacement` 在消费侧对账。
 
-### 拉取方式的演进：流式 list
+### Evolution of Pull Methods: Streaming list
 
 v1.36 另一处影响握手方式的改动是 **WatchList（流式 list）**：Reflector 不再"先 LIST 再 WATCH"，而是直接发一个 `watch=true` + `sendInitialEvents=true` 的请求，由服务端把"当前全量"作为一串合成的 ADDED 事件流回来，最后用一个带 `k8s.io/initial-events-end` 注解的 BOOKMARK 收尾。
 
@@ -542,7 +542,7 @@ func (q *Type) Done(item interface{}) {
 
 退避序列为 `5ms × 2^(n-1)`，即 5ms → 10ms → 20ms → … → 82s。控制器通常设有最大重试次数（Deployment 为 15 次），超过才丢弃并记录 error。
 
-## reconcile 循环
+## reconcile Loop
 
 把所有部件拼起来，就是几乎每个控制器都在复制的同一个模板：
 

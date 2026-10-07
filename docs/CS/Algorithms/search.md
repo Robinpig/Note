@@ -6,7 +6,6 @@
 线性搜索是一种简单的搜索策略 通过循环遍历每个元素的方式直到找到目标
 
 ## Binary Search
-
 二分搜索适用于有序数组 相比于线性查找 可以在每次查询时成倍缩小查询范围 将时间复杂度降低到 $O(logN)$
 
 
@@ -138,11 +137,7 @@ public class BinarySearchUtil {
 
 
 
-### 二分搜索变体
-
-
-
-
+### Binary Search Variants
 **应用:**
 
 Kafka 的 索引文件
@@ -154,9 +149,7 @@ Kafka 的 索引文件
 
 
 ## Graph Search
-
 ### DFS
-
 DFS 全称是 *Depth First Search*，中文名是深度优先搜索，是一种用于遍历或搜索树或图的算法
 “二叉树”的前序、中序和后序遍历都属于深度优先搜索
 
@@ -171,7 +164,6 @@ DFS 天然符合回溯法的使用场景 常规做法是使用递归来实现
 
 
 ### BFS
-
 BFS 全称是 *Breadth First Search*，中文名是宽度优先搜索，也叫广度优先搜索。所谓宽度优先。就是每次都尝试访问同一层的节点。 
 如果同一层都访问完了，再访问下一层 这样做的结果是，BFS 算法找到的路径是从起点开始的 最短合法路径
 换言之，这条路径所包含的边数最小 在 BFS 结束时，每个节点都是通过从起点到该点的最短路径访问的
@@ -197,5 +189,11 @@ DFS 实现起来比 BFS 更简单，且由于递归栈的存在，让我们可�
 
 ## Links
 
-- [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
-- [algorithm analysis](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
+- [数据结构](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
+- [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
+
+## References
+
+1. [二分查找 - OI Wiki](https://oi-wiki.org/basic/binary/)
+2. [Binary Search - CP-Algorithms](https://cp-algorithms.com/num_methods/binary_search.html)
+3. [Breadth-First Search - CP-Algorithms](https://cp-algorithms.com/graph/breadth-first-search.html)

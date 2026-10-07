@@ -63,7 +63,7 @@ sudo apt install libgconf-2-4
 
 
 
-## 密码与权限
+## Password and Permissions
 
 
 
@@ -75,7 +75,7 @@ sudo apt install libgconf-2-4
 4. `passwd ["username"]` change password
 
 
-## 命令相关
+## Commands
 
 ##### path修改出问题了
 

@@ -6,7 +6,7 @@ ICMP 常被误解为"可有可无的诊断协议"，实际上它是 IP 正确运
 
 本篇讲 IPv4 的 ICMP：报文格式、类型、内核接收处理 `icmp_rcv`、各类差错报文的产生，以及 PMTU。ICMPv6（协议号 58）是 NDP 的载体，见 [IPv6](/docs/CS/OS/Linux/net/IPv6.md)；协议基础对照 [CN/ICMP](/docs/CS/CN/ICMP.md)。
 
-## 报文格式
+## Packet Format
 
 ```c
 // include/uapi/linux/icmp.h
@@ -31,11 +31,11 @@ struct icmphdr {
 
 所有 ICMP 报文头 8 字节，`type` 决定大类、`code` 区分具体情形，后续为变长数据区。**差错报文（error）的数据区按规定要回填"触发该错误的原始 IP 头 + 前若干字节负载"**，以便发送方识别是哪条连接、哪个包出了问题。
 
-## 类型总览
+## Type Overview
 
 ICMP 分**查询类（query）**与**差错类（error）**：
 
-### 查询类
+### Query Class
 
 | Type | 名称 | 作用 |
 |---|---|---|
@@ -44,7 +44,7 @@ ICMP 分**查询类（query）**与**差错类（error）**：
 | 17 / 18 | Mask request/reply | 地址掩码请求（基本废弃） |
 | 30 / 31 | Traceroute（已废弃） | 老的路由追踪扩展 |
 
-### 差错类
+### Error Class
 
 | Type | 名称 | 典型 code 与含义 |
 |---|---|---|
@@ -54,7 +54,7 @@ ICMP 分**查询类（query）**与**差错类（error）**：
 | 4 | Source quench（已废弃） | 旧的拥塞反馈，现被 ECN / 拥塞控制取代 |
 | 12 | Parameter problem | IP 头字段非法 / 缺少必需选项 |
 
-## 接收处理 icmp_rcv
+## Receive Processing icmp_rcv
 
 ICMP 在协议栈注册阶段由 `inet_add_protocol(&icmp_protocol, IPPROTO_ICMP)` 登记。IP 层收到协议号 1 的包、本机交付时，分发到 `icmp_rcv`（`net/ipv4/icmp.c`）：
 
@@ -96,11 +96,11 @@ int icmp_rcv(struct sk_buff *skb)
   - TCP 收到"需分片 DF"用其中的 MTU 更新路由的 pmtu；收到"主机不可达"等硬错误影响连接建立 / 重传；
   - UDP socket 若设置了 `IP_RECVERR`，错误进入其错误队列供 `recvmsg(MSG_ERRQUEUE)` 读取，否则通常静默（UDP 本就不可靠）。
 
-### rate limit 与安全
+### Rate Limit and Security
 
 内核会对 ICMP 差错报文做速率限制（`net.ipv4.icmp_ratelimit` / `icmp_ratemask`），既防止错误应答被用于放大攻击，也避免风暴。普通站点安全实践常**放行 echo request 而屏蔽部分出站差错**，但**完全封禁 ICMP 会破坏 PMTUD**，导致大包黑洞，需要谨慎。
 
-## 差错报文如何产生
+## How Error Messages Are Generated
 
 协议栈在各处理点发现问题时主动调用 `icmp_send` 构造差错报文：
 
@@ -120,7 +120,7 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, __be32 info)
 - **路由命中 RTN_UNREACHABLE / 无路由**：回目的不可达；
 - **需转发但设置了 DF 且超过出接口 MTU**：回 type 3 code 4 并携带下一跳 MTU。
 
-## PMTU：路径 MTU 发现
+## PMTU: Path MTU Discovery
 
 **PMTUD（path MTU discovery）让发送方知道到对端整条路径上最小的 MTU**，从而一次发出不需中途分片的最大包：
 

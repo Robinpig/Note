@@ -4,7 +4,7 @@
 
 
 
-## 注册中心
+## Registry
 
 服务发现是⼀个古老的话题， 当应用开始脱离单机运行和访问时， 服务发现就诞生了。 目前的网络架构是每个主机都有⼀个独立的 IP 地址， 那么服务发现基本上都是通过某种方式获取到服务所部署的 IP 地址。
 DNS 协议是最早将⼀个网络名称翻译为网络 IP 的协议， 在最初的架构选型中，DNS+LVS+Nginx 基本可以满足所有的 RESTful 服务的发现， 此时服务的 IP 列表通常配置在 nginx或者 LVS。
@@ -47,7 +47,7 @@ Zookeeper、 Consul 和 Eureka 在开源层面都没有很明确的针对服务�
 
 
 
-临时实例和持久实例的区分应该在service level, 一个service只能是其中之一
+临时实例和持久实例的区分应该在服务级别（service level），一个 service 只能是其中之一
 
 > Nacos1.x将持久性作为服务元数据 存在一个服务既有临时 也有持久的情况, 在2.x之后简化
 
@@ -139,19 +139,19 @@ Eureka 集群在扩容之后， 性能上有很大问题。
 Nacos 基于阿里巴巴内部的使用经验， 提供的解决方案是采用 Nacos-Sync 组件来做数据中心之间的数据同步， 这意味着每个数据中心的 Nacos 集群都会有多个数据中心的全量数据。 
 Nacos-Sync 是 Nacos 生态组件里的重要⼀环， 不仅会承担 Nacos 集群与 Nacos 集群之间的数据同步， 也会承担 Nacos 集群与 Eureka、 Zookeeper、 Kubernetes 及 Consul 之间的数据同步  
 
-### 健康检查
+### Health Checks
 注册中心不应该仅仅提供服务注册和发现功能，还应该保证对服务可用性进行监测，对不健康的服务和过期的进行标识或剔除，维护实例的生命周期，以保证客户端尽可能的查询到可用的服务列表
 我们需要知道 个服务是否还健康。那么第 种方式是客户端主动上报，告诉服务端自己健康状态，如果在 段时间没有上报，那么我们就认为服务已经不健康。第二种，则是服务端主动向客户端进行探测，检查客户端是否还被能探测到。
 在当前主流的注册中心，对于健康检查机制主要都采用了 TTL（Time To Live）机制，即客户端在定时间没有向注册中心发送心跳，那么注册中心会认为此服务不健康，进而触发后续的剔除逻辑。对于主动探测的方式那么根据不同的场景，需要采用的方式可能会有不同
 
 
 
-在 Nacos 中，用户可以通过两种方式进行临时实例的注册，通过 Nacos 的 OpenAP 进行服务注册或通过 Nacos 提供的 SDK 进行服务注册。
+在 Nacos 中，用户可以通过两种方式进行临时实例的注册，通过 Nacos 的 OpenAPI 进行服务注册或通过 Nacos 提供的 SDK 进行服务注册。
 
 对于永久实例的的监看检查，Nacos 采用的是注册中心探测机制，注册中心会在永久服务初始化时根据客户端选择的协议类型注册探活的定时任务。Nacos 现在内置提供了三种探测的协议，即Http、TCP 以及 MySQL 。 般而言 Http 和 TCP 已经可以涵盖绝大多数的健康检查场景。MySQL 主要用于特殊的业务场景，例如数据库的主备需要通过服务名对外提供访问，需要确定当前访问数据库是否为主库时，那么我们此时的健康检查接口，是 个检查数据库是否为主库的 MySQL命令。
 
 
-## 负载均衡
+## Load Balancing
 
 负载均衡到底是在服务提供者实现还是在服务消费者实现， 我们看到目前的负载均衡有基于权
 重、 服务提供者负载、 响应时间、 标签等策略。 其中 Ribbon 设计的客户端负载均衡机制， 主要是
@@ -168,3 +168,12 @@ Eureka 的
 负载均衡是由 ribbon 来完成的， 而 Consul 则是由 Fabio 做负载均衡。  
 
 ## Links
+
+- [Distributed Systems](/docs/CS/Distributed/Distributed.md)
+- [Architecture](/docs/CS/Distributed/Architecture.md)
+- [Consensus](/docs/CS/Distributed/Consensus/Consensus.md)
+- [CAP](/docs/CS/Distributed/CAP.md)
+- [Time](/docs/CS/Distributed/Time.md)
+- [ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)
+
+## References

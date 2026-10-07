@@ -10,7 +10,7 @@
 | [`Product/`](https://github.com/Robinpig/Note/blob/master/docs/CS/AI/LLM/Agent/Product/Codex.md) | 具体的 Agent 产品与框架实现 | [Codex 源码剖析](/docs/CS/AI/LLM/Agent/Product/Codex.md) |
 | [`Practice/`](https://github.com/Robinpig/Note/blob/master/docs/CS/AI/LLM/Agent/Practice/Self-Evolving.md) | 演进方向与开发方式的自变化 | [Self-Evolving](/docs/CS/AI/LLM/Agent/Practice/Self-Evolving.md) |
 
-## Theory 五篇怎么分工
+## How the Five Theory Articles Divide Responsibilities
 
 这几篇的关系是**从抽象到具体**，不是并列：
 
@@ -24,7 +24,7 @@
 
 **Compaction** 讲长会话怎么在窗口耗尽前活下来。它最反直觉的地方在**代价结构**上：压缩不是免费的，而是拿「模型对原始上下文的可见性」换「更长的会话时长」——厂商承认能力会下降（Codex 每次压缩后向用户发警告，说长线程与多次压缩会让模型变得不够准确）。这篇的骨架是六件事：阈值怎么定（**几乎全是 token 预算，不是「最近 N 轮」**）、保留什么、摘要由谁生成（**基本都要额外调一次 LLM**）、能否恢复（**原文通常还在盘上，但模型几乎都取不回**）、失败怎么处理、以及和 KV 缓存的交互（**各家在压缩过程中刻意在保缓存**：DSH 把指令放在回放前缀之后以复用热前缀，Claude Code 复用 system prompt 层，Pi 干脆禁掉摘要请求的 cache 写入）。附一张五家对比表与「陷阱」清单——其中「压缩会不会丢 skill 正文」的精确答案在 Claude Code 官方表里：**会重新注入，但每 skill 上限 5K、总计 25K token，超限时最老的先被丢弃**，这比直接消失更隐蔽。
 
-## Product 六个实现
+## Product: Six Implementations
 
 编程 Agent 是这一层最成熟的产品形态，几家的差异比想象中大，**不在「谁更强」而在架构选择**：
 
@@ -33,9 +33,9 @@
 - **[DSH](/docs/CS/AI/LLM/Agent/Product/DSH.md)** 是**架构哲学最激进的一个**：「一切皆插件」，连驱动 Agent 运转的主循环都只是默认插件实现之一，没有特权内核。它也是本目录里唯一逐行读源码的笔记（793 行，涵盖 Cordis 微内核、七层洋葱模型、子进程管理的 pid 复用边界、PTY）。
 - **[OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw.md)** 走的是另一条路：**本地优先的个人助手网关**，核心是接管 20 多种通讯软件 + 多 agent 路由，不服务于「写代码」这件事。
 
-一篇横向对照见 [OpenCode 与 Claude Code 的对照表](/docs/CS/AI/LLM/Agent/Product/OpenCode.md?id=与-claude-code-的对照)，它把客户端架构、模型绑定、规则文件兼容性与扩展方式逐项列出。
+一篇横向对照见 [OpenCode 与 Claude Code 的对照表](/docs/CS/AI/LLM/Agent/Product/OpenCode.md?id=comparison-with-claude-code)，它把客户端架构、模型绑定、规则文件兼容性与扩展方式逐项列出。
 
-## Practice 往哪走
+## Where Practice Is Heading
 
 能完成任务只是及格线，这一层关心的是**这层架构本身怎么继续变化**。
 
@@ -45,7 +45,7 @@
 
 **[Vibe](/docs/CS/AI/LLM/Agent/Practice/Vibe.md)** 记录的是这层工具对开发方式本身的反向影响：从 Karpathy 2025-02 提出的「氛围编程」，到他在 2026-02 亲手判定它 passé 并改推「agentic engineering」，再到 SDD（规范驱动开发）成为严肃工程的答案。它也订正了一个常见误解——原教旨版 vibe coding 是「不读 diff、只适合扔掉级项目」，把这个纪律用到生产系统上才是风险来源；后者（用 AI 写代码然后认真 review）其实是普通的软件开发。讨论「AI 参与写代码之后，人该把注意力放在哪」——答案是方向、判断与品味，以及把它们固定下来的 spec。
 
-## 一个坐标感
+## A Sense of Orientation
 
 四个组件各自对应什么、谁最容易被搞错，一张表收尾：
 

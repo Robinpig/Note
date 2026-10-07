@@ -1,4 +1,4 @@
-# Istio 接入 VM 工作负载
+# Istio Onboarding VM Workloads
 
 ## Introduction
 
@@ -8,7 +8,7 @@
 
 版本基线：**Istio 1.31.1**（2026-09-21 发布，1.31.0 于 2026-08-31）。以下字段逐条核实自 `istio/istio` 与 `istio/api` 的 1.31.1 tag（`istio/istio@1.31.1/go.mod` 声明的 api 版本为 `v1.31.1-0.20260915183457-d60a532be69a`，与 tarball 逐字符一致）。
 
-## 三个 CRD 的分工与连接方式
+## Division of Labor and Connection Among Three CRDs
 
 ```mermaid
 graph LR
@@ -28,7 +28,7 @@ graph LR
 > [!WARNING]
 > **`ServiceEntry.workloadSelector.labels` 为空 ≠ 选全部，而是「一个都不选」。** 源码注释原文：「**SE with empty workload selector will not select any workloads**」。这是接入 VM 最常见的静默失效点。
 
-## `WorkloadEntry` 字段（7 个，速查）
+## `WorkloadEntry` Fields (7, Quick Reference)
 
 短名 `we`，`networking.istio.io/v1`，Namespaced。
 
@@ -52,7 +52,7 @@ graph LR
 > [!TIP]
 > **WorkloadEntry 有 status 子资源**（`+cue-gen:WorkloadEntry:subresource:status`），含 `conditions` / `observedGeneration` / `validationMessages`。这不是「只能手动创建」的只声明式对象——istiod 会回写健康状态，见后文「健康检查」。
 
-## `WorkloadGroup`：VM 集群的模板
+## `WorkloadGroup`: VM Cluster Template
 
 短名 `wg`，三个字段：
 
@@ -71,9 +71,9 @@ graph LR
 > [!NOTE]
 > **`WorkloadGroup.metadata` 不能设 `network`。** 它只有 `labels` 与 `annotations` 两个字段，**无 network**。network 只能在 `template.network` 逐组设置（`istioctl x workload group create --network` 写入的正是 `Spec.Template.Network`）。
 
-## 部署实操
+## Deployment Practice
 
-### 前置条件
+### Prerequisites
 
 官方 VM 安装页列出四条：
 
@@ -88,7 +88,7 @@ graph LR
 kubectl label namespace istio-system topology.istio.io/network="${CLUSTER_NETWORK}"
 ```
 
-### `istioctl x workload` 命令组
+### `istioctl x workload` Command Group
 
 1.31 中确实存在（`istioctl/pkg/workload/workload.go:85-119`）：
 
@@ -114,7 +114,7 @@ istioctl x workload
 
 `x workload group create` 参数：`--name`、`-n`、`-l/--labels`、`-a/--annotations`、`-p/--ports`、`-s/--serviceAccount`（**默认 `default`**）、`--network`、`--locality`、`-w/--weight`。
 
-### 身份签发：TokenRequest → 证书
+### Identity Issuance: TokenRequest → Certificate
 
 机制是：`istioctl x workload entry configure` 通过 **TokenRequest API** 为 `template.serviceAccount` 签发 JWT，agent 再用它换 mTLS 证书。
 
@@ -133,7 +133,7 @@ istioctl x workload
 
 需 `chown -R istio-proxy /var/lib/istio /etc/certs /etc/istio/proxy /etc/istio/config /var/run/secrets`。
 
-### 注入的 proxyMetadata 全清单
+### Complete List of Injected proxyMetadata
 
 `workload.go:497-521` 写入 `mesh.yaml` 的值：
 
@@ -157,11 +157,11 @@ ISTIO_LOCAL_EXCLUDE_PORTS, SERVICE_ACCOUNT, [CA_ADDR（revisioned）], [ISTIO_SV
 >
 > `ISTIO_LOCAL_EXCLUDE_PORTS` 默认 **`22,15090,15021`**，再按 statusPort 追加 `15020`。源码注释说明 22 是为了避免 VM 失联（改 SSH 端口时需同步调整）。
 
-### systemd 单元
+### systemd Unit
 
 权威模板在 `tools/packaging/common/istio.service`：`ExecStart=/usr/local/bin/istio-start.sh`、`Restart=always`、`RestartSec=10`、`TimeoutStopSec=30s`。`istio-start.sh` 读 `./var/lib/istio/envoy/sidecar.env` 与 `cluster.env`；默认 pilot 地址 `istiod.${ISTIO_SYSTEM_NAMESPACE}.svc:15012`；`EXEC_USER` 默认 `istio-proxy`，`ISTIO_INBOUND_INTERCEPTION_MODE=TPROXY` 时改为 `root`。
 
-## 健康检查：WorkloadEntry 也有 status
+## Health Check: WorkloadEntry Also Has Status
 
 这是容易忽略的一点——**VM 的健康状态是被主动探测出来的**：
 
@@ -183,7 +183,7 @@ ISTIO_LOCAL_EXCLUDE_PORTS, SERVICE_ACCOUNT, [CA_ADDR（revisioned）], [ISTIO_SV
 
 标签优先级（自动注册时）：`node metadata > WorkloadGroup.Metadata > WorkloadGroup.Template`，且**明确不使用 `proxy.Labels`**（避免循环依赖）。
 
-## ambient 与 VM：一个需要说清的矛盾
+## ambient and VM: A Contradiction to Clarify
 
 **官方立场是明确的：VM 不能加入 ambient mesh。**
 
@@ -202,7 +202,7 @@ ISTIO_LOCAL_EXCLUDE_PORTS, SERVICE_ACCOUNT, [CA_ADDR（revisioned）], [ISTIO_SV
 
 其他已核实的 ambient 限制：**不支持 SPIRE**（指 SPIRE 作为证书提供方）；HBONE 不可关闭。
 
-### 1.31 的 HBONE 修复与升级动作
+### 1.31 HBONE Fixes and Upgrade Actions
 
 1.31 修复了「advertised HBONE capability 未传播到自动注册的 WorkloadEntry」（`releasenotes/notes/60788.yaml`）。
 
@@ -211,7 +211,7 @@ ISTIO_LOCAL_EXCLUDE_PORTS, SERVICE_ACCOUNT, [CA_ADDR（revisioned）], [ISTIO_SV
 > 1. 重连一个全新实例（触发重新注册）
 > 2. 手动给 WorkloadEntry 加标签 **`networking.istio.io/tunnel=http`**
 
-## 其他限制与已知问题
+## Other Limitations and Known Issues
 
 | 问题 | 结论 |
 | :-- | :-- |
@@ -221,7 +221,7 @@ ISTIO_LOCAL_EXCLUDE_PORTS, SERVICE_ACCOUNT, [CA_ADDR（revisioned）], [ISTIO_SV
 | `network` 语义 | 同一 network 内端点**假定 L3 互相可达**；跨 network 需 Istio Gateway（通常 `AUTO_PASSTHROUGH` 模式） |
 | 1.31 修复 | 「Service 或 WorkloadEntry 在创建后被更新」相关问题已修（issue 27183/27151/27185）；多端口 WorkloadEntry 的 `targetPort` 不生效也已修 |
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 | 现象 | 先查 |
 | :-- | :-- |

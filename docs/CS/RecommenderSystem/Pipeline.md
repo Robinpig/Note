@@ -4,7 +4,7 @@
 
 热度排行榜就是最简单的一种推荐方法，它依赖的逻辑就是当一个内容被大多数用户喜欢，那大概率其他用户也会喜欢。但是基于粗放的推荐往往会不够精确，想要挖掘用户个性化的、小众化的兴趣，需要制定复杂的规则运算逻辑，并由机器完成。
 
-## 推荐算法的主要步骤
+## Main Steps of Recommendation Algorithms
 
 - **召回**：当用户以及内容量比较大的时候，往往先通过召回策略，将百万量级的内容先缩小到百量级。
 - **过滤**：对于内容不可重复消费的领域，例如实时性比较强的新闻等，在用户已经曝光和点击后不会再推送到用户面前。
@@ -12,7 +12,7 @@
 - **混排**：为避免内容越推越窄，将精排后的推荐结果进行一定修改，例如控制某一类型的频次。
 - **强规则**：根据业务规则进行修改，例如在活动时将某些文章置顶
 
-## 漏斗的真实形状
+## The Real Shape of the Funnel
 
 上面五步在工业系统里通常还要再插一层**粗排**（pre-ranking）：召回与精排之间，用极轻的模型（双塔点积、蒸馏出的小模型）先把万级候选压到千级，好让精排的深度网络在预算内跑得完。完整的漏斗是"逐级截断"，而**截断即信息损失**——上游没捞上来的物品，下游再强也救不回来。
 
@@ -33,7 +33,7 @@
 - 加一级模型容易，减一次远程调用才是提速的主要手段（并发扇出与批量拉取的做法见 [TPP](/docs/CS/RecommenderSystem/TPP.md)，分层与预算的完整讨论见 [Architecture](/docs/CS/RecommenderSystem/Architecture.md)）
 - 每多一级截断，整体误差就会跨级放大：召回用相似度、粗排用小模型、精排用大模型，三者的目标并不完全一致，**级间一致性**（上游是否给下游留了正确答案）比单级指标的绝对值更值得监控
 
-## 样本回流与训练闭环
+## Sample Feedback and Training Loop
 
 链路不只是在线打分，它同时是数据的生产者。一条完整闭环的口径必须事先约定：
 
@@ -63,7 +63,7 @@
 - **Wide&Deep / DeepFM**：记忆与泛化两路结合的深度模型，端到端学习高阶交叉
 - **发展趋势**：注意力机制建模行为序列（DIN）、多任务多目标联合建模，以及与强化学习结合的序列决策优化（见 [ReinforcementLearning](/docs/CS/AI/ML/ReinforcementLearning.md)）
 
-## 召回与精排的模型视角
+## Model Perspective on Recall and Ranking
 
 - **召回**讲多样性：多路并行——热门召回、协同过滤（"喜欢 A 的人也喜欢 B"，原理与实现见 [CollaborativeFiltering](/docs/CS/RecommenderSystem/CollaborativeFiltering.md)）、向量召回（用户与内容各编码成向量，近邻检索，距离度量见 [KNN](/docs/CS/AI/ML/KNN.md)）。多路如何配额、双塔怎么训练、ANN 索引怎么选，见 [Recall](/docs/CS/RecommenderSystem/Recall.md)
 - **精排**本质是点击率（CTR）预估——一个典型的二分类问题：早期用[逻辑回归](/docs/CS/AI/ML/LinearModel.md) + 大规模特征交叉，主流换成[梯度提升树](/docs/CS/AI/ML/EnsembleLearning.md)与深度模型；特征质量决定上限，[特征工程](/docs/CS/AI/ML/FeatureEngineering.md)在搜推广行业是第一生产力。样本、校准与重排的完整链条见 [Ranking](/docs/CS/RecommenderSystem/Ranking.md)

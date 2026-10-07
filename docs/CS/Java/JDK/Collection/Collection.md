@@ -513,7 +513,7 @@ private static void rotate2(List<?> list, int distance) {
 }
 ```
 
-## 本目录导航
+## This Directory Navigation
 
 集合框架按**接口 → 实现 → 工具类**组织：
 

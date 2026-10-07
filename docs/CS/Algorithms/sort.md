@@ -8,7 +8,6 @@ those that sort in place and use no extra memory except perhaps for a small func
 
 
 ## Classification of Sorting Algorithms
-
 Sorting algorithms are generally categorized based on the following parameters.
 
 **By Number of Comparisons**
@@ -89,7 +88,6 @@ We give two $O(nlogn)$ sorting algorithms-Heapsort. which is $O(nlogn)$ in the w
 
 
 ## Bubble Sort
-
 Bubble sort is the simplest sorting algorithm. It works by iterating the input array from the first element to the last, comparing each pair of elements and swapping them if needed.
 Bubble sort continues its iterations until no more swaps are needed.
 The algorithm gets its name from the way smaller elements “bubble” to the top of the list.
@@ -130,7 +128,6 @@ for(int i = 0; i < nums.length; i++){
 
 
 ## Selection Sort
-
 Selection sort is an in-place sorting algorithm. Selection sort works well for small files.
 It is used for sorting the files with very large values and small keys.
 This is because selection is made based on keys and swaps are made only when required.
@@ -153,8 +150,7 @@ This method is called _selection sort_ because it works by repeatedly selecting 
 > - Running time is insensitive to input.
 > - Data movement is minimal.
 
-## Insertion sort
-
+## Insertion Sort
 Insertion sort is a simple and efficient comparison sort.
 In this algorithm, each iteration removes an element from the input data and inserts it into the correct position in the list being sorted.
 The choice of the element being removed from the input is random and this process is repeated until all input elements have gone through.
@@ -172,13 +168,11 @@ and the number of compares is at least equal to the number of inversions and at 
 
 
 ## Heap Sort
-
 Time complexity: As we remove the elements from the heap, the values become sorted (since maximum elements are always root only).
 Since the time complexity of both the insertion algorithm and deletion algorithm is $O(logn)$ (where n is the number of items in the heap), 
 the time complexity of the heap sort algorithm is $O(nlogn)$.
 
 ## Merge Sort
-
 > [!NOTE]
 >
 > Top-down mergesort uses between $½NlgN$ and $NlgN$ compares to sort any array of length N.
@@ -213,7 +207,6 @@ Bottom-up mergesort
 No compare-based sorting algorithm can guarantee to sort N items with fewer than lg(N!) ~ NlgN compares.
 
 ## Quick Sort
-
 Like Merge Sort, QuickSort is a Divide and Conquer algorithm.
 It picks an element as a pivot and partitions the given array around the picked pivot.
 There are many different versions of quickSort that pick pivot in different ways.
@@ -293,7 +286,6 @@ func main() {
 ```
 
 ### Picking the Pivot
-
 A safe course is merely to choose the pivot randomly.
 
 Median-of-Three Partitioning
@@ -302,8 +294,7 @@ Median-of-Three Partitioning
 >
 > A common solution is not to use quicksort recursively for small files, but instead use a sorting algorithm that is efficient for small files, such as insertion sort.
 
-### Randomized QuickSort
-
+### Randomized Quick Sort
 Choosing the first element of a subarray as the pivot takes only $O(1)$ time but can cause QuickSort to run in $O(n^2)$ time.
 Choosing the median element as the pivot guarantees an overall running time of $O(nlogn)$ but is much more time-consuming (if still linear-time).
 Can we have the best of both worlds? Is there a simple and lightweight way to choose a pivot element that leads to a roughly balanced split of the array? The answer is yes, and the key idea is to use randomization.
@@ -313,7 +304,6 @@ Can we have the best of both worlds? Is there a simple and lightweight way to ch
 The algorithm doesn’t spend time allocating and managing additional memory (unlike [MergeSort](/docs/CS/Algorithms/sort.md?id=merge-sort)).
 
 ## Shell Sort
-
 Shell sort (also called diminishing increment sort) was invented by Donald Shell.
 This sorting algorithm is a generalization of insertion sort. Insertion sort works efficiently on input that is already almost sorted.
 Shell sort is also known as n-gap insertion sort.
@@ -327,8 +317,7 @@ This is the first algorithm which got less than quadratic complexity among compa
 
 
 
-## Tim Sort
-
+## TimSort
 Timsort 由 Python 核心开发者 Tim Peters 于 2002 年设计，并应用于 Python 语言，其巧妙结合了插入排序和归并排序的优点，针对数据集中的有序性进行了精确的优化，尤其适合处理包含大量部分有序子序列的数据集
 
 Timsort 的核心思想是通过识别和利用数据集中已有的有序性，提高排序效率，其主要包括以下步骤：
@@ -398,21 +387,8 @@ Timsort 的时间复杂度取决于数据的有序性：
 
 
 ## Bucket Sort
-
-
-
-
-
-
-
 ## Counting Sort
-
-
-
-
-
 ## Radix Sort
-
 Similar to Counting sort and Bucket sort, this sorting algorithm also assumes some kind of information about the input elements.
 Suppose that the input values to be sorted are from base d. That means all numbers are d-digit numbers.
 
@@ -443,10 +419,7 @@ Still, there are faster sorts, which is one reason why Radix sort is not used as
 
 Time Complexity: $O(nd) ≈ O(n)$, if d is small.
 
-## 
-
 ## Tree Sort
-
 Tree sort uses a binary search tree. It involves scanning each element of the input and placing it into its proper position in a binary search tree.
 This has two phases:
 
@@ -457,7 +430,6 @@ The average number of comparisons for this method is $O(nlogn)$.
 But in worst case, the number of comparisons is reduced by $O(n^2)$, a case which arises when the sort tree is skew tree.
 
 ## External Sort
-
 Sorts that cannot be performed in main memory and must be done on disk or tape are also quite important. This type of sorting, known as external sorting.
 
 Merging is the central idea of external sorts.
@@ -474,15 +446,13 @@ Merging is the central idea of external sorts.
 
 
 ### Multiway Merge
-
 ## Others
-
 The Pancake Flipping problem is NP-hard.(see [Pancake Flipping is Hard](https://arxiv.org/pdf/1111.0434v1.pdf))
 
 ## Links
 
-- [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
-- [algorithm analysis](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
+- [数据结构](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
+- [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
 
 ## References
 

@@ -1263,9 +1263,9 @@ do_page_fault()
 
 进入时持有非独占的 mmap_lock（用以排除 VMA 变更，但允许缺页并发）。mmap_lock 可能因 flags 与返回值而被释放，详见 filemap_fault() 与 __folio_lock_or_retry()。
 
-上面的链路只讲了"谁来处理缺页"，还有一半没讲：**处理过程中页表是怎么被建出来的**。`__handle_mm_fault()` 在进入 `handle_pte_fault()` 之前，会沿地址逐级确保页表存在——`pgd_offset()` 直接取（`mm->pgd` 随进程创建、永不回收），再由 `p4d_alloc()` / `pud_alloc()` / `pmd_alloc()` 按需分配缺失的中间层，最后才落到 PTE。也就是说**页表是随地址被访问而逐步长出来的树**，进程刚启动时页表几乎是空的，稀疏地址空间只在实际用到的分支上花钱。这条路径、以及页表页自身如何表示与回收，见 [页表](/docs/CS/OS/Linux/mm/pagetable.md?id=惰性生长：缺页时逐级建表)；缺页在 PTE 里填完映射后必须让 TLB 失效，其批量机制见 [mmu_gather](/docs/CS/OS/Linux/mm/pagetable.md?id=mmu_gather：批量-tlb-失效)。
+上面的链路只讲了"谁来处理缺页"，还有一半没讲：**处理过程中页表是怎么被建出来的**。`__handle_mm_fault()` 在进入 `handle_pte_fault()` 之前，会沿地址逐级确保页表存在——`pgd_offset()` 直接取（`mm->pgd` 随进程创建、永不回收），再由 `p4d_alloc()` / `pud_alloc()` / `pmd_alloc()` 按需分配缺失的中间层，最后才落到 PTE。也就是说**页表是随地址被访问而逐步长出来的树**，进程刚启动时页表几乎是空的，稀疏地址空间只在实际用到的分支上花钱。这条路径、以及页表页自身如何表示与回收，见 [页表](/docs/CS/OS/Linux/mm/pagetable.md?id=lazy-growth-building-tables-level-by-level-on-page-fault)；缺页在 PTE 里填完映射后必须让 TLB 失效，其批量机制见 [mmu_gather](/docs/CS/OS/Linux/mm/pagetable.md?id=mmu_gather-batch-tlb-invalidation)。
 
-`handle_mm_fault()` 的调用者也不止 CPU 的异常入口：内核自己会主动触发缺页——[GUP](/docs/CS/OS/Linux/mm/gup.md) 在页表里找不到页时，就调一次 `faultin_page()` 让缺页路径去建，然后回到自己的循环重试。这条通路给缺页侧带来了原本没有的语义：R/O 长期 pin 一个匿名页时不能走写缺页（那会把页弄脏、也不符合"我只读"的声明），而是用 [`FAULT_FLAG_UNSHARE`](/docs/CS/OS/Linux/mm/gup.md?id=慢路径：跟着页表走，走不通就缺页) 把共享关系提前拆开、但不写——`faultin_page()` 里对这两个标志的互斥有明确的 `VM_WARN_ON_ONCE`，因为它们是两件不同的事。
+`handle_mm_fault()` 的调用者也不止 CPU 的异常入口：内核自己会主动触发缺页——[GUP](/docs/CS/OS/Linux/mm/gup.md) 在页表里找不到页时，就调一次 `faultin_page()` 让缺页路径去建，然后回到自己的循环重试。这条通路给缺页侧带来了原本没有的语义：R/O 长期 pin 一个匿名页时不能走写缺页（那会把页弄脏、也不符合"我只读"的声明），而是用 [`FAULT_FLAG_UNSHARE`](/docs/CS/OS/Linux/mm/gup.md?id=slow-path-following-the-page-table-faulting-when-stuck) 把共享关系提前拆开、但不写——`faultin_page()` 里对这两个标志的互斥有明确的 `VM_WARN_ON_ONCE`，因为它们是两件不同的事。
 
 ### page_fault
 

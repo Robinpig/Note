@@ -4,7 +4,7 @@ nginx 的配置看起来是"一门小语言"，但它的行为完全由源码里
 
 本文按"由浅入深"组织：先讲语言本身的规则，再讲匹配算法，最后落到变量与陷阱。主笔记见 [nginx](/docs/CS/CN/nginx/nginx.md)。
 
-## 配置文件的结构
+## Structure of Configuration File
 
 ```nginx
 user  nginx;                       # ← main 上下文
@@ -41,7 +41,7 @@ http {                             # ← http 块（七层）
 
 块之间不允许乱套：`location` 只能在 `server`（或另一个 `location`、或 `if in location`）里，`upstream` 只能在 `http` 里，`server` 可以在 `http`、`stream`、`mail` 里（分别属于不同模块，同名不同义）。
 
-### 上下文（Context）
+### Context
 
 每条指令在源码里都声明了它能出现的位置，写错位置会直接启动失败：
 
@@ -91,7 +91,7 @@ static ngx_command_t  ngx_http_rewrite_commands[] = {
 };
 ```
 
-### 指令表
+### Directive Table
 
 ```c
 struct ngx_command_s {
@@ -106,7 +106,7 @@ struct ngx_command_s {
 
 `set` 是一批通用 setter：`ngx_conf_set_flag_slot`（on/off）、`ngx_conf_set_str_slot`、`ngx_conf_set_msec_slot`、`ngx_conf_set_num_slot`、`ngx_conf_set_enum_slot`，复杂指令则各写各的（如 `proxy_pass` 的 `ngx_http_proxy_pass`）。
 
-## 解析流程
+## Parsing Flow
 
 ```dot
 digraph conf_parse {
@@ -128,7 +128,7 @@ digraph conf_parse {
 }
 ```
 
-### 词法：`ngx_conf_read_token()`
+### Lexical: `ngx_conf_read_token()`
 
 - 空白（空格/制表/换行）都是分隔符，**一条指令可以跨行写**；
 - `#` 只在 token 起始位置才是注释，出现在 token 内部就是普通字符（密码里带 `#` 要加引号）；
@@ -137,7 +137,7 @@ digraph conf_parse {
 - `${var}` 中的 `{` 不会被当作块开始——这是 `$` 在词法阶段唯一的作用，变量本身**这一步不求值**；
 - 返回值：`NGX_OK`（遇到 `;`）、`NGX_CONF_BLOCK_START`（`{`）、`NGX_CONF_BLOCK_DONE`（`}`）、`NGX_CONF_FILE_DONE`。
 
-### 语义：`ngx_conf_handler()`
+### Semantic: `ngx_conf_handler()`
 
 ```c
 // core/ngx_conf_file.c（简化）
@@ -174,7 +174,7 @@ for (i = 0; cf->cycle->modules[i]; i++) {          /* 线性扫描所有模块 *
 1. **指令查找是 O(模块数 × 指令数) 的线性扫描，没有 hash**。nginx 只接受这个开销，因为解析只在启动时发生一次。
 2. `NGX_DIRECT_CONF` 与 `NGX_MAIN_CONF` 的差别是"给不给指针的指针"：`main` 层的配置结构体指针可能为空（需要 `set()` 自己创建），`DIRECT_CONF` 则保证已存在。
 
-## 三层配置结构与合并
+## Three-Layer Configuration Structure and Merging
 
 HTTP 的每个模块最多有三份配置结构体，挂在 `ngx_http_conf_ctx_t` 上：
 
@@ -193,7 +193,7 @@ main_conf ──> srv_conf ──> loc_conf
               (merge_srv_conf)  (merge_loc_conf)
 ```
 
-### 合并宏：只在"子级未设置"时继承
+### Merge Macro: Inherit Only When Child Not Set
 
 ```c
 // core/ngx_conf_file.h
@@ -218,7 +218,7 @@ main_conf ──> srv_conf ──> loc_conf
 
 示例：`keepalive_timeout` 在 location 里没写，就继承 server，再没有就继承 http，最后才是默认值 75s。
 
-### 数组型指令：跨层覆盖，不是合并
+### Array-Type Directives: Cross-Layer Override, Not Merge
 
 这是最容易踩的规则。以 `proxy_set_header` 为例：
 
@@ -263,17 +263,17 @@ http {
 
 同理的还有 `proxy_set_body`? 不，这个是标量。常见数组/累积型指令：`add_header`、`add_trailer`、`proxy_set_header`、`fastcgi_param`、`uwsgi_param`、`scgi_param`、`grpc_set_header`、`more_set_headers`。
 
-## server 匹配
+## server Matching
 
 一个连接进来时，nginx 分两步决定用哪个 `server`：
 
-### 第一步：按 `listen` 选（连接建立时）
+### Step 1: Select by `listen` (At Connection Establishment)
 
 `ngx_http_init_connection()` 只根据**本地地址:端口**定位 `ngx_http_addr_conf_t`，如果同一个端口上配了多个地址（`listen 1.2.3.4:80` 与 `listen 80`），才用 `getsockname()` 区分。这一步**不看 Host**，只确定兜底用的 `default_server`。
 
 `default_server` 的选取规则：显式写了 `listen ... default_server` 的那个；都没写就取**该地址上第一个** `server` 块。
 
-### 第二步：按 `server_name` 选（请求头解析后）
+### Step 2: Select by `server_name` (After Request Header Parsing)
 
 `ngx_http_set_virtual_server()` → `ngx_http_find_virtual_server()` 用 `ngx_hash_find_combined()` 做查找，优先级被硬编码在这个函数里：
 
@@ -322,9 +322,9 @@ server {
 }
 ```
 
-## location 匹配
+## location Matching
 
-### 语法与优先级
+### Syntax and Priority
 
 ```nginx
 location = /exact      { }   # 精确匹配：命中即停，不再看正则
@@ -343,7 +343,7 @@ location $is_mobile    { }   # 1.31.5 起：predicate location，按变量真假
 3. 否则按配置顺序遍历正则 location，第一个命中的采用；
 4. 都没命中就用最长前缀的结果；再没有就是 server 级 location。
 
-### 静态 location 是一棵树，不是线性扫描
+### Static location Is a Tree, Not Linear Scan
 
 启动阶段 `ngx_http_init_locations()` 把 location 排序并切成四段（named / predicate / regex / 静态），静态段再交给 `ngx_http_init_static_location_trees()` 建树：
 
@@ -418,7 +418,7 @@ for ( ;; ) {
 - `^~` 只在**前缀已经匹配成功**时才生效，它不会让一个不匹配的 location 突然生效。
 - **auto_redirect**：`location /dir/ { proxy_pass ...; }` 会自动给 `clcf->auto_redirect = 1`，于是访问 `/dir` 会收到 **301 → /dir/**（源码在 `ngx_http_core_find_config_phase()` 里对 `NGX_DONE` 的处理）。
 
-### 嵌套与命名 location
+### Nested and Named location
 
 - **嵌套 location**：前缀匹配命中后返回 `NGX_AGAIN`，递归进入子 location 继续找；正则命中后也会递归。
 - **命名 location `@name`**：存在 `server` 级（`cscf->named_locations`），普通匹配**永远查不到它**，只有 `error_page`、`try_files`、`rewrite` 的内部跳转能引用：
@@ -433,7 +433,7 @@ for ( ;; ) {
   跳转走 `ngx_http_named_location()`，它会把 `r->phase_handler` 直接设为 `location_rewrite_index`，即**从 REWRITE 阶段继续，不再重新匹配 location**。
 - **predicate location**（1.31.5）：`location $is_mobile { }`，运行时求值变量，非空且非 `"0"` 则命中。它排在正则之后、命名之前。
 
-### `limit_except` 与方法切换
+### `limit_except` and Method Switching
 
 `limit_except GET { ... }` 会为"非 GET/HEAD 方法"准备一份独立的 loc_conf，在 `ngx_http_update_location_config()` 里按需切换：
 
@@ -444,9 +444,9 @@ if (r->method & clcf->limit_except) {
 }
 ```
 
-## 变量
+## Variables
 
-### 变量是什么
+### What Are Variables
 
 变量不是在请求里预先算好的一张 map，而是**一组带索引的懒求值 getter**：
 
@@ -492,7 +492,7 @@ ngx_http_variable_request(ngx_http_request_t *r, ngx_http_variable_value_t *v, u
 | `WEAK` | 弱定义，允许后续模块"升级"（`set` 定义的变量） |
 | `PREFIX` | 前缀变量（`$http_*`、`$arg_*`、`$cookie_*`、`$upstream_http_*`），线性最长匹配 |
 
-### 三个 getter
+### Three Getters
 
 | 函数 | 时机 | 行为 |
 | :-- | :-- | :-- |
@@ -502,7 +502,7 @@ ngx_http_variable_request(ngx_http_request_t *r, ngx_http_variable_value_t *v, u
 
 结论：**变量默认缓存**，`$uri` 这类每次内部重定向都会变的才标了 `NOCACHEABLE`。反过来，`$request_uri`（未解析的原始 URI）是**可缓存**的，因为内部重定向不会改它。
 
-### 前缀变量
+### Prefix Variables
 
 `$http_*`、`$arg_*`、`$cookie_*`、`$sent_http_*`、`$upstream_http_*` 不是预先枚举的，而是启动时注册成 `PREFIX` 变量，运行期按名字最长匹配：
 
@@ -512,7 +512,7 @@ if ($arg_debug = "1") { ... }                      # 查询参数 debug
 add_header X-Upstream-Latency $upstream_http_x_latency;
 ```
 
-## rewrite 与内部重定向
+## rewrite and Internal Redirect
 
 `rewrite` 指令的四个 flag 决定了后续流程：
 
@@ -548,7 +548,7 @@ location /images/ {
 }
 ```
 
-## 陷阱清单
+## Pitfall List
 
 > [!WARNING]
 > 以下每一条都对应真实的线上事故形态。

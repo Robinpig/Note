@@ -633,7 +633,7 @@ Another fundamental difference is that **Spring MVC does not support asynchronou
 nor does it have any explicit support for asynchronous and reactive types as model attributes.
 Spring WebFlux does support all that.
 
-### 选型：DeferredResult vs Callable
+### Selection: DeferredResult vs Callable
 
 | 返回值 | 线程模型 | 适用场景 |
 |---|---|---|
@@ -652,7 +652,7 @@ Spring MVC 对 CORS 提供多层支持，核心是判断请求是否带 `Origin`
 
 预检（preflight）是带 `OPTIONS` 方法和 `Access-Control-Request-Method` 头的请求，由框架根据配置直接应答，不进入控制器方法。细粒度控制还可用 `CorsConfiguration` 按请求动态决定放行策略。
 
-## 路径匹配：PathPattern 与 AntPathMatcher
+## Path Matching: PathPattern and AntPathMatcher
 
 Spring 5.3 起引入 `PathPatternParser`，Spring 6 / Boot 3 起 MVC 与 WebFlux **默认用它替代 `AntPathMatcher`** 做 URL 路径匹配；到 7.x，`AntPathMatcher` 在 HTTP 请求映射场景已**被弃用**，仅保留给非 Web 的内部用途（如资源路径匹配）。
 

@@ -6,7 +6,7 @@ OpenResty 把 LuaJIT 嵌进 nginx（核心是 `lua-nginx-module`），让 nginx 
 
 本文覆盖：执行阶段挂载、cosocket、共享字典、FFI 与性能陷阱。nginx 本体机制见 [nginx](/docs/CS/CN/nginx/nginx.md)。
 
-## 执行阶段：Lua 怎么挂进 11 个阶段
+## Execution Phase: How Lua Hooks into 11 Phases
 
 `lua-nginx-module` 把 nginx 的阶段机制（见 [HTTP](/docs/CS/CN/nginx/HTTP.md)）映射成一组 `*_by_lua` 指令，每个都是「在该阶段执行一段 Lua」：
 
@@ -29,7 +29,7 @@ OpenResty 把 LuaJIT 嵌进 nginx（核心是 `lua-nginx-module`），让 nginx 
 
 每个请求内的 Lua 跑在 **LuaJIT 协程**里。`ngx.sleep`、cosocket 的读写都会 yield 挂起整个协程并释放 worker——这就是「同步写法、异步执行」的机制。
 
-## cosocket：非阻塞 socket 的 Lua 化
+## cosocket: Non-blocking socket Lua-ified
 
 cosocket（coroutine + socket）把 nginx 的事件 socket 包装成 Lua 对象：
 
@@ -56,7 +56,7 @@ red:set_keepalive(10000, 100)               -- 放回连接池
 
 `ngx.location.capture` 是另一种「子请求」形式（走 nginx 内部 HTTP 栈，能复用 proxy_pass/缓存），与 cosocket 的取舍：需要 nginx 特性（缓存、location 匹配）用 capture，需要裸协议（Redis/Memcached）用 cosocket。
 
-## 共享内存：lua_shared_dict 与 worker 间状态
+## Shared Memory: lua_shared_dict and Inter-worker State
 
 ```conf
 http {
@@ -77,7 +77,7 @@ cache:delete("key")
 - **跨 worker 一致**；但每次操作都有锁开销，高频读写用它反而慢——热数据先 worker 本地缓存（`lua-resty-lrucache`），`shared_dict` 做跨 worker 的低频同步层
 - `add`/`incr` 是原子的，适合做计数器、分布式锁（配合 `resty.lock` 防缓存击穿）
 
-## FFI 与性能陷阱
+## FFI and Performance Pitfalls
 
 LuaJIT 的 FFI 可以直接调 C 库，OpenResty 生态大量用它绕过 table/字符串的转换开销。但性能陷阱明确：
 
@@ -89,7 +89,7 @@ LuaJIT 的 FFI 可以直接调 C 库，OpenResty 生态大量用它绕过 table/
 
 `resty` 命令行（`resty -e 'print("hi")'`）可以直接跑脚本，方便测试 API 语义。
 
-## 生态与关联
+## Ecosystem and Related
 
 | 层 | 项目 | 说明 |
 | :-- | :-- | :-- |

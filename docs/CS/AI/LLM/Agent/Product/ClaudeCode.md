@@ -21,7 +21,7 @@ brew install --cask claude-code
 
 
 
-## 命令
+## Commands
 
 1 /plan - 先规划再执行
 
@@ -50,7 +50,7 @@ PreToolUse   git push 前自动检查
 Stop         会话结束前清理临时文件
 ```
 
-### 完整事件表
+### Complete Event Table
 
 按生命周期分组，挑有代表性的：
 
@@ -66,7 +66,7 @@ Stop         会话结束前清理临时文件
 
 > `InstructionsLoaded` 在 `CLAUDE.md` 或 `.claude/rules/*.md` 被载入上下文时触发——会话启动时、以及会话中被懒加载时都会触发。`CwdChanged` 在 Claude 执行 `cd` 改变工作目录时触发，适合配合 direnv 做响应式环境管理。
 
-### 容易踩的点
+### Easy Pitfalls
 
 - **不是所有事件都支持 `matcher`**。`UserPromptSubmit`、`Stop`、`CwdChanged`、`TaskCreated` 等十个事件每次触发都执行，给它们加 `matcher` 会被**静默忽略**——不报错，只是没用。
 - **`matcher` 的匹配语义会随字符变化**：只含字母数字与 `_ - 空格 , |` 时按精确字符串（支持 `|` 或 `,` 分隔的列表）匹配；一旦出现其他字符，就当**未锚定的 JS 正则**处理，于是 `Edit.*` 会连 `NotebookEdit` 一起匹配，要精确匹配必须写 `^Edit$`。`FileChanged` 与 `StopFailure` 的匹配字符集更窄，只有字母数字与 `_`、`|`。
@@ -77,7 +77,7 @@ Stop         会话结束前清理临时文件
 - **`once: true`** 只在 skill frontmatter 里生效，在 settings 文件与 agent frontmatter 会被忽略。
 - `EndConversation` 是工具行为不是 hook event——它的调用会跳过 `PreToolUse` 与 `PostToolUse`。
 
-### 常用 Hooks 配方
+### Common Hook Recipes
 
 **自动格式化：**编辑 .ts/.tsx 文件后自动运行 prettier
 
@@ -112,7 +112,7 @@ Claude Code 的记忆系统主要可以分为三大核心模块：长期持久�
 
 ### Memory Architecture
 
-#### 长期持久记忆
+#### Long-Term Persistent Memory
 
 这是 Claude Code 记忆系统中最核心、最具特色的部分。它通过读取 Markdown 文件来为 AI 注入“长期记忆”，这些记忆会在每次启动新会话时自动加载。
 CLAUDE.md 采用了分层加载机制，优先级从低到高（或从全局到局部）如下：
@@ -138,7 +138,7 @@ CLAUDE.md 采用了分层加载机制，优先级从低到高（或从全局到�
 路径：.claude/CLAUDE.md （位于项目根目录下）
 作用：存储仅属于你个人、不想提交到 Git 共享的项目特定偏好。例如你个人的调试习惯、临时的上下文提示等。这个文件应该被加入到 .gitignore 中。
 
-#### 短期工作记忆
+#### Short-Term Working Memory
 
 
 这是 Claude Code 在当前终端会话中的“工作记忆”，用于维持多轮对话的连贯性。
@@ -149,7 +149,7 @@ Claude Code 会记住你在当前会话中说过的话，以及它执行过的�
 自动压缩机制：上下文接近窗口极限时自动触发，后台总结历史、提取核心决策与关键代码修改、遗忘冗长中间推理。`/compact` 可手动触发，`PreCompact` / `PostCompact` 两个 hook 事件可介入其前后。官方建议**别抢在自动压缩之前手动 compact**，留给任务之间的自然断点——压缩发生在任务中途会打断思路。
 细节（触发公式、保留策略、压缩与 skill 状态的关系、各家对比）见 [上下文压缩](/docs/CS/AI/LLM/Agent/Theory/Compaction.md)。
 
-#### 环境感知记忆
+#### Environment-Aware Memory
 
 除了显式的文件和对话，Claude Code 还会主动“感知”当前环境，将其作为隐式记忆。
 1. 文件系统感知
@@ -165,7 +165,7 @@ Claude Code 深度集成了 Git。它会自动读取：
 
 
 
-### “记忆管理”技巧
+### "Memory Management" Tips
 
 1. 打造高质量的 CLAUDE.md
 CLAUDE.md 的质量直接决定了 Claude Code 的表现。编写时请遵循以下原则：

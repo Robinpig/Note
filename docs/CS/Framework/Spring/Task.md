@@ -47,7 +47,7 @@ Spring自动装载的ThreadPoolTaskExecutor线程池对象的参数：核心线�
 
 
 
-### 虚拟线程
+### Virtual Threads
 
 Java 21 的虚拟线程（Virtual Threads）在 Framework 7 / Boot 4 中已是一等公民，一行配置即可让 Web 请求处理、`@Async` 执行、任务调度全部跑在虚拟线程上：
 
@@ -529,7 +529,7 @@ public class MyTask {
 }
 ```
 
-#### @Scheduled 参数语义
+#### @Scheduled Parameter Semantics
 
 | 属性 | 含义 |
 |---|---|
@@ -541,7 +541,7 @@ public class MyTask {
 
 `cron`、`fixedDelay`、`fixedRate` 三者**必须且只能指定一个**，否则启动报错（对应源码里的 `Exactly one of ...` 断言）。cron 触发不支持 initialDelay。
 
-#### 启用方式
+#### Enablement Method
 
 `@EnableScheduling` 负责扫描 `@Scheduled`，`@EnableAsync` 负责 `@Async`，两者独立，按需开启：
 
@@ -808,7 +808,7 @@ public static Method selectInvocableMethod(Method method, @Nullable Class<?> tar
 但是有一个问题就是 TaskScheduler 的默认实现 ThreadPoolTaskScheduler，它其实也实现了 TaskExecutor，所以在一些配置复杂的场景中，它可能会被当作 TaskExecutor 来使用。
 我们要避免 @Async 底层实际使用 ThreadPoolTaskScheduler，导致出现预期之外的情况
 
-### 异步失效
+### Async Invalidity
 
 - 未使用@EnableAsync
 
@@ -821,7 +821,7 @@ Spring相关
 - 未被 Spring 管理
 - @Async 方法返回值必须是 void 或者 Future
 
-### 线程池
+### Thread Pool
 
 手动设置自定义的线程池
 
@@ -832,6 +832,7 @@ Spring相关
 - [Transaction](/docs/CS/Framework/Spring/Transaction.md)
 - [AOP](/docs/CS/Framework/Spring/AOP.md)
 - [Transaction](/docs/CS/Framework/Spring/Transaction.md)
+- [Scheduled Task](/docs/CS/SE/Scheduled_Task.md)
 
 ## References
 

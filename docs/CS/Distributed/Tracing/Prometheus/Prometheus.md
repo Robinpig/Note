@@ -22,7 +22,7 @@ Prometheus 的主要特性包括：
 
 Prometheus 受启发于 Google 的 Borgmon 监控系统。Prometheus 基于 Golang 开发，可方便进行二进制部署，同时可方便地使用 Docker 或 Kubernetes 进行部署。除程序外，仅有单文件配置文件与存储数据，存储数据亦可使用第三方数据库。
 
-### 二进制部署
+### Binary Deployment
 
 ```bash
 # 下载并解压（版本可按需调整）
@@ -36,7 +36,7 @@ cd prometheus-2.53.0.linux-amd64
 
 默认监听 `http://localhost:9090`。
 
-### Docker 部署
+### Docker Deployment
 
 ```bash
 docker run -d \
@@ -45,7 +45,7 @@ docker run -d \
   prom/prometheus
 ```
 
-### 常用启动参数
+### Common Startup Parameters
 
 | 参数                                   | 说明                         |
 | ------------------------------------ | -------------------------- |
@@ -55,7 +55,7 @@ docker run -d \
 | `--web.enable-lifecycle`             | 启用 `/-/reload` 等管理 API     |
 | `--web.enable-remote-write-receiver` | 允许接收 Remote Write 数据       |
 
-### 热加载
+### Hot Reloading
 
 启动时需开启 `--web.enable-lifecycle`：
 
@@ -86,7 +86,7 @@ Prometheus 直接或通过中间 Pushgateway（用于短期任务）从已插桩
 - Alertmanager 根据配置文件，对接收的警报进行处理（去重、分组、路由），发出告警
 - 通过 Prometheus Web UI 或 Grafana 进行可视化展示
 
-### Pull vs Push
+### Pull and Push
 
 Prometheus 采用 Pull 模型，优点：
 
@@ -160,14 +160,14 @@ Prometheus 从根本上将所有数据存储为时间序列（time series）：�
 
 > 注意：冒号是为用户定义的 recording rules 保留的，exporter 或直接插桩不应使用。
 
-### Sample
+### Samples
 
 时间序列中的每个点称为样本（sample），由三部分组成：
 
 - float64 类型的值
 - 毫秒精度的时间戳
 
-### Label
+### Labels
 
 标签为同一指标名建立不同的维度（如 `method="GET"`、`handler="/api"`）。标签值的任意组合都对应一条独立的时间序列，因此标签组合总数（基数）直接决定存储量。
 
@@ -235,7 +235,7 @@ rate(http_requests_total{status=~"5.."}[5m])
   / rate(http_requests_total[5m])
 ```
 
-### 常用操作符与函数
+### Common Operators and Functions
 
 - 聚合：`sum`、`avg`、`min`、`max`、`count`、`topk`、`bottomk`，可用 `by` / `without` 分组
 - 算术/比较/逻辑：`+ - * / % == != > < =~ !~`，`and or unless`
@@ -405,9 +405,9 @@ EOF
 
 
 
-## Alerting
+## Alerts
 
-### Alerting Rules
+### Alert Rules
 
 告警规则在 Prometheus 中评估，触发后推送给 Alertmanager：
 

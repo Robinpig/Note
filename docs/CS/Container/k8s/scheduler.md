@@ -9,7 +9,7 @@ kube-scheduler 是 Kubernetes 的默认调度器，职责窄到只有一件事�
 > [!NOTE]
 > 本文基于 **Kubernetes v1.36.4** 源码实读。v1.36 有一批结构性变更，与多数既有资料的认知差异较大，集中列在文末。
 
-## 源码结构
+## Source Code Structure
 
 v1.36 的调度器目录发生过一次重命名，**老路径已经全部失效**：
 
@@ -21,7 +21,7 @@ v1.36 的调度器目录发生过一次重命名，**老路径已经全部失效
 
 `pkg/scheduler/backend/` 下新增了 `api_cache`、`api_dispatcher`、`heap` 三个子层，用于支撑异步 API 调用（默认关闭）。原来的 `scheduler.go` 现在只剩构造与装配逻辑，主循环不在这里。
 
-## 主循环 ScheduleOne
+## Main Loop ScheduleOne
 
 `pkg/scheduler/schedule_one.go:67` 是整个调度器的入口：
 
@@ -51,7 +51,7 @@ NextPod(activeQ.pop)            阻塞取当前最优 Pod
  go runBindingCycle            ★ 绑定放进独立 goroutine
 ```
 
-### 为什么必须先 AssumePod
+### Why AssumePod Must Come First
 
 `assume` 的源码注释写得很直白：乐观地假定绑定会成功，然后把 Pod 写进 cache 并异步发起绑定；万一绑定失败，立即释放已分配给它的资源。
 
@@ -62,7 +62,7 @@ NextPod(activeQ.pop)            阻塞取当前最优 Pod
 1. 绑定失败时显式 `Cache.ForgetPod` 回收；
 2. 每次 `UpdateSnapshot` 时调用 `forgetAllAssumedPods` 做兜底。
 
-## 调度队列
+## Scheduling Queue
 
 `PriorityQueue` 由三个部分组成（`backend/queue/scheduling_queue.go:172`）：
 
@@ -88,7 +88,7 @@ NextPod(activeQ.pop)            阻塞取当前最优 Pod
 
 事件驱动的重新入队依赖 Queueing Hints：**gated pod 只对自己 gating 插件注册过的事件或 wildcard 事件响应**，这是防止无效重算的关键优化。
 
-## Scheduling Framework 扩展点
+## Scheduling Framework Extension Points
 
 扩展点的权威定义已经不在 `pkg/scheduler/framework/interface.go`，而在 staging 仓库 `staging/src/k8s.io/kube-scheduler/framework/interface.go`。按实际调用顺序：
 
@@ -110,7 +110,7 @@ PreBindPreFlight  →  WaitOnPermit  →  PreBind  →  Bind  →  PostBind
 
 v1.36 新增了两个扩展点：`PreBindPreFlight`（并行 PreBind 预检）与 `SignPlugin`；另有服务于 pod group 的 `PlacementGeneratePlugin` / `PlacementScorePlugin`。注意 `PreFilterExtensions` **没有被统一化**，仍然作为 `PreFilterPlugin` 的可选返回值独立存在。
 
-### Filter 阶段的局部最优
+### Local Optimum in the Filter Phase
 
 调度器在集群规模大时只遍历部分节点，这就是 sched 文档里"局部最优解"的来源。`numFeasibleNodesToFind` 的公式（`schedule_one.go:864`）：
 
@@ -123,7 +123,7 @@ v1.36 新增了两个扩展点：`PreBindPreFlight`（并行 PreBind 预检）�
 
 即少于 100 个节点时全量遍历；5000 节点时按 `50 - 40 = 10%` 取 500 个节点，找到足够数量即 `cancel` 掉剩余的并行检查任务。
 
-## 默认插件与权重
+## Default Plugins and Weights
 
 默认启用的打分插件（`apis/config/v1/default_plugins.go`）：
 
@@ -149,7 +149,7 @@ func (pl *PrioritySort) Less(pInfo1, pInfo2 fwk.QueuedPodInfo) bool {
 
 NodeResourcesFit 的默认策略是 `LeastAllocated`，资源权重为 `cpu:1, memory:1`。
 
-## 抢占
+## Preemption
 
 只有 PostFilter 阶段才会触发抢占。流程是六步：`PodEligibleToPreemptOthers` 过滤 → `findCandidates` → `callExtenders` → `SelectCandidate` → 执行驱逐 → 返回被提名节点。
 
@@ -160,7 +160,7 @@ NodeResourcesFit 的默认策略是 `LeastAllocated`，资源权重为 `cpu:1, m
 
 抢占并不会真的驱逐 Pod，它只是给被抢占者标记 `nominatedNodeName` 并通过 apiserver 删除 victim；真正的驱逐由 apiserver + kubelet 完成。
 
-## Bind 的落点
+## Where Bind Lands
 
 绑定优先级是：**先 HTTP extender，后框架插件**。
 
@@ -171,7 +171,7 @@ err := b.handle.ClientSet().CoreV1().Pods(binding.Namespace).Bind(ctx, binding, 
 
 注意这里提交的是 legacy **`binding` 子资源**，不是 Update pods。只有开启 `SchedulerAsyncAPICalls`（默认 false）时才会改走异步的 `APICacher().BindPod`。
 
-## v1.36 关键默认值
+## v1.36 Key Default Values
 
 | 参数 | 默认值 | 位置 |
 |---|---|---|

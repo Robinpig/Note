@@ -132,9 +132,9 @@ Breakpoint的实现分两种 硬件和软件
 
 ## Links
 
-- [GCC]()
-- [LLDB](/docs/)
+- [C](/docs/CS/C/C.md)
 
 ## References
 
-1. [GDB: The GNU Project Debugg](http://www.sourceware.org/gdb/)
+1. [GDB: The GNU Project Debugger](https://www.sourceware.org/gdb/)
+2. [ptrace(2) — Linux manual](https://man7.org/linux/man-pages/man2/ptrace.2.html)

@@ -1094,7 +1094,7 @@ void __wake_up(struct wait_queue_head *wq_head, unsigned int mode,
 EXPORT_SYMBOL(__wake_up);
 ```
 
-## Socket 阻塞读与唤醒
+## Socket Blocking Read and Wakeup
 
 Socket 的阻塞 `read` 是等待队列最典型的应用（收包路径见 [network Ingress](/docs/CS/OS/Linux/net/network.md?id=ingress)）。
 

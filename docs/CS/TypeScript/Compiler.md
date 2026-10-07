@@ -4,7 +4,7 @@ TypeScript 编译器（`tsc`）不是一个传统意义上的"编译到机器码
 
 2026 年这块发生了十四年来最大的变化：编译器主体从自托管的 TypeScript 移植成了 **Go 原生二进制**（TypeScript 7.0）。本文同时覆盖经典管线与新实现。
 
-## 两代实现
+## Two Generations of Implementation
 
 | 代号 | 实现 | 版本范围 | 运行环境 |
 |------|------|----------|----------|
@@ -13,7 +13,7 @@ TypeScript 编译器（`tsc`）不是一个传统意义上的"编译到机器码
 
 Corsa 是一次**忠实移植（faithful port）**，不是重新设计。团队刻意逐文件复刻原结构，从而保证类型检查逻辑与 6.0 结构相同、语义一致：任何在 6.0 下能干净编译（且无弃用告警）的代码，在 7.0 下产出完全相同的结果。
 
-## 编译管线
+## Compilation Pipeline
 
 ```
   ┌──────────────────────────────────────────────────────────────┐
@@ -43,7 +43,7 @@ Corsa 是一次**忠实移植（faithful port）**，不是重新设计。团队
 
 一个容易被忽视的事实：**AST 里充满了环**（子节点指回父节点、符号引用回 AST、类型指向声明又指回 AST）。这个性质直接决定了后面选择 Go 而不是 Rust。
 
-## 为什么原先在 Node 上跑不动
+## Why It Couldn't Run on Node Before
 
 Strada 时代三个无法用调参绕开的天花板：
 
@@ -59,11 +59,11 @@ Go 一次搬掉三块石头：
 - goroutine 提供真正的**共享内存并行**，多个 worker 可以直接读同一份类型数据，而非 Node worker 那种需要序列化传递的模型；
 - Go 的**并发 GC**与应用并行运行，不会长时间 Stop-The-World，天然适配递归、自引用的 AST 图。
 
-### 为什么是 Go 而不是 Rust
+### Why Go Instead of Rust
 
 这个问题在社区吵了很久。TypeScript 开发负责人 Ryan Cavanaugh 给的理由很具体：**Rust 的所有权模型不允许环形数据结构**，而 TypeScript 的 AST 到处是环。要用 Rust 就得先重新设计编译器的数据模型——那是数年级的工作量，且无法保证语义一致。相比之下 Go 换来的是约一年工期 + 严格等价的语义。
 
-## TypeScript 7.0：性能与并行模型
+## TypeScript 7.0: Performance and Parallelism Model
 
 官方公布的全量构建基准：
 
@@ -79,7 +79,7 @@ Go 一次搬掉三块石头：
 
 编辑器的体感提升比构建更明显：在 VS Code 这份代码库里，打开文件到看到第一条红色波浪线，从约 17.5 s 降到 1.3 s（约 13×）；language server 的命令失败率下降约 80%，崩溃率下降约 60%。Slack 报告 CI 类型检查从约 7.5 分钟降到 1.25 分钟，合并队列时间减少 40%。
 
-### 并行是怎么安排的
+### How Parallelism Is Arranged
 
 三个原本串行的环节被并行化：
 
@@ -99,11 +99,11 @@ tsc --singleThreaded
 
 小项目调大 `--checkers` 通常没有收益——工作量不够分。
 
-### watch 模式换了地基
+### Watch Mode Got a New Foundation
 
 7.0 的 `--watch` 建立在移植到 Go 的 **Parcel watcher** 之上。原先原生 watcher 依赖 C++ 工具链编译，难以随包分发；换成 Go 之后所有受支持平台都能获得真正的 OS 级文件监听，空闲 CPU 与内存占用低于 6.0 的轮询 + 回退方案。
 
-### 一个真实的类型系统 bug 修复
+### A Real Type System Bug Fix
 
 Go 版遍历字符串按 Unicode code point，而非旧实现的 UTF-16 code unit，修掉了长期存在的代理对被切断的问题：
 
@@ -116,7 +116,7 @@ type HeadTail = S extends `${infer Head}${infer Tail}` ? [Head, Tail] : never
 
 涉及非 BMP 字符（emoji、部分 CJK 扩展区、数学字母符号）的类型层字符串操作，从此行为符合直觉。详见 [TypeScript 类型系统](/docs/CS/TypeScript/TypeSystem.md)。
 
-## 升级 7.0 的破坏性变更
+## Breaking Changes in the 7.0 Upgrade
 
 | 变更 | 影响 |
 |------|------|
@@ -142,7 +142,7 @@ type HeadTail = S extends `${infer Head}${infer Tail}` ? [Head, Tail] : never
 > [!TIP]
 > 迁移路径推荐：先在 6.0 下清理告警（开启 `stableTypeOrdering`、去掉 `ignoreDeprecations`）→ 装 TS 7 只做 `--noEmit` 检查对比 → 确认上下游工具就绪后再切换 emit。
 
-## tsc 与那些"只删类型"的工具
+## tsc and Those "Type-only Erasure" Tools
 
 工程上最容易混淆的一组概念：
 
@@ -161,7 +161,7 @@ TS 7 出现前，社区的常规做法就是"**用 esbuild 换速度，丢掉检
 - `isolatedModules`：强制每个文件可以被**独立**编译——因为 esbuild/swc 是逐文件处理的，没有跨文件的类型信息，`.d.ts` 里写了但实际不存在的值会哑火；
 - `verbatimModuleSyntax`：类型导入必须显式写 `import type`，让删除器能准确判断这条 import 该不该删（`importsNotUsedAsValues` 的继任者）。
 
-## 增量化：tsbuildinfo 与 project references
+## Incrementalization: tsbuildinfo and Project References
 
 即使有 TS 7 的原生速度，增量依然是大型仓库的必选项。
 

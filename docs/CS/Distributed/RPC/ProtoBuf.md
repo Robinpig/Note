@@ -35,7 +35,7 @@ protobuf 把前后向兼容做成默认行为，以支撑滚动升级（新老�
 
 兼容性纪律：**字段名可改（编号不变即可），编号绝不可复用**。
 
-## proto2 vs proto3
+## proto2 and proto3
 
 | 维度 | proto2 | proto3 |
 | --- | --- | --- |
@@ -57,7 +57,7 @@ service UserService {
 
 这与 RPC 的 [Parameter Marshalling](/docs/CS/Distributed/RPC/RPC.md) 直接对应：stub 用 protobuf 编码请求、解码响应。
 
-## Compare
+## Comparison
 
 | 维度 | protobuf | JSON | Thrift | Java 原生序列化 |
 | --- | --- | --- | --- | --- |

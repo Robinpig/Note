@@ -1,4 +1,4 @@
-## 版本基线
+## Version Baseline
 
 本页与 `JDK/` 下各子页的**默认值、命令行选项与 API 状态**以 **JDK 27** 为准；生产落地按 LTS 基线 **JDK 25** 对齐。
 
@@ -30,7 +30,7 @@ In one book I read that it was “completely wrong to say that Java supports pas
 And everything is actually pass by value. <br>
 **So you’re not passing by reference, you’re “passing an object reference by value.”**
 
-## 知识地图
+## Knowledge Map
 
 JDK 笔记按「语言基础 → 标准库 → 虚拟机 → I/O」四层展开，另有一组横切主题与生态库。**各分区的入口页同时承担该目录的完整导航**，本页只给分区入口与代表性页面。
 
@@ -50,7 +50,7 @@ JDK 笔记按「语言基础 → 标准库 → 虚拟机 → I/O」四层展开�
 
 **生态库**（同级 `CS/Java/` 目录）—— 连接池 [ConnectionPool](/docs/CS/Java/ConnectionPool/ConnectionPool.md)（[HiKariCP](/docs/CS/Java/ConnectionPool/HiKariCP.md)、[Druid](/docs/CS/Java/ConnectionPool/Druid.md)、[DBCP](/docs/CS/Java/ConnectionPool/DBCP.md)）；工具 [Tools](/docs/CS/Java/Tools/Tools.md)（[Arthas](/docs/CS/Java/Tools/Arthas.md)、[JFR](/docs/CS/Java/Tools/JFR.md)、[Lombok](/docs/CS/Java/Tools/Lombok.md)）；序列化与缓存 [Jackson](/docs/CS/Java/Jackson.md)、[Gson](/docs/CS/Java/Gson.md)、[Codec](/docs/CS/Java/Codec.md)、[JCache](/docs/CS/Java/JCache.md)、[Ehcache](/docs/CS/Java/Ehcache.md)、[Guava_Cache](/docs/CS/Java/Guava_Cache.md)；并发框架 [Disruptor](/docs/CS/Java/Disruptor.md)；HTTP 客户端 [Retrofit](/docs/CS/Java/Retrofit.md)；AOP [AspectJ](/docs/CS/Java/AspectJ.md)；测试 [JUnit](/docs/CS/Java/JUnit.md)；日志 [Log4j](/docs/CS/Java/Log4j.md)；运行时 [Quarkus](/docs/CS/Java/Quarkus.md)；[OOP](/docs/CS/Java/OOP.md)。
 
-## 发行版、OpenJDK 项目与 JEP
+## Distributions, OpenJDK Projects and JEP
 
 除 Oracle / OpenJDK 官方构建外，国内外厂商与组织维护着各自的 JDK 分支：
 

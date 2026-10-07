@@ -7,7 +7,7 @@ ZooKeeper 提供三层可观测面：**四字命令（Four-letter Words）**、*
 > [!NOTE]
 > 版本基线：四字命令 `mntr` 自 3.4；MetricsProvider（含 Prometheus）自 3.6.0；当前主线 3.9.6。
 
-## 四字命令
+## Four-Letter Commands
 
 通过 `nc` / `telnet` / `socat` 向客户端端口（默认 2181）发一个单词触发：
 
@@ -27,7 +27,7 @@ ZooKeeper 提供三层可观测面：**四字命令（Four-letter Words）**、*
 > [!WARNING]
 > 四字命令在 3.6+ 受 `4lw.commands.whitelist` 控制，未列出的命令会被拒绝；`ruok` 只说明进程活着，**不能替代 quorum / 角色监控**——必须同时看 `mntr` 的 `zk_server_state` 与 `zk_synced_followers`。
 
-## mntr 关键指标
+## mntr Key Metrics
 
 `echo mntr | nc localhost 2181` 输出 `key\tvalue`，重点：
 
@@ -76,7 +76,7 @@ JMX 适合细粒度排查，但长期监控仍以 MetricsProvider 为主。
 
 默认 `8080` 的 HTTP 管理接口（3.9 起支持快照流式 API 与命令），可经 `zookeeper.admin.serverPort` / `admin.serverInetAddress` 管控，监控外也可作为命令通道（如 `command=metrics`）。安全见 [security](/docs/CS/Framework/ZooKeeper/security.md)。
 
-## 关键告警规则（建议）
+## Key Alerting Rules (Recommended)
 
 | 告警 | 条件 | 可能原因 |
 | :--- | :--- | :--- |

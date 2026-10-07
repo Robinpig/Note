@@ -5,7 +5,7 @@
 > [!NOTE]
 > 版本基线：当前主线 **3.9.6**（2026-09），维护线 3.9.x / 3.8.x；3.7 已于 2024-02 EOL；3.10.0 / 4.0.0 规划中。横向对比见 [etcd 横向对照](/docs/CS/Framework/etcd/compare.md)。
 
-## 分层架构图
+## Layered Architecture Diagram
 
 ```dot
 digraph "ZooKeeperStack" {
@@ -45,7 +45,7 @@ digraph "ZooKeeperStack" {
 
 实线为一次写请求的主链路：客户端 → 预处理 → 提案（经 Zab 广播）→ 提交 → 应用内存树；虚线为启动恢复时快照/日志回填内存。
 
-## 分层导航
+## Layered Navigation
 
 **总览与数据模型** —— 一切的起点。[ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md) 讲清 znode 树、createNode、watch 一次性语义、session、ACL、Zab 总览、动态重配置，以及与 Chubby / etcd 的对照；[start](/docs/CS/Framework/ZooKeeper/start.md) 覆盖部署与启动；序列化线格式见 [Jute](/docs/CS/Framework/ZooKeeper/Jute.md)。
 

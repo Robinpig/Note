@@ -7,7 +7,7 @@ ZooKeeper 的所有写操作都先落 **事务日志（TxnLog，WAL）**，再�
 > [!NOTE]
 > 版本基线：事务日志的 Adler-32 校验和在 3.4.x 已默认开启；快照文件头含 `count` 字段（3.6+）；当前主线 3.9.6，维护线 3.9.x / 3.8.x，3.7 已 EOL。
 
-## 整体结构
+## Overall Structure
 
 ```dot
 digraph "ZKStorage" {
@@ -34,7 +34,7 @@ digraph "ZKStorage" {
 - **FileTxnSnapLog**：同时持有 TxnLog 与 SnapShot 的适配层，被 `ZKDatabase` 持有。
 - **ZKDatabase**：内存数据库，持有 `DataTree`（znode 树）、会话超时表与 `lastProcessedZxid`。
 
-## zxid：事务的唯一序号
+## zxid: Unique Transaction Sequence Number
 
 每个事务都带一个 64 位 `zxid = epoch(高 32 位) + counter(低 32 位)`：
 
@@ -43,7 +43,7 @@ digraph "ZKStorage" {
 
 zxid 同时是**快照与日志文件命名的依据**，也是数据一致性的全局版本号——客户端 `sync()` 后读到的是"已提交且 zxid 最大"的状态。DataNode 的 `Stat` 里 `czxid` / `mzxid` / `pzxid` 记录了创建、修改、子节点变更对应的 zxid。
 
-## 事务日志 FileTxnLog
+## Transaction Log FileTxnLog
 
 `FileTxnLog` 位于 `zookeeper-server/.../server/persistence/`，在 `dataLogDir` 下写入 `log.<zxid>` 文件，文件名中的 zxid 是**该文件第一条事务的 zxid**。
 
@@ -69,7 +69,7 @@ zxid 同时是**快照与日志文件命名的依据**，也是数据一致性�
 > [!WARNING]
 > 不要把 `dataLogDir` 和放快照的 `dataDir` 放在同一块盘上。事务日志的写延迟直接决定集群写吞吐；快照生成与日志写入争抢 I/O 会让 P99 延迟陡增。
 
-## 快照 FileSnap
+## Snapshot FileSnap
 
 `FileSnap` 在 `dataDir` 下写入 `snapshot.<zxid>`，文件名中的 zxid 是**该快照包含的最后一条事务的 zxid**。文件内含：
 
@@ -79,7 +79,7 @@ zxid 同时是**快照与日志文件命名的依据**，也是数据一致性�
 
 快照是**模糊快照（fuzzy snapshot）**：生成期间仍有写请求落到内存树，因此快照内容对应的是"某一瞬间的近似值"，但配合其后 replay 的日志即可还原到精确状态。
 
-## 快照触发：shouldSnapshot
+## Snapshot Trigger: shouldSnapshot
 
 `SyncRequestProcessor.shouldSnapshot()` 决定何时物化快照（见 [ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md) 的 `Issues` 段源码）：
 
@@ -100,7 +100,7 @@ private boolean shouldSnapshot() {
 
 **调大 `snapCount` / `snapSizeLimitInKb`** 能降低快照频率，但会让重启时 replay 的日志变长、恢复变慢——这是"写入频率 vs 恢复时间"的权衡。
 
-## 内存数据树 ZKDatabase / DataTree / DataNode
+## In-Memory Data Tree ZKDatabase / DataTree / DataNode
 
 `ZKDatabase`（内存）是服务器的"实时状态"，所有读请求直接打这里：
 
@@ -109,9 +109,9 @@ private boolean shouldSnapshot() {
 - **sessionsWithTimeouts**：`sessionId → timeout`，用于会话恢复后重建。
 - **lastProcessedZxid**：已应用到内存的最新事务号，恢复时作为日志 replay 的起点。
 
-ZooKeeper 把整棵树常驻内存，因此**数据量受 JVM 堆上限约束（GB 级）**——这是它与 etcd（boltdb 仅缓存热数据、可存 TB 级）最本质的容量差异（对比见 [与 etcd 对照](/docs/CS/Framework/ZooKeeper/ZooKeeper.md?id=与-etcd-对照)）。
+ZooKeeper 把整棵树常驻内存，因此**数据量受 JVM 堆上限约束（GB 级）**——这是它与 etcd（boltdb 仅缓存热数据、可存 TB 级）最本质的容量差异（对比见 [与 etcd 对照](/docs/CS/Framework/ZooKeeper/ZooKeeper.md?id=comparison-with-etcd)）。
 
-## 启动恢复流程
+## Startup Recovery Flow
 
 服务器 `loadData()` 的双阶段恢复，等价于"快照打底 + 日志增量 replay"：
 
@@ -137,7 +137,7 @@ digraph "Recover" {
 > [!TIP]
 > 因为恢复靠"最新快照 + 其后的日志"，所以 `autopurge` 清理旧文件时**绝不能只删日志不删快照**——保留的快照必须与其后的日志配套，否则会丢数据。清理策略见 [troubleshooting](/docs/CS/Framework/ZooKeeper/troubleshooting.md)。
 
-## 运维相关参数
+## Operations-Related Parameters
 
 | 参数 | 含义 | 默认 |
 | :--- | :--- | :--- |

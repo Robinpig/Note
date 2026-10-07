@@ -48,7 +48,6 @@ The following operations make a queue an ADT. Insertions and deletions in the qu
 Similar to other ADTs, executing DeQueue on an empty queue throws an “Empty Queue Exception” and executing EnQueue on a full queue throws a “Full Queue Exception”.
 
 ## Applications
-
 Following are the some of the applications that use queues.
 
 Direct Applications
@@ -66,7 +65,6 @@ Indirect Applications
 
 
 ## Implementation
-
 There are many ways (similar to Stacks) of implementing queue operations and some of the commonly used methods are listed below.
 - Simple circular array based implementation
 - Dynamic circular array based implementation
@@ -87,7 +85,6 @@ With this representation, if there are any free slots at the beginning, the rear
 > The simple circular array and dynamic circular array implementations are very similar to stack array implementations.
 
 ### Simple Circular Array Implementation
-
 This simple implementation of Queue ADT uses an array.
 In the array, we add elements circularly and use two variables to keep track of the start element and end element. 
 Generally, front is used to indicate the start element and rear is used to indicate the end element in the queue. 
@@ -103,7 +100,6 @@ The maximum size of the queue must be defined as prior and cannot be changed. Tr
 
 
 ## Doubly End Queue
-
 双端队列是支持在头尾两端进行pop和push操作
 
 
@@ -111,19 +107,9 @@ The maximum size of the queue must be defined as prior and cannot be changed. Tr
 
 
 ## Deque
-
-
-
-
-
-
-
-
-
-
 ## Links
 
-- [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
+- [数据结构](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
 - [list](/docs/CS/Algorithms/struct/list.md)
 - [stack](/docs/CS/Algorithms/struct/stack.md)
 

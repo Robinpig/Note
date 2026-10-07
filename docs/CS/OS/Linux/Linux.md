@@ -69,7 +69,7 @@ Linux在最初是宏内核架构 同时也逐渐融入了微内核的精华 如�
 
 镜像编出来之后怎么跑起来，是 [启动链](/docs/CS/OS/Linux/boot/README.md) 的主题：上电 → BootLoader → 内核解压 → `start_kernel` → init → systemd。这是 `Linux/` 下唯一一条严格单向的时间轴，[init](/docs/CS/OS/Linux/boot/init.md) 讲用户态第一号进程与运行级，[U-Boot](/docs/CS/OS/Linux/boot/U-Boot.md) 与 [arm](/docs/CS/OS/Linux/boot/arm.md) 覆盖嵌入式侧的引导器与架构差异。
 
-## 内核协同链路
+## Kernel Coordination Link
 
 想先看"进程 × 内存 × 网络 × 中断如何协同完成一件事"，见横向贯通枢纽 [内核协同链路](/docs/CS/OS/Linux/Architecture.md)——以 Nginx 一次请求为锚，端到端串联各子系统。下面各章为按子系统组织的纵向笔记。
 
@@ -298,7 +298,7 @@ Linux 网络子系统（socket 抽象、协议栈收发、NAPI 软中断、TCP �
 - [udev](/docs/CS/OS/Linux/dev/udev.md)
 - [Swap](/docs/CS/OS/Linux/Swap.md)
 
-## 参考书籍
+## Reference Books
 
 
 | 书名                                           | Desc | 

@@ -1,40 +1,39 @@
 ## Introduction
 
-本页做**编程语言的横向对比**：先一张特性速览表（编译方式、类型系统、内存管理、并发模型、运行时），再逐门语言讲它的适用场景与不宜场景。目的是回答"这件事该用什么语言"，而不是教某门语言的语法。
+本页是**全站编程语言的统一入口**：先给一张语言目录导航表（每门语言指向其入口笔记，并标注该目录下收录了什么），再做特性速览与逐门语言的适用场景对比。目的是回答"这件事该用什么语言"，而不是教某门语言的语法。
 
-本页是全站的语言对比入口：先给语言入口列表，再做特性对比，最后逐门语言讲适用场景。各门语言笔记的详细链接见页尾 Links。
+> 收录范围：本页只收录**编程语言**。[Flutter](/docs/CS/Flutter.md) 是 Dart 的跨平台 UI 框架，单列于导航表下方的"相关框架"；Dart 作为语言已在表中收录，见 [Dart](/docs/CS/Dart/Dart.md)。[CO（组成原理）](/docs/CS/CO/CO.md) 是硬件 / 体系结构主题，不属于语言。
 
-## 语言入口列表
+## Language Directory Navigation
 
-各语言笔记的入口，以及编译方式、内存管理与函数调用约定。
+| 语言 | 定位 | 该目录要点 |
+|------|------|-----------|
+| [C](/docs/CS/C/C.md) | 贴近硬件、零隐藏成本 | CMake / GDB / make 工具链、Thread、glibc、malloc |
+| [C++](/docs/CS/C++/C++.md) | C 之上的零成本抽象 | 对象模型、智能指针、移动语义、模板、STL、内存、UB、标准演进、Concurrency、RTTI、muduo |
+| [Go](/docs/CS/Go/Go.md) | 云原生与高并发的默认姿势 | 运行时（GC / GMP / netpoller）、Concurrency、Framework（Gin / gorm…）、struct |
+| [Java](/docs/CS/Java/Java.md) | 企业级后端与大数据生态 | JDK（Basic / Collection / Concurrency / JVM…）、ConnectionPool、Tools、OOP |
+| [Python](/docs/CS/Python/Python.md) | 表达力与 AI / 数据生态 | 运行时三件套（[GIL](/docs/CS/Python/GIL.md) / [Memory](/docs/CS/Python/Memory.md) / [Bytecode](/docs/CS/Python/Bytecode.md)）、[Concurrency](/docs/CS/Python/Concurrency.md)、[Typing](/docs/CS/Python/Typing.md)、[Packaging](/docs/CS/Python/Packaging.md)、[NumPy](/docs/CS/Python/NumPy.md) |
+| [Rust](/docs/CS/Rust/Rust.md) | 编译期保证内存安全 | compile |
+| [TypeScript](/docs/CS/TypeScript/TypeScript.md) | 浏览器 / 全栈的唯一选择 | Compiler、Tsconfig、TypeSystem（运行时语义来自 JS） |
+| [Scala](/docs/CS/Scala/Scala.md) | JVM 上的函数式表达力 | 单篇 |
+| [Assembly](/docs/CS/assembly/assembly.md) | 最接近机器的抽象 | 单篇 |
+| [Dart](/docs/CS/Dart/Dart.md) | Flutter 的专属语言，也能做 CLI/Web/服务端 | 单篇；与 [Flutter](/docs/CS/Flutter.md) 强绑定 |
 
-| Programming Language                      | Compile Type | Memory Management | Func Call |
-|-------------------------------------------|--------------|-------------------|-----------|
-| [C](/docs/CS/C/C.md)                      |              |                   | Register  |
-| [C++](/docs/CS/C++/C++.md)                |              |                   |           |
-| [Golang](/docs/CS/Go/Go.md)               |              | GC                | Stack     |
-| [Java](/docs/CS/Java/JDK/JDK.md)          |              | GC                | Stack     |
-| [Python](/docs/CS/Python/Python.md)       |              | GC                |           |
-| [Rust](/docs/CS/Rust/Rust.md)             |              |                   |           |
-| [Scala](/docs/CS/Scala/Scala.md)          |              |                   |           |
-| [TypeScript](/docs/CS/TypeScript/TypeScript.md) | 转译为 JS 后由 JIT 执行 | GC                | Stack     |
-| [Flutter](/docs/CS/Flutter.md)            |              |                   |           |
-| [Assembly](/docs/CS/assembly/assembly.md) |              |                   |           |
+相关框架（非语言）：[Flutter](/docs/CS/Flutter.md)——由 [Dart](/docs/CS/Dart/Dart.md) 编写，Dart 已在上方作为语言收录。
 
-不同语言的函数调用耗时有较大差异。
-
-## 特性速览
+## Feature Overview
 
 | 语言 | 编译 / 执行 | 类型系统 | 内存管理 | 并发模型 | 运行时 |
 |------|------------|---------|---------|---------|--------|
 | [C](/docs/CS/C/C.md) | 编译到机器码 | 静态、弱、名义 | 手动 `malloc`/`free` | OS 线程 / pthread | libc，几乎裸机 |
 | [C++](/docs/CS/C++/C++.md) | 编译到机器码 | 静态、强、名义 | RAII + 智能指针，手动为主 | `std::thread`、协程（C++20） | libc++ / libstdc++ |
-| [Java](/docs/CS/Java/JDK/JDK.md) | 源码 → 字节码 → JVM 解释 + JIT | 静态、强、名义 | GC（G1/ZGC/Shenandoah） | OS 线程；Java 21+ 虚拟线程 | JVM |
+| [Java](/docs/CS/Java/Java.md) | 源码 → 字节码 → JVM 解释 + JIT | 静态、强、名义 | GC（G1/ZGC/Shenandoah） | OS 线程；Java 21+ 虚拟线程 | JVM |
 | [Golang](/docs/CS/Go/Go.md) | 编译到机器码（自带编译器） | 静态、强、结构化接口 | 并发三色标记 GC | goroutine + channel，M:N 调度 | Go runtime（含调度器） |
 | [Rust](/docs/CS/Rust/Rust.md) | 编译到机器码（LLVM 后端） | 静态、强、所有权 + 借用检查 | 编译期决定，无 GC | `std::thread`、async/await，无数据竞争 | 无运行时（可 `no_std`） |
-| [Python](/docs/CS/Python/Python.md) | 源码 → 字节码 → 解释器执行 | 动态、强（duck typing） | 引用计数 + 分代 GC | 线程受 GIL 限制；靠多进程 / async | CPython 解释器 |
+| [Python](/docs/CS/Python/Python.md) | 源码 → 字节码 → 特化解释器（JIT 实验性） | 动态、强（duck typing），标注仅静态可见 | 引用计数为主 + 分代 GC 兜环，pymalloc 分层 | 单锁 GIL；free-threaded 构建、多解释器、多进程、asyncio | CPython 解释器 |
 | [TypeScript](/docs/CS/TypeScript/TypeScript.md) | 转译为 JS → JIT | 渐进可选静态、结构化、unsound | GC（宿主负责） | 单线程事件循环 + worker | JS 引擎（V8 等） |
 | [Scala](/docs/CS/Scala/Scala.md) | 源码 → 字节码 → JVM | 静态、强，含类型推断与高阶类型 | JVM GC | Future / Akka / 协程库 | JVM |
+| [Dart](/docs/CS/Dart/Dart.md) | 开发 JIT + 发布 AOT（Web 转 JS） | 静态、强、可选标注、null safety | GC（分代） | isolate（无共享内存、消息传递）+ async/await | Dart VM / 嵌入运行时 |
 
 三个容易看漏的列：
 
@@ -99,7 +98,14 @@ JVM 提供了跨平台的内存管理、JIT 与成熟的可观测性，生态是
 - **适合**：数据管道与流处理（Spark/Flink 的原生语言）、需要强表达力且已有 JVM 基建的团队。
 - **不宜**：团队流动大的项目——代码风格方差过大是真实的维护风险。
 
-## 选型的几个判断
+## Dart
+
+为 Flutter 而生的语言：JIT 支撑热重载、AOT 撑起发布性能，类型系统从 2.12 起强制 null safety。它最大的落地就是 [Flutter](/docs/CS/Flutter.md) 的跨平台 UI，但也能独立写 CLI、轻量服务端和 Web（编译到 JS / WASM）。并发靠 isolate——隔离堆、消息传递，从语言层杜绝共享内存竞争。
+
+- **适合**：Flutter 跨端 UI；希望一套语言打通前后端的轻量后端 / CLI；重视热重载迭代速度的团队。
+- **不宜**：系统编程与裸机；对运行时体积 / 冷启动极敏感的 Serverless；不在 Flutter 生态内的纯后端（库生态成熟度远不如 Java / Go / Node）。
+
+## Key Criteria for Selection
 
 | 判断 | 说明 |
 |------|------|
@@ -111,12 +117,9 @@ JVM 提供了跨平台的内存管理、JIT 与成熟的可观测性，生态是
 
 ## Links
 
-- [Tests](/docs/CS/Go/Go.md)
-- [Scala](/docs/CS/Scala/Scala.md)
-- [Rust](/docs/CS/Rust/Rust.md)
-- [Python](/docs/CS/Python/Python.md)
-- [JDK](/docs/CS/Java/JDK/JDK.md)
-- [TypeScript](/docs/CS/TypeScript/TypeScript.md)
+- [CS 总纲（主题目录）](/docs/CS/CS.md)
+- [GIL](/docs/CS/Python/GIL.md)
+- [Bytecode](/docs/CS/Python/Bytecode.md)
 
 ## References
 

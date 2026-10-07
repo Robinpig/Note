@@ -45,8 +45,10 @@ Three models with six memory ordering options:
 - sequentially consistent ordering 
   - memory_order_seq_cst
     
+多线程下未同步的并发写构成**数据竞争**，属于 [未定义行为](/docs/CS/C++/UB.md)。
 
 ## Links
 
 - [C++](/docs/CS/C++/C++.md)
+- [未定义行为](/docs/CS/C++/UB.md)
 - [Java Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)

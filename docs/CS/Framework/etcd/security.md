@@ -19,7 +19,7 @@ etcd 的"安全"不是一块开关，而是**四层彼此独立的机制**，混
 > [!NOTE]
 > **版本基线**：etcd **3.7.2**（`api/version/version.go` → `Version = "3.7.2"`）。本文所有 flag、文件路径、默认值与源码行号均以 `server/auth/`、`server/embed/config.go` 在 3.7.2 下的实际内容为准。3.7.2 **没有引入新的认证机制**，但给授权路径加了一层性能机制（见下文 `rangePermCache`）——这是旧版本资料里没有的。
 
-## 控制面与数据面
+## Control Plane and Data Plane
 
 鉴权体系架构由**控制面**和**数据面**组成。
 
@@ -33,7 +33,7 @@ etcd 的"安全"不是一块开关，而是**四层彼此独立的机制**，混
 
 认证通过后，为了提高密码认证性能，会分配一个 Token（类似门票、通信证）给 client，client 后续其他请求携带此 Token，server 就可快速完成身份校验，不必每次都跑一遍 bcrypt。
 
-### 密码存储：bcrypt + salt + cost
+### Password Storage: bcrypt + salt + cost
 
 用户密码认证是最基础的鉴权方式。密码认证有两大难点：**如何保障密码安全性**和**如何提升认证性能**——这两者天然冲突（安全性靠慢哈希实现，性能要求快）。
 
@@ -71,7 +71,7 @@ User alice created
 
 当你用 alice 账号访问 etcd 时，需要先调用鉴权模块的 `Authenticate` 接口（`server/auth/store.go:333`）验证身份合法性：模块先按请求的用户名从 boltdb 取出加密后的密码，由于 hash 里包含了算法版本、salt、cost 等信息，可以据此用请求中的明文密码计算出最终 hash，结果一致则校验通过。
 
-### Token 生命周期
+### Token Lifecycle
 
 etcd 生成的每个 Token 都有一个过期时间 TTL 属性。Token 过期后 client 需再次验证身份——这显著缩小了数据泄露的时间窗口，在性能与安全性之间取得平衡。
 
@@ -103,7 +103,7 @@ JWT 路径签出的 token 携带三个 claim（`server/auth/jwt.go:101-105`）�
 
 可识别的选项只有四个：`sign-method`、`pub-key`、`priv-key`、`ttl`（`server/auth/options.go:36-41`）。写错的键**不会报错**，只会打一条 `unknown JWT options` 的 warn 然后被忽略——配置拼错了却静默生效，是这条路径上最容易踩的坑。
 
-### 证书身份（CN 认证）
+### Certificate Identity (CN Authentication)
 
 除了密码，etcd 还有一条**不依赖密码**的认证路径：从客户端证书的 Common Name 里取用户名。
 
@@ -148,7 +148,7 @@ $ etcdctl role grant-permission app readwrite key1 key5  # 区间 [key1, key5)
 $ etcdctl user grant-role alice app
 ```
 
-### 区间树
+### Interval Tree
 
 因为一个用户可能拥有成百上千条权限，etcd 为提升权限检查性能引入了**区间树**：把角色的所有 key 权限合并成两棵区间树（读一棵、写一棵），检查时只需判断请求的 key 落在哪个已授权区间内。
 
@@ -181,7 +181,7 @@ func isOpenEnded(rangeEnd []byte) bool { // check rule b3
 
 因为 `BytesAffineComparable` 用 `[]byte{}`（空串）当最大元素，`(X, []byte{})` 在语义上是"非法区间"而非"到顶区间"，所以必须用 `0x00` 来表达"一直到最大 key"。`--prefix=true` 生成的就是这种开区间权限。
 
-### rangePermCache：per-user 区间树缓存
+### rangePermCache: per-user Interval Tree Cache
 
 仅有区间树还不够。`isOpPermitted` 是**每个请求**都会走的热路径，而它需要先拿到用户对象、遍历用户的角色列表、再查树——源码里甚至留着一条 TODO 承认这件事很贵：
 
@@ -239,7 +239,7 @@ func (as *authStore) refreshRangePermCache(tx UnsafeAuthReader) {
 
 缓存之外的短路只有一条：**`root` 角色直接放行**，不查任何树（`server/auth/store.go:889-892`）。反过来，缓存里查不到用户时会打 `user doesn't exist` 并返回 `false`——**fail-closed**，鉴权出问题时 etcd 选择拒绝而不是放行。
 
-### 鉴权相关的 flag
+### Auth-Related Flags
 
 | flag | 默认值 | 位置 | 说明 |
 | :--- | :--- | :--- | :--- |
@@ -271,7 +271,7 @@ if revision < rev {
 
 该 revision 也作为指标暴露：`etcd_debugging_auth_revision`（`server/auth/metrics.go:24`）。注意它带 `etcd_debugging_` 前缀，属官方标注的**不稳定指标**，跨版本可能变。
 
-## 3.7 feature gate 对相关行为的影响
+## 3.7 Impact of Feature Gate on Related Behavior
 
 3.7 引入了统一的 feature gate 机制（`server/features/etcd_features.go`），其中两项与安全/存储行为相关：
 
@@ -282,7 +282,7 @@ if revision < rev {
 
 `LeaseCheckpointPersist` 是一条**计划与现实脱节的实证**：它的注释明确写着"v3.6 起默认启用，**将在 v3.7 移除**"（`:69` 的 `Deprecated` 标注、`:65` 的 `TODO: Delete in v3.7`），但 3.7.2 源码里**它仍然存在**，且默认仍是 `false`（`:95`）。这类"注释说该删但没删"的情况，正是必须以源码而不是以注释为准的典型例子。
 
-## 陷阱清单
+## Pitfall List
 
 > [!WARNING]
 > 这套体系里有几处最容易配错的点：

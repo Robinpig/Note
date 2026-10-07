@@ -2,7 +2,7 @@
 
 并行计算关注如何在多个执行单元（多核、多 CPU、多机）上协同完成同一计算，核心矛盾有两个：**任务怎么切分**（并行模型）与**工作怎么分配**（调度与负载均衡）。并行（parallel）不等于并发（concurrent）：并发是结构上同时处理多个任务的能力（时间片轮转也算），并行是物理上同一时刻真的有多个任务在执行。
 
-## 并行模型
+## Parallelism Models
 
 | 模型 | 通信方式 | 同步 | 代表 |
 |------|---------|------|------|
@@ -13,7 +13,7 @@
 | SIMD/GPU | 单指令驱动多数据 | 锁步 | AVX、CUDA warp |
 | MapReduce / 批处理 | 分布式 shuffle | 阶段屏障 | Hadoop/Spark 阶段 |
 
-## Work-first 与 Work-Stealing
+## Work-first vs Work-Stealing
 
 并行任务的执行时间有两个经典度量：**work** $T_1$（在一个核上串行执行全部指令的时间）与 **span/depth** $T_\infty$（关键路径长度，无限多核下的最短时间）。$p$ 个核上的理论加速比上限由 work law（$T_p \ge T_1/p$）与 span law（$T_p \ge T_\infty$）共同约束，效率取决于调度器如何把任务铺到核上。
 
@@ -25,7 +25,7 @@
 
 这正是 Cilk、Java ForkJoinPool、Go 调度器（GMP 中 P 的本地 runq + work-stealing，见 [Go 并发](/docs/CS/Go/Concurrency/Concurrency.md)）的共同基础。Linux 内核调度器处理的是固定实体（task），负载均衡用域间主动拉取（[EAS/负载均衡](/docs/CS/OS/Linux/proc/sche.md)）；用户态 work-stealing 处理的是动态生成的任务 DAG，这是两者问题形态的差异。
 
-## 随机化负载均衡：Power of Two Choices
+## Randomized Load Balancing: Power of Two Choices
 
 n 个任务随机分配到 n 个队列（随机放置）时，最大负载约为 $\log n/\log\log n$；而**二选一策略**（随机挑两个队列，选其中负载更轻的放进去）把最大负载降到约 $\log\log n$——只用一个额外的随机采样，就从对数级压到双对数级，这是分布式系统中性价比最高的理论结果之一。
 
@@ -38,7 +38,7 @@ n 个任务随机分配到 n 个队列（随机放置）时，最大负载约为
 
 对照集中式最少连接（least-loaded）：全局最优要知道所有队列负载（协调成本高、有状态），二选一只看局部、无共享状态，在大规模下几乎免费地逼近最优。
 
-## 并行性能的工程要点
+## Engineering Practices for Parallel Performance
 
 - **Amdahl 定律**：串行比例为 $s$ 时，加速比上限 $1/(s+(1-s)/p)$——哪怕 1% 的串行段，无穷多核也只能加速 100 倍。优化应先消除串行瓶颈。
 - **Gustafson 定律**是另一视角：问题规模随核数增长时，加速比可以近似线性，适用于可扩展数据规模的场景。

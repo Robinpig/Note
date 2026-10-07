@@ -88,7 +88,7 @@ Pulsar 与 Kafka 最本质的差异是**存储与计算解耦**。消息数据�
 >
 > **SQL92 不用 Calcite**，是 JavaCC `SelectorParser` + AST 解释执行，靠 BloomFilter 优化；`enablePropertyFilter` 默认 **false**。
 
-## 主题导航
+## Topic Navigation
 
 Pulsar 的独特之处在于**计算与存储彻底分离**：Broker 无状态，数据落到 BookKeeper ledger，元数据落到 metadata store。这个分层决定了它几乎所有能力（多租户、细粒度扩容、unload）的形态。
 

@@ -29,7 +29,7 @@ CentOS 曾是 RHEL 的免费二进制克隆（下游重建），因"稳定免费
 
 > **CentOS Stream 的 5 年支持期是"诚实的信号"** —— 它明确标示自己是开发分支而非冻结目标。Rocky 与 Alma 都给 10 年。
 
-## Rocky 与 Alma 的路线差异
+## Roadmap Differences between Rocky and Alma
 
 这两个"接棒者"在 2023 年做出分岔：
 
@@ -40,7 +40,7 @@ CentOS 曾是 RHEL 的免费二进制克隆（下游重建），因"稳定免费
 
 **Rocky 坚持 bug-for-bug**，追求与 RHEL 逐包一致。代价是必须等 RHEL 修完才跟。
 
-### ⚠️ CPU 基线差异（实际会踩的坑）
+### ⚠️ CPU Baseline Differences (Pitfalls You Will Actually Hit)
 
 **RHEL 10 把硬件基线提到 `x86-64-v3`**（需要 AVX2 等较新 CPU 指令集）。三者应对不同：
 
@@ -52,7 +52,7 @@ CentOS 曾是 RHEL 的免费二进制克隆（下游重建），因"稳定免费
 
 **在跑老 host CPU 的廉价 VPS 上，这一项决定系统能否安装。** 需要 v2 就选 AlmaLinux 的 v2 构建。
 
-## 其他行为差异
+## Other Behavioral Differences
 
 **Rocky 不维护旧 point release**：Rocky 10.1 在 10.2 发布后即停止安全更新。Alma 也没有同样激进的策略，但版本节奏更常规。
 
@@ -60,7 +60,7 @@ CentOS 曾是 RHEL 的免费二进制克隆（下游重建），因"稳定免费
 
 > **AlmaLinux 没有加入 OpenELA** —— 这直接源于它的 ABI 决策：既然不需要精确的源码馈送，就不必加入。
 
-## 内核策略：ABI 冻结
+## Kernel Policy: ABI Freeze
 
 RHEL 系承诺**内核 ABI 稳定**，这决定了它与 Fedora 的根本差异：
 
@@ -73,7 +73,7 @@ RHEL 系承诺**内核 ABI 稳定**，这决定了它与 Fedora 的根本差异�
 
 **"内核 ABI 冻结"的实际含义**：第三方内核模块（DKMS）若只用导出符号与稳定结构，可以在多个 RHEL 小版本间通用而不重编。这对 nvidia 驱动尤其重要 —— 也是 [Kali](/docs/CS/OS/Linux/Distribution/Kali.md) 把 7.0 内核挡在 ISO 之外的原因（会破坏 DKMS）。
 
-## 从 Debian/Ubuntu 迁移
+## Migration from Debian/Ubuntu
 
 日常差异主要在包管理器。常用对照：
 
@@ -96,7 +96,7 @@ RHEL 系承诺**内核 ABI 稳定**，这决定了它与 Fedora 的根本差异�
 1. **SELinux 默认 enforcing**（见 [Fedora](/docs/CS/OS/Linux/Distribution/Fedora.md) 一节）；
 2. **podman 已占用 `docker` 命令**，且 bind mount 需要 `:z` / `:Z` 重打标签。
 
-## 如何选
+## How to Choose
 
 | 需求 | 选择 |
 | :-- | :-- |
@@ -109,7 +109,7 @@ RHEL 系承诺**内核 ABI 稳定**，这决定了它与 Fedora 的根本差异�
 
 > 需要注意 CentOS Stream **不适合要求"经过测试的变更"的生产负载** —— 它是开发分支。
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 ```shell
 # 确认是哪个 Stream / 兼容版
@@ -147,7 +147,7 @@ dnf history undo last
 rpm -qa --last | head
 ```
 
-## 与其它子系统的接缝
+## Interfaces with Other Subsystems
 
 - 内核 ABI 冻结与 DKMS 依赖的关系（Kali 挡 7.0 内核的同源问题）
 - SELinux 的 LSM 机制，见 [SELinux](/docs/CS/OS/Linux/SELinux.md)

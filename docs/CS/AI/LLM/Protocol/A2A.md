@@ -15,7 +15,7 @@
 | Secure & Opaque | 不共享内部记忆/工具/逻辑，安全且保护知识产权 |
 | Extensible | 通过正式的协议扩展与自定义绑定增加能力，核心保持稳定 |
 
-## 与 MCP 的关系
+## Relationship with MCP
 
 A2A 与 MCP **不是竞争而是互补**，解决两个不同的问题：
 
@@ -35,9 +35,9 @@ A2A 明确"不是"什么：
 - **不是 MCP 的替代品**
 - **不是聊天应用**（Slack/Discord 那种），是面向自主 agent 的机器对机器协议
 
-## 核心概念
+## Core Concepts
 
-### 三类角色
+### Three Types of Roles
 
 | 角色 | 说明 |
 | --- | --- |
@@ -45,7 +45,7 @@ A2A 明确"不是"什么：
 | A2A Client（Client Agent） | 代表用户发起通信的一方：应用、服务或另一个 agent |
 | A2A Server（Remote Agent） | 暴露 HTTP 端点、实现 A2A 协议的 agent；对 client 是**黑盒** |
 
-### 六个通信元素
+### Six Communication Elements
 
 | 元素 | 作用 |
 | --- | --- |
@@ -58,7 +58,7 @@ A2A 明确"不是"什么：
 
 Agent 响应请求时：能立即回答 → 返回 **Message**；需要执行长任务 → 创建 **Task**。
 
-## Task 生命周期
+## Task Lifecycle
 
 Task 是 A2A 的核心抽象——**协作被建模为有状态的工作单元**，状态迁移可观测：
 
@@ -70,7 +70,7 @@ submitted → working → input-required → completed / failed / cancelled
 - 长任务运行中，client 通过 `tasks/get` 轮询，或用流式/推送获取更新
 - 任务可以跨越多次消息交换（multi-turn），支持异步、多步骤工作流
 
-## 通信机制
+## Communication Mechanism
 
 三种交互模式，按任务时长与实时性需求选择：
 
@@ -80,7 +80,7 @@ submitted → working → input-required → completed / failed / cancelled
 | Streaming（SSE） | `message/stream` 建立长连接，服务端持续推 Task/Message/状态变更/Artifact 增量事件 | 需要实时进度与增量结果 |
 | Push Notifications | client 提供 webhook URL，服务端在状态显著变化时主动 POST 通知 | 超长任务、无法维持长连接的场景 |
 
-## 架构分层
+## Architecture Layering
 
 规范分三层：
 
@@ -88,7 +88,7 @@ submitted → working → input-required → completed / failed / cancelled
 2. **Abstract Operations（抽象操作）**：所有 A2A agent 必须支持的基本能力——Send Message、Stream Message（SSE）、Get/List/Cancel Task、Get Agent Card
 3. **Protocol Bindings（协议绑定）**：操作到具体协议的映射——主绑定 **JSON-RPC 2.0 over HTTP**；另有 **gRPC**（二进制序列化、高性能流式）和 **HTTP/REST**；可扩展自定义绑定
 
-## 生态与现状
+## Ecosystem and Current Status
 
 - **官方 SDK**：Python / JavaScript / Java / C#(.NET) / Go / Rust（[a2aproject](https://github.com/a2aproject)）
 - **采用情况**（v1.0 GA 一年）：150+ 组织采用；Azure AI Foundry、AWS Bedrock AgentCore、Copilot Studio、Salesforce、SAP、ServiceNow 等企业平台一级集成；LangGraph、CrewAI 内置 A2A 兼容层

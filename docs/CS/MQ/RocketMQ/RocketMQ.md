@@ -117,7 +117,7 @@ Consumption Retry
 
 Message Storage and Cleanup
 
-#### 事务消息
+#### Transactional Messages
 
 Apache RocketMQ transactional messages can be used to ensure consistency of upstream and downstream data.
 Transactional messages are an advanced message type provided by Apache RocketMQ to ensure the ultimate consistency between message production and local transaction.
@@ -666,19 +666,19 @@ public class SendMessageTraceHookImpl implements SendMessageHook {
 
 ## Features
 
-### 消息过滤
+### Message Filtering
 
 两级过滤：Tag 精确匹配与 SQL92 属性级表达式。实现落在 Broker 读路径的「ConsumeQueue 预筛 → 读 CommitLog 精判 → 客户端 tag 精确匹配」三级链上，SQL92 由 JavaCC 解析的 AST 解释执行（非 Calcite），且 Broker 端 `enablePropertyFilter` **默认关闭** —— 细节见 [消息过滤](/docs/CS/MQ/RocketMQ/Filter.md)。
 
-### 事务消息
+### Transactional Messages
 
 2PC + 补偿：先存 half 消息（改写 topic 故对消费者不可见），本地事务执行完再定论；结果丢失时 Broker 以 30s 间隔单向 RPC 回查 Producer，最多 15 次后丢弃。不保证强一致 —— 细节见 [事务消息](/docs/CS/MQ/RocketMQ/Transaction.md)。
 
-### 延时消息
+### Delayed Messages
 
 18 级固定延迟队列（`messageDelayLevel`，`1s 5s 10s 30s 1m ... 1h 2h`），5.x 另引入时间轮实现（`timerWheelEnable` 默认开启）支持更大范围与更高精度。
 
-### 死信队列
+### Dead-letter Queue
 
 消费失败超过重试次数后进入 `%DLQ%group`，可由 `mqadmin` 查看与重投。
 
@@ -755,7 +755,7 @@ public class TraceBean {
 
 
 
-#### 消息积压
+#### Message Backlog
 
 在 RocketMQ 中每一客户端会单独创建一个线程 PullMessageService 会循环从 Broker 拉取一批消息，然后提交到消费端的线程池中进行消费，线程池中的线程消费完一条消息后会上服务端上报当前消费端的消费进度，而且在提交消费进度时是提交当前处理队列中消息消费偏移量最小的消息作为消费组的进度，即如果消息偏移量为 100 的消息，如果由于某种原因迟迟没有消费成功，那该消费组的进度则无法向前推进，久而久之，Broker 端的消息偏移量就会远远大于消费组当前消费的进度，从而造成消息积压现象
 

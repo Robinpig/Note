@@ -14,7 +14,7 @@ Spring Boot 的自动配置建立在一套 SPI（Service Provider Interface）�
 > [!NOTE]
 > `spring.factories` 本身并没有被删除。它仍用于注册 `ApplicationContextInitializer`、`ApplicationListener`、`EnvironmentPostProcessor`、`FailureAnalyzer`、`PropertySourceLoader` 等扩展点——只是**不再承担自动配置的注册职责**。
 
-## 清单文件的写法
+## How to Write the Manifest File
 
 ```
 META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports
@@ -32,7 +32,7 @@ com.mycorp.libx.autoconfigure.LibXWebAutoConfiguration
 - 若自动配置类是**内部类**，用 `$` 分隔（`com.example.Outer$NestedAutoConfiguration`）。
 - 自动配置类**只能**通过 `.imports` 被加载：必须放在独立的包空间里，**永远不要**让它成为组件扫描的目标。Boot 的 `AutoConfigurationExcludeFilter` 会主动把自动配置类从 `@SpringBootApplication` 的扫描结果中剔除——它既检查 `@AutoConfiguration` 注解，也检查 `ImportCandidates` 读到的名单。
 
-### 改名后的替换映射
+### Replacement Mapping After Renaming
 
 自动配置类改包名时，旧类名可能仍出现在别人的 `before`/`after` 排序或 `exclude` 配置里。为此可以再放一个 K/V 文件声明替换关系：
 
@@ -43,7 +43,7 @@ com.mycorp.libx.autoconfigure.LibXAutoConfiguration=com.mycorp.libx.autoconfigur
 
 `.imports` 文件本身也要更新为**只列新类**。
 
-## 加载管线
+## Loading Pipeline
 
 `@SpringBootApplication` 上的 `@EnableAutoConfiguration` 通过 `@Import` 引入 `AutoConfigurationImportSelector`。它实现 `DeferredImportSelector`，导入时机被推迟到用户自定义配置全部处理完之后，从而保证"用户显式声明的 Bean 优先于自动配置"。
 
@@ -92,7 +92,7 @@ public class AutoConfigurationImportSelector implements DeferredImportSelector, 
 
 条件评估在 Boot 4 是**两阶段**的：先用编译期生成的元数据与 `Class.forName` 做一次廉价过滤（不加载候选类的字节码），通过者才进入 `ConditionEvaluator` 的完整评估。这也是模块拆分带来的启动收益之一。
 
-## 编写一个自动配置
+## Write an Auto-Configuration
 
 ```java
 @AutoConfiguration(after = RedisAutoConfiguration.class)          // 顺序
@@ -111,7 +111,7 @@ public class LibXAutoConfiguration {
 
 `@AutoConfiguration` 本身被 `@Configuration` 元注解标记，语义上等价于 `@Configuration(proxyBeanMethods = false)`，但额外表达了"这是自动配置、只能从 `.imports` 加载"。
 
-### 条件注解速查
+### Quick Reference of Conditional Annotations
 
 | 类别 | 注解 | 判定依据 |
 |---|---|---|
@@ -129,7 +129,7 @@ public class LibXAutoConfiguration {
 
 另一个常见约定：自动配置类**不应开启组件扫描**去发现组件，需要额外组件就用显式 `@Import`。组件扫描会把用户不想引入的东西拉进容器，也破坏"自动配置可预测"这一前提。
 
-## 排错：条件评估报告
+## Troubleshooting: Conditional Evaluation Report
 
 自动配置没生效时，不要靠猜，先看报告：
 
@@ -143,7 +143,7 @@ java -jar app.jar --debug        # 或 application.properties 里 debug=true
 
 典型的失败原因只有几类：starter 缺失或依赖被限定为 `test`/`provided` 作用域；版本冲突导致类不在类路径；用户自定义 Bean 让 `@ConditionalOnMissingBean` 主动退让（这是**预期行为**，不是 bug）；被 `spring.autoconfigure.exclude` 排除了；或配置属性未满足条件。
 
-## 测试自动配置
+## Test Auto-Configuration
 
 用 `ApplicationContextRunner`（Web 场景用 `WebApplicationContextRunner` / `ReactiveWebApplicationContextRunner`）构造受控上下文：
 
@@ -195,11 +195,11 @@ class LibXAutoConfigurationTests {
 
 需要打印条件报告时，加一个 `ConditionEvaluationReportLoggingListener.forLogLevel(LogLevel.INFO)` 初始化器。
 
-## AOT 与自动配置
+## AOT and Auto-Configuration
 
 AOT（预编译）模式下，条件评估被提前到**构建期**完成，能静态判定的分支直接固化，运行时不再扫描 `.imports`、不再做类路径探测。这对启动时间和原生镜像体积收益明显，代价是"运行时才出现的类路径变化"不再被感知。详见 [AOT](/docs/CS/Framework/Spring/AOT.md)。
 
-## 与 JDK SPI 的差异
+## Differences from JDK SPI
 
 | 维度 | JDK SPI（`ServiceLoader`） | Spring Boot 自动配置 |
 | :-- | :-- | :-- |
@@ -212,7 +212,7 @@ AOT（预编译）模式下，条件评估被提前到**构建期**完成，能�
 
 JDK SPI 的用法见 [JDK SPI](/docs/CS/Java/JDK/Basic/SPI.md)。
 
-## 常见陷阱
+## Common Pitfalls
 
 | 陷阱 | 现象 | 处理 |
 |---|---|---|

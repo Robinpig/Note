@@ -4,7 +4,7 @@ Kafka Connect 是 Kafka 生态中**在 Kafka 与外部数据存储之间搬数�
 
 > 版本基线：**4.3.1**（`gradle.properties:17`）。源码在 **`connect/runtime`**（**不是** `connect/connect-runtime`，模块名在 4.x 已改）。
 
-## 核心概念
+## Core Concepts
 
 - **Connector**：逻辑作业，描述「从哪到哪」（`SourceConnector` 读外部写 Kafka，`SinkConnector` 读 Kafka 写外部）。配置驱动，无需写代码。
 - **Task**：Connector 的并行执行单元。Connector 把工作拆成若干 Task 分发到 worker，实现水平扩展与容错（Task 失败由框架重调度）。
@@ -12,7 +12,7 @@ Kafka Connect 是 Kafka 生态中**在 Kafka 与外部数据存储之间搬数�
   - **Standalone**：单进程跑全部，适合边缘/简单场景。
   - **Distributed**：多 worker 组成集群，REST API 提交配置，任务自动均衡与故障转移（生产首选）。
 
-## 重要更正：4.x Connect 没有使用虚拟线程
+## Important Correction: 4.x Connect Does Not Use Virtual Threads
 
 > [!WARNING]
 > **4.3.1 的 Connect 不使用 Java 虚拟线程。** 这是最容易被误传的说法，实测证伪：
@@ -23,7 +23,7 @@ Kafka Connect 是 Kafka 生态中**在 Kafka 与外部数据存储之间搬数�
 >
 > 写笔记时不要沿用「4.x Connect 基于虚拟线程」这个说法。
 
-## WorkerConfig 关键默认值
+## WorkerConfig Key Defaults
 
 `connect/runtime/src/main/java/org/apache/kafka/connect/runtime/WorkerConfig.java`：
 
@@ -38,7 +38,7 @@ Kafka Connect 是 Kafka 生态中**在 Kafka 与外部数据存储之间搬数�
 | `config.providers` | `List.of()`（空）| :260 → `AbstractConfig.java:67` |
 | `plugin.path` / `plugin.discovery` | 见 doc | :129-148 |
 
-### override policy 四个合法值
+### override policy Four Valid Values
 
 `All`（默认）、`Allowlist`、`None`、`Principal`（**已 deprecated**）。
 
@@ -94,7 +94,7 @@ Kafka Connect 是 Kafka 生态中**在 Kafka 与外部数据存储之间搬数�
 
 文档印证 `docs/kafka-connect/connector-development-guide.md:332`：*"set the `exactly.once.support` property to `required`"*。
 
-## 分布式模式的内部 topic
+## Internal topic in Distributed Mode
 
 `connect/runtime/.../runtime/distributed/DistributedConfig.java`：
 
@@ -120,7 +120,7 @@ OFFSET_STORAGE_PREFIX = "offset.storage.";
 > - 三个 storage topic **无默认值、必填**（`.define()` 第二参数缺失即无默认）。`connect-configs` / `connect-offsets` / `connect-status` 这三个名字来自 `config/connect-distributed.properties:43,53,62` 的**示例值**，不是硬编码默认。`CONFIG_TOPIC` / `OFFSET_STORE_TOPIC` 这类常量名在 4.3.1 中不存在。
 > - **`connect.offset.storage` 前缀不存在**（零匹配）。现代码只有 Kafka backing store（`KafkaConfigBackingStore` / `KafkaOffsetBackingStore` / `KafkaStatusBackingStore`），**没有 `standalone` 选项**。
 
-## 4.x 移除情况
+## 4.x Removal Status
 
 > [!IMPORTANT]
 > Connect 目录下（排除测试）**无任何 `zookeeper` / `--zookeeper` 引用** —— 已彻底移除，仅剩 `--bootstrap-server`。这与 Kafka 4.0 的 KRaft-only 方向一致。
@@ -134,7 +134,7 @@ Connect 与 Streams 的 DLQ 配置**前缀不同，不要混**：
 | Connect Sink | `errors.deadletterqueue.*`（`SinkConnectorConfig.java:54` `DLQ_PREFIX`）| — | **有** enable 开关 |
 | Streams | `errors.dead.letter.queue.topic.name` | `null` | **无**开关，配了即启用 |
 
-## 与 Kafka 其他组件的边界
+## Boundaries with Other Kafka Components
 
 | 组件 | 角色 | 何时用 |
 |---|---|---|
@@ -145,7 +145,7 @@ Connect 与 Streams 的 DLQ 配置**前缀不同，不要混**：
 
 Connect 解决「管道」，Streams 解决「处理」，二者常串联：Connect 把源吸入 → Streams 计算 → Connect 把结果下沉。
 
-## 需要打假的常见说法
+## Common Claims That Need Debunking
 
 | 说法 | 4.3.1 实况 |
 | ---- | --------- |

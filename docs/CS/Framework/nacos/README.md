@@ -1,4 +1,4 @@
-# Nacos 目录索引
+# Nacos Index
 
 ## Introduction
 
@@ -38,44 +38,44 @@ digraph Nacos {
 }
 ```
 
-## 总览与启动
+## Overview and Startup
 
 - [Nacos](/docs/CS/Framework/nacos/Nacos.md)：架构（用户层 / 业务层 / 内核层 / 插件）、安装编译、启动链路、gRPC 端口、JRaft 与 Cluster 内联段、调优、与 etcd 对照。版本基线见其顶部 NOTE。
 - [ConfigServer](/docs/CS/Framework/nacos/ConfigServer.md)：阿里内部 ConfigServer 演进来源。
 - [Diamond](/docs/CS/Framework/nacos/Diamond.md)：Diamond 配置中心演进来源。
 
-## 共识层：AP / CP 并存
+## Consensus Layer: AP / CP Coexist
 
 - [一致性抽象层](/docs/CS/Framework/nacos/consistency.md)：两套一致性抽象（ConsistencyProtocol / ConsistencyService）、按 key 路由 AP/CP、临时实例走 Distro / 持久实例走 JRaft 的双写、为什么 AP+CP 能共存。
 - [Distro（AP 协议深潜）](/docs/CS/Framework/nacos/distro.md)：责任分片、双层任务引擎、两阶段延迟合并（1000ms 窗口）、定时校验与自愈、新节点全量加载、失败重试。
 - [JRaft](/docs/CS/Framework/nacos/jraft.md)：Nacos 为什么在配置侧用 Raft、Leader 选举 / 日志复制 / 提交 / 快照 / 成员变更、端口与 Distro 的分工。
 
-## 存储与持久化
+## Storage and Persistence
 
 - [Storage](/docs/CS/Framework/nacos/storage.md)：AP 命名在内存、CP 配置落库的边界；Derby（单机不可集群）与 MySQL（集群生产）；表结构、data_id+group_id+tenant_id 唯一键、容量 quota、PostgreSQL 插件。
 
-## 子系统
+## Subsystem
 
 - [Registry](/docs/CS/Framework/nacos/registry.md)：服务发现数据模型、Client 注册 / Server 处理、Distro 同步、健康心跳、订阅、选实例、调优。
 - [Config](/docs/CS/Framework/nacos/config.md)：配置发布 / dump / 长轮询与 gRPC 推送、Spring Cloud 集成、Server 端配置、灰度（beta/tag/aggr）。
 - [Config Push（配置推送深潜）](/docs/CS/Framework/nacos/config-push.md)：轻量通知 + 主动拉取设计、2.x 长轮询 vs 3.x gRPC 推送、dump 全量同步、灰度监听、3.x 废弃 HTTP 长轮询监听。
 - [nacos-spring](/docs/CS/Framework/nacos/nacos-spring.md)：Spring / Spring Boot 接入注解。
 
-## 客户端与生态
+## Client and Ecosystem
 
 - [Client](/docs/CS/Framework/nacos/client.md)：Java / Go SDK 与 Spring Cloud Alibaba 最佳实践、配置监听、服务订阅、namespace/group/dataId、长连接与重连。
 
-## 安全
+## Security
 
 - [Security](/docs/CS/Framework/nacos/security.md)：开启鉴权、JWT token、RBAC（users/roles/permissions）、鉴权插件、控制台关闭、弱鉴权定位。
 
-## 生产运维
+## Production Operations
 
 - [Monitoring](/docs/CS/Framework/nacos/monitoring.md)：Actuator 暴露 Prometheus、关键指标、3.x 健康检查接口、Grafana 与告警。
 - [Troubleshooting](/docs/CS/Framework/nacos/troubleshooting.md)：端口冲突、成员列表不一致、Derby 不可集群、403 token、推送失败、Distro 重启丢实例、长连接上限、版本错配。
 - 集群与调优目前内联在 [Nacos](/docs/CS/Framework/nacos/Nacos.md) 的 `## Cluster`（MemberLookup：Standalone / FileConfig / AddressServer）与 `## Tuning`（限流 / 黑名单）段。
 
-## 横向对比
+## Horizontal Comparison
 
 - [etcd 横向对照](/docs/CS/Framework/etcd/compare.md)：etcd / ZooKeeper / Nacos / Consul 维度矩阵（Nacos 在 `## Nacos 特有能力` 段）。
 - [ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)、[Consul](/docs/CS/Framework/consul/Consul.md)、[etcd](/docs/CS/Framework/etcd/etcd.md)。

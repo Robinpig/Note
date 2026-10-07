@@ -10,9 +10,9 @@
 
 本文所有结论来自 Apache Dubbo **3.3.6** 官方源码（`apache/dubbo` 仓库 tag `dubbo-3.3.6`），默认值一律标注文件与行号，网上流传但与源码不符的说法会在文中显式标出。
 
-## 序列化 SPI 与扩展清单
+## Serialization SPI and Extension List
 
-### 主仓库的真实模块结构
+### Actual Module Structure of the Main Repo
 
 `dubbo-serialization/` 目录下**只有 3 个子模块**：
 
@@ -34,7 +34,7 @@ fastjson2=org.apache.dubbo.common.serialize.fastjson2.FastJson2Serialization
 > [!WARNING]
 > 「Dubbo 内置 kryo / fst / protostuff / avro / gson / jackson / nativejava / msgpack / fury / protobuf 序列化」这句话在 3.3.6 主仓库语境下**不成立**。这些实现类不在 `apache/dubbo` 主仓库，而在独立的 `dubbo-spi-extensions` 仓库（`org.apache.dubbo.extensions`）。主仓库里它们只以「ID 常量」的形式存在，用于协议头里标识序列化类型。
 
-### ID 常量表：主仓库留下的只有编号
+### ID Constant Table: Only Numbers Left in the Main Repo
 
 `dubbo-serialization-api/.../serialize/Constants.java:19-40` 定义了全部序列化 ID，这是主仓库对「缺失实现」留下的唯一痕迹：
 
@@ -70,7 +70,7 @@ byte CUSTOM_MESSAGEPACK_SERIALIZATION_ID = 31;
 default=org.apache.dubbo.common.serialize.DefaultMultipleSerialization
 ```
 
-### Serialization 接口契约
+### Serialization Interface Contract
 
 所有实现共同遵守的 SPI 接口定义在 `dubbo-serialization-api`：
 
@@ -95,13 +95,13 @@ public interface Serialization {
 
 接口只约定「id、名字、读、写」四件事。实现方不需要感知协议头布局——flag 位的组装在 `ExchangeCodec` 里完成，序列化实现只负责对象与流的转换。这也是为什么扩展外置到 `dubbo-spi-extensions` 后无需改动协议层：ID 空间主仓库已预留，实现只需报告自己的 `getContentTypeId()`。
 
-### wrapper 扩展：异常包装器
+### wrapper Extension: Exception Wrapper
 
 注册清单里的 `wrapper=` 条目值得单独说明。`DefaultSerializationExceptionWrapper` 是一个装饰器，它在反序列化抛出异常时，把底层 IO 异常统一包装成 Dubbo 语义的 `SerializeException`（带 `isSerializationException` 标记），使上层能把「序列化本身出错」与「网络断开」区分开——前者应提示客户端检查类型与安全配置，后者应走重连逻辑。Dubbo SPI 的 wrapper 机制（命名以 `wrapper` 开头自动包裹所有实现）保证了这一层对所有序列化实现透明生效。
 
-## 默认值与优先级
+## Default Values and Priority
 
-### 默认远程序列化是 hessian2
+### Default Remote Serialization Is hessian2
 
 ```java
 // dubbo-serialization/dubbo-serialization-api/.../common/serialize/support/DefaultSerializationSelector.java:25
@@ -110,7 +110,7 @@ public static final String DEFAULT_REMOTING_SERIALIZATION_PROPERTY = "hessian2";
 
 注意这和 Triple 的行为一致：即使协议换成 Triple，默认序列化依然是 `hessian2`，而不是很多人直觉里的 Protobuf。
 
-### 配置 key 与优先级
+### Configuration key and Priority
 
 三个相关配置 key 的定义位置：
 
@@ -151,7 +151,7 @@ public static byte serializationId(URL url) {
 
 结论：**`prefer.serialization` 列表 > `serialization` 单值 > 默认 `hessian2`**。`prefer.serialization` 的设计意图是客户端与服务端各持有一份偏好列表，协商时取双方都支持的第一个。
 
-## 多序列化协商（MultipleSerialization）
+## Multi-Serialization Negotiation (MultipleSerialization)
 
 `serialize.multiple` 打开后，Dubbo 不再把「一次部署一种序列化」当成前提，而是允许同一连接上按请求选择序列化。默认实现：
 
@@ -172,13 +172,13 @@ public class DefaultMultipleSerialization implements MultipleSerialization {
 
 Triple 是这个机制的主要消费者：`serialize.multiple=default` 语义为「使用框架默认协商策略」，客户端取自己的 `prefer.serialization` 首选、与对端注册的序列化能力求交集。注意协商使用的名字（`getContentType()`）与 SPI 名可能不同——Hessian2 在协商字符串里就表现为 `hessian4`（见上一节）。
 
-## Hessian2 实现细节
+## Hessian2 Implementation Details
 
-### hessian4 的命名陷阱
+### hessian4 Naming Trap
 
 `Hessian2Serialization` 实际写入 content type 的名字是 `hessian4`——虽然 SPI 扩展名叫 `hessian2`，但底层用的是 Hessian 4.x 的库（`com.caucho.hessian4`，Maven 坐标 `com.caucho:hessian`）。对外配置写 `hessian2`，内部协商字符串却是 `hessian4`，排查 Triple 的 `serialize.multiple` 协商日志时会同时看到这两个名字，属于同一实现。
 
-### allowNonSerializable 与类工厂放行
+### allowNonSerializable and Class Factory Bypass
 
 Hessian2 的对象输出工厂由 `Hessian2FactoryManager` 管理，其中有两处关键逻辑：
 
@@ -203,20 +203,20 @@ boolean allowNonSerializable = Boolean.parseBoolean(
 
 `dubbo.hessian.allowNonSerializable` 默认 `"false"`，与 Hessian 官方 `SerializerFactory#setAllowNonSerializable` 的语义一致。
 
-## 序列化安全（3.x 的核心防线）
+## Serialization Security (Core Defense Line of 3.x)
 
-### 背景：CVE-2020-1948
+### Background: CVE-2020-1948
 
 2020 年的 CVE-2020-1948 是一条完整的 Hessian2 反序列化 RCE 链：攻击者伪造请求体，借助 Hessian2 的类还原机制触发 gadget 链。之后 Dubbo 逐步落地了 `SerializeSecurityManager` 体系——请求体里出现的每一个反序列化目标类，都要先过安全检查。详见 [Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md) 中该 CVE 的链接。
 
-### 类名打假
+### Debunk Class Names
 
 先纠正两个网上流传的类名：
 
 - **不存在 `SerializationSecurityManager` 这个类**。真实执行类校验的是 `org.apache.dubbo.common.utils.DefaultSerializeClassChecker`，安全管理与配置分发给 `SerializeSecurityManager` 和 `SerializeSecurityConfigurator`。
 - **不存在 `AllowClassChecker` 这个类**。放行/阻断逻辑在 `DefaultSerializeClassChecker` 内部实现。
 
-### 状态机：默认就是 STRICT
+### State Machine: The Default Is STRICT
 
 ```java
 // dubbo-common/src/main/java/org/apache/dubbo/common/utils/AllowClassNotifyListener.java:23
@@ -231,7 +231,7 @@ public static final SerializeCheckStatus DEFAULT_STATUS = SerializeCheckStatus.S
 
 **「默认是 WARN」的说法不成立**——从引入这套机制起，默认就是 `STRICT`。
 
-### refreshStatus()：两个系统属性的开关语义
+### refreshStatus(): Switch Semantics of Two System Properties
 
 `SerializeSecurityConfigurator.refreshStatus()`（`SerializeSecurityConfigurator.java:186-211`）按以下顺序决定最终状态：
 
@@ -250,7 +250,7 @@ boolean blockAll = Boolean.parseBoolean(
 
 即：`openCheckClass=false` 一票否决（DISABLE），`blockAllClassExceptAllow=true` 一票抬升（STRICT），`serialize-check-status` 只在这两个开关允许的范围内生效。
 
-### allowlist 与 blockedlist：逐条类名，不是包前缀
+### allowlist and blockedlist: Per-Class Names, Not Package Prefixes
 
 默认放行清单不是 `java.util.*` 这类宽泛前缀，而是一份**逐条类名**的文件：
 
@@ -259,7 +259,7 @@ boolean blockAll = Boolean.parseBoolean(
 
 两个文件的路径常量定义在 `CommonConstants.java:449,451`（`SERIALIZE_ALLOW_LIST_PATH` / `SERIALIZE_BLOCK_LIST_PATH`）。blockedlist 里的条目**在任何状态下都会被阻断**，即使开了 `openCheckClass=false` 之外的宽松配置，`com.caucho.`、`javax.naming.` 这些经典 gadget 来源也进不来。
 
-### 自动信任：被导出接口的类型自动放行
+### Automatic Trust: Exported Interface Types Are Automatically Allowed
 
 严格模式之所以可用，是因为框架会**自动信任业务自己声明的类型**。`SerializeSecurityConfigurator.registerInterface()`（`:213-253`）在服务导出/引用时，把该接口的方法签名里出现的参数、返回值、异常类型全部注册进 allowlist。两个配套开关：
 
@@ -273,7 +273,7 @@ private int trustSerializeClassLevel = Integer.MAX_VALUE;
 private boolean checkSerializable = true;
 ```
 
-### 配置项真名清单
+### Actual Configuration Item Name List
 
 这一节是打假重灾区。**真实存在的配置项**只有以下这些：
 
@@ -294,7 +294,7 @@ private boolean checkSerializable = true;
 > [!WARNING]
 > 网上流传的 `serialize.check.status`、`serialize.checker`、`serialize.allowlist` 作为配置 key 在 3.3.6 源码中**均不存在**。用这些 key 配置不会有任何效果，也不会报错——排查时如果发现安全策略「配了不生效」，先检查 key 名是不是写错了。
 
-## 跨语言序列化选择
+## Cross-Language Serialization Selection
 
 `fastjson2` 之所以是主仓库唯二的注册实现之一，定位很清晰：它是纯 JSON 语义的序列化，任何语言都能消费，适合泛化调用、HTTP 网关侧的场景。而 Protobuf 类型的「跨语言」走的是另一条路——如果方法签名本身是 Protobuf 生成类，Triple 直接做 PB 直通打包（见 [Triple](/docs/CS/Framework/Dubbo/Triple.md)），根本不经过 `Serialization` SPI 的通用对象序列化路径。
 
@@ -306,7 +306,7 @@ private boolean checkSerializable = true;
 
 协议头里的 ID（如 kryo=8、fury=28）不需要也无法自定义——ID 空间由主仓库 `Constants.java` 统一编号，客户端与服务端必须引入一致版本的扩展实现，否则会出现「ID 认识、实现没有」的解码失败。
 
-## 默认值汇总表
+## Default Value Summary Table
 
 | 项目 | 值 | 源码位置 |
 | :--- | :--- | :--- |
@@ -324,7 +324,7 @@ private boolean checkSerializable = true;
 | `dubbo.hessian.allowNonSerializable` | `"false"` | Hessian2FactoryManager |
 | Hessian2 固定放行 | `org.apache.dubbo.*` | `Hessian2FactoryManager.java:88-90,117-119` |
 
-## 陷阱清单
+## Pitfall List
 
 | 直觉/网传说法 | 源码实际 | 后果 |
 | :--- | :--- | :--- |

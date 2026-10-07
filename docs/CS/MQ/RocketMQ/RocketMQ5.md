@@ -19,7 +19,7 @@ Client ──▶ Proxy（无状态，gRPC 8081 + Remoting 8080）
           Broker（专注存储）──▶ CommitLog / ConsumeQueue
 ```
 
-## 关键事实：gRPC SDK 在独立仓库
+## Key Fact: gRPC SDK in Separate Repo
 
 > [!WARNING]
 > **常见误解：「RocketMQ 5.0 把 gRPC 客户端 `rocketmq-client-java` 合入了主仓库 `client/java/`」——完全错误。**
@@ -40,7 +40,7 @@ Client ──▶ Proxy（无状态，gRPC 8081 + Remoting 8080）
 >
 > `PullResult` 存在于 `client/.../consumer/PullResult.java`（Remoting 版）。
 
-## 模块与关键类
+## Modules and Key Classes
 
 5.5.1 根目录一级模块（trees API 全量，`truncated: false`，3562 条）：
 
@@ -67,7 +67,7 @@ proxy  remoting  srvutil  store  style  test  tieredstore  tools
 >
 > 同理 `AbstractProxyMessageService` 也不存在 —— 5.5.1 为 `Cluster` / `Local` 二分实现。
 
-### 端口默认值
+### Port Defaults
 
 `ProxyConfig.java`：
 
@@ -81,7 +81,7 @@ proxy  remoting  srvutil  store  style  test  tieredstore  tools
 > [!NOTE]
 > 8081/8080 的常见说法成立，但注意 gRPC 端口是 `Integer`（可为 null 表示不启用），remoting 是 `int`（必启用）。
 
-## Proxy：不存消息、无需元数据存储
+## Proxy: Does Not Store Messages, No Metadata Storage Needed
 
 > [!IMPORTANT]
 > **Proxy 是无状态的**（不存消息），请求经 `TopicRouteService` 解析出 `messageQueue.getBrokerAddr()` / `getBrokerName()` 后转发。
@@ -90,7 +90,7 @@ proxy  remoting  srvutil  store  style  test  tieredstore  tools
 >
 > → 「5.0 有 zookeeper/metadataStore 概念」的说法在 **5.5.1 已不存在**。这是 Proxy 无状态化的直接体现。
 
-### 旧 Remoting 客户端能连 5.x Proxy
+### Old Remoting Client Can Connect to 5.x Proxy
 
 > [!WARNING]
 > **常见误解：「5.x 只能用新 gRPC 客户端」——错。** 5.5.1 Proxy **同时启用两种协议**。
@@ -108,7 +108,7 @@ proxy  remoting  srvutil  store  style  test  tieredstore  tools
 
 两者 API 不兼容，切换需改代码。
 
-### Proxy 支持 ACL
+### Proxy Supports ACL
 
 `proxy/auth/ProxyAuthorizationMetadataProvider.java`（`implements AuthorizationMetadataProvider`，含 createAcl / deleteAcl / updateAcl / getAcl / listAcl）。
 
@@ -124,7 +124,7 @@ proxy  remoting  srvutil  store  style  test  tieredstore  tools
 > [!NOTE]
 > ACL RPC Hook 在 Cluster 模式下默认**关闭**，多租户场景需显式开启。
 
-## POP：无状态消费模型
+## POP: Stateless Consumption Model
 
 5.0 在队列模型之上引入**无状态消费模型（POP）**，在同一个主体上同时支持两种消费模型，体现消息与流的「二象性」：面向流场景用高性能队列模型，面向消息场景用无状态消息模型。
 
@@ -138,7 +138,7 @@ proxy  remoting  srvutil  store  style  test  tieredstore  tools
 | 旧客户端侧 | `PopResult`、`PopStatus`、`PopCallback` | `client/.../consumer/` |
 | 5.5.1 新增 | `broker/pop/` 包：`PopConsumerKVStore`、`PopConsumerLockService`、`PopConsumerRocksdbStore`、`PopConsumerCache`、`PopConsumerRecord` | — |
 
-### invisibleTime 由客户端携带
+### invisibleTime Carried by Client
 
 > [!WARNING]
 > **常见说法「POP 的 invisibleTime 服务端默认 15s」——未查到服务端默认值。** `PopMessageProcessor` 直接透传 `requestHeader.getInvisibleTime()`（`:383/431/594/736`）。
@@ -158,7 +158,7 @@ proxy  remoting  srvutil  store  style  test  tieredstore  tools
 >
 > 「POP 解决消息不可见但已 ack 问题」这一表述**未在 5.5.1 源码/文档中查到**对应说明，不作断言。
 
-## 新特性清单
+## New Features List
 
 逐项经 trees API / contents API 核实：
 
@@ -179,7 +179,7 @@ proxy  remoting  srvutil  store  style  test  tieredstore  tools
 1s 5s 10s 30s 1m 2m 3m 4m 5m 6m 7m 8m 9m 10m 20m 30m 1h 2h
 ```
 
-## 高可用：BrokerContainer 与 DLedger Controller
+## High Availability: BrokerContainer and DLedger Controller
 
 5.0 对 Master-Slave 架构和基于 Raft 的架构都做了优化。
 
@@ -202,7 +202,7 @@ proxy  remoting  srvutil  store  style  test  tieredstore  tools
 >
 > 两个开关默认都是 `false`，5.x 默认仍是传统主从。详见 [Cluster](/docs/CS/MQ/RocketMQ/Cluster.md)。
 
-## 5.x 限制与坑
+## 5.x Limitations and Pitfalls
 
 > [!WARNING]
 > | 常见说法 | 5.5.1 真相 |
@@ -218,7 +218,7 @@ proxy  remoting  srvutil  store  style  test  tieredstore  tools
 > | 存在 `useRocksDBStore` 配置 | ❌ 未查到，实际是 `rocksdbCQDoubleWriteEnable` 等 |
 > | 官方限制章节在 `/docs/featureBehavior/` 与 `/docs/deployment/` | ❌ 两路径均为 JS 渲染的空目录索引；实际路径是 `/docs/bestPractice/*`、`/docs/observability/*`、`/docs/sdk/*` |
 
-## 监控指标
+## Monitoring Metrics
 
 > [!IMPORTANT]
 > Prometheus 指标**自 5.1.0 起引入，且仅支持 broker**（官方 `/docs/observability/01metrics`）。
@@ -234,7 +234,7 @@ Label 集：`cluster`、`node_type`(proxy/broker/nameserver)、`node_id`、`topi
 > [!TIP]
 > 排障常用：`rocketmq_storage_flush_behind_bytes` 观察刷盘积压、`rocketmq_storage_dispatch_behind_bytes` 观察 Reput 派发积压、`rocketmq_consumer_lag_latency` 观察消费延迟。写入即丢的丢消息问题优先看 `send_to_dlq_messages_total` 与 `storage_flush_behind_bytes`。
 
-## JVM 与系统参数
+## JVM and System Parameters
 
 官方推荐（`https://rocketmq.apache.org/docs/bestPractice/07JVMOS`）：
 
@@ -253,7 +253,7 @@ Label 集：`cluster`、`node_type`(proxy/broker/nameserver)、`node_id`、`topi
 - fd 上限 **655350**
 - IO 调度器用 **deadline**
 
-## 相关配置速查
+## Related Configuration Quick Reference
 
 `MessageStoreConfig`（5.5.1，均为默认值）：
 

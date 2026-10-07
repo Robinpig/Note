@@ -6,7 +6,7 @@
 
 x86 与 arm64 上的默认实现是 **qspinlock**（queued spinlock），代码在 `kernel/locking/qspinlock.c` 与 `include/asm-generic/qspinlock.h`。它是一个"塞进 4 个字节里的 MCS 队列锁"——既要保留 `spinlock_t` 只有 4 字节的历史 ABI，又想拿到 MCS 锁"每个等待者自旋自己的变量"的可扩展性。本文按源码的四级结构展开：**快速路径 → pending 位 → MCS 队列 → PV 让出**。
 
-## 使用规则
+## Usage Rules
 
 > [!WARNING]
 >
@@ -18,9 +18,9 @@ x86 与 arm64 上的默认实现是 **qspinlock**（queued spinlock），代码�
 
 > The configure option CONFIG_DEBUG_SPINLOCK enables a handful of debugging checks in the spin lock code.
 
-配合 `lockdep`（`CONFIG_PROVE_LOCKING`）可以检测锁顺序倒置等死锁风险，见 [死锁与调试](/docs/CS/OS/Linux/Lock/README.md?id=死锁与调试)。
+配合 `lockdep`（`CONFIG_PROVE_LOCKING`）可以检测锁顺序倒置等死锁风险，见 [死锁与调试](/docs/CS/OS/Linux/Lock/README.md?id=deadlocks-and-debugging)。
 
-## 中断与 API 选择
+## Interrupts and API Selection
 
 自旋锁最大的坑是**中断打断持锁者**：如果中断处理程序也要获取同一把锁，那么中断发生在持锁期间时，中断里会自旋等到天荒地老——因为持锁者永远不会被调度回来。因此 API 按"要不要关中断/关下半部"分成一组：
 
@@ -89,7 +89,7 @@ static inline void __raw_spin_unlock(raw_spinlock_t *lock)
 
 注意 `spin_lock()`/`spin_unlock()` 在可抢占内核中隐含了 `preempt_disable()`/`preempt_enable()`：不仅防止其他 CPU 竞争，也防止本 CPU 上切换到另一个想拿同一把锁的任务。
 
-## 为什么锁要排队：TAS → ticket → MCS
+## Why Locks Queue: TAS → ticket → MCS
 
 自旋锁的性能瓶颈不在"自旋"本身，而在**自旋时访问了什么**。
 
@@ -101,7 +101,7 @@ MCS 锁的代价是**锁字变成了指针**（8 字节），而且调用者必�
 
 qspinlock 的全部技巧，就是如何在 **4 字节**里既塞下 MCS 的排队语义，又不用把 node 从加锁传到解锁。
 
-## qspinlock 的 4 字节布局
+## The 4-Byte Layout of qspinlock
 
 `include/asm-generic/qspinlock_types.h`：
 
@@ -175,7 +175,7 @@ static inline __pure u32 encode_tail(int cpu, int idx)
 }
 ```
 
-## 快速路径：一个 cmpxchg 与一个字节写
+## Fast Path: One cmpxchg and One Byte Write
 
 加锁的快路径就是"把 0 换成 1"（`include/asm-generic/qspinlock.h`）：
 
@@ -207,7 +207,7 @@ static __always_inline void queued_spin_unlock(struct qspinlock *lock)
 
 注意这里不做原子 RMW：因为 `locked` 独占一个字节，写 0 是原子的（架构保证单字节访问不对齐撕裂），`smp_store_release` 提供 release 语义即可。**这是 locked 字段占满 8 位的直接收益**——解锁路径上没有 `lock` 前缀指令。
 
-## pending 位：两级自旋的第一级
+## pending Bit: First Stage of Two-Level Spinning
 
 qspinlock 保留了"队首者在锁字上自旋"的行为。源码注释里那张状态机图就是全部逻辑：
 
@@ -342,7 +342,7 @@ static __always_inline u32 queued_fetch_set_pending_acquire(struct qspinlock *lo
 
 `btsl`（bit test and set）返回的是"位的旧值"，乘上 `_Q_PENDING_VAL` 还原成"我是否设置了它"，再或上其余字段。
 
-## 慢路径：MCS 队列
+## Slow Path: MCS Queue
 
 真正的排队从 `queue:` 标签开始。
 
@@ -454,7 +454,7 @@ pv_queue:
 
 `arch_mcs_spin_lock_contended()` 默认就是 `smp_cond_load_acquire(l, VAL)`，架构可覆盖（arm 用自己的实现，arm64 借 `smp_cond_load_acquire` 拿到 WFE 低功耗自旋）。
 
-### 队首为什么自旋锁字而不是自己的节点
+### Why the Queue Head Spins on the Lock Word, Not Its Own Node
 
 经典 MCS 锁里，**队首**也是自旋自己的 node。qspinlock 改成了让队首自旋共享的锁字：
 
@@ -479,7 +479,7 @@ pv_queue:
 
 代价是队首（只有队首）会造成锁字的 cache line 竞争——但队首只有一个，抖动是 O(1) 而非 O(N)。收益是 **`spin_unlock()` 不需要知道谁在等、不需要传递 node**，API 保持不变。
 
-### 退出：一次 cmpxchg 完成"接管 + 清空队列"
+### Exit: One cmpxchg to "Take Over + Clear the Queue"
 
 拿到锁之后，如果后面没人排队，可以一步到位把整个锁字清成 `_Q_LOCKED_VAL`：
 
@@ -530,7 +530,7 @@ release:
 
 否则走交接：`set_locked(lock)`（写 `locked` 字节）之后，等 `node->next` 出现（可能是刚入队还没来得及写指针的竞争者），然后写 `next->locked = 1` 把锁传下去。
 
-## pvqspinlock：把自旋换成 halt
+## pvqspinlock: Replacing Spinning with halt
 
 虚拟机里自旋是纯粹的浪费：持锁者可能是一个**被宿主机调度出去的 vCPU**，它根本没在跑，等待者空转几百微秒也等不到锁释放，还白白占着一个物理核。
 
@@ -579,7 +579,7 @@ struct pv_node {
 
 三个状态对应三件事：`RUNNING`（在跑，正常自旋）、`HALTED`（已 halt，靠 `pv_wait` 挂起）、`HASHED`（已登记到锁的哈希表，unlock 时会被查表唤醒）。
 
-### wait-early：前驱没在跑就别等了
+### wait-early: Don't Wait If the Predecessor Isn't Running
 
 ```c
 	for (;;) {
@@ -613,7 +613,7 @@ struct pv_node {
 
 `pv_wait_early()` 检查**前驱节点的 vCPU 是否在运行**（通过 `vcpu_is_preempted()`），如果不运行就提前 halt——因为等一个被抢占的 vCPU 释放锁是毫无意义的。检查按 `PV_PREV_CHECK_MASK` 节流（每 256 次循环查一次），避免频繁读前驱的 cache line。
 
-### kick 不唤醒，而是"推进状态"
+### kick Does Not Wake, It "Advances State"
 
 常规实现里，解锁者要唤醒后继（wake/sleep 一次往返）。pv 版做了个优化：不唤醒，而是把后继的 state 从 `HALTED` 改成 `HASHED`，并把它要等的锁登记进哈希表：
 
@@ -652,7 +652,7 @@ static void pv_kick_node(struct qspinlock *lock, struct mcs_spinlock *node)
 
 被"推进"的 vCPU 醒来后不再睡第二次，而是直接进入队首逻辑（`pv_wait_head_or_lock`）自旋锁字。同时锁的 `locked` 字节被写成 `_Q_SLOW_VAL`（=3，一个非法值），作为"这把锁有人在哈希表里等"的标记，unlock 时据此决定要不要查表 kick。
 
-### 混合公平/非公平：允许偷锁
+### Hybrid Fair/Unfair: Allowing Lock Stealing
 
 pv 下还允许"偷锁"（lock stealing）——队列非空但队首还没准备好时，新来的等待者可以直接抢：
 
@@ -685,7 +685,7 @@ static inline bool pv_hybrid_queued_unfair_trylock(struct qspinlock *lock)
 
 **pending 位在这里有了第二重语义**：队首 vCPU 一旦开始正式自旋（在 `pv_wait_head_or_lock()` 里 `set_pending`），就禁止别人偷锁。所以只要队列里的队首 vCPU 在跑，偷锁就不会造成饥饿——源码注释称之为 "hybrid PV queued/unfair lock"，兼顾非公平锁的性能与队列锁的无饥饿。
 
-## PREEMPT_RT 下的 spinlock
+## spinlock Under PREEMPT_RT
 
 `CONFIG_PREEMPT_RT` 下 `spinlock_t` 不再自旋，而是退化成可睡眠的 `rt_mutex_base`。v7.2.7 的实现（`kernel/locking/spinlock_rt.c`）：
 
@@ -741,7 +741,7 @@ void __sched rt_spin_unlock(spinlock_t *lock) __releases(RCU)
 2. **获取 spinlock 会 `migrate_disable()`**：RT 下锁是可迁移感知的，禁止迁移是为了让 per-CPU 数据访问仍然安全。
 3. **`raw_spinlock_t` 保持真正的自旋**（永远不变成睡眠锁）。所以"RT 下 spinlock 可以睡眠"这句话只对 `spinlock_t` 成立，`raw_spinlock_t` 依旧禁止在临界区睡眠。
 
-## 架构适配要求
+## Architecture Adaptation Requirements
 
 qspinlock 不是随便能用的，源码头部的注释列了硬约束：
 
@@ -764,7 +764,7 @@ qspinlock 不是随便能用的，源码头部的注释列了硬约束：
 >
 > `arch/arm64/include/asm/rqspinlock.h` 名字看着像 "arm64 版 qspinlock"，其实不是——**rqspinlock 是 BPF 子系统的 resilient spin lock**（实现在 `kernel/bpf/rqspinlock.c`，服务于 `bpf_res_spin_lock`），带超时检测与 AA/ABBA 死锁检查。arm64 的普通自旋锁仍是标准 qspinlock。
 
-## 观测
+## Observation
 
 内核自带锁事件计数器，由 `CONFIG_LOCK_EVENT_COUNTS` 开启，暴露在 debugfs 的 `lock_event_counts/` 目录下（每个事件一个文件，`.reset_counts` 可写清零）：
 
@@ -780,7 +780,7 @@ qspinlock 不是随便能用的，源码头部的注释列了硬约束：
 
 读数时有个经验判断：**`lock_slowpath` 相对 `lock_pending` 的比例**能看出锁竞争到底有多激烈——如果大量进入慢路径，说明这把锁上的并发已经超过"两个人抢"的规模，值得考虑拆分或 per-CPU 化。
 
-## 其他注意点
+## Other Notes
 
 - `spin_is_locked()` 只用于断言/调试，不能用作同步判断；
 - `raw_spinlock_t` 与 `spinlock_t` 的差别在 RT 内核下才有意义：`raw_` 版本永不转换为睡眠锁；

@@ -12,7 +12,7 @@
 Fig.1. Test.
 </p>
 
-## 测试金字塔
+## Test Pyramid
 
 - **单元测试（底层，最多）**：针对单个类/函数，依赖全部 mock，毫秒级，无 IO。验证逻辑分支，是重构的主要安全网。
 - **集成测试（中层，适量）**：多个真实组件协作——DAO 连数据库（Testcontainers）、Service 连真实 MQ/Redis，验证装配与边界行为。
@@ -20,7 +20,7 @@ Fig.1. Test.
 
 反模式：冰激凌蛋筒——端到端测试占绝大多数，套件跑一小时、失败后不知道哪层坏了。实践中常补一层**契约测试**（Pact / Spring Cloud Contract）保证服务间接口演进不破坏调用方。
 
-## 测试替身（Test Doubles）
+## Test Doubles
 
 | 类型 | 行为 | 用途 |
 |------|------|------|
@@ -32,7 +32,7 @@ Fig.1. Test.
 
 原则：**断言行为而非实现**。滥用 Mock 验证内部调用顺序会导致重构即改测试——测试反而成了枷锁。一个信号：如果方法调用没出错但测试因 mock 期望而红，说明测的是实现细节。
 
-## 好测试的特征（FIRST）
+## Characteristics of Good Tests (FIRST)
 
 Fast（快）、Independent（互不依赖、不依赖执行顺序）、Repeatable（任何环境结果一致）、Self-Validating（自动断言，不靠人眼看日志）、Timely（与生产代码同时甚至更早写）。其他实践：
 
@@ -46,7 +46,7 @@ Fast（快）、Independent（互不依赖、不依赖执行顺序）、Repeatab
 - [JUnit](/docs/CS/Java/JUnit.md)：Java 生态主流，JUnit 5 = Platform（启动）+ Jupiter（注解 API）+ Vintage（旧用例兼容）；断言库 AssertJ 表达力更强；Mock 用 Mockito（`@Mock`/`@InjectMocks`/`verify`）。
 - 其他生态：pytest（Python，fixture + 参数化）、Go 内置 `testing`（表驱动测试是惯例）、Jest/Vitest（前端）。
 
-## 进阶实践
+## Advanced Practice
 
 - **TDD（测试驱动开发）**：红（先写失败测试表达需求）→ 绿（最小实现）→ 重构；价值主要在"先想清楚接口与可测性"，而非测试本身。
 - **覆盖率**：分支覆盖率比行覆盖率有意义；覆盖率只告诉你哪些没被测，不代表测得好——100% 覆盖仍可能漏掉边界。把它当**漏网检查**而非质量目标。

@@ -67,7 +67,7 @@ $$
 
 MobileNet 的核心构件：把标准卷积拆成两步——**深度卷积（depthwise）**对每个输入通道单独做空间卷积、**逐点卷积（pointwise，1×1）**做跨通道线性组合，把参数量与计算量降约一个数量级，代价是精度略降，是端侧推理的默认选择。
 
-## 训练要点
+## Training Essentials
 
 - 优化器 SGD + momentum / Adam；分类头接 softmax + 交叉熵
 - **数据增强**：随机裁剪、翻转、颜色抖动、Mixup / CutMix、RandAugment——CNN 的泛化很大程度依赖增强
@@ -95,7 +95,7 @@ cnn = nn.Sequential(
 
 训练流程（取 batch、前向、损失、反向、更新）见 [Training](/docs/CS/AI/DL/Training.md)。CNN 的应用面——分类、检测、分割——见 [CV](/docs/CS/AI/CV.md)。
 
-## 适用边界与替代
+## Applicability Boundaries and Alternatives
 
 CNN 的归纳偏置（局部性、平移等变）适合图像与局部相关信号，但卷积感受野增长慢、难以建模全局关系。**Vision Transformer（ViT）** 用 self-attention 直接获得全局感受野，在大数据/大模型设定下反超 CNN；当前实用趋势是二者混合——**ConvNeXt** 证明补上现代化训练技巧后纯卷积也能追平 ViT。
 

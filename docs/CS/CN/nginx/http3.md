@@ -18,7 +18,7 @@ nginx 的实现在源码里分成两块，这个划分本身就说明了问题�
 - 1.29.1 之前，即使设了 `ssl_early_data`，用 OpenSSL 也无法启用 0-RTT；
 - **不能在 Win32 平台构建**。
 
-## 最小可用配置
+## Minimal Usable Configuration
 
 官方示例的骨架（注意两行 `listen`）：
 
@@ -52,7 +52,7 @@ http {
 2. **`Alt-Svc` 不会自动添加**，必须自己 `add_header`。浏览器只有在见过 `Alt-Svc` 之后才会尝试 h3，所以「升级到 h3 慢」通常不是协议慢，而是宣告没做对。
 3. **日志里用 `$http3` 判断协议**（取值 `h3` / `hq` / 空串），别想着复用 `$server_protocol`。
 
-## 指令与默认值
+## Directives and Defaults
 
 | 指令 | 上下文 | 默认值 | 说明 |
 | :-- | :-- | :-- | :-- |
@@ -68,7 +68,7 @@ http {
 
 `quic_host_key` 与 `quic_bpf` 这两条最容易被忽略：前者影响 reload 后已签发令牌的存活，后者是连接迁移能不能工作的前置条件。
 
-## QUIC 连接在 nginx 里长什么样
+## How QUIC Connections Look in nginx
 
 `ngx_quic_connection_t`（`src/event/quic/ngx_event_quic_connection.h`）的字段基本对应 RFC 9000 的概念模型：
 
@@ -117,7 +117,7 @@ struct ngx_quic_connection_s {
 - **拥塞控制内置**：`ngx_quic_congestion_t` 里有 `ssthresh`、`w_max`、`w_est`、`w_prior`、`k` 这些字段，是典型的 **CUBIC** 状态量；`in_flight` / `window` 与 `mtu` 决定发送窗口。这也意味着 QUIC 的拥塞行为完全由 nginx 决定，不受内核 net.ipv4.tcp_congestion_control 影响。
 - **连接对象挂在连接上**：`ngx_connection_t` 上有 `quic:1` 位标志与 `ngx_quic_stream_t *quic` 字段，QUIC 流复用 nginx 的 connection 抽象，所以 HTTP/3 的请求仍然走同一套 `ngx_http_request_t` 生命周期，只是底层连接不是 socket。
 
-## 多 worker 与连接迁移：为什么需要 eBPF
+## Multi-worker and Connection Migration: Why eBPF Is Needed
 
 HTTP/1.1 与 HTTP/2 下，一个 TCP 连接由内核按四元组哈希分给某个 worker，之后**永远属于那个 worker**。QUIC 不同：客户端可以在连接存续期间换 IP/端口（连接迁移），而 **QUIC 连接的身份是 Connection ID，不是四元组**。
 
@@ -132,14 +132,14 @@ if (ls[i].quic && ls[i].reuseport) {
 
 - 建一张 `BPF_MAP_TYPE_SOCKHASH` 映射，键取 Connection ID 的 **cookie**，值是对应的 UDP socket；
 - 把 eBPF 程序通过 `SO_ATTACH_REUSEPORT_EBPF` 挂到监听 socket 的 reuseport 组上，由内核在分发数据包时就按 Connection ID 选定 socket（也即选定 worker）；
-- 热升级时用环境变量 `NGINX_BPF_MAPS` 把 map 的 fd 传给新 master（与监听 fd 通过 `NGINX` 环境变量传递是同一套思路，见 [nginx 的 Reload 与热升级](/docs/CS/CN/nginx/nginx.md?id=reload：不中断服务的配置替换)）。
+- 热升级时用环境变量 `NGINX_BPF_MAPS` 把 map 的 fd 传给新 master（与监听 fd 通过 `NGINX` 环境变量传递是同一套思路，见 [nginx 的 Reload 与热升级](/docs/CS/CN/nginx/nginx.md?id=reload-configuration-replacement-without-service-interruption)）。
 
 所以 `quic_bpf on` 不只是性能开关，**它是连接迁移能正确工作的关键**：没有它，迁移过的连接的数据包可能落到错误的 worker。
 
 > [!WARNING]
 > 连接迁移也是攻击面。1.31.0 修了 CVE-2026-40460：处理连接迁移时，新 QUIC 流可能在地址验证之前就收到新的客户端地址，造成**地址伪造**。同一版本还加了「限制 QUIC 无状态重置包的大小与速率」。1.31.6 进一步规定：**在 SSL 连接中收到的 QUIC transport parameters 扩展一律忽略**（`Change`），避免两套传输参数来源互相干扰。
 
-## 0-RTT 与地址验证
+## 0-RTT and Address Validation
 
 | 机制 | 开启方式 | 代价 |
 | :-- | :-- | :-- |
@@ -156,7 +156,7 @@ proxy_set_header Early-Data $ssl_early_data;
 
 上游据此对 0-RTT 请求做限制（例如拒绝 POST、只允许读接口）。这与 HTTP/1.1 时代的 TLS 会话复用不是一回事，不能套用旧结论。
 
-## 安全与版本基线
+## Security and Version Baseline
 
 HTTP/3 是 nginx 近两年 CVE 的集中区，选版本时值得单独看：
 
@@ -168,13 +168,13 @@ HTTP/3 是 nginx 近两年 CVE 的集中区，选版本时值得单独看：
 
 实践结论：**开 HTTP/3 就必须跟到最新的 mainline/stable 补丁版本**，并且同时升级 OpenSSL —— 1.31.6 的这枚 CVE 同时涉及 nginx 与 OpenSSL 两侧。
 
-## 与 stream、HTTP/2 的边界
+## Boundary with stream, HTTP/2
 
 - **stream 侧不支持 QUIC**：`src/stream/` 下没有 quic / v3 相关实现。也就是说 **UDP 上的 HTTP/3 只能由 `http` 模块的 v3 提供**，`stream` 的 UDP 代理只是普通的数据报转发。别指望用 `stream` 给 QUIC 做四层代理再交给后端 `http`，那需要真正的 QUIC 感知转发。
 - **HTTP/2 与 HTTP/3 可以同时开**：同端口上 `listen 443 ssl; listen 443 quic reuseport;`，前者承载 h2/h1.1，后者承载 h3；用 `$server_protocol` 与 `$http3` 分别观测。
 - **`http3_hq` 只在互操作测试里有意义**，生产不要开。
 
-## 调试与观测
+## Debugging and Observability
 
 ```nginx
 log_format h3 '$remote_addr $http3 $server_protocol $status '
@@ -186,7 +186,7 @@ log_format h3 '$remote_addr $http3 $server_protocol $status '
 - 抓包看 UDP 443 是否有流量，是最直接的「到底有没有走 QUIC」验证；
 - error_log 里 `quic` 开头的告警（如连接 ID 相关、令牌校验失败）通常指向 `quic_host_key` 与 `quic_retry` 的配置问题。
 
-## 常见坑
+## Common Pitfalls
 
 1. **`listen ... quic` 与 `ssl`/`http2`/`backlog`/`proxy_protocol` 等写在同一行**——配置直接报错，必须拆成两条 `listen`。
 2. **忘了 `add_header Alt-Svc`**——客户端永远不知道 h3 可用，测出来「h3 没生效」。

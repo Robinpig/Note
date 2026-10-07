@@ -17,11 +17,37 @@ swapped := atomic.CompareAndSwapInt64(&counter, old, new)
 ## Operations
 
 - **Add**：原子加减（`AddInt64`/`AddUint64` 等），自增计数、信号量风格的配额都用它。
-- **Load / Store**：保证读到/写入一个完整、不撕裂的值，并附带 happens-before 的可见性语义（对齐到 [Go 内存模型](/docs/CS/Go/GMM.md)）。
+- **Load / Store**：保证读到/写入一个完整、不撕裂的值，并附带 happens-before 的可见性语义（对齐到 [Go 内存模型](/docs/CS/Go/Concurrency/MemoryModel.md)）。
 - **Swap / CompareAndSwap**：Swap 无条件换；CAS 条件换，是无锁算法的核心——「读旧值 → 计算新值 → CAS 提交」，失败则重试（retry loop）。
 - **Pointer / Value**：`atomic.Pointer[T]`（泛型，Go 1.19+）与 `atomic.Value` 支持原子地整体替换一个接口/指针，常用于**无锁配置热更新、单例切换**：Store 一个新配置，所有读方 Load 到的总是某个完整版本，不会看到半更新状态。
 
-## CAS Loop（无锁模式）
+## Generic Atomic Types (Go 1.19+)
+
+Go 1.19 起，`sync/atomic` 提供一组**类型安全的原子值类型**，把「传 `&x` + 函数式 API」升级成「方法式 API」，且对指针类型做到编译期类型检查。它们底层用的还是同一套原子指令，只是接口更友好、更不容易写错（不必反复手写 `&x`、不必担心对齐/地址传错）。
+
+类型清单：`atomic.Bool`、`atomic.Int32`、`atomic.Int64`、`atomic.Uint32`、`atomic.Uint64`、`atomic.Uintptr`、`atomic.Pointer[T]`（泛型），后续版本又补齐了 `Int8/Uint8/Int16/Uint16` 等窄整型变体。
+
+- 数值类型方法：`Load() T`、`Store(v T)`、`Add(delta T) T`（返回新值）、`Swap(v T) T`、`CompareAndSwap(old, new T) bool`；
+- `atomic.Bool` 对应 `Load/Store/Swap/CompareAndSwap`（参数与返回值均为 `bool`）；
+- `atomic.Pointer[T]`：泛型参数 `T` 是**指向的类型**，方法读写的是 `*T`——`Load() *T`、`Store(*T)`、`Swap(*T) *T`、`CompareAndSwap(old, new *T) bool`，**取代** `atomic.Value` 承载指针的场景，省去 `interface{}` + 类型断言、把类型错误从运行期提前到编译期。
+
+```go
+var counter atomic.Int64
+counter.Add(1)
+n := counter.Load()
+
+var stopped atomic.Bool
+if stopped.CompareAndSwap(false, true) { /* 只跑一次，无需 Mutex */ }
+
+type Config struct{ /* ... */ }
+var config atomic.Pointer[Config]
+config.Store(&newCfg)
+cfg := config.Load() // *Config，类型安全，无需断言
+```
+
+选型：新代码优先用类型化原子；函数式 `atomic.AddInt64` 等仍保留，适用于手头只有普通 `*int64` 或需要与旧代码互操作的场景。当要原子替换的不是一个指针、而是一个任意值（如某个 struct 整体），仍可用非泛型的 `atomic.Value`。注意 `atomic.Pointer[T]` 的 `T` 是所指向的类型（方法操作 `*T`），不能把值类型直接放进去。
+
+## CAS Loop (Lock-Free Mode)
 
 ```go
 for {
@@ -58,7 +84,7 @@ for {
 - [Golang](/docs/CS/Go/Go.md)
 - [Lock（Mutex 实现）](/docs/CS/Go/Concurrency/Lock.md)
 - [Sync](/docs/CS/Go/Concurrency/Sync.md)
-- [Go Memory Model](/docs/CS/Go/GMM.md)
+- [Go Memory Model](/docs/CS/Go/Concurrency/MemoryModel.md)
 - [Go Concurrency 总览](/docs/CS/Go/Concurrency/Concurrency.md)
 
 ## References

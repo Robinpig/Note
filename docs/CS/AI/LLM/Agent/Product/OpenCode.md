@@ -15,11 +15,11 @@
 
 自上而下可以拆成五层：
 
-#### 1. 客户端层 (Client)
+#### 1. Client Layer (Client)
 
 TUI（主客户端）、`opencode web`（浏览器界面）、IDE 插件、`opencode github`（CI 中的 Agent）、自定义脚本（SDK / HTTP）。它们都是同一后端的客户端
 
-#### 2. 服务层 (Server)
+#### 2. Server Layer (Server)
 
 ```shell
 opencode serve            # 无头 HTTP 服务，默认端口 4096
@@ -29,18 +29,18 @@ opencode web              # 启动服务并打开浏览器
 
 服务暴露 OpenAPI 3.1 规范（`/doc`），官方 SDK 即由该规范生成。可用 `--hostname`、`--port`、`--cors`、`--mdns` 控制监听与服务发现（mDNS），`opencode web` 与 `opencode serve` 共用同一套 basic-auth 环境变量防护
 
-#### 3. 会话层 (Session)
+#### 3. Session Layer (Session)
 
 会话以 `session → message → part` 三级结构持久化在本地 SQLite（`opencode db` 提供维护命令）。因此支持 `opencode session list`、`--continue`、`--session`、`--fork`（分叉会话）以及 `opencode export` / `opencode import`
 
-#### 4. 代理与工具层 (Agent & Tools)
+#### 4. Agent & Tools Layer (Agent & Tools)
 
 - **主 Agent**：`Build`（默认，全能力）与 `Plan`（默认对编辑和 bash 询问，用于只读分析）
 - **子 Agent**：`general`（多步执行）、`explore`（只读检索代码库）、`scout`（只读检索外部文档与依赖）；另有 `compaction`、`title`、`summary` 等隐藏的自动 Agent
 - **工具**：read / write / edit / bash / grep / glob / patch / webfetch / todo / task / skill 等，配合 **LSP** 与 **formatter** 保证编辑后的代码质量
 - **权限**：`allow` / `ask` / `deny` 三态；默认为"不询问直接执行"，可对 `bash`、`edit`、`task`、`skill` 等按 glob 模式逐项收紧
 
-#### 5. 扩展层 (Extension Surface)
+#### 5. Extension Surface (Extension Surface)
 
 `AGENTS.md`（规则）、`skills/`（技能）、`commands/`（自定义命令）、`agents/`（自定义 Agent）、`plugins/`（事件钩子）、`mcp`（外部工具）。除 plugin 是 JS/TS 之外，其余全部是 Markdown + JSON，"文件即配置"
 
@@ -392,7 +392,7 @@ opencode db | debug | completion   # 数据库维护 / 排障 / shell 补全
 
 
 
-## 与 Claude Code 的对照
+## Comparison with Claude Code
 
 | 维度 | Claude Code | OpenCode |
 | --- | --- | --- |
@@ -406,7 +406,7 @@ opencode db | debug | completion   # 数据库维护 / 排障 / shell 补全
 
 
 
-## 实践建议
+## Practical Recommendations
 
 **规则分层**：全局 `~/.config/opencode/AGENTS.md` 放个人偏好（语言、讲解顺序、范式倾向），项目 `AGENTS.md` 放技术栈、目录结构、可执行的构建/测试命令与**负面约束**（"不要引入新的状态管理库"），子目录再放模块级规则。保持精简，过长提示词会稀释注意力
 

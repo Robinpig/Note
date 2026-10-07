@@ -27,7 +27,7 @@ crictl info | jq '.config.containerd.runtimes.runc.runtimeType'
 ls -l /run/containerd/containerd.sock
 ```
 
-## containerd 内部不是一坨
+## containerd Internals Are Not Monolithic
 
 containerd 不是"收到 CRI 请求就调 runc"的黑盒，内部有五个模块各管一摊：
 
@@ -41,9 +41,9 @@ containerd 不是"收到 CRI 请求就调 runc"的黑盒，内部有五个模块
 
 为什么做成插件化？因为 containerd 不只服务 Kubernetes：Docker 调它、`ctr` 命令行直接操作它、也可以写自己的 client。插件化让核心逻辑复用，只换不同"入口插件"。
 
-## Pod Sandbox：先搭台子再唱戏
+## Pod Sandbox: Build the Stage Before the Show
 
-Pod 不等于 Container。Pod 是多个容器共享的运行环境（同一套 Network/IPC/UTS Namespace），实现方式是先创建一个最小化的 **Pause 容器**（镜像 `registry.k8s.io/pause`），它只做一个 `pause()` 系统调用永远挂着，业务容器创建时加入它的 Namespace 实现共享——细节见 [Pod 的 Pause 容器](/docs/CS/Container/k8s/Pod.md?id=pause-容器)。
+Pod 不等于 Container。Pod 是多个容器共享的运行环境（同一套 Network/IPC/UTS Namespace），实现方式是先创建一个最小化的 **Pause 容器**（镜像 `registry.k8s.io/pause`），它只做一个 `pause()` 系统调用永远挂着，业务容器创建时加入它的 Namespace 实现共享——细节见 [Pod 的 Pause 容器](/docs/CS/Container/k8s/Pod.md?id=pause-container)。
 
 containerd 收到 `RunPodSandbox` 后：创建 Sandbox 对象 → 拉 Pause 镜像 → 创建 Pause 容器 → 生成 Namespace 配置 → **调 CNI 插件分配网络**（建 veth pair、配路由、分 Pod IP）→ 把 Sandbox 作为后续容器的基础环境。
 
@@ -53,7 +53,7 @@ sudo crictl pods     # 每个 Sandbox 有独立 ID，后续 CreateContainer 必�
 
 Sandbox 是网络的锚点：Pod 的 IP 属于 Sandbox，业务容器只是"加入"它——这正是"IP 归 Pod 而非容器"的实现层解释。
 
-## CreateContainer ≠ 容器跑起来了
+## CreateContainer ≠ Container Is Running
 
 这是全文最容易混淆的一点：**`CreateContainer` 执行完后容器还没跑**。它做的是准备工作：
 
@@ -82,7 +82,7 @@ sudo ctr -n k8s.io tasks ls        # Task，有 PID 列，STATUS=running
 
 要拿到它在宿主机上的 PID：`ctr tasks ls` 的 PID 列，或 `crictl inspect -o json <container-id> | jq .info.pid`。有了宿主 PID 就能继续顺着 `/proc` 反查容器 PID / namespace / rootfs，完整链路见 [容器定位](/docs/CS/Container/locate.md)。
 
-## Snapshotter：rootfs 不是凭空出现的
+## Snapshotter: rootfs Does Not Appear Out of Thin Air
 
 容器看到的 rootfs 不是镜像解压出来的，而是**多层叠加**的结果：镜像由多个只读层组成（base layer、runtime layer、app layer），Snapshotter 在其上叠加一个每个容器独占的**可写层**，用 OverlayFS 合成统一视图。
 
@@ -91,11 +91,11 @@ sudo ctr -n k8s.io tasks ls        # Task，有 PID 列，STATUS=running
 
 ```shell
 crictl inspect <container-id> | jq .info.runtimeSpec.mounts
-# overlay 类型挂载即 rootfs：lowerdir=镜像层, upperdir=可写层, merged=叠加视图
 # 位于 /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/
+# Located at /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/
 ```
 
-## containerd-shim：为什么要多一层
+## containerd-shim: Why an Extra Layer
 
 如果 containerd 直接把容器进程作为自己的子进程管理，会有一个致命问题：**containerd 重启或升级时，它的所有子进程（也就是所有容器）都会受影响**。生产环境 containerd 升级是常事，不能每次升级都干掉节点上所有 Pod。
 
@@ -111,7 +111,7 @@ shim 还负责：收集容器退出状态（exit code）、管理容器 stdio、
 
 生产意义：containerd 升级时旧进程退出，shim 与容器继续跑，新 containerd 启动后通过 shim 重新接管。**整个升级过程容器不停机**。
 
-## runc：真正干活的人
+## runc: The One That Actually Does the Work
 
 runc 是 [OCI 运行时](/docs/CS/Container/Container.md)的参考实现。它接收 OCI Spec（描述容器该怎么建的 JSON），调 Linux 系统调用把它变成现实，做三件事：
 
@@ -121,7 +121,7 @@ runc 是 [OCI 运行时](/docs/CS/Container/Container.md)的参考实现。它�
 
 这三步做完，容器进程就跑起来了。
 
-## 串起整条链路
+## Stringing Together the Entire Chain
 
 ```
 kubelet

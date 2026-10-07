@@ -4,15 +4,11 @@
 
 
 ## 2-3 Tree
-
 allows one node has two elements.
 
 
 
 ## Red-Black Tree
-
-
-
 1. nodes are red or black
 2. Root is black
 3. Are NIL 

@@ -10,7 +10,7 @@
 
 本篇记录这个词的**原始含义、它为什么会漂移、以及它被什么取代**，因为这三个问题回答的是同一件事：**AI 参与写代码之后，人的注意力该放在哪**。这也正是 [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md) 视角下最要紧的问题——代码产出变便宜之后，稀缺的是意图、约束与验收。
 
-## 原始定义与它的漂移
+## Original Definition and Its Drift
 
 这个词的生命周期很值得记：**2025-02 提出 → 2025-03 被 Merriam-Webster 收为俚语 → 2025 年获 Collins English Dictionary 年度词汇 → 2026-02 被发明者本人判定为 passé**。
 
@@ -26,22 +26,22 @@
 
 一个常被脱离语境引用的数据：2025-03，YC 管理合伙人 Jared Friedman 称 W25 批四分之一创业公司 **95% 代码库由 AI 生成**。但他澄清该统计只算「人写的 vs AI 生成的」，**排除导入的库**，且强调这批是**完全有能力从零构建的技术创始人**——不是非程序员。把它推广成「四分之一的生产软件已由 AI 写成」是误读。
 
-## 四个核心心法
+## Four Core Principles
 
 1. **放弃对底层细节的控制欲**：不纠结这行正则怎么匹配的、那个异步函数为什么这么写——能跑、结果对就接受。
 2. **把报错当成"对话"而不是"事故"**：报错不是待调试的故障，而是下一条 Prompt。
 3. **接受"屎山代码"**：结构丑一点无所谓——**这条只对短期项目成立**，见下文失效模式。
 4. **关注"表现"而非"实现"**：精力放在 UI 好不好看、交互顺不顺滑、业务逻辑对不对上，而不是命名规不规范。
 
-## 实操工作流
+## Practical Workflow
 
-### 1 准备 AI 原生环境
+### 1 Prepare AI-Native Environment
 
 - **宿主**：Cursor（主流）、Windsurf、VS Code + Cline/Roo、Claude Code、Codex CLI、aider（CLI）
 - **模型**：选上下文与代码能力最强的当代模型。本库模型基线见 [模型总览](/docs/CS/AI/LLM/Model/Overview.md)，此处不写死版本号——**这个领域半年就会过时**
 - **给 agent 配工具**：MCP 服务器（文件、终端、git、搜索、Jira），或直接用宿主内置工具
 
-### 2 用自然语言描述结果
+### 2 Describe Results in Natural Language
 
 不要写代码，写 Prompt。差别在**给锚点**：
 
@@ -52,13 +52,13 @@
 
 让 AI 在预览里跑起来，你只做一件事：**凭直觉检查**——颜色顺眼吗、点击有反馈吗、流程走得通吗。
 
-### 4 迭代 不要自己去改代码文件
+### 4 Iterate: Do Not Edit Code Files Yourself
 
 - Bug：`点击提交后卡死，控制台报 TypeError: Cannot read properties of undefined，帮我修复`
 - UI：`卡片太笨重，圆角加大、阴影减弱、背景换成更通透的白色`
 - 功能：`如果输入内容包含"紧急"两个字，卡片边框变红`
 
-### 5 上下文管理
+### 5 Context Management
 
 对话变长、AI 开始变笨时：
 
@@ -67,7 +67,7 @@
 
 这在 Harness 层面就是 [Compaction](/docs/CS/AI/LLM/Agent/Theory/Compaction.md) 讨论的问题——压缩不是免费的，拿「模型对原始上下文的可见性」换「更长的会话时长」。Vibe Coding 里"开新对话"是手工版的同一种交易。
 
-### 规则文件 `.cursorrules` 已废弃
+### Rule File .cursorrules Is Deprecated
 
 原文推荐建 `.cursorrules`，**这个格式在 Cursor 官方文档中已被标为 legacy**（`cursor.com/docs/rules` 已不再出现该字符串，只在迁移说明里提到它）。现行做法：
 
@@ -79,13 +79,13 @@
 
 有个易踩的坑：`.cursor/rules/` 下放**纯 `.md` 会被忽略**，必须有 frontmatter 才生效；想用无元数据的纯 markdown，官方答案是改用 `AGENTS.md`。另外 Cursor 规则**是合并而非覆盖**——Team > Project > User，冲突时"靠前的来源优先"，但两条规则都会进上下文，模型可能哪条都没遵守。**两条规则互相矛盾时正确做法是删掉一条，而不是把另一条写得更强硬。**
 
-## 最佳实践
+## Best Practices
 
 1. **提供锚点**：AI 不知道你的审美。给它一张截图、一个开源仓库链接，或直接说"我要这种感觉"。
 2. **小步快跑**：先写登录页，再写商品列表，再写购物车。每步做完就 Vibe Check，别让 AI 一次写完整电商系统。
 3. **善用规则文件**：提前声明技术栈偏好（"始终用 Tailwind CSS + TypeScript，组件用函数式写法"），能大幅减少后续修正成本。
 
-## 什么时候必须退出 Vibe 区
+## When You Must Exit the Vibe Zone
 
 心法 3（接受屎山）**只在低风险、短生命周期项目成立**。以下场景必须切回工程纪律：
 
@@ -100,7 +100,7 @@
 2. **幻觉接口（hallucinated interfaces）**：Agent 凭空造出一个不存在的 API 方法、配置项或数据库列；编译通过，运行时炸
 3. **上下文坍塌（context collapse）**：跨会话/跨文件时忘记早先的决定并自相矛盾；项目越长越糟
 
-## SDD 规范驱动开发
+## SDD: Specification-Driven Development
 
 > 这一节原为空白占位。`Agent/README.md` 要求本页覆盖「氛围编程 → SDD → 人该把注意力放在哪」。
 
@@ -108,7 +108,7 @@
 
 驱动 SDD 的是瓶颈转移：**当 agent 足够能干，问题就从「agent 会不会写代码」变成「agent 知不知道要造什么」**。spec 先行把意图、约束、验收标准固定下来，三种失效模式同时被堵住——写下来的意图不会漂移，明确规定的接口不会被幻觉，架构决策记在文档里不会忘。
 
-### 四阶段
+### Four Stages
 
 `Spec → Plan → Tasks → Implement`，**每阶段都产出进入版本控制的 Markdown 文档**，前一阶段的文档是后一阶段的输入。常见文档集：
 
@@ -119,7 +119,7 @@
 | `tasks.md` | 有序实现步骤，agent 逐条执行 |
 | `constitution.md` | 项目级不可违背约定（"constitution" 源自 spec-kit） |
 
-### 工具谱系
+### Tool Genealogy
 
 | 工具 | 形态 | 特点 |
 | --- | --- | --- |
@@ -132,7 +132,7 @@ Spec Kit 的关键命令与工作流：先 `/speckit.constitution` 立项目原�
 
 **EARS（Easy Approach to Requirements Syntax）** 是 2026 年被广泛采用的需求句式：`While <trigger> when <condition> the system shall <response>`，可带 Ubiquitous / Event-driven / State-driven / Unwanted behavior / Optional feature 前缀。它短到能背、硬到能 lint——这是它被选中的真正原因。
 
-### 实践者的话
+### Practitioner's Notes
 
 **Andrew Ng** 在 2025 年 5 月 LangChain Interrupt 大会的 firechat 上批评这个词误导：
 
@@ -156,7 +156,7 @@ Spec Kit 的关键命令与工作流：先 `/speckit.constitution` 立项目原�
 
 Simon Willison 的表述更直接（Ars Technica 引）："用 vibe coding 一路走到生产代码库显然是危险的。我们作为软件工程师的大部分工作都涉及演进既有系统，而底层代码的质量与可理解性至关重要。"
 
-### 真实事故清单
+### Real Incident List
 
 这个词不是纯概念之争，有据可查的翻车案例：
 
@@ -169,7 +169,7 @@ Simon Willison 的表述更直接（Ars Technica 引）："用 vibe coding 一�
 
 这个演变本身就是本篇的结论：**编码门槛塌了，人的注意力从"怎么写"移到"写什么、怎么验、谁来拍板"。**
 
-## 与本库其他主题的关系
+## Relationship with Other Topics in This Repository
 
 Vibe Coding → SDD 这条线是 Harness 命题的最好例证：**代码产出变便宜后，稀缺的不是 token，而是意图表达、约束边界与验收机制**——它们全都落在 Harness 这一层，而且都对应本目录里的既有主题：
 

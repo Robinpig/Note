@@ -2,7 +2,7 @@
 
 Class 文件是 Java 「一次编写，到处运行」的载体：编译器把 Java 源码编译成与平台无关的字节码，JVM 再把字节码翻译成本地机器码。理解 class 文件的结构，等于理解了 JVM 的输入格式。
 
-## 版本基线
+## Version Baseline
 
 > [!NOTE]
 > **版本口径**：class 文件格式由《Java SE 规范》锁定，整体结构长期稳定，**主版本号随版本递进**：
@@ -14,9 +14,9 @@ Class 文件是 Java 「一次编写，到处运行」的载体：编译器把 J
 > | 9 | 53 | 25 | 69 |
 > | 11 | 55 | | |
 >
-> 前两位是 `0xCAFE BABE`（cafebabe），次两位是 minor，第三、四位是 major。本篇的常量池与属性表结构适用于近年版本。JVM 域的新特性记录见 [JVM 版本基线](/docs/CS/Java/JDK/JVM/JVM.md?id=版本基线)。
+> 前两位是 `0xCAFE BABE`（cafebabe），次两位是 minor，第三、四位是 major。本篇的常量池与属性表结构适用于近年版本。JVM 域的新特性记录见 [JVM 版本基线](/docs/CS/Java/JDK/JVM/JVM.md?id=version-baseline)。
 
-## 整体结构
+## Overall Structure
 
 class 文件是一段**紧凑的二进制流**，没有对齐要求：
 
@@ -100,7 +100,7 @@ ClassFile {
 > [!WARNING]
 > **`long` 和 `double` 各占两个常量池槽位**。所以遍历常量池时索引不能简单 `i++`，必须按 tag 判断是否跳过下一项——否则会错位。这是解析 class 文件时的高频 bug。规范上槽位 1 也不能被 long/double 占用（为了兼容早期实现）。
 
-## 方法调用指令
+## Method Invocation Instructions
 
 class 文件里最关键的一组字节码是方法调用，它们决定了方法分派走哪条路：
 
@@ -117,7 +117,7 @@ class 文件里最关键的一组字节码是方法调用，它们决定了方�
 > [!TIP]
 > [JEP 181](https://openjdk.org/jeps/181)（Nest-Based Access Control，Release **11**）**放宽**了这条历史约束，方向与直觉相反：Java 8 起允许接口私有方法后，规范一度要求它们用 `invokespecial` 调用；JEP 181 明确取消该限制，改为**私有接口方法可以用 `invokeinterface`**（私有构造器仍用 `invokespecial`，私有非接口方法可用 `invokevirtual`）。该 JEP 同时引入 `NestHost` / `NestMembers` 属性，允许同一 nest 的类互相访问私有成员，从而让编译器不必再生成「访问桥接方法」。**注意这套规则需要足够新的 class 文件版本才会被 JVM 启用。**
 
-## 字节码与调试属性
+## Bytecode and Debug Attributes
 
 `Code` 属性里除了字节码指令，还常挂两类调试信息属性：
 
@@ -126,7 +126,7 @@ class 文件里最关键的一组字节码是方法调用，它们决定了方�
 
 这两者都**不影响语义**，可以用 `-g:none` 省略以减小体积；但生产环境排查问题时，缺失它们会让栈信息变得很难读。
 
-## 类加载与方法链接
+## Class Loading and Method Linking
 
 class 文件只是「原料」，从它到可执行代码要经过 [ClassLoader](/docs/CS/Java/JDK/JVM/ClassLoader.md) 的三阶段：
 

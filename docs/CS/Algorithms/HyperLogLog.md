@@ -29,3 +29,8 @@ The count and merge operations depend on the number of registers m and have a th
 In some implementations ([Redis](/docs/CS/DB/Redis/struct/HyperLogLog.md)) the number of registers is fixed and the cost is considered to be ${\displaystyle O(1)}$ in the documentation.
 
 ## Links
+
+## References
+
+1. [HyperLogLog: the analysis of a near-optimal cardinality estimation algorithm (Flajolet et al., ICDT 2007)](https://algo.inria.fr/flajolet/Publications/FlFuGaMe07.pdf)
+2. [New cardinality estimation algorithms for HyperLogLog sketches (Google, HLL++)](https://arxiv.org/abs/1702.01284)

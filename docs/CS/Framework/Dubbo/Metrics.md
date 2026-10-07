@@ -8,9 +8,9 @@ Dubbo 3.3 的可观测性（metrics + tracing）统一建立在 Micrometer Obser
 
 版本基线：Apache Dubbo **3.3.6**，源码 tag `dubbo-3.3.6`。本文所有默认值、类名、SPI 注册均取自该 tag 的源码文件；「不存在」的结论均在同一棵源码树上做过全量检索。
 
-## Metrics 模块结构与启用条件
+## Metrics Module Structure and Enablement Conditions
 
-### 子模块清单
+### Submodule List
 
 `dubbo-metrics/` 下有 9 个子模块，职责按「采集」与「导出」分离：
 
@@ -28,7 +28,7 @@ Dubbo 3.3 的可观测性（metrics + tracing）统一建立在 Micrometer Obser
 
 采集器接口位于 `dubbo-metrics-api/.../metrics/collector`，主要有 `MetricsCollector`、`ApplicationMetricsCollector`、`ServiceMetricsCollector`、`MethodMetricsCollector`、`CombMetricsCollector`，另有 `stat` 子包放统计模型。
 
-### 启用条件：classpath 判定，而非总开关
+### Enablement Condition: classpath Determination, Not a Master Switch
 
 > [!WARNING]
 > 打假：**不存在 `dubbo.metrics.enable` 这个总开关。** 在 `MetricsConfig` 里检索 `enable` 前缀，得到的是 `enableJvm` / `enableThreadpool` / `enableRegistry` / `enableMetadata` / `enableNetty` / `enableRpc` / `enableCollectorSync` / `enableMetricsInit` 这些分项。「用 `dubbo.metrics.enable=true` 开启指标」是错的。
@@ -54,7 +54,7 @@ public static boolean isSupportPrometheus() {
 - **`isSupportMetrics()` 的判据只有一个类**：只要 classpath 上有 `io.micrometer.core.instrument.MeterRegistry`（即引入了 `micrometer-core`），指标采集就具备启动条件。
 - **`isSupportPrometheus()` 是 4 个类的与运算**，不止 `PrometheusConfig`。除了 Micrometer 的 Prometheus 绑定，还要求 Prometheus Java client 的 `PushGateway` 等类在场。只引入一半依赖会导致 Prometheus 协议被判为不可用。
 
-### 分项开关与默认值
+### Itemized Switches and Default Values
 
 `MetricsConfig` 的分项开关是「在已启用指标的前提下」控制各采集器是否工作：
 
@@ -92,9 +92,9 @@ collector.setMetricsInitEnabled(
 
 即 `enableThreadpool` 与 `enableMetricsInit` 的**默认值是 `true`**（未配置时启用），其余分项未配置时由各自 `Optional.ofNullable(...).orElse(...)` 语义决定。
 
-## 默认协议推导与 exporter 现状
+## Default Protocol Derivation and exporter Status
 
-### `dubbo.metrics.protocol` 没有硬编码默认常量
+### `dubbo.metrics.protocol` Has No Hardcoded Default Constant
 
 协议不是写死的常量，而是**运行时推导**：未显式配置时，有 Prometheus 依赖就选 `prometheus`，否则选 `default`。
 
@@ -120,7 +120,7 @@ prometheus=org.apache.dubbo.metrics.prometheus.PrometheusMetricsReporterFactory
 > [!NOTE]
 > 推导逻辑还有一个副作用：当协议不是 `default` 时，`DefaultApplicationDeployer` 会**额外再初始化一个 default reporter**（源码注释 "If the protocol is not the default protocol, the default protocol is also initialized."）。这是为了让 QoS 查询与 Prometheus 导出能同时工作，不是配置错误。
 
-### 打假：20888 是死常量，导出走 QoS
+### Debunk: 20888 Is a Dead Constant, Export Goes Through QoS
 
 这是本文最重要的打假点。
 
@@ -165,7 +165,7 @@ public String getResponse() {
 > [!WARNING]
 > **很多文章写「Prometheus 抓 `http://<host>:20888/metrics`」，这在 3.3.6 源码上不成立。** `20888` 是定义了却无人使用的常量，模块里没有监听该端口的 HTTP 服务。正确做法是让 Prometheus 通过 **QoS 端口（默认 22222）** 执行 `metrics` 命令拉取，或使用 Pushgateway 推送。若一定要走 HTTP 拉取，需要自己写一个薄薄的 Exporter 把 QoS 的 `metrics` 输出暴露出去。
 
-### Pushgateway 推送（默认关闭）
+### Pushgateway Push (Disabled by Default)
 
 推送模式默认关闭，由配置显式打开：
 
@@ -187,7 +187,7 @@ private void schedulePushJob() {
 - 推送到 job `default_dubbo_job`，间隔 `30` 秒（`PROMETHEUS_DEFAULT_PUSH_INTERVAL`），支持 basic auth。
 - 推送模式适合短生命周期任务或无法被 Prometheus 主动抓取的实例。
 
-## 指标采集器清单
+## Metrics Collector List
 
 采集器通过 `org.apache.dubbo.metrics.collector.MetricsCollector` 的 SPI 注册，按模块分组：
 
@@ -202,7 +202,7 @@ private void schedulePushJob() {
 
 ## Tracing
 
-### 模块位置与依赖结构
+### Module Location and Dependency Structure
 
 Tracing 位于 **`dubbo-metrics/dubbo-tracing`**，不是顶层 `dubbo-tracing/`。它内部把 Brave 与 OTel 放在**同一个模块的两个包**里：
 
@@ -240,7 +240,7 @@ public static TracerProvider getProvider(ApplicationModel applicationModel, Trac
 
 同一时刻只会启用一种实现：classpath 同时存在两者时是 **OTel 优先**。
 
-### `dubbo.tracing.enabled` 默认 false
+### `dubbo.tracing.enabled` Defaults to false
 
 ```java
 // dubbo-common/src/main/java/org/apache/dubbo/config/TracingConfig.java:33-36
@@ -267,7 +267,7 @@ Spring Boot 自动配置由一个条件注解控制：
 > [!NOTE]
 > `@ConditionalOnProperty` 未写 `havingValue` / `matchIfMissing`，因此等价于 `matchIfMissing=false`：**不显式配 `dubbo.tracing.enabled=true` 就不装 tracing 相关 Bean**。裸 Dubbo（非 Spring Boot）则由 `DefaultApplicationDeployer.initObservationRegistry()` 里的 `configOptional.get().getEnabled()` 判断，同样默认关闭。
 
-### 打假：不存在 TracingFilter
+### Debunk: TracingFilter Does Not Exist
 
 埋点是两个 Filter，分别注册在两个不同的 SPI 上：
 
@@ -289,7 +289,7 @@ observationsender=org.apache.dubbo.tracing.filter.ObservationSenderFilter
 > [!WARNING]
 > 全树检索 `TracingFilter` 只命中 `dubbo-rpc/dubbo-rpc-api/.../rpc/FutureContext.java:96,110` 的 javadoc 示例代码，**这个类不存在**。任何「自定义 `TracingFilter`」的教程在 3.3.6 上都无法照抄；要扩展埋点应基于 Micrometer 的 `ObservationHandler` / `ObservationRegistry`，或自行实现 `Filter`。
 
-### ObservationRegistry 接入
+### ObservationRegistry Integration
 
 `DefaultApplicationDeployer` 在启动时尝试初始化 ObservationRegistry：
 
@@ -341,7 +341,7 @@ public void initObservationRegistry() {
 
 结论：**如果容器（如 Spring Boot Actuator / Micrometer Tracing 自动配置）已经注册了一个 `ObservationRegistry` Bean，Dubbo 直接复用它，不再自建**。这保证 Dubbo 的 span 与应用其他埋点共享同一套 registry 与 exporter。
 
-## Micrometer Observation 统一模型
+## Micrometer Observation Unified Model
 
 Dubbo 3.3 的可观测性收敛到 Micrometer Observation 这一层，metrics 与 tracing **共用同一个 `ObservationRegistry`**：
 
@@ -362,7 +362,7 @@ digraph observation {
 
 这套模型是 **3.2 之后的重要变化**：在此之前 metrics 与 tracing 各自为政；3.3 起二者由同一次 Observation 派生出指标与 span，语义一致性更好。前提是 classpath 上有 `micrometer-observation`（`ObservationSupportUtil.isSupportObservation()`，源码注释要求版本 > 1.10.0），且 tracing 需要额外的 `micrometer-tracing`（`isSupportTracing()`）。
 
-## 默认值汇总表
+## Default Value Summary Table
 
 | 项 | 默认值 | 来源 | 备注 |
 | :--- | :--- | :--- | :--- |
@@ -381,7 +381,7 @@ digraph observation {
 | tracer 实现选择 | OTel 优先，其次 Brave | `TracerProviderFactory.java:29-35` | classpath 决定 |
 | ObservationRegistry | 复用外部，否则 `ObservationRegistry.create()` | `DubboObservationRegistry.java:57-88` | 外部（如 Spring）优先 |
 
-## 陷阱清单
+## Pitfall List
 
 | 直觉写法 / 印象 | 源码实际 | 后果 |
 | :--- | :--- | :--- |

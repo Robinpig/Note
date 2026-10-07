@@ -24,7 +24,7 @@ public class User implements Serializable {
   自动算出的 UID 就会变化，旧数据流反序列化即抛 `InvalidClassException`；显式声明后可以在字段兼容的前提下平滑演进。
 - `transient` 与 `static` 字段不被序列化（静态字段属于类而非对象状态）。
 
-### 自定义序列化
+### Custom Serialization
 
 - 类中定义 `writeObject`/`readObject`（签名固定、由反射调用），可以在默认序列化前后追加逻辑，例如加密、校验、重建 `transient` 派生字段。
 - `writeReplace()`/`readResolve()` 允许序列化时替换对象。单例模式正依赖 `readResolve()` 返回唯一实例，

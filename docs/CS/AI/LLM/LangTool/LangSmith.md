@@ -9,7 +9,7 @@ LangSmith 是 LangChain Inc. 的商业侧产品，官方定位是 **Agent Engine
 
 在家族里的位置是**最上面一层（Platform）**：下面的 [LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md) 与 [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md) 负责把 Agent 跑起来，它负责让你看见跑得怎么样，并把它推进生产。
 
-## 模块划分
+## Module Division
 
 | 模块 | 解决什么 |
 | --- | --- |
@@ -23,7 +23,7 @@ LangSmith 是 LangChain Inc. 的商业侧产品，官方定位是 **Agent Engine
 
 注意 Evaluation 的设计意图：它**不是让你手工写测试用例**，而是把线上真实 trace 转成测试集。这条链路是否跑通，决定了这套东西是"又一个监控面板"还是"能持续变好的系统"。
 
-## 接进去
+## Plug It In
 
 LangChain / LangGraph 代码一行都不用改，两个环境变量就能开始追踪：
 
@@ -41,12 +41,12 @@ export LANGSMITH_API_KEY=<your-api-key>
 
 ⚠️ **命名已变更**：旧教程里的 `LANGCHAIN_TRACING_V2`、`LANGCHAIN_PROJECT` 已经被 `LANGSMITH_TRACING`、`LANGSMITH_PROJECT` 取代（后者仅在 JS SDK < 0.2.16 时才需要）。照着旧文章配环境变量会静默不生效——这类"变量名变了但没人报错"的坑，和内核里 sysctl 存在却不生效是同一族问题。
 
-## 两个实操坑
+## Two Practical Pitfalls
 
 - **无服务器环境会丢 trace**。追踪默认在后台线程上报，进程可能在数据送出去之前就结束了。serverless 下设 `LANGCHAIN_CALLBACKS_BACKGROUND=false`；Python 还可以在退出前调 `wait_for_all_tracers()` 强制等待。
 - **只想追踪一部分调用**。Python 用 `ls.tracing_context(enabled=True/False)` 精确开关，或用 `@traceable` 手工划定 span。跨服务场景可以 `get_current_run_tree().to_headers()` 取出上下文头并传给下游，实现分布式追踪。
 
-## 部署形态与自托管
+## Deployment Forms and Self-Hosting
 
 平台有三种托管形态：**Cloud**（全托管，数据在 LangChain 云，US 或 EU 区域）、**Hybrid**（控制面在云、数据面自持）、**Self-Hosted**（全部在自家 VPC）。
 
@@ -55,7 +55,7 @@ export LANGSMITH_API_KEY=<your-api-key>
 
 配置项里也留着这次改名的痕迹：**v0.12.0 起 `langgraphPlatform` 选项废弃，改用 `config.deployment`**——这正是"LangGraph Platform 变成 LangSmith Deployment"在配置文件里的具体表现。升级旧自托管实例时，照着老配置改会直接不生效。
 
-## 怎么选
+## How to Choose
 
 一句话：**要"看得见、测得了、部署得起"，且数据出内网没问题，直接用它；数据不能出内网，就得走自托管，且准备好 Enterprise 预算。**
 

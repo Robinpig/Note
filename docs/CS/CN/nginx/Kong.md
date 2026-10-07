@@ -9,7 +9,7 @@ Kong 是基于 [OpenResty](/docs/CS/CN/nginx/OpenResty.md) 的 API 网关：请�
 - **混合部署（hybrid）**：Kong 2.0 起 control plane 与 data plane 分节点部署，CP 把配置推给 DP（内存里跑，不再直连数据库）
 - **Kong Konnect / Enterprise**：托管控制面 + 免费数据面的商业形态
 
-## 核心概念
+## Core Concepts
 
 | 概念 | 含义 | 对应 nginx 概念 |
 | :-- | :-- | :-- |
@@ -21,7 +21,7 @@ Kong 是基于 [OpenResty](/docs/CS/CN/nginx/OpenResty.md) 的 API 网关：请�
 
 请求流：`Route 匹配 → 插件链（access）→ Service 转发 → 插件链（header_filter/body_filter/log）`。插件链的执行顺序按 Kong 的优先级表，同一插件挂在 global + route 时 route 优先（除非配置了 consumer 级）。
 
-## 插件体系
+## Plugin System
 
 插件就是一个实现了固定回调的 Lua 模块，回调对应 OpenResty 的 `*_by_lua` 阶段：
 
@@ -49,7 +49,7 @@ return HelloHandler
 
 自定义插件需要把目录加进 `KONG_PLUGINS` 与 `KONG_LUA_PACKAGE_PATH`，DB-less 模式还需在声明式配置里声明。
 
-## 最小运行示例
+## Minimal Running Example
 
 Kong 3.x 的 DB-less 起步（替代旧版 PostgreSQL 三容器栈）：
 
@@ -88,7 +88,7 @@ services:
           policy: local
 ```
 
-## 与 nginx 原生能力的取舍
+## Trade-offs with nginx Native Capabilities
 
 | 需求 | 用 Kong | 直接 nginx |
 | :-- | :-- | :-- |

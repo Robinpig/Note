@@ -12,8 +12,7 @@ The last cell's next pointer points to ; this value is defined by C and cannot b
 ANSI C specifies that is zero.
 
 
-## Bisection method
-
+## Bisection Method
 二分法的基本思想是通过不断将区间一分为二，逐步缩小查找范围，从而找到目标值或近似解
 
 
@@ -23,7 +22,6 @@ ANSI C specifies that is zero.
 
 
 ## Linked Lists Overview
-
 A linked list is a data structure used for storing collections of data A linked list has the following properties.
 
 - Successive elements are connected by pointers
@@ -33,7 +31,6 @@ A linked list is a data structure used for storing collections of data A linked 
 - Does not waste memory space (but takes some extra memory for pointers). It allocates memory as list grows.
 
 ### Linked Lists ADT
-
 The following operations make linked lists an ADT:
 
 **Main Linked Lists Operations**
@@ -71,7 +68,6 @@ This requires that the list is traversed to find the last but one link, and its 
 Finally, linked lists waste memory in terms of extra reference points.
 
 ## Comparison of Linked Lists with Arrays
-
 <p style="text-align: center;">
 Tab.1 Comparison of Linked Lists with Arrays
 </p>
@@ -91,13 +87,11 @@ Tab.1 Comparison of Linked Lists with Arrays
 </div>
 
 ## Singly Linked Lists
-
 Generally “linked list” means a singly linked list.
 This list consists of a number of nodes in which each node has a next pointer to the following element.
 The link of the last node in the list is NULL, which indicates the end of the list.
 
 ## Doubly Linked Lists
-
 Sometimes it is convenient to traverse lists backwards. The standard implementation does not help here, but the solution is simple.
 Merely add an extra field to the data structure, containing a pointer to the previous cell.
 The cost of this is an extra link, which adds to the space requirement and also doubles the cost of insertions and deletions because there are more pointers to fix.
@@ -108,7 +102,6 @@ On the other hand, it simplifies deletion, because you no longer have to refer t
 通常实现双向链表是将链表首尾的前驱和后继指针，设为 NULL 或者指向一个特殊的虚拟节点，来标记链表的终结
 
 ## Circularly Linked Lists
-
 A popular convention is to have the last cell keep a pointer back to the first.
 This can be done with or without a header (if the header is present, the last cell points to it), and can also be done with doubly linked lists (the first cell's previous pointer points to the last cell).
 This clearly affects some of the tests, but the structure is popular in some applications.
@@ -120,7 +113,6 @@ This clearly affects some of the tests, but the structure is popular in some app
 For large amounts of input, the linear access time of linked lists is prohibitive.
 
 ## Skip Lists
-
 Binary trees can be used for representing abstract data types such as dictionaries and ordered lists.
 They work well when the elements are inserted in a random order.
 Some sequences of operations, such as inserting the elements in order, produce degenerate data structures that give very poor performance.
@@ -140,7 +132,6 @@ If somehow we could scan down the list in bigger steps (skip down, as it were), 
 This is the fundamental idea behind Skip Lists.
 
 ## Iterator
-
 每个链表数据结构中都会有一个虚拟节点成员变量 `node` 用于标记首(或者首尾)
 对于循环链表 这个 node 初始化时 pre 和 next 都指向自身
 
@@ -167,7 +158,7 @@ This is the fundamental idea behind Skip Lists.
 
 ## Links
 
-- [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
+- [数据结构](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
 -
 
 ## References

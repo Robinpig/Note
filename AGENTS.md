@@ -58,8 +58,8 @@ Note/
 | :------- | :---------------- | :--------------------------------------------------------------------------------------------- |
 | 操作系统     | `CS/OS/`          | [OS.md](/docs/CS/OS/OS.md)；下辖 `Linux/`、`unix/`、`Windows/`、`mac/`、`Android/`、`xv6/`、`Fuchsia/`、`Book/`、`Boot/`（仅 `Grub.md`） |
 | Linux 内核 | `CS/OS/Linux/`    | [Linux.md](/docs/CS/OS/Linux/Linux.md) 是该子树的**唯一枢纽**，见下节                                   |
-| 框架与中间件   | `CS/Framework/`   | **无总入口**，直接用具体框架页（Spring、Spring_Boot、Netty、Tomcat、Dubbo、ZooKeeper、etcd、ES、Flink、Hadoop、Spark、Job 等） |
-| Java     | `CS/Java/`        | 入口 [JDK/JDK.md](/docs/CS/Java/JDK/JDK.md)（`Java/Java.md` 不存在）                                  |
+| 框架与中间件   | `CS/Framework/`   | 总入口 [Framework/README.md](/docs/CS/Framework/README.md)（按 Java 体系 / 协调与服务注册 / 服务治理 / 网络与 RPC / 网格与网关 / 计算与数据 / 响应式 / 跨语言与 AI 分层）；**无 `Framework.md`**，具体机制仍在各框架子目录 |
+| Java     | `CS/Java/`        | 语言入口与目录地图 [Java.md](/docs/CS/Java/Java.md)；JDK 与 JVM 内部机制的枢纽仍是 [JDK/JDK.md](/docs/CS/Java/JDK/JDK.md) |
 | 数据库      | `CS/DB/`          | [DB.md](/docs/CS/DB/DB.md)                                                                     |
 | 算法       | `CS/Algorithms/`  | [Algorithms.md](/docs/CS/Algorithms/Algorithms.md)                                             |
 | 分布式      | `CS/Distributed/` | [Distributed.md](/docs/CS/Distributed/Distributed.md)                                          |
@@ -70,8 +70,9 @@ Note/
 | 推荐系统     | `CS/RecommenderSystem/` | [RecommenderSystem.md](/docs/CS/RecommenderSystem/RecommenderSystem.md)；召回、排序、冷启动、偏差、评估、在线架构、广告（**不是 `AI/` 的子目录**） |
 | 消息队列     | `CS/MQ/`          | [MQ.md](/docs/CS/MQ/MQ.md)                                                                     |
 | Golang   | `CS/Go/`          | [Go.md](/docs/CS/Go/Go.md)                                                                     |
+| Python   | `CS/Python/`      | 语言入口 [Python.md](/docs/CS/Python/Python.md) + 知识地图 [Python/README.md](/docs/CS/Python/README.md)；**无子目录**，运行时层三篇 `GIL.md` / `Memory.md` / `Bytecode.md` 是这一子树的骨架，工程层 `Typing.md` / `Packaging.md` / `Performance.md` |
 
-其余较小目录：`CO/`（组成原理）、`C/`、`C++/`、`Python/`、`Rust/`、`Scala/`、`TypeScript/`、`assembly/`、`memory/`、`Compiler/`、`BuildTool/`（入口 `BuildTools.md`）、`Tool/`（**无 Tool.md**，代表文件 `Vim.md`）、`front-end/`（**无 front-end.md**，代表文件 `Nodejs.md`）、`Browser/`、`DesignPatterns/`、`VCS/`、`log/`、`compress/`、`Cloud/`、`BigData/`、`Blockchain/`、`Security/`、`GNU/`。
+其余较小目录：`CO/`（组成原理）、`C/`、`C++/`、`Rust/`、`Scala/`、`TypeScript/`、`Dart/`、`assembly/`、`memory/`、`Compiler/`、`BuildTool/`（入口 `BuildTools.md`）、`Tool/`（**无 Tool.md**，代表文件 `Vim.md`）、`front-end/`（**无 front-end.md**，代表文件 `Nodejs.md`）、`Browser/`、`DesignPatterns/`、`VCS/`、`log/`、`compress/`、`Cloud/`、`BigData/`、`Blockchain/`、`Security/`、`GNU/`。
 
 `docs/CS/Flutter.md` 是**没有同名目录的孤立文件**，不要误以为存在 `CS/Flutter/`。
 
@@ -104,7 +105,7 @@ Note/
 - ⚠️ **`OS/Boot/` 与 `OS/Linux/boot/` 是两个不同目录**：前者只有旧的 `Grub.md`，启动链主题在后者（`README.md` / `Start.md` / `init.md` / `U-Boot.md` / `arm.md` / `crash.md`）。
 - ⚠️ `mm/memory.md` 是 **boot 阶段的初始化笔记**，**不是内存子系统总入口**（全站有旧链接把它当 "Linux Memory"，属历史错配）。
 - ⚠️ **`struct/struct.md` 只讲 llist**，文件名覆盖面远大于内容，是历史沿用名；`struct/` 的地图以 `struct/README.md` 为准。同理 `Tools/Tools.md`（命令速查表）与 `Tools/README.md`（笔记导航）**不是一回事**。
-- ⚠️ **标题避免用全角标点**（如 `## freezer：冻结与终止`）：`validate_links.py` 的 `anchors_of()` 会按全角冒号把标题切成两个锚点，与 docsify 的 `slugify()` 行为不一致，导致 BAD ANCHOR 误报。中英混排标题用**半角空格**分隔（`## freezer 冻结与终止`）。
+- ⚠️ **标题避免用全角标点**（如 `## freezer：冻结与终止`）：`validate_links.py` 的 `anchors_of()` 会按全角冒号把标题切成两个锚点，与 docsify 的 `slugify()` 行为不一致，导致 BAD ANCHOR 误报。**标题统一英文后此坑基本自然消除**，但新增标题仍应避免全角 `：（）、，` 与 `→`；中英混排标题用**半角空格**分隔。
 
 **内核源码核实**：**先确认本机有没有源码树**——
 
@@ -169,11 +170,13 @@ Markdown 增强写法：
 ## 笔记写作规范（必须遵守）
 
 1. **结构顺序**：`## Introduction` 开头 → 正文小节（`##` 子主题、`###` / `####` 细节）→ `## Links` → `## References`。正文不内嵌「来源：…」引用块。
-2. **标题一律用英文，禁止汉化**（2026-10-05 用户明确要求）。正文用中文，标题保留英文原名 —— 标题是锚点来源，改名会打断全库 `?id=` 引用，且 docsify 侧边栏、搜索、跨文件锚点全部依赖它。
-   - ✅ 正文汉化、代码/配置名/产品名保留英文、References 保留原文
-   - ❌ `## Message brokers` → `## 消息代理`、`### Partitioned Logs` → `### 分区日志`
-   - **例外**：原本就是中文的标题（如 `MQ.md` 的 `### 元数据存储`、`### 消息丢失`）保持中文即可，不要反向改成英文。
-   - 若确需改标题标题语言，必须同步修全部 `?id=` 引用并重跑 `validate_links.py` —— 改完立刻验证，别留到收尾。
+2. **内容标题一律英文**（2026-10-07 执行，取代旧规「标题一律中文」，且**取代更早的「按域区分」**）。除固定英文骨架外，正文小节（`##` 子主题、`###` / `####` 细节）标题一律用英文；正文保持中文、代码 / 配置名 / 产品名保留英文、References 保留原文。标题仍是锚点来源，改名会打断全库 `?id=` 引用，必须同步验证。
+   - 固定英文骨架（全库统一三段式，不得汉化）：`## Introduction` / `## Links` / `## References`。
+   - **保留原文、不翻译的标题**：**系统 / 算法 / 产品专有名词**（如 `## GFS`、`## Paxos`、`### Bigtable`、`## Consensus`）以及各类代码标识（`qspinlock`、`io_uring`、`SRCU` 等）。**全库标题已完成英化**，这类专名原样保留即可，不要再"译成中文+附英文"。
+   - ✅ 描述性概念**译成英文**：`## 消息代理` → `## Message Brokers`、`### 分区日志` → `### Partitioned Logs`；同一中文标题在不同文件**必须译名一致**（如「概述」统一 `Overview`）。
+   - ⚠️ **代码块内的 `#` / `//` 注释不算标题，保持中文**。用 `^#{1,4}\s+` 扫描标题时**必须先跟踪 ``` / ~~~ 围栏、跳过代码块内的行**，否则会把 Python/shell 注释（如 `# 1. 定义状态`）误当标题改掉——2026-10-07 全库英化时曾误改 591 行/118 文件，事后靠 `git diff` 定位才全部回滚。
+   - ⚠️ **锚点 bug 红线**：docsify 的 `?id=` 链接里**不能写带括号的标题**——半角 `( )` 会被 markdown 链接结构提前截断，全角 `（）` 的链接本库也无 `%` 编码先例、实际写不出。**被 `?id=` 引用的标题不要带任何括号**；确有需要时改用半角且确保该锚点不被 `?id=` 引用。改动任何标题前先 `grep -rn "<file>.md?id=<slug>" docs/`，有引用就同步修并重跑 `validate_links.py` —— 改完立刻验证，别留到收尾。
+   - **批量改标题的标准流程**（6000+ 条已跑通）：① 导出目标范围中文标题清单 → ② 定英文译名 → ③ 脚本按文件精确替换标题行（保留 `#` 层级、跳过代码块）→ ④ 收集各批 `old_slug → new_slug` 映射 → ⑤ **按「目标文件路径 + 旧 slug」作用域**统一同步 `?id=`（**绝不能无作用域全局替换**，否则误伤其它文件同名标题）→ ⑥ 三道校验：严格残留扫描（排除代码块）+ `validate_links.py` 全库 **BAD ANCHOR = 0** + `git diff` 排查代码块内误改。
 3. **站内链接**一律用 docsify 绝对路径：`/docs/CS/OS/Linux/proc/process.md`；锚点用 `?id=slug`。
 4. **slug 规则**（2026-10-02 按 docsify v5.0.0 源码 `src/core/render/slugify.js` 逐条复核；v4.13.1 实现相同。**不要凭标题印象拼**）：
    - `[A-Z]+` → 小写。**对纯 ASCII 标题等价于整串小写**（`MarkWord` → `markword`，`M` 与 `W` 都被小写）；差异只在非 ASCII 大写字母（`École` 保留 `É`）。
@@ -200,13 +203,13 @@ Markdown 增强写法：
 - **不要修改 `out/`**（IDE 产物副本）、`src/`、`wiki/`、`knowledge-base/`、`outputs/`。
 - `index.html` 只动配置和样式区块，**不要重排脚本加载顺序**（插件依赖 docsify 主脚本先加载）。
 - `.obsidian/`、`.claude/`、`.workbuddy/` 是**本机工具目录，都不入版本控制**（`.gitignore` 里忽略了 `.obsidian/`、`.claude`、`.workbuddy`）—— 换机器克隆下来可能根本不存在，**不要依赖、也不要删**。其中 **`.workbuddy` 存的是 Agent 记忆，不是缓存**；**校验脚本不在那里，在已入库的 `scripts/`**。
-- 新增链接前先确认目标文件存在。以下目录**没有同名入口文件**，别写错：
+- 新增链接前先确认目标文件存在。以下目录的入口**不等于目录名**（或存在两级入口），别写错：
   - `CS/BuildTool/` 入口是 `BuildTools.md`（不是 `BuildTool.md`）
   - `CS/Tool/` 无 `Tool.md`，代表文件 `Vim.md`
   - `CS/front-end/` 无 `front-end.md`，代表文件 `Nodejs.md`
-  - `CS/Java/` 入口在 `JDK/JDK.md`
+  - `CS/Java/` 有两级入口：语言入口与目录地图是 `Java/Java.md`，JDK/JVM 内部机制的枢纽是 `JDK/JDK.md`（写 JDK 源码细节走后者）
   - `CS/SE/` 入口是 `Engineering.md`
-  - `CS/Framework/` 无总入口，用具体框架页
+  - `CS/Framework/` 无 `Framework.md`，总入口是 `Framework/README.md`（目录级索引页），具体机制在各框架子目录
   - `docs/Test.md` 是测试页，可忽略
 
 ## 校验工具（`scripts/`，随仓库入库，不进站点）
@@ -215,8 +218,8 @@ Markdown 增强写法：
 | :--- | :--- |
 | `scripts/kb-check.sh` | **一键全量门禁**（推荐入口）：链接校验 + 密度门禁 + 全库 dot 校验 + CDN 可达性（仅告警）；前几项任一不通过即非零退出 |
 | `scripts/validate_links.py <file\|dir...>` | **主力校验**：死链 DEAD / 坏锚点 BAD ANCHOR / 相对链接 RELATIVE / 西里尔字母 CYRILLIC（均致命）+ 中英夹杂 GARBLED（告警）。可 `import` 出 `slugify()` 复用 |
-| `scripts/analyze_crosslinks.py [dir...]` | 量化链入/链出、孤立页、弱链出页；`--gate --min-indegree N` 做密度门禁 |
-| `scripts/check_dot.js <dir...>` | 用站点实际加载的 viz.js 复现 dot 图渲染，防 Graphviz 语法错误导致整页白屏（需 node） |
+| `scripts/analyze_crosslinks.py --root <目录> --dirs <子目录...> [--gate --min-indegree N]` | 量化链入/链出、孤立页、弱链出页；`--gate` 做密度门禁。**目录只能用 `--root`/`--dirs` 传，写位置参数会报错退出**（`-h` 看完整说明）。默认根是 `docs/CS/Framework`，跑别的子树必须显式 `--root`。带 `?id=`／`#` 片段的链接与 `%20` 转义路径**都计入**图；根目录下的散文件（`CS.md`、`Languages.md`）不作为节点 |
+| `scripts/check_dot.js <dir...>` | 用站点实际加载的 viz.js 复现 dot 图渲染，防 Graphviz 语法错误导致整页白屏（需 node）。viz.js 地址**从 `index.html` 现读**（改 CDN 不必回来改脚本），失败回退 unpkg；下载内容会校验首行是否 `<!DOCTYPE html>`。离线/被墙机器用 `VIZ_JS=<本地路径>` 指定手工下载的副本 |
 | `scripts/check_cdn.sh` | 逐条验证 `index.html` 的外部资源可达。**「页面完全无法渲染」时先跑这个**（需 curl） |
 | `scripts/fix_garbled.py` | 修 `validate_links.py` 报的 GARBLED（在 CJK 与 Latin 边界补空格） |
 | `scripts/find_hub_gaps.py` | 定位 hub 页 `## Links` 中未链到的子笔记 |
@@ -301,5 +304,7 @@ python3 -m http.server 8899   # 打开 http://127.0.0.1:8899/index.html
 ## 已知遗留问题
 
 - ✅ **校验脚本入库问题已修**（2026-10-06）：脚本原在 `.workbuddy/tools/`（被 `.gitignore` 忽略），CI 却调用它们 → 新机器与 Actions 上必然缺文件。已迁到 `scripts/`，`.gitignore` 加 `!scripts/*.py` 放行。**遗留的小不对称**：`ci.yml` 仍只跑 Framework + Linux 两项，而 `scripts/kb-check.sh` 多跑 MQ 校验与全库 dot 校验 —— 若想让 CI 与本地完全一致，把 `ci.yml` 的 4 个 step 换成一句 `bash scripts/kb-check.sh` 即可（ubuntu-latest 自带 node，可直接跑 dot 校验）。
+- ✅ **`check_dot.js` 的 viz.js 源与站点漂移已修**（2026-10-06）：脚本硬编码 `unpkg.com`（站点本体早已全量挂 jsdelivr），本机连不上 unpkg 时这一步必失败，看起来像"内容写坏了"其实是取不到渲染器。现在**从 `index.html` 现读** viz.js 地址、失败回退 unpkg、下载内容校验首行是否 `<!DOCTYPE html>`、超时压到 connect 8s / 总 30s，离线或被墙的机器用 `VIZ_JS=<本地路径>` 指定手工下载的副本即可跑。
+- ✅ **`analyze_crosslinks.py` 漏计带锚点的链接已修**（2026-10-06）：旧正则只匹配 `](/docs/x.md)`，凡是 `?id=` 锚点链接与 `%20` 转义路径**全部不计入图**，导致枢纽页链出被系统性低估、门禁数字偏冷（边只增不减，修完门禁阈值不用动）。同时它的真实接口是 `--root`/`--dirs`，而本节旧版写成位置参数 `[dir...]` —— 已改正文档，并让脚本误用位置参数时打印用法而非只报"未知参数"。
 - 部分目录缺同名入口 md（见禁区一节），目录索引只能链接到具体笔记。
-- 全库仍有若干主题零覆盖（DAMON、dm-crypt / LUKS、md / RAID、kTLS、Landlock），部分主题偏薄（livepatch、kdump、pidfd、psi、MPTCP）。
+- 全库仍有若干主题零覆盖（DAMON、dm-crypt / LUKS、md / RAID、kTLS、Landlock），部分主题偏薄（livepatch、kdump、pidfd、psi、MPTCP）。定时任务主题的缺口（Python / Rust / C++ 定时器、Go 运行时深处、K8s CronJob、crontab / systemd timer）单独记在 `docs/CS/SE/Scheduled_Task.md` 的 Open Gaps 一节，**以那里为准，不在本文件重复列**。

@@ -14,7 +14,7 @@ MongoDB 是最流行的**文档型 NoSQL 数据库**（2009 起，SSPL/商业双
 | `$lookup`（聚合管道） | join |
 | embedded document / array | 一对多（预关联） |
 
-## 数据模型：嵌入 vs 引用
+## Data Model: Embedding vs Reference
 
 建模决策是 MongoDB 的核心：
 
@@ -23,7 +23,7 @@ MongoDB 是最流行的**文档型 NoSQL 数据库**（2009 起，SSPL/商业双
 
 经验法则：先按查询模式（读什么、写什么、一起访问的频率）建模，而不是先做 ER 图；文档保持小而集中，避免无限增长的数组。
 
-## 查询与聚合
+## Query and Aggregation
 
 ```javascript
 // 条件 + 投影
@@ -38,18 +38,18 @@ db.carts.updateOne({ uid: 7 }, { $addToSet: { items: "sku_1" } }, { upsert: true
 
 索引方面支持 B+Tree 二级索引、复合索引（同样遵循最左前缀）、多键索引（数组字段自动多键）、文本索引、地理空间索引（2dsphere）；执行计划用 `explain('executionStats')` 看是否 IXSCAN、docsExamined 与键数。
 
-## 存储引擎与事务
+## Storage Engine and Transaction
 
 - **WiredTiger**（3.2 起默认）：文档级并发控制（乐观并发 + 文档级 latch）、MVCC 快照、按 checkpoint 落盘；写先记 WAL（journal，对应 redo log）保证崩溃恢复，原理可对照 [WAL](/docs/CS/DB/WAL.md) 与 [MySQL redo](/docs/CS/DB/MySQL/redolog.md)。
 - 早期 MMAPv1 已移除，其整库锁/内存映射时代结束。
 - 单文档原子性由引擎天然保证；4.0 支持副本集多文档事务、4.2 支持分片事务，但跨文档事务有性能与超时代价，官方仍建议优先用文档嵌入建模把一致性收敛到单文档内。
 
-## 高可用与水平扩展
+## High Availability and Horizontal Scaling
 
 - **副本集（Replica Set）**：一主多从，oplog（幂等的操作日志，本质 capped collection）驱动异步复制，心跳 + Raft-like 选举自动故障转移，多数派写关注 `w: majority` 配合 `j: true` 保证已提交不丢；多数派原则与 [Redis Sentinel](/docs/CS/DB/Redis/sentinel.md) 的异步主从相比安全性更高。
 - **分片（Sharding）**：数据按 shard key 分布到多个副本集，mongos 路由 + config server 存元数据；支持范围分片与哈希分片，shard key 一旦选定几乎无法改，必须在建库初期按基数、写均匀度、查询亲和性谨慎选择（热点写入是最大坑）。
 
-## 适用边界
+## Applicable Boundaries
 
 适合：schema 多变、聚合结构数据、高写入吞吐、需要水平扩展的场景；不适合：强事务跨实体（银行核心账务）、大量复杂 ad-hoc join、严格范式化报表分析（这类更适合关系库或 [ClickHouse](/docs/CS/DB/ClickHouse.md)）。
 

@@ -11,7 +11,7 @@ Deployment 的核心任务是保证"当前 Pod 数量 = 期望 Pod 数量"，但
 
 水平扩缩容是云原生弹性的主力，本文以它为主。
 
-## 手动扩缩容
+## Manual Scaling
 
 ```shell
 # 大促前预估流量涨 10 倍，先扩容到 5 个
@@ -21,7 +21,7 @@ kubectl scale deployment my-app --replicas=5
 kubectl scale deployment my-app --replicas=2
 ```
 
-扩缩容最终都落到 Deployment → ReplicaSet → Pod 的副本数调和上（见 [ReplicaSetController](/docs/CS/Container/k8s/ReplicaSetController.md)），缩掉的 Pod 会被优雅终止（见 [Pod 优雅终止](/docs/CS/Container/k8s/Pod.md?id=优雅终止)）。
+扩缩容最终都落到 Deployment → ReplicaSet → Pod 的副本数调和上（见 [ReplicaSetController](/docs/CS/Container/k8s/ReplicaSetController.md)），缩掉的 Pod 会被优雅终止（见 [Pod 优雅终止](/docs/CS/Container/k8s/Pod.md?id=graceful-termination)）。
 
 手动方式适合"可预知的大促"，但它有三个绕不过的问题：
 
@@ -29,7 +29,7 @@ kubectl scale deployment my-app --replicas=2
 2. **没有客观依据**——设 5 还是 10 全凭直觉，少了扛不住、多了浪费钱；
 3. **缩容时机难判断**——流量降了没人知道，多余副本白烧一周资源。
 
-## HPA：自动扩缩容
+## HPA: Auto Scaling
 
 HPA（Horizontal Pod Autoscaler）是一个"自动店长"：它周期性（默认每 15s）检查负载指标，自动调整 Deployment/StatefulSet 的 replicas，你只需告诉它两个数——**有几个人**（min/max）和**多忙算忙**（目标利用率）。
 
@@ -63,7 +63,7 @@ spec:
         averageUtilization: 70
 ```
 
-### 工作流程
+### Workflow
 
 1. **监控**：通过 Metrics Server 采集每个 Pod 的 CPU/内存实际用量；
 2. **计算**：求当前所有 Pod 的平均利用率，与目标值比较；
@@ -78,12 +78,12 @@ spec:
 
 例：2 个 Pod 各用 80% CPU，目标 70% → `ceil(2 × 80/70) = ceil(2.29) = 3`。
 
-### 冷却与抖动
+### Cooling and Jitter
 
 - **扩容有 3 分钟容忍窗口**、**缩容默认有 5 分钟冷却期**（`--horizontal-pod-autoscaler-downscale-stabilization`）：不会因为 CPU 抖动一下就把 Pod 全杀了。
 - HPA 还会取过去一段时间内的**推荐值最大值**来抑制指标毛刺，避免副本数来回震荡（flapping）。
 
-### 指标不止 CPU
+### Metrics Are More Than Just CPU
 
 autoscaling/v2 支持三类指标，按需组合：
 
@@ -95,7 +95,7 @@ autoscaling/v2 支持三类指标，按需组合：
 
 生产实践中，CPU 只是"替代指标"，对 IO 密集或异步消费型服务，用队列积压量（Kafka lag）等业务指标做 HPA 往往更准确。
 
-## HPA / VPA / Cluster Autoscaler 的关系
+## Relationship Between HPA / VPA / Cluster Autoscaler
 
 三者解决的是不同层次的"不够用"：
 
@@ -107,7 +107,7 @@ autoscaling/v2 支持三类指标，按需组合：
 - **VPA**：改 Pod 的 requests/limits（纵向），需要重建 Pod，且与 HPA 同时作用于 CPU 时会打架，同一维度二选一；
 - **Cluster Autoscaler**：Node 池层面加/减机器，是 HPA 能持续生效的兜底。
 
-## 实战心法
+## Practical Tips
 
 1. **别迷信 3**：先设 `min=2, max=10`，让 HPA 跑，再看 Prometheus 曲线反推合适的 min/max 和 requests。
 2. **缩容留缓冲**：min 不要设 1（单副本既无高可用，也扛不住突增流量），手动缩容同样留 1~2 个冗余 Pod。
@@ -115,7 +115,7 @@ autoscaling/v2 支持三类指标，按需组合：
 4. **看住 requests**：HPA 的利用率分母是 `requests` 而非 `limits`。requests 设小了会导致利用率虚高、Pod 频繁被限流；设大了则 HPA 迟迟不触发。
 5. **HPA 只管 Pod**：Node 满了新 Pod 会 Pending，必须配 Cluster Autoscaler。
 
-## 常见翻车案例
+## Common Pitfall Cases
 
 | 案例 | 现象 | 教训 |
 |------|------|------|

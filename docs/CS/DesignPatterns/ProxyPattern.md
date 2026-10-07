@@ -4,7 +4,7 @@
 
 结构上有三种角色：**Subject**（抽象接口）、**RealSubject**（真实实现）、**Proxy**（持有 RealSubject 引用，实现同一接口）。
 
-## 四种常见代理
+## Four Common Proxies
 
 | 类型 | 控制内容 | 例子 |
 |------|---------|------|
@@ -15,7 +15,7 @@
 
 注意与装饰器模式的区别：装饰器强调**增强**且通常由客户端组合传入；代理强调**控制访问**且代理自己决定真实对象的创建时机。
 
-## 静态代理 vs 动态代理
+## Static Proxy vs Dynamic Proxy
 
 - **静态代理**：为每个接口手写代理类，类数量爆炸、逻辑重复，工程上已很少用；
 - **动态代理**：运行时生成代理类，一份增强逻辑适用于任意接口：
@@ -34,7 +34,7 @@ Service proxy = (Service) Proxy.newProxyInstance(
         });
 ```
 
-## 在框架中的落地
+## Implementation in Frameworks
 
 Spring AOP 默认策略：目标类实现了接口用 JDK 代理，否则用 CGLIB（Boot 2.x 起默认统一 CGLIB）。调用链是"代理对象 → 拦截器链（advice/interceptor）→ 目标方法"。由此产生两个经典陷阱（见 [AspectJ](/docs/CS/Java/AspectJ.md)）：
 

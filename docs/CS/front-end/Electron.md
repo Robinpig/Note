@@ -2,7 +2,7 @@
 
 Electron 是用 Web 技术（HTML/CSS/JavaScript）开发**跨平台桌面应用**的框架，由 GitHub 为 Atom 编辑器开发，VS Code、Slack、Discord、Postman 都基于它。核心做法是把 **Chromium 渲染进程**和 **Node.js 运行时**一起打包进应用：UI 用前端技术渲染，系统能力（文件、进程、原生菜单）由 Node.js 提供，开发者不必为 Windows/macOS/Linux 各写一套原生代码。
 
-## 多进程架构
+## Multi-process Architecture
 
 Electron 沿用 Chromium 的多进程模型，并有明确的职责划分：
 
@@ -14,7 +14,7 @@ Electron 沿用 Chromium 的多进程模型，并有明确的职责划分：
 
 进程间通过 IPC 通信：`ipcMain.handle` / `ipcRenderer.invoke`（请求-响应，Promise 风格）或 `webContents.send`（事件推送）。这与浏览器内部的进程隔离原理一致，参见 [浏览器多进程模型](/docs/CS/Browser/Browser.md)。
 
-## 安全模型（高频踩坑）
+## Security Model (Common Pitfalls)
 
 Electron 早期允许渲染进程直接用 Node.js（`nodeIntegration: true`），相当于让网页拥有完整本机权限，XSS 即 RCE。现代安全基线：
 
@@ -24,7 +24,7 @@ Electron 早期允许渲染进程直接用 Node.js（`nodeIntegration: true`）�
 - 加载远程内容时配置 CSP、禁止 `webSecurity: false`、`allowRunningInsecureContent: false`；
 - 导航与新窗口用 `will-navigate`/`setWindowOpenHandler` 白名单管控，防钓鱼跳转。
 
-## 工程问题
+## Engineering Issues
 
 - **体积与内存**：每个应用自带整套 Chromium + Node，安装包 80MB 起步、每个窗口都是独立渲染进程，内存占用高。轻量化替代有 Tauri（系统 WebView + Rust 后端，安装包数 MB）、Wails（Go）。
 - **自动更新**：electron-updater + 静态文件服务器/GitHub Release，差量更新与签名公证（macOS notarization、Windows 代码签名）是发布硬门槛。

@@ -2,7 +2,7 @@
 
 发行版（Distribution）= **Linux 内核 + GNU 用户态工具 + 包管理器 + 安装器/配置工具** 的完整打包。内核本身只是操作系统核心（见 [Linux 内核笔记](/docs/CS/OS/Linux/Linux.md)），发行版负责把它变成一台"开箱即用"的系统——不同发行版共享同一个上游内核，差异主要在包管理、发布节奏、默认桌面与商业模式上。
 
-## 谱系
+## Lineage
 
 ```
 Linux 内核（kernel.org）
@@ -27,7 +27,7 @@ Linux 内核（kernel.org）
        └── Alpine —— musl libc + BusyBox + OpenRC，容器基础镜像（见笔记）
 ```
 
-## 当前版本速查（2026-10 核实）
+## Current Version Quick Reference (Verified 2026-10)
 
 版本事实变化快，涉及具体大版本号时**建议联网复核**（各发行版官网或 [DistroWatch](https://distrowatch.com/)）。
 
@@ -48,7 +48,7 @@ Linux 内核（kernel.org）
 | Arch 系 | 滚动 | — | 滚动 | linux / linux-lts / linux-zen |
 | NixOS | **26.05** | — | **7 个月**（全发行版最短） | initrd 默认转 systemd |
 
-## 各发行版笔记
+## Notes on Each Distribution
 
 | 发行版 | 笔记 | 定位 | 包管理 |
 | :-- | :-- | :-- | :-- |
@@ -67,7 +67,7 @@ Linux 内核（kernel.org）
 | Omarchy | [Omarchy](/docs/CS/OS/Linux/Distribution/Omarchy.md) | DHH 的 omakase 成品桌面，Arch + Hyprland + Quickshell | pacman + AUR |
 | NixOS | [NixOS](/docs/CS/OS/Linux/Distribution/NixOS.md) | 函数式包管理 + 声明式系统配置，可复现构建 | nix |
 
-## 包管理对照
+## Package Management Comparison
 
 | | Debian 系 | Red Hat 系 | Arch | Alpine |
 | :-- | :-- | :-- | :-- | :-- |
@@ -79,7 +79,7 @@ Linux 内核（kernel.org）
 | 事务回滚 | （无内建） | `dnf history undo` | （无内建） | （无内建） |
 | **init 系统** | systemd | systemd | systemd | **OpenRC** |
 
-## 容器基础镜像怎么选
+## How to Choose a Base Container Image
 
 这是 Alpine 真正的战场。实测压缩体积（linux/amd64，2026-08）：
 
@@ -99,7 +99,7 @@ Linux 内核（kernel.org）
 
 Alpine 镜像必须在 Dockerfile 里显式补的三项（详见 [Alpine](/docs/CS/OS/Linux/Distribution/Alpine.md)）：`tzdata`（否则日志全是 UTC）、DNS 解析验证（musl 不走 NSS）、构建依赖（`musl-dev` 等，用虚拟包 `apk del` 删掉）。
 
-## x86-64 微架构级别：最容易被忽略的升级门槛
+## x86-64 Microarchitecture Level: The Most Easily Overlooked Upgrade Threshold
 
 发行版用 `-march=x86-64-vN` 编译整个包集合，**基线一上移，一批老 CPU 就被排除** —— 而且这不会出现在发行说明里。
 
@@ -123,7 +123,7 @@ Alpine 镜像必须在 Dockerfile 里显式补的三项（详见 [Alpine](/docs/
 
 **"有 AVX 但没 AVX2 是 Sandy Bridge/Ivy Bridge = v2，不是"快到 v3"了"** —— 级别是全有或全无。
 
-### 两秒自检
+### Two-second Self-check
 
 ```bash
 /lib64/ld-linux-x86-64.so.2 --help | grep -A6 "Subdirectories of glibc-hwcaps"
@@ -142,11 +142,11 @@ Subdirectories of glibc-hwcaps directories, in priority order:
 
 ```bash
 grep -oE 'sse4_2|popcnt|avx2|bmi2|fma|avx512f' /proc/cpuinfo | sort -u
-# sse4_2 + popcnt     → 至少 v2
 # 再加 avx2+bmi2+fma  → v3
+# Add avx2+bmi2+fma -> v3
 ```
 
-### VM 里更隐蔽
+### More Hidden in VMs
 
 **虚拟 CPU 可以隐藏宿主支持的特性** —— 物理机支持 v3，VM 里未必。按环境排查：
 
@@ -159,7 +159,7 @@ grep -oE 'sse4_2|popcnt|avx2|bmi2|fma|avx512f' /proc/cpuinfo | sort -u
 
 **没有内核模块或 dnf 包能补上老 CPU 缺的指令** —— 那些指令在硅片上不存在。
 
-### 真实代价：CERN 的案例
+### Real Cost: The CERN Case
 
 CERN 把 **2200 多台加速器控制计算机**从 Red Hat 系迁到 Debian，**直接原因是 CPU 基线**（不是许可、不是口味、不是支持合同）：
 
@@ -179,7 +179,7 @@ for h in $(cat hosts.txt); do
 done
 ```
 
-## 内核配置取向的四种
+## Four Kernel Configuration Orientations
 
 发行版差异都在用户态，但**内核配置取向**直接决定你能用什么特性：
 
@@ -195,7 +195,7 @@ done
 
 **"内核增强"路线的代价**是笔记写作时的歧义：openEuler 的 Cluster 调度域、内存动态复合页、混部多优先级 cgroup、潮汐调度等**都不是上游 Linux 原生能力**。引用时务必标明来源，否则会把发行版特性误当内核通用机制。
 
-## 如何选
+## How to Choose
 
 - **服务器/生产**：Ubuntu LTS 或 RHEL 兼容系（Rocky/Alma）——长支持周期、安全更新可预期；**要厂商支持与认证只能买 RHEL**；
 - **桌面/学习**：Ubuntu（省心）或 Arch（想理解系统每一层，安装过程本身就是 [Linux 启动流程](/docs/CS/OS/Linux/boot/Start.md) 的实战课）；

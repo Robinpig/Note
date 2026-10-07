@@ -8,7 +8,7 @@ Hermes Agent（"The agent that grows with you"）是 **Nous Research 开源、NV
 
 > 本笔记聚焦 Hermes 自身的工程机制；自进化的评测体系、CI/CD 与人的校准作用见 Self-Evolving。下文所有配置项均来自仓库 `cli-config.yaml.example`，实现细节来自对应源码模块。
 
-## 架构：三层主干 + 多入口
+## Architecture: Three-Layer Backbone + Multiple Entries
 
 | 层 | 组件 | 职责（已核实） |
 | --- | --- | --- |
@@ -18,7 +18,7 @@ Hermes Agent（"The agent that grows with you"）是 **Nous Research 开源、NV
 
 三种入口（CLI Session、Gateway Message、Cron Job）数据流不同，却共享同一套执行、存储、记忆和 Skill 机制——**轨迹被统一保存，Evolve Loop 才能跨入口工作**。
 
-### 入口层：六种形态
+### Entry Layer: Six Forms
 
 | 入口 | 形态 | 说明 |
 | --- | --- | --- |
@@ -29,17 +29,17 @@ Hermes Agent（"The agent that grows with you"）是 **Nous Research 开源、NV
 | API Server | `/v1` 路由 | 以 HTTP 服务暴露 Agent 能力，restart 时有独立的 drain 宽限 |
 | Python Library | 可 import 的 `hermes` 包 | 在自有代码里以库的形式调用 Agent |
 
-### 运行后端：在哪执行工具
+### Execution Backend: Where Tools Run
 
 Hermes 的工具不在你的笔记本上裸跑，而是跑在**六种终端后端**之一：local、Docker、SSH、Singularity、Modal、Daytona。其中 Modal / Daytona 提供 **serverless 持久化**——环境空闲时休眠、按需唤醒，idle 期间几乎零成本。这解释了为什么它"不在你的笔记本上"也能从 Telegram 指挥云端 VM 干活。
 
-### 模型与提供商：Provider Resolution
+### Models and Providers: Provider Resolution
 
 `hermes model` 一行切换，无代码改动、无锁定。已支持的提供商：Nous Portal、OpenRouter（200+ 模型）、NovitaAI、NVIDIA NIM（Nemotron）、Xiaomi MiMo、z.ai/GLM、Kimi/Moonshot、MiniMax、Hugging Face、OpenAI，以及任意自托管 endpoint（NIM / vLLM / 本地 Ollama）。子智能体还可单独覆盖 `model` / `provider`。
 
-## Evolve Loop 的四个关键机制
+## Four Key Mechanisms of the Evolve Loop
 
-### Periodic Nudges：后台复盘（已核实实现名 `background_review`）
+### Periodic Nudges: Background Review (verified implementation name `background_review`)
 
 一轮交互结束后派生一个**独立复盘过程**：重读会话快照，判断是否新增/修改记忆与 Skill。源码里它叫 `background_review`——一个 **daemon 线程里的 post-turn 记忆/技能自改进 review fork**，在 nudge 间隔触发时写入 skills/memories。复盘与主会话分离（不污染进行中的上下文），并可用更便宜的辅助模型降本（配置 `background_review.provider: "auto"`）。
 
@@ -50,7 +50,7 @@ Hermes 的工具不在你的笔记本上裸跑，而是跑在**六种终端后�
 
 它在「什么都保存」（上下文爆炸、注意力稀释）和「什么都忘记」（不沉淀）之间充当筛选器。
 
-### Autonomous Skill Creation：程序性记忆
+### Autonomous Skill Creation: Procedural Memory
 
 Agent 在完成复杂任务后可创建、修改、复用自己的 Skill，写入 `~/.hermes/skills/`（`external_dirs` 则是只读的跨 Agent 共享目录，本地技能同名优先）。每个 `SKILL.md` 采用 **agentskills.io 开放标准**的 frontmatter：
 
@@ -76,7 +76,7 @@ metadata:
 
 > 注：DeepEvolution 文章提到的 `skill_manage` 工具名、以及 `skills.write_approval` / `memory.write_approval` 两个开关，在**当前源码与 `cli-config.yaml.example` 中均不存在**（grep 零命中）。技能/记忆写入直接由 `background_review` 守护线程完成，没有"先进待审核区、人看差异再应用"这个简单配置开关。下文「安全与人工把关」给出了真正存在的人工把关机制。
 
-### FTS5 Session Search：检索不等于记忆
+### FTS5 Session Search: Retrieval Is Not Equal to Memory
 
 会话统一存 `~/.hermes/state.db`，SQLite **FTS5 全文索引**，并额外支持 **trigram 与 CJK（中日韩）分词**——对中文检索友好。`session_search` 返回**数据库里的真实消息**（不摘要、不截断）。分工：
 
@@ -86,7 +86,7 @@ metadata:
 
 可选的 Honcho 外部 Memory Provider 提供语义搜索、跨会话结论和用户画像（dialectic user modeling）。
 
-### 三层记忆系统
+### Three-Layer Memory System
 
 | 层 | 内容 | 特点（已核实配置） |
 | --- | --- | --- |
@@ -96,7 +96,7 @@ metadata:
 
 直观理解：Memory 是随身携带的少量关键事实，Archive 是需要时查阅的完整经历，Skill 是从经历中抽象出的做事方法。
 
-## 子智能体与并行化
+## Subagents and Parallelization
 
 Hermes 把子智能体当作**面向子任务的、生命周期很短的隔离工作单元**（`delegate_task` 工具，由 `delegation:` 配置驱动）：
 
@@ -109,7 +109,7 @@ Hermes 把子智能体当作**面向子任务的、生命周期很短的隔离�
 
 也支持用 Python 脚本通过 RPC 调用工具，把多步流水线压缩成零上下文成本的回合。
 
-## 安全与人工把关
+## Security and Human Gatekeeping
 
 Hermes 的"人的确认权"不是靠一个记忆/技能审批开关，而是落在几处真实存在的安全机制上：
 
@@ -118,7 +118,7 @@ Hermes 的"人的确认权"不是靠一个记忆/技能审批开关，而是落�
 - **危险命令审批**：工具执行危险命令时的 approval 流程（与 [Permission](/docs/CS/AI/LLM/Agent/Theory/Permission.md) 的 fail-closed 思路一致）。
 - **`background_review` 无审批开关**：技能/记忆的后台写入目前直接落盘，没有"待审核区"。高风险环境应靠 `protected_instruction_files` + 危险命令审批 + 只读 `external_dirs` 组合来约束，而不是依赖一个不存在的 `write_approval` 键。
 
-## 部署、持久化与快照
+## Deployment, Persistence and Snapshot
 
 Agent 在生产中会因代码发布/配置变更而重建容器。**学到的技能/记忆若不能存活，每次都要重新教**。Hermes 的做法是快照 + 恢复：
 
@@ -127,7 +127,7 @@ Agent 在生产中会因代码发布/配置变更而重建容器。**学到的�
 
 在 NVIDIA NemoClaw 的私有数据场景里，Hermes 跑在 **OpenShell 沙箱**中：凭据隔离（Slack/Outlook token 永不让 Agent 看见，认证在沙箱代理出口完成）+ 网络策略（Agent 被禁止访问公网，GitHub/论坛数据经只读 ETL 注入）。即便 Agent 被攻破，也无法把内部数据外发。
 
-## 定位与边界
+## Positioning and Boundary
 
 Hermes 的主路径是**上下文/记忆进化**；Skill 创建与 patch 是 Harness 级轻量结构进化；**不更新权重，不属于参数进化**。最大价值：不需要等待模型重新训练，Agent 也能在使用中逐步形成属于自己的工作方法。
 

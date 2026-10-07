@@ -4,7 +4,7 @@ suspend 是**整机级**的电源管理：把 CPU、内存、设备全部切到�
 
 它的实现是一条**极其严格的顺序链** —— 顺序错了就是 crash 或数据损坏。本文按源码实际调用顺序讲这条链，所有函数名在 **v7.2** 核实。
 
-## 睡眠状态
+## Sleep State
 
 ```c
 typedef int __bitwise suspend_state_t;
@@ -80,7 +80,7 @@ bool pm_suspend_default_s2idle(void)
 
 这个函数被 `firmware/` 下的电源管理代码用来决定"要不要用 s2idle 而非平台睡眠"。
 
-## 平台回调：platform_suspend_ops
+## Platform Callbacks: platform_suspend_ops
 
 > ⚠️ **v7.2 的重要变化**：旧资料里的 `struct suspend_ops` **已不存在**，改为 **`struct platform_suspend_ops`**。更关键的是**成员完全不同** —— 不是 `prepare`/`prepare_late`/`enter_noirq` 那套，而是：
 
@@ -126,7 +126,7 @@ void suspend_set_ops(const struct platform_suspend_ops *ops)
 
 s2idle 有独立的 `struct platform_s2idle_ops`（`s2idle_set_ops()`），与平台睡眠分开。
 
-### s2idle 绕过平台回调
+### s2idle Bypassing Platform Callbacks
 
 值得注意的是 s2idle 路径**不需要 `suspend_ops`**：
 
@@ -142,7 +142,7 @@ s2idle 有独立的 `struct platform_s2idle_ops`（`s2idle_set_ops()`），与�
 
 即 **`prepare` / `prepare_late` / `finish` / `recover` 在 s2idle 路径下全部被跳过**。这就是为什么 s2idle 能在没有平台支持的系统上工作 —— 它本质是"把所有 CPU 挂进深 C-state"，依赖的是 [cpuidle](/docs/CS/OS/Linux/PM/cpuidle.md) 而非平台电源管理。
 
-## suspend_enter：完整的顺序链
+## suspend_enter: The Complete Sequence Chain
 
 这是本文的核心。`suspend_enter()` 严格按固定顺序推进，**任何一步失败都要逆序回滚**：
 
@@ -229,7 +229,7 @@ static int suspend_enter(suspend_state_t state, bool *wakeup)
 }
 ```
 
-### 睡眠方向（自上而下）
+### Sleep Direction (Top-down)
 
 ```
 platform_suspend_prepare()          ← 平台准备
@@ -249,7 +249,7 @@ suspend_ops->enter(state)          ← 真正断电（永不返回直到唤醒�
 
 **`dpm_suspend_noirq()` 必须在 `arch_suspend_disable_irqs()` 之前** —— 设备的 noirq suspend 回调里通常还要操作自己的寄存器，此时中断仍开着。一旦关中断再去 suspend 设备，竞态下会丢中断。
 
-### 唤醒方向（自下而上）
+### Wakeup Direction (Bottom-up)
 
 ```
 syscore_resume()
@@ -264,7 +264,7 @@ platform_resume_finish()            ← 平台收尾
 
 **noirq 阶段的中断状态是"关着"的**（那两行 `BUG_ON(!irqs_disabled())` 就是断言这个），设备 resume 回调必须能在无中断环境下完成寄存器恢复。
 
-### 三个提前退出点
+### Three Early Exit Points
 
 `suspend_test()` 提供测试钩子（详见下文），可在指定阶段主动放弃睡眠：
 
@@ -288,7 +288,7 @@ platform_resume_finish()            ← 平台收尾
 
 **唤醒事件已挂起时返回 `-EBUSY`**（有人在 `suspend_ops->begin()` 里触发了唤醒），而不是进入睡眠。
 
-### s2idle 的短路
+### s2idle Short-circuit
 
 ```c
 	if (state == PM_SUSPEND_TO_IDLE) {
@@ -299,7 +299,7 @@ platform_resume_finish()            ← 平台收尾
 
 s2idle **在平台 noirq 准备之后就直接进 `s2idle_loop()`** —— 不停次要 CPU、不关中断、不切 syscore。原因就是前面说的：s2idle 靠 CPU 挂进深 C-state 实现，"整机断电"是由此触发的。
 
-## 冻结进程
+## Freezing Processes
 
 睡眠的第一步是**冻结用户态进程**（`kernel/power/process.c`）：
 
@@ -331,7 +331,7 @@ int freeze_processes(void)
 2. **必须成对**：`freeze_processes()` 的调用者必须稍后调 `thaw_processes()`。
 3. **失败时系统已完全解冻** —— 返回 `-errno` 而非半冻结状态。
 
-### 重试策略：指数退避
+### Retry Strategy: Exponential Backoff
 
 冻结是"请求"而非"命令"，进程可能正忙而无法立即进入冷冻。内核的重试策略：
 
@@ -368,7 +368,7 @@ int freeze_processes(void)
 
 `todo` 里区分两类：`wq_busy` 是**可冻结工作队列**没冻结（`freeze_workqueues_busy()` 统计），其余是任务拒绝。内核线程不参与冻结统计（它们在 PF_SUSPEND_TASK 逻辑里被排除）。
 
-## 调试：pm_test
+## Debugging: pm_test
 
 > ⚠️ **v7.2 的变化**：旧的 `pm_debug_mask` / `PM_DEBUG_*` 标志位**已被 `pm_test_level` 取代**。
 
@@ -404,7 +404,7 @@ dmesg | tail -30                 # 观察哪些回调真的被调用了
 
 **这是验证设备 suspend 回调是否完整调用的标准手段** —— 逐步推进到更深阶段，看 dmesg 里哪些设备的 `suspend`/`resume` 没出现。
 
-## 与 cpufreq 的交互
+## Interaction with cpufreq
 
 睡眠期间不能动态调频，policy 里有专门的字段：
 
@@ -419,20 +419,20 @@ dmesg | tail -30                 # 观察哪些回调真的被调用了
 
 **这条链发生在 syscore 阶段**，所以它的失败会走 `suspend_again` / `recover` 路径。
 
-## 与 crash dump 的接缝
+## Seam with Crash Dump
 
 睡眠失败或唤醒失败时若 panic，走的是 [boot/crash](/docs/CS/OS/Linux/boot/crash.md) 那条链。注意 `pm_wakeup_pending()` 的含义 —— **有唤醒事件待处理时内核不会进入睡眠**，返回 `-EBUSY`。这个检查正是为了避免"刚要睡就被唤醒，白折腾一趟还可能出问题"。
 
-## 与其它子系统的接缝
+## Seams with Other Subsystems
 
 - **cpuidle**：s2idle 靠 CPU 挂进深 C-state 实现，见 [cpuidle](/docs/CS/OS/Linux/PM/cpuidle.md)。
 - **cpufreq**：睡眠前切固定频率，见 [cpufreq](/docs/CS/OS/Linux/PM/cpufreq.md)。
 - **runtime PM**：系统 suspend 期间所有设备都要挂起，resume 后仍保持挂起，见 [runtime PM](/docs/CS/OS/Linux/PM/runtimepm.md)。
-- **freezer**：内核态的冻结（cgroup.freeze）与这里的用户态冻结是两套，见 [cgroup 控制器接口](/docs/CS/OS/Linux/cgroup/controllers.md?id=freezer-冻结与终止)。
+- **freezer**：内核态的冻结（cgroup.freeze）与这里的用户态冻结是两套，见 [cgroup 控制器接口](/docs/CS/OS/Linux/cgroup/controllers.md?id=freezer-freeze-and-terminate)。
 - **设备模型**：`dpm_suspend_*` 系列回调的分发见 [设备模型 device](/docs/CS/OS/Linux/dev/device.md)。
 - **崩溃转储**：睡眠链上的 panic 走 [boot/crash](/docs/CS/OS/Linux/boot/crash.md)。
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 ```shell
 # 可用状态
@@ -471,7 +471,7 @@ dmesg | grep -iE "suspend|resume|freeze|PM: " | tail -40
 - [cpuidle 空闲挂起](/docs/CS/OS/Linux/PM/cpuidle.md)
 - [cpufreq 频率调节](/docs/CS/OS/Linux/PM/cpufreq.md)
 - [runtime PM 设备省电](/docs/CS/OS/Linux/PM/runtimepm.md)
-- [cgroup 控制器接口（freezer）](/docs/CS/OS/Linux/cgroup/controllers.md?id=freezer-冻结与终止)
+- [cgroup 控制器接口（freezer）](/docs/CS/OS/Linux/cgroup/controllers.md?id=freezer-freeze-and-terminate)
 - [设备模型 device](/docs/CS/OS/Linux/dev/device.md)
 - [boot/crash](/docs/CS/OS/Linux/boot/crash.md)
 

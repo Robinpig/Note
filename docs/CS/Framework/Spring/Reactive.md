@@ -59,7 +59,7 @@ Spring 5 引入 [Spring WebFlux](/docs/CS/Framework/Spring/webflux.md)，与基�
 
 并非所有应用都该上响应式：在典型阻塞型业务（大量同步 ORM 访问）下，MVC + 虚拟线程往往更简单且吞吐足够；WebFlux 的价值集中在超高并发连接数、流式推送与 IO 密集的网关/聚合层。
 
-## Spring 中的响应式落地
+## Reactive Adoption in Spring
 
 Reactive 在 Spring 全家桶里是一整条技术栈，而非只有 WebFlux：
 
@@ -72,7 +72,7 @@ Reactive 在 Spring 全家桶里是一整条技术栈，而非只有 WebFlux：
 > [!NOTE]
 > `WebClient` 与 `RestClient` 的取舍：**非流式、调用外部 HTTP 且项目已用虚拟线程时，优先 `RestClient`**——它同步 API、零额外依赖、配合虚拟线程吞吐足够；只有需要流式响应、背压或大量并发出站调用时才上 `WebClient`。`RestTemplate` 已被弃用，但迁移路径要按场景选。
 
-## 虚拟线程 vs WebFlux 决策
+## Virtual Threads vs WebFlux Decision
 
 | 维度 | MVC + 虚拟线程（JDK 21+） | WebFlux（响应式） |
 | :--- | :--- | :--- |
@@ -85,7 +85,7 @@ Reactive 在 Spring 全家桶里是一整条技术栈，而非只有 WebFlux：
 
 结论：典型阻塞型业务下 MVC + 虚拟线程往往更简单且吞吐足够；WebFlux 的价值集中在超高并发连接数、流式推送与 IO 密集的网关/聚合层。
 
-## Reactor Context 与跨切面传参
+## Reactor Context and Cross-Aspect Parameter Passing
 
 响应式链里没有"当前线程"的概念，`ThreadLocal` 在 `subscribeOn`/`publishOn` 切换线程后失效。Reactor 用不可变的 **`ContextView`** 在链上携带数据，例如 Spring Security 的 `ReactiveSecurityContextHolder` 就是把认证信息放进 `Context`，而非塞进 `ThreadLocal`：
 
@@ -97,7 +97,7 @@ Mono.just("/admin")
 
 `Context` 必须从订阅点（publisher 源头）沿链向下传递；在 `subscribeOn` 切换的**下游**写入的 Context 不会回流到上游，这是最常踩的"取不到认证信息"原因。
 
-## 线程调度陷阱
+## Thread Scheduling Trap
 
 Reactor 默认在**事件循环线程**上执行，阻塞调用会卡死整条管道：
 

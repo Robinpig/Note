@@ -14,7 +14,7 @@ partition 目录（log.dir / tmp/kafka-logs）
 └── __leader_epoch                      ← partition 级（不是段级！）
 ```
 
-## 4.3.1 的包路径已迁移（照旧资料必找不到文件）
+## 4.3.1 Package Paths Have Migrated (Old Docs Will Not Find Files)
 
 > [!WARNING]
 > `kafka.log` 包已整体迁到 **`storage` 模块的 Java 包** `org.apache.kafka.storage.internals.log`。整个 4.3.1 树里 `.scala` 文件只剩 309 个。
@@ -29,7 +29,7 @@ partition 目录（log.dir / tmp/kafka-logs）
 >
 > 更重要的是：**`LogConfig.java` 只有 66 处 `define(`，且不含任何 retention 配置** —— 常量与 ConfigDef 定义已拆分到 `server-common/.../ServerLogConfigs.java`（179 行）。查默认值要去对的地方。
 
-## 段文件结构
+## Segment File Structure
 
 `storage/src/main/java/org/apache/kafka/storage/internals/log/LogFileUtils.java:27-67`：
 
@@ -50,7 +50,7 @@ partition 目录（log.dir / tmp/kafka-logs）
 > - **没有 `leader-epoch-checkpoint` 段文件**。leader epoch 由 `leaderEpochCache` 独立管理（`UnifiedLog.java:2356,2369`），checkpoint 写在 **partition 目录级**（`__leader_epoch`），不是每个 segment。
 > - **没有 `partition.metadata` 文件**（4.x 已移除）。
 
-## 稀疏索引与二分查找
+## Sparse Index and Binary Search
 
 `storage/.../OffsetPosition.java:23` 定义了索引条目：
 
@@ -96,7 +96,7 @@ if (bytesSinceLastIndexEntry > indexIntervalBytes) {
 
 索引大小上限 `index.size.max.bytes` 默认 **10 MB**（`ServerLogConfigs.java:93`,映射见 `ServerTopicConfigSynonyms.java:58`）。因为是稀疏索引,10 MB 足以索引数亿条消息。
 
-## 滚动策略：5 个条件
+## Rolling Strategy: 5 Conditions
 
 `storage/.../LogSegment.java:167-173`（完整实现）：
 
@@ -129,16 +129,16 @@ public boolean shouldRoll(RollParams rollParams) throws IOException {
 > ```
 > 调用点 `UnifiedLog.java:2153`。
 
-## 核心默认值表
+## Core Defaults Table
 
-### 权威来源
+### Authoritative Sources
 
 配置定义在两个地方,查的时候别搞错：
 
 - **`server-common/src/main/java/org/apache/kafka/server/config/ServerLogConfigs.java`** —— 常量 + broker 级 ConfigDef
 - **`storage/.../log/LogConfig.java:125-134`**（`DEFAULT_*` 常量）与 `:188-251`（topic 级 ConfigDef）
 
-### 存储相关
+### Storage-related
 
 | 配置名 | 默认值 | 出处 |
 | ------ | ------ | ---- |
@@ -160,7 +160,7 @@ public boolean shouldRoll(RollParams rollParams) throws IOException {
 | `log.dir.failure.timeout.ms` | 30000 | ServerLogConfigs.java:173 |
 | `cordoned.log.dirs` | `List.of()` | ServerLogConfigs.java:55（4.3 新增 KIP-1066）|
 
-### 刷盘相关
+### Flush-related
 
 | 配置名 | 默认值 | 出处 |
 | ------ | ------ | ---- |
@@ -178,7 +178,7 @@ public boolean shouldRoll(RollParams rollParams) throws IOException {
 >
 > 需要更强的持久性时要显式设 `flush.ms` / `flush.messages`,代价是吞吐下降。这与 RocketMQ 的 `ASYNC_FLUSH`（每 500ms 攒 4 页刷）形成鲜明对比 —— **Kafka 默认连异步刷盘周期都没有**。
 
-### 时间戳
+### Timestamp
 
 | 配置名 | 默认值 | 出处 |
 | ------ | ------ | ---- |
@@ -191,7 +191,7 @@ public boolean shouldRoll(RollParams rollParams) throws IOException {
 >
 > `CreateTime` 是默认类型意味着：**producer 客户端时间戳决定消息时间**,若客户端时钟漂移会导致消息落到「未来」,超出 `after.max.ms`（1 小时）会被拒绝或落到新段。
 
-### 保留与清理
+### Retention and Cleanup
 
 | 配置名 | 默认值 | 出处 |
 | ------ | ------ | ---- |
@@ -227,7 +227,7 @@ public boolean shouldRoll(RollParams rollParams) throws IOException {
 >
 > 所以「关掉 cleaner 省资源」这个建议在 4.x 是错的。
 
-## 配置项优先级：哪个才是权威
+## Configuration Priority: Which Is Authoritative
 
 这是最多人搞错的一点。`server-common/.../ServerTopicConfigSynonyms.java:49-86`,注释原文（`:44-47`）：
 
@@ -253,7 +253,7 @@ listWithLogPrefix(TopicConfig.RETENTION_MS_CONFIG,
 >
 > 陷阱：`log.retention.hours=168` 有默认值,意味着即使你只设 `log.retention.ms=3600000`,`hours` 的默认值也不会干扰（因为 `ms` 优先级更高）。但如果你**只设 minutes** 而 `ms` 未设,`ms` 是 null,此时会用 minutes —— 这才是三级的实际作用场景。
 
-## 隔离级别：`log.isolation.level` 不存在
+## Isolation Level: `log.isolation.level` Does Not Exist
 
 > [!WARNING]
 > **`log.isolation.level` 在 4.3.1 中零命中**（`LogConfig.java` 无此配置）。这是个常见误解。
@@ -264,7 +264,7 @@ listWithLogPrefix(TopicConfig.RETENTION_MS_CONFIG,
 >
 > Share Group 有独立的 `share.isolation.level`（`group-coordinator/.../GroupConfig.java:80`）。
 
-## 零拷贝：Kafka 用 sendfile,不用 mmap 读数据
+## Zero-copy: Kafka Uses sendfile, Not mmap to Read Data
 
 这是 Kafka 与 RocketMQ 最本质的架构分野，值得单写。
 
@@ -304,7 +304,7 @@ UnalignedFileRecords.java:49  return (int) destChannel.transferFrom(channel, pos
 > [!NOTE]
 > 与 [RocketMQ Store](/docs/CS/MQ/RocketMQ/Store.md) 的对比值得记住：Kafka 用 sendfile 是因为「读出去就够了，不需要在应用层看消息内容」；RocketMQ 用 mmap 是因为需要拿到消息内容做 SQL92 过滤与死信投递。**这个取舍决定了两者功能边界的差异** —— 详见 [ZeroCopy](/docs/CS/OS/Linux/ZeroCopy.md)。
 
-## ProducerStateManager 与 leader epoch
+## ProducerStateManager and Leader Epoch
 
 `storage/.../ProducerStateManager.java` 存在，配置类 `ProducerStateManagerConfig.java`；且 `DYNAMIC_PRODUCER_STATE_MANAGER_CONFIGS` 在动态配置白名单内（`DynamicBrokerConfig.java:78`）。
 
@@ -315,7 +315,7 @@ UnalignedFileRecords.java:49  return (int) destChannel.transferFrom(channel, pos
 
 ELR（Eligible Leader Replicas，KIP-966）：`storage/.../LeaderHwChange.java` 存在。
 
-### 截断：方法名不是 truncateToAndHandleDuplicates
+### Truncation: Method Name Is Not truncateToAndHandleDuplicates
 
 > [!WARNING]
 > **`UnifiedLog#truncateToAndHandleDuplicates` 在 4.3.1 中不存在**（grep 零命中）。真实方法名是 **`truncateTo`**（`UnifiedLog.java:2340-2376`）。
@@ -349,7 +349,7 @@ if (targetOffset >= localLog.logEndOffset()) {
 >
 > 开启后（不建议生产）会截断到 `highWatermark` 之后,这会**丢数据**。
 
-## 分层存储
+## Tiered Storage
 
 > [!WARNING]
 > 配置名是 **`remote.storage.enable`**（**没有 `log.` 前缀**），默认 **false**（`LogConfig.java:136` `DEFAULT_REMOTE_STORAGE_ENABLE = false`，ConfigDef `:243`）。
@@ -369,7 +369,7 @@ if (targetOffset >= localLog.logEndOffset()) {
 >
 > 这个误解来源很可能是把「KIP-1050」与 Kafka tiered storage 的 roadmap 混为一谈。
 
-## 需要打假的常见说法
+## Common Claims That Need Debunking
 
 | 说法 | 4.3.1 实况 |
 | ---- | --------- |
@@ -387,7 +387,7 @@ if (targetOffset >= localLog.logEndOffset()) {
 | 「默认 flush.ms 是 5 秒或 1 秒」 | ❌ **`Long.MAX_VALUE`**，即默认完全不主动刷盘 |
 | 「KIP-1050 是 log format/cloud storage」 | ❌ 是事务错误处理；4.x 无新 log format |
 
-## 未查到清单
+## List Not Found
 
 - `FileChannelImpl.transferToArbitraryChannels` 的 sendfile 退化条件（属 JDK 源码，本环境不可达）
 - `java.nio.Buffer` 的 `force`/`put` 与 page cache 交互的 JDK 层实现（同上）

@@ -4,17 +4,17 @@
 
 本页是心理学领域的**总纲与分支学科目录**：先给出分支学科清单，再沿「研究层次」与「范式演进」两条线说明它们的关系，最后挂上本库已有的专题笔记。
 
-## 分支学科
+## Subdisciplines
 
 <div class="kb-home">
 
-### 主要分支
+### Major Branches
 
 <div class="kb-grid kb-grid-sm">
 
 <div class="kb-card">
 
-### [认知心理学](/docs/Psychology/Cognitive_Psychology.md)
+### [Cognitive Psychology](/docs/Psychology/Cognitive_Psychology.md)
 
 把心智当作信息加工系统：注意、记忆、思维与决策
 
@@ -22,7 +22,7 @@
 
 <div class="kb-card">
 
-### [发展心理学](/docs/Psychology/Developmental_Psychology.md)
+### [Developmental Psychology](/docs/Psychology/Developmental_Psychology.md)
 
 一生的变化与连续：皮亚杰、埃里克森、依恋与毕生发展
 
@@ -30,7 +30,7 @@
 
 <div class="kb-card">
 
-### [社会心理学](/docs/Psychology/Social_Psychology.md)
+### [Social Psychology](/docs/Psychology/Social_Psychology.md)
 
 他人的存在如何塑造我们：从众、服从、态度与群体行为
 
@@ -38,7 +38,7 @@
 
 <div class="kb-card">
 
-### [人格心理学](/docs/Psychology/Personality_Psychology.md)
+### [Personality Psychology](/docs/Psychology/Personality_Psychology.md)
 
 跨情境稳定的个体差异：特质论与大五人格
 
@@ -46,7 +46,7 @@
 
 <div class="kb-card">
 
-### [生理心理学](/docs/Psychology/Biological_Psychology.md)
+### [Biological Psychology](/docs/Psychology/Biological_Psychology.md)
 
 行为与心理的生理基础：神经元、脑区与神经递质
 
@@ -54,7 +54,7 @@
 
 <div class="kb-card">
 
-### [行为主义与学习](/docs/Psychology/Behaviorism.md)
+### [Behaviorism and Learning](/docs/Psychology/Behaviorism.md)
 
 可观察的行为如何被塑造：条件反射、强化与惩罚
 
@@ -62,7 +62,7 @@
 
 <div class="kb-card">
 
-### [心理测量学](/docs/Psychology/Psychometrics.md)
+### [Psychometrics](/docs/Psychology/Psychometrics.md)
 
 心理属性的量化：信度、效度与智力测验
 
@@ -70,7 +70,7 @@
 
 <div class="kb-card">
 
-### [临床与异常心理学](/docs/Psychology/Clinical_Psychology.md)
+### [Clinical and Abnormal Psychology](/docs/Psychology/Clinical_Psychology.md)
 
 心理障碍的分类、成因、评估与治疗
 
@@ -78,7 +78,7 @@
 
 <div class="kb-card">
 
-### [积极心理学](/docs/Psychology/Positive_Psychology.md)
+### [Positive Psychology](/docs/Psychology/Positive_Psychology.md)
 
 幸福、优势与繁荣：PERMA、心流与干预
 
@@ -86,7 +86,7 @@
 
 <div class="kb-card">
 
-### [精神分析](/docs/Psychology/Psychoanalysis.md)
+### [Psychoanalysis](/docs/Psychology/Psychoanalysis.md)
 
 无意识与防御机制：弗洛伊德传统及其后继流派
 
@@ -96,7 +96,7 @@
 
 </div>
 
-## 从神经元到社会：研究的层次
+## From Neurons to Society: Levels of Analysis
 
 心理学没有一个单独的「主对象」，它按**分析层次**层层放大，各分支因此相互支撑：
 
@@ -108,7 +108,7 @@
 
 层次之间不是包含关系而是**互相约束**：社会情境通过认知机制起作用，认知机制又有其神经实现。
 
-## 范式演进：三条路线与一次革命
+## Paradigm Evolution: Three Routes and One Revolution
 
 心理学的百年史，是一部**范式更替**史。理解这条线，才能理解各分支为何立场迥异：
 
@@ -121,11 +121,11 @@
 
 关键在于**证据标准的迁移**：从精神分析的临床叙事，到行为主义的严格实验，再到认知与神经科学的可重复、可量化——每一次转向，都是对「什么算可靠证据」的重新定义。这也解释了为什么本库对弗洛伊德的具体论断持保留态度：它是有影响力的思想史，而非可证伪的实证科学。
 
-## 应用取向
+## Applied Orientation
 
 从「修复缺陷」到「培育优势」，是当代心理学另一条重要的态度转变。临床与实践一侧，[临床与异常心理学](/docs/Psychology/Clinical_Psychology.md) 处理障碍的诊断与治疗（CBT、动力学治疗、药物），[积极心理学](/docs/Psychology/Positive_Psychology.md) 则研究幸福、性格优势与心流。两者共享同一个评估与循证框架，即 [心理测量学](/docs/Psychology/Psychometrics.md) 提供的信度与效度工具。
 
-## 专题笔记
+## Topic Notes
 
 以小见大的专题，分别挂在对应分支下：
 

@@ -9,7 +9,7 @@ boltdb 的核心是 **B+ tree**：所有 key-value 都组织成一棵 B+ tree，
 > [!NOTE]
 > 本篇的 key 编码、bucket 清单、tombstone 标记等结论均来自 etcd **v3.4.9** 源码（`mvcc/revision.go`、`mvcc/kvstore.go`、`mvcc/kvstore_txn.go`、`mvcc/key_index.go`），代码片段保持原样。这些结构在 3.5/3.6 未发生实质变化。
 
-## Page 结构
+## Page Structure
 
 文件内容由若干 **page** 组成，page size 固定 **4KB**。按功能分为五类：
 
@@ -59,7 +59,7 @@ metaBucketName = []byte("meta")
 > [!WARNING]
 > 只有 `key` 与 `meta` 是 mvcc 层的 bucket 常量，其余（lease、cluster、auth 等）由**各自模块**（lessor、cluster、auth store）独立管理，写入同一份 db 文件。理解这点很重要：`db` 文件里的数据是多个模块共同写入的，不属于 MVCC 体系。
 
-## Key 的编码
+## Key Encoding
 
 执行 `put hello world` 时，**boltdb 实际写入的 key 是版本号（revision），value 是 `mvccpb.KeyValue` 结构体**。这里有个反直觉的事实：磁盘 key 里**并不包含用户的 `hello`**——用户 key 存在 value 内部。
 
@@ -114,7 +114,7 @@ func bytesToRev(bytes []byte) revision {
 > [!TIP]
 > **为什么要把 revision 放在 key 里？** 因为 B+ tree 按 key 有序排列，把单调递增的 revision 编码进 key，天然保证磁盘上"同一 key 的所有版本按版本号物理相邻"。范围查询 `[start, end)` 就退化成一次 B+ tree 的顺序扫描——这正是 `--prefix` 查询能高效工作的底层原因。用户 key 放在 value 里，反而让 key 保持定长（17 或 18 字节），B+ tree 的节点更紧凑。
 
-### Tombstone 标记
+### Tombstone Marker
 
 删除 key 时，etcd 不做物理擦除，而是写一条**只有 key、没有 value** 的记录，并加上墓碑标记（`mvcc/kvstore.go`）：
 
@@ -160,7 +160,7 @@ func isTombstone(b []byte) bool {
 > [!NOTE]
 > 网上流传的"8 字节 main + 1 字节 tombstone 标记 + 用户 key"是**错的**。真实布局是 `main(8) + '_' + sub(8)`，标记追加在尾部，用户 key 根本不在磁盘 key 里。
 
-## 读写路径
+## Read/Write Path
 
 写路径（`mvcc/kvstore_txn.go` 的 `storeTxnWrite.put`）：
 

@@ -40,7 +40,7 @@ mail {
 
 认证流程是：客户端连上 → nginx 与它完成 SMTP 的 EHLO/AUTH 协商 → nginx 把凭据用一个 HTTP 请求发给 `auth_http` → 后端返回 `Auth-Status: OK` 与上游地址 → nginx 拿这组凭据登录真实邮件服务器，之后纯字节对拷。
 
-### 模块地图与编译开关
+### Module Map and Compile Switches
 
 | 文件 | 职责 |
 | :-- | :-- |
@@ -57,7 +57,7 @@ mail {
 
 mail 与 http/stream 共享的只有 core 层设施——`ngx_mail.h` 的 include 就四行：`ngx_config.h` / `ngx_core.h` / `ngx_event.h` / `ngx_event_connect.h`。也就是说它复用 `ngx_connection_t`、`ngx_event_t`、内存池、`ngx_cycle_t`、`ngx_listening_t`、`ngx_resolver_t`、`ngx_ssl_t`，但**不共享** conf 结构、阶段数组、变量引擎与 rewrite。
 
-### 会话模型
+### Session Model
 
 每个连接对应一个 `ngx_mail_session_t`（`ngx_mail.h:188`）。与 http 的 `ngx_http_request_t` 相比，它出奇地扁平——**没有三协议联合体**，所有字段共用：
 
@@ -119,7 +119,7 @@ for (i = 0; module->protocol->port[i]; i++) {
 
 **没有 `ngx_mail_handler()`、没有 `ngx_mail_core_run_phases()`、没有 `ngx_mail_finalize_session()`**——这些都是按 http/stream 的习惯推想出来的名字，源码里不存在。收尾是 `ngx_mail_close_connection()`（SSL shutdown → 计数减 → `ngx_destroy_pool`）与 `ngx_mail_session_internal_server_error()`。
 
-### 三个协议状态机
+### Three Protocol State Machines
 
 三套状态枚举各自独立（`ngx_mail.h:136-178`），命名是**小写前缀** `ngx_smtp_*` / `ngx_pop3_*` / `ngx_imap_*`（命令码才是大写的 `NGX_SMTP_HELO` 之类）：
 
@@ -157,7 +157,7 @@ SMTP 的主干是 `ngx_mail_smtp_auth_state()` 里一个 `switch (s->mail_state)
 
 其它默认值：`smtp_client_buffer` / `imap_client_buffer` 均为 `ngx_pagesize`，`smtp_greeting_delay` 为 `0`，`pop3_capabilities` 默认 `TOP USER UIDL`，`imap_capabilities` 默认 `IMAP4 IMAP4rev1 UIDPLUS`。
 
-### auth_http：把认证外包出去
+### auth_http: Outsource Authentication
 
 这是 mail 模块里唯一有真正设计感的部分。`auth_http <url>` 只接受 **http**（源码里只剥 `http://` 前缀，不认 https），默认端口 80，支持 AF_UNIX。
 
@@ -196,7 +196,7 @@ nginx 发出的请求是**固定格式的 `GET`**（无 body），由 `ngx_mail_
 
 `auth_http_timeout` 默认 **60000 ms**，`auth_http_pass_client_cert` 默认 **off**。另外 `resolver` 指令**不是给 `auth_http` 用的**——`auth_http` 的地址在配置期由 `ngx_parse_url` 解析完成；`resolver` 只被 SMTP 用，作用是把客户端 IP 反查成 `Client-Host`。
 
-### 代理与转发
+### Proxy and Forwarding
 
 认证通过后进入 `ngx_mail_proxy_init()`：建立到上游的连接，然后按协议把凭据「再登一次」（POP3 发 `USER`/`PASS`、IMAP 发 `LOGIN`、SMTP 发 `AUTH PLAIN`），成功后统一切到 `ngx_mail_proxy_handler()` 做双向 `recv/send` 对拷。
 
@@ -234,13 +234,13 @@ mail 的 TLS 有一个 http 没有的指令：**`starttls`**，三态 `off` / `o
 
 ALPN 由协议自身的 `protocol->alpn` 给出（`"\x04smtp"` / `"\x04pop3"` / `"\x04imap"`），选择逻辑硬编码在 `ngx_mail_ssl_alpn_select()` 里，不可配。
 
-### realip 与 max_errors
+### realip and max_errors
 
 `ngx_mail_realip_module` 只提供一条指令 `set_real_ip_from`。它**没有** `real_ip_header`、也没有 `real_ip_recursive`（http 侧都有），因为 mail 只认 PROXY protocol 这一个来源：`c->proxy_protocol` 非空且源地址落在 CIDR 内才改写 `c->sockaddr`/`addr_text`，**不支持 `X-Forwarded-For`**。
 
 `max_errors` 默认 **5**，是 mail 唯一的防暴破内建机制：命令解析失败（`NGX_MAIL_PARSE_INVALID_COMMAND`）时 `s->errors++`，达到阈值打日志 `client sent too many invalid commands` 并置 `s->quit = 1`。**真正的登录失败重试控制在 `auth_http` 后端手里**（靠 `Auth-Wait` 与 `Auth-Status: WAIT`）。
 
-### 日志：mail 没有访问日志
+### Logs: mail Has No Access Log
 
 `src/mail/` 目录下**没有 log 模块**，没有 `access_log`、没有 `log_format`、也没有任何变量。唯一的日志指令是 **`error_log`**（默认继承 `cf->cycle->new_log`）。
 
@@ -252,7 +252,7 @@ while <动作>, client: <ip>, server: <addr>[, login: "..."][, upstream: ...]
 
 所以要统计「谁在什么时候登录了几个邮箱」，只能从后端 `auth_http` 服务自己记，或者解析 error_log。
 
-### 与 http / stream 的系统性差异
+### Systematic Differences from http / stream
 
 | 维度 | http | stream | mail |
 | :-- | :-- | :-- | :-- |
@@ -271,7 +271,7 @@ mail 的 `listen` 参数也更少：只有 `bind` / `backlog` / `rcvbuf` / `sndb
 > [!NOTE]
 > 同一 `addr:port` 若同时被 http/stream 与 mail 声明，mail 侧的 listen 不参与 http/stream 的 server 合并，双方各自 `bind()`，最终在 `ngx_open_listening_sockets()` 阶段以 `EADDRINUSE` 失败（`nginx -t` 不会拦下这个冲突）。**mail 端口必须独占。**
 
-### 陷阱清单
+### Pitfall List
 
 1. **没配 `auth_http` 就直接 `nginx -t` 报错**。这是硬约束，不是建议——mail 没有本地用户库的概念。
 2. **指望 `auth_http` 后端用 HTTP 状态码表达结果**。源码忽略状态码，必须用 `Auth-Status` 头。返回 401/500 一律被当成「认证失败但没给消息」，最终走向 internal error。
@@ -284,7 +284,7 @@ mail 的 `listen` 参数也更少：只有 `bind` / `backlog` / `rcvbuf` / `sndb
 9. **以为 `resolver` 会影响 `auth_http` 地址解析**。不会，那是配置期 `ngx_parse_url` 干的；`resolver` 只用于 SMTP 的客户端反查。
 10. **忘了 `max_errors` 的实际语义**。它数的是「非法命令」，不是「登录失败」，别拿它当防撞库闸门。
 
-### 什么时候值得用它
+### When It's Worth Using
 
 一句话判断：**你已经在 MTA / IMAP 服务前面，需要一个「先查后端、再转发」的 POP3/IMAP/SMTP 前置层，且已经有 HTTP 鉴权服务**——这时 mail 模块很合适（尤其 IMAP/POP3 前面做统一鉴权 + 分片选后端）。
 

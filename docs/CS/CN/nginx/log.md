@@ -4,7 +4,7 @@
 
 本文覆盖：`log_format` 的编译机制、`access_log` 全参数与默认值、`error_log` 级别体系与 `--with-debug` 的真实关系、syslog、结构化 JSON。事实基于 **nginx 1.31.6** 源码。
 
-## access_log 的默认行为
+## Default Behavior of access_log
 
 完全不写 `access_log` 时，nginx 会在配置合并阶段自动创建一条默认日志（`ngx_http_log_module.c:1324`）：
 
@@ -13,7 +13,7 @@
 
 `combined` 是**惰性编译**的：只有确实被用到时才在配置末尾编译成 ops 数组；自己定义了 `log_format` 且没引用 `combined`，它就不参与编译。
 
-## log_format 的编译机制
+## Compilation Mechanism of log_format
 
 `log_format` 只能写在 http 块（stream 有独立的同名指令），语法：
 
@@ -30,7 +30,7 @@ log_format name [escape=default|json|none] string ...;
 
 运行时两趟循环：先对每个 op 调 `getlen()` 累加总长，`ngx_pnalloc` 一块精确大小的内存，再逐个 `run()` 渲染。日志行是**先算长度再拼**，没有截断和二次分配。
 
-### 时间变量的精度
+### Precision of Time Variables
 
 | 变量 | 格式 | 精度 |
 | :-- | :-- | :-- |
@@ -41,7 +41,7 @@ log_format name [escape=default|json|none] string ...;
 
 `$time_local` 取的是 `ngx_cached_http_log_time`（由 timer 每秒刷新的缓存），不是每请求实时 `gettimeofday`。要毫秒精度用 `$msec`。error_log 行首时间是另一种格式（`1970/09/28 12:00:00`，`ngx_cached_err_log_time`）。
 
-## access_log 全参数
+## access_log Full Parameters
 
 ```
 access_log path [format [buffer=size] [gzip[=level]] [flush=time] [if=condition]];
@@ -83,7 +83,7 @@ open_log_file_cache max=N [inactive=time] [min_uses=N] [valid=time];
 - 其余默认：`inactive=10s`、`valid=60s`、`min_uses=1`
 - 只对**含变量的路径**生效，静态路径直接写 fd
 
-## error_log 级别体系
+## error_log Level System
 
 ```
 error_log file [level];        # 只能 main / http / server / location 等上下文逐级覆盖
@@ -96,7 +96,7 @@ error_log file [level];        # 只能 main / http / server / location 等上�
 - `error_log stderr` 是特殊值（不是 `/dev/stderr`）
 - `error_log syslog:...` 见下节；`error_log memory:size` 仅 `--with-debug` 编译可用（环形内存日志，测试用）
 
-### --with-debug 的真实关系（最容易误解）
+### --with-debug Real Relationship (Easiest to Misunderstand)
 
 | 开关 | 作用 |
 | :-- | :-- |
@@ -116,7 +116,7 @@ events {
 
 细分 debug 级别（位掩码）：`debug_core/alloc/mutex/event/http/mail/stream`。
 
-## 落盘方式：没有锁，裸 write
+## Flush Method: No Lock, Raw write
 
 `ngx_log_error_core()`（`src/core/ngx_log.c:96`）的行为：
 
@@ -144,7 +144,7 @@ access_log syslog:server=[2001:db8::1]:514,facility=local7,nohostname combined;
 
 severity 拼写用 nginx 的习惯（`error`/`warn`），**不是** syslog 的 `err`/`warning`。实现在 `src/core/ngx_syslog.c`，走 UDP。
 
-## stream 的日志：三处不同
+## stream Logs: Three Differences
 
 stream 有自己的 log 模块（`src/stream/ngx_stream_log_module.c`），用法类似但有硬差异：
 
@@ -154,7 +154,7 @@ stream 有自己的 log 模块（`src/stream/ngx_stream_log_module.c`），用�
 
 可用变量是 stream 变量集（`$remote_addr`、`$bytes_sent`、`$bytes_received`、`$session_time`、`$status`、`$upstream_addr`、`$upstream_session_time`、`$ssl_preread_server_name` 等），**http 的 `$request`、`$http_*` 在 stream 里不存在**，见 [stream](/docs/CS/CN/nginx/stream.md)。
 
-## 结构化 JSON
+## Structured JSON
 
 `escape=json` 只负责**转义变量值**（引号、反斜杠、控制字符），**不帮你加引号和花括号**——JSON 骨架要自己拼：
 
@@ -183,7 +183,7 @@ log_format json_combined escape=json
 - **1.31.5 的 `ngx_http_json_module` 不是日志模块**：它的指令是 `json_set $var $source path`（从**任意变量持有的 JSON 文档**里按路径抽字段成新变量，`json_max_depth` 默认 32）。变量名自己起，没有 `$json_` 前缀约定。它的产物可以被 log_format 引用，但用途是「解析变量里的 JSON」。
 - 日志里出现 `0.000`/`-` 的 upstream 字段：`$upstream_response_time` 多值时逗号分隔（重试每个 upstream 一段），`-` 表示该阶段未发生。
 
-## 排障向的日志变量
+## Troubleshooting-Oriented Log Variables
 
 | 变量 | 用途 |
 | :-- | :-- |

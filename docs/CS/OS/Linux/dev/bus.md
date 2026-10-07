@@ -6,9 +6,9 @@
 
 版本基线 **v7.2**。⚠️ 本篇开头有一批 v7.2 的 API 重命名（`spi_master`→`spi_controller`、regmap 字节序字段拆分、`gpiod_get`→`gpiod_get_index`），旧资料照抄会编译不过。
 
-## 三段式：发现 / 匹配 / 绑定
+## Three-Phase Pattern: Discovery / Matching / Binding
 
-### 发现
+### Discovery
 
 设备从三个来源出现：
 
@@ -20,7 +20,7 @@
 
 设备树路径与 initcall level 的关系见 [arm.md](/docs/CS/OS/Linux/boot/arm.md) —— `of_platform_default_populate_init` 处在 `arch_initcall_sync`（3s level），而 I2C/SPI 控制器本身是 `platform_device`、用 level 4 初始化，**这个 level 差是硬约束**，选错就会在自己的依赖还没初始化时被调用。
 
-### 匹配：driver model 的统一入口
+### Matching: The Unified Entry Point of the Driver Model
 
 所有总线共享同一套匹配逻辑，在 `drivers/base/bus.c` 的 `bus_match_device()`。`struct bus_type` 里的 `.match` 回调由各总线提供：
 
@@ -30,13 +30,13 @@ static int pci_bus_match(struct device *dev, const struct device_driver *drv)
 
 匹配成功后调用驱动的 `probe()`。**PCI 的匹配细节**（`pci_match_device()` → 先查动态表 `drv->dynids.list`，再遍历 `drv->id_table`，最后看 `driver_override`）见 [dev/README.md](/docs/CS/OS/Linux/dev/README.md) 的 match/probe 一节。
 
-### 绑定
+### Binding
 
 绑定后设备与驱动配对，`struct device` 里记着 `dev->driver`。热插拔时解除绑定并调用 `remove()`，驱动必须在此把资源（IRQ、寄存器映射、DMA 句柄）全部释放干净。
 
 ## PCI
 
-### BAR：地址空间的窗口
+### BAR: Window into the Address Space
 
 **BAR = Base Address Register**，是设备上的一组寄存器，描述"我需要多大的地址空间"和"我的地址放在哪"。这是 PCI 规范术语（不在内核源码里展开）。
 
@@ -62,7 +62,7 @@ BAR 0~5 是标准六条（32 位或 64 位），`0x30` 起是扩展寄存器：
 
 > **`PCI_BASE_ADDRESS_MEM_TYPE_1M` 带 `[obsolete]` 注释** —— 1M 以下的地址空间早已不用，写驱动时遇到这个标记直接忽略。
 
-### enable 系列：引用计数
+### The enable Family: Reference Counting
 
 ```c
 #define PCI_ENABLE_...
@@ -77,7 +77,7 @@ BAR 0~5 是标准六条（32 位或 64 位），`0x30` 起是扩展寄存器：
 
 > ⚠️ **v7.2 的变化**：旧的 `pci_enable_device_io()` / `pci_enable_device_bars()` **不存在**。要精确控制用 `pci_enable_device_flags()` 传自定义 flags。
 
-### pcim_*：devres 化的新名字
+### pcim_*: The devres-Aware Renaming
 
 > ⚠️ **v7.2 的变化**：`pci_iomap` / `pci_iomap_range` / `pci_iomap_kasme` / `struct pci_devres` **全部不存在**，改为 `pcim_*` 家族：
 
@@ -94,7 +94,7 @@ BAR 0~5 是标准六条（32 位或 64 位），`0x30` 起是扩展寄存器：
 
 `pcim_` 前缀 = "PCI managed"，**资源自动随设备解绑释放**。这是 v7.x 的方向：**从"手动 request/free"迁移到"devres 托管"**。写新驱动一律用 `pcim_`。
 
-### MSI/MSI-X 与向量分配
+### MSI/MSI-X and Vector Allocation
 
 ```c
 int pci_alloc_irq_vectors(struct pci_dev *dev, unsigned int min_vecs,
@@ -117,7 +117,7 @@ flags：
 
 `pci_alloc_irq_vectors_affinity()` 的分配逻辑：MSIX 走 `__pci_enable_msix_range()`，MSI 走 `__pci_enable_msi_range()`，`PCI_IRQ_INTX` 且只求 1 个向量时走传统 `pci_intx()`。**向量数不够返回 `-ENOSPC`**，所以驱动必须检查返回值。
 
-### 配置空间访问
+### Configuration Space Access
 
 v7.2 的抽象是 **`struct pci_raw_ops`**（不是 `pci_ecam_...` 命名）：
 
@@ -130,7 +130,7 @@ const struct pci_raw_ops pci_direct_conf1 = { .read = pci_conf1_read, .write = p
 
 > **路径变化**：`arch/x86/kernel/pci/` 在 v7.2 **已不存在**，迁至 `arch/x86/pci/`（含 `mmconfig_64.c` / `direct.c` / `common.c`）。`include/linux/pci_regs.h` 也移到了 `include/uapi/linux/pci_regs.h`。
 
-### 初始化时机
+### Initialization Timing
 
 ```c
 postcore_initcall(pci_driver_init);
@@ -162,7 +162,7 @@ int pci_vfs_assigned(struct pci_dev *dev);
 
 ## USB
 
-### URB：一切传输的载体
+### URB: The Carrier of All Transfers
 
 USB 的核心抽象是 **URB（USB Request Block）**。`struct urb` 在 v7.2 有 1300 余行，关键字段：
 
@@ -197,7 +197,7 @@ USB 的核心抽象是 **URB（USB Request Block）**。`struct urb` 在 v7.2 �
 > - **类型由 pipe 编码推导**：`usb_pipetype(pipe)` 从高位取值
 > - **驱动私有数据用 `context`**
 
-### pipe 的位域编码
+### Bit-Field Encoding of pipe
 
 ```c
 #define USB_DIR_OUT 0        /* to device */
@@ -262,7 +262,7 @@ void usb_fill_int_urb(...);
 
 > ⚠️ 旧的 `URB_NO_FSBR` 在 v7.2 **不存在**。`0x0008`/`0x0010`/`0x0020` 是空洞。
 
-### 描述符解析
+### Descriptor Parsing
 
 ```c
 static int usb_parse_endpoint(struct usb_device *dev, int endpoint, ...)
@@ -279,7 +279,7 @@ static int usb_parse_configuration(struct usb_device *dev, ...)
 
 > ⚠️ 旧的 `usb_max_packet()` / `usb_get_max_packet()` **不存在**。`maxp_mult` 是 USB 2.0 的"每帧包数倍数"（高速设备每微帧可发多包）。
 
-### 注册与端口
+### Registration and Ports
 
 > ⚠️ **v7.2 的变化**：`usb_add_interface()` / `usb_add_interface_locked()` **不存在** —— 绑定改由 driver model 驱动（`device_attach(&intf->dev)`）。`usb_register` 是宏：
 
@@ -295,7 +295,7 @@ Gadget 侧（设备模式）主入口是 `usb_gadget_register_driver_owner()`，
 
 ## I2C
 
-### 算法与适配器
+### Algorithms and Adapters
 
 > ⚠️ **v7.2 的变化**：`struct i2c_algorithm` 的 `master_xfer` 降级为 **union 别名**（新名 `xfer`）：
 
@@ -345,7 +345,7 @@ Gadget 侧（设备模式）主入口是 `usb_gadget_register_driver_owner()`，
 
 > ⚠️ `i2c_register_adapter()` 变成 **`static`**；`i2c_new_adapter()` / `i2c_adapter_unregister()` **不存在**。导出的只有 `i2c_add_adapter` / `devm_i2c_add_adapter` / `i2c_add_numbered_adapter` / `i2c_del_adapter`。`i2c_add_driver()` 也变成宏（转发 `i2c_register_driver()`）。
 
-### 一次传输的调用链
+### Call Chain of a Single Transfer
 
 `i2c_transfer()` → `__i2c_transfer()` → `adap->algo->master_xfer` → 适配器驱动 → 控制器寄存器。
 
@@ -375,7 +375,7 @@ Gadget 侧（设备模式）主入口是 `usb_gadget_register_driver_owner()`，
 
 **仍以 union 的 `master_xfer` 名字做判空**（新名 `xfer` 才是主字段）—— 读源码时容易困惑。
 
-### Bit-bang：没有硬件控制器也能跑
+### Bit-bang: Running Without a Hardware Controller
 
 ```c
 #define setscl(adap,val) adap->setscl(adap->data, val)
@@ -400,7 +400,7 @@ const struct i2c_algorithm i2c_bit_algo = { .xfer = bit_xfer, .xfer_atomic = bit
 
 > ⚠️ 文件路径也变了：`drivers/i2c/algo-bit.c` → **`drivers/i2c/algos/i2c-algo-bit.c`**。
 
-### 用户态接口
+### User-Space Interface
 
 `/dev/i2c-N`（`drivers/i2c/i2c-dev.c`）暴露两个 ioctl：
 
@@ -450,12 +450,12 @@ flags：
 
 `->flags` 里的 `MUST_TX` / `MUST_RX` 值得注意 —— 它们声明"每次传输必须同时收发"，用于某些只能全双工工作的控制器。
 
-### chip_select 是数组
+### chip_select Is an Array
 
 > ⚠️ 旧的 `spi_cs_gpios`（标量）改为**数组** `chip_select[SPI_DEVICE_CS_CNT_MAX]` + 访问器 `spi_get_chipselect()` / `spi_set_chipselect()`。
 > 注意 controller 级属性名是**复数** `cs_gpiods`。
 
-### 传输 API
+### Transfer API
 
 ```c
 static inline int spi_sync(struct spi_device *spi, struct spi_message *message);
@@ -487,9 +487,9 @@ int spi_sync_locked(struct spi_device *spi, struct spi_message *message);
 
 > `spi_finalize_message` 在 v7.2 改为面向 provider 的 `spi_finalize_current_message()` / `spi_finalize_current_transfer()`。
 
-## 三套支撑设施
+## Three Supporting Facilities
 
-### regmap：寄存器访问的统一抽象
+### regmap: Unified Abstraction for Register Access
 
 I2C/SPI/MMIO 三种总线的寄存器访问逻辑高度相似（都是"写地址 → 写/读数据"），regmap 把它们统一成一套带缓存的 API。
 
@@ -521,7 +521,7 @@ int regmap_update_bits(struct regmap *map, unsigned int reg, unsigned int mask, 
 	bool (*precious_reg)(struct device *dev, unsigned int reg);
 ```
 
-### 缓存：enum 成员是"后端实现名"
+### Cache: The enum Member Is the "Backend Implementation Name"
 
 > ⚠️ **v7.2 的变化**：`enum regcache_type` 的成员**从"存储粒度"改成了"后端实现名"**：
 > ```c
@@ -556,7 +556,7 @@ struct regcache_ops {
 
 **读 volatile 寄存器会绕过缓存并返回 `-EINVAL`** —— 这是正确行为（volatile 意味着值可能被别人改了，缓存里的值是脏的）。理解这一点能解释"为什么读某些寄存器总是读到旧值"这类问题。
 
-### 锁
+### Locking
 
 ```c
 	regmap_lock lock;
@@ -583,7 +583,7 @@ int regmap_irq_get_virq(struct regmap_irq_chip_data *data, unsigned int hwirq);
 
 > 旧的 `regmap_irq_get_ressource()` **不存在**。
 
-### pinctrl 与 GPIO
+### pinctrl and GPIO
 
 pinctrl 分两层，**这个划分很重要**：
 
@@ -637,7 +637,7 @@ struct pinctrl *devm_pinctrl_get(struct device *dev);
 
 便利 inline `pinctrl_get_select()` = get + lookup + select 三步合一。
 
-### gpiod：descriptor 方式的 GPIO
+### gpiod: The Descriptor-Based GPIO
 
 > ⚠️ **v7.2 的变化**：`gpiod_get()` / `gpiod_get_from_dev()` **不存在**，统一为：
 > ```c
@@ -669,7 +669,7 @@ bool gpiod_cansleep(struct gpio_desc *desc);
 
 > ⚠️ **`/sys/class/gpio` 在 v7.2 仍然存在**（`drivers/gpio/gpiolib-sysfs.c`），同时 `drivers/gpio/gpiolib-cdev.c` 提供字符设备与 `GPIO_V2_LINE_*` ioctl。**两个接口并存**，"sysfs 已废弃"的说法在 v7.2 不成立。
 
-### clk：时钟框架
+### clk: The Clock Framework
 
 > ⚠️ `struct clk_ops` 在 **`include/linux/clk-provider.h`**（不在 `clk.h`）。`struct clk_core` 定义在 `drivers/clk/clk.c` 内部（私有）。
 
@@ -704,7 +704,7 @@ bool gpiod_cansleep(struct gpio_desc *desc);
 
 > ⚠️ **无 `is_essential` / `pll_ops`** —— v7.2 新增了 `determine_rate()`（新式 rate 请求接口）。
 
-### 三类基本 cell
+### Three Basic Cell Types
 
 | 类型 | 结构 | 关键字段 |
 | :-- | :-- | :-- |
@@ -739,7 +739,7 @@ mux 的 index 编码：
 
 **mux 默认行为与 divider 类似**（index 语义需看硬件），`CLK_MUX_INDEX_ONE` 让它按"直接用寄存器值"处理。
 
-### 消费侧 API
+### Consumer API
 
 ```c
 struct clk *clk_get(struct device *dev, const char *id);
@@ -757,7 +757,7 @@ int clk_set_rate_range(struct clk *clk, unsigned long min, unsigned long max);
 
 `clk_prepare_enable()` / `clk_disable_unprepare()` 是"启用/禁用 + 计数"的组合，避免手工配对出错。
 
-### 层级传播
+### Hierarchical Propagation
 
 ```c
 static struct clk_core *clk_calc_new_rates(struct clk_core *core, unsigned long rate)
@@ -780,7 +780,7 @@ static struct clk_core *clk_calc_new_rates(struct clk_core *core, unsigned long 
 
 **`->set_rate` 失败后不能只回滚一部分** —— 所以要么整棵子树都算成功，要么整棵都不改。
 
-### 设备树绑定
+### Device Tree Bindings
 
 ```c
 struct clk *of_clk_get(struct device_node *np, int index);
@@ -800,7 +800,7 @@ clock-names = "ref_clk", "pll";
 
 > ⚠️ `of_clk_parse` 在 v7.2 **不存在**。
 
-### 调试
+### Debugging
 
 ```shell
 mount -t debugfs none /sys/kernel/debug
@@ -809,7 +809,7 @@ cat /sys/kernel/debug/clk/clk_summary
 
 `clk_summary` 递归打印整棵时钟树（`clk_summary_show_subtree()`），是排查"某个设备时钟没开"的第一个工具。
 
-## 与其它子系统的接缝
+## Seams with Other Subsystems
 
 - **设备模型**：总线与 driver model 的绑定见 [设备模型 device](/docs/CS/OS/Linux/dev/device.md)。
 - **device tree**：总线设备的发现依赖 DT，见 [arm](/docs/CS/OS/Linux/boot/arm.md)。
@@ -819,7 +819,7 @@ cat /sys/kernel/debug/clk/clk_summary
 - **内存**：DMA 相关的内存屏障与映射，见 [ZeroCopy](/docs/CS/OS/Linux/ZeroCopy.md) 与 [mm/pagetable](/docs/CS/OS/Linux/mm/pagetable.md)。
 - **kprobe/eBPF**：动态观测总线的手段，见 [eBPF](/docs/CS/OS/Linux/Tools/eBPF.md)。
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 ```shell
 # 设备树里声明了什么

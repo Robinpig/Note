@@ -6,7 +6,7 @@
 
 本文只记Qwen 模型与权重事实。API 与云服务侧的通义见[阿里云百炼](/docs/CS/AI/LLM/Platform/)，开源阵营的横向对比见 [Open Model](/docs/CS/AI/LLM/Model/Open_Model.md)。
 
-## 当前版本基线
+## Current Version Baseline
 
 最新代次是 **Qwen3.8**，不是 Qwen3.5。Qwen3.5 → Qwen3.6 → Qwen3.8 三代共用同一个仓库 `QwenLM/Qwen3.8`（截至核实日4231 stars，最后推送 2026-08-17，仓库 license 字段 `Apache-2.0`），仓库内按代次分节记录各型号。
 
@@ -25,7 +25,7 @@
 
 > ⚠️ **`Qwen3-235B-A22B`（2025-04-28）已是上一代。** 它属于 Qwen3 代际，官方在 Qwen3.5-397B-A17B 的博客里明确给出解码吞吐对比（32k/256k 上下文下为 3.5 倍／7.2 倍），MMLU-Pro 76.01 对 67.7。实际选型中它已被同代甚至更小的新型号取代：Qwen3.5-35B-A3B 在 MMLU-Pro（86.1 对 80.8）、GPQA Diamond（85.5 对 80.1）、LiveCodeBench v6（80.7 对 82.7，少数例外）等多数基准上超过它。**新项目不要从 235B 起步。**
 
-## 开源协议 Apache-2.0 与它的陷阱
+## Open Source License Apache-2.0 and Its Pitfalls
 
 这是 Qwen3.8 最需要注意的一处。同一代次内两种许可证并存，ModelScope API 实测字段如下：
 
@@ -41,7 +41,7 @@
 
 这条协议属于「宽松但有条件」的开放权重（open-weight），不是 OSI 定义的开源：它没有附带训练数据与训练代码，且附加了规模与营收条件。商用前法务需要按自身营收与产品形态对号入座，不能沿用「Apache-2.0 所以随便用」的直觉。
 
-## 架构 Gated DeltaNet 混合注意力
+## Architecture: Gated DeltaNet Hybrid Attention
 
 Qwen3.5 引入并被Qwen3.5 全系、Qwen3.6、Qwen3.8 沿用的架构是 **Gated DeltaNet + Gated Attention 混合注意力**配稀疏 MoE。`config.json` 里能直接读出它的层布局规律——每4 层里 3 层用线性注意力、1 层用全注意力，`full_attention_interval: 4` 就是这个配比。
 
@@ -63,7 +63,7 @@ Qwen3.5 引入并被Qwen3.5 全系、Qwen3.6、Qwen3.8 沿用的架构是 **Gate
 - **MTP（Multi-Token Prediction）已随权重发布**。两个模型的 config 都有 `mtp_num_hidden_layers: 1`、模型卡标注 MTP trained with multiple steps。投机解码（speculative decoding）草稿模型可以直接用权重自带的 MTP 头，不必另训。
 - **词表 248,320 是padded 值**，模型卡明确写(Padded)，做 embedding 容量估算时别按这个数算有效词表。
 
-## 上下文长度与 YaRN 扩窗
+## Context Length and YaRN Window Extension
 
 `Qwen3.8-27B` 与 `Qwen3.8-2.4T-A95B` 的 `max_position_embeddings` 都是 **262144**（256K）原生，模型卡写作「262,144 natively and extensible up to 1,000,000 tokens」，扩窗方式是 RoPE 缩放（YaRN），官方给的目标值：27B 扩至 1,000,000，2.4T-A95B 扩至 1,010,000。托管版 Qwen3.8-Max 默认就是 1M。
 
@@ -79,7 +79,7 @@ SGLANG_ALLOW_OVERWRITE_LONGER_CONTEXT_LEN=1 python -m sglang.launch_server ... -
 
 > ⚠️ **YaRN 是静态缩放，不是动态的。** 模型卡明确警告：所有主流开源框架实现的都是静态 YaRN，缩放因子不随输入长度变化，**会牺牲短文本性能**。所以 `factor` 要按自己的典型负载设——若典型上下文是 524,288，官方建议设 `factor: 2.0` 而不是 4.0。只有在真的需要处理超长文本时才改`rope_parameters`。
 
-## Thinking 与 reasoning_effort
+## Thinking and reasoning_effort
 
 Qwen3.8 **默认开启 thinking**，输出里会带 `<think>\n...</think>\n\n`。采样参数按模式分两套，thinking 模式是 `temperature=1.0, top_p=0.95, top_k=20`，instruct（非思考）模式是 `temperature=0.7, top_p=0.80, presence_penalty=1.5`。这两个默认值与 DeepSeek 正好相反（DeepSeek 默认 thinking、但采样推荐不同），跨模型迁移配置时要单独校准。
 
@@ -93,7 +93,7 @@ Qwen3.8 **默认开启 thinking**，输出里会带 `<think>\n...</think>\n\n`�
 
 **关掉 thinking 的两个坑**：`Qwen3.8-27B` 走本地权重时用 `chat_template_kwargs: {"enable_thinking": False}`；走 QwenCloud API 时参数位置不同，要改成 `extra_body={"enable_thinking": False}`。直接照抄另一条路径的参数会静默不生效。
 
-## 推理引擎
+## Inference Engine
 
 官方在 Qwen3.8 仓库里给出的推荐顺序与适配情况：
 
@@ -125,7 +125,7 @@ vllm serve Qwen/Qwen3.8-27B --port 8000 --tensor-parallel-size 4 --max-model-len
 
 微调侧官方点名 Unsloth、ModelScope Swift、Llama-Factory，支持 SFT、DPO、GRPO。
 
-## 权重获取
+## Weight Acquisition
 
 HuggingFace 与 ModelScope 同名同步，模型 ID 就是 `Qwen/Qwen3.8-27B` 这种形式。HuggingFace 不可达时官方推荐走 ModelScope，框架侧设环境变量即可：
 
@@ -134,7 +134,7 @@ export SGLANG_USE_MODELSCOPE=true
 export VLLM_USE_MODELSCOPE=true
 ```
 
-## 与国产同门的定位
+## Positioning Relative to Domestic Siblings
 
 放进开源阵营看，Qwen 的位置是**规模与完整度最齐、协议分叉最需留意的一家**：
 

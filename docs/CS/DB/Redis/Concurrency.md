@@ -9,7 +9,7 @@ Redis是 多进程 + 多线程 混合并发模型
 
 
 
-## 多进程
+## Multi-Process
 
 Redis 封装了 redisFork 函数用于子进程的创建
 
@@ -54,7 +54,7 @@ LDB 和 MODULE 也会创建子进程
 
 
 
-## 多线程
+## Multi-Threading
 
 
 

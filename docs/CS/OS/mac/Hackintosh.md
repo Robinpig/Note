@@ -2,13 +2,13 @@
 
 
 
-## 硬件准备
+## Hardware Preparation
 
 
 
 
 
-## 制备U盘
+## Creating a Bootable USB Drive
 
 
 
@@ -100,7 +100,7 @@ USBToolBox.kext 官方下载地址为：https://github.com/USBToolBox/kext/relea
 
 
 
-## 修复
+## Fixes
 
 OS排错
 
@@ -155,7 +155,7 @@ pmset -g custom
 
 
 
-#### 睡眠立刻唤醒
+#### Sleep and Immediate Wake
 
 
 

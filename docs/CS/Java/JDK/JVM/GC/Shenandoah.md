@@ -249,21 +249,21 @@ Final Mark:
 
 分代 Shenandoah 由 **[JEP 404](https://openjdk.org/jeps/404)（JDK 24，实验性）** 引入，把 Java 堆分为 young / old 两代，沿用"多数对象朝生夕死"的分代假设，让 GC 把工作集中在年轻、且大多已死的对象上。它与非分代（默认 `satb` 模式）并存，**截至 JDK 27 默认仍是非分代模式**，分代成为默认是 JDK 28 的目标（[JEP 535](https://openjdk.org/jeps/535)，Targeted）。
 
-### 启用方式
+### How to Enable
 
 ```shell
 # JDK 24+ 实验性分代模式（需解锁实验选项）
 java -XX:+UnlockExperimentalVMOptions -XX:ShenandoahGCMode=generational
 ```
 
-### 与非分代模式的区别
+### Differences from Non-generational Mode
 
 - **双代结构**：每一代由 Shenandoah 堆中 region 的一个子集构成；任一时刻某 region 要么空闲、要么专属于 young 或 old。每代大小 = 其已占用 region + 一部分空闲 region 配额，可临时越界借用对方配额（但会加速触发收集）。
 - **复用既有机制**：分代模式复用同一个 Load Reference Barrier（支持压缩指针的 32 位 LRB）、同一个 evacuator，以及已广义化的 SATB 写屏障——SATB 缓冲区后处理时区分指向 old/young 的引用，但快路径不变。
 - **记忆集**：借用 Parallel/CMS 的 card marking 代码实现跨代引用记录，并新增"可随 mutator 并发扫描"的 remembered set 实现。
 - **收集拓扑**：young 收集与 G1 的 young 收集类似，mixed 收集（young + 部分 old）则并发进行——核心优势在于 **young 与 mixed 收集都与 mutator 并发**，而 G1 的 young/mixed 转移必须 STW。
 
-### 与 ZGC 分代对比
+### Comparison with ZGC Generational
 
 | 维度 | Generational Shenandoah | Generational ZGC |
 | :--- | :--- | :--- |

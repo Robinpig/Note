@@ -1,4 +1,4 @@
-# Jetty Connector 与 accept 路径
+# Jetty Connector and accept Path
 
 ## Introduction
 

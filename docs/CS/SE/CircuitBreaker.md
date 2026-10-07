@@ -4,7 +4,7 @@
 
 没有熔断器时的典型死法：下游响应从 10ms 恶化到 5s，调用方线程池/连接池在等待中被耗尽，上游自己也被拖垮——一台节点的故障沿调用链反向扩散，最终整条链路不可用。
 
-## 三种状态
+## Three States
 
 ```
         失败率超阈值                超时后放一个探测请求
@@ -18,21 +18,21 @@
 - **OPEN（打开/跳闸）**：直接快速失败（fail-fast），不再访问下游，可走 fallback 降级逻辑；持续 `waitDurationInOpenState` 后进入半开；
 - **HALF_OPEN（半开）**：放行有限数量的探测请求，成功达到阈值则回到 CLOSED，仍有失败则重回 OPEN。半开防止下游刚恢复时被海量请求再次压垮（惊群）。
 
-## 关键参数
+## Key Parameters
 
 - 失败率阈值（如 50%）与最小统计样本数（样本太少不判熔断，避免冷启动误判）；
 - 慢调用比例阈值与慢调用耗时定义（RT 超过 N 秒即记为慢，不必等到超时）；
 - 滑动窗口：基于计数（最近 N 次）或时间（最近 N 秒），时间窗口还要选桶粒度；
 - OPEN 等待时长、HALF_OPEN 探测数、fallback 降级策略（返回默认值、缓存旧值、排队稍后重试）。
 
-## 实现
+## Implementation
 
 - **Resilience4j**（推荐，轻量函数式）：`CircuitBreakerRegistry` 创建断路器，支持注解 `@CircuitBreaker(fallbackMethod=...)`，基于 Ring Bit Buffer 统计；同一库还提供 Bulkhead（线程隔离）、RateLimiter、Retry、TimeLimiter。
 - **Hystrix**（Netflix，已停止维护）：最早普及该模式，线程池隔离是其标志性设计（代价是线程切换开销）；新项目不应再用。
 - **Sentinel**：阿里开源，熔断与[限流](/docs/CS/SE/RateLimiter.md)一体，按资源统计，支持流控/热点/系统自适应规则，见 [Sentinel 熔断器](/docs/CS/Framework/Sentinel/CircuitBreaker.md)。
 - 服务网格层：Istio/Envoy 的 OutlierDetection（主动驱逐异常端点）在流量层实现同等效果，语言无关。
 
-## 与其他模式的边界
+## Boundaries with Other Patterns
 
 | 模式 | 触发依据 | 作用 |
 |------|---------|------|

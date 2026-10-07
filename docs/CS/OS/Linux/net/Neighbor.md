@@ -4,7 +4,7 @@
 
 IPv4 下邻居子系统最典型的实现就是 **ARP**（`arp_tbl`）；IPv6 对应的是 NDP。它是**协议无关**的通用框架，不同协议注册自己的 `neigh_table` 与 `neigh_ops`。
 
-## 数据结构
+## Data Structure
 
 ### neigh_table
 
@@ -61,7 +61,7 @@ struct neigh_ops {
 };
 ```
 
-## NUD 状态机
+## NUD State Machine
 
 邻居条目的核心是一套状态机（`nud_state`），状态值定义在 `linux/neighbour.h`：
 
@@ -93,7 +93,7 @@ struct neigh_ops {
 
 关键设计：**缓存的 MAC 不会被无条件信任**。REACHABLE 有超时，过期转 STALE；STALE 的 MAC 虽可"乐观使用"，但会通过 DELAY/PROBE 重新验证，避免长期向一个已失效的 MAC 发包。
 
-## 解析与输出流程
+## Parsing and Output Flow
 
 发送时，IP 层之后调邻居输出（`neigh_output`），按状态分流：
 
@@ -108,7 +108,7 @@ struct neigh_ops {
 
 为避免每个包都重新拼二层帧头，解析成功后把帧头缓存进 `struct hh_cache`（`hh_len`、`hh_data`，用 seqlock 保护）。`neigh_hh_output` 直接把缓存头拷到 SKB 前部再送 `dev_queue_xmit`——这正是 [network](/docs/CS/OS/Linux/net/network.md) Egress 中 `neigh_hh_output` 一步的含义。无缓存或未就绪时才退化为逐包填头。
 
-## 回收与排障
+## Reclamation and Troubleshooting
 
 - 垃圾回收由 `gc_work` 异步执行，按 `gc_thresh1/2/3` 三级水位清理长期不用的条目，条目总量受 `gc_thresh3` 限制（超限即报 table overflow）；
 - 查看 / 调整：`ip neigh`、`arp -n`、`/proc/net/arp`；参数在 `/proc/sys/net/ipv4/neigh/<dev>/`（`gc_stale_time`、`base_reachable_time` 等）；

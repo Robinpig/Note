@@ -4,7 +4,7 @@
 
 版本现状（2026-10）：**0.9.0**（2026-09-09 发布）——注意它仍然是 **0.x 的框架**，**不提供开箱即用的服务器二进制**；你用 Rust 实现 `ProxyHttp` trait 写出自己的代理再编译。价值主张是「内存安全地替代 C/C++ 写的代理服务」，定位与 nginx/Caddy 这类现成产品完全不同。
 
-## 核心特性
+## Core Features
 
 - **异步 Rust**：多线程 tokio 运行时，HTTP/1 与 HTTP/2 端到端代理（HTTP/3 计划中，0.9 未含）
 - **TLS 后端可选**：OpenSSL、BoringSSL、s2n-tls、rustls（实验）
@@ -13,7 +13,7 @@
 - **可编程**：请求/响应各阶段都有回调 trait，负载均衡策略（含 Ketama 一致性哈希）可插拔
 - **配套子 crate**：`pingora-proxy`（代理逻辑）、`pingora-load-balancing`、`pingora-ketama`、`pingora-memory-cache`（TinyUfo 算法）、`pingora-timeout`
 
-## 最小代理骨架
+## Minimal Proxy Skeleton
 
 ```rust
 use async_trait::async_trait;
@@ -49,7 +49,7 @@ impl ProxyHttp for MyGateway {
 
 nginx 做同样的事是几行配置；Pingora 是几百行起步的框架——换来的是任意业务逻辑直接嵌进代理层（鉴权、改写、路由），不必受配置语言表达力限制。
 
-## 与 nginx 的对比
+## Comparison with nginx
 
 | 维度 | Pingora | nginx |
 | :-- | :-- | :-- |

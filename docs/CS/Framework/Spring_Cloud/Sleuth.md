@@ -29,7 +29,7 @@ Sleuth 时代就把 traceId / spanId 放进 SLF4J 的 **MDC**，日志里直接�
 > [!WARNING]
 > **必须**使用框架自动装配的 Builder 构造 HTTP 客户端——`RestTemplateBuilder`、`RestClient.Builder`、`WebClient.Builder`。自己 `new RestTemplate()` 出来的客户端**不带传播逻辑**，trace 到这一跳就断了，且毫无报错。链路的下游会出现"孤零零的新 trace"，排查时非常容易误判为"上游没接进来"。
 
-## Boot 4 接入
+## Boot 4 Integration
 
 Boot 为两类 tracer 提供依赖管理与自动装配，选型基本等于选"后端是 Zipkin 还是通用 OTLP"。
 
@@ -99,7 +99,7 @@ management:
 > [!TIP]
 > 默认的 parent-based 语义意味着**采样决策在链路入口做出并传播下去**，从而避免"一条链只采到半截"。若各服务各自配了不同的采样率又不传播决策，后端看到的会是一条条断链。
 
-## 日志关联
+## Log Correlation
 
 使用 Micrometer Tracing 后 Boot **默认**在日志里输出关联 ID，格式是 `[traceId-spanId]`。想还原成 Sleuth 时代的 `[应用名,traceId,spanId]` 格式：
 

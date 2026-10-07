@@ -2,7 +2,7 @@
 
 本文主要基于 Java 语言梳理实现定时任务的方式：从单机 `Timer` / `ScheduledThreadPoolExecutor`，到中间件场景的时间轮，再到分布式调度框架。
 
-## 任务模型
+## Task Model
 
 - Cron
 - Fixed Delay
@@ -10,13 +10,13 @@
 - One Time 一次性任务
   适用日历提醒、订单超时自动关闭。因为 Job 占用资源较多，当任务量过大时可使用 MQ 做定时消息，或者秒级 Map 任务扫库处理
 
-## 任务分配
+## Task Assignment
 
 - 单机
 - 广播
 - MapReduce 模型
 
-## 单机定时任务
+## Standalone Scheduled Tasks
 
 Timer 是 JDK 内置的定时器，单线程搭配小顶堆的设计，Oracle 官方文档明确指出彻底弃用 Timer（源码解析见下文 [Timer 源码解析](#timer-源码解析)）。
 
@@ -35,7 +35,7 @@ Timer 是 JDK 内置的定时器，单线程搭配小顶堆的设计，Oracle �
 - **Timer**：`scheduleAtFixedRate` 在任务阻塞时会产生“堆积”，恢复后可能连续快速执行多次（追赶机制不完善）。
 - **ScheduledThreadPoolExecutor**：严格遵循 `ScheduledExecutorService` 契约，`fixedRate` 模式会记录理论触发时间，阻塞恢复后仅执行**错过的最后一次**，避免雪崩。
 
-## Timer 源码解析
+## Timer Source Code Analysis
 
 虽然 `Timer` 已被官方弃用（`@Deprecated(forRemoval = true)`），但它是理解 Java 定时任务模型最直观的样本：从它的「单线程 + 小顶堆」出发，才能看清 `ScheduledThreadPoolExecutor` 为什么要改造成「可配置线程池 + `DelayedWorkQueue`」。
 
@@ -231,7 +231,7 @@ class TimerThread extends Thread {
 }
 ```
 
-### Timer 的四个缺陷
+### Four Flaws of Timer
 
 根据以上 `Timer` 的核心实现，我们可以总结出 `Timer` 在应对中间件场景的延时任务时，有以下四种不足：
 
@@ -242,7 +242,7 @@ class TimerThread extends Thread {
 
 此外，`Timer` 只创建一个线程执行任务：若某个任务运行过久，其他任务的计时精度都会受影响——比如一个每 10ms 执行一次的周期任务，遇到一个耗时 40ms 的任务后，要么在长任务完成后短时间内被连续调用四次（固定频率下「追赶」），要么完全「错过」四次调用。
 
-## ScheduledThreadPoolExecutor 源码解析
+## ScheduledThreadPoolExecutor Source Code Analysis
 
 `ScheduledThreadPoolExecutor` 是 `Timer` 的官方推荐替代。它在 [ThreadPoolExecutor](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md) 之上做了四点定制：
 
@@ -312,7 +312,7 @@ class BeeperControl {
 }
 ```
 
-### run 机制
+### run Mechanism
 
 ```java
 public void run() {
@@ -414,7 +414,7 @@ public ScheduledFuture<?> scheduleWithFixedDelay(Runnable command,
 }
 ```
 
-### delayedExecute 与 ensurePrestart
+### delayedExecute and ensurePrestart
 
 ```java
 private void delayedExecute(RunnableScheduledFuture<?> task) {
@@ -529,7 +529,7 @@ public boolean offer(Runnable x) {
 
 `ScheduledThreadPoolExecutor` 内部对 task 做了 catch，出现异常的 task 将不再加入队列。
 
-## 中间件场景定时任务
+## Middleware Scenario Scheduled Tasks
 
 在中间件的场景中，同样存在很多定时任务的需求。比如，网络连接的心跳检测，网络请求超时或失败的重试机制，网络连接断开之后的重连机制。
 
@@ -548,7 +548,7 @@ Netty 的 [HashedWheelTimer](/docs/CS/Framework/Netty/HashedWheelTimer.md) 是�
 
 Kafka 的 [Hierarchical Timing Wheels](/docs/CS/MQ/Kafka/Timer.md) 的多层时间轮设计，巧妙地解决了时间轮的空推进现象和海量延时任务时间跨度大的管理问题。
 
-## 分布式定时任务
+## Distributed Scheduled Tasks
 
 如果我们需要一些高级特性比如支持任务在分布式场景下的分片和高可用的话，我们就需要用到分布式任务调度框架了。
 
@@ -581,21 +581,23 @@ Kafka 的 [Hierarchical Timing Wheels](/docs/CS/MQ/Kafka/Timer.md) 的多层时�
 
 ## Tuning
 
-### 任务堆积
+### Task Backlog
 
 同 MQ 中消息堆积，需考虑限流措施。
 
-### 任务超时
+### Task Timeout
 
-### 任务重试
+### Task Retry
 
-### 重复消费
+### Duplicate Consumption
 
-### 任务分配
+### Task Assignment
 
 ## Links
 
 - [JDK](/docs/CS/Java/JDK/JDK.md)
+- [Scheduled Task](/docs/CS/SE/Scheduled_Task.md)
+- [Asyncio](/docs/CS/Python/Asyncio.md)
 
 ## References
 

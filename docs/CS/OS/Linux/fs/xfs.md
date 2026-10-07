@@ -123,7 +123,7 @@ ino = (agno << (sb_agblklog + sb_inopblog)) | (agbno << sb_inopblog) | offset
 | `sb_metadirino` | 元数据目录树的根（v7 新增，见后文 metadir） |
 | `sb_rgcount` / `sb_rgextents` | realtime group 数量与每个 rt group 的 extent 数（zoned 支持引入） |
 
-## 内存中的 AG：xfs_perag
+## AG in Memory: xfs_perag
 
 每个 AG 在内存里有对应的 `struct xfs_perag`，缓存 AGF/AGI 的易变摘要，避免每次都读盘：
 
@@ -312,7 +312,7 @@ enum {
 
 配合 `struct xfs_iext_cursor`（缓存最近访问的 leaf + pos），顺序遍历一个文件的 extent 几乎退化为数组扫描——这正是 XFS 在大文件顺序读写上表现好的原因之一。
 
-## 一切皆 B+ 树
+## Everything Is a B+ Tree
 
 XFS 里没有"位图 + 表"这种东西，所有索引结构都是 B+ 树：
 
@@ -403,7 +403,7 @@ short 用于**指针是 32 位**的树（AG 内的 bnobt/cntbt/inobt/finobt/rmap
 
 `buf_ops` 是每种树的 **verifier**——读写块时校验 magic、uuid、owner、CRC 与记录有序性。这既是完整性保护，也让 [scrub](#数据完整性crc-与在线修复) 与在线修复有了统一的检查入口。
 
-## Extent 映射与延迟分配
+## Extent Mapping and Delayed Allocation
 
 磁盘上的 bmbt 记录是两个 64 位字的位打包：
 
@@ -472,7 +472,7 @@ static inline int isnullstartblock(xfs_fsblock_t x)
 
 副作用有两个：一是 `i_delayed_blks` 让 `stat` 看到的块数与最终落盘的不同；二是空间不足时，延迟分配的"过度预留"（speculative preallocation）要先由 `pag_blockgc_work` 收回。
 
-## 日志：逻辑日志、CIL 与 AIL
+## Log: Logical Log, CIL and AIL
 
 这是 XFS 与 ext4 差别最大的一块。ext4 用 [jbd2](/docs/CS/OS/Linux/fs/jbd2.md) 做**物理日志**：记录"哪些元数据块被改了"（整块或块内范围），恢复时把块内容重新写回原位，并用 revoke 表防止重放已被取消的旧块。XFS 做的是**逻辑日志**：日志项描述"发生了什么修改"，恢复时按项的类型重新执行。
 
@@ -525,7 +525,7 @@ struct xfs_item_ops {
 
 `XFS_ITEM_INTENT` / `XFS_ITEM_INTENT_DONE` 两类项是 XFS 特有的：**一个逻辑操作可能要修改多个 AG 的多个结构，无法放进一个事务**。做法是先把"意图"（intent，比如 EFI = extent free intent）记进日志，执行完后再记一条"完成"（intent done，EFD），恢复时若发现只有 intent 没有 done，就重做；若两者都有就跳过。
 
-### 事务
+### Transactions
 
 ```c
 static int
@@ -581,7 +581,7 @@ xfs_trans_reserve(
 
 只有 `XFS_TRANS_SYNC` 的事务（如 `fsync`、创建文件）才真的等日志落盘。
 
-### CIL：延迟日志的核心
+### CIL: The Core of Delayed Logging
 
 CIL（Committed Item List）把"每个事务一次日志写"变成"一批事务合并成一次 checkpoint"。同一个元数据在 CIL 里被改十次，最终只写一次最新内容：
 
@@ -647,13 +647,13 @@ push 由工作队列异步执行，触发条件是 CIL 大小超过阈值、日�
  */
 ```
 
-### AIL 与日志尾部
+### AIL and the Log Tail
 
 日志写完后，item 从 CIL 移入 **AIL（Active Item List）**。AIL 回答的问题是"**哪些元数据已经记进日志、但还没写到最终位置**"——最老的那个 item 的 LSN 就是**日志尾部（tail LSN）**，它之前的日志空间可以回收。元数据块真正回写后，对应 item 出 AIL，尾部前进。
 
 所以 XFS 里"日志空间不够"的常见原因是：AIL 里有钉住的老 item（比如某个 AG 的元数据一直没能写回），尾部推不动。这与 jbd2 的 checkpoint 机制目标相同，但粒度是 item 而不是整个事务/块。
 
-### 恢复
+### Recovery
 
 ```c
 	/*
@@ -679,7 +679,7 @@ push 由工作队列异步执行，触发条件是 CIL 大小超过阈值、日�
 
 两趟扫描：**PASS1** 只收集"哪些 buffer 项的修改后来被取消了"（对应 jbd2 的 revoke 表），**PASS2** 才真正回放。之后还有两步：`xlog_recover_process_intents()` 处理没配对的 intent，`xlog_recover_process_iunlinks()` 清理 unlinked inode。
 
-## 目录与扩展属性：da btree
+## Directory and Extended Attributes: da btree
 
 目录有四种形态，随条目数增长依次升级：
 
@@ -720,7 +720,7 @@ v3（CRC 版）换了 magic 以便运行时原地识别，并给目录项加了�
 
 有了 FT 字段，`readdir` 不用为每个条目 `stat` 一次——这是 `ls -lR` 在大目录上快的原因之一。源码里那句"Where it is possible, the code decides what to do based on the magic numbers in the blocks rather than feature bits in the superblock"说明格式判断是靠块内 magic 而非超级块特性位，便于工具离线解析。
 
-## 空闲空间与分配策略
+## Free Space and Allocation Strategy
 
 分配一个 extent 时，XFS 的决策链是：
 
@@ -737,7 +737,7 @@ v3（CRC 版）换了 magic 以便运行时原地识别，并给目录项加了�
 
 原因是：如果块被立刻分配给了别处，而旧的所有者元数据还没落盘，崩溃后恢复会把旧内容"复活"，造成交叉损坏。ext4 用块位图的日志顺序保证同一件事。
 
-## 数据完整性：CRC 与在线修复
+## Data Integrity: CRC and Online Repair
 
 v5 格式（2013 年引入，现在是 mkfs 默认）给每个元数据块加了自我描述头：`magic + uuid + 自身块号 + owner + LSN + CRC`。这带来三个能力：
 
@@ -749,7 +749,7 @@ v5 格式（2013 年引入，现在是 mkfs 默认）给每个元数据块加了
 
 健康状态用位掩码记录在 `xfs_mount.m_fs_sick` / `m_rt_sick` 与每个 inode 的 `i_sick` 上，v7 还加了 `xfs_healthmon.c` 把状态变化以事件形式上报给用户态。
 
-## reflink 与反向映射
+## reflink and Reverse Mapping
 
 **reflink**（`cp --reflink`）让两个文件共享同一批物理块，写入时再 CoW。它依赖两棵树：
 
@@ -764,13 +764,13 @@ v5 格式（2013 年引入，现在是 mkfs 默认）给每个元数据块加了
 
 写入共享块时，新内容先写进 **CoW fork**（`i_cowfp`），写完成后再原子地替换 data fork 中的映射（通过 BUI/BUD intent 项保证原子性）。这一整套依赖前面说的 intent 机制，是 XFS 日志里最复杂的一类操作。
 
-## 实时子卷、zoned 与元数据目录（v7 新进展）
+## Realtime Subvolume, zoned, and Metadata Directory (v7 New Developments)
 
 XFS 有一个可选的 **realtime 子卷**：独立设备，空间按 **rt extent**（通常是块大小的整数倍）分配，由 rtbitmap / rtsummary 两个元数据文件管理。它给需要稳定带宽的场景（视频采集、数据库）用——分配粒度大、布局可预测。
 
 v7.2.7 在这个方向上加了两个大东西：
 
-### realtime group 与 zoned 设备
+### realtime group and zoned Devices
 
 `sb_rgcount` / `sb_rgextents` / `sb_rgblklog` 把 realtime 子卷也切成 **rt group**，与 AG 并列为 `struct xfs_group`（`XG_TYPE_RTG`）。在此基础上支持 **zoned 块设备**（SMR HDD、NVMe ZNS）：
 
@@ -805,7 +805,7 @@ enum xfs_metafile_type {
 
 对应的 fork 格式是新增的 `XFS_DINODE_FMT_META_BTREE`。
 
-## 特性位
+## Feature Bits
 
 特性分四级，决定"老内核能否挂载"：
 
@@ -818,7 +818,7 @@ enum xfs_metafile_type {
 
 内核侧对应 `m_features` 位图（`XFS_FEAT_*`，`xfs_mount.h`），常用 `xfs_has_reflink(mp)` 之类的谓词判断。新增特性往往同时需要 log_incompat 位，这样"用过新特性但日志已清空"的文件系统仍能降级挂载。
 
-## ext4 与 XFS 的对照
+## ext4 vs XFS Comparison
 
 | 维度 | ext4 | XFS |
 | --- | --- | --- |
@@ -838,7 +838,7 @@ enum xfs_metafile_type {
 
 一句话总结取舍：**ext4 是"够用且能缩"的通用盘，XFS 是"大而快但不能缩"的专业盘**。选择时最硬的约束是"要不要缩容"——要就只能选 ext4（或 Btrfs）。
 
-## 使用与运维
+## Usage and Operations
 
 - `mkfs.xfs`：创建时可指定 AG 数量/大小（`agcount=` / `agsize=`）、inode 大小、是否启用 reflink/rmap（`-m reflink=1 -m rmapbt=1`）、CRC（默认开）、外部日志（`logdev=`）；
 - `xfs_growfs`：在线扩容（**只能增不能减**）；

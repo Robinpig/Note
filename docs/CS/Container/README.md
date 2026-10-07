@@ -2,7 +2,7 @@
 
 本目录是 [容器](/docs/CS/Container/Container.md) 与容器编排的知识地图：从共享内核的隔离原理（Namespace/Cgroup），到 Docker 的镜像与网络实现，再到 [Kubernetes](/docs/CS/Container/k8s/K8s.md) 的架构、组件源码与生态工具。
 
-## 知识地图
+## Knowledge Map
 
 ```
 容器基础 (Container.md)
@@ -40,7 +40,7 @@
        └── Pod.md —— 最小调度单元详解
 ```
 
-## 快速索引
+## Quick Index
 
 | 主题 | 笔记 | 一句话 |
 |------|------|--------|
@@ -65,7 +65,7 @@
 | 包管理 | [Helm](/docs/CS/Container/k8s/Helm.md) | Chart / Release / values |
 | 编程接口 | [client-go](/docs/CS/Container/k8s/client-go.md) | Informer / ListAndWatch / workqueue |
 
-## 与其他领域的关系
+## Relationship with Other Areas
 
 - 容器隔离的根基在操作系统层：[Namespace](/docs/CS/OS/Linux/namespace.md)、[Cgroup](/docs/CS/OS/Linux/cgroup.md)、[LXC](/docs/CS/OS/Linux/LXC.md)
 - 容器网络底层：[Linux 网络](/docs/CS/OS/Linux/net/network.md)

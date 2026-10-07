@@ -2,7 +2,7 @@
 
 kubectl 是与 [apiserver](/docs/CS/Container/k8s/apiserver.md) 交互的官方命令行客户端，本身无状态：所有集群状态都存在 [etcd](/docs/CS/Container/k8s/etcd.md) 中，kubectl 只是把用户意图翻译成 REST 请求。它的配置来自 kubeconfig（`--kubeconfig` / `$KUBECONFIG` / `~/.kube/config`），支持配置多个 cluster / user / context 并一键切换。
 
-## 常用命令速查
+## Common Commands Quick Reference
 
 ```shell
 # 资源查询
@@ -32,7 +32,7 @@ kubectl get events --sort-by=.lastTimestamp
 
 几个值得记住的行为差异：`create` 是命令式（存在即报错），`apply` 是声明式（合并 patch）；`edit` 改动的是存活对象，不会回写本地 YAML，容易造成配置漂移——用 GitOps（见 [Helm](/docs/CS/Container/k8s/Helm.md)）管理时禁止直接 edit。
 
-## 源码视角：请求的构造流程
+## Source Code View: Request Construction Flow
 
 kubectl 是了解 client-go 的最佳入口（详见 [client-go](/docs/CS/Container/k8s/client-go.md)）。
 

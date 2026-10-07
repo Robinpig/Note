@@ -8,7 +8,7 @@
 >
 > 基础医学的结论多来自**体外实验与动物模型**。从模型到人之间隔着物种差异、剂量差异与时间尺度差异，这道跨度是基础研究成果「不能直接变成疗法」的根本原因。
 
-## 核心分支
+## Core Branches
 
 <div class="kb-home">
 
@@ -16,7 +16,7 @@
 
 <div class="kb-card">
 
-### 解剖学与生理学
+### Anatomy and Physiology
 
 身体的结构与功能：**结构决定功能**是这一分支的基本信条
 
@@ -24,7 +24,7 @@
 
 <div class="kb-card">
 
-### 生物化学与分子生物学
+### Biochemistry and Molecular Biology
 
 代谢、遗传信息流转与蛋白质功能——现代医学最小的解释单位
 
@@ -32,7 +32,7 @@
 
 <div class="kb-card">
 
-### 病理学与病理生理学
+### Pathology and Pathophysiology
 
 **疾病是什么**：损伤、反应、修复，以及从细胞改变到器官衰竭的链条
 
@@ -40,7 +40,7 @@
 
 <div class="kb-card">
 
-### 药理学与毒理学
+### Pharmacology and Toxicology
 
 药物如何起效、如何被代谢、如何以剂量区分治疗与毒性
 
@@ -48,7 +48,7 @@
 
 <div class="kb-card">
 
-### 免疫学与微生物学
+### Immunology and Microbiology
 
 宿主与病原体的攻防战：固有免疫、适应性免疫、抗体与抗生素的作用点
 
@@ -58,7 +58,7 @@
 
 </div>
 
-## 结构到分子 向下的还原与向上的溢出
+## Structure to Molecule: Downward Reduction and Upward Spillover
 
 基础医学内部有一条**自上而下也会自下而上**的逻辑：
 
@@ -72,7 +72,7 @@
 
 **免疫学与微生物学**构成一组特殊的攻防关系：免疫学研究人体的防御体系，微生物学研究入侵者的策略。抗体的特异性记忆是疫苗能起效的原理，而抗生素与抗病毒药的作用点几乎全部落在微生物自身的代谢或复制机器上——这正是「选择性毒性」能够成立的基础，也是抗药性产生的根源。
 
-## 基础到临床的那道边界
+## The Boundary from Basics to Clinical
 
 最容易被误解的一点是：**基础医学的进展不会自动变成临床获益**。
 

@@ -22,7 +22,7 @@ docker run -d -p 5672:5672 -p 15672:15672 \
   --name rabbitmq rabbitmq:4.3.6-management
 ```
 
-### 定位与取舍
+### Positioning and Trade-offs
 
 | | RabbitMQ 4.3 | Kafka 4.3 | RocketMQ 5.5 |
 | --- | --- | --- | --- |
@@ -38,7 +38,7 @@ docker run -d -p 5672:5672 -p 15672:15672 \
 > [!TIP]
 > 它的路由能力有代价：每条消息都要过 exchange 路由 + binding 匹配，而 Kafka/RocketMQ 走的是分区直连。这也是它吞吐上不去的根本原因，而非单纯的实现效率问题。
 
-## Exchange 与路由
+## Exchange and Routing
 
 核心心智一句话：**生产者从不直接把消息发到队列**，甚至往往不知道消息最终会不会被投递出去。交换机决定把消息推到哪里去。
 
@@ -61,7 +61,7 @@ digraph rmq_exchange {
 }
 ```
 
-### 类型清单：不止四种
+### Type List: More Than Four
 
 core 内置4 种（全部在 `rabbit_exchange_type_*.erl` 中注册）：
 
@@ -82,7 +82,7 @@ core 内置4 种（全部在 `rabbit_exchange_type_*.erl` 中注册）：
 > [!WARNING]
 > 「RabbitMQ 有四种 exchange 类型」是过时认知。但 `headers` **仍在**，且每个 vhost 会预声明两个实例 `amq.match` 与 `amq.headers` —— 源码注释刻意区分了它们分别来自 AMQP 0-9-1 的 PDF 与 XML 规范。
 
-### default exchange 的特殊语义
+### Special Semantics of default exchange
 
 每个 vhost 预声明 7 个 exchange，其中最特殊的是**空字符串名**的default exchange（`rabbit_vhost.erl:265-273`）：
 
@@ -90,7 +90,7 @@ core 内置4 种（全部在 `rabbit_exchange_type_*.erl` 中注册）：
 - **禁止绑定到它**（会得到 `access_refused "operation not permitted on the default exchange"`）
 - `amq.` 前缀的实体**禁止删除**；但在创建时被拒绝（passive 或已存在时豁免）
 
-### topic 通配的边界
+### Boundaries of topic Wildcards
 
 `*` 匹配**恰好一个** segment，`#` 匹配**零个或多个**：
 
@@ -109,7 +109,7 @@ core 内置4 种（全部在 `rabbit_exchange_type_*.erl` 中注册）：
 
 超出即得到 `binding_invalid`。源码注释说明了动机：MQTTv5 的 topic filter 最多一个 `#`，每多一个都成倍放大匹配开销（`rabbit_exchange_type_topic.erl:28-30, 52-61`）。
 
-### headers 的 x-match 有四个取值
+### x-match of headers Has Four Values
 
 | `x-match` | 语义 |
 | --- | --- |
@@ -121,13 +121,13 @@ core 内置4 种（全部在 `rabbit_exchange_type_*.erl` 中注册）：
 > [!TIP]
 > `all-with-x` / `any-with-x` **在官方 exchanges 文档页查不到**，只出现在源码的校验错误信息里。默认的 `all`/`any` 会对 `x-` 前缀 header 直接 `skip`（`rabbit_exchange_type_headers.erl:54-66`）——想匹配 RabbitMQ 自己的内部 header，必须显式用 `-with-x` 变体。
 
-### 两条容易被忽略的能力
+### Two Easily Overlooked Capabilities
 
 **Alternate Exchange（AE）**：**仅在无任何匹配 binding 时**才生效（`rabbit_exchange.erl:432-440` 的空结果分支）。它是唯一在 declare 时做参数等价性检查的 x-arg，且可以做成 policy 动态调整。典型用法是兜底：没被业务队列消费掉的消息进 AE，避免静默丢失。
 
 **Exchange-to-Exchange binding**：允许把 exchange 直接绑到另一个 exchange。它**不是重新发布**，而是路由扩展，因此遵守源与目标两个 exchange 的类型——**目标 exchange 的 ingress 指标不会更新**（文档明确）。
 
-## 队列类型
+## Queue Types
 
 4.3 只注册了三种队列类型（`rabbit_queue_type.erl:864-868` 从registry 读取）：
 
@@ -140,7 +140,7 @@ core 内置4 种（全部在 `rabbit_exchange_type_*.erl` 中注册）：
 > [!IMPORTANT]
 > `x-queue-version` **只接受 2** —— CQv1 存储引擎已在 4.3 彻底移除，源码树里连v1 文件都没有了。声明 v1 会得到 `unsupported queue version`。而 `x-queue-type: classic` 显式声明**仍然合法**。
 
-### 队列类型选择
+### Queue Type Selection
 
 - **默认选 quorum**：复制、内存开销可控、4.3 新增延迟重试。代价是 inherently 更高的延迟与更重的磁盘 I/O。
 - **classic 的唯一实质优势**：支持 `x-max-priority`（上限 **255**）与 `auto-delete`。**默认消息优先级是 0**。
@@ -149,7 +149,7 @@ core 内置4 种（全部在 `rabbit_exchange_type_*.erl` 中注册）：
 > [!WARNING]
 > **不要相信任何"quorum 比 classic 快 N 倍"的说法** —— 4.3 官方文档**没有给出任何量化数字**，只有定性表述，且其对比对象是 4.0 已移除的 classic mirrored queues，不是普通 classic queue。
 
-### Quorum Queue 的 Raft 语义
+### Raft Semantics of Quorum Queue
 
 - 成员数默认 **3**（`quorum_cluster_size`），容忍 1 节点故障
 - **性能在成员数 > 5 时明显下降**，官方**不建议超过 7 个节点**
@@ -171,7 +171,7 @@ core 内置4 种（全部在 `rabbit_exchange_type_*.erl` 中注册）：
 > [!WARNING]
 > **quorum 会静默忽略 `x-max-priority`** —— 从 classic 迁移时若保留该参数，不报错也不生效。另外 `max-priority` 对 quorum 是 **unsupported policy**（用 policy 设置会报错，用 x-arg 设置只是静默忽略）。未设 `priority` 的消息在 quorum 视为 **4**、在 classic 视为 **0**，迁移会让优先级分布发生变化。
 
-### Poison Message与 delivery-limit
+### Poison Message and delivery-limit
 
 `delivery-limit` 默认 **20**（源码常量 `DEFAULT_DELIVERY_LIMIT`），`-1` 可禁用；policy 与 x-arg 同时为正时取 **min**。
 
@@ -180,7 +180,7 @@ core 内置4 种（全部在 `rabbit_exchange_type_*.erl` 中注册）：
 > [!WARNING]
 > 4.3 起判定基准从 `acquired-count` 改为 **`delivery-count`**。后果是 `basic.nack` 与 `modified(delivery-failed=false)` **不消耗** delivery-limit —— 可以无限返回。只有 `reject`、`modified(delivery-failed=true)`、连接/channel 崩溃才计入。照3.x/4.0 的 acquired-count 心智模型算出的重投次数在 4.3 是错的。
 
-### Streams 队列
+### Streams Queue
 
 - **不需要 AMQP 1.0 客户端** —— 可以用 AMQP 0-9-1 客户端当普通队列用（只需用 consumer ack），也能绑定到任意 exchange
 - 但官方**强烈推荐 stream protocol**（`rabbitmq_stream` 插件），因为只有它能拿到全部 stream 特性与最佳吞吐
@@ -190,7 +190,7 @@ core 内置4 种（全部在 `rabbit_exchange_type_*.erl` 中注册）：
 - ⚠️ 这两个参数**即使 policy 变更也不会应用到已存在的 stream**，只在**声明时**有 policy 才生效 → **只用 queue argument 配置**
 - stream 是 quorum 系统，官方建议集群**各节点数一致**
 
-## 消费与流控
+## Consumption and Flow Control
 
 ### prefetch
 
@@ -222,7 +222,7 @@ AMQP 规范层默认 **0 = 无限**（不限流）。这是**服务端**配置�
 >
 > 另外在 `advanced.config` 里把它设成 `undefined` 等于禁用，官方**不推荐**。
 
-### nack/ack 的 multiple 参数陷阱
+### multiple Parameter Pitfall of nack/ack
 
 这是最容易造成生产事故的一个细节。源码 `collect_acks`（`rabbit_channel.erl:2002-2022`）遍历的是**channel 级** `unacked_message_q`，**不是某个 consumer 的队列**：
 
@@ -240,9 +240,9 @@ collect_acks(UAMQ, 0, true) ->
 > [!WARNING]
 > 同一 channel 上开多个 consumer 时，误用 `multiple` 会**连带确认其他 consumer 的消息**。settle 顺序是 oldest-first（tag 升序）。
 
-## 消息生存期与死信
+## Message Lifetime and Dead-letter
 
-### 两种 TTL 方式
+### Two Types of TTL Approaches
 
 | 方式 | 配置 | 说明 |
 | --- | --- | --- |
@@ -259,7 +259,7 @@ collect_acks(UAMQ, 0, true) ->
 >
 > 所以「队列深度持续增长但 TTL 已过」是**正常行为，不是泄漏**。想让资源立即释放要么 purge，要么改用队列级 TTL。
 
-### DLX 与死信 header
+### DLX and Dead-letter Header
 
 - DLX **就是普通 exchange**，按普通方式声明
 - **x-arg 优先于 policy**
@@ -283,11 +283,11 @@ collect_acks(UAMQ, 0, true) ->
 > [!WARNING]
 > **只配 `dead-letter-strategy: at-least-once` 而忘了改 `overflow=reject-publish`，会打 WARN 并静默回退为 at-most-once** —— 配置「看起来生效了」，实际保证等级低一档。从 at-least-once 切回 at-most-once 会**删除所有未被目标确认的死信**。
 
-### 死信循环检测
+### Dead-letter Loop Detection
 
 有cycle 检测，但**只在「全自动循环」时丢弃消息**：循环路径上任何一次死信原因是 `rejected`（即客户端显式reject 过）就不丢，把打破循环的责任交给应用（`mc.erl:493-507`）。
 
-### x-expires 与 auto-delete 的区别
+### Difference Between x-expires and auto-delete
 
 | 维度 | `x-expires` | `auto-delete` |
 | --- | --- | --- |
@@ -299,9 +299,9 @@ collect_acks(UAMQ, 0, true) ->
 
 **队列 TTL 只对 transient（非 durable）classic queue 有意义**，streams **不支持过期**。且队列整体到期时，里面的消息**不会死信**。
 
-## 集群与元数据
+## Cluster and Metadata
 
-### Khepri：4.3 的架构性变化
+### Khepri: Architectural Change in 4.3
 
 4.3 起**Khepri 成为唯一的元数据存储**，彻底替代 Mnesia（自动迁移，一次性操作）。它的 Raft 语义决定了集群行为：
 
@@ -314,7 +314,7 @@ collect_acks(UAMQ, 0, true) ->
 >
 > 读取按组件分两类：多数读走本地 cache（最终一致）；**线性一致读走 leader**，新 leader 选出前会暂停。
 
-### 与 vhost 的关系
+### Relationship with vhost
 
 | 组件 | 说明 |
 | --- | --- |
@@ -323,7 +323,7 @@ collect_acks(UAMQ, 0, true) ->
 | **stream** | 队列消息 —— 独立 Raft 组，consumer **可从任意 replica 读**，不受 leader 切换影响 |
 | **经典镜像队列** | 4.0 已移除 |
 
-### 节点加入与移除
+### Node Join and Removal
 
 - **加入**：peer discovery 自动，或 `cluster_formation.peer_discovery_backend` 配置；空白节点「加入第一个可达 peer 的集群」
 - **移除**：在**仍存在的成员**上执行 `rabbitmqctl forget_cluster_node`
@@ -331,7 +331,7 @@ collect_acks(UAMQ, 0, true) ->
 - 未知节点清理默认**仅告警**（`only_log_warning = true`）；改成 `false` 会强制清理，但**清理后无法再 rejoined**
 - 4.3 的 `forget_cluster_node` 行为变更：先移除 quorum/stream 成员，再离开元数据集群
 
-### 磁盘与内存阈值
+### Disk and Memory Thresholds
 
 > [!IMPORTANT]
 > **4.3 没有四档 watermark**，只有两个单阈值：
@@ -345,7 +345,7 @@ collect_acks(UAMQ, 0, true) ->
 
 **文件描述符**：官方不给固定推荐值，规则是**连接数 × 1.5**（如支撑 10 万连接则设15 万）。提高 OS 上限时**必须同步提高 `ERL_MAX_PORTS`**，检查用 `rabbitmqctl eval 'erlang:system_info(port_limit).'`。
 
-### 监控
+### Monitoring
 
 - **Prometheus 默认端口 15692**（专用 TCP 端口）
 - `prometheus.return_per_object_metrics` 默认 **false**（设 true 可能产生极大响应）
@@ -354,7 +354,7 @@ collect_acks(UAMQ, 0, true) ->
 - `vhost_status`、`exchange_names`、`exchange_bindings` 是 cluster-wide，**不得跨节点聚合**
 - 4.3 管理 UI 新增 **Linter**（评估配置、提示反模式）
 
-### Federation 与 Shovel
+### Federation and Shovel
 
 两者都用于跨集群搬消息，但语义不同：
 
@@ -380,7 +380,7 @@ collect_acks(UAMQ, 0, true) ->
 
 **4.2 新增 `local` shovel**：不用任何协议，直接用内部 API 在本集群内消费/发布，只能用于声明它的那个集群。
 
-## 协议
+## Protocol
 
 | 协议 | 状态 | 关键说明 |
 | --- | --- | --- |
@@ -397,7 +397,7 @@ collect_acks(UAMQ, 0, true) ->
 
 4.3 的 AMQP 1.0 变更：Rejected outcome 含队列名与拒绝原因（`queue: <name>` / `reason: maxlen | unavailable`）、Single Active Consumer 状态变化用 flow frame 通知、重复 link handle 返回 `handle-in-use`。
 
-## 4.3 移除清单
+## 4.3 Removal List
 
 照旧资料写的最大风险在这里：
 
@@ -421,7 +421,7 @@ collect_acks(UAMQ, 0, true) ->
 
 **仍存在但已非元数据存储**：`rabbit_mnesia.erl` 源码文件还在（172 行），但它只提供 `is_virgin_node/0`、`dir/0` 等**迁移辅助函数**，另有 9 个 `*_m2k_converter.erl` 专用于 Mnesia → Khepri 数据迁移。
 
-## 常见坑清单
+## Common Pitfalls List
 
 1. **`max_ack_rtt` 不存在** —— 网上流传的「quorum queue 有 `max_ack_rtt` 默认 30s」在4.3.6 全树 grep **0 命中**，它不是合法 schema 键。真实机制是 `consumer_timeout`（30 min）+ `consumer_disconnected_timeout`（60 s）。
 2. **`consumer_disconnected_timeout` 的 schema 注释是过时的** —— `rabbit.schema:1573` 的示例注释写 `10000`，**源码两处默认都是 `60_000`**。照注释改成 10000 是把60s 调小 6 倍，会导致分区恢复时消息被过快重投。
@@ -445,6 +445,7 @@ collect_acks(UAMQ, 0, true) ->
 - [消息投递语义（at-most-once / at-least-once / exactly-once）](/docs/CS/MQ/MQ.md?id=message-delivery-semantics)
 - [死信队列与消息积压](/docs/CS/MQ/MQ.md?id=dead-letter-queues)
 - [AMQP 0-9-1 协议结构与工作流（Spring AMQP 侧）](/docs/CS/Framework/Spring/AMQP.md)
+- [Scheduled Task](/docs/CS/SE/Scheduled_Task.md)
 
 ## References
 

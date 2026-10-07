@@ -1,12 +1,6 @@
 ## Introduction
 
-
-[Thrift](https://github.com/apache/thrift) is a lightweight, language-independent software stack for point-to-point RPC implementation. 
-Thrift provides clean abstractions and implementations for data transport, data serialization, and application level processing.
-The code generation system takes a simple definition language as input and generates code across programming languages that uses the abstracted stack to build interoperable RPC clients and servers.
-
-
-
+[Thrift](https://github.com/apache/thrift) 是一套轻量、语言无关的软件栈，用于实现点对点 RPC。Thrift 为数据传输、数据序列化与应用层处理提供了清晰的抽象与实现。其代码生成系统以一种简单的定义语言作为输入，跨多种编程语言生成代码，利用这套抽象栈构建可互操作的 RPC 客户端与服务端。
 
 <div style="text-align: center;">
 
@@ -17,8 +11,6 @@ The code generation system takes a simple definition language as input and gener
 <p style="text-align: center;">
 Fig.1. Thrift Layered Architecture
 </p>
-
-
 
 ## Links
 

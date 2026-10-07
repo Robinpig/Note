@@ -424,7 +424,7 @@ fork子进程的速度变慢
 - redis-check-aof
 - redis-benchmark
 
-## 缓存一致性
+## Cache Consistency
 
 本地缓存和Redis缓存一致性
 

@@ -2,106 +2,82 @@
 
 ## Software Architecture
 
-- Monolithic
-- Service Oriented
-- Microservices
-- Service Mesh
-- Serverless
+- Monolithic（单体）
+- Service Oriented（面向服务，SOA）
+- Microservices（微服务）
+- Service Mesh（服务网格）
+- Serverless（无服务器）
 
-### Monolithic architecture
+### Monolithic Architecture
 
-Monolithic architecture is the traditional structure for software applications. Analysts often compare it to microservices, a newer model for application development.
-Although monolithic architecture has a long history, it is sometimes still superior to the microservices model.
+单体架构（Monolithic architecture）是软件应用的传统结构。分析师常把它与微服务——一种较新的应用开发模型——作比较。尽管单体架构有悠久历史，有时它仍优于微服务模型。
 
-Monolithic is an all-in-one architecture, wherein all aspects of the software operate as a single unit.
-In the microservices model, components are modular, functioning independently, and coupled together as needed for optimal functionality.
-When choosing between monolithic architecture and microservices, businesses evaluate factors such as agile integration, rapid testing, debugging, and scalability.
+单体是一种一体化的架构，软件的各个方面作为一个单一单元运行。在微服务模型中，组件是模块化的，独立运行，并按需组合在一起以获得最优功能。在单体架构与微服务之间做选择时，企业会评估敏捷集成、快速测试、调试和可扩展性等因素。
 
-Monolithic architecture is a unified development model for software applications.
-It has three components:
+单体是一个统一的软件开发模型。它有三个组成部分：
 
-- Client-side user interface
-- Server-side application
-- Data interface
+- 客户端用户界面
+- 服务端应用
+- 数据接口
 
-All three parts interact with a single database. Software built on this model operates with one base of code.
-As a result, whenever stakeholders want to make updates or changes, they access the same set of code.
-This can have ripple effects that impact user-side performance.
+这三部分都和一个单一数据库交互。基于这种模型构建的软件用一个代码基运行。因此，每当干系人想要更新或变更时，他们访问的是同一套代码。这可能产生波及用户端性能的连锁反应。
 
-Monolithic architecture is the tried-and-true method of building applications.
-It has an integrated development environment (IDE), which closely links all parts of the code.
-Because it relies on that one set of code and does not create ad hoc linkages or loose coupling between tasks as microservices do, it is impossible to segment one particular task and integrate improvements without affecting the entire application.
+单体架构是经过验证的构建应用的方法。它有一个集成开发环境（IDE），把代码的所有部分紧密联系在一起。因为它依赖那一套代码，且不像微服务那样为任务创建特设的链接或松耦合，所以不可能在不影响整个应用的情况下切出某个特定任务并集成改进。
 
-**Pros of Monolithic Architecture**
+**单体架构的优势（Pros of Monolithic Architecture）**
 
-- Simpler development and deployment
-  There are lots of tools you can integrate to facilitate development. In addition, all actions are performed with one directory, which provides for easier deployment.
-  With a monolithic core, developers don’t need to deploy changes or updates separately, as they can do it at once and save lots of time.
-- Fewer cross-cutting concerns
-  Most applications are reliant on a great deal of cross-cutting concerns, such as audit trails, logging, rate limiting, etc.
-  Monolithic apps incorporate these concerns much easier due to their single code base. It’s easier to hook up components to these concerns when everything runs in the same app.
-- Better performance
-  If built properly, monolithic apps are usually more performant than microservice-based apps.
-  An app with a microservices architecture might need to make 40 API calls to 40 different microservices to load each screen, for example, which obviously results in slower performance.
-  Monolithic apps, in turn, allow faster communication between software components due to shared code and memory.
+- 开发与部署更简单
+  有许多工具可以集成以促进开发。此外，所有操作都在一个目录下进行，部署更轻松。有了单体核心，开发者不需要分别部署变更或更新，可以一次性完成，节省大量时间。
+- 更少的横切关注点
+  大多数应用依赖大量横切关注点（cross-cutting concerns），如审计跟踪、日志、限流等。单体应用凭借单一代码基更容易纳入这些关注点。当所有东西运行在同一个应用时，把这些关注点挂接到组件上更容易。
+- 更好的性能
+  如果构建得当，单体应用通常比基于微服务的应用性能更好。例如，微服务架构的应用可能为了加载每个屏幕而需要向 40 个不同的微服务发起 40 次 API 调用，这显然导致更慢的性能。反之，单体应用由于共享代码和内存，组件间通信更快。
 
-**Cons of Monolithic Architecture**
+**单体架构的劣势（Cons of Monolithic Architecture）**
 
-Despite its benefits, there are some potential downsides to monolithic architecture.
-These downsides arise because of the monolith's defining feature — the all-in-one structure.
-They include:
+尽管有好处，单体架构也有一些潜在的缺点。这些缺点源于单体定义性的特征——一体化结构。它们包括：
 
-- Difficult to adopt new technologies
-  If there’s a need to add some new technology to your app, developers may face barriers to adoption. Adding new technology means rewriting the whole application, which is costly and time-consuming.
-- Limited agility
-  In monolithic apps, every small update requires a full redeployment. Thus, all developers have to wait until it’s done. When several teams are working on the same project, agility can be reduced greatly.
+- 难以采用新技术
+  如果需要给应用添加某种新技术，开发者可能面临采用障碍。添加新技术意味着重写整个应用，既昂贵又耗时。
+- 有限的敏捷性
+  在单体应用中，每次小的更新都需要完整重新部署。因此所有开发者都得等到它完成。当多个团队在同一项目上工作时，敏捷性会大大降低。
 
-The monolithic model isn’t outdated, and it still works great in some cases.
-Some giant companies like Etsy stay monolithic despite today’s popularity of microservices.
-Monolithic software architecture can be beneficial if your team is at the founding stage, you’re building an unproven product, and you have no experience with microservices.
-Monolithic is perfect for startups that need to get a product up and running as soon as possible.
-However, certain issues mentioned above come with the monolithic package.
+单体模型并未过时，在某些情况下仍然表现出色。一些巨头公司如 Etsy 尽管今天微服务流行，仍保持单体。如果你的团队处于初创阶段、正在构建未经证实的产品、且没有微服务经验，单体软件架构会很有益。单体非常适合需要尽快让产品上线运行的初创公司。然而，上述某些问题也随单体而来。
 
 ### SOA
 
-A service-oriented architecture (SOA) is a software architecture style that refers to an application composed of discrete and loosely coupled software agents that perform a required function. SOA has two main roles: a service provider and a service consumer.
-Both of these roles can be played by a software agent. The concept of SOA lies in the following: an application can be designed and built in a way that its modules are integrated seamlessly and can be easily reused.
+面向服务的架构（SOA，service-oriented architecture）是一种软件架构风格，指由执行所需功能的、离散且松耦合的软件代理组成的应用。SOA 有两个主要角色：服务提供者和服务消费者。这两个角色都可以由软件代理扮演。SOA 的理念在于：应用可以以模块无缝集成、且易于复用的方式设计与构建。
 
-**Pros of SOA**
+**SOA 的优势（Pros of SOA）**
 
-- Reusability of services
-  Due to the self-contained and loosely coupled nature of functional components in service-oriented applications, these components can be reused in multiple applications without influencing other services.
-- Better maintainability
-  Since each software service is an independent unit, it’s easy to update and maintain it without hurting other services. For example, large enterprise apps can be managed easier when broken into services.
-- Higher reliability
-  Services are easier to debug and test than are huge chunks of code like in the monolithic approach. This, in turn, makes SOA-based products more reliable.
-- Parallel development
-  As a service-oriented architecture consists of layers, it advocates parallelism in the development process. Independent services can be developed in parallel and completed at the same time.
-  Below, you can see how SOA app development is executed by several developers in parallel:
+- 服务的可复用性
+  由于面向服务应用中功能组件的自我包含与松耦合特性，这些组件可以在多个应用中复用，而不影响其它服务。
+- 更好的可维护性
+  由于每个软件服务是一个独立单元，更新和维护它很容易，且不影响其它服务。例如，大型企业的应用拆成服务后更容易管理。
+- 更高的可靠性
+  服务比单体方式中庞大的代码块更容易调试和测试。这反过来使基于 SOA 的产品更可靠。
+- 并行开发
+  由于面向服务的架构由层组成，它倡导开发过程的并行。独立的服务可以并行开发并同时完成。下面你可以看到若干开发者如何并行执行 SOA 应用开发：
 
-**Cons of SOA**
+**SOA 的劣势（Cons of SOA）**
 
-- Complex management
-  The main drawback of a service-oriented architecture is its complexity. Each service has to ensure that messages are delivered in time.
-  The number of these messages can be over a million at a time, making it a big challenge to manage all services.
-- High investment costs
-  SOA development requires a great upfront investment of human resources, technology, and development.
-- Extra overload
-  In SOA, all inputs are validated before one service interacts with another service. When using multiple services, this increases response time and decreases overall performance.
+- 管理复杂
+  面向服务架构的主要缺点是其复杂性。每个服务都必须确保消息及时投递。这些消息的数量一次可能超过百万，使管理所有服务成为大挑战。
+- 高投资成本
+  SOA 开发需要在人力资源、技术和开发上进行大量前期投入。
+- 额外开销
+  在 SOA 中，一个服务与另一个服务交互前会校验所有输入。使用多个服务时，这增加了响应时间，降低了整体性能。
 
-The SOA approach is best suited for complex enterprise systems such as those for banks.
-A banking system is extremely hard to break into microservices. But a monolithic approach also isn’t good for a banking system as one part could hurt the whole app.
-The best solution is to use the SOA approach and organize complex apps into isolated independent services.
+SOA 方法最适合复杂的系统，如银行系统。银行系统极难拆成微服务。但单体方式对银行系统也不好，因为一部分可能拖累整个应用。最佳方案是使用 SOA 方法，把复杂应用组织成隔离的独立服务。
 
 SOA架构过于严谨精密的流程与理论
 - SOA架构会利用一个被称为是企业服务总线（Enterprise Service Bus，ESB）的消息管道，来实现各个子系统之间的通讯交互，这就让各个服务间在ESB的调度下，不需要相互依赖就可以实现相互通讯，既带来了服务松耦合的好处，也为以后可以进一步实现业务流程编排（Business Process Management，BPM）提供了基础；
 - SOA架构使用了服务数据对象（Service Data Object，SDO）来访问和表示数据，使用服务组件架构（Service Component Architecture，SCA）来定义服务封装的形式和服务运行的容器
 
 
-### Microservice architecture
+### Microservice Architecture
 
-Microservice is a type of service-oriented software architecture that focuses on building a series of autonomous components that make up an app.
-Unlike monolithic apps built as a single indivisible unit, microservice apps consist of multiple independent components that are glued together with APIs.
+微服务是一种面向服务的软件架构，专注于构建一组构成应用的自治组件。与作为单一不可分割单元构建的单体应用不同，微服务应用由多个通过 API 粘合在一起的独立组件组成。
 
 
 
@@ -114,38 +90,28 @@ Unlike monolithic apps built as a single indivisible unit, microservice apps con
 
 
 
-**Pros of microservices**
+**微服务的优势（Pros of microservices）**
 
-- Easy to develop, test, and deploy
-  The biggest advantage of microservices over other architectures is that small single services can be built, tested, and deployed independently.
-  Since a deployment unit is small, it facilitates and speeds up development and release. Besides, the release of one unit isn’t limited by the release of another unit that isn’t finished.
-  And the last plus here is that the risks of deployment are reduced as developers deploy parts of the software, not the whole app.
-- Increased agility
-  With microservices, several teams can work on their services independently and quickly. Each individual part of an application can be built independently due to the decoupling of microservice components.
-  For example, you may have a team of 100 people working on the whole app (like in the monolithic approach), or you can have 10 teams of 10 people developing different services for the app. Let’s imagine this visually.
-  Increased agility allows developers to update system components without bringing down the application.
-  Moreover, agility provides a safer deployment process and improved uptime. New features can be added as needed without waiting for the entire app to launch.
-- Ability to scale horizontally
-  Vertical scaling (running the same software but on bigger machines) can be limited by the capacity of each service.
-  But horizontal scaling (creating more services in the same pool) isn’t limited and can run dynamically with microservices. Furthermore, horizontal scaling can be completely automated.
+- 易于开发、测试与部署
+  微服务相对于其它架构最大的优势在于，小的单一服务可以独立构建、测试和部署。由于部署单元小，它促进并加速了开发与发布。此外，一个单元的发布不受另一个未完成单元发布的限制。最后一个好处是部署风险降低，因为开发者部署的是软件的一部分，而非整个应用。
+- 更高的敏捷性
+  借助微服务，若干团队可以独立且快速地开发自己的服务。由于微服务组件的去耦，应用的每个单独部分都可以独立构建。例如，你可以有 100 人开发整个应用（像单体方式），也可以有 10 个团队各 10 人开发应用的不同服务。让我们可视化地想象一下。更高的敏捷性让开发者无需让应用下线就能更新系统组件。此外，敏捷性提供了更安全的部署过程和更高的正常运行时间。新功能可以按需在无需等待整个应用启动的情况下添加。
+- 水平扩展能力
+  垂直扩展（运行相同软件但在更大的机器上）受每个服务容量限制。但水平扩展（在同一池中创建更多服务）不受限，且可以随微服务动态运行。此外，水平扩展可以完全自动化。
 
-**Cons of microservices**
+**微服务的劣势（Cons of microservices）**
 
-- Complexity
-  The biggest disadvantage of microservices lies in their complexity. Splitting an application into independent microservices entails more artifacts to manage.
-  This type of architecture requires careful planning, enormous effort, team resources, and skills. The reasons for high complexity are the following:
-  - Increased demand for automation, as every service should be tested and monitored
-  - Available tools don’t work with service dependencies
-  - Data consistency and transaction management becomes harder as each service has a database
-- Security concerns
-  In a microservices application, each functionality that communicates externally via an API increases the chance of attacks.
-  These attacks can happen only if proper security measurements aren’t implemented when building an app.
-- Different programming languages
-  The ability to choose different programming languages is two sides of the same coin. Using different languages make deployment more difficult.
-  In addition, it’s harder to switch programmers between development phases when each service is written in a different language.
+- 复杂性
+  微服务最大的缺点在于其复杂性。把应用拆成独立的微服务需要管理更多构件。这类架构需要仔细规划、巨大投入、团队资源与技能。高复杂度的原因在于：
+  - 对自动化的需求增加，因为每项服务都应被测试和监控
+  - 可用工具不适用于服务依赖
+  - 数据一致性和事务管理变得更难，因为每个服务都有自己的数据库
+- 安全问题
+  在微服务应用中，每个通过 API 对外通信的功能都增加了被攻击的机会。这些攻击只有在构建应用时未实施恰当安全措施时才会发生。
+- 不同的编程语言
+  选择不同编程语言的能力是一枚硬币的两面。使用不同语言使部署更困难。此外，当每个服务用不同语言编写时，在开发阶段于不同程序员间切换更困难。
 
-**Microservices are good, but not for all types of apps.** This pattern works great for evolving applications and complex systems.
-When an application is large and needs to be flexible and scalable, microservices are beneficial.
+**微服务不错，但并非适用于所有类型的应用。** 这种模式对演进中的应用和复杂系统很有效。当应用庞大、需要灵活且可扩展时，微服务有益。
 
 Monolithic apps consist of interdependent, indivisible units and feature very low development speed.
 SOA is broken into smaller, moderately coupled services, and features slow development.
@@ -162,7 +128,6 @@ Microservices are very small, loosely coupled independent services and feature r
 - 接口的定义 通信协议 序列化协议等
 - 服务发布与订阅
 
-
 第⼆阶段要解决微服务应⽤的交付和规模化运维问题，这些是容器和Ks的领域
 
 第三阶段随着微服务架构复杂化，分布式场景下排查和诊断效率急剧下降开始成为开发者主要痛点，因此⼜催⽣了分布式链路跟踪和可观测性技术
@@ -172,8 +137,6 @@ Microservices are very small, loosely coupled independent services and feature r
 并具备服务注册发现、
 服务配置、负载均衡、API 网关、分布式事务 调度 API管理 服务压测等基本能力。其中，服务治理包括无损下线，服
 务容错，服务路由 服务鉴权 限流降级等能力。可观测性包括应用监控，链路追踪，日志管理，应用诊断等
-
-
 
 
 SOA有更明确精细的规范 而微服务对服务的实现约束更少 工程师可以自行选择服务治理框架 但同时对其素养有了更高的要求
@@ -200,7 +163,6 @@ SOA有更明确精细的规范 而微服务对服务的实现约束更少 工程
 样执⾏这条请求，有⼀些⽐较隐蔽的攻击，可能会通过变形的请求绕过流量特征的检测
 
 
-
 在应⽤层我们推荐使⽤应⽤层防护 RASP 技术来进⾏防护，RASP 全称 Runtime Application
 Self Protection，是⼀种在运⾏时检测应⽤程序攻击并进⾏⾃我保护的安全产品。RASP 通过
 Java Agent ⽅式挂载到微服务系统中，⽆需修改任何业务代码，对业务侵⼊性较低。RASP 能
@@ -211,60 +173,44 @@ Java Agent ⽅式挂载到微服务系统中，⽆需修改任何业务代码，
 基于特征的检测，RASP 同理也能都抵抗
 
 
-
 配置访问策略：
 - 从访问⽅式上，可以通过⿊⽩名单的⽅式来进⾏配置
 - 从访问粒度上，针对 Spring Cloud 类型的微服务，可以控制访问微服务的某⼀个具体的
 URL, 针对 Dubbo 类型的接⼝维度的微服务框架，可以⽀持控制访问微服务的某⼀个具体
 的接⼝
 
-### Serverless architecture
+### Serverless Architecture
 
-Serverless architecture is a cloud computing approach to building and running apps and services without the need for infrastructure management.
-In serverless apps, code execution is managed by a server, allowing developers to deploy code without worrying about server maintenance and provision.
-In fact, serverless doesn’t mean “no server.” The application is still running on servers, but a third-party cloud service like AWS takes full responsibility for these servers.
-A serverless architecture eliminates the need for extra resources, application scaling, server maintenance, and database and storage systems.
+无服务器架构（Serverless architecture）是一种无需管理基础设施就能构建和运行应用的云计算方法。在无服务器应用中，代码执行由服务器管理，让开发者可以部署代码而无需担心服务器维护和配置。事实上，无服务器并不意味着“没有服务器”。应用仍在服务器上运行，但像 AWS 这样的第三方云服务为这些服务器承担全部责任。无服务器架构消除对额外资源、应用扩展、服务器维护和数据库及存储系统的需求。
 
-The serverless architecture incorporates two concepts:
+无服务器架构包含两种概念：
 
-- **FaaS ( Function as a Service)** – a cloud computing model which allows developers to upload pieces of functionality to the cloud and let these pieces be executed independently
-- **BaaS ( Backend as a Service)** – a cloud computing model which allows developers to outsource backend aspects (database management, cloud storage, hosting, user authentication, etc.) and write and maintain only the frontend part
+- **FaaS（Function as a Service，函数即服务）**——一种云计算模型，允许开发者把功能片段上传到云，并让这些片段独立执行
+- **BaaS（Backend as a Service，后端即服务）**——一种云计算模型，允许开发者把后端方面（数据库管理、云存储、托管、用户认证等）外包，只编写和维护前端部分
 
-When using a serverless architecture, developers can focus on the product itself without worrying about server management or execution environments.
-This allows developers to focus on developing products with high reliability and scalability.
+使用无服务器架构时，开发者可以专注于产品本身，而无需担心服务器管理或执行环境。这让开发者能专注于开发高可靠性和可扩展性的产品。
 
-**Pros of a serverless architecture**
+**无服务器架构的优势（Pros of a serverless architecture）**
 
-- Easy to deploy
-  In serverless apps, developers don’t need to worry about infrastructure. This allows them to focus on the code itself.
-  Serverless architecture allows you to spin up an app extremely fast, as deployment takes only hours or days (compared to days or weeks with a traditional approach).
-- Lower costs
-  Going serverless reduces costs. Since you don’t need to handle databases, some logic, and servers, you can not only create higher quality code but also cut expenses.
-  When using a serverless model, you’re only charged for the CPU cycles and memory you actually use.
-- Enhanced scalability
-  Many business owners want their apps to become influential and scalable like Google or Facebook. Serverless computing makes scaling automatic and seamless.
-  Your app will automatically scale as your load or user base increases without affecting performance.
-  Serverless apps can handle a huge number of requests, whereas a traditional app will be overwhelmed by a sudden increase in requests.
+- 易于部署
+  在无服务器应用中，开发者不需要担心基础设施。这让他们能专注于代码本身。无服务器架构让你极快地启动应用，因为部署只需几小时或几天（相比传统方式的数天或数周）。
+- 更低的成本
+  转向无服务器降低了成本。由于你不需要处理数据库、部分逻辑和服务器，你不仅能写出更高质量的代码，还能削减开支。使用无服务器模型时，你只为实际使用的 CPU 周期和内存付费。
+- 增强的可扩展性
+  许多企业主希望他们的应用变得像 Google 或 Facebook 那样有影响力且可扩展。无服务器计算让扩展自动且无缝。你的应用会随着负载或用户基数增长自动扩展，而不影响性能。无服务器应用能处理海量请求，而传统应用会被请求的突增淹没。
 
-**Cons of a serverless architecture**
+**无服务器架构的劣势（Cons of a serverless architecture）**
 
-- Vendor lock-in
-  Vendor lock-in describes a situation when you give a vendor full control of your operations. As a result, changes to business logic are limited and migration from one vendor to another might be challenging.
-- Not for long-term tasks
-  A serverless model isn’t suitable for long-term operations. Serverless apps are good for short real-time processes, but if a task takes more than five minutes, a serverless app will need additional FaaS functionality.
+- 厂商锁定
+  厂商锁定描述你把运营完全控制权交给厂商的情况。结果是，业务逻辑的变更受限，从一个厂商迁移到另一个可能很有挑战。
+- 不适合长期任务
+  无服务器模型不适合长期运行的操作。无服务器应用适合短的实时过程，但如果任务超过五分钟，无服务器应用就需要额外的 FaaS 功能。
 
-Serverless software architecture is beneficial for accomplishing one-time tasks and auxiliary processes. It works great for client-heavy apps and apps that are growing fast and need to scale limitlessly.
+无服务器软件架构有利于完成一次性任务和辅助流程。它非常适合客户端密集的应用，以及快速增长、需要无限扩展的应用。
 
 
 
-## 服务治理
-
-
-
-
-
-
-
+## Service Governance
 
 
 ## Links

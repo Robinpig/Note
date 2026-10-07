@@ -30,9 +30,9 @@ Milvus Lite 是一个 Python 库，可导入到应用程序中。作为 Milvus �
 from pymilvus import MilvusClient
 import random
 
-# 1. 启动/连接 Milvus Lite
-# 指定一个本地文件路径（如 ./milvus_demo.db），Milvus Lite 会自动创建并启动
 # 如果文件已存在，则会直接加载之前的数据
+# Specify a Local File Path (e.g., ./milvus_demo.db), Milvus Lite Will Automatically Create and Start
+# If the File Already Exists, the Previous Data Is Loaded Directly
 client = MilvusClient(uri="./milvus_demo.db")
 
 print("Milvus Lite 已成功启动并连接！")
@@ -51,8 +51,8 @@ client.create_collection(
 )
 print(f"集合 '{collection_name}' 创建成功。")
 
-# 3. 插入数据
 # 准备一些模拟数据
+# Prepare Some Simulated Data
 num_entities = 10
 ids = [i for i in range(num_entities)]
 embeddings = [[random.uniform(-1, 1) for _ in range(8)] for _ in range(num_entities)]
@@ -190,7 +190,7 @@ Milvus 高度解耦的系统架构
 
 Milvus 采用存算分离架构，本身是完全无状态的，因此可以借助 Kubernetes 或公共云轻松扩展。此外，Milvus 的各个组件都有很好的解耦，其中最关键的三项任务——搜索、数据插入和索引/压实——被设计为易于并行化的流程，复杂的逻辑被分离出来。这确保了相应的查询节点、数据节点和索引节点可以独立地向上和向下扩展，从而优化了性能和成本效率。
 
-### 数据模型
+### Data Model
 
 Milvus 的数据存储分为逻辑层与物理层：
 

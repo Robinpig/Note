@@ -8,7 +8,7 @@ VPN（Virtual Private Network，虚拟专用网络）在公共网络（互联网
 - **加密与完整性**：对封装报文加密并做 MAC/认证，防嗅探与篡改，密码学基础见 [TLS](/docs/CS/CN/TLS.md)。
 - **认证与密钥协商**：通信前确认对端身份并协商会话密钥（IKE 等握手协议）。
 
-## 构建技术
+## Build Techniques
 
 主流的三类隧道技术：PPTP、IPsec、SSL/TLS VPN。
 
@@ -44,7 +44,7 @@ IPsec 是企业分支互联、云厂商 VPN 网关的标准方案；难点在策
 
 OpenVPN（TLS + 虚拟 TUN/TAP 网卡）、WireGuard（UDP + 现代密码学，代码仅数千行、性能高、内核内置）属于这一路线的现代演进；企业产品（Pulse/FortiClient/AnyConnect）多为 SSL VPN。
 
-### 技术对比
+### Technical Comparison
 
 | 维度 | PPTP | IPsec | SSL/TLS VPN（含 WireGuard） |
 |------|------|-------|------------------------------|
@@ -54,7 +54,7 @@ OpenVPN（TLS + 虚拟 TUN/TAP 网卡）、WireGuard（UDP + 现代密码学，�
 | 客户端 | 系统自带但已淘汰 | 配置复杂，网关场景为主 | 浏览器/轻客户端，部署快 |
 | 典型场景 | （淘汰） | site-to-site、云 VPN | 远程办公接入 |
 
-## 注意区分
+## Note the Distinction
 
 - VPN 解决的是**通道可信**，不等于访问控制：接入内网后仍要靠零信任（ZTNA，按身份与设备状态逐次授权）限制横向移动；
 - 反向代理 / SOCKS 代理只转发流量、默认不加密不鉴权，不是 VPN；

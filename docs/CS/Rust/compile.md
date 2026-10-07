@@ -2,7 +2,7 @@
 
 rustc 是 Rust 的官方编译器，基于 LLVM 后端（另有 cranelift 快速调试后端、GCC 后端等实验方向）。理解编译过程，能解释"借用检查为什么在编译期完成"、"宏和泛型单态化在哪个阶段发生"以及"为什么 debug 构建慢、release 快"。日常开发通常不直接调用 rustc，而是通过 Cargo 驱动整个构建与依赖管理。
 
-## 编译过程
+## Compilation Process
 
 ```
 源代码 .rs
@@ -25,7 +25,7 @@ rustc 是 Rust 的官方编译器，基于 LLVM 后端（另有 cranelift 快速
 - **单态化（monomorphization）**：泛型 `Vec<T>` 对每个具体类型 T 生成一份专用机器码，性能等同手写具体类型，代价是编译时间与代码体积膨胀；
 - **unsafe 不跳过借用检查**：unsafe 只开放少数额外能力（裸指针解引用、调用 unsafe fn 等），普通引用仍受完整检查。
 
-## Cargo 与工作区
+## Cargo and Workspaces
 
 Cargo 是官方构建系统与包管理器：`cargo build/check/test/run`、crates.io 依赖、feature flags、workspace 多 crate 构建。`cargo check` 只做到类型检查不做 codegen，是开发循环中最快的反馈方式。
 
@@ -34,7 +34,7 @@ Cargo 是官方构建系统与包管理器：`cargo build/check/test/run`、crat
 | dev（默认） | 0 | 编译快、运行慢，调试信息完整 |
 | release | 3 + LTO 可选 | 全量 LLVM 优化，编译慢但运行快 |
 
-## 与其他语言编译器的对照
+## Comparison with Compilers of Other Languages
 
 - 与 Go 相比：Go 直接生成机器码、编译极快、泛型用 GC 而不是所有权；rustc 借 LLVM 获得成熟优化但编译更慢；
 - 与 C++ 相比：两者共用 LLVM/链接器后端，区别在前端——Rust 把内存安全做成编译期类型系统规则（ownership/borrow/lifetime），C++ 靠开发者约定与运行时工具（ASan/Valgrind）事后发现；

@@ -4,7 +4,7 @@
 
 etcd.md 的 `get` 段其实把"读"和"写/apply"混在一段里讲了（标题是 get，内容却描述的是 propose→readyc→applyc 的写路径）；本文专讲**读路径**，并区分 linearizable 与 serializable 两种读。
 
-## 两种读：Serializable vs Linearizable
+## Two Reads: Serializable vs Linearizable
 
 etcd 的 `RangeRequest` 有个布尔字段 `Serializable`。它直接决定走不走 ReadIndex：
 
@@ -30,7 +30,7 @@ func (s *EtcdServer) Range(ctx context.Context, r *pb.RangeRequest) (*pb.RangeRe
 > [!NOTE]
 > serializable 读不是"错误数据"，而是"可能落后一个 apply 延迟"。监控读取、最终一致即可的业务、或扛大量读压力时常用它；要求强一致（如读刚写下去的配置）必须用默认 linearizable。
 
-## linearizableReadNotify 的流程
+## linearizableReadNotify Flow
 
 `Range` 调用 `linearizableReadNotify(ctx)` 只是往 `readwaitc` 发个信号；真正的 ReadIndex 由**后台常驻 goroutine** `linearizableReadLoop()` 驱动（v3_server.go:911）：
 
@@ -78,13 +78,13 @@ func (s *EtcdServer) linearizableReadLoop() {
 > [!NOTE]
 > 这个"一个 loop 唤醒一批读"的设计很关键：同一时刻多个线性读请求会被合并——它们共享同一个 ReadIndex 往返，只在 `appliedIndex` 追上后一起被放行。这把"每次读都走一次 Raft 心跳"的代价摊薄了。raft.md 只描述单条 ReadIndex 的四步，本文补的是 etcd 服务端的**批量聚合**实现。
 
-## Leader 变更与重试
+## Leader Change and Retry
 
 等待 `readStateC` 期间若 leader 发生变更，`requestCurrentIndex` 会返回 `ErrLeaderChanged`（一个**可重试**错误），`linearizableReadLoop` 据此 `continue` 重新发起 ReadIndex。`Range` 上层把这个错误交给客户端重试逻辑（见 [client](/docs/CS/Framework/etcd/client.md) 的 `isSafeRetry`：读是 immutable RPC，仅在 `Unavailable` 等少数码上重试）。
 
 requestID 用 8 字节、从 `reqIDGen` 递增生成，配合 `readStateC` 响应的 `RequestCtx` 做匹配；若某次请求超时，响应回来时会被 `slowReadIndex` 计数并忽略，继续等当前请求。
 
-## 与 raft.md 的衔接
+## Connection with raft.md
 
 | 层 | 文件 | 讲什么 |
 | :--- | :--- | :--- |

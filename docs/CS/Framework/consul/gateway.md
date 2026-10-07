@@ -2,7 +2,7 @@
 
 Consul 的**网关**与**多数据中心联邦**是它"跨机房原生"能力的落地。etcd 是单一 Raft 组、跨 DC 需外部复制；ZooKeeper 无跨 DC 概念；Consul 则把 mesh gateway / WAN federation 做成一等能力。本篇覆盖四种网关与两种联邦形态。
 
-## Mesh Gateway（服务网格跨 DC）
+## Mesh Gateway (Service Mesh Cross-DC)
 
 mesh gateway 让跨数据中心的服务网格流量走 WAN，而**不必把每个 sidecar 暴露到公网**：
 
@@ -12,19 +12,19 @@ mesh gateway 让跨数据中心的服务网格流量走 WAN，而**不必把每�
   - **remote 模式**：sidecar 直连远端 mesh gateway（需网络可达）；
 - WAN federation **用 mesh gateway 时**：server 只接受来自本地 mesh gateway 的 WAN Serf（8302）与 Server RPC（8300）流量，入站永远经由本地 gateway——更安全。
 
-## Ingress Gateway（南北向入站）
+## Ingress Gateway (North-South Inbound)
 
 ingress gateway 把**外部流量引入**服务网格：经典场景是"公网 / 外部调用方 → ingress gateway → 网格内服务"，统一走 mTLS + 意图校验。与 API gateway 区别：ingress 偏"进网格"，API gateway 偏"对外暴露北向 API + L7 路由"。
 
-## Terminating Gateway（出网格到外部）
+## Terminating Gateway (Egress to External)
 
 terminating gateway 让网格内服务**安全访问网格外的存量系统**（如未接入 Consul 的传统数据库、第三方 API）：由 gateway 代理出站、统一 TLS 与 ACL，存量系统无需改造。2.0 起其上游 TLS 改为 SDS 动态证书，可热更新无需重启。
 
-## API Gateway（北向 L7）
+## API Gateway (Northbound L7)
 
 Consul 自带 **API gateway**（与主线同版本发布，非独立组件）：对外暴露北向 HTTP/TCP API，支持 L7 路由、TLS（2.0 起支持 listener 级 SDS 证书 + 路由级 SDS 覆盖）、限流（Enterprise 有 `rate-limit` 配置项做全局 RPC 限流）。可与 `service-router` / `service-splitter` 联动做金丝雀。2.0.3/2.0.4 修复了 api-gateway / terminating-gateway 的路径规范化（CVE-2024-10005，防 L7 意图 RBAC 绕过）。
 
-## WAN Federation：两种形态
+## WAN Federation: Two Forms
 
 跨 DC 联邦本质是把各 DC 的 catalog 连通，两种实现：
 

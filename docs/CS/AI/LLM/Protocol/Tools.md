@@ -4,7 +4,7 @@ LLM 本身只会输出 token，是**工具（Tools / Function Calling）**让它
 
 本笔记梳理工具生态的三个层次：函数调用能力本身、工具接入协议、以及面向 AI 编程的现成工具/技能集合。
 
-## 三个层次
+## Three Levels
 
 | 层 | 解决的问题 | 代表 |
 | --- | --- | --- |
@@ -21,15 +21,15 @@ LLM 本身只会输出 token，是**工具（Tools / Function Calling）**让它
 - **副作用走审批**：删改文件、下单付款等动作要经策略层和人工确认，设计参考 Codex 的沙箱/策略/审批/schema 四层（fail closed）。
 - **并行/顺序调用**：无依赖的调用可并发；有依赖的由模型多轮决策。
 
-### MCP：工具接入标准化
+### MCP: Standardizing Tool Access
 
 没有协议时，N 个 Agent × M 个工具要写 N×M 个适配；[MCP](/docs/CS/AI/LLM/Protocol/MCP.md) 把它降为 N+M：工具实现为 MCP Server，任何支持 MCP 的 Agent（Client）都能发现（list tools）并调用。这与 JDBC/ODBC 之于数据库、LSP 之于编辑器是同一种「统一驱动」思想。
 
-### Skill：打包可复用的做事方法
+### Skill: Packaging Reusable Ways of Doing Things
 
 [Skill](/docs/CS/AI/LLM/Agent/Theory/Skill.md) 比单个函数粒度更大：一个 `SKILL.md` + 脚本 + 参考资料，描述「遇到某类任务该按什么步骤做、有哪些约束和坑」，按需加载（渐进式披露）。自进化 Agent（如 [Hermes](/docs/CS/AI/LLM/Agent/Practice/Hermes.md)）能在使用中自动创建和修补自己的 Skill。
 
-## AI 编程工具集
+## AI Coding Toolset
 
 面向 code agent 的「超能力」工具箱，通常以 Skill / 指令集形式分发：
 

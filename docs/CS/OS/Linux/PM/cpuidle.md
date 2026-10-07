@@ -6,7 +6,7 @@ cpuidle 管的是**"CPU 没事做的时候能停多久"**。当每个 CPU 上的
 
 版本基线 **v7.2**（本文所有函数名与常量均在该版本核实）。
 
-## C-state 与 P-state 的区别
+## Differences Between C-state and P-state
 
 | | C-state（cpuidle） | P-state（cpufreq） |
 | :-- | :-- | :-- |
@@ -18,9 +18,9 @@ cpuidle 管的是**"CPU 没事做的时候能停多久"**。当每个 CPU 上的
 
 C0 是"运行态"不算空闲态，C1 及以后才是真正的省电档。**功耗构成**上，动态功耗（$C V^2 f$）随频率平方增长、随电压降低而快速下降，所以 C-state 省的是与频率无关的那部分漏电 + 驱动功耗。
 
-## 数据结构
+## Data Structures
 
-### struct cpuidle_state：一个 C-state
+### struct cpuidle_state: A C-state
 
 ```c
 struct cpuidle_state {
@@ -63,7 +63,7 @@ struct cpuidle_state {
 
 s2idle（suspend-to-idle）路径**禁止在回调里重开中断**（哪怕是临时的），因为整机正在用它作为睡眠目标。它可以与 `->enter` 指向同一函数。
 
-### struct cpuidle_driver：一个平台的空闲实现
+### struct cpuidle_driver: A Platform Idle Implementation
 
 ```c
 struct cpuidle_driver {
@@ -90,9 +90,9 @@ struct cpuidle_driver {
 - **`states` 数组必须按功耗递减排序** —— governor 依赖这个顺序做区间搜索，乱序会导致选错档。
 - `governor` 是**注册时指定的优先 governor**，cpuidle 框架会用它。
 
-## 选择流程
+## Selection Workflow
 
-### cpuidle_select：交给 governor
+### cpuidle_select: Handing Off to the Governor
 
 ```c
 int cpuidle_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
@@ -106,7 +106,7 @@ int cpuidle_select(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 
 > ⚠️ **v7.2 的重要变化**：旧资料里的 `cpuidle_go_billiard()`（进空闲前的兜底/看门狗逻辑）**已被删除**。取而代之的是 `cpuidle_poll_time()`（`drivers/cpuidle/poll_state.c`），用于 POLL_IDLE 模式。写"进 idle 前先自旋一会等中断"的逻辑现在走 poll_state 而不是 go_billiard。
 
-### cpuidle_enter：真正进档
+### cpuidle_enter: Actually Entering the State
 
 ```c
 int cpuidle_enter(struct cpuidle_driver *drv, struct cpuidle_device *dev,
@@ -136,7 +136,7 @@ int cpuidle_enter(struct cpuidle_driver *drv, struct cpuidle_device *dev,
 
 `cpuidle_state_is_coupled()` 是个分叉：**coupled C-state** 要求一组 CPU（通常是同一物理核的 SMT 兄弟或共享时钟域的核）**同时**空闲才能进入，否则省不了电。`cpuidle_enter_state_coupled()` 会等待同组其他 CPU 也到达空闲。
 
-### 统计：rejected 计数揭示了什么
+### Statistics: What the rejected Count Reveals
 
 `cpuidle_enter_state()` 里对每档维护两组计数：
 
@@ -173,7 +173,7 @@ menu 是最常用的 governor（也是其他 governor 的参考实现）。它�
 
 **两个决策因素相互独立**：
 
-### 因素一：能量盈亏平衡点
+### Factor One: Energy Break-even Point
 
 ```c
  * C state entry and exit have an energy cost, and a certain amount of time in
@@ -228,7 +228,7 @@ struct menu_device {
 };
 ```
 
-### 因素二：重复间隔检测器
+### Factor Two: Recurrence Interval Detector
 
 ```c
  * Repeatable-interval-detector
@@ -258,7 +258,7 @@ struct menu_device {
 
 `MAX_INTERESTING` = 50 ms 是"有意义的最大空闲时长"上界 —— 超过这个值的预测精度不值得关注。
 
-### 决策
+### Decision
 
 `menu_select()` 里的选档逻辑分两层：先按修正因子算出 `predicted_ns`（预测的实际空闲时长），再用它去和每档的 `target_residency_ns` 比较：
 
@@ -306,7 +306,7 @@ tick 相关的两处判断：
 
 > **v7.2 的变化**：menu 只有**单一** `menu_select()` 入口，没有旧资料里的 `menu_get_next_idx()` / `menu_select_state()` 两段式接口。
 
-## 与 tick 的联动
+## Coupling with tick
 
 cpuidle 与 NO_HZ tickless 的耦合点在 `cpuidle_enter()` 开头：
 
@@ -327,13 +327,13 @@ cpuidle 与 NO_HZ tickless 的耦合点在 `cpuidle_enter()` 开头：
 
 停掉 tick 后由 hrtimer 模拟出 tick，这就是 [timer](/docs/CS/OS/Linux/timer.md) 里 NO_HZ 的 "停掉之后：hrtimer 模拟 tick" 一节。**停 tick 的决策权在 governor 手上**（通过 `stop_tick` 输出参数），不在 cpuidle 框架。
 
-## PM QoS：约束 C-state 深度
+## PM QoS: Constraining C-state Depth
 
 用户态延迟约束通过 PM QoS 进入，governor 读它作为"因素二"。效果是：**有实时任务时，governor 不会选深度 C-state**。
 
 > ⚠️ **v7.2 的变化**：旧的 `cpuidle_latency_limit` / `cpuidle_latency_requirement` 两个 sysfs 节点**已删除**，语义完全由 PM QoS 承担。旧脚本写 `/sys/devices/system/cpu/cpuidle/cpuidle_latency_limit` 会失败。
 
-## 与其它子系统的接缝
+## Seams with Other Subsystems
 
 - **timer**：停 tick 与 hrtimer 模拟见 [timer](/docs/CS/OS/Linux/timer.md)；`cpuidle_enter()` 直接依赖 `tick_nohz_get_next_hrtimer()`。
 - **调度器**：进入 cpuidle 的前置条件是所有任务都不可调度，路径见 [sche](/docs/CS/OS/Linux/proc/sche.md) 的空闲部分。
@@ -341,7 +341,7 @@ cpuidle 与 NO_HZ tickless 的耦合点在 `cpuidle_enter()` 开头：
 - **cpufreq**：C-state 出节电、P-state 出性能，两者的预测输入同源，见 [cpufreq](/docs/CS/OS/Linux/PM/cpufreq.md)。
 - **runtime PM**：进 C-state 前的设备 suspend 与 PM QoS 交互见 [runtime PM](/docs/CS/OS/Linux/PM/runtimepm.md)。
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 ```shell
 # 当前 governor 与 driver

@@ -2,7 +2,7 @@
 
 Gradle 是一个基于 **任务有向无环图（Task DAG）** 的构建工具，用 Groovy 或 Kotlin DSL 描述构建（当前推荐 Kotlin DSL，`build.gradle.kts` 类型安全、IDE 补全好）。它结合了 Ant 的灵活性与 Maven 的约定和依赖管理，并通过增量构建、构建缓存、常驻守护进程大幅提升大型工程的构建速度，是 Android 与大型多模块 JVM 项目的事实标准。
 
-## 任务模型
+## Task Model
 
 构建被建模为一组 Task：每个任务声明**输入与输出**（注解或 DSL），Gradle 据此做 up-to-date 检查——输入未变且输出存在，任务直接标 `UP-TO-DATE` 跳过。任务之间用 `dependsOn` 构成 DAG，Gradle 配置阶段先确定执行图，再按拓扑序执行。
 
@@ -15,7 +15,7 @@ tasks.register('hello') {
 
 插件提供现成任务与约定：`java`、`application`、`org.springframework.boot`、`com.google.cloud.tools.jib`（直接构建/推送镜像免 Dockerfile）等。
 
-## 常用命令
+## Common Commands
 
 ```shell
 ./gradlew tasks                       # 查看可用任务
@@ -45,7 +45,7 @@ test {
 
 配合 JUnit 5 的 `@Tag` 做测试分层（单测/集成测试分离），CI 只默认跑 fast 组。`--tests` 可过滤单个类/方法：`./gradlew test --tests '*OrderServiceTest.create'`。测试默认也是增量的（输入变化才重跑），强制刷新用 `--rerun-tasks` 或 cleanTest。
 
-## 依赖管理
+## Dependency Management
 
 ```kotlin
 dependencies {
@@ -61,14 +61,14 @@ dependencies {
 - 版本统一：BOM 用 `platform("...:dependencies")`；多模块用 version catalog（`gradle/libs.versions.toml`）集中声明；
 - 排查冲突：`dependencyInsight --dependency xxx`，强制版本用 constraints 或 resolutionStrategy。
 
-## 性能机制
+## Performance Mechanism
 
 - **Daemon**：常驻 JVM，缓存已解析的构建模型，消除启动开销（本地开发默认开启）；
 - **Configuration on demand / 配置缓存**：只配置相关模块、把配置结果序列化复用，进一步降低配置阶段耗时；
 - **Build Cache**：任务输出按输入哈希缓存，本地目录或 HTTP 远程共享——不同机器/分支只要输入相同即复用（含代码、资源、JDK 版本等作为 key）；
 - **并行执行**：`--parallel` 让互不相关的多模块任务并行。
 
-## Wrapper 与多模块
+## Wrapper and Multi-module
 
 - **Wrapper**（`gradlew` + `gradle/wrapper/`）固化 Gradle 版本，任何人/CI 执行 `./gradlew` 自动下载声明版本，是项目应提交进版本库的基础设施；
 - `settings.gradle(.kts)` 里 `include(":module-a")` 声明模块，`rootProject` + `subprojects` 可统一公共配置，模块间用 `project(":module-a")` 依赖，应保持依赖方向无环。

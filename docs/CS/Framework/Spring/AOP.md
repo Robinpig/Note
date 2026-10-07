@@ -869,7 +869,7 @@ public class MethodBeforeAdviceInterceptor implements MethodInterceptor, BeforeA
 }
 ```
 
-## AOP 与 AOT / Native Image 注意
+## AOP and AOT / Native Image Notes
 
 AOP 代理（JDK 动态代理 / CGLIB）依赖运行期反射生成代理类，在 [AOT](/docs/CS/Framework/Spring/AOT.md) / GraalVM native image 下属于"动态能力"，需要显式 hint：
 
@@ -890,7 +890,7 @@ AOP 代理（JDK 动态代理 / CGLIB）依赖运行期反射生成代理类，�
 - `intersection(p1, p2)`：两者都要匹配；
 - 常用实现：`NameMatchMethodPointcut`（按方法名）、`JdkRegexpMethodPointcut`（正则）、`AspectJExpressionPointcut`（AspectJ 表达式，注解风格底层也用它）。
 
-### Advice 类型与 Advisor
+### Advice Types and Advisor
 
 | Advice | 接口 | 语义 |
 |---|---|---|
@@ -901,7 +901,7 @@ AOP 代理（JDK 动态代理 / CGLIB）依赖运行期反射生成代理类，�
 
 `Advisor` = Pointcut + Advice；`DefaultPointcutAdvisor` 是最常用的组合实现。
 
-### 编程式创建代理
+### Programmatically Create a Proxy
 
 ```java
 ProxyFactory factory = new ProxyFactory(new MyService());

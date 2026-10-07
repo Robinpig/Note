@@ -176,7 +176,7 @@ class OrderListener {
 }
 ```
 
-### 条件与顺序
+### Conditions and Order
 
 `condition` 接受一段 SpEL，返回 `false` 则跳过。可用变量包括事件本身（`#root.event` 或直接用属性名）与方法参数（`#root.args` / `#p0` / `#a0`）：
 
@@ -187,7 +187,7 @@ public void on(OrderPlaced event) { /* 只处理大额订单 */ }
 
 多个监听同一事件的方法用 `@Order`（或实现 `Ordered`）定义先后，数值小的先执行。但**不要把顺序当成编排手段**——监听器之间应该彼此无感知，需要严格先后时应显式调用。
 
-### 异步执行
+### Async Execution
 
 事件默认是**同步**的：监听器在 `publishEvent` 的调用线程上执行，抛出的异常会回传给发布者（进而可能回滚事务）。两种异步化方式：
 
@@ -205,7 +205,7 @@ public void on(OrderPlaced event) { /* 在另一个线程上执行 */ }
 > [!WARNING]
 > 一旦事件异步化，监听器里的异常**不再传播**给发布者，只能通过 `AsyncUncaughtExceptionHandler`（实现 `AsyncConfigurer`）或 multicaster 的 `ErrorHandler` 捕获。同时线程绑定的事务上下文、`SecurityContext`、MDC 都不会自动传递过去。
 
-### 泛型事件
+### Generic Events
 
 `PayloadApplicationEvent<T>` 携带了 `ResolvableType`，因此 `ApplicationListener<PayloadApplicationEvent<OrderPlaced>>` 这类带泛型的声明能精确匹配。自定义事件若本身是泛型类（`EntityCreated<Order>`），需要实现 `ResolvableTypeProvider` 主动报告真实类型，否则会因类型擦除导致所有泛型实例互相串台：
 
@@ -245,7 +245,7 @@ class OrderNotificationListener {
 }
 ```
 
-### 无事务时静默丢弃
+### Silently Discarded When No Transaction
 
 `fallbackExecution` 默认 **false**：事件发布处若没有活动事务，监听器**根本不会执行，而且没有任何报错**。这是该注解最高频的使用事故——本地跑通（外层有事务），某个非事务入口调用时行为悄悄消失。
 
@@ -257,7 +257,7 @@ public void on(OrderPlaced event) { /* 有事务则提交后执行，无事务�
 > [!WARNING]
 > `fallbackExecution = true` 会让同一个监听器在两条代码路径上拥有**不同语义**：从事务入口进来是"提交后"，从非事务入口进来是"立即"。同一笔业务可能因此先后不一致，除非明确接受这种二分，否则宁可要求调用方补上事务边界。
 
-### AFTER_COMMIT 不等于新事务
+### AFTER_COMMIT Is Not a New Transaction
 
 提交完成后事务资源可能仍未完全释放，此时在监听器里直接写库，"改动不会提交"——它表面上能执行 SQL，实际参与的是一个已经完成的连接。需要在提交后写入，应显式开新事务：
 
@@ -270,15 +270,15 @@ public void createFor(OrderPlaced event) {
 
 `REQUIRES_NEW` 会额外占用一条数据库连接，连接池要按此容量规划。若要求"业务数据与待发消息同生共死"，正确解法不是事务监听器，而是**事务性发件箱（outbox）**：同一事务内写业务表与 outbox 表，再由独立投递器发出去——[Spring Modulith](/docs/CS/Framework/Spring/Modulith.md) 的 Event Publication Registry 正是这一模式的开箱实现。
 
-### 与响应式事务不兼容
+### Incompatible with Reactive Transactions
 
 事务事件依赖 `TransactionSynchronizationManager` 的**线程绑定**状态。响应式事务由 `ReactiveTransactionManager` 管理，状态存放在 Reactor `Context` 而非线程局部变量，因此从监听器视角看"没有活动事务"，`@TransactionalEventListener` 不会生效。响应式栈要用事务后回调，需自行在 `TransactionalOperator` 的 `doFinally` / `doOnSuccess` 上挂逻辑。
 
-### 只与 PlatformTransactionManager 协同
+### Only Coordinates with PlatformTransactionManager
 
 `@TransactionalEventListener` 只识别 `PlatformTransactionManager` 管理的事务；自己手写 JDBC `Connection#commit()`、或 `@Transactional` 因自调用/非 public 方法未生效时，同样会落入"无事务 → 静默丢弃"。
 
-## @Async 与事务事件的组合
+## @Async Combined with Transaction Events
 
 "提交后 + 异步"是最常见的搭配——提交后不阻塞请求线程，又能保证数据可见：
 

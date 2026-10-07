@@ -13,9 +13,9 @@ input 子系统解决一个具体问题：**把"物理设备产生的物理量"�
 >
 > 本文所有函数名、字段名与文件路径在 **v7.2** 核实。v7.2 的 input 目录做过一轮改名，见文末"v7.2 变化清单"——**照抄旧教程会找不到文件**。
 
-## 核心数据结构
+## Core Data Structures
 
-### struct input_dev：设备端
+### struct input_dev: The Device Side
 
 `include/linux/input.h:137-212`。按功能分组：
 
@@ -35,7 +35,7 @@ input 子系统解决一个具体问题：**把"物理设备产生的物理量"�
 
 `input_dev` 自己也挂进设备模型（`dev` 字段），所以 input 设备在 sysfs 里有 `/sys/class/input/` 树。
 
-### struct input_handler：处理端
+### struct input_handler: The Handler Side
 
 `include/linux/input.h:315-337`：
 
@@ -51,7 +51,7 @@ input 子系统解决一个具体问题：**把"物理设备产生的物理量"�
 
 > **v7.2 的关键变化是 `events()` 批量回调**。注释明确说同一结构也用于实现 input filter。批量接口的价值：一次鼠标移动会产生多个事件（X 位移、Y 位移、SYN_REPORT），批量传递省掉逐个函数调用的开销。
 
-### struct input_value：值的抽象
+### struct input_value: Abstraction of a Value
 
 ```c
 struct input_value {
@@ -76,7 +76,7 @@ enum input_clock_type {
 };
 ```
 
-## 事件分发链
+## Event Dispatch Chain
 
 v7.2 的实际链路（比旧资料的"三段式"多一层批量值处理）：
 
@@ -113,7 +113,7 @@ input_pass_values()                                input.c:111  （持锁 + 关�
 
 反向注入（handler → device）走 `input_inject_event()`（`input.c:412`），在 RCU 下查 `dev->grab`，非 grab 设备收到的事件被丢弃。
 
-### 三个 disposition 常量
+### The Three Disposition Constants
 
 ```c
 #define INPUT_IGNORE_EVENT	0
@@ -123,7 +123,7 @@ input_pass_values()                                input.c:111  （持锁 + 关�
 
 `input_get_disposition()` 返回它们。`dev->event()` 回调可通过 `input_event_dispose()` 的返回值影响后续走向。`INPUT_SLOT` 与多点触摸的 slot 机制相关。
 
-## 时间戳抽象
+## Timestamp Abstraction
 
 驱动上报事件时若不显式给时间，内核会补：
 
@@ -144,7 +144,7 @@ ktime_t *input_get_timestamp(struct input_dev *dev);                   /* input.
 
 `input_get_timestamp()` 有个特殊行为：**若 MONO 为 0 则用 `ktime_get()` 合成**。这是"非零即有效"的约定 —— 所以冲刷批量后会重置 MONO 槽位（`input.c:350`），注释说明只重置单体时钟，因为它的存在与否正是"是否需要生成合成时间戳"的判据。
 
-## evdev：把事件交给用户态
+## evdev: Delivering Events to User Space
 
 `drivers/input/evdev.c`。用户态通过 `/dev/input/eventN` 读事件，容器是 `struct input_event`（uapi 定义）。
 
@@ -164,7 +164,7 @@ ktime_t *input_get_timestamp(struct input_dev *dev);                   /* input.
 
 关键常量：`EVDEV_MINOR_BASE 64`、`EVDEV_MINORS 32`（所以 event 编号从 64 起）、`EVDEV_MIN_BUFFER_SIZE 64U`、`EVDEV_BUF_PACKETS 8`。
 
-### 事件过滤
+### Event Filtering
 
 `__evdev_is_filtered()`（`evdev.c:78`）：**`EV_SYN` 与 `type >= EV_CNT` 永不过滤**。所以用户态关掉某类事件不影响 `SYN_REPORT` 的同步语义。
 
@@ -179,7 +179,7 @@ ktime_t *input_get_timestamp(struct input_dev *dev);                   /* input.
 
 `evdev_pass_values()`（`evdev.c:247`）会**丢弃空的 `SYN_REPORT`**（`272-275`）—— 一批事件里若只有同步标记，就不通知用户态（无意义地唤醒它）。只在真有内容时才 `wake_up_interruptible_poll()`。
 
-### 常用 ioctl
+### Common ioctls
 
 | ioctl | 作用 |
 | :-- | :-- |
@@ -197,7 +197,7 @@ ktime_t *input_get_timestamp(struct input_dev *dev);                   /* input.
 
 > ⚠️ `input_event_from_user()` 声明在 **`drivers/input/input-compat.h:69`**（不再是 `input.h`），配套 `input_event_to_user()`、`input_ff_effect_from_user()`。
 
-## input-poller：轮询型设备
+## input-poller: Polling-Type Devices
 
 滑块、摇杆、加速度计这类**没有中断线**的设备需要内核主动轮询。`drivers/input/input-poller.c`（221 行）：
 
@@ -227,9 +227,9 @@ struct input_dev_poller {
 
 `input_start_polling()` 只在 `poll_interval > 0` 时首次同步调 `poll()`（`input.c:58-59`），所以"启用即调一次"。
 
-## 其它 input 驱动
+## Other input Drivers
 
-### mousedev：转成 PS/2 协议
+### mousedev: Converting to the PS/2 Protocol
 
 `drivers/input/mousedev.c`（1125 行）把 input 事件**翻译成 PS/2 鼠标协议字节流**，供 X server / gpm 这类老式用户态消费。
 
@@ -244,7 +244,7 @@ struct input_dev_poller {
 	mousedev_touchpad_touch() /* 触摸板起停 */            mousedev.c:319
 ```
 
-### 键盘
+### Keyboard
 
 > ⚠️ **v7.2 没有独立的 `kbd-core.c` —— 键盘核心状态机在 `input.c` 内**。`drivers/input/keyboard/` 子目录只放具体控制器驱动（`atkbd.c` / `gpio_keys.c` / `matrix_keypad.c` 等）。
 
@@ -255,7 +255,7 @@ struct input_dev_poller {
 - `dev->rep[REP_CNT]`（`input.h:174`）存重复速率与延迟；
 - `EV_REP` 周期值在 `input.c:1731-1732` 下发。
 
-### touchscreen 与多点触摸
+### Touchscreen and Multi-Touch
 
 `drivers/input/touchscreen.c`（208 行）只放**共用的 slot 状态机与 `input_device_enabled()` 判定**（后者被 `input-poller.c:170` 调用），不针对具体硬件。
 
@@ -263,7 +263,7 @@ MT 核心在 `drivers/input/input-mt.c`：`input_mt_init_slot()` 系列管理 sl
 
 `touch-overlay.c` 提供**触摸框选/放大**这类叠加手势。
 
-### misc：板级杂项
+### misc: Board-Level Miscellanea
 
 `drivers/input/misc/` 有 90+ 个驱动，全是**板级/SoC 杂项**，不按设备类型划分：
 
@@ -290,7 +290,7 @@ MT 核心在 `drivers/input/input-mt.c`：`input_mt_init_slot()` 系列管理 sl
 
 > ⚠️ **`drivers/input/gamepad.c` 不存在**。另有旧式字符设备 `joydev.c`（`CONFIG_JOYSTICK`）。
 
-## 能力位图的一致性校验
+## Consistency Check of the Capability Bitmap
 
 一个容易忽略但很体现内核风格的做法：`include/linux/input.h:219-262` 用 `#error` 指令**在编译期校验** uapi 侧的枚举与内核侧宏一致：
 
@@ -304,7 +304,7 @@ MT 核心在 `drivers/input/input-mt.c`：`input_mt_init_slot()` 系列管理 sl
 
 事件类型的实际定义位置：`include/uapi/linux/input-event-codes.h`（1016 行），uapi 的 `struct input_event` 在 `include/uapi/linux/input.h`（539 行）。
 
-## v7.2 变化清单
+## v7.2 Change List
 
 | 旧（不存在） | v7.2 | 说明 |
 | :-- | :-- | :-- |
@@ -320,7 +320,7 @@ MT 核心在 `drivers/input/input-mt.c`：`input_mt_init_slot()` 系列管理 sl
 | `handler->event` 直连 | `handle->handle_events` 批量层 | 需经 `input_handle_events_default/filter/null` 之一 |
 | `input_dev_get_*` 当 evdev API | 只在 `input-poller.c` 是 sysfs 属性读写 | 真正的引用计数接口是 `input_get_device()` / `input_put_device()` |
 
-## 与其它子系统的接缝
+## Seams with Other Subsystems
 
 - **设备模型**：`input_dev` 内嵌 `struct device`，走 probe/match 绑定，见 [设备模型 device](/docs/CS/OS/Linux/dev/device.md)。
 - **字符设备**：evdev 走 `cdev` 暴露 `/dev/input/eventN`，见 [字符设备驱动 char](/docs/CS/OS/Linux/dev/char.md)。
@@ -328,7 +328,7 @@ MT 核心在 `drivers/input/input-mt.c`：`input_mt_init_slot()` 系列管理 sl
 - **总线**：i2c_hid / usbhid 等驱动通过总线注册 input 设备，见 [dev 总线族](/docs/CS/OS/Linux/dev/bus.md)。
 - **用户态**：uinput 反向造设备、D-Bus 转发（`libinput`/`evdev`）都是用户态选择。
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 ```shell
 # 列出所有 input 设备与能力

@@ -6,7 +6,7 @@ Lombok能通过注解的方式，在编译时自动为属性生成构造器、ge
 
  Lombok的使用跟引用jar包一样，可以从maven仓库引入依赖，同时IDE还需要安装插件。
 
-## 注解
+## Annotations
 
 ### @Data
 
@@ -59,7 +59,7 @@ Lombok没法实现多种参数构造器的重载。
 - fluent 在chain基础上将setter和getter方法名改为属性名
 - prefix  prefix用于忽视指定前缀，修改getter和setter方法的方法名（遵守驼峰命名 
 
-## Lombok工作原理分析
+## Lombok Working Principle Analysis
 
 自动生成的代码到底是如何产生的呢？
 
@@ -94,7 +94,7 @@ Lombok本质上就是一个实现了“[JSR 269 API](https://www.jcp.org/en/jsr/
 
 拜读了Lombok源码，对应注解的实现都在HandleXXX中，比如@Getter注解的实现时HandleGetter.handle()。还有一些其它类库使用这种方式实现，比如[Google Auto](https://github.com/google/auto)、[Dagger](http://square.github.io/dagger/)等等。
 
-## Lombok的优缺点
+## Lombok Pros and Cons
 
 优点：
 
@@ -107,7 +107,7 @@ Lombok本质上就是一个实现了“[JSR 269 API](https://www.jcp.org/en/jsr/
 1. **不支持多种参数构造器的重载**
 2. 虽然省去了手动创建getter/setter方法的麻烦，但大大降低了源代码的可读性和完整性，降低了阅读源代码的舒适度
 
-##  总结
+##  Summary
 
 Lombok虽然有很多优点，但Lombok更类似于一种IDE插件，项目也需要依赖相应的jar包。Lombok依赖jar包是因为编译时要用它的注解，为什么说它又类似插件？因为在使用时，eclipse或IntelliJ IDEA都需要安装相应的插件，在编译器编译时通过操作AST（抽象语法树）改变字节码生成，变向的就是说它在改变java语法。它不像spring的依赖注入或者mybatis的ORM一样是运行时的特性，而是编译时的特性。这里我个人最感觉不爽的地方就是对**插件的依赖**！因为Lombok只是省去了一些人工生成代码的麻烦，但IDE都有快捷键来协助生成getter/setter等方法，也非常方便。
 

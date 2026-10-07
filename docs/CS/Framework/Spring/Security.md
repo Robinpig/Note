@@ -4,7 +4,7 @@
 It is the de-facto standard for securing Spring-based applications.
 Spring Security is a framework that focuses on providing both authentication and authorization to Java applications.
 
-### 版本演进
+### Version Evolution
 
 Spring Security 5.7 / 6.0 是一条重要分界线，理解新旧 API 对应关系是读旧资料的前提：
 
@@ -352,7 +352,7 @@ public interface PasswordEncoder {
 Spring Security provides interceptors which control access to secure objects such as method invocations or web requests. 
 A pre-invocation decision on whether the invocation is allowed to proceed is made by the AccessDecisionManager.
 
-### AccessDecisionManager（5.x 旧 API）
+### AccessDecisionManager (Legacy 5.x API)
 
 ```java
 public interface AccessDecisionManager {
@@ -412,7 +412,7 @@ It will also implement the proper handling of secure object invocations, namely:
        The AbstractSecurityInterceptor will take no further action when its afterInvocation(InterceptorStatusToken, Object) is called.
 5. Control again returns to the concrete subclass, along with the Object that should be returned to the caller. The subclass will then return that result or exception to the original caller.
 
-### AuthorizationManager（6.x 新 API / 7.x 已更名 authorize）
+### AuthorizationManager (New 6.x API / Renamed authorize in 7.x)
 
 Spring Security 6 用 `AuthorizationManager` 取代 `AccessDecisionManager` + `AccessDecisionVoter` 组合，投票语义收敛为一次判定调用（6.x 方法名为 `check`，**7.0 更名为 `authorize`**，`check` 已移除）：
 
@@ -456,7 +456,7 @@ public Order getOrder(Long orderId) { ... }
 实现基于 Spring AOP：`AuthorizationManagerBeforeMethodInterceptor` 等拦截器在方法调用前后执行对应的 `AuthorizationManager`。
 注解可标注在接口上，支持元注解组合成自定义注解（如 `@AdminOnly`），与 `@Secured`、JSR-250 的 `@RolesAllowed` 并存。
 
-## 配置
+## Configuration
 
 ### SecurityFilterChain（6.x）
 

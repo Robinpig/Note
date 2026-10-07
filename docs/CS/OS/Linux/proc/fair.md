@@ -13,7 +13,7 @@ https://www.kernel.org/doc/Documentation/scheduler/sched-design-CFS.txt
 
 
 
-### vruntime 与权重
+### vruntime and Weight
 
 CFS/EEVDF 的核心量是 **vruntime**（虚拟运行时间）：实际运行时间按权重归一化后的值。权重由 nice 值决定（`sched_prio_to_weight` 表），nice 每低 1 级权重大约 ×1.25；权重越大的实体 vruntime 增长越慢，从而分到更多 CPU 时间。
 
@@ -253,7 +253,7 @@ place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 }
 ```
 
-### CFS 带宽控制
+### CFS Bandwidth Control
 
 cgroup 层面对普通任务也有配额：`cpu.cfs_quota_us` / `cpu.cfs_period_us`（如 200000/1000000 = 0.2 个 CPU）。每个周期内 runtime 耗尽后 `check_cfs_rq_runtime()` 触发 throttle，cfs_rq 被整体出队，任务进入 throttled 状态直到下个周期补充配额——容器 CPU 限流的根源就在这里（[cgroup](/docs/CS/OS/Linux/cgroup.md)）。上文 enqueue_entity 中的 `check_enqueue_throttle` 与 rq 里的 `cfsb_*` 字段即相关实现。
 

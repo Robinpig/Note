@@ -40,12 +40,12 @@ Linux 驱动，内核协议栈等等模块在具备接收⽹卡数据包之前�
 只有这些都Ready之后，我们才能真正开始接收数据包。
 
 
-### 软中断内核线程创建
+### Softirq Kernel Thread Creation
 
 Linux 的软中断都是在专⻔的内核线程 [ksoftirqd](/docs/CS/OS/Linux/Interrupt.md?id=init_softirq) 进行
 系统初始化时为每个CPU创建独立的 ksoftirqd
 
-### 网络子系统初始化
+### Network Subsystem Initialization
 
 linux 内核通过调⽤ subsys_initcall 来初始化各个⼦系统，在源代码⽬录⾥你可以 grep 出许多对这个函数的调⽤。这⾥我们要说的是⽹络⼦系统的初始化，会执⾏到 net_dev_init 函数
 
@@ -89,7 +89,7 @@ static int __init net_dev_init(void)
 }
 ```
 
-### 协议栈注册
+### Protocol Stack Registration
 
 内核实现了⽹络层的IP协议，也实现了传输层的TCP协议和UDP协议。这些协议对应的实现函数分别是 `ip_rcv()`、`tcp_v4_rcv()` 和 `udp_rcv() `
 fs_initcall 调⽤ inet init 后开始⽹络协议栈注册，通过inet init， 将这些函数注册到 `inet_protos` 和 `ptype_base` 数据结构中
@@ -176,7 +176,7 @@ static inline struct list_head *ptype_head(const struct packet_type *pt)
 }
 ```
 
-### 网卡驱动初始化
+### NIC Driver Initialization
 
 每⼀个驱动程序（不仅仅包括⽹卡驱动程序）会使⽤ `module_init` 向内核注册⼀个初始化函数，当驱动程序被加载时，内核会调⽤这个函数
 igb 的初始化函数（igb_init_module）以及它通过 module_init 完成的注册，位于 `drivers/net/ethernet/intel/igb/igb_main.c`。
@@ -245,7 +245,7 @@ static const struct net_device_ops igb_netdev_ops = {
 };
 ```
 
-### 启动网卡
+### Bring Up the Network Card
 
 调用 open 函数 -> 分配收发（RX/TX）内存
 
@@ -1281,7 +1281,7 @@ void sock_def_readable(struct sock *sk)
 
 [wake_up_interruptible_sync_poll](/docs/CS/OS/Linux/proc/thundering_herd.md?id=wake-up), wake up and invoke callback func
 
-## 本机网络 IO
+## Local Network IO
 
 本机网络 IO 不需要经过真实网卡，节省了驱动层面的一些开销：发送数据不必走 Ring Buffer 的驱动队列，直接把 skb 通过软中断传递给接收协议栈。但系统调用、协议栈、网络设备子系统、“驱动”程序都完整走了一遍。如果需要绕过协议栈的开销，可以使用 eBPF 的 sockmap 与 sk redirect。
 
@@ -1295,7 +1295,7 @@ void sock_def_readable(struct sock *sk)
 > 因为内核在设置 IP 时，把所有本机 IP 都初始化到 local 路由表里了，类型写死为 RTN_LOCAL。
 > 在后面路由项选择时发现类型是 RTN_LOCAL，就选择环回 IO 设备。
 
-### 环回发送
+### Loopback Send
 
 回顾[发送流程](/docs/CS/OS/Linux/net/network.md?id=ndo_start_xmit)，环回驱动注册的 `net_device_ops` 为：
 
@@ -1338,7 +1338,7 @@ static int enqueue_to_backlog(struct sk_buff *skb, int cpu,
 }
 ```
 
-### backlog 轮询
+### backlog Polling
 
 回顾设备初始化函数，backlog 默认的 poll 函数是 `process_backlog`：它把 input_pkt_queue 挂到 process_queue，再逐个出队调用 [__netif_receive_skb](/docs/CS/OS/Linux/net/network.md?id=netif_receive_skb)，让包进入与真实网卡一致的协议栈接收路径。
 
@@ -1459,7 +1459,7 @@ ls /sys/class/net/eth0/queues
 
 ```
 
-### 多核扩展 RSS / RPS / RFS / XPS
+### Multi-core Scaling RSS / RPS / RFS / XPS
 
 背景：现代服务器是多 CPU + 多队列网卡，但中断默认集中在某一个 CPU，单 CPU 处理协议栈会先于网卡打满。这一组机制沿"接收中断 → 协议栈处理 → 应用消费 → 发送"链路，把负载和缓存亲和性分散到多核。按软硬与方向区分：
 
@@ -1492,7 +1492,7 @@ echo 2048 > /sys/class/net/eth0/queues/rx-0/rps_flow_cnt # 每队列表容量
 echo ff > /sys/class/net/eth0/queues/tx-0/xps_cpus
 ```
 
-### 分段与聚合卸载 TSO / GSO / GRO
+### Segmentation and Aggregation Offload TSO / GSO / GRO
 
 核心思想是**让协议栈尽量处理少而大的 SKB**，把"切成 MSS 大小"或"合并多个包"的工作尽量推迟到驱动（硬件能做就交给硬件），减少上层处理次数与每包开销。
 

@@ -4,7 +4,7 @@
 
 委派的本质是**权限边界的划定**：把 cgroup 子树的一部分所有权交给一个受限的进程（容器内的 init、systemd 服务），让它能在自己的子树里配置资源，而不能越界影响全局。
 
-## 三种隔离层次
+## Three Isolation Levels
 
 cgroup 委派要同时配合 namespace 才能形成完整隔离。三者职责不同：
 
@@ -16,7 +16,7 @@ cgroup 委派要同时配合 namespace 才能形成完整隔离。三者职责�
 
 namespace 管"能看到什么"，委派管"能改什么"。**两者独立**：可以看到但改不了，也可以（理论上）改得了但看不到更多。
 
-## nsdelegate：委派的开关
+## nsdelegate: The Delegation Switch
 
 v2 挂载时的 `nsdelegate` 选项是委派的**总开关**。它标记在 root 上：
 
@@ -45,7 +45,7 @@ v2 挂载时的 `nsdelegate` 选项是委派的**总开关**。它标记在 root
 
 **在非 init cgroup namespace 里挂载 cgroup2，树的根不是你以为的根，而是该 namespace 的 `root_cgrp`。** 容器内 `ls /sys/fs/cgroup` 看到的那一层"假根"就是这么来的。
 
-### 静默失效：容器内改不了 mount options
+### Silent Failure: Cannot Change mount options Inside a Container
 
 v7.2 把所有 root flags 的应用都限制在 init namespace：
 
@@ -64,7 +64,7 @@ static void apply_cgroup_root_flags(unsigned int root_flags)
 
 这是容器场景下最难查的一类问题。排查方法很简单：看 `/proc/self/cgroup` 的相对路径深度。如果进程在 `init_cgroup_ns` 里看到的是 `/`（单个 0），在容器里通常看到 `/some/path`（有层级）—— 层级深度就是"你已经离开根了"的证据。
 
-## CFTYPE_NS_DELEGATABLE：哪些文件能跨边界写
+## CFTYPE_NS_DELEGATABLE: Which Files Can Be Written Across Boundaries
 
 委派边界不是"全部允许"或"全部禁止"，而是**逐文件**的。标志位：
 
@@ -92,7 +92,7 @@ echo "max 1000000" > /sys/fs/cgroup/cpu.max
 
 不是文件不存在，是**跨越了委派边界**。要改必须在容器自己的 cgroup 目录里改（即 `cgroup.procs` 指向的那个）。
 
-## systemd 的 Delegate=
+## systemd Delegate=
 
 systemd 服务级的资源控制靠 `Delegate=yes`。它做两件事：
 
@@ -113,7 +113,7 @@ TasksMax=64
 
 systemd 的 `MemoryMax` / `CPUQuota` 恰好是 `Delegate=yes` 时最容易验证的观测点：进服务内部读 `memory.max` / `cpu.max`，值应该与 unit 文件里写的一致。
 
-## 容器运行时的默认行为
+## Container Runtime Default Behavior
 
 现代运行时（Docker 20.10+ / containerd 1.6+ / K8s 1.25+）默认 v2，并且**默认不给完整委派**：
 
@@ -126,7 +126,7 @@ systemd 的 `MemoryMax` / `CPUQuota` 恰好是 `Delegate=yes` 时最容易验证
 
 `--cgroupns=private` 与 `host` 的选择影响很大：private 模式下容器内 `ls /sys/fs/cgroup` 顶着那层假根，宿主 `docker top` / `kubectl top` 仍能正常定位；host 模式下容器内能看到整棵树，更便于排查但隔离性弱一些。
 
-## 排查路径
+## Troubleshooting Path
 
 遇到"容器里改不了 cgroup 配置"时，按这个顺序查：
 
@@ -172,7 +172,7 @@ docker inspect --format '{{.HostConfig.Memory}}' <container>
 
 如果容器内读到 `max`（无限）而宿主侧有限额，说明限额打在了另一个层级（常见于 cgroupfs driver 与 systemd driver 混用）。
 
-## 一个易错点：memory.max 生效时机
+## A Common Pitfall: When memory.max Takes Effect
 
 `memory.max` 写小之后，**不是立刻杀掉超额进程**。v7.2 的 `memory_max_write()` 会同步做一轮回收：
 
@@ -188,7 +188,7 @@ docker inspect --format '{{.HostConfig.Memory}}' <container>
 echo "1048576" > memory.reclaim   # 尝试回收 1M 页（4 GiB）
 ```
 
-## 冻结与终止在容器里的用法
+## Freeze and Terminate Usage in Containers
 
 `cgroup.freeze` 在容器场景下有两个实际用途：
 
@@ -199,7 +199,7 @@ echo "1048576" > memory.reclaim   # 尝试回收 1M 页（4 GiB）
 
 需要注意 `cgroup.kill` 在 threaded cgroup 上返回 `-EOPNOTSUPP` —— 容器内如果用了线程级计费的配置，会发现 kill 不可用。
 
-## 与其它子系统的接缝
+## Interfaces with Other Subsystems
 
 - **memcg**：容器内存账单的完整机制见 [memcg](/docs/CS/OS/Linux/mm/memcg.md)。
 - **namespace**：cgroup namespace 与其他 namespace 的配合见 [namespace](/docs/CS/OS/Linux/namespace.md)。
@@ -207,7 +207,7 @@ echo "1048576" > memory.reclaim   # 尝试回收 1M 页（4 GiB）
 - **Docker/K8s 侧**：容器如何配置这些参数见 [Container](/docs/CS/Container/Container.md)。
 - **v1 遗留**：见 [cgroup（旧笔记，v1 视角）](/docs/CS/OS/Linux/cgroup.md)。
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 ```shell
 # 我在哪棵树、什么视角

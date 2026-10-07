@@ -11,7 +11,7 @@ Spring AI 解决了 AI 集成的根本难题：将企业数据和 API 与 AI 模
 
 设计思路与 Spring 一贯的抽象哲学一致：`ChatModel` 之于大模型，如同 `JdbcTemplate` 之于数据库——统一接口屏蔽厂商差异（OpenAI、Anthropic、Ollama、DeepSeek 等各有 starter），可移植的 prompt 与 options 配置不绑定具体供应商。
 
-## 核心概念
+## Core Concepts
 
 | 概念 | 职责 |
 | :-- | :-- |
@@ -22,7 +22,7 @@ Spring AI 解决了 AI 集成的根本难题：将企业数据和 API 与 AI 模
 | `ChatOptions` | 模型参数（model、temperature、maxTokens…），运行时选项覆盖默认值 |
 | `EmbeddingModel` | 向量嵌入抽象，供 RAG / 相似度检索使用 |
 
-## 入门示例
+## Getting Started Example
 
 spring-ai-openai-starter 配置 `application.properties`（OpenAI 兼容协议，换 base-url 即可接入 DeepSeek、阿里云百炼等）：
 
@@ -158,7 +158,7 @@ Spring AI 官方参考 [Anthropic 的 Building Effective Agents](https://www.ant
 
 Agent 模式 = ChatClient + `tools()` + ChatMemory 的自然组合；更复杂的编排建议外置到工作流引擎或 [Agent 平台](/docs/CS/AI/LLM/Agent/Theory/Agent.md)。
 
-## 监控
+## Monitoring
 
 ```xml
 <dependency>

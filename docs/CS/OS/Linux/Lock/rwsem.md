@@ -10,7 +10,7 @@
 
 三者按"读侧开销"递增排列的选择顺序是反的：seqlock 读侧最便宜但要能重读，rwsem 读侧最贵（可能睡眠）但语义最完整。
 
-## rwlock 与 qrwlock
+## rwlock and qrwlock
 
 rwlock 在本质上是 spinlock 的一种，在 spinlock 之上增加了一个类似信号量的读计数器：读操作增加引用计数，写操作需要引用计数为 0 且拿到锁，从而获得独占。
 
@@ -77,7 +77,7 @@ typedef struct qrwlock {
 
 rwlock 的总体结论没变：**临界区极短且读远多于写**才划算，更多老代码已经迁到 RCU 或 rwsem。
 
-## rwsem 的数据结构
+## rwsem Data Structures
 
 ```c
 context_lock_struct(rw_semaphore) {
@@ -104,7 +104,7 @@ context_lock_struct(rw_semaphore) {
 
 `count` 与 `owner` 刻意相邻——无竞争时只有这两个字段被碰，希望它们落在同一条 cache line 上。而 `owner` 是竞争时最热的字段（乐观自旋者都盯着它），所以**嵌入 rwsem 的结构体应把其他高频字段放远一点**（源码注释明确建议），避免伪共享。
 
-## count 的位布局
+## Bit Layout of count
 
 ```
  63         8 7   3  2    1     0
@@ -144,7 +144,7 @@ context_lock_struct(rw_semaphore) {
 
 `RWSEM_READ_FAILED_MASK` 是读侧快路径的判据：只要有写者持有、有等待者、有 handoff、或读计数溢出（`READFAIL`），快路径就不成立。
 
-## owner 的两个标志位
+## The Owner's Two Flag Bits
 
 ```c
 /*
@@ -161,7 +161,7 @@ context_lock_struct(rw_semaphore) {
 
 这个残留值的用途是乐观自旋：写者想知道"能不能自旋等"，先看 `owner` 是不是个正在 CPU 上跑的写者。
 
-## 读侧快路径与"读者偷锁"
+## Reader Fast Path and "Reader Stealing the Lock"
 
 ```c
 static inline int __down_read_trylock(struct rw_semaphore *sem)
@@ -211,9 +211,9 @@ static inline int __down_read_trylock(struct rw_semaphore *sem)
 
 逻辑可以读成：如果锁**显然**被多个读者持有（读者流不停），就老实排队；否则（比如只是有 `WAITERS` 位但没有实质持有者）允许偷——反正没人真的拿着锁，不偷白不偷。`HANDOFF` 位一旦设置就绝对不许偷，和 mutex 一样。
 
-## 写侧快路径与乐观自旋
+## Writer Fast Path and Optimistic Spinning
 
-写者的快路径要求 `count` 完全为 0（`RWSEM_WRITER_LOCKED` 之外没有任何位）。失败后进乐观自旋，套路与 [mutex 的中速路径](/docs/CS/OS/Linux/Lock/mutex.md?id=中速路径：乐观自旋) 一样：先用 `osq_lock()` 排队，再盯 `owner`。
+写者的快路径要求 `count` 完全为 0（`RWSEM_WRITER_LOCKED` 之外没有任何位）。失败后进乐观自旋，套路与 [mutex 的中速路径](/docs/CS/OS/Linux/Lock/mutex.md?id=medium-path-optimistic-spinning) 一样：先用 `osq_lock()` 排队，再盯 `owner`。
 
 区别在于**写者自旋有额外的时间限制**，因为 rwsem 上可能挂着一大群读者：
 
@@ -270,7 +270,7 @@ static inline u64 rwsem_rspin_threshold(struct rw_semaphore *sem)
 		}
 ```
 
-## NONSPINNABLE：读者持锁时的自旋上限
+## NONSPINNABLE: Spin Limit When a Reader Holds the Lock
 
 超时之后不是简单放弃，而是**给这把锁打上 `NONSPINNABLE` 标记**：
 
@@ -308,7 +308,7 @@ rwsem_owner_state(struct task_struct *owner, unsigned long flags)
 | `OWNER_READER` | （可能是）读者持有 | 受时间阈值约束地自旋 |
 | `OWNER_NONSPINNABLE` | 不可自旋 | 退出，进慢路径 |
 
-## 读者慢路径
+## Reader Slow Path
 
 ```c
 queue:
@@ -361,7 +361,7 @@ queue:
 
 `rwsem_mark_wake()` 把 `waiter.task` 置 NULL 就是用 `smp_store_release()`，这里用 `smp_load_acquire()` 配对。
 
-## 写者慢路径与 handoff
+## Writer Slow Path and handoff
 
 写者的慢路径先做一次乐观自旋（`rwsem_can_spin_on_owner()` + `rwsem_optimistic_spin()`），失败才入队。入队后的核心是 `rwsem_try_write_lock()`：
 
@@ -427,7 +427,7 @@ queue:
 		}
 ```
 
-## rwsem_mark_wake：批量唤醒读者
+## rwsem_mark_wake: Waking Readers in Bulk
 
 解锁时不是一个个唤醒读者，而是一次唤醒一批：
 
@@ -471,7 +471,7 @@ queue:
 	}
 ```
 
-## downgrade_write：写锁降级为读锁
+## downgrade_write: Downgrading a Write Lock to a Read Lock
 
 `downgrade_write()` 把写锁换成读锁而不放开，避免"释放 → 立刻被别人抢走"的窗口。实现上只是走一次 `RWSEM_WAKE_READ_OWNED` 唤醒：
 
@@ -500,7 +500,7 @@ static struct rw_semaphore *rwsem_downgrade_wake(struct rw_semaphore *sem)
 
 典型用法："先以写锁查找并可能插入，然后降级为读锁继续持有"——避免中间被别人改掉。
 
-## percpu-rwsem：读侧真正的无竞争
+## percpu-rwsem: Truly Contention-Free Reader Side
 
 标准 rwsem 的读侧快路径仍是一次**共享的**原子加，高并发下那一条 cache line 就是瓶颈（想想 `mmap_lock` 被几百个线程同时读）。`percpu_rw_semaphore` 把读计数做成 per-CPU：
 
@@ -523,7 +523,7 @@ static bool __percpu_down_read_trylock(struct percpu_rw_semaphore *sem)
 
 per-CPU 化的思想本身见 [per-CPU 变量](/docs/CS/OS/Linux/Lock/percpu.md)。
 
-## PREEMPT_RT 下的 rwsem
+## rwsem Under PREEMPT_RT
 
 RT 下 `struct rw_semaphore` 换成 `rwbase_rt`：
 
@@ -588,14 +588,14 @@ typedef struct seqcount {
 
 典型用途：`jiffies` 与时间戳（`get_jiffies_64()`）、`xtime`、`vfsmount` 的部分字段。
 
-## 选择
+## Choosing
 
 - 临界区短 + 不需要睡眠 + 写不饥饿 → **rwlock**（内核新代码更倾向 RCU）；
 - 临界区可能阻塞 → **rwsem**；
 - 读侧要零开销、且对象生命周期能被延迟回收 → **seqlock**（简单数据）或 [RCU](/docs/CS/OS/Linux/Lock/RCU.md)（指针结构）；
 - 读侧频率高到共享原子变量成为瓶颈、而写侧几乎不发生 → **percpu-rwsem**。
 
-## 观测
+## Observation
 
 `CONFIG_LOCK_EVENT_COUNTS` 下 debugfs 的 `lock_event_counts/` 里 rwsem 相关计数器最能说明问题：
 

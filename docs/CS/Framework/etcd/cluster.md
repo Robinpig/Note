@@ -10,7 +10,7 @@ etcd 官方反复强调的一条硬约束贯穿全文：
 
 两节点集群的多数派也是 2，摘掉一个就失去 quorum，且**没有第三份副本能容忍移除过程中的失败**，所以不安全。
 
-## 版本基线
+## Version Baseline
 
 | 项 | 值 |
 | :--- | :--- |
@@ -163,7 +163,7 @@ Error: etcdserver: member not found
 | 替换健康节点 | 先 `remove` 旧的，再 `add` 新的 |
 | 滚动升级 | 一次只动一个成员，确认恢复再动下一个 |
 
-### 常见启动报错
+### Common Startup Errors
 
 这几类错误的共同根因都是 **peer URL 与集群记录不匹配**，排查时优先核对 `etcdctl member list` 的输出与启动参数：
 
@@ -183,7 +183,7 @@ etcd: this member has been permanently removed from the cluster. Exiting.
 
 ## Backup & restore
 
-### 快照备份
+### Snapshot Backup
 
 etcd 的备份就是后端 `db` 文件的一致性快照，可以定期跑：
 
@@ -199,7 +199,7 @@ $ etcdctl --write-out=table snapshot status backup.db
 
 对每个成员单独做快照，拿到的是**该成员的完整状态**——注意这与 raft 快照不是一回事：raft 快照用于截断日志，而 `snapshot save` 是给运维用的离线备份。
 
-### 从快照恢复
+### Restore from Snapshot
 
 `etcdutl` 是 3.5 起从 etcd 二进制里拆出的独立工具（`make build` 产出 `etcd` / `etcdctl` / `etcdutl` 三个可执行文件），恢复动作由它完成：
 
@@ -223,14 +223,14 @@ $ etcdutl snapshot restore backup.db \
 
 按故障范围，官方把恢复场景分成两类，处置思路完全不同。
 
-### 少数成员失败
+### Minority Members Failure
 
 单节点故障等价于"替换一台坏机器"，走 [成员变更](#add-as-learner) 的常规流程：先 `member remove` 掉坏的，再 `member add` 新节点。
 
 > [!WARNING]
 > **已经故障但还没被 remove 的成员会继续影响 quorum**。它虽然不可用，却仍被算在多数派基数里，从而降低集群对"再挂一个"的容忍度。所以故障节点要尽快摘除，不要让它挂着占席位。
 
-### 多数成员失败
+### Majority Members Failure
 
 多数派丢失，或所有节点 IP 都变了，Raft 已无法自行恢复，必须手工介入。官方给的基本套路是三步：
 

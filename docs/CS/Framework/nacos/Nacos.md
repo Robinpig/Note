@@ -454,7 +454,7 @@ public class AddressServerMemberLookup extends AbstractMemberLookup {
 
 ## Tuning
 
-### 限流
+### Rate Limiting
 
 
 
@@ -562,7 +562,7 @@ Windows下阿里云盘的SyncAppServer.exe占用了端口9848导致启动失败
 
 
 
-## 与 etcd 对照
+## Comparison with etcd
 
 Nacos 与 etcd 定位有交集也有分野：etcd 是**通用的强一致 KV 协调底座**，Nacos 是**配置中心 + 服务注册中心**（完整维度矩阵见 [etcd 横向对照](/docs/CS/Framework/etcd/compare.md)）。
 

@@ -264,7 +264,7 @@ func (proxier *metaProxier) SyncLoop() {
 ```
 
 
-## 数据面：三种模式
+## Data Plane: Three Modes
 
 控制面上 kube-proxy 通过 informer watch Service / EndpointSlice / Node，真正干活的数据面在 v1.36 有四种实现（`pkg/proxy/apis/config/types.go:253-256`）：
 
@@ -279,7 +279,7 @@ func (proxier *metaProxier) SyncLoop() {
 
 注意 kube-proxy 名字里有 "proxy"，但它自己**不转发任何流量**——只负责把负载均衡翻译成内核规则，转发全部在内核 netfilter / ipvs 中完成。
 
-### iptables 模式
+### iptables Mode
 
 kube-proxy 把每个 Service 翻译成节点 `nat` 表里的两级自定义链：
 
@@ -298,7 +298,7 @@ $ iptables-save | grep KUBE-SVC
 
 DNAT 依赖 conntrack 保证连接粒度的一致性：同一个 TCP 连接的所有报文始终 DNAT 到同一个 Pod，天然实现会话保持。Pod 被摘除时旧 conntrack 条目不清理会造成连接黑洞，kube-proxy 在同步规则时会主动删除失效条目，排障时也可手动 `conntrack -D`。
 
-### IPVS 模式
+### IPVS Mode
 
 IPVS 基于内核 LVS，Service 规则存在哈希表中，查找复杂度 O(1)，且支持多种调度算法：
 
@@ -314,7 +314,7 @@ TCP  10.96.0.168:80 rr
 
 `rr`（轮询）是默认值，此外还有 `wrr`（加权轮询）、`lc`（最少连接）、`sh`（源地址哈希）、`dh`（目标地址哈希）等，通过 kube-proxy 配置 `ipvs.scheduler` 指定；Forward 列的 `Masq` 表示同样走 DNAT（MASQUERADE）改写。
 
-#### ClusterIP 为什么能 ping 通：kube-ipvs0
+#### Why ClusterIP Can Be Pinged: kube-ipvs0
 
 ClusterIP 没有绑在任何真实网卡上，Pod 发出的包为什么能路由到它？IPVS 模式下，kube-proxy 在每个节点创建了一块 **dummy 网卡 `kube-ipvs0`**，把集群中所有 ClusterIP 以 `/32` 地址绑到这块网卡上（源码里只做 `LinkAdd(&netlink.Dummy{...})`，`NOARP` 是内核 dummy 设备的默认属性，并非 kube-proxy 显式设置）：
 
@@ -327,7 +327,7 @@ $ ip addr show kube-ipvs0
 
 这样本机协议栈认为这些 VIP "就在本地"，流量进入协议栈后由 ipvs 规则截获并 DNAT 到后端 Pod；dummy 网卡本身不收发包，只负责让路由判定成立。iptables 模式不需要这块网卡——它靠 `KUBE-SERVICES` 链挂在 PREROUTING/OUTPUT 钩子上、在路由判定之前就完成改写。NodePort 与 `externalTrafficPolicy`（Cluster/Local）同样由各自的链或 ipvs 规则实现，Local 模式只转发给本节点 Pod，可保留客户端源 IP。
 
-### nftables 模式
+### nftables Mode
 
 v1.33 起 GA 的第三种后端（KEP-3866）。它不借用内核保留表，而是自建一张 `ip kube-proxy` 表，把 nat / filter 型 base chain 分别挂在 prerouting / output / postrouting 上。
 
@@ -341,7 +341,7 @@ iptables 里的 `KUBE-SVC-XXXX` 那一层被一张哈希表替掉，一条 `vmap
 
 硬性前置条件是内核 ≥ 5.13，不满足直接启动失败；环境变量 `KUBE_PROXY_NFTABLES_SKIP_KERNEL_VERSION_CHECK` 可绕过该检查。把 nftables 设为默认模式是后续 KEP（KEP-5343）的事，v1.36 仍需显式 `--proxy-mode=nftables`。
 
-### EndpointSlice：后端名单的数据结构
+### EndpointSlice: Data Structure for the Backend List
 
 早期一个 Service 的全部后端放在单个 Endpoints 对象里，后端一多每次变更都要全量推送。新版本默认拆成 EndpointSlice：每个 slice 默认最多装 100 个端点（控制器可配置，不是 API 协议上限），按协议/地址族分片，kube-proxy watch 时只收自己关心的增量：
 

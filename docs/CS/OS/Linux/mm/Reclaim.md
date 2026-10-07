@@ -9,7 +9,7 @@
 
 回收的顺序由 **LRU 链表**表达，回收的动作由 **vmscan**（`mm/vmscan.c`）执行。本篇覆盖：水位线与 kswapd 唤醒 → LRU 老化 → `scan_control` 与回收入口 → 扫描主干 → 逐页决策（`shrink_folio_list`）→ shrinker（slab 回收）→ memcg 回收 → 调优。
 
-## 水位线与 kswapd
+## Watermarks and kswapd
 
 每个 zone 维护三条水位线，全部以 **页**为单位，定义在 `struct zone` 的 `_watermark[NR_WMARK]` 里（[struct zone](/docs/CS/OS/Linux/mm/pm.md?id=zone)）：
 
@@ -32,7 +32,7 @@
 
 > `watermark_boost` 是给"需要大块连续内存"的场景预留的（比如 THP、大 order 分配）：临时抬高水位线，逼 kswapd 多回收一些，避免大页分配反复失败。
 
-## LRU 链表与页面老化
+## LRU List and Page Aging
 
 回收要知道"先拿谁"。内核把可回收页挂在 **LRU 链表**上，按 **两个维度**切分：
 
@@ -55,9 +55,9 @@ active 链表不是只进不出：当 inactive 太少（`inactive_is_low`），�
 
 还有一个反抖动的机制叫 **refault**：文件页被回收后，内核在页缓存里留一条 shadow entry 记录它。如果这页很快又被访问、从磁盘重新读回，内核判定发生了一次 refault——说明刚才是"误杀"，于是把它直接放进 active 链表、计入 workingset，避免"回收—重读—再回收"的往复。`folio_check_refault()` 就是这条判定的落点，也是 page cache 抖动（thrashing）分析的核心指标（`/proc/vmstat` 的 `workingset_refault`）。
 
-在多 memcg 场景下，每条 LRU 不是全局一条，而是 per-node、per-memcg 一个 `lruvec`——回收才可能做到"只动某个 cgroup 的页"（见下文 [memcg 回收](?id=memcg-回收)）。
+在多 memcg 场景下，每条 LRU 不是全局一条，而是 per-node、per-memcg 一个 `lruvec`——回收才可能做到"只动某个 cgroup 的页"（见下文 [memcg 回收](?id=memcg-reclaim)）。
 
-## 回收入口：scan_control 与 try_to_free_pages
+## Reclaim Entry: scan_control and try_to_free_pages
 
 一次回收要回答三个问题：**扫哪些 node、过程中允许做哪些动作、什么时候退出**。这三个问题由 `scan_control` 结构体描述，由入口函数 `try_to_free_pages()` 赋值——direct reclaim 走的就是它；kswapd 则在 `balance_pgdat()` 里构造自己的 `scan_control`，主干一致、取向不同（kswapd 可以更从容地回写与扫描）。
 
@@ -222,7 +222,7 @@ struct scan_control {
 ```
 
 
-## 扫描主干：shrink_zones → shrink_node → shrink_node_memcgs
+## Scan Backbone: shrink_zones -> shrink_node -> shrink_node_memcgs
 
 一次回收的目标是"扫哪几个 node、能动哪些页、什么时候停"，这完全由 `scan_control` 描述（见下一节）。主干是：
 
@@ -238,7 +238,7 @@ do_try_to_free_pages(zonelist, sc)
 
 `priority` 是这条链的"力度旋钮"：从 `DEF_PRIORITY`（12）开始，每轮回扫不出目标量就把 priority 减 1，即扫描量按 `total_size >> priority` 指数级放大——priority 越小越激进，减到 0 还没有回收出足够内存，就只能靠更上层（compaction / OOM）收场。kswapd 与 direct reclaim 走的是同一套主干，差别只在 `scan_control` 的取值与谁在等待。
 
-## shrink_lruvec 与 shrink_list
+## shrink_lruvec and shrink_list
 
 ### shrink_lruvec
 ```c
@@ -448,7 +448,7 @@ static unsigned long shrink_inactive_list(unsigned long nr_to_scan,
 ```
 
 
-## shrink_folio_list：单页去留的决策树
+## shrink_folio_list: Decision Tree for Keeping or Evicting a Single Page
 
 `shrink_inactive_list()` 把一批页从 LRU 摘下来（`isolate_lru_folios`）后，交给 `shrink_folio_list()` 逐页做去留判断。判断的依据依次是**引用计数、页表映射、脏不脏、能不能换出**：
 
@@ -460,7 +460,7 @@ static unsigned long shrink_inactive_list(unsigned long nr_to_scan,
 
 判断通过、确实能释放的页，最后经 `free_unref_page_list()` 归还伙伴系统（[free](/docs/CS/OS/Linux/mm/pm.md?id=free)）；没能释放的经 `move_folios_to_lru()` 放回相应 LRU，等下轮 priority 更激进时再扫。
 
-## shrink_slab 与 shrinker
+## shrink_slab and shrinker
 
 内存里不只有 page 和 page cache，还有大量 **slab 缓存**——dentry（dcache）、inode（icache）、各种子系统自己的对象池。它们同样占着物理页，同样能被回收，但"怎么回收"只有各自的子系统知道。内核因此提供 **shrinker** 回调机制：
 
@@ -479,7 +479,7 @@ struct shrinker {
 
 子系统通过 `shrinker_register()` 注册自己的回收器（`count_objects` 报"有多少可回收"，`scan_objects` 执行回收），`shrink_slab()` 在每次 node 回收时按 reclaim 的压力调用它们。最典型的是文件系统注册的 `super_cache_scan`——它回收 dentry 与 inode 缓存，扫描力度由 `vm.vfs_cache_pressure` 调节（默认 100，调大则更积极回收元数据缓存、更少回收 page cache）。这解释了为什么"内存压力下 `slab` 里的 `dentry` 会掉"：那是 shrinker 在工作。
 
-## memcg 回收
+## memcg Reclaim
 
 cgroup v2 的 `memory.max` 超限时走的是**局部回收**：`scan_control` 带上 `target_mem_cgroup`，`shrink_node_memcgs()` 只遍历这个 memcg 及其子 cgroup 的 lruvec，不去动别的组的页——这是容器内存隔离的基础（memcg 侧的结构与限额见 [cgroup 内存控制（memcg）](/docs/CS/OS/Linux/mm/memcg.md)）。
 
@@ -489,7 +489,7 @@ cgroup v2 的 `memory.max` 超限时走的是**局部回收**：`scan_control` �
 - **`memory.low` 保护**：低优先级回收会跳过受保护的 memcg（`memcg_low_skipped`）；只有当所有组都受保护、一点内存都收不回来时，才回头回收受保护内存（`memcg_low_reclaim`），目的是"宁可动保护内存，也别 OOM"；
 - **主动回收**：用户态可以写 `memory.reclaim`（`scan_control.proactive`）主动触发一次回收，不必等到真的紧张——k8s 的内存驱逐、容器运行时的"提前瘦身"靠的就是它。
 
-## 后台回收与直接回收的对照
+## Comparison between Background Reclaim and Direct Reclaim
 
 | 维度 | kswapd（后台） | direct reclaim（直接） |
 |---|---|---|
@@ -501,7 +501,7 @@ cgroup v2 的 `memory.max` 超限时走的是**局部回收**：`scan_control` �
 
 `throttle_direct_reclaim()` 负责给直接回收"限流"：多个进程同时撞上 min 水位时排队进入，避免一群进程一起扫 LRU 把系统拖垮（`reclaim_throttle` / `VMSCAN_THROTTLE_*`）。
 
-## 调优
+## Tuning
 
 `/proc/sys/vm` 下与回收直接相关的几个旋钮：
 

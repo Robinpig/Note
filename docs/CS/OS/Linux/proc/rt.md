@@ -2,7 +2,7 @@
 
 sched_rt_entity 结构体充当 rq 和 task_struct 的媒介
 
-### 实时策略
+### Realtime Policy
 
 实时调度类覆盖 `SCHED_FIFO` 与 `SCHED_RR`（外加 `SCHED_DEADLINE`，见 [DL](/docs/CS/OS/Linux/proc/sche.md?id=dl)）：
 
@@ -11,7 +11,7 @@ sched_rt_entity 结构体充当 rq 和 task_struct 的媒介
 
 无论哪种策略，只要存在可运行的实时任务，它就绝对先于 fair/idle 类运行。
 
-### 实时优先级
+### Realtime Priority
 
 实时优先级 `rt_priority` 取值 1~99（`chrt -f 99 pid`），内核换算为 prio 0~98（数值越小优先级越高）；普通任务的 nice 映射到 100~139。每个 CPU 的 rt_rq 内部用 `rt_prio_array` 组织：100 个链表 + 一张位图，`sched_find_first_bit` 一步定位最高优先级队列，查找 O(1)——这正是从 O(1) 调度器继承的数据结构。
 
