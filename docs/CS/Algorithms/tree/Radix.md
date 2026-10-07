@@ -43,3 +43,9 @@ Linux 的基数树实现在 `lib/radix-tree.c` 中，Linux 并不是对一个字
 
 - [Trees](/docs/CS/Algorithms/tree/tree.md)
 - [Trie](/docs/CS/Algorithms/tree/Trie.md)
+
+## References
+
+1. [字典树 - OI Wiki](https://oi-wiki.org/string/trie/)
+2. [Radix tree - Wikipedia](https://en.wikipedia.org/wiki/Radix_tree)
+3. [Patricia trie - Wikipedia](https://en.wikipedia.org/wiki/Patricia_trie)

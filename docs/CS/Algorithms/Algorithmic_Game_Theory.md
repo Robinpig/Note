@@ -7,8 +7,7 @@
 对弈被建模为一棵**博弈树（game tree）**：节点是局面，边是着法，双方轮流在 MAX 层（最大化己方收益）与 MIN 层（最小化对手收益）间切换。
 目标是在搜索深度有限、局面数随深度指数爆炸的前提下，仍能近似找到最优解。
 
-## Minimax
-
+## 极小化极大
 基础是 **Minimax**：自底向上对每个局面估值
 
 - MAX 节点取子节点最大值，MIN 节点取子节点最小值；
@@ -22,8 +21,7 @@ function minimax(node, depth, maximizing):
     else:          return min(minimax(c, depth-1, true)  for c in children)
 ```
 
-## Alpha-Beta Pruning
-
+## α-β 剪枝
 **α-β 剪枝**在不改变 Minimax 结果的前提下剪掉不可能影响决策的分支：
 
 - α：当前 MAX 层已能保证的最好值（下界）；β：当前 MIN 层已能保证的最坏值（上界）；
@@ -47,8 +45,7 @@ function alphabeta(node, depth, α, β, maximizing):
 剪枝本身不损失精确性，但效果依赖着法顺序——先搜「看起来好」的着法能更早触发剪枝；理想着法顺序下可访问约 O(b^(d/2)) 个节点，等效搜索深度翻倍。
 常见增强：迭代加深（iterative deepening）、置换表（transposition table，本质是局面哈希缓存）、杀手着法/历史启发（move ordering）、quiescence search（静止期搜索，缓解水平线效应）。
 
-## PVS
-
+## 主变例搜索（PVS）
 Principal Variation Search（PVS / NegaScout）在 α-β 基础上进一步假设：「上一着法仍是最佳着法，其余着法只会更差」。
 
 - 先用完整窗口搜第一个（预期最佳）子节点，得到主变（principal variation）的值；
@@ -57,8 +54,7 @@ Principal Variation Search（PVS / NegaScout）在 α-β 基础上进一步假�
 
 着法排序准确时 PVS 比朴素 α-β 节点更少；排序差、频繁 fail-high 重搜时优势缩小。
 
-## Monte Carlo Tree Search
-
+## 蒙特卡洛树搜索
 当**没有好的评估函数**（如围棋，局面难以静态估值）或分支因子极大时，转向 **MCTS（蒙特卡洛树搜索）**：不靠人工估值，而用大量随机模拟（rollout/playout）的胜率近似局面价值。每轮迭代四步：
 
 1. **Selection**：从根沿树用选择策略下行（经典用 UCT）；
@@ -68,8 +64,7 @@ Principal Variation Search（PVS / NegaScout）在 α-β 基础上进一步假�
 
 MCTS 是**任意时间算法（anytime）**：随时停止都能给出当前最优着法，时间越多越强；且价值由模拟得出，不依赖领域评估函数。
 
-## UCT
-
+## UCT 选择公式
 UCB Apply to Trees（**UCT**）是 Selection 阶段平衡「利用与探索」的策略，对节点的子节点 c 取使下式最大者：
 
 ```

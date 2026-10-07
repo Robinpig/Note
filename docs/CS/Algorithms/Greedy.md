@@ -88,4 +88,10 @@ Notice that if all the characters occur with the same frequency, then there are 
 
 ## Links
 
-- [Algorithm Analysis](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
+- [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=复杂度分析)
+
+## References
+
+1. [贪心 - OI Wiki](https://oi-wiki.org/basic/greedy/)
+2. [Minimum Spanning Tree - CP-Algorithms](https://cp-algorithms.com/graph/mst_kruskal.html)
+3. [Huffman 树 - OI Wiki](https://oi-wiki.org/ds/huffman-tree/)

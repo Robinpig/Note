@@ -33,3 +33,9 @@ link: Redis 在存储实现时数据少尽量数组，多再考虑链表。
 - [skip list](/docs/CS/Algorithms/struct/skiplist.md)
 - [Fenwick Tree](/docs/CS/Algorithms/struct/Fenwick-Tree.md)
 - [Bloom Filter](/docs/CS/Algorithms/struct/BloomFilter.md)
+
+## References
+
+1. [数据结构 - OI Wiki](https://oi-wiki.org/ds/)
+2. [哈希表 - OI Wiki](https://oi-wiki.org/ds/hash/)
+3. [树的基本概念 - OI Wiki](https://oi-wiki.org/graph/tree-basic/)

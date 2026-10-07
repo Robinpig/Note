@@ -1,18 +1,16 @@
 ## Introduction
 
 LRU（Least Recently Used，最近最久未使用）是最常用的缓存/页面置换策略：当容量不足需要淘汰时，**优先丢弃最久没有被访问过的数据**。
-直觉依据是局部性原理——最近用过的数据，将来更可能再次被使用。它是操作系统[页面置换算法](/docs/CS/Algorithms/Algorithms.md?id=page-replacement-algorithms)与各类缓存（CPU cache、Redis、Buffer Pool、业务缓存）的共同基础。
+直觉依据是局部性原理——最近用过的数据，将来更可能再次被使用。它是操作系统[页面置换算法](/docs/CS/Algorithms/Algorithms.md?id=页面置换算法)与各类缓存（CPU cache、Redis、Buffer Pool、业务缓存）的共同基础。
 
-## Operations
-
+## 操作
 一个 LRU 缓存需要支持三个操作且都应尽量 O(1)：
 
 - `get(key)`：读取，命中后要把该项标记为「最近使用」；
 - `put(key, value)`：写入/更新；容量超限时淘汰「最久未使用」项；
 - 维护严格的访问时间顺序。
 
-## Data Structure: HashMap + Doubly Linked List
-
+## 数据结构：哈希表 + 双向链表
 单一结构都不够：
 
 - 纯[哈希表](/docs/CS/Algorithms/hash.md)能 O(1) 查找，但无序，无法知道谁最久未用；
@@ -49,15 +47,13 @@ put(k, v):
 Java 可直接用 [LinkedHashMap](/docs/CS/Java/JDK/Collection/Map.md)：构造时 `accessOrder=true`，
 重写 `removeEldestEntry` 即可，内部正是「HashMap + 双向链表」，无需手写。
 
-## Cache Hit and Analyze
-
+## 命中率与分析
 - 缓存命中率依赖工作集存在明显的访问局部性；对扫描型、访问均匀的负载，LRU 会被「一次性遍历大量冷数据」污染（cache污染/扫描冲刷），把热点挤出。
 - 工程上常用改进：**LFU**（按访问频率而非最近时间，抗扫描但对频率突变不敏感）、**ARC/LIRS**（自适应区分 recency 与 frequency）、
   分段 LRU（如 MySQL 的 young/old 两段）、以及采样近似 LRU（不全量维护链表）。
 - 缓存写策略（write-through / write-back / 失效）与 LRU 是正交问题。
 
-## System Implementations
-
+## 系统实现
 理论上的精确 LRU 需要为每次访问维护全局链表，在数据量巨大或并发极高时代价可观，真实系统多做近似或改造：
 
 - **Java**：`LinkedHashMap`（accessOrder + removeEldestEntry）手写最简 LRU。
@@ -66,7 +62,7 @@ Java 可直接用 [LinkedHashMap](/docs/CS/Java/JDK/Collection/Map.md)：构造�
 
 ## Links
 
-- [Page Replacement Algorithms](/docs/CS/Algorithms/Algorithms.md?id=page-replacement-algorithms)
+- [页面置换算法](/docs/CS/Algorithms/Algorithms.md?id=页面置换算法)
 - [hash](/docs/CS/Algorithms/hash.md)
 - [linked-list](/docs/CS/Algorithms/struct/linked-list.md)
 - [Redis memory](/docs/CS/DB/Redis/memory.md)

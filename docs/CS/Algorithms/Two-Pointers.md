@@ -31,3 +31,8 @@
 - [Array](/docs/CS/Algorithms/struct/array.md)
 - [Linked List](/docs/CS/Algorithms/struct/linked-list.md)
 - [Algorithm Design](/docs/CS/Algorithms/Algorithms.md)
+
+## References
+
+1. [双指针 - OI Wiki](https://oi-wiki.org/misc/two-pointer/)
+2. [Slow and Two Pointers (Floyd's Cycle Detection) - CP-Algorithms](https://cp-algorithms.com/others/tortoise_and_hare.html)

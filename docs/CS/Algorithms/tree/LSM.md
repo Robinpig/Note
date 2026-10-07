@@ -803,7 +803,7 @@ For statistics that are not mergeable, multiple synopses are kept to improve the
 
 ## Links
 
-- [Trees](/docs/CS/Algorithms/tree/tree.md?id=lsm-trees)
+- [Trees](/docs/CS/Algorithms/tree/tree.md?id=lsm-树)
 
 ## References
 

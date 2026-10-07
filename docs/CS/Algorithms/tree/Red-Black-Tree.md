@@ -3,16 +3,12 @@
 
 
 
-## 2-3 Tree
-
+## 2-3 树
 allows one node has two elements.
 
 
 
-## Red-Black Tree
-
-
-
+## 红黑树（Red-Black Tree）
 1. nodes are red or black
 2. Root is black
 3. Are NIL 

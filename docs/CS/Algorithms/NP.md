@@ -26,3 +26,8 @@ The key notion behind the theory of NP-complete problems is the nondeterministic
 ## Links
 
 - [Algorithms](/docs/CS/Algorithms/Algorithms.md)
+
+## References
+
+1. [复杂度 - OI Wiki](https://oi-wiki.org/basic/complexity/)
+2. [哈密顿图 - OI Wiki](https://oi-wiki.org/graph/hamilton/)

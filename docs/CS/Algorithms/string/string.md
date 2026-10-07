@@ -30,10 +30,7 @@
 字符串在底层实现基本都是使用数组进行存储的 在很多场景下都需要使用数组的特性 将其看作一个字符数组
 利用数组的索引进行快速读取元素
 
-## String match
-
-
-
+## 字符串匹配
 字符串匹配问题又称模式匹配（pattern matching）
 该问题可以概括为「给定字符串 S 和 T，在主串 S 中寻找子串 T」。字符 T 称为模式串 (pattern)
 
@@ -49,8 +46,7 @@
 
 
 
-## Hash
-
+## 哈希
 我们定义一个把字符串映射到整数的函数 f，这个 f 称为是 Hash 函数。
 我们希望这个函数 f 可以方便地帮我们判断两个字符串是否相等
 
@@ -71,8 +67,7 @@
 
 
 
-## Trie
-
+## 字典树（Trie）
 字典树，英文名 trie。顾名思义，就是一个像字典一样的树
 
 字典树最基础的应用——查找一个字符串是否在「字典」中出现过
@@ -96,8 +91,7 @@
 
 
 
-## Manacher
-
+## Manacher 算法
 给定一个长度为 n 的字符串 [s，请找到所有对 (i, j) 使得子串 $s[i \dots j]$ 为一个回文串
 当 $t = t_{rev}$ 时，字符串 t 是一个回文串( $ t_{rev}$ 是 t 的反转字符串)
 
@@ -108,4 +102,10 @@
 
 ## Links
 
-- [Algorithm Analysis](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
+- [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=复杂度分析)
+
+## References
+
+1. [字符串基础 - OI Wiki](https://oi-wiki.org/string/basic/)
+2. [回文树 - OI Wiki](https://oi-wiki.org/string/pam/)
+3. [Manacher Algorithm - CP-Algorithms](https://cp-algorithms.com/string/manacher.html)

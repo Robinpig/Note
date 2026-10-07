@@ -29,7 +29,7 @@ Generally, we treat them as exceptions.
 线程安全的队列我们叫作**并发队列**。最简单直接的实现方式是直接在enqueue()、dequeue()方法上加锁，但是锁粒度大并发度会比较低，同一时刻仅允许一个存或者取操作。实际上，基于数组的循环队列，利用CAS原子操作，可以实现非常高效的并发队列。这也是循环队列比链式队列应用更加广泛的原因
 
 
-## Queue ADT
+## 队列的抽象数据类型
 The following operations make a queue an ADT. Insertions and deletions in the queue must follow the FIFO scheme. For simplicity we assume the elements are integers.
 
 **Main Queue Operations**
@@ -47,8 +47,7 @@ The following operations make a queue an ADT. Insertions and deletions in the qu
 
 Similar to other ADTs, executing DeQueue on an empty queue throws an “Empty Queue Exception” and executing EnQueue on a full queue throws a “Full Queue Exception”.
 
-## Applications
-
+## 应用
 Following are the some of the applications that use queues.
 
 Direct Applications
@@ -65,8 +64,7 @@ Indirect Applications
 
 
 
-## Implementation
-
+## 实现
 There are many ways (similar to Stacks) of implementing queue operations and some of the commonly used methods are listed below.
 - Simple circular array based implementation
 - Dynamic circular array based implementation
@@ -86,8 +84,7 @@ With this representation, if there are any free slots at the beginning, the rear
 > 
 > The simple circular array and dynamic circular array implementations are very similar to stack array implementations.
 
-### Simple Circular Array Implementation
-
+### 循环数组的简单实现
 This simple implementation of Queue ADT uses an array.
 In the array, we add elements circularly and use two variables to keep track of the start element and end element. 
 Generally, front is used to indicate the start element and rear is used to indicate the end element in the queue. 
@@ -102,28 +99,17 @@ The maximum size of the queue must be defined as prior and cannot be changed. Tr
 
 
 
-## Doubly End Queue
-
+## 双端队列
 双端队列是支持在头尾两端进行pop和push操作
 
 
 
 
 
-## Deque
-
-
-
-
-
-
-
-
-
-
+## 双端队列（Deque）
 ## Links
 
-- [data structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
+- [数据结构](/docs/CS/Algorithms/Algorithms.md?id=数据结构)
 - [list](/docs/CS/Algorithms/struct/list.md)
 - [stack](/docs/CS/Algorithms/struct/stack.md)
 

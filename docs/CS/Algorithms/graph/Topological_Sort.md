@@ -73,3 +73,8 @@ AOE 网中的有些活动是可以并行进行的，所以完成整个工程的�
 ## Links
 
 - [graph](/docs/CS/Algorithms/graph/graph.md)
+
+## References
+
+1. [拓扑排序 - OI Wiki](https://oi-wiki.org/graph/topo/)
+2. [Topological Sort - CP-Algorithms](https://cp-algorithms.com/graph/topological-sort.html)

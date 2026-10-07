@@ -4,8 +4,7 @@
 
 
 
-## Backtracking
-
+## 回溯解法
 [回溯算法（Backtracking）](/docs/CS/Algorithms/Backtracking.md) 是解决N皇后问题的标准方法
 该算法通过尝试在棋盘上放置皇后，当发现当前放置方案无法继续时，就撤销最近的选择，回溯到上一步并尝试其他可能性，直到找到完整解或尝试所有可能后确认无解
 
@@ -80,3 +79,9 @@ public class Solution {
 ## Links
 
 - [Backtracking](/docs/CS/Algorithms/Backtracking.md)
+
+## References
+
+1. [Queens Problem - Wolfram MathWorld](https://mathworld.wolfram.com/QueensProblem.html)
+2. [A000307 - OEIS: N 皇后问题解的个数](https://oeis.org/A000307)
+3. [回溯法 - OI Wiki](https://oi-wiki.org/search/backtracking/)
