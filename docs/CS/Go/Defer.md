@@ -2,7 +2,7 @@
 
 `defer` 让函数"退出前"执行一段清理逻辑，是 Go 资源管理的惯用法（关闭文件、解锁、恢复 panic）。表面上它像"析构 / RAII"，底层由 runtime 通过 `_defer` 记录与延迟调用机制实现。Go 1.14 起，`defer` 在多数简单场景下被**开放编码（open-coded）**优化，几乎零开销。
 
-## _defer 记录
+## _defer Records
 
 每次执行 `defer f()`，runtime 会生成一条 `_defer` 记录，挂在当前 goroutine 的 `g._defer` 链表上（链表头即最近一次 defer，因此执行顺序是 **LIFO**）：
 
@@ -20,7 +20,7 @@ type _defer struct {
 }
 ```
 
-## 两种实现路径
+## Two Implementation Paths
 
 | 路径 | 适用场景 | 机制 | 开销 |
 |------|----------|------|------|
@@ -30,7 +30,7 @@ type _defer struct {
 - `deferreturn` 在每个 `ret` 指令前由编译器插入（开放编码路径），逐个执行；`jmpdefer` 用汇编 `jmp` 复用调用栈，避免每次 defer 多一层栈帧。
 - 当开放编码不可用时（循环中的 defer、defer 数量过多等），自动回退到堆分配路径。
 
-## 与 return 的执行序
+## Execution Order with return
 
 `return X` 的完整过程（以命名返回值函数为例）：
 
@@ -49,7 +49,7 @@ func f() (n int) {
 
 匿名返回值的函数里，defer 看不到返回值变量，无法修改最终返回。
 
-## 与 panic/recover 的交互
+## Interaction with panic/recover
 
 panic 触发时，runtime 沿 `g._defer` 链表逐个执行 defer（详见 panic/recover 机制）；若某 defer 中调用 `recover()` 成功，unwind 停止，函数象正常 return 一样退出。注意：**defer 中的函数会因本函数 panic 而被执行，但 `os.Exit` 等直接退出进程时 defer 不会执行**。
 

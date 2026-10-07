@@ -7,7 +7,7 @@
 > [!NOTE]
 > 本文类名对应 `zookeeper-server/.../server/quorum/` 与 `.../server/`，当前主线 3.9.6 仍保持这一链路结构。
 
-## RequestProcessor 接口
+## RequestProcessor Interface
 
 所有处理器实现同一个接口：
 
@@ -20,7 +20,7 @@ public interface RequestProcessor {
 
 每个处理器通常是一个独立线程，靠阻塞队列串联（`requestThrottler` 还会在前端做限流）。请求在处理器间以 `Request` 对象传递，携带 `zxid`、`type`、`cxid`、`sessionId` 等。
 
-## Leader 侧链路
+## Leader Side Chain
 
 ```dot
 digraph "LeaderPipeline" {
@@ -53,7 +53,7 @@ digraph "LeaderPipeline" {
 6. **ToBeAppliedRequestProcessor**（仅 Leader）：从 `leader.toBeApplied` 队列取出已提交事务，应用到 `ZKDatabase`，再交给 `FinalRequestProcessor`。
 7. **FinalRequestProcessor**：真正改 `DataTree`、构造响应、按请求注册 watch、把响应发回。
 
-## Follower / Observer 侧链路
+## Follower / Observer Side Chain
 
 ```dot
 digraph "FollowerPipeline" {
@@ -74,7 +74,7 @@ digraph "FollowerPipeline" {
 - Follower 收到 Leader 的 PROPOSAL 时由自己的 `SyncRequestProcessor` 写日志并回 ACK；收到 COMMIT 后 `CommitProcessor` 放行到 `FinalRequestProcessor`。
 - **Observer** 用 `ObserverRequestProcessor`，链路同 Follower 但不参与投票（不回 ACK、不出现在 quorum 计算中），用于跨 DC 只读扩展（见 [cluster](/docs/CS/Framework/ZooKeeper/cluster.md)）。
 
-## 一次写请求的完整路径
+## Complete Path of a Write Request
 
 ```dot
 digraph "WriteFlow" {
@@ -104,7 +104,7 @@ digraph "WriteFlow" {
 
 **写必须过 Leader 且经 quorum**：这是 Zab "原子广播" 的本质，也是 ZooKeeper 写吞吐低于"多主可写"类系统的原因。
 
-## 读路径与 sync() 线性读
+## Read Path and sync() Linearizable Read
 
 读请求（exists / getData / getChildren）**不走 Zab**，在本节点 `CommitProcessor → FinalRequestProcessor` 直接从内存 `DataTree` 返回：
 
@@ -129,7 +129,7 @@ digraph "SyncRead" {
 
 `sync()` 本身是一条会经 Zab 提交的空写，强制本节点先 apply 到 Leader 已提交的最新 zxid，之后的读即线性一致。但 `sync()` 不是默认行为——客户端缓存 + watch 才是 ZooKeeper 扛读的主流手段（见 [client](/docs/CS/Framework/ZooKeeper/client.md) 的 watch 一节）。这与 etcd 默认 `ReadIndex` 线性读（见 [etcd read](/docs/CS/Framework/etcd/read.md)）形成对照。
 
-## ReadOnlyRequestProcessor 与只读模式
+## ReadOnlyRequestProcessor and Read-Only Mode
 
 当集群失去 quorum 或处于维护期，存活节点进入**只读模式**（`ReadOnlyRequestProcessor` 接管），只接受读、拒绝写，并打 `will be dropped if server is in read-only mode` 日志。这是 ZooKeeper 在分区下的"保护式降级"——宁可不写，也不在无法确认 quorum 时写，避免脑裂造成不一致（排查见 [troubleshooting](/docs/CS/Framework/ZooKeeper/troubleshooting.md)）。
 

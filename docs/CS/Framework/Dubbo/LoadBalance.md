@@ -22,7 +22,7 @@ public interface LoadBalance {
 }
 ```
 
-## 扩展点清单
+## Extension Point List
 
 3.3.6 的 `dubbo-cluster` 注册了 **6 个** LoadBalance 扩展名，对应 7 个类（`AbstractLoadBalance` 是抽象基类，不注册）：
 
@@ -703,7 +703,7 @@ public class AdaptiveLoadBalance extends AbstractLoadBalance {
 
 节点数只有 2 时直接二选一比较（`selectByP2C`，`:68-70`），不浪费随机采样。
 
-## 陷阱清单
+## Pitfall List
 
 > [!WARNING]
 >

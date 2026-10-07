@@ -1,11 +1,11 @@
 ## Introduction
 
-## 版本基线
+## Version Baseline
 
 > [!NOTE]
 > **版本口径**：HotSpot 至今仍有**两套解释器**——汇编模板解释器（`templateinterpreter`，各平台主流路径，OpenJDK 主干 `src/hotspot/share/interpreter/templateInterpreter.cpp`）与 C++ 解释器（`bytecodeInterpreter`，位于 `interpreter/zero/` 子目录，**未随时间移除**）。两者关系是**主/备**而非「新/旧」：Zero 是**可移植回退实现**，在没有模板解释器的平台上顶上去（`zeroInterpreterGenerator.cpp` 负责用 C++ 生成同等语义的代码）。因此「C++ 解释器已被移除」是常见误解——`interpreter/zero/` 目录在 OpenJDK 主干仍完整存在。
 >
-> 另外，**JVMCI 编译器**（Graal，`-XX:+UseJVMCICompiler`）启用后会接管编译，但解释器仍用于尚未编译的方法。详见 [JVM 版本基线](/docs/CS/Java/JDK/JVM/JVM.md?id=版本基线)。
+> 另外，**JVMCI 编译器**（Graal，`-XX:+UseJVMCICompiler`）启用后会接管编译，但解释器仍用于尚未编译的方法。详见 [JVM 版本基线](/docs/CS/Java/JDK/JVM/JVM.md?id=version-baseline)。
 
 TemplateInterpreter
 

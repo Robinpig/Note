@@ -8,7 +8,7 @@
 
 > 基于 PostgreSQL 18.0（REL_18_STABLE）的实际目录布局。源码主要由 C 与少量汇编组成。
 
-### 顶层结构
+### Top-Level Structure
 
 ```
 postgresql/                       # git clone 后根目录
@@ -31,7 +31,7 @@ postgresql/                       # git clone 后根目录
 └── src/Makefile.global.in
 ```
 
-### 架构模块 → 源码文件映射（PG 18）
+### Architecture Module → Source File Mapping (PG 18)
 
 > 这是 GDB 调试与源码定位的关键速查表。
 
@@ -89,7 +89,7 @@ postgresql/                       # git clone 后根目录
 |  | initdb | `src/bin/initdb/initdb.c` | 初始化数据目录 |
 |  | psql | `src/bin/psql/` | 交互式客户端 |
 
-### PG 18 新增/变更目录
+### PG 18 New/Changed Catalogs
 
 | 路径 | 新功能 |
 | --- | --- |
@@ -103,7 +103,7 @@ postgresql/                       # git clone 后根目录
 
 > 来源：知乎用户 *bcAndCarl* 的「PostgreSQL 源码分析 01 / 02」系列，文章 03 中"学习路径"部分也补充了相关调试建议。下文以 PG 18 为示例，PG 13+ 基本通用。
 
-### 1. 编译安装
+### 1. Compile and Install
 
 依赖包（RHEL 9 / CentOS 9 / Fedora）：
 
@@ -157,7 +157,7 @@ source ~/.bashrc
 psql --version    # 应输出 psql (PostgreSQL) 18.0
 ```
 
-### 2. 初始化数据目录
+### 2. Initialize Data Directory
 
 ```bash
 sudo mkdir -p /usr/local/pgsql/data
@@ -172,7 +172,7 @@ sudo semanage fcontext -a -t postgresql_db_t "/usr/local/pgsql/data(/.*)?"
 sudo restorecon -R /usr/local/pgsql/data
 ```
 
-### 3. 启动与停止
+### 3. Start and Stop
 
 ```bash
 # 服务器模式（推荐用于联调）
@@ -189,7 +189,7 @@ pg_ctl -D /usr/local/pgsql/data stop              # smart：等待客户端断�
 pg_ctl -D /usr/local/pgsql/data -m fast stop      # fast：立即断开
 ```
 
-### 4. 用 GDB 命令行调试
+### 4. Debug with GDB Command Line
 
 PG 的多进程模型下调试单条 SQL，最简单的方式是 **单用户模式 + GDB attach**：
 
@@ -229,7 +229,7 @@ backtrace              # 调用栈
 step / next / finish   # 单步
 ```
 
-### 5. 用 CLion 远程调试（Windows + Linux）
+### 5. Remote Debug with CLion (Windows + Linux)
 
 CLion 支持远程开发，可以在 Windows 上编辑 Linux 上的 PG 源码并直接调试。
 
@@ -273,7 +273,7 @@ CLion 端配置：
 - 性能分析：`perf record -p $(pidof postgres)` 后导入 CLion 查看热点
 - 内存检查：`valgrind --leak-check=full /usr/local/pgsql/bin/postgres --single -D ~/pgdata`
 
-### 6. 推荐学习路径（5 天）
+### 6. Recommended Learning Path (5 Days)
 
 ```
 第 1 天：postmaster → tcop → parser
@@ -295,7 +295,7 @@ PG 源码在演化中沉淀出几条贯穿全局的设计准则：
 
 ## Process & Connection Model
 
-### 启动流程（PostmasterMain 调用链）
+### Startup Flow (PostmasterMain Call Chain)
 
 > 来源：bcAndCarl「PostgreSQL 源码分析 04：postgres 启动工作流程」（PG 18 实际代码位置，行号会随版本漂移）
 
@@ -341,7 +341,7 @@ PostmasterMain()
 - `SIGUSR1` → `handle_pm_pmsignal_signal`（来自子进程的 pmsignal）
 - `SIGCHLD` → `handle_pm_child_exit_signal`（子进程退出）
 
-### ServerLoop（epoll 主循环）
+### ServerLoop (epoll Main Loop)
 
 > 来源：bcAndCarl 04
 
@@ -371,7 +371,7 @@ gdb /usr/local/pgsql/bin/postgres
 (gdb) r
 ```
 
-### Backend 启动
+### Backend Startup
 
 ```
 postgres -D $PGDATA
@@ -387,7 +387,7 @@ postgres -D $PGDATA
             └── postmaster 回到 accept 循环
 ```
 
-### Backend 启动
+### Backend Startup
 
 子进程由 `PostmasterMain` → `BackendStartup` → `fork_process` 创建，进入 `PostgresMain`（`src/backend/tcop/postgres.c`）：
 
@@ -401,7 +401,7 @@ PostgresMain
     └── 处理客户端 async 消息
 ```
 
-### 客户端通信协议
+### Client Communication Protocol
 
 PG 使用 V3 消息协议，主要消息类型（`src/backend/libpq/pqcomm.c`）：
 
@@ -414,7 +414,7 @@ PG 使用 V3 消息协议，主要消息类型（`src/backend/libpq/pqcomm.c`）
 
 扩展查询流水线允许多语句单往返，是高并发驱动和 ORM 的首选路径。
 
-### JDBC prepareStatement 全链路（PG 18 实战）
+### JDBC prepareStatement Full Link (PG 18 Practice)
 
 > 来源：bcAndCarl「PostgreSQL 源码分析 09：JDBC prepareStatement SQL 的执行流程」
 
@@ -478,7 +478,7 @@ break PortalDrop                     # Portal 清理
 
 ## Query Lifecycle
 
-### 综合视图：5 个阶段
+### Comprehensive View: 5 Stages
 
 > 来源：bcAndCarl「PostgreSQL 查询处理阶段全面概述」（翻译自 highgo.ca）
 
@@ -494,7 +494,7 @@ break PortalDrop                     # Portal 清理
 - **`get_relation_info()`**（`optimizer/util/plancat.c`）：告诉规划器每张表的页数/元组数/索引/列类型等基础信息，是代价估算的"数据库字典接口"。
 - **`HeapAccessMethod`**（`access/heap/`）：执行器最终依赖访问方法层完成对 Heap 数据页的读写；堆表元组只有 `HeapTuple` 一种类型。
 
-### 简单查询协议下的端到端路径
+### End-to-End Path Under Simple Query Protocol
 
 ```
 字符串 (Query)
@@ -546,7 +546,7 @@ Executor ← ExecutorRun / ExecutorStart
 
 输出是 `List *parsetree`，每个元素为 `RawStmt`/`SelectStmt`/`InsertStmt`/...，再被 `parse_analyze` 包成 `Query`。
 
-#### exec_simple_query 解析阶段（PG 18 实际代码）
+#### exec_simple_query Parsing Phase (PG 18 Actual Code)
 
 > 来源：bcAndCarl「PostgreSQL 源码分析 05：SQL 解析和语法树」
 
@@ -596,7 +596,7 @@ List *raw_parsetree_list
 
 这一步会大量命中 `pg_class` / `pg_attribute` / `pg_proc`，所以 PG 用 `syscache`（`utils/cache/syscache.c`）缓存系统表的查询结果。
 
-#### pg_analyze_and_rewrite 流程细节（PG 18 实际代码）
+#### pg_analyze_and_rewrite Flow Details (PG 18 Actual Code)
 
 > 来源：bcAndCarl「PostgreSQL 源码分析 06：SQL 语义分析和查询树」
 
@@ -759,7 +759,7 @@ PG 11+ 引入了 LLVM JIT 编译表达式：
 
 - `src/backend/jit/`：`jit.c` / `llvmjit.c` / `llvmjit_expr.c` / `llvmjit_deform.c`
 
-#### 执行计划树与 Portal
+#### Execution Plan Tree and Portal
 
 > 来源：bcAndCarl「PostgreSQL 源码分析 07：SQL 执行计划树和执行器」
 
@@ -803,7 +803,7 @@ PortalDrop(...)                  // 释放结果缓存等资源
 - `PORTAL_UTIL_SELECT`：EXPLAIN / COPY RETURNING
 - `PORTAL_MULTI_QUERY`：多语句
 
-#### GDB 跟踪 SQL 完整路径
+#### GDB Traces the Complete SQL Path
 
 ```bash
 # 启动 PG 服务器
@@ -872,7 +872,7 @@ SQL Plan  ──>  Access Method (heap/btree/gin/...)  ──>  Storage Manager 
 - 内容锁（`CONTENT_LOCK`、`BM_LOCKED`）：共享/独占保护
 - 替换策略：`strategy_point` 指向 clock hand
 
-#### BufferAlloc：Shared Buffer 的唯一入口
+#### BufferAlloc: The Only Entry of Shared Buffer
 
 > 来源：bcAndCarl「PostgreSQL 源码分析 16：PG 的 Shared Buffer」
 
@@ -901,7 +901,7 @@ static Buffer BufferAlloc(SMgrRelation reln, ForkNumber forkNum,
 12. 插入成功 → 设置 BM_TAG_VALID/BUF_USAGECOUNT_ONE → return foundPtr=false（此处产生 blks_read）
 ```
 
-#### 128 把分区锁（BufMappingPartitionLock）
+#### 128 Partition Locks (BufMappingPartitionLock)
 
 `BufTable` 是所有 backend 共享的唯一全局结构。PG 用 **128 把** LWLock 把哈希表切成 128 个分片，极大降低并发争用：
 
@@ -909,7 +909,7 @@ static Buffer BufferAlloc(SMgrRelation reln, ForkNumber forkNum,
 - 逻辑读与物理读 **互相阻塞**（同一分片）
 - 物理读与物理读 **互相阻塞**
 
-#### Shared Buffer 与 MemoryContext 对比
+#### Shared Buffer vs MemoryContext Comparison
 
 | 维度 | Shared Buffer | MemoryContext |
 | --- | --- | --- |
@@ -919,7 +919,7 @@ static Buffer BufferAlloc(SMgrRelation reln, ForkNumber forkNum,
 | 主要用途 | 缓存磁盘数据页（Table/Index） | 进程内部临时数据分配 |
 | 容量建议 | 物理内存的 25%~33% | 由查询复杂度决定 |
 
-#### HTAB 结构（动态哈希表）
+#### HTAB Structure (Dynamic Hash Table)
 
 `buf_table.c::SharedBufHash` 是 Shared Buffer 的全局哈希表：
 
@@ -939,7 +939,7 @@ struct HTAB {
 
 `HASH_FIND` 仅读，`HASH_ENTER` 写入分配桶——这是 race-to-fill 的关键。
 
-#### Shared Buffer 实战指标
+#### Shared Buffer Practical Metrics
 
 - **逻辑读命中率**：99.9% 及格、99.99% 优秀、99.999% 顶级
 - `shared_buffers` 提到 16~32 GB 时 `blks_read` 几乎归零
@@ -963,7 +963,7 @@ struct HTAB {
 - `t_infomask2`（2B）：属性数 / 二级位标志
 - `t_ctid`（6B）：当前版本行指针，UPDATE 形成链表
 
-#### HeapTupleHeaderData 完整布局
+#### HeapTupleHeaderData Complete Layout
 
 > 来源：bcAndCarl「PostgreSQL 的堆表的存储结构」
 
@@ -1009,7 +1009,7 @@ HeapTupleHeaderData (固定 23 字节)
 | `t_infomask` | 2 | 可见性标志核心：HEAP_XMIN_COMMITTED / HEAP_XMAX_INVALID / HEAP_HASNULL / HEAP_HOT_UPDATED 等 |
 | `t_hoff` | 1 | 整个头部长度（bitmap + padding），决定用户数据起点 |
 
-#### pageinspect 实战
+#### pageinspect Practice
 
 编译并加载 `contrib/pageinspect`，可直接 dump 堆表的物理页面：
 
@@ -1051,7 +1051,7 @@ psql -c 'CREATE EXTENSION pageinspect;'
 - `xlogreader.c`：用于 logical decoding 的 WAL 读取
 - `xlogutils.c`：WAL 期间的回放工具
 
-### XLogRecord 结构
+### XLogRecord Structure
 
 ```
 XLogRecord {
@@ -1087,7 +1087,7 @@ XLogRecord {
 | RM_STANDBY_ID | standby | 热备运行所需记录 |
 | RM_LOGICALMSG_ID | logical | logical decoding 的自定义消息 |
 
-### 崩溃恢复
+### Crash Recovery
 
 `StartupXLOG`（启动期执行）：
 
@@ -1096,7 +1096,7 @@ XLogRecord {
 3. 应用 ReorderBuffer 的逻辑消息（如 logical replication）
 4. 完成一致点后切换为正常模式
 
-### XLOG / WAL 概述与文件命名
+### XLOG / WAL Overview and File Naming
 
 > 来源：bcAndCarl「PostgreSQL 源码分析 13/14：XLOG 事务日志」
 
@@ -1138,7 +1138,7 @@ Checkpoint 是"将 Shared Buffer 中的所有脏页刷到数据文件，并记�
 - Checkpoint 完成后，把 redo LSN 写入 `pg_control`，下次崩溃恢复从这里开始
 - "按热度刷脏页"原则：usage_count 低（冷脏页）优先刷盘，越热的页越晚刷
 
-### Shared Buffer 与 WAL Buffer 的协作
+### Shared Buffer and WAL Buffer Collaboration
 
 数据修改与 WAL 的写入顺序是 PG 的根本：
 
@@ -1155,7 +1155,7 @@ Checkpoint 是"将 Shared Buffer 中的所有脏页刷到数据文件，并记�
 
 为什么要先写 WAL？PG 数据页写入是**随机 IO**，WAL 是**顺序 IO**，先写 WAL 可以保证事务提交后即使 Shared Buffer 数据丢失也能通过 WAL 恢复。
 
-### XLogInsertRecord 流程与两把锁
+### XLogInsertRecord Flow and Two Locks
 
 `XLogInsert` 是 PG 的核心 WAL 入口：
 
@@ -1200,7 +1200,7 @@ typedef struct XLogCtlInsert {
 | **WALInsertLock**（8 把） | 通知/同步机制 | 保护 copy_data_to WAL_buffer，组提交语义 |
 | **insertpos_lck**（XLogCtlInsert 内 spinlock） | 全局唯一 | 串行化对 XLogCtl 的写入，竞争热点 |
 
-### XLogFlush 落盘
+### XLogFlush Flush to Disk
 
 事务提交或后台刷脏页时调用：
 
@@ -1228,7 +1228,7 @@ void XLogFlush(XLogRecPtr record);    // 把 record LSN 之前的 WAL 全部强�
 - `HeapTupleSatisfiesUpdate` / `HeapTupleSatisfiesDirty` / `HeapTupleSatisfiesVacuum`（DML 路径）
 - `HeapTupleSatisfiesHistoricMVCC`（已结束事务的快照回溯）
 
-### SnapshotData 字段详解
+### SnapshotData Field Details
 
 > 来源：bcAndCarl「PostgreSQL 源码分析 17：PG 的快照」
 
@@ -1253,7 +1253,7 @@ typedef struct SnapshotData {
 - `t_xmax != 0` 时按 xmax 也走查 xip（同上）
 - `t_infomask & HEAP_XMIN_COMMITTED` 等 hint bit 可加速（绕过 clog/SLRU 读）
 
-### GetSnapshotData 流程
+### GetSnapshotData Flow
 
 `GetSnapshotData()` 是所有快照采集的源头：
 
@@ -1277,7 +1277,7 @@ GetSnapshotData(Snapshot snap)
 - 事务注册 / 注销 / VACUUM：`LW_EXCLUSIVE`（等待正在采集的快照全部完成）
 - 复用快照（`GetSnapshotDataReuse`）：可提前释放
 
-### 实战：跨 session 观察 MVCC
+### Practice: Observing MVCC Across Sessions
 
 ```sql
 -- Session 1
@@ -1317,7 +1317,7 @@ SELECT * FROM test WHERE id=3;   -- 提交后看到新值
 
 CLOG（`src/backend/access/transam/clog.c`）记录 xid 的提交状态。`pg_xact/` 目录下每页（默认 8 KB）保存 32K × 2 bit 的提交状态。
 
-### MVCC 与并发控制流派
+### MVCC and Concurrency Control Schools
 
 > 来源：bcAndCarl「PostgreSQL 源码分析 10：1-事务的要点」
 
@@ -1336,7 +1336,7 @@ CLOG（`src/backend/access/transam/clog.c`）记录 xid 的提交状态。`pg_xa
 
 PG 在通用 OLTP 场景仍以悲观锁为基础，结合 MVCC 让读写互不阻塞。
 
-### HeapTupleHeader 字段详解
+### HeapTupleHeader Field Details
 
 | 字段 | 含义 |
 | --- | --- |
@@ -1347,7 +1347,7 @@ PG 在通用 OLTP 场景仍以悲观锁为基础，结合 MVCC 让读写互不�
 | `t_infomask2` | 扩展标志位 + 属性数 |
 | `t_ctid` | 当前或新版本物理位置（指向自身 = 最新；指向他处 = 链表） |
 
-### pageinspect 实战
+### pageinspect Practice
 
 ```sql
 CREATE EXTENSION pageinspect;
@@ -1387,7 +1387,7 @@ SELECT * FROM bt_page_stats('idx_orders_id', 1);
 
 子事务结束 SAVEPOINT 时通过 `xact.c::CommitSubTransaction` 提交，再触发一次 xact commit 的 WAL 记录。
 
-### 事务子系统结构
+### Transaction Subsystem Structure
 
 > 来源：bcAndCarl「PostgreSQL 源码分析 11/12：2/3-事务基本操作」
 
@@ -1406,7 +1406,7 @@ SELECT * FROM bt_page_stats('idx_orders_id', 1);
 
 分层：上层 *Transaction Block* 负责语法块（BEGIN/COMMIT）识别与状态维护，下层 *Xact* 负责 MVCC、WAL、CLOG、锁管理与崩溃恢复。
 
-### 双状态机
+### Dual State Machine
 
 PG 用两个独立的状态机分别管理"语法块"与"底层事务状态"：
 
@@ -1437,7 +1437,7 @@ PG 用两个独立的状态机分别管理"语法块"与"底层事务状态"：
 | `TRANS_ABORT` | 回滚中 |
 | `TRANS_PREPARE` | 预提交中 |
 
-### 核心数据结构 TransactionStateData
+### Core Data Structure TransactionStateData
 
 ```c
 typedef struct TransactionStateData {
@@ -1470,7 +1470,7 @@ typedef struct TransactionStateData {
 
 调试技巧：`gdb 中 p CurrentTransactionState->state` 99% 时间是 `TRANS_INPROGRESS`，COMMIT 那瞬间会闪现 `TRANS_COMMITTING`。
 
-### StartTransaction 启动流程
+### StartTransaction Startup Flow
 
 调用链：`exec_simple_query → start_xact_command → StartTransactionCommand → StartTransaction`
 
@@ -1517,7 +1517,7 @@ XID 分配的关键步骤（`xact.c::AssignTransactionId`）：
 
 调试：在 gdb attach 到 backend PID 后，断点 `GetCurrentTransactionId`、`AssignTransactionId` 可观察到 DML 执行前 XID 才被分配，第二条 SQL 不再调用。
 
-### heap_update 三阶段
+### heap_update Three Phases
 
 `heap_update` 在事务中执行的完整流程：
 
@@ -1543,7 +1543,7 @@ XID 分配的关键步骤（`xact.c::AssignTransactionId`）：
 3-3  释放内存
 ```
 
-### CommitTransaction 三段式
+### CommitTransaction Three-Phase
 
 调用链：`exec_simple_query → finish_xact_command → CommitTransactionCommand → CommitTransactionCommandInternal → CommitTransaction`
 
@@ -1621,7 +1621,7 @@ byteno  = xid % (8192 * 4) / 4; // 字节偏移
 bshift  = xid % 4 * 2;          // 位偏移
 ```
 
-### XID 回绕与 FrozenTransactionId
+### XID Wraparound and FrozenTransactionId
 
 XID 是 32-bit 环形递增，达到 2^31 后会"穿过"过去；为了避免把已经存在于表里的旧行误判为"未提交事务"，PG 引入了 FrozenTransactionId（常量 2）：
 
@@ -1650,7 +1650,7 @@ XID 是 32-bit 环形递增，达到 2^31 后会"穿过"过去；为了避免把
 
 `Fast Path` 行锁：单事务内对同一行加锁时直接走 backend 局部数组，避免主锁表争用；超过阈值后才升级到主锁表。
 
-### LOCK 与 PROCLOCK 详细结构
+### LOCK and PROCLOCK Detailed Structure
 
 > 来源：bcAndCarl「PostgreSQL Lock 锁总览」（参考自 `src/backend/storage/lmgr/README`）
 
@@ -1690,7 +1690,7 @@ typedef struct PROCLOCK {
    - `procLink` 让 PROCLOCK 挂在 PGPROC 维度上，方便事务退出时清理
 3. **`releaseMask` 无锁优化**：持有者改自己 PROCLOCK 的字段不需要加锁，配合事务清理阶段快速回收锁资源
 
-### 锁管理器的内部同步
+### Lock Manager Internal Synchronization
 
 ```c
 static HTAB *LockMethodLockHash;     // LOCK 全局表（共享内存）
@@ -1706,7 +1706,7 @@ static HTAB *LockMethodLocalHash;    // LOCALLOCK 表（每 backend 私有）
 
 **避免 LWLock 死锁的规则**：任何后端进程若需要同时对多个分区加锁，必须按分区编号顺序执行加锁。
 
-### Fast Path Locking（快速路径锁）
+### Fast Path Locking
 
 > `src/backend/storage/lmgr/lock.c`
 
@@ -1726,7 +1726,7 @@ Fast Path 的实现：
 
 > 来源：bcAndCarl「PostgreSQL 源码分析 15：PG 的 VACUUM」
 
-### 前映像（Before Image）
+### Before Image
 
 前映像 = "行在被修改之前的旧版本"，是 MVCC 三大特性（事务回滚、MVCC 一致性读、崩溃恢复）的基础。
 
@@ -1741,13 +1741,13 @@ Fast Path 的实现：
 
 **PG 的崩溃恢复与前映像无关** —— 完全依赖 WAL；Oracle/MySQL 用 UNDO 既做 MVCC 也做回滚/恢复。
 
-### VACUUM 三大工作
+### VACUUM Three Major Tasks
 
 1. **清理 dead tuples**：回收对所有事务都已不可见的旧版本数据
 2. **更新统计信息**（VACUUM ANALYZE 时）
 3. **冻结行 XID**：将极旧提交的 `t_xmin` 改写为 `FrozenTransactionId`（常量 2），防止 XID 回绕
 
-### 启动机制
+### Startup Mechanism
 
 ```text
 PG 启动
@@ -1766,7 +1766,7 @@ PG 启动
 - 表上 dead tuples 数 > `autovacuum_vacuum_threshold + autovacuum_vacuum_scale_factor * n_live_tup`
 - XID 接近 `autovacuum_freeze_max_age`，强制 VACUUM 防回绕
 
-### do_autovacuum 核心流程
+### do_autovacuum Core Flow
 
 ```text
 1 StartTransactionCommand
@@ -1794,7 +1794,7 @@ PG 启动
 10 CommitTransactionCommand
 ```
 
-### vacuum_rel 内部动作（heap_vacuum_rel）
+### vacuum_rel Internal Actions (heap_vacuum_rel)
 
 1. `lazy_vacuum` / `vacuum_heap` 顺序扫表，对每页：
    - 设置 PD_ALL_VISIBLE，重置 VM
@@ -1804,7 +1804,7 @@ PG 启动
 3. 更新 `pg_class.relpages/reltuples` 统计
 4. 多趟进行 freeze：把 `t_xmin < FreezeLimit` 的行冻结为 `FrozenTransactionId`
 
-### 多进程 vs autovacuum
+### Multi-Process vs autovacuum
 
 - 用户手动 `VACUUM`（同 session）只持 `AUTOVACUUM_LOCK` 共享模式，不阻塞其它 worker
 - `VACUUM FULL` 重写表（`rewriteheap.c`）独占 `ACCESS EXCLUSIVE` 锁，会阻塞所有读写
@@ -1857,7 +1857,7 @@ PG 启动
 
 逻辑解码：WAL → `XLogReadRecord` → 各 RMGR 的 `decode` 回调 → `ReorderBuffer` 按事务 ID 与 LSN 重新排序 → `pgoutput` 插件翻译为 protobuf → 订阅端 apply。
 
-## Extensions 机制
+## Extensions Mechanism
 
 扩展入口（`src/backend/utils/fmgr/` 与 `src/backend/commands/extension.c`）：
 
@@ -1889,7 +1889,7 @@ Extension 注册到系统表 `pg_extension`，加载时通过 `$sharedir/extensi
 
 每次语句执行都在 `ExecutorStart` 创建一个 `ExecutorState`，结束后 `MemoryContextDelete` 一次性回收。
 
-### MemoryContextData 抽象类
+### MemoryContextData Abstract Class
 
 > 来源：bcAndCarl「PostgreSQL 源码分析 08：pg 的本地内存管理」
 
@@ -1922,7 +1922,7 @@ typedef struct MemoryContextMethods {
 
 `methods` 是抽象接口，`mcxt_methods[]` 是所有实现的注册表。`MemoryContext` 是抽象类——目前仅 `AllocSetContext` 一个实现。
 
-### 进程内典型 MemoryContext 树
+### Typical In-Process MemoryContext Tree
 
 ```
 TopMemoryContext                    // 进程整个生命周期（pg_class 缓存等）
@@ -1939,7 +1939,7 @@ TopMemoryContext                    // 进程整个生命周期（pg_class 缓�
     └── Per-Tuple-Context            // 每 1000 条 tuple 重建一次
 ```
 
-### AllocSetContext 实现细节
+### AllocSetContext Implementation Details
 
 ```c
 typedef struct AllocSetContext {
@@ -1971,7 +1971,7 @@ typedef struct AllocSetContext {
 | 10 | 32768 B | |
 | 11 | 65536 B | |
 
-### MemoryContext → Block → Chunk 三层关系
+### MemoryContext → Block → Chunk Three-Layer Relationship
 
 ```
 MemoryContext   生命周期管理者

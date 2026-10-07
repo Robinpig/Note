@@ -12,9 +12,9 @@ TCP 的全部复杂性，几乎都来自一个无法消除的困境：**发送�
 
 一个容易事先搞错的事实：**在 v7.2.7 上，RACK 和 TLP 都是默认开启的**（`tcp_ipv4.c:3474-3475`），不是什么需要手动打开的新特性。所以"用重复 ACK 判丢包"这套教科书叙述，已经不是当前内核的主路径了。
 
-## RTT：先测准，才谈得上重传
+## RTT: Measure Accurately Before Retransmission
 
-### 一次测量从哪来：三个来源的优先级
+### Where a Measurement Comes From: Priority of Three Sources
 
 每个 ACK 都可能携带一个 RTT 样本，但可信度不同。`tcp_ack_update_rtt()` 同时收到三个候选（`net/ipv4/tcp_input.c:3459`）：
 
@@ -42,7 +42,7 @@ static bool tcp_ack_update_rtt(struct sock *sk, const int flag,
 
 优先用第一个，退到第二个，再退到第三个，三个都拿不到就返回 false——**这一次 ACK 不产生 RTT 样本**。
 
-### Jacobson 算法与它的定点放大
+### Jacobson Algorithm and Its Fixed-point Amplification
 
 拿到了样本之后，`tcp_rtt_estimator()` 做平滑（`tcp_input.c:1070`）。这段代码在内核里躺了三十年，注释本身就是史料：
 
@@ -97,7 +97,7 @@ static bool tcp_ack_update_rtt(struct sock *sk, const int flag,
 
 含义是：RTT 下降时不要立刻收紧 RTO（否则下一个正常抖动就会触发虚假超时），但也不要像纯 Eifel 那样完全冻结，而是用小得多的步长跟上。
 
-### mdev_max 与 rttvar：为什么用两层
+### mdev_max and rttvar: Why Use Two Layers
 
 平滑后的 mdev 并不直接用于 RTO，中间还夹了一层（`tcp_input.c:1112`）：
 
@@ -120,7 +120,7 @@ static bool tcp_ack_update_rtt(struct sock *sk, const int flag,
 
 这个不对称是刻意的——**抖动变大要立刻反应，变小要慢慢信**。如果 rttvar 对称收敛，一次偶发的大抖动之后的平静期会让 RTO 快速收紧，紧接着的第二次抖动就会造成虚假超时。
 
-### 首次测量：为什么是 3×RTT
+### First Measurement: Why 3xRTT
 
 没有任何历史样本时（`tcp_input.c:1125`）：
 
@@ -137,7 +137,7 @@ static bool tcp_ack_update_rtt(struct sock *sk, const int flag,
 
 `srtt = 8m`、`mdev = 2m`，代入 RTO 公式就是 `m + 2m = 3m`。首次 RTT 没有任何统计量支撑，用三倍来兜底。注意 `rttvar` 还要和 `rto_min` 取大——即使首测 RTT 只有 1ms，RTO 也不会低于 200ms 量级。
 
-### 重传歧义：Karn 在 Linux 怎么落地
+### Retransmission Ambiguity: How Karn Is Implemented in Linux
 
 Karn 算法的原始表述是"重传过的包，其 ACK 不能用于 RTT 测量"——因为你分不清这个 ACK 是在应答原始包还是重传包。Linux 上有两处实现，第一处就是前面看到的"只采未重传 skb 的发送时间"。
 
@@ -167,9 +167,9 @@ static void tcp_rack_advance(struct tcp_sock *tp, u8 sacked,
 
 判定条件是**测量值小于历史最小 RTT 且这个包被重传过**。逻辑很直接：重传至少比原始发送晚一个 RTT，所以如果测出来的"RTT"比历史最小值还小，那它一定是在应答原始包（或更早的某次重传），不是最近这次重传。这种样本必须丢弃，否则 RTT 会被系统性低估，进而 RTO 过紧、虚假超时。
 
-## RTO：从方差到上下界
+## RTO: From Variance to Upper and Lower Bounds
 
-### 公式
+### Formula
 
 有了 srtt 和 rttvar，RTO 就是一行（`include/net/tcp.h:879`）：
 
@@ -201,7 +201,7 @@ static inline u32 __tcp_set_rto(const struct tcp_sock *tp)
 | `TCP_TIMEOUT_FALLBACK` | 3 秒 | RFC 1122 的旧值，SYN 重传后退到这里 |
 | `TCP_TIMEOUT_MIN_US` | 2 毫秒 | 定时器最小分辨率 |
 
-### 退避只在该重置时重置
+### Backoff Is Reset Only When It Is Reset
 
 指数退避的 `icsk_backoff` 只在**拿到有效 RTT 样本**时清零（`tcp_input.c:3495`）：
 
@@ -213,9 +213,9 @@ static inline u32 __tcp_set_rto(const struct tcp_sock *tp)
 
 如果 ACK 只是推进了 snd_una 但没产生 RTT 样本（比如应答的是重传包），`tcp_ack_update_rtt()` 返回 false，backoff 保持不动。少了这一行，一次丢包后的退避会被后续 ACK 提前抹平，重传风暴就压不住。
 
-## 超时之后：退避、放弃与两个例外
+## After Timeout: Backoff, Abandonment, and Two Exceptions
 
-### tcp_retransmit_timer 的主干
+### The Backbone of tcp_retransmit_timer
 
 RTO 到点进入 `tcp_retransmit_timer()`（`net/ipv4/tcp_timer.c:537`）。它有两个必须知道的例外分支。
 
@@ -246,7 +246,7 @@ RTO 到点进入 `tcp_retransmit_timer()`（`net/ipv4/tcp_timer.c:537`）。它�
 
 首次 RTO 时还会按当时的拥塞状态记不同的计数器（`tcp_timer.c:609-628`）：Recovery 状态下超时记 `TCPSACKRECOVERYFAIL`（Reno 记 `TCPRENORECOVERYFAIL`），Loss 状态记 `TCPLOSSFAILURES`，Disorder 记 `TCPSACKFAILURES`。**这几个计数器是"快速重传没能救回来"的直接证据**，排障时比 `TCPTimeouts` 更能说明问题。
 
-### 退避：指数为主，薄流走线性
+### Backoff: Exponential Primarily, Thin Streams Use Linear
 
 退避在 `out_reset_timer` 标签之后，但对"薄流"（thin stream，如 SSH、在线游戏的交互流量）有特殊处理（`tcp_timer.c:660`）：
 
@@ -263,7 +263,7 @@ RTO 到点进入 `tcp_retransmit_timer()`（`net/ipv4/tcp_timer.c:537`）。它�
 
 薄流的特点是在途包很少、丢一个就卡住，指数退避会让它延迟爆炸。所以这里**每次都重算 RTO 而不累积退避**，最多 `TCP_THIN_LINEAR_RETRIES` 次之后退回指数退避——注释说明了理由：避免对着黑洞一直线性重传。
 
-### 放弃连接不是"重传 N 次"，而是"超过 N 次的时间预算"
+### Giving Up a Connection Is Not 'Retransmit N Times' But 'Exceed the Time Budget for N Times'
 
 这是本篇最容易被误解的一点。`tcp_retries2 = 15` 看上去是"重传 15 次就放弃"，实际不是。
 
@@ -317,9 +317,9 @@ RTO 到点进入 `tcp_retransmit_timer()`（`net/ipv4/tcp_timer.c:537`）。它�
 
 上面这套是**连接建立之后**的重传。握手阶段的 SYN / SYNACK 重传走的是另一条路：此时还没有 `tcp_sock` 的重传状态可用，SYNACK 靠 `tcp_rtx_synack()`、SYN 靠 `tcp_retransmit_timer()` 的 `TCPF_SYN_SENT` 分支，且默认次数完全不同（`tcp_syn_retries` = 6、`tcp_synack_retries` = 5）。详见 [Connection_Setup](/docs/CS/OS/Linux/net/TCP/Connection_Setup.md)。
 
-## 丢失判据之一：重复 ACK 与 SACK 计分板
+## Loss Criterion One: Duplicate ACK and SACK Scoreboard
 
-### dupthresh：数够 N 个就算丢
+### dupthresh: Counting N Duplicates Means Loss
 
 最原始的判据是"收到 N 个重复 ACK"。内核里这个阈值叫 `reordering`，默认 `TCP_FASTRETRANS_THRESH = 3`（`include/net/tcp.h:94`），并且**会随观测到的重排程度动态调整**（上限 `sysctl_tcp_max_reordering = 300`）。
 
@@ -337,7 +337,7 @@ void tcp_newreno_mark_lost(struct sock *sk, bool snd_una_advanced)
 
 条件是两个之一：还没进 Recovery 且重复 ACK 数够了；或者已在 Recovery 且 snd_una 又推进了（RFC 6582 的部分确认处理）。判定后标记**重传队列队首**为丢失——Reno 只能看到队首，这是它相对 SACK 的根本局限。
 
-### SACK 计分板：一个六状态的交换图
+### SACK Scoreboard: A Six-state Transition Diagram
 
 有 SACK 之后，内核维护的是一张"哪些段到了、哪些没到"的计分板。每个 skb 的 `TCP_SKB_CB(skb)->sacked` 是这张表的位图，`tcp_input.c:1355` 那段长注释给出了完整定义：
 
@@ -362,7 +362,7 @@ void tcp_newreno_mark_lost(struct sock *sk, bool snd_una_advanced)
 
 即这个状态机是**可交换的**——多个事件同时到达时，处理顺序不影响结果。这让内核不必为事件排序操心。
 
-### DSACK：让接收方告诉发送方"你多发了一次"
+### DSACK: Let the Receiver Tell the Sender 'You Sent One Extra Copy'
 
 D-SACK（RFC 2883）是 SACK 的扩展：接收方用它报告"这个范围的字节我**已经收到过**了"。这是唯一能让发送方确认"我刚才那次重传是多余的"的机制。
 
@@ -403,9 +403,9 @@ DSACK 的两个用途：
 1. **检测重排**：DSACK 出现在"已 SACK 过又被重传"的段上，说明原始包不是丢了只是晚到。这是 `rack.dsack_seen` 的来源，RACK 用它来调大重排窗口。
 2. **撤销虚假重传的代价**：`tp->undo_retrans` 递减（`tcp_input.c:1515`），配合 `tcp_undo_cwnd_reduction()` 恢复被误砍的拥塞窗口。
 
-## 丢失判据之二：RACK——把判据从序号域搬到时间域
+## Loss Criterion Two: RACK - Moving the Criterion from Sequence Space to Time Domain
 
-### 为什么 dupack 不够
+### Why Dupack Is Not Enough
 
 基于重复 ACK 的判据有三个结构性盲区：
 
@@ -435,7 +435,7 @@ RACK（Recent ACKnowledgment）换了判据的度量。内核注释把三种判�
 
 一句话：**dupthresh 数包数，FACK 量序号距离，RACK 算时间差**。
 
-### 判据本身
+### The Criterion Itself
 
 核心就一个不等式（`tcp_recovery.c:32`）：
 
@@ -462,7 +462,7 @@ s32 tcp_rack_skb_timeout(struct tcp_sock *tp, struct sk_buff *skb, u32 reo_wnd)
 
 没到期的包不会白算：它们的最大剩余时间会被记下来，用来设置 `ICSK_TIME_REO_TIMEOUT` 定时器——**到期时再来判一次**，而不是等 RTO。
 
-### 遍历的是"按发送时间排序"的队列
+### The Traversed Queue Is 'Sorted by Send Time'
 
 RACK 要按时间比较，所以内核额外维护了一个队列（`include/linux/tcp.h:285`）：
 
@@ -490,7 +490,7 @@ RACK 要按时间比较，所以内核额外维护了一个队列（`include/lin
 
 `tcp_skb_sent_after()` 比较时会同时看时间和序号——序号用于在发送时间相同（同一个 TSO 突发）时打破平局。
 
-### 重排窗口：给"晚到"留出的余量
+### Reordering Window: The Margin Left for 'Late Arrivals'
 
 `reo_wnd` 是 RACK 里的关键参数，它决定"多久算晚"（`tcp_recovery.c:5`）：
 
@@ -531,7 +531,7 @@ static u32 tcp_rack_reo_wnd(const struct sock *sk)
 
 也就是说，**RACK 是从观测到的重排中学习的**，而不是靠人工调阈值——这正是它相对 dupthresh 的核心优势。
 
-### 入口：Reno 与 SACK 在这里分道扬镳
+### Entry: Reno and SACK Diverge Here
 
 `tcp_identify_packet_loss()` 是每次收到 ACK 后做丢失判定的统一入口（`tcp_input.c:3297`）：
 
@@ -570,15 +570,15 @@ static bool tcp_time_to_recover(const struct tcp_sock *tp)
 
 **旧版本里那一大段 "Trick#1: the loss is proven"、"Trick#2"、"Trick#3" 的条件判断已经全部消失**。原因是判据被统一了：不管丢包是 dupthresh、RACK 还是 RTO 判出来的，最终都体现在 `lost_out` 上，进入恢复就只看这一个条件。如果照着老资料去读 `tcp_time_to_recover()` 会找不到那些分支——它们被 RACK 的引入淘汰了。
 
-## 尾包丢失：TLP
+## Tail Packet Loss: TLP
 
-### 为什么尾包是特殊情况
+### Why the Tail Packet Is a Special Case
 
 RACK 需要"有更晚发出的包被确认"才能推断更早的包丢了。**如果丢的就是最后发出的包，没有任何更晚的包可供参照**——RACK 失效，只剩 RTO 一条路。而尾包丢失在短连接、请求-响应型流量里恰恰很常见。
 
 TLP（Tail Loss Probe）的解法是：**与其干等 RTO，不如先主动发一个探测包**。探测包到达后会引发对端的 ACK（或 SACK），这个反馈就能喂给 RACK 做判定。
 
-### PTO 的计算
+### PTO Calculation
 
 探测超时叫 PTO，由 `tcp_schedule_loss_probe()` 设置（`net/ipv4/tcp_output.c:3099`）：
 
@@ -619,7 +619,7 @@ TLP（Tail Loss Probe）的解法是：**与其干等 RTO，不如先主动发�
 
 触发条件也要看清（`tcp_output.c:3116`）：需要 `sysctl_tcp_early_retrans` 为 3 或 4（**默认值就是 3**）、连接支持 SACK、且处于 Open 或 CWR 状态——**已经在恢复中的连接不做 TLP**。
 
-### 探测发什么：优先新数据
+### What Probing Sends: Prefer New Data
 
 `tcp_send_loss_probe()` 的第一个选择可能反直觉（`tcp_output.c:3182`）：
 
@@ -656,7 +656,7 @@ TLP（Tail Loss Probe）的解法是：**与其干等 RTO，不如先主动发�
 
 最后记录 `tp->tlp_high_seq = tp->snd_nxt`（`tcp_output.c:3222`）用于丢失判定，计数 `TCPLossProbes`，然后重新武装 RTO 定时器。
 
-## 三个机制共用一个定时器
+## Three Mechanisms Share One Timer
 
 RTO、TLP、RACK 重排超时三者**共用同一个 `sk->tcp_retransmit_timer`**，靠 `icsk_pending` 区分当前挂的是哪种（`net/ipv4/tcp_timer.c:714`）：
 
@@ -694,7 +694,7 @@ RTO、TLP、RACK 重排超时三者**共用同一个 `sk->tcp_retransmit_timer`*
 
 否则从 TLP 切回 RTO 时，RTO 会被"重置"成一个完整周期，丢包恢复的总时长就被拉长了。
 
-## 真正重传什么
+## What Is Actually Retransmitted
 
 判定完成后，实际发包由 `tcp_xmit_retransmit_queue()` 完成（`net/ipv4/tcp_output.c:3725`）。它遍历重传队列，但有几个明确的停止条件：
 
@@ -756,7 +756,7 @@ RTO、TLP、RACK 重排超时三者**共用同一个 `sk->tcp_retransmit_timer`*
 
 重传超过一次就认为对端或路径不支持 ECN，降级重试——这是 RFC 3166 6.1.1.1 规定的行为。
 
-## 观测与排障
+## Observation and Troubleshooting
 
 **单连接级别**，`ss -ti` 的字段直接来自 `tcp_get_info()`，对应内核字段（`include/uapi/linux/tcp.h`）：
 

@@ -4,7 +4,7 @@ AI（人工智能）是研究如何让机器表现出感知、推理、学习与
 
 现代 AI 的分水岭是 2017 年 NeurIPS 上 Google 论文《Attention Is All You Need》提出的 **Transformer**（见 [Transformer](/docs/CS/AI/Transformer.md)）：它用 self-attention 取代 RNN 的顺序递推，使训练可大规模并行、规模可扩展。基于 Transformer 的 [LLM](/docs/CS/AI/LLM/LLM.md)（BERT/GPT 及后续模型）把 NLP、CV（ViT）、多模态乃至 Agent 统一到同一套预训练范式下。
 
-## 学科地图
+## Field Map
 
 ```
 AI
@@ -27,7 +27,7 @@ AI
     └── 落地形态：[LLM 应用开发平台](/docs/CS/AI/LLM/Platform/Platform.md)（Dify、Coze 等，见 LLM/ 目录）
 ```
 
-## 三范式对比
+## Comparison of Three Paradigms
 
 | 维度 | 传统机器学习 | 深度学习 | 大模型（Foundation Model） |
 |------|-------------|----------|------------------------------|
@@ -38,7 +38,7 @@ AI
 | 代表算法 | [SVM](/docs/CS/AI/ML/SVM.md)、随机森林、GBDT | [CNN](/docs/CS/AI/CNN.md)、ResNet | GPT、BERT、扩散模型 |
 | 工具 | [Scikit-Learn](/docs/CS/AI/Scikit-Learn.md)、XGBoost | [PyTorch](/docs/CS/AI/PyTorch.md)、[TensorFlow](/docs/CS/AI/TensorFlow.md) | Transformers、vLLM、推理框架 |
 
-## 关键概念脉络
+## Key Concept Thread
 
 - **偏差-方差权衡**：模型误差 = 偏差（欠拟合）+ 方差（过拟合）+ 不可约噪声；正则化、交叉验证、集成学习都在管理这对矛盾（见 [ML](/docs/CS/AI/ML/ML.md)）。
 - **优化**：梯度下降及其变体（SGD+momentum、Adam/AdamW）、学习率调度、损失函数（交叉熵、Hinge、MSE）。

@@ -2,16 +2,16 @@
 
 ZooKeeper 的安全分三层：**ACL（节点级授权）**、**认证（客户端身份如何证明）**、**传输安全（SASL / TLS）**。它不像 etcd 那样有 RBAC + mTLS 的一站式模型，而是把"谁能访问哪个 znode"拆成 scheme:id:permission 的细粒度 ACL，把"身份从哪来"交给 digest / IP / SASL 等多种 scheme，把"链路加密"长期依赖 SASL，直到 3.9 才补齐 TLS 的动态加载。
 
-本篇覆盖 ACL 的 scheme 与权限位、如何 `addAuthInfo`、SASL（Kerberos）、TLS（含 3.9 的动态 keystore 重加载）、AdminServer 安全与应急 superDigest。横向对比 etcd 的 RBAC/mTLS 见 [与 etcd 对照](/docs/CS/Framework/ZooKeeper/ZooKeeper.md?id=与-etcd-对照)；客户端如何设置 ACL 见 [client](/docs/CS/Framework/ZooKeeper/client.md)。
+本篇覆盖 ACL 的 scheme 与权限位、如何 `addAuthInfo`、SASL（Kerberos）、TLS（含 3.9 的动态 keystore 重加载）、AdminServer 安全与应急 superDigest。横向对比 etcd 的 RBAC/mTLS 见 [与 etcd 对照](/docs/CS/Framework/ZooKeeper/ZooKeeper.md?id=comparison-with-etcd)；客户端如何设置 ACL 见 [client](/docs/CS/Framework/ZooKeeper/client.md)。
 
 > [!NOTE]
 > 版本基线：TLS 动态加载 keystore/truststore 自 3.9.0 起；`secureClientPort`（默认 2182）、`secureAdminServerPort`；当前主线 3.9.6。
 
-## ACL 模型：scheme:id:permission
+## ACL Model: scheme:id:permission
 
 每个 znode 上挂着一组 ACL 项，格式为 `scheme:id:permission`。访问时服务器用"请求携带的身份"去匹配对应 scheme 的 id，并校验权限位。
 
-### scheme（身份来源）
+### scheme (Identity Source)
 
 | scheme | id 含义 | 说明 |
 | :--- | :--- | :--- |
@@ -23,7 +23,7 @@ ZooKeeper 的安全分三层：**ACL（节点级授权）**、**认证（客户�
 | `super` | superDigest 对应身份 | 超级用户，绕过 ACL（应急用） |
 | `x509` | 客户端证书主体 | 配合 TLS 客户端认证（3.9+） |
 
-### permission（权限位）
+### permission (Permission Bits)
 
 `c r w d a` 五位，合起来即 `cdrwa`：
 
@@ -36,7 +36,7 @@ ZooKeeper 的安全分三层：**ACL（节点级授权）**、**认证（客户�
 > [!WARNING]
 > ZooKeeper 的 ACL 是**节点级、不继承**的：子节点不会自动获得父节点的 ACL，创建子节点时若不带 ACL 则采用 `world:anyone:cdrwa`（除非父节点设了 `CREATOR_ALL_ACL` 策略）。这是"误配导致裸奔"的高发点——务必在创建关键节点时显式带 ACL。
 
-## 认证：addAuthInfo
+## Authentication: addAuthInfo
 
 客户端在连接后用 `addAuthInfo(scheme, auth)` 注入身份；可多次调用叠加多个 scheme。以 digest 为例：
 
@@ -51,7 +51,7 @@ zk.create("/app/config", data,
 - 口令只在认证握手中传输（建议配合 TLS/SASL 加密链路），不持久化明文。
 - 会话级：认证信息绑定当前会话，会话失效需重新 `addAuthInfo`。
 
-## SASL：Kerberos 集成
+## SASL: Kerberos Integration
 
 ZooKeeper 原生支持 SASL，常用于 Hadoop / Kafka 等 Kerberos 环境：
 
@@ -59,7 +59,7 @@ ZooKeeper 原生支持 SASL，常用于 Hadoop / Kafka 等 Kerberos 环境：
 - 服务端：`zookeeper.sasl.serverconfig` 指向服务端 JAAS，`jaasLoginRenew` 控制票据续期。
 - 节点 ACL 用 `sasl:<principal>` 授权，实现"哪个 Kerberos 主体能访问哪个 znode"。
 
-## TLS：3.9 起补齐传输加密
+## TLS: Transport Encryption Completed since 3.9
 
 在 3.9 之前，ZooKeeper 没有原生的 TLS，链路加密只能靠 SASL（GSSAPI）或外部隧道（stunnel / 业务侧 mTLS）。3.9.0 引入：
 
@@ -72,7 +72,7 @@ ZooKeeper 原生支持 SASL，常用于 Hadoop / Kafka 等 Kerberos 环境：
 > [!TIP]
 > 生产建议：明文 2181 仅内网管控面使用，**对外/client 走 secureClientPort + `x509` ACL**，避免口令与数据在链路上暴露。3.9 之前的老版本只能靠 SASL 或运维层网络隔离兜底。
 
-## superDigest：应急超级用户
+## superDigest: Emergency Superuser
 
 `zookeeper.DigestAuthenticationProvider.superDigest` 配置一个 `super:base64(sha1(super:password))`。持有该身份的连接拥有**绕过一切 ACL** 的权限，用于 ACL 配错导致锁死时的应急修复。
 
@@ -89,7 +89,7 @@ digraph "Super" {
 > [!WARNING]
 > superDigest 等同 root，必须存于安全的运维配置、绝不进代码仓库；一旦泄露可任意篡改集群数据。
 
-## AdminServer 安全
+## AdminServer Security
 
 `AdminServer` 默认在 `8080` 暴露 HTTP 管理接口（含 3.9 的 snapshot 流式 API），需收紧：
 
@@ -97,7 +97,7 @@ digraph "Super" {
 - `admin.serverInetAddress` 绑定到管理网段，避免 0.0.0.0 暴露。
 - 配合防火墙仅放行运维网段；快照接口会泄露数据，尤其要限制。
 
-## 与 etcd 的安全对照
+## Security Comparison with etcd
 
 | 维度 | ZooKeeper | etcd |
 | :--- | :--- | :--- |

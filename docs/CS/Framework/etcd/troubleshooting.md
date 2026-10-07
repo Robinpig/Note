@@ -49,7 +49,7 @@ etcd 的报错分两层：一组**哨兵 error 变量**，以及把它们包装�
 > [!WARNING]
 > NOSPACE 是 **cluster-wide** 的：任意一个成员触发，全集群拒绝写入。所以处理时必须对所有成员分别操作，不能只修一台。
 
-### 定位
+### Positioning
 
 ```shell
 $ etcdctl --write-out=table endpoint status
@@ -82,7 +82,7 @@ memberID:13803658152347727308 alarm:NOSPACE
 > [!NOTE]
 > 观察 `member/snap` 目录的 `ls -lrt` 输出有个实用技巧：**`.snap` 文件大小基本不变、只有 `db` 在长**，说明增长完全来自新数据而非快照累积，这决定了该 compact 而不是排查快照机制。
 
-### 实际错误串
+### Actual Error String
 
 三个字符串对应三层，排查时要知道自己看到的是哪一层：
 
@@ -95,7 +95,7 @@ memberID:13803658152347727308 alarm:NOSPACE
 > [!NOTE]
 > NOSPACE 有一个反直觉的边界：**收到 `ErrGRPCNoSpace` 不代表写操作没生效**。配额检查发生在 API 层与内部 Apply 层两处，Apply 层只会**触发 NOSPACE alarm 而不阻止事务继续执行**。所以可能出现"客户端收到报错、但数据其实写进去了"。把 `etcdctl compact` 的目标 revision 取错（取了 alarm 之后的 revision）会连带把这次写入一起 compact 掉——这也是官方文档单独强调这一点的原因。
 
-### 处置四步
+### Four-Step Remediation
 
 ```shell
 # 1. 取当前 revision
@@ -152,7 +152,7 @@ func warnOfExpensiveGenericRequest(lg *zap.Logger, warningApplyDuration time.Dur
 
 阈值可由 `--warning-apply-duration` 调整。
 
-### 根因一：磁盘慢（最常见）
+### Root Cause 1: Slow Disk (Most Common)
 
 ```shell
 # 看 p99，应该 < 25ms
@@ -161,18 +161,18 @@ $ curl -L http://localhost:2379/metrics | grep backend_commit_duration
 
 若 p99 明显超过 25ms，就是磁盘的问题。解法是给 etcd 分配独立磁盘或换更快的盘。
 
-### 根因二：CPU 饥饿
+### Root Cause 2: CPU Starvation
 
 第二常见。监控机器 CPU 使用率，若长期打满，说明算力不足。手段：迁移到独立机器、提高 cgroup 资源隔离优先级、用 `renice` 提升 etcd 进程优先级。
 
-### 根因三：单请求访问 key 过多
+### Root Cause 3: Too Many Keys per Request
 
 "取走整个 keyspace"这类请求会让 apply 变慢。官方给的经验数字是**单请求访问的 key 数控制在几百以内就一定没问题**。
 
 > [!TIP]
 > 这个结论反过来给了容量规划依据：etcd 适合"读多写少、访问局部"的工作负载，**不适合当分析型数据库用**。海量数据应该写进对象存储或时序库，etcd 只存指针和元信息。
 
-## Leader 频繁选举
+## Leader Frequent Election
 
 官方告警阈值是 **15 分钟内 leader 切换 >= 4 次**（`etcdHighNumberOfLeaderChanges`，持续 5m 告警）。频繁选举通常意味着：资源不足、网络延迟高，或被其他组件反复干扰。
 
@@ -185,7 +185,7 @@ $ curl -L http://localhost:2379/metrics | grep backend_commit_duration
 > [!WARNING]
 > 调整 `--heartbeat-interval` / `--election-timeout`（默认 100ms / 1000ms）是**最后手段**。把它们调大虽然能减少误选举，但同时也拉长了真正故障时的恢复时间——etcd 的默认值本就是 1:10 的宽松比例。正确做法是先解决磁盘与网络。
 
-## Compaction 与 watch 失效
+## Compaction and Watch Invalidation
 
 ### mvcc: required revision has been compacted
 
@@ -227,7 +227,7 @@ request ignored (cluster ID mismatch)
 
 解法是保证不同集群的 peer 地址**互不重叠**，并清理残留进程。
 
-## 重配置被拒
+## Reconfiguration Rejected
 
 ```text
 etcdserver: re-configuration failed due to not enough started members
@@ -259,7 +259,7 @@ curl -k http://localhost:2379/readyz?verbose
 > [!WARNING]
 > 如果**多数成员同时损坏**（例如所有节点共用一块存储、同时断电），就没有健康快照可依，只能靠 `db` 文件尽力恢复，且必须接受**丢失最后一次快照之后的数据**。这就是为什么定期 `etcdctl snapshot save` 到集群外的存储是硬要求——快照存在集群内部时，它和被保护的数据库一起坏掉。
 
-### snapshot 命令的分工：etcdctl 与 etcdutl
+### snapshot Command Division: etcdctl and etcdutl
 
 3.5 引入了独立的 `etcdutl` 工具做快照相关操作，但**并非整个 snapshot 子命令都迁走了**。这是最容易误解的一点：
 
@@ -295,7 +295,7 @@ $ etcdutl snapshot restore backup.db --data-dir /var/lib/etcd
 > [!TIP]
 > `snapshot status` 迁到 `etcdutl` 后带来一个实际收益：**可以在 restore 之前先校验快照文件**。用 `etcdctl snapshot status` 确认 hash / revision 正常再执行 restore，能避免拿一个损坏的快照去覆盖数据目录。
 
-## 排查速查表
+## Troubleshooting Quick Reference Table
 
 | 现象 | 首要检查 | 处置方向 |
 | :--- | :--- | :--- |
@@ -311,7 +311,7 @@ $ etcdutl snapshot restore backup.db --data-dir /var/lib/etcd
 | `revision of auth store is old` | 是否刚改过权限 | 重新认证拿新 Token，非 etcd 故障 |
 | `invalid auth token` | Token TTL 是否已过 | 重新 `Authenticate` |
 
-## 陷阱清单
+## Pitfall List
 
 > [!WARNING]
 > 这一篇的坑集中在**"搜不到"和"以为是 etcd 挂了"两类**：

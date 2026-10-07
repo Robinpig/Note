@@ -23,7 +23,7 @@ public final class CacheAutoConfiguration {
 > [!NOTE]
 > Boot 4 模块化后有两处搬迁：`CacheAutoConfiguration` 的包名从 `org.springframework.boot.autoconfigure.cache` 改为 **`org.springframework.boot.cache.autoconfigure`**（`CacheManagerCustomizer`、`CacheProperties` 等一并迁移），依赖后置特化类也从 `CacheManagerEntityManagerFactoryDependsOnPostProcessor` 更名为 `CacheManagerEntityManagerFactoryDependsOnConfiguration`。另外注意 `afterName` 用的是**字符串全限定名**而非 class 字面量——这是 Boot 4 模块化的直接产物：自动配置模块之间不再有编译期依赖。
 
-### starter 里并没有缓存实现
+### starter Does Not Contain a Cache Implementation
 
 `spring-boot-starter-cache` 依赖树只有三项：`spring-boot-starter`、自动配置模块 `spring-boot-cache`、`spring-context-support`（`CaffeineCacheManager`、`JCacheCacheManager` 这些实现类的家）。
 
@@ -32,7 +32,7 @@ public final class CacheAutoConfiguration {
 > [!WARNING]
 > 这是"配了半天不生效"的高频原因：只引了 starter，classpath 上没有任何第三方缓存库，于是 Boot 回落到默认的 `ConcurrentMapCacheManager`（JVM 内存），本地跑得通、上了集群发现每个实例各缓存各的。**没有任何报错提示你落到了本地 Map**。想知道实际装配了哪个 provider，`/actuator/conditions` 或者让 container 打出 `CacheManager` 的实际类型即可确认。
 
-## Provider 检测顺序
+## Provider Detection Order
 
 容器里没有自定义 `CacheManager`、也没有名为 `cacheResolver` 的 `CacheResolver` 时，Boot 按**固定顺序**检测：
 
@@ -69,7 +69,7 @@ spring:
 
 `CacheConfigurationImportSelector` 根据 `CacheType` 从一份映射表里挑出对应的 `*CacheConfiguration` 导入，这就是不同 provider 各自装配逻辑的切换开关。
 
-## Simple 兜底
+## Simple Fallback
 
 ```java
 @Configuration(proxyBeanMethods = false)
@@ -94,7 +94,7 @@ class SimpleCacheConfiguration {
 
 通过 `spring.cache.cache-names` 预设名字可以约束它的缓存范围（Simple provider 下的动态创建会失败），这也是让缓存行为可预测的一个手段。
 
-## 定制 CacheManager
+## Customize CacheManager
 
 ```java
 @Configuration(proxyBeanMethods = false)
@@ -112,7 +112,7 @@ public class MyCacheConfig {
 
 需要更强的控制力（例如给不同 cache 配不同的 TTL）时，直接自己定义 `CacheManager` Bean——注意这会让 `@ConditionalOnMissingBean(CacheManager.class)` 失效，整套自动配置自动退出，此时 `spring.cache.*` 下的配置**一律不再生效**。
 
-## 注解语义
+## Annotation Semantics
 
 缓存抽象提供五个核心注解（定义在 [Spring Cache](/docs/CS/Framework/Spring/Cache.md)，Boot 只负责自动装配 provider）：
 
@@ -122,13 +122,13 @@ public class MyCacheConfig {
 - `@Caching`：一个方法上组合多个 `@Cacheable`/`@CachePut`/`@CacheEvict`（同一类型注解不能重复，用 `@Caching` 包一层）。
 - `@CacheConfig`：类级注解，统一该类所有缓存操作的 `cacheNames`、`keyGenerator`、`cacheManager`，减少重复配置。
 
-## sync 防击穿与自定义 key/cache 解析
+## sync Cache-Breaking Protection and Custom key/cache Parsing
 
 - **`sync = true`**：并发未命中时只放行一个线程回源、其余共享结果，避免缓存击穿（同一 key 被大量并发打到 DB）。限制：仅对**单个缓存**生效、不能配合 `unless`、且只有部分 provider（如 ConcurrentMap、Redis 的事务型实现）真正支持。
 - **`keyGenerator`**：实现 `KeyGenerator` 自定义 key 生成策略（如统一加业务前缀、对复杂参数做哈希），用 `keyGenerator = "myKeyGenerator"` 引用。比 `@Cacheable(key = "...")` 的 SpEL 更灵活，但失去可读性，慎用。
 - **`cacheResolver`**：实现 `CacheResolver` 动态决定"这次操作落到哪些缓存"，粒度比 `cacheManager` 更细。自定义后 `@ConditionalOnMissingBean(name = "cacheResolver")` 的自动配置会退出。
 
-## 与事务的关系
+## Relationship with Transactions
 
 缓存切面的执行时机容易被误解：
 
@@ -140,7 +140,7 @@ public class MyCacheConfig {
 
 - 因此**缓存与数据库的一致性**不能靠注解自动保证，跨事务的写后读一致性通常需要把清除放在事务提交之后，或在 service 层手动编排。
 
-## 按缓存区分 TTL（Redis 为例）
+## Differentiate TTL by Cache (Redis as Example)
 
 `spring.cache.redis.*` 只能给**所有** Redis 缓存设同一套默认 TTL。要给不同缓存设不同过期时间，需要自定义 `RedisCacheManager`：
 
@@ -163,7 +163,7 @@ RedisCacheManager cacheManager(RedisConnectionFactory factory) {
 
 一旦自己定义了 `CacheManager` Bean，Boot 的 `CacheAutoConfiguration` 因 `@ConditionalOnMissingBean(CacheManager.class)` 整体退出，`spring.cache.*` 下的统一配置不再生效——TTL 与命名空间全交给上面的代码。
 
-## 几个常见的坑
+## Several Common Pitfalls
 
 - **`@EnableCaching` 不要加在主应用类上**：官方明确提醒，这会让缓存成为强制特性，跑测试时也不得不装配缓存（很多由此产生的 "No cache named XXX could not be found" 测试报错都源于此）。单独放一个 `@Configuration` 类更干净。
 - **自调用失效**：同一个类里的方法调用自己带 `@Cacheable` 的方法，走的是 this 引用而非代理，缓存不生效。这是 Spring AOP 的通用约束，与 [AOP](/docs/CS/Framework/Spring/AOP.md) 里的注意事项同源。

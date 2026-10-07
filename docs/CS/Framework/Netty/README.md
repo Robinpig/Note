@@ -22,28 +22,28 @@ digraph netty_index {
 }
 ```
 
-## 启动与引导
+## Startup and Bootstrap
 
 - [Bootstrap](/docs/CS/Framework/Netty/Bootstrap.md)：客户端 / 服务端引导，事件循环组与 ChannelPipeline 装配。
 
-## 事件循环与线程模型
+## Event Loop and Thread Model
 
 - [EventLoop](/docs/CS/Framework/Netty/EventLoop.md)：事件循环、单线程串行语义、任务提交与执行。
 - [TPO](/docs/CS/Framework/Netty/TPO.md)：线程池与 executor 的关系、线程上下文细节。
 - [FastThreadLocal](/docs/CS/Framework/Netty/FastThreadLocal.md)：Netty 对 ThreadLocal 的高性能替代（内存池化版本）。
 
-## 通道与管道
+## Channel and Pipeline
 
 - [Channel](/docs/CS/Framework/Netty/Channel.md)：Channel 抽象与状态、事件回调。
 - [ChannelHandler](/docs/CS/Framework/Netty/ChannelHandler.md)：入站 / 出站 handler、编解码器、消息流转。
 - [Limiter](/docs/CS/Framework/Netty/Limiter.md)：流量整形与限流相关。
 
-## 内存与缓冲
+## Memory and Buffering
 
 - [ByteBuf](/docs/CS/Framework/Netty/ByteBuf.md)：字节缓冲、堆内 / 直接内存、`ReaderIndex`/`WriterIndex`。
 - [memory](/docs/CS/Framework/Netty/memory.md)：内存池（`Arena` / `Chunk` / `Page`）、分配器与零拷贝。
 
-## 异步与配套工具
+## Asynchronous and Supporting Tools
 
 - [Future](/docs/CS/Framework/Netty/Future.md)：`Future` / `Promise` 异步结果与回调。
 - [MpscLinkedQueue](/docs/CS/Framework/Netty/MpscLinkedQueue.md)：多生产者单消费者无锁队列。

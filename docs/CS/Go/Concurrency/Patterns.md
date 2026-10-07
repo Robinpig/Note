@@ -4,7 +4,7 @@ Go 的并发哲学是「share by communicating」——通过 channel 在 gorout
 
 channel 与锁的判据（何时该用哪个）见 [Concurrency](/docs/CS/Go/Concurrency/Concurrency.md) 的 Share by Communicating 段：channel 表达「数据流动 / 事件」，锁表达「状态此刻互斥访问」。
 
-## Worker Pool（工作者池）
+## Worker Pool
 
 固定一组 worker goroutine 从同一个 `jobs` channel 取任务、把结果写到 `results` channel，用 quit channel 或 context 做统一退出。比起「来一个请求起一个 goroutine」，worker pool 能平滑突增流量、限制资源占用。
 
@@ -36,7 +36,7 @@ func main() {
 
 退出有两种等价方式：`close(done)` 广播（见 [Channel](/docs/CS/Go/Concurrency/Channel.md) 的 close 语义），或 `ctx` 取消（见 [Context](/docs/CS/Go/Concurrency/Context.md)）。要限制 worker 数量，直接控制启动的 goroutine 个数；要限制**并发任务数**而非 worker 数，用下方的限流模式。
 
-## Pipeline（流水线）
+## Pipeline
 
 把处理拆成多个阶段，每阶段是一个「接收上游 channel → 处理 → 写入下游 channel」的 goroutine，阶段间用 channel 串联。上游阶段负责 `close` 自己的输出 channel，下游用 `for range` 自然收尾（见 [Channel](/docs/CS/Go/Concurrency/Channel.md) 的 for-range 约定）。
 
@@ -56,7 +56,7 @@ func sq(in <-chan int) <-chan int { // stage 2：平方
 
 取消传播：任意阶段出错应让整条流水线退出——把每个阶段的 select 都监听同一个 `ctx.Done()`，错误上游 `cancel(ctx)`，下游在 Done 后 `return`，避免「孤儿 goroutine」泄漏（见 [Goroutine](/docs/CS/Go/Concurrency/Goroutine.md) 的泄漏章节）。
 
-## Fan-in / Fan-out（扇入 / 扇出）
+## Fan-in / Fan-out
 
 - **Fan-out**：一个 channel 被多个 worker 同时消费（分摊计算，天然负载均衡，因为 channel 每次只递交给一个接收者）。
 - **Fan-in**：多个 worker 的结果汇入一个 channel，供下游统一消费。常用 `reflect.Select` 或单独起 goroutine 把每个输入 channel 转发到同一个输出（见 [select](/docs/CS/Go/Concurrency/select.md) 的反射式 select）。
@@ -77,7 +77,7 @@ func fanIn(a, b <-chan int) <-chan int {
 }
 ```
 
-## 限流（限制并发度）
+## Rate Limiting (Limiting Concurrency)
 
 三种层次，按需取用：
 
@@ -100,7 +100,7 @@ for _, task := range tasks {
 wg.Wait()
 ```
 
-## 退出与取消传播
+## Exit and Cancel Propagation
 
 长期运行的服务里，子 goroutine 必须能被「优雅退出」，否则就是 [goroutine 泄漏](/docs/CS/Go/Concurrency/Goroutine.md)。两条等价广播路径：
 
@@ -109,7 +109,7 @@ wg.Wait()
 
 选择：纯内部、无截止时间需求用 done channel 更轻；需要超时 / 跨调用链传递 / 与 RPC·HTTP 框架对接用 context。二者广播语义一致，可混用（见 [Context](/docs/CS/Go/Concurrency/Context.md)）。
 
-## for-range 退出约定
+## for-range Exit Convention
 
 发送方 `close(ch)` 后，接收方的 `for v := range ch` 在缓冲耗尽后自动结束——**关闭是发送方的职责**，接收方不应 close 别人的 channel（会导致 [panic](/docs/CS/Go/Concurrency/Channel.md)）。这条约定是 pipeline / fan-in 收尾的基础，违反它会引发「close of closed channel」或「send on closed channel」。
 

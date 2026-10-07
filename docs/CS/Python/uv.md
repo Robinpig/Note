@@ -17,7 +17,7 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 
 也随 `pipx`/`brew`/CI 镜像分发；装完 `uv --version` 确认。`uv self update` 自更新（包管理器装的不要用它）。
 
-## 两套接口
+## Two Sets of Interfaces
 
 | 模式 | 命令族 | 状态来源 | 用途 |
 | :--- | :--- | :--- | :--- |
@@ -28,7 +28,7 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 
 两者不要混用：项目模式下手写 `.venv` 里 `uv pip install` 的东西会在下次 `uv sync` 时被当成"多余包"处理。
 
-## 项目工作流
+## Project Workflow
 
 ```shell
 uv init myapp && cd myapp          # 生成 pyproject.toml 与 hello.py
@@ -61,7 +61,7 @@ uv run fetch.py            # 解析内联依赖到临时环境后执行
 uvx ruff check .           # 一次性运行第三方 CLI，等价 uv tool run
 ```
 
-## 环境变量与调试
+## Environment Variables and Debugging
 
 | 变量 | 作用 |
 | :--- | :--- |
@@ -74,7 +74,7 @@ uvx ruff check .           # 一次性运行第三方 CLI，等价 uv tool run
 
 解析结果诡异时用 `uv pip compile --verbose` 或 `uv add --dry-run` 看决策；`uv cache clean <pkg>` 只清单个包缓存。
 
-## 与 conda 的分工
+## Division of Labor with conda
 
 uv 管的是 Python 包与 Python 解释器本身，**不解析原生库依赖**（CUDA、`libgdal`、BLAS 变体）。需要这类软件栈时两条路：conda 负责底座、uv 负责项目依赖；或者干脆用提供了预编译 wheel 的包（多数场景已够）。对照与混用风险见 [Packaging](/docs/CS/Python/Packaging.md) 与 [conda](/docs/CS/Python/conda.md)。
 

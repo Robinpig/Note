@@ -4,7 +4,7 @@ Share Group 是 Kafka 4.x 引入的新消费模型，本质是把「队列」语
 
 > 版本基线：**4.3.1**（`gradle.properties:17`）。
 
-## 为什么需要 Share Group
+## Why Share Group Is Needed
 
 Consumer Group 的核心约束是**partition 与 consumer 的一对一绑定**：一个 partition 在同一时刻只能被组内一个 consumer 消费。这带来两个硬限制：
 
@@ -37,7 +37,7 @@ Consumer Group（独占式）                Share Group（共享式）
 | 锁 | 无 | **acquisition record lock** |
 | 状态 topic | `__consumer_offsets` | **`__share_group_state`** |
 
-## 内部 topic
+## Internal topic
 
 `clients/src/main/java/org/apache/kafka/common/internals/Topic.java:27-30`：
 
@@ -54,7 +54,7 @@ public static final String SHARE_GROUP_STATE_TOPIC_NAME = "__share_group_state";
 
 `ShareCoordinatorService.java:91` 可见 `numPartitions = -1; // Number of partitions for __share_group_state`（分区数由 coordinator 自行决定，不静态配置）。
 
-## 配置项
+## Configuration Items
 
 > [!WARNING]
 > **两个常见配置名在 4.3.1 中不存在**：
@@ -98,7 +98,7 @@ public static final String SHARE_GROUP_STATE_TOPIC_NAME = "__share_group_state";
 >
 > 三个 `delivery.count.limit` 同理（min 2 / 默认 5 / max 10）。
 
-## 协议：ApiKeys 数值
+## Protocol: ApiKeys Values
 
 `clients/src/main/resources/common/message/*.json` 第 17 行 `"apiKey"`：
 
@@ -114,7 +114,7 @@ public static final String SHARE_GROUP_STATE_TOPIC_NAME = "__share_group_state";
 > [!NOTE]
 > 这些数值**不是我记忆里的值**，是从 4.3.1 的消息定义 JSON 里读出来的 `apiKey` 字段。KIP 编号与 apiKey 数值无对应关系，不要按 KIP 号推算。
 
-## 与 KIP-848 新消费者组协议的关系
+## Relationship with KIP-848 New Consumer Group Protocol
 
 二者是**不同 group type，不是同一开关的两档**，可共存。
 
@@ -138,14 +138,14 @@ public static final String DEFAULT_GROUP_PROTOCOL = GroupProtocol.CLASSIC.name()
 
 `GroupMetadataManager.java:7471` 可见按 `protocolName` 分派（`classic` / `consumer` / `streams` / share）。
 
-### 选型判据
+### Selection Criteria
 
 | 需求 | 选择 |
 | ---- | ---- |
 | 每 partition 独占、顺序稳定、offset 长期提交 | **Consumer Group**（`classic` 或 `consumer`）|
 | 多消费者抢同一批任务、逐条 ack、失败自动重投、水平扩展不受 partition 限制 | **Share Group** |
 
-## 生命周期要点
+## Lifecycle Key Points
 
 1. **记录锁（record lock）**：consumer fetch 时获得记录的独占锁，锁有超时（`group.share.record.lock.duration.ms`），超时后其他 consumer 可接手。
 2. **acknowledge**：consumer 处理完发 `SHARE_ACKNOWLEDGE` 确认。
@@ -153,7 +153,7 @@ public static final String DEFAULT_GROUP_PROTOCOL = GroupProtocol.CLASSIC.name()
 4. **persister**：`group.share.persister.class.name` 默认 `DefaultStatePersister`，负责 `__share_group_state` 的记录持久化与回放（`PersisterStateManager.java:318-320` 负责内部 topic 生命周期）。
 5. **分派器**：`group.share.assignors` 默认 `SimpleAssignor` —— Share Group 的分派逻辑是「记录级抢占」，与传统 partition 分派本质不同。
 
-## 演进时间线
+## Evolution Timeline
 
 | 版本 | 状态 |
 | ---- | ---- |
@@ -163,7 +163,7 @@ public static final String DEFAULT_GROUP_PROTOCOL = GroupProtocol.CLASSIC.name()
 
 4.3.0 相关 KIP：KIP-1244 弃用 streams-scala；KIP-1259 `state.cleanup.dir.max.age.ms`；KIP-1271/1285 State Store 存 Headers。
 
-## 需要打假的常见说法
+## Common Claims That Need Debunking
 
 | 说法 | 4.3.1 实况 |
 | ---- | --------- |
@@ -175,7 +175,7 @@ public static final String DEFAULT_GROUP_PROTOCOL = GroupProtocol.CLASSIC.name()
 | 「Share Group 的 offset 存在 `__share_group_state`」 | ⚠️ `__share_group_state` 存**记录锁与投递状态**；committed offset 仍走 `__consumer_offsets` |
 | 「`group.share.session.timeout.ms` 默认 45s，可配到更大」 | ⚠️ 默认 45000，**max 也只有 60000**（Consumer Group 默认 45000 但上界远大于此）|
 
-## 未查到清单
+## List Not Found
 
 - `group.share.assignment.interval.ms` 的默认值（配置名已确认存在于 `GroupCoordinatorConfig.java:298`，未读取数值行）
 - KIP-848 `memberEpoch` 字段的具体校验代码位置（仅确认 KIP-1251 在 4.3.0 改进 epoch 校验以减少不必要 fencing）

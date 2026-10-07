@@ -7,7 +7,7 @@
 > [!WARNING]
 > **本文所有数字都不代表生产性能。** 测试跑在 macOS（Darwin 15.8.1 / arm64）+ loopback 上，与 Linux 生产的网络栈、文件系统、epoll 实现完全不同。本文要的是**对照关系**（A 比 B 快多少、行为差异方向），不是绝对值。凡是把 loopback 数字当容量规划依据的做法都是错的——实验 8 就是专门用来证明这一点的反面教材。
 
-### 测试环境与复现方式
+### Test Environment and Reproduction Method
 
 ```bash
 # 1. 取源码并编译（为避开 PCRE 依赖，关掉 rewrite 与 gzip 模块）
@@ -76,7 +76,7 @@ http {
 > [!NOTE]
 > 一个实操经验：把 upstream 的 `access_log` 里记上 `$connection` 与 `$connection_requests`，就能**直接数出前端到底用了多少个上游连接、每个连接扛了多少请求**。这比抓包或看 `ss` 简单得多，是验证连接池行为最省事的办法，后文实验 3 就用它。
 
-### 实验 1：`limit_req` 的 `burst` 与 `nodelay` 到底改变了什么
+### Experiment 1: What `limit_req`'s `burst` and `nodelay` Actually Change
 
 同一速率（`rate=10r/s`）、同一 `burst=40`，只差一个 `nodelay`：
 
@@ -106,7 +106,7 @@ ab -n 60 -c 60 http://127.0.0.1:8080/lr-plain
 
 队列（40 个）装不下的部分一样被拒。所以完整结论是：**并发小于 `burst` 时只延迟不拒绝；并发超过 `burst` 时才拒绝**。选 `burst` 的大小时，要按「你能接受多久的排队」来定，而不是「你愿意放多少漏」。
 
-### 实验 2：客户端长连接的收益
+### Experiment 2: Benefits of Client Persistent Connection
 
 ```bash
 ab -n 3000 -c 20 http://127.0.0.1:8080/small   # 每次新建连接
@@ -125,7 +125,7 @@ ab -k -n 3000 -c 20 http://127.0.0.1:8080/small # 长连接复用
 1. 为什么 `keepalive_timeout` 这类"连接层"参数在高并发下比"内容层"优化更敏感；
 2. 为什么在反向代理场景里，**上游连接池与客户端长连接是两件独立但同样重要的事**——实验 3 马上量化后者。
 
-### 实验 3：上游连接池（顺带证实 1.29.7 的默认值变更）
+### Experiment 3: Upstream Connection Pool (Also Confirming 1.29.7 Default Value Change)
 
 用 upstream 日志里的 `$connection` 唯一值个数直接数连接：
 
@@ -163,7 +163,7 @@ if (kcf->max_cached == NGX_CONF_UNSET_UINT) {
 
 这条对升级排查很关键：从老版本（≤1.29.6）升上来的配置，上游连接数会**悄悄从「每请求一个」变成「几十个并发复用」**。好处是吞吐改善，副作用是：后端如果按「连接数」做限流、或者依赖「请求结束即连接断开」的假设，行为会变；另外长连接会让上游的连接保持时间变长，`keepalive_timeout`（默认 60s）与后端自身的空闲超时要对齐。
 
-### 实验 4：`keepalive_requests` 的实际边界
+### Experiment 4: Actual Boundary of `keepalive_requests`
 
 `keepalive_requests 3;`，然后用 `curl` 在同一条连接上连发 4 个请求：
 
@@ -193,7 +193,7 @@ curl -sv -o /dev/null http://127.0.0.1:8082/small http://127.0.0.1:8082/small \
 
 顺带一个 1.19.10 的默认值事实：`keepalive_requests` 的默认值从 100 改成了 **1000**。压测时如果看到吞吐在某一点突然掉台阶，先查这个值。
 
-### 实验 5：`client_max_body_size` 的边界
+### Experiment 5: Boundary of `client_max_body_size`
 
 `client_max_body_size 1k;`
 
@@ -211,7 +211,7 @@ head -c  512 /dev/zero | curl -s -o /dev/null -w "%{http_code}\n" -X POST --data
 
 再配合 [grpc](/docs/CS/CN/nginx/grpc.md) 里那条源码结论一起看：HTTP/2 客户端不带 `Content-Length` 时 `content_length_n = -1`，检查被跳过。所以 **`client_max_body_size` 并不是一道能覆盖所有协议的防线**。
 
-### 实验 6：连接池耗尽的真实行为
+### Experiment 6: Real Behavior of Connection Pool Exhaustion
 
 把 `worker_connections` 压到 16，再打 60 并发：
 
@@ -263,7 +263,7 @@ for (i = 0; i < n; i++) {
 1. 看到 `worker_connections are not enough`，**不代表请求失败**——它意味着一批客户端的长连接被服务端单方面关闭了。客户端如果没有重连逻辑，会看到 `Connection reset`；有重连逻辑则只是多一次握手。
 2. **这条日志是"连接池水位"的告警，不是"错误"**。它真正的调优信号是：要么加大 `worker_connections`，要么缩短 `keepalive_timeout` 让空闲连接早点释放。
 
-### 实验 7：`access_log buffer` 的落盘时机
+### Experiment 7: When `access_log buffer` Flushes to Disk
 
 在 8082 上配 `access_log ... combined buffer=64k;`，发 5 个请求：
 
@@ -284,7 +284,7 @@ access_log /var/log/nginx/access.log combined buffer=64k flush=1s;
 
 排查此类问题的经验：先看日志有没有内容，再看**是不是被 buffer 攒着**——用 `flush=` 或临时 `buffer=0` 就能区分「没产生日志」和「日志还没落盘」。
 
-### 实验 8：`sendfile` 在 loopback 上测不出收益
+### Experiment 8: `sendfile` Shows No Benefit on loopback
 
 512KB 静态文件，`-n 500 -c 20`，`sendfile on` 与 `off` 对照，连跑三轮消掉预热效应：
 
@@ -310,7 +310,7 @@ done
 
 真实的 `sendfile` 收益要在「大文件 + 真实网卡 + 高并发」下才明显，机制层面的分析见 [零拷贝](/docs/CS/OS/Linux/ZeroCopy.md) 与 [I/O 模型总览](/docs/CS/OS/Linux/IO/IO.md)。
 
-### 方法论：这类压测能得出什么、不能得出什么
+### Methodology: What This Kind of Load Test Can and Cannot Conclude
 
 从上面 8 组实验可以提炼出一套判断标准：
 
@@ -329,7 +329,7 @@ done
 
 **工具建议**：`ab` 适合做本文这种「单变量、看行为」的对照；做容量测试换 `wrk`（HTTP/1.1 高并发）或 `h2load`（HTTP/2、HTTP/3、支持 ALPN）；要测延迟分布（p95/p99）用 `wrk` 的 `--latency` 或 `hdrhistogram`。**压测工具本身经常先成为瓶颈**——本文 `ab` 在 12 万 rps 时已经在吃力了。
 
-### 结论速查
+### Conclusion Quick Reference
 
 | 配置项 | 实测行为 | 一句话建议 |
 | :-- | :-- | :-- |

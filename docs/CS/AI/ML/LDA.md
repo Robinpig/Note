@@ -9,7 +9,7 @@
 
 ## Math
 
-### 二分类：Fisher 判别
+### Binary Classification: Fisher Discriminant
 
 设两类样本的均值向量为 $\mu_0,\mu_1$。投影方向为 $w$，目标是投影后类内距离小、类间距离大，即最大化广义瑞利商：
 
@@ -28,7 +28,7 @@ $$
 w^*=S_w^{-1}(\mu_0-\mu_1)
 $$
 
-### 多分类
+### Multi-class Classification
 
 C 类情形下 $S_b$ 的秩为 C-1，$S_w$ 秩亏，通过广义特征值问题 $S_b w=\lambda S_w w$ 取前 k 个广义特征向量组成 $W$。**这也决定了 LDA 降维的维度上限是 C-1**——想把 10 类数据降到 5 维做不到。
 

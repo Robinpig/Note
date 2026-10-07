@@ -267,7 +267,7 @@ brew install riscv64-elf-gdb
 如果 我们希望各个线程 都受gdb控制而执行，而不是现在只控制其中一个线程，那么我们设置set-scheduler-locking=on，反之设置力off
 我们还可以控制调试命令施加到指定的线程上，例如用具体的ID列表，或者用all指代所有线程
 
-## 代码总览
+## Code Overview
 
 xv6源代码总量较小
 
@@ -1340,7 +1340,7 @@ vm.c kalloc.c
 
 
 
-## 小测
+## Quick Test
 
 编写程序
 

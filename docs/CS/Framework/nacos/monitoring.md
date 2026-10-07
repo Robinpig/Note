@@ -1,4 +1,4 @@
-# Nacos 监控
+# Nacos Monitoring
 
 ## Introduction
 
@@ -6,7 +6,7 @@ Nacos 的监控分两类：**Server 自身指标**（JVM / HTTP / gRPC / 配置 
 
 注意：默认 `application.properties` 里 Actuator 暴露是**注释状态**，需要显式开启；否则 `/actuator/prometheus` 404。
 
-## 开启指标暴露
+## Enable Metrics Exposure
 
 每个 Nacos Server 节点在 `application.properties` 开启：
 
@@ -23,7 +23,7 @@ http://{nacos-server-host}:8848/nacos/actuator/prometheus
 
 `/nacos` 前缀来自默认 `nacos.server.contextPath`；若改了服务端上下文路径，URL 要同步调整。
 
-## Prometheus 抓取
+## Prometheus Scraping
 
 ```yaml
 scrape_configs:
@@ -38,7 +38,7 @@ scrape_configs:
 
 端口 / 上下文路径变化就改 `targets` 与 `metrics_path`。Grafana 用 Prometheus 作数据源，社区维护的 Dashboard 模板（nacos-template）可直接导入，分核心监控、曲线、告警三个模块。
 
-## 关键指标
+## Key Metrics
 
 指标名带 Micrometer 类型后缀（timer 通常导出 `_seconds_count` / `_seconds_sum`），排障先搜基名再看 label。
 
@@ -84,7 +84,7 @@ scrape_configs:
 
 客户端侧：`nacos_monitor{name="configListenSize"}`、`subServiceCount` / `pubServiceCount`、`nacos_client_request_seconds_*`。
 
-## 3.x 健康检查接口
+## 3.x Health Check Interface
 
 适合给负载均衡、K8s 探针、巡检系统用：
 
@@ -98,7 +98,7 @@ scrape_configs:
 
 改了 `nacos.server.contextPath` / `nacos.console.contextPath` 要相应调整 URL 前缀。
 
-## 告警项建议
+## Suggested Alert Items
 
 从指标反推「Nacos 是不是要挂了」：
 

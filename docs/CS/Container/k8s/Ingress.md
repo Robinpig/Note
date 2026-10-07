@@ -32,7 +32,7 @@ spec:
             port: { number: 80 }
 ```
 
-## 为什么需要 Ingress
+## Why Ingress Is Needed
 
 先看纯 Service 对外暴露的原生方案——**每个业务单独创建一个 LoadBalancer Service**：
 
@@ -73,7 +73,7 @@ pay-service   → LoadBalancer → 公网IP3:80
 
 没有安装 Controller 的集群里创建 Ingress，会一直处于无 `ADDRESS` 的空转状态。
 
-## 路径匹配：pathType
+## Path Matching: pathType
 
 `pathType` 决定路径如何匹配，生产中最容易踩坑的字段之一：
 
@@ -85,7 +85,7 @@ pay-service   → LoadBalancer → 公网IP3:80
 
 易错点在于 `Prefix` 不是"纯字符串前缀"：官方语义要求按路径元素（segment）边界匹配，所以 `/user` 不会误命中 `/userabc`。但部分 Controller（尤其 ingress-nginx 早期版本）在 `ImplementationSpecific` 下退化为字符串前缀匹配，曾导致 `/user` 意外命中 `/userabc` 而串流量——统一显式声明 `pathType: Prefix` 是规避该问题的标准做法。
 
-## 流量路径
+## Traffic Path
 
 以 ingress-nginx 为例（NodePort 暴露方式）：
 
@@ -97,13 +97,13 @@ Client → Node:NodePort → ingress-nginx Pod (Nginx) → Service → Pod
 
 生产环境通常在 Controller 前面还有一个云 LB 或四层 LB 挂公网 IP；用 `LoadBalancer` 类型的 Service 暴露 ingress-nginx 是最省心的组合。
 
-## 金丝雀发布
+## Canary Release
 
 Ingress 的另一大价值是**灰度发布**：先切一小部分真实流量到新版本，观测错误率、延迟、CPU，没问题再逐步放大，异常立刻切回老版本。对比"直接全量发布"——一旦有 bug 就是 **100% 用户受影响**，金丝雀只把 5%/10% 流量交给新版本，故障影响面极小。
 
 > 名字来源：早年矿工带金丝雀下矿井，金丝雀对毒气更敏感，中毒先预警，从而保护矿工。
 
-### 策略 A：按权重分流（最常用）
+### Strategy A: Split Traffic by Weight (Most Common)
 
 ```yaml
 apiVersion: networking.k8s.io/v1
@@ -128,7 +128,7 @@ spec:
 
 按随机比例切流量，必须与新版本的 Service/Deployment 一起部署；调整 `canary-weight` 数值即可逐级放量（10 → 30 → 50 → 100）。
 
-### 策略 B：按 Header/Cookie 定向分流
+### Strategy B: Targeted Split by Header/Cookie
 
 ```yaml
 metadata:
@@ -142,7 +142,7 @@ metadata:
 
 金丝雀与 [Deployment 滚动更新](/docs/CS/Container/k8s/K8s.md)解决的不是同一个问题：滚动更新是**替换**（新版本最终会全量接管），金丝雀是**分流验证**（可长期停在某个比例，也可随时回滚）。
 
-## 与 Service / Gateway API 的关系
+## Relationship with Service / Gateway API
 
 | 组件 | 层级 | 能力 | 适合场景 |
 |------|------|------|---------|

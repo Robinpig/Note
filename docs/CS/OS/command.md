@@ -2,7 +2,7 @@
 
 这篇笔记整理"**一个可执行文件是怎么被运行起来的**"这一链路上最常用的排查命令：从识别文件类型、查看 ELF 结构，到 shell 如何通过 `execve` 装载。内核侧 execve 的处理见 [进程知识地图](/docs/CS/OS/Linux/proc/README.md)，这里是用户态观察入口。
 
-## 识别文件：file 与 xxd
+## Identifying Files: file and xxd
 
 `file` 通过魔数（magic number）判断类型，而不是扩展名；`xxd` 做十六进制 dump，直接看文件头字节：
 
@@ -17,7 +17,7 @@ $ xxd /bin/cat | less
 
 开头四个字节 `7f 45 4c 46`（`\x7fELF`）就是 ELF 魔数：第 5 字节 01 表示 32 位、02 表示 64 位；第 6 字节 01 小端、02 大端。
 
-## 查看 ELF：readelf / objdump / ldd
+## Inspecting ELF: readelf / objdump / ldd
 
 - `readelf -h`：ELF 头——入口地址 `Entry point address`、目标架构、程序头/节头表位置；
 - `readelf -l`：program header（段视图，装载器用），可以看到 `INTERP` 段指定的动态链接器 `/lib64/ld-linux-x86-64.so.2`；
@@ -38,7 +38,7 @@ $ objdump -d /bin/cat | less   # 反汇编
 
 排障高频场景：启动报 `No such file or directory` 但文件明明存在——往往是 INTERP 指定的动态链接器路径不对（如 32/64 位不匹配）；`version 'GLIBC_2.xx' not found` 用 `readelf -d` + `objdump -T` 查符号版本。
 
-## shell 到进程：execve
+## From Shell to Process: execve
 
 shell 执行外部命令时 fork 出子进程，子进程调用 `execve` 用新程序替换自身映像（PID 不变）：
 
@@ -58,7 +58,7 @@ $ ltrace ./a.out                            # 库函数调用
 
 注意内建命令（cd/export/read）由 shell 直接执行，不会 fork+execve——这也是 `cd` 必须内建的原因（子进程改工作目录影响不了父 shell）。
 
-## 其他常用二进制工具
+## Other Common Binary Tools
 
 | 命令 | 用途 |
 |------|------|

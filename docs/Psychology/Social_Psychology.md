@@ -4,7 +4,7 @@
 
 它与 [人格心理学](/docs/Psychology/Personality_Psychology.md) 恰好构成一组张力：一个强调「人」的稳定特质，一个强调「境」的塑造力，现代观点是二者交互（person–situation interaction）。
 
-## 社会认知：我们如何理解他人
+## Social Cognition: How We Understand Others
 
 人类是「认知吝啬者（cognitive miser）」，倾向用快捷的启发式理解社会世界，因此系统性出错：
 
@@ -12,14 +12,14 @@
 - **自利偏差**：把成功归因于自己、失败归因于外部，用于维护自尊。
 - **刻板印象与偏见**：以类别代替个体，节省认知成本，代价是系统性误判。
 
-## 态度、说服与认知失调
+## Attitude, Persuasion, and Cognitive Dissonance
 
 - **从众（conformity）**：Asch 线段实验显示，个体常为与群体一致而否认自己清晰的知觉判断。
 - **服从（obedience）**：Milgram 的电击实验揭示，在权威指令下普通人可能做出伤害他人的行为。
 - **旁观者效应**：在场人数越多，个体出手相助的责任感越被分散。
 - **认知失调（cognitive dissonance）**：Festinger 提出，当行为与信念冲突时会产生心理不适，人们往往**改变信念**而非行为来消解——「死要面子活受罪」正是这个机制。详细展开见 [认知偏差](/docs/Psychology/Cognitive_Bias.md)。
 
-## 群体行为
+## Group Behavior
 
 | 现象 | 机制 |
 | --- | --- |
@@ -28,7 +28,7 @@
 | 群体极化 | 讨论后群体立场比个体原立场更极端 |
 | 群体思维（groupthink） | 追求一致的压力压制异议，导致劣质决策 |
 
-## 与相邻分支的关系
+## Relationship with Adjacent Branches
 
 社会认知的偏差源自 [认知心理学](/docs/Psychology/Cognitive_Psychology.md) 的启发式机制，其发展源头则要回到 [发展心理学](/docs/Psychology/Developmental_Psychology.md) 的依恋与社会化；而社会行为被自动化的过程，又可以用 [行为主义](/docs/Psychology/Behaviorism.md) 的强化与观察学习来解释。
 

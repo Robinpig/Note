@@ -1,4 +1,4 @@
-## Self-Evolving（自进化）
+## Self-Evolving (Self-Evolution)
 
 ## Introduction
 
@@ -25,27 +25,27 @@ Agent 能不能完成任务固然重要，但它能不能**从过去的任务中
 
 闭环的核心不是"保存所有内容"，而是**将经历分层**：事实进入记忆，过程保存在会话档案，可复用的方法升级为 Skill。
 
-## Hermes 案例：Hermes 的自进化设计
+## Hermes Case Study: Hermes's Self-Evolution Design
 
-### 架构：自进化不是孤立模块
+### Architecture: Self-Evolution Is Not an Isolated Module
 
 三层主干架构：入口层（CLI / Gateway / ACP / Batch Runner / API Server / Python Library）→ AIAgent 核心层（Prompt Builder 组装提示/上下文/记忆/画像/Skill、Provider Resolution、Tool Dispatch）→ 存储与工具后端层（Session Storage 用 SQLite+FTS5 保存会话；Tool Backends 让 Agent 真正进入环境执行）。
 
 三种入口（CLI Session、Gateway Message、Cron Job）数据流不同，却共享同一套执行、存储、记忆和 Skill 机制——**轨迹被统一保存，Evolve Loop 才能跨入口工作**。
 
-### Periodic Nudges：复盘从偶发变成后台机制
+### Periodic Nudges: Review Becomes a Background Mechanism Instead of Occasional
 
 一轮交互结束后，系统可派生一个**独立复盘过程**：重新审视会话快照，判断是否应新增/修改记忆与 Skill。复盘与主会话分离（不改进行中的上下文），默认只有记忆管理、Skill 管理和只读文件工具，可配置更便宜的辅助模型。
 
 它解决两个矛盾：全量塞回 Prompt → 上下文越长重要信息越稀释；完全依赖任务中主动记忆 → Agent 专注当前目标忘了沉淀。**Nudge 是在"什么都保存"和"什么都忘记"之间的筛选器。**
 
-### Autonomous Skill Creation：沉淀程序性记忆
+### Autonomous Skill Creation: Distilling Procedural Memory
 
 `skill_manage` 允许 Agent 创建、修改、删除自己的 Skill。典型触发场景：找到可复用的多步骤工作流；经历死路后找到正确路径；用户纠正了处理方式。经验写成 `SKILL.md` 存入 `~/.hermes/skills/`——包含步骤、约束、避坑说明、引用资料和辅助脚本，是比零散记忆更完整的"程序性记忆"。
 
 **Skill Self-Improvement 优先用 patch**：只需 Skill 名 + 旧文本 + 新文本三个参数。优势：影响范围小（保留已验证内容）、上下文成本低（只传变化部分）。可开启 `skills.write_approval` / `memory.write_approval`——后台变更先进待审核区，人看差异后决定是否应用：**Agent 可以提出改进，但高风险环境仍应保留人的确认权。**
 
-### FTS5 Session Search：检索不是记忆本身
+### FTS5 Session Search: Retrieval Is Not Memory Itself
 
 会话统一存 `~/.hermes/state.db`，FTS5 全文索引。`session_search` 按关键词返回**数据库里的真实消息**（不调 LLM、不摘要、不截断——不要与官网宣传的 "LLM summarization" 混淆）。分工：
 
@@ -54,7 +54,7 @@ Agent 能不能完成任务固然重要，但它能不能**从过去的任务中
 
 只有把检索和抽象接起来，历史记录才可能转化为能力。可选的 Honcho 外部 Memory Provider 提供语义搜索、跨会话结论和用户画像，增强"Agent 对谁服务"的理解。
 
-### 三层记忆系统
+### Three-Layer Memory System
 
 | 层 | 内容 | 特点 |
 | --- | --- | --- |
@@ -66,11 +66,11 @@ Agent 能不能完成任务固然重要，但它能不能**从过去的任务中
 
 **Hermes 的定位**：主路径是上下文/记忆进化；Skill 创建与 patch 是 Harness 级轻量结构进化；不更新权重，不属于参数进化。最大价值：**不需要等待模型重新训练，也能让 Agent 在使用中逐步形成属于自己的工作方法。**
 
-## 评测：没有评测，就没有进化
+## Evaluation: No Evaluation, No Evolution
 
 评测不是进化完成后的验收环节，而是整个 Evolve Loop 的**信号源**。信号不准，Agent 不仅不会进化，反而会更稳定地重复错误。
 
-### 三重职责
+### Triple Responsibilities
 
 1. **方向指引**：告诉系统问题出在哪，下轮该改 Prompt、流程、工具还是记忆
 2. **质量门控**：判断候选版本是否真的优于基线，防止错误更新污染后续任务
@@ -78,7 +78,7 @@ Agent 能不能完成任务固然重要，但它能不能**从过去的任务中
 
 传统评测打错分只是发布了个不够好的版本；自进化评测打错分，会让 Agent 把错误经验持续写进未来。
 
-### 三个观察面
+### Three Observation Surfaces
 
 - **结果质量**：任务是否完成、输出是否准确完整符合约束
 - **过程质量**：工具调用是否正确、关键步骤是否执行、路径是否安全可复现
@@ -86,7 +86,7 @@ Agent 能不能完成任务固然重要，但它能不能**从过去的任务中
 
 实用策略：日常评测先做结果级筛选，失败样本和关键链路再做轨迹级诊断。
 
-### 七个评测陷阱
+### Seven Evaluation Pitfalls
 
 1. 评估器本身不可靠——LLM-as-Judge 偏爱长答案/特定表达，Agent 会学会迎合评估器
 2. 只评结果不评过程——答案对不代表路径对
@@ -96,7 +96,7 @@ Agent 能不能完成任务固然重要，但它能不能**从过去的任务中
 6. 忽略预算公平性——更多重试/采样/Token 换来的表面提升
 7. 每次修改都跑全量评测——分层运行：日常核心回归集 → 候选验证集 → 上线最终测试集
 
-### 三层评测体系
+### Three-Layer Evaluation System
 
 精度、成本、覆盖面很难同时拉满，解法是分层组合：
 
@@ -106,7 +106,7 @@ Agent 能不能完成任务固然重要，但它能不能**从过去的任务中
 
 核心原则：**能用便宜、确定的方法覆盖，就不要急着用昂贵、主观的方法。**
 
-### 评测集职责隔离
+### Evaluation Set Responsibility Isolation
 
 同一批样本既发现问题、又选择方案、还证明有效 → 系统对这批题过拟合。三集分离：
 
@@ -116,7 +116,7 @@ Agent 能不能完成任务固然重要，但它能不能**从过去的任务中
 
 更新节奏：线上新失败样本持续进 Train；Validation 定期换旧样本；Test 只在任务分布明显变化时更新。
 
-### 终点是归因，不是分数
+### The Endpoint Is Attribution, Not Scores
 
 "60 分"不告诉你该改什么。失败四类归因：
 
@@ -125,13 +125,13 @@ Agent 能不能完成任务固然重要，但它能不能**从过去的任务中
 - **能力缺失**：缺工具/知识/数据 → 补能力，而不是继续改 Prompt
 - **回归问题**：旧版本能做、更新后失败 → 立即回滚，样本加入核心回归集
 
-### 评估器也需要被校准
+### Evaluators Also Need Calibration
 
 谁来评测评估器？人工校准（定期抽样、多人独立判断）、多评估器交叉（分歧进人工复核）、元评测集监控、无泄漏诊断。评估器偏移时应**先暂停自动写入记忆或流程**。评估器不是最终权威，而是需要监控、校准和回退的系统组件。
 
-## Agent CI/CD：自进化不是全自动
+## Agent CI/CD: Self-Evolution Is Not Fully Automatic
 
-### 自动化 ≠ 全自动的三个理由
+### Three Reasons Automation ≠ Full Automation
 
 1. **单次任务看到的上下文不完整**——不知道规则背后的历史决策与兼容性要求，一次"合理"重写可能删掉稳定的边界逻辑
 2. **局部改进 ≠ 全局改进**——改一个 Skill 的输出格式可能破坏另一个的输入契约；只有完整任务集比较才能判断是进化还是过拟合
@@ -139,11 +139,11 @@ Agent 能不能完成任务固然重要，但它能不能**从过去的任务中
 
 合理边界：**允许 Agent 自动发现、自动提议、自动实验；是否进入稳定版本，由证据和治理流程决定。**
 
-### 七阶段闭环
+### Seven-Stage Closed Loop
 
 信号汇聚（评测诊断/线上失败/用户纠正/历史 Playbook/外部研究）→ 生成候选（只是候选，不能覆盖稳定版本）→ 独立评测（隔离环境、同数据集同预算同评测器）→ 安全门控（结构检查→回归评测→统计检验→一致性检查→高风险人工确认）→ 灰度发布（如 10% 流量观察 7 天，比例由业务风险决定）→ 监控与回滚（触发阈值立即撤回）→ 经验沉淀（成功写 Playbook，失败也记录假设/证据/原因）。
 
-### 五个工程支柱
+### Five Engineering Pillars
 
 1. **三路信号汇聚**：本轮评测（哪里出问题）+ 历史 Playbook（以前为什么这样设计）+ 外部研究（尚未尝试的新方向）
 2. **分层门控**：自动门控承担规模，人负责最后的责任边界
@@ -151,15 +151,15 @@ Agent 能不能完成任务固然重要，但它能不能**从过去的任务中
 4. **版本化一切**：Prompt、Skill、Memory Schema、工作流、Harness 配置都要有版本号/来源/变更说明/评测结果——没有版本无法比较，没有来源无法追责，没有稳定版本谈不上回滚
 5. **Diff 修改**：默认倾向补丁式更新而非整文件重生成——变化半径越小，验证成本和意外破坏越小（SkillOS：执行器保持冻结，专门 Skill Curator 更新 SkillRepo——生成答案和治理能力库是两种职责）
 
-### Dreaming：任务之外发现长期模式
+### Dreaming: Discovering Long-Term Patterns Beyond Tasks
 
 同步评测看一条轨迹，难以发现跨项目/跨时间反复出现的问题。异步 Dreaming（Claude Managed Agents 研究预览）按计划回顾历史会话与记忆，寻找三类模式：反复出现的失败原因、成功但成本/时延明显偏高的路径、Skill 与记忆未覆盖的知识缺口。输出应为**结构化候选**（证据/频率/影响范围/建议位置/预期收益/风险等级），进入同一条 CI/CD 管线。分工：**同步评测优化单次任务，异步 Dreaming 发现系统性模式；它们都提出变化，但都不跳过发布治理。**
 
-### 落地七问
+### Seven Questions for Implementation
 
 信号可靠吗？变化范围清楚吗？基线可比较吗？门控完整吗？可以灰度吗？能够回滚吗？经验会回流吗？——**任何一项答不上来，系统就还没准备好自动应用变化。**
 
-## 人的角色：进化方向的校准器
+## Human Role: Calibrator of Evolution Direction
 
 > 人的价值不在于逐步操作 Agent，而在于设定目标、划定边界、处理高风险例外，并校准长期进化方向。
 
@@ -169,7 +169,7 @@ Agent 能不能完成任务固然重要，但它能不能**从过去的任务中
 
 人提供三类不可替代的输入：高质量数据（用户纠正/领域案例/失败证据）、价值判断（什么值得优化、什么代价不可接受）、最终裁决（高风险变更是否上线、回滚到哪、哪些权限永不开放）。
 
-### 自治是可升可降的等级
+### Autonomy Is an Adjustable Level
 
 | 等级 | 描述 | 适用 |
 | --- | --- | --- |
@@ -180,7 +180,7 @@ Agent 能不能完成任务固然重要，但它能不能**从过去的任务中
 
 原则：**能力与权限必须分开**（技术上能改文件 ≠ 系统应该授权）；升级由连续证据驱动（稳定成功率、无严重回归、回滚演练过），降级由严重回归/越权/安全告警/方向漂移触发。
 
-### 五类不能永久交给 Agent 的决策
+### Five Categories of Decisions That Can Never Be Permanently Delegated to Agents
 
 1. **规则级记忆的准入**——"这次方案 A 不错"和"以后永远用 A"完全不同，错误规则会被反复调用并衍生新错误
 2. **Prompt/Skill/权限规则更新的最终确认**——执行者不能决定自己的红线（Agent 不能删除自己的安全约束）
@@ -188,7 +188,7 @@ Agent 能不能完成任务固然重要，但它能不能**从过去的任务中
 4. **新领域冷启动**——没有历史数据时 Agent 不知道什么叫"好"，首批样本/初始 Skill/安全边界必须由领域专家提供；第一圈必须有人推动
 5. **安全边界的设定与调整**——默认最小权限，红线不能由被红线约束的执行者自行决定
 
-### 对抗审核疲劳：三条通道
+### Combating Review Fatigue: Three Channels
 
 1. **自动化高置信过滤**：格式/静态/回归/显著性/规则一致性先挡掉明显错误，只把值得判断的变化交给人
 2. **批量异步审核**：中风险更新按主题聚类，一次判断一类变化（只展示 Diff、证据、关键评测变化）
@@ -196,7 +196,7 @@ Agent 能不能完成任务固然重要，但它能不能**从过去的任务中
 
 核心不是让人看更多，而是**减少无意义审核，提高每次介入的信息密度**：风险与不可逆性越高，人的介入越同步、越深入。
 
-### 方向观测：防"每步都对，整体走偏"
+### Direction Observation: Preventing 'Every Step Right, Whole Thing Drifts'
 
 门控检查"这步是否安全"，无法判断"一百步后是否仍在靠近目标"。方向漂移的例子：成功率持续提高但回答越来越长；工具调用变多没有收益；拒答率不断升高；为满足评分器失去自然表达。三层防护：
 
@@ -206,7 +206,7 @@ Agent 能不能完成任务固然重要，但它能不能**从过去的任务中
 
 **Agent 越自主，人越不需要盯着每一步；但人越需要看清它正在成为谁。**
 
-## 警惕：闭环存在 ≠ 每次循环都会变好
+## Caution: Existence of a Loop ≠ Every Iteration Improves
 
 Agent 可能保存错误记忆、把偶然成功误判为通用经验、Skill 多次 patch 后冲突、把不安全内容带入后续会话。没有任务成功率/成本/人工反馈/回归测试，就无法证明新 Skill 优于旧版本。可靠的 Evolve Loop 还需要：
 

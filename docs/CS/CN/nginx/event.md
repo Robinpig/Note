@@ -4,7 +4,7 @@
 
 理解这个循环要回答五个问题：**连接对象从哪来**（连接池）、**事件怎么注册**（事件模块抽象）、**新连接怎么接**（accept 与惊群）、**延迟任务怎么排**（posted events 队列）、**时间从哪来**（定时器与缓存时间）。本文按这个顺序展开，进程模型部分见 [nginx](/docs/CS/CN/nginx/nginx.md)。
 
-## 数据结构
+## Data Structure
 
 ### `ngx_event_t`
 
@@ -86,7 +86,7 @@ c->read->instance = !instance;
 c->write->instance = !instance;
 ```
 
-## 事件模块抽象
+## Event Module Abstraction
 
 ```c
 typedef struct {
@@ -136,11 +136,11 @@ extern ngx_module_t ngx_select_module;
 
 Linux 上 epoll 是最优解：`O(1)` 的就绪通知、支持 `EPOLLRDHUP`（对端关闭）与 `EPOLLEXCLUSIVE`（避免惊群）。
 
-## worker 的事件初始化
+## Event Initialization of worker
 
 `ngx_event_process_init()` 在每个 worker 启动时执行，是整个事件子系统的装配现场。
 
-### accept mutex 的启用条件
+### Conditions for Enabling accept mutex
 
 ```c
 ccf = (ngx_core_conf_t *) ngx_get_conf(cycle->conf_ctx, ngx_core_module);
@@ -168,7 +168,7 @@ ngx_conf_init_msec_value(ecf->accept_mutex_delay, 500);
 > [!WARNING]
 > 大量中文资料仍写着"nginx 默认开启 accept mutex 来解决惊群"——这句在 1.11.3 之后是错的。现代 Linux 上 nginx 靠内核的 `EPOLLEXCLUSIVE` 避免惊群，`accept_mutex` 只是历史遗留的 fallback。
 
-### 监听套接字如何注册进事件循环
+### How Listening Socket Registers into Event Loop
 
 这是最关键的一段，四种情况**互斥且有优先级**：
 
@@ -221,7 +221,7 @@ ngx_del_event(c->read, NGX_READ_EVENT, NGX_DISABLE_EVENT);
 ngx_add_event(c->read, NGX_READ_EVENT, NGX_EXCLUSIVE_EVENT);
 ```
 
-### 监听事件的 handler
+### Listening Event handler
 
 ```c
 if (ls[i].reuseport && ls[i].worker != ngx_worker) continue;   /* 只管自己那一份 */
@@ -245,7 +245,7 @@ if (c->type == SOCK_STREAM) {
 }
 ```
 
-### accept mutex 的抢锁与让出
+### Lock Acquisition and Release of accept mutex
 
 ```c
 // event/ngx_event_accept.c
@@ -291,9 +291,9 @@ if (ngx_use_accept_mutex) {
 }
 ```
 
-## epoll 封装
+## epoll Wrapper
 
-### 初始化
+### Initialization
 
 ```c
 ep = epoll_create(cycle->connection_n / 2);     /* size 参数内核已忽略，仅历史兼容 */
@@ -307,7 +307,7 @@ nevents = epcf->events;                          /* 只增不减 */
 
 `epoll_events` 默认 **512**，即一次 `epoll_wait` 最多取回 512 个事件；没取完的下一轮继续（epoll 是 LT 语义下的"贪心"模式，nginx 标了 `NGX_USE_GREEDY_EVENT`）。
 
-### 注册事件与 instance 位
+### Register Events and instance Bit
 
 ```c
 ee.events = events | (uint32_t) flags;
@@ -324,7 +324,7 @@ if ((flags & NGX_EXCLUSIVE_EVENT) && (NGX_HAVE_EPOLLEXCLUSIVE && NGX_HAVE_EPOLLR
 }
 ```
 
-### 处理事件
+### Handling Events
 
 ```c
 events = epoll_wait(ep, event_list, (int) nevents, timer);
@@ -376,7 +376,7 @@ for (i = 0; i < events; i++) {
 2. **`revents & EPOLLIN` 之外还要 `rev->active`**，避免处理已被删除的事件；
 3. **`POST_EVENTS` 模式**：持锁期间不立即执行 handler，而是入队延后执行——这样锁的持有时间只覆盖"收集事件"，不覆盖"处理请求"。
 
-## accept 流程
+## accept Flow
 
 ```c
 // event/ngx_event_accept.c（简化）
@@ -432,7 +432,7 @@ do {
 - **`EMFILE` 的处理很典型**：不是崩溃，而是关闭监听事件 + 暂停 accept 一段时间（500ms）。日志里的 `accept4() failed (24: Too many open files)` 就是这个分支，此时提高 `worker_rlimit_nofile` 才是正解；
 - `ls->handler` 是分派点：HTTP 指向 `ngx_http_init_connection`，stream 指向 `ngx_stream_init_connection`。
 
-## posted events 队列
+## posted events Queue
 
 nginx 有三个队列，用于把"事件收集"与"事件处理"解耦：
 
@@ -453,7 +453,7 @@ ngx_event_process_posted(cycle, &ngx_posted_events);           /* 再处理普�
 
 即：**先 accept、再解锁、再跑定时器、最后处理读写**。这最大化了 accept 的吞吐，也把锁的持有时间压到最短。
 
-### eventfd：跨线程唤醒
+### eventfd: Cross-Thread Wakeup
 
 `ngx_epoll_notify()` 通过一个专用 eventfd 让阻塞在 `epoll_wait()` 的循环被唤醒：
 
@@ -472,7 +472,7 @@ ngx_epoll_notify(ngx_event_handler_pt handler)
 
 唯一的使用者是**线程池**：`aio threads` 场景下文件 IO 在线程池里完成，完成后用 `ngx_notify()` 唤醒主线程继续处理。注意它与 `NGX_HAVE_FILE_AIO` 用的 `ngx_eventfd` 是**两个不同的 fd**。
 
-## 定时器
+## Timer
 
 所有定时器挂在一棵红黑树上，key 是**绝对毫秒时间戳**：
 
@@ -509,7 +509,7 @@ if (ngx_timer_resolution && !(ngx_event_flags & NGX_USE_TIMER_EVENT)) {
 
 此时主循环把 `timer` 设为 `NGX_TIMER_INFINITE`，靠 `SIGALRM` 打断 `epoll_wait`（返回 `EINTR`）来推进时间。代价是固定的信号开销，收益是时间精度更可控——一般不需要配。
 
-## 缓存时间
+## Cache Duration
 
 nginx 不每次调用 `gettimeofday()`，而是**缓存时间**，只在事件循环的关键点刷新：
 
@@ -537,7 +537,7 @@ nginx 不每次调用 `gettimeofday()`，而是**缓存时间**，只在事件�
 
 实践含义：**同一批事件内的所有请求共享同一个时间戳**，所以 `$time_iso8601` 的精度是"事件循环粒度"；`ngx_current_msec`（单调时钟）每次 `ngx_time_update()` 都会刷新，而格式化后的时间字符串**每秒才更新一次**。
 
-## 阻塞 IO 与线程池
+## Blocking IO and Thread Pool
 
 事件循环最怕阻塞。`sendfile` 在大文件上仍可能占用 worker 很久，nginx 提供了两个对策：
 
@@ -557,7 +557,7 @@ thread_pool default threads=16 max_queue=65536;
 
 线程池完成 IO 后通过 `ngx_notify()`（eventfd）唤醒主线程。注意 **aio threads 只覆盖文件 IO**，DNS 解析在独立的 resolver 进程，其它阻塞（如数据库访问）在 nginx 里只能靠 OpenResty 的 cosocket 或改用上游服务。
 
-## 与内核的对应关系
+## Correspondence with the Kernel
 
 | nginx 行为 | 内核机制 |
 | :-- | :-- |
@@ -570,7 +570,7 @@ thread_pool default threads=16 max_queue=65536;
 | worker 创建 | [fork](/docs/CS/OS/Linux/proc/process.md?id=fork) |
 | reload / 热升级 | [信号](/docs/CS/OS/Linux/proc/signal.md) + [exec](/docs/CS/OS/Linux/proc/process.md?id=exec) |
 
-## 调优清单
+## Tuning Checklist
 
 ```nginx
 events {

@@ -24,13 +24,13 @@ digraph mybatis_index {
 }
 ```
 
-## 会话与执行
+## Session and Execution
 
 - [SqlSession](/docs/CS/Framework/MyBatis/SqlSession.md)：会话对象、生命周期、Mapper 代理。
 - [Executor](/docs/CS/Framework/MyBatis/Executor.md)：执行器（Simple / Reuse / Batch）与一级缓存。
 - [Execute](/docs/CS/Framework/MyBatis/Execute.md)：一条 SQL 的完整执行流程串讲。
 
-## 语句与结果映射
+## Statements and Result Mapping
 
 - [StatementHandler](/docs/CS/Framework/MyBatis/StatementHandler.md)：`Statement` 封装、`#{}` 与 `${}` 差异、预编译。
 - [ResultSetHandler](/docs/CS/Framework/MyBatis/ResultSetHandler.md)：结果集处理、`TypeHandler`。
@@ -38,16 +38,16 @@ digraph mybatis_index {
 - [binding](/docs/CS/Framework/MyBatis/binding.md)：参数绑定规则、#{ } 占位符解析。
 - [KeyGenerator](/docs/CS/Framework/MyBatis/KeyGenerator.md)：主键生成（自增 / selectKey）。
 
-## 缓存
+## Cache
 
 - [Cache](/docs/CS/Framework/MyBatis/Cache.md)：一级 / 二级缓存、失效策略、Redis 扩展。
 
-## 插件与日志
+## Plugins and Logging
 
 - [Interceptor](/docs/CS/Framework/MyBatis/Interceptor.md)：MyBatis 插件机制（拦截 `Executor` / `StatementHandler` / `ResultSetHandler`）、分页等常见插件。
 - [Logging](/docs/CS/Framework/MyBatis/Logging.md)：日志体系与 MyBatis 内部日志接入。
 
-## 初始化与集成
+## Initialization and Integration
 
 - [Init](/docs/CS/Framework/MyBatis/Init.md)：启动与配置解析、`Configuration`、Mapper 解析。
 - [DataSource](/docs/CS/Framework/MyBatis/DataSource.md)：数据源与事务。

@@ -6,7 +6,7 @@ Java 是一门**跑在 JVM 上的静态强类型语言**：源码编译成字节
 
 > 版本基线：本库 Java 相关笔记的默认值与 API 状态以 **JDK 27** 为准、生产按 LTS **JDK 25** 对齐，详见 [JDK/JDK.md 的版本基线](/docs/CS/Java/JDK/JDK.md)。
 
-## 本目录包含
+## This Directory Contains
 
 Java 目录按「语言基础 → 标准库 → 虚拟机 → I/O → 生态」组织，主要分区如下：
 

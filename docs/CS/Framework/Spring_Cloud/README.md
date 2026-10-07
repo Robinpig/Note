@@ -27,30 +27,30 @@ digraph cloud_index {
 }
 ```
 
-## 网关
+## Gateway
 
 - [gateway](/docs/CS/Framework/Spring_Cloud/gateway.md)：Spring Cloud Gateway（响应式，配置根 `spring.cloud.gateway.server.webflux.routes`）。
 - [Zuul](/docs/CS/Framework/Spring_Cloud/Zuul.md)：Netflix 遗留网关，新项目不建议。
 
-## 声明式调用与负载均衡
+## Declarative Invocation and Load Balancing
 
 - [Feign](/docs/CS/Framework/Spring_Cloud/Feign.md)：声明式 HTTP 客户端。
 - [LoadBalancer](/docs/CS/Framework/Spring_Cloud/LoadBalancer.md)：客户端负载均衡（替代 Ribbon）。
 - [Ribbon](/docs/CS/Framework/Spring_Cloud/Ribbon.md)：Netflix 遗留负载均衡，已被 LoadBalancer 取代。
 
-## 容错与追踪
+## Fault Tolerance and Tracing
 
 - [Resilience4j](/docs/CS/Framework/Spring_Cloud/Resilience4j.md)：熔断、限流、重试、舱壁（Spring AOP 下 order 越小越外层）。
 - [Hystrix](/docs/CS/Framework/Spring_Cloud/Hystrix.md)：Netflix 遗留熔断器。
 - [Sleuth](/docs/CS/Framework/Spring_Cloud/Sleuth.md)：遗留链路追踪（已被 Micrometer Tracing 取代）。
 
-## 配置
+## Configuration
 
 - [Config](/docs/CS/Framework/Spring_Cloud/Config.md)：配置中心（Config Server / Client）。
 - [Alibaba](/docs/CS/Framework/Spring_Cloud/Alibaba.md)：Spring Cloud Alibaba（Nacos 集成、Sentinel、Seata）。
 - [Consul](/docs/CS/Framework/Spring_Cloud/Consul.md)：与 Consul 集成（服务发现 / 配置）。
 
-## 消息
+## Messages
 
 - [Stream](/docs/CS/Framework/Spring_Cloud/Stream.md)：声明式消息抽象（Binder）。
 

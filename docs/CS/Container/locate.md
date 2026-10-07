@@ -7,9 +7,9 @@
 宿主机 PID ──► /proc/PID/cgroup ──► 容器 ID / Pod UID ──► 容器名
 ```
 
-这套换算在两种场景下最值钱：**镜像里没有 shell（distroless/scratch，`exec` 用不了）**，以及 **daemon 自己就是坏掉的那个**。两者都需要绕开上层工具，直接从 `/proc` 读答案。原理见 [namespace 的 setns](/docs/CS/OS/Linux/namespace.md?id=setns-加入已有-namespace) 与 [cgroup](/docs/CS/OS/Linux/cgroup.md)。
+这套换算在两种场景下最值钱：**镜像里没有 shell（distroless/scratch，`exec` 用不了）**，以及 **daemon 自己就是坏掉的那个**。两者都需要绕开上层工具，直接从 `/proc` 读答案。原理见 [namespace 的 setns](/docs/CS/OS/Linux/namespace.md?id=setns-join-an-existing-namespace) 与 [cgroup](/docs/CS/OS/Linux/cgroup.md)。
 
-## 同一进程的两套 PID
+## Two Sets of PID in the Same Process
 
 PID namespace 是**层级嵌套**的，因此同一个进程在每一级 PID namespace 里都有一个编号。容器里的 PID 1，在宿主机上往往是一个普通的四位数：
 
@@ -32,7 +32,7 @@ NSpid:	2192	1
 
 这行输出解释了一整类困惑：容器日志里那句 "killing pid 1"，在宿主机上对应的其实是 2192；在容器内 `kill 1` 与在宿主机上 `kill 2192` 是同一个动作；宿主机 `top` 里永远找不到这个容器的 "PID 1"。
 
-## 由容器查宿主 PID
+## Find Host PID from Container
 
 ### Docker
 
@@ -45,7 +45,7 @@ docker stats <容器> --no-stream                     # 资源视角
 
 注意 `docker top` 底层就是读 `/proc`，所以它的 PID 列天然是宿主机编号；只有进到容器里（`docker exec`）看到的才是容器内编号。
 
-### containerd 与 nerdctl
+### containerd and nerdctl
 
 ```shell
 sudo ctr -n k8s.io  tasks ls          # Kubernetes 用的 containerd namespace，PID 列即宿主 PID
@@ -75,13 +75,13 @@ sudo crictl inspect -o json $CID | jq -r '.status.metadata.name' # 容器名
 
 `kubectl debug node/<node> -it --image=alpine` 起出来的调试 Pod 直接使用宿主机的 PID/Network/IPC namespace，宿主机根文件系统挂在 `/host`，没有 ssh 权限时用它最省事。
 
-pause（沙箱）容器也是普通容器，要看 Pod 共享的那张网络栈，先 `crictl pods --name <pod>` 拿到沙箱 ID，再用 `crictl ps --pod <沙箱ID>` 找到 pause 容器本身，最后同样 inspect 取 `.info.pid`。pause 持有 net/ipc/uts ns 的机制见 [pause 容器](/docs/CS/Container/k8s/Pod.md?id=pause-容器)。
+pause（沙箱）容器也是普通容器，要看 Pod 共享的那张网络栈，先 `crictl pods --name <pod>` 拿到沙箱 ID，再用 `crictl ps --pod <沙箱ID>` 找到 pause 容器本身，最后同样 inspect 取 `.info.pid`。pause 持有 net/ipc/uts ns 的机制见 [pause 容器](/docs/CS/Container/k8s/Pod.md?id=pause-container)。
 
-## 由宿主 PID 反查容器
+## Find Container from Host PID
 
 线上最常见的起手式其实是反过来的：`top` 里发现某个进程吃掉 12 个核，要回答"它是哪个容器"。
 
-### 走 cgroup 路径
+### Take the cgroup Path
 
 这是唯一**一定存在**的映射：任何 OCI 运行时在创建容器时都会把容器主进程写进 `cgroup.procs`。
 
@@ -112,7 +112,7 @@ sudo crictl inspect -o json $CID | jq -r '.status.metadata.name'          # cont
 
 反向也可以：`sudo ctr -n k8s.io containers info $CID` 能看到容器对应的 OCI spec（含 rootfs 路径、env、资源限额）。
 
-### 走 namespace inode
+### Take the namespace inode
 
 当 cgroup 路径被某些运行时改写、或想确认"这两个进程是否在同一容器/同一网络栈"时，比对 namespace inode 最直接：
 
@@ -123,7 +123,7 @@ readlink /proc/$PID/ns/net
 ls -l /proc/<疑似容器主进程>/ns/{pid,net,mnt}       # inode 相同 ⇒ 共享该 namespace
 ```
 
-同一个 Pod 内两个业务容器的 `net` inode 必然相同（都 setns 进了 pause 的网络栈），但 `pid` inode 不同（除非开了 `shareProcessNamespace`）——这条规律很好用来验证 Sandbox 的理解是否正确。原理见 [ls -l /proc/$$/ns 的观察方法](/docs/CS/OS/Linux/namespace.md?id=setns-加入已有-namespace)。
+同一个 Pod 内两个业务容器的 `net` inode 必然相同（都 setns 进了 pause 的网络栈），但 `pid` inode 不同（除非开了 `shareProcessNamespace`）——这条规律很好用来验证 Sandbox 的理解是否正确。原理见 [ls -l /proc/$$/ns 的观察方法](/docs/CS/OS/Linux/namespace.md?id=setns-join-an-existing-namespace)。
 
 如果手里只有 IP 没有 PID，也能从名字跳过去：
 
@@ -133,7 +133,7 @@ docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{"\n"}}{{en
 
 反过来从连接找进程则用 `ss -tnp` 得到 PID，再走上面的 cgroup 反查。
 
-### 在容器内部自查
+### Self-check Inside the Container
 
 站在容器里没有宿主视角时，仍然能拿到自己的标识：
 
@@ -145,7 +145,7 @@ cat /proc/1/cmdline | tr '\0' ' '   # 入口进程命令行
 
 不过容器内**无从得知**自己的宿主机 PID——这正是"边界"的意义，必须回到宿主机上用上面的方法。
 
-## 拿到 PID 之后
+## After Getting the PID
 
 宿主 PID 是通往 `/proc` 全部细节的句柄，以下都**不需要进容器，也不需要 daemon**：
 
@@ -183,7 +183,7 @@ sudo nsenter -t $PID -r -w /bin/sh                       # root/cwd 也切过去
 
 对 distroless / scratch 这类没有 shell 的镜像，`nsenter -a /bin/sh` 必然失败（PATH 里根本没有 `/bin/sh`）。正确姿势是**不要进 mount namespace**，只借需要的那一个 ns，用宿主机上的二进制去观察容器视图——这也是 `-n` / `-p` 单独使用的实际价值。
 
-## 速查表
+## Quick Reference Table
 
 | 想做的事 | 命令 |
 |----------|------|
@@ -200,7 +200,7 @@ sudo nsenter -t $PID -r -w /bin/sh                       # root/cwd 也切过去
 | 进容器排障（daemon 已挂） | `nsenter -t <pid> -a /bin/sh` |
 | 区分是/不是容器进程 | `/proc/<pid>/cgroup` 末尾是否含 `<cid>.scope` 或 `docker/<cid>` |
 
-## 例外与坑
+## Exceptions and Pitfalls
 
 - **Docker Desktop（macOS / Windows）**：容器跑在 Linux VM 里，`docker inspect` 给的 PID 是 VM 内部的编号，在 macOS 上 `ps`/`nsenter` 全都对不上号。要进 VM 得先跳进去：
   ```shell

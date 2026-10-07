@@ -6,7 +6,7 @@
 
 本页沿这条主线展开：先解决**编号问题**（设备号如何定位驱动），再看内核里的**三层映射表**，然后是打开时那次关键的 **替换 file_operations**，之后是完整的注册/注销流程，最后是与设备模型、devtmpfs、用户态交互的咬合。与 [块设备驱动](/docs/CS/OS/Linux/dev/block.md) 对照着看效果最好——二者的设计取舍恰好相反。
 
-## 设备号：内核的门牌号
+## Device Number: The Kernel's Address
 
 用户态打开 `/dev/ttyS0` 时，内核拿到的不是路径字符串，而是这个 inode 上记的一个 32 位数 `dev_t`。它把"哪个驱动"和"哪个实例"编在一起（`include/linux/kdev_t.h`）：
 
@@ -55,7 +55,7 @@ static int find_dynamic_major(void)
 
 先查 `chrdevs[]` 桶是否为空这一层是 O(1) 快路径，只有桶非空才遍历链表确认——这是内核里典型的"乐观检查 + 精确确认"写法。
 
-## 三层映射：从设备号到驱动函数
+## Three-Layer Mapping: From Device Number to Driver Function
 
 一个 `dev_t` 要变成一次函数调用，中间经过三张表。这是字符设备最容易被忽略、也最该弄清楚的部分。
 
@@ -110,7 +110,7 @@ struct cdev {
 
 五个字段各有分工：`ops` 是最终要用的操作表；`dev`/`count` 是它负责的号段；`list` 挂所有**已打开**它的 inode（用于卸载时反查，见下面的 `cdev_purge`）；`kobj` 让 cdev 参与引用计数与 sysfs；`owner` 指向所属模块，打开时 `try_module_get` 防止模块被卸载。
 
-## 打开：chrdev_open 的替换戏法
+## open: The Substitution Trick of chrdev_open
 
 这里有个反直觉的事实：**所有字符设备文件的 `inode->i_fop` 初始值都是同一个占位表**。VFS 建 inode 时（`fs/inode.c`）：
 
@@ -198,7 +198,7 @@ static int chrdev_open(struct inode *inode, struct file *filp)
 3. **`replace_fops()`**。这是整个机制的枢纽：把驱动的 `file_operations` 装进 `filp`，此后这个 fd 的 read/write/ioctl 全部直达驱动。**注意替换只影响这一个 `struct file`**，其他进程打开同一设备会各自再走一遍。
 4. **`.owner` 与引用计数**。`fops_get()` 会 `try_module_get(p->ops->owner)`。驱动忘写 `.owner = THIS_MODULE` 的后果就在这里——模块可以在设备还开着时被 rmmod，然后 fd 上的每次调用都跳到已卸载内存。
 
-### 设备节点不存在时：自动加载
+### When the Device Node Does Not Exist: Auto-Loading
 
 如果 `kobj_lookup()` 在 255 个桶里都没找到，会退化到 `base_probe`：
 
@@ -214,7 +214,7 @@ static struct kobject *base_probe(dev_t dev, int *part, void *data)
 
 它返回 NULL，但副作用是触发 `modprobe char-major-10-232` 这样的模块加载请求（modalias 机制，见 [LKM](/docs/CS/OS/Linux/module/LKM.md)）。驱动装载后会注册自己的 cdev，`kobj_lookup()` 里 `goto retry` 再查一遍就命中了。这就是"设备节点先于驱动存在"也能工作的原因——前提是驱动模块写了正确的 `MODULE_ALIAS`。
 
-## 操作集：file_operations
+## Operations Set: file_operations
 
 驱动的全部能力都体现在这张表上（6.12 `include/linux/fs.h`）：
 
@@ -278,7 +278,7 @@ struct file_operations {
 
 `fop_flags` 是 6.x 新增的能力位（如 `FOP_UNSIGNED_OFFSET` 给 `/dev/mem` 用），一般驱动留空即可。
 
-## 注册一个字符设备
+## Registering a Character Device
 
 完整流程是四步，前三步注册、最后一步建节点：
 
@@ -369,7 +369,7 @@ err_unregister:
 
   注意它**只解除关联，不阻止已经打开的 fd 继续调用**——真正防卸载的是 `.owner` 上的模块引用计数。
 
-### 把 cdev 和 device 绑在一起
+### Binding cdev and device Together
 
 现代驱动几乎都让 cdev 与 `struct device` 共存于同一个宿主结构，此时应改用 `cdev_device_add()`，它把父子关系一并处理好（`fs/char_dev.c`）：
 
@@ -396,7 +396,7 @@ int cdev_device_add(struct cdev *cdev, struct device *dev)
 
 `cdev_set_parent()` 把 cdev 的 kobject 父节点设为 device 的 kobject，于是**只要还有人引用 cdev（即设备还开着），device 就不会被释放**。这解决了驱动最常见的 use-after-free：用户态 open 着设备，同时设备被热拔出。
 
-## 设备节点从哪来
+## Where Device Nodes Come From
 
 `cdev_add` 只建立内核内部的映射，用户态看不到任何东西。`/dev/mydev0` 这个入口由 [设备模型](/docs/CS/OS/Linux/dev/device.md) 与 devtmpfs 合作生成：`device_add()` 里（`drivers/base/core.c`）有这段：
 
@@ -418,7 +418,7 @@ int cdev_device_add(struct cdev *cdev, struct device *dev)
 
 三者分工是：内核负责在 devtmpfs 上建出**最朴素**的节点（正确的主要/次要号、默认权限）；用户态 [udev](/docs/CS/OS/Linux/dev/udev.md) 监听 uevent，再按规则改权限、改属主、建稳定符号链接（`/dev/serial/by-id/...`）。纯手工验证时也可以 `mknod /dev/mydev0 c 240 0` 直接建节点——这正说明**节点只是 (类型, 主号, 次号) 三元组的一个具名入口**，不含任何驱动信息。
 
-## 快捷方式：miscdevice
+## Shortcut: miscdevice
 
 如果一个驱动只需要**一个**设备号、且不想去申请主设备号，内核提供了 misc 子系统：所有 misc 设备共享主设备号 `MISC_MAJOR`（10），只用次设备号区分。结构极其简单（`include/linux/miscdevice.h`）：
 
@@ -517,7 +517,7 @@ int misc_register(struct miscdevice *misc)
 
 misc 的代价是**打开时要遍历链表**找次号，且与所有 misc 设备共享主设备号 10——所以它只适合"一个驱动一个设备"的小设备。内核里用它的远比想象的多：KVM（232）、FUSE（229）、TUN/TAP（200）、UHID（239）、VHOST_NET（238）、loop-control（237）、device-mapper 控制节点（236）、HPET（228）、 watchdog（130）、hwrng（183）都在 `miscdevice.h` 里占着固定次号。
 
-## 用户态怎么打交道
+## Interacting from User Space
 
 驱动运行在内核态，用户态传来的指针**不能直接解引用**——那个地址在当前页表里可能根本无效，或者是恶意构造的。必须用带检查的拷贝：`copy_to_user()` / `copy_from_user()` 内部先做 `access_ok()` 校验，越界返回未拷贝字节数（不是负 errno），失败要 `-EFAULT`。
 
@@ -525,7 +525,7 @@ ioctl 是字符设备的"万能后门"，命令号按方向/大小/类型/序号
 
 阻塞语义由驱动自己实现，标准做法是在 `read` 里检查数据是否就绪，不就绪就把当前任务挂到等待队列上睡眠，中断或写侧再唤醒——这套机制与 [惊群](/docs/CS/OS/Linux/proc/thundering_herd.md) 里 socket 的阻塞读完全同构。想让用户态能多路复用，就额外实现 `poll`（返回就绪掩码 + 注册等待队列），设备立刻获得被 [epoll](/docs/CS/OS/Linux/IO/epoll.md) 监听的能力。
 
-## 与块设备的对照
+## Comparison with Block Devices
 
 两类接口的设计取舍几乎处处相反，对照着看最容易记住：
 
@@ -543,7 +543,7 @@ ioctl 是字符设备的"万能后门"，命令号按方向/大小/类型/序号
 
 一句话概括：**字符设备给驱动自由度，块设备给内核控制权**。要不要内核帮忙做缓存、做 I/O 调度、做回写，是选择二者的根本判据——这也是为什么 loop 设备明明是"用文件模拟磁盘"却必须做成块设备。
 
-## 跨子系统边界
+## Crossing Subsystem Boundaries
 
 字符设备不是孤立的，它几乎和内核每个子系统都有接触面：
 

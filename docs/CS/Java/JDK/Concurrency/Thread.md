@@ -1619,7 +1619,7 @@ See [OpenHFT Java Thread Affinity library](https://github.com/OpenHFT/Java-Threa
 优先级分配的是 时间片长度 不保证执行顺序
 
 
-### 线程间通信
+### Inter-thread Communication
 
 
 

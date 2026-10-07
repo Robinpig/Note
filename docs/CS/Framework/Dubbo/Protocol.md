@@ -9,9 +9,9 @@ Dubbo 协议（`dubbo://`）的报文格式是理解整个 RPC 框架的解剖�
 
 本文所有结论来自 Apache Dubbo **3.3.6** 官方源码（`apache/dubbo` 仓库 tag `dubbo-3.3.6`），默认值一律标注文件与行号，网上流传但与源码不符的说法会在文中显式标出。
 
-## Dubbo 协议报文格式
+## Dubbo Protocol Message Format
 
-### 16 字节头布局
+### 16-Byte Header Layout
 
 头部长度是常量 16，magic number 是 `0xdabb`：
 
@@ -67,7 +67,7 @@ Bytes.int2bytes(body.length, header, 12);             // [12..15] body 长度
 
 解码侧先校验魔数与 `HEADER_LENGTH`，再从 `header[2]` 取 flag 与序列化 id、从 `header[3]` 取 status、从 `[4..11]` 取 request id，由 id 在 `DefaultFuture` 中找回对应的请求 future——这就是 Dubbo 在单条 TCP 连接上多路复用的全部基础。
 
-### 协议版本
+### Protocol Version
 
 ```java
 // dubbo-common/src/main/java/org/apache/dubbo/common/Version.java:46
@@ -76,7 +76,7 @@ public static final String DEFAULT_DUBBO_PROTOCOL_VERSION = "2.0.2";
 
 `DUBBO_VERSION` 默认 `"2.0.2"`，写在 body 里随请求携带。这个「2.0.2」是 Dubbo 协议自身的格式版本号，与 Dubbo 框架版本（3.3.6）无关——从 2.x 到 3.x，协议格式没有大改，这也是 `dubbo://` 长期保持兼容的原因。
 
-### DubboCodec：从 Exchange 层到 RPC 层的桥
+### DubboCodec: Bridge from Exchange Layer to RPC Layer
 
 ```java
 // dubbo-rpc/dubbo-rpc-dubbo/.../codec/DubboCodec.java:61-63
@@ -87,7 +87,7 @@ public class DubboCodec extends ExchangeCodec {       // :61 ExchangeCodec 的�
 
 `DubboCodec` 继承 `ExchangeCodec`（`DubboCodec.java:61`），复用 16 字节头的编解码，只覆写 body 的序列化/反序列化。网络层挂载的编解码器是 `DubboCountCodec`（负责拆包粘包并把解码计数带出来），它内部委托给 `DubboCodec`。
 
-### 请求 body 的对象顺序
+### Object Order of Request body
 
 body 按 `DubboCodec` 中 `encodeRequestData` 的写入顺序固定为六个元素：
 
@@ -100,7 +100,7 @@ body 按 `DubboCodec` 中 `encodeRequestData` 的写入顺序固定为六个元�
 
 响应 body 的形态由 status 决定：`OK` 时先写结果值，有附件时在结果后追加 attachments；异常 status 时直接写异常对象。**顺序是硬编码的**——解码按同样下标读回，跳读任何一个字段都会导致后续字节流错位，这是抓包分析 Dubbo 协议时最常犯的错误。泛化调用也不改变这一结构：`path`/`method`/描述串照常写真实值，差异在第 5 项参数值以 Map 形态（带 `generic` 附件标注）承载——泛化是「参数表示法」的变化，不是「报文格式」的变化。
 
-### status 字段的取值
+### Values of status Field
 
 `header[3]` 的 status 由 `ChannelStatus`（`dubbo-remoting-api`）定义，常见取值：
 
@@ -116,13 +116,13 @@ body 按 `DubboCodec` 中 `encodeRequestData` 的写入顺序固定为六个元�
 
 解码侧对 status 的判断很直接：非 `OK` 时响应 body 携带的是异常对象而非调用结果，`DefaultFuture.completeExceptionally` 走异常路径。服务端处理请求时若来不及构造业务结果，`DubboProtocol` 也会主动构造带异常 status 的 `Response` 回写。
 
-### 半包与粘包：NEED_MORE_INPUT 的实践
+### Half-Packet and Sticky-Packet: Practice of NEED_MORE_INPUT
 
 Dubbo 协议的 TCP 流没有分隔符，拆包完全依赖解码器的状态判断。`Codec2.decode` 返回 `DecodeResult.NEED_MORE_INPUT` 时，`AbstractCodec` 侧会把 buffer 的 readerIndex 回退并暂停读取，等待下一批网络数据；magic 校验失败则用 `SKIP_SOME_INPUT` 跳过脏字节重新对齐。理解这一点才能解释 Dubbo 的两个经典现象：半包请求不会产生半执行的调用（解码不完整就不分发），以及流中出现非 `0xdabb` 开头的脏数据时连接靠跳帧自愈而不是直接断开。
 
-## Codec2 体系与注册现状
+## Codec2 System and Current Registration Status
 
-### Codec 与 Codec2 是两个独立接口
+### Codec and Codec2 Are Two Independent Interfaces
 
 一个常见的想当然是「`Codec2` 继承自老的 `Codec`」——不成立。二者是**平行的两个 `@SPI` 接口**：
 
@@ -145,7 +145,7 @@ public interface Codec { ... }
 
 `Codec` 是遗留接口，已标 `@Deprecated`；现行体系全部基于 `Codec2`。
 
-### 接口方法打假
+### Debunk Interface Methods
 
 **`Codec2` 接口不存在 `encodeRequestData` / `decodeBody` 这两个方法**。这两个名字属于实现类的 `protected` 方法，而非 SPI 接口契约：
 
@@ -154,7 +154,7 @@ public interface Codec { ... }
 
 SPI 接口只声明 `encode` / `decode` 两个方法加一个 `DecodeResult` 枚举。把 protected 实现方法当成接口方法写进文档，会导致对「自定义编解码器需要实现什么」产生错误预期——自定义 Codec 实现的是 `Codec2.encode/decode`，拆包状态机（粘包/半包处理）也要自己在 `decode` 里用 `NEED_MORE_INPUT` 表达。
 
-### Codec2 扩展注册全景
+### Codec2 Extension Registration Overview
 
 ```properties
 # dubbo-remoting/dubbo-remoting-api/src/main/resources/META-INF/dubbo/internal/org.apache.dubbo.remoting.Codec2
@@ -169,7 +169,7 @@ dubbo=org.apache.dubbo.rpc.protocol.dubbo.DubboCountCodec
 
 就这五条。**没有 thrift / tri / rest 的注册**——triple 协议不走 `Codec2` 体系，它通过 `WireProtocol`（`dubbo-remoting-api` 的另一个 SPI）接入，详见 [Triple](/docs/CS/Framework/Dubbo/Triple.md)。`DefaultCodec` 是 3.x 新增的抽象基类体系（`pu` 包），为端口复用/多协议探测服务。
 
-### WireProtocol 与 Codec2 的分工
+### WireProtocol and Codec2 Division of Labor
 
 3.x 引入 `WireProtocol` 后，编解码体系实际是双轨制：
 
@@ -182,7 +182,7 @@ dubbo=org.apache.dubbo.rpc.protocol.dubbo.DubboCountCodec
 
 实践含义：给 Dubbo 3 写新协议应实现 `WireProtocol`，而不是再挂一个 `Codec2` 扩展——`Codec2` 体系在 3.x 中服务于存量协议，不再扩展。
 
-## Exchange 层与请求响应映射
+## Exchange Layer and Request-Response Mapping
 
 ### ExchangeHandler
 
@@ -198,7 +198,7 @@ public interface ExchangeHandler extends ChannelHandler, TelnetHandler {   // :2
 
 它同时继承了 `ChannelHandler`（连接事件）与 `TelnetHandler`（telnet 指令），`reply()` 是 twoway 请求的服务端入口。
 
-### HeaderExchangeHandler 的分发
+### HeaderExchangeHandler Dispatch
 
 ```java
 // dubbo-remoting/dubbo-remoting-api/.../exchange/support/HeaderExchangeHandler.java:49
@@ -219,7 +219,7 @@ public class HeaderExchangeHandler implements ChannelHandlerDelegate {
 
 客户端与服务端的收发路径在这里分叉：客户端收到的是 `Response`，按 request id 唤醒等待中的 future；服务端收到的是 `Request`，进入 `reply()` 业务逻辑后回写响应。
 
-### DefaultFuture：id 到 future 的映射表
+### DefaultFuture: Mapping Table from id to future
 
 ```java
 // dubbo-remoting/dubbo-remoting-api/.../exchange/support/DefaultFuture.java
@@ -229,13 +229,13 @@ private static final Map<Long, DefaultFuture> FUTURES = new ConcurrentHashMap<>(
 
 两张静态表构成了 Dubbo 的请求-响应映射：发请求时以全局自增 id 建 `DefaultFuture` 入表，收到响应按 id 出表并 `complete`。这也是单连接多路复用不会串包的保证——id 全局唯一，表按 id 索引。
 
-## 超时机制：时间轮定时器，不是扫描线程
+## Timeout Mechanism: Time-Wheel Timer, Not a Scanning Thread
 
-### 打假 RemotingInvocationTimeoutScan
+### Debunk RemotingInvocationTimeoutScan
 
 网上大量资料描述「`RemotingInvocationTimeoutScan` 线程每 30ms 扫描所有 future 检查超时」——这是 2.x 早期的实现，**3.3.6 中 `RemotingInvocationTimeoutScan` 这个类不存在**，也不存在「每 30ms 全表扫描」的行为。
 
-### 3.3.6 的真实实现：HashedWheelTimer + 单 future 单 timeout
+### 3.3.6 Actual Implementation: HashedWheelTimer + Single Future Single Timeout
 
 ```java
 // dubbo-remoting/dubbo-remoting-api/.../exchange/support/DefaultFuture.java:65-67
@@ -250,7 +250,7 @@ timeout = TIMEOUT_TIMER.newTimeout(timeoutCheckTask, future.getTimeout(), TimeUn
 
 每个 `DefaultFuture` 创建时独立注册一个 `newTimeout(task, future.getTimeout(), MILLISECONDS)`（`:107-110`），超时检查任务 `TimeoutCheckTask` 在 `:311-348`：触发后把 future 从 `FUTURES`/`CHANNELS` 移除，标记 `TIMEOUT` 并唤醒等待线程。30ms 是时间轮的 **tick 精度**（到期检查的分辨率），不是「扫描周期」——时间轮按到期时间哈希到槽位，不存在全表遍历。这是 O(1) 的定时器模型，与「扫描全部 future」的 O(n) 模型是两回事。
 
-### 默认超时值
+### Default Timeout Value
 
 ```java
 // dubbo-common/src/main/java/org/apache/dubbo/constants/CommonConstants.java:147
@@ -259,9 +259,9 @@ int DEFAULT_TIMEOUT = 1000;  // 默认方法调用超时 1000ms
 
 即未配置 `timeout` 时，一次调用 1 秒即超时。超时后客户端 future 标记失败，但服务端可能仍在执行——这就是 Dubbo 经典的「超时后 provider 仍在跑」问题，与协议无关，是异步映射模型的固有语义。
 
-## 协议家族现状与迁移说明
+## Protocol Family Status and Migration Notes
 
-### dubbo-rpc 模块全景
+### dubbo-rpc Module Overview
 
 `dubbo-rpc/` 下**只有 4 个模块**：
 
@@ -292,7 +292,7 @@ rest2=org.apache.dubbo.rpc.protocol.tri.RestProtocol
 injvm=org.apache.dubbo.rpc.protocol.injvm.InjvmProtocol
 ```
 
-### 打假：那些「不存在」的协议模块
+### Debunk: Those "Non-Existent" Protocol Modules
 
 | 网传模块 | 3.3.6 现状 |
 | :--- | :--- |
@@ -306,7 +306,7 @@ injvm=org.apache.dubbo.rpc.protocol.injvm.InjvmProtocol
 > [!TIP]
 > 判断「某协议在当前 Dubbo 3 里是否可用」的最快方法：看 `dubbo-rpc/` 的模块列表与各模块 `META-INF/dubbo/internal/org.apache.dubbo.rpc.Protocol` 文件。主仓库内可用协议就是 `dubbo`、`tri`、`grpc`、`rest2`、`injvm` 五个名字，其余一律需要引入 extensions 依赖。
 
-## 默认值汇总表
+## Default Value Summary Table
 
 | 项目 | 值 | 源码位置 |
 | :--- | :--- | :--- |
@@ -322,7 +322,7 @@ injvm=org.apache.dubbo.rpc.protocol.injvm.InjvmProtocol
 | `dubbo-rpc` 模块 | api / dubbo / injvm / triple 共 4 个 | 目录结构 |
 | 可用协议名 | `dubbo`、`tri`、`grpc`、`rest2`、`injvm` | 各模块 SPI 文件 |
 
-## 陷阱清单
+## Pitfall List
 
 | 直觉/网传说法 | 源码实际 | 后果 |
 | :--- | :--- | :--- |

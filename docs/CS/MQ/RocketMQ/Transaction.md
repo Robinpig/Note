@@ -29,9 +29,9 @@ Producer                  Broker
   │ ⑤ endTransaction(REPLY)  ──▶│ 补偿到达
 ```
 
-## Topic 与 flag 常量
+## Topic and Flag Constants
 
-### Topic 名称
+### Topic Name
 
 `common/src/main/java/org/apache/rocketmq/common/topic/TopicValidator.java:29-34`：
 
@@ -48,7 +48,7 @@ Producer                  Broker
 
 两者都在 `SYSTEM_TOPIC_SET`（`:62,64`）与 `NOT_ALLOWED_SEND_TOPIC_SET`（`:73,74`）中 —— **客户端不能直接发送**，只能由 Broker 内部流程写入。Broker 启动时初始化为 1 读 1 写队列（`broker/.../topic/TopicConfigManager.java:197-215`）。
 
-### sysflag 事务位
+### sysflag Transaction Bit
 
 `common/src/main/java/org/apache/rocketmq/common/sysflag/MessageSysFlag.java:33-38`：
 
@@ -70,7 +70,7 @@ public final static int TRANSACTION_ROLLBACK_TYPE = 0x3 << 2;
 
 占用 byte1 的 bit2~bit3。辅助方法：`getTransactionValue(flag) = flag & 0xC`，`resetTransactionValue(flag, type) = (flag & ~0xC) | type`。
 
-## 半消息为什么对消费者不可见
+## Why Half Messages Are Invisible to Consumers
 
 > [!IMPORTANT]
 > **不是靠 flag 屏蔽，而是靠改写 topic。** 关键代码在 `broker/.../transaction/queue/TransactionalMessageBridge.java:219-237`：
@@ -87,7 +87,7 @@ msgInner.setQueueId(0);                                          // ← 强制 0
 
 因为用户不订阅这个系统 topic，消费端就看不见 —— 这是**存储层实现**而非过滤逻辑，可靠性比「消费时判断 flag 跳过」高得多。
 
-### 半消息照常占 20 字节 ConsumeQueue 单元
+### Half Messages Still Occupy 20-byte ConsumeQueue Units
 
 ```java
 // store/.../ConsumeQueue.java:851-853
@@ -101,7 +101,7 @@ this.byteBufferIndex.putLong(tagsCode);  // 8B  tag hashcode / ext 地址
 > [!TIP]
 > 5.5.1 中**没有**任何「半消息不占 ConsumeQueue」的开关，commitlog 侧也**没有**针对 half topic 的特殊 `PutMessageStatus` 分支。
 
-## 事务 ID 与 opaque 的误解
+## Misconceptions About Transaction ID and opaque
 
 > [!WARNING]
 > **`opaque` 不是本地事务 ID，也不是 Producer 端的 `endTransactionOpaque`。**
@@ -132,18 +132,18 @@ this.byteBufferIndex.putLong(tagsCode);  // 8B  tag hashcode / ext 地址
 > [!NOTE]
 > 5.5.1 中 `GetMessageResponseHeader` 类**不存在**。
 
-## 事务回查：两个方向要分清
+## Transaction Check: Two Directions to Distinguish
 
 > [!WARNING]
 > 常见说法「Broker 主动 pull 事务回查消息」部分正确但**极易误导**。准确表述是**两个动作，方向不同**：
 
-### 动作一：Broker pull half/op 消息（走 RocketMQ 自己的存储）
+### Action 1: Broker Pulls half/op Messages (via RocketMQ Own Storage)
 
 `TransactionalMessageServiceImpl.check()` 调 `getHalfMsg()` / `fillOpRemoveMap()`，最终 `TransactionalMessageBridge.java:112-124` 调 `store.getMessage(...)`，即 `DefaultMQPushConsumer` 式拉取。half 用 `new SubscriptionData(topic, "*")`。
 
 **这是为了拿到「哪些消息还没定论」这个列表，属于消费语义。**
 
-### 动作二：Broker 向 Producer 发 RPC（`CHECK_TRANSACTION_STATE`）
+### Action 2: Broker Sends RPC to Producer (CHECK_TRANSACTION_STATE)
 
 `broker/.../client/net/Broker2Client.java:74-88`：
 
@@ -177,7 +177,7 @@ public void checkProducerTransactionState(final String group, final Channel chan
 
 Producer 侧处理入口：`client/.../ClientRemotingProcessor.java:72-73`，注册于 `MQClientAPIImpl.java:336`。
 
-### 调度器与配置
+### Scheduler and Configuration
 
 `TransactionalMessageCheckService`（`extends ServiceThread`）：
 
@@ -215,7 +215,7 @@ protected void onWaitEnd() {
 > [!IMPORTANT]
 > **回查超限不是「告警」，而是直接丢弃消息。** `needDiscard` 达 15 次即调 `resolveDiscardMsg` 丢弃 —— 这本身就是「不保证强一致、允许丢弃」的直接证据。
 
-## BrokerController 没有 checkTransactionalState
+## BrokerController Has No checkTransactionalState
 
 > [!WARNING]
 > 全仓 grep `checkTransactionalState` → **零命中**。5.5.1 的 `BrokerController` **没有**该方法（4.x 资料里的常见写法）。
@@ -229,7 +229,7 @@ protected void onWaitEnd() {
 | 调度器 | `broker/.../transaction/TransactionalMessageCheckService.java` |
 | 监听器 | `broker/.../transaction/queue/DefaultTransactionalMessageCheckListener.java` |
 
-## 三种回调结果的处理路径
+## Processing Paths for Three Callback Results
 
 Producer 侧（`client/.../producer/DefaultMQProducerImpl.java:403-436`）：
 
@@ -260,7 +260,7 @@ Slave 模式直接返回 `SLAVE_NOT_AVAILABLE`（`:65-69`）。
 > [!NOTE]
 > 官方文档 `docs/en/Design_Transaction.md` 说明了为什么 rollback 只能「打标」而非删除：*"RocketMQ can't actually delete a message because it is a sequential-write file"* —— 顺序写文件无法物理删除中间的消息。
 
-## 完整时序
+## Complete Sequence
 
 ```
 Producer                          Broker
@@ -294,7 +294,7 @@ Producer                          Broker
   │────────────────────────────────▶ 补偿到达
 ```
 
-## 用户侧 API
+## User-side API
 
 ### TransactionListener
 
@@ -341,14 +341,14 @@ public class TransactionMQProducer extends DefaultMQProducer {
     private TransactionListener transactionListener;
 ```
 
-### @RocketMQTransactionListener 不在 5.5.1 主仓库
+### @RocketMQTransactionListener Not in 5.5.1 Main Repo
 
 > [!WARNING]
 > 全仓 grep `RocketMQTransactionListener` → **零命中**；模块列表无 `spring/`；grep `rocketmq-spring` 于 pom → 零命中。**5.5.1 主仓库已不含 Spring 支持。**
 >
 > 因此注解及其属性 `rocketMQTemplateBeanName`、`corePoolSize`、`maxReconsumeTimes` **在本 tag 内未查到** —— 它们属于独立的 `rocketmq-spring-boot-starter` 项目（`apache/rocketmq-spring`），需要另去那个仓库核实，不能挂在 5.5.1 名下。
 
-## 与 Spring 事务 / XA / Seata 的关系
+## Relationship with Spring Transaction / XA / Seata
 
 > [!NOTE]
 > **未查到**源码或 5.5.1 仓内文档中对 "XA"、"Seata"、"AT 模式"、"强一致/最终一致" 的任何直接表述（grep 无命中）。以下是基于源码事实的推断，不是官方引用。
@@ -363,7 +363,7 @@ public class TransactionMQProducer extends DefaultMQProducer {
 
 按此可判断它与 Seata AT 的差异：AT 靠 undo_log 自动生成反向补偿，RocketMQ **不生成反向补偿**，只做「问清楚再定论」；且 RocketMQ 的回查是**有次数上限的**，超了直接丢，而 Seata AT 的全局事务会一直重试回滚。
 
-## 死信与重试 topic 前缀
+## Dead-letter and Retry topic Prefix
 
 `common/.../MixAll.java:103-104`：
 
@@ -377,7 +377,7 @@ public static final String DLQ_GROUP_TOPIC_PREFIX = "%DLQ%";
 >
 > `TopicValidator` 注释（`:44-47`）确认 retry/DLQ topic 形如 `%RETRY%group_topic`，故 `GROUP_MAX_LENGTH = 120`、`RETRY_OR_DLQ_TOPIC_MAX_LENGTH = 255`（`:48-49`）。
 
-### 定时清理
+### Scheduled Cleanup
 
 > [!WARNING]
 > **`checkExpireMessage` 不存在**（全仓零命中）。实际机制在 `store/.../DefaultMessageStore.java:1931-1938` `addScheduleTask()`：
@@ -392,7 +392,7 @@ this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
 **未查到**：Op 消息（`RMQ_SYS_TRANS_OP_HALF_TOPIC`）有任何独立的过期清理逻辑 —— 它依赖 CommitLog 文件级过期被一并清理。
 
-## 实践要点
+## Practice Key Points
 
 | 事项 | 建议 |
 | ---- | ---- |
@@ -404,7 +404,7 @@ this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 | 消费者侧 | 事务消息对消费者是**完全透明的** —— 消费者不需要任何特殊处理，只看到「最终可见的消息」 |
 | 与 Seata 混用 | 两者解决的问题不同（Seata 管跨服务数据库事务，RocketMQ 管消息可达性）。可配合使用但需注意：RocketMQ 事务**允许丢弃**，Seata 侧重补偿，混用时不要指望 RocketMQ 侧的「已提交」等于「数据一定正确」 |
 
-## 5.x 补充
+## 5.x Addendum
 
 5.5.1 新增 `proxy/service/transaction/` 包支持 Proxy 模式下的事务消息：`TransactionService`、`AbstractTransactionService`、`ClusterTransactionService`、`LocalTransactionService`、`TransactionData`、`TransactionDataManager`、`EndTransactionRequestData`。
 

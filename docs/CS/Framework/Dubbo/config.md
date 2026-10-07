@@ -9,7 +9,7 @@ Dubbo 的配置体系是「多来源叠加 + 逐层覆盖」的模型：同一�
 
 本文基于 Apache Dubbo **3.3.6** 官方源码，优先级顺序直接引用 `Environment` 的装配代码，不做凭印象的排序。
 
-## 配置来源与优先级
+## Configuration Source and Priority
 
 配置源的装配顺序写在 `Environment` 里，源码注释本身就是权威答案：
 
@@ -54,7 +54,7 @@ this.appConfiguration         = new InmemoryConfiguration("AppConfig");
 > [!TIP]
 > 生产上最实用的推论：想临时压掉配置中心下发的值做验证，用 `-D` 启动参数即可，它比配置中心优先；想固化一版默认值给所有环境，写 `dubbo.properties` 是一档兜底，但**任何注解 / API 的显式设置都会覆盖它**，不要用它来做「强制值」。
 
-## 三种配置形态
+## Three Configuration Forms
 
 按使用方式，Dubbo 配置可以归为三类，它们最终都会被归一化成 `AbstractConfig` 的子类实例：
 
@@ -66,7 +66,7 @@ this.appConfiguration         = new InmemoryConfiguration("AppConfig");
 
 无论用哪种形态，配置项最终的载体都是 `AbstractConfig` 的字段（如 `ProtocolConfig.port`、`ApplicationConfig.name`）。配置项 key 的命名规则是「`dubbo.` + 模块名 + `-` + 连字符化字段名」，例如 `dubbo.application.name`、`dubbo.application.serialize-check-status`。
 
-## ConfigManager 与配置加载
+## ConfigManager and Configuration Loading
 
 配置的管理者是 `ConfigManager`（应用级）与 `ModuleConfigManager`（模块级）：
 
@@ -141,7 +141,7 @@ public void refreshAll() {
 }
 ```
 
-## 配置中心的启动链路
+## Startup Chain of the Configuration Center
 
 配置中心的加载是整个启动流程的第一步，入口是 `DefaultApplicationDeployer.initialize()` 调用的 `startConfigCenter()`：
 
@@ -183,7 +183,7 @@ private void startConfigCenter() {
 
 **应用名必须在配置中心加载之前确定**，因为应用级配置（AppExternal）是按应用名订阅的。源码里那句注释 "application config has load before starting config center" 就是这个约束。
 
-### 用注册中心兼作配置中心
+### Use the Registry as a Configuration Center
 
 出于兼容性考虑，如果没有显式配置配置中心、且注册中心未禁止，Dubbo 会把注册中心直接当配置中心用：
 
@@ -266,7 +266,7 @@ private ConfigCenterConfig registryAsConfigCenter(RegistryConfig registryConfig)
 }
 ```
 
-## dubbo.properties 的加载路径
+## dubbo.properties Load Path
 
 `dubbo.properties` 的默认文件名只有一个，**就是 classpath 根目录下的 `dubbo.properties`**：
 
@@ -292,7 +292,7 @@ return ConfigUtils.loadProperties(classLoaders, path, false, true);
 > [!WARNING]
 > **`classpath:/META-INF/dubbo/dubbo.properties` 并不是 Dubbo 的默认查找路径。** 这个路径字符串只出现在 `dubbo-spring-boot-*` 的测试用例 `@PropertySource` 里（如 `CompatibleDubboAutoConfigurationTest.java:44`），不构成框架行为。把配置文件放到 `META-INF/dubbo/` 下**不会被自动加载**，这是很常见的误配。
 
-## 常见配置陷阱
+## Common Configuration Pitfalls
 
 | 现象 | 原因 | 处理 |
 | :--- | :--- | :--- |

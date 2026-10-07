@@ -475,7 +475,7 @@ exchange=org.apache.dubbo.remoting.exchange.codec.ExchangeCodec
 default=org.apache.dubbo.remoting.api.pu.DefaultCodec
 ```
 
-## 扩展点清单
+## Extension Point List
 
 `Transporter` 的注册分散在**两个模块**里，且`netty` 与 `netty4` 是同一个实现类的两个名字：
 
@@ -490,7 +490,7 @@ netty3=org.apache.dubbo.remoting.transport.netty.NettyTransporter
 
 `Dispatcher` 的 5 个扩展名（`all` / `direct` / `message` / `execution` / `connection`）与笔记旧版完全一致，仍然有效。
 
-## Exchange 层与 3.3.6 新增模块
+## Exchange Layer and New Modules in 3.3.6
 
 `Endpoint` / `Channel` 只是「一条连接」的抽象，**真正被业务代码拿到的是 Exchange 层**：`Exchanger` 把 `Channel` 包装成 `ExchangeChannel`，而它的 header 协议实现在 3.3.6 位于：
 
@@ -517,7 +517,7 @@ dubbo-remoting/dubbo-remoting-api/src/main/java/org/apache/dubbo/remoting/exchan
 >
 > 这三个模块用的是**各自独立的 `HttpMessage*` 工厂扩展点**，不是 `Transporter` / `Codec2`。想跟它们打交道，不要去 `org.apache.dubbo.remoting.Transporter` 的 SPI 文件里找。
 
-## 陷阱清单
+## Pitfall List
 
 > [!WARNING]
 >

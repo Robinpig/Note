@@ -4,7 +4,7 @@ TypeScript 的类型系统有几个反直觉的设计：**它是结构化的**�
 
 对应的四条主干能力：结构化子类型、控制流收窄、泛型与变型、类型层面的计算。
 
-## 结构化类型 vs 名义类型
+## Structural Types vs Nominal Types
 
 TS 判断兼容性靠**结构**：成员对得上就兼容，不需要显式 `implements`。
 
@@ -54,7 +54,7 @@ let o: OrderId = "o-1" as OrderId
 
 TS 选结构化 + 容忍漏报，符合它"渐进采用、不打断现有 JS"的定位。
 
-## 控制流分析（CFA）与类型收窄
+## Control Flow Analysis (CFA) and Type Narrowing
 
 TS 里变量的类型不是静态标注，**而是随控制流变化**的。这是贯穿整个检查器的核心机制，也是 TS 比"只是加类型注释"强的地方。
 
@@ -114,7 +114,7 @@ function isString(x: unknown): x is string {
 }
 ```
 
-## 泛型与变型（Variance）
+## Generics and Variance
 
 写这行代码时的直觉差异来自变型规则：
 
@@ -126,7 +126,7 @@ let a: A = (x) => {}
 let b: B = a          // OK：参数更宽的函数，可以当窄的用
 ```
 
-### 协变与逆变
+### Covariance and Contravariance
 
 | 位置 | 变型 | 直觉 |
 |------|------|------|
@@ -163,11 +163,11 @@ type Consumer<in T>  = (t: T) => void // 只消费，逆变
 | `const` 类型参数 | `<const T extends string[]>` | TS 5.0，推断时不再放宽到宽泛类型 |
 | `NoInfer<T>` | `<T>(names: NoInfer<T>[])` | TS 5.4，指定某个位置**不参与**推断 |
 
-## 类型层的计算：类型体操
+## Computation at the Type Level: Type Gymnastics
 
 TS 的类型层是一门纯函数式的迷你语言：有递归、**有条件分支**、有模式匹配（`infer`）、甚至可以尾递归优化到相当深。
 
-### 条件类型
+### Conditional Types
 
 ```typescript
 type IsString<T> = T extends string ? true : false
@@ -188,7 +188,7 @@ type 不分配 = ToArrayNoDist<string | number>  // (string | number)[]
 
 想关掉分配，用 `[T] extends [U]` 包一层把它变成非裸类型。**这条规则几乎是所有类型体操 bug 的源头。**
 
-### infer：类型层的模式匹配
+### infer: Pattern Matching at the Type Level
 
 ```typescript
 type ReturnType_<T> = T extends (...args: any[]) => infer R ? R : never
@@ -207,7 +207,7 @@ type R = HeadTail<"abc">     // ["a", "bc"]
 
 顺带一个 TS 7 的真实修复：旧实现按 **UTF-16 code unit** 遍历字符串，遇到 emoji 这种代理对会被切坏，`HeadTail<"😀abc">` 在 TS 6 得到 `["\ud83d", "\ude00abc"]` 半个 emoji。Go 移植版按 Unicode code point 遍历，TS 7 得到 `["😀", "abc"]`。横跨所有非 BMP 字符（emoji、部分 CJK 扩展区）的字符串类型操作因此修正。
 
-### 映射类型
+### Mapped Types
 
 ```typescript
 type Optional<T>  = { [K in keyof T]?: T[K] }              // 全部可选
@@ -229,7 +229,7 @@ type G = Getters<{ id: number; name: string }>
 
 内置的字符串操作工具：`Uppercase`、`Lowercase`、`Capitalize`、`Uncapitalize`。
 
-### 该在哪里停手
+### Where to Stop
 
 类型体操的成本是真实且容易被低估的：
 
@@ -242,7 +242,7 @@ type G = Getters<{ id: number; name: string }>
 
 一个实用的判断准则：**如果一段类型逻辑无法用一句话向同事解释清楚它想表达什么，就该退化成值层代码加显式标注。** 类型系统的价值在于承担文档和重构保障，而不是炫技。真需要复杂推导时，宁可用几条简单的约束手写几份重载，也别写一段谁都不敢碰的递归。
 
-## 不健全的地方（坑表）
+## Soundness Holes (Pitfall Table)
 
 TS 刻意保留了若干 unsound hole。知道它们在哪，比背一百个语法糖有用：
 
@@ -266,7 +266,7 @@ function g(x: unknown) { x.foo() }  // Error: Object is of type 'unknown'
 
 `unknown` 是类型安全的顶层类型——可以接收任何值，但在收窄之前什么都不让做。它是动态数据的正确落点。
 
-### satisfies：既要推断又要约束
+### satisfies: Both Inference and Constraints
 
 ```typescript
 const routes = {
@@ -281,7 +281,7 @@ const r: string = routes.user            // OK
 
 用**冒号注解**会把 `routes` 的类型压成 `Record<string, ...>`，丢失具体键；用 `satisfies` 则先按字面量推断，再校验它是否满足约束。这是 TS 4.9 之后写配置对象的标准方式。
 
-## 与运行时边界的配合
+## Cooperation with Runtime Boundaries
 
 类型只在编译期存在，边界上进来的数据（HTTP body、JSON 解析、`process.env`、`JSON.parse`）**天然是 `unknown`**。行业惯例是让 schema 成为唯一真相源：
 

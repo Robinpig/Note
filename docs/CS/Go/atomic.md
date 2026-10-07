@@ -21,7 +21,7 @@ swapped := atomic.CompareAndSwapInt64(&counter, old, new)
 - **Swap / CompareAndSwap**：Swap 无条件换；CAS 条件换，是无锁算法的核心——「读旧值 → 计算新值 → CAS 提交」，失败则重试（retry loop）。
 - **Pointer / Value**：`atomic.Pointer[T]`（泛型，Go 1.19+）与 `atomic.Value` 支持原子地整体替换一个接口/指针，常用于**无锁配置热更新、单例切换**：Store 一个新配置，所有读方 Load 到的总是某个完整版本，不会看到半更新状态。
 
-## 泛型原子类型（Go 1.19+）
+## Generic Atomic Types (Go 1.19+)
 
 Go 1.19 起，`sync/atomic` 提供一组**类型安全的原子值类型**，把「传 `&x` + 函数式 API」升级成「方法式 API」，且对指针类型做到编译期类型检查。它们底层用的还是同一套原子指令，只是接口更友好、更不容易写错（不必反复手写 `&x`、不必担心对齐/地址传错）。
 
@@ -47,7 +47,7 @@ cfg := config.Load() // *Config，类型安全，无需断言
 
 选型：新代码优先用类型化原子；函数式 `atomic.AddInt64` 等仍保留，适用于手头只有普通 `*int64` 或需要与旧代码互操作的场景。当要原子替换的不是一个指针、而是一个任意值（如某个 struct 整体），仍可用非泛型的 `atomic.Value`。注意 `atomic.Pointer[T]` 的 `T` 是所指向的类型（方法操作 `*T`），不能把值类型直接放进去。
 
-## CAS Loop（无锁模式）
+## CAS Loop (Lock-Free Mode)
 
 ```go
 for {

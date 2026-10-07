@@ -23,20 +23,20 @@ free_percpu(ptr);
 
 x86-64 上 `this_cpu_*` 通常编译成一条以 `gs:` 段基址寻址的指令（如 `incq %gs:offset`），原子且免抢占——这是"副本 + 单指令"能做到的最快计数方式。
 
-## 正确性前提
+## Correctness Prerequisites
 
 1. **写侧只属于本 CPU**：`per_cpu(var, cpu)` 直写别的 CPU 的副本是被禁止的（除非你知道对方无法访问它）。操作本 CPU 变量期间必须保证不被迁移到别的 CPU——`get_cpu_var`/`this_cpu_*` 隐含禁抢占，裸用 `per_cpu(var, smp_processor_id())` 则要自己 `preempt_disable()`；
 2. **单次 RMW ≠ 复合原子**：`this_cpu_inc` 是一条指令，但"读→判断→写"的多步逻辑仍会被抢占打断，需要显式禁抢占或锁；
 3. **其他 CPU 可以读你的副本**（比如统计聚合），但没有一致性保证——要么容忍瞬时偏差（多数统计场景无所谓），要么聚合时加锁/用 [seqlock](/docs/CS/OS/Linux/Lock/rwsem.md?id=seqlock) 模式。
 
-## 典型应用
+## Typical Applications
 
 - **统计计数**：`percpu_counter`（带 `batch` 容差的聚合计数器：各 CPU 记增量，够一批才合并到全局值；vmstat、`nr_files` 等都用它）；
 - **slab 分配器的 per-CPU 对象缓存**：分配/释放对象通常只碰本 CPU 的 freelist，无锁无原子；
 - **网络与块设备的热路径**：per-CPU 收发队列、per-CPU backlog，避免包处理在核间竞争；
 - **per-CPU 副本 + 机制组合**：与 [RCU](/docs/CS/OS/Linux/Lock/RCU.md)（每 CPU 经历静止状态）、per-CPU seqlock（latch 方案）搭配是常见套路。
 
-## 与锁的取舍
+## Trade-offs Against Locks
 
 | | 锁 / 原子操作 | per-CPU 变量 |
 | :-- | :-- | :-- |
@@ -48,7 +48,7 @@ x86-64 上 `this_cpu_*` 通常编译成一条以 `gs:` 段基址寻址的指令�
 
 经验法则：**计数器、缓存、队列这类"高频单变量写"先想想能不能 per-CPU 化，不行再上锁**；反之复合不变量只能用锁。
 
-## 用户态对照
+## User-Space Comparison
 
 同一个思想在各语言运行时里反复出现：Java 的 `LongAdder`（Striped64，按 cell 分散计数）、Go 的 per-P mcache/本地 runq（见 [GMP](/docs/CS/Go/Concurrency/Goroutine.md?id=gmp)）、C/C++ 的 `thread_local`。它们都验证同一条规律——**把共享拆成按执行单元隔离，再在低频路径上聚合**。
 

@@ -5,7 +5,7 @@
 > [!NOTE]
 > 核实时间 2026-10。版本号均取自 GitHub API `/releases/latest` 现场请求。**托管网格普遍落后上游**：上游 Istio 已到 1.31.1，而 Google Cloud Service Mesh 到 1.30.4、阿里云 ASM 到 1.29、Azure AppNet 到 1.30.3、AKS add-on 到 1.29。
 
-## 竞品横评
+## Competitor Comparison
 
 | 项目 | 归属 | 最新版本 | 状态 |
 | :-- | :-- | :-- | :-- |
@@ -27,7 +27,7 @@ CNCF **毕业项目**（2017-01 进入，2018-04 Incubating，**2021-07-28 Gradu
 
 **未查到**：Linkerd 的 Istio ambient 模式兼容能力、Service Mesh Performance 证书状态、与 Istio 的互操作方案。
 
-### Cilium Service Mesh（eBPF 路线）
+### Cilium Service Mesh (eBPF Approach)
 
 Cilium **1.12（2022-07-20）整体 GA**，其中包含「完全无 sidecar」的 Cilium Service Mesh，同时保留既有基于 sidecar 的 Istio 集成；1.12 引入 `CiliumEnvoyConfig`（CEC）CRD 直接编程 Envoy 做高级 L7。当前版本 v1.20.2，`pushed_at` 2026-10-04（核实时当天），25.6k stars，CNCF Graduation level。
 
@@ -59,7 +59,7 @@ Cilium 官方有与 **Istio ambient 模式**及 sidecar 模式的集成文档—
 
 **未查到**：Connect 是否有明确 EOL 时间表、L7 能力是否被标记限制或弃用、与 Istio/Linkerd 的互操作方案。
 
-### Open Service Mesh：已归档
+### Open Service Mesh: Archived
 
 > [!WARNING]
 > **OSM 已被 CNCF 正式归档**（不是仅 Microsoft 停更）。仓库 README 顶部横幅：「**⚠️ The OSM project has been officially archived by the CNCF. There will be no more new development on any repo under the OpenServiceMesh organization.⚠️**」；「There are no more community meetings for this project」。
@@ -68,7 +68,7 @@ Cilium 官方有与 **Istio ambient 模式**及 sidecar 模式的集成文档—
 
 **未查到**：精确归档日期（仅有上述边界证据，**不建议在笔记中写具体归档日期**）；**README 归档公告未列出官方推荐的迁移去向**（第三方提及 Kuma 等，非官方）。
 
-## 微软：两条并行产品线
+## Microsoft: Two Parallel Product Lines
 
 当前微软有**两条并行的 Istio 托管线**，容易混淆：
 
@@ -94,9 +94,9 @@ Cilium 官方有与 **Istio ambient 模式**及 sidecar 模式的集成文档—
 
 「Open Service Mesh for Azure」这一产品名**未查到**任何官方资料——OSM 归档后微软未以该名延续。
 
-## 云厂商托管网格
+## Cloud Provider Managed Mesh
 
-### AWS App Mesh：已终止支持
+### AWS App Mesh: Support Ended
 
 官方公告（页面顶部 Important 框重复两次）：
 
@@ -119,7 +119,7 @@ AWS 当前实际布局：① **ECS Service Connect**（App Mesh 官方后继）�
 - 两种实现模式：支持 **`TRAFFIC_DIRECTOR`**（Google 自己的 xDS 实现，非 Envoy/Istio 数据面），该实现的直连集群默认使用 distroless proxy 镜像。
 - 未托管的后果：「Istio 组件仍可运行，但 Google 不再管理 Istio 安装，你将不再收到自动更新，也不保证安装随 K8s 版本升级而工作」。
 
-### 阿里云 ASM
+### Alibaba Cloud ASM
 
 「基于原生的 Istio 提供以多语言流量管理为核心的解决方案」。**当前最高支持 Istio 1.29**（2026-06 发布，**2027-04 过期**）；1.28（2027-01）、1.27（2026-11）、1.26（2026-09）；**1.25 及以下已过期**（1.25 于 2026-05 过期）。
 
@@ -127,9 +127,9 @@ AWS 当前实际布局：① **ECS Service Connect**（App Mesh 官方后继）�
 
 版本增强：1.29 支持 **ztunnel 证书吊销列表（CRL）校验**、ServiceEntry 实验性支持 DYNAMIC_DNS 下 TLS 通配符 hosts、`/stats/prometheus` 默认支持 HTTP 压缩（brotli/gzip/zstd）；1.28 全面支持 Gateway API v1.4、ztunnel 支持 L7 访问日志（默认关闭）、支持 InferencePool v1。特有 CRD：`ASMMeshConfig`、`ASMReconcileNSLabels`。
 
-## 多集群与多网格
+## Multi-Cluster and Multi-Mesh
 
-### Istio 多集群
+### Istio Multi-Cluster
 
 四种拓扑：Multi-Primary、Primary-Remote、Multi-Primary on different networks、Primary-Remote on different networks。
 
@@ -144,14 +144,14 @@ AWS 当前实际布局：① **ECS Service Connect**（App Mesh 官方后继）�
 
 1.31 的多集群稳定性提升：ambient 模式**凭据轮换不再导致 stale snapshot 或丢失 endpoint shards**；修复多集群内存与 goroutine 泄漏；CNI node agent 修复并发 map 写 panic、fd 泄漏、Pod 删除死锁；1.31.1 修复远程集群凭据轮换泄漏整个集群缓存状态（#60033）。
 
-### 跨网格互联的现状
+### Current State of Cross-Mesh Interconnection
 
 > [!WARNING]
 > **Istio 不提供任何跨 mesh 信任 bundle 交换工具**（官方原话）。可用 **SPIFFE Trust Domain Federation** 协议自行交换。
 >
 > **跨 Istio mesh ↔ Linkerd 等异构网格：未查到任何标准方案或官方支持声明。** 不要断言存在标准互联路径。
 
-## 选型视角
+## Selection Perspective
 
 | 场景 | 建议 | 理由 |
 | :-- | :-- | :-- |

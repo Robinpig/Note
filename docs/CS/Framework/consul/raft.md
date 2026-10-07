@@ -5,13 +5,13 @@ Consul 把全局状态（catalog、KV、ACL、服务网格证书）的一致性�
 > [!NOTE]
 > 版本事实：2.0.x 当前主线（2.0.4，2026-09-09；2.0 分支 2026-05-24 GA），维护线 1.22.x / 1.21.x。Raft 相关参数自 1.x 起稳定，下文默认值以 1.21+/2.0 为准。
 
-## 角色与选举
+## Roles and Election
 
 - Consul server 内部维护一个标准 Raft 状态机：一个 **leader** 负责处理所有写（服务注册、KV 写、ACL 变更、connect CA 操作），follower 复制日志并响应读。
 - Leader 选举依赖 `raft_protocol`（Raft 协议版本，v3 起支持 `server_stabilization_time` 等 Autopilot 特性）。新 server 加入后需先通过 Autopilot 的**稳定期**才能成为 voting member。
 - 集群规模建议 **3 或 5** 个 server（奇数，容忍 `(n-1)/2` 故障）；不要为"高可用"堆到 7+，会拖慢提交。
 
-## 持久化：LogStore 与 SnapshotStore
+## Persistence: LogStore and SnapshotStore
 
 server 的状态以 **WAL（append-only 轮转日志，LogStore）+ 快照（SnapshotStore）** 持久化在 `-data-dir`。关键参数：
 
@@ -23,7 +23,7 @@ server 的状态以 **WAL（append-only 轮转日志，LogStore）+ 快照（Sna
 
 快照与日志均存于 `-data-dir` 下的 `raft/` 子目录；WAL 与快照建议放低延迟磁盘（见 [Tuning](/docs/CS/Framework/consul/tuning.md)）。**WAN 各 DC 独立一套 Raft**，互不复用日志。
 
-## Autopilot：自动化 Raft 运维
+## Autopilot: Automated Raft Operations
 
 Autopilot（1.4+ 通用，部分特性仅 Enterprise）降低运维误操作风险。默认配置（来自 `/v1/operator/autopilot/configuration`）：
 
@@ -38,7 +38,7 @@ Autopilot（1.4+ 通用，部分特性仅 Enterprise）降低运维误操作风�
 > [!TIP]
 > `max_trailing_logs` 默认只有 **250**——慢 server（磁盘 IO 差、网络抖动）容易"落后超限"被长期挡在投票圈外，表现为 `FailureTolerance` 下降、`/v1/operator/autopilot/health` 中 `Healthy=false`。这类问题优先查磁盘与跨 AZ 延迟，而非盲目加节点。
 
-### 健康检查与升级就绪
+### Health Check and Upgrade Readiness
 
 leader 周期性对每个 server 跑内部健康检查，判定条件：
 
@@ -49,11 +49,11 @@ leader 周期性对每个 server 跑内部健康检查，判定条件：
 
 `/v1/operator/autopilot/health` 返回 `Healthy`、`FailureTolerance`（还能丢几个 server）、各 server 的 `Voter` / `Healthy`。Enterprise 还有 `RedundancyZoneTag`（冗余区，每区最多一个 voter）与自动升级迁移（`DisableUpgradeMigration`）。
 
-### 配置生效方式
+### Config Effective Method
 
 Autopilot 参数仅在**引导期**从配置文件读取；引导后修改必须用 `consul operator autopilot set-config` 或 `PUT /v1/operator/autopilot/configuration`，且配置会存入 Raft 数据库——意味着它**包含在 `consul snapshot` 里**，跨 DC 各 DC 独立。
 
-## 与 etcd / ZooKeeper / Nacos 对照
+## Comparison with etcd / ZooKeeper / Nacos
 
 | 维度 | Consul | etcd | ZooKeeper | Nacos |
 | :--- | :--- | :--- | :--- | :--- |

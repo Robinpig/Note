@@ -338,7 +338,7 @@ func (c *Client) unaryClientInterceptor(optFuncs ...retryOption) grpc.UnaryClien
 > [!NOTE]
 > 本节源码引用基于 etcd **v3.5.34**（`client/v3/retry.go`）。配置项默认值以 `client/v3/config.go` 为准，不同版本略有差异，上生产前请对照所用版本核对。
 
-### 重试语义
+### Retry Semantics
 
 etcd 客户端把 RPC 分为两类，采用**截然不同**的重试策略。定义在 `client/v3/retry.go`：
 
@@ -434,7 +434,7 @@ func isSafeRetryMutableRPC(err error) bool {
 
 对照 [troubleshooting.md](/docs/CS/Framework/etcd/troubleshooting.md) 的错误码表，可以看出这套策略与 gRPC 语义的一处错配：`database space exceeded` 的 code 是 `ResourceExhausted`(8)，落在 gRPC 官方"可重试"集合里，但 etcd 自己的 `isSafeRetry*` 只放行 `Unavailable`——所以 NOSPACE 不会被客户端自动重试，这个坑实际上被客户端挡住了。
 
-### 配置项
+### Config Items
 
 | 配置项 | 默认值 | 说明 |
 | :--- | :--- | :--- |
@@ -463,7 +463,7 @@ func isSafeRetryMutableRPC(err error) bool {
 > [!WARNING]
 > **批量写入必须同步调大两侧限制**。`MaxCallSendMsgSize` 默认 2 MiB，但真正卡住的往往是服务端：`--max-request-bytes`（默认 1.5 MiB）。批量导入数据时客户端调大而不动服务端，会得到 `etcdserver: request is too large`。
 
-### 一致性读
+### Consistent Read
 
 `Range` 默认是**线性一致读**（需走 [ReadIndex](/docs/CS/Framework/etcd/raft.md) 与 leader 确认，多一次网络往返，本地集群约 1~5ms）。proto 里对此有明确说明：
 
@@ -489,7 +489,7 @@ resp, err := client.Get(ctx, "/registry/pods/default/my-pod", clientv3.WithSeria
 
 判据是数据的性质：**参与准入/调度决策的数据必须线性读；仅用于展示或缓存预热的可以 serializable**。
 
-### Lease 与 KeepAlive
+### Lease and KeepAlive
 
 [lease](/docs/CS/Framework/etcd/lease.md) 的续期由客户端的 `KeepAlive` 循环自动完成，但有两个坑：
 
@@ -507,7 +507,7 @@ resp, err := client.Get(ctx, "/registry/pods/default/my-pod", clientv3.WithSeria
 > [!NOTE]
 > 服务端侧还有一个对应机制：leader 切换后 TTL 的自动续期问题由 `CheckPointScheduledLeases` 定时任务同步给 follower（见 [lease.md](/docs/CS/Framework/etcd/lease.md)）。客户端 KeepAlive 与服务端 checkpoint 是配套的两侧机制。
 
-### 范围查询语义
+### Range Query Semantics
 
 `Range` 的 `range_end` 有几种约定，容易踩错（来自 `api/etcdserverpb/rpc.proto`）：
 

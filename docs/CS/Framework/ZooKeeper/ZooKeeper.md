@@ -1943,7 +1943,7 @@ ZooKeeper内部存储ZKDatabase可以看作是一个简化版本的 Redis 实现
 综上所述，内存空间是 Zookeeper 的死穴，内存决定了 Zookeeper 的数据存储上限，而磁盘 I/O 决定了 Zookeeper 的写入延迟与响应速度，使得 Zookeeper 只能支持几 GB 级别的数据存储，这是 Zookeeper 最大的局限性，也是 Zookeeper 在大规模集群中的瓶颈
 
 
-## 与 etcd 对照
+## Comparison with etcd
 
 etcd 是 ZooKeeper 在现代云原生时代最常被拿来比较的对象（完整维度矩阵见 [etcd 横向对照](/docs/CS/Framework/etcd/compare.md)）。两者都提供"一致性的分布式键值 + 协调"，但底层取舍差异很大：
 

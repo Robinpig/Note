@@ -2,7 +2,7 @@
 
 网络攻击按目的可粗分为三类：破坏**可用性**（DoS/DDoS，让服务无法响应）、破坏**机密性/完整性**（嗅探、欺骗、中间人，窃取或篡改数据）、以及未授权访问。下面是教材中最经典的几种报文级攻击，理解它们也是理解 [TCP 连接管理](/docs/CS/CN/CN.md?id=connection-oriented)、[ARP](/docs/CS/CN/ARP.md) 与 [TLS](/docs/CS/CN/TLS.md) 等防御机制设计动机的最好途径。整体安全属性框架（CIA）见 [Security](/docs/CS/CN/Security.md)。
 
-## IP 欺骗
+## IP Spoofing
 
 伪造源 IP 地址发送报文，使目标无法识别真实来源，或让响应被导向被冒充的主机。
 
@@ -44,7 +44,7 @@ TCP 报文头有 RST 位，用于异常关闭连接。攻击者（或链路上�
 
 防御：TLS 只保护数据内容、**不能防 RST 打断连接**（RST 在 TCP 层）；实际对抗靠流量混淆（域名前置、代理协议把流量封装在对中间人不透明的会话里）、WireGuard 等 VPN 封装，以及服务端忽略窗口外 RST/校验时间戳等加固。
 
-## Smurf Attack（ICMP 放大）
+## Smurf Attack (ICMP Amplification)
 
 > 原文小节标题 "Mock Attack" 应为经典的 **Smurf Attack**（蓝精灵攻击）。
 

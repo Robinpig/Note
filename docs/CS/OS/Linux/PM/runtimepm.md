@@ -6,7 +6,7 @@ runtime PM 管的是**单个设备的电源开关**，而且是"按需"的 —�
 
 版本基线 **v7.2**。
 
-## 核心模型：引用计数 + 状态机
+## Core Model: Reference Counting + State Machine
 
 驱动通过一对调用表达"我要用"和"我用完了"：
 
@@ -23,7 +23,7 @@ pm_runtime_put(dev);        /* 我用完了：引用计数 -1，归零则挂起 
 
 这个"归零不立即挂起"的设计是 autosuspend 的基础 —— 否则每次 `get`/`put` 配对都会导致设备反复通断电，既费电又费时间。
 
-## 状态机
+## State Machine
 
 ```c
 enum rpm_status {
@@ -58,7 +58,7 @@ enum rpm_status {
 
 **状态反映的是"PM 核心认为的状态"，不是设备的真实电源状态** —— 驱动可能没实现 `->runtime_suspend()`（此时状态照样变，但硬件没断电）。排查"设备为什么还耗电"时要看驱动是否真的实现了回调。
 
-## 电源状态结构
+## Power State Structure
 
 ```c
 	bool			idle_notification:1;
@@ -92,7 +92,7 @@ enum rpm_status {
 - **`deferred_resume:1`** —— 设备在 `-EPROBE_DEFER` 状态下的特殊处理。
 - `active_time` / `suspended_time` / `accounting_timestamp` 用于统计设备实际活跃/挂起时长。
 
-## dev_pm_ops：三个 runtime 回调
+## dev_pm_ops: Three Runtime Callbacks
 
 ```c
 struct dev_pm_ops {
@@ -113,7 +113,7 @@ struct dev_pm_ops {
 
 > ⚠️ **v7.2 的变化**：`struct dev_pm_ops` **没有** `def_runtime_resume` / `power_state_name` 字段；`DEFINE_FLEXOS_CLEANUP` 宏也不存在（改用 `DEFINE_GUARD` / `DEFINE_FREE`）。
 
-### 宏体系
+### Macro System
 
 ```c
 #define RUNTIME_PM_OPS(suspend_fn, resume_fn, idle_fn) \
@@ -142,7 +142,7 @@ struct dev_pm_ops {
 
 即：**只实现 runtime 回调，系统睡眠路径由 PM 核心用通用实现兜底**。若需要自定义睡眠行为，得用 `SYSTEM_SLEEP_PM_OPS` 系列宏。
 
-## get 的三个变体
+## Three Variants of get
 
 ```c
 extern void __pm_runtime_use_autosuspend(struct device *dev, bool use);
@@ -161,7 +161,7 @@ extern int devm_pm_runtime_get_noresume(struct device *dev);
 
 `get_noresume()` 的价值：一个"在设备已经醒着时也要标记我在用"的场景，用 `get_sync` 会触发一次不必要的恢复检查（虽然状态已经是 ACTIVE 时是廉价的，但仍有原子操作开销）。
 
-### RPM flag 参数
+### RPM Flag Parameters
 
 ```c
 #define RPM_ASYNC		0x01	/* Request is asynchronous */
@@ -175,7 +175,7 @@ extern int devm_pm_runtime_get_noresume(struct device *dev);
 
 `RPM_TRANSPARENT` 用于"runtime PM 没开也要成功"的场景 —— 适合那些"能省电就省电，但驱动不强制要求"的调用点。
 
-## put 与 autosuspend
+## put and Autosuspend
 
 ```c
 extern void pm_runtime_put(struct device *dev);
@@ -191,7 +191,7 @@ extern void pm_runtime_mark_last_busy(struct device *dev);
 
 **只"排队 idle 检查"，不立即挂起**。真正的判定在 autosuspend 路径。
 
-### autosuspend 的两个条件
+### Two Conditions for Autosuspend
 
 设备实际进入 autosuspend 需要**同时**满足：
 
@@ -213,7 +213,7 @@ static inline void pm_runtime_mark_last_busy(struct device *dev)
 
 **最后一次访问设备后延迟指定毫秒才挂起**。这是"避免突发小操作导致设备反复通断电"的核心机制 —— 比如键盘敲几个键就挂网卡显然不合理。
 
-### 请求类型
+### Request Types
 
 ```c
 enum rpm_request {
@@ -229,7 +229,7 @@ enum rpm_request {
 
 `runtime_idle` 与 `runtime_suspend` 的区别在 `RPM_REQ_IDLE` vs `RPM_REQ_SUSPEND` 里体现：前者是"轻量省电"，后者是"完全断电"。
 
-## Power domain：跨设备的电源域
+## Power Domain: Cross-device Power Domain
 
 ```c
 struct dev_pm_domain {
@@ -255,7 +255,7 @@ struct dev_pm_domain {
 
 `->set_performance_state()` 值得注意：它把 [devfreq](/docs/CS/OS/Linux/PM/devfreq.md) 的性能状态请求**接入 PM 核心**，实现设备性能与电源的统一管理。
 
-## 父子依赖：supplier/consumer
+## Parent-child Dependencies: supplier/consumer
 
 设备间有依赖关系（一个设备供电给另一个），runtime PM 核心通过 **supplier/consumer** 模型处理：consumer 恢复前先恢复 supplier。
 
@@ -272,7 +272,7 @@ extern void pm_runtime_put_suppliers(struct device *dev);
 
 这解释了一个常见现象：**HDMI/PCIe 这类"消费者"设备的 runtime PM 依赖"供应者"（PHY、时钟、电源域）**，只对消费者调 get 而不管供应者会在某些配置下出问题。
 
-## 与其他 PM 类型的关系
+## Relationship with Other PM Types
 
 | 机制 | 粒度 | 触发 | 设备回调 |
 | :-- | :-- | :-- | :-- |
@@ -284,7 +284,7 @@ extern void pm_runtime_put_suppliers(struct device *dev);
 
 runtime PM 与系统 suspend 有一个重要区别：**系统 suspend 期间所有设备都该挂起，而 runtime PM 只挂起"当前没人用"的设备**。因此系统 resume 后，runtime PM 挂起的设备仍是挂起状态，需要新的 get 才恢复。
 
-## sysfs 与调试
+## sysfs and Debugging
 
 每个设备的 PM 目录：
 
@@ -325,7 +325,7 @@ cat /sys/devices/platform/xxx/power/runtime_error  # 有挂起失败过？
 
 `runtime_error` 记录最近的失败错误码。反复出现 `-EAGAIN` 或 `-EBUSY` 说明设备的 `->runtime_suspend` 拒绝了挂起。
 
-## 与其它子系统的接缝
+## Seams with Other Subsystems
 
 - **设备模型**：`struct device.power` 与设备 probe/remove 的时序配合见 [设备模型 device](/docs/CS/OS/Linux/dev/device.md)。
 - **总线**：runtime PM 的回调最终由总线类型执行（PCI/USB/I2C 各自的 runtime_suspend），见 [dev 总线族](/docs/CS/OS/Linux/dev/bus.md)。
@@ -334,7 +334,7 @@ cat /sys/devices/platform/xxx/power/runtime_error  # 有挂起失败过？
 - **devfreq**：设备动态频率通过 power domain 接入 PM 核心，见 [devfreq](/docs/CS/OS/Linux/PM/devfreq.md)。
 - **中断**：设备挂起期间的 IRQ 处理约束（`irq_safe` 位的意义）。
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 ```shell
 # 全局统计：谁在耗电

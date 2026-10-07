@@ -6,13 +6,13 @@
 
 本篇讲清 lockdep 的**三个核心抽象**（锁类、依赖图、每任务持锁栈）和它报的**四类经典问题**，最后给一份"怎么读一个 splat"的速查。
 
-## 锁类与锁实例：为什么不是按地址
+## Lock Classes and Lock Instances: Why Not by Address
 
 lockdep 跟踪的单位是**锁类（lock class）**，不是某个具体的 `spinlock_t` 实例。一个 `struct lock_class` 由编译期嵌入的 `struct lockdep_map`（每个锁都有这个 `.dep_map` 字段）和它背后的 `struct lock_class_key` 标识。好处是：同一个 `kmalloc` 出来的 1000 把 spinlock，只要来源是同一段代码（`lockdep_map` 的 key 相同），它们**共享一个锁类**——否则内存耗爆、图也乱。
 
 但同一个代码位置有时需要区分"这是外层锁还是内层锁"，于是有了 **subclass**（0~7，`MAX_LOCKDEP_SUBCLASSES = 8`）。比如文件系统对目录项加锁时，父目录和子目录都来自同一处代码，必须用 `lockdep_set_subclass()` 或带 subclass 的加锁宏把它们标记为不同的类，否则 lockdep 会把合法的层级加锁误判成递归死锁。`rwsem` 的 `down_read_nested` / `mutex_lock_nest_lock` 就是为此而生。
 
-## 依赖图与每任务持锁栈
+## Dependency Graph and Per-Task Held-Lock Stack
 
 lockdep 维护两个东西：
 
@@ -23,7 +23,7 @@ lockdep 维护两个东西：
 
 关键点：**图是跨任务累积的全局知识**。一个 CPU 上先持有 A 再拿 B，另一个路径上若曾持有 B 再拿 A，哪怕两者从未在同一时刻同时发生，lockdep 也会报死锁——因为理论上那两个持锁窗口重叠就会锁死。这正是它能"提前"发现死锁的原因，也是它偶尔误报（需要 subclass 或 annotation 消解）的原因。
 
-## 四类经典问题
+## Four Classic Problem Types
 
 | 报错关键字 | 含义 | 机制 |
 | :-- | :-- | :-- |
@@ -36,7 +36,7 @@ lockdep 维护两个东西：
 
 > 历史注记：老内核里还有 `RECLAIM_FS` 状态位（fs-reclaim 上下文），在约 5.x 的 reclaim lockdep 重构中已被移除；v7.2.7 的状态位只剩 **hardirq / softirq 两对 safe-unsafe**。帖子里的老 splat 若提 RECLAIM_FS，那是对旧版本的描述。
 
-## 怎么读一个 splat
+## How to Read a splat
 
 一个典型的 circular 报告自上而下是：
 
@@ -48,7 +48,7 @@ lockdep 维护两个东西：
 
 排查顺序：**先看环本身（哪两把锁、谁嵌套谁）→ 再看两个历史调用栈确认哪条路径是"真会同时持锁" → 若是合法的层级嵌套，用 subclass/annotation 消解；若真是 bug，改加锁顺序**。
 
-## 配置、开销与误报消解
+## Configuration, Overhead, and False-Positive Resolution
 
 - **开启**：`CONFIG_PROVE_LOCKING`（默认选中会连带开 lockdep）。只调试内核用。
 - **关闭/屏蔽**：运行时 `echo 0 > /proc/sys/kernel/prove_locking` 可整体关掉检测；单把锁可用 `__lockdep_no_validate__` 或 `lockdep_set_novalidate_class()` 跳过；整个子系统对 RT 内核会用 `raw_spinlock_t` 替代 `spinlock_t` 以绕过。

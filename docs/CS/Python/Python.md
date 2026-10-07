@@ -23,7 +23,7 @@
 pip3 install numpy -i https://pypi.tuna.tsinghua.edu.cn/simple
 ```
 
-### 标准库
+### Standard Library
 
 [标准库](https://docs.python.org/3/library/)
 
@@ -33,7 +33,7 @@ pip3 install numpy -i https://pypi.tuna.tsinghua.edu.cn/simple
 - re
 - time
 
-### 第三方库
+### Third-Party Libraries
 
 | 分类 | 库 |
 |---|---|

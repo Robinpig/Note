@@ -4,18 +4,18 @@
 
 卡表的思路是**用空间换时间**：把堆按固定大小切成「卡」，在每次**写引用**时，只把「目标地址所在的卡」标脏（card marking）；回收年轻代时只需扫描被标脏的卡。
 
-## 版本基线
+## Version Baseline
 
 > [!NOTE]
 > **版本口径**：卡大小由全局参数 `GCCardSizeInBytes` 决定，**默认 512 字节**，取值范围 `128` ~ `MaxGCCardSizeInBytes`（**32 位平台 512 / 64 位平台 1024**），超出范围会在**解析命令行时**报错。
 >
 > 卡表是**基于卡的收集器**（G1 / Parallel / Serial / Shenandoah）共用的基础设施（OpenJDK 主干 `src/hotspot/share/gc/shared/cardTable.cpp`）。**ZGC 与 Epsilon 不使用它**——前者有自己的多阶段着色指针/负载屏障方案，后者根本没有屏障（JEP 318）。
 >
-> 参见 [GC 版本基线](/docs/CS/Java/JDK/JVM/JVM.md?id=版本基线)。
+> 参见 [GC 版本基线](/docs/CS/Java/JDK/JVM/JVM.md?id=version-baseline)。
 
-## 核心机制
+## Core Mechanism
 
-### 1. 卡大小的确定
+### 1. Determining Card Size
 
 `card_shift` 是卡大小的以 2 为底的对数，这样地址到卡号的换算就变成一次**右移**：
 
@@ -35,7 +35,7 @@ void CardTable::initialize_card_size() {
 > [!TIP]
 > **为什么是 512 字节？** 这是精度与开销的折中。卡越小，扫描越精确但卡表越大、写屏障的脏卡率越高；卡越大则反之。512 字节在两者间取了平衡，且正好是 2 的幂，使移位替代除法。
 
-### 2. 地址 → 卡号
+### 2. Address → Card Number
 
 核心是 `byte_for()`：给定任意堆内地址，右移 `_card_shift` 即可直接算出对应卡表项的位置——**无需查表、无需除法**：
 
@@ -53,7 +53,7 @@ CardValue* byte_for(const void* p) const {
 }
 ```
 
-### 3. `_byte_map_base` 的偏移技巧
+### 3. Offset Tricks of `_byte_map_base`
 
 这里有个容易看懵的设计。堆并非从地址 0 开始，但为了让数组下标与地址**线性对应**，需要一个「反推出来的虚拟基址」：
 
@@ -68,7 +68,7 @@ CardValue* byte_map_base() const { return _byte_map_base; }
 
 于是对任意地址 `p`，下标 `p >> card_shift` 天然包含了堆的低地址偏移，**不需要再减去堆起点**。代价是 `_byte_map_base` 指向实际卡表数组**之前**的某个地址——它只是用来做加法的基准，不是可解引用的指针。
 
-### 4. 类结构
+### 4. Class Structure
 
 ```cpp
 class CardTable: public CHeapObj<mtGC> {
@@ -93,7 +93,7 @@ protected:
 - **声明顺序即初始化顺序**，注释明确警告改动会破坏构造函数——因为这些字段之间存在依赖（`_page_size` 要先算，才能定 `_byte_map_size`）；
 - `_guard_index` 是**哨兵（sentinel）元素**，卡表最后一项固定为 `last_card` 值，让**越界检查不需要额外的比较分支**。
 
-## 写屏障：谁在标脏
+## Write Barrier: Who Marks Dirty
 
 卡表本身只是数据结构，**标记动作发生在写屏障里**。当应用线程执行「把一个引用写进某个对象」时，编译器插桩（interceptor 与 JIT 都会生成）会调用屏障代码：
 
@@ -110,7 +110,7 @@ protected:
 
 相关机制见 [GC 总览的 Generation 一节](/docs/CS/Java/JDK/JVM/GC/GC.md?id=generation)，G1 的具体用法见 [G1 Roots](/docs/CS/Java/JDK/JVM/GC/G1.md?id=roots)。
 
-## 为什么不用 bitmap 或别的方案
+## Why Not Use bitmap or Other Schemes
 
 | 方案 | 取舍 |
 | :-- | :-- |
@@ -121,7 +121,7 @@ protected:
 
 卡表能在**不依赖对象头**的前提下覆盖「数组内引用」与「栈上引用」这两类无处安放引用的场景，这是它在分代 GC 中长期存在的原因。
 
-## 观察与调优
+## Observation and Tuning
 
 ```bash
 # 打印卡大小与卡表范围（需要 -Xlog 支持）

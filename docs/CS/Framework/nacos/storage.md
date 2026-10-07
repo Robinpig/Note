@@ -1,4 +1,4 @@
-# Nacos 存储与持久化
+# Nacos Storage and Persistence
 
 ## Introduction
 
@@ -9,7 +9,7 @@ Nacos 的存储最容易踩的坑是：**它不是一个「全量落盘」的中
 
 所以「Nacos 用什么存储」要分两层答：共识元数据靠 **JRaft 日志 + 快照**（见 [JRaft](/docs/CS/Framework/nacos/jraft.md)），业务持久化靠 **Derby（单机）/ MySQL（集群）**。
 
-## Derby：单机内嵌，不可集群
+## Derby: Single-Node Embedded, Not Clustered
 
 - Nacos 默认内置 **Apache Derby**，standalone 模式开箱即用，无需外部依赖，`conf/derby-schema.sql` 初始化。
 - Derby 是**单文件嵌入式数据库**，**不支持多节点并发写入**：集群模式下若多个 Nacos 共用同一份 Derby 数据会直接报错 / 锁冲突。
@@ -21,7 +21,7 @@ Nacos 的存储最容易踩的坑是：**它不是一个「全量落盘」的中
 spring.datasource.platform=mysql
 ```
 
-## MySQL：集群生产存储
+## MySQL: Cluster Production Storage
 
 集群部署在 `application.properties` 里切到 MySQL，并导入 `conf/mysql-schema.sql`：
 
@@ -39,7 +39,7 @@ db.password.0=nacos
 - **所有节点必须连同一个 MySQL 实例 / 高可用 MySQL 集群**——Nacos 自身不复制 DB 数据，DB 的可用性是 CP 侧的单点，需要 DB 侧做主从 / 集群。
 - 3.x 起通过**多数据源插件**支持 PostgreSQL 等（官方文档「多数据源插件」），配置方式随插件而定，JDBC 驱动需自行放置；Oracle 11g 及以下官方插件已不再向下兼容。
 
-## 表结构（MySQL schema）
+## Table Structure (MySQL schema)
 
 Nacos 的库按职能分三组，约 11~15 张表（3.x 多出 AI 资源相关表）：
 
@@ -71,7 +71,7 @@ Nacos 的库按职能分三组，约 11~15 张表（3.x 多出 AI 资源相关�
 
 3.x 额外引入 `ai_resource` 等 AI 资源管理表，纳入同一 namespace 体系。
 
-### 配置主表关键列
+### Config Main Table Key Columns
 
 `config_info` 的几列决定了 Nacos 的运转方式：
 
@@ -82,11 +82,11 @@ Nacos 的库按职能分三组，约 11~15 张表（3.x 多出 AI 资源相关�
 - **`encrypted_data_key`**：配置加密场景下保存的数据密钥（配合配置加密插件，原文以密文存储）。
 - **`gmt_create` / `gmt_modified`**：时间戳，驱动 dump / 监听的增量判断。
 
-## 容量与配额
+## Capacity and Quota
 
 `tenant_capacity` / `group_capacity` 控制单租户、单分组的配额（最大配置数、最大容量、使用量）。超限会拒绝发布——容量相关异常在监控里表现为配置发布失败，排查时先看这两个表与对应配额配置。
 
-## 持久化边界小结
+## Persistence Boundary Summary
 
 | 数据 | 是否落 DB | 一致性 | 重启后 |
 | :-- | :-- | :-- | :-- |

@@ -2,7 +2,7 @@
 
 HAProxy（High Availability Proxy）是一款高性能的 **TCP/HTTP 负载均衡器与反向代理**，以事件驱动、单进程、非阻塞的架构著称，能在单核上处理数十万级并发连接，广泛用于 L4/L7 流量分发与高可用接入层。与 Nginx 自带 Web 服务器能力不同，HAProxy 更纯粹地聚焦「代理」本身。
 
-## 架构模型
+## Architecture Model
 
 HAProxy 采用 **event-driven + single process** 模型：一个进程（可绑定多核 worker）通过 epoll/kqueue 监听所有 socket，避免线程上下文切换与锁竞争。配合 `nbproc` / `nbthread`（新版统一用 `nbthread`）做多核扩展。
 
@@ -28,7 +28,7 @@ backend web_srv
     server s2 10.0.0.2:8080 check
 ```
 
-## 调度算法
+## Scheduling Algorithm
 
 `balance` 可选（部分需 `option httpchk` 配合）：
 
@@ -38,12 +38,12 @@ backend web_srv
 - `uri` / `url_param`：按请求 URI / 参数哈希，用于缓存亲和。
 - `first`：依次填满权重最高的节点，适合省电场景。
 
-## 健康检查与会话保持
+## Health Check and Session Persistence
 
 - **健康探测**：`server ... check` 开启 TCP 层探活；`option httpchk GET /health` 升级为 HTTP 层探测，`inter` / `rise` / `fall` 控制频率与阈值。
 - **会话保持**：`cookie` 注入（HTTP 模式）或 `stick-table`（跨进程共享，基于源 IP/端口做表项跟踪），比 `source` 算法更精准且对扩缩容更友好。
 
-## 与 LVS / Nginx 的取舍
+## Trade-offs with LVS / Nginx
 
 - **LVS**：纯 L4（IPVS），转发性能极致、无应用层解析，但无 URL 路由/重写能力。
 - **Nginx**：L7 反向代理 + 完整 Web 服务器，配置生态成熟；HAProxy 在纯粹代理场景的连接数、健康检查粒度、stick-table 上更专业。

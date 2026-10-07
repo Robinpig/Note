@@ -14,11 +14,11 @@ Spring Integration 提供一套统一的消息模型，把上述一切抽象成�
 
 一个常见的组合是：**外部文件到达 → Integration 的 file inbound adapter 感知 → 触发 Batch 的 Job → 处理结果经 Integration 的发件适配器投递出去**。二者是协作而非替代关系。
 
-### 版本基线
+### Version Baseline
 
 Spring Integration **7.0.0**（2025-11-19 GA）是 Boot 4 / Framework 7 一代的配套版本。它建立在 Java 17 基线、Jakarta EE 11、Jackson 3 之上，并随整个 Spring 产品组合做了几处统一升级——其中 `spring-retry` → Spring Core Retry 的替换是**编译期breaking change**，见文末迁移表。
 
-## 消息模型
+## Message Model
 
 一切的基础是 `Message<T>`，一个不可变的信封：
 
@@ -34,7 +34,7 @@ public interface Message<T> {
 > [!TIP]
 > Message 是不可变的。任何"修改"消息的操作（如 `MessageBuilder.withPayload(...).copyHeaders(...).build()`）实际都是构造新实例，header 由 `MessageBuilder` 显式继承。这个约束让消息在多线程通道间传递时无需额外同步。
 
-## 消息通道
+## Message Channels
 
 通道是生产者与消费者之间的解耦点，类型决定了投递语义：
 
@@ -49,7 +49,7 @@ public interface Message<T> {
 
 选错通道是集成代码最常见的性能与一致性问题。特别是：**把 `ExecutorChannel` 放进原本依赖 `DirectChannel` 单线程语义的链路，会静默丢掉事务边界**——前半段提交的事务不会因为后半段失败而回滚。
 
-## 端点与 EIP 模式
+## Endpoints and EIP Patterns
 
 端点负责把某个 EIP 模式接到通道上。核心组件：
 
@@ -92,7 +92,7 @@ class OrderIntegrationConfig {
 
 DSL 的价值在于：整条链路在一次链式调用里可见，重排、插入新处理环节、替换通道类型都只改一处。
 
-## 与外部系统的连接
+## Connection with External Systems
 
 真正"接触到外界"的是通道适配器（Channel Adapter），按方向分两类：
 
@@ -104,7 +104,7 @@ DSL 的价值在于：整条链路在一次链式调用里可见，重排、插�
 > [!NOTE]
 > 7.0 起所有 Integration 模块统一了包结构：组件按其用途迁到 `input` 或 `output` 包下。升级时按编译报错逐个调整 import 即可。
 
-## 错误处理
+## Error Handling
 
 每条流程都有一个隐式的 **error channel**。流程内任何未被捕获的异常会被包装成 `ErrorMessage`（payload 是 `MessagingException`，原始消息藏在 header 里）投递进去。因此处理方式有两种：
 
@@ -121,7 +121,7 @@ IntegrationFlow errorHandling() {
 .handle(orderProcessor(), e -> e.advice(retryAdvice()))
 ```
 
-### 重试
+### Retry
 
 7.0 把重试实现从 `spring-retry` 迁移到了 **Spring Framework Core 的 retry API**（整个 Spring 组合房的统一演进）。常用mapping：
 
@@ -140,22 +140,22 @@ IntegrationFlow errorHandling() {
 - **死信通道**：重试耗尽后投递到专门的通道而非丢弃，便于事后人工干预；
 - **Claim Check**：payload 过大时先存进 `MessageStore`，链路上只传递引用。
 
-## 消息存储
+## Message Storage
 
 需要跨步骤持久化消息时用 `MessageStore`（JDBC、Redis、MongoDB 等实现），聚合器等待分组、队列持久化、Claim Check 都依赖它。
 
 > [!WARNING]
 > 7.0 把消息存储表的 `MESSAGE_BYTES` 列更名为 **`MESSAGE_CONTENT`**——因为某些实现的序列化结果并不总是 byte[]。存量库升级时这是一处必须手工执行的 DDL，否则聚合器/持久化队列会直接报列不存在。
 
-## 分布式锁
+## Distributed Lock
 
 7.0 新增 `DistributedLock` 抽象并支持 **TTL 选项**用途很直接：多个实例同时轮询同一个 FTP 目录或同一张待处理表时，谁先拿到锁谁处理，避免重复捞取。TTL 是这类锁的救命配置——没有 TTL，拿到锁的实例崩溃后锁会永久悬挂，整个任务再也不会被处理。
 
-## 空安全
+## Null Safety
 
 与 Framework 7 一致，7.0 用 **JSpecify** 注解（`org.jspecify.annotations`）暴露空安全 API，取代原先零散的 JSR-305 注解。构建期用 NullAway 校验这些声明的一致性。Kotlin 用户可以据此获得原生可空类型推断，不必再手动加 `!!`。
 
-## 从 6.x 迁移到 7
+## Migration from 6.x to 7
 
 | 变更 | 说明 |
 | ---- | ---- |

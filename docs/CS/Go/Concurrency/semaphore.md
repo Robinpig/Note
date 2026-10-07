@@ -4,7 +4,7 @@
 
 与用 channel 当信号量（`sem := make(chan struct{}, 10)`）相比，`Weighted` 的关键点是**加权**：一次可以 `Acquire(3)`，而不是固定 1 个单位；与 [errgroup.SetLimit(n)](/docs/CS/Go/Concurrency/errgroup.md) 相比，它是更底层的原语——errgroup 的并发上限背后正是借它实现的。
 
-## 核心 API
+## Core API
 
 ```go
 import "golang.org/x/sync/semaphore"
@@ -31,7 +31,7 @@ if sem.TryAcquire(1) {
 - `(*Weighted).TryAcquire(n) bool`：非阻塞，成功 true、失败 false，信号量均保持不变。
 - `(*Weighted).Release(n)`：归还 n 个单位；**过量归还（归还量超过已持有）会 panic**。
 
-## 典型用法：限流并发任务
+## Typical Usage: Rate-limiting Concurrent Tasks
 
 ```go
 func fetchAll(ctx context.Context, urls []string) error {
@@ -56,7 +56,7 @@ func fetchAll(ctx context.Context, urls []string) error {
 
 申请与归还成对、用 `defer Release` 保证异常路径也归还；还想聚合错误就换 [errgroup.SetLimit](/docs/CS/Go/Concurrency/errgroup.md)，它内部正是用 `Weighted` 压并发。
 
-## 与 channel / errgroup / worker pool 的取舍
+## Trade-offs with channel / errgroup / worker pool
 
 | 方案 | 能力 | 适合 |
 | --- | --- | --- |
@@ -67,7 +67,7 @@ func fetchAll(ctx context.Context, urls []string) error {
 
 经验法则：只要「并发度」是唯一约束、任务彼此独立 → channel 或 `Weighted` 即可；需要「错误聚合 / 失败取消其余」→ [errgroup](/docs/CS/Go/Concurrency/errgroup.md)；任务同构且想避免每个任务起一个 goroutine → 走 worker pool。
 
-## 实现要点（FIFO 等待）
+## Implementation Notes (FIFO Waiting)
 
 `Weighted` 内部维护一个 FIFO 等待队列，每个等待者记录自己要申请的权重 n 和一个用于唤醒的 channel；同时保存已分配总量 `cur` 与上限 `size`：
 

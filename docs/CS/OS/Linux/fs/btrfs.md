@@ -10,7 +10,7 @@ btrfs 是 Linux 上最重要的 CoW（写时复制）文件系统。它不是" e
 
 版本基线 **v7.2**。⚠️ **v7.2 的结构定义已大改**：核心结构定义搬到 **uapi 头**（`include/uapi/linux/btrfs_tree.h`，1357 行），`fs/btrfs/` 下的私有头改用**下划线命名**（`block-group.h` / `delayed-ref.h` / `extent-io-tree.h`）。旧的 `btrfs_tree.h` 私有头**已不存在**。
 
-## 魔数与根
+## Magic Number and Root
 
 ```c
 #define BTRFS_MAGIC 0x4D5F53665248425FULL
@@ -20,7 +20,7 @@ btrfs 是 Linux 上最重要的 CoW（写时复制）文件系统。它不是" e
 
 > ⚠️ **旧资料里的 `BTRFS_SUPER_MAGIC` 及其四个变体（`_METADUP` / `_METADUP_V0` / `_CSUM_TREE`）在 v7.2 全部不存在** —— v7.2 只有单一 `BTRFS_MAGIC`。这些变体是历史遗留，用于识别旧格式磁盘，现在只读旧盘的代码才需要。
 
-## 五棵树
+## Five Trees
 
 btrfs 的核心是**所有元数据存在树里**。每棵树是一个 B+ 树，根由超级块指向。树用 objectid 区分：
 
@@ -78,7 +78,7 @@ btrfs 的核心是**所有元数据存在树里**。每棵树是一个 B+ 树，
 
 **256 是分界线**：用户空间 objectid 从 256 起分配，内核保留 < 256。
 
-## key：树的坐标
+## key: Coordinates of the Tree
 
 ```c
 struct btrfs_disk_key {
@@ -126,7 +126,7 @@ struct btrfs_key {
 
 **unlink 只是减引用计数，不立即释放；条目挪到 orphan 树，等事务提交后才真正删** —— 这样崩溃后能恢复，代价是需要处理"提交时发现还有引用"的情况。
 
-## 树深度
+## Tree Depth
 
 ```c
 #define BTRFS_MAX_LEVEL 8
@@ -154,7 +154,7 @@ struct btrfs_key {
 
 **用数组而非链表** —— 树搜索是热点，数组索引比链表快，且 `locks[]` 让同一路径上的锁有序获取（按 level 顺序）。
 
-## 时间戳：btrfs_timespec
+## Timestamp: btrfs_timespec
 
 ```c
 struct btrfs_timespec {
@@ -167,7 +167,7 @@ struct btrfs_timespec {
 
 为什么不用内核的 `timespec64`：**纳秒字段是 32 位**（最多约 2.1 秒），秒是 64 位。on-disk 格式省空间，所以定义了自己的类型。四个时间戳（atime/ctime/mtime/otime）都用这个类型。
 
-## 树映射链
+## Tree Mapping Chain
 
 从 inode 到磁盘块要走四步：
 
@@ -196,7 +196,7 @@ chunk tree 的作用在注释里说得很准：
 
 **chunk tree 就是一张"逻辑块号 → (设备, 物理块号)"的翻译表**。btrfs 把磁盘空间切成固定大小的 chunk（默认 256 MiB），每个 chunk 整体分配给某个设备的某个块组。多 RAID 情况下 chunk 跨设备由条带组成。
 
-## 写时复制
+## Copy-on-Write
 
 CoW 的核心规则：**任何要修改的块先复制一份，改动写在新块上，原块留给旧快照**。
 
@@ -213,7 +213,7 @@ CoW 的核心规则：**任何要修改的块先复制一份，改动写在新�
 
 `BTRFS_EXTENT_CSUM_OBJECTID` 的存在让校验和也是 CoW 的一部分。
 
-## 事务
+## Transactions
 
 所有修改都在事务里，提交时要么全成功要么全失败。v7.2 的 API：
 
@@ -227,13 +227,13 @@ int __btrfs_abort_transaction(struct btrfs_fs_info *fs_info, struct btrfs_trans_
 
 **树锁定**（`struct btrfs_tree_lock`）保证并发事务对同一棵树的操作互斥或可并行。`btrfs_start_transaction()` 决定本次事务锁哪些树 —— 读多写少时可以共享锁。
 
-### tree log：单设备快照的基础
+### tree log: The Basis for Single-Device Snapshots
 
 `BTRFS_TREE_LOG_OBJECTID` 是 btrfs 的**写前日志**。它让 `fsync` 一个文件时只提交该文件相关的块，而不用提交整个事务。
 
 > ⚠️ **v7.2 重写**：旧的 `btrfs_log_start_commit()` / `btrfs_log_append()` / `btrfs_log_commit()` / `btrfs_log_written()` **全部不存在**，改为单一的 `btrfs_log_inode()`。相关的还有 `tree-mod-log.h`（tree modification log）与 `orphan.h` —— 孤儿处理与 tree log 拆成了独立模块。
 
-## 挂载选项
+## Mount Options
 
 > ⚠️ **v7.2 用标准 `fs_parameter` API**（`fsparam_flag` / `fsparam_u32` / `fsparam_string` / `fsparam_enum`），**旧的 `FUSE_OPT` 式选项表已不存在**。选项枚举 `Opt_*` 仍在 `fs/btrfs/super.c`（约 45 个，含 `Opt_err` 兜底）。
 
@@ -273,7 +273,7 @@ int __btrfs_abort_transaction(struct btrfs_fs_info *fs_info, struct btrfs_trans_
 	 * specifying "compress".
 ```
 
-### 压缩算法
+### Compression Algorithm
 
 ```c
 	ctx->compress_type = BTRFS_COMPRESS_ZLIB;     /* 缺省 zlib */
@@ -304,7 +304,7 @@ int __btrfs_abort_transaction(struct btrfs_fs_info *fs_info, struct btrfs_trans_
 
 **LZO 不支持压缩等级**（LZO 压缩格式本身不带等级参数）—— 读 `/proc/mounts` 或 mountinfo 时会看到 LZO 没有 level 后缀。
 
-## ioctl 接口
+## ioctl Interface
 
 `include/uapi/linux/btrfs.h` 的完整 ioctl 清单（按序号）：
 
@@ -347,7 +347,7 @@ int __btrfs_abort_transaction(struct btrfs_fs_info *fs_info, struct btrfs_trans_
 
 `BTRFS_IOC_LOGICAL_INO` 对应 btrfs 的 **virtual inode** 特性 —— 逻辑 inode 号与物理 inode 分离，所以 `BTRFS_LOOKUP` 之类操作不暴露物理位置（子卷复制 / 重定位后 inode 号会变，但对用户保持稳定）。
 
-## sysfs 接口
+## sysfs Interface
 
 ```
 /sys/fs/btrfs/<devid>/
@@ -402,7 +402,7 @@ cat /sys/fs/btrfs/<devid>/global_rw/balance_progress
 cat /sys/fs/btrfs/<devid>/global_rw/space_cache_commit_interval
 ```
 
-## 与其它子系统的接缝
+## Interfaces with Other Subsystems
 
 - **块层**：chunk 是块层的分配单位（默认 256 MiB），多设备映射依赖 device mapper 或原生多路径，见 [dev/char.md](/docs/CS/OS/Linux/dev/char.md) 的块设备部分与 [dev/block.md](/docs/CS/OS/Linux/dev/block.md)。
 - **VFS**：CoW 语义对 `stat` / `fallocate` / `copy_file_range` 有特殊语义（reflink），见 [fs/fs.md](/docs/CS/OS/Linux/fs/fs.md)。

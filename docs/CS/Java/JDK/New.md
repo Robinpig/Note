@@ -8,7 +8,7 @@ Lambda
 ## 9
 ### JShell
 
-### 接口私有方法
+### Interface Private Methods
 
 
 Java8 带来了许多改变，其中之一就是 default 修饰的接口方法。这些方法改变了我们已知的接口，现在我们能够在接口中定义默认实现方法。如果你大量使用 default 方法在你的应用接口中，现在可以通过 JDK9 的接口私有方法来重构。
@@ -34,7 +34,7 @@ public interface PrivateInterface {
 
 
 ## 10
-### var 类型推断
+### var Type Inference
 
 
 var 是 Java10 版本中新出的特性，用它来定义局部变量。var 不是关键字，相当于一种动态类型，编译器根据变量所赋的值来推断类型。所以必须在定义变量的时候赋初始值。
@@ -60,7 +60,7 @@ var 是 Java10 版本中新出的特性，用它来定义局部变量。var 不�
 ```
 ## 12
 
-### switch 表达式
+### switch Expression
 
 - 如下逻辑，当我们需要判断某天是否是工作日时候，需要大量的重复的 case 逻辑
 
@@ -183,7 +183,7 @@ public record Demo(String username, String password) {
 ```
 
 ## 15
-### Sealed 类封闭
+### Sealed Class Confinement
 
 
 可扩展性不是面向对象编程的一个重要指标吗？为什么要限制可扩展性呢？其实，面向对象编程的最佳实践之一，就是要把可扩展性的限制在可以预测和控制的范围内，而不是无限的可扩展性。

@@ -37,7 +37,7 @@ UMA 即一致内存访问：所有处理器通过一条共享总线（或交叉�
 - Linux 的 NUMA 平衡（AutoNUMA）会自动迁移页面靠近访问它的任务，但迁移本身有成本，数据库常用 `numa=interleave` 或显式绑核避免抖动；
 - JVM/数据库（MySQL、Redis 集群）在多路机器上常见的优化就是按 NUMA node 切分实例，避免远程访问。
 
-## 缓存一致性：UMA/NUMA 共同的底层问题
+## Cache Coherence: The Underlying Issue Shared by UMA/NUMA
 
 每个核心有私有 L1/L2 和共享 L3，同一地址在多个 cache 中可能有副本，写操作必须让其他副本失效或更新——这由硬件**缓存一致性协议**保证（对软件透明）：
 
@@ -45,7 +45,7 @@ UMA 即一致内存访问：所有处理器通过一条共享总线（或交叉�
 - 写共享变量时的缓存行乒乓（cache line bouncing）是多核扩展的隐形杀手，与软件层面的**伪共享**（false sharing）直接相关，见 [Parallel 并行性能](/docs/CS/OS/Parallel.md)；
 - 内存屏障（memory barrier）解决的是编译器/CPU 重排序的可见性问题，与缓存一致性是两层不同概念。
 
-## 层次结构回顾
+## Hierarchy Review
 
 完整存储层级：寄存器 → L1（~1ns，核私有）→ L2（数 ns，核私有）→ L3（十余 ns，socket 共享）→ 本地 DRAM（~80–100ns）→ 远程 NUMA DRAM（更慢）→ SSD/磁盘。越往下容量越大、越慢，详见 [Cache](/docs/CS/CO/Cache.md) 与 OS 的 [内存管理](/docs/CS/OS/Linux/mm/memory.md) 笔记。
 

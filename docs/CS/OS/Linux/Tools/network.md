@@ -56,7 +56,7 @@ ethtool -l eth0         # 队列数（与 RSS/CPU 中断均衡相关）
 - **ip link / arp / arping**：二层状态与免费 ARP；原理见 [ARP](/docs/CS/CN/ARP.md)。
 - **tc（iproute2）**：流量控制（Qdisc、HTB 限流、netem 模拟延迟丢包），压测构造弱网必备：`tc qdisc add dev eth0 root netem delay 100ms loss 1%`。
 
-## 排障路径速查
+## Troubleshooting Path Quick Reference
 
 ```
 网页打不开

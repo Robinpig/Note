@@ -28,7 +28,7 @@ mmap 有两种映射方式，一种是匿名映射，常用于进程动态的向
 
 当我们调用 mmap 之后，OS 内核只是会为我们分配一段虚拟内存，然后将虚拟内存与磁盘文件进行映射，整个过程都只是在和虚拟内存打交道，并未出现任何物理内存的身影
 
-这句话还差一半：**mmap 建立的是 VMA，不是页表**。此时这段地址在内核眼里只是"一段约定了性质的虚拟区间"，页表树上连对应的 PTE 表都还没分配。直到第一次真正访问这段地址触发缺页，内核才沿地址逐级把页表建出来（`p4d_alloc` / `pud_alloc` / `pmd_alloc`）并填入 PTE。所以"只和虚拟内存打交道"的假象，本质是**页表树的按需生长**在兜底——见 [页表](/docs/CS/OS/Linux/mm/pagetable.md?id=惰性生长：缺页时逐级建表)。对称地，munmap 一侧也不只是删掉 VMA：页表要沿 [free_pgtables](/docs/CS/OS/Linux/mm/pagetable.md?id=释放页表：递归下降) 自顶向下逐级回收，并走 [mmu_gather](/docs/CS/OS/Linux/mm/pagetable.md?id=mmu_gather：批量-tlb-失效) 批量失效 TLB。
+这句话还差一半：**mmap 建立的是 VMA，不是页表**。此时这段地址在内核眼里只是"一段约定了性质的虚拟区间"，页表树上连对应的 PTE 表都还没分配。直到第一次真正访问这段地址触发缺页，内核才沿地址逐级把页表建出来（`p4d_alloc` / `pud_alloc` / `pmd_alloc`）并填入 PTE。所以"只和虚拟内存打交道"的假象，本质是**页表树的按需生长**在兜底——见 [页表](/docs/CS/OS/Linux/mm/pagetable.md?id=lazy-growth-building-tables-level-by-level-on-page-fault)。对称地，munmap 一侧也不只是删掉 VMA：页表要沿 [free_pgtables](/docs/CS/OS/Linux/mm/pagetable.md?id=releasing-page-tables-recursive-descent) 自顶向下逐级回收，并走 [mmu_gather](/docs/CS/OS/Linux/mm/pagetable.md?id=mmu_gather-batch-tlb-invalidation) 批量失效 TLB。
 
 
 ```c
@@ -415,7 +415,7 @@ out:
 }
 ```
 
-### 与 v7.2.7 的差异
+### Differences from v7.2.7
 
 上面这两段 `populate_vma_page_range()` / `__get_user_pages()` 摘录自较早的内核版本（约 5.x）。对照 v7.2.7，几处已经变了：
 

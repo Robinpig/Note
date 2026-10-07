@@ -724,7 +724,7 @@ func scanobject(b uintptr, gcw *gcWork) {
 
 
 
-## 三色标记的不变量
+## Tri-color Marking Invariants
 
 并发三色标记把对象抽象成三种颜色：
 
@@ -739,7 +739,7 @@ func scanobject(b uintptr, gcw *gcWork) {
 
 为何必须保证：标记过程中若某个黑对象在其变黑**之后**才被插入一条指向白对象的指针，且这条白对象不再被任何灰对象引用，那么扫描永远不会再访问它，它会被误回收——产生悬空指针、破坏程序正确性。写屏障正是为了在指针变更时把相关对象重新置灰、从而维持不变性（见上方 `gcStart` 注释中的 "no white to black invariant"）。
 
-## 混合写屏障（hybrid write barrier，Go 1.8）
+## Hybrid Write Barrier (hybrid write barrier, Go 1.8)
 
 Go 1.7 及之前对栈用 Dijkstra 插入式写屏障、对堆用 Yuasa 删除式写屏障，但栈上的指针无法被屏障覆盖，必须在标记终止阶段 STW 重扫所有 goroutine 栈，停顿可达几十毫秒。
 
@@ -750,11 +750,11 @@ Go 1.8 引入**混合写屏障**，把两种思路合并、并**同时覆盖栈�
 
 配合"栈上指针在标记开始时整体置灰、标记期间不再需要屏障重扫"的设计，混合写屏障使弱三色不变性在并发阶段始终成立。效果上，标记终止（STW）时间从十毫秒级降到亚毫秒级（约 ~0.5ms），这是 Go 实现低延迟 GC 的关键改进。
 
-## 标记终止（mark termination，STW）
+## Mark Termination (mark termination, STW)
 
 当所有灰色对象耗尽、并发标记逻辑完成时，GC 进入 `_GCmarktermination` 阶段：再次 `stopTheWorld`，执行最后一遍、范围很小的 root 重扫（覆盖并发期间可能被漏掉的栈 / 全局变量变化），关闭写屏障，完成最终标记并统计。此阶段是整个周期里对停顿最敏感的一段——虽然 1.8 后很短，但仍是唯一的"长"STW 来源之一；之后进入并发清扫（`sweep`）。
 
-## 辅助标记与 GC Pacer
+## Assist Marking and the GC Pacer
 
 标记工作并非只由后台 worker 承担：**辅助标记（mutator assist）** 让正在分配内存的 mutator 在 GC 进行期间分出一部分 CPU 去标灰对象，以防分配速度超过标记速度、导致堆无限膨胀。分配越快的 goroutine 被要求 assist 越多，从而把"制造垃圾"与"回收垃圾"的代价绑定在一起。
 

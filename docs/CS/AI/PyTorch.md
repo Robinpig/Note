@@ -2,7 +2,7 @@
 
 PyTorch 是 Meta AI（原 FAIR）2017 年开源的深度学习框架，凭借 **define-by-run 动态图**、彻底 Pythonic 的 API 和与 NumPy 近乎一致的张量体验，在 2018 年后成为学术研究的事实标准，并通过 TorchServe、TorchScript/`torch.compile`、分布式训练等能力补齐工业部署，当前大模型生态（Hugging Face Transformers、vLLM、Megatron 等）基本都以 PyTorch 为底座。
 
-## 核心抽象
+## Core Abstraction
 
 - **Tensor**：类似 `numpy.ndarray` 的多维数组，额外具备 GPU 设备放置与自动微分能力。
 - **autograd**：张量设置 `requires_grad=True` 后，前向运算构建动态计算图（由 `Function` 节点组成），调用 `loss.backward()` 沿链式法则反向传播，梯度累积到 `.grad`。
@@ -28,11 +28,11 @@ for x, y in train_loader:                      # x: [B,784], y: [B]
     opt.step()
 ```
 
-### 动态图的意义
+### Significance of Dynamic Graphs
 
 每次 `forward` 都是用普通 Python 重新跑一遍、即时建图，因此可以自由使用 `if/for/while`、按输入长度改变网络结构（这对 NLP 中变长序列至关重要），出错时栈帧就是普通 Python 调用栈，可直接 pdb 断点。对照 [TensorFlow](/docs/CS/AI/TensorFlow.md) 1.x 的静态图：先声明后执行、调试困难但部署优化空间大。
 
-## 张量创建与数据拷贝
+## Tensor Creation and Data Copying
 
 | 共享数据（浅拷贝，改一个另一个也变） | 拷贝数据 |
 |--------------------------------------|---------|
@@ -40,7 +40,7 @@ for x, y in train_loader:                      # x: [B,784], y: [B]
 
 其余常用点：`view/reshape` 改形状（前者要求内存连续）、`permute/transpose` 换轴、`squeeze/unsqueeze` 增减维度、`cat/stack` 拼接、广播（broadcasting）规则、`argmax(dim=...)` 指定归约轴（NumPy 里叫 axis）。卷积权重 `weight.shape = [out_channels, in_channels, kH, kW]`，具体层输出 shape 推导见 [DL](/docs/CS/AI/DL/DL.md)。
 
-## 生态
+## Ecosystem
 
 | 组件 | 用途 |
 |------|------|
@@ -52,7 +52,7 @@ for x, y in train_loader:                      # x: [B,784], y: [B]
 | AMP (`torch.cuda.amp`) | 混合精度：FP16/BF16 前向 + FP32 主权重，省显存且常能提速 |
 | TorchServe / ONNX / libtorch | 生产服务化、跨框架交换格式、C++ 推理 |
 
-## 训练中的常见坑
+## Common Pitfalls in Training
 
 - **忘记 `zero_grad()`**：梯度默认累加（RNN 截断反传时才需要这种行为），普通训练每个 step 必须清零。
 - **训练/推理模式忘记切换**：`model.train()` / `model.eval()` 影响 Dropout 与 BatchNorm；推理还应包 `torch.no_grad()` 关闭建图省显存。

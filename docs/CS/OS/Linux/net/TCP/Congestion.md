@@ -14,9 +14,9 @@ Linux 的 TCP 拥塞控制不是一个算法，而是**一套插件框架 + 一�
 
 一个先要澄清的分工：**"哪些包丢了"不归拥塞控制管**。丢包判定由 RACK/TLP/超时负责（见 [Retransmission](/docs/CS/OS/Linux/net/TCP/Retransmission.md)），拥塞控制只回答"知道丢包之后发多快"。这两个子系统在 v7.2.7 上是明确分离的。
 
-## 插件体系：算法怎么注册进来
+## Plugin System: How Algorithms Are Registered
 
-### 契约：哪些回调必选
+### Contract: Which Callbacks Are Mandatory
 
 `struct tcp_congestion_ops`（`include/net/tcp.h:1324`）定义了一组回调，注册时会先校验（`tcp_cong.c:78`）：
 
@@ -46,7 +46,7 @@ int tcp_validate_congestion_control(struct tcp_congestion_ops *ca)
 
 其余都是可选：`init` / `release`、`set_state`、`cwnd_event`、`cwnd_event_tx_start`、`in_ack_event`、`pkts_acked`、`min_tso_segs`、`sndbuf_expand`、`get_info`、`flags`。
 
-### 注册：名字哈希成 key，挂进 RCU 链表
+### Registration: Hash the Name into a Key, Attach to the RCU Linked List
 
 ```c
 int tcp_register_congestion_control(struct tcp_congestion_ops *ca)
@@ -79,7 +79,7 @@ int tcp_register_congestion_control(struct tcp_congestion_ops *ca)
 
 还有个很有意思的函数 `tcp_update_congestion_control()`（`tcp_cong.c:146`）——**热替换一个已注册算法**，要求新算法名字与旧的相同，并且"先加后删"以保证任何时刻都有一个实现可用。这是给 **BPF struct_ops** 用的：允许在运行时用 BPF 程序替换拥塞算法，不用重新加载内核模块。
 
-### flags：权限与 ECN 协商
+### flags: Permissions and ECN Negotiation
 
 ```c
 #define TCP_CONG_NON_RESTRICTED		BIT(0)
@@ -98,7 +98,7 @@ int tcp_register_congestion_control(struct tcp_congestion_ops *ca)
 - **`TCP_CONG_NON_RESTRICTED`** 是权限位：没有它的算法，普通进程 `setsockopt(TCP_CONGESTION)` 会被拒（`tcp_cong.c:436`），只有 `CAP_NET_ADMIN` 能用。
 - 后四个是 **AccECN（RFC 9000 风格的精确 ECN 反馈）** 引入的协商标志，v7.2.7 上比较新。它们决定连接建立时怎么协商 ECN 能力。
 
-### 自动加载模块
+### Auto-load Modules
 
 ```c
 static struct tcp_congestion_ops *tcp_ca_find_autoload(const char *name)
@@ -121,11 +121,11 @@ static struct tcp_congestion_ops *tcp_ca_find_autoload(const char *name)
 
 算法编成模块时（如 `tcp_bbr.ko`），第一次按名字引用会自动 `request_module("tcp_bbr")`。注意这里的**临时释放 RCU 读锁再重新获取**——因为 `request_module` 可能睡眠，不能在 RCU 临界区里调用。另外只有 `CAP_NET_ADMIN` 能触发加载，防止普通用户通过反复请求不存在的模块来刷内核日志。
 
-## 选择算法：三个层级的优先级
+## Selecting Algorithms: Priority of Three Levels
 
 一个连接最终用哪个算法，是三层决定的，越靠下优先级越高：
 
-### 1. 编译期默认 → `late_initcall`
+### 1. Compile-time Default -> `late_initcall`
 
 ```c
 static int __init tcp_congestion_default(void)
@@ -138,7 +138,7 @@ late_initcall(tcp_congestion_default);
 
 `CONFIG_DEFAULT_TCP_CONG` 来自 `net/ipv4/Kconfig`，v7.2.7 上**默认仍是 `cubic`**（`bbr` 是可选值之一）。
 
-### 2. 每 netns 默认 → sysctl
+### 2. Per-netns Default -> sysctl
 
 `net.ipv4.tcp_congestion_control` 走 `tcp_set_default_congestion_control()`（`tcp_cong.c:281`）：
 
@@ -159,7 +159,7 @@ late_initcall(tcp_congestion_default);
 
 两个细节：**非 init netns 不能把默认算法设成受限算法**；以及**一旦某个算法被设为某 netns 的默认，它就被标记为 NON_RESTRICTED**（因为这个 netns 里的所有 socket 都会用它，再限制就没意义了）。
 
-### 3. 每 socket → setsockopt
+### 3. Per-socket Default -> setsockopt
 
 `TCP_CONGESTION` 走 `tcp_set_congestion_control()`（`tcp_cong.c:412`）。第一个检查就值得注意：
 
@@ -174,7 +174,7 @@ late_initcall(tcp_congestion_default);
 
 还有一个容易被忽略的**白名单机制**：`net.ipv4.tcp_allowed_congestion_control` 通过 `tcp_set_allowed_congestion_control()`（`tcp_cong.c:369`）批量改写所有算法的 `NON_RESTRICTED` 位。实现是三趟：先校验所有名字都存在，再清空所有标志，最后按名单置位——保证不会因为中间出错留下半改状态。
 
-### 绑定的副作用：ECN 协商与私有区清零
+### Side Effects of Binding: ECN Negotiation and Private Area Zeroing
 
 ```c
 void tcp_assign_congestion_control(struct sock *sk)
@@ -199,9 +199,9 @@ void tcp_assign_congestion_control(struct sock *sk)
 
 三点：模块引用拿不到就**回退到 Reno**（Reno 编译进内核，永远可用）；私有区 `icsk_ca_priv` 被清零（BBR 的 `struct bbr` 就放在这里，`BUILD_BUG_ON(sizeof(struct bbr) > ICSK_CA_PRIV_SIZE)` 保证不溢出）；按算法需求决定是否发起 ECN 协商。
 
-## 状态机：tcp_ca_state 五态
+## State Machine: The Five States of tcp_ca_state
 
-### 五个状态的定义
+### Definitions of the Five States
 
 状态在 uAPI 头里（`include/uapi/linux/tcp.h:199`），因为它要通过 `tcp_info` 暴露给用户态：
 
@@ -215,7 +215,7 @@ void tcp_assign_congestion_control(struct sock *sk)
 
 **Disorder 这个状态存在本身就是一种谨慎**：收到重复 ACK 不等于丢包，也可能只是乱序。内核不立刻削减窗口，而是先标 Disorder 继续观察，等 RACK 或 dupthresh 给出更强的证据才进 Recovery。
 
-### 一个反直觉的事实：Loss 不在 cwnd reduction 里
+### A Counterintuitive Fact: Loss Is Not in cwnd Reduction
 
 ```c
 static inline bool tcp_in_cwnd_reduction(const struct sock *sk)
@@ -229,7 +229,7 @@ static inline bool tcp_in_cwnd_reduction(const struct sock *sk)
 
 `tcp_in_cwnd_reduction()` 只覆盖 **CWR 和 Recovery**，**不包括 Loss**。原因是 Loss 态的窗口处理走完全不同的路径——`tcp_enter_loss()` 直接把 cwnd 设成 `inflight + 1`（`tcp_input.c:2574`），彻底回到慢启动，不需要 PRR 那种"平滑削减"。所以"处于 cwnd reduction"和"处于非 Open 状态"是两个不同的判断。
 
-### 三个进入函数
+### Three Entry Functions
 
 **CWR**（`tcp_input.c:3030`）：
 
@@ -283,7 +283,7 @@ void tcp_enter_cwr(struct sock *sk)
 
 这就是**调用算法 `ssthresh` 回调的地方**——`WRITE_ONCE(tp->snd_ssthresh, icsk->icsk_ca_ops->ssthresh(sk))`。Reno 的实现是 `max(cwnd >> 1, 2)`，CUBIC 是自己的 β 折算。条件判断保证"同一个窗口内只削减一次 ssthresh"。
 
-### 状态迁移全貌
+### The Full Picture of State Transitions
 
 `tcp_set_ca_state()`（`tcp_cong.c:38`）是唯一的设置入口，它会先通知算法：
 
@@ -304,9 +304,9 @@ void tcp_set_ca_state(struct sock *sk, const u8 ca_state)
 
 退出路径有两条：`tcp_try_to_open()`（`tcp_input.c:3057`，正常 ACK 处理里）和 undo 路径（下面一节）。
 
-## 经典路径：cong_avoid 分支里发生了什么
+## Classic Path: What Happens in the cong_avoid Branch
 
-### 调度点
+### Scheduling Points
 
 ```c
 static void tcp_cong_control(struct sock *sk, u32 ack, u32 acked_sacked,
@@ -334,7 +334,7 @@ static void tcp_cong_control(struct sock *sk, u32 ack, u32 acked_sacked,
 
 这就是整个框架的分水岭：**有 `cong_control` 就整体接管；否则内核按状态机在"削减"和"增窗"之间二选一**，最后用通用公式算 pacing。
 
-### 增窗前的门：tcp_is_cwnd_limited
+### The Gate Before Window Growth: tcp_is_cwnd_limited
 
 Reno/CUBIC 的 `cong_avoid` 开头都有这个判断：
 
@@ -362,7 +362,7 @@ static inline bool tcp_is_cwnd_limited(const struct sock *sk)
 
 慢启动时有放宽：注释说明"cwnd 允许涨到已确认量的两倍"——因为慢启动本来就冒着 100% 过冲的风险，放宽一点可以让 app-limited 的连接更激进地探测带宽，同时 discourages 应用靠发填充包人为撑大 cwnd。
 
-### 慢启动：tcp_slow_start
+### Slow Start: tcp_slow_start
 
 ```c
 __bpf_kfunc u32 tcp_slow_start(struct tcp_sock *tp, u32 acked)
@@ -383,7 +383,7 @@ __bpf_kfunc u32 tcp_slow_start(struct tcp_sock *tp, u32 acked)
 1. **cwnd 被 `snd_ssthresh` 截断，多出来的 acked 被返回给调用者**。Reno 的 `cong_avoid` 拿到这个剩余量继续走拥塞避免——这就是注释里说的"slow start exits when cwnd grows over ssthresh and returns the leftover acks"。
 2. **一次 stretch ACK 的处理**。注释（447-454 行）解释：一个确认了 N 个包的 stretch ACK 被当作 N 个度为 1 的 ACK 连续处理。这里刻意**不实现 RFC 3465 的 ABC（Appropriate Byte Counting）**，因为它会把 N 限制到 2 从而减缓慢启动；内核的做法是"一个包只有被完整确认才算"，以防御该 RFC 描述的 ACK 攻击。
 
-### 拥塞避免：tcp_cong_avoid_ai
+### Congestion Avoidance: tcp_cong_avoid_ai
 
 AIMD 里的"加性增"在整数上怎么实现？答案是**信用计数**：
 
@@ -413,7 +413,7 @@ __bpf_kfunc void tcp_cong_avoid_ai(struct tcp_sock *tp, u32 w, u32 acked)
 
 开头那个 `if (tp->snd_cwnd_cnt >= w)` 分支处理的是**窗口变小的情况**：如果之前在大窗口下攒了信用，现在 `w` 变小了，不能一次性全兑换（那会瞬间把 cwnd 顶上去），而是只加 1 并清零，重新开始攒。
 
-### Reno：兜底实现
+### Reno: Fallback Implementation
 
 ```c
 struct tcp_congestion_ops tcp_reno = {
@@ -428,7 +428,7 @@ struct tcp_congestion_ops tcp_reno = {
 
 Reno 编译在内核里、永远可用，是所有失败场景的兜底（前面 `tcp_assign_congestion_control()` 里模块拿不到就回退到它）。它的三个回调都极简：ssthresh 砍半（最小 2）、cong_avoid 是慢启动 + AIMD、undo_cwnd 取 `max(cwnd, prior_cwnd)`。
 
-## 削减窗口：PRR 算法
+## Window Reduction: PRR Algorithm
 
 CWR 和 Recovery 期间的 cwnd 不是"砍一刀然后等着"，而是用 **PRR（Proportional Rate Reduction，RFC 6937）** 平滑地降下来。注释在 `tcp_input.c:2962` 讲得很清楚：
 
@@ -471,7 +471,7 @@ void tcp_cwnd_reduction(struct sock *sk, int newly_acked_sacked, int newly_lost,
 
 为什么要这么麻烦？直接砍到 ssthresh 的问题在于：如果 inflight 远大于 ssthresh，一刀砍下去会让发送方**在一个 RTT 内完全停止发送**（因为 inflight 已经超过新的 cwnd），造成吞吐断崖和可能的 RTO。PRR 让这个下降过程分散到一个 RTT 里。
 
-### 削减结束
+### Reduction Ends
 
 ```c
 static inline void tcp_end_cwnd_reduction(struct sock *sk)
@@ -495,7 +495,7 @@ static inline void tcp_end_cwnd_reduction(struct sock *sk)
 
 又是那个 `cong_control` 提前返回——BBR 不参与任何这套逻辑。另外 `snd_ssthresh < TCP_INFINITE_SSTHRESH` 这个条件会跳过 BBR（它把 ssthresh 设成无穷大）。
 
-## Undo：撤销一次错误的削减
+## Undo: Reverse an Incorrect Reduction
 
 拥塞控制最尴尬的处境是：**削减完发现其实没拥塞**。典型场景是 RTO 触发了削减，但随后发现原始包只是延迟到达（RTO 是虚假的）。内核为此准备了完整的 undo 机制。
 
@@ -544,7 +544,7 @@ static void tcp_undo_cwnd_reduction(struct sock *sk, bool unmark_loss)
 
 DSACK 那条路径还顺带调整了 RACK 的重排窗口持久计数（`reo_wnd_persist`），让 RACK 下次更保守一些。
 
-## ECN 与拥塞算法的交互
+## ECN and Congestion Algorithm Interaction
 
 ECN 是唯一一个"网络主动报告拥塞"的信号，比丢包更早也更明确。它在框架里有两处体现：
 
@@ -555,7 +555,7 @@ ECN 是唯一一个"网络主动报告拥塞"的信号，比丢包更早也更�
 
 v7.2.7 上还新增了 **AccECN** 相关的四个 flag（`NEEDS_ACCECN` / `ECT_1_NEGOTIATION` / `NO_FALLBACK_RFC3168`），用于精确 ECN 反馈的协商。这部分较新，涉及 RFC 3168 与 AccECN 的回退规则。
 
-## 观测与调试
+## Observation and Debugging
 
 ```bash
 # 已注册 / 允许 / 当前默认
@@ -574,7 +574,7 @@ ss -ti
 
 BPF struct_ops 是更进阶的观测与替换手段：`tcp_update_congestion_control()` 的存在就是为了支持运行时替换算法实现，v7.2.7 上 BBR 与 Reno 的多个回调都标了 `__bpf_kfunc`，可以被 BPF 程序直接调用。
 
-## 各算法的版图
+## The Landscape of Algorithms
 
 v7.2.7 的 `net/ipv4/` 下自带这些实现（`tcp_*.c`），Kconfig 里 `TCP_CONG_ADVANCED` 打开后可单独选：
 
@@ -600,7 +600,7 @@ v7.2.7 的 `net/ipv4/` 下自带这些实现（`tcp_*.c`），Kconfig 里 `TCP_C
 
 按信号源分就是四类：**丢包 / 延迟 / ECN / 建模**。历史脉络是从丢包（Reno 1988）→ 延迟（Vegas 1994）→ 建模（BBR 2016），中间大量混合方案试图兼得——但"延迟会随交叉流量变化"这个固有缺陷让纯延迟派始终没成为主流。
 
-## 与其他笔记的关系
+## Relationship with Other Notes
 
 框架层本身不长，但它是理解具体算法的前提：
 

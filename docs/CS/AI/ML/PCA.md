@@ -46,7 +46,7 @@ $$
 
 由瑞利商性质，其解为 $\Sigma$ 最大特征值对应的特征向量。
 
-### 保留多少维
+### How Many Dimensions to Retain
 
 - **方差解释率（explained variance ratio）**：前 k 个特征值之和占总特征值的比例，通常累计到 85%~95% 即可
 - **碎石图（Scree Plot）**：画特征值递减曲线，取"拐点"

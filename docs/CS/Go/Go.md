@@ -11,7 +11,7 @@ Go是一种新的语言，一种并发的、带垃圾回收的、快速编译的
 >[Google style go](https://google.github.io/styleguide/go)
 >[Go Wiki: Go Code Review Comments - The Go Programming Language](https://go.dev/wiki/CodeReviewComments)
 
-## 为什么是 Go
+## Why Go
 
 Go 是 Google 在 2009 年发布的语言，定位恰好填补 C++（太重、编译慢）与 Python（太慢、动态）之间的空白：为**大规模工程、多核机器与网络服务**而设计。它的全部取舍都围绕"让大团队低成本地协作与维护"展开：
 
@@ -23,7 +23,7 @@ Go 是 Google 在 2009 年发布的语言，定位恰好填补 C++（太重、�
 
 代价同样明显：表达力有限（无枚举 / 可选项、泛型保守）、错误处理 verbose（`if err != nil` 遍布）、GC 不可控（不能像 Java 那样换收集器）。这些在编程语言横向对比的"适用与不适用"里有系统对照。
 
-## 本目录包含
+## This Directory Contains
 
 本目录按"语言特性 → 运行时 → 工程"逐层展开，覆盖 Go 作为工程语言的全貌：
 
@@ -388,7 +388,7 @@ func ParseStudent() {
 
 
 
-### 指针
+### Pointer
 在 Go 语言中，指针对应的是变量在内存中的存储位置，也就说指针的值就是变量的内存地址。通过 & 可以获取一个变量的地址，也就是指针。
 常量
 

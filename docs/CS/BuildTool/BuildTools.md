@@ -2,7 +2,7 @@
 
 构建工具负责把源码变成可交付产物的全过程：依赖管理、编译、测试、打包、静态检查、发布。Java 生态经历了 **Make → Ant（过程式 XML，无依赖管理）→ Maven（约定优于配置 + 统一仓库坐标）→ Gradle（声明式任务图 + 灵活脚本）** 四代演进；其他语言有各自的对应物（npm/yarn、Go modules、Cargo、pip/poetry），核心问题始终相同：**可重复构建（reproducible build）与依赖地狱（dependency hell）**。
 
-## 核心概念
+## Core Concepts
 
 - **坐标（GAV）**：`groupId:artifactId:version` 唯一标识一个制品，制品发布到仓库（Nexus/Artifactory/Maven Central）；
 - **传递依赖与仲裁**：A 依赖 B、B 依赖 C，则 C 自动引入。版本冲突时 Maven 按"最近路径优先"仲裁，Gradle 默认选最高版本；都可用 exclusions/dependency constraints 强制；
@@ -25,7 +25,7 @@
 
 详见各自专文：[Maven](/docs/CS/BuildTool/Maven.md)、[Gradle](/docs/CS/BuildTool/Gradle.md)。
 
-## 典型流水线
+## Typical Pipeline
 
 ```
 拉代码 → 依赖解析（私有镜像加速） → 编译 → 单元测试 → 静态检查(SpotBugs/Checkstyle/dependency-check)
@@ -40,7 +40,7 @@
 - **可重复构建**：锁定插件与依赖版本（Maven Enforcer、Gradle version catalog + lockfile），禁止裸用 LATEST/RELEASE/SNAPSHOT 上生产；
 - **依赖安全**：排查冲突用 `mvn dependency:tree`、`gradle dependencies`，已知 CVE 用 OWASP dependency-check。
 
-## 与其他生态对照
+## Comparison with Other Ecosystems
 
 | 生态 | 构建/依赖工具 | 制品 |
 |------|--------------|------|

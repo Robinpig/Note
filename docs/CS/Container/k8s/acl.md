@@ -76,7 +76,7 @@ roleRef:
 - 内置插件：`NamespaceLifecycle`（向不存在的 namespace 创建对象会被拒）、`ResourceQuota`（配额检查）、`LimitRanger`（注入默认资源限制）、`ServiceAccount`（自动挂载 SA token）等。
 - 动态扩展：**Admission Webhook**（MutatingWebhookConfiguration / ValidatingWebhookConfiguration），是 Istio sidecar 自动注入、OPA Gatekeeper 策略引擎的实现基础。
 
-## Pod 的访问控制
+## Pod Access Control
 
 Pod 内应用访问 apiserver 时默认携带挂载的 ServiceAccount token，权限由对应 RBAC 决定。生产实践中通常通过 automountServiceAccountToken: false 关闭默认挂载，仅给确实需要访问 apiserver 的 Pod（如 operator）配置最小权限。
 

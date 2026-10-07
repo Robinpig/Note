@@ -1,9 +1,9 @@
 ## Introduction
 
-## 版本基线
+## Version Baseline
 
 > [!NOTE]
-> **版本口径**：运行时数据区的**五个区域**（方法区/堆/PC 寄存器/本地方法栈/虚拟机栈）是《JVM 规范》的固定划分，但**实现**随版本大变：永久代自 **JDK 8 移除**代之以 [Metaspace](/docs/CS/Java/JDK/JVM/Metaspace.md)，**JEP 534**（Release 27）起对象头由 96 压缩为 64 bit，栈上局部变量槽位布局也受 Valhalla 影响。详见 [JVM 版本基线](/docs/CS/Java/JDK/JVM/JVM.md?id=版本基线)。
+> **版本口径**：运行时数据区的**五个区域**（方法区/堆/PC 寄存器/本地方法栈/虚拟机栈）是《JVM 规范》的固定划分，但**实现**随版本大变：永久代自 **JDK 8 移除**代之以 [Metaspace](/docs/CS/Java/JDK/JVM/Metaspace.md)，**JEP 534**（Release 27）起对象头由 96 压缩为 64 bit，栈上局部变量槽位布局也受 Valhalla 影响。详见 [JVM 版本基线](/docs/CS/Java/JDK/JVM/JVM.md?id=version-baseline)。
 
 The Runtime Data Area is divided into five major components:
 

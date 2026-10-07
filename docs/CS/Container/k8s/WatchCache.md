@@ -22,7 +22,7 @@ Kubernetes 的每个组件都在做同一件事：从 apiserver 读一份自己�
 
 ---
 
-## 第一段：读请求进来之前——缓存要在什么位置
+## Segment 1: Before the Read Request Comes — Where the Cache Should Be
 
 apiserver 的存储栈自上而下是：REST handler → registry store → **CacheDelegator** → Cacher 或 etcd。
 
@@ -47,7 +47,7 @@ apiserver 的存储栈自上而下是：REST handler → registry store → **Ca
 
 ---
 
-## 第二段：watchCache 内核——一个会自己伸缩的滑动窗口
+## Segment 2: watchCache Core — A Self-resizing Sliding Window
 
 `watchCache` 是整个缓存的实体（`storage/cacher/watch_cache.go:89`）。它由三部分组成：
 
@@ -59,7 +59,7 @@ apiserver 的存储栈自上而下是：REST handler → registry store → **Ca
 
 前两者解决的是两类不同的请求：List 要"现在有什么"，watch 要"从 RV X 之后发生了什么"。
 
-### 环形缓冲不是固定容量
+### The Ring Buffer Is Not Fixed Capacity
 
 老版本的 `--default-watch-cache-size`（默认 100）常说成"缓存能存 100 个事件"，v1.36 已经不是这样了：
 
@@ -82,7 +82,7 @@ w.endIndex++
 
 注意 `endIndex` / `startIndex` 是**事件序号**，跟 RV 没有算术关系——RV 由 etcd 保证单调，序号只是"第几个事件"。
 
-### 太旧的 RV 会被明确拒绝
+### Too-old RV Will Be Explicitly Rejected
 
 "从 RV X 开始 watch"时，X 可能已经不在缓冲里了。判定在 `getAllEventsSinceLocked`（`:876`）：
 
@@ -102,7 +102,7 @@ if resourceVersion < oldest-1 {
 > [!TIP]
 > 这一段解释了 **`410 Gone` 的真实来源**。客户端收到它只意味着"你要的起点已经不在 apiserver 内存里了"，**不一定跟 etcd 的 compaction 有关**。反之，如果请求直接透传到 etcd 撞上 compaction，410 来自 `etcd3/errors.go:31`。两者的排查方向完全不同。
 
-### 新鲜度不足时等，而不是报错
+### Wait When Freshness Is Insufficient, Rather Than Erroring
 
 如果请求的 RV 比缓存当前追上的还新（比如刚写完立刻读），`waitUntilFreshAndBlock`（`:449`）会阻塞等待：
 
@@ -124,7 +124,7 @@ for w.resourceVersion < resourceVersion {          // :481
 
 ---
 
-## 第三段：事件怎么扇出——慢消费者会被断开
+## Segment 3: How Events Fan Out — Slow Consumers Get Disconnected
 
 事件从 etcd 到 watcher 要穿过三段，每段都有明确的边界：
 
@@ -132,7 +132,7 @@ for w.resourceVersion < resourceVersion {          // :481
 etcd watch → watchCache.processEvent → incoming chan(cap 100) → dispatchEvents(单 goroutine) → 每个 cacheWatcher
 ```
 
-### 三段各自的形态
+### The Shape of Each of the Three Segments
 
 1. **`watchCache.processEvent`**（`watch_cache.go:283`）：写环形缓冲、推进 `resourceVersion`、更新 btree、`Broadcast` 唤醒等待者。取旧值（`PrevObject`）的 `store.Get` 是**在锁外**做的（`:311`），减少持锁时间。
 2. **`Cacher.processEvent`**（`cacher.go:878`）：唯一动作是 `c.incoming <- *event`，channel 容量硬编码 **100**（`:405`，代码里带 TODO）。
@@ -140,7 +140,7 @@ etcd watch → watchCache.processEvent → incoming chan(cap 100) → dispatchEv
 
 `incoming` 是阻塞式投递，所以第 2 段能对第 1 段形成背压；但第 3 段对 watcher 是**非阻塞**的，这是关键设计。
 
-### `nonblockingAdd` 与"断开慢 watcher"
+### `nonblockingAdd` and Disconnecting Slow Watchers
 
 ```go
 // cache_watcher.go:147
@@ -167,7 +167,7 @@ c.timer.Reset(timeout)
 
 超时仍未消费的 watcher 会被**直接关闭**（`cache_watcher.go:169` 的 `add` → `closeFunc`）。这就是"一个卡住的 informer 不会拖垮整个 Cacher"的源码保证。
 
-### 分发预算不是固定值
+### Distribution Budget Is Not a Fixed Value
 
 预算来自 `timeBudget`，不是常见的"3 秒超时"：
 
@@ -186,7 +186,7 @@ $$\text{budget}(t) = \min(100\text{ms},\ \text{budget}(t_0) + 50\text{ms} \times
 > [!NOTE]
 > `blockTimeout = 3s`（`watch_cache.go:53`）和这里的 100ms 预算很容易被混为一谈。前者管**等缓存追上 RV**，后者管**分发时给 watcher 多少缓冲时间**，两者毫无关系。
 
-### 谁在收集候选
+### Who Is Collecting Candidates
 
 `startDispatching`（`cacher.go:1065`）持锁后按两级索引收集：`allWatchers` 按 namespace / name 的四种 scope 组合查，`valueWatchers` 再按 field selector 的触发值查（`:1089-1134`）。索引结构 `indexedWatchers` 定义在 `cacher.go:143`。
 
@@ -196,7 +196,7 @@ Bookmark 走另一条路：`startDispatchingBookmarkEventsLocked`（`:1047`）+ 
 
 ---
 
-## 第四段：List 请求——为什么要"最后一步才拷贝"
+## Segment 4: List Request — Why Copy Only at the Last Step
 
 `Cacher.GetList`（`cacher.go:748`）的流程值得单独看，因为它体现了一个刻意的性能取舍：
 
@@ -207,7 +207,7 @@ Bookmark 走另一条路：`startDispatchingBookmarkEventsLocked`（`:1047`）+ 
 
 源码注释说得很直白（`:794`）：`ListObject` 的元素是 struct 类型，构造 slice 会带来过多内存消耗，所以这个动作要尽量推迟。
 
-### 快照：Exact RV 与分页的第二条路
+### Snapshot: Exact RV and Pagination’s Second Path
 
 `ListFromCacheSnapshot` 在 1.34 转 Beta、默认开启（`apiserver/features/kube_features.go:434`）。开启后 `watchCache` 多两个字段：`snapshots store.Snapshotter` 与 `snapshottingEnabled atomic.Bool`（`watch_cache.go:160`）。
 
@@ -215,7 +215,7 @@ Bookmark 走另一条路：`startDispatchingBookmarkEventsLocked`（`:1047`）+ 
 
 拿不到对应快照就返回 `ResourceExpired`，让上层回退 etcd——**宁可慢，不给错数据**。快照本身按 etcd 的 compaction revision 清理，轮询周期 15s（`cacher/compactor.go:30`）。
 
-### `cachingObject`：不是延迟解码
+### `cachingObject`: Not Lazy Decoding
 
 `caching_object.go` 容易被名字误导。它不是延迟解码，而是**序列化结果缓存 + 惰性深拷贝**：
 
@@ -231,7 +231,7 @@ Bookmark 走另一条路：`startDispatchingBookmarkEventsLocked`（`:1047`）+ 
 
 ---
 
-## 第五段：分页与 continue token
+## Segment 5: Pagination and continue token
 
 分页由 `limit` + `continue` 两个参数驱动，token 的内容可以直接看源码：
 
@@ -253,7 +253,7 @@ return base64.RawURLEncoding.EncodeToString(out), nil
 > [!WARNING]
 > **continue token 不加密。** 它只是 base64url 编码的 JSON，任何人解码就能看到起始 key 与该次列表的 RV。它跟 `--api-audiences`、EncryptionConfiguration 都无关——后者是 etcd 静态数据加密，用途完全不同。这一点在排查"token 能否跨集群复用""会不会泄密"时最容易搞错。
 
-### RV 必须绑进 token
+### RV Must Be Bound into the Token
 
 `rv` 字段不是装饰。`ValidateListOptions`（`storage/interfaces.go:346`）在 `continueRV > 0` 时把请求的 RV 覆盖成 token 里的值，让所有分页在**同一个快照 RV** 上读取。否则分页期间数据变化会导致重复或漏项。
 
@@ -266,7 +266,7 @@ return base64.RawURLEncoding.EncodeToString(out), nil
 
 ---
 
-## 第六段：Watch 请求——bookmark、进度通知与两种错误
+## Segment 6: Watch Request — bookmark, Progress Notification and Two Errors
 
 watch 的服务端实体是 `cacheWatcher`（`cache_watcher.go:53`），一个请求一个，有自己的输入 channel（容量由 `suggestedWatchChannelSize` 估算，`watch_cache.go:839`）。
 
@@ -279,7 +279,7 @@ watch 的服务端实体是 `cacheWatcher`（`cache_watcher.go:53`），一个�
 | `maxWatchChanSizeWithIndexWithoutTrigger` | 1000 | 有索引无触发 |
 | `maxWatchChanSizeWithoutIndex` | 100 | 无索引 |
 
-### 三种 bookmark 时机
+### Three bookmark Timing Cases
 
 `nextBookmarkTime`（`cache_watcher.go:222`）决定何时发 bookmark：
 
@@ -289,7 +289,7 @@ watch 的服务端实体是 `cacheWatcher`（`cache_watcher.go:53`），一个�
 
 `bookmarkAfterResourceVersion` 字段（`:81`）就是这个下界的载体，请求侧由 `setBookmarkAfterResourceVersion` 设置（`:321`）。
 
-### watch 的两类错误，方向相反
+### Two Types of watch Errors, Opposite Directions
 
 | 情况 | 错误 | HTTP | 客户端该做什么 |
 |---|---|---|---|
@@ -302,7 +302,7 @@ watch 的服务端实体是 `cacheWatcher`（`cache_watcher.go:53`），一个�
 > [!TIP]
 > 所以在日志里看到 **504 不要先怀疑超时配置**，先看 `RetryAfterSeconds` 与 cause 类型。K8s 用"超时"这个语义来表达"你现在问的东西还不存在"，因为两者对客户端而言的处理方式一致：等一下再来。
 
-### 就绪状态是一个三态机
+### Readiness Is a Three-state Machine
 
 `ready`（`cacher/ready.go:30`）只有 `Pending` / `Ready` / `Stopped` 三态，加上一个 `generation` 计数。
 
@@ -320,7 +320,7 @@ c.watchCache.SetOnReplace(func() {
 
 ---
 
-## 第七段：流式 list（WatchList）——用 watch 冒充 list
+## Segment 7: Streaming list (WatchList) — Using watch to Fake list
 
 到这里可以回答一个现代 K8s 的问题：**为什么要有 WatchList 这个特性？**
 
@@ -335,7 +335,7 @@ c.watchCache.SetOnReplace(func() {
 
 客户端看到这个注解的 bookmark，就知道"初始状态已全部收到"，可以 `Replace` 本地 store 了。
 
-### 客户端与服务端是两个独立的开关
+### Client and Server Are Two Independent Switches
 
 这点极易混淆，因为名字太像：
 
@@ -352,11 +352,11 @@ c.watchCache.SetOnReplace(func() {
 
 ---
 
-## 第八段：客户端侧——Reflector 与流式 list
+## Segment 8: Client Side — Reflector and Streaming list
 
 `Reflector`（`client-go/tools/cache/reflector.go:106`）是 List-Watch 循环的实现者，也是 informer 拉取数据的唯一入口。
 
-### 主循环不是裸 `for {}`
+### The Main Loop Is Not a Bare `for {}`
 
 ```go
 // reflector.go:428
@@ -371,7 +371,7 @@ r.delayHandler.Until(ctx, true, true, func(ctx context.Context) (bool, error) {
 
 回调永远返回 `false, nil`，所以循环不会因返回值结束——这就是"断线自动重连"的实现方式。退避参数在 `:62`：初始 800ms、上限 30s、因子 2.0、jitter 1.0、2 分钟无错就重置。
 
-### `useWatchList` 的判定比想象简单
+### `useWatchList` Judgment Is Simpler Than Imagined
 
 只有两个条件（`reflector.go:361`）：
 
@@ -386,7 +386,7 @@ if r.useWatchList && watchlist.DoesClientNotSupportWatchListSemantics(lw) {
 
 失败会自动降级并打日志（`:490`）："Data couldn't be fetched in watchlist mode. Falling back to regular list."——**这条日志在生产集群里出现是正常的**，说明服务端不支持或关闭了该特性。
 
-### 流式 list 的实现要点
+### Key Implementation Points of Streaming list
 
 `watchList`（`:804`）的关键动作：
 
@@ -395,7 +395,7 @@ if r.useWatchList && watchlist.DoesClientNotSupportWatchListSemantics(lw) {
 - 一路消费事件，直到 `handleAnyWatch` 判定收到 initial-events-end bookmark（`:1061`）
 - 收到后**复用同一条 watch 流**继续收增量（`:891`、`:1077` 把 `stopWatcher` 显式置为 false），不重新建连
 
-### resync 的真相
+### The Truth About resync
 
 这是被误解最深的一点。`startResync`（`:514`）的全过程是：
 
@@ -411,7 +411,7 @@ for { select { case <-resyncCh: ... case <-ctx.Done(): return } }
 
 顺带修正另一个常见说法：内置控制器的 resync 周期不是"随机 8h~16h"那么和谐。`MinResyncPeriod` 默认是 **12h**，`ResyncPeriod()` 里乘 `rand.Float64() + 1`（因子落在 `[1, 2)`），所以实际区间是 **[12h, 24h)**（`cmd/kube-controller-manager/app/controllermanager.go:191`、`controller-manager/config/v1alpha1/defaults.go:31`）。informer 层还有个 `minimumResyncPeriod = 1s` 的下限保护（`shared_informer.go:871`）。
 
-### 两种 RV 回退路径
+### Two RV Fallback Paths
 
 Reflector 用 `isLastSyncResourceVersionUnavailable` 标记（`:145`）来处理"上次同步点已失效"，但两条路径取的值不同：
 
@@ -427,7 +427,7 @@ Reflector 用 `isLastSyncResourceVersionUnavailable` 标记（`:145`）来处理
 
 ---
 
-## 全链路对照
+## Whole-chain Comparison
 
 | 阶段 | 服务端位置 | 客户端位置 |
 |---|---|---|
@@ -441,7 +441,7 @@ Reflector 用 `isLastSyncResourceVersionUnavailable` 标记（`:145`）来处理
 
 ---
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 | 现象 | 优先看什么 |
 |---|---|
@@ -456,7 +456,7 @@ Reflector 用 `isLastSyncResourceVersionUnavailable` 标记（`:145`）来处理
 
 ---
 
-## v1.36 反直觉清单
+## v1.36 Counterintuitive List
 
 1. **watch cache 容量不再是固定 100**。改为 [100, 102400] 的**自适应区间**（`watch_cache.go:61,64,374`），由 `eventFreshDuration`（默认 75s）驱动。`--default-watch-cache-size` 已 deprecated，`--watch-cache-sizes` 非零值直接丢弃并告警。
 2. **`dispatchTimeout` 这个 3 秒超时不存在**。分发预算是 `timeBudget`：每秒积攒 50ms、上限 100ms（`time_budget.go:26`）。`blockTimeout = 3s` 是另一件事——等缓存追上 RV。

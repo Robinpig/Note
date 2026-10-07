@@ -1,14 +1,14 @@
 ## Computer Systems A Programmer's Perspective Third Edition
 
-## 计算机系统漫游
+## Computer Systems: A Programmer's Perspective
 
-### 信息是位+上下文
+### Information Is Bits Plus Context
 
 Text File < Binary File
 
 
 
-### GCC编译过程
+### The GCC Compilation Process
 
 - **预处理阶段**	.c文件通过预处理器（cpp）插入#include<>的内容生成.i文本文件
 - **编译阶段**	通过编译器（ccl）编译成汇编程序.s文本文件
@@ -17,7 +17,7 @@ Text File < Binary File
 
 
 
-### 了解编译系统益处
+### Benefits of Understanding the Compilation System
 
 - 优化程序性能
 
@@ -27,7 +27,7 @@ Text File < Binary File
 
 
 
-### 处理器读解释指令
+### The Processor Reads and Interprets Instructions
 
 命令行第一个单词不为内置命令时，则假定为可执行文件名
 
@@ -70,7 +70,7 @@ $$
 S=T_{old}/T_{new}=\frac{1}{(1-\alpha)+\alpha /k}
 $$
 
-### 并发和并行
+### Concurrency and Parallelism
 
 L1高速缓存分成数据和指令两个部分，L2属于单核，L3为所有核共享
 
@@ -84,9 +84,9 @@ L1高速缓存分成数据和指令两个部分，L2属于单核，L3为所有�
 
 
 
-## 第一部分	程序结构和执行
+## Part I Program Structure and Execution
 
-### 信息的表示和处理
+### Representing Information and Processing
 
 最小可寻址单位为byte，为8bit，内存被作为一个字节数组（virtual memory），每个字节具有唯一数字标识（address）
 
@@ -114,7 +114,7 @@ L1高速缓存分成数据和指令两个部分，L2属于单核，L3为所有�
 
 
 
-### 程序的机器级表示
+### Machine-Level Representation of Programs
 
 汇编代码与机器指令级相关
 
@@ -150,23 +150,23 @@ x86-64限制传送指令（mov）的两个操作数不能指向内存位置，�
 
 
 
-### 处理器体系结构
+### Processor Architecture
 
-### 优化程序性能
+### Optimizing Program Performance
 
-### 存储器层次结构
+### The Memory Hierarchy
 
-### 链接
+### Linking
 
-### 异常控制流
+### Exceptional Control Flow
 
-## 虚拟内存
+## Virtual Memory
 
-## 系统级I/O
+## System-Level I/O
 
-## 网络编程
+## Network Programming
 
-## 并发编程
+## Concurrent Programming
 
 ## Links
 

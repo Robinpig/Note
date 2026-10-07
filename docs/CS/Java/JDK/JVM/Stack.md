@@ -33,7 +33,7 @@ Java Virtual Machine Stacks（Java 虚拟机栈）是 [Runtime Data Area](/docs/
 
 HotSpot 源码层面的栈帧实现（vframe/compiledVFrame/interpreter frame 等）见 [frame](/docs/CS/Java/JDK/JVM/frame.md)。
 
-### Stack Overflow 与 OOM
+### Stack Overflow and OOM
 
 虚拟机栈有两种容量异常，常被混为一谈：
 
@@ -43,7 +43,7 @@ HotSpot 源码层面的栈帧实现（vframe/compiledVFrame/interpreter frame �
 HotSpot 的虚拟机栈不支持扩展，因此在线程运行中只会在方法调用时得到 `StackOverflowError`；
 只有在新线程创建、初始栈分配失败时才可能出现 `OutOfMemoryError: unable to create native thread`。
 
-### 栈上分配与逃逸分析
+### Stack Allocation and Escape Analysis
 
 栈帧内的局部变量随方法返回自动销毁，不需要 GC 介入。若 JIT 通过逃逸分析（Escape Analysis）确认一个对象
 **不会逃逸出方法/线程**（NoEscape），可能做 **Scalar Replacement（标量替换）**：对象根本不创建，

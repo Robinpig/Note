@@ -2,7 +2,7 @@
 
 C 语言本身在 C11 之前**没有**并发原语。线程来自 POSIX 线程库（本库由 glibc 提供，见 [glibc](/docs/CS/C/glibc.md)）或 C11 可选的 `<threads.h>`（多数实现基于 pthread）；**原子操作与内存模型**到 C11 的 `<stdatomic.h>` 才正式进入标准。并发相关的「数据竞争」本身是 [未定义行为](/docs/CS/C/UB.md)，必须靠同步消除。
 
-## POSIX 线程基础
+## POSIX Thread Basics
 
 ```c
 pthread_t tid;
@@ -12,7 +12,7 @@ pthread_join(tid, NULL);   // 等待结束
 
 线程间共享同一地址空间——这正是共享数据需要同步的原因。线程池的实践模式见 [Thread](/docs/CS/C/Thread.md)。
 
-## 互斥量（mutex）
+## Mutex (mutex)
 
 临界区用 `pthread_mutex_t` 互斥：
 
@@ -25,7 +25,7 @@ pthread_mutex_unlock(&m);
 
 忘记解锁、或在持非递归锁时再次取同一把锁会死锁。
 
-## 条件变量（condvar）
+## Condition Variables (condvar)
 
 条件变量让线程「等某个谓词成立」而非忙等，必须与 mutex 配合：
 
@@ -46,16 +46,16 @@ pthread_mutex_unlock(&m);
 
 `while` 而非 `if` 是因为**虚假唤醒**可能发生；`pthread_cond_wait` 返回时已重新持锁。
 
-## 读写锁与屏障
+## Read-Write Locks and Barriers
 
 - `pthread_rwlock_t`：多读单写，读多写少场景提升并发。
 - `pthread_barrier_t`：让若干线程在某点汇合，全部到齐才继续（常用于并行算法的分阶段同步）。
 
-## 数据竞争
+## Data Races
 
 两个线程无同步地访问同一对象、且至少一个是写，就是**数据竞争**——属于 UB。只要共享可变状态，就必须有 mutex 或原子保护，不能赌单核 / 测试时没事。
 
-## C11 原子：`<stdatomic.h>`
+## C11 Atomics: `<stdatomic.h>`
 
 `_Atomic` 是类型限定符，对该类型的一切读写都是原子的：
 
@@ -69,7 +69,7 @@ atomic_store(&counter, 0);
 
 无锁（lock-free）与否取决于类型与平台；`atomic_is_lock_free(&counter)` 可查询。
 
-## 内存序（memory_order）
+## Memory Order (memory_order)
 
 原子操作自带**内存序**，控制它与其它内存访问的可见性 / 重排：
 

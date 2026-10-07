@@ -4,7 +4,7 @@
 
 > 收录范围：本页只收录**编程语言**。[Flutter](/docs/CS/Flutter.md) 是 Dart 的跨平台 UI 框架，单列于导航表下方的"相关框架"；Dart 作为语言已在表中收录，见 [Dart](/docs/CS/Dart/Dart.md)。[CO（组成原理）](/docs/CS/CO/CO.md) 是硬件 / 体系结构主题，不属于语言。
 
-## 语言目录导航
+## Language Directory Navigation
 
 | 语言 | 定位 | 该目录要点 |
 |------|------|-----------|
@@ -21,7 +21,7 @@
 
 相关框架（非语言）：[Flutter](/docs/CS/Flutter.md)——由 [Dart](/docs/CS/Dart/Dart.md) 编写，Dart 已在上方作为语言收录。
 
-## 特性速览
+## Feature Overview
 
 | 语言 | 编译 / 执行 | 类型系统 | 内存管理 | 并发模型 | 运行时 |
 |------|------------|---------|---------|---------|--------|
@@ -105,7 +105,7 @@ JVM 提供了跨平台的内存管理、JIT 与成熟的可观测性，生态是
 - **适合**：Flutter 跨端 UI；希望一套语言打通前后端的轻量后端 / CLI；重视热重载迭代速度的团队。
 - **不宜**：系统编程与裸机；对运行时体积 / 冷启动极敏感的 Serverless；不在 Flutter 生态内的纯后端（库生态成熟度远不如 Java / Go / Node）。
 
-## 选型的几个判断
+## Key Criteria for Selection
 
 | 判断 | 说明 |
 |------|------|

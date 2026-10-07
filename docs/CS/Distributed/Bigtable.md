@@ -4,7 +4,7 @@ Bigtable 是一个用于管理结构化数据的分布式存储系统，其设�
 
 在许多方面，Bigtable 类似于一个数据库：它与数据库共享许多实现策略。并行数据库和主存数据库已经实现了可扩展性和高性能，但 Bigtable 提供了与这类系统不同的接口。Bigtable 不支持完整的关系数据模型；相反，它为客户端提供了一个简单的数据模型，支持对数据布局和格式的动态控制，并允许客户端推断底层存储中所表示数据的局部性（locality）属性。数据使用可以是任意字符串的行名和列名进行索引。Bigtable 也将数据视为未经解释的字符串，尽管客户端常常将各种形式的结构化和半结构化数据序列化到这些字符串中。客户端可以通过在 schema 中谨慎选择来控制其数据的局部性。最后，Bigtable 的 schema 参数让客户端动态控制是从内存还是从磁盘提供数据。
 
-## 数据模型
+## Data Model
 
 一个 Bigtable 是一个稀疏的、分布式的、持久化的多维有序映射。该映射由行键、列键和时间戳索引；映射中的每个值都是一个未经解释的字节数组。
 
@@ -14,7 +14,7 @@ Bigtable 是一个用于管理结构化数据的分布式存储系统，其设�
 
 
 
-## 架构
+## Architecture
 
 Bigtable 构建在 Google 的其他若干基础设施之上。Bigtable 使用分布式 [Google File System](/docs/CS/Distributed/GFS.md) 来存储日志和数据文件。一个 Bigtable 集群通常运行在一个共享的机器池中，该机器池运行着各种各样的其他分布式应用，并且 Bigtable 进程经常与其他应用的进程共享同一台机器。Bigtable 依赖一个集群管理系统来进行作业调度、管理共享机器上的资源、处理机器故障以及监控机器状态。
 
@@ -49,7 +49,7 @@ METADATA 表在一个行键下存储一个 tablet 的位置，该行键是该 ta
 
 我们还在 METADATA 表中存储辅助信息，包括与每个 tablet 相关的所有事件的日志（例如，当一个 server 开始服务它时）。这些信息有助于调试和性能分析。
 
-#### Tablet 分配
+#### Tablet Assignment
 
 每个 tablet 一次只分配给一个 tablet server。Master 跟踪存活的 tablet server 集合，以及 tablet 到 tablet server 的当前分配，包括哪些 tablet 尚未分配。当一个 tablet 未被分配，并且有一个具有足够空间容纳该 tablet 的 tablet server 可用时，master 通过向该 tablet server 发送一个 tablet 加载请求来分配该 tablet。
 
@@ -61,7 +61,7 @@ Bigtable 使用 Chubby 来跟踪 tablet server。当一个 tablet server 启动�
 
 
 
-#### Tablet 服务
+#### Tablet Service
 
 一个 tablet 的持久化状态存储在 GFS 中。更新被提交到一个存储重做（redo）记录的提交日志（commit log）中。在这些更新中，最近提交的那些被存储在一个称为 memtable 的有序缓冲区中；较旧的更新被存储在一个 SSTable 序列中。为了恢复一个 tablet，tablet server 从 METADATA 表读取其元数据。该元数据包含构成该 tablet 的 SSTable 列表，以及一组重做点（redo point），这些重做点是指向任何可能包含该 tablet 数据的提交日志的指针。该 server 将 SSTable 的索引读入内存，并通过应用自重做点以来已提交的所有更新来重建 memtable。
 
@@ -70,7 +70,7 @@ Bigtable 使用 Chubby 来跟踪 tablet server。当一个 tablet server 启动�
 
 
 
-## 合并
+## Merge
 
 随着写操作的执行，memtable 的大小会增加。当 memtable 大小达到一个阈值时，memtable 被冻结，创建一个新的 memtable，并且冻结的 memtable 被转换为一个 SSTable 并写入 GFS。这个 *minor compaction*（次要压缩）过程有两个目标：它缩减了 tablet server 的内存使用量，并且减少了在该 server 死亡时恢复期间必须从提交日志读取的数据量。在读和写操作进行期间，压缩可以继续进行。
 
@@ -78,18 +78,18 @@ Bigtable 使用 Chubby 来跟踪 tablet server。当一个 tablet server 启动�
 
 将所有的 SSTable 精确地重写为一个 SSTable 的 merging compaction 被称为 *major compaction*（主要压缩）。非主要压缩产生的 SSTable 可能包含特殊的删除条目，用于抑制在仍然存活的较旧 SSTable 中已被删除的数据。另一方面，major compaction 产生一个不包含删除信息或已删除数据的 SSTable。Bigtable 遍历其所有的 tablet，并定期对它们应用 major compaction。这些 major compaction 使 Bigtable 能够回收被已删除数据使用的资源，并且也使它能够确保已删除数据及时地从系统中消失，这对于存储敏感数据的服务来说很重要。
 
-## 改进
+## Improvements
 
-### 缓存
+### Cache
 
 为了提高读性能，tablet server 使用两级缓存。Scan Cache 是一个较高级别的缓存，它缓存从 SSTable 接口返回给 tablet server 代码的键值对。Block Cache 是一个较低级别的缓存，它缓存从 GFS 读取的 SSTable 块。Scan Cache 对于倾向于重复读取相同数据的应用最为有用。Block Cache 对于倾向于读取与其最近读取的数据相近的数据的应用很有用（例如，顺序读，或在同一局部性组（locality group）内的热行中不同列的随机读）。
 
 
-### Bloom 过滤器
+### Bloom Filter
 
 Bloom 过滤器允许我们询问一个 SSTable 是否可能包含某个指定行/列对的数据。对于某些应用，用于存储 Bloom 过滤器的一小部分 tablet server 内存极大地减少了读操作所需的磁盘寻道次数。我们对 Bloom 过滤器的使用还意味着，对不存在的行或列的大多数查找不需要触碰磁盘。
 
-### 提交日志
+### Commit Log
 
 如果我们把每个 tablet 的提交日志保存在一个单独的日志文件中，那么在 GFS 中将会并发地写入非常大量的文件。取决于每个 GFS server 上底层文件系统的实现，这些写可能导致大量的磁盘寻道以写入不同的物理日志文件。此外，每个 tablet 一个单独的日志文件也会降低 group commit（成组提交）优化的有效性，因为组往往会更小。为了解决这些问题，我们将变更追加到每个 tablet server 一个单一的提交日志中，将不同 tablet 的变更混合在同一个物理日志文件中。
 

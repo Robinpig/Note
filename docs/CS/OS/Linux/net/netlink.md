@@ -4,7 +4,7 @@ netlink 是内核与用户态进程之间的一种**基于 socket 的双向 IPC 
 
 可以这样定位它在本目录的角色：[Route](/docs/CS/OS/Linux/net/Route.md) 讲"路由表怎么查"，而增删路由的命令 `ip route` 之所以能改到内核，正是通过 netlink 的 **rtnetlink** 子协议；[udev](/docs/CS/OS/Linux/dev/udev.md) 监听设备 add/remove 也是靠 netlink。本篇讲 netlink 机制本身。
 
-## 协议族与地址
+## Protocol Family and Address
 
 打开一个 netlink socket 时要指定**子协议号**（协议族是 `AF_NETLINK`，类型通常 `SOCK_RAW`/`SOCK_DGRAM`）：
 
@@ -39,7 +39,7 @@ struct sockaddr_nl {
 - **单播**：`nl_pid` 标识对端，发给内核时内核端 `pid=0`；
 - **多播**：进程把 `nl_groups` 置上相应位加入组，内核一次广播、所有订阅者收到——状态变化通知不必逐个进程查询，这正是 netlink 相对 ioctl 的关键优势。
 
-## 消息格式
+## Message Format
 
 每条消息以固定的 `nlmsghdr` 开头，后接按 4 字节对齐的有效载荷：
 
@@ -68,7 +68,7 @@ struct nlmsghdr {
 
 一个 socket buffer 里可连续放多条消息（用 `NLMSG_NEXT` 遍历、`NLMSG_OK` 校验）；消息长度按 `NLMSG_ALIGN` 对齐。错误 / ACK 用 `nlmsgerr`（含错误码与原消息头），新版还能携带可读错误串、出错属性偏移等扩展信息（`NETLINK_EXT_ACK`）。
 
-## 属性 TLV
+## Attribute TLV
 
 载荷普遍用 **TLV（type-length-value）** 属性承载，便于向后兼容地增删字段：
 
@@ -98,7 +98,7 @@ struct nlattr {
 
 当一个新内核功能需要 netlink 通道但又不想占用稀缺的子协议号时，统一走 `NETLINK_GENERIC`：它是一个复用层，子系统先注册一个**家族名（family）**，由家族内自己定义命令、属性与多播组。多数现代子系统优先选 generic netlink 而非新增 `NETLINK_*` 号。
 
-## 内核侧实现要点
+## Key Implementation Points on the Kernel Side
 
 - netlink 在内核里也是一种 socket（`netlink_create`），每个子系统注册 `struct netlink_kernel_cfg` 与接收回调；
 - 发送到内核的消息先进入接收队列、由回调解析（多在进程上下文，可睡眠、可取 `capable()` 鉴权）；

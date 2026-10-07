@@ -4,7 +4,7 @@ RocketMQ 的消息过滤分两个层级：**Tag 过滤**（精确匹配 tag 字�
 
 > 版本基线：**5.5.1**（tag `rocketmq-all-5.5.1`）。
 
-## 三大误解先纠正
+## Correct Three Major Misconceptions First
 
 | 常见说法 | 5.5.1 真相 |
 | -------- | --------- |
@@ -12,7 +12,7 @@ RocketMQ 的消息过滤分两个层级：**Tag 过滤**（精确匹配 tag 字�
 | `enablePropertyFilter` 默认 `true` | ❌ **默认 `false`**。这是 SQL92 能否工作的总开关，不开直接报 `SYSTEM_ERROR` |
 | 多 Tag 会按分隔符切分成多个 hash | ❌ `tagsString2tagsCode` **完全忽略** `filter` 参数，只对整串 `tag1 || tag2` 做一次 `hashCode()` |
 
-## 属性名常量
+## Property Name Constants
 
 `common/src/main/java/org/apache/rocketmq/common/message/MessageConst.java`：
 
@@ -33,9 +33,9 @@ RocketMQ 的消息过滤分两个层级：**Tag 过滤**（精确匹配 tag 字�
 >
 > `MessageDecoder` 里只有 `NAME_VALUE_SEPARATOR = 1`（`\u0001`，`:53`），是属性串的 KV 分隔符。
 
-## Tag 过滤
+## Tag Filtering
 
-### 实现位置是 remoting 模块，不是 TagFilter 类
+### Implementation Is in remoting Module, Not TagFilter Class
 
 > [!WARNING]
 > **`TagFilter` 类不存在**（common/client 均无）。`TagFilterProducer` / `TagFilterConsumer` 只是 `example/.../filter/` 下的示例类。
@@ -78,7 +78,7 @@ public static SubscriptionData buildSubscriptionData(String topic, String subStr
 
 `classFilterMode` 字段（`:31`，默认 false）**仍然存在**，但见下文「类过滤已失效」。
 
-### 多 Tag 的 tagsCode 是整串的 hash
+### tagsCode for Multiple Tags Is Hash of the Whole String
 
 > [!WARNING]
 > `MessageExtBrokerInner.tagsString2tagsCode`（`common/.../message/MessageExtBrokerInner.java:46-50`）：
@@ -105,9 +105,9 @@ if (TopicFilterType.MULTI_TAG == topicConfig.getTopicFilterType()) {
 > [!NOTE]
 > `MULTI_TAGS_DISPATCH_TAG_SPLIT_CHAR` 与 `checkMessageTag` 在 5.5.1 中**均不存在**（全仓零命中）。
 
-## SQL92 过滤
+## SQL92 Filtering
 
-### SQL92 是表达式类型，不是消息属性
+### SQL92 Is an Expression Type, Not a Message Property
 
 > [!WARNING]
 > **`PROPERTY_SQL92` 不存在**（全仓零命中）。SQL92 不是消息属性名，而是**订阅的表达式类型**：
@@ -118,7 +118,7 @@ if (TopicFilterType.MULTI_TAG == topicConfig.getTopicFilterType()) {
 > // :61-64  isTagType()
 > ```
 
-### FilterAPI 在 remoting 模块
+### FilterAPI in remoting Module
 
 `remoting/src/main/java/org/apache/rocketmq/remoting/protocol/filter/FilterAPI.java`。
 
@@ -130,7 +130,7 @@ if (TopicFilterType.MULTI_TAG == topicConfig.getTopicFilterType()) {
 >
 > 签名均为 `throws Exception`。
 
-### 表达式引擎是 JavaCC，不是 Calcite
+### Expression Engine Is JavaCC, Not Calcite
 
 > [!IMPORTANT]
 > **5.5.1 全仓不含 Calcite** —— `grep -rn -i calcite`（含所有 pom.xml）→ **零命中**。类 `FilterExpression`、`SQLOperator` **不存在**。
@@ -168,7 +168,7 @@ return (Boolean) ret;   // 非 Boolean 一律 false
 >
 > 注意 BloomFilter 未命中或位图长度不符时**保守放行**（返回 true）—— 宁可放过不可错杀。
 
-### enablePropertyFilter 默认是 false
+### enablePropertyFilter Defaults to false
 
 ```java
 // common/.../BrokerConfig.java:176-178
@@ -214,7 +214,7 @@ if (this.brokerController.getBrokerConfig().isFilterSupportRetry()) {
 > [!NOTE]
 > **`enableTagMessageFiltering` 不存在**（全仓零命中）—— 5.x 已统一到 `enablePropertyFilter`。
 
-## 过滤发生在什么时候
+## When Filtering Happens
 
 > [!WARNING]
 > **写盘时完全不过滤。** 常见误解是「commitlog 空间不足时返回 FILTERED_MESSAGE」——5.5.1 中：
@@ -225,7 +225,7 @@ if (this.brokerController.getBrokerConfig().isFilterSupportRetry()) {
 >
 > `CommitLog.java:757`、`:1429` 的 `mappedFile.isAvailable()` 是**文件可写**检查，与过滤无关。
 
-### 过滤在读路径，且是「预筛 + 精判」两级
+### Filtering Is on Read Path, and Is Two-level "Pre-screen + Precise Judgment"
 
 `DefaultMessageStore.getMessage` 内（`DefaultMessageStore.java:974-1000`）：
 
@@ -252,7 +252,7 @@ if (messageFilter != null
 | `isMatchedByConsumeQueue(Long tagsCode, CqExtUnit)` | 预筛（tagHash / BloomFilter）|
 | `isMatchedByCommitLog(ByteBuffer, Map<String,String>)` | 精确判定（SQL92）|
 
-### 三级过滤链
+### Three-level Filter Chain
 
 | 级别 | 位置 | 判据 | 精度 |
 | ---- | ---- | ---- | ---- |
@@ -263,7 +263,7 @@ if (messageFilter != null
 > [!IMPORTANT]
 > `isMatchedByCommitLog` 对 **Tag 类型直接 `return true`**（`:126-128`）—— **Broker 端从不对 Tag 做精确判定**，只靠客户端 ③。
 
-### 客户端过滤的调用点在 PullAPIWrapper
+### Client-side Filtering Call Point Is in PullAPIWrapper
 
 `client/.../impl/consumer/PullAPIWrapper.java:112-129`：
 
@@ -289,7 +289,7 @@ if (this.hasHook()) { ... this.executeHook(filterMessageContext); }
 > - `DefaultMQPushConsumerImpl` 中只有 `filterMessageHookList`（`:119`）与注册（`registerFilterMessageHook`，由 `DefaultMQPushConsumerImpl.java:950` 调用）
 > - `DefaultMQPushConsumerImpl.java:638-645` 另有一处 hook 调用，处理 unpack 后的 `msgListFilterAgain`
 
-## 为什么过滤主要发生在消费端
+## Why Filtering Mainly Happens on Consumer Side
 
 官方文档 `docs/en/Design_Filter.md` 说得很直接：
 
@@ -299,7 +299,7 @@ if (this.hasHook()) { ... this.executeHook(filterMessageContext); }
 
 **根因**：ConsumeQueue 只存 `tagsCode`（8 字节 hash），**没有原始 tag 字符串**。Broker 端无法做精确判定（多 Tag 场景下 `tagsCode` 还是整串 hash，见上文）。
 
-### tagHashCode 在 20 字节单元中的角色
+### Role of tagHashCode in 20-byte Unit
 
 `store/.../ConsumeQueue.java:64-65`：
 
@@ -316,7 +316,7 @@ public static final int MSG_TAG_OFFSET_INDEX = 12;   // ← tagsCode 的偏移
 └───────────────────────────────┴───────────────────┴───────────────────────────────┘
 ```
 
-### 性能含义
+### Performance Implications
 
 由于 Broker 端只有 hash 粗筛，客户端 ③ 之前**可能已拉回大量 tag 不匹配的消息** → 产生无效网络流量与客户端内存/CPU 开销。
 
@@ -325,7 +325,7 @@ public static final int MSG_TAG_OFFSET_INDEX = 12;   // ← tagsCode 的偏移
 >
 > 若需要前缀/正则/嵌套条件等复杂语义，必须走 SQL92 且**开 `enablePropertyFilter=true`**，并接受额外的 BloomFilter 内存与 CPU 开销。
 
-## 类过滤已失效
+## Class Filtering Has Failed
 
 > [!WARNING]
 > **`enableClassFilter` 配置项在 5.5.1 不存在**（全仓零命中）。已统一为 `enablePropertyFilter`。
@@ -340,7 +340,7 @@ public static final int MSG_TAG_OFFSET_INDEX = 12;   // ← tagsCode 的偏移
 >
 > **结论：任何 `classFilterMode = true` 的订阅会被全量放行**，即 4.x 时代「服务端类过滤白名单」的功能在 5.x 已经完全没有了。
 
-## maxFilterMessageSize 的真实语义
+## True Semantics of maxFilterMessageSize
 
 `maxFilterMessageSize = 16000`（`MessageStoreConfig.java:206`）：
 
@@ -361,7 +361,7 @@ if ((cqUnit.getQueueOffset() - offset) * consumeQueue.getUnitSize() >= maxFilter
 >
 > 想调大以支持「稀疏匹配 + 长区间扫描」的场景可以调，但会拉长单次 Pull 的响应时间。
 
-## 实践要点
+## Practice Key Points
 
 | 事项 | 建议 |
 | ---- | ---- |

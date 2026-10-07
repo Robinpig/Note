@@ -4,7 +4,7 @@
 
 本笔记给出 CS 视角的代数骨架；与向量空间的关系见 [Linear Algebra](/docs/Mathematics/Linear_Algebra.md)，整数结构见 [数论](/docs/Mathematics/Number_Theory.md)，数学的语言基础见 [集合论与数理逻辑](/docs/Mathematics/Set_Theory_Logic.md)。
 
-## 初等代数 → 抽象代数
+## Elementary Algebra → Abstract Algebra
 
 | 层次 | 关注点 | 例子 |
 | --- | --- | --- |
@@ -14,7 +14,7 @@
 
 抽象代数的核心问题是：**一个集合配上若干运算，满足哪些公理，就能推出哪些结论？** 这套「先定公理、再推导性质」的方法，正是 [集合论与数理逻辑](/docs/Mathematics/Set_Theory_Logic.md) 中形式化思想的体现。
 
-## 三大代数结构
+## Three Algebraic Structures
 
 | 结构 | 运算 | 额外公理 | CS 落点 |
 | --- | --- | --- | --- |
@@ -24,11 +24,11 @@
 
 群描述「对称」：旋转、置换、模运算都是群。环和域在此基础上加入第二种运算，从而能研究多项式与方程根——这是 [数论](/docs/Mathematics/Number_Theory.md) 与现代密码学的共同语言。
 
-## 多项式
+## Polynomials
 
 多项式是最自然的「可计算函数」：加法、乘法、带余除法都封闭。多项式插值在数值分析、纠错码（Reed-Solomon）与秘密分享中反复出现。多项式环上的因式分解，是理解有限域构造的钥匙。
 
-## 在 CS 中的落点
+## Applications in CS
 
 - **密码学**：有限域（GF(p)、GF(2ᵐ)）支撑 RSA、Diffie-Hellman、椭圆曲线与 AES；群论描述攻击面（如子群冲突）。
 - **编码理论**：环与域上的代数结构构造纠错码。

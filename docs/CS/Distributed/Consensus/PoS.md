@@ -10,7 +10,7 @@ PoS（Proof of Stake，权益证明）是一种用**质押资本**来约束提�
 - **Validator 替代 Miner**：参与者称为 validator（验证者）而非 miner；要成为 validator 通常需质押最低门槛（如以太坊需 32 ETH）。
 - **Slashing（罚没）**：若 validator 表现出可被惩罚的行为（如在同一高度对两个冲突区块投票、或长期离线），协议会没收其部分或全部质押。这是 PoS 解决「nothing-at-stake」的关键装置——作恶有真实经济代价。
 
-## 与 PoW 的关键差异
+## Key Differences from PoW
 
 | 维度 | PoW | PoS |
 | --- | --- | --- |
@@ -20,14 +20,14 @@ PoS（Proof of Stake，权益证明）是一种用**质押资本**来约束提�
 | 能耗 | 极高 | 极低 |
 | Nothing-at-stake | 不存在（算力只能投一条链） | 原生存在，靠 slashing 化解 |
 
-## Nothing-at-stake 问题
+## Nothing-at-stake Problem
 
 PoW 中矿工的算力物理上只能用于一条链，因此在分叉时理性选择是「全力以赴押注一条」。PoS 里 validator 的 stake 可以同时投在多套历史上而几乎零成本——若在每条分叉上都投票，无论哪条最终胜出都能获得奖励，于是没有动机去收敛到单一历史，这会导致共识无法稳定。解决手段：
 
 - **Slashing**：对「双重投票 / 环绕投票」等可归因的恶意行为进行罚没；
 - **Finality gadget**：引入明确的终结点（如 Casper FFG 的 checkpoint 投票），越过终结点的回滚需罚没大量 stake，使攻击代价陡增。
 
-## 主流实现
+## Mainstream Implementations
 
 - **Peercoin（2012）**：最早的 PoS 加密货币之一（Sunny King 等），以「币龄（coin age）」加权出块权，是最早尝试用 stake 替代算力的方案。
 - **Nxt（2013）**：纯 PoS，出块权完全由账户余额随机抽签决定，无 PoW 预热阶段。

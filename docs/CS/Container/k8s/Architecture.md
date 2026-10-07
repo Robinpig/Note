@@ -17,7 +17,7 @@ Kubernetes 的架构一旦抓住一句话就清楚了：它不是一个"编排�
 > [!NOTE]
 > 本文全部结论基于 **Kubernetes v1.36.4** 源码实读（tag `v1.36.4`），各处已标注文件路径与行号。凡与旧版本认知冲突的地方，统一收在文末「v1.36 反直觉清单」。
 
-## 全局视图
+## Global View
 
 四条链路在同一个模型上跑，这也是为什么它们能被独立替换：
 
@@ -54,7 +54,7 @@ digraph linkage {
 
 kubelet 的"mini controller"身份值得单独说一句：它内部并行跑着 status manager、probe manager、eviction manager、volume manager 等独立循环，只是这些循环不写 etcd，而是写本地状态和节点的 status 子资源。
 
-## 链路一：写请求到账
+## Chain 1: Write Request Arrives
 
 用户提交一个 Pod，从 HTTP 到 etcd 落盘要穿过两道结构：外层三层 delegation 套娃，内层 filter chain。
 
@@ -78,11 +78,11 @@ filter chain 的精确顺序在 `DefaultBuildHandlerChain`（`staging/src/k8s.io
 > [!TIP]
 > **APF 排在 Authorization 之前**，这是很多人记反的地方。原因很直接：给请求分流只需要 user（来自认证）和 RequestInfo（来自上一层），完全不需要鉴权结果。换句话说，被拒的请求也曾经占用过队列席位——这是刻意的，否则任意用户都能用非法请求挤爆排队。
 
-进入 REST handler 之后是 `decode → managedFields 合并 → mutating admission → BeforeCreate 策略校验 → 存储`。落库由 etcd 事务完成，详见 [apiserver](/docs/CS/Container/k8s/apiserver.md?id=写链路)。
+进入 REST handler 之后是 `decode → managedFields 合并 → mutating admission → BeforeCreate 策略校验 → 存储`。落库由 etcd 事务完成，详见 [apiserver](/docs/CS/Container/k8s/apiserver.md?id=write-path)。
 
 这条链路还有一个**反向的孪生兄弟**：删除。它走的入口相同、admission 相同、最后同样落到 etcd 事务，但语义完全不对称——一次 `DELETE` 通常不删任何东西，只写一个 `metadata.deletionTimestamp`，然后由 GC controller 与 kubelet 接力完成。完整过程见 [删除与级联](/docs/CS/Container/k8s/Deletion.md)。
 
-## 链路二：控制回路
+## Chain 2: Control Loop
 
 这条链路是整套架构的灵魂，**所有控制器都跑同一个模板**：
 
@@ -100,7 +100,7 @@ apiserver watch/list
 
 详细的去重机制、RealFIFO 与 DeltaFIFO 的差异、resync 的真实语义见 [client-go](/docs/CS/Container/k8s/client-go.md?id=informer)。
 
-## 链路三：调度
+## Chain 3: Scheduling
 
 scheduler 的职责窄到只有一件事：给 Pod 挑一个 nodeName。主循环严格单 goroutine 串行 `ScheduleOne`，但绑定步骤被丢到独立 goroutine：
 
@@ -119,7 +119,7 @@ NextPod(activeQ.pop)  →  scheduleOnePod
 
 调度框架把这条流程切成 PreEnqueue / PreFilter / Filter / PostFilter / PreScore / Score / Reserve / Permit / PreBind / Bind / PostBind 若干扩展点的有序执行，每个环节都可以用插件替换或增删。完整清单与默认值见 [scheduler](/docs/CS/Container/k8s/scheduler.md)。
 
-## 链路四：kubelet 落地
+## Chain 4: kubelet Lands
 
 kubelet 侧先把三种来源（apiserver watch、静态文件、HTTP）收拢成一条容量为 50 的事件通道，再由 `syncLoopIteration` 分发。它的 select 实际有**七路**，不止常见的四路：
 
@@ -137,9 +137,9 @@ kubelet 侧先把三种来源（apiserver watch、静态文件、HTTP）收拢�
 > [!NOTE]
 > v1.36 的一个重要变化：**CNI 已完全移出 kubelet 代码树**。kubelet 不再直接调用任何 CNI 插件，只能通过 CRI 回报的 `NetworkReady` condition 间接感知网络是否就绪。同理，dockershim 已彻底不存在，只剩 CRI 一条运行路径。
 
-## 三个贯穿全局的契约
+## Three Contracts Spanning the Whole System
 
-### ResourceVersion：乐观并发的载体
+### ResourceVersion: Carrier of Optimistic Concurrency
 
 RV 就是 **etcd 事务响应的 `Header.Revision`**，不是什么独立维护的版本计数器。这个事实解释了很多现象：
 
@@ -151,13 +151,13 @@ RV 就是 **etcd 事务响应的 `Header.Revision`**，不是什么独立维护�
 
 还有一个容易忽略的分工：RV 由 etcd 分配，但**读请求大多不经过 etcd**。apiserver 为每个 group-resource 维护一个 watch cache，把 N 个 informer 收敛成 1 条到 etcd 的 watch，客户端的 List/Watch 优先由内存服务。缓存与 RV 的交互细节——滑动窗口、`410 Gone` 的两种来源、`504` 与 `429` 的分野、流式 list——见 [watch cache 读路径底座](/docs/CS/Container/k8s/WatchCache.md)。
 
-### OwnerReference：所有权驱动的级联
+### OwnerReference: Ownership-driven Cascading
 
 对象之间不是靠调用关系关联，而是靠 `metadata.ownerReferences` 声明所有权。GC controller 据此做级联删除，`Finalizer` 则提供删除前的钩子，让外部系统有机会清理集群外的资源。
 
 后果是：删除一个对象等于删除一棵树，而这棵树的形状是**运行时动态计算**出来的，不是硬编码的。这也解释了为什么删除有时会卡住——某个 finalizer 没被清掉。
 
-### 水平触发：为什么崩溃不可怕
+### Level Triggering: Why Crashes Are Not Scary
 
 控制器只接受"当前应该是什么样"，不处理"刚才发生了什么"：
 
@@ -169,7 +169,7 @@ RV 就是 **etcd 事务响应的 `Header.Revision`**，不是什么独立维护�
 
 代价是调试困难：错误不再能靠单次事件路径复现，得理解整个收敛过程。
 
-## 设计取舍
+## Design Trade-offs
 
 | 取舍 | 换来什么 | 付出什么 |
 |---|---|---|
@@ -181,7 +181,7 @@ RV 就是 **etcd 事务响应的 `Header.Revision`**，不是什么独立维护�
 
 上面四条链路讲的都是"把东西建出来"。反向的两条——**删除**与**驱逐**——复杂度更高，因为它们是**有状态**的：中间态会被持久化，任何一个参与者掉线都会留下残局。这两条单独成篇：[删除与级联](/docs/CS/Container/k8s/Deletion.md)、[驱逐](/docs/CS/Container/k8s/Eviction.md)。
 
-## v1.36 反直觉清单
+## v1.36 Counterintuitive List
 
 以下每条都回源码核实过，且与常见认知相反。这几条最容易在版本升级时踩坑：
 

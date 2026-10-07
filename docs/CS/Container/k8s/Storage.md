@@ -27,9 +27,9 @@
 
 ---
 
-## 第一段：绑定 —— PVC 怎么变成 Bound
+## Segment 1: Binding — How PVC Becomes Bound
 
-### 状态机的入口只有两分支
+### The State Machine Entry Has Only Two Branches
 
 很多人记得 `syncClaim` 有「nil / Lost / 其它」三分支，但在 v1.36 **`getClaimStatus` 这个函数已经不存在了**：
 
@@ -55,7 +55,7 @@ if !metav1.HasAnnotation(claim.ObjectMeta, storagehelpers.AnnBindCompleted) {
 
 **每条队列只有一个 worker**（注释 `:186-192` 明确要求 `syncClaim()` 不可重入）。resync 周期默认 15s，作用是「给共享 informer 补一个短周期，而不拖累其他消费者」。
 
-### syncUnboundClaim：两条路径
+### syncUnboundClaim: Two Paths
 
 ```go
 // pv_controller.go:332
@@ -80,7 +80,7 @@ if volume != nil {
 
 **路径 B —— 用户或供给器已指定 PV**（`:411`）：去缓存找那个 PV，检查 `ClaimRef` 是否为空、`checkVolumeSatisfyClaim`（`:260`）是否满足（删除时间戳、容量、StorageClassName、VolumeMode、accessModes），满足就 `bind`。
 
-### 匹配是 best-fit，但索引不再是按容量排序的
+### Matching Is best-fit, But the Index Is No Longer Sorted by Capacity
 
 ```go
 // pkg/controller/volume/persistentvolume/index.go:97
@@ -104,7 +104,7 @@ bestVol, err := volume.FindMatchingVolume(claim, volumes, nil, nil, delayBinding
 
 best-fit 是为了避免一个 1Ti 的 PV 被 1Gi 的请求占掉。
 
-### 延迟绑定：一次跨组件的双向握手
+### Delayed Binding: A Cross-component Bidirectional Handshake
 
 `volumeBindingMode: WaitForFirstConsumer` 是**为了跟调度器协商拓扑**（比如 EBS 卷必须和 Pod 在同一可用区）。
 
@@ -122,7 +122,7 @@ best-fit 是为了避免一个 1Ti 的 PV 被 1Gi 的请求占掉。
 
 第 6-7 步是很多人不知道的反向通道：**它让「供给失败」变成一次可重试的调度事件**，而不是让 Pod 永远卡住。
 
-### 绑定动作是四步，顺序不能乱
+### Binding Action Is Four Steps, Order Cannot Be Messed Up
 
 ```go
 // pv_controller.go:1095-1133
@@ -139,7 +139,7 @@ best-fit 是为了避免一个 1Ti 的 PV 被 1Gi 的请求占掉。
 - `pv.kubernetes.io/bind-completed` —— 决定下次进 `syncUnboundClaim` 还是 `syncBoundClaim`
 - `pv.kubernetes.io/bound-by-controller` —— 区分「controller 绑的」和「用户手填的」
 
-### 动态供给：controller 只写 annotation，干活的是别人
+### Dynamic Provisioning: controller Only Writes annotation, Someone Else Does the Work
 
 `provisionClaim`（`:1561`）先挑插件：
 
@@ -171,7 +171,7 @@ metav1.SetMetaDataAnnotation(..., AnnStorageProvisioner, provisionerName)
 
 注意这里的职责分工：**PV controller 不调用任何 CSI 接口**。它只写 annotation、发事件、然后等。
 
-### annotation 常量表
+### annotation Constant Table
 
 全部定义在 `staging/src/k8s.io/component-helpers/storage/volume/pv_helpers.go:34-83`：
 
@@ -186,7 +186,7 @@ metav1.SetMetaDataAnnotation(..., AnnStorageProvisioner, provisionerName)
 | `AnnMigratedTo` | `pv.kubernetes.io/migrated-to` |
 | `NotSupportedProvisioner` | `kubernetes.io/no-provisioner` |
 
-### 三个「守护」控制器
+### Three 'Guardian' Controllers
 
 它们的存在理由高度一致：**防止对象被删时，还在用它的东西被静默丢弃**。
 
@@ -203,9 +203,9 @@ finalizer 字符串定义在 `pkg/volume/util/finalizer.go:21,24,27`。**三者�
 
 ---
 
-## 第二段：Attach —— 卷挂到节点上
+## Segment 2: Attach — Volume Mounted to Node
 
-### 两个「世界」
+### Two 'Worlds'
 
 AttachDetach controller 的核心是两份状态：
 
@@ -220,7 +220,7 @@ AttachDetach controller 的核心是两份状态：
 
 **为什么必须有 ASW**：attach 是外部副作用（云 API 调用），可能超时但你不知道是否成功。重启后 controller 只能从 `Node.Status.VolumesAttached` 反推，所以需要一个能表达「不确定」的中间态。
 
-### reconcile：先 detach 再 attach
+### reconcile: Detach First, Then Attach
 
 ```go
 // reconciler/reconciler.go:165
@@ -245,7 +245,7 @@ DSW 里不再需要这个 (卷,节点)
 
 `verifySafeToDetach` 对应 `verifyVolumeIsSafeToDetach`（`operation_generator.go:1491-1514`）：拉取 Node，如果 `node.Status.VolumesInUse` 里还有这个卷就**拒绝摘除**。这就是「kubelet 说还在用，controller 就不敢动」的硬约束。
 
-### 两条独立的强摘通道
+### Two Independent Force-eviction Channels
 
 | 通道 | 条件 | 是否看 `MountedByNode` |
 |---|---|---|
@@ -254,7 +254,7 @@ DSW 里不再需要这个 (卷,节点)
 
 第二条是给「确认节点已经死了，但还没超过 6 分钟」准备的快速通道（`reconciler.go:231-243`）。运维手动打了这个污点，就是明确宣告「这个节点不用等了」。
 
-### VolumeAttachment：由谁创建，由谁消费
+### VolumeAttachment: Created By Whom, Consumed By Whom
 
 这是最容易搞错的一段。
 
@@ -297,7 +297,7 @@ AttachDetach controller → 创建 VolumeAttachment 对象
 
 `statusupdater/` 只维护 `Node.Status.VolumesAttached`（`node_status_updater.go:121-131`），**完全不碰 VolumeAttachment 对象**。
 
-### CSINode 是 kubelet 写的
+### CSINode Is Written by kubelet
 
 另一个常见误解。out-of-tree 的 `csi-driver-registrar` **只负责把 driver 的 socket 注册给 kubelet**，CSINode 对象由 kubelet 自己维护：
 
@@ -314,7 +314,7 @@ kubelet 还会等 CSINode 初始化成功**才允许自己上报 Ready**（`csi_
 
 v1.36 新增了 `pkg/volume/csi/csi_node_updater.go`：按 `CSIDriver.Spec.NodeAllocatableUpdatePeriodSeconds` 周期刷新 CSINode 的可分配量，配套的 feature gate `MutableCSINodeAllocatableCount` 已 **GA + LockToDefault**（`pkg/features/kube_features.go:1688-1693`）。
 
-### 关键默认值
+### Key Default Values
 
 | 项 | 值 | 位置 |
 |---|---|---|
@@ -331,9 +331,9 @@ v1.36 新增了 `pkg/volume/csi/csi_node_updater.go`：按 `CSIDriver.Spec.NodeA
 
 ---
 
-## 第三段：Mount —— 卷进到 Pod 里
+## Segment 3: Mount — Volume Into the Pod
 
-### kubelet 的 ASW 粒度不同
+### kubelet's ASW Granularity Is Different
 
 | | controller | kubelet |
 |---|---|---|
@@ -344,7 +344,7 @@ v1.36 新增了 `pkg/volume/csi/csi_node_updater.go`：按 `CSIDriver.Spec.NodeA
 
 **kubelet 必须同时维护两级状态**，因为「全局 stage 一次、每个 Pod publish 一次」本身就是两件事。ASW 里 `DeviceMountState`（`actual_state_of_world.go:207`）和 `volumeMountStateForPod`（`:373`）分开存放，正是这个模型的直接体现。
 
-### kubelet 怎么知道「controller 已经 attach 好了」
+### How kubelet Knows 'the Controller Has Already Attached'
 
 **通道是 `Node.Status.VolumesAttached`，不是直接读 VolumeAttachment**：
 
@@ -368,7 +368,7 @@ kubelet 读 VolumesAttached → 把卷加入 ASW → 下一轮才允许 mount
 
 这是一次**经由 etcd 的异步往返**，也是为什么 Pod 拿到卷总是有延迟。CSI 插件内部还会额外读一次 `VolumeAttachment`（`csi_attacher.go:155`），但那个 `WaitForAttach` 已经退化成「查一次拿元数据」——注释明说「there should be no waiting」，真正的设备由 driver 在 stage/publish 阶段自己处理。
 
-### 两阶段：不是两个循环，是同一个操作里的先后调用
+### Two-phase: Not Two Loops, But Sequential Calls in the Same Operation
 
 ```go
 // operation_generator.go:445-648  GenerateMountVolumeFunc
@@ -390,7 +390,7 @@ kubelet 读 VolumesAttached → 把卷加入 ASW → 下一轮才允许 mount
 
 实现位置：`csi_attacher.go:264`（`MountDevice`，调 `NodeStageVolume` 在 `:387`）、`csi_mounter.go:99`（`SetUp`，调 `NodePublishVolume` 在 `:301`）。
 
-### 为什么拆两阶段
+### Why Split into Two Phases
 
 三个理由，源码里都有据：
 
@@ -415,7 +415,7 @@ if !NodeSupportsStageUnstage {
 
 **3. 块设备与文件系统走不同分支。** block 卷用 `GenerateMapVolumeFunc`（`operation_executor.go:846`）而不是 `GenerateMountVolumeFunc`，对应 `csi_block.go` 的 `SetUpDevice`（`NodeStageVolume`）/ `MapPodDevice`（`NodePublishVolume`）——但**同样是两阶段**。
 
-### unmount 是严格逆序
+### unmount Is Strictly Reverse Order
 
 ```go
 // reconciler/reconciler.go:33-69
@@ -438,7 +438,7 @@ for _, volumeToUnmount := range rc.actualStateOfWorld.GetUnmountedVolumes()
 
 `readyToUnmount` 是一道**双重门控**（`reconstruct.go:30-44`）：kubelet 重启后必须等 populator 完成首轮**且** device path 已从 `node.Status` 回填完，才允许任何 unmount。这是为了防止用错误的 devicePath 去卸载。
 
-### Pod 启动会等卷就绪
+### Pod Startup Waits for Volume to Be Ready
 
 ```go
 // pkg/kubelet/volumemanager/volume_manager.go:397  WaitForAttachAndMount
@@ -458,7 +458,7 @@ for _, volumeToUnmount := range rc.actualStateOfWorld.GetUnmountedVolumes()
 
 **所以「Pod 卡在 ContainerCreating」的最常见原因就是这里在等**——而且它**阻塞该 Pod 的 sync goroutine 最多 2 分 3 秒**。源码注释解释了为什么定 2 分钟：为了「释放 goroutine」，不能无限等。
 
-### 交给容器运行时
+### Hand It to the Container Runtime
 
 最后一步反而简单：
 
@@ -473,7 +473,7 @@ volumes := kl.volumeManager.GetMountedVolumesForPod(podName)
 
 ---
 
-## 全链路一张表
+## One Table for the Whole Chain
 
 | 阶段 | 执行者 | 关键动作 | 状态落在哪 |
 |---|---|---|---|
@@ -489,7 +489,7 @@ volumes := kl.volumeManager.GetMountedVolumesForPod(podName)
 
 ---
 
-## v1.36 反直觉清单
+## v1.36 Counterintuitive List
 
 按杀伤力排序，全部已回源码复验：
 
@@ -525,7 +525,7 @@ volumes := kl.volumeManager.GetMountedVolumesForPod(podName)
 
 ---
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 | 现象 | 看什么 |
 |---|---|

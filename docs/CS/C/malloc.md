@@ -12,7 +12,7 @@ Linux 内核：VMA、缺页、物理页分配
 
 内核只负责把一整段虚拟内存区域（VMA）交给进程，并**不立即分配物理页**；ptmalloc 则把从内核批量拿到的大段内存，切成应用想要的各种小块、缓存复用，避免每次申请都陷入内核。本页沿这条链路自上而下展开：先看堆块 chunk 的真实结构，再看 arena 与各种 bin 如何组织空闲块，然后是 malloc/free 的完整流程、`brk` 与 `mmap` 两条取内存路径，最后分析著名的"内存站岗"问题与分配器选型。
 
-## chunk：堆的最小单位
+## chunk: The Smallest Unit of the Heap
 
 ptmalloc 管理的每个块都是一个 `malloc_chunk`（glibc `malloc/malloc.c`）。注意**返回给用户的指针并不指向 chunk 开头**，而是跳过头部两个字段：
 
@@ -44,7 +44,7 @@ struct malloc_chunk {
 
 这种"前后都记录大小和状态"的设计叫 **boundary tag（边界标签）**：空闲块的大小既存在块头、也隐式存在相邻块的 `mchunk_prev_size` 里，因此 free 时能 O(1) 找到前后相邻块并立即合并，无需遍历。
 
-## arena：分配区与多线程
+## arena: Allocation Arena and Multithreading
 
 为了多线程下不被一把全局锁卡死，ptmalloc 引入 **arena（分配区）**。每个 arena 是一套独立的堆管理结构 + 锁，即 `struct malloc_state`：
 
@@ -86,7 +86,7 @@ struct malloc_state
 
 `top` chunk 是 arena 里最顶层的大块空闲区，**不属于任何 bin**：所有 bin 都没有合适块时就切 top，top 不够才向内核要内存。
 
-## bin：空闲块的分类缓存
+## bin: Classified Cache of Free Blocks
 
 free 回来的块不是立即还给内核，而是按大小放进不同的 **bin（空闲链表）**，malloc 时优先从这里取。从 glibc 2.26 起还增加了每线程的 tcache。按速度和大小分几层：
 
@@ -112,7 +112,7 @@ free 回来的块不是立即还给内核，而是按大小放进不同的 **bin
 
 free 的块先进 unsorted bin，malloc 时若在 unsorted bin 没被用掉，ptmalloc 会在适当时候把它们整理（sort）进 small/large bin；fast bin 为了高频小块不立即合并，只在堆需要大块、触发 malloc_consolidate 时才统一合并。
 
-## malloc 流程
+## malloc Flow
 
 一次 `malloc(n)` 的查找顺序，命中任意一步即返回：
 
@@ -127,7 +127,7 @@ free 的块先进 unsorted bin，malloc 时若在 unsorted bin 没被用掉，pt
 
 分配 chunk 时会设置 `mchunk_size`、按需清 P 位，返回 chunk 开头 + 2 个字长处的地址给用户。
 
-## free 流程与合并
+## free Flow and Coalescing
 
 `free(p)` 时先由用户指针减头部偏移还原 chunk，读出大小与标志：
 
@@ -139,7 +139,7 @@ free 的块先进 unsorted bin，malloc 时若在 unsorted bin 没被用掉，pt
    - 后一块是 top → 直接并入 top；
 4. 合并靠 boundary tag 在 O(1) 完成，目的是抑制外部碎片。
 
-## brk 与 mmap：向内核要内存的两条路
+## brk and mmap: Two Ways to Request Memory from the Kernel
 
 ptmalloc 向内核取内存只有两种方式，分界是 **mmap threshold，默认 128KB**：
 
@@ -165,7 +165,7 @@ SYSCALL_DEFINE1(brk, unsigned long, brk)
 
 动态阈值机制：如果大块频繁申请释放，ptmalloc 会**动态调高** mmap threshold（最高到 `DEFAULT_MMAP_THRESHOLD_MAX`，64 位 32MB），让更多块改走 brk 堆以复用。
 
-## 内存站岗（heap 不归还）
+## Memory Hoarding (Heap Not Returned)
 
 ptmalloc 的设计目标是服务**短生命周期**的分配，它什么时候把内存还给内核？默认规则是：当 **top chunk 超过 trim threshold（128KB）** 才把 top 的一部分还给内核。这就引出了实际工程中常见的 [glibc 内存站岗](/docs/CS/C/glibc.md)问题：
 
@@ -177,7 +177,7 @@ ptmalloc 的设计目标是服务**短生命周期**的分配，它什么时候�
 - 避免持有夹在中间的长生命周期小块、或把它们迁出主堆；
 - 直接换用 **jemalloc / tcmalloc**，它们以更小的 span 为单位管理，站岗概率和粒度都小得多。
 
-## 分配器选型：ptmalloc / jemalloc / tcmalloc
+## Allocator Selection: ptmalloc / jemalloc / tcmalloc
 
 | 维度 | ptmalloc (glibc) | jemalloc | tcmalloc (gperftools) |
 | --- | --- | --- | --- |
@@ -189,7 +189,7 @@ ptmalloc 的设计目标是服务**短生命周期**的分配，它什么时候�
 
 [jemalloc](/docs/CS/memory/jemalloc.md) 同样按申请大小把分配分成 small / large / huge，并针对 false sharing 做优化；选型时碎片敏感、长期运行的服务更倾向 jemalloc/tcmalloc，简单通用场景用默认 ptmalloc 即可。
 
-## 与其它子系统的咬合
+## Interaction with Other Subsystems
 
 - **虚拟内存**：malloc 拿到的是 [vm](/docs/CS/OS/Linux/mm/vm.md) 里的匿名 VMA，物理页经缺页才分配。
 - **mmap**：大块与文件映射的机制见 [mmap](/docs/CS/OS/Linux/mm/mmap.md)。

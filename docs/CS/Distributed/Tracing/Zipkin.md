@@ -4,7 +4,7 @@
 它帮助收集排查服务架构中延迟问题所需的时序数据。
 其功能包括对这些数据的收集与查询。
 
-### 架构
+### Architecture
 
 Tracer 运行在你的应用中，记录下所发生操作的时间与元数据。
 它们通常会对各类库做 instrumentation（埋点），因此对用户是透明的。
@@ -30,12 +30,12 @@ Fig.1. Architecture
 
 
 
-## 传输
+## Transport
 
 被埋点的库发出的 span 必须被传输，从被追踪的服务送达 Zipkin collectors。
 主要有三种传输方式：HTTP、Kafka 与 Scribe。
 
-### 上报器
+### Reporters
 
 被埋点的应用中，负责把数据发送给 Zipkin 的组件称为 Reporter。
 Reporter 通过若干种传输方式之一，将追踪数据发送给 Zipkin collectors，由后者把追踪数据持久化到存储中。
@@ -118,7 +118,7 @@ public interface Reporter<S> {
 
 	}
 ```
-#### 异步
+#### Asynchronous
 ```java
 static final class BoundedAsyncReporter<S> extends AsyncReporter<S> {
     static final Logger logger = Logger.getLogger(BoundedAsyncReporter.class.getName());
@@ -230,17 +230,17 @@ static final class BoundedAsyncReporter<S> extends AsyncReporter<S> {
 }
 ```
 
-## 收集器
+## Collectors
 当追踪数据抵达 Zipkin collector 守护进程后，它会对其进行校验、存储并建立索引，以便被 Zipkin collector 查询。
 
 
-## 存储
+## Storage
 
 Zipkin 最初构建在 Cassandra 之上，因为 Cassandra 具备良好的可扩展性、灵活的 schema，并且在 Twitter 内部被大量使用。
 不过我们让这一组件变得可插拔。除 Cassandra 外，我们还原生支持 ElasticSearch 与 MySQL。
 其它后端可能以第三方扩展的形式提供。
 
-## 查询服务
+## Query Service
 
 数据被存储并建立索引后，我们需要一种方式把它取出来。Query 守护进程提供了一个简单的 JSON API，用于查找与检索 traces。
 该 API 的主要消费者是 Web UI。

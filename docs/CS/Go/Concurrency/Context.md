@@ -95,7 +95,7 @@ emptyCtx对 Context 接口方法的实现也都非常简单，无论何时调用
 
 
 
-## 四类实现与 Context 树
+## Four Implementation Types and the Context Tree
 
 `context` 包里真正干活的是四个具体类型，它们都实现了 `Context` 接口，并通过**嵌入（embedding）**组成一棵树：
 
@@ -106,7 +106,7 @@ emptyCtx对 Context 接口方法的实现也都非常简单，无论何时调用
 
 所以 `timerCtx` 是 `cancelCtx` 的超集；`cancelCtx` / `timerCtx` 是可取消节点，`emptyCtx` / `valueCtx` 不可取消（它们未实现 `canceler` 接口，`cancel` 对他们无意义）。父节点取消时，会沿 `children` 把取消信号**递归广播**给所有后代。
 
-## cancelCtx：取消广播的核心
+## cancelCtx: Core of Cancel Broadcast
 
 `cancelCtx` 的核心字段（源码 `src/context/context.go`，Go 1.14+ 把 `done` 改为 `atomic.Value` 懒存储，本质仍是首次访问创建、首次 `cancel` 关闭）：
 
@@ -120,7 +120,7 @@ type cancelCtx struct {
 }
 ```
 
-### WithCancel 与挂载子节点
+### WithCancel and Attaching Child Nodes
 
 `WithCancel(parent)` 创建 `cancelCtx` 后调用 `propagateCancel(parent, child)`：若父节点实现了 `canceler` 且尚未取消，就把当前节点加入父的 `children` 集合——这就把新节点挂到了 Context 树上。返回的 `cancel` 函数只是 `child.cancel(true, Canceled)` 的包装。
 
@@ -132,7 +132,7 @@ func WithCancel(parent Context) (Context, CancelFunc) {
 }
 ```
 
-### cancel：递归广播的实现
+### cancel: Implementation of Recursive Broadcast
 
 取消的本质是 `cancelCtx.cancel`：加锁，把 `done` channel 关闭（所有监听 `Done()` 的 goroutine 同时唤醒），**遍历 `children` 对每个子节点递归调用 `cancel(false, err)`**，清空 `children`，最后若 `removeFromParent` 为真则从父节点集合里把自己摘掉。
 
@@ -165,7 +165,7 @@ func (c *cancelCtx) cancel(removeFromParent bool, err error) {
 
 > 取消是**幂等**的：第二次 `cancel` 因 `c.err != nil` 直接返回，多次调用 `CancelFunc` 安全。
 
-## timerCtx：带定时器的 cancelCtx
+## timerCtx: cancelCtx with Timer
 
 `timerCtx` 在 `cancelCtx` 之上加了一个 `deadline` 和一个 `*time.Timer`：
 
@@ -197,7 +197,7 @@ func (c *timerCtx) cancel(removeFromParent bool, err error) {
 }
 ```
 
-## valueCtx：链表式的键值查找
+## valueCtx: Linked-List Key-Value Lookup
 
 `valueCtx` 只存一对 key-value，并把查找**委托给父节点**（不是哈希表，是一条链）：
 
@@ -227,7 +227,7 @@ func WithValue(parent Context, key, val interface{}) Context {
 - `WithValue` 要求 `key` 必须可比较（Go 1.21+ 会在非可比较 key 时 panic），实践中常用自定义类型或私有变量当 key 以防碰撞。
 - `valueCtx` 不实现 `canceler`，所以一个纯 `WithValue` 派生的节点不参与取消广播；它通常挂在某个可取消节点之下。
 
-## 与 errgroup 的衔接
+## Integration with errgroup
 
 `errgroup.WithContext(parent)` 内部就是用 `WithCancel(parent)` 拿到 `(ctx, cancel)`，并在**任一子任务返回非 nil error 时自动调用 `cancel`**——把「错误聚合」与「取消广播」合二为一。`WithContext` 派生的 ctx 只负责出错时取消、**不提供超时**，需要超时就把 `context.WithTimeout` 作为父节点传进去（见 [errgroup](/docs/CS/Go/Concurrency/errgroup.md)）。这也是为什么 [并发模式](/docs/CS/Go/Concurrency/Patterns.md) 里限流 / 流水线退出都优先用 `ctx.Done()` 收口。
 

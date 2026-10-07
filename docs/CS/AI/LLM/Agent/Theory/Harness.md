@@ -7,7 +7,7 @@
 
 > 本文是 Harness 这个主题的专页。Harness 在 [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) 四组件中的定位（它是基础设施层、Agent = LLM + Harness）在那篇里，本文不重复；这里专注三件事：Agent 会在哪四种情况下失效、Harness 做什么、以及 Runtime / Framework / Harness 三层怎么分。具体的编程 Agent 实现见 [Codex 源码剖析](/docs/CS/AI/LLM/Agent/Product/Codex.md)，能力封装机制见 [Skill](/docs/CS/AI/LLM/Agent/Theory/Skill.md)，而八项共性里最吃重的两项——权限与上下文压缩——各有一篇专页：[权限与沙箱](/docs/CS/AI/LLM/Agent/Theory/Permission.md) 与[上下文压缩](/docs/CS/AI/LLM/Agent/Theory/Compaction.md)。
 
-## Agent 的四种核心失效模式
+## Four Core Failure Modes of Agents
 
 Harness 的设计要解决什么，得先看 Agent 在哪里会坏。这四种失效模式不是并列罗列，而是**从「几乎不发生」到「每天都在发生」**——越靠后越需要工程手段介入。
 
@@ -20,7 +20,7 @@ Harness 的设计要解决什么，得先看 Agent 在哪里会坏。这四种�
 
 这四条决定了 Harness 的组件清单。**八项共性**（文件操作、任务规划、工具编排、子任务委派、状态恢复、权限控制、可观测性、上下文管理）不是凭空列的，而是前四种失效模式的解法集合——每一项都能对上表里某一行。
 
-## Harness 做了什么
+## What the Harness Does
 
 一句话：**把「模型决定做什么」与「系统保证做得成」之间那道缝填上**。模型只输出结构化的意图，中间这一段全部是 Harness 的活。
 
@@ -31,7 +31,7 @@ Harness 的设计要解决什么，得先看 Agent 在哪里会坏。这四种�
 - **行动（Action）**——工具编排与执行。调什么、并行还是串行、失败怎么重试、权限怎么判。对应工具调度、失败恢复、分层审批
 
 这三层与下面「三个工程层次」表里的同名概念是一回事，只是把「Harness 做了什么」换成「做在哪一层」来问。
-## Agent 开发的三个层次
+## Three Levels of Agent Development
 
 常被混淆的三件事："让 Agent 跑起来"、"让开发更方便"、"让 Agent 完成复杂任务"——对应三层架构：
 
@@ -47,7 +47,7 @@ Harness 的设计要解决什么，得先看 Agent 在哪里会坏。这四种�
 
 三层不是替代关系而是**分工关系**：需要最大控制力 → 深入 Runtime；快速搭标准 Agent → 用 Framework；让 Agent 面对真实复杂任务 → 用 Harness。一句话：**Runtime 解决"能稳定运行"，Framework 解决"能方便开发"，Harness 解决"能直接完成复杂任务"。**
 
-## 从提示词工程到上下文工程，再到 Harness 工程
+## From Prompt Engineering to Context Engineering, to Harness Engineering
 
 | 工程层次 | 核心问题 | 主要对象 | 典型能力 |
 | --- | --- | --- | --- |
@@ -57,7 +57,7 @@ Harness 的设计要解决什么，得先看 Agent 在哪里会坏。这四种�
 
 三者**层层向外扩展**而非替代：提示词工程优化单次交互；上下文工程优化每一步的信息；Harness 工程优化从目标输入到任务完成的整个过程。
 
-### Prompt Stuffing 的三个问题
+### Three Problems with Prompt Stuffing
 
 朴素做法是把所有可能有用的信息都塞进上下文窗口，任务规模一大就会：
 
@@ -65,11 +65,11 @@ Harness 的设计要解决什么，得先看 Agent 在哪里会坏。这四种�
 2. **注意力稀释**：信息越多，模型越难稳定关注当前真正重要的内容
 3. **无法扩展**：能力受限于单次 Prompt，真实项目规模远超一个窗口
 
-### Context Engineering：按需获取信息
+### Context Engineering: Acquiring Information on Demand
 
 以 Deep Agents 的虚拟文件系统为例：`read_file` 按需读取、`write_file` 保存中间结论、`grep`/`glob` 定位信息、大文件只读必要片段。上下文只保留当前步骤需要的信息，其余存外部环境，需要时取回——和人的工作方式一样：不会把所有文档背在脑中，而是先明确问题，再开文件、做笔记、搜资料。**上下文工程的本质不是堆 Prompt，而是为模型建立一套高效获取、筛选、保存和恢复信息的基础设施。**
 
-### Harness Engineering：成功 Agent 产品的八项共性
+### Harness Engineering: Eight Commonalities of Successful Agent Products
 
 Claude Code、Codex、Manus、Cursor 等产品定位不同，处理复杂任务时都逐渐长出相似能力——这不是巧合，任务足够复杂时它们就从锦上添花变成必需品：
 
@@ -92,7 +92,7 @@ Claude Code、Codex、Manus、Cursor 等产品定位不同，处理复杂任务�
 
 > ⚠️ **一项值得注意的规律**：这八项里**只有第 1 项是几乎所有产品都做的**（文件操作），其余七项的实现深度在各产品间差异极大。判断一个 Agent 产品的成熟度，不是看它「有没有规划功能」，而是看**压缩策略、权限粒度、恢复语义这三项做得对不对**——前两项决定了它能不能在真实项目里跑长任务，后一项决定了它出问题时能不能接上。
 
-### 三句话总结
+### Three-Sentence Summary
 
 1. 提示词工程解决**表达**问题：怎样把任务交代清楚
 2. 上下文工程解决**信息**问题：怎样让模型在正确时刻看到正确信息
@@ -100,7 +100,7 @@ Claude Code、Codex、Manus、Cursor 等产品定位不同，处理复杂任务�
 
 真正决定复杂 Agent 上限的，往往不是某一句神奇提示词，而是模型背后那套管理信息、组织行动和保障执行的工程系统。
 
-## 工程实例：Codex
+## Engineering Example: Codex
 
 OpenAI Codex 是 Harness 概念的生产级实现（Rust），可以作为理解抽象概念的具体标本。本节提炼可迁移的设计；仓库目录、源码文件路径、`run_turn` 主循环与 app-server 协议等实现细节见 [Codex](/docs/CS/AI/LLM/Agent/Product/Codex.md)。
 
@@ -111,7 +111,7 @@ OpenAI Codex 是 Harness 概念的生产级实现（Rust），可以作为理解
 - **Harness 是集成层，不是固定 UI**：统一的线程/事件协议让 CLI、IDE、业务系统共享同一个 Agent 内核
 - **模型给出决策，Harness 负责让决策在现实环境中可执行、可控制、可恢复、可观察**
 
-### 三层边界
+### Three-Layer Boundary
 
 | 层 | 职责 |
 | --- | --- |
@@ -119,7 +119,7 @@ OpenAI Codex 是 Harness 概念的生产级实现（Rust），可以作为理解
 | Harness | 可复用的中间层，让 Host 获得"能工作的 Agent" |
 | Model | 只输出"建议说什么、调用什么工具" |
 
-### 四种上下文粒度
+### Four Context Granularities
 
 | 粒度 | 含义 |
 | --- | --- |
@@ -130,7 +130,7 @@ OpenAI Codex 是 Harness 概念的生产级实现（Rust），可以作为理解
 
 工具调用闭环：模型产生 FunctionCall → Harness 的路由器找到实现 → 执行 → 结果作为 Item 写回历史。**这个闭环的真正所有者是 Harness，不是模型**——所以工具结果必须写回模型上下文（不能只显示给用户），否则就是"刚做完就忘"。
 
-### 安全是分层叠加的
+### Security Is Layered and Stacked
 
 Codex 把"能不能执行一个动作"拆成四层，缺一不可：
 
@@ -143,14 +143,14 @@ Codex 把"能不能执行一个动作"拆成四层，缺一不可：
 
 关键原则 **fail closed**：等待审批期间连接断开或 Turn 被中断，一律默认 Abort，绝不偷偷放行；有副作用的命令与修改文件的补丁走两条独立审批通道。
 
-### 其他可迁移的设计
+### Other Transferable Designs
 
 - **快照保证决策与执行一致**：每次采样前捕获一份不可变的运行设置（模型、路由、环境），执行时看到的就是决策时的设置
 - **状态机承接不确定性**：重试、取消、人工审批都是状态而不是异常分支；取消信号沿调用链传播到模型流、工具和审批等待
 - **UI 订阅事实流而非自存状态**：宿主只接收 Item 事件流，不自己维护一份任务状态——这是同一个内核能驱动多种 UI 的前提
 - **Harness 是外部记忆管理器**：给模型的事实与给人/系统的记录分开存放，上下文过长时压缩但保留可恢复的原始日志
 
-### 什么时候才需要 Harness
+### When You Actually Need a Harness
 
 单文档摘要这类简单任务直接调模型即可。出现以下特征再上 Harness：多步"观察-行动"循环、修改真实状态、需要实时人工介入、长任务、需要权限与审计。
 

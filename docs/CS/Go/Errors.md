@@ -2,7 +2,7 @@
 
 `error` 是 Go 内建的接口类型，而非异常。它承载"可预期的失败"，与 panic 的"不可恢复错误"分工明确。Go 1.13 引入 `%w` 包装与 `errors.Is` / `errors.As`，让错误链上的判定与类型提取变得可组合。
 
-## error 接口与 sentinel
+## error Interface and Sentinel
 
 ```go
 type error interface { Error() string }
@@ -12,7 +12,7 @@ type error interface { Error() string }
 - **sentinel error**（哨兵错误）是包级导出的预定义错误值，用 `==` 比较：`io.EOF`、`sql.ErrNoRows`，以及 Go 1.20 加入的 `errors.ErrUnsupported`。
 - 注意：sentinel 只适用于"调用方需要按值区分"的场景；不要为每一种失败都造一个 sentinel。
 
-## 错误包装与链
+## Error Wrapping and Chain
 
 Go 1.13 起，`fmt.Errorf("read %s: %w", name, err)` 用 `%w` 把 `err` 包进新错误，新错误实现 `Unwrap() error` 从而可被"解开"：
 
@@ -29,7 +29,7 @@ Go 1.13 起，`fmt.Errorf("read %s: %w", name, err)` 用 `%w` 把 `err` 包进�
 
 `errors.Join(errs...)` 把多个错误合并为一个，其 `Unwrap()` 返回所有子错误切片，便于在一次操作中收集多处失败（如并行任务的部分失败）。
 
-## 自定义错误类型
+## Custom Error Types
 
 ```go
 type MyError struct {
@@ -43,7 +43,7 @@ func (e *MyError) Is(target error) bool { ... }     // 自定义 Is 判定
 
 约定：仅当调用方需要按类型 / 字段区分时才定义自定义类型；自定义类型应实现 `Unwrap` 以保持链可穿透。
 
-## 错误 vs panic（再强调）
+## Error vs panic (Reemphasis)
 
 error 用于寻常错误流，每层 `if err != nil` 处理或上抛；panic 仅用于不可恢复的程序级 bug（详见 panic/recover 机制）。不要把 error 当 exception 用、到处 `panic`。
 

@@ -105,7 +105,7 @@ zuul:
 
 由于 Zuul 1 的阻塞模型在高并发长连接下的局限，以及 Netflix 进入维护模式，Spring 官方在 [Spring Cloud Gateway](/docs/CS/Framework/Spring_Cloud/gateway.md) 中用 `Route + Predicate + Filter` 的响应式模型（Reactor + Netty）取代了它，并提供更好的异步、背压与可扩展性。新项目应选 Gateway，Zuul 主要出现在存量 Spring Cloud Netflix 系统中。
 
-### 模型对照
+### Model Comparison
 
 | 维度 | Zuul 1 | Spring Cloud Gateway |
 | ---- | ---- | ---- |
@@ -121,7 +121,7 @@ zuul:
 > [!NOTE]
 > `RequestContext` 依赖 ThreadLocal 是 Zuul 1 最深的模型约束：它在异步场景（异步 Servlet、自定义线程池、响应式调用）里会**静默丢失上下文**。Gateway 用 `ServerWebExchange` 传递状态，不存在这个问题。这也是 Zuul 没能通过简单改造演进下去、必须重写的原因之一。
 
-### 过滤器迁移映射
+### Filter Migration Mapping
 
 | Zuul 写法 | Gateway 对应 |
 | ---- | ---- |
@@ -135,7 +135,7 @@ zuul:
 > [!WARNING]
 > Gateway 5.x 的配置根路径已改名（`spring.cloud.gateway.server.webflux.routes`），旧前缀**不会报错也不会生效**。把 Zuul 配置迁移过来时若发现路由全部不生效，先查是不是照抄了老教程的前缀。
 
-### Zuul 与 Nginx 的关系
+### Relationship Between Zuul and Nginx
 
 两者常被混为一谈，实则层次不同：**Nginx 是进程外的反向代理 / LB**，走的是传输层—应用层之间的转发；**Zuul 是进程内的边缘服务**，跑在 JVM 里，因此天然能访问 Spring 的上下文（配置、服务发现、认证信息）。典型部署是 Nginx 在最外层扛连接与 TLS，Zuul 在内层做业务相关的横切。Gateway 承接的是 Zuul 的这一层，而不是 Nginx 那一层。
 

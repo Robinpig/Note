@@ -27,7 +27,7 @@ digraph rmq_ha {
 > [!IMPORTANT]
 > **最容易记错的一点：Controller 自身默认用的就是 DLedger 做 Raft，不是 jRaft。** 源码常量 `ControllerConfig.java:31` 是 `controllerType = DLEDGER_CONTROLLER`，jRaft 需要显式配置并额外提供 `jRaftInitConf` 与 `jRaftServerId`（`ControllerManager.java:104-107`）。
 
-## 三代架构的开关与默认值
+## Switches and Defaults of Three Generations of Architecture
 
 | 开关 | 默认值 | 位置 |
 | --- | --- | --- |
@@ -40,7 +40,7 @@ digraph rmq_ha {
 >
 > 更反直觉的一点：**DLedger 模式与 Controller 模式是互斥的**，同时为 true 直接 `System.exit(-4)`（`BrokerStartup.java:216-218`）。
 
-### DLedger 已废弃（源码知道，官方文档不知道）
+### DLedger Is Deprecated (Known in Source, Not in Official Docs)
 
 ```java
 static final String DLEDGER_COMMIT_LOG_DEPRECATION_WARNING =
@@ -55,13 +55,13 @@ static final String DLEDGER_COMMIT_LOG_DEPRECATION_WARNING =
 >
 > 另外常见的包路径错误：不存在 `org.apache.rocketmq.dledger` 这个包。真实位置是 `store/src/main/java/org/apache/rocketmq/store/dledger/` 与 `broker/.../broker/dledger/`，顶层模块列表中**没有** dledger 模块，它是外部依赖 `io.openmessaging.storage:dledger`。
 
-### 启用 DLedger 的副作用
+### Side Effects of Enabling DLedger
 
 - **强制 `brokerId = -1`**：`if (messageStoreConfig.isEnableDLegerCommitLog()) { brokerConfig.setBrokerId(-1); }`（`BrokerStartup.java:211-213`）
 - **不向 NameServer 注册**（`BrokerController.java:1976` 的条件含 `!isEnableDLegerCommitLog()`），路由改由 DLedger 组内自维护 —— **升级时极易踩的坑**
 - 日志目录拼接 selfId：`brokerName + "_" + dLegerSelfId`
 
-### Controller 模式
+### Controller Mode
 
 Controller 把 Raft 放在存储**之外**，只做选主与副本元数据管理。Broker 侧 HA 实现被替换为 `AutoSwitchHAService`（`DefaultMessageStore.java:1976-1988`）。
 
@@ -80,11 +80,11 @@ Controller 把 Raft 放在存储**之外**，只做选主与副本元数据管�
 > [!TIP]
 > 官方给出的理由只有一句 "Use Controller mode for new deployments"，**没有成文的理由清单**。可观察到的结构性差异是：DLedger 把 Raft 塞进存储层（`DLedgerCommitLog` 接管 CommitLog，代价是 brokerId 被强制置 -1），Controller 则把 Raft 放在存储之外。这个差异应标注为推断，不要写成官方结论。
 
-## 复制链路（5.5.1 源码级）
+## Replication Chain (5.5.1 Source-level)
 
 **关键事实：5.5.1 的 HA 复制通道完全没用 Netty**，仍是 store 模块里的裸 `java.nio`（`SocketChannel` + `Selector`）。Netty 4.1.130.Final 只用于 broker↔client 的 remoting 通道。
 
-### 传输协议：12 字节头 + 8 字节裸 offset
+### Transport Protocol: 12-byte Header + 8-byte Raw offset
 
 ```java
 /**
@@ -95,7 +95,7 @@ public static final int TRANSFER_HEADER_SIZE = 8 + 4;
 
 `DefaultHAConnection.java:35-48`。**5.5.1 的 HA 协议没有任何请求/响应命令类型** —— 网上（含 4.x 时代资料）常见的 `HACommand`、`GET_HISTORY_DATA`、`PUT_HISTORY_DATA` 全部**不存在**。
 
-### 端到端流程
+### End-to-end Flow
 
 | 步骤 | 主体 | 位置 |
 | --- | --- | --- |
@@ -112,7 +112,7 @@ public static final int TRANSFER_HEADER_SIZE = 8 + 4;
 >
 > 而 `dispatchReadRequest` **只在 slave 侧存在**（master 侧没有此方法）。
 
-### slave 首次连接的 offset 对齐（易错）
+### slave First Connection offset Alignment (Error-prone)
 
 slave 首次上报 offset 为 0 时，master **不会从 0 开始发**，而是对齐到当前映射文件边界：
 
@@ -126,7 +126,7 @@ if (0 == DefaultHAConnection.this.slaveRequestOffset) {
 
 `DefaultHAConnection.java:288-299`。这个对齐逻辑若理解错，会误判「复制丢数据」。
 
-### 两个 master 地址，别搞混
+### Two master Addresses, Don't Confuse Them
 
 `DefaultHAClient` 持有**两个** master 地址：
 
@@ -137,7 +137,7 @@ if (0 == DefaultHAConnection.this.slaveRequestOffset) {
 
 `DefaultHAClient.java:91`/`:101` 与 `:84`/`:97`。`DefaultHAService` 侧同样成对（`:79`、`:86`）。
 
-## 类名纠错表
+## Class Name Correction Table
 
 现存于其他笔记或网上的 4.x 时代说法，在 5.5.1 里的实际情况：
 
@@ -157,7 +157,7 @@ if (0 == DefaultHAConnection.this.slaveRequestOffset) {
 > [!TIP]
 > `AcceptSocketService`/`ReadSocketService` 从 `ha/haservice/` 子包扁平化进内部类这一步发生在 4.x→5.x。若知识库中其他笔记引用了 `ha.haservice.AcceptSocketService` 这类全限定名，需一并订正。
 
-## 三套落后阈值机制
+## Three Sets of Lag Threshold Mechanisms
 
 `SlaveFallBehindMuch` 不存在，真实的是三套独立阈值：
 
@@ -169,7 +169,7 @@ if (0 == DefaultHAConnection.this.slaveRequestOffset) {
 
 另有 `FlowMonitor` 流控（`haTransferBatchSize = 32768`，即 32 KB）与 `slaveTimeout = 3000` ms。
 
-### 同步双写（SYNC_MASTER）
+### Synchronous Double-write (SYNC_MASTER)
 
 ```java
 private CompletableFuture<PutMessageStatus> handleHA(AppendMessageResult result,
@@ -191,7 +191,7 @@ private CompletableFuture<PutMessageStatus> handleHA(AppendMessageResult result,
 > [!WARNING]
 > **`waitStoreMsgOK` 与同步双写不是一个开关**。它是 `Message` 的**消息属性**（`Message.java:43`/`:179`，常量 `MessageConst.PROPERTY_WAIT_STORE_MSG_OK`），不是 broker 配置键。同步双写由 `brokerRole=SYNC_MASTER` 触发（`DefaultMessageStore.java:2192-2193`），超时上限 `slaveTimeout=3000` ms。
 
-## 三个易混概念
+## Three Easily Confused Concepts
 
 **`brokerClusterRole` 与 `brokerRole` 并存**这个前提在 5.5.1 中**不成立** —— `brokerClusterRole` 全树 grep 0 命中。正确的三个维度是：
 
@@ -203,7 +203,7 @@ private CompletableFuture<PutMessageStatus> handleHA(AppendMessageResult result,
 
 第四个相关开关：`enableSlaveActingMaster` 默认 `false`，与 `brokerRole=SLAVE` 组合时才生效。
 
-## DLedger 迁移到 Controller 的坑
+## Pitfalls of Migrating DLedger to Controller
 
 1. **数据面不通用** —— DLedger 的 CommitLog 由 Raft 写，Controller 走 `AutoSwitchHAService` 的普通 socket复制，混用会读到不一致的 CommitLog
 2. **路由来源变化** —— DLedger 下broker 不注册 NameServer，Controller 下会正常注册
@@ -217,7 +217,7 @@ private CompletableFuture<PutMessageStatus> handleHA(AppendMessageResult result,
 >
 > 所以真实后果是 **epoch 缓存为空，表现为复制/追数据行为异常的静默故障，而非启动崩溃** —— 这比崩溃更难查。
 
-## 集群路由
+## Cluster Routing
 
 **Broker 向全部 NameServer 注册**：实现内部取 `getAvailableNameSrvList()`，对每个 namesrv 起一个任务，用 `CountDownLatch(size)` 等全部完成（`BrokerOuterAPI.java:508`起）。
 

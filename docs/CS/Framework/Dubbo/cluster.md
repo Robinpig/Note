@@ -87,7 +87,7 @@ public interface Cluster {
 
 第二，`getCluster` 的**首参变成了 `ScopeModel`**。3.x 所有扩展加载都挂在 ScopeModel 树上，静态的 `ExtensionLoader.getExtensionLoader(Cluster.class)` 已在 3.3.6 标记 `@Deprecated`（`ExtensionLoader.java:241-244`），内部转发到 `ApplicationModel.defaultModel().getDefaultModule()`——那是个隐式默认值，多应用场景下会拿到错的 ExtensionLoader。
 
-### 内置 Cluster 扩展清单
+### Built-in Cluster Extension List
 
 `dubbo-cluster/src/main/resources/META-INF/dubbo/internal/org.apache.dubbo.rpc.cluster.Cluster` 共 11 行：
 
@@ -138,7 +138,7 @@ public interface Router extends Comparable<Router> {
 
 尾部成员：`notify(List)`（地址变更通知）、`isRuntime()`、`isForce()`、`getPriority()`、`stop()`（3.x 新增，`RouterChain#destroy` 逐个调它释放路由内部资源）、`compareTo`（按 `priority` 升序，数值小的先跑）。
 
-### RouterFactory 与 CacheableRouterFactory
+### RouterFactory and CacheableRouterFactory
 
 ```java
 // dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/RouterFactory.java:36-47
@@ -247,7 +247,7 @@ script-app=org.apache.dubbo.rpc.cluster.router.script.config.AppScriptRouterFact
 tag=org.apache.dubbo.rpc.cluster.router.tag.TagStateRouterFactory
 ```
 
-`mock` / `condition` / `tag` 对应老资料里的 `MockRouter` / `ConditionRouter` / `TagRouter`；`script-app` 对应老的 `ScriptRouter`。规则语法见 [Router](/docs/CS/Framework/Dubbo/Router.md?id=内置路由实现的注册表)。
+`mock` / `condition` / `tag` 对应老资料里的 `MockRouter` / `ConditionRouter` / `TagRouter`；`script-app` 对应老的 `ScriptRouter`。规则语法见 [Router](/docs/CS/Framework/Dubbo/Router.md?id=registry-of-built-in-routing-implementations)。
 
 ### BitList
 
@@ -336,7 +336,7 @@ tag=org.apache.dubbo.rpc.cluster.router.tag.TagStateRouterFactory
 
 与旧版笔记相比的差异：`buildChain` 多了接口 Class 参数、内部建两条链、构造器从 `private RouterChain(URL)` 变为 `public RouterChain(SingleRouterChain[])` 且强制 2 条；`invokers` 从 `List` 换成 `BitList`；新增 `headStateRouter` 串链、`shouldFailFast` 开关（配置项 `dubbo.router.should-fail-fast`，默认 `true`，见 `Constants.java:138`）、`RouterSnapshotSwitcher`；`route` 已 `@Deprecated`（`:119-122`）。
 
-### 双链热切换
+### Dual-Chain Hot Switching
 
 `setInvokers(BitList, Runnable switchAction)` 是双链机制的核心（`RouterChain.java:128-210`）。地址列表更新时不能直接改正在被使用的链，否则正在执行的调用会读到半更新状态。做法是「切到备用链 → 慢慢更新主链 → 切换引用 → 慢慢更新备用链」：
 
@@ -534,7 +534,7 @@ adaptive=org.apache.dubbo.rpc.cluster.loadbalance.AdaptiveLoadBalance
 
 各算法的实现细节（预热权重公式、`ShortestResponse` 的滑动窗口、`ConsistentHash` 的虚拟节点）在 [LoadBalance](/docs/CS/Framework/Dubbo/LoadBalance.md)，本篇不重复。
 
-## 陷阱清单
+## Pitfall List
 
 | # | 说法 | 3.3.6 事实 |
 |---|---|---|

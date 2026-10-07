@@ -9,9 +9,9 @@ io_uring 是 Linux 5.1（2019，Jens Axboe）引入的**异步 I/O 接口**：�
 
 io_uring 把"提交一批操作"与"收割一批结果"都做成内存中共享环上的读写，并把网络、文件、甚至 `accept`/`openat`/`send`/`futex` 等非传统 I/O 操作都纳入同一套异步框架，让阶段①、阶段②都可由内核完成、完成后再通知，是 Linux 上最接近 Windows IOCP 的真异步接口。本笔记对照内核 **v6.12** 源码梳理：共享环设计 → UAPI 数据结构 → 三种工作模式 → 四个系统调用 → 一个请求的完整生命周期 → 固定资源与高级特性 → io-wq 回退与安全限制。
 
-## 共享环形设计
+## Shared Ring Design
 
-### SQ 与 CQ：单生产者单消费者
+### SQ and CQ: Single Producer Single Consumer
 
 SQ 和 CQ 都是**单生产者 / 单消费者**（SPSC）的环形队列，但读写方向相反：
 
@@ -24,7 +24,7 @@ SQ 和 CQ 都是**单生产者 / 单消费者**（SPSC）的环形队列，但�
 
 关键在于：这些环和 SQE/CQE 数组都被 mmap 进了用户空间，**应用提交请求、收割完成只是在写/读自己进程地址空间里的内存，不必每步都陷入内核**——可以批量填充多个 SQE 后只在必要时通知内核一次。
 
-### 内存屏障
+### Memory Barrier
 
 共享内存的两端必须用配对的内存屏障保证可见性。应用侧的规则：
 
@@ -34,9 +34,9 @@ SQ 和 CQ 都是**单生产者 / 单消费者**（SPSC）的环形队列，但�
 
 内核对任何发生在与应用共享数据上的读写都使用 `READ_ONCE()` / `WRITE_ONCE()`，既保证顺序，也确保一旦从（可能被应用篡改的）共享内存加载了值，该值在内核里保持稳定。
 
-## UAPI 数据结构
+## UAPI Data Structures
 
-### SQE：提交项
+### SQE: Submission Entry
 
 `struct io_uring_sqe` 是应用描述"要做什么"的定长结构，**固定 64 字节**（内核用 `BUILD_BUG_ON(sizeof(struct io_uring_sqe) != 64)` 强校验）。定义见 `include/uapi/linux/io_uring.h`：
 
@@ -106,7 +106,7 @@ struct io_uring_sqe {
 
 大量 union 是因为不同操作复用同一批字段：`read`/`write` 用 `addr`(缓冲地址)+`len`+`off`；`readv`/`writev` 用 `addr` 指向 iovec、`len` 为 iovec 个数；`splice` 用 `splice_off_in`+`splice_fd_in`；`uring_cmd` 把末尾当命令数据。这样无论何种操作都能塞进同一条 64 字节表项。
 
-### CQE：完成项
+### CQE: Completion Entry
 
 ```c
 struct io_uring_cqe {
@@ -124,7 +124,7 @@ struct io_uring_cqe {
 
 `user_data` 原样回填提交时的值，应用靠它把完成项关联回自己的请求（不必是指针，也可放请求 id）；`res` 是结果——成功时是字节数等，失败时是负的 errno；`flags` 携带 `IORING_CQE_F_*` 信息，如 multishot 是否还有后续、是否使用了 provided buffer。
 
-### 共享页 io_rings
+### Shared Page io_rings
 
 SQ 与 CQ 的 head/tail、mask、计数等元数据放在同一个 mmap 页 `struct io_rings`（定义在 `include/linux/io_uring_types.h`），`cqes[]` 柔性数组紧随其后：
 
@@ -151,7 +151,7 @@ struct io_rings {
 
 应用通过 `io_uring_setup` 返回的 `sq_off` / `cq_off`（各字段在共享页内的偏移）定位 head/tail/mask 等，因此同一份结构可以在内核与不同版本的 liburing 之间稳定演进。三个 mmap 偏移量是固定的魔数：`IORING_OFF_SQ_RING = 0`、`IORING_OFF_CQ_RING = 0x8000000`、`IORING_OFF_SQES = 0x10000000`，分别映射 SQ/CQ 元数据页和 SQE 数组。
 
-### opcode：一个接口承载所有操作
+### opcode: One Interface for All Operations
 
 v6.12 已支持 60 多种 opcode，远不止读写。常见分类：
 
@@ -168,7 +168,7 @@ v6.12 已支持 60 多种 opcode，远不止读写。常见分类：
 
 这意味着一条提交链可以表达"accept → recv → 读文件 → send"这种完整工作流，全部在同一个异步上下文里推进。
 
-## 三种工作模式
+## Three Working Modes
 
 `io_uring_setup` 的 flags 决定内核如何收割完成，三种模式性能与适用场景不同：
 
@@ -184,9 +184,9 @@ v6.12 已支持 60 多种 opcode，远不止读写。常见分类：
 
 IOPOLL 与 SQPOLL 同时开启时，应用连完成轮询都不用做——`io_sq_thread` 一并承担提交与完成轮询，减少 CPU 消耗与 uring_lock 争用。
 
-## 四个系统调用
+## Four System Calls
 
-### io_uring_setup：创建环
+### io_uring_setup: Create the Ring
 
 ```c
 SYSCALL_DEFINE2(io_uring_setup, u32, entries,
@@ -200,7 +200,7 @@ SYSCALL_DEFINE2(io_uring_setup, u32, entries,
 
 核心创建逻辑在 `io_uring_create`：分配 `io_ring_ctx` → `io_allocate_scq_urings` 建立共享环 → 若需要则 `io_sq_offload_create` 起 SQPOLL 线程 → 回填 `sq_off`/`cq_off` 偏移和 `features` → 最后 `io_uring_install_fd` 安装 fd（放到最后，避免有人在初始化完成前就 close 它）。
 
-### io_uring_enter：提交与等待
+### io_uring_enter: Submit and Wait
 
 ```c
 SYSCALL_DEFINE6(io_uring_enter, unsigned int, fd, u32, to_submit,
@@ -215,7 +215,7 @@ SYSCALL_DEFINE6(io_uring_enter, unsigned int, fd, u32, to_submit,
 
 SQPOLL 模式下提交与完成都由 SQ 线程负责，此调用只是按需唤醒线程（`IORING_ENTER_SQ_WAKEUP`）或等待 SQ 被消费（`IORING_ENTER_SQ_WAIT`）。
 
-### io_uring_register：注册固定资源
+### io_uring_register: Register Fixed Resources
 
 ```c
 SYSCALL_DEFINE4(io_uring_register, unsigned int, fd, unsigned int, opcode,
@@ -224,15 +224,15 @@ SYSCALL_DEFINE4(io_uring_register, unsigned int, fd, unsigned int, opcode,
 
 用于注册长期复用的资源（文件、缓冲、凭证等），是热路径性能优化的关键，详见后文「固定资源」。
 
-### io_uring：收割 CQ 不需要系统调用
+### io_uring: Reaping CQ without a System Call
 
 应用收割 CQ 完全是读共享内存：比较 CQ head/tail、取出 CQE、处理后推进 head。只有当需要阻塞等待新完成、或 CQ 环溢出需要内核补刷时才进入内核。
 
-## 一个请求的生命周期
+## Lifecycle of a Request
 
 下面跟踪一条普通 `READ` SQE 从提交到完成在内核里走过的路径（v6.12）。
 
-### ① 分配请求对象 io_kiocb
+### Allocating the Request Object io_kiocb
 
 每个 SQE 在内核对应一个 `struct io_kiocb`（io_uring 的内核 I/O 控制块）。它从专用 slab 缓存 `req_cachep`（`KMEM_CACHE(io_kiocb, ...)`）分配，并有 per-context 的请求缓存做批量补充，避免每个请求都走 slab 分配器。`io_kiocb` 是连接一切的枢纽，关键字段：
 
@@ -283,7 +283,7 @@ struct io_kiocb {
 
 提交主循环 `io_submit_sqes` 每次先 `io_alloc_req` 取一个 `io_kiocb`，再 `io_get_sqe` 取出应用填的 SQE（经 SQ index array 一层间接，`IORING_SETUP_NO_SQARRAY` 可去掉），交给 `io_submit_sqe`。
 
-### ② 初始化 io_init_req
+### Initializing io_init_req
 
 `io_submit_sqe` 先调 `io_init_req`，把 SQE 的内容搬进 `io_kiocb` 并做校验：
 
@@ -315,7 +315,7 @@ static int io_init_req(struct io_ring_ctx *ctx, struct io_kiocb *req,
 
 每个 opcode 在 `io_issue_defs[opcode]`（`struct io_issue_def`）里登记了自己的 `prep`（准备/校验）、`issue`（实际下发）函数和能力位，是一套典型的 opcode 分发表。注意这里读 SQE 都用 `READ_ONCE`——因为 SQE 在用户映射内存里，可能被应用随时改动。
 
-### ③ 下发 io_queue_sqe → io_issue_sqe
+### Dispatching io_queue_sqe → io_issue_sqe
 
 普通请求经 `io_queue_sqe`，它先以内联、非阻塞方式尝试一次：
 
@@ -337,7 +337,7 @@ static inline void io_queue_sqe(struct io_kiocb *req)
 
 `IO_URING_F_NONBLOCK` 要求"绝不能阻塞"，`IO_URING_F_COMPLETE_DEFER` 表示"完成先攒着、批量提交结束再统一刷 CQ"。`io_issue_sqe` 调对应操作的 `issue` 函数（如读文件走 `io_read`、网络走相应 handler）。这一步有三种结果，决定请求走向。
 
-### ④ 三条去路
+### Three Exit Paths
 
 1. **内联完成（inline completion）**：操作当场就能完成（如数据已在 PageCache、或一个非阻塞的纯计算操作），结果直接写入 `req->cqe`，请求随后进入批量完成列表，等这一批提交结束统一刷进 CQ 环——整条路径不睡眠、不额外调度。
 
@@ -345,7 +345,7 @@ static inline void io_queue_sqe(struct io_kiocb *req)
 
 3. **异步线程回退（io-wq）**：操作不支持非阻塞、必须在阻塞上下文中完成时（典型是 buffered I/O 遇到需要等待的情况），`io_queue_async` 走 `io_queue_iowq`，把请求丢给 **io-wq** 线程池阻塞执行，应用线程完全不被阻塞。
 
-### ⑤ 完成并回填 CQE
+### Completing and Filling Back CQE
 
 执行完成后，结果写进 `req->cqe.res`/`flags`。绝大多数路径用**延迟完成**（`IO_URING_F_COMPLETE_DEFER`），在批量提交结束的 `io_submit_state_end` → `io_submit_flush_completions` 里一次性把攒下的完成项填进 CQ 环，摊薄开销。真正填 CQE 的是 `io_fill_cqe_req`：
 
@@ -369,7 +369,7 @@ static __always_inline bool io_fill_cqe_req(struct io_ring_ctx *ctx,
 
 若 CQ 环已满（应用没及时收割），`io_get_cqe` 失败，完成项进入 `cq_overflow_list` 并累加 `cq_overflow` 计数，等应用腾出空间后由内核补刷。io-wq 线程里的完成走 `io_req_complete_post`，单独加锁填 CQE。完成回填后释放对 `io_kiocb` 的引用，最后一个引用把对象还回请求缓存。
 
-### task_work：借提交者的上下文收尾
+### task_work: Finishing Up Using the Submitter's Context
 
 有些完成工作（如把数据 fixup、收割 multishot）必须在**提交该请求的那个用户进程上下文**里、且需要 `mm` 时才能做。内核不能在硬中断或别的 CPU 上随意强行打断，于是用 **task_work** 机制：`io_req_task_work_add` 把一个回调挂到提交任务的 `task->task_works` 链表，等该任务下次要进入/返回内核（返回用户态前）时执行。
 
@@ -378,39 +378,39 @@ static __always_inline bool io_fill_cqe_req(struct io_ring_ctx *ctx,
 - `IORING_SETUP_COOP_TASKRUN`：协作式运行——等任务反正要切换时再做 task_work，而不是强制用 IPI 打断正在用户态运行的任务；
 - `IORING_SETUP_DEFER_TASKRUN`：把 task_work 推迟到真正需要事件（如 `io_uring_enter` 等 GETEVENTS）时才跑。
 
-## 固定资源与高级特性
+## Fixed Resources and Advanced Features
 
-### Fixed files（固定文件表）
+### Fixed Files (Fixed File Table)
 
 正常 I/O 每个请求要用 `fget`/`fput` 引用 fd，底层有原子操作与锁。`io_uring_register`（`IORING_REGISTER_FILES` / `..._FILES2`）可预先把一组文件注册进 `ctx->file_table`，之后 SQE 设 `IOSQE_FIXED_FILE`、用 `file_index` 下标引用，走 `io_file_get_fixed`，**每次 I/O 省去 fget/fput 的原子开销**。可用 `FILES_UPDATE`/`FILES_UPDATE2` 增量更新，`IORING_REGISTER_FILE_ALLOC_RANGE` 注册一个可自动分配的槽位区间。
 
-### Registered buffers（固定缓冲）
+### Registered Buffers (Fixed Buffer)
 
-`IORING_REGISTER_BUFFERS` 预注册一组用户缓冲，内核把它们 [pin 在内存](/docs/CS/OS/Linux/mm/gup.md?id=longterm-的代价)（`io_mapped_ubuf`），之后 `READ_FIXED`/`WRITE_FIXED` 或带 `buf_index` 的操作直接用，免去每次 I/O 的 `pin_user_pages`/解 pin 开销，并支持块层的固定缓冲快速路径。
+`IORING_REGISTER_BUFFERS` 预注册一组用户缓冲，内核把它们 [pin 在内存](/docs/CS/OS/Linux/mm/gup.md?id=the-cost-of-longterm)（`io_mapped_ubuf`），之后 `READ_FIXED`/`WRITE_FIXED` 或带 `buf_index` 的操作直接用，免去每次 I/O 的 `pin_user_pages`/解 pin 开销，并支持块层的固定缓冲快速路径。
 
-### Provided buffers（按需提供缓冲组）
+### Provided Buffers (On-demand Buffer Group)
 
 对于"事先不知道数据多大"的读（典型是服务器 recv），可以用 `PROVIDE_BUFFERS` 或注册 **buffer ring**（`IORING_REGISTER_PBUF_RING`）提供一个缓冲组。SQE 设 `IOSQE_BUFFER_SELECT` + `buf_group`，请求就绪时内核自动从组里挑一个缓冲、把缓冲 ID 放进 CQE 的高 16 位（`IORING_CQE_F_BUFFER`）返回，应用无需提前为每个连接挂起一个缓冲。基于共享环的 PBUF ring 连缓冲的提交/回收都可在用户态完成；`IOU_PBUF_RING_INC` 支持增量消费大缓冲。
 
-### 链式操作与 multishot
+### Chained Operations and Multishot
 
 - **`IOSQE_IO_LINK` / `IOSQE_IO_HARDLINK`**：把多个 SQE 串成一条链，前一个成功才执行下一个，可表达"open→read→close""recv→处理→send"工作流；配 `LINK_TIMEOUT` 可给整链加超时。
 - **multishot**：`POLL_ADD`、`ACCEPT`、`RECV` 等支持 multishot 标志，一条 SQE 在事件反复到来时**持续产生多个 CQE**，每次 CQE 带 `IORING_CQE_F_MORE` 表示"还有后续"，省去反复重新注册。
 - **`IOSQE_CQE_SKIP_SUCCESS`**：请求成功时不产生 CQE（失败仍产生），适合纯串联、只关心异常的中间步骤。
 
-### 零拷贝与 buffer select 网络发送
+### Zero-copy and Buffer-select Network Send
 
 `SEND_ZC` / `SENDMSG_ZC` 走内核零拷贝发送（与 `MSG_ZEROCOPY` 同源），完成后用带 `IORING_CQE_F_NOTIF` 的通知 CQE 告知内核何时可释放承载页；`IORING_SEND_ZC_REPORT_USAGE` 可让内核报告是否真的零拷贝、还是退回了拷贝。
 
-### 环间通信 MSG_RING
+### Inter-ring Communication MSG_RING
 
 `IORING_OP_MSG_RING` 允许一个环向另一个环直接投递数据（`IORING_MSG_DATA`）甚至传递一个已注册的 fd（`IORING_MSG_SEND_FD`），可用于在同一进程多个环或线程的工作者之间做无锁的工作交接，而不必经额外 IPC。
 
-### URING_CMD 与 SQE128/CQE32
+### URING_CMD and SQE128/CQE32
 
 `IORING_OP_URING_CMD` 让设备驱动注册自己的命令（如 NVMe passthrough、某些网卡/存储命令），配合 `IORING_SETUP_SQE128`（SQE 扩到 128 字节承载 80 字节命令数据）和 `IORING_SETUP_CQE32`（CQE 扩到 32 字节、多 16 字节回传）传递大块命令与结果。
 
-## io-wq：异步回退线程池
+## io-wq: Asynchronous Fallback Thread Pool
 
 当请求无法非阻塞完成、又不能让提交线程阻塞时，io_uring 用 **io-wq**（内核 worker pool，`io_uring/io-wq.c`）在线程上下文阻塞执行。它的 worker 分两类：
 
@@ -419,7 +419,7 @@ static __always_inline bool io_fill_cqe_req(struct io_ring_ctx *ctx,
 
 每个 io_ring_ctx 默认有自己的 io-wq，也可通过 `IORING_SETUP_ATTACH_WQ`（传 `wq_fd`）让多个环共享一个线程池；可用 `IORING_REGISTER_IOWQ_MAX_WORKERS` 限制 worker 数、`IORING_REGISTER_IOWQ_AFF` 设置 worker 的 CPU 亲和性。io-wq 使 io_uring 即使面对只支持阻塞语义的旧文件系统也能对外呈现统一的异步接口——内联完成、poll、io-wq 三条路径对应用透明。
 
-## 安全与限制
+## Security and Limitations
 
 io_uring 把大量内核操作暴露到共享内存接口，历史上多次成为本地提权漏洞的来源，因此内核加了多层限制：
 

@@ -4,7 +4,7 @@
 
 TS 7 之后 `strict` 成了默认值，`moduleResolution` 的选项空间也重新洗牌，这份笔记按当前时间点的实际状态整理。细节审核请先翻 TS 对应版本的 release notes。
 
-## 文件在哪里：program 的组成
+## Where the Files Are: The Composition of a Program
 
 ```jsonc
 {
@@ -30,7 +30,7 @@ tsc --showConfig          # 打印继承、合并后的最终配置
 
 注意 `"files"` 不参与继承合并，而 `include`/`exclude` 的路径基准是各自所在文件的目录。
 
-## strict 家族：逐项在管什么
+## The strict Family: What Each Flag Controls
 
 TS 7 起 `strict` 默认为开。逐条理解它的组成，才知道升级后满屏报错来自哪一项：
 
@@ -59,7 +59,7 @@ TS 7 起 `strict` 默认为开。逐条理解它的组成，才知道升级后�
 
 最后一条值得多说一句：`erasableSyntaxOnly`（TS 5.8 引入）把"这份代码能否被 Node 直接跑"变成了**可被编译器机械校验**的属性。开了它，`node --experimental-strip-types app.ts` 就能直接执行源码，不需要 `ts-node`、`tsx` 或任何构建步骤。
 
-## 模块：`module` 与 `moduleResolution`
+## Modules: `module` and `moduleResolution`
 
 这是实务中踩坑最多的一组。**`module` 决定产出的格式，`moduleResolution` 决定怎么找文件**，两者必须配套。
 
@@ -80,7 +80,7 @@ TS 7 的变化：**`moduleResolution: node10` 已被移除**，`module` 默认�
 - **`moduleDetection`**：设为 `force` 强制把每个非空文件当作模块（避免误判为全局脚本）；
 - **`isolatedModules`**：限制只允许能被逐文件独立编译的写法，是 esbuild/swc 友好的前提。
 
-## `target` 与 `lib`：两件不同的事
+## `target` and `lib`: Two Different Things
 
 初学者最容易混：`target` 管**语法降级**，`lib` 管**可用 API 的类型声明**。
 
@@ -101,7 +101,7 @@ TS 7 的变化：**`moduleResolution: node10` 已被移除**，`module` 默认�
 
 TS 7 已**移除 ES5 target**；需要 ES5 的链路请保留 6.x 产物。
 
-### 类字段的语义差异：`useDefineForClassFields`
+### Semantic Differences of Class Fields: `useDefineForClassFields`
 
 这一项决定了 `class { x = 1 }` 走 `[[Define]]` 还是 `[[Set]]`：
 
@@ -115,7 +115,7 @@ class Derived extends Base {
 
 `target: es2022` 或更高时默认为 `true`（按标准语义用 `[[Define]]`），否则为 `false`。涉及到继承 + 属性装饰器的老代码在这两个模式下行为不同，升级时要格外留意。
 
-## 声明文件：`.d.ts` 这块
+## Declaration Files: The `.d.ts` Part
 
 | 选项 | 作用 |
 |------|------|
@@ -127,7 +127,7 @@ class Derived extends Base {
 
 第三方没有自带类型时，从社区仓库 DefinitelyTyped 安装：`npm i -D @types/node`。这些包靠 `node_modules/@types` 下的隐式查找被自动纳入；一旦显式写了 `types` 数组，未列出的包就不再自动生效——这是很多人遇到"为什么 @types/node 突然找不到了"的原因。
 
-## 这些选项不影响 emit
+## These Options Do Not Affect emit
 
 理解"只有类型、不留痕迹"的部分，可以避免为了消除报错而误改源码：
 
@@ -173,7 +173,7 @@ class Derived extends Base {
 
 构建用 `tsc --build`（TS 7 下再用 `--builders` 让它并行）。引用方读的是被引用方的 `.d.ts`，因此 IDE 不必为了补全去重新解析整棵依赖树。详见 [TypeScript 编译器](/docs/CS/TypeScript/Compiler.md)。
 
-## 性能与排障
+## Performance and Troubleshooting
 
 | 手段 | 命令 | 用途 |
 |------|------|------|

@@ -96,7 +96,7 @@
 
 我跑了多次还是 if 的吞吐量都是最高的，怎么整这个全 if 的都是最棒滴。
 
-## 反编译 if 和 switch
+## Decompiling if and switch
 
 在我的印象里这个 switch 应该是优于 if 的，不考虑 CPU 分支预测的话，当从字节码角度来说是这样的，我们来看看各自生成的字节码。
 
@@ -140,7 +140,7 @@
 
 > 题外话: 我看网上也有对比 if 和 switch 的，它们对比出来的结果是 switch 优于 if，首先 jmh 就没写对，定义一个常量来测试 if 和 switch，并且测试方法的 result 写了没有消费，这代码也不知道会被 JIT 优化成啥样了，写了几十行，可能直接优化成 return 某个值了。
 
-## 小结一下测试结果
+## Summary of Test Results
 
 对比了这么多我们来小结一下。
 
@@ -156,7 +156,7 @@
 
 在选择条件很多的情况下 switch 是优于 if 的，再多的选择值我就没测了，大伙有兴趣可以自己测测，不过趋势就是这样的。
 
-## CPU 分支预测
+## CPU Branch Prediction
 
 接下来咱们再来看看这个分支预测到底是怎么弄的，为什么会有分支预测这玩意，不过在谈到分支预测之前需要先介绍下指令流水线（Instruction pipelining），也就是现代微处理器的 pipeline。
 
@@ -202,7 +202,7 @@ CPU 本质就是取指执行，而取指执行我们来看下五大步骤，分�
 
 
 
-## 为什么处理有序数组要比非有序数组快？
+## Why Are Ordered Arrays Faster Than Unordered Ones?
 
 这个问题在那篇博客开头就被提出来了，很明显这也是和分支预测有关系，既然看到了索性就再分析一波，大伙可以在脑海里先回答一下这个问题，毕竟咱们都知道答案了，看看思路清晰不。
 
@@ -244,7 +244,7 @@ CPU 本质就是取指执行，而取指执行我们来看下五大步骤，分�
 
 ![Image](https://mmbiz.qpic.cn/mmbiz_png/azicia1hOY6QibEh7mVicEt6icC8A9fpiaJYa9mW89Oia2dyluibIwPtJ5KUlY8tJgfN0SPB6HGI4lqo7oicriaZDNSnw00A/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
 
-## 最后
+## Final Thoughts
 
 这篇文章就差不多了，今天就是从 Dubbo 的一段代码开始了探险之旅，分析了波 if 和 switch，从测试结果来看 Dubbo 的这次优化还不够彻底，应该全部改成 if else 结构。
 

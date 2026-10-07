@@ -56,7 +56,7 @@ Linux启动有个 INIT_TASK 0号进程，也叫idle进程，固定使用这个�
 
 
 
-## 容器如何使用 namespace
+## How Containers Use namespace
 
 容器 = 一组 namespace + 一个 rootfs + 一套 cgroup 限额。以 `docker run` 为例，runc 的启动路径正是教科书式的三步（伪代码见 [LXC](/docs/CS/OS/Linux/LXC.md)）：
 
@@ -66,11 +66,11 @@ Linux启动有个 INIT_TASK 0号进程，也叫idle进程，固定使用这个�
 
 各 namespace 在容器里的可观察现象：PID ns 让容器内 `ps` 只看到自己；NET ns 给容器独立的网卡与端口空间（veth pair 怎么接进来见 [Docker 网络](/docs/CS/Container/Docker/net.md)）；UTS ns 让每个容器有自己的 hostname。
 
-### setns 加入已有 namespace
+### setns: Join an Existing namespace
 
 `docker exec` / `kubectl exec` / `nsenter` 的底层都是 setns(2)：打开目标进程的 `/proc/PID/ns/xxx` 拿到 namespace 句柄，再 setns 把当前线程"搬"进去。
 
-这也是 [Pod 的 pause 容器](/docs/CS/Container/k8s/Pod.md?id=pause-容器)的实现机制：pause 先创建并持有 Network/IPC/UTS namespace，业务容器逐项 setns join 进来——因此业务容器崩溃重建不影响 Pod IP，只有 pause 重建才会。
+这也是 [Pod 的 pause 容器](/docs/CS/Container/k8s/Pod.md?id=pause-container)的实现机制：pause 先创建并持有 Network/IPC/UTS namespace，业务容器逐项 setns join 进来——因此业务容器崩溃重建不影响 Pod IP，只有 pause 重建才会。
 
 观察：`ls -l /proc/$$/ns/`，两个进程某项 namespace 的链接数与 inode 号相同即共享之。
 

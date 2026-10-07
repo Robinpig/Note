@@ -14,7 +14,7 @@ etcd-raft 里 `MsgCheckQuorum` 的语义是：检查活跃的节点数是否达�
 >
 > 术语统一说明：本篇代码块中，`Progress`（`tracker.go` 里的 map 类型，3.5.34 及之前叫 `ProgressMap`）与 `*Progress`（单个 follower 状态，`progress.go`）是两个不同层级的类型；正文若无特别说明，`Progress` 均指单个 follower 状态。
 
-## 三种状态
+## Three States
 
 leader 与某个 follower 之间的交互方式有且只有三种，定义在外置仓库的 `tracker/state.go`：
 
@@ -63,7 +63,7 @@ const (
 - **Replicate 是乐观的**。不等 ack 就把 `Next` 推到最新，这是吞吐量的来源；代价是可能发到 follower 并不需要的位置，所以有了 `MaybeDecrTo` 的回退逻辑。
 - **Snapshot 是兜底**。一旦 leader 已经截断日志给不出 follower 需要的条目，只能传整份快照，此时 Progress 暂停一切日志发送。
 
-## Progress 结构
+## Progress Structure
 
 外置仓库 `tracker/progress.go` 的结构体定义，每个字段都对应一类交互决策：
 
@@ -160,7 +160,7 @@ func (pr *Progress) OptimisticUpdate(n uint64) { pr.Next = n + 1 }
 
 `OptimisticUpdate` 只有一行——发出消息后不等 ack，直接推进 `Next`。这就是"乐观复制"这个词的落点。
 
-## IsPaused 与流控
+## IsPaused and Flow Control
 
 leader 判断"能不能给这个 follower 发消息"只有一个入口：
 
@@ -294,7 +294,7 @@ func (in *Inflights) Count() int { return in.count }
 
 `FreeLE` 里那个"窗口空时把 `start` 归零"的细节也是内存优化：否则长期运行的 group 缓冲区会停在偏移位置，白占空间。
 
-## 回退逻辑
+## Rollback Logic
 
 follower 拒绝日志时，leader 要把 `Next` 调回去。`MaybeDecrTo` 处理的正是这件事，它必须区分**真拒绝**和**假拒绝**：
 
@@ -347,7 +347,7 @@ func (pr *Progress) MaybeDecrTo(rejected, matchHint uint64) bool {
 
 这行 TODO 很有意思：Replicate 分支里明明拿到了 `matchHint` 却没用，理由没写。合理推测是 `Match+1` 已经是最安全的选择（不会越过 follower 确认的边界），而 `matchHint` 来自对端、未必可信。
 
-## 状态转移
+## State Transition
 
 三个 `Become*` 方法对应状态机的三条边，都走 `ResetState` 统一重置辅助字段：
 
@@ -438,7 +438,7 @@ type ProgressTracker struct {
 > [!NOTE]
 > 这里能看到 **learner 被单独存放**（`Learners` map），不混在 `Progress` 里——因为 learner 的语义是"要追踪进度但不参与投票"，而 `Committed()` 只按 `Voters` 算。
 
-### 提交水位与quorum
+### Commit Watermark and Quorum
 
 回到之前埋的坑，quorum 的判定就是 `Committed()`：
 
@@ -465,7 +465,7 @@ func (r *raft) maybeCommit() bool {
 > [!TIP]
 > `Committed()` 只统计 **Voters**，`Learners` 不在计算范围内。所以 learner 无论落后多少，都不会影响提交水位——这正是它作为"安全加入集群手段"的价值所在（见 [cluster.md](/docs/CS/Framework/etcd/cluster.md) 的 learner 三步法）。
 
-### 存活检测
+### Liveness Detection
 
 `MsgCheckQuorum` 依赖的活跃判定同样在这里：
 
@@ -489,7 +489,7 @@ func (p *ProgressTracker) QuorumActive() bool {
 
 同样**跳过 learner**。连上这两个坑就通了：`MsgCheckQuorum` 检查活跃 voter 数量不足 quorum → leader 主动退位为 follower → 触发新一轮选举。
 
-### 无分配遍历
+### Unassigned Traversal
 
 `Visit` 是个性能敏感函数，注释直说了：*We need to sort the IDs and don't want to allocate since this is hot code*。实现用栈上数组兜底，只有成员数超过 7 才真正分配：
 
@@ -521,7 +521,7 @@ func (p *ProgressTracker) Visit(f func(id uint64, pr *Progress)) {
 > [!WARNING]
 > 注意最后用了**插入排序**而非 `sort.Slice`。这是刻意的——`ids` 此时已经是"倒序填满"的排列（从尾部往前写），插入排序对接近有序的数据是O(n) 的；换成通用排序反而更慢。这类微观优化在共识实现里很常见，因为选举心跳路径每 100ms 就走一遍。
 
-### 可观测性
+### Observability
 
 `Progress` 与 `ProgressTracker` 都实现了 `String()`，这是**排查线上状态最实用的手段**。注意术语：3.5.34 里 `tracker.go` 的那个 map 类型叫 `ProgressMap`，后续版本已改名为 `Progress`（字段名），而单个 follower 状态始终是 `*Progress`——两个层级同名，读代码时要看接收者是 `map[uint64]*Progress` 还是 `*Progress`：
 

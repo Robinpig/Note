@@ -1,7 +1,7 @@
 
 
 
-## 仪表盘
+## Dashboards
 
 | ID | Name | Description |
 | --- | --- | --- |

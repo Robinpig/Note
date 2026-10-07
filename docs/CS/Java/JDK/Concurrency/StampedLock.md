@@ -135,7 +135,7 @@ public boolean validate(long stamp) {
 
 
 
-### 内部数据结构
+### Internal Data Structure
 
 为了帮助大家更好的理解StampedLock，这里再简单给大家介绍一下它的内部实现和数据结构。
 
@@ -292,7 +292,7 @@ private transient volatile Node tail;
 
 
 
-### 写锁的申请和释放
+### Acquisition and Release of Write Lock
 
 在了解了StampedLock的内部数据结构之后，让我们再来看一下有关写锁的申请和释放吧！首先是写锁的申请：
 
@@ -578,7 +578,7 @@ private long acquireWrite(boolean interruptible, boolean timed, long time) {
 ```
 ## Tuning
 
-### CPU的问题
+### CPU Issues
 
 StampedLock固然是个好东西，但是由于它特别复杂，难免也会出现一些小问题。下面这个例子，就演示了StampedLock悲观锁疯狂占用CPU的问题：
 

@@ -1,4 +1,4 @@
-# Jetty 线程模型
+# Jetty Thread Model
 
 ## Introduction
 

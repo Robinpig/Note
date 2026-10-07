@@ -7,7 +7,7 @@ etcd、[ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)、[Nacos](/docs/CS
 > [!NOTE]
 > 选型的第一性问题不是"哪个更好"，而是**"这个数据能不能丢"**。etcd 与 Consul 的数据是**状态**（丢了就是事故），Nacos 的配置是**意图**（丢了可以回滚），ZooKeeper 的 znodes 多数是**协调用的临时状态**。能接受偶发不一致的场景，用更轻的方案往往更划算。
 
-## 版本基线
+## Version Baseline
 
 本文是一篇**选型对比**（不是 etcd 版本对比），etcd 侧的签名与行为描述以 **3.7.2** 为基线；其余组件的版本取各自官方发布页在 2026-10 的状态。
 
@@ -21,7 +21,7 @@ etcd、[ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)、[Nacos](/docs/CS
 > [!WARNING]
 > **ZooKeeper 的 EOL 结论极易记错**：官方宣布 EOL 的是 **3.7**（2024-02-02 生效，末版 3.7.2），**3.8 并没有 EOL**——3.8.7 与 3.9.6 在 2026-09-15 同期发布。ZooKeeper 官方同时只维护两条分支（stable + current），但 3.8 仍在发布 bugfix。看到"3.8 已 EOL"的说法，先去 [官方 news 页](https://zookeeper.apache.org/news) 核对发布日期。
 
-## 一致性模型
+## Consistency Model
 
 | 维度 | etcd | ZooKeeper | Nacos | Consul |
 | :--- | :--- | :--- | :--- | :--- |
@@ -38,7 +38,7 @@ etcd 的 MVCC 是它独有的能力：同一个 key 的历史版本可按 revisi
 > [!TIP]
 > ZooKeeper 用 **znode 树模型**（`/a/b/c` 层级命名 + 节点类型 `persistent`/`ephemeral`/`container`），etcd 用**扁平 key + 前缀范围查询**模拟层级。前者的父子关系是数据结构的一部分，后者的 `/` 只是 key 的一部分——`get --prefix /a/b` 和逐层 `getChildren` 语义类似，但 etcd 没有"父节点必须存在"这类约束，写入更自由。
 
-## 数据模型与能力
+## Data Model and Capabilities
 
 | 能力 | etcd | ZooKeeper | Nacos | Consul |
 | :--- | :--- | :--- | :--- | :--- |
@@ -61,7 +61,7 @@ etcd 的 MVCC 是它独有的能力：同一个 key 的历史版本可按 revisi
 
 **分布式事务**只有 etcd 原生支持。它的 Txn 是一组带条件的原子操作（`If...Then...Else`），条件为 false 时只执行 else 分支。这个能力组合起来能实现"仅当某 key 版本未变才更新"这类逻辑。
 
-## 架构与依赖
+## Architecture and Dependencies
 
 | 维度 | etcd | ZooKeeper | Nacos |
 | :--- | :--- | :--- | :--- |
@@ -75,7 +75,7 @@ etcd 的**零外部依赖**是运维上最大的优势：一个二进制 + 一�
 
 **私有协议**的代价要留意：ZooKeeper 的 Jute 序列化 + 私有 RPC 使得无法用 `curl` 等通用工具调试，Nacos 与 etcd 早期版本也有类似问题。etcd v3 改用 gRPC + protobuf 后，这个问题才根本解决。
 
-## 选型倾向
+## Selection Tendency
 
 | 场景 | 推荐 | 理由 |
 | :--- | :--- | :--- |
@@ -86,7 +86,7 @@ etcd 的**零外部依赖**是运维上最大的优势：一个二进制 + 一�
 | 服务网格 | **Consul** | 与 Consul / Envoy 深度集成 |
 | 需要跨语言、HTTP 调试 | **etcd** | gRPC 生态 + 统一 API |
 
-## ZooKeeper 特有能力
+## ZooKeeper Unique Capabilities
 
 ZooKeeper 有几项能力在其他组件里没有对应物，值得单独说明：
 
@@ -94,13 +94,13 @@ ZooKeeper 有几项能力在其他组件里没有对应物，值得单独说明�
 - **ZooKeeper Watch 是一次性的**：触发后需要重新注册，这是它"惊群"问题的来源。etcd 的 watch 是可续的流，配合 MVCC 还能从指定 revision 续接。
 - **Zab 与 Raft 的关键差异**：Zab 是**只写 leader**的原子广播协议，followers 只能转发不能直接服务读；Raft 让 leader 也走日志（no-op + ReadIndex）来实现线性一致读。
 
-## Consul 特有能力
+## Consul Unique Capabilities
 
 Consul 在服务发现之上补了 etcd 和 ZooKeeper 都不内置的东西：**服务网格**（Service Mesh）、多数据中心（WAN gossip）、ACL token 体系、以及原生 KV 的**阻塞查询**（long polling，语义上比 watch 更灵活但不支持历史回溯）。
 
 etcd 社区因此常出现"用 etcd + Envoy 自己搭"的组合，但 Consul 的服务治理全家桶对不想自己拼装的团队仍有价值。
 
-## Nacos 特有能力
+## Nacos Unique Capabilities
 
 Nacos 在 etcd / ZooKeeper 之外走出一条"配置 + 注册中心一体化"的路线，有几点其他组件没有或不主打：
 
@@ -111,7 +111,7 @@ Nacos 在 etcd / ZooKeeper 之外走出一条"配置 + 注册中心一体化"的
 
 etcd 社区因此常出现"用 etcd + Envoy 自己搭"的组合，但 Nacos 的配置治理全家桶对 Java 微服务团队仍更省心。
 
-## 陷阱清单
+## Pitfall List
 
 > [!WARNING]
 > 跨组件对比最容易踩的不是技术差异，而是**版本事实抄错**——几个高频坑：

@@ -6,7 +6,7 @@
 
 本文只记模型与 API 事实。Agent 侧的 [DeepSeek Harness（dsh）](/docs/CS/AI/LLM/Agent/Product/DSH.md) 另有一篇。
 
-## API 型号
+## API Models
 
 DeepSeek API 现在只有**两个**在售模型，都同时提供 OpenAI 兼容格式（`https://api.deepseek.com`）与 Anthropic 兼容格式（`https://api.deepseek.com/anthropic`）两个 Base URL。
 
@@ -22,7 +22,7 @@ DeepSeek API 现在只有**两个**在售模型，都同时提供 OpenAI 兼容�
 - **`deepseek-chat` 与 `deepseek-reasoner` 已于 2026-07-24 彻底下线**，不可访问。这两个是早期把「对话模型」与「推理模型」拆成两个名字的产物，现在统一为单模型 + thinking 开关。
 - **`deepseek-v4-pro` 正在退场**：自 2026-09-14 04:00 UTC 起，其流量被路由到 V4.1-Flash 并按 V4.1 费率计费，除非显式要求保留 V4-Pro 服务。
 
-## Thinking 模式
+## Thinking Mode
 
 两个模型都支持 non-thinking 与 thinking 双模式，**默认是 thinking**。这与「Ollama 之类本地推理默认不思考」的直觉相反，接入时若发现输出带一大段推理过程而调用方没要求，先检查这个默认值。
 
@@ -30,7 +30,7 @@ DeepSeek API 现在只有**两个**在售模型，都同时提供 OpenAI 兼容�
 
 功能支持矩阵：两模型都支持 Json Output、Tool Calls、**Responses API**、**Anthropic API**。后者意味着 Claude Code、Claude Agent SDK 这类按 Anthropic 协议写的工具可以直接指向 DeepSeek，无需改代码——这是 DeepSeek 相比其他国产厂商比较实用的一点。
 
-## 架构演进
+## Architecture Evolution
 
 DeepSeek 的模型演进不是靠堆参数，而是靠改架构。几个关键节点：
 
@@ -49,7 +49,7 @@ V4.1-Flash 的架构细节值得单独说：
 
 DeepSeek 权重与各代技术报告一贯发布在 HuggingFace，与此前版本一致。
 
-## 定价 峰谷分时
+## Pricing: Peak-Valley Time-of-Use
 
 这是 DeepSeek 目前最有辨识度的机制，也是「为什么这么便宜」的答案。
 
@@ -77,7 +77,7 @@ DeepSeek 权重与各代技术报告一贯发布在 HuggingFace，与此前版�
 
 并发限制**按账号计**而非按 API key：Flash 2500、Pro 500。超额返回 HTTP 429，可申请扩容（免费）。另有 `user_id` 参数可隔离 KV cache、调度与内容安全处理，适合在一个账号内服务多个终端用户。
 
-## 定价演进
+## Pricing Evolution
 
 V4-Pro 的价格在 2026 年内经历了多次调整，写文档时必须带日期，否则很快就是错的：
 
@@ -91,7 +91,7 @@ V4-Pro 的价格在 2026 年内经历了多次调整，写文档时必须带日�
 
 长期流传的旧价格表（比如 V4-Flash 输入 $0.14／输出 $0.28）都是 2026-08-16 之前的平价时代产物，已完全失效。
 
-## 中国模型横向位置
+## Horizontal Positioning of Chinese Models
 
 把 DeepSeek 放进整个市场看，它的位置很清楚——**不是最强的模型，是最便宜的开源前沿模型**：
 
@@ -102,7 +102,7 @@ V4-Pro 的价格在 2026 年内经历了多次调整，写文档时必须带日�
 
 对绝大多数应用负载（客服、抽取、分类、批处理、代码补全），用 Flash 这个档位就够，真正的成本压力根本不该出现在这一层。需要在 DeepSeek 与 OpenAI／Anthropic 之间做路由的策略见 [Model 总览](/docs/CS/AI/LLM/Model/Overview.md)。
 
-## 与国产同门的差异
+## Differences from Domestic Siblings
 
 | 维度 | DeepSeek | Qwen | GLM | Kimi |
 | :--- | :--- | :--- | :--- | :--- |

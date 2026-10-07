@@ -1,8 +1,8 @@
 ## Introduction
-## 版本基线
+## Version Baseline
 
 > [!NOTE]
-> **版本口径**：安全点是 HotSpot 里最容易随版本变动的机制之一——安全点数量、协作式安全点轮询（`PollingPage`）、`-XX:+SafepointTimeout`/`-XX:SafepointTimeoutMillis` 的诊断行为都随版本调整。本文结构与机制讲解适用于近年的 HotSpot，具体阈值请以所用 JDK 版本为准。详见 [JVM 版本基线](/docs/CS/Java/JDK/JVM/JVM.md?id=版本基线)。
+> **版本口径**：安全点是 HotSpot 里最容易随版本变动的机制之一——安全点数量、协作式安全点轮询（`PollingPage`）、`-XX:+SafepointTimeout`/`-XX:SafepointTimeoutMillis` 的诊断行为都随版本调整。本文结构与机制讲解适用于近年的 HotSpot，具体阈值请以所用 JDK 版本为准。详见 [JVM 版本基线](/docs/CS/Java/JDK/JVM/JVM.md?id=version-baseline)。
 
 A _safepoint_ is a point in program execution where the state of the program is known and can be examined. Things like registers, memory, etc.
 For the JVM to completely pause and run tasks (such as GC), **all threads** must come to a safepoint.

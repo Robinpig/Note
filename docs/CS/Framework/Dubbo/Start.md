@@ -145,7 +145,7 @@ public final class DubboBootstrap {
 > [!TIP]
 > 整个 `initialize()` 里没有一行「加载 SPI 扩展」——扩展加载是 `ExtensionLoader` 的懒加载行为，`initialize()` 只保证 `ConfigManager` / `Environment` / 各 Deployer 就位。把 `initialize()` 理解成「把 Dubbo 启动起来」是最常见的误读，它只到「骨架搭好」为止。
 
-## Deployer 分层
+## Deployer Layering
 
 启动的实际执行者是发布器，分两层：
 
@@ -314,7 +314,7 @@ public final class DubboBootstrap {
 
 `exportServiceInternal`（`:463`）里，若配置了异步导出则 `CompletableFuture.runAsync` 到 `executorRepository.getServiceExportExecutor()` 并把 future 收进 `asyncExportingFutures`（`:477`）；否则同步调用 `sc.export()` 或 `sc.export(RegisterTypeEnum.AUTO_REGISTER_BY_DEPLOYER)`（`:495`）。
 
-## Spring Boot 集成
+## Spring Boot Integration
 
 Dubbo 与 Spring Boot 的集成靠 Spring 的事件机制触发，共三个关键类：
 
@@ -325,7 +325,7 @@ Dubbo 与 Spring Boot 的集成靠 Spring 的事件机制触发，共三个关�
 | `DubboBootstrapApplicationListener` | 存在（已 `@Deprecated`） | 兼容 2.7.x 的 takeover 逻辑 |
 | `ServiceBean` | 存在，**但不监听事件** | 只是 `ServiceConfig` 的 Spring Bean 载体 |
 
-### 启动时序
+### Startup Sequence
 
 ```mermaid
 sequenceDiagram
@@ -416,7 +416,7 @@ public class ServiceBean<T> extends ServiceConfig<T>
 
 五个接口里**没有 `ApplicationListener`**，也没有任何事件订阅能力。旧笔记「`ServiceBean` 监听到事件，调用 `export()`」的链路在 3.3.6 已不存在。
 
-### 兼容路径
+### Compatibility Path
 
 `DubboBootstrapApplicationListener` 是 2.7.x 时代的类，3.3.6 里标了 `@Deprecated`（`:47`），但仍在：
 
@@ -459,7 +459,7 @@ public class DubboBootstrapApplicationListener implements ApplicationListener, A
 
 提供者启动的核心是暴露服务，由 `ServiceConfig` 完成。
 
-### export 入口
+### export Entry Point
 
 3.3.6 的 `export` **多了 `RegisterTypeEnum` 参数**（`ServiceConfig.java:311`）：
 
@@ -982,7 +982,7 @@ public class DubboBootstrapApplicationListener implements ApplicationListener, A
 > [!NOTE]
 > 这段与 [Consumer](/docs/CS/Framework/Dubbo/Consumer.md) 中的代码块一致。消费者侧的引用链、迁移（`MigrationInvoker`）、Filter、心跳与超时处理都在那一篇，本文不重复。
 
-### refer 与 protocolBindingRefer
+### refer and protocolBindingRefer
 
 `RegistryProtocol#refer` 分派到 `doRefer`：
 
@@ -1195,7 +1195,7 @@ public class DubboShutdownHook extends Thread {
 
 停机回调机制也在 3.x 挪了位置。`ShutdownHookCallback` 现在在 `dubbo-common/src/main/java/org/apache/dubbo/common/lang/`（不在 `common/hooks/`），触发点在 `DefaultApplicationDeployer#executeShutdownCallbacks`（`:1168-1172`）——它从 bean factory 取 `ShutdownHookCallbacks` bean 并调 `callback()`，这个调用发生在 `postDestroy()` 里（`:1148`），即注册中心与元数据中心销毁之后、状态置为 stopped 之前。
 
-### 应用级 stop
+### Application-Level stop
 
 `DefaultApplicationDeployer#stop()` 只有一行（`:1081-1083`）：`applicationModel.destroy()`。真正做事的是 `preDestroy()`：
 
@@ -1225,7 +1225,7 @@ public class DubboShutdownHook extends Thread {
 > [!TIP]
 > `ready` / `readonly` 这两个状态在 3.3.6 里**已不属于 Dubbo 生命周期状态机**。`Deployer` 接口的状态方法是 `isPending` / `isRunning` / `isStarted` / `isCompletion` / `isStarting` / `isStopping` / `isStopped`，没有 `isReady`。旧笔记 `doExport()` 里的 `bootstrap.setReady(true)` 在 3.3.6 的 `dubbo-config-api` 里 grep 零匹配。想在启动完成后做点什么，位置是 `exported()` 里的 `onExported()`，或者挂 `DeployListener`。
 
-## 陷阱清单
+## Pitfall List
 
 | # | 说法 | 3.3.6 事实 |
 |---|---|---|

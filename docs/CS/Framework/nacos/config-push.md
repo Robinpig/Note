@@ -1,10 +1,10 @@
-# Nacos 配置推送机制深潜
+# Nacos Config Push Mechanism Deep Dive
 
 ## Introduction
 
 配置中心的核心价值不只是「能存」，更是「**变了客户端能马上知道**」。Nacos 客户端感知配置变更的机制，随大版本从 HTTP 长轮询演进到 gRPC 长连接推送——这是注册发现之外 Nacos 的第二大实时能力。服务端把 DB 落盘的 dump 机制见 [Config](/docs/CS/Framework/nacos/config.md) 的 `### dump`；本文聚焦**变更如何触达客户端**。
 
-## 设计哲学：轻量通知 + 主动拉取
+## Design Philosophy: Lightweight Notification + Active Pull
 
 Nacos 的推送刻意「小」：推送消息只携带变更标识（`dataId + group`），**不携带内容**。客户端收到通知后，重新发起一次配置查询拿最新内容。
 
@@ -13,7 +13,7 @@ Nacos 的推送刻意「小」：推送消息只携带变更标识（`dataId + g
 
 这套设计两个好处：推送消息极小、网络开销低；最终内容仍走正常查询路径，保证一致性。
 
-## 2.x 长轮询（HTTP）
+## 2.x Long Polling (HTTP)
 
 2.x 及以前，客户端用 HTTP 长轮询监听（`/nacos/v1/cs/configs/listener`）。服务端 `ConfigLongPollingService` 用 Servlet 3.0 的 `AsyncContext` 把请求**挂起**：
 
@@ -33,7 +33,7 @@ Nacos 的推送刻意「小」：推送消息只携带变更标识（`dataId + g
 - 感知延迟受轮询空档影响，最长接近一个轮询周期（秒级）。
 - 订阅项极多时，单次长轮询请求 body 很大。
 
-## 3.x gRPC 长连接推送
+## 3.x gRPC Long-Connection Push
 
 2.x 起通信协议从 HTTP 短连接升级为 gRPC 双向流，配置监听改为长连接推送：
 
@@ -49,19 +49,19 @@ Nacos 的推送刻意「小」：推送消息只携带变更标识（`dataId + g
 
 优势：一条 gRPC 长连接复用所有请求，毫秒级延迟，连接数远低于长轮询。
 
-## dump 全量同步
+## dump Full Sync
 
 服务端启动时把 MySQL 的 `config_info` 全量 dump 到本地磁盘（`DumpService` / `DiskUtil`，落在 `nacos/data/config-data/tenant/...` 的 `worker_${port}` 目录），供客户端直读、降低 DB 压力。细节与定时全量（`DUMP_ALL_INTERVAL_IN_MINUTE`）见 [Config](/docs/CS/Framework/nacos/config.md) 的 `### dump`。dump 是「服务端 → 磁盘」的持久化同步，与「服务端 → 客户端」的推送是两条独立链路。
 
-## 灰度监听（beta / tag）
+## Canary Watch (beta / tag)
 
 Nacos 支持按 IP 灰度发布。dump 阶段对应 `DumpAllBetaProcessor` / `DumpAllTagProcessor` 把 beta / tag 配置单独落盘；监听侧客户端可订阅灰度配置，验证无误后全量发布。灰度配置与主配置共用同一推送通道，只是 dataId 维度不同。
 
-## 3.x 破坏性变化
+## 3.x Breaking Changes
 
 Nacos 3.x 的 Client OpenAPI **不再提供 HTTP 长轮询的配置监听能力**——配置监听必须走官方 SDK 的 gRPC 长连接。这意味着 Spring Cloud Alibaba **2025.1.0.0** 起，配置监听底层完全依赖 gRPC。迁移到 3.x 时，若仍用旧版 SDK 的 HTTP 长轮询监听，会收不到变更通知（见 [Troubleshooting](/docs/CS/Framework/nacos/troubleshooting.md) 的版本错配段）。
 
-## 与 etcd Watch 对照
+## Comparison with etcd Watch
 
 | 维度 | Nacos 配置推送 | etcd Watch |
 | :-- | :-- | :-- |

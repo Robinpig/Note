@@ -24,7 +24,7 @@ JUring 是一个把 io_uring 文件 I/O 暴露给 Java 的实验性库，其关�
 SQE 填入 Submission Queue，调用一次 enter（提交屏障），再从 Completion Queue 收割 CQE。
 批量提交、避免每个 I/O 一次 syscall 正是 io_uring 相对 [epoll](/docs/CS/OS/Linux/IO/epoll.md) + 非阻塞读写的核心收益。
 
-## 与现有 Java I/O 模型的关系
+## Relationship with Existing Java I/O Model
 
 | 模型 | Linux 实现 | 系统调用/事件 | 文件 I/O 异步性 |
 | --- | --- | --- | --- |

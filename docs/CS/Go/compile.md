@@ -143,11 +143,11 @@ func (p *noder) decls(decls []syntax.Decl) (l []*Node) {
 类型检查阶段不止会对节点的类型进行验证，还会展开和改写一些内建的函数，例如 make 关键字在这个阶段会根据子树的结构被替换成 [`runtime.makeslice`](https://draven.co/golang/tree/runtime.makeslice) 或者 [`runtime.makechan`](https://draven.co/golang/tree/runtime.makechan) 等函数
 
 
-## 变量捕获
+## Variable Capture
 
 闭包变量捕获的核心逻辑位于gc/closure.go的capturevars函数中
 
-## 函数内联
+## Function Inlining
 
 函数内联指将较小的函数直接组合进调用者的函数。这是现代编译器优化的一种核心技术。函数内联的优势在于，可以减少函数调用带来的开销。
 对于Go语言来说，函数调用的成本在于参数与返回值栈复制、较小的栈寄存器开销以及函数序言部分的检查栈扩容（Go语言中的栈是可以动态扩容的）
@@ -226,7 +226,7 @@ Go语言通过对抽象语法树的静态数据流分析（static data-flow anal
 在执行walk函数遍历之前，编译器还需要对某些表达式和语句进行重新排序，例如将x/=y替换为x=x/y。
 根据需要引入临时变量，以确保形式简单，例如x=m[k]或m[k]=x，而k可以寻址。
 
-## 闭包重写
+## Closure Rewriting
 
 在完成逃逸分析后，下一个优化的阶段为闭包重写，其核心逻辑位于gc/closure.go中。
 
@@ -268,7 +268,7 @@ go tool compile -S
 
 Go编译器使用 Plan9 汇编作为统一汇编语言，屏蔽了不同架构的细节，生成的汇编代码随后通过汇编器（如 go tool asm）和链接器（如 go tool link）转换为可执行文件
 
-## 机器码生成
+## Machine Code Generation
 
 Go 语言源代码的 [`src/cmd/compile/internal`](https://github.com/golang/go/tree/master/src/cmd/compile/internal) 目录中包含了很多机器码生成相关的包，不同类型的 CPU 分别使用了不同的包生成机器码
 

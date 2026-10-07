@@ -2,7 +2,7 @@
 
 服务发现是 Consul 最核心的能力。服务注册并附带健康检查后，消费方有三种接入入口：**DNS**（无需 SDK，普通 `dig` 即可）、**HTTP API**、以及本地 **agent 缓存的 stale 读**。这比 etcd（必须 gRPC 客户端，见 [etcd client](/docs/CS/Framework/etcd/client.md)）和 ZooKeeper（Jute 私有协议）对业务更友好——也是 Consul "零改造接入"的来源。
 
-## DNS 接口
+## DNS Interface
 
 Consul 内置 DNS 服务器（端口 `8600`，TCP+UDP），默认域为 `consul`：
 
@@ -25,7 +25,7 @@ Consul 内置 DNS 服务器（端口 `8600`，TCP+UDP），默认域为 `consul`
 
 `/v1/health/service/<svc>?passing` 是服务发现最常用的查询——自动剔除检查失败实例，流量不再路由到它。
 
-## 健康检查
+## Health Check
 
 服务可挂多种检查，失败即从 DNS / 健康查询剔除：
 
@@ -38,7 +38,7 @@ Consul 内置 DNS 服务器（端口 `8600`，TCP+UDP），默认域为 `consul`
 > [!TIP]
 > 检查失败只影响"发现结果"，**不自动重启/隔离进程**。需要自愈（如从负载摘除）要配合服务网格或外部编排。反熵（anti-entropy）由 agent 周期性把本地注册状态同步到 catalog（见 [Serf](/docs/CS/Framework/consul/serf.md)）。
 
-## Agent 缓存与 stale 读
+## Agent Cache and Stale Reads
 
 client agent 默认缓存 catalog 结果，本地查询走缓存——可用性高、但可能短暂陈旧（stale）。需要强一致时：
 
@@ -47,11 +47,11 @@ client agent 默认缓存 catalog 结果，本地查询走缓存——可用性�
 
 对比 etcd 的 `linearizable` / `serializable` 双读模型（[etcd read](/docs/CS/Framework/etcd/read.md)）——Consul 把"默认 AP 式可用"作为发现主路径，把强一致作为可选项，定位更偏"发现优先于严格一致"。
 
-## Prepared Query（命名查询）
+## Prepared Query (Named Query)
 
 prepared query 是**带过滤逻辑的命名查询**：预先存好"查某服务 + 某 tag + 某数据中心 + 失败 fallback 到邻近 DC"的规则，业务用 `<query>.query.consul` 调用。适合把复杂发现逻辑（如多 DC 就近 failover）沉淀成可复用名字，而不是每个客户端写一堆过滤参数。
 
-## 阻塞查询
+## Blocking Query
 
 HTTP 带 `index` + `wait` 做长轮询（详见 [KV](/docs/CS/Framework/consul/kv.md) 的阻塞查询段）。服务列表 / 健康状态变更时服务端唤醒返回，省去客户端轮询。注意 Consul 不保留历史 revision，阻塞查询只给"当前最新状态 + 触发索引"，回溯需客户端自维护游标。
 

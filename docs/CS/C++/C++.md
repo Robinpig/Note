@@ -2,7 +2,7 @@
 
 C++ 在 C 之上叠加了面向对象、泛型与 RAII，核心理念是**零成本抽象（zero-overhead abstraction）**：你不为没用到的抽象付费，用到的抽象与手写代码等价。代价是语言表面积巨大、编译慢、错误信息冗长。
 
-## 知识体系
+## Knowledge System
 
 本目录按「对象模型 → 资源管理 → 泛型 → 内存 → 标准库 → 并发 → 工程」逐层展开：
 
@@ -15,23 +15,23 @@ C++ 在 C 之上叠加了面向对象、泛型与 RAII，核心理念是**零成
 - **标准演进**：[C++ 标准演进](/docs/CS/C++/Standard.md)（C++11 → 20 → 23 → 26）对照各版本特性与 `-std=` / ABI 稳定性。
 - **工程框架**：[muduo](/docs/CS/C++/muduo.md)是现代 C++ 网络编程（one loop per thread）的代表库。
 
-## 几个值得记住的点
+## A Few Points Worth Remembering
 
 - `std::sort` 是**内省排序**（introsort）：快排为主、递归过深转堆排、小子区间用插入排序——见 [STL](/docs/CS/C++/STL.md)。
 - **RAII** 是 C++ 资源管理的万能钥匙：任何「获取即构造、释放即析构」的资源（锁、文件、连接）都应包进对象，详见 [智能指针](/docs/CS/C++/SmartPtr.md)。
 - 与 [C](/docs/CS/C/C.md) 共享底层（同用堆、同踩 UB），但多了构造 / 析构、类型安全与模板元编程。
 
-## 工具链
+## Toolchain
 
 C++ 与 C 共用构建与调试基建：CMake / make 见 [C 的 make](/docs/CS/C/make.md) 与 [CMake](/docs/CS/C/CMake.md)，调试器见 [GDB](/docs/CS/C/GDB.md)。
 
-## 与相邻语言的对照
+## Comparison with Adjacent Languages
 
 - 和 [Go](/docs/CS/Go/Go.md) 比：Go 用 GC 与 goroutine 换开发效率，C++ 用显式控制换性能与抽象。
 - 和 [Rust](/docs/CS/Rust/Rust.md) 比：Rust 把所有权 / 借用检查移到编译期，C++ 把所有权交给程序员（靠智能指针自律）。
 - 和 [Java](/docs/CS/Java/Java.md) 比：Java 的对象总是在堆、靠 JVM GC，C++ 对象可在栈也可在堆、析构确定性释放。
 
-## 快速开始（VS Code 环境）
+## Quick Start (VS Code Environment)
 
 Mac 下用 VS Code 写 C++ 的常用配置。
 

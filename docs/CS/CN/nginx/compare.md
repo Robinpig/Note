@@ -4,7 +4,7 @@
 
 版本基线（2026-10 核实）：nginx **1.31.6** mainline / **1.30.5** stable；Envoy **1.39.2**；HAProxy **3.4.6**（LTS 3.4，2026-06 发布，引入 dynamic backends）；Caddy **2.11.4**；Pingora **0.9.0**。网关侧：Traefik Proxy **3.7.13**（2026-09-04）、Apache APISIX **3.18.0**（2026-08-20）、Kong Gateway **3.16**（LTS 3.14，2026-04）、Higress **2.2.4**（2026-08，阿里开源 / CNCF 沙箱，Envoy 内核云原生网关）。
 
-## 一屏对比
+## One-Screen Comparison
 
 | 维度 | nginx | HAProxy | Envoy | Caddy | Pingora |
 | :-- | :-- | :-- | :-- | :-- | :-- |
@@ -18,29 +18,29 @@
 | 扩展机制 | C 模块 / Lua（OpenResty） | Lua / SPOE | C++ filter / WASM | Go 插件（需自编译） | Rust trait（最灵活） |
 | 典型定位 | Web 服务器 + 反代 + 边缘 | 四层/七层负载均衡 | Service Mesh 数据面 / API 网关底座 | 自托管反代 / 内网服务 | CDN 边缘 / 自研代理 |
 
-## 架构差异的深层原因
+## Deep Reasons for Architectural Differences
 
-### nginx：多进程 + 无锁 accept
+### nginx: Multi-Process + Lock-Free accept
 
 master fork 出 N 个 worker，共享监听 fd，靠 `EPOLLEXCLUSIVE`/`SO_REUSEPORT` 解决惊群（历史演进见 [Event](/docs/CS/CN/nginx/event.md)）。进程隔离换来**一个 worker 崩溃不影响其它**，代价是跨 worker 状态必须走共享内存（limit_req、cache 都如此）。配置是**编译进内存的静态结构**，变更靠 fork 新 worker 的 reload——这是它动态性弱、稳定性强的根源。
 
-### HAProxy：单进程多线程 + stick tables
+### HAProxy: Single-Process Multi-Thread + Stick Tables
 
 1.8 起默认多线程（`nbthread`），事件驱动内核与 nginx 同源，但**单进程内聚合所有状态**——stick tables（会话粘滞表、限流计数器）天然全进程共享，这是它做精细限流/会话保持的结构性优势。reload 用「新进程继承监听 fd + 老进程排空」模型（与 nginx 热升级同思路，但常态化为 `master-worker` 常驻）。3.4 的 dynamic backends 把「加后端不 reload」从 Plus 版特性拉平到开源。
 
-### Envoy：线程模型 + 全动态
+### Envoy: Thread Model + Fully Dynamic
 
 单进程多线程（worker 线程数 = 核数），每个 worker 独立跑完整 filter chain。**一切皆 xDS**：CDS/EDS/LDS/RDS 集群发现、监听器、路由全部通过 gRPC 订阅推送，控制面（Istio 等）变更秒级生效、无需进程操作。代价是配置模型复杂、内存开销高、排障链路长。它是为「大规模微服务 + 服务网格」设计的，单机反代场景是杀鸡用牛刀。
 
-### Caddy：Go 运行时 + 自动证书
+### Caddy: Go Runtime + Automatic Certificates
 
 Go 的 netpoll（epoll/kqueue 封装）+ goroutine，单二进制、内存安全。最大差异化是 **ACME 客户端内置**：站点名写进 Caddyfile，签发/续期/重定向 80 端口全自动化——nginx 需要 certbot + 定时任务 + reload 编排的整套流程，Caddy 是零配置。性能低于 nginx/HAProxy（GC、goroutine 调度开销），但 self-hosting 场景足够。
 
-### Pingora：框架不是服务器
+### Pingora: Framework, Not a Server
 
 Cloudflare 开源的 Rust 框架（0.9.0，2026-09），支撑其 CDN 每秒数千万请求。**它不提供开箱即用的二进制**——你用 Rust 实现 `ProxyHttp` trait 写出自己的代理，再编译。价值主张：内存安全替代 C/C++ 写的代理 + 多线程无惊群（线程间共享监听，连接均匀分配，冷连接转移）。适合「要自研代理/网关、且愿意维护 Rust 代码」的团队；不是 nginx 的 drop-in 替代品。
 
-## 网关与 Ingress 侧：Traefik / APISIX / Kong / Higress
+## Gateway and Ingress Side: Traefik / APISIX / Kong / Higress
 
 上面五个是「代理/负载均衡」视角，但近两年真正的战场在 **Kubernetes 入口**。2025-11-11 Kubernetes 社区官宣、并于 **2026-03 正式退役 ingress-nginx**，把这个位置空了出来——这直接推着网关产品改路线。Higress 作为阿里开源、CNCF 沙箱的 Envoy 内核云原生网关，正好踩中「K8s Ingress + 微服务网关 + AI 网关」三合一的空白，并可作为 Spring Cloud Gateway 的替代。
 
@@ -58,7 +58,7 @@ Cloudflare 开源的 Rust 框架（0.9.0，2026-09），支撑其 CDN 每秒数�
 
 **共同趋势**：各家在 2026 年都把重心压到 **AI Gateway**——Traefik Hub 3.20 加了 token 级限流与配额、并行 LLM 护栏；APISIX 3.18 修的是 AI 代理的协议转换（Anthropic ↔ OpenAI）与流式语义；Kong 则把 AI Gateway 拆成独立产品线；**Higress 更是把 AI 流量作为一等公民**（ai-proxy / ai-cache / ai-token-ratelimit / MCP 托管网关），是这一波 AI 网关趋势的先行者。也就是说，**「反向代理 + 插件」的基本盘已经稳定，增量都在 LLM 流量的治理上**（成本、限流、协议适配、内容安全）。这一点值得单独记一笔：它意味着选型时要看的已经不只是 QPS 和延迟，还有「能不能按 token 计数、能不能处理 SSE 流式响应、能不能做协议转换」。
 
-## 选型速查
+## Selection Quick Reference
 
 | 场景 | 推荐 | 理由 |
 | :-- | :-- | :-- |
@@ -73,7 +73,7 @@ Cloudflare 开源的 Rust 框架（0.9.0，2026-09），支撑其 CDN 每秒数�
 | 阿里微服务体系 / Spring Cloud Alibaba 栈 | **Higress** | 与 Nacos / Dubbo / Sentinel 原生集成，三网关合一，性能高于 Java 网关 2 倍+ |
 | 既要 K8s Ingress 又要 AI 网关 + 微服务网关 | **Higress** | Envoy 内核高性能 + Wasm 插件热更新 + AI 流量原生支持 |
 
-迁移相关：K8s 社区的 ingress-nginx 已于 2026-03 退役，Ingress 场景的迁移方向见 [Practice 的 Kubernetes 一节](/docs/CS/CN/nginx/practice.md?id=kubernetes：ingress-nginx-已退役)。
+迁移相关：K8s 社区的 ingress-nginx 已于 2026-03 退役，Ingress 场景的迁移方向见 [Practice 的 Kubernetes 一节](/docs/CS/CN/nginx/practice.md?id=kubernetes-ingress-nginx-retired)。
 
 ## Links
 

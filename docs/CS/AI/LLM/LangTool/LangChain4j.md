@@ -4,7 +4,7 @@ LangChain4j 是 LangChain 思想的 **Java 实现**：用统一抽象屏蔽各�
 
 与 Python 版 [LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md) 的关系：**理念同源、API 各自地道**。LangChain4j 不是逐行移植，而是按 Java 习惯重新设计（Builder、接口、声明式 AiServices），并深度集成 Spring Boot / Quarkus。需要长流程有状态编排（检查点、分叉、人机协同）时，Java 侧通常直接用 Spring AI 或自研状态机，对应 Python 生态的 [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md)。
 
-## 核心抽象
+## Core Abstractions
 
 | 抽象 | 作用 |
 | --- | --- |
@@ -16,7 +16,7 @@ LangChain4j 是 LangChain 思想的 **Java 实现**：用统一抽象屏蔽各�
 | `ContentRetriever` / `RetrievalAugmentor` | RAG 检索与增强：文档切分、检索、重排、注入 Prompt |
 | `Document` / `DocumentSplitter` | 文档加载与切分（按段落/Token/递归） |
 
-## AiServices：声明式接口
+## AiServices: Declarative Interface
 
 最能体现 LangChain4j 风格的设计——接口即应用，机制上与 [Retrofit](/docs/CS/Java/Retrofit.md) 的动态代理、[Spring AOP](/docs/CS/Java/AspectJ.md) 的代理生成本质相同：
 
@@ -37,7 +37,7 @@ String answer = agent.chat("我上周的订单到哪了？");
 
 代理在运行时完成：组装历史记忆 → 检索知识 → 序列化工具描述 → 调用模型 → 模型请求工具时反射执行 Java 方法 → 把结果回填模型 → 返回最终答案。
 
-## Agentic 工作流编排模式
+## Agentic Workflow Orchestration Patterns
 
 LangChain4j Agentic 框架提供了多种工作流编排模式，按自主程度从低到高：
 
@@ -50,7 +50,7 @@ LangChain4j Agentic 框架提供了多种工作流编排模式，按自主程度
 
 经验法则与 Harness 三层划分一致：**流程越确定越该写死成编排，流程越开放越交给 Agent 循环**，参见 [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md) 的 Runtime/Framework/Harness 分层。
 
-## 与 Python 生态的取舍
+## Trade-offs with the Python Ecosystem
 
 | 维度 | LangChain4j | LangChain (Python) |
 | --- | --- | --- |

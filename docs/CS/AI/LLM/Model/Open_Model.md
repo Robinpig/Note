@@ -6,7 +6,7 @@
 
 本文覆盖 Llama、GLM、Kimi、MiniMax、Mistral、星火六家国产外阵营。各家单篇细节见 [Qwen](/docs/CS/AI/LLM/Model/Qwen.md) 与 [DeepSeek](/docs/CS/AI/LLM/Model/DeepSeek.md)，部署侧见 [Inference](/docs/CS/AI/LLM/Model/Inference.md)。
 
-## 当前全景
+## Current Landscape
 
 | 阵营 | 最新开放权重 | 发布 | 参数 | 上下文 | 许可证 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -19,7 +19,7 @@
 | Mistral | Mistral Medium 3.5 | 2026-04-28 | **128B dense**（非 MoE） | 256K |⚠️ Modified MIT |
 | 讯飞星火 | ⚠️ 仅端侧 X2.5-4B / 1.7B | 2026-09-01 | 4B / 1.7B | 1M | 未查到 |
 
-## Meta Llama 4 不是最新 这一点最容易被弄错
+## Meta Llama 4 Is Not the Latest — This Is Most Easily Misunderstood
 
 **截至 2026-10-05，仍未查到 Llama 5。** Llama 4（2025-04-05）仍是 Llama 品牌下的最新权重，这一点用户给的信息正确。但更关键的是：**Llama 4 已经不是 Meta 最新的开放权重模型了。**
 
@@ -35,11 +35,11 @@
 
 > ⚠️ **所以「Llama 4 是 Meta 最新模型」这句话在 2026 年已经错了。** 准确说法是：Llama 4 是 Llama 品牌最新，Muse Glimmer 30B 是 Meta 开放权重最新。而且 Llama 4 的 17B 激活 + 400B 总参数意味着最小可用档位就是 400B 级别，**Llama 4 家族里没有能塞进单张消费级显卡的型号**——Llama 4 最小的是 Scout 109B总参。Meta 补上这个空档的方式不是 Llama 5，而是换了品牌的 Muse Glimmer。
 
-## 开源协议 真实定级
+## Open Source License: True Rating
 
 这是本篇最有价值的部分。协议决定能不能商用，法务比性能更早成为决策瓶颈。
 
-### Llama 4 允许商用
+### Llama 4 Permits Commercial Use
 
 > ⚠️ **「Llama 4 非商用」是常见误传。** Llama 4 Community License Agreement（2025-04-05 生效）**允许商业使用**，是一份自定义的、有条件限制的商用许可。它**不是** OSI 批准的开源许可证，所以准确定级是 **open-weight（开放权重）／source-available，不是 open source**。把它当「非商用」会白白放弃一个可商用的选项；把它当「开源」则会在合规审查上被否。
 
@@ -52,7 +52,7 @@
 
 > ⚠️ **OSI 早在 2025-02-18 就对 Llama 4 下了判定**（Llama 4 发布前），公开表态「Llama 4 is still not #opensource and Europeans are excluded. Stop calling it Open Source AI.」，并指出 Llama 违反自由 0（任何用途均可使用）、OSD 第 5 条（不得歧视特定领域使用者）与第 6 条（不得对使用者施加限制）。OSI 社区负责人 Nick Vidal 进一步明确「openness is binary」——带限制就不是开源，不存在「更open」的程度问题。Meta 的回应是不接受这套定义（"There is no single open source AI definition"），并在官方公告里把 Llama 4 谨慎地称作 open-weight，但 Zuckerberg 在 Instagram 帖子里仍称其为 open source。**引用时建议用 OSI 与许可证原文，不要引 Meta 的宣传话术。**
 
-### GLM-5.3 是协议分叉 不是整体退化
+### GLM-5.3 Is a Protocol Fork, Not Overall Degradation
 
 智谱在这一家上出现了**同一系列两种许可证**的情况，ModelScope 实测字段：
 
@@ -70,7 +70,7 @@
 
 GLM-5.3 的 `max_position_embeddings` 是 **1048576（1M 原生）**，而 GLM-5 是 202752（约 200K）——上下文从 5 代到 5.3 有五倍跳跃，写长文档方案时要注意这个代差。
 
-### Kimi K3 只开权重
+### Kimi K3 Opens Weights Only
 
 > ⚠️ **「全球首个开放 3T 级模型」的准确含义是：首个开放 3T 级权重，不是首个开源 3T 级模型。** Kimi K3 协议全名 **Kimi K3 License**，但**只开权重，不开训练数据，训练代码也不完整**——GitHub `MoonshotAI/Kimi-K3` 仓库只有四个文件：`LICENSE`、`README.md`、`assets/`、`k3_tech_report.pdf`。没有训练脚本、没有数据管线。许可证正文把「inference and training code」写进了 Software 的定义里，但仓库里并没有提供可用的训练代码。**所以准确定级是 open-weight，不是 open source。**
 
@@ -86,13 +86,13 @@ Kimi K3 License 的实质约束有两条，比 Qwen 与 GLM 都更严：
 
 前代谱系：K2.5（2026-01）→ K2.6（2026-04）→ K2.7 Code（2026-06）均为 1T 总 / 32B 激活、Modified MIT。另有一条独立的长上下文效率路线 **Kimi Linear**（48B-A3B，Kimi Delta Attention，1M 上下文）。
 
-### MiniMax-M2 是 Modified MIT 不是 Apache-2.0
+### MiniMax-M2 Is Modified MIT, Not Apache-2.0
 
 > ⚠️ **MiniMax-M2 不是 Apache-2.0。** ModelScope 的 `license` 字段是 `other`，`license_name: modified-mit`，实际许可证文件是 MIT 的一个修改版，正文里写明「Our only modification is that...」：若用于月活超**1 亿**或年度经常性收入超 **3000 万美元**的商业产品或服务，须在该产品界面显著展示 "MiniMax M2"。除此之外与 MIT 完全一致。
 
 参数：230B 总 / 10B 激活 MoE，2025-10-26 上线。10B 激活的定位是端到端工具使用与 agentic 任务。**未查到 M3 的官方发布**。
 
-### Mistral 合并了三条产品线
+### Mistral Merged Three Product Lines
 
 Mistral Medium 3.5（2026-04-28 发布，权重 04-29，05-22 GA）最值得记的不是参数而是产品策略：**它把三条产品线合并成单权重**——退役 Mistral Medium 3.1（通用）、Magistral（推理）、Devstral 2（编码），统一为一个权重 + 逐请求 `reasoning_effort` 参数（`none` 走快答，`high` 走长思维链）。从「三个 checkpoint 常驻」变成「一个 checkpoint + 一个参数」。
 
@@ -100,7 +100,7 @@ Mistral Medium 3.5（2026-04-28 发布，权重 04-29，05-22 GA）最值得记�
 
 本地部署的算术要提前算：128B dense 在 Q4_K_M 下约 72 GB 磁盘占用加 KV cache，实际门槛是 4×24GB 或 96GB+ 统一内存。**单卡 24–32GB 机器直接跳过这个型号。**
 
-## 讯飞星火 只开源端侧
+## iFlytek Spark Opens Source Only the On-Device Side
 
 > ⚠️ **星火 293B 基座没有开源。** 讯飞星火 X2.5 于 2026-09-07 发布，293B-A30B MoE、256K 上下文，但**只在开放平台上线，未开放基座权重**。开源的只有两个端侧小模型：**星火 X2.5-4B 与 X2.5-1.7B（2026-09-01 开源，1M 上下文）**。
 
@@ -108,7 +108,7 @@ Mistral Medium 3.5（2026-04-28 发布，权重 04-29，05-22 GA）最值得记�
 
 它的价值另在别处——**全流程全国产算力训练与推理**的代表。官方表述是「基于全国产算力完成全流程训练及推理」，且端侧模型同时支持英伟达、华为、海光、后摩。科大讯飞 2019 年已被列入美国商务部实体清单，这个国产化定位有明确的合规动因。选型时要看清：如果你的需求是本地端侧小模型，星火 4B/1.7B 值得看；如果要 293B 旗舰，只能走 API。
 
-## 架构收敛 2026 年的信号
+## Architecture Convergence: Signals in 2026
 
 抛开各家宣传，2026 年最实质的技术变化是**多路独立收敛到同一个架构组合：混合线性注意力 + MoE**。四家各自的命名不同，但解决的是同一个问题——全注意力在长上下文上的计算与 KV cache 成本：
 
@@ -121,7 +121,7 @@ Mistral Medium 3.5（2026-04-28 发布，权重 04-29，05-22 GA）最值得记�
 
 这个收敛意味着**过去两年「谁用 MLA / 谁用 DSA / 谁用线性注意力」的路线之争基本结束了**，现在的问题是「混合比例调多少、每多少层插一次全注意力」。对做推理部署的人，直接影响是：KV cache 的形状和计算模式在各家趋同，量化与缓存优化的通用方案更容易跨模型复用。DeepSeek 那篇的 V4.1-Flash 用的 causal encoder–decoder 是另一条独立路线，见 [DeepSeek](/docs/CS/AI/LLM/Model/DeepSeek.md)。
 
-## 选型速查
+## Selection Quick Reference
 
 按约束条件选，而不是按榜单选：
 

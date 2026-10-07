@@ -4,7 +4,7 @@
 
 本笔记聚焦 FIB 表本体与查找过程。查找的**结果对象**（`dst_entry`/`rtable`/`flowi`）见 [socket 的 Route 章](/docs/CS/OS/Linux/net/socket.md)——那里是"查到之后拿到什么缓存"，本篇是"表里有什么、怎么查"。路由查找的结果随后决定 Egress 是否需要经过**邻居子系统**解析下一跳 MAC（见 [Neighbor](/docs/CS/OS/Linux/net/Neighbor.md)）。
 
-## 查找时机
+## Lookup Timing
 
 路由查找在两个方向发生：
 
@@ -13,7 +13,7 @@
 
 无论哪个方向，命中后都会把结果（一个 `rtable`，内含 `dst_entry`）缓存在 socket（`inet_sock->inet_dst_cache`）或 SKB 上，避免每个包重复查表。
 
-## FIB 表结构
+## FIB Table Structure
 
 现代内核（约 5.x 起）的 IPv4 FIB 用 **LC-trie**（层级压缩前缀树）组织，取代了早期的 hash 表，使**最长前缀匹配**在大规模路由下依然高效。`include/net/ip_fib.h` 中的核心对象：
 
@@ -32,7 +32,7 @@ struct fib_table {
 - 注意 `fib_table` 里**不再有函数指针**（早期的 `tb_lookup`/`tb_insert` 已废弃），表操作统一由 `fib_table_lookup()`、`fib_table_insert()` 等外部函数承担；
 - trie 的叶子上挂着一组前缀相同的路由条目（旧实现里是 `fib_alias`，按 ToS/priority 排序），每个条目指向一个 `fib_info`。
 
-### fib_info：路由的"怎么走"
+### fib_info: The Route's 'How to Go'
 
 `trie` 只负责"匹配到前缀"，真正描述下一跳与出接口的是 `fib_info`：
 
@@ -75,7 +75,7 @@ struct fib_nh_common {
 - `fib_type` 决定匹配后动作：`RTN_UNICAST` 正常转发，`RTN_UNREACHABLE`/`RTN_BLACKHOLE` 直接产生 ICMP 不可达 / 静默丢弃；
 - 现代内核（5.6+）推荐用独立的 **nexthop 对象**（`struct nexthop`），多个路由可引用同一下一跳组，便于 ECMP 组的原子替换。
 
-### fib_result：查找返回值
+### fib_result: Lookup Return Value
 
 查找命中后，结果回填到 `fib_result`：
 
@@ -92,7 +92,7 @@ struct fib_result {
 };
 ```
 
-## 策略路由
+## Policy Routing
 
 启用 `CONFIG_IP_MULTIPLE_TABLES` 后，查找不再只查 main/local 两张表，而是先过一组 **`fib_rules`**（策略规则），按规则把流量引导到不同表：
 
@@ -100,7 +100,7 @@ struct fib_result {
 - 每条规则动作：查表（`goto table N`）、直接拒绝、或不可达；
 - 规则按优先级顺序匹配，命中即止——这就是 `ip rule` / `ip route show table N` 背后的机制。
 
-## ECMP 与多路径
+## ECMP and Multipath
 
 一条路由可有多个下一跳（`fib_nhs > 1` 或 nexthop group）：
 
@@ -108,7 +108,7 @@ struct fib_result {
 - `nh_sel`/`nhc_weight` 决定选哪条、按多大权重；
 - 下一跳失效（链路 down、邻居解析失败）时会做 **next-hop alive 检测**，把流量迁到存活路径并缓存例外（`nhc_exceptions`）。
 
-## 与用户态的接口
+## Interface with User Space
 
 路由表通过 [**rtnetlink**](/docs/CS/OS/Linux/net/netlink.md?id=rtnetlink)（`NETLINK_ROUTE`）增删改：`ip route`、`ip rule` 命令在内核里对应 `RTM_NEWROUTE`/`RTM_DELROUTE` 等消息，最终调 `fib_table_insert()` 等落地。链路状态变化（网卡 up/down、地址增删）也以同样通道反向通知用户态。
 

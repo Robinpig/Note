@@ -14,7 +14,7 @@
 
 注册中心侧的职责与地址推送机制见 [registry.md](/docs/CS/Framework/Dubbo/registry.md)，配置项全表见 [config.md](/docs/CS/Framework/Dubbo/config.md)，应用启动顺序见 [Start.md](/docs/CS/Framework/Dubbo/Start.md)，本文不重复。
 
-## 承载的两类元数据
+## Two Types of Metadata Carried
 
 | 类别 | 作用 | 主要接口方法 |
 | :--- | :--- | :--- |
@@ -24,7 +24,7 @@
 
 之所以需要「接口-应用映射」，是因为应用级模型下消费端只声明接口列表，需要能把接口转换成 Provider 应用名才能做精准订阅。这个映射可以是一对多：一个接口名可能对应多个应用，由 Provider 启动时主动上报实现。
 
-## 存储 key 的双轨制
+## Dual-Track System for Storage key
 
 `KeyTypeEnum` 定义了两套拼装格式，是理解元数据中心存储结构的**唯一入口**：
 
@@ -69,7 +69,7 @@ public enum KeyTypeEnum {
 
 根目录默认 `"dubbo"`（`AbstractMetadataReport.java:86` `DEFAULT_ROOT = "dubbo"`），`ZookeeperMetadataReport.toRootDir()`（`:79-85`）把它处理成 `/dubbo/`。`revision` 前缀常量 `KEY_REVISION_PREFIX = "revision"`（`MetadataConstants.java:22`），拼接结果是字面量 `revision:{值}`。
 
-### 映射路径已去掉 `mapping/` 层
+### Mapping Path Has Removed the `mapping/` Layer
 
 2.7.x 时代 ZK 上的映射节点是 `/dubbo/mapping/{interface}`，内容是逗号分隔的多个应用名。**3.3.6 里 `mapping/` 这一层被注释掉了**：
 
@@ -95,7 +95,7 @@ $ demo-provider,two-demo-provider,dubbo-demo-annotation-provider
 > [!NOTE]
 > `ZookeeperMetadataReport` 的读写实现里，**path 仍是用 `DEFAULT_MAPPING_GROUP` 拼的**（`getServiceAppMapping` 里 `buildPathKey(DEFAULT_MAPPING_GROUP, serviceKey)`，`:161`），只是这个 `group` 是**服务名**而非字面量 `mapping`——因为传进来的 `serviceKey` 本身就是 `buildGroup(url.getServiceInterface())` 的结果。读代码时容易把这两层看成「拼出 mapping 前缀」，实际上拼出的是裸接口名。
 
-## `MetadataInfo`：revision 聚合机制
+## `MetadataInfo`: revision Aggregation Mechanism
 
 3.x 元数据中心的核心。**不是「逐条上报接口」，而是「先聚合整个应用，再算一个 revision 写一份」**。
 
@@ -169,7 +169,7 @@ public void publishAppMetadata(SubscriberMetadataIdentifier identifier, Metadata
 > [!TIP]
 > 延迟上报有独立配置：`METADATA_PUBLISH_DELAY_KEY = "dubbo.application.metadata.publish.delay"`，默认 `DEFAULT_METADATA_PUBLISH_DELAY = 1000` ms（`MetadataConstants.java:24-25`）。
 
-## `MetadataReport` 接口的真实方法集
+## `MetadataReport` Interface Actual Method Set
 
 19 个方法（`MetadataReport.java:33-98`）。这是打假「`publishServiceDefinition` 是接口方法」的关键——**接口上没有这个名字**：
 
@@ -200,7 +200,7 @@ public void publishAppMetadata(SubscriberMetadataIdentifier identifier, Metadata
 
 `shouldReportDefinition()` / `shouldReportMetadata()` 对应 `AbstractMetadataReport` 的 `reportDefinition`（默认 `true`）与 `reportMetadata`（默认 `false`）两个字段（`AbstractMetadataReport.java:155-156`），上报前先问这两个开关。
 
-### `publishServiceDefinition` 到底在哪
+### Where `publishServiceDefinition` Actually Is
 
 它在 `MetadataUtils` 里，是个 `static` 辅助方法，**不是 `MetadataReport` 接口方法**：
 
@@ -242,7 +242,7 @@ public static void publishServiceDefinition(
 ```
 调用点是 `ServiceConfig.java:886,903` 与 `ReferenceConfig.java:519`。注意这个类在 **`dubbo-registry/dubbo-registry-api/`**，包名 `org.apache.dubbo.registry.client.metadata`，**不在 `dubbo-metadata/`**。
 
-### 类路径速查
+### Classpath Quick Reference
 
 几个类容易被误认为在 `dubbo-metadata/`，实际不在：
 
@@ -256,7 +256,7 @@ public static void publishServiceDefinition(
 > [!NOTE]
 > `ServiceMetadata` 的源码 javadoc 自己都写了 `Notice, this class currently has no usage inside Dubbo.`——它不是元数据中心的载体，只是框架侧的 service 元模型。
 
-## `ServiceNameMapping`：接口到应用名的映射
+## `ServiceNameMapping`: Mapping from Interface to Application Name
 
 映射能力是一个**独立的 SPI**，与 `MetadataReport` 并列：
 
@@ -302,7 +302,7 @@ metadata=org.apache.dubbo.registry.client.metadata.MetadataServiceNameMapping
 
 `MetadataServiceNameMapping`（`dubbo-registry-api/.../MetadataServiceNameMapping.java:57`）是具体实现，它从 `MetadataReportInstance` 取 `MetadataReport` 来读写映射，并带 CAS 重试配置（`casRetryTimes` / `casRetryWaitTime`，对应 `CAS_RETRY_TIMES_KEY` / `CAS_RETRY_WAIT_TIME_KEY`）。
 
-## `MetadataReportFactory`：工厂与多实例容器
+## `MetadataReportFactory`: Factory and Multi-Instance Container
 
 工厂接口极简：
 
@@ -362,7 +362,7 @@ ZookeeperMetadataReportFactory -> AbstractMetadataReportFactory  [color = "#0000
 
 图中**只有 2 个实现**。2.7.x 时代常见的 `RedisMetadataReportFactory` / `RedisMetadataReport`（含 `JedisPool` 构建、cluster 节点解析）在 3.3.6 主仓库**完全不存在**，属于外部仓库或更早版本的历史实现。
 
-### 抽象工厂：双检锁 + 模板方法
+### Abstract Factory: Double-Checked Locking + Template Method
 
 `AbstractMetadataReportFactory`（`:34`）用双检锁缓存实例，key 是 `url.toServiceString(NAMESPACE_KEY)`（**namespace 参与 key**）：
 
@@ -409,7 +409,7 @@ public MetadataReport getMetadataReport(URL url) {
 
 `check` 是容错开关：`check=false`（URL 参数 `check=false`）且端口为 0 时，创建失败只 warn 不抛，把「元数据中心连不上」降级为「元数据功能不可用」，应用能继续启动。抽象方法签名是 **`protected abstract` MetadataReport createMetadataReport(URL url)**（`:105`）——**是 `protected`，不是 `public`**。3.3.6 末尾还多了 `destroy()`（`:92-104`）遍历销毁所有实例。
 
-### 多报告组合：没有 `CompositeMetadataReport`
+### Multi-Report Combination: No `CompositeMetadataReport`
 
 3.3.6 **没有 `CompositeMetadataReport`** 这个类。多报告的「组合」语义由 `MetadataReportInstance` 内部的 `Map` 承担：
 
@@ -455,7 +455,7 @@ public MetadataReport getMetadataReport(String registryKey) {
 
 `ZookeeperMetadataReportFactory`（`:30-47`）很薄，`createMetadataReport` 只有一行 `new ZookeeperMetadataReport(url, zookeeperClientManager)`，复用的是 `dubbo-remoting-zookeeper-curator5` 的 `ZookeeperClientManager`——与注册中心共用同一套 Curator 客户端管理。
 
-## 元数据中心 vs 注册中心
+## Metadata Center vs Registry Center
 
 这是最容易被含糊过去的一点。**两者是两个独立 SPI，可以是不同协议、可以只部署一个**：
 
@@ -516,13 +516,13 @@ private boolean isUsedRegistryAsMetadataCenter(RegistryConfig registryConfig) {
 
 两者的**关联方式**是同一个 id 绑定，而不是共用实例。`MetadataReportInstance` 的字段 javadoc 写明（`:48-53`）：给 `<dubbo:registry id="demo1"/>` 配一个 `<dubbo:metadata id="demo1"/>`，注册中心就通过 `getMetadataReport("demo1")` 找到自己的元数据中心实例。
 
-## `MetadataService` 与 V2
+## `MetadataService` and V2
 
 运维元数据的读取入口是 `MetadataService`（`dubbo-metadata-api/.../metadata/MetadataService.java`），一个可被远程调用的 RPC 接口，消费端通过它向 Provider 拉取接口级元数据。
 
 3.3.6 另有 **`MetadataServiceV2`**（`MetadataServiceV2.java:21`），`extends org.apache.dubbo.rpc.model.DubboStub`，走 protobuf/Triple 序列化，配 `dubbo-metadata-definition-protobuf` 模块与 `MetadataServiceV2OuterClass` / `MetadataInfoV2OrBuilder` 生成类。版本协商由 `MetadataServiceVersionUtils` 处理。新部署建议直接用 V2。
 
-## 启动流程
+## Startup Process
 
 元数据中心在 `DefaultApplicationDeployer.start()` 流程里启动，**在 `startMetadataCenter()` 这一步**（源码 `:238` 处的调用，方法注释标注 `@since 2.7.8`）：
 
@@ -570,7 +570,7 @@ private void startMetadataCenter() {
 - 没有任何元数据配置，且 `metadata` 不是 `remote` → 直接 `return`，应用继续启动（不部署元数据中心是合法配置）。
 - 有配置但**全部校验不通过** → `init()` 未成功，`isInitialized()` 为 `false`，抛 `IllegalStateException`。注意异常信息用的是 `metadataReportConfigs.size()`（原始数量）而非过滤后的数量，排查时会略有误导。
 
-## 上报的重试与定时刷新
+## Retry and Periodic Refresh of Reporting
 
 上报默认异步（`AbstractMetadataReport.storeProviderMetadata`，`:289-296`）：`syncReport=false` 时走单线程池 `reportCacheExecutor`（`DubboSaveMetadataReport`），`true` 时在调用线程同步执行。
 
@@ -624,7 +624,7 @@ class MetadataReportRetry {
 
 注意 `retryTimesIfNonFail = 600` 这个**硬编码常量**：连续 600 个周期没有失败上报就主动取消重试任务，避免定时器空转。
 
-### 构造器与本地缓存文件
+### Constructor and Local Cache File
 
 ```java
 // dubbo-metadata/dubbo-metadata-api/src/main/java/org/apache/dubbo/metadata/report/support/AbstractMetadataReport.java:114-157
@@ -678,7 +678,7 @@ public AbstractMetadataReport(URL reportServerURL) {
 
 `storeProviderMetadataTask`（`:298-`）的写入路径**先过一遍 metrics 事件**（`MetricsEventBus.post(MetadataEvent.toServiceSubscribeEvent(...))`），真正的上报被包在事件回调里。
 
-## 配置项
+## Configuration Items
 
 ```properties
 dubbo.metadata-report.address=zookeeper://127.0.0.1:2181
@@ -694,7 +694,7 @@ dubbo.metadata-report.sync.report=false    ##非必须,default值为false
 
 如果完全不配 `dubbo.metadata-report.address`，则走前面说的「复用注册中心」路径。
 
-## 默认值汇总表
+## Default Value Summary Table
 
 | 项 | 默认值 | 来源 |
 | :--- | :--- | :--- |
@@ -715,7 +715,7 @@ dubbo.metadata-report.sync.report=false    ##非必须,default值为false
 | 根目录 | `dubbo` | `AbstractMetadataReport.java:86` |
 | `pathTag` | `metadata` | `MetadataConstants.java:21` |
 
-## 陷阱清单
+## Pitfall List
 
 | 直觉写法 / 印象 | 源码实际 | 后果 |
 | :--- | :--- | :--- |

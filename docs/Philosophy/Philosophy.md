@@ -4,17 +4,17 @@
 
 本页是哲学领域的**总纲与分支学科目录**：先给出分支清单，再沿「问题域」与「两大传统」两条线说明它们的关系，最后挂上本库已有的专题笔记。
 
-## 分支学科
+## Subdisciplines
 
 <div class="kb-home">
 
-### 主要分支
+### Major Branches
 
 <div class="kb-grid kb-grid-sm">
 
 <div class="kb-card">
 
-### [形而上学](/docs/Philosophy/Metaphysics.md)
+### [Metaphysics](/docs/Philosophy/Metaphysics.md)
 
 存在本身与最普遍的结构：本体论、模态、因果与同一性
 
@@ -22,7 +22,7 @@
 
 <div class="kb-card">
 
-### [认识论](/docs/Philosophy/Epistemology.md)
+### [Epistemology](/docs/Philosophy/Epistemology.md)
 
 知识、信念与证成：JTB、Gettier 问题与怀疑论
 
@@ -30,7 +30,7 @@
 
 <div class="kb-card">
 
-### [逻辑学](/docs/Philosophy/logic.md)
+### [Logic](/docs/Philosophy/logic.md)
 
 有效推理的形式：演绎与归纳、三段论、现代逻辑分支
 
@@ -38,7 +38,7 @@
 
 <div class="kb-card">
 
-### [伦理学](/docs/Philosophy/Ethics.md)
+### [Ethics](/docs/Philosophy/Ethics.md)
 
 应当如何行动：义务论、后果论、德性伦理与元伦理学
 
@@ -46,7 +46,7 @@
 
 <div class="kb-card">
 
-### [政治哲学](/docs/Philosophy/Political_Philosophy.md)
+### [Political Philosophy](/docs/Philosophy/Political_Philosophy.md)
 
 权力、权威与正义：社会契约、罗尔斯与自由平等
 
@@ -54,7 +54,7 @@
 
 <div class="kb-card">
 
-### [美学](/docs/Philosophy/Aesthetics.md)
+### [Aesthetics](/docs/Philosophy/Aesthetics.md)
 
 美、审美经验与艺术：康德式判断与艺术的定义
 
@@ -62,7 +62,7 @@
 
 <div class="kb-card">
 
-### [价值论](/docs/Philosophy/Value_Theory.md)
+### [Value Theory](/docs/Philosophy/Value_Theory.md)
 
 价值本身：内在与工具价值、价值多元与不可通约
 
@@ -70,7 +70,7 @@
 
 <div class="kb-card">
 
-### [心灵哲学](/docs/Philosophy/Philosophy_of_Mind.md)
+### [Philosophy of Mind](/docs/Philosophy/Philosophy_of_Mind.md)
 
 心与身的关系：意识难题、感受质与意向性
 
@@ -78,7 +78,7 @@
 
 <div class="kb-card">
 
-### [语言哲学](/docs/Philosophy/Philosophy_of_Language.md)
+### [Philosophy of Language](/docs/Philosophy/Philosophy_of_Language.md)
 
 意义、指称与使用：语言学转向与言语行为
 
@@ -86,7 +86,7 @@
 
 <div class="kb-card">
 
-### [科学哲学](/docs/Philosophy/Philosophy_of_Science.md)
+### [Philosophy of Science](/docs/Philosophy/Philosophy_of_Science.md)
 
 科学的本质与方法：划界、范式与科学实在论
 
@@ -94,7 +94,7 @@
 
 <div class="kb-card">
 
-### [现象学与存在主义](/docs/Philosophy/Phenomenology.md)
+### [Phenomenology and Existentialism](/docs/Philosophy/Phenomenology.md)
 
 大陆哲学主干：意向性、此在、自由与荒谬
 
@@ -104,7 +104,7 @@
 
 </div>
 
-## 理论哲学与实践哲学
+## Theoretical Philosophy and Practical Philosophy
 
 哲学的分支可按**追问方向**分成两组，二者的关系是「地基与楼宇」：
 
@@ -113,7 +113,7 @@
 
 两组并不隔绝：自由意志既是 [形而上学](/docs/Philosophy/Metaphysics.md) 的决定论问题，也是 [伦理学](/docs/Philosophy/Ethics.md) 的责任前提；「是与应当」的鸿沟则横跨两组。
 
-## 两大传统：分析 vs 大陆
+## Two Traditions: Analytic vs Continental
 
 20 世纪的哲学在方法上分成两支，理解这条分界线才能读懂各分支的立场差异：
 
@@ -124,7 +124,7 @@
 
 **语言学转向（linguistic turn）**是分析传统的标志性事件：哲学问题先被化约为语言问题再求解——弗雷格与罗素奠基，维特根斯坦提出「意义在于使用」。大陆一侧则以 [现象学与存在主义](/docs/Philosophy/Phenomenology.md) 从第一人称经验入手，两条路线在哈马贝斯对「四种思潮」的批判性综合中被同时纳入视野，见 [后形而上学思想-哈马贝斯](/docs/Philosophy/后形而上学思想-哈马贝斯.md)。
 
-## 哲学史脉络
+## History of Philosophy
 
 | 阶段 | 代表 | 母题 |
 | --- | --- | --- |
@@ -134,7 +134,7 @@
 | 现代 | 弗雷格、罗素、维特根斯坦、胡塞尔、海德格尔 | 语言学转向与现象学 |
 | 当代 | 罗尔斯、Quine、Kripke、哈马贝斯 | 正义、意义、模态与商谈 |
 
-## 专题笔记
+## Topic Notes
 
 本库已有的读书专项，分别挂在对应分支下：
 

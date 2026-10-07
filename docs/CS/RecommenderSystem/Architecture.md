@@ -30,7 +30,7 @@ digraph rec_online {
 
 实线是在线请求路径，虚线是离线的回流与发布路径。两条路必须**共用同一套口径**，这条图最重要的信息就这一句。
 
-## 分层职责
+## Layered Responsibilities
 
 | 层 | 职责 | 失败时的直接表现 |
 | ------ | ------ | ------ |
@@ -44,7 +44,7 @@ digraph rec_online {
 
 厂商中立的分层与阿里侧的具体产品形态（TPP 与其编排的 BE/iGraph/EAS 引擎族）是同一件事的两种画法，实现细节见 [TPP](/docs/CS/RecommenderSystem/TPP.md)。
 
-## 延迟预算的算术
+## Arithmetic of Latency Budget
 
 链路总 RT 不是各环节之和——并发的部分是取最大值，串行的部分才相加：
 
@@ -61,7 +61,7 @@ $$
 - **P99 才是预算依据**：均值达标而 P99 超时的链路，会表现为"部分用户看到的永远是兜底结果"，这类偏差在指标上极难发现，必须单独统计兜底触发率
 - **加一级模型要先回答预算从哪来**：粗排的合理性与否，本质是精排候选量与 RT 的取舍，而不是"多一层更先进"
 
-## 一致性：在线架构的第一大坑
+## Consistency: The Biggest Pitfall of Online Architecture
 
 效果对不上时，八成不是模型退化，而是一致性破了。三处必须对齐：
 
@@ -69,7 +69,7 @@ $$
 - **快照口径**：训练特征取"曝光那一刻"的值，不能用当前值重算（否则学到未来）。与标签窗口、延迟转化一起构成样本正确性的基础，见 [Pipeline](/docs/CS/RecommenderSystem/Pipeline.md)
 - **版本对齐**：模型版本、embedding 词表版本、向量索引版本三者必须一起发布。换了 embedding 模型却查旧索引，等价于随机召回，而各项指标不会报错，这是最典型的静默故障
 
-## 索引与在线存储选型
+## Indexing and Online Storage Selection
 
 | 需求 | 常用存储 | 取舍 |
 | ------ | ------ | ------ |
@@ -82,7 +82,7 @@ $$
 
 **更新时效是选型里最常被低估的一项**：全量重建便宜但新物品要等小时级；增量段能让分钟级甚至秒级可见，但会带来段合并、内存膨胀与一致性窗口。行为链路侧通常靠消息队列削峰 + 流式计算更新（见 [Kafka](/docs/CS/MQ/Kafka/Kafka.md)、[Flink](/docs/CS/Framework/Flink/Flink.md)）。
 
-## 发布、灰度与回滚
+## Release, Canary and Rollback
 
 一次模型上线要同时回答"效果对不对"和"会不会出事"，因此标准流水线是：
 
@@ -94,7 +94,7 @@ $$
 
 配置与开关（业务规则、降级阈值、流量分配）走配置中心动态下发，而不是等下一次发版；这与灰度发布、熔断降级共同构成"柔性化"的一部分（另见 [SystemDesign](/docs/CS/SE/SystemDesign.md)）。
 
-## 降级矩阵
+## Degradation Matrix
 
 写清楚"每一层失败时退到哪里"，比事后临时补补丁更可靠：
 
@@ -108,7 +108,7 @@ $$
 
 兜底列表本身要**预生成并缓存**（见 [Cache](/docs/CS/SE/Cache.md)），而不是故障时现算——故障时的下游依赖往往同时是坏的。
 
-## 成本与容量
+## Cost and Capacity
 
 推荐系统的成本结构与候选量强相关：
 
@@ -119,7 +119,7 @@ $$
 
 容量评估靠压测与流量回放：用生产请求样本回放来验证新链路的 P99 与降级路径是否真能触发（见 [Stress_testing](/docs/CS/SE/Stress_testing.md)）。只按 QPS 线性外推的容量估算，通常会在降级路径上翻车——因为兜底逻辑本身也是一条没被测过的链路。
 
-## 观测与故障定位
+## Observability and Fault Localization
 
 - **请求级链路追踪**：一次请求经过哪些引擎、各段耗时、命中了哪条降级分支。链路不染色就永远说不清"这一次为什么兜底了"（见 [Tracing](/docs/CS/Distributed/Tracing/Tracing.md)、[APM](/docs/CS/SE/APM.md)）
 - **必备看板**：QPS、P50/P99 RT、超时率、兜底与降级触发率、特征缺失率、各召回路配额与实际曝光来源占比、pCTR 与真实 CTR 的比值（PCoC）、索引与模型版本号

@@ -38,7 +38,7 @@ spring.cloud.sentinel.transport.dashboard = localhost:8080
 
 
 
-## 原理
+## Principles
 
 Sentinel 的核心原理可以高度概括为：**基于上下文的调用链路追踪 + 责任链（Slot Chain）拦截架构 + 滑动窗口度量统计 + 策略化流控/熔断算法 + 热更新规则管理**
 

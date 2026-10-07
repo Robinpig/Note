@@ -2,7 +2,7 @@
 
 C++ 的内存管理位于「手动 `malloc`」与「带 GC 的语言」之间：它把**分配**与**构造**拆成两个正交步骤，并提供了可替换的分配器抽象。理解 `new` / `delete` 的真实动作，是写好 [智能指针](/docs/CS/C++/SmartPtr.md)、避免泄漏与 UB 的前提。
 
-## new-expression 的两步
+## The Two Phases of new-expression
 
 `T* p = new T(args);` 实际发生：
 
@@ -11,12 +11,12 @@ C++ 的内存管理位于「手动 `malloc`」与「带 GC 的语言」之间：
 
 `delete p;` 反之：先调析构函数，再调 `operator delete`。**只 `free` 不析构、或只析构不 `free` 都是 UB**。
 
-## placement new 与自定义 operator new
+## placement new and Custom operator new
 
 - **placement new** `new (buf) T` 在已分配内存上构造对象，不分配——用于内存池、定制布局（如 [muduo](/docs/CS/C++/muduo.md) 的对象池、ring buffer）。
 - 可重载全局 / 类级 `operator new` / `operator delete`，实现专属分配策略（如高频小对象用池化分配器）。
 
-## 分配器模型（allocator）
+## Allocator Model (allocator)
 
 - `std::allocator`（经典接口：`allocate` / `deallocate` / `construct` / `destroy`）让容器与内存来源解耦。
 - C++17 起 `std::pmr`（**P**olymorphic **M**emory **R**esource）：`std::pmr::memory_resource` + `std::pmr::polymorphic_allocator`，运行时切换内存池（monotonic_buffer / pool / 默认 `new_delete_resource`），`std::pmr::vector` 即使用它的容器。
@@ -31,7 +31,7 @@ std::pmr::vector<int> v{&pool};   // 该 vector 从 pool 取内存，析构后�
 
 数组版本 `new T[n]` 在分配区额外记录元素个数（供 `delete[]` 知道调多少次析构）；`new[]` 必须与 `delete[]` 配对，否则 UB。实践中**优先用 `std::vector` / 容器**替代裸数组。
 
-## 与 C / 智能指针的关系
+## Relationship with C / Smart Pointers
 
 - 比 [C 的 malloc](/docs/CS/C/malloc.md) 多了构造 / 析构环节、类型安全（不需 `(T*)` 强转），但错误使用同样是 UB。
 - 现代 C++ 的答案是 [智能指针](/docs/CS/C++/SmartPtr.md) 与容器，把 `new` / `delete` 藏进 RAII。

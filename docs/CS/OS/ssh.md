@@ -12,7 +12,7 @@ vim /etc/ssh/sshd_config
 service ssh restart
 ```
 
-## 协议分层
+## Protocol Layering
 
 SSH-2 由三个协议层叠加：
 
@@ -20,13 +20,13 @@ SSH-2 由三个协议层叠加：
 2. **User Authentication Layer（SSH-USERAUTH）**：在加密通道上验证客户端，支持 `publickey`、`password`、`hostbased` 等方式。
 3. **Connection Layer（SSH-CONN）**：复用单条加密连接为多条逻辑「channel」，承载 shell、exec、X11 转发、端口转发等。
 
-## 认证方式
+## Authentication Methods
 
 - **公钥认证（推荐）**：客户端持有私钥，服务端 `~/.ssh/authorized_keys` 存公钥；相比密码，抗暴力破解且可免密。
 - **密码认证**：简单但有被嗅探/爆破风险，生产应关闭 `PasswordAuthentication no`。
 - **hostbased / GSSAPI**：企业内网 Kerberos 集成场景。
 
-## 端口转发
+## Port Forwarding
 
 同一加密隧道可顺带转发 TCP，是 SSH 常被低估的能力：
 
@@ -34,7 +34,7 @@ SSH-2 由三个协议层叠加：
 - **远程转发 `-R`**：把远端端口映射回本地（`ssh -R 9000:localhost:3000 host`，从远端访问本地 3000）。
 - **动态转发 `-D`**：启动本地 SOCKS5 代理（`ssh -D 1080 host`），流量经主机出口。
 
-## 配套命令与增强客户端
+## Companion Commands and Enhanced Clients
 
 - `scp` / `sftp`：基于 SSH 的安全文件拷贝（注意 `scp` 新实现改用 SFTP 协议）。
 - `ssh-keygen`：生成/管理密钥对。

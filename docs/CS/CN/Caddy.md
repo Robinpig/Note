@@ -6,7 +6,7 @@
 
 配置有双形态：**Caddyfile**（人类友好、简洁）与 **JSON API**（程序化、支持热重载 `caddy reload`）。
 
-## 自动 HTTPS 机制
+## Automatic HTTPS Mechanism
 
 Caddy 内置了完整的 ACME 客户端，站点名写进 Caddyfile 即触发签发：
 
@@ -20,7 +20,7 @@ app.example.com {
 - 本地测试用 `localhost` 会自动签**自签**证书，不依赖外网
 - nginx 做到同等体验需要 certbot + 续期定时任务 + 续期后 reload 的完整编排；nginx 侧的手工流程见 [TLS](/docs/CS/CN/nginx/tls.md)
 
-## 反代速览
+## Reverse Proxy Quick View
 
 ```
 api.example.com {
@@ -37,7 +37,7 @@ api.example.com {
 - 2.11 起反代 HTTPS 上游时自动重写 Host 头，少一类「直连正常、过代理 404」的问题
 - Docker 部署要挂 `data` 卷存证书，否则每次重启重新签发，会撞 Let's Encrypt 限频
 
-## 与 nginx 的取舍
+## Trade-offs with nginx
 
 | 维度 | Caddy | nginx |
 | :-- | :-- | :-- |

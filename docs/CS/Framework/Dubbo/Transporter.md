@@ -12,7 +12,7 @@ Dubbo 的 RPC 抽象（`Protocol` / `Invoker`）之下还有一层「传输」�
 
 `Channel` / `ChannelHandler` / `Codec` / `Dispatcher` 的接口结构已在 [remoting.md](/docs/CS/Framework/Dubbo/remoting.md) 展开，线程模型（`Dispatcher` 与 `ThreadPool`）见 [ThreadPool.md](/docs/CS/Framework/Dubbo/ThreadPool.md)，协议族与端口复用见 [Triple.md](/docs/CS/Framework/Dubbo/Triple.md)，本文不重复，只聚焦「传输层由谁实现、怎么装配、生命周期怎么走」。
 
-## 整体定位：传输层在调用链中的位置
+## Overall Positioning: The Position of the Transport Layer in the Call Chain
 
 一次 Dubbo RPC 从上到下依次穿过：
 
@@ -43,11 +43,11 @@ public ExchangeServer bind(URL url, ExchangeHandler handler) throws RemotingExce
 ```
 
 > [!TIP]
-> `IS_PU_SERVER_KEY`（URL 参数 `ispuserver`）是「单端口多协议」的开关。为 `true` 时走 `PortUnificationExchanger`，否则走普通 `Transporters`——这条分支是理解「DubboProtocol 与 Triple 如何共用一个端口」的关键，详见 [Triple.md](/docs/CS/Framework/Dubbo/Triple.md?id=端口与单端口多协议)。
+> `IS_PU_SERVER_KEY`（URL 参数 `ispuserver`）是「单端口多协议」的开关。为 `true` 时走 `PortUnificationExchanger`，否则走普通 `Transporters`——这条分支是理解「DubboProtocol 与 Triple 如何共用一个端口」的关键，详见 [Triple.md](/docs/CS/Framework/Dubbo/Triple.md?id=port-and-single-port-multi-protocol)。
 
 `Protocol` 层不感知具体传输实现，只通过 URL 上的 `transporter` 参数间接选择扩展。参数校验在 `ConfigValidationUtils.java:586,599`，会先用 `ExtensionLoader.hasExtension` 确认扩展存在。
 
-## `dubbo-remoting/` 模块全景
+## `dubbo-remoting/` Module Overview
 
 3.3.6 的 `dubbo-remoting/` 有 **7 个子模块**：
 
@@ -64,9 +64,9 @@ public ExchangeServer bind(URL url, ExchangeHandler handler) throws RemotingExce
 > [!WARNING]
 > 网上流传的「Dubbo 支持 netty / mina / grizzly / thrift」清单对应的是 2.x 时代。3.3.6 主仓库**没有** `dubbo-remoting-mina`，也**没有** `dubbo-remoting-grizzly`、`dubbo-remoting-etcd3`。`mina` 相关实现需要显式引入外部 `org.apache.dubbo.extensions` 生态仓库；grizzly / thrift 传输在 3.x 主线已不可用。
 
-## `Transporter` SPI 与注册机制
+## `Transporter` SPI and Registration Mechanism
 
-### 接口定义
+### Interface Definition
 
 ```java
 // dubbo-remoting/dubbo-remoting-api/src/main/java/org/apache/dubbo/remoting/Transporter.java:32-58
@@ -88,7 +88,7 @@ public interface Transporter {
 
 `scope = ExtensionScope.FRAMEWORK` 表示这个扩展是**框架级**的，一个 `FrameworkModel` 内单例，被所有 `ApplicationModel` 共享。SPI 的 scope 机制详见 [SPI.md](/docs/CS/Framework/Dubbo/SPI.md)。
 
-### 三份 SPI 注册文件
+### Three SPI Registration Files
 
 生产代码里只有 **2 份**（第 3 份在 test 资源里），共注册 4 个扩展名：
 
@@ -140,7 +140,7 @@ public class NettyTransporter implements Transporter {
 
 实现只有两行 `new`，**没有任何连接池、线程池、重试逻辑**。它甚至没有实现 `Transporter` 之外的能力——`NAME` 常量为 `"netty"` 而类在 `netty4` 包下，这种「常量与包名不一致」正是双别名演化的残留。
 
-## `Transporters` 门面
+## `Transporters` Facade
 
 `Transporters` 是纯静态门面，构造器私有，**3.3.6 只有 5 个方法**。核心是 `getTransporter` 与两个 handler 分发方法：
 
@@ -186,11 +186,11 @@ public static Transporter getTransporter(URL url) {
 
 `getTransporter` 用的是 `url.getOrDefaultFrameworkModel()` 而不是 `applicationModel`，与 `@SPI(scope = FRAMEWORK)` 对应——传输扩展在框架级查找，与应用级配置无关。
 
-## `NettyServer` 生命周期
+## `NettyServer` Lifecycle
 
 3.3.6 的 `NettyServer` 相对 2.7.x 已重构：`extends AbstractServer`（不再显式 `implements RemotingServer`）、`doOpen` 拆成 5 个可覆写步骤、加入 metrics 上报、优雅停机带双参数、SSL 无条件启用。
 
-### 构造与 doOpen 的拆分
+### Separation of Construction and doOpen
 
 ```java
 // dubbo-remoting/dubbo-remoting-netty4/src/main/java/org/apache/dubbo/remoting/transport/netty4/NettyServer.java:63-110
@@ -236,7 +236,7 @@ public class NettyServer extends AbstractServer {
 
 另外两个 2.7.x 时代的写法在 3.3.6 里已经不存在：`super(ExecutorUtil.setThreadName(url, SERVER_THREAD_POOL_NAME), ...)` 的线程名包装**已移到 `AbstractServer` 内部**（`AbstractServer.java:78,105`）；`private static final Logger logger` **已删除**，改用继承自 `AbstractEndpoint` 的 `ErrorTypeAwareLogger logger`（`AbstractEndpoint.java:37`），日志带错误码。
 
-### IO 线程数、SO_KEEPALIVE 与 pipeline 顺序
+### IO Thread Count, SO_KEEPALIVE and pipeline Order
 
 ```java
 // dubbo-remoting/dubbo-remoting-netty4/src/main/java/org/apache/dubbo/remoting/transport/netty4/NettyServer.java:157-161
@@ -287,7 +287,7 @@ pipeline 顺序是 `negotiation` → `decoder` → `encoder` → `server-idle-ha
 
 `IdleStateHandler` 的**写空闲超时**从 `heartbeat * 3` 换成了 `close.timeout`。这就是 2.7.x 源码里 `// FIXME: should we use getTimeout()?` 那条注释的答案——FIXME 已解决。
 
-### getCloseTimeout：3.3.6 新增方法
+### getCloseTimeout: New Method in 3.3.6
 
 2.7.x 只有 `getIdleTimeout` / `getHeartbeat` 两个方法。3.3.6 增加了 `getCloseTimeout`，且两者**不是替换关系**——`getCloseTimeout` 内部会回落到 `getIdleTimeout`：
 
@@ -338,7 +338,7 @@ public static int getIdleTimeout(URL url) {
 
 后两者都有**硬校验**：小于 `heartbeat * 2` 直接抛 `IllegalStateException`。调小 `heartbeat` 却忘了同步调 `close.timeout`，会在 `NettyServer` 构造时炸掉。
 
-### 优雅停机与 getChannels 的新语义
+### Graceful Shutdown and the New Semantics of getChannels
 
 ```java
 // dubbo-remoting/dubbo-remoting-netty4/src/main/java/org/apache/dubbo/remoting/transport/netty4/NettyServer.java:225-249
@@ -375,7 +375,7 @@ public Collection<Channel> getChannels() {
 
 也就是说 3.3.6 把「过滤死链」的职责从 `getChannels()` 挪走了。调用方如果依赖「拿到的都是活连接」，需要自己判断 `isConnected()`。新增的 `getChannelsSize()`（`:241-244`）返回 map 全量大小，不受此影响。
 
-### metrics 上报
+### metrics Reporting
 
 3.3.6 在 `doOpen` 末尾新增了 Netty 分配器指标上报，共 **8 项**，全部读同一个 `PooledByteBufAllocator.DEFAULT`：
 
@@ -407,7 +407,7 @@ if (isSupportMetrics()) {
 > [!NOTE]
 > 上报取的是 `ApplicationModel.defaultModel()`，而不是 `getUrl().getOrDefaultApplicationModel()`。在多应用模型下这是已知的不精确点。
 
-## `NettyClient` 与 `NettyChannel`
+## `NettyClient` and `NettyChannel`
 
 `NettyClient extends AbstractClient`，`doOpen` 只做两件事——建 handler、建 `Bootstrap`，真正的连接在 `doConnect`：
 
@@ -439,12 +439,12 @@ public class NettyClient extends AbstractClient {
 三个要点：
 
 - **EventLoopGroup 是全进程共享的**：`GlobalResourceInitializer` 持有单例 + `EventExecutorGroup::shutdownGracefully` 释放钩子，不是每个 client 一个线程池。客户端的 IO 线程数也用 `DEFAULT_IO_THREADS`，但**不读 `iothreads` 参数**。
-- **一个 client 只有一条连接**：`channel` 字段是 `volatile` 单值，`doConnect` 每次成功都用新 channel 替换并关掉旧 channel（源码注释写明 "Each successful invocation of doConnect() will replace this with new channel and close old channel"）。多 Reference 的连接复用规则见 [ThreadPool.md](/docs/CS/Framework/Dubbo/ThreadPool.md?id=多-reference-默认共享一条连接)。
+- **一个 client 只有一条连接**：`channel` 字段是 `volatile` 单值，`doConnect` 每次成功都用新 channel 替换并关掉旧 channel（源码注释写明 "Each successful invocation of doConnect() will replace this with new channel and close old channel"）。多 Reference 的连接复用规则见 [ThreadPool.md](/docs/CS/Framework/Dubbo/ThreadPool.md?id=multiple-references-share-one-connection-by-default)。
 - **业务线程池不是它创建的**：`initExecutor` 在 `AbstractClient.java:145-156`，把 `THREADPOOL_KEY` 补上 `DEFAULT_CLIENT_THREADPOOL`（即 `cached`）后交给 `ExecutorRepository` 全局创建，**全应用共享一个池**。这就是消费端线程池默认 `cached` 的来源。
 
 `initBootstrap` 的 client 侧 pipeline 是 `negotiation`（**条件性**，仅 `sslContext != null` 时加）→ `decoder` → `encoder` → `client-idle-handler`（`IdleStateHandler(heartbeatInterval, 0, 0)`，只写空闲触发心跳）→ `handler`。与 server 端相反，client 端仍受 `SslContexts.buildClientSslContext(getUrl())` 是否返回非空控制。它还支持 SOCKS5 代理：若配置了 `socksProxyHost` 且目标地址不是本机，则 `pipeline().addFirst(new Socks5ProxyHandler(...))`，默认端口 `1080`。
 
-### NettyChannel.send 与 sent 的语义
+### NettyChannel.send and the Semantics of sent
 
 ```java
 // dubbo-remoting/dubbo-remoting-netty4/src/main/java/org/apache/dubbo/remoting/transport/netty4/NettyChannel.java:191-232
@@ -501,7 +501,7 @@ public void send(Object message, boolean sent) throws RemotingException {
 | `true` | `future.await(timeout)` **阻塞等待**写完成 | `TIMEOUT_KEY`（URL 参数 `timeout`），走 `getPositiveParameter` |
 | `false` | 注册 listener 后**立即返回**，靠 listener 回调 | 不等待 |
 
-`sent` 的语义是**「是否等这一笔写完」**，不是「是否等业务响应」。业务响应由 `DefaultFuture` + 时间轮处理，属 [Protocol.md](/docs/CS/Framework/Dubbo/Protocol.md?id=超时机制：时间轮定时器，不是扫描线程) 的范畴。
+`sent` 的语义是**「是否等这一笔写完」**，不是「是否等业务响应」。业务响应由 `DefaultFuture` + 时间轮处理，属 [Protocol.md](/docs/CS/Framework/Dubbo/Protocol.md?id=timeout-mechanism-time-wheel-timer-not-a-scanning-thread) 的范畴。
 
 > [!TIP]
 > `sent` 默认值来自 URL 参数 `Constants.SENT_KEY`，见 `AbstractPeer.send(Object)`：`send(message, url.getParameter(SENT_KEY, false))`——**默认 `false`（异步）**。
@@ -510,15 +510,15 @@ listener 里只有 `Request` 才回调（`:208`）。写失败时不是抛异常
 
 `!encodeInIOThread` 分支是**在业务线程里提前编码**：`NettyBackedChannelBuffer` 把 Dubbo 的 `ChannelBuffer` 包装到 Netty 的 `ByteBuf` 上，让 `codec.encode` 直接写出字节，IO 线程只做搬运。`writeQueue` 是 `Netty4BatchWriteQueue`（继承 `BatchExecutorQueue`），提供 `enqueue` 批量写能力。
 
-### Codec 适配层
+### Codec Adaptation Layer
 
 `NettyCodecAdapter`（`NettyCodecAdapter.java:37-60`）是 `Codec2` 与 Netty pipeline 之间的桥，`final class`，构造时同时创建 `InternalEncoder`（`extends MessageToByteEncoder`）与 `InternalDecoder`（`extends ByteToMessageDecoder`），由 `getEncoder()` / `getDecoder()` 取出后放进 pipeline。
 
 `Codec2` 实例从哪来：`AbstractEndpoint.getChannelCodec(url)`（`AbstractEndpoint.java:48-60`）——读 URL 参数 `codec`，**为空则直接用协议名**（因为 Dubbo 约定 codec 扩展名与协议名相同），先去 `Codec2` 扩展里找，找不到再退 `Codec` 扩展。`NettyBackedChannelBuffer` / `NettyBackedChannelBufferFactory` 则是 `Buffer` 体系对 Netty `ByteBuf` 的适配，让上层（`Codec2` 实现、`Payload` 检查）不必认识 Netty 类型。
 
-## 3.x 新增扩展点
+## New Extension Points in 3.x
 
-### ChannelHandlers.wrap 的链路
+### ChannelHandlers.wrap Chain
 
 `NettyServer` / `NettyClient` 构造时都会把业务 handler 包一层，顺序是**从外到内** `MultiMessageHandler` → `HeartbeatHandler` → `Dispatcher 包装后的 handler`：
 
@@ -534,7 +534,7 @@ protected ChannelHandler wrapInternal(ChannelHandler handler, URL url) {
 
 `MultiMessageHandler` 处理组合请求（一次请求携带多个子请求），`HeartbeatHandler` 收发心跳，`Dispatcher` 决定哪些事件进业务线程池——**三层的注册顺序与执行顺序正好相反**，这是读 pipeline 时的常见困惑点。`Dispatcher` 的五种派发模型见 [ThreadPool.md](/docs/CS/Framework/Dubbo/ThreadPool.md)。
 
-### ConnectionManager：连接级管理
+### ConnectionManager: Connection-Level Management
 
 3.x 新增的 `ConnectionManager` SPI，用于 Triple / 端口复用这类需要「在一条连接上跑多路协议」的场景：
 
@@ -558,7 +558,7 @@ public interface ConnectionManager {
 
 `NettyConnectionManager` 的实现极简：`connect` 返回 `new NettyConnectionClient(url, handler)`，`forEachConnection` **是空实现（Do nothing）**。netty4 模块下同样只有 `netty` / `netty4` 两个别名。netty4 侧对应的连接级类是 `NettyConnectionClient` / `AbstractNettyConnectionClient` / `NettyConnectionHandler`，它们在 pipeline 里额外插入 HTTP/2 的 `Http2FrameCodec` 与 preface promise，用于多路复用。
 
-### NettyPortUnificationTransporter：单端口多协议
+### NettyPortUnificationTransporter: Single Port Multiple Protocols
 
 `PortUnificationTransporter` 是 `Transporter` 之外的**独立 SPI**，专门做端口统一，注册在 `org.apache.dubbo.remoting.api.pu.PortUnificationTransporter`（netty4 模块注册 `netty4`，netty3 模块注册 `netty3`）：
 
@@ -583,9 +583,9 @@ public class NettyPortUnificationTransporter implements PortUnificationTransport
 }
 ```
 
-注意 `connect` 侧不是走自身的 `ConnectionManager` 实现，而是**硬编码取 `MultiplexProtocolConnectionManager`**——与 `NettyConnectionManager.NAME = "netty4"` 是两条不同的扩展路径，不要混。触发路径是 `HeaderExchanger.bind` 里读 `IS_PU_SERVER_KEY`；DubboProtocol 与 Triple 共用端口的完整机制见 [Triple.md](/docs/CS/Framework/Dubbo/Triple.md?id=端口与单端口多协议)。
+注意 `connect` 侧不是走自身的 `ConnectionManager` 实现，而是**硬编码取 `MultiplexProtocolConnectionManager`**——与 `NettyConnectionManager.NAME = "netty4"` 是两条不同的扩展路径，不要混。触发路径是 `HeaderExchanger.bind` 里读 `IS_PU_SERVER_KEY`；DubboProtocol 与 Triple 共用端口的完整机制见 [Triple.md](/docs/CS/Framework/Dubbo/Triple.md?id=port-and-single-port-multi-protocol)。
 
-### 其他 3.x 新增类
+### Other New Classes in 3.x
 
 | 类 | 作用 |
 | :--- | :--- |
@@ -593,7 +593,7 @@ public class NettyPortUnificationTransporter implements PortUnificationTransport
 | `ssl/aot/`、`http2/`、`logging/` | AOT 预置 SSL 上下文、HTTP/2 handler、日志桥接 |
 | `AddressUtils` / `ChannelAddressAccessor` | 地址工具 |
 
-## 默认值汇总表
+## Default Value Summary Table
 
 | 项 | 默认值 | 来源 |
 | :--- | :--- | :--- |
@@ -611,7 +611,7 @@ public class NettyPortUnificationTransporter implements PortUnificationTransport
 | 停机 `quietPeriod` | `min(2000, timeout)` | `NettyServer.java:230` |
 | SOCKS5 默认端口 | `1080` | `NettyClient.java:66` |
 
-## 陷阱清单
+## Pitfall List
 
 | 直觉写法 / 印象 | 源码实际 | 后果 |
 | :--- | :--- | :--- |
@@ -637,9 +637,9 @@ public class NettyPortUnificationTransporter implements PortUnificationTransport
 
 - [Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md)
 - [remoting](/docs/CS/Framework/Dubbo/remoting.md)
-- [ThreadPool](/docs/CS/Framework/Dubbo/ThreadPool.md?id=消费端线程模型)
-- [Triple](/docs/CS/Framework/Dubbo/Triple.md?id=端口与单端口多协议)
-- [Protocol](/docs/CS/Framework/Dubbo/Protocol.md?id=codec2-体系与注册现状)
+- [ThreadPool](/docs/CS/Framework/Dubbo/ThreadPool.md?id=consumer-thread-model)
+- [Triple](/docs/CS/Framework/Dubbo/Triple.md?id=port-and-single-port-multi-protocol)
+- [Protocol](/docs/CS/Framework/Dubbo/Protocol.md?id=codec2-system-and-current-registration-status)
 - [Metrics](/docs/CS/Framework/Dubbo/Metrics.md)
 
 ## References

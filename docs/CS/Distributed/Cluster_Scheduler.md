@@ -2,13 +2,13 @@
 
 集群调度器（Cluster scheduler）是现代基础设施的重要组件。其架构已从单体（monolithic）设计演进到更灵活、更解耦（disaggregated）与分布式的设计。调度之所以重要，是因为它直接影响运营集群的成本：一个糟糕的调度器会导致利用率低下，让昂贵的机器闲置而白白花钱。然而，高利用率本身并不足够——敌对的工作负载会相互干扰，除非调度决策足够审慎。
 
-## 架构演进
+## Architecture Evolution
 
 图 1 可视化了几种不同的方案：灰色方块代表一台机器，彩色圆圈代表一个任务，内部带“S”的圆角矩形代表一个调度器。箭头表示调度器做出的放置决策，三种颜色对应不同的工作负载（例如 Web 服务、批处理分析、机器学习）。
 
 ![Fig.1. Cluster scheduler architectures](./img/Cluster_Scheduler_Arch.png)
 
-### 单体调度
+### Monolithic Scheduling
 
 许多集群调度器——例如大多数高性能计算（HPC）调度器、[Borg scheduler](/docs/CS/Distributed/Borg.md?id=scheduling)、早期的各种 [Hadoop 调度器]() 以及 [Kubernetes scheduler](/docs/CS/Container/k8s/K8s.md?id=scheduling)——都是**单体（monolithic）**的。一个单一的调度器进程运行在一台机器上（例如 Hadoop v1 的 `JobTracker` 与 Kubernetes 的 `kube-scheduler`），负责把任务分配到机器上。**所有工作负载都由同一个调度器处理，所有任务都经由同一套调度逻辑**（见图 1a）。这种方式简单且统一，也推动了越来越复杂的调度器不断出现。例如 [Paragon](http://dl.acm.org/citation.cfm?id=2451125) 与 [Quasar](http://dl.acm.org/citation.cfm?id=2541941) 调度器使用机器学习方法来避免竞争资源的工作负载之间的负面干扰。
 
@@ -20,7 +20,7 @@
 
 总而言之，这听起来像是一场工程噩梦——而调度器维护者收到的那份永无止境的特性需求清单也印证了这一点。[1](http://www.firmament.io/blog/scheduler-architectures.html#fn1)
 
-### 两级调度
+### Two-level Scheduling
 
 两级（two-level）调度架构通过把**资源分配**与**任务放置**的关注点分离，来解决上述问题。这让任务放置逻辑可以针对特定应用定制，同时又能维持集群在它们之间的共享。
 
@@ -32,7 +32,7 @@
 2. 调度器无法考虑来自运行中工作负载、可能拉低资源质量的干扰（例如占满 I/O 带宽的“吵闹邻居，noisy neighbours”），因为它们看不到这些。
 3. 应用专属的调度器关心底层资源的许多不同方面，但它们选择资源的唯一手段就是与资源管理器之间的提供/请求接口。这个接口很容易变得相当复杂。
 
-### 共享状态调度
+### Shared-state Scheduling
 
 共享状态（shared-state）架构通过转向一种半分布式模型来解决这一问题：多个集群状态的副本由各应用级调度器独立更新，如图 1c 所示。在本地应用变更后，调度器发起一个乐观并发（optimistically concurrent）事务来更新共享集群状态。当然，这个事务也可能失败：期间另一个调度器可能已做出了冲突的修改。
 
@@ -42,7 +42,7 @@
 
 然而，共享状态架构也有缺点：它们必须使用陈旧（stale）信息（不像集中式调度器），并可能在高竞争下出现调度性能下降（尽管其它架构也可能如此）。
 
-### 全分布式调度
+### Fully Distributed Scheduling
 
 全分布式（fully-distributed）架构把解耦推得更远：调度器之间完全不做协调，而是用许多相互独立的调度器来服务进来的工作负载，如图 1d 所示。每个调度器纯粹基于自己对集群的局部、片面、且常常过时的视图工作。任务通常可提交给任意调度器，而每个调度器可把任务放置在集群的任何位置。与两级调度器不同，这里没有每个调度器各自负责的固定分区；相反，整体调度与资源分区是统计复用（statistical multiplexing）与 workload/scheduler 决策中随机性涌现（emergent）的结果——类似共享状态调度器，只是完全没有中心控制。
 
@@ -55,11 +55,11 @@
 3. 分布式调度器难以强制全局不变量（例如公平性策略或严格的优先级先后），因为没有中心控制。
 4. 由于它们被设计成基于最少知识做快速决策，分布式调度器无法支持或负担复杂、应用专属的调度策略。例如，避免任务间干扰就变得棘手。
 
-### 混合调度
+### Hybrid Scheduling
 
 混合（hybrid）架构是近期（主要多见于学术界的）发明，试图把全分布式架构的缺点与单体或共享状态设计结合起来。其典型做法——例如 [Tarcil](http://dl.acm.org/citation.cfm?id=2806779)、[Mercury](https://www.usenix.org/conference/atc15/technical-session/presentation/karanasos) 与 [Hawk](https://www.usenix.org/conference/atc15/technical-session/presentation/delgado)——是真正存在两条调度路径：一条分布式路径服务于部分工作负载（例如极短任务，或低优先级批处理负载），另一条集中式路径服务于其余部分。图 1e 展示了这种设计。混合调度器各组成部分的行为，与上述对应架构中的行为完全一致。
 
-## 调度器对比
+## Scheduler Comparison
 
 图 2 概览了若干开源编排框架，展示了它们的架构及其调度器所支持的特性。表格底部还列入了 Google 与微软的闭源系统以供参考。资源粒度（resource granularity）一列表明调度器是把任务分配到固定大小的槽位，还是在多个维度（例如 CPU、内存、磁盘 I/O 带宽、网络带宽等）上分配资源。
 
@@ -134,7 +134,7 @@ Firmament 通过使用多种 MCMF（最小费用最大流，min-cost max-flow）
 
 与 Quincy 类似，Firmament 把调度问题建模为在流网络（flow network）上的 min-cost max-flow（MCMF）优化。流网络是一个有向图，其结构由调度策略定义。响应事件与监控信息，流网络依据调度策略被修改，并交给 MCMF 求解器以找出最优（即最小费用）流。求解器完成后返回最优流，Firmament 从中提取隐含的任务放置。下文中，我们先解释流网络的基本结构，再讨论如何让求解器提速。
 
-### 调度策略
+### Scheduling Policies
 
 - 负载散布策略（Load-spreading policy）
 - Quincy 策略（Quincy policy）

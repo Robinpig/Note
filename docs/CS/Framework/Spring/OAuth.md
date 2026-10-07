@@ -120,7 +120,7 @@ JWT 里的 `scope` 会被映射为 `SCOPE_xxx` 权限，自定义 claim→author
 
 当系统需要自己签发 token（而不是对接 GitHub 这类外部 IdP）时，用 Authorization Server：注册客户端（`RegisteredClientRepository`）、配置 JWK 源（签名密钥）、暴露授权端点与 token 端点，签发 JWT access token 与 refresh token。它是协议意义上的"授权服务器"，与上面的 Client、Resource Server 可以分属不同服务。
 
-### 并入 Spring Security 7.0
+### Merged into Spring Security 7.0
 
 Spring Authorization Server 自 2020 年起是独立项目，**2025 年 9 月官宣并入 Spring Security，随 7.0 一起发布**。这次合并对用户的影响被刻意压得很小：
 
@@ -134,7 +134,7 @@ Spring Authorization Server 自 2020 年起是独立项目，**2025 年 9 月官
 > [!WARNING]
 > **不存在 Spring Authorization Server 2.x。** 历史上只发过 `2.0.0-M1` / `2.0.0-M2` 两个里程碑就被废弃，改号为 7.0.0 以对齐 Spring Security。看到"升级到 SAS 2.0"的说法都是描述了一个从未 GA 的版本。
 
-### 升级时的两处包搬迁
+### Two Package Relocations When Upgrading
 
 真正会让编译报错的只有两个类，它们被移到了 `spring-security-config` 这个 jar，而且**没有搬进同一个包**：
 
@@ -165,7 +165,7 @@ SecurityFilterChain authorizationServerSecurityFilterChain(HttpSecurity http) th
 > [!TIP]
 > IDE 的"整理 import"通常能自动找到搬走后的第一个类，但常常抓不住包路径深了五层的 `OAuth2AuthorizationServerConfigurer`——报错信息会伪装成"包不存在"而不是"类改名"。遇到这种情况直接手动补第二个 import。
 
-### RegisteredClient 与 PKCE
+### RegisteredClient and PKCE
 
 ```java
 RegisteredClient client = RegisteredClient.withId(UUID.randomUUID().toString())
@@ -190,7 +190,7 @@ RegisteredClient client = RegisteredClient.withId(UUID.randomUUID().toString())
 
 token 内容的定制走 `OAuth2TokenGenerator` / `OAuth2TokenCustomizer<JwtEncodingContext>`，往 access token 里加业务 claim 的标准入口就是后者。
 
-## 常见授权模式选型
+## Common Authorization Model Selection
 
 | 模式 | 场景 |
 | ---- | ---- |

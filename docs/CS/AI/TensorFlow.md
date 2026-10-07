@@ -2,7 +2,7 @@
 
 TensorFlow（TF）是 Google Brain 2015 年开源的深度学习框架，名字来源于多维数组（tensor）在计算图上的流动。它最早以**静态计算图**（先 `tf.Graph` 构图、再在 Session 中喂数据执行）为核心，部署能力（Serving、Lite、TFLite、TF.js）覆盖云端到嵌入式，曾是工业界绝对主流；2.x 起默认 **Eager Execution**（逐行立即执行）并以 Keras 为高层 API，开发体验向 [PyTorch](/docs/CS/AI/PyTorch.md) 靠拢。当前研究社区以 PyTorch 为主，TF 更多见于存量工业部署、移动端/浏览器端和 TPU 生态。
 
-## 核心抽象
+## Core Abstraction
 
 - **Tensor**：同类型多维数组，对标 `np.ndarray`，但可驻留 GPU/TPU 且参与自动微分。
 - **tf.Graph / tf.function**：`@tf.function` 装饰器把 Python 函数追踪（trace）成静态图，图模式去掉解释器开销、可做算子融合，并能导出 SavedModel 跨语言部署。这是"用 eager 调试、用图模式上线"的双模式设计。
@@ -24,7 +24,7 @@ model.fit(x_train, y_train, epochs=5, batch_size=256,
           validation_data=(x_val, y_val))
 ```
 
-## 数据管道：tf.data
+## Data Pipeline: tf.data
 
 `tf.data.Dataset` 是 TF 区别于早期 PyTorch 的强项：声明式描述数据变换，框架自动做并行预取：
 
@@ -37,7 +37,7 @@ ds = (tf.data.Dataset.from_tensor_slices((x, y))
 
 大数据场景配合 `tf.train.Example`（Protobuf）+ TFRecord 顺序文件格式，比大量小图文件的随机 IO 高效得多。
 
-## 生态
+## Ecosystem
 
 | 组件 | 用途 |
 |------|------|
@@ -49,7 +49,7 @@ ds = (tf.data.Dataset.from_tensor_slices((x, y))
 | XLA | 线性代数编译器，融合算子、生成 TPU/GPU 专用机器码 |
 | TFX | 端到端生产流水线（ExampleGen→Transform→Trainer→Pusher） |
 
-## TF 1.x 静态图 vs 2.x Eager
+## TF 1.x Static Graph vs 2.x Eager
 
 | 维度 | TF 1.x 静态图 | TF 2.x Eager |
 |------|---------------|--------------|
@@ -58,7 +58,7 @@ ds = (tf.data.Dataset.from_tensor_slices((x, y))
 | 性能 | 图优化充分 | 靠 @tf.function 回退到图模式 |
 | 控制流 | tf.cond/tf.while | 原生 Python 语法（AutoGraph 转换） |
 
-## 与 PyTorch 的取舍
+## Trade-offs with PyTorch
 
 - PyTorch：动态图（define-by-run）、Pythonic、研究生态（论文实现、Hugging Face 首选）、分布式训练体验后来居上。
 - TF：图/SavedModel 部署链路成熟、TFLite/JS 端侧全家桶、TPU 原生支持；代价是 API 历史包袱重（1.x/2.x 割裂、estimator 已废弃）。

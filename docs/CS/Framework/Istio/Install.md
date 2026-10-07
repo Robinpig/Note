@@ -5,7 +5,7 @@ Istio 的安装、升级与 sidecar 注入是运维最高频也最容易踩坑�
 > [!NOTE]
 > 版本基线：Istio **1.31.1**（2026-09-21），1.31.0 于 2026-08-31 发布，官方支持 Kubernetes **1.32 ~ 1.36**。本文所有默认值来自 `release-1.31` 分支源码与官方 install/upgrade/canary 文档，未使用记忆值。
 
-## 安装方式选型
+## Installation Method Selection
 
 官方给出三种安装路径，FAQ 明确排序：
 
@@ -25,7 +25,7 @@ Istio 的安装、升级与 sidecar 注入是运维最高频也最容易踩坑�
 istioctl manifest generate > $HOME/generated-manifest.yaml   # 1.31 新增 -o 可直接写文件
 ```
 
-### Istio Operator 已弃用（易踩的存量陷阱）
+### Istio Operator Deprecated (A Legacy Trap to Avoid)
 
 - **集群内 Operator 控制器在 Istio 1.23 即弃用，1.24 随发布移除**。官方原话：Operator 方式安装「**可以无限期继续运行，但无法升级超过 1.23.x**」。
 - 判定方法：`kubectl get deploy -n istio-system istio-operator` 与 `kubectl get IstioOperator` **两者都非空**即受影响。
@@ -33,7 +33,7 @@ istioctl manifest generate > $HOME/generated-manifest.yaml   # 1.31 新增 -o �
 - **关键区分**：`IstioOperator` 这个 **CRD / API 本身没有废弃**——`istioctl install` 至今仍通过它接收配置。废弃的只是**集群内运行的 operator 控制器**。
 - 迁移：`istioctl manifest translate -f istio.yaml` 转 Helm values；社区的 Classic Operator Controller / Sail Operator **均不受 Istio 项目支持**。
 
-### 安装实践要点
+### Installation Practice Key Points
 
 - **`--set` 与 `-f` 等价，但生产强烈建议用 `-f`**。
 - **Helm values 路径必须加 `values.` 前缀**：`--set` 语义与 Helm 一致，legacy 路径要加前缀。
@@ -41,7 +41,7 @@ istioctl manifest generate > $HOME/generated-manifest.yaml   # 1.31 新增 -o �
 - 外部 charts：1.31.1 的 compiled-in charts 就在 release tar 的 `manifests` 目录，`istioctl install --manifests=manifests/` 与直接 `istioctl install` 结果相同，**官方建议优先用 compiled-in**。
 - 卸载：`istioctl uninstall --purge`（含 cluster-scoped 资源）；只卸单个控制面用 `istioctl uninstall <原安装参数>`。
 
-## 组件构成与命名陷阱
+## Component Composition and Naming Traps
 
 `release-1.31` 分支的实际二进制入口：
 
@@ -57,7 +57,7 @@ istioctl manifest generate > $HOME/generated-manifest.yaml   # 1.31 新增 -o �
 2. **`pilot-agent` 与 `istio-agent` 是同一组件**——进程名 `pilot-agent`，库包名 `istio-agent`，容器名 `istio-proxy`。**不存在名为 `istio-agent` 的独立容器**。
 3. **不存在独立的 CA 组件**：官方架构页 Components 一节只列 Envoy 与 Istiod 两项，并明确「Istiod acts as a Certificate Authority (CA)」。Citadel 只作为**代码库**（`pkg/security`）存在。
 
-### istiod 端口（源码 flag 默认值）
+### istiod Ports (Source Flag Defaults)
 
 官方文档站当前**没有** istiod 端口参考页（`/docs/ops/reference/ports/` 等均 404），下表全部来自 `pilot/cmd/pilot-discovery/app/cmd.go`：
 
@@ -71,14 +71,14 @@ istioctl manifest generate > $HOME/generated-manifest.yaml   # 1.31 新增 -o �
 
 Service 里另有 `443/TCP`（webhook）。`15017` 兼具健康检查，`istioctl` 排障时常用。
 
-## xDS 推送机制
+## xDS Push Mechanism
 
-### 长连接与 ADS
+### Long Connection and ADS
 
 - Envoy bootstrap 中 CDS/LDS 均配 `"ads": {}`，**聚合为单一 ADS 流**（`A single ADS stream is available per Envoy instance`）。
 - istio-agent 同时实现 SotW 与 Delta 两套代理（`xds_proxy.go` / `xds_proxy_delta.go`），源码注释：「**Depending on how Envoy connects we will use one or the other.**」
 
-### Delta xDS 是默认（纠正常见误解）
+### Delta xDS is Default (Correcting a Common Misconception)
 
 `pilot/pkg/features/experimental.go:169`：
 
@@ -91,7 +91,7 @@ DeltaXds = env.Register("ISTIO_DELTA_XDS", true, ...)
 - 官方注明：即使启用 delta，**仍可能偶尔发送未变更的配置**，并非严格只发增量。
 - Delta xDS **只支持 gRPC 双向流**（无 REST 版本）；SotW 则支持 gRPC、REST-JSON 等。
 
-### 8 种 xDS 资源类型
+### 8 xDS Resource Types
 
 常被误认为只有 5 种，官方完整枚举是 8 种：**LDS**（Listener）、**RDS**（RouteConfiguration）、**SRDS**（ScopedRouteConfiguration）、**VHDS**（VirtualHost）、**CDS**（Cluster）、**EDS**（ClusterLoadAssignment）、**SDS**（Secret）、**RTDS**（Runtime）。
 
@@ -107,9 +107,9 @@ NAME      CLUSTER     CDS     LDS     EDS     RDS     ECDS      ISTIOD          
 curl-...  Kubernetes  SYNCED  SYNCED  SYNCED  SYNCED  NOT SENT  istiod-1-31-1-...  1.31.1
 ```
 
-## Sidecar 注入
+## Sidecar Injection
 
-### 两条路径
+### Two Paths
 
 官方推荐**自动注入**（namespace 级 mutating webhook），原话：「If you are not sure which one to use, automatic injection is recommended.」
 
@@ -127,7 +127,7 @@ curl-...  Kubernetes  SYNCED  SYNCED  SYNCED  SYNCED  NOT SENT  istiod-1-31-1-..
 - 自动注入是 **pod 级**的，Deployment 本身不变，注入后 Pod 从 `1/1` 变 `2/2`。
 - in-place 注入 `istioctl kube-inject` 仍受支持，是次选路径。离线注入需先从集群导出三份配置：`istio-sidecar-injector` 的 `config` 与 `values`、configmap `istio` 的 `mesh`。
 
-### 注入后的容器与 iptables 端口
+### Containers and iptables Ports After Injection
 
 `istio-init` 容器**确实存在**，以 **init container** 形式运行。端口常量来自 `tools/common/config/config.go` 与 `tools/istio-iptables/pkg/constants/constants.go`：
 
@@ -146,7 +146,7 @@ curl-...  Kubernetes  SYNCED  SYNCED  SYNCED  SYNCED  NOT SENT  istiod-1-31-1-..
 
 端口保留链：`ISTIO_OUTPUT`、`ISTIO_OUTPUT_DNS`、`ISTIO_INBOUND`、`ISTIO_DIVERT`、`ISTIO_TPROXY`、`ISTIO_REDIRECT`、`ISTIO_IN_REDIRECT`、`ISTIO_DROP`。
 
-### 两种入向捕获模式
+### Two Inbound Capture Modes
 
 `tools/istio-iptables/pkg/capture/run.go` 实际逻辑：
 
@@ -156,7 +156,7 @@ curl-...  Kubernetes  SYNCED  SYNCED  SYNCED  SYNCED  NOT SENT  istiod-1-31-1-..
 
 **HBONE 端口语义**（官方明文）：「ztunnel and other proxies that understand the HBONE protocol expose listeners on TCP port **15008**」。HBONE = **HTTP/2 + HTTP CONNECT + mTLS** 三标准组合。流量重定向规则：目的端口 == 15008 → HBONE 监听端口；否则 → 明文端口 15006；出向一律 → 15001。
 
-### 流量捕获注解（均为 Alpha，Pod 级）
+### Traffic Capture Annotations (All Alpha, Pod-Level)
 
 | 注解 | 语义要点 |
 | :-- | :-- |
@@ -171,15 +171,15 @@ curl-...  Kubernetes  SYNCED  SYNCED  SYNCED  SYNCED  NOT SENT  istiod-1-31-1-..
 
 「仅当全部被重定向时才生效」是常见误解来源：设了 `excludeInboundPorts` 但没设 `includeInboundPorts: "*"`，该注解**不起作用**。
 
-### 资源注解的陷阱
+### Resource Annotation Traps
 
 - 设 `sidecar.istio.io/proxyCPU` 而不设 `proxyCPULimit` → **CPU limit 变为 unlimited**；内存同理（`proxyMemory` 无 `proxyMemoryLimit` → unlimited）。
 - **TPROXY 模式下 `securityContext.RunAsUser`/`RunAsGroup` 可能不被尊重**（TPROXY 要求 sidecar 以 uid 0 运行），配置不当会**导致流量丢失**。
 - `kube-system`、`kube-public` 命名空间**豁免**自动注入；`hostNetwork: true` 的 Pod 也会被跳过（sidecar 模型假设 iptables 改在 Pod 内）。
 
-## 升级
+## Upgrade
 
-### in-place 与 revision 的规则差异
+### in-place vs revision Rule Differences
 
 | 维度 | in-place（`istioctl upgrade`） | revision（canary） |
 | :-- | :-- | :-- |
@@ -200,14 +200,14 @@ kubectl rollout restart deployment   # 必须手动重启数据面
 - 中断风险：官方原文「Traffic disruption may occur」，建议 istiod ≥2 副本 + PDB `minAvailable: 1`。
 - 降级规则对称，且必须用对应目标版本的 istioctl。
 
-### revision 机制的两个要点
+### revision Mechanism Two Key Points
 
 - 每个 revision 是**完整的独立控制面**（自己的 Deployment、Service、MutatingWebhookConfiguration）。
 - **`default` tag 有额外语义**：为 `istio-injection=enabled` / `sidecar.istio.io/inject=true` / `istio.io/rev=default` 注入 sidecar、执行 Istio 资源校验、并从非 default revision 抢 leader lock 执行单例网格职责（如更新资源 status）。
 - tag 机制可避免反复改命名空间标签：`istioctl tag set prod-stable --revision 1-31-1 --overwrite`。
 - 若在已有非 revision 安装旁使用 default tag，官方建议删除旧的 `MutatingWebhookConfiguration`（通常名为 `istio-sidecar-injector`），避免新旧控制面同时注入。
 
-### 兼容性版本（compatibility versions）
+### Compatibility Versions
 
 ```bash
 istioctl install --set values.compatibilityVersion=1.30
@@ -215,21 +215,21 @@ istioctl install --set values.compatibilityVersion=1.30
 
 「装 1.31，但行为像 1.30」。仅应作为临时措施；被引用的 release 到达 EOL 后该 compatibility version 即被移除。检测：`istioctl x precheck --from-version 1.30`。
 
-## 1.31 升级破坏性变更
+## 1.31 Upgrade Breaking Changes
 
 官方 upgrade-notes 共 6 条，其中三条会造成实际故障：
 
-### ① 默认发送不健康端点
+### ① Sends Unhealthy Endpoints by Default
 
 > 「By default, Istio now **sends unhealthy endpoints** unless `OutlierDetection.minHealthPercent` is configured on a Service.」
 
 这是**行为变更**而非新功能。关闭：`PILOT_AUTO_SEND_UNHEALTHY_ENDPOINTS=false` 或用 compatibility profile。
 
-### ② HBONE 隧道标签需重新注册
+### ② HBONE Tunnel Label Requires Re-Registration
 
 HBONE tunnel label **仅在 WorkloadEntry 自动创建时应用**。**升级前自动注册的 workload 将持续以明文被访问**，直到重连新实例或手动给现有 WorkloadEntry 加 `networking.istio.io/tunnel=http`。
 
-### ③ WDS 重连请求在大规模 ambient 网格中变大
+### ③ WDS Reconnect Requests Grow in Large ambient Meshes
 
 ztunnel 重连时会报告其持有的**每个 workload 的 name 与 version**，该请求可超过 istiod 默认 **4MiB** gRPC 接收上限，ztunnel 陷入 `ResourceExhausted: grpc: received message larger than max` 重连循环。**触发点从约 55,000 workload 降至约 40,000**（本次多报 version，约增长 1/3）。
 
@@ -239,13 +239,13 @@ istioctl install --set pilot.env.ISTIO_GPRC_MAXRECVMSGSIZE=33554432   # 32MiB，
 
 官方预算参考：每 10,000 workload/service 约 1MiB。
 
-### ④ 其余三条
+### ④ The Other Three
 
 - **`PILOT_SPAWN_UPSTREAM_SPAN_FOR_GATEWAY` 已被移除**：其行为（gateway 用 Telemetry API 时为每个 upstream 请求生成独立 span）**现已总是启用**，曾显式设 `false` 的用户失去该退出选项。
 - **GCP 制品渠道退役**（详见 Istio.md 的 1.31 变更节）。
 - **XDS API generator 现需控制面身份**：来自非系统命名空间的自定义 MCP consumer 会被拒绝；标准 sidecar/gateway/ztunnel 流量不受影响。恢复旧行为设 `ENABLE_XDS_API_GENERATOR_AUTH=false`。
 
-## 1.31.1 安全修复
+## 1.31.1 Security Fixes
 
 - **CVE `GHSA-qm8v-g4f9-qhjx`（CVSS 6.8, Moderate）**：`BackendTLSPolicy` 在 sidecar 上当 CA 引用无法解析时 **fail open 降级到明文**。
 - `RequestAuthentication` 的 `jwksUri` 抓取存在 **SSRF 缺口**：现默认在 dial 层阻断 link-local 与已知云元数据地址（如 `169.254.169.254`），并拒绝非法 JWKS 响应；私有与回环段仍可达，可用 `BLOCKED_CIDRS_IN_JWKS_URIS` 阻断。
@@ -257,7 +257,7 @@ istioctl install --set pilot.env.ISTIO_GPRC_MAXRECVMSGSIZE=33554432   # 32MiB，
 - 修复 JWKS resolver 被强制 HTTP/1.1（自定义 `TLSClientConfig` 使 Go 禁用自动 HTTP/2）导致经 HTTP CONNECT 代理的抓取失败。
 - Kiali addon 升至 **v2.31.0**（1.31.0 时为 v2.26.0）。
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 | 症状 | 优先检查 |
 | :-- | :-- |

@@ -27,7 +27,7 @@ HMM 由隐藏状态序列 $I=(i_1,\dots,i_T)$ 生成观测序列 $O=(o_1,\dots,o
 
 HMM 的实际使用归结为三个基本问题：
 
-### 概率计算：前向-后向算法
+### Probability Computation: Forward-Backward Algorithm
 
 给定模型 λ，求观测序列 $O$ 出现的概率 $P(O\mid\lambda)$。直接枚举所有状态路径是指数级的，**前向算法**用动态规划把复杂度降到 $O(NT^2)$，递推定义前向概率：
 
@@ -41,7 +41,7 @@ $$
 
 后向算法对称地从序列末尾向前递推，两者结合可算任意时刻状态的边际概率。
 
-### 学习：Baum-Welch 算法
+### Learning: Baum-Welch Algorithm
 
 只有观测序列、没有状态标注时，用 **Baum-Welch 算法**（EM 算法在 HMM 上的实例）估计参数 λ：
 
@@ -50,7 +50,7 @@ $$
 
 若有状态标注数据（监督学习），直接用极大似然按频率统计即可。
 
-### 预测：Viterbi 算法
+### Prediction: Viterbi Algorithm
 
 给定模型 λ 和观测序列 $O$，求最可能的隐藏状态序列。**Viterbi 算法**同样是动态规划，把前向算法的"求和"换成"取最大"，并回溯记录路径：
 

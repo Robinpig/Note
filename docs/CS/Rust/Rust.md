@@ -43,6 +43,7 @@ Rust 版本
 ## Links
 
 - [编译过程（rustc）](/docs/CS/Rust/compile.md)
+- [编程语言横向对比](/docs/CS/Languages.md)
 
 ## References
 

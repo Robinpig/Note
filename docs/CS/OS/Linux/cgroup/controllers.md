@@ -4,7 +4,7 @@
 
 先说一条贯穿全部控制器的机制：**v7.2 的控制器注册已从动态 API 改为编译期静态表**。
 
-## 控制器如何注册
+## How a Controller Registers
 
 `cgroup_subsys_register()` / `DEFINE_CGROUP_SUBSYS` 在 v7.2 **都不存在**。取而代之的是 `kernel/cgroup/cgroup.c` 里的一张静态数组：
 
@@ -27,7 +27,7 @@ static struct cgroup_subsys *cgroup_subsys[] = { ... };
 
 初始化是遍历式的（`cgroup_init_subsys()`，被 `subsys_initcall` 调用），`early_init` 位的控制器会更早初始化。
 
-### CFTYPE 标志：控制文件出现在哪、谁能写
+### CFTYPE Flags: Where the Control File Appears and Who Can Write
 
 每个 cgroup 目录下的文件由 `struct cftype` 描述，标志位决定它的可见性与权限。**v7.2 的标志名与旧资料出入很大**：
 
@@ -53,11 +53,11 @@ enum {
 
 `CFTYPE_NS_DELEGATABLE` 值得单独说：带这个标志的文件**可以跨委派边界写**。容器内大多数 cgroup 文件没这个标志，所以即使文件看起来可写，写下去也会被委派边界拦住。
 
-## cpu 控制器
+## cpu Controller
 
 CPU 控制器的实现藏在调度器核心里（`kernel/sched/core.c`），因为它和 fair 调度器共享记账代码。
 
-### cpu.max：配额与周期
+### cpu.max: Quota and Period
 
 格式是 `<quota> <period>`，quota 写 `max` 表示不限。默认周期由 `default_bw_period_us()` 给出：
 
@@ -70,7 +70,7 @@ static inline u64 default_bw_period_us(void) { return 100000ULL; }
 
 > 旧资料里的 `CFS_QUOTA_PERIOD_US` / `sysctl_cfs_period_us` 在 v7.2 已不存在，只有 `sched_cfs_bandwidth_slice_us`（默认 5000 µs）还在。
 
-### cpu.max.burst：突发额度
+### cpu.max.burst: Burst Quota
 
 **文件真名是 `cpu.max.burst`，不是 `cpu.burst`**（`core.c:10533`）：
 
@@ -83,7 +83,7 @@ static inline u64 default_bw_period_us(void) { return 100000ULL; }
 
 单位是**微秒**。它解决的问题是：`cpu.max` 是长期均值限流，但一个突发请求可能立刻超限被杀；`max.burst` 允许短期超支而不触发 throttling。
 
-### cpu.stat 与 cpu.stat.local
+### cpu.stat and cpu.stat.local
 
 v2 的字段是六个（都在 `cpu_extra_stat_show` 里）：
 
@@ -99,7 +99,7 @@ burst_usec      累计突发时间（微秒）
 
 > ⚠️ **`throttled_time` 不在 v2 的 `cpu.stat` 里** —— 它是 v1 的字段名。`nr_decayed` / `decay_ms` 在 v7.2 也不存在。
 
-### cpu.weight 与 nice 值
+### cpu.weight and nice Value
 
 ```
 cpu.weight       1 .. 10000，默认 100
@@ -118,11 +118,11 @@ cpu.weight.nice  对应 nice 值，范围与 nice 一致
 
 `cpu.weight.nice` 是给不想算权重的人用的：直接写 nice 值（`sched_prio_to_weight[]` 反查）。
 
-### cpu.idle 与 uclamp
+### cpu.idle and uclamp
 
 v7.2 新增了 `cpu.idle`（`CONFIG_GROUP_SCHED_WEIGHT` 下）、`cpu.uclamp.min` / `cpu.uclamp.max`（`CONFIG_UCLAMP_TASK_GROUP`）。uclamp 是**利用率钳制**——限制这个 cgroup 的调度实体最高能用多少 CPU，从而隔离延迟敏感型负载。
 
-### cpuset：CPU 与 NUMA 绑定
+### cpuset: CPU and NUMA Binding
 
 cpuset 是 v2 里唯一支持**在非根 cgroup 上**存在的核心控制器（因为它标记了 `threaded = true`）。v2 的文件全集（`cpuset.c` 的 `dfl_files[]`）：
 
@@ -140,7 +140,7 @@ cpuset 是 v2 里唯一支持**在非根 cgroup 上**存在的核心控制器（
 
 **请求值与生效值分离**是 v2 的设计要点：写 `cpuset.cpus` 是"我要这些"，实际拿到的是 `effective`。上层 cgroup 收缩时，子 cgroup 的请求值不变但生效值跟着变 —— 所以**永远读 `.effective`**。
 
-#### cpuset.cpus.partition 的四个取值
+#### cpuset.cpus.partition: The Four Possible Values
 
 ```c
 #define PRS_MEMBER		0	// 非 partition root
@@ -162,11 +162,11 @@ cpuset 是 v2 里唯一支持**在非根 cgroup 上**存在的核心控制器（
 
 partition 根的强制约束：父必须是有效 partition root，否则返回 `PERR_NOTPART` / `PERR_INVPARENT`；建分区根时**强制置 `CS_CPU_EXCLUSIVE`** 标志，失败返回 `PERR_NOTEXCL`。local partition 与 remote partition 的祖先链规则不同（`update_parent_effective_cpumask()`）。
 
-## memory 控制器
+## memory Controller
 
 实现是 `mm/memcontrol.c`（6000+ 行），本 KB 有独立的 [memcg](/docs/CS/OS/Linux/mm/memcg.md) 笔记讲回收与记账机制，这里只列接口。
 
-### 文件全集
+### Complete File Set
 
 | 文件 | 读 | 写 | 说明 |
 | :-- | :-: | :-: | :-- |
@@ -194,7 +194,7 @@ memory.zswap.current  memory.zswap.max   memory.zswap.writeback
 
 **v7.2 的 peak 系列是新增的**：`memory.peak`、`memory.swap.peak`、`pids.peak`、`rdma.peak`、`misc.peak` 都存在，且带 `open`/`release` 钩子（意味着可以写 0 重置峰值）。
 
-### memory.events 的七个字段
+### memory.events: The Seven Fields
 
 ```c
 	low            MEMCG_LOW
@@ -208,7 +208,7 @@ memory.zswap.current  memory.zswap.max   memory.zswap.writeback
 
 前六项是常见认知里的全部，**第七项 `sock_throttled` 是 socket 内存回收限流事件**，容易被漏掉。
 
-### memory.stat 的字段
+### memory.stat Fields
 
 无条件字段约 40 个，常用分组：
 
@@ -226,7 +226,7 @@ memory.zswap.current  memory.zswap.max   memory.zswap.writeback
 
 > **folio 化不影响 `memory.stat` 的 key 名**。key 是硬编码字符串字面量（`"anon"`、`"file"`…），与内核内部 `page`→`folio` 的类型重命名解耦。所以看到 `VM_BUG_ON_FOLIO(...)` 这类新宏不必奇怪 —— 用户可见的接口是稳定的。
 
-### memory.reclaim：主动回收
+### memory.reclaim: Active Reclaim
 
 写一个字符串（**单位是页数**），内核按参数执行主动回收。实现在 `mm/vmscan.c` 的 `user_proactive_reclaim()`。
 
@@ -246,7 +246,7 @@ echo "1024 swappiness=max" > memory.reclaim      # SWAPPINESS_ANON_ONLY
 
 `0`（默认）表示只杀超出配额的进程；`1` 表示把整个 cgroup 一起杀。写 `1` 时该文件带 `CFTYPE_NS_DELEGATABLE`，可以跨委派边界写。
 
-## pids 控制器
+## pids Controller
 
 实现极简（`kernel/cgroup/pids.c` 只有 460 行），因为它只做一件事：限制进程/线程数。
 
@@ -270,9 +270,9 @@ pids.events.local     同上，本节点
 
 > `pids.events` 在 v1 下打印的 `max` 实际计的是 `PIDCG_FORKFAIL`，而 v2 才是真正的超限次数 —— 这是 v1/v2 语义不一致的一例。
 
-## misc / rdma / dmem 三个小控制器
+## misc / rdma / dmem: Three Minor Controllers
 
-### misc：主机级稀缺资源配额
+### misc: Host-Level Scarce Resource Quota
 
 v7.2 的资源类型是三项：
 
@@ -298,7 +298,7 @@ misc.events / .events.local
 
 `misc.capacity` 标记了 `CFTYPE_ONLY_ON_ROOT`，且**只有 show 没有 write**。
 
-### rdma：RDMA 资源上限
+### rdma: RDMA Resource Limits
 
 ```
 rdma.max       上限
@@ -309,7 +309,7 @@ rdma.events / .events.local
 
 > 旧资料里的 `rdma.max_rdma_cm` 在 v7.2 **不存在**。改成了统一的资源框架：同一个 `rdmacg_resource_read` 服务 max/current/peak 三者，靠 `private` 字段区分读哪个（`RDMACG_RESOURCE_TYPE_MAX` / `_STAT` / `_PEAK`）。这是"用一套代码管多个资源维度"的典型写法。
 
-### dmem：设备内存
+### dmem: Device Memory
 
 ```
 dmem.capacity   总容量（只读，仅根）
@@ -319,7 +319,7 @@ dmem.min / dmem.low / dmem.max
 
 **`dmem` 没有 `.events`** —— 这是它与其他控制器的显著差异（pids/misc/rdma 都有成对的 events）。`dmem` 主要面向设备内存（DPU/GPU 类场景），由驱动通过 `dmem_cgroup_register_region()` 注册自定义 region。
 
-## freezer 冻结与终止
+## freezer Freeze and Terminate
 
 ### cgroup.freeze
 
@@ -368,7 +368,7 @@ v7.2 已支持，写 **`1` 杀全部后代进程，其他值 `-ERANGE`**。与 f
 
 threaded cgroup 拒绝 `cgroup.kill` 的理由也写在源码注释里：threaded 模式按**进程组语义**整体终止，与线程级计费模型不兼容。
 
-### v1 的 freezer 为什么不同
+### Why v1 freezer Is Different
 
 v1 的 `kernel/cgroup/legacy_freezer.c` 是独立子系统（`.legacy_cftypes` 有而 `.dfl_cftypes` 没有），状态是**单个位掩码**：
 
@@ -383,7 +383,7 @@ CGROUP_FROZEN             = (1 << 3)
 
 **为什么 v1 需要独立子系统而 v2 不需要**：v2 的冻结状态必须被 cgroup **核心**读到 —— `cgroup.events` 的 `frozen` 位、fork/exit 路径的冻结判定都要 `test_bit(CGRP_FREEZE, ...)`。状态必须内建于 `struct cgroup`，藏不进独立控制器的 css 私有数据。v1 没有这个耦合，所以保留独立实现 + `CONFIG_CGROUP_FREEZER` 条件编译。
 
-## PSI：压力 Stall 信息
+## PSI: Pressure Stall Information
 
 四个资源（irq 需 `CONFIG_IRQ_TIME_ACCOUNTING`）：
 
@@ -411,7 +411,7 @@ FULL: Stalled tasks & no working tasks
 
 > **系统级 `cpu.pressure` 只有 `some` 档**。源码里有明确注释："CPU FULL is undefined at the system level"。
 
-### PSI 的资源开销
+### PSI Resource Overhead
 
 `struct psi_group_cpu` 用了**两条 cacheline 分治**的布局：前一条由调度器侧更新（`tasks[]`、`state_mask`、`times[]`），后一条由聚合器侧更新（`times_prev[][]`）。这个 cacheline 对齐布局是 PSI 内存占用的主要来源 —— 每个 cgroup 都要 `alloc_percpu()` 一份。
 
@@ -426,7 +426,7 @@ FULL: Stalled tasks & no working tasks
 
 > 旧资料里的 `psi_threshold` 符号与"固定默认值"都不存在，阈值完全由用户态通过 trigger 接口传入。
 
-## v1 独有接口
+## v1 Exclusive Interfaces
 
 `kernel/cgroup/cgroup-v1.c` 有一组 v2 完全没有的核心文件：
 
@@ -442,7 +442,7 @@ FULL: Stalled tasks & no working tasks
 
 挂载机制也完全不同：v1 用 `cgroup1_get_tree()` + `cgroup1_parse_param()`，按 mount 参数里的名字（`cpu`、`memory`…）匹配 `ss->legacy_name`。**同一个控制器不能同时在 v1 和 v2 启用** —— 冲突时 `rebind_subsystems()` 返回 `-EBUSY`，但隐式控制器（`implicit_on_dfl`）例外，可以被"抢"到 v2。
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 ```shell
 # 本 cgroup 能用哪些控制器

@@ -10,7 +10,7 @@ OpenClaw 的架构可以概括为：**“网关驱动（Gateway-driven） + 本�
 
 OpenClaw 的架构可以清晰地划分为以下五个核心层：
 
-#### 1. 渠道接入层 (Channel Adapters Layer)
+#### 1. Channel Adapters Layer (Channel Adapters Layer)
 
 这是 OpenClaw 最直观的“触角”，采用了经典的**适配器模式（Adapter Pattern）**。
 
@@ -18,7 +18,7 @@ OpenClaw 的架构可以清晰地划分为以下五个核心层：
 - **覆盖面**：支持高达 20+ 种主流 IM，包括 WhatsApp、Telegram、Slack、Discord、Signal、iMessage、微信（WeChat）、QQ、飞书（Feishu）、Matrix 等。
 - **架构意义**：实现了“一次接入，全渠道响应”。无论用户从哪个 App 发消息，Gateway 都能无缝接收并路由。
 
-#### 2. 网关与控制平面 (Gateway & Control Plane)
+#### 2. Gateway & Control Plane (Gateway & Control Plane)
 
 这是 OpenClaw 的**核心枢纽（大脑）**，完全由 TypeScript/Node.js 构建。
 
@@ -26,14 +26,14 @@ OpenClaw 的架构可以清晰地划分为以下五个核心层：
 - **多智能体路由 (Multi-agent Routing)**：这是其架构的灵魂。它不是把所有消息扔给同一个大模型，而是**根据消息来源（渠道、账户、特定联系人或群组），将消息路由到不同的、相互隔离的 Agent（工作区）**。
 - **事件总线**：处理工具调用结果、系统事件和异步任务。
 
-#### 3. 智能体运行层 (Agent Runtime & Workspace)
+#### 3. Agent Runtime & Workspace (Agent Runtime & Workspace)
 
 在 Gateway 之下，是具体的 Agent 运行环境。
 
 - **Workspace 隔离**：每个被路由到的 Agent 拥有独立的工作区（Workspace）和独立的会话状态（Per-agent sessions）。这意味着你的“工作助手 Agent”和“家庭助手 Agent”不仅人设不同，其记忆、文件和上下文也是完全物理/逻辑隔离的。
 - **本地上下文**：Agent 可以读取本地文件系统，实现真正的“个人助理”功能（如整理本地笔记、管理本地代码等）。
 
-#### 4. 工具与沙箱执行层 (Tool & Sandbox Execution)
+#### 4. Tool & Sandbox Execution Layer (Tool & Sandbox Execution)
 
 这是 OpenClaw 在**安全性与能力**之间取得平衡的关键架构设计。它提供了一个极其精细的安全模型：
 
@@ -41,7 +41,7 @@ OpenClaw 的架构可以清晰地划分为以下五个核心层：
 - **Non-main Session（非主会话/多用户/群聊模式）**：当 Agent 在群聊中，或者处理来自不可信联系人的消息时，架构会自动切换安全策略。通过配置 `sandbox.mode: "non-main"`，Agent 的工具执行会被强制放入**沙箱**中。
 - **沙箱后端支持**：默认使用 **Docker** 进行容器级隔离，同时也支持 **SSH** 和 **OpenShell** 后端，确保即使 Agent 被恶意 Prompt 注入，也无法破坏宿主机。
 
-#### 5. 交互与客户端层 (Client & UI Layer)
+#### 5. Client & UI Layer (Client & UI Layer)
 
 除了 IM 渠道，OpenClaw 还提供了原生的富交互客户端。
 

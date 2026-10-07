@@ -31,7 +31,7 @@ typedef struct mempool_s {
 - `wait`：等待队列。当底层分配失败、且预留池也空、调用者又允许睡眠时，挂在上面等别的路径 `mempool_free` 把元素还回来再唤醒。
 - `lock`：保护 `curr_nr` / `elements` 的自旋锁，因为预留池的借用与归还可能跨上下文并发。
 
-## 创建与初始化
+## Creation and Initialization
 
 创建内存池时会**立即预填充** `min_nr` 个元素进 `elements` 数组——这是"预留"的来处；之后 `curr_nr == min_nr`。
 
@@ -155,7 +155,7 @@ void mempool_free(void *element, mempool_t *pool)
 
 运行时调整 `min_nr`：增大就批量用 `alloc_fn` 补元素直到 `curr_nr` 达标；减小就回收多余的预留元素给底层分配器。持锁下分步操作，避免一次性大分配卡住。对"负载变化时想动态改保底水位"的场景有用，但日常少见。
 
-## 典型使用场景与陷阱
+## Typical Use Cases and Pitfalls
 
 **该用 mempool 的地方**：必须在回收路径里、且不能失败的分配。
 - 块设备层：blk-mq 的 request / tag 缓存、bio 相关对象（提交 I/O 时不能因为内存压力把请求丢掉）。

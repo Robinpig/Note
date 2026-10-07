@@ -4,7 +4,7 @@ Pulsar 的集群能力围绕一个核心抽象展开：**namespace 级的 bundle
 
 > 版本基线：**4.2.4**（tag `v4.2.4`）。
 
-## 多租户三级模型
+## Multi-tenant Three-level Model
 
 ```
 cluster
@@ -13,7 +13,7 @@ cluster
         └── topic   （persistent / non-persistent / partitioned）
 ```
 
-### 元数据 key：tenant 与 namespace 共用一棵树
+### Metadata key: tenant and namespace Share One Tree
 
 > [!WARNING]
 > 旧资料常写 `/admin/namespaces`、`/admin/persistent`、`LOCAL_`/`GLOBAL_` 前缀 —— **4.2.4 中全不存在**。真实只有两个常量（`pulsar-broker-common/.../broker/resources/BaseResources.java:52-53`）：
@@ -35,7 +35,7 @@ cluster
 > [!TIP]
 > bundle 归属在**独立的 ephemeral 树** `/namespace/...`，与 `/admin/policies` 分开。设计上的好处是 unload 时归属信息能保留（ephemeral 节点随 broker 存活），恢复后能重新接管。
 
-### 两个数据类
+### Two Data Classes
 
 `TenantInfo`（`pulsar-client-admin-api/.../policies/data/TenantInfo.java:24-33`）只有 2 个字段：
 
@@ -54,18 +54,18 @@ public boolean is_active;
 > [!WARNING]
 > **字段名是下划线风格**（`is_controlled` / `is_active`），不是驼峰。`isAssigned` 字段**不存在**。赋值见 `NamespaceService.java:924-938`。
 
-### tiered namespace 不存在
+### tiered namespace Does Not Exist
 
 > [!WARNING]
 > `SystemTopicNames.TIERED_NAMESPACE_TOPIC` **不存在**，tiered namespace 这个概念在 4.2.4 中**全仓零命中**（`tierStoragePolicies` / `TIERED_NAMESPACE_TOPIC` / `tiered_namespace` 全部 0 命中）。
 >
 > 4.2.4 的分层存储配置是 `OffloadPolicies`（`pulsar-client-admin-api/.../data/OffloadPolicies.java:23`），走 **driver 名 + 阈值**，不是策略名引用。详见 [BookKeeper 存储分层](/docs/CS/MQ/Pulsar/BookKeeper.md) 与本文「分层存储」一节。
 
-## Bundle 切分
+## Bundle Splitting
 
 `NamespaceBundleFactory` 的实际位置：**`pulsar-broker/src/main/java/org/apache/pulsar/common/naming/NamespaceBundleFactory.java`** —— 包名是 `org.apache.pulsar.common.naming`，但**物理在 `pulsar-broker` 模块**（不是 `pulsar-common`，这是 3.x→4.x 的模块迁移）。
 
-### hash 区间编码
+### hash Range Encoding
 
 ```java
 // NamespaceBundle.java:51
@@ -84,9 +84,9 @@ this.bundleRange = String.format("0x%08x_0x%08x",
 >
 > `NamespaceBundleData` 这个类名**不存在**，已更名 `BundlesData`。
 
-## 负载均衡
+## Load Balancing
 
-### 4.x 默认是 ModularLoadManager
+### 4.x Defaults to ModularLoadManager
 
 ```java
 // ServiceConfiguration.java:3053
@@ -109,7 +109,7 @@ private String loadManagerClassName = "org.apache.pulsar.broker.loadbalance.impl
 >
 > 4.x 另有 `loadbalance/extensions/` 提供 `ExtensibleLoadManager` / `ExtensibleLoadManagerImpl` 作为扩展点。
 
-### 过载保护是 LoadSheddingStrategy 家族
+### Overload Protection Is the LoadSheddingStrategy Family
 
 > [!WARNING]
 > `OverloadSheddingService` / `BrokerService#isOverloaded` / `LoadManager#getOverloadedBroker` **均不存在**（旧资料常提）。
@@ -118,9 +118,9 @@ private String loadManagerClassName = "org.apache.pulsar.broker.loadbalance.impl
 >
 > 另有一路独立的 producer 生产限流 `ServerCnxThrottleTracker`（`broker/service/`）。
 
-## Unload 与 bundle 转移
+## Unload and Bundle Transfer
 
-### 两条独立路径
+### Two Independent Paths
 
 > [!IMPORTANT]
 > **topic 级 unload 与 bundle 级 unload 是两条不同的路**，旧资料常混为一谈。
@@ -141,13 +141,13 @@ validateTopicOwnershipAsync(topicName, authoritative)
 > - `BrokerService.unloadBundle` **不存在**。
 > - **unload 时不显式持久化 cursor 状态** —— cursor 状态由 managed-ledger 自行持久化到 ledger，unload 路径中未见显式持久化调用。旧资料说「unload 会持久化 cursor 到 ledger」不准确。
 
-### 数据可读性
+### Data Readability
 
 归属 ephemeral 节点在 metadata store，ledger 数据在 bookie。`isNamespaceBundleOwned`(886) 读 `/namespace/...` 存在性；`is_controlled` 表达是否受隔离策略管控。
 
 即 unload 后随时可被任何 broker 重新加载并继续读 —— 这是「计算无状态」的直接收益。
 
-## Broker 启动顺序
+## Broker Startup Order
 
 `PulsarService#start`（`pulsar-broker/.../broker/PulsarService.java:841-1112`）：
 
@@ -188,7 +188,7 @@ validateTopicOwnershipAsync(topicName, authoritative)
 >
 > 类名包名：`org.apache.pulsar.PulsarService`（2.x）→ **`org.apache.pulsar.broker.PulsarService`**（4.x）。
 
-## 端口与关键配置
+## Ports and Key Configuration
 
 | 字段 | 默认值 | 行号 | 备注 |
 | ---- | ------ | ---- | ---- |
@@ -209,7 +209,7 @@ validateTopicOwnershipAsync(topicName, authoritative)
 >
 > `brokerDeleteInactiveTopicsEnabled` 默认是 **`true`**（旧资料常说 false）。
 
-### 限流与配额默认值
+### Rate Limiting and Quota Defaults
 
 | 字段 | 默认值 | 行号 | 备注 |
 | ---- | ------ | ---- | ---- |
@@ -236,9 +236,9 @@ validateTopicOwnershipAsync(topicName, authoritative)
 >
 > `maxConsumerCountPerTopic` / `maxProducerCountPerTopic` 在 `ServiceConfiguration` 中**不存在**（未查到）。
 
-## 复制
+## Replication
 
-### 包路径已上移，去重变体已简化
+### Package Path Moved Up, Deduplication Variants Simplified
 
 > [!WARNING]
 > `pulsar-broker/src/main/java/org/apache/pulsar/broker/replication/` 目录**不存在**，类已上移到 `broker/service/`。
@@ -271,7 +271,7 @@ public enum State {
 >
 > 去重改为在 `MessageDeduplication` 内按 `Producer.isRemoteOrShadow(...)` 分支（`persistent/MessageDeduplication.java:287-290`），不再靠子类区分。
 
-### 跨地域复制与备份已被移除
+### Cross-region Replication and Backup Have Been Removed
 
 > [!IMPORTANT]
 > **4.2.4 确认移除了以下能力**（全仓零命中）：
@@ -288,9 +288,9 @@ public enum State {
 
 保留的跨集群配置是 metadata 层：`configurationStoreServers`(161) 与 `configurationMetadataStoreUrl`(168) 并存，解析优先级见 `:4153-4156`（后者优先，回落前者）。
 
-## 分层存储（Offload）
+## Tiered Storage (Offload)
 
-### SPI 已换成 NAR
+### SPI Has Been Replaced by NAR
 
 > [!WARNING]
 > 旧资料列的 `TieredStorageProvider` / `TieredStoragePolicyConfig` / `StoragePolicy` / `TieredStoragePolicies` / `ManagedLedgerStorageConfiguration` / `OffloadPolicyContext` **全部不存在**；`pulsar/broker/tieredstorage/` 与 `pulsar/broker/offload/` 两个包也都不存在。
@@ -303,7 +303,7 @@ public enum State {
 >
 > 驱动装配走 NAR 加载：`PulsarService.java:1646-1684`，`offloaders.getOffloaderFactory(driver)`（`:1658`），未配置时用 `NullLedgerOffloader.INSTANCE`（`:1679`）。
 
-### 触发时机：不是周期任务，是 ledger 关闭事件
+### Trigger Timing: Not a Periodic Task, but a ledger Close Event
 
 > [!IMPORTANT]
 > `OffloadManager` / `OffloadScheduler` / `OffloadProcessor` **全部不存在**。4.2.4 改为**事件驱动**：
@@ -325,7 +325,7 @@ public enum State {
 >
 > 并发合并由 `AutomaticOffloadTriggerController`（`:86`）保证，**三态 CAS**：`IDLE` / `RUNNING` / `RUNNING_WITH_PENDING_TRIGGER` —— 即「至多一个运行 + 一个合并的后续」。
 
-### 阈值语义
+### Threshold Semantics
 
 ```java
 // ManagedLedgerImpl.java:2862-2878
@@ -344,7 +344,7 @@ return Optional.empty();   // → 不触发
 >
 > ❌ `isTieredStorageEnabled` 方法在 4.2.4 **不存在**（全仓零命中）。
 
-### Offload 配置默认值
+### Offload Default Configuration
 
 | 字段 | 默认值 | 行号 |
 | ---- | ------ | ---- |
@@ -363,7 +363,7 @@ return Optional.empty();   // → 不触发
 > [!WARNING]
 > **没有 `offloadMaxThreads` 这个配置名** —— 真实是 `managedLedgerOffloadMaxThreads`（默认 **2**，不是旧资料的 4/8）。
 
-### 内置 offload 实现
+### Built-in offload Implementation
 
 > [!WARNING]
 > `tiered-storage/` 目录下**只有 2 个子模块，且没有 HDFS**：
@@ -375,7 +375,7 @@ return Optional.empty();   // → 不触发
 
 根级另有 `jclouds-shaded/` 目录。旧资料说的 `tiered-storage/hdfs` 不存在。
 
-## 与 Kafka 的架构对比
+## Architectural Comparison with Kafka
 
 | 维度 | Pulsar | Kafka |
 | ---- | ------ | ---- |
@@ -391,7 +391,7 @@ return Optional.empty();   // → 不触发
 | 跨集群复制 | 4.x **已移除**，需外部方案 | MirrorMaker 2 成熟 |
 | 延迟退读 | 分层存储（tiered storage）| 需自建 |
 
-## 需要打假的常见说法
+## Common Claims That Need Debunking
 
 | 说法 | 4.2.4 实况 |
 | ---- | --------- |
@@ -412,7 +412,7 @@ return Optional.empty();   // → 不触发
 | 「有 tiered namespace」 | ❌ 概念不存在 |
 | 「unload topic 会持久化 cursor 状态」 | ❌ 未查到显式持久化调用，unload 即 `topic.close(false)` |
 
-## 未查到清单
+## List Not Found
 
 - `brokerDeleteInactiveTopicsIntervalSeconds` 字段本体（`:789` 仅注释提及 86400 秒 = 24h 默认值，字段未在 `ServiceConfiguration` 中定位到）
 - `maxConsumerCountPerTopic` / `maxProducerCountPerTopic`（`ServiceConfiguration` 中不存在）

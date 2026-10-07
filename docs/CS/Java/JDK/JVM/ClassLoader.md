@@ -1,6 +1,6 @@
 ## Introduction
 
-## 版本基线
+## Version Baseline
 
 > [!NOTE]
 > **版本口径**：类加载沿 `loadClass → linkClass → initialize` 三阶段。
@@ -11,7 +11,7 @@
 >
 > 另一个易错点：`getSystemClassLoader()` 名字里的 "system" 指的是**「系统类路径上的类」**（`-cp` / classpath），**不是**「引导/系统级加载器」——引导加载器是 `null`。
 >
-> Java 9+ 应用默认不再用 `-Xbootclasspath` 追加类，改用 `--module-path` / `-p`；`-Xbootclasspath/p:` 仅在编译期（`javac -Xbootclasspath/p:`）保留。详见 [JVM 版本基线](/docs/CS/Java/JDK/JVM/JVM.md?id=版本基线)。
+> Java 9+ 应用默认不再用 `-Xbootclasspath` 追加类，改用 `--module-path` / `-p`；`-Xbootclasspath/p:` 仅在编译期（`javac -Xbootclasspath/p:`）保留。详见 [JVM 版本基线](/docs/CS/Java/JDK/JVM/JVM.md?id=version-baseline)。
 
 When you compile a .java source file, it is converted into byte code as a .class file.
 
@@ -42,7 +42,7 @@ It is mainly responsible for three activities.
 Fig.1. ClassLoader
 </p>
 
-## 本篇导航
+## This Article Navigation
 
 本篇源码密度高（近 2800 行，其中约 2000 行为 HotSpot 源码），按「规范概念 → HotSpot 实现 → 实用排查」三段展开：
 
@@ -246,7 +246,7 @@ protected ClassLoader(){
 -Xlog: class+load=info # JDK11
 ```
 
-#### 动手写一个自定义加载器
+#### Write a Custom Class Loader by Hand
 
 上面是 JVM 提供的骨架，实际开发中要自己实现加载逻辑。最小可用版本——**先委派父加载器，父加载不到才自己找**：
 
@@ -2779,7 +2779,7 @@ use ClassLoaderDataGraph::classed_do can iterate all loaded class when GC
 
 ClassLoaderDataGraph::classes_do
 
-### 卸载的触发条件
+### Trigger Conditions for Unloading
 
 类 unloading 是「**可达性驱动**」的：只有当定义某个类的 `ClassLoader`、该类本身、以及它加载的所有类**全部不可达**时，这个类才可能被回收。注意是「可能」——真正释放发生在一次 **full GC**（或并发标记的Remark 阶段结束时），普通 young GC 不碰 metaspace。
 

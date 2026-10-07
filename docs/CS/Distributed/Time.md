@@ -1,9 +1,9 @@
 ## Introduction
 
 
-## 逻辑时钟（Logical Clocks）
+## Logical Clocks
 
-### 偏序（Partial Ordering）
+### Partial Ordering
 
 ***时钟条件（Clock Condition）***。
 对任意事件 a、b：若 a → b，则 C(a) < C(b)。
@@ -20,7 +20,7 @@
 - 若事件 a 是进程 $P_i$ 发送消息 m，则消息 m 携带时间戳 $T_m = C_i(a)$。
 - 进程 $P_j$ 收到消息 m 时，将 $C_j$ 设为不小于其当前值且大于 $T_m$。
 
-### 全序（Total Ordering）
+### Total Ordering
 
 我们首先假设，对任意两个进程 $P_i$ 与 $P_j$，从 $P_i$ 发往 $P_j$ 的消息按发送顺序被接收。此外，假设每条消息最终都会被收到。（引入消息编号与消息确认协议可避免这些假设。）我们还假设进程能直接向其他任一进程发送消息。
 
@@ -34,7 +34,7 @@
 > (b) There are constants ~" and ~ such that every ~- seconds a message with an unpredictable delay less than ~ is sent over every arc.
 > Then PC2 is satisfied with • = d(2x~- +~) for all t > to + Td, where the approximations assume # + ~<< z.
 
-## 向量时钟（Vector Clocks）
+## Vector Clocks
 
 [Virtual Time and Global States of Distributed Systems](https://www.vs.inf.ethz.ch/publ/papers/VirtTimeGlobStates.pdf)
 
@@ -42,10 +42,10 @@
 
 [Why Vector Clocks Are Hard](https://riak.com/posts/technical/why-vector-clocks-are-hard/index.html)
 
-## 混合逻辑时钟（Hybrid Logical Clocks）
+## Hybrid Logical Clocks
 
 
-## 全序广播（Total Order Broadcast）
+## Total Order Broadcast
 
 在容错分布式计算中，原子广播（atomic broadcast）或全序广播（total order broadcast）是指：在多进程系统中，所有正确进程以相同顺序收到同一组消息，即相同的消息序列。该广播被称为“原子”是因为它要么在所有参与者处最终正确完成，要么所有参与者无副作用地中止。原子广播是重要的分布式计算原语。
 
@@ -63,7 +63,7 @@
 状态机复制（State machine replication）要求操作的全序。
 
 
-### 等价于共识（Equivalent to consensus）
+### Equivalent to Consensus
 
 为使原子广播的条件得以满足，参与者必须在消息的接收顺序上有效“达成一致（agree）”。当其他参与者已“达成一致”的顺序并开始接收消息后，从故障中恢复的参与者必须能够学习并遵从该已达成一致的顺序。这些考量表明：在存在崩溃故障的系统中，原子广播与 [consensus](/docs/CS/Distributed/Consensus/Consensus.md) 是等价的问题。
 

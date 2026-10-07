@@ -37,7 +37,7 @@ conda env create -f environment.yml
 
 `environment.yml` 里的 `pip:` 段是二等公民——`conda` 只是转手调用 `pip`，不做跨解析器的一致性检查。所以同一个包的同一个依赖，**只该由一个工具负责**。
 
-## conda 与 pip 混用
+## Mixing conda and pip
 
 推荐顺序：**先用 conda 装能装的一切，剩下的缺口才用 pip**，且一旦对某个包用了 `pip` 就不要再让 `conda` 升级它的依赖。反序（先 `pip install` 再 `conda install`）会让 conda 覆盖 pip 装的文件却不清理元数据，结果是 `import` 到的版本与 `pip list` 显示的不一致。
 

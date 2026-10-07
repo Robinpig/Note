@@ -7,7 +7,7 @@ Istio 的安全模型可以拆成三件事：**身份（谁在调用）**、**�
 
 ## mTLS：PeerAuthentication
 
-### 三种模式
+### Three Modes
 
 | 模式 | 官方描述 |
 | :-- | :-- |
@@ -18,7 +18,7 @@ Istio 的安全模型可以拆成三件事：**身份（谁在调用）**、**�
 
 **mesh 级默认 = `PERMISSIVE`**（三处官方明文确认）。运维文档表述：「proxies are configured in permissive mode by default, meaning they will accept both mutual TLS and plaintext traffic」。
 
-### 层级与覆盖规则
+### Hierarchy and Override Rules
 
 - 作用域由 `metadata.namespace` 决定：root namespace（默认 `istio-system`）= mesh 级，其他 namespace = 该命名空间内。
 - **优先级取最窄，不叠加**：workload-specific → namespace-wide → mesh-wide。
@@ -34,15 +34,15 @@ Istio 的安全模型可以拆成三件事：**身份（谁在调用）**、**�
 > [!WARNING]
 > **PeerAuthentication 的 API 参考页字段表只列 `selector` / `mtls` / `portLevelMtls`，没有 `targetRefs`**（RequestAuthentication 与 AuthorizationPolicy 才有）。按 API 页现状，PeerAuthentication 应只用 `selector`。
 
-### AuthorizationPolicy 对 mTLS 的硬依赖
+### AuthorizationPolicy Hard Dependency on mTLS
 
 以下字段**必须先开 mTLS**：`source.principals`/`notPrincipals`、`source.namespaces`/`notNamespaces`。
 
 官方警告：强烈建议这些字段始终配合 `STRICT` 使用，「to avoid potential unexpected requests rejection or **policy bypass** when plain text traffic is used with the permissive mutual TLS mode」——**在 PERMISSIVE 下用这些字段等于可被绕过**。
 
-## 证书与身份
+## Certificate and Identity
 
-### 签发流程
+### Issuance Flow
 
 1. `istiod` 提供 gRPC 服务接收 CSR；
 2. Istio agent 生成私钥与 CSR 并携带凭证发往 istiod；
@@ -53,7 +53,7 @@ Istio 的安全模型可以拆成三件事：**身份（谁在调用）**、**�
 
 格式为 X.509 证书，SDS 管道为本地 UDS（`customSDSPath`），不经 istiod 转发——这是 `pilot-agent` 断连时已有连接仍能维持证书的原因。
 
-### SPIFFE 与 SPIRE 的澄清
+### Clarification on SPIFFE and SPIRE
 
 这是最容易搞错的一点：
 
@@ -70,7 +70,7 @@ SPIRE 集成的两个硬前提：
 
 官方推荐用 **SPIFFE CSI driver** 而非 `hostMounts`（后者「is a larger security risk」）。
 
-### 证书轮转参数
+### Certificate Rotation Parameters
 
 | 变量 | 默认值 | 说明 |
 | :-- | :-- | :-- |
@@ -86,14 +86,14 @@ SPIRE 集成的两个硬前提：
 
 **TTL 上限 90 天**：「Values over 90 days will not be accepted」。istiod 可通过 `proxyMetadata.SECRET_TTL` 覆盖。
 
-### 外部 CA 与根证书
+### External CA and Root Certificate
 
 - 默认 Istio CA 自签根证书；`meshConfig.caAddresses` 可指向外部 CA（如 `istio-csr`）。
 - `meshConfig.caCertificates` 为 `CertificateData[]`，可含 `pem` 或 `spiffeBundleUrl`；istiod 自动把 `cacerts` Secret（插件证书）或 `istio-ca-secret`（自签）加入信任锚。
 - `CA.requestTimeout` 默认 `10s`；`CA.istiodSide` 默认 `true`。
 - 1.31 修复（SEC-10）：CA 根证书由文件提供时，istiod 现在会在证书轮换后**重新加载根证书**。
 
-## 信任域
+## Trust Domain
 
 - 配置位置：`meshConfig.trustDomain`（另有 `trustDomainAliases`）。`cluster.local` 这个默认值来自 pilot-agent `TRUST_DOMAIN`，MeshConfig 参考页本身未声明默认值。
 - `trustDomainAliases` 可让多个域下的同名身份视为同一身份：`trustDomain: td1` + `["td2","td3"]` → `td1|td2|td3` 视为同一身份。
@@ -104,7 +104,7 @@ SPIRE 集成的两个硬前提：
 
 与 `principals`/`namespaces` 等字段是 **AND** 关系。
 
-### 多网格的信任约束
+### Trust Constraints of Multi-Mesh
 
 > [!WARNING]
 > 跨 mesh（不同 CA）**必须交换信任 bundle**，且官方明确不提供工具：「Istio does not provide any tooling to exchange trust bundles across meshes. You can exchange the trust bundles either manually or automatically using a protocol such as **SPIFFE Trust Domain Federation**」。
@@ -115,7 +115,7 @@ multi-network 场景还有一条硬约束：「Istio only supports cross-network
 
 ## AuthorizationPolicy
 
-### 四种 action
+### Four Action Types
 
 官方枚举：`ALLOW`（默认）、`DENY`、`AUDIT`、**`CUSTOM`**。
 
@@ -130,7 +130,7 @@ multi-network 场景还有一条硬约束：「Istio only supports cross-network
 > [!NOTE]
 > `AUDIT` 不影响放行/拒绝，仅打标；**必须额外配置插件才会真正审计**——「The request will not be audited if there are no such supporting plugins enabled.」
 
-### 匹配维度
+### Matching Dimensions
 
 `from[].source`：`principals`、`requestPrincipals`、`namespaces`、`serviceAccounts`（格式 `<namespace>/<serviceaccount>`，**不允许通配符 `*`，且不能与 `principals`/`namespaces` 同时设置**）、`ipBlocks`、`remoteIpBlocks`（取自 `X-Forwarded-For` 或 proxy protocol，需配 `meshConfig.gatewayTopology.numTrustedProxies`）、`trustDomains`/`notTrustDomains`（1.31 新增）。
 
@@ -146,7 +146,7 @@ CEL 条件 `when` 的键如 `request.headers[x]`、`request.auth.claims[groups]`
 > [!NOTE]
 > **waypoint 场景必须用 `targetRefs`，`selector` 会被忽略**——「Waypoint proxies are required to use this field for policies to apply; `selector` policies will be ignored.」
 
-### CUSTOM action 的真实依赖（常见误解）
+### CUSTOM Action Real Dependencies (Common Misconception)
 
 `CUSTOM` **不依赖 SPIRE**，而是依赖 MeshConfig 中 `extensionProviders` 声明的外部授权扩展：
 
@@ -158,14 +158,14 @@ CEL 条件 `when` 的键如 `request.headers[x]`、`request.auth.claims[groups]`
 
 与 SPIRE 的真实关联点：若用 SPIRE 替换身份来源，ext_authz 看到的 principal 形态会随之变化（形如 `principal:"spiffe://cluster.local/ns/foo/sa/curl"`），但 CUSTOM 本身不要求 SPIRE。
 
-### 被拒时的返回
+### Return on Rejection
 
 返回 **HTTP 403**，响应体 `RBAC: access denied`（`content-length: 19`、`content-type: text/plain`）；访问日志 `response_code:403`、`response_flags` 含 `UAEX`、`response_code_details` 形如 `rbac_access_denied_matched_policy[ns/policy-name]`；debug 日志 `enforced denied, matched policy ns[default]-policy[test]-rule[0]`。
 
 > [!NOTE]
 > 上述细节来自阿里云 ASM 官方文档的实机访问日志与 Istio 官方外授权任务示例输出；**istio.io 文档中未找到「403 + `RBAC: access denied`」的成文规格**。
 
-### 官方明示的能力限制
+### Officially Stated Capability Limits
 
 - **授权策略只支持入站流量，不支持出站**。
 - **不支持 server-first TCP 协议**（MySQL/PostgreSQL 等服务端先发数据的协议）：首包未经访问控制检查直达客户端，**故不应在此类协议的首包中携带敏感数据**。
@@ -175,7 +175,7 @@ CEL 条件 `when` 的键如 `request.headers[x]`、`request.auth.claims[groups]`
 
 ## JWT：RequestAuthentication
 
-### 字段与验证
+### Fields and Validation
 
 - `jwtRules[].issuer`：`iss` 不匹配则拒。
 - `audiences[]`：**「The service name will be accepted if audiences is empty.」**
@@ -188,7 +188,7 @@ CEL 条件 `when` 的键如 `request.headers[x]`、`request.auth.claims[groups]`
 > [!WARNING]
 > **「多个位置的 token 不受支持」**——「Requests with multiple tokens (at different locations) are not supported, the output principal of such requests is undefined.」
 
-### 与授权策略配合
+### Cooperation with Authorization Policy
 
 - `requestPrincipals` 格式 `"<ISS>/<SUB>"`，如 `"example.com/sub-1"`，等价于 `request.auth.principal` 属性。
 - **RequestAuthentication 本身不做强制**：无凭证的请求会被接受，只是没有已认证身份。官方推荐范式是 `RequestAuthentication` 定规则 + `AuthorizationPolicy` 用 `requestPrincipals: ["*"]` 强制必须携带有效 JWT。
@@ -196,19 +196,19 @@ CEL 条件 `when` 的键如 `request.headers[x]`、`request.auth.claims[groups]`
 - CEL 直接读 claim：`when: [{key: request.auth.claims[groups], values: [...]}]`。
 - **JWT claim 路由（Experimental）**：`VirtualService` 中用 `@request.auth.claims.sub` 前缀匹配内部 metadata，**仅支持在 Gateway 上**。
 
-### 1.31.1 的 JWKS 加固
+### 1.31.1 JWKS Hardening
 
 修复 istiod 抓取 `jwksUri` 的 **SSRF 缺口**：默认在 dial 层阻断 link-local 与已知云元数据地址（如 `169.254.169.254`），并拒绝非合法 JWKS 响应；私有与 loopback 段仍可达，可用 `BLOCKED_CIDRS_IN_JWKS_URIS` 屏蔽。
 
 1.31.1 同时修复：JWKS resolver 被强制 HTTP/1.1（自定义 `TLSClientConfig` 使 Go `net/http` 禁用自动 HTTP/2、ALPN 无法协商 h2）导致经 HTTP CONNECT 代理的抓取失败，现已重新启用 HTTP/2。
 
-## TLS 与加密套件
+## TLS and Cipher Suites
 
 - Istio 配置 **`TLSv1_2` 为客户端与服务端的最低 TLS 版本**，配 6 个套件（ECDHE-ECDSA/RSA-AES256-GCM-SHA384、ECDHE-ECDSA/RSA-AES128-GCM-SHA256、AES256-GCM-SHA384、AES128-GCM-SHA256）。
 - `meshConfig.enableAutoMtls` 默认 `true`。
 - `BackendTLSPolicy` 用于**服务端**侧 CA 引用；1.31.1 的 CVE（`GHSA-qm8v-g4f9-qhjx`，CVSS 6.8）正是它在 sidecar 上 CA 引用无法解析时 **fail open 降级为明文**。
 
-### FIPS 140-3 与后量子（1.31 新增）
+### FIPS 140-3 and Post-Quantum (New in 1.31)
 
 `COMPLIANCE_POLICY` 的合法值：`''`/unset（无额外限制）、`fips-140-2`、`fips-140-3`、`pqc`（**后量子安全，实验性**，强制 X25519MLKEM768 + TLS 1.3）。
 
@@ -218,13 +218,13 @@ CEL 条件 `when` 的键如 `request.headers[x]`、`request.auth.claims[groups]`
 
 官方警告：「Setting compliance policy in the control plane is a **necessary but not sufficient** requirement to achieve compliance.」
 
-## 其他安全能力
+## Other Security Capabilities
 
 - **EnvoyFilter 扩展授权**：`INSERT_FIRST` 可插入 Lua filter 做路径归一化等预处理。1.31 加固（SEC-07）：限制 `EnvoyFilter.proxyVersion` 正则长度至 **1024 字符**，修复未限制长度导致 istiod 正则编译过度消耗内存与 CPU。
 - **可观测端点 mTLS 化**（1.31 新增，TEL-05）：`ENVOY_SECURE_METRICS_PORT` 与 `ENVOY_SECURE_MERGED_METRICS_PORT` 创建**要求 mutual TLS 的静态 bootstrap listener**，使 Prometheus 可通过 mTLS 抓取指标。
 - **CRL**：`ClusterTrustBundle` 支持证书吊销列表；1.31.1 修复无法清空 CRL（指定空串或删除 `ca-crl.pem`）。阿里云 ASM 1.29 已支持 ztunnel CRL 校验。
 
-### 1.31 安全变更全景（change notes SEC-01~11）
+### 1.31 Security Changes Overview (change notes SEC-01~11)
 
 | 编号 | 内容 |
 | :-- | :-- |
@@ -244,7 +244,7 @@ CEL 条件 `when` 的键如 `request.headers[x]`、`request.auth.claims[groups]`
 
 INS-08 修复 waypoint/kube-gateway workload socket 与 **SPIRE CSI driver 不兼容**（#60108）。
 
-## 安全排障速查
+## Security Troubleshooting Quick Reference
 
 | 症状 | 优先检查 |
 | :-- | :-- |

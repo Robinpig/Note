@@ -9,7 +9,7 @@ Nix 是一个**函数式、声明式、可复现**的包管理器。它把"软�
 - **可复现构建**：同一份描述在任何机器、任何时间构建结果一致；
 - **事务式**：安装 / 升级先写新路径再切换符号链接（用户 profile / 系统 `current-system`），失败可整体回退。
 
-## 基本概念
+## Basic Concepts
 
 ```shell
 ls /nix/store/                 # 每个条目形如 <hash>-<name>-<version>
@@ -20,7 +20,7 @@ ls /nix/store/                 # 每个条目形如 <hash>-<name>-<version>
 - **store path**：构建产物在 `/nix/store` 下的实际路径，被其内容的哈希前缀唯一标识；
 - **profile**：一组 store path 的符号链接集合（用户环境 `~/.nix-profile`、系统 `/run/current-system`），切换即"换环境"。
 
-## 常用命令
+## Common Commands
 
 ```shell
 nix-env -iA nixpkgs.vim       # 装包到用户 profile（类传统，但不作为真理来源）
@@ -31,7 +31,7 @@ nix develop                   # 进入含 devShell 的开发环境（替代 venv
 nix-collect-garbage           # 回收不再被任何 profile 引用的 store 路径
 ```
 
-## Flakes（现代实践）
+## Flakes (Modern Practice)
 
 用 `flake.nix` 声明输入源与版本锁（`flake.lock`），让构建在任意机器可复现：
 
@@ -62,7 +62,7 @@ nix develop .                # 可复现开发环境
 }
 ```
 
-## 运行平台
+## Runtime Platform
 
 Nix 不绑定 NixOS——可在任意 Linux 发行版（Ubuntu / Fedora / Rocky 等）乃至 macOS 上安装，用于可复现的开发环境、CI 依赖与构建缓存；真正的"整系统声明式"则由 [NixOS](/docs/CS/OS/Linux/Distribution/NixOS.md) 在它之上实现。与 [容器](/docs/CS/Container/Container.md) 互补：Nix 可导出确定性镜像，但粒度在"包 / 配置"层而非"整机快照"层。
 

@@ -15,7 +15,7 @@ etcd 的监控数据全部由**客户端端口**（默认 2379）自己吐出，
 
 ## Debug endpoint
 
-### pprof：两种开启方式
+### pprof: Two Ways to Enable
 
 `/debug/pprof` 是标准 Go runtime profiling 端点，可分析 CPU、heap、mutex 与 goroutine 占用。3.7.2 里有**两条**开启路径：
 
@@ -87,7 +87,7 @@ $ curl -L http://localhost:2379/metrics | grep -v debugging # debugging_ 前缀�
 > [!NOTE]
 > 找指标定义时不要指望某个统一的 collector 包。3.7.2 里指标定义**分散在 17 个 `metrics.go`**：`server/etcdserver/metrics.go`、`server/etcdserver/{apply,txn,read}/metrics.go`、`server/etcdserver/api/{v3rpc,v2store,membership,rafthttp,snap,etcdhttp}/metrics.go`、`server/storage/{metrics.go,mvcc,backend,wal}/metrics.go`、`server/lease/metrics.go`、`server/auth/metrics.go`、`server/proxy/grpcproxy/metrics.go`。
 
-### 指标详细级别：--metrics
+### Metrics Detail Level: --metrics
 
 3.7 新增 `--metrics`，控制导出指标的详细程度（`config.go:737`，默认 `basic`）：
 
@@ -176,7 +176,7 @@ scrape_configs:
 
 Grafana 侧导入官方默认 dashboard（`etcd.io/docs/v3.7/op-guide/grafana.json`）即可，但要注意数据源名要一致：Prometheus 数据源命名为 `my-etcd` 时，dashboard JSON 里的 `datasource` 字段值也要改成 `my-etcd`。
 
-## 关键指标与阈值
+## Key Metrics and Thresholds
 
 下表全部来自官方默认告警规则（3.7.2 的 `contrib/mixin/alerts/alerts.libsonnet`），**阈值与持续时间都是官方值**：
 
@@ -215,7 +215,7 @@ Unknown | FailedPrecondition | ResourceExhausted | Internal | Unavailable | Data
 > [!TIP]
 > 告警规则里的 `for` 时长（持续时间）与阈值同等重要。比如 leader 切换是"15 分钟窗口内 >= 4 次"**且**"持续 5m"才报——只满足前者是正常的抖动。两个条件是 `and` 关系，改规则时别只改一半。
 
-## 空间与碎片
+## Space and Fragmentation
 
 两个 db 大小指标必须分清，它们回答的是不同问题：
 
@@ -261,7 +261,7 @@ Unknown | FailedPrecondition | ResourceExhausted | Internal | Unavailable | Data
 > [!WARNING]
 > 官方实测该项开销约为 **2%~4% CPU**。默认采样率为 0（不采样），开启前要评估这个成本。
 
-## 3.7 feature gate 的影响
+## 3.7 Impact of Feature Gate
 
 3.7 引入统一 feature gate（`server/features/etcd_features.go`），其中两项会改变可观测到的行为：
 
@@ -272,7 +272,7 @@ Unknown | FailedPrecondition | ResourceExhausted | Internal | Unavailable | Data
 
 排查指标异常但找不到配置改动时，值得确认一下相关 gate 的状态。
 
-## 陷阱清单
+## Pitfall List
 
 > [!WARNING]
 > 这一篇里最容易让人排错方向的几点：

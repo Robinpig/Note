@@ -2,13 +2,13 @@
 
 [Xcap](http://xcap.weebly.com/) 是一款运行在 Windows 上的 **数据包生成与发送工具**（packet generator & sender）。与 tcpdump / Wireshark 这类「抓取并分析已有流量」的工具相反，Xcap 让你**手工构造任意报文**（自定义各层协议字段），再从指定网卡发送出去，常用于协议测试、防火墙/IDS 规则验证、网络设备的健壮性压测。
 
-## 核心能力
+## Core Capabilities
 
 - **报文构造**：从 Ethernet / IP / TCP / UDP / ICMP 等逐层填充字段（源/目的 MAC、IP、端口、标志位、载荷），支持校验和自动计算。
 - **指定出口**：选择本机某个网络接口（interface）作为发送通道，可叠加 VLAN / MPLS 等标签。
 - **发送模式**：单次发送、连续发送（按速率/数量），便于模拟洪泛或重放。
 
-## 与抓包/分析工具的分工
+## Division of Labor with Packet Capture / Analysis Tools
 
 | 工具 | 角色 | 典型用途 |
 |---|---|---|

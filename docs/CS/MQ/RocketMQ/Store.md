@@ -18,7 +18,7 @@ Producer ──▶ ┌───────────────────�
 
 这种「一写多读」的结构是 RocketMQ 高吞吐的来源，也是它所有痛点的来源（无法按消息删除、磁盘稀疏、恢复复杂）。
 
-## 5.5.1 的包路径重构（踩坑预警）
+## 5.5.1 Package Path Refactoring (Pitfall Warning)
 
 5.5.1 对 `store` 模块做过一次大规模包重构，**网上绝大多数资料给的是 4.x 路径，照着找不到文件**：
 
@@ -46,7 +46,7 @@ ServiceThread
 > [!WARNING]
 > 常见误解：「`FlushCommitLogService` 是异步刷盘类」——错。它是**抽象基类**，异步用的是子类 `FlushRealTimeService`。
 
-## 三类文件的物理结构
+## Physical Structure of Three File Types
 
 ### CommitLog
 
@@ -103,7 +103,7 @@ public final static int BLANK_MAGIC_CODE   = -875286124;   // cbd43194
 public static final int CRC32_RESERVED_LEN = 19;           // "CRC32" + 1 + 10 + 1
 ```
 
-#### 文件末尾的 blank 保护
+#### blank Protection at End of File
 
 `maxBlank` 是 `doAppend()` 的**方法参数**而非类字段。边界保护逻辑（`CommitLog.java:2054-2067`）：
 
@@ -177,7 +177,7 @@ public static final int MSG_TAG_OFFSET_INDEX = 12;
 
 单文件总大小 = 40 + 5000000×4 + 20000000×20 = **420,000,040 字节 ≈ 400 MB**。
 
-#### 查找是链表反向遍历，不是二分查找
+#### Lookup Is Reverse Linked-list Traversal, Not Binary Search
 
 > [!WARNING]
 > 5.5.1 中 `getMessagePositionByTime` 与 `getMessageOffset` **均不存在**（master 同样不存在）。真实方法是 `selectPhyOffset`（`IndexFile.java:201-253`），走**槽 + 反向链表**：
@@ -201,9 +201,9 @@ selectPhyOffset(phyOffsets, key, maxNum, begin, end):
 
 哈希冲突用**头插法**处理（`putKey`，`IndexFile.java:113-171`）：新条目的第 4 字段填旧槽值（链头），再把槽更新为新条目下标。槽只存一条链的头，冲突多了退化为线性扫描。
 
-## MappedFile 与 mmap
+## MappedFile and mmap
 
-### 两条 map 分支
+### Two map Branches
 
 `DefaultMappedFile.java:199-221`：
 
@@ -230,7 +230,7 @@ if (writeWithoutMmap) {
 return ((write / OS_PAGE_SIZE) - (flush / OS_PAGE_SIZE)) >= flushLeastPages;
 ```
 
-### hold() / release() 引用计数
+### hold() / release() Reference Counting
 
 不在 `MappedFile` 里，而在父类 `ReferenceResource`（`ReferenceResource.java:26-63`）：
 
@@ -256,11 +256,11 @@ public void release() {
 
 `selectMappedBuffer`（`DefaultMappedFile.java:667-688`）在 `hold()` 成功后 `slice()` 出新 ByteBuffer 并把 `this` 塞进 `SelectMappedBufferResult`，调用方释放时触发 `release()` —— 这是零拷贝读的安全机制，防止映射区被 unmap 后仍持有引用。
 
-### 预分配（warm）
+### Pre-allocation (warm)
 
 `warmMapedFileEnable` 默认 **false**（`MessageStoreConfig.java:266`）。开启后由 `AllocateMappedFileService` 触发 `warmMappedFile`（`DefaultMappedFile.java:797-835`）：逐 4 KB 页 `put(0)` 触碰全部页面触发**缺页预分配**（避免真实写入时才换页），SYNC_FLUSH 时按 `flushLeastPagesWhenWarmMapedFile`（默认 `1024/4*16 = 4096` 页）分批 `force()`，最后整体 `force()` 一次并 `mlock()`。**只预热，不写业务数据。**
 
-### swap 机制存在，但配置已成死代码
+### swap Mechanism Exists, But Config Is Dead Code
 
 > [!WARNING]
 > `swapMap()` 实现还在（`DefaultMappedFile.java:839-860`）：重新 `map()` 并把老区暂存待清理，`cleanSwapedMap` 真正 unmap 且非 force 时会 sleep 到距上次 swap 满 **120 秒**（`minGapTime`），避免刚换出的页立刻换回。
@@ -276,7 +276,7 @@ public void release() {
 
 搜索 `isMappedFileSwapEnable()` 等在整个仓库（排除 `MessageStoreConfig` 自身）**零命中**。`swapMap()` 与 `MappedFileQueue.cleanSwappedMap()` 也均无调用方。写笔记时不应把它描述为「启用的机制」。
 
-## 刷盘：flush 与 commit 是两件事
+## Flush: flush and commit Are Two Different Things
 
 这是整个 store 模块**最容易被搞混**的地方，也是本文档的核心区分：
 
@@ -320,7 +320,7 @@ protected void commit0() {
 >
 > 所以 `commitIntervalCommitLog`（200ms）、`commitCommitLogLeastPages`（4）、`commitCommitLogThoroughInterval`（200ms）这三个参数**在默认配置下形同虚设**，只有开了 TransientStorePool 才有意义。
 
-### 同步 vs 异步
+### Synchronous vs Asynchronous
 
 `CommitLog.java:2228-2233` 的选择逻辑：
 
@@ -335,7 +335,7 @@ this.commitRealTimeService = new CommitLog.CommitRealTimeService();
 
 `GroupCommitService.doCommit()`（`:1729-1763`）对每个请求最多重试 **1000 次** `flush(0)`，每次间隔 `Thread.sleep(1)`（注释说明：TransientStorePool 开启时 writeBuffer 到 pageCache 有延迟）。全部满足 `getFlushedWhere() >= req.getNextOffset()` 才回 `PUT_OK`，否则 `FLUSH_DISK_TIMEOUT`。
 
-### 触发条件是「或」不是「与」
+### Trigger Condition Is "OR" Not "AND"
 
 默认参数（`MessageStoreConfig.java`，5.5.1 与 master 一致）：
 
@@ -365,7 +365,7 @@ CommitLog.this.mappedFileQueue.flush(flushPhysicQueueLeastPages);
 
 即：**满 4 页** 或 **满 10 秒**，任一满足即刷。`CommitRealTimeService` 用完全相同的模式。
 
-### 唤醒受两个开关控制
+### Wake-up Controlled by Two Switches
 
 ```java
 // MessageStoreConfig.java:364, 366
@@ -386,7 +386,7 @@ if (!isTransientStorePoolEnable()) {
 > [!TIP]
 > 默认 `wakeFlushWhenPutMessage = false` —— 异步模式下**写完消息不主动唤醒刷盘线程**，而是等 10 秒定时器或攒够 4 页。这对吞吐有利，但意味着 Broker 崩溃时最多丢 10 秒的页缓存数据（这正是 ASYNC_FLUSH 的语义）。
 
-## TransientStorePool 双写
+## TransientStorePool Double-write
 
 `TransientStorePool`（默认 **false**，`MessageStoreConfig.java:275`）预分配 `poolSize`（默认 5）个 `ByteBuffer.allocateDirect(fileSize)`，并用 JNA `LibC.INSTANCE.mlock()` **锁内存**防换出；`borrowBuffer()` / `returnBuffer()` 池化复用；可用 buffer 低于 `poolSize * 0.4` 时告警。
 
@@ -400,7 +400,7 @@ this.transientStorePool = new TransientStorePool(
 
 `start()` / `shutdown()` 中 `commitRealTimeService` **仅在 `isTransientStorePoolEnable()` 为真时**才启动/关闭（`:2239-2243`、`:2325-2330`）。
 
-## CompletableFuture 化（5.x 异步重构）
+## CompletableFuture-ification (5.x Async Refactoring)
 
 `MessageStore` 接口提供 default 异步方法（`MessageStore.java:91-103`）：
 
@@ -430,7 +430,7 @@ private PutMessageResult waitForPutResult(CompletableFuture<PutMessageResult> f)
 
 5.x 新增 `FlushDiskWatcher`（`store/.../FlushDiskWatcher.java`）：单线程从 `LinkedBlockingQueue<GroupCommitRequest>` 取请求，轮询 `future().isDone()`，到 deadline 就 `wakeupCustomer(FLUSH_DISK_TIMEOUT)`，睡眠粒度 `Math.min(10, sleepTime)` ms 避免频繁线程切换。
 
-## ReputMessageService：异步派发
+## ReputMessageService: Asynchronous Dispatch
 
 作用（`DefaultMessageStore.java:2712-2783`）：从 `reputFromOffset` 开始反复 `commitLog.getData(reputFromOffset)` 读 CommitLog，逐条解析并 dispatch 到 ConsumeQueue / IndexService，推进 `reputFromOffset += size`；到文件尾则 `commitLog.rollNextFile()` 跳下一文件；`reputFromOffset < commitLog.getMinOffset()` 时被强制前移。
 
@@ -445,9 +445,9 @@ private PutMessageResult waitForPutResult(CompletableFuture<PutMessageResult> f)
 
 `reputFromOffset` 的初始值在 `start()` 里设置（`:439`）：`setReputFromOffset(this.commitLog.getConfirmOffset())`。
 
-## 恢复（recover）
+## Recovery
 
-### load() 完整顺序
+### load() Complete Order
 
 `DefaultMessageStore.java:324-368`（**注意与 4.x 资料完全不同**）：
 
@@ -480,7 +480,7 @@ load():
 
 **已删除的方法**（4.x 资料里的这些在 5.5.1 全部不存在）：`recoverConsumeQueue`（合并进 `consumeQueueStore.recover(boolean)`）、`recoverLatestOffset`、`recoverConsumeQueueExt`（并入 `ConsumeQueue.recover()`）、`recoverBatchConsumeQueue`、`recoverPoints`。`recoverOffsetTable` 仍在，但现在是 `recoverTopicQueueTable()` 的唯一实现体（`:2026-2028`）。
 
-### ConsumeQueue 恢复是纯 CQ 侧自校验
+### ConsumeQueue Recovery Is Pure CQ-side Self-validation
 
 > [!WARNING]
 > `STORE_TIME_AND_OFFSET_INDEX` 与 `STORE_TIME_AND_MAGIC_INDEX` 常量在 5.5.1 `CommitLog.java` 中**零命中** —— 这是 4.x 的机制。
@@ -507,7 +507,7 @@ if (extReadEnable) consumeQueueExt.truncateByMaxAddress(maxExtAddr)
 
 判定条件就是三元组 `offset >= 0 && size > 0`，`maxPhysicOffset` 取最后一条的 `offset + size`。**不与 CommitLog 交叉验证**，一致性由 CommitLog 侧的 `getDispatchFromPhyOffset` 间接保证。
 
-### CRC 校验的作用范围
+### Scope of CRC Validation
 
 `checkCRCOnRecover`（默认 **true**，`MessageStoreConfig.java:210`）使用点在 `recoverNormally`（`:349`）、`recoverAbnormally`（`:770`）、`isMappedFileMatchedRecover`（`:940`）。
 
@@ -516,7 +516,7 @@ if (extReadEnable) consumeQueueExt.truncateByMaxAddress(maxExtAddr)
 
 配套的 `checkCommitLogOffsetOnRecover` 默认 **false**（`:213`），仅在 `recoverAbnormally` 中使用。恢复时最多回溯文件数由 `commitLogRecoverMaxNum` 控制，默认 **10**（`:109`）。
 
-## 过期文件清理
+## Expired File Cleanup
 
 `CleanCommitLogService` 现为 `DefaultMessageStore` 内部类。触发条件（`:2374-2376`）三者取或：
 
@@ -529,7 +529,7 @@ if (isTimeUp || isUsageExceedsThreshold || isManualDelete) { ... }
 
 清理任务调度（`addScheduleTask`，`:1931-1938`）：首次延迟 60s，周期 `cleanResourceInterval`（`MessageStoreConfig.java:175` = 10000 ms）。
 
-### diskMaxUsedSpaceRatio 是 75，不是 72
+### diskMaxUsedSpaceRatio Is 75, Not 72
 
 > [!WARNING]
 > **这是与旧资料最重要的不一致点。** 5.5.1 与 master **均为 75**：
@@ -570,7 +570,7 @@ if (isTimeUp || isUsageExceedsThreshold || isManualDelete) { ... }
 
 多路径支持：遍历 `storePathPhysic` 按 `MixAll.MULTI_PATH_SPLITTER` 分割，`physicRatio > 85` 的路径加入 `fullStorePath` 并 `commitLog.setFullStorePaths()`（`:2446-2447`）。
 
-## 索引写入
+## Index Write
 
 `IndexService#indexMessage` 已**改名**为 `buildIndex(DispatchRequest)`（`IndexService.java:224`）。
 
@@ -591,7 +591,7 @@ public void dispatch(DispatchRequest request) {
 
 `buildIndex` 内部：跳过 `commitLogOffset < indexFile.getEndPhyOffset()` 的重复请求；事务消息跳过 `TRANSACTION_ROLLBACK_TYPE`；依次为 **uniqKey**、**keys**（按 `KEY_SEPARATOR` = 空格分割）、**TAGS** 建索引。
 
-### 写满换新文件，不阻塞不丢弃
+### Full File Switches to New One: No Blocking, No Dropping
 
 `IndexService.putKey`（`:284-295`）：
 
@@ -613,9 +613,9 @@ private IndexFile putKey(IndexFile indexFile, DispatchRequest msg, String idxKey
 > [!WARNING]
 > **`putMsgIndexHightWater`（默认 600000）是死配置** —— 全仓搜索除 `MessageStoreConfig` 自身 getter/setter 外**无任何调用方**。5.5.1 的 `IndexService` 只在 `flush()` 里用 `isWriteFull()`。
 
-## 其他高频疑问
+## Other Frequently Asked Questions
 
-### 四个 maxTransfer 参数
+### Four maxTransfer Parameters
 
 | 参数 | 默认值 | 含义 |
 | ---- | ------ | ---- |
@@ -641,7 +641,7 @@ if (isInMem) {
 >
 > 注意实际生效值是**参数值 − 1**（源码写 `> count - 1`），即内存 **31** 条、磁盘 **7** 条。
 
-### maxFilterMessageSize 是读路径扫描上限
+### maxFilterMessageSize Is the Read-path Scan Limit
 
 `maxFilterMessageSize = 16000`（`MessageStoreConfig.java:206`）：
 
@@ -660,7 +660,7 @@ if ((cqUnit.getQueueOffset() - offset) * consumeQueue.getUnitSize() >= maxFilter
 >
 > 真实语义：从消费者请求的 offset 起，最多扫描 **16000 字节的 CQ 空间**（≈800 条消息）就 `break`，防止为一条已被过滤掉的消息扫完整条队列。`Math.max` 保证不会小于本次请求条数所需的 CQ 字节数。
 
-### osPageCacheBusy 判据是「持锁时长」
+### osPageCacheBusy Criterion Is "Lock Hold Duration"
 
 `osPageCacheBusyTimeOutMills = 1000`（`MessageStoreConfig.java:271`），判断逻辑（`DefaultMessageStore.java:742-749`）：
 
@@ -681,7 +681,7 @@ public boolean isOSPageCacheBusy() {
 >
 > 顺带一提，`diff` 与 1000 的比较是**毫秒**，而 `10000000` 是纳秒量级的硬编码上界 —— 两个比较量纲不同，这是源码原样。
 
-### LMQ 轻量队列
+### LMQ Lightweight Queue
 
 ```java
 // MessageStoreConfig.java:299-302
@@ -709,7 +709,7 @@ public static boolean isNeedHandleMultiDispatch(MessageStoreConfig cfg, String t
 > [!TIP]
 > `LmqQueueManager` 类**不存在**于 5.5.1。
 
-### 冷数据限流（5.x 新增，全默认关闭）
+### Cold Data Rate Limiting (New in 5.x, All Off by Default)
 
 | 参数 | 默认值 | 说明 |
 | ---- | ------ | ---- |
@@ -728,7 +728,7 @@ public static boolean isNeedHandleMultiDispatch(MessageStoreConfig cfg, String t
 > [!NOTE]
 > 这些参数在 master（pom = 5.3.3）与 5.5.1 中均存在，但**是否在 5.3.0 之前引入未查到**（未拉更早 tag 核实）。
 
-### Properties CRC（成对使用）
+### Properties CRC (Used in Pairs)
 
 `CRC32_RESERVED_LEN = 19`（`CommitLog.java:86`），格式为 `[PROPERTY_CRC32 + NAME_VALUE_SEPARATOR + 10 位定长字符串 + PROPERTY_SEPARATOR]`。
 
@@ -740,7 +740,7 @@ private boolean forceVerifyPropCRC = false;     // 校验时跳过 bodyCRC，改
 
 两者**配套使用**：默认双 false，走传统 `bodyCRC` 校验路径（`CommitLog.java:551-560`）；`forceVerifyPropCRC = true` 时**跳过 bodyCRC**，改为从 properties 读回 `PROPERTY_CRC32` 手工解析期望值校验整条消息（`:619-632`）—— 而该属性由 `enabledAppendPropCRC = true` 写入。所以只开 `forceVerifyPropCRC` 而不开 `enabledAppendPropCRC` 会失效。
 
-### RocksDB 版 ConsumeQueue
+### RocksDB-based ConsumeQueue
 
 ```java
 // MessageStoreConfig.java:486, 519
@@ -753,7 +753,7 @@ private String bottomMostCompressionTypeForConsumeQueueStore = CompressionType.Z
 > [!WARNING]
 > `useRocksDBStore` 这个配置项**不存在**于 5.5.1。
 
-## 默认值汇总表
+## Default Value Summary Table
 
 `MessageStoreConfig`（除注明外均在 `MessageStoreConfig.java`，5.5.1 与 master 一致）：
 
@@ -831,7 +831,7 @@ private String bottomMostCompressionTypeForConsumeQueueStore = CompressionType.Z
 > [!IMPORTANT]
 > 5.5.1 虽然新增了 `timerWheelEnable`（默认 **true**）等一整套 `timer*` 配置，但 `messageDelayLevel` **仍是 18 级**。时间轮实现在 `store/timer/` 包（`TimerMessageStore`、`TimerWheel`、`TimerLog`、`TimerCheckpoint`、`TimerRequest`、`TimerMetrics`、`Slot`、`Timeline`）。注意 `TimerMessageService` 与 `ScheduleMessageTimerWheel` 这两个类名**不存在**。
 
-## 死配置速查表
+## Dead Configuration Quick Reference Table
 
 以下参数在 5.5.1 中**只有字段声明与 getter/setter，没有任何消费方**。网上资料把它们当生效配置描述是错误的：
 
@@ -851,7 +851,7 @@ private String bottomMostCompressionTypeForConsumeQueueStore = CompressionType.Z
 > [!WARNING]
 > 判断某个配置是否生效的可靠方法：grep 其 getter 名（`isXxx()` / `getXxx()`）在整个仓库的调用点，**排除 `MessageStoreConfig.java` 自身**。零命中即死配置。这个方法同样适用于其他模块。
 
-## 核心默认值速查（跨模块）
+## Core Defaults Quick Reference (Cross-module)
 
 `MessageStoreConfig` 里几个跨模块常被引用的值：
 
@@ -869,7 +869,7 @@ haMaxGapNotInSync = 1024 * 1024 * 256
 >
 > 另外 `BrokerConfig` 实际路径是 `common/src/main/java/org/apache/rocketmq/common/BrokerConfig.java`（**不在 `broker/` 模块下**）。
 
-## 已废弃 / 不存在的字段与类速查
+## Quick Reference of Deprecated / Non-existent Fields and Classes
 
 写 5.x 笔记或读旧资料时最容易踩的坑，全部在 5.5.1 中**已确认不存在**：
 
@@ -893,7 +893,7 @@ haMaxGapNotInSync = 1024 * 1024 * 256
 | `TimerMessageService` / `ScheduleMessageTimerWheel` | 不存在，见 `store/timer/` |
 | `unmappedFile` | 全仓零命中 |
 
-## 内核机制关联
+## Kernel Mechanism Correlation
 
 RocketMQ 的存储设计几乎每一步都踩在 Linux 内核机制上，可以与内核笔记对读：
 

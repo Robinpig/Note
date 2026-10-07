@@ -6,9 +6,9 @@
 
 本文版本基线：Apache Dubbo **3.3.6**，所有结论均逐文件核对自源码 tag `dubbo-3.3.6`。路由规则的细节见 [Router](/docs/CS/Framework/Dubbo/Router.md)，Filter 体系见 [Filter](/docs/CS/Framework/Dubbo/Filter.md)。
 
-## 优雅停机
+## Graceful Shutdown
 
-### 真实的配置 key 与默认值
+### Actual Configuration key and Default Values
 
 优雅停机相关的配置 key 只有三个是真实的：
 
@@ -20,7 +20,7 @@
 
 默认值是 `DEFAULT_SERVER_SHUTDOWN_TIMEOUT = 10000`（毫秒，`CommonConstants.java:184`）。读取逻辑集中在 `ConfigurationUtils.getServerShutdownTimeout`（`ConfigurationUtils.java:121-151`），注意其中一段容易被忽视的短路逻辑：**如果实际停机已经超过预期时间，直接返回 1ms**——避免停机流程被一个已经超时的等待卡住。
 
-### 钩子链路：DubboShutdownHook.doDestroy
+### Hook Chain: DubboShutdownHook.doDestroy
 
 `DubboShutdownHook`（`DubboShutdownHook.java:41`）注册为 JVM shutdown hook，核心逻辑在 `doDestroy()`（:86-144）：
 
@@ -44,18 +44,18 @@ private void doDestroy() {
 2. **等 Spring 接管**：模块若由 Spring 容器管理生命周期，Dubbo 不抢先销毁，而是轮询等待 `ContextClosedEvent` 触发的关闭流程，最多等到 timeout。这样 Bean 销毁顺序仍由 Spring 主导，避免「Dubbo 先关了、业务 Bean 还在发请求」。
 3. **`applicationModel.destroy()`**：最终销毁注册中心、协议、代理等资源。
 
-### Spring 侧的协作
+### Spring-Side Collaboration
 
 两条监听器在 Spring 关闭时反向驱动 Dubbo：
 
 - `DubboBootstrapApplicationListener.onContextClosedEvent`（:125-131）：收到 `ContextClosedEvent` 时调用 `deployer.stop()`。
 - `DubboDeployApplicationListener.onContextClosedEvent`（:191-200）：未设置 `KEEP_RUNNING_ON_SPRING_CLOSED` 时调用 `moduleModel.destroy()`。
 
-### 业务自定义停机动作
+### Business Custom Shutdown Actions
 
 从 `@since 2.7.5` 起（`dubbo-common/.../common/lang/ShutdownHookCallback.java:37`），可以通过 `ShutdownHookCallback`（配合 `ShutdownHookCallbacks`，:35）注册业务自己的停机回调，执行点在 `DefaultApplicationDeployer.postDestroy → executeShutdownCallbacks`（:1148、:1168-1172）。需要「停机时刷缓存、发通知」之类的动作，这是官方扩展点。
 
-### GracefulShutdown：在途请求的善后
+### GracefulShutdown: Cleanup of In-Flight Requests
 
 钩子链路的第 1 步 `readonly()` 最终落到 Protocol 层的 `GracefulShutdown`。以 dubbo 协议为例：Server 先摘除注册（从注册中心注销或置只读地址），再停止接受新连接，然后等待「在途请求数归零」或超时。整个窗口的时长上限就是 `dubbo.service.shutdown.wait`。
 
@@ -67,14 +67,14 @@ private void doDestroy() {
 3. kill（触发 DubboShutdownHook → readonly → 等 Spring → destroy）
 ```
 
-### 停机相关的常见误操作
+### Common Misoperations Related to Shutdown
 
 - **手动注册 DubboShutdownHook 与 Spring Boot 冲突**：Spring Boot 自身已管理关闭流程，重复注册 hook 会造成双重销毁；3.x 中 Dubbo 与 Spring 的生命周期靠 `isLifeCycleManagedExternally()` 与两条 `ContextClosedEvent` 监听器对齐，用户代码里再手动 `DubboShutdownHook.getDubboShutdownHook().register()` 属于画蛇添足。
 - **`KEEP_RUNNING_ON_SPRING_CLOSED`**：设置后 Spring 关闭时 Dubbo 模块不随之 destroy（`DubboDeployApplicationListener.onContextClosedEvent` :191-200 的判断条件），用于「容器关闭但进程仍需存活」的特殊场景，常规部署不要开。
 
-## 延迟暴露与启动预热
+## Delayed Exposure and Startup Warmup
 
-### delay 的默认值是 null
+### The Default Value of delay Is null
 
 打假：很多资料写「`delay` 默认 `-1`，表示不延迟」，但源码里 `AbstractServiceConfig` 的声明是：
 
@@ -88,7 +88,7 @@ protected Integer delay;         // 没有初始化，默认 null
 
 延迟暴露的典型用途：应用启动时有大量初始化任务（缓存预热、连接池建立），此时注册中心里服务已可见但实例还没准备好接流量。给 `delay=15000` 可以让 Provider 晚 15 秒再向注册中心注册。但注意：延迟暴露**不等于**延迟接流量后就有保护——真正防「冷实例被打爆」的是下面的预热权重。
 
-### 预热的完整链路
+### Complete Warmup Chain
 
 预热权重生效需要三个条件同时成立：
 
@@ -105,7 +105,7 @@ protected Integer delay;         // 没有初始化，默认 null
 | 6 分钟（360000ms） | 360000 / 6000 = 60 | 60 |
 | 10 分钟之后 | — | 100（满权重） |
 
-### 预热权重公式
+### Warmup Weight Formula
 
 服务启动预热通过负载均衡权重插值实现：`DEFAULT_WARMUP = 10 * 60 * 1000`，即 **600000ms / 10 分钟**（`dubbo-cluster/.../cluster/Constants.java:97-99`）。
 
@@ -122,9 +122,9 @@ static int calculateWarmupWeight(int uptime, int warmup, int weight) {
 > [!TIP]
 > 容器化场景（K8s HPA、频繁滚动发布）建议显式调小 `warmup`（如 `warmup=60000`），否则每次发布后的 10 分钟里新实例都在低权重运行，流量会被旧实例硬扛。
 
-## Mock（服务降级）
+## Mock (Service Degradation)
 
-### 配置入口与语义
+### Configuration Entry and Semantics
 
 Mock 的配置 key 就是 `"mock"`（`dubbo-rpc-api/.../rpc/Constants.java:24`），注解侧 `@DubboReference` 与 `@DubboService` 都有 `String mock() default ""`（`DubboReference.java:239`、`DubboService.java:228`）。前缀常量：`RETURN_PREFIX="return "`、`THROW_PREFIX="throw"`、`FAIL_PREFIX="fail:"`、`FORCE_PREFIX="force:"`（`Constants.java:31,33,35,37`）。
 
@@ -152,7 +152,7 @@ public Result invoke(Invocation invocation) throws RpcException {
 
 即两种模式：`force:` 是**无条件 mock**（熔断演练、彻底屏蔽），`fail:`（不带前缀的 `mock=` 等价 fail 语义）是**失败降级**，且只针对非业务异常。
 
-### mock 值的解析
+### mock Value Parsing
 
 真正产出降级结果的是 `MockInvoker.invoke`（:104-138）：
 
@@ -162,7 +162,7 @@ public Result invoke(Invocation invocation) throws RpcException {
 
 解析前 `normalizeMock` 会先剥离 `fail:`/`force:` 前缀，并把反引号 `` ` `` 替换为双引号（:233-265）——所以 `fail:throw` 里的异常参数想带字符串字面量时要用反引号。
 
-### 四种用法对照
+### Comparison of Four Usage Patterns
 
 | 写法 | 触发时机 | 效果 |
 |---|---|---|
@@ -171,7 +171,7 @@ public Result invoke(Invocation invocation) throws RpcException {
 | `mock = fail:throw java.lang.RuntimeException` | 非业务 RpcException 后 | 抛指定异常，让上层感知失败 |
 | `mock = com.xxx.MockImpl` | 非业务 RpcException 后 | 执行自定义降级逻辑（复杂降级） |
 
-### Mock 的整个触发链路
+### The Entire Trigger Chain of Mock
 
 把 `mock=` 放到调用链里看，它其实横跨三层：
 
@@ -193,8 +193,8 @@ Consumer 侧 Cluster 层
 再补两种常被问到的写法：
 
 ```yaml
-# mock=true：便捷写法，等价于 mock=接口全限定名 + "Mock"
 # 即要求工程里存在 org.apache.dubbo.demo.api.DemoServiceMock implements DemoService
+# Requires the Project to Have org.apache.dubbo.demo.api.DemoServiceMock implements DemoService
 mock: true
 
 # 全局默认降级值：consumer 侧 cluster 配置 mock 默认行为
@@ -205,7 +205,7 @@ dubbo:
 
 `mock=true` 与自定义 MockImpl 的区别只在于类名约定：前者按「接口名 + Mock」自动寻找实现类，后者在 `mock=` 里显式指定全限定类名，二者最终都落到 `MockInvoker` 的自定义类分支。
 
-### 与 MockInvokersSelector 的区别
+### Difference from MockInvokersSelector
 
 `mock=` 配置之外还有一个**独立的路由实现** `MockInvokersSelector`（扩展名 `mock`，走 legacy Router 链，保留原名未改名）。它依据 invocation attachment `invocation.need.mock`（`INVOCATION_NEED_MOCK`，`dubbo-cluster/.../cluster/Constants.java:80`）在 mock invoker 与 normal invoker 之间选择（`MockInvokersSelector.java:73-84`）——即「把调用定向到 MockProtocol 暴露的 invoker」的机制，与「调用失败后返回假数据」的 `mock=` 配置是两套东西，不要混为一谈。
 
@@ -244,14 +244,14 @@ OK
 
 `online`/`offline` 改变的是 Provider 在本进程内的暴露状态与注册中心里的地址可见性，进程不退出、JVM 不重启，是发布窗口手工摘流的最快手段。`metrics` 命令的输出默认是文本格式，配合 Prometheus exporter 模式（`dubbo.metrics.protocol=prometheus`）后可直接被 `prometheus.yml` 的 scrape 配置抓取。
 
-### 与启动时序的交互
+### Interaction with Startup Sequence
 
 `qos.check` 默认 `false`：QoS Server 启动失败（如端口被占）不会阻断应用启动。若把 QoS 当作运维强依赖（发布脚本依赖 offline/online），建议设 `qos.check=true`，让端口冲突尽早暴露。
 
 > [!WARNING]
 > `qos.accept.foreign.ip=false` 是默认的安全防线（仅本机可连）。一旦把它打开且 22222 端口暴露到公网/办公网，任何人都能 `offline` 你的服务——务必配合网络隔离。
 
-## 内置限流与并发控制
+## Built-in Rate Limiting and Concurrency Control
 
 dubbo-rpc-api 的 `META-INF/dubbo/internal/org.apache.dubbo.rpc.Filter` 中与限流相关的真实扩展名：
 
@@ -276,18 +276,18 @@ active-limit=org.apache.dubbo.rpc.filter.ActiveLimitFilter
 
 此外 `active-limit`（`ActiveLimitFilter`）作用于 Consumer 侧，控制单个客户端对同一方法的最大并发（`actives` 参数）。
 
-### ExecuteLimitFilter 的实现要点
+### ExecuteLimitFilter Implementation Notes
 
 `ExecuteLimitFilter` 的并发控制是一个按「方法级 URL 参数」划分的 `RpcStatus` 计数器：请求进入时 `beginCount`，若超过 `executes` 直接抛 `RpcException`；请求结束（无论成功失败）`endCount`。注意它是 **Provider 单实例维度**——三台机器各配 `executes=100`，集群总并发上限是 300 而不是 100，且没有任何跨实例协调。`ActiveLimitFilter` 同理是 Consumer 单实例维度。
 
-### TpsLimitFilter 的实现要点
+### TpsLimitFilter Implementation Notes
 
 `TpsLimitFilter` 用 `RateLimiter`（Dubbo 自实现的固定窗口计数）实现：`tps` 配置每秒允许的请求数，超限抛 `RpcException("Failed to invoke service ...")`。固定窗口的通病它都有——窗口边界处可能放过 2 倍突发流量。两个 Filter 都没有熔断（半开探测）、没有降级回调，失败就是直接抛异常给上层，因此「限流」而不「兜底」。
 
 > [!NOTE]
 > 这些内置能力都很「朴素」：单机维度、无平滑、无分布式配额，生产上的限流/熔断通常改用 Sentinel 集成（`dubbo-sentinel-support`），见 [Sentinel](/docs/CS/Framework/Sentinel/Sentinel.md)。
 
-## 各机制的协作时序
+## Collaboration Sequence of Each Mechanism
 
 这些治理机制不是孤立开关，把它们放到一次「发布 → 运行 → 故障 → 下线」的生命周期里看：
 
@@ -305,7 +305,7 @@ active-limit=org.apache.dubbo.rpc.filter.ActiveLimitFilter
 - **mock 与限流的先后**：Filter 链在 Cluster Invoker 之内，`TpsLimitFilter` 抛出的 `RpcException` 对 MockClusterInvoker 而言就是「非业务异常」——被限流的请求会**额外触发 fail-mock**。这意味着「限流 + mock」组合的降级路径是连通的，演练时要考虑到。
 - **优雅停机与 QoS 互为补充**：offline 是「注册中心层面摘流」，优雅停机是「进程层面的善后」，顺序执行才能保证在途请求平滑归零。
 
-## 默认值汇总
+## Default Value Summary
 
 | 配置 | 默认值 | 源码位置 |
 |---|---|---|
@@ -320,7 +320,7 @@ active-limit=org.apache.dubbo.rpc.filter.ActiveLimitFilter
 | `qos.accept.foreign.ip` | `false`（仅本机） | `QosProtocolWrapper.java:117` |
 | `executes` / `tps` / `actives` | 未配置则不启用对应 Filter | `dubbo-rpc-api` Filter SPI |
 
-## 陷阱清单
+## Pitfall List
 
 1. **优雅停机 key 记错不生效**：真实 key 是 `dubbo.service.shutdown.wait`（毫秒）；`shutdown.wait`、`dubbo.shutdown.wait` 均不存在；`...seconds` 结尾的旧 key 已 `@Deprecated` 且单位是秒——毫秒/秒混写会让等待时间差 1000 倍。
 2. **`getServerShutdownTimeout` 的 1ms 短路**：停机已超时（如 JVM 已被 SIGKILL 倒计时）时返回 1ms，不要误以为 1 是什么特殊配置值。

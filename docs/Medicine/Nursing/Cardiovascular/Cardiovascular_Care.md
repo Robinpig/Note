@@ -8,7 +8,7 @@
 >
 > 本页讨论**照护框架与判断逻辑**，不收录具体药物方案、剂量、器械参数、手术操作与抢救流程——须以最新指南与所在机构规范为准。
 
-## 为什么心血管护理需要独立成篇
+## Why Cardiovascular Nursing Needs Its Own Chapter
 
 它与[临床护理](/docs/Medicine/Nursing/Clinical_Nursing.md)中的内科护理有几处结构性差异，这些差异使通用框架不足以覆盖：
 
@@ -20,7 +20,7 @@
 
 **心与肾、肺、脑互相牵连**。心衰会损伤肾功能，肾功能反过来影响可用药物与利尿策略；心源性栓塞累及脑，心律失常影响脑灌注。**护理的观察视野必须跨器官**，这一特征与[老年护理](/docs/Medicine/Nursing/Gerontological_Nursing.md)中的多病共存相互强化。
 
-## 分支学科
+## Branch Disciplines
 
 <div class="kb-home">
 
@@ -28,7 +28,7 @@
 
 <div class="kb-card">
 
-### [冠心病与急性冠脉综合征](/docs/Medicine/Nursing/Cardiovascular/Coronary_Heart_Disease.md)
+### [Coronary Heart Disease and Acute Coronary Syndrome](/docs/Medicine/Nursing/Cardiovascular/Coronary_Heart_Disease.md)
 
 最常见的 ischemic 心脏病：稳定期的二级预防与急性期的时间敏感救治
 
@@ -36,7 +36,7 @@
 
 <div class="kb-card">
 
-### [心力衰竭](/docs/Medicine/Nursing/Cardiovascular/Heart_Failure.md)
+### [Heart Failure](/docs/Medicine/Nursing/Cardiovascular/Heart_Failure.md)
 
 从代偿到失代偿：分期管理、容量管理、每日体重与长期依从性
 
@@ -44,7 +44,7 @@
 
 <div class="kb-card">
 
-### [心律失常与起搏器护理](/docs/Medicine/Nursing/Cardiovascular/Arrhythmia.md)
+### [Arrhythmia and Pacemaker Care](/docs/Medicine/Nursing/Cardiovascular/Arrhythmia.md)
 
 房颤抗凝、心动过缓与起搏器、晕厥评估——最考验「尺度感」的一支
 
@@ -52,7 +52,7 @@
 
 <div class="kb-card">
 
-### [高血压与心血管危险因素](/docs/Medicine/Nursing/Cardiovascular/Hypertension.md)
+### [Hypertension and Cardiovascular Risk Factors](/docs/Medicine/Nursing/Cardiovascular/Hypertension.md)
 
 最「平庸」也最致命的一支：诊室外的血压、家庭测量与长期依从性
 
@@ -60,7 +60,7 @@
 
 <div class="kb-card">
 
-### [心脏瓣膜病与瓣膜置换术后](/docs/Medicine/Nursing/Cardiovascular/Valvular_Heart_Disease.md)
+### [Valvular Heart Disease and Post-Valve-Replacement Care](/docs/Medicine/Nursing/Cardiovascular/Valvular_Heart_Disease.md)
 
 机械瓣与生物瓣的抗凝要求截然不同，护理差异是刚性的
 
@@ -68,7 +68,7 @@
 
 <div class="kb-card">
 
-### [心肌病与心肌炎](/docs/Medicine/Nursing/Cardiovascular/Cardiomyopathy_Myocarditis.md)
+### [Cardiomyopathy and Myocarditis](/docs/Medicine/Nursing/Cardiovascular/Cardiomyopathy_Myocarditis.md)
 
 扩张型、限制型心肌病与心肌炎：心力衰竭的特殊病因学
 
@@ -76,7 +76,7 @@
 
 <div class="kb-card">
 
-### [心包疾病](/docs/Medicine/Nursing/Cardiovascular/Pericardial_Disease.md)
+### [Pericardial Disease](/docs/Medicine/Nursing/Cardiovascular/Pericardial_Disease.md)
 
 心包积液与缩窄性心包病：从体循环淤血认识心包受限
 
@@ -86,7 +86,7 @@
 
 </div>
 
-## 贯穿全部疾病的三条主线
+## Three Main Threads throughout All Diseases
 
 心血管疾病谱看似庞杂，但护理逻辑可归为三条主线，理解这三条就理解了全部分支：
 
@@ -98,7 +98,7 @@
 
 此外，[心脏瓣膜病与瓣膜置换术后](/docs/Medicine/Nursing/Cardiovascular/Valvular_Heart_Disease.md)横跨前两条主线：机械瓣需要终身抗凝（跨越第一与第三条），而瓣膜功能退化会直接改变容量管理策略。
 
-## 三重特殊能力要求
+## Three Special Competency Requirements
 
 把上述三条主线落到从业者身上，心血管护理对能力的要求可归为三重，它们共同构成这一专科的专业底座：
 

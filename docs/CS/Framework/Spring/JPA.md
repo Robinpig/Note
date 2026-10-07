@@ -17,9 +17,9 @@ Spring Data JPA, part of the larger Spring Data family, makes it easy to easily 
 
 本文讲 **JPA 侧**的内容（实体映射、持久化上下文、抓取策略、缓存、锁、审计）；Repository 抽象、派生查询、分页排序等通用能力见 [Spring Data](/docs/CS/Framework/Spring/Data.md)。
 
-## 实体映射
+## Entity Mapping
 
-### 常用注解
+### Common Annotations
 
 ```java
 @Entity                    // 声明为 JPA 实体（注意不是 @Entiry）
@@ -39,7 +39,7 @@ Spring Data JPA, part of the larger Spring Data family, makes it easy to easily 
 
 `@MappedSuperclass` 与 `@Embeddable` 常被混淆：前者是**继承**（子类各自建表，字段合并进去），后者是**组合**（值对象内联，可复用、可嵌套）。
 
-### 主键生成策略
+### Primary Key Generation Strategy
 
 | 策略 | 机制 | 适用 | 代价 |
 | :-- | :-- | :-- | :-- |
@@ -61,11 +61,11 @@ Spring Data JPA, part of the larger Spring Data family, makes it easy to easily 
 private Long id;
 ```
 
-## Repository 代理的创建
+## Repository Proxy Creation
 
 Spring Data Repository 是**接口**，没有实现类。容器里真正注册的是一个动态代理，启动时由 `@EnableJpaRepositories`（Boot 下自动配置）触发扫描与注册。
 
-### 注解驱动的装配
+### Annotation-Driven Wiring
 
 ```java
 @Configuration
@@ -150,7 +150,7 @@ public class JpaRepositoryConfigExtension extends RepositoryConfigurationExtensi
 }
 ```
 
-### 延迟初始化
+### Lazy Initialization
 
 注册进容器的是 `FactoryBean`，且目标对象是**惰性**创建的——非 `lazyInit` 时才在 `afterPropertiesSet` 里立即解析：
 
@@ -171,7 +171,7 @@ public class JpaRepositoryFactoryBean<T extends Repository<S, ID>, S, ID>
 }
 ```
 
-### 创建代理并织入拦截器
+### Create Proxy and Weave Interceptor
 
 ```java
 public abstract class RepositoryFactorySupport implements BeanClassLoaderAware, BeanFactoryAware {
@@ -237,7 +237,7 @@ public abstract class RepositoryFactorySupport implements BeanClassLoaderAware, 
 
 注意代理实现了 `TransactionalProxy` —— 这就是为什么 Repository 上的 `@Transactional` 能被 `TransactionInterceptor` 识别并在**代理层而非目标类**上生效。
 
-### 查询执行
+### Query Execution
 
 派生方法、字符串查询最终都落到 `QueryExecutorMethodInterceptor` 上分发：
 
@@ -283,9 +283,9 @@ class QueryExecutorMethodInterceptor implements MethodInterceptor {
 
 SQL 解析实现在 commons 包里。
 
-## 持久化上下文与实体状态
+## Persistence Context and Entity State
 
-### 四态与对应操作
+### Four States and Corresponding Operations
 
 | 状态 | 含义 | 进入方式 | 退出方式 |
 | :-- | :-- | :-- | :-- |
@@ -299,13 +299,13 @@ SQL 解析实现在 commons 包里。
 - **`merge()` 的返回值才是托管对象**。继续改传入的那个引用，改动不会落库，且不报错。
 - **`persist()` 传游离实体会抛 `PersistentObjectException`**（而不是静默忽略）。
 
-### 一级缓存与脏检查
+### First-Level Cache and Dirty Checking
 
 持久化上下文本身就是**一级缓存**：同一个 ID 在一次会话内只会得到一个 Java 对象（保证 `a == b`），并保存一份加载时的快照；flush 时逐字段比对快照，有差异才生成 `UPDATE`。
 
 它无法关闭，因此批量处理大批量数据时，会话会在内存中无界增长——要么周期性 `clear()`，要么改用 `StatelessSession`（Hibernate 7 起其能力已与 `Session` 基本对等，且能读写二级缓存）。
 
-### Hibernate 7 的 detached 收紧
+### Hibernate 7 detached Tightening
 
 旧代码里这些写法在 Hibernate 7 全部失效：
 
@@ -328,15 +328,15 @@ parent.addChild(detachedChild);            // Hibernate 7：flush 时抛 EntityE
 parent.addChild(session.merge(child));     // 正确
 ```
 
-## 关联抓取与 N+1
+## Eager Fetch and N+1
 
-### 默认抓取策略
+### Default Fetch Strategy
 
 关联注解自带的默认值是问题的根源：`@OneToOne` / `@ManyToOne` 默认 **EAGER**，`@OneToMany` / `@ManyToMany` 默认 **LAZY**。EAGER 是"永远无法关闭的隐式 join"，一旦实体被任何查询加载，关联的额外 SQL 就必然发出。
 
 经验是把所有关联显式声明为 `LAZY`，再按查询场景用 entity graph 逐个补加载。
 
-### 懒加载代理陷阱
+### Lazy-Loading Proxy Trap
 
 `@ManyToOne(fetch = LAZY)` 返回的是一个**代理对象**，字段要等首次访问时才去查库；如果此时持久化上下文已关闭，抛 `LazyInitializationException`。典型触发场景是"事务方法返回实体 → 序列化成 JSON 时访问懒字段"。
 
@@ -353,7 +353,7 @@ spring.jpa.open-in-view=false
 > [!WARNING]
 > `hibernate.enable_lazy_load_no_trans=true` 也能消除该异常，但它会在每次访问懒字段时临时开一个新会话，等于把 N+1 藏起来并让一致性失去保证，属反模式。
 
-### Entity Graph 与 join fetch
+### Entity Graph and join fetch
 
 N+1 的标准形态：1 条查主表 + N 条查关联。三种手段按推荐度排列：
 
@@ -384,9 +384,9 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 > [!TIP]
 > `@EntityGraph` 本质是把关联变成 join，与分页（`Pageable`）联用时会出现"内存分页"警告：join 出多行后无法在 SQL 层 `LIMIT`，Hibernate 只能全部载入后再切页。分页场景要么改用 `@BatchSize`，要么拆成"先查 ID 页、再按 ID 批量取关联"两查。
 
-## 缓存
+## Cache
 
-### 三层缓存对照
+### Three-Level Cache Comparison
 
 | 层级 | 作用域 | 是否默认开启 | 存什么 |
 | :-- | :-- | :-- | :-- |
@@ -396,7 +396,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
 关键认知：二级缓存**只按主键命中**。JPQL / 派生查询不会自动走二级缓存，除非叠加查询缓存。
 
-### 启用二级缓存
+### Enable Second-Level Cache
 
 Hibernate 6 起不再为各缓存厂商提供 `hibernate-ehcache` 这类适配模块，统一走 JSR-107（JCache）：
 
@@ -429,9 +429,9 @@ public class Product {
 > [!NOTE]
 > 二级缓存是**进程内**缓存，多实例部署时各节点互不知情，仍是可能读到旧数据。跨节点一致性要靠 Infinispan / Redis(Redisson) 这类分布式实现，或直接用 [Spring Cache](/docs/CS/Framework/Spring/Cache.md) 在业务层做——后者对失效时机的控制更直观。
 
-## 锁与并发
+## Lock and Concurrency
 
-### 乐观锁
+### Optimistic Lock
 
 `@Version` 字段让 Hibernate 在 `UPDATE` 时带上版本条件，命中 0 行即判定冲突：
 
@@ -454,7 +454,7 @@ UPDATE account SET balance = ?, version = version + 1 WHERE id = ? AND version =
 
 适用：冲突概率低、重试成本低的场景。高频争抢（如秒杀库存）用乐观锁会导致大量重试失败，应改悲观锁或把扣减下沉到数据库原子操作（`UPDATE ... SET stock = stock - 1 WHERE stock > 0`）。
 
-### 悲观锁
+### Pessimistic Lock
 
 在 Repository 方法上声明锁模式，Hibernate 会生成 `SELECT ... FOR UPDATE`：
 
@@ -477,7 +477,7 @@ Optional<Account> findByIdForUpdate(@Param("id") Long id);
 
 悲观锁必须包在真实事务里才有效——脱离事务执行的 `@Lock` 不会开启数据库锁。
 
-### 失败重试
+### Failure Retry
 
 乐观锁冲突重试要**重新读一遍数据**再重算，不能拿旧对象直接再 `save`，否则只是重复提交同一个版本。可靠做法是用 Spring Retry 在新事务里整体重放：
 
@@ -488,7 +488,7 @@ Optional<Account> findByIdForUpdate(@Param("id") Long id);
 public void transfer(...) { /* 重新读取 → 重新计算 → 更新 */ }
 ```
 
-## 审计
+## Auditing
 
 审计字段（创建/修改时间与操作人）不必手写，交给 `AuditingEntityListener`：
 

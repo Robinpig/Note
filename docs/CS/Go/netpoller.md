@@ -164,7 +164,7 @@ func (c *pollCache) free(pd *pollDesc) {
 
 因为不同 I/O 多路复用模块的实现大同小异，本节会使用 Linux 操作系统上的 epoll 实现；
 因为处理读事件和写事件的逻辑类似，本节会省略写事件相关的代码；
-### 初始化
+### Initialization
 
 因为文件 I/O、网络 I/O 以及计时器都依赖网络轮询器，所以 Go 语言会通过以下两条不同路径初始化网络轮询器：
 
@@ -268,7 +268,7 @@ func netpollopen(fd uintptr, pd *pollDesc) int32 {
 
 从全局的 epfd 中删除待监听的文件描述符可以使用 runtime.netpollclose 函数，因为该函数的实现与 runtime.netpollopen 比较相似，所以这里就不展开分析了。
 
-### 事件循环
+### Event Loop
 
 本节将继续介绍网络轮询器的核心逻辑，也就是事件循环。我们将从以下的两个部分介绍事件循环的实现原理：
 
@@ -302,7 +302,7 @@ func netpollblock(pd *pollDesc, mode int32, waitio bool) bool {
 
 runtime.netpollblock 是 Goroutine 等待 I/O 事件的关键函数，它会使用运行时提供的 runtime.gopark 让出当前线程，将 Goroutine 转换到休眠状态并等待运行时的唤醒。
 
-### 轮询等待
+### Polling Wait
 
 Go 语言的运行时会在调度或者系统监控中调用 runtime.netpoll 轮询网络，该函数的执行过程可以分成以下几个部分：
 
@@ -380,7 +380,7 @@ func netpollready(toRun *gList, pd *pollDesc, mode int32) {
 
 runtime.netpollunblock 会在读写事件发生时，将 runtime.pollDesc 中的读或者写信号量转换成 pdReady 并返回其中存储的 Goroutine；如果返回的 Goroutine 不会为空，那么该 Goroutine 就会被加入 toRun 列表，运行时会将列表中的全部 Goroutine 加入运行队列并等待调度器的调度。
 
-### 截止日期
+### Deadline
 
 网络轮询器和计时器的关系非常紧密，这不仅仅是因为网络轮询器负责计时器的唤醒，还因为文件和网络 I/O 的截止日期也由网络轮询器负责处理。截止日期在 I/O 操作中，尤其是网络调用中很关键，网络请求存在很高的不确定因素，我们需要设置一个截止日期保证程序的正常运行，这时就需要用到网络轮询器中的 runtime.poll_runtime_pollSetDeadline 函数：
 ```go

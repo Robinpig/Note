@@ -204,7 +204,7 @@ public class DispatcherHandler implements WebHandler, PreFlightRequestHandler, A
 
 
 
-## 两种编程模型
+## Two Programming Models
 
 `DispatcherHandler` 之所以能同时支持注解式控制器和函数式端点，是因为它把"请求 → 处理器"这一步完全委托给 `HandlerMapping` 链，而容器里可以同时存在多种实现，按 `@Order` 依次匹配：
 
@@ -225,7 +225,7 @@ public class DispatcherHandler implements WebHandler, PreFlightRequestHandler, A
 | 复杂前置处理 | 靠拦截器 / AOP | 直接用 `before` / `filter` 组合子 |
 | 适用场景 | 常规 REST API、团队熟悉 MVC | 小型服务、路由规则复杂、API 网关类场景 |
 
-## RouterFunction 函数式端点
+## RouterFunction Functional Endpoints
 
 路由用一个返回 `RouterFunction<ServerResponse>` 的 Bean 声明，谓词与处理器写在一起：
 
@@ -289,7 +289,7 @@ class PersonHandler {
 
 `ServerRequest` 侧的取值 API：`pathVariable` / `queryParam` / `headers()` / `bodyToMono` / `bodyToFlux` / `formData()` / `multipartData()` / `attribute()`。注意 `body` 只能被消费一次——这是响应式流的基本性质，多次订阅会报错。
 
-### 组合子：before / after / filter
+### Combinators: before / after / filter
 
 函数式的"拦截器"是组合子，直接写在路由上：
 
@@ -325,7 +325,7 @@ Mono<Person> person = client.get()
         .bodyToMono(Person.class);
 ```
 
-### retrieve 与 exchange
+### retrieve and exchange
 
 | 方法 | 语义 | 状态 |
 | :-- | :-- | :-- |
@@ -348,7 +348,7 @@ client.get().uri("/orders/{id}", id)
       });
 ```
 
-### 错误处理、超时与重试
+### Error Handling, Timeout and Retry
 
 ```java
 client.get().uri("/orders/{id}", id)
@@ -365,7 +365,7 @@ client.get().uri("/orders/{id}", id)
 
 `timeout` 只切断当前订阅，不会取消下游已发出的连接，写操作要慎用重试（非幂等接口重试可能造成重复）。
 
-### 连接层配置
+### Connection Layer Configuration
 
 超时、连接池、SSL 等属于 `HttpClient`（Reactor Netty）而非 `WebClient` 本身：
 
@@ -381,7 +381,7 @@ WebClient client = WebClient.builder()
 
 Boot 提供了预配置的 `WebClient.Builder` Bean，注入它即可继承编解码器、指标与观测配置。
 
-## 响应式异常处理
+## Reactive Exception Handling
 
 注解式控制器沿用 `@ExceptionHandler` / `@RestControllerAdvice`，只是返回值可以是 `Mono`：
 
@@ -413,7 +413,7 @@ route()
 
 未被任何 handler 处理的异常最终落到 `ErrorWebExceptionHandler`（默认实现 `DefaultErrorWebExceptionHandler`）——自定义全局兜底要实现这个接口，而不是 MVC 那套 `ErrorController`。
 
-## 上下文传播
+## Context Propagation
 
 响应式链上没有线程局部变量可用：请求中途会切换线程，`ThreadLocal` 里的 `SecurityContext`、MDC、观测上下文都会丢。替代机制是 Reactor 的 `Context`：
 

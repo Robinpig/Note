@@ -1,4 +1,4 @@
-# Istio 流量治理
+# Istio Traffic Management
 
 ## Introduction
 
@@ -6,7 +6,7 @@
 
 版本基线：**Istio 1.31.1**（2026-09-21 发布），官方支持 Kubernetes **1.32 ~ 1.36**。以下字段名、默认值与限制逐条核实自 `istio/api` 与 `istio/istio` 的 `release-1.31` 分支 proto/CRD 源码及 `pilot/` 下的翻译代码；官方未给出的一律标注「未查到」。
 
-## 治理能力的归属：两个 CRD 的分工
+## Attribution of Governance Capabilities: Division of Two CRDs
 
 | CRD | 回答的问题 | 典型字段 |
 | :-- | :-- | :-- |
@@ -15,9 +15,9 @@
 
 一句话记法：**`VirtualService` 决定「去哪个 subset、带什么条件」，`DestinationRule` 决定「这个 subset 内部怎么选实例、连不上怎么办」。**
 
-## 流量分割：金丝雀与 A/B
+## Traffic Splitting: Canary and A/B
 
-### `weight` 的真实语义是相对比例
+### `weight` Real Semantics is Relative Ratio
 
 ```yaml
 apiVersion: networking.istio.io/v1
@@ -62,7 +62,7 @@ spec:
 
 `weight: 0` 本身是合法的，proto 明确「will not receive any traffic」；但同样是多目标时会被丢弃。
 
-### 金丝雀 vs A/B：机制不同
+### Canary vs A/B: Different Mechanisms
 
 | 模式 | 机制 | 特征 |
 | :-- | :-- | :-- |
@@ -94,7 +94,7 @@ http:
 >
 > **cookie 路由官方也无示例**——cookie 本质是 header，用 `match[].headers.cookie.regex` 即可，但 concepts 页的 cookie 只出现在 `consistentHash` 说明里。
 
-### `match[].headers` 的三个细节
+### `match[].headers` Three Details
 
 `headers` 是 `map<string, StringMatch>`，**header 名直接作为 map key，没有 `name` 字段**：
 
@@ -113,9 +113,9 @@ match:
 
 `match` 与 `weight` **可以同时存在**且是标准用法——校验函数 `validateHTTPRouteMatchRequest` 与 `validateHTTPRouteDestinations` 相互独立，没有互斥规则。
 
-## 熔断与连接池
+## Circuit Breaking and Connection Pool
 
-### 1.31 没有迁移 CRD 路径
+### 1.31 No CRD Path Migration
 
 先澄清一个常见疑问：`TrafficPolicy` **仍是 `DestinationRule.spec.trafficPolicy` 的嵌套 message，不是独立 CRD**。1.31 的 CRD 清单里**不存在** `trafficpolicies` 资源。所谓「旧字段」`loadBalancer.simple` / `outlierDetection.*` / `connectionPool.tcp.maxConnections` **均未标记 deprecated**，全是现行字段。
 
@@ -133,7 +133,7 @@ trafficPolicy:
   retryBudget: {...}
 ```
 
-### connectionPool 默认值：几乎全是不限制
+### connectionPool Defaults: Almost All Unlimited
 
 | 字段 | 实际运行时默认 | 备注 |
 | :-- | :-- | :-- |
@@ -158,7 +158,7 @@ trafficPolicy:
 
 **`connectionPool.http.proxyProtocol` 不存在**——PROXY protocol 只在顶层 `trafficPolicy.proxyProtocol.version`（默认 `V1`）。
 
-### outlierDetection 的默认值与两个隐式联动
+### outlierDetection Defaults and Two Implicit Interactions
 
 | 字段 | 文档默认 | 实际行为 |
 | :-- | :-- | :-- |
@@ -186,7 +186,7 @@ trafficPolicy:
 
 `consecutiveErrors` 是 **`$hide_from_docs` + `deprecated`** 的旧字段。
 
-### 熔断在哪一侧执行：客户端侧
+### Where Circuit Breaking Executes: Client Side
 
 源码 `applyTrafficPolicy` 里，`applyOutlierDetection` 与 `applyLoadBalancer` 都被包在 `if opts.direction != model.TrafficDirectionInbound` 条件内，而 `applyConnectionPool` 在 if 之外（注释：*"Connection pool settings are applicable for both inbound and outbound clusters."*）。
 
@@ -202,9 +202,9 @@ trafficPolicy:
 > [!NOTE]
 > **1.31 起 Istio 默认把 unhealthy endpoint 也发到 EDS**（带健康状态标记，让 Envoy 自行按比例规避），**除非**你在 `DestinationRule` 里显式设了 `outlierDetection.minHealthPercent > 0`——只有那时 Istio 才在 EDS 层面过滤掉 unhealthy endpoint。可用 `PILOT_AUTO_SEND_UNHEALTHY_ENDPOINTS=false` 关闭。这是 1.31 对异常检测行为影响最大的一条变更。
 
-## 重试与超时
+## Retry and Timeout
 
-### `retries.attempts` 不含初始请求
+### `retries.attempts` Excludes Initial Request
 
 | 字段 | 默认值 | 说明 |
 | :-- | :-- | :-- |
@@ -230,7 +230,7 @@ Istio 有一个便利行为：`parseRetryOn` 会把逗号串里**能解析为合
 
 另有两个 1.31 运行时细节：`HostSelectionRetryMaxAttempts: 5`（无论 `attempts` 写多少，单 host 最多试 5 次才切下一个）；**一致性哈希场景下默认不带 `RetryHostPredicate`**（源码注释：*"When Consistent Hashing is enabled, we don't want to use other hosts during retries."*），即不会跳到其他 host。
 
-### `timeout` 与 `perTryTimeout`
+### `timeout` and `perTryTimeout`
 
 | | `timeout` | `perTryTimeout` |
 | :-- | :-- | :-- |
@@ -246,13 +246,13 @@ Envoy 对 timeout 的语义值得记住（避免超时/重试组合的指数爆�
 
 退避算法是**全抖动**（fully jittered）指数退避：base interval 25ms 时，第 1 次重试延迟在 0~24ms，第 2 次 0~74ms，第 3 次 0~174ms；上限是 base 的 10 倍（250ms）。
 
-### `retryHostPredicate` 不存在于 Istio API
+### `retryHostPredicate` Does Not Exist in Istio API
 
 1.31 CRD 中 `retryHostPredicate` 出现次数为 **0**。它是 Envoy 侧 `RetryPolicy.RetryHostPredicate` 的概念，Istio 通过 `retryIgnorePreviousHosts` 布尔开关**间接**控制（true → 填入 `RetryPreviousHosts` predicate；false → 置空）。
 
 `retryRemoteLocalities` 则是真实存在的 Istio 字段：设为 true 时下发 Envoy `RetryPriority: envoy.retry_priorities.previous_priorities`，实现「重试到其他 locality」。
 
-## 故障注入
+## Fault Injection
 
 字段名是 **`http[].fault`**——**`faultInjection` 从来不是合法字段**，写了会被 CRD schema 以 unknown field 拒绝。
 
@@ -287,7 +287,7 @@ http:
 
 必须有 `delay` 或 `abort` 或两者，否则报 `HTTP fault injection must have an abort and/or a delay`。两者**相互独立**，可同时指定。
 
-### 与超时重试的关系：是运行时行为，不是校验
+### Relationship with Timeout/Retry: Runtime Behavior, Not Validation
 
 官方原文：
 
@@ -298,7 +298,7 @@ http:
 >
 > **至于「为什么」未查到官方解释**——proto 注释、istio.io 参考页、fault-injection task 页、concepts 页均未给出原因，此处不做推测。
 
-## 流量镜像
+## Traffic Mirroring
 
 1.31 有**三套**镜像字段（不是两个）：
 
@@ -320,9 +320,9 @@ http:
 >
 > 另一个细节：`DISABLE_SHADOW_HOST_SUFFIX` 环境变量**默认为 `true`**，即 1.31 **默认关闭** `-shadow` 后缀追加（task 文档描述的是旧行为）。
 
-## 重定向与重写
+## Redirect and Rewrite
 
-### `redirect` 的 7 个字段
+### `redirect` 7 Fields
 
 | 字段 | 说明 |
 | :-- | :-- |
@@ -337,7 +337,7 @@ http:
 > [!WARNING]
 > `prefixRewrite` 在 change-notes 与 istio.io 参考页里写作 **`prefix_rewrite`**（snake_case），但 **CRD/proto 中实际是 `prefixRewrite`**（camelCase，CRD 全文 grep `prefix_rewrite` = 0）。Istio CRD 一律 camelCase。
 
-### `rewrite` 与 `RegexRewrite` 的真实字段名
+### `rewrite` and `RegexRewrite` Real Field Names
 
 `HTTPRewrite` 字段：`uri` / `authority` / `uriRegexRewrite`。
 
@@ -355,7 +355,7 @@ http:
 
 另有一个 1.31 行为：`rewrite.uri == "/"` 且 VS 处于 gateway semantics 时，会被翻译成正则 `^<prefix>(/?)(.*)` → `/\2` 以剥离前缀，而非普通 prefixRewrite。
 
-## 完整的互斥矩阵
+## Complete Mutual Exclusion Matrix
 
 源码 `validateHTTPRouteConflict` 的实际规则：
 
@@ -373,7 +373,7 @@ http:
 | `match` + `weight` | **合法**（标准用法） |
 | `fault` + `timeout`/`retries` | **webhook 不报错**，但运行时 timeout/retry 不生效 |
 
-## 限流：Istio 没有原生 API
+## Rate Limiting: Istio Has No Native API
 
 明确核实：**Istio 无论 1.31 还是此前都没有原生的限流 CRD**（社区项目 `istio-ratelimit-operator` 是自建的，非官方）。官方 rate limit task 页原文：
 
@@ -388,7 +388,7 @@ http:
 > [!WARNING]
 > **istio.io 全站未提及 Higress**。Higress 是基于 Istio 的独立网关产品，其 `extensions.higress.io/v1alpha1 WasmPlugin` 限流插件**不是 Istio 官方方案**——引用时必须说清这层区别。
 
-## 1.31 变更补遗
+## 1.31 Change Addendum
 
 除已知的 `zoneAwareLbSetting` / `defaultTrafficPolicy` / `ALLOW_ANY_DYNAMIC_DNS` 外：
 
@@ -417,7 +417,7 @@ http:
 > [!NOTE]
 > **1.31 change-notes 中没有** traffic splitting、circuit breaking/connectionPool 语义、fault injection、mirroring、local rate limit、timeout 的任何变更条目——这些领域是安静的，语义变化主要来自历史累积。
 
-## 已废弃 / 易混淆字段速查
+## Deprecated / Easily Confused Fields Quick Reference
 
 | 流传写法 | 正确写法 | 状态 |
 | :-- | :-- | :-- |
@@ -438,7 +438,7 @@ http:
 | 「不写 weight 默认 1.0」 | — | **不成立**，零值是 0 |
 | 「Istio 有原生限流 API」 | — | **不存在**，只有 EnvoyFilter + Envoy filter |
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 | 现象 | 先查 |
 | :-- | :-- |

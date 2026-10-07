@@ -2,7 +2,7 @@
 
 `io` 包定义了一组极简、可组合的 I/O 原语接口，是 Go 标准库的基石：`net/http`、`os.File`、`bytes.Buffer`、压缩 / 编码包全都围绕 `io.Reader` / `io.Writer` 构建。掌握这几个接口与它们的装饰器（adapter），就能以"流"的方式零拷贝地拼接任意数据源与目的地。
 
-## 核心接口
+## Core Interface
 
 ```go
 type Reader interface { Read(p []byte) (n int, err error) }
@@ -19,13 +19,13 @@ type Seeker interface { Seek(offset int64, whence int) (int64, error) }
 
 `io.EOF` 是哨兵错误，表示"流已到末尾"，**不是异常**——正常读取循环以它作为结束信号，不应当作错误去中断流程。
 
-## io.Copy 与全量读取
+## io.Copy and Full Read
 
 - `io.Copy(dst Writer, src Reader)` 内部循环 `Read` / `Write`，并对实现了 `io.ReaderFrom` / `io.WriterTo` 的类型走快捷路径（如 `*os.File`、`*bytes.Buffer` 可零拷贝搬运）。
 - `io.CopyBuffer` 允许传入复用缓冲区；`io.CopyN` 只搬前 N 字节。
 - `io.ReadAll(r)` 一次性读完整个流到 `[]byte`；`io.ReadFull` 精确读取指定长度。
 
-## 装饰器（无分配地组合流）
+## Decorator (Composing Streams Without Allocation)
 
 | 适配器 | 作用 |
 |--------|------|
@@ -39,7 +39,7 @@ type Seeker interface { Seek(offset int64, whence int) (int64, error) }
 
 这些适配器本身也是 `Reader` / `Writer`，可继续嵌套，无需中间分配。
 
-## 与 bytes.Buffer 的边界
+## Boundary with bytes.Buffer
 
 `bytes.Buffer` 同时实现 `Reader` 与 `Writer`，但**不是 `Closer`**（没有 `Close`，也不需要关闭）。需要"又读又写的内存缓冲"时用它；把它当作 `Reader` 耗尽后返回 `io.EOF` 而非阻塞。参见 Issues（#79 关闭实现 `io.Closer` 的资源）。
 

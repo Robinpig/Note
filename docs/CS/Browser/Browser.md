@@ -2,7 +2,7 @@
 
 浏览器是一个把 URL 变成可交互页面的**大型应用运行时**：它同时是 HTTP 客户端、HTML/CSS 解析器、JavaScript 解释器与 JIT、图形合成器、安全沙箱和多进程操作系统。理解浏览器的内部管线（导航→解析→布局→绘制→合成）是前端性能优化（LCP/INP/CLS）、网络协议演进（HTTP/2、HTTP/3）和安全策略（同源策略、沙箱）的共同基础。
 
-## 进程模型
+## Process Model
 
 现代浏览器（Chrome/Edge/Firefox）采用多进程架构：
 
@@ -13,7 +13,7 @@
 
 Site Isolation 让不同站点的渲染进程完全隔离，是防御 Spectre 类侧信道的关键；进程间通过 Mojo IPC（Chrome）通信，跨进程开销也是 iframe 性能成本的来源。
 
-## 导航与渲染管线
+## Navigation and Rendering Pipeline
 
 ```
 输入 URL
@@ -33,11 +33,11 @@ Site Isolation 让不同站点的渲染进程完全隔离，是防御 Spectre �
 - JS 是单线程事件循环（宏任务/微任务），与渲染共享主线程；长任务用 Web Worker 或拆分；
 - 关键渲染路径优化：CSS 尽早、JS 加 defer、preload/prefetch、代码分割。
 
-## JS 引擎与 V8
+## JS Engine and V8
 
 V8 的管线：解析器生成 AST → Ignition 解释器生成字节码直接执行 → 热点函数被 TurboFan 优化为机器码（去优化时可回退）。隐藏类（hidden class/shape）与内联缓存让动态类型也能高性能；对象频繁增删属性会退化隐藏类，创建对象保持构造顺序一致是经典建议。垃圾回收采用分代（新生代 Scavenge / 老生代 Mark-Sweep-Compact）。
 
-## 存储与缓存
+## Storage and Caching
 
 | 机制 | 生命周期/特点 |
 |------|--------------|
@@ -47,14 +47,14 @@ V8 的管线：解析器生成 AST → Ignition 解释器生成字节码直接�
 | IndexedDB | 异步事务型对象库，容量大，PWA 离线数据主力 |
 | Cache API + Service Worker | 可编程的请求缓存，支撑离线与弱网 |
 
-## 安全模型
+## Security Model
 
 - **同源策略（SOP）**：协议+域名+端口三者相同才允许直接读 DOM/发请求；跨域用 CORS（响应头授权）、postMessage（窗口间）、[WebSocket](/docs/CS/CN/WebSocket.md)（不受 CORS 限制但有 Origin 校验）；
 - **沙箱**：渲染进程在最小权限沙箱中运行，配合 site isolation；
 - **安全头**：CSP（限制脚本来源防 XSS）、HSTS（强制 HTTPS）、X-Frame-Options/frame-ancestors（防点击劫持）；
 - 证书与传输安全见 [TLS](/docs/CS/CN/TLS.md)，网络层攻击见 [Attack](/docs/CS/CN/Attack.md)。
 
-## 开发者工具与生态
+## Developer Tools and Ecosystem
 
 DevTools 的 Network（瀑布图/排队/TTFB/协议版本）、Performance（火焰图、布局抖动）、Memory（heap snapshot 排查泄漏）是核心排障入口；Lighthouse 给出性能/可访问性/最佳实践评分。桌面化方案 [Electron](/docs/CS/front-end/Electron.md) 就是把 Chromium + Node.js 打包；服务端渲染/边缘渲染则是把同一套渲染逻辑搬到服务器。
 

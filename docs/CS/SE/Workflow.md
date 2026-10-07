@@ -4,7 +4,7 @@
 
 核心概念：流程定义（Process Definition）→ 流程实例（Process Instance）→ 执行流（Execution，含分支 token）→ 用户任务（UserTask，产生待办 Task）/ 服务任务（ServiceTask，自动执行）→ 网关（排他 Exclusive `XOR`、并行 Parallel `AND`、包含 Inclusive `OR`）。
 
-## 典型使用场景与判断
+## Typical Use Cases and Decision Criteria
 
 值得上工作流引擎的信号：流程节点多且顺序常变、需要可视化配置与审批轨迹、有会签/加签/驳回/委派/超时升级、需要流程级别的事务与补偿。不值得的信号：只是简单的三态状态流转——此时用一个枚举 + 状态机（Spring StateMachine/Squirrel）更轻，引入引擎反而是过度设计。
 
@@ -23,7 +23,7 @@ Task task = taskService.createTaskQuery().taskAssignee(uid).singleResult();
 taskService.complete(task.getId(), Map.of("approved", true));        // 审批通过，自动走条件网关
 ```
 
-## 与相关概念的区分
+## Distinction from Related Concepts
 
 | 概念 | 职责 | 例子 |
 |------|------|------|

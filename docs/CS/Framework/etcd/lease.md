@@ -14,7 +14,7 @@ etcd 在启动的时候，创建 Lessor 模块的时候，它会启动两个常�
 > [!WARNING]
 > **归类更正**：上面后两个 API **不在 `Lessor` 接口里**。`Lessor` 接口（`server/lease/lessor.go`）只暴露 `Lookup`（查内存里的 `*Lease`）与 `Renew`（返回剩余 TTL）这类**进程内**操作；`LeaseTimeToLive` / `LeaseLeases` / `LeaseKeepAlive` / `LeaseGrant` / `LeaseRevoke` 都是 **`EtcdServer` 层**的方法（`server/etcdserver/v3_server.go`），gRPC 接入层在 `server/etcdserver/api/v3rpc/lease.go`。把「客户端 API」当成「Lessor 接口方法」去读源码会找不到。
 
-## 版本基线
+## Version Baseline
 
 | 项 | 值 |
 | :--- | :--- |
@@ -73,11 +73,11 @@ etcd Lessor 主循环每隔 500ms 执行一次撤销 Lease 检查（RevokeExpire
 > [!NOTE]
 > 3.7.2 把这套「leader 切换时怎么处置 lease」的历史逻辑显式化成了 `Lessor` 接口的两个方法：`Promote(extend time.Duration)`（成为 leader 时调用，`Promote` 会 refresh 所有 lease 到期并按需调度 checkpoint）与 `Demote()`（失去 leader 时调用）。调用点在 `server/etcdserver/server.go`——成为 leader 时 `Promote(s.Cfg.ElectionTimeout())`，失去 leader 时 `Demote()`。读 3.7 源码时不用再从 `runLoop` 里猜这段逻辑藏在哪。
 
-## 租约的只读查询与管理
+## Lease Read-Only Query and Management
 
 前面讲的是服务端生命周期（Grant / Revoke / KeepAlive / Checkpoint）。客户端还有一组**只读**查询 API——它们不修改任何状态、不改 TTL，只是读取 lease 的当前视图，统称 read-only lease 操作。这些方法定义在 `client/v3/lease.go` 的 `Lease` 接口上。
 
-### TimeToLive 与关联 key
+### TimeToLive and Associated Keys
 
 `Lease.TimeToLive(ctx, id, opts...)` 返回一个 lease 的剩余 TTL、初始 TTL，以及（可选）挂在该 lease 下的所有 key：
 
@@ -90,7 +90,7 @@ resp, _ := cli.TimeToLive(ctx, leaseID, clientv3.WithAttachedKeys())
 
 `WithAttachedKeys()` 对应 `LeaseTimeToLiveRequest.keys` 字段——etcdctl 里就是 `etcdctl lease timetolive <id> --keys`。这正是排查「哪个 lease 还挂着 key」的最快手段，[troubleshooting.md](/docs/CS/Framework/etcd/troubleshooting.md) 的 NOSPACE 排查常需要定位大 key 归属的 lease。
 
-### Leases 列出全部
+### List All Leases
 
 `Lease.Leases(ctx)` 返回集群里所有 lease 的 ID（不含 key 明细），用于巡检「有多少租约还活着」「哪个快到期」。etcdctl 对应 `etcdctl lease list`。
 
@@ -98,7 +98,7 @@ resp, _ := cli.TimeToLive(ctx, leaseID, clientv3.WithAttachedKeys())
 
 `Lease.KeepAliveOnce(ctx, id)` 只续期一次（不像 `KeepAlive` 起常驻流）。适用于「临时延长一下、但不想维护 keepalive 流」的场景；官方注释特意说明：即使 `KeepAlive` 的流因意外中断（`ErrKeepAliveHalted`），`KeepAliveOnce` 仍能正常工作。
 
-### checkpoint 配置（管理面）
+### Checkpoint Configuration (Control Plane)
 
 > [!WARNING]
 > checkpoint 的开关**不是** embed 启动配置，而是 3.6 起引入的 **feature gate**，通过 `--feature-gates` 传入。3.7.2 里两个 gate **都是 alpha 且默认 false**：
@@ -127,7 +127,7 @@ checkpoint 间隔由 `LeaseCheckpointInterval` 配置，默认 `defaultLeaseChec
 > [!NOTE]
 > 一条容易踩的版本陷阱：`LeaseCheckpointPersist` 的源码注释写着「v3.6 起默认启用，将在 v3.7 移除」，但 3.7.2 里它**既没被移除、也没默认启用**，仍是 alpha + 默认 false。注释描述的是计划不是现状，判断实际行为只能读默认值代码。
 
-### 3.7 的续期路径变化
+### 3.7 Renewal Path Changes
 
 3.7 新增的两个 feature gate 直接改写了 `LeaseRenew` 的行为：
 
@@ -138,11 +138,11 @@ checkpoint 间隔由 `LeaseCheckpointInterval` 配置，默认 `defaultLeaseChec
 
 `FastLeaseKeepAlive` 默认开启意味着 3.7 的续期延迟比 3.5/3.6 更低——做 lease 相关压测时这条差异会影响观测结果。
 
-### 与 naming 的配合
+### Cooperation with naming
 
 [naming.md](/docs/CS/Framework/etcd/naming.md) 里 endpoint 注册可以 `clientv3.WithLease(leaseID)`——把业务实例地址挂到一个 lease 上。实例进程挂了、lease 不再续期，endpoint 自动从 etcd 消失，消费方 Watch 到 Delete 摘掉实例。这里 lease 同时充当了「服务健康检查」：lease 活着 = 实例活着。
 
-## 陷阱清单
+## Pitfall List
 
 > [!WARNING]
 > 逐条对照 3.7.2 源码核实，都是「照旧文档写会出错」的点：

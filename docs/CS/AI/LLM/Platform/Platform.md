@@ -4,7 +4,7 @@ LLM 应用开发平台（也称 LLMOps / Agent 平台）指的是一类**可视�
 
 本笔记是这个谱系的枢纽：[Coze](/docs/CS/AI/LLM/Platform/Coze.md)、[Dify](/docs/CS/AI/LLM/Platform/Dify.md) 各有一篇专记，这里解决三件事——**平台到底是什么（和解决什么问题）、各家怎么横向选、自部署有哪些红线**。
 
-## 为什么需要平台层
+## Why a Platform Layer Is Needed
 
 把 [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) 的四个构成（Loop / Tools / Memory / Harness）套进平台看，对应关系很直接：
 
@@ -25,7 +25,7 @@ LLM 应用开发平台（也称 LLMOps / Agent 平台）指的是一类**可视�
 - **可观测与评测**：Trace、成本/延迟统计、会话日志、回归评测集；
 - **模型切换**：换模型、按场景配不同模型、灰度与降级。
 
-## 主流平台横向对比
+## Mainstream Platform Horizontal Comparison
 
 | 平台 | 主打场景 | 技术栈 / 形态 | 协议 | 备注 |
 |------|----------|---------------|------|------|
@@ -40,17 +40,17 @@ LLM 应用开发平台（也称 LLMOps / Agent 平台）指的是一类**可视�
 
 > 协议一栏只作快速印象，**商用（尤其多租户转售）前一律以官方 LICENSE 为准**——n8n、Dify、FastGPT 都有限制性条款，Flowise 不同版本条款也不一致。
 
-## 竞争格局：五类玩家
+## Competitive Landscape: Five Categories of Players
 
 Coze 和 Dify 只是其中一类。到 2026 年，"低代码 LLM 应用平台"这条赛道已经挤进了五种不同出身的玩家，它们相互抢的场景其实有限，更多是各占一条**选型走廊**。给产品盲目排"TOP10"意义不大，看清出身更有用。
 
-### 第一类：开源自建派
+### Category One: Open-Source Self-Built Faction
 
 即上一节表格里的 Dify、Coze 开源版、Langflow、Flowise、FastGPT、RAGFlow、AnythingLLM、n8n。
 
 **共性**：数据留在自己手里、许可费为零、可二开。**代价**：升级、备份、扩容、故障全都自己背；社区的"插件丰富"不等于"企业级稳定"。这条路的隐性门槛是运维能力，不是拖拉拽的能力。
 
-### 第二类：云厂商 / 大厂生态派
+### Category Two: Cloud Vendor / Big-Tech Ecosystem Faction
 
 它们的逻辑是**拿自家模型 + 云资源 + 办公入口做捆绑**，卖点是"顺手"而非"最强"。
 
@@ -69,13 +69,13 @@ Coze 和 Dify 只是其中一类。到 2026 年，"低代码 LLM 应用平台"�
 
 **选型真话**：这类平台的价值全部来自"你已经在这个生态里"——离开自家云与办公套件，优势迅速归零。它们也几乎都提供私有化版本，因为企业侧的数据出境与信创需求是真实存在的。IDC 口径下国内私有化智能体平台市场已有十几亿元规模，竞争焦点已从"能不能搭"后移到**评测、观测、安全治理、多 Agent 协同与迭代闭环**。
 
-### 第三类：自动化工具派（AI 只是其中一个节点）
+### Category Three: Automation Tool Faction (AI is just one node)
 
 n8n、Make、Zapier Agents、Gumloop、Relay.app、Lindy、Relevance AI、Voiceflow、Botpress。
 
 它们的底盘是**业务流程自动化**，AI 节点是后来加上去的。强项是触达外部系统（n8n 400+ 集成、Zapier 覆盖数千应用），弱项是 LLM 侧的原生能力——会话记忆、知识库精调、评测回归都比较薄。什么时候选：**业务的主体是一串跨系统动作，AI 只负责其中一两步**（如"客户邮件进来 → 模型分类提取 → 写回 CRM → 通知群"）。
 
-### 第四类：代码框架派（不是产品，是积木）
+### Category Four: Code Framework Faction (not a product, but building blocks)
 
 [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md)、CrewAI、OpenAI Agents SDK、Claude Agent SDK、[Pydantic AI](/docs/CS/AI/LLM/PydanticAI.md)。
 
@@ -85,7 +85,7 @@ n8n、Make、Zapier Agents、Gumloop、Relay.app、Lindy、Relevance AI、Voicef
 
 画布表达不了的东西在这里表达：多 Agent 监督/分工、自定义记忆、持久执行与断点恢复、逐节点超时。代价是你要自己承担编排、托管、观测、提示词版本管理和 on-call。它是"什么时候应该离开平台"那一节的答案（见下文）。
 
-### 第五类：模型厂商的一站式（往往最不稳的一类）
+### Category Five: Model Vendor One-Stop (often the least stable category)
 
 模型厂商也会下场做可视化搭建层。典型如 OpenAI **AgentKit**（Agents SDK + 可视化 Agent Builder + ChatKit 嵌入 UI + 评测与 Trace）。
 
@@ -93,7 +93,7 @@ n8n、Make、Zapier Agents、Gumloop、Relay.app、Lindy、Relevance AI、Voicef
 
 这件事比它看起来更重要，可以直接改写成一条选型原则：**可视化画布是厂商的"产品表面"，SDK、协议和数据模型才是能沉淀的东西。** 厂商的战略风向一变，画布是最先被砍的那一层；而把核心逻辑押在 [MCP](/docs/CS/AI/LLM/Protocol/MCP.md) 这类协议与自有代码上，迁移成本就可控得多——这也是 [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md) 强调"沉淀到自己的执行面"的现实依据。
 
-### 五类边界速览
+### Quick Look at Five Categories of Boundaries
 
 | 类型 | 强项 | 弱项 | 什么时候选 |
 |------|------|------|-----------|
@@ -103,7 +103,7 @@ n8n、Make、Zapier Agents、Gumloop、Relay.app、Lindy、Relevance AI、Voicef
 | 代码框架派 | 表达力上限最高，沉淀为自有资产 | 一切都得自己写 | 复杂状态机、长任务、必须先上审计再上线 |
 | 模型厂商一站式 | 与该厂商模型配合最顺、起步最快 | 画布层可能被砍，锁定单一模型生态 | 快速验证，或已完全绑定该厂商 |
 
-## 怎么选：一张决策树
+## How to Choose: A Decision Tree
 
 ```
 先判数据主权（一票否决）
@@ -133,7 +133,7 @@ n8n、Make、Zapier Agents、Gumloop、Relay.app、Lindy、Relevance AI、Voicef
 
 另有一条经验：**功能区对比几乎总是无效信息**——到了 2026 年，主流平台都有画布、都能接知识库、都能发 API。真正的差异都在不那么显眼的地方：观测能否归因到单步、成本能否解释给财务听、失败能否复盘、换人会不会失传。
 
-## 什么时候应该离开平台
+## When to Leave the Platform
 
 平台解决的是"大多数应用的共性部分"，它会在下面这些地方开始成为负担：
 
@@ -145,7 +145,7 @@ n8n、Make、Zapier Agents、Gumloop、Relay.app、Lindy、Relevance AI、Voicef
 
 常见折中路线：**用平台做前 80%（原型、知识库、灰度、给业务自助操作），把真正复杂的确定性部分写成服务，用 HTTP / MCP 节点接回画布。**
 
-## 自部署通用红线
+## General Red Lines for Self-Deployment
 
 不管选哪家，私有化部署都会撞上同一批问题：
 

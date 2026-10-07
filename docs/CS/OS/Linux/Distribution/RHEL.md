@@ -13,7 +13,7 @@ RHEL（Red Hat Enterprise Linux）是 Red Hat 系的**商业顶点**：Fedora �
 | 容器镜像 | **UBI 10**（`registry.access.redhat.com/ubi10/ubi-minimal`） |
 | 新增 | **image mode（bootc）**、**后量子密码**、Lightspeed CLI |
 
-## x86-64-v3：最容易被忽略的"静默升级门槛"
+## x86-64-v3: The Most Easily Overlooked "Silent Upgrade Threshold"
 
 RHEL 10 把硬件基线提到 **x86-64-v3**。这不是"支持更好"的意思，而是**一批老 CPU 被直接排除**。Intel 侧大致是 Haswell（2013）之后，AMD 侧是 Excavator（2015）与全部 Zen。
 
@@ -44,7 +44,7 @@ grep -q avx2 /proc/cpuinfo && echo "x86-64-v3 capable"
 
 无 AVX2 的机器**在 RHEL 9 到 2032 年退役** —— 与你机群里其他机器的更新计划无关。
 
-### 各发行版的基线对照
+### Baseline Comparison Across Distributions
 
 | 发行版 | 基线 |
 | :-- | :-- |
@@ -60,7 +60,7 @@ grep -q avx2 /proc/cpuinfo && echo "x86-64-v3 capable"
 1. **企业 Linux 是唯一果断上移的**；其余发行版要么保持基线，要么并行提供"优化变体"。
 2. **Debian/Ubuntu/Fedora 保持 v1** —— 老硬件继续能跑，代价是不用 AVX2/FMA。对寿命长于硬件刷新周期的设备（如 CERN 的加速器控制机），这个取舍是对的；对全新云实例则是一笔小税。
 
-### 虚拟机里更隐蔽
+### More Hidden in VMs
 
 VM 的虚拟 CPU **可以隐藏宿主支持的特性**。物理机支持 v3，VM 里未必 —— 这是"宿主明明支持却装不上"的常见原因。按环境排查：
 
@@ -73,7 +73,7 @@ VM 的虚拟 CPU **可以隐藏宿主支持的特性**。物理机支持 v3，VM
 
 **没有内核模块或 dnf 包能补上老 CPU 缺的指令** —— 那些指令在硅片上不存在。
 
-## 升级路径：不能跳级
+## Upgrade Path: No Skipping Versions
 
 原地升级走 **`leapp`**，且**一次只能跨一个大版本**：8.10 → 9 → 10。**从 RHEL 8 到 10 要走两次**。
 
@@ -81,7 +81,7 @@ VM 的虚拟 CPU **可以隐藏宿主支持的特性**。物理机支持 v3，VM
 
 在重建版里，**AlmaLinux 维护的 ELevate** 承担 leapp 的角色（用于跨大版本原地升级）。
 
-## el8 → el10 的移除项
+## Removed Items from el8 to el10
 
 跨两个大版本，移除的东西不少：
 
@@ -94,7 +94,7 @@ VM 的虚拟 CPU **可以隐藏宿主支持的特性**。物理机支持 v3，VM
 
 > AlmaLinux 10 **有意在几处分叉**，其中一处就是重新加回 32 位 i686 包 —— 它软化了上述移除项中的两条。
 
-## RHEL 10 的新增
+## RHEL 10 Additions
 
 | 特性 | 说明 |
 | :-- | :-- |
@@ -104,7 +104,7 @@ VM 的虚拟 CPU **可以隐藏宿主支持的特性**。物理机支持 v3，VM
 
 image mode 是最需要理解的架构变化：**它让"更新操作系统"变成"拉一个新容器镜像并切换引导"** —— 与 [btrfs 快照](/docs/CS/OS/Linux/fs/btrfs.md) 的 OSTree 原子升级（见 [Fedora Silverblue](/docs/CS/OS/Linux/Distribution/Fedora.md)）思路一致，但机制在 bootc 层面。
 
-## UBI 容器镜像
+## UBI Container Image
 
 容器用宿主内核，**所以 UBI 的意义是 glibc 与工具链**：
 
@@ -116,7 +116,7 @@ registry.access.redhat.com/ubi10/ubi-minimal-micro
 
 RHEL 10 与 UBI 10 同期发布（2025-06-01 前后）。**升级 UBI 10 时宿主内核不用动**，只有 glibc 变 —— 这对不能重启宿主内核的场景（K8s 节点）很关键。
 
-## 与其它子系统的接缝
+## Interfaces with Other Subsystems
 
 - **x86-64 基线与指令集**关系见 [发行版知识地图](/docs/CS/OS/Linux/Distribution/README.md) 的微架构级别对照表。
 - **SELinux** 是 RHEL 系默认强制的机制，见 [SELinux](/docs/CS/OS/Linux/SELinux.md)。
@@ -124,7 +124,7 @@ RHEL 10 与 UBI 10 同期发布（2025-06-01 前后）。**升级 UBI 10 时宿�
 - 内核 ABI 冻结与 DKMS 的关系见 [Kali](/docs/CS/OS/Linux/Distribution/Kali.md)（同源问题）。
 - **podman** 占用 `docker` 命令，bind mount 需 `:z`/`:Z`（SELinux 重打标签）。
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 ```shell
 # CPU 基线自检（权威方法）

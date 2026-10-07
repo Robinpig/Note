@@ -9,7 +9,7 @@
 
 两条主线之外，[Consensus](/docs/CS/Distributed/Consensus/Consensus.md) 一文先把「共识问题」本身形式化（Termination / Validity / Agreement 三性质）、讲清 FLP 不可能性，再串起 2PC、3PC、Quorum NWR 这些基础构件，是其余各篇的上游概念页。
 
-## 成员导航
+## Membership Navigation
 
 - [Consensus](/docs/CS/Distributed/Consensus/Consensus.md) — 共识问题的定义、FLP 不可能性、2PC/3PC、Quorum NWR，以及「许可 vs 无许可」「崩溃容错 vs 拜占庭容错」的模型分野。
 - [Paxos](/docs/CS/Distributed/Consensus/Paxos.md) — Lamport 的单值/多值共识家族，理论完备但工程上偏难理解，是后续一切的源头。
@@ -19,7 +19,7 @@
 - [PoS](/docs/CS/Distributed/Consensus/PoS.md) — 无许可共识（Proof of Stake），以质押资本替代烧电算力。
 - [dPoW](/docs/CS/Distributed/Consensus/dPoW.md) — 延迟工作量证明（Delayed Proof of Work），借 Bitcoin/Litecoin 算力为小链提供抗 51% 攻击的安全服务。
 
-## 关系轴
+## Relationship Axes
 
 共识算法共同服务于三类场景：**leader election**（单主复制里避免脑裂）、**atomic commit**（跨节点事务要么全提交要么全回滚）、以及 replicated state machine 的日志对齐。选算法时先问两个前提：成员集合是否固定可认证（许可 vs 无许可）？节点是否会作恶（崩溃容错 vs 拜占庭容错）？前者决定了要不要额外引入 Sybil 防御，后者决定了能不能直接用 Paxos/Raft。
 

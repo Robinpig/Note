@@ -37,7 +37,7 @@ Input Split -> [Map] -> (k,v) -> partition -> shuffle(网络传输) -> sort/merg
 - 输出先写**环形内存缓冲区**（`mapreduce.task.io.sort.mb`，默认 100MB），达到阈值（默认 80%）后**spill（溢写）**到本地磁盘，每次溢写产生一个有序小文件并可能运行 combiner/压缩。
 - Map 结束时把多个溢写文件 **merge** 成一个大的有序文件，等待 Reduce 拉取。
 
-### ReduceTask 与 Shuffle
+### ReduceTask and Shuffle
 
 - **Copy（fetch/pull）**：Reduce 主动去各 MapTask 节点**拉取（pull）**属于自己分区的数据（这点与 Flink 的上游 push 模型形成对比，见 [Flink Dataflow](/docs/CS/Framework/Flink/Dataflow.md)）。
 - **Merge/Sort**：把拉到的多个文件归并排序，按 key 分组。

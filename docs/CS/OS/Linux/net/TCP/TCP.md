@@ -909,7 +909,7 @@ static unsigned int tcp_model_timeout(struct sock *sk,
 
 同样受timeout限制
 
-### 与 v7.2.7 的差异
+### Differences from v7.2.7
 
 上面两段摘录来自旧版本，函数结构一致但有三处变化：
 
@@ -917,7 +917,7 @@ static unsigned int tcp_model_timeout(struct sock *sk,
 2. **SYN 重传新增线性退避**。`tcp_write_timeout()` 的 SYN 分支引入了 `sysctl_tcp_syn_linear_timeouts`：SYN_SENT 状态下前半段超时走**线性**退避而非指数退避（`net/ipv4/tcp_timer.c:677-685`），同时把这个值加到放弃阈值上。上面摘录里那句 `expired = icsk->icsk_retransmits >= retry_until` 现在比较的是 `max_retransmits`（含线性部分）。
 3. **新增两个钩子**：字段访问统一加了 `READ_ONCE()`（并发注解）；函数末尾新增 BPF 的 `BPF_SOCK_OPS_RTO_CB` 回调，以及 `timeout_rehash` 计数——RTO 会触发重选发送哈希（`__sk_rethink_txhash_reset_dst()`），试图绕过 ECMP 上的故障路径。
 
-### 重传时机的另一半
+### The Other Half of Retransmission Timing
 
 本节讲的是"RTO 到点之后怎么办"。但**这个超时值是怎么算出来的、以及内核靠什么在 RTO 之前就判出丢包**，是另外一半：RTT 怎么测（Jacobson 算法与 Karn 校正在 Linux 的两处落地）、SACK 计分板的六态状态机、RACK 的时间域判据、TLP 怎么处理尾包丢失，见 [Retransmission](/docs/CS/OS/Linux/net/TCP/Retransmission.md)。
 

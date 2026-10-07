@@ -4,7 +4,7 @@ Unix 最响亮的设计哲学是 **"一切皆文件"**：磁盘上的普通文�
 
 但承诺"一切皆文件"是要还的：一台机器上可能同时有 ext4 磁盘、FAT 的 U 盘、NFS 网络盘、proc 内核伪文件系统，它们在磁盘上存放数据的方式完全不同，凭什么能用同一套系统调用？Linux 的答案是在系统调用与具体实现之间加一层 **VFS（Virtual File System，虚拟文件系统）**。VFS 定义一套统一的对象与契约，让所有文件系统照着实现，内核其余部分只跟 VFS 打交道。本页是 `fs/` 目录的链路总图，沿因果顺序展开：先讲 VFS 的**四大对象**，再看文件系统如何**注册**与**挂载**成一棵树，应用如何沿这棵树**查找路径**、**打开**文件，以及读写如何经 **PageCache** 落到块设备。
 
-## VFS 的四大对象
+## VFS Four Major Objects
 
 要让五花八门的文件系统"看起来一样"，VFS 把"一个文件系统、一个文件、一个名字、一个打开实例"抽象成四个核心结构。它们在 6.12 `include/linux/fs.h`、`dcache.h` 中定义，字段与回调全部对照源码。
 
@@ -113,7 +113,7 @@ struct file {
 
 四者关系一句话：**super_block 含根 dentry，dentry 通过 `d_inode` 关联 inode，inode 经 `i_mapping` 接 PageCache，file 是 dentry + inode 被打开后的运行时实例**。
 
-## 注册一个文件系统
+## Registering a File System
 
 挂载之前，文件系统得先让内核"知道有我这一号"。每种文件系统定义一个 `file_system_type`（`include/linux/fs.h`），经 `register_filesystem` 挂进全局链表：
 
@@ -136,7 +136,7 @@ struct file_system_type {
 
 `name` 就是 `mount -t ext4` 里的类型名；`fs_supers` 收集该类型下所有已存在的超级块；`init_fs_context` / `mount` 负责在挂载时建立 super_block。文件系统可以内建进内核，也可像 [LKM](/docs/CS/OS/Linux/module/LKM.md) 那样作为模块按需加载。VFS 各对象的字段细节与初始化路径在 [fs](/docs/CS/OS/Linux/fs/fs.md) 中有完整源码摘录。
 
-## 挂载：拼出一棵全局目录树
+## Mount: Assembling a Global Directory Tree
 
 内核里有许多独立文件系统，用户却希望它们呈现为**一棵**从 `/` 开始的目录树——`mount`（挂载）就是把某文件系统的根"接"到现有树的某个目录（挂载点）上的动作。现代挂载经 **fs_context** 完成，它把"挂载参数 + 超级块 + 根 dentry"打包，取代了老式的一次性参数传递：
 
@@ -158,7 +158,7 @@ struct fs_context {
 
 > 进程的 `fs_struct` 记住它自己的根目录与当前工作目录（cwd），因此同一份挂载树在不同挂载命名空间里可以有不同视图——这正是容器文件隔离的基础，见 [namespace](/docs/CS/OS/Linux/namespace.md)。
 
-## 路径查找：把字符串变成 dentry
+## Path Lookup: Turning a String into a dentry
 
 挂载给出了一棵静态的树，但应用给 VFS 的是 `/home/robin/a.txt` 这样的**字符串**。把字符串解析成最终 dentry 的工作叫**路径查找（path lookup / namei）**，实现于 `fs/namei.c`。主干是逐分量行走：
 
@@ -170,13 +170,13 @@ struct fs_context {
 
 这套"先查内存缓存、未命中才下探到文件系统"的两级结构，与 [PageCache](/docs/CS/OS/Linux/mm/PageCache.md) "先查缓存、未命中才读盘"是同一种思想。它也解释了为什么内核要保留负 dentry：一次 `open` 一个不存在的文件，慢路径查过一次后，短时间内重复查找能直接在缓存里返回"不存在"。
 
-## 打开文件：open 与 fd
+## Opening a File: open and fd
 
 路径查到 dentry、确认其 inode 后，`open` 做的是建立**运行时实例**：分配一个 `struct file`，挂上 inode 的 `file_operations`、初始化读写偏移与打开标志、做权限与各种 flag（O_CREAT / O_TRUNC / O_APPEND）检查。随后内核在进程的 **`files_struct`**（打开文件表）里分配一个整数下标——这就是返回给用户态的 **文件描述符 fd**。
 
 之后所有 `read(fd)` / `write(fd)` 都经 fd 在 `files_struct` 里查出 file，再调 `file->f_op`。fd 0/1/2 默认是标准输入/输出/错误，fork 后子进程继承同一张打开文件表（可共享 file 与偏移），这些进程侧结构在 [fs 的 files_struct 章](/docs/CS/OS/Linux/fs/fs.md?id=files_struct) 与 [进程管理链路](/docs/CS/OS/Linux/proc/README.md) 中展开。
 
-## 读写：从 file 到 PageCache 再到块设备
+## Read/Write: From file to PageCache to Block Device
 
 拿到 file 后，数据如何流动？现代内核里普通文件读写几乎都先经过 **PageCache**，而不是直接读盘：
 
@@ -205,7 +205,7 @@ struct file_operations {
 
 bio 一旦提交，就离开 VFS 进入通用块层：合并、I/O 调度、blk-mq 派发到驱动——这条下行链路见 [块设备驱动](/docs/CS/OS/Linux/dev/block.md) 与 [IO](/docs/CS/OS/Linux/IO/IO.md)。内存紧张时 [Reclaim](/docs/CS/OS/Linux/mm/Reclaim.md) 还会反向要求文件系统先回写脏页才能回收缓存，VFS 与内存子系统由此紧密咬合。
 
-## 文件系统的几种归宿
+## Several Fates of a File System
 
 `fs/` 目录下的笔记按"数据真正存在哪"分成几类：
 
@@ -214,7 +214,7 @@ bio 一旦提交，就离开 VFS 进入通用块层：合并、I/O 调度、blk-
 - **联合文件系统**：自身不存数据，把多个目录叠成一棵树。[overlayfs](/docs/CS/OS/Linux/fs/overlayfs.md) 用"只读 lower 层 + 唯一可写 upper 层"实现写时复制，是容器镜像分层的基础。
 - **用户态文件系统**：实现跑在用户态，内核只做请求转发。[FUSE](/docs/CS/OS/Linux/fs/FUSE.md) 把每次 syscall 打包成消息送到 `/dev/fuse`，用能力位协商（批量大小、是否走 writeback 缓存）换取吞吐——SSHFS、s3fs、浏览器沙箱、容器存储驱动都建立在它之上；代价是每次 I/O 都有两次上下文切换与两次拷贝。
 
-## 文件管理与其它子系统的咬合
+## File Management and Its Interaction with Other Subsystems
 
 - **块设备**：磁盘文件系统建立在 [block](/docs/CS/OS/Linux/dev/block.md) 之上，super_block 持有 `s_bdev`，回写以 bio 为单位下发。
 - **内存**：文件内容缓存于 [PageCache](/docs/CS/OS/Linux/mm/PageCache.md)，脏页回写与 [Reclaim](/docs/CS/OS/Linux/mm/Reclaim.md) 联动。FUSE 的性能与正确性同样取决于页缓存模式（`FOPEN_DIRECT_IO` vs writeback）。

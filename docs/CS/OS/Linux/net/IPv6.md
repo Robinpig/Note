@@ -9,9 +9,9 @@
 
 本篇从内核视角讲 IPv6：报文与扩展头部、收发路径、独立的 IPv6 路由表，以及 NDP / SLAAC。协议基础可对照 [IP](/docs/CS/CN/IP.md)。
 
-## 报文与地址
+## Packets and Addresses
 
-### 基础头部
+### Basic Header
 
 ```c
 // include/uapi/linux/ipv6.h
@@ -38,7 +38,7 @@ struct ipv6hdr {
 
 常见扩展头：Hop-by-Hop(0)、Routing(43，如源路由 / SRv6)、Fragment(44)、ESP(50)/AH(51，IPsec)、Destination Options(60)。
 
-### 地址类型
+### Address Types
 
 | 类型 | 前缀 | 说明 |
 |---|---|---|
@@ -51,7 +51,7 @@ struct ipv6hdr {
 
 **没有广播地址**：IPv4 里的 ARP 广播、DHCP 广播在 IPv6 全部换成对应的组播组。
 
-## 接收路径
+## Receive Path
 
 IPv6 在 `inet_init` 之后由 `ipv6_module` 初始化，通过 `dev_add_pack` 注册以太网类型 `ETH_P_IPV6` 的接收入口 `ipv6_rcv`（位于 `net/ipv6/ip6_input.c`）。它和 IPv4 的 `ip_rcv` 平行：
 
@@ -94,7 +94,7 @@ int ipv6_rcv(struct sk_buff *skb, struct net_device *dev,
 
 netfilter 对 IPv6 有独立的 `NFPROTO_IPV6` 钩子集，挂载点与 IPv4 五钩子一一对应（[netfilter](/docs/CS/OS/Linux/net/netfilter.md) 中的 `NF_INET_*` 已对 v4/v6 共用）。
 
-## 发送路径
+## Send Path
 
 IPv6 的发送入口是 `ip6_xmit`（`net/ipv6/ip6_output.c`），由 TCPv6 / UDPv6 的发送函数调用：
 
@@ -115,7 +115,7 @@ tcp_v6_send_response / udp_v6_send_skb
 
 路由结果同样以 `dst_entry` 形式挂在 SKB 上（具体是 `rt6_info`），结构与 IPv4 的 `rtable` 对应。
 
-## IPv6 路由表 fib6
+## IPv6 Routing Table fib6
 
 IPv6 用一套独立于 IPv4 FIB 的路由实现（`net/ipv6/ip6_fib.c`），核心是 **fib6**：
 
@@ -125,7 +125,7 @@ IPv6 用一套独立于 IPv4 FIB 的路由实现（`net/ipv6/ip6_fib.c`），核
 
 用户态同样经 [netlink](/docs/CS/OS/Linux/net/netlink.md)（rtnetlink 的 AF_INET6 地址族）用 `ip -6 route` 管理。
 
-## NDP：邻居发现协议
+## NDP: Neighbor Discovery Protocol
 
 **NDP（neighbor discovery protocol）是 ICMPv6 的一组消息**，承担了 IPv4 里 ARP、ICMP 路由器发现、地址冲突检测等多项工作。它运行在链路本地地址之上：
 
@@ -139,11 +139,11 @@ IPv6 用一套独立于 IPv4 FIB 的路由实现（`net/ipv6/ip6_fib.c`），核
 
 解析下一跳 MAC 的过程与 ARP 同构，但复用了协议无关的**邻居子系统**：IPv6 注册自己的 `nd_tbl`（`neigh_table`），状态机仍是 NUD（[Neighbor](/docs/CS/OS/Linux/net/Neighbor.md)）。NS 不是发广播，而是发给目标地址对应的**请求节点组播地址（solicited-node multicast，`ff02::1:ff00:0/104` + 地址末 24 bit）**，这样每台主机只需监听极少的组播组。
 
-### DAD：重复地址检测
+### DAD: Duplicate Address Detection
 
 主机给接口配置地址前，先对该地址发 NS（源地址用未指定地址 `::`）：如果有人回 NA，说明地址已被占用，该地址不能启用。这是 IPv4 长期缺失、靠 gratuitous ARP 勉强实现的能力，在 IPv6 是启用地址前的强制步骤。
 
-## SLAAC：无状态自动配置
+## SLAAC: Stateless Auto-configuration
 
 **SLAAC（stateless address autoconfiguration）让主机不依赖 DHCP 即可获得全球地址**，实现即插即用：
 

@@ -17,17 +17,17 @@ openEuler 是**开放原子开源基金会**孵化的社区版 openEuler，由�
 
 **架构支持是它最突出的地方** —— 六种架构，含 RISC-V 与龙芯 LoongArch。Embedded 版本的 [Raspberry Pi OS](/docs/CS/OS/Linux/Distribution/Rasp.md) 也有 LLVM 构建镜像。
 
-## 内核增强特性（对内核笔记最有价值的部分）
+## Kernel Enhancement Features (The Most Valuable Part for Kernel Notes)
 
 ⚠️ 以下特性**是 openEuler 的内核增强，不是上游 Linux 6.6 原生具备的**。这正是理解它与本站各子系统关系的入口。
 
-### 调度器：Cluster 调度域
+### Scheduler: Cluster Scheduling Domain
 
 主流处理器硬件都已支持 **Cluster 架构**（同簇共享 L2 cache），但上游调度器仍以 core 为粒度。openEuler 的 **Cluster 调度域**让调度器感知簇结构，在这类处理器上提升调度效率。
 
 上游视角：调度域的层级（core → SMT → LLC/NUMA）与 `sched_domain` 的组织方式，见 [sche.md](/docs/CS/OS/Linux/proc/sche.md)。
 
-### 内存管理：动态软件 I/O TLB
+### Memory Management: Dynamic Software I/O TLB
 
 > 该特性可根据需要**动态调整 I/O TLB 大小**，提升嵌入式/终端等场景的访存效率。
 
@@ -35,7 +35,7 @@ openEuler 是**开放原子开源基金会**孵化的社区版 openEuler，由�
 
 对嵌入式与终端场景，小 TLB 省电但更易 miss；固定大 TLB 常驻内存又浪费。**动态调整是这两者的折中**。
 
-### 内存管理：内存动态复合页
+### Memory Management: Dynamic Composite Pages
 
 > 兼容 4K 页生态的同时具备大页的高性能。如匿名页、文件页可**自适应选择页面大小**，提升访存性能；ext4 等文件系统支持 **large folio**，批量化预留、映射文件块，**大 IO 写场景性能最大提升 2 倍**。
 
@@ -46,19 +46,19 @@ openEuler 是**开放原子开源基金会**孵化的社区版 openEuler，由�
 
 **"兼容 4K 页生态"是设计约束**：大页要 2 MiB 对齐，会浪费内存；自适应选择让系统在内存紧张的场景回退到 4K。
 
-### 内存管理：KSM 故障页恢复
+### Memory Management: KSM Fault Page Recovery
 
 > 支持 **KSM（Kernel Shared Memory）故障页的自动恢复**，延长系统可用时间。
 
 KSM 扫描多个进程的相同页面合并为一份以省内存（上游机制，见 [mm/README.md](/docs/CS/OS/Linux/mm/README.md) 的机制索引）。**问题在于 COW 引用被写坏后，那个页就废了** —— openEuler 增加了自动恢复。
 
-### cgroup：混部多优先级
+### cgroup: Mixed Deployment with Multiple Priorities
 
 > 允许 cgroup 支持**多个优先级**，按照 CPU 的使用比例进行资源的划分，并提供**唤醒抢占**能力，从而支持容器 QoS 细粒度隔离，降低业务间干扰，提升不同类型业务的**混部**能力。
 
 "混部"（mixed workload）是国内云厂商的核心诉求 —— 同一批物理机上既要跑延迟敏感的在线业务，又要跑批处理/CI 任务。上游 cgroup v2 的 `cpu.weight` / `cpu.uclamp` 是单优先级的（见 [cgroup 控制器接口](/docs/CS/OS/Linux/cgroup/controllers.md)），**多优先级 + 唤醒抢占是扩展**。
 
-### 调度：潮汐调度（CPU / 内存）
+### Scheduling: Tidal Scheduling (CPU / Memory)
 
 > **CPU 潮汐**：内核提供标准化接口，使能容器 CPU 资源弹性扩缩容。
 > **内存潮汐**：通过内核标准化的实现，使能业务容器数据（JAVA 堆内存）**在存储和内存间快速交换**，业务不感知。
@@ -67,7 +67,7 @@ KSM 扫描多个进程的相同页面合并为一份以省内存（上游机制�
 
 配套效果实测：内存潮汐使在线业务启动时间**降低 80%**；`iSulad` 容器运行时支持 CRI v1.29 / CDI / NRI 与 **cgroup v2**。
 
-### 文件系统与块层
+### File System and Block Layer
 
 | 特性 | 说明 |
 | :-- | :-- |
@@ -79,13 +79,13 @@ KSM 扫描多个进程的相同页面合并为一份以省内存（上游机制�
 
 **ubi 磨损均衡**这条值得关注：闪存寿命由擦写次数决定，**均衡磨损意味着把写入摊到所有块** —— 这是 SSD 的关键算法，也是 openEuler 在存储子系统的实质贡献。
 
-### 安全加固
+### Security Hardening
 
 > 针对内存分配，**堆混淆加固**方案，防护**堆喷**（heap spraying）攻击。
 
 堆喷是 2010 年代后被主流浏览器与内核都淘汰的攻击面（glibc 的 `ptmalloc` 曾长期受此困扰）。在发行版层面做堆混淆是对应用栈的加固。
 
-### 其他
+### Others
 
 - **oeAware**：微架构信息采集 + 性能动态优化，在 **ARM + Redis** 场景性能提升 **70%**；
 - **Gazelle**：用户态 UDP 协议栈，比内核态协议栈性能提升 **50%**（DPDK 思路的落地，见 [DPDK.md](/docs/CS/OS/Linux/IO/DPDK.md)）；
@@ -104,7 +104,7 @@ openEuler 24.03 LTS LTS 的定位口号，反映了国内发行版的普遍走�
 
 **AI for OS 的智能 shell** 值得留意 —— 它直接改写的是本站 [shell.md](/docs/CS/OS/Linux/Tools/shell.md) 描述的那层交互：命令补全与意图理解由模型接管，而不是传统的 shell 语法解析。24.03 LTS SP4 的智能诊断用"容器干扰检测 Agent + 已知问题分析 Agent"组合做全链路诊断。
 
-## 与其它子系统的接缝
+## Interfaces with Other Subsystems
 
 openEuler 的增强特性集中在本站这几个目录，引用时注意区分"上游原生"与"openEuler 增强"：
 
@@ -116,7 +116,7 @@ openEuler 的增强特性集中在本站这几个目录，引用时注意区分"
 - 用户态旁路 → [IO/DPDK.md](/docs/CS/OS/Linux/IO/DPDK.md)
 - 容器 → [Container](/docs/CS/Container/Container.md)
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 ```shell
 # 版本与内核

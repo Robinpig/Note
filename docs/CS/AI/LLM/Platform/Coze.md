@@ -7,7 +7,7 @@ Coze（中文名「扣子」）是字节跳动的一站式 AI Agent 开发平台
 
 它解决的是 [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) 从"想法"到"可运维服务"之间的那段工程距离：把模型、[工具与插件](/docs/CS/AI/LLM/Protocol/Tools.md)、[知识库（RAG）](/docs/CS/AI/RAG.md)、工作流、会话记忆、发布渠道和评测观测打包成一个可视化的产品，让业务工程师不必从零写编排代码。
 
-## Studio vs Loop：工作台与望远镜
+## Studio vs Loop: Workbench and Telescope
 
 这是理解 Coze 的第一件事——**两个开源项目，分工明确**：
 
@@ -22,7 +22,7 @@ Coze（中文名「扣子」）是字节跳动的一站式 AI Agent 开发平台
 
 一句话：**Studio 负责从 0 到 1 把 Agent 做出来，Loop 负责从 1 到 100 把它调稳、看好。** Studio 的社区热度（GitHub star 两万量级）远高于 Loop（五千量级），但后者恰好补足了多数可视化平台最缺的评测与观测。
 
-## Coze Studio 的能力模块
+## Capability Modules of Coze Studio
 
 | 模块 | 作用 |
 |------|------|
@@ -38,7 +38,7 @@ Coze（中文名「扣子」）是字节跳动的一站式 AI Agent 开发平台
 
 工作流画布是 Coze 的核心资产：它本质上是把 [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md) 里那套"模型决策 → 框架执行 → 结果回填"的循环，变成了可拖拽的显式数据流。相比写代码，它的代价是复杂的循环/递归逻辑表达受限，收益是业务同学也能读懂和修改。
 
-## 技术栈与部署
+## Tech Stack and Deployment
 
 - **后端**：Golang，微服务架构，遵循领域驱动设计（DDD），可二次开发；
 - **前端**：React + TypeScript；
@@ -50,15 +50,15 @@ Coze（中文名「扣子」）是字节跳动的一站式 AI Agent 开发平台
 git clone https://github.com/coze-dev/coze-studio.git
 cd coze-studio
 make web          # macOS/Linux；Windows 用 docker compose -f ./docker/docker-compose.yml up
-# 启动后访问 http://localhost:8888/sign 注册
 # 再到 http://localhost:8888/admin/#model-management 配置模型 API Key
+# Then configure the model API Key at http://localhost:8888/admin/#model-management
 ```
 
 模型要先用 YAML 模板配置（例如 `model_template_ark_doubao-*.yaml` 配置火山方舟模型 ID 与密钥），配好之后画布里才选得到模型——这一步几乎是所有自部署踩坑第一名。
 
 **开源版与云版的差异**要心里有数：开源版开放的是引擎骨架与核心能力（上述模块），云版的插件数量、模板、发布渠道与托管资源更丰富；开源版插件支持自行开发，但生态规模小于云端。
 
-## Coze Loop：让 Agent 不再是黑盒
+## Coze Loop: Making the Agent No Longer a Black Box
 
 Loop 覆盖上线前后的四个环节，正好对应 Agent 最容易"看不见"的部分：
 
@@ -69,7 +69,7 @@ Loop 覆盖上线前后的四个环节，正好对应 Agent 最容易"看不见"
 
 于是可以形成一条正经的工程闭环：**Studio 搭建 → Loop 调优和评测 → SDK 上报线上 Trace → 从观测结果反推 Studio 迭代**。这条闭环与 [Self-Evolving](/docs/CS/AI/LLM/Agent/Practice/Self-Evolving.md) 里"评测驱动的自进化循环"是同一套思路，只是 Coze 把它做成了平台能力。
 
-## 自部署的安全红线
+## Security Red Lines for Self-Deployment
 
 两个项目的 README 都明确提醒：部署到公网前必须先做安全评估。常见风险清单：
 
@@ -81,7 +81,7 @@ Loop 覆盖上线前后的四个环节，正好对应 Agent 最容易"看不见"
 
 一句话原则：**把 Coze 当一台有执行能力的应用服务器对待，而不是一个静态网站。**
 
-## 什么时候选 Coze
+## When to Choose Coze
 
 | 选 Coze 的信号 | 不选 Coze 的信号 |
 |----------------|------------------|

@@ -3,7 +3,7 @@
 The [Spring Framework](https://spring.io/projects/spring-framework) provides a comprehensive programming and configuration model for *modern Java-based enterprise applications* - on any kind of deployment platform. makes programming Java quicker, easier, and safer for everybody.
 Spring’s focus on speed, simplicity, and productivity has made it the world's most popular Java framework.
 
-## 版本基线
+## Version Baseline
 
 Spring 家族当前基线是 **Framework 7 / Boot 4** 这一代（Boot 4.0 于 2025-11 GA，4.1 于 2026-06 GA）。本目录所有笔记的 API、配置项与默认行为描述均以此为准：
 
@@ -35,7 +35,7 @@ Spring 家族当前基线是 **Framework 7 / Boot 4** 这一代（Boot 4.0 于 2
 - **`RestTemplate` 进入退场流程**：7.1 弃用、8.0 移除，新代码统一用 `RestClient`。
 - **`AntPathMatcher`** 在 HTTP 请求映射场景弃用，改用 `PathPattern`。
 - **不再支持 Undertow**（尚未兼容 Jakarta Servlet 6.1）。
-- **Actuator 的 `enabled` 换成 `access`**：`management.endpoint.<id>.enabled` 已移除，改用 `management.endpoint.<id>.access`（`none` / `read-only` / `unrestricted`）与 `management.endpoints.access.default`；自定义端点的写操作在只读配置下会返回 405 而非报错。详见 [Actuator](/docs/CS/Framework/Spring_Boot/actuator.md?id=端点访问模型)。
+- **Actuator 的 `enabled` 换成 `access`**：`management.endpoint.<id>.enabled` 已移除，改用 `management.endpoint.<id>.access`（`none` / `read-only` / `unrestricted`）与 `management.endpoints.access.default`；自定义端点的写操作在只读配置下会返回 405 而非报错。详见 [Actuator](/docs/CS/Framework/Spring_Boot/actuator.md?id=endpoint-access-model)。
 - **Actuator 健康检查包搬迁**：`Health` / `HealthIndicator` / `Status` 从 `org.springframework.boot.actuate.health` 迁到 `org.springframework.boot.health.contributor`。
 
 7.0 新增、值得单独一提的能力：JSpecify 空安全注解（取代 `org.springframework.lang` 下的 JSR-305 注解）、MVC 与 WebFlux 的 API 版本化、`spring-core` 内建的 Retry（`@Retryable` / `@ConcurrencyLimit`）、`@ImportHttpServices` HTTP 接口分组注册、`BeanRegistrar` 编程式 Bean 注册。
@@ -142,7 +142,7 @@ public interface RestTemplateRequestCustomizer<T extends ClientHttpRequest> {
 
 [Task Execution and Scheduling](/docs/CS/Framework/Spring/Task.md)
 
-#### 消息与集成
+#### Messages and Integration
 
 - [Spring AMQP](/docs/CS/Framework/Spring/AMQP.md)：RabbitMQ 的 Spring 侧整合。`RabbitTemplate` 发送、`@RabbitListener` 接收、`RabbitAdmin` 声明式拓扑。
 - [Spring Integration](/docs/CS/Framework/Spring/Integration.md)：企业集成模式（EIP）实现。用 Message / Channel / Endpoint 三件套把过滤、转换、路由、拆分、聚合编排成流水线，两端用适配器对接外部系统。

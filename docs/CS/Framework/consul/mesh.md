@@ -5,13 +5,13 @@
 > [!NOTE]
 > Consul 2.0.x 中服务网格是主力方向：Envoy 升级到 1.37.x（2.0.0 起），并引入 multi-port（命名端口）服务（Enterprise）、passive health check（outlier detection）等增强。
 
-## Sidecar 与 xDS
+## Sidecar and xDS
 
 - 每个服务实例旁运行 Envoy，通过 **gRPC xDS（8502）** 从 Consul 拉取监听器 / 集群 / 路由 / 端点配置；
 - 业务无需改代码：只要把出站流量指到本地 sidecar（透明代理 transparent proxy 模式下连改代码都不用）；
 - sidecar 自动从 Consul CA 获取并轮转证书，服务身份由 SPIFFE 风格的 `spiffe://<trust-domain>/ns/<ns>/svc/<svc>` URI 表示。
 
-## mTLS 与 Connect CA
+## mTLS and Connect CA
 
 Consul 内置 CA，自动为服务签发、轮转证书。CA provider 可插拔：
 
@@ -27,7 +27,7 @@ Consul 内置 CA，自动为服务签发、轮转证书。CA provider 可插拔�
 > [!TIP]
 > `primary_datacenter` 是 connect CA 的根——它持有根 CA，其他 DC 通过 CA 复制获得中间 CA。跨 DC 服务网格的 mTLS 信任链由此收敛到主 DC。
 
-## Intentions（意图）：服务间授权
+## Intentions: Inter-Service Authorization
 
 intentions 控制"哪个服务能调哪个服务"，**默认 deny**——未显式放行即拒绝：
 
@@ -38,7 +38,7 @@ intentions 控制"哪个服务能调哪个服务"，**默认 deny**——未显�
 > [!WARNING]
 > 2.0.4 起，给 Envoy 附加"可执行代码的 EnvoyExtension"或 proxy escape-hatch 键，需要同时具备 `mesh:write` 与 `service:write`（CVE 修复）。配置 ACL 时别漏 `mesh:write`。
 
-## 流量治理配置项（config entries）
+## Traffic Governance Config Items (config entries)
 
 服务网格的路由 / 切分 / 默认值由一组 config entry 声明：
 
@@ -53,11 +53,11 @@ intentions 控制"哪个服务能调哪个服务"，**默认 deny**——未显�
 
 这套能力与 Istio 的 VirtualService/DestinationRule 同源思路，但 Consul 的卖点是**同一套控制面同时管 VM 与 K8s 上的工作负载**（Istio 仅 K8s）。
 
-## 透明代理（Transparent Proxy）
+## Transparent Proxy
 
 开启后，服务出站流量被 iptables 重定向到本地 sidecar，应用**完全无感**即可获得 mTLS + 意图校验——这是 Consul 在"混合云（VM + K8s + 多云）"场景相对 Istio 的关键易用性优势。
 
-## 与 etcd / Nacos 对照
+## Comparison with etcd / Nacos
 
 | 维度 | Consul mesh | etcd | Nacos |
 | :--- | :--- | :--- | :--- |

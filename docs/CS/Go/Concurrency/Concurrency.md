@@ -35,7 +35,7 @@ channel 适合「转移数据所有权 / 编排工作流」，但并非所有同
 内存可见性的正式保证见 [Go Memory Model](https://go.dev/ref/mem)（happens-before 规则）。
 
 
-## 内存模型（happens-before）
+## Memory Model (happens-before)
 
 并发可见性的正式保证见 [Go 内存模型](/docs/CS/Go/Concurrency/MemoryModel.md)：它逐条定义了 goroutine 创建/退出、channel、Mutex、atomic、Once、init 各自提供的 happens-before 保证，以及 data race 的判定。atomic 的 Load/Store 自带 acquire/release 语义、channel 收发天然携带 happens-before，正是「通过通信共享内存」在可见性层面成立的根基——不要凭直觉假设并发读写安全，需要顺序保证就靠这些同步原语。
 

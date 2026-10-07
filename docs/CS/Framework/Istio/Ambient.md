@@ -1,4 +1,4 @@
-# Istio Ambient 模式
+# Istio Ambient Mode
 
 ## Introduction
 
@@ -8,7 +8,7 @@ Ambient 模式把「每 Pod 一个 sidecar」换成「**每节点一个 ztunnel 
 
 版本基线：**Istio 1.31.1**（2026-09-21 发布，1.31.0 于 2026-08-31），官方支持 Kubernetes **1.32 ~ 1.36**。本文所有命令、注解/标签名、默认值逐条核实自 istio 1.31.1 源码 tarball 与 `istio/api` 对应 commit（`d60a532be69a`）、istio.io 官方文档与 1.31 change-notes。
 
-## 三层数据面：mesh / waypoint / ztunnel
+## Three-Layer Data Plane: mesh / waypoint / ztunnel
 
 理解 ambient 的关键是分清三个角色：
 
@@ -27,9 +27,9 @@ Ambient 模式把「每 Pod 一个 sidecar」换成「**每节点一个 ztunnel 
 > [!TIP]
 > **省的是「代理数量」，不是「单实例开销」。** 官方性能数据：单个 sidecar 约 0.20 vCPU / 60 MB，单个 waypoint 约 **0.25 vCPU** / 60 MB，**waypoint 单实例比 sidecar 更贵**。N 个 sidecar 换成 1 个共享 waypoint 才省。
 
-## 安装
+## Installation
 
-### ambient 是一个真实存在的 profile
+### ambient is a Real Profile
 
 `manifests/profiles/ambient.yaml` 全文：
 
@@ -64,7 +64,7 @@ istioctl install --set profile=ambient --skip-confirmation
 >
 > 用 Gateway API 还需要先装 CRD：`kubectl apply --server-side -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.6.0/experimental-install.yaml`
 
-### 关键：`ISTIO_META_ENABLE_HBONE` 是 ambient 带来的
+### Key: `ISTIO_META_ENABLE_HBONE` Is Brought by ambient
 
 真正控制数据面行为的是 Helm values 层的 `manifests/helm-profiles/ambient.yaml`：
 
@@ -83,9 +83,9 @@ cni:
 
 `ISTIO_META_ENABLE_HBONE=true` 这条全局 proxyMetadata 默认值**是 ambient profile 独有的**，也是「必须用 ambient profile 安装」的硬理由之一（见「与 sidecar 互操作」小节）。
 
-## waypoint 部署实操
+## waypoint Deployment Practice
 
-### `istioctl waypoint` 只有 5 个子命令
+### `istioctl waypoint` Has Only 5 Subcommands
 
 | 子命令 | 用途 |
 | :-- | :-- |
@@ -148,7 +148,7 @@ istioctl waypoint delete --all -n default
 istioctl waypoint list -A
 ```
 
-### 7 个真正生效的标签/注解
+### 7 Actually Effective Labels/Annotations
 
 | 名称 | 种类 | 语义 | 可挂载 | 稳定性 |
 | :-- | :-- | :-- | :-- | :-- |
@@ -168,7 +168,7 @@ istioctl waypoint list -A
 >
 > **`istio.io/use-waypoint-weight` 也是错的**——1.31 change-notes 页把它写错了，源码常量是 `istio.io/use-waypoint-canary-weight`（announcing 博客页写的是对的）。**以源码为准。**
 
-### waypoint 选择逻辑
+### waypoint Selection Logic
 
 - **严格基于流量的原始目的地**（original destination），与最终解析到的 Pod 无关。若流量最初寻址 service 而该 service 未挂 waypoint，则**不经过 waypoint**，即便最终落到的 Pod 挂了 waypoint。
 - Pod 标签优先级高于 Namespace 标签；Service 上的 `use-waypoint` 会被同 ns 的 Namespace 同名标签覆盖（前提是该 waypoint 能处理 `service` 或 `all`）。
@@ -177,7 +177,7 @@ istioctl waypoint list -A
 > [!WARNING]
 > **挂 waypoint 标签不等于流量一定过 waypoint。** waypoint 不存在、无地址，或流量类型不匹配时，**ztunnel 会直接路由到目标而非失败**。若 L7 策略是安全要求，须用 ztunnel 执行的 L4 `AuthorizationPolicy` 只允许 waypoint 身份兜底。
 
-### 金丝雀 waypoint（Alpha）
+### Canary Waypoint (Alpha)
 
 1.31 新增，**客户端零改动**即可渐进发布 waypoint 配置变更：
 
@@ -196,7 +196,7 @@ metadata:
 - Namespace 级金丝雀仅对「同时继承该 ns primary waypoint」的 service 生效。
 - 整体特性状态为 **Alpha**。
 
-### ztunnel 部署形态
+### ztunnel Deployment Forms
 
 DaemonSet（`manifests/charts/ztunnel/templates/daemonset.yaml` 首个模板即 `kind: DaemonSet`），默认资源：
 
@@ -215,9 +215,9 @@ ztunnel 配置通过**环境变量**注入 DaemonSet：`CA_ADDRESS`、`XDS_ADDRE
 > [!WARNING]
 > **`istio-ztunnel-config` ConfigMap 在 1.31.1 中不存在。** 全仓库（`*.yaml`/`*.go`/`*.tpl`）搜索零命中，ztunnel chart 模板里没有任何 ConfigMap。若笔记或教程提到它，可以判定为过时信息。
 
-## L4 / L7 分级授权
+## L4 / L7 Tiered Authorization
 
-### ztunnel 侧支持的匹配维度（源码级）
+### ztunnel-side Supported Matching Dimensions (Source Level)
 
 ztunnel 的 `AuthorizationPolicy` 转换在 `pilot/pkg/serviceregistry/ambient/authorization.go` 的 `handleRule()`，逐字段映射。**实际只有这些**：
 
@@ -239,7 +239,7 @@ ztunnel 的 `AuthorizationPolicy` 转换在 `pilot/pkg/serviceregistry/ambient/a
 >
 > 1.31 新增的 `trustDomains` / `notTrustDomains` 在 `authorization.go` 中出现次数也是 **0**——既未映射也未列入 L7 不支持名单，因此**在 ztunnel 上被静默忽略**（不报错、不生效）。这是一个真实的静默失效陷阱。
 
-### L7 规则落到 ztunnel 时是 fail-safe 拒绝
+### L7 Rules Become Fail-Safe Rejections When Applied to ztunnel
 
 不是「静默不生效」，而是**更严格**：
 
@@ -263,7 +263,7 @@ be more restrictive than requested.
 
 还有一条范围规则：**有 `targetRefs` 的策略不由 ztunnel 处理**（源码注释「TargetRef is not intended for ztunnel」，直接 `return nil, nil`）；只有 `ALLOW` / `DENY` 两种 action 被支持，其他 action 返回 `ztunnel does not support the %s action`。
 
-### L7 策略通过 `targetRefs` 路由到 waypoint
+### L7 Policy Routing to Waypoint via `targetRefs`
 
 > [!NOTE]
 > **L7 策略靠 `targetRefs` 而非 `istio.io/waypoint-for` 挂到 waypoint。** 后者只管「本 waypoint 处理哪类目的地」，不参与策略路由。
@@ -308,7 +308,7 @@ spec:
 
 这里刻意用 `selector` 而非 `targetRef`，让 ztunnel 在 L4 执行——**waypoint 不可用时仍能阻断**。
 
-### waypoint 支持的资源与稳定性
+### waypoint Supported Resources and Stability
 
 | 资源 | 稳定性 | 挂接方式 |
 | :-- | :-- | :-- |
@@ -323,13 +323,13 @@ spec:
 
 `EnvoyFilter` 的原文措辞很强硬：*"not currently supported for any existing Istio version with waypoint proxies… its use is **not supported, and is actively discouraged by the maintainers**."*
 
-## mTLS 与 HBONE
+## mTLS and HBONE
 
-### ambient 默认是 PERMISSIVE
+### ambient Defaults to PERMISSIVE
 
 官方原文：「The default policy for ambient mode is `PERMISSIVE`, which allows pods to accept both mTLS-encrypted traffic (from within the mesh) and plain text traffic (from without).」
 
-### DISABLE 模式被忽略，无法关闭 mTLS
+### DISABLE Mode Ignored, Cannot Disable mTLS
 
 官方两处明示：
 
@@ -343,11 +343,11 @@ spec:
 
 源码印证 `PeerAuthentication` 在 ambient 下是被**转换**成 ztunnel L4 授权策略：`convertPeerAuthentication()` 把 STRICT 转成 `NotPrincipals: [Presence]` 的 DENY 规则（`staticStrictPolicyName = "istio_converted_static_strict"`），端口级例外 `portLevelMtls` 也被转成 `DestinationPorts` 规则。
 
-## 与 sidecar 互操作
+## Interoperability with sidecar
 
 **可以混用，且是官方支持的渐进迁移路径**——「ambient mesh」这个词的定义就是「以支持 ambient 的方式安装的网格，可以同时容纳两种数据面的 Pod」。
 
-### HBONE 信令的硬前提
+### Hard Prerequisites for HBONE Signaling
 
 sidecar 与 ambient Pod 之间东西向互通时，sidecar 知道要用 HBONE 协议——**但有前提**：
 
@@ -355,7 +355,7 @@ sidecar 与 ambient Pod 之间东西向互通时，sidecar 知道要用 HBONE �
 
 推论：若网格用**非 ambient profile** 安装后再手工混入 ambient，`ISTIO_META_ENABLE_HBONE` 不会自动为 true，sidecar→ambient 方向可能不通。
 
-### Pod 被判为 ambient 的三个条件
+### Three Conditions for a Pod to Be Classified as Ambient
 
 必须同时满足：**不在** `cni.values.excludeNamespaces` 排除列表；namespace 或 pod 有 `istio.io/dataplane-mode=ambient`；pod 无 `istio.io/dataplane-mode=none`；且 pod 上**不存在**注解 `sidecar.istio.io/status`。
 
@@ -366,7 +366,7 @@ sidecar 与 ambient Pod 之间东西向互通时，sidecar 知道要用 HBONE �
 >
 > 这与「双重代理冲突」不同——不是冲突，而是 **waypoint 被绕过**的语义问题。
 
-### 迁移硬阻塞（官方列出的 4 条）
+### Migration Hard Blockers (4 Listed Officially)
 
 1. **VM workload 不能加入 ambient**
 2. **不支持 SPIRE**
@@ -375,7 +375,7 @@ sidecar 与 ambient Pod 之间东西向互通时，sidecar 知道要用 HBONE �
 
 其他已知限制：存在 L7 策略时**无法零停机迁移**（存在策略不生效窗口）。
 
-## 网格边界与外部服务
+## Mesh Boundary and External Services
 
 ambient 下一个便利特性：**waypoint 天然充当 egress gateway**。官方原文「In ambient mode, a waypoint proxy naturally acts as an egress gateway. Ztunnel automatically routes traffic to a service's waypoint before forwarding it to the destination. If you place a `ServiceEntry` in a namespace enrolled to use a waypoint, all mesh traffic to that external host passes through the waypoint automatically, **with no extra routing rules required**.」（sidecar 模式需协调 5 个对象。）
 
@@ -384,8 +384,8 @@ ambient 下一个便利特性：**waypoint 天然充当 egress gateway**。官�
 #    istio.io/dataplane-mode=ambient
 # 2. 建 waypoint 并给 ns 打 use-waypoint
 istioctl waypoint apply --for service --enroll-namespace --namespace istio-egress
-# 3. 在该 ns 建 ServiceEntry（默认 exportTo: *，全网 ztunnel 都能解析）
 # 4. L7 策略用 targetRefs 指向 kind: ServiceEntry
+# 4. L7 Policy Uses targetRefs Pointing to kind: ServiceEntry
 # 5. TLS origination：ServiceEntry.targetPort: 443 + DestinationRule.tls.mode: SIMPLE
 ```
 
@@ -393,7 +393,7 @@ istioctl waypoint apply --for service --enroll-namespace --namespace istio-egres
 
 **网格外（非网格）Pod** 的流量不经源节点 ztunnel，直接到目的 Pod，由**目的侧 ztunnel**执行 L4 策略——所以 ambient ns 上设 `STRICT` 会拒绝来自网格外的流量。
 
-## Ingress 与 waypoint
+## Ingress and Waypoint
 
 **Ingress Gateway 本身不需要 waypoint。** ambient profile 默认反而**禁用**了 `istio-ingressgateway`，需要时自行启用。Ingress gateway 可以跑在非 ambient namespace，并暴露 ambient / sidecar / 非网格 Pod 的服务。
 
@@ -408,9 +408,9 @@ kubectl label service reviews istio.io/ingress-use-waypoint=true
 > [!NOTE]
 > ztunnel 的负载均衡是**内部固定的 L4 Round Robin，用户不可配置**，且**独立于 `VirtualService.TrafficPolicy`**。这是官方 troubleshoot 页明确列出的「代理行为不符合预期但无报错」的原因之一。
 
-## 排障
+## Troubleshooting
 
-### `istioctl ztunnel-config`（别名 `zc`）
+### `istioctl ztunnel-config` (Alias `zc`)
 
 > [!WARNING]
 > **主命令名是单数**（`service` / `policy` / `certificate`），复数形式是别名。这是很容易写错的地方。
@@ -427,7 +427,7 @@ kubectl label service reviews istio.io/ingress-use-waypoint=true
 
 常用 flag：`-o/--output`（默认 `summary`，可选 `json|yaml|short`）、`--proxy-admin-port`、`--node`、`-f/--file`、`--direction`（inbound/outbound）、`--raw`、`--service-namespace`、`--policy-namespace`、`--workload-namespace`、`--workload-node`、`--address`、`-r/--reset`、`--level`。
 
-### 官方排障命令
+### Official Troubleshooting Commands
 
 ```bash
 # 看 ztunnel 追踪到的 workload（含 WAYPOINT / PROTOCOL 列）
@@ -469,7 +469,7 @@ istioctl proxy-config all deploy/waypoint
 > [!WARNING]
 > **`istioctl x describe` 不支持 ambient。** 该命令实现在 `istioctl/pkg/describe/describe.go`，注册为 `istioctl experimental describe`，子命令只有 `pod` 与 `service`（标 `[kube-only]`），**全文搜索 `waypoint` / `ztunnel` 零命中**。ambient 排障必须用 `istioctl ztunnel-config`。
 
-### 常见故障模式
+### Common Fault Modes
 
 | 故障 | 判定 / 规避 |
 | :-- | :-- |
@@ -482,11 +482,11 @@ istioctl proxy-config all deploy/waypoint
 | IPv6 `network is unreachable` 告警 | 单栈 IPv4 集群上无 `spec.addresses` 的 Service 会拿到双 VIP，客户端偏好 IPv6 时先失败再回退；给 ztunnel 设 `IPV6_ENABLED=false`（**默认 `true`**） |
 | 代理行为不符预期但无报错 | ztunnel LB 是固定 L4 Round Robin，不可配置，独立于 `VirtualService` |
 
-### 可观测性差异
+### Observability Differences
 
 **只有 ztunnel 时仅有 4 个 L4 TCP 指标**：`istio_tcp_sent_bytes_total`、`istio_tcp_received_bytes_total`、`istio_tcp_connections_opened_total`、`istio_tcp_connections_closed_total`。**用 waypoint 才有完整 Istio/Envoy 指标集。**
 
-## 性能参考
+## Performance Reference
 
 官方数据（**注意版本标注为 Istio 1.24**，非 1.31；条件 1000 req/s、1 KB payload、2 worker threads）：
 
@@ -503,7 +503,7 @@ istioctl proxy-config all deploy/waypoint
 
 基准工具：fortio.org、nighthawk、isotope。
 
-## 1.31 变更全景
+## 1.31 Change Overview
 
 **控制面 / XDS**
 
@@ -540,7 +540,7 @@ istioctl proxy-config all deploy/waypoint
 
 **新增 flag**：`PILOT_ENABLE_STRICT_GATEWAY_MERGING`（默认 `true`，禁止跨 ns 合并 Istio Gateway CRD 与受管 Gateway API proxy）、`PILOT_ENABLE_REMOTE_CREDENTIALS_CONTROLLER`（默认 `true`）。**均非 ambient 专属。**
 
-## agentgateway 作为 waypoint
+## agentgateway as Waypoint
 
 **1.31 中需要特殊 enable，默认关闭。**
 
@@ -565,7 +565,7 @@ istioctl install --set profile=ambient \
 
 1.31 还修复了 agentgateway 连 sidecar 注入的 mesh backend 时用明文而非 Istio mTLS 的问题（影响 SMTP/MySQL 等 server-first 协议，`STRICT` backend 不可达）。
 
-## 稳定性状态一览
+## Stability Status Overview
 
 | 资源 / 名称 | 稳定性 |
 | :-- | :-- |
@@ -581,7 +581,7 @@ istioctl install --set profile=ambient \
 > [!NOTE]
 > `istio.io/dataplane-mode` / `istio.io/use-waypoint` / `istio.io/waypoint-for` 三个在 **API 源码中是 Stable**，而 istio.io add-workloads 页的 Label reference 表里分别标为 Beta / Beta / **Alpha**。**以 API 源码定义为准**并注明差异。
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 | 现象 | 先查 |
 | :-- | :-- |

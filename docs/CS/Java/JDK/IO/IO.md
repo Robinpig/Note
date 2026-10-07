@@ -269,7 +269,7 @@ Linux下由于没有这种异步 IO 技术，所以使用的是epoll 对异步 I
 在实际的大型互联网项目中，Java 原生的 API 应用并不广泛，取而代之的是一款第三方Java 框架，这就是 [Netty](/docs/CS/Framework/Netty/Netty.md)
 
 
-## 本目录导航
+## This Directory Navigation
 
 - 本页：BIO 流模型、`Socket` / `ServerSocket`、AIO 与文件 I/O
 - [NIO](/docs/CS/Java/JDK/IO/NIO.md)（Buffer / Channel / Selector）

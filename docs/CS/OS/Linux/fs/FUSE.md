@@ -8,9 +8,9 @@ FUSE（Filesystem in Userspace）让**文件系统实现跑在用户态**。内�
 
 版本基线 **v7.2**。⚠️ **v7.2 的代码组织与 API 已大改**，见文末的"v7.2 变化清单"——旧教程里的许多函数名已不存在。
 
-## 请求与响应
+## Request and Response
 
-### 消息头
+### Message Header
 
 ```c
 struct fuse_in_header {
@@ -33,7 +33,7 @@ struct fuse_out_header {
 
 `unique` 是请求的唯一标识，响应必须原样带回 —— 内核靠它匹配。这是**异步**设计的基石：用户态可以先处理请求 A 再回 A，不必按顺序。
 
-### INIT：握手中的能力协商
+### INIT: Capability Negotiation in the Handshake
 
 内核与用户态在挂载时交换能力位。**这是最重要的协商点** —— 用户态声明自己支持什么，内核据此调整行为。
 
@@ -110,7 +110,7 @@ struct fuse_out_header {
 
 **它就是允许 mmap** —— 旧版 `FOPEN_DIRECT_IO` 打开的文件不能共享 mmap，这个能力位放宽了该限制（uapi 注释里 "allow shared mmap in FOPEN_DIRECT_IO mode"）。
 
-### FOPEN：open 时返回的开关
+### FOPEN: The Switch Returned on open
 
 ```c
 #define FOPEN_DIRECT_IO		(1 << 0)   /* bypass page cache for this open file */
@@ -119,7 +119,7 @@ struct fuse_out_header {
 
 `FOPEN_DIRECT_IO` **让这个 fd 绕过页缓存**。注意 v7.2 里 **`fc->direct_io` 字段已不存在** —— DIRECT_IO 现在完全由 `fuse_file` 的 `open_flags` 承载，即**每个 fd 独立决定**（同一文件可以一个 fd 直写、一个 fd 走缓存）。
 
-## nodeid 与 inode 生命周期
+## nodeid and inode Lifecycle
 
 FUSE 里 inode 由**两套标识**：
 
@@ -128,7 +128,7 @@ FUSE 里 inode 由**两套标识**：
 
 关系是"多对一"：同一 nodeid 可以有多个用户态 inode 号（硬链接）。反过来，**用户态 inode 号唯一但 nodeid 可共享**。
 
-### nlookup 计数
+### nlookup Count
 
 ```c
 struct fuse_inode {
@@ -152,7 +152,7 @@ static inline u64 fuse_inode_to_nodeid(struct inode *inode) { return get_fuse_in
 
 `nlookup > 0` 是它"有效"的判据。
 
-## 文件操作路径
+## File Operation Path
 
 ```
 应用 read(fd)
@@ -169,7 +169,7 @@ static inline u64 fuse_inode_to_nodeid(struct inode *inode) { return get_fuse_in
 
 关键点：**内核在等待期间可以挂起进程**（异步 I/O），所以 FUSE 支持真正的 AIO。这条路径的实现分散在 `file.c`（读写）、`dir.c`（目录）、`control.c`（控制）、`xattr.c`、`ioctl.c`、`readdir.c`、`poll.c`、`notify.c`。
 
-## 页缓存与 writeback
+## Page Cache and writeback
 
 **这是 FUSE 性能与正确性的核心权衡。**
 
@@ -182,7 +182,7 @@ static inline u64 fuse_inode_to_nodeid(struct inode *inode) { return get_fuse_in
 
 `FUSE_MAX_PAGES` 决定了单次请求的最大页数，**是减少往返次数最直接的开关**。用户态没开这个位时，每次写只传 4 KiB —— 顺序写 1 GB 就是 26 万次往返，性能不可接受。
 
-## 挂载选项
+## Mount Options
 
 > ⚠️ **v7.2 用标准 `fs_parameter` API**（`fsparam_*`），**旧的 `FUSE_OPT` 宏已彻底移除**，`fs/fuse/options.c` **文件也不存在**（逻辑并入 `inode.c`）。`fuse_mount_opts` 结构改名为 **`struct fuse_fs_context`**。
 
@@ -217,7 +217,7 @@ static inline u64 fuse_inode_to_nodeid(struct inode *inode) { return get_fuse_in
 
 `user_id` / `group_id` 有**额外校验**（v7.2 新增的 idmapping 支持）：uid/gid 必须在挂载的 idmapping 中可表示，否则挂载失败。这是为了配合 user namespace 做的正确性检查。
 
-## CUSE：字符设备 in userspace
+## CUSE: Character Device in Userspace
 
 CUSE（Character device in Userspace）把 FUSE 的机制用于**字符设备**而非文件系统 —— 用户态收到的是 ioctl/read/write 请求，返回的是"数据"而不是"缓冲区"。
 
@@ -229,7 +229,7 @@ obj-$(CONFIG_CUSE) += cuse.o
 
 > ⚠️ **v7.2 的 CUSE 已重写**：`CUSE_IOC_*` ioctl、`cuse_lowlevel_setup()`、`cuse_send_ioctl()` 等旧 API **全部不存在**。`virtiofs`（`CONFIG_VIRTIO_FS`）是另一条更现代的路径 —— 通过 virtio 传输而不是 FUSE 协议。
 
-## v7.2 变化清单
+## v7.2 Change List
 
 写 FUSE 代码前必读。以下是 v7.2 相对旧资料的差异：
 
@@ -269,7 +269,7 @@ obj-$(CONFIG_CUSE) += cuse.o
 
 另外还有 `CONFIG_FUSE_DAX`（`dax.o`）与 `CONFIG_FUSE_IO_URING`（`dev_uring.o`）两个可选特性。
 
-## 与其它子系统的接缝
+## Interfaces with Other Subsystems
 
 - **VFS**：FUSE 实现了 file_operations 与 address_space_operations，所有路径都经它，见 [fs/fs.md](/docs/CS/OS/Linux/fs/fs.md)。
 - **页缓存**：`FUSE_DIRECT_IO` / writeback 模式直接决定页缓存行为，与 [mm/PageCache.md](/docs/CS/OS/Linux/mm/PageCache.md) 相关。
@@ -279,7 +279,7 @@ obj-$(CONFIG_CUSE) += cuse.o
 - **user namespace**：`FUSE_ALLOW_IDMAP` 与 `user_id=`/`group_id=` 的 idmapping 校验，见 [namespace](/docs/CS/OS/Linux/namespace.md)。
 - **容器**：Docker 的存储驱动、FUSE-overlayfs 都基于 FUSE。
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 ```shell
 # 连接信息

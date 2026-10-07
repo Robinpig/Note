@@ -42,7 +42,7 @@ future.whenComplete((result, ex) -> {
 
 `send()` 立即返回不代表已落盘。要拿到 `RecordMetadata` 必须处理返回的 future——**忽略返回值是生产端丢消息最典型的写法**（不报错，只是消息偶尔不见）。
 
-### 事务
+### Transactions
 
 Kafka 事务有两种粒度：
 
@@ -55,7 +55,7 @@ Kafka 事务有两种粒度：
 
 ## @KafkaListener
 
-### 方法签名
+### Method Signature
 
 框架按参数类型自动注入，常用组合：
 
@@ -88,7 +88,7 @@ void e(@Payload Order order,
        @Header(KafkaHeaders.RECEIVED_PARTITION) int partition) { }
 ```
 
-### 容器与并发
+### Container and Concurrency
 
 `@KafkaListener` 背后是 `ConcurrentKafkaListenerContainerFactory`，它创建 `ConcurrentMessageListenerContainer`，后者按 `concurrency` 起多个 `KafkaMessageListenerContainer`（每个一个 consumer 线程）：
 
@@ -125,7 +125,7 @@ protected void doStart() {
 
 反过来，并发度也不能只顾着往上调：**同一分区只会被一个线程消费**，因此"按 key 分区 + 单线程"就能拿到 per-key 顺序；一旦让同一 key 落到不同分区，顺序保证就没了。
 
-### 位点提交
+### Offset Commit
 
 容器的 `AckMode` 决定何时提交位点。前提：`enable.auto.commit` 自 2.3 起若无显式配置，框架**无条件设为 false**，由容器接管。
 
@@ -145,7 +145,7 @@ protected void doStart() {
 
 `Acknowledgment` 还提供了 `nack(long sleep)`（记录监听器）与 `nack(int index, long sleep)`（批量监听器）：提交前面的位点、把失败的及后续记录 seek 回去重投。`nack()` 只能在调用监听器的那个 consumer 线程上使用，用错监听器类型会抛 `IllegalStateException`；其 sleep 参数加上前一批的处理时间必须小于 `max.poll.interval.ms`，否则会被判定为消费超时而触发 rebalance。
 
-## 容器轮询主循环
+## Container Polling Main Loop
 
 每个 consumer 线程的核心循环如下，位点提交、seek、rebalance、暂停与恢复、空闲检测都集中在这里：
 
@@ -287,7 +287,7 @@ private RuntimeException doInvokeRecordListener(final ConsumerRecord<K, V> cReco
 
 ## Error Handling
 
-### 三类失败边界
+### Three Categories of Failure Boundaries
 
 排障的第一步是分清消息在哪一步失败，因为各阶段的处理机制完全不同：
 
@@ -340,7 +340,7 @@ DefaultErrorHandler errorHandler(KafkaTemplate<Object, Object> template) {
 - 批量监听器要精确指定失败位置，需抛 `BatchListenerFailedException` 并带上失败记录；否则整个批次重投。
 - 这就是**阻塞重试**：重试发生在同一个 consumer 线程上，期间该分区不再前进。
 
-### 阻塞与非阻塞重试
+### Blocking and Non-Blocking Retry
 
 `@RetryableTopic` 提供非阻塞重试：失败记录被转发到带延迟的重试 topic，主消费者继续前进。
 
@@ -374,7 +374,7 @@ public void onDlt(ConsumerRecord<String, Order> rec,
 
 最后：没有 `@DltHandler` 时框架照样创建并填充 DLT，只是**记录日志然后继续，应用里没有任何东西看过这条记录**。没人盯着的 DLT 是一个会一直涨到磁盘告警的队列。
 
-### 实践清单
+### Practice Checklist
 
 按投入产出排序：
 
@@ -414,7 +414,7 @@ public void processImage(String imageUrl) {
 }
 ```
 
-### 三种确认动作
+### Three Confirmation Actions
 
 这是与 RabbitMQ 差异最大、最容易踩的地方：
 
@@ -444,7 +444,7 @@ public void processPayment(PaymentEvent event, ShareAcknowledgment ack) {
 
 三种确认模式：`EXPLICIT`（默认，容器代管）、`MANUAL`（监听器自行确认，且上一次 poll 的记录全部确认前会阻塞后续 poll）、`IMPLICIT`（broker 无条件接受，不关心处理结果）。
 
-### 约束与并发语义
+### Constraints and Concurrency Semantics
 
 Share Consumer **不支持**：显式分区分配（`TopicPartitionOffset`）、topic 模式订阅、手动位点管理。
 
@@ -457,7 +457,7 @@ Share Consumer **不支持**：显式分区分配（`TopicPartitionOffset`）、
 
 **何时不用**：需要严格顺序（交易流水、会话事件）、有状态流处理与聚合、Kafka Streams 或依赖分区本地状态的场景，都应继续用传统消费者。Share Group 是补充而非替代。
 
-## 序列化与类型转换
+## Serialization and Type Conversion
 
 序列化（Kafka 层的 `Serializer` / `Deserializer`）与 Spring 消息转换（`MessageConverter`）是**两个独立阶段**，把它们各自的输入输出类型配错是 JSON 类故障的常见成因。
 

@@ -37,7 +37,7 @@ pip install notebook
 
 启动：`jupyter lab` 或 `jupyter notebook`。工作目录与配置键（`c.ServerApp.root_dir`）见 [conda](/docs/CS/Python/conda.md)；两个前端选哪个：新项目用 JupyterLab（多标签、可调面板、扩展体系），只需要"传统线性 notebook"时 classic 更轻。
 
-## 与本地环境的关系
+## Relationship with the Local Environment
 
 `jupyter lab` 用的 Python 解释器决定"`import` 得到哪些包"：在 conda 环境里 `pip install jupyterlab` 装的那份，看到的就是那个环境的包；base 里启动的 Jupyter 看不见项目环境的包。多环境正解是给每个环境装 `ipykernel` 后注册内核，从一个前端切换：
 
@@ -49,7 +49,7 @@ jupyter kernelspec list          # 查看已注册内核
 
 比"每个环境各装一套 JupyterLab"更省心，也不会出现同名内核指向错解释器。
 
-## ARM Mac 与 GPU
+## ARM Mac and GPU
 
 `pip install torch` 在 Apple Silicon 上装的是 MPS 后端版本，**不支持 CUDA**；AMD 显卡同样不支持 CUDA（ROCm 路线在 macOS 上不可用）。入门教程里的 `device = "cuda"` 片段在这两类机器上要改成 `mps`（Apple）或 `cpu`，且不少算子在 MPS 上仍未实现，回退到 CPU 时报错信息往往指向算子而不是设备。
 
@@ -96,7 +96,7 @@ print("Predictions", pred_species)
 
 值得记住的不是 API，而是 `train_test_split(..., random_state=1)`：不固定种子时同一份代码两次跑出的准确率不同，任何"我改了个特征所以变好了"的结论都不可信。多分类场景还应加 `stratify=y`，否则小类别可能在测试集里缺席。
 
-## Notebook 作为文档
+## Notebooks as Documentation
 
 嵌入 Markdown：iPython 创建好 .ipynb 文件后，在 markdown 使用 `<iframe>` 标签，就可以将完成嵌入（docsify 站点里同理，见本仓库 `index.html` 的 remote-markdown 处理）。
 

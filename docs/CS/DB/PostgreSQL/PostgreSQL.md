@@ -26,7 +26,7 @@ docker run -d --name postgres \
 
 默认账号 `postgres`，默认数据库 `postgres`，默认端口 `5432`。
 
-### 包管理器
+### Package Manager
 
 ```bash
 # Debian/Ubuntu
@@ -38,7 +38,7 @@ sudo postgresql-setup --initdb
 sudo systemctl enable postgresql --now
 ```
 
-### 源码编译
+### Source Compilation
 
 源码编译可指定 segment size、block size、WAL block size 等底层参数，方便定制化。
 
@@ -119,7 +119,7 @@ systemctl enable postgresql --now
 | Logical replication launcher | 逻辑复制 worker 派生器 |
 | Archiver | WAL 归档 |
 
-### 共享内存
+### Shared Memory
 
 - **shared_buffers**：缓存表与索引的数据页，PG 推荐设为系统内存的 25%
 - **WAL buffers**：WAL 日志的环形缓冲
@@ -127,7 +127,7 @@ systemctl enable postgresql --now
 - **lock space**：锁管理器内存
 - **predicate locks**：可串行化隔离级别的谓词锁
 
-### 数据目录结构
+### Data Directory Structure
 
 ```
 $PGDATA/
@@ -151,7 +151,7 @@ $PGDATA/
 
 ## Storage
 
-### Heap / Page 布局
+### Heap / Page Layout
 
 默认存储引擎（Heap）的页面默认大小为 8 KB（编译期可通过 `--with-blocksize` 调整到 1/2/4/8/16/32 KB）。
 
@@ -247,7 +247,7 @@ PG 默认隔离级别为 **Read Committed**，可通过语句或参数切换为 
 | Repeatable Read | 事务级快照 |
 | Serializable | 基于 SSI（Serializable Snapshot Isolation） |
 
-### 子事务
+### Subtransaction
 
 > **存储引擎只有 redolog 没有 undo log**——子事务的实现是通过分配一个新的事务 ID；
 > 子事务还可以继续创建子事务，构成一个树状结构。
@@ -300,7 +300,7 @@ CREATE INDEX idx_orders_attrs_gin ON orders USING GIN (attrs jsonb_path_ops);
 
 ## SQL
 
-### psql 常用命令
+### psql Common Commands
 
 ```sql
 \l              -- 列出数据库
@@ -334,7 +334,7 @@ SELECT * FROM orders WHERE tenant_id = $1 AND created_at > now() - interval '1 d
 
 ## Replication
 
-### 物理流复制
+### Physical Streaming Replication
 
 主备：`primary` 通过 WAL 流式复制把 WAL 推到 `standby`，备库持续 apply。备库可配：
 
@@ -360,7 +360,7 @@ synchronous_standby_names = 'FIRST 1 (s1, s2)'  # 至少 1 个同步备
 synchronous_commit = on
 ```
 
-### 逻辑复制
+### Logical Replication
 
 ```ini
 wal_level = logical
@@ -460,7 +460,7 @@ log_temp_files = 0
 - 内建覆盖索引（covering）机制
 - 无 free space map，依靠 undo 列表管理空间
 
-### 其他存储/分发扩展
+### Other Storage/Distribution Extensions
 
 - [Citus](https://www.citusdata.com/)：分布式 / 多租户分片
 - [TimescaleDB](https://www.timescale.com/)：时序优化

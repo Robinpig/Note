@@ -190,11 +190,11 @@ Docker 底层技术主要包括 Namespaces、Cgroups 和 rootfs，三者都是�
 
 | 机制 | 作用 | 内核笔记 |
 | :-- | :-- | :-- |
-| Namespace | 访问隔离：PID/NET/MNT/IPC/UTS/USER 等视图隔离 | [namespace](/docs/CS/OS/Linux/namespace.md?id=容器如何使用-namespace) |
-| Cgroups | 资源限额：CPU/MEM/IO 配额与记账 | [cgroup](/docs/CS/OS/Linux/cgroup.md?id=cpu-限制如何落到调度器) |
+| Namespace | 访问隔离：PID/NET/MNT/IPC/UTS/USER 等视图隔离 | [namespace](/docs/CS/OS/Linux/namespace.md?id=how-containers-use-namespace) |
+| Cgroups | 资源限额：CPU/MEM/IO 配额与记账 | [cgroup](/docs/CS/OS/Linux/cgroup.md?id=how-cpu-limit-reaches-the-scheduler) |
 | rootfs（overlayfs） | 文件系统隔离与分层镜像 | [LXC](/docs/CS/OS/Linux/LXC.md)（clone + pivot_root 伪代码） |
 
-一条 `docker run` 在内核层面发生的事：`clone(CLONE_NEW*)` 创建隔离视图 → `pivot_root` 切换 rootfs → 把 PID 写入 `cgroup.procs` 纳入限额 → `exec` 入口程序，完整路径见 [namespace 的容器组装](/docs/CS/OS/Linux/namespace.md?id=容器如何使用-namespace)。网络的 veth/bridge/NAT 细节见 [Docker 网络](/docs/CS/Container/Docker/net.md)。
+一条 `docker run` 在内核层面发生的事：`clone(CLONE_NEW*)` 创建隔离视图 → `pivot_root` 切换 rootfs → 把 PID 写入 `cgroup.procs` 纳入限额 → `exec` 入口程序，完整路径见 [namespace 的容器组装](/docs/CS/OS/Linux/namespace.md?id=how-containers-use-namespace)。网络的 veth/bridge/NAT 细节见 [Docker 网络](/docs/CS/Container/Docker/net.md)。
 
 ## Architecture
 
@@ -443,7 +443,7 @@ docker run --rm \
 
 注意还原出的 Dockerfile 是"近似等价"的：`MAINTAINER`/`LABEL` 可能丢失，构建期用到的 build args、build context 里的临时文件无法恢复。它适合审计、学习和排查"这个镜像里到底装了什么"，而不是官方构建脚本。
 
-### 对比
+### Comparison
 
 | 工具 | 作用对象 | 输出 | 典型场景 |
 | ---- | -------- | ---- | -------- |
@@ -464,7 +464,7 @@ alias dfimage="docker run --rm -v /var/run/docker.sock:/var/run/docker.sock \
 dfimage -sV=1.36 <image>
 ```
 
-### 安全提示
+### Security Notes
 
 这类工具都以 `docker.sock` 挂载运行，等价于给容器 root 级权限访问 Docker daemon，只应在可信环境使用。反推出来的配置里可能包含敏感的环境变量和密钥，注意脱敏。
 
@@ -472,9 +472,9 @@ dfimage -sV=1.36 <image>
 
 Docker 性能高度依赖于 Linux 内核的 cgroup v2、调度器和 I/O 子系统
 
-### 瓶颈识别
+### Bottleneck Identification
 
-#### 指标收集
+#### Metrics Collection
 
 现代 Docker 环境需要全面的监控栈，包括用于实时指标的 `docker stats`、用于详细容器分析的 cAdvisor、用于深度系统内省的 sysdig、用于底层分析的 perf 以及用于历史趋势分析的 sar
 
@@ -484,7 +484,7 @@ Docker 性能高度依赖于 Linux 内核的 cgroup v2、调度器和 I/O 子系
 
 
 
-#### 瓶颈定位
+#### Bottleneck Locating
 
 性能调查遵循结构化工作流程。从症状观察开始：当应用变慢时，检查延迟直方图和百分位分布，以了解延迟的严重程度和分布。
 
@@ -494,19 +494,19 @@ Docker 性能高度依赖于 Linux 内核的 cgroup v2、调度器和 I/O 子系
 
 
 
-### 优化
+### Optimization
 
-#### CPU优化
+#### CPU Optimization
 
 CPU 优化平衡利用率与公平性，确保容器获得适当的处理时间，同时避免邻居无法被调度
 
-#### 内存优化
+#### Memory Optimization
 
 内存调优防止泄漏，减少碎片化，并避免令人畏惧的 OOM（Out-of-Memory）杀手（即内存耗尽时终止进程）
 
 
 
-#### I/O优化
+#### I/O Optimization
 
 I/O 常常成为无声的瓶颈，尽管 CPU 和内存充足，却限制了吞吐量。通过存储驱动程序选择和队列调优解锁性能。
 

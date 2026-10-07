@@ -41,7 +41,7 @@ configserver
 
 
 
-## 客户端接入
+## Client Access
 
 > https://www.alibabacloud.com/help/zh/schedulerx/getting-started/connect-an-agent-to-schedulerx/?spm=a2c63.p38356.0.0.38f57d87tuu7MI
 
@@ -90,7 +90,7 @@ public class MyHelloJob extends JavaProcessor {
 如果实例总数不为0，显示接入的实例个数，说明应用接入成功。在操作列单击查看实例，即可在连接实例对话框中查看实例列表。
 
 
-## 定时调度
+## Timer Scheduling
 
 - Crontab
 
@@ -119,7 +119,7 @@ Crontab必须被60整除，不支持其它数量级时间间隔的任务，例�
 数据时间
 
 SchedulerX可以处理具有数据状态的任务。创建任务时支持填写数据偏移。例如，某个任务是每天00:30运行，但实际上要处理上一天的数据，就可以向前偏移一个小时。运行时间不变，执行的时候通过context.getDataTime()获得的即为前一天23:30。
-## 调度任务编排
+## Scheduling Task Orchestration
 支持可拖拽的工作流DAG（Directed Acyclic Graph）进行任务编排，操作简单，前端直接拖拽即可。详细的任务状态图能让您直观地查看并排查下游任务未执行的原因。
 
 
@@ -181,11 +181,11 @@ cron、fix_rate不支持秒级别调度，您可以选择时间类型为second_d
 
 类似Elastic-Job模型，控制台配置分片参数，可以将分片平均分给多个客户端执行，支持多语言版本。更多信息，请参见多语言版本分片模型。
 
-### 任务超时
+### Task Timeout
 
 不支持子任务级别的超时时间，只支持整个任务的超时，可以通过控制台动态修改
 
-### 失败自动重试
+### Automatic Retry on Failure
 
 - 实例失败自动重试
 
@@ -195,7 +195,7 @@ cron、fix_rate不支持秒级别调度，您可以选择时间类型为second_d
 
 如果是分布式任务（分片模型或MapReduce模型），子任务也支持失败自动重试和重试间隔，同样支持通过任务管理的高级配置进行配置。
 
-### 限流
+### Rate Limiting
 
 支持可抢占的任务优先级队列
 

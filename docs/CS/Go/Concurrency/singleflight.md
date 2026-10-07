@@ -4,7 +4,7 @@
 
 它与 [errgroup](/docs/CS/Go/Concurrency/errgroup.md) 常被混淆：errgroup 是"等待**一组不同**任务并聚合错误"，singleflight 是"合并**同一 key 的多个相同**请求"。
 
-## 核心 API
+## Core API
 
 ```go
 var g singleflight.Group
@@ -28,7 +28,7 @@ g.Forget("user:123")
 - `DoChan(key, fn)`：同上，但不阻塞当前 goroutine，返回一个 `chan Result`。
 - `Forget(key)`：把 key 从"进行中"集合移除。此后对同一 key 的新 `Do` 会另起一次 `fn` 执行。
 
-## 实现原理（inFlight 合并）
+## Implementation Principle (inFlight Merging)
 
 内部维护一个 `call` 结构表示"正在进行一次 key 的调用"，以及一个 `inFlight map[string]*call`：
 
@@ -46,7 +46,7 @@ type call struct {
 - 不存在则新建 `call`、`inFlight[key] = c`、执行 `fn`，结束后 `wg.Done()` 唤醒所有等待者，并从 `inFlight` 删除该 key；
 - `fn` 返回 `err` 时，所有等待者都拿到同一个 `err`，**且该 key 不会自动 Forget**（下一次同 key 调用会重新执行 `fn`）——除非显式 `Forget`。
 
-## 防缓存击穿示例
+## Example: Preventing Cache Breakdown
 
 ```go
 func (c *Cache) Get(key string) (string, error) {
@@ -63,7 +63,7 @@ func (c *Cache) Get(key string) (string, error) {
 }
 ```
 
-## 陷阱
+## Pitfalls
 
 - `shared == true` 时结果是"借用"的，不要对返回值做可变原地修改（可能污染其它共享者）。
 - `fn` 返回错误时该 key 不会被 Forget，下一次调用会重新执行——这是正确行为，避免一次失败把 key 永久"钉死"在错误结果上。

@@ -6,7 +6,7 @@
 
 本页的组织方式也说明了另一件事：**模型名不能代表能力顺序**。OpenAI 用 Astra／Sol／Terra／Luna，Anthropic 用 Fable／Opus／Sonnet／Haiku，Google 用 Pro／Flash／Flash-Lite，DeepSeek 直接用 Flash／Pro——四套命名体系里只有「越贵越强」这个方向是一致的。所以下面的排序一律**按能力档位**而不是按名字。
 
-## 怎么读这张表
+## How to Read This Table
 
 先说清楚三个维度，否则表格会被误读：
 
@@ -14,7 +14,7 @@
 - **缓存**一栏是缓存**读取**价相对输入价的倍率。倍率越低，重复前缀多的负载（如固定系统提示、多轮对话）越省。这一栏的差距比标价差距大得多。
 - **长上下文加价**是「标称上下文」能否按标价算完。OpenAI 有 272K 台阶，Anthropic 与 DeepSeek 没有，这个差异比任何价格数字都重要。
 
-## 闭源三家 横评
+## Closed-Source Three: Horizontal Review
 
 | 档位 | 模型 | 输入 | 输出 | 缓存读 | 上下文 | 长上下文 |
 | :--- | :--- | ---: | ---: | ---: | :---: | :--- |
@@ -45,7 +45,7 @@
 
 厂商名的自有细节见 [OpenAI](/docs/CS/AI/LLM/Model/OpenAI.md)、[Claude](/docs/CS/AI/LLM/Model/Claude.md)、[Gemini](/docs/CS/AI/LLM/Model/Gemini.md)。
 
-## 中国模型横评
+## Chinese Model Comparison
 
 这一组的共同点是**权重开源**，但「开源」的成色差别极大，必须逐个看协议：
 
@@ -67,7 +67,7 @@
 
 各家详情见 [DeepSeek](/docs/CS/AI/LLM/Model/DeepSeek.md)、[Qwen](/docs/CS/AI/LLM/Model/Qwen.md)、[开源模型全景](/docs/CS/AI/LLM/Model/Open_Model.md)。
 
-## 三条真正的选择逻辑
+## Three Real Selection Logics
 
 看完上面的表，容易得出「按价格挑最便宜的」这个结论，但实际选型要复杂一些。真正起作用的是这三条：
 
@@ -79,7 +79,7 @@
 
 **什么时候该多供应商**：当能力档位接近时（$2/$10 这个价位已经有 Sol、Sonnet 5.5、Gemini 3.1 Pro 三家），把「用哪家」变成一个按实时价格与可用性做的路由决策，而不是冻在两季度前写下的 SDK import 里。DeepSeek 的峰谷定价尤其适合做这件事——把批处理与夜间跑批路由到空闲时段，账单直接砍半。
 
-## 本地部署 这是一条平行的路
+## Local Deployment: A Parallel Path
 
 上面所有价格都是云端 API。但只要负载够稳定，自托管就从成本题变成能力题：把「每百万 token 多少钱」换成「一张卡跑多久」，高频固定负载下自建几乎总是更便宜，且**数据不出内网**这个合规收益往往比省钱更关键。
 
@@ -87,7 +87,7 @@
 
 细节见 [本地部署与推理引擎](/docs/CS/AI/LLM/Model/Inference.md)、[开源模型全景](/docs/CS/AI/LLM/Model/Open_Model.md)。
 
-## 架构层面的收敛
+## Convergence at the Architecture Level
 
 最后一件值得跨厂商记住的事：**2026 年出现了多路独立的架构收敛**——**混合线性注意力 + MoE**。Kimi KDA、Qwen3.5 Gated DeltaNet、GLM-5 DeepSeek Sparse Attention、GLM-5.3-Flash 的线性与稀疏混合，走的是同一个方向。这条收敛的直接后果是**长上下文场景的 KV cache 成本在快速下降**，DeepSeek V4.1-Flash 的 cache 在 HBM 缩小 4 倍、SSD 缩小 8 倍是同一趋势的极端案例。
 

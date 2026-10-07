@@ -256,7 +256,7 @@ static int bdi_init(struct backing_dev_info *bdi)
 
 
 
-## 页缓存的索引：address_space
+## Index of the Page Cache: address_space
 
 page cache 按**文件**组织：每个 inode 对应一个 `struct address_space`，打开同一文件的所有 `struct file` 共享它，缓存页在里边按**文件内偏移**索引：
 
@@ -280,7 +280,7 @@ radix_tree 时代的关键设计（读老代码仍会遇到；6.x 已演进为 X
 
 查找入口 `find_get_page`/`pagecache_get_page`：把 offset 按 6 位一段逐层下钻定位；未命中则 `__page_cache_alloc` 分配新页、`add_to_page_cache_lru` 同时挂进页缓存与 LRU。
 
-## 文件读取路径与预读
+## File Read Path and Readahead
 
 Buffered 读的内核主干是 `generic_file_read_iter` → `generic_file_buffered_read`（Direct 分流见下一节）：
 
@@ -301,7 +301,7 @@ for (;;) {
 
 预读的触发入口：read 未命中（同步预读）、命中 `PageReadahead` 页（异步预读）、`posix_fadvise`（NORMAL 默认窗口 / SEQUENTIAL 翻倍 / RANDOM 禁用或按 2MB 块 / WILLNEED 立即预读）、`readahead(2)` 系统调用、mmap 缺页、`madvise(MADV_WILLNEED)`。
 
-## Buffered IO 与 Direct IO
+## Buffered IO and Direct IO
 
 `generic_file_read_iter` 按 `IOCB_DIRECT` 分流，两种方式对比（以 ext4 为例）：
 

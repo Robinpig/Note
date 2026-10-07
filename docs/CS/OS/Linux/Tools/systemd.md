@@ -6,7 +6,7 @@ systemd 不是单个进程，而是**一整套用户态设施**：PID 1 本身�
 
 版本事实以 systemd **262~devel** 为准（man page 当前版本）。标注了 `Added in version` 的事实是核实过的，其余以官方 man page 为准。
 
-## unit 类型
+## unit Types
 
 `systemd.unit(5)` 列出 **11 种** unit 后缀：
 
@@ -32,7 +32,7 @@ systemd 不是单个进程，而是**一整套用户态设施**：PID 1 本身�
 
 `.timer` 与 `.path` 的作用经常被低估：前者替代 cron（`OnCalendar=` / `OnBootSec=`），后者在**目录变化时**触发（`PathChanged=` / `PathExists=`）—— 配合 `inotify` 实现"文件来了就处理"，比轮询省资源。
 
-## Type=：服务怎么算"启动完成"
+## Type=: How a Service Determines 'Startup Complete'
 
 `systemd.service(5)`：
 
@@ -58,7 +58,7 @@ systemd 不是单个进程，而是**一整套用户态设施**：PID 1 本身�
 
 推荐做法是**用 `Type=notify`，让服务自己确认准备好了**。这也是容器 healthcheck 的常见模式 —— 服务真正能服务才报 READY。
 
-## 依赖指令
+## Dependency Instructions
 
 `systemd.unit(5)`。**关键区分：要求依赖与排序依赖互相独立**，要求依赖不自动决定顺序 —— 这解释了为什么实践中几乎总要同时写 `Requires=` + `After=`。
 
@@ -102,7 +102,7 @@ systemd 不是单个进程，而是**一整套用户态设施**：PID 1 本身�
 
 `SocketMode=0666` 的默认值有个安全含义：**任何用户都能连这个 socket**（若有文件系统节点）。需要收紧就显式设 `SocketMode=0660` + `SocketGroup=`。
 
-### fd 传递协议
+### fd Passing Protocol
 
 服务侧用 `sd_listen_fds(1)` 接收：
 
@@ -116,7 +116,7 @@ systemd 不是单个进程，而是**一整套用户态设施**：PID 1 本身�
 
 `Accept=yes` 时 `FileDescriptorName` 默认是 `connection`。
 
-## 资源控制
+## Resource Control
 
 `systemd.resource-control(5)`，全部映射到 cgroup v2 文件：
 
@@ -131,7 +131,7 @@ systemd 不是单个进程，而是**一整套用户态设施**：PID 1 本身�
 
 `CPUQuota=` 的周期由 `CPUQuotaPeriodSec=` 决定，对应 `cpu.max` 的第二个字段（默认 100 ms，见 [cgroup 控制器接口](/docs/CS/OS/Linux/cgroup/controllers.md)）。
 
-### ManagedOOM：内核压力下的受害者选择
+### ManagedOOM: Victim Selection Under Kernel Pressure
 
 `ManagedOOMMemoryPressure=kill` 的语义：把该 cgroup 设为内存压力的**候选受害者集合**；超阈值时 `systemd-oomd.service` 选一个**后代 cgroup** 发 `SIGKILL`。
 
@@ -159,7 +159,7 @@ systemd 不是单个进程，而是**一整套用户态设施**：PID 1 本身�
 
 不写 `Delegate=yes` 但服务内自己 `mkdir` cgroup 目录会失败（`-EPERM`）—— 这是"我的服务在容器里建不了 cgroup"的根因。详见 [cgroup 委派与容器实践](/docs/CS/OS/Linux/cgroup/delegation.md)。
 
-## Restart= 与自动重启
+## Restart= and Automatic Restart
 
 七值：`no`（默认）/`on-success`/`on-failure`/`on-abnormal`/`on-watchdog`/`on-abort`/`always`。
 
@@ -171,7 +171,7 @@ systemd 不是单个进程，而是**一整套用户态设施**：PID 1 本身�
 
 `StartLimitIntervalSec=` / `StartLimitBurst=` 限制重启频率 —— **没有它，故障服务会无限重启刷屏**（systemd v230 起默认启用该限制）。
 
-## 诊断工具
+## Diagnostic Tools
 
 | 命令 | 用途 |
 | :-- | :-- |
@@ -192,7 +192,7 @@ systemd 不是单个进程，而是**一整套用户态设施**：PID 1 本身�
 
 `systemctl show` 的价值常被低估：它输出**所有**配置属性（含默认值与最终生效值），比读 unit 文件准确 —— 配置文件可能被 drop-in 覆盖。
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 ```shell
 # 全局状态
@@ -227,7 +227,7 @@ systemctl daemon-reload && systemctl restart nginx
 systemd-analyze verify /etc/systemd/system/nginx.service
 ```
 
-## 与内核的接缝
+## Interface with the Kernel
 
 - **cgroup**：资源控制、委派、冻结（`systemctl freeze`）的实际执行者，见 [cgroup 知识地图](/docs/CS/OS/Linux/cgroup/README.md) 与 [委派实践](/docs/CS/OS/Linux/cgroup/delegation.md)。
 - **namespace**：`Private*=` 系列指令使用 namespace 隔离，见 [namespace](/docs/CS/OS/Linux/namespace.md)。

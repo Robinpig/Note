@@ -6,7 +6,7 @@ Pydantic AI 是 Pydantic 公司（[FastAPI](https://fastapi.tiangolo.com/) 同�
 
 它与 [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md) 解决的是不同层的问题：**Pydantic AI 强在"单个类型安全的 Agent 能否可靠地嵌进真实代码库"，LangGraph 强在"多步有状态图 + 检查点 + 人在环路"。** 两者并不互斥，常见组合是用 Pydantic AI 写类型安全的 Agent 作为节点，上面再架一层编排。
 
-## 四个支柱
+## Four Pillars
 
 | 支柱 | 说明 |
 |------|------|
@@ -17,7 +17,7 @@ Pydantic AI 是 Pydantic 公司（[FastAPI](https://fastapi.tiangolo.com/) 同�
 
 FastAPI 的经验几乎可以一比一迁移过来——同样的校验直觉、同样的依赖注入写法。
 
-## V2 的关键词：Capabilities 与 Harness
+## V2 Keywords: Capabilities and Harness
 
 V2.0 的头号特性是**能力系统（capabilities）**：把横切关注点打包成可组合的能力，通过一个 `capabilities=[...]` 参数挂到 Agent 上，官方提供 `WebSearch`、`MCP`、`Thinking`、`Guardrails`、`SpendLimits` 等；需要拦截 Agent 循环内生命周期钩子的（成本追踪、审批流、护栏），则继承 `AbstractCapability` 自定义。
 
@@ -25,7 +25,7 @@ V2.0 的头号特性是**能力系统（capabilities）**：把横切关注点�
 
 迁移建议是先升到最新的 V1、清完所有 deprecation 警告，再上 V2；V2 的破坏性变更包括：安装变为精简版 + provider extras、`builtin_tools` 改名 `native_tools`、`OpenAIModel` 改名 `OpenAIChatModel`， graceful 工具执行成为默认。
 
-## 工程友好性：它解决的是"上生产"那几件事
+## Engineering Friendliness: It Solves the 'Going to Production' Issues
 
 - **用量与成本硬约束**：`UsageLimits` 可以设置每次 run 的请求数、token 数与**成本上限**，避免失控循环把额度烧穿（这类护栏应该在选型阶段就问清楚，而不是等账单刺痛时才补）。
 - **输出校验 + 自动重试**：不符 schema 的错误会被连同错误信息一起回灌模型重试，业务代码不必写脏数据处理。
@@ -34,14 +34,14 @@ V2.0 的头号特性是**能力系统（capabilities）**：把横切关注点�
 - **持久执行**：与 Temporal、DBOS、Prefect 有一等集成，跑几天的任务不必自己造轮子。
 - **互操作**：MCP（通过 extras）与 [A2A](/docs/CS/AI/LLM/Protocol/A2A.md) 均原生支持；另有一个 Python 沙箱（Monty / CodeMode 能力）用于代码执行。
 
-## 需要注意的短板
+## Shortcomings to Note
 
 - **Python only**，没有 JS/TS 版本；
 - 主打**单 Agent 的类型可靠**，多 Agent 靠"委托"组合（一个 Agent 的工具里调用另一个 Agent，并把 `ctx.usage` 传下去，让整棵树共享一个预算和一条 trace），而不是内置图；
 - 自带的 `pydantic-graph` 存在但**官方自己都劝退**——文档形容它是"给钉子用的钉枪"，生产代码用得不多，真需要图建议直接考虑 LangGraph；
 - 泛型写出来有些啰嗦，生态与招人池子比 LangGraph 薄。
 
-## 怎么选
+## How to Choose
 
 | 需求 | 更合适 |
 |------|--------|

@@ -6,7 +6,7 @@ Service 是一个**抽象的访问入口**：它持有固定的 ClusterIP（虚�
 
 > 类比：Service 是公寓的快递收发站，Pod 是不断更换的快递员。发件人只记住收发站地址，包裹（流量）总能送到当班的快递员手上。
 
-## 三要素与 Endpoints
+## Three Elements and Endpoints
 
 ```yaml
 apiVersion: v1
@@ -39,9 +39,9 @@ nginx-service   10.244.1.3:80,10.244.2.7:80,10.244.3.9:80 30s
 
 注意 `targetPort` 与 `port` 的区别是高频踩坑点：`port` 是 Service 暴露的端口，`targetPort` 是容器实际监听的端口，二者可以不同（比如 Service 80 → 容器 8080）。
 
-## 四种类型
+## Four Types
 
-### ClusterIP（默认）
+### ClusterIP (default)
 
 集群内网虚拟 IP，只在集群内部可达。
 
@@ -95,7 +95,7 @@ Pod 访问 `mysql-external.default.svc.cluster.local` 会被解析成外部域�
 
 典型场景：依赖解耦（数据库、第三方 API 域名不硬编码进代码）；迁移过渡期让调用方无感切换。
 
-### 类型对比
+### Type Comparison
 
 | 类型 | 可达范围 | 有无 ClusterIP | 典型场景 |
 |------|---------|---------------|---------|
@@ -104,7 +104,7 @@ Pod 访问 `mysql-external.default.svc.cluster.local` 会被解析成外部域�
 | LoadBalancer | 公网 | 有 | 生产环境非 HTTP 业务 |
 | ExternalName | — | 无 | 集群外依赖的稳定别名 |
 
-## kube-proxy：把虚拟 IP 变成内核规则
+## kube-proxy: Turning Virtual IP into Kernel Rules
 
 ClusterIP 是一个**虚拟 IP**：没有网卡、没有实体设备，只是一条存在于内核里的转发规则。真正把它变现实的是每个 Node 上的 [kube-proxy](/docs/CS/Container/k8s/kube-proxy.md)：
 
@@ -118,7 +118,7 @@ ClusterIP 是一个**虚拟 IP**：没有网卡、没有实体设备，只是一
 
 一句话选型：**小集群 iptables 够用，大型集群选 nftables 或 IPVS，要 L7 策略与极致性能走 eBPF。**
 
-## 选型决策
+## Selection Decision
 
 ```
 集群内部通信                      → ClusterIP

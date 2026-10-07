@@ -1,4 +1,4 @@
-# Istio 运行时排障命令集
+# Istio Runtime Troubleshooting Command Set
 
 ## Introduction
 
@@ -8,7 +8,7 @@ Istio 的排障困难不在于命令少，而在于**命令分属三个层次且
 
 本文所有命令、参数、默认值核实自 `istio-1.31.1` tag 源码（`istioctl/cmd/root.go`、`istioctl/pkg/**`），并与 `pilot/` 下的判��逻辑对照。基线：Istio **1.31.1**。
 
-## 三个层次的分工
+## Division of Labor Among Three Layers
 
 | 层次 | 命令 | 数据来源 | 能回答 | 不能回答 |
 | :-- | :-- | :-- | :-- | :-- |
@@ -19,7 +19,7 @@ Istio 的排障困难不在于命令少，而在于**命令分属三个层次且
 
 选层的判据：症状是「配置写错了」→ 静态；症状是「改了没生效」→ 先 sync 后 dump；症状是「要发给厂商」→ bug-report。
 
-## 完整命令清单（1.31.1，以源码为准）
+## Complete Command List (1.31.1, Per Source Code)
 
 **顶层**：`kube-inject`、`proxy-config`(pc)、`admin`、`uninstall`、`waypoint`、`ztunnel-config`、`analyze`、`dashboard`、`manifest`、`install`、`upgrade`、`bug-report`、`tag`、`create-remote-secret`、`clusters`(remote-clusters)、`collateral`、`validate`、`options`、`version`、`proxy-status`(ps)、`experimental`(x/exp)
 
@@ -34,7 +34,7 @@ Istio 的排障困难不在于命令少，而在于**命令分属三个层次且
 >
 > **`authz` 在顶层是占位桩**：执行返回 error「authz is experimental. Use `istioctl experimental authz`」。
 
-## `analyze`：静态检查
+## `analyze`: Static Check
 
 参数（`analyze.go:338-373`）：
 
@@ -64,7 +64,7 @@ Istio 的排障困难不在于命令少，而在于**命令分属三个层次且
 
 **它明确不查什么**：不接触 Envoy、不读 config_dump、不看 xDS 同步状态。`--ambient` 标志在 1.31 的 analyze 中**不存在**。
 
-## `proxy-status`：看收敛
+## `proxy-status`: View Convergence
 
 参数（`proxystatus.go:190-199`）：`-o/--output`（默认 `table`）、`-v/--verbosity`（**0=默认，1=显示所有 xDS 类型**）、`-f/--file`（Envoy config dump JSON，**`-` 表示 stdin**）、`--proxy-admin-port`（默认 **15000**）、`--revision`。
 
@@ -90,7 +90,7 @@ NonceSent == NonceAcked → SYNCED
 
 其他要点：指定 ztunnel pod 时会直接输出「Sync diff is not available for ztunnel pod」并返回；带 pod 参数时走 istiod `TypeDebugConfigDump` 做 **sync diff**（istiod 视角 vs Envoy 实际 config_dump），需能访问该 pod 的 admin 端口。**数据源是控制面，不读 pod。**
 
-## `proxy-config`：读数据面实况
+## `proxy-config`: Read Data Plane State
 
 `Short` 明确标注 **`[kube only]`**。父命令 flag：`-o/--output`（默认 `short`）、`--proxy-admin-port`（默认 15000）。
 
@@ -119,7 +119,7 @@ NonceSent == NonceAcked → SYNCED
 
 读 dump 时用的 mask：`all` 用 `?mask=dynamic_active_clusters,dynamic_warming_clusters,static_clusters`；`secret` 用 `?mask=dynamic_active_secrets,dynamic_warming_secrets`；`eds` 用 `?include_eds=true`。
 
-### VM 上必须用 `--file`
+### Must Use `--file` on VM
 
 VM 不在 K8s 里，`proxy-config` 无法通过 API 找 pod，只能读本地 config dump：
 
@@ -128,7 +128,7 @@ curl -s localhost:15000/config_dump | istioctl pc clusters --file -
 curl -s localhost:15000/config_dump | istioctl pc secret   --file -
 ```
 
-### 改日志级别
+### Change Log Level
 
 `--level` 取值 7 档：`trace` / `debug` / `info` / `warning`（输入 `warn` 亦可）/ `error` / `critical` / `off`。
 
@@ -145,13 +145,13 @@ curl -s localhost:15000/config_dump | istioctl pc secret   --file -
 >   >> /var/lib/istio/envoy/cluster.env && systemctl restart istio
 > ```
 
-## `x authz check`：验证策略是否真到 Envoy
+## `x authz check`: Verify Policy Reaches Envoy
 
 `istioctl authz check <pod>`（支持 `-f` 读本地 config dump）**直接检查 Envoy 实际生效的 AuthorizationPolicy**。
 
 这在「istiod 说策略下发成功、但行为不对」的场景特别有用——它读的是数据面而非控制面。
 
-## `x describe`：资源关系梳理
+## `x describe`: Resource Relationship Mapping
 
 子命令只有 `pod`（别名 `po`）与 `service`，两者都标 **`[kube-only]`**。参数：`--ignoreUnmeshed`、`--proxy-admin-port`。**无 `-v` 等级参数**（与 proxy-status 不同）。
 
@@ -160,7 +160,7 @@ curl -s localhost:15000/config_dump | istioctl pc secret   --file -
 > [!WARNING]
 > **不支持 ambient**（全文无 waypoint/ztunnel 处理逻辑）。ambient 排障用 `istioctl ztunnel-config`，详见 [Ambient](/docs/CS/Framework/Istio/Ambient.md)。
 
-## `x metrics`：从 Prometheus 查服务指标
+## `x metrics`: Query Service Metrics from Prometheus
 
 > [!IMPORTANT]
 > **它不是从控制面读 istiod 指标，而是查 Prometheus。** 实现：找 `app.kubernetes.io/name=prometheus` 的 pod → 端口转发 9090 → 用 PromQL 查询。
@@ -169,7 +169,7 @@ curl -s localhost:15000/config_dump | istioctl pc secret   --file -
 
 所以它**查不到**控制面指标（`pilot_*`）——那些要用 `istioctl x envoy-stats` 或直接查 istiod。
 
-## `bug-report`：抓现场
+## `bug-report`: Capture On-Site State
 
 关键参数：`-c/--kubeconfig`、`--context`、`--filename`、`--dry-run`、`--proxy-admin-port`（默认 15000）、`--full-secrets`、`--istio-namespace`（默认 `istio-system`）、`--timeout`（**默认 30 分钟**）、`--include` / `--exclude` / `--start-time` / `--end-time` / `--duration`、`--dir`、**`--output-dir`（无 `-o` 简写）**、`--rq-concurrency`（0 → 默认 32）、`--tail`（0=无限）、`--skip-cluster-dump`、`--skip-analyze`、`--skip-proxy-debug`、`--skip-netstat`、`--skip-coredumps`。
 
@@ -182,13 +182,13 @@ curl -s localhost:15000/config_dump | istioctl pc secret   --file -
 
 过滤器语法 `ns/dep/pod/lbl=val/ann=val/cntr`，语义是「must be in (ns1 OR ns2) AND (dep1 OR ...)」，label/annotation 之外的 name 支持 `*` glob。
 
-## `x precheck`：安装/升级前检查
+## `x precheck`: Pre-Install/Upgrade Check
 
 `Short`：「Check whether Istio can safely be installed or **upgraded**」。
 
 参数：`--skip-controlplane`、`--output-threshold`（**默认 `Warning`**，注意与 analyze 的 `Info` 不同）、`-o/--output`、`-f/--from-version`、`--revision`。
 
-## 排障命令速查表
+## Troubleshooting Command Quick Reference Table
 
 | 场景 | 命令 | 关键点 |
 | :-- | :-- | :-- |
@@ -209,7 +209,7 @@ curl -s localhost:15000/config_dump | istioctl pc secret   --file -
 | Wasm 插件状态 | `istioctl pc ecds <pod>` | 无 `pc wasm` 子命令 |
 | ztunnel 排查 | `istioctl ztunnel-config workload/certificate/policy/connections` | 7 子命令，ambient 专用 |
 
-## 默认值 / 阈值汇总
+## Default Values / Thresholds Summary
 
 | 项 | 默认值 |
 | :-- | :-- |

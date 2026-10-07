@@ -4,7 +4,7 @@ shell 是用户态程序，但它的行为几乎完全由内核机制决定：�
 
 本页分两层：先看有哪些 shell、脚本怎么写（用户态），再看 shell 依赖的内核机制（这部分是理解行为的根本）。所有内核机制在 **v7.2** 核实。
 
-## 常见 shell
+## Common Shells
 
 | shell | 说明 |
 | :-- | :-- |
@@ -21,7 +21,7 @@ shell 是用户态程序，但它的行为几乎完全由内核机制决定：�
 >
 > 写可移植脚本时注意 `/bin/sh` 在不同发行版指向不同实现：Debian/Ubuntu 指向 dash（POSIX 严格），RHEL/Fedora 指向 bash。所以 `#!/bin/sh` 的脚本在 RHEL 上可能"意外能用" bash 语法，到 Debian 上就报错。**要 bash 特性就显式写 `#!/bin/bash`**，别依赖默认值。
 
-## 脚本基础
+## Scripting Basics
 
 ```shell
 #!/bin/bash      # 第一行必须是 shebang，指定解释器
@@ -35,7 +35,7 @@ shebang 由内核识别：`execve()` 读文件前两字节若是 `#!`，就按�
 
 用 `env` 代替绝对路径，在 PATH 不同的环境里更可靠。
 
-### 常用速查
+### Common Quick Reference
 
 | 用途 | 语法 |
 | :-- | :-- |
@@ -53,7 +53,7 @@ shebang 由内核识别：`execve()` 读文件前两字节若是 `#!`，就按�
 
 **引号是最容易出错的地方**：`"$x"` 展开变量但不做分词，`$x` 还会做 glob 展开。路径操作永远用 `"$path"`。
 
-## 内核机制：管道
+## Kernel Mechanism: Pipe
 
 shell 管道（`cmd1 | cmd2`）是内核 `pipe()` 系统调用提供的。**v7.2 已经没有 `sys_pipe()`，只有 `pipe2()`**（`fs/pipe.c:1152`）。源码注释解释了为什么：
 
@@ -61,7 +61,7 @@ shell 管道（`cmd1 | cmd2`）是内核 `pipe()` 系统调用提供的。**v7.2
 
 即 **`pipe()` 是 libc 的封装，系统调用层面只有 `pipe2()`**。glibc 的 `pipe()` 就是 `pipe2(fildes, 0)`。
 
-### 三个关键默认值
+### Three Key Default Values
 
 | 常量 | 值 | 位置 | 含义 |
 | :-- | :-- | :-- | :-- |
@@ -75,7 +75,7 @@ shell 管道（`cmd1 | cmd2`）是内核 `pipe()` 系统调用提供的。**v7.2
 
 > **注意区分**：`pipe_max_size`（内核，1 MB）与 `ulimit -p`（shell 的 pipe 缓冲上限）是**两套独立限制**，取更小者生效。
 
-### O_NONBLOCK 语义
+### O_NONBLOCK Semantics
 
 ```c
 	/* 读端，pipe.c:466 附近 */
@@ -92,7 +92,7 @@ shell 管道（`cmd1 | cmd2`）是内核 `pipe()` 系统调用提供的。**v7.2
 
 **`O_NONBLOCK` 是在 `pipe2()` 创建时传的，会同时作用于两端**。传统上要用 `fcntl()` 单独设置某个 fd 的 `O_NONBLOCK`，`pipe2()` 把它做进了创建接口。
 
-### 环形缓冲的演进
+### Evolution of the Ring Buffer
 
 `pipe.c:63-68` 的注释标注了这段代码的来源（David Howells, 2019-09-23）：
 
@@ -111,7 +111,7 @@ static inline struct pipe_buffer *pipe_buf(struct pipe_inode_info *pipe, unsigne
 
 这消除了"缓冲区大小必须是 2 的幂"之外的所有除法。缓冲区数量按需分配而非固定 16，所以 pipe 才需要配额机制（`account_pipe_buffers()`）——非特权用户超配额时会被压到 `PIPE_MIN_DEF_BUFFERS`。
 
-## 内核机制：用户态与内核态的边界
+## Kernel Mechanism: The Boundary Between User Mode and Kernel Mode
 
 ### copy_to_user / access_ok
 
@@ -143,11 +143,11 @@ static __always_inline unsigned long copy_from_user(void *to, const void __user 
 
 `access_ok()` 在 v7.2 已成可选内联（`user_access_begin()` 直接展开成 `access_ok()`）。
 
-### execve 与 shebang
+### execve and shebang
 
 `execve()` 读文件头，若为 `#!` 则解析解释器路径并 exec 那一行指定的程序（最多再传一个参数）。**这是内核唯一支持的脚本机制** —— 没有 `#!` 就没有脚本。
 
-## 内核机制：信号（Ctrl-C 为什么有效）
+## Kernel Mechanism: Signals (Why Ctrl-C Works)
 
 在交互式 shell 里按 Ctrl-C，终端驱动生成一个 `SIGINT` 字符，**行规程（line discipline）** 转成信号发给前台进程组：
 
@@ -182,13 +182,13 @@ static __always_inline unsigned long copy_from_user(void *to, const void __user 
 
 > ⚠️ 旧资料里的 `signal_deliver()` 在 v7.2 **不存在**。
 
-### 为什么 Ctrl-C 只杀掉一个进程组
+### Why Ctrl-C Only Kills One Process Group
 
 `^C` 发送给 **前台进程组**（`tty->ctrl.pgrp`）的**所有**成员。这是设计如此：`cmd1 | cmd2` 两个进程同属一个前台进程组，按一次 Ctrl-C 两个都死。
 
 而 `tty->pgrp` 在 v7.2 已移入 **`tty->ctrl.pgrp`**（`include/linux/tty.h`）—— 前面多了 `ctrl` 一层，因为前台/后台/会话相关的进程组信息现在归在一起管。
 
-## 内核机制：作业控制
+## Kernel Mechanism: Job Control
 
 | 概念 | 机制 |
 | :-- | :-- |
@@ -209,7 +209,7 @@ static __always_inline unsigned long copy_from_user(void *to, const void __user 
 
 **`sched_autogroup_create_attach()`** 说明 `setsid()` 会顺带把进程挂进调度器的 **autogroup** —— 见 [fair](/docs/CS/OS/Linux/proc/fair.md) 里 autogroup 对 build 进程做交互性判断的机制。
 
-## 内核机制：伪终端
+## Kernel Mechanism: Pseudo-terminal
 
 终端模拟器（xterm、tmux、screen）与被运行的程序之间靠 **pty** 通信。`drivers/tty/pty.c`（923 行）的分工：
 
@@ -231,7 +231,7 @@ master 与 slave 的 `init_termios` 初值不同：**master 侧全零**（`c_ifl
 
 > `ptsname` / `grantpt` / `unlockpt` **是 glibc 用户态函数，内核不实现**。内核只提供 ioctl：`TIOCGPTN`（拿从设备号）与 `TIOCSPTLCK`（加解锁）。
 
-## 内核机制：dup 与 fd 共享
+## Kernel Mechanism: dup and fd Sharing
 
 shell 的 `cmd > file 2>&1` 靠 `dup2()`。v7.2 的实现**在 `fs/file.c`**（`kernel/fcntl.c` 已不存在）：
 
@@ -247,13 +247,13 @@ shell 的 `cmd > file 2>&1` 靠 `dup2()`。v7.2 的实现**在 `fs/file.c`**（`
 
 `dup2` 与 `dup` 的关键差别是**幂等性**：`dup2` 若 `newfd == oldfd` 直接返回（不关闭也不分配），`dup` 总是找最低空闲 fd。这个差别让 `dup2(a, b)` 可以安全地用于 shell 重定向而不必先判断 b 是否已开。
 
-## 内核机制：系统调用边界
+## Kernel Mechanism: System Call Boundary
 
 v7.2 的 `SYSCALL_DEFINE` 与内部 `ksys_*` 分离已成模式（`kernel/sys.c:1268` 的 `ksys_setsid()` → `1303` 的 `SYSCALL_DEFINE0(setsid)`）。分工是：**`ksys_*` 放实现、外面包一层系统调用定义**，便于 seccomp、tracepoint、ptrace 挂在系统调用边界上。
 
 注意 `kernel/sys.c` 是 uid/gid/pid/uname/rlimit/prctl 等的实现（3000+ 行），`kernel/ksys.c` **不存在**。
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 ```shell
 # 脚本调试
@@ -288,7 +288,7 @@ bash --noprofile --norc        # 不读任何配置文件（干净 shell）
 env -i bash                    # 清空环境变量
 ```
 
-## 与其它子系统的接缝
+## Interfaces with Other Subsystems
 
 - **信号**：Ctrl-C 到 handler 的完整链路，handler 侧见 [signal](/docs/CS/OS/Linux/proc/signal.md)。
 - **进程与作业**：`fork`/`clone`/`exit` 与僵尸回收见 [Processes 知识地图](/docs/CS/OS/Linux/proc/README.md)。

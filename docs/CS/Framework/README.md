@@ -27,7 +27,7 @@ digraph framework_index {
 }
 ```
 
-## Java 体系
+## Java Ecosystem
 
 - [Spring](/docs/CS/Framework/Spring/Spring.md)：Spring Framework 7.x 枢纽——IoC/AOP、事务、数据访问、Web、测试，是本库最核心的 Java 笔记。
 - [Spring Boot](/docs/CS/Framework/Spring_Boot/Spring_Boot.md)：Boot 4.x 自动装配、内嵌服务器、starter、生产特性。
@@ -35,7 +35,7 @@ digraph framework_index {
 - [MyBatis](/docs/CS/Framework/MyBatis/MyBatis.md)：持久层框架，源码级解析 mapper、插件、动态 SQL 与一级/二级缓存。
 - [Hibernate](/docs/CS/Framework/Hibernate/Hibernate.md)：JPA 实现，实体映射与会话语义。
 
-## 分布式协调与服务注册
+## Distributed Coordination and Service Registry
 
 按"强一致键值底座 / 配置与注册中心"两类定位取舍，完整维度矩阵见 [etcd 横向对照](/docs/CS/Framework/etcd/compare.md)。
 
@@ -46,7 +46,7 @@ digraph framework_index {
 - [Eureka](/docs/CS/Framework/eureka/eureka.md)：Netflix 注册中心，AP 自注册/续约。
 - [BooKeeper](/docs/CS/Framework/BooKeeper/BooKeeper.md)：面向 ZooKeeper 编程的抽象层。
 
-## 服务治理与运维
+## Service Governance and Operations
 
 - [Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md)：RPC 框架，SPI 扩展、自定义协议、服务治理与注册发现。
 - [Sentinel](/docs/CS/Framework/Sentinel/Sentinel.md)：流量治理（限流、熔断、热点、系统自适应保护）。
@@ -55,7 +55,7 @@ digraph framework_index {
 - [Hippo4j](/docs/CS/Framework/Hippo4j.md)：动态线程池与监控告警。
 - [Job（任务调度）](/docs/CS/Framework/Job/Quartz/Quartz.md)：调度器集合——[Quartz](/docs/CS/Framework/Job/Quartz/Quartz.md)、[xxl-job](/docs/CS/Framework/Job/xxl-job.md)、[PowerJob](/docs/CS/Framework/Job/PowerJob.md)、[ElasticJob](/docs/CS/Framework/Job/ElasticJob.md)、[DolphinScheduler](/docs/CS/Framework/Job/DolphinScheduler.md)、[ScheduleX](/docs/CS/Framework/Job/ScheduleX.md)。跨语言与跨层（内核定时器、时间轮、MQ 延时消息、DB 自建延迟队列）的总览见 [Scheduled Task](/docs/CS/SE/Scheduled_Task.md)。
 
-## 网络与 RPC
+## Networking and RPC
 
 - [Netty](/docs/CS/Framework/Netty/Netty.md)：NIO 框架，内存池、编解码器、零拷贝、事件循环。
 - [Tomcat](/docs/CS/Framework/Tomcat/Tomcat.md)：Servlet/JSP 容器子树（11.0.x）——连接器、容器与 Pipeline、认证与 TLS、HTTP/2、部署与内嵌 API。
@@ -66,24 +66,24 @@ digraph framework_index {
 - [kitex](/docs/CS/Framework/kitex.md)（Go）、[Netpoll](/docs/CS/Framework/Netpoll.md)（Go）、[evio](/docs/CS/Framework/evio.md)（Go）：Go 生态的 RPC/网络库。
 - [Pandora](/docs/CS/Framework/Pandora.md)：容器内进程管理与网络接管，常与多进程后端服务配合。
 
-## 服务网格与网关
+## Service Mesh and Gateway
 
 - [Istio](/docs/CS/Framework/Istio/Istio.md)：K8s 原生服务网格，流量治理、安全、Ambient、Envoy 扩展。
 - [Higress](/docs/CS/Framework/Higress/Higress.md)：基于 Envoy 的高性能云原生网关（Ingress / API 网关 / AI 代理）。
 
-## 计算与数据
+## Computing and Data
 
 - [Hadoop](/docs/CS/Framework/Hadoop/Hadoop.md)：HDFS 与 MapReduce 生态。
 - [Flink](/docs/CS/Framework/Flink/Flink.md)：流批一体计算，DataStream / Table API / 状态与Checkpoint。
 - [Spark](/docs/CS/Framework/Spark/Spark.md)：批处理与 Spark SQL。
 - [ES](/docs/CS/Framework/ES/ES.md)：Elasticsearch 分布式检索与倒排索引。
 
-## 响应式编程
+## Reactive Programming
 
 - [Reactor](/docs/CS/Framework/reactor/reactor.md)：Project Reactor 响应式数据流。
 - [RxJava](/docs/CS/Framework/RxJava/RxJava.md)：JVM 响应式库，与 Reactor 对照。
 
-## 跨语言与 AI 框架
+## Cross-Language and AI Frameworks
 
 - [LangTool（LLM Agent 框架）](/docs/CS/AI/LLM/LangTool/LangChain.md)：以 [LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md) 为主线串起 [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md)、[Langflow](/docs/CS/AI/LLM/LangTool/Langflow.md)、[LangChain4j](/docs/CS/AI/LLM/LangTool/LangChain4j.md)——Java/Python 双生态的 Agent 编排框架。
 - [FastAPI](/docs/CS/Framework/FastAPI.md)：Python 现代 Web 框架（异步、类型注解、OpenAPI）。

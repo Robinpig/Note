@@ -13,13 +13,13 @@ brew install --cask codex
 
 认证信息在 ~/.codex/auth.json
 
-## Harness 源码剖析
+## Harness Source Code Analysis
 
 Harness 的通用概念（三层边界 Host/Harness/Model、Thread/Turn/Step/Item 四级粒度、四层安全、业务系统接入要点）已提炼到 [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md) 笔记的「工程实例：Codex」一节。本篇只记录 Codex 仓库本身的源码级实现（对应 commit `633ab199cf`）。
 
 开源仓库不含模型权重，只公开 CLI、核心运行时、app-server、SDK 等集成面。
 
-## 项目结构
+## Project Structure
 
 ```
 codex/
@@ -48,11 +48,11 @@ Core 关键入口（`codex-rs/core/src`）：
 | `tools/parallel.rs` | 并发控制 |
 | `session/mod.rs` | 审批请求 |
 
-## 一条任务如何运行
+## How a Single Task Runs
 
 以"修复登录接口偶发 500 并跑测试"为例，完整走一遍。
 
-### 接收任务：start_or_steer
+### Receive Task: start_or_steer
 
 `turn_input.rs` 的 `start_or_steer` 判断这次输入是**启动新 Turn、注入现有 Turn，还是拒绝**；随后构造 `TurnContext` 并 `spawn_task` 为后台 `SessionTask`。
 
@@ -60,7 +60,7 @@ Core 关键入口（`codex-rs/core/src`）：
 - **StepContext**：一次请求前捕获的不可变设置（模型、路由、环境）
 - **SessionTask**：统一取消、事件、生命周期
 
-### 主循环 run_turn
+### Main Loop run_turn
 
 ```rust
 async fn run_turn(...) {
@@ -83,31 +83,31 @@ async fn run_turn(...) {
 
 三个关键机制：**StepContext 快照**（决策与执行看到同一套设置）、**历史受控输入**、**满则压缩后继续**。循环是否继续由 `needs_follow_up` 控制信号决定——工具刚启动、服务端返回 `end_turn: false`、用户插入新输入、hook 要求继续，都会让它为真。
 
-### 事件汇合
+### Event Merging
 
 `run_sampling_request` 创建 `ToolCallRuntime`，把 `ResponseEvent`（文本 delta、推理、Item 添加/完成）分发出去。**UI 订阅的是事实流，而不是自己保存一份状态。**
 
-### 工具调度与并发
+### Tool Scheduling and Concurrency
 
 - `ToolRouter` 持有 `model_visible_specs` 与 `ToolRegistry`，负责"模型可见名 → 真实执行器"的映射
 - `ToolCallRuntime` 用 Tokio 的 `RwLock` 做并发闸门：声明支持并行的工具拿**读锁**并行执行，独占工具拿**写锁**等待，全部监听 `CancellationToken`
 - 四层形态：协议层 `FunctionCall` → 路由层 `ToolCall` → 执行层 handler → 回填层 `FunctionCallOutput`
 
-### 安全边界：审批的异步实现
+### Security Boundary: Asynchronous Implementation of Approval
 
 四层安全模型（沙箱 / 策略 / 审批 / schema）见 [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md) 笔记。Codex 的源码实现在审批这层：
 
 审批是**异步等待**：`Session::request_command_approval` 创建 oneshot channel、以 `approval_id` 登记等待者，发事件给 UI，然后 await 用户决策。**fail closed**——批准则继续，拒绝则产生拒绝结果，Turn 被中断或连接断开一律默认 `Abort`，不偷偷放行。文件修改走独立的 `request_patch_approval` 通道，命令与补丁在 UI 上按风险分别呈现。
 
-### 历史与恢复
+### History and Recovery
 
 两类历史要分清：给模型的**事实**、给人/系统的**记录**。工具结果由 `drain_in_flight` 写回 `record_annotated_conversation_items`；Rollout 支撑恢复、分叉与审计；上下文压缩后仍保持后续可用。**Harness 本质上是外部记忆管理器。**
 
-### 运行中的变化
+### Changes During Execution
 
 三种停止方式：正常完成、工具失败（可继续）、用户中断。取消沿调用链传播（模型 / 工具 / 审批都能被打断）；模型流失败有重试状态；用户中途插话进入 `input_queue`，可控地并入下一轮。
 
-### app-server 控制面
+### app-server Control Plane
 
 对外生命周期：
 
@@ -123,7 +123,7 @@ initialize → thread/start 或 thread/resume → turn/start → 持续接收 it
 | SDK | 程序内嵌 |
 | app-server | 复杂 UI、长期 Thread |
 
-### 扩展能力
+### Extension Capabilities
 
 | 扩展 | 定位 |
 | --- | --- |
@@ -134,7 +134,7 @@ initialize → thread/start 或 thread/resume → turn/start → 持续接收 it
 
 扩展接入必须走主链：被选择 → 纳入 StepContext → 模型可见 → Router/策略验证 → 执行 → Item 回填 → 事件可见。**不让扩展绕过 Harness**，否则会失去日志、取消和审批。
 
-## 常见问题
+## Common Issues
 
 | 问题 | 回答 |
 | --- | --- |
@@ -143,7 +143,7 @@ initialize → thread/start 或 thread/resume → turn/start → 持续接收 it
 | 开源仓库含模型吗？ | 不含，只有 CLI、运行时、app-server、SDK |
 | 核心入口在哪？ | 理解运行看 `run_turn`，理解控制看 app-server，理解安全看 `ToolRouter` + `request_command_approval` |
 
-## 源码阅读路线
+## Source Reading Path
 
 ```
 app-server/README.md

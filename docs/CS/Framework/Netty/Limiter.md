@@ -17,7 +17,7 @@ Netty 的“限流”指的是**流量整形（Traffic Shaping）**：对读写�
 
 构造参数典型为：`(EventExecutorGroup? , long writeLimit, long readLimit, long checkInterval)`，可分别限制上行/下行带宽，值为 `0` 表示不限。
 
-### 三个层级实现
+### Three-Level Implementation
 
 原笔记列出的 Channel / Global 对应两个具体子类，加上 GlobalChannel 共三种作用域：
 

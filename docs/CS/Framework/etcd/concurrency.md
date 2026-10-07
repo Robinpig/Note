@@ -10,7 +10,7 @@ etcd.md 的 `Transaction` 段末尾甩了个 STM 链接就完了（[etcd.md](/do
 > [!NOTE]
 > concurrency 包**没有**队列（Queue）类型——只有 `Session`、`Mutex`（含 `NewLocker`）、`STM`、`Election`。早年示例里出现过 queue 用法，但当前包不含 `NewQueue`；需要分布式队列请基于 `Election` 或 `Mutex` + 前缀自行实现。
 
-## Session（一切原语的底座）
+## Session (The Foundation of All Primitives)
 
 ```go
 s, err := concurrency.NewSession(client, concurrency.WithTTL(10))  // 10s 租约
@@ -27,7 +27,7 @@ defer s.Close()
 > [!WARNING]
 > 务必 `defer s.Close()`。Session 背后是 Lease keepalive 流，不关会泄漏 goroutine 与租约。更要紧的是：锁/选主的生命周期跟随 Session——客户端崩溃 → 租约过期 → 原语自动释放；但若你手动 `Close()` 了 Session，对应锁立即释放，即使业务还没跑完。
 
-## Mutex（分布式锁）
+## Mutex (Distributed Lock)
 
 ```go
 m := concurrency.NewMutex(s, "/my-lock/")
@@ -48,7 +48,7 @@ defer m.Unlock(ctx)
 > [!WARNING]
 > 锁的"自动释放"依赖租约保活。若持锁方发生**长 GC / 网络分区**导致 keepalive 没及时续上、租约过期，锁会被释放、另一客户端可能拿到同一把锁——出现双持。需要严格 fencing 的业务应配合 `IsOwner()` 的 Txn 校验或版本号 fencing token，不要只靠锁本身。
 
-## STM（软件事务内存）
+## STM (Software Transactional Memory)
 
 ```go
 _, err := concurrency.NewSTM(client, func(stm concurrency.STM) error {
@@ -72,7 +72,7 @@ _, err := concurrency.NewSTM(client, func(stm concurrency.STM) error {
 > [!NOTE]
 > STM 把 etcd.md 里 `If(mod("Alice")=v1).Then(...)` 那种手写 Txn 封装成了 `Get`/`Put` + 自动冲突重试，应用层只写业务逻辑。它与 [MVCC](/docs/CS/Framework/etcd/MVCC.md) 的 revision 机制、[compact](/docs/CS/Framework/etcd/compact.md) 的历史压缩强相关：readSet 依赖的旧 revision 若被 compact 掉，事务会失败需重试。
 
-## Election（选主）
+## Election (Leader Election)
 
 ```go
 e := concurrency.NewElection(s, "/my-leader/")
@@ -92,13 +92,13 @@ e.Resign(ctx)
 
 实现要点（来自 `election.go`）：与 Mutex 同源——leader 是 `pfx` 下 createRevision 最小的带租约 key。`Campaign` 内部用 `v3.Compare(v3.CreateRevision(leaderKey), "=", leaderRev)` 保证只有自己能 `Proclaim`/`Resign`。leader 崩溃 → 租约过期 → key 删 → 其余候选者中 createRevision 最小者上位。
 
-## 与客户端重试语义的配合
+## Cooperation with Client Retry Semantics
 
 [client](/docs/CS/Framework/etcd/client.md) 里讲明：写操作是 **at-most-once**，仅在"连接都没建起来"时才重试。concurrency 的 `Lock`/`Campaign`/`Put` 底层都是 Txn/Put，因此：
 - 拿到 `Unavailable` 等错误**不要盲目重放** `Lock`/`Campaign`——客户端无法区分"请求没到"和"已提交但响应丢了"。
 - 正确做法是依赖 Session 租约自动释放 + 业务层幂等，而非在调用点无脑重试。
 
-## 陷阱清单
+## Pitfall List
 
 > [!WARNING]
 > 下面几条都是「照旧文档/旧示例抄下来就跑不对」的点，逐条对照 3.7.2 源码核实过。

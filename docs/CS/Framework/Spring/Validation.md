@@ -7,7 +7,7 @@ Spring 的校验能力分两层，先分清这两层是读懂全部校验代码�
 
 日常开发绝大多数用第二种，而 Spring 把两者打通：`LocalValidatorFactoryBean` 同时实现 `jakarta.validation.Validator` 与 `org.springframework.validation.Validator`，用作后者时会把 `ConstraintViolation` 适配成 `FieldError` 再写入 `Errors`，因此上层无需感知用的是哪套 API。
 
-### 版本基线
+### Version Baseline
 
 | 组件 | 当前基线 | 要点 |
 | :-- | :-- | :-- |
@@ -16,7 +16,7 @@ Spring 的校验能力分两层，先分清这两层是读懂全部校验代码�
 | Hibernate Validator | 9.x | 9.0 实现 Jakarta Validation 3.1；Boot 4.0 配 9.0、Boot 4.1 配 9.1 |
 | Spring Boot | 4.0 | 依赖 `spring-boot-starter-validation` |
 
-## 内置约束
+## Built-in Constraints
 
 | 约束 | 作用 |
 | :-- | :-- |
@@ -41,7 +41,7 @@ public record CreateOrderRequest(
 }
 ```
 
-## 自定义约束
+## Custom Constraints
 
 一个约束由两部分构成：`@Constraint` 注解声明元数据，`ConstraintValidator` 实现校验逻辑，再由 `@Constraint(validatedBy = ...)` 关联。
 
@@ -77,7 +77,7 @@ public class PhoneValidator implements ConstraintValidator<Phone, String> {
 
 关键点：`isValid` 对 `null` 应直接返回 `true`，把空值判定留给 `@NotNull`；`LocalValidatorFactoryBean` 默认装配 `SpringConstraintValidatorFactory`，因此自定义校验器里的 `@Autowired` 生效。若需自定义错误信息，用 `context.disableDefaultConstraintViolation()` + `buildConstraintViolationWithTemplate(...)` 动态生成。
 
-## 分组校验
+## Group Validation
 
 约束默认属于 `Default` 组，`groups` 属性让同一模型在不同场景下按不同规则校验（如「新增必须填 id 为空、更新必须填 id」）。
 
@@ -102,7 +102,7 @@ public void create(@Validated(OnCreate.class) @RequestBody UserForm form) { }
 
 `@GroupSequence` 可定义组的执行顺序（前一组全部通过才校验后一组），常用于「前置粗校验 → 后置重校验」的成本优化。
 
-## 级联校验
+## Cascade Validation
 
 字段是另一个对象时，需要在字段上标 `@Valid` 才会级联进去；否则嵌套对象的约束不会触发。
 
@@ -125,7 +125,7 @@ private List<@NotBlank String> tags;
 private Map<@NotBlank String, @Positive Integer> scores;
 ```
 
-## Spring Validator 接口
+## Spring Validator Interface
 
 不依赖注解时（如跨字段校验、依赖外部数据的校验）直接实现接口：
 
@@ -157,7 +157,7 @@ validator.validateObject(form).failOnError(IllegalArgumentException::new);
 
 多个校验器可同时挂到一个 `DataBinder` 上（`addValidators` / `replaceValidators`），实现「全局 Bean Validation + 局部自定义规则」的组合。
 
-## 方法校验
+## Method Validation
 
 在 Service 方法上校验入参与返回值，靠 AOP 代理实现：
 
@@ -188,7 +188,7 @@ public class UserService {
 > [!WARNING]
 > 方法校验依赖 AOP 代理，因此：类内自调用（`this.xxx()`）不走代理、失效；`private` / `final` 方法无法拦截；同类中必须走代理对象调用。这与 [Spring AOP](/docs/CS/Framework/Spring/AOP.md) 的代理限制是同一条规则。
 
-## 在 Spring MVC 中的集成
+## Integration in Spring MVC
 
 MVC 对 `@RequestMapping` 方法的内建校验分两个层级，两者的异常不同，应用应同时处理：
 
@@ -229,7 +229,7 @@ public class UserController {
 
 校验失败如何转成 HTTP 响应，见 [统一异常处理与 Problem Details](/docs/CS/Framework/Spring/Exception.md)。
 
-## 校验消息与国际化
+## Validation Messages and Internationalization
 
 1. 取注解 `message` 属性（默认值，写死在注解上）。
 2. 覆盖：在 classpath 提供 `ValidationMessages.properties`（Hibernate Validator 约定的默认 bundle），可写 `ValidationMessages_zh_CN.properties` 做本地化。
@@ -250,7 +250,7 @@ person.name=用户名
 
 消息参数中的字段名本身也是可解析的 `MessageSourceResolvable`，所以能把 `name` 翻译成「用户名」。方法参数级约束的错误码形如 `Max.myService#addStudent.degrees`。
 
-## 常见坑
+## Common Pitfalls
 
 - `@Valid` 不加在任何字段上时，嵌套对象/集合元素完全不校验。
 - `@Valid` 与 `@Validated` 的区别：前者是 Jakarta 注解、不支持分组；后者是 Spring 注解、支持分组，可用于类级触发 AOP 方法校验。

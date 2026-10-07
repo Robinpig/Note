@@ -1,4 +1,4 @@
-# Agent 权限控制与沙箱（Permission & Sandbox）
+# Agent Permission Control and Sandbox (Permission & Sandbox)
 
 > 核实日期：2026-10-05。所有行为细节以官方文档 / 官方仓库源码为准。
 > 本机可访问源：`code.claude.com`、`github.com`（HTML + git clone）、`opencode.ai`、`google-gemini.github.io`、`aider.chat`、`docs.cline.bot`、`openai.com/index`、`learn.chatgpt.com`（部分）。
@@ -6,9 +6,9 @@
 
 ---
 
-## 通用机制
+## General Mechanism
 
-### 1. 沙箱的技术形态
+### 1. Technical Forms of Sandboxing
 
 分档不是「越强越好」的线性关系，真正的分歧点是**是否共享内核**。
 
@@ -39,7 +39,7 @@
 - https://learn.chatgpt.com/docs/sandboxing（WebSearch 快照）
 - https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/subsystems/sandbox.md
 
-### 2. 权限判定的层级
+### 2. Levels of Permission Judgment
 
 四层实为「同一判定链上的四个粒度」，各家实现深度差异极大：
 
@@ -63,7 +63,7 @@
 - https://developers.openai.com/codex/rules（WebSearch 快照）
 - https://opencode.ai/docs/permissions/
 
-### 3. 审批粒度与「一次授权管多大范围」
+### 3. Approval Granularity and 'How Much Scope One Authorization Covers'
 
 这是各家最核心的差异点。
 
@@ -86,11 +86,11 @@
 - https://google-gemini.github.io/gemini-cli/docs/get-started/configuration
 - https://docs.cline.bot/cli/configuration
 
-### 4. fail closed 的实现
+### 4. Implementation of Fail-Closed
 
 **先明确一个概念区分**：官方文档里 Codex 把决策枚举叫 `ReviewDecision::Abort`，而 Claude Code 在权限提示里把中途中断叫「停止当前 turn」。二者都指向「中止」，但语义不同：Codex 的 `Denied` 是「拒绝这一步，但会话继续、换个方法试」，`Abort` 是「什么都别做，直到用户下一条指令」。**把 `Denied` 误当成 `Abort` 会让 Agent 误以为可以换个姿势重试。**
 
-#### Codex（源码级核实，fail closed 有硬证据）
+#### Codex (source-level verification, hard evidence for fail-closed)
 
 `codex-rs/protocol/src/protocol.rs:4183`：
 
@@ -145,7 +145,7 @@ ApplyPatchApprovalRequest(ApplyPatchApprovalRequestEvent),
 - https://github.com/deepseek-ai/deepseek-harness/blob/main/docs/subsystems/sandbox.md
 - https://code.claude.com/docs/en/permissions.md
 
-### 5. 企业策略注入与防绕过
+### 5. Enterprise Policy Injection and Bypass Prevention
 
 两家都有真正的「成员绕不过」机制，但**文件路径与锁的粒度差异很大**。
 
@@ -213,7 +213,7 @@ ApplyPatchApprovalRequest(ApplyPatchApprovalRequestEvent),
 
 MCP allowlist 要求**名称与身份同时匹配**，否则禁用。
 
-#### 其它
+#### Others
 
 - **Gemini CLI**：系统级 `settings.json` 可设 `"tools": {"sandbox": "docker"}` 强制容器沙箱、`tools.core` 白名单（只留 `ReadFileTool`/`GlobTool`/`ShellTool(ls)` 等）、`mcp.allowed` 白名单、`enforcedAuthType`、`telemetry.logPrompts: false`。
 - **Cline**：`CLINE_COMMAND_PERMISSIONS` 环境变量注入策略，`deny` 覆盖 `allow`，`allowRedirects` 默认 false（**默认禁止 shell 重定向**，这是个少见但很到位的默认）。
@@ -227,7 +227,7 @@ MCP allowlist 要求**名称与身份同时匹配**，否则禁用。
 - https://google-gemini.github.io/gemini-cli/docs/cli/enterprise.html
 - https://docs.cline.bot/cli/configuration
 
-### 6. 沙箱与权限的边界
+### 6. Boundary Between Sandbox and Permissions
 
 **沙箱管「能不能」，权限管「该不该」，但两者的判定者不同，且权限层先于沙箱层执行。**
 
@@ -237,7 +237,7 @@ MCP allowlist 要求**名称与身份同时匹配**，否则禁用。
 - 但同一文档列出了这条捷径的例外，说明它不是等价交换：显式 deny 始终有效；`rm`/`rmdir` 触碰 critical path 仍走常规流程；**内容限定的 ask 规则仍会提示**（如 `Bash(git push *)`）；裸 `Bash` ask 规则通常被跳过但仍适用于无沙箱路径；Plan mode 不跳过。
 - 沙箱不管什么：沙箱**只覆盖 shell 命令**。`Read`/`Edit`/`Write`、`WebFetch`/`WebSearch`、hooks、本地 MCP servers、plugin monitors、LSP servers、status line、`apiKeyHelper`、Mods 及其启动的进程、Computer use、用户在 `!` shell-mode 输入的命令——全部在沙箱外。官方两条硬提醒：`filesystem.denyRead` **不能**阻止内置 `Read` 工具；`network.allowedDomains` **不能**限制内置 `WebFetch`。Subagent 不是独立进程隔离边界，与父会话同一进程体系、仅复用同一沙箱配置。
 
-### 7. 提示注入在这一层能否防住
+### 7. Can Prompt Injection Be Prevented at This Layer
 
 **核实结论：不能。权限模型不是提示注入的防御层。**
 
@@ -258,9 +258,9 @@ OpenAI 官方系统卡则把网络默认关闭直接当作注入缓解措施来�
 
 ---
 
-## 各家实现对比
+## Comparison of Implementations Across Vendors
 
-### 总表
+### Summary Table
 
 | 维度 | Claude Code | OpenAI Codex | DSH (deepseek-harness) | OpenCode |
 | --- | --- | --- | --- | --- |
@@ -273,7 +273,7 @@ OpenAI 官方系统卡则把网络默认关闭直接当作注入缓解措施来�
 | **特色机制** | ①`sandbox.credentials` 凭据 **deny / mask**（mask 用 per-session sentinel + 代理在允许主机注入真值，需 `tlsTerminate`）②OS 层 **protected paths**（`.git/hooks`、`.claude/`、`~/.claude.json`、`.credentials.json`；session 内新建 `HEAD`/`objects`/`refs` 会被沙箱删除；符号链接指向也拒写）③`excludedCommands` 移出沙箱 ④`dangerouslyDisableSandbox` + `Bash(dangerouslyDisableSandbox:true)` 强制提示 ⑤bash 网络规则剥离 `timeout/time/nice/nohup/stdbuf/command/builtin/noglob` 与安全 env 前缀 | ①**rules 的 argv 级匹配 + tree-sitter 安全拆分线性脚本**（`git add . && rm -rf /` 不会被整体放行）②`approvals_reviewer = "auto_review"` 由 reviewer subagent 自动审批 ③`approval_policy = { granular = {...} }` 按类别允许/自动拒绝 ④`codex sandbox {macos,linux,windows}` 可本地测试沙箱，含 `landlock` 别名 ⑤permission profiles（`:read-only` / `:workspace` / `:danger-full-access`）替代旧 sandbox 设置 | ①**per-call 策略携带**：`SandboxExecutionPolicy` 按调用传，provider 状态不变，同一时刻 bash 与子 Agent 可在不同边界 ②`SandboxEnforcement = 'full' \| 'partial'` 诚实上报，老 Landlock ABI 与 Windows ACL 归为 partial ③denial 签名按后端区分（bwrap EROFS / Landlock EACCES / Seatbelt EPERM），拒绝用跨后端并集 ④`writableRoots` 单一来源同时喂 fs 围栏与 Seatbelt profile，防漂移 ⑤审计事件 log-only，不进模型 transcript | ①**`doom_loop` 权限**：同一工具调用重复 3 次即触发（默认 ask）②`external_directory` 独立权限键 ③`*.env`/`*.env.*` 默认 deny、`*.env.example` 默认 allow ④每 agent 可覆写权限，Markdown frontmatter 即可配置 |
 | **默认权限取向** | Manual 模式：只读工具免批，**Bash/文件编辑/WebFetch/WebSearch 首次均需批准** | read-only 沙箱 + 无网络 | read-only | **默认宽松**：多数权限 `"allow"` |
 
-### 补充：有差异做法的产品
+### Supplement: Products with Divergent Approaches
 
 | 产品 | 独特之处 |
 | --- | --- |
@@ -285,9 +285,9 @@ OpenAI 官方系统卡则把网络默认关闭直接当作注入缓解措施来�
 
 ---
 
-## 陷阱与易踩点
+## Pitfalls and Easy Mistakes
 
-### 1. 「开了沙箱就安全」是误解
+### 1. 'Sandbox Means Safe' Is a Misconception
 
 Claude Code 官方文档自己列了 12 条限制，挑最该记住的：
 
@@ -301,7 +301,7 @@ Claude Code 官方文档自己列了 12 条限制，挑最该记住的：
 
 **「开沙箱就安全」的真正含义**：沙箱降低的是**破坏范围**，不是**风险总量**。它降低不了数据外泄（内容照样出网）、降低不了模型被注入后作出的错误决策、也降低不了「宽泛写权限导致的权限提升」。
 
-### 2. 各家默认值（差异极大，极易踩）
+### 2. Default Values per Vendor (Huge Differences, Easy to Trip Up)
 
 | 产品 | 默认 | 踩坑方向 |
 | --- | --- | --- |
@@ -315,7 +315,7 @@ Claude Code 官方文档自己列了 12 条限制，挑最该记住的：
 
 一个反直觉的细节：**OpenCode 的规则是「最后匹配者胜」（last matching rule wins），Claude Code 是「deny → ask → allow」固定顺序**。这意味着在 OpenCode 里，把 `"*": "deny"` 写在末尾会覆盖掉前面所有具体 allow——**规则顺序即优先级**，与 Claude Code 的「规则宽泛程度不改变优先级」正好相反。这是跨产品迁移配置时最容易出事的地方。
 
-### 3. 哪些操作永远不该自动放行
+### 3. Which Operations Should Never Be Auto-Approved
 
 综合各家机制，以下应在任何自动放行配置中显式 deny 或强制 prompt：
 
@@ -328,7 +328,7 @@ Claude Code 官方文档自己列了 12 条限制，挑最该记住的：
 - **沙箱逃逸路径**：`excludedCommands` 覆盖的解释器（`python`、`node`、`sh`）、能改项目文件的脚本、以及任何 `docker *`。官方警告：模型可能先改脚本再让脚本在沙箱外跑。
 - **控制面自身**：`.claude/`、`.git/hooks`、`.git/config`、`~/.claude/settings.json`。Claude Code 已用 OS 层 protected paths 挡住，Codex 把 `.git/`、`.codex/` 在可写根内设为只读（故 `git commit` 默认会失败并要求批准）。
 
-### 4. 审批疲劳：怎么设计粒度
+### 4. Approval Fatigue: How to Design Granularity
 
 这是真实且有据的问题——OpenAI 官方文档明确把「降低审批疲劳」列为沙箱的设计目标之一："The sandbox reduces approval fatigue. Instead of asking you to confirm every low-risk command, the agent can read files, make edits, and run routine project commands within the boundary you already approved."
 
@@ -340,7 +340,7 @@ Claude Code 官方文档自己列了 12 条限制，挑最该记住的：
 4. **把安全网做在审批之外**。Cline 的做法值得借鉴：shadow Git checkpoint 让「先放行、错了回滚」变成低成本选项，从而真正敢开 auto-approve——**降低撤销成本比增加审批摩擦更有效**。
 5. **企业场景直接关掉通道而非依赖判断**。`dontAsk`（全拒）、`approval_policy = "never"`、`ApprovalPolicy = 'never'`、Gemini 强制 `sandbox: "docker"`。无头场景下「不询问」必须是确定性拒绝，不能是「没问就当同意」。
 
-### 5. 本地 Agent 与云端 Agent 的根本差异
+### 5. Fundamental Differences Between Local and Cloud Agents
 
 **根本差异在信任边界的位置，不在功能多少。**
 
@@ -360,7 +360,7 @@ Claude Code 官方文档自己列了 12 条限制，挑最该记住的：
 
 ---
 
-## 与本库已有素材的冲突（必须修正）
+## Conflicts with Existing Material in This Repository (Must Be Fixed)
 
 | # | 本库记录 | 官方实为 | 严重度 |
 | --- | --- | --- | --- |
@@ -374,7 +374,7 @@ Claude Code 官方文档自己列了 12 条限制，挑最该记住的：
 
 ---
 
-## 未查到项
+## Items Not Found
 
 1. ~~**Codex `features.use_legacy_landlock` 的官方页面原文**。~~ **已解决（2026-10-05 补）**：官方 `codex-rs/core/config.schema.json` 中存在 `$.features.use_legacy_landlock`（`{"type": "boolean"}`），紧邻的还有 `$.features.use_linux_sandbox_bwrap`。两条路径均在 `[features]` 表下。源码链路：`core/src/tools/sandboxing.rs:418` → `config().use_legacy_landlock()`（`thread_manager_tests.rs:1374` 可见调用点）→ `tools/runtimes/{unix_escalation,apply_patch}.rs`。此前列为未查到的原因是只搜了 `config.md` / `config-reference` 的网页快照，**没查仓库内的生成 schema**——教训：官方仓库里的机器可读 schema 比文档页更权威。
 2. **Codex「审批等待期间连接断开」的 fail-closed 官方表述**。源码只证实超时与 Abort 路径。
@@ -388,7 +388,7 @@ Claude Code 官方文档自己列了 12 条限制，挑最该记住的：
 10. **`permissions.disableAutoMode` 与顶层 `disableAutoMode` 的确切层级**。`settings-reference` 索引中两者同时出现（顶层 `disableAutoMode` 与 `permissions.disableBypassPermissionsMode`），而 `managed-settings` 的「只能由受管来源设置」表中又出现顶层 `allowManagedPermissionRulesOnly`。层级归属未能完全确定。
 11. **Codex `untrusted` approval policy 的当前状态**。官方 config-reference 的 enum 含它、HIPAA 文档说「不再支持」，**官方两处表述冲突**，未找到解释性变更说明。
 
-### 已用替代路径绕过的封锁（供后续复查）
+### Blocks Bypassed via Alternative Paths (for Later Review)
 
 | 目标 | 封锁情况 | 实际使用 |
 | --- | --- | --- |
@@ -401,7 +401,7 @@ Claude Code 官方文档自己列了 12 条限制，挑最该记住的：
 
 **一条方法论教训**：Codex 的 `use_legacy_landlock` 一开始在「未查到项」里，因为只搜了 `config.md` 与 config-reference 的**网页快照**。后来在克隆下来的仓库里找到 `codex-rs/core/config.schema.json`，里面是机器可读的完整配置 schema，`$.features.*` 全部键名与类型一应俱全。**官方仓库里的生成 schema 比文档页更权威**——文档页会截断、会滞后，schema 不会。下次核实配置项应优先找 schema 文件。
 
-## 顺带核实（供 [Compaction](/docs/CS/AI/LLM/Agent/Theory/Compaction.md) 交叉引用）
+## Incidental Verification (for [Compaction](/docs/CS/AI/LLM/Agent/Theory/Compaction.md) cross-reference)
 
 [Compaction](/docs/CS/AI/LLM/Agent/Theory/Compaction.md) 的未查到项里有一条「DSH `minimal` preset 不加载 compaction」，本轮克隆源码时可确认：
 

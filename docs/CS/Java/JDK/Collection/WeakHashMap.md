@@ -35,7 +35,7 @@ WeakHashMap的键是“**弱键**”。在 WeakHashMap 中，当某个键不再�
 
 
 
-## 关于Java中的引用类型
+## About Reference Types in Java
 
 引用类型主要分为4种：
 ①强引用（Strong Reference）就是永远不会回收掉被引用的对象，比如说我们代码中new出来的对象。
@@ -47,7 +47,7 @@ WeakHashMap中用WeakReference，也就是**弱引用**来实现。
 
 
 
-##  引用队列ReferenceQueue
+##  Reference Queue (ReferenceQueue)
 
 引用队列相当于一个电话簿一样的东西，用于监听和管理在引用对象中被回收的对象。
 
@@ -120,7 +120,7 @@ WeakHashMap中用WeakReference，也就是**弱引用**来实现。
 
 上面这个逻辑就是核心WeakHashMap的实现，WeakHashMap只不过比上述的代码多了一步：把引用回收的对象从Map中移除罢了。
 
-### 实现弱键
+### Implementing Weak Keys
 
 ReferenceQueue是一个队列，它会保存被GC回收的“弱键”。实现步骤是：
 
@@ -221,9 +221,9 @@ expungeStaleEntries方法代码如下。
 
 
 
-## 方法
+## Method
 
-###  get(Object key) 方法
+###  get(Object key) Method
 
 ```Java
  public V get(Object key) {
@@ -367,7 +367,7 @@ expungeStaleEntries方法代码如下。
 
 
 
-## 遍历方式
+## Traversal Method
 
 ```java
  public class WeakHashMapIteratorTest {

@@ -14,13 +14,13 @@ Fedora 是 Red Hat 赞助、社区主导的**上游发行版**：新内核、新
 
 **它最重要的定位**是 RHEL 的上游：`Fedora（试验田）→ RHEL（企业稳定版）→ Rocky / Alma / CentOS Stream（免费生态）`。想在第一时间用上最新内核特性（EEVDF、sched_ext、io_uring 演进，见 [sche](/docs/CS/OS/Linux/proc/sche.md) 与 [io_uring](/docs/CS/OS/Linux/IO/io_uring.md)），Fedora 和 [Arch](/docs/CS/OS/Linux/Distribution/Arch.md) 是最方便的两个选择。
 
-## 支持期为何只有 13 个月
+## Why the Support Period Is Only 13 Months
 
 发布节奏是**每 6 个月一版，每版支持约 13 个月**（= 6 个月发布 × 2 + 4 周）。**Fedora 没有 LTS**。
 
 这个数字的含义：**你每年要升两次系统**。对服务器不是问题（因为服务器用 [RHEL 兼容系](/docs/CS/OS/Linux/Distribution/CentOS.md)）；对桌面也合理（新特性红利值得频繁升级）。
 
-## Fedora 44 的三个"首次"
+## Fedora 44's Three "Firsts"
 
 Fedora 44 是个里程碑版本：
 
@@ -30,7 +30,7 @@ Fedora 44 是个里程碑版本：
 
 另有 **COSMIC 成为官方 spin**（System76 捐给 Fedora 的 Rust 桌面），以及 **Nix system extension 实验支持** —— 想在 Fedora 上试 Nix 而不换系统。
 
-## 六种 Edition
+## Six Editions
 
 | Edition | 用途 |
 | :-- | :-- |
@@ -43,7 +43,7 @@ Fedora 44 是个里程碑版本：
 
 另有社区 spin（Xfce、Budgie、Sway、Development 等）。
 
-## Btrfs 透明压缩（Silverblue 的基础）
+## Btrfs Transparent Compression (Foundation of Silverblue)
 
 Fedora 44 的桌面版默认用 **Btrfs 并开启透明压缩** —— 小容量设备上能省不少空间。机制见 [btrfs](/docs/CS/OS/Linux/fs/btrfs.md)：
 
@@ -65,7 +65,7 @@ findmnt -no FSTYPE,OPTIONS /       # 挂载选项里能看到 compress
 
 这解决了传统发行版"更新把系统搞坏"的长期痛点。代价是**需要理解 OSTree 的两层模型**（host 与 container），且自定义系统级配置比传统方式麻烦。
 
-## 包管理：DNF 5
+## Package Management: DNF 5
 
 ```shell
 dnf search <pkg>          # 搜索
@@ -98,7 +98,7 @@ setenforce 1
 
 **Docker/podman 场景的经典坑**：`podman` 已占用 `docker` 命令，且 **SELinux 会给 bind mount 重打标签**（`:z` / `:Z` 后缀），照搬 Ubuntu 的 Docker 教程会失败。
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 ```shell
 # 版本
@@ -138,7 +138,7 @@ dnf check                       # 依赖完整性
 rpm -Va                         # 校验已装文件
 ```
 
-## 与其它子系统的接缝
+## Interfaces with Other Subsystems
 
 - 内核与调度器：[sche](/docs/CS/OS/Linux/proc/sche.md)（Fedora 通常最先拿到 EEVDF / sched_ext）
 - 安全策略：[SELinux](/docs/CS/OS/Linux/SELinux.md)（Fedora 默认 enforcing）

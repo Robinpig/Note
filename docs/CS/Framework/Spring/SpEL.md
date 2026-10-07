@@ -4,7 +4,7 @@ SpEL（Spring Expression Language）是 Spring Framework 中的表达式语言�
 
 它属于「运算层」而非「配置层」，这一点与属性占位符极易混淆，是第一个要分清的点。
 
-### `#{ }` 与 `${ }` 是两套机制
+### `#{ }` and `${ }` Are Two Separate Mechanisms
 
 | 维度 | `#{ ... }` | `${ ... }` |
 | :-- | :-- | :-- |
@@ -15,7 +15,7 @@ SpEL（Spring Expression Language）是 Spring Framework 中的表达式语言�
 
 两者可以嵌套：`#{'${app.name}'}` 表示「先把 `${app.name}` 替换成字符串，再作为 SpEL 字面量」；反过来 `${#{...}}` 不成立，因为占位符解析发生得更早、看不到 SpEL 的结果。
 
-## 核心 API
+## Core API
 
 ```java
 ExpressionParser parser = new SpelExpressionParser();
@@ -37,7 +37,7 @@ Integer nameLength = len.getValue(context, Integer.class);
   - `StandardEvaluationContext`：功能全，允许 `T()` 类型引用与 `@bean` 引用。
   - `SimpleEvaluationContext`：**受限**，按需开启属性访问/方法调用，**不允许类型引用与 Bean 引用**——处理不可信输入时必须用它。
 
-## 表达式语法
+## Expression Syntax
 
 | 类别 | 示例 |
 | :-- | :-- |
@@ -67,7 +67,7 @@ parser.parseExpression(template, new TemplateParserContext())
       .getValue(String.class);
 ```
 
-## 在 Spring 各处的作用点
+## Action Points Across Spring
 
 | 位置 | 典型写法 | 可见变量 |
 | :-- | :-- | :-- |
@@ -81,7 +81,7 @@ parser.parseExpression(template, new TemplateParserContext())
 
 方法参数引用有约定：`#p0` / `#a0` 是位置索引（无需参数名），`#参数名` 需要编译时保留参数名（`javac -parameters`，Boot 的 Maven/Gradle 插件默认开启）。AOP 织入的表达式还能用 `#args` 取参数数组，见 [AOP](/docs/CS/Framework/Spring/AOP.md)。
 
-## 性能与安全
+## Performance and Security
 
 **安全是首要问题**。`StandardEvaluationContext` 允许 `T(...)` 调用任意静态方法与构造任意对象，若表达式字符串来自用户输入（如自定义规则、报表公式、低代码平台），等于把反射与类加载能力交出去。处理不可信输入的正确做法：
 
@@ -98,7 +98,7 @@ SimpleEvaluationContext.forPropertyAccessors(new DataBindingPropertyAccessor())
 
 性能方面：解析（parse）比求值（evaluate）贵得多，`SpelExpressionParser` 内部缓存已解析的 `Expression`，重复求值不会反复解析；求值默认走解释器，可开启编译模式（`SpelCompilerMode`）把热点表达式编译成字节码以降低长期开销。在 [AOT](/docs/CS/Framework/Spring/AOT.md) / native image 场景下，表达式涉及的反射需要在构建期可知，动态拼接的表达式尤其要注意。
 
-## 编译模式与解析配置
+## Compile Mode and Parsing Configuration
 
 ### SpelCompilerMode
 
@@ -117,7 +117,7 @@ ExpressionParser parser = new SpelExpressionParser(config);
 
 编译态要求表达式的返回类型在多次求值间稳定，且不支持解释态下的全部动态特性。
 
-### 解析配置开关
+### Parsing Configuration Switch
 
 `SpelParserConfiguration` 还能全局开启：
 
@@ -125,7 +125,7 @@ ExpressionParser parser = new SpelExpressionParser(config);
 - **集合/数组字面量**：允许 `{1,2,3}`、`new int[]{1,2,3}`。
 - **自动数组增长**：对数组下标越界赋值时自动扩容。
 
-### EvaluationContext 的内部解析链
+### EvaluationContext Internal Resolution Chain
 
 `StandardEvaluationContext` 在求值时依赖一组可替换的解析器，理解它们有助于排查"为什么取不到 / 调不了"：
 
@@ -135,7 +135,7 @@ ExpressionParser parser = new SpelExpressionParser(config);
 - `OperatorOverloader`：自定义运算符重载（默认无）。
 - `PropertyAccessor` / `MethodResolver`：属性与方法的分派。
 
-### 性能陷阱：复用而非反复创建
+### Performance Trap: Reuse Instead of Repeated Creation
 
 - `ExpressionParser` 线程安全且内部缓存已解析的 `Expression`，**应全局单例复用**，不要每次求值都 `new`。
 - `StandardEvaluationContext` 构建较重（收集类型信息、方法缓存），**不要在热路径里反复 new**，把它作为常量或缓存起来；`SimpleEvaluationContext` 更轻，处理不可信输入优先用它。

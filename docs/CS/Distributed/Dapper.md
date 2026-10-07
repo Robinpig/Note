@@ -22,7 +22,7 @@ Web 搜索用户对延迟很敏感，而延迟可能由任何子系统的不良�
 一个额外的设计目标是：追踪数据在生成后能很快用于分析，理想情况下在一分钟之内。
 尽管运行在数小时前数据上的追踪分析系统仍然很有价值，但新鲜信息的可用性使得对生产异常的响应更快。
 
-## 追踪
+## Tracing
 
 面向分布式服务的追踪基础设施需要记录系统中代表给定发起者（initiator）所完成的所有工作的信息。
 例如，图 1 展示了一个包含 5 台服务器的服务：一个前端（A）、两个中间层（B 和 C）以及两个后端（D 和 E）。
@@ -40,7 +40,7 @@ B 可以立即响应，但 C 需要来自后端 D 和 E 的工作才能回复 A�
 
 形式上，我们用树（trees）、跨度（spans）和注解（annotations）为 Dapper 追踪建模。
 
-### 追踪树与跨度
+### Trace Trees and Spans
 
 在 Dapper 追踪树中，树节点是我们称为跨度（span）的基本工作单元。
 边表示跨度与其父跨度之间的因果关系（casual relationship）。
@@ -60,9 +60,9 @@ Dapper 为每个跨度记录一个可读的*跨度名（span name）*，以及*�
 
 <p style="text-align: center;">Fig.2. The causal and temporal relationships between five spans in a Dapper trace tree.</p>
 
-### 注解
+### Annotations
 
-## 追踪收集
+## Trace Collection
 
 Dapper 的追踪日志与收集流水线是一个三阶段过程。
 首先，跨度数据被写入本地日志文件。
@@ -74,9 +74,9 @@ Bigtable 对稀疏表布局的支持在这里很有用，因为单个追踪可�
 Dapper 还提供一个 API 以简化对仓库中追踪数据的访问。
 Google 的开发者用这个 API 构建通用和特定于应用的分析工具。
 
-### 安全性
+### Security
 
-## 透明
+## Transparency
 
 Dapper 能够近乎零干预地跟随分布式控制路径，这几乎完全依赖于对少数几个通用库的埋点（instrumentation）：
 
@@ -90,9 +90,9 @@ Dapper 能够近乎零干预地跟随分布式控制路径，这几乎完全依�
   对于被追踪的 RPC，跨度 id 与追踪 id 从客户端传送到服务器。对于像 Google 中广泛使用的这类基于 RPC 的系统，这是一个必要的埋点位置。
   我们计划在相关非 RPC 通信框架演进并获得用户基础时对其做埋点。
 
-## 采样
+## Sampling
 
-### 自适应采样
+### Adaptive Sampling
 
 ## Links
 

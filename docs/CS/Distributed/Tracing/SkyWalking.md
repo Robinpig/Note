@@ -2,7 +2,7 @@
 
 Application performance monitor tool for distributed systems, especially designed for microservices, cloud native and container-based (Kubernetes) architectures.
 
-## 架构
+## Architecture
 
 从逻辑上讲，SkyWalking分为四个部分：探针，平台后端，存储和UI
 

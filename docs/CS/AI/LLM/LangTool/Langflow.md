@@ -6,13 +6,13 @@ Langflow 是一个开源的**低代码可视化 LLM 应用编排工具**：把�
 
 它与 [LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md) 是同源兄弟（编译出来的 flow 就是 LangChain 代码），与 [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md) 是互补关系（后者是代码层状态机，Langflow 是它之上的画布），与 [Dify](/docs/CS/AI/LLM/Platform/Dify.md) / [Flowise](/docs/CS/AI/LLM/Platform/Platform.md) 属同一赛道的不同选择。
 
-## 它的核心差异化：可视化不锁死你
+## Its Core Differentiation: Visualization Does Not Lock You In
 
 低代码工具的通病是"上手快、深入时卡死"——做到一半发现表达不了，只能重来。Langflow 的解法是**每个组件都是可编辑的 Python 类**：画布上搭骨架，需要定制的地方直接掀开盖子改底层 Python，不必在"全可视化"和"全代码"之间二选一。自定义组件带上输入/输出端口和 build 方法，Langflow 会自动为它生成 UI，还能打包分享给团队复用。
 
 一句话概括它的卖点：**不是"不用写代码"，而是"可以先不写代码，但随时能写"。**
 
-## 关键能力与这片画布的边界
+## Key Capabilities and the Boundary of This Canvas
 
 | 能力 | 说明 |
 |------|------|
@@ -27,7 +27,7 @@ Langflow 是一个开源的**低代码可视化 LLM 应用编排工具**：把�
 
 **边界也很清楚，别在画布上硬撑**：超过约 20 个节点后，连线会变成一团难以维护的毛线；开源版**没有内置 SSO 与 RBAC**，多租户/受监管场景需要额外的企业方案或自建中间件；高并发下的 CPU 与内存表现是已知短板。这些情况的正确答案通常都是"落回代码"。
 
-## 版本与部署（含一条重要变更）
+## Version and Deployment (including an important change)
 
 - **当前稳定版**：1.11.4（PyPI，2026-08），要求 Python 3.10–3.14；默认端口 `7860`。
 - **发版节奏极快**（近乎周更），好处是功能迭代快，代价是版本间可能有破坏性变更——**生产务必锁死版本号**，先看 changelog 再升级。
@@ -45,7 +45,7 @@ cd langflow/docker_example && docker compose up -d
 
 一条必说的安全提醒：`LANGFLOW_AUTO_LOGIN=true` 只适合本机试玩。**只要服务暴露到本机之外，就必须关掉它并设置 `LANGFLOW_SUPERUSER` 与 `LANGFLOW_SUPERUSER_PASSWORD`**——否则画布和你填进去的模型 API Key 等于裸奔在公网上，这是自托管工具最常见的事故来源。
 
-## 怎么选
+## How to Choose
 
 | 场景 | 建议 |
 |------|------|

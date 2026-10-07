@@ -1,6 +1,6 @@
 ## Introduction
 
-## 软件架构（Software Architecture）
+## Software Architecture
 
 - Monolithic（单体）
 - Service Oriented（面向服务，SOA）
@@ -8,7 +8,7 @@
 - Service Mesh（服务网格）
 - Serverless（无服务器）
 
-### 单体架构（Monolithic architecture）
+### Monolithic Architecture
 
 单体架构（Monolithic architecture）是软件应用的传统结构。分析师常把它与微服务——一种较新的应用开发模型——作比较。尽管单体架构有悠久历史，有时它仍优于微服务模型。
 
@@ -75,7 +75,7 @@ SOA架构过于严谨精密的流程与理论
 - SOA架构使用了服务数据对象（Service Data Object，SDO）来访问和表示数据，使用服务组件架构（Service Component Architecture，SCA）来定义服务封装的形式和服务运行的容器
 
 
-### 微服务架构（Microservice architecture）
+### Microservice Architecture
 
 微服务是一种面向服务的软件架构，专注于构建一组构成应用的自治组件。与作为单一不可分割单元构建的单体应用不同，微服务应用由多个通过 API 粘合在一起的独立组件组成。
 
@@ -179,7 +179,7 @@ Java Agent ⽅式挂载到微服务系统中，⽆需修改任何业务代码，
 URL, 针对 Dubbo 类型的接⼝维度的微服务框架，可以⽀持控制访问微服务的某⼀个具体
 的接⼝
 
-### 无服务器架构（Serverless architecture）
+### Serverless Architecture
 
 无服务器架构（Serverless architecture）是一种无需管理基础设施就能构建和运行应用的云计算方法。在无服务器应用中，代码执行由服务器管理，让开发者可以部署代码而无需担心服务器维护和配置。事实上，无服务器并不意味着“没有服务器”。应用仍在服务器上运行，但像 AWS 这样的第三方云服务为这些服务器承担全部责任。无服务器架构消除对额外资源、应用扩展、服务器维护和数据库及存储系统的需求。
 
@@ -210,7 +210,7 @@ URL, 针对 Dubbo 类型的接⼝维度的微服务框架，可以⽀持控制�
 
 
 
-## 服务治理
+## Service Governance
 
 
 ## Links

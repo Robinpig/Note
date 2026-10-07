@@ -2,7 +2,7 @@
 
 Retrofit 是 Square 开源的**类型安全 HTTP 客户端**（Android 与 Java），核心思想是**声明式接口 + 动态代理**：只定义一个 Java 接口并用注解描述 HTTP 方法、路径、参数，Retrofit 在运行时通过 `Proxy.newProxyInstance` 生成实现类，把方法调用翻译成 HTTP 请求，再用底层 HTTP 客户端（默认 OkHttp）发出并把响应反序列化为声明的返回类型。它不直接做网络 IO——真正的连接池、拦截器、HTTP/2 都在 OkHttp 层。
 
-## 声明与调用
+## Declaration and Invocation
 
 ```java
 interface GitHubService {
@@ -35,7 +35,7 @@ List<Repo> repos = svc.listRepos("octocat").execute().body();  // 同步；enque
 | `@Multipart + @Part` | 文件上传 |
 | `@Url` | 动态完整 URL |
 
-## 适配层：Call 之外的返回类型
+## Adapter Layer: Return Types Beyond Call
 
 默认返回 `Call<T>`；注册 adapter 后接口方法可直接返回：
 
@@ -45,13 +45,13 @@ List<Repo> repos = svc.listRepos("octocat").execute().body();  // 同步；enque
 
 这种"接口 + 适配"分层让业务代码完全看不到 HTTP 细节，也便于单测时把接口 mock 成普通对象。
 
-## Converter 与 OkHttp 拦截器
+## Converter and OkHttp Interceptor
 
 - ConverterFactory 决定序列化：Gson（最常用）、Jackson、Moshi、Protobuf、Wire；必须与 `Content-Type` 匹配。
 - 横切逻辑放在 OkHttp Interceptor 而不是 Retrofit 接口里：鉴权头注入、统一加签、日志（HttpLoggingInterceptor）、重试与超时、解压。应用拦截器与网络拦截器（跟随重定向后、看到真实连接）的层级不同。
 - 错误处理：`response.isSuccessful()`（2xx）与业务错误码要分开；异常分 IOException（网络层）与解析异常两类。
 
-## 与 Feign 的定位差异
+## Positioning Differences with Feign
 
 - **Retrofit**：端上（Android）出身，也广泛用于服务端，轻量、强依赖 OkHttp、注解描述偏 RESTful 资源；
 - **[Feign](/docs/CS/Framework/Spring_Cloud/Feign.md)**：微服务间调用出身，与 Spring Cloud/服务发现/负载均衡/熔断深度集成，接口上直接贴 Spring MVC 注解，服务端 Java 生态更主流；

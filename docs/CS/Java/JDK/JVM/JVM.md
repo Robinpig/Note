@@ -1,8 +1,8 @@
-## 版本基线
+## Version Baseline
 
 > [!NOTE]
 >
-> 本篇及整个 `JVM/` 子树的**版本口径**：最新 **JDK 27**（2026-09-15 GA，非 LTS），**LTS 基线为 JDK 25**（Premier 至 2030-09），下个 LTS 是 JDK 29。子树的整体版本基线见 [JDK 枢纽页](/docs/CS/Java/JDK/JDK.md?id=版本基线)。
+> 本篇及整个 `JVM/` 子树的**版本口径**：最新 **JDK 27**（2026-09-15 GA，非 LTS），**LTS 基线为 JDK 25**（Premier 至 2030-09），下个 LTS 是 JDK 29。子树的整体版本基线见 [JDK 枢纽页](/docs/CS/Java/JDK/JDK.md?id=version-baseline)。
 
 读到旧口径表述时以本基线为准。JVM 域最容易被写错的默认行为变化：
 
@@ -2203,7 +2203,7 @@ jmap -dump:format=b
 with jvisualvm
 
 
-## 本目录导航
+## This Directory Navigation
 
 JVM 笔记沿「类加载 → 运行时数据区 → 执行引擎 → 运行时支撑」展开，垃圾回收单独成页（见末条）：
 

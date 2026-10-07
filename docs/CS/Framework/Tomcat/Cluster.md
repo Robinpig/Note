@@ -131,7 +131,7 @@ tribes 的成员表决定「消息发给谁」。默认实现是组播心跳：
 
 拦截器顺序就是 server.xml 里 `<Interceptor>` 的声明顺序（再叠加 optionFlag 排序语义），排查消息问题时先画这条链。
 
-### EncryptInterceptor 的版本兼容
+### EncryptInterceptor Version Compatibility
 
 源码事实：默认算法是 **AES/GCM/NoPadding**，密钥经 `encryptionKey`（hex 编码）注入，另带防重放窗口（`replayWindowTime` 默认 10 秒）：
 

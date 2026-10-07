@@ -119,7 +119,7 @@ type p struct {
 
 
 
-## 状态机
+## State Machine
 
 每个 goroutine 在 `runtime.g` 结构里用 `atomicstatus` 字段记录当前状态，运行时借此判断能否调度、是否需要唤醒。Go 核心状态如下：
 
@@ -145,7 +145,7 @@ type p struct {
 
 `_Gscan` 位是 GC 安全点的关键：GC 必须先把 G 置为 `_Gscanrunnable` 才能扫描其栈上的指针，扫描完成再恢复。
 
-## 栈模型（连续栈）
+## Stack Model (Contiguous Stack)
 
 goroutine 能以 2KB 的初始栈支持百万级并发，靠的是**连续栈（contiguous stack）**机制——栈随需要动态增长、也在空闲时收缩，而不像 OS 线程那样固定 8MB。
 
@@ -162,7 +162,7 @@ goroutine 能以 2KB 的初始栈支持百万级并发，靠的是**连续栈（
 
 > 连续栈的"复制 + 改指针"是 Go 能做到极小初始栈的根本原因，也是 goroutine 切换比线程轻量的来源之一。源码落点：`runtime/stack.go`（`copystack` / `newstack` / `shrinkstack`）、`runtime/asm_amd64.s`（`morestack`）。
 
-## 创建：newproc 与 newproc1
+## Creation: newproc and newproc1
 
 `go f(a, b)` 并非直接调用函数，而是被编译器翻译为对 `runtime.newproc` 的调用，再由它转交 `runtime.newproc1` 完成 goroutine 的实体创建。
 
@@ -717,7 +717,7 @@ Go scheduler 会不断循环调用 runtime.schedule() 去调度 goroutines，而
 
 
 
-### 调度时机
+### Scheduling Timing
 
 
 主动让渡
@@ -978,7 +978,7 @@ TEXT gogo<>(SB), NOSPLIT, $0
 	JMP	BX
 ```
 
-### 抢占
+### Preemption
 
 为了让每个协程都有执行的机会，并且最大化利用CPU资源，Go语言在初始化时会启动一个特殊的线程来执行系统监控任务。
 系统监控在一个独立的M上运行，不用绑定逻辑处理器P，系统监控每隔10ms会检测是否有准备就绪的网络协程，并放置到全局队列中。
@@ -1457,7 +1457,7 @@ func stealWork(now int64) (gp *g, inheritTime bool, rnow, pollUntil int64, newWo
 }
 ```
 
-## 生命周期与退出
+## Lifecycle and Exit
 
 一个 goroutine 从 `_Grunnable` 被调度运行，到彻底回收，经历明确的收尾路径：
 
@@ -1468,7 +1468,7 @@ func stealWork(now int64) (gp *g, inheritTime bool, rnow, pollUntil int64, newWo
 
 **不能从外部强制结束**：Go 刻意不提供"kill 某个 goroutine"的 API。一个 goroutine 只能靠自己 `return`、或通过对 channel / `context` 信号**协作式**退出。这既是避免数据竞争的设计前提，也是 goroutine 泄漏（见下）频发的根源——如果没人发退出信号，它就会永远阻塞。
 
-## goroutine 泄漏
+## goroutine Leak
 
 goroutine 泄漏指：本应退出回收的 goroutine，因某种原因永远阻塞在 `_Gwaiting`、无法回到 `_Gdead`，随着时间累积持续占用内存与调度资源。
 

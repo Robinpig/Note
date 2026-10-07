@@ -11,7 +11,7 @@
 | overlay | `docker network create -d overlay` | VXLAN 隧道跨主机组网 | Docker Swarm 跨主机通信 |
 | macvlan | `--network=macvlan` | 容器直接获得物理网络 MAC/IP | 需要容器以"物理机"身份入网 |
 
-## bridge 模式
+## bridge Mode
 
 在 bridge 模式下首次启动会创建一个虚拟网桥，默认名称 docker0，按照 RFC1918 模型在私有网络命名空间给网桥分配一个子网（默认 `172.17.0.0/16`）。
 
@@ -24,11 +24,11 @@
 
 这样做的结果是在同一台机器的容器之间可以互相通信，不同机器上的容器不能互相通信，即使它们可能在相同的网络地址范围（不同主机上的 docker0 地址段可能是一样的）。
 
-## container 模式与 K8s
+## container Mode and K8s
 
 container 模式让新容器加入另一个已有容器的 Network Namespace，两个容器共享 IP 和端口空间，彼此通过 loopback 通信。**Kubernetes Pod 内的容器就是这样组织的**：所有业务容器都 `join` 到 pause 容器的 Network Namespace。区别在于，K8s 不用 docker0，而是通过 [CNI 插件](/docs/CS/Container/k8s/net.md) 完成网络配置。
 
-## 若要实现跨主机通信
+## To Achieve Cross-host Communication
 
 Docker 原生方案是以单机为边界的，跨主机通信主要有三条路：
 

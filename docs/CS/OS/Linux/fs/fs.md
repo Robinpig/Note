@@ -1064,7 +1064,7 @@ Log-structured File Systems
 Writing To Disk Sequentially
 
 
-## 文件系统
+## File System
 
 
 [proc](/docs/CS/OS/Linux/fs/proc.md) 文件系统也是一个基于内存的文件系统，方便用户空间访间内核数据结构、更改内核某些设置

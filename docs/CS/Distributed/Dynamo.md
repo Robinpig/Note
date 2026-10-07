@@ -19,7 +19,7 @@
 
 从高层看，Dynamo 由三大核心组件构成：请求协调（request coordination）、成员关系与故障检测（membership & failure detection），以及本地持久化引擎（local persistence engine）。
 
-## 经验总结
+## Lessons Learned
 
 在构建 Dynamo 的过程中总结出了一系列经验，这些经验也促使我们在该数据存储的设计中加入了更多改进。其中部分经验如下：
 

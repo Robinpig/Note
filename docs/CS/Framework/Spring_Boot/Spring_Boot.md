@@ -68,7 +68,7 @@ If you need to find out what auto-configuration is currently being applied, and 
 - **应用参数**：实现 `ApplicationRunner` / `CommandLineRunner` 的 bean 会在上下文就绪后执行（前者拿到解析后的 `ApplicationArguments`，后者拿到原始字符串数组），多个 Runner 可用 `@Order` 排序。
 - **优雅退出**：bean 实现 `ExitCodeGenerator` 可向 JVM 返回自定义退出码。
 
-### 可用性探针（Liveness / Readiness）
+### Availability Probes (Liveness / Readiness)
 
 Spring Boot 在 Actuator 中暴露应用可用性状态，供 Kubernetes 探针消费：
 
@@ -77,7 +77,7 @@ Spring Boot 在 Actuator 中暴露应用可用性状态，供 Kubernetes 探针�
 
 对应 `/actuator/health/liveness` 与 `/actuator/health/readiness`，可通过 `AvailabilityChangeEvent` 编程式更新状态，或自定义 `AvailabilityState`。
 
-### 应用事件
+### Application Events
 
 启动过程会按顺序发布应用事件（`ApplicationStartingEvent` → `ApplicationEnvironmentPreparedEvent` → `ApplicationContextInitializedEvent` → `ApplicationPreparedEvent` → `ApplicationStartedEvent` → `ApplicationReadyEvent` → 失败时 `ApplicationFailedEvent`）。
 
@@ -98,7 +98,7 @@ A full Spring Boot starter for a library may contain the following components:
 
 > You may combine the auto-configuration code and the dependency management in a single module if you don’t need to separate those two concerns.
 
-#### Boot 4 的 starter 改名
+#### Boot 4 Starter Renaming
 
 为与模块名对齐，若干 starter 在 4.0 更名，旧名保留但已弃用：
 
@@ -198,7 +198,7 @@ public final class ConfigurationPropertiesBean {
 }
 ```
 
-#### 配置加载顺序与优先级
+#### Configuration Loading Order and Priority
 
 外部配置按从高到低的优先级覆盖（高优先级先命中）：命令行参数 → 系统属性 → 操作系统环境变量 → `application-{profile}.yml`（jar 包外优先于包内）→ `application.yml`。具体可用 `config/import` 或属性 `spring.config.location` / `spring.config.additional-location` 改变搜索位置：
 
@@ -208,7 +208,7 @@ public final class ConfigurationPropertiesBean {
 
 单个文件可用 `---` 分隔多文档（multi-document），通过 `spring.config.activate.on-profile` 按 profile 激活。
 
-#### 宽松绑定（Relaxed Binding）
+#### Relaxed Binding
 
 `@ConfigurationProperties` 的属性名匹配是宽松的，同一属性多种写法都能绑定：kebab-case（`my-prefix.remote-timeout`，**推荐**）、camelCase、underscore、环境变量大写。但 `@Value` 占位符不支持宽松绑定，必须写精确 key——这也是优先用类型安全配置而非散落 `@Value` 的原因之一。
 

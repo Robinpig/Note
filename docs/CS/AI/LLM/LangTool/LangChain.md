@@ -6,7 +6,7 @@ LangChain 是把 LLM 组装成应用的**高层框架**：用一套跨厂商的�
 
 先分清它和 [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md) 的关系：**LangChain 是组件层与高层 Agent 入口，LangGraph 是它下面的状态机运行时**。`create_agent` 编译出来就是一张 LangGraph 图，持久化、流式、人在环路都由那层提供。
 
-## 官方四层定位
+## Official Four-Layer Positioning
 
 LangChain Inc. 把自家产品切成四层，这套划分比"框架对比框架"更能说明问题：
 
@@ -19,7 +19,7 @@ LangChain Inc. 把自家产品切成四层，这套划分比"框架对比框架"
 
 自下而上能力递减、开箱即用程度递增。选型原则与 [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md) 里的判断一致：**越靠上越省事，越靠下越可控**；只有当上层补的东西你用不上时，往下退一层才划算。
 
-## 包结构
+## Package Structure
 
 1.0 把包面切干净了，import 之前先认清楚该装哪个：
 
@@ -73,7 +73,7 @@ agent.invoke(
 
 自定义 middleware 可以挂在循环的多个钩子点上，实现细粒度控制。
 
-## 标准内容块（standard content blocks）
+## Standard Content Blocks (standard content blocks)
 
 1.0 在 `langchain-core` 里加了 `content_blocks`：把各厂商返回的差异化内容（推理轨迹、引用、内置工具调用等）统一成一套带类型的标准结构。
 
@@ -83,12 +83,12 @@ result["messages"][-1].content_blocks   # 跨厂商统一的输出结构
 
 好处是换模型不用改解析逻辑，且对旧代码向后兼容（惰性加载）。
 
-## Message 与 Tool
+## Message and Tool
 
 - **Message**：对话的基本单位，`SystemMessage` / `HumanMessage` / `AIMessage` / `ToolMessage` 各司其职。`MessagesState` 内置 reducer，新消息自动追加——LangGraph 的 ReAct 示例全靠这一条。
 - **Tool**：用 `@tool` 装饰普通函数，函数的类型签名与 docstring 即工具 schema，不必手写 JSON Schema。
 
-## 与 LangGraph 的分工
+## Division of Labor with LangGraph
 
 | 维度 | LangChain | LangGraph |
 | --- | --- | --- |

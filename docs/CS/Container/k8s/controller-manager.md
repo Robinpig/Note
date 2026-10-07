@@ -93,7 +93,7 @@ panic("unreachable")
 }
 ```
 
-## 控制器注册表与启动链路
+## Controller Registry and Startup Chain
 
 Controller Manager 在启动时把一组控制器**描述**（descriptor）注册进注册表。早期版本是 `cmd/kube-controller-manager/app/controllermanager.go` 里的 `NewControllerInitializers()` 函数，**v1.36 已改为 `controller_descriptor.go` 中的 `KnownControllers()`**：
 
@@ -111,7 +111,7 @@ func ControllersDisabledByDefault() []string { ... }
 
 证书与身份相关的是另一组：`csrsigning`（**四个**独立签发放：kubelet-serving / kubelet-client / kube-apiserver-client / legacy-unknown，`pkg/controller/certificates/signer/`）、`csrapproving`（审批，走 SAR）、`csrcleaner`（清理）、`root-ca-cert-publisher`（往每个 namespace 发 `kube-root-ca.crt`）、`kube-apiserver-serving-clustertrustbundle-publisher`（Beta 默认关闭），另有两个**默认禁用**的 `bootstrapsigner` 与 `tokencleaner`。这条链路见 [身份与证书](/docs/CS/Container/k8s/Identity.md)。
 
-## reconcile 模板
+## reconcile Template
 
 每个控制器都跑同一个模板：**从 Informer 拿到事件 → 只把对象 key 放进 WorkQueue → worker 取出 key → 从本地缓存读最新状态 → 对比期望与实际 → 写回 apiserver**。
 
@@ -139,7 +139,7 @@ func ControllersDisabledByDefault() []string { ... }
 
 选主失败或失去 Leader 身份时默认行为是**直接退出进程**（`klog.FlushAndExit(1)`），而不是降级继续运行。这是刻意的：避免两个实例同时认为自己有写权限。开启 `ControllerManagerReleaseLeaderElectionLockOnExit` 后改为主动释放租约，让接管更快。
 
-## v1.36 变更要点
+## v1.36 Key Changes
 
 | 项 | 变化 |
 |---|---|

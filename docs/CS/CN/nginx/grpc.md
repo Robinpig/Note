@@ -42,7 +42,7 @@ location /api/ {
 }
 ```
 
-### 指令全集与默认值
+### Complete Directive Set and Defaults
 
 `ngx_http_grpc_commands` 里共 **33 条**指令。整体分为两组——普通组与 `grpc_ssl_*` 组。
 
@@ -65,7 +65,7 @@ location /api/ {
 
 `grpc_ssl_*` 共 14 条，与 `proxy_ssl_*` **一一对应、无差集**：`session_reuse`、`protocols`、`ciphers`、`name`、`server_name`、`verify`、`verify_depth`、`trusted_certificate`、`crl`、`certificate`、`certificate_key`、`certificate_cache`、`password_file`、`conf_command`。回源 TLS 直接用这组，并用 `grpcs://` 前缀触发。
 
-### 三个硬编码值决定了行为边界
+### Three Hardcoded Values Determine Behavior Boundaries
 
 `ngx_http_grpc_create_loc_conf()` 里有一组以 `/* the hardcoded values */` 开头的赋值，它们**没有对应指令、不可配置**：
 
@@ -86,7 +86,7 @@ r->request_body_no_buffering = 1;        /* 请求体边收边转，不落盘不
 
 四条合起来就是 gRPC 代理的行为基石：**请求与响应都是流式的，且不可关闭**。所以下面这些指令**根本不存在**：`grpc_request_buffering`、`grpc_buffering`、`grpc_pass_trailers`、`grpc_pass_request_body`、`grpc_limit_rate`、`grpc_cache`、`grpc_store`。想「先缓冲完请求再发上游」或「关掉 trailer」，在 grpc 模块里没有开关。
 
-### 上游请求怎么造出来
+### How Upstream Request Is Constructed
 
 `ngx_http_grpc_create_request()` 干的第一件事不是写请求行，而是发 HTTP/2 握手。它有一段静态数组，把 connection preface 和两帧预编码好直接拷过去：
 
@@ -114,7 +114,7 @@ b->last = ngx_http_v2_write_value(b->last, host.data, host.len, tmp); }
 
 > Change: now HTTP/2 and gRPC requests to backends are always sent with the `:authority` pseudo-header, and HTTP/1.1 requests - with the `Host` header.
 
-### 上游响应怎么读
+### How to Read Upstream Response
 
 `ngx_http_grpc_process_header()` 是逐帧解析器，认 HEADERS / CONTINUATION / DATA / RST_STREAM / GOAWAY / WINDOW_UPDATE / SETTINGS / PING。在头部里，**只有 `:status` 伪头是合法的**，其它以 `:` 开头的一律判协议违规：
 
@@ -144,7 +144,7 @@ if (ctx->name.len && ctx->name.data[0] == ':') {
 
 请求侧则由 `ngx_http_grpc_body_output_filter()` 把请求体切成 **16384 字节**（`NGX_HTTP_V2_DEFAULT_FRAME_SIZE = 1 << 14`）的 DATA 帧，同时递减 `ctx->send_window` 与 `ctx->connection->send_window`。
 
-### trailer 与 TE：为什么客户端必须 HTTP/2
+### trailer and TE: Why Client Must Use HTTP/2
 
 gRPC 的状态码 `grpc-status` 只能放在 HTTP/2 的 **trailing HEADERS** 里——响应开始时状态还未知，不可能放在头里。所以 trailer 是协议必需，而 nginx 必须把它透传给下游（`pass_trailers = 1` 硬编码）。
 
@@ -178,19 +178,19 @@ if (rc == NGX_HTTP_PARSE_HEADER_DONE) {
 
 **那为什么不能用 HTTP/1.1 客户端调 gRPC？** 根源在请求体解析：`ngx_http_parse_chunked(r, b, rb->chunked, 0)` 的最后一个参数是 `keep_trailers = 0`，也就是 **HTTP/1.1 客户端请求体里的 trailer 被解析后直接丢弃**。既然 trailer 进不来也发不出去，gRPC 的语义就不成立。这是「gRPC 必须走 HTTP/2」的源码级解释，而不是一句笼统的「HTTP/1.1 不支持流」。
 
-### 客户端侧的协议前提
+### Client-Side Protocol Prerequisites
 
 - **必须显式 `http2 on;`（或 `listen ... http2`）**。`ngx_http_ssl_module` 的 ALPN 候选默认是 `NGX_HTTP_ALPN_PROTOS = "\x08http/1.1\x08http/1.0\x08http/0.9"`——**不含 h2**；只有 `h2scf->enable || hc->addr_conf->http2` 成立时，才会把 `NGX_HTTP_V2_ALPN_PROTO`（`"\x02h2"`）插到候选最前面。忘了这一条，客户端 ALPN 协商不到 h2，会静默退化成 HTTP/1.1。
 - **h2c 只支持 prior knowledge**：非 SSL socket 上若首包是 `"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"` 就直接切到 HTTP/2。**不支持 HTTP/1.1 Upgrade 到 h2c**（全源码无该分支）。
 - **上游永远是 HTTP/2**。`grpc_pass` 不带前缀时即 h2c；`grpcs://` 才是 h2/TLS。没有「上游走 HTTP/1.1」的选项——这也是为什么它不能直接代理普通 HTTP 后端。
 
-### 请求体限制：一个容易踩空的地方
+### Request Body Limit: An Easy Place to Slip
 
 `client_max_body_size` 的检查发生在核心阶段，依据是 `content_length_n`。而**HTTP/2 客户端如果不带 `Content-Length`**（gRPC 流式请求的常态），`content_length_n` 为 `-1`，**检查被直接跳过**。
 
 所以：**典型的 gRPC 请求不受 `client_max_body_size` 约束**。想限制大消息，得靠上游应用自己或 `client_body_buffer_size` 之类的间接手段。HTTP/1.1 chunked 上传则仍会逐块累计检查，两者行为不同。
 
-### 重试：为什么 gRPC 几乎不重试
+### Retry: Why gRPC Rarely Retries
 
 通用重试决策在 `ngx_http_upstream_next()` 里，有一行专门为 gRPC 这类场景设的闸门：
 
@@ -214,7 +214,7 @@ if (u->peer.tries == 0
 
 再叠加 `grpc_next_upstream` 默认只有 `error timeout`，结论很清楚：**gRPC 的重试基本只在建连阶段发生**。想在应用层做重试，应该交给 gRPC 客户端自己的 retry policy，而不是 nginx。
 
-### 超时矩阵
+### Timeout Matrix
 
 | 指令 | 作用方向 | 语义 |
 | :-- | :-- | :-- |
@@ -225,7 +225,7 @@ if (u->peer.tries == 0
 
 要特别注意：**nginx 没有 gRPC 心跳（HTTP/2 PING）逻辑**。任何「该方向上持续有字节」都会重置定时器，但一旦某个方向静默超过对应超时，连接立刻断开。长连接双向流（比如语音/推送类）必须把这两个超时显式调大，否则会被 60s 默认值悄悄掐断。
 
-### 排障：日志关键字
+### Troubleshooting: Log Keywords
 
 grpc 模块自带的错误日志非常细（`upstream sent ...` 系列有 60 多条），按现象归类：
 
@@ -242,7 +242,7 @@ grpc 模块自带的错误日志非常细（`upstream sent ...` 系列有 60 多
 > 有一个流传很广的「常见日志」**在源码里不存在**：`upstream sent unsupported protocol version`（全树 grep 零命中），别写进排查表。
 > 另外，如果服务端日志里出现疑似 gRPC 错误信息，那**不是 nginx 产生的**——nginx 不认识 `grpc-status`，它只会把 trailer 原样透传。此时应去看上游应用日志或直接用 `grpcurl` 验证后端。
 
-### 与 proxy 模块的关系
+### Relationship with proxy Module
 
 三个模块是**三份独立源码**，但共享同一个上游配置结构 `ngx_http_upstream_conf_t`：
 
@@ -254,7 +254,7 @@ grpc 模块自带的错误日志非常细（`upstream sent ...` 系列有 60 多
 
 grpc 与 proxy_v2 的函数名去掉前缀后大量同名（`parse_frame` / `parse_header` / `parse_fragment` / `create_request` / `send_window_update` / `parse_rst_stream`…），本质是同一套 HTTP/2 上游实现的两次演进——属**复制粘贴式演进**，维护上要留意两者的差异是刻意的还是漏改的。
 
-### 陷阱清单
+### Pitfall List
 
 1. **忘了 `http2 on`**。ALPN 不提供 h2，客户端静默退到 HTTP/1.1，然后各种 gRPC 语义问题接踵而来。
 2. **以为 `proxy_pass` 能代 gRPC**。proxy 只懂 HTTP/1.x，做不到。

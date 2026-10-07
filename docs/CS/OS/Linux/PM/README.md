@@ -19,7 +19,7 @@ Linux 的电源管理是一个**倒金字塔**：越往底层，节能越彻底�
 
 cpuidle 选 C-state 时会参考下一个定时器到期时间，cpufreq 选 P-state 时会参考当前 util —— 两者共享"预测还有多久空闲"这个信息，但决策目标相反。
 
-## 一个贯穿全栈的机制：PM QoS
+## A Mechanism Spanning the Whole Stack: PM QoS
 
 PM 性能服务质量（PM QoS）是内核里唯一一处"由用户态声明需求、影响内核决策"的机制。它的作用是给电源管理各层提供一个**统一的延迟/频率约束出口**：
 
@@ -37,7 +37,7 @@ PM QoS: 全局 cpu_latency_qos / 各设备 latency QoS
 
 > ⚠️ **v7.2 的一个重要变化**：旧资料里控制 cpuidle 选深度的 `cpuidle_latency_limit` / `cpuidle_latency_requirement` 两个 sysfs 节点**已不存在**。同样的语义改由 PM QoS 提供。
 
-## 跨层接缝
+## Cross-layer Seam
 
 - **timer / tick**：cpuidle 进入深度空闲前要停 tick，用 hrtimer 模拟 —— 完整机制见 [timer 时间子系统](/docs/CS/OS/Linux/timer.md) 的 NO_HZ 一节。
 - **调度器**：cpufreq 的 schedutil governor **直接与调度器对话**取 util，不经过别的中间层，见 [cpufreq](/docs/CS/OS/Linux/PM/cpufreq.md)。
@@ -45,7 +45,7 @@ PM QoS: 全局 cpu_latency_qos / 各设备 latency QoS
 - **中断**：runtime PM 与中断唤醒的交互（能否在中断上下文里 get/put）见 [runtime PM](/docs/CS/OS/Linux/PM/runtimepm.md)。
 - **崩溃转储**：睡眠失败时的错误处理与 `pm_test_level` 调试开关见 [suspend](/docs/CS/OS/Linux/PM/suspend.md)。
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 ```shell
 # cpuidle：当前有哪些 C-state、用了哪个

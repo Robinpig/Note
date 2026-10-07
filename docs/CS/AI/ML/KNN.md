@@ -18,7 +18,7 @@ KNN 的三个基本要素：
 2. 取距离最小的 K 个训练样本
 3. 分类：K 个邻居中票数最多的类别即为输出；回归：K 个邻居标签的平均值即为输出
 
-### K 值的选择
+### Selection of K
 
 - **K 太小**（如 K=1）：决策边界复杂，对噪声敏感，容易**过拟合**
 - **K 太大**：远处不相关的样本也参与投票，决策边界过于平滑，容易**欠拟合**
@@ -31,7 +31,7 @@ KNN 的三个基本要素：
 
 距离度量决定了"近"的含义，以下 10 种是机器学习里最常用的（p、q 为两个 n 维样本向量）。
 
-#### 1. Euclidean Distance 欧氏距离
+#### 1. Euclidean Distance
 
 最常用的直线距离，对应 L2 范数：
 
@@ -39,7 +39,7 @@ $$
 d(p,q)=\sqrt{\sum_{i=1}^n\left(q_i-p_i\right)^2}
 $$
 
-#### 2. Chebyshev Distance 切比雪夫距离
+#### 2. Chebyshev Distance
 
 各维度差的最大值，对应 L∞ 范数。国际象棋里王的走法就是切比雪夫距离：
 
@@ -61,7 +61,7 @@ $$
 d=\lim_{k\to\infty}\left(\sum_{i=1}^n\left|x_i-y_i\right|^k\right)^{1/k}
 $$
 
-#### 3. Manhattan Distance 曼哈顿距离
+#### 3. Manhattan Distance
 
 各维度差的绝对值之和，对应 L1 范数。因纽约曼哈顿街区只能横平竖直地走而得名：
 
@@ -69,7 +69,7 @@ $$
 d(p,q)=\sum_{i=1}^n\left|q_i-p_i\right|
 $$
 
-#### 4. Minkowski Distance 闵可夫斯基距离
+#### 4. Minkowski Distance
 
 欧氏、曼哈顿、切比雪夫距离的统一推广：
 
@@ -81,7 +81,7 @@ $$
 - p=2 时，为 Euclidean Distance
 - p→∞ 时，为 Chebyshev Distance
 
-#### 5. Mahalanobis Distance 马氏距离
+#### 5. Mahalanobis Distance
 
 考虑特征间**协方差**的距离，能消除量纲和相关性影响：
 
@@ -91,7 +91,7 @@ $$
 
 其中 $\Sigma$ 是数据的协方差矩阵。Σ 为单位阵时退化为欧氏距离。
 
-#### 6. Bhattacharyya Distance 巴塔查里亚距离
+#### 6. Bhattacharyya Distance
 
 度量两个**概率分布**的重叠程度，常用于分类特征选择、图像处理：
 
@@ -99,11 +99,11 @@ $$
 D_B(p,q)=-\ln\sum_{i}\sqrt{p_i\,q_i}
 $$
 
-#### 7. Hamming Distance 汉明距离
+#### 7. Hamming Distance
 
 两个**等长字符串/编码**在对应位置上不同字符的个数，用于纠错编码、DNA 序列比较。例如 `10101` 与 `10010` 的汉明距离为 2。
 
-#### 8. Cosine 余弦相似度
+#### 8. Cosine Similarity
 
 用向量夹角衡量方向相似性，与向量长度无关，文本检索中最常用：
 
@@ -114,7 +114,7 @@ $$
 > [!TIP]
 > 严格说余弦是**相似度**（越大越相似），取 1-cos 后才是距离。
 
-#### 9. Jaccard Similarity Coefficient 杰卡德相似系数
+#### 9. Jaccard Similarity Coefficient
 
 两个**集合**的交集与并集之比，适合稀疏的布尔特征：
 
@@ -122,7 +122,7 @@ $$
 J(A,B)=\frac{|A\cap B|}{|A\cup B|}
 $$
 
-#### 10. Pearson Correlation Coefficient 皮尔逊相关系数
+#### 10. Pearson Correlation Coefficient
 
 协方差除以标准差之积，度量两个变量的**线性相关**程度，取值 [-1, 1]：
 
@@ -132,14 +132,14 @@ $$
 
 ## Pros and Cons
 
-### 优点
+### Advantages
 
 - 简单好用，容易理解，精度高，理论成熟，既可以用来做分类也可以用来做回归
 - 可用于数值型数据和离散型数据
 - 训练时间复杂度为 O(n)；无数据输入假定
 - 对异常值不敏感
 
-### 缺点
+### Disadvantages
 
 - 计算复杂性高；空间复杂性高
 - 样本不平衡问题（即有些类别的样本数量很多，而其它样本的数量很少）

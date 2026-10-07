@@ -4,7 +4,7 @@
 
 本笔记给出组合的 CS 视角；存在性证明的鸽巢原理见例题 [鸽巢原理](/docs/Mathematics/Pigeonhole%20Principle.md)，计数与离散基础见 [离散数学](/docs/Mathematics/Discrete_Math.md)。
 
-## 基本计数原理
+## Basic Counting Principles
 
 | 原理 | 公式 | 含义 |
 | --- | --- | --- |
@@ -14,15 +14,15 @@
 | 容斥原理 | 交并计数修正 | 处理重叠 |
 | 生成函数 | 级数编码序列 | 把计数变代数 |
 
-## 鸽巢原理
+## Pigeonhole Principle
 
 若把 $m$ 个对象放入 $n$ 个盒子且 $m>n$，则某盒至少含两个对象。朴素却强大：它只证「存在」，不构造具体解，是存在性证明的利器。完整说明见例题 [鸽巢原理](/docs/Mathematics/Pigeonhole%20Principle.md)。
 
-## 图论入口
+## Graph Theory
 
 图（顶点+边）是组合的核心结构：握手定理、欧拉回路、树、平面性都属组合范畴。图论独立成庞大领域，是网络、依赖分析与最短路径的基础，见 [离散数学](/docs/Mathematics/Discrete_Math.md) 与其在 CS 的落点。
 
-## 在 CS 中的落点
+## Applications in CS
 
 - **算法复杂度**：计数下界证明某问题至少多少步，见 [算法](/docs/CS/Algorithms/Algorithms.md)。
 - **密码学**：组合设计用于密钥分发与哈希。

@@ -19,7 +19,7 @@ type Mutex struct {
 `mutexStarving`（进入饥饿模式）；高位存放等待者数量（waiter count）。等待/唤醒最终走 runtime 的信号量
 （`runtime_SemacquireMutex` / `runtime_Semrelease`），由调度器把 goroutine park 到等待队列，而不是忙等。
 
-## Fast Path 与 Slow Path
+## Fast Path and Slow Path
 
 - **正常路径（fast path）**：无竞争时 `Lock` 就是一次 CAS 把 `mutexLocked` 置位，成功立即返回，无系统级开销。
 - **慢速路径（slow path）`lockSlow`**：CAS 失败后进入，先在满足条件时**自旋（spinning）**几次，期望持锁者很快释放（临界区很短时，自旋比挂起/唤醒便宜）；
@@ -27,7 +27,7 @@ type Mutex struct {
 
 这与 Linux 内核 [futex](/docs/CS/OS/Linux/Lock/futex.md)「用户态先原子试、失败再陷入内核等待」的两段式设计是同一个套路。
 
-## Normal 与 Starvation 模式
+## Normal and Starvation Modes
 
 Go 1.9 引入饥饿模式，解决极端竞争下新来的 goroutine（正在 CPU 上运行）反复插队、导致被挂起的等待者长期拿不到锁的问题：
 

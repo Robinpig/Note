@@ -8,7 +8,7 @@ NAPI（New API）就是为解决它而生的。它的思路是**中断与轮询�
 
 本页专讲这条收包主线本身的机制。整条上行（驱动 → 协议栈 → socket 唤醒）见 [network 的 Ingress 章](/docs/CS/OS/Linux/net/network.md?id=net_rx_action)，发送侧的对应机制见 [Qdisc](/docs/CS/OS/Linux/net/Qdisc.md)。
 
-## 为什么纯中断不行
+## Why Pure Interrupts Do Not Work
 
 先把问题说清楚，才知道 NAPI 每个设计取舍的来由。三个方案的对照：
 
@@ -22,7 +22,7 @@ livelock 的关键在于**中断优先级高于一切**：只要网卡持续来�
 
 NAPI 的破解点很直接：**在忙的时候不让网卡发中断**。没有中断就不会被抢占，协议栈得以连续运行，收完一批再开中断。
 
-## 核心结构：napi_struct
+## Core Structure: napi_struct
 
 一个 NAPI 实例通常对应**一个接收队列**（多队列网卡每个队列一个，配合 RSS 分散到不同 CPU）。定义如下（6.12 `include/linux/netdevice.h`）：
 
@@ -88,7 +88,7 @@ enum {
 
 最需要理解的是 `SCHED` 与 `MISSED` 的配合。`SCHED` 表示"已在待轮询链表里（或正被处理）"，它的存在保证了**同一个 NAPI 不会被两个 CPU 同时 poll**。而 `MISSED` 解决一个微妙竞态：轮询进行中网卡又来了新包，此时 `SCHED` 已置位，中断处理不能再把它加进链表（会破坏链表），于是改成置 `MISSED` 位——等这一轮 poll 结束时，若发现 `MISSED` 被置过，就**再排一轮**，从而不丢包。
 
-## 调度侧：softnet_data
+## Scheduling Side: softnet_data
 
 NAPI 不是全局管理的，而是**每 CPU 一份**（`net/core/dev.c`）：
 
@@ -130,7 +130,7 @@ struct softnet_data {
 - `time_squeeze`、`processed`、`dropped`、`received_rps` 是观测计数，直接对应 `/proc/net/softnet_stat`。
 - 结构是 `____cacheline_aligned_in_smp` 对齐的 per-CPU 数据，因此**本 CPU 访问无需加锁**——这是收包路径能无锁化的基础。
 
-## 调度：从硬中断到 poll_list
+## Scheduling: From Hard Interrupt to poll_list
 
 驱动在硬中断里做的事极少，典型实现就一行（`igb_msix_ring`，完整上下文见 [network 的 driver process 章](/docs/CS/OS/Linux/net/network.md?id=igb_msix_ring)）：
 
@@ -196,7 +196,7 @@ bool napi_schedule_prep(struct napi_struct *n)
 
 通过 prep 后，`__napi_schedule()` 把 NAPI 挂到本 CPU 的 `poll_list` 并触发 `NET_RX_SOFTIRQ`（软中断机制见 [Interrupt 的 softirq 章](/docs/CS/OS/Linux/Interrupt.md?id=softirq)）。注意这里**关中断调用**变体 `napi_schedule_irqoff()` 是驱动里更常用的形式——硬中断里中断本来就关着，省一次开关开销。
 
-## 执行：net_rx_action 与 __napi_poll
+## Execution: net_rx_action and __napi_poll
 
 软中断被调度后执行 `net_rx_action()`（`net/core/dev.c`）：
 
@@ -363,7 +363,7 @@ poll 返回值决定三条去路，这是驱动必须遵守的契约：
 
 注意注释里的约束：**用光 weight 时驱动不许改 NAPI 状态**——因为此时所有权仍归 `net_rx_action`，它要把实例在链表上挪动。这条常被写驱动的人忽略。
 
-## 收尾：napi_complete_done 与中断延迟打开
+## Wrap-up: napi_complete_done and Interrupt Delay Re-enable
 
 收干净后，驱动调用 `napi_complete_done()` 宣布"我这轮干完了，可以重新开中断了"。现代版本（6.x）里它做的事远不止清状态位：
 
@@ -502,7 +502,7 @@ static int e1000e_poll(struct napi_struct *napi, int budget)
 
 **只有 `napi_complete_done()` 返回真才重新开中断**——这正是 deferral 能在驱动无感的情况下生效的原因。
 
-## GRO 与 NAPI 的耦合
+## GRO and NAPI Coupling
 
 GRO 状态直接长在 `napi_struct` 里（`gro_hash[]`、`rx_list`、`rx_count`），这不是随意的：**聚合必须按 NAPI 上下文隔离**，否则不同队列（可能不同 CPU、不同流）的包会被错误合并。
 
@@ -544,9 +544,9 @@ static inline void gro_normal_list(struct napi_struct *napi)
 }
 ```
 
-批的提交点有三处：攒够 `gro_normal_batch`、`__napi_poll()` 里额度耗尽时、以及 `napi_complete_done()` 收尾时。用链表批量上交（`netif_receive_skb_list_internal`）比逐个 `netif_receive_skb` 少了很多重复的每包开销。GRO 与 LRO 的取舍见 [network 的卸载章](/docs/CS/OS/Linux/net/network.md?id=分段与聚合卸载-tso--gso--gro)。
+批的提交点有三处：攒够 `gro_normal_batch`、`__napi_poll()` 里额度耗尽时、以及 `napi_complete_done()` 收尾时。用链表批量上交（`netif_receive_skb_list_internal`）比逐个 `netif_receive_skb` 少了很多重复的每包开销。GRO 与 LRO 的取舍见 [network 的卸载章](/docs/CS/OS/Linux/net/network.md?id=segmentation-and-aggregation-offload-tso--gso--gro)。
 
-## backlog：兜底队列与 RPS
+## backlog: Fallback Queue and RPS
 
 不是所有包都来自有 NAPI 的硬件队列。环回、隧道设备、以及 RPS 分发过来的包，走的是每 CPU 内嵌的 `backlog` NAPI，其 poll 是 `process_backlog()`。入队逻辑（`net/core/dev.c`）：
 
@@ -633,9 +633,9 @@ static int process_backlog(struct napi_struct *napi, int quota)
 
 处理时先把 `input_pkt_queue` **整体拼到 `process_queue`**，然后只消费后者。这样生产者（别的 CPU 经 RPS 入队）只需短暂持锁往 `input_pkt_queue` 尾部追加，不必和消费者长时间互斥。另外注意那段注释：backlog 这个 NAPI **只被本 CPU 操作**，所以收尾可以退化成普通写而不需要原子操作与内存屏障——这是"共享程度决定同步强度"的典型案例。
 
-**RPS（Receive Packet Steering）** 正是借此实现的：硬件只有少量队列、中断集中在少数 CPU 时，可以在收包早期按流的哈希把包排到**另一个 CPU 的 backlog**，再用 IPI 触发该 CPU 的 `NET_RX_SOFTIRQ`。于是协议栈处理被分散到多核。它与硬件 RSS 的对照（谁算哈希、能否避免跨 CPU 缓存抖动）见 [network 的多核扩展章](/docs/CS/OS/Linux/net/network.md?id=多核扩展-rss--rps--rfs--xps)。
+**RPS（Receive Packet Steering）** 正是借此实现的：硬件只有少量队列、中断集中在少数 CPU 时，可以在收包早期按流的哈希把包排到**另一个 CPU 的 backlog**，再用 IPI 触发该 CPU 的 `NET_RX_SOFTIRQ`。于是协议栈处理被分散到多核。它与硬件 RSS 的对照（谁算哈希、能否避免跨 CPU 缓存抖动）见 [network 的多核扩展章](/docs/CS/OS/Linux/net/network.md?id=multi-core-scaling-rss--rps--rfs--xps)。
 
-## 变体：线程化 NAPI 与忙轮询
+## Variant: Threaded NAPI and Busy Polling
 
 **线程化 NAPI（threaded NAPI）**：设了 `NAPI_STATE_THREADED` 的实例不再在软中断里跑 poll，而是每个 NAPI 一个专属内核线程 `napi/<dev>-<id>`（见 `napi_kthread_create()`）。好处是收包路径变成**可调度、可设优先级**的普通任务——需要确定性延迟的场景（如配合 RT 应用）可以把它设成实时优先级，且不会被其他软中断阻塞。代价是每次调度多一次上下文切换。
 
@@ -646,7 +646,7 @@ static int process_backlog(struct napi_struct *napi, int quota)
 
 二者都依赖 `napi_id` 与全局 `napi_hash`，因此设了 `NAPI_STATE_NO_BUSY_POLL` 的实例不进这个哈希表。
 
-## 驱动怎么写
+## How to Write the Driver
 
 注册就是告诉内核"这个队列的收割函数是它"（`netif_napi_add()` 默认 weight = `NAPI_POLL_WEIGHT` = 64，需要不同额度用 `netif_napi_add_weight()`）：
 
@@ -676,7 +676,7 @@ void netif_napi_add_weight(struct net_device *dev, struct napi_struct *napi,
 | 在 poll 里睡眠 | poll 在软中断上下文，不允许睡眠；真要睡眠请用 [workqueue](/docs/CS/OS/Linux/workqueue.md) |
 | 未设 `.owner`/未在 disable 后停止中断 | 卸载/关闭路径的 use-after-free |
 
-## 观测与调优
+## Observation and Tuning
 
 第一手观测是 `/proc/net/softnet_stat`，**每行一个 CPU**（6.12 `net/core/net-procfs.c`，15 列十六进制）：
 
@@ -705,7 +705,7 @@ void netif_napi_add_weight(struct net_device *dev, struct napi_struct *napi,
 
 另外 `/proc/softirqs` 里的 `NET_RX` 行看各 CPU 的收包软中断次数，`/proc/interrupts` 看硬中断分布（判断是否该调 IRQ 亲和性），`ethtool -S` 看驱动自身计数（如 `rx_missed`、`rx_overruns` 指向 RingBuffer 溢出）。
 
-## 与其他子系统的边界
+## Boundaries with Other Subsystems
 
 - **中断与下半部**：NAPI 就是 [NET_RX_SOFTIRQ](/docs/CS/OS/Linux/Interrupt.md?id=softirq) 的实体。它不选用 tasklet/workqueue 的理由很清楚——tasklet 不能跨 CPU 并行、且粒度太粗；workqueue 走的是进程上下文，调度延迟不可控且没法保证"收完这一批"。收包需要的是**在软中断上下文里可批量、可限额、可跨 CPU 并行**的执行体，这正是 NAPI 的形状。
 - **发送侧**：发送走 [Qdisc](/docs/CS/OS/Linux/net/Qdisc.md) 排队与 `NET_TX_SOFTIRQ`，与 NAPI 的收包路径结构对称但目的不同——一个做流量调度与整形，一个做批量收割与背压。

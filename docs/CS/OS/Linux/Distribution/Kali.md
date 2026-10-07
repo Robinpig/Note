@@ -17,7 +17,7 @@ Kali Linux 是基于 [Debian](/docs/CS/OS/Linux/Distribution/Debian.md) 的发�
 | 基础 | **Debian testing**（现 trixie 血统） |
 | 仓库 | `kali-rolling` |
 
-## 滚动发行意味着什么
+## What Rolling Release Means
 
 **Kali 不做版本分支**，只有一条持续更新的 `kali-rolling` 仓库：
 
@@ -35,9 +35,9 @@ sudo apt update && sudo apt full-upgrade -y
 
 > ⚠️ 但存在 `kali-last-snapshot` 变体：指向季度快照点，**两次发布之间不收更新**。看到这个 suite 名就说明系统不在滚动分支上。
 
-## 2026.2 的三个变化
+## Three Changes in 2026.2
 
-### APT 源改为 deb822 格式
+### APT Sources Changed to deb822 Format
 
 **新装系统不再有 `/etc/apt/sources.list`**，改为 `/etc/apt/sources.list.d/kali.sources`：
 
@@ -58,15 +58,15 @@ sudo apt modernize-sources      # 生成 .sources，旧文件存为 .list.bak
 
 `modernize-sources` 会补上可推断的 `Signed-By` 值，转换后应检查再删旧文件。
 
-### 虚拟机不再装显卡固件
+### VMs No Longer Install GPU Firmware
 
 安装器检测到运行在 VM 内时**跳过 NVIDIA / AMD / Intel GPU 固件** —— 这些过去约占 300 MB 并把 initrd 顶到 200 MB 以上。裸机安装不变。
 
-### 服务类工具配 start/stop 脚本
+### Service-type Tools Configure start/stop Scripts
 
 依赖后台服务的工具现在附带 `-start` / `-stop` 命令，会报状态、打印默认凭据、有 Web UI 的直接打开。默认安装带 5 个（`gophish-start`、`faraday-start`、`starkiller-start` 等）。
 
-## 内核：为什么 ISO 是 6.19 而仓库到了 7.x
+## Kernel: Why the ISO Is 6.19 While the Repository Is at 7.x
 
 这是个容易困惑的点：**Kali 团队把 7.0 内核挡在 ISO 之外，因为 7.0 破坏了 Debian 的 NVIDIA DKMS 驱动**。所以 2026.2 的 ISO 铺的是 6.19，但**滚动仓库已经提供 7.1.5**。
 
@@ -77,7 +77,7 @@ sudo apt modernize-sources      # 生成 .sources，旧文件存为 .list.bak
 
 2026.2 新增 9 款工具：`arsenal-ng`、`hydra-gtk`、`legba`、`oletools`、`penelope`、`shell-gpt`、`tailscale`、`tookie-osint`、`uro`。其中**只有 `hydra-gtk` 进了默认 metapackage**（是重新加入而非新增），其余 8 款需显式 `apt install`。
 
-## 镜像选择
+## Image Selection
 
 | 镜像 | 大小 | 用途 |
 | :-- | :-- | :-- |
@@ -90,7 +90,7 @@ sudo apt modernize-sources      # 生成 .sources，旧文件存为 .list.bak
 
 **取证场景选 live 版**：它整个跑在内存里，不写入宿主磁盘 —— 这是它存在的唯一理由（机制上与 tmpfs 思路一致，见 [mm](/docs/CS/OS/Linux/mm/README.md)）。
 
-## 安全研究视角的内核关联
+## Kernel Association from a Security Research Perspective
 
 渗透与取证大量依赖内核机制：
 
@@ -106,7 +106,7 @@ sudo apt modernize-sources      # 生成 .sources，旧文件存为 .list.bak
 
 `kali-tools-top10` metapackage 只装最常用的 10 个；完整工具集用 `kali-linux-full`。
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 ```shell
 # 版本与分支
@@ -114,8 +114,8 @@ grep VERSION /etc/os-release
 # VERSION="2026.2"  VERSION_CODENAME="kali-rolling"
 cat /etc/apt/sources.list.d/kali.sources
 grep -r Suite /etc/apt/sources.list /etc/apt/sources.list.d/ 2>/dev/null
-# Suites: kali-rolling        = 滚动分支
 # Suites: kali-last-snapshot  = 季度快照点（不收更新）
+# Suites: kali-last-snapshot = Quarterly Snapshot Point (No Updates)
 
 # 更新
 sudo apt update && sudo apt full-upgrade -y

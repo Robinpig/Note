@@ -13,13 +13,13 @@
 
 所以这篇笔记的主线是三条：
 
-1. **怎么走** —— GUP 的慢路径与快路径，以及 fast GUP 为什么必须关中断（这条直接接在 [pagetable.md](/docs/CS/OS/Linux/mm/pagetable.md?id=mmu_gather：批量-tlb-失效) 的延迟释放协议上）；
+1. **怎么走** —— GUP 的慢路径与快路径，以及 fast GUP 为什么必须关中断（这条直接接在 [pagetable.md](/docs/CS/OS/Linux/mm/pagetable.md?id=mmu_gather-batch-tlb-invalidation) 的延迟释放协议上）；
 2. **计数放哪** —— `GUP_PIN_COUNTING_BIAS` 如何把"pin 了几次"编进 refcount 的高位；
 3. **谁必须让路** —— pin 成立之后，mm 里哪些路径要先检查 `folio_maybe_dma_pinned()`。
 
 对应内核版本 **v7.2.7**（源码树 `/Users/robin/Tools/linux-7.2.7`），主干集中在 `mm/gup.c`（3563 行）、`mm/internal.h` 的 FOLL 内部标志段、`include/linux/mm.h` 的 pin 计数段。
 
-## 为什么"走一遍页表"不够
+## Why "Walking the Page Table Once" Is Not Enough
 
 用户页与内核页的差别，不在于能不能拿到物理地址，而在于**这个物理地址的有效期**。
 
@@ -43,7 +43,7 @@
 - 只有 refcount 没有 pin 计数 → 内核无法判断"这页是不是被 DMA 借走了"，也就无法知道 fork / 迁移 / soft-dirty 该不该绕开它；
 - 只有 pin 计数没有 refcount → 页仍然可能被回收，计数挂在已经释放的页上。
 
-## 两个 API 家族
+## Two API Families
 
 内核提供两套接口，**语义不同、释放方式不同、绝对不能混用**：
 
@@ -121,7 +121,7 @@ static inline struct page *get_user_page_vma_remote(struct mm_struct *mm,
 
 这个改动的动机很实际：每页都记录 VMA 会让快路径的批量输出变复杂，而绝大多数调用者根本不需要。现在只在真正需要时多取一次 maple tree。
 
-### pin 接口的调用者
+### Callers of the Pin Interface
 
 `pin_user_pages*()` 的调用者集中在"要把页交给硬件或长期持有"的地方，可以在源码里直接看到这层：
 
@@ -133,11 +133,11 @@ static inline struct page *get_user_page_vma_remote(struct mm_struct *mm,
 
 **`FOLL_PIN` 不允许由调用者直接指定**，必须由 `pin_user_pages*()` 家族内部设置。这是 `is_valid_gup_args()` 检查 `INTERNAL_GUP_FLAGS` 的原因之一——手工混用会导致释放时配错接口。
 
-## FOLL 标志
+## FOLL Flags
 
 标志分两组：一组对外可见（调用者可以传），一组只用在内核内部。
 
-### 外部可见标志
+### Externally Visible Flags
 
 v7.2.7 把它们定义成了 `enum`，而不是老的 `#define`——这是个小但容易踩的版本差异，老代码里 `#ifdef FOLL_WRITE` 这种写法本来就不可能成立，但搜索 `^#define FOLL_` 会一无所获（`include/linux/mm_types.h:1872`）：
 
@@ -208,7 +208,7 @@ enum {
 
 `FOLL_HONOR_NUMA_FAULT` 是**从 `FOLL_NUMA` 改名来的**。老资料里 `FOLL_NUMA` 这个名字已经不存在了，慢路径里也不再是简单地"没设 FORCE 就加上 NUMA"——语义收窄成了"显式要求触发 NUMA hinting fault"。
 
-### 内部标志
+### Internal Flags
 
 另一半在 `mm/internal.h:1630-1652`，外部传入会被 `is_valid_gup_args()` 拒绝：
 
@@ -236,7 +236,7 @@ enum {
 
 其中 `FOLL_PIN` 虽然语义上是"外部概念"，实现上却是内部标志——它由 `pin_user_pages*()` 家族设置，不由调用者直接传。
 
-### 参数不变量
+### Parameter Invariants
 
 `is_valid_gup_args()`（`mm/gup.c:2506`）是所有这些标志的守门人，四条硬约束：
 
@@ -298,9 +298,9 @@ enum {
 
 注意这里**放行 `FOLL_PIN` 与 `FOLL_GET`**——它们最终会在 `try_grab_folio_fast()` 里被再次分流。
 
-## 慢路径：跟着页表走，走不通就缺页
+## Slow Path: Following the Page Table, Faulting When Stuck
 
-### 主循环
+### Main Loop
 
 慢路径的骨架是 `__get_user_pages()`（`mm/gup.c:1354`）里那个 `do { } while` 循环：
 
@@ -335,11 +335,11 @@ retry:
 				fallthrough;
 ```
 
-这个 `retry:` 标签是理解整个慢路径的钥匙：**GUP 自己不建页表、不读文件、不做 COW，它只是反复问"页表里现在有页了吗"，没有就调一次缺页，然后再问一遍**。真正的建页表逻辑全在缺页路径里，也就是 [pagetable.md](/docs/CS/OS/Linux/mm/pagetable.md?id=惰性生长：缺页时逐级建表) 讲的 `__handle_mm_fault()` 逐级 `*_alloc`。
+这个 `retry:` 标签是理解整个慢路径的钥匙：**GUP 自己不建页表、不读文件、不做 COW，它只是反复问"页表里现在有页了吗"，没有就调一次缺页，然后再问一遍**。真正的建页表逻辑全在缺页路径里，也就是 [pagetable.md](/docs/CS/OS/Linux/mm/pagetable.md?id=lazy-growth-building-tables-level-by-level-on-page-fault) 讲的 `__handle_mm_fault()` 逐级 `*_alloc`。
 
 `-EBUSY` 对应"缺页处理过程中释放了 mmap_lock"，此时 GUP 返回 0（不是错误），调用者看到的是"这次一个都没拿到，重试吧"。
 
-### follow_page_mask 的逐级下降
+### The Hierarchical Descent of follow_page_mask
 
 `follow_page_mask()` 是缺页路径 `__handle_mm_fault()` 的镜像版本：同样从 pgd 往下走四级，但**只读不写**，遇到不存在就返回 NULL（`mm/gup.c:1007`）：
 
@@ -357,7 +357,7 @@ follow_page_mask → follow_p4d_mask → follow_pud_mask → follow_pmd_mask →
 
 **这个对称性很重要**：GUP 从不主动建页表，这是"GUP 不该产生副作用"这一设计原则的体现。反过来说，一次 GUP 调用可能触发大量缺页，从而分配页、建页表、读磁盘——`FOLL_NOFAULT` 存在的意义就是让某些调用者（如 futex）能说"别给我搞这套"。
 
-### follow_page_pte 逐行
+### follow_page_pte Line by Line
 
 这是慢路径取到页的最后一站（`mm/gup.c:802`）：
 
@@ -493,7 +493,7 @@ static struct page *follow_page_pte(struct vm_area_struct *vma,
 
 `arch_make_folio_accessible()` 是**机密计算**相关的钩子：通用实现是空函数（`include/linux/mm.h:2971`），只有 s390 定义了自己的版本（`arch/s390/kernel/uv.c:376`），用于"把页解密给设备可见"。它的注释也解释了为什么只在 `FOLL_PIN` 时调用——只有 pin 才会把页交给**外部**设备去读，普通 GUP 是内核自己访问，不需要这个动作。
 
-### can_follow_write_pte 与 FOLL_FORCE 的边界
+### The Boundary between can_follow_write_pte and FOLL_FORCE
 
 `can_follow_write_pte()`（`mm/gup.c:785`）处理"PTE 只读但我想写"的情况，先看 PTE 本身可写就直接通过，否则落到 `can_follow_write_common()`：
 
@@ -573,7 +573,7 @@ static inline bool can_follow_write_common(struct page *page,
 
 **fsdax 不允许长期 pin**——文件系统 DAX 依赖能随时 truncate / hole-punch 收回块，长期 pin 会让这些操作无限期阻塞。
 
-### faultin_page：把 FOLL 翻译成 FAULT_FLAG
+### faultin_page: Translating FOLL into FAULT_FLAG
 
 `faultin_page()`（`mm/gup.c:1087`）是一张翻译表，把 GUP 的标志翻译成缺页处理的标志：
 
@@ -690,7 +690,7 @@ static inline bool gup_must_unshare(struct vm_area_struct *vma,
 
 第三条还顺带解释了**为什么 KSM 页不能被 pin**：KSM 合并的前提就是"这页不是独占的"，而 pin 的前提是"必须独占"，两者天然互斥。所以 KSM 只合并 `PageAnonExclusive` 为假的页，也就是从未被 pin 过的页。
 
-### 为什么 GUP 写文件映射是"根本性破坏"
+### Why GUP Writing to File Mappings Is a "Fundamental Corruption"
 
 `writable_file_mapping_allowed()`（`mm/gup.c:1182`）前面有一段长注释，值得整段抄下来，因为它解释了整个 pin 机制存在的历史动因：
 
@@ -723,11 +723,11 @@ static inline bool gup_must_unshare(struct vm_area_struct *vma,
 - 想要 `FOLL_WRITE` + 长期持有？先过 `writable_file_mapping_allowed()`；
 - 只允许 **shmem**（tmpfs）的写 pin。
 
-## 快路径：关中断、无锁遍历页表
+## Fast Path: Disabling Interrupts, Lockless Page Table Walk
 
 慢路径一次要拿页表锁、可能还要触发缺页，对 `io_uring`、`futex`、`process_vm_readv` 这种高频调用太贵。所以内核还有一条 `get_user_pages_fast()` 路径：**不拿页表锁、不关页表变更，靠"事后验证"来保证正确性**。
 
-### 为什么是 local_irq_save 而不是 rcu_read_lock
+### Why local_irq_save Instead of rcu_read_lock
 
 ```c
 	/*
@@ -746,7 +746,7 @@ static inline bool gup_must_unshare(struct vm_area_struct *vma,
 	local_irq_restore(flags);
 ```
 
-**这段注释是整篇笔记与 [pagetable.md](/docs/CS/OS/Linux/mm/pagetable.md?id=页表页的延迟释放) 的接口。** 三层意思：
+**这段注释是整篇笔记与 [pagetable.md](/docs/CS/OS/Linux/mm/pagetable.md?id=deferred-release-of-page-table-pages) 的接口。** 三层意思：
 
 1. **关中断能阻止页表页被释放** —— 释放页表页不是直接 `free_page()`，而是走 mmu_gather 的延迟释放队列，最后需要一次 IPI 同步（`tlb_remove_table_sync_one()`）或 RCU 宽限期。关中断让本 CPU 收不到 IPI，释放方就得等——这正是延迟释放机制的设计前提。
 2. **为什么不用 `rcu_read_lock()`** —— 因为 RCU 只能挡住 RCU 回调释放的那条路，挡不住 IPI 那条路，而页表页释放两条路都会用。关中断是更强的约束。
@@ -762,7 +762,7 @@ static inline bool gup_must_unshare(struct vm_area_struct *vma,
 | `local_irq_disable()` | 同时挡住 IPI 与 RCU | **fast GUP** |
 | per-VMA lock | VMA 级锁 + `ptl` 的替代 | `pte_offset_map_ro_nolock()` 等变体 |
 
-### 双向协议
+### Bidirectional Protocol
 
 这是 fast GUP 最精妙的地方，源码注释（`mm/gup.c:2816`）把它写成了一份协议：
 
@@ -830,7 +830,7 @@ static inline bool gup_must_unshare(struct vm_area_struct *vma,
 
 `pte_protnone` 的拒绝理由是**一致性**：同样的地址，快路径该失败的和慢路径该失败的必须一样，否则调用者看到的行为会随路径而变。`PROT_NONE` 在快路径里没有 VMA 可查（快路径不持有 mmap_lock），所以干脆退回慢路径去查。
 
-### 快路径拒绝的条件
+### Conditions for Fast-Path Rejection
 
 `try_grab_folio_fast()`（`mm/gup.c:517`）里有几条"抓不住就退回慢路径"的判断：
 
@@ -892,7 +892,7 @@ static inline bool gup_must_unshare(struct vm_area_struct *vma,
 
 最后一行是结论：**唯一允许"写 + 长期 pin"的文件系统是 shmem**。这正好对上前面 `writable_file_mapping_allowed()` 的那段"根本性破坏"注释——shmem 是 RAM 文件系统，没有真正的回写与 buffer_head，绕过了整个问题。
 
-### write_protect_seq 与 fork 的竞争
+### The Race between write_protect_seq and fork
 
 fast GUP 还要防一个对手：**fork**。`copy_page_range()` 会把父进程的 PTE 全部写保护（建立 COW），如果 fast GUP 在这期间抓到了页，pin 的语义就被破坏了。
 
@@ -920,7 +920,7 @@ fast GUP 还要防一个对手：**fork**。`copy_page_range()` 会把父进程�
 
 注意 `write_protect_seq` 只在 `FOLL_PIN` 时使用。原因回到 `gup_must_unshare()`：只有 pin 才要求"pin 的页与页表里的页永远一致"，普通 `FOLL_GET` 引用没有这个承诺。
 
-### 快慢路径的选择
+### Choice between Fast and Slow Paths
 
 `gup_fast_fallback()`（`mm/gup.c:3181`）是调度者：先试快路径，`nr_pinned` 不够就补慢路径。
 
@@ -932,9 +932,9 @@ gup_fast_fallback()
 
 `FOLL_FAST_ONLY` 就是用来**禁止这个回落**的：设了它，`gup_fast()` 拿不到就是失败，不会去走慢路径。futex 需要它，因为 futex 的调用点可能在不允许睡眠的上下文里。
 
-## pin 计数放在哪
+## Where the Pin Count Lives
 
-### 两种布局
+### Two Layouts
 
 `struct folio` 里有两个不同的地方可以放 pin 计数，取决于 folio 大小（`include/linux/mm.h:2630`）：
 
@@ -1109,7 +1109,7 @@ static inline bool folio_maybe_dma_pinned(struct folio *folio)
 
 那个 `(unsigned int)` 强转也有讲究：refcount 是带符号的 `atomic_t`，溢出后会变负；转成无符号后符号位变成了最大的那一位，正好继续参与 `>= BIAS` 的比较，让溢出情况下依然给出正确的 `true`。
 
-### 零页的特殊待遇
+### The Special Treatment of the Zero Page
 
 零页（`ZERO_PAGE`）是所有"读未写过匿名映射"共享的那一个只读页，用得太频繁，pin 它会让计数爆掉且毫无意义。所以它在多处被显式跳过：
 
@@ -1145,11 +1145,11 @@ static void gup_put_folio(struct folio *folio, int refs, unsigned int flags)
 
 注意这里的 `refs *= GUP_PIN_COUNTING_BIAS`：小 folio 释放时要把 `refs` 乘回一个 BIAS，与 grab 时的 `* BIAS` 对称。而**零页是唯一"抓时返回 0、放时直接 return"的例外**——抓和放都不记账，所以平衡。这也意味着零页永远不会显示为 pinned，`folio_maybe_dma_pinned()` 对它无意义。
 
-## pin 的反作用：谁必须让路
+## The Side Effect of Pin: Who Must Yield
 
 pin 成立之后，mm 里多处路径都要先问一句"这页被 pin 了吗"。这是理解 pin 成本的另一半——**pin 不是一个孤立的计数，而是会向下传导到所有内存管理决策**。
 
-### fork：提前拆 COW
+### fork: Breaking COW Early
 
 ```c
 static inline bool folio_needs_cow_for_dma(struct vm_area_struct *vma,
@@ -1181,21 +1181,21 @@ static inline bool folio_needs_cow_for_dma(struct vm_area_struct *vma,
 
 **"never cleared"**——一旦这个 mm 执行过 FOLL_PIN，这个位就永远为 1。这样 fork 路径可以用一个廉价的位测试跳过绝大多数进程（`likely(!mm_flags_test(...))`），只在确实 pin 过的进程上才去逐页检查；代价是 pin 过又 unpin 的进程会继续"多检查"，但这个开销只落在真正用过 pin 的进程上。
 
-### 迁移：pin 是拦路虎
+### Migration: pin as a Stumbling Block
 
 迁移需要独占页——内容搬走时，页表里所有指向它的 PTE 都要改写。但 pin 者手里拿的是**旧 PFN**，内核无法改写它。所以迁移代码会检查 `folio_maybe_dma_pinned()`，为真就放弃这次迁移。
 
 这条约束解释了为什么 LD 说"pin 会让内存碎片化"：pin 的页无法迁移，也就无法归整。
 
-### 回收：多重保护
+### Reclaim: Multiple Protections
 
 `folio_maybe_dma_pinned()` 为真时页不会被回收，这一层保护来自两处：refcount 本身（回收路径的 `folio_ref_count()` 检查）与显式的 pin 检查。这也是 pin 泄漏最直接的后果——**进程退出后，被 pin 的页依然留在内存里，直到驱动 unpin**。
 
-### KSM：pin 页不参与合并
+### KSM: Pinned Pages Are Not Merged
 
 如前所述，KSM 只合并 `PageAnonExclusive` 为假的页，而 pin 要求独占，两者互斥。
 
-### soft-dirty / CRIU：写保护被跳过
+### soft-dirty / CRIU: Write Protection Skipped
 
 这是最容易被忽略的一条。`fs/proc/task_mmu.c` 里的 `pte_is_pinned()`（`fs/proc/task_mmu.c:1687`）：
 
@@ -1236,7 +1236,7 @@ static inline bool pte_is_pinned(struct vm_area_struct *vma, unsigned long addr,
 
 **后果**：有 pin 的进程，soft-dirty 追踪不完整 → `CRIU` 这类依赖 soft-dirty 的检查点工具可能丢页。这是一个很实际的排障知识点：容器里跑 RDMA/GPU 负载时做检查点，要注意这个交互。
 
-### 小结：让路清单
+### Summary: The Yield List
 
 | 路径 | 检查点 | 让路方式 |
 |---|---|---|
@@ -1248,7 +1248,7 @@ static inline bool pte_is_pinned(struct vm_area_struct *vma, unsigned long addr,
 | soft-dirty 写保护 | `pte_is_pinned()` | 跳过写保护 |
 | LONGTERM pin | `folio_is_longterm_pinnable()` | 迁移到合规 zone 后重试 |
 
-## LONGTERM 的代价
+## The Cost of LONGTERM
 
 `FOLL_LONGTERM` 与普通 pin 的差别不在"pin 多久"，而在**落点合规**：声明长期持有之后，内核要求这个页所在的内存位置必须是"可以长期占着而不影响系统能力"的。
 
@@ -1294,7 +1294,7 @@ static inline bool folio_is_longterm_pinnable(struct folio *folio)
 
 最后一行 `return !folio_is_zone_movable(folio)` 是总纲：**非 movable zone 的页才允许长期 pin**。
 
-### 迁移重试契约
+### Migration Retry Contract
 
 落点不合规时，慢路径不是失败返回，而是"**迁移它，然后让调用者重来**"。契约写在 `check_and_migrate_movable_folios()` 的注释里（`mm/gup.c:2405`）：
 
@@ -1348,9 +1348,9 @@ static inline bool folio_is_longterm_pinnable(struct folio *folio)
 
 两级 drain（先本地、再全局）配合 refcount 的精确比对：`folio_expected_ref_count() + pin_refs` 是"如果只有 pin 这一个额外引用"时的期望值，不等就说明还有别的地方拿着引用（LRU 缓存、页表映射、PG_private 等），需要把 LRU 缓存清掉。**这是 Linux 内存管理里"要隔离一个页有多难"的一个具体样本**。
 
-## 释放
+## Release
 
-### unpin 家族
+### The Unpin Family
 
 | 接口 | 用途 |
 |---|---|
@@ -1362,7 +1362,7 @@ static inline bool folio_is_longterm_pinnable(struct folio *folio)
 
 批量接口内部会做 folio 分组：一个数组里连续的多个 `struct page *` 如果属于同一个 folio，就一次性减计数，而不是逐页操作。`gup_folio_next()` / `gup_folio_range_next()` 就是这个分组的实现（`mm/gup.c:232`、`mm/gup.c:247`）。
 
-### unpin_user_pages_dirty_lock 里的竞态分析
+### Race Analysis in unpin_user_pages_dirty_lock
 
 为什么需要"释放并标脏"的专用接口？因为 GUP 调用者拿到的页可能被自己写过（比如驱动填充了用户缓冲），此时页表可能还是只读的、页也没标脏，需要有人补上。这中间的竞态分析很值得读（`mm/gup.c:284`）：
 
@@ -1419,7 +1419,7 @@ DEBUG_VM 配置下会做一组额外断言（`mm/gup.c:31`），核心是**匿�
 
 这组检查在 fast GUP 之后也会主动调用一次（见前面 `gup_fast()` 的 `read_seqcount_retry` 分支），用来把"关中断窗口里发生的违规"尽早抓出来。
 
-### 统计
+### Statistics
 
 `/proc/vmstat` 里有两个全局计数（`mm/vmstat.c:1256`、`include/linux/mmzone.h:276`）：
 
@@ -1436,7 +1436,7 @@ grep -E 'nr_foll_pin' /proc/vmstat
 
 注意名字里是 `foll`（FOLL 的标志名）而不是 `pin`——照着 `pin` 去 grep 会一无所获。
 
-## 特殊映射
+## Special Mappings
 
 ### VM_IO / VM_PFNMAP / VM_MIXEDMAP
 
@@ -1452,7 +1452,7 @@ grep -E 'nr_foll_pin' /proc/vmstat
 
 `VM_MIXEDMAP` 特殊一点：允许 VMA 里混合普通页与特殊页，所以它**不被整体拒绝**，而是在逐页检查时按 PTE 是否 special 分别处理。
 
-### pte_special 与快路径
+### pte_special and the Fast Path
 
 `CONFIG_ARCH_HAS_PTE_SPECIAL` 决定快路径能不能处理 PTE 级映射（`mm/gup.c:2815`）。不支持这个配置的架构上，`gup_fast_pte_range()` 直接退化成返回 0：
 
@@ -1470,7 +1470,7 @@ grep -E 'nr_foll_pin' /proc/vmstat
 
 注释里再次提到 futex——它是快路径最敏感的消费者，连"THP tail page 上放 futex"这种细节都要照顾到。
 
-### hugetlb：已经从独立路径并入通用路径
+### hugetlb: Merged from a Standalone Path into the Generic Path
 
 早期内核里 hugetlb 的 GUP 有一条完全独立的实现 `follow_hugetlb_page()`（在 `mm/hugetlb.c`）。**v7.2.7 里这个函数已经彻底不存在了**——全树 grep 无任何匹配，`__get_user_pages()` 里那个 `is_vm_hugetlb_page()` 分支也一并删掉了。hugetlb 现在统一走通用路径：它在 pmd 级就是叶子，于是 `follow_page_mask()` → `follow_pmd_mask()` → `follow_huge_pmd()` 自然覆盖了它。
 
@@ -1524,9 +1524,9 @@ static struct page *follow_huge_pmd(struct vm_area_struct *vma,
 
 顺带说，这也让 `page_mask` 的作用更清楚了：`follow_huge_pmd()` 返回的是 `*page_mask = HPAGE_PMD_NR - 1`，调用者据此知道"这一批连续的页表项共用同一个大页"，从而一次推进一整页而不是一页一页走。
 
-## 观测与排障
+## Observation and Troubleshooting
 
-### 可用的观测点
+### Available Observation Points
 
 | 观测点 | 内容 |
 |---|---|
@@ -1537,7 +1537,7 @@ static struct page *follow_huge_pmd(struct vm_area_struct *vma,
 
 **没有** `/proc/<pid>/status` 里的 "VmPin" 字段——不像 `VmLck` 有专门的 mlock 计数，pin 的**按进程**统计一直没有落地（`MMF_HAS_PINNED` 的注释里也提到"未来可能由 `mm.pinned_vm` 取代，或长成独立计数器"，但目前还只是一个位）。要按进程统计只能靠内核调试工具。
 
-### 常见故障模式
+### Common Failure Modes
 
 | 现象 | 可能原因 |
 |---|---|
@@ -1550,7 +1550,7 @@ static struct page *follow_huge_pmd(struct vm_area_struct *vma,
 | `-EOPNOTSUPP` / `-EFAULT` | **不是 bug**：映射类型不允许 pin（fsdax、`VM_PFNMAP` 等） |
 | RDMA 注册大缓冲时反复重试 | LONGTERM pin 触发迁移，`-EAGAIN` 后全量重做 |
 
-### 相关配置
+### Related Configuration
 
 | 配置 | 影响 |
 |---|---|
@@ -1562,7 +1562,7 @@ static struct page *follow_huge_pmd(struct vm_area_struct *vma,
 | `CONFIG_DEBUG_VM` | 是否启用 `sanity_check_pinned_pages()` |
 | `CONFIG_HAVE_ARCH_MAKE_FOLIO_ACCESSIBLE` | 机密计算下的 pin 前解密（目前只有 s390） |
 
-## 与其它子系统的咬合
+## Interaction with Other Subsystems
 
 **与页表（[pagetable.md](/docs/CS/OS/Linux/mm/pagetable.md)）**：fast GUP 是"无锁遍历页表"的第二个消费者，与 `pte_offset_map()` 的 RCU 方案并列。两者的关键差别是**用什么挡住页表页的释放**：RCU 只挡 RCU 回调那条路，而 fast GUP 要的是更强的"连 IPI 都收不到"，所以用 `local_irq_save()`。这也解释了 `mmu_gather` 为什么要把页表页释放推迟到 TLB flush 之后——它必须给 fast GUP 留出"关中断窗口"的安全边界。
 

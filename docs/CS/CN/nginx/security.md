@@ -16,7 +16,7 @@ nginx 在安全链路里通常是最外层的那一段：它先于业务代码�
 > [!NOTE]
 > 一条贯穿全篇的原则：**nginx 侧的安全配置是「减少暴露面」，不是「识别攻击」**。真正的攻击识别（SQL 注入、XSS、反序列化）需要规则引擎，nginx 只能做到把请求大小、速率、来源、协议约束住。
 
-## 访问控制：allow / deny
+## Access Control: allow / deny
 
 ```nginx
 location /admin/ {
@@ -29,11 +29,11 @@ location /admin/ {
 语义要点（都来自 `ngx_http_access_module.c`）：
 
 - 规则**按书写顺序求值，第一条匹配的规则决定结果**，因此 `deny all;` 必须写在最后；
-- 匹配发生在 **ACCESS 阶段**，用的是 `r->connection->sockaddr` —— 也就是**直连对端的地址**。位于 CDN / 负载均衡之后时，这里是代理的 IP，必须先用 `realip` 模块或 PROXY protocol 还原真实客户端地址（见 [stream](/docs/CS/CN/nginx/stream.md?id=proxy-protocol：两个方向要分清)）；
+- 匹配发生在 **ACCESS 阶段**，用的是 `r->connection->sockaddr` —— 也就是**直连对端的地址**。位于 CDN / 负载均衡之后时，这里是代理的 IP，必须先用 `realip` 模块或 PROXY protocol 还原真实客户端地址（见 [stream](/docs/CS/CN/nginx/stream.md?id=proxy-protocol-two-directions-must-be-distinguished)）；
 - 支持 IPv4、IPv6、CIDR、`unix:` 域套接字，IPv4-mapped IPv6 地址会被折回 IPv4 规则比较；
 - `deny` 命中即返回 **403**。
 
-### satisfy 的语义
+### Semantics of satisfy
 
 多个 ACCESS 阶段的检查器（`access`、`auth_basic`、`auth_request`）之间由 `satisfy` 决定组合方式：
 
@@ -57,7 +57,7 @@ auth_basic_user_file /etc/nginx/htpasswd;
 
 另一个容易忽略的指令是 `auth_delay`（默认 `0`）：认证失败时强制延迟一段时间再回 401，用来抬高在线爆破的成本。
 
-## 身份层：三种认证
+## Identity Layer: Three Types of Authentication
 
 | 方式 | 适用 | 特点 |
 | :-- | :-- | :-- |
@@ -78,7 +78,7 @@ location /internal/ {
 - 认证成功后 `$remote_user` 可用，适合写进日志与传给上游（`proxy_set_header X-User $remote_user;`）；
 - `auth_basic off;` 可以在子 location 里关闭父级的继承——这个「用 off 覆盖继承」的写法是 nginx 的通用模式，很多指令都支持。
 
-### auth_request：把鉴权外置
+### auth_request: Externalize Authorization
 
 `auth_request` 在 ACCESS 阶段发起一个**子请求**去鉴权服务，然后按子请求的状态码决定主请求的命运。源码里的判定逻辑（`ngx_http_auth_request_handler`）非常明确：
 
@@ -108,9 +108,9 @@ location /api/ {
 > [!TIP]
 > 鉴权服务的延迟会被**叠加**在每次请求上。要么给鉴权接口加缓存，要么用 `auth_request` 之外的手段（如 njs 的 `js_access` + `ngx.shared` 做本地令牌校验，见 [njs](/docs/CS/CN/nginx/njs.md)）。
 
-## 内容层：防盗链与签名 URL
+## Content Layer: Hotlink Protection and Signed URL
 
-### 防盗链：valid_referers
+### Hotlink Protection: valid_referers
 
 ```nginx
 location ~* \.(jpg|png|mp4)$ {
@@ -132,7 +132,7 @@ location ~* \.(jpg|png|mp4)$ {
 
 **Referer 由客户端提供、可随意伪造**，所以它只能防「别人网站热链你的资源」，不能当访问控制。真正的资源保护要靠 `secure_link` 或带签名的 URL。
 
-### 签名 URL：secure_link 的两种模式
+### Signed URL: Two Modes of secure_link
 
 **模式一：新式（推荐），`secure_link` + `secure_link_md5`**
 
@@ -160,7 +160,7 @@ location /download/ {
 
 笔记里特意分开写，是因为这两种模式**不能同时配**，且旧式在各类文章中常被当作「secure_link 的唯一用法」。
 
-## 大小与时间：最有效的防线
+## Size and Time: The Most Effective Defense
 
 多数「一轮就把服务打挂」的攻击，靠的不是漏洞而是**未设上限**。这几个默认值必须知道：
 
@@ -179,7 +179,7 @@ location /download/ {
 | `reset_timedout_connection` | `off` | 超时后是否直接 RST 并丢弃缓冲，防「僵尸连接」占内存 |
 | `lingering_close` | `on`（`lingering_time` 30s、`lingering_timeout` 5s） | 关闭前尝试读完客户端剩余数据 |
 
-### 慢速攻击（Slowloris / Slow POST）
+### Slow Attack (Slowloris / Slow POST)
 
 原理都是「每次只送一点点，让服务端为这条连接长时间保活」。对应的防线：
 
@@ -208,9 +208,9 @@ limit_conn_status 429;     # 默认 503
 - `limit_req` / `limit_conn` 的**默认状态码都是 503**，对客户端（和监控）不友好，建议统一改成 429；
 - `limit_req_dry_run` 可以先「只记录不拦截」，用来观察真实阈值再上线规则。
 
-漏桶参数（`burst` / `nodelay` / `delay=`）的详细语义见 [nginx 的限流一节](/docs/CS/CN/nginx/nginx.md?id=限流与限速)。
+漏桶参数（`burst` / `nodelay` / `delay=`）的详细语义见 [nginx 的限流一节](/docs/CS/CN/nginx/nginx.md?id=rate-limiting-and-throttling)。
 
-## 响应层：少说一点
+## Response Layer: Say Less
 
 ### server_tokens
 
@@ -230,15 +230,15 @@ static u_char ngx_http_server_build_string[] = "Server: " NGINX_VER_BUILD CRLF;
 
 也就是说 **`off` 只是去掉版本号，`Server` 头依然存在**（错误页脚注里的版本也会消失）。想彻底不发这个头，得用 `more_set_headers`（headers-more 模块）或改源码。
 
-### 其它信息泄漏点
+### Other Information Leakage Points
 
 - 默认错误页底部会打印 `nginx` 与版本，`server_tokens off` 会一并处理；
 - `X-Powered-By`、`X-AspNet-Version` 之类来自上游，需要在 nginx 侧裁掉：`proxy_hide_header X-Powered-By;`；
 - `$upstream_addr`、`$upstream_status` 等变量写进响应头等于暴露内网拓扑，别随手 `add_header` 回传。
 
-## 路径与文件：两个经典陷阱
+## Path and File: Two Classic Traps
 
-### root + alias 的路径穿越
+### Path Traversal of root + alias
 
 只要配置写成 `alias` 少一个斜杠，就可能让 `..` 逃出目录：
 
@@ -256,7 +256,7 @@ location /files/ {
 
 相关默认值：`merge_slashes on`（合并重复斜杠，配合规范化路径）、`disable_symlinks off`（默认允许跟随软链接，敏感目录建议 `disable_symlinks on;`）、`internal`（把 location 标记为只能内部跳转/子请求访问，用于保护 `/status`、`/auth` 这类端点）。
 
-### 伪装与限方法
+### Spoofing and Method Limiting
 
 ```nginx
 # 只允许必要方法
@@ -272,7 +272,7 @@ if ($request_method !~ ^(GET|HEAD|POST|PUT|DELETE|OPTIONS)$) {
 
 `limit_except` 里的 `allow`/`deny` 语法与 ACCESS 阶段一致，但**只能写在 location 内**。
 
-## 外挂层：WAF
+## Add-on Layer: WAF
 
 nginx 生态里的三套主流方案，定位差异很大：
 
@@ -293,13 +293,13 @@ ModSecurity 一侧的当前版本（2026-10 核实）：
 
 另外注意 WAF 在链路上的**位置**：它看到的是 nginx 已经解析过的请求，因此它不能替代 nginx 自身的大小/速率限制；反过来，如果 WAF 部署在 nginx 之后（比如保护上游应用），前面对客户端的限流仍要由 nginx 承担。
 
-## 一个容易忽略的风险：别把自己配成开放代理
+## An Easily Overlooked Risk: Don't Configure Yourself as an Open Proxy
 
 nginx 1.31.0 引入了 `ngx_http_tunnel_module`（`tunnel_pass`），把 HTTP 正向代理/CONNECT 隧道能力做进了官方模块。这带来一类新的事故模式：**配置里出现一个没有访问控制的转发 location，就等于对公网开放了一个代理**——攻击者用它跳板、隐藏来源、消耗带宽。
 
 任何 `tunnel_pass`、`proxy_pass` 到外部域名、或 `resolver` + 变量拼 URL 的配置，都应配 `allow`/`deny` 或 `auth_request` 收口。
 
-## 常见坑
+## Common Pitfalls
 
 1. **`deny all;` 写在 `allow` 之前**——后面的规则永远不会被求值。
 2. **在代理后面用 `allow`/`deny` 判断客户端 IP**——拿到的是代理 IP，必须先配 `realip`。

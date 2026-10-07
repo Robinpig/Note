@@ -10,7 +10,7 @@ strace 用 **ptrace** 拦截系统调用：被跟踪进程每次进出内核都�
 
 内核机制部分在 **v7.2** 核实。
 
-## 安装与基本用法
+## Installation and Basic Usage
 
 ```shell
 sudo apt-get install strace        # Debian/Ubuntu
@@ -24,7 +24,7 @@ strace -f ./program                # 跟踪 fork 出的所有子进程
 strace -ff -o out ./program        # 每个进程写各自的输出文件
 ```
 
-## 常用参数
+## Common Parameters
 
 | 参数 | 作用 |
 | :-- | :-- |
@@ -49,7 +49,7 @@ strace -ff -o out ./program        # 每个进程写各自的输出文件
 
 > 原文里的 `-e trace=open,close` 应为 `openat,close`：`open` 在 x86-64 上是旧接口，现代程序用的是 `openat`。
 
-### -c 的输出怎么读
+### How to Read the Output of `-c`
 
 ```
 % time     seconds  usecs/call     calls    errors syscall
@@ -60,7 +60,7 @@ strace -ff -o out ./program        # 每个进程写各自的输出文件
 
 **前几行占 80% 才是有意义的优化方向**。`errors` 列非 0 的行往往是真 bug —— `openat` 报 `ENOENT` 说明路径不对、`write` 报 `EPIPE` 说明对端已关闭。
 
-## 内核机制：ptrace 的请求模型
+## Kernel Mechanism: The Request Model of ptrace
 
 `kernel/ptrace.c` 的 `ptrace_request()`（`ptrace.c:1162`）是所有请求的分派点。关键请求：
 
@@ -86,7 +86,7 @@ strace -ff -o out ./program        # 每个进程写各自的输出文件
 
 **它检查"被跟踪者当前是否处于可 ptrace 状态"** —— 只有停在 ptrace-stop（而非 running 或普通 stop）才能操作。这是"为什么 strace 附加后要等一下才能开始输出"的原因。
 
-### PTRACE_SEIZE 与 ATTACH 的区别
+### Differences Between PTRACE_SEIZE and ATTACH
 
 `ptrace_attach()` 的注释（`ptrace.c:320`）说明了限制：
 
@@ -100,7 +100,7 @@ strace -ff -o out ./program        # 每个进程写各自的输出文件
 - seize 不打断，但需要显式 interrupt；
 - GDB 新版本默认用 seize。
 
-### PTRACE_GET_SYSCALL_INFO：v7.x 的改进
+### PTRACE_GET_SYSCALL_INFO: Improvements in v7.x
 
 这个接口一次性返回进入/退出的完整信息：
 
@@ -123,7 +123,7 @@ struct ptrace_syscall_info {
 
 `PTRACE_SYSCALL_INFO_SECCOMP` 更是把 [seccomp-BPF](/docs/CS/OS/Linux/Tools/eBPF.md) 事件与 ptrace 打通了 —— seccomp 过滤器可以在特定系统调用上让进程停下交给 ptrace 决策。`strace --seccomp-bpf` 用的就是这条路。
 
-## 内核机制：seccomp-BPF 过滤（比 ptrace 快得多）
+## Kernel Mechanism: seccomp-BPF Filtering (Much Faster Than ptrace)
 
 `kernel/seccomp.c`（2569 行）。seccomp 的核心是一个 BPF 程序，系统调用前先跑一遍：
 
@@ -158,7 +158,7 @@ strace --seccomp-bpf -e trace=openat,read,write ./program
 
 代价是**看不到系统调用之间的 ptrace 语义差异**（如 restart 行为），且需要内核启用 `CONFIG_SECCOMP_FILTER`。
 
-## 内核机制：strace 看到的"重启"
+## Kernel Mechanism: The 'Restart' Seen by strace
 
 `strace` 输出里偶尔出现这样的行：
 
@@ -172,7 +172,7 @@ read(3, "de", 2)                     = 2
 
 这个机制由 `signal.c:3185` 的 `SYSCALL_DEFINE0(restart_syscall)` 与 `do_no_restart_syscall()`（`signal.c:3191`）配合完成。**无 handler 或 handler 未设 `SA_RESTART` 时**，strace 显示的就是真实的 `EINTR`。
 
-## 注意事项与实践建议
+## Notes and Practical Recommendations
 
 - **开销是结构性的**：每个系统调用边界都有 trap + 唤醒 tracer。跟踪高频 I/O 服务会明显劣化响应时间，且 tracer 与目标跑在**不同 CPU** 上时影响更小（可绑核：`taskset -c 0 strace -p PID`）。
 - **反检测**：部分程序（含不少反调试/加固的商业软件）会检测 ptrace（查 `/proc/self/status` 的 `TracerPid`、主动 `ptrace(PTRACE_TRACEME)` 占位）。表现为行为改变或直接退出 —— 遇到"加上 strace 就跑不起来"应先想到这条。
@@ -181,7 +181,7 @@ read(3, "de", 2)                     = 2
 - **权限**：附加到别人的进程需要同 uid 或 `CAP_SYS_PTRACE`；`/proc/sys/kernel/yama/ptrace_scope` 为 1 时只允许跟踪后代。
 - **生产环境首选 bpftrace / eBPF**：无侵入、开销低，工具见 [eBPF](/docs/CS/OS/Linux/Tools/eBPF.md)；确实需要完整 syscall 序列时再考虑 strace，或用 sysdig（syscall 过滤 + 环形缓冲）替代。
 
-## 与其它子系统的接缝
+## Interfaces with Other Subsystems
 
 - **ptrace**：本文的机制底座，tracer/tracee 关系与 syscall-stop 见 [ptrace](/docs/CS/OS/Linux/proc/ptrace.md)。
 - **seccomp-BPF**：更快的 syscall 过滤路径，见 [eBPF](/docs/CS/OS/Linux/Tools/eBPF.md)。
@@ -189,7 +189,7 @@ read(3, "de", 2)                     = 2
 - **进程状态**：被跟踪进程停在 `TASK_TRACED`，见 [process](/docs/CS/OS/Linux/proc/process.md)。
 - **gdb**：另一个 ptrace 的大用户，见 [Debug](/docs/CS/OS/Linux/Tools/Debug.md)。
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 ```shell
 # 基础

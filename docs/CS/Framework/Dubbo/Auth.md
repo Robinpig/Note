@@ -8,11 +8,11 @@ RPC 框架之间的能力差距，最终都会落到一个问题上：**你怎�
 2. **「`dubbo-security` 是 Dubbo 的认证框架，`BasicAuthenticator` 就在它里面」**——全错。`dubbo-security` 里只有 `cert/` 一个子包，干的是**向 CA 申请证书并托管**的活；`BasicAuthenticator` 在 `dubbo-auth` 里。而 `dubbo-spring-security` 更特殊：它**把客户端传来的 `SecurityContextHolder` 反序列化后直接塞回 Provider 端，本身不做任何校验**——它是上下文透传，不是认证。
 3. **「认证失败抛 `UNAUTHORIZED`」**——错。`RpcException` 的常量表里只有 `AUTHORIZATION_EXCEPTION = 13`（`RpcException.java:43`）和 `FORBIDDEN_EXCEPTION = 4`（:34），**整棵源码树里不存在 `UNAUTHORIZED` 这个 RpcException 码**（唯一带这个词的 `HttpStatus.UNAUTHORIZED(401)` 是 HTTP 状态码，不是错误码）。更麻烦的是**同一个 token 机制在两条链路上的 code 都不一样**，按错误码做监控告警会踩空。
 
-本文版本基线：Apache Dubbo **3.3.6**，所有结论均逐文件核对自源码 tag `dubbo-3.3.6`。Filter 链的组装机制见 [Filter](/docs/CS/Framework/Dubbo/Filter.md)，attachment 的透传路径见 [Invocation](/docs/CS/Framework/Dubbo/Invocation.md?id=attachment-的三条透传路径)。
+本文版本基线：Apache Dubbo **3.3.6**，所有结论均逐文件核对自源码 tag `dubbo-3.3.6`。Filter 链的组装机制见 [Filter](/docs/CS/Framework/Dubbo/Filter.md)，attachment 的透传路径见 [Invocation](/docs/CS/Framework/Dubbo/Invocation.md?id=three-transparent-paths-of-attachment)。
 
-## 认证开关与配置项
+## Authentication Switch and Configuration Items
 
-### 配置字段内联在两个 Config 类里
+### Configuration Fields Inlined in Two Config Classes
 
 Dubbo 没有 `AuthenticationConfig`、`AccessKeyConfig`、`CredentialConfig` 这类东西。认证字段**直接内联在已有的配置基类上**：
 
@@ -43,7 +43,7 @@ private String password;         // :222
 
 两者的粒度差异值得注意：`auth` / `authenticator` / `username` / `password` 定义在 `AbstractInterfaceConfig`，意味着**接口级和服务级都能配**；而 `token` 在 `AbstractServiceConfig` 上，**只有服务侧能配**——Consumer 侧没有「把 token 配在自己身上」的地方，token 是 Provider 单方面声明的期望值。这些字段全部通过 URL 参数读取，键就是字段名本身，没有 `dubbo.auth.` 这样的前缀。
 
-### auth 开关默认关闭
+### auth Switch Is Disabled by Default
 
 `auth` 的默认值不是 `true` 也不是 `null` 语义上的「未配置」，而是被三个 Filter 各自显式读成 `false`：
 
@@ -57,9 +57,9 @@ boolean shouldAuth = url.getParameter(Constants.AUTH_KEY, false);
 > [!WARNING]
 > 认证是**双边显式开启**的：Consumer 不开 `auth` 就不会签名，Provider 不开 `auth` 就不会验签。两边不同步配置的结果是「看起来配了认证，实际上完全敞开」，且不报错。生产环境排查「为什么没拦住」时，第一件事是确认两侧 URL 上都真的带了 `auth=true`。
 
-## Token 机制
+## Token Mechanism
 
-### TokenFilter 全文
+### TokenFilter Full Text
 
 `TokenFilter` 在 `dubbo-rpc-api` 里，不在 `dubbo-auth`——这一点和 auth 系的 Filter 完全不同，替换时要注意它属于核心 API 模块：
 
@@ -89,7 +89,7 @@ public class TokenFilter implements Filter {
 
 token 的键是 `Constants.TOKEN_KEY = "token"`（`dubbo-rpc-api/.../rpc/Constants.java:75`）。逻辑只有五行，下面四点必须逐条钉住。
 
-### 四个必须知道的要点
+### Four Must-Know Points
 
 **① token 只在 Provider URL 上配置，没配就整体跳过。** `ConfigUtils.isNotEmpty(token)` 是唯一的开关判断（:44）。Provider 没配 `token`，整个校验块连同 `equals` 比较一起消失——这是**默认不设防**的经典形态，配置漏了不会有任何提示。
 
@@ -125,13 +125,13 @@ public class TokenHeaderFilter implements HeaderFilter {
 > [!WARNING]
 > **同一个 token 机制有两条实现，错误码不一致。** 上面的 `TokenHeaderFilter` 是 `rpc.HeaderFilter` SPI 的 `token` 实现（`dubbo-rpc-api` 的 `META-INF/dubbo/internal/org.apache.dubbo.rpc.HeaderFilter`），走 Triple 协议链路，抛 **`FORBIDDEN_EXCEPTION = 4`**；`TokenFilter` 走普通 `rpc.Filter` 链，抛 **`UNKNOWN_EXCEPTION = 0`**。而 auth 机制在 HeaderFilter 链上抛的又是 `AUTHORIZATION_EXCEPTION = 13`（见下文）。**三条链路的认证失败 code 各不相同**，`RpcException.isAuthorization()`（:115）只在 HeaderFilter 链的 auth 失败时为 true。指望用一个错误码统一捕获认证失败是做不到的。
 
-### 粒度只到 URL 参数级
+### Granularity Only Down to URL Parameter Level
 
 `TokenFilter` 里没有任何 `getMethodParameter` 调用，也没有方法级判定逻辑。**同一个 Provider 上的所有方法、所有接口共享一个 token**：拿到它就能调该 Provider 上 `token` 覆盖到的所有方法。它防的是「匿名调用」，不是「越权访问」。
 
-## 凭据体系
+## Credential System
 
-### 只有两种 Authenticator
+### Only Two Kinds of Authenticator
 
 `dubbo-auth` 的 `Authenticator` SPI 注册文件总共两行：
 
@@ -143,7 +143,7 @@ basic=org.apache.dubbo.auth.BasicAuthenticator
 
 接口本身也把默认值写死在注解上（`auth/spi/Authenticator.java:25`）：`@SPI(scope = ExtensionScope.FRAMEWORK, value = "basic")`。两个方法的分工明确：`sign` 只在 Consumer 侧调用（给请求签名），`authenticate` 只在 Provider 侧调用（验签）。`Authenticator` 是 **FRAMEWORK 作用域**（不是 MODULE），实现里可以安全地拿到 `FrameworkModel`。
 
-### basic 与 accesskey 对照
+### basic vs accesskey Comparison
 
 | 维度 | `basic` | `accesskey` |
 | :--- | :--- | :--- |
@@ -174,7 +174,7 @@ if (!Objects.equals(authHeaderValue, invocation.getAttachment(Constants.AUTHORIZ
 > [!WARNING]
 > **default 是 basic 这件事本身就是个坑。** 官方文档给 basic 的定位是「Triple REST 场景的 HTTP Basic 认证」，但它是 SPI 的**全局默认值**。任何只写了 `auth=true` 而忘了写 `authenticator=...` 的配置，拿到的都是 Base64 明文口令的传输——**在链路上等同于明文 HTTP Basic**。生产上凡是开启 `auth` 的接口，都应该显式写明 `authenticator`，并优先选 `accesskey`，或者干脆用 TLS 通道保护（见后文）。
 
-### AK/SK 的签名是怎么算出来的
+### How AK/SK Signatures Are Computed
 
 签名串由四段拼成，格式常量是 `"%s#%s#%s#%s"`（`Constants.java:45`）：
 
@@ -197,7 +197,7 @@ String getSignature(URL url, Invocation invocation, String secretKey, String tim
 
 验签流程（`AccessKeyAuthenticator.authenticate`，:52-73）是：读四个 attachment → 任一为空抛 `RpcAuthenticationException` → 取 `AccessKeyPair` → 用**同一个 secretKey** 重算签名 → `equals` 比较。注意这里**没有时间戳窗口校验**——`timestamp` 参与签名但从不被拿来做过期判断，所以**录下来的合法请求可以无限期重放**。
 
-### `.accessKeyId` 的前导点是刻意设计
+### The Leading Dot in `.accessKeyId` Is Deliberate Design
 
 默认的密钥存储实现简单到近乎直白——直接读 URL 参数塞进 `AccessKeyPair`（`DefaultAccessKeyStorage.java:28-36`）。但两个参数的键是 `.accessKeyId` 和 `.secretAccessKey`，**前面各有一个点**。源码注释把原因写得很直白（`Constants.java:34-37`）：
 
@@ -214,9 +214,9 @@ Dubbo 在把 Config 转成 URL、以及把 URL 输出到注册中心/运维命�
 
 `AccessKeyPair` 这个 POJO 只有六个字段：`accessKey` / `secretKey` / `consumerSide` / `providerSide` / `creator` / `options`。注意**它没有「凭据类型」字段**——想按应用维度限制某把 AK 能调哪些服务，实现方得自己往 `consumerSide` / `providerSide` 里塞并自行校验，框架不读这两个字段。
 
-## 三个 Filter 的分工与双链路
+## Division of Labor Among Three Filters and the Dual Chain
 
-### 总览表
+### Overview Table
 
 `dubbo-auth` 一共注册了四个 SPI 文件，其中三个 Filter 分属两条不同的链：
 
@@ -240,7 +240,7 @@ if (shouldAuth) {
 return invoker.invoke(invocation);
 ```
 
-### 为什么 Provider 侧有两个
+### Why There Are Two on the Provider Side
 
 这是整套机制里最反直觉的设计：**同一份 auth 校验逻辑在 Provider 侧存在两份实现，走两条链路，谁先跑谁做校验。**
 
@@ -255,7 +255,7 @@ for (HeaderFilter headerFilter : headerFilters) {
 
 Dubbo 协议、gRPC 协议走的是常规 `rpc.Filter` 链，`HeaderFilter` 根本不会被调用。所以：走 Triple / gRPC 的请求由 `ProviderAuthHeaderFilter` 在**构建 RpcInvocation 的那一刻**（还没进业务线程池）校验；走 Dubbo 协议的请求由 `ProviderAuthFilter` 在 Filter 链里校验。两条路径都得有人管，于是就配了两个。
 
-### 去重机制：auth.success
+### Deduplication Mechanism: auth.success
 
 `ProviderAuthHeaderFilter` 的 `@Activate` **没有 group 约束**，意味着它在 consumer 侧也会被激活（只是 Consumer 侧 URL 一般没有 `auth=true` 所以直接跳过）。一旦两侧都带了 `auth=true`，`ProviderAuthFilter` 就会在 HeaderFilter 之后**再校验一遍**。去重靠的是 Invocation attributes 上的一个标记：
 
@@ -279,7 +279,7 @@ if (Boolean.TRUE.equals(invocation.getAttributes().get(Constants.AUTH_SUCCESS)))
 
 `AUTH_SUCCESS = "auth.success"`（`Constants.java:49`）。注意它是 **`Boolean.TRUE.equals` 的显式比较**而不是 `instanceof`——HeaderFilter 写入的就是 `Boolean.TRUE`，读的时候也只认这个类型。标记走 `invocation.getAttributes()`（内部属性），不占 attachment 空间也不跨网络传输，意味着它是**单次调用内有效**的：Provider 集群里换一个实例处理同一请求时不会残留。
 
-### 失败语义完全不同
+### Failure Semantics Are Completely Different
 
 两个 Provider Filter 对同一类失败的处理方式截然不同，这是排查时最需要先确认的事：
 
@@ -288,7 +288,7 @@ if (Boolean.TRUE.equals(invocation.getAttributes().get(Constants.AUTH_SUCCESS)))
 
 两个异常类都是**受检异常**（这在 dubbo-auth 里少见，与框架里清一色的 RuntimeException 风格不同）：`RpcAuthenticationException extends Exception`（`exception/RpcAuthenticationException.java:19`）、`AccessKeyNotFoundException extends Exception`（:24）。而 `AccessKeyAuthenticator` 里 `getAccessKeyPair` 的 catch 块（:87-89）会把 `AccessKeyNotFoundException` 包成 `RuntimeException` 再抛，所以「Provider 侧没配 `.accessKeyId`」最终落到调用方的是一个无 message 的 RuntimeException。
 
-## 三个 security 模块的职责边界
+## Responsibility Boundaries of Three security Modules
 
 | 模块 | 真实职责 | 关键类 | 与 `dubbo-auth` 的关系 |
 | :--- | :--- | :--- | :--- |
@@ -299,7 +299,7 @@ if (Boolean.TRUE.equals(invocation.getAttributes().get(Constants.AUTH_SUCCESS)))
 
 **三者不共享任何 SPI 扩展点。** `dubbo-security` 的三个注册文件分别是 `CertProvider`、`ApplicationDeployListener`、`ScopeModelInitializer`，与 `Authenticator` / `AccessKeyStorage` / `Filter` / `HeaderFilter` 完全没有交集。所以「`BasicAuthenticator` 在 dubbo-security 里」这个说法是彻底错的——它在 `dubbo-plugin/dubbo-auth`，包名 `org.apache.dubbo.auth`。
 
-## 证书体系
+## Certificate System
 
 `dubbo-security` 只有一个子包 `cert/`，七个类，管的是「向 CA 要一张证书并定期续期」：
 
@@ -336,9 +336,9 @@ public void onStarting(ApplicationModel scopeModel) {
 
 `SslConfig` 里与 CA 相关的四个字段值得单独记住，因为它们**行为与其他字段不同**：`caAddress` / `envType` / `caCertPath` / `oidcTokenPath`（:125-140）**都没有 `@Parameter` 注解**，而八个证书路径字段全部带 `@Parameter(key = ...)`（:148-211）。缺少 `@Parameter` 意味着**这四个字段不会被同步进 URL**——URL 会进注册中心、进监控、进日志，CA 地址和 OIDC Token 恰恰是最不该出现在那里的东西。这和 `.accessKeyId` 用前导点是同一种思路。
 
-## TLS 与 mTLS
+## TLS and mTLS
 
-### 类名是 SslContexts，不是 SslContextFactory
+### The Class Name Is SslContexts, Not SslContextFactory
 
 TLS 的代码分在两个包里：SPI 与配置在 `org.apache.dubbo.common.ssl`，Netty 构建在 `org.apache.dubbo.remoting.transport.netty4.ssl`。核心类叫 **`SslContexts`**（复数），不存在 `SslContextFactory` 这个类。服务端 context 的构建：
 
@@ -356,7 +356,7 @@ if (serverTrustCertStream != null) {
 
 **`clientAuth` 完全由 `AuthPolicy` 决定**，而 `AuthPolicy` 只有三个值（`common/ssl/AuthPolicy.java:19-23`）：`NONE` / `SERVER_AUTH` / `CLIENT_AUTH`。TLS provider 的选择是「优先 OpenSSL，回退 JDK」（:144-156），两者都不可用时抛 `IllegalStateException`。Server 端的 ALPN 固定协商 `HTTP_2` + `HTTP_1_1`（:87-92），cipher 套件用 `Http2SecurityUtil.CIPHERS`（:86）——这两个值对 Dubbo 协议也是同一套，因为它们服务于 Triple/gRPC 的 HTTP/2 承载。
 
-### mTLS 是支持的，但 AuthPolicy 被硬编码
+### mTLS Is Supported, but AuthPolicy Is Hardcoded
 
 **Dubbo 3.3.6 明确支持 mTLS**，没有任何「不支持」的限制。问题出在唯一一个基于本地文件配置证书的 `CertProvider` 上：
 
@@ -391,9 +391,9 @@ public class SSLConfigCertProvider implements CertProvider {
 
 Dubbo 侧配 TLS 还需要协议层显式打开 `sslEnabled`（`ProtocolConfig.setSslEnabled(true)`），官方 TLS 文档有完整示例；`SslConfig` 的八个路径常量定义在 :36-50（`server-key-cert-chain-path` 等），字段在 :55-140。
 
-## Spring Security 上下文传播与安全边界
+## Spring Security Context Propagation and Security Boundary
 
-### 传播链路
+### Propagation Chain
 
 `dubbo-spring-security` 干的事分两侧，SPI 注册在 `ClusterFilter` 与 `Filter` 两个文件里：
 
@@ -421,7 +421,7 @@ SecurityContextHolder.getContext().setAuthentication(authentication);
 > [!NOTE]
 > **`onClass` 探测失败时 Filter 静默不激活，没有任何日志。** 这类「类在就不生效」的开关是排查「为什么 SecurityContext 没传过去」时的第一检查点。
 
-### 安全边界：它信任客户端，不做校验
+### Security Boundary: It Trusts the Client and Does No Validation
 
 > [!WARNING]
 > `dubbo-spring-security` 的方向是「**Consumer 说我是谁，Provider 就信我是谁**」。Consumer 侧无条件把本地 `SecurityContextHolder` 的 `Authentication` 序列化发出去，Provider 侧反序列化后**直接 `setAuthentication`，中间没有任何签名、没有任何校验、没有任何比对**。这意味着：
@@ -430,7 +430,7 @@ SecurityContextHolder.getContext().setAuthentication(authentication);
 > - 它**必须**与真正的认证机制（`auth=true` + AK/SK，或 mTLS）配合使用——传输层必须先确认对端身份，上下文透传才有意义。单独使用等于**把授权决策交给了客户端**。
 > - 正确用法是「让已有的 Spring Security 认证结果跨进程可用」，认证本身仍应由网关 / `dubbo-auth` / mTLS 承担。
 
-### 异常翻译与 spring6 变体
+### Exception Translation and spring6 Variant
 
 Provider 侧的 `AuthenticationExceptionTranslatorFilter`（`order = Integer.MAX_VALUE`，排最后）把 Spring Security 异常翻译成 Dubbo 错误码：`onResponse` 里若结果异常是 `AuthenticationException` 或 `AccessDeniedException`，就包一个 `RpcException` 并 `setCode(AUTHORIZATION_EXCEPTION)`。这是**第三条**能产生 code 13 的路径。它的 `onError` 是空实现，说明翻译只覆盖「正常返回但结果里带异常」这一种情况。
 
@@ -452,7 +452,7 @@ Provider 侧的 `AuthenticationExceptionTranslatorFilter`（`order = Integer.MAX
 
 其 SPI 只有一个扩展点：`org.apache.dubbo.spring.security.jackson.ObjectMapperCodecCustomer` → `oauth2Customer=OAuth2ObjectMapperCodecCustomer`，把那一堆 `*Mixin` 注册进 `ObjectMapper`。
 
-## 生态速查表
+## Ecosystem Quick Reference
 
 与安全无关但常被一并打听的插件，清单级结论：
 
@@ -469,9 +469,9 @@ Provider 侧的 `AuthenticationExceptionTranslatorFilter`（`order = Integer.MAX
 | `dubbo-configcenter-file` | → `file=FileSystemDynamicConfigurationFactory` |
 | `dubbo-configcenter-zookeeper` | → `zookeeper=ZookeeperDynamicConfigurationFactory` |
 
-配置中心的启动链路与优先级规则见 [config](/docs/CS/Framework/Dubbo/config.md?id=配置中心的启动链路)。
+配置中心的启动链路与优先级规则见 [config](/docs/CS/Framework/Dubbo/config.md?id=startup-chain-of-the-configuration-center)。
 
-## 默认值汇总表
+## Default Value Summary Table
 
 | 项目 | 默认值 | 源码位置 |
 | :--- | :--- | :--- |
@@ -511,7 +511,7 @@ Provider 侧的 `AuthenticationExceptionTranslatorFilter`（`order = Integer.MAX
 | `AuthenticationExceptionTranslatorFilter` order | `Integer.MAX_VALUE` | `AuthenticationExceptionTranslatorFilter.java:39` |
 | SecurityContext attachment 键 | `security_authentication_context`（**object attachment**） | `spring/security/utils/SecurityNames` |
 
-## 陷阱清单
+## Pitfall List
 
 1. **凭据只有 2 种，不是 3 种**：SPI 里只有 `basic` 与 `accesskey`，`Authenticator.java:25` 的 `@SPI(value = "basic")` 是唯一的默认值来源。
 2. **默认的 basic 不是加密**：`Base64(user:pass)` 可逆，等同明文传输；且**读取端用的是非常量时间比较**。生产上开 `auth` 必须显式写 `authenticator`。

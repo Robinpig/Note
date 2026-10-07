@@ -66,7 +66,7 @@ tap
 
 
 
-### 多版本
+### Multiple Versions
 
 参考:
 
@@ -137,7 +137,7 @@ REMOTE=https://mirrors.tuna.tsinghua.edu.cn/git/ohmyzsh.git sh install.sh
 
 为 iTerm2 配置 Solarize 主题
 
-### 主题美化
+### Theme Customization
 
 
 主题美化 设置 `.zshrc` 

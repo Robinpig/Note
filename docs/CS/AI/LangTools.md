@@ -6,7 +6,7 @@
 
 这一层当下的格局几乎由 LangChain Inc. 定义：它把自家产品切成 Harness / Framework / Runtime / Platform 四层，其他玩家基本都在其中某几层上对标。
 
-## LangChain 家族的四层
+## The Four Layers of the LangChain Family
 
 | 层 | 产品 | 职责 |
 | --- | --- | --- |
@@ -22,7 +22,7 @@
 - [LangChain4j](/docs/CS/AI/LLM/LangTool/LangChain4j.md)——同一套理念的 Java 实现（Spring Boot / Quarkus 集成），适合"给现有后端加一个会用工具的助手"，而不必另起 Python 服务。
 - [Langflow](/docs/CS/AI/LLM/LangTool/Langflow.md)——把 LangChain 组件做成可视化画布，可导出 Python 或发布成 API，走"先可视化验证、再落回代码"的路径。
 
-## 同层的其他玩家
+## Other Players at the Same Layer
 
 | 框架 | 定位 | 什么时候选它 |
 | --- | --- | --- |
@@ -31,7 +31,7 @@
 | OpenAI Agents SDK | 厂商原生 Agent SDK | 只用 OpenAI，或想跟着官方路线走 |
 | Claude Agent SDK | 厂商原生 Agent SDK | 同上，且更偏"在开发机上干活的编码 Agent" |
 
-## 怎么选
+## How to Choose
 
 - **要标准 tool-calling Agent，且预期会换模型** → [LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md)
 - **要长任务开箱即用：规划、文件系统、子 Agent 都现成** → [Deep Agents](/docs/CS/AI/LLM/LangTool/DeepAgents.md)
@@ -41,7 +41,7 @@
 - **要追踪、评测与部署上线** → [LangSmith](/docs/CS/AI/LLM/LangTool/LangSmith.md)
 - **只有一两次模型调用** → 直接用厂商 SDK 最快，框架反而是负担
 
-## 上手准备
+## Getting Started
 
 这一层的例子基本都能用同一个 Python 环境跑起来：
 

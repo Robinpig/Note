@@ -507,7 +507,7 @@ volatile
 
 
 
-## 本目录导航
+## This Directory Navigation
 
 本页是总纲（线程安全三要素、共享对象、并发容器、Amdahl 定律与锁竞争），全目录沿「线程语义 → 锁与同步器 → 执行框架 → Loom 时代原语」四条线展开：
 

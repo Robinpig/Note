@@ -14,7 +14,7 @@ Agent Skill（技能包）是**把一套可复用的做事方法打包成文件�
 
 > ⚠️ 常见误解澄清：**「Skill 是知识、MCP 是工具」是本库的概括，不是官方原话**。官方页面上的实际表述是：skill「gives the subagent **domain knowledge** without requiring it to discover and load skills」，而 MCP 是让 subagent 拿到主对话里没有的 server。功能上这个区分准确，但引用时不能当引文。
 
-## 目录结构
+## Directory Structure
 
 规范约定的结构非常朴素：
 
@@ -39,9 +39,9 @@ skill-name/
 
 ⚠️ `SKILL.md` 的文件名**必须全大写**。Linux 区分大小写，写成 `skill.md` 或 `Skill.md` 不会被识别——这是排障时的第一条。
 
-## SKILL.md 的字段
+## Fields of SKILL.md
 
-### 规范字段 只有 6 个
+### Specification Fields: Only 6
 
 | 字段 | 必填 | 约束 |
 | :--- | :---: | :--- |
@@ -56,7 +56,7 @@ skill-name/
 
 > 📌 **一个规范内部的矛盾**：规范正文写 `name` 只允许「unicode lowercase alphanumeric characters (`a-z`, `0-9`)」，但校验器代码用的是 Python 的 `c.isalnum()`，**实际接受 Unicode 字母**（i18n 名字可用），且源码注释明确写了「Skill names support i18n characters (Unicode letters) plus hyphens」。文档与实现不一致，官方未澄清——写 i18n 名的 skill 目前能用，但别指望它一直能用。
 
-### Claude Code 的 20 个本地字段
+### Claude Code's 20 Local Fields
 
 Claude Code 本地接受 20 个字段，远多于规范。官方原话是「**All fields are optional. Only `description` is recommended**」——这与规范里 `name`／`description` 必填**直接矛盾**。Claude Code 侧 `name` 可省略（回退到目录名），`description` 省略时回退到 Markdown 第一条非空行。
 
@@ -73,7 +73,7 @@ allowed-tools, compatibility, description, license, metadata, name
 
 所以自定义字段可以放心在本地用，但要打包分发就得删干净。
 
-## 最大的坑 拼错不报错
+## Biggest Pitfall: Typos Fail Silently
 
 **`allowed-tools` 用连字符，不是 `allowed_tools`。** 而写错之后**不会报错**。
 
@@ -87,7 +87,7 @@ allowed-tools, compatibility, description, license, metadata, name
 
 **抓这个错的手段**：`claude plugin validate .claude/skills`（需 v2.1.233+），或 `skills-ref validate ./my-skill`。
 
-## 渐进式披露 三级加载
+## Progressive Disclosure: Three-Level Loading
 
 这是 skill 能塞很多内容却不炸上下文的原因。规范给的三级与预算：
 
@@ -105,7 +105,7 @@ allowed-tools, compatibility, description, license, metadata, name
 
 另外第一级的隐含代价值得单独说：**「Every skill in the skill listing adds to your context on every turn, whether or not Claude ever uses it.」** 装 50 个 skill 就意味着每轮都在为 50 条 description 付费，哪怕一个都没用上。
 
-## 存放位置与作用域
+## Storage Location and Scope
 
 Claude Code 的加载位置（这套最全，其他实现都是它的子集或变体）：
 
@@ -128,11 +128,11 @@ Claude Code 的加载位置（这套最全，其他实现都是它的子集或�
 
 保留名：`synced`（claude.ai 同步目录）、`anthropic-skills`（plugin 外不加载）。
 
-## 改了 Skill 要重载吗
+## Do You Need to Reload After Editing a Skill?
 
 这是每个使用者都会踩的问题，而**答案按产品分叉**，不能一概而论。
 
-### Claude Code 有热加载，但有例外
+### Claude Code Has Hot-Reload, but with Exceptions
 
 官方原文：Claude Code 会监听 skill 目录的文件变化（**裸模式除外**），在 `~/.claude/skills/`、项目 `.claude/skills/`、`--add-dir` 目录的 `.claude/skills/` 下增删改 skill，**会话内自动生效，不需重启**。
 
@@ -148,7 +148,7 @@ Claude Code 的加载位置（这套最全，其他实现都是它的子集或�
 
 最后一行是最阴的：YAML 写坏了不会报「加载失败」，而是变成一个没有 description 的 skill，**能手动调用但模型永远不会自动选它**。
 
-### 其他产品
+### Other Products
 
 - **Codex**：官方说会自动检测 skill 变更，但「If an update doesn't appear, **restart Codex**」
 - **Pi**：编辑后需 `/reload`
@@ -156,7 +156,7 @@ Claude Code 的加载位置（这套最全，其他实现都是它的子集或�
 
 > ⚠️ 因此不要写「改了 description 必须重启」这种一刀切的说法。准确表述是：**Claude Code 对已存在的 skill 目录有文件监听、会话内自动生效；新建顶层目录需 `/reload-skills`，plugin 附属文件需 `/reload-plugins`；Codex 与 Pi 各自有重启或 reload 要求。**
 
-## 同名冲突的优先级
+## Priority of Name Conflicts
 
 Claude Code 官方给的完整规则表，其中第一条**非常反直觉**：
 
@@ -174,7 +174,7 @@ Claude Code 官方给的完整规则表，其中第一条**非常反直觉**：
 
 另外：**自定义命令已并入 skill**（官方原话「Custom commands have been merged into skills」）。`.claude/commands/deploy.md` 与 `.claude/skills/deploy/SKILL.md` 都会创建 `/deploy` 且行为一致，但旧 command 文件**不含 `name` 和 `paths`**。
 
-## 各家实现差异
+## Differences in Implementations Across Vendors
 
 跨实现的最大兼容性地雷是 **`name` 是否必须与父目录一致**，各家宽严不一：
 
@@ -196,7 +196,7 @@ Claude Code 官方给的完整规则表，其中第一条**非常反直觉**：
 
 框架侧：**LangChain / LangGraph / Deep Agents 有 skill 概念且遵循同一规范**（Deep Agents 文档的原话是「智能体启动时，会读取每个 SKILL.md 文件的前置元数据」——同一套渐进式披露）。LangChain 还发布了 11 个 skill 组成的 `langchain-skills` 仓库，用 `npx skills add langchain-ai/langchain-skills --agent claude-code` 安装。**OpenAI Agents SDK 只查到 AGENTS.md，未查到内建 skill 机制。**
 
-## 数量上限 与目录预算
+## Quantity Limit and Directory Budget
 
 **没有统一的「skill 数量上限」**，但多家有**目录预算**，这才是真正的卡点：
 
@@ -209,7 +209,7 @@ Claude Code 官方给的完整规则表，其中第一条**非常反直觉**：
 
 Codex 那条特别值得注意：**skill 装太多时会「突然不触发」**——不是触发得慢，是被静默省略了并只给一行 warning。所以遇到「某个 skill 明明装了却不生效」，先怀疑描述预算超了。
 
-## Skill 与 CLAUDE.md 的分工
+## Division of Labor Between Skill and CLAUDE.md
 
 官方给了明确的判据，值得原样记住：
 
@@ -224,7 +224,7 @@ Codex 那条特别值得注意：**skill 装太多时会「突然不触发」**�
 
 ⚠️ **与 hooks 的优先级未查到官方规则**。skill 有 `hooks` 字段（调用时注册，持续到会话结束），但官方 skills / plugins / hooks / sub-agents 四页都没给出「skill 与 CLAUDE.md、hooks 谁覆盖谁」的优先级表。这两个不是同一维度（hooks 是执行机制、CLAUDE.md 是上下文内容），推测不如等官方澄清。
 
-## 与 Subagent 怎么组合
+## How to Combine with Subagents
 
 官方对 Subagent 的定义是「runs in its own context window with a custom system prompt, specific tool access, and independent permissions」，判断何时该用它：
 
@@ -246,7 +246,7 @@ Pi 的分工表述值得引用，因为它是少见的把边界写清楚的实�
 
 即：**Skill 教「怎么做」，Extension 提供「新的可执行集成点」**——需要新工具能力时才上 Extension。这也解释了为什么 Pi 把 Skill 设计成纯 Markdown 而把执行能力全放在 Extension。
 
-## 官方 skill 清单
+## Official Skill List
 
 `anthropics/skills` 仓库当前有 19 个 skill，按用途分几类：
 
@@ -262,7 +262,7 @@ Pi 的分工表述值得引用，因为它是少见的把边界写清楚的实�
 
 Claude Code 自带的 bundled skills（文档点名的）：`/doctor`（别名 `/checkup`）、`/code-review`（别名 `/review`）、`/batch`、`/debug`、`/loop`、`/claude-api`、`/verify`、`/simplify`、`/run`、`/run-skill-generator`、`/workflow-authoring`。
 
-## 陷阱清单
+## Pitfall List
 
 汇总一遍最值得记住的：
 

@@ -6,7 +6,7 @@ Dify（源自 "Do It For You"）是 LangGenius 出品的开源 LLM 应用开发�
 
 它不是一个 SaaS 聊天工具，也不是一个 Python SDK——理解这一点，是理解它和 [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md)（代码框架）与 [Coze](/docs/CS/AI/LLM/Platform/Coze.md)（可视化 + 观测一体）之间取舍的前提。
 
-## 它在技术栈里的位置
+## Its Position in the Tech Stack
 
 ```
 模型层（OpenAI / Anthropic / 国产模型 / Ollama / vLLM）
@@ -20,7 +20,7 @@ Dify（源自 "Do It For You"）是 LangGenius 出品的开源 LLM 应用开发�
 
 框架与平台的分界线：**框架给你积木，平台给你连 UI、账号、API、日志的一整套成品。** 用 LangGraph 你得自己写前端、自己管会话数据、自己做鉴权；用 Dify 这些是现成的，代价是深度定制时要顺着它的抽象走，且输出结果不再是"你自己的代码"。
 
-## 应用类型
+## Application Types
 
 | 类型 | 形态 | 适合场景 |
 |------|------|----------|
@@ -32,7 +32,7 @@ Dify（源自 "Do It For You"）是 LangGenius 出品的开源 LLM 应用开发�
 
 最容易混淆的是这三者的边界：**Workflow 是确定性编排**（你画图，它按图执行），**Agent 是自主规划**（模型决定调什么、调几次），**Chatflow 是二者在对话场景的折中**。多数生产应用是"以 Workflow 为主骨架，在需要不确定性的局部嵌 Agent 节点"。
 
-## 工作流画布
+## Workflow Canvas
 
 拖拽节点组成数据流，常用节点：开始（入参定义）、LLM、知识检索、代码执行（Python/JS 沙箱）、工具、HTTP 请求、条件分支、迭代 Iteration、循环 Loop、变量聚合、模板转换、人工输入 HITL、结束。
 
@@ -45,7 +45,7 @@ Dify（源自 "Do It For You"）是 LangGenius 出品的开源 LLM 应用开发�
 - **超时与重试必须配**：HTTP / LLM 节点都会超时，30–60 秒超时 + 1–2 次重试是常规配置。
 - **变量别泛滥**：复杂流程里变量节点超过 20 个就该用一个 Code 节点聚合。
 
-## RAG 知识管线
+## RAG Knowledge Pipeline
 
 这是 Dify 相对其他可视化平台最扎实的一块，可配置项也最多：
 
@@ -60,7 +60,7 @@ Dify（源自 "Do It For You"）是 LangGenius 出品的开源 LLM 应用开发�
 
 向量存储默认是 Postgres 上的 pgvector，也可接外部向量库；它与 [RAG](/docs/CS/AI/RAG.md) 笔记里「索引器 / 检索器 / 生成器」的三段式分层正好对应起来。调不好 RAG 时先怀疑切分与检索方式，而不是先怪模型。
 
-## 插件体系与模型接入
+## Plugin System and Model Access
 
 Dify **v1.0.0（2025-02-17）** 是架构分水岭：把模型与工具从核心里解耦成可热插拔的插件，并上线 Dify Marketplace，第三方不必改核心代码就能扩展能力。插件打包为 `.difypkg`，可以贡献：
 
@@ -71,7 +71,7 @@ Dify **v1.0.0（2025-02-17）** 是架构分水岭：把模型与工具从核心
 
 模型侧覆盖 OpenAI、Anthropic、Azure、火山方舟、DeepSeek、通义、本地 Ollama/vLLM 等数十家；本地模型配上私有化部署，就构成一套内网可用的 LLM 应用底座。
 
-## 近期版本：从「能搭」到「能打」（1.17 / Agent V2）
+## Recent Versions: From 'Can Build' to 'Can Fight' (1.17 / Agent V2)
 
 **v1.17.0（2026-08-28）** 集中解决了 Agent 的工程化落地问题：
 
@@ -85,7 +85,7 @@ Dify **v1.0.0（2025-02-17）** 是架构分水岭：把模型与工具从核心
 
 ⚠️ 从 1.16 升到 1.17 属于**破坏性变更**（Agent V2），升级前务必备份 database volume 并按官方迁移说明走。
 
-## 发布形态与对外接口
+## Release Form and External Interface
 
 一条应用可同时发布为多种形态，各有独立访问控制（公开/私有/白名单）与限流：
 
@@ -98,7 +98,7 @@ Dify **v1.0.0（2025-02-17）** 是架构分水岭：把模型与工具从核心
 
 反过来，Dify 也**作为 MCP Client** 接入外部 MCP Server，把它们的工具注册进 Agent 工具列表。这种"双向 MCP"让它既是 [MCP](/docs/CS/AI/LLM/Protocol/MCP.md) 生态里的生产者也是消费者，企业内部可借它统一工具目录。
 
-## 部署与运维
+## Deployment and Operations
 
 | 组件 | 作用 |
 |------|------|
@@ -112,7 +112,7 @@ Dify **v1.0.0（2025-02-17）** 是架构分水岭：把模型与工具从核心
 
 官方 `docker compose up` 即可起全套，生产上要注意：为 Agent V2 预留更多内存（官方建议 6 G 起步、8 G 以上更稳）、备份 Postgres 与向量数据卷、把 Nginx 换成自己的网关处理 TLS 与 SSO、并规划 sandbox 的出网策略——沙箱一旦能随意出网，工作流里的 Code 节点就是一条 SSRF 通道。
 
-## 什么时候选 Dify
+## When to Choose Dify
 
 | 选 Dify 的信号 | 不选 Dify 的信号 |
 |----------------|------------------|

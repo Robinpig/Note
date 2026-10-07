@@ -38,7 +38,7 @@ digraph MQ {
 }
 ```
 
-### 三个产品的定位差异
+### Positioning Differences Among Three Products
 
 理解三者差异最快的方式是问三个问题：**数据存在哪、谁来做路由、怎么扩**。
 
@@ -58,7 +58,7 @@ digraph MQ {
 > [!IMPORTANT]
 > **零拷贝路线的差异决定了两者的功能边界**，这是本目录最值得记住的一条主线：Kafka 用 `sendfile` 只把字节搬出去，应用层拿不到消息内容，因此做不了「读到内容再过滤/改写」这类事；RocketMQ 用 `mmap` 能拿到完整消息，才可能有 Broker 端的 SQL92 表达式过滤与死信二次投递。详见 [Kafka Storage](/docs/CS/MQ/Kafka/Storage.md) 与 [RocketMQ Store](/docs/CS/MQ/RocketMQ/Store.md)。
 
-### 选型速查
+### Selection Quick Reference
 
 | 场景 | 推荐 | 理由 |
 | ---- | ---- | ---- |
@@ -71,7 +71,7 @@ digraph MQ {
 > [!TIP]
 > 不要迷信「Kafka 吞吐一定更高」。Kafka 的优势建立在 **partition 数量可控**的前提上 —— partition 多到一定程度，写侧会退化为随机写。RocketMQ 共用 commitlog，topic 数量对其影响小得多。
 
-### 目录导航
+### Table of Contents Navigation
 
 - [Apache Kafka](/docs/CS/MQ/Kafka/Kafka.md) —— 事件流平台
 - [Apache RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md) —— 业务消息队列
@@ -125,7 +125,7 @@ digraph MQ {
 
 排队带来的一个结果是消费者通常是异步的：生产者发送消息时一般只等代理确认「我已经缓冲好了」，不会等消息被消费者处理完。投递会在未来某个不确定的时刻发生 —— 往往在一秒之内，但如果队列积压，也可能晚得多。
 
-#### Message brokers与数据库的对比
+#### Comparison of Message Brokers and Databases
 
 有些消息代理甚至能参与 XA 或 JTA 的两阶段提交协议，这让它们在本质上与数据库非常接近。不过两者之间仍有一些重要的实际差异：
 
@@ -134,7 +134,7 @@ digraph MQ {
 - 数据库往往支持二级索引和各种数据检索方式，而消息代理通常支持以某种方式订阅匹配特定模式的一部分 topic。机制不同，但本质上都是让客户端选择它关心的那部分数据。
 - 查询数据库时，结果通常基于某个时间点的数据快照；如果之后另一个客户端写入了会改变该查询结果的数据，第一个客户端不会得知自己先前的结果已经过期（除非它重新查询或轮询变更）。相比之下，消息代理不支持任意查询，但会在数据变化时（即有新消息可用时）通知客户端。
 
-#### 多消费者
+#### Multiple Consumers
 
 当多个消费者读取同一个 topic 的消息时，主要有两种消息传递模式：
 
@@ -171,7 +171,7 @@ digraph MQ {
 
 
 
-### 元数据存储
+### Metadata Storage
 
 元数据信息的存储，一般有两个思路。
 
@@ -190,7 +190,7 @@ digraph MQ {
 
 这个方案的优缺点跟第一个正好相反。优点是部署和运维成本低，不会因为依赖第三方服务导致稳定性问题，也不会有数据不一致的问题。但缺点是开发成本高，前期要投入大量的开发人力  
 
-### 消息数据存储
+### Message Data Storage
 
 消息数据的存储，分为存储结构、数据分段、数据存储格式、数据清理四个部分  
 
@@ -250,7 +250,7 @@ digraph MQ {
 
 消息数据的存储格式虽然没有统一的规范，但是一般包含通用信息和业务信息两部分。通用信息主要包括时间戳、CRC、消息头、消息体、偏移量、长度、大小等信息，业务信息主要跟业务相关，包含事务、幂等、系统标记、数据来源、数据目标等信息  
 
-#### 单文件与多文件的取舍
+#### Trade-offs Between Single-file and Multi-file
 
 前面提到的两种落盘思路（每分区独立文件 vs 全部分区共用一个文件），在工程上可进一步归纳为单文件与多文件两种形态：
 
@@ -268,7 +268,7 @@ digraph MQ {
 
 按 topic 或按分区划分文件是另一层维度：Kafka 是「分区 → 独立 segment 文件」并在文件名携带基准 offset；RocketMQ 是「全部 topic 共用一个 commitlog + 每 topic 一个 ConsumeQueue 索引」；Pulsar 则是「topic → ledger → segment → entry」两级。详见 [Kafka Storage](/docs/CS/MQ/Kafka/Storage.md) 与 [RocketMQ Store](/docs/CS/MQ/RocketMQ/Store.md)。
 
-#### 消息数据清理机制
+#### Message Data Cleanup Mechanism
 
 消息队列中的数据最终都会删除，时间周期短的话几小时、甚至几分钟，正常情况一天、三天、七天，长的话可能一个月，基本很少有场景需要在消息队列中存储一年的数据。
 
@@ -325,7 +325,7 @@ digraph MQ {
 
 无论保留消息多久，日志的吞吐基本保持恒定 —— 因为每条消息反正都要写盘。这与「默认把消息放内存、队列过大才落盘」的消息系统形成鲜明对比：后者在队列短的时候很快，一旦开始写盘就慢得多，吞吐取决于保留了多少历史。
 
-#### 当消费者跟不上生产者时
+#### When Consumers Can't Keep Up with Producers
 
 前面讨论过消费者跟不上生产速度时的三种选择：丢弃消息、缓冲、施加反压。在这个分类下，基于日志的方案属于「缓冲」的一种 —— 缓冲区很大但固定（受可用磁盘空间限制）。如果消费者落后到所需消息比磁盘保留的更旧，它就读不到那些消息了 —— 也就是说代理实际上丢弃了超出缓冲区容量的更早消息。你可以监控消费者落后日志头的程度，落后严重时告警。由于缓冲区很大，有足够时间让运维人员修复慢消费者，让它赶上进度而不开始漏消息。
 
@@ -333,7 +333,7 @@ digraph MQ {
 
 这个行为也和传统消息代理形成对照：在传统代理里，你必须小心删除那些消费者已关闭的队列，否则它们会继续无谓地累积消息、占用活跃消费者的内存。
 
-#### 重放旧消息
+#### Replay Old Messages
 
 前面提到，在 AMQP 和 JMS 风格的消息代理中，处理并确认消息是一个**破坏性操作** —— 因为它会导致消息在代理上被删除。而基于日志的消息代理里，消费消息更像是从文件读取：这是一个只读操作，不改变日志。
 
@@ -679,7 +679,7 @@ sendfile
 - 只能读/写 leader
 - leader 把数据同步给 follower，大多数 follower 同步成功后返回 ack
 
-### 消息丢失
+### Message Loss
 
 消息丢失需要消息从生产到消费整条链路上的组件协同保障
 
@@ -734,7 +734,7 @@ sendfile
 
 Kafka partition → queue → thread（Kafka 分区对应队列，队列再对应处理线程）
 
-### 消息积压
+### Message Backlog
 
 消息积压问题通常出在消费侧。因为一个 topic 通常会被多个消费组订阅，只要看看其他消费组是否也积压即可。
 
@@ -751,14 +751,14 @@ Kafka partition → queue → thread（Kafka 分区对应队列，队列再对�
 
 当前开源社区用得较多的消息队列主要有 RabbitMQ、Kafka、RocketMQ 和 Pulsar 四款，各自定位差异见 [Introduction 的定位差异表](#三个产品的定位差异)。
 
-### 存储路线与吞吐的取舍
+### Trade-offs Between Storage Path and Throughput
 
 topic 数量增多时 Kafka 吞吐会明显下降而 RocketMQ 稳定，原因在于存储路线不同：Kafka 的每个 topic-partition 对应一个物理文件，topic 变多会导致磁盘 IO 竞争；RocketMQ 所有消息存在同一个物理文件里，topic 与 partition 只是逻辑划分，因此 topic 数量增加对性能影响很小。
 
 > [!TIP]
 > 所以「Kafka 吞吐一定更高」的说法要加限定条件 —— 前提是 partition 数量可控。选型时若 topic 极多（数千以上），RocketMQ 的共用 commitlog 路线更稳。
 
-### RabbitMQ 的取舍
+### RabbitMQ Trade-offs
 
 - 消息一旦投递即从队列移除（无消费位点重放能力）
 - 纵向扩展，靠更强的硬件换吞吐

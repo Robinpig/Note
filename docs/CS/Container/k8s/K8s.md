@@ -1707,7 +1707,7 @@ type IngressSpec struct {
 
 ## Resource Management
 
-资源管理围绕 `requests` / `limits` 两个声明展开：requests 决定调度放置，limits 由 [Cgroup](/docs/CS/OS/Linux/cgroup.md) 强制执行。由此推导出 Guaranteed / Burstable / BestEffort 三档 QoS，它是**内核 OOM killer** 挑 victim 的依据（经 `oom_score_adj`），详见 [Pod 资源与 QoS](/docs/CS/Container/k8s/Pod.md?id=资源与-qos)。
+资源管理围绕 `requests` / `limits` 两个声明展开：requests 决定调度放置，limits 由 [Cgroup](/docs/CS/OS/Linux/cgroup.md) 强制执行。由此推导出 Guaranteed / Burstable / BestEffort 三档 QoS，它是**内核 OOM killer** 挑 victim 的依据（经 `oom_score_adj`），详见 [Pod 资源与 QoS](/docs/CS/Container/k8s/Pod.md?id=resources-and-qos)。
 
 注意不要把 OOM killer 与 kubelet 驱逐混为一谈：**kubelet 的节点压力驱逐排序并不看 QoS**，而是按"是否超过 request → priority → 绝对用量"排序。节点侧的保障机制（资源预留、驱逐阈值与两套 eviction 的分野）见 [驱逐](/docs/CS/Container/k8s/Eviction.md)。
 

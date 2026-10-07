@@ -6,7 +6,7 @@ Deep Agents 是 LangChain 官方给出的 **agent harness**——一个开箱即
 
 设计取向写在官方致谢里，值得原文一读：**"本项目主要受 Claude Code 启发，最初很大程度上是想搞清楚是什么让 Claude Code 变得通用，并让它更通用。"** 这解释了它为什么长得像编码 Agent——但它并不限于编码场景。
 
-## 在家族里的位置
+## Position in the Family
 
 官方口径把三者描述成同一个栈的三层，区别只在"你已经拿到了多少"：
 
@@ -18,7 +18,7 @@ Deep Agents 是 LangChain 官方给出的 **agent harness**——一个开箱即
 
 对应到 [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md) 的判断方法：**上层替你把模型缺口补上了，只有当它补的东西你用不上（或反过来在拖后腿）时，才往下退一层**。官方给的选择线很干脆——要全副 harness 用 Deep Agents，要更轻的 harness 用 `create_agent`，当 agent loop 本身形状就不对时下到 LangGraph。
 
-## 内置了什么
+## What Is Built In
 
 自动挂载的 middleware 带来四组能力：
 
@@ -31,7 +31,7 @@ Deep Agents 是 LangChain 官方给出的 **agent harness**——一个开箱即
 
 这些工具不是散装函数，而是由 `TodoListMiddleware`、`FilesystemMiddleware`、`SubAgentMiddleware`、`SummarizationMiddleware` 等中间件注入的——所以每一块都能单点替换，包括文件系统后端（本地 / 沙箱 / 远程）。
 
-## 最小用法
+## Minimal Usage
 
 ```python
 from deepagents import create_deep_agent
@@ -49,7 +49,7 @@ result = agent.invoke(
 
 `create_deep_agent` 返回的**就是一个 LangGraph graph**，所以流式、人在环路、checkpointer、Studio 调试全都能直接用。反过来也成立：任何 LangGraph `CompiledStateGraph` 都能作为子 Agent 塞进 Deep Agent，自定义编排与 harness 默认值并存。
 
-## 可定制点
+## Customization Points
 
 | 参数 | 作用 |
 | --- | --- |
@@ -64,7 +64,7 @@ result = agent.invoke(
 > [!WARNING]
 > 官方安全政策写的是 **"trust the LLM"**：Agent 能做它的工具允许的任何事。**边界必须落在工具与沙箱层，不要指望模型自律**。也就是说，文件系统后端与 shell 执行用什么沙箱，属于安全设计的一部分，而不是部署细节——把 shell 工具接到无隔离环境上，等于把主机交出去了。
 
-## 什么时候用它
+## When to Use It
 
 - **长任务、需要规划与自我管理上下文**（深度调研、代码迁移、批量分析）→ Deep Agents
 - **单轮或轻量多轮、上下文装得下** → 用 [LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md) 的 `create_agent` 更轻

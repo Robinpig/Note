@@ -80,13 +80,13 @@
 跟Namespace的情况类似，Cgroups对资源的限制能力也有很多不完善的地方，被提及最多的自然是/proc文件系统的问题
 
 在容器里执行top指令，就会发现，它显示的信息居然是宿主机的CPU和内存数据，而不是当前容器的数据。
-造成这个问题的原因就是，/proc文件系统并不知道用户通过Cgroups给这个容器做了什么样的资源限制，即：/proc文件系统不了解Cgroups限制的存在（详见 [cgroup v1 与 v2](/docs/CS/OS/Linux/cgroup.md?id=cgroup-v1-与-v2)，生产环境常用 lxcfs 修正）
+造成这个问题的原因就是，/proc文件系统并不知道用户通过Cgroups给这个容器做了什么样的资源限制，即：/proc文件系统不了解Cgroups限制的存在（详见 [cgroup v1 与 v2](/docs/CS/OS/Linux/cgroup.md?id=cgroup-v1-vs-v2)，生产环境常用 lxcfs 修正）
 
 Mount Namespace修改的，是容器进程对文件系统“挂载点”的认知
 跟其他Namespace的使用略有不同的地方：它对容器进程视图的改变，一定是伴随着挂载操作（mount）才能生效 在此之前，新创建的容器会直接继承宿主机的各个挂载点
 
 
-## 容器定位：容器 ↔ 宿主机进程
+## Container Locating: Container <-> Host Process
 
 容器不是一个内核认得的对象，内核里只有"进程 + namespace 成员身份 + cgroup 归属"。因此排障时真正的动作，是在**容器 ID ↔ 宿主机 PID ↔ namespace / cgroup** 之间做双向换算：容器里的 PID 1 在宿主机上往往是个普通 PID（`NSpid` 一行就能读出两套编号），反过来从 `top` 里冒出来的异常进程要靠 `/proc/PID/cgroup` 认祖归宗。
 
@@ -98,7 +98,7 @@ Mount Namespace修改的，是容器进程对文件系统“挂载点”的认�
 两条路都会失效的典型场景是镜像里没有 shell（`exec` 用不了）和 daemon 自己挂了，这时只有绕到 `/proc` 才拿得到答案。完整命令清单、K8s 侧链路（kubectl → 节点 → crictl → nsenter）与常见例外见 [容器定位](/docs/CS/Container/locate.md)。
 
 
-## 容器编排
+## Container Orchestration
 
 > 容器本身没有价值，有价值的是“容器编排”
 

@@ -4,7 +4,7 @@
 
 它也是 [形而上学](/docs/Philosophy/Metaphysics.md) 的试验场：心身问题本质上是本体论问题（世界有几种根本实体），而意识问题则考验物理主义的边界。
 
-## 心身问题
+## Mind-Body Problem
 
 | 立场 | 主张 | 主要困难 |
 | --- | --- | --- |
@@ -16,19 +16,19 @@
 
 功能主义的吸引力在于实现**多重实现（multiple realizability）**：疼痛不必是碳基神经元的专利，硅基系统同样可以有疼痛——这直接为强人工智能的可能性打开通道，见 [人工智能](/docs/CS/AI/AI.md)。
 
-## 意识难题
+## The Hard Problem of Consciousness
 
 - **难问题（the hard problem）**（Chalmers）：为什么信息加工会伴随**主观体验**？「容易问题」是解释注意、报告、行为控制等功能的机制；难问题问的是「为什么这一切有感觉（what it is like）」。
 - **感受质（qualia）**：如红色的红、咖啡的苦——能否用物理语汇完全描述？思想实验如「黑白屋里的玛丽」与「蝙蝠是什么感觉」被用来论证物理知识的不完备。
 - **主要理论**：全局工作空间理论（GWT）、整合信息论（IIT）、高阶表征理论，各自给出「什么使一个状态成为有意识的」的判据。
 
-## 心理因果与意向性
+## Mental Causation and Intentionality
 
 - **心理因果性**：若心理事件只随附于物理事件，它如何「造成」行为？（副现象论 vs 非还原物理主义）
 - **意向性（intentionality）**：心理状态**关于**某物——信念是关于命题的。这种「指向性」如何从无指向的物理世界中产生？
 - **人格同一性**：何种连续性（记忆、身体、心理联结）使人在时间中保持为同一个人？与 [形而上学](/docs/Philosophy/Metaphysics.md) 的同一性问题共享框架。
 
-## 与认知科学的交汇
+## Intersection with Cognitive Science
 
 心灵哲学与 [认知心理学](/docs/Psychology/Cognitive_Psychology.md) 彼此哺育：后者提供表征与加工的经验模型，前者审查其中的概念（「表征」到底是什么）。神经层面的证据则来自 [生理心理学](/docs/Psychology/Biological_Psychology.md)。
 

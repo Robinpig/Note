@@ -6,7 +6,7 @@
 
 和 DeepSeek 的对比见 [DeepSeek](/docs/CS/AI/LLM/Model/DeepSeek.md)，横向选型见 [Model 总览](/docs/CS/AI/LLM/Model/Overview.md)，Claude 侧见 [Claude](/docs/CS/AI/LLM/Model/Claude.md)。
 
-## GPT-6 家族
+## GPT-6 Family
 
 | 模型 | API ID | 发布 | 输入 | 缓存输入 | 缓存写入 | 输出 | 知识截止 |
 | :--- | :--- | :--- | :---: | :---: | :---: | :---: | :--- |
@@ -27,7 +27,7 @@
 
 **GPT-6.1 Sol 是 2026-09-29 DevDay 的头条**，OpenAI 定位为「near-Astra performance at one-fifth cost」，并首次支持 **Multi-agent（beta）**：在一次 Responses API 请求里让模型把工作委派给子智能体。发布材料给出的口径是：DeepSWE v1.1 上追平 Astra，在更低 effort 下比 GPT-6 Sol 的最佳成绩高 6.4 个百分点；GDP.pdf 上任务成本不到 Claude Opus 5.5 的一半而结果更好；AutomationBench（medium effort）比 Opus 5.5 高 2.2 个百分点、成本约其三分之一；OSWorld 2.0（离线，max effort）比 GPT-6 Sol 高 7 个百分点、成本不足其一半。这些都是 OpenAI 自报数。
 
-## 长上下文是台阶不是斜坡
+## Long Context Is a Step, Not a Slope
 
 这是 OpenAI 定价里最容易被漏掉的一条：
 
@@ -39,7 +39,7 @@ Astra 因此变成 $20／$2／$25／$75，Sol 与 Luna 同理翻倍。这个 272
 
 缓存的杠杆在这一档更值钱：Astra 缓存输入 $1 是标准 input 的十分之一，缓存写入 $12.50 是未缓存 input 的 1.25 倍。**稳定前缀复用率超过78% 才回本**——因为写一次要 1.25 倍，读多次才 0.1 倍。用一次的 prefix 去缓存是纯亏。
 
-## 服务层级 Batch Flex Fast Ultrafast
+## Service Tiers Batch Flex Fast Ultrafast
 
 同一批模型有四档计费方式，倍率是叠加在标准价上的：
 
@@ -55,7 +55,7 @@ Astra 因此变成 $20／$2／$25／$75，Sol 与 Luna 同理翻倍。这个 272
 - **2026-09-29 新增 `service_tier: "ultrafast"`**，目前只对 `gpt-6-astra` 开放，用于压缩输出 token 之间的间隔。仅支持全球处理与美国数据驻留，**不支持 EU 等区域推理驻留**。对应的 ChatGPT 侧是 $500/月 的 Pro 500 计划。
 - **Batch 与 Flex 同为半价且可与缓存折扣叠加**。延迟不敏感的离线任务（批量分类、打标、摘要）应该默认走Batch。
 
-## 区域处理与数据驻留
+## Region Handling and Data Residency
 
 > **对2026-03-05 及之后发布、且符合数据驻留条件的模型，区域处理（data residency）端点加价10%。**
 
@@ -68,7 +68,7 @@ Astra 因此变成 $20／$2／$25／$75，Sol 与 Luna 同理翻倍。这个 272
 
 OpenAI 模型在 AWS Bedrock 上通过 AWS 计费，商用区域价格与 OpenAI 直连一致；Azure 上是另一套部署形态（Global／Data Zone／Regional），不适用本页任何数字。
 
-## o 系列的退场
+## The Exit of the o Series
 
 o 系列（o1、o1-pro、o3-mini、o4-mini）**已经在退场倒计时中，且功能上被GPT-5.6／GPT-6 的 `reasoning.effort` 完全取代**——不再有独立的「推理模型」这条产品线。
 
@@ -83,7 +83,7 @@ o 系列（o1、o1-pro、o3-mini、o4-mini）**已经在退场倒计时中，且
 
 `o3` 已于 2026-08-26 从 ChatGPT 下线，`o4-mini` 与 GPT-4o 全系、GPT-4.1 nano、GPT-4 Turbo、原始 GPT-4、GPT-3.5 Turbo 同批在 2026-10-23 关停。**用 o3-mini / o4-mini / GPT-4o 之类快照名做细粒度锁定的代码会直接失效**，官方替代全部指向 GPT-5.6 家族。同一批关停的还有基于这些底座的微调版本（`ft-gpt-3.5-turbo`、`ft-gpt-4`、`ft-gpt-4.1-nano`、`ft-babbage-002`、`ft-davinci-002`）。
 
-## 前代 GPT-5.6
+## Previous Generation GPT-5.6
 
 GPT-5.6 家族（2026-06-26 预览，2026-07-09 全面可用）现在仍在售，且**GPT-5.6 家族里没有 GPT-6 Terra** —— GPT-6 换掉了 Sol 与 Luna 的位置，Terra 这一档没有后继。
 
@@ -98,7 +98,7 @@ GPT-5.6 家族（2026-06-26 预览，2026-07-09 全面可用）现在仍在售�
 - 三者上下文同样是 1.05M / 128K 输出 / 272K 长上下文台阶。
 - GPT-5.6 引入的能力在 GPT-6 上继续可用：程序化工具调用、显式缓存断点、持久化推理（persisted reasoning）、`max` effort、Pro mode、Responses API 的多智能体编排（beta）。
 
-## 专用模型
+## Dedicated Models
 
 GPT-6 之外，OpenAI 的模型目录按用途分了几块：
 
@@ -109,7 +109,7 @@ GPT-6 之外，OpenAI 的模型目录按用途分了几块：
 
 **GPT-oss 开放权重线**独立于 API 体系：`gpt-oss-120b`（117B 总参数／5.1B激活，MoE，单张 80GB GPU 可跑）与 `gpt-oss-20b`（21B／3.6B 激活，约 16GB 内存），2025-08-05 发布，**Apache 2.0**，上下文 131k，知识截止 2024-06。另有 `gpt-oss-safeguard-20b/120b` 两个安全分类专用微调。**这四个模型都不通过 OpenAI API 提供**，API 价格与速率限制对它们不适用，自部署的成本结构完全是另一笔账。
 
-## 基准与横向位置
+## Benchmarks and Horizontal Positioning
 
 OpenAI 与 Anthropic 各自选了自己有利的评测集，effort 设定与 harness 也不一致，所以下面的数字只能当作定位参考，不是受控对比。Terminal-Bench 4.0 的标准误约 ±2.6，Terminal-Bench-Science 0.1 约 ±3.5～5——**小于这些幅度的差距不要当信号**。
 
@@ -130,7 +130,7 @@ OpenAI 与 Anthropic 各自选了自己有利的评测集，effort 设定与 har
 
 整体格局：**Opus 5.5 在 agentic coding 与知识工作上领先，Astra 在科学推理、前沿数学与科研 agent 上领先**，两边都没有全面压制。成本上 Astra（$10／$50）是 Opus 5.5（$4／$20）的 2.5 倍，而 **GPT-6.1 Sol 用 Sol 的价格去打Astra 的位置**，这才是 2026-10 之后 agentic coding 选型里真正的新变量。Gemini 侧另见 [Gemini](/docs/CS/AI/LLM/Model/Gemini.md)。
 
-## 模型选择建议
+## Model Selection Recommendations
 
 - **日常主力用 `gpt-6.1-sol`**，不是 `gpt-6-sol`——同价、缓存输入半价、能力更强，唯一理由不选它是 Astra 独占的 `none` 档位以外没有差异。
 - **只有「Astra 明显不够」才上 `gpt-6-astra`**。它的 2.5 倍价差要靠「更少的 token 数」和「更少返工」摊回来，这依赖你的负载形状，必须自己测。

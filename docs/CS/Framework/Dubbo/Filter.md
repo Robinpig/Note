@@ -9,7 +9,7 @@ Filter 是 Dubbo 里最「平」的一个扩展点：协议层 `ProtocolFilterWr
 3. **「自定义 Filter 默认排在内置 Filter 之后」**——结论偶然成立，理由是错的。真实规则是**按 `@Activate` 的 `order` 升序排**，与「内置 / 自定义」这个身份无关。内置 Filter 的 `order` 大多是负数（`AdaptiveLoadBalanceFilter` -200000、`EchoFilter` -110000、`ClassLoaderFilter` -30000、`GenericFilter` -20000），而自定义 Filter 不写 `order` 就是 `0`（`Activate.java:93`），所以看起来像是「排在内置之后」。
 4. **「`ConsumerContextFilter` 在 `dubbo-rpc-api` 里」**——它在 **`dubbo-cluster`**，包路径 `org.apache.dubbo.rpc.cluster.filter.support`，实现的是 `ClusterFilter` 而不是 `Filter`。
 
-本文版本基线：Apache Dubbo **3.3.6**，所有代码块与扩展名清单均逐文件核对自源码 tag `dubbo-3.3.6`。本篇的 `Filter` 接口、3.x 双链结构图、`ProtocolFilterWrapper` 与 `buildInvokerChain` 四节已按 3.3.6 **逐字核对，与源码完全一致**，未作改动。`ClusterFilter` 侧的完整扩展点全景见 [Consumer](/docs/CS/Framework/Dubbo/Consumer.md?id=消费者侧扩展点全景)。
+本文版本基线：Apache Dubbo **3.3.6**，所有代码块与扩展名清单均逐文件核对自源码 tag `dubbo-3.3.6`。本篇的 `Filter` 接口、3.x 双链结构图、`ProtocolFilterWrapper` 与 `buildInvokerChain` 四节已按 3.3.6 **逐字核对，与源码完全一致**，未作改动。`ClusterFilter` 侧的完整扩展点全景见 [Consumer](/docs/CS/Framework/Dubbo/Consumer.md?id=consumer-side-extension-point-overview)。
 
 ```java
 @SPI(scope = ExtensionScope.MODULE)
@@ -48,7 +48,7 @@ Filter的总体结构
 
 
 
-### 内置 Filter 清单
+### Built-in Filter List
 
 3.3.6 的 `dubbo-rpc-api` 注册了 **18 个** Filter 扩展名。这是 SPI 文件的全文：
 
@@ -83,7 +83,7 @@ callback-consumer-context=org.apache.dubbo.rpc.cluster.filter.support.CallbackCo
 
 相对旧版本，3.3.6 **新增**了 5 个：`classloader-callback`、`profiler-server`、`adaptiveLoadBalance`、`active-limit`、`rpc-exception`。
 
-### order 排序机制
+### order Sorting Mechanism
 
 链上 Filter 的先后**只由 `@Activate` 的 `order` 决定**，比较由 `ActivateComparator` 完成。它挂在 `ExtensionLoader` 的实例字段上（`activateComparator`，`ExtensionLoader.java:158`），构造入参是 `ExtensionDirector`（多模块场景下是 `List<ExtensionDirector>`）。
 
@@ -119,7 +119,7 @@ callback-consumer-context=org.apache.dubbo.rpc.cluster.filter.support.CallbackCo
 >
 > `@Activate` 的 `order` 默认值是 `0`（`Activate.java:93`）。想插到内置 Filter 之前就写比 -30000 更小的负数，想追加到最后就写正数。只写 `group` 不写 `order` 的 Filter 统一按 `0` 参与排序，再按类名字典序排。
 
-### 内置 Filter 的 order 速查
+### Quick Reference of Built-in Filter order
 
 | Filter | 扩展名 | group | order | 证据 |
 |---|---|---|---|---|
@@ -564,7 +564,7 @@ public class ActiveLimitFilter implements Filter, Filter.Listener {
 
 
 
-## 自定义Filter
+## Custom Filter
 
 自定义 Filter **不存在「默认在内置之后」这条规则**，真实规则只有一条：**按 `@Activate` 的 `order` 升序排**（见 [order 排序机制](#order-排序机制)）。
 
@@ -581,9 +581,9 @@ public class ActiveLimitFilter implements Filter, Filter.Listener {
 
 > [!TIP]
 >
-> 消费者侧要拦截选址**之前**的逻辑（如统一参数转换、入口日志），应该实现 `ClusterFilter` 而不是 `Filter`。原因是消费端 `Filter` 的实例数量级等于服务端地址量级，每个 `Invoker` 各持一条链；而 `ClusterFilter` 每个集群一份。完整扩展点全景见 [Consumer](/docs/CS/Framework/Dubbo/Consumer.md?id=消费者侧扩展点全景)。
+> 消费者侧要拦截选址**之前**的逻辑（如统一参数转换、入口日志），应该实现 `ClusterFilter` 而不是 `Filter`。原因是消费端 `Filter` 的实例数量级等于服务端地址量级，每个 `Invoker` 各持一条链；而 `ClusterFilter` 每个集群一份。完整扩展点全景见 [Consumer](/docs/CS/Framework/Dubbo/Consumer.md?id=consumer-side-extension-point-overview)。
 
-## 陷阱清单
+## Pitfall List
 
 > [!WARNING]
 >

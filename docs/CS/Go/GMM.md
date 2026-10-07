@@ -6,7 +6,7 @@ Go 在语言层只暴露 goroutine 与 channel，但真正把成千上万个 gor
 
 三要素的角色划分与结构体定义见 [Goroutine](/docs/CS/Go/Concurrency/Goroutine.md) 的 GMP 章节（g / m / p），本文聚焦调度的**算法与流程**。
 
-## 三要素职责
+## Responsibilities of the Three Elements
 
 - **G（goroutine）**：用户态轻量执行流，初始栈 2KB、按需增长；状态机含 `_Grunnable / _Grunning / _Gwaiting / _Gdead` 等。一个程序可同时存在百万级 G。
 - **M（machine）**：操作系统线程的抽象，真正在 CPU 上跑代码的实体；runtime 把 M 与内核线程绑定。一个 M 阻塞在 syscall 时，与它所绑定的 P 会被解绑、转交其他 M。M 数量默认上限 10000（`debug.SetMaxThreads` 可调）。
@@ -14,7 +14,7 @@ Go 在语言层只暴露 goroutine 与 channel，但真正把成千上万个 gor
 
 > 早期 Go（1.0 前）是 GM 模型：全局 runq + 全局锁，锁争用严重、缓存局部性差、频繁跨 M 切换。引入 P 后，调度的主要竞争从"全局锁"收敛为"每 P 的本地队列"，这是 GMP 相对 GM 的根本改进。
 
-## 调度循环
+## Scheduling Loop
 
 每个 M 在拿到 P 后进入 `schedule()` 自旋，生命周期是一条永不退出的环：
 
@@ -24,7 +24,7 @@ schedule → execute → gogo → 运行用户代码 → goexit → goexit1 → 
 
 `goexit0` 把 G 复位为 `_Gdead`、归还到 P 的 gfree 缓存，再调 `schedule()` 取下一个 G，如此往复。新 goroutine 由 `go` 关键字编译为 `newproc → newproc1`，优先放入**当前 P 的本地 runq**（创建细节见 [Goroutine](/docs/CS/Go/Concurrency/Goroutine.md) 的 start 章节）。
 
-## findRunnable：去哪拿下一个 G
+## findRunnable: Where to Get the Next G
 
 `schedule()` 的核心是 `findRunnable()`，它按既定优先级尝试获取一个可运行的 G，顺序直接决定调度的公平性与局部性（源码见 [Goroutine](/docs/CS/Go/Concurrency/Goroutine.md)）：
 
@@ -36,11 +36,11 @@ schedule → execute → gogo → 运行用户代码 → goexit → goexit1 → 
 
 找不到任何工作时，M 进入休眠（`stopm`），P 回到 `pidle` 空闲池，直到被 `wakep` / netpoll / 新 goroutine 唤醒。
 
-## 工作窃取与自旋
+## Work Stealing and Spinning
 
 工作窃取是 GMP 负载均衡的基石：当一个 P 的本地队列被掏空，它不会干等，而是从其他 P "借" G。配套的是 **spinning M** 机制——当一个 M 即将去偷活时先 `becomeSpinning()`，偷到后把偷来的 G 通过 `runnext` 优先执行（利用缓存局部性）；偷不到则退出自旋去休眠。对 spinning M 的数量设上限，避免了 `GOMAXPROCS` 很大但程序并行度很低时的 CPU 空耗。
 
-## 系统调用 handoff
+## System Call Handoff
 
 当 G 陷入**阻塞型 syscall**（如文件 read、部分 cgo），它所在的 M 会被内核挂起。若 P 一直绑在这个 M 上，P 的本地队列就停摆。解决方式是 **handoff**：
 
@@ -50,7 +50,7 @@ schedule → execute → gogo → 运行用户代码 → goexit → goexit1 → 
 
 注意：**非阻塞 I/O（网络）走的是 netpoller + G 挂起 `_Gwaiting`，M 不被阻塞**，所以不会触发 handoff——这是 Go 高并发网络性能的关键。
 
-## sysmon 与抢占
+## sysmon and Preemption
 
 runtime 启动时会创建一个**不绑定 P、运行在独立 M 上**的监控线程 sysmon，每约 10ms 跑一次 `retake`，负责三件事：
 
@@ -58,7 +58,7 @@ runtime 启动时会创建一个**不绑定 P、运行在独立 M 上**的监控
 - **回收陷入 syscall 的 P**：如上所述，把 `_Psyscall` 的 P 抢回空闲池。
 - **触发 netpoll 与 GC 辅助**：在网络、GC 需要时被唤醒。
 
-## GOMAXPROCS 与数量关系
+## GOMAXPROCS and the Number of Threads
 
 | 实体 | 默认 | 上限 / 约束 |
 | --- | --- | --- |

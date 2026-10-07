@@ -4,7 +4,7 @@ Java 标准的 `java.net.URL` 和各种 URL 前缀处理器不足以统一访问
 
 Spring 的 `Resource` 接口就是为抽象"对底层资源的访问"而设计的更强大的接口。它在 Spring 内部被广泛使用（配置文件加载、SQL 脚本、`spring.factories` 与 `.imports` 清单读取、静态资源服务等），也可以脱离 Spring 其余部分当作通用工具类使用。
 
-## Resource 接口
+## Resource Interface
 
 `Resource` 继承自 `InputStreamSource`，位于 `org.springframework.core.io`：
 
@@ -35,13 +35,13 @@ public interface InputStreamSource {
 
 `Resource` 抽象不取代底层访问能力，而是包装它（例如 `UrlResource` 内部就是包了一个 `URL`）。
 
-### 三个子接口
+### Three Sub-Interfaces
 
 - `WritableResource`：可写资源，增加 `getOutputStream()` / `isWritable()` / `getWritableChannel()`。
 - `ContextResource`：从"上下文"加载的资源（如 `ServletContext`、classpath 相对路径），多一个 `getPathWithinContext()`。
 - `HttpResource`：HTTP 可达资源，暴露响应头信息。
 
-### 7.x 的两点变化
+### Two Changes in 7.x
 
 > [!WARNING]
 > **两个容易踩的版本点**：
@@ -65,7 +65,7 @@ public interface InputStreamSource {
 | `DescriptiveResource` | 无 | 只有描述、不可读，用于异常消息中占位 |
 | `VfsResource` | JBoss VFS | 应用服务器内部使用，应用代码一般不需要 |
 
-## 读取资源的四种姿势
+## Four Ways to Read Resources
 
 ```java
 // 1) 经典流方式：调用方负责关闭，每次返回新流
@@ -130,7 +130,7 @@ ctx.getResource("http://myhost/logo.png");                        // UrlResource
 
 此外 `ProtocolResolver` 是自定义协议的扩展点（`DefaultResourceLoader#addProtocolResolver`），可让 `getResource("myproto:xxx")` 返回自定义 `Resource`；Boot 的嵌套 jar 支持正是基于这类扩展来做 `jar:file:` 解析的。
 
-## ResourcePatternResolver 与通配符
+## ResourcePatternResolver and Wildcards
 
 `ResourcePatternResolver` 扩展 `ResourceLoader`，支持一次返回多个资源：
 
@@ -158,7 +158,7 @@ Resource[] xmls = resolver.getResources("classpath*:META-INF/spring/*.xml");
 > 1. **`classpath*:` 与 Ant 通配符连用时，模式前必须至少有一段根目录**。官方明确说明 `classpath*:*.xml` 这类"根下直接通配"不可靠——它可能只从文件系统目录取到结果而不会扫描 jar 根。写成 `classpath*:conf/*.xml` 或 `classpath*:META-INF/**/*.xml` 才是安全的。
 > 2. **`classpath*:**/*.class` 性能很差**：需要遍历所有 jar 的全部条目，启动期做一次尚可，请求路径上绝不能这么扫。Spring 自己的组件扫描反而用的是编译期索引（`@ComponentScan` 的候选组件索引）而非通配扫描。
 
-## 注入资源
+## Inject Resources
 
 大多数场景不需要自己调 `ResourceLoader`——直接把 `Resource` 声明为属性，由 `ResourceEditor` 把字符串位置转换成资源对象：
 
@@ -186,7 +186,7 @@ public interface ResourceLoaderAware {
 
 **判据**：路径写死在配置里 → 用 `@Value` 注入；路径运行时才确定（如按用户角色、租户选择模板）→ 注入 `ResourceLoader` 动态加载。
 
-## 写资源与 Web 场景
+## Write Resources and Web Scenarios
 
 写入需要 `WritableResource`，常用实现是 `FileSystemResource` 与 `FileUrlResource`：
 
@@ -202,7 +202,7 @@ Web 侧有两个高频用法：
 - **静态资源服务**：Spring MVC 的 `ResourceHttpRequestHandler` 把 `Resource` 直接映射为 HTTP 响应，支持缓存头、Gzip/Brotli 编码协商。配置入口是 `spring.web.resources.*`，详见 [Spring MVC](/docs/CS/Framework/Spring/MVC.md)。
 - **断点续传 / 视频分片**：把 `HttpRange` 解析成 `ResourceRegion` 列表返回，一次响应只传文件的一段。这是 `Resource` 抽象在 HTTP 层最实际的收益——同一份代码对 classpath、文件系统、远程 URL 资源都成立。
 
-## 常见陷阱
+## Common Pitfalls
 
 | 陷阱 | 现象 | 处理 |
 |---|---|---|

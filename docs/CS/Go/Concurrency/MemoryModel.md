@@ -9,15 +9,15 @@ Go 的**内存模型（Memory Model）**规定了一组规则，用来判断"一
 
 > 注意区分：本文档是 Go 的**内存模型（可见性规则）**；[GMM](/docs/CS/Go/GMM.md) 是 **GMP 调度模型**（Goroutine / Machine / Processor），二者完全不是一回事。
 
-## 基础规则
+## Basic Rules
 
 - **程序顺序**：单 goroutine 内按代码顺序（program order）执行；编译器的重排不会破坏单线程语义（as-if-serial）。
 - happens-before 是**传递**的：`e1 → e2 → e3` 蕴含 `e1 → e3`。
 - 若 `e1` 不 happens-before `e2`、且 `e2` 不 happens-before `e1`，则二者**并发**。
 
-## 同步操作提供的 happens-before 保证
+## happens-before Guarantees Provided by Synchronization Operations
 
-### goroutine 的创建与退出
+### goroutine Creation and Exit
 
 - `go` 语句中"启动 goroutine 之前的语句" **happens-before** "新 goroutine 的函数体开始执行"。
 - goroutine 的**退出不**对任何事件建立 happens-before。因此"等子 goroutine 写完、主 goroutine 再读"不能只靠自然退出——必须通过 [channel](/docs/CS/Go/Concurrency/Channel.md) 或 [Sync](/docs/CS/Go/Concurrency/Sync.md) 的 WaitGroup 显式同步。
@@ -40,13 +40,13 @@ Go 的**内存模型（Memory Model）**规定了一组规则，用来判断"一
 
 `Once.Do(f)` 中 `f` 的返回 happens-before **任何**后续 `Do` 调用返回——保证一次性初始化的结果对所有调用者都可见（零值/懒加载单例的安全基石）。
 
-### init 与 main
+### init and main
 
 - 每个包的 `init` 函数 happens-before 该包内任何其它代码；
 - 被 `import` 包的 `init` 全部先于导入者运行；
 - `main.main` 在所有 `init` 完成之后才开始。
 
-## Data Race（数据竞争）
+## Data Race
 
 当满足以下三点，即发生 data race，结果**未定义**（可能看到撕裂值、重排后的旧值，甚至崩溃）：
 

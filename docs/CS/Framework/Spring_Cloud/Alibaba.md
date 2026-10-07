@@ -16,7 +16,7 @@ Eureka · Consul · Resilience4j · Kafka   ← Spring Cloud 原生 / 其它厂�
 > [!NOTE]
 > **分工**：本文讲 Spring Cloud Alibaba 这层的版本、装配选型与迁移；各组件本身的原理见各自的笔记——[Nacos](/docs/CS/Framework/nacos/Nacos.md)、[Sentinel](/docs/CS/Framework/Sentinel/Sentinel.md)、[Seata](/docs/CS/Framework/Seata/Seata.md)、[RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md)。
 
-## 版本矩阵
+## Version Matrix
 
 Spring Cloud Alibaba 的版本号与 Spring Cloud 的发布列车严格绑定，**务必按官方对照表选**，混搭会在自动配置阶段各种奇怪地失效。
 
@@ -40,7 +40,7 @@ Spring Cloud Alibaba 的版本号与 Spring Cloud 的发布列车严格绑定，
 > [!TIP]
 > 命名规律：**2025.1.x 分支适配 Boot 4 + Cloud 2025.1**（即当前基线），2025.0.x 适配 Boot 3.5 + Cloud 2025.0。网上有些文章把 Sentinel 写成 2.0.0、Nacos Client 写成 3.0.0，与上表不符，应以官方版本说明为准。
 
-## 引入方式
+## How to Introduce
 
 Spring Cloud Alibaba 以 BOM 形式统一管理各组件版本，不要手工指定子组件版本：
 
@@ -70,7 +70,7 @@ Spring Cloud Alibaba 以 BOM 形式统一管理各组件版本，不要手工指
 </dependencyManagement>
 ```
 
-## 组件与职责
+## Components and Responsibilities
 
 | 组件 | 解决什么 | 常用 starter | 对应 Spring Cloud 原生替代 |
 | ---- | ---- | ---- | ---- |
@@ -81,33 +81,33 @@ Spring Cloud Alibaba 以 BOM 形式统一管理各组件版本，不要手工指
 | **RocketMQ** | 消息中间件（含 Stream binder） | `spring-cloud-starter-stream-rocketmq` | Kafka / RabbitMQ binder |
 | **SchedulerX** | 分布式任务调度 | `spring-cloud-starter-alibaba-schedulerx` | 无（自建 Quartz 集群） |
 
-### 装配要点
+### Wiring Essentials
 
 - **Nacos Discovery**：starter 自动向 Nacos 注册服务实例、拉取服务列表，并使 Spring Cloud LoadBalancer 从中读取实例（见 [LoadBalancer](/docs/CS/Framework/Spring_Cloud/LoadBalancer.md)）。启用即 `@EnableDiscoveryClient`（多数版本已自动开启）。注册中心的原理见 [registry](/docs/CS/Framework/nacos/registry.md)。
 - **Nacos Config**：优先 Boot 4 的 `spring.config.import` 方式接入（见下一节）。配置中心本身的推送机制见 [config](/docs/CS/Framework/nacos/config.md) 与 [ConfigServer](/docs/CS/Framework/nacos/ConfigServer.md)。
 - **Sentinel**：starter 会自动为 MVC、WebFlux、Feign、RestTemplate、Gateway 注入埋点，使其受流控规则管辖。规则可以从控制台推送到本地，也可以托管到 Nacos 之类的外部数据源做持久化。限流算法本身见 [RateLimiter](/docs/CS/Framework/Sentinel/RateLimiter.md) 与 [CircuitBreaker](/docs/CS/Framework/Sentinel/CircuitBreaker.md)。
 - **Seata**：靠数据源代理（`DataSourceProxy`）在本地事务里偷偷记录回滚日志，二阶段提交/回滚由 Seata Server（TC）协调。注意它会替换你的数据源 Bean，若项目里有多数据源或自定义数据源，需要留意整合方式。
 
-## 生态周边：网关与 RPC
+## Ecosystem: Gateway and RPC
 
 Spring Cloud Alibaba 主解决"注册 / 配置 / 流控 / 事务 / 消息"这一层；落到南北向流量入口与 RPC 协议，还有两个常被一起提及的阿里系项目。
 
-### Higress（云原生网关）
+### Higress (Cloud-Native Gateway)
 
 Higress 是阿里巴巴开源、基于 Envoy 的云原生 API 网关（CNCF 沙箱项目），与 Nacos 服务发现、Dubbo、Kubernetes 深度集成。在 K8s 环境里它常作为**融合网关**——一个网关同时承担流量网关（替代 Nginx Ingress）与微服务网关（对接 Nacos 服务名做路由、限流、灰度），并可与 Spring Cloud Gateway 互为替代：传统虚拟机 + Spring Cloud 技术栈用 [gateway](/docs/CS/Framework/Spring_Cloud/gateway.md)，K8s 原生环境优先 Higress。
 
-### Dubbo（RPC 框架）
+### Dubbo (RPC Framework)
 
 Dubbo 是阿里的高性能 Java RPC 框架，Spring Cloud Alibaba 提供 `spring-cloud-starter-dubbo`（见 [Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md)），让 Dubbo 服务可以**复用 Spring Cloud 的服务发现（Nacos）与负载均衡**：Dubbo Provider / Consumer 也能注册进 Nacos、被 `DiscoveryClient` 看到。选型上它与 OpenFeign / RestTemplate 是不同风格的 RPC（Dubbo 用 Triple / gRPC 私有协议、强调服务治理），二者一般不同时作为主调用方式。
 
 > [!WARNING]
 > **商业云 SDK 已不在主 BOM**。早期（2.2.x 及以前）的 `spring-cloud-starter-alicloud-oss` / `-sms` / `-schedulerx` 等阿里云商业 SDK starter 已停止维护，Maven Central 停留在 `2.2.0.RELEASE`（6 年以上），**不在 2025.x 的 `spring-cloud-alibaba-dependencies` 里**，直接引用会因找不到版本而解析失败。需要 OSS / SMS 等能力时，直接引入阿里云官方 SDK（`com.aliyun` / `alibabacloud` 坐标），不要通过 Spring Cloud Alibaba 的 BOM 管理。
 
-## 升级到 2025.1.0.0 的破坏性变更
+## Breaking Changes When Upgrading to 2025.1.0.0
 
 这一代同步拥抱了 Boot 4 + Cloud 2025.1，主要变化：
 
-### 1. `bootstrap.yml` 不再可用
+### 1. `bootstrap.yml` Is No Longer Available
 
 改动最大也最容易踩。过去把注册中心/配置中心地址写在 `bootstrap.yml` 里（因为它在主 application context 之前加载），现在必须由 `spring.config.import` 承担：
 
@@ -126,26 +126,26 @@ spring:
 
 缺了 `spring.config.import` 会直接启动失败（这点的报错比较明确，算幸运的）。同时要从 pom 里删掉 `spring-cloud-starter-bootstrap`。
 
-### 2. Sentinel 转向 Jackson 3
+### 2. Sentinel Moves to Jackson 3
 
 随 Boot 4 的默认 JSON 库迁移，Sentinel 侧的包名从 `com.fasterxml.jackson` 转到新的 Jackson 3 坐标。**直接引用了 Jackson 内部类的自定义序列化代码会编译失败**。同时新版针对响应式环境（WebFlux / Gateway 2025）改进了限流埋点，不再阻塞 event loop 线程。
 
-### 3. Nacos 3.1.1 的安全增强
+### 3. Nacos 3.1.1 Security Enhancements
 
 新增敏感字段脱敏：配置序列化时会自动遮蔽 `password`、`secret`、`token` 等关键字的值，避免高 verbosity 日志里泄露凭据——无需改代码。
 
-### 4. Seata 支持响应式事务
+### 4. Seata Supports Reactive Transactions
 
 响应式流里线程会跳转，传统的 `ThreadLocal` 上下文传递失效。新版适配了 Reactor 的 `ContextView`，让事务 XID 能在响应式流中透传，从而在 WebFlux 应用里也能用 AT / TCC 模式。同时修了一批自动配置问题。
 
-### 5. RocketMQ 模块适配 Boot 4
+### 5. RocketMQ Module Adapts to Boot 4
 
 通过 Spring Cloud Stream 的 RocketMQ binder 支持 Boot 4.0，并增强了对消费者优先级的细粒度控制。
 
 > [!NOTE]
 > 升级清单上还有两条经验项：JDK 需 ≥ 17（用虚拟线程建议 21+）；部分连接池（如老版本 Druid starter）与 Boot 4 有兼容性问题，必要时升级或换回 HikariCP。
 
-## 选型建议
+## Selection Recommendations
 
 | 场景 | 建议 |
 | ---- | ---- |

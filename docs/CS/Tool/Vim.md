@@ -32,7 +32,7 @@ sudo apt-get install vim
 <!-- tabs:end -->
 
 
-## 模式
+## Patterns
 
 
 Vim 常用的模式有四种:
@@ -47,7 +47,7 @@ arrow keys that display A B C D in Ubuntu vi
 
 
 
-## 定制
+## Customization
 
 ```shell
 vim ~/.vimrc

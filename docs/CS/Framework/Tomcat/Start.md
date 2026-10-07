@@ -497,7 +497,7 @@ protected void startInternal() throws LifecycleException {
 
 与旧摘录相比：`synchronized (engine)`、`synchronized (connectorsLock)` 两把锁没了，`executors.start()` 改成逐个遍历 `findExecutors()`，connectors 也改成逐个遍历。**最值得注意的是启动顺序与旧注释的说法相反**：engine（容器树）先起，connector 最后——「先有处理能力再开监听端口」，connector 打开端口的瞬间请求就能被处理，容器必须已经就绪。`connector.getState() != FAILED` 的跳过逻辑意味着**单个 connector 起不来不会拖垮整个 Service**。
 
-对应地，`stopInternal()` 的顺序完全镜像：先对每个 connector `closeServerSocketGraceful()` + `awaitConnectionsClose(gracefulStopAwaitMillis)`，再 pause，再逐层 stop——优雅停机的细节在 [Connector 的摘流一节](/docs/CS/Framework/Tomcat/Connector.md)与 [故障处理](/docs/CS/Framework/Tomcat/Tomcat.md?id=故障处理)。
+对应地，`stopInternal()` 的顺序完全镜像：先对每个 connector `closeServerSocketGraceful()` + `awaitConnectionsClose(gracefulStopAwaitMillis)`，再 pause，再逐层 stop——优雅停机的细节在 [Connector 的摘流一节](/docs/CS/Framework/Tomcat/Connector.md)与 [故障处理](/docs/CS/Framework/Tomcat/Tomcat.md?id=fault-handling)。
 
 ##### StandardContext
 

@@ -12,13 +12,13 @@
 
 换句话说：**Swagger UI 不是规范，它只是规范的一层可视化界面**。真正有价值的是那份 `/v3/api-docs` JSON——它驱动着 Swagger UI、Postman 导入、前端代码生成、契约测试、网关 Schema 校验等一切下游工具。
 
-### 为什么值得建
+### Why It Is Worth Building
 
 手写 API 文档必然腐化：接口改了文档没改，最终没人敢信。springdoc 的做法是在应用运行时扫描 `@RestController`、方法签名、JSR-380 校验注解和 swagger 注解，自动推导 API 语义——**文档与代码同源，改了代码文档就跟着变**。
 
 这份契约对以下角色都直接有用：前端/移动端据此生成请求代码、QA 据此构造用例、网关据此做参数校验、外部合作方据此对接。
 
-### 版本对应关系
+### Version Correspondence
 
 springdoc-openapi 的主版本号与 Spring Boot 主版本**同步递增**，选错版本是最常见的问题：
 
@@ -33,7 +33,7 @@ springdoc-openapi 的主版本号与 Spring Boot 主版本**同步递增**，选
 > [!WARNING]
 > **Boot 4 必须用 springdoc 3.x**。用 2.8.x 对接 Boot 4 会因为 Boot 4 的模块化改造（`spring-boot-autoconfigure` 拆分、自动配置包名变更）而失效——这与 Flyway/Liquibase 的遭遇是同一类问题。
 
-## 快速开始
+## Quick Start
 
 ```xml
 <dependency>
@@ -63,11 +63,11 @@ springdoc:
     path: /swagger-ui.html
 ```
 
-## 描述 API
+## Describe API
 
 代码注入足够生成一份能用的契约，但要让它"好用"需要补业务语义。
 
-### 全局元信息
+### Global Metadata
 
 ```java
 @Configuration
@@ -80,7 +80,7 @@ class OpenApiConfig {
 }
 ```
 
-### 操作层面
+### Operational Level
 
 ```java
 @Tag(name = "Orders", description = "订单相关操作")
@@ -102,7 +102,7 @@ class OrderController {
 }
 ```
 
-### 数据结构
+### Data Structure
 
 ```java
 record CreateOrderRequest(
@@ -116,7 +116,7 @@ record CreateOrderRequest(
 
 失败响应的文档尤其值得写：API 不只是返回 200，前端最关心的往往恰恰是 4xx 该怎么处理。ErrorCode 的统一结构建议与 [统一异常处理](/docs/CS/Framework/Spring/Exception.md) 中的 `ProblemDetail` 保持一致——springdoc 也会读取 `@ControllerAdvice` 里声明的异常映射，把通用错误响应自动补进契约。
 
-## 分组
+## Grouping
 
 对外 API 与内部 API、公开接口与管理员接口混在一页文档里很难用。`GroupedOpenApi` 可以按路径或包拆分：
 
@@ -144,7 +144,7 @@ class OpenApiGroupsConfig {
 
 分组后每组有独立的 `/v3/api-docs/{group}`，Swagger UI 右上角可切换。
 
-## 与其它 Spring 能力的联动
+## Interaction with Other Spring Capabilities
 
 | 功能 | 表现 |
 | ---- | ---- |
@@ -157,7 +157,7 @@ class OpenApiGroupsConfig {
 
 最后一项是值得留意的新方向：既然 OpenAPI 已经完整描述了 API 的入参出参，它天然就是一份高质量的 tool definition。springdoc 3.0.3 起支持把 API 同时注册成 MCP 工具（含"安全/会修改数据"的分类标注与人工确认环节），相关背景见 [MCP](/docs/CS/AI/LLM/Protocol/MCP.md)。
 
-## 生产环境
+## Production Environment
 
 > [!WARNING]
 > `/swagger-ui.html` 与 `/v3/api-docs` 会把**所有接口路径、参数结构、甚至内部字段名**暴露出去。这是对攻击者的免费地图。生产环境应当二选一：
@@ -169,7 +169,7 @@ class OpenApiGroupsConfig {
 
 另外，文档生成需要在运行时扫描反射元数据，若追求极致启动性能或用 GraalVM native image，需确认 springdoc 的 reachability metadata 版本与 GraalVM 版本兼容（历史上出现过 GraalVM 25 不兼容的问题，已在 3.0.2 修复）。
 
-## Boot 4 / Framework 7 注意事项
+## Boot 4 / Framework 7 Notes
 
 - **必须用 springdoc 3.x**（见版本对应表），且 webmvc 项目的 springdoc starter 名称不变，仍为 `springdoc-openapi-starter-webmvc-ui`——Boot 侧改的是自己的 starter（`spring-boot-starter-web` → `spring-boot-starter-webmvc`），二者互不影响，别混淆。
 - **Jackson 3 影响**：Framework 7 默认 Jackson 3，日期默认输出 ISO-8601 字符串、属性排序策略变化。`example` 里的日期样例建议显式写字符串，避免文档与实际行为对不上。

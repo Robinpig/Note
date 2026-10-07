@@ -295,11 +295,11 @@ func createAggregatorServer(aggregatorConfig *aggregatorapiserver.Config, delega
 
 
 
-## 写链路
+## Write Path
 
 一个 `POST /api/v1/namespaces/default/pods` 从进来到落盘，要穿过两道结构：外层是上文的三层 delegation，内层是 GenericAPIServer 的 filter chain 加上 handler 到存储的路径。
 
-### filter chain 顺序
+### filter chain Order
 
 `DefaultBuildHandlerChain` 位于 `staging/src/k8s.io/apiserver/pkg/server/config.go:1036`。它的写法是**自内向外**层层包裹，因此实际执行顺序与代码阅读顺序相反——从最后一个 return 往回推，才是请求真正流过的次序：
 
@@ -321,7 +321,7 @@ func createAggregatorServer(aggregatorConfig *aggregatorapiserver.Config, delega
 
 认证器本身是一条 union 链，按序尝试 requestheader、x509、token file、ServiceAccount、Bootstrap Token、JWT/OIDC、webhook。
 
-### 从 handler 到 etcd
+### From handler to etcd
 
 路由装在 `endpoints/installer.go`，落入 `handlers.CreateResource` 之后：
 
@@ -350,7 +350,7 @@ err = s.decoder.Decode(data, out, txnResp.Revision)
 
 创建时 `expectedRevision` 为 0，等价于 `Compare(ModRevision == 0)`，天然实现"key 不存在才写"，这就是 409 Conflict 的来源。
 
-### resourceVersion 的出处
+### The Origin of resourceVersion
 
 这是很多人含糊的地方，直接给结论：**RV 就是 etcd 事务响应的 `Header.Revision`**，不是独立维护的版本计数器。链路是：
 
@@ -367,7 +367,7 @@ OptimisticPut → txnResp.Revision (= txnResp.Header.Revision)
 > [!NOTE]
 > 删除走的是同一套 `GuaranteedUpdate` 与同一套 etcd 事务（`OptimisticDelete`，`staging/src/k8s.io/apiserver/pkg/storage/etcd3/store.go:434`），但语义完全不同：**一次 DELETE 通常不删任何东西**，只写 `metadata.deletionTimestamp`，真正的删除由 GC 与 kubelet 接力完成。这条反向链路见 [删除与级联](/docs/CS/Container/k8s/Deletion.md)。
 
-### etcd 客户端换代
+### etcd Client Generation Upgrade
 
 v1.36 依赖 etcd **v3.6.8**，写操作从手写 `clientv3.Txn` 改为 kubernetes-mode client 的 `OptimisticPut`：
 
@@ -383,13 +383,13 @@ if opts.GetOnFailure {
 
 新增的 `GetOnFailure` 把"冲突时的当前值"随事务一并返回，**更新失败重试时省掉一轮 Get**。
 
-### 读链路：写完之后谁来读
+### Read Path: Who Reads After Writing
 
 写路径的尽头是 etcd，但**读路径大多不碰 etcd**。apiserver 为每个 group-resource 维护一个 `Cacher`（`staging/src/k8s.io/apiserver/pkg/storage/cacher/cacher.go:263`）：它先从 etcd 拉一次全量填进内存 btree 与环形缓冲，之后持续 watch；所有客户端的 List / Watch 都由这份内存结构服务。于是"N 个 informer"被收敛成"1 条到 etcd 的 watch"。
 
 读请求进来时先过 `CacheDelegator` 的分流决策（`cacher/delegator/interface.go:40`）：`resourceVersionMatch` 与 `continue` 的组合决定这次请求走缓存还是透传 etcd。缓存层内部的滑动窗口、`410` / `504` / `429` 三种错误的分野、以及流式 list 的合成都收在单独的笔记里，见 [watch cache 读路径底座](/docs/CS/Container/k8s/WatchCache.md)。
 
-### 职责边界：apiserver 不签发证书
+### Responsibility Boundary: apiserver Does Not Issue Certificates
 
 写链路的另一端有一件事 apiserver 刻意不做：**签发证书**。客户端的 CSR 由 apiserver 收下并落库，但"批准"要走一次 `SubjectAccessReview`，真正签名的是 kube-controller-manager 里持有 CA 私钥的 `CertificateAuthority.Sign`；apiserver 只负责校验请求方有没有资格。同理 **ServiceAccount token 的签发与校验都用 apiserver 自己的密钥对，与集群 CA 完全无关**——`--client-ca-file` 与 `--service-account-key-file` 是两套互不背书的信任根。这条边界见 [身份与证书](/docs/CS/Container/k8s/Identity.md)。
 

@@ -44,7 +44,7 @@ ACID 的四大特性是：
 CP 系统的一个例子是共识（Consensus）算法的实现，需要多数节点才能推进：始终一致，但在网络分区时可能不可用。
 一个只要还有单个副本存活就始终接受写入并提供读取的数据库，是 AP 系统的例子，它可能最终丢失数据或返回不一致的结果。
 
-### 最终一致性（Eventually Consistent）
+### Eventual Consistency
 
 [Eventually Consistent - Revisited](https://www.allthingsdistributed.com/2008/12/eventually_consistent.html)
 
@@ -67,7 +67,7 @@ MongoDB 可被归类为 PA/EC 系统。
 Dynamo、Cassandra、Riak 的默认版本是 PA/EL 系统：如果发生分区，它们为可用性放弃一致性；在正常操作时，它们为更低延迟放弃一致性。
 
 
-## 权衡（Trade-off）
+## Trade-offs
 
 正如“CAP 困惑”边栏所解释的，“三选二”的观点在多个方面具有误导性。
 

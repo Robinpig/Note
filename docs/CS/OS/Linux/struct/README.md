@@ -6,7 +6,7 @@
 
 本目录收的都是这类**贯穿全内核的基础设施**：它们不属于任何子系统，但每个子系统都在用。选型时要问的不是"哪种更快"，而是"这个场景能不能加锁、索引是稀疏还是稠密、需不需要 O(1) 取尾"。
 
-## 链表家族：从 list 到 llist
+## The Linked List Family: From list to llist
 
 [list](/docs/CS/OS/Linux/struct/list.md) 是默认选择：**双向循环**链表，head 节点的 `prev` 指向尾元素，因此头插、尾插、取首、取尾都是 O(1)。绝大多数"挂一串东西然后遍历"的场景用它就对了。遍历推荐使用 `list_for_each_entry` 这类宏——它把 `container_of` 藏进循环里，让人不必手写指针运算。
 
@@ -20,13 +20,13 @@
 
 llist 有三处容易踩的坑，都在该篇展开：`llist_del_first()` 取出的是**最新加入的**那个（头插 LIFO，与其他容器的 FIFO 直觉相反）；**多消费者用 `del_first` 会互踩**（它做的是两段式改 `head->first->next`）；以及它**依赖 `CONFIG_ARCH_HAVE_NMI_SAFE_CMPXCHG`**（NMI 可能打断 cmpxchg 中途，所以不能用在 NMI 处理器里）。
 
-## 从链表到索引树
+## From Linked List to Index Tree
 
 [xarray](/docs/CS/OS/Linux/struct/xarray.md) 换了个思路：它不组织"一串元素"，而是组织**稀疏整数索引 → 指针**的映射，适用场景是文件描述符、inode 号、页缓存的文件偏移这一类"键是整数、空间极其稀疏"的场合。它从 4.20 起引入，用于取代历史上的 radix tree 与 idr 两套实现——把两种用途合并成一套代码。
 
 它的结构是**哈希函数固定的多级树**：只有当某个区间真的放了数据，对应的中间节点才会被分配，这是"稀疏"能省下内存的原因；`xa_node` 里同时维护 `slots` 指针数组与 `tags`/`marks` 位图，让"批量找出带某标记的项"不必遍历全部节点。局部锁（`xa_lock`）而非全局锁，则保证了并发插入的扩展性。页缓存正是它最大的用户，见 [页缓存](/docs/CS/OS/Linux/mm/PageCache.md)。
 
-## 选型速查
+## Selection Quick Reference
 
 | 结构 | 形态 | 关键约束 | 典型场景 |
 | --- | --- | --- | --- |

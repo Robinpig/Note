@@ -17,7 +17,7 @@ cat /proc/net/netstat
 
 socket 套接字是一种数据结构。
 
-## IO多路复用
+## IO Multiplexing
 
 IO多路复用只需要一个进程就能够处理多个套接字。IO多路复用这个名词看起来好像很复杂很高深的样子。实际上，这项技术所能带来的本质成果就是：**一个服务端进程可以同时处理多个套接字描述符**。
 
@@ -197,7 +197,7 @@ int main(int argc, char *argv[]) {
 
 我们看这个通过epoll实现一个IO多路复用服务器的代码结构，除了由一个函数拆分成三个函数，其余的执行流程基本同select、poll相似。只是epoll会只返回已经就绪的套接字描述符集合，而不是所有描述符的集合，IO的效率不会随着监视fd的数量的增长而下降，大大提升了效率。同时它细化并规范了对每个套接字描述符的管理（如增删改的过程）。此外，它监听的套接字描述符是没有限制的，这样，之前select、poll的遗留问题就全部解决啦。
 
-#### epoll的内部调用流程
+#### Internal Call Flow of epoll
 
 ![图 2. epoll的内部调用流程](https://upload-images.jianshu.io/upload_images/14368201-d95003f50adb77ec.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
 
@@ -209,11 +209,11 @@ int main(int argc, char *argv[]) {
 (5) ep_send_events函数，它扫描txlist中的每个epitem，调用其关联fd对用的poll方法。之后将取得的events和相应的fd发送到用户空间（封装在struct epoll_event，从epoll_wait返回）。
 (6) 如果这个epitem对应的fd是LT模式监听且取得的events是用户所关心的，则将其重新加入回rdlist。否则（ET模式）不在加入rdlist。
 
-#### ET模式与LT模式的不同
+#### Differences Between ET Mode and LT Mode
 
 ET和LT模式下的epitem都可以通过插入红黑树时的回调（ep_poll_callback）方式加入rdlist从而唤醒epoll_wait，但LT模式下的epitem还可以通过txlist（ep_send_events）重新加入rdlist唤醒epoll_wait。所以ET模式下，fd就绪，只会被通知一次，而LT模式下只要满足相应读写条件就返回就绪（通过txlist加入rdlist）。
 
-####  直接回调插入
+####  Direct Callback Insertion
 
 直接回调插入：fd状态改变才会触发。
 
@@ -241,7 +241,7 @@ txlist（ep_send_events）：fd的events中有相应的事件（位置1）即会
 
 (1) buffer中有空间可写的时候，即buffer不满的时候fd的events的可写位就置1。
 
-### 总结
+### Summary
 
 与select相比，epoll的回调机制使得资源能够直接使用在有活动的事件上，而不用线性轮询所有的事件。同时 epoll通过内核与用户空间mmap同一块内存，减少了用户空间和内核空间的数据交换，解决了select的重要痛点。
 

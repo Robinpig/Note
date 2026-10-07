@@ -4,7 +4,7 @@
 先用 IDL 在 `.proto` 文件中定义消息结构与服务，再由 `protoc` 生成各语言的类型与编解码代码。
 它是 [gRPC](/docs/CS/Framework/gRPC/gRPC.md) 的默认编码，也被广泛用于配置、存储与跨语言数据交换。
 
-## 线格式（Wire Format）
+## Wire Format
 
 protobuf 编码紧凑的关键有三点：
 
@@ -24,7 +24,7 @@ message User {
 
 字段编号一旦投入使用就**不能再复用或改义**，它是二进制兼容的锚点（1~15 编码为单字节 tag，高频字段应优先占用）。
 
-## 模式演进（Schema Evolution）
+## Schema Evolution
 
 protobuf 把前后向兼容做成默认行为，以支撑滚动升级（新老版本节点混跑）：
 
@@ -35,7 +35,7 @@ protobuf 把前后向兼容做成默认行为，以支撑滚动升级（新老�
 
 兼容性纪律：**字段名可改（编号不变即可），编号绝不可复用**。
 
-## proto2 与 proto3
+## proto2 and proto3
 
 | 维度 | proto2 | proto3 |
 | --- | --- | --- |
@@ -45,7 +45,7 @@ protobuf 把前后向兼容做成默认行为，以支撑滚动升级（新老�
 | 扩展 | `extensions`/`extend` | 用 `Any`、`oneof`、`map` 等 |
 | 现状 | 遗留系统 | 新项目默认 |
 
-## 服务（Services）
+## Services
 
 protobuf 不仅定义消息，还能定义 RPC 服务契约，再由 gRPC 等插件生成 client/server 桩：
 
@@ -57,7 +57,7 @@ service UserService {
 
 这与 RPC 的 [Parameter Marshalling](/docs/CS/Distributed/RPC/RPC.md) 直接对应：stub 用 protobuf 编码请求、解码响应。
 
-## 对比
+## Comparison
 
 | 维度 | protobuf | JSON | Thrift | Java 原生序列化 |
 | --- | --- | --- | --- | --- |

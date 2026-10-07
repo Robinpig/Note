@@ -5,7 +5,7 @@ ZooKeeper 集群（ensemble）是"奇数个投票节点（peer）+ 可选 Observ
 > [!NOTE]
 > 版本基线：动态重配置自 3.5.0，但 **3.5.3 起默认关闭**（`reconfigEnabled=false`）；当前主线 3.9.6，维护线 3.9.x / 3.8.x，3.7 已于 2024-02 EOL。
 
-## 集群规模与 quorum 数学
+## Cluster Size and Quorum Math
 
 ZooKeeper 用**多数派（quorum）**做容错：写入需被超过半数投票节点确认。因此节点数取奇数 `2n+1`，能容忍 `n` 个失效：
 
@@ -19,7 +19,7 @@ ZooKeeper 用**多数派（quorum）**做容错：写入需被超过半数投票
 > [!WARNING]
 > 不要部署偶数个投票节点（如 4 个）：容忍失效数仍是 1，却多了一台写开销，毫无收益。读可扩展靠 **Observer**，不是加投票节点。
 
-## Observer：跨 DC 只读扩展
+## Observer: Cross-DC Read-Only Scaling
 
 Observer 是**不参与投票**的 learner——它接收 Leader 的 PROPOSAL/COMMIT 来保持数据最新，但**不回 ACK、不计入 quorum**。典型用途：
 
@@ -35,9 +35,9 @@ server.3=zk3:2888:3888
 server.4=zk4:2888:3888:observer
 ```
 
-请求链路见 [pipeline](/docs/CS/Framework/ZooKeeper/pipeline.md?id=follower--observer-侧链路)。
+请求链路见 [pipeline](/docs/CS/Framework/ZooKeeper/pipeline.md?id=follower--observer-side-chain)。
 
-## 动态重配置 reconfig
+## Dynamic Reconfiguration reconfig
 
 3.5 之前成员变更只能"滚动重启 + 改静态配置"，易出错甚至丢数据。动态重配置允许**运行时增删成员、不改静态文件、不重启**：
 
@@ -46,7 +46,7 @@ server.4=zk4:2888:3888:observer
 - 客户端用 `reconfig()` API 做增量（`add/remove`）或全量重配置；变更经 Zab 提交后集群即时生效。
 - 关键约束：**重配置过程中必须始终保留一个 quorum 的投票成员在线**，否则会丢 Leader、进入只读（见 [troubleshooting](/docs/CS/Framework/ZooKeeper/troubleshooting.md)）。
 
-## 滚动升级与版本线
+## Rolling Upgrade and Version Line
 
 ```dot
 digraph "Upgrade" {
@@ -65,7 +65,7 @@ digraph "Upgrade" {
 - **建议路径**：3.7 → 3.8.x → 3.9.x。升级前读对应版本的 Release Notes（3.9.0 引入 TLS 动态加载、AdminServer 快照 API 等）。
 - 升级中若启用动态重配置，先确认 `reconfigEnabled`。
 
-## 备份与恢复
+## Backup and Recovery
 
 ZooKeeper 的"备份"就是**快照 + 其后事务日志**：
 
@@ -77,7 +77,7 @@ ZooKeeper 的"备份"就是**快照 + 其后事务日志**：
 > [!TIP]
 > 备份频率取决于 RPO 容忍度。由于恢复会 replay 快照之后的全部日志，**保留的日志越旧，恢复越慢**——备份窗口与 `snapCount` 调参要联动考虑。
 
-## 关键超时参数
+## Key Timeout Parameters
 
 | 参数 | 含义 | 默认 |
 | :--- | :--- | :--- |
@@ -91,9 +91,9 @@ ZooKeeper 的"备份"就是**快照 + 其后事务日志**：
 
 `syncLimit` 过小会在 GC / 网络抖动时误判 follower 掉线、诱发 leader 切换（见 [troubleshooting](/docs/CS/Framework/ZooKeeper/troubleshooting.md) 的 flapping）。
 
-## chroot：共享集群多租户
+## chroot: Shared Cluster Multi-Tenancy
 
-同一 ensemble 上可按 `connectString` 末尾的 `/app` 前缀做命名空间隔离（见 [client](/docs/CS/Framework/ZooKeeper/client.md?id=连接串与-chroot)），配合 [security](/docs/CS/Framework/ZooKeeper/security.md) 的 ACL 实现多应用共享一个集群的逻辑隔离，降低运维成本。
+同一 ensemble 上可按 `connectString` 末尾的 `/app` 前缀做命名空间隔离（见 [client](/docs/CS/Framework/ZooKeeper/client.md?id=connection-string-and-chroot)），配合 [security](/docs/CS/Framework/ZooKeeper/security.md) 的 ACL 实现多应用共享一个集群的逻辑隔离，降低运维成本。
 
 ## Links
 

@@ -4,16 +4,16 @@ Just allocate, do not collect garbage.
 
 Epsilon 是**只分配、不回收**的空收集器：它实现了完整的分配路径，但完全不回收垃圾，堆耗尽时直接失败退出。
 
-## 版本基线
+## Version Baseline
 
 > [!NOTE]
 > **版本口径**：Epsilon 由 [JEP 318](https://openjdk.org/jeps/318) 引入（Release **11**），JEP 状态为 **Experimental**，启用需要 `-XX:+UnlockExperimentalVMOptions`。它**至今仍在 OpenJDK 主干**（`src/hotspot/share/gc/epsilon/`），未被移除，也未被提升为 product 特性。
 >
 > 依赖 [JEP 304](https://openjdk.org/jeps/304)（GC Interface，Release 10）——Epsilon 的 BarrierSet 全是 no-op 实现，正是对 GC 接口抽象是否够用的一个证明。
 >
-> 同一代的可选项：[ZGC](https://openjdk.org/jeps/377) 也在 Release 11 引入，但它是**需要回收**的低延迟收集器，与 Epsilon 方向相反。参见 [GC 总览](/docs/CS/Java/JDK/JVM/JVM.md?id=版本基线)。
+> 同一代的可选项：[ZGC](https://openjdk.org/jeps/377) 也在 Release 11 引入，但它是**需要回收**的低延迟收集器，与 Epsilon 方向相反。参见 [GC 总览](/docs/CS/Java/JDK/JVM/JVM.md?id=version-baseline)。
 
-## 为什么需要「什么都不做」的收集器
+## Why We Need a Collector That Does Nothing
 
 听起来没有实用价值，但它是**差分性能分析**的基准线。跑真实 GC 时，性能损耗里混着多种来源：GC 线程调度、GC 屏障开销、周期恰好在最坏的时刻触发、内存布局变化……Epsilon 把这些**全部消掉**，剩下的就是「代码 + 运行时 + 分配器」的本底开销。
 
@@ -22,7 +22,7 @@ Epsilon 是**只分配、不回收**的空收集器：它实现了完整的分�
 1. **测出延迟的本底**（latency baseline）——延迟敏感场景想知道「去掉 GC 因素后能有多快」，用 Epsilon 跑一遍即可。
 2. **过滤 GC 引入的伪影**——某个性能异常究竟是 GC 引起的，还是代码本身慢？对比 Epsilon 与真实 GC 的差值即可判断。
 
-## 典型用例
+## Typical Use Cases
 
 | 场景 | 做法 |
 | :-- | :-- |
@@ -44,7 +44,7 @@ java -XX:+UnlockExperimentalVMOptions -XX:+UseEpsilonGC -Xmx2g -Xlog:gc -version
 [0.006s][info][gc] Using Epsilon GC
 ```
 
-## 关键设计
+## Key Design
 
 Epsilon 看起来「什么都不做」，实现上并不简单，它把 GC 该做的事**简化到极限**：
 
@@ -56,7 +56,7 @@ Epsilon 看起来「什么都不做」，实现上并不简单，它把 GC 该�
 > [!WARNING]
 > **Epsilon 不做压缩（compaction）**，对象始终保持分配顺序。这意味着**空间局部性取决于你的分配模式**：随机分配或产生大量稀疏垃圾的应用会明显掉吞吐。这是所有非移动 GC 的通病，不是 Epsilon 的 bug。
 
-## 堆耗尽时发生什么
+## What Happens When the Heap Is Exhausted
 
 Epsilon 没有回收逻辑，所以失败是**唯一出口**，行为与其它 GC 保持一致：
 
@@ -66,7 +66,7 @@ Epsilon 没有回收逻辑，所以失败是**唯一出口**，行为与其它 G
 
 另外，`System.gc()` 在 Epsilon 下**无事可做**（没有回收代码），实现上可能打印一条警告，提示这次强制回收是徒劳的。
 
-## 源码：分配主路径
+## Source Code: Main Allocation Path
 
 入口 `mem_allocate` 只是转发到 `allocate_work`；后者是真正的分配循环——先无锁尝试，失败再加锁重试并尝试扩容：
 

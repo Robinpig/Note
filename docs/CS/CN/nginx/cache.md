@@ -35,7 +35,7 @@ http {
 }
 ```
 
-## 三部分组成
+## Three Components
 
 ```dot
 digraph cache_arch {
@@ -57,7 +57,7 @@ digraph cache_arch {
 }
 ```
 
-## 状态机
+## State Machine
 
 一次请求在缓存侧的判定发生在 `ngx_http_upstream_cache()` 与 `ngx_http_file_cache_open()` 之间：
 
@@ -86,7 +86,7 @@ digraph cache_flow {
 }
 ```
 
-### 七个缓存状态
+### Seven Cache States
 
 `$upstream_cache_status` 的取值定义在源码里只有 7 个：
 
@@ -102,7 +102,7 @@ digraph cache_flow {
 
 > 源码里还有一个内部状态 `NGX_HTTP_CACHE_SCARCE`（编号 8），表示"暂时不写缓存"（例如 `min_uses` 未达标，或 slab 分配失败）。它**不会**出现在 `$upstream_cache_status` 里，只是把 `u->cacheable` 置 0。很多资料把它列成第 8 个取值，是错的。
 
-## cache key 与文件布局
+## cache key and File Layout
 
 ```c
 // http/ngx_http_file_cache.c
@@ -140,7 +140,7 @@ c->node->exists = 1;
 c->node->updating = 0;
 ```
 
-## 共享内存索引
+## Shared Memory Index
 
 `keys_zone=mycache:100m` 里的 100MB 只存索引，不存内容：
 
@@ -180,7 +180,7 @@ typedef struct {
 
 容量估算：一个节点约 100~150 字节（视 key 长度），**1 MB 大约能放 8000 个 key**。100MB → 约 80 万条。如果 key 数量超出 zone 容量，slab 分配失败，新的缓存条目会被丢弃（表现为缓存命中率上不去，error log 里出现 slab 分配失败）。
 
-## 击穿防护：cache lock
+## Cache Stampede Protection: cache lock
 
 > [!NOTE]
 > 缓存击穿 = 某个热点 key 过期的瞬间，成千上万请求同时 MISS，全部打到上游。
@@ -211,7 +211,7 @@ ngx_add_timer(&c->wait_event, (timer > 500) ? 500 : timer);   /* 500ms 轮询 */
 
 注意等待是 **500ms 轮询**（定时器 + 重新入队），不是事件通知，所以等待者的响应延迟是 0~500ms 的粒度。
 
-## 过期与陈旧内容
+## Expiration and Stale Content
 
 nginx 有两个正交的"过期"维度：
 
@@ -253,7 +253,7 @@ nginx 有两个正交的"过期"维度：
 
 > 上游响应里带了 `Set-Cookie` 时 nginx **默认不缓存**，这是安全设计。要缓存必须显式 `proxy_ignore_headers Set-Cookie;`——但请先确认这些响应里没有用户私有内容。
 
-## loader 与 manager 进程
+## loader and manager Processes
 
 ```c
 // os/unix/ngx_process_cycle.c
@@ -314,7 +314,7 @@ max_size          = NGX_MAX_OFF_T_VALUE;   /* 不限 */
 min_free          = 0;
 ```
 
-## 调优
+## Tuning
 
 1. **`keys_zone` 按条目数算，不按磁盘容量算**。1MB ≈ 8000 条；100MB ≈ 80 万条。配小了会出现"磁盘没满但命中率上不去"。
 2. **`use_temp_path=off`**，避免跨设备 rename 退化成拷贝。
@@ -325,7 +325,7 @@ min_free          = 0;
 7. **reload 会重建共享内存索引**：缓存文件还在磁盘上，但索引丢了 → 需要 loader 重新扫描。大缓存区 reload 后会有短暂的命中率下降与 IO 上升，这也是"不要频繁 reload"的理由之一。
 8. **`open_file_cache` 不是缓存响应**，它缓存的是**文件描述符与 stat 结果**，两者别混。
 
-## 陷阱
+## Pitfalls
 
 1. **`$upstream_cache_status` 一直是 `MISS`**：常见原因是上游带了 `Cache-Control: private/no-store` 或 `Set-Cookie`，或请求方法不在 `proxy_cache_methods`，或 `proxy_cache_bypass` 条件恒真。逐条排查。
 2. **缓存"看起来生效了"但磁盘一直在涨**：`inactive` 与 `max_size` 只由 manager 周期性执行，短时写入速度远超清理速度是正常的；但如果长期只涨不跌，检查 `max_size` 是否真的生效（`proxy_cache_path` 与 `proxy_cache` 的 zone 名必须一致）。

@@ -18,7 +18,7 @@ Spring Framework 为调用 REST 端点提供四种客户端，定位互补：
 
 `RestTemplate` 在底层 HTTP 客户端之上提供高层 API，一行代码即可完成 REST 调用。
 
-### 方法组
+### Method Groups
 
 | 方法组 | 语义 |
 |---|---|
@@ -31,7 +31,7 @@ Spring Framework 为调用 REST 端点提供四种客户端，定位互补：
 | `exchange` | 最通用的固定版本：接受 `RequestEntity`（method + url + headers + body），返回 `ResponseEntity`，可用 `ParameterizedTypeReference` 表达泛型返回类型 |
 | `execute` | 最底层：通过回调完全控制请求准备与响应提取 |
 
-### URI 模板与编码
+### URI Template and Encoding
 
 URI 模板变量支持可变参数或 `Map<String,String>`，且默认自动编码：
 
@@ -47,7 +47,7 @@ restTemplate.getForObject("https://example.com/hotel list", String.class);
 
 编码策略可通过 `uriTemplateHandler` 自定义；传已构造好的 `java.net.URI` 则不再二次编码。
 
-### 初始化与切换底层 HTTP 库
+### Initialization and Switching the Underlying HTTP Library
 
 ```java
 // 默认走 java.net.HttpURLConnection
@@ -59,7 +59,7 @@ RestTemplate template = new RestTemplate(new HttpComponentsClientHttpRequestFact
 
 > 注意：JDK 的 HTTP 实现在遇到 401 等错误状态码时可能直接抛异常；若要正常拿到错误响应做处理，切换到其他 HTTP 客户端库。
 
-### 消息转换
+### Message Conversion
 
 出入参对象由 `HttpMessageConverter` 与原始报文互转，按类路径检查默认注册全部内置转换器：
 
@@ -172,7 +172,7 @@ HttpServiceProxyFactory factory = HttpServiceProxyFactory
 RepositoryService service = factory.createClient(RepositoryService.class);
 ```
 
-### 分组注册（7.0）
+### Grouped Registration (7.0)
 
 当 HTTP 接口多到几十上百个时，逐个手工构造 `HttpServiceProxyFactory` 会很啰嗦。7.0 引入 `@ImportHttpServices` 按"组"批量注册：框架自动创建代理并注册为 Bean，同一组共享一个客户端配置。
 
@@ -191,7 +191,7 @@ static class HttpServicesConfiguration extends AbstractHttpServiceRegistrar {
 
 `HttpServiceProxyRegistry` 在此之上提供按类型或组查询代理的统一入口。
 
-### 支持的方法参数
+### Supported Method Parameters
 
 | 参数 | 作用 |
 |---|---|
@@ -203,11 +203,11 @@ static class HttpServicesConfiguration extends AbstractHttpServiceRegistrar {
 | `@RequestPart` | multipart 片段：String / `Resource` / 实体 / `HttpEntity` |
 | `@CookieValue` | Cookie |
 
-### 支持的返回值
+### Supported Return Values
 
 `void` / `Mono<Void>`（不取内容）、`HttpHeaders` / `Mono<HttpHeaders>`（只取头）、具体类型或 `Mono<T>`（解码 body）、`Flux<T>`（流式解码）、以及对应 `ResponseEntity<T>` 包装（带 status + headers）。
 
-### 异常处理
+### Exception Handling
 
 默认对 4xx / 5xx 抛 `WebClientResponseException`，可在底层 `WebClient` 上注册全局状态处理器：
 
@@ -217,7 +217,7 @@ WebClient webClient = WebClient.builder()
         .build();
 ```
 
-## 负载均衡
+## Load Balancing
 
 在 Spring Cloud 中，给 `RestTemplate` bean 或 `WebClient.Builder` bean 加 `@LoadBalanced` 限定符，即可把请求 URL 中的逻辑服务名解析为物理地址（详见 [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md)）：
 

@@ -4,7 +4,7 @@
 
 > 版本基线：**4.3.1**（`gradle.properties:17`）。
 
-## 4.x 客户端的新分层
+## 4.x Client New Layering
 
 > [!IMPORTANT]
 > **4.x 的消费端不再是「一个 `KafkaConsumer` 干所有事」，而是拆成了 delegate + 两种实现**：
@@ -35,7 +35,7 @@
 | `AutoOffsetResetStrategy` | 位点重置策略 |
 | `AbstractStickyAssignor` / `CooperativeStickyAssignor` | 分配器 |
 
-## poll 主流程
+## poll Main Flow
 
 核心在 `internals/ClassicKafkaConsumer.java:660-662`：
 
@@ -53,7 +53,7 @@ final Fetch<K, V> fetch = pollForFetches(timer);
 | **不跨 poll 保留 iterator** | 必须消费完返回的所有记录才能再调 `poll`（`KafkaConsumer.java:258` javadoc 明确）|
 | **rebalance 只在 poll 期间发生** | `:684`、`:739` javadoc：「Group rebalances only take place during an active call to `poll(Duration)`」|
 
-## 完整调用链
+## Complete Call Chain
 
 ```java
 KafkaConsumer.poll(Duration)
@@ -73,14 +73,14 @@ KafkaConsumer.poll(Duration)
        └─ return ConsumerRecords
 ```
 
-### 1. 触发 rebalance
+### 1. Trigger Rebalance
 
 `maybeTriggerPartitionReassignment()` —— 依据 `heartbeat` 超时、`max.poll.interval.ms` 超限等条件判断是否需要重新分配。
 
 > [!TIP]
 > `max.poll.interval.ms` 是最常见的消费卡死原因：两次 `poll` 间隔超过它，consumer 被踢出组并触发 rebalance，即使 `session.timeout.ms` 还没到。处理逻辑慢（比如 `poll` 后做耗时计算）是最典型的触发方式。
 
-### 2. 加入组与分配分区
+### 2. Join Group and Assign Partitions
 
 `updateAssignmentMetadataIfNeeded()`（`:695`）负责：
 
@@ -91,7 +91,7 @@ KafkaConsumer.poll(Duration)
 > [!NOTE]
 > 分区分配策略在 `ConsumerPartitionAssignor` / `CooperativeStickyAssignor`，细节见 [Consumer 分区分配](/docs/CS/MQ/Kafka/Consumer.md?id=consumerpartitionassignor)。
 
-### 3. 拉取消息
+### 3. Fetch Messages
 
 `pollForFetches()`（`:706`）—— 注意 `:723` 注释强调：**必须在 `updateAssignmentMetadataIfNeeded` 之后调用**，否则分配还没同步完。
 
@@ -103,18 +103,18 @@ KafkaConsumer.poll(Duration)
 | `fetch.min.bytes` / `fetch.max.bytes` | 拉取量上下限 |
 | `fetch.max.wait.ms` | 等待 broker 返回的最长时间 |
 
-### 4. 拦截器
+### 4. Interceptors
 
 `interceptors.onConsume()` 在记录返回给用户**之前**调用。**`onConsume` 必须返回原记录**，不能替换成 null 或数量不同的集合，否则 `poll` 抛 `IllegalStateException`。详见 [Interceptor](/docs/CS/MQ/Kafka/Consumer.md?id=commit)。
 
-### 5. 多线程消费的正确做法
+### 5. Correct Approach to Multi-threaded Consumption
 
 > [!WARNING]
 > `KafkaConsumer` 本身**不支持**多线程消费。常见错误是多个线程共享一个 consumer —— 每个线程各自调 `poll`，会导致 `ConcurrentModificationException`（`acquire` 失败）。
 >
 > 正确模式是**每个线程一个独立的 `KafkaConsumer` 实例**，它们属于**同一个 `group.id`**，由 Kafka 自己做分区分配与再平衡。
 
-## 与 Share Consumer 的对照
+## Comparison with Share Consumer
 
 4.x 新增的 `KafkaShareConsumer`（同包下，配套 `MockShareConsumer`）走的是**完全不同的协议**：
 
@@ -127,7 +127,7 @@ KafkaConsumer.poll(Duration)
 
 详见 [ShareGroup](/docs/CS/MQ/Kafka/ShareGroup.md)。
 
-## 排查线索
+## Troubleshooting Clues
 
 | 症状 | 优先怀疑 |
 | ---- | -------- |

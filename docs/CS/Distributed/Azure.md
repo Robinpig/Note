@@ -9,7 +9,7 @@ Windows Azure Storage（WAS，以下简称 Azure Storage）是一个云存储系
 - 灾难恢复（Disaster Recovery）
 - 多租户与存储成本（Multi-tenancy and Cost of Storage）
 
-## 架构
+## Architecture
 
 WAS 生产系统由存储戳（Storage Stamp）与位置服务（Location Service）两部分构成。
 
@@ -20,7 +20,7 @@ WAS 生产系统由存储戳（Storage Stamp）与位置服务（Location Servic
 
 ![Azure architecture](./img/Azure_Architecture.png)
 
-### 存储戳
+### Storage Stamps
 
 从下往上看，一个存储戳内部有三层：
 
@@ -31,7 +31,7 @@ WAS 生产系统由存储戳（Storage Stamp）与位置服务（Location Servic
 - **前端层（Front-End，FE）** ——
   前端层由一组无状态服务器组成，负责接收外部请求。收到请求后，FE 会查询 AccountName、对请求做鉴权与授权，再依据 PartitionName 把请求路由到分区层中的某个分区服务器。系统维护一张分区映射表（Partition Map），记录 PartitionName 区间以及各区间由哪个分区服务器服务。FE 服务器缓存这张 Partition Map，并据此判断把每个请求转发给哪个分区服务器。FE 服务器还会直接从流层流式读取大对象，并缓存频繁访问的数据以提升效率。
 
-### 两个复制引擎
+### Two Replication Engines
 
 系统中两个复制引擎及其各自独立的职责如下。
 
@@ -46,7 +46,7 @@ WAS 生产系统由存储戳（Storage Stamp）与位置服务（Location Servic
 
 建立这两套独立复制层的另一个原因，是它们各自需要维护的命名空间不同。在流层做存储戳内复制，使得需要维护的信息量被限定在单个存储戳的规模内。这种聚焦让存储戳内复制的全部元状态都能缓存在内存中以提升性能，使 WAS 能够通过在单个存储戳内快速提交事务，以强一致性提供高速复制来响应客户请求。相比之下，分区层与位置服务共同掌控并理解跨存储戳的全局对象命名空间，从而能高效地跨数据中心复制并维护对象状态。
 
-### 流层
+### Flow Layer
 
 流层提供一个仅供分区层使用的内部接口，它提供类似文件系统的命名空间与 API，区别在于所有写入都是追加写（append-only）。它允许客户端（即分区层）打开、关闭、删除、重命名、读取、追加以及拼接这些称为流（stream）的大文件。一个流是有序的区段（extent）指针列表，而区段是一串追加块（append block）的序列。
 
@@ -64,7 +64,7 @@ SM 定期轮询（sync）EN 的状态，以及它们所存储的区段。如果 
 
 分区层用两种方式处理重复记录。对于元数据与提交日志（commit log）流，写入的所有事务都带有序列号，重复记录会有相同的序列号；对于行数据与 Blob 数据流，重复写入时，只有最后一次写入会被 RangePartition 的数据结构指向，因此此前的重复写入没有任何引用，后续会被垃圾回收。
 
-### 分区层
+### Partition Layer
 
 分区层存储不同类型的对象，并理解对给定对象类型（Blob、Table 或 Queue）而言，一次事务意味着什么。分区层提供：(a) 所存储各类对象的数据模型；(b) 处理各类对象的逻辑与语义；(c) 大规模可扩展的对象命名空间；(d) 跨可用分区服务器访问对象的负载均衡；(e) 访问对象的事务定序与强一致性。
 

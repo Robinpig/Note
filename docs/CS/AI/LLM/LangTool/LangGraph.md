@@ -38,7 +38,7 @@ graph.invoke({"messages": [{"role": "user", "content": "hi!"}]})
 
 
 
-## 三个核心概念
+## Three Core Concepts
 
 LangGraph 的本质是把工作流抽象成图（Graph），三个核心概念：
 
@@ -55,7 +55,7 @@ LangGraph 的本质是把工作流抽象成图（Graph），三个核心概念�
 
 
 
-## 图的基本形状
+## Basic Shape of the Graph
 
 <!-- tabs:start -->
 
@@ -195,8 +195,8 @@ workflow.add_node("refiner", refine_node)
 # 添加边
 workflow.add_edge(START, "classifier") # 1. 起点 -> 分类节点
 
-# 2. 核心：添加条件边 (从分类节点出发)
 # 我们传入路由函数，并定义返回值到目标节点的映射
+# We Pass in the Routing Function and Define the Mapping from Return Values to Target Nodes
 workflow.add_conditional_edges(
     "classifier",               # 源节点
     route_classification,       # 路由函数
@@ -234,7 +234,7 @@ if __name__ == "__main__":
 <!-- tabs:end -->
 
 
-## 接入 LLM
+## Connect to LLM
 
 图本身跑通了，真正要用起来还得把 LLM 接进去。下面用 DeepSeek（兼容 OpenAI 接口，可直接套 `ChatOpenAI`）演示，前提是装上集成包：
 
@@ -306,8 +306,8 @@ def agent_node(state: MessagesState):
     response = llm_with_tools.invoke(state["messages"])
     return {"messages": [response]}
 
-# 节点 2: 工具执行节点 (使用 LangGraph 官方预构建的 ToolNode)
 # ToolNode 会自动解析 LLM 的 tool_calls，执行对应的工具，并将结果作为 ToolMessage 返回
+# ToolNode automatically parses the LLM's tool_calls, executes the corresponding tool, and returns the result as a ToolMessage
 tool_node = ToolNode(tools)
 
 # ==========================================
@@ -622,7 +622,7 @@ if __name__ == "__main__":
             print(f"\n❌ 发生错误: {e}")
 ```
 
-## 持久化与记忆
+## Persistence and Memory
 
 LangGraph 的"记忆"由两套机制分工，别混：
 
@@ -638,7 +638,7 @@ LangGraph 的"记忆"由两套机制分工，别混：
 
 顺带一提，checkpoint 系列包（尤其 `langgraph-checkpoint-postgres`）与核心 `langgraph` **不锁步发版**，版本错配会导致 checkpoint 读写报错（例如新包查询了旧 schema 里不存在的列），升级时务必成套 pin 住。
 
-## 人在环路
+## Human in the Loop
 
 LangGraph 把人工介入做成运行时原语，而不是让应用层自己轮询：
 
@@ -648,7 +648,7 @@ LangGraph 把人工介入做成运行时原语，而不是让应用层自己轮�
 
 这也是它和 [Dify](/docs/CS/AI/LLM/Platform/Dify.md) 这类画布平台的分界线——审批闸门、断点恢复是代码级能力，画布很难表达得同样精确。
 
-## 版本演进
+## Version Evolution
 
 | 版本 | 时间 | 关键变化 |
 | --- | --- | --- |

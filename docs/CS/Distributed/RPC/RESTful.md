@@ -4,7 +4,7 @@ REST（Representational State Transfer）是 Roy Fielding 在 2000 年博士论�
 不是协议也不是标准。符合其约束的 Web API 常被称为 RESTful API。它与 [RPC](/docs/CS/Distributed/RPC/RPC.md) 风格相对：
 RPC 关注「调用远端的一个动作/方法」，REST 关注「操作网络上的一组资源」，用统一的资源标识与接口语义换取通用性、可缓存性与松耦合。
 
-## 约束（Constraints）
+## Constraints
 
 Fielding 给出的 REST 约束（满足全部才是真正的 REST，多数所谓 REST API 只是「HTTP + JSON」）：
 
@@ -19,7 +19,7 @@ Fielding 给出的 REST 约束（满足全部才是真正的 REST，多数所谓
 5. **Layered System（分层系统）**：客户端无法判断自己直连的是末端服务器还是中间的网关/负载均衡/CDN，各层可独立替换。
 6. **Code-On-Demand（可选）**：服务端可以临时下发可执行代码（如 JS）扩展客户端功能，唯一可选约束。
 
-## 资源模型（Resource Model）
+## Resource Model
 
 - 资源用**名词**的 URI 标识：`/users/123/orders`，而非 `/getUserOrders`；
 - 用 HTTP 方法表达动词语义，并天然携带幂等/安全属性：
@@ -57,7 +57,7 @@ Fielding 给出的 REST 约束（满足全部才是真正的 REST，多数所谓
 从而服务端可以在不破坏老客户端的前提下调整 URI 与流程。HATEOAS 是统一接口约束里「最常被省略」的一条，
 绝大多数业务 API 只做到资源 + HTTP 方法，属 Richardson 成熟度模型的第 2 级，HATEOAS 才是第 3 级。
 
-## REST 与 RPC
+## REST and RPC
 
 | 维度 | RESTful | RPC（gRPC/Dubbo 等） |
 | --- | --- | --- |

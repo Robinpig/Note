@@ -56,7 +56,7 @@ While this undoubtedly requires constant investment, the lessons of the past are
 Dead, ossifying IT systems rapidly bring the organization to a standstill, unable to respond to new threats and opportunities.
 
 
-## 趋势
+## Trends
 
 企业越来越聚焦在⾃⼰的业务应⽤上，⽽更少的去关注底层的中间件依赖。过去我们从数据库开始，再到消息队
 列，缓存，⼏乎所有的云厂商都提供了托管的服务供选择，然⽽随着微服务化进⼀步深⼊，我

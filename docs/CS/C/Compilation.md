@@ -2,14 +2,14 @@
 
 C 是**编译型**语言：源码经预处理器、编译器、汇编器、链接器四步，最终变成可直接执行的机器码，没有解释器参与。理解这条「翻译单元 → 目标文件 → 可执行文件」的链路，是看懂 `make` / `CMake` / `GDB` 三篇的前提——它们都默认你已经知道「编译」和「链接」到底在干什么。
 
-## 翻译单元（Translation Unit）
+## Translation Unit
 
 一个 `.c` 文件经过预处理（展开 `#include`、替换宏）之后得到的文本，称为一个**翻译单元**。每个翻译单元被**独立编译**成目标文件（`.o` / `.obj`），彼此不共享任何中间状态。这种「分单元编译 + 最后链接」的模型带来两个直接后果：
 
 - 改一个 `.c` 只需重编它自己，不用重编整个项目（`make` 正是基于这个增量）。
 - 跨文件的名字（函数、全局变量）要到**链接**阶段才拼到一起，所以*声明*（告诉编译器「这个符号存在、长什么样」）和*定义*（真正分配空间 / 生成指令）必须分开看。
 
-## gcc 的四阶段
+## gcc's Four Stages
 
 `gcc` 其实是一串工具的前端。对 `hello.c` 来说，一条 `gcc hello.c` 背后是四步：
 
@@ -31,7 +31,7 @@ a.out
 
 对应常用开关：`-E` 只预处理、`-S` 到汇编、`-c` 到目标文件（不链接）。调试时 `gcc -E hello.c | less` 能直接看到宏展开后的大量代码。
 
-## 头文件与声明
+## Header Files and Declarations
 
 `#include` 本质是「把头文件文本原样贴进来」。两种写法含义不同：
 
@@ -49,13 +49,13 @@ a.out
 
 `#pragma once` 是等价但非标准的写法，主流编译器都支持（细节见 [预处理与宏](/docs/CS/C/Preprocessor.md)）。
 
-## 声明 vs 定义、外部链接
+## Declaration vs Definition, External Linkage
 
 - **声明**：引入名字，不分配存储。`extern int g;` 只是声明。
 - **定义**：分配存储或生成函数体。`int g;` 是定义（C 里未初始化的全局叫「暂定定义」，同一 TU 内多个会合并为一个）。
 - 具有**外部链接**的名字（默认全局函数 / 变量）在**整个程序**中只能有**一个定义**，否则链接器报 `multiple definition`。想要多文件共享，就「一个 `.c` 里定义、其它 `.c` 里 `extern` 声明」。
 
-## 目标文件与符号
+## Object Files and Symbols
 
 `.o` 不是纯机器码，它至少含：代码 / 数据节、一张**符号表**（哪些名字已定义、哪些还待解析）、重定位信息。链接器靠符号表把各 `.o` 拼起来：
 
@@ -66,7 +66,7 @@ readelf -h hello.o  # ELF 头（Linux）
 
 `U` 标记的符号要在链接阶段从别的 `.o` 或库里找到，找不到就 `undefined reference`。
 
-## 静态链接 vs 动态链接
+## Static Linking vs Dynamic Linking
 
 链接到库有两种方式：
 
@@ -75,7 +75,7 @@ readelf -h hello.o  # ELF 头（Linux）
 
 常用链接选项：`-I<dir>` 加头搜索路径、`-L<dir>` 加库搜索路径、`-lxxx` 链 `libxxx.so`（注意顺序：被依赖的库放后面）。
 
-## 常用编译选项
+## Common Compilation Options
 
 ```shell
 gcc -std=c11 -Wall -Wextra -O2 -g -Iinclude -Llib -lm main.c util.c -o app

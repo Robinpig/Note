@@ -12,7 +12,7 @@
 [OpenTelemetry](/docs/CS/Distributed/Tracing/Otel.md) 定义了一套统一的方式来生成并关联这三个信号——
 详见其 [Signals](/docs/CS/Distributed/Tracing/Otel.md?id=signals) 与 [Correlating the Three Signals](/docs/CS/Distributed/Tracing/Otel.md?id=correlating-the-three-signals) 章节。
 
-### 指标
+### Metrics
 
 Metrics 是用数值表示、并描述某个服务或组件随时间变化整体行为的度量。
 它们通常带有时间戳、名称和取值等特征。
@@ -28,7 +28,7 @@ Metrics 让你能够定义什么是正常、什么是不正常。
 触发告警的那个指标，并不会告诉你客户正经历着什么，也不会说明系统为什么会变成当前这个状态。
 你需要可观测性的其它支柱才能了解更多。
 
-### 追踪
+### Tracing
 
 Tracing 用于理解一个应用的不同服务之间如何连接、资源如何在它们之间流动。
 Traces 帮助工程师分析请求流转，并理解一条请求在分布式应用中的完整生命周期。
@@ -57,7 +57,7 @@ Traces 也是深入剖析一次 metrics 告警的绝佳手段。
 
 
 
-### 日志
+### Logs
 
 仅有 metrics 与 tracing，很难理解系统是如何走到当前状态的。
 这正是 logging 发挥作用的地方。Logs 是应用在某个时间段内发生的离散事件的不可变记录。
@@ -85,7 +85,7 @@ Logs 也可以看作是一条带时间戳、标明事件发生时刻、并附带
 OpenTracing 由一个 API 规范、已实现该规范的框架与库，以及项目文档共同组成。
 OpenTracing 让开发者能够用不绑定任何特定产品或厂商的 API，为应用代码添加 instrumentation。
 
-## OpenTracing 数据模型
+## OpenTracing Data Model
 
 在 OpenTracing 中，Traces 是由其 Spans 隐式定义的。
 具体来说，一条 Trace 可以看作是一张由 Spans 构成的有向无环图（DAG），Span 之间的边称为 References。

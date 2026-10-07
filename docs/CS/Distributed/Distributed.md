@@ -1,4 +1,4 @@
-## 引言
+## Introduction
 
 分布式系统解决了什么问题
 
@@ -22,7 +22,7 @@
 - 可预期性能（Predictable Performance）：能够适时地提供期望的响应能力。
 - 安全（Secure）：系统对数据与服务的访问进行鉴权。
 
-## 分布式系统的麻烦
+## Trouble with Distributed Systems
 
 分布式系统中可能发生的失效类型包括：
 
@@ -36,7 +36,7 @@
 
 我们的目标是设计出具备上述特征（容错、高可用、可恢复等）的分布式系统，这意味着我们必须为失效而设计。
 
-### 故障与局部失效
+### Failures and Partial Outages
 
 在分布式系统中，即便系统的其他部分工作正常，也很可能有某些部分以某种不可预测的方式坏掉了。这就是所谓的*局部失效*（partial failure）。
 难点在于，局部失效是*非确定性的*：当你试图做任何涉及多个节点和网络的事情时，它有时成功，有时又会不可预测地失败。
@@ -47,7 +47,7 @@
 如果我们想让分布式系统工作，就必须接受局部失效的可能性，并把容错机制构建进软件之中。
 换句话说，**我们需要用不可靠的组件构建出一个可靠的系统**。
 
-### 不可靠的网络
+### Unreliable Networks
 
 每个初次构建分布式系统的人，都会默认以下八个假设。
 
@@ -79,9 +79,9 @@
 
 两将军问题已被证明不可解。
 
-### 不可靠的时钟
+### Unreliable Clocks
 
-#### 单调时钟与日历时钟
+#### Monotonic Clocks and Calendar Clocks
 
 现代计算机至少有两种不同的时钟：*日历时钟*（time-of-day clock，也叫墙上时钟）和*单调时钟*（monotonic clock）。
 
@@ -110,7 +110,7 @@
 单调时钟不需要同步，但日历时钟需要按照 NTP 服务器或其它外部时间源来设置才有用。
 遗憾的是，我们让时钟报出正确时间的方法，远没有你希望的那么可靠或精确——硬件时钟和 NTP 都是善变的家伙。
 
-#### 置信区间
+#### Confidence Intervals
 
 你也许能以微秒甚至纳秒的分辨率读取一台机器的日历时钟。
 但即使你能得到如此精细的测量值，也不意味着这个值的真实精度就达到那个级别。
@@ -131,13 +131,13 @@
 基于其不确定性计算，时钟知道真实当前时间就落在这个区间内的某处。
 区间的宽度，除其它因素外，取决于自本地石英钟上一次与更精确时钟源同步以来过去了多久。
 
-### 知识、真相与谎言
+### Knowledge, Truth, and Lies
 
-#### 拜占庭问题
+#### Byzantine Problem
 
 [拜占庭问题](/docs/CS/Distributed/Byzantine.md)
 
-## 系统模型与现实
+## System Model and Reality
 
 人们设计了许多算法来解决分布式系统的问题。
 为了让这些算法有用，它们需要容忍我们前面讨论过的各种分布式系统失效。
@@ -173,7 +173,7 @@
 
 对真实系统建模时，带崩溃-恢复失效的半同步模型通常是最有用的模型。
 
-### 算法的正确性
+### Correctness of the Algorithm
 
 为了定义"一个算法是正确的"意味着什么，我们可以描述它的性质。
 我们可以写下对分布式算法想要的性质，来定义正确性的含义。
@@ -189,7 +189,7 @@
 一个算法在某个系统模型下是正确的，当且仅当它在我们假定该模型可能发生的所有情形下，始终满足其性质。但这如何成立呢？
 如果所有节点都崩溃，或者所有网络延迟突然变成无限长，那么没有任何算法能做成任何事。
 
-#### 安全性与活性
+#### Safety and Liveness
 
 为了澄清状况，值得区分两类不同的性质：*安全性*（safety）和*活性*（liveness）。
 在上述例子中，*唯一性*和*单调序列*是安全性性质，而*可用性*是活性性质。
@@ -210,7 +210,7 @@
 然而，对活性性质，我们被允许附加前提条件：例如我们可以说，仅当多数节点没有崩溃、且网络最终从中断中恢复时，一个请求才需要收到响应。
 半同步模型的定义本身就要求系统最终回到同步状态——也就是说，任何网络中断只持续有限时长，随后被修复。
 
-## 一致性与共识
+## Consistency and Consensus
 
 构建容错系统的最佳方式，是找到一些带有有用保证的、通用目的的抽象，实现它们一次，然后让应用依赖这些保证。这与我们在[事务](/docs/CS/SE/Transaction.md)上采用的方法相同：
 通过使用事务，应用可以假装没有崩溃（原子性）、假装没有别人在并发访问数据库（隔离性）、并假装存储设备绝对可靠（持久性）。
@@ -222,7 +222,7 @@
 分布式一致性模型与[事务隔离级别](/docs/CS/SE/Transaction.md?id=isolation-levels)的层次结构有一定相似性。
 但尽管有重叠，它们基本是独立的两件事：事务隔离主要关乎如何避免并发执行事务带来的竞态条件，而分布式一致性主要关乎如何在延迟与失效面前协调副本的状态。
 
-### 一致性模型
+### Consistency Models
 
 当多个客户端同时、或在很短的间隔内读取或修改数据的不同副本时，会发生什么？
 这个问题没有唯一正确的答案，因为这些语义随应用而不同，但它们在一致性模型的语境下已被充分研究。
@@ -560,7 +560,7 @@ Viotti 与 Vukolić 把顺序一致性分解为三个性质：
 
 与线性一致性类似，现代 CPU 默认不保证顺序一致性，而且由于处理器可以重排指令，我们应当使用内存屏障（memory barrier，也叫 fence）来确保写以顺序对并发运行的线程可见。
 
-#### 因果一致性
+#### Causal Consistency
 
 [Causal memory: definitions, implementation, and programming](https://www.cs.tau.ac.il/~orilahav/seminar18/causal.pdf)
 
@@ -609,7 +609,7 @@ COPS 通过键版本来跟踪依赖，而 Eiger 则通过建立操作顺序（Ei
 两个项目都不像最终一致存储那样暴露乱序操作。
 相反，它们检测并处理冲突：在 COPS 中，这通过检查键顺序并使用应用特定的函数来完成；而 Eiger 实现的是最后写获胜（last-write-wins）规则。
 
-#### 最终一致性
+#### Eventual Consistency
 
 [Eventually Consistent - Revisited](https://www.allthingsdistributed.com/2008/12/eventually_consistent.html)
 
@@ -637,7 +637,7 @@ COPS 通过键版本来跟踪依赖，而 Eiger 则通过建立操作顺序（Ei
 如果投递服务只提供一个"最终"保证，听起来就不可靠。
 然而，在实践中这工作得很好，如今许多数据库都被描述为最终一致。
 
-#### 以客户端为中心的一致性
+#### Client-centric Consistency
 
 以客户端为中心的一致性为单一客户端提供一致性保证，保证该客户端对数据存储的访问的一致性，但是它不为不同客户端的并发访问提供任何一致性保证
 
@@ -648,7 +648,7 @@ COPS 通过键版本来跟踪依赖，而 Eiger 则通过建立操作顺序（Ei
 - 读写一致性（Read-your-writes Consistency）：一个进程对数据项 x 执行一次写操作的结果总是会被该进程对 x 执行的后续读操作看见。即保证客户端能读到自己最新写入的值。
 - 写读一致性（Writes-follow-reads Consistency）：同一个进程对数据项 x 执行的读操作之后的写操作，保证发生在与 x 读取值相同或比之更新的值上。即保证客户端对一个数据项的写操作是基于该客户端最新读取的值
 
-#### 强最终一致性与 CRDT
+#### Strong Eventual Consistency and CRDT
 
 我们已经讨论过几种强一致性模型，如线性一致性与可串行性，以及一种弱一致性的形式：最终一致性。
 两者之间一个可能的中间地带，兼取两者的一些好处，就是强最终一致性（strong eventual consistency）。
@@ -717,11 +717,11 @@ PRAM 保证：来自一个进程的写操作会按该进程执行它们的顺序
 
 以客户端为中心的一致性模型所描述的性质是令人向往的，并且在大多数情况下被分布式系统开发者用来验证他们的系统、简化系统的使用。
 
-## 时间
+## Time
 
 [时钟与时间](/docs/CS/Distributed/Time.md)
 
-## 共识
+## Consensus
 
 [共识](/docs/CS/Distributed/Consensus/Consensus.md) 是容错分布式系统中的一个基本问题。
 共识涉及多台服务器就某个值达成一致。一旦它们就某个值做出决定，该决定便是最终的。
@@ -737,11 +737,11 @@ PRAM 保证：来自一个进程的写操作会按该进程执行它们的顺序
   它是终止性的推广。
   例如，"系统最终会对每个 API 调用返回结果"是一个活性性质，正如"保证对磁盘的写总是最终完成"也是。
 
-## 失效
+## Failure
 
-### 失效模式
+### Failure Modes
 
-### 故障检测
+### Failure Detection
 
 像 dead、failed、crashed 这样的词，通常用来描述一个已完全停止执行其步骤的进程。
 像 unresponsive、faulty、slow 这样的词，用来描述可疑进程，它们实际上可能已经死了。
@@ -786,7 +786,7 @@ PRAM 保证：来自一个进程的写操作会按该进程执行它们的顺序
 我们将讨论几种故障检测算法，各自使用不同的方法：有些专注于通过直接通信检测失效，有些使用广播或 gossip 来传播信息，还有些选择用静默（即没有通信）作为传播手段。
 我们现在知道，我们可以使用心跳或 ping、硬性截止时间，或连续刻度。每种方法各有其优点：简单、准确或精确。
 
-#### 心跳与 Ping
+#### Heartbeat and Ping
 
 我们可以通过触发以下两种周期性进程之一来查询远程进程的状态：
 
@@ -813,7 +813,7 @@ PRAM 保证：来自一个进程的写操作会按该进程执行它们的顺序
 另一种方法被可扩展弱一致感染式进程组成员协议（SWIM，Scalable Weakly Consistent Infection-style Process Group Membership Protocol）所使用，它利用外包心跳（outsourced heartbeats），通过来自邻居视角的、关于进程存活性的信息来提高可靠性。
 这种方法不要求进程知晓网络中所有其它进程，只要求知晓一部分相连的 peer。
 
-#### φ-累积故障检测器
+#### φ-Accrual Failure Detector
 
 φ-累积（phi-accrual）故障检测器不把节点失效当作一个二值问题（进程只能处于 up 或 down 两种状态之一），而是使用连续刻度，捕捉被监控进程崩溃的概率。
 它的工作方式是维护一个滑动窗口，收集来自对端进程最近若干次心跳的到达时间。
@@ -832,7 +832,7 @@ PRAM 保证：来自一个进程的写操作会按该进程执行它们的顺序
 - 行动（Action）
   每当进程被标记为可疑时执行的一个回调。
 
-#### Gossip 与故障检测
+#### Gossip and Failure Detection
 
 另一种避免依赖单节点视图来做决策的方式，是 gossip 风格的故障检测服务，它使用 gossip（见 [Gossip](?id=gossip)）来收集并分发相邻进程的状态。
 
@@ -850,7 +850,7 @@ PRAM 保证：来自一个进程的写操作会按该进程执行它们的顺序
 
 这类 gossip 风格的成员管理有成熟的工程实现，例如 **Serf**（HashiCorp）：它基于改进的 SWIM 协议，无中心服务器，以最终一致的方式维护集群成员视图，并额外提供事件广播与查询机制；与之相对，**Consul** 用一组强一致服务器管理成员与服务发现，两者代表了"gossip 最终一致"与"强一致协调"两种取向（见 [Consensus](/docs/CS/Distributed/Consensus/Consensus.md)）。
 
-#### 逆向故障检测问题陈述
+#### Reverse Failure Detection Problem Statement
 
 由于传播关于失效的信息并不总是可行，而通过通知每个成员来传播它可能很昂贵，一种被称为 FUSE（失败通知服务）的方法，专注于可靠且廉价的失效传播，它甚至在出现网络分区时也能工作。
 
@@ -867,13 +867,13 @@ PRAM 保证：来自一个进程的写操作会按该进程执行它们的顺序
 一个缺点是：把单个进程与其它进程分离的链路失效，也可能被转换成组失效，但这在某些用例下可被视为优点。
 应用可以使用它们自己对"被传播失效"的定义来应对这种场景。
 
-## 领导者选举
+## Leader Election
 
 同步可能相当昂贵：如果每个算法步骤都要联系其它每个参与者，我们就会招致显著的通信开销。
 在大型、地理分布的网络中尤其如此。
 为了减少同步开销和达成决策所需的消息往返次数，一些算法依赖领导者（有时叫协调者，coordinator）进程的存在，它负责执行或协调分布式算法的各个步骤。
 
-### 高可用范式
+### High Availability Paradigm
 
 在需要故障切换的系统中，高可靠与高可用通常通过三类范式实现（主从复制的对比见 [Replica](/docs/CS/Distributed/Replica.md)）：
 
@@ -915,7 +915,7 @@ PRAM 保证：来自一个进程的写操作会按该进程执行它们的顺序
 有些算法，如 [ZAB](/docs/CS/Framework/ZooKeeper/Zab.md)、[Multi-Paxos](/docs/CS/Distributed/Consensus/Paxos.md) 或 [Raft](/docs/CS/Distributed/Consensus/Raft.md)，使用临时领导者来减少参与者之间达成协议所需的消息数量。
 然而，这些算法使用它们各自算法特定的手段来做领导者选举、故障检测，以及解决竞争领导者进程之间的冲突。
 
-### 霸道算法
+### Bully Algorithm
 
 领导者选举算法之一，被称为霸道算法（bully algorithm），使用进程排名来识别新领导者。
 每个进程被分配一个唯一的排名。在选举期间，排名最高的进程成为领导者。
@@ -930,7 +930,7 @@ PRAM 保证：来自一个进程的写操作会按该进程执行它们的顺序
 一个不稳定的高排名节点把自己提议为领导者，不久后失效，赢得重选，再次失效，整个过程不断重复。
 这个问题可以通过分发主机质量指标，并在选举时把它们纳入考虑来解决。
 
-### 下一顺位故障切换
+### Next-in-line Failover
 
 霸道算法有许多变体，改进了它的各种性质。例如，我们可以使用多个"下一顺位"（next-in-line）候选进程作为故障切换，来缩短重新选举的时间。
 
@@ -940,7 +940,7 @@ PRAM 保证：来自一个进程的写操作会按该进程执行它们的顺序
 
 如果检测到领导者失效的进程本身就是列表中排名最高的进程，它可以立刻通知其它进程新领导者。
 
-### 候选/普通节点优化
+### Candidate/Regular Node Optimization
 
 另一种算法试图通过把节点分成两个子集——候选（candidate）与普通（ordinary）——来降低对消息数量的要求，其中只有一个候选节点最终能成为领导者。
 
@@ -949,7 +949,7 @@ PRAM 保证：来自一个进程的写操作会按该进程执行它们的顺序
 为了解决多场同时选举的问题，算法建议使用一个决胜变量 δ，一个进程特定的、在节点间差异显著的延迟，它允许其中一个节点在其它节点之前发起选举。
 决胜时间通常大于消息往返时间。优先级更高的节点拥有更低的 δ，反之亦然。
 
-### 邀请算法
+### Invitation Algorithm
 
 邀请算法（invitation algorithm）允许进程"邀请"其它进程加入自己的组，而不是试图在排名上压过它们。
 按定义，这个算法允许多个领导者，因为每个组都有自己的领导者。
@@ -965,7 +965,7 @@ PRAM 保证：来自一个进程的写操作会按该进程执行它们的顺序
 与讨论过的其它算法类似，这个算法允许进程在多个组中安顿下来，并拥有多个领导者。
 邀请算法允许创建进程组并把它们合并，而无需从头触发一次新选举，从而减少完成选举所需的消息数量。
 
-### 环算法
+### Ring Algorithm
 
 在环算法 [CHANG79] 中，系统中的所有节点形成一个环，并知晓环的拓扑（即它们在环中的前驱与后继）。
 当进程检测到领导者失效时，它启动新的选举。选举消息绕环转发：每个进程联系它的后继（环中离它最近的下一个节点）。
@@ -974,11 +974,11 @@ PRAM 保证：来自一个进程的写操作会按该进程执行它们的顺序
 节点联系它们的兄弟，绕环而行，收集存活节点集合，在把集合传给下一个节点之前把自己加入其中，
 这类似于"无超时故障检测器"中描述的故障检测算法，节点在把标识符追加到路径之后再传给下一个节点。
 
-## 消息传递
+## Message Passing
 
 [RPC（远程调用）](/docs/CS/Distributed/RPC/RPC.md)
 
-### 原子广播
+### Atomic Broadcast
 
 [Total Order Broadcast and Multicast Algorithms: Taxonomy and Survey](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.3.4709&rep=rep1&type=pdf)
 
@@ -992,7 +992,7 @@ PRAM 保证：来自一个进程的写操作会按该进程执行它们的顺序
 
 [A Response to Cheriton and Skeen's Criticism of Causal and Totally Ordered Communication](https://www.cs.princeton.edu/courses/archive/fall07/cos518/papers/catocs-limits-response.pdf)
 
-## 反熵与传播
+## Anti-entropy and Propagation
 
 为了在整个系统中可靠地传播数据记录，我们需要传播节点可用且能到达其它节点，但即便如此，吞吐量也受限于单台机器。
 
@@ -1087,7 +1087,7 @@ Gossip 协议非常健壮，有助于在分布式系统固有的失效面前实�
 
 就一致性而言，gossip 协议提供收敛一致性（convergent consistency）：节点对发生在更久之前的事件拥有相同视图的概率更高。
 
-#### 覆盖网络
+#### Overlay Network
 
 尽管 gossip 协议重要且有用，它们通常只被用于一组狭窄的问题。
 非流行病（nonepidemic）方法能以非概率的确定性、更少的冗余、且通常在更优的方式下分发消息。
@@ -1111,7 +1111,7 @@ Gossip 算法常因其可扩展性、以及能在 log N 轮消息内（N 为集�
 
 为了在保持低消息数的同时允许连通性丢失时的快速恢复，我们可以混合两种方法——在系统处于稳定状态时用固定拓扑与基于树的广播，并在故障切换与系统恢复时回落到 gossip。
 
-#### 混合 Gossip
+#### Hybrid Gossip
 
 Push/lazy-push 多播树（Plumtrees）在流行病式与基于树的广播原语之间做了权衡。
 Plumtrees 通过创建节点的生成树覆盖，以最小开销主动分发消息来工作。
@@ -1121,7 +1121,7 @@ Plumtrees 通过创建节点的生成树覆盖，以最小开销主动分发消�
 如果节点收到了一个从未见过的消息标识符，它可以向 peer 查询以获取它。这个惰性推送（lazy-push）步骤保证了高可靠性，并提供了一种快速修复广播树的方式。
 在故障情况下，协议通过惰性推送步骤回落到 gossip 方法，广播消息并修复覆盖网络。
 
-## 链式复制
+## Chain Replication
 
 [Chain Replication for Supporting High Throughput and Availability](https://www.cs.cornell.edu/home/rvr/papers/OSDI04.pdf)
 
@@ -1129,13 +1129,13 @@ Plumtrees 通过创建节点的生成树覆盖，以最小开销主动分发消�
 
 [Chain Replication in Theory and in Practice](http://diyhpl.us/~bryan/papers2/distributed/distributed-systems/chain-replication-in-theory-and-in-practice.2010.pdf)
 
-### 快照
+### Snapshot
 
 一个分布式系统由有限个进程的集合与有限个信道的集合组成。
 
 [Distributed Snapshots - Determining Global States of a Distributed System](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/Determining-Global-States-of-a-Distributed-System.pdf)
 
-## 系统索引
+## System Index
 
 [Google Cluster](/docs/CS/Distributed/Google.md)
 
@@ -1167,7 +1167,7 @@ Plumtrees 通过创建节点的生成树覆盖，以最小开销主动分发消�
 
 [Concurrency Control in Distributed Database Systems](https://people.eecs.berkeley.edu/~brewer/cs262/concurrency-distributed-databases.pdf)
 
-## 计算
+## Computation
 
 Big Data
 
@@ -1190,12 +1190,12 @@ engine
 - Spark
 - Flink
 
-## 元数据存储
+## Metadata Storage
 
 etcd
 zookeeper
 
-## 工程实现
+## Engineering Implementation
 
 对于分布式计算（无状态）的情况，系统内部的协调需要做哪些工作
 

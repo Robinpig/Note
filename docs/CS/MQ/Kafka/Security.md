@@ -12,7 +12,7 @@ Client ──SASL 认证──▶ Broker ──▶ Controller
 
 ## SASL
 
-### 默认值（多与常见资料不符）
+### Default Values (Often Differ from Common Docs)
 
 > [!IMPORTANT]
 > **broker 端与客户端端的默认机制都是 `GSSAPI`（Kerberos），不是 PLAIN。**
@@ -88,7 +88,7 @@ public static final String DEFAULT_SASL_MECHANISM = GSSAPI_MECHANISM;
 | `sasl.oauthbearer.expected.audience` | `List.of()`（空）| :412 |
 | `sasl.oauthbearer.token.endpoint.url` / `jwks.endpoint.url` / `expected.issuer` / `client.credentials.client.id` | null | :406,407,413,390 |
 
-### Delegation Token（令牌代理）
+### Delegation Token
 
 让客户端用 token 而非长期 Kerberos 凭证，便于短期授权。
 
@@ -126,7 +126,7 @@ tokenAuthEnabled = secretKey != null && !secretKey.value().isEmpty();
 
 ## SSL
 
-### 核心默认值
+### Core Defaults
 
 `clients/src/main/java/org/apache/kafka/common/config/SslConfigs.java`：
 
@@ -168,9 +168,9 @@ CN=writeuser,OU=Unknown,O=Unknown,L=Unknown,ST=Unknown,C=Unknown
 > [!NOTE]
 > 4.x TLS 状态：TLS v1.3 **已默认启用**，协商逻辑 `SslConfigs.java:36-38`（双端支持则用 1.3，否则回落 1.2）。
 
-## ACL 与授权
+## ACL and Authorization
 
-### 4.x 最重要的变化：ACL 在 KRaft metadata log
+### 4.x Most Important Change: ACL in KRaft Metadata Log
 
 > [!IMPORTANT]
 > **ACL 已全部迁到 KRaft metadata log `__cluster_metadata`，ZK 路径不再是 ACL 的存储位置。**
@@ -191,7 +191,7 @@ CN=writeuser,OU=Unknown,O=Unknown,L=Unknown,ST=Unknown,C=Unknown
 >
 > 这个变化意味着：**从 ZK 迁移到 KRaft 的集群不需要单独迁移 ACL**，它随 metadata log 一起走。
 
-### AclOperation（16 个值）
+### AclOperation (16 Values)
 
 `clients/src/main/java/org/apache/kafka/common/acl/AclOperation.java`：
 
@@ -219,7 +219,7 @@ CN=writeuser,OU=Unknown,O=Unknown,L=Unknown,ST=Unknown,C=Unknown
 >
 > 蕴含关系（`:26-38`）：`ALL` ⇒ 全部；`READ`/`WRITE`/`DELETE`/`ALTER` ⇒ `DESCRIBE`；`ALTER_CONFIGS` ⇒ `DESCRIBE_CONFIGS`。所以授 `WRITE` 隐含 `DESCRIBE`。
 
-### ResourceType（8 个值）
+### ResourceType (8 Values)
 
 `clients/.../common/resource/ResourceType.java`：`UNKNOWN(0)` `:31`、`ANY(1)` `:36`、`TOPIC(2)` `:41`、`GROUP(3)` `:46`、`CLUSTER(4)` `:51`、`TRANSACTIONAL_ID(5)` `:56`、`DELEGATION_TOKEN(6)` `:61`、`USER(7)` `:66`。
 
@@ -260,7 +260,7 @@ CN=writeuser,OU=Unknown,O=Unknown,L=Unknown,ST=Unknown,C=Unknown
 
 **`TopicCommand`** 包名是 `org.apache.kafka.tools`（`tools/.../TopicCommand.java:18`），**不是** `kafka.admin.TopicCommand`（0.10.x 时代）。
 
-## 需要打假的常见说法
+## Common Claims That Need Debunking
 
 | 说法 | 4.3.1 实况 |
 | ---- | --------- |
@@ -282,7 +282,7 @@ CN=writeuser,OU=Unknown,O=Unknown,L=Unknown,ST=Unknown,C=Unknown
 | 「ACL 命令类是 `AclsCommand`」 | ❌ 类名 **`AclCommand`**（单数）|
 | 「`TopicCommand` 是 `kafka.admin.TopicCommand`」 | ❌ 包名 `org.apache.kafka.tools` |
 
-## 未查到清单
+## List Not Found
 
 - `authorizer.class.name` 除 `StandardAuthorizer` 外的 4.x 内置实现（KRaft 下 `AclControlManager` 是唯一内置路径）
 - `sasl.oauthbearer.expected.audience` 为空列表时的实际校验行为（仅确认默认空）

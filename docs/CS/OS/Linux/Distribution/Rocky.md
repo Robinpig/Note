@@ -11,7 +11,7 @@ Rocky Linux 是 RHEL（Red Hat Enterprise Linux）的社区重建版，目标是
 
 包管理与 [Fedora](/docs/CS/OS/Linux/Distribution/Fedora.md)、CentOS 完全一致：`dnf`/`yum` + rpm。
 
-## 版本与支持期
+## Version and Support Period
 
 | 版本 | 代号 | 发布 | 支持至 |
 | :-- | :-- | :-- | :-- |
@@ -21,7 +21,7 @@ Rocky Linux 是 RHEL（Red Hat Enterprise Linux）的社区重建版，目标是
 
 每个主版本约 10 年支持。**CentOS Stream 10 只给 5 年**（2024-12-12 → 2030-05-31）—— 短支持期本身就是"它是开发分支"的诚实信号。
 
-### ⚠️ Rocky 10 的 CPU 基线是 x86-64-v3
+### ⚠️ Rocky 10's CPU Baseline Is x86-64-v3
 
 RHEL 10 把硬件基线提到 `x86-64-v3`（需 AVX2 等较新指令集），**Rocky 10 跟进该基线并放弃了 x86-64-v2**。
 
@@ -31,11 +31,11 @@ RHEL 10 把硬件基线提到 `x86-64-v3`（需 AVX2 等较新指令集），**R
 lscpu | grep -o 'Flags.*' | tr ' ' '\n' | grep -c avx2   # 0 = 不支持 v3
 ```
 
-### Rocky 不维护旧 point release
+### Rocky Does Not Maintain Old point Releases
 
 **Rocky 10.1 在 10.2 发布后即停止安全更新** —— 需要安全补丁必须跟到最新的 point release。这与 AlmaLinux 的节奏不同，也是运维排期时要注意的点。
 
-## 基础操作
+## Basic Operations
 
 ```shell
 cat /etc/redhat-release     # Rocky Linux release 10.x (Red Quartz)
@@ -45,13 +45,13 @@ dnf update                  # 全系统升级
 sudo migrate2rocky          # 切换仓库到 RESF，替换发行标识
 ```
 
-## 适用场景
+## Use Cases
 
 - 生产服务器、私有云、HPC 集群——需要长期稳定与 RHEL 生态兼容，又不愿购买 RHEL 订阅；
 - CI/CD 中作为"免费 RHEL"构建 / 测试节点；
 - 学习 [SELinux](/docs/CS/OS/Linux/SELinux.md)、cgroup 等红帽系默认启用机制的最佳平替。
 
-## 排障速查
+## Troubleshooting Quick Reference
 
 ```shell
 # 版本与仓库

@@ -20,11 +20,11 @@ load_module modules/ngx_stream_js_module.so;
 > njs 1.0.0（2026-06-23）宣布「deprecating the njs engine in favor of QuickJS」，`js_engine` 的默认值却仍是 `njs`（见官方文档）。也就是说**默认配置跑在已弃用的引擎上**，新配置应显式选择 `qjs`。
 > 另外 njs 1.0.1（2026-09-02）修了 `js_access` 的**访问控制绕过**（CVE-2026-18329，异步读请求体 continuation 抛异常时 nginx 会当作校验通过，该问题由 0.9.9 引入）——用 njs 做鉴权的部署必须确认版本不低于 1.0.1。
 
-## 指令体系
+## Directive System
 
 按「作用」而不是按字母顺序看，njs 的指令分四类。
 
-### 加载与作用域
+### Loading and Scope
 
 | 指令 | 上下文 | 说明 |
 | :-- | :-- | :-- |
@@ -34,7 +34,7 @@ load_module modules/ngx_stream_js_module.so;
 | `js_preload_object name.json;` | http, server, location | 配置期预加载**不可变**对象，免去运行期解析 JSON 的开销 |
 | `js_load_http_native_module path [as name];` | main | 加载原生共享库给 JS 调用，**仅 QuickJS 引擎** |
 
-### 挂到请求处理链上
+### Hook onto the Request Processing Chain
 
 | 指令 | 生效位置 | 是否可异步 |
 | :-- | :-- | :-- |
@@ -48,7 +48,7 @@ load_module modules/ngx_stream_js_module.so;
 
 「是否可异步」这条边界是实际写代码时最容易踩的：**过滤器和 `js_set` 要求立即出结果**，所以里面不能 `await ngx.fetch()`；只有 `js_content` / `js_access` / `js_periodic` 能挂起等 IO。
 
-### 共享状态与运行时
+### Shared State and Runtime
 
 | 指令 | 默认值 | 说明 |
 | :-- | :-- | :-- |
@@ -56,7 +56,7 @@ load_module modules/ngx_stream_js_module.so;
 | `js_engine njs \| qjs;` | `njs` | **选引擎；`njs` 已弃用，新配置用 `qjs`** |
 | `js_context_reuse number;` | `128` | QuickJS 专属：可复用的 JS 上下文池大小 |
 
-### Fetch API（模块内发起 HTTP 请求）
+### Fetch API (Initiate HTTP Request Within Module)
 
 `ngx.fetch()` 是 njs 自己的 HTTP 客户端，不经过 nginx 的连接池，因此每个请求都会单独建连（`js_fetch_keepalive` 默认为 `0`，即关闭缓存）。相关指令及其默认值：
 
@@ -77,9 +77,9 @@ load_module modules/ngx_stream_js_module.so;
 
 默认协议列表里没有 TLSv1.3、默认不做连接复用，这两条决定了「用 njs 调外部 API」的真实开销，需要时都得起手就配。
 
-## 对象模型
+## Object Model
 
-### `r` —— 请求对象
+### `r` — Request Object
 
 HTTP 侧的处理器都接收一个 `r`：
 
@@ -92,12 +92,12 @@ HTTP 侧的处理器都接收一个 `r`：
 
 `r.decline()` 只在 `js_access` 里有意义：它表示「本次检查不表态」，把决定权交回 `satisfy any|all` 与其他 access 检查器。
 
-### `s` 与 `ngx`
+### `s` and `ngx`
 
 - `s`：仅 `js_periodic` 的处理器收到，是一个**周期性会话对象**；处理器仍可通过 `ngx` 访问全局能力。
 - `ngx`：全局对象，含 `ngx.fetch()`、`ngx.log(level, ...)`、`ngx.shared.<zone名>`、`ngx.version` 等。
 
-## VM 与作用域：一个反复咬人的细节
+## VM and Scope: A Detail That Keeps Biting
 
 官方文档给出的模型是：**每个请求在第一次触发 JS 时创建一个 VM**，VM 从**当时生效的配置作用域**克隆，此后该请求内所有 JS 调用都复用这个 VM。
 
@@ -117,7 +117,7 @@ server {
 
 因为 VM 已经绑定到 server 作用域的 import 集合，`location` 里 import 的模块在**该请求**中不可见。官方建议是：**把 `js_import` 统一放在共同父作用域（`http` 或 `server`）**，不要散落在 location 里。对 QuickJS 引擎，`js_context_reuse` 控制的是复用池大小（默认 128），一个上下文服务一个请求、用完归还池。
 
-## 与 Lua / OpenResty 的选择
+## Choice with Lua / OpenResty
 
 | 维度 | njs | OpenResty（LuaJIT） |
 | :-- | :-- | :-- |
@@ -129,9 +129,9 @@ server {
 
 一句话：**OpenResty 能做 njs 的一切，反过来不成立**；njs 的价值是「不换发行版、不动编译参数，往配置里塞一段 JS」。
 
-## 实战片段
+## Practical Snippet
 
-### 用 `js_set` 打一个可观测变量
+### Use `js_set` to Create an Observable Variable
 
 ```nginx
 load_module modules/ngx_http_js_module.so;
@@ -158,7 +158,7 @@ export default { reqId };
 
 注意 `js_set` 是**同步**的，不要在 `reqId` 里做网络调用。
 
-### 用 `js_access` 做签名校验（可异步）
+### Use `js_access` for Signature Verification (Async Supported)
 
 ```javascript
 async function check(r) {
@@ -188,7 +188,7 @@ location /api/ {
 > [!TIP]
 > njs 1.0.1 修的正是这类代码路径上的绕过：当异步读请求体的 continuation 抛异常或产生未处理的 rejection 时，旧版本会让请求**当作校验通过**继续向下走。用 `js_access` 做鉴权时，务必把版本升到 ≥ 1.0.1，并且**所有异常分支都要显式 `r.return(4xx)`**。
 
-### 共享字典做计数
+### Shared Dictionary for Counting
 
 ```nginx
 http {
@@ -207,7 +207,7 @@ function hit(r) {
 
 相比之下 `limit_req` 是 C 实现的漏桶、精度与性能都更好；shared dict 适合放「自定义维度的计数」或轻量状态。
 
-## 常见坑
+## Common Pitfalls
 
 1. **默认引擎 `njs` 已弃用**——新配置写 `js_engine qjs;`；`js_context_reuse`、`js_load_http_native_module` 只在 QuickJS 下有效。
 2. **location 级 `js_import` 可能"看不见"**——VM 绑定首次生效的配置作用域；import 统一放 `http`/`server`。

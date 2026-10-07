@@ -34,9 +34,9 @@ server {
 }
 ```
 
-## 数据结构
+## Data Structure
 
-### `ngx_http_upstream_t`：一次上游交互的全部状态
+### `ngx_http_upstream_t`: All State of One Upstream Interaction
 
 它挂在 `r->upstream` 上，既保存配置（超时、缓冲、重试策略），也保存运行期状态（peer、缓存、缓冲区、pipe）。关键的一组回调由具体协议模块（proxy / fastcgi / uwsgi / scgi / grpc）填充：
 
@@ -73,7 +73,7 @@ u->finalize_request = ngx_http_proxy_finalize_request;
 
 > `abort_request` 虽被多个模块赋值，但框架在 1.31.6 里**并没有任何调用点**——它是历史遗留钩子，别指望它会在请求中止时被回调。
 
-### `ngx_peer_connection_t`：选 peer 与建连
+### `ngx_peer_connection_t`: Select peer and Establish Connection
 
 ```c
 typedef struct {
@@ -93,7 +93,7 @@ typedef struct {
 
 这个结构是**可嵌套的**：upstream keepalive 模块会把 `get`/`free` 换成自己的版本，并把原来的函数指针保存在 `data` 里——典型的装饰器模式，见后文长连接池。
 
-### 配置期与运行期的两级初始化
+### Two-Stage Initialization of Configuration and Runtime
 
 | 钩子 | 时机 | 作用 |
 | :-- | :-- | :-- |
@@ -102,9 +102,9 @@ typedef struct {
 
 所以"负载均衡算法"的入口其实有两个：upstream 块里写了 `least_conn` 之类指令时，`init_upstream` 被替换成对应模块的；不写就是默认的 `ngx_http_upstream_init_round_robin`。
 
-## 负载均衡算法
+## Load Balancing Algorithm
 
-### 默认：平滑加权轮询（SWRR）
+### Default: Smooth Weighted Round Robin (SWRR)
 
 很多人以为 nginx 的轮询是 `i % n`，其实不是——它是**平滑加权轮询**，能让不同权重的节点均匀 interleaving，而不是"先连打权重高的那个"。
 
@@ -240,7 +240,7 @@ upstream backend {
 - `two` 即 power of two choices，在分布式场景下比纯随机好得多，且不需要全局状态；
 - **不支持 `backup`**。
 
-### least_time（1.31.0 起开源）
+### least_time (Open Source Since 1.31.0)
 
 ```nginx
 upstream backend {
@@ -250,7 +250,7 @@ upstream backend {
 
 之前是 NGINX Plus 专有，1.31.0 合入开源版。它把每个 peer 的平均响应时间（到响应头 / 到最后一个字节）作为打分依据。
 
-### sticky（1.29.6 起开源）
+### sticky (Open Source Since 1.29.6)
 
 ```nginx
 upstream backend {
@@ -264,7 +264,7 @@ upstream backend {
 
 会话保持的三种实现：cookie（nginx 自己下发）、route（从请求里取）、learn（从上游响应的 cookie 里学习）。此前属于 NGINX Plus，1.29.6 进入开源版；随之一同开源的还有 `server ... route=` 与 `server ... drain`（优雅摘流量）。
 
-### 算法对照
+### Algorithm Comparison
 
 | 指令 | 依据 | 会话保持 | backup | 状态来源 |
 | :-- | :-- | :-- | :-- | :-- |
@@ -277,7 +277,7 @@ upstream backend {
 | `random two` | 随机两个取优 | 否 | ❌ | 每 worker |
 | `sticky` | cookie / route / learn | 是 | 视算法 | zone（learn 模式） |
 
-## server 指令参数
+## server Directive Parameters
 
 ```c
 // http/ngx_http_upstream.c
@@ -303,9 +303,9 @@ fail_timeout = 10;
 
 > `max_fails=1` 的默认值非常激进：**一次**失败就把节点摘掉 10 秒。上游偶尔抖动时会看到节点频繁进出，生产上建议改成 `max_fails=3 fail_timeout=10s`（甚至更长窗口 + 更大阈值）。
 
-## 失败判定与重试
+## Failure Determination and Retry
 
-### 失败类型（ft_type）
+### Failure Type (ft_type)
 
 ```c
 // http/ngx_http_upstream.h
@@ -331,7 +331,7 @@ fail_timeout = 10;
 
 > 注意 `http_404` 也可以被当作"失败"来重试——在"上游滚动发布导致短暂 404"的场景下有用，但通常不该打开，因为它会把正常业务的 404 放大 N 倍打到所有节点。
 
-### 重试状态机
+### Retry State Machine
 
 ```c
 // http/ngx_http_upstream.c
@@ -369,7 +369,7 @@ tries 计数：
 - `proxy_next_upstream_tries N` 可以把它压小（默认 0 = 不限制）；
 - 状态码触发的重试判定用的是 `u->peer.tries > 1`（进入 `next()` 时当前 peer 还占着一次，所以是 `> 1` 而不是 `> 0`）。
 
-### 主动 vs 被动健康检查
+### Active vs Passive Health Check
 
 > [!WARNING]
 > nginx **开源版没有主动健康检查**。所有"节点是否健康"的判定都来自真实请求的失败。
@@ -387,7 +387,7 @@ tries 计数：
 - 外部探活 + 动态改配置 + reload（粗暴但有效）；
 - 用 OpenResty + lua-resty-upstream-healthcheck，或改用 Tengine。
 
-## upstream 长连接
+## upstream Persistent Connection
 
 HTTP/1.1 的长连接能省掉大量 TIME_WAIT 与握手开销。nginx 侧由 `ngx_http_upstream_keepalive_module` 实现，做法是**装饰器的装饰器**：
 
@@ -422,7 +422,7 @@ HTTP/1.1 的长连接能省掉大量 TIME_WAIT 与握手开销。nginx 侧由 `n
 > [!TIP]
 > 1.29.7 是一个分水岭：此前 upstream keepalive **默认关闭**，且必须同时写 `proxy_http_version 1.1;` 与 `proxy_set_header Connection "";`。1.29.7 起 `keepalive` 默认开启、`proxy_http_version` 默认 1.1、`Connection` 头不再默认发送——**老配置里那行 `proxy_set_header Connection "";` 现在是多余的**，留着反而可能干扰 HTTP/1.1 语义。升级前请核对版本。
 
-## 超时矩阵
+## Timeout Matrix
 
 超时是最容易被"拍脑袋"配置的部分，它们各自管的是完全不同的时间段：
 
@@ -442,7 +442,7 @@ HTTP/1.1 的长连接能省掉大量 TIME_WAIT 与握手开销。nginx 侧由 `n
 - 默认值 60s 对内网服务往往过长：一个上游 hang 住会同时占用一个 worker 连接 60 秒，连接数不够时很快雪崩。内网建议 `connect 2-5s`、`read 10-30s`。
 - `proxy_connect_timeout` 覆盖的是**握手阶段**：nginx 把上游 socket 设为非阻塞后调 `connect()`，拿到 `EINPROGRESS` 就注册写事件等 `EPOLLOUT`，而不是阻塞在 `connect()` 上——机制见 [socket](/docs/CS/OS/Linux/net/socket.md)。服务端一侧的监听队列（`listen ... backlog=` 与 `net.core.somaxconn`）如何造成连接堆积、SYN 队列与 accept 队列如何分工，见 [TCP 连接建立](/docs/CS/OS/Linux/net/TCP/Connection_Setup.md)。
 
-## 缓冲
+## Buffering
 
 ```nginx
 location /api/ {
@@ -464,7 +464,7 @@ location /api/ {
 - `proxy_request_buffering on`：先把请求体收完再发上游。好处是上游不被慢客户端拖住，而且**请求可以重放**（这也是 `proxy_request_buffering off` 时无法重试的原因之一，源码里 `r->request_body_no_buffering` 会直接禁止重试）。
 - 上传大文件时 `client_body_buffer_size` 不够会落盘，注意 `proxy_temp_path` 所在磁盘的容量与 IO。
 
-## resolver 与动态 upstream
+## resolver and Dynamic upstream
 
 写死 IP 不利于弹性伸缩，但把域名直接写进 `server` 只会在**启动时解析一次**。要运行时解析：
 
@@ -484,7 +484,7 @@ http {
 - 域名解析发生在独立的 resolver 进程/事件里，不会阻塞 worker；
 - Kubernetes 场景：Pod IP 变化频繁，`resolve` + 短 `valid` 是常见组合，但要注意 DNS 本身的可用性。
 
-## 调优与排查
+## Tuning and Troubleshooting
 
 **必配**
 

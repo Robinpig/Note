@@ -6,7 +6,7 @@ RAGFlow 是 InfiniFlow 出品、**Apache-2.0** 许可的开源 RAG 引擎（GitH
 
 一句话：**RAG 的效果上限由切分质量决定，RAGFlow 卖的就是切分质量。**
 
-## DeepDoc：它到底多做了什么
+## DeepDoc: What Exactly It Does Extra
 
 朴素切分器的失败模式很典型：表格被按行切开后，"Q3 营收是多少"能把数字检出来，却丢掉了说明这个数字含义的列名；PPT 丢失视觉层级；扫描件干脆是空的。DeepDoc 用三段式处理解决：
 
@@ -18,14 +18,14 @@ RAGFlow 是 InfiniFlow 出品、**Apache-2.0** 许可的开源 RAG 引擎（GitH
 
 产出不是裸文本，而是**带版面元数据的结构化内容**——切分器因此知道不要把表头和它的数据行拆开、不要把图注和它描述的段落分开。此外它在生成前还有一道多趟校验，确认召回的 chunk 真的支持即将生成的答案，用于压低"看似合理实则编造"的引用。
 
-## 关键机制
+## Key Mechanisms
 
 - **13 种内置切分模板**：通用、问答、简历、手册、表格、论文、书籍、法律、演示文稿、图片、整篇、标签，以及 v0.21.0 新增的"Ingestion Pipeline"。模板是按文档版式调过的，选对模板比调参更有效。
 - **chunk 在 UI 里可见可编辑**：答错了能一路追溯到导致它的那个 chunk——这是"回答要能对合规/法务解释得清、可追溯到源 chunk"的前提。
 - **答案带引用**：每个结论可回溯到源 chunk 与页码。
 - ⚠️ **embedding 模型一旦有 chunk 就不可更换**：这是最容易踩的一次性决定，换模型意味着重建知识库，选型阶段就想清楚。
 
-## 2026 年的版本进展
+## Version Progress in 2026
 
 | 版本 | 时间 | 主要变化 |
 |------|------|----------|
@@ -36,7 +36,7 @@ RAGFlow 是 InfiniFlow 出品、**Apache-2.0** 许可的开源 RAG 引擎（GitH
 
 近期还在稳定的方向：Agentic 工作流与 Agent 记忆、**基于 gVisor 沙箱的代码执行器**、以及飞书 / Discord / Telegram / Line 等对话渠道。也就是说它已经从"纯 RAG"往"带执行的 RAG 应用平台"走了一步。
 
-## 部署：门槛明显高于同类
+## Deployment: Threshold Clearly Higher Than Peers
 
 官方 README 给出的最低要求：
 
@@ -65,7 +65,7 @@ docker compose --profile elasticsearch,cpu up -d
 
 资源吃紧时可以把文档引擎换成更轻的 `infinity`，代价是大规模场景的成熟度不如 Elasticsearch。另外它默认要用 GPU 才能跑得动 DeepDoc 的视觉任务（CPU 也能跑，只是慢），处理大量扫描件时应规划 GPU。
 
-## 怎么选
+## How to Choose
 
 | 情况 | 建议 |
 |------|------|

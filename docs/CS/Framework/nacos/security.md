@@ -1,4 +1,4 @@
-# Nacos 安全：鉴权与 RBAC
+# Nacos Security: Authentication and RBAC
 
 ## Introduction
 
@@ -8,7 +8,7 @@ Nacos 官方对自带鉴权的定位非常明确：**它是一个为「可信内
 
 因此：Nacos 绝不能裸奔在公网；若必须在不可信网络运行，应叠加外部安全边界（反向代理鉴权、网络隔离、更强鉴权插件）。本篇只讲 Nacos 自带鉴权怎么开、怎么用。
 
-## 开启鉴权
+## Enable Authentication
 
 鉴权开关在 `application.properties`（非 Docker 部署）或环境变量（Docker），**修改后立即生效，无需重启**：
 
@@ -51,7 +51,7 @@ Docker 镜像用环境变量等价开启：`NACOS_AUTH_ENABLE=true` / `NACOS_AUT
 - token 过期需重新登录；**权限变更有约 15 秒缓存延迟**（`caching.enabled=true`），改完权限后短暂仍按旧策略放行 / 拒绝属正常。
 - 鉴权是「运行时生效」的，但 **插件选择（system.type）改动需要重启**。
 
-## RBAC：用户 / 角色 / 权限
+## RBAC: User / Role / Permission
 
 默认 Nacos 鉴权用本地 RBAC，三张表（见 [Storage](/docs/CS/Framework/nacos/storage.md) 的 `users` / `roles` / `permissions`）：
 
@@ -67,7 +67,7 @@ Docker 镜像用环境变量等价开启：`NACOS_AUTH_ENABLE=true` / `NACOS_AUT
 
 **管理员初始化**：自 **2.4.0** 起，Nacos **不再内置默认密码 `nacos/nacos`**。首次开启默认鉴权后，必须通过 `/nacos/v3/auth/user/admin` 设置管理员密码（控制台也会进入初始化页）；密码为空时 Nacos 随机生成并展示，务必保存。
 
-## 鉴权插件
+## Auth Plugin
 
 Nacos 3.x 把鉴权做成插件 SPI，`nacos.core.auth.system.type`（规范键 `nacos.plugin.auth.type`）选择：
 
@@ -80,13 +80,13 @@ Nacos 3.x 把鉴权做成插件 SPI，`nacos.core.auth.system.type`（规范键 
 
 不同插件共享同一套开关，但身份源与权限模型不同；选 LDAP / OIDC 时 Nacos 仍负责角色与权限的授权。
 
-## 控制台
+## Console
 
 - `nacos.core.auth.console.enabled=true`（默认）开启控制台登录鉴权。
 - 可关闭开源控制台、引导到自定义控制台（鉴权插件手册 / 控制台手册），满足「只留 API、不暴露 UI」的诉求。
 - 独立 Console 有自身健康检查：`/v3/console/health/liveness` 与 `/readiness`（见 [Monitoring](/docs/CS/Framework/nacos/monitoring.md)）。
 
-## TLS / 传输安全
+## TLS / Transport Security
 
 Nacos 默认**不启用传输层加密**，明文走 HTTP 8848 / gRPC 9848。官方未提供「一键 TLS 开关」式的原生配置；生产加密通常做法：
 
@@ -95,7 +95,7 @@ Nacos 默认**不启用传输层加密**，明文走 HTTP 8848 / gRPC 9848。官
 
 > 若需要「Nacos 节点间 gRPC 强制 mTLS」这类强传输安全，当前以 LB / mesh 方案为主，配置方式随所选组件而定——**不要凭印象假设 Nacos 有独立 TLS 开关**，以目标版本官方文档为准。
 
-## 弱鉴权的边界
+## Boundary of Weak Authentication
 
 再次强调定位：Nacos 自带鉴权防的是「内网误用 / 越权」，不是「公网攻击」。生产 checklist：
 

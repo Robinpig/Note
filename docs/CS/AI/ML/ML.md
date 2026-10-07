@@ -19,7 +19,7 @@
 
 介于两者之间还有半监督学习（少量标注 + 大量未标注）和自监督学习（从数据自身构造监督信号，LLM 预训练即是典型）。
 
-### 分类与回归
+### Classification and Regression
 
 监督学习的两大任务，区别在输出的形态：
 
@@ -28,7 +28,7 @@
 
 同一个模型往往两者都能做：决策树、SVM、KNN 既可以输出类别也可以输出数值。
 
-### 聚类与降维
+### Clustering and Dimensionality Reduction
 
 无监督学习的两大任务：
 
@@ -37,14 +37,14 @@
 
 ## Basic Concepts
 
-### 特征、标签与数据划分
+### Features, Labels and Data Splitting
 
 - **特征（Feature）**：描述样本的属性向量 x
 - **标签（Label）**：要预测的目标 y
 - **训练集 / 测试集**：模型在训练集上学习参数，在测试集上评估泛化能力；常按 8:2 或 7:3 划分，另划验证集做调参
 - **交叉验证（Cross Validation）**：k 折交叉验证把数据分成 k 份轮流做验证，对小数据集的评估更稳定
 
-### 损失函数 Loss Function
+### Loss Function
 
 损失函数度量"预测值与真实值的差距"，训练过程就是最小化它。常用的有：
 
@@ -54,7 +54,7 @@
 - **Hinge 损失**：$L(y,\hat{y})=\max(0,\ 1-y\hat{y})$，SVM 的标准损失
 - **对数损失（交叉熵）**：分类 + 概率输出（[逻辑回归](/docs/CS/AI/ML/LinearModel.md)、神经网络）的标准损失
 
-### 偏差与方差 Bias & Variance
+### Bias & Variance
 
 模型泛化误差可以分解为偏差、方差与噪声三部分：
 
@@ -67,11 +67,11 @@
 - 欠拟合：训练集和测试集都差 → 提高模型复杂度、加特征
 - 过拟合：训练集很好、测试集差 → 增加数据、正则化、剪枝、Dropout
 
-### 梯度下降 Gradient Descent
+### Gradient Descent
 
 参数优化的基础方法：沿损失函数梯度的反方向小步更新参数 $\theta \leftarrow \theta - \eta \nabla L(\theta)$，学习率 $\eta$ 控制步长。变体有批量（BGD）、随机（SGD）、小批量（Mini-batch）三种。
 
-### 评价指标
+### Evaluation Metrics
 
 分类指标基于混淆矩阵（TP / FP / FN / TN）：
 

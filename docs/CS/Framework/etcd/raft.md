@@ -21,7 +21,7 @@ etcd 3.6 之后，Raft 算法实现从主仓库**物理外置**为独立依赖 `
 
 本文按这个边界组织：先说清哪些类型在哪边（第 1 节），再用 `raftexample` 这个官方最小示例对齐 3.7.2 的 API（第 2 节），然后逐行拆 `etcdserver` 的封装（第 3 节）与 `Ready` 的五步消费（第 4 节），最后是落盘（第 5 节）、线性读与客户端 Mutex（第 6 节）与陷阱清单。
 
-## 共识层边界
+## Consensus Layer Boundary
 
 下表逐类型列出归属。**「外置」意味着主仓库里既没有定义、也没有直接引用其内部字段**——主仓库只能通过接口与它交互。
 
@@ -50,7 +50,7 @@ etcd 3.6 之后，Raft 算法实现从主仓库**物理外置**为独立依赖 `
 >
 > 表里最容易被忽略的一行是 `Storage` 接口。raft 包的 `Storage`（`InitialState`/`Entries`/`Term`/`LastIndex`）已随算法外置；etcd 主仓库在 `server/storage/storage.go` 定义的 `Storage` 是**另一个同名但完全不同的接口**，方法集是 `Save`/`SaveSnap`/`Close`/`Release`/`Sync`/`MinimalEtcdVersion`——它服务于 WAL，不服务于 raft 状态机恢复。两者不要混谈。
 
-## raftexample 最小使用示例
+## raftexample Minimal Usage Example
 
 `contrib/raftexample` 是理解「怎么用外置库」的最短路径，13 个文件、`package main`。**它没有自己的 `go.mod`**，属于主模块 `go.etcd.io/etcd/v3`，import 的是外部库：
 
@@ -60,7 +60,7 @@ etcd 3.6 之后，Raft 算法实现从主仓库**物理外置**为独立依赖 `
 "go.etcd.io/raft/v3/raftpb"
 ```
 
-### 与 3.5 时代的 API 差异
+### API Differences from the 3.5 Era
 
 3.7.2 的 raftexample 相对老资料有**一批指针化与语法现代化**改动，照着老文章抄代码是编不过的：
 
@@ -79,7 +79,7 @@ etcd 3.6 之后，Raft 算法实现从主仓库**物理外置**为独立依赖 `
 | `snap.Metadata.Index` | `snap.Metadata.GetIndex()` | `raft.go:355,415-416` |
 | `rc.raftStorage.CreateSnapshot(i, rc.confState, data)` | 同签名但 `confState` 已是指针，直接传 | `raft.go:386` |
 
-### 入口：包级函数，不是方法
+### Entry: Package-Level Function, Not a Method
 
 一个容易踩的点：**raftexample 的 `raftNode` 没有 `start()` 方法**。入口是包级构造函数 `newRaftNode()`，它在内部 `go rc.startRaft()`；`startRaft` 定义在 `raft.go:278`。
 
@@ -152,7 +152,7 @@ func (s *kvstore) readCommits(commitC <-chan *commit, errorC <-chan error) {
 		}
 ```
 
-### 构建与运行
+### Build and Run
 
 注意命令行参数是**两个半角连字符** `--id`（老笔记里写成 em dash `—id` 是错的，官方 `contrib/raftexample/README.md:24` 为准）：
 
@@ -194,11 +194,11 @@ w.WriteHeader(http.StatusNoContent)
 
 POST/DELETE 都是**乐观返回**（`204 No Content` 不等 apply 完成）；DELETE 若移除的是自己，`publishEntries` 会 `log.Println("I've been removed from the cluster! Shutting down.")` 并返回 `false`，进而 `rc.stop()`（`raft.go:180-186`）。
 
-## etcdserver 的 raft 封装
+## etcdserver Raft Wrapper
 
 主仓库的封装与 raftexample 是两套完全不同的东西：raftexample 是**教学用的最小示例**（一个 goroutine 全包），etcdserver 是**生产用的双循环架构**——`raftNode` 只负责「持久化 + 发消息 + 投喂 toApply」，状态机由 `EtcdServer.run()` 的调度器异步消费。两者不要混读。
 
-### toApply：跨循环的数据包
+### toApply: Data Packet Across Loops
 
 ```go
 // server/etcdserver/raft.go:66-79
@@ -223,7 +223,7 @@ type toApply struct {
 - `notifyc`（容量 1，raft 循环写、apply 循环读）：**落盘完成信号**。`applyAll` 在 `<-apply.notifyc` 之后才敢触发快照，否则 applied index 可能超过 raft storage 的 last index。
 - `raftAdvancedC`：**只在含 `EntryConfChange` 时使用**。`r.Advance()` 之后才写（`raft.go:333-336`），`applyConfChange` 里 `<-resp.raftAdvanceC` 等它，保证回应客户端前 raft 层已确认（对应 issue #15528）。
 
-### raftNode 与 raftNodeConfig
+### raftNode and raftNodeConfig
 
 `raftNodeConfig` 用**内嵌 `raft.Node`** 而不是具名字段——这是主仓库能省略大量转发代码的原因，`r.Tick()`、`r.Ready()`、`r.Advance()`、`r.Step()` 都是内嵌接口方法的直接调用：
 
@@ -300,7 +300,7 @@ func (r *raftNode) getLatestTickTs() time.Time {
 
 `latestTickTs` 供监控判断「leader 是否在按节奏发心跳」；`advanceTicks(ticks int)`（`:445`）则用于多机房部署快进选举 tick。
 
-### raftStatus 与 expvar
+### raftStatus and expvar
 
 `raft.status` 这个 expvar 用了一个**函数间接层**，原因写在注释里：expvar 发布后不能删除、重复发布同名会 panic，所以只能注册一个固定 func，内部转调可替换的变量。
 
@@ -331,7 +331,7 @@ func init() {
 
 赋值点在 `bootstrap.go:561-563`（`raftStatus = n.Status`），读取点有两处：`EtcdServer.raftStatus()`（`server.go:2447`，转发给 `s.r.Node.Status()`）被 `server.go:933`（找新 leader）与 `server.go:1565`（`MemberHandler` 组装 `Status` 响应）使用。
 
-### raftReadyHandler：解耦状态机与算法
+### raftReadyHandler: Decouple State Machine and Algorithm
 
 raft 循环需要回调状态机，但不该知道状态机的存在。`raftReadyHandler`（`server.go:748`）就是这层薄接口，5 个回调全部在 `EtcdServer.run()` 里用闭包实现（`server.go:766`）：
 
@@ -342,7 +342,7 @@ raft 循环需要回调状态机，但不该知道状态机的存在。`raftRead
 | `updateLeadership(newLeader)` | 同上 | 降级时 `lessor.Demote()` + `compactor.Pause()`；升级时 `compactor.Resume()`；换人时 `leaderChanged.Notify()` |
 | `updateCommittedIndex(ci)` | 每批 `Ready`（`updateCommittedIndex`，`raft.go:344`） | 单调推进 `committedIndex` |
 
-### 日志适配：zap_raft.go
+### Log Adapter: zap_raft.go
 
 外置库要求一个 `raft.Logger` 接口，etcd 用 `zap_raft.go` 做适配。三个构造器对应三种已有 logger 形态：
 
@@ -369,13 +369,13 @@ func NewRaftLoggerZap(lg *zap.Logger) raft.Logger {
 
 `AddCallerSkip(1)` 是必需的：调用方是 `logutil` 的包装层，多跳一层才能报到真正的 raft 代码位置。`zapRaftLogger`（`:52`）逐个转发 12 个方法到 `sugar`，注意 `Warning`/`Warningf` 映射到 zap 的 `Warn`/`Warnf`（`raft.Logger` 用的是 etcd 早期 zap 之前的 `Warning` 命名）。
 
-## Ready 的五个处理步骤
+## Ready Five Processing Steps
 
 外置库的 `Ready` 结构体定义在 `go.etcd.io/raft/v3`，本篇**不贴**（它已不属于 etcd 主仓库）。这里只讲 etcdserver 如何消费它——全部在 `raft.go:185-243` 及其延伸。
 
 关键前提：`Ready` 里的字段**全部只读**，且处理顺序有强约束（先落盘、再发消息、最后 apply）。etcd 把这个顺序改了一处：**先投 applyc，再落盘**。
 
-### 第 1 步：SoftState —— 认领导权
+### Step 1: SoftState —— Acknowledge Leadership
 
 ```go
 // server/etcdserver/raft.go:185-207
@@ -406,7 +406,7 @@ case rd := <-r.Ready():
 
 `islead` 是本轮循环的局部变量，**第 4 步的「leader 先发消息」完全依赖它**。`newLeader` 的判定是「有 leader 且与上次不同」——同一个 leader 反复当选不算变更。
 
-### 第 2 步：ReadStates —— 喂给线性读
+### Step 2: ReadStates —— Feed Linearizable Read
 
 ```go
 // server/etcdserver/raft.go:209-217
@@ -423,7 +423,7 @@ if len(rd.ReadStates) != 0 {
 
 `internalTimeout` 硬编码为 `time.Second`（`:175`）。只取**最后一个** `ReadState`：`readStateC` 容量为 1，前面的要么已被消费、要么被覆盖——线性读要的是「当前已确认的最新 read index」，早的那些已无意义。消费方见第 6 节。
 
-### 第 3 步：打包 toApply 并投给状态机
+### Step 3: Package toApply and Submit to State Machine
 
 ```go
 // server/etcdserver/raft.go:218-235
@@ -475,7 +475,7 @@ FIFO 调度器保证 apply 严格按 raft 产出顺序执行。`applyAll` 的第
 >
 > 同理 `applySnapshot(ep *etcdProgress, toApply *toApply)`。`apply` 只是形参名，容易和 `EtcdServer.apply()` 方法（`server.go:1892`）混淆。
 
-### 第 4 步：落盘
+### Step 4: Persist to Disk
 
 顺序被一条注释严格约束（`:245-246`）：
 
@@ -502,7 +502,7 @@ if !raft.IsEmptyHardState(rd.HardState) {
 
 快照分支之后还有一段 `Sync` + `ApplySnapshot` + `Release`（`:264-285`），其中 `Sync` 的注释直接引用了 issue #10219——不强制 fsync hard state 就 `Release` 旧 WAL，会触发 `panic: tocommit(107) is out of range [lastIndex(84)]`。最后 `r.raftStorage.Append(rd.Entries)`（`:287`）更新内存态。
 
-### 第 5 步：发消息 + Advance
+### Step 5: Send Message + Advance
 
 leader 与 follower 的路径**故意不同**：
 
@@ -546,7 +546,7 @@ r.transport.Send(msgs)
 
 最后 `r.Advance()`（`:331`），再在 `confChanged` 时补 `raftAdvancedC <- struct{}{}`（`:333-336`）。
 
-### processMessages：三条过滤规则
+### processMessages: Three Filter Rules
 
 发出去之前每条消息过一遍筛（`:357-402`）：
 
@@ -563,11 +563,11 @@ r.transport.Send(msgs)
 >
 > `maxInFlightMsgSnap = 16`（`server.go:98`）是个背压设计：`select` + `default` 意味着**满了就丢快照消息**而不是阻塞 raft 循环。这是有意的——快照可以由后续 `MsgApp` 重新触发，阻塞 raft 循环的代价更高。
 
-## 日志与快照的落盘
+## Log and Snapshot Flushing
 
 raft 算法外置了，但**持久化全在主仓库**。etcd 的稳定存储是两层：`WAL`（追加日志）+ `Snapshotter`（快照文件）。
 
-### 目录与职责
+### Directory and Responsibilities
 
 | 路径 | 内容 |
 | :--- | :--- |
@@ -611,7 +611,7 @@ type Storage interface {
 
 `Snapshotter` 的关键方法（`server/etcdserver/api/snap/snapshotter.go`）：`New`（`:60`）、`SaveSnap`（`:72`）、`Load`（`:112`）、`LoadNewestAvailable`（`:117`）、`ReleaseSnapDBs`（`:259`）、包级 `Read`（`:160`）。
 
-### 启动时的顺序
+### Startup Order
 
 `EtcdServer.run()`（`server.go:756` 起）第一件事就是从 raft storage 读快照，读不到直接 `lg.Panic`：
 
@@ -628,7 +628,7 @@ sched := schedule.NewFIFOScheduler(lg)
 
 `Node` 本身在 `bootstrap.go:555-570` 创建（有 peers 走 `StartNode`，否则 `RestartNode`），紧接着把 `n.Status` 挂到 expvar，再构造 `raftNode`。
 
-### 停止顺序有硬约束
+### Stop Order Has Hard Constraints
 
 `EtcdServer.run()` 的 defer 块（`server.go:826-833`）：
 
@@ -645,11 +645,11 @@ close(s.done)
 
 `raftNode.stop()`（`:408`）是**双向握手**——发信号后必须等 `onStop()` 关闭 `done` 才返回。`onStop()`（`:420`）的顺序同样固定：`r.Stop()` → `ticker.Stop()` → `transport.Stop()` → `storage.Close()` → `close(r.done)`。`transport.Stop()` 必须在 `storage.Close()` 之前，否则 rafthttp 可能还在写已关闭的 WAL。
 
-## 线性读与客户端 Mutex
+## Linearizable Read and Client Mutex
 
 这两个主题都曾写在 raft.md 里，且都属于**主仓库**。
 
-### 线性读已迁 read 包并导出大写
+### Linearizable Read Migrated to read Package and Exported Uppercase
 
 ReadIndex 算法本身在外置库，但 etcdserver 侧的实现已从 `etcdserver` 迁到独立包 `server/etcdserver/read/`，且两个关键方法**导出为大写**：
 
@@ -720,7 +720,7 @@ func (r *Read) LinearizableReadNotify(ctx context.Context) error {
 
 循环体（`:96` 起）每次先换一个新 notifier，再 `requestCurrentIndex` 拿 read index，等 `appliedIndex >= confirmedIndex` 后 `nr.notify(nil)` 一次性放行所有等在这个 notifier 上的读。细节见 [read.md](/docs/CS/Framework/etcd/read.md)。
 
-### 客户端 Mutex.TryLock
+### Client Mutex.TryLock
 
 `client/v3/concurrency/mutex.go` 是纯客户端代码，**与 raft 无关**——它用一条 Txn 的比较-写入实现分布式锁，靠 `CreateRevision` 判所有权：
 
@@ -753,7 +753,7 @@ func (m *Mutex) TryLock(ctx context.Context) error {
 
 「获取失败也要删 key」是**清理自己的残留**：`tryAcquire` 里若 `create` 分支成功（key 已存在且 rev 匹配）说明是自己上一轮的锁，若 `create` 成功但 rev 不匹配说明 key 已被别人重建，此时必须删掉自己刚写的那个 key，否则会留下一条永远占位的僵尸锁。`m.myKey = "\x00"` / `m.myRev = -1` 是把本地状态重置到「无锁」。
 
-## 陷阱清单
+## Pitfall List
 
 按「写错就编不过 / 排查跑偏」分类：
 

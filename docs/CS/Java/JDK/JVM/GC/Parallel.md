@@ -65,7 +65,7 @@ class ParallelScavengeHeap : public CollectedHeap {
 ```
 
 
-## 收集阶段概览
+## Collection Phase Overview
 
 Parallel GC 的堆由 `PSYoungGen`（Eden + 两个 Survivor）与 `PSOldGen` 组成，顶层实现类是 `ParallelScavengeHeap`。其收集动作分两类，且**均全程 Stop-The-World**——这是"吞吐优先"取向的代价：用更长的暂停换取更高的应用吞吐。
 
@@ -82,11 +82,11 @@ Parallel GC 的堆由 `PSYoungGen`（Eden + 两个 Survivor）与 `PSOldGen` 组
 - 过程：`PSParallelCompact` 采用"按密度前缀（dense prefix）"的分代压缩算法，多线程并行完成 标记 → 计算目标位置 → 调整根引用 → 压缩 四个阶段；`HeapMaximumCompactionInterval` 等参数控制最大压缩频率。整个 Full GC 是长时间 STW。
 - 对应源码：`PSParallelCompact::invoke_no_policy`（见下节）。
 
-### 自适应调节（Ergonomics）
+### Adaptive Tuning (Ergonomics)
 
 `-XX:+UseAdaptiveSizePolicy`（默认开启）由 `PSAdaptiveSizePolicy` 根据每次收集的反馈（各区域占用、晋升量、GC 时间占比 `GCTimeRatio`）动态调整 Eden/Survivor/Old 大小与晋升阈值，目标是在吞吐与暂停之间达到平衡。这正是 Parallel GC 被称为"吞吐量收集器"的原因——用户通常只需设 `-Xmx` 与一个 `GCTimeRatio`/`MaxGCPauseMillis` 目标，不必手工调各代大小。
 
-### 与其它收集器对比
+### Comparison with Other Collectors
 
 | 维度 | Parallel | Serial | CMS / G1 / ZGC / Shenandoah |
 | :--- | :--- | :--- | :--- |

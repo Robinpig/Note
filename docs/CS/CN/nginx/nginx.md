@@ -45,7 +45,7 @@ nginx 快的原因不是某一个魔法优化，而是一组彼此咬合的设�
 
 各代代理的系统性对比（nginx / HAProxy / Envoy / Caddy / Pingora）单独成篇：[compare](/docs/CS/CN/nginx/compare.md)。
 
-### 笔记导航
+### Notes Navigation
 
 本目录按「由浅入深」分层组织，主笔记（本文）给出全貌，专题各管一块：
 
@@ -123,7 +123,7 @@ nginx -s reopen          # SIGUSR1：重开日志文件（配合 logrotate）
 kill -USR2 $(cat /run/nginx.pid)   # 热升级：换成新二进制而不中断服务
 ```
 
-### 请求生命周期
+### Request Lifecycle
 
 理解 nginx 最快的方式是把一次请求从头到尾走一遍。下图是主干路径，每个节点都能展开成一整篇笔记：
 
@@ -183,7 +183,7 @@ digraph request_lifecycle {
 Fig.1. nginx's architecture.
 </p>
 
-### 进程模型
+### Process Model
 
 nginx 启动时是**一个 master + N 个 worker**，另外按需拉起两个辅助进程：
 
@@ -200,7 +200,7 @@ nginx 启动时是**一个 master + N 个 worker**，另外按需拉起两个辅
 - **为什么一核一个 worker？** 让调度器的 CPU 亲和性自然生效，配合 `worker_cpu_affinity auto` 可进一步绑定；连接到达的分发由内核（`SO_REUSEPORT` / `EPOLLEXCLUSIVE`）或 nginx 自己的 accept mutex 完成。
 - **进程间怎么共享状态？** 只通过共享内存（cache、limit_req/conn、upstream zone、ssl session cache），访问用 `ngx_shmtx_t`（自旋 + 可选 `sem_t`）；共享内存内的分配走 slab，见 [Memory](/docs/CS/CN/nginx/memory.md)。
 
-#### 连接数上限
+#### Connection Limit
 
 `worker_connections` 是**每个 worker 的连接对象总数**，而"连接"不只是客户端连接：
 
@@ -218,7 +218,7 @@ nginx 启动时是**一个 master + N 个 worker**，另外按需拉起两个辅
 
 这套多进程模型正是内核进程机制的落地：master 通过 [fork](/docs/CS/OS/Linux/proc/process.md?id=fork)（`kernel_clone`/`copy_process`）创建 worker，通过[信号](/docs/CS/OS/Linux/proc/signal.md)（`SIGHUP` reload、`SIGQUIT` 优雅退出、`SIGUSR2` 热升级）管理 worker 生命周期，平滑升级依赖 [exec](/docs/CS/OS/Linux/proc/process.md?id=exec) 替换进程映像；worker 间用共享内存 + mutex 共享状态，并依赖 accept mutex 规避 [惊群](/docs/CS/OS/Linux/proc/thundering_herd.md)。完整对照表见 [Processes 知识地图 × Nginx](/docs/CS/OS/Linux/proc/README.md)。
 
-### master 主循环
+### master Main Loop
 
 master 阻塞在 `sigsuspend()` 上，被信号唤醒后依次检查一组全局标志位并做出反应：
 
@@ -267,7 +267,7 @@ ngx_master_process_cycle(ngx_cycle_t *cycle)
 
 注意 master 用 `sigprocmask` 把这些信号全部 **block**，只在 `sigsuspend` 期间放开——这是标准的"信号同步化"写法，避免信号在任意指令边界上打断逻辑。
 
-### worker 与 spawn
+### worker and spawn
 
 `ngx_spawn_process()` 是 nginx 里唯一的进程创建入口，几个容易被忽略的细节：
 
@@ -363,7 +363,7 @@ ngx_process_events_and_timers(ngx_cycle_t *cycle)
 }
 ```
 
-### Reload：不中断服务的配置替换
+### Reload: Configuration Replacement Without Service Interruption
 
 `nginx -s reload`（SIGHUP）做的事，比"重新读一遍配置"要精细得多：
 
@@ -391,7 +391,7 @@ ngx_process_events_and_timers(ngx_cycle_t *cycle)
 - 旧 worker 的退出时机取决于它手上的连接。如果有长连接（WebSocket、SSE、长轮询）一直不释放，旧 worker 就会一直存在，表现为 `ps` 里 worker 数量翻倍甚至更多。用 `worker_shutdown_timeout 30s;` 给一个硬上限（默认 0，即不限）。
 - reload 会重建共享内存区（limit_req/conn 的计数、cache 索引），因此**限流计数与缓存命中率会重置**。
 
-### 热升级：换二进制而不掉连接
+### Hot Upgrade: Swap Binary Without Dropping Connections
 
 ```shell
 kill -USR2 $(cat /run/nginx.pid)     # 1. master fork+exec 新二进制，pid 文件改名 .oldbin
@@ -403,7 +403,7 @@ kill -QUIT  $(cat /run/nginx.pid.oldbin)   # 3. 确认新版本没问题后，�
 
 关键机制是**监听 fd 通过环境变量传递**：旧 master 在 `ngx_exec_new_binary()` 里把所有监听 fd 拼成 `NGINX="6;7;8;"` 形式塞进环境变量，新进程启动时 `ngx_add_inherited_sockets()` 解析它并标记 `ls->inherited = 1`，于是 `ngx_open_listening_sockets()` 跳过 `socket/bind/listen`，直接用现成的 fd。这也是为什么热升级期间新旧进程能同时监听同一个端口。
 
-### 信号表
+### Signal Table
 
 信号处理函数统一是 `ngx_signal_handler()`，它只负责给全局标志位置 1，真正的动作在 master 主循环里执行。表定义在 `os/unix/ngx_process.c`：
 
@@ -423,7 +423,7 @@ kill -QUIT  $(cat /run/nginx.pid.oldbin)   # 3. 确认新版本没问题后，�
 
 > **TERM 与 QUIT 的区别是面试与事故现场的高频考点**：`TERM` 会让 worker 立刻 `ngx_worker_process_exit()`，正在处理的请求被中断（客户端看到 502 或连接重置）；`QUIT` 先关监听、再等所有活动连接自然结束。kill 掉 nginx 之前请想清楚用哪个。
 
-## Configuration 概览
+## Configuration Overview
 
 nginx 的配置是**声明式的、块嵌套的**，指令能否写在某个块里、以及父子块如何合并，都有严格规则：
 
@@ -448,7 +448,7 @@ http {                    # 七层
 - 配置解析是**线性扫描**所有模块的所有指令（`ngx_conf_handler()` 两层 for 循环，没有 hash），所以解析只在启动时发生一次，慢也无所谓。
 - 同一指令在父子块同时出现时，**是否合并取决于指令的实现**：标量指令（`keepalive_timeout`、`client_max_body_size`）在子块未设置时继承父块；**数组型指令（`proxy_set_header`、`add_header`）是覆盖不是合并**——这是最常见的配置事故，详见 [Configuration](/docs/CS/CN/nginx/config.md)。
 
-## HTTP 概览
+## HTTP Overview
 
 一个 HTTP 请求在 nginx 内部要穿过 **11 个阶段**，每个阶段可以挂载若干模块的 handler，模块通过返回值告诉框架"继续/接管/等待"：
 
@@ -468,7 +468,7 @@ http {                    # 七层
 
 阶段机制、content handler 的唯一性、过滤链与子请求的实现都在 [HTTP](/docs/CS/CN/nginx/HTTP.md)。
 
-## Upstream 与负载均衡
+## Upstream and Load Balancing
 
 `upstream` 块定义一组上游服务器，nginx 在它们之间做选择、失败重试与健康度维护：
 
@@ -533,7 +533,7 @@ server {
 
 原理、锁、后台更新与 loader/manager 进程的分批参数见 [Cache](/docs/CS/CN/nginx/cache.md)。
 
-## 限流与限速
+## Rate Limiting and Throttling
 
 nginx 的限流发生在 `PREACCESS` 阶段，两个模块分工明确：
 
@@ -602,7 +602,7 @@ server {
 - HTTP/2 上 nginx 会在服务完 `http2_max_requests`（默认 1000）个请求后发 `GOAWAY` 并换一条新连接，这是有意为之的设计（限制单连接的累积错误），不要当成故障；
 - HTTP/3 侧 nginx 自带 QUIC 实现（1.25.0 起实验性，需 `--with-http_v3_module`），`quic_bpf` 用于 `reuseport` 场景下的连接路由。
 
-## 可观测性
+## Observability
 
 ```nginx
 log_format main '$remote_addr - $remote_user [$time_local] "$request" '
@@ -630,7 +630,7 @@ server {
 
 排障时的标准动作：`error_log ... debug;` + `debug_connection <client_ip>;`（需编译时 `--with-debug`），或者用 [strace](/docs/CS/OS/Linux/Tools/strace.md) 看系统调用。
 
-## 性能调优清单
+## Performance Tuning Checklist
 
 **进程与连接**
 
@@ -672,7 +672,7 @@ net.ipv4.tcp_fin_timeout = 15
 fs.file-max = 1000000
 ```
 
-## 常见坑
+## Common Pitfalls
 
 > [!WARNING]
 > 下面每一条都是"配置看起来没问题，但行为与直觉不符"的类型，排查时优先怀疑它们。
@@ -777,7 +777,7 @@ typedef struct {
 
 按 bit 逐位下沉（0 → left，1 → right），32 次比较即可定位 IPv4；`free` 链表复用删除的节点，避免频繁分配。
 
-### 其他
+### Others
 
 - `ngx_hash_t`：**只读**哈希表，启动时一次性构建（`ngx_hash_init`），运行期无锁查找，用于 `server_name`、`mime.types`、变量表；
 - `ngx_array_t` / `ngx_list_t`：配置期动态数组与链表，运行期只读；
@@ -887,7 +887,7 @@ ngx_conf_parse(ngx_conf_t *cf, ngx_str_t *filename)
 
 ## Debug
 
-### 编译期
+### Compile Time
 
 ```shell
 ./configure --with-debug --with-http_ssl_module --with-http_v2_module --with-stream
@@ -895,7 +895,7 @@ vim objs/Makefile        # 把 -O 改成 -O0，方便 gdb 单步
 make && make install
 ```
 
-### 运行期
+### Runtime
 
 ```shell
 nginx -t                 # 配置语法检查

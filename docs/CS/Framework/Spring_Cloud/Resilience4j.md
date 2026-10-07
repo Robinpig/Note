@@ -53,13 +53,13 @@ Try.ofSupplier(withRetry)
    .get();
 ```
 
-### 装饰器与事件
+### Decorators and Events
 
 - 装饰方式：`decorateSupplier/Function/CheckedRunnable`，响应式用 `transformDeferred(CircuitBreakerOperator.of(cb))`。
 - 事件回调：`cb.getEventPublisher().onSuccess(...)`、`onError(...)`、`onStateTransition(...)`，可接指标与告警。
 - 状态与指标通过 [Micrometer](/docs/CS/log/Micrometer.md) 暴露，便于监控熔断状态与失败率。
 
-## 注解与切面顺序
+## Annotations and Aspect Order
 
 多个注解可以叠在同一方法上，但**叠加顺序由切面 order 决定，而不是注解的书写顺序**。这是配置类故障里最难查的一类：代码看着对，行为却不同。
 
@@ -93,7 +93,7 @@ resilience4j:
 
 网上不少文章把这条写反了（"order 值越大优先级越高"），照抄会得到与预期完全相反的嵌套。判断依据始终是 Spring 的规则：**小值优先、小值在外**。
 
-### fallbackMethod 签名规则
+### fallbackMethod Signature Rules
 
 ```java
 @CircuitBreaker(name = "userService", fallbackMethod = "fallback")
@@ -114,7 +114,7 @@ private List<User> fallback(String tenant, CallNotPermittedException e) {
 - 想给一批同返回类型的方法配同一个兜底，才定义带 `Throwable` 参数的"全局"降级方法。
 - **签名写错不会在启动时报错**，只在真正触发降级时抛 `NoSuchMethodException`——也就是说降级逻辑在平时完全没被验证过，等到故障时才暴露。
 
-### 编程式与工厂定制
+### Programmatic and Factory Customization
 
 注解之外，Spring Cloud Circuit Breaker 提供 `CircuitBreakerFactory` 抽象（Resilience4j 实现为 `Resilience4JCircuitBreakerFactory`），可统一给所有实例加默认配置与事件监听：
 
@@ -142,7 +142,7 @@ Customizer<Resilience4JCircuitBreakerFactory> slowCalls() {
 
 令牌桶式限流，限制某个后端在刷新周期内的允许调用数（`limitForPeriod` / `limitRefreshPeriod` / `timeoutDuration`），超出立即拒绝或等待。
 
-### Bulkhead（舱壁）
+### Bulkhead
 
 借鉴船舱分舱的思路，把对不同下游的调用隔离开，避免一个慢下游占满全部线程。两种实现：
 
@@ -177,7 +177,7 @@ resilience4j:
 
 指标与端点：CircuitBreaker、Retry、RateLimiter、Bulkhead、TimeLimiter 的指标会自动发布，经 [Actuator](/docs/CS/Framework/Spring_Boot/actuator.md) 的 `/actuator/metrics` 可查（`resilience4j.circuitbreaker.state`、`...calls` 等）；`management.health.circuitbreakers.enabled: true` 可把熔断状态纳入健康端点。
 
-## 常见误配
+## Common Misconfigurations
 
 | 现象 | 原因 |
 | :-- | :-- |

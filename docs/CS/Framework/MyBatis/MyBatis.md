@@ -111,9 +111,9 @@ Fig.1. MyBatis Infrastructure
 
 
 
-### 设计模式
+### Design Patterns
 
-## 设计模式总结
+## Design Pattern Summary
 
 
 

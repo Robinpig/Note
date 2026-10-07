@@ -2,7 +2,7 @@
 
 C++ 的对象模型决定了「一个对象在内存里长什么样」，以及虚函数、`dynamic_cast`、`typeid` 是如何找到正确实现的。理解它是读懂 RAII、智能指针、RTTI，以及和 C / Rust / Go 对象布局差异的前提。
 
-## 数据成员布局
+## Data Member Layout
 
 - 同一 **access specifier** 下的非静态数据成员按声明顺序在对象内递增排列；不同 access 段之间的相对顺序标准未强制，但主流编译器（GCC / Clang / MSVC）实际仍按声明顺序排布。
 - 编译器按各成员对齐要求插入填充（padding），对象大小 ≥ 各成员大小之和；空类大小不为 0（通常占位 1 字节）。
@@ -14,7 +14,7 @@ struct Empty {};               // sizeof(Empty)==1
 struct B : Empty { int x; };   // sizeof(B)==4（EBO 生效，Empty 不占空间）
 ```
 
-## 虚函数表（vtable / vptr）
+## Virtual Function Table (vtable / vptr)
 
 带虚函数的类（多态类）由编译器插入一个隐藏的 **vptr**（通常位于对象起始处，offset 0），指向该类型的 **vtable**：
 
@@ -25,7 +25,7 @@ struct B : Empty { int x; };   // sizeof(B)==4（EBO 生效，Empty 不占空间
 
 > 具体布局遵循 **Itanium C++ ABI**（Linux / macOS 上 GCC、Clang 遵守）；MSVC 的细节略有差异，但 vptr + vtable 的通用模型一致。
 
-## 虚分发与代价
+## Virtual Dispatch and Its Cost
 
 ```cpp
 struct Base { virtual void f(); virtual ~Base(); };
@@ -37,7 +37,7 @@ p->f();          // 通过 p 的 vptr 找到 Der::f，一次额外间接寻址
 - 虚调用 = 一次指针间接 + 可能的 cache miss，**无法被内联 / 去虚化**（除非编译器能静态确定类型）。
 - **析构函数应为 virtual**：通过基类指针 delete 派生对象时，非虚析构只调基类析构，导致派生部分泄漏（UB）。
 
-## 与 RTTI 的关系
+## Relationship with RTTI
 
 `dynamic_cast` 与 `typeid` 都读取 vtable 内嵌的 `std::type_info`（见 [RTTI](/docs/CS/C++/RTTI.md)）。只有多态类才有可用 RTTI；非多态类型 `dynamic_cast` 在编译期即被拒。
 

@@ -2,7 +2,7 @@
 
 [SSDB](https://github.com/ideawu/ssdb) 是国人开发的开源（BSD）NoSQL 数据库，定位是"**磁盘版 Redis 替代**"：网络协议和客户端 API 与 Redis 高度兼容（支持 redis-cli、大多数语言的 Redis 客户端直连），但底层用 [LevelDB](/docs/CS/DB/LevelDB/LevelDB.md)（LSM-Tree）做主存储，数据落在磁盘上，单机可以承载远超内存容量的数据。适合"想用 Redis 的数据结构和协议、但数据量大到放内存不划算、且能接受磁盘延迟"的场景。
 
-## 架构
+## Architecture
 
 - 网络层自研 NIO 框架，兼容 Redis 协议（RESP），也有私有协议；
 - 存储引擎是改造过的 LevelDB：内存 memtable（SkipList）+ 后台 compaction 落到 SSTable，顺序写、LSM 结构（LSM 原理见 [LSM](/docs/CS/Algorithms/tree/LSM.md)）；
@@ -20,7 +20,7 @@
 | 集群 | Redis Cluster、Sentinel | 主从 + 客户端分区，无官方 Cluster |
 | 生态/活跃度 | 事实标准、生态活跃 | 社区小众、更新缓慢 |
 
-## 适用与陷阱
+## Applicability and Pitfalls
 
 - 适合：海量中小 KV 的读写（标签、计数器历史、用户关系冷数据），预算敏感、容量优先于延迟；
 - 不适合：不能容忍 compaction 写放大与读放大抖动的链路、依赖 Redis 新特性（Lua 完整版、stream、ACL）、需要成熟集群运维方案的场景；

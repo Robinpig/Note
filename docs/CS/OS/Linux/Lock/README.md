@@ -12,7 +12,7 @@
 
 本页是 `Lock/` 目录的索引：先看下面的分类与[对比表](#对比表)判断该用哪类原语，再进对应的笔记看实现。
 
-## 分类
+## Categories
 
 | 层次 | 原语 | 说明 |
 | :-- | :-- | :-- |
@@ -29,13 +29,13 @@
 | 小原语 | [小原语合集](/docs/CS/OS/Linux/Lock/SmallPrimitives.md) | qrwlock / bit_spin_lock / local_lock / lockref / percpu_rwsem |
 | 调试 | [lockdep](/docs/CS/OS/Linux/Lock/lockdep.md) | 运行时死锁检测：锁依赖图 + 每任务持锁栈 |
 
-## 读写锁族的由来
+## Origin of the Reader-Writer Lock Family
 
 rwlock 在本质上是 spinlock 的一种，它在 spinlock 概念上增加了一个类似信号量的读计数器：读操作首先获得 spinlock，然后增加引用计数，最后释放 spinlock；写操作需要满足引用计数为 0 且获取到 spinlock，写操作获得 rwlock 后不会释放 spinlock，以此做到独占——但是 rwlock 容易造成写饥饿。
 
 在允许睡眠的情况下可以使用 rwsem，在不允许睡眠的高响应要求下可以使用 seqlock。三者的权衡见 [rwlock / rwsem / seqlock](/docs/CS/OS/Linux/Lock/rwsem.md)。
 
-## 对比表
+## Comparison Table
 
 | 原语 | 能否睡眠 | 可用上下文 | 典型场景 |
 | :-- | :-- | :-- | :-- |
@@ -50,21 +50,21 @@ rwlock 在本质上是 spinlock 的一种，它在 spinlock 概念上增加了�
 | completion | 是 | 同上 | 一次性事件：等待初始化完成 |
 | RCU | 读侧否 | 读侧任意 | 链表/路由表/缓存等读多写少结构 |
 
-## 选型指南
+## Selection Guide
 
 1. **临界区会不会睡眠？** 会 → 睡眠锁（mutex/rwsem/semaphore）；绝不会 → spinlock。
-2. **同一把锁会被中断/软中断获取吗？** 会 → 必须用 `spin_lock_irqsave()` / `spin_lock_bh()`（见 [spinlock 的 API 矩阵](/docs/CS/OS/Linux/Lock/spinlock.md?id=中断与-api-选择)）。
+2. **同一把锁会被中断/软中断获取吗？** 会 → 必须用 `spin_lock_irqsave()` / `spin_lock_bh()`（见 [spinlock 的 API 矩阵](/docs/CS/OS/Linux/Lock/spinlock.md?id=interrupts-and-api-selection)）。
 3. **读写比例悬殊吗？** 读多写少 → 可睡眠选 rwsem，不可睡眠选 rwlock/seqlock；读极多写极少且能接受延迟回收 → RCU。
 4. **只是计数或单标志？** → 直接用原子操作；如果是**高频累加**，先考虑 [per-CPU 化](/docs/CS/OS/Linux/Lock/percpu.md)再考虑锁。
 5. **跨进程共享数据？** → 见[跨进程同步](/docs/CS/OS/Linux/Lock/ipc-sync.md)（崩溃安全是首要考虑）；用户态线程间且无竞争是常态 → [futex](/docs/CS/OS/Linux/Lock/futex.md)。
 
-## 死锁与调试
+## Deadlocks and Debugging
 
 - 死锁的四个必要条件与避免策略见 [Deadlocks](/docs/CS/OS/Deadlocks.md)；内核中最常见的是**忘记关中断**与**锁顺序不一致**。
 - **[lockdep](/docs/CS/OS/Linux/Lock/lockdep.md)**（`CONFIG_PROVE_LOCKING`）在运行时构建锁依赖图，报告"可能的循环锁序"；`CONFIG_DEBUG_SPINLOCK`、`CONFIG_DEBUG_MUTEXES` 校验各原语自身的使用规则。
 - 通用规则：不可递归获取、自旋锁持有期间不睡眠、不在持锁时调用可能反向加锁的函数。
 
-## 用户态视角
+## User-Space Perspective
 
 用户态同步（pthread mutex/cond、Java `synchronized`/AQS、Go `sync.Mutex`）的无竞争快速路径是纯用户态原子操作，竞争时才通过 [futex](/docs/CS/OS/Linux/Lock/futex.md) 进入内核等待队列——与内核 mutex 的"乐观自旋 + 等待队列"是同一思路在两个层次上的体现。详见 [pthread](/docs/CS/OS/Linux/proc/pthread.md) 与 [语言运行时与内核任务](/docs/CS/OS/Linux/proc/runtime.md)。
 

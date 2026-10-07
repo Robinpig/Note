@@ -10,7 +10,7 @@
 
 版本基线：Apache Dubbo **3.3.6**，源码 tag `dubbo-3.3.6`。本文所有「有 / 没有」的结论都给出检索范围与文件行号；凡是「未查到」的，都在同一棵源码树上做过全量检索。
 
-## Proxy 与 Proxyless：两个必须分清的概念
+## Proxy and Proxyless: Two Concepts That Must Be Distinguished
 
 「Dubbo 接入 Service Mesh」在中文语境里常被笼统称为 "Dubbo Mesh"，但它实际指向两条**完全不同的技术路线**：
 
@@ -54,11 +54,11 @@ digraph mesh_mode {
 
 Proxyless 之所以难，是因为它把 Envoy 承担的一整套职责搬进了应用进程：xDS 协议栈（gRPC stream + LDS/RDS/CDS/EDS 资源模型）、服务发现与端点管理、负载均衡算法、mTLS 证书申请与轮转、连接池与熔断。这些在主仓库的 `mesh` 相关源码里都找不到对应实现，只有「拼一个 K8s Service 地址」和「消费一份配置中心下发的规则」两件事。
 
-## 主仓库真实存在的 Mesh 代码
+## Mesh Code Actually Present in the Main Repo
 
 主仓库里与 Mesh 直接相关的真实实现有两块：**URL 约定**与**规则路由**。
 
-### 一、mesh-enable + providedBy：拼出 K8s Service 地址
+### 1. mesh-enable + providedBy: Assembling the K8s Service Address
 
 这是最容易在源码里看到、也最常被误读为 Proxyless 的一块。核心逻辑在 `ReferenceConfig` 的 mesh URL 构造：
 
@@ -118,7 +118,7 @@ private boolean checkMeshConfig(Map<String, String> referenceParameters) {
 
 namespace 的取值优先级是：`@DubboReference(providerNamespace = "...")` > 环境变量 `POD_NAMESPACE` > 字面量 `"default"`。取不到 `POD_NAMESPACE` 时会打告警，提示可能不在 K8s 环境。
 
-### 配置示例
+### Configuration Example
 
 消费端开启 mesh 并指定上游 K8s Service 名：
 
@@ -147,7 +147,7 @@ tri://dubbo-samples-xds-provider.default.svc.cluster.local:80
 > [!TIP]
 > 端口默认 `80`（`DEFAULT_MESH_PORT`），这个 80 是**Envoy 监听的端口**，不是 Dubbo Provider 的端口。Provider 的真实端口由 Istio 的 `VirtualService` / `DestinationRule` 决定；`@DubboReference(providerPort = N)` 只是让你显式指定 Envoy 暴露的端口，`providerPort <= -1` 时回落到 80。
 
-### 二、dubbo-cluster 里的 mesh 规则路由
+### 2. mesh Rule Routing in dubbo-cluster
 
 除了 URL 约定，主仓库还有一套**真实的 Mesh 规则路由实现**，位于 `dubbo-cluster`：
 
@@ -217,7 +217,7 @@ public interface MeshEnvListener {
 > [!NOTE]
 > 这套路由器的定位是「消费已下发的 Istio 风格规则」，不是「作为 xDS 客户端订阅控制面」。两者不要混为一谈。规则由外部系统写进配置中心（data id `<app>.MESHAPPRULE`），Mesh router 读出来用于 Dubbo 侧的选址决策。
 
-#### 规则模型：把 Istio CRD 映射成 Dubbo 路由
+#### Rule Model: Mapping Istio CRD to Dubbo Routing
 
 路由器本体是 `MeshRuleRouter`，它是一个 `AbstractStateRouter`，同时实现 `MeshRuleListener` 以接收规则变更：
 
@@ -263,7 +263,7 @@ public class StandardMeshRuleRouter<T> extends MeshRuleRouter<T> {
 
 关键仍然在于**规则输入**：这些类解析的是配置中心里那段文本，而不是控制面推送的 xDS 资源。`MeshRuleConstants` 里的 `DESTINATION_RULE_KEY = "DestinationRule"`、`VIRTUAL_SERVICE_KEY = "VirtualService"`、`KIND_KEY = "kind"` 只是用来识别 JSON 里的字段，不代表 Dubbo 说 xDS。
 
-### 三、mesh 模式下的调用链：unloadClusterRelated
+### 3. Call Chain in mesh Mode: unloadClusterRelated
 
 侧车模式下，地址已经由 K8s DNS + Envoy 决定，Dubbo 本地的 Directory / Cluster 选址链就成了多余的（甚至是有害的，因为它只看到一个地址却仍要做集群容错）。Dubbo 用一个开关让调用直接落到 mesh 地址：
 
@@ -291,9 +291,9 @@ private void createInvoker() {
 > [!NOTE]
 > mesh 模式下是否要开 `unloadClusterRelated` 取决于你的治理诉求：开了就更「纯粹」地把治理交给 Istio（Dubbo 不做本地容错），不开则 Dubbo 仍保留本地 Cluster 行为。两条路径都只涉及「本地是否包一层 Cluster」，与 xDS 无关。
 
-## 主仓库缺失的部分
+## Missing Parts of the Main Repo
 
-### 复现检索方法
+### Reproduce the Retrieval Method
 
 下面的命令在 Apache Dubbo 3.3.6 源码树上可直接复现本文的「不存在」结论：
 
@@ -341,7 +341,7 @@ ls dubbo-registry/
 > [!WARNING]
 > `LICENSE` 里出现 `dubbo-registry-xds`、`LoggerCodeConstants` 里有 `XDS` / `ISTIO` 错误码，说明这个模块在历史上**曾经存在过**（Dubbo 3.0/3.1 时期），后被移除，只留下许可证归属与错误码常量。**不要因为这些残留就认为 3.3.6 仍带该模块。** 判断某模块是否还在，看目录与 SPI 注册文件，不要看常量与注释。
 
-## 借助 Istio 落地的正确姿势
+## The Correct Way to Adopt with Istio
 
 在 3.3.6 上，Dubbo 接入 Istio 的正确姿势是 **sidecar 模式**，步骤与职责边界如下：
 
@@ -358,7 +358,7 @@ ls dubbo-registry/
 
 关于 [Istio](/docs/CS/Framework/Istio/Istio.md) 侧的具体配置（`VirtualService` / `DestinationRule` 的写法、[Service](/docs/CS/Container/k8s/Service.md) 的 DNS 规则），属于 Istio 与 Kubernetes 的主题，不在本笔记展开。
 
-## 陷阱清单
+## Pitfall List
 
 | 直觉写法 / 印象 | 源码实际 | 后果 |
 | :--- | :--- | :--- |

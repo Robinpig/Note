@@ -17,7 +17,7 @@ Borg cell 运行着具有两个主要部分的异构（heterogeneous）工作负
 
 工作负载组合（workload mix）因 cell 而异，这些 cell 根据其主要租户（tenant）运行不同的应用组合（例如，某些 cell 是相当批处理密集的），并且也随时间变化：批处理作业来来去去，许多面向终端用户的服务作业呈现出昼夜（diurnal）使用模式。Borg 需要同样好地处理所有这些情况。
 
-## 架构
+## Architecture
 
 一个 Borg cell 由一组机器、一个逻辑上集中的控制器（称为 Borgmaster）以及一个在每个机器上运行的称为 Borglet 的代理进程组成。
 
@@ -51,7 +51,7 @@ Borgmaster 在某一时刻的状态被称为一个检查点（checkpoint），�
 
 Borglet 是一个存在于 cell 中每台机器上的本地 Borg 代理。它启动和停止任务；在任务失败时重启它们；通过操纵 OS 内核设置来管理本地资源；滚动（roll over）调试日志；并向 Borgmaster 和其他监控系统报告机器的状态。
 
-## 经验教训
+## Lessons Learned
 
 **集群管理不仅仅是任务管理。**
 

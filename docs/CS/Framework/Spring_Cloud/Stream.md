@@ -97,7 +97,7 @@ public Consumer<String> logSink() {
 
 多个函数用管道符串接：`spring.cloud.function.definition=toUppercase|uppercase|logSink`。
 
-### 绑定命名规则
+### Binding Naming Rules
 
 绑定名遵循 `<函数名>-<in|out>-<下标>`，下标从 0 起，多个输入输出依次递增：
 
@@ -110,7 +110,7 @@ public Consumer<String> logSink() {
 
 函数名由 Bean 名决定，可用 `@Bean("orderProcessor")` 显式指定。这是纯约定，**拼错一个字符不会报错，只会静默地绑定到一个新 destination 上**（通常表现为"消息发了但没人收"）。
 
-### Binding 配置
+### Binding Configuration
 
 ```yaml
 spring:
@@ -138,7 +138,7 @@ spring:
 
 `group` 是生产环境必配项。不配时框架每次启动创建**匿名消费者组**，从 `latest` 开始读——**服务停机期间的事件会永久丢失**，且 Kafka binder 下匿名组无法启用 DLQ。显式配了 group 后，新建组默认从 `earliest` 开始。
 
-## 分区与顺序
+## Partition and Ordering
 
 Kafka 只保证分区内有序。要让同一订单的事件按序处理，必须让它们落到同一分区——通过消息键实现：
 
@@ -154,7 +154,7 @@ streamBridge.send("orderPlaced-out-0", msg);
 
 ## Reliability
 
-### 重试与 max-attempts 的陷阱
+### Retry and the max-attempts Trap
 
 这是 Kafka binder 下最容易踩的空转配置：
 
@@ -172,7 +172,7 @@ ListenerContainerCustomizer<AbstractMessageListenerContainer<?, ?>> customizer()
 
 只有启用了 DLQ，binder 的 `max-attempts` / `back-off-*` 才会生效并覆盖容器默认值。
 
-### 死信队列
+### Dead Letter Queue
 
 ```yaml
 spring:
@@ -193,7 +193,7 @@ spring:
 - 框架**不提供**任何死信消费机制：原因可能是暂时的（该回灌）也可能是永久的（回灌会造成无限循环）。官方示例的做法是回灌最多三次，之后转入 parking lot 主题。
 - 回灌应用最好在主应用停止时运行，否则瞬时错误会很快耗尽重试次数。
 
-### 手动提交
+### Manual Commit
 
 `autoCommitOffset: false` 时 binder 会把 `AckMode` 设为 `MANUAL`，并在入站消息里放入 `kafka_acknowledgment` 头，业务处理完自行确认：
 
@@ -207,15 +207,15 @@ public Consumer<Message<String>> manual() {
 }
 ```
 
-### 错误处理原则
+### Error Handling Principles
 
 **不要用 try-catch 吞掉消费异常**。catch 住并正常返回会让位点前进，事件永久丢失——这比抛异常更糟。让异常传播出去，交给重试与 DLQ 机制处理，同时对 DLQ 深度建监控：那里堆积的未处理事件意味着有 bug 或数据契约不匹配。
 
-### 幂等
+### Idempotency
 
 消息语义是 at-least-once，重试、重平衡、手动提交失败都会导致重复投递。**消费端幂等由业务保证**，框架不提供。参见 [Spring Kafka](/docs/CS/Framework/Spring/Kafka.md)。
 
-## 何时不该用 Stream
+## When Not to Use Stream
 
 Stream 的价值在于**中间件可替换**与**配置化装配**。代价是：中间件的特有能力被抽象层挡住，出问题时要同时懂 Stream 和底层客户端两层。
 

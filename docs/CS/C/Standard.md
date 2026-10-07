@@ -2,7 +2,7 @@
 
 C 标准由 ISO/IEC JTC1/SC22/WG14（WG14）维护，文档号 ISO/IEC 9899。了解演进不在于考古，而在于：**某特性是否可用，取决于你指定的 `-std` 和编译器版本**。本文按时间线梳理各版引入的关键能力。
 
-## 演进时间线
+## Evolution Timeline
 
 | 版本 | 发布 | 名字 / `__STDC_VERSION__` | 关键新增 |
 | :-- | :-- | :-- | :-- |
@@ -13,7 +13,7 @@ C 标准由 ISO/IEC JTC1/SC22/WG14（WG14）维护，文档号 ISO/IEC 9899。�
 | C17 / C18 | 2018 | 201710L | 仅缺陷修复与技术勘误，**无新特性**（「C18」来自 ISO 出版年） |
 | C23 | 2024 | 202311L | 大量更新（见下） |
 
-## C23 重点（ISO/IEC 9899:2024，2024-10-31 发布）
+## C23 Highlights (ISO/IEC 9899:2024, released 2024-10-31)
 
 - **关键字化**：`bool` / `true` / `false` / `static_assert` / `thread_local` / `nullptr`（及 `nullptr_t`）从宏升级为关键字（旧 `<stdbool.h>` / `<threads.h>` 宏仍可用作兼容拼写）；`typeof` 运算符标准化；`auto` 改作类型推导；新增 `constexpr`。
 - **新类型**：`_BitInt(N)` 位精确整数、`_Decimal32/64/128` 十进制浮点、`char8_t`（UTF-8 字符类型，与 C++17 对齐）。
@@ -22,7 +22,7 @@ C 标准由 ISO/IEC JTC1/SC22/WG14（WG14）维护，文档号 ISO/IEC 9899。�
 - **新库**：`<stdbit.h>`（位工具 `stdc_count_ones` 等）、`<stdckdint.h>`（checked 整数算术）；`memset_explicit`（安全擦除敏感数据）、`memccpy`、`strdup` / `strndup`、`memalignment`、`timegm`；`printf` 的 `%b`/`%B` 二进制格式；`0b`/`0B` 二进制整数字面量；字面量数字分隔符 `'`。
 - **移除 / 弃用**：三字符序列（trigraphs）、K&R 旧式函数定义（无原型）、非二补码的有符号整数表示。
 
-## 编译器与 `-std`
+## Compilers and `-std`
 
 实际可用特性要看编译器支持度（GCC 15 起默认 C23、Clang/MSVC 渐进支持）。用 `-std` 选标准：
 
@@ -40,7 +40,7 @@ gcc -std=c23 main.c     # 或旧称 -std=c2x
 #endif
 ```
 
-## 实践建议
+## Practical Recommendations
 
 - 既有 / 跨平台项目：默认 `-std=c11` 或 `c17`，兼容性最好。
 - 新项目：可考虑 `c23`，但先确认工具链（尤其嵌入式 / 老旧编译器）支持。

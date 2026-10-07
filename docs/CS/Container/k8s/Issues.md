@@ -2,7 +2,7 @@
 
 K8s 的所有故障最终都会表现为某种资源状态异常。排查的核心方法是：**先看 Events（describe），再看容器日志，最后看组件日志（kubelet / controller-manager）**。本文按"Pod 状态异常、Node 异常、网络不通、组件失联、身份与证书"五类整理常见症状与根因。
 
-## Pod 状态异常
+## Pod Status Anomaly
 
 | 现象 | 常见根因 | 定位方式 |
 |------|---------|---------|
@@ -16,13 +16,13 @@ K8s 的所有故障最终都会表现为某种资源状态异常。排查的核�
 | Terminating（长时间不消失） | finalizer 未清空 / foreground 级联未完 / 容器停不下来 | 见下方专节 |
 | ContainerCreating（长时间） | 卷未就绪 / 镜像拉取中 / CNI 未就绪 | 按卷的异步往返逐层查，见下方专节 |
 
-### 案例：健康检查超时导致 CrashLoopBackOff
+### Case: Health Check Timeout Causing CrashLoopBackOff
 
 Pod 出现 CrashLoopBackOff 状态，就想到大概率是 Pod 内服务自身的原因。使用 kubectl describe 命令查看：从 Event 日志可以看出，是 calico 的健康检查没通过导致的重启，出错原因也比较明显：`net/http: request canceled while waiting for connection (Client.Timeout exceeded while awaiting headers)`——建立连接超时，手动在控制台执行健康检查命令，发现确实响应慢（正常环境是毫秒级别）。考虑到错误原因是建立连接超时，并且业务量比较大，先观察一下 TCP 连接的状态情况（大量 `SYN_RECV` 意味着握手排队），最终指向健康检查超时阈值设置过小 + 高负载下端口接受队列溢出。
 
-细节见 [Pod 故障排查](/docs/CS/Container/k8s/Pod.md?id=故障排查)。
+细节见 [Pod 故障排查](/docs/CS/Container/k8s/Pod.md?id=troubleshooting)。
 
-### 案例：Pod 卡在 Terminating
+### Case: Pod Stuck in Terminating
 
 这是删除链路专属的故障，`delete` 返回成功但对象不消失（详见 [删除与级联](/docs/CS/Container/k8s/Deletion.md)）。按三问定位：
 
@@ -36,7 +36,7 @@ kubectl get pod <name> -o json | jq '{ts: .metadata.deletionTimestamp, grace: .m
 
 namespace 卡 Terminating 是同类问题的放大版，且Apiserver 会把 `kubernetes` finalizer 放在 `spec.finalizers` 里让用户改不掉。最快的诊断是看 condition：`kubectl get ns <name> -o yaml` 里的 `NamespaceFinalizersRemaining` 会**直接点名是哪个 finalizer 卡住**。
 
-### 案例：Pod 卡在 ContainerCreating
+### Case: Pod Stuck in ContainerCreating
 
 绝大多数长期 ContainerCreating 指向**卷没准备好**。这条链路要经由 etcd 做两次异步交接（kubelet 上报意图 → controller attach → kubelet 才挂载），所以要**按层往上查，而不是先翻 kubelet 日志**：
 
@@ -58,14 +58,14 @@ kubectl describe volumeattachment <va-name>     # 看 Status.AttachError
 
 完整链路见 [持久化存储](/docs/CS/Container/k8s/Storage.md)。
 
-## Node 异常
+## Node Anomaly
 
 - **NotReady**：kubelet 与 apiserver 心跳丢失。排查链路：kubelet 是否存活（`systemctl status kubelet`）→ 容器运行时是否正常（crictl info）→ 节点资源是否触发驱逐。
 - **MemoryPressure / DiskPressure**：condition 由 kubelet 汇报，会触发 Pod [驱逐](/docs/CS/Container/k8s/Eviction.md)。注意有两套完全不同的机制：kubelet 本地杀 Pod（node-pressure eviction）与控制器按 NoExecute 污点删 Pod（taint eviction），现象相似但排查方向完全不同。
 - **Pod 被驱逐但不知是谁干的**：看 Pod 的 `DisruptionTarget` condition 的 `Reason`。`DeletionByTaintManager` = 控制器按污点删的；`TerminationByKubelet` = kubelet 本地压力驱逐；`DeletionByDeviceTaintManager` = DRA 设备污点。
 - **部分节点无法启动 Pod**：常见于节点 label 污染了调度（taint/toleration 不匹配）、节点镜像缓存损坏、或 CNI 网络插件在该节点未就绪——`kubectl get pod -n kube-system | grep <node>` 先看系统 Pod。
 
-## 网络不通
+## Network Unreachable
 
 按路径逐跳排查：
 
@@ -93,12 +93,12 @@ DNS 类故障占比极高：`nslookup kubernetes.default` 从业务 Pod 内先�
 
 进不去容器也算常态：镜像是 distroless（没有 shell）、`kubectl exec` 报错、或运行时/节点已经在报警。这时退到节点上按"Pod → 容器 ID → 宿主 PID → `/proc/PID` 这条链走——`nsenter` 不经过 daemon 也能观察容器的 namespace 与 rootfs，方法见 [容器定位](/docs/CS/Container/locate.md)。
 
-## 组件失联
+## Component Disconnected
 
 - apiserver 无响应：etcd 集群先看健康（`etcdctl endpoint health`），etcd 故障会导致整个控制面冻结，但存量 Pod 不受影响——这是"控制面与数据面解耦"的体现。
 - controller-manager / scheduler 单点故障不直接影响存量流量，但新建副本不再被调度、删除的副本不再被重建。
 
-## 身份与证书类故障
+## Identity and Certificate Faults
 
 这类故障的共同特征是**报错信息里出现 401 / `x509: certificate` / `Unauthorized`**，而根因大多不在这条报错所在的组件上。完整链路见 [身份与证书](/docs/CS/Container/k8s/Identity.md)。
 

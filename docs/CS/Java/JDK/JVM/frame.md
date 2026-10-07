@@ -1,7 +1,7 @@
 ## Introduction
 
 
-## 版本基线
+## Version Baseline
 
 > [!NOTE]
 > **版本口径**：`frame` 的组成（局部变量表、操作数栈、动态链接、方法返回地址）源自《规范》，但 HotSpot 具体的 `oopMap` / `safepoint` 记录与编译器接口随版本演进。**JEP 534**（Release 27）默认启用紧凑对象头后，对象引用在栈上的槽位宽度也随之变化——涉及"一个 slot 多大"的问题请以所用版本为准。

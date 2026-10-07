@@ -824,7 +824,7 @@ func (kl *Kubelet) syncPod(o syncPodOptions) error {
 
 > 这一步（`WaitForAttachAndMount`）是 Pod 卡在 `ContainerCreating` 的主要来源：它会**阻塞该 Pod 的 sync goroutine 最多 2 分 3 秒**（`podAttachAndMountTimeout`，`volume_manager.go:75`），而且等的不是本地操作，是「kubelet 上报 `VolumesInUse` → controller attach 并写 `VolumesAttached` → kubelet 读到」这一整圈经由 etcd 的异步往返。完整链路与逐层排查见 [持久化存储](/docs/CS/Container/k8s/Storage.md)。
 
-## podWorkers 状态机
+## podWorkers State Machine
 
 每个 Pod 有独立的 podWorker 与一条容量为 1 的事件通道。v1.36 的状态机是**三态**而非两态：
 
@@ -860,7 +860,7 @@ PLEG（Pod Lifecycle Event Generator）负责发现"容器实际发生了什么"
 
 v1.36 新增了 `PLEGOnDemandRelist`（Beta，默认开启）：允许对单个 Pod 按需触发 relist，队列容量 200。SyncPod 结束后会通过 `postSync` 主动请求一次，把状态感知延迟从"等下一轮全局 relist"降到"立刻"。
 
-## 三个 outward 接口的现状
+## Status of the Three outward Interfaces
 
 kubelet 自己不实现这三种接口，而是通过插件契约把它们交给外部实现。v1.36 的边界较早期版本有明显变化：
 
@@ -875,7 +875,7 @@ kubelet 自己不实现这三种接口，而是通过插件契约把它们交给
 
 cAdvisor 目前仍在依赖中，但已降级为 CRI stats provider 的 fallback（`PodAndContainerStatsFromCRI` 至今仍是 Alpha 且默认关闭）。
 
-## v1.36 结构性变更
+## v1.36 Structural Changes
 
 | 变更 | 说明 |
 |---|---|

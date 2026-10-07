@@ -1,4 +1,4 @@
-# Nacos 客户端 SDK 与最佳实践
+# Nacos Client SDK and Best Practices
 
 ## Introduction
 
@@ -64,7 +64,7 @@ naming.subscribe("order-service", event -> {
 - `ephemeral=false` → **持久实例**，注册写 JRaft（CP），落库，重启不丢，但写代价更高。
 - `selectInstances(..., healthy)` 只返回健康实例；`subscribe` 是长连接推送，优于定时 `getAllInstances` 轮询。
 
-## namespace / group / dataId 模型
+## namespace / group / dataId Model
 
 | 维度 | 含义 | 典型用法 |
 | :-- | :-- | :-- |
@@ -74,7 +74,7 @@ naming.subscribe("order-service", event -> {
 
 三者唯一确定一条配置。`namespace` 是强隔离（不同 namespace 互不可见），`group` 是同 namespace 内的逻辑分组。生产约定：**namespace 按环境、group 按应用、dataId 按文件**。
 
-## 连接与重连
+## Connection and Reconnection
 
 - `serverAddr` 可填多个（逗号分隔），对应集群成员；客户端对**每个节点建立 gRPC 长连接**，自动探活。
 - 节点宕机 / 网络抖动时 SDK **自动重连**其他节点，业务无感；若全部不可达，读本地缓存（启动时 `namingLoadCacheAtStart=true` 可预载缓存）、写则失败。
@@ -103,7 +103,7 @@ spring:
 - 版本兼容是高频坑：**Spring Boot 3 必须配兼容的 Spring Cloud Alibaba 版本**（如 2022.0.0.0 / 2023.x 系列），且**Nacos 客户端与服务端大版本要严格匹配**，否则启动报协议错或监听失效。升级 Nacos 服务端时一并核对 SCA 版本矩阵。
 - 2.4+ 的 Spring Boot 用 `spring.config.import=nacos:...` 引入 Nacos 配置；旧版用 `bootstrap.yml`。
 
-## 最佳实践
+## Best Practices
 
 - **用监听 / 订阅，不要轮询**。`addListener` / `subscribe` 是推送，成本低、时延小；自己定时拉等于退化成 1.x 长轮询且易触发限流。
 - **namespace 按环境隔离**，避免 dev 配置误推到 prod。

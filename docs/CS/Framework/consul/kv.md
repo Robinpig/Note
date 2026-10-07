@@ -2,7 +2,7 @@
 
 Consul 的 **KV 存储**是基于 Raft 的强一致键值，命令 `consul kv` / HTTP `/v1/kv/<key>`。它和 etcd 的 KV 看起来相似，但语义有明显差异：**Consul KV 不保留历史版本**（每次写直接覆盖），而 etcd 的 MVCC 保留多 revision（见 [etcd MVCC](/docs/CS/Framework/etcd/MVCC.md)）。Consul KV 的"协调"能力主要靠 **session**（类似 etcd 的 lease，见 [etcd lease](/docs/CS/Framework/etcd/lease.md)）来实现锁、leader 选举、临时键。
 
-## 基本语义
+## Basic Semantics
 
 - **无历史版本**：写操作整体替换 value，不留存旧 revision；无法像 etcd 那样"从某 revision 读历史"或"watch 某 key 的全部变更轨迹"。
 - **层级键**：以 `/` 分隔的任意字符串键，`consul kv get -recurse` 可递归列举前缀。
@@ -10,7 +10,7 @@ Consul 的 **KV 存储**是基于 Raft 的强一致键值，命令 `consul kv` /
 - **CAS（Check-And-Set）**：写请求带 `cas=<ModifyIndex>`——仅当 KV 当前的 `ModifyIndex` 等于该值时才成功，用于无锁乐观并发。`ModifyIndex` 每次写自增，是 Consul KV 唯一的"版本号"概念（非连续 revision）。
 - **原子化整个树**：递归删除/写以单条 Raft 日志提交，保证子树一致。
 
-## Session：临时键与锁的基础
+## Session: The Basis for Ephemeral Keys and Locks
 
 session 把一组 key 与一个**持有者身份**绑定：当 session 失效（持有者宕机 / TTL 过期 / 显式销毁），绑定的 key 自动被释放或删除。
 
@@ -23,21 +23,21 @@ session 把一组 key 与一个**持有者身份**绑定：当 session 失效（
 > [!NOTE]
 > session 的 `TTL` 不是"过期即删"的硬保证——它只是检测死客户端的手段。leader 在超过 TTL 未收到心跳后才回收 session；网络分区时可能略晚，因此锁的"安全"依赖 `LockDelay` 而非 TTL 精确性。
 
-### 分布式锁
+### Distributed Lock
 
 - `consul kv put -acquire=<session>` 在 key 上**获取锁**（需该 key 当前未被其他 session 持有，或 `cas=0` 新建）；
 - 持有者用 `-release=<session>` 释放；session 失效自动释放；
 - 配合 `LockDelay` 避免"持有者刚死、新客户端立刻抢到锁但旧客户端请求还在飞"的竞态。
 
-### 信号量（Semaphore）
+### Semaphore
 
 Consul 还提供 [Semaphore](https://developer.hashicorp.com/consul/api-docs/semaphore) 原语（基于 session + 一组含序号的 key），实现"至多 N 个持有者"的并发控制。注意：它**没有 etcd concurrency 包里的 STM（软件事务内存）**——Consul 的协调原语比 etcd 薄，复杂事务要业务自己编排。
 
-## 阻塞查询（Blocking Query）
+## Blocking Query
 
 HTTP 带 `index=<ModifyIndex>` + `wait=<duration>`（默认最长 5m，Consul 2.0 起 HTTP 读超时提到 15min 以容纳长轮询）做长轮询：服务端在 `ModifyIndex` 变更或超时前挂起返回。语义比 etcd watch 灵活（任意索引点阻塞），但**不支持按历史 revision 回溯**——想要"全量变更流"得客户端自己维护游标。
 
-## 与 etcd 对照
+## Comparison with etcd
 
 | 维度 | Consul KV | etcd KV |
 | :--- | :--- | :--- |

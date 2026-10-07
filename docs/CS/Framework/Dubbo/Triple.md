@@ -10,7 +10,7 @@ Dubbo 3 最根本的变化，是把默认通信协议从 Dubbo 协议（TCP 私�
 
 本文所有结论来自 Apache Dubbo **3.3.6** 官方源码（`apache/dubbo` 仓库 tag `dubbo-3.3.6`），默认值一律标注文件与行号，网上流传但与源码不符的说法会在文中显式标出。
 
-## 协议注册与命名
+## Protocol Registration and Naming
 
 `dubbo-rpc/dubbo-rpc-triple` 的协议扩展文件注册了三个名字：
 
@@ -40,7 +40,7 @@ public class GrpcProtocol extends TripleProtocol {
 > [!WARNING]
 > 旧写法里 `Protocol` 接口上的 `getName()` 方法在 3.3.6 已不存在（`dubbo-rpc/dubbo-rpc-api/.../rpc/Protocol.java:58-66` 只有 `getDefaultPort()` / `export` / `refer` / `destroy` / `getServers`）。任何「通过 `protocol.getName()` 判断协议类型」的经验在 3.3 上都不成立，判断协议类型应当读 `URL` 的 `protocol` 参数。
 
-## 与 gRPC 的兼容边界
+## Compatibility Boundary with gRPC
 
 Triple 在传输层用 HTTP/2，与 gRPC 共用同一套帧格式，因此可以被标准的 gRPC 客户端或 Envoy 之类的代理直接识别；Dubbo 另外提供了 health 与 reflection 服务桩，让 `grpc_health_probe`、`grpcurl` 这类工具能探测 Triple 服务。
 
@@ -65,7 +65,7 @@ grpc=org.apache.dubbo.rpc.protocol.tri.GrpcHttp2Protocol
 
 Triple 走的是 `WireProtocol` 扩展体系（而不是老协议的 `Codec2`），这也是它与 Dubbo 协议在 remoting 层的本质差异。
 
-## 四种调用模式
+## Four Invocation Modes
 
 Triple 支持 gRPC 定义的全部四种 RPC 模式，枚举定义在 `dubbo-common`：
 
@@ -101,7 +101,7 @@ switch (methodDescriptor.getRpcType()) {
 
 客户端侧的核心类是 `TripleClientCall`、`ClientCall`、`AbstractTripleClientStream`、`UnaryClientCallListener`；服务端侧是 `AbstractServerTransportListener`、`AbstractServerCallListener`、`GrpcStreamServerChannelObserver`、`ServerStreamObserver`。注意**不存在名为 `StreamCallListener` 的类**，流式监听是通过 `ClientCall.Listener` 与各个 `*ChannelObserver` 实现的。
 
-## 序列化：先看是不是 Protobuf 类型
+## Serialization: First Check Whether It Is a Protobuf Type
 
 Triple 的序列化选择分两条路径，判断发生在 `ReflectionPackableMethod`：
 
@@ -155,7 +155,7 @@ private static final String DEFAULT_REMOTING_SERIALIZATION_PROPERTY = "hessian2"
 
 **所以 Triple 在非 Protobuf 场景下的默认序列化与 Dubbo 协议完全一致，都是 `hessian2`。** 唯一的区别是名字：wrapper 内部把 `hessian2` 转换成了 `hessian4`（`ReflectionPackableMethod.java:424-428` 的 `convertHessianToWrapper`），这是 Dubbo 自研 hessian 实现的标识，不是另一种序列化算法。
 
-### 序列化的优先级
+### Priority of Serialization
 
 `prefer.serialization` 优先于 `serialization`，两者都配了才生效：
 
@@ -174,7 +174,7 @@ public static Byte serializationId(URL url) {
 
 `prefer.serialization` 可以写一列候选（逗号分隔），框架按顺序找到第一个可用实现；这在「Provider 与 Consumer 支持不同序列化实现」时是唯一的柔性协商手段。注意 `@DubboService` 上有 `serialization()` 与 `preferSerialization()` 两个属性，而 **`@DubboReference` 上没有这两个属性**——消费侧的序列化必须靠 URL 参数或注解外的配置传递。
 
-## 端口与单端口多协议
+## Port and Single-Port Multi-Protocol
 
 Triple 与 Dubbo 协议默认端口不同，且 `ProtocolConfig` 本身没有默认端口常量，端口由各 `Protocol.getDefaultPort()` 提供，`ServiceConfig` 在未配置时采用：
 
@@ -228,9 +228,9 @@ if (isPuServerKey) {
 
 常量位置：`EXT_PROTOCOL = "ext.protocol"`（`CommonConstants.java:630`）、`IS_PU_SERVER_KEY = "ispuserver"`（`remoting/Constants.java:102`），`ProtocolConfig.extProtocol` 的注释就是 "Extra protocol for this service, using Port Unification Server"。
 
-## 两种开发模式
+## Two Development Modes
 
-### Java 接口优先（无 IDL）
+### Java Interface First (No IDL)
 
 直接写 Java 接口 + Dubbo 注解，序列化回落 hessian2。这是从 Dubbo 2.x 迁移过来的团队最省事的路径：
 
@@ -242,7 +242,7 @@ public class DemoServiceImpl implements DemoService { ... }
 private DemoService demoService;
 ```
 
-### IDL 优先（Protobuf）
+### IDL First (Protobuf)
 
 写 `.proto`，由 `dubbo-maven-plugin` 生成 Triple 桩：
 
@@ -271,7 +271,7 @@ Tri_reactor("tri_reactor", "org.apache.dubbo.gen.tri.reactive.ReactorDubbo3Tripl
 > [!NOTE]
 > 检索 `config/annotation/` 全目录，`@DubboService` 与 `@DubboReference` 上**没有** `protobuf` 这个属性；注解里出现的只有 `protocol()`（协议名）。「通过 `@DubboService(protobuf = true)` 开启 Protobuf 模式」是不存在的写法。
 
-## REST 能力
+## REST Capabilities
 
 `tri` 协议自身内置 REST 支持，由一个静态开关控制：
 
@@ -297,7 +297,7 @@ private String[] produces;
 
 因此 `tri` 与 `rest2` 的关系是「同一引擎的两种协议名」，REST 风格的服务既能按 `tri` 导出（HTTP/2 + RESTful 语义），也能按 `rest2` 导出。注意**不存在 `TripleRestProtocol` 这个类**，REST 能力不在独立类里。
 
-## 陷阱清单
+## Pitfall List
 
 | 直觉写法 | 源码实际 | 后果 |
 | :--- | :--- | :--- |

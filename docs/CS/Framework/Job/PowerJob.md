@@ -31,7 +31,7 @@ public class PowerJobServerApplication {
 }
 
 
-## 任务调度
+## Task Scheduling
 
 1. Server 启动 → 开启多个 LoopRunnable 线程（调度间隔 15 秒）
 2. scheduleNormalJob: 查询 nextTriggerTime ≤ now+30s 的待调度任务
@@ -42,7 +42,7 @@ public class PowerJobServerApplication {
 
 
 
-### 时间轮
+### Timing Wheel
 
 PowerJob 的时间轮设计是其核心特性之一，采用分层设计，通过多级时间轮实现精确的任务调度
 
