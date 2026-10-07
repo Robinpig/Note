@@ -47,7 +47,7 @@ UMA 即一致内存访问：所有处理器通过一条共享总线（或交叉�
 
 ## 层次结构回顾
 
-完整存储层级：寄存器 → L1（~1ns，核私有）→ L2（数 ns，核私有）→ L3（十余 ns，socket 共享）→ 本地 DRAM（~80–100ns）→ 远程 NUMA DRAM（更慢）→ SSD/磁盘。越往下容量越大、越慢，详见 [Cache](/docs/CS/CO/Cache.md) 与 OS 的 [内存管理](/docs/CS/OS/Linux/mm/memory.md) 笔记。
+完整存储层级：寄存器 → L1（~1ns，核私有）→ L2（数 ns，核私有）→ L3（十余 ns，socket 共享）→ 本地 DRAM（~80–100ns）→ 远程 NUMA DRAM（更慢）→ SSD/磁盘。越往下容量越大、越慢，详见 [Cache](/docs/CS/CO/Cache.md)、[存储设备](/docs/CS/CO/disk.md) 与 OS 的 [内存管理](/docs/CS/OS/Linux/mm/memory.md) 笔记。
 
 ## Links
 

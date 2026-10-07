@@ -136,7 +136,9 @@ A full-fledged memory barrier orders both loads and stores, but again only on th
 
 ## Links
 
-- [Cache](/docs/CS/SE/Cache.md)
+- [Computer Organization（组成原理枢纽）](/docs/CS/CO/CO.md)
+- [多处理器内存（UMA/NUMA 与缓存一致性）](/docs/CS/CO/memory.md)
+- [Linux 内存管理](/docs/CS/OS/Linux/mm/memory.md)
 
 ## References
 
