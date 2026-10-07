@@ -1,157 +1,142 @@
 ## Introduction
 
-It is impossible for a distributed computer system to simultaneously provide all three of the following guarantees:
+分布式计算机系统不可能同时提供以下三项保证：
 
-- **Consistency**: all nodes see the same data at the same time(Actually means [linearizability](/docs/CS/Distributed/Distributed.md?id=linearizability))
-- **Availability**: Node failures do not prevent other survivors from continuing to operate (a guarantee that every request receives a response about whether it succeeded or failed)
-- **Partition tolerance**: the system continues to operate despite arbitrary partitioning due to network failures (e.g., message loss)
+- **一致性（Consistency）**：所有节点在同一时刻看到相同的数据（实际上指[线性一致性](/docs/CS/Distributed/Distributed.md?id=linearizability)）
+- **可用性（Availability）**：节点的失效不会导致其他存活节点无法继续工作（即每个请求都能得到关于成功或失败的响应）
+- **分区容错（Partition tolerance）**：尽管因网络故障（例如消息丢失）而产生任意分区，系统仍能继续运行
 
-A distributed system can satisfy any two of these guarantees at the same time but not all three.
-We would like to achieve both consistency and availability while tolerating network partitions.
-The network can get split into several parts where processes are not able to communicate with each other: some of the messages sent between partitioned nodes won’t reach their destinations.
+一个分布式系统在同一时刻最多只能满足其中两项保证，无法三者兼得。
+我们希望在容忍网络分区的同时，既能保证一致性又能保证可用性。
+网络可能被分割成若干部分，进程之间无法相互通信：分区节点之间发送的某些消息无法送达目的地。
 
-The easiest way to understand CAP is to think of two nodes on opposite sides of a partition.
-Allowing at least one node to update state will cause the nodes to become inconsistent, thus forfeiting C.
-Likewise, if the choice is to preserve consistency, one side of the partition must act as if it is unavailable, thus forfeiting A.
-Only when nodes communicate is it possible to preserve both consistency and availability, thereby forfeiting P.
-The general belief is that for wide-area systems, designers cannot forfeit P and therefore have a difficult choice between C and A.
-In some sense, the NoSQL movement is about creating choices that focus on availability first and consistency second; 
-databases that adhere to ACID properties (atomicity, consistency, isolation, and durability) do the opposite.
+理解 CAP 最简单的方式是想象位于分区两侧的两个节点。
+只要允许至少一个节点更新状态，节点间就会变得不一致，从而放弃了 C。
+同理，如果选择保持一致性，分区的一侧必须表现得如同不可用，从而放弃了 A。
+只有当节点能够相互通信时，才可能同时保留一致性和可用性，也就意味着放弃了 P。
+普遍的看法是，对于广域网系统，设计者无法放弃 P，因而不得不在 C 与 A 之间艰难取舍。
+从某种意义上说，NoSQL 运动就是关于优先可用性、次之一致性的选择；
+而遵循 ACID 特性（原子性、一致性、隔离性、持久性）的数据库则相反。
 
-> The choice of availability over consistency is a business choice, not a technical one.    -- Coda Hale
+> 选择可用性而非一致性，是一个业务决策，而非技术决策。  -- Coda Hale
 
 
 
 ## BASE
 
-ACID and BASE represent two design philosophies at opposite ends of the consistency-availability spectrum.
-The ACID properties focus on consistency and are the traditional approach of databases.
+ACID 与 BASE 代表了在一致性—可用性光谱两端的两套设计哲学。
+ACID 特性关注一致性，是数据库的传统做法。
 
-Although both terms are more mnemonic than precise, the BASE acronym (being second) is a bit more awkward: Basically Available, Soft state, Eventually consistent.
-Soft state and eventual consistency are techniques that work well in the presence of partitions and thus promote availability.
-The relationship between CAP and ACID is more complex and often misunderstood, in part because the C and A in ACID represent different concepts than the same letters in CAP and in part because choosing availability affects  only some of the ACID guarantees.
-The four ACID properties are:
+虽然这两个术语更像是助记符而非精确定义，但 BASE 这个缩写（排在后面）稍微别扭一些：Basically Available、Soft state、Eventually consistent（基本可用、软状态、最终一致）。
+软状态与最终一致是在存在分区时依然表现良好的技术，因此有助于提升可用性。
+CAP 与 ACID 之间的关系更复杂且常被误解，部分原因是 ACID 中的 C 和 A 与 CAP 中同样的字母含义不同，部分原因是选择可用性只影响 ACID 保证中的一部分。
+ACID 的四大特性是：
 
-- Atomicity (A).
-  All systems benefit from atomic operations.
-  When the focus is availability, both sides of a partition should still use atomic operations.
-  Moreover, higher-level atomic operations(the kind that ACID implies) actually simplify recovery.
-- Consistency (C).
-  In ACID, the C means that a transaction preserves all the database rules, such as unique keys.
-  In contrast, the C in CAP refers only to single‐copy consistency, a strict subset of ACID consistency.
-  ACID consistency also cannot be maintained across partitions—partition recovery will need to restore ACID consistency.
-  More generally, maintaining invariants during partitions might be impossible, thus the need for careful thought about which operations to disallow and how to restore invariants during recovery.
-- Isolation (I).
-  Isolation is at the core of the CAP theorem: if the system requires ACID isolation, it can operate on at most one side during a partition.
-  Serializability requires communication in general and thus fails across partitions.
-  Weaker definitions of correctness are viable across partitions via compensation during partition recovery.
-- Durability (D). As with atomicity, there is no reason to forfeit durability, although the developer might choose to avoid needing it via soft state (in the style of BASE) due to its expense.
-  A subtle point is that, during partition recovery, it is possible to reverse durable operations that unknowingly violated an invariant during the operation.
-  However, at the time of recovery, given a durable history from both sides, such operations can be detected and corrected.
-  In general, running ACID transactions on each side of a partition makes recovery easier and enables a framework for compensating transactions that can be used for recovery from a partition.
+- 原子性（Atomicity，A）。所有系统都能从原子操作中受益。当关注可用性时，分区两侧仍应使用原子操作。此外，更高级别的原子操作（ACID 所暗示的那种）实际上简化了恢复。
+- 一致性（Consistency，C）。在 ACID 中，C 表示事务保持所有数据库规则，例如唯一键约束。相反，CAP 中的 C 仅指单副本一致性（single-copy consistency），它是 ACID 一致性的严格子集。ACID 一致性也无法在分区间保持——分区恢复需要重建 ACID 一致性。更一般地说，在分区期间维持不变量可能不可能，因此需要仔细考虑禁止哪些操作，以及如何在恢复期间重建不变量。
+- 隔离性（Isolation，I）。隔离性是 CAP 定理的核心：如果系统要求 ACID 隔离，那么在分区期间它最多只能在一侧运行。可串行性（Serializability）通常需要通信，因此在分区时会失败。在分区期间，通过分区恢复时的补偿，可以采用更弱的正确性定义。
+- 持久性（Durability，D）。与原子性一样，没有理由放弃持久性，尽管开发者可能因代价高昂而选择通过软状态（BASE 风格）来避免需要它。一个微妙之处在于，在分区恢复期间，有可能回滚那些在操作时不经意违反不变量的持久化操作。然而，在恢复时，给定双方的持久化历史，这类操作可以被检测并纠正。一般而言，在分区两侧各自运行 ACID 事务会让恢复更容易，并提供一个补偿事务框架，可用于从分区中恢复。
 
-Availability requirement is impossible to satisfy in an asynchronous system, and we cannot implement a system that simultaneously guarantees both availability and consistency in the presence of network partitions [GILBERT02].
-We can build systems that guarantee strong consistency while providing best effort availability, or guarantee availability while providing best effort consistency.
-Best effort here implies that if everything works, the system will not purposefully violate any guarantees, but guarantees are allowed to be weakened and violated in the case of network partitions.
+在异步系统中，可用性要求不可能被满足，而且我们无法实现一个在网络分区存在时同时保证可用性与一致性的系统 [GILBERT02]。
+我们可以构建在提供尽力可用性（best effort availability）的同时保证强一致性的系统，或在提供尽力一致性（best effort consistency）的同时保证可用性的系统。
+这里的“尽力”意味着：只要一切正常，系统不会故意违反任何保证，但在发生网络分区时，允许保证被弱化甚至破坏。
 
-An example of a CP system is an implementation of a consensus algorithm, requiring a majority of nodes for progress: always consistent, but might be unavailable in the case of a network partition.
-A database always accepting writes and serving reads as long as even a single replica is up is an example of an AP system, which may end up losing data or serving inconsistent results.
+CP 系统的一个例子是共识（Consensus）算法的实现，需要多数节点才能推进：始终一致，但在网络分区时可能不可用。
+一个只要还有单个副本存活就始终接受写入并提供读取的数据库，是 AP 系统的例子，它可能最终丢失数据或返回不一致的结果。
 
-### Eventually Consistent
+### 最终一致性（Eventually Consistent）
 
 [Eventually Consistent - Revisited](https://www.allthingsdistributed.com/2008/12/eventually_consistent.html)
 
 
 ## PACELEC
 
-PACELEC conjecture an extension of CAP, states that in presence of network partitions there’s a choice between consistency and availability (PAC).
-Else (E), even if the system is running normally, we still have to make a choice between latency and consistency.
+PACELEC 猜想是 CAP 的扩展，它指出在网络分区存在时，要在一致性与可用性之间做选择（PAC）；
+否则（E），即便系统正常运行，我们仍须在延迟与一致性之间做选择。
 
-The latency-consistency tradeoff (ELC) is relevant only when the data is replicated.
+延迟—一致性权衡（ELC）仅当数据被复制时才相关。
 
-Default versions of Dynamo, Cassandra, and Riak were PA/EL systems, i.e., if a partition occurs, availability is prioritized. In the absence of partition, lower latency is prioritized.
+Dynamo、Cassandra、Riak 的默认版本是 PA/EL 系统，即如果发生分区，优先保证可用性；在没有分区时，优先保证低延迟。
 
-Fully ACID systems (VoltDB, H-Store, and Megastore) and others like BigTable and HB are PC/EC, i.e., they prioritize consistency and give up availability and latency.
+完全 ACID 的系统（VoltDB、H-Store、Megastore）以及 BigTable、HB 等是 PC/EC 系统，即优先保证一致性，放弃可用性与延迟。
 
-MongoDB can be classified as a PA/EC system.
+MongoDB 可被归类为 PA/EC 系统。
 
 [Consistency Tradeoffs in Modern Distributed Database System Design](https://www.cs.umd.edu/~abadi/papers/abadi-pacelc.pdf)
 
-The default versions of Dynamo, Cassandra, and Riak are PA/EL systems: if a partition occurs, they give up consistency for availability, and under normal operation they give up consistency for lower latency.
+Dynamo、Cassandra、Riak 的默认版本是 PA/EL 系统：如果发生分区，它们为可用性放弃一致性；在正常操作时，它们为更低延迟放弃一致性。
 
 
-## Trade-off
+## 权衡（Trade-off）
 
-As the “CAP Confusion” sidebar explains, the “2 of 3” view is misleading on several fronts.
+正如“CAP 困惑”边栏所解释的，“三选二”的观点在多个方面具有误导性。
 
-- First, because partitions are rare, there is little reason to forfeit C or A when the system is not partitioned.
-- Second, the choice between C and A can occur many times within the same system at very fine granularity; not only can subsystems make different choices, but the choice can change according to the operation or even the specific data or user involved.
-- Finally, all three properties are more continuous than binary.
-  Availability is obviously continuous from 0 to 100 percent, but there are also many levels of consistency, and even partitions have nuances, including disagreement within the system about whether a partition exists.
+- 首先，由于分区很少发生，当系统未分区时，几乎没有理由放弃 C 或 A。
+- 其次，C 与 A 之间的选择可能在同一个系统内以极细的粒度多次发生；不仅子系统可以做出不同选择，而且该选择可以随操作甚至所涉及的具体数据或用户而变化。
+- 最后，这三项特性都比二元（binary）更具连续性。可用性显然是从 0% 到 100% 连续的，但一致性也有许多级别，甚至分区也有细微差别，包括系统内部对于“是否存在分区”的分歧。
 
-Exploring these nuances requires pushing the traditional way of dealing with partitions, which is the fundamental challenge.
-Because partitions are rare, CAP should allow perfect C and A most of the time, but when partitions are present or perceived, a strategy that detects partitions and explicitly accounts for them is in order.
-This strategy should have three steps: detect partitions, enter an explicit partition mode that can limit some operations, and initiate a recovery process to restore consistency and compensate for mistakes made during a partition.
+探索这些细微差别需要突破传统的分区处理方式，这是根本性的挑战。
+由于分区很少发生，CAP 应该允许在大多数时候达到完美的 C 和 A，但当分区出现或被感知时，采取一种检测分区并显式处理它的策略才是正道。
+该策略应包含三个步骤：检测分区、进入显式分区模式以限制某些操作、启动恢复过程以恢复一致性并补偿分区期间所犯的错误。
 
-Operationally, the essence of CAP takes place during a timeout, a period when the program must make a fundamental decision—the partition decision:
+在操作层面，CAP 的本质发生在超时期间——这是程序必须做出根本性决策的时期，即分区决策（partition decision）：
 
-- cancel the operation and thus decrease availability, or
-- proceed with the operation and thus risk inconsistency.
+- 取消操作从而降低可用性，或
+- 继续执行操作从而冒不一致的风险。
 
-Retrying communication to achieve consistency, for example, via Paxos or a two-phase commit, just delays the decision.
-At some point the program must make the decision; retrying communication indefinitely is in essence choosing C over A.
+通过重试通信以实现一致性（例如通过 Paxos 或两阶段提交）只是推迟了决策。
+程序迟早必须做出决策；无限重试通信本质上就是在 C 与 A 之间选择了 C。
 
-Thus, pragmatically, a partition is a time bound on communication.
-Failing to achieve consistency within the time bound implies a partition and thus a choice between C and A for this operation.
-These concepts capture the core design issue with regard to latency: are two sides moving forward without communication?
+因此，从实用角度看，分区是对通信的时间界限。
+未能在时间界限内达成一致意味着发生了分区，从而对该操作要在 C 与 A 之间做出选择。
+这些概念抓住了关于延迟的核心设计问题：双方是否在没有通信的情况下继续推进？
 
-This pragmatic view gives rise to several important consequences.
+这种实用观点带来几个重要推论。
 
-- The first is that there is no global notion of a partition, since some nodes might detect a partition, and others might not.
-- The second consequence is that nodes can detect a partition and enter a partition mode—a central part of optimizing C and A.
-- Finally, this view means that designers can set time bounds intentionally according to target response times; systems with tighter bounds will likely enter partition mode more often and at times when the network is merely slow and not actually partitioned.
+- 第一，不存在全局的分区概念，因为某些节点可能检测到分区，而其他节点可能没有。
+- 第二，节点可以检测到分区并进入分区模式——这是优化 C 和 A 的核心部分。
+- 最后，这种观点意味着设计者可以根据目标响应时间有意设置时间界限；界限更紧的系统可能更频繁地进入分区模式，甚至在网络只是缓慢而非真正分区时。
 
-Sometimes it makes sense to forfeit strong C to avoid the high latency of maintaining consistency over a wide area.
+有时为了避免跨广域维护一致性的高延迟，放弃强 C 是有意义的。
 
-The challenging case for designers is to mitigate a partition’s effects on consistency and availability.
-The key idea is to manage partitions very explicitly, including not only detection, but also a specific recovery process and a plan for all of the invariants that might be violated during a partition.
-This management approach has three steps:
+对设计者而言，最具挑战的情况是如何缓解分区对一致性和可用性的影响。
+核心思想是显式地管理分区，不仅包括检测，还包括具体的恢复过程，以及针对分区期间可能被破坏的所有不变量的计划。
+这种管理方式包含三个步骤：
 
-- detect the start of a partition,
-- enter an explicit partition mode that may limit some operations, and
-- initiate partition recovery when communication is restored.
+- 检测分区的开始，
+- 进入可能限制某些操作的显式分区模式，
+- 在通信恢复时启动分区恢复。
 
-The last step aims to restore consistency and compensate for mistakes the program made while the system was partitioned.
+最后一步旨在恢复一致性，并补偿程序在系统分区期间所犯的错误。
 
 > [!TIP]
 >
-> Consistency in CAP is defined quite differently from what [ACID](/docs/CS/SE/Transaction.md?id=acid) defines as consistency.
-> ACID consistency describes transaction consistency: transaction brings the database from one valid state to another, maintaining all the database invariants (such as uniqueness constraints and referential integrity).
-> In CAP, it means that operations are atomic (operations succeed or fail in their entirety) and consistent (operations never leave the data in an inconsistent state).
+> CAP 中的一致性（Consistency）定义与 [ACID](/docs/CS/SE/Transaction.md?id=acid) 所定义的一致性截然不同。
+> ACID 一致性描述事务一致性：事务将数据库从一个有效状态带到另一个有效状态，保持所有数据库不变量（如唯一性约束与参照完整性）。
+> 在 CAP 中，它意味着操作是原子的（操作整体成功或失败）且一致的（操作绝不会使数据处于不一致状态）。
 
 RPO
 
-Recovery Point Objective
+Recovery Point Objective（恢复点目标）
 
 RTO
 
-Recovery Time Objective
+Recovery Time Objective（恢复时间目标）
 
-More trade-offs L vs. C
+更多权衡 L vs. C
 
-Low-latency: Speak to fewer than quorum of nodes?
-– 2PC: write N, read 1
-– RAFT: write ⌊N/2⌋ + 1, read ⌊N/2⌋ + 1
-– General: |W| + |R| > N
+低延迟：向少于法定人数（quorum）的节点发起请求？
+– 2PC：写入 N，读取 1
+– RAFT：写入 ⌊N/2⌋ + 1，读取 ⌊N/2⌋ + 1
+– 通用：|W| + |R| > N
 
-L and C are fundamentally at odds
-– “C” = linearizability, sequential, serializability (more later)
+L 与 C 根本上对立
+– “C” = 线性一致性（linearizability）、顺序一致性（sequential）、可串行性（serializability）（详见后文）
 
+PRAM 定理：
+顺序一致（sequentially consistent）的系统不可能始终提供低延迟
 
-PRAM Theorem:
-Impossible for sequentially consistent system to always provide low latency
-
-FLP: No deterministic 1-crash-robust consensus algorithm exists with asynchronous communication. 
+FLP：在异步通信下，不存在确定性的、能容忍一次崩溃的共识（Consensus）算法。
 
 [Eventually Consistent Register Revisited](https://www.researchgate.net/publication/284096787_Eventually_Consistent_Register_Revisited)
 

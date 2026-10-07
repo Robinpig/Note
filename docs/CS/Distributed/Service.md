@@ -47,7 +47,7 @@ Zookeeper、 Consul 和 Eureka 在开源层面都没有很明确的针对服务�
 
 
 
-临时实例和持久实例的区分应该在service level, 一个service只能是其中之一
+临时实例和持久实例的区分应该在服务级别（service level），一个 service 只能是其中之一
 
 > Nacos1.x将持久性作为服务元数据 存在一个服务既有临时 也有持久的情况, 在2.x之后简化
 
@@ -146,7 +146,7 @@ Nacos-Sync 是 Nacos 生态组件里的重要⼀环， 不仅会承担 Nacos 集
 
 
 
-在 Nacos 中，用户可以通过两种方式进行临时实例的注册，通过 Nacos 的 OpenAP 进行服务注册或通过 Nacos 提供的 SDK 进行服务注册。
+在 Nacos 中，用户可以通过两种方式进行临时实例的注册，通过 Nacos 的 OpenAPI 进行服务注册或通过 Nacos 提供的 SDK 进行服务注册。
 
 对于永久实例的的监看检查，Nacos 采用的是注册中心探测机制，注册中心会在永久服务初始化时根据客户端选择的协议类型注册探活的定时任务。Nacos 现在内置提供了三种探测的协议，即Http、TCP 以及 MySQL 。 般而言 Http 和 TCP 已经可以涵盖绝大多数的健康检查场景。MySQL 主要用于特殊的业务场景，例如数据库的主备需要通过服务名对外提供访问，需要确定当前访问数据库是否为主库时，那么我们此时的健康检查接口，是 个检查数据库是否为主库的 MySQL命令。
 
@@ -168,3 +168,12 @@ Eureka 的
 负载均衡是由 ribbon 来完成的， 而 Consul 则是由 Fabio 做负载均衡。  
 
 ## Links
+
+- [Distributed Systems](/docs/CS/Distributed/Distributed.md)
+- [Architecture](/docs/CS/Distributed/Architecture.md)
+- [Consensus](/docs/CS/Distributed/Consensus/Consensus.md)
+- [CAP](/docs/CS/Distributed/CAP.md)
+- [Time](/docs/CS/Distributed/Time.md)
+- [ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)
+
+## References

@@ -32,9 +32,6 @@ Dledger 作为一个轻量级的 Java Library，它的作用就是将 Raft 有�
 
 ## Links
 
-- [Architecture](/docs/CS/Distributed/Architecture.md)
-- [Azure](/docs/CS/Distributed/Azure.md)
-- [Bigtable](/docs/CS/Distributed/Bigtable.md)
-- [Borg](/docs/CS/Distributed/Borg.md)
-- [Byzantine](/docs/CS/Distributed/Byzantine.md)
-- [CAP](/docs/CS/Distributed/CAP.md)
+- [Distributed Systems](/docs/CS/Distributed/Distributed.md)
+- [Replica](/docs/CS/Distributed/Replica.md) — Master/Slave 本质是主从复制
+- [Consensus](/docs/CS/Distributed/Consensus/Consensus.md) — 基于 ZooKeeper/Etcd 与 Raft 的自动故障切换

@@ -8,7 +8,7 @@ Mesos 自身**不做任务级调度**，而是把资源以 **resource offer** �
 
 1. **Agent（slave）** 向 **Master** 汇报可用资源（CPU/内存/端口）。
 2. **Master** 按策略（DRF，Dominant Resource Fairness 主导资源公平）把资源切片成 offer 发给注册框架。
-3. **Framework 的 Scheduler** 收到 offer 后，自行决定 lançar 哪些 Task（或拒绝 offer）。
+3. **Framework 的 Scheduler** 收到 offer 后，自行决定启动（launch）哪些 Task（或拒绝 offer）。
 4. **Executor** 在 Agent 上执行 Task，并向 Framework/Master 汇报状态。
 
 这种「offer → 拒绝/接受」的悲观调度避免了中心调度器的全局锁，框架保有领域知识（如任务本地性），但代价是可能出现资源碎片与拒绝-重发开销。

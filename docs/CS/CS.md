@@ -6,10 +6,6 @@
 
 内容分三层：**Learning Paths** 给三条主干路线；**Topic Map** 是入口卡片速查；其后的**分组学科小节**逐门说明研究对象、核心子主题与枢纽页；最后的 **Directory** 展开全部主题目录与速查页。站点首页只做七大领域的总入口，CS 的主题清单**只在本页维护一份**。
 
-> [!TIP]
->
-> 全站不做侧边栏与页内目录：向下读靠本页的分组小节，跨篇跳转靠每篇笔记末尾的 `## Links`。站内链接一律写成 `/docs/...` 绝对路径，锚点用 `?id=slug`；链接文字用目标页的英文名，正文说明用中文。
-
 ## Learning Paths
 
 <div class="kb-grid">
@@ -166,7 +162,7 @@ JDK 源码、集合与并发、虚拟线程、内存与 GC
 
 算法研究**如何把问题变成可执行的步骤、这些步骤要花多少资源**；数据结构研究**如何组织数据，才能让这些步骤花得少**。两者共用同一套度量语言——渐进复杂度。
 
-入口 [Algorithms](/docs/CS/Algorithms/Algorithms.md)：[Data Structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures)（线性表、树、堆、图、页置换）与[Algorithm Analysis](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)是主干，按范式展开 [Dynamic Programming](/docs/CS/Algorithms/DP/DP.md)、[Greedy](/docs/CS/Algorithms/Greedy.md)、[Divide and Conquer](/docs/CS/Algorithms/Divide-and-Conquer.md)、[Backtracking](/docs/CS/Algorithms/Backtracking.md)、[Randomized](/docs/CS/Algorithms/Randomized.md)、[Amortized Analysis](/docs/CS/Algorithms/Amortized.md)，另有 [Sort](/docs/CS/Algorithms/sort.md)、[Hash](/docs/CS/Algorithms/hash.md) 与工程向专题（[LRU](/docs/CS/Algorithms/LRU.md)、[PageRank](/docs/CS/Algorithms/PageRank.md)、[HyperLogLog](/docs/CS/Algorithms/HyperLogLog.md)、[Timing Wheel](/docs/CS/Algorithms/TimingWheel.md)）。
+入口 [Algorithms](/docs/CS/Algorithms/Algorithms.md)：[数据结构](/docs/CS/Algorithms/Algorithms.md?id=数据结构)（线性表、树、堆、图、页置换）与[复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=复杂度分析)是主干，按范式展开 [Dynamic Programming](/docs/CS/Algorithms/DP/DP.md)、[Greedy](/docs/CS/Algorithms/Greedy.md)、[Divide and Conquer](/docs/CS/Algorithms/Divide-and-Conquer.md)、[Backtracking](/docs/CS/Algorithms/Backtracking.md)、[Randomized](/docs/CS/Algorithms/Randomized.md)、[Amortized Analysis](/docs/CS/Algorithms/Amortized.md)，另有 [Sort](/docs/CS/Algorithms/sort.md)、[Hash](/docs/CS/Algorithms/hash.md) 与工程向专题（[LRU](/docs/CS/Algorithms/LRU.md)、[PageRank](/docs/CS/Algorithms/PageRank.md)、[HyperLogLog](/docs/CS/Algorithms/HyperLogLog.md)、[Timing Wheel](/docs/CS/Algorithms/TimingWheel.md)）。
 
 ### Computability and Complexity
 
@@ -224,7 +220,7 @@ JDK 源码、集合与并发、虚拟线程、内存与 GC
 
 分布式系统是**组件位于不同机器、只能靠传递消息来协调**的系统。这个定义直接带来三个本质困难：组件并发、没有全局时钟、部件独立失效——所有共识、复制、一致性与容错设计都是对这三点的回应。入口 [Distributed](/docs/CS/Distributed/Distributed.md)。
 
-理论：[CAP](/docs/CS/Distributed/CAP.md)、[Byzantine](/docs/CS/Distributed/Byzantine.md)、[Time](/docs/CS/Distributed/Time.md)、[Replica](/docs/CS/Distributed/Replica.md)、[Partition](/docs/CS/Distributed/Partition.md)、[Gossip](/docs/CS/Distributed/Gossip.md)、[Id](/docs/CS/Distributed/Id.md)、[Serf](/docs/CS/Distributed/Serf.md)。工程：[Service](/docs/CS/Distributed/Service.md)、[Middleware](/docs/CS/Distributed/Middleware.md)、[Architecture](/docs/CS/Distributed/Architecture.md)、[Dapper](/docs/CS/Distributed/Dapper.md)、[Cluster_Scheduler](/docs/CS/Distributed/Cluster_Scheduler.md)、[Master](/docs/CS/Distributed/Master.md)。论文线以 Google 为主：[GFS](/docs/CS/Distributed/GFS.md)、[MapReduce](/docs/CS/Distributed/MapReduce.md)、[Bigtable](/docs/CS/Distributed/Bigtable.md)、[Spanner](/docs/CS/Distributed/Spanner.md)、[Dynamo](/docs/CS/Distributed/Dynamo.md)，脉络见 [Google](/docs/CS/Distributed/Google.md)。共识与协调的具体实现（[ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)、[etcd](/docs/CS/Framework/etcd/etcd.md)）在框架一节。
+理论：[CAP](/docs/CS/Distributed/CAP.md)、[Byzantine](/docs/CS/Distributed/Byzantine.md)、[Time](/docs/CS/Distributed/Time.md)、[Replica](/docs/CS/Distributed/Replica.md)、[Partition](/docs/CS/Distributed/Partition.md)、[Id](/docs/CS/Distributed/Id.md)。工程：[Service](/docs/CS/Distributed/Service.md)、[Middleware](/docs/CS/Distributed/Middleware.md)、[Architecture](/docs/CS/Distributed/Architecture.md)、[Dapper](/docs/CS/Distributed/Dapper.md)、[Cluster_Scheduler](/docs/CS/Distributed/Cluster_Scheduler.md)。 gossip 成员管理与高可用范式已并入 [Distributed](/docs/CS/Distributed/Distributed.md) 的 `### Gossip` 与 `## Leader Election` 章节。论文线以 Google 为主：[GFS](/docs/CS/Distributed/GFS.md)、[MapReduce](/docs/CS/Distributed/MapReduce.md)、[Bigtable](/docs/CS/Distributed/Bigtable.md)、[Spanner](/docs/CS/Distributed/Spanner.md)、[Dynamo](/docs/CS/Distributed/Dynamo.md)，脉络见 [Google](/docs/CS/Distributed/Google.md)。共识与协调的具体实现（[ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)、[etcd](/docs/CS/Framework/etcd/etcd.md)）在框架一节。
 
 ### Cloud Native
 

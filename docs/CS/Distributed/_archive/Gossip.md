@@ -11,6 +11,9 @@ Gossip algorithms, as the name suggests, are built upon a gossip or rumor style 
 
 ## Links
 
+- [Distributed Systems](/docs/CS/Distributed/Distributed.md)
+- [Serf](/docs/CS/Distributed/_archive/Serf.md) — 基于 SWIM 的 gossip 成员管理工程实现
+- [Consensus](/docs/CS/Distributed/Consensus/Consensus.md) — 成员视图最终一致 vs 强一致共识
 
 ## References
 

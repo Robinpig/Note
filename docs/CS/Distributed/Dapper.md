@@ -1,34 +1,34 @@
 ## Introduction
 
-Dapper, Google’s production distributed systems tracing infrastructure, and describe how our design goals of low overhead, application-level transparency, and ubiquitous deployment on a very large scale system were met.
+Dapper 是 Google 的生产级分布式系统追踪（tracing）基础设施；本文描述我们如何在低开销、应用层透明（application-level transparency），以及在超大规模系统上普遍部署等设计目标得以实现。
 
-Web-search users are sensitive to delays, which can be caused by poor performance in any sub-system.
-An engineer looking only at the overall latency may know there is a problem, but may not be able to guess which service is at fault, nor why it is behaving poorly.
+Web 搜索用户对延迟很敏感，而延迟可能由任何子系统的不良性能引起。
+仅关注整体延迟的工程师可能知道存在问题，却无法猜测是哪个服务出了故障，也无法解释它为何表现不佳。
 
-- First, the engineer may not be aware precisely which services are in use; new services and pieces may be added and modified from week to week, both to add user-visible features and to improve other aspects such as performance or security.
-- Second, the engineer will not be an expert on the internals of every service; each one is built and maintained by a different team.
-- Third, services and machines may be shared simultaneously by many different clients, so a performance artifact may be due to the behavior of another application.
-  For example, front-ends may handle many different request types, or a storage system such as [Bigtable](/docs/CS/Distributed/Bigtable.md) may be most efficient when shared across multiple applications.
+- 第一，工程师可能并不确切知道正在使用哪些服务；新服务和组件可能每周都被添加和修改，既用于增加用户可见的功能，也用于改进性能或安全等其他方面。
+- 第二，工程师不会是每项服务内部机制的专家；每一项都由不同团队构建和维护。
+- 第三，服务和机器可能同时被许多不同客户端共享，因此性能异常可能由另一个应用的行为导致。
+  例如，前端可能处理多种不同的请求类型，或者像 [Bigtable](/docs/CS/Distributed/Bigtable.md) 这样的存储系统在跨多个应用共享时可能最为高效。
 
-Three concrete design goals result from these requirements:
+这些需求产生了三个具体的设计目标：
 
-- **Low overhead**: the tracing system should have negligible performance impact on running services.
-  In some highly optimized services even small monitoring overheads are easily noticeable, and might compel the deployment teams to turn the tracing system off.
-- **Application-level transparency**: programmers should not need to be aware of the tracing system.
-  A tracing infrastructure that relies on active collaboration from application-level developers in order to function becomes extremely fragile, and is often broken due to instrumentation bugs or omissions, therefore violating the ubiquity requirement.
-  This is especially important in a fast-paced development environment such as ours.
-- **Scalability**: it needs to handle the size of Google’s services and clusters for at least the next few years.
+- **低开销（Low overhead）**：追踪系统对运行中的服务应当只有可忽略的性能影响。
+  在某些高度优化的服务中，即便很小的监控开销也很容易被注意到，并可能迫使部署团队关闭追踪系统。
+- **应用层透明（Application-level transparency）**：程序员无需知晓追踪系统的存在。
+  一个依赖应用层开发者主动配合才能运作的追踪基础设施会变得极为脆弱，并常常因埋点（instrumentation）缺陷或遗漏而失效，从而违背普遍部署的要求。
+  在我们这样快节奏的开发环境中，这一点尤为重要。
+- **可扩展性（Scalability）**：它需要处理 Google 服务与集群的规模，至少满足未来几年。
 
-An additional design goal is for tracing data to be available for analysis quickly after it is generated: ideally within a minute.
-Although a trace analysis system operating on hours-old data is still quite valuable, the availability of fresh information enables faster reaction to production anomalies.
+一个额外的设计目标是：追踪数据在生成后能很快用于分析，理想情况下在一分钟之内。
+尽管运行在数小时前数据上的追踪分析系统仍然很有价值，但新鲜信息的可用性使得对生产异常的响应更快。
 
-## Tracing
+## 追踪
 
-A tracing infrastructure for distributed services needs to record information about all the work done in a system on behalf of a given initiator.
-For example, Figure 1 shows a service with 5 servers: a front-end (A), two middle-tiers (B and C) and two backends (D and E).
-When a user request (the initiator in this case) arrives at the front end, it sends two RPCs to servers B and C.
-B can respond right away, but C requires work from backends D and E before it can reply to A, which in turn responds to the originating request.
-A simple yet useful distributed trace for this request would be a collection of message identifiers and timestamped events for every message sent and received at each server.
+面向分布式服务的追踪基础设施需要记录系统中代表给定发起者（initiator）所完成的所有工作的信息。
+例如，图 1 展示了一个包含 5 台服务器的服务：一个前端（A）、两个中间层（B 和 C）以及两个后端（D 和 E）。
+当用户请求（此处即发起者）到达前端时，它向服务器 B 和 C 发送两个 RPC。
+B 可以立即响应，但 C 需要来自后端 D 和 E 的工作才能回复 A，而 A 再回复原始请求。
+针对该请求的一个简单而有用的分布式追踪，将是每个服务器收发每条消息的消息标识符与带时间戳事件的集合。
 
 <div style="text-align: center;">
 
@@ -38,19 +38,19 @@ A simple yet useful distributed trace for this request would be a collection of 
 
 <p style="text-align: center;">Fig.1. The path taken through a simple serving system on behalf of user request X. The letter-labeled nodes represent processes in a distributed system.</p>
 
-Formally, we model Dapper traces using trees, spans, and annotations.
+形式上，我们用树（trees）、跨度（spans）和注解（annotations）为 Dapper 追踪建模。
 
-### Trace trees and spans
+### 追踪树与跨度
 
-In a Dapper trace tree, the tree nodes are basic units of work which we refer to as spans.
-The edges indicate a casual relationship between a span and its parent span.
-Independent of its place in a larger trace tree, though, a span is also a simple log of timestamped records which encode the span’s start and end time, any RPC timing data, and zero or more application-specific annotations.
+在 Dapper 追踪树中，树节点是我们称为跨度（span）的基本工作单元。
+边表示跨度与其父跨度之间的因果关系（casual relationship）。
+不过，独立于它在更大追踪树中的位置，一个跨度也是一个简单的带时间戳记录日志，它编码了跨度的起止时间、任意 RPC 时序数据，以及零个或多个应用特定的注解（annotation）。
 
-Dapper records a human-readable *span name* for each span, as well as a *span id* and *parent id* in order to reconstruct the causal relationships between the individual spans in a single distributed trace.
-Spans created without a parent id are known as *root spans*.
-All spans associated with a specific trace also share a common *trace id*.
-All of these ids are probabilistically unique 64-bit integers.
-In a typical Dapper trace we expect to find a single span for each RPC, and each additional tier of infrastructure adds an additional level of depth to the trace tree.
+Dapper 为每个跨度记录一个可读的*跨度名（span name）*，以及*跨度 id（span id）*和*父 id（parent id）*，以重建单次分布式追踪中各个跨度之间的因果关系。
+没有父 id 的跨度称为*根跨度（root span）*。
+与特定追踪关联的所有跨度还共享一个公共的*追踪 id（trace id）*。
+所有这些 id 都是概率意义上唯一的 64 位整数。
+在一个典型的 Dapper 追踪中，我们期望为每个 RPC 找到一个跨度，而每多一层基础设施就会给追踪树增加一级深度。
 
 <div style="text-align: center;">
 
@@ -60,39 +60,39 @@ In a typical Dapper trace we expect to find a single span for each RPC, and each
 
 <p style="text-align: center;">Fig.2. The causal and temporal relationships between five spans in a Dapper trace tree.</p>
 
-### Annotations
+### 注解
 
-## Trace Collection
+## 追踪收集
 
-The Dapper trace logging and collection pipeline is a three-stage process.
-First, span data is written to local log files.
-It is then pulled from all production hosts by Dapper daemons and collection infrastructure and finally written to a cell in one of several regional Dapper Bigtable repositories.
-A trace is laid out as a single Bigtable row, with each column corresponding to a span.
-Bigtable’s support for sparse table layouts is useful here since individual traces can have an arbitrary number of spans.
-The median latency for trace data collection – that is, the time it takes data to propagate from instrumented application binaries to the central repository – is less than 15 seconds.
+Dapper 的追踪日志与收集流水线是一个三阶段过程。
+首先，跨度数据被写入本地日志文件。
+随后它被 Dapper 守护进程和收集基础设施从所有生产主机拉取，最终写入若干区域 Dapper Bigtable 仓库中某个 cell 的 Bigtable。
+一条追踪被布局为单个 Bigtable 行，每一列对应一个跨度。
+Bigtable 对稀疏表布局的支持在这里很有用，因为单个追踪可以有任意数量的跨度。
+追踪数据收集的中位延迟——即数据从被埋点的应用二进制程序传播到中央仓库所花的时间——小于 15 秒。
 
-Dapper also provides an API to simplify access to the trace data in our repository.
-Developers at Google use this API to build both general-purpose and applicationspecific analysis tools.
+Dapper 还提供一个 API 以简化对仓库中追踪数据的访问。
+Google 的开发者用这个 API 构建通用和特定于应用的分析工具。
 
-### Security
+### 安全性
 
-## Transparent
+## 透明
 
-Dapper is able to follow distributed control paths with near-zero intervention from application developers by relying almost entirely on instrumentation of a few common libraries:
+Dapper 能够近乎零干预地跟随分布式控制路径，这几乎完全依赖于对少数几个通用库的埋点（instrumentation）：
 
-- When a thread handles a traced control path, Dapper attaches a trace context to thread-local storage.
-  A trace context is a small and easily copyable container of span attributes such as trace and span ids.
-- When computation is deferred or made asynchronous, most Google developers use a common control flow library to construct callbacks and schedule them in a thread pool or other executor.
-  Dapper ensures that all such callbacks store the trace context of their creator, and this trace context is associated with the appropriate thread when the callback is invoked.
-  In this way, the Dapper ids used for trace reconstruction are able to follow asynchronous control paths transparently.
-- Nearly all of Google’s inter-process communication is built around a single RPC framework with bindings in both C++ and Java.
-  We have instrumented that framework to define spans around all RPCs.
-  The span and trace ids are transmitted from client to server for traced RPCs. For RPC-based systems like those in wide use at Google, this is an essential instrumentation point.
-  We plan to instrument nonRPC communication frameworks as they evolve and find a user base.
+- 当某个线程处理一条被追踪的控制路径时，Dapper 将一个追踪上下文（trace context）附加到线程本地存储（thread-local storage）。
+  追踪上下文是一个小巧且易于复制的容器，保存跨度属性（如 trace 和 span id）。
+- 当计算被推迟或以异步方式进行时，大多数 Google 开发者使用一个通用控制流库来构造回调，并将其调度到线程池或其他执行器（executor）中。
+  Dapper 确保所有此类回调都保存其创建者的追踪上下文，并且该追踪上下文在回调被调用时与相应线程关联。
+  这样，用于追踪重建的 Dapper id 就能透明地跟随异步控制路径。
+- 几乎 Google 所有的进程间通信都围绕一个单一的 RPC 框架构建，该框架有 C++ 和 Java 两种绑定。
+  我们已对该框架做埋点，以在所有 RPC 周围定义跨度。
+  对于被追踪的 RPC，跨度 id 与追踪 id 从客户端传送到服务器。对于像 Google 中广泛使用的这类基于 RPC 的系统，这是一个必要的埋点位置。
+  我们计划在相关非 RPC 通信框架演进并获得用户基础时对其做埋点。
 
-## Sampling
+## 采样
 
-### Adaptive Sampling
+### 自适应采样
 
 ## Links
 

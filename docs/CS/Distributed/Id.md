@@ -1,15 +1,11 @@
 ## Introduction
 
+Snowflake 是一个网络服务，用于在高并发规模下生成具备一些简单保证的唯一 ID 号码。
 
-
-
-
-Snowflake is a network service for generating unique ID numbers at high scale with some simple guarantees.
-
-id is composed of:
-- time - 41 bits (millisecond precision w/ a custom epoch gives us 69 years)
-- configured machine id - 10 bits - gives us up to 1024 machines
-- sequence number - 12 bits - rolls over every 4096 per machine (with protection to avoid rollover in the same ms)
+ID 由以下部分组成：
+- 时间戳（time） - 41 位（毫秒精度，配合自定义纪元（epoch）可使用 69 年）
+- 配置的机器 ID（configured machine id） - 10 位 - 最多支持 1024 台机器
+- 序列号（sequence number） - 12 位 - 每台机器每 4096 溢出一次（有保护机制避免在同一毫秒内溢出）
 
 
 http://mongodb.github.io/node-mongodb-native/2.0/tutorials/objectid/
@@ -24,17 +20,13 @@ https://tech.meituan.com/MT_Leaf.html
 
 
 
-Clock Skew
-
+时钟回拨（Clock Skew）
 
 ## Links
 
-- [Architecture](/docs/CS/Distributed/Architecture.md)
-- [Azure](/docs/CS/Distributed/Azure.md)
-- [Bigtable](/docs/CS/Distributed/Bigtable.md)
-- [Borg](/docs/CS/Distributed/Borg.md)
-- [Byzantine](/docs/CS/Distributed/Byzantine.md)
-- [CAP](/docs/CS/Distributed/CAP.md)
+- [Distributed Systems](/docs/CS/Distributed/Distributed.md)
+- [Time](/docs/CS/Distributed/Time.md) — 时钟回拨（Clock Skew）是 Snowflake 的核心约束
+- [Dynamo](/docs/CS/Distributed/Dynamo.md) — 同样依赖时间戳/版本做因果排序
 
 ## References
 
