@@ -40,6 +40,7 @@ taskService.complete(task.getId(), Map.of("approved", true));        // 审批�
 - [DDD](/docs/CS/SE/DDD.md)
 - [Transaction](/docs/CS/SE/Transaction.md)
 - [SystemDesign](/docs/CS/SE/SystemDesign.md)
+- [Scheduled Task](/docs/CS/SE/Scheduled_Task.md)
 
 ## References
 

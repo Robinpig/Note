@@ -44,6 +44,7 @@ Cache<String, User> cache = Caffeine.newBuilder()
 - [JetCache](/docs/CS/SE/JetCache.md)
 - [Redis](/docs/CS/DB/Redis/Redis.md)
 - [LRU](/docs/CS/Algorithms/LRU.md)
+- [Scheduled Task](/docs/CS/SE/Scheduled_Task.md)
 
 ## References
 

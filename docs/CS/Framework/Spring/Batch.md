@@ -309,6 +309,7 @@ new JobBuilder("parallelJob", repo)
 - [Spring Transaction](/docs/CS/Framework/Spring/Transaction.md)
 - [Spring Data](/docs/CS/Framework/Spring/Data.md)
 - [Spring Boot](/docs/CS/Framework/Spring_Boot/Spring_Boot.md)
+- [Scheduled Task](/docs/CS/SE/Scheduled_Task.md)
 
 ## References
 

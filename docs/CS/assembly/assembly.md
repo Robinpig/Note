@@ -15,3 +15,4 @@
 ## Links
 
 - [C](/docs/CS/C/C.md)
+- [编程语言横向对比](/docs/CS/Languages.md)

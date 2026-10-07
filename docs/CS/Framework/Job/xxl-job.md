@@ -1042,3 +1042,4 @@ private ReturnT<String> callback(HandleCallbackParam handleCallbackParam) {
 - [SchedulerX](/docs/CS/Framework/Job/ScheduleX.md)
 - [ElasticJob](/docs/CS/Framework/Job/ElasticJob.md)
 - [Task](/docs/CS/Framework/Spring/Task.md)
+- [Scheduled Task](/docs/CS/SE/Scheduled_Task.md)
