@@ -203,6 +203,7 @@ ptmalloc 的设计目标是服务**短生命周期**的分配，它什么时候�
 - [jemalloc](/docs/CS/memory/jemalloc.md)
 - [vm 虚拟内存](/docs/CS/OS/Linux/mm/vm.md)
 - [mmap](/docs/CS/OS/Linux/mm/mmap.md)
+- [Memory](/docs/CS/Python/Memory.md)
 
 ## References
 

@@ -70,8 +70,9 @@ Note/
 | 推荐系统     | `CS/RecommenderSystem/` | [RecommenderSystem.md](/docs/CS/RecommenderSystem/RecommenderSystem.md)；召回、排序、冷启动、偏差、评估、在线架构、广告（**不是 `AI/` 的子目录**） |
 | 消息队列     | `CS/MQ/`          | [MQ.md](/docs/CS/MQ/MQ.md)                                                                     |
 | Golang   | `CS/Go/`          | [Go.md](/docs/CS/Go/Go.md)                                                                     |
+| Python   | `CS/Python/`      | 语言入口 [Python.md](/docs/CS/Python/Python.md) + 知识地图 [Python/README.md](/docs/CS/Python/README.md)；**无子目录**，运行时层三篇 `GIL.md` / `Memory.md` / `Bytecode.md` 是这一子树的骨架，工程层 `Typing.md` / `Packaging.md` / `Performance.md` |
 
-其余较小目录：`CO/`（组成原理）、`C/`、`C++/`、`Python/`、`Rust/`、`Scala/`、`TypeScript/`、`Dart/`、`assembly/`、`memory/`、`Compiler/`、`BuildTool/`（入口 `BuildTools.md`）、`Tool/`（**无 Tool.md**，代表文件 `Vim.md`）、`front-end/`（**无 front-end.md**，代表文件 `Nodejs.md`）、`Browser/`、`DesignPatterns/`、`VCS/`、`log/`、`compress/`、`Cloud/`、`BigData/`、`Blockchain/`、`Security/`、`GNU/`。
+其余较小目录：`CO/`（组成原理）、`C/`、`C++/`、`Rust/`、`Scala/`、`TypeScript/`、`Dart/`、`assembly/`、`memory/`、`Compiler/`、`BuildTool/`（入口 `BuildTools.md`）、`Tool/`（**无 Tool.md**，代表文件 `Vim.md`）、`front-end/`（**无 front-end.md**，代表文件 `Nodejs.md`）、`Browser/`、`DesignPatterns/`、`VCS/`、`log/`、`compress/`、`Cloud/`、`BigData/`、`Blockchain/`、`Security/`、`GNU/`。
 
 `docs/CS/Flutter.md` 是**没有同名目录的孤立文件**，不要误以为存在 `CS/Flutter/`。
 

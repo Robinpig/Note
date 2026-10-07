@@ -61,7 +61,8 @@ AI
 ## Links
 
 - [OS](/docs/CS/OS/OS.md)
-
+- [NumPy](/docs/CS/Python/NumPy.md)
+- [Ecosystem](/docs/CS/Python/Ecosystem.md)
 
 ## References
 

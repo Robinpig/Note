@@ -141,6 +141,7 @@ static int thread_init (thpool_* thpool_p, struct thread** thread_p, int id){
 
 - [C](/docs/CS/C/C.md)
 - [glibc](/docs/CS/C/glibc.md)
+- [Concurrency](/docs/CS/Python/Concurrency.md)
 
 ## References
 

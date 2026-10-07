@@ -194,10 +194,12 @@ gunicorn main:app -w 4 -k uvicorn.workers.UvicornWorker
 
 ## Links
 
-- [Python](/docs/CS/Python/README.md) — Python 笔记目录
-- [LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md) — 同为 Python 生态框架
-- [Nginx](/docs/CS/CN/nginx/nginx.md) — 生产环境反向代理
-- [Concurrency](/docs/CS/SE/Concurrency.md) — 协程与并发模型对照
+- [README](/docs/CS/Python/README.md)
+- [Typing](/docs/CS/Python/Typing.md)
+- [Asyncio](/docs/CS/Python/Asyncio.md)
+- [LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md)
+- [Nginx](/docs/CS/CN/nginx/nginx.md)
+- [Concurrency](/docs/CS/SE/Concurrency.md)
 
 ## References
 

@@ -34,6 +34,8 @@ Hybrid algorithms are also possible. Often the term garbage collection is used n
 ## Links
 
 - [Operating Systems memory](/docs/CS/OS/OS.md)
+- [Memory](/docs/CS/Python/Memory.md)
+- [NumPy](/docs/CS/Python/NumPy.md)
 
 ## References
 
