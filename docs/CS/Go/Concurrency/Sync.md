@@ -553,6 +553,66 @@ func (c *Cond) Signal() {
 }
 ```
 
+## Once
+
+`Once` 保证某个初始化函数 `f` **只执行一次**，是 Go 里做"一次性懒初始化 / 单例"的标准件，比手写 `if !inited { ... }` + Mutex 安全。
+
+```go
+type Once struct {
+    done atomic.Uint32 // 0=未执行 1=已执行
+    m    Mutex
+}
+```
+
+`Do(f)` 的要点是**双重检查（double-checked）**：先用原子读 `done`，已为 1 直接返回（快路径，无锁）；否则加锁后再查一次（避免多个 goroutine 同时通过第一次判断），执行 `f` 后原子写 `done = 1`。
+
+```go
+func (o *Once) Do(f func()) {
+    if o.done.Load() == 0 {
+        o.doSlow(f) // 加锁 + 二次检查后执行 f 并置 done
+    }
+}
+```
+
+陷阱：
+- `Once` **不可复制**（内嵌 Mutex），应通过指针共享；`go vet` 的 copylocks 会报警。
+- 若 `f` 中途 **panic**，`Once` 视为"已完成"，后续 `Do` **不再执行** `f`——务必保证 `f` 不会 panic，或 panic 是可接受的终态。
+- `Once` 没有 `Reset` 方法，不能重置复用。
+
+## Pool
+
+`Pool` 是**临时对象池**：`Get` 取一个对象、`Put` 还回，用来缓存已分配的对象、摊薄高频分配/释放带来的 [GC](/docs/CS/Go/GC.md) 压力（fmt、encoding/json、net/http 内部都大量使用）。
+
+```go
+type Pool struct {
+    New func() any // 池空时调用以构造新对象
+}
+```
+
+- **结构**：每个 P 有一块"私有 + 共享"的本地池，跨 P 通过共享池偷取，减少锁竞争；全局有个 victim cache，在 GC 的 STW 阶段整体清空。
+- **语义是松耦合的**：`Put` 的对象不保证被同一次 `Get` 拿到，甚至可能随时被 GC 回收（victim 清空）。因此它**不是**通用的"对象复用 / 连接池"——数据库连接、goroutine 这类有状态、不能丢失的资源**不要**放进 `Pool`（会被偷走或回收导致泄漏/丢失）。
+- `Get` 在池为空且 `New != nil` 时会调用 `New` 造一个新对象，调用方需自行完成必要的字段复位。
+
+## Map
+
+`sync.Map` 是**并发安全 map**，适用于**读远多于写、且键集相对稳定**的场景（如配置缓存）。
+
+```go
+type Map struct {
+    mu     Mutex
+    read   atomic.Pointer[readOnly] // 只读快照，覆盖绝大多数读，零锁
+    dirty  map[any]*entry           // 可写副本，由 mu 保护
+    misses int                      // 在 read 上未命中而落到 dirty 的次数
+}
+```
+
+- 读（`Load`）走 `read`，命中即返回，**无锁**；未命中才加锁查 `dirty` 并把 `misses` +1。
+- 写/删（`Store`/`Delete`）走 `dirty`（加锁）；当 `misses` 累积到与 `dirty` 规模相当时，`dirty` 被提升为新的 `read`，`dirty` 重建为空。
+- 删除用"标记删除"（entry 置 `expunged`），延迟到提升时真正清理，避免频繁锁。
+
+与 `map` + `RWMutex` 的取舍：**`Map` 在只读热点下几乎无锁、吞吐高**；但写/删路径仍有锁，`Range` 是弱一致快照（遍历期间不阻塞写、可能看到中间状态），且无法得到精确 `size`、不适合频繁写或需要强一致遍历的场景。频繁写、或需要 `Len` 的场景仍应回到 `map` + `RWMutex`，或考虑分片（sharded map）。
+
+
 ## Links
 
 - [Concurrency](/docs/CS/Go/Concurrency/Concurrency.md)

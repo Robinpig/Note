@@ -168,3 +168,4 @@ Go 的函数可以返回多个值
 
 - [array](/docs/CS/Go/struct/array.md)
 - [map](/docs/CS/Go/struct/map.md)
+- [interface 内部实现](/docs/CS/Go/struct/interface.md)
