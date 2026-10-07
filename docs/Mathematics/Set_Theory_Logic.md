@@ -20,7 +20,7 @@
 
 ## 可计算性
 
-- **图灵机**：tape + 控制器 + 读写头，形式化「算法」；详见 [CS 总纲的图灵机](/docs/CS/CS.md?id=the-turing-machine)。
+- **图灵机**：tape + 控制器 + 读写头，形式化「算法」；详见 [可计算性理论](/docs/CS/Algorithms/Computability.md?id=the-turing-machine)。
 - **丘奇-图灵论题**：凡算法可做的，图灵机都能做（是论题非定理）。
 - **停机问题**：不可判定——存在「无法写出程序判断」的问题，划定计算的边界。
 

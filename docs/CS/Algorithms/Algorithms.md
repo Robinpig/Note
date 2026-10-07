@@ -178,6 +178,8 @@ This model clearly has some weaknesses. Obviously, in real life, not all operati
 In particular, in our model one disk read counts the same as an addition, even though the addition is typically several orders of magnitude faster.
 Also, by assuming infinite memory, we never worry about page faulting, which can be a real
 
+把「计算」本身形式化、并追问哪些问题原则上不可判定的那一部分，见 [Computability](/docs/CS/Algorithms/Computability.md)。
+
 
 
 ### Algorithm Types
