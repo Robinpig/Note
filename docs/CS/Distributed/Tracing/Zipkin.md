@@ -1,22 +1,20 @@
 ## Introduction
 
-[Zipkin](https://zipkin.io/) is a distributed tracing system.
-It helps gather timing data needed to troubleshoot latency problems in service architectures.
-Features include both the collection and lookup of this data.
+[Zipkin](https://zipkin.io/) 是一个分布式追踪系统。
+它帮助收集排查服务架构中延迟问题所需的时序数据。
+其功能包括对这些数据的收集与查询。
 
+### 架构
 
+Tracer 运行在你的应用中，记录下所发生操作的时间与元数据。
+它们通常会对各类库做 instrumentation（埋点），因此对用户是透明的。
+收集到的追踪数据称为一个 Span。
 
-### Architecture
+Instrumentation 被设计为可在生产环境安全使用，且开销极小。
+出于这个原因，它们只在带内传播 ID，以告知接收方当前有一条 trace 正在进行。
+Trace instrumentation 异步上报 span，以免追踪系统自身的延迟或故障拖慢、打断用户代码。
 
-Tracers live in your applications and record timing and metadata about operations that took place. 
-They often instrument libraries, so that their use is transparent to users. 
-The trace data collected is called a Span.
-
-Instrumentation is written to be safe in production and have little overhead. 
-For this reason, they only propagate IDs in-band, to tell the receiver there’s a trace in progress.
-Trace instrumentation report spans asynchronously to prevent delays or failures relating to the tracing system from delaying or breaking user code.
-
-Here’s a diagram describing this flow from Zipkin homepage:
+下面这张来自 Zipkin 官网的图描述了这一流程：
 
 
 
@@ -32,16 +30,15 @@ Fig.1. Architecture
 
 
 
+## 传输
 
-## Transport
+被埋点的库发出的 span 必须被传输，从被追踪的服务送达 Zipkin collectors。
+主要有三种传输方式：HTTP、Kafka 与 Scribe。
 
-Spans sent by the instrumented library must be transported from the services being traced to Zipkin collectors.
-There are three primary transports: HTTP, Kafka and Scribe.
+### 上报器
 
-### Reporter
-
-The component in an instrumented app that sends data to Zipkin is called a Reporter.
-Reporters send trace data via one of several transports to Zipkin collectors, which persist trace data to storage.
+被埋点的应用中，负责把数据发送给 Zipkin 的组件称为 Reporter。
+Reporter 通过若干种传输方式之一，将追踪数据发送给 Zipkin collectors，由后者把追踪数据持久化到存储中。
 
 ```java
 public interface Reporter<S> {
@@ -121,7 +118,7 @@ public interface Reporter<S> {
 
 	}
 ```
-#### Async
+#### 异步
 ```java
 static final class BoundedAsyncReporter<S> extends AsyncReporter<S> {
     static final Logger logger = Logger.getLogger(BoundedAsyncReporter.class.getName());
@@ -173,7 +170,7 @@ static final class BoundedAsyncReporter<S> extends AsyncReporter<S> {
 
         // record after flushing reduces the amount of gauge events vs on doing this on report
         metrics.updateQueuedSpans(pending.count);
-        metrics.updateQueuedBytes(pending.sizeInBytes);
+        metrics.updateQueuedBytes(pending.sizeInBytes());
 
         // loop around if we are running, and the bundle isn't full
         // if we are closed, try to send what's pending
@@ -233,20 +230,20 @@ static final class BoundedAsyncReporter<S> extends AsyncReporter<S> {
 }
 ```
 
-## Collector
-Once the trace data arrives at the Zipkin collector daemon, it is validated, stored, and indexed for lookups by the Zipkin collector.
+## 收集器
+当追踪数据抵达 Zipkin collector 守护进程后，它会对其进行校验、存储并建立索引，以便被 Zipkin collector 查询。
 
 
-## Storage
+## 存储
 
-Zipkin was initially built to store data on Cassandra since Cassandra is scalable, has a flexible schema, and is heavily used within Twitter.
-However, we made this component pluggable. In addition to Cassandra, we natively support ElasticSearch and MySQL. 
-Other back-ends might be offered as third party extensions.
+Zipkin 最初构建在 Cassandra 之上，因为 Cassandra 具备良好的可扩展性、灵活的 schema，并且在 Twitter 内部被大量使用。
+不过我们让这一组件变得可插拔。除 Cassandra 外，我们还原生支持 ElasticSearch 与 MySQL。
+其它后端可能以第三方扩展的形式提供。
 
-## Query Service
+## 查询服务
 
-Once the data is stored and indexed, we need a way to extract it. The query daemon provides a simple JSON API for finding and retrieving traces.
-The primary consumer of this API is the Web UI.
+数据被存储并建立索引后，我们需要一种方式把它取出来。Query 守护进程提供了一个简单的 JSON API，用于查找与检索 traces。
+该 API 的主要消费者是 Web UI。
 
 
 ## Links

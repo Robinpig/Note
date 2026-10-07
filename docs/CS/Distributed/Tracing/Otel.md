@@ -21,7 +21,7 @@ OpenTelemetry **不是**什么：
 
 OpenTelemetry **源自**分布式追踪，但如今已经 **超出**了追踪的范畴。这层关系常被误解，值得说清楚。
 
-### Lineage: OpenTracing + OpenCensus → OpenTelemetry
+### 沿革：OpenTracing + OpenCensus → OpenTelemetry
 
 在 OTel 出现之前，追踪插桩分散在两个相互竞争的 CNCF/Google 项目中：
 
@@ -30,7 +30,7 @@ OpenTelemetry **源自**分布式追踪，但如今已经 **超出**了追踪的
 
 2019 年两个社区合并为 OpenTelemetry：吸收了 OpenTracing 的 API 规范思路，也继承了 OpenCensus 开箱即用的 SDK/Collector 路线。OpenTracing 与 OpenCensus 均已归档，OpenTelemetry 是它们的继任者。OpenTracing 的数据模型（span 树、tags → attributes、logs → events、baggage）几乎原样延续到了 OTel。
 
-### Tracing is one of three signals
+### 追踪是三大信号之一
 
 分布式追踪回答的是"这个请求在系统里是怎么流转的"。OTel 保留了这一点，但把同一套插桩/导出管道推广到了可观测性的三大支柱：
 
@@ -42,7 +42,7 @@ OpenTelemetry  ──── ┼── Metrics  (counters, histograms)   ──�
 
 所以"tracing"只是 OTel 产出的 **一种信号**；API/SDK/Collector 这套机制为所有信号共享——这正是 OTel 是 *可观测性* 框架而非追踪库的原因。
 
-### Division of roles in a tracing stack
+### 追踪技术栈中的角色划分
 
 在一个具体的分布式追踪方案里，各层角色是这样划分的：
 
@@ -61,7 +61,7 @@ OpenTelemetry 并不取代 Jaeger/Zipkin/SkyWalking——它取代的是它们�
 - **上下文传播被标准化**：OTel 采用 W3C Trace Context / Baggage 头（`traceparent`、`tracestate`），因此即使各服务用了不同的厂商/工具插桩，也能参与同一条 trace。以前各厂商传播自己的头格式（如 Zipkin 的 `b3`），跨系统追踪很脆弱。
 - **SkyWalking** 既是 APM 后端，也有自己的插桩生态（SW agent、自有协议）；在混合环境中，常见做法是保留 OTel SDK 做插桩，数据经 SkyWalking 的 OTLP receiver 写入。
 
-## Components
+## 组件
 
 OpenTelemetry 由几个部分组成，共同构成一条遥测管道：
 
@@ -74,7 +74,7 @@ Applications / Frameworks                Collector                    Backends
                                                                └─────────────┘
 ```
 
-### API & SDK
+### API 与 SDK
 
 - **API**：生成遥测数据的编程接口。插桩库基于它实现，对任何后端都没有硬依赖。
 - **SDK**：API 的参考实现——负责遥测数据的配置、采样、处理与导出。
@@ -145,7 +145,7 @@ service:
 
 注意 Collector 有两个发行版：**core**（精简，常用组件）和 **contrib**（完整组件库——覆盖大多数厂商和协议的 receivers/exporters/processors）。
 
-### OTLP (OpenTelemetry Protocol)
+### OTLP（OpenTelemetry 协议）
 
 OTLP（OpenTelemetry Protocol）是为 OpenTelemetry 数据原生设计的传输协议（gRPC 或 HTTP，通常以 Protobuf 编码）。
 它是推荐的导出路径；不支持 OTLP 的后端可以通过 Collector 做桥接。
@@ -192,7 +192,7 @@ OTel metrics 与 [Prometheus](/docs/CS/Distributed/Tracing/Prometheus/Prometheus
 `trace_id` 实际如何进入日志记录、span 与日志行之间如何互跳，见 [Logs ↔ Traces](#correlating-the-three-signals)。
 OTel 日志如何与现有日志框架（Log4j/Logback/SLF4J）及采集器（Fluentd/Fluent Bit/Filebeat）共存，详见 [OTel vs. Prometheus & Logging Frameworks](#otel-vs-prometheus--logging-frameworks)。
 
-### Baggage & Semantic Conventions
+### Baggage 与语义约定
 
 - **Baggage**：随 trace 上下文在带内传播的 key:value 对。
 - **Semantic Conventions（语义约定）**：标准化的 attribute 名称和取值（如 `http.method`、`db.system`、`k8s.pod.name`），使后端和仪表盘可以统一处理遥测数据，而不管它由哪个库产生。这些属性的载体叫 resource，用于描述产生遥测数据的实体（服务名、版本、环境等）。
@@ -201,7 +201,7 @@ OTel 日志如何与现有日志框架（Log4j/Logback/SLF4J）及采集器（Fl
 
 一个常见问题：OTel metrics 会 *取代* Prometheus 吗？OTel logs 会 *取代* Log4j/SLF4J 吗？都不会——两者是互补关系，但每个信号的细节不同。
 
-### Metrics: OTel vs. Prometheus
+### 指标：OTel 与 Prometheus
 
 Prometheus 是 **后端**：抓取（pull）、时序存储、PromQL、告警。OTel metrics 是 **插桩 API/SDK**——二者分管管道的不同半段，并且可以双向互通：
 
@@ -224,7 +224,7 @@ Prometheus ≥ 3.0 ──(native OTLP ingest)──▶ accepts OTLP directly
 
 实践结论：已有 Prometheus 就继续把它当 metrics 后端；把 **插桩** 切换到 OTel，让三大信号共享同一套 API、resource 模型和管道。Collector 负责转换 temporality 和命名，PromQL 和既有仪表盘不受影响。
 
-### Logs: OTel vs. logging frameworks & shippers
+### 日志：OTel 与日志框架及采集器
 
 日志是"共存"最彻底的信号，因为日志框架负责的 **应用侧** 职责正是 OTel 不想重新发明的：
 
@@ -259,19 +259,19 @@ OTel 真正的价值在于：三大支柱不是三股互不相干的数据流—
           alert ▶ which requests were slow? ▶ what exactly happened inside?
 ```
 
-### Logs ↔ Traces
+### 日志 ↔ Traces
 
 - 开启 **自动插桩** 后，Java agent 会自动把 `trace_id`/`span_id` 注入日志 MDC；你只需把它们加进日志 pattern（Log4j/Logback 用 `%X{trace_id}`）。log bridge / Collector 转换对以纯文本输出的记录同样有效。（配置方式见 [Java example](#example-java)。）
 - 于是每条日志都带着 TraceId，从 Jaeger/Tempo 的任意 span 都能跳到这次请求的日志（Grafana 中的 "Trace to Logs" 关联），从任意日志行也能跳回它的 trace。
 - Span **events** 和 `recordException(e)` 会把错误详情直接嵌入 span，与错误日志互为镜像。
 
-### Metrics ↔ Traces (Exemplars)
+### 指标 ↔ Traces（Exemplars）
 
 - **Exemplar** 是从 metric 数据点指向代表性 trace 的指针：比如记录请求延迟的 histogram bucket，同时存下了那次请求的 `trace_id`。
 - 在 Prometheus + Grafana Tempo 中，exemplar 在直方图上显示为小圆点；点开一个就打开产生该测量的 trace。这就是从"p99 飙高"一步到"实际慢的请求长这样"的方式。
 - Exemplar 需要 metric 导出器支持（OTLP 原生支持；Prometheus exposition 格式需要 `Exemplar` 行）。
 
-### The debug loop
+### 调试闭环
 
 串起来之后，故障排查就从三次独立检索变成一个闭环：
 

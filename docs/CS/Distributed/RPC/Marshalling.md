@@ -1,105 +1,56 @@
 ## Introduction
 
-There are several modes of dataflow, illustrating different scenarios in which data encodings are important:
+数据流有几种模式，分别对应数据编码（Encoding）至关重要的不同场景：
 
-- Databases, where the process writing to the database encodes the data and the process reading from the database decodes it
+- 数据库：写入进程对数据编码，读取进程对数据解码。
+- RPC 与 REST API：客户端编码请求，服务端解码请求并编码响应，客户端最终解码响应。
+- 异步消息传递（使用消息代理或 actor）：节点通过互相发送消息通信，消息由发送方编码、接收方解码。
 
-- RPC and REST APIs, where the client encodes a request, the server decodes the request and encodes a response, and the client finally decodes the response
-- Asynchronous message passing (using message brokers or actors), where nodes communicate by sending each other messages that are encoded by the sender and decoded by the recipient
+应用不可避免地随时间演化。随着新产品上线、用户需求更清晰或业务环境变化，功能被不断新增或修改。
 
-Applications inevitably change over time.
-Features are added or modified as new products are launched, user requirements become better understood, or business circumstances change.
+尤其是，许多服务需要支持滚动升级（rolling upgrade）：新版本的服务被逐步部署到少量节点，而非一次性部署到全部节点。滚动升级让新版本无需停机即可发布（从而鼓励频繁的小发布，而非罕见的大发布），也让部署风险更低（便于在影响大量用户之前发现并回滚有问题的版本）。这些特性对可演化性（evolvability，即修改应用的难易程度）益处极大。在滚动升级期间，或出于其它种种原因，我们必须假设系统中不同节点运行着应用代码的不同版本。因此，系统中流动的所有数据都必须以一种能提供后向兼容（backward compatibility，新代码能读旧数据）与前向兼容（forward compatibility，旧代码能读新数据）的方式编码。
 
-In particular, many services need to support rolling upgrades, where a new version of a service is gradually deployed to a few nodes at a time, rather than deploying to all nodes simultaneously.
-Rolling upgrades allow new versions of a service to be released without downtime (thus encouraging frequent small releases over rare big releases) and make deployments less risky
-(allowing faulty releases to be detected and rolled back before they affect a large number of users).
-These properties are hugely beneficial for evolvability, the ease of making changes to an application.
-During rolling upgrades, or for various other reasons, we must assume that different nodes are running the different versions of our application’s code.
-Thus, it is important that all data flowing around the system is encoded in a way that provides backward compatibility (new code can read old data) and forward compatibility (old code can read new data).
+我们讨论了几种数据编码格式及其兼容性特征：
 
-We discussed several data encoding formats and their compatibility properties:
+- 编程语言特定的编码受限单一语言，通常无法提供前向与后向兼容。
+- JSON、XML、CSV 等文本格式应用广泛，其兼容性取决于具体用法。它们带有可选的 schema 语言，有时有用、有时碍事。这些格式对数据类型有些含糊，因此处理数字与二进制字符串时必须小心。
+- Thrift、[Protocol Buffers](/docs/CS/Distributed/RPC/ProtoBuf.md)、Avro 等二进制 schema 驱动格式，能在清晰定义的前/后向兼容语义下实现紧凑高效的编码。这些 schema 对文档化与静态类型语言的代码生成很有用，但代价是数据必须先解码才能被人读懂。
 
-- Programming language–specific encodings are restricted to a single programming language and often fail to provide forward and backward compatibility.
-- Textual formats like JSON, XML, and CSV are widespread, and their compatibility depends on how you use them.
-  They have optional schema languages, which are sometimes helpful and sometimes a hindrance.
-  These formats are somewhat vague about datatypes, so you have to be careful with things like numbers and binary strings.
-- Binary schema–driven formats like Thrift, [Protocol Buffers](/docs/CS/Distributed/RPC/ProtoBuf.md), and Avro allow compact, efficient encoding with clearly defined forward and backward compatibility semantics.
-  The schemas can be useful for documentation and code generation in statically typed languages.
-  However, they have the downside that data needs to be decoded before it is human-readable.
+### 语言特定格式
 
+许多编程语言内置了将内存对象编码为字节序列的能力。例如 Java 有 `java.io.Serializable`，Ruby 有 `Marshal`，Python 有 `pickle`，等等。也有不少第三方库，如 Java 的 Kryo。这些编码库非常方便，因为只需极少量额外代码就能保存并恢复内存对象。但它们也存在若干深层次问题：
 
+- 编码往往与特定编程语言绑定，用另一种语言读取数据非常困难。若以这类编码存储或传输数据，你就把自己长期绑定在当前编程语言上，并阻断了与可能使用不同语言的其它组织系统集成的可能。
+- 为用相同对象类型恢复数据，解码过程需要能实例化任意类。这常常是安全问题的根源：若攻击者能让你的应用解码任意字节序列，他们就能实例化任意类，进而常常得以执行任意代码等危险操作。
+- 这些库往往把数据版本化当作事后考虑：因为它们本意是快速、简单地编码数据，常常忽略前向与后向兼容这些麻烦的问题。
+- 效率（编码/解码消耗的 CPU 时间，以及编码后结构的大小）也常是事后考虑。例如 Java 内置序列化以其糟糕的性能与臃肿的编码而臭名昭著。
 
+出于这些原因，将语言内置的编码用于除极短暂用途之外的任何场景，通常都是个坏主意。
 
-### Language-Specific Formats
+### 文本格式
 
-Many programming languages come with built-in support for encoding in-memory objects into byte sequences. 
-For example, Java has java.io.Serializable, Ruby has Marshal, Python has pickle, and so on. 
-Many third-party libraries also exist, such as Kryo for Java.
-These encoding libraries are very convenient, because they allow in-memory objects to be saved and restored with minimal additional code. 
-However, they also have a number of deep problems:
-- The encoding is often tied to a particular programming language, and reading the data in another language is very difficult. 
-  If you store or transmit data in such an encoding, you are committing yourself to your current programming language for potentially a very long time, and precluding integrating your systems with those of other organizations (which may use different languages).
-- In order to restore data in the same object types, the decoding process needs to be able to instantiate arbitrary classes. 
-  This is frequently a source of security problems: if an attacker can get your application to decode an arbitrary byte sequence, they can instantiate arbitrary classes, which in turn often allows them to do terrible things such as remotely executing arbitrary code.
-- Versioning data is often an afterthought in these libraries: as they are intended for quick and easy encoding of data, they often neglect the inconvenient problems of forward and backward compatibility.
-- Efficiency (CPU time taken to encode or decode, and the size of the encoded structure) is also often an afterthought. 
-  For example, Java’s built-in serialization is notorious for its bad performance and bloated encoding.
-  
+JSON、XML、CSV 都是文本格式，因而有一定可读性（尽管其语法规范本身是长期争议的话题）。除了表层的语法问题，它们还有一些微妙的问题：
 
-For these reasons it’s generally a bad idea to use your language’s built-in encoding for anything other than very transient purposes.
+- 数字的编码存在大量歧义。在 XML 与 CSV 中，你无法区分一个数字与恰好由数字组成的字符串（除非参照外部 schema）。JSON 区分字符串与数字，但不区分整数与浮点数，也不规定精度。处理大数时这是个问题：例如大于 2^53 的整数无法在 IEEE 754 双精度浮点数中精确表示，因此在用浮点数的语言（如 JavaScript）中解析时会变得不准确。大于 2^53 的数字实例出现在 Twitter 上——它用 64 位数字标识每条推文。Twitter API 返回的 JSON 把推文 ID 包含两次，一次作为 JSON 数字、一次作为十进制字符串，以规避 JavaScript 应用无法正确解析这些数字的问题。
+- JSON 与 XML 对 Unicode 字符串（即可读文本）支持良好，但不支持二进制字符串（没有字符编码的字节序列）。二进制字符串很有用，于是人们用 Base64 把二进制数据编码为文本来绕过这一限制，再用 schema 标明该值应被解释为 Base64 编码。这能工作，但略显 hack，且会让数据体积增加 33%。
+- XML 与 JSON 都有可选的 schema 支持。这些 schema 语言相当强大，因而学习与实现都相当复杂。XML schema 的使用相当普遍，但许多基于 JSON 的工具懒得使用 schema。由于数据的正确解释（如数字与二进制字符串）依赖于 schema 中的信息，不使用 XML/JSON schema 的应用往往需要把相应的编码/解码逻辑硬编码进去。
+- CSV 没有任何 schema，因此各行、各列的含义由应用自行定义。若应用变更新增了一行或一列，你必须手动处理这一变更。CSV 也是一种相当含糊的格式（如果一个值里包含逗号或换行符会怎样？）。尽管其转义规则已被正式规定，但并非所有解析器都正确实现。
 
-### Textual Formats
+### 二进制编码
 
-JSON, XML, and CSV are textual formats, and thus somewhat human-readable(although the syntax is a popular topic of debate).
-Besides the superficial syntactic issues, they also have some subtle problems:
-
-- There is a lot of ambiguity around the encoding of numbers.
-  In XML and CSV, you cannot distinguish between a number and a string that happens to consist of digits (except by referring to an external schema).
-  JSON distinguishes strings and numbers, but it doesn’t distinguish integers and floating-point numbers, and it doesn’t specify a precision.
-  This is a problem when dealing with large numbers; for example, integers greater than 253 cannot be exactly represented in an IEEE 754 double-precision floating-point number, so such numbers become inaccurate when parsed in a language that uses floating-point numbers (such as JavaScript).
-  An example of numbers larger than 253 occurs on Twitter, which uses a 64-bit number to identify each tweet.
-  The JSON returned by Twitter’s API includes tweet IDs twice, once as a JSON number and once as a decimal string, to work around the fact that the numbers are not correctly parsed by JavaScript applications.
-- JSON and XML have good support for Unicode character strings (i.e., humanreadable text), but they don’t support binary strings (sequences of bytes without a character encoding).
-  Binary strings are a useful feature, so people get around this limitation by encoding the binary data as text using Base64.
-  The schema is then used to indicate that the value should be interpreted as Base64-encoded.
-  This works, but it’s somewhat hacky and increases the data size by 33%.
-- There is optional schema support for both XML and JSON.
-  These schema languages are quite powerful, and thus quite complicated to learn and implement.
-  Use of XML schemas is fairly widespread, but many JSON-based tools don’t bother using schemas.
-  Since the correct interpretation of data (such as numbers and binary strings) depends on information in the schema, applications that don’t use XML/JSON schemas need to potentially hardcode the appropriate encoding/decoding logic instead.
-- CSV does not have any schema, so it is up to the application to define the meaning of each row and column.
-  If an application change adds a new row or column, you have to handle that change manually.
-  CSV is also a quite vague format (what happens if a value contains a comma or a newline character?).
-  Although its escaping rules have been formally specified, not all parsers implement them correctly.
-
-
-### Binary Encoding
-
-For data that is used only internally within your organization, there is less pressure to use a lowest-common-denominator encoding format.
-For example, you could choose a format that is more compact or faster to parse. 
-For a small dataset, the gains are negligible, but once you get into the terabytes, the choice of data format can have a big impact.
-
-
-
-
+对于仅在组织内部使用的数据，使用"最低公约数"式编码格式的压力较小。例如，你可以选择更紧凑或解析更快的格式。对小规模数据集，收益可忽略不计；但一旦进入 TB 级别，数据格式的选择就会带来巨大影响。
 
 ## Java
 
 最好默认设置UUID, 在某些序列化场景(如Redis, Tair) 默认会使用Java 的Serial, 避免后续字段的增减影响到之前数据的读取
 
-
-
-
 ## JSON
-
 
 fastjson在某些场景下会导致jvm crash
 
 当多个对象存在循环引用时 GSON和Jackson会抛异常
 
-
 [Fury](/docs/CS/Distributed/RPC/Fury.md)
-
 
 ## Links
 

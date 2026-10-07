@@ -1,7 +1,7 @@
 
 
 
-## Dashboard
+## 仪表盘
 
 | ID | Name | Description |
 | --- | --- | --- |
@@ -14,7 +14,7 @@
 
 ## Grafana
 
-Dashboard
+仪表盘
 
 
 | App   | exporter | grafana     |

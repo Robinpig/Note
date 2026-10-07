@@ -16,7 +16,7 @@ Prometheus 的主要特性包括：
 - 通过服务发现或静态配置来发现目标
 - 支持多种图形和仪表板展示模式（Grafana、Prometheus Web UI 等）
 
-## Installation
+## 安装
 
 > [部署Prometheus](https://monaive.gitbook.io/prometheus)
 
@@ -63,7 +63,7 @@ docker run -d \
 curl -X POST http://localhost:9090/-/reload
 ```
 
-## Architecture
+## 架构
 
 Prometheus 主要包含下面几个组件：
 
@@ -86,7 +86,7 @@ Prometheus 直接或通过中间 Pushgateway（用于短期任务）从已插桩
 - Alertmanager 根据配置文件，对接收的警报进行处理（去重、分组、路由），发出告警
 - 通过 Prometheus Web UI 或 Grafana 进行可视化展示
 
-### Pull vs Push
+### 拉取与推送
 
 Prometheus 采用 Pull 模型，优点：
 
@@ -99,7 +99,7 @@ Push 模型（通过 Pushgateway 或 Remote Write）适用于：
 - 短生命周期任务（批处理作业结束就退出，来不及被抓取）
 - 防火墙不允许反向访问的场景
 
-## Configuration
+## 配置
 
 Prometheus 使用 YAML 配置，核心结构：
 
@@ -138,7 +138,7 @@ scrape_configs:
         refresh_interval: 5m
 ```
 
-### Service Discovery
+### 服务发现
 
 生产环境中目标通常不是固定的，Prometheus 支持多种服务发现机制：
 
@@ -150,7 +150,7 @@ scrape_configs:
 
 服务发现产出的标签可通过 relabeling（`relabel_configs`）在抓取前进行过滤、改写，`metric_relabel_configs` 则在入库前对样本标签进行处理。
 
-## Data Model
+## 数据模型
 
 Prometheus 从根本上将所有数据存储为时间序列（time series）：属于同一指标和同一组标签维度、带有时间戳的值流。除已存储的时间序列外，Prometheus 还可能生成临时的派生时间序列作为查询结果。
 
@@ -160,14 +160,14 @@ Prometheus 从根本上将所有数据存储为时间序列（time series）：�
 
 > 注意：冒号是为用户定义的 recording rules 保留的，exporter 或直接插桩不应使用。
 
-### Sample
+### 样本
 
 时间序列中的每个点称为样本（sample），由三部分组成：
 
 - float64 类型的值
 - 毫秒精度的时间戳
 
-### Label
+### 标签
 
 标签为同一指标名建立不同的维度（如 `method="GET"`、`handler="/api"`）。标签值的任意组合都对应一条独立的时间序列，因此标签组合总数（基数）直接决定存储量。
 
@@ -180,7 +180,7 @@ Prometheus 从根本上将所有数据存储为时间序列（time series）：�
 http_requests_total{method="POST", handler="/messages"}
 ```
 
-### Metric Types
+### 指标类型
 
 Prometheus 客户端库提供四种指标类型：
 
@@ -245,7 +245,7 @@ rate(http_requests_total{status=~"5.."}[5m])
 - 标签处理：`label_replace`、`label_join`
 - 时间对齐：`offset`、`@`（绝对时间戳修饰符）
 
-### Recording Rules
+### 记录规则
 
 将常用且计算量大的查询预先物化为新序列，既加快仪表板加载，也为告警提供稳定的命名约定（如 `level:metric:operations`，例如 `instance_path:requests:rate5m`）：
 
@@ -257,9 +257,9 @@ groups:
         expr: sum by (job) (rate(http_requests_total[5m]))
 ```
 
-## Storage
+## 存储
 
-### Local Storage
+### 本地存储
 
 Prometheus 的本地时序数据库（TSDB）以一种自定义且极其高效的格式将数据存储在本地存储中。
 
@@ -271,7 +271,7 @@ Prometheus 的本地时序数据库（TSDB）以一种自定义且极其高效�
 
 > 本地存储不适合长期保存。长期存储推荐使用 Remote Storage（如 Thanos、Mimir、VictoriaMetrics），或对象存储方案。
 
-### Remote Storage
+### 远程存储
 
 Prometheus 通过两个接口与远端存储集成：
 
@@ -285,7 +285,7 @@ remote_write:
   - url: "http://thanos-receive:19291/api/v1/receive"
 ```
 
-### Federation
+### 联邦
 
 联邦（Federation）允许一个 Prometheus 从另一个 Prometheus 拉取选定的时序，用于构建全局视角的"树干"服务器：
 
@@ -405,9 +405,9 @@ EOF
 
 
 
-## Alerting
+## 告警
 
-### Alerting Rules
+### 告警规则
 
 告警规则在 Prometheus 中评估，触发后推送给 Alertmanager：
 
@@ -457,7 +457,7 @@ receivers:
       - url: "http://oncall:8080/critical"
 ```
 
-## Best Practices
+## 最佳实践
 
 - 指标命名：`namespace_metricname_units`（如 `http_request_duration_seconds`），Counter 以 `_total` 结尾，使用基本单位（seconds、bytes）而非毫秒/KB
 - 控制基数（cardinality）：避免无上界的标签（如 user_id、request_id），每个标签组合都是一条独立序列；经验上单实例序列数超过百万即需警惕
