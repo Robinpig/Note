@@ -284,13 +284,10 @@ Cost_estimate handler::table_scan_cost() {
 
 > 为了让优化器不倾向于全表扫，MySQL给全表扫的Cost添加了2.1的固定修正值
 
-
-Index Scan
+### Index Scan
 
 当某个二级索引包含的列包括了查询想要的所有列时，可以通过扫描二级索引来减少IO Cost。这里所说的覆盖索引仅指全表扫描时检索二级索引代替检索主键索引。
-```
 
-```
 先获得最短的索引，然后计算做index_scan的cost
 
 

@@ -13,6 +13,13 @@ The binary log has two important purposes:
   After a backup has been restored, the events in the binary log that were recorded after the backup was made are re-executed.
   These events bring databases up to date from the point of the backup.
 
+| 项 | 值 |
+| :--- | :--- |
+| 正文默认版本 | MySQL 9.7.x LTS（最新 9.7.3，2026-08-18） |
+| 源码核实基线 | tag `mysql-9.7.2` |
+| 次要兼容目标 | 8.4.x LTS |
+| 已停止支持 | 8.0（EOL 2026-04-30）、5.7（EOL 2023-10） |
+| 核实日期 | 2026-10-07 |
 
 ## Binary Logging Formats
 
@@ -30,6 +37,14 @@ With statement-based replication, there may be issues with replicating nondeterm
 In deciding whether or not a given statement is safe for statement-based replication, MySQL determines whether it can guarantee that the statement can be replicated using statement-based logging. 
 If MySQL cannot make this guarantee, it marks the statement as potentially unreliable and issues the warning, Statement may not be safe to log in statement format.
 You can avoid these issues by using MySQL's row-based replication instead.
+
+
+## Version Coordinates
+
+- 自 MySQL 8.0 起，binary log 默认开启（`log_bin=ON`，无需再显式指定 `--log-bin`；此前默认关闭），复制与时间点恢复因此开箱可用。
+- 默认的 `binlog_format` 为 `ROW`（`STATEMENT` / `MIXED` 仍可选）。
+- `binlog_row_metadata` 控制 ROW 格式写入 binlog 的列类型元数据量，取值 `MINIMAL`（默认，只记录 replica 实际需要的元数据）或 `FULL`（记录全部元数据）。该变量在 9.7.2 源码 `sql/sys_vars.cc` 中确认存在。
+- 8.0.x 时代用于控制并行回放依赖追踪的 `binlog_transaction_dependency_tracking`（COMMIT_ORDER / WRITESET / WRITESET_SESSION）在 MySQL 9.7.2 源码树中已不存在；WRITESET 依赖追踪已是默认行为，不再由该开关选择。
 
 
 ## file sync
@@ -81,7 +96,7 @@ buffer_length 加上临时文件中已经写入的 binlog 占用的字节数，�
 InnoDB 内部事务是个特例，不管是否开启了 binlog，改变表中数据都不会产生 binlog 日志，所以内部事务不需要使用二阶段提交
 
 
-调用 ha_prepare_low () 之前，用户线程对象的 durability_property 属性值会被设置为 HA_IGNORE_DURABILITY 为了不让 redo log 在prepare阶段刷盘 可以在binlog commit的时候一起刷盘
+调用 ha_prepare_low () 之前，用户线程对象的 durability_property 属性值会被设置为 HA_IGNORE_DURABILITY 为了不让 redo log 在 prepare 阶段刷盘 可以在 binlog commit 的时候一起刷盘
 
 Set HA_IGNORE_DURABILITY to not flush the prepared record of the  transaction to the log of storage engine (for example, InnoDB redo log) during the prepare phase.
 So that we can flush prepared  records of transactions to the log of storage engine in a group right before flushing them to binary log during binlog group  commit flush stage.
@@ -207,4 +222,13 @@ FLUSH PRIVILEGES;
 
 ## Links
 
-- [InnoDB Storage Engine](/docs/CS/DB/MySQL/InnoDB.md)
+- [redo log](/docs/CS/DB/MySQL/redolog.md)
+- [undo log](/docs/CS/DB/MySQL/undolog.md)
+- [复制与主从延迟 replica](/docs/CS/DB/MySQL/replica.md)
+- [事务 Transaction](/docs/CS/DB/MySQL/Transaction.md)
+- [InnoDB 存储引擎](/docs/CS/DB/MySQL/InnoDB.md)
+
+## References
+
+- [MySQL 8.4 Reference Manual: Binary Log](https://dev.mysql.com/doc/refman/8.4/en/binary-log.html)
+- [MySQL 8.4 Reference Manual: Replication Formats](https://dev.mysql.com/doc/refman/8.4/en/binary-log-formats.html)
