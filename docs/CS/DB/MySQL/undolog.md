@@ -12,7 +12,7 @@ They are used only for rollback while the server is running. This type of undo l
 What is undo log for:
 
 1. [Atomicity](/docs/CS/DB/MySQL/Transaction.md?id=innodb-and-the-acid-model)
-2. [MVCC](/docs/CS/DB/MySQL/Transaction.md?id=mvcc)
+2. [MVCC](/docs/CS/DB/MySQL/Mvcc.md?id=mvcc)
 
 | 项 | 值 |
 | :--- | :--- |
