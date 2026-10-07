@@ -71,6 +71,8 @@ Hello, World
 
 ## Links
 
+- [C](/docs/CS/C/C.md)
+- [CMake](/docs/CS/C/CMake.md)
 
 ## References
 

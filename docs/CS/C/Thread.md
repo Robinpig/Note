@@ -138,3 +138,10 @@ static int thread_init (thpool_* thpool_p, struct thread** thread_p, int id){
 
 
 ## Links
+
+- [C](/docs/CS/C/C.md)
+- [glibc](/docs/CS/C/glibc.md)
+
+## References
+
+1. [POSIX Threads 编程（pthreads 概览）](https://man7.org/linux/man-pages/man7/pthreads.7.html)
