@@ -58,8 +58,8 @@ Note/
 | :------- | :---------------- | :--------------------------------------------------------------------------------------------- |
 | 操作系统     | `CS/OS/`          | [OS.md](/docs/CS/OS/OS.md)；下辖 `Linux/`、`unix/`、`Windows/`、`mac/`、`Android/`、`xv6/`、`Fuchsia/`、`Book/`、`Boot/`（仅 `Grub.md`） |
 | Linux 内核 | `CS/OS/Linux/`    | [Linux.md](/docs/CS/OS/Linux/Linux.md) 是该子树的**唯一枢纽**，见下节                                   |
-| 框架与中间件   | `CS/Framework/`   | **无总入口**，直接用具体框架页（Spring、Spring_Boot、Netty、Tomcat、Dubbo、ZooKeeper、etcd、ES、Flink、Hadoop、Spark、Job 等） |
-| Java     | `CS/Java/`        | 入口 [JDK/JDK.md](/docs/CS/Java/JDK/JDK.md)（`Java/Java.md` 不存在）                                  |
+| 框架与中间件   | `CS/Framework/`   | 总入口 [Framework/README.md](/docs/CS/Framework/README.md)（按 Java 体系 / 协调与服务注册 / 服务治理 / 网络与 RPC / 网格与网关 / 计算与数据 / 响应式 / 跨语言与 AI 分层）；**无 `Framework.md`**，具体机制仍在各框架子目录 |
+| Java     | `CS/Java/`        | 语言入口与目录地图 [Java.md](/docs/CS/Java/Java.md)；JDK 与 JVM 内部机制的枢纽仍是 [JDK/JDK.md](/docs/CS/Java/JDK/JDK.md) |
 | 数据库      | `CS/DB/`          | [DB.md](/docs/CS/DB/DB.md)                                                                     |
 | 算法       | `CS/Algorithms/`  | [Algorithms.md](/docs/CS/Algorithms/Algorithms.md)                                             |
 | 分布式      | `CS/Distributed/` | [Distributed.md](/docs/CS/Distributed/Distributed.md)                                          |
@@ -71,7 +71,7 @@ Note/
 | 消息队列     | `CS/MQ/`          | [MQ.md](/docs/CS/MQ/MQ.md)                                                                     |
 | Golang   | `CS/Go/`          | [Go.md](/docs/CS/Go/Go.md)                                                                     |
 
-其余较小目录：`CO/`（组成原理）、`C/`、`C++/`、`Python/`、`Rust/`、`Scala/`、`TypeScript/`、`assembly/`、`memory/`、`Compiler/`、`BuildTool/`（入口 `BuildTools.md`）、`Tool/`（**无 Tool.md**，代表文件 `Vim.md`）、`front-end/`（**无 front-end.md**，代表文件 `Nodejs.md`）、`Browser/`、`DesignPatterns/`、`VCS/`、`log/`、`compress/`、`Cloud/`、`BigData/`、`Blockchain/`、`Security/`、`GNU/`。
+其余较小目录：`CO/`（组成原理）、`C/`、`C++/`、`Python/`、`Rust/`、`Scala/`、`TypeScript/`、`Dart/`、`assembly/`、`memory/`、`Compiler/`、`BuildTool/`（入口 `BuildTools.md`）、`Tool/`（**无 Tool.md**，代表文件 `Vim.md`）、`front-end/`（**无 front-end.md**，代表文件 `Nodejs.md`）、`Browser/`、`DesignPatterns/`、`VCS/`、`log/`、`compress/`、`Cloud/`、`BigData/`、`Blockchain/`、`Security/`、`GNU/`。
 
 `docs/CS/Flutter.md` 是**没有同名目录的孤立文件**，不要误以为存在 `CS/Flutter/`。
 
@@ -200,13 +200,13 @@ Markdown 增强写法：
 - **不要修改 `out/`**（IDE 产物副本）、`src/`、`wiki/`、`knowledge-base/`、`outputs/`。
 - `index.html` 只动配置和样式区块，**不要重排脚本加载顺序**（插件依赖 docsify 主脚本先加载）。
 - `.obsidian/`、`.claude/`、`.workbuddy/` 是**本机工具目录，都不入版本控制**（`.gitignore` 里忽略了 `.obsidian/`、`.claude`、`.workbuddy`）—— 换机器克隆下来可能根本不存在，**不要依赖、也不要删**。其中 **`.workbuddy` 存的是 Agent 记忆，不是缓存**；**校验脚本不在那里，在已入库的 `scripts/`**。
-- 新增链接前先确认目标文件存在。以下目录**没有同名入口文件**，别写错：
+- 新增链接前先确认目标文件存在。以下目录的入口**不等于目录名**（或存在两级入口），别写错：
   - `CS/BuildTool/` 入口是 `BuildTools.md`（不是 `BuildTool.md`）
   - `CS/Tool/` 无 `Tool.md`，代表文件 `Vim.md`
   - `CS/front-end/` 无 `front-end.md`，代表文件 `Nodejs.md`
-  - `CS/Java/` 入口在 `JDK/JDK.md`
+  - `CS/Java/` 有两级入口：语言入口与目录地图是 `Java/Java.md`，JDK/JVM 内部机制的枢纽是 `JDK/JDK.md`（写 JDK 源码细节走后者）
   - `CS/SE/` 入口是 `Engineering.md`
-  - `CS/Framework/` 无总入口，用具体框架页
+  - `CS/Framework/` 无 `Framework.md`，总入口是 `Framework/README.md`（目录级索引页），具体机制在各框架子目录
   - `docs/Test.md` 是测试页，可忽略
 
 ## 校验工具（`scripts/`，随仓库入库，不进站点）
