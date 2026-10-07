@@ -64,7 +64,7 @@ For locking reads (SELECT with FOR UPDATE or LOCK IN SHARE MODE), UPDATE, and DE
 ## Transaction
 
 事务是怎样开启的
-```
+```sql
 /*  1 */ BEGIN
 /*  2 */ BEGIN WORK
 /*  3 */ START TRANSACTION

@@ -1,5 +1,21 @@
 ## Introduction
 
+MySQL 优化器是**代价驱动**的：它不靠规则打分选索引，而是把每种可行的取数据方式折算成 CPU 与 IO 的代价，
+再挑总和最小的那个。所以看懂执行计划的前提，是先看懂它的代价单位、Access Path 集合与统计信息来源。
+本篇按「成本常数 → Access Path → 代价计算 → 单表代价总表」的顺序展开；
+语句在 server 层的整体流转见 SQL，索引结构与回表成本见 Index 与 B-Tree。
+
+| 项 | 值 |
+| :--- | :--- |
+| 正文默认版本 | MySQL 9.7.x LTS（最新 9.7.3，2026-08-18） |
+| 源码核实基线 | tag `mysql-9.7.2` |
+| 次要兼容目标 | 8.4.x LTS |
+| 已停止支持 | 8.0（EOL 2026-04-30）、5.7（EOL 2023-10） |
+| 核实日期 | 2026-10-07 |
+
+本篇的成本常数取自 `mysql.server_cost` / `mysql.engine_cost` 的出厂默认值，
+跨版本改动记录在 [Version_Migration](/docs/CS/DB/MySQL/Version_Migration.md)；下面的源码摘录与 9.7.2 对照过函数签名，
+但代价模型本身自 8.0 以来没有大改。
 
 <div style="text-align: center;">
 
@@ -11,64 +27,44 @@
 Fig.1. Optimizer
 </p>
 
+## Cost Model
 
-MySQL查询成本
+一次查询的成本被折算成两类：
 
-I/O成本（1.0）
+- **I/O 成本**：查询记录时要先把数据页加载进内存，这个加载过程的开销就是 I/O 成本。
+  读取一个页（Page，默认 16 KB）的成本默认 **1.0**（`io_block_read_cost`）。
+- **CPU 成本**：读取记录、判断它是否满足条件、对结果集排序等操作的开销。
+  读取并比较一行的成本默认 **0.2**（`row_evaluate_cost`）。
 
-- 查询记录时，需先把数据加载到内存中再操作，加载过程损耗时间称为 I/O成本
-- MySQL读取一个页（Page，16KB）数据的成本默认1.0
+两类成本量纲不同，优化器给它们各自加权后求和得到最终 Cost；权重就是上面这些常数，
+用户可按硬件特征调整——磁盘紧张而 CPU 核多，就抬高 I/O 权重、压低 CPU 权重。
 
-CPU成本（0.2）
+## Optimizer Steps
 
-- 读取及检测记录是否满足查询条件、对结果集进行排序等操作损耗的时间 称为CPU成本
-- MySQL读取一行数据 进行匹配比较的成本 默认0.2
+1. 根据搜索条件，分析出可能使用的索引
+2. 计算全表扫描的成本（在聚簇索引上完整遍历一遍，再按条件比对）
+3. 计算使用不同索引执行查询的成本
+4. 对比各种执行方案的成本，选出成本最低者
 
+### Table Scan Cost
 
+估算全表扫描需要先知道两件事：聚簇索引占了多少页、表里有多少行。
 
-优化步骤
-
-1. 根据搜索条件，分析出 可能使用的索引
-2. 计算全表扫描的成本
-   - 全表扫描：在聚簇索引树数据全部遍历一次后，根据搜索条件进行比对
-3. 计算使用 不同索引执行查询的成本
-4. 对比各种执行方案的成本，找出成本最低的
-
-
-
-全表扫描成本计算
-
-查看聚簇索引占用page
-
-查看表记录数
-
-```shell
-SHOW TABLE STATUS LIKE 'tableName'
+```sql
+SHOW TABLE STATUS LIKE 'tableName';
 ```
 
-返回结果
+返回值里相关的是 `Rows`（估算行数）与 `Data_length`（InnoDB 下即聚簇索引占用空间，
+等于聚簇索引页数乘以每页大小）。
 
-- Rows
-- Data_length InnoDB下代表聚簇索引占用空间大小 聚簇索引页面数量 * 每个页面大小（默认16KB）
-
-
-
-聚簇索引页面 * 每页成本 + 微调值 = IO成本
-
-表的总记录数 * CPU成本 + 微调值 = CPU成本
+- I/O 成本 = 聚簇索引页数 * 每页成本 + 微调值
+- CPU 成本 = 表总记录数 * 每行 evaluate 成本 + 微调值
 
 
+## Access Path
 
-
-
-
-
-
-
-
-
-接下来，我们来说一下什么是表的Access Path。
-创建一个简单的表，其中id是主键，并且我们在col1建立有二级索引：
+一个表的 Access Path 就是「实际用什么方式从这张表里取数据」。
+先创建一个简单的表，id 是主键，并在 col1 上建有二级索引：
 
 ```sql
 CREATE TABLE t1 (
@@ -83,41 +79,41 @@ KEY index_col1 (col1)
 ```sql
 SELECT * FROM t1 where t1.col1 < 5;
 ```
-它从逻辑上来说很简单，就是想要找到t1.col1小于5的所有记录。然而，如何从表中获取数据呢？至少可以有以下方案：
-1. 查主键索引，全表遍历一遍，然后过滤出t1.col1 < 5的记录。
-2. 查col1上建立的二级索引，找到t1.col1 < 5的记录对应的主键，然后根据得到的主键再去主键索引上查找完整记录。
-   可以发现，这两种方式都能达到逻辑上一致的效果，但它们访问了哪些数据，访问方式确实完全不同的。
-3. 
+逻辑上它只是要找到 t1.col1 小于 5 的所有记录，但「怎么取到这些行」至少有两个方案：
+1. 查主键索引，全表遍历一遍，然后过滤出 t1.col1 < 5的记录。
+2. 查 col1上建立的二级索引，找到 t1.col1 < 5的记录对应的主键，然后根据得到的主键再去主键索引上查找完整记录。
+   两种方式在逻辑上等价，访问的数据却完全不同。
 
-我们称对每个表获取数据的实际执行方式为是这个表的Access Path。当改变一个表的Access Path，就改变了这个算子实际的物理执行计划，也就是说，逻辑上获得同一份数据的查询但在物理执行上却会有很多区别，效率也有很大区别，
-这也就是Logical Plan和Physcal Plan。我们改变表的Access Path，就是改变了它的Physcal Plan
+改变一个表的 Access Path，就改变了这个算子的物理执行计划：同一份逻辑结果，物理执行方式与效率可以差很多。
+这就是 Logical Plan 与 Physical Plan 的分界——优化器改的从来不是逻辑语义，而是 Physical Plan。
 
 
-从一个表中读数据都有多种Access Path，那么就要问：这些Access Path孰优孰劣呢？
+从一个表中读数据都有多种 Access Path，那么就要问：这些 Access Path 孰优孰劣呢？
 我们来看两种情况：
 
-表中只有一万条记录，且这些记录都满足t1.col1 < 5。
-• 使用第一种Access Path，需要在主键索引上全表扫描一遍即可。
-• 使用第二种Access Path，需要在二级索引上全表扫描一遍，并且每个记录都需要从主键索引上回一遍表。
+表中只有一万条记录，且这些记录都满足 t1.col1 < 5。
+• 使用第一种 Access Path，需要在主键索引上全表扫描一遍即可。
+• 使用第二种 Access Path，需要在二级索引上全表扫描一遍，并且每个记录都需要从主键索引上回一遍表。
 显然第一种更优。
 
-表中有一万条记录，且只有其中一条记录满足t1.col1 < 5。
-• 使用第一种Access Path，需要在主键索引上全表扫描一遍即可。
-• 使用第二种Access Path，需要在二级索引上扫描，但只会得到一条记录，对这条记录再从主键索引查找完整记录即可。
+表中有一万条记录，且只有其中一条记录满足 t1.col1 < 5。
+• 使用第一种 Access Path，需要在主键索引上全表扫描一遍即可。
+• 使用第二种 Access Path，需要在二级索引上扫描，但只会得到一条记录，对这条记录再从主键索引查找完整记录即可。
 显然第二种更优。
 
-从这个例子可以发现，实际哪种Access Path更优是与数据强相关的。并不是说我在WHERE子句中指明了一条与二级索引相关的谓词（Predicate）就必须选择二级索引。
+从这个例子可以发现，实际哪种 Access Path 更优是与数据强相关的。并不是说我在 WHERE 子句中指明了一条与二级索引相关的谓词（Predicate）就必须选择二级索引。
 从以上分析，我们可以有一些发现：
-1. Access Path是与存储引擎相关的。因为我们使用的是InnoDB引擎，而InnoDB是索引组织表，因此才会存在走二级索引需要回表。
-2. 同一个Logical Plan对应的不同Access Path，谁更优秀在不知道数据分布下，是无法直接判断的。这也证明代价估计器存在的必要性。
+1. Access Path 是与存储引擎相关的。因为我们使用的是 InnoDB 引擎，而 InnoDB 是索引组织表，因此才会存在走二级索引需要回表。
+2. 同一个 Logical Plan 对应的不同 Access Path，谁更优秀在不知道数据分布下，是无法直接判断的。这也证明代价估计器存在的必要性。
 
 
-### Cost
+### What Cost Measures
 
-Cost Estimator中另一个重要的概念就是Cost，我们首先需要定义什么是Cost，才能进行估计。在MySQL中，所谓的Cost其实就是对一个物理查询计划的执行过程中，所消耗的CPU和IO的Cost估计。CPU Cost评估了执行物理计划所需要消耗的CPU周期数，而IO Cost评估了执行物理计划时，从存储引擎读取数据时需要做的IO次数。
-现在我们定义了Cost，但在计算Cost之前，还必须明确一点，那就是Cost该如何比较。我们都知道CPU和IO其实是两种不同的资源，那么假设执行计划A的CPU Cost低，但IO Cost高，而执行计划B的CPU Cost高，但IO Cost低，这种情况我们应该如何抉择？
-MySQL的处理方式很简单，虽然两种Cost的物理意义不同，而且也没办法把他们转换成一个可以比较的物理量，那么，就给他们赋予不同的权重，让他们加权求和成为最终的Cost，而这个权重，就开放给用户，让用户可以自己修改。显然，这个权重是应该十分依赖硬件的，假如数据库宿主机的IO资源紧张，但CPU核数多，那么就应该加大IO资源的权重，降低CPU资源的权重。
-在MySQL中，可以通过查询mysql.server_cost和mysql.engine_cose两张表来查看Cost计算过程中的常数。
+Cost Estimator 中另一个重要的概念就是 Cost，我们首先需要定义什么是 Cost，才能进行估计。在 MySQL 中，所谓的 Cost 其实就是对一个物理查询计划的执行过程中，所消耗的 CPU 和 IO 的 Cost 估计。CPU Cost 评估了执行物理计划所需要消耗的 CPU 周期数，而 IO Cost 评估了执行物理计划时，从存储引擎读取数据时需要做的 IO 次数。
+现在我们定义了 Cost，但在计算 Cost 之前，还必须明确一点，那就是 Cost 该如何比较。我们都知道 CPU 和 IO 其实是两种不同的资源，那么假设执行计划 A 的 CPU Cost 低，但 IO Cost 高，而执行计划 B 的 CPU Cost 高，但 IO Cost 低，这种情况我们应该如何抉择？
+MySQL 的处理方式很简单，虽然两种 Cost 的物理意义不同，而且也没办法把他们转换成一个可以比较的物理量，那么，就给他们赋予不同的权重，让他们加权求和成为最终的 Cost，而这个权重，就开放给用户，让用户可以自己修改。显然，这个权重是应该十分依赖硬件的，假如数据库宿主机的 IO 资源紧张，但 CPU 核数多，那么就应该加大 IO 资源的权重，降低 CPU 资源的权重。
+在 MySQL 中，可以通过查询 `mysql.server_cost` 与 `mysql.engine_cost` 两张表查看代价计算用到的常数：
+前者是 server 层的 CPU 常数，后者是引擎层的 I/O 常数，改之前先备份，改完要 `FLUSH OPTIMIZER_COSTS` 才对新连接生效。
 
 ```sql
 select * from mysql.server_cost;
@@ -125,21 +121,21 @@ select * from mysql.server_cost;
 select * from mysql.engine_cost;
 ```
 
-在MySQL中，有关代价估计的代码主要集中在两个函数中：bool JOIN::estimate_rowcount()和bool Optimize_table_order::choose_table_order()中。
-bool JOIN::estimate_rowcount()会对每个表估计每种Access Path输出的行数以及对应的cost
+### Row Estimation
 
+代价估计的代码主要落在两个函数里：`JOIN::estimate_rowcount()` 与 `Optimize_table_order::choose_table_order()`。
 
+前者对每个表估算各种 Access Path 会输出多少行、对应多少 cost，
+且只考虑「这张表作为第一个被读取的表」时可行的 Access Path。
 
-
-
-
-
-在这个函数中，只会考虑当这个表作为第一个读到的表时可行的Access Path。
-bool Optimize_table_order::choose_table_order()是通过某种搜索算法计算不同JOIN ORDER下，每个表的最佳Access Path和对应的cost。在这个函数中，表可以通过JOIN condition来拓展出新的Access Path。
-
+`Optimize_table_order::choose_table_order()` 则是用某种搜索算法，计算不同 JOIN ORDER 下每个表的最佳 Access Path 与对应 cost；
+在这里，表还能借助 JOIN condition 拓展出新的 Access Path。它下面的注释正是该函数的职责清单：
+```c
 Estimate the number of matched rows for each joined table.
-Set up range scan for tables that have proper predicates. 
-Eliminate tables that have filter conditions that are always false based on analysis performed in resolver phase or analysis of range scan predicates.
+Set up range scan for tables that have proper predicates.
+Eliminate tables that have filter conditions that are always false based on
+analysis performed in resolver phase or analysis of range scan predicates.
+```
 
 
 ```c
@@ -266,13 +262,18 @@ bool JOIN::estimate_rowcount() {
 }
 ```
 
-进行全表扫描无法保证所有的记录都是符合过滤条件的，因此还需要对每条记录都评估是否满足过滤条件，这部分的cost也需要计算。scan_time就描述了这项cost，计算公式也非常简单：row_evaluate_cost * records，行数 * 每条记录evaluate的cost，进行evaluate主要是消耗CPU资源，因此scan_time会记录到CPU cost中。
-全表扫描会带来IO Cost
+全表扫描不能保证每条记录都满足过滤条件，所以还要为「逐条判定」付一次钱。`scan_time` 描述的就是这项成本：
+`row_evaluate_cost * records`，即行数乘以单条 evaluate 的成本。判定主要消耗 CPU，
+因此 `scan_time` 记进 CPU cost。
 
-文件页数 * 读取每个page的cost = 聚簇索引页数 * 读取每个page的cost = 聚簇索引页数 * （内存中page的比例 * memory_block_read_cost + on-disk的page的比例 * io_block_read_cost）
+I/O 侧则按页计算：聚簇索引页数 * 每页读取成本，而每页读取成本再按「页在内存里的比例」拆开——
 
-This function returns a Cost_estimate object. 
-The function should be implemented in a way that allows the compiler to use "return value optimization" to avoid creating the temporary object for the return value and use of the copy constructor.
+```text
+io_cost = 聚簇索引页数 * ( 内存页比例 * memory_block_read_cost + 磁盘页比例 * io_block_read_cost )
+```
+
+也就是说，同一张表在冷启动与热态下的估算成本并不相同，`page_read_cost(1.0)` 取的就是这个混合单价。
+下面的实现里可以看到它只累加 IO 部分，CPU 部分由调用方按 `scan_time` 另算。
 ```c
 Cost_estimate handler::table_scan_cost() {
   const double io_cost = scan_time() * table->cost_model()->page_read_cost(1.0);
@@ -282,37 +283,55 @@ Cost_estimate handler::table_scan_cost() {
 }
 ```
 
-> 为了让优化器不倾向于全表扫，MySQL给全表扫的Cost添加了2.1的固定修正值
+> [!NOTE]
+>
+> 为了让优化器不偏向全表扫描，MySQL 给全表扫描的总成本额外加了 2.1 的固定修正值：
+> I/O 侧 1.1、CPU 侧 1.0。这也是下面总表里 Table Scan 一行带着两个修正值的原因。
 
 ### Index Scan
 
-当某个二级索引包含的列包括了查询想要的所有列时，可以通过扫描二级索引来减少IO Cost。这里所说的覆盖索引仅指全表扫描时检索二级索引代替检索主键索引。
+当某个二级索引包含的列包括了查询想要的所有列时，可以通过扫描二级索引来减少 IO Cost。这里所说的覆盖索引仅指全表扫描时检索二级索引代替检索主键索引。
 
-先获得最短的索引，然后计算做index_scan的cost
-
-
+先获得最短的索引，然后计算做 index_scan 的 cost：覆盖索引扫描的 I/O 成本按**这棵二级索引的页数**计算，
+而不是聚簇索引页数——这正是它能压低 Cost 的唯一原因。一旦查询列没有全部被索引覆盖，
+代价模型就得为回表额外付「按主键随机读聚簇索引页」的钱，也就是总表里
+`(rows + ranges) * 读每个聚簇索引页的 cost` 那一项。
 
 ## Summary
 
-用一个表格总结MySQL优化器所有单表Access Path的代价估计：
+用一个表格总结 MySQL 优化器所有单表 Access Path 的代价估计：
 
 
 
 | Access Path                  | row count                                               | IO Cost                                                | CPU Cost                                      |
 | ---------------------------- | ------------------------------------------------------- | ------------------------------------------------------ | --------------------------------------------- |
 | system/const                 | 1                                                       | 1                                                      |                                               |
-| Table Scan                   | stats.records                                           | 聚簇索引页数 * 读每个索引页的cost + IO cost修正值(1.1) | evaluate的CPU Cost+CPU cost修正值(1.0)        |
-| Covering Index               | stats.records                                           | 索引页数 * 读每个索引页的cost                          | evaluate的cpu cost                            |
-| Group Range                  | 用于GROUP BY语句的key的Cardinality                      | skip scan的IO Cost                                     | evaluate的CPU Cost + 搜索B+树产生的的CPU Cost |
-| Skip Scan                    | 直方图得到的selectivity/缺省selectivity * stats.records | skip scan的IO Cost                                     | evaluate的CPU Cost + 搜索B+树产生的CPU Cost   |
-| Index Range Scan（不需回表） | 使用统计信息或者Index Dive方式来估计                    | 需要读取索引页数 * 读每个索引页的cost                  | evaluate的CPU Cost                            |
-| Index Range Scan（需要回表） | 使用统计信息或者Index Dive方式来估计                    | (rows + ranges) * 读每个聚簇索引页的cost               | evaluate的CPU Cost                            |
-| Roworder Intersect           | 多次index range scan获得行数的最大值                    | 略                                                     | 略                                            |
-| Index Merge Union            | 多次index range scan获得行数的和                        | 略                                                     | 略                                            |
+| Table Scan                   | stats.records                                           | 聚簇索引页数 * 读每个索引页的 cost + IO cost 修正值(1.1) | evaluate 的 CPU Cost+CPU cost 修正值(1.0)        |
+| Covering Index               | stats.records                                           | 索引页数 * 读每个索引页的 cost                          | evaluate 的 cpu cost                            |
+| Group Range                  | 用于 GROUP BY 语句的 key 的 Cardinality                      | skip scan 的 IO Cost                                     | evaluate 的 CPU Cost + 搜索 B+树产生的的 CPU Cost |
+| Skip Scan                    | 直方图得到的 selectivity/缺省 selectivity * stats.records | skip scan 的 IO Cost                                     | evaluate 的 CPU Cost + 搜索 B+树产生的 CPU Cost   |
+| Index Range Scan（不需回表） | 使用统计信息或者 Index Dive 方式来估计                    | 需要读取索引页数 * 读每个索引页的 cost                  | evaluate 的 CPU Cost                            |
+| Index Range Scan（需要回表） | 使用统计信息或者 Index Dive 方式来估计                    | (rows + ranges) * 读每个聚簇索引页的 cost               | evaluate 的 CPU Cost                            |
+| Roworder Intersect           | 多次 index range scan 获得行数的最大值                    | 略                                                     | 略                                            |
+| Index Merge Union            | 多次 index range scan 获得行数的和                        | 略                                                     | 略                                            |
+
+统计信息失真时这张表算出来的就是错的：`stats.records` 来自采样，范围条件靠 index dive 或直方图估计选择率。
+所以同一个计划在不同数据分布、不同冷热状态下都可能翻转——这正是 `EXPLAIN` 只给估算、
+要靠 `EXPLAIN ANALYZE` 拿实际行数的原因（写法与代价见 Optimization 与 Index）。
 
 
 ## Links
 
-
+- [SQL Execution](/docs/CS/DB/MySQL/SQL.md)
+- [Indexes](/docs/CS/DB/MySQL/Index.md)
+- [InnoDB Storage Engine](/docs/CS/DB/MySQL/InnoDB.md)
+- [B-Tree](/docs/CS/DB/MySQL/B-Tree.md)
+- [Query Optimization](/docs/CS/DB/MySQL/Optimization.md)
 
 ## References
+
+- [MySQL Cost Model Constants](https://dev.mysql.com/doc/refman/9.7/en/cost-model.html)
+- [Optimizer Statistics](https://dev.mysql.com/doc/refman/9.7/en/optimizer-statistics.html)
+- [Index Statistics](https://dev.mysql.com/doc/refman/9.7/en/index-statistics.html)
+- [EXPLAIN Output Format](https://dev.mysql.com/doc/refman/9.7/en/explain-output.html)
+- [Optimizer Tracing](https://dev.mysql.com/doc/refman/9.7/en/optimizer-tracing.html)

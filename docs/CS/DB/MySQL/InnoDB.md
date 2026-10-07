@@ -109,7 +109,7 @@ innodb_old_blocks_time	1000
 
 ### Master Thread
 
-```
+```text
 // using SHOW ENGINE INNODB STATUS;
 srv_master_thread loops: 177 srv_active, 0 srv_shutdown, 2772864 srv_idle
 srv_master_thread log flush and writes: 2773038
