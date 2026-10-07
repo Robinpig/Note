@@ -10,7 +10,7 @@
 
 
 
-## 递归解法
+## Recursive Solution
 我们将规模为 i 的汉诺塔问题记作 $f(i)$ 例如 $f(3)$ 代表将 3 个圆盘从 A 移动至 C 的汉诺塔问题。
 
 - 对于问题 $f(1)$，即当只有一个圆盘时，我们将它直接从 A 移动至 C 即可
@@ -73,10 +73,10 @@ void solveHanota(List<Integer> A, List<Integer> B, List<Integer> C) {
 
 
 
-## 迭代解法
+## Iterative Solution
 ## Links
 
-- [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=复杂度分析)
+- [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
 
 ## References
 

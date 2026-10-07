@@ -11,7 +11,7 @@ Since these two types are symmetric we will be concentrating on one of them: asc
 
 Priority queues are also important in the implementation of  [*greedy algorithms*](/docs/CS/Algorithms/Greedy.md) , which operate by repeatedly finding a minimum.
 
-## 优先队列的抽象数据类型（ADT）
+## Priority Queue ADT
 The following operations make priority queues an ADT.
 
 **Main Priority Queues Operations**
@@ -28,7 +28,7 @@ A priority queue is a container of elements, each having an associated key.
 - Size: Returns number of elements in priority queue.
 - Heap Sort: Sorts the elements in the priority queue based on priority (key)
 
-## 优先队列的应用
+## Priority Queue Applications
 Priority queues have many applications - a few of them are listed below:
 
 - Data compression: Huffman Coding algorithm
@@ -37,7 +37,7 @@ Priority queues have many applications - a few of them are listed below:
 - Event-driven simulation: customers in a line
 - Selection problem: Finding kth- smallest element
 
-## 优先队列的实现
+## Priority Queue Implementations
 Before discussing the actual implementation, let us enumerate the possible options.
 
 Unordered Array Implementation
@@ -77,7 +77,7 @@ Comparing Implementations
 | Balanced Binary Search Trees | $logn$          | $logn$              | $logn$          |
 | Binary Heap                  | $logn$          | $logn$              | 1               |
 
-## 堆与二叉堆
+## Heaps and Binary Heaps
 A heap is a tree with some special properties.
 The basic requirement of a heap is that the value of a node must be ≥ (or ≤) than the values of its children.
 This is called heap property.
@@ -89,7 +89,7 @@ Based on the property of a heap we can classify heaps into two types:
 - **Min heap:** The value of a node must be less than or equal to the values of its children
 - **Max heap:** The value of a node must be greater than or equal to the values of its children
 
-### 二叉堆
+### Binary Heaps
 In binary heap each node may have up to two children. In practice, binary heaps are enough and we concentrate on binary min heaps and binary max heaps for the remaining discussion.
 
 **Representing Heaps:**
@@ -194,19 +194,19 @@ Insertion of an element is similar to the heapify and deletion process.
 - Heapify the element from bottom to top (root)
 
 
-## 堆排序
+## Heap Sort
 One main application of heap ADT is sorting (heap sort).
 The heap sort algorithm inserts all elements (from an unsorted array) into a heap, then removes them from the root of a heap until the heap is empty.
 Note that heap sort can be done in place with the array to be sorted.
 Instead of deleting an element, exchange the first element (maximum) with the last element and reduce the heap size (array size). 
 Then, we heapify the first element. Continue this process until the number of remaining elements is one.
 
-## d 叉堆
+## d-Heaps
 Binary heaps are so simple that they are almost always used when priority queues are needed.
 A simple generalization is a  *d-heap* , which is exactly like a binary heap except that all nodes have *d *children (thus, a binary heap is a 2-heap).
 
-## 左偏树
-## 斜堆
+## Leftist Heaps
+## Skew Heaps
 A *skew heap* is a self-adjusting version of a leftist heap that is incredibly simple to implement.
 The relationship of skew heaps to leftist heaps is analogous to the relation between splay trees and AVL trees.
 Skew heaps are binary trees with heap order, but there is no structural constraint on these trees.
@@ -217,8 +217,8 @@ Thus, skew heaps have  *O* (log  *n* ) amortized cost per operation.
 
 As with leftist heaps, the fundamental operation on skew heaps is merging.
 
-## 二项队列
-## 小结
+## Binomial Queues
+## Summary
 The standard binary heap implementation is elegant because of its simplicity and speed. It requires no pointers and only a constant amount of extra space, yet supports the priority queue operations efficiently.
 
 We considered the additional *merge* operation and developed three implementations, each of which is unique in its own way.
@@ -227,6 +227,6 @@ The binomial queue shows how a simple idea can be used to achieve a good time bo
 
 ## Links
 
-- [数据结构](/docs/CS/Algorithms/Algorithms.md?id=数据结构)
+- [数据结构](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
 
 ## References

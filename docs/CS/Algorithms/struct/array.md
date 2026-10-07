@@ -34,7 +34,7 @@ void test_arr
 ```
 
 
-### 动态数组
+### Dynamic Arrays
 Dynamic array (also called growable array, resizable array, dynamic table, or array list) is a random access, variable-size list data structure that allows elements to be added or removed.
 One simple way of implementing dynamic arrays is to initially start with some fixed size array.
 As soon as that array becomes full, create the new array double the size of the original array.
@@ -51,7 +51,7 @@ Note: We will see the implementation for dynamic arrays in the Stacks, Queues an
 
 ## Links
 
-- [数据结构](/docs/CS/Algorithms/Algorithms.md?id=数据结构)
+- [数据结构](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
 
 ## References
 

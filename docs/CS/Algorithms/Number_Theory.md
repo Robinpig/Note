@@ -6,8 +6,7 @@
 
 本页聚焦算法视角的数论：**如何不枚举到 $n$ 就回答关于 $1 \sim n$ 的问题**。
 
-## 整除与最大公约数
-
+## Divisibility and GCD
 **欧几里得算法**（辗转相除法）是求 $\gcd(a,b)$ 的经典方法，也是史上第一个被记录的算法（见 [Algorithms](/docs/CS/Algorithms/Algorithms.md) 入口的历史一节）。其递推形式是 $\gcd(a,b) = \gcd(b, a \bmod b)$，直到 $b=0$ 为止，复杂度 $O(\log \min(a,b))$。
 
 ```java
@@ -23,12 +22,10 @@ long gcd(long a, long b) {
 
 **扩展欧几里得**在此基础上反解出贝祖系数 $x,y$ 使 $ax+by=\gcd(a,b)$，是解**线性同余方程** $ax \equiv c \pmod m$ 的基础（前提是 $\gcd(a,m) \mid c$）。
 
-## 素数与筛法
-
+## Primes and Sieves
 判断单个数 $n$ 是否为素数可以试除到 $\sqrt n$，复杂度 $O(\sqrt n)$。但若要回答「$1 \sim n$ 中每个数是不是素数」，逐个试除是 $O(n\sqrt n)$，而**筛法**能一次搞定。
 
-### 埃氏筛（Eratosthenes）
-
+### Sieve of Eratosthenes
 从 2 开始，把所有未标记的数的倍数标记为合数；遇到已标记则跳过。关键优化是**从 $i^2$ 开始标记**（更小的倍数已被更小的质数筛过），复杂度 $O(n\log\log n)$，空间 $O(n)$。
 
 ```java
@@ -46,14 +43,12 @@ boolean[] sieve(int n) {
 }
 ```
 
-### 线性筛（Euler sieve）
-
+### Linear (Euler) Sieve
 埃氏筛对每个合数会重复标记（如 6 被 2、3 各筛一次）。线性筛保证**每个合数只被它的最小质因子筛一次**，因此总复杂度是线性的 $O(n)$：按 $i$ 递增遍历，遍历其质因子 $p$，令 $i \cdot p$ 被 $p$ 筛去，并**当且仅当 $p$ 是 $i$ 的最小质因子时 break**。这个 break 正是线性复杂度的来源，也使它适合顺带求出每个数的最小质因子与欧拉函数值。
 
 工程含义：$n$ 到 $10^7 \sim 10^8$ 量级时，线性筛明显快于埃氏筛，且只需保存一次结果，适合多次查询「某数是否为素数」。
 
-## 快速幂
-
+## Binary Exponentiation
 要计算 $a^n \bmod m$，逐次相乘是 $O(n)$，而用**二进制拆位**可降到 $O(\log n)$：维护结果 `res = 1`，循环中若 $n$ 的最低位为 1 则 `res = res * a`，然后 `a = a * a`、`n >>= 1`。
 
 ```java
@@ -71,8 +66,7 @@ long modPow(long a, long n, long m) {
 
 **扩展快速幂**进一步支持「求 $a^x \bmod m$ 且 $x$ 极大（如 $10^{10^6}$）」：把指数 $x$ 的十进制表示按矩阵分解，或直接按数位递推 $a^{10} = (a^{x \bmod 9}\cdots)^{10} \cdot a^{\lfloor x/10\rfloor}$，复杂度降到 $O(\text{位数})$。这是大数取模题的核心技巧。
 
-## 模运算与逆元
-
+## Modular Arithmetic and Inverse
 $(a + b) \bmod m = (a \bmod m + b \bmod m) \bmod m$ 与 $(a \times b) \bmod m$ 都可逐步取模，但**除法不能**。因此「模意义下的除法」需要**乘法逆元**：
 
 > $a$ 在模 $m$ 意义下可逆 $\iff \gcd(a,m)=1$。此时存在 $a^{-1}$ 使 $a \cdot a^{-1} \equiv 1 \pmod m$，于是 $a/b \bmod m = a \cdot b^{-1} \bmod m$。
@@ -81,28 +75,24 @@ $(a + b) \bmod m = (a \bmod m + b \bmod m) \bmod m$ 与 $(a \times b) \bmod m$ �
 
 这条性质是许多「除法」型计数题的关键——例如「求方案数模 $10^9+7$」时，组合数里的除法必须换成逆元，否则结果错误。**前提是模数是质数**，这是最常见的踩坑点。
 
-## 欧拉函数与欧拉定理
-
+## Euler's Totient Function and Theorem
 **欧拉函数** $\varphi(n)$ 是 $1 \sim n$ 中与 $n$ 互质的整数个数，计算式为 $\varphi(n) = n \prod_{p \mid n} (1 - \tfrac{1}{p})$，其中乘积遍历 $n$ 的所有不同质因子。它与线性筛配合可 $O(n)$ 求出 $1 \sim n$ 全部 $\varphi$ 值。
 
 **欧拉定理**：$\gcd(a,m)=1$ 时 $a^{\varphi(m)} \equiv 1 \pmod m$。它把「求 $a^k \bmod m$」的指数从 $k$ 缩小到 $k \bmod \varphi(m)$，在大指数问题里与扩展快速幂互补。
 
-## 组合数
-
+## Binomial Coefficients
 从 $n$ 个元素中选 $k$ 个：$C(n,k) = \binom{n}{k}$，递推 $C(n,k) = C(n-1,k) + C(n-1,k-1)$ 即帕斯卡三角（本身也是一道经典 DP）。
 
 当 $n$ 很大、$k$ 很小时，逐个算会超时，需**预处理阶乘与逆阶乘**：$C(n,k) = \text{fac}[n] \cdot \text{ifac}[k] \cdot \text{ifac}[n-k] \bmod m$，预处理 $O(n)$、每次查询 $O(1)$。这是所有组合计数题目的通用基础设施。
 
 相关恒等式在竞赛中高频出现：$C(n,k) \cdot k = n \cdot C(n-1,k-1)$（选人再选代表）、$C(n,k) = \sum_i C(k,i)C(n-k,k-i)$（按子集大小分拆）等。
 
-## 质因数分解与大数分解
-
+## Integer Factorization
 试除法分解 $n$ 是 $O(\sqrt n)$，对 $10^{18}$ 量级完全失效。
 
 **Pollard–Rho** 是解决大数分解的实用算法：随机选取递推式 $f(x) = x^2 + c \pmod n$，像 Floyd 判环那样用「快慢指针」找循环节，再对每个因子 $d = \gcd(|x-y|, n)$ 尝试提取因子；失败就换随机参数重试。它**没有确定性复杂度保证**，但实践上对 64 位整数分解非常快（通常在 $O(n^{1/4})$ 量级），是竞赛与 CTF 分解 64 位整数的标准解法。
 
-## 中国剩余定理
-
+## Chinese Remainder Theorem
 当若干模数**两两互质**时，同余方程组 $x \equiv a_i \pmod{m_i}$ 有解，且解在 $\prod m_i$ 意义下唯一：
 
 $$

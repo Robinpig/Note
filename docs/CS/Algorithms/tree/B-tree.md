@@ -71,7 +71,7 @@ B-Trees are characterized by their fanout: the number of keys stored in each nod
 > 
 > B+-Trees became widespread, and we refer to them as B-Trees, similar to other literature the subject. For example, MySQL InnoDB refers to its B+-Tree implementation as B-tree.
 
-### 分隔键
+### Separator Keys
 Keys stored in B-Tree nodes are called index entries, separator keys, or divider cells. They split the tree into subtrees (also called branches or subranges), holding corresponding key ranges. Keys are stored in sorted order to allow binary search. A subtree is found by locating a key and following a corresponding pointer from the higher to the lower level.
 
 The first pointer in the node points to the subtree holding items less than the first key, and the last pointer in the node points to the subtree holding items greater than or equal to the last key. Other pointers are reference subtrees between the two keys: Ki-1 ≤ Ks < Ki, where K is a set of keys, and Ks is a key that belongs to the subtree. Figure 2-10 shows these invariants.
@@ -102,7 +102,7 @@ What sets B-Trees apart is that, rather than being built from top to bottom (as 
 Since B-Trees reserve extra space inside nodes for future insertions and updates, tree storage utilization can get as low as 50%, but is usually considerably higher. Higher occupancy does not influence B-Tree performance negatively.
 
 
-### 查找复杂度
+### B-Tree Lookup Complexity
 B-Tree lookup complexity can be viewed from two standpoints: the number of block transfers and the number of comparisons done during the lookup.
 
 In terms of number of transfers, the logarithm base is N (number of keys per node). There are K times more nodes on each new level, and following a child pointer reduces the search space by the factor of N. During lookup, at most logK M (where M is a total number of items in the B-Tree) pages are addressed to find a searched key. The number of child pointers that have to be followed on the root-to-leaf pass is also equal to the number of levels, in other words, the height h of the tree.
@@ -122,7 +122,7 @@ During the point query, the search is done after finding or failing to find the 
 
 
 
-### 节点分裂与合并
+### Node Splits and Merges
 To insert the value into a B-Tree, we first have to locate the target leaf and find the insertion point. After the leaf is located, the key and value are appended to it. Updates in B-Trees work by locating a target leaf node using a lookup algorithm and associating a new value with an existing key.
 
 If the target node doesn’t have enough room available, we say that the node has overflowed [NICHOLS66] and has to be split in two to fit the new data. More precisely, the node is split if the following conditions hold:
@@ -164,7 +164,7 @@ To summarize, node merges are done in three steps, assuming the element is alrea
 
 One of the techniques often implemented in B-Trees to reduce the number of splits and merges is rebalancing.
 
-## 再平衡
+## Rebalancing
 Some B-Tree implementations attempt to postpone split and merge operations to amortize their costs by rebalancing elements within the level, or moving elements from more occupied nodes to less occupied ones for as long as possible before finally performing a split or merge. This helps to improve node occupancy and may reduce the number of levels within the tree at a potentially higher maintenance cost of rebalancing.
 
 Load balancing can be performed during insert and delete operations.
@@ -236,7 +236,7 @@ Better space utilization can be obtained if, instead of always splitting a node 
 
 ## Links
 
-- [Trees](/docs/CS/Algorithms/tree/tree.md?id=b-树)
+- [Trees](/docs/CS/Algorithms/tree/tree.md?id=b-trees)
 
 ## References
 

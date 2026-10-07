@@ -55,8 +55,8 @@ def backtrack(参数):
 
 ## Links
 
-- [数据结构](/docs/CS/Algorithms/Algorithms.md?id=数据结构)
-- [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=复杂度分析)
+- [数据结构](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
+- [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
 
 ## References
 

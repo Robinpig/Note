@@ -4,7 +4,7 @@ PageRank 是 Google 早期用来衡量网页重要性的图算法（Page & Brin,
 还取决于这些来源网页自身有多重要**——被重要页面链接的页面也更重要。它把整个 Web 抽象为一张有向图（页面是节点、超链接是边），
 在图上定义一个随机游走模型并迭代求出每个节点的稳定概率。
 
-## 随机冲浪模型
+## Random Surfer Model
 设想一个「随机冲浪者」：
 
 - 以较大概率从当前页面沿出链均匀随机地跳到某个页面；
@@ -26,7 +26,7 @@ R = (1 − d)/N · 1 + d · Aᵀ R
 
 这是马尔可夫链的平稳分布方程，R 即该随机过程的平稳分布（随机冲浪者长期停留在各页面的概率）。
 
-## 为何需要阻尼因子
+## Why Damping
 纯沿链接走会有两个问题：
 
 - **出度为 0 的页面（sink / dangling node）**会吞掉所有权重，随机游走卡死；
@@ -35,7 +35,7 @@ R = (1 − d)/N · 1 + d · Aᵀ R
 随机跳转项（1−d）保证转移矩阵每个位置都为正、不可约且非周期，由 Perron–Frobenius 定理保证平稳分布**唯一存在**且与初值无关；
 工程上 dangling node 通常先把它的权重均分给所有页面再迭代。
 
-## 计算方法
+## Computation
 直接解线性方程/求主特征向量代价高，实践用**幂迭代（power iteration）**：
 
 ```
@@ -49,7 +49,7 @@ R = (1 − d)/N · 1 + d · Aᵀ R
 - 每次迭代 O(E)（E 为边数），通常几十轮即可收敛，可用 [MapReduce](/docs/CS/Distributed/MapReduce.md) / 分布式矩阵计算处理数十亿页面；
 - 收敛速度与 d 有关，d 越接近 1 收敛越慢。
 
-## 应用与变体
+## Applications and Variants
 - 搜索引擎排序（作为众多信号之一，已非唯一依据）；
 - 社交网络用户影响力、论文引用网络、推荐系统中的节点重要性；
 - TrustRank（从可信种子出发）、主题敏感 PageRank（按主题多向量）、Personalized PageRank（个性化随机跳转向量）；
@@ -59,7 +59,7 @@ PageRank 属于在[图](/docs/CS/Algorithms/graph/graph.md)上做随机游走/�
 
 ## Links
 
-- [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=复杂度分析)
+- [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
 - [graph](/docs/CS/Algorithms/graph/graph.md)
 
 ## References

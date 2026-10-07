@@ -12,7 +12,7 @@ Each structure contains the element and a pointer to a structure containing its 
 
 ## Links
 
-- [数据结构](/docs/CS/Algorithms/Algorithms.md?id=数据结构)
+- [数据结构](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
 - [stack](/docs/CS/Algorithms/struct/stack.md)
 - [queue](/docs/CS/Algorithms/struct/queue.md)
 

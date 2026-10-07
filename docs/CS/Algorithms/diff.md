@@ -20,10 +20,10 @@ git diff 的实现里，其实就内置有多个不同的 diff 算法
 
 git diff 默认算法：Myers 差分算法
 
-## Myers 差分算法
+## The Myers Diff Algorithm
 ## Links
 
-- [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=复杂度分析)
+- [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
 
 ## References
 

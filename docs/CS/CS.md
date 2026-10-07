@@ -162,7 +162,7 @@ JDK 源码、集合与并发、虚拟线程、内存与 GC
 
 算法研究**如何把问题变成可执行的步骤、这些步骤要花多少资源**；数据结构研究**如何组织数据，才能让这些步骤花得少**。两者共用同一套度量语言——渐进复杂度。
 
-入口 [Algorithms](/docs/CS/Algorithms/Algorithms.md)：[数据结构](/docs/CS/Algorithms/Algorithms.md?id=数据结构)（线性表、树、堆、图、页置换）与[复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=复杂度分析)是主干，按范式展开 [Dynamic Programming](/docs/CS/Algorithms/DP/DP.md)、[Greedy](/docs/CS/Algorithms/Greedy.md)、[Divide and Conquer](/docs/CS/Algorithms/Divide-and-Conquer.md)、[Backtracking](/docs/CS/Algorithms/Backtracking.md)、[Randomized](/docs/CS/Algorithms/Randomized.md)、[Amortized Analysis](/docs/CS/Algorithms/Amortized.md)，另有 [Sort](/docs/CS/Algorithms/sort.md)、[Hash](/docs/CS/Algorithms/hash.md) 与工程向专题（[LRU](/docs/CS/Algorithms/LRU.md)、[PageRank](/docs/CS/Algorithms/PageRank.md)、[HyperLogLog](/docs/CS/Algorithms/HyperLogLog.md)、[Timing Wheel](/docs/CS/Algorithms/TimingWheel.md)）。
+入口 [Algorithms](/docs/CS/Algorithms/Algorithms.md)：[Data Structures](/docs/CS/Algorithms/Algorithms.md?id=data-structures)（线性表、树、堆、图、页置换）与[Algorithm Analysis](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)是主干，按范式展开 [Dynamic Programming](/docs/CS/Algorithms/DP/DP.md)、[Greedy](/docs/CS/Algorithms/Greedy.md)、[Divide and Conquer](/docs/CS/Algorithms/Divide-and-Conquer.md)、[Backtracking](/docs/CS/Algorithms/Backtracking.md)、[Randomized](/docs/CS/Algorithms/Randomized.md)、[Amortized Analysis](/docs/CS/Algorithms/Amortized.md)，另有 [Sort](/docs/CS/Algorithms/sort.md)、[Hash](/docs/CS/Algorithms/hash.md) 与工程向专题（[LRU](/docs/CS/Algorithms/LRU.md)、[PageRank](/docs/CS/Algorithms/PageRank.md)、[HyperLogLog](/docs/CS/Algorithms/HyperLogLog.md)、[Timing Wheel](/docs/CS/Algorithms/TimingWheel.md)）。
 
 ### Computability and Complexity
 

@@ -44,7 +44,7 @@ Linux 用户态提供四种"睡眠到某时刻"的接口（`nanosleep`、`clock_
 
 ## Kernel Timers Under Everything
 
-所有用户态定时最终都落在内核的两套机制上：**低精度定时器**用分级时间轮（同一时刻的海量普通 timer 挂在按有效期位数分级的槽里，避免逐个扫描），**高精度定时器 hrtimer** 用红黑树按到期时间排序（需要 ns 级精度的场景，以及 tick 停掉之后模拟 tick）。两者取舍与用户态完全同构：**海量短超时用轮，少量精确到点用树/堆**（对照表见 [与其他定时器方案对比](/docs/CS/Algorithms/TimingWheel.md?id=与其他定时器方案对比)）。
+所有用户态定时最终都落在内核的两套机制上：**低精度定时器**用分级时间轮（同一时刻的海量普通 timer 挂在按有效期位数分级的槽里，避免逐个扫描），**高精度定时器 hrtimer** 用红黑树按到期时间排序（需要 ns 级精度的场景，以及 tick 停掉之后模拟 tick）。两者取舍与用户态完全同构：**海量短超时用轮，少量精确到点用树/堆**（对照表见 [Comparison with Other Timer Schemes](/docs/CS/Algorithms/TimingWheel.md?id=comparison-with-other-timer-schemes)）。
 
 内核侧还有两件直接影响"定时准不准"的事：`NO_HZ` 会在系统空闲时停掉节拍中断，深睡的 CPU 醒来后靠 **tick broadcast** 补定时；定时任务在 CPU 间迁移时还要搬定时器。做容器化调度时，被 cgroup 限流的进程其定时器精度还会受调度延迟影响。整条链路的机制与排障见 [Linux 时间子系统](/docs/CS/OS/Linux/timer.md)。
 

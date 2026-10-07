@@ -9,8 +9,7 @@ Monotonic Stacks can be broadly classified into two types:
 
 将一个元素插入单调栈时，为了维护栈的单调性，需要在保证将该元素插入到栈顶后整个栈满足单调性的前提下弹出最少的元素
 
-### 核心不变量
-
+### Core Invariant
 单调栈 = 一个普通栈 + 一条**排序不变量**：从栈底到栈顶，元素始终保持递增（或始终保持递减）。
 
 插入新元素 $x$ 的动作固定为「先弹后压」：
@@ -27,8 +26,7 @@ Monotonic Stacks can be broadly classified into two types:
 
 单调栈成立的**前提**是：元素**只从一端进出**。一旦需要随机删除中间元素，栈顶弹出的顺序就不再受控，不变量立刻失效 —— 这正是它与单调队列的分界（见下文）。
 
-### 单调递增 vs 单调递减栈
-
+### Increasing vs Decreasing Stacks
 | 维度 | 单调递增栈 | 单调递减栈 |
 | --- | --- | --- |
 | 栈内顺序（栈底→栈顶） | 元素递增 | 元素递减 |
@@ -40,8 +38,7 @@ Monotonic Stacks can be broadly classified into two types:
 
 两种栈的算法骨架完全一样，差异仅在比较方向与栈顶语义：**很多题目把`<` 改成 `>` 就从一个栈翻转到另一个栈**，不需要换整体思路。
 
-### 为什么有效
-
+### Why It Works
 核心不是"栈"这个容器，而是**每个元素至多入栈一次、出栈一次**。
 
 虽然 `while` 循环嵌在 `for` 里，看起来是 $O(n^2)$，但总弹出次数不超过总压入次数，而压入次数恰好是 $n$：
@@ -54,10 +51,8 @@ $$\text{总代价} = \sum (\text{压入次数} + \text{弹出次数}) \le n + n 
 
 顺带一提，栈中元素个数始终不超过 $n$，所以空间复杂度是 $O(n)$。
 
-### 经典例题
-
-#### 柱状图中最大的矩形
-
+### Classic Problems
+#### Largest Rectangle in a Histogram
 单调递增栈存**下标**（存值就失去了计算宽度的能力）。从左往右遍历，遇到更矮的柱子时结算被弹出柱子的最优宽度：
 
 ```java
@@ -82,8 +77,7 @@ int largestRectangleArea(int[] heights) {
 
 时间 $O(n)$，空间 $O(n)$。
 
-#### 下一个更大元素（Next Greater Element）
-
+#### Next Greater Element
 单调递减栈，从左往右一次扫描，答案是"每个位置右侧第一个严格大于它的元素"。
 
 ```java
@@ -105,8 +99,7 @@ int[] nextGreater(int[] nums) {
 
 时间 $O(n)$，空间 $O(n)$ —— 对比朴素的逐位置向右扫描是 $O(n^2)$。
 
-#### 接雨水
-
+#### Trapping Rain Water
 同样用单调递减栈存下标。本质是逐层横向填水：每弹出一个"坑底"下标 `bottom`，若栈还非空，则 `stack.peek()` 是左侧挡板，宽度 $i - peek - 1$，水深 $\min(左侧高, 当前高) - heights[bottom]$：
 
 ```java
@@ -130,8 +123,7 @@ int trap(int[] height) {
 
 注意与最大矩形不同的两点：弹栈条件是**严格小于**（相等的柱子不构成新挡板），且弹栈后可能栈空、需提前退出（左边没有墙）。时间 $O(n)$，空间 $O(n)$。
 
-#### 滑动窗口最大值
-
+#### Sliding Window Maximum
 这是**单调队列**（用双端队列实现），不是单调栈，但常被混为一谈，见下一节。
 
 ```java
@@ -150,8 +142,7 @@ int[] maxSlidingWindow(int[] nums, int k) {
 
 队首永远保持窗口内最大值的下标。时间 $O(n)$ —— 每个下标进出各至多一次。
 
-### 与单调队列的区分
-
+### Distinction from Monotonic Queues
 一句话：**栈只能一端进出，队列两端都能进出**，这个结构差异决定了适用题型。
 
 | 维度 | 单调栈 | 单调队列 |
@@ -168,8 +159,7 @@ int[] maxSlidingWindow(int[] nums, int k) {
 
 一个常见误解是"滑动窗口最大值也能用单调栈做"。实际上可以，但需要额外维护窗口起点、并在插入时做判断剪枝，最终仍要 $O(n)$ 且代码更复杂；直接用单调队列是标准解。
 
-### 易错点
-
+### Common Pitfalls
 **栈空判定**。`while (stack.peek() ...)` 之前必须先判空，否则取栈顶直接抛异常。上面代码统一写成 `!stack.isEmpty() && ...`，短路求值保证安全。
 
 **存下标还是存值**。要计算宽度、距离、或要回头修改答案数组时，**存下标**：柱状图最大矩形（要算宽度）、下一个更大元素（要写回 `ans[下标]`）都必须存下标。存值只在纯"求当前极值"时才够用。存下标还带来一个好处：比较时用 `heights[stack.peek()]` 间接访问，避免了重复读取。
@@ -185,7 +175,7 @@ int[] maxSlidingWindow(int[] nums, int k) {
 
 ## Links
 
-- [数据结构](/docs/CS/Algorithms/Algorithms.md?id=数据结构)
+- [数据结构](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
 - [stack](/docs/CS/Algorithms/struct/stack.md)
 - [queue](/docs/CS/Algorithms/struct/queue.md)
 

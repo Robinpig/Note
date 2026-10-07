@@ -88,7 +88,7 @@ Notice that if all the characters occur with the same frequency, then there are 
 
 ## Links
 
-- [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=复杂度分析)
+- [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
 
 ## References
 

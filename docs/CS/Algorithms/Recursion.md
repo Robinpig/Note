@@ -33,7 +33,7 @@ else
 	return (some work and then a recursive call)
 ```
 
-## 递归与迭代
+## Recursion versus Iteration
 While discussing recursion, the basic question that comes to mind is: which way is better? – iteration or recursion?
 The answer to this question depends on what we are trying to do. A recursive approach mirrors the problem that we are trying to solve.
 A recursive approach makes it simpler to solve a problem that may not have the most obvious of answers.
@@ -64,8 +64,7 @@ Iteration
 * Some problems are best suited for recursive solutions while others are not.
 
 
-## 递归优化
-
+## Optimizing Recursion
 比较初级的递归实现可能递归次数太多，容易超时。这时需要对递归进行优化
 
 分治（Divide and Conquer），字面上的解释是「分而治之」，就是把一个复杂的问题分成两个或更多的相同或相似的子问题，直到最后子问题可以简单的直接求解，原问题的解即子问题的解的合并
@@ -78,8 +77,7 @@ Iteration
 
 
 
-## 递推式求解：斐波那契数列
-
+## Solving Recurrences: The Fibonacci Sequence
 斐波那契数列是最经典的递推例子，它的定义本身就是递推式：
 
 $$
@@ -135,7 +133,7 @@ $$
 
 ## Links
 
-- [数据结构](/docs/CS/Algorithms/Algorithms.md?id=数据结构)
-- [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=复杂度分析)
+- [数据结构](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
+- [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
 
 ## References

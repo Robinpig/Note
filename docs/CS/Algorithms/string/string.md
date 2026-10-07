@@ -5,8 +5,7 @@
 
 
 
-## 基础概念
-
+## Basic Concepts
 一个 **字符串** S 是将 n 个字符顺次排列形成的序列，n 称为 S 的长度，表示为 |S|
 
 - 如果字符串下标从 1 开始计算，S 的第 i 个字符表示为 S[i]
@@ -21,8 +20,7 @@
 
 
 
-### 存储
-
+### Storage
 - 使用 `char` 数组存储，用空字符 `\0` 表示字符串的结尾（C 风格字符串）。
 - 使用 C++ 标准库提供的 [`string` 类](https://oi-wiki.org/lang/csl/string/)。
 - 字符串常量可以用字符串字面量（用双引号括起来的字符串）表示
@@ -30,7 +28,7 @@
 字符串在底层实现基本都是使用数组进行存储的 在很多场景下都需要使用数组的特性 将其看作一个字符数组
 利用数组的索引进行快速读取元素
 
-## 字符串匹配
+## String Matching
 字符串匹配问题又称模式匹配（pattern matching）
 该问题可以概括为「给定字符串 S 和 T，在主串 S 中寻找子串 T」。字符 T 称为模式串 (pattern)
 
@@ -46,7 +44,7 @@
 
 
 
-## 哈希
+## Hash
 我们定义一个把字符串映射到整数的函数 f，这个 f 称为是 Hash 函数。
 我们希望这个函数 f 可以方便地帮我们判断两个字符串是否相等
 
@@ -67,7 +65,7 @@
 
 
 
-## 字典树（Trie）
+## Trie
 字典树，英文名 trie。顾名思义，就是一个像字典一样的树
 
 字典树最基础的应用——查找一个字符串是否在「字典」中出现过
@@ -76,14 +74,12 @@
 
 
 
-## 回文
-
+## Palindrome
 **回文串** 是正着写和倒着写相同的字符串，即满足 $\forall 1\le i\le|s|, s[i]=s[|s|+1-i]]$ 的 s
 
 
 
-## 回文树
-
+## Palindromic Tree
  回文树（EER Tree，Palindromic Tree，也被称为回文自动机）是一种可以存储一个串中所有回文子串的高效数据结构
  最初由 Mikhail Rubinchik 和 Arseny M. Shur 在 2015 年发表
  它的灵感来源于后缀树等字符串后缀数据结构，使用回文树可以简单高效地解决一系列涉及回文串的问题
@@ -91,7 +87,7 @@
 
 
 
-## Manacher 算法
+## Manacher Algorithm
 给定一个长度为 n 的字符串 [s，请找到所有对 (i, j) 使得子串 $s[i \dots j]$ 为一个回文串
 当 $t = t_{rev}$ 时，字符串 t 是一个回文串( $ t_{rev}$ 是 t 的反转字符串)
 
@@ -102,7 +98,7 @@
 
 ## Links
 
-- [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=复杂度分析)
+- [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
 
 ## References
 

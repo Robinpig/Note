@@ -6,7 +6,7 @@ Bloom Filter（布隆过滤器）是一种**空间效率极高**的概率型集�
 - 任一对应位为 0 → **一定不存在**（无假阴性，false negative 为 0）；
 - 所有位都为 1 → **可能存在**，但可能是多个其它元素恰好把这些位填满了（假阳性，false positive）。
 
-## 操作
+## Operations
 ```
 add(x):   for i in 1..k: bit[ h_i(x) mod m ] = 1
 maybe(x): all bit[ h_i(x) mod m ] == 1 ?
@@ -14,7 +14,7 @@ maybe(x): all bit[ h_i(x) mod m ] == 1 ?
 
 标准 Bloom Filter 不支持删除（置 0 会误伤共享该位的其它元素）。需要删除可用 **Counting Bloom Filter**（位换成小计数器），代价是数倍空间。
 
-## 参数
+## Parameters
 设插入元素数为 n、位数组长度为 m、哈希函数个数为 k，假阳性率近似为：
 
 ```
@@ -29,13 +29,13 @@ p ≈ (1 − e^(−k·n/m))^k
 
 Guava 的 `BloomFilter.create(funnel, expectedInsertions, fpp)` 会按预期容量和目标假阳性率自动算好 m、k。
 
-## 应用场景
+## Use Cases
 - **缓存穿透防护**：在查 [Redis](https://redis.io)/DB 前先用 Bloom Filter 拦截对不存在 key 的请求，避免大量恶意/随机 key 直接打到底层存储；判「一定不存在」直接返回。
 - 大数据去重：爬虫 URL 去重、HBase/[Lucene](/docs/CS/Framework/ES/Lucene.md) 类系统判断某条目/段是否可能存在。
 - LSM 存储里判断一个 key 是否可能在某个 SSTable 中，减少无效磁盘读取，见 [LSM](/docs/CS/Algorithms/tree/LSM.md)。
 - 分布式成员/黑名单、弱一致的「见过吗」判断，能容忍极小误判率即可。
 
-## 取舍
+## Trade-offs
 | 维度 | Bloom Filter | HashSet/完整存储 |
 | --- | --- | --- |
 | 空间 | 每位/每元素极省 | 存整个对象，大 |
@@ -48,7 +48,7 @@ Guava 的 `BloomFilter.create(funnel, expectedInsertions, fpp)` 会按预期容�
 
 - [Structure](/docs/CS/Algorithms/struct/Structure.md)
 - [LSM Tree](/docs/CS/Algorithms/tree/LSM.md) — 用 Bloom Filter 跳过不含 key 的 SSTable
-- [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=复杂度分析)
+- [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
 
 ## References
 

@@ -133,6 +133,6 @@ Radix trees are a refinement of tries that only introduce nodes when branching i
 
 ## Links
 
-- [数据结构](/docs/CS/Algorithms/Algorithms.md?id=数据结构)
+- [数据结构](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
 
 ## References

@@ -4,7 +4,7 @@
 
 
 
-## 回溯解法
+## Backtracking Solution
 [回溯算法（Backtracking）](/docs/CS/Algorithms/Backtracking.md) 是解决N皇后问题的标准方法
 该算法通过尝试在棋盘上放置皇后，当发现当前放置方案无法继续时，就撤销最近的选择，回溯到上一步并尝试其他可能性，直到找到完整解或尝试所有可能后确认无解
 

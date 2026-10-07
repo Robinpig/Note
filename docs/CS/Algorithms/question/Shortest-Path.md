@@ -20,7 +20,7 @@
 它们对道路网络、运营和后勤研究也非常重要。最短路径算法对计算机网络（如互联网）也非常重要
 任何帮助你选择路线的软件都会使用某种最短路径算法。比如谷歌地图，你可以输入起点和终点，帮你解决最短路径问题
 
-## 最短路问题的类型
+## Types of Shortest Path Problems
 最短路径算法主要有两种类型：单源(*Single Source*)算法和全对(*All Pair*)算法
 这两种类型的算法都有各自表现最好的方式
 全对算法因复杂性增加而运行时间更长。所有最短路径算法都会返回可用于寻找最短路径的值，即使这些返回值在不同算法的类型或形式上有所不同
@@ -35,7 +35,7 @@
 `Jonson's` 算法适用于稀疏图 时间复杂度近似为 $O(V^3logV+VE)$ 是Dijkstra算法的变种 利用重新加权的技巧 允许在可能存在负权重边的图上使用 Dijkstra 算法
 
 
-## Dijkstra 算法
+## Dijkstra's Algorithm
 Dijkstra 算法是用于计算单源最短路径算法
 
 基本思想是: 设置两个顶点集 S 和 T, S 中存放已确定最短路径的顶点, T 中存放待确定最短路径的顶点
@@ -103,7 +103,7 @@ Dijkstra 算法的优化
 
 我们可以用堆对dis数组进行维护,用 $O(logn)$ 的时间取出堆顶元素并删除,用 $O(logn)$ 遍历每条边,总复杂度 $O((n+m)logn)$
 
-## Floyd–Warshall 算法
+## Floyd-Warshall Algorithm
 Floyd 算法一次性求所有结点之间的最短路径，它用到了动态规划的思想：求两点i、j之间的最短距离，可以分两种情况考虑，即经过图中某个点k的路径和不经过点k的路径，取两者中的最短路径
 
 Floyd 算法使用邻接矩阵来处理 依次将每个点作为“中心点”去更新最短路径信息
@@ -111,8 +111,8 @@ Floyd 算法使用邻接矩阵来处理 依次将每个点作为“中心点”�
 
 
 
-## A* 搜索
-## Bellman–Ford 算法
+## A* Search
+## Bellman-Ford Algorithm
 和 Dijkstra 用到的贪心思想不同，Bellman-Ford 算法采用的是动态规划的思想
 
 Bellman-Ford 的整体时间复杂度是 $O(V*E)$，大部分实际场景下，边的数量比节点数量大的多，所以时间复杂度要比 Dijkstra 算法差很多。当然好处在于可以处理图中有负边的情况
@@ -128,7 +128,7 @@ Bellman-Ford 的整体时间复杂度是 $O(V*E)$，大部分实际场景下，�
 
 [洛谷P3385 【模板】负环](https://www.luogu.com.cn/problem/P3385)
 
-## Johnson 算法
+## Johnson's Algorithm
 Jonson 算法描述如下
 1. 给定图 G = (V, E), 增加一个新的顶点s, 使得s 与图 G 中所有顶点建立连接 设新的图为 G'
 2. 对图 G‘ 中顶点 s 使用 Bellman-Ford 算法计算单源最短路径, 得到结果 h[] = {h[0], h[1], ... h[V-1]}
@@ -138,7 +138,7 @@ Jonson 算法描述如下
 
 Johnson 算法时间复杂度为 $O(V^2logV + VE)$
 
-## A* 搜索
+## A* Search
 A star算法最早可追溯到1968年，在IEEE Transactions on Systems Science and Cybernetics中的论文A Formal Basis for the Heuristic Determination of Minimum Cost Paths中首次提出
 A*算法是把启发式方法（heuristic approaches）如BFS（完全使用贪心策略），和常规方法如 Dijsktra 算法结合在一起的算法
 有点不同的是，类似BFS的启发式方法经常给出一个近似解而不是保证最佳解。然而，尽管A star基于无法保证最佳解的启发式方法，A star却能保证找到一条最短路径

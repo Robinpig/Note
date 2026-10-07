@@ -51,7 +51,7 @@ You can use these arrays not only to find a pattern in a text, but also to answe
 such as what is the longest repeated substring in the text and what is the longest common substring between two texts.
 The algorithm to form the suffix array takes $O(n 1g n)$ time and, given the suffix array, shows how to compute the longest common prefix array in $O(n)$ time.
 
-## 朴素字符串匹配算法
+## The Naive String-Matching Algorithm
 The *Naive-String-Matcher* procedure finds all valid shifts using a loop that checks the condition $P[1:m] = T[s+1:s+m]$ for each of the n−m+1 possible values of s.
 
 Naive-String-Matcher(T, P, n, m)
@@ -97,7 +97,7 @@ The naive string matcher is inefficient because it entirely ignores information 
 Such information can be quite valuable, however. For example, if P = aaab and s = 0 is valid, then none of the shifts 1, 2, or 3 are valid, since T[4] = b.
 The following sections examine several ways to make effective use of this sort of information.
 
-## Rabin–Karp 算法（滚动哈希）
+## The Rabin-Karp Algorithm
 Rabin and Karp proposed a string-matching algorithm that performs well in practice and that also generalizes to other algorithms for related problems, such as two-dimensional pattern matching.
 The Rabin-Karp algorithm uses Θ(m) preprocessing time, and its worst-case running time is Θ((n−m+1)m).
 Based on certain assumptions, however, its average-case running time is better.
@@ -209,7 +209,7 @@ BM 算法，最大的特点就是利用了对目标串的预处理，用空间�
 
 ## RK
 
-## 后缀数组（Suffix Array）
+## Suffix Arrays
 The algorithms we have seen thus far in this chapter can efficiently find all occurrences of a pattern in a text.
 That is, however, all they can do.
 This section presents a different approach—suffix arrays—with which you can find all occurrences of a pattern in a text, but also quite a bit more.
@@ -292,7 +292,7 @@ This substring also occurs at positions substr-rank[2].index = 4 and substr-rank
 
 ## Links
 
-- [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=复杂度分析)
+- [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
 
 ## References
 
