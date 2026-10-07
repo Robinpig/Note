@@ -69,7 +69,7 @@ MySQL 早期默认引擎：
 - 文件三件套：`xxx.sdi`（8.0 前是 `.frm`，表结构）、`xxx.MYD`（数据）、`xxx.MYI`（索引，索引与数据分离，非聚簇）；
 - 适合读多写少、不需要事务的非核心场景（日志、历史表、报表），如今这类需求不少已转向 MongoDB/分析型存储。
 
-### MEMORY（Heap）
+### MEMORY (Heap)
 
 - 数据全部放在内存，默认使用 **Hash 索引**（也支持 B-Tree），重启即丢、容量受限于内存；
 - 磁盘上只有表结构文件 `xxx.sdi`；适合临时表、缓存、Lookup 表，如今大量场景被 [Redis](/docs/CS/DB/Redis/Redis.md) 取代。
@@ -102,7 +102,7 @@ MySQL 早期默认引擎：
 ## Links
 
 - [InnoDB](/docs/CS/DB/MySQL/InnoDB.md)
-- [Index](/docs/CS/DB/MySQL/Index.md) — 各引擎索引结构差异
+- [Index](/docs/CS/DB/MySQL/Index.md)
 - [tablespace](/docs/CS/DB/MySQL/tablespace.md)
 - [MySQL](/docs/CS/DB/MySQL/MySQL.md)
 

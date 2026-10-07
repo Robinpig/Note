@@ -1,8 +1,22 @@
+## Introduction
+
+MySQL server 维护多种日志文件（server log files），用于诊断、审计以及复制 / 恢复：Error Log（错误日志）、General Query Log（通用查询日志）、Binary Log（二进制日志）与 Slow Query Log（慢查询日志）。本文概述四者的作用与关键参数，正文默认口径为 MySQL 9.7。
+
+| 项 | 值 |
+| :--- | :--- |
+| 正文默认版本 | MySQL 9.7.x LTS（最新 9.7.3，2026-08-18） |
+| 源码核实基线 | tag `mysql-9.7.2` |
+| 次要兼容目标 | 8.4.x LTS |
+| 已停止支持 | 8.0（EOL 2026-04-30）、5.7（EOL 2023-10） |
+| 核实日期 | 2026-10-07 |
+
 ## Error Log
 
 The error log contains a record of **mysqld** startup and shutdown times.
 It also contains diagnostic messages such as errors, warnings, and notes that occur during server startup and shutdown, and while the server is running.
 For example, if **mysqld** notices that a table needs to be automatically checked or repaired, it writes a message to the error log.
+
+自 MySQL 8.0.13 起，error log 采用组件化的日志过滤 / 清洗服务（log filtering and cleansing services），由 `log_error_services` 变量控制数据流，默认 `log_filter_internal; log_sink_internal`：先由内置过滤器按 `log_error_verbosity` 等规则过滤，再由内置 sink `log_sink_internal` 以文本格式写出。安装 `log_sink_json` 组件后，error log 可输出 JSON 格式。
 
 ## General Query Log
 
@@ -55,7 +69,9 @@ The slow query log consists of SQL statements that take more than `long_query_ti
 The slow query log can be used to find queries that take a long time to execute and are therefore candidates for optimization.
 However, examining a long slow query log can be a time-consuming task. To make this easier, you can use the **mysqldumpslow** command to process a slow query log file and summarize its contents.
 
-```
+自 MySQL 8.0.14 起，`log_slow_extra` 变量（默认关闭）开启后会在慢日志每条语句后追加更多执行统计字段；慢日志还可通过 `log_slow_explain` 附带语句的 `EXPLAIN` 计划，便于分析（具体可用性与版本相关，以手册为准）。
+
+```text
 long_query_time	10.000000
 log_slow_admin_statements	ON
 log_slow_disabled_statements	sp
@@ -71,9 +87,9 @@ log_queries_not_using_indexes	ON
 slow_query_log_file	demo-slow.log
 ```
 
-log_queries_not_using_indexes 开启后，如果运行的SQL语句没有使用索引，则MYSQL数据库同样会将其记录到慢查询日志
+log_queries_not_using_indexes 开启后，如果运行的 SQL 语句没有使用索引，则 MYSQL 数据库同样会将其记录到慢查询日志
 
-
+上述 `log_slow_slave_statements` 是 ≤8.0.22 的旧写法，9.7 的对应名称为 `log_slow_replica_statements`（旧名作为弃用别名仍可用）。
 
 ```sql
 
@@ -89,4 +105,10 @@ set long_query_time=0;
 
 ## Links
 
+- [binlog 二进制日志](/docs/CS/DB/MySQL/binlog.md)
+- [复制与主从延迟 replica](/docs/CS/DB/MySQL/replica.md)
 - [MySQL](/docs/CS/DB/MySQL/MySQL.md)
+
+## References
+
+- [MySQL 8.4 Reference Manual: The Server Log Files](https://dev.mysql.com/doc/refman/8.4/en/server-log-files.html)

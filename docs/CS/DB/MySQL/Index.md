@@ -2,7 +2,7 @@
 
 
 
-## 理论
+## Fundamentals
 
 A data structure that provides a fast lookup capability for **rows** of a **table**, typically by forming a tree structure (**B-tree)** representing all the values of a particular **column** or set of columns.
 
@@ -35,7 +35,7 @@ Any **column index** or **composite index** could act as a covering index, given
 Design your indexes and queries to take advantage of this optimization technique wherever possible.
 
 
-### 联合索引
+### Composite Index
 
 
 当遇到>或者<时 当前column走索引 下个column不再使用索引 此时会根据查询回表代价估计是否全表还是使用index condition
@@ -51,7 +51,7 @@ LIKE '%XX' 无法使用索引
 MySQL can also optimize the combination col_name = expr OR col_name IS NULL, a form that is common in resolved subqueries. EXPLAIN shows ref_or_null when this optimization is used.
 
 
-### 最左前缀与 key_len
+### Leftmost Prefix and key_len
 
 联合索引 `(a, b, c)` 本质是一棵按 `(a, b, c)` 字典序排列的 B+Tree，因此遵循**最左前缀法则（leftmost prefix）**：
 
@@ -66,7 +66,7 @@ MySQL can also optimize the combination col_name = expr OR col_name IS NULL, a f
 
 key_len 的计算：字符列要算「字符字节数 × 定义长度 + 是否可空(1) + 变长长度字节(2)」，例如 utf8mb4 的 `varchar(20)` 是 `20×4 + 2 + 可空1`。
 
-### 索引何时失效
+### When Indexes Are Not Used
 
 工程上高频的失效场景，务必结合 `EXPLAIN`（type/key/key_len/rows/Extra）验证，而不是背结论：
 
@@ -82,14 +82,14 @@ key_len 的计算：字符列要算「字符字节数 × 定义长度 + 是否�
 | 优化器认为全表扫更便宜 | 命中行占比大、统计信息偏差、数据分布不均时，走索引大量回表反而更慢 |
 | 字符集/排序规则不一致 | 两表 join 列 collation 不同会导致隐式转换而用不上索引 |
 
-### 回表与覆盖索引
+### Table Lookup and Covering Index
 
 - **回表（lookup / bookmark lookup）**：InnoDB 二级索引叶子只存索引列 + 主键值。先用二级索引找到主键，再拿主键去聚簇索引查整行，是两次 B+Tree 查找。
 - **覆盖索引（covering index）**：查询所需列（SELECT、WHERE、ORDER BY 涉及的列）都已包含在该索引里，无需回表，`EXPLAIN` 的 Extra 显示 `Using index`。
 - 减少回表的手段：避免 `SELECT *`，只取需要的列；把高频查询列做进联合索引（注意把 WHERE 列放前、补充 SELECT 列在后）；必要时用汇总/冗余。
 - 主键越短越好，因为每个二级索引叶子都携带主键，长主键会放大所有二级索引体积。
 
-### 全文索引
+### Full-Text Index
 
 普通 B+Tree 适合「整值/前缀」匹配，不适合在大段文本里找关键词。`FULLTEXT` 索引用**倒排索引（inverted index）**解决文本检索：
 
@@ -110,7 +110,7 @@ WHERE MATCH(title, body) AGAINST('数据库 索引' IN NATURAL LANGUAGE MODE);
 适用于站内文章/描述的关键词搜索；但在中文需要考虑分词（ngram parser），更复杂的相关性、海量文本检索通常直接上 [Elasticsearch](/docs/CS/Framework/ES/ES.md)。
 另外要注意：**MySQL 不支持位图索引（Bitmap Index）**。教程里出现的 `CREATE BITMAP INDEX` 是 Oracle 的语法，在 MySQL 上会报错；低基数列在 InnoDB 中一般不适合普通 B+Tree（区分度低）。
 
-### 索引碎片化
+### Index Fragmentation
 
 长期频繁的 UPDATE/DELETE 会导致 B+Tree 页分裂与页内空洞，数据在物理上不连续，`Data_free` 增大、范围扫描的磁盘 I/O 变差：
 
@@ -131,7 +131,7 @@ ALTER TABLE tbl_name ENGINE=InnoDB;      -- 显式重建，效果相同
 
 碎片比例不高（如 < 10%）通常无需处理；频繁大批量写入的表才需要周期性维护，且应在业务低峰、确认磁盘有足够剩余空间时进行。
 
-### 建索引的取舍
+### Trade-offs of Creating Indexes
 
 - 适合：高频 WHERE/连接键（JOIN ON）、`ORDER BY`/`GROUP BY` 列、区分度高的列、需要唯一约束的列、大表。
 - 不适合：小表（少于约千行）、频繁更新的列（维护代价）、区分度极低的列（性别、deleted 标志，反而可能误导优化器）、过多冗余单列索引。
@@ -418,7 +418,7 @@ rocksDB的存储引擎
 - [B-Tree](/docs/CS/DB/MySQL/B-Tree.md)
 - [存储引擎](/docs/CS/DB/MySQL/plugin.md)
 - [Optimizer](/docs/CS/DB/MySQL/Optimizer.md)
-- [Elasticsearch](/docs/CS/Framework/ES/ES.md) — 全文检索的外部方案
+- [Elasticsearch](/docs/CS/Framework/ES/ES.md)
 
 ## References
 

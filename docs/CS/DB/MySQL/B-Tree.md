@@ -1,5 +1,16 @@
 ## Introduction
 
+| 项 | 值 |
+| :--- | :--- |
+| 正文默认版本 | MySQL 9.7.x LTS（最新 9.7.3，2026-08-18） |
+| 源码核实基线 | tag `mysql-9.7.2`（`storage/innobase/include/dict0mem.h`、`include/btr0btr.h`、`btr/btr0cur.cc`） |
+| 次要兼容目标 | MySQL 8.4.x LTS |
+| 已停止支持 | MySQL 8.0（EOL **2026-04-30**）、MySQL 5.7（EOL 2023-10） |
+| 核实日期 | 2026-10-07 |
+
+> [!NOTE]
+> 本篇正文按版本演进顺序写：`The 5.6 Implementation` / `The 5.7 Additions` / `The 8.0 Read Path` 三节是**旧版本的历史脉络**，保留它们是为了理解「为什么现在长这样」；当前行为以最后一节 [Current Implementation In MySQL 9.7](/docs/CS/DB/MySQL/B-Tree.md?id=current-implementation-in-mysql-97) 为准。本目录的版本坐标与勘误见 [Version Migration](/docs/CS/DB/MySQL/Version_Migration.md)。
+
 在InnoDB 的实现中, btree 主要有两种lock: index lock 和 page lock
 
 index lock 就是整个Index 的lock, 具体在代码里面就是 dict_index->lock
@@ -9,6 +20,8 @@ page lock 就是我们在btree 里面每一个page 的变量里面都会有的 l
 
 
 
+
+## The 5.6 Implementation
 
 在5.6 的实现里面比较简单,btree latch 大概是这样的流程
 
@@ -44,6 +57,8 @@ page lock 就是我们在btree 里面每一个page 的变量里面都会有的 l
 
 
 
+## The 5.7 Additions
+
 5.7 就引入两个改动
 
 1. 引入了sx lock
@@ -59,7 +74,7 @@ SX LOCK 的意思我有意向要修改这个保护的范围, 但是现在还没�
 
 **目前主要用途因为index SX lock 和 S LOCK 不冲突, 因此悲观insert 改成index SX LOCK 以后, 可以允许用户的read/乐观写入**
 
-SX LOCK 的引入由这个 WL 加入 [WL#6363](https://link.zhihu.com/?target=https%3A//dev.mysql.com/worklog/task/%3Fid%3D6363)
+SX LOCK 的引入由这个 WL 加入 [WL#6363](https://dev.mysql.com/worklog/task/?id=6363)
 
 可以认为 SX LOCK 的引入是为了对读操作更加的优化,  SX lock 是和 X lock 冲突, 但是是和 S lock 不冲突的, 将以前需要加X lock 的地方改成了SX lock, 因此对读取更加友好了
 
@@ -73,7 +88,9 @@ SX LOCK 的引入由这个 WL 加入 [WL#6363](https://link.zhihu.com/?target=ht
 
 的page lock 以后, 再把父节点的page lock 放开, 这样就可以尽可能的减少latch 的范围. 这样的实现就必须保证non-leaf page 也必须持有page lock.
 
-不过这里InnoDB 并未把index->lock 完全去掉, 这就导致了现在InnoDB 同一时刻仍然只有同时有一个 BTR_MODIFY_TREE 操作在进行, 从而在激烈并发修改btree 结构的时候, 性能下降明显.
+不过这里InnoDB 并未把index->lock 完全去掉, 这就导致了从 5.7 一直到 9.7，同一时刻仍然只有同时有一个 BTR_MODIFY_TREE 操作在进行, 从而在激烈并发修改btree 结构的时候, 性能下降明显.
+
+这个约束的源码级证据在 9.7 依然存在：`btr_cur_latch_leaves()` 的 `BTR_MODIFY_TREE` 分支断言 index 的 `rw_lock` 必须已被 X 或 SX 持有（见 [Current Implementation In MySQL 9.7](/docs/CS/DB/MySQL/B-Tree.md?id=current-implementation-in-mysql-97)）。
 
 
 
@@ -83,6 +100,8 @@ SX LOCK 的引入由这个 WL 加入 [WL#6363](https://link.zhihu.com/?target=ht
 
 
 
+## The 8.0 Read Path
+
 到了8.0
 
 1. 如果是一个查询请求
@@ -91,6 +110,8 @@ SX LOCK 的引入由这个 WL 加入 [WL#6363](https://link.zhihu.com/?target=ht
 - 然后沿着搜索btree 路径, 遇到的non-leaf node page 都加 S LOCK
 - 然后直到找到 leaf node 以后, 对leaft node page 也是 S LOCK, 然后把index-> lock 放开
 
+
+## Latch Coupling And SMO Sub-tree
 
 在 B-tree 索引的并发访问控制上，通常利用物理锁 latch 来实现互斥，在共享数据访问结束后就可以立即释放。这区别于事务系统的逻辑锁 lock，事务锁需要在事务提交时释放，通常会持续较长时间
 
@@ -112,6 +133,8 @@ latch sub-tree 导致的单一操作加锁范围大：
 
 
 
+## Recap Of Latch Basics
+
 在InnoDB 的实现中, btree 主要有两种lock: index lock 和 page lock
 index lock 就是整个Index 的 rw_lock, 具体在代码里面就是 dict_index->lock
 page lock 就是我们在btree 里面每一个page 的变量里面都会有的 lock
@@ -124,6 +147,114 @@ page lock 就是我们在btree 里面每一个page 的变量里面都会有的 l
 2. 引入了non-leaf page lock
 
 
+## Current Implementation In MySQL 9.7
+
+上面几节的结论在 9.7 一句话概括：**`index->lock` 没有被删，`RW_SX_LATCH` 仍是它的核心用法，变的是「申请 latch 时能把意图说得多细」。**
+
+### index lock Is Still There
+
+`dict_index_t::lock` 位于 `include/dict0mem.h`：
+
+```c++
+  /** read-write lock protecting the upper levels of the index tree */
+  rw_lock_t lock;
+```
+
+注释 `read-write lock protecting the upper levels of the index tree` 就是它的职责边界：**只保护上层（非叶子）节点**，叶子层由 page latch 负责。这也解释了为什么 5.6 时代「一次 SMO 锁住整棵树」在后来变得可以接受——真正长期被保护的只剩 root 附近几层。
+
+`RW_SX_LATCH` 也仍在使用，例如 `include/btr0btr.h` 里 `btr_node_ptr_get_child()` 的 latch 类型默认值：
+
+```c++
+buf_block_t *btr_node_ptr_get_child(const rec_t *node_ptr, dict_index_t *index,
+                                    const ulint *offsets, mtr_t *mtr,
+                                    rw_lock_type_t type = RW_SX_LATCH);
+```
+
+沿树下探取子节点时默认就是 SX：既允许读者继续 S latch 上层，又排除掉其它 SMO 与整树 X。**SX 是 InnoDB 特有的「共享但排斥 SX 和 X」的意图锁**，5.7 之后并发能力的提升全部建立在这一点上。
+
+### Intention Flags That Narrow The Latch Range
+
+9.7 里可以把「我到底要干什么」直接编码进 latch_mode 的 flag（`include/btr0btr.h`），让被调方少加一把 latch：
+
+```c++
+/** In the case of BTR_SEARCH_LEAF or BTR_MODIFY_LEAF, the caller is
+already holding an S latch on the index tree */
+constexpr size_t BTR_ALREADY_S_LATCHED = 16384;
+
+/** In the case of BTR_MODIFY_TREE, the caller specifies the intention
+to insert record only. It is used to optimize block->lock range.*/
+constexpr size_t BTR_LATCH_FOR_INSERT = 32768;
+
+/** In the case of BTR_MODIFY_TREE, the caller specifies the intention
+to delete record only. It is used to optimize block->lock range.*/
+constexpr size_t BTR_LATCH_FOR_DELETE = 65536;
+```
+
+- `BTR_LATCH_FOR_INSERT` / `BTR_LATCH_FOR_DELETE`：走 `BTR_MODIFY_TREE` 时告诉被调方「我只插入」或「我只删除」，据此缩小叶子层的 `block->lock` 加锁范围——不必像过去那样为了正确性把左右兄弟一起 X latch。这正是针对上文「latch sub-tree 加锁范围过大」问题的修补。
+- `BTR_ALREADY_S_LATCHED`：调用方已经持有 index 的 S latch 时用它跳过重复加锁，避免同一把 `index->lock` 被重入。
+
+真正执行叶子层加锁的是 `btr_cur_latch_leaves()`（`btr/btr0cur.cc`）：
+
+```c++
+/** Latches the leaf page or pages requested.
+@param[in]      block           Leaf page where the search converged
+@param[in]      page_id         Page id of the leaf
+@param[in]      page_size       Page size
+@param[in]      latch_mode      BTR_SEARCH_LEAF, ...
+@param[in]      cursor          Cursor
+@param[in]      mtr             Mini-transaction
+@return blocks and savepoints which actually latched. */
+btr_latch_leaves_t btr_cur_latch_leaves(buf_block_t *block,
+                                        const page_id_t &page_id,
+                                        const page_size_t &page_size,
+                                        ulint latch_mode, btr_cur_t *cursor,
+                                        mtr_t *mtr) {
+```
+
+`case BTR_MODIFY_TREE:` 分支开头那条断言，就是「同一时刻只有一个 SMO」这个约束在 9.7 仍然成立的证据：
+
+```c++
+    case BTR_MODIFY_TREE:
+      /* It is exclusive for other operations which calls
+      btr_page_set_prev() */
+      ut_ad(mtr_memo_contains_flagged(mtr, dict_index_get_lock(cursor->index),
+                                      MTR_MEMO_X_LOCK | MTR_MEMO_SX_LOCK) ||
+            cursor->index->table->is_intrinsic());
+      /* x-latch also siblings from left to right */
+```
+
+也就是说：进 `BTR_MODIFY_TREE` 必须已经持有 index 的 X 或 SX latch，兄弟页再按插入 / 删除的意图补 X latch。函数内部另有 `btr_intention_t`（`BTR_INTENTION_DELETE` / `BTR_INTENTION_BOTH` / `BTR_INTENTION_INSERT`）表达「要往哪边走」，与上面的 `BTR_LATCH_FOR_*` flag 配合决定实际 latch 的邻居范围。
+
+### Side Effects Of Holding index X Latch Less Often
+
+`btr/btr0cur.cc` 里留着一段很宝贵的注释，说明这次「index->lock 可扩展性改造」唯一观察到的性能回退来自 history list 变长——原来 index X latch 顺带起到了给 purge 预留 free block 与读 IO 带宽的作用，收窄之后这层隐式优先级没了：
+
+```c++
+/** For the index->lock scalability improvement, only possibility of clear
+performance regression observed was caused by grown huge history list length.
+That is because the exclusive use of index->lock also worked as reserving
+free blocks and read IO bandwidth with priority. To avoid huge glowing history
+list as same level with previous implementation, prioritizes pessimistic tree
+operations by purge as the previous, when it seems to be growing huge.
+
+ Experimentally, the history list length starts to affect to performance
+throughput clearly from about 100000. */
+constexpr uint32_t BTR_CUR_FINE_HISTORY_LENGTH = 100000;
+```
+
+所以 9.7 的做法是：当 history list 长度接近 `100000` 这个实测门槛时，显式让 purge 优先执行悲观树操作，把过去靠 index X latch「顺带」拿到的效果补回来。这也是读 B-tree 并发时必须和 undo / purge 一起看的原因。
 
 
 ## Links
+
+- [Lock](/docs/CS/DB/MySQL/lock.md)
+- [Index](/docs/CS/DB/MySQL/Index.md)
+- [InnoDB Storage Engine](/docs/CS/DB/MySQL/InnoDB.md)
+- [Memory](/docs/CS/DB/MySQL/memory.md)
+- [Undo Log](/docs/CS/DB/MySQL/undolog.md)
+
+
+## References
+
+1. [A Survey of B-Tree Locking Techniques](https://15721.courses.cs.cmu.edu/spring2019/papers/06-indexes/a16-graefe.pdf)
+2. [MySQL Worklog WL#6363](https://dev.mysql.com/worklog/task/?id=6363)
