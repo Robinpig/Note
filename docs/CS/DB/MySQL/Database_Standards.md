@@ -262,10 +262,9 @@
 - [MySQL](/docs/CS/DB/MySQL/MySQL.md)
 - [InnoDB](/docs/CS/DB/MySQL/InnoDB.md)
 - [Index](/docs/CS/DB/MySQL/Index.md)
-- [B-Tree](/docs/CS/DB/MySQL/B-Tree.md)
-- [Double-Buffer](/docs/CS/DB/MySQL/Double-Buffer.md)
 - [Experiences](/docs/CS/DB/MySQL/Experiences.md)
 - [SQL](/docs/CS/DB/MySQL/SQL.md)
+- [ShardingSphere](/docs/CS/DB/ShardingSphere.md)
 
 ## References
 

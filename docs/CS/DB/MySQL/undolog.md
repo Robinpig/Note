@@ -266,6 +266,7 @@ ulint trx_purge(ulint n_purge_threads, /*!< in: number of purge tasks
 - [Redo Log](/docs/CS/DB/MySQL/redolog.md)
 - [Tablespace](/docs/CS/DB/MySQL/tablespace.md)
 - [Buffer Pool](/docs/CS/DB/MySQL/memory.md)
+- [PostgreSQL Internals](/docs/CS/DB/PostgreSQL/Internals.md)
 
 ## References
 

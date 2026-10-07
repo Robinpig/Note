@@ -942,6 +942,7 @@ replica-ignore-maxmemory no
 ## Links
 
 - [Redis](/docs/CS/DB/Redis/Redis.md?id=persistence)
+- [MySQL Replication](/docs/CS/DB/MySQL/replica.md)
 
 ## References
 

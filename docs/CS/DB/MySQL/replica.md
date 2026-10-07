@@ -45,6 +45,8 @@ replica lag（主从延迟）指同一事务在 replica 执行完成的时刻与
 - [redo log](/docs/CS/DB/MySQL/redolog.md)
 - [MySQL](/docs/CS/DB/MySQL/MySQL.md)
 - [版本迁移](/docs/CS/DB/MySQL/Version_Migration.md)
+- [Redis Replication](/docs/CS/DB/Redis/Replication.md)
+- [TiDB](/docs/CS/DB/TiDB.md)
 
 ## References
 

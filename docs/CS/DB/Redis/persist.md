@@ -1214,6 +1214,8 @@ Redis >= 2.4 确保在 RDB 快照操作已在进行中时避免触发 AOF 重写
 ## Links
 
 - [Redis](/docs/CS/DB/Redis/Redis.md)
+- [MySQL Binlog](/docs/CS/DB/MySQL/binlog.md)
+- [MySQL Memory](/docs/CS/DB/MySQL/memory.md)
 
 ## References
 

@@ -52,6 +52,8 @@ A long-running Read operation can prevent a new Checkpoint from moving forward, 
 ## Links
 
 - [DataBases](/docs/CS/DB/DB.md)
+- [Redo Log](/docs/CS/DB/MySQL/redolog.md)
+- [Binlog](/docs/CS/DB/MySQL/binlog.md)
 
 ## References
 

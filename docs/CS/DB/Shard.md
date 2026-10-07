@@ -45,3 +45,5 @@ ShardingJDBC 客户端代理模式 性能损耗小 通过jar扩展 适配性强 
 ## Links
 
 - [DataBases](/docs/CS/DB/DB.md)
+- [Transaction Flow](/docs/CS/DB/MySQL/Transaction_Flow.md)
+

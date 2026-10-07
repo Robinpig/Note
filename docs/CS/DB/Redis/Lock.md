@@ -215,6 +215,7 @@ The analysis and  [reply here](http://antirez.com/news/101).
 ## Links
 
 - [Redis](/docs/CS/DB/Redis/struct/struct.md)
+- [MySQL Locks](/docs/CS/DB/MySQL/lock.md)
 
 ## References
 

@@ -915,9 +915,7 @@ You can cope with deadlocks and reduce the likelihood of their occurrence with t
 - [Transaction](/docs/CS/DB/MySQL/Transaction.md)
 - [InnoDB Storage Engine](/docs/CS/DB/MySQL/InnoDB.md)
 - [Undo Log](/docs/CS/DB/MySQL/undolog.md)
-
-
-
+- [Redis Lock](/docs/CS/DB/Redis/Lock.md)
 
 ## References
 

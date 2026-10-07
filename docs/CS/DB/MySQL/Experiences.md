@@ -105,7 +105,6 @@ select id, name from tb_user where id > 1000000 order by id limit 20;
 
 ## Links
 
-- [B-Tree](/docs/CS/DB/MySQL/B-Tree.md)
 - [Double-Buffer](/docs/CS/DB/MySQL/Double-Buffer.md)
 - [Index](/docs/CS/DB/MySQL/Index.md)
 - [InnoDB](/docs/CS/DB/MySQL/InnoDB.md)

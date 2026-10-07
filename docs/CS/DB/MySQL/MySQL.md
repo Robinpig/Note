@@ -229,10 +229,9 @@ MySQL is designed for accepting writes on one node at any given time. This has a
 - [DataBases](/docs/CS/DB/DB.md?id=mysql)
 - [Version Migration](/docs/CS/DB/MySQL/Version_Migration.md)
 - [InnoDB](/docs/CS/DB/MySQL/InnoDB.md)
-- [Storage Engines](/docs/CS/DB/MySQL/plugin.md)
-- [Index](/docs/CS/DB/MySQL/Index.md)
 - [Transaction](/docs/CS/DB/MySQL/Transaction.md)
 - [Mvcc](/docs/CS/DB/MySQL/Mvcc.md)
+- [PostgreSQL](/docs/CS/DB/PostgreSQL/PostgreSQL.md)
 
 ## References
 

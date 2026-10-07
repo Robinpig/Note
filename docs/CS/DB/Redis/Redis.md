@@ -694,7 +694,7 @@ CLIENT LIST
 
 - [DataBases](/docs/CS/DB/DB.md?id=redis)
 - [Pika](/docs/CS/DB/Pika.md)
-- Java 客户端：[Jedis](/docs/CS/DB/Redis/Jedis.md) / [Lettuce](/docs/CS/DB/Redis/Lettuce.md) / [Redisson](/docs/CS/DB/Redis/Redisson.md)
+- [MySQL Storage Engines](/docs/CS/DB/MySQL/plugin.md)
 
 ## References
 
