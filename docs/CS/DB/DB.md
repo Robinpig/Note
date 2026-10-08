@@ -901,6 +901,10 @@ LevelDB supports range queries, snapshots, and other features that are useful in
 
 [ClickHouse](/docs/CS/DB/ClickHouse.md) is an open-source column-oriented OLAP database; [Doris](/docs/CS/DB/Doris.md) is a MySQL-protocol compatible MPP analytical warehouse. See also [InfluxDB](/docs/CS/DB/InfluxDB.md) for time-series workloads.
 
+### Wide Column Store
+
+[HBase](/docs/CS/DB/HBase.md) and [Cassandra](/docs/CS/DB/Cassandra.md) model data as a sparse multidimensional map grouped into column families: families are declared up front while qualifiers are added freely, and rows are globally ordered by key. That ordering is what makes prefix and range scans cheap — and what pushes secondary indexes, and therefore hot-spotting, onto the schema designer. Do not confuse this layout with the column-oriented stores above: inside a family, values of one row are kept together, so the workload is point lookup and bounded scan rather than full-column aggregation.
+
 ### Document Store
 
 [MongoDB](/docs/CS/DB/MongoDB.md) stores data as BSON documents with a flexible schema, embedding one-to-many relationships inside the parent document; it supports the aggregation pipeline, WiredTiger MVCC storage, replica sets and sharding.

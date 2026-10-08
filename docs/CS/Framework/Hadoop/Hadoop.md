@@ -28,7 +28,7 @@ The project includes these modules:
 - [分布式 MapReduce 概念](/docs/CS/Distributed/MapReduce.md)
 - [Spark](/docs/CS/Framework/Spark/Spark.md)
 - [Flink](/docs/CS/Framework/Flink/Flink.md)
-- [HBase](/docs/CS/Distributed/HBase.md)
+- [HBase](/docs/CS/DB/HBase.md)
 
 ## References
 
