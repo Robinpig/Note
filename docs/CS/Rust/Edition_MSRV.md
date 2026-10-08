@@ -190,7 +190,7 @@ MSRV（minimum supported Rust version）是第三个轴，也是**唯一由 crat
 | 机制 | 版本归属 | 内容 |
 | :-- | :-- | :-- |
 | `package.rust-version` | 1.56.0（2021-10-21，与 edition 2021 同一次发布） | manifest 字段；用更高编译器编它会直接报错 |
-| MSRV-aware resolver 配置 + `resolver = "3"` | 1.84.0（2025-01-09） | 解析依赖时优先挑 `rust-version` 兼容的**最旧可用**版本组合，而不是无脑最新；edition 2024 隐含 `resolver = "3"` |
+| MSRV-aware resolver 配置 + `resolver = "3"` | 1.84.0（2025-01-09） | 把 `resolver.incompatible-rust-versions` 的默认值从 `allow` 改成 `fallback`：优先在 **`rust-version` 兼容的候选中挑最高版本**，而不是从全部候选中无脑取最高版；兼容候选为空时才退化为不兼容版本（**不报错**）。edition 2024 隐含 `resolver = "3"`，完整操作语义见 [Cargo](/docs/CS/Rust/Cargo.md) |
 | `cargo add` 的 MSRV 感知 | 1.79.0（2024-06-13） | 往 manifest 加依赖时按当前 MSRV 挑版本号 |
 
 ⚠️ **`cargo msrv` 不是内建子命令**。本机 `cargo --list` 实测：`add` / `remove` / `fix` / `report` / `config` / `info` 都在列，`msrv` 不在（`grep -c msrv` 为 0）。Cargo 的内建 MSRV 机器就是上面三行；工具圈里那个 `cargo msrv` 是第三方 `cargo-msrv` crate。

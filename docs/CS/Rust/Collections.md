@@ -152,7 +152,7 @@ fn slice_adapters() {
 0 次或 1 次分配皆可，取决于输入   → Cow<'a, str>
 ```
 
-`Cow<str>` 不是「性能小技巧」，而是**接口契约**：`String::from_utf8_lossy(&[u8]) -> Cow<str>` 的签名直接说明「输入本来就是合法 UTF-8 时不分配」。本机验证：
+`Cow<str>` 不是「性能小技巧」，而是**接口契约**：`String::from_utf8_lossy(&[u8]) -> Cow<str>` 的签名直接说明「输入本来就是合法 UTF-8 时不分配」。本机验证（下面用 `matches!` 判定落在哪个变体上，这个宏就是把 `match` 的一个分支压成布尔，模式本身的语法与穷尽性规则见 [Pattern_Matching](/docs/CS/Rust/Pattern_Matching.md)）：
 
 ```rust
 fn cow_behavior() {
@@ -281,7 +281,7 @@ error[E0599]: no method named `raw_entry_mut` found for mutable reference `&mut 
 
 ## Iterators Are a State Machine
 
-`Iterator` 只有一个必需方法：`fn next(&mut self) -> Option<Self::Item>`。这就是全部抽象——**迭代器是显式状态机，Option 是它唯一的「结束了」信号**。因此 `for` 循环、`while let Some(x) = it.next()`、以及「在循环里换迭代器」这三件事是同一件事的三种写法；也因此「迭代器失效」在 Rust 里不可能发生：状态机持有 `&mut self`，借用检查器直接把「边遍历边改容器」挡在编译期。
+`Iterator` 只有一个必需方法：`fn next(&mut self) -> Option<Self::Item>`。这就是全部抽象——**迭代器是显式状态机，Option 是它唯一的「结束了」信号**。因此 `for` 循环、`while let Some(x) = it.next()`、以及「在循环里换迭代器」这三件事是同一件事的三种写法；也因此「迭代器失效」在 Rust 里不可能发生：状态机持有 `&mut self`，借用检查器直接把「边遍历边改容器」挡在编译期。本篇只从容器侧讲这三种入口的取舍，适配器全景、惰性与 `size_hint` 的实测见 [Iterator](/docs/CS/Rust/Iterator.md)。
 
 三个进入方式对应三种所有权语义：
 

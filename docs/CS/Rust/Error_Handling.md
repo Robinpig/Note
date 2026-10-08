@@ -49,7 +49,7 @@ fn with_q() -> Result<u8, Outer> { Ok(inner()?) }
 fn desugared() -> Result<u8, Outer> { match inner() { Ok(v) => Ok(v), Err(e) => Err(From::from(e)) } }
 ```
 
-删掉 `impl From<Inner> for Outer`，`with_q` 立刻编译不过而 `desugared` 改报 E0308——这正好证明 `?` 的隐藏内容就是 `From::from`。两个自定义错误类型 `A` / `B` 之间缺 `impl From<A> for B` 时的实测诊断：
+删掉 `impl From<Inner> for Outer`，`with_q` 立刻编译不过而 `desugared` 改报 E0308——这正好证明 `?` 的隐藏内容就是 `From::from`。也就是说日常写的每一个 `?` 都是一次 `match` 加一次 `From`，而 `match` 的穷尽性检查与绑定按值还是按引用那套规则见 [Pattern_Matching](/docs/CS/Rust/Pattern_Matching.md)。两个自定义错误类型 `A` / `B` 之间缺 `impl From<A> for B` 时的实测诊断：
 
 ```text
 error[E0277]: `?` couldn't convert the error to `B`

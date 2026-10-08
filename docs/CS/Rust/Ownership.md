@@ -6,7 +6,7 @@ Rust 要在**没有 GC、也没有手动 `free`** 的前提下管住内存。两
 
 本篇讲机制层：三条规则各防哪类事故、move 与 `Copy` / `Clone` 的分工、按值传参与部分移动、借用规则为什么等价于「无数据竞争」、借用检查运行在哪里（MIR / NLL / 析构点 / 临时值作用域）、`'static` 与闭包捕获，最后是错误码的真实诊断与跨语言对照。下文所有诊断都是 `rustc 1.98.1` 单文件编译的真实输出，只把路径前缀按 cargo 惯例归一为 `src/main.rs` / `src/lib.rs`。
 
-边界：生命周期**标注语法**、variance、HRTB、RPIT 捕获规则见 [Lifetime](/docs/CS/Rust/Lifetime.md)；`Box` / `Rc` / `Arc` / `RefCell` 见 [Smart_Pointers](/docs/CS/Rust/Smart_Pointers.md)；析构顺序与 dropck 见 [Drop](/docs/CS/Rust/Drop.md)；`Send` / `Sync` 见 [Concurrency](/docs/CS/Rust/Concurrency.md)。
+边界：生命周期**标注语法**、variance、HRTB、RPIT 捕获规则见 [Lifetime](/docs/CS/Rust/Lifetime.md)；`Box` / `Rc` / `Arc` / `RefCell` 见 [Smart_Pointers](/docs/CS/Rust/Smart_Pointers.md)；析构顺序与 dropck 见 [Drop](/docs/CS/Rust/Drop.md)；`Send` / `Sync` 见 [Concurrency](/docs/CS/Rust/Concurrency.md)；匹配发生的移动与借用（match ergonomics 的所有权后果）见 [Pattern_Matching](/docs/CS/Rust/Pattern_Matching.md)。
 
 ## The Three Rules and the Accident Each One Prevents
 
@@ -119,7 +119,7 @@ note: consider changing this parameter type in function `print_owned` to borrow 
   |    -----------    ^^^^^^ this parameter takes ownership of the value
 ```
 
-`for` 循环是同一机制的隐藏版本：它脱糖成 `into_iter()`，因此默认**吃进**整个集合。实测 `for s in v { ... }` 之后再读 `v` 报 E0382，诊断里那句 "`v` moved due to this implicit call to `.into_iter()`" 正是借用检查在 MIR 上工作的自白——源码里没写的调用，它照单全收；给出的 help 是 `for s in &v`。`into_iter` / `iter` / `iter_mut` 三种遍历的取舍见 [Collections](/docs/CS/Rust/Collections.md)。
+`for` 循环是同一机制的隐藏版本：它脱糖成 `into_iter()`，因此默认**吃进**整个集合。实测 `for s in v { ... }` 之后再读 `v` 报 E0382，诊断里那句 "`v` moved due to this implicit call to `.into_iter()`" 正是借用检查在 MIR 上工作的自白——源码里没写的调用，它照单全收；给出的 help 是 `for s in &v`。`into_iter` / `iter` / `iter_mut` 三种遍历的取舍见 [Collections](/docs/CS/Rust/Collections.md)；脱糖到 `into_iter` 之后的适配器链、惰性与 `size_hint` 见 [Iterator](/docs/CS/Rust/Iterator.md)。
 
 于是 API 形状是一个必须提前做的决定：`fn f(s: &str)` 只借、`fn f(s: String)` 索取，二者不兼容且不能事后改；`impl AsRef<str>` / `impl Into<String>` / `Cow<_>` 是同一取舍的不同赌注（实测 `takes_str(&owned_string)` 靠 deref coercion 可行，而 `takes_owned(owned)` 会移动、逼出 `.clone()`）。
 

@@ -63,7 +63,7 @@ macro_rules! dash { ($e:expr) => { 1u8 }; ($t:tt) => { 1u32 }; }
 const _: u8 = dash!(_);                  // 同样的 edition 分叉
 ```
 
-四个 edition 各跑一遍：`2015/2018/2021` 报两条 `E0308: mismatched types`（诊断标注"在这个宏调用中"），`2024` 全绿；把 `expr` 换成 `expr_2021` 后即使在 2024 也保持旧行为。迁移靠 lint `edition_2024_expr_fragment_specifier`（属 `rust-2024-compatibility` 组），`cargo fix --edition` 会批量把 `expr` 改写成 `expr_2021`——但**新宏多数应保留 `expr`**，只需检查有没有别的规则因此被抢走匹配。同族的历史改动是 `pat` / `pat_param`（or-pattern），且 ⚠️ 决定语义的是 **`macro_rules!` 定义所在 crate 的 edition**，不是调用点。另有一条已硬化：`($name)` 这种**漏写片段说明符**的规则自 1.89.0 起在所有 edition 都是硬错误 `error: missing fragment specifier`，`cargo fix --edition` 不会帮你——它本来就是死代码。
+四个 edition 各跑一遍：`2015/2018/2021` 报两条 `E0308: mismatched types`（诊断标注"在这个宏调用中"），`2024` 全绿；把 `expr` 换成 `expr_2021` 后即使在 2024 也保持旧行为。迁移靠 lint `edition_2024_expr_fragment_specifier`（属 `rust-2024-compatibility` 组），`cargo fix --edition` 会批量把 `expr` 改写成 `expr_2021`——但**新宏多数应保留 `expr`**，只需检查有没有别的规则因此被抢走匹配。同族的历史改动是 `pat` / `pat_param`（or-pattern）——它跟随的正是模式语法里顶层 `|` 在 1.53.0 的放开，而模式能出现在哪几个位置、各自要求可反驳还是不可反驳，见 [Pattern_Matching](/docs/CS/Rust/Pattern_Matching.md)；且 ⚠️ 决定语义的是 **`macro_rules!` 定义所在 crate 的 edition**，不是调用点。另有一条已硬化：`($name)` 这种**漏写片段说明符**的规则自 1.89.0 起在所有 edition 都是硬错误 `error: missing fragment specifier`，`cargo fix --edition` 不会帮你——它本来就是死代码。
 
 ### Repetition Operators and Separators
 
