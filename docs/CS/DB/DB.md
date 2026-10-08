@@ -896,6 +896,12 @@ At present, this is a new area of research, but it is worth keeping an eye on in
 LevelDB is a widely used key-value store based on [LSMtrees](/docs/CS/Algorithms/tree/LSM.md) that is inspired by [BigTable](/docs/CS/Distributed/Bigtable.md).
 LevelDB supports range queries, snapshots, and other features that are useful in modern applications.
 
+### RocksDB
+
+[RocksDB](/docs/CS/DB/RocksDB/RocksDB.md) is Facebook’s descendant of LevelDB: it keeps the log-structured merge tree but turns nearly every policy into a knob. Column families give one process many independently tuned key spaces sharing a single write-ahead log; compaction can be leveled, universal or FIFO; and the read path is protected by Bloom or Ribbon filters, partitioned indexes and a block cache. On top of the engine sit a merge operator, snapshot-based MVCC, transactional databases, BlobDB for key-value separation, and the operational surface an embedded store otherwise lacks — checkpoints, backup engines and external SST ingestion. [Write_Path](/docs/CS/DB/RocksDB/Write_Path.md), [Read_Path](/docs/CS/DB/RocksDB/Read_Path.md), [Compaction](/docs/CS/DB/RocksDB/Compaction.md), [Table_Format](/docs/CS/DB/RocksDB/Table_Format.md), [Transactions](/docs/CS/DB/RocksDB/Transactions.md) and [Operations](/docs/CS/DB/RocksDB/Operations.md) take each axis in turn, with [Column_Families](/docs/CS/DB/RocksDB/Column_Families.md) covering the isolation boundaries between key spaces.
+
+Systems that need a durable local state store on fast local storage typically pick this engine: [Pika](/docs/CS/DB/Pika.md) and [SSDB](/docs/CS/DB/SSDB.md) layer Redis compatibility on top of it, [TiDB](/docs/CS/DB/TiDB.md) uses it as its KV layer, and [NebulaGraph](/docs/CS/DB/graph/NebulaGraph.md) as graph storage. CockroachDB and MyRocks are further examples without a dedicated note here.
+
 
 ### Column Store
 
