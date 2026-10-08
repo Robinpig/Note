@@ -913,6 +913,10 @@ LevelDB supports range queries, snapshots, and other features that are useful in
 
 [SSDB](/docs/CS/DB/SSDB.md) is a Redis-protocol compatible, disk-backed (LevelDB) key-value store; [Pika](/docs/CS/DB/Pika.md) is a similar RocksDB-backed implementation; [Dragonfly](/docs/CS/DB/Dragonfly.md) is a high-performance in-memory alternative.
 
+### Embedded SQL Databases
+
+An embedded database runs inside the application process, so the "server" disappears as a deployment unit: there is no connection pool to provision, no port to firewall, and a backup is a file copy. The trade-off is a single-writer process model — one JVM or one address space owns the file — so these engines buy convenience in tests and edge deployments rather than horizontal scale. [H2](/docs/CS/DB/h2/H2.md) is the Java-side representative (pure Java, embedded *and* server modes, an in-memory option, a copy-on-write log-structured store called MVStore); SQLite is its C-language counterpart with the widest ecosystem, while Derby and HSQLDB are the older pure-Java engines. Spring Boot's `@DataJpaTest` silently substitutes an in-memory H2, which is why vendor-specific SQL can pass tests and fail in production.
+
 ### Graph
 
 图数据库是一种专门用于存储和查询图形数据的数据库。它们在处理复杂关系和连接方面表现出色，适用于社交网络、推荐系统、知识图谱等应用场景
