@@ -151,7 +151,7 @@ B-tree 侧 `index->lock` **没有被删**：`dict_index_t::lock` 仍在
 | Double-Buffer.md | 空的 `// buf0dblwr.cc` 代码块残留 | 填真实摘录或删除 |
 | memory.md | 图示外链指向已停更的 `refman/8.0` 文档站 | 改 9.7 或本地化配图 |
 | B-Tree.md | 结论止于「5.7 之后」 | 补 8.4 / 9.7 的 SX latch 与意图标志 |
-| Transaction.md | 体量大、混入源码摘录与旧版本断言 | 拆分并逐节校准 |
+| Transaction.md | 体量大（原 1475 行）、锁与 MVCC 与提交路径混编 | 已拆为 Transaction / Mvcc / Transaction_Flow 三篇，锁相关内容并入 lock.md |
 
 ## Links
 

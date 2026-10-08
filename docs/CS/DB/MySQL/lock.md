@@ -33,6 +33,243 @@ select、update、delete 语句执行过程中，不管 where 条件是否命中
 
 
 
+## Two-Phase Locking
+
+InnoDB uses a two-phase locking protocol. It can acquire locks at any time during a transaction, but it does not
+release them until a `COMMIT` or `ROLLBACK`.
+
+> ⚠️ 严格说「同一时刻释放所有锁」只对 `REPEATABLE READ` 成立。`lock0lock.h` 的锁生命周期注释明确写了：
+> 在 Read Committed 及更弱隔离级别下，第 3 步与第 4 步之间还有一步，InnoDB 会**提前释放部分 gap 上的读锁**，
+> 目的是降低复制时的死锁风险。原表述照抄自 5.7 时代资料，未区分隔离级别。
+
+## Locking Types
+
+```sql
+mysql> select * from information_schema.innodb_locks;
+mysql> select * from information_schema.innodb_lock_waits;
+mysql> select * from information_schema.innodb_trx;
+```
+
+row-level locking only be implemented at server level.
+
+### Shared and Exclusive Locks
+
+`InnoDB` implements standard **row-level locking** where there are two types of locks, shared (`S`) locks and exclusive (`X`) locks.
+
+- A shared (`S`) lock permits the transaction that holds the lock to read a row.
+- An exclusive (`X`) lock permits the transaction that holds the lock to update or delete a row.
+
+If transaction `T1` holds a shared (`S`) lock on row `r`, then requests from some distinct transaction `T2` for a lock on row `r` are handled as follows:
+
+- A request by `T2` for an `S` lock can be granted immediately. As a result, both `T1` and `T2` hold an `S` lock on `r`.
+- A request by `T2` for an `X` lock cannot be granted immediately.
+
+If a transaction `T1` holds an exclusive (`X`) lock on row `r`, a request from some distinct transaction `T2` for a lock of either type on `r` cannot be granted immediately.
+Instead, transaction `T2` has to wait for transaction `T1` to release its lock on row `r`.
+
+### Intention Locks
+
+`InnoDB` supports *multiple granularity locking* which permits coexistence of row locks and table locks.
+For example, a statement such as `LOCK TABLES ... WRITE` takes an exclusive lock (an `X` lock) on the specified table.
+To make locking at multiple granularity levels practical, `InnoDB` uses intention locks.
+Intention locks are **table-level** locks that indicate which type of lock (shared or exclusive) a transaction requires later for a row in a table.
+There are two types of intention locks:
+
+- An intention shared lock (`IS`) indicates that a transaction intends to set a *shared* lock on individual rows in a table.
+- An intention exclusive lock (`IX`) indicates that a transaction intends to set an exclusive lock on individual rows in a table.
+
+For example, `SELECT ... FOR SHARE` sets an `IS` lock, and `SELECT ... FOR UPDATE` sets an `IX` lock.
+
+The intention locking protocol is as follows:
+
+- Before a transaction can acquire a shared lock on a row in a table, it must first acquire an `IS` lock or stronger on the table.
+- Before a transaction can acquire an exclusive lock on a row in a table, it must first acquire an `IX` lock on the table.
+
+Table-level lock type compatibility is summarized in the following matrix.
+
+
+|      | `X`      | `IX`       | `S`        | `IS`       |
+| :--- | :------- | :--------- | :--------- | :--------- |
+| `X`  | Conflict | Conflict   | Conflict   | Conflict   |
+| `IX` | Conflict | Compatible | Conflict   | Compatible |
+| `S`  | Conflict | Conflict   | Compatible | Compatible |
+| `IS` | Conflict | Compatible | Compatible | Compatible |
+
+### Record Locks
+
+A record lock is a lock on an index record.
+For example, `SELECT c1 FROM t WHERE c1 = 10 FOR UPDATE;` prevents any other transaction from inserting, updating, or deleting rows where the value of `t.c1` is `10`.
+
+**Record locks always lock index records**, even if a table is defined with no indexes.
+For such cases, `InnoDB` creates a hidden clustered index and uses this index for record locking.
+
+### Gap Locks
+
+**A gap lock is a lock on a gap between index records, or a lock on the gap before the first or after the last index record.**
+For example, `SELECT c1 FROM t WHERE c1 BETWEEN 10 and 20 FOR UPDATE;` prevents other transactions from inserting a value of `15` into column `t.c1`,
+whether or not there was already any such value in the column, because the gaps between all existing values in the range are locked.
+
+**A gap might span a single index value, multiple index values, or even be empty.**
+
+Gap locks are part of the tradeoff between performance and concurrency, and are used in some transaction isolation levels and not others.
+
+*Gap locking is not needed for statements that lock rows using a unique index to search for a unique row.*
+(This does not include the case that the search condition includes only some columns of a multiple-column unique index; in that case, gap locking does occur.)
+
+If `id` is not indexed or has a nonunique index, the statement does lock the preceding gap.
+
+It is also worth noting here that conflicting locks can be held on a gap by different transactions.
+For example, transaction A can hold a shared gap lock (gap S-lock) on a gap while transaction B holds an exclusive gap lock (gap X-lock) on the same gap.
+The reason conflicting gap locks are allowed is that if a record is purged from an index, the gap locks held on the record by different transactions must be merged.
+
+Gap locks in `InnoDB` are “purely inhibitive”, which means that their only purpose is to prevent other transactions from inserting to the gap.
+Gap locks can co-exist. A gap lock taken by one transaction does not prevent another transaction from taking a gap lock on the same gap.
+**There is no difference between shared and exclusive gap locks. They do not conflict with each other, and they perform the same function.**
+
+Gap locking can be disabled explicitly. This occurs if you change the transaction isolation level to `READ COMMITTED`.
+In this case, gap locking is disabled for searches and index scans and is used only for foreign-key constraint checking and duplicate-key checking.
+
+There are also other effects of using the `READ COMMITTED` isolation level.
+*Record locks for nonmatching rows are released after MySQL has evaluated the `WHERE` condition. For `UPDATE` statements, `InnoDB` does a “semi-consistent” read,
+such that it returns the latest committed version to MySQL so that MySQL can determine whether the row matches the `WHERE` condition of the `UPDATE`.*
+
+### Next-Key Locks
+
+**A next-key lock is a combination of a record lock on the index record and a gap lock on the gap before the index record.**
+
+`InnoDB` performs row-level locking in such a way that when it searches or scans a table index, it sets shared or exclusive locks on the index records it encounters.
+Thus, **the row-level locks are actually index-record locks**.
+*A next-key lock on an index record also affects the “gap” before that index record.*
+That is, a next-key lock is an index-record lock plus a gap lock on the gap preceding the index record.
+If one session has a shared or exclusive lock on record `R` in an index, another session cannot insert a new index record in the gap immediately before `R` in the index order.
+
+For the last interval, the next-key lock locks the gap above the largest value in the index and the “supremum” pseudo-record having a value higher than any value actually in the index.
+The supremum is not a real index record, so, in effect, this next-key lock locks only the gap following the largest index value.
+
+> [!NOTE]
+>
+> By default, `InnoDB` operates in `REPEATABLE READ` transaction isolation level.
+> In this case, **`InnoDB` uses next-key locks for searches and index scans, which prevents `phantom rows`**.
+
+### Insert Intention Locks
+
+**An insert intention lock is a type of gap lock set by `INSERT` operations prior to row insertion**.
+This lock signals the intent to insert in such a way that multiple transactions inserting into the same index gap need not wait for each other if they are not inserting at the same position within the gap.
+Suppose that there are index records with values of 4 and 7.
+Separate transactions that attempt to insert values of 5 and 6, respectively, each lock the gap between 4 and 7 with insert intention locks prior to obtaining the exclusive lock on the inserted row,
+but do not block each other because the rows are nonconflicting.
+
+### AUTO-INC Locks
+
+An `AUTO-INC` lock is a special table-level lock taken by transactions inserting into tables with `AUTO_INCREMENT` columns.
+In the simplest case, if one transaction is inserting values into the table, any other transactions must wait to do their own inserts into that table,
+so that rows inserted by the first transaction receive consecutive primary key values.
+
+The `innodb_autoinc_lock_mode` variable controls the algorithm used for auto-increment locking.
+It allows you to choose how to trade off between predictable sequences of auto-increment values and maximum concurrency for insert operations.
+
+
+```sql
+SHOW VARIABLES LIKE 'innodb_autoinc_lock_mode'; -- 2
+```
+
+We cannot create yet another interval as we already contain one. 
+This situation can happen. 
+Assume innodb_autoinc_lock_mode>=1 and 
+CREATE TABLE T(A INT AUTO_INCREMENT PRIMARY KEY) ENGINE=INNODB;
+
+INSERT INTO T VALUES (NULL),(NULL),(1025),(NULL);
+      
+Then InnoDB will reserve [1,4] (because of 4 rows) then [1026,1026]. 
+Only the first interval is important for statement-based binary logging as it tells the starting point. 
+So we ignore the second interval:
+
+
+Update & Delete 加锁
+
+ClusterIndex
+
+命中 都是X锁
+
+未命中 只有RR加GAP锁
+
+Second Unique Index
+命中 二级索引和聚簇索引都是X锁
+
+未命中 只有RR在二级索引加GAP锁
+
+二级非唯一索引
+
+命中 RC对两个索引加X锁 RR对二级索引加X和GAP锁 对Cluster索引加X锁
+
+未命中 只有RR在二级索引加GAP锁
+
+
+INSERT语句加锁
+
+- 为了防止幻读，如果记录之间加有GAP锁，此时不能INSERT。
+- 如果INSERT的记录和已有记录造成唯一键冲突，此时不能INSERT。
+
+
+## Lock System Source Code
+
+```cpp
+
+/** Lock modes and types */
+/** @{ */
+#define LOCK_MODE_MASK                          \
+  0xFUL /*!< mask used to extract mode from the \
+        type_mode field in a lock */
+/** Lock types */
+#define LOCK_TABLE 16 /*!< table lock */
+#define LOCK_REC 32   /*!< record lock */
+#define LOCK_TYPE_MASK                                \
+  0xF0UL /*!< mask used to extract lock type from the \
+         type_mode field in a lock */
+#if LOCK_MODE_MASK & LOCK_TYPE_MASK
+#error "LOCK_MODE_MASK & LOCK_TYPE_MASK"
+#endif
+
+#define LOCK_WAIT                          \
+  256 /*!< Waiting lock flag; when set, it \
+      means that the lock has not yet been \
+      granted, it is just waiting for its  \
+      turn in the wait queue */
+/* Precise modes */
+#define LOCK_ORDINARY                     \
+  0 /*!< this flag denotes an ordinary    \
+    next-key lock in contrast to LOCK_GAP \
+    or LOCK_REC_NOT_GAP */
+#define LOCK_GAP                                     \
+  512 /*!< when this bit is set, it means that the   \
+      lock holds only on the gap before the record;  \
+      for instance, an x-lock on the gap does not    \
+      give permission to modify the record on which  \
+      the bit is set; locks of this type are created \
+      when records are removed from the index chain  \
+      of records */
+#define LOCK_REC_NOT_GAP                            \
+  1024 /*!< this bit means that the lock is only on \
+       the index record and does NOT block inserts  \
+       to the gap before the index record; this is  \
+       used in the case when we retrieve a record   \
+       with a unique key, and is also used in       \
+       locking plain SELECTs (not part of UPDATE    \
+       or DELETE) when the user has set the READ    \
+       COMMITTED isolation level */
+#define LOCK_INSERT_INTENTION                                             \
+  2048                       /*!< this bit is set when we place a waiting \
+                          gap type record lock request in order to let    \
+                          an insert of an index record to wait until      \
+                          there are no conflicting locks by other         \
+                          transactions on the gap; note that this flag    \
+                          remains set when the waiting lock is granted,   \
+                          or if the lock is inherited to a neighboring    \
+                          record */
+#define LOCK_PREDICATE 8192  /*!< Predicate lock */
+#define LOCK_PRDT_PAGE 16384 /*!< Page lock */
+```
+
 ## Lock Scheduling CATS
 
 先分清两件事：**锁调度**决定「一把锁被释放时，队列里多个 WAITING 锁先给谁」；**死锁检测**决定「等待关系成环时回滚谁」。9.7 里它们的实现完全分开，CATS 是前者，不是死锁算法——把 CATS 说成死锁检测算法是常见误读。
@@ -630,6 +867,48 @@ static void lock_wait_update_schedule_and_check_for_deadlocks() {
 
 
 
+
+A deadlock is a situation where different transactions are unable to proceed because each holds a lock that the other needs.
+Because both transactions are waiting for a resource to become available, neither ever release the locks it holds.
+
+## Minimizing and Handling Deadlocks
+
+You can cope with deadlocks and reduce the likelihood of their occurrence with the following techniques:
+
+- At any time, issue `SHOW ENGINE INNODB STATUS` to determine the cause of the most recent deadlock. That can help you to tune your application to avoid deadlocks.
+- `SHOW FULL PROCESSLIST`
+- table `INNODB_TRX`, `INNODB_LOCKS`, `INNODB_LOCK_WAITS` in information_schema
+- If frequent deadlock warnings cause concern, collect more extensive debugging information by enabling the `innodb_print_all_deadlocks` variable.
+  Information about each deadlock, not just the latest one, is recorded in the MySQL [error log](/docs/CS/DB/MySQL/serverlog.md).
+  Disable this option when you are finished debugging.
+- Always be prepared to re-issue a transaction if it fails due to deadlock. Deadlocks are not dangerous. Just try again.
+- Keep transactions small and short in duration to make them less prone to collision.
+- Commit transactions immediately after making a set of related changes to make them less prone to collision. In particular, do not leave an interactive **mysql** session open for a long time with an uncommitted transaction.
+- If you use *locking reads* (`SELECT ... FOR UPDATE` or `SELECT ... FOR SHARE`), try using a lower isolation level such as `READ COMMITTED`.
+- When modifying multiple tables within a transaction, or different sets of rows in the same table, do those operations in a consistent order each time.
+  Then transactions form well-defined queues and do not deadlock.
+  For example, organize database operations into functions within your application, or call stored routines, rather than coding multiple similar sequences of `INSERT`, `UPDATE`, and `DELETE` statements in different places.
+- Add well-chosen indexes to your tables so that your queries scan fewer index records and set fewer locks. Use `EXPLAIN SELECT` to determine which indexes the MySQL server regards as the most appropriate for your queries.
+- Use less locking. If you can afford to permit a `SELECT` to return data from an old snapshot, do not add a `FOR UPDATE` or `FOR SHARE` clause to it.
+  Using the `READ COMMITTED` isolation level is good here, because each consistent read within the same transaction reads from its own fresh snapshot.
+- If nothing else helps, serialize your transactions with table-level locks. The correct way to use `LOCK TABLES` with transactional tables,
+  such as `InnoDB` tables, is to begin a transaction with `SET autocommit = 0` (not `START TRANSACTION`) followed by `LOCK TABLES`,
+  and to not call `UNLOCK TABLES` until you commit the transaction explicitly. For example, if you need to write to table `t1` and read from table `t2`, you can do this:
+
+  Table-level locks prevent concurrent updates to the table, avoiding deadlocks at the expense of less responsiveness for a busy system.
+- Another way to serialize transactions is to create an auxiliary “semaphore” table that contains just a single row.
+  Have each transaction update that row before accessing other tables. In that way, all transactions happen in a serial fashion.
+  Note that the `InnoDB` instant deadlock detection algorithm also works in this case, because the serializing lock is a row-level lock.
+  With MySQL table-level locks, the timeout method must be used to resolve deadlocks.
+
+#### Diagnosing Deadlocks
+
+`SHOW ENGINE INNODB STATUS` 的 `LATEST DETECTED DEADLOCK` 段给出最近一次死锁的两个事务、各自持有与等待的锁、
+以及被选为 victim 的事务。要看**全部**死锁（而不只是最后一次），打开 `innodb_print_all_deadlocks`，
+输出会进 error log；`data_locks` / `data_lock_waits` 是 8.0 起取代旧 `INNODB_LOCKS` /
+`INNODB_LOCK_WAITS` 的 performance_schema 表。死锁本身不危险，**应用侧必须准备重试**。
+
+
 ## Links
 
 - [B-Tree](/docs/CS/DB/MySQL/B-Tree.md)
@@ -644,3 +923,5 @@ static void lock_wait_update_schedule_and_check_for_deadlocks() {
 
 1. [MySQL 死锁检测源码分析](https://leviathan.vip/2020/02/02/mysql-deadlock-check/)
 2. [Contention-Aware Lock Scheduling for Transactional Databases](https://dl.acm.org/doi/10.1145/3341301.3359648)
+3. [MySQL 源码分析 - MySQL deadlock cause by lock inherit](http://mysql.taobao.org/monthly/2024-03-02/)
+4. [mysql-deadlocks - deadlock examples](https://github.com/aneasystone/mysql-deadlocks)

@@ -216,7 +216,7 @@ MySQL is designed for accepting writes on one node at any given time. This has a
 
 **怎么找得到。** InnoDB 的一切检索都走 B+Tree，[B-Tree](/docs/CS/DB/MySQL/B-Tree.md) 讲这棵树本身的形态与并发控制，[Index](/docs/CS/DB/MySQL/Index.md) 讲在它之上如何建索引、聚簇与二级索引的关系、回表与覆盖索引。这两篇是后续所有性能结论的地基。
 
-**改坏了怎么回去。** 事务的 ACID 承诺如何在实现上兑现，是 [Transaction](/docs/CS/DB/MySQL/Transaction.md) 的主题；它与并发之间的冲突由 [Locks](/docs/CS/DB/MySQL/lock.md) 处理——注意 9.7 的锁调度已改用 CATS、死锁检测也重写，旧叙述只在历史脉络里成立。并发读者不互相阻塞靠的是 MVCC，其旧版本数据存放在 [Undo Log](/docs/CS/DB/MySQL/undolog.md)，回收由 purge 驱动。
+**改坏了怎么回去。** 事务的 ACID 承诺如何在实现上兑现，是 [Transaction](/docs/CS/DB/MySQL/Transaction.md) 的主题；它与并发之间的冲突由 [Locks](/docs/CS/DB/MySQL/lock.md) 处理——锁的类型、CATS 调度与死锁检测都在那篇，注意 9.7 的调度与检测已重写，旧叙述只在历史脉络里成立。并发读者不互相阻塞靠的是 [MVCC](/docs/CS/DB/MySQL/Mvcc.md)：ReadView 决定一个版本对谁可见；其旧版本数据存放在 [Undo Log](/docs/CS/DB/MySQL/undolog.md)，回收由 purge 驱动。提交本身怎么落盘，[Transaction Flow](/docs/CS/DB/MySQL/Transaction_Flow.md) 走的是 prepare 与 commit 两阶段的源码路径。
 
 **崩了怎么恢复。** 三条日志各管一段：[Redo Log](/docs/CS/DB/MySQL/redolog.md) 保证崩溃一致性，[Binlog](/docs/CS/DB/MySQL/binlog.md) 面向归档与复制，[Server Logs](/docs/CS/DB/MySQL/serverlog.md) 是排障入口。页级部分写这一风险则由 [Double Buffer](/docs/CS/DB/MySQL/Double-Buffer.md) 兜住——它是 flush 链路上容易被忽略的一环。
 
@@ -232,6 +232,7 @@ MySQL is designed for accepting writes on one node at any given time. This has a
 - [Storage Engines](/docs/CS/DB/MySQL/plugin.md)
 - [Index](/docs/CS/DB/MySQL/Index.md)
 - [Transaction](/docs/CS/DB/MySQL/Transaction.md)
+- [Mvcc](/docs/CS/DB/MySQL/Mvcc.md)
 
 ## References
 

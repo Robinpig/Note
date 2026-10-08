@@ -62,6 +62,7 @@ lspci -t -v           # 树形拓扑
 
 - [Computer Organization](/docs/CS/CO/CO.md)
 - [多处理器内存（UMA/NUMA）](/docs/CS/CO/memory.md)
+- [存储设备（NVMe SSD / HDD）](/docs/CS/CO/disk.md)
 - [Linux IO 子系统](/docs/CS/OS/Linux/IO/IO.md)
 
 ## References
