@@ -2,6 +2,8 @@
 
 Compaction 是 RocksDB 里唯一同时决定**写放大、读放大、空间放大**的机制：它把上层 SST 与下层重叠的文件归并重写，顺带清理被覆盖的版本、过期数据与删除标记。RocksDB 的绝大部分可调项，最终都是在给「压实来得多快、多宽、多省」这三个问题让路。本页符号与默认值取 v11.8.1 源码。
 
+这份「可配置」本身就是与 LevelDB 的分界线：后者只有一个后台线程（同刻最多一个在途压实）、层数与各层容量、慢写与停写阈值全是编译期常量，也没有列族可以分别调参；不过轮转指针这一点两代一致——LevelDB 的 `compact_pointer_` 同样会以 `kCompactPointer` 记进 MANIFEST。那套更简单的机制（`VersionSet` / `VersionEdit` / `LogAndApply` / `MakeRoomForWrite` 的六级判定）逐行写在 [Versions_and_Compaction](/docs/CS/DB/LevelDB/Versions_and_Compaction.md) 里，两篇对照读能看清「同一篇 LSM 论文的两种工程取舍」。
+
 ## Level Structure and Size Targets
 
 不变式是：**L0 内文件 key 区间可以重叠，L1 及以下每层内部不重叠**。承载它的是 `VersionStorageInfo::level0_non_overlapping_`（`db/version_set.cc:2689`）——L0 只有在已排干净时才参与某些优化，例如 `Compaction::IsTrivialMove()` 显式要求 `input_vstorage_->level0_non_overlapping()` 才允许 L0→L1 直接移动（`compaction.cc:562-567`）。

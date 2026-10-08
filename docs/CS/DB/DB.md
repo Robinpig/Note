@@ -895,6 +895,7 @@ At present, this is a new area of research, but it is worth keeping an eye on in
 [LevelDB](/docs/CS/DB/LevelDB/LevelDB.md) is a fast key-value storage library written at Google that provides an ordered mapping from string keys to string values.
 LevelDB is a widely used key-value store based on [LSMtrees](/docs/CS/Algorithms/tree/LSM.md) that is inspired by [BigTable](/docs/CS/Distributed/Bigtable.md).
 LevelDB supports range queries, snapshots, and other features that are useful in modern applications.
+Its geometry is frozen rather than tunable — seven levels, compile-time byte budgets and hard-coded write-throttling thresholds — so understanding it means following the code paths: [Versions_and_Compaction](/docs/CS/DB/LevelDB/Versions_and_Compaction.md) covers the metadata machinery that decides which files merge and when, while [BloomFilter](/docs/CS/DB/LevelDB/BloomFilter.md) derives the false-positive curve behind its 2 KiB-granular local filters.
 
 ### RocksDB
 

@@ -4,6 +4,12 @@
 LevelDB is a widely used key-value store based on [LSMtrees](/docs/CS/Algorithms/tree/LSM.md) that is inspired by [BigTable](/docs/CS/Distributed/Bigtable.md).
 LevelDB supports range queries, snapshots, and other features that are useful in modern applications.
 
+It is worth being explicit about what LevelDB is *not*, because most disappointment with it comes from expecting the other things: there is no SQL, no server process or wire protocol, no secondary index, no schema, no column families, and no replication. It is a library that owns a directory of files and one in-process writer. Anything beyond that — a network API, a Redis-compatible front end like [SSDB](/docs/CS/DB/SSDB.md) or [Pika](/docs/CS/DB/Pika.md), a replicated KV layer — is somebody else's project built on top of it.
+
+**All symbol names, line numbers and defaults in this note are pinned to LevelDB 1.23** (tagged 2021-02, still the latest release). That pin matters for two reasons. First, 1.23 requires C++11 and moved large parts of the tree: the table reader and writer now live in `table/table.cc` and `table/table_builder.cc` rather than `db/table.cc`, and `db/internal_stats.{h,cc}` was deleted outright, so the SSTable properties block many blog posts describe no longer exists. Second, a great deal of LevelDB documentation on the web is really describing RocksDB, which forked this code and renamed or replaced most of its internals — `ColumnFamily`, `VersionStorageInfo`, `WriteController`, `SwitchMemtable`, recyclable WAL records, `DeleteObsoleteFiles` and `RibbonFilterPolicy` are all absent here. The comparison is drawn out explicitly in [Versions_and_Compaction](/docs/CS/DB/LevelDB/Versions_and_Compaction.md).
+
+The shape of the code also explains where the depth of this note goes. LevelDB's geometry is deliberately frozen: seven levels, per-level byte budgets, the write-throttling thresholds, and the 2 KiB filter granularity are compile-time constants, not options. So the interesting questions are never "how do I tune it" but "what exactly happens on a write, a read, a flush, a compaction and a crash" — which is why the walkthrough below is organised by data structure and code path rather than by configuration.
+
 ## Architecture
 
 The overall architecture of LevelDB is shown in Figure 1.
@@ -556,17 +562,64 @@ for (it->SeekToFirst(); it->Valid(); it->Next()) {
 delete it;
 ```
 
-## Compress
+### Table Cache
 
-Snappy
+LevelDB keeps **two distinct caches**, and conflating them is a common source of confusion. The one above is the *block* cache (uncompressed 4 KiB data blocks, `options.block_cache`, defaulting to a shared 8 MB LRU created in `DBImpl` when the field is left null — `db_impl.cc:115-117`, `options.h:94`). The second is the *table* cache in `db/table_cache.{h,cc}`, which holds opened `Table` objects — i.e. the parsed index, the filter block and the file handle.
+
+Its key is an 8-byte fixed64 **file number** (`table_cache.cc:44-46`) and each entry has charge 1 (`:72`), so capacity is measured in open tables rather than bytes:
+
+```
+TableCacheSize = max_open_files - kNumNonTableCacheFiles      // kNumNonTableCacheFiles = 10
+                                                              // db_impl.cc:40, :123
+```
+
+`max_open_files` defaults to 1000 (`options.h:87`) and is first clamped into `[74, 50000]` (`db_impl.cc:101`) — 74 exists precisely so that after subtracting the 10 non-table files there is still a usable cache.
+
+A few behaviours are worth knowing when tuning or reading logs:
+
+- `FindTable` misses try the current name `TableFileName` (`*.ldb`) and fall back to the legacy `SSTTableFileName` (`*.sst`) for databases created by old versions (`table_cache.cc:53-67`).
+- If `Table::Open` fails, the file is deleted and **the failure is not cached** — every subsequent access will retry and re-fail.
+- Eviction is LRU-driven (`DeleteEntry` runs when the entry is erased), plus an explicit `Evict(file_number)` used by `RemoveObsoleteFiles` before deleting a live table (`db_impl.cc:276`).
+- Lifetime during iteration is handled by `Iterator::RegisterCleanup(&UnrefEntry, cache_, handle)` (`table_cache.cc:93`): `NewIterator` deliberately does *not* release the handle, whereas `Get` releases synchronously (`:109`). This is what keeps a `Table` alive while a merging iterator still points into it.
+- `fill_cache` is not consulted in `table_cache`; it is honoured deeper down, in `Table::BlockReader`, which only inserts when `contents.cachable && options.fill_cache` (`table.cc:180`). Compaction reads set `fill_cache = false`, which is why a large compaction does not flush the block cache.
 
 ## Write-Ahead Log
 
-addRecord
+The WAL is written by `db/log_writer.cc` and replayed by `db/log_reader.cc`; both share the record framing defined in `db/log_format.h`.
 
-readRecord
+Physical layout: the file is a sequence of 32 KiB blocks (`kBlockSize = 32768`, `log_format.h:27`), each block a run of records. A record header is **7 bytes** — 4-byte masked CRC + 2-byte length + 1-byte type (`kHeaderSize = 4 + 2 + 1`, `:29-30`) — followed by the payload. Record types are `kZeroType = 0` (reserved for preallocated files), `kFullType = 1`, `kFirstType = 2`, `kMiddleType = 3`, `kLastType = 4` (`:16-25`). There is **no recyclable record type in LevelDB** — `kRecyclable*` and `kHighBitType` are RocksDB inventions.
 
-recoverLogFile
+`Writer::AddRecord` (`log_writer.cc:34-80`) fragments in a do/while loop. When fewer than `kHeaderSize` bytes remain in the current block it pads the tail with zeros and starts the next block (`:46-53`); the fragment length is `min(left, kBlockSize - block_offset_ - kHeaderSize)` (`:59-60`), and the type is chosen from whether the fragment is the whole record, the first, a middle, or the last (`:62-72`). An empty value still emits one `kFullType` record.
+
+Two details of `EmitPhysicalRecord` (`:82-108`) matter when writing a parser or a recovery tool:
+
+- the length field is a **plain little-endian 16-bit integer**, not a varint (`buf[4] = length & 0xff; buf[5] = length >> 8`, with `assert(length <= 0xffff)`), which caps a fragment at 64 KiB;
+- the CRC covers **the type byte plus the payload, but not the length field**: `crc32c::Extend(type_crc_[t], ptr, length)` where `type_crc_` holds pre-computed single-byte CRCs (`:94`, `:16-21`).
+
+The stored CRC is masked — `kMaskDelta = 0xa282ead8ul`, and `Mask()` **rotates right 15 bits then adds** the constant (`util/crc32c.h:22-32`, not an XOR). The header comment explains why: computing a CRC over a string that already embeds its own CRC is awkward, so the value is obfuscated before it hits disk.
+
+Note also that `log::Writer` has **no `Sync()` method**: `AddRecord` ends with `Flush()` on every record, pushing bytes into the page cache (`:99-105`). The real `fsync` happens one level up, in `DBImpl::Write`, only when `WriteOptions::sync` is set (`db_impl.cc:1233`). A second constructor `Writer(dest, dest_length)` initialises `block_offset_ = dest_length % kBlockSize` (`:27-30`) so that a reused log file can be appended to correctly.
+
+`Reader::ReadRecord` keeps its fragmentation state in **local variables**, not members: the reader holds only `file_ / reporter_ / checksum_ / backing_store_ / buffer_ / eof_ / last_record_offset_ / end_of_buffer_offset_ / initial_offset_ / resyncing_`. There is no `Kill()` and no `ReportBadRecord()`; the `checksum` constructor argument has **no default value**, and the recovery path hard-codes `true` (`db_impl.cc:422`). Handling of the awkward edges:
+
+- fewer than `kHeaderSize` bytes left in a block: if the file is not exhausted, the buffer is simply dropped and the next whole block is read; if it *is* exhausted, the truncated header is treated as `kEof` rather than corruption (`log_reader.cc:191-214`, `:206-212`);
+- a declared length that runs past the block end mid-file → `ReportCorruption("bad record length")`; at EOF → `kEof` (`:222-233`);
+- `kZeroType` with zero length → returns `kBadRecord` **without reporting a drop**, since it marks preallocated space (`:235-241`);
+- CRC mismatch (only when `checksum_`) → the buffer is discarded and `ReportCorruption("checksum mismatch")` is raised (`:244-257`).
+
+### Recovery: `RecoverLogFile`
+
+`DBImpl::RecoverLogFile` (`db_impl.cc:385-503`) replays one log file: `reader.ReadRecord(&record, &scratch)` in a loop, `record.size() < 12` is rejected as "log record too small" (12 = the 8-byte sequence + 4-byte count header of a `WriteBatch`), each surviving record becomes a `WriteBatch` lazily inserted into a memtable, and `max_sequence` is tracked as `Sequence(batch) + Count(batch) - 1`. When the memtable exceeds `write_buffer_size` it is flushed to L0 and `*save_manifest` is set.
+
+Crucially, **LevelDB does not deduplicate replays by comparing batch pointers** — there is no `prev` pointer, no `record_to_sequence` map, no `found_final_batch` flag (all of those are RocksDB). Idempotence comes from the collection step in `DBImpl::Recover`: only log files with `number >= versions_->LogNumber()` (or `== PrevLogNumber()`) are gathered, they are replayed **in ascending file-number order**, and the read path resolves duplicates by sequence number. A log whose contents already reached an SSTable has a file number below `LogNumber()`, so it is never replayed at all.
+
+`paranoid_checks` does not reach the reader: the checksum is always verified, so a torn tail of an uncommitted batch is skipped regardless; `paranoid_checks` only decides whether the resulting error is surfaced (`status` set → `DB::Open` fails) or swallowed by `MaybeIgnoreError` and logged as "(ignoring error)" (`:393-398`, `:216-224`).
+
+### Rotation and reuse
+
+`MakeRoomForWrite` rotates the log together with the memtable (`:1360-1382`): take a new file number, `NewWritableFile` (on failure, `ReuseFileNumber` so the number is not burned), `delete log_; delete logfile_;`, then install the new `log::Writer`, set `imm_ = mem_` and create a fresh memtable. The old WAL becomes deletable once every memtable it covers has reached L0 — `RemoveObsoleteFiles` keeps a log iff `number >= LogNumber() || number == PrevLogNumber()` (`:246-250`).
+
+`options.reuse_logs` (present in 1.23, default `false`, marked EXPERIMENTAL, `include/leveldb/options.h:132-137`) lets recovery append to the last WAL instead of starting a new one, but only when the file was fully replayed and nothing was flushed during recovery (`compactions == 0`, `db_impl.cc:472`).
 
 ## MemTable
 
@@ -675,13 +728,40 @@ int SkipList<Key, Comparator>::RandomHeight() {
 
 ## SSTable
 
+### File Layout
+
+The read/write implementation moved in 1.23: `table/table.cc` and `include/leveldb/table.h` hold the reader, `table/table_builder.cc` and `include/leveldb/table_builder.h` hold the writer, and `table/format.{h,cc}`, `table/block.{h,cc}`, `table/block_builder.{h,cc}`, `table/filter_block.{h,cc}` carry the layout. Anything citing `db/table.cc` describes an older tree.
+
+A finished table is laid out as (`TableBuilder::Finish`, `table/table_builder.cc:198-252`):
+
+```
+data block 0
+data block 1
+...
+filter block                       (if a filter_policy was configured)
+metaindex block                  (key "filter.<policy name>" -> BlockHandle of filter block)
+index block                    (one entry per data block: smallest key of that block -> BlockHandle)
+padding to 40 bytes
+footer                        (2 * BlockHandle::kMaxEncodedLength + 8 = 48 bytes)
+```
+
+`BlockHandle::kMaxEncodedLength = 10 + 10`（`table/format.h:26`，两个 varint64 的最坏情况各 10 字节），于是 `Footer::kEncodedLength = 2 * kMaxEncodedLength + 8 = 48`（`:53`）。注释强调 footer 的序列化**恒定占满这 48 字节**：两个 handle 的真实编码先补零到 40 字节，再接 8 字节 magic。`Footer::DecodeFrom` 校验的第一件事就是这个 magic——`kTableMagicNumber = 0xdb4775248b80fb57ull`（`:76`），不符即报 "not an sstable"（`format.cc:42-62`）；`Table::Open` 还要求文件不小于 48 字节（`table.cc:41`）。1.23 里**没有 properties block，metaindex 也不携带统计信息**，源码仍留着 `// TODO(postrelease): Add stats and other meta blocks`（`table_builder.cc:224`）。
+
+一个 `BlockHandle` 只是两个 varint64（`offset`、`size`），所以索引条目本身很便宜；filter block 靠名字定位——`"filter." + filter_policy->Name()`（`table.cc:101-105`），内置策略的名字是 `leveldb.BuiltinBloomFilter2`（`util/bloom.cc:26`）。
+
+### Block Format
+
+Inside a block, entries are delta-encoded: `shared_length`, `non_shared_length`, `value_length` (three varint32) followed by the key suffix and the value (`table/block_builder.cc:16-22`). `Block::Iter::DecodeEntry` has a three-byte fast path for the common small case (`block.cc:55-75`), and `ParseNextKey` (`:250-277`) rebuilds the current key by prefixing `shared` bytes of the previous key.
+
+The block ends with a restart section — `restarts: uint32[num_restarts]`, then `num_restarts: uint32` (`block_builder.cc:24-27`) — which lists the buffer offsets where the prefix encoding restarts from scratch. `Block::Iter::Seek` binary-searches that array and then scans linearly within the chosen interval; 1.23 also narrows the upper bound using the already-known `restart_index_` (`:164-227`). The `restart_offset_` is derived in the constructor as `size_ - (1 + NumRestarts()) * 4` (`block.cc:25-40`).
+
+Restart intervals are chosen per block kind: data blocks use `Options::block_restart_interval` (default **16**, `options.h:105`) while the **index block is built with `block_restart_interval = 1`** (`table_builder.cc:35`), because index entries are seeked individually and must each be decodable without a neighbour. `BlockBuilder` itself has just a `counter_`: in `Add`, if `counter_ < block_restart_interval` it computes the shared prefix, otherwise it pushes `buffer_.size()` as a new restart point and resets the counter (`block_builder.cc:77-88`). There is **no `ShouldRestart`/`RestartBlock`/`EmitRestartPoint` and no `block_size_` member** in LevelDB — those are RocksDB names. Block splitting is decided by `TableBuilder` comparing `CurrentSizeEstimate() >= options.block_size` (default **4 KiB**, `options.h:100`) at `table_builder.cc:119-122`.
+
 ### WriteLevel0Table
 
-BlockBuilder
+`DBImpl::WriteLevel0Table(MemTable* mem, VersionEdit* edit, Version* base)` (`db_impl.cc:505-547`) is where an in-memory table becomes an on-disk one. Its shape: `base->Ref()` (so the newly built file's metadata cannot be GC'd mid-flight), take a fresh file number, register it in `pending_outputs_`, build the table, erase from `pending_outputs_`, then record `{file_size, smallest, largest}` into the passed-in `VersionEdit` as a `kNewFile` and add it to `edit`'s in-memory file collection.
 
-### TableBuilder
-
-Build Table
+It is called from three places, which is the whole story of "when does data reach disk": the foreground `MakeRoomForWrite` path (via `CompactMemTable`, `:557`), the recovery path (`RecoverLogFile`, whenever replayed data exceeds `write_buffer_size`), and the manual `TEST_CompactMemTable`. The actual byte-writing is `BuildTable` (`table/builder.cc`):
 
 ```cpp
 
@@ -753,18 +833,43 @@ Status BuildTable(const std::string& dbname, Env* env, const Options& options,
 
 ### FilterPolicy
 
-BloomFilter
+The `filter." + policy->Name()` block in an SSTable is produced by `table/filter_block.{h,cc}`, which is a *local* (per-region) filter layout — and its granularity is not what most descriptions claim.
+
+**A filter covers a 2 KiB span of file offsets, not one data block.** `kFilterBaseLg = 11` (`table/filter_block.cc:15-16`), so `FilterBlockBuilder::StartBlock(block_offset)` pads in empty filters until it reaches `block_offset >> 11` (`:21-27`). Because `Options::block_size` defaults to 4 KiB, a single filter typically covers two data blocks — but the mapping is by byte offset, so a large block simply spans several buckets. `Finish` appends the accumulated bitmaps, then a `uint32` offset array, the array's own offset, and one final byte holding `base_lg` (`:35-49`).
+
+On the read side, `FilterBlockReader` keeps only `data_ / offset_ / num_ / base_lg_` (there are **no `alloced_`/`cache_allocated_` members**; `Table::Rep` frees `filter_data` manually, `table.cc:32, 128-130`). If the block is shorter than 5 bytes the reader gives up (`n < 5`). `KeyMayMatch(block_offset, key)` computes `index = block_offset >> base_lg_`, and **returns `true` — i.e. "maybe present" — for any malformed or out-of-range case** (`:90-104`), so a broken filter degrades into a full read rather than a false negative.
+
+Two things worth pinning down, since they are frequently misquoted:
+
+- **`bits_per_key` has no default in LevelDB.** `NewBloomFilterPolicy(int bits_per_key)` takes a required argument (`include/leveldb/filter_policy.h:68`); the "10" seen in tutorials comes from comments and tests, not from a default. Inside `util/bloom.cc` the number of hashes is `k_ = bits_per_key * 0.69` clamped to `[1, 30]` (`:21-23`), and the bitmap size is rounded up to a whole byte (`(bits + 7) / 8`, `:36-37`).
+- There is **no `kFilterBlockPrefix` constant** (the key is just the literal `"filter."`), and **no `FullFilterBitsBuilder`, `FastLocalFilterBitsBuilder` or `RibbonFilterPolicy`** — a whole-file filter and a ribbon filter are RocksDB features with no LevelDB equivalent. The math behind the false-positive curve lives in [BloomFilter](/docs/CS/DB/LevelDB/BloomFilter.md); this section is only about how the bits get stored and consulted.
 
 ## Compression
 
-BackgroundCompaction
+`Options::CompressionType` has exactly two values — `kNoCompression = 0x0` and `kSnappyCompression = 0x1` (`include/leveldb/options.h:28-29`) — and the default is `kSnappyCompression` (`:131`).
 
-DoCompaction
+Snappy is optional at build time, gated by `#if HAVE_SNAPPY` (`port/port_stdcxx.h:86-126`; note it is a defined-0-or-1 macro, not `#ifdef SNAPPY`). The degradation path is on the **write** side: `TableBuilder::WriteBlock` calls `Snappy_Compress`, and when that reports unavailable it stores the block raw and rewrites the type byte to `kNoCompression` (`table/table_builder.cc:160-168`). There is no `have_snappy_` member on `Table`. Reading is the opposite — a reader built without snappy that meets a compressed block reports Corruption rather than quietly falling back, so a binary that reads an existing database must be built with the same compression support that wrote it.
+
+A block is only stored compressed if it actually pays: the threshold is `compressed < raw - raw / 8`, i.e. it must save at least 12.5 % (`:161`).
+
+Which blocks get compressed is worth memorising precisely, because it is asymmetric:
+
+- **data blocks** — compressed, via `WriteBlock`;
+- **index block and metaindex block** — also compressed, they go through the same `WriteBlock` path (`:225`, `:237`);
+- **filter block** — written with `WriteRawBlock(..., kNoCompression, ...)`, deliberately never compressed (`:208`), because it is consulted on nearly every point lookup and decompressing it would defeat its purpose.
+
+Each block on disk ends with a 5-byte trailer (`kBlockTrailerSize = 5`, `table/format.h:79`): 1 byte compression type + 4 bytes masked CRC. The type byte is read in `ReadBlock` (`table/format.cc:97-136`), which switches on it and reports "bad block type" for anything else. Note that in 1.23 the older `Block::InitData` helper no longer exists — CRC verification was folded into the `Block` constructor (`table/block.cc:25-40`).
+
+Compaction of the LSM (which blocks get rewritten, and therefore re-compressed) is covered in [Versions_and_Compaction](/docs/CS/DB/LevelDB/Versions_and_Compaction.md); the entry points formerly listed here, `BackgroundCompaction` and `DoCompactionWork`, live in `db/db_impl.cc`.
 
 ## Links
 
 - [DataBases](/docs/CS/DB/DB.md?id=leveldb)
+- [Versions and Compaction](/docs/CS/DB/LevelDB/Versions_and_Compaction.md)
+- [Bloom Filter](/docs/CS/DB/LevelDB/BloomFilter.md)
 - [RocksDB](/docs/CS/DB/RocksDB/RocksDB.md)
+- [RocksDB Compaction](/docs/CS/DB/RocksDB/Compaction.md)
+- [LSM-Tree](/docs/CS/Algorithms/tree/LSM.md)
 
 ## References
 
