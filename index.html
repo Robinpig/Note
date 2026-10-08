@@ -6,9 +6,22 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"/>
   <meta name="description" content="Description">
   <meta name="viewport" content="width=device-width,user-scalable=no,  initial-scale=1.0, minimum-scale=1.0">
-  <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify-darklight-theme@latest/dist/style.min.css">
-  <script src="//cdn.jsdelivr.net/npm/docsify-darklight-theme@latest/dist/index.min.js"></script>
-  <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify/lib/themes/vue.css" />
+  <!-- 主题层叠顺序（2026-10-08 修正，勿调换）：
+       vue.css 先、docsify-darklight-theme 后 —— 同特异性下后加载者胜。
+       反序时 vue.css 会用硬编码色值覆盖 darklight 的 var(--*)，
+       实测 162 个选择器同名、31 处属性冲突，其中 body 背景被钉死为 #fff，
+       导致 darklight 注入的明暗变量在 body 上全部失效。
+
+       下面这行 window.$docsify 预置不可删除（2026-10-08 修正）：
+       darklight 的 index.min.js 第一句就是 `window.$docsify.plugins = ...`，
+       而本页原先在 body 里才创建 window.$docsify，顺序颠倒导致该脚本直接抛
+       TypeError('Cannot read properties of undefined')，插件从未注册 →
+       明暗切换按钮不出现、主题变量也不注入。预置空对象后，
+       body 内的配置必须用 Object.assign 合并（见那处标注）。 -->
+  <script>window.$docsify = window.$docsify || {};</script>
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify@5.0.0/lib/themes/vue.css" />
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify-darklight-theme@3.2.0/dist/style.min.css">
+  <script src="//cdn.jsdelivr.net/npm/docsify-darklight-theme@3.2.0/dist/index.min.js"></script>
 
 <!--  see https://jhildenbiddle.github.io/docsify-themeable/#/-->
 <!--  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/docsify-themeable@0/dist/css/theme-simple.css">-->
@@ -134,7 +147,7 @@
   // var num = 0;
  // mermaid.initialize({ startOnLoad: true });
 
-  window.$docsify = {
+  window.$docsify = Object.assign(window.$docsify || {}, {
     disqus: 'shortname',
     name: 'Note',
     repo: 'https://github.com/Robinpig/Note',
@@ -249,7 +262,10 @@
     remoteMarkdown: {
       tag: 'md',
     }
-  }
+  });
+  // ⚠️ 必须用 Object.assign 合并，不能写成 `window.$docsify = {...}`
+  // （2026-10-08）整体赋值会抹掉 head 里 darklight 主题注册的 plugins 数组，
+  //  导致明暗切换按钮不出现。详见 head 内该行注释。
 </script>
 
 <!--<script>-->
@@ -259,110 +275,115 @@
 <!--</script>-->
 <!--<script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/disqus.min.js"></script>-->
 
-<!-- Docsify v4 -->
+<!-- CDN 版本策略（2026-10-08）：以上全部引用已锁定到精确版本号。
+     docsify 本体锁在 5.0.0（注意：@latest 当初也是 5.0.0，锁定只是防未来漂移）。
+     升级方式：只改 @版本号，不要整段替换，锁定后须探活确认路径仍存在。
+     ⚠️ 已知偏差：docsify 5 自身依赖 marked ^18.0.3，但此处刻意保持在 4.3.0
+        （marked 是解析器，4→18 跨 14 个大版本，贸然升级会改变全站渲染结果）。
+        如需升级 marked，必须单独验证渲染结果，不要与其它包升级混在一起。 -->
 
 
 <!-- 公式 -->
-<script src="//cdn.jsdelivr.net/npm/katex@latest/dist/katex.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/marked@4"></script>
-<script src="//cdn.jsdelivr.net/npm/docsify-katex@latest/dist/docsify-katex.js"></script>
+<script src="//cdn.jsdelivr.net/npm/katex@0.19.0/dist/katex.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/marked@4.3.0"></script>
+<script src="//cdn.jsdelivr.net/npm/docsify-katex@2.0.2/dist/docsify-katex.js"></script>
 
 <script src="//cdn.jsdelivr.net/npm/viz.js@1.8.0/viz.js"></script>
 
-<script src="//cdn.jsdelivr.net/npm/docsify-puml/dist/docsify-puml.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/docsify-plantuml/dist/docsify-plantuml.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/docsify-puml@1.1.1/dist/docsify-puml.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/docsify-plantuml@1.3.2/dist/docsify-plantuml.min.js"></script>
 
 
-<script src="//cdn.jsdelivr.net/npm/prismjs@1/components/prism-flow.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-flow.min.js"></script>
 
 
-<script src="//cdn.jsdelivr.net/npm/docsify/lib/docsify.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/emoji.js"></script>
+<script src="//cdn.jsdelivr.net/npm/docsify@5.0.0/lib/docsify.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/docsify@5.0.0/lib/plugins/emoji.js"></script>
 
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-bash.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-c.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-cpp.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-docker.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-dot.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-git.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-go.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-groovy.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-http.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-java.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-json.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-kotlin.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-latex.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-lua.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-makefile.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-matlab.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-markdown.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-nginx.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-perl.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-powershell.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-properties.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-protobuf.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-python.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-r.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-ruby.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-rust.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-scala.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-sql.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-swift.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-typescript.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-yaml.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-armasm.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-bash.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-c.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-cpp.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-docker.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-dot.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-git.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-go.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-groovy.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-http.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-java.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-json.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-kotlin.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-latex.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-lua.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-makefile.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-matlab.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-markdown.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-nginx.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-perl.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-powershell.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-properties.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-protobuf.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-python.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-r.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-ruby.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-rust.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-scala.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-sql.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-swift.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-typescript.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-yaml.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-armasm.min.js"></script>
                     
-<script src="//cdn.jsdelivr.net/npm/prismjs/components/prism-asm6502.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/prismjs@1.30.0/components/prism-asm6502.min.js"></script>
 
 
-<script src="https://cdn.jsdelivr.net/npm/docsify-hide-code"></script>
+<script src="//cdn.jsdelivr.net/npm/docsify-hide-code@1.0.1"></script>
     
 
-<script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/external-script.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/docsify@5.0.0/lib/plugins/external-script.min.js"></script>
 
-<script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/search.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/zoom-image.min.js"></script>
-<script src="//cdn.jsdelivr.net/npm/docsify-count/dist/countable.js"></script>
-<script src="//cdn.jsdelivr.net/npm/docsify-pagination/dist/docsify-pagination.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/docsify@5.0.0/lib/plugins/search.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/docsify@5.0.0/lib/plugins/zoom-image.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/docsify-count@1.1.0/dist/countable.js"></script>
+<script src="//cdn.jsdelivr.net/npm/docsify-pagination@2.10.1/dist/docsify-pagination.min.js"></script>
 
-<script src="https://cdn.jsdelivr.net/npm/docsify-plugin-flexible-alerts"></script>
+<script src="//cdn.jsdelivr.net/npm/docsify-plugin-flexible-alerts@1.3.0"></script>
 
-<script src="https://cdn.jsdelivr.net/npm/docsify-remote-markdown/dist/docsify-remote-markdown.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/docsify-remote-markdown@1.0.1/dist/docsify-remote-markdown.min.js"></script>
 
-<script src="//cdn.jsdelivr.net/npm/docsify-share/build/index.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/docsify-progress@1.0.3/dist/progress.js"></script>
+<script src="//cdn.jsdelivr.net/npm/docsify-share@0.1.3/build/index.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/docsify-progress@1.0.3/dist/progress.js"></script>
 
 
-<script src="https://cdn.jsdelivr.net/npm/docsify-footer-enh/dist/docsify-footer-enh.min.js"></script>
-
-<!--see https://vagnerdomingues.github.io/docsify-example-panels/#/-->
-<script src="https://cdn.jsdelivr.net/npm/docsify-example-panels"></script>
+<script src="//cdn.jsdelivr.net/npm/docsify-footer-enh@0.1.0/dist/docsify-footer-enh.min.js"></script>
 
 <!--see https://vagnerdomingues.github.io/docsify-example-panels/#/-->
-<script src="https://cdn.jsdelivr.net/npm/docsify-tabs@1"></script>
+<script src="//cdn.jsdelivr.net/npm/docsify-example-panels@1.1.0"></script>
 
-<script src="//cdn.jsdelivr.net/npm/docsify-slides/dist/docsify-slides.min.js"></script>
+<!--see https://vagnerdomingues.github.io/docsify-example-panels/#/-->
+<script src="//cdn.jsdelivr.net/npm/docsify-tabs@1.6.3"></script>
 
-
-<script src="https://cdn.jsdelivr.net/npm/docsify-sidebar-collapse@1.3.5/src/index.js"></script>
-
-<script src="https://cdn.jsdelivr.net/npm/docsify-link-preview@0.1.1/src/index.js"></script>
+<script src="//cdn.jsdelivr.net/npm/docsify-slides@1.1.2/dist/docsify-slides.min.js"></script>
 
 
-<script src="https://cdn.jsdelivr.net/npm/docsify-copy-code"></script>
+<script src="//cdn.jsdelivr.net/npm/docsify-sidebar-collapse@1.3.5/src/index.js"></script>
+
+<script src="//cdn.jsdelivr.net/npm/docsify-link-preview@0.1.1/src/index.js"></script>
+
+
+<script src="//cdn.jsdelivr.net/npm/docsify-copy-code@3.0.2"></script>
 
 
 <!--see https://github.com/imyelo/docsify-sequence-diagram-->
-<script src="//cdn.jsdelivr.net/npm/raphael"></script>
-<script src="//cdn.jsdelivr.net/npm/underscore"></script>
-<script src="//cdn.jsdelivr.net/npm/docsify-sequence-diagram/dist/docsify-sequence-diagram.min.js"></script>
+<script src="//cdn.jsdelivr.net/npm/raphael@2.3.0"></script>
+<script src="//cdn.jsdelivr.net/npm/underscore@1.13.8"></script>
+<script src="//cdn.jsdelivr.net/npm/docsify-sequence-diagram@1.0.1/dist/docsify-sequence-diagram.min.js"></script>
 
 <!-- see https://github.com/Leward/mermaid-docsify not support with Graphviz, tex and original sequence-->
 <!--<script src="//cdn.jsdelivr.net/npm/mermaid/dist/mermaid.js"></script>-->
 <!--<script src="//cdn.jsdelivr.net/npm/docsify-mermaid@latest/dist/docsify-mermaid.js">-->
 
 
-<script src="//cdn.jsdelivr.net/npm/docsify/lib/plugins/zoom-image.js"></script>
+<script src="//cdn.jsdelivr.net/npm/docsify@5.0.0/lib/plugins/zoom-image.js"></script>
 
 </body>
 </html>
