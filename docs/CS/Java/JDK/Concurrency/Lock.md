@@ -92,9 +92,68 @@ The ReentrantLock constructor offers a choice of two fairness options: create a 
 
 
 
-## Condition
+`Object.wait()` 的问题在于它**强制持有对象的 monitor**。这意味着「进入等待」和「释放锁」被绑定成一个不可分割的动作，
+而业务上经常需要「先释放锁去干别的事，回来时再检查条件」。`Condition` 把这两件事拆开：它本身没有锁，
+`await()` 的语义是**完全释放关联的那把 `Lock`，等待，被 signal 后重新获取锁再返回**。
 
-### Summary of Condition 
+```java
+Lock lock = new ReentrantLock();
+Condition notEmpty = lock.newCondition();
+Condition notFull  = lock.newCondition();
+
+lock.lock();
+try {
+    while (queue.isEmpty()) {
+        notEmpty.await();          // 释放 lock + 入条件队列
+    }
+    // 重新持有 lock 继续
+} finally {
+    lock.unlock();
+}
+```
+
+七个工作方法，构成两组对称：
+
+| 等待侧 | 唤醒侧 | 说明 |
+| --- | --- | --- |
+| `await()` | `signal()` | 可中断；返回时**已持有锁** |
+| `awaitNanos(nanos)` | | 返回剩余纳秒数，<= 0 表示超时 |
+| `await(time, unit)` | | 返回 `boolean`，`false` 表示超时 |
+| `awaitUntil(deadline)` | | 绝对时间截止，返回 `boolean` |
+| `awaitUninterruptibly()` | | 不可中断，返回时**不重设中断标志** |
+
+三条必须记住的规则：
+
+1. **必须用 `while` 而不是 `if` 检查条件**。`await` 返回不代表条件成立，只代表有人 signal 了；
+   signal 存在「先唤醒 A，但 A 检查时条件已被 B 消费」的窗口，所以必须循环复检。
+2. **`await()` 会抛 `InterruptedException`，且中断状态被清除**。这是它与 `Object.wait` 的
+   [等价语义](/docs/CS/Java/JDK/Concurrency/Thread.md?id=wait)，不是缺陷；`awaitUninterruptibly()` 不抛异常也不清标志。
+3. **必须在 `lock()` 之后、`unlock()` 之前调用**。`Condition` 关联的是创建它的那把 `Lock`，
+   在其它线程调用 `signal()` 时，被唤醒的线程同样需要重新竞争这把锁，所以它只能被持锁者调用。
+
+### Multiple Conditions
+
+一个 `Lock` 可以 `newCondition()` 出任意多个 `Condition`，这是它相对 `Object` 的最大优势。
+`Object.wait/notifyAll` 只有一个等待队列，唤醒后所有竞争者必须重新检查同一个条件谓词，唤醒无关的线程是纯浪费；
+多个 `Condition` 则可以让生产者唤醒消费者、消费者唤醒生产者，互不干扰：
+
+```java
+// BoundedBuffer 的标准写法
+notFull.await();      // 队列满，只等消费者腾出位置
+item = queue.take();
+notEmpty.signal();    // 有新元素，唤醒消费者
+```
+
+`signal()` 只唤醒**队列中第一个**等待者；`signalAll()` 唤醒全部。
+多个 `Condition` 的正确用法是能用 `signal()` 就不用 `signalAll()`，
+因为惊群唤醒会让所有竞争者被唤醒后立刻因条件不成立而重新入队，白白损失唤醒与上下文切换。
+
+条件队列与同步队列是两套独立的队列：`Condition.await()` 先完全释放锁再进条件队列，
+`signal()` 把节点从条件队列移到同步队列末尾，线程再在那里竞争锁。
+这个「先脱离锁、再排队、再竞争锁」的两段式，是 `Condition` 与 `Object.wait` 在实现上的根本分野，
+也是它能支持多个条件谓词的原因。
+
+### Summary of Condition
 
 
 

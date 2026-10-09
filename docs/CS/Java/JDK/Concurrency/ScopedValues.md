@@ -70,6 +70,7 @@ ScopedValue.where(CURRENT_USER, "alice").run(() -> {
 
 - [ThreadLocal](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md)
 - [VirtualThread](/docs/CS/Java/JDK/Concurrency/VirtualThread.md)
+- [StructuredTaskScope](/docs/CS/Java/JDK/Concurrency/StructuredTaskScope.md)
 - [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
 
 ## References

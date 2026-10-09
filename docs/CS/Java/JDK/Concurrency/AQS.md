@@ -542,171 +542,129 @@ private void unparkSuccessor(Node node) {
 
 ## Shared
 
+独占模式之外，AQS 的另一半是**共享获取**：`Semaphore`、`CountDownLatch`、`ReadWriteLock` 的读锁都走这条路径。
+它与独占模式的根本差别不在「多个线程能否同时进来」，而在**唤醒的传播性**——一个线程释放后，
+必须把唤醒沿着队列继续往后传，而不是只叫醒后继一个。
 
+### Acquire
 
-### acquireShared
-
-1. addWaiter
-2. setHeadAndPropagate -> doReleaseShared
-3. shouldParkAfterFailedAcquire
-4. parkAndCheckInterrupt
+模板方法 `acquireShared` 现在只是薄薄一层，先试一次，不成则进入统一的 `acquire`：
 
 ```java
 public final void acquireShared(int arg) {
     if (tryAcquireShared(arg) < 0)
-        doAcquireShared(arg);
-}
-
-private void doAcquireShared(int arg) {
-    final Node node = addWaiter(Node.SHARED);
-    boolean failed = true;
-    try {
-        boolean interrupted = false;
-        for (;;) {
-            final Node p = node.predecessor();
-            if (p == head) {
-                int r = tryAcquireShared(arg);
-                if (r >= 0) {
-                    setHeadAndPropagate(node, r);
-                    p.next = null; // help GC
-                    if (interrupted)
-                        selfInterrupt();
-                    failed = false;
-                    return;
-                }
-            }
-            if (shouldParkAfterFailedAcquire(p, node) &&
-                parkAndCheckInterrupt())
-                interrupted = true;
-        }
-    } finally {
-        if (failed)
-            cancelAcquire(node);
-    }
+        acquire(null, arg, true, false, false, 0L);
 }
 ```
 
-
+`acquire` 的六个参数分别是 `node`、`arg`、`shared`、`interruptible`、`timed`、`deadline`。
+共享模式下关键的三个位置：
 
 ```java
-private void doAcquireSharedInterruptibly(int arg)
-    throws InterruptedException {
-    final Node node = addWaiter(Node.SHARED);
-    boolean failed = true;
-    try {
-        for (;;) {
-            final Node p = node.predecessor();
-            if (p == head) {
-                int r = tryAcquireShared(arg);
-                if (r >= 0) {
-                    setHeadAndPropagate(node, r);
-                    p.next = null; // help GC
-                    failed = false;
-                    return;
-                }
-            }
-            if (shouldParkAfterFailedAcquire(p, node) &&
-                parkAndCheckInterrupt())
-                throw new InterruptedException();
-        }
-    } finally {
-        if (failed)
-            cancelAcquire(node);
-    }
-}
+if (shared)
+    acquired = (tryAcquireShared(arg) >= 0);   // 1. 共享获取：>= 0 即成功
+else
+    acquired = tryAcquire(arg);                //    独占获取：布尔
+...
+if (acquired) {
+    if (first) {
+        node.prev = null;
+        head = node;
+        pred.next = null;
+        node.waiter = null;
+        if (shared)
+            signalNextIfShared(node);           // 2. 传播唤醒
+        ...
 ```
 
-
-
-#### setHeadAndPropagate
+节点在入队时就按类型分好：
 
 ```java
-/**
- * Sets head of queue, and checks if successor may be waiting
- * in shared mode, if so propagating if either propagate > 0 or
- * PROPAGATE status was set.
- */
-private void setHeadAndPropagate(Node node, int propagate) {
-    Node h = head; // Record old head for check below
-    setHead(node);
-    /*
-     * Try to signal next queued node if:
-     *   Propagation was indicated by caller,
-     *     or was recorded (as h.waitStatus either before
-     *     or after setHead) by a previous operation
-     *     (note: this uses sign-check of waitStatus because
-     *      PROPAGATE status may transition to SIGNAL.)
-     * and
-     *   The next node is waiting in shared mode,
-     *     or we don't know, because it appears null
-     *
-     * The conservatism in both of these checks may cause
-     * unnecessary wake-ups, but only when there are multiple
-     * racing acquires/releases, so most need signals now or soon
-     * anyway.
-     */
-    if (propagate > 0 || h == null || h.waitStatus < 0 ||
-        (h = head) == null || h.waitStatus < 0) {
-        Node s = node.next;
-        if (s == null || s.isShared())
-            doReleaseShared();
+node = (shared) ? new SharedNode() : new ExclusiveNode();
+```
+
+**共享获取的返回值语义与独占相反**：`tryAcquireShared` 返回**非负**值表示成功，负值表示失败。
+这个约定正是为传播服务的——返回值同时承载了「还有多少资源」的信息，
+`Semaphore` 直接把它返回给 `tryAcquireShared()` 的调用者作为许可数。
+
+### Propagation
+
+传播靠两个静态方法区分唤醒谁：
+
+```java
+private static void signalNext(Node h) {
+    Node s;
+    if (h != null && (s = h.next) != null && s.status != 0) {
+        s.getAndUnsetStatus(WAITING);
+        LockSupport.unpark(s.waiter);
+    }
+}
+
+/** Wakes up the given node if in shared mode */
+private static void signalNextIfShared(Node h) {
+    Node s;
+    if (h != null && (s = h.next) != null &&
+        (s instanceof SharedNode) && s.status != 0) {
+        s.getAndUnsetStatus(WAITING);
+        LockSupport.unpark(s.waiter);
     }
 }
 ```
 
+差异只有一行 `(s instanceof SharedNode)`。这就是**节点类型化的收益**：
+旧实现需要 `PROPAGATE` 这个特殊状态位来表达「唤醒要往后传」，
+现在「要不要继续传」由后继节点的**类型**直接决定，`signalNext` 和 `signalNextIfShared` 一眼可辨。
 
+链式传播的完整过程：共享线程 A 释放 → `signalNext(head)` 唤醒 B → B 拿到资源后又成为 head →
+B 在 `first` 分支里调 `signalNextIfShared` → C 被唤醒。唤醒像多米诺一样传下去，
+直到队列里没有共享节点为止。`Semaphore` 的许可充足时可以一次放行一批线程，靠的就是这条链。
 
-### releaseShared
+`releaseShared` 本身同样被简化了，不再需要 `doReleaseShared` 这样的多层递归：
 
 ```java
 public final boolean releaseShared(int arg) {
     if (tryReleaseShared(arg)) {
-        doReleaseShared();
+        signalNext(head);
         return true;
     }
     return false;
 }
 ```
 
-#### doReleaseShared
+### Summary
 
-```java
-private void doReleaseShared() {
-    /*
-     * Ensure that a release propagates, even if there are other
-     * in-progress acquires/releases.  This proceeds in the usual
-     * way of trying to unparkSuccessor of head if it needs
-     * signal. But if it does not, status is set to PROPAGATE to
-     * ensure that upon release, propagation continues.
-     * Additionally, we must loop in case a new node is added
-     * while we are doing this. Also, unlike other uses of
-     * unparkSuccessor, we need to know if CAS to reset status
-     * fails, if so rechecking.
-     */
-    for (;;) {
-        Node h = head;
-        if (h != null && h != tail) {
-            int ws = h.waitStatus;
-            if (ws == Node.SIGNAL) {
-                if (!compareAndSetWaitStatus(h, Node.SIGNAL, 0))
-                    continue;            // loop to recheck cases
-                unparkSuccessor(h);
-            }
-            else if (ws == 0 &&
-                     !compareAndSetWaitStatus(h, 0, Node.PROPAGATE))
-                continue;                // loop on failed CAS
-        }
-        if (h == head)                   // loop if head changed
-            break;
-    }
-}
-```
+| | Exclusive | Shared |
+| --- | --- | --- |
+| 模板方法 | `acquire` / `tryAcquire` | `acquireShared` / `acquireSharedInterruptibly` / `tryAcquireSharedNanos` |
+| 钩子签名 | `tryAcquire` 返回 `boolean` | `tryAcquireShared` 返回 `int`，**非负即成功** |
+| 节点类型 | `ExclusiveNode` | `SharedNode` |
+| 唤醒 | `signalNext` | `signalNext` + `signalNextIfShared` 链式传播 |
+| 能否同时多持 | 否 | 是（资源数由实现决定） |
+| 典型实现 | `ReentrantLock` | `Semaphore` / `CountDownLatch` / `ReadWriteLock` 读锁 |
 
+### Old Implementation
 
+需要留意的是，上面这套代码是**当前 JDK 的形态**，与流传最广的 AQS 教程（基于 JDK 8）差别很大。
+JDK 8 的写法在 `java.util.concurrent.locks` 里已经不存在：
+
+| 旧（JDK 8） | 新（当前） |
+| --- | --- |
+| `PROPAGATE`（`-3`）状态位 | **已删除**，改由 `SharedNode` 类型表达 |
+| `waitStatus` 字段 | 更名为 `status` |
+| `doAcquireShared` / `doAcquireSharedInterruptibly` | 统一为 `acquire(node, arg, shared, ...)` |
+| `doReleaseShared`（内含递归与循环） | 简化为 `signalNext(head)` |
+| `setHeadAndPropagate` | `acquire` 内的 `first` 分支 + `signalNextIfShared` |
+| `CANCELLED = 1` / `SIGNAL = -1` / `CONDITION = -2` | `WAITING = 1` / `CANCELLED = 0x80000000` / `COND = 2` |
+
+状态位的语义整体被简化了：旧的四个负值常量变成了两个正数位，
+并且大量原本靠 CAS 循环修改 `waitStatus` 的地方改用了 `Node` 上的专用原语
+（`getAndUnsetStatus` / `setStatusRelaxed` / `clearStatus`），注释里直接写明了用途
+（`for signalling` / `for off-queue assignment` / `for reducing unneeded signals`）。
+读旧代码里的 `waitStatus` 时要意识到这一点，否则会以为在读当前实现。
 
 ## ConditionObject
 
-implements [Condition](/docs/CS/Java/JDK/Concurrency/Lock.md?id=condition)
+implements [Condition](/docs/CS/Java/JDK/Concurrency/Lock.md?id=multiple-conditions)
 
 ```java
 public class ConditionObject implements Condition, java.io.Serializable {
@@ -1084,6 +1042,7 @@ Here is a latch class that is like a CountDownLatch except that it only requires
 1. Exclusive ReentrantLock
 2. Share Semaphore/CountDownLatch
 3. Both ReadWriteLock/StampedLock
+
 
 
 

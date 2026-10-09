@@ -508,7 +508,21 @@ If this thread-local variable is subsequently read by the current thread, its va
 
 ## InheritableThreadLocal
 
+`InheritableThreadLocal<T>` 是 `ThreadLocal` 的子类，在**子线程创建的那一刻**把父线程的值复制一份给它：
+
+```java
+public class InheritableThreadLocal<T> extends ThreadLocal<T> {
+    public InheritableThreadLocal() {}
+
+    protected T childValue(T parentValue) {
+        return parentValue;
+    }
+}
+```
+
 ### create in init of Thread
+
+拷贝发生在 `Thread` 的构造函数里，而不是子线程第一次访问时：
 
 ```java
 if (inheritThreadLocals && parent.inheritableThreadLocals != null)
@@ -516,18 +530,70 @@ if (inheritThreadLocals && parent.inheritableThreadLocals != null)
         ThreadLocal.createInheritedMap(parent.inheritableThreadLocals);
 ```
 
+`inheritThreadLocals` 默认为 `true`，可通过 `Thread` 构造函数的第五个参数
+`new Thread(group, target, name, stackSize, inheritThreadLocals)` 关闭。
 
+`createInheritedMap` 的实现是**新建同尺寸空表后逐条重算哈希并重新插入**，而不是直接 clone 数组：
 
-**TransmittableThreadLocal**
+```java
+static ThreadLocalMap createInheritedMap(ThreadLocalMap parentMap) {
+    return new ThreadLocalMap(parentMap);
+}
+```
 
-# Tuning
+遍历父表时对每个条目调 `key.childValue(e.value)`，并**跳过 key 为 null 的槽位**（那些是已被 `remove()` 的空洞）。
+必须重算哈希而不能复制数组，是因为槽位下标由 `key.threadLocalHashCode` 决定，
+而线程 identity hash 因线程而异，直接搬槽位会把 key 放错位置。
+
+### childValue
+
+默认实现是**原样返回父值**，但它是唯一需要留意的扩展点：
+
+```java
+class UserContext extends InheritableThreadLocal<User> {
+    @Override protected User childValue(User parentValue) {
+        return parentValue == null ? null : parentValue.copyForChild();   // 深拷贝，别共享可变对象
+    }
+}
+```
+
+源码里有个容易误读的设计：`ThreadLocal` 本身也声明了 `childValue`，默认**抛 `UnsupportedOperationException`**：
+
+```java
+T childValue(T parentValue) {
+    throw new UnsupportedOperationException();
+}
+```
+
+它存在的唯一理由是让 `createInheritedMap` 不必对 map 类型做 `instanceof` 判断
+（注释里明确写了「This technique is preferable to the alternative of embedding instanceof tests」），
+只有 `InheritableThreadLocal` 才真正覆写它。所以读 `ThreadLocal.java` 时看到它，别以为是可用的 API。
+
+### Two Failure Modes
+
+`InheritableThreadLocal` 在实践中基本已被 [ScopedValue](/docs/CS/Java/JDK/Concurrency/ScopedValues.md) 取代，
+原因不是它不可靠，而是**它的继承模型与线程池天然冲突**：
+
+1. **继承只发生一次，且只在「新建线程」那一刻**。提交到
+   [ThreadPoolExecutor](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md) 的任务不会新建线程，
+   而是复用池里的已有线程——那些线程的 `inheritableThreadLocals` 是**上一次运行别的任务时留下的残值**。
+   于是子任务既拿不到父线程的新值，又拿到了不相关的旧值，这是数据串号而非继承失败。
+2. **继承是浅拷贝**。父线程的值是可变对象时，所有子线程与父线程共享**同一个实例**，
+   任何一方修改都全局可见，与「每个线程一份」的直觉严重不符。
+   要隔离必须像上面那样覆写 `childValue` 做深拷贝，这又要求值本身可安全复制。
+
+虚拟线程把矛盾放大了：`fork` 出的每个虚拟线程都要复制一份 map，百万级线程下这是可观的内存与语义负担。
+JDK 25 转正的 [ScopedValue](/docs/CS/Java/JDK/Concurrency/ScopedValues.md) 才是官方答案——
+值绑定后不可变、随作用域自动失效、且只在
+[StructuredTaskScope](/docs/CS/Java/JDK/Concurrency/StructuredTaskScope.md) 的 `fork` 处按结构化方式只读继承。
+
+社区的过渡方案是阿里开源的 TransmittableThreadLocal：任务提交时捕获父线程上下文、
+执行前回放、执行完毕后还原，实质是把「继承」从线程创建时刻搬到了任务提交时刻——
+它绕开了线程池问题，但仍保留了 ThreadLocal 可变易泄漏的老毛病。
 
 ## Optimize ThreadLocal
 
-
-
 1. [FastThreadLocal in Netty](/docs/CS/Framework/Netty/FastThreadLocal.md)
-
 
 
 ## Practice

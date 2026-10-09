@@ -217,7 +217,7 @@ Five implementations in java.util.concurrent support the extended [BlockingQueue
 LinkedBlockingQueue, ArrayBlockingQueue, SynchronousQueue, PriorityBlockingQueue, and DelayQueue.
 The different classes cover the most common usage contexts for producer-consumer, messaging, parallel tasking, and related concurrent designs.
 
-Extended interface TransferQueue, and implementation LinkedTransferQueue introduce a synchronous transfer method (along with related features) in which a producer may optionally block awaiting its consumer.
+Extended interface [TransferQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=linkedtransferqueue), and implementation LinkedTransferQueue introduce a synchronous transfer method (along with related features) in which a producer may optionally block awaiting its consumer.
 The BlockingDeque interface extends BlockingQueue to support both FIFO and LIFO (stack-based) operations. Class LinkedBlockingDeque provides an implementation.
 
 #### Concurrent Collections
@@ -226,9 +226,9 @@ Besides Queues, this package supplies Collection implementations designed for us
 
 - [ConcurrentHashMap](/docs/CS/Java/JDK/Collection/Map.md?id=concurrenthashmap),
 - [ConcurrentSkipListMap](/docs/CS/Java/JDK/Collection/Map.md?id=concurrentskiplistmap),
-- ConcurrentSkipListSet,
+- [ConcurrentSkipListSet](/docs/CS/Java/JDK/Collection/Set.md?id=concurrentskiplistset),
 - [CopyOnWriteArrayList](/docs/CS/Java/JDK/Collection/List.md?id=copyonwritearraylist),
-- and CopyOnWriteArraySet.
+- and [CopyOnWriteArraySet](/docs/CS/Java/JDK/Collection/Set.md?id=copyonwritearrayset).
 
 When many threads are expected to access a given collection, a ConcurrentHashMap is normally preferable to a synchronized HashMap,
 and a ConcurrentSkipListMap is normally preferable to a synchronized TreeMap.
@@ -367,10 +367,37 @@ Disadvantages of Unbounded Thread Creation
 
 #### Execution Policies
 
+并发编程的核心难题不是「怎么起线程」，而是**用什么策略把任务分配给有限的资源**。
+四种经典策略按调度方式排列：
+
+| 策略 | 行为 | 适用场景 | 风险 |
+| --- | --- | --- | --- |
+| **newFixedThreadPool** | 固定 N 个线程，队列无界 | 需要限制并发度的 CPU 密集任务 | N 定得过大时内存与线程开销高 |
+| **newCachedThreadPool** | 线程按需创建、空闲 60s 回收，队列 `SynchronousQueue` | 任务量波动大、且能承受无限并发 | 新任务持续涌入时**线程数无上限**，可能 OOM |
+| **newSingleThreadExecutor** | 单线程串行 | 需要保证顺序 | 一个慢任务会阻塞全部 |
+| **newScheduledThreadPool** | 固定 N + 定时/周期任务 | 需要延迟或周期执行 | 任务异常会终止后续周期 |
+
+这些工厂方法最终都落到同一个
+[ThreadPoolExecutor](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md) 上，差别只在核心参数：
+
+```java
+// newCachedThreadPool 的等价构造
+new ThreadPoolExecutor(0, Integer.MAX_VALUE, 60L, TimeUnit.SECONDS,
+                       new SynchronousQueue<>());
+```
+
+注意核心线程数为 0、最大值却是 `MAX_VALUE` —— 这个「畸形」配置正是 cached pool 语义的全部来源：
+先用同步队列直接交给空闲线程，没有空闲线程就新建，用完靠 60 秒超时回收。
+**`newCachedThreadPool` 不限制并发度**，用它在 unbounded 的 `newFixedThreadPool` 与 unbounded 的线程数之间二选一时，
+必须清楚自己在选「内存无界」还是「线程无界」——两者都是无界，只是不耗在不同资源上。
+
 #### Thread Pools
 
 The class library provides a flexible thread pool implementation along with some useful predefined configurations.
-You can create a thread pool by calling one of the static factory methods in [Executors](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md).
+You can create a thread pool by calling one of the static factory methods in `Executors`.
+
+选池子时唯一可靠的做法是**测量**：先用固定池跑压测，观察任务排队与 CPU 利用率，再调 `corePoolSize`。
+不要用「经验公式」直接定线程数——阻塞型 I/O 任务与纯计算任务的最优值能差一个数量级。
 
 #### Cancellation and Shutdown
 
@@ -414,11 +441,86 @@ Context switches are not free; thread scheduling requires manipulating shared da
 
 #### Memory Synchronization
 
+内存同步的隐性成本常被低估。JMM 语义（[JMM](/docs/CS/Java/JDK/Concurrency/JMM.md)）是**允许** CPU 重排的，
+只有在真正需要跨线程可见时，编译器/JIT 才插入内存屏障——而这些屏障在 x86 上往往是一条 `lock` 前缀指令，
+它会**清空流水线并锁定 cache line**，代价接近一次缓存未命中。
+
+关键结论是：**无竞争的同步几乎免费**。屏障的真正开销出现在竞争开始之后——
+一个共享计数器上的 CAS 循环，失败重试的次数与线程数正相关，这才是 `AtomicInteger`
+在高度竞争的计数场景下反而不如锁快的原因。
+
 #### Blocking
+
+阻塞的代价常被算错。**它不仅是「线程闲置」，还有两笔固定开销**：
+
+1. 线程切换本身——保存/恢复寄存器与栈上下文，操作系统调度开销；
+2. **缓存失效**。被阻塞唤醒的线程，其工作集大概率已被其他线程的 CPU 核改写，
+   重新执行时会遭遇一连串 cache miss。冷启动的代价往往大于切换本身。
+
+这两笔成本解释了为什么减少无谓阻塞（缩短临界区、降低共享频率）是并发优化的第一优先级，
+也解释了本节下方 Amdahl 定律在实践中的分量。
 
 ### Reducing Lock Contention
 
+锁竞争的削减有严格的优先顺序，**先降低频率，再缩短时间，最后才考虑换算法**：
+
+| 手段 | 说明 | 风险 |
+| --- | --- | --- |
+| **缩小临界区** | 把 I/O、日志、计算移出锁范围 | 低，但不要缩得过度破坏原子性 |
+| **降低共享粒度** | 把一个全局锁拆成 N 个分片锁（`ConcurrentHashMap` 的分段思想） | 中，需要提前识别热点键 |
+| **换无锁算法** | CAS / `LongAdder` / `ConcurrentHashMap` | 高，需严格推理内存序 |
+| **换线程模型** | 用消息传递、Actor 消除共享 | 最高，改动面大 |
+
+最常被忽略也最有效的是第一条。实践中大量「锁竞争」问题实际是**临界区里混了慢操作**——
+一次数据库查询或一次远程调用被包在锁里，临界区的实际长度是毫秒级而非纳秒级，
+此时换成任何更花哨的无锁结构都无效，因为瓶颈根本不在线程竞争，而在持锁等待 I/O。
+
+调优前先测量：`jcmd Thread.print` 看线程状态分布，JFR 看锁竞争事件，
+定位到底是哪个锁、哪个调用路径在争用。
+
 ## Testing
+
+并发代码的测试困难在于**失败是概率性的、且往往在生产环境才复现**。
+三套工具构成互补的验证层次：
+
+### Manual Techniques
+
+最基础的手段是**故意制造交错**：在临界区里插入 `Thread.yield()`、`sleep`，
+或用 `CountDownLatch` 精确控制两个线程的到达顺序。这能稳定复现竞态，
+但只能验证「你已经想到的」那一种交错——**它无法证明没有未知的交错**。
+
+### Dynamic Analysis
+
+静态工具（SpotBugs、Error Prone 的并发检查）能报出明显错误，
+但对 happens-before 的误用只能给出警告而非证明。真正能验证内存序正确性的是
+**jcstress**（OpenJDK 的独立项目，注意它不在 JDK 源码树里）——
+它为每个测试生成大量线程交错，反复执行并检查结果的合法性：
+
+```java
+@JCStressTest
+@Outcome(id = "1, 1", expect = Expect.ACCEPTABLE)
+@Outcome(id = "2, 1", expect = Expect.FORBIDDEN)
+public class RaceTest {
+    @Actor
+    public void actor1(II_Result r) { r.r1 = 1; shared = 1; }
+    @Actor
+    public void actor2(II_Result r) { r.r2 = 1; shared = 2; }
+}
+```
+
+这种「声明式合法结果集」的方式比断言具体值更强：它验证的是**所有允许的结果集合**，
+能捕获机器码级别的意外重排。这是验证 [volatile](/docs/CS/Java/JDK/Concurrency/volatile.md)
+与 [Atomic](/docs/CS/Java/JDK/Concurrency/Atomic.md) 正确性的标准手段。
+
+### JMH
+
+[JMH](https://github.com/openjdk/jmh) 解决的是另一个问题：**测量**。
+它用死代码消除、常量折叠抑制、伪死循环等方式对抗 JIT 的优化，
+避免「把结果缓存到局部变量」的假优化，从而给出可信的吞吐量/延迟数据。
+并发场景下的基准测试几乎都必须用 JMH，普通 `System.nanoTime()` 循环测出的数字没有意义。
+
+对并发代码而言，测试的目标不是「跑过」，而是**把对正确性的推理变成可执行的断言**——
+这正是 jcstress 的价值所在。
 
 ## Advanced Topics
 
@@ -515,7 +617,7 @@ volatile
 - 锁的基础：[Parker](/docs/CS/Java/JDK/Concurrency/Parker.md)（JVM 层阻塞原语）、[AQS](/docs/CS/Java/JDK/Concurrency/AQS.md)、[Lock](/docs/CS/Java/JDK/Concurrency/Lock.md)、[ReentrantLock](/docs/CS/Java/JDK/Concurrency/ReentrantLock.md)、[ReadWriteLock](/docs/CS/Java/JDK/Concurrency/ReadWriteLock.md)、[StampedLock](/docs/CS/Java/JDK/Concurrency/StampedLock.md)
 - 同步器与原子量：[Semaphore](/docs/CS/Java/JDK/Concurrency/Semaphore.md)、[CountDownLatch](/docs/CS/Java/JDK/Concurrency/CountDownLatch.md)、[CyclicBarrier](/docs/CS/Java/JDK/Concurrency/CyclicBarrier.md)、[Phaser](/docs/CS/Java/JDK/Concurrency/Phaser.md)、[Exchanger](/docs/CS/Java/JDK/Concurrency/Exchanger.md)、[Atomic](/docs/CS/Java/JDK/Concurrency/Atomic.md)
 - 执行框架：[ThreadPoolExecutor](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md)、[ForkJoinPool](/docs/CS/Java/JDK/Concurrency/ForkJoinPool.md)、[Future](/docs/CS/Java/JDK/Concurrency/Future.md)、[定时执行](/docs/CS/Java/JDK/sche.md)
-- Loom 与线程上下文：[ThreadLocal](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md)、[ThreadLocalRandom](/docs/CS/Java/JDK/Concurrency/ThreadLocalRandom.md)、[ScopedValue](/docs/CS/Java/JDK/Concurrency/ScopedValues.md)、[VirtualThread](/docs/CS/Java/JDK/Concurrency/VirtualThread.md)
+- Loom 与线程上下文：[ThreadLocal](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md)、[ThreadLocalRandom](/docs/CS/Java/JDK/Concurrency/ThreadLocalRandom.md)、[ScopedValue](/docs/CS/Java/JDK/Concurrency/ScopedValues.md)、[VirtualThread](/docs/CS/Java/JDK/Concurrency/VirtualThread.md)、[StructuredTaskScope](/docs/CS/Java/JDK/Concurrency/StructuredTaskScope.md)
 
 ## Links
 

@@ -125,58 +125,91 @@ public interface ListIterator<E> extends Iterator<E> {
 ```
 
 
-## Sequenced
+### Spliterator
 
-A collection that has a well-defined *encounter order*, that supports operations at both ends, and that is reversible.
-The elements of a sequenced collection have an encounter order, where conceptually the elements have a linear arrangement from the first element to the last element.
-Given any two elements, one element is either before (closer to the first element) or after (closer to the last element) the other element.
-(**Note that this definition does not imply anything about physical positioning of elements, such as their locations in a computer's memory.**)
-
-<div style="text-align: center;">
-
-![Fig.2. SequencedCollection](img/SequencedCollection.png)
-
-</div>
-
-<p style="text-align: center;">Fig.2. SequencedCollection</p>
+`Spliterator`（**spl**ittable **iterator**）是 JDK 8 为并行流引入的「可分割迭代器」。`Collection` 的默认实现把它架在 `Iterator` 之上：
 
 ```java
-public interface SequencedCollection<E> extends Collection<E> {
-
-    SequencedCollection<E> reversed();
-
-    default void addFirst(E e) {
-        throw new UnsupportedOperationException();
-    }
-
-    default void addLast(E e) {
-        throw new UnsupportedOperationException();
-    }
-
-    default E getFirst() {
-        return this.iterator().next();
-    }
-
-    default E getLast() {
-        return this.reversed().iterator().next();
-    }
-
-    default E removeFirst() {
-        var it = this.iterator();
-        E e = it.next();
-        it.remove();
-        return e;
-    }
-
-    default E removeLast() {
-        var it = this.reversed().iterator();
-        E e = it.next();
-        it.remove();
-        return e;
-    }
+default Spliterator<E> spliterator() {
+    return Spliterators.spliterator(this, 0);
 }
 ```
 
+但真正有价值的用法是各集合自己重写的版本——**能否高效地并行，全看 `trySplit` 怎么切**。
+
+```java
+public interface Spliterator<T> {
+    boolean tryAdvance(Consumer<? super T> action);   // 处理一个，有则 true
+    Spliterator<T> trySplit();                        // 切出一半返回，剩下留在本对象；不能再切返回 null
+    long estimateSize();                              // 估算剩余量（不一定是精确值）
+    int characteristics();
+
+    default void forEachRemaining(Consumer<? super T> action) { ... }
+}
+```
+
+`characteristics()` 返回一组位标志，决定流框架敢做什么优化：
+
+| 标志           | 含义                             |
+| :----------- | :----------------------------- |
+| `ORDERED`    | 有确定的遭遇顺序（并行也要保持）                |
+| `DISTINCT`   | 元素互不相等（`Set` 才有）                |
+| `SORTED`     | 按某种顺序排好（`getComparator()` 可用）   |
+| `SIZED`      | `estimateSize()` 是精确值           |
+| `NONNULL`    | 不会有 null 元素                    |
+| `IMMUTABLE`  | 元素来源不可变                        |
+| `CONCURRENT` | 源可被并发修改且已有安全保证                 |
+| `SUBSIZED`   | 切出来的子 spliterator 也满足 `SIZED`  |
+
+对比两个 `List` 实现的 `spliterator()` 很有意思——它们的 **`characteristics()` 完全相同**：
+
+```java
+// ArrayList.ArrayListSpliterator
+public int characteristics() {
+    return Spliterator.ORDERED | Spliterator.SIZED | Spliterator.SUBSIZED;
+}
+
+// LinkedList.LLSpliterator
+public int characteristics() {
+    return Spliterator.ORDERED | Spliterator.SIZED | Spliterator.SUBSIZED;
+}
+```
+
+差别全在 `trySplit`。`ArrayList` 直接对下标折半，`O(1)`：
+
+```java
+public ArrayListSpliterator trySplit() {
+    int hi = getFence(), lo = index, mid = (lo + hi) >>> 1;
+    return (lo >= mid) ? null : // divide range in half unless too small
+        new ArrayListSpliterator(lo, index = mid, expectedModCount);
+}
+```
+
+`LinkedList` 没有下标可用，只能**按批把节点拷进一个临时数组**，再把数组交给数组版 spliterator：
+
+```java
+public Spliterator<E> trySplit() {
+    Node<E> p;
+    int s = getEst();
+    if (s > 1 && (p = current) != null) {
+        int n = batch + BATCH_UNIT;      // 批大小逐次递增
+        if (n > s) n = s;
+        if (n > MAX_BATCH) n = MAX_BATCH;
+        Object[] a = new Object[n];
+        int j = 0;
+        do { a[j++] = p.item; } while ((p = p.next) != null && j < n);
+        current = p;
+        batch = j;
+        est = s - j;
+        return Spliterators.spliterator(a, 0, j, Spliterator.ORDERED);
+    }
+    return null;
+}
+```
+
+> [!WARNING]
+>
+> 常见误解：「`LinkedList` 并行流慢是因为它的 spliterator 没有 `SUBSIZED`」。源码里它**有** `SUBSIZED`，和 `ArrayList` 一模一样。真实原因是**每次切分都要分配数组并遍历拷贝节点**，链表的指针追逐成本远高于数组的连续访问。结论不变（要并行就用数组型集合），但**理由得写对**。
 
 ### Collection
 
@@ -262,6 +295,109 @@ public interface Collection<E> extends Iterable<E> {
 ```
 
 Allocate  memory when first element added.
+
+## Sequenced
+
+A collection that has a well-defined *encounter order*, that supports operations at both ends, and that is reversible.
+The elements of a sequenced collection have an encounter order, where conceptually the elements have a linear arrangement from the first element to the last element.
+Given any two elements, one element is either before (closer to the first element) or after (closer to the last element) the other element.
+(**Note that this definition does not imply anything about physical positioning of elements, such as their locations in a computer's memory.**)
+
+<div style="text-align: center;">
+
+![Fig.2. SequencedCollection](img/SequencedCollection.png)
+
+</div>
+
+<p style="text-align: center;">Fig.2. SequencedCollection</p>
+
+```java
+public interface SequencedCollection<E> extends Collection<E> {
+
+    SequencedCollection<E> reversed();
+
+    default void addFirst(E e) {
+        throw new UnsupportedOperationException();
+    }
+
+    default void addLast(E e) {
+        throw new UnsupportedOperationException();
+    }
+
+    default E getFirst() {
+        return this.iterator().next();
+    }
+
+    default E getLast() {
+        return this.reversed().iterator().next();
+    }
+
+    default E removeFirst() {
+        var it = this.iterator();
+        E e = it.next();
+        it.remove();
+        return e;
+    }
+
+    default E removeLast() {
+        var it = this.reversed().iterator();
+        E e = it.next();
+        it.remove();
+        return e;
+    }
+}
+```
+
+
+### SequencedSet
+
+`SequencedSet` 在 `SequencedCollection` 之上只加一件事——**`reversed()` 返回的也是 `Set`**（否则反转一个 `Set` 得到 `Collection`，`equals` 语义就丢了）：
+
+```java
+public interface SequencedSet<E> extends SequencedCollection<E>, Set<E> {
+    SequencedSet<E> reversed();
+}
+```
+
+`addFirst` / `addLast` 的行为受 `Set` 约束：**若元素已存在则不插入，位置也不变**；对 `SortedSet` 实现类（`TreeSet`、`ConcurrentSkipListSet`）这两个方法还会抛 `UnsupportedOperationException`——因为顺序由比较器决定，不能人为插到头尾。
+
+JDK 21 起的实现情况：
+
+| 类型                      | 是否 `SequencedSet` | `reversed()` 后 `add` 的落点 |
+| :---------------------- | :--------------- | :---------------------- |
+| `LinkedHashSet`         | 是               | 原集合头部（`addFirst`）        |
+| `TreeSet` / `ConcurrentSkipListSet` | 是（经 `NavigableSet`） | 抛 `UnsupportedOperationException` |
+| `HashSet`               | 否               | 无 `reversed()`           |
+| `EnumSet`               | 否               | 无 `reversed()`           |
+
+### SequencedMap
+
+`SequencedMap` 是 `Map` 侧的对等物，JDK 21 引入，把「有序 Map 的两端操作」从 `NavigableMap` 下沉了一层：
+
+```java
+public interface SequencedMap<K, V> extends Map<K, V> {
+    SequencedMap<K, V> reversed();
+
+    default Map.Entry<K,V> firstEntry() { ... }
+    default Map.Entry<K,V> lastEntry() { ... }
+    default Map.Entry<K,V> pollFirstEntry() { ... }
+    default Map.Entry<K,V> pollLastEntry() { ... }
+
+    default V putFirst(K k, V v) { ... }
+    default V putLast(K k, V v) { ... }
+
+    default SequencedSet<K> sequencedKeySet() { ... }
+    default SequencedCollection<V> sequencedValues() { ... }
+    default SequencedSet<Map.Entry<K, V>> sequencedEntrySet() { ... }
+}
+```
+
+两组概念要分清：
+
+- **`keySet()` vs `sequencedKeySet()`**：前者返回 `Set`（无序语义），后者返回 `SequencedSet`（可 `reversed()`、可 `getFirst()`）。`LinkedHashMap` 两者返回的是同一个对象的不同静态类型视图。
+- **`putFirst` vs `put`**：`putFirst` 保证「插到最前面」，若键已存在则**只改值、不改位置**；`putLast` 同理。
+
+`equals` 有个容易忽略的点：**`SequencedMap` 与 `Map` 的 `equals` 只看映射关系、不看顺序**（javadoc 明写 "irrespective of ordering"）。所以 `LinkedHashMap` 与其 `reversed()` 视图是 `equals` 的。
 
 ## Concurrent
 
@@ -513,18 +649,73 @@ private static void rotate2(List<?> list, int distance) {
 }
 ```
 
+### Wrappers
+
+`Collections` 的静态工厂分成五大家族，语义差别很大：
+
+| 家族                  | 代表方法                                                    | 语义                                     |
+| :------------------ | :------------------------------------------------------ | :------------------------------------- |
+| 空容器                 | `emptyList` / `emptySet` / `emptyMap`                     | 返回**共享的不可变空实例**（`EMPTY_LIST` 等常量），零分配   |
+| 单元素/重复              | `singleton` / `singletonList` / `singletonMap` / `nCopies` | 不可变，`nCopies` 是「逻辑 n 份」的视图而非真实拷贝        |
+| 同步                  | `synchronizedList` / `synchronizedMap` / ...              | **视图**，每个方法加 `synchronized`；迭代仍需手动加锁    |
+| 不可修改                | `unmodifiableList` / `unmodifiableMap` / ...              | **视图**，写方法抛 `UnsupportedOperationException` |
+| 类型检查                | `checkedList` / `checkedSet` / `checkedMap` / ...         | **视图**，插入时对元素做运行时类型检查                  |
+
+`checkedXxx` 是五家里最少被用到的那个，但它解决的是泛型擦除留下的一个真实漏洞：
+
+```java
+List raw = new ArrayList<Integer>();
+raw.add("a string");                       // 只有 warning，编译通过
+List<Integer> safe = Collections.checkedList(raw, Integer.class);
+safe.add("another");                       // 立刻 ClassCastException
+```
+
+用途是**把「什么时候炸」从下游消费点提前到写入点**——尤其是把集合交给不受信任的第三方代码时（SPI 插件、脚本引擎）。
+
+三个 `unmodifiable` / `synchronized` 家族的共同注意点：**它们都是视图，不是快照**。原集合改了，包装后的对象跟着变，两个都不是线程安全或不可变的「终极解」。
+
+## Immutable Collections
+
+JDK 9 引入的 `List.of` / `Set.of` / `Map.of`（JEP 269）与上面的包装器**不是一回事**：
+
+| 对比项     | `Collections.unmodifiableXxx` | `List.of` / `Set.of` / `Map.of` |
+| :------ | :--------------------------- | :------------------------------ |
+| 与原集合的关系 | 视图，共享数据                      | 快照，构造完就彻底解耦                     |
+| 元素为 null | 允许（取决于原集合）                   | 一律 `NullPointerException`       |
+| 重复元素    | 允许                           | `Set.of` / `Map.of` 抛 `IllegalArgumentException` |
+| 实现      | 包装类，每次调用多一层                  | `ImmutableCollections` 里按规模特化的私有类 |
+
+按规模特化是这套实现的要点：**0/1/2 个元素直接存在字段上，3 个以上才用开放寻址数组**，避免小集合的数组开销：
+
+```java
+// java.util.ImmutableCollections
+static final class List12<E> ...   // 1~2 个：字段 e0 / e1
+static final class ListN<E>  ...   // 3+ ：@Stable 数组
+static final class Set12<E>  ...
+static final class SetN<E>   ...   // EXPAND_FACTOR = 2，负载 0.5
+static final class Map1<K,V> ...
+static final class MapN<K,V> ...   // key/value 交替存一张表
+```
+
+另外 **`Set.of` / `Map.of` 的迭代顺序在每次 JVM 启动都是随机的**（`ImmutableCollections.SALT32L`），这是刻意的防御设计，细节见 [Set.md](/docs/CS/Java/JDK/Collection/Set.md?id=iteration-order)。
+
 ## This Directory Navigation
 
 集合框架按**接口 → 实现 → 工具类**组织：
 
-- 接口与总览：本页，含 `Iterable` / `Iterator` / `ListIterator`、`Sequenced`（JDK 21 起的顺序集合）、Fail-Fast 与 Fail-Safe、`Arrays` 与 `Collections` 工具类
+- 接口与总览：本页，含 `Iterable` / `Iterator` / `ListIterator` / `Spliterator`、`Sequenced` 三件套（JDK 21 起的顺序集合）、Fail-Fast 与 Fail-Safe、`Arrays` 与 `Collections` 工具类、不可变集合工厂
 - 四类实现：[List](/docs/CS/Java/JDK/Collection/List.md)、[Set](/docs/CS/Java/JDK/Collection/Set.md)、[Queue](/docs/CS/Java/JDK/Collection/Queue.md)、[Map](/docs/CS/Java/JDK/Collection/Map.md)
 - 特殊实现：[WeakHashMap](/docs/CS/Java/JDK/Collection/WeakHashMap.md)（键为弱引用的哈希表）
 
 ## Links
 
 - [JDK](/docs/CS/Java/JDK/JDK.md)
+- [Java](/docs/CS/Java/Java.md)
 
 ## References
 
-1. [JEP 353: Sequenced Collections](https://openjdk.org/jeps/431)
+1. [JEP 431: Sequenced Collections](https://openjdk.org/jeps/431)
+2. [SequencedCollection (Java SE 25 & JDK 25)](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/util/SequencedCollection.html)
+3. [SequencedMap (Java SE 25 & JDK 25)](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/util/SequencedMap.html)
+4. [Immutable Collections (JEP 269 Convenience Factory Methods)](https://openjdk.org/jeps/269)
+5. [Spliterator (Java SE 25 & JDK 25)](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/util/Spliterator.html)

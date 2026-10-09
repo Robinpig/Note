@@ -446,8 +446,104 @@ protected final boolean tryRelease(int releases) {
 
 ## tryLock
 
+`ReentrantReadWriteLock` 的 `tryLock` 有一个容易踩的坑：**读锁的 `tryLock` 和写锁的 `tryLock` 语义不同**。
+读锁的 `tryLock()` **允许插队**——当有写锁在等待时，新来的读锁仍可能立即拿到锁；
+写锁的 `tryLock()` 则完全遵循「现有读者全部让位」的规则，拿不到就是拿不到。
 
+两个实现都是薄封装，真正干活的是 `Sync` 里的方法：
 
+```java
+// 读锁侧
+public boolean tryLock() {
+    return sync.tryReadLock();
+}
+
+public boolean tryLock(long timeout, TimeUnit unit) throws InterruptedException {
+    return sync.tryAcquireSharedNanos(1, unit.toNanos(timeout));
+}
+
+// 写锁侧
+public boolean tryLock() {
+    return sync.tryWriteLock();
+}
+
+public boolean tryLock(long timeout, TimeUnit unit) throws InterruptedException {
+    return sync.tryAcquireNanos(1, unit.toNanos(timeout));
+}
+```
+
+### tryWriteLock
+
+写锁的立即获取实现如下，注意第一行的短路条件：
+
+```java
+final boolean tryWriteLock() {
+    Thread current = Thread.currentThread();
+    long c = getState();
+    if (c != 0) {
+        int w = exclusiveCount(c);
+        if (w == 0 || current != getExclusiveOwnerThread())
+            return false;
+        if (w == MAX_COUNT)
+            throw new Error("Maximum lock count exceeded");
+    }
+    if (!compareAndSetState(c, c + 1))
+        return false;
+    setExclusiveOwnerThread(current);
+    return true;
+}
+```
+
+三个要点：
+
+1. **仅当锁完全空闲（`c == 0`）或已被当前线程持有时才继续**。
+   `w == 0` 表示状态里只有读锁（有读者但无写者），此时 `tryWriteLock` 返回 false；
+2. **重入例外**：若写锁已被当前线程持有（`current == getExclusiveOwnerThread()`），
+   仍然允许再加一层重入计数——这与 `ReentrantLock` 的重入语义一致，
+   否则一个写锁内嵌套 `lock()` 的方法会自己把自己锁死；
+3. **最后 CAS 一次而非独占**。前两步是快速路径上的无锁判断，只有在确定可以获取后才做一次
+   `compareAndSetState`，把并发竞争收敛到单条原子指令上。
+
+### Timeout Variants
+
+带超时的两个变体直接复用 AQS 的模板方法（见 [AQS](/docs/CS/Java/JDK/Concurrency/AQS.md)），
+这正是 AQS 把「独占/共享获取」抽象成两套钩子的价值：
+
+```java
+// 写锁：独占路径
+return sync.tryAcquireNanos(1, unit.toNanos(timeout));
+// 读锁：共享路径
+return sync.tryAcquireSharedNanos(1, unit.toNanos(timeout));
+```
+
+读锁走的是 `tryAcquireSharedNanos`，与 [Semaphore](/docs/CS/Java/JDK/Concurrency/Semaphore.md)
+`tryAcquire` 是同一套机制。所以读锁的「获取一个」在语义上就是**获取一个共享许可**——
+这也是 `ReadWriteLock` 与 `Semaphore` 的抽象亲缘关系：前者是后者的特化，只是许可数固定为 1。
+
+### Usage
+
+`tryLock` 的典型用途是**在拿不到时立刻走降级路径**，而不是阻塞等待：
+
+```java
+if (lock.tryWriteLock()) {
+    try {
+        rebuildCache();
+    } finally {
+        unlock();
+    }
+} else {
+    serveStaleCache();      // 有其它线程在写，直接读旧值，不排队
+}
+```
+
+在缓存/配置这类「读多写少且允许短暂不一致」的场景里，这比排队等写锁更划算：
+写锁的持有时间往往远大于一次读，让读者绕开等待能显著改善尾延迟。
+反过来，在必须保证一致性的地方不要用 `tryLock` 静默降级——正确做法是 `lock()` 或带超时版本，
+让失败以异常形式暴露。
+
+需要注意 `tryLock()` **不响应中断也不抛 `InterruptedException`**（只在调用者已持有锁时才抛），
+所以它对「等待可被中断」的需求无能为力；那时应该用
+`tryLock(timeout, unit)`，它会抛 `InterruptedException`。
 
 
 ## Summary

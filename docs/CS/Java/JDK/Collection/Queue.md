@@ -576,6 +576,130 @@ public void put(E e) throws InterruptedException {
 
 ### DelayQueue
 
+`DelayQueue` 是一个**无界阻塞队列，只有「到期」的元素才能被取出**。元素必须实现 `Delayed`：
+
+```java
+public interface Delayed extends Comparable<Delayed> {
+    long getDelay(TimeUnit unit);   // 返回剩余的延迟时间，<=0 表示已到期
+}
+```
+
+即元素自己要会算「还剩多久」，同时能互相比较（`compareTo` 决定堆内顺序，通常是按到期时间升序）。
+
+内部结构是「一把锁 + 一个 `PriorityQueue`」：
+
+```java
+public class DelayQueue<E extends Delayed> extends AbstractQueue<E>
+    implements BlockingQueue<E> {
+
+    private final transient ReentrantLock lock = new ReentrantLock();
+    private final PriorityQueue<E> q = new PriorityQueue<E>();
+
+    /**
+     * Thread designated to wait for the element at the head of
+     * the queue. This variant of the Leader-Follower pattern
+     * (http://www.cs.wustl.edu/~schmidt/POSA/POSA2/) serves to
+     * minimize unnecessary timed waiting. When a thread becomes
+     * the leader, it waits only for the next delay to elapse, but
+     * other threads await indefinitely.
+     */
+    private Thread leader;
+
+    private final Condition available = lock.newCondition();
+}
+```
+
+#### Leader-Follower
+
+`take()` 是这个类最值得看的地方。朴素实现里每个等待线程都 `awaitNanos(自己的剩余时间)`，但**所有线程等的其实都是同一个队首元素**，于是会有 N 个定时器在跑。`DelayQueue` 用 Leader-Follower 消掉这个浪费：**只有一个线程（leader）做定时等待，其余线程无限期等待**。
+
+```java
+public E take() throws InterruptedException {
+    final ReentrantLock lock = this.lock;
+    lock.lockInterruptibly();
+    try {
+        for (;;) {
+            E first = q.peek();
+            if (first == null)
+                available.await();                      // 空队列：无限期等
+            else {
+                long delay = first.getDelay(NANOSECONDS);
+                if (delay <= 0L)
+                    return q.poll();                    // 已到期：直接取走
+                first = null;                           // 等待期间不再持有引用
+                if (leader != null)
+                    available.await();                  // 已有 leader：自己无限期等
+                else {
+                    Thread thisThread = Thread.currentThread();
+                    leader = thisThread;                // 抢占 leader
+                    try {
+                        available.awaitNanos(delay);    // 只有 leader 做定时等待
+                    } finally {
+                        if (leader == thisThread)
+                            leader = null;
+                    }
+                }
+            }
+        }
+    } finally {
+        if (leader == null && q.peek() != null)
+            available.signal();                         // 交班：唤醒一个 follower
+        lock.unlock();
+    }
+}
+```
+
+`offer` 侧对应地要做一件事：**如果新元素成了队首，必须让旧 leader 作废**，否则旧 leader 还在按老元素的剩余时间等：
+
+```java
+public boolean offer(E e) {
+    final ReentrantLock lock = this.lock;
+    lock.lock();
+    try {
+        q.offer(e);
+        if (q.peek() == e) {          // 新元素插到了堆顶
+            leader = null;            // 旧 leader 的等待时间已失效
+            available.signal();       // 唤醒一个 follower 重新抢 leader
+        }
+        return true;
+    } finally {
+        lock.unlock();
+    }
+}
+```
+
+#### Expired Head
+
+「到期」是相对队首而言的，取元素只看堆顶：
+
+```java
+public E poll() {
+    final ReentrantLock lock = this.lock;
+    lock.lock();
+    try {
+        E first = q.peek();
+        return (first == null || first.getDelay(NANOSECONDS) > 0)
+            ? null                    // 队首还没到期 → 整个队列没有可取元素
+            : q.poll();
+    } finally {
+        lock.unlock();
+    }
+}
+```
+
+由此推出四条容易踩的语义：
+
+1. **`poll()` 返回 `null` 不代表队列空**，只代表「队首未到期」。
+2. **`size()` 包含未到期的元素**，`isEmpty()` 同样如此。
+3. **`peek()` 是唯一例外**：它返回队首而**不管到期与否**（javadoc 明说 "returns the element that will expire next"）。
+4. **不受 `remainingCapacity` / 超时限制**：队列无界，`put` / `offer` 永不阻塞，所以 `SynchronousQueue` 那套「必须配对」的约束这里没有。
+
+> [!WARNING]
+>
+> `getDelay` 的返回值会被 `take()` 直接当纳秒用（`available.awaitNanos(delay)`），所以 **`compareTo` 与 `getDelay` 必须用同一个时间源**。混用 `System.currentTimeMillis()` 与 `System.nanoTime()` 会造出「堆顶不是最早到期」的错乱顺序，表现为任务延迟触发。
+
+典型用法：延迟任务调度、缓存条目过期、超时连接回收——`ScheduledThreadPoolExecutor` 的 `DelayedWorkQueue` 就是同一套思路的专用实现。
+
 ### SynchronousQueue
 
 A blocking queue in which **each insert operation must wait for a corresponding remove operation by another thread, and vice versa**.
@@ -884,6 +1008,125 @@ private final Condition notEmpty = lock.newCondition();
 private transient volatile int allocationSpinLock;
 ```
 
+#### Growth
+
+`PriorityBlockingQueue` 无界，扩容时不阻塞消费者：它**先释放主锁**，用一个 CAS 自旋锁抢到扩容权，分配完新数组再重新拿锁：
+
+```java
+private void tryGrow(Object[] array, int oldCap) {
+    lock.unlock();                  // 必须释放主锁再重拿：扩容期间允许 poll 继续进行
+    Object[] newArray = null;
+    if (allocationSpinLock == 0 &&
+        ALLOCATIONSPINLOCK.compareAndSet(this, 0, 1)) {
+        try {
+            int growth = (oldCap < 64)
+                ? (oldCap + 2)                          // 小堆长得快点
+                : (oldCap >> 1);                        // 大堆每次 +50%
+            int newCap = ArraysSupport.newLength(oldCap, 1, growth);
+            if (queue == array)
+                newArray = new Object[newCap];
+        } finally {
+            allocationSpinLock = 0;
+        }
+    }
+    if (newArray == null)           // 另一个线程正在扩容：yield 让出，下次循环重试
+        Thread.yield();
+    lock.lock();
+    if (newArray != null && queue == array) {
+        queue = newArray;
+        System.arraycopy(array, 0, newArray, 0, oldCap);
+    }
+}
+```
+
+三个细节值得记住：扩容**增量是 `oldCap >> 1`（约 1.5 倍）而不是 2 倍**（堆数组大，省内存优先）；`allocationSpinLock` 只保护「谁来分配」，不保护拷贝；`queue == array` 的二次检查是防止期间已被别的线程扩过。
+
+## LinkedTransferQueue
+
+`LinkedTransferQueue` 是 `ConcurrentLinkedQueue` 的「可移交」超集：既支持普通入队（元素可以堆在队列里等着），也支持生产者**越过队列直接把元素交给一个正在等待的消费者**。
+
+```java
+public class LinkedTransferQueue<E> extends AbstractQueue<E>
+    implements TransferQueue<E>, java.io.Serializable {
+```
+
+它实现的 `TransferQueue` 在 `BlockingQueue` 之上多了五个方法：
+
+| 方法                                  | 语义                                          |
+| :---------------------------------- | :------------------------------------------ |
+| `tryTransfer(e)`                    | 有消费者在等就立即交给它并返回 `true`，否则**不入队**直接返回 `false` |
+| `transfer(e)`                       | 有消费者就交，没有就**阻塞到被取走**                         |
+| `tryTransfer(e, timeout, unit)`     | 同上但限时，超时返回 `false`                           |
+| `hasWaitingConsumer()`              | 是否有消费者正在等待                                  |
+| `getWaitingConsumerCount()`          | 正在等待的消费者数量（估算值，用于 metrics 而不是控制流）            |
+
+### Dual Queue with Slack
+
+实现基于 Scherer & Scott 的 **Dual Queue**：链表里的节点既可以代表「数据」（data）也可以代表「请求」（request）。生产者入队时若撞上请求节点就直接**匹配并摘掉**它，反之消费者撞上数据节点同理。这样一条链表同时表达了两个方向的等待者。
+
+所有操作都汇到一个 `xfer`：
+
+```java
+/**
+ * @param e the item or null for take
+ * @param ns timeout or negative if async, 0 if immediate,
+ *        Long.MAX_VALUE if untimed
+ * @return an item if matched, else e
+ */
+final Object xfer(Object e, long ns) {
+    boolean haveData = (e != null);
+    Object m;                           // the match or e if none
+    DualNode s = null, p;               // enqueued node and its predecessor
+    restart: for (DualNode prevp = null;;) {
+        DualNode h, t, q;
+        if ((h = head) == null &&       // initialize unless immediate
+            (ns == 0L ||
+             (h = cmpExHead(null, s = new DualNode(e, haveData))) == null)) {
+            p = null;
+            break;
+        }
+        p = (t = tail) != null && t.isData == haveData && t != prevp ? t : h;
+        prevp = p;
+        do {
+            m = p.item;
+            q = p.next;
+            if (p.isData != haveData && haveData != (m != null) &&
+                p.cmpExItem(m, e) == m) {
+                Thread w = p.waiter;    // 匹配到互补节点：直接换数据并 unpark
+                if (p != h && h == cmpExHead(h, (q == null) ? p : q))
+                    h.next = h;         // advance head; self-link old
+                LockSupport.unpark(w);
+                return m;
+            } else if (q == null) {
+                if (ns == 0L)           // immediate：不匹配就放弃
+                    ...
+```
+
+`ns` 这一个参数把四种语义编码在了一起：
+
+| `ns` 取值               | 语义           | 对应方法                                          |
+| :-------------------- | :----------- | :-------------------------------------------- |
+| `-1L`                 | ASYNC，不匹配就入队 | `add` / `offer` / `put`                       |
+| `0L`                  | NOW，不匹配就放弃   | `tryTransfer` / `poll()`（取模式下 `xfer(null,0)`） |
+| `> 0`                 | TIMED，限时等待   | `tryTransfer(e, t, u)` / `poll(t, u)`         |
+| `Long.MAX_VALUE`      | SYNC，无限等待    | `transfer` / `take()`                         |
+
+「Slack」指的是**允许 `head` 落后于真正的队首若干步**（`MAX_HOPS = 8`）：匹配成功的线程并不急着更新 `head`，只有累积到一定距离才 CAS 推进。这是典型的「用少量遍历成本换 CAS 竞争」的权衡——`ConcurrentLinkedQueue` 里也有同名机制。
+
+### Versus SynchronousQueue
+
+两者都基于 dual queue，但容量语义相反：
+
+| 维度       | `SynchronousQueue`   | `LinkedTransferQueue` |
+| :------- | :------------------- | :-------------------- |
+| 容量       | 0，元素从不落地              | 无界，可以堆积               |
+| `offer`  | 无消费者时返回 `false`      | 直接入队返回 `true`         |
+| 是否支持移交   | 是（`put` 必须配对）        | 是（额外提供 `tryTransfer`） |
+| `size()` | 恒为 0                 | 真实元素数                 |
+| 元素是否可达   | 否，`peek()` 恒 `null`  | 是                     |
+
+选哪个的判断很简单：**要「背压」用 `SynchronousQueue`（生产者必须等到有人接），要「削峰 + 可选移交」用 `LinkedTransferQueue`**。
+
 ## Thread-Safe Queues
 
 
@@ -893,8 +1136,9 @@ private transient volatile int allocationSpinLock;
 | LinkedBlockingQueue   | optionally-bounded | 2 locks  | linkedList |
 | ConcurrentLinkedQueue | unbounded          | Non-lock | linkedList |
 | LinkedTransferQueue   | unbounded          | Non-lock | linkedList |
+| SynchronousQueue      | zero capacity      | Non-lock | dual stack / dual queue |
 | PriorityBlockingQueue | unbounded          | lock     | heap       |
-| DealyQueue            | unbounded          | lock     | heap       |
+| DelayQueue            | unbounded          | lock     | heap       |
 
 
 队列的底层一般分成三种：数组、链表和堆。其中，堆一般情况下是为了实现带有优先级特性的队列，暂且不考虑。
@@ -909,4 +1153,11 @@ private transient volatile int allocationSpinLock;
 ## Links
 
 - [Collection](/docs/CS/Java/JDK/Collection/Collection.md)
-- [Disruptor]()
+- [Set](/docs/CS/Java/JDK/Collection/Set.md)
+- [Disruptor](/docs/CS/Java/Disruptor.md)
+
+## References
+
+1. [BlockingQueue (Java SE 25 & JDK 25)](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/util/concurrent/BlockingQueue.html)
+2. [TransferQueue (Java SE 25 & JDK 25)](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/util/concurrent/TransferQueue.html)
+3. [DelayQueue (Java SE 25 & JDK 25)](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/util/concurrent/DelayQueue.html)

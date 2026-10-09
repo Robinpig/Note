@@ -89,8 +89,6 @@ Two accesses to (reads of or writes to) the same variable are said to be *confli
 
 ### volatile
 
-
-
 Variants of lock rule apply to volatile fields and thread control
 - Writing a volatile has same basic memory effects as unlock
 - Reading a volatile has same basic memory effects as lock
@@ -99,9 +97,11 @@ Similarly for thread start and termination
 
 Details differ from locks in minor ways
 
-
 - visually
 - prevent reorder
+
+volatile 只给可见性与有序性，**不给互斥性**（`count++` 仍会丢更新），且只覆盖引用本身而不覆盖被引用对象的内部状态；
+屏障落地的具体形态见 [volatile](/docs/CS/Java/JDK/Concurrency/volatile.md)。
 
 
 ### Final fields

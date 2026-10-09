@@ -30,6 +30,78 @@ Fig.1. Fig.1. Map
 
 
 
+## Default Methods
+
+JDK 8 给 `Map` 接口加了一整组 `default` 方法（「函数式」批量操作）。它们**全部基于 `get` / `put` / `remove` 组合实现**，因此：
+
+1. 任何 `Map` 实现都自动获得这些方法；
+2. 这些默认实现**不是原子的**，并发场景下 `ConcurrentMap` 的实现类（如 `ConcurrentHashMap`）逐一重写了它们。
+
+| 方法                                            | 语义                                       |
+| :-------------------------------------------- | :--------------------------------------- |
+| `getOrDefault(k, default)`                    | 有值返回值，无值返回 default（**注意 null 值也返回值**）    |
+| `putIfAbsent(k, v)`                           | 仅当「无映射或映射为 null」时写入                      |
+| `replace(k, v)` / `replace(k, old, new)`       | 仅当已存在（且值匹配）时替换                           |
+| `replaceAll(BiFunction)`                      | 对全部 entry 原地替换                           |
+| `computeIfAbsent(k, Function)`                | 缺值或值为 null 时用函数算一个并写入                    |
+| `computeIfPresent(k, BiFunction)`             | 有值时用 `(k, oldV)` 算新值；算得 null 则**删除**该键    |
+| `compute(k, BiFunction)`                      | 无条件算；算得 null 则删除，算得非 null 则写入             |
+| `merge(k, v, BiFunction)`                     | 无值直接放 `v`；有值用 `(oldV, v)` 合并；合并为 null 则删除 |
+
+四个 `compute*` / `merge` 有个统一约定：**返回 `null` 等于「删掉这个键」**。所以 `computeIfPresent` 里返回 `null` 不是「不改动」，而是 `remove`。
+
+### Null Semantics
+
+`getOrDefault` 的实现比想象中绕，原因是**要区分「值为 null」与「没有这个键」**：
+
+```java
+default V getOrDefault(Object key, V defaultValue) {
+    V v;
+    return (((v = get(key)) != null) || containsKey(key))
+        ? v
+        : defaultValue;
+}
+```
+
+`get` 返回 `null` 时再补一次 `containsKey`：真的有键就返回 `null`（**不是 default**），真没键才返回 default。
+
+`merge` 反过来：**value 参数不允许为 null**，一进来就 `requireNonNull`：
+
+```java
+default V merge(K key, V value,
+        BiFunction<? super V, ? super V, ? extends V> remappingFunction) {
+    Objects.requireNonNull(remappingFunction);
+    Objects.requireNonNull(value);          // 注意：value 不能是 null
+    V oldValue = get(key);
+    V newValue = (oldValue == null) ? value :
+               remappingFunction.apply(oldValue, value);
+    if (newValue == null) {
+        remove(key);                        // 合并结果 null → 删除
+    } else {
+        put(key, newValue);
+    }
+    return newValue;
+}
+```
+
+### Recursion Trap
+
+`computeIfAbsent` 的映射函数**不要在内部再修改同一个 map**（尤其同一个 bin）。JDK 1.8 时代 `ConcurrentHashMap` 上这段代码会死锁：
+
+```java
+Map<String, Integer> map = new ConcurrentHashMap<>(16);
+map.computeIfAbsent(
+        "AaAa",
+        key -> {
+            return map.computeIfAbsent(      // 递归更新同一个 map
+                    "BBBB",
+                    key2 -> 42);
+        }
+);
+```
+
+这个 JDK-8062841 的修复正是**检测到递归更新后抛 `IllegalStateException`（"Recursive update"）**——现在不会再挂死，但**这段写法依然是错误的**：在原子方法的映射函数里重入同一容器，语义上就没有定义。解决办法永远是把递归拆成两步。
+
 ## HashMap
 
 
@@ -1585,6 +1657,213 @@ static final class CounterCell {
 
 
 
+### Recursive Update
+
+
+
+
+
+
+
+Example from [ConcurrentHashMap.computeIfAbsent stuck in an endless loop in JDK1.8](https://bugs.openjdk.java.net/browse/JDK-8062841) :
+
+```java
+
+Map<String, Integer> map = new ConcurrentHashMap<>(16);
+map.computeIfAbsent(
+        "AaAa",
+        key -> {
+            return map.computeIfAbsent(
+                    "BBBB",
+                    key2 -> 42);
+        }
+);
+```
+
+hash of "AaAa" == "BBBB"
+
+1. new ReservationNode (f = tabAt(tab, i = (n - 1) & h)) == null
+
+2. Recurivse to else { boolean added = false;,  must 
+
+3. the second operation will block by first operation
+
+```java
+// jdk1.8
+public V computeIfAbsent(K key, Function<? super K, ? extends V> mappingFunction) {
+  if (key == null || mappingFunction == null)
+    throw new NullPointerException();
+  int h = spread(key.hashCode());
+  V val = null;
+  int binCount = 0;
+  for (Node<K,V>[] tab = table;;) {
+    Node<K,V> f; int n, i, fh;
+    if (tab == null || (n = tab.length) == 0)
+      tab = initTable();
+    else if ((f = tabAt(tab, i = (n - 1) & h)) == null) {
+      Node<K,V> r = new ReservationNode<K,V>();
+      synchronized (r) {
+        if (casTabAt(tab, i, null, r)) {
+          binCount = 1;
+          Node<K,V> node = null;
+          try {
+            if ((val = mappingFunction.apply(key)) != null)
+              node = new Node<K,V>(h, key, val, null);
+          } finally {
+            setTabAt(tab, i, node);
+          }
+        }
+      }
+      if (binCount != 0)
+        break;
+    }
+    else if ((fh = f.hash) == MOVED)
+      tab = helpTransfer(tab, f);
+    else {
+      boolean added = false;
+      synchronized (f) {
+        if (tabAt(tab, i) == f) {
+          if (fh >= 0) {
+            binCount = 1;
+            for (Node<K,V> e = f;; ++binCount) {
+              K ek; V ev;
+              if (e.hash == h &&
+                  ((ek = e.key) == key ||
+                   (ek != null && key.equals(ek)))) {
+                val = e.val;
+                break;
+              }
+              Node<K,V> pred = e;
+              if ((e = e.next) == null) {
+                if ((val = mappingFunction.apply(key)) != null) {
+                  added = true;
+                  pred.next = new Node<K,V>(h, key, val, null);
+                }
+                break;
+              }
+            }
+          }
+          else if (f instanceof TreeBin) {
+            binCount = 2;
+            TreeBin<K,V> t = (TreeBin<K,V>)f;
+            TreeNode<K,V> r, p;
+            if ((r = t.root) != null &&
+                (p = r.findTreeNode(h, key, null)) != null)
+              val = p.val;
+            else if ((val = mappingFunction.apply(key)) != null) {
+              added = true;
+              t.putTreeVal(h, key, val);
+            }
+          }
+        }
+      }
+      if (binCount != 0) {
+        if (binCount >= TREEIFY_THRESHOLD)
+          treeifyBin(tab, i);
+        if (!added)
+          return val;
+        break;
+      }
+    }
+  }
+  if (val != null)
+    addCount(1L, binCount);
+  return val;
+}
+```
+
+
+
+
+
+
+
+if the computation detectably attempts a recursive update to this map that would otherwise never complete
+
+```java
+// JDK12
+public V computeIfAbsent(K key, Function<? super K, ? extends V> mappingFunction) {
+    if (key == null || mappingFunction == null)
+        throw new NullPointerException();
+    int h = spread(key.hashCode());
+    V val = null;
+    int binCount = 0;
+    for (Node<K,V>[] tab = table;;) {
+        Node<K,V> f; int n, i, fh;
+        if (tab == null || (n = tab.length) == 0)
+            tab = initTable();
+        else if ((f = tabAt(tab, i = (n - 1) & h)) == null) {
+            Node<K,V> r = new ReservationNode<K,V>();
+            synchronized (r) {
+                if (casTabAt(tab, i, null, r)) {
+                    binCount = 1;
+                    Node<K,V> node = null;
+                    try {
+                        if ((val = mappingFunction.apply(key)) != null)
+                            node = new Node<K,V>(h, key, val, null);
+                    } finally {
+                        setTabAt(tab, i, node);
+                    }
+                }
+            }
+            if (binCount != 0)
+                break;
+        }
+        else if ((fh = f.hash) == MOVED)
+            tab = helpTransfer(tab, f);
+        else {
+            boolean added = false;
+            synchronized (f) {
+                if (tabAt(tab, i) == f) {
+                    if (fh >= 0) {
+                        binCount = 1;
+                        for (Node<K,V> e = f;; ++binCount) {
+                            K ek; V ev;
+                            if (e.hash == h &&
+                                ((ek = e.key) == key ||
+                                 (ek != null && key.equals(ek)))) {
+                                val = e.val;
+                                break;
+                            }
+                            Node<K,V> pred = e;
+                            if ((e = e.next) == null) {
+                                if ((val = mappingFunction.apply(key)) != null) {
+                                    added = true;
+                                    pred.next = new Node<K,V>(h, key, val, null);
+                                }
+                                break;
+                            }
+                        }
+                    }
+                    else if (f instanceof TreeBin) {
+                        binCount = 2;
+                        TreeBin<K,V> t = (TreeBin<K,V>)f;
+                        TreeNode<K,V> r, p;
+                        if ((r = t.root) != null &&
+                            (p = r.findTreeNode(h, key, null)) != null)
+                            val = p.val;
+                        else if ((val = mappingFunction.apply(key)) != null) {
+                            added = true;
+                            t.putTreeVal(h, key, val);
+                        }
+                    }
+                }
+            }
+            if (binCount != 0) {
+                if (binCount >= TREEIFY_THRESHOLD)
+                    treeifyBin(tab, i);
+                if (!added)
+                    return val;
+                break;
+            }
+        }
+    }
+    if (val != null)
+        addCount(1L, binCount);
+    return val;
+}
+```
+
 ## LinkedHashMap
 
 Hash table and linked list implementation of the Map interface, with **predictable iteration order**.
@@ -2111,214 +2390,208 @@ first/last key
 
 
 
+## EnumMap
+
+`EnumMap` 是 `EnumSet` 的 `Map` 对应物：**键的枚举常量在构造时就全部确定，直接用 `ordinal` 当数组下标**，因此完全不需要哈希、不需要节点对象、不需要扩容。
+
+```java
+public class EnumMap<K extends Enum<K>, V> extends AbstractMap<K, V>
+    implements java.io.Serializable, Cloneable
+{
+    private final Class<K> keyType;
+    private transient K[] keyUniverse;      // 该 enum 的全部常量
+    private transient Object[] vals;        // 与 keyUniverse 等长，按下标对齐
+
+    public EnumMap(Class<K> keyType) {
+        this.keyUniverse = getKeyUniverse(keyType);
+        this.vals = new Object[keyUniverse.length];
+    }
+
+    public V get(Object key) {
+        return (isValidKey(key) ?
+                unmaskNull(vals[((Enum<?>)key).ordinal()]) : null);
+    }
+
+    public V put(K key, V value) {
+        typeCheck(key);
+        int index = key.ordinal();
+        Object oldValue = vals[index];
+        vals[index] = maskNull(value);
+        if (oldValue == null)
+            size++;
+        return unmaskNull(oldValue);
+    }
+}
+```
+
+四个性质：
+
+1. **`get` / `put` 是纯数组访问**，没有哈希冲突、没有链表遍历、没有树化。
+2. **空间 = 常量数 × 1 个引用**，与「实际放了多少个键」无关——一个 100 常量的枚举只放 1 个键，`vals` 也是 100 长度。
+3. **迭代顺序 = 枚举声明顺序**，稳定且可预测。
+4. **允许 `null` value**，靠 `maskNull` / `unmaskNull`（把 null 换成私有哨兵 `NULL`）区分「值是 null」与「没有这个键」；但 **key 不允许为 null**，且必须是同一个 enum 类型（`typeCheck`）。
+
+> [!WARNING]
+>
+> `new EnumMap<>(someMap)` 传入**空的非 `EnumMap`** 集合会抛 `IllegalArgumentException`（无法推断 key 类型），必须先判空或显式传 `Class`。理由与 `EnumSet.copyOf` 完全一致。
+
+## IdentityHashMap
+
+`IdentityHashMap` 故意**违反 `Map` 的通用契约**：它用 `==` 而不是 `equals` 判等键。
+
+```java
+public class IdentityHashMap<K,V>
+    extends AbstractMap<K,V>
+    implements Map<K,V>, java.io.Serializable, Cloneable
+{
+    private static final int DEFAULT_CAPACITY = 32;
+    private static final int MINIMUM_CAPACITY = 4;
+```
+
+结构上有两个特别之处。
+
+**一、key 与 value 交替存在同一个数组里**——`tab[i]` 是键，`tab[i+1]` 是它的值。所以默认容量 32 实际只能放 16 对。
+
+```java
+// Returns index for Object x.
+private static int hash(Object x, int length) {
+    int h = System.identityHashCode(x);
+    // Multiply by -254 to use the hash LSB and to ensure index is even
+    return ((h << 1) - (h << 8)) & (length - 1);
+}
+
+// Circularly traverses table of size len.
+private static int nextKeyIndex(int i, int len) {
+    return (i + 2 < len ? i + 2 : 0);      // 步进 2：跨过 value 槽
+}
+```
+
+`hash` 里那段 `(h << 1) - (h << 8)` 的目的是**把结果强制成偶数**，保证落到的下标一定是键槽而不是值槽；冲突探测用的是**线性探测**（`+2`），不是链地址法。
+
+```java
+public V put(K key, V value) {
+    final Object k = maskNull(key);
+
+    retryAfterResize: for (;;) {
+        final Object[] tab = table;
+        final int len = tab.length;
+        int i = hash(k, len);
+
+        for (Object item; (item = tab[i]) != null;
+             i = nextKeyIndex(i, len)) {
+            if (item == k) {                  // ← 注意是 ==，不是 equals
+                V oldValue = (V) tab[i + 1];
+                tab[i + 1] = value;
+                return oldValue;
+            }
+        }
+
+        final int s = size + 1;
+        // Use optimized form of 3 * s.
+        if (s + (s << 1) > len && resize(len))
+            continue retryAfterResize;
+
+        modCount++;
+        tab[i] = k;
+        tab[i + 1] = value;
+        size = s;
+        return null;
+    }
+}
+```
+
+**二、判等全程用 `==`**，`containsKey` / `get` / `equals` 都是：
+
+```java
+var m = new IdentityHashMap<String, Integer>();
+m.put(new String("a"), 1);
+m.put(new String("a"), 2);
+m.size();            // 2 —— 内容相同但不同实例，是两个键
+```
+
+> [!WARNING]
+>
+> 千万别把 `IdentityHashMap` 当「更快的 HashMap」用。它只在**必须区分实例而不是值**的场景才有意义：对象图的序列化 / 深拷贝（记住已访问实例，避免环与重复拷贝）、代理去重、拓扑保持遍历。普通业务缓存用它会导致「看起来该命中却没命中」。
+
 ## ConcurrentSkipListMap
 
-
-
-
-
-### computeIfAbsent
-
-Example from [ConcurrentHashMap.computeIfAbsent stuck in an endless loop in JDK1.8](https://bugs.openjdk.java.net/browse/JDK-8062841) :
+`ConcurrentSkipListMap` 是**并发有序 Map**，底层是跳表（skip list）。与 `TreeMap`（红黑树）不同，跳表天然适合无锁 CAS：修改只影响相邻节点，不需要像树旋转那样改动一片结构。
 
 ```java
+/**
+ * Nodes hold keys and values, and are singly linked in sorted
+ * order, possibly with some intervening marker nodes. The list is
+ * headed by a header node accessible as head.node. Headers and
+ * marker nodes have null keys. The val field (but currently not
+ * the key field) is nulled out upon deletion.
+ */
+static final class Node<K,V> {
+    final K key;
+    V val;
+    Node<K,V> next;
+}
 
-Map<String, Integer> map = new ConcurrentHashMap<>(16);
-map.computeIfAbsent(
-        "AaAa",
-        key -> {
-            return map.computeIfAbsent(
-                    "BBBB",
-                    key2 -> 42);
-        }
-);
-```
-
-hash of "AaAa" == "BBBB"
-
-1. new ReservationNode (f = tabAt(tab, i = (n - 1) & h)) == null
-
-2. Recurivse to else { boolean added = false;,  must 
-
-3. the second operation will block by first operation
-
-```java
-// jdk1.8
-public V computeIfAbsent(K key, Function<? super K, ? extends V> mappingFunction) {
-  if (key == null || mappingFunction == null)
-    throw new NullPointerException();
-  int h = spread(key.hashCode());
-  V val = null;
-  int binCount = 0;
-  for (Node<K,V>[] tab = table;;) {
-    Node<K,V> f; int n, i, fh;
-    if (tab == null || (n = tab.length) == 0)
-      tab = initTable();
-    else if ((f = tabAt(tab, i = (n - 1) & h)) == null) {
-      Node<K,V> r = new ReservationNode<K,V>();
-      synchronized (r) {
-        if (casTabAt(tab, i, null, r)) {
-          binCount = 1;
-          Node<K,V> node = null;
-          try {
-            if ((val = mappingFunction.apply(key)) != null)
-              node = new Node<K,V>(h, key, val, null);
-          } finally {
-            setTabAt(tab, i, node);
-          }
-        }
-      }
-      if (binCount != 0)
-        break;
-    }
-    else if ((fh = f.hash) == MOVED)
-      tab = helpTransfer(tab, f);
-    else {
-      boolean added = false;
-      synchronized (f) {
-        if (tabAt(tab, i) == f) {
-          if (fh >= 0) {
-            binCount = 1;
-            for (Node<K,V> e = f;; ++binCount) {
-              K ek; V ev;
-              if (e.hash == h &&
-                  ((ek = e.key) == key ||
-                   (ek != null && key.equals(ek)))) {
-                val = e.val;
-                break;
-              }
-              Node<K,V> pred = e;
-              if ((e = e.next) == null) {
-                if ((val = mappingFunction.apply(key)) != null) {
-                  added = true;
-                  pred.next = new Node<K,V>(h, key, val, null);
-                }
-                break;
-              }
-            }
-          }
-          else if (f instanceof TreeBin) {
-            binCount = 2;
-            TreeBin<K,V> t = (TreeBin<K,V>)f;
-            TreeNode<K,V> r, p;
-            if ((r = t.root) != null &&
-                (p = r.findTreeNode(h, key, null)) != null)
-              val = p.val;
-            else if ((val = mappingFunction.apply(key)) != null) {
-              added = true;
-              t.putTreeVal(h, key, val);
-            }
-          }
-        }
-      }
-      if (binCount != 0) {
-        if (binCount >= TREEIFY_THRESHOLD)
-          treeifyBin(tab, i);
-        if (!added)
-          return val;
-        break;
-      }
-    }
-  }
-  if (val != null)
-    addCount(1L, binCount);
-  return val;
+/**
+ * Index nodes represent the levels of the skip list.
+ */
+static final class Index<K,V> {
+    final Node<K,V> node;
+    final Index<K,V> down;
+    Index<K,V> right;
 }
 ```
 
+两层结构：底层 `Node` 是有序单链表，上层 `Index` 是「多级索引」，靠 `down` / `right` 串成网。查找从最高层横向跳，跳过头就 `down` 一层——这就是 `O(log n)` 均摊的来源。
 
+### Size
 
-
-
-
-
-if the computation detectably attempts a recursive update to this map that would otherwise never complete
+一个被广泛传抄但**已经过时**的说法是「`ConcurrentSkipListMap.size()` 是 `O(n)` 遍历」。当前源码里它维护了一个 `LongAdder`：
 
 ```java
-// JDK12
-public V computeIfAbsent(K key, Function<? super K, ? extends V> mappingFunction) {
-    if (key == null || mappingFunction == null)
-        throw new NullPointerException();
-    int h = spread(key.hashCode());
-    V val = null;
-    int binCount = 0;
-    for (Node<K,V>[] tab = table;;) {
-        Node<K,V> f; int n, i, fh;
-        if (tab == null || (n = tab.length) == 0)
-            tab = initTable();
-        else if ((f = tabAt(tab, i = (n - 1) & h)) == null) {
-            Node<K,V> r = new ReservationNode<K,V>();
-            synchronized (r) {
-                if (casTabAt(tab, i, null, r)) {
-                    binCount = 1;
-                    Node<K,V> node = null;
-                    try {
-                        if ((val = mappingFunction.apply(key)) != null)
-                            node = new Node<K,V>(h, key, val, null);
-                    } finally {
-                        setTabAt(tab, i, node);
-                    }
-                }
-            }
-            if (binCount != 0)
-                break;
-        }
-        else if ((fh = f.hash) == MOVED)
-            tab = helpTransfer(tab, f);
-        else {
-            boolean added = false;
-            synchronized (f) {
-                if (tabAt(tab, i) == f) {
-                    if (fh >= 0) {
-                        binCount = 1;
-                        for (Node<K,V> e = f;; ++binCount) {
-                            K ek; V ev;
-                            if (e.hash == h &&
-                                ((ek = e.key) == key ||
-                                 (ek != null && key.equals(ek)))) {
-                                val = e.val;
-                                break;
-                            }
-                            Node<K,V> pred = e;
-                            if ((e = e.next) == null) {
-                                if ((val = mappingFunction.apply(key)) != null) {
-                                    added = true;
-                                    pred.next = new Node<K,V>(h, key, val, null);
-                                }
-                                break;
-                            }
-                        }
-                    }
-                    else if (f instanceof TreeBin) {
-                        binCount = 2;
-                        TreeBin<K,V> t = (TreeBin<K,V>)f;
-                        TreeNode<K,V> r, p;
-                        if ((r = t.root) != null &&
-                            (p = r.findTreeNode(h, key, null)) != null)
-                            val = p.val;
-                        else if ((val = mappingFunction.apply(key)) != null) {
-                            added = true;
-                            t.putTreeVal(h, key, val);
-                        }
-                    }
-                }
-            }
-            if (binCount != 0) {
-                if (binCount >= TREEIFY_THRESHOLD)
-                    treeifyBin(tab, i);
-                if (!added)
-                    return val;
-                break;
-            }
-        }
-    }
-    if (val != null)
-        addCount(1L, binCount);
-    return val;
+private transient LongAdder adder;
+
+final long getAdderCount() {
+    LongAdder a; long c;
+    do {} while ((a = adder) == null &&
+                 !ADDER.compareAndSet(this, null, a = new LongAdder()));
+    return ((c = a.sum()) <= 0L) ? 0L : c; // ignore transient negatives
+}
+
+public int size() {
+    long c;
+    return ((baseHead() == null) ? 0 :
+            ((c = getAdderCount()) >= Integer.MAX_VALUE) ?
+            Integer.MAX_VALUE : (int) c);
 }
 ```
+
+代价是**并发修改下 `size()` 只是近似值**（`LongAdder.sum()` 不提供全局快照）。另注意 **子视图 `SubMap.size()` 仍然是逐节点遍历**——它没法复用父 map 的计数器。
+
+### Versus TreeMap
+
+| 维度            | `TreeMap`           | `ConcurrentSkipListMap`  |
+| :------------ | :------------------ | :----------------------- |
+| 结构            | 红黑树                 | 跳表                       |
+| 线程安全          | 否                   | 是（CAS，无锁）                |
+| `get` / `put` | `O(log n)`          | `O(log n)` 均摊            |
+| `size()`      | `O(1)`（字段，精确）        | `O(1)`（LongAdder，**近似**） |
+| 迭代一致性         | fail-fast，并发改抛 CME  | 弱一致，不抛异常                 |
+| null 键/值      | 取决于比较器              | 都不允许                     |
+
+选哪个：**单线程 / 外部加锁 → `TreeMap`（常数更小、内存更省、size 精确）；并发读写 → `ConcurrentSkipListMap`**。另外 `ConcurrentSkipListSet` 就是它的 `Set` 包装（见 [Set](/docs/CS/Java/JDK/Collection/Set.md?id=concurrentskiplistset)）。
 
 
 
 ## Links
-- [Collection](/docs/CS/Java/JDK/Collection/Collection.md)
+
+- [Set](/docs/CS/Java/JDK/Collection/Set.md)
+- [List](/docs/CS/Java/JDK/Collection/List.md)
+- [WeakHashMap](/docs/CS/Java/JDK/Collection/WeakHashMap.md)
+
+## References
+
+1. [Map (Java SE 25 & JDK 25)](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/util/Map.html)
+2. [EnumMap (Java SE 25 & JDK 25)](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/util/EnumMap.html)
+3. [IdentityHashMap (Java SE 25 & JDK 25)](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/util/IdentityHashMap.html)
+4. [ConcurrentSkipListMap (Java SE 25 & JDK 25)](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/util/concurrent/ConcurrentSkipListMap.html)
+5. [JDK-8062841: ConcurrentHashMap.computeIfAbsent stuck in an endless loop in JDK1.8](https://bugs.openjdk.java.net/browse/JDK-8062841)
