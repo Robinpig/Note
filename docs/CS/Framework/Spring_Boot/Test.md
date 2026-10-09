@@ -267,6 +267,7 @@ class OrderTest { /* @Nested ... */ }
 - [Spring Boot](/docs/CS/Framework/Spring_Boot/Spring_Boot.md)
 - [Spring Boot 启动流程](/docs/CS/Framework/Spring_Boot/Start.md)
 - [H2](/docs/CS/DB/h2/H2.md)
+- [H2 Compatibility Modes](/docs/CS/DB/h2/Compatibility_Modes.md)
 
 ## References
 
