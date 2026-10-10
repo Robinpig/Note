@@ -1,5 +1,8 @@
 ## Introduction
 
+> [!NOTE]
+> 版本基线 **Redis 8.10.2**；本页机制若与其他版本口径冲突，以 [Redis 版本基线](/docs/CS/DB/Redis/Redis.md?id=version-baseline) 为准。
+
 ## Server
 
 All the server configuration and in general all the shared state is defined in a global structure called `server`, of type `struct redisServer`.
@@ -1000,4 +1003,5 @@ client list
 
 ## Links
 
-- [Redis](/docs/CS/DB/Redis/struct/struct.md)
+- [Redis](/docs/CS/DB/Redis/Redis.md)
+- [start.md](/docs/CS/DB/Redis/start.md)

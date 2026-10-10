@@ -1,6 +1,7 @@
 ## Introduction
 
-
+> [!IMPORTANT]
+> 版本基线 **Redis 8.10.2**，完整版本表与易踩默认值见 [Redis 版本基线](/docs/CS/DB/Redis/Redis.md?id=version-baseline)。
 
 Sentinels by default run **listening for connections to TCP port 26379**, so for Sentinels to work, port 26379 of your servers **must be open** to receive connections from the IP addresses of the other Sentinel instances.
 Otherwise Sentinels can't talk and can't agree about what to do, so failover will never be performed.

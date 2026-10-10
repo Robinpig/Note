@@ -1,5 +1,8 @@
 ## Introduction
 
+> [!IMPORTANT]
+> 版本基线 **Redis 8.10.2**，完整版本表与易踩默认值见 [Redis 版本基线](/docs/CS/DB/Redis/Redis.md?id=version-baseline)。
+
 ### Safety and Liveness guarantees
 
 We are going to model our design with just three properties that, from our point of view, are the minimum guarantees needed to use distributed locks in an effective way.
@@ -214,7 +217,8 @@ The analysis and  [reply here](http://antirez.com/news/101).
 
 ## Links
 
-- [Redis](/docs/CS/DB/Redis/struct/struct.md)
+- [Redis](/docs/CS/DB/Redis/Redis.md)
+- [Cache.md](/docs/CS/DB/Redis/Cache.md)
 - [MySQL Locks](/docs/CS/DB/MySQL/lock.md)
 
 ## References

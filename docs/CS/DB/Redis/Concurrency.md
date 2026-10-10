@@ -1,9 +1,14 @@
 ## Introduction
 
+> [!IMPORTANT]
+> 版本基线 **Redis 8.10.2**。本页的默认值与 `bio.c` 代码均按此版本核实；读到与本页冲突的旧口径（尤其是把 `BIO_NUM_OPS` 当线程数的说法）时以本页为准。
+
 Redis是 多进程 + 多线程 混合并发模型
 
 - 多进程: 子进程处理[持久化]() RDB/AOF
 - 多线程: 主线程 + 后台线程 + IO线程
+
+线程总数是「1 主线程 + 3 个后台 bio 线程 + (io-threads - 1) 个 IO 线程」，另有 jemalloc 自身创建的线程。子进程按需创建（同一时刻通常只有一个互斥类型的子进程），并非常驻。
 
 
 
@@ -88,13 +93,53 @@ void killThreads(void) {
 
 
 
-后台线程个数为 3 个（BIO_NUM_OPS），通过消息队列实现多线程的生产者和消费者工作方式 ——主线程生产，后台线程消费。
+后台线程**固定 3 个**，通过「每类型一个队列」的生产者-消费者模式工作—— 主线程生产任务，后台线程消费。
+
+> [!WARNING]
+> 「3 个」对应的常量是 `BIO_WORKER_NUM`，**不是 `BIO_NUM_OPS`**。这两个都是极易记错的宏，8.10.2 `src/bio.h:16-33` 里它们含义完全不同：
+>
+> ```c
+> typedef enum bio_worker_t {        // 线程（worker）类型
+>     BIO_WORKER_CLOSE_FILE = 0,
+>     BIO_WORKER_AOF_FSYNC,
+>     BIO_WORKER_LAZY_FREE,
+>     BIO_WORKER_NUM                // = 3，这是【线程数】
+> } bio_worker_t;
+>
+> /* Background job opcodes */
+> typedef enum bio_job_type_t {      // 任务（job）类型
+>     BIO_CLOSE_FILE = 0,// Deferred close(2) syscall.
+>     BIO_AOF_FSYNC,          // Deferred AOF fsync.
+>     BIO_LAZY_FREE,          // Deferred objects freeing.
+>     BIO_CLOSE_AOF,
+>     BIO_COMP_RQ_CLOSE_FILE,  // Job completion request, registered on close-file worker's queue
+>     BIO_COMP_RQ_AOF_FSYNC,  // Job completion request, registered on aof-fsync worker's queue
+>     BIO_COMP_RQ_LAZY_FREE,  // Job completion request, registered on lazy-free worker's queue
+>     BIO_NUM_OPS                  // = 7，这是【任务类型数】
+> } bio_job_type_t;
+> ```
+>
+> **线程数与任务类型数不是一回事**：3 个 worker 线程通过 `bio_job_to_worker[]` 映射表承接 7 种 job 类型（`src/bio.c:59-67`），其中 `BIO_COMP_RQ_*` 三个「完成请求」类型不独立占线程，而是投递到对应 worker 队列、处理完回写 `bio_comp_list`，再经管道唤醒主线程回调——用于 `FLUSHALL` 这类单命令提交多个 job、需要确认都完成的场景。
 
 它主要执行三种类型操作：
 
 1. 关闭文件。例如打开了 aof 和 rdb 这种大型的持久化文件，需要关闭。
 2. aof 文件刷盘。aof 持久化方式，主线程定时将新增内容追加到 aof 文件，只将数据写入内核缓存，并没有将其刷入磁盘，这种阻塞耗时的脏活累活需要后台线程去做。
 3. 释放体量大的数据。key-value 数据结构，主线程将 key 和 value 解除关系后，如果 value 很小的话，主线程实时释放，否则需要后台线程惰性释放
+
+线程与队列的分配同样按 worker 而非 job 展开（`src/bio.c:69-73`）：
+
+```c
+static pthread_t bio_threads[BIO_WORKER_NUM];
+static pthread_mutex_t bio_mutex[BIO_WORKER_NUM];
+static pthread_cond_t bio_newjob_cond[BIO_WORKER_NUM];
+static list *bio_jobs[BIO_WORKER_NUM];// 队列数 = 线程数
+static unsigned long bio_jobs_counter[BIO_NUM_OPS] = {0};  // 计数器才按 job 类型
+```
+
+同worker 队列内的任务保证**先进先出**（旧任务先处理），这是 `FLUSHALL` 可以用完成请求确认全部落地的正确性依据。
+
+lazyfree 的阈值判断与`dbAsyncDelete` / `freeObjAsync` / `emptyDbAsync` 的源码展开在 [io.md](/docs/CS/DB/Redis/io.md)，IO 线程部分也在该页。
 
 
 
@@ -261,7 +306,8 @@ o-threads 线程配置，redis.conf 配置文件默认是不开放的，默认�
 
 ## Links
 
-- [Redis](/docs/CS/DB/Redis/struct/struct.md)
+- [Redis](/docs/CS/DB/Redis/Redis.md)
+- [io.md](/docs/CS/DB/Redis/io.md)
 
 ## References
 

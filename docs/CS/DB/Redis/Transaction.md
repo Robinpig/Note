@@ -1,5 +1,8 @@
 ## Introduction
 
+> [!NOTE]
+> 版本基线 **Redis 8.10.2**；本页机制若与其他版本口径冲突，以 [Redis 版本基线](/docs/CS/DB/Redis/Redis.md?id=version-baseline) 为准。
+
 Redis Transactions allow the execution of a group of commands in a single step, they are centered around the commands `MULTI`, `EXEC`, `DISCARD` and `WATCH`.
 Redis Transactions make two important guarantees:
 

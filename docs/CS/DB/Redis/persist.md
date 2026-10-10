@@ -1,5 +1,8 @@
 ## Introduction
 
+> [!NOTE]
+> 版本基线 **Redis 8.10.2**；本页机制若与其他版本口径冲突，以 [Redis 版本基线](/docs/CS/DB/Redis/Redis.md?id=version-baseline) 为准。
+
 Redis 提供三种持久化方式：RDB 快照、AOF 日志以及混合持久化
 
 - **RDB**（Redis Database）：RDB 持久化在指定时间间隔对数据集执行时间点快照。

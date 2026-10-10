@@ -1,16 +1,30 @@
 ## Introduction
 
+> [!IMPORTANT]
+> 版本基线 **Redis 8.10.2**。本页聚焦两件事：**IO 线程**（网络读写，主线程之外的 `io-threads`）与**惰性释放**（`bio.c` 的 lazy-free worker + `lazyfree.c`）。
+> 子进程模型与后台线程 worker 的划分见 [Concurrency.md](/docs/CS/DB/Redis/Concurrency.md)，本页不重复。
+>
+> ⚠️ 下文`struct bio_job` / `BIO_NUM_OPS 3` 的代码片段是 **Redis 6.x 形态**，仅作演进对照；8.10.2 已改为 `bio_worker_t`（3 个worker）+ `bio_job_type_t`（7 种 job）的双枚举结构，`bio_job` 被 `bio_job_hdr_t` 取代。**当前版本的代码以 [Concurrency.md](/docs/CS/DB/Redis/Concurrency.md) 一节为准。**
 
 从 Redis 调试代码中，我们可以看到，Redis 线程主要分为 3 类：
 1. 主线程：负责程序的主逻辑，当然也负责 IO。
 2. 后台线程：延时回收耗时的系统资源。
 3. 网络 IO 线程：Redis 6.0 版本增加的 IO 线程，利用多核资源，实现 IO 并发。
 
-后台线程个数为 3 个（BIO_NUM_OPS），通过消息队列实现多线程的生产者和消费者工作方式 ——主线程生产，后台线程消费。
+后台线程个数为 3 个，通过消息队列实现多线程的生产者和消费者工作方式 ——主线程生产，后台线程消费。
 它主要执行三种类型操作：
 1. 关闭文件。例如打开了 aof 和 rdb 这种大型的持久化文件，需要关闭。
 2. aof 文件刷盘。aof 持久化方式，主线程定时将新增内容追加到 aof 文件，只将数据写入内核缓存，并没有将其刷入磁盘，这种阻塞耗时的脏活累活需要后台线程去做。
 3. 释放体量大的数据。key-value 数据结构，主线程将 key 和 value 解除关系后，如果 value 很小的话，主线程实时释放，否则需要后台线程惰性释放
+
+
+## Directory Navigation
+
+本页两件事：**IO 线程**（`io-threads`，把网络读写从主线程分出去）与**惰性释放**（后台 lazy-free worker 与 `lazyfree.c`）。
+
+- **IO 线程** —— [IO Threads](#io-threads)：线程数配置、任务分发模型、为什么读操作默认不开启、CPU 亲和性。
+- **后台任务** —— [Background Jobs](#background-jobs)：`bio.c` 的队列与worker（**6.x 旧版代码**，当前版见 [Concurrency.md](/docs/CS/DB/Redis/Concurrency.md)）。
+- **惰性释放** —— [Lazy Free](#lazy-free)：`LAZYFREE_THRESHOLD` 阈值如何决定同步还是异步释放，以及 `dbAsyncDelete` / `freeObjAsync` / `emptyDbAsync` 的替换策略。
 
 
 
@@ -28,6 +42,9 @@ Multi I/O
 6. 主线程清空全局队列，等待客户端后续的请求
 
 ![](https://mmbiz.qpic.cn/mmbiz_png/EoJib2tNvVtficyIzKOicibvLa33THndmjqmSibCy8KnXf0ZE3WRyWAfCUSgicDfaictMhgySliaQ7f4nvfqdecoNKJX6A/640?wx_fmt=png&tp=webp&wxfrom=5&wx_lazy=1&wx_co=1)
+## IO Threads
+
+
 
 
 io-threads 线程配置，redis.conf 配置文件默认是不开放的，默认只有一个线程在工作，这个线程就是 主线程。
@@ -111,6 +128,9 @@ struct bio_job {
     lazy_free_fn *free_fn; /* Function that will free the provided arguments */
     void *free_args[]; /* List of arguments to be passed to the free function */
 };
+## Background Jobs
+
+
 ```
 
 job queue
@@ -295,6 +315,9 @@ void bioSubmitJob(int type, struct bio_job *job) {
     pthread_cond_signal(&bio_newjob_cond[type]);
     pthread_mutex_unlock(&bio_mutex[type]);
 }
+## Lazy Free
+
+
 ```
 
 lazy free
@@ -518,7 +541,7 @@ void emptyDbAsync(redisDb *db) {
 ## Links
 
 - [Cache](/docs/CS/DB/Redis/Cache.md)
-- [redis.conf](/docs/CS/DB/Redis/Concurrency.md)
+- [Concurrency](/docs/CS/DB/Redis/Concurrency.md)
 - [Jedis](/docs/CS/DB/Redis/Jedis.md)
 - [Lettuce](/docs/CS/DB/Redis/Lettuce.md)
 - [Lock](/docs/CS/DB/Redis/Lock.md)
