@@ -398,6 +398,78 @@ Java_sun_nio_ch_FileDispatcherImpl_transferTo0(JNIEnv *env, jobject this,
 ```
 
 
+### Native Dispatch (IOUtil / IOStatus)
+
+无论是 `FileChannel` 还是 `SocketChannel`，最终都落到 `sun.nio.ch.IOUtil` 的静态方法，再经 `NativeDispatcher` 进入 JNI。理解这套分发层，才能解释两件事：**为什么堆内 `ByteBuffer` 读写要多一次拷贝**，以及 **JDK 如何消化 `EAGAIN` / `EINTR`**。
+
+#### Heap vs Direct: One Extra Copy
+
+`IOUtil.read` 对目标缓冲区类型分支：
+
+```java
+static int read(FileDescriptor fd, ByteBuffer dst, long position, ...) {
+    if (dst instanceof DirectBuffer)
+        return readIntoNativeBuffer(fd, dst, position, ...);   // 直接走堆外地址
+    // 否则借线程级临时 DirectByteBuffer 承接系统调用
+    ByteBuffer bb = Util.getTemporaryDirectBuffer(dst.remaining());
+    try {
+        int n = readIntoNativeBuffer(fd, bb, position, ...);
+        bb.flip();
+        if (n > 0) dst.put(bb);                                // 再拷回堆内
+        return n;
+    } finally {
+        Util.offerFirstTemporaryDirectBuffer(bb);              // 归还线程级缓冲池
+    }
+}
+```
+
+堆内 `ByteBuffer` 的底层数组地址会被 GC 移动，内核无法直接写入，因此 JDK 必须先用一个**线程级临时 `DirectByteBuffer`** 承接 `read` 系统调用，再 `put` 拷回堆内。这正是 NIO 高性能路径几乎一律用 `allocateDirect` 的原因——省掉这一次中转拷贝（见 [Direct_Buffer](/docs/CS/Java/JDK/IO/Direct_Buffer.md)）。
+
+#### IOStatus: How EAGAIN / EINTR Are Encoded
+
+native 的 read/write 不抛异常，而是返回一组负数状态码，由 Java 层解释。`IOStatus` 定义了它们：
+
+| 常量 | 值 | 含义 / 对应 errno |
+|------|----|-------------------|
+| `EOF` | `-1` | 到达流尾 |
+| `UNAVAILABLE` | `-2` | 非阻塞下无可读/写数据（EAGAIN / EWOULDBLOCK） |
+| `INTERRUPTED` | `-3` | 系统调用被信号打断（EINTR） |
+| `UNSUPPORTED` | `-4` | 操作不支持 |
+| `THROWN` | `-5` | JNI 中已抛异常 |
+| `UNSUPPORTED_CASE` | `-6` | 该分支不支持 |
+
+两个 helper 驱动上层循环：
+
+```java
+public static int normalize(int n) {
+    if (n == UNAVAILABLE) return 0;   // UNAVAILABLE 对调用方表现为"读到 0 字节"
+    return n;
+}
+static boolean okayToRetry(long n) {
+    return (n == UNAVAILABLE) || (n == INTERRUPTED);   // 这两种可重试
+}
+```
+
+`epoll_wait` 在 `EINTR` 时返回 `IOS_INTERRUPTED`（即 `IOStatus.INTERRUPTED`，详见 [Selector_Epoll](/docs/CS/Java/JDK/IO/Selector_Epoll.md?id=epoll-the-native-wrapper-jdk-25-refactoring)）；普通读写 native 在 `EAGAIN` 时返回 `IOS_UNAVAILABLE`（= `UNAVAILABLE`）。channel 包装层据此：
+
+- **阻塞模式 / 文件**：native 调用直接在内核态等待数据，不会返回 `UNAVAILABLE`；
+- **非阻塞模式**：返回 `UNAVAILABLE` 时，`normalize` 把它转成 `0`，调用方据此把控制权交还事件循环；
+- `INTERRUPTED` 由 channel 的 `do { n = ... } while (n == IOStatus.INTERRUPTED)` 循环吃掉（见上文 `FileChannelImpl.read` 摘录）。
+
+#### Unified Dispatcher and Zero-Copy Transfer
+
+JDK 25 把原先独立的 `SocketDispatcher` 合并进 `FileDispatcherImpl`（Linux 专属，继承自 `UnixFileDispatcherImpl`）。文件、socket、管道三类通道的读写都经这一个 dispatcher 的 native 方法分发。
+
+文件零拷贝的核心 `transferTo` 在 native 端（`FileDispatcherImpl.c`）优先尝试 `copy_file_range`，失败再回退到 `sendfile`：
+
+```c
+// FileDispatcherImpl.c —— transferTo0
+// copy_file_range fails with EBADF when appending, and sendfile ...
+n = sendfile(dstFD, srcFD, &offset, (size_t)count);   // 经典 sendfile 零拷贝
+```
+
+JDK 25 这一改动（先 `copy_file_range` 后 `sendfile`）修正了老实现只认 `sendfile` 的局限：`copy_file_range` 在两个**文件**描述符之间也能零拷贝搬运，而 `sendfile` 要求目标必须是 socket。这也是 Nginx 的 `sendfile` 主线在 JDK 侧的对应（[IO](/docs/CS/Java/JDK/IO/IO.md) 的 `transferTo` 三路径之一）。
+
 ### ServerSocketChannel
 
 ```java
@@ -1433,6 +1505,7 @@ public abstract Selector wakeup();
 
 - [PageCache](/docs/CS/OS/Linux/mm/PageCache.md) — FileChannel 读写最终落到的 page cache 与预读
 - [Direct_Buffer](/docs/CS/Java/JDK/IO/Direct_Buffer.md)
+- [Selector (epoll)](/docs/CS/Java/JDK/IO/Selector_Epoll.md) — Selector 到 epoll 的源码对接
 - [epoll](/docs/CS/OS/Linux/IO/epoll.md)
 - [io_uring](/docs/CS/Java/JDK/IO/Uring.md) — Java 侧经 JUring / Netty incubator 接入
 - [IO](/docs/CS/OS/Linux/IO/IO.md) — 五种 IO 模型与两阶段辨析

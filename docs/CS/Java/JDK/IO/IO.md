@@ -168,6 +168,8 @@ Linux 5.1 引入的 [io_uring](/docs/CS/OS/Linux/IO/io_uring.md) 通过 SQ/CQ �
 
 ## File (java.nio.file)
 
+`java.nio.file`（NIO.2）是 JDK 7 引入的文件系统抽象层，在 Linux 上由 `LinuxFileSystemProvider` / `LinuxFileSystem` 落地：文件打开、目录遍历、属性读取分别映射到 `open(2)` / `getdents64(2)` / `fstatat(2)`，零拷贝走 `copy_file_range`→`sendfile`，目录变更监听则基于 inotify。底层系统调用与 `WatchService` 的 inotify 实现分别见 [NIO.2 File System](/docs/CS/Java/JDK/IO/NIO2.md) 与 [WatchService (inotify)](/docs/CS/Java/JDK/IO/WatchService.md)。异步文件通道 [AsynchronousFileChannel](/docs/CS/Java/JDK/IO/AsyncFileChannel.md) 在 Linux 上**并非内核 AIO**，而是 `ExecutorService` 线程池模拟——与 socket 侧 `EPollPort`（epoll 模拟）同源。
+
 `Files.lines` 以惰性 `Stream<String>` 读取文件，不一次性读入 `List`：
 
 ```java
@@ -199,6 +201,9 @@ public static Stream<String> lines(Path path, Charset cs) throws IOException {
 ## Links
 
 - [NIO](/docs/CS/Java/JDK/IO/NIO.md)
+- [Selector (epoll)](/docs/CS/Java/JDK/IO/Selector_Epoll.md)
+- [NIO.2 File System](/docs/CS/Java/JDK/IO/NIO2.md)
+- [WatchService (inotify)](/docs/CS/Java/JDK/IO/WatchService.md)
 - [Direct Buffer](/docs/CS/Java/JDK/IO/Direct_Buffer.md)
 - [io_uring](/docs/CS/Java/JDK/IO/Uring.md)
 - [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
