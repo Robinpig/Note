@@ -536,7 +536,7 @@ private void decrementPendingOutboundBytes(long size, boolean invokeLater, boole
 
 ## Memory Leak
 
-> See [Java WeakReference](/docs/CS/Java/JDK/Basic/Ref.md?id=weakreference).
+> See [Java WeakReference](/docs/CS/Java/JDK/Basic/Ref.md?id=weak-reference).
 
 
 ```java

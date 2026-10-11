@@ -1,20 +1,19 @@
 ## Introduction
 
+Java 在强引用之外提供 `SoftReference` / `WeakReference` / `PhantomReference`，以及用于 finalization 的 `FinalReference`，目的是把对象的生命周期管理与 GC 解耦，支撑内存敏感缓存、规范化映射（canonicalizing map）、堆外资源回收等场景。
 
-Java实现多种引用的原因
-- 提供更多样的对象生命周期管理
-- 提高GC回收
+- 强引用由语言默认提供，GC 不会主动回收其可达对象。
+- 其余四种位于 `java.lang.ref` 包，与 GC 协同工作；`Reference` 抽象类不允许直接子类化（只能由 JDK 内部使用）。
 
-Java提供了4种引用类型 分别是 FinalReference、SoftReference、WeakReference 和 PhantomReference 我们将在后面逐一介绍
-另外默认的 strong reference 无需显式定义 同时GC不会主动回收 strong reference引用的对象
+Java 提供的引用类型（强引用无需显式定义）：
 
+- **Strong**：普通 `Object o = new Object()`，可达即不回收。
+- **Soft** (`SoftReference`)：内存不足时由 GC 按需清除，常用于内存敏感缓存。
+- **Weak** (`WeakReference`)：下一次 GC 一旦判定 weakly reachable 即清除，常用于规范化映射（`WeakHashMap`）。
+- **Phantom** (`PhantomReference`)：`get()` 恒返回 null，仅用于对象被回收前的 post-mortem 清理。
+- **Final** (`FinalReference`)：为 finalization 机制服务，不由用户直接创建。
 
-
-
-
-
-
-
+## Reference Class Hierarchy
 
 <div style="text-align: center;">
 
@@ -26,19 +25,16 @@ Java提供了4种引用类型 分别是 FinalReference、SoftReference、WeakRef
 Fig.1. Reference hierarchy.
 </p>
 
+调试开关（按 GC 阶段打印引用处理信息）：
 
-
-
-```
+```text
 -XX:+PrintReferenceGC
 -XX:+TraceReferenceGC
 ```
 
+## Abstract Reference
 
-### Abstract Reference
-
-Abstract base class for reference objects. This class defines the operations common to all reference objects.
-Because reference objects are implemented in close cooperation with the [garbage collector](/docs/CS/Java/JDK/JVM/GC/GC.md), this class may not be subclassed directly.
+`java.lang.ref.Reference<T>` 是所有引用对象的抽象基类，定义了引用对象共有的字段与状态机；它必须与垃圾收集器协同工作，因此不能被直接子类化。
 
 ```java
 public abstract class Reference<T> {
@@ -82,38 +78,21 @@ public abstract class Reference<T> {
 
 ### Reference State
 
-The state of a Reference object is characterized by two attributes.
-It may be either "active", "pending", or "inactive".It may also be either "registered", "enqueued", "dequeued", or "unregistered".
+`Reference` 对象的状态由两个维度刻画：可达性维度为 `Active` / `Pending` / `Inactive`；队列维度为 `Registered` / `Enqueued` / `Dequeued` / `Unregistered`。
 
-- **Active:** Subject to special treatment by the garbage collector.
-  Some time after the collector detects that the reachability of the referent has changed to the appropriate state, the collector "notifies" the reference, changing the state to either "pending" or "inactive".
-  <br/>referent != null; discovered = null, or in GC discovered list.
-- **Pending:** An element of the pending-Reference list, waiting to be processed by the ReferenceHandler thread.
-  The pending-Reference list is linked through the discovered fields of references in the list.
-  <br/>referent = null; discovered = next element in pending-Reference list.
-- **Inactive:** Neither Active nor Pending.
-  <br/>referent = null.
-- **Registered:** Associated with a queue when created, and not yet added to the queue.
-  <br/>queue = the associated queue.
-- **Enqueued:** Added to the associated queue, and not yet removed.
-  <br/>queue = ReferenceQueue.ENQUEUE; next = next entry in list, or this to indicate end of list.
-- **Dequeued:** Added to the associated queue and then removed.
-  <br/>queue = ReferenceQueue.NULL; next = this.
-- **Unregistered:** Not associated with a queue when created.
-  <br/>queue = ReferenceQueue.NULL.
+- **Active:** 受 GC 特殊处理。referent != null；discovered = null，或在 GC 的 discovered 链表中。
+- **Pending:** pending-Reference 链表中的元素，等待 `ReferenceHandler` 线程处理；通过 discovered 字段串成链表。
+- **Inactive:** 既非 Active 也非 Pending；referent = null。
+- **Registered:** 创建时关联了队列，尚未入队；queue = 关联的队列。
+- **Enqueued:** 已加入关联队列，尚未被取走；queue = `ReferenceQueue.ENQUEUE`；next = 链表下一节点或自身（尾）。
+- **Dequeued:** 已入队并已被取走；queue = `ReferenceQueue.NULL`；next = this。
+- **Unregistered:** 创建时未关联队列；queue = `ReferenceQueue.NULL`。
 
-The collector only needs to examine the referent field and the discovered field to determine whether a (non-FinalReference) Reference object needs special treatment.
-If the referent is non-null and not known to be live, then it may need to be discovered for possible later notification.
-But if the discovered field is non-null, then it has already been discovered.
+GC 只需检查 `referent` 与 `discovered` 两个字段即可判断一个（非 Final）Reference 是否需要特殊处理：referent 非 null 且未知存活 → 可能被 discover；discovered 非 null → 已被 discover。
 
-FinalReference (which exists to support finalization) differs from other references, because a FinalReference is not cleared when notified.
-The referent being null or not cannot be used to distinguish between the active state and pending or inactive states.
-However, FinalReferences do not support enqueue().
-Instead, the next field of a FinalReference object is set to "this" when it is added to the pending-Reference list.
-The use of "this" as the value of next in the enqueued and dequeued states maintains the non-active state.
-An additional check that the next field is null is required to determine that a FinalReference object is active.
+`FinalReference`（为 finalization 服务）与其它引用不同：被 notify 时**不会**清除 referent，因此不能以 referent 是否为 null 区分 active/pending/inactive；其 `next` 在进入 pending 链表时被置为 `this`，需额外检查 `next == null` 才能确定 active。且 `FinalReference` 不支持 `enqueue()`。
 
-```
+```text
     /**
      * Initial states:
      *   [active/registered]
@@ -171,63 +150,11 @@ An additional check that the next field is null is required to determine that a 
      */
 ```
 
-### processPendingReferences
+## ReferenceHandler Thread
 
-```java
-public abstract class Reference<T> {
-  private static void processPendingReferences() {
-    // Only the singleton reference processing thread calls
-    // waitForReferencePendingList() and getAndClearReferencePendingList().
-    // These are separate operations to avoid a race with other threads
-    // that are calling waitForReferenceProcessing().
-    waitForReferencePendingList();
-    Reference<?> pendingList;
-    synchronized (processPendingLock) {
-      pendingList = getAndClearReferencePendingList();
-      processPendingActive = true;
-    }
-    while (pendingList != null) {
-      Reference<?> ref = pendingList;
-      pendingList = ref.discovered;
-      ref.discovered = null;
+GC 发现引用对象可达性变化后，把它们挂到 pending 链表；`ReferenceHandler` 单线程循环把 pending 中的引用搬到对应的 `ReferenceQueue`。若该引用是 `Cleaner`，则直接调用 `Cleaner.clean()`（例如 `DirectByteBuffer` 的堆外内存在此释放，见 [Direct Buffer](/docs/CS/Java/JDK/IO/Direct_Buffer.md?id=cleaner)）。
 
-      if (ref instanceof Cleaner) {
-        ((Cleaner) ref).clean();
-        // Notify any waiters that progress has been made.
-        // This improves latency for nio.Bits waiters, which
-        // are the only important ones.
-        synchronized (processPendingLock) {
-          processPendingLock.notifyAll();
-        }
-      } else {
-        ref.enqueueFromPending();
-      }
-    }
-    // Notify any waiters of completion of current round.
-    synchronized (processPendingLock) {
-      processPendingActive = false;
-      processPendingLock.notifyAll();
-    }
-  }
-}
-```
-
-## ReferenceHandler
-
-1. from PendingList to ReferenceQueue in a loop.
-2. if instanceof Cleaner , `invoke Cleaner.clean()` like DirectByteBuffer is free by [Cleaner](/docs/CS/Java/JDK/IO/Direct_Buffer.md?id=cleaner).
-
-Create Reference Object
-
-find ref object when GC
-
-if need to collect, add to DiscoveredList `referenceProcessor::process_discovered_references`
-
-move elements in DiscoveredList to PendingList when  `enqueue_discovered_ref_helper`  in `referenceProcessor.cpp`
-
-add pending to ReferenceQueue by ReferenceHandler
-
-remove from referenceQueue
+### ReferenceHandler
 
 ```java
 private static class ReferenceHandler extends Thread {
@@ -263,7 +190,6 @@ private static class ReferenceHandler extends Thread {
 
 ```java
 public abstract class Reference<T> {
-
   private static void processPendingReferences() {
     // Only the singleton reference processing thread calls
     // waitForReferencePendingList() and getAndClearReferencePendingList().
@@ -301,26 +227,17 @@ public abstract class Reference<T> {
 }
 ```
 
-## StrongReference
+GC 侧的对象发现流程（HotSpot `referenceProcessor`）：GC 标记阶段找到引用对象 → 若需回收则加入 Discovered 链表（`referenceProcessor::process_discovered_references`）→ 把 Discovered 链表元素搬到 Pending 链表（`enqueue_discovered_ref_helper`）→ `ReferenceHandler` 把 Pending 搬到 `ReferenceQueue`。
 
-Strong references provide direct access to the target object.
-Will not be recycled.
+## Strong Reference
 
-## SoftReference
+强引用直接持有目标对象，只要强引用可达，对象就不会被回收。它是 Java 默认的对象访问方式，无需 `java.lang.ref` 中的任何类型。
 
-Soft reference objects, which are cleared at the discretion of the garbage collector in response to memory demand. Soft references are most often used to implement memory-sensitive caches.
+## Soft Reference
 
-Suppose that the garbage collector determines at a certain point in time that an object is softly reachable.
-At that time it may choose to clear atomically all soft references to that object and all soft references to any other softly-reachable objects from which that object is reachable through a chain of strong references.
-At the same time or at some later time it will enqueue those newly-cleared soft references that are registered with reference queues.
+软引用对象由 GC 在内存不足时按需清除，最常用于实现内存敏感缓存。当 GC 判定某对象 softly reachable 时，会原子清除到该对象及其 softly-reachable 闭包上的所有软引用，并随后把注册了队列的软引用入队。
 
-All soft references to softly-reachable objects are guaranteed to have been cleared before the virtual machine throws an OutOfMemoryError.
-Otherwise no constraints are placed upon the time at which a soft reference will be cleared or the order in which a set of such references to different objects will be cleared.
-Virtual machine implementations are, however, encouraged to bias against clearing recently-created or recently-used soft references.
-
-Direct instances of this class may be used to implement simple caches; this class or derived subclasses may also be used in larger data structures to implement more sophisticated caches.
-As long as the referent of a soft reference is strongly reachable, that is, is actually in use, the soft reference will not be cleared.
-Thus a sophisticated cache can, for example, prevent its most recently used entries from being discarded by keeping strong referents to those entries, leaving the remaining entries to be discarded at the discretion of the garbage collector.
+规范保证：在 JVM 抛出 `OutOfMemoryError` 之前，所有软引用都已被清除；其余清除时机与顺序不受约束。但实现被鼓励偏向保留最近创建/使用的软引用（LRU 策略）。
 
 ```java
 public class SoftReference<T> extends Reference<T> {
@@ -357,13 +274,7 @@ public class SoftReference<T> extends Reference<T> {
 }
 ```
 
-`ReferenceProcessor::process_discovered_references`
-
--> `process_soft_ref_reconsider `
-
--> `process_soft_ref_reconsider_work`
-
-(SoftReferences only) **Traverse the list and remove any SoftReferences whose referents are not alive**, but that should be kept alive for policy reasons. Keep alive the transitive closure of all such referents.
+GC 处理软引用（HotSpot `referenceProcessor`）：遍历 discovered 链表，移除 referent 已死且按策略应保留的软引用，并对其余做 keep-alive。
 
 ```cpp
 // referenceProcessor.cpp
@@ -378,7 +289,7 @@ size_t ReferenceProcessor::process_soft_ref_reconsider_work(DiscoveredList&    r
     iter.load_ptrs(DEBUG_ONLY(!discovery_is_atomic() /* allow_null_referent */));
     bool referent_is_dead = (iter.referent() != NULL) && !iter.is_referent_alive();
     if (referent_is_dead &&
-        !policy->should_clear_reference(iter.obj(), _soft_ref_timestamp_clock)) {
+        !policy->should_clear_reference(iter.obj(), _soft_ref_clock)) {
       log_dropped_ref(iter, "by policy");
       // Remove Reference object from list
       iter.remove();
@@ -395,12 +306,11 @@ size_t ReferenceProcessor::process_soft_ref_reconsider_work(DiscoveredList&    r
 }
 ```
 
-### referencePolicy
+> 注：下文 `referencePolicy` 与 `init_statics` 片段来自早期 JDK 的 `referenceProcessor`（供理解策略设计，具体符号以所用 JDK 源码为准）。
 
-referencePolicy is used to determine when soft reference objects should be cleared.
+### Reference Policy
 
-1. Server compiler mode **LRUMaxHeapPolicy**
-2. Else **LRUCurrentHeapPolicy**
+`referencePolicy` 决定软引用何时被清除。Server 编译模式下使用 `LRUMaxHeapPolicy`，否则使用 `LRUCurrentHeapPolicy`。
 
 ```cpp
 // referencePolicy.hpp
@@ -421,11 +331,9 @@ class AlwaysClearPolicy : public ReferencePolicy {
 class LRUCurrentHeapPolicy : public ReferencePolicy {
  private:
   jlong _max_interval;
-
  public:
   LRUCurrentHeapPolicy();
-
-  // Capture state (of-the-VM) information needed to evaluate the policy
+  // state (of-the-VM) information needed to evaluate the policy
   void setup();
   virtual bool should_clear_reference(oop p, jlong timestamp_clock);
 };
@@ -433,17 +341,13 @@ class LRUCurrentHeapPolicy : public ReferencePolicy {
 class LRUMaxHeapPolicy : public ReferencePolicy {
  private:
   jlong _max_interval;
-
  public:
   LRUMaxHeapPolicy();
-
-  // Capture state (of-the-VM) information needed to evaluate the policy
+  // state (of-the-VM) information needed to evaluate the policy
   void setup();
   virtual bool should_clear_reference(oop p, jlong timestamp_clock);
 };
 ```
-
-init_statics
 
 ```cpp
 // referenceProcessor.cpp
@@ -453,18 +357,18 @@ void ReferenceProcessor::init_statics() {
   jlong now = os::javaTimeNanos() / NANOSECS_PER_MILLISEC;
 
   // Initialize the soft ref timestamp clock.
-  _soft_ref_timestamp_clock = now;
+  _soft_ref_clock = now;
   // Also update the soft ref clock in j.l.r.SoftReference
-  java_lang_ref_SoftReference::set_clock(_soft_ref_timestamp_clock);
+  java_lang_ref_SoftReference::set_clock(_soft_ref_clock);
 
-  _always_clear_soft_ref_policy = new AlwaysClearPolicy();
+  _always_clear_soft_ref = new AlwaysClearPolicy();
   if (is_server_compilation_mode_vm()) {
     _default_soft_ref_policy = new LRUMaxHeapPolicy();
   } else {
     _default_soft_ref_policy = new LRUCurrentHeapPolicy();
   }
-  if (_always_clear_soft_ref_policy == NULL || _default_soft_ref_policy == NULL) {
-    vm_exit_during_initialization("Could not allocate reference policy object");
+  if (_always_clear_soft_ref == NULL || _default_soft_ref_policy == NULL) {
+    vm_exit_during_initialization("Could not allocate reference_policies object");
   }
   guarantee(RefDiscoveryPolicy == ReferenceBasedDiscovery ||
             RefDiscoveryPolicy == ReferentBasedDiscovery,
@@ -472,15 +376,11 @@ void ReferenceProcessor::init_statics() {
 }
 ```
 
-## WeakReference
+## Weak Reference
 
-Weak reference objects, which do not prevent their referents from being made finalizable, finalized, and then reclaimed.
-Weak references are most often used to implement canonicalizing mappings.
+弱引用对象不会阻止其 referent 被置为 finalizable、复活并最终回收，最常用于实现规范化映射。`WeakHashMap` 的 key 即用弱引用，entry 在其 key 被回收后随之失效。
 
-Suppose that the garbage collector determines at a certain point in time that an object is weakly reachable.
-At that time it will atomically clear all weak references to that object and all weak references to any other weakly-reachable objects from which that object is reachable through a chain of strong and soft references.
-At the same time it will declare all of the formerly weakly-reachable objects to be finalizable.
-At the same time or at some later time it will enqueue those newly-cleared weak references that are registered with reference queues.
+当 GC 判定对象 weakly reachable 时，原子清除到该对象及其 weakly-reachable 闭包上的所有弱引用，并随后把注册了队列的弱引用入队。
 
 ```java
 public class WeakReference<T> extends Reference<T> {
@@ -496,8 +396,7 @@ public class WeakReference<T> extends Reference<T> {
 }
 ```
 
-Traverse the list and remove any Refs whose referents are alive, or NULL if discovery is not atomic.
-Enqueue and clear the reference for others if do_enqueue_and_clear is set.
+GC 处理软/弱/终引用共用的通用路径：移除 referent 已死或仍存活的引用，其余在 `do_enqueue_and_clear` 时清除并入队。
 
 ```cpp
 size_t ReferenceProcessor::process_soft_weak_final_refs_work(DiscoveredList&    refs_list,
@@ -544,12 +443,14 @@ size_t ReferenceProcessor::process_soft_weak_final_refs_work(DiscoveredList&    
 
 ## Phantom Reference
 
+虚引用对象的 `get()` 始终返回 null；当 GC 判定对象 phantom reachable 时，会原子清除该虚引用并随后入队（见 `java.lang.ref.PhantomReference` 文档）。它最常用于对象被回收前的 post-mortem 清理，且由于 `get()` 恒返回 null，不会意外令已"死亡"的对象复活。
+
 ```java
 public class PhantomReference<T> extends Reference<T> {
     public T get() {
         return null;
     }
-  
+
     public PhantomReference(T referent, ReferenceQueue<? super T> q) {
         super(referent, q);
     }
@@ -557,7 +458,7 @@ public class PhantomReference<T> extends Reference<T> {
 }
 ```
 
-**TODO in JDK12 will clear referent while JDk1.8 not**
+GC 处理虚引用：referent 为 null 或仍存活则移除，否则清除并入队。
 
 ```cpp
 size_t ReferenceProcessor::process_phantom_refs_work(DiscoveredList&    refs_list,
@@ -603,9 +504,9 @@ void DiscoveredListIterator::complete_enqueue() {
 }
 ```
 
-## FinalReference
+## Final Reference
 
-Final references, used to implement finalization
+终引用用于实现 finalization 机制。与其它引用不同，它不支持 `enqueue()`，被 notify 时也不清除 referent。
 
 ```java
 class FinalReference<T> extends Reference<T> {
@@ -621,39 +522,9 @@ class FinalReference<T> extends Reference<T> {
 }
 ```
 
-**Keep alive followers of referents for FinalReferences.** Must only be called for those.
-
-```cpp
-size_t ReferenceProcessor::process_final_keep_alive_work(DiscoveredList& refs_list,
-                                                         OopClosure*     keep_alive,
-                                                         VoidClosure*    complete_gc) {
-  DiscoveredListIterator iter(refs_list, keep_alive, NULL);
-  while (iter.has_next()) {
-    iter.load_ptrs(DEBUG_ONLY(false /* allow_null_referent */));
-    // keep the referent and followers around
-    iter.make_referent_alive();
-
-    // Self-loop next, to mark the FinalReference not active.
-    java_lang_ref_Reference::set_next_raw(iter.obj(), iter.obj());
-
-    iter.enqueue();
-    log_enqueued_ref(iter, "Final");
-    iter.next();
-  }
-  iter.complete_enqueue();
-  // Close the reachable set
-  complete_gc->do_void();
-  refs_list.clear();
-
-  return iter.removed();
-}
-```
-
 ### Finalizer
 
-Package-private; must be in same package as the Reference class
-
-register invoked by VM
+`Finalizer` 与 `Reference` 同包（package-private），由 VM 在对象创建/初始化时注册。
 
 ```java
 final class Finalizer extends FinalReference<Object> {
@@ -706,25 +577,22 @@ final class Finalizer extends FinalReference<Object> {
 
 #### register_finalizer
 
-rewrite _return to _return_register_finalizer while [rewrite_Object_init](/docs/CS/Java/JDK/JVM/ClassLoader.md?id=rewrite_object_init).
+在 `Object.<init>` 默认路径（或分配后）通过 `InterpreterRuntime::register_finalizer` 调用 `Finalizer#register()`。
 
 ```cpp
-
 IRT_ENTRY(void, InterpreterRuntime::register_finalizer(JavaThread* thread, oopDesc* obj))
   InstanceKlass::register_finalizer(instanceOop(obj), CHECK);
 IRT_END
 ```
 
-Register finalizable objects at end of
+注册时机：
 
-- Object.<init> (default)
-- or after allocation
+- `Object.<init>`（默认路径）
+- 或分配之后
 
-```
+```text
 -XX:+/-RegisterFinalizersAtInit
 ```
-
-call `Finalizer#register()` after  [allocation](/docs/CS/Java/JDK/JVM/Oop-Klass.md)
 
 ```cpp
 // instanceKlass.cpp
@@ -741,8 +609,6 @@ instanceOop InstanceKlass::allocate_instance(TRAPS) {
   return i;
 }
 ```
-
-call `Finalizer.register()`
 
 ```cpp
 instanceOop InstanceKlass::register_finalizer(instanceOop i, TRAPS) {
@@ -795,7 +661,7 @@ private static class FinalizerThread extends Thread {
 
 #### runFinalizer
 
-use `JavaLangAccess#invokeFinalize()` run `finalize` method **after invoke finalize method, the reference set null so can't run finalize method twice**
+通过 `JavaLangAccess#invokeFinalize()` 执行 `finalize`；执行后把 referent 置 null，保证 `finalize` 不会被调用两次。
 
 ```java
 final class Finalizer extends FinalReference<Object> {
@@ -829,7 +695,37 @@ final class Finalizer extends FinalReference<Object> {
 }
 ```
 
+GC 处理 Final 引用的 keep-alive 阶段（保留 referent 及其 follower，等待 FinalizerThread 执行 finalize）：
+
+```cpp
+size_t ReferenceProcessor::process_final_keep_alive_work(DiscoveredList& refs_list,
+                                                         OopClosure*     keep_alive,
+                                                         VoidClosure*    complete_gc) {
+  DiscoveredListIterator iter(refs_list, keep_alive, NULL);
+  while (iter.has_next()) {
+    iter.load_ptrs(DEBUG_ONLY(false /* allow_null_referent */));
+    // keep the referent and followers around
+    iter.make_referent_alive();
+
+    // Self-loop next, to mark the FinalReference not active.
+    java_lang_ref_Reference::set_next_raw(iter.obj(), iter.obj());
+
+    iter.enqueue();
+    log_enqueued_ref(iter, "Final");
+    iter.next();
+  }
+  iter.complete_enqueue();
+  // Close the reachable set
+  complete_gc->do_void();
+  refs_list.clear();
+
+  return iter.removed();
+}
+```
+
 ## Cleaner
+
+`Cleaner` 继承 `PhantomReference<Object>`，用于在对象回收前执行一段清理动作（如释放堆外内存）。它注册了一个"哑"队列：因为 `ReferenceHandler` 会显式调用 `Cleaner.clean()`，引用本身永远不会进入该队列。
 
 ```java
 public class Cleaner
@@ -882,7 +778,6 @@ public class Cleaner
         cl.next = cl;
         cl.prev = cl;
         return true;
-
     }
 
     private final Runnable thunk;
@@ -924,39 +819,15 @@ public class Cleaner
 }
 ```
 
-## ReferenceProcessor
+## ReferenceProcessor (GC Side)
+
+GC 侧的 `ReferenceProcessor` 负责发现（discover）与处理（process）引用对象。下面两段来自 HotSpot，展示发现策略与处理编排。引用处理在 GC 整体流程中的位置，见 [GC 中的引用处理阶段](/docs/CS/Java/JDK/JVM/GC/GC.md?id=reference-processing)。
 
 ### discover_reference
 
-We mention two of several possible choices here:
-0: if the reference object is not in the "originating generation"
-(or part of the heap being collected, indicated by our "span")
-we don't treat it specially (i.e. we scan it as we would
-a normal oop, treating its references as strong references).
-This means that references can't be discovered unless their
-referent is also in the same span. This is the simplest,
-most "local" and most conservative approach, albeit one
-that may cause weak references to be enqueued least promptly.
-We call this choice the "ReferenceBasedDiscovery" policy.
-1: the reference object may be in any generation (span), but if
-the referent is in the generation (span) being currently collected
-then we can discover the reference object, provided
-the object has not already been discovered by
-a different concurrently running discoverer (as may be the
-case, for instance, if the reference object is in G1 old gen and
-the referent in G1 young gen), and provided the processing
-of this reference object by the current collector will
-appear atomically to every other discoverer in the system.
-(Thus, for instance, a concurrent discoverer may not
-discover references in other generations even if the
-referent is in its own generation). This policy may,
-in certain cases, enqueue references somewhat sooner than
-might Policy #0 above, but at marginally increased cost
-and complexity in processing these references.
-We call this choice the "ReferentBasedDiscovery" policy.
+发现策略有两种：`ReferenceBasedDiscovery`（引用对象必须位于正在收集的代/span 内）与 `ReferentBasedDiscovery`（引用对象可在任意代，只要其 referent 位于正在收集的 span 内即可更早被发现）。
 
 ```cpp
-
 bool ReferenceProcessor::discover_reference(oop obj, ReferenceType rt) {
   // Make sure we are discovering refs (rather than processing discovered refs).
   if (!_discovering_refs || !RegisterReferences) {
@@ -989,10 +860,7 @@ bool ReferenceProcessor::discover_reference(oop obj, ReferenceType rt) {
     // For soft refs we can decide now if these are not
     // current candidates for clearing, in which case we
     // can mark through them now, rather than delaying that
-    // to the reference-processing phase. Since all current
-    // time-stamp policies advance the soft-ref clock only
-    // at a full collection cycle, this is always currently
-    // accurate.
+    // to the reference-processing phase.
     if (!_current_soft_ref_policy->should_clear_reference(obj, _soft_ref_timestamp_clock)) {
       return false;
     }
@@ -1031,6 +899,7 @@ bool ReferenceProcessor::discover_reference(oop obj, ReferenceType rt) {
     if (is_subject_to_discovery(obj) ||
         (discovery_is_stw() &&
          is_subject_to_discovery(java_lang_ref_Reference::unknown_referent_no_keepalive(obj)))) {
+      // discover
     } else {
       return false;
     }
@@ -1056,7 +925,6 @@ bool ReferenceProcessor::discover_reference(oop obj, ReferenceType rt) {
 ### process_discovered_references
 
 ```cpp
-
 ReferenceProcessorStats ReferenceProcessor::process_discovered_references(RefProcProxyTask& proxy_task,
                                                                           ReferenceProcessorPhaseTimes& phase_times) {
 
@@ -1104,20 +972,23 @@ ReferenceProcessorStats ReferenceProcessor::process_discovered_references(RefPro
 
 ## Summary
 
-
-|  | Soft            | Weak               | Phantom                | Final |
+| Reference Type | Cleared when | Enqueued on GC | `get()` returns | Typical use |
 | - | --------------- | ------------------ | ---------------------- | ----- |
-|  | clean by Policy | clean all the time | use to trace collector |       |
-|  |                 |                    |                        |       |
-|  |                 |                    |                        |       |
+| Strong | never (while strongly reachable) | no | the object | normal object access |
+| Soft | on memory demand (LRU-biased) | yes (if registered) | object or null | memory-sensitive cache |
+| Weak | on next GC after weakly reachable | yes (if registered) | object or null | canonicalizing map (`WeakHashMap`) |
+| Phantom | when phantom reachable (atomically) | yes (if registered) | always null | post-mortem cleanup |
+| Final | not cleared (for finalization) | no (`Finalizer` queue) | object | `finalize()` mechanism |
 
 ## Links
 
 - [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
-- [Handles](/docs/CS/Java/JDK/JVM/Handles.md)
-- [SymbolTable](/docs/CS/Java/JDK/JVM/SymbolTable.md)
-- [destroy](/docs/CS/Java/JDK/JVM/destroy.md)
+- [Garbage Collector](/docs/CS/Java/JDK/JVM/GC/GC.md)
+- [Direct Buffer](/docs/CS/Java/JDK/IO/Direct_Buffer.md)
+- [ClassLoader](/docs/CS/Java/JDK/JVM/ClassLoader.md)
 
 ## References
 
-1. [Java引用类型原理剖析](https://github.com/farmerjohngit/myblog/issues/10)
+- [Java引用类型原理剖析](https://github.com/farmerjohngit/myblog/issues/10)
+- [Reference (Java SE 25 API)](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/lang/ref/Reference.html)
+- [PhantomReference (Java SE 25 API)](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/lang/ref/PhantomReference.html)
