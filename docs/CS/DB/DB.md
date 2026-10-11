@@ -924,6 +924,10 @@ Systems that need a durable local state store on fast local storage typically pi
 
 An embedded database runs inside the application process, so the "server" disappears as a deployment unit: there is no connection pool to provision, no port to firewall, and a backup is a file copy. The trade-off is a single-writer process model — one JVM or one address space owns the file — so these engines buy convenience in tests and edge deployments rather than horizontal scale. [H2](/docs/CS/DB/h2/H2.md) is the Java-side representative (pure Java, embedded *and* server modes, an in-memory option, a copy-on-write log-structured store called MVStore); SQLite is its C-language counterpart with the widest ecosystem, while Derby and HSQLDB are the older pure-Java engines. Spring Boot's `@DataJpaTest` silently substitutes an in-memory H2, which is why vendor-specific SQL can pass tests and fail in production.
 
+### Vector Databases
+
+向量数据库把「相似」变成一等公民：数据以高维向量表示，检索靠距离而非精确匹配，因此传统数据库的 B-Tree 索引在这里几乎无用武之地，取而代之的是 ANN 图索引与聚类索引。整个门类的原理与选型坐标见 [vector](/docs/CS/DB/vector.md)。落到工程上，这个品类分化成两条路：一条是**扩展**——[pgvector](/docs/CS/DB/PostgreSQL/PostgreSQL.md) 这类嵌入既有关系库的插件，胜在事务与运维复用，受限于单机上限；另一条是**独立系统**，把向量的分区、副本、增量写入与索引重建当成数据库问题重做一遍，[Milvus](/docs/CS/DB/Milvus/Milvus.md) 是其中架构最「云原生」的一个：存算分离、以 WAL 为唯一事实来源、检索由 C++ 的 segcore 承担，因而代价是组件与外部依赖（日志后端、元数据 KV、对象存储）远比一个扩展多。选型时的真实分界线不是召回率，而是数据规模能否摊平这套分布式架构的运维成本。
+
 ### Graph
 
 图数据库是一种专门用于存储和查询图形数据的数据库。它们在处理复杂关系和连接方面表现出色，适用于社交网络、推荐系统、知识图谱等应用场景
@@ -1098,6 +1102,7 @@ Other fuzzy search techniques go in the direction of document classification and
 - [RocksDB](/docs/CS/DB/RocksDB/RocksDB.md)
 - [Cassandra](/docs/CS/DB/Cassandra.md)
 - [H2](/docs/CS/DB/h2/H2.md)
+- [Milvus](/docs/CS/DB/Milvus/Milvus.md) / [vector](/docs/CS/DB/vector.md)
 - [NebulaGraph](/docs/CS/DB/graph/NebulaGraph.md)
 - [Druid](/docs/CS/DB/Druid.md)
 - [Valkey](/docs/CS/DB/Valkey.md)

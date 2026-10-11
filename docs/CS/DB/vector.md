@@ -39,3 +39,4 @@ ChromeraDB
 - [DB](/docs/CS/DB/DB.md)
 - [Doris](/docs/CS/DB/Doris.md)
 - [Dragonfly](/docs/CS/DB/Dragonfly.md)
+- [Milvus](/docs/CS/DB/Milvus/Milvus.md)

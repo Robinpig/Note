@@ -54,6 +54,7 @@ A long-running Read operation can prevent a new Checkpoint from moving forward, 
 - [DataBases](/docs/CS/DB/DB.md)
 - [H2](/docs/CS/DB/h2/H2.md)
 - [H2 MVStore](/docs/CS/DB/h2/MVStore.md)
+- [Milvus WAL and StreamingNode](/docs/CS/DB/Milvus/WAL_and_StreamingNode.md)
 
 ## References
 
