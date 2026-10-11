@@ -20,3 +20,8 @@ Neo4j 使用的存储结构是链表结构 其物理存储单元可以是连续�
 ## Links
 
 - [Graph DB](/docs/CS/DB/graph/graph.md)
+
+## References
+
+1. [Neo4j Documentation](https://neo4j.com/docs/)
+2. [Neo4j: Graph database](https://neo4j.com/product/graph-database/)
