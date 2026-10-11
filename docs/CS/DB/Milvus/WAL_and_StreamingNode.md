@@ -1,6 +1,6 @@
 ## Introduction
 
-Milvus 3.0 相对 2.x 最大的一次架构迁移，是把「日志」从一条旁路的消息总线，升格为整个系统**唯一的事实来源（single source of truth）**。2.x 里存在两条并行的写路径：一条走消息流，一条走独立的数据节点落盘。3.0 把它们收敛成一条——**所有数据变更只往 WAL append，读、恢复、复制一律以 WAL 为准**。这一收敛的落地载体就是 StreamingNode：它是 WAL 分区的持有者与落盘者，其它组件通过进程内库访问它。
+Milvus 3.0 相对 2.x 最大的一次架构迁移，是把「日志」从一条旁路的消息总线，升格为整个系统**唯一的事实来源（single source of truth）**。2.x 里存在两条并行的写路径：一条走消息流，一条走独立的数据节点落盘。3.0 把它们收敛成一条——**所有数据变更只往 WAL append，读、恢复、复制一律以 WAL 为准**。这一收敛的落地载体就是 StreamingNode：它是 WAL 分区的持有者与落盘者，其它组件通过进程内库访问它。这里的「持有」是**按 PChannel 计**的：集群里同时运行多个 StreamingNode，一个 PChannel 在任意时刻只有唯一持有者，而一个节点会持有多个 PChannel——不存在持有整个 WAL 的单点。
 
 这套设计的代价是必须回答三个约束同时成立的问题：**多个 collection 要共享同一条物理日志**（否则 topic 数随 collection 爆炸），**单个 collection 内部要严格保序**（否则事务与 segment 分配无法定义），**集群级广播要有唯一排序点**（否则 RBAC 这类跨库变更在哪个副本上先生效不确定）。Milvus 用 PChannel / VChannel / CChannel 三层通道模型来同时满足它们。本篇讲清这层地基：WAL 后端抽象、三层通道、PChannel 归属与 Term fencing、TimeTick 与 tSafe、msgdispatcher 消费模型，以及 WAL 保留与 checkpoint 的关系。
 
@@ -38,7 +38,7 @@ VChannel 到 PChannel 的映射由 StreamingCoord 内的 `ChannelManager.AllocVi
 
 ### Atomic Broadcast Path
 
-集群级变更走 CChannel 这条唯一排序点，具体由 StreamingCoord 的 Broadcaster（`broadcaster/`）执行一次跨 PChannel 的原子广播。流程是：先按 `Domain → Key` 排序获取 `ResourceKey` 锁，避免死锁；把广播任务持久化进 catalog，保证协调者崩溃后仍能最终完成；再把消息 append 进所有目标 PChannel；等待消费端 ACK 后，按 **CChannel 的 TimeTick 序**执行回调 `AckCallback`——这正是「唯一排序点」的落点：无论消息物理上散落在多少条 PChannel，回调的全局执行顺序都由 CChannel 时间线定死。任务状态机为 `PENDING → TOMBSTONE → DONE`，复制场景下的次集群引入 `REPLICATED` 态。DDL、RBAC 这类变更都经此路径广播，端到端细节见 [Write Path](/docs/CS/DB/Milvus/Write_Path.md)。
+集群级变更走 CChannel 这条唯一排序点，具体由 StreamingCoord 的 Broadcaster（`broadcaster/`）执行一次跨 PChannel 的原子广播。流程是：先按 `Domain → Key` 排序获取 `ResourceKey` 锁，避免死锁；把广播任务持久化进 catalog，保证协调者崩溃后仍能最终完成；再把消息 append 进所有目标 PChannel；等待消费端 ACK 后，按 **CChannel 的 TimeTick 序**执行回调 `AckCallback`——这正是「唯一排序点」的落点：无论消息物理上散落在多少条 PChannel，回调的全局执行顺序都由 CChannel 时间线定死。任务状态机为 `PENDING → TOMBSTONE → DONE`，复制场景下的次集群引入 `REPLICATED` 态；旧状态机里的 `WAIT_ACK` 态在 v3.0.1 已标 deprecated，恢复时与 `PENDING` 走同一处理分支。回调的定序在实现层由 ack scheduler 兜住：待回调任务先按 CChannel 的 TimeTick 排序（对冲突 resource key 的任务，其 broadcastID 序与 TimeTick 序一致，故按 broadcastID 执行即可让 ack 顺序与 WAL 顺序对齐）；消息确定写入 WAL 后（`AckSyncUp` 未开启时）还可先做 `FastAck` 加速，不必干等消费端逐条确认。DDL、RBAC 这类变更都经此路径广播，端到端细节见 [Write Path](/docs/CS/DB/Milvus/Write_Path.md)。
 
 ## PChannel Ownership and Term Fencing
 
@@ -47,6 +47,33 @@ WAL 横跨多个 PChannel，分布在一批 StreamingNode 上；**每个 PChanne
 Balancer 通过两阶段分配管理 PChannel 状态机 `UNINITIALIZED → ASSIGNING → ASSIGNED → UNAVAILABLE`：`AssignPChannels` 先持久化分配结果并**递增该 PChannel 的 Term**，`AssignPChannelsDone` 由目标节点确认后转为已就绪。节点健康变化时触发再平衡，把 PChannel 迁到新节点。
 
 **Term 是防脑裂的关键**：它是一个单调递增的整数，隔离旧归属者。一旦某 PChannel 被重新分配，Term 变大，旧 StreamingNode 上任何仍以更小 Term 发起的 append 都会被拒绝——在 Woodpecker 后端上表现为写栅栏 `ErrFenced`。因此即使旧节点因网络分区仍在运行，也无法把脏数据写进已被接管的日志。分配结果通过 gRPC `AssignmentDiscover` 以版本化的 `(Global, Local)` 对发布给所有客户端；当某进程恰好持有目标 PChannel 时，进程内 StreamingClient 会**绕过 gRPC 直连本地 WAL**。故障切换与高可用的更多语境见 [Deployment and Ops](/docs/CS/DB/Milvus/Deployment_and_Ops.md)。
+
+### WAL Rebalancing
+
+Balancer 的平衡动作分两类，配置注释与策略代码都强调这一区分：**恢复性分配**处理「没有健康持有者」的 PChannel——新接入的、所在节点失联或被标记不可用的——把它们分配给健康节点；**再平衡迁移**则是把已有健康持有者的 PChannel 从一个节点搬到另一个节点，纯粹为负载均衡。`streaming.walBalancer.balancePolicy.allowRebalance`（默认 true）为 false 时策略只走前者、跳过后者，这正是该键注释「only the lost wal recovery will be executed」的落点。迁移的执行序列是：对旧持有者的每条历史 assignment 调 `Remove`，向目标节点 `Assign`，再以 `AssignPChannelsDone` 记账；分配同时递增 Term，旧节点残余的写入被栅栏拒绝——再平衡天然复用了 Term fencing 机制。
+
+平衡任务由后台循环在多个事件上触发：定时器（`triggerInterval` 默认 1m）、StreamingNode 上下线（节点变化 watch）、VChannel 增删引起的 PChannel 统计变化、primary resource group 配置变更、新的 incoming channel，以及显式的 `Trigger` 请求。任务失败进入指数退避（10ms 起、乘 2、上限 5s），每个 assign / remove 操作受 `operationTimeout` 30m 的超时约束。
+
+`vchannelFair` 策略要解决的公平性问题：一个 PChannel 承载的 VChannel 数差异可以很大，若只按 PChannel **数量**做均衡，会出现「节点间 PChannel 数相等、但 VChannel 负载悬殊」的布局——而 VChannel 数才是 StreamingNode 消费与落盘负载的近似。策略的代价函数对每个节点计算加权平方相对偏差，三个权重各管一件事：`pchannelWeight`（0.4）管 PChannel 数量均衡；`vchannelWeight`（0.3）管 VChannel 数量均衡；`antiAffinityWeight`（0.01）惩罚两个「共享同一 collection 的 VChannel」的 PChannel 落在同一节点，让一个 collection 的 VChannel 尽量分散到不同节点，收敛单节点故障的影响面。每轮最多解绑 `rebalanceMaxStep`（3）个 PChannel 做深度优先重排，且只有新布局的总分改善超过 `rebalanceTolerance`（0.01）才采纳，否则维持现状——避免为微小收益来回抖动。
+
+再平衡还有两道逐 PChannel 的保护闸，实现在 `CurrentLayout.AllowRebalance()`：**最短迁移间隔** `minRebalanceIntervalThreshold`（5m），刚完成分配的 PChannel 在该窗口内不再被选为迁移候选；**恢复滞后保护** `allowRebalanceRecoveryLagThreshold`（1s），节点上报的 recovery lag（最新 MVCC 时间戳与恢复水位之差）超过 1s 的 PChannel 不允许再平衡，等它先追平重放——否则会把一个还在追赶 WAL 积压的 channel 挪来挪去。配置面汇总如下：
+
+| 配置键 | 默认值 | 作用 |
+| :--- | :--- | :--- |
+| `streaming.walBalancer.triggerInterval` | 1m | 后台平衡任务的定时触发间隔 |
+| `streaming.walBalancer.backoffInitialInterval` | 10ms | 任务失败后的退避起始间隔 |
+| `streaming.walBalancer.backoffMultiplier` | 2 | 退避倍数 |
+| `streaming.walBalancer.backoffMaxInterval` | 5s | 退避间隔上限 |
+| `streaming.walBalancer.operationTimeout` | 30m | 单次 assign / remove 操作的超时 |
+| `streaming.walBalancer.balancePolicy.name` | `vchannelFair` | 平衡策略；v3.0.1 注册的策略只有这一个 |
+| `streaming.walBalancer.balancePolicy.allowRebalance` | true | 关闭后仅做恢复性分配，跳过再平衡迁移 |
+| `streaming.walBalancer.balancePolicy.minRebalanceIntervalThreshold` | 5m | 同一 PChannel 两次迁移的最短间隔 |
+| `streaming.walBalancer.balancePolicy.allowRebalanceRecoveryLagThreshold` | 1s | 恢复滞后超过它则禁止迁移该 PChannel |
+| `streaming.walBalancer.balancePolicy.vchannelFair.pchannelWeight` | 0.4 | PChannel 数量均衡权重 |
+| `streaming.walBalancer.balancePolicy.vchannelFair.vchannelWeight` | 0.3 | VChannel 数量均衡权重 |
+| `streaming.walBalancer.balancePolicy.vchannelFair.antiAffinityWeight` | 0.01 | 同 collection VChannel 分散权重 |
+| `streaming.walBalancer.balancePolicy.vchannelFair.rebalanceTolerance` | 0.01 | 采纳新布局所需的最小改善 |
+| `streaming.walBalancer.balancePolicy.vchannelFair.rebalanceMaxStep` | 3 | 每轮参与重排的 PChannel 数上限 |
 
 ## TimeTick as MVCC Visibility Boundary
 
@@ -78,22 +105,32 @@ msgdispatcher（`pkg/mq/msgdispatcher/`）是节点内的「消费共享层」�
 | RootCoord 在 StreamingNode 就绪后停发 DDL 与 proxy timetick            | 时序信号改由 StreamingNode 发出                    |
 | QueryCoord 优先把 channel 与 segment 分给 WAL 所在节点                     | 该节点即 StreamingQueryNode，副本数不足时报错          |
 
+两类 flush 控制消息在 flusher 的 `msg_handler_impl.go` 里分工要分清：`HandleFlush` **只**对消息指定的 segment 调 `wbMgr.SealSegments`，并不推进 channel 级 flush；`FlushChannel` 只出现在 `HandleManualFlush`、`HandleFlushAll` 与 `HandleTruncateCollection` 中——手动 flush / flush all 才会额外对 write buffer 调 `SetFlushTimestamp`，把 channel 数据推进到消息携带的 TimeTick。
+
 旧落盘模型里的 `DataSyncService` **并未退出生产路径，它就是 3.0 落盘的载体本身**：StreamingNode flusher 在 `internal/streamingnode/server/flusher/flusherimpl/flusher_components.go` 里为每个 VChannel 建一个服务——收到 create collection 消息时用 `NewEmptyStreamingNodeDataSyncService`，恢复或订阅已有 channel 时用 `NewStreamingNodeDataSyncService`，输入不再是 msgdispatcher 的注册流而是一个 `input <-chan *msgstream.MsgPack`，由 `WALFlusherImpl` 直接投喂。真正只剩测试可达的是旧构造器 `NewDataSyncService`（走 `DispClient` 注册 msgdispatcher 的那条路）与管理它的 `FlowgraphManager`——`NewFlowgraphManager` 在 v3.0.1 无任何生产调用点，只出现在同包的测试与 mock 中。开关本身的更多部署含义见 [Deployment and Ops](/docs/CS/DB/Milvus/Deployment_and_Ops.md)。
 
 ## WAL Retention and Checkpoint
 
 WAL 不能无限增长，但它的截断必须与恢复状态对齐，否则会破坏核心不变量。StreamingNode 的 `wal/recovery/` 即 **RecoveryStorage**，负责把 WAL 消费状态持久化：`WALCheckpoint` 记录 `MessageID`、`TimeTick` 与 `ReplicateCheckpoint` 到 etcd，VChannel 元数据与 segment 分配随之内嵌，segment 数据落对象存储。它保证的**核心不变量**是：从任意 WAL 位置加上对应持久化状态，都能向前重放 WAL 恢复出一致的内存态。
 
-Truncate 与这一 checkpoint 直接挂钩：截断点只能推进到「恢复状态已经持久化覆盖」的位置，让 checkpoint 之前的历史日志可安全回收，而 checkpoint 之后的日志始终为故障恢复、副本重放与 CDC 保留。换句话说，**checkpoint 决定 WAL 保留的下界**，二者必须一起前进。恢复与复制如何消费这些保留窗口，见 [Write Path](/docs/CS/DB/Milvus/Write_Path.md) 与 [Distributed Systems](/docs/CS/Distributed/Distributed.md)。
+Truncate 与这一 checkpoint 直接挂钩：截断点只能推进到「恢复状态已经持久化覆盖」的位置，让 checkpoint 之前的历史日志可安全回收，而 checkpoint 之后的日志始终为故障恢复、副本重放与 CDC 保留（复制侧如何消费保留窗口见 [CDC and Replication](/docs/CS/DB/Milvus/CDC_and_Replication.md)）。换句话说，**checkpoint 决定 WAL 保留的下界**，二者必须一起前进。恢复与复制如何消费这些保留窗口，见 [Write Path](/docs/CS/DB/Milvus/Write_Path.md) 与 [Distributed Systems](/docs/CS/Distributed/Distributed.md)。
+
+### Truncation Mechanism
+
+截断的真实机制（此前留白，本轮已核实）：生产代码里唯一调用 `WALImpls.Truncate` 的地方就是 RecoveryStorage 的后台任务。快照持久化按 `streaming.walRecovery.persistInterval`（默认 10s）周期执行，脏消息超过 `streaming.walRecovery.maxDirtyMessage`（100 条）时立即触发；写入顺序固定为 VChannel 元数据与 segment 分配、可选的 SalvageCheckpoint、最后 consume checkpoint（`SaveConsumeCheckpoint`），持久化成功后才调用 `simpleTruncateCheckpoint` 推进截断——「先持久化、后截断」是代码里的硬顺序，而不是约定。
+
+截断点取两个水位的较小值：**recovery 的 consume checkpoint** 与 **flusher checkpoint**。flusher checkpoint 逐 VChannel 推进——flusher 把 channel 位点经 `UpdateChannelCheckpoint` RPC 上报 DataCoord，回调在 RPC 成功后才写入 `UpdateFlusherCheckpoint`；截断前取所有 VChannel 中最小的 flush checkpoint，任何一个 VChannel 尚未上报就整条 PChannel 不截断。于是保留窗口被两个条件共同卡住：恢复状态没追上的位置不能截，数据没落盘且没上报的位置也不能截。
+
+`Truncate` 在四个后端上的落差本身也是语义：只有 Woodpecker 真正实现截断（`walImpl.Truncate` 把底层 log 截到给定 logMsgId）；Kafka 与 RocksMQ 的同名方法直接返回 nil，Pulsar 在 `backlogClearHelper` 存在时（v3.0.1 恒存在）同样返回 nil——这三种后端的日志保留完全交给各后端自身的 retention 策略。截断后 Woodpecker 再按 `woodpecker.logstore.retentionPolicy.ttl`（默认 72h）清理被截断的 segment，Woodpecker 存储侧细节见 [Woodpecker](/docs/CS/DB/Milvus/Woodpecker.md)。
 
 ## Links
 
 - [Milvus](/docs/CS/DB/Milvus/Milvus.md)
 - [Write Path](/docs/CS/DB/Milvus/Write_Path.md)
 - [Query Path](/docs/CS/DB/Milvus/Query_Path.md)
+- [CDC and Replication](/docs/CS/DB/Milvus/CDC_and_Replication.md)
+- [Woodpecker](/docs/CS/DB/Milvus/Woodpecker.md)
 - [WAL](/docs/CS/DB/WAL.md)
-- [MQ](/docs/CS/MQ/MQ.md)
-- [Distributed Systems](/docs/CS/Distributed/Distributed.md)
 
 ## References
 

@@ -236,7 +236,7 @@ Milvus Distributed 可以部署在 Kubernetes 集群上。这种部署采用云�
 
 ## The WAL Convergence
 
-要理解 3.0 的一切，先接受一个前提：**数据不再「写进存储」，而是「追加进日志」**。[WAL and StreamingNode](/docs/CS/DB/Milvus/WAL_and_StreamingNode.md) 从后端抽象讲起——`pkg/streaming/walimpls` 把 RocksMQ、Kafka、Pulsar、Woodpecker 注册成可替换实现，之上是 PChannel / VChannel / CChannel 三层通道模型，用一个结构同时满足「多 collection 共享一条物理日志」「单 collection 内严格保序」「集群级变更需要唯一排序点」。日志的持有者是 StreamingNode，它靠单调递增的 Term 隔离失效归属，靠 TimeTick 划出 MVCC 的可见性边界；这也是 WAL 敢当真相源的底气。
+要理解 3.0 的一切，先接受一个前提：**数据不再「写进存储」，而是「追加进日志」**。[WAL and StreamingNode](/docs/CS/DB/Milvus/WAL_and_StreamingNode.md) 从后端抽象讲起——`pkg/streaming/walimpls` 把 RocksMQ、Kafka、Pulsar、Woodpecker 注册成可替换实现，之上是 PChannel / VChannel / CChannel 三层通道模型，用一个结构同时满足「多 collection 共享一条物理日志」「单 collection 内严格保序」「集群级变更需要唯一排序点」。日志的持有者是 StreamingNode，它靠单调递增的 Term 隔离失效归属，靠 TimeTick 划出 MVCC 的可见性边界；这也是 WAL 敢当真相源的底气。后端之间并非等价替换：Kafka 与 Pulsar 把持久化外包给成熟消息系统，RocksMQ 是单机嵌入，而 Woodpecker 是官方自研的云原生日志，用「quorum + 对象存储」同时买到低运维与无限容量——它的两种运行模式与取舍单独成篇：[Woodpecker](/docs/CS/DB/Milvus/Woodpecker.md)。
 
 有了这层地基，[Write Path](/docs/CS/DB/Milvus/Write_Path.md) 讲的端到端链路就变得顺理成章：Proxy 完成校验与取号后把 DML 打成 WAL 消息，TSO、RowID、TimeTick 三个号码都源自 MixCoord——正因取号频率如此之高，3.0 把四个协调者合进单进程才有意义。落盘只是 WAL 的第一路消费者，QueryNode 的实时可见是第二路，两条路互不等待，所以「写完立刻能读」不需要等 flush。
 
@@ -254,7 +254,9 @@ Milvus Distributed 可以部署在 Kubernetes 集群上。这种部署采用云�
 
 ## Running It
 
-形态与选型是部署的真正分水岭：同一套代码在 Lite / Standalone / Cluster 之间切换，查询与写入机制完全相同，生产可用性由三个外部依赖决定——WAL 后端、元数据 KV、对象存储。[Deployment and Ops](/docs/CS/DB/Milvus/Deployment_and_Ops.md) 给出四后端对比与选择算法、配置三层叠加与「哪些改动必须重启」、可观测性入口、配额与限流为什么是写请求被拒的第一嫌疑、以及 Database / RBAC / Resource Group / Partition Key 四层多租户各自的事实落在哪个组件。动手环节看 [Deploy](/docs/CS/DB/Milvus/Deploy.md)：etcd + Kafka KRaft 三节点集群的完整实操。
+形态与选型是部署的真正分水岭：同一套代码在 Lite / Standalone / Cluster 之间切换，查询与写入机制完全相同，生产可用性由三个外部依赖决定——WAL 后端、元数据 KV、对象存储。[Deployment and Ops](/docs/CS/DB/Milvus/Deployment_and_Ops.md) 给出四后端对比与选择算法、配置三层叠加与「哪些改动必须重启」、可观测性入口、配额与限流为什么是写请求被拒的第一嫌疑、以及 Database / RBAC / Resource Group / Partition Key 四层多租户各自的事实落在哪个组件。
+
+两件横切的事也在这条线上：跨集群容灾不在同一套 WAL 之内——CDC 角色从源集群日志读消息、经目标集群 Proxy 落入目标 WAL，复制的是变更流而非存储快照，见 [CDC and Replication](/docs/CS/DB/Milvus/CDC_and_Replication.md)；而跨进程、跨语言（Go↔C++）、跨协议（gRPC/REST）的失败语义由统一错误契约 merr 承担，排障时看到的每一个错误码都出自那里，见 [Error Model](/docs/CS/DB/Milvus/Error_Model.md)。动手环节看 [Deploy](/docs/CS/DB/Milvus/Deploy.md)：etcd + Kafka KRaft 三节点集群的完整实操。
 
 ## Default Values Worth Memorizing
 
@@ -266,6 +268,8 @@ Milvus Distributed 可以部署在 Kubernetes 集群上。这种部署采用云�
 | 对象存储回收节奏 | `dataCoord.gc.interval` 3600s、`dropTolerance` 10800s | Compaction and Lifecycle |
 | 新存储引擎开关 | `useLoonFFI` 默认 false，未全量切换 | Storage Layer |
 | WAL 后端 | `mq.type` 默认 `default` 按形态推断，且**首次启动即钉进 etcd 不可热换** | Deployment and Ops |
+| Bounded 一致性的回退量 | `common.gracefulTime` 5000 ms | Query Path |
+| PChannel 再平衡保护 | `allowRebalance` true；迁移间隔 5m、恢复滞后 >1s 禁迁移 | WAL and StreamingNode |
 | 内存保护水位 | 0.85 开始线性降速、0.95 直接拒写 | Deployment and Ops |
 | RBAC | `common.security.authorizationEnabled` 默认 false | Deployment and Ops |
 
