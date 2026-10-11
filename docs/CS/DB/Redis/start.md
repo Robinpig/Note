@@ -1,5 +1,8 @@
 ## Introduction
 
+> [!NOTE]
+> 版本基线 **Redis 8.10.2**；本页机制若与其他版本口径冲突，以 [Redis 版本基线](/docs/CS/DB/Redis/Redis.md?id=version-baseline) 为准。
+
 The following are the most important steps in order to startup the Redis server.
 
 * `initServerConfig()` setups the default values of the `server` structure.

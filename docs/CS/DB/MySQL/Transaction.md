@@ -565,7 +565,6 @@ XA : isolation level must be `SERIALIZABLE`
 - [Locks](/docs/CS/DB/MySQL/lock.md)
 - [Transaction Flow](/docs/CS/DB/MySQL/Transaction_Flow.md)
 - [Undo Log](/docs/CS/DB/MySQL/undolog.md)
-- [InnoDB](/docs/CS/DB/MySQL/InnoDB.md)
 - [Version Migration](/docs/CS/DB/MySQL/Version_Migration.md)
 - [Transaction (SE)](/docs/CS/SE/Transaction.md)
 

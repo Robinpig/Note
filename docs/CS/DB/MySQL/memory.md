@@ -663,6 +663,7 @@ Shard when single table szie > InnoDB Buffer Pool size(`innodb_buffer_pool_size`
 - [Undo Log](/docs/CS/DB/MySQL/undolog.md)
 - [Tablespace](/docs/CS/DB/MySQL/tablespace.md)
 - [Doublewrite Buffer](/docs/CS/DB/MySQL/Double-Buffer.md)
+- [Redis Persistence](/docs/CS/DB/Redis/persist.md)
 
 ## References
 

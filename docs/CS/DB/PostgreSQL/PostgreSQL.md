@@ -471,6 +471,7 @@ log_temp_files = 0
 - [Database 综述](/docs/CS/DB/DB.md)
 - [B-Link Tree](/docs/CS/Algorithms/tree/B_Link_Tree.md)
 - [PostgreSQL Internals（源码分析）](/docs/CS/DB/PostgreSQL/Internals.md)
+- [MySQL Server](/docs/CS/DB/MySQL/MySQL.md)
 
 ## References
 

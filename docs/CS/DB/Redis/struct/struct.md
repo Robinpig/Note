@@ -40,6 +40,18 @@ typedef struct redisObject {
 
 Redis objects are used extensively in the Redis internals, however in order to avoid the overhead of indirect accesses, recently in many places we just use plain dynamic strings not wrapped inside a Redis object.
 
+## Directory Navigation
+
+本目录 16 篇，按「通用字符串 → 集合类型 → 编码实现 → 专用结构」组织。`Redis` 对象与key 的字典体系在父级页 [redisDb.md](/docs/CS/DB/Redis/redisDb.md)，本页只讲被 `robj.ptr` 指向的具体结构。
+
+**字符串与通用编码**：[SDS](/docs/CS/DB/Redis/struct/SDS.md) 是 Redis 自己的动态字符串实现（长度前缀 + 分配策略 + 二进制安全），一切字符串值的底座；[bitmap](/docs/CS/DB/Redis/struct/bitmap.md) 是在普通 string 上做的位操作封装。
+
+**集合类型**：[hash](/docs/CS/DB/Redis/struct/hash.md) 讲哈希表编码与其 listpack 小对象编码；[list](/docs/CS/DB/Redis/struct/list.md) 与合并后的 [quicklist](/docs/CS/DB/Redis/struct/quicklist.md) 是链表与 quicklist 的关系；[set](/docs/CS/DB/Redis/struct/set.md) 与整数集合 [intset](/docs/CS/DB/Redis/struct/intset.md) 是两种集合编码；[zset](/docs/CS/DB/Redis/struct/zset.md) 是有序集合，其跳表底层单独成篇 [skiplist](/docs/CS/DB/Redis/struct/skiplist.MD)。
+
+**压缩表示**：[ziplist](/docs/CS/DB/Redis/struct/ziplist.md) 与 [listpack](/docs/CS/DB/Redis/struct/listpack.md) 是 ziplist 及其后继listpack 的实现，小元素聚合编码依赖它们。
+
+**专用结构**：[Stream](/docs/CS/DB/Redis/struct/Stream.md) 是持久化消息流（rax 索引 + listpack 打包，消费组与 PEL）；[geo](/docs/CS/DB/Redis/struct/geo.md) 是经纬度编码（Zset 的 52 位地理哈希）；[HyperLogLog](/docs/CS/DB/Redis/struct/HyperLogLog.md) 与 [BloomFilter](/docs/CS/DB/Redis/struct/BloomFilter.md) 是两个近似基数/概率结构。
+
 ## Data Types
 
 Data structures implemented into Redis have a few special properties:
@@ -381,7 +393,8 @@ A [Redis script](/docs/CS/DB/Redis/struct/struct.md?id=lua-scripts) is transacti
 
 ## Links
 
-- [Redis](/docs/CS/DB/Redis/struct/struct.md)
+- [Redis](/docs/CS/DB/Redis/Redis.md)
+- [redisDb.md](/docs/CS/DB/Redis/redisDb.md)
 
 ## References
 

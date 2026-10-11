@@ -464,6 +464,8 @@ It describes limits for `InnoDB` tables, indexes, tablespaces, and other aspects
 ## Links
 
 - [MySQL Server](/docs/CS/DB/MySQL/MySQL.md)
+- [B Link Tree](/docs/CS/DB/BLink-Tree.md)
+- [Indexes](/docs/CS/DB/Index.md)
 
 ## References
 

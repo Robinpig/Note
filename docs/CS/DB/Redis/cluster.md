@@ -1,5 +1,8 @@
 ## Introduction
 
+> [!NOTE]
+> 版本基线 **Redis 8.10.2**；本页机制若与其他版本口径冲突，以 [Redis 版本基线](/docs/CS/DB/Redis/Redis.md?id=version-baseline) 为准。
+
 Redis Cluster is a distributed implementation of Redis with the following goals in order of importance in the design:
 
 - High performance and linear scalability up to 1000 nodes. There are no proxies, asynchronous replication is used, and no merge operations are performed on values.

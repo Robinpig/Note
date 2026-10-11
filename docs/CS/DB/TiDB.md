@@ -131,7 +131,8 @@ TiFlash 主要包含两个组件 一个是列式存储引擎组件 一个是处�
 ## Links
 
 - [DataBases](/docs/CS/DB/DB.md)
-
+- [MySQL Replication](/docs/CS/DB/MySQL/replica.md)
+- [Transaction Flow](/docs/CS/DB/MySQL/Transaction_Flow.md)
 
 ## References
 

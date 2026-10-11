@@ -1,3 +1,78 @@
+## Version Baseline
+
+> [!IMPORTANT]
+> 本页及`Redis/` 子树的所有默认值、命令可用性均以 **Redis 8.10.2（2026-09-17）** 为基线。
+> 读到与下表冲突的旧口径表述时，一律以本基线为准。
+
+**当前版本**：8.10.2，发布于 2026-09-17（`src/version.h:1` → `REDIS_VERSION "8.10.2"`）。
+
+**支持状态**（来源：官方仓库 `unstable` 分支 `SECURITY.md`，注意 tag 内的副本是旧矩阵，不要用）：
+
+| 版本线 | 状态 |
+| :-- | :-- |
+| 8.10.x / 8.8.x / 8.6.x / 8.4.x / 8.2.x | 支持 |
+| **8.0.x** | **已 EOL**（唯一被跳过的 8.x 线） |
+| 7.4.x / 7.2.x | 支持；7.2.x 延长至 7.4 停止支持为止 |
+
+Redis 官方**未公布**「3 年 / 5 年」这类年限承诺，唯一口径是上述支持矩阵加一句模糊的「通常回移到上一个 major 版本」。
+
+**许可证时间线**（这是最容易记错的一项，来源：各 tag 内 `LICENSE.txt` / `COPYING` 原文）：
+
+| 版本 | 许可 | 依据 |
+| :-- | :-- | :-- |
+| ≤ 7.2.x | **BSD-3-Clause** | 7.2.4 根目录文件是 `COPYING`，内容为 BSD 三条款；8.0 的 `LICENSE.txt` 反向印证「7.2 and prior releases remain subject to the BSDv3 clause license」 |
+| **7.4.0**（2024-07-29） | **RSALv2 + SSPLv1 双许可** —— 首个非 BSD 版本 | `7.4.0/LICENSE.txt`：`Starting on March 20th, 2024, Redis follows a dual-licensing model with all Redis project code contributions under version 7.4 and subsequent releases` |
+| **8.0.0**（2025-05-02） | **RSALv2 + SSPLv1 + AGPLv3 三选一** | `8.0.0/LICENSE.txt` 首段：`moving to a tri-licensing model ... your choice of: (a) RSALv2; or (b) SSPLv1; or (c) AGPLv3` |
+
+三个易错点纠正：
+
+- **7.2.x 才是最后一个 BSD 系列**，7.4 就已经不是 BSD 了 —— 「7.4 是最后 BSD 版」是错的。
+- **SSPLv2 从未被 Redis 采用过**，只有 SSPLv1；AGPLv3 是 8.0 起新增的第三个**可选**许可，不是「8.0 改成 AGPLv3」。
+- 因此 [Valkey](/docs/CS/DB/Valkey.md) 的分叉点是 7.2.4（BSD），此后 Redis 转私有许可才促成 2024-03 的社区分叉。
+
+**8.x 关键能力节点**（用于判断某特性是否可用）：
+
+| 版本 | 日期 | 关键变化 |
+| :-- | :-- | :-- |
+| 7.2.0 | 2023-08-15 | `WAITAOF`、`CLIENT NO-TOUCH`、`CLIENT SETINFO`、`CLUSTER MYSHARDID`（新增 4 个，**无删除无改名**） |
+| **7.4.0** | 2024-07-29 | **Hash 字段级过期 9 个命令**（`HEXPIRE`/`HPEXPIRE`/`HEXPIREAT`/`HPEXPIREAT`/`HPERSIST`/`HEXPIRETIME`/`HPEXPIRETIME`/`HTTL`/`HPTTL`）；`XREAD` 支持 `+`；`HSCAN NOVALUES` |
+| **8.0.0** | 2025-05-02 | 更名 Redis Open Source；**许可三选一**；Query Engine 与 JSON / Time Series / Bloom / Cuckoo / Count-min sketch / Top-k / t-digest / Vector set[beta] 内建；新 I/O 线程实现；`HGETDEL`/`HGETEX`/`HSETEX` |
+| 8.2.0 | 2025-08-04 | `XDELEX`/`XACKDEL`；`BITOP` 新增 `DIFF`/`DIFF1`/`ANDOR`/`ONE`；SVS-VAMANA 向量索引 |
+| 8.4.0 | 2025-11-18 | `DIGEST`/`DELEX`/`MSETEX`；`CLUSTER MIGRATION`（原子 slot 迁移）；`CLUSTER SLOT-STATS` |
+| 8.6.0 | 2026-02-10 | **新增 LRM 淘汰策略**（见下）；hash/zset 内存下降；`XADD` 幂等；`HOTKEYS` |
+| 8.8.0 | 2026-05-25 | **新数据结构 Array**（18 个 `AR*` 命令）；hash 字段级子键通知；`INCREX`；`XNACK` |
+| 8.10.0 | 2026-07-29 | **Compact hash**（共享 schema 的field name 只存一份）+ `HIMPORT`；`LMOVEM`/`BLMOVEM`；`SUNIONCARD`/`SDIFFCARD`；`BACKUP`（基于 MP-AOF） |
+| **8.10.2** | 2026-09-17 | 当前最新 GA；安全修复（ACL 事务绕过、cluster bus 未认证） |
+
+**易记错默认值汇总表**（全部取自 8.10.2 `src/config.c`，与 7.2.4 逐项对照过，**唯一差异是 `maxmemory-samples` 上限从 `1, INT_MAX` 收紧为 `1, 64`**）：
+
+| 配置项 | 默认值 | 出处 |
+| :-- | :-- | :-- |
+| `maxmemory-policy` | `noeviction` | `config.c:3491` |
+| `maxmemory-samples` | `5`（范围 1–**64**） | `config.c:3522` |
+| `appendonly` | `0` / no（**AOF 默认关闭**） | `config.c:3435` |
+| `appendfsync` | `everysec` | `config.c:3492` |
+| `save` | `3600 1` / `300 100` / `60 10000` | 编译进二进制，见 `server.c:2489-2491`，非配置默认值 |
+| `timeout` | `0`（永不超时） | `config.c:3524` |
+| `maxclients` | `10000` | `config.c:3553` |
+| `io-threads` | `1`（**单线程**，范围 1–128，`IMMUTABLE_CONFIG` 运行时不可改） | `config.c:3507` |
+| `cluster-node-timeout` | `15000` ms | `config.c:3574` |
+| `lazyfree-lazy-expire` / `-eviction` / `-server-del` / `-user-del` / `-user-flush` | 全部 `0` / no | `config.c:3410-3414` |
+| `slowlog-log-slower-than` | `10000`（**单位微秒**） | `config.c:3579` |
+| `slowlog-max-len` | `128` | `config.c:3568` |
+
+**淘汰策略共 10 种，不是 8 种**（`config.c:39-51` 枚举表 + `redis.conf` + 官方 docs 三处一致）：
+`noeviction`、`allkeys-lru`、`allkeys-lrm`、`allkeys-lfu`、`allkeys-random`、`volatile-lru`、`volatile-lrm`、`volatile-lfu`、`volatile-random`、`volatile-ttl`。
+
+- `lru` 与 `lrm` 的区别在于**时间戳更新时机**：LRU 在**读和写**时都更新，LRM **只在写**时更新（`src/db.c` 注释原文：`LRM policy should NOT update timestamp on reads`）。8.6.0 起才引入 LRM；≤ 8.4 与 Valkey 都只有 8 种。
+- `volatile-xxx` 在没有 key 带过期时间时**行为等同 `noeviction`**（官方 docs 明述）。
+
+**Cluster 全覆盖是全有全无，不是「覆盖一半即挂」**：`src/cluster.h:22-23` 定义 `CLUSTER_SLOT_MASK_BITS 14` / `CLUSTER_SLOTS (1<<14)` = 16384；`src/cluster_legacy.c:5308-5318` 遍历全部 16384 个 slot，**任意一个**未被健康 master 覆盖即置 `CLUSTER_FAIL`——不存在中间态。该行为可由 `cluster-require-full-coverage no`（默认 `1`，`config.c:3420`）关闭。
+
+**后台线程数与 `BIO_NUM_OPS` 不是一回事**（本页与 `Concurrency.md` 曾长期混淆）：8.10.2 `src/bio.h:16-33` 有两组枚举——
+`bio_worker_t` 的 `BIO_WORKER_NUM = 3`（**线程数**），`bio_job_type_t` 的 `BIO_NUM_OPS = 7`（**任务类型数**，含 `BIO_CLOSE_AOF` 与三个 `BIO_COMP_RQ_*`）。
+「后台线程 3 个」是对的，但括号里写`BIO_NUM_OPS` 是错的。
+
 ## Introduction
 
 [Redis](https://redis.io)(Remote Dictionary Server) is often referred to as a *data structures* server.
@@ -8,7 +83,7 @@ Redis has **built-in replication, Lua scripting, LRU eviction, [transactions](/d
 
 > [!TIP]
 >
-> The Linux Foundation announced its intent to form [Valkey](/docs/CS/DB/Valkey.md), an open source alternative to the Redis in-memory, NoSQL data store.
+> 2024年 Redis 转为双许可后，社区与 Linux 基金会fork 出 [Valkey](/docs/CS/DB/Valkey.md)（基于 7.2.4，全程 BSD-3-Clause）。截至 2026-09 Valkey 已到 9.1.2，与 Redis 8.10.2 已明显分叉——**不要假设「Valkey 就是 Redis」**，两者命令集与配置键都有实质差异，详见 [Valkey 的分叉差异](/docs/CS/DB/Valkey.md?id=divergence-from-redis)。
 
 ## Features
 
@@ -690,11 +765,36 @@ MEMORY USAGE
 CLIENT LIST
 ```
 
+## Knowledge Map
+
+本目录共 41 篇，按「读源码的推进顺序」分成五组。启动与数据结构是底座，持久化与集群是两条独立主线，客户端与场景应用在最外层。
+
+**一、启动与事件循环 —— 服务器怎么跑起来、怎么转**
+
+枢纽页 Architecture 段之后，源码入口按`main()` 调用顺序展开：[start.md](/docs/CS/DB/Redis/start.md) 覆盖 `initServerConfig` → `initServer` → `aeMain` → 命令执行 → 关闭的完整主流程；[server.md](/docs/CS/DB/Redis/server.md) 拆解 `redisServer` 结构体与客户端、进程、缓存、监控子系统；事件循环本体在 [ae.md](/docs/CS/DB/Redis/ae.md)（`aeMain`、文件事件与时间事件、`epoll` 边缘触发），并发模型（子进程 + 主线程 + 后台线程 + IO 线程）在 [Concurrency.md](/docs/CS/DB/Redis/Concurrency.md)，后台线程的 `bio.c`/`lazyfree.c` 源码级展开在 [io.md](/docs/CS/DB/Redis/io.md)。
+
+**二、数据结构与对象模型 —— 内存里长什么样**
+
+总纲在 [struct/struct.md](/docs/CS/DB/Redis/struct/struct.md)（key/object 编码体系与各类型概览），字典对象在 [redisDb.md](/docs/CS/DB/Redis/redisDb.md)（`redisDb`、`redisObject`、get/set/delete 三条路径）。具体结构各自成篇：字符串 [SDS](/docs/CS/DB/Redis/struct/SDS.md)、哈希 [hash](/docs/CS/DB/Redis/struct/hash.md)（含 listpack 编码）、列表 [list](/docs/CS/DB/Redis/struct/list.md) 与合并后的 [quicklist](/docs/CS/DB/Redis/struct/quicklist.md)、旧版压缩列表 [ziplist](/docs/CS/DB/Redis/struct/ziplist.md) 与 [listpack](/docs/CS/DB/Redis/struct/listpack.md)、集合 [set](/docs/CS/DB/Redis/struct/set.md) 与 [intset](/docs/CS/DB/Redis/struct/intset.md)、有序集合 [zset](/docs/CS/DB/Redis/struct/zset.md) 与 [skiplist](/docs/CS/DB/Redis/struct/skiplist.MD)、位图 [bitmap](/docs/CS/DB/Redis/struct/bitmap.md)、地理编码 [geo](/docs/CS/DB/Redis/struct/geo.md)、Stream [Stream](/docs/CS/DB/Redis/struct/Stream.md)。近似去重类结构单列：[HyperLogLog](/docs/CS/DB/Redis/struct/HyperLogLog.md) 与 [BloomFilter](/docs/CS/DB/Redis/struct/BloomFilter.md)。
+
+**三、持久化 —— RDB / AOF 两条独立主线**
+
+[persist.md](/docs/CS/DB/Redis/persist.md) 是本组枢纽，覆盖 RDB、AOF、混合持久化（multi-part AOF）以及三者的取舍；AOF 重写机制的触发条件在 `server.c` 的 `aofRewriteLimited`（8.10.2 口径，见本页 Tuning 段）。内存侧的对应话题在 [memory.md](/docs/CS/DB/Redis/memory.md)（共享对象、淘汰、maxmemory、LRU/LFU 算法与编码开销）。
+
+**四、高可用与扩展 —— 单机之外的形态**
+
+复制在 [Replication.md](/docs/CS/DB/Redis/Replication.md)（含 PSYNC、部分重同步、过期键传递），哨兵在 [sentinel.md](/docs/CS/DB/Redis/sentinel.md)（定时器、选主、故障转移），分片在 [cluster.md](/docs/CS/DB/Redis/cluster.md)（Gossip、`CLUSTER SLOTS`、Failover 与 cron 任务）。集群下 slot 到 key 的映射细节见 [redisDb.md](/docs/CS/DB/Redis/redisDb.md) 的 `slotToKey*` 一节。
+
+**五、客户端、扩展与场景应用**
+
+Java 客户端三家各一篇：[Jedis](/docs/CS/DB/Redis/Jedis.md)（阻塞直连、连接池与 JMX）、[Lettuce](/docs/CS/DB/Redis/Lettuce.md)（Netty、三种调用模型与拓扑刷新）、[Redisson](/docs/CS/DB/Redis/Redisson.md)（锁与同步器封装）。扩展机制在 [module.md](/docs/CS/DB/Redis/module.md)（`moduleInitModulesSystem` 与模块加载）和 [command.md](/docs/CS/DB/Redis/command.md)（命令定义与 `addReply` 回复约定），服务端脚本能力在 [Lua.md](/docs/CS/DB/Redis/Lua.md)（含自带的 Lua debugger）。把 Redis 当缓存用（雪崩/穿透/击穿、更新策略）见 [Cache.md](/docs/CS/DB/Redis/Cache.md)，作为消息队列用（Pub/Sub、Streams 消费组、消费模型）见 [MQ.md](/docs/CS/DB/Redis/MQ.md) 与 [PubSub.md](/docs/CS/DB/Redis/PubSub.md)（注意本库口径：**Redis 归DB，不归 MQ 专题**，MQ 侧只做对照）。分布式锁实现对比见 [Lock.md](/docs/CS/DB/Redis/Lock.md)，客户端侧缓存（tracking 协议）在本页 Client side caching 段。压测工具用法在 [benchmark.md](/docs/CS/DB/Redis/benchmark.md)，检索扩展见 [RediSearch.md](/docs/CS/DB/Redis/RediSearch.md)。
+
 ## Links
 
 - [DataBases](/docs/CS/DB/DB.md?id=redis)
+- [Valkey](/docs/CS/DB/Valkey.md)
 - [Pika](/docs/CS/DB/Pika.md)
-- Java 客户端：[Jedis](/docs/CS/DB/Redis/Jedis.md) / [Lettuce](/docs/CS/DB/Redis/Lettuce.md) / [Redisson](/docs/CS/DB/Redis/Redisson.md)
+- [MySQL Storage Engines](/docs/CS/DB/MySQL/plugin.md)
 
 ## References
 

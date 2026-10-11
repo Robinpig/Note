@@ -68,3 +68,5 @@ KeyGeneratorConfiguration
 ## Links
 
 - [DataBases](/docs/CS/DB/DB.md)
+- [Database Standards](/docs/CS/DB/MySQL/Database_Standards.md)
+

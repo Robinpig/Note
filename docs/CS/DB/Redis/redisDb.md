@@ -1,6 +1,7 @@
 ## Introduction
 
-
+> [!IMPORTANT]
+> 版本基线 **Redis 8.10.2**，完整版本表与易踩默认值见 [Redis 版本基线](/docs/CS/DB/Redis/Redis.md?id=version-baseline)。
 
 [redisServer](/docs/CS/DB/Redis/server.md?id=server) 中存储着redisDb数组的指针
 

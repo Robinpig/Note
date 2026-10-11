@@ -1,5 +1,8 @@
 ## Introduction
 
+> [!NOTE]
+> 版本基线 **Redis 8.10.2**；本页机制若与其他版本口径冲突，以 [Redis 版本基线](/docs/CS/DB/Redis/Redis.md?id=version-baseline) 为准。
+
 At the base of Redis replication (excluding the high availability features provided as an additional layer by Redis Cluster or Redis Sentinel) there is a *leader follower* (master-replica) replication that is simple to use and configure.
 It allows replica Redis instances to be exact copies of master instances.
 The replica will automatically reconnect to the master every time the link breaks, and will attempt to be an exact copy of it *regardless* of what happens to the master.
@@ -942,6 +945,7 @@ replica-ignore-maxmemory no
 ## Links
 
 - [Redis](/docs/CS/DB/Redis/Redis.md?id=persistence)
+- [MySQL Replication](/docs/CS/DB/MySQL/replica.md)
 
 ## References
 

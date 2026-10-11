@@ -34,3 +34,5 @@ canal 模拟 MySQL slave 的交互协议，向 MySQL master 发送 dump 协议�
 ## Links
 
 - [MySQL binlog](/docs/CS/DB/MySQL/binlog.md)
+- [MySQL Replication](/docs/CS/DB/MySQL/replica.md)
+

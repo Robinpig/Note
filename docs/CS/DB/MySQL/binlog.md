@@ -227,6 +227,7 @@ FLUSH PRIVILEGES;
 - [复制与主从延迟 replica](/docs/CS/DB/MySQL/replica.md)
 - [事务 Transaction](/docs/CS/DB/MySQL/Transaction.md)
 - [InnoDB 存储引擎](/docs/CS/DB/MySQL/InnoDB.md)
+- [Canal](/docs/CS/DB/canal.md)
 
 ## References
 

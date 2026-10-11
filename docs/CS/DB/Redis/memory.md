@@ -1,5 +1,8 @@
 ## Introduction
 
+> [!NOTE]
+> 版本基线 **Redis 8.10.2**；本页机制若与其他版本口径冲突，以 [Redis 版本基线](/docs/CS/DB/Redis/Redis.md?id=version-baseline) 为准。
+
 Redis 是从三个方面来优化内存使用的，分别是内存分配、内存回收，以及数据替换。
 首先，在内存分配方面，Redis 支持使用不同的内存分配器，包括 glibc 库提供的默认分配器 tcmalloc、第三方库提供的 jemalloc。Redis 把对内存分配器的封装实现在了 zmalloc.h/zmalloc.c。
 其次，在内存回收上，Redis 支持设置过期 key，并针对过期 key 可以使用不同删除策略，这部分代码实现在 expire.c 文件中。同时，为了避免大量 key 删除回收内存，会对系统性能产生影响，Redis 在 lazyfree.c 中实现了异步删除的功能，所以这样，我们就可以使用后台 IO 线程来完成删除，以避免对 Redis 主线程的影响。
@@ -1022,7 +1025,8 @@ Small hashes are encoded in a very small space, so you should try representing y
 
 ## Links
 
-- [Redis](/docs/CS/DB/Redis/struct/struct.md)
+- [Redis](/docs/CS/DB/Redis/Redis.md)
+- [persist.md](/docs/CS/DB/Redis/persist.md)
 
 
 ## References

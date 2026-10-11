@@ -309,7 +309,7 @@ dberr_t btr_cur_update_in_place(ulint flags, btr_cur_t *cursor, ulint *offsets,
 - [Locks](/docs/CS/DB/MySQL/lock.md)
 - [Index](/docs/CS/DB/MySQL/Index.md)
 - [InnoDB](/docs/CS/DB/MySQL/InnoDB.md)
-- [Version Migration](/docs/CS/DB/MySQL/Version_Migration.md)
+- [PostgreSQL Internals](/docs/CS/DB/PostgreSQL/Internals.md)
 
 ## References
 

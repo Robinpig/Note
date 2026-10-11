@@ -32,6 +32,7 @@ TDDL（内部中间件） → DRDS（云上中间件服务） → PolarDB-X（�
 
 ## Links
 
+- [Database Standards](/docs/CS/DB/MySQL/Database_Standards.md)
 
 ## References
 

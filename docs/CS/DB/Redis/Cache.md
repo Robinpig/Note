@@ -67,7 +67,7 @@
 
 ## Links
 
-- [redis.conf](/docs/CS/DB/Redis/Concurrency.md)
+- [Concurrency](/docs/CS/DB/Redis/Concurrency.md)
 - [Jedis](/docs/CS/DB/Redis/Jedis.md)
 - [Lettuce](/docs/CS/DB/Redis/Lettuce.md)
 - [Lock](/docs/CS/DB/Redis/Lock.md)
