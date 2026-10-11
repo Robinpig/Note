@@ -314,7 +314,7 @@ select/poll/epoll 用一个系统调用同时等待大量 fd，机制与演进�
 
 ## AIO
 
-Native AIO（libaio）只支持 Direct IO，一直不温不火；io_uring（5.1+，Jens Axboe）用共享环形缓冲区提交/收割 IO，把真异步带上了 Linux，见 [io_uring](/docs/CS/OS/Linux/IO/io_uring.md)。
+Native AIO（libaio，内核实现见 [aio](/docs/CS/OS/Linux/IO/aio.md)）只支持 Direct IO、且对 buffered I/O 会在提交路径阻塞，一直不温不火；io_uring（5.1+，Jens Axboe）用共享环形缓冲区提交/收割 IO，把真异步带上了 Linux，见 [io_uring](/docs/CS/OS/Linux/IO/io_uring.md)。值得注意的是，Java 标准库的 [AsynchronousFileChannel 在 Linux 上并非内核 AIO，而是线程池模拟](/docs/CS/Java/JDK/IO/AsyncFileChannel.md)——正是内核 AIO 局限太多的结果。
 
 参考：[Design Notes on Asynchronous I/O (aio) for Linux](http://lse.sourceforge.net/io/aionotes.txt)
 
@@ -326,3 +326,4 @@ Native AIO（libaio）只支持 Direct IO，一直不温不火；io_uring（5.1+
 - [thundering herd（Socket 阻塞读）](/docs/CS/OS/Linux/proc/thundering_herd.md)
 - [ZeroCopy](/docs/CS/OS/Linux/ZeroCopy.md)
 - [DPDK](/docs/CS/OS/Linux/IO/DPDK.md)
+- [AsynchronousFileChannel：JDK 线程池模拟（对照内核 AIO）](/docs/CS/Java/JDK/IO/AsyncFileChannel.md)

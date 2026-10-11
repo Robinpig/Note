@@ -929,6 +929,7 @@ ET 使用上的两个常见坑：
 - [multiplexing（select/poll）](/docs/CS/OS/Linux/IO/multiplexing.md)
 - [io_uring](/docs/CS/OS/Linux/IO/io_uring.md)
 - [Nginx Event](/docs/CS/CN/nginx/event.md)
+- [JDK Selector 的 epoll 封装（JDK 侧）](/docs/CS/Java/JDK/IO/Selector_Epoll.md)
 
 ## References
 

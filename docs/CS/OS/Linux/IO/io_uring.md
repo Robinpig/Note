@@ -436,6 +436,8 @@ io_uring 把大量内核操作暴露到共享内存接口，历史上多次成�
 - [DPDK（内核旁路）](/docs/CS/OS/Linux/IO/DPDK.md)
 - [零拷贝 ZeroCopy](/docs/CS/OS/Linux/ZeroCopy.md)
 - [Nginx Event](/docs/CS/CN/nginx/event.md)
+- [JDK 与 io_uring 集成状态（JDK 侧）](/docs/CS/Java/JDK/IO/Uring.md)
+- [AsynchronousFileChannel 是线程池模拟（JDK 对照）](/docs/CS/Java/JDK/IO/AsyncFileChannel.md)
 
 ## References
 
