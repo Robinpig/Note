@@ -24,8 +24,49 @@
 - 存储布局：行式或列式
 - 编码：protobuf 或 Thrift
 
+本文按五个问题自上而下展开：**存得下**（Storing Data：存储结构、数据文件与索引文件、缓冲池）→ **找得快**（Finding Data：索引结构、多列与多维、全文与模糊、优化器与访问路径）→ **改不乱**（Changing Safely：事务、并发控制、WAL 与崩溃恢复）→ **扩得开**（Scaling Out：复制、分片、跨节点原子提交与共识）→ **算得动**（Analytics：OLAP 与数据仓库）。再用 **Choosing** 按数据模型收拢各产品家族，**Tuning** 记录容器化与线上排障的实测注意。每章末尾直接挂到本目录下的子页，不必回头翻目录。
 
-### Memory- Versus Disk-Based
+
+## Architecture
+
+数据库管理系统采用 client/server 模型：数据库系统实例（节点）扮演服务器，应用实例扮演客户端。
+
+数据库是模块化系统，由多个部分组成：接受请求的 transport 层、决定以最高效方式运行查询的查询处理器、实际执行操作的执行引擎，以及存储引擎。
+
+再往细一层，一套数据库还可以按层拆开：存储数据层（storage data layer）、缓存层（cache layer）、transport 层、执行层（execute layer）、日志层（log layer）与权限层（authority layer）；容错（tolerance）与并发（concurrency）则是贯穿这些层的关注点。
+
+
+
+
+
+<div style="text-align: center;">
+
+![数据库管理系统的架构](./img/DB.png)
+
+</div>
+
+<p style="text-align: center;">
+图 2：数据库管理系统的架构
+</p>
+
+
+客户端请求经由 transport 子系统到达。请求以查询的形式出现，大多用某种查询语言表达。transport 子系统还负责与数据库集群中其他节点的通信。
+
+收到请求后，transport 子系统把查询交给查询处理器，由它做解析、解释与校验。随后才进行访问控制检查，因为这些检查只有在查询被解释之后才能完整执行。
+
+解析后的查询交给查询优化器：它先剔除查询中不可能成立与冗余的部分，再基于内部统计信息（索引基数、近似交集大小等）和数据分布（集群中哪些节点持有数据、搬运数据的代价）寻找执行它的最高效方式。优化器既处理查询求解所需的关系运算（通常表示为依赖树），也负责索引顺序、基数估计、访问方法选择等优化。
+
+查询通常会以执行计划（execution plan / query plan）的形式给出：一系列为了得到完整结果必须执行的操作。同一个查询可以由不同的执行计划满足，效率也各不相同，于是优化器挑出其中最好的一个。
+
+执行计划交给执行引擎处理，由它收集本地与远程操作的执行结果。远程执行可能涉及向集群中其他节点读写数据，以及复制。
+
+本地查询（无论来自客户端还是其他节点）都由存储引擎执行。
+
+## Taxonomy
+
+数据库的分类不止一种口径，本章按四个维度依次展开：数据主要放在内存还是磁盘、按行还是按列摆放、宽列存储与列式存储的区别、以及向量带来的新类别；末尾再给一张「模型 × 机制」地图，作为整棵 DB 目录的索引。
+
+### Memory Versus Disk-Based
 
 数据库系统把数据存在内存与磁盘上。内存型数据库管理系统（in-memory / main memory DBMS）主要把数据放在内存，磁盘用于恢复与日志；磁盘型 DBMS 则把大部分数据放在磁盘，内存用来缓存磁盘内容或作临时存储。两类系统都会在一定程度上使用磁盘，只是内存数据库的内容几乎完全驻留在 RAM 中。
 
@@ -48,7 +89,7 @@
 
 有些场景可以合理地假设整个数据集都能放进内存。有些数据集天然受现实规模约束，例如学校的学生记录、企业的客户记录、网店的库存：每条记录不过几 Kb，条数也有限。
 
-### Column- Versus Row-Oriented
+### Row Versus Column-Oriented
 
 
 给数据库分类的一种方式，是看数据在磁盘上按行还是按列存放。表可以水平切分（把属于同一行的值存在一起），也可以垂直切分（把属于同一列的值存在一起）。图 1 展示了这种区别：(a) 按列切分值，(b) 按行切分值。
@@ -87,39 +128,28 @@
 向量数据库促进了快速且精确的相似性搜索，使其在机器学习、自然语言处理和计算机视觉等领域应用中不可或缺。
 它们还支持大型语言模型（LLM）的集成，增强了语义搜索、实时知识检索等任务的能力，并减少了 LLM 输出中常见的「幻觉」错误。
 
+### Model and Mechanism Map
 
-## Architecture
+把「数据模型 × 存储索引路线」摊成一张表，就是本目录的地图：行是模型，右列是该行在本库的入口页。
 
-数据库管理系统采用 client/server 模型：数据库系统实例（节点）扮演服务器，应用实例扮演客户端。
+| 数据模型 | 存储与索引路线 | 本库入口 |
+| :-- | :-- | :-- |
+| 关系（行式） | B+Tree 聚簇 + WAL + MVCC | [MySQL](/docs/CS/DB/MySQL/MySQL.md)、[PostgreSQL](/docs/CS/DB/PostgreSQL/PostgreSQL.md)、[Oracle](/docs/CS/DB/Oracle/Oracle.md)、[h2](/docs/CS/DB/h2/H2.md) |
+| 关系 · 分布式 | 分片 + 共识日志，兼容 MySQL 生态 | [TiDB](/docs/CS/DB/TiDB.md)、[OceanBase](/docs/CS/DB/OceanBase.md)、[PolarDB](/docs/CS/DB/PolarDB/PolarDB.md) |
+| 键值 / 缓存 | 内存 hashtable + skiplist | [Redis](/docs/CS/DB/Redis/Redis.md)、[Memcached](/docs/CS/DB/Memcached.md)、[Valkey](/docs/CS/DB/Valkey.md)、[Dragonfly](/docs/CS/DB/Dragonfly.md) |
+| 键值 · 磁盘引擎 | LSM Tree，可嵌入进程 | [LevelDB](/docs/CS/DB/LevelDB/LevelDB.md)、[RocksDB](/docs/CS/DB/RocksDB/RocksDB.md)、[SSDB](/docs/CS/DB/SSDB.md)、[Pika](/docs/CS/DB/Pika.md) |
+| 文档 | BSON 嵌套树 + 二级索引 | [MongoDB](/docs/CS/DB/MongoDB.md) |
+| 宽列 | 多维 map、列族内行存、LSM 后端 | [HBase](/docs/CS/DB/HBase.md)、[Cassandra](/docs/CS/DB/Cassandra.md) |
+| 列式 / 时序 | 按列连续存 + 压缩 + 向量化执行 | [ClickHouse](/docs/CS/DB/ClickHouse.md)、[Doris](/docs/CS/DB/Doris.md)、[Druid](/docs/CS/DB/Druid.md)、[InfluxDB](/docs/CS/DB/InfluxDB.md)、[Presto](/docs/CS/DB/Presto.md) |
+| 图 | 免索引邻接 / 外部 KV 上的邻接表 | [graph](/docs/CS/DB/graph/graph.md)、[Neo4j](/docs/CS/DB/graph/Neo4j.md)、[JanusGraph](/docs/CS/DB/graph/JanusGraph.md)、[NebulaGraph](/docs/CS/DB/graph/NebulaGraph.md) |
+| 向量 | ANN 图索引与聚类索引 | [vector](/docs/CS/DB/vector.md)、[Milvus](/docs/CS/DB/Milvus/Milvus.md) |
+| 中间件（不改存储） | 分库分表、binlog 增量订阅 | [ShardingSphere](/docs/CS/DB/ShardingSphere.md)、[TDDL](/docs/CS/DB/TDDL.md)、[canal](/docs/CS/DB/canal.md) |
 
-数据库是模块化系统，由多个部分组成：接受请求的 transport 层、决定以最高效方式运行查询的查询处理器、实际执行操作的执行引擎，以及存储引擎。
+跨模型复用的机制页单列一份：[Index](/docs/CS/DB/Index.md)（索引结构）、[WAL](/docs/CS/DB/WAL.md)（预写日志）、[BLink-Tree](/docs/CS/DB/BLink-Tree.md)（并发下的 B+Tree）、[Shard](/docs/CS/DB/Shard.md)（分片与再均衡）；算法与分布式侧的 [LSM Tree](/docs/CS/Algorithms/tree/LSM.md)、[Bigtable](/docs/CS/Distributed/Bigtable.md) 也已在本库。
 
+## Storing Data
 
-
-
-
-<div style="text-align: center;">
-
-![数据库管理系统的架构](./img/DB.png)
-
-</div>
-
-<p style="text-align: center;">
-图 2：数据库管理系统的架构
-</p>
-
-
-客户端请求经由 transport 子系统到达。请求以查询的形式出现，大多用某种查询语言表达。transport 子系统还负责与数据库集群中其他节点的通信。
-
-收到请求后，transport 子系统把查询交给查询处理器，由它做解析、解释与校验。随后才进行访问控制检查，因为这些检查只有在查询被解释之后才能完整执行。
-
-解析后的查询交给查询优化器：它先剔除查询中不可能成立与冗余的部分，再基于内部统计信息（索引基数、近似交集大小等）和数据分布（集群中哪些节点持有数据、搬运数据的代价）寻找执行它的最高效方式。优化器既处理查询求解所需的关系运算（通常表示为依赖树），也负责索引顺序、基数估计、访问方法选择等优化。
-
-查询通常会以执行计划（execution plan / query plan）的形式给出：一系列为了得到完整结果必须执行的操作。同一个查询可以由不同的执行计划满足，效率也各不相同，于是优化器挑出其中最好的一个。
-
-执行计划交给执行引擎处理，由它收集本地与远程操作的执行结果。远程执行可能涉及向集群中其他节点读写数据，以及复制。
-
-本地查询（无论来自客户端还是其他节点）都由存储引擎执行。
+第一个问题是**存得下**：数据最终要落成文件与页，而选哪种结构——原地更新的 B-Tree 还是追加写的 LSM Tree——决定了读放大、写放大与空间放大三者怎么分配。
 
 ### Storage Engine
 
@@ -182,6 +212,18 @@ transaction manager 与 lock manager 共同负责并发控制（见 Concurrency 
 
 B-Tree 是最流行的存储结构之一。许多开源数据库都基于 B-Tree，多年下来它们已被证明能覆盖大多数用例。
 
+要让一种树结构适合磁盘实现，它必须满足以下性质：
+
+- 高扇出（fanout），以提高相邻 key 的局部性。
+- 低高度（height），以减少遍历过程中的寻道次数。
+
+> [!TIP]
+>
+> 扇出与高度互为倒数关系：扇出越高，高度越低。
+> 扇出高意味着每个节点能挂更多子节点，节点总数随之减少，高度也就降了下来。
+
+落地成对：InnoDB 的 [B-Tree](/docs/CS/DB/MySQL/B-Tree.md) 与 [BLink-Tree](/docs/CS/DB/BLink-Tree.md)（并发下的 B+Tree）、LevelDB/RocksDB 的 [LSM Tree](/docs/CS/Algorithms/tree/LSM.md)。
+
 
 不可变数据结构常用于函数式编程语言，并因其安全特性越来越受欢迎：一旦创建就不会改变，所有引用都可并发访问，其完整性由「不可被修改」这一事实保证。
 
@@ -208,161 +250,6 @@ B-Tree 是最流行的存储结构之一。许多开源数据库都基于 B-Tree
 
 
 
-### Optimizer
-
-
-关系数据库长期以来的一个优势是：请求数据时，几乎不用（或完全不用）操心数据将如何被访问。
-这个决定由 DBMS 中称为优化器（optimizer）的组件做出。
-不同关系系统的优化器千差万别，以后大概也会一直如此，但目标都一样：利用系统收集并保存下来的数据统计信息，以最有效的方式访问数据。
-
-
-在一条 SQL 语句被执行之前，优化器必须先决定如何访问数据：要不要用索引、用哪个索引、索引怎么用、要不要借助辅助随机读，等等。
-这些信息全部体现在访问路径（access path）里。
-
-
-
-<div style="text-align: center;">
-
-![传统索引扫描](./img/Traditional-Index-Scan.png)
-
-</div>
-
-<p style="text-align: center;">
-图 3：传统索引扫描
-</p>
-
-#### Index Slices and Matching Columns
-
-于是，索引中一条很薄的切片（如上图所示）会被顺序扫描：
-对每一个值落在 100 与 110 之间的索引行，除非对应的页已经在 buffer pool 中，否则都要用一次同步读去表里把行取出来。访问路径的代价显然取决于这片切片有多「厚」，而这又取决于范围谓词：切片越厚，需要顺序读取的索引页越多，要处理的索引行也越多。但真正让代价上涨的，是对表的同步读次数增加——每页可能要花上 10 ms。同理，切片越薄固然能降低索引开销，而更大的节省同样来自更少的表同步读。正因为如此，索引切片的大小可能非常关键。
-
-index slice 这个词并不是哪个关系数据库系统自己用的术语——各家都有各家的叫法，但我们觉得 index slice 更贴近本质，而且可以跨 DBMS 通用。
-另一种常见的说法，是用索引在处理过程中用到的 matching column 数目来定义一条 index slice。在我们的例子里（值介于 100 与 110 之间）只有一个 matching column。
-这个单独的 matching column 实际上就定义了切片的厚度。假如 WHERE 子句和索引里还有第二个列，两列一起能定义出一条更薄的索引切片，那么我们就有两个 matching column：需要做的索引处理会更少，但更重要的是对表的同步读会更少。
-
-
-#### Index Screening and Screening Columns
-
-有时候一个列确实同时出现在 WHERE 子句和索引里——这里先只需知道：索引里并非所有列都能定义 index slice。
-但这些列仍可能减少同步读表的次数，从而扮演更重要的角色。
-我们把这些列叫作 screening column（一些关系数据库系统也确实这么叫），因为这正是它们在做的事：
-它们只凭自己出现在索引里这一事实，就能判断无需真的去访问表行，从而省掉那次访问。
-
-索引列从前往后依次检查：
-1. 在 WHERE 子句中，该列是否至少有一个足够简单、指向它的谓词？
-   有，则该列是 M column。
-   没有，则该列及其后面的所有列都不是 M column。
-2. 如果谓词是范围谓词，那么后面的列不再是 M column。
-3. 最后一个 M column 之后的列，只要有一个足够简单、指向它的谓词，就是 S column。
-
-#### Access Path Terminology
-
-遗憾的是，描述访问路径的术语远未标准化——连 access path 这个词本身也不例外，另一个常用叫法是 execution plan。
-我们约定：描述数据实际被访问的方式时用 access path；描述 DBMS 通过 `EXPLAIN` 设施（后文详述）给出的输出时用 execution plan。
-这是个细微区别，两个词混用也无伤大雅。
-
-matching predicate 有时也叫 range delimiting predicate。
-如果某个谓词对优化器来说足够简单——在有合适索引时能构成 matching predicate——就被称为 indexable 或 sargable。
-相反的叫法是 nonindexable 或 nonsargable。
-
-SQL Server 用 table lookup 指代一种「既用索引、又读表行」的访问路径，与 index only 相对。
-消除表访问最直接的办法，就是把缺失的列加进索引。
-许多 SQL Server 书籍把「能让某条 SELECT 走 index-only 访问路径」的索引称为 covering index；用到 covering index 的 SELECT 有时也被称为 covering SELECT。
-
-
-
-### Transaction Manager
-
-事务管理器调度事务，确保事务不会把数据库留在逻辑上不一致的状态；锁管理器为运行中的事务锁定数据库对象，确保并发操作不破坏物理数据完整性。两者共同负责并发控制（见 Concurrency Control）：在保证逻辑与物理数据完整性的同时，尽可能高效地执行并发操作。
-
-数据库体系通常可以按层划分：存储数据层（storage data layer）、缓存层（cache layer）、传输层（transport layer）、执行层（execute layer）、日志层（log layer）、权限层（authority layer）；容错（tolerance）与并发（concurrency）是贯穿这些层的关注点。
-
-要让一种树结构适合磁盘实现，它必须满足以下性质：
-
-- 高扇出（fanout），以提高相邻 key 的局部性。
-- 低高度（height），以减少遍历过程中的寻道次数。
-
-> [!TIP]
->
-> 扇出与高度互为倒数关系：扇出越高，高度越低。
-> 扇出高意味着每个节点能挂更多子节点，节点总数随之减少，高度也就降了下来。
-
-#### Buffer Management
-
-大多数数据库都构建在两级存储层次之上：慢的持久存储（磁盘）与快的主存（RAM）。为了减少访问持久存储的次数，页会被缓存在内存里；当存储层再次请求同一页时，直接返回它的缓存副本。
-
-内存中可用的缓存页可以被复用，前提是认定没有其他进程修改过磁盘上的数据。这种做法有时被称为 virtual disk [BAYER72]：virtual disk 读只有在内存中没有该页副本时才真正访问物理存储。同一概念更常见的叫法是 page cache 或 buffer pool。page cache 负责把从磁盘读入的页缓存在内存中；一旦数据库系统崩溃或非正常关机，缓存内容就会丢失。
-
-页缓存的问题并不只属于数据库。操作系统同样有 page cache 的概念：利用空闲内存段透明地缓存磁盘内容，提升 I/O 系统调用的性能。
-
-未被缓存的页从磁盘调入时，称为被 paged in（调入）。一旦缓存页被修改，它就处于 dirty（脏）状态，直到这些修改被刷回磁盘。
-
-由于存放缓存页的内存区域通常远小于整个数据集，page cache 迟早会被填满，此时要调入新页，就必须先逐出一个已缓存的页。
-
-page cache 的主要职能可以总结为：
-
-- 把缓存页的内容保持在内存中。
-- 允许对磁盘页的修改被缓冲在一起，并作用在它们的缓存版本上。
-- 当请求的页不在内存中、且有足够空间时，由 page cache 把它调入，并返回缓存版本。
-- 若请求的是已缓存的页，直接返回缓存版本。
-- 若没有足够空间容纳新页，则逐出其他某个页，并把其内容刷回磁盘。
-
-> [!NOTE]
-> 许多数据库用 O_DIRECT 标志打开文件：该标志让 I/O 系统调用绕过内核 page cache、直接访问磁盘，改用数据库自己的缓存管理。操作系统阵营对此时常颇有微词。
-> Linus Torvalds 也批评过 O_DIRECT 的用法，因为它不是异步的，也没有 readahead 之类的手段向内核提示访问模式。不过在操作系统提供更完善的机制之前，O_DIRECT 仍然有用。
-> 我们还能通过 fadvise 对内核如何从其缓存中逐出页施加一些影响，但这只是请内核参考我们的意见，并不保证生效。要避免 I/O 时的系统调用，可以用内存映射，代价是失去对缓存的控制。
-
-##### Caching Semantics
-
-对缓冲区的所有修改都留在内存中，直到最终写回磁盘。由于不允许其他进程修改背后的文件，这一同步是单向的：从内存到磁盘，而不是反过来。page cache 让数据库对内存管理与磁盘访问有更强的控制。可以把它理解为「应用专属的内核 page cache」：它直接访问块设备，实现类似的功能，服务类似的目的。它抽象了磁盘访问，把逻辑写与物理写解耦。
-
-缓存页让我们无需改动算法、无需把对象实体化进内存，就能把树的一部分常驻内存。要做的只是把磁盘访问替换成对 page cache 的调用。
-
-当存储引擎访问（即请求）某个页时，我们先检查其内容是否已被缓存，已缓存则直接返回缓存副本。若尚未缓存，缓存会把逻辑页地址或页号翻译成物理地址，把内容加载进内存，并把缓存版本返回给存储引擎。返回之后，持有该页的缓冲区即处于被引用（referenced）状态，存储引擎用完必须把它交还给 page cache 或解除引用。通过 pin（钉住），可以告诉 page cache 不要逐出某些页。
-
-如果页被修改过（例如追加了一条记录），它会被标记为 dirty。dirty 位置起，说明页内容与磁盘不同步，必须刷盘才能持久化。
-
-
-##### Cache Eviction
-
-让缓存保持「满」是好事：更多的读可以不用碰持久存储，更多的同页写可以被缓冲在一起。但 page cache 容量有限，迟早要容纳新内容，就得逐出旧页。若页内容与磁盘同步（已经刷过或从未被修改），且没有被 pin、没有被引用，就可以直接逐出。脏页必须先刷盘才能被逐出。正被其他线程使用的页不应被逐出。
-
-由于每次逐出都触发一次刷盘会伤害性能，一些数据库会用独立的后台进程不断轮询那些即将被逐出的脏页，提前把它们的磁盘版本更新好——例如 PostgreSQL 的 background writer（bgwriter）做的就是这件事。
-
-另一个必须牢记的性质是持久性：如果数据库崩溃，所有没有落盘的数据都会丢失。为了确保所有修改都被持久化，刷盘由 checkpoint 进程统一协调。checkpoint 进程同时掌控 WAL（write-ahead log）与 page cache，让两者步调一致：只有当某条日志对应的操作已应用到「已落盘的缓存页」上时，这条日志才可以从 WAL 中丢弃。checkpoint 完成之前，脏页不能被逐出。
-
-
-这意味着下面几个目标之间永远存在取舍：
-- 推迟刷盘，减少磁盘访问次数
-- 提前刷页，以便快速逐出
-- 以最优顺序挑选要逐出与刷盘的页
-- 把缓存大小控制在内存预算内
-- 避免数据因未写入主存储而丢失
-
-
-##### Locking Pages in Cache
-
-每次读写都做磁盘 I/O 是不现实的：后续的读可能请求同一页，后续的写也可能改同一页。由于 B-Tree 越往上越「窄」，大部分读都会命中靠近根的高层节点，分裂与合并最终也会传播到这些高层节点。也就是说，树里总有一部分能显著受益于常驻缓存。
-
-我们可以把近期很可能被用到的页「锁」在缓存里——这在缓存中称为 pin（钉住）。被 pin 的页在内存中停留更久，从而减少磁盘访问次数、提升性能。
-
-
-由于 B-Tree 每往下一层的节点数都比上一层多出指数级，高层节点只占整棵树很小的一部分，因此这部分可以永久常驻内存，其余部分按需调入。
-这意味着执行一次查询不必做 h 次磁盘访问（见 “B-Tree Lookup Complexity”，h 为树高），只有那些未被缓存的底层才需要真正落盘。
-
-在同一棵子树上执行的操作，可能产生互相冲突的结构变更——例如多次删除触发 merge，随后写入又触发 split，或反之亦然。
-不同子树向上传播的结构变更也一样（时间上彼此接近、发生在树的不同部位、同时向上冒泡）。
-这些操作可以只在内存中生效而被缓冲在一起，从而减少磁盘写次数、摊薄操作成本——多次写被合并成一次写。
-
-
-> page cache 还让存储引擎对预取与逐出有细粒度控制：可以要求它提前把页加载进来。例如范围扫描遍历叶子节点时，可以预载接下来的叶子。类似地，如果某个维护进程加载了某页，进程结束后可以立刻把该页逐出，因为它对正在跑的查询几乎没用。一些数据库（例如 PostgreSQL）对大型顺序扫描使用环形缓冲（也就是 FIFO 页替换策略）。
-
-
-
-
-
-
-## Storage
 
 数据库系统确实使用文件存放数据，但不依赖文件系统「目录+文件」的层级来定位记录，而是按各家实现的专有格式组织文件。相比 flat file，采用专门的的文件组织主要有三个理由：
 
@@ -464,66 +351,238 @@ page cache 的主要职能可以总结为：
 
 
 
-## OLAP
+### Buffer Management
 
-OLAP（online analytical processing，联机分析处理）是对数据仓库、数据湖或其他数据存储中的海量数据执行高速复杂查询与多维分析的技术。
-OLAP 用于商业智能（BI）、决策支持，以及各种业务预测与报表应用。
+大多数数据库都构建在两级存储层次之上：慢的持久存储（磁盘）与快的主存（RAM）。为了减少访问持久存储的次数，页会被缓存在内存里；当存储层再次请求同一页时，直接返回它的缓存副本。
 
-下表对比事务处理系统与分析系统的特征：
+内存中可用的缓存页可以被复用，前提是认定没有其他进程修改过磁盘上的数据。这种做法有时被称为 virtual disk [BAYER72]：virtual disk 读只有在内存中没有该页副本时才真正访问物理存储。同一概念更常见的叫法是 page cache 或 buffer pool。page cache 负责把从磁盘读入的页缓存在内存中；一旦数据库系统崩溃或非正常关机，缓存内容就会丢失。
+
+页缓存的问题并不只属于数据库。操作系统同样有 page cache 的概念：利用空闲内存段透明地缓存磁盘内容，提升 I/O 系统调用的性能。
+
+未被缓存的页从磁盘调入时，称为被 paged in（调入）。一旦缓存页被修改，它就处于 dirty（脏）状态，直到这些修改被刷回磁盘。
+
+由于存放缓存页的内存区域通常远小于整个数据集，page cache 迟早会被填满，此时要调入新页，就必须先逐出一个已缓存的页。
+
+page cache 的主要职能可以总结为：
+
+- 把缓存页的内容保持在内存中。
+- 允许对磁盘页的修改被缓冲在一起，并作用在它们的缓存版本上。
+- 当请求的页不在内存中、且有足够空间时，由 page cache 把它调入，并返回缓存版本。
+- 若请求的是已缓存的页，直接返回缓存版本。
+- 若没有足够空间容纳新页，则逐出其他某个页，并把其内容刷回磁盘。
+
+> [!NOTE]
+> 许多数据库用 O_DIRECT 标志打开文件：该标志让 I/O 系统调用绕过内核 page cache、直接访问磁盘，改用数据库自己的缓存管理。操作系统阵营对此时常颇有微词。
+> Linus Torvalds 也批评过 O_DIRECT 的用法，因为它不是异步的，也没有 readahead 之类的手段向内核提示访问模式。不过在操作系统提供更完善的机制之前，O_DIRECT 仍然有用。
+> 我们还能通过 fadvise 对内核如何从其缓存中逐出页施加一些影响，但这只是请内核参考我们的意见，并不保证生效。要避免 I/O 时的系统调用，可以用内存映射，代价是失去对缓存的控制。
+
+#### Caching Semantics
+
+对缓冲区的所有修改都留在内存中，直到最终写回磁盘。由于不允许其他进程修改背后的文件，这一同步是单向的：从内存到磁盘，而不是反过来。page cache 让数据库对内存管理与磁盘访问有更强的控制。可以把它理解为「应用专属的内核 page cache」：它直接访问块设备，实现类似的功能，服务类似的目的。它抽象了磁盘访问，把逻辑写与物理写解耦。
+
+缓存页让我们无需改动算法、无需把对象实体化进内存，就能把树的一部分常驻内存。要做的只是把磁盘访问替换成对 page cache 的调用。
+
+当存储引擎访问（即请求）某个页时，我们先检查其内容是否已被缓存，已缓存则直接返回缓存副本。若尚未缓存，缓存会把逻辑页地址或页号翻译成物理地址，把内容加载进内存，并把缓存版本返回给存储引擎。返回之后，持有该页的缓冲区即处于被引用（referenced）状态，存储引擎用完必须把它交还给 page cache 或解除引用。通过 pin（钉住），可以告诉 page cache 不要逐出某些页。
+
+如果页被修改过（例如追加了一条记录），它会被标记为 dirty。dirty 位置起，说明页内容与磁盘不同步，必须刷盘才能持久化。
 
 
-| 特征           | 事务处理系统（OLTP）            | 分析系统（OLAP）              |
-| -------------- | ------------------------------- | ----------------------------- |
-| 主要读取模式   | 每次按键取少量记录              | 对大量记录做聚合              |
-| 主要写入模式   | 用户输入带来的随机访问低延迟写  | 批量导入（ETL）或事件流       |
-| 主要使用者     | 终端用户/客户（经由 Web 应用）  | 内部分析师（决策支持）        |
-| 数据代表什么   | 数据的最新状态（当前时间点）    | 随时间发生的事件历史          |
-| 数据集规模       | GB 到 TB                          | TB 到 PB                      |
+#### Cache Eviction
+
+让缓存保持「满」是好事：更多的读可以不用碰持久存储，更多的同页写可以被缓冲在一起。但 page cache 容量有限，迟早要容纳新内容，就得逐出旧页。若页内容与磁盘同步（已经刷过或从未被修改），且没有被 pin、没有被引用，就可以直接逐出。脏页必须先刷盘才能被逐出。正被其他线程使用的页不应被逐出。
+
+由于每次逐出都触发一次刷盘会伤害性能，一些数据库会用独立的后台进程不断轮询那些即将被逐出的脏页，提前把它们的磁盘版本更新好——例如 PostgreSQL 的 background writer（bgwriter）做的就是这件事。
+
+另一个必须牢记的性质是持久性：如果数据库崩溃，所有没有落盘的数据都会丢失。为了确保所有修改都被持久化，刷盘由 checkpoint 进程统一协调。checkpoint 进程同时掌控 WAL（write-ahead log）与 page cache，让两者步调一致：只有当某条日志对应的操作已应用到「已落盘的缓存页」上时，这条日志才可以从 WAL 中丢弃。checkpoint 完成之前，脏页不能被逐出。
 
 
-#### MOLAP vs. ROLAP vs. HOLAP
-
-直接在多维 OLAP cube 上工作的 OLAP 称为多维 OLAP（MOLAP）。对多数用途而言，MOLAP 仍是速度最快、最实用的多维分析类型。
-
-ROLAP（relational OLAP）不先把数据重组成 cube，而是直接在关系表上做多维分析。
-当「直接处理海量数据」比性能与灵活性更重要时，ROLAP 是最优解。
-
-HOLAP（hybrid OLAP）试图在单一 OLAP 架构内，在关系数据库与多维数据库之间做出最优分工：
-关系表承载更大量的数据，OLAP cube 用于聚合与试探性计算。
-HOLAP 需要一个同时支持 MOLAP 与 ROLAP 的 OLAP 服务器。
+这意味着下面几个目标之间永远存在取舍：
+- 推迟刷盘，减少磁盘访问次数
+- 提前刷页，以便快速逐出
+- 以最优顺序挑选要逐出与刷盘的页
+- 把缓存大小控制在内存预算内
+- 避免数据因未写入主存储而丢失
 
 
-起初，事务处理与分析查询用的是同一批数据库。
-SQL 在这方面表现出相当的灵活性：OLTP 型与 OLAP 型查询它都能胜任。
-尽管如此，1980 年代末到 1990 年代初，企业开始不再拿 OLTP 系统做分析，而是把分析跑在一个独立的数据库上。
-这个独立的数据库被称为 *data warehouse*（数据仓库）。
+#### Locking Pages in Cache
+
+每次读写都做磁盘 I/O 是不现实的：后续的读可能请求同一页，后续的写也可能改同一页。由于 B-Tree 越往上越「窄」，大部分读都会命中靠近根的高层节点，分裂与合并最终也会传播到这些高层节点。也就是说，树里总有一部分能显著受益于常驻缓存。
+
+我们可以把近期很可能被用到的页「锁」在缓存里——这在缓存中称为 pin（钉住）。被 pin 的页在内存中停留更久，从而减少磁盘访问次数、提升性能。
+
+
+由于 B-Tree 每往下一层的节点数都比上一层多出指数级，高层节点只占整棵树很小的一部分，因此这部分可以永久常驻内存，其余部分按需调入。
+这意味着执行一次查询不必做 h 次磁盘访问（见 “B-Tree Lookup Complexity”，h 为树高），只有那些未被缓存的底层才需要真正落盘。
+
+在同一棵子树上执行的操作，可能产生互相冲突的结构变更——例如多次删除触发 merge，随后写入又触发 split，或反之亦然。
+不同子树向上传播的结构变更也一样（时间上彼此接近、发生在树的不同部位、同时向上冒泡）。
+这些操作可以只在内存中生效而被缓冲在一起，从而减少磁盘写次数、摊薄操作成本——多次写被合并成一次写。
+
+
+> page cache 还让存储引擎对预取与逐出有细粒度控制：可以要求它提前把页加载进来。例如范围扫描遍历叶子节点时，可以预载接下来的叶子。类似地，如果某个维护进程加载了某页，进程结束后可以立刻把该页逐出，因为它对正在跑的查询几乎没用。一些数据库（例如 PostgreSQL）对大型顺序扫描使用环形缓冲（也就是 FIFO 页替换策略）。
 
 
 
-### Data Warehousing
 
-一个企业可能有几十套不同的事务处理系统：支撑面向客户的网站、管理实体门店的 POS（收银）系统、跟踪仓库库存、为车辆规划路线、管理供应商、管理员工，等等。
-每个系统都很复杂、都需要一支团队维护，于是它们彼此基本独立运转。
-这些 OLTP 系统通常被要求高可用、低延迟地处理事务，因为它们往往对业务运营至关重要。
-因此 DBA 会严防死守自己的 OLTP 数据库，
-通常不愿让业务分析师在 OLTP 库上跑 ad hoc 分析查询——那些查询往往代价高昂，要扫描数据集的很大一块，会伤害同时在线的事务性能。
 
-相比之下，数据仓库是一个独立的数据库，分析师可以在里面尽情查询，而不影响 OLTP 业务。
-数据仓库里装着公司所有 OLTP 系统数据的只读副本。
-数据从 OLTP 数据库中抽取出来（用周期性 dump 或持续更新的流），转换成便于分析的模式、清洗整理后，再加载进数据仓库。
-这个「把数据搬进仓库」的过程就是 Extract–Transform–Load（ETL）。
 
-与其直接查 OLTP 系统做分析，不如用独立数据仓库的一大优势是：数据仓库可以针对分析型访问模式做优化。
-事实表明，索引算法对 OLTP 很有效，却不太擅长回答分析型查询。
+往下读：InnoDB 的落盘结构见 [InnoDB](/docs/CS/DB/MySQL/InnoDB.md)、[tablespace](/docs/CS/DB/MySQL/tablespace.md) 与 [memory](/docs/CS/DB/MySQL/memory.md)（缓冲池）；LSM 一侧的完整拆解是 [LevelDB](/docs/CS/DB/LevelDB/LevelDB.md) 与 [RocksDB](/docs/CS/DB/RocksDB/RocksDB.md) 两棵子树，H2 的 [MVStore](/docs/CS/DB/h2/MVStore.md) 是第三条路线（copy-on-write 日志结构）。
 
-数据仓库的数据模型通常是关系型的，因为 SQL 总体上很适合表达分析查询。
-许多图形化数据分析工具会生成 SQL 查询、把结果可视化，并让分析师通过 drill-down、slicing and dicing 等操作探索数据。
-表面上，数据仓库与关系型 OLTP 数据库很像，因为都有 SQL 查询接口。
-但系统内部往往差别很大，因为它们针对的查询模式完全不同。
-如今许多数据库厂商只专注事务处理或分析负载中的一端，而不是两者通吃。
-也有 Microsoft SQL Server、SAP HANA 这样的产品同时支持事务处理与数据仓库，但它们内部正越来越清晰地分裂成两套存储与查询引擎，只是共享同一个 SQL 接口。
+## Finding Data
 
-## Transaction
+第二个问题是**找得快**：把全表扫描换成索引查找，代价从 O(n) 降到一次树高；代价是要回答索引怎么组织、值要不要存进索引、多列与多维如何同时收窄，以及优化器凭什么选到这条路径。
+
+*主键*（primary key）唯一标识关系表中的一行、文档数据库中的一个文档，或图数据库中的一个顶点。
+库里其他记录可以通过主键（或 ID）引用该 行/文档/顶点，索引则用来解析这类引用。
+
+*二级索引*（secondary index）也非常常见。
+在关系数据库中，可以用 CREATE INDEX 在同一张表上建多个二级索引，它们对高效执行 join 往往至关重要。
+二级索引可以很容易地建立在键值索引之上，
+主要区别是 key 不唯一：即可能有很多行（文档、顶点）共享同一个 key。
+解决办法有两种：要么让索引里每个 value 成为匹配行标识符的列表（类似全文索引里的 postings list），要么在每个 key 后附加行标识符使其唯一。
+无论哪种，B-tree 与 log-structured 索引都可以充当二级索引。
+
+### Storing Values Within the Index
+
+索引里的 key 是查询要找的东西，而 value 可以是两种东西之一：要么就是那行（文档、顶点）本身，要么是到存放在别处的行的引用。
+后一种情况下，存放行的地方叫 heap file，它不以任何特定顺序存数据（可以是 append-only，也可以记录被删除的行，以便之后用新数据覆盖）。
+heap file 之所以常见，是因为在存在多个二级索引时它能避免复制数据：每个索引只需引用 heap file 中的一个位置，真正的数据集中存放一处。
+
+只改 value 不改 key 时，heap file 方式可以相当高效：只要新值不比旧值大，记录就能就地覆盖。
+若新值更大就麻烦些——它多半得搬到 heap 中有足够空间的新位置。
+这时要么更新所有索引让它指向记录的新 heap 位置，要么在旧 heap 位置留一个转发指针。
+
+有些场景下，「从索引多跳一次到 heap file」对读的性能损失太大，于是希望把被索引的行直接存在索引里。
+这就是聚簇索引（clustered index）。
+例如 MySQL 的 InnoDB 存储引擎里，表的主键永远是聚簇索引，二级索引引用的是主键（而不是 heap file 位置）。
+SQL Server 则允许每张表指定一个聚簇索引。
+介于聚簇索引（把行数据全存在索引里）与非聚簇索引（索引里只存数据的引用）之间的折中，称为 covering index（覆盖索引）或带 included columns 的索引——把表的一部分列存在索引里。
+这让某些查询仅靠索引就能回答（此时称该索引「覆盖」了这条查询）。
+
+与一切数据复制一样，聚簇与覆盖索引能加速读，但要额外存储空间，也会给写增加开销。
+数据库还得额外下功夫维持事务保证，因为应用不应看到由复制导致的不一致。
+
+### Multi-Column Indexes
+
+到目前为止讨论的索引都只把一个 key 映射到一个值。
+当需要同时查询一张表的多个列（或一个文档的多个字段）时，这就不够了。
+最常见的多列索引是 concatenated index（拼接索引），把一个列接在另一个列后面，将若干字段拼成一个 key（索引定义里规定字段的拼接顺序）。
+这就像老式纸质电话簿：提供从 (lastname, firstname) 到电话号码的索引。
+由于排序规则，这个索引可以找出所有某个姓的人，或所有某个「姓+名」组合的人；
+但要找所有某个名的人，它就无能为力了。
+多维索引是「一次查询多个列」的更一般手段，对地理空间数据尤其重要。
+例如一个餐厅搜索网站的库里存着每家餐厅的经纬度。
+用户在地图上看餐厅时，网站需要找出当前矩形视野范围内的所有餐厅。
+这需要一个类似下面的二维范围查询：
+
+```
+SELECT * FROM restaurants WHERE latitude > 51.4946 AND latitude < 51.5079 AND longitude > -0.1162 AND longitude < -0.1004;
+```
+
+标准的 B-tree 或 LSM-tree 索引无法高效回答这种查询：它要么给出某段纬度内的所有餐厅（但经度不限），要么给出某段经度内的所有餐厅（但纬度可以从北极排到南极），却不能同时限定两者。
+
+一个办法是用空间填充曲线把二维位置翻译成一维数字，然后继续用普通 B-tree 索引。
+更常见的做法是使用专门的空间索引，如 R-tree。
+例如 PostGIS 用 PostgreSQL 的 Generalized Search Tree 索引机制，把地理空间索引实现为 R-tree。
+这里不展开讲 R-tree，相关文献很多。
+
+一个有趣的观点是：多维索引不只用于地理位置。
+例如电商网站可以在（红、绿、蓝）三个维度上建三维索引，检索某个颜色区间内的商品；天气观测库可以在（日期、温度）上建二维索引，高效查出 2013 年气温介于 25 与 30 之间的所有观测。
+用一维索引则只能二选一：先扫完 2013 年所有记录（不管温度）再按温度过滤，或反过来。
+二维索引可以同时按时间戳与温度收窄范围。
+HyperDex 就用了这种技术。
+
+### Full-Text Search and Fuzzy Indexes
+
+前面讨论的所有索引都假设数据是精确的，只能查 key 的确切值、或按排序查 key 的一段取值范围。
+它们不允许你查「相似的 key」，例如拼错的单词。
+这类模糊查询需要别的技术。
+
+例如，全文检索引擎通常允许把一个词的搜索扩展为包含它的同义词、忽略词形变化、检索同一文档中彼此邻近的词，并依赖语言的分析支持各种其他特性。
+为了应对文档或查询里的错字，Lucene 能在给定编辑距离（edit distance 为 1 表示增删改了一个字母）内检索词语。
+
+正如「Making an LSM-tree out of SSTables」一节（原书第 78 页）所述，Lucene 的词项字典用的就是类 SSTable 结构。
+这种结构需要一小份内存索引，告诉查询要在有序文件的哪个偏移处找某个 key。
+在 LevelDB 里，这份内存索引是部分 key 的稀疏集合；在 Lucene 里，它是建在 key 字符上的有限状态自动机，类似 trie。
+这个自动机可以变换成 Levenshtein 自动机，从而高效支持「给定编辑距离内的词」的搜索。
+
+另一些模糊搜索技术走向文档分类与机器学习。更详细的可参阅信息检索教材。
+
+
+### Optimizer
+
+
+关系数据库长期以来的一个优势是：请求数据时，几乎不用（或完全不用）操心数据将如何被访问。
+这个决定由 DBMS 中称为优化器（optimizer）的组件做出。
+不同关系系统的优化器千差万别，以后大概也会一直如此，但目标都一样：利用系统收集并保存下来的数据统计信息，以最有效的方式访问数据。
+
+
+在一条 SQL 语句被执行之前，优化器必须先决定如何访问数据：要不要用索引、用哪个索引、索引怎么用、要不要借助辅助随机读，等等。
+这些信息全部体现在访问路径（access path）里。
+
+
+
+<div style="text-align: center;">
+
+![传统索引扫描](./img/Traditional-Index-Scan.png)
+
+</div>
+
+<p style="text-align: center;">
+图 3：传统索引扫描
+</p>
+
+#### Index Slices and Matching Columns
+
+于是，索引中一条很薄的切片（如上图所示）会被顺序扫描：
+对每一个值落在 100 与 110 之间的索引行，除非对应的页已经在 buffer pool 中，否则都要用一次同步读去表里把行取出来。访问路径的代价显然取决于这片切片有多「厚」，而这又取决于范围谓词：切片越厚，需要顺序读取的索引页越多，要处理的索引行也越多。但真正让代价上涨的，是对表的同步读次数增加——每页可能要花上 10 ms。同理，切片越薄固然能降低索引开销，而更大的节省同样来自更少的表同步读。正因为如此，索引切片的大小可能非常关键。
+
+index slice 这个词并不是哪个关系数据库系统自己用的术语——各家都有各家的叫法，但我们觉得 index slice 更贴近本质，而且可以跨 DBMS 通用。
+另一种常见的说法，是用索引在处理过程中用到的 matching column 数目来定义一条 index slice。在我们的例子里（值介于 100 与 110 之间）只有一个 matching column。
+这个单独的 matching column 实际上就定义了切片的厚度。假如 WHERE 子句和索引里还有第二个列，两列一起能定义出一条更薄的索引切片，那么我们就有两个 matching column：需要做的索引处理会更少，但更重要的是对表的同步读会更少。
+
+
+#### Index Screening and Screening Columns
+
+有时候一个列确实同时出现在 WHERE 子句和索引里——这里先只需知道：索引里并非所有列都能定义 index slice。
+但这些列仍可能减少同步读表的次数，从而扮演更重要的角色。
+我们把这些列叫作 screening column（一些关系数据库系统也确实这么叫），因为这正是它们在做的事：
+它们只凭自己出现在索引里这一事实，就能判断无需真的去访问表行，从而省掉那次访问。
+
+索引列从前往后依次检查：
+1. 在 WHERE 子句中，该列是否至少有一个足够简单、指向它的谓词？
+   有，则该列是 M column。
+   没有，则该列及其后面的所有列都不是 M column。
+2. 如果谓词是范围谓词，那么后面的列不再是 M column。
+3. 最后一个 M column 之后的列，只要有一个足够简单、指向它的谓词，就是 S column。
+
+#### Access Path Terminology
+
+遗憾的是，描述访问路径的术语远未标准化——连 access path 这个词本身也不例外，另一个常用叫法是 execution plan。
+我们约定：描述数据实际被访问的方式时用 access path；描述 DBMS 通过 `EXPLAIN` 设施（后文详述）给出的输出时用 execution plan。
+这是个细微区别，两个词混用也无伤大雅。
+
+matching predicate 有时也叫 range delimiting predicate。
+如果某个谓词对优化器来说足够简单——在有合适索引时能构成 matching predicate——就被称为 indexable 或 sargable。
+相反的叫法是 nonindexable 或 nonsargable。
+
+SQL Server 用 table lookup 指代一种「既用索引、又读表行」的访问路径，与 index only 相对。
+消除表访问最直接的办法，就是把缺失的列加进索引。
+许多 SQL Server 书籍把「能让某条 SELECT 走 index-only 访问路径」的索引称为 covering index；用到 covering index 的 SELECT 有时也被称为 covering SELECT。
+
+
+
+往下读：MySQL 的索引与执行计划见 [Index](/docs/CS/DB/MySQL/Index.md) 与 [Optimizer](/docs/CS/DB/MySQL/Optimizer.md)；Redis 的有序集合靠跳表，见 [zset](/docs/CS/DB/Redis/struct/zset.md) 与 [skiplist](/docs/CS/DB/Redis/struct/skiplist.MD)；索引的通用结构（B-Tree 与 LSM 的取舍）在 [Index](/docs/CS/DB/Index.md)。
+
+## Changing Safely
+
+第三个问题是**改不乱**：多个事务并发读写同一份数据时，既要让每个事务看到自洽的快照，又要在崩溃后回到一个说得过去的状态——这由并发控制与日志恢复两件事共同保证。
+
+### Transaction Manager
+
+事务管理器调度事务，确保事务不会把数据库留在逻辑上不一致的状态；锁管理器为运行中的事务锁定数据库对象，确保并发操作不破坏物理数据完整性。两者共同负责并发控制（见下文 Concurrency Control）：在保证逻辑与物理数据完整性的同时，尽可能高效地执行并发操作。
+
+隔离级别决定「允许看到哪种中间状态」，实现路径却分两条：靠锁挡住冲突写，或靠多版本让读不挡写；Redis 则用单线程加 `MULTI`/Lua 直接绕过整个锁矩阵。本章末尾按这两条路径给出各数据库的落地页。
 
 ### Recovery
 
@@ -617,8 +676,6 @@ undo 回滚已提交事务对 forced 页的更新，redo 则把已提交事务�
 
 大多数高性能事务系统为了满足性能要求，必须并发执行事务。因此，没有并发控制，这类系统既无法给出正确结果，也无法维持数据库一致性。
 
-#### Concurrency Control Mechanisms
-
 #### Categories
 
 并发控制机制的主要类别：
@@ -676,30 +733,116 @@ OCC 通常用在 [数据争用](https://en.wikipedia.org/wiki/Block_contention) 
 
 基本协议使用两种锁：*Shared*（共享锁）与 *Exclusive*（排他锁）。基本协议的改进版可能引入更多锁类型。由于使用会阻塞进程的锁，2PL 可能遭遇 [deadlock](https://en.wikipedia.org/wiki/Deadlock)（两个及以上事务互相阻塞）。
 
-## Replication
+往下读：MySQL 侧的完整链路是 [Transaction](/docs/CS/DB/MySQL/Transaction.md) → [Mvcc](/docs/CS/DB/MySQL/Mvcc.md) → [lock](/docs/CS/DB/MySQL/lock.md) → [redolog](/docs/CS/DB/MySQL/redolog.md) / [undolog](/docs/CS/DB/MySQL/undolog.md) / [binlog](/docs/CS/DB/MySQL/binlog.md)；Redis 用单线程与 [Transaction](/docs/CS/DB/Redis/Transaction.md)、[Lock](/docs/CS/DB/Redis/Lock.md) 绕过整个锁矩阵；日志与恢复的通用机制见 [WAL](/docs/CS/DB/WAL.md)。
 
-考虑复制时，要在两个维度上分别做决策：
+## Scaling Out
 
-* 执行复制的算法
-  * Leader-Follower Replication（主从复制）
-  * Multi Leader Replication（多主复制）
-  * Leaderless Replication（无主复制）
-* 复制的执行过程
-  * Synchronous Replication（同步复制）
-  * Asynchronous Replication（异步复制）
-  * 同步与异步混合
+单机撑住之后，第二道天花板是容量与可用性：一份数据要放多份（复制），一张表要拆多份（分片）。这两件事各自有两条互不兼容的路线，合起来决定了一个数据库能不能长大规模。
 
-MySQL 侧的复制落地见 [replica](/docs/CS/DB/MySQL/replica.md)，Redis 侧见 [Replication](/docs/CS/DB/Redis/Replication.md)。
+### Replication
 
-## Shard
+复制先要分清两个正交维度：**复制算法**决定谁是写入点，**复制过程**决定副本多久追平。
 
-[Shard](/docs/CS/DB/Shard.md)
+| 维度 | 选项 | 代价 |
+| :-- | :-- | :-- |
+| 算法 | 单主（leader-follower） | 简单、语义清晰；瓶颈是 leader 的写吞吐 |
+| 算法 | 多主（multi-leader） | 多机房各自可写；必须处理写冲突与拓扑收敛 |
+| 算法 | 无主（leaderless） | 客户端直连副本；靠 quorum 与反熵收敛 |
+| 过程 | 同步 | 零数据丢失；一次跨区写入被 RTT 卡住 |
+| 过程 | 异步 | 快；failover 时会丢未送达的变更 |
 
-[Granularity of Locks and Degrees of Consistency in a Shared DataBase](http://jimgray.azurewebsites.net/papers/granularity%20of%20locks%20and%20degrees%20of%20consistency%20rj%201654.pdf)
+单主 + 异步是最常见的组合（MySQL 主从、Redis 主从/哨兵）：写入只到 leader，follower 拉取复制日志（MySQL 走 [binlog](/docs/CS/DB/MySQL/binlog.md) 与 [replica](/docs/CS/DB/MySQL/replica.md)，Redis 走命令传播与 [Replication](/docs/CS/DB/Redis/Replication.md)）异步回放。要读到的数据必须最新，就得读 leader 或强制同步复制；否则要显式接受陈旧度。
 
-Atomic Commitment Protocol（ACP）
+无主路线（Dynamo/Cassandra）不做共识选举，而是读写各自取 quorum：只要 `W + R > N`，读集合与写集合必相交，再用 read-repair 与 anti-entropy 后台补齐，并把不可达节点的写暂存为 hint 后递送。代价是冲突要额外机制裁决（时间戳、last write wins）。
 
-## DBs
+跨地域要同步就要付 RTT，跨地域要异步就要接受丢数据——「两地三中心」通常按 Zone 拆：同区间同步、跨区间异步。落点：MySQL 的 [replica](/docs/CS/DB/MySQL/replica.md)、Redis 的 [Replication](/docs/CS/DB/Redis/Replication.md) 与 [sentinel](/docs/CS/DB/Redis/sentinel.md)、宽列的 [Cassandra](/docs/CS/DB/Cassandra.md)。
+
+### Sharding
+
+分片要同时回答四个问题：切在哪、搬多少、热点怎么散、跨片怎么读。
+
+- **切法**：按 key 范围切（range）保留局部性，于是前缀/范围扫描便宜，但递增 key（时间戳、自增）会把写全压到一个分片；按哈希切（hash）把负载打散，代价是范围查询要广播到所有分片。
+- **再均衡**：以「分区/region」为搬迁单位，先复制再移交所有权，才能不停写地挪数据；一致性哈希 + 虚拟分片把搬迁比例压到 `1/N`；把相关表放进同一分片组（table group / 文件组）能省掉大量跨片 join 与分布式事务。
+- **热点**：bucket split——一个哈希桶承载多个分区，桶内再按负载动态拆分；或对热 key 做拆分/读写分离。
+- **二级索引**：terminating 方式在索引里存匹配记录的主键（索引分片要回查数据分片），global 方式由索引自己按主键分片（写时要跨片更新，但读不再扇出）。
+
+对应用透明地做这件事，就是中间件的定位：[ShardingSphere](/docs/CS/DB/ShardingSphere.md) 与 [TDDL](/docs/CS/DB/TDDL.md) 在 JDBC/Proxy 层分库分表，[canal](/docs/CS/DB/canal.md) 伪装从库把 binlog 增量订阅出去喂缓存与数仓；而 [TiDB](/docs/CS/DB/TiDB.md)、[OceanBase](/docs/CS/DB/OceanBase.md) 把分片与再均衡做进内核。术语与算法细节见 [Shard](/docs/CS/DB/Shard.md)。
+
+### Atomic Commit and Consensus
+
+分片把事务切成跨节点的问题：一个事务改了 3 个分片，就必须让这 3 个分片「要么都提交、要么都回滚」。
+
+- **2PC**（two-phase commit）：协调者先让所有参与者 prepare（写满 redo 并持锁），全部同意后再广播 commit。它是阻塞的——协调者在 prepare 之后、commit 之前崩溃，参与者只能一直等，锁也不能放。
+- **3PC** 用超时与 can-commit 状态缓解，但建立在「网络故障可被超时区分」的假设上，真实异步系统里并不成立，工业界主流仍是 2PC + 更强的容灾。
+- **共识（Paxos/Raft）**解决的不是「一次事务要不要提交」，而是「这条日志该不该被写下」，从而构造复制状态机并顺带选出 leader。分片 × 共识 = 每个分区/region 一组副本各自跑共识：[TiDB](/docs/CS/DB/TiDB.md) 的 Region + Raft、[OceanBase](/docs/CS/DB/OceanBase.md) 的日志流 + 自研 Paxos（多数派持久化成功才算写成功，因此 RPO = 0）。
+- 单分片内的原子性仍由 WAL + 崩溃恢复保证（见上文 Recovery），共识只负责把同一份日志复制到多副本——两者不要混为一谈。
+
+跨节点事务的实现路径（Percolator 式的 2PC 加状态表、Google Spanner 的 TrueTime 外部一致性）与共识协议本身，见 [Distributed](/docs/CS/Distributed/Distributed.md) 与 [Consensus](/docs/CS/Distributed/Consensus/Consensus.md)。
+
+往下读：分片算法与再均衡见 [Shard](/docs/CS/DB/Shard.md)；MySQL 复制见 [replica](/docs/CS/DB/MySQL/replica.md)，Redis 侧见 [Replication](/docs/CS/DB/Redis/Replication.md)、[cluster](/docs/CS/DB/Redis/cluster.md) 与 [sentinel](/docs/CS/DB/Redis/sentinel.md)；共识协议本身见 [Consensus](/docs/CS/Distributed/Consensus/Consensus.md)；「分片交给中间件」与「分片做进内核」两条路，分别是 [ShardingSphere](/docs/CS/DB/ShardingSphere.md) / [TDDL](/docs/CS/DB/TDDL.md) 与 [TiDB](/docs/CS/DB/TiDB.md) / [OceanBase](/docs/CS/DB/OceanBase.md) / [PolarDB](/docs/CS/DB/PolarDB/PolarDB.md)。
+
+## Analytics
+
+OLAP（online analytical processing，联机分析处理）是对数据仓库、数据湖或其他数据存储中的海量数据执行高速复杂查询与多维分析的技术。
+OLAP 用于商业智能（BI）、决策支持，以及各种业务预测与报表应用。
+
+下表对比事务处理系统与分析系统的特征：
+
+
+| 特征           | 事务处理系统（OLTP）            | 分析系统（OLAP）              |
+| -------------- | ------------------------------- | ----------------------------- |
+| 主要读取模式   | 每次按键取少量记录              | 对大量记录做聚合              |
+| 主要写入模式   | 用户输入带来的随机访问低延迟写  | 批量导入（ETL）或事件流       |
+| 主要使用者     | 终端用户/客户（经由 Web 应用）  | 内部分析师（决策支持）        |
+| 数据代表什么   | 数据的最新状态（当前时间点）    | 随时间发生的事件历史          |
+| 数据集规模       | GB 到 TB                          | TB 到 PB                      |
+
+
+### MOLAP vs. ROLAP vs. HOLAP
+
+直接在多维 OLAP cube 上工作的 OLAP 称为多维 OLAP（MOLAP）。对多数用途而言，MOLAP 仍是速度最快、最实用的多维分析类型。
+
+ROLAP（relational OLAP）不先把数据重组成 cube，而是直接在关系表上做多维分析。
+当「直接处理海量数据」比性能与灵活性更重要时，ROLAP 是最优解。
+
+HOLAP（hybrid OLAP）试图在单一 OLAP 架构内，在关系数据库与多维数据库之间做出最优分工：
+关系表承载更大量的数据，OLAP cube 用于聚合与试探性计算。
+HOLAP 需要一个同时支持 MOLAP 与 ROLAP 的 OLAP 服务器。
+
+
+起初，事务处理与分析查询用的是同一批数据库。
+SQL 在这方面表现出相当的灵活性：OLTP 型与 OLAP 型查询它都能胜任。
+尽管如此，1980 年代末到 1990 年代初，企业开始不再拿 OLTP 系统做分析，而是把分析跑在一个独立的数据库上。
+这个独立的数据库被称为 *data warehouse*（数据仓库）。
+
+
+
+### Data Warehousing
+
+一个企业可能有几十套不同的事务处理系统：支撑面向客户的网站、管理实体门店的 POS（收银）系统、跟踪仓库库存、为车辆规划路线、管理供应商、管理员工，等等。
+每个系统都很复杂、都需要一支团队维护，于是它们彼此基本独立运转。
+这些 OLTP 系统通常被要求高可用、低延迟地处理事务，因为它们往往对业务运营至关重要。
+因此 DBA 会严防死守自己的 OLTP 数据库，
+通常不愿让业务分析师在 OLTP 库上跑 ad hoc 分析查询——那些查询往往代价高昂，要扫描数据集的很大一块，会伤害同时在线的事务性能。
+
+相比之下，数据仓库是一个独立的数据库，分析师可以在里面尽情查询，而不影响 OLTP 业务。
+数据仓库里装着公司所有 OLTP 系统数据的只读副本。
+数据从 OLTP 数据库中抽取出来（用周期性 dump 或持续更新的流），转换成便于分析的模式、清洗整理后，再加载进数据仓库。
+这个「把数据搬进仓库」的过程就是 Extract–Transform–Load（ETL）。
+
+与其直接查 OLTP 系统做分析，不如用独立数据仓库的一大优势是：数据仓库可以针对分析型访问模式做优化。
+事实表明，索引算法对 OLTP 很有效，却不太擅长回答分析型查询。
+
+数据仓库的数据模型通常是关系型的，因为 SQL 总体上很适合表达分析查询。
+许多图形化数据分析工具会生成 SQL 查询、把结果可视化，并让分析师通过 drill-down、slicing and dicing 等操作探索数据。
+表面上，数据仓库与关系型 OLTP 数据库很像，因为都有 SQL 查询接口。
+但系统内部往往差别很大，因为它们针对的查询模式完全不同。
+如今许多数据库厂商只专注事务处理或分析负载中的一端，而不是两者通吃。
+也有 Microsoft SQL Server、SAP HANA 这样的产品同时支持事务处理与数据仓库，但它们内部正越来越清晰地分裂成两套存储与查询引擎，只是共享同一个 SQL 接口。
+
+往下读：列式引擎的两条实现路线（MergeTree 与向量化执行）见 [ClickHouse](/docs/CS/DB/ClickHouse.md) 与 [Doris](/docs/CS/DB/Doris.md)，实时分析取数见 [Druid](/docs/CS/DB/Druid.md)，时序专用于 [InfluxDB](/docs/CS/DB/InfluxDB.md)，不存数据只做联邦查询的是 [Presto](/docs/CS/DB/Presto.md)；离线一侧的批量计算见 [BigData](/docs/CS/BigData/BigData.md)。
+
+## Choosing
 
 文档数据库在一个方面回到了层次模型：把嵌套记录（一对多关系）存进父记录里，而不是另立一张表。
 
@@ -894,89 +1037,13 @@ Dgraph 是一个分布式图数据库，使用 Go 语言开发，支持 GraphQL 
 
 
 
-## Indexes
-
-[Indexes](/docs/CS/DB/Index.md)
-
-*主键*（primary key）唯一标识关系表中的一行、文档数据库中的一个文档，或图数据库中的一个顶点。
-库里其他记录可以通过主键（或 ID）引用该 行/文档/顶点，索引则用来解析这类引用。
-
-*二级索引*（secondary index）也非常常见。
-在关系数据库中，可以用 CREATE INDEX 在同一张表上建多个二级索引，它们对高效执行 join 往往至关重要。
-二级索引可以很容易地建立在键值索引之上，
-主要区别是 key 不唯一：即可能有很多行（文档、顶点）共享同一个 key。
-解决办法有两种：要么让索引里每个 value 成为匹配行标识符的列表（类似全文索引里的 postings list），要么在每个 key 后附加行标识符使其唯一。
-无论哪种，B-tree 与 log-structured 索引都可以充当二级索引。
-
-### Storing Values Within the Index
-
-索引里的 key 是查询要找的东西，而 value 可以是两种东西之一：要么就是那行（文档、顶点）本身，要么是到存放在别处的行的引用。
-后一种情况下，存放行的地方叫 heap file，它不以任何特定顺序存数据（可以是 append-only，也可以记录被删除的行，以便之后用新数据覆盖）。
-heap file 之所以常见，是因为在存在多个二级索引时它能避免复制数据：每个索引只需引用 heap file 中的一个位置，真正的数据集中存放一处。
-
-只改 value 不改 key 时，heap file 方式可以相当高效：只要新值不比旧值大，记录就能就地覆盖。
-若新值更大就麻烦些——它多半得搬到 heap 中有足够空间的新位置。
-这时要么更新所有索引让它指向记录的新 heap 位置，要么在旧 heap 位置留一个转发指针。
-
-有些场景下，「从索引多跳一次到 heap file」对读的性能损失太大，于是希望把被索引的行直接存在索引里。
-这就是聚簇索引（clustered index）。
-例如 MySQL 的 InnoDB 存储引擎里，表的主键永远是聚簇索引，二级索引引用的是主键（而不是 heap file 位置）。
-SQL Server 则允许每张表指定一个聚簇索引。
-介于聚簇索引（把行数据全存在索引里）与非聚簇索引（索引里只存数据的引用）之间的折中，称为 covering index（覆盖索引）或带 included columns 的索引——把表的一部分列存在索引里。
-这让某些查询仅靠索引就能回答（此时称该索引「覆盖」了这条查询）。
-
-与一切数据复制一样，聚簇与覆盖索引能加速读，但要额外存储空间，也会给写增加开销。
-数据库还得额外下功夫维持事务保证，因为应用不应看到由复制导致的不一致。
-
-### Multi-Column Indexes
-
-到目前为止讨论的索引都只把一个 key 映射到一个值。
-当需要同时查询一张表的多个列（或一个文档的多个字段）时，这就不够了。
-最常见的多列索引是 concatenated index（拼接索引），把一个列接在另一个列后面，将若干字段拼成一个 key（索引定义里规定字段的拼接顺序）。
-这就像老式纸质电话簿：提供从 (lastname, firstname) 到电话号码的索引。
-由于排序规则，这个索引可以找出所有某个姓的人，或所有某个「姓+名」组合的人；
-但要找所有某个名的人，它就无能为力了。
-多维索引是「一次查询多个列」的更一般手段，对地理空间数据尤其重要。
-例如一个餐厅搜索网站的库里存着每家餐厅的经纬度。
-用户在地图上看餐厅时，网站需要找出当前矩形视野范围内的所有餐厅。
-这需要一个类似下面的二维范围查询：
-
-```
-SELECT * FROM restaurants WHERE latitude > 51.4946 AND latitude < 51.5079 AND longitude > -0.1162 AND longitude < -0.1004;
-```
-
-标准的 B-tree 或 LSM-tree 索引无法高效回答这种查询：它要么给出某段纬度内的所有餐厅（但经度不限），要么给出某段经度内的所有餐厅（但纬度可以从北极排到南极），却不能同时限定两者。
-
-一个办法是用空间填充曲线把二维位置翻译成一维数字，然后继续用普通 B-tree 索引。
-更常见的做法是使用专门的空间索引，如 R-tree。
-例如 PostGIS 用 PostgreSQL 的 Generalized Search Tree 索引机制，把地理空间索引实现为 R-tree。
-这里不展开讲 R-tree，相关文献很多。
-
-一个有趣的观点是：多维索引不只用于地理位置。
-例如电商网站可以在（红、绿、蓝）三个维度上建三维索引，检索某个颜色区间内的商品；天气观测库可以在（日期、温度）上建二维索引，高效查出 2013 年气温介于 25 与 30 之间的所有观测。
-用一维索引则只能二选一：先扫完 2013 年所有记录（不管温度）再按温度过滤，或反过来。
-二维索引可以同时按时间戳与温度收窄范围。
-HyperDex 就用了这种技术。
-
-### Full-Text Search and Fuzzy Indexes
-
-前面讨论的所有索引都假设数据是精确的，只能查 key 的确切值、或按排序查 key 的一段取值范围。
-它们不允许你查「相似的 key」，例如拼错的单词。
-这类模糊查询需要别的技术。
-
-例如，全文检索引擎通常允许把一个词的搜索扩展为包含它的同义词、忽略词形变化、检索同一文档中彼此邻近的词，并依赖语言的分析支持各种其他特性。
-为了应对文档或查询里的错字，Lucene 能在给定编辑距离（edit distance 为 1 表示增删改了一个字母）内检索词语。
-
-正如「Making an LSM-tree out of SSTables」一节（原书第 78 页）所述，Lucene 的词项字典用的就是类 SSTable 结构。
-这种结构需要一小份内存索引，告诉查询要在有序文件的哪个偏移处找某个 key。
-在 LevelDB 里，这份内存索引是部分 key 的稀疏集合；在 Lucene 里，它是建在 key 字符上的有限状态自动机，类似 trie。
-这个自动机可以变换成 Levenshtein 自动机，从而高效支持「给定编辑距离内的词」的搜索。
-
-另一些模糊搜索技术走向文档分类与机器学习。更详细的可参阅信息检索教材。
-
+选型时把这条链倒过来读就够了：先看**访问模式**能不能被一个模型天然表达（嵌套一对多 → 文档；多跳关系 → 图；相似性检索 → 向量；整列聚合 → 列式），再看**一致性需求**允许多弱的复制与事务（能接受最终一致才有无主/多主路线，要 RPO = 0 就得付共识延迟），最后用**规模与运维成本**裁掉不可选项——数据量摊不平一套分布式架构的运维开销时，选单机加索引与读写分离；反之，靠中间件硬撑单库会把自己锁死在再均衡与跨片事务上。这个取舍坐标的完整版在 [vector](/docs/CS/DB/vector.md)（向量门类）与 [Shard](/docs/CS/DB/Shard.md)（分片），索引收益在 [Index](/docs/CS/DB/Index.md)。
 
 ## Tuning
 
+机制与产品选完，剩下的约束来自运行环境：容器里的 cgroup 与磁盘、从单库一路拆到分库分表的演进顺序，以及线上出问题时的处置次序。
+
+### Containerized Deployment
 
 引自 [InfoQ 不敢把数据库运行在 K8s 上？容器化对数据库性能有影响吗?](https://www.infoq.cn/article/sh2tjyw1dki4zqpakujj):
 
@@ -990,32 +1057,33 @@ HyperDex 就用了这种技术。
 - Redis 的瓶颈主要在网络，所以需要特别关注应用和 Redis 服务之间的网络延迟，这部分延迟由网络链路决定，Redis 满载时 70%+ 的 CPU 消耗在网络栈上，所以为了解决网络性能的扩展性问题，Redis 6.0 版本引入了网络多线程功能，真正的 worker thread 还是单线程，这个功能在大幅提升 Redis 性能的同时也保持了 Redis 简单优雅的特性
 
 
-数据库的演进
+### Evolution
 
-从最开始的单库
+从最开始的单库出发，容量与并发压力按固定顺序推动架构演进。
 
 读写分离
-- 数据的复制 从主库同步到从库 使用 binlog 做 replication
-- 数据源选择 在执行 sql 语句时需要解析 sql 从而选择数据库 比如 Druid 的 SQL parser 模块
+
+- 数据的复制：从主库同步到从库，使用 binlog 做 replication
+- 数据源选择：在执行 SQL 语句时需要解析 SQL 从而选择数据库，比如 Druid 的 SQL parser 模块
 
 垂直分库分表
-- join查询需要去多个库查询后在代码层处理
-- 分库就需要分布式事务支持 使用 Seata 或者 RocketMQ 实现最终一致性
+
+- join 查询需要去多个库查询后在代码层处理
+- 分库就需要分布式事务支持，使用 Seata 或者 RocketMQ 实现最终一致性
 
 水平分库分表
+
 - 唯一 id 的生成
 
+### Troubleshooting
 
-
-数据库问题排查
-线上问题 先确认是否是代码变动导致的 是否可以回滚降低影响
-先止损 再考虑定位修复问题
-慢查询
-先看explain
+线上问题先确认是否是代码变动导致的、是否可以回滚降低影响：先止损，再考虑定位与修复问题。慢查询先看 explain。
 
 
 
 
+
+往下读：MySQL 的优化清单与踩坑记录见 [Optimization](/docs/CS/DB/MySQL/Optimization.md) 与 [Experiences](/docs/CS/DB/MySQL/Experiences.md)，连接与内存参数在 [memory](/docs/CS/DB/MySQL/memory.md)；Redis 侧的压测方法与结果解读见 [benchmark](/docs/CS/DB/Redis/benchmark.md)；容器化限制的成因在内核侧，见 [cgroup](/docs/CS/OS/Linux/cgroup.md) 与 [Swap](/docs/CS/OS/Linux/Swap.md)。
 
 ## Links
 
@@ -1040,3 +1108,7 @@ HyperDex 就用了这种技术。
 ## References
 
 1. [NoSQL Database Systems - A Survey and Decision Guidance](https://www.baqend.com/files/nosql-survey.pdf)
+2. [Designing Data-Intensive Applications](https://dataintensive.net/)
+3. [Database Internals (Alex Petrov)](https://www.oreilly.com/library/view/database-internals/9781492040363/)
+4. [Granularity of Locks and Degrees of Consistency in a Shared DataBase](http://jimgray.azurewebsites.net/papers/granularity%20of%20locks%20and%20degrees%20of%20consistency%20rj%201654.pdf)
+5. [不敢把数据库运行在 K8s 上？容器化对数据库性能有影响吗（InfoQ）](https://www.infoq.cn/article/sh2tjyw1dki4zqpakujj)
