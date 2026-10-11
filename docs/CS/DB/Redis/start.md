@@ -3,11 +3,11 @@
 > [!NOTE]
 > 版本基线 **Redis 8.10.2**；本页机制若与其他版本口径冲突，以 [Redis 版本基线](/docs/CS/DB/Redis/Redis.md?id=version-baseline) 为准。
 
-The following are the most important steps in order to startup the Redis server.
+以下是启动 Redis 服务器最关键的几个步骤。
 
-* `initServerConfig()` setups the default values of the `server` structure.
-* `initServer()` allocates the data structures needed to operate, setup the listening socket, and so forth.
-* `aeMain()` starts the event loop which listens for new connections.
+* `initServerConfig()` 设置 `server` 结构的默认值。
+* `initServer()` 分配运行所需的数据结构、建立监听 socket 等。
+* `aeMain()` 启动事件循环，开始接收新连接。
 
 ```c
 // server.c
@@ -43,7 +43,7 @@ int main(int argc, char **argv) {
 
 ```
 
-We need to init sentinel right now as parsing the configuration file in sentinel mode will have the effect of populating the sentinel data structures with master nodes to monitor.
+sentinel 必须现在就初始化：以 sentinel 模式解析配置文件时，会把 sentinel 的配置项写进 sentinel db，否则后面调用 `SentinelReloadConfig()` 会报错。
 
 ```c
     if (server.sentinel_mode) {
@@ -348,11 +348,11 @@ initCommandTable
 
 ### updateCachedTime
 
-We take a cached value of the unix time in the global state because with virtual memory and aging there is to store the current time in objects at every object access, and accuracy is not needed.
-To access a global var is a lot faster than calling time(NULL).
+unix 时间用的是全局状态里的一份缓存值：有虚拟内存与页面老化在，若每次访问对象都去读存在对象里的当前时间，代价不可控，而且这里也不需要精确值。
+读一个全局变量比调用 `time(NULL)` 快得多。
 
-This function should be fast because it is called at every command execution in call(), so it is possible to decide if to update the daylight saving info or not using the 'update_daylight_info' argument.
-Normally we update such info only when calling this function from serverCron() but not when calling it from call().
+这个函数必须很快，因为 `call()` 每执行一条命令都会调它；因此是否顺带更新夏令时信息，由 `update_daylight_info` 参数决定。
+通常只有在 `serverCron()` 里调用它时才更新那部分信息，从 `call()` 进来时不更新。
 
 ```c
 void updateCachedTime(int update_daylight_info) {
@@ -377,7 +377,7 @@ void updateCachedTime(int update_daylight_info) {
 
 #### initCommandTable
 
-Command table -- we initiialize it here as it is part of the initial configuration, since command names may be changed via redis.conf using the rename-command directive.
+命令表在这里初始化，因为它属于初始配置的一部分——命令名可以通过 redis.conf 的 `rename-command` 指令改掉。
 
 ### loadServerConfig
 
@@ -427,12 +427,12 @@ void loadServerConfig(char *filename, char *options) {
 1. setupSignalHandlers
 2. createSharedObjects
 3. [aeCreateEventLoop](/docs/CS/DB/Redis/ae.md?id=aecreateeventloop)
-4. open TCP listening socket and Unix domain socket
-5. Create the Redis databases and initialize other internal state
+4. 打开 TCP 监听 socket 与 Unix domain socket
+5. 创建 Redis 数据库并初始化其余内部状态
 6. aeCreateTimeEvent
 7. aeCreateFileEvent
 8. Open the AOF file if needed
-9. Set maxmemory = 3GB if 32 bit instances not set maxmemory
+9. 32 位实例若未配置 maxmemory，则默认设为 3GB
 
 ```c
 void initServer(void) {
@@ -784,23 +784,23 @@ void createSharedObjects(void) {
 
 ### aeCreateTimeEvent
 
-`aeCreateTimeEvent` accepts the following as parameters:
+`aeCreateTimeEvent` 接受以下参数：
 
-- `eventLoop`: This is `server.el` in `redis.c`
-- milliseconds: The number of milliseconds from the current time after which the timer expires.
-- `proc`: Function pointer. Stores the address of the function that has to be called after the timer expires.
-- `clientData`: Mostly `NULL`.
-- `finalizerProc`: Pointer to the function that has to be called before the timed event is removed from the list of timed events.
+- `eventLoop`：即 `redis.c` 里的 `server.el`
+- `milliseconds`：从当前时间算起，定时器多少毫秒后到期。
+- `proc`：函数指针，保存定时器到期后要调用的函数地址。
+- `clientData`：通常是 `NULL`。
+- `finalizerProc`：指向「该时间事件从时间事件链表移除之前」要调用的函数。
 
-`initServer` calls `aeCreateTimeEvent` to add a timed event to `timeEventHead` field of `server.el`. `timeEventHead` is a pointer to a list of such timed events. The call to `aeCreateTimeEvent` from `redis.c:initServer` function is given below:
+`initServer` 调用 `aeCreateTimeEvent`，把一个时间事件挂到 `server.el` 的 `timeEventHead` 字段上——该指针指向这条时间事件链表。`redis.c:initServer` 里的那次调用如下：
 
 ```
 aeCreateTimeEvent(server.el /*eventLoop*/, 1 /*milliseconds*/, serverCron /*proc*/, NULL /*clientData*/, NULL /*finalizerProc*/);
 ```
 
-`redis.c:serverCron` performs many operations that helps keep Redis running properly.
+`redis.c:serverCron` 做了很多维持 Redis 正常运转的后台工作。
 
-Create the timer callback, this is our way to process many background operations incrementally, like clients timeout, eviction of unaccessed expired keys and so forth.
+创建这个定时器回调，是我们增量处理大量后台操作的方式，比如客户端超时、淘汰已过期的 key 等。
 
 ```c
 long long aeCreateTimeEvent(aeEventLoop *eventLoop, long long milliseconds,
@@ -1173,18 +1173,18 @@ void linkClient(client *c) {
 
 ### aeCreateFileEvent
 
-The essence of `aeCreateFileEvent` function is to execute `epoll_ctl` system call which adds a watch for `EPOLLIN` event on the *listening descriptor* create by `anetTcpServer` and associate it with the `epoll` descriptor created by a call to `aeCreateEventLoop`.
+`aeCreateFileEvent` 的本质就是一次 `epoll_ctl` 系统调用：在 `anetTcpServer` 建出的*监听描述符*上注册对 `EPOLLIN` 的监听，并把它与 `aeCreateEventLoop` 创建的 `epoll` 描述符关联起来。
 
-Following is an explanation of what precisely `aeCreateFileEvent` does when called from `redis.c:initServer`.
+下面说明 `aeCreateFileEvent` 被 `redis.c:initServer` 调用时具体做了什么。
 
-`initServer` passes the following arguments to `aeCreateFileEvent`:
+`initServer` 传给 `aeCreateFileEvent` 的参数如下：
 
-- `server.el`: The event loop created by `aeCreateEventLoop`. The `epoll` descriptor is got from `server.el`.
-- `server.fd`: The *listening descriptor* that also serves as an index to access the relevant file event structure from the `eventLoop->events` table and store extra information like the callback function.
-- `AE_READABLE`: Signifies that `server.fd` has to be watched for `EPOLLIN` event.
-- `acceptHandler`: The function that has to be executed when the event being watched for is ready. This function pointer is stored in `eventLoop->events[server.fd]->rfileProc`.
+- `server.el`：由 `aeCreateEventLoop` 创建的事件循环，`epoll` 描述符就取自它。
+- `server.fd`：*监听描述符*，同时充当下标，用来在 `eventLoop->events` 表里取到对应的文件事件结构，并存放回调函数等附加信息。
+- `AE_READABLE`：表示要监听 `server.fd` 上的 `EPOLLIN` 事件。
+- `acceptHandler`：被监听的事件就绪时要执行的函数，这个函数指针会存进 `eventLoop->events[server.fd]->rfileProc`。
 
-This completes the initialization of Redis event loop.
+到这里，Redis 事件循环的初始化就完成了。
 
 初始化了 aeFileEvent，存放在 eventLoop 中的events[] 内。并且调用 [aeApiAddEvent()](/docs/CS/DB/Redis/ae.md?id=events)，将监听端口的描述符注册到创建的内核队列中
 
@@ -1213,9 +1213,9 @@ int aeCreateFileEvent(aeEventLoop *eventLoop, int fd, int mask,
 
 ### InitServerLast
 
-Some steps in server initialization need to be done last (after modules are loaded).
+服务器初始化中有几步必须放到最后做（在加载模块之后）。
 
-Specifically, creation of threads due to a race bug in ld.so, in which Thread Local Storage initialization collides with dlopen call.
+具体就是线程的创建：ld.so 有个竞态 bug，TLS（线程本地存储）初始化会与 `dlopen` 调用冲突。
 ```c
 void InitServerLast() {
     bioInit();
@@ -1235,7 +1235,7 @@ Three Ops:
 - Deferred AOF fsync.
 - Deferred objects freeing.
 
-Initialize the background system, spawning the thread.
+初始化后台系统，并拉起后台线程。
 
 ```c
 void bioInit(void) {
@@ -1260,7 +1260,7 @@ void bioInit(void) {
     pthread_attr_setstacksize(&attr, stacksize);
 ```
 
-Ready to spawn our threads. We use the single argument the thread function accepts in order to pass the job ID the thread is responsible of.
+可以创建我们的线程了。用线程函数唯一的那个参数，把该线程负责的任务 ID 传进去。
 
 ```c
     for (j = 0; j < BIO_NUM_OPS; j++) {
@@ -1386,7 +1386,7 @@ bioCreateLazyFreeJob
 
 #### initThreadedIO
 
-Initialize the data structures needed for threaded I/O.
+初始化线程化 I/O 需要的数据结构。
 ```c
 void initThreadedIO(void) {
     for (int i = 0; i < server.io_threads_num; i++) {
@@ -1457,14 +1457,14 @@ void *IOThreadMain(void *myid) {
 
 ## aeMain
 
-There are two special functions called periodically by the event loop:
+事件循环会周期性调用两个特殊函数：
 
-1. `serverCron()` is called periodically (according to `server.hz` frequency), and performs tasks that must be performed from time to time, like checking for timed out clients.
-2. `beforeSleep()` is called every time the event loop fired, Redis served a few requests, and is returning back into the event loop.
+1. `serverCron()` 按 `server.hz` 的频率周期性调用，负责那些必须时不时做一次的活，比如检查超时的客户端。
+2. `beforeSleep()` 在每次事件循环触发、Redis 处理完若干请求、正准备回到事件循环睡眠之前被调用。
 
-`ae.c:aeMain` called from `redis.c:main` does the job of processing the event loop that is initialized in the previous phase.
+`redis.c:main` 调用 `ae.c:aeMain`，由它驱动前面阶段初始化好的事件循环。
 
-`ae.c:aeMain` calls `ae.c:aeProcessEvents` in a while loop that processes pending time and file events.
+`ae.c:aeMain` 在一个 while 循环里调用 `ae.c:aeProcessEvents`，处理待办的时间事件与文件事件。
 
 ```c
 // sever.c
@@ -1508,7 +1508,7 @@ struct redisServer {
 
 #### readQueryFromClient
 
-`readQueryFromClient()` is the ***readable event handler*** and accumulates data from read from the client into the query buffer.
+`readQueryFromClient()` 是***可读事件处理器***，把从客户端读到的数据累积进 query buffer。
 
 
 
@@ -1613,11 +1613,11 @@ int postponeClientRead(client *c) {
 
 如果未开启I/O多线程模型 则需要主线程独立完成流程
 
-This function achieves thread safety using a fan-out -> fan-in paradigm:
-Fan out: The main thread fans out work to the io-threads which block until setIOPendingCount() is called with a value larger than 0 by the main thread.
-Fan in: The main thread waits until getIOPendingCount() returns 0. 
+这个函数用 fan-out → fan-in 的模式做到线程安全：
+Fan out：主线程把活分发给各 io-thread，io-thread 会阻塞，直到主线程调用 `setIOPendingCount()` 把一个大于 0 的值设进去。
+Fan in：主线程等待，直到 `getIOPendingCount()` 返回 0。
 
-Then it can safely perform post-processing and return to normal synchronous work.
+之后它就能安全地做收尾处理，并回到普通的同步工作方式。
 
 ```c
 int handleClientsWithPendingReadsUsingThreads(void) {
@@ -1726,10 +1726,10 @@ int processPendingCommandAndInputBuffer(client *c) {
 
 
 
-This function calls `processCommand()`, but also performs a few sub tasks for the client that are useful in that context:
+这个函数会调用 `processCommand()`，但同时顺手为该客户端做几件在这个上下文里必要的事：
 
-1. It sets the current client to the client 'c'.
-2. calls commandProcessed() if the command was handled.
+1. 把当前客户端设为 `c`。
+2. 若命令已被处理，则调用 `commandProcessed()`。
 
 ```c
 int processCommandAndResetClient(client *c) {
@@ -1828,21 +1828,21 @@ void addReply(client *c, robj *obj) {
 
 ##### prepareClientToWrite
 
-This function is called every time we are going to transmit new data to the client. 
+每次准备向客户端发送新数据之前，都会调用这个函数。
 
 The behavior is the following:
 
-If the client should receive new data (normal clients will) the function returns C_OK, and make sure to install the write handler in our event loop so that when the socket is writable new data gets written.
+如果客户端应当收到新数据（普通客户端都是如此），函数返回 `C_OK`，并确保在事件循环里装上 write handler，以便 socket 一可写就把新数据写出去。
 
-If the client should not receive new data, because it is a fake client (used to load AOF in memory), a master or because the setup of the write handler failed, the function returns C_ERR.
+如果客户端不该收到新数据——例如它是个 fake client（用于把 AOF 载入内存）、是 master，或者装 write handler 失败了——函数返回 `C_ERR`。
 
-The function may return C_OK without actually installing the write event handler in the following cases:
+以下两种情况下，函数会返回 `C_OK` 但并不真的装上写事件处理器：
 
-1. The event handler should already be installed since the output buffer already contains something.
-2. The client is a slave but not yet online, so we want to just accumulate writes in the buffer but not actually sending them yet.
+1. 输出缓冲里已经有内容，说明处理器本该已经装好了。
+2. 该客户端是尚未上线的 replica：我们只想先把写累积在缓冲里，暂时不真正发送。
 
-Typically gets called every time a reply is built, before adding more data to the clients output buffers. 
-If the function returns C_ERR no data should be appended to the output buffers.
+通常在构造应答、准备往客户端输出缓冲追加更多数据之前调用它。
+若返回 `C_ERR`，就不该再往输出缓冲追加任何数据。
 
 ```c
 int prepareClientToWrite(client *c) {
@@ -1975,7 +1975,7 @@ int handleClientsWithPendingWritesUsingThreads(void) {
 
 handleClientsWithPendingWrites
 
-This function is called just before entering the event loop, in the hope we can just write the replies to the client output buffer without any need to use a syscall in order to install the writable event handler, get it called, and so forth.
+这个函数在进入事件循环（睡眠）之前被调用，期望能顺手把应答直接写进客户端输出缓冲，从而避免「装可写事件处理器 → 等它被触发」这一整套系统调用开销。
 
 ```c
 int handleClientsWithPendingWrites(void) {
@@ -2031,10 +2031,10 @@ void sendReplyToClient(connection *conn) {
 
 #### writeToClient
 
-Write data in output buffers to client.
-If handler_installed is set, it will attempt to clear the write event.
-This function is called by threads, but always with handler_installed set to 0.
-So when handler_installed is set to 0 the function must be thread safe.
+把输出缓冲里的数据写给客户端。
+若 `handler_installed` 为真，还会尝试清除写事件。
+这个函数由线程调用，但传入的 `handler_installed` 恒为 0。
+因此当 `handler_installed` 为 0 时，它必须是线程安全的。
 
 writeToClient 函数核心是一个while 循环, 循环调用 _writeToClient 函数向底层的 socket 连接里写数据
 
@@ -2202,7 +2202,7 @@ static void sigShutdownHandler(int sig) {
 }
 ```
 
-We received a SIGTERM, shutting down here in a safe way, as it is not ok doing so inside the signal handler.
+收到 SIGTERM 后在这里安全地关闭进程——在信号处理器里直接做关停是不合适的。
 
 ```c
 int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
