@@ -767,27 +767,33 @@ CLIENT LIST
 
 ## Knowledge Map
 
-本目录共 41 篇，按「读源码的推进顺序」分成五组。启动与数据结构是底座，持久化与集群是两条独立主线，客户端与场景应用在最外层。
+本目录按「一个问题一组」组织，与 [DB.md](/docs/CS/DB/DB.md) 的主线同构：存得下 → 找得快 → 改不乱 → 扩得开 → 怎么选。三种读法：顺着下面的组顺序读建立体系；按源码推进顺序读（[start](/docs/CS/DB/Redis/start.md) → [server](/docs/CS/DB/Redis/server.md) → [ae](/docs/CS/DB/Redis/ae.md) → [struct 总纲](/docs/CS/DB/Redis/struct/struct.md) → [persist](/docs/CS/DB/Redis/persist.md) → [cluster](/docs/CS/DB/Redis/cluster.md)）；排障与面试按主题跳读（本页 Tuning 段、slowlog、[memory](/docs/CS/DB/Redis/memory.md)、[Cache](/docs/CS/DB/Redis/Cache.md)、[Lock](/docs/CS/DB/Redis/Lock.md)）。
 
-**一、启动与事件循环 —— 服务器怎么跑起来、怎么转**
+### Execution Model
 
-枢纽页 Architecture 段之后，源码入口按`main()` 调用顺序展开：[start.md](/docs/CS/DB/Redis/start.md) 覆盖 `initServerConfig` → `initServer` → `aeMain` → 命令执行 → 关闭的完整主流程；[server.md](/docs/CS/DB/Redis/server.md) 拆解 `redisServer` 结构体与客户端、进程、缓存、监控子系统；事件循环本体在 [ae.md](/docs/CS/DB/Redis/ae.md)（`aeMain`、文件事件与时间事件、`epoll` 边缘触发），并发模型（子进程 + 主线程 + 后台线程 + IO 线程）在 [Concurrency.md](/docs/CS/DB/Redis/Concurrency.md)，后台线程的 `bio.c`/`lazyfree.c` 源码级展开在 [io.md](/docs/CS/DB/Redis/io.md)。
+事件循环与线程模型是「快」的成因，也是所有延迟问题的解释框架：[start.md](/docs/CS/DB/Redis/start.md) 走 `initServerConfig` → `initServer` → `aeMain` → 命令执行 → 关闭的主流程；[server.md](/docs/CS/DB/Redis/server.md) 拆 `redisServer` 的客户端、进程、缓存与监控子系统；[ae.md](/docs/CS/DB/Redis/ae.md) 是循环本体（文件事件、时间事件、`epoll` 边缘触发）；[Concurrency.md](/docs/CS/DB/Redis/Concurrency.md) 给子进程 + 主线程 + 后台线程 + IO 线程的并发模型，[io.md](/docs/CS/DB/Redis/io.md) 展开 `bio.c` 与 `lazyfree.c`；压测口径与工具在 [benchmark.md](/docs/CS/DB/Redis/benchmark.md)。
 
-**二、数据结构与对象模型 —— 内存里长什么样**
+### Encoding and Persistence
 
-总纲在 [struct/struct.md](/docs/CS/DB/Redis/struct/struct.md)（key/object 编码体系与各类型概览），字典对象在 [redisDb.md](/docs/CS/DB/Redis/redisDb.md)（`redisDb`、`redisObject`、get/set/delete 三条路径）。具体结构各自成篇：字符串 [SDS](/docs/CS/DB/Redis/struct/SDS.md)、哈希 [hash](/docs/CS/DB/Redis/struct/hash.md)（含 listpack 编码）、列表 [list](/docs/CS/DB/Redis/struct/list.md) 与合并后的 [quicklist](/docs/CS/DB/Redis/struct/quicklist.md)、旧版压缩列表 [ziplist](/docs/CS/DB/Redis/struct/ziplist.md) 与 [listpack](/docs/CS/DB/Redis/struct/listpack.md)、集合 [set](/docs/CS/DB/Redis/struct/set.md) 与 [intset](/docs/CS/DB/Redis/struct/intset.md)、有序集合 [zset](/docs/CS/DB/Redis/struct/zset.md) 与 [skiplist](/docs/CS/DB/Redis/struct/skiplist.MD)、位图 [bitmap](/docs/CS/DB/Redis/struct/bitmap.md)、地理编码 [geo](/docs/CS/DB/Redis/struct/geo.md)、Stream [Stream](/docs/CS/DB/Redis/struct/Stream.md)。近似去重类结构单列：[HyperLogLog](/docs/CS/DB/Redis/struct/HyperLogLog.md) 与 [BloomFilter](/docs/CS/DB/Redis/struct/BloomFilter.md)。
+值在内存里长什么样由编码体系决定：总纲 [struct/struct.md](/docs/CS/DB/Redis/struct/struct.md)（key/object 编码与各类型概览），容器与 get/set/delete 三条路径在 [redisDb.md](/docs/CS/DB/Redis/redisDb.md)。单值 [SDS](/docs/CS/DB/Redis/struct/SDS.md)；聚合结构 [hash](/docs/CS/DB/Redis/struct/hash.md)、[list](/docs/CS/DB/Redis/struct/list.md) 与合并后的 [quicklist](/docs/CS/DB/Redis/struct/quicklist.md)、[set](/docs/CS/DB/Redis/struct/set.md) 与 [intset](/docs/CS/DB/Redis/struct/intset.md)、[zset](/docs/CS/DB/Redis/struct/zset.md) 与其底层 [skiplist](/docs/CS/DB/Redis/struct/skiplist.MD)，以及被接替的 [ziplist](/docs/CS/DB/Redis/struct/ziplist.md) 与替代者 [listpack](/docs/CS/DB/Redis/struct/listpack.md)；消息型 [Stream](/docs/CS/DB/Redis/struct/Stream.md)；概率与位级结构 [bitmap](/docs/CS/DB/Redis/struct/bitmap.md)、[HyperLogLog](/docs/CS/DB/Redis/struct/HyperLogLog.md)、[BloomFilter](/docs/CS/DB/Redis/struct/BloomFilter.md)（模块）；[geo](/docs/CS/DB/Redis/struct/geo.md) 直接用 zset 实现。落盘侧 [persist.md](/docs/CS/DB/Redis/persist.md) 覆盖 RDB、AOF 与混合持久化（multi-part AOF）及取舍，AOF 重写的触发条件在 `server.c` 的 `aofRewriteLimited`；内存上限、淘汰与 LRU/LFU 在 [memory.md](/docs/CS/DB/Redis/memory.md)。
 
-**三、持久化 —— RDB / AOF 两条独立主线**
+### Retrieval and Extension
 
-[persist.md](/docs/CS/DB/Redis/persist.md) 是本组枢纽，覆盖 RDB、AOF、混合持久化（multi-part AOF）以及三者的取舍；AOF 重写机制的触发条件在 `server.c` 的 `aofRewriteLimited`（8.10.2 口径，见本页 Tuning 段）。内存侧的对应话题在 [memory.md](/docs/CS/DB/Redis/memory.md)（共享对象、淘汰、maxmemory、LRU/LFU 算法与编码开销）。
+按 key 取值本身就是查找路径，「查内容」才需要额外结构：存在性与去重交给上面的概率结构，全文与二级索引见 [RediSearch.md](/docs/CS/DB/Redis/RediSearch.md)，按 channel 的订阅匹配见 [PubSub.md](/docs/CS/DB/Redis/PubSub.md)。要改行为，先看命令层：[command.md](/docs/CS/DB/Redis/command.md)（命令定义、`addReply` 约定，以及 key 声明——它是 cluster 路由的前提）；服务端内编程用 [Lua.md](/docs/CS/DB/Redis/Lua.md)（含自带 debugger），更底层的扩展机制在 [module.md](/docs/CS/DB/Redis/module.md)。
 
-**四、高可用与扩展 —— 单机之外的形态**
+### Atomicity and Consistency
 
-复制在 [Replication.md](/docs/CS/DB/Redis/Replication.md)（含 PSYNC、部分重同步、过期键传递），哨兵在 [sentinel.md](/docs/CS/DB/Redis/sentinel.md)（定时器、选主、故障转移），分片在 [cluster.md](/docs/CS/DB/Redis/cluster.md)（Gossip、`CLUSTER SLOTS`、Failover 与 cron 任务）。集群下 slot 到 key 的映射细节见 [redisDb.md](/docs/CS/DB/Redis/redisDb.md) 的 `slotToKey*` 一节。
+单线程排队执行提供了天然隔离，成组命令的原子性由 [Transaction.md](/docs/CS/DB/Redis/Transaction.md) 提供（`MULTI`/`EXEC`/`DISCARD`/`WATCH` 与它并不等于回滚的坑）；跨进程互斥要自己实现，方案与失效场景在 [Lock.md](/docs/CS/DB/Redis/Lock.md)；改完数据与缓存怎么对齐、雪崩/穿透/击穿的应对在 [Cache.md](/docs/CS/DB/Redis/Cache.md)，客户端侧缓存（tracking 协议）见本页 Client side caching 段。
 
-**五、客户端、扩展与场景应用**
+### Replication and Sharding
 
-Java 客户端三家各一篇：[Jedis](/docs/CS/DB/Redis/Jedis.md)（阻塞直连、连接池与 JMX）、[Lettuce](/docs/CS/DB/Redis/Lettuce.md)（Netty、三种调用模型与拓扑刷新）、[Redisson](/docs/CS/DB/Redis/Redisson.md)（锁与同步器封装）。扩展机制在 [module.md](/docs/CS/DB/Redis/module.md)（`moduleInitModulesSystem` 与模块加载）和 [command.md](/docs/CS/DB/Redis/command.md)（命令定义与 `addReply` 回复约定），服务端脚本能力在 [Lua.md](/docs/CS/DB/Redis/Lua.md)（含自带的 Lua debugger）。把 Redis 当缓存用（雪崩/穿透/击穿、更新策略）见 [Cache.md](/docs/CS/DB/Redis/Cache.md)，作为消息队列用（Pub/Sub、Streams 消费组、消费模型）见 [MQ.md](/docs/CS/DB/Redis/MQ.md) 与 [PubSub.md](/docs/CS/DB/Redis/PubSub.md)（注意本库口径：**Redis 归DB，不归 MQ 专题**，MQ 侧只做对照）。分布式锁实现对比见 [Lock.md](/docs/CS/DB/Redis/Lock.md)，客户端侧缓存（tracking 协议）在本页 Client side caching 段。压测工具用法在 [benchmark.md](/docs/CS/DB/Redis/benchmark.md)，检索扩展见 [RediSearch.md](/docs/CS/DB/Redis/RediSearch.md)。
+复制在 [Replication.md](/docs/CS/DB/Redis/Replication.md)（PSYNC、部分重同步、过期键如何传递），自动故障转移在 [sentinel.md](/docs/CS/DB/Redis/sentinel.md)（定时器、选主、failover 流程），水平分片在 [cluster.md](/docs/CS/DB/Redis/cluster.md)（Gossip、slot 表语义、failover 与 cron 任务）；slot 到 key 的映射细节在 [redisDb.md](/docs/CS/DB/Redis/redisDb.md) 的 `slotToKey*` 一节。把 Redis 当队列用的语义边界（消费组、ack、重投）在 [MQ.md](/docs/CS/DB/Redis/MQ.md) 与 [PubSub.md](/docs/CS/DB/Redis/PubSub.md)——本库口径是 **Redis 归 DB，不归 MQ 专题**，MQ 侧只做对照。
+
+### Clients and Alternatives
+
+Java 侧三种连接模型各一篇：[Jedis.md](/docs/CS/DB/Redis/Jedis.md)（阻塞直连与连接池、JMX）、[Lettuce.md](/docs/CS/DB/Redis/Lettuce.md)（Netty、同步/异步/响应式与拓扑刷新）、[Redisson.md](/docs/CS/DB/Redis/Redisson.md)（锁与分布式数据结构的封装）。服务端形态的同路替代：[Valkey](/docs/CS/DB/Valkey.md)（ fork 延续）、[Pika](/docs/CS/DB/Pika.md) 与 [SSDB](/docs/CS/DB/SSDB.md)（磁盘化）、[Dragonfly](/docs/CS/DB/Dragonfly.md)（share-nothing 内存版）。部署环境的两个隐形前提见本页 THP 与 TLS 段。
+
+横切到数据库层面的机制——事件循环对应的 IO 多路复用、复制与分片的通用取舍、索引结构的 B-Tree/LSM 对比——在 [DB.md](/docs/CS/DB/DB.md) 的 Finding Data、Scaling Out 与 Storing Data 三章，本目录只讲 Redis 的实现。
 
 ## Links
 
