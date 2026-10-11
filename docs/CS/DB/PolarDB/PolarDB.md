@@ -49,6 +49,7 @@ PolarDB-X 的目标是完全兼容 MySQL ，目前兼容的内容包括 MySQL �
 ## Links
 
 - [DB](/docs/CS/DB/DB.md)
+- [OceanBase](/docs/CS/DB/OceanBase.md)
 - [ClickHouse](/docs/CS/DB/ClickHouse.md)
 - [Doris](/docs/CS/DB/Doris.md)
 - [HBase](/docs/CS/DB/HBase.md)
