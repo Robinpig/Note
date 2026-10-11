@@ -2082,3 +2082,8 @@ src/hotspot/share/interpreter/zero/
 ## Links
 
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
+- [Execution Engine](/docs/CS/Java/JDK/JVM/ExecutionEngine.md)
+- [Deoptimization](/docs/CS/Java/JDK/JVM/Deoptimization.md)
+- [TLAB](/docs/CS/Java/JDK/JVM/TLAB.md)
+- [ClassFile](/docs/CS/Java/JDK/JVM/ClassFile.md)
+- [Card Table](/docs/CS/Java/JDK/JVM/GC/CardTable.md)

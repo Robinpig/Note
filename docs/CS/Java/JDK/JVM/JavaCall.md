@@ -642,3 +642,5 @@ static CallStub call_stub()                              { return CAST_TO_FN_PTR
 ## Links
 
 - [Execution Engine](/docs/CS/Java/JDK/JVM/ExecutionEngine.md)
+- [frame](/docs/CS/Java/JDK/JVM/frame.md)
+- [Handles](/docs/CS/Java/JDK/JVM/Handles.md)

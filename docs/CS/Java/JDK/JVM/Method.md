@@ -1553,3 +1553,7 @@ JEP350 DynamicCDS
 
 - [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
+- [frame](/docs/CS/Java/JDK/JVM/frame.md)
+- [ClassFile](/docs/CS/Java/JDK/JVM/ClassFile.md)
+- [SymbolTable](/docs/CS/Java/JDK/JVM/SymbolTable.md)
+- [Execution Engine](/docs/CS/Java/JDK/JVM/ExecutionEngine.md)

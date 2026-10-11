@@ -719,6 +719,7 @@ PS 以前是BFS对象图的 JDK1.6更改为默认DFS ParNew 一直是 BFS
 - [Serial GC](/docs/CS/Java/JDK/JVM/GC/Serial.md)
 - [G1 GC](/docs/CS/Java/JDK/JVM/GC/G1.md)
 - [Safepoint](/docs/CS/Java/JDK/JVM/Safepoint.md)
+- [Card Table](/docs/CS/Java/JDK/JVM/GC/CardTable.md)
 
 
 

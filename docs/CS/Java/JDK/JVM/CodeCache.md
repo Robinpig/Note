@@ -405,3 +405,6 @@ Code Cache分区的好处是降低内存碎片的产生，提高运行效率
 ## Links
 
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
+- [Execution Engine](/docs/CS/Java/JDK/JVM/ExecutionEngine.md)
+- [Deoptimization](/docs/CS/Java/JDK/JVM/Deoptimization.md)
+- [Startup Acceleration](/docs/CS/Java/JDK/JVM/Startup_Acceleration.md)

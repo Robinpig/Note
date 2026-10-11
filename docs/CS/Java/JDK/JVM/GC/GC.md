@@ -717,6 +717,9 @@ GC log
 
 - [Garbage Collection](/docs/CS/memory/GC.md)
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
+- [Object Header](/docs/CS/Java/JDK/JVM/Object_Header.md)
+- [Metaspace](/docs/CS/Java/JDK/JVM/Metaspace.md)
+- [Handles](/docs/CS/Java/JDK/JVM/Handles.md)
 
 ## References
 

@@ -809,3 +809,4 @@ public:
 ## Links
 
 - [Garbage Collection](/docs/CS/Java/JDK/JVM/GC/GC.md)
+- [Card Table](/docs/CS/Java/JDK/JVM/GC/CardTable.md)

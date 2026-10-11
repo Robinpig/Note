@@ -278,6 +278,8 @@ java -XX:+UnlockExperimentalVMOptions -XX:ShenandoahGCMode=generational
 ## Links
 
 - [Garbage Collection](/docs/CS/Java/JDK/JVM/GC/GC.md)
+- [TLAB](/docs/CS/Java/JDK/JVM/TLAB.md)
+- [Card Table](/docs/CS/Java/JDK/JVM/GC/CardTable.md)
 
 
 

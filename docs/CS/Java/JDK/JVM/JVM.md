@@ -13,8 +13,15 @@
 | [JEP 363](https://openjdk.org/jeps/363) | 14 | **移除 CMS**（`gc/cms` 目录删除）。弃用见 [JEP 291](https://openjdk.org/jeps/291)（9） |
 | [JEP 377](https://openjdk.org/jeps/377) | 15 | ZGC 由实验特性转为**产品特性**（不再需要 `-XX:+UnlockExperimentalVMOptions`） |
 | [JEP 439](https://openjdk.org/jeps/439) | 21 | **分代 ZGC**；后续非分代模式在 24 移除 |
+| JDK-8256425 | 18 | **偏向锁彻底移除**（`UseBiasedLocking` 连 obsolete 表条目都不剩）；弃用与默认禁用见 [JEP 374](https://openjdk.org/jeps/374)（15）。旧书里的 `[threadId\|epoch\|1\|01]` 位布局在 27 已无处可寻 |
 
 其他跨版本易错点：**JEP 214**（9）移除了 CMS 的年轻代组合，`ParNew` 与 CMS 的搭配从此不再可选；`-XX:+PrintGCDetails` 自 **JEP 271**（9）起被统一的 `-Xlog:gc*` 取代；**永久代（PermGen）自 JDK 8 起移除**，代之以 [Metaspace](/docs/CS/Java/JDK/JVM/Metaspace.md)（`-XX:MaxPermSize` / `-XX:PermSize` 会报 Unrecognized VM option）。
+
+⚠️ **随 JEP 534 一起失效的旧建议**：`UseCompressedClassPointers` 在 JDK 25 弃用、**JDK 27 已进 obsolete 表**（`runtime/arguments.cpp:544`），网上"关掉 `-XX:-UseCompressedClassPointers` 可以怎样怎样"的说法在 27 上是个无效开关。同理已 obsolete 的还有 `MetaspaceReclaimPolicy`（21）与 `NeverActAsServerClassMachine`（27）。紧凑对象头的三个真实代价（堆超上限被自动关闭、与 `-UseObjectMonitorTable` 不兼容、identity hash 与 klass 抢位）见 [Object Header](/docs/CS/Java/JDK/JVM/Object_Header.md)。
+
+> [!WARNING]
+>
+> **诊断命令名不存在 `VM.` → `GC.` 迁移**。JDK 27 的 metaspace / NMT 命令仍是 `VM.metaspace`、`VM.classloaders`、`VM.classloader_stats`、`VM.native_memory`；`GC.` 前缀只属于本来就管堆的 `GC.heap_info` / `GC.run` 等。踩坑根因：dcmd 的**名字**定义在 `.hpp` 的 `static const char* name()` 里，而 `.cpp` 构造函数开头那串字符串是**参数名**（`metaspaceDCmd.cpp:39-49` 的 `basic` / `show-loaders` / `by-spacetype` / `by-chunktype` / `vslist`），把后者当命令名会造出 `GC.metaspace_dump` 这类根本不存在的条目。详见 [Serviceability](/docs/CS/Java/JDK/JVM/Serviceability.md)。
 
 ## Introduction
 
@@ -2205,14 +2212,16 @@ with jvisualvm
 
 ## This Directory Navigation
 
-JVM 笔记沿「类加载 → 运行时数据区 → 执行引擎 → 运行时支撑」展开，垃圾回收单独成页（见末条）：
+JVM 笔记沿「类加载 → 运行时数据区 → 执行引擎 → 运行时支撑」展开，垃圾回收单独成页（见末条）。
+本子树已整体按 **jdk-27-ga** 源码重核过一轮，新增的五篇都源于原来「概念被反复引用却没有承载页」的空白：
 
-- 类加载与元数据：[ClassFile](/docs/CS/Java/JDK/JVM/ClassFile.md)（class 文件格式）、[ClassLoader](/docs/CS/Java/JDK/JVM/ClassLoader.md)、[Method](/docs/CS/Java/JDK/JVM/Method.md)、[Oop-Klass](/docs/CS/Java/JDK/JVM/Oop-Klass.md)（oop / klass 二分）、[Metaspace](/docs/CS/Java/JDK/JVM/Metaspace.md)、[SymbolTable](/docs/CS/Java/JDK/JVM/SymbolTable.md)
-- 运行时数据区：[Runtime Data Area](/docs/CS/Java/JDK/JVM/Runtime_Data_Area.md)、[Stack](/docs/CS/Java/JDK/JVM/Stack.md)、[frame](/docs/CS/Java/JDK/JVM/frame.md)、[TLAB](/docs/CS/Java/JDK/JVM/TLAB.md)
-- 执行引擎与编译：[interpreter](/docs/CS/Java/JDK/JVM/interpreter.md)（模板解释器）、[c1](/docs/CS/Java/JDK/JVM/c1.md)、[JIT](/docs/CS/Java/JDK/JVM/JIT.md)（分层编译）、[CodeCache](/docs/CS/Java/JDK/JVM/CodeCache.md)、[ExecutionEngine](/docs/CS/Java/JDK/JVM/ExecutionEngine.md)、[Javac](/docs/CS/Java/JDK/JVM/Javac.md)
-- 线程与运行时支撑：[Thread](/docs/CS/Java/JDK/JVM/Thread.md)、[Safepoint](/docs/CS/Java/JDK/JVM/Safepoint.md)、[JavaCall](/docs/CS/Java/JDK/JVM/JavaCall.md)、[start](/docs/CS/Java/JDK/JVM/start.md)（构建与启动）、[destroy](/docs/CS/Java/JDK/JVM/destroy.md)（有序 / 异常关闭）
-- 性能与实验：[JMH](/docs/CS/Java/JDK/JVM/JMH.md)、[Graal](/docs/CS/Java/JDK/JVM/Graal.md)
-- 垃圾回收：[GC](/docs/CS/Java/JDK/JVM/GC/GC.md) 及其收集器分页
+- 类加载与元数据：[ClassFile](/docs/CS/Java/JDK/JVM/ClassFile.md)（class 文件格式、常量池与属性表全集）、[ClassLoader](/docs/CS/Java/JDK/JVM/ClassLoader.md)、[Method](/docs/CS/Java/JDK/JVM/Method.md)、[Oop-Klass](/docs/CS/Java/JDK/JVM/Oop-Klass.md)（oop / klass 二分）、[Metaspace](/docs/CS/Java/JDK/JVM/Metaspace.md)（弹性 Metaspace 的 chunk 树）、[SymbolTable](/docs/CS/Java/JDK/JVM/SymbolTable.md)（interned 符号与 StringTable 的分界）
+- 对象与栈的内存布局：[Runtime Data Area](/docs/CS/Java/JDK/JVM/Runtime_Data_Area.md)、[Object_Header](/docs/CS/Java/JDK/JVM/Object_Header.md)（`markWord` 位布局、压缩指针与 JEP 534 紧凑对象头）、[Stack](/docs/CS/Java/JDK/JVM/Stack.md)（线程栈这块内存本身）、[frame](/docs/CS/Java/JDK/JVM/frame.md)（如何解读其中一段）、[TLAB](/docs/CS/Java/JDK/JVM/TLAB.md)（分配 fast path，写下去的第一个字就是对象头）
+- 执行引擎与编译：[ExecutionEngine](/docs/CS/Java/JDK/JVM/ExecutionEngine.md)（入口分派与四条执行路径的导览）、[interpreter](/docs/CS/Java/JDK/JVM/interpreter.md)（模板解释器）、[c1](/docs/CS/Java/JDK/JVM/c1.md)、[JIT](/docs/CS/Java/JDK/JVM/JIT.md)（分层编译）、[Deoptimization](/docs/CS/Java/JDK/JVM/Deoptimization.md)（推测破产时把编译帧退回解释帧）、[CodeCache](/docs/CS/Java/JDK/JVM/CodeCache.md)、[Javac](/docs/CS/Java/JDK/JVM/Javac.md)
+- 线程与运行时支撑：[Thread](/docs/CS/Java/JDK/JVM/Thread.md)、[Handles](/docs/CS/Java/JDK/JVM/Handles.md)（GC 会移动对象，所以热路径上拿的是句柄而非裸 `oop`；含 JNI 引用表的内部实现）、[Safepoint](/docs/CS/Java/JDK/JVM/Safepoint.md)、[JavaCall](/docs/CS/Java/JDK/JVM/JavaCall.md)
+- 生命周期与启动加速：[start](/docs/CS/Java/JDK/JVM/start.md)（构建与 `create_vm`）、[Startup_Acceleration](/docs/CS/Java/JDK/JVM/Startup_Acceleration.md)（CDS / 动态归档 / AOT class linking / AOT method / final image）、[destroy](/docs/CS/Java/JDK/JVM/destroy.md)（有序、`halt` 与崩溃三条终止路径）
+- 可观测性与性能：[Serviceability](/docs/CS/Java/JDK/JVM/Serviceability.md)（统一日志、NMT、dcmd 与 attach 这套底座）、[JMH](/docs/CS/Java/JDK/JVM/JMH.md)、[Graal](/docs/CS/Java/JDK/JVM/Graal.md)
+- 垃圾回收：[GC](/docs/CS/Java/JDK/JVM/GC/GC.md) 及其收集器分页，其中 [CardTable](/docs/CS/Java/JDK/JVM/GC/CardTable.md) 是跨代引用粗筛的通用机制（G1 的 RSet 与它的分工见该页）
 
 ## Links
 

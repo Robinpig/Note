@@ -1046,6 +1046,10 @@ CompileBroker::compilation_init_phase1()
 
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
 - [Thread](/docs/CS/Java/JDK/Concurrency/Thread.md)
+- [Handles](/docs/CS/Java/JDK/JVM/Handles.md)
+- [Stack](/docs/CS/Java/JDK/JVM/Stack.md)
+- [frame](/docs/CS/Java/JDK/JVM/frame.md)
+- [TLAB](/docs/CS/Java/JDK/JVM/TLAB.md)
 
 ## References
 

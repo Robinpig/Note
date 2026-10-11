@@ -686,6 +686,8 @@ void ZDriverMajor::collect_old() {
 ## Links
 
 - [Garbage Collection](/docs/CS/Java/JDK/JVM/GC/GC.md)
+- [TLAB](/docs/CS/Java/JDK/JVM/TLAB.md)
+- [Startup Acceleration](/docs/CS/Java/JDK/JVM/Startup_Acceleration.md)
 
 
 ## References

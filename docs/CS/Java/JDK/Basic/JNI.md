@@ -352,6 +352,9 @@ $ java -Xcomp -Djava.library.path=./ JNITest
 ## Links
 
 - [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
+- [Handles](/docs/CS/Java/JDK/JVM/Handles.md)
+- [destroy](/docs/CS/Java/JDK/JVM/destroy.md)
+- [Stack](/docs/CS/Java/JDK/JVM/Stack.md)
 
 ## References
 

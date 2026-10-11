@@ -45,3 +45,5 @@ Lookup defineClassAsLookup(boolean initialize) {
 ## Links
 
 - [JDK](/docs/CS/Java/JDK/JDK.md)
+- [ClassFile](/docs/CS/Java/JDK/JVM/ClassFile.md)
+- [Object Header](/docs/CS/Java/JDK/JVM/Object_Header.md)

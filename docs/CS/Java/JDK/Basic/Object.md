@@ -815,3 +815,5 @@ Local classes, anonymous classes, and lambda expressions also impart these advan
 ## Links
 
 - [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
+- [Object Header](/docs/CS/Java/JDK/JVM/Object_Header.md)
+- [TLAB](/docs/CS/Java/JDK/JVM/TLAB.md)

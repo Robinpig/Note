@@ -888,5 +888,7 @@ public:
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
 - [ClassLoader](/docs/CS/Java/JDK/JVM/ClassLoader.md)
 - [Class File and Compiler](/docs/CS/Java/JDK/JVM/ClassFile.md)
+- [Object Header](/docs/CS/Java/JDK/JVM/Object_Header.md)
+- [Handles](/docs/CS/Java/JDK/JVM/Handles.md)
 
 ## References

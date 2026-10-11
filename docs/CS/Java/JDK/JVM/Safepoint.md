@@ -843,6 +843,9 @@ Xlog:safepoint
 
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
 - [VMThread](/docs/CS/Java/JDK/JVM/Thread.md?id=vmthread)
+- [Deoptimization](/docs/CS/Java/JDK/JVM/Deoptimization.md)
+- [TLAB](/docs/CS/Java/JDK/JVM/TLAB.md)
+- [destroy](/docs/CS/Java/JDK/JVM/destroy.md)
 
 
 

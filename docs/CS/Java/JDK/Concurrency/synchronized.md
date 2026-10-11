@@ -1956,6 +1956,9 @@ Using ParkEvent(A wrapper of mutex).
 
 ## Links
 - [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
+- [Object Header](/docs/CS/Java/JDK/JVM/Object_Header.md)
+- [Deoptimization](/docs/CS/Java/JDK/JVM/Deoptimization.md)
+- [frame](/docs/CS/Java/JDK/JVM/frame.md)
 
 ## References
 

@@ -2797,6 +2797,9 @@ ClassLoaderDataGraph::classes_do
 
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
 - [Oop-Klass](/docs/CS/Java/JDK/JVM/Oop-Klass.md)
+- [ClassFile](/docs/CS/Java/JDK/JVM/ClassFile.md)
+- [SymbolTable](/docs/CS/Java/JDK/JVM/SymbolTable.md)
+- [Startup Acceleration](/docs/CS/Java/JDK/JVM/Startup_Acceleration.md)
 
 ## References
 

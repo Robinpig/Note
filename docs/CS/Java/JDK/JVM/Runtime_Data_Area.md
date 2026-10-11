@@ -381,6 +381,8 @@ VirtualSpaceList
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
 - [Java Virtual Machine Stack](/docs/CS/Java/JDK/JVM/Stack.md)
 - [frame](/docs/CS/Java/JDK/JVM/frame.md)
+- [Object Header](/docs/CS/Java/JDK/JVM/Object_Header.md)
+- [TLAB](/docs/CS/Java/JDK/JVM/TLAB.md)
 
 
 

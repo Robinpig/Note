@@ -1114,6 +1114,9 @@ ReferenceProcessorStats ReferenceProcessor::process_discovered_references(RefPro
 ## Links
 
 - [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
+- [Handles](/docs/CS/Java/JDK/JVM/Handles.md)
+- [SymbolTable](/docs/CS/Java/JDK/JVM/SymbolTable.md)
+- [destroy](/docs/CS/Java/JDK/JVM/destroy.md)
 
 ## References
 

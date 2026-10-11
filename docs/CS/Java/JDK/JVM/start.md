@@ -1068,3 +1068,4 @@ Java 应用通常都是运行一段时间后将字节码编译成机器码之后
 
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
 - [Destroy JVM](/docs/CS/Java/JDK/JVM/destroy.md)
+- [Startup Acceleration](/docs/CS/Java/JDK/JVM/Startup_Acceleration.md)

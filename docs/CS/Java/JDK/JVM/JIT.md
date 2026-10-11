@@ -722,6 +722,10 @@ not support escape method
 ## Links
 
 - [JVM](/docs/CS/Java/JDK/JVM/JVM.md)
+- [Execution Engine](/docs/CS/Java/JDK/JVM/ExecutionEngine.md)
+- [Deoptimization](/docs/CS/Java/JDK/JVM/Deoptimization.md)
+- [Startup Acceleration](/docs/CS/Java/JDK/JVM/Startup_Acceleration.md)
+- [Card Table](/docs/CS/Java/JDK/JVM/GC/CardTable.md)
 
 ## References
 
