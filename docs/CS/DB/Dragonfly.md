@@ -25,3 +25,9 @@ Dragonfly has a single unified adaptive caching algorithm that is very simple an
 
 - [DataBases](/docs/CS/DB/DB.md)
 - [Redis](/docs/CS/DB/Redis/Redis.md)
+
+
+## References
+
+1. [Dragonfly](https://www.dragonflydb.io/)
+2. [dragonflydb/dragonfly](https://github.com/dragonflydb/dragonfly)

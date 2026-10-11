@@ -1,3 +1,7 @@
+## Introduction
+
+Bloom filter（布隆过滤器）用极小的空间回答「一个元素是否在集合中」，代价是存在假阳性、且难以删除。Redis 本体不提供该结构，要靠 4.0 引入的 module 机制外挂 RedisBloom。本页讲原理、参数与典型用法，相关类型见 [HyperLogLog](/docs/CS/DB/Redis/struct/HyperLogLog.md) 与 [bitmap](/docs/CS/DB/Redis/struct/bitmap.md)。
+
 ## Bloom Filter
 
 A Bloom filter is a data structure that may report it contains an item that it does not (a false positive), but is guaranteed to report correctly if it contains the item (“no false negatives”).
@@ -61,5 +65,5 @@ That is, it may claim that it has not seen an item when it has, but will never c
 
 ## References
 
-1. []()
+1. [RedisBloom](https://github.com/RedisBloom/RedisBloom)
 2. [The Opposite of a Bloom Filter](https://www.somethingsimilar.com/2012/05/21/the-opposite-of-a-bloom-filter/)

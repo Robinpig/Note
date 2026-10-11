@@ -49,10 +49,10 @@ typedef struct quicklistNode {
 } quicklistNode;
 ```
 
-从数据结构上看quicklist的设计重点在于控制每个ziplist的大小和元素个数 有效减少了在 ziplist 中新增或修改元素后，发生连锁更新的情况
+从数据结构上看 quicklist 的设计重点在于控制每个 ziplist 的大小和元素个数 有效减少了在 ziplist 中新增或修改元素后，发生连锁更新的情况
 
-- 单个ziplist的过小就会退化成linkedlist
-- 单个ziplist过大极端情况下只有一个ziplist同样无法避免级联更新
+- 单个 ziplist 的过小就会退化成 linkedlist
+- 单个 ziplist 过大极端情况下只有一个 ziplist 同样无法避免级联更新
 
 
 Lists are also encoded in a special way to save a lot of space.
@@ -213,8 +213,13 @@ REDIS_STATIC int _quicklistNodeAllowInsert(const quicklistNode *node,
 
 ## Tuning
 
-quicklist解决了单个ziplist过大 缩小连锁更新的范围
+quicklist 解决了单个 ziplist 过大 缩小连锁更新的范围
 
 
 
 ## Links
+
+
+## References
+
+1. [Redis quicklist.c](https://github.com/redis/redis/blob/unstable/src/quicklist.c)

@@ -26,7 +26,7 @@
 | 变更项 | 官方默认 | 本方案 |
 |--------|---------|--------|
 | 网络模式 | `bridge`（端口映射） | `host`（直接暴露宿主机端口） |
-| 跨节点通信 | Docker DNS + 容器名 | 宿主机物理 IP（`193.195.129.57/58/59`） |
+| 跨节点通信 | Docker DNS + 容器名 | 宿主机物理 IP（`192.0.2.57/58/59`） |
 | Attu | 同属一个 compose 或独立 bridge | 单独 bridge 模式，`-p 28000:3000` 映射 |
 
 Host 模式下消除了 Docker NAT 转发开销，但也要求端口规划不得冲突、防火墙策略精确到位。
@@ -93,7 +93,7 @@ Host 模式下所有容器共享宿主机网络栈，组件共用 `9091` 必然�
 ### 0.2 Project Structure
 
 ```
-<部署节点 IP：193.195.129.57/58/59>
+<部署节点 IP：192.0.2.57/58/59>
 ├── etcd/                              # etcd 部署（§1）
 │   ├── deploy-etcd.sh                 # 安装脚本（Node1 版本，需按节点修改 IP 与 --name）
 │   └── images/
@@ -125,15 +125,15 @@ Host 模式下所有容器共享宿主机网络栈，组件共用 `9091` 必然�
 
 | 节点 IP | 部署组件 |
 |---------|---------|
-| 193.195.129.57 | etcd-node1 + kafka-node1 + Milvus 全部 8 组件 + Attu |
-| 193.195.129.58 | etcd-node2 + kafka-node2 + Milvus 全部 8 组件 |
-| 193.195.129.59 | etcd-node3 + kafka-node3 + Milvus 全部 8 组件 |
+| 192.0.2.57 | etcd-node1 + kafka-node1 + Milvus 全部 8 组件 + Attu |
+| 192.0.2.58 | etcd-node2 + kafka-node2 + Milvus 全部 8 组件 |
+| 192.0.2.59 | etcd-node3 + kafka-node3 + Milvus 全部 8 组件 |
 
 > 每台节点上 Milvus 的 8 个组件（rootcoord、datacoord、querycoord、indexcoord、proxy、datanode、querynode、indexnode）全部启动，四个 Coordinator 通过 `ENABLE_ACTIVE_STANDBY` 实现跨节点热备。
 
 ### 0.3 Hard Constraints
 
-- 跨主机连接必须使用节点 IP（`193.195.129.57/58/59`），不得使用 Docker 容器名或 localhost；
+- 跨主机连接必须使用节点 IP（`192.0.2.57/58/59`），不得使用 Docker 容器名或 localhost；
 - 每个项目独立启停、独立验证、独立维护；
 - **Host 网络模式下，端口冲突由运维保证** —— etcd `2379/2380`、Kafka `9092/9093`、Milvus Proxy `19530`、Milvus Metrics `9991-9998`；
 - **同一宿主机上的每个 Milvus 组件必须配置不同的 `METRICS_PORT`**，禁止继续共用默认端口 `9091`。
@@ -161,25 +161,25 @@ Host 网络模式下，所有容器直接监听宿主机 IP 上的端口。三�
 
 | 组件 | 端口 | 用途 | 防火墙策略 |
 |------|------|------|-----------|
-| etcd | 2379 | 客户端连接 | 仅 `193.195.129.57/58/59` |
-| etcd | 2380 | Peer 集群通信 | 仅 `193.195.129.57/58/59` |
-| Kafka | 9092 | 客户端连接（PLAINTEXT） | 仅 `193.195.129.57/58/59` |
-| Kafka | 9093 | Controller 集群通信 | 仅 `193.195.129.57/58/59` |
-| Milvus Proxy | 19530 | 业务入口 | 仅 `193.195.129.57/58/59`（F5 后端） |
-| Milvus RootCoord | 53100 | 内部 gRPC | 仅 `193.195.129.57/58/59` |
-| Milvus DataCoord | 13333 | 内部 gRPC | 仅 `193.195.129.57/58/59` |
-| Milvus QueryCoord | 19531 | 内部 gRPC | 仅 `193.195.129.57/58/59` |
-| Milvus IndexCoord | 22930 | 内部 gRPC | 仅 `193.195.129.57/58/59` |
-| Milvus RootCoord Metrics | 9991 | Prometheus 指标 | 仅 `193.195.129.57/58/59` |
-| Milvus DataCoord Metrics | 9992 | Prometheus 指标 | 仅 `193.195.129.57/58/59` |
-| Milvus QueryCoord Metrics | 9993 | Prometheus 指标 | 仅 `193.195.129.57/58/59` |
-| Milvus IndexCoord Metrics | 9994 | Prometheus 指标 | 仅 `193.195.129.57/58/59` |
-| Milvus Proxy Metrics | 9995 | Prometheus 指标、F5 健康检查 | 仅 `193.195.129.57/58/59` |
-| Milvus DataNode Metrics | 9996 | Prometheus 指标 | 仅 `193.195.129.57/58/59` |
-| Milvus QueryNode Metrics | 9997 | Prometheus 指标 | 仅 `193.195.129.57/58/59` |
-| Milvus IndexNode Metrics | 9998 | Prometheus 指标 | 仅 `193.195.129.57/58/59` |
-| Milvus 内部（各 Worker 节点默认端口） | 21147、21149、21151 | DataNode/QueryNode/IndexNode 组件间 gRPC | 仅 `193.195.129.57/58/59` |
-| Attu | 28000 | Web 运维控制台 | 仅 `193.195.129.57` |
+| etcd | 2379 | 客户端连接 | 仅 `192.0.2.57/58/59` |
+| etcd | 2380 | Peer 集群通信 | 仅 `192.0.2.57/58/59` |
+| Kafka | 9092 | 客户端连接（PLAINTEXT） | 仅 `192.0.2.57/58/59` |
+| Kafka | 9093 | Controller 集群通信 | 仅 `192.0.2.57/58/59` |
+| Milvus Proxy | 19530 | 业务入口 | 仅 `192.0.2.57/58/59`（F5 后端） |
+| Milvus RootCoord | 53100 | 内部 gRPC | 仅 `192.0.2.57/58/59` |
+| Milvus DataCoord | 13333 | 内部 gRPC | 仅 `192.0.2.57/58/59` |
+| Milvus QueryCoord | 19531 | 内部 gRPC | 仅 `192.0.2.57/58/59` |
+| Milvus IndexCoord | 22930 | 内部 gRPC | 仅 `192.0.2.57/58/59` |
+| Milvus RootCoord Metrics | 9991 | Prometheus 指标 | 仅 `192.0.2.57/58/59` |
+| Milvus DataCoord Metrics | 9992 | Prometheus 指标 | 仅 `192.0.2.57/58/59` |
+| Milvus QueryCoord Metrics | 9993 | Prometheus 指标 | 仅 `192.0.2.57/58/59` |
+| Milvus IndexCoord Metrics | 9994 | Prometheus 指标 | 仅 `192.0.2.57/58/59` |
+| Milvus Proxy Metrics | 9995 | Prometheus 指标、F5 健康检查 | 仅 `192.0.2.57/58/59` |
+| Milvus DataNode Metrics | 9996 | Prometheus 指标 | 仅 `192.0.2.57/58/59` |
+| Milvus QueryNode Metrics | 9997 | Prometheus 指标 | 仅 `192.0.2.57/58/59` |
+| Milvus IndexNode Metrics | 9998 | Prometheus 指标 | 仅 `192.0.2.57/58/59` |
+| Milvus 内部（各 Worker 节点默认端口） | 21147、21149、21151 | DataNode/QueryNode/IndexNode 组件间 gRPC | 仅 `192.0.2.57/58/59` |
+| Attu | 28000 | Web 运维控制台 | 仅 `192.0.2.57` |
 
 
 
@@ -201,7 +201,7 @@ Host 网络模式下，所有容器直接监听宿主机 IP 上的端口。三�
 
 # 服务器地址
 # Server Address
-localhost="193.195.129.57"
+localhost="192.0.2.57"
 # 安装包目录
 path="/aiapp/mid/etcd"
 
@@ -233,7 +233,7 @@ etcdInstall() {
             --name etcd-node1 \
             --listen-peer-urls http://0.0.0.0:2380 \
             --initial-advertise-peer-urls http://${localhost}:2380 \
-            --initial-cluster etcd-node1=http://193.195.129.57:2380,etcd-node2=http://193.195.129.58:2380,etcd-node3=http://193.195.129.59:2380 \
+            --initial-cluster etcd-node1=http://192.0.2.57:2380,etcd-node2=http://192.0.2.58:2380,etcd-node3=http://192.0.2.59:2380 \
             --advertise-client-urls=http://${localhost}:2379 \
             --listen-client-urls http://0.0.0.0:2379 \
             --log-outputs=/etcd/logs/etcd.log \
@@ -270,13 +270,13 @@ etcdInstall
 ### 1.4 Node2 / Node3 Variants
 
 仅需要替换脚本中两处 
-- localhost 的IP为宿主机IP
+- localhost 的 IP 为宿主机 IP
 - `--name` 对应的值需和 `--initial-cluster` 中配置的对应关系进行呼应
 
 | 参数 | Node1 | Node2 | Node3 |
 |------|-------|-------|-------|
 | `--name` | `etcd-node1` | `etcd-node2` | `etcd-node3` |
-| `localhost` | `193.195.129.57` | `193.195.129.58` | `193.195.129.59` |
+| `localhost` | `192.0.2.57` | `192.0.2.58` | `192.0.2.59` |
 
 
 `ETCD_INITIAL_CLUSTER` 三个节点完全一致，无需修改。
@@ -292,12 +292,12 @@ ss -tlnp | grep -E '2379|2380'
 
 # 检查集群健康
 docker exec -T etcd etcdctl \
-  --endpoints=http://193.195.129.57:2379,http://193.195.129.58:2379,http://193.195.129.59:2379 \
+  --endpoints=http://192.0.2.57:2379,http://192.0.2.58:2379,http://192.0.2.59:2379 \
   endpoint health
 
 # 查看成员状态
 docker exec -T etcd etcdctl \
-  --endpoints=http://193.195.129.57:2379,http://193.195.129.58:2379,http://193.195.129.59:2379 \
+  --endpoints=http://192.0.2.57:2379,http://192.0.2.58:2379,http://192.0.2.59:2379 \
   endpoint status --write-out=table
 ```
 
@@ -345,14 +345,14 @@ Kafka 3.4.1 KRaft 模式下，每个节点同时承担 Broker（数据存储与�
 
 ### 2.3 Installation Script
 
-以下是 Kafka 安装脚本 Node1 版本（`193.195.129.57`）。脚本完成：下载二进制包 → 解压 → 生成 `server.properties` → `kafka-storage.sh format` 格式化元数据 → 后台启动。
+以下是 Kafka 安装脚本 Node1 版本（`192.0.2.57`）。脚本完成：下载二进制包 → 解压 → 生成 `server.properties` → `kafka-storage.sh format` 格式化元数据 → 后台启动。
 
 ```bash
 #!/bin/bash
 
 # 服务器地址
 # Server Address
-localhost="193.195.129.57"
+localhost="192.0.2.57"
 # 本节点 node.id（Node1=1, Node2=2, Node3=3）
 node_id="1"
 # 安装包目录
@@ -363,7 +363,7 @@ kafka_pkg="kafka_${scala_version}-${kafka_version}"
 kafka_home="${path}/${kafka_pkg}"
 # KRaft 集群 ID，三个节点必须完全一致（22 位 base64，可用 kafka-storage.sh random-uuid 生成）
 cluster_id="MkU3OEVBNTcwNTJENDM5Qk"
-quorum_voters="1@193.195.129.57:9093,2@193.195.129.58:9093,3@193.195.129.59:9093"
+quorum_voters="1@192.0.2.57:9093,2@192.0.2.58:9093,3@192.0.2.59:9093"
 
 # Kafka安装
 kafkainstall() {
@@ -472,20 +472,20 @@ kafkainstall
 | 变量 | Node1（57） | Node2（58） | Node3（59） |
 |------|------------|------------|------------|
 | `node_id` | `1` | `2` | `3` |
-| `localhost` | `193.195.129.57` | `193.195.129.58` | `193.195.129.59` |
+| `localhost` | `192.0.2.57` | `192.0.2.58` | `192.0.2.59` |
 
 生成的 `server.properties` 中对应差异项：
 
 | 配置项 | Node1（57） | Node2（58） | Node3（59） |
 |------|------------|------------|------------|
 | `node.id` | `1` | `2` | `3` |
-| `advertised.listeners` | `PLAINTEXT://193.195.129.57:9092` | `PLAINTEXT://193.195.129.58:9092` | `PLAINTEXT://193.195.129.59:9092` |
+| `advertised.listeners` | `PLAINTEXT://192.0.2.57:9092` | `PLAINTEXT://192.0.2.58:9092` | `PLAINTEXT://192.0.2.59:9092` |
 
 **以下配置三个节点完全一致**：
 
 ```properties
 cluster.id（format 时使用）= MkU3OEVBNTcwNTJENDM5Qk
-controller.quorum.voters=1@193.195.129.57:9093,2@193.195.129.58:9093,3@193.195.129.59:9093
+controller.quorum.voters=1@192.0.2.57:9093,2@192.0.2.58:9093,3@192.0.2.59:9093
 ```
 
 > **CLUSTER_ID 生成**：在任意一台节点解压后的安装目录下执行，输出值填入三个节点脚本的 `cluster_id` 变量：
@@ -508,14 +508,14 @@ ss -tlnp | grep -E '9092|9093'
 
 # 验证 KRaft 集群状态（在任意节点安装目录下执行）
 /aiapp/mid/kafka-cluster/kafka_2.13-3.4.1/bin/kafka-metadata-quorum.sh \
-  --bootstrap-server 193.195.129.57:9092,193.195.129.58:9092,193.195.129.59:9092 \
+  --bootstrap-server 192.0.2.57:9092,192.0.2.58:9092,192.0.2.59:9092 \
   describe --status
 
 # 期望输出：LeaderId 存在，QuorumState 为 QuorumLeader 或 Follower
 
 # 查看 broker 注册情况（应列出 3 个节点 id: 1,2,3）
 /aiapp/mid/kafka-cluster/kafka_2.13-3.4.1/bin/kafka-broker-api-versions.sh \
-  --bootstrap-server 193.195.129.57:9092,193.195.129.58:9092,193.195.129.59:9092 | awk -F: '{print $1}'
+  --bootstrap-server 192.0.2.57:9092,192.0.2.58:9092,192.0.2.59:9092 | awk -F: '{print $1}'
 ```
 
 ## 3. Milvus 2.4 + Kafka
@@ -557,13 +557,13 @@ version: '3.8'
 x-milvus-env: &milvus-env
   # HOST_IP 在每节点的 .env 中设置为本机 IP（57/58/59），供 coordinator 注册地址使用
   HOST_IP: "${HOST_IP}"
-  ETCD_ENDPOINTS: "193.195.129.57:2379,193.195.129.58:2379,193.195.129.59:2379"
+  ETCD_ENDPOINTS: "192.0.2.57:2379,192.0.2.58:2379,192.0.2.59:2379"
   MINIO_ADDRESS: "${MINIO_ADDRESS}"
   MINIO_ACCESS_KEY_ID: "${MINIO_ACCESS_KEY_ID}"
   MINIO_SECRET_ACCESS_KEY: "${MINIO_SECRET_ACCESS_KEY}"
   MINIO_USE_SSL: "${MINIO_USE_SSL}"
   MINIO_BUCKET_NAME: "${MINIO_BUCKET_NAME}"
-  KAFKA_BROKER_LIST: "193.195.129.57:9092,193.195.129.58:9092,193.195.129.59:9092"
+  KAFKA_BROKER_LIST: "192.0.2.57:9092,192.0.2.58:9092,192.0.2.59:9092"
   MQ_TYPE: "kafka"
   COMMON_STORAGETYPE: "minio"
   KNOWHERE_GPU_MEM_POOL_SIZE: "0"
@@ -731,16 +731,16 @@ docker ps | grep milvus
 ss -tlnp | grep -E '19530|999[1-8]|53100|13333|19531|22930'
 
 # 检查 Proxy 健康状态（通过 metrics 端点）
-curl -s http://193.195.129.57:9995/metrics | head -20
+curl -s http://192.0.2.57:9995/metrics | head -20
 
 # 方式一：使用 milvus-cli（需额外安装）
 # Method 1: Use milvus-cli (Requires Additional Installation)
-# milvus-cli --host 193.195.129.57 --port 19530
+# milvus-cli --host 192.0.2.57 --port 19530
 
 # 方式二：使用 Python SDK 验证连接（可选）
 python3 -c "
 from pymilvus import connections, utility
-connections.connect(host='193.195.129.57', port='19530')
+connections.connect(host='192.0.2.57', port='19530')
 print('Milvus 连接成功')
 print('服务版本:', utility.get_server_version())
 print('集合列表:', utility.list_collections())
@@ -767,11 +767,11 @@ docker logs milvus-indexnode --tail 20
 
 ### 4.1 Project Description
 
-Attu 是 Milvus 的 Web 运维控制台，用于验证Milvus集群部署状态和基本操作。
+Attu 是 Milvus 的 Web 运维控制台，用于验证 Milvus 集群部署状态和基本操作。
 
 - **网络模式**：`bridge`（单独部署，非 Host 模式）
 - **宿主机端口**：`28000`（映射到容器内 `3000`）
-- **部署节点**：仅 `193.195.129.57`（Node1）
+- **部署节点**：仅 `192.0.2.57`（Node1）
 - **依赖**：Milvus Proxy（`19530`）正常运行
 
 ### 4.2 Installation Script
@@ -781,7 +781,7 @@ Attu 是 Milvus 的 Web 运维控制台，用于验证Milvus集群部署状态�
 
 # 服务器地址
 # Server Address
-localhost="193.195.129.57"
+localhost="192.0.2.57"
 # 安装包目录
 path="/aiapp/mid/attu"
 
@@ -810,8 +810,8 @@ attuInstall
 
 ### 4.3 Access Instructions
 
-- **Web 控制台**：`http://193.195.129.57:28000`
-- **Milvus 连接地址**：`http://193.195.129.57:19530`
+- **Web 控制台**：`http://192.0.2.57:28000`
+- **Milvus 连接地址**：`http://192.0.2.57:19530`
 - Attu 与 Milvus 部署在同一台机器上，所以 `HOST_URL` 和 `MILVUS_URL` 均为 `localhost`
 
 ## 5. Summary
@@ -881,9 +881,9 @@ Woodpecker 将上述能力内建到 Milvus 自身：
 
 | 节点 IP | 2.x 部署组件 | 3.x 部署组件 |
 |---------|-------------|-------------|
-| 193.195.129.57 | etcd-node1 + kafka-node1 + Milvus 8 组件 + Attu | etcd-node1 + Milvus 8 组件 + Attu |
-| 193.195.129.58 | etcd-node2 + kafka-node2 + Milvus 8 组件 | etcd-node2 + Milvus 8 组件 |
-| 193.195.129.59 | etcd-node3 + kafka-node3 + Milvus 8 组件 | etcd-node3 + Milvus 8 组件 |
+| 192.0.2.57 | etcd-node1 + kafka-node1 + Milvus 8 组件 + Attu | etcd-node1 + Milvus 8 组件 + Attu |
+| 192.0.2.58 | etcd-node2 + kafka-node2 + Milvus 8 组件 | etcd-node2 + Milvus 8 组件 |
+| 192.0.2.59 | etcd-node3 + kafka-node3 + Milvus 8 组件 | etcd-node3 + Milvus 8 组件 |
 
 **启动依赖链简化**：
 
@@ -913,7 +913,7 @@ Woodpecker 作为 Milvus 内置组件，复用 Milvus 已有的内部通信端�
 
 ```yaml
 # 以下配置在 3.x 中移除
-KAFKA_BROKER_LIST: "193.195.129.57:9092,193.195.129.58:9092,193.195.129.59:9092"
+KAFKA_BROKER_LIST: "192.0.2.57:9092,192.0.2.58:9092,192.0.2.59:9092"
 MQ_TYPE: "kafka"
 ```
 
@@ -924,7 +924,7 @@ Milvus 3.x 中 Woodpecker 作为默认 WAL 引擎，`MQ_TYPE` 默认为 `woodpec
 ```yaml
 x-milvus-env: &milvus-env
   HOST_IP: "${HOST_IP}"
-  ETCD_ENDPOINTS: "193.195.129.57:2379,193.195.129.58:2379,193.195.129.59:2379"
+  ETCD_ENDPOINTS: "192.0.2.57:2379,192.0.2.58:2379,192.0.2.59:2379"
   # ... MinIO / 日志 / 鉴权等配置与 2.x 相同 ...
 
   # 3.x：Woodpecker WAL 配置
@@ -989,7 +989,7 @@ docker logs milvus-proxy --tail 50 | grep -i -E 'woodpecker|kafka|mq'
 # 写入验证：通过 Python SDK 插入数据后确认 Woodpecker 日志段增长
 python3 -c "
 from pymilvus import connections, Collection, FieldSchema, CollectionSchema, DataType
-connections.connect(host='193.195.129.57', port='19530')
+connections.connect(host='192.0.2.57', port='19530')
 print('Milvus 版本:', connections.get_connection_addr('default'))
 # 后续插入/搜索验证逻辑同 2.x
 "
@@ -1013,7 +1013,7 @@ Milvus 官方指标可视化仪表盘：
 wget https://raw.githubusercontent.com/milvus-io/milvus/refs/heads/master/deployments/monitor/grafana/milvus-dashboard.json
 ```
 
-因为Milvus目前主要是kubernetes部署的，所以需要适配一下
+因为 Milvus 目前主要是 kubernetes 部署的，所以需要适配一下
 
 修改prometheus.yml
 
@@ -1023,7 +1023,7 @@ wget https://raw.githubusercontent.com/milvus-io/milvus/refs/heads/master/deploy
 # Milvus rootcoord
 - job_name: 'milvus-rootcoord'
   static_configs:
-  - targets: ['193.195.129.57:9991','193.195.129.58:9991','193.195.129.59:9991']
+  - targets: ['192.0.2.57:9991','192.0.2.58:9991','192.0.2.59:9991']
     labels:
       namespace: "milvus-docker"
       app_kubernetes_io_name: "milvus"
@@ -1033,7 +1033,7 @@ wget https://raw.githubusercontent.com/milvus-io/milvus/refs/heads/master/deploy
 #Milvus datacoord
 - job_name: 'milvus-datacoord'
   static_configs:
-  - targets: ['193.195.129.57:9992','193.195.129.58:9992','193.195.129.59:9992']
+  - targets: ['192.0.2.57:9992','192.0.2.58:9992','192.0.2.59:9992']
     labels:
       namespace: "milvus-docker"
       app_kubernetes_io_name: "milvus"
@@ -1043,7 +1043,7 @@ wget https://raw.githubusercontent.com/milvus-io/milvus/refs/heads/master/deploy
 # Milvus querycoord
 - job_name: 'milvus-querycoord'
   static_configs:
-  - targets: ['193.195.129.57:9993','193.195.129.58:9993','193.195.129.59:9993']
+  - targets: ['192.0.2.57:9993','192.0.2.58:9993','192.0.2.59:9993']
     labels:
       namespace: "milvus-docker"
       app_kubernetes_io_name: "milvus"
@@ -1053,7 +1053,7 @@ wget https://raw.githubusercontent.com/milvus-io/milvus/refs/heads/master/deploy
 # Milvus indexcoord
 - job_name: 'milvus-indexcoord'
   static_configs:
-  - targets: ['193.195.129.57:9994','193.195.129.58:9994','193.195.129.59:9994']
+  - targets: ['192.0.2.57:9994','192.0.2.58:9994','192.0.2.59:9994']
     labels:
       namespace: "milvus-docker"
       app_kubernetes_io_name: "milvus"
@@ -1063,7 +1063,7 @@ wget https://raw.githubusercontent.com/milvus-io/milvus/refs/heads/master/deploy
 # Milvus proxy
 - job_name: 'milvus-proxy'
   static_configs:
-  - targets: ['193.195.129.57:9995','193.195.129.58:9995','193.195.129.59:9995']
+  - targets: ['192.0.2.57:9995','192.0.2.58:9995','192.0.2.59:9995']
     labels:
       namespace: "milvus-docker"
       app_kubernetes_io_name: "milvus"
@@ -1073,7 +1073,7 @@ wget https://raw.githubusercontent.com/milvus-io/milvus/refs/heads/master/deploy
 # Milvus datanode
 - job_name: 'milvus-datanode'
   static_configs:
-  - targets: ['193.195.129.57:9996','193.195.129.58:9996','193.195.129.59:9996']
+  - targets: ['192.0.2.57:9996','192.0.2.58:9996','192.0.2.59:9996']
     labels:
       namespace: "milvus-docker"
       app_kubernetes_io_name: "milvus"
@@ -1084,7 +1084,7 @@ wget https://raw.githubusercontent.com/milvus-io/milvus/refs/heads/master/deploy
 # Milvus querynode
 - job_name: 'milvus-querynode'
   static_configs:
-  - targets: ['193.195.129.57:9997','193.195.129.58:9997','193.195.129.59:9997']
+  - targets: ['192.0.2.57:9997','192.0.2.58:9997','192.0.2.59:9997']
     labels:
       namespace: "milvus-docker"
       app_kubernetes_io_name: "milvus"
@@ -1095,7 +1095,7 @@ wget https://raw.githubusercontent.com/milvus-io/milvus/refs/heads/master/deploy
 # Milvus indexnode
 - job_name: 'milvus-indexnode'
   static_configs:
-  - targets: ['193.195.129.57:9998','193.195.129.58:9998','193.195.129.59:9998']
+  - targets: ['192.0.2.57:9998','192.0.2.58:9998','192.0.2.59:9998']
     labels:
       namespace: "milvus-docker"
       app_kubernetes_io_name: "milvus"
@@ -1111,3 +1111,10 @@ wget https://raw.githubusercontent.com/milvus-io/milvus/refs/heads/master/deploy
 - [Write Path](/docs/CS/DB/Milvus/Write_Path.md)
 - [etcd](/docs/CS/Framework/etcd/README.md)
 - [MQ](/docs/CS/MQ/MQ.md)
+
+
+## References
+
+1. [Milvus Documentation](https://milvus.io/docs)
+2. [Apache Kafka Documentation](https://kafka.apache.org/documentation/)
+3. [etcd Documentation](https://etcd.io/docs/)

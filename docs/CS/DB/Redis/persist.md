@@ -72,7 +72,7 @@ save 60 1000
 其它触发生成 RDB文件的操作
 - 在 Redis 主从复制中，当从节点执行全量复制操作时，主节点会执行 `bgsave` 命令，并将 RDB 文件发送给从节点
 - debug reload 命令重新加载 Redis 会触发 bgsave
-- 默认情况下执行 shutdown 命令，如果没有开启AOF持久化，也会触发 bgsave操作
+- 默认情况下执行 shutdown 命令，如果没有开启 AOF 持久化，也会触发 bgsave 操作
 
 
 其它配置
@@ -777,7 +777,7 @@ void aof_background_fsync(int fd) {
 
 AOF 文件重写是生成一个全新的文件，并把当前数据的最少操作命令保存到新文件上，当把所有的数据都保存至新文件之后，Redis 会交换两个文件，并把最新的持久化操作命令追加到新文件上。
 
-> 为什么不复用之前的AOF文件
+> 为什么不复用之前的 AOF 文件
 >
 > 文件写竞争；重写文件失败会污染原始文件，无法用于恢复
 
@@ -802,7 +802,7 @@ AOF 文件重写是生成一个全新的文件，并把当前数据的最少操�
 * 完成！现在 Redis 原子地交换清单文件，使此次 AOF 重写的结果生效。Redis 还会清理旧的基础文件和任何未使用的增量文件。
 
 
-新的 Multi Part AOF 机制在重写时无需 AOF Rewrite 缓冲区，不需要重复写AOF文件
+新的 Multi Part AOF 机制在重写时无需 AOF Rewrite 缓冲区，不需要重复写 AOF 文件
 
 
 #### rewriteAppendOnlyFileBackground

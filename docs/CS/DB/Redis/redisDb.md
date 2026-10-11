@@ -3,7 +3,7 @@
 > [!IMPORTANT]
 > 版本基线 **Redis 8.10.2**，完整版本表与易踩默认值见 [Redis 版本基线](/docs/CS/DB/Redis/Redis.md?id=version-baseline)。
 
-[redisServer](/docs/CS/DB/Redis/server.md?id=server) 中存储着redisDb数组的指针
+[redisServer](/docs/CS/DB/Redis/server.md?id=server) 中存储着 redisDb 数组的指针
 
 ```c
 struct redisServer {
@@ -13,7 +13,7 @@ struct redisServer {
 ```
 
 
-在initServer时创建redisDb数据 根据redis.conf文件的配置 server.dbnum默认是16
+在 initServer 时创建 redisDb 数据 根据 redis.conf 文件的配置 server.dbnum 默认是16
 
 ```c
 void initServer(void){
@@ -56,15 +56,15 @@ typedef struct redisDb {
 ```
 
 dict 和 expires 是 两个最重要的属性 底层数据结构是 dict
-将expires和dict分开存储因为不是每个key都有过期时间 分开存储能节省空间 在key过期时便于查询
+将 expires 和 dict 分开存储因为不是每个 key 都有过期时间 分开存储能节省空间 在 key 过期时便于查询
 
-blocking_keys 和 ready_keys 用于BLPOP命令的
+blocking_keys 和 ready_keys 用于 BLPOP 命令的
 
 
 
 ### dict
 
-dict用来保存所有的kv对数据
+dict 用来保存所有的 kv 对数据
 
 ```c
 // dict.h
@@ -84,7 +84,7 @@ struct dict {
 
 ht_table[2] 是一个大小为2的[hash表](/docs/CS/DB/Redis/struct/hash.md)数组 每个都是指向一个散列表数组的指针
 
-> 一开始只使用 ht_table[0] 读写数据 ht_table[1] 指向NULL, 当rehash时才会创建更大的散列表 ht_table[1], 
+> 一开始只使用 ht_table[0] 读写数据 ht_table[1] 指向 NULL, 当 rehash 时才会创建更大的散列表 ht_table[1], 
 > rehash迁移完成后 交换 ht_table[0]  和 ht_table[1] 的指针 ht_table[1] 重新指向 NULL
 
 散列表数组中元素是[dictEntry](/docs/CS/DB/Redis/struct/hash.md) 类型, 链地址法处理键碰撞

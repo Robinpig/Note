@@ -946,7 +946,7 @@ ConnectionType CT_Socket = {
 };
 ```
 
-处理socket read/write的事件 通常先read再write 这样有时候能在处理查询请求的时候马上获取响应
+处理 socket read/write 的事件 通常先 read 再 write 这样有时候能在处理查询请求的时候马上获取响应
 
 ```c
 static void connSocketEventHandler(struct aeEventLoop *el, int fd, void *clientData, int mask)
@@ -1482,7 +1482,7 @@ void aeMain(aeEventLoop *eventLoop) {
 
 这里看一下命令的执行流程
 
-对于一个命令处理的过程来说，主要可以分成四个阶段，它们分别对应了Redis源码中的不同函数。这里，我把它们对应的入口函数，也就是它们是从哪个函数开始进行执行的，罗列如下：
+对于一个命令处理的过程来说，主要可以分成四个阶段，它们分别对应了 Redis 源码中的不同函数。这里，我把它们对应的入口函数，也就是它们是从哪个函数开始进行执行的，罗列如下：
 
 - 命令读取，对应 readQueryFromClient 函数；
 - 命令解析，对应 processInputBuffer 函数；
@@ -1586,7 +1586,7 @@ void readQueryFromClient(connection *conn) {
 }
 ```
 
-主线程首次调用会执行 postponeClientRead 检查 将clients放入 clients_pending_read 列表
+主线程首次调用会执行 postponeClientRead 检查 将 clients 放入 clients_pending_read 列表
 
 
 ```c
@@ -1608,7 +1608,7 @@ int postponeClientRead(client *c) {
 
 #### handleClientsWithPendingReadsUsingThreads
 
-主线程在执行 [beforeSleep](/docs/CS/DB/Redis/ae.md?id=beforesleep) 函数时会调用 handleClientsWithPendingReadsUsingThreads 将clients通过RoundRobin方式分配给 I/O 线程绑定队列  i o_thread_list, I/O 线程从队列中获取任务执行 socket 读取和解析
+主线程在执行 [beforeSleep](/docs/CS/DB/Redis/ae.md?id=beforesleep) 函数时会调用 handleClientsWithPendingReadsUsingThreads 将 clients 通过 RoundRobin 方式分配给 I/O 线程绑定队列  i o_thread_list, I/O 线程从队列中获取任务执行 socket 读取和解析
 之后主线程也会执行一部分的命令读取与解析 而命令的执行需要等待所有I/O线程完成解析后才开始
 
 如果未开启I/O多线程模型 则需要主线程独立完成流程
@@ -1753,7 +1753,7 @@ int processCommandAndResetClient(client *c) {
 
 #### processCommand
 
-processCommand 函数从 `server.commands` 这个[hash](/docs/CS/DB/Redis/struct/hash.md) 中查找命令对应的redisCommand实例
+processCommand 函数从 `server.commands` 这个[hash](/docs/CS/DB/Redis/struct/hash.md) 中查找命令对应的 redisCommand 实例
 
 如果通过就会进行如下处理
 
@@ -1768,7 +1768,7 @@ call() 中会调用命令对应的处理函数
 
 
 
-这里以GET的函数 getCommand 为例
+这里以 GET 的函数 getCommand 为例
 
 ```c
 void getCommand(client *c) {
@@ -1789,7 +1789,7 @@ int getGenericCommand(client *c) {
     return C_OK;
 }
 ```
-返回值是通过addReply 写入到对应client的 buffer
+返回值是通过 addReply 写入到对应 client 的 buffer
 
 ```c
 void addReplyBulk(client *c, robj *obj) {
@@ -1801,7 +1801,7 @@ void addReplyBulk(client *c, robj *obj) {
 
 #### addReply
 
-addReply函数是在networking.c文件中定义的。它的执行逻辑比较简单，主要是调用prepareClientToWrite函数，并在prepareClientToWrite函数中调用clientInstallWriteHandler函数，将待写回客户端加入到全局变量server的 `clients_pending_write` 列表中。
+addReply 函数是在 networking.c 文件中定义的。它的执行逻辑比较简单，主要是调用 prepareClientToWrite 函数，并在 prepareClientToWrite 函数中调用 clientInstallWriteHandler 函数，将待写回客户端加入到全局变量 server 的 `clients_pending_write` 列表中。
 
 然后，addReply函数会调用_addReplyToBuffer等函数，将要返回的结果添加到客户端的输出缓冲区中
 
@@ -1873,7 +1873,7 @@ int prepareClientToWrite(client *c) {
 
 #### handleClientsWithPendingWritesUsingThreads
 
-下一次时间循环时 [beforeSleep](/docs/CS/DB/Redis/ae.md?id=beforesleep) 函数会调用 handleClientsWithPendingWrites 把 clients_pending_write 队列的数据分配给I/O线程和main线程
+下一次时间循环时 [beforeSleep](/docs/CS/DB/Redis/ae.md?id=beforesleep) 函数会调用 handleClientsWithPendingWrites 把 clients_pending_write 队列的数据分配给 I/O 线程和 main 线程
 
 分配完成后由负责的 I/O 线程或者主线程调用 `writeToClient` 函数把命令执行结果发送回客户端
 

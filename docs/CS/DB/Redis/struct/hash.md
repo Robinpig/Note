@@ -42,8 +42,8 @@ Redis 准备了两个哈希表，用于 rehash 时交替保存数据
 
 7.0 变更
 - dictht ht[2]用dictEntry **ht_table[2]代替
-- 原来两个dictht的used用unsigned long ht_used[2]代替
-- 原来两个dictht的size用signed char ht_size_exp[2]代替，且由8个字节变为1个字节
+- 原来两个 dictht 的 used 用 unsigned long ht_used[2]代替
+- 原来两个 dictht 的 size 用 signed char ht_size_exp[2]代替，且由8个字节变为1个字节
 
 通过数据结构的优化（96->56字节）
 
@@ -105,7 +105,7 @@ typedef struct dictType {
 
 ## Hash Function
 
-在redis中hash使用的是 siphash 算法
+在 redis 中 hash 使用的是 siphash 算法
 
 Hash Function: times33
 

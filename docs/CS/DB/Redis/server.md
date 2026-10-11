@@ -1005,3 +1005,8 @@ client list
 
 - [Redis](/docs/CS/DB/Redis/Redis.md)
 - [start.md](/docs/CS/DB/Redis/start.md)
+
+
+## References
+
+1. [Redis server source: server.c](https://github.com/redis/redis/blob/unstable/src/server.c)

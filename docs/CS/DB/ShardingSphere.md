@@ -70,3 +70,8 @@ KeyGeneratorConfiguration
 - [DataBases](/docs/CS/DB/DB.md)
 - [Database Standards](/docs/CS/DB/MySQL/Database_Standards.md)
 
+
+## References
+
+1. [Apache ShardingSphere](https://shardingsphere.apache.org/)
+2. [ShardingSphere Documentation](https://shardingsphere.apache.org/document/)

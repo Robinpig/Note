@@ -189,26 +189,26 @@ Update & Delete 加锁
 
 ClusterIndex
 
-命中 都是X锁
+命中 都是 X 锁
 
-未命中 只有RR加GAP锁
+未命中 只有 RR 加 GAP 锁
 
 Second Unique Index
-命中 二级索引和聚簇索引都是X锁
+命中 二级索引和聚簇索引都是 X 锁
 
-未命中 只有RR在二级索引加GAP锁
+未命中 只有 RR 在二级索引加 GAP 锁
 
 二级非唯一索引
 
-命中 RC对两个索引加X锁 RR对二级索引加X和GAP锁 对Cluster索引加X锁
+命中 RC 对两个索引加 X 锁 RR 对二级索引加 X 和 GAP 锁 对 Cluster 索引加 X 锁
 
-未命中 只有RR在二级索引加GAP锁
+未命中 只有 RR 在二级索引加 GAP 锁
 
 
 INSERT语句加锁
 
-- 为了防止幻读，如果记录之间加有GAP锁，此时不能INSERT。
-- 如果INSERT的记录和已有记录造成唯一键冲突，此时不能INSERT。
+- 为了防止幻读，如果记录之间加有 GAP 锁，此时不能 INSERT。
+- 如果 INSERT 的记录和已有记录造成唯一键冲突，此时不能 INSERT。
 
 
 ## Lock System Source Code
@@ -387,17 +387,17 @@ That might lead to the deadlock with G3 never being noticed.
 
 ## Deadlock
 
-两个事务分别持有对方需要的锁，并等待对方释放锁（事务1持有a锁、请求b锁，事务2持有b锁、请求a锁），导致程序无法继续进行
+两个事务分别持有对方需要的锁，并等待对方释放锁（事务1持有 a 锁、请求 b 锁，事务2持有 b 锁、请求 a 锁），导致程序无法继续进行
 
 MySQL自动监测死锁并回滚其中一个事务：
 
 - MySQL默认开启死锁检测（innodb_deadlock_detect默认为on），发现死锁后主动回滚死锁链条中的某一个事务，让其他事务得以继续执行
 - 如果死锁监测被关闭，InnoDB依赖innodb_lock_wait_timeout 进行事务回滚以避免死锁，请求锁的默认最长等待时间是50s
-- 如果要查看InnoDB用户事务中的最后一个死锁，可以使用 SHOW ENGINE INNODB STATUS
-- 如果频繁的出现死锁，可以启用innodb_print_all_deadlocks将所有死锁的有关信息打印到mysqld错误日志中
+- 如果要查看 InnoDB 用户事务中的最后一个死锁，可以使用 SHOW ENGINE INNODB STATUS
+- 如果频繁的出现死锁，可以启用 innodb_print_all_deadlocks 将所有死锁的有关信息打印到 mysqld 错误日志中
 
 数据库死锁常见原因：
-多个事务通过uptade或者select..for share / update锁定了多个表中的行记录，但锁定的顺序相反
+多个事务通过 uptade 或者 select..for share / update 锁定了多个表中的行记录，但锁定的顺序相反
 
 
 
@@ -407,9 +407,9 @@ show engine innodb status查看到最近的一次死锁日志
 
 
 
-MySQL官方提供了InnoDB引擎下，事务死锁的主动检测与丢弃机制，官方允许通过innodb_deadlock_detect这个参数进行控制，默认开启。
+MySQL 官方提供了 InnoDB 引擎下，事务死锁的主动检测与丢弃机制，官方允许通过 innodb_deadlock_detect 这个参数进行控制，默认开启。
 同时如果禁用此选项，依旧可以通过锁超时参数innodb_lock_wait_timeout来进行控制
-innodb死锁检测只能针对innodb引擎级别死锁，innodb死锁检测不能检测到应用层级别死锁
+innodb 死锁检测只能针对 innodb 引擎级别死锁，innodb 死锁检测不能检测到应用层级别死锁
 
 
 ### Deadlock Detection Status In 9.7
@@ -860,7 +860,7 @@ static void lock_wait_update_schedule_and_check_for_deadlocks() {
 
 如何减少死锁：
 - 当不同的事务同时访问数据资源时，尽量采用相同的操作顺序
-- 如果能确定幻读和不可重复读对应用的影响不大，可以考虑将隔离级别从默认的RR改成 RC，可以避免 Gap 锁导致的死锁；
+- 如果能确定幻读和不可重复读对应用的影响不大，可以考虑将隔离级别从默认的 RR 改成 RC，可以避免 Gap 锁导致的死锁；
   - 为表添加合理的索引，如果不走索引，将会为表的每一行记录加锁，死锁的概率就会大大增大；
   - 避免大事务，尽量将大事务拆成多个小事务来处理；因为大事务占用资源多，耗时长，与其他事务冲突的概率也会变高；
 

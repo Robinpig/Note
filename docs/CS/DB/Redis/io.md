@@ -546,3 +546,8 @@ void emptyDbAsync(redisDb *db) {
 - [Lettuce](/docs/CS/DB/Redis/Lettuce.md)
 - [Lock](/docs/CS/DB/Redis/Lock.md)
 - [Lua](/docs/CS/DB/Redis/Lua.md)
+
+
+## References
+
+1. [Redis event library: ae.c](https://github.com/redis/redis/blob/unstable/src/ae.c)

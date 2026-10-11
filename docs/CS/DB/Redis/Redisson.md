@@ -19,9 +19,9 @@ Redisson 提供多种分布式锁类型。它们共享相同的 API 范式和看
 | Fenced Lock             | ✔️         | ❌           | ✔️             | Pub/sub           | Guarding an external resource against a stale lock holder    |
 
 
-分布式重入Lock对象，适用于Java，并实现了Lock接口。使用pub/sub通道通知所有Redisson实例中等待获取锁的其他线程。
+分布式重入 Lock 对象，适用于 Java，并实现了 Lock 接口。使用 pub/sub 通道通知所有 Redisson 实例中等待获取锁的其他线程。
 
-如果Redisson实例获得锁崩溃，该锁定可能会永远挂在获得状态。
+如果 Redisson 实例获得锁崩溃，该锁定可能会永远挂在获得状态。
 为避免这种情况，Redisson 维护锁的看门狗，延长锁的到期时间，而锁持有者 Redisson 实例仍在。
 默认情况下，锁的看门狗超时是30秒，可以通过Config.lockWatchdog超时设置更改。
 
@@ -52,3 +52,9 @@ if (res) {
 ## Links
 
 - [Redis](/docs/CS/DB/Redis/Redis.md)
+
+
+## References
+
+1. [Redisson](https://redisson.org/)
+2. [redisson/redisson](https://github.com/redisson/redisson)

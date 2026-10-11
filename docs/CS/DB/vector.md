@@ -14,10 +14,10 @@
 
 Pinecone是一个托管向量数据库平台，专为解决高维数据带来的独特挑战而打造。Pinecone配备了尖端的索引和搜索能力，赋能数据工程师和数据科学家构建和实施大规模机器学习应用，有效处理和分析高维数据。
 
-Weaviate 是一个开源的 AI 原生向量数据库。正如我们在Weaviate教程中探讨的，它允许你存储来自喜欢的机器学习模型的数据对象和矢量嵌入，并无缝扩展到数十亿个数据对象。
+Weaviate 是一个开源的 AI 原生向量数据库。正如我们在 Weaviate 教程中探讨的，它允许你存储来自喜欢的机器学习模型的数据对象和矢量嵌入，并无缝扩展到数十亿个数据对象。
 
 
-Faiss 是一个开源库，用于快速搜索相似性和聚类密集向量。它包含能够在不同大小的向量集内搜索的算法，甚至包括那些可能超过RAM容量的向量集。此外，Faiss还提供辅助代码用于评估和参数调整。
+Faiss 是一个开源库，用于快速搜索相似性和聚类密集向量。它包含能够在不同大小的向量集内搜索的算法，甚至包括那些可能超过 RAM 容量的向量集。此外，Faiss 还提供辅助代码用于评估和参数调整。
 
 
 [Milvus](/docs/CS/DB/Milvus/Milvus.md) 是一个开源矢量数据库，因其可扩展性、可靠性和性能迅速获得关注。该系统专为相似性搜索和人工智能驱动应用设计，支持存储和查询由深度神经网络生成的大规模嵌入矢量。
@@ -40,3 +40,10 @@ ChromeraDB
 - [Doris](/docs/CS/DB/Doris.md)
 - [Dragonfly](/docs/CS/DB/Dragonfly.md)
 - [Milvus](/docs/CS/DB/Milvus/Milvus.md)
+
+
+## References
+
+1. [Vector database](https://en.wikipedia.org/wiki/Vector_database)
+2. [ANN-Benchmarks](https://ann-benchmarks.com/)
+3. [facebookresearch/faiss](https://github.com/facebookresearch/faiss)

@@ -171,3 +171,8 @@ static uint8_t intsetSearch(intset *is, int64_t value, uint32_t *pos) {
 ## Links
 
 - [Redis Struct](/docs/CS/DB/Redis/struct/struct.md?id=sets)
+
+
+## References
+
+1. [Redis intset.c](https://github.com/redis/redis/blob/unstable/src/intset.c)

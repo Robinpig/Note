@@ -601,3 +601,8 @@ void sentinelFailoverReconfNextSlave(sentinelRedisInstance *master) {
 ## Links
 
 - [Redis](/docs/CS/DB/Redis/Redis.md)
+
+
+## References
+
+1. [Redis Sentinel](https://redis.io/docs/latest/operate/oss_and_stack/management/sentinel/)

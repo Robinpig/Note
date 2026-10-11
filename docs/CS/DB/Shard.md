@@ -18,7 +18,7 @@
 - 重构适配系统  本身我们的业务系统不可能一开始开发上线的时候就会分库分表 进行分库分表我们业务服务项目代码需要从单一数据库表适配成多库多表，这是一次极其繁重的重构任务，还涉及到数据迁移、备份、扩容等操作问题，
 - 事务问题 分库分表会涉及到分布式事务，所以在这一块需要解决分布式事务可能带来的不一致性
 - 分页、排序、聚合函数问题  
-- 全局主键避免重复  单表主键id自增能够保证id不重复，但是分库分表之后，多张表就不能保证主键id不重复了，这时候就要使用分布式id算法进行生成。
+- 全局主键避免重复  单表主键 id 自增能够保证 id 不重复，但是分库分表之后，多张表就不能保证主键 id 不重复了，这时候就要使用分布式 id 算法进行生成。
 - 数据迁移、扩容问题  随着数据持续增加分表后还需要进行动态新增表时，这个时候就要考虑数据迁移以及扩容问题
 
 
@@ -35,7 +35,7 @@ SQL 解析
 
 MyCat 服务端代理模式 对业务代码无侵入 有性能损耗 中心化 容易成为瓶颈 数据库适配性
 
-ShardingJDBC 客户端代理模式 性能损耗小 通过jar扩展 适配性强 没有统一视图 运维成本高
+ShardingJDBC 客户端代理模式 性能损耗小 通过 jar 扩展 适配性强 没有统一视图 运维成本高
 
 [ShardingSphere](/docs/CS/DB/ShardingSphere.md) 类似MyCat 搭配
 
@@ -47,3 +47,8 @@ ShardingJDBC 客户端代理模式 性能损耗小 通过jar扩展 适配性强 
 - [DataBases](/docs/CS/DB/DB.md)
 - [Transaction Flow](/docs/CS/DB/MySQL/Transaction_Flow.md)
 
+
+## References
+
+1. [MongoDB Sharding](https://www.mongodb.com/docs/manual/sharding/)
+2. [MySQL Partitioning](https://dev.mysql.com/doc/refman/8.4/en/partitioning.html)
