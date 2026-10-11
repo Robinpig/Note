@@ -248,7 +248,7 @@ Milvus Distributed 可以部署在 Kubernetes 集群上。这种部署采用云�
 
 ## Serving a Search
 
-查询侧的难点不是算得快，而是**一次请求要横跨十几个 shard，还得让它们给出同一个时间点的答案**。[Query Path](/docs/CS/DB/Milvus/Query_Path.md) 沿这条线展开：一致性级别如何落成一个具体要等待的时间戳、QueryCoord 为什么用「目标视图」而不是直接分配段、shard leader 的 delegator 如何把内存里的 growing 段与对象存储上的 sealed 段合成一份答案、以及删除墓碑（L0 段）在读取时才被应用成位图。真正做向量检索的是 C++ 的 segcore，Go 与它之间只过 plan、placeholder 与 bitset。
+查询侧的难点不是算得快，而是**一次请求要横跨十几个 shard，还得让它们给出同一个时间点的答案**。[Query Path](/docs/CS/DB/Milvus/Query_Path.md) 沿这条线展开：一致性级别如何落成一个具体要等待的时间戳、QueryCoord 为什么用「目标视图」而不是直接分配段、shard leader 的 delegator 如何把内存里的 growing 段与对象存储上的 sealed 段合成一份答案、以及删除墓碑（L0 段）在读取时才被应用成位图。真正做向量检索的是 C++ 的 segcore，Go 与它之间只过 plan、placeholder 与 bitset——segcore 内部如何同时服务无锁追加的 growing 段与按 chunk 组织的 sealed 段、计划树与表达式在那里怎么执行、检索与归并的分界在哪，见 [Segcore](/docs/CS/DB/Milvus/Segcore.md)。
 
 检索质量的天花板则由索引决定。[Index and Vector Engine](/docs/CS/DB/Milvus/Index_and_Vector_Engine.md) 给出 v3.0.1 的完整能力面：Knowhere 承担的算法层、稠密与稀疏索引的类型矩阵、每种索引支持哪些向量数据类型、mmap 与磁盘型索引如何换取内存、标量与 JSON 与全文倒排索引各自适合什么谓词，最后用功能矩阵说清它与 pgvector / Qdrant / Weaviate 的分工边界——ANN 算法本身的原理不在此重复，见 [vector](/docs/CS/DB/vector.md)。语义相似之外还有一类需求是**精确词项匹配**——订单号、错误码、专有名词；Milvus 用 analyzer 链加 tantivy 倒排补齐这块能力，并让文本字段经 function 直接产出 BM25 稀疏向量，与向量检索共存于同一次混合查询，见 [Full Text Search](/docs/CS/DB/Milvus/Full_Text_Search.md)。
 

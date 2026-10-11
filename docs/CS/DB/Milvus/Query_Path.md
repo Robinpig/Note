@@ -128,7 +128,7 @@ search 侧则相反：plan 里没有聚合节点，也没有排序节点。`orde
 
 ## segcore and the cgo Boundary
 
-`internal/core/` 是独立 C++ 工程，产出 `milvus_core`，经 `internal/util/segcore` 与 cgo 暴露给 QueryNode。边界上只有三类东西值得过：
+`internal/core/` 是独立 C++ 工程，产出 `milvus_core`，经 `internal/util/segcore` 与 cgo 暴露给 QueryNode。本节讲边界上「传什么」，边界之内 C++ 侧的数据结构与执行模型（两种 Segment 实现、InsertRecord/DeletedRecord、PlanNode 求值与 reduce）见 [Segcore](/docs/CS/DB/Milvus/Segcore.md)。边界上只有三类东西值得过：
 
 | 上传物 | 载体 | 说明 |
 | --- | --- | --- |
