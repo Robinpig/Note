@@ -1,11 +1,10 @@
 ## Introduction
 
-The simplest way to understand how a program works is to understand the data structures it uses.
+要理解一个程序如何工作，最直接的办法是先理解它使用的数据结构。
 
-All the server configuration and in general all the shared state is defined in a global structure called [server](/docs/CS/DB/Redis/server.md), of type `struct redisServer`.
+所有服务器配置、以及总体上所有共享状态，都定义在一个名为 [server](/docs/CS/DB/Redis/server.md) 的全局结构里，类型为 `struct redisServer`。
 
-Another important Redis data structure is the one defining a [client](/docs/CS/DB/Redis/server.md?id=client).
-The structure has many fields, here we'll just show the main ones:
+另一个重要的 Redis 数据结构是 [client](/docs/CS/DB/Redis/server.md?id=client)。它的字段很多，这里只列主要几个：
 
 ```c
 struct client {
@@ -21,8 +20,8 @@ struct client {
 }
 ```
 
-As you can see in the client structure above, arguments in a command are described as `robj` structures.
-The following is the full `robj` structure, which defines a [Redis object](/docs/CS/DB/Redis/redisDb.md?id=redisobject):
+如上面的 client 结构所示，命令里的参数用 `robj` 结构描述。
+下面是完整的 `robj` 结构，它定义了 [Redis 对象](/docs/CS/DB/Redis/redisDb.md?id=redisobject)：
 
 ```c
 typedef struct redisObject {
@@ -34,15 +33,15 @@ typedef struct redisObject {
 } robj;
 ```
 
-- Basically this structure can represent all the basic Redis data types like strings, lists, sets, sorted sets and so forth.
-- It has a `type` field, so that it is possible to know what type a given object has, and a `refcount`, so that the same object can be referenced in multiple places without allocating it multiple times.
-- Finally the `ptr` field points to the actual representation of the object, which might vary even for the same type, depending on the `encoding` used.
+- 这个结构基本可以表示 Redis 的全部基本数据类型：字符串、列表、集合、有序集合等。
+- 它带 `type` 字段，因此能知道某个对象是什么类型；带 `refcount`，同一个对象可以在多处被引用而不必重复分配。
+- 最后 `ptr` 指向对象的真实表示，即便 `type` 相同，表示也会随 `encoding` 不同而变化。
 
-Redis objects are used extensively in the Redis internals, however in order to avoid the overhead of indirect accesses, recently in many places we just use plain dynamic strings not wrapped inside a Redis object.
+Redis 内部大量使用 redis object，但为了避开间接访问的开销，许多地方已经改用不被 Redis 对象包裹的裸动态字符串。
 
 ## Directory Navigation
 
-本目录 16 篇，按「通用字符串 → 集合类型 → 编码实现 → 专用结构」组织。`Redis` 对象与key 的字典体系在父级页 [redisDb.md](/docs/CS/DB/Redis/redisDb.md)，本页只讲被 `robj.ptr` 指向的具体结构。
+本目录按「通用字符串 → 集合类型 → 编码实现 → 专用结构」组织。`Redis` 对象与 key 的字典体系在父级页 [redisDb.md](/docs/CS/DB/Redis/redisDb.md)，本页只讲被 `robj.ptr` 指向的具体结构。
 
 **字符串与通用编码**：[SDS](/docs/CS/DB/Redis/struct/SDS.md) 是 Redis 自己的动态字符串实现（长度前缀 + 分配策略 + 二进制安全），一切字符串值的底座；[bitmap](/docs/CS/DB/Redis/struct/bitmap.md) 是在普通 string 上做的位操作封装。
 
@@ -54,38 +53,34 @@ Redis objects are used extensively in the Redis internals, however in order to a
 
 ## Data Types
 
-Data structures implemented into Redis have a few special properties:
+Redis 实现的数据结构有几个特别之处：
 
-- Redis cares to store them on disk, even if they are always served and modified into the server memory. This means that Redis is fast, but that it is also non-volatile.
-- The implementation of data structures emphasizes memory efficiency, so data structures inside Redis will likely use less memory compared to the same data structure modelled using a high-level programming language.
-- Redis offers a number of features that are natural to find in a database, like replication, tunable levels of durability, clustering, and high availability.
+- 即使它们始终在服务器内存里被服务和修改，Redis 仍负责把它们存到磁盘上——也就是说 Redis 很快，但默认不保证不丢。
+- 数据结构的实现把内存效率放在第一位，所以同一个结构在 Redis 里通常比用高级语言建模时更省内存。
+- Redis 还提供一整套本该在数据库里才见到的能力：复制、可调的持久化强度、集群与高可用。
 
-> Another good example is to think of Redis as a more complex version of memcached, where the operations are not just SETs and GETs, but operations that work with complex data types like Lists, Sets, ordered data structures, and so forth.
+> 另一个合适的类比是：把 Redis 想成一个更复杂的 memcached——操作不止 SET 和 GET，而是作用在列表、集合、有序结构这类复杂数据类型上的操作。
 
  
 
 
 
-While in traditional key-value stores you associate string keys to string values, in Redis the value is not limited to a simple string, but can also hold more complex data structures.
-The following is the list of all the data structures supported by Redis, which will be covered separately in this tutorial:
+传统键值存储把字符串 key 关联到字符串 value；Redis 的 value 不限于简单字符串，还可以放更复杂的数据结构。
+下面是 Redis 支持的全部数据结构，本目录会分别展开：
 
-* Binary-safe strings.
-* Lists: collections of string elements sorted according to the order of insertion.
-  They are basically linked lists .
-* Sets: collections of unique, unsorted string elements.
-* Sorted sets, similar to Sets but where every string element is associated to a floating number value, called** ** *score* .
-  The elements are always taken sorted by their score, so unlike Sets it is possible to retrieve a range of elements (for example you may ask: give me the top 10, or the bottom 10).
-* Hashes, which are maps composed of fields associated with values. Both the field and the value are strings.
-  This is very similar to Ruby or Python hashes.
-* Bit arrays (or simply bitmaps): it is possible, using special commands, to handle String values like an array of bits:
-  you can set and clear individual bits, count all the bits set to 1, find the first set or unset bit, and so forth.
-* HyperLogLogs: this is a probabilistic data structure which is used in order to estimate the cardinality of a set.
-  Don't be scared, it is simpler than it seems... See later in the HyperLogLog section of this tutorial.
-* [Streams](/docs/CS/DB/Redis/struct/Stream.md): append-only collections of map-like entries that provide an abstract log data type.
+* 二进制安全的字符串（Binary-safe strings）。
+* 列表（Lists）：按插入顺序排列的字符串元素集合，本质是链表。
+* 集合（Sets）：去重、无序的字符串元素集合。
+* 有序集合（Sorted sets）：与集合类似，但每个字符串元素都关联一个浮点数 *score*；
+  元素始终按 score 排序，因此可以像 Sets 那样取一段元素范围（例如给我前 10 个或后 10 个）。
+* 哈希（Hashes）：由 field 与 value 组成的 map，field 和 value 都是字符串，很像 Ruby / Python 的 hash。
+* 位数组（bitmaps）：用专门的命令把 String 的值当作位数组操作——置位、清位、统计为 1 的位数、找第一个 0 或 1 的位。
+* HyperLogLog：用来估算集合基数（cardinality）的概率型结构，比看起来简单，详见 [HyperLogLog](/docs/CS/DB/Redis/struct/HyperLogLog.md)。
+* [Streams](/docs/CS/DB/Redis/struct/Stream.md)：只追加的、类 map 条目集合，提供一种抽象的日志数据类型。
 
 
 
-Redis objects can be encoded in different ways
+同一个 Redis 对象可以有多种编码方式：
 
 
 
@@ -122,22 +117,19 @@ Redis objects can be encoded in different ways
 
 
 
-Since Redis 2.2 many data types are optimized to use less space up to a certain size. Hashes, Lists, Sets composed of just integers, and Sorted Sets, when  smaller than a given number of elements, and up to a maximum element  size, are encoded in a very memory-efficient way that uses *up to 10 times less memory* (with 5 times less memory used being the average saving).
+从 Redis 2.2 起，多数数据类型在元素规模不超过阈值时会改用更省空间的编码。哈希、列表、纯整数集合与有序集合，只要元素个数与单元素大小都在限制内，就会用极省内存的方式编码，*最多可省 10 倍内存*（平均约省 5 倍）。
 
+类型与编码的对应关系，以及具体结构在哪一页：
 
-
-
-<table id="tfhover" class="tftable" border="1">
-<tr><th>Data Type</th><th>Desc</th><th>Encoding</th><th>struct</th><th>Header 5</th></tr>
-<tr> <td rowspan="3">OBJ_STRING</td> <td rowspan="3">string </td><td> </td><td> </td><td> </td></tr>
-
-<tr><td>  </td><td> </td><td> </td></tr>
-<tr><td>  </td><td> </td><td> </td></tr>
-<tr><td> </td><td> </td><td> </td><td> </td><td> </td></tr>
-<tr><td> </td><td> </td><td> </td><td> </td><td> </td></tr>
-<tr><td> </td><td> </td><td> </td><td> </td><td> </td></tr>
-<tr><td> </td><td> </td><td> </td><td> </td><td> </td></tr>
-</table>
+| type | 常见 encoding | 底层结构 | 本库详页 |
+| :-- | :-- | :-- | :-- |
+| `OBJ_STRING` | `RAW`、`INT`、`EMBSTR` | SDS | [SDS](/docs/CS/DB/Redis/struct/SDS.md)、[bitmap](/docs/CS/DB/Redis/struct/bitmap.md) |
+| `OBJ_LIST` | `QUICKLIST` | 由 listpack（旧版 ziplist）串成的链表 | [list](/docs/CS/DB/Redis/struct/list.md)、[quicklist](/docs/CS/DB/Redis/struct/quicklist.md) |
+| `OBJ_SET` | `INTSET`、`HT` | 整数用紧凑数组，否则用字典 | [set](/docs/CS/DB/Redis/struct/set.md)、[intset](/docs/CS/DB/Redis/struct/intset.md) |
+| `OBJ_ZSET` | `SKIPLIST`、`LISTPACK` | 小集合用压缩列表，否则跳表 + 字典 | [zset](/docs/CS/DB/Redis/struct/zset.md)、[skiplist](/docs/CS/DB/Redis/struct/skiplist.MD) |
+| `OBJ_HASH` | `HT`、`LISTPACK` | 小集合用压缩列表，否则字典 | [hash](/docs/CS/DB/Redis/struct/hash.md) |
+| `OBJ_STREAM` | 由 listpack 组成的 radix tree | Stream 的条目打包 | [Stream](/docs/CS/DB/Redis/struct/Stream.md) |
+| `OBJ_MODULE` | 模块自定义 | 由模块自己决定 | [module](/docs/CS/DB/Redis/module.md) |
 
 
 
@@ -146,22 +138,14 @@ Since Redis 2.2 many data types are optimized to use less space up to a certain 
 
 ### Keys
 
-Redis keys are binary safe, this means that you can use any binary sequence as a key, from a string like "foo" to the content of a JPEG file.
-The empty string is also a valid key.
+Redis 的 key 是二进制安全的：任何二进制序列都能当 key，从 "foo" 这样的字符串到一个 JPEG 文件的内容都行，空串也是合法的 key。
 
-A few other rules about keys:
+关于 key 还有几条规则：
 
-- **Very long keys are not a good idea**.
-  For instance a key of 1024 bytes is a bad idea not only memory-wise, but also because the lookup of the key in the dataset may require several costly key-comparisons.
-  Even when the task at hand is to match the existence of a large value, hashing it (for example with SHA1) is a better idea, especially from the perspective of memory and bandwidth.
-- **Very short keys are often not a good idea**.
-  There is little point in writing "u1000flw" as a key if you can instead write "`user:1000:followers`".
-  The latter is more readable and the added space is minor compared to the space used by the key object itself and the value object.
-  While short keys will obviously consume a bit less memory, your job is to find the right balance.
-- **Try to stick with a schema.**
-  For instance "object-type:id" is a good idea, as in "user:1000".
-  Dots or dashes are often used for multi-word fields, as in "`comment:1234:reply.to`" or "`comment:1234:reply-to`".
-- The maximum allowed key size is **512 MB**.
+- **过长的 key 不是好主意**。1024 字节的 key 不仅费内存，还因为要在数据集里做多次数昂贵的 key 比较而拖慢查找。即便目的确实是拿一个大值去判存在，先哈希一次（例如 SHA1）也更划算——尤其是内存与带宽上。
+- **过短的 key 往往也不是好主意**。能写 `user:1000:followers` 时，没必要写成 "u1000flw"：后者更易读，而多出的字符相比 key 对象与 value 对象自身的开销只是零头。短 key 确实省一点内存，你要做的是找到平衡点。
+- **尽量固定一套命名 schema**，比如 "object-type:id"（`user:1000`）；多段字段常用点或横线，如 `comment:1234:reply.to` 或 `comment:1234:reply-to`。
+- key 的最大长度是 **512 MB**。
 
 ```shell
 # client
@@ -181,215 +165,182 @@ $5 = 7
 
 #### Key expiration
 
-Key expiration lets you set a timeout for a key, also known as a "time to live", or "TTL". When the time to live elapses, the key is automatically destroyed.
+Key 过期（expiration）可以给一个 key 设超时时间，也就是 "time to live"、TTL；到期后 key 会被自动销毁。
 
-A few important notes about key expiration:
+几点要注意：
 
-* They can be set both using seconds or milliseconds precision.
-* However the expire time resolution is always 1 millisecond.
-* Information about expires are replicated and persisted on disk, the time virtually passes when your Redis server remains stopped (this means that Redis saves the date at which a key will expire).
+* 可以用秒或毫秒为精度设置过期。
+* 但过期时间的分辨率始终是 1 毫秒。
+* 过期信息会被复制并持久化到磁盘；服务器停机期间时间「照算」——因为 Redis 存的是 key 过期的那个时刻，而不是剩余时长。
 
 ### Strings
 
-The Redis [String](/docs/CS/DB/Redis/struct/SDS.md) type is the simplest type of value you can associate with a Redis key.
-Since Redis keys are strings, when we use the string type as a value too, we are mapping a string to another string.
-Values can be strings (including binary data) of every kind, for instance you can store a jpeg image inside a value.
-A value can't be bigger than 512 MB.
+Redis 的 [String](/docs/CS/DB/Redis/struct/SDS.md) 是最简单的 value 类型。既然 key 本身就是字符串，把 string 当 value 用等于把字符串映射到字符串。
+value 可以是任意内容的字符串（含二进制数据），例如把一张 jpeg 存进 value；单个 value 不能超过 512 MB。
 
-The `INCR` command parses the string value as an integer, increments it by one, and finally sets the obtained value as the new value.
-**INCR is atomic.**
-That even multiple clients issuing INCR against the same key will never enter into a race condition.
+`INCR` 把字符串 value 当整数解析、加一，再写回为新值。**INCR 是原子的**：多个客户端同时对同一个 key 执行 INCR 也不会踩到竞态。
 
 ### Lists
 
-Redis [lists](/docs/CS/DB/Redis/struct/list.md) are implemented via Linked Lists. This means that even if you have millions of elements inside a list, the operation of adding a new element in the head or in the tail of the list is performed  *in constant time* .
+Redis [列表](/docs/CS/DB/Redis/struct/list.md) 用链表实现，这意味着即使列表里有上百万个元素，在头部或尾部追加一个元素仍是*常数时间*操作。
 
-Redis Lists are implemented with linked lists because for a database system it is crucial to be able to add elements to a very long list in a very fast way.
+Redis 之所以用链表实现列表，是因为对数据库来说「往一个很长的列表里极快地追加元素」是关键能力。
+另一个显著优势（马上会看到）是：列表的长度也能在常数时间内取到。
 
-Another strong advantage, as you'll see in a moment, is that Redis Lists can be taken at constant length in constant time.
+当需要快速访问一个大集合的中间部分时，该换另一种结构——有序集合（sorted sets）。
 
-When fast access to the middle of a large collection of elements is important, there is a different data structure that can be used, called sorted sets.
+列表能派上用场的场景很多，两个最有代表性的：
 
-Lists are useful for a number of tasks, two very representative use cases are the following:
+* 记住用户在社交网络里最新发布的动态。
+* 进程间通信，用生产者-消费者模式：生产者把条目 push 进列表，消费者（通常是 *worker*）取出并执行动作。Redis 有专门的列表命令让这种用法更可靠也更高效。
 
-* Remember the latest updates posted by users into a social network.
-* Communication between processes, using a consumer-producer pattern where the producer pushes items into a list, and a consumer (usually a  *worker* ) consumes those items and executed actions. Redis has special list commands to make this use case both more reliable and efficient.
+用一个常见场景逐步说明：首页要展示图片社交网站最新发布的照片并加速访问。
 
-To describe a common use case step by step, imagine your home page shows the latest photos published in a photo sharing social network and you want to speedup access.
-
-* Every time a user posts a new photo, we add its ID into a list with `LPUSH`.
-* When users visit the home page, we use `LRANGE 0 9` in order to get the latest 10 posted items.
+* 每当用户发布新照片，就用 `LPUSH` 把它的 ID 塞进列表。
+* 用户访问首页时，用 `LRANGE 0 9` 取最近 10 条。
 
 #### Capped lists
 
-In many use cases we just want to use lists to store the  *latest items* , whatever they are: social network updates, logs, or anything else.
+很多场景只想要列表里的*最新 N 项*——社交动态、日志，或任何东西。
 
-Redis allows us to use lists as a capped collection, only remembering the latest N items and discarding all the oldest items using the `LTRIM` command.
+Redis 允许把列表当受限集合（capped collection）用：只保留最新 N 项，用 `LTRIM` 丢弃最老的。
+`LTRIM` 与 `LRANGE` 语法相似，但**不是把指定范围的元素显示出来，而是把这个范围设为列表的新值**，范围之外的元素全部删除。
 
-The `LTRIM` command is similar to `LRANGE`, but **instead of displaying the specified range of elements** it sets this range as the new list value. All the elements outside the given range are removed.
-
-> [!Note]
+> [!NOTE]
 >
-> While `LRANGE` is technically an O(N) command, accessing small ranges towards the head or the tail of the list is a constant time operation.
+> `LRANGE` 严格来说是 O(N) 命令，但取靠近头部或尾部的短区间是常数时间操作。
 
 #### Blocking Queue
 
-Redis implements commands called `BRPOP` and `BLPOP`which are versions of `RPOP` and `LPOP` able to block if the list is empty:
-they'll return to the caller only when a new element is added to the list, or when a user-specified timeout is reached.
+Redis 提供了 `BRPOP` 与 `BLPOP`，它们是 `RPOP`/`LPOP` 的可阻塞版本：列表为空时挂起，只有当有新元素加入、或到达用户指定的超时才返回调用方。
 
-Note that you can use 0 as timeout to wait for elements forever, and you can also specify multiple lists and not just one, in order to wait on multiple lists at the same time, and get notified when the first list receives an element.
+超时可以填 0 表示无限等待；也可以一次指定多个列表，只要其中任意一个来元素就被通知。
 
-A few things to note about `BRPOP`:
+关于 `BRPOP` 还有几点：
 
-1. Clients are served in an ordered way: the first client that blocked waiting for a list, is served first when an element is pushed by some other client, and so forth.
-2. The return value is different compared to `RPOP`: it is a two-element array since it also includes the name of the key, because `BRPOP` and `BLPOP`are able to block waiting for elements from multiple lists.
-3. If the timeout is reached, NULL is returned.
+1. 客户端按顺序得到服务：最早阻塞等待某个列表的客户端，会最先拿到其他客户端 push 进来的元素。
+2. 返回值与 `RPOP` 不同，是包含 key 名的二元数组——因为 `BRPOP`/`BLPOP` 可以同时等多个列表。
+3. 超时到达时返回 NULL。
 
 ### Hashes
 
-Redis [hashes](/docs/CS/DB/Redis/struct/hash.md) look exactly how one might expect a "hash" to look, with field-value pairs.
+Redis [哈希](/docs/CS/DB/Redis/struct/hash.md)就是人们期待中「hash」的样子，由 field-value 对组成。
 
-While hashes are handy to represent  *objects* , actually the number of fields you can put inside a hash has no practical limits (other than available memory), so you can use hashes in many different ways inside your application.
+哈希很适合表示*对象*，而且单个哈希能放的 field 数量没有实际限制（只受内存约束），因此可以在应用里以很多种方式使用它。
 
-It is worth noting that small hashes (i.e., a few elements with small values) are encoded in special way in memory that make them very memory efficient.
+值得注意的是，小哈希（少量元素、小 value）在内存里会用一种特殊编码存放，非常省内存。
 
 ### Sets
 
-Redis [Sets](/docs/CS/DB/Redis/struct/set.md) are unordered collections of strings. 
+Redis [集合](/docs/CS/DB/Redis/struct/set.md)是无序的字符串元素集合。
 
-The `SADD` command adds new elements to a set.
-It's also possible to do a number of other operations against sets like testing if a given element already exists, performing the intersection, union or difference between multiple sets, and so forth.
+`SADD` 往集合里加新元素；此外还能做很多操作：判断某元素是否已存在、对多个集合求交并差等。
+集合擅长表达对象之间的关系，例如实现 tag 就很直接。
 
-Sets are good for expressing relations between objects. For instance we can easily use sets in order to implement tags.
+### Sorted Sets
 
-### Sorted sets
+[有序集合](/docs/CS/DB/Redis/struct/zset.md)像集合与哈希的混合体：和集合一样由不重复的字符串元素组成，某种意义上它就是集合；
+但集合里的元素无序，有序集合里每个元素都关联一个浮点数 *score*（这一点又像哈希，因为每个元素都映射到一个值）。
 
-[Sorted sets](/docs/CS/DB/Redis/struct/zset.md) are a data type which is similar to a mix between a Set and a Hash. Like sets, sorted sets are composed of unique, non-repeating string elements, so in some sense a sorted set is a set as well.
+而且元素是*按序取出的*——不是「按需排序」，顺序本身就是它所采用的数据结构的特性。排序规则：
 
-However while elements inside sets are not ordered, every element in a sorted set is associated with a floating point value, called *the score* (this is why the type is also similar to a hash, since every element is mapped to a value).
+* 若 A、B 两个元素 score 不同，则 `A.score > B.score` 时 A > B。
+* 若 A、B score 完全相同，则 A 的字符串按字典序大于 B 时 A > B；两者不可能相等，因为元素唯一。
 
-Moreover, elements in a sorted sets are *taken in order* (so they are not ordered on request, order is a peculiarity of the data structure used to represent sorted sets).
-They are ordered according to the following rule:
-
-* If B and A are two elements with a different score, then A > B if A.score is > B.score.
-* If B and A have exactly the same score, then A > B if the A string is lexicographically greater than the B string.
-  B and A strings can't be equal since sorted sets only have unique elements.
-
-Sorted sets are implemented via a dual-ported data structure containing both a skip list and a hash table, so every time we add an element Redis performs an $O(log(N))$ operation.
-
-Sorted sets are suitable when there are tons of updates.
-Because of this characteristic a common use case is leader boards.
+有序集合用一份「双端口」结构实现——同时含跳表与哈希表，因此每次添加元素都是 $O(log(N))$。
+它很适合更新量极大的场景，最常见的用法是排行榜（leader board）。
 
 ### Bitmaps
 
-[Bitmaps](/docs/CS/DB/Redis/struct/bitmap.md) are not an actual data type, but a set of bit-oriented operations defined on the String type.
-Since strings are binary safe blobs and their maximum length is 512 MB, they are suitable to set up to 2^32 different bits.
+[位图](/docs/CS/DB/Redis/struct/bitmap.md)不是一种独立数据类型，而是在 String 上定义的一组按位操作。
+字符串是二进制安全的 blob、最长 512 MB，因此最多可以放到 $2^{32}$ 个不同的位。
 
-Bit operations are divided into two groups: constant-time single bit operations, like setting a bit to 1 or 0, or getting its value, and operations on groups of bits, for example counting the number of set bits in a given range of bits (e.g., population counting).
+位操作分两类：常数时间的单比特操作（置 1、清 0、取某位的值），以及对一组比特的操作，例如统计给定范围内置 1 的位数（population count）。
 
-One of the biggest advantages of bitmaps is that they often provide extreme space savings when storing information. For example in a system where different users are represented by incremental user IDs, it is possible to remember a single bit information (for example, knowing whether a user wants to receive a newsletter) of 4 billion of users using just 512 MB of memory.
+位图最大的优势是存信息时极度省空间。比如一个系统里用户用递增 ID 表示，那么「某个用户是否愿意收简报」这一位信息，40 亿用户只需 512 MB 内存。
 
-Common use cases for bitmaps are:
+常见用法：
 
-* Real time analytics of all kinds.
-* Storing space efficient but high performance boolean information associated with object IDs.
+* 各类实时分析。
+* 存与对象 ID 关联的布尔信息——既省空间又高性能。
 
-For example imagine you want to know the longest streak of daily visits of your web site users.
-You start counting days starting from zero, that is the day you made your web site public, and set a bit with `SETBIT` every time the user visits the web site.
-As a bit index you simply take the current unix time, subtract the initial offset, and divide by the number of seconds in a day (normally, 3600*24).
+举例：想知道网站用户「连续每日访问」的最长纪录。把第 0 天定为网站上线日，用户每次访问就用 `SETBIT` 置一位；位下标取当前 unix 时间减去初始偏移再除以一天的秒数（通常 `3600*24`）。
+这样每个用户只有一个记录着每日到访情况的小字符串：`BITCOUNT` 直接算出到访天数，多调用几次 `BITPOS`（或把位图取回客户端分析）就能算出最长连续段。
 
-This way for each user you have a small string containing the visit information for each day.
-With `BITCOUNT` it is possible to easily get the number of days a given user visited the web site, while with a few `BITPOS` calls, or simply fetching and analyzing the bitmap client-side, it is possible to easily compute the longest streak.
-
-Bitmaps are trivial to split into multiple keys, for example for the sake of sharding the data set and because in general it is better to avoid working with huge keys.
-To split a bitmap across different keys instead of setting all the bits into a key, a trivial strategy is just to store M bits per key and obtain the key name with `bit-number/M` and the Nth bit to address inside the key with `bit-number MOD M`.
+位图很容易切成多个 key，比如为了分片，也因为一般不该操作巨大的 key。做法很直接：每个 key 存 M 位，key 名用 `bit-number/M` 求得，key 内要操作的位用 `bit-number MOD M`。
 
 ### HyperLogLogs
 
-A [HyperLogLog](/docs/CS/DB/Redis/struct/HyperLogLog.md) is a probabilistic data structure used in order to count unique things (technically this is referred to estimating the cardinality of a set).
-Usually counting unique items requires using an amount of memory proportional to the number of items you want to count, because you need to remember the elements you have already seen in the past in order to avoid counting them multiple times.
-However there is a set of algorithms that trade memory for precision: you end with an estimated measure with a standard error, which in the case of the Redis implementation is less than 1%.
-The magic of this algorithm is that you no longer need to use an amount of memory proportional to the number of items counted, and instead can use a constant amount of memory! 12k bytes in the worst case, or a lot less if your HyperLogLog (We'll just call them HLL from now) has seen very few elements.
+[HyperLogLog](/docs/CS/DB/Redis/struct/HyperLogLog.md) 是概率型结构，用来数「不重复的东西」（严格说是估算集合的基数）。
+通常统计不重复元素要花的内存与元素数量成正比，因为必须记住见过的元素才不会重复计数；
+但有一类算法用精度换内存：得到的是带标准误差的估计值，Redis 实现里小于 1%。它的妙处在于内存不再随数量增长，而是常数——最坏 12k 字节，如果 HLL 见过的元素很少则远小于此。
 
-An example of use case for this data structure is counting unique queries performed by users in a search form every day.
+一个典型用例：统计每天搜索框里有多少不重复的查询。
 
 ## Streams
 
-The Stream is a new data type introduced with Redis 5.0, which models a log data structure in a more abstract way.
-However the essence of a log is still intact: like a log file, often implemented as a file open in append-only mode, Redis Streams are primarily an append-only data structure.
-At least conceptually, because being an abstract data type represented in memory, Redis Streams implement powerful operations to overcome the limitations of a log file.
+Stream 是 Redis 5.0 引入的新类型，用更抽象的方式建模「日志」这一数据结构。
+日志的本质没变：日志文件常以只追加模式打开，Redis Stream 首先也是一种只追加结构；
+作为一种内存里的抽象数据类型，它实现了强力的操作来突破日志文件的限制。
 
-Redis streams implement additional, non-mandatory features: a set of blocking operations allowing consumers to wait for new data added to a stream by producers, and in addition to that a concept called **Consumer Groups**(allow a group of clients to cooperate in consuming a different portion of the same stream of messages).
+此外 Redis Stream 还实现了两个非必需的附加特性：一组阻塞操作让消费者可以等生产者写入的新数据，以及所谓的**消费组（Consumer Groups）**——让一组客户端协作消费同一个消息流的不同部分。
 
-### tips
+### Tips
 
-- use SCAN rather than KEYS（block）to get all keys
-- use UNLINK rather than DEL when delete big data
-- check if EXISTS before RENAME
+- 取全部 key 用 SCAN 而不是 KEYS（后者会阻塞）
+- 删大数据用 UNLINK 而不是 DEL
+- RENAME 之前先确认 EXISTS
 
 ## Data Features
 
 ### Shared Objects
 
-see [createSharedObjects](/docs/CS/DB/Redis/start.md?id=createsharedobjects)
+见 [createSharedObjects](/docs/CS/DB/Redis/start.md?id=createsharedobjects)。
 
-### Automatic creation and removal of keys
+### Automatic Creation and Removal of Keys
 
-This is not specific to lists, it applies to all the Redis data types composed of multiple elements -- Streams, Sets, Sorted Sets and Hashes.
+这不是列表特有的行为，而是所有由多元素构成的 Redis 类型共有的规则——Stream、Set、Sorted Set、Hash 都一样。
+行为可以用三条规则概括：
 
-Basically we can summarize the behavior with three rules:
+1. 往聚合类型里加元素时，若目标 key 不存在，会先创建一个空的聚合类型再加元素。
+2. 从聚合类型里删元素时，若值变空，key 会被自动销毁。Stream 是这条规则的唯一例外。
+3. 对一个不存在的 key 调用只读命令（如返回列表长度的 `LLEN`），或调用会删元素的写命令，其结果与该 key 恰好持有一个对应类型的空聚合时完全一致。
 
-1. When we add an element to an aggregate data type, if the target key does not exist, an empty aggregate data type is created before adding the element.
-2. When we remove elements from an aggregate data type, if the value remains empty, the key is automatically destroyed. The Stream data type is the only exception to this rule.
-3. Calling a read-only command such as `LLEN` (which returns the length of the list), or a write command removing elements, with an empty key,
-   always produces the same result as if the key is holding an empty aggregate type of the type the command expects to find.
+### Sort
 
-### expiration keys
+有时需要拿到 Redis 列表或集合按某种顺序排好的副本，或者让有序集合按 score 之外的顺序输出。Redis 为此提供了 `SORT` 命令。
 
-### sort
+### Pipeline
 
-Sometimes we may need to get a sorted copy of a Redis list or set in some order, or sort elements in a Redis sorted set by an order other than scores.
-Redis provides a convenient command called SORT for this purpose.
-
-### pipeline
-
-Like batch
+类似批量操作：把多条命令一次写入、一次读回，省掉逐条往返的 RTT。
 
 ### Transaction
 
-support isolation and consistency, and support durability when use AOF and appendfsync is always
+Redis 事务提供隔离性与一致性；若开启 AOF 且 `appendfsync always`，也提供持久性。
 
-It's important to note that **even when a command fails, all the other commands in the queue are processed** – Redis will *not* stop the processing of commands.
+需要强调的是，**即使某条命令失败，队列里的其余命令仍会继续执行**——Redis *不会*因此中断处理。
 
 #### Why Redis does not support roll backs?
 
-- Redis commands can fail only if called with a wrong syntax (and the problem is not detectable during the command queueing), or against keys holding the wrong data type:
-  this means that in practical terms a failing command is the result of a **programming errors**, and a kind of error that is very likely to be detected during development, and not in production.
-- Redis is internally simplified and faster because it does not need the ability to roll back.
+- Redis 命令只有两种失败方式：语法错误（入队时检测不出来），或对类型不对的 key 调用。也就是说命令失败其实是**程序错误**，而这类错误极早在开发期就会暴露，不会留到生产环境。
+- 不需要回滚能力，让 Redis 内部更简单、也更快。
 
-**In general the roll back does not save you from programming errors**.
+**回滚本身也救不了程序错误。**
 
 #### Optimistic locking using check-and-set
 
-[WATCH](https://redis.io/commands/watch) is used to provide a check-and-set (CAS) behavior to Redis transactions.
+[WATCH](https://redis.io/commands/watch) 给 Redis 事务带来 check-and-set（CAS）语义：被 `WATCH` 的 key 会被监视，只要在 [EXEC](https://redis.io/commands/exec) 之前有任何一个被改动，整个事务放弃执行，[EXEC](https://redis.io/commands/exec) 返回一个 [Null reply](https://redis.io/topics/protocol#nil-reply) 告知事务失败。
+这时只能重做一遍，盼着这次不再撞上竞争。这种加锁方式称为*乐观锁*，是一种很有力的手段。
 
-`WATCH`ed keys are monitored in order to detect changes against them. If at least one watched key is modified before the [EXEC](https://redis.io/commands/exec) command, the whole transaction aborts, and [EXEC](https://redis.io/commands/exec) returns a [Null reply](https://redis.io/topics/protocol#nil-reply) to notify that the transaction failed.
-
-We just have to repeat the operation hoping this time we'll not get a new race. This form of locking is called *optimistic locking* and is a very powerful form of locking.
-
-A [Redis script](/docs/CS/DB/Redis/struct/struct.md?id=lua-scripts) is transactional by definition, so everything you can do with a Redis transaction, you can also do with a script, and usually the script will be both simpler and faster.
+[Redis 脚本](/docs/CS/DB/Redis/struct/struct.md?id=lua-scripts)天生就是一个事务：事务能做的事脚本都能做，而且通常更简单也更快。
 
 ### PubSub
 
-[Publish-Subscribe (PubSub)](/docs/CS/DB/Redis/PubSub.md) is a classic messaging pattern which has a long history, as far back as 1987 according to Wikipedia.
+[发布订阅（PubSub）](/docs/CS/DB/Redis/PubSub.md)是一种经典消息模式，历史可追溯到 1987 年。
 
-### Lua scripts
+### Lua Scripts
 
-[Lua](/docs/CS/DB/Redis/Lua.md), a lightweight script language, has been introduced into Redis since version 2.6.
-
-### Using the correct data types
-
-### Using the correct Redis APIs
+[Lua](/docs/CS/DB/Redis/Lua.md) 这门轻量脚本语言自 Redis 2.6 起被引入。
 
 ## Links
 
