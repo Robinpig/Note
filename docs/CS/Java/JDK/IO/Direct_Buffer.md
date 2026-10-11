@@ -458,5 +458,25 @@ enable NMT
 
 
 
+## MappedByteBuffer (mmap)
+
+除 `allocateDirect` 外，另一类堆外 / 映射内存来自 `FileChannel.map`：
+
+```java
+MappedByteBuffer mbb = fileChannel.map(
+    FileChannel.MapMode.READ_WRITE, position, size);
+```
+
+底层通过 `mmap` 系统调用把文件（或匿名页）映射到进程虚拟地址空间，与 `DirectByteBuffer` 同属「不受 Java 堆管理」的内存，但生命周期与语义不同：
+
+- **不受 `-XX:MaxDirectMemorySize` 限制**：`map` 走的是文件映射（页缓存），而非 `Unsafe.allocateMemory` 的 `malloc` direct memory；其容量受文件大小与系统级 `-XX:MaxMapCount`（映射数上限）等约束。
+- **回收由 Cleaner 代理**：`MappedByteBuffer` 同样挂了一个 `Cleaner`，在 buffer 对象被 GC 时调用 `Unmapper.unmap`（内部 `munmap`），因此大文件映射也可能因 Cleaner 未及时触发而滞留映射。
+- **回写语义不同**：`READ_WRITE` 模式的修改由操作系统按 dirty page 策略异步刷盘，而 `DirectByteBuffer` 的 `malloc` 内存与文件无关。
+- **适用场景**：适合大文件随机访问、进程间共享内存；与 `transferTo`/`transferFrom` 配合可实现 sendfile 风格的零拷贝（见 [NIO](/docs/CS/Java/JDK/IO/NIO.md)）。
+
+> 直接缓冲区的上限由 `Bits.reserveMemory` 按 `-XX:MaxDirectMemorySize` 预留；**未显式设置时，默认值等于 `Runtime.getRuntime().maxMemory()`**（即堆最大值，见上文 `directMemory` 字段注释），而非物理内存大小。这也解释了为什么未调优的应用往往在堆还没满时就先撞上 direct buffer OOM。
+
 ## Links
 - [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
+- [Unsafe](/docs/CS/Java/JDK/Basic/unsafe.md)
+- [Reference](/docs/CS/Java/JDK/Basic/Ref.md?id=phantom-reference)

@@ -18,7 +18,7 @@
 
 ## Standalone Scheduled Tasks
 
-Timer 是 JDK 内置的定时器，单线程搭配小顶堆的设计，Oracle 官方文档明确指出彻底弃用 Timer（源码解析见下文 [Timer 源码解析](#timer-源码解析)）。
+Timer 是 JDK 内置的定时器，单线程搭配小顶堆的设计。它自 Java 5 起在官方文档中被建议用 `ScheduledThreadPoolExecutor` 取代，**但从未被 `@Deprecated` 标记** —— JDK-8154799 曾提案、JEP 277 计划在 JDK 9 弃用，最终均未落地（源码解析见下文 [Timer 源码解析](#timer-源码解析)）。
 
 从 Timer 的实现总结分析，对任务的优先级排序需要一个优先级队列，JDK 内置的 `DelayQueue` 可以实现。在此基础上封装的 `ScheduledThreadPoolExecutor` 能实现更精细地管理（源码解析见下文 [ScheduledThreadPoolExecutor 源码解析](#scheduledthreadpoolexecutor-源码解析)）。Spring Task 底层就是基于 JDK 的 `ScheduledThreadPoolExecutor` 线程池来实现的。
 
@@ -37,7 +37,7 @@ Timer 是 JDK 内置的定时器，单线程搭配小顶堆的设计，Oracle �
 
 ## Timer Source Code Analysis
 
-虽然 `Timer` 已被官方弃用（`@Deprecated(forRemoval = true)`），但它是理解 Java 定时任务模型最直观的样本：从它的「单线程 + 小顶堆」出发，才能看清 `ScheduledThreadPoolExecutor` 为什么要改造成「可配置线程池 + `DelayedWorkQueue`」。
+虽然 `Timer` 被广泛认为应当被取代，但**它从未被 `@Deprecated` 标记**；理解它的「单线程 + 小顶堆」模型，仍是看清 `ScheduledThreadPoolExecutor` 为什么要改造成「可配置线程池 + `DelayedWorkQueue`」的最佳样本。
 
 `Timer` 中有两个核心组件，一个是用于调度延时任务的 `TimerThread`，另一个是 `TaskQueue`，用于组织延时任务。
 
@@ -524,6 +524,32 @@ public boolean offer(Runnable x) {
     return true;
 }
 ```
+
+### setNextRunTime
+
+`ScheduledFutureTask` 用 `period` 字段的正负号区分两种周期模式，并在每次执行后由 `setNextRunTime` 计算下次触发时间——这正是 `scheduleAtFixedRate`（`period > 0`）与 `scheduleWithFixedDelay`（`period < 0`）语义分叉的落点：
+
+```java
+private void setNextRunTime() {
+    long p = period;
+    if (p > 0)
+        time += p;                  // fixed-rate：按"理论触发时间表"累加
+    else
+        time = triggerTime(-p);     // fixed-delay：按"本次完成时间 + delay"
+}
+```
+
+- **fixed-rate（`period > 0`）**：即使某次执行被阻塞、错过了若干个理论时刻，`time` 仍按最初时间表推进；恢复后只会执行**错过的最后一次**（不会按次数补跑），避免了"追赶雪崩"。这也是为什么固定频率任务不宜用于耗时波动大的场景。
+- **fixed-delay（`period < 0`）**：以上一次任务**实际完成**的时刻为基准加 `delay`，两次执行之间至少间隔 `delay`，不受单次执行耗时影响，但整体节奏会随长任务"漂移"。
+
+> [!NOTE]
+> 无论是哪种模式，`run()` 内部抛出的**任何未捕获异常（含 OOM）都会抑制后续所有执行**——`setNextRunTime` 不会被调用，任务从此退出调度。必须在 `Runnable` 内部 try-catch。
+
+### Modern Considerations
+
+- **虚拟线程隔离**：`ScheduledThreadPoolExecutor` 的 worker 线程是平台线程。若周期任务内部要执行阻塞 I/O，应当自行把工作体提交到一个虚拟线程（或独立 `Executor`），避免长期占用 STPE 的 worker，否则会拖慢同池其它定时任务。
+- **与 Spring 衔接**：Spring 的 `@Scheduled`（`fixedRate` / `fixedDelay` / `cron`）底层正是委托给一个 `ScheduledThreadPoolExecutor`（由 `ThreadPoolTaskScheduler` 持有），其 `fixedRate`/`fixedDelay` 语义与上节完全一致；`cron` 表达式则由 `CronTrigger` 解析为下次触发时间后交由同一执行器。
+- **时间轮替代**：当单机任务量达到数十万级、且精度要求宽松时，`DelayedWorkQueue` 的 O(log n) 入队与堆维护会成为瓶颈，此时应转向 [HashedWheelTimer](/docs/CS/Framework/Netty/HashedWheelTimer.md) 或 [Kafka 多层时间轮](/docs/CS/MQ/Kafka/Timer.md)（见下文中间件场景）。
 
 ### Tuning
 

@@ -84,11 +84,7 @@ OpenJDK 下辖多个子项目，多是为某一较大特性而立项，关注它
 
 ## Security
 
-如需更高安全等级，可启用 SecurityManager：
-
-```bash
--Djava.security.manager
-```
+SecurityManager 自 JDK 17 起被弃用（[JEP 411](https://openjdk.org/jeps/411)），并在 JDK 24 被永久禁用（[JEP 486](https://openjdk.org/jeps/486)）——`-Djava.security.manager` 在新版本已不再提供保护，反而会在启动时报错。现代 Java 应用的安全边界应依赖：模块强封装（[module](/docs/CS/Java/JDK/Basic/module.md) 的 `opens` / `--add-opens`）、对外部来源（反序列化、JNI、native access）的显式校验，以及 `--enable-native-access` 等细粒度开关。
 
 相关命令行工具：`keytool`（密钥与证书库管理）、`jarsigner`（JAR 签名）。
 
