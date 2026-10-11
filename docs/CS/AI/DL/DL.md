@@ -5,7 +5,7 @@
 它解决的问题是：图像、语音、文本这类原始数据难以手工定义特征（什么是"猫耳朵"的像素规则？），让网络端到端地自己学。三大网络家族分别匹配三类数据结构：
 
 - **CNN**（卷积）：网格数据（图像），见 [CNN](/docs/CS/AI/CNN.md)
-- **RNN/LSTM**（循环）：序列数据（文本、语音），应用见 [NLP](/docs/CS/AI/NLP/NLP.md)
+- **RNN/LSTM**（循环）：序列数据（文本、语音），应用见 [NeuralNLP](/docs/CS/AI/NLP/NeuralNLP.md)
 - **Transformer**（注意力）：并行建模长程依赖，统一了以上场景，是 [LLM](/docs/CS/AI/LLM/LLM.md) 的底座
 
 工具链上 PyTorch 与 TensorFlow 双雄并立（见 [PyTorch](/docs/CS/AI/PyTorch.md)、[TensorFlow](/docs/CS/AI/TensorFlow.md)），本目录示例用 PyTorch 语法。网络结构全景速查见 [Neurons](/docs/CS/AI/DL/Neurons.md)。

@@ -1,6 +1,6 @@
 ## Introduction
 
-一张速查表纵览各类神经元与网络结构：从基本神经元到门控循环，从自编码器到生成对抗网络。按家族理解——卷积系看 [CNN](/docs/CS/AI/CNN.md)，循环系的应用见 [NLP](/docs/CS/AI/NLP/NLP.md)，预训练与 Transformer 时代的演进见 [DL](/docs/CS/AI/DL/DL.md) 总览。
+一张速查表纵览各类神经元与网络结构：从基本神经元到门控循环，从自编码器到生成对抗网络。按家族理解——卷积系看 [CNN](/docs/CS/AI/CNN.md)，循环系的应用见 [NeuralNLP](/docs/CS/AI/NLP/NeuralNLP.md)，预训练与 Transformer 时代的演进见 [DL](/docs/CS/AI/DL/DL.md) 总览。
 
 ## Neurons and Networks
 

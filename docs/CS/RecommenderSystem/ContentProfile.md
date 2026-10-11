@@ -20,7 +20,7 @@
 1. **清洗与归一**：去模板文本、乱码、重复空白；正文与标题分离；多语言与繁简归一
 2. **词级表示**：分词与关键词抽取，产出可枚举的词条
 3. **结构与实体**：类目分类、品牌/演员/地点等实体识别、情感与标题党判定——这一步产出的是可做倒排的标签（倒排与全文检索的机制见 [ES](/docs/CS/Framework/ES/ES.md?id=inverted-index)）
-4. **向量表示**：文本、图像、音频各走自己的编码器（图像侧见 [CNN](/docs/CS/AI/CNN.md)，语义 embedding 见 [NLP](/docs/CS/AI/NLP/NLP.md)），拼成内容向量，供相似召回与去重
+4. **向量表示**：文本、图像、音频各走自己的编码器（图像侧见 [CNN](/docs/CS/AI/CNN.md)，语义 embedding 见 [Representation](/docs/CS/AI/NLP/Representation.md)），拼成内容向量，供相似召回与去重
 5. **入索引**：标签进倒排、向量进 ANN 索引、约束字段（在架、时效、地域）进过滤器——三者的更新延迟决定了新内容多久能被推出去（索引侧细节见 [Recall](/docs/CS/RecommenderSystem/Recall.md)）
 
 第 2 步最常用的基线是 TF-IDF：一个词在单篇里出现得越多权重越大，但在全集里越普遍则被压得越低：

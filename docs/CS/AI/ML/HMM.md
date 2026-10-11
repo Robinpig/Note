@@ -77,6 +77,7 @@ $$
 
 - [ML](/docs/CS/AI/ML/ML.md)
 - [NLP](/docs/CS/AI/NLP/NLP.md)
+- [SequenceTagging](/docs/CS/AI/NLP/SequenceTagging.md)
 - [Clustering](/docs/CS/AI/ML/Clustering.md)
 
 ## References

@@ -199,7 +199,7 @@ Self-attention 的时间和空间都是 O(n²)，上下文从 4k 涨到 128k，�
 
 ## Several Operational Details Related to Modern LLM
 
-- **Tokenizer 先于模型**：BPE / WordPiece / SentencePiece 把文本切成子词，词表通常 3–15 万；中文通常一个字接近 1–2 个 token，这也是计费与上下文长度估算的口径（见 [NLP](/docs/CS/AI/NLP/NLP.md)）。
+- **Tokenizer 先于模型**：BPE / WordPiece / SentencePiece 把文本切成子词，词表通常 3–15 万；中文通常一个字接近 1–2 个 token，这也是计费与上下文长度估算的口径（见 [Tokenization](/docs/CS/AI/NLP/Tokenization.md)）。
 - **采样策略**：temperature 缩放 logits 控制分布陡峭度，top-p（核采样）/ top-k 截断长尾，beam search 适合翻译而容易让对话变啰嗦，repeat penalty 压制循环。
 - **训练目标与对齐**：预训练 CLM → 指令微调（SFT）→ 偏好对齐（RLHF，或更简单的 DPO）。这套流水线解决的是"会续写"到"会听指令"的落差。
 - **Scaling Law**：Chinchilla 给出的经验配比是每 1 参数约 20 个训练 token；超出数据配比的欠训练模型反而浪费算力。涌现能力（ICL、CoT）随之出现。
