@@ -3,34 +3,32 @@
 > [!NOTE]
 > 版本基线 **Redis 8.10.2**；本页机制若与其他版本口径冲突，以 [Redis 版本基线](/docs/CS/DB/Redis/Redis.md?id=version-baseline) 为准。
 
-a simple event-driven programming library
+一个简单的事件驱动编程库。
 
 
 
-This file(*networking.c*) defines all the I/O functions with clients, masters and replicas(which in Redis are just special clients):
+这个文件（*networking.c*）定义了与客户端、主节点、副本之间的全部 I/O 函数（在 Redis 里，主与副本都只是特殊的客户端）：
 
-* `createClient()` allocates and initializes a new client.
-* the `addReply*()` family of functions are used by command implementations in order to append data to the client structure, that will be transmitted to the client as a reply for a given command executed.
-* `writeToClient()` transmits the data pending in the output buffers to the client and is called by the *writable event handler* `sendReplyToClient()`.
-* `readQueryFromClient()` is the *readable event handler* and accumulates data read from the client into the query buffer.
-* `processInputBuffer()` is the entry point in order to parse the client query buffer according to the Redis protocol. 
-  Once commands are ready to be processed, it calls `processCommand()` which is defined inside `server.c` in order to actually execute the command.
-* `freeClient()` deallocates, disconnects and removes a client.
+* `createClient()` 分配并初始化一个新客户端。
+* `addReply*()` 系列函数由命令实现调用，把数据追加到客户端结构上，最终作为某条命令的应答发给客户端。
+* `writeToClient()` 把输出缓冲里待发的数据发给客户端，由*可写事件处理器* `sendReplyToClient()` 调用。
+* `readQueryFromClient()` 是*可读事件处理器*，把从客户端读到的数据累积进 query buffer。
+* `processInputBuffer()` 是解析入口：按 Redis 协议解析客户端的 query buffer；命令就绪后调用定义在 `server.c` 里的 `processCommand()` 真正执行命令。
+* `freeClient()` 负责释放、断开并移除一个客户端。
 
 ## EventLoop
 
-For various [reasons](http://groups.google.com/group/redis-db/browse_thread/thread/b52814e9ef15b8d0/) Redis uses its own event library.
+由于种种[原因](http://groups.google.com/group/redis-db/browse_thread/thread/b52814e9ef15b8d0/)，Redis 用的是自己的事件库。
 
-`Redis`需要对事件做整体抽象，于是定义了`aeEventLoop`结构
+`Redis` 需要对事件做整体抽象，于是定义了 `aeEventLoop` 结构。
 
-`initServer` function defined in `redis.c` initializes the numerous fields of the [redisServer structure](/docs/CS/DB/Redis/server.md?id=server) variable. 
-One such field is the Redis event loop `el`:
+定义在 `redis.c` 里的 `initServer` 负责初始化 [redisServer 结构](/docs/CS/DB/Redis/server.md?id=server) 的众多字段，其中一个字段就是事件循环 `el`：
 
 ```c
 aeEventLoop *el
 ```
 
-`initServer` initializes `server.el` field by calling `aeCreateEventLoop` defined in `ae.c`. The definition of `aeEventLoop` is below:
+`initServer` 通过调用 `ae.c` 里的 `aeCreateEventLoop` 来初始化 `server.el`。`aeEventLoop` 的定义如下：
 
 ```c
 typedef struct aeEventLoop {
@@ -53,8 +51,10 @@ aeEventLoop结构保存了一个void *类型的万能指针apidata，是用来�
 关于 Redis 的多路复用库的选择，Redis 包装了常见的 select epoll evport kqueue，他们在编译阶段，根据不同的系统选择性能最高的一个多路复用库作为 Redis 的多路复用程序的实现，
 而且所有库实现的接口名称都是相同的，因此 Redis 多路复用程序底层实现是可以互换的
 
-Include the best multiplexing layer supported by this system.
-The following should be ordered by performances, descending.
+```c
+/* Include the best multiplexing layer supported by this system.
+ * The following should be ordered by performances, descending. */
+```
 
 ```c
 // ae.c
@@ -81,9 +81,9 @@ The following should be ordered by performances, descending.
 
 InitServer 中调用了 aeCreateEventLoop
 
-`aeApiCreate` `malloc`s `aeApiState` that has two fields - `epfd` that holds the `epoll` file descriptor returned by a call from [`epoll_create`](http://man.cx/epoll_create(2)) and `events` that is of type `struct epoll_event` define by the Linux `epoll` library. The use of the `events` field will be described later.
+`aeApiCreate` 会为 `aeApiState` 分配内存，它有两个字段：`epfd` 存放 [`epoll_create`](http://man.cx/epoll_create\(2)) 返回的 `epoll` 文件描述符，`events` 是 Linux `epoll` 库定义的 `struct epoll_event`。`events` 字段的用法后面再讲。
 
-Next is `ae.c:aeCreateTimeEvent`. But before that `initServer` call `anet.c:anetTcpServer` that creates and returns a *listening descriptor*. The descriptor listens on *port 6379* by default. The returned *listening descriptor* is stored in `server.fd` field.
+下一步是 `ae.c:aeCreateTimeEvent`。但在那之前，`initServer` 已经调用过 `anet.c:anetTcpServer`，它创建并返回一个*监听描述符*（listening descriptor），默认监听 *6379* 端口，返回值存在 `server.fd` 字段里。
 
 ```c
 aeEventLoop *aeCreateEventLoop(int setsize) {
@@ -142,24 +142,23 @@ static int aeApiCreate(aeEventLoop *eventLoop) {
 
 ### processEvents
 
-`ae.c:aeProcessEvents` looks for the time event that will be pending in the smallest amount of time by calling `ae.c:aeSearchNearestTimer` on the event loop.
-In our case there is only one timer event in the event loop that was created by `ae.c:aeCreateTimeEvent`.
+`ae.c:aeProcessEvents` 会在事件循环上调用 `ae.c:aeSearchNearestTimer`，找出最快到期（等待时间最短）的时间事件。
+本例中事件循环里只有这一个时间事件，由 `ae.c:aeCreateTimeEvent` 创建。
 
-Remember, that the timer event created by `aeCreateTimeEvent` has probably elapsed by now because it had an expiry time of one millisecond.
-Since the timer has already expired, the seconds and microseconds fields of the `tvp` `timeval` structure variable is initialized to zero.
+要记得，`aeCreateTimeEvent` 创建的这个时间事件此刻多半已经到期了——它的超时只有 1 毫秒。
+既然时间事件已经到期，`tvp` 这个 `timeval` 结构变量的秒与微秒字段都被置为 0。
 
-The `tvp` structure variable along with the event loop variable is passed to `ae_epoll.c:aeApiPoll`.
+`tvp` 连同事件循环一起传给 `ae_epoll.c:aeApiPoll`。
 
-`aeApiPoll` functions does an [`epoll_wait`](http://man.cx/epoll_wait) on the `epoll` descriptor and populates the `eventLoop->fired` table with the details:
+`aeApiPoll` 在 `epoll` 描述符上做一次 [`epoll_wait`](http://man.cx/epoll_wait)，并把结果填进 `eventLoop->fired` 表：
 
-- `fd`: The descriptor that is now ready to do a read/write operation depending on the mask value.
-- `mask`: The read/write event that can now be performed on the corresponding descriptor.
+- `fd`：现在可以按 mask 做读/写操作的描述符。
+- `mask`：该描述符上现在可以执行的读/写事件。
 
-`aeApiPoll` returns the number of such file events ready for operation.
-Now to put things in context, if any client has requested for a connection then `aeApiPoll` would have noticed it and populated the `eventLoop->fired` table with an entry of the descriptor being the *listening descriptor* and mask being `AE_READABLE`.
+`aeApiPoll` 返回就绪文件事件的个数。放回上下文看：如果有客户端请求连接，`aeApiPoll` 就会察觉，并在 `eventLoop->fired` 里填一项——描述符是那个*监听描述符*，mask 是 `AE_READABLE`。
 
-Now, `aeProcessEvents` calls the `redis.c:acceptHandler` registered as the callback. `acceptHandler` executes `accept` on the *listening descriptor* returning a *connected descriptor* with the client.
-`redis.c:createClient` adds a file event on the *connected descriptor* through a call to `ae.c:aeCreateFileEvent` like below:
+随后 `aeProcessEvents` 调用注册为回调的 `redis.c:acceptHandler`；`acceptHandler` 对*监听描述符*执行 `accept`，拿到与客户端之间的*已连接描述符*。
+`redis.c:createClient` 再通过 `ae.c:aeCreateFileEvent` 在这个*已连接描述符*上挂一个文件事件，如下：
 
 ```c
 if (aeCreateFileEvent(server.el, c->fd, AE_READABLE,
@@ -169,21 +168,20 @@ if (aeCreateFileEvent(server.el, c->fd, AE_READABLE,
 }
 ```
 
-`c` is the `redisClient` structure variable and `c->fd` is the connected descriptor.
+`c` 是 `redisClient` 结构变量，`c->fd` 就是那个已连接的描述符。
 
-Next the `ae.c:aeProcessEvent` calls `ae.c:processTimeEvents`
+接着 `ae.c:aeProcessEvent` 会调用 `ae.c:processTimeEvents`。
 
-Process every pending time event, then every pending file event (that may be registered by time event callbacks just processed).
-Without special flags the function sleeps until some file event fires, or when the next time event occurs (if any).
+`aeProcessEvents` 的语义（源码注释）：先处理所有到期的时间事件，再处理所有就绪的文件事件（文件事件也可能刚被前面处理的时间事件回调注册出来）。
+没有特殊 flags 时，函数会一直睡眠，直到某个文件事件触发、或下一个时间事件到期（如果有）。
 
-* If flags is 0, the function does nothing and returns.
-* if flags has AE_ALL_EVENTS set, all the kind of events are processed.
-* if flags has AE_FILE_EVENTS set, file events are processed.
-* if flags has AE_TIME_EVENTS set, time events are processed.
-* if flags has AE_DONT_WAIT set the function returns ASAP until all
-* the events that's possible to process without to wait are processed.
-* if flags has AE_CALL_AFTER_SLEEP set, the aftersleep callback is called.
-* if flags has AE_CALL_BEFORE_SLEEP set, the beforesleep callback is called.
+* flags 为 0：什么都不做，直接返回。
+* 置 `AE_ALL_EVENTS`：处理所有类型的事件。
+* 置 `AE_FILE_EVENTS`：处理文件事件。
+* 置 `AE_TIME_EVENTS`：处理时间事件。
+* 置 `AE_DONT_WAIT`：尽快返回，把所有不需要等待就能处理的事件处理完。
+* 置 `AE_CALL_AFTER_SLEEP`：调用 aftersleep 回调。
+* 置 `AE_CALL_BEFORE_SLEEP`：调用 beforesleep 回调。
 
 从内核取出就绪事件，根据事件的读写类型，分别进行回调处理相关业务逻辑
 
@@ -320,15 +318,11 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
 
 #### aeSearchNearestTimer
 
-Search the first timer to fire.
-This operation is useful to know how many time the select can be put in sleep without to delay any event.
-If there are no timers NULL is returned.
-Note that's O(N) since time events are unsorted.
-Possible optimizations (not needed by Redis so far, but...):
+查找下一个即将到期的时间事件：这个操作用来判断 select 可以睡多久而不耽误任何事件；没有任何定时器时返回 NULL。
+由于时间事件是无序存放的，这是 O(N) 的。可能的优化（Redis 目前还不需要）：
 
-1. Insert the event in order, so that the nearest is just the head.
-   Much better but still insertion or deletion of timers is O(N).
-2. Use a skiplist to have this operation as O(1) and insertion as O(log(N)).
+1. 按到期顺序插入，使最近的就是表头——好一些，但插入与删除仍是 O(N)。
+2. 用跳表，使这个操作 O(1)、插入 O(log(N))。
 
 ```c
 static aeTimeEvent *aeSearchNearestTimer(aeEventLoop *eventLoop)
@@ -386,16 +380,15 @@ static int aeApiPoll(aeEventLoop *eventLoop, struct timeval *tvp) {
 
 ### beforeSleep
 
-This function gets called every time Redis is entering the main loop of the event driven library, that is, before to sleep for ready file descriptors.
+每次 Redis 进入事件库的主循环、准备睡眠等待就绪的文件描述符之前，都会调用这个函数。
 
-Note: This function is (currently) called from two functions:
+注意：目前它被两个函数调用：
 
-1. aeMain - The main server loop
-2. processEventsWhileBlocked - Process clients during RDB/AOF load
+1. `aeMain` —— 服务器主循环。
+2. `processEventsWhileBlocked` —— 在加载 RDB/AOF 期间继续服务客户端。
 
-If it was called from processEventsWhileBlocked we don't want to perform all actions (For example, we don't want to expire keys), but we do need to perform some actions.
-
-The most important is freeClientsInAsyncFreeQueue but we also call some other low-risk functions.
+如果调用方是 `processEventsWhileBlocked`，就不能做全部动作（例如不该让 key 过期），但仍要做其中一部分。
+最重要的是 `freeClientsInAsyncFreeQueue`，此外还调用一些低风险函数。
 
 ```c
 void beforeSleep(struct aeEventLoop *eventLoop) {
@@ -515,12 +508,12 @@ void afterSleep(struct aeEventLoop *eventLoop) {
 
 ### processTimeEvents
 
-`ae.processTimeEvents` iterates over list of time events starting at `eventLoop->timeEventHead`.
+`ae.processTimeEvents` 从 `eventLoop->timeEventHead` 开始遍历时间事件链表。
 
-For every timed event that has elapsed `processTimeEvents` calls the registered callback.
-In this case it calls the only timed event callback registered, that is, `redis.c:serverCron`.
-The callback returns the time in milliseconds after which the callback must be called again.
-This change is recorded via a call to `ae.c:aeAddMilliSeconds` and will be handled on the next iteration of `ae.c:aeMain` while loop.
+对每个已到期事件，`processTimeEvents` 调用其注册的回调；
+这里调用的正是唯一注册过的那个时间事件回调——`redis.c:serverCron`。
+回调返回「下次再被调用需要等待的毫秒数」，
+这个改动通过 `ae.c:aeAddMilliSeconds` 记录，会在 `ae.c:aeMain` 主循环的下一次迭代中被处理。
 
 ```c
 static int processTimeEvents(aeEventLoop *eventLoop) {
@@ -530,10 +523,10 @@ static int processTimeEvents(aeEventLoop *eventLoop) {
     time_t now = time(NULL);
 ```
 
-If the system clock is moved to the future, and then set back to the right value, time events may be delayed in a random way. 
-Often this means that scheduled operations will not be performed soon enough.
+如果系统时钟被拨到未来、又被调回正确值，时间事件就可能被打乱延后。
+通常意味着本该按计划执行的操作没能及时跑起来。
 
-Here we try to detect system clock skews, and force all the time events to be processed ASAP when this happens: **the idea is that processing events earlier is less dangerous than delaying them indefinitely, and practice suggests it is**.
+这里的做法是检测时钟跳变：一旦发生就强制所有时间事件尽快处理——**早处理比无限期拖着更安全，实践也支持这一点**。
 ```c
     if (now < eventLoop->lastTime) {
         te = eventLoop->timeEventHead;
@@ -607,30 +600,30 @@ Here we try to detect system clock skews, and force all the time events to be pr
 
 ## Multiple IO
 
-Redis is mostly single threaded, however there are certain threaded operations such as UNLINK, slow I/O accesses and other things that are performed on side threads.
+Redis 基本是单线程的，但某些操作已经走了线程：UNLINK、异步刷盘与 AOF fsync、惰性释放等，此外还有一块专门负责加载与计算校验和的线程。
 
-Now it is also possible to handle Redis clients socket reads and writes in different I/O threads. Since especially writing is so slow, normally Redis users use pipelining in order to speed up the Redis performances per core, and spawn multiple instances in order to scale more. Using I/O threads it is possible to easily speedup two times Redis without resorting to pipelining nor sharding of the instance.
+现在还可以把客户端 socket 的读写放到不同的 IO 线程里处理。由于写操作尤其慢，Redis 用户通常靠 pipelining 提升单核性能、靠多开实例做扩展；用上 IO 线程后，不必 pipelining 也不必给实例分片，就能轻松拿到约 2 倍提速。
 
-By default threading is disabled, we suggest enabling it only in machines that have at least 4 or more cores, leaving at least one spare core.
+线程默认关闭。建议只在 4 核以上、且能留出至少一个空闲核心的机器上开启。
 
-Using more than 8 threads is unlikely to help much. We also recommend using threaded I/O only if you actually have performance problems, with Redis instances being able to use a quite big percentage of CPU time, otherwise there is no point in using this feature.
+超过 8 个线程通常没什么收益。也建议只在真的遇到性能问题、且 Redis 实例确实吃掉了相当大比例 CPU 时间时才启用线程化 IO，否则这个特性没有意义。
 
-So for instance if you have a four cores boxes, try to use 2 or 3 I/O threads, if you have a 8 cores, try to use 6 threads. In order to enable I/O threads use the following configuration directive:
+比如 4 核机器试 2~3 个 IO 线程，8 核机器试 6 个。开启方式是配置指令：
 
 ```
 io-threads 4
 ```
 
-Setting io-threads to 1 will just use the main thread as usual. When I/O threads are enabled, we only use threads for writes, that is to thread the write(2) syscall and transfer the client buffers to the socket. However it is also possible to enable threading of reads and protocol parsing using the following configuration directive, by setting it to yes:
+把 `io-threads` 设为 1 就等于照旧只用主线程。启用 IO 线程后，默认只对「写」做线程化——即把 `write(2)` 系统调用与「把客户端缓冲写进 socket」挪到线程里；也可以通过下面的指令把读与协议解析也线程化：
 
 ```
 io-threads-do-reads no
 ```
 
-Usually threading reads doesn't help much.
+通常对读做线程化帮助不大。
 
-- **NOTE 1:** This configuration directive cannot be changed at runtime via CONFIG SET. Aso this feature currently does not work when SSL is enabled.
-- **NOTE 2:** If you want to test the Redis speedup using redis-benchmark, make sure you also run the benchmark itself in threaded mode, using the --threads option to match the number of Redis threads, otherwise you'll not be able to notice the improvements.
+- **NOTE 1：** 该配置项不能用 `CONFIG SET` 动态修改；并且开启 SSL 时这个特性目前不可用。
+- **NOTE 2：** 想用 redis-benchmark 验证提速，记得压测本身也要用 `--threads` 开多线程、且线程数与 Redis 侧对齐，否则看不到差异。
 
 ## File and Time Events
 
@@ -706,19 +699,22 @@ typedef struct aeFiredEvent {
 
 整个 I/O 多路复用模块抹平了不同平台上 I/O 多路复用函数的差异性，提供了相同的接口：
 
-- static int aeApiCreate(aeEventLoop *eventLoop)
-- static int aeApiResize(aeEventLoop *eventLoop, int setsize)
-- static void aeApiFree(aeEventLoop *eventLoop)
-- static int aeApiAddEvent(aeEventLoop *eventLoop, int fd, int mask)
-- static void aeApiDelEvent(aeEventLoop *eventLoop, int fd, int mask)
-- static int aeApiPoll(aeEventLoop *eventLoop, struct timeval *tvp)
+```c
+/* 整个 aeApi* 层在每个后端里提供同名接口（各模块内部用 aeApiState 存上下文） */
+    static int aeApiCreate(aeEventLoop *eventLoop)
+    static int aeApiResize(aeEventLoop *eventLoop, int setsize)
+    static void aeApiFree(aeEventLoop *eventLoop)
+    static int aeApiAddEvent(aeEventLoop *eventLoop, int fd, int mask)
+    static void aeApiDelEvent(aeEventLoop *eventLoop, int fd, int mask)
+    static int aeApiPoll(aeEventLoop *eventLoop, struct timeval *tvp)
+```
 
 因为各个函数所需要的参数不同，我们在每一个子模块内部通过一个 aeApiState 来存储需要的上下文信息
 
 
 ## epoll
 
-Redis use ae wrap [epoll](/docs/CS/OS/Linux/IO/epoll.md) rather than use libevent
+Redis 用自研的 ae 包装 [epoll](/docs/CS/OS/Linux/IO/epoll.md)，而不是引入 libevent。
 
 aeApiCreate->`epoll_create`
 
