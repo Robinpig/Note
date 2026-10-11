@@ -14,6 +14,28 @@ Servlets have the following advantages over other server extension mechanisms:
 - They have all the advantages of the Java programming language, including ease of development and platform independence.
 - They can access the large set of APIs available for the Java platform.
 
+## Specification Versions
+
+| 版本 | 时间 | 规范 | 关键特性 | 包名 |
+|------|------|------|----------|------|
+| 2.5 | 2005-09 | JSR 154 (Java EE 5) | 注解支持、需 Java SE 5 | `javax.servlet` |
+| 3.0 | 2009-12 | JSR 315 (Java EE 6) | **异步处理**、可插拔、`web.xml` 可选 | `javax.servlet` |
+| 3.1 | 2013-05 | JSR 340 (Java EE 7) | 非阻塞 I/O（`ReadListener`/`WriteListener`）、HTTP upgrade | `javax.servlet` |
+| 4.0 | 2017-09 | Java EE 8 | HTTP/2 | `javax.servlet` |
+| 5.0 | 2020-10/11 | Jakarta EE 9 | **整个 API 从 `javax.servlet` 迁移到 `jakarta.servlet`** | `jakarta.servlet` |
+| 6.0 | 2022-05 | Jakarta EE 10 | 移除过时特性、baseline 提到 Java SE 11 | `jakarta.servlet` |
+| 6.1 | 2024-03 | Jakarta EE 11 | 弃用 HTTP/2 server push、移除 SecurityManager 引用 | `jakarta.servlet` |
+
+容器对应关系：Tomcat 9.x → Servlet 4.0；Tomcat 10.x → Jakarta Servlet 5.0/6.0。
+
+## Jakarta Namespace Migration
+
+Servlet 5.0（Jakarta EE 9，2020 年 10 月）完成了**整个 API 从 `javax.servlet.*` 包到 `jakarta.servlet.*` 的迁移**，这是平台历史上最大的二进制不兼容变更——任何 `import javax.servlet.*` 的代码都必须改为 `import jakarta.servlet.*` 才能在 Jakarta EE 9+ 容器（Tomcat 10、Jetty 12、WildFly）上运行。
+
+- 迁移源于 Oracle 将 Java EE 移交 Eclipse 基金会后保留 `javax` 命名空间；`javax` 无法继续用于 Jakarta。
+- 容器分界：**Tomcat 9.x 仍用 `javax`（Servlet 4.0），Tomcat 10.x 起用 `jakarta`（Servlet 5.0+）**。同一 `.war` 无法跨分界部署，需做包名改写（如 `jakartaee-migration` 工具）。
+- 本文代码示例中的 `package javax.servlet;` 属 **Servlet 4.0 及更早**的历史写法，新项目应统一改为 `jakarta.servlet`。
+
 ### Servlet Container
 
 The servlet container is a part of a web server or application server that provides the network services over which requests and responses are sent, decodes MIME-based requests, and formats MIME-based responses.
@@ -40,7 +62,7 @@ All servlets implement this interface either directly, or more commonly, by exte
 The two classes in the Java Servlet API that implement the Servlet interface are GenericServlet and HttpServlet.
 For most purposes, Developers will extend HttpServlet to implement their servlets.
 
-### Request Handling Methods
+### HTTP Methods
 
 The basic Servlet interface defines a service method for handling client requests.
 This method is called for each request that the servlet container routes to an instance of a servlet.
@@ -406,9 +428,37 @@ Async listeners are used to manage async events such as time outs and completion
 There may be multiple listener classes listening to each event type, and the Application Developer may specify the order in which the container invokes the listener beans for each event type.
 
 
-## ASync
+## Async
 
-AsyncContext req和res
+Servlet 3.0（JSR 315）引入的异步处理让 servlet 线程不必阻塞等待下游资源（数据库、远程服务），而是把请求 / 响应托管给 `AsyncContext`，立即释放容器线程。
+
+### Start Async
+
+在 `service` / `doGet` 等方法中调用 `ServletRequest.startAsync(req, res)` 即可得到 `AsyncContext`；多次调用返回同一实例。前提是 servlet / filter 声明了 `asyncSupported = true`（注解 `@WebServlet(asyncSupported=true)` 或 `web.xml` 的 `<async-supported>true</async-supported>`），否则抛 `IllegalStateException`。
+
+```java
+@WebServlet(name = "DemoServlet", asyncSupported = true, urlPatterns = "/demo")
+public class DemoServlet extends HttpServlet {
+    public void doGet(HttpServletRequest req, HttpServletResponse res) {
+        AsyncContext ctx = req.startAsync(req, res);
+        ctx.setTimeout(30000);            // 0 或负数表示无超时
+        executor.execute(() -> {
+            try {
+                // 耗时业务...
+                req.getRequestDispatcher("/result").forward(req, res);
+            } finally {
+                ctx.complete();            // 提交响应、关闭连接
+            }
+        });
+    }
+}
+```
+
+### Lifecycle and Listeners
+
+- 容器线程在 `startAsync` 后立即返回；真正业务在托管线程（如业务线程池）执行。
+- `AsyncListener` 监听 `onComplete` / `onTimeout` / `onError` / `onStartAsync`；`ctx.dispatch(path)` 把请求派发回容器由 JSP / 其它 servlet 生成响应。
+- 超时未 `complete` 时容器按错误派发（默认 500），`ctx.complete()` 或任意 `dispatch()` 标记异步周期结束、**关闭 TCP 连接**。注意异步只复用长连接、并未改变 HTTP 单向协议。
 
 
 

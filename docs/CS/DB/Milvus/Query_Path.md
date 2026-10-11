@@ -30,9 +30,24 @@ Milvus 3.0 的查询链路是一个**两级模型**：Proxy 是无状态的接�
 
 `searchTask` 在 `PreExecute` 阶段把请求翻译成 segcore 可执行的计划：设置输出字段、partition 裁剪、rerank 输入字段、下推到 QueryNode 的函数链，再 `proto.Marshal` 成 `SerializedExprPlan`。待检索的向量不进 plan，而是走 `SearchInput` 的另一支 `PlaceholderGroup`——两者一个描述「怎么算」、一个描述「拿什么算」，这个分工决定了 cgo 边界的形状。
 
+### Pushdown Boundary between Go and segcore
+
+Proxy 只负责把请求编码成 plan，真正决定「哪些节点在 C++ 里建」的是 `PlanProto.cpp`。可下推的不是具体的算子清单，而是**只依赖单段数据、可并行的计算**：表达式过滤、向量检索（`VectorSearchNode`）、MVCC 裁行（`MvccNode`）、迭代过滤（`IterativeFilterNode`）、group_by 的每组截断（`SearchGroupByNode`）。需要全局视图的留在 Go：跨 shard topK、融合、最终聚合与全局排序。
+
+query 侧的 plan 比 search 多两类节点，这正是「聚合与排序下推」的真实边界：
+
+| 能力 | plan 字段 | segcore 侧节点 | Go 侧残留的工作 |
+| --- | --- | --- | --- |
+| 聚合与 GROUP BY | `QueryPlanNode` 的 `aggregates`、`group_by_field_ids` | `AggregationNode`，由 `BuildProjectAndAggregationNodes` 构建；avg 只产出 sum 与 count 两个部分态 | Proxy 的 `query_pipeline.go` 用 `reduce_by_groups` 跨段跨 shard 合并，`avg` 由 sum 与 count 相除补齐 |
+| ORDER BY | `QueryPlanNode` 的 `order_by_fields` | `OrderByNode`，由 `BuildOrderByNode` 构建，执行时落到 `PhyQueryOrderByNode` 的 SortBuffer | Proxy 只归并各分片已排序的结果流，外加截断与字段重映射 |
+
+search 侧则相反：plan 里没有聚合节点，也没有排序节点。`order_by_fields` 只是 search params 里的字符串，由 Proxy 的 `parseOrderByFields` 解析成 `OrderByField` 列表，排序完全发生在 Proxy 的 `orderByOperator`；排序字段常不在输出列里，`requeryOperator` 负责回表补齐。分面聚合同样全在 Proxy：`searchReduceOperator` 先完成跨 shard 归并，`aggregateOperator` 再对归并后的 `SearchResultData` 做层级遍历，逐层分桶、累计度量、处理 `top_hits` 与子聚合。所以 3.0 的下推是单向的——query 能推的尽量推，search 的聚合与全局排序一行都没进 segcore。
+
 ### VChannel Fan-out and Leader Selection
 
-`shardclient.Manager` 调 `GetShardLeaders` 拿到 collection 每个 VChannel 的 leader 列表，结果带版本缓存，channel 分配变化时失效；`LBPolicyImpl` 在 `roundrobin_balancer` 与 `look_aside_balancer` 之间选择策略，从 leader 列表挑一个 QueryNode 直连其 `Search` / `Query`。被选中节点若已不再持有该 shard，会返回 `NotShardLeader`，Proxy 失效缓存并重试——这条错误路径就是 shard 迁移期间的实际收敛机制。
+`shardclient.Manager` 调 `GetShardLeaders` 拿到 collection 每个 VChannel 的 leader 列表，结果按 collectionID 缓存在内存表里；缓存条目没有版本号，失效是显式的——`InvalidateShardLeaderCache` 在 shard leader 均衡、collection drop 与查询重试路径上删除条目，QueryCoord 侧的均衡与 load 变更也会主动调用它清缓存。`LBPolicyImpl` 在 `roundrobin_balancer` 与 `look_aside_balancer` 之间选择策略，从 leader 列表挑一个 QueryNode 直连其 `Search` / `Query`。被选中节点若已不再持有该 shard，会返回 `NotShardLeader`，Proxy 据此删除该 collection 的缓存条目并重试——这条错误路径就是 shard 迁移期间的实际收敛机制，`NotShardLeader` 一类 RPC 错误的分类与重试语义见 [Error Model](/docs/CS/DB/Milvus/Error_Model.md)。
+
+服务端一侧的语义要更细：`GetShardLeaders` 只返回 `IsQueryVisible()` 的 replica，默认还跳过 leader 缺失或 `IsServiceable()` 为假的条目——任一 channel 在所有 replica 都拿不到可用 leader 时整体报 `channel not available`。调用方可以传 `WithUnserviceableShards` 跳过「全量装载完成」这道门禁，并把每个 leader 的 `Serviceable` 标志带回，自行决定是否使用尚未就绪的 leader——Proxy 的 `shardclient.Manager` 刷新 shard location 缓存时正是这样调用的。
 
 ### Reduce Pipeline
 
@@ -43,6 +58,12 @@ Milvus 3.0 的查询链路是一个**两级模型**：Proxy 是无状态的接�
 混合检索在协议层就是 `IsAdvanced` 加一组 `SubReqs`：Proxy 把每个向量字段的检索编成子请求，delegator 在**同一份 pin 住的 segment 快照与同一个 tSafe** 下并行执行每个子请求，每个子请求内部先做 QueryNode 侧 `ReduceSearchOnQueryNode`，然后把**各子请求各自的**结果原样返回 Proxy。因此融合发生在 Proxy：`hybridSearchReduceOperator` 与 `hybridAssembleOperator` 对齐 nq，`rerankOperator` 执行加权或 RRF 之类的打分函数。需要 rerank 输入字段时，plan 会把 `rerankInputFieldIDs` 塞进输出，必要时触发 `requeryOperator` 回表补齐。
 
 一处容易被误解的边界：打分函数链可以拆分——`plan.QuerynodeFunctionChains` 允许把部分链下推到 QueryNode 执行，其余留在 Proxy。两个约束是硬编码的：search iterator 不支持 function rerank，因为 rerank 改写了分数域，续查会误读；`order_by` 与 function rerank 互斥，因为排序准则冲突。
+
+### Iterators and Continuation
+
+迭代器在协议上只是一个布尔开关加一组游标参数，续查本身没有独立的执行路径，服务端每次请求都按参数重建续查现场。search 侧是 `IsIterator` 加 V2 的 `SearchIteratorV2Info`：客户端携带 `token`（首轮可缺省，服务端生成 UUID）、`batch_size` 与上一轮的 `last_bound`，响应回填 `SearchIteratorV2Results` 里的 token 与新的 `last_bound`，续查位置完全由这两个值重建。query 侧的游标是「主键 + 元素级 offset」：`query_iter_last_pk` 与 `query_iter_last_element_offset` 两个参数必须成对出现，Proxy 解析成 `QueryIteratorCursor` 放进 plan，续查在 segcore 按主键序推进，首屏响应通过 `SessionTs` 把快照时间戳交回客户端。
+
+跨批一致性的做法是**锁快照时间戳**而非重放游标：续查批次把上一轮的时间戳经请求的 `GuaranteeTimestamp` 字段送回，Proxy 检测到非零值就同时写入 `MvccTimestamp` 与 `GuaranteeTimestamp`，delegator 复用同一快照、不再重新定水位。这也解释了 `speedupGuranteeTS` 为什么对迭代器一律跳过——shard 级 mvcc 加速会改变快照，破坏「所有批次同一视图」。其余差异都是协议层硬限制：search iterator V2 与 group_by、offset 互斥；query iterator 与 ORDER BY 互斥，游标推进依赖主键序。
 
 ## Consistency Levels and Guarantee Timestamp
 
@@ -56,6 +77,14 @@ Milvus 3.0 的查询链路是一个**两级模型**：Proxy 是无状态的接�
 | `Session` / `Customized` | 显式 `GuaranteeTimestamp` | 哨兵值 `strongTS` / `boundedTS` 走 `parseGuaranteeTs` 再折算，否则用调用方给的时间点 |
 
 真正的等待发生在 delegator：`waitTSafe(ctx, guaranteeTs)` 阻塞到该 channel 的 WAL 消费水位越界，这正是「读已提交」的实现点——查询不会读到 guaranteeTs 之后写入的数据。等到之后，delegator 把返回的 tSafe 写进 `MvccTimestamp`，请求自带非零 mvcc ts 时保留原值供续查复用同一快照，这个 ts 就是整个 shard 本次查询的快照边界。外部表集合走 `skipStreamingForExternalTable` 分支，不订阅 WAL，直接把 tSafe 置为 `typeutil.MaxTimestamp`。
+
+### GracefulTime and speedupGuranteeTS
+
+`Bounded` 的回退量来自配置 `common.gracefulTime`，默认 5000 毫秒，生效点只有两处：`parseGuaranteeTsFromConsistency` 的 `Bounded` 分支与 `parseGuaranteeTs` 的哨兵 `boundedTS` 分支，两者都用 `AddPhysicalDurationOnTs(tMax, -ratio)` 从 tMax 的物理时间往回扣。它不引入任何锁，只是把等待目标从「追上最新」降成「追到约 5 秒前」。
+
+反方向的调整发生在 delegator 的 `speedupGuranteeTS`，`Search`、`Query`、`QueryStream` 三个读入口都会先调它：它只作用于 `Strong` 且请求未自带 mvcc ts 的非迭代器读请求——先经 `GetLatestMVCCTimestampIfLocal` 读本地 WAL 的最新 mvcc 水位，若低于 guaranteeTs 就直接把它当等待目标。加速的道理是 Strong 真正要等的其实是「本地已确认写入的最新数据」，而这正是 mvcc 水位的定义，再等 tMax 属于多余。跳过加速的条件在源码里是硬编码的：外部表、迭代器（客户端不支持 shard 级 mvcc，加速会让不同批次落到不同快照）、非 Strong、请求已带非零 `MvccTimestamp`。`GetStatistics` 这类旁路读取只登记不加速。
+
+同一次调用还会把 guaranteeTs 登记进 `latestRequiredMVCCTimeTick`，供 QueryNode 消费管道里的 empty timetick slowdowner 使用：无数据的空 TimeTick 平时被过滤掉以省 CPU，但只要有读者在等某个 ts，时间戳就必须放行到这个水位，否则 tSafe 永不推进、等待者全部卡死；delegator 启动追赶阶段该值直接取当前物理时间，保证装载尽快完成。
 
 跨 shard 的一致性不靠分布式事务：每个 delegator 独立等待自己 channel 的水位，靠同一个 guaranteeTs 语义把各 shard 的时间上界对齐，Proxy 只做结果归并、不再二次校验可见性。TimeTick 与 tSafe 如何产生见 [WAL and StreamingNode](/docs/CS/DB/Milvus/WAL_and_StreamingNode.md)。
 
@@ -99,7 +128,7 @@ Milvus 3.0 的查询链路是一个**两级模型**：Proxy 是无状态的接�
 
 ## segcore and the cgo Boundary
 
-`internal/core/` 是独立 C++ 工程，产出 `milvus_core`，经 `internal/util/segcore` 与 cgo 暴露给 QueryNode。边界上只有三类东西值得过：
+`internal/core/` 是独立 C++ 工程，产出 `milvus_core`，经 `internal/util/segcore` 与 cgo 暴露给 QueryNode。本节讲边界上「传什么」，边界之内 C++ 侧的数据结构与执行模型（两种 Segment 实现、InsertRecord/DeletedRecord、PlanNode 求值与 reduce）见 [Segcore](/docs/CS/DB/Milvus/Segcore.md)。边界上只有三类东西值得过：
 
 | 上传物 | 载体 | 说明 |
 | --- | --- | --- |
@@ -136,3 +165,5 @@ Go 与 C++ 的错误经 `HandleCStatus` 分类成 merr 哨兵，即 `merr.Segcor
 - [milvus-io/milvus v3.0.1 PlanProto](https://github.com/milvus-io/milvus/blob/v3.0.1/internal/core/src/query/PlanProto.cpp)
 - [milvus-io/milvus v3.0.1 resource manager](https://github.com/milvus-io/milvus/blob/v3.0.1/internal/querycoordv2/meta/resource_manager.go)
 - [milvus-io/milvus v3.0.1 shard client LB policy](https://github.com/milvus-io/milvus/blob/v3.0.1/internal/proxy/shardclient/lb_policy.go)
+- [milvus-io/milvus v3.0.1 empty timetick slowdowner](https://github.com/milvus-io/milvus/blob/v3.0.1/internal/util/pipeline/consuming_slowdown.go)
+- [milvus-io/milvus v3.0.1 query pipeline](https://github.com/milvus-io/milvus/blob/v3.0.1/internal/proxy/query_pipeline.go)

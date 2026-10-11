@@ -19,7 +19,7 @@ MySQL 启动配置文件读取顺序是 `/etc/my.cnf` → `/etc/mysql/my.cnf` �
 ```shell
 # 以 9.7 LTS 为例；镜像标签跟随版本线
 docker pull mysql:9.7
-docker run --name test-mysql -e MYSQL_ROOT_PASSWORD=123456 -p 3306:3306 -d mysql:9.7
+docker run --name test-mysql -e MYSQL_ROOT_PASSWORD=yourpassword -p 3306:3306 -d mysql:9.7
 ```
 
 ##### **K8s**
@@ -239,4 +239,4 @@ MySQL is designed for accepting writes on one node at any given time. This has a
 2. [MySQL 9.7 Reference Manual](https://dev.mysql.com/doc/refman/9.7/en/)
 3. [MySQL Releases: Innovation and LTS](https://dev.mysql.com/doc/refman/26.7/en/mysql-releases.html)
 4. [MySQL 源码编译和调试指南(Ubuntu 22.04.4 LTS) by GrokDB](https://grokdb.io/post/first-post/)
-5. [Mac上编译MySQL源码与安装](https://max2d.com/archives/983)
+5. [Mac 上编译 MySQL 源码与安装](https://max2d.com/archives/983)

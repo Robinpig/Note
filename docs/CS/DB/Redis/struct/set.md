@@ -154,3 +154,8 @@ Set 的差集、并集和交集的计算复杂度较高，在数据量较大的�
 ## Links
 
 - [Redis Struct](/docs/CS/DB/Redis/struct/struct.md?id=sets)
+
+
+## References
+
+1. [Redis sets](https://redis.io/docs/latest/develop/data-types/sets/)

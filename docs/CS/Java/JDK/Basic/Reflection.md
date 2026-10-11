@@ -1,308 +1,146 @@
-
-
 ## Introduction
 
-Instances of the class Class represent classes and interfaces in a running Java application. An enum is a kind of class and an annotation is a kind of interface. Every array also belongs to a class that is reflected as a Class object that is shared by all arrays with the same element type and number of dimensions. The primitive Java types (boolean, byte, char, short, int, long, float, and double), and the keyword void are also represented as Class objects.
-Class has no public constructor. Instead Class objects are constructed automatically by the Java Virtual Machine as classes are loaded and by calls to the defineClass method in the class loader.
+Instances of the class `Class` represent classes and interfaces in a running Java application. An enum is a kind of class and an annotation is a kind of interface. Every array also belongs to a Class object shared by all arrays with the same element type and number of dimensions. The primitive Java types and the keyword `void` are also represented as `Class` objects. `Class` has no public constructor — Class objects are constructed automatically by the JVM as classes are loaded.
 
-- Class
-- Constructor
-- Field
-- Method
+**四种获取 Class 对象的方式：**
 
+1. `ClassName.class`（编译期已知）
+2. `Class.forName("...")`（运行时按名加载，触发初始化）
+3. `instance.getClass()`
+4. `ClassLoader.loadClass("...")`（仅加载，不初始化）
 
+| 表达式 | getName | getSimpleName | getCanonicalName |
+| -------- | -------- | -------- | -------- |
+| `int.class` | int | int | int |
+| `int[].class` | [I | int[] | int[] |
+| `String.class` | java.lang.String | String | java.lang.String |
+| `ArrayList.class` | java.util.ArrayList | ArrayList | java.util.ArrayList |
 
-Get Class Object
+> 注意：`Class.getMethods()` **不保证方法顺序**——它们按内存布局而非字母序排序以提升性能，不要依赖返回顺序。
 
-1. ClassName.class
-2. Class.forName()
-3. Instance.getClass()
-4. ClassLoader.loadClass()
+## Reflection API
 
+### Class
 
+`Class` 是反射的入口，除获取名称（见上表）外，还提供 `getFields`/`getDeclaredFields`、`getMethods`/`getDeclaredMethods`、`getConstructors`/`getDeclaredConstructors`、`getAnnotations` 等。带 `Declared` 的方法只列出当前类显式声明的成员，不含继承；不带 `Declared` 的包含公开继承成员。
 
-1. `getName()` Returns the name of the entity (class, interface, array class, primitive type, or void) represented by this Class object, as a String.
-2. `getSimpleName()` Returns the simple name of the underlying class as given in the source code. Returns an empty string if the underlying class is anonymous.
-3. `getCanonicalName()` Returns the canonical name of the underlying class as defined by the Java Language Specification. Returns null if the underlying class does not have a canonical name (i.e., if it is a local or anonymous class or an array whose component type does not have a canonical name).
+### Field and Constructor
 
+`Field` / `Constructor` 通过 `get`/`set`、`newInstance` 读写成员或创建实例。访问非 public 成员前需 `setAccessible(true)` 关闭访问检查（见下节）。
 
-| Class           | getName             | getSimpleName | getCanonicalName    |
-| --------------- | ------------------- | ------------- | ------------------- |
-| int.class       | int                 | int           | int                 |
-| int[].class     | [I                  | int[]         | int[]               |
-| int[][].class   | [[I                 | int[][]       | int[][]             |
-| String.class    | java.lang.String    | String        | java.lang.String    |
-| String[].class  | [Ljava.lang.String; | String[]      | java.lang.String[]  |
-| ArrayList.class | java.util.ArrayList | ArrayList     | java.util.ArrayList |
+> ⚠️ 反射**禁止创建 enum 实例**：`Constructor.newInstance` 内部检查 `Modifier.ENUM` 并抛 `IllegalArgumentException("Cannot reflectively create enum objects")`——这是 enum 单例安全性的最后一道防线（`Unsafe.allocateInstance` 可绕过，见 [unsafe](/docs/CS/Java/JDK/Basic/unsafe.md?id=allocateinstance)）。
 
+`Constructor.newInstance` 在引导期借 `Unsafe.allocateInstance` 实现（仅 `BootstrapConstructorAccessorImpl`）：
 
-
-Todo benchmark
-
-
+```java
+class BootstrapConstructorAccessorImpl extends ConstructorAccessorImpl {
+    public Object newInstance(Object[] args) throws ... {
+        try {
+            return UnsafeFieldAccessorImpl.unsafe.allocateInstance(constructor.getDeclaringClass());
+        } catch (InstantiationException e) { throw new InvocationTargetException(e); }
+    }
+}
+```
 
 ### Method
 
-java.lang.Class.getMethods don't keep the order of methods
-
-because they are sorted by memory not name for improve performance
-
-
-MethodAccessor
-
-MethodAccessor 是一个接口，它有两个已有的具体实现：一
-个通过本地方法NativeMethodAccessorImpl来实现反射调用，另一个则使用了委派模式DelegatingMethodAccessorImpl
-每个 Method 实例的第一次反射调用都会生成一个委派实现，它所委派的具体实现便是一
-个本地实现。
-本地实现非常容易理解。当进入了 Java 虚拟机内部之后，我们便拥有了
-Method 实例所指向方法的具体地址。这时候，反射调用无非就是将传入的参数准备好，
-然后调用进入目标方法
- 
-
--Dsun.reflect.inflationThreshold=15
-
-
-当某个反射调用的调用次数在 15 之下时，
-采用本地实现；当达到 15 时，便开始动态生成字节码，并将委派实现的委派对象切换至动
-态实现，这个过程我们称之为 Inflation。
-
-反射调用的 Inflation 机制是可以通过参数（-Dsun.reflect.noInflation=true）来关闭的
-
+`Method.invoke` 的底层由 `MethodAccessor` 实现。每个 `Method` 的首次反射调用会生成一个委派实现（`DelegatingMethodAccessorImpl`），其委派对象最初是一个本地实现（`NativeMethodAccessorImpl`）；当调用次数达到 **15 次阈值**时，JVM 动态生成字节码（`GeneratedMethodAccessorN`）并切换委派目标，这一过程称为 **Inflation**：
 
 ```java
-// java -verbose:class Test
+// -Dsun.reflect.inflationThreshold=15   // 默认 15
+// -Dsun.reflect.noInflation=true        // 关闭 Inflation，始终用本地实现
+```
+
+```java
 public class Test {
-  public static void target(int i) {
-    new Exception("#" + i).printStackTrace();
-  }
+  public static void target(int i) { new Exception("#" + i).printStackTrace(); }
   public static void main(String[] args) throws Exception {
-    Class<?> klass = Class.forName("Test");
-    Method method = klass.getMethod("target", int.class);
-    for (int i = 0; i < 20; i++) {
-      method.invoke(null, i);
-    }
+    Method method = Class.forName("Test").getMethod("target", int.class);
+    for (int i = 0; i < 20; i++) method.invoke(null, i);  // 第 15 次起转动态实现
   }
 }
 ```
 
+本地实现慢（需跨 JNI 边界、参数打包成 Object 数组），动态生成字节码后可直接调用目标方法、避免装箱与数组分配，性能接近直接调用。
+
+## setAccessible and Strong Encapsulation
+
+`setAccessible(true)` 用于绕过 private/protected 访问检查，是 ORM、序列化、测试框架的基石。但 **JPMS 强封装（JEP 403，JDK 17 硬默认）改变了它的边界**：
+
+- 若目标类所在的**包未被模块 `opens` 给调用方模块**，即使 `setAccessible(true)` 也会抛 `InaccessibleObjectException`。
+- 平台模块（如 `java.base`）的多数内部包默认不开放，需启动参数 `--add-opens <module>/<pkg>=<caller>` 才能反射（见 [module](/docs/CS/Java/JDK/Basic/module.md)）。
+
+> 这与 Security Manager 无关：Security Manager 已在 JDK 24（JEP 486）被移除，强封装由模块系统本身强制。
+
+## MethodHandle vs Reflection
+
+`java.lang.invoke.MethodHandle`（JSR 292，JDK 7 引入、JDK 8 完善）是更现代、更底层的"可调用引用"抽象：
+
+- **签名严格**：`invokeExact` 要求调用时的静态类型与方法句柄类型完全匹配，否则抛 `WrongMethodTypeException`；`invoke` 允许松散适配。
+- **性能更好**：无变长 Object 数组、无强制装箱，JIT 可直接内联目标，避免了反射 `Method.invoke` 的三类开销（见 [Tuning](#tuning)）。
+- **与 Lambda 同源**：Lambda 表达式经 `invokedynamic` 引导方法生成调用点，内部正是用 `MethodHandle` + ASM 动态生成匿名类（见 [unsafe](/docs/CS/Java/JDK/Basic/unsafe.md?id=class--lambda-generation)）。
+
+反射适合"按名发现 API"（如框架扫描字段/方法），`MethodHandle` 适合"已知签名的高频调用"。两者都能被 JIT 优化，但 MethodHandle 的路径更短。
 
 ## Proxy
 
-A dynamic proxy class is a class that implements a list of interfaces specified at runtime such that a method invocation through one of 
-the interfaces on an instance of the class will be encoded and dispatched to another object through a uniform interface. 
-Thus, a dynamic proxy class can be used to create a type-safe proxy object for a list of interfaces without requiring pre-generation of the proxy class, such as with compile-time tools.
-Method invocations on an instance of a dynamic proxy class are dispatched to a single method in the instance's invocation handler,
-and they are encoded with a java.lang.reflect.Method object identifying the method that was invoked and an array of type Object containing the arguments.
+A dynamic proxy class implements a list of interfaces specified at runtime; a method invocation through one of the interfaces is encoded and dispatched to an `InvocationHandler`. `Proxy` 无需预生成代理类即可为一组接口创建类型安全的代理对象。
 
-
-Processes a method invocation on a proxy instance and returns the result. This method will be invoked on an invocation handler when a method is invoked on a proxy instance that it is associated with.
 ```java
-public interface InvocationHandler { 
+public interface InvocationHandler {
     Object invoke(Object proxy, Method method, Object[] args) throws Throwable;
 }
 ```
 
-MethodInterceptor Enhancer
-
-
-
-### newProxyInstance
-
-Returns a proxy instance for the specified interfaces that dispatches method invocations to the specified invocation handler.
-
-
-Note that the order of the specified proxy interfaces is significant: 
-two requests for a proxy class with the same combination of interfaces but in a different order will result in two distinct proxy classes.
+`Proxy.newProxyInstance` 查找或生成代理类，再经其构造器实例化：
 
 ```java
-class Proxy {
-  @CallerSensitive
-  public static Object newProxyInstance(ClassLoader loader, Class<?>[] interfaces, InvocationHandler h) {
+public static Object newProxyInstance(ClassLoader loader, Class<?>[] interfaces, InvocationHandler h) {
     Objects.requireNonNull(h);
-
     final Class<?> caller = System.getSecurityManager() == null ? null : Reflection.getCallerClass();
-
-    /** Look up or generate the designated proxy class and its constructor. */
-    Constructor<?> cons = getProxyConstructor(caller, loader, interfaces);
-
+    Constructor<?> cons = getProxyConstructor(caller, loader, interfaces);  // 查找/生成代理类
     return newProxyInstance(caller, cons, h);
-  }
-
-  private static Object newProxyInstance(Class<?> caller, // null if no SecurityManager
-                                         Constructor<?> cons,
-                                         InvocationHandler h) {
-    /** Invoke its constructor with the designated invocation handler. */
-    try {
-      if (caller != null) {
-        checkNewProxyPermission(caller, cons.getDeclaringClass());
-      }
-
-      return cons.newInstance(new Object[]{h});
-    } catch (IllegalAccessException | InstantiationException e) {
-      throw new InternalError(e.toString(), e);
-    } catch (InvocationTargetException e) {
-            ...
-    }
-  }
 }
 ```
 
+生成的类可经 `System.getProperties().put("sun.misc.ProxyGenerator.saveGeneratedFiles", "true")` 落盘查看（`ProxyGenerator.generateProxyClass`）。
 
-Uses the constructor represented by this Constructor object to create and initialize a new instance of the constructor's declaring class, with the specified initialization parameters. Individual parameters are automatically unwrapped to match primitive formal parameters, and both primitive and reference parameters are subject to method invocation conversions as necessary.
+### Limitations
 
-If the number of formal parameters required by the underlying constructor is 0, the supplied initargs array may be of length 0 or null.
+- **只能代理接口**，不能代理类——生成的代理类继承自 `Proxy` 并实现指定接口，Java 单继承决定了无法同时继承目标类。
+- 代理类自身位于 `com.sun.proxy` 包（历史为 `sun.misc` 包），在 JPMS 下受模块边界约束，且生成过程同样受 `setAccessible` 的强封装限制。
+- 每次 `newProxyInstance` 都生成（或缓存）一个新类，接口顺序不同会得到**不同的代理类**。
 
-If the constructor's declaring class is an inner class in a non-static context, the first argument to the constructor needs to be the enclosing instance; see section 15.9.3 of The Java Language Specification.
+## AnnotatedElement and Generic Reflection
 
-If the required access and argument checks succeed and the instantiation will proceed, the constructor's declaring class is initialized if it has not already been initialized.
+`AnnotatedElement`（`Class`/`Method`/`Field` 均实现）提供 `getAnnotations`/`getDeclaredAnnotations`/`getAnnotation`，是注解处理（如 Spring 的 `@Autowired`、JUnit 的 `@Test`）的基础。
 
-If the constructor completes normally, returns the newly created and initialized instance.
+泛型类型在运行时被擦除，但通过反射仍可获取**声明处**的泛型信息：
 
+- `Type[] getTypeParameters()`：类的类型变量（如 `class Box<T>` 的 `T`）。
+- `Type getGenericReturnType()` / `getGenericParameterTypes()`：方法签名中的泛型类型。
+- `ParameterizedType.getActualTypeArguments()`：如从 `List<String>` 提取 `String`。
 
-```java
-@CallerSensitive
-@ForceInline // to ensure Reflection.getCallerClass optimization
-public T newInstance(Object ... initargs)
-    throws InstantiationException, IllegalAccessException,
-           IllegalArgumentException, InvocationTargetException
-{
-    Class<?> caller = override ? null : Reflection.getCallerClass();
-    return newInstanceWithCaller(initargs, !override, caller);
-}
-```
-
-
-
-
-```java
-
- /* package-private */
-T newInstanceWithCaller(Object[] args, boolean checkAccess, Class<?> caller)
-  throws InstantiationException, IllegalAccessException,
-InvocationTargetException
-{
-  if (checkAccess)
-    checkAccess(caller, clazz, clazz, modifiers);
-
-  if ((clazz.getModifiers() & Modifier.ENUM) != 0)
-    throw new IllegalArgumentException("Cannot reflectively create enum objects");
-
-  ConstructorAccessor ca = constructorAccessor;   // read volatile
-  if (ca == null) {
-    ca = acquireConstructorAccessor();
-  }
-  @SuppressWarnings("unchecked")
-  T inst = (T) ca.newInstance(args);
-  return inst;
-}
-```
-
-Uses Unsafe.allocateObject() to instantiate classes; only used for bootstrapping.
-
-```java
-class BootstrapConstructorAccessorImpl extends ConstructorAccessorImpl {
-    private final Constructor<?> constructor;
-
-    BootstrapConstructorAccessorImpl(Constructor<?> c) {
-        this.constructor = c;
-    }
-
-    public Object newInstance(Object[] args)
-        throws IllegalArgumentException, InvocationTargetException
-    {
-        try {
-            return UnsafeFieldAccessorImpl.unsafe.
-                allocateInstance(constructor.getDeclaringClass());
-        } catch (InstantiationException e) {
-            throw new InvocationTargetException(e);
-        }
-    }
-}
-```
-
-Threshold
-```
-# default 15
--Dsun.reflect.inflationThreshold=
-
--Dsun.reflect.noInflation=true
-```
-
-NativeMethodAccessorImpl
-DelegatingMethodAccessorImpl
-
-```shell
-java -verbose:class Main.class
-```
-gather than threshold, only use DelegatingMethodAccessor, GeneratedMethodAccessor1, 
-
-
-
-### saveProxyFiles
-
-set property
-> System.getProperties().put("sun.misc.ProxyGenerator.saveGeneratedFiles", "true");
-
-saveFies
-```java
-public class ProxyGenerator {
-  /** debugging flag for saving generated class files */
-  private final static boolean saveGeneratedFiles =
-          java.security.AccessController.doPrivileged(
-                  new GetBooleanAction(
-                          "sun.misc.ProxyGenerator.saveGeneratedFiles")).booleanValue();
-
-
-
-  /**
-   * Generate a proxy class given a name and a list of proxy interfaces.
-   */
-  public static byte[] generateProxyClass(final String name,
-                                          Class<?>[] interfaces,
-                                          int accessFlags)
-  {
-    ProxyGenerator gen = new ProxyGenerator(name, interfaces, accessFlags);
-    final byte[] classFile = gen.generateClassFile();
-
-    if (saveGeneratedFiles) {
-      java.security.AccessController.doPrivileged(
-              new java.security.PrivilegedAction<Void>() {
-                public Void run() {
-                  try {
-                    int i = name.lastIndexOf('.');
-                    Path path;
-                    if (i > 0) {
-                      Path dir = Paths.get(name.substring(0, i).replace('.', File.separatorChar));
-                      Files.createDirectories(dir);
-                      path = dir.resolve(name.substring(i+1, name.length()) + ".class");
-                    } else {
-                      path = Paths.get(name + ".class");
-                    }
-                    Files.write(path, classFile);
-                    return null;
-                  } catch (IOException e) {
-                    throw new InternalError(
-                            "I/O exception saving generated file: " + e);
-                  }
-                }
-              });
-    }
-
-    return classFile;
-  }
-}
-```
-
+这些信息来自 class 文件中的 `Signature` 属性，而非运行时对象，因此只能还原"源码声明"层面的泛型，无法还原具体实例的实参类型。
 
 ## Tuning
 
-方法的反射调用会带来不少性能开销，原因主要有三个：变长参数方法导致的 Object 数组，基本类型的自动装箱、拆箱，还有最重要的方法内联
+方法的反射调用会带来开销，主要来自三点：
 
+1. **变长参数方法导致的 Object 数组分配**：`invoke` 把基本类型装箱、参数打包成 `Object[]`。
+2. **基本类型的自动装箱/拆箱**：`int` → `Integer` 等。
+3. **方法内联受阻**：反射调用经 `MethodAccessor` 间接跳转，JIT 难以内联目标方法（动态生成字节码后有所缓解）。
 
+在高性能场景，应优先用 `MethodHandle` 或直接代码路径替代反射。
 
 ## Links
+
 - [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
+- [unsafe](/docs/CS/Java/JDK/Basic/unsafe.md)
+- [module](/docs/CS/Java/JDK/Basic/module.md)
 
 ## References
 
 1. [JVM源码分析之不保证顺序的Class.getMethods](http://lovestblog.cn/blog/2016/11/02/class-getmethods/)
+2. [JEP 403: Strongly Encapsulate JDK Internals](https://openjdk.org/jeps/403)
+3. [JSR 292: Supporting Dynamically Typed Languages on the JVM](https://jcp.org/en/jsr/detail?id=292)

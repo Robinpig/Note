@@ -1,318 +1,74 @@
 ## Introduction
 
-A collection of methods for performing low-level, unsafe operations. 
-Although the class and all methods are public, use of this class is limited because only trusted code can obtain instances of it. 
+`sun.misc.Unsafe` 是一个用于执行底层、不安全操作的类。虽然类和所有方法都是 public 的，但其使用受到限制——只有受信任的代码（位于 `jdk.unsupported` 模块、通常由 bootstrap classloader 加载）才能拿到实例。
 
-**Note:** It is the responsibility of the caller to make sure arguments are checked before methods of this class are called.
-While some rudimentary checks are performed on the input, the checks are best effort and when performance is an overriding priority, 
-as when methods of this class are optimized by the runtime compiler, some or all checks (if any) may be elided.
-Hence, the caller must not rely on the checks and corresponding exceptions!
+> **Note:** 调用方有责任在调用方法前自行检查参数。虽然运行时会对输入做最基本的检查，但这些检查是 best-effort 的；当性能优先（如被 JIT 优化）时，部分或全部检查可能被省略。因此调用方**绝不能依赖这些检查及其抛出的异常**。
 
+Unsafe 的 87 个方法中 **79 个是内存访问方法**（on-heap / off-heap / bimodal），其余用于对象分配、线程调度、类定义等。滥用这些方法会绕过 JVM 的安全性与内存管理，直接导致未定义行为甚至 JVM 崩溃——这也是它名字的由来。
+
+## Acquire Instance
+
+历史上获取 Unsafe 实例有两条路径：
 
 ```java
-public class TestUnsafe {
-    public static void main(String[] args) {
-        Field f = null;
-        try{
-            f = Unsafe.class.getDeclaredField("theUnsafe");
-            f.setAccessible(true);
-            
-        }catch (NoSuchFieldException | IllegalAccessException e){
-            e.printStackTrace();
-        }
-        
-    }
+// 1. 标准 API：仅对 bootstrap classloader 加载的类可用，否则抛 SecurityException
+public static Unsafe getUnsafe() {
+    Class<?> caller = Reflection.getCallerClass();
+    if (!VM.isSystemDomainLoader(caller.getClassLoader()))
+        throw new SecurityException("Unsafe");
+    return theUnsafe;
 }
+
+// 2. 反射私有字段 theUnsafe（被广泛使用的绕过手段）
+Field f = Unsafe.class.getDeclaredField("theUnsafe");
+f.setAccessible(true);
+Unsafe unsafe = (Unsafe) f.get(null);
 ```
 
+**JPMS 下的变化：** JDK 9 起强封装（JEP 403 在 JDK 17 成为硬默认），`sun.misc` 包默认不向普通模块开放，仅靠反射 `theUnsafe` 会触发 `InaccessibleObjectException`。需要 `--add-opens java.base/sun.misc` 或依赖 `jdk.unsupported` 模块的特殊导出。更现代的替代是 `MethodHandles.Lookup` 的私有访问能力，但本质上仍是受限的内部 API。
+
+> ⚠️ **弃用趋势（JEP 471 / JEP 498）**：见文末 [Deprecation](#deprecation-jep-471) 一节——JDK 23 起这 79 个内存访问方法已被标记为 `@Deprecated(forRemoval=true)`，新代码不应再依赖它们。
+
+## Core API Categories
+
+| 类别 | 代表方法 |
+| -------- | -------- |
+| 字段偏移 | `objectFieldOffset` / `staticFieldOffset` / `arrayBaseOffset` / `arrayIndexScale` |
+| 堆内读写 | `getInt`/`putInt`、`getObject`/`putObject`、`getXVolatile`/`putXVolatile`、`getXAcquire`/`putXRelease` |
+| 原子更新 | `compareAndSwapInt`/`compareAndSwapLong`/`compareAndSwapObject`、`getAndAddInt`、`putOrderedInt` |
+| 堆外分配 | `allocateMemory` / `reallocateMemory` / `freeMemory` / `allocateInstance` |
+| 线程调度 | `park` / `unpark` |
+| 内存屏障 | `loadFence` / `storeFence` / `fullFence` |
+| 异常抛出 | `throwException` |
+| 类定义 | `defineAnonymousClass`（JDK 15 起 deprecated）/ `defineClass` |
 
 ## Memory
 
 ### Direct Memory
 
-
-与 [DirectByteBuffer](/docs/CS/Java/JDK/IO/Direct_Buffer.md) 不同的是，Unsafe#allocateMemory 所分配的内存必须自己手动释放，否则会造成内存泄漏
-
-
-
-## Memory Barrier
-
-
-Fence like `volatile` 
-
-see [JEP 171: Fence Intrinsics](https://openjdk.java.net/jeps/171)
-
-Ensures that loads before the fence will not be reordered with loads and stores after the fence; a "LoadLoad plus LoadStore barrier". 
-Corresponds to C11 atomic_thread_fence(memory_order_acquire) (an "acquire fence"). 
-A pure LoadLoad fence is not provided, since the addition of LoadStore is almost always desired, 
-and most current hardware instructions that provide a LoadLoad barrier also provide a LoadStore barrier for free.
+与 [DirectByteBuffer](/docs/CS/Java/JDK/IO/Direct_Buffer.md) 不同，`Unsafe#allocateMemory` 分配的内存**必须手动 `freeMemory` 释放**，否则造成堆外内存泄漏（DirectByteBuffer 由 Cleaner 在 GC 时自动释放，见 [Ref](/docs/CS/Java/JDK/Basic/Ref.md?id=cleaner)）。
 
 ```java
-    public native void loadFence();
-
+long addr = unsafe.allocateMemory(1024);
+unsafe.setMemory(addr, 1024, (byte) 0);
+// ... 操作 addr ...
+unsafe.freeMemory(addr);   // 必须手动释放
 ```
 
-Ensures that loads and stores before the fence will not be reordered with stores after the fence; a "StoreStore plus LoadStore barrier". 
-Corresponds to C11 atomic_thread_fence(memory_order_release) (a "release fence").
-A pure StoreStore fence is not provided, since the addition of LoadStore is almost always desired, 
-and most current hardware instructions that provide a StoreStore barrier also provide a LoadStore barrier for free.
+### Object Layout & Field Offset
 
-```java
-    public native void storeFence();
-```
+`objectFieldOffset(Field)` 返回某字段在对象内部的**字节偏移**，常配合 `getInt(obj, offset)` / `putInt(obj, offset, v)` 直接读写对象字段，绕过访问控制甚至 `final` 语义（这正是序列化框架、并发容器的底层手段）。
 
-Ensures that loads and stores before the fence will not be reordered with loads and stores after the fence.
-Implies the effects of both loadFence() and storeFence(), and in addition, the effect of a StoreLoad barrier.
-Corresponds to C11 atomic_thread_fence(memory_order_seq_cst).
-
-```java
-    public native void fullFence();
-```
-used in StampedLock
-
-|          | loadFence                        | storeFence                         | fullFence                          |
-| -------- | -------------------------------- | ---------------------------------- | ---------------------------------- |
-| Barriers | LoadLoad + LoadStore + LoadStore | StoreStore + LoadStore + LoadStore | loadFence + storeFence + StoreLoad |
-
-
-
-
-## Parker
-
-Parker based on `futex`
-
-`_counter` only will be 0 or 1
-
-### park
-
-```cpp
-// unsafe.cpp
-UNSAFE_ENTRY(void, Unsafe_Park(JNIEnv *env, jobject unsafe, jboolean isAbsolute, jlong time)) {
-  HOTSPOT_THREAD_PARK_BEGIN((uintptr_t) thread->parker(), (int) isAbsolute, time);
-  EventThreadPark event;
-
-  JavaThreadParkedState jtps(thread, time != 0);
-  thread->parker()->park(isAbsolute != 0, time);
-  if (event.should_commit()) {
-    const oop obj = thread->current_park_blocker();
-    if (time == 0) {
-      post_thread_park_event(&event, obj, min_jlong, min_jlong);
-    } else {
-      if (isAbsolute != 0) {
-        post_thread_park_event(&event, obj, min_jlong, time);
-      } else {
-        post_thread_park_event(&event, obj, time, min_jlong);
-      }
-    }
-  }
-  HOTSPOT_THREAD_PARK_END((uintptr_t) thread->parker());
-} UNSAFE_END
-```
-
-
-
-```cpp
-// park.hpp
-class Parker : public os::PlatformParker {
-private:
-  volatile int _counter ;
-  Parker * FreeNext ;
-  JavaThread * AssociatedWith ; // Current association
-
-public:
-  Parker() : PlatformParker() {
-    _counter       = 0 ;
-    FreeNext       = NULL ;
-    AssociatedWith = NULL ;
-  }
-protected:
-  ~Parker() { ShouldNotReachHere(); }
-public:
-  // For simplicity of interface with Java, all forms of park (indefinite,
-  // relative, and absolute) are multiplexed into one call.
-  void park(bool isAbsolute, jlong time);
-  void unpark();
-
-  // Lifecycle operators
-  static Parker * Allocate (JavaThread * t) ;
-  static void Release (Parker * e) ;
-private:
-  static Parker * volatile FreeList ;
-  static volatile int ListLock ;
-
-};
-```
-
-
-
-os_posix.cpp
-
-1. Check if prevoius `_counter` is > 0, return fast
-2. check pending interrupt, **not clear interrupt**
-3. if has  pending interrupt or  **`pthread_mutex_trylock`** fail, return
-4. check _counter again, **`pthread_mutex_unlock`** and return
-5. Check time
-   1. Time == 0, **`pthread_cond_wait`**
-   2. Else **`pthread_cond_timedwait`**
-6. set _counter = 0, release mutex lock, `pthread_mutex_unlock` 
-7. If externally suspended while waiting, re-suspend
-
-```cpp
-// Parker::park decrements count if > 0, else does a condvar wait.  Unpark
-// sets count to 1 and signals condvar.  Only one thread ever waits
-// on the condvar. Contention seen when trying to park implies that someone
-// is unparking you, so don't wait. And spurious returns are fine, so there
-// is no need to track notifications.
-
-void Parker::park(bool isAbsolute, jlong time) {
-
-  // Optional fast-path check:
-  // Return immediately if a permit is available.
-  // We depend on Atomic::xchg() having full barrier semantics
-  // since we are doing a lock-free update to _counter.
-  if (Atomic::xchg(0, &_counter) > 0) return;
-
-  // ... ignore assert
-
-  // Optional optimization -- avoid state transitions if there's an interrupt pending.
-  if (Thread::is_interrupted(thread, false)) {
-    return;
-  }
-
-  // Next, demultiplex/decode time arguments
-  struct timespec absTime;
-  if (time < 0 || (isAbsolute && time == 0)) { // don't wait at all
-    return;
-  }
-  if (time > 0) {
-    to_abstime(&absTime, time, isAbsolute);
-  }
-
-  // Enter safepoint region
-  // Beware of deadlocks such as 6317397.
-  // The per-thread Parker:: mutex is a classic leaf-lock.
-  // In particular a thread must never block on the Threads_lock while
-  // holding the Parker:: mutex.  If safepoints are pending both the
-  // the ThreadBlockInVM() CTOR and DTOR may grab Threads_lock.
-  ThreadBlockInVM tbivm(jt);
-
-  // Don't wait if cannot get lock since interference arises from
-  // unparking. Also re-check interrupt before trying wait.
-  if (Thread::is_interrupted(thread, false) ||
-      pthread_mutex_trylock(_mutex) != 0) {
-    return;
-  }
-
-  int status;
-  if (_counter > 0)  { // no wait needed
-    _counter = 0;
-    status = pthread_mutex_unlock(_mutex);
-    assert_status(status == 0, status, "invariant");
-    // Paranoia to ensure our locked and lock-free paths interact
-    // correctly with each other and Java-level accesses.
-    OrderAccess::fence();
-    return;
-  }
-
-  OSThreadWaitState osts(thread->osthread(), false /* not Object.wait() */);
-  jt->set_suspend_equivalent();
-  // cleared by handle_special_suspend_equivalent_condition() or java_suspend_self()
-
-  assert(_cur_index == -1, "invariant");
-  if (time == 0) {
-    _cur_index = REL_INDEX; // arbitrary choice when not timed
-    status = pthread_cond_wait(&_cond[_cur_index], _mutex);
-    assert_status(status == 0, status, "cond_timedwait");
-  }
-  else {
-    _cur_index = isAbsolute ? ABS_INDEX : REL_INDEX;
-    status = pthread_cond_timedwait(&_cond[_cur_index], _mutex, &absTime);
-    assert_status(status == 0 || status == ETIMEDOUT,
-                  status, "cond_timedwait");
-  }
-  _cur_index = -1;
-
-  _counter = 0;
-  status = pthread_mutex_unlock(_mutex);
-  assert_status(status == 0, status, "invariant");
-  // Paranoia to ensure our locked and lock-free paths interact
-  // correctly with each other and Java-level accesses.
-  OrderAccess::fence();
-
-  // If externally suspended while waiting, re-suspend
-  if (jt->handle_special_suspend_equivalent_condition()) {
-    jt->java_suspend_self();
-  }
-}
-```
-
-
-
-### unpark
-
-1. **`pthread_mutex_lock`**
-2. Get prevoius `_counter` and  set _counter = 1,get  `_cur_index`
-3. `pthread_mutex_unlock`
-4. `pthread_cond_signal` when previous `_counter` < 1 && `_cur_index` != -1
-
-```cpp
-// os_posix.cpp
-void Parker::unpark() {
-  int status = pthread_mutex_lock(_mutex);
-  assert_status(status == 0, status, "invariant");
-  const int s = _counter;
-  _counter = 1;
-  // must capture correct index before unlocking
-  int index = _cur_index;
-  status = pthread_mutex_unlock(_mutex);
-  assert_status(status == 0, status, "invariant");
-
-  // Note that we signal() *after* dropping the lock for "immortal" Events.
-  // This is safe and avoids a common class of futile wakeups.  In rare
-  // circumstances this can cause a thread to return prematurely from
-  // cond_{timed}wait() but the spurious wakeup is benign and the victim
-  // will simply re-test the condition and re-park itself.
-  // This provides particular benefit if the underlying platform does not
-  // provide wait morphing.
-
-  if (s < 1 && index != -1) {
-    // thread is definitely parked
-    status = pthread_cond_signal(&_cond[index]);
-    assert_status(status == 0, status, "invariant");
-  }
-}
-```
-
-
-
-serial
-
-getOffset 
-
-
-
-putLong
-
-### write object
-performance
-put > putOrder > putVolatile
-
-
-allocateInstance not invoke constructor
+- 偏移量依赖对象头和字段排列，与 [Object Header](/docs/CS/Java/JDK/JVM/Object_Header.md) 布局强相关。
+- **缓存 offset 的风险**：JVM 可能在未来版本中重排字段或修改对象头大小（如 JDK 25 的 [Compact Object Headers，JEP 519](/docs/CS/Java/JDK/JVM/Object_Header.md)），硬编码的偏移会失效。这也是 VarHandle 优于 Unsafe 的原因——它动态感知布局。
 
 ## CAS
 
-In [computer science](https://en.wikipedia.org/wiki/Computer_science), **compare-and-swap** (**CAS**) is an [atomic](https://en.wikipedia.org/wiki/Atomic_(computer_science)) [instruction](https://en.wikipedia.org/wiki/Instruction_(computer_science)) used in [multithreading](https://en.wikipedia.org/wiki/Thread_(computer_science)#Multithreading) to achieve [synchronization](https://en.wikipedia.org/wiki/Synchronization_(computer_science)). It compares the contents of a memory location with a given value and, only if they are the same, modifies the contents of that memory location to a new given value. This is done as a single atomic operation. The atomicity guarantees that the new value is calculated based on up-to-date information; if the value had been updated by another thread in the meantime, the write would fail. The result of the operation must indicate whether it performed the substitution; this can be done either with a simple [boolean](https://en.wikipedia.org/wiki/Boolean_logic) response (this variant is often called **compare-and-set**), or by returning the value read from the memory location (*not* the value written to it).
-
-
+In [computer science](https://en.wikipedia.org/wiki/Computer_science), **compare-and-swap** (**CAS**) is an [atomic](https://en.wikipedia.org/wiki/Atomic_(computer_science)) [instruction](https://en.wikipedia.org/wiki/Instruction_(computer_science)) used in [multithreading](https://en.wikipedia.org/wiki/Thread_(computer_science)#Multithreading) to achieve [synchronization](https://en.wikipedia.org/wiki/Synchronization_(computer_science)). It compares the contents of a memory location with a given value and, only if they are the same, modifies the contents of that memory location to a new given value. This is done as a single atomic operation.
 
 ### Overview
 
-This operation is used to implement [synchronization primitives](https://en.wikipedia.org/wiki/Synchronization_(computer_science)#Thread_or_process_synchronization) like [semaphores](https://en.wikipedia.org/wiki/Semaphore_(programming)) and [mutexes](https://en.wikipedia.org/wiki/Mutex),[[1\]](https://en.wikipedia.org/wiki/Compare-and-swap#cite_note-plan9-1) as well as more sophisticated [lock-free and wait-free algorithms](https://en.wikipedia.org/wiki/Lock-free_and_wait-free_algorithms). [Maurice Herlihy](https://en.wikipedia.org/wiki/Maurice_Herlihy) (1991) proved that CAS can implement more of these algorithms than [atomic](https://en.wikipedia.org/wiki/Atomic_operation) read, write, or [fetch-and-add](https://en.wikipedia.org/wiki/Fetch-and-add), and assuming a fairly large[*[clarification needed](https://en.wikipedia.org/wiki/Wikipedia:Please_clarify)*] amount of memory, that it can implement all of them.[[2\]](https://en.wikipedia.org/wiki/Compare-and-swap#cite_note-herlihy91-2) CAS is equivalent to [load-link/store-conditional](https://en.wikipedia.org/wiki/Load-link/store-conditional), in the sense that a constant number of invocations of either primitive can be used to implement the other one in a [wait-free](https://en.wikipedia.org/wiki/Wait-free) manner.[[3\]](https://en.wikipedia.org/wiki/Compare-and-swap#cite_note-3)
-
-Algorithms built around CAS typically read some key memory location and remember the old value. Based on that old value, they compute some new value. Then they try to swap in the new value using CAS, where the comparison checks for the location still being equal to the old value. If CAS indicates that the attempt has failed, it has to be repeated from the beginning: the location is re-read, a new value is re-computed and the CAS is tried again. Instead of immediately retrying after a CAS operation fails, researchers have found that total system performance can be improved in multiprocessor systems—where many threads constantly update some particular shared variable—if threads that see their CAS fail use [exponential backoff](https://en.wikipedia.org/wiki/Exponential_backoff)—in other words, wait a little before retrying the CAS.[[4\]](https://en.wikipedia.org/wiki/Compare-and-swap#cite_note-dice-4)
-
-
+CAS-based 算法通常先读取关键内存位置、记住旧值，基于旧值算出新值，再用 CAS 尝试写入（仅当位置仍等于旧值时成功）。失败后从开头重试。在多线程频繁更新共享变量的场景，失败后采用指数退避（exponential backoff）可改善整体性能。
 
 ```cpp
 // unsafe.cpp
@@ -328,84 +84,7 @@ UNSAFE_ENTRY(jboolean, Unsafe_CompareAndSetInt(JNIEnv *env, jobject unsafe, jobj
 } UNSAFE_END
 ```
 
-
-
-```hpp
-// atomic.hpp
-// Handle cmpxchg for integral and enum types.
-//
-// All the involved types must be identical.
-template<typename T>
-struct Atomic::CmpxchgImpl<
-  T, T, T,
-  typename EnableIf<IsIntegral<T>::value || IsRegisteredEnum<T>::value>::type>
-{
-  T operator()(T exchange_value, T volatile* dest, T compare_value,
-               atomic_memory_order order) const {
-    // Forward to the platform handler for the size of T.
-    return PlatformCmpxchg<sizeof(T)>()(exchange_value,
-                                        dest,
-                                        compare_value,
-                                        order);
-  }
-};
-
-// Handle cmpxchg for pointer types.
-//
-// The destination's type and the compare_value type must be the same,
-// ignoring cv-qualifiers; we don't care about the cv-qualifiers of
-// the compare_value.
-//
-// The exchange_value must be implicitly convertible to the
-// destination's type; it must be type-correct to store the
-// exchange_value in the destination.
-template<typename T, typename D, typename U>
-struct Atomic::CmpxchgImpl<
-  T*, D*, U*,
-  typename EnableIf<Atomic::IsPointerConvertible<T*, D*>::value &&
-                    IsSame<typename RemoveCV<D>::type,
-                           typename RemoveCV<U>::type>::value>::type>
-{
-  D* operator()(T* exchange_value, D* volatile* dest, U* compare_value,
-               atomic_memory_order order) const {
-    // Allow derived to base conversion, and adding cv-qualifiers.
-    D* new_value = exchange_value;
-    // Don't care what the CV qualifiers for compare_value are,
-    // but we need to match D* when calling platform support.
-    D* old_value = const_cast<D*>(compare_value);
-    return PlatformCmpxchg<sizeof(D*)>()(new_value, dest, old_value, order);
-  }
-};
-
-// Handle cmpxchg for types that have a translator.
-//
-// All the involved types must be identical.
-//
-// This translates the original call into a call on the decayed
-// arguments, and returns the recovered result of that translated
-// call.
-template<typename T>
-struct Atomic::CmpxchgImpl<
-  T, T, T,
-  typename EnableIf<PrimitiveConversions::Translate<T>::value>::type>
-{
-  T operator()(T exchange_value, T volatile* dest, T compare_value,
-               atomic_memory_order order) const {
-    typedef PrimitiveConversions::Translate<T> Translator;
-    typedef typename Translator::Decayed Decayed;
-    STATIC_ASSERT(sizeof(T) == sizeof(Decayed));
-    return Translator::recover(
-      cmpxchg(Translator::decay(exchange_value),
-              reinterpret_cast<Decayed volatile*>(dest),
-              Translator::decay(compare_value),
-              order));
-  }
-};
-```
-
-
-
-Implement by os
+平台实现（x86-64）最终落到 `lock cmpxchg`：
 
 ```cpp
 // atomic_linux_x86.hpp
@@ -422,92 +101,117 @@ inline T Atomic::PlatformCmpxchg<8>::operator()(T exchange_value,
 }
 ```
 
+### ABA Problem
 
+ABA 问题发生在：某位置被读两次、两次值相同，于是误判"什么都没变"；但另一线程可能在两次读取之间改了值、做了别的工作、又改回原值，从而骗过第一次读取。
 
+- **DCAS（双字 CAS）**：在 32 位系统用 64 位 CAS，高 32 位放计数器，比较时同时比较指针与计数器。
+- **SMR（Safe Memory Reclamation）**：本质是 lock-free 垃圾回收，保证同一指针在数据结构中的唯一存在性，从而彻底解决 ABA。
 
+## Memory Barrier
 
-### ABA problem
+Fence 类似 `volatile` 的语义。参见 [JEP 171: Fence Intrinsics](https://openjdk.java.net/jeps/171)。
 
-In [multithreaded](https://en.wikipedia.org/wiki/Thread_(computer_science)) [computing](https://en.wikipedia.org/wiki/Computer_science), the **ABA problem** occurs during synchronization, when a location is read twice, has the same value for both reads, and "value is the same" is used to indicate "nothing has changed". However, another thread can execute between the two reads and change the value, do other work, then change the value back, thus fooling the first thread into thinking "nothing has changed" even though the second thread did work that violates that assumption.
+| 方法 | 屏障组合 | 语义对应 |
+| -------- | -------- | -------- |
+| `loadFence()` | LoadLoad + LoadStore | C11 `memory_order_acquire` |
+| `storeFence()` | StoreStore + LoadStore | C11 `memory_order_release` |
+| `fullFence()` | 上述二者 + StoreLoad | C11 `memory_order_seq_cst` |
 
-
-
-Some CAS-based algorithms are affected by and must handle the problem of a [false positive](https://en.wikipedia.org/wiki/Type_I_error#False_negative_vs._false_positive) match, or the [ABA problem](https://en.wikipedia.org/wiki/ABA_problem). It is possible that between the time the old value is read and the time CAS is attempted, some other processors or threads change the memory location two or more times such that it acquires a bit pattern which matches the old value. The problem arises if this new bit pattern, which looks exactly like the old value, has a different meaning: for instance, it could be a recycled address, or a wrapped version counter.
-
-A general solution to this is to use a double-length CAS (DCAS). E.g. on a 32-bit system, a 64-bit CAS can be used. The second half is used to hold a counter. The compare part of the operation compares the previously read value of the pointer *and* the counter, with the current pointer and counter. If they match, the swap occurs - the new value is written - but the new value has an incremented counter. This means that if ABA has occurred, although the pointer value will be the same, the counter is exceedingly unlikely to be the same (for a 32-bit value, a multiple of 232 operations would have to have occurred, causing the counter to wrap and at that moment, the pointer value would have to also by chance be the same).
-
-An alternative form of this (useful on CPUs which lack DCAS) is to use an index into a freelist, rather than a full pointer, e.g. with a 32-bit CAS, use a 16-bit index and a 16-bit counter. However, the reduced counter lengths begin to make ABA possible at modern CPU speeds.
-
-One simple technique which helps alleviate this problem is to store an ABA counter in each data structure element, rather than using a single ABA counter for the whole data structure.
-
-A more complicated but more effective solution is to implement safe memory reclamation (SMR). This is in effect lock-free garbage collection. The advantage of using SMR is the assurance a given pointer will exist only once at any one time in the data structure, thus the ABA problem is completely solved. (Without SMR, something like a freelist will be in use, to ensure that all data elements can be accessed safely (no memory access violations) even when they are no longer present in the data structure. With SMR, only elements actually currently in the data structure will be accessed).
-
-
-
-### Implementations
-
-- [AIX compare_and_swap Kernel Service](http://pic.dhe.ibm.com/infocenter/aix/v7r1/topic/com.ibm.aix.kerneltechref/doc/ktechrf1/compare_and_swap.htm)
-- Java package [java.util.concurrent.atomic]() implements `compareAndSet` in various classes
-- .NET Class methods [Interlocked::CompareExchange](https://msdn.microsoft.com/en-us/library/system.threading.interlocked.aspx)
-- Windows API [InterlockedCompareExchange](https://msdn.microsoft.com/en-us/library/windows/desktop/ms683560.aspx)
-
-## Monitor
-
-
-
-## Class
-
-
-
-在Lambda表达式实现中，通过invokedynamic指令调用引导方法生成调用点，在此过程中，会通过ASM动态生成字节码，而后利用Unsafe的defineAnonymousClass方法定义实现相应的函数式接口的匿名类，然后再实例化此匿名类，并返回与此匿名类中函数式方法的方法句柄关联的调用点；而后可以通过此调用点实现调用相应Lambda表达式定义逻辑的功能。
-
-
-
-BootstrapMethods
-
-### defineAnonymousClass
-
-Defines a class but does not make it known to the class loader or system dictionary.
-For each CP entry, the corresponding CP patch must either be null or have the a format that matches its tag:
-
-- Integer, Long, Float, Double: the corresponding wrapper object type from java.lang
-- Utf8: a string (must have suitable syntax if used as signature or name)
-- Class: any java.lang.Class object
-- String: any object (not just a java.lang.String)
-- InterfaceMethodRef: (NYI) a method handle to invoke on that call site's arguments
-
-
-
-**Deprecated since 15**
-Use the `MethodHandles.Lookup.defineHiddenClass(byte[], boolean, MethodHandles.Lookup.ClassOption...)` method.
+`fullFence` 被用于 [StampedLock](/docs/CS/Java/JDK/Concurrency/Lock.md) 等无锁结构的全屏障点。注意 JVM 不为 pure LoadLoad 提供独立 fence，因为多数硬件的 LoadLoad 屏障免费附带 LoadStore。
 
 ```java
-public Class<?> defineAnonymousClass(Class<?> hostClass, byte[] data, Object[] cpPatches) {
-    if (hostClass == null || data == null) {
-        throw new NullPointerException();
-    }
-    if (hostClass.isArray() || hostClass.isPrimitive()) {
-        throw new IllegalArgumentException();
-    }
+public native void loadFence();
+public native void storeFence();
+public native void fullFence();
+```
 
+## Parker
+
+`Unsafe#park` / `unpark` 是 JVM 线程阻塞原语，底层基于 `futex`（Linux）。[StampedLock](/docs/CS/Java/JDK/Concurrency/Lock.md)、[LockSupport](/docs/CS/Java/JDK/Concurrency/Lock.md) 都经由此实现。`_counter` 只可能为 0 或 1。
+
+```cpp
+// unsafe.cpp
+UNSAFE_ENTRY(void, Unsafe_Park(JNIEnv *env, jobject unsafe, jboolean isAbsolute, jlong time)) {
+  HOTSPOT_THREAD_PARK_BEGIN((uintptr_t) thread->parker(), (int) isAbsolute, time);
+  EventThreadPark event;
+  JavaThreadParkedState jtps(thread, time != 0);
+  thread->parker()->park(isAbsolute != 0, time);
+  // ... 事件上报 ...
+  HOTSPOT_THREAD_PARK_END((uintptr_t) thread->parker());
+} UNSAFE_END
+```
+
+`Parker::park` 的快路径：若 `_counter > 0` 直接返回（permit 可用），否则在 `_mutex` 保护下 `pthread_cond_wait`/`timedwait`，退出前 `_counter = 0`。`unpark` 将 `_counter` 置 1 并对条件变量 `pthread_cond_signal`。
+
+```cpp
+// Parker::park 片段（os_posix.cpp）
+if (Atomic::xchg(0, &_counter) > 0) return;   // 快路径
+// ... 中断检查、mutex trylock ...
+if (_counter > 0) { _counter = 0; pthread_mutex_unlock(_mutex); OrderAccess::fence(); return; }
+// ... cond_wait ...
+_counter = 0; pthread_mutex_unlock(_mutex); OrderAccess::fence();
+```
+
+## Class & Lambda Generation
+
+`defineAnonymousClass` 定义一个类但不让它进入类加载器或系统字典（JDK 15 起 deprecated，改用 `MethodHandles.Lookup.defineHiddenClass`，见 [Valhalla](/docs/CS/Java/JDK/Valhalla.md) 中关于 Hidden Classes 的章节）：
+
+```java
+// 已 deprecated since 15
+public Class<?> defineAnonymousClass(Class<?> hostClass, byte[] data, Object[] cpPatches) {
+    if (hostClass == null || data == null) throw new NullPointerException();
+    if (hostClass.isArray() || hostClass.isPrimitive()) throw new IllegalArgumentException();
     return defineAnonymousClass0(hostClass, data, cpPatches);
 }
 ```
 
-Method Handle like Function Pointer in C/C++ 
+**Lambda 的实现依赖此机制**：Lambda 表达式经 `invokedynamic` 调用引导方法生成调用点，过程中通过 ASM 动态生成字节码，再借 Unsafe 的 `defineAnonymousClass` 定义实现相应函数式接口的匿名类并实例化，返回与该匿名类函数式方法句柄关联的调用点。
 
-## Instance
+## allocateInstance
 
+`allocateInstance(Class)` **不调用任何构造器**直接分配对象，是反序列化框架、某些单例破坏手段的底层。反射的 `BootstrapConstructorAccessorImpl` 也用它来实例化类（仅用于引导期）：
 
+```java
+// BootstrapConstructorAccessorImpl
+public Object newInstance(Object[] args) throws ... {
+    try {
+        return UnsafeFieldAccessorImpl.unsafe.allocateInstance(constructor.getDeclaringClass());
+    } catch (InstantiationException e) { throw new InvocationTargetException(e); }
+}
+```
 
-## System Proterties
+`[Reflection](/docs/CS/Java/JDK/Basic/Reflection.md)` 中 `Constructor.newInstance` 在反射创建 enum 时会显式抛 `IllegalArgumentException("Cannot reflectively create enum objects")`，但 `allocateInstance` 可绕过这一保护。
 
+## Deprecation: JEP 471
 
+`sun.misc.Unsafe` 的内存访问方法正被标准 API 取代，弃用分多阶段推进：
+
+| 阶段 | 版本 | 行为 |
+| -------- | -------- | -------- |
+| 标准替代引入 | JDK 9（VarHandle, JEP 193）/ JDK 22（FFM, JEP 454） | 安全、高性能的公开替代 API 可用 |
+| 终止式弃用 | **JDK 23（JEP 471）** | 79 个内存访问方法标 `@Deprecated(forRemoval=true)`，编译期警告 |
+| 运行时警告 | **JDK 24（JEP 498）** | 整个运行期首次调用时向 stderr 输出一次警告（报首个被调用的方法名） |
+| 默认拒绝 | 未来版本 | 默认 `deny`，调用抛 `UnsupportedOperationException`；最终 `NoSuchMethodError` |
+
+`--sun-misc-unsafe-memory-access` 选项控制强制力度：`allow` / `warn`（JDK 24–26 默认）/ `debug`（每次调用打栈）/ `deny`（立即模拟未来默认）。JDK 25 上 86 个 public 方法中 83 个带 `@Deprecated(forRemoval=true)`，仅 `allocateInstance`、`pageSize`、`throwException` 不在 JEP 471 范围内。
+
+**迁移方向**：
+- 堆内字段偏移与原子更新 → `java.lang.invoke.VarHandle`（JEP 193, JDK 9），动态感知对象布局，避免硬编码偏移的内存损坏风险。
+- 堆外内存管理 → `java.lang.foreign.MemorySegment`（JEP 454, JDK 22），配合 `Arena` 作用域自动释放。
 
 ## Links
-- [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
 
+- [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
+- [Reflection](/docs/CS/Java/JDK/Basic/Reflection.md)
+- [Ref](/docs/CS/Java/JDK/Basic/Ref.md?id=cleaner)
+- [Object Header](/docs/CS/Java/JDK/JVM/Object_Header.md)
+- [Valhalla](/docs/CS/Java/JDK/Valhalla.md)
+- [Lock](/docs/CS/Java/JDK/Concurrency/Lock.md)
 
 ## References
 
 1. [Java魔法类：Unsafe应用解析 - 美团技术团队](https://tech.meituan.com/2019/02/14/talk-about-java-magic-class-unsafe.html)
+2. [JEP 471: Deprecate the Memory-Access Methods in sun.misc.Unsafe for Removal](https://openjdk.org/jeps/471)
+3. [JEP 454: Foreign Function & Memory API](https://openjdk.org/jeps/454)
+4. [JEP 193: Variable Handles](https://openjdk.org/jeps/193)

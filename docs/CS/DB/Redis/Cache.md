@@ -29,18 +29,18 @@
 
 原因
 
-- 缓存未区分KEY不存在和查询到一个空值 被查询绕过
+- 缓存未区分 KEY 不存在和查询到一个空值 被查询绕过
 
 解决方案
 
 - 缓存空值的KEY，占用空间大
-- Bloom过滤器或RoaringBitmap 判断KEY是否存在
+- Bloom 过滤器或 RoaringBitmap 判断 KEY 是否存在
 
 - 完全以缓存为准，使用 延迟异步加载 的策略2，这样就不会触发更新。
 
 ### Cache Breakdown
 
-缓存击穿-某KEY失效时，正好有大量并发请求访问该KEY对数据库造成压力
+缓存击穿-某 KEY 失效时，正好有大量并发请求访问该 KEY 对数据库造成压力
 
 但如下问题若同时出现，可能对系统致命：
 
@@ -51,7 +51,7 @@
 
 解决方案
 
-- 限制处理线程的数量，即KEY的更新操作添加全局互斥锁
+- 限制处理线程的数量，即 KEY 的更新操作添加全局互斥锁
 - 使用异步线程负责维护缓存的数据，定期或根据条件触发更新，这样就不会触发更新
 - 限流 如使用 hystrix 或者 sentinel
 
@@ -73,3 +73,9 @@
 - [Lock](/docs/CS/DB/Redis/Lock.md)
 - [Lua](/docs/CS/DB/Redis/Lua.md)
 - [PubSub](/docs/CS/DB/Redis/PubSub.md)
+
+
+## References
+
+1. [Redis Client-Side Caching](https://redis.io/docs/latest/develop/reference/client-side-caching/)
+2. [Redis Documentation](https://redis.io/docs/)

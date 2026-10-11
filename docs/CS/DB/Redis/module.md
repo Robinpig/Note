@@ -69,3 +69,8 @@ moduleLoadFromQueue 函数会进一步调用 moduleLoad 函数，而 moduleLoad 
 ## Links
 
 - [Redis](/docs/CS/DB/Redis/Redis.md)
+
+
+## References
+
+1. [Redis Modules API](https://redis.io/docs/latest/develop/reference/modules/)

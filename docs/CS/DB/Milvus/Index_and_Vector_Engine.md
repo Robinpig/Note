@@ -72,7 +72,7 @@ Int8 向量在 python 用例里只对 `HNSW`（`int8_vector_index = ["HNSW"]`）
 | MINHASH_LSH | LSH 分带 | `mh_lsh_band` `mh_element_bit_width` | 检索期由 `BruteForceIndexParams` 带同名参数 | 近似去重，配 `MHJACCARD` 与 MinHash function |
 | GPU_IVF_FLAT / GPU_IVF_PQ / GPU_CAGRA / GPU_BRUTE_FORCE | cuVS / RAFT | CAGRA: `intermediate_graph_degree` `graph_degree` `build_algo` ∈ `IVF_PQ` \| `NN_DESCENT`；`cache_dataset_on_device` | `search_list` 等 | 吞吐最高；`GPU_CUVS_*` 是新名，两套并存；`adapt_for_cpu=true` 可让段加载不再要求 GPU |
 
-**growing 段的 interim index 不在这张表里**：稠密向量默认 `IVF_FLAT_CC`（可选 `SCANN_DVR`），稀疏用 `SPARSE_INVERTED_INDEX_CC` / `SPARSE_WAND_CC`，由 segcore 的 `IndexConfigGenerator` 生成，见 Query_Path；`queryNode.segcore.interimIndex.enableIndex` 的 `DefaultValue` 是 `false`，但它的 Doc 写着 "This defaults to true"——典型「文档滞后于代码」，以默认值代码为准。
+**growing 段的 interim index 不在这张表里**：稠密向量默认 `IVF_FLAT_CC`（可选 `SCANN_DVR`），稀疏用 `SPARSE_INVERTED_INDEX_CC` / `SPARSE_WAND_CC`，由 segcore 的 `IndexConfigGenerator` 生成，见 Query_Path；`queryNode.segcore.interimIndex.enableIndex` 三处不一致：随包 yaml 为 `true`、代码 `DefaultValue` 为 `false`、Doc 写 "This defaults to true"——常规部署加载随包 yaml，实际生效为开启；裸装无 yaml 时才落回代码默认的关闭。
 
 ## Sparse Binary and Embedding List Indexes
 
@@ -105,9 +105,9 @@ Int8 向量在 python 用例里只对 `HNSW`（`int8_vector_index = ["HNSW"]`）
 | NGRAM | `NgramInvertedIndex` | `LIKE '%x%'`、前缀、正则字面量抽取 | 仅 VARCHAR / JSON 且 `json_cast_type=VARCHAR`；`min_gram` `max_gram` 必填 | ✅ |
 | RTREE | `RTreeIndexWrapper` + GEOS | `st_contains` `st_within` `st_intersects` `st_dwithin` `st_equals` `st_touches` `st_crosses` `st_isvalid` | 仅 GEOMETRY | ❌ |
 
-两个反直觉点：**HYBRID 不是「BITMAP + INVERTED 叠加」**（`index_type.go` 的注释已过时）。它在建索引时扫一遍去重值，数量 ≥ `bitmap_cardinality_limit`（`scalarAutoIndex.params.bitmapCardinalityLimit` 默认 100，上限 1000）就用高基数类型，否则用低基数类型；两者分别取自 `dataCoord.index.hybridIndex.{lowCardinalityIndexType,highCardinalityIndexType}`，默认 `BITMAP` 与 `STL_SORT`（旧数据无这两个键时按类型回退：字符串 INVERTED、整型 STLSORT）。选中的内部类型写进索引文件，加载时 `ResolveHybridInternalIndexType` 读回来——所以 HYBRID 的真实形态是**每段可能不同**。**INVERTED 不接所有 LIKE**：`ShouldUseOp` 只对 `Match` 与 `PrefixMatch` 返回真，`RegexMatch` / `PostfixMatch` / `InnerMatch` 明确返回假走原始数据扫描，因为短 varchar 上倒排反而更慢。
+两个反直觉点：**HYBRID 不是「BITMAP + INVERTED 叠加」**（`index_type.go` 的注释已过时）。它在建索引时扫一遍去重值，数量 ≥ `bitmap_cardinality_limit`（`scalarAutoIndex.params.bitmapCardinalityLimit` 默认 100，上限 1000）就用高基数类型，否则用低基数类型；两者分别取自 `dataCoord.index.hybridIndex.{lowCardinalityIndexType,highCardinalityIndexType}`，默认 `BITMAP` 与 `STL_SORT`（旧数据无这两个键时按类型回退：字符串 INVERTED、整型 STLSORT）。选中的内部类型写进索引文件，加载时 `ResolveHybridInternalIndexType` 读回来——所以 HYBRID 的真实形态是**每段可能不同**。**INVERTED 不接所有 LIKE**：`ShouldUseOp` 对模式匹配类算子分流——`Match` / `PrefixMatch` 依索引能力放行，`RegexMatch` / `PostfixMatch` / `InnerMatch` 明确返回假走原始数据扫描（短 varchar 上倒排反而更慢），其余算子默认放行。
 
-标量索引另有版本轴：`CurrentScalarIndexEngineVersion = 3`、`Maximum = 4`，JSON 路径多类型（v4）与嵌套 HYBRID-STL_SORT（v4）按版本门控；`ClampScalarIndexVersion` 会把请求钳到上限。全文/倒排的 tantivy 格式版本 `TANTIVY_INDEX_LATEST_VERSION = 7`。
+标量索引另有版本轴：`CurrentScalarIndexEngineVersion = 3`、`Maximum = 4`，JSON 路径多类型（v4）与嵌套 HYBRID-STL_SORT（v4）按版本门控；`ClampScalarIndexVersion` 会把请求钳到上限。全文/倒排的 tantivy 格式版本 `TANTIVY_INDEX_LATEST_VERSION = 7`。全文谓词与 analyzer 链是独立的一层机制，见 [Full Text Search](/docs/CS/DB/Milvus/Full_Text_Search.md)。
 
 ## JSON Dynamic Schema and Function Output Fields
 

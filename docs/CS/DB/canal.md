@@ -7,7 +7,7 @@ Canal 通过伪装成数据库的从库，读取主库发来的 binlog，用来�
 - 数据库镜像
 - 数据库实时备份
 - 索引构建和实时维护（拆分异构索引、倒排索引等）
-- 业务cache刷新
+- 业务 cache 刷新
 - 带业务逻辑的增量数据处理
 
 
@@ -29,10 +29,14 @@ canal 模拟 MySQL slave 的交互协议，向 MySQL master 发送 dump 协议�
 监听中文表会乱码出现问题
 
 
-有缓存 与数据库实际表column不一致 column size is not match for table xxxx 8 vs 9, 删除meta.dat并重启解决
+有缓存 与数据库实际表 column 不一致 column size is not match for table xxxx 8 vs 9, 删除 meta.dat 并重启解决
 
 ## Links
 
 - [MySQL binlog](/docs/CS/DB/MySQL/binlog.md)
 - [MySQL Replication](/docs/CS/DB/MySQL/replica.md)
 
+
+## References
+
+1. [alibaba/canal](https://github.com/alibaba/canal)

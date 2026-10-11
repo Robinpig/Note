@@ -27,3 +27,8 @@ Pika 的底层存储使用了 RocksDB 来保存数据，但是，RocksDB 只提�
 ## Links
 
 - [DataBases](/docs/CS/DB/DB.md?id=mysql)
+
+
+## References
+
+1. [OpenAtomFoundation/pika](https://github.com/OpenAtomFoundation/pika)

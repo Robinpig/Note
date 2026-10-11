@@ -1,19 +1,26 @@
 ## Introduction
 
+Java 的 I/O 体系横跨 `java.io`（流式 BIO）、`java.net`（网络端点）、`java.nio`（通道 / 缓冲区 / 选择器）三大包，并在 JDK 7 之后通过 NIO.2（`java.nio.file`、异步通道）统一了文件与网络抽象。
 
+本页是 **IO 子树的枢纽**：向下串起 [NIO](/docs/CS/Java/JDK/IO/NIO.md)（Buffer / Channel / Selector 的多路复用模型）、[Direct Buffer](/docs/CS/Java/JDK/IO/Direct_Buffer.md)（堆外内存的分配、页对齐与 Cleaner 回收）、[io_uring](/docs/CS/Java/JDK/IO/Uring.md)（Linux 异步 I/O 的 Java 侧接入）；向上承接 [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)。从「阻塞流」到「多路复用」再到「真正异步」的演进，是理解现代 Java 网络编程的主线。
 
-## Network
+## I/O Models
 
-The java.net package supports two protocols,
+| 模型 | 包 | 阻塞点 | 并发单位 | 典型场景 |
+|------|----|--------|----------|----------|
+| BIO（流） | `java.io` | 读写阻塞整个线程 | 每连接一线程 | 低并发、简单协议、脚本工具 |
+| NIO（多路复用） | `java.nio` | 仅 `Selector.select` 阻塞 | 少量线程 + 事件循环 | 高并发网络（Netty、Web 服务器） |
+| AIO（异步） | `java.nio.channels` | 无（回调 / `Future`） | 回调线程池 | 文件大块 I/O、长耗时操作 |
 
-- TCP: Transmission Control Protocol provides reliable communication between the sender and receiver. TCP is used along with the Internet Protocol referred as TCP/IP.
-- UDP: User Datagram Protocol provides a connection-less protocol service by allowing packet of data to be transferred along two or more nodes
+> NIO 在 Linux 上的网络 `Selector` 底层仍是 **epoll**（详见 [Uring](/docs/CS/Java/JDK/IO/Uring.md) 的「JDK Mainline Integration Status」）；AIO 在 Windows 用 **IOCP** 实现，在 Linux 由 epoll 模拟，实践中并未比 NIO 更快——这也是大型项目普遍直接用 Netty 而非原生 AIO 的原因。
+
+## Networking (java.net)
+
+`java.net` 提供两套协议端点抽象：**TCP**（可靠、面向连接）与 **UDP**（无连接、数据报）。其上承载 `Socket` / `ServerSocket` / `DatagramSocket` 与 `InetAddress` 等。
 
 ### Socket
 
-This class represents a Socket Address with no protocol attachment. 
-As an abstract class, it is meant to be subclassed with a specific, protocol dependent, implementation.
-It provides an immutable object used by sockets for binding, connecting, or as returned values.
+`SocketAddress` 是一个不带协议语义的抽象地址基类，通常由具体协议子类化（如 `InetSocketAddress`）后用于绑定、连接或作为返回值。
 
 ```java
 public abstract class SocketAddress implements java.io.Serializable {
@@ -24,23 +31,11 @@ public abstract class SocketAddress implements java.io.Serializable {
 }
 ```
 
-This class represents an Internet Protocol (IP) address.
-An IP address is either a 32-bit or 128-bit unsigned number used by IP, a lower-level protocol on which protocols like UDP and TCP are built.
-The IP address architecture is defined by RFC 790: Assigned Numbers, RFC 1918: Address Allocation for Private Internets, RFC 2365: Administratively Scoped IP Multicast, and RFC 2373: IP Version 6 Addressing Architecture.
-
-An instance of an InetAddress consists of an IP address and possibly its corresponding host name (depending on whether it is constructed with a host name or whether it has already done reverse host name resolution).
-
-InetAddress
-
+`InetAddress` 封装一个 32 位（IPv4）或 128 位（IPv6）无符号 IP 地址，可能附带已解析或待解析的主机名。其地址语义由 RFC 790 / RFC 1918 / RFC 2365 / RFC 2373 定义。
 
 ### ServerSocket
 
-
-Listens for a connection to be made to this socket and accepts it. 
-The method blocks until a connection is made.
-
-A new Socket s is created and, if there is a security manager, the security manager's checkAccept method is called with s.getInetAddress().getHostAddress() and s.getPort() as its arguments to ensure the operation is allowed. 
-This could result in a SecurityException.
+`ServerSocket` 监听并接受入站连接，`accept()` 阻塞直到连接到达；若安装安全管理器，会调用其 `checkAccept` 校验。JDK 的 `ServerSocket` 在 JDK 14 后改为基于 `NioSocketImpl`（见 [NIO](/docs/CS/Java/JDK/IO/NIO.md)），`accept` 的核心委托如下：
 
 ```java
 public class ServerSocket implements java.io.Closeable {
@@ -95,78 +90,37 @@ public class ServerSocket implements java.io.Closeable {
     }
     s.postAccept();
   }
-  
+
 }
 ```
 
+### InetAddress and Caching
+
+`InetAddress` 内置正/负向解析缓存。默认行为：
+
+- 安装安全管理器时，正向解析结果**永久缓存**（防 DNS 欺骗）；
+- 未安装时，缓存实现相关的一段有限时间；
+- 负向解析（解析失败）缓存约 **10 秒**以提升性能。
+
+两个 Java 安全属性控制 TTL：
+
+- `networkaddress.cache.ttl`：正向缓存秒数，`-1` 表示「永久缓存」；
+- `networkaddress.cache.negative.ttl`（默认 `10`）：负向缓存秒数，`0` 表示从不缓存，`-1` 表示永久。
 
 ### Address Types
 
-- unicast
-  An identifier for a single interface. A packet sent to a unicast address is delivered to the interface identified by that address.
-  - The Unspecified Address -- Also called anylocal or wildcard address. It must never be assigned to any node. It indicates the absence of an address. One example of its use is as the target of bind, which allows a server to accept a client connection on any interface, in case the server host has multiple interfaces.
-    The unspecified address must not be used as the destination address of an IP packet.
-  - The Loopback Addresses -- This is the address assigned to the loopback interface. Anything sent to this IP address loops around and becomes IP input on the local host. This address is often used when testing a client.
-- multicast
-  An identifier for a set of interfaces (typically belonging to different nodes). A packet sent to a multicast address is delivered to all interfaces identified by that address.
+- **unicast**：标识单个接口，发往该地址的包只投递给该接口。
+  - **Unspecified Address**（通配 / wildcard）：绝不可分配给任何节点，表示「无地址」，常用于 `bind` 以监听任意接口。
+  - **Loopback Addresses**：分配给回环接口，发往该地址的包在本地主机内环回，常用于客户端自测。
+- **multicast**：标识一组接口（通常跨不同节点），发往该地址的包投递给所有匹配接口。
 
-#### IP address scope
+#### IP Address Scope
 
-Link-local addresses are designed to be used for addressing on a single link for purposes such as auto-address configuration, neighbor discovery, or when no routers are present.
-Site-local addresses are designed to be used for addressing inside of a site without the need for a global prefix.
-Global addresses are unique across the internet.
-Textual representation of IP addresses
-The textual representation of an IP address is address family specific.
-For IPv4 address format, please refer to Inet4Address#format; For IPv6 address format, please refer to Inet6Address#format.
-There is a couple of System Properties affecting how IPv4 and IPv6 addresses are used.
+Link-local 地址用于单链路的自动配置 / 邻居发现；Site-local 用于站点内寻址；Global 地址在 Internet 上全局唯一。文本表示因地址族而异（IPv4 见 `Inet4Address#format`，IPv6 见 `Inet6Address#format`）。主机名解析由本地配置与 DNS / NIS 等命名服务共同完成，正反向解析均由 `InetAddress` 提供。
 
-Host Name Resolution
+## BIO (java.io)
 
-Host name-to-IP address resolution is accomplished through the use of a combination of local machine configuration information and network naming services such as the Domain Name System (DNS) and Network Information Service(NIS).
-The particular naming services(s) being used is by default the local machine configured one. For any host name, its corresponding IP address is returned.
-Reverse name resolution means that for any IP address, the host associated with the IP address is returned.
-The InetAddress class provides methods to resolve host names to their IP addresses and vice versa.
-
-#### InetAddress Caching
-
-The InetAddress class has a cache to store successful as well as unsuccessful host name resolutions.
-
-By default, when a security manager is installed, in order to protect against DNS spoofing attacks, the result of positive host name resolutions are cached forever.
-When a security manager is not installed, the default behavior is to cache entries for a finite (implementation dependent) period of time.
-The result of unsuccessful host name resolution is cached for a very short period of time (10 seconds) to improve performance.
-
-If the default behavior is not desired, then a Java security property can be set to a different Time-to-live (TTL) value for positive caching.
-Likewise, a system admin can configure a different negative caching TTL value when needed.
-
-Two Java security properties control the TTL values used for positive and negative host name resolution caching:
-
-- networkaddress.cache.ttl
-  Indicates the caching policy for successful name lookups from the name service. The value is specified as an integer to indicate the number of seconds to cache the successful lookup.
-  The default setting is to cache for an implementation specific period of time. A value of -1 indicates "cache forever".
-- networkaddress.cache.negative.ttl (default: 10)
-  Indicates the caching policy for un-successful name lookups from the name service. The value is specified as an integer to indicate the number of seconds to cache the failure for un-successful lookups.
-  A value of 0 indicates "never cache". A value of -1 indicates "cache forever".
-
-
-
-
-## BIO
-
-
-Java I/O (Input and Output) is used to process the input and produce the output.
-Java uses the concept of a stream to make I/O operation fast.
-The `java.io` package contains all the classes required for input and output operations.
-
-### Stream
-
-A stream is a sequence of data. In Java, a stream is composed of bytes. It's called a stream because it is like a stream of water that continues to flow.
-Java application uses an stream to read/write data to a destination; it may be a file, an array, peripheral device or socket.
-
-In Java, 3 streams are created for us automatically. All these streams are attached with the console.
-1. System.out: standard output stream
-2. System.in: standard input stream
-3. System.err: standard error stream
-
+`java.io` 用**流（stream）**抽象顺序字节序列，所有类位于 `java.io` 包。JVM 自动创建三个标准流：`System.out`（标准输出）、`System.in`（标准输入）、`System.err`（标准错误）。
 
 ```java
 public abstract class InputStream implements Closeable {
@@ -183,59 +137,40 @@ public abstract class OutputStream implements Closeable, Flushable {
 }
 ```
 
+### Buffered Stream
 
-#### BufferedStream
+`BufferedInputStream` / `BufferedOutputStream` 内置缓冲区以提升批量读写性能。在并发服务器模型中，迭代服务器（iterative server）一次只服务一个客户端；并发服务器（concurrent server）则为每个连接分配线程或交由线程池。
 
-Java BufferedOutputStream/BufferedInputStream class is used to read information from stream. It internally uses buffer mechanism to make the performance fast.
+### Read and Write
 
+`InputStream.read()` 返回 `0..255` 的字节，到达流尾返回 `-1`，在无数据可用 / 流尾 / 异常前阻塞。在 `IOUtil.write()` 中，JDK 对缓冲区的写入有统一优化：
 
-Iterative server serves client one by one.
+1. 若源是 `DirectBuffer`，直接走 `writeFromNativeBuffer`；
+2. 否则先从 `getTemporaryDirectBuffer` 拷贝到临时堆外缓冲，再 `writeFromNativeBuffer`。
 
-concurrent servers
-
-
-read
-
-Reads the next byte of data from the input stream.
-The value byte is returned as an int in the range 0 to 255
-If no byte is available because the end of the stream has been reached, the value -1 is returned.
-This method blocks until input data is available, the end of the stream is detected, or an exception is thrown.
-
-
-
-### write
-Writes the specified byte to this output stream. The general contract for write is that one byte is written to the output stream. The byte to be written is the eight low-order bits of the argument b. The 24 high-order bits of b are ignored.
-
-
-In `IOUtil.write()`
-
-1. `if (src instanceof DirectBuffer)`, `writeFromNativeBuffer`
-2. Else  copy to directBuffer from `getTemporaryDirectBuffer`
-then `writeFromNativeBuffer`
-
-
-> Links: [Comparing performance of Java I/O and NIO: streams vs channels](https://github.com/romromov/java-io-benchmark)
+> 相关基准：[Comparing performance of Java I/O and NIO: streams vs channels](https://github.com/romromov/java-io-benchmark)
 
 ## NIO
 
-
-[Java NIO（New IO）](/docs/CS/Java/JDK/IO/NIO.md)是一种替代的 Java IO API，意即标准 Java IO 和 Java 网络 API 的替代方案
-Java NIO 提供了与传统 IO API 不同的 IO 编程模型
+[Java NIO（New IO）](/docs/CS/Java/JDK/IO/NIO.md) 是标准 Java IO 与网络 API 的替代方案，提供与传统 `java.io` 不同的编程模型：**Buffer + Channel + Selector** 的多路复用，使少量线程即可支撑海量连接。
 
 ## AIO
 
-
-[IOCP](https://hg.openjdk.org/jdk/jdk/file/d8327f838b88/src/java.base/windows/classes/sun/nio/ch/Iocp.java)
+[AIO / AsynchronousChannel](https://hg.openjdk.org/jdk/jdk/file/d8327f838b88/src/java.base/windows/classes/sun/nio/ch/Iocp.java) 在 Windows 上基于 **IOCP** 实现；Linux 没有原生异步文件 I/O，由 epoll 模拟，因此实践中性能并不优于 NIO，且不支持 UDP。
 
 ## io_uring
 
-Linux 5.1 引入的 [io_uring](/docs/CS/OS/Linux/IO/io_uring.md) 通过 SQ/CQ ring 批量提交 I/O，
-JDK 主线尚未内置支持，Java 侧通过 [JUring](/docs/CS/Java/JDK/IO/Uring.md)（FFM API）或 Netty incubator transport 接入，
-也是补齐 NIO 文件 I/O 阻塞短板的候选方向，详见 [Uring](/docs/CS/Java/JDK/IO/Uring.md)。
+Linux 5.1 引入的 [io_uring](/docs/CS/OS/Linux/IO/io_uring.md) 通过 SQ/CQ 双环形队列批量提交 I/O，JDK 主线尚未内置支持；Java 侧通过 [JUring](/docs/CS/Java/JDK/IO/Uring.md)（基于 FFM API）或 Netty incubator transport 接入，也是补齐 NIO 文件 I/O 阻塞短板的候选方向，详见 [Uring](/docs/CS/Java/JDK/IO/Uring.md)。
 
-## File
+## Direct Buffer
 
-Read all lines from a file as a Stream. Unlike readAllLines, this method does not read all lines into a List, but instead populates lazily as the stream is consumed.
+直接缓冲区在**堆外（native）**分配，绕过 Java 堆，减少一次内核↔用户空间拷贝，是 NIO 零拷贝与高网络吞吐的关键。其分配、`-XX:MaxDirectMemorySize` 预留、`Cleaner` 回收机制见 [Direct Buffer](/docs/CS/Java/JDK/IO/Direct_Buffer.md)。
+
+## File (java.nio.file)
+
+`java.nio.file`（NIO.2）是 JDK 7 引入的文件系统抽象层，在 Linux 上由 `LinuxFileSystemProvider` / `LinuxFileSystem` 落地：文件打开、目录遍历、属性读取分别映射到 `open(2)` / `getdents64(2)` / `fstatat(2)`，零拷贝走 `copy_file_range`→`sendfile`，目录变更监听则基于 inotify。底层系统调用与 `WatchService` 的 inotify 实现分别见 [NIO.2 File System](/docs/CS/Java/JDK/IO/NIO2.md) 与 [WatchService (inotify)](/docs/CS/Java/JDK/IO/WatchService.md)。异步文件通道 [AsynchronousFileChannel](/docs/CS/Java/JDK/IO/AsyncFileChannel.md) 在 Linux 上**并非内核 AIO**，而是 `ExecutorService` 线程池模拟——与 socket 侧 `EPollPort`（epoll 模拟）同源。
+
+`Files.lines` 以惰性 `Stream<String>` 读取文件，不一次性读入 `List`：
 
 ```java
 public static Stream<String> lines(Path path, Charset cs) throws IOException {
@@ -259,25 +194,19 @@ public static Stream<String> lines(Path path, Charset cs) throws IOException {
 }
 ```
 
-
 ## Tuning
 
-JAVA NIO 和 JAVA AIO并没有提供断连重连、网络闪断、半包读写、失败缓存、网络拥塞和异常码流等的处理，这些都需要开发者自己来补齐相关的工作
-AIO在实践中，并没有比NIO更好。AIO在不同的平台有不同的实现，windows系统下使用的是一种异步IO技术：IOCP；
-Linux下由于没有这种异步 IO 技术，所以使用的是epoll 对异步 IO 进行模拟。所以 AIO 在 Linux 下的性能并不理想。AIO 也没有提供对 UDP 的支持
-
-在实际的大型互联网项目中，Java 原生的 API 应用并不广泛，取而代之的是一款第三方Java 框架，这就是 [Netty](/docs/CS/Framework/Netty/Netty.md)
-
-
-## This Directory Navigation
-
-- 本页：BIO 流模型、`Socket` / `ServerSocket`、AIO 与文件 I/O
-- [NIO](/docs/CS/Java/JDK/IO/NIO.md)（Buffer / Channel / Selector）
-- [Direct Buffer](/docs/CS/Java/JDK/IO/Direct_Buffer.md)（直接内存的分配与回收）
-- [io_uring](/docs/CS/Java/JDK/IO/Uring.md)（Linux 5.1 起的异步 I/O 接口）
+原生 NIO / AIO 并不提供断连重连、网络闪断、半包读写、失败缓存、拥塞与异常码流等处理，这些需要开发者自行补齐。实践中 AIO 并不比 NIO 更好——Linux 下它仍是 epoll 模拟，且不支持 UDP。大型互联网项目普遍不直接使用原生 API，而是采用 [Netty](/docs/CS/Framework/Netty/Netty.md) 这类框架。
 
 ## Links
 
+- [NIO](/docs/CS/Java/JDK/IO/NIO.md)
+- [Selector (epoll)](/docs/CS/Java/JDK/IO/Selector_Epoll.md)
+- [NIO.2 File System](/docs/CS/Java/JDK/IO/NIO2.md)
+- [WatchService (inotify)](/docs/CS/Java/JDK/IO/WatchService.md)
+- [Direct Buffer](/docs/CS/Java/JDK/IO/Direct_Buffer.md)
+- [io_uring](/docs/CS/Java/JDK/IO/Uring.md)
+- [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
 - [JDK](/docs/CS/Java/JDK/JDK.md)
 
 ## References

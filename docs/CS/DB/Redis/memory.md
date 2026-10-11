@@ -111,13 +111,13 @@ size_t zmalloc_used_memory(void) {
 
 内存分布
 
-对象内存是redis中占用最大的一块内存，redis属于键值数据库。每次创建键值时，都会创建两个对象key和value。常见的数据类型为string、list、hash、zset、set
+对象内存是 redis 中占用最大的一块内存，redis 属于键值数据库。每次创建键值时，都会创建两个对象 key 和 value。常见的数据类型为 string、list、hash、zset、set
 
-自身内存 主要是是指AOF/RDB时fork创建的子进程内存开销，linux采用了写时复制技术
+自身内存 主要是是指 AOF/RDB 时 fork 创建的子进程内存开销，linux 采用了写时复制技术
 
 缓冲内存 
 
-所有接入到redis服务器TCP连接的输入输出缓冲区，输入缓冲区无法控制，最大为1G，超过1G将会被断开连接。输出缓冲区通过client-output-buffer-limit控制
+所有接入到 redis 服务器 TCP 连接的输入输出缓冲区，输入缓冲区无法控制，最大为1G，超过1G 将会被断开连接。输出缓冲区通过 client-output-buffer-limit 控制
 
 复制积压缓冲区：
 
@@ -125,7 +125,7 @@ size_t zmalloc_used_memory(void) {
 
 AOF缓存：
 
-在Redis重写期间保存最近的写入命令。这一部分占用量一般比较少。
+在 Redis 重写期间保存最近的写入命令。这一部分占用量一般比较少。
 
 
 
@@ -202,7 +202,7 @@ However it is usually a better idea to run two Redis instances to solve such a p
 It is also worth noting that setting an `expire` value to a key costs memory, so using a policy like **allkeys-lru** is more memory efficient since there is no need for an `expire` configuration for the key to be evicted under memory pressure.
 
 
-对于数据不能淘汰和全部数据都可以淘汰的业务系统 建议使用不同的Redis集群
+对于数据不能淘汰和全部数据都可以淘汰的业务系统 建议使用不同的 Redis 集群
 
 ```c
 #define EVPOOL_SIZE 16
@@ -592,9 +592,9 @@ void propagate(struct redisCommand *cmd, int dbid, robj **argv, int argc,
 
 ## LRU
 
-如果要严格按照LRU算法的基本原理来实现的话，你需要在代码中实现如下内容：
+如果要严格按照 LRU 算法的基本原理来实现的话，你需要在代码中实现如下内容：
 
-- 要为Redis使用最大内存时，可容纳的所有数据维护一个链表；
+- 要为 Redis 使用最大内存时，可容纳的所有数据维护一个链表；
 - 每当有新数据插入或是现有数据被再次访问时，需要执行多次链表操作
 
 
@@ -612,15 +612,15 @@ We found that using a power law access pattern, the difference between true LRU 
 
 
 
-虽然Redis使用了近似LRU算法，但是，这个算法仍然需要区分不同数据的访问时效性，也就是说，Redis需要知道数据的最近一次访问时间。因此，Redis就设计了LRU时钟来记录数据每次访问的时间戳。
+虽然 Redis 使用了近似 LRU 算法，但是，这个算法仍然需要区分不同数据的访问时效性，也就是说，Redis 需要知道数据的最近一次访问时间。因此，Redis 就设计了 LRU 时钟来记录数据每次访问的时间戳。
 
-redisObject结构体除了记录值的指针以外，它其实还会使用24 bits来保存LRU时钟信息，对应的是lru成员变量。所以这样一来，每个键值对都会把它最近一次被访问的时间戳，记录在lru变量当中
+redisObject 结构体除了记录值的指针以外，它其实还会使用24 bits 来保存 LRU 时钟信息，对应的是 lru 成员变量。所以这样一来，每个键值对都会把它最近一次被访问的时间戳，记录在 lru 变量当中
 
-Redis server使用了一个实例级别的全局LRU时钟，每个键值对的LRU时钟值会根据全局LRU时钟进行设置
+Redis server 使用了一个实例级别的全局 LRU 时钟，每个键值对的 LRU 时钟值会根据全局 LRU 时钟进行设置
 
-这个全局LRU时钟保存在了Redis全局变量server的成员变量**lruclock**中。当Redis server启动后，调用initServerConfig函数初始化各项参数时，就会对这个全局LRU时钟lruclock进行设置。具体来说，initServerConfig函数是调用getLRUClock函数，来设置lruclock的值
+这个全局 LRU 时钟保存在了 Redis 全局变量 server 的成员变量**lruclock**中。当 Redis server 启动后，调用 initServerConfig 函数初始化各项参数时，就会对这个全局 LRU 时钟 lruclock 进行设置。具体来说，initServerConfig 函数是调用 getLRUClock 函数，来设置 lruclock 的值
 
-serverCron函数作为时间事件的回调函数，本身会按照一定的频率周期性执行 默认100毫秒在serverCron函数中，全局LRU时钟值就会按照这个函数的执行频率，定期调用getLRUClock函数进行更新
+serverCron 函数作为时间事件的回调函数，本身会按照一定的频率周期性执行 默认100毫秒在 serverCron 函数中，全局 LRU 时钟值就会按照这个函数的执行频率，定期调用 getLRUClock 函数进行更新
 
 To improve the quality of the LRU approximation we take a set of keys that are good candidate for eviction across performEvictions() calls.
 Entries inside the eviction pool are taken ordered by idle time, putting greater idle times to the right (ascending order).
@@ -661,7 +661,7 @@ struct evictionPoolEntry {
 
 
 
-为了淘汰数据，Redis定义了一个数组EvictionPoolLRU，用来保存待淘汰的候选键值对。这个数组的元素类型是evictionPoolEntry结构体，该结构体保存了待淘汰键值对的空闲时间idle、对应的key等信息
+为了淘汰数据，Redis 定义了一个数组 EvictionPoolLRU，用来保存待淘汰的候选键值对。这个数组的元素类型是 evictionPoolEntry 结构体，该结构体保存了待淘汰键值对的空闲时间 idle、对应的 key 等信息
 
 ```c
 struct evictionPoolEntry {

@@ -101,9 +101,9 @@ Redis 可以用来做什么
 
 ### build
 
-修改配置文件中的daemon为yes
+修改配置文件中的 daemon 为 yes
 
-禁用gcc编译优化，将makefile文件中 OPTIMIZATION?=-O2修为-O0
+禁用 gcc 编译优化，将 makefile 文件中 OPTIMIZATION?=-O2修为-O0
 
 ##### **Mac**
 
@@ -184,7 +184,7 @@ Redis 将客户端的创建、消息回复等功能，实现在了 networking.c 
 
 ### benchmark
 
-Redis-benchmark是官方自带的Redis性能测试工具，可以有效的测试Redis服务的性能。
+Redis-benchmark 是官方自带的 Redis 性能测试工具，可以有效的测试 Redis 服务的性能。
 
 
 
@@ -318,7 +318,7 @@ latency monitor
   其次，与 Redis 实现高可靠性保证的功能类似，Redis 高可扩展性保证的功能，是通过 Redis Cluster 来实现的，这部分代码也非常集中，就是在 cluster.h/cluster.c 代码文件中。
   所以这样，我们在学习 Redis Cluster 的设计与实现时，就会非常方便，不用在不同的文件之间来回跳转了
 
-单机Redis瓶颈
+单机 Redis 瓶颈
 
 - QPS
 - 容量
@@ -501,9 +501,9 @@ fork子进程的速度变慢
 
 ## Cache Consistency
 
-本地缓存和Redis缓存一致性
+本地缓存和 Redis 缓存一致性
 
-常见是Redis和本地缓存都监听canal事件 同步数据库变更
+常见是 Redis 和本地缓存都监听 canal 事件 同步数据库变更
 
 ### Client side caching
 
@@ -548,7 +548,7 @@ Redis 用它存储**键的指针**和**客户端 ID** 的映射关系。因为�
 
 *广播*模式
 
-广播模式与普通模式类似，Redis 同样使用 `PrefixTable` 存储广播模式下的客户端数据，它存储**前缀字符串指针和(需要通知的key和客户端ID)**的映射关系。它和广播模式最大的区别就是真正发送失效消息的时机不同：
+广播模式与普通模式类似，Redis 同样使用 `PrefixTable` 存储广播模式下的客户端数据，它存储**前缀字符串指针和(需要通知的 key 和客户端 ID)**的映射关系。它和广播模式最大的区别就是真正发送失效消息的时机不同：
 
 - 当客户端开启广播模式时，会在 `PrefixTable`的前缀对应的客户端列表中加入该客户端ID。
 - 当某一个 key 被修改或删除时，Redis 会调用 `trackingInvalidateKey` 方法，`trackingInvalidateKey` 方法中如果发现 `PrefixTable` 不为空，则调用 `trackingRememberKeyToBroadcast` 依次遍历所有前缀，如果key 符合前缀规则，则记录到 `PrefixTable` 对应的位置。
@@ -676,7 +676,7 @@ Redis 对 CPU 的要求并不高，反而是对内存和磁盘的要求很高，
 
 key 的命名规范，只有命名规范，才能提供可读性强、可维护性好的 key，方便日常管理
 
-把业务名作为前缀，然后用冒号或者下划线分隔，再加上具体的业务数据名 为避免key过长(key也是SDS 长度增加时元数据也会占用更多空间) 可以对前缀进行缩写
+把业务名作为前缀，然后用冒号或者下划线分隔，再加上具体的业务数据名 为避免 key 过长(key 也是 SDS 长度增加时元数据也会占用更多空间) 可以对前缀进行缩写
 
 BigKey
 
@@ -687,7 +687,7 @@ bigkey 通常有两种情况。
 
 对带宽压力大 进而影响之后的处理
 
-对于JIT技术在存储引擎中而言，“EVAL is evil”，尽量避免使用lua耗费内存和计算资源
+对于 JIT 技术在存储引擎中而言，“EVAL is evil”，尽量避免使用 lua 耗费内存和计算资源
 
 **不同的序列化方法，在序列化速度和数据序列化后的占用内存空间这两个方面，效果是不一样的**。比如说，protostuff 和 kryo 这两种序列化方法，就要比 Java 内置的序列化方法（java-build-in-serializer）效率更高
 
@@ -704,17 +704,17 @@ XML 和 JSON 格式的数据占用的内存空间比较大。为了避免数据�
 Redis 单实例的内存大小都不要太大，根据我自己的经验值，建议你设置在 2~6GB 。这样一来，无论是 RDB 快照，还是主从集群进行数据同步，都能很快完成，不会阻塞正常请求的处理。
 
 Pubsub的典型场景
-Pubsub适合悲观锁和简单信号，不适合稳定的更新，因为可能会丢消息。在1对N的消息转发通道中，服务瓶颈。还有模
-糊通知方面，算力瓶颈。在channel和client比较多的情况下，造成CPU打满、服务夯住。
+Pubsub 适合悲观锁和简单信号，不适合稳定的更新，因为可能会丢消息。在1对 N 的消息转发通道中，服务瓶颈。还有模
+糊通知方面，算力瓶颈。在 channel 和 client 比较多的情况下，造成 CPU 打满、服务夯住。
 
 Transaction
-Transaction是一种伪事物，没有回滚条件；集群版需要所有key使用hashtag保证，代码比较复杂，hashtag也可能导
+Transaction 是一种伪事物，没有回滚条件；集群版需要所有 key 使用 hashtag 保证，代码比较复杂，hashtag 也可能导
 致算力和存储倾斜；Lua中封装了multi-exec，但更耗费CPU，比如编译、加载时，经常出现问题。
 
 Pipeline
 Pipeline用的比较多，如下面的示意图，实际上是把多个请求封装在一个请求中，合并在一个请求里发送，服务端一次
-性返回，能够有效减少IO，提高执行效率。需要注意的是，用户需要聚合小的命令，避免在pipeline里做大range。注意
-Pipeline中的批量任务不是原子执行的（从来不是），所以要处理Pipeline其中部分命令失败的场景。
+性返回，能够有效减少 IO，提高执行效率。需要注意的是，用户需要聚合小的命令，避免在 pipeline 里做大 range。注意
+Pipeline 中的批量任务不是原子执行的（从来不是），所以要处理 Pipeline 其中部分命令失败的场景。
 
 危险命令禁用
 

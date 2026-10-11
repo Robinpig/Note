@@ -373,3 +373,8 @@ In fact, in addition to allowing writes to be delayed, caching can permit them t
 ## Links
 
 - [SQL](/docs/CS/DB/MySQL/SQL.md)
+
+
+## References
+
+1. [MySQL Reference Manual: Optimization](https://dev.mysql.com/doc/refman/8.4/en/optimization.html)

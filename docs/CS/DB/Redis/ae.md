@@ -50,8 +50,8 @@ typedef struct aeEventLoop {
 ```
 
 aeEventLoop结构保存了一个void *类型的万能指针apidata，是用来保存轮询事件的状态的，也就是保存底层调用的多路复用库的事件状态，
-关于Redis的多路复用库的选择，Redis包装了常见的select epoll evport kqueue，他们在编译阶段，根据不同的系统选择性能最高的一个多路复用库作为Redis的多路复用程序的实现，
-而且所有库实现的接口名称都是相同的，因此Redis多路复用程序底层实现是可以互换的
+关于 Redis 的多路复用库的选择，Redis 包装了常见的 select epoll evport kqueue，他们在编译阶段，根据不同的系统选择性能最高的一个多路复用库作为 Redis 的多路复用程序的实现，
+而且所有库实现的接口名称都是相同的，因此 Redis 多路复用程序底层实现是可以互换的
 
 Include the best multiplexing layer supported by this system.
 The following should be ordered by performances, descending.
@@ -648,16 +648,16 @@ typedef struct aeFileEvent {
 ```
 
 
-rfileProc和wfileProc成员分别为两个函数指针，他们的原型为
+rfileProc 和 wfileProc 成员分别为两个函数指针，他们的原型为
 
 ```c
 
 typedef void aeFileProc(struct aeEventLoop *eventLoop, int fd, void *clientData, int mask);
 ```
 
-当事件就绪时，我们需要知道文件事件的文件描述符还有事件类型才能对于锁定该事件，因此定义了aeFiredEvent结构统一管理：
-时间事件表是一个链表，因为它有一个next指针域，指向下一个时间事件。
-和文件事件一样，当时间事件所指定的事件发生时，也会调用对应的回调函数，结构成员timeProc和finalizerProc都是回调函数，函数原型如下：函数指针与回调函数详解
+当事件就绪时，我们需要知道文件事件的文件描述符还有事件类型才能对于锁定该事件，因此定义了 aeFiredEvent 结构统一管理：
+时间事件表是一个链表，因为它有一个 next 指针域，指向下一个时间事件。
+和文件事件一样，当时间事件所指定的事件发生时，也会调用对应的回调函数，结构成员 timeProc 和 finalizerProc 都是回调函数，函数原型如下：函数指针与回调函数详解
 
 
 ```c

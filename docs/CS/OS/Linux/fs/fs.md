@@ -1074,6 +1074,38 @@ Writing To Disk Sequentially
 
 [ext4](/docs/CS/OS/Linux/fs/ext4.md)  是一个基于磁盘的文件系统，全称是Fourth Extended Filesystem,为第4代扩展文件系统
 
+## VFS Syscall Path
+
+文件系统调用从用户态进入后，先经过 VFS 这层与具体文件系统无关的抽象，再下沉到 ext4/xfs 等实现。关键路径（基于 Linux 7.2.7 源码）：
+
+```
+openat(2)        fs/open.c:1385   → do_sys_openat2 (open.c:1359)
+                                   → do_filp_open
+                                     → path_openat (fs/namei.c:4843)
+                                       → link_path_walk (fs/namei.c:2578)  // dentry/inode 解析
+                                         → vfs_open
+fstatat(2)       fs/stat.c:365 (vfs_fstatat) → vfs_statx (fs/stat.c:341)
+getdents64(2)    fs/readdir.c:87 (iterate_dir) → file->f_op->iterate_shared (readdir.c:110)
+readlinkat(2)    fs/stat.c:596 → do_readlinkat (559) → vfs_readlink (583)
+```
+
+- `link_path_walk` 逐级把路径分量解析成 dentry/inode，命中 dcache 时不落盘。
+- `iterate_dir` 调具体文件系统的 `->iterate_shared`：目录遍历是"一次 syscall 批产多条 dirent"，由 dcache 加速，而非 open+read 逐条。
+- `vfs_statx` 从 inode 读属性，open 之后属性查询大多命中缓存。
+
+## Mapping to JDK NIO.2
+
+JDK 25 的 `java.nio.file` 在 Linux 上正是干净地翻译到这套 VFS 原语（详见 [JDK NIO.2 File System](/docs/CS/Java/JDK/IO/NIO2.md) 的 `Mapping to Linux VFS` 节）：
+
+- `LinuxNativeDispatcher.open0` → `openat(2)`（`O_NOFOLLOW`/`O_CLOEXEC`），落到上面的 `do_sys_openat2` 链。
+- `readdir` 批量调 `getdents64(2)`（`iterate_dir`），所以遍历目录是批处理语义。
+- `fstatat` → `vfs_statx`，属性来自 inode，缓存命中零磁盘 I/O。
+- `readlinkat` → `vfs_readlink`，符号链接解析不递归打开目标。
+- `copy_file_range(2)`/`sendfile(2)` 在内核内搬运页，绕开用户态 buffer——与 VFS 数据路径平行，不经 `read`/`write` 往返。
+- 目录变更监听 `inotify_*` → `fs/notify/inotify/`（见 [inotify](/docs/CS/OS/Linux/IO/inotify.md)）。
+
+要点：NIO.2 与 `java.io.File` 最大的不同，就是它直接对接这套 VFS 原语，而不是绕一层兼容性语义——理解 `link_path_walk` / `iterate_dir` / `vfs_statx` 就理解了 JDK 文件 API 的底层成本模型。
+
 ## Links
 
 - [文件管理机制](/docs/CS/OS/Linux/fs/README.md)
@@ -1082,3 +1114,4 @@ Writing To Disk Sequentially
 - [proc](/docs/CS/OS/Linux/fs/proc.md)
 - [sysfs](/docs/CS/OS/Linux/fs/sysfs.md)
 - [Minix](/docs/CS/OS/Linux/fs/Minix.md)
+- [JDK NIO.2 File System](/docs/CS/Java/JDK/IO/NIO2.md)

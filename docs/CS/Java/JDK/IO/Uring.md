@@ -12,6 +12,22 @@ Java 生态访问 io_uring 的路径分三类：
 3. **Netty incubator io_uring transport**：Netty 官方实验性传输实现，在 Linux native 环境下用 io_uring 替换 epoll 事件循环，
    是目前生产上最主流的 Java io_uring 落地方案。
 
+## JDK Mainline Integration Status
+
+**截至 JDK 25，主线 JDK 仍未内置可切换的 io_uring Selector/Channel**——上节第一条「主线 JDK 没有提供内置 io_uring」是成立的，需要特别澄清：社区长期流传「JDK 21 已内置 `IoUringSelectorProvider`」的说法，与 GA 源码不符，多为把 Loom 实验分支 / 早期 EA build / 路线规划误当作已交付事实。
+
+直接证据（JDK 25，`jdk-25+36`）：
+
+- `sun.nio.ch.DefaultSelectorProvider`（Linux）的实例字段写死为 `new EPollSelectorProvider()`，`get()` 直接返回该常量，没有任何读取系统属性或探测 io_uring 可用性的分支。
+- 即 Linux 上默认网络多路复用引擎至今仍是 **epoll**（`EPollSelectorProvider` → `EPollSelectorImpl`），macOS/BSD 仍是 **kqueue**，与 JDK 8 时代一致。
+
+**为什么「计划却未落地」**：OpenJDK 的 Loom 路线文档（*State of Loom*）明确写道——文件 I/O 在内核侧始终表现为「有可用字节即报告就绪」，虚拟线程在其上仍会阻塞 carrier；官方「计划在 Linux 上用 io_uring 做异步文件 I/O」，但在未落地前，JDK 用 `ForkJoinPool.ManagedBlocker` 机制兜底（worker 阻塞时向池里补充更多 OS 线程）来平滑文件 I/O 的阻塞。**网络 I/O 则早已通过把 `SocketChannel`/`ServerSocketChannel`/`DatagramChannel` 改造为 virtual-thread-friendly（底层仍是非阻塞 I/O，与是否用 io_uring 无关）解决了阻塞问题**。
+
+因此：
+
+- 想用 io_uring，目前只能走 **JUring（FFM 直调 liburing）** 或 **Netty incubator transport**（上节第 2、3 条），而非 JDK 标准 API；
+- 任何声称「JDK 21 内置 `IoUringSelectorProvider`」的资料都不可信，应以 `DefaultSelectorProvider` 源码为准。
+
 ## JUring
 
 JUring 是一个把 io_uring 文件 I/O 暴露给 Java 的实验性库，其关键意义在于**不再需要 JNI**：

@@ -30,3 +30,8 @@ SETBIT key offset value
 ## Links
 
 - [Redis Struct](/docs/CS/DB/Redis/struct/struct.md?id=hashes)
+
+
+## References
+
+1. [Redis bitmaps](https://redis.io/docs/latest/develop/data-types/bitmaps/)

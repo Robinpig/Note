@@ -476,3 +476,8 @@ Redis 是通过有序集合（ZSet）的方式来实现延迟消息队列的，Z
 
 - [Redis Struct](/docs/CS/DB/Redis/struct/struct.md?id=sorted-sets)
 - [Scheduled Task](/docs/CS/SE/Scheduled_Task.md)
+
+
+## References
+
+1. [Redis sorted sets](https://redis.io/docs/latest/develop/data-types/sorted-sets/)

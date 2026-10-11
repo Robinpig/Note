@@ -71,7 +71,7 @@ try{
 
 
 
-而对于解锁来说，我们可以使用如下的 Lua脚本来完成，而Lua脚本会以EVAL命令的形式在Redis server中执行。客户端会使用GET命令读取锁对应key的value，并判断value是否等于客户端自身的ID。如果等于，就表明当前客户端正拿着锁，此时可以执行DEL命令删除key，也就是释放锁；如果value不等于客户端自身ID，那么该脚本会直接返回。
+而对于解锁来说，我们可以使用如下的 Lua 脚本来完成，而 Lua 脚本会以 EVAL 命令的形式在 Redis server 中执行。客户端会使用 GET 命令读取锁对应 key 的 value，并判断 value 是否等于客户端自身的 ID。如果等于，就表明当前客户端正拿着锁，此时可以执行 DEL 命令删除 key，也就是释放锁；如果 value 不等于客户端自身 ID，那么该脚本会直接返回。
 
 ```
 if redis.call("get",lockKey) == uid then

@@ -19,7 +19,7 @@ GEO 本质上是基于 ZSet 实现的
 
 
 
-GeoHash将经纬度编码转换为一个N位的二进制数
+GeoHash 将经纬度编码转换为一个 N 位的二进制数
 
 每个地理位置坐标表示为geoPoint
 
@@ -439,3 +439,8 @@ void georadiusGeneric(client *c, int srcKeyIndex, int flags) {
 ## Links
 
 - [Redis Struct](/docs/CS/DB/Redis/struct/struct.md)
+
+
+## References
+
+1. [Redis geospatial indexes](https://redis.io/docs/latest/develop/data-types/geospatial/)

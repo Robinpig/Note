@@ -63,7 +63,7 @@ VChannel 是 collection 的逻辑分片，PChannel 是 WAL 的物理流；**VCha
 
 消息落 WAL 后端后，`LastConfirmedMessageID` 推进——从该位置往后读，后续消息的 TimeTick 严格更大。消费端用 `ReOrderByTimeTickBuffer` 按 TimeTick 重排，形成 MVCC 的可见性边界。
 
-可选地，单 VChannel 内多条消息可包成一个写事务：`Begin` → 多次 `Append` → `Commit`，整体可见性以 `CommitTxn` 的 TimeTick 为边界——要么全部对读可见，要么都不可见。这个事务能力是 WAL append 协议之上的薄封装，不在 interceptor 链里单列一层。
+可选地，单 VChannel 内多条消息可包成一个写事务：`Begin` → 多次 `Append` → `Commit`，整体可见性以 `CommitTxn` 的 TimeTick 为边界——要么全部对读可见，要么都不可见。这个事务能力是 WAL append 协议之上的薄封装，不在 interceptor 链里单列一层（事务的完整生命周期、锁与未提交可见性见 [Transactions and Locking](/docs/CS/DB/Milvus/Transactions_and_Locking.md)）。
 
 ## Flush Entry Points and Seal Conditions
 

@@ -884,8 +884,8 @@ void clusterFailoverReplaceYourMaster(void) {
 
 
 No way to dispatch this command to Redis Cluster because keys have different slots
-可能原因：JedisCluster操作的Key不在同一个Slot（槽）中。
-解决方法：通过Hash tags对Key进行改造
+可能原因：JedisCluster 操作的 Key 不在同一个 Slot（槽）中。
+解决方法：通过 Hash tags 对 Key 进行改造
 
 
 

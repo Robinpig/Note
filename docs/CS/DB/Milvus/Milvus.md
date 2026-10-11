@@ -63,6 +63,12 @@ Milvus 的数据存储分为逻辑层与物理层：
 
 字段类型上，v3.0.1 除 dense 向量外还支持 sparse 向量、binary / float16 / bfloat16 / int8 向量、JSON 与 array、动态字段（dynamic field）以及函数字段（function field，如 text 生成 embedding 或 BM25 稀疏向量）——它们各自能建什么索引，见 [Index and Vector Engine](/docs/CS/DB/Milvus/Index_and_Vector_Engine.md)。
 
+## Metadata and Schema
+
+Schema 不是一次定终身：加字段、改字段、加别名、调 analyzer 都要经过 DDL，而每次 DDL 在分布式架构里都是「元数据变更 + 广播 + 缓存失效」的组合动作。[Schema and DDL](/docs/CS/DB/Milvus/Schema_and_DDL.md) 讲清演进的能力边界（哪些改动允许、哪些必须重建集合、dynamic field 与 nullable 的语义），以及 DDL callback 框架与 catalog 的顺序落地。
+
+DDL 之后「为什么所有节点立刻看到新事实」是另一个问题：Proxy 不可能每次请求都回源 etcd，于是有了缓存；缓存的一致性靠**广播失效**来兜——一次 AlterCollection 的完整链路（元数据落地 → 广播 → 各 Proxy 失效 → 下一次请求重建）见 [Metadata Cache](/docs/CS/DB/Milvus/Metadata_Cache.md)。
+
 ## Installation
 
 Milvus 有三种部署选项：Milvus Lite、Milvus Standalone 和 Milvus Distributed。
@@ -236,15 +242,15 @@ Milvus Distributed 可以部署在 Kubernetes 集群上。这种部署采用云�
 
 ## The WAL Convergence
 
-要理解 3.0 的一切，先接受一个前提：**数据不再「写进存储」，而是「追加进日志」**。[WAL and StreamingNode](/docs/CS/DB/Milvus/WAL_and_StreamingNode.md) 从后端抽象讲起——`pkg/streaming/walimpls` 把 RocksMQ、Kafka、Pulsar、Woodpecker 注册成可替换实现，之上是 PChannel / VChannel / CChannel 三层通道模型，用一个结构同时满足「多 collection 共享一条物理日志」「单 collection 内严格保序」「集群级变更需要唯一排序点」。日志的持有者是 StreamingNode，它靠单调递增的 Term 隔离失效归属，靠 TimeTick 划出 MVCC 的可见性边界；这也是 WAL 敢当真相源的底气。
+要理解 3.0 的一切，先接受一个前提：**数据不再「写进存储」，而是「追加进日志」**。[WAL and StreamingNode](/docs/CS/DB/Milvus/WAL_and_StreamingNode.md) 从后端抽象讲起——`pkg/streaming/walimpls` 把 RocksMQ、Kafka、Pulsar、Woodpecker 注册成可替换实现，之上是 PChannel / VChannel / CChannel 三层通道模型，用一个结构同时满足「多 collection 共享一条物理日志」「单 collection 内严格保序」「集群级变更需要唯一排序点」。日志的持有者是 StreamingNode，它靠单调递增的 Term 隔离失效归属，靠 TimeTick 划出 MVCC 的可见性边界；这也是 WAL 敢当真相源的底气。后端之间并非等价替换：Kafka 与 Pulsar 把持久化外包给成熟消息系统，RocksMQ 是单机嵌入，而 Woodpecker 是官方自研的云原生日志，用「quorum + 对象存储」同时买到低运维与无限容量——它的两种运行模式与取舍单独成篇：[Woodpecker](/docs/CS/DB/Milvus/Woodpecker.md)。
 
-有了这层地基，[Write Path](/docs/CS/DB/Milvus/Write_Path.md) 讲的端到端链路就变得顺理成章：Proxy 完成校验与取号后把 DML 打成 WAL 消息，TSO、RowID、TimeTick 三个号码都源自 MixCoord——正因取号频率如此之高，3.0 把四个协调者合进单进程才有意义。落盘只是 WAL 的第一路消费者，QueryNode 的实时可见是第二路，两条路互不等待，所以「写完立刻能读」不需要等 flush。
+有了这层地基，[Write Path](/docs/CS/DB/Milvus/Write_Path.md) 讲的端到端链路就变得顺理成章：Proxy 完成校验与取号后把 DML 打成 WAL 消息，TSO、RowID、TimeTick 三个号码都源自 MixCoord——正因取号频率如此之高，3.0 把四个协调者合进单进程才有意义。落盘只是 WAL 的第一路消费者，QueryNode 的实时可见是第二路，两条路互不等待，所以「写完立刻能读」不需要等 flush。更细的机制各自成篇：写事务不是锁加隔离级别的套餐，而是 WAL 上的消息分组——一组 append 由 `Begin` / `CommitTxn` 圈起、提交前对读者不可见，防并发竞争的锁则是 append 路径上的 key 级闸门，见 [Transactions and Locking](/docs/CS/DB/Milvus/Transactions_and_Locking.md)。
 
 ## Serving a Search
 
-查询侧的难点不是算得快，而是**一次请求要横跨十几个 shard，还得让它们给出同一个时间点的答案**。[Query Path](/docs/CS/DB/Milvus/Query_Path.md) 沿这条线展开：一致性级别如何落成一个具体要等待的时间戳、QueryCoord 为什么用「目标视图」而不是直接分配段、shard leader 的 delegator 如何把内存里的 growing 段与对象存储上的 sealed 段合成一份答案、以及删除墓碑（L0 段）在读取时才被应用成位图。真正做向量检索的是 C++ 的 segcore，Go 与它之间只过 plan、placeholder 与 bitset。
+查询侧的难点不是算得快，而是**一次请求要横跨十几个 shard，还得让它们给出同一个时间点的答案**。[Query Path](/docs/CS/DB/Milvus/Query_Path.md) 沿这条线展开：一致性级别如何落成一个具体要等待的时间戳、QueryCoord 为什么用「目标视图」而不是直接分配段、shard leader 的 delegator 如何把内存里的 growing 段与对象存储上的 sealed 段合成一份答案、以及删除墓碑（L0 段）在读取时才被应用成位图。真正做向量检索的是 C++ 的 segcore，Go 与它之间只过 plan、placeholder 与 bitset——segcore 内部如何同时服务无锁追加的 growing 段与按 chunk 组织的 sealed 段、计划树与表达式在那里怎么执行、检索与归并的分界在哪，见 [Segcore](/docs/CS/DB/Milvus/Segcore.md)。
 
-检索质量的天花板则由索引决定。[Index and Vector Engine](/docs/CS/DB/Milvus/Index_and_Vector_Engine.md) 给出 v3.0.1 的完整能力面：Knowhere 承担的算法层、稠密与稀疏索引的类型矩阵、每种索引支持哪些向量数据类型、mmap 与磁盘型索引如何换取内存、标量与 JSON 与全文倒排索引各自适合什么谓词，最后用功能矩阵说清它与 pgvector / Qdrant / Weaviate 的分工边界——ANN 算法本身的原理不在此重复，见 [vector](/docs/CS/DB/vector.md)。
+检索质量的天花板则由索引决定。[Index and Vector Engine](/docs/CS/DB/Milvus/Index_and_Vector_Engine.md) 给出 v3.0.1 的完整能力面：Knowhere 承担的算法层、稠密与稀疏索引的类型矩阵、每种索引支持哪些向量数据类型、mmap 与磁盘型索引如何换取内存、标量与 JSON 与全文倒排索引各自适合什么谓词，最后用功能矩阵说清它与 pgvector / Qdrant / Weaviate 的分工边界——ANN 算法本身的原理不在此重复，见 [vector](/docs/CS/DB/vector.md)。语义相似之外还有一类需求是**精确词项匹配**——订单号、错误码、专有名词；Milvus 用 analyzer 链加 tantivy 倒排补齐这块能力，并让文本字段经 function 直接产出 BM25 稀疏向量，与向量检索共存于同一次混合查询，见 [Full Text Search](/docs/CS/DB/Milvus/Full_Text_Search.md)。
 
 ## Durability and Cost
 
@@ -254,7 +260,9 @@ Milvus Distributed 可以部署在 Kubernetes 集群上。这种部署采用云�
 
 ## Running It
 
-形态与选型是部署的真正分水岭：同一套代码在 Lite / Standalone / Cluster 之间切换，查询与写入机制完全相同，生产可用性由三个外部依赖决定——WAL 后端、元数据 KV、对象存储。[Deployment and Ops](/docs/CS/DB/Milvus/Deployment_and_Ops.md) 给出四后端对比与选择算法、配置三层叠加与「哪些改动必须重启」、可观测性入口、配额与限流为什么是写请求被拒的第一嫌疑、以及 Database / RBAC / Resource Group / Partition Key 四层多租户各自的事实落在哪个组件。动手环节看 [Deploy](/docs/CS/DB/Milvus/Deploy.md)：etcd + Kafka KRaft 三节点集群的完整实操。
+形态与选型是部署的真正分水岭：同一套代码在 Lite / Standalone / Cluster 之间切换，查询与写入机制完全相同，生产可用性由三个外部依赖决定——WAL 后端、元数据 KV、对象存储。[Deployment and Ops](/docs/CS/DB/Milvus/Deployment_and_Ops.md) 给出四后端对比与选择算法、配置三层叠加与「哪些改动必须重启」、可观测性入口、配额与限流为什么是写请求被拒的第一嫌疑、以及 Database / RBAC / Resource Group / Partition Key 四层多租户各自的事实落在哪个组件。瓶颈定位之后的调优取舍面——段大小、索引选型、一致性等待、内存水位、配额保护——收拢在 [Performance Tuning](/docs/CS/DB/Milvus/Performance_Tuning.md)：每个旋钮换来什么、牺牲什么，都链回它的机制篇。
+
+两件横切的事也在这条线上：跨集群容灾不在同一套 WAL 之内——CDC 角色从源集群日志读消息、经目标集群 Proxy 落入目标 WAL，复制的是变更流而非存储快照，见 [CDC and Replication](/docs/CS/DB/Milvus/CDC_and_Replication.md)；而跨进程、跨语言（Go↔C++）、跨协议（gRPC/REST）的失败语义由统一错误契约 merr 承担，排障时看到的每一个错误码都出自那里，见 [Error Model](/docs/CS/DB/Milvus/Error_Model.md)。动手环节看 [Deploy](/docs/CS/DB/Milvus/Deploy.md)：etcd + Kafka KRaft 三节点集群的完整实操。
 
 ## Default Values Worth Memorizing
 
@@ -266,6 +274,9 @@ Milvus Distributed 可以部署在 Kubernetes 集群上。这种部署采用云�
 | 对象存储回收节奏 | `dataCoord.gc.interval` 3600s、`dropTolerance` 10800s | Compaction and Lifecycle |
 | 新存储引擎开关 | `useLoonFFI` 默认 false，未全量切换 | Storage Layer |
 | WAL 后端 | `mq.type` 默认 `default` 按形态推断，且**首次启动即钉进 etcd 不可热换** | Deployment and Ops |
+| Bounded 一致性的回退量 | `common.gracefulTime` 5000 ms | Query Path |
+| 元数据缓存 | 无 TTL、无容量上限，一致性全靠广播失效 | Metadata Cache |
+| PChannel 再平衡保护 | `allowRebalance` true；迁移间隔 5m、恢复滞后 >1s 禁迁移 | WAL and StreamingNode |
 | 内存保护水位 | 0.85 开始线性降速、0.95 直接拒写 | Deployment and Ops |
 | RBAC | `common.security.authorizationEnabled` 默认 false | Deployment and Ops |
 
