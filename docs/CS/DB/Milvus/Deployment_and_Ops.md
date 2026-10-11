@@ -62,7 +62,7 @@ Embedded 与 Standalone 的差异只在 `Embedded=true` 时改从 `MILVUSCONF` �
 | `rootCoord.dmlChannelNum` | `16` | 初始 PChannel（DML channel）数，同时封顶单集合 shard 上限 |
 | `rootCoord.maxPartitionNum` / `maxDatabaseNum` | `1024` / `64` | 元数据规模上限 |
 | `proxy.maxShardNum` / `maxFieldNum` / `maxDimension` | `16` / `256` / `32768` | 建集合硬限制 |
-| `dataCoord.segment.maxSize` / `sealProportion` | `1024` MB / `0.12` | 封口双条件：约 122 MB 起封（含 10% jitter） |
+| `dataCoord.segment.maxSize` / `sealProportion` | `1024` MB / `0.12` | 封口双条件：约 111~123 MB 起封（0.108~0.12 倍，jitter 向下浮动） |
 | `dataCoord.segment.diskSegmentMaxSize` | `2048` MB | 磁盘索引集合的 segment 上限 |
 | `streaming.flush.l0.maxRowNum` / `maxSize` / `maxLifetime` | `500000` / `32m` / `10m` | L0 删除段落盘阈值 |
 | `dataCoord.gc.interval` / `dropTolerance` / `missingTolerance` | `3600s` / `10800s` / `86400s` | 对象存储回收节奏，详见 [Compaction and Lifecycle](/docs/CS/DB/Milvus/Compaction_and_Lifecycle.md) |
@@ -112,13 +112,13 @@ Embedded 与 Standalone 的差异只在 `Embedded=true` 时改从 `MILVUSCONF` �
 
 ### What to Look at When Debugging
 
-一次写入变慢的排查路径应当是：先看 WAL 层——streaming 的 produce 时延与错误、`streaming.logging.appendSlowThreshold`（默认 1s，Woodpecker 下最低 3s）触发的慢 append 日志，判断是后端 MQ 抖还是 StreamingNode flush 不过来（`streaming.flush` 的水位指标与 growing 段字节）；再看配额层——Proxy 的限流计数与被拒错误码分布，确认不是 memProtection 水位把写入压低；读侧问题先看一致性等待（QueryNode tSafe / TimeTick 延迟）与 QueryCoord 的 task 积压、target checkpoint 推进；资源面盯 QueryNode/DataNode 内存水位（就是 QuotaCenter 做决策的那两个数）与对象存储用量（diskQuota 决策依据）；最后是元数据面——etcd 请求时延与 leader 切换事件，它异常时所有协调动作都会变得迟缓。命令与面板链接不在此展开，实操见 [Deploy](/docs/CS/DB/Milvus/Deploy.md)。
+一次写入变慢的排查路径应当是：先看 WAL 层——streaming 的 produce 时延与错误、`streaming.logging.appendSlowThreshold`（默认 1s，Woodpecker 下最低 3s）触发的慢 append 日志，判断是后端 MQ 抖还是 StreamingNode flush 不过来（`streaming.flush` 的水位指标与 growing 段字节）；再看配额层——Proxy 的限流计数与被拒错误码分布，确认不是 memProtection 水位把写入压低；读侧问题先看一致性等待（QueryNode tSafe / TimeTick 延迟）与 QueryCoord 的 task 积压、target checkpoint 推进；资源面盯 QueryNode/DataNode 内存水位（就是 QuotaCenter 做决策的那两个数）与对象存储用量（diskQuota 决策依据）；最后是元数据面——etcd 请求时延与 leader 切换事件，它异常时所有协调动作都会变得迟缓。命令与面板链接不在此展开，实操见 [Deploy](/docs/CS/DB/Milvus/Deploy.md)；定位到瓶颈之后的具体取舍面（每个旋钮的收益与代价）见 [Performance Tuning](/docs/CS/DB/Milvus/Performance_Tuning.md)。
 
 ## Quota and Rate Limiting
 
 QuotaCenter 的代码在 `internal/rootcoord/quota_center.go`、运行于 MixCoord 进程，仅当 `quotaAndLimits.enabled=true` 时随 RootCoord 启动。主循环每 3s（`quotaCenterCollectInterval`）四步：从 QueryNode / DataNode / Proxy 拓扑**采集**真实负载指标 → 重建 cluster → database → collection → partition 四级限流树并计算各 RateType 速率 → **广播 SetRates 给所有 Proxy** → 记录指标。执行端在 Proxy 的 gRPC 拦截器：insert/delete 按请求字节数、search 按 nq、query 按 1 取 token，逐层扣减、失败回滚。
 
-**写请求为什么被限**（这是最常见的一类用户投诉，答案基本都在默认开关里）：默认生效的保护是 memProtection——任一 QueryNode/DataNode 内存越过 0.85 低水位，DML 速率按 `(high-cur)/(high-low)` 线性衰减；越过 0.95 高水位则整体拒绝。diskProtection 默认开但 `diskQuota=-1`（无限），配了配额且超限会 force deny 写（delete 仍放行）；ttProtection（TimeTick 延迟超 `maxTimeTickDelay` 1200s 拒写）与 DML 吞吐上限、DDL/DQL QPS 限流默认**关**，要显式打开。错误语义：令牌不足返回 `ErrServiceRateLimit`（码 8，**可重试**，映射旧码 `RateLimit`），强制拒绝返回 `ErrServiceQuotaExceeded`（码 9，**不可重试**，附 QuotaState 原因）；REST v2 入口的限流拒绝则包装成业务码 1807 的响应——排障时看到的「429 式」被限，落到实处就是这几层错误码之一，SDK 重试策略应区分对待（merr 的分类、码区间与跨协议映射见 [Error Model](/docs/CS/DB/Milvus/Error_Model.md)）。所有水位与限值都可被 collection/database 属性覆盖（`database.diskQuota.mb`、`database.force.deny.writing` 等），这也是多租户配额的正确落点。
+**写请求为什么被限**（这是最常见的一类用户投诉，答案基本都在默认开关里）：默认生效的保护是 memProtection——任一 QueryNode/DataNode 内存越过 0.85 低水位，DML 速率按 `(high-cur)/(high-low)` 线性衰减；越过 0.95 高水位则整体拒绝。StreamingNode 侧另有一道独立阀门 `streaming.walRateLimit.nodeMemory.*`（0.85 削速 / 0.90 硬拒 / 0.80 恢复），未导出到随包 yaml 但代码默认即生效——**硬拒早于 0.95**，排查「写入被拒」时两手都要看。diskProtection 默认开但 `diskQuota=-1`（无限），配了配额且超限会 force deny 写（delete 仍放行）；ttProtection（TimeTick 延迟超 `maxTimeTickDelay` 1200s 拒写）与 DML 吞吐上限、DDL/DQL QPS 限流默认**关**，要显式打开。错误语义：令牌不足返回 `ErrServiceRateLimit`（码 8，**可重试**，映射旧码 `RateLimit`），强制拒绝返回 `ErrServiceQuotaExceeded`（码 9，**不可重试**，附 QuotaState 原因）；REST v2 入口的限流拒绝则包装成业务码 1807 的响应——排障时看到的「429 式」被限，落到实处就是这几层错误码之一，SDK 重试策略应区分对待（merr 的分类、码区间与跨协议映射见 [Error Model](/docs/CS/DB/Milvus/Error_Model.md)）。所有水位与限值都可被 collection/database 属性覆盖（`database.diskQuota.mb`、`database.force.deny.writing` 等），这也是多租户配额的正确落点。
 
 ## High Availability and Replication
 

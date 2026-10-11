@@ -260,7 +260,7 @@ Milvus Distributed 可以部署在 Kubernetes 集群上。这种部署采用云�
 
 ## Running It
 
-形态与选型是部署的真正分水岭：同一套代码在 Lite / Standalone / Cluster 之间切换，查询与写入机制完全相同，生产可用性由三个外部依赖决定——WAL 后端、元数据 KV、对象存储。[Deployment and Ops](/docs/CS/DB/Milvus/Deployment_and_Ops.md) 给出四后端对比与选择算法、配置三层叠加与「哪些改动必须重启」、可观测性入口、配额与限流为什么是写请求被拒的第一嫌疑、以及 Database / RBAC / Resource Group / Partition Key 四层多租户各自的事实落在哪个组件。
+形态与选型是部署的真正分水岭：同一套代码在 Lite / Standalone / Cluster 之间切换，查询与写入机制完全相同，生产可用性由三个外部依赖决定——WAL 后端、元数据 KV、对象存储。[Deployment and Ops](/docs/CS/DB/Milvus/Deployment_and_Ops.md) 给出四后端对比与选择算法、配置三层叠加与「哪些改动必须重启」、可观测性入口、配额与限流为什么是写请求被拒的第一嫌疑、以及 Database / RBAC / Resource Group / Partition Key 四层多租户各自的事实落在哪个组件。瓶颈定位之后的调优取舍面——段大小、索引选型、一致性等待、内存水位、配额保护——收拢在 [Performance Tuning](/docs/CS/DB/Milvus/Performance_Tuning.md)：每个旋钮换来什么、牺牲什么，都链回它的机制篇。
 
 两件横切的事也在这条线上：跨集群容灾不在同一套 WAL 之内——CDC 角色从源集群日志读消息、经目标集群 Proxy 落入目标 WAL，复制的是变更流而非存储快照，见 [CDC and Replication](/docs/CS/DB/Milvus/CDC_and_Replication.md)；而跨进程、跨语言（Go↔C++）、跨协议（gRPC/REST）的失败语义由统一错误契约 merr 承担，排障时看到的每一个错误码都出自那里，见 [Error Model](/docs/CS/DB/Milvus/Error_Model.md)。动手环节看 [Deploy](/docs/CS/DB/Milvus/Deploy.md)：etcd + Kafka KRaft 三节点集群的完整实操。
 

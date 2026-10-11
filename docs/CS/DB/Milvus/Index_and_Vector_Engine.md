@@ -72,7 +72,7 @@ Int8 向量在 python 用例里只对 `HNSW`（`int8_vector_index = ["HNSW"]`）
 | MINHASH_LSH | LSH 分带 | `mh_lsh_band` `mh_element_bit_width` | 检索期由 `BruteForceIndexParams` 带同名参数 | 近似去重，配 `MHJACCARD` 与 MinHash function |
 | GPU_IVF_FLAT / GPU_IVF_PQ / GPU_CAGRA / GPU_BRUTE_FORCE | cuVS / RAFT | CAGRA: `intermediate_graph_degree` `graph_degree` `build_algo` ∈ `IVF_PQ` \| `NN_DESCENT`；`cache_dataset_on_device` | `search_list` 等 | 吞吐最高；`GPU_CUVS_*` 是新名，两套并存；`adapt_for_cpu=true` 可让段加载不再要求 GPU |
 
-**growing 段的 interim index 不在这张表里**：稠密向量默认 `IVF_FLAT_CC`（可选 `SCANN_DVR`），稀疏用 `SPARSE_INVERTED_INDEX_CC` / `SPARSE_WAND_CC`，由 segcore 的 `IndexConfigGenerator` 生成，见 Query_Path；`queryNode.segcore.interimIndex.enableIndex` 的 `DefaultValue` 是 `false`，但它的 Doc 写着 "This defaults to true"——典型「文档滞后于代码」，以默认值代码为准。
+**growing 段的 interim index 不在这张表里**：稠密向量默认 `IVF_FLAT_CC`（可选 `SCANN_DVR`），稀疏用 `SPARSE_INVERTED_INDEX_CC` / `SPARSE_WAND_CC`，由 segcore 的 `IndexConfigGenerator` 生成，见 Query_Path；`queryNode.segcore.interimIndex.enableIndex` 三处不一致：随包 yaml 为 `true`、代码 `DefaultValue` 为 `false`、Doc 写 "This defaults to true"——常规部署加载随包 yaml，实际生效为开启；裸装无 yaml 时才落回代码默认的关闭。
 
 ## Sparse Binary and Embedding List Indexes
 
