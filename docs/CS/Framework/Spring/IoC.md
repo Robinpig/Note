@@ -1155,7 +1155,7 @@ public class SimpleApplicationEventMulticaster extends AbstractApplicationEventM
 
 ## Close
 
-向 JVM 运行时注册一个名为 SpringContextShutdownHook 的关闭钩子，在 [JVM 关闭](/docs/CS/Java/JDK/JVM/destroy.md?id=shutdown-hooks) 时关闭当前上下文（除非此时上下文已被关闭）。
+向 JVM 运行时注册一个名为 SpringContextShutdownHook 的关闭钩子，在 [JVM 关闭](/docs/CS/Java/JDK/JVM/destroy.md?id=two-sets-of-shutdown-hooks) 时关闭当前上下文（除非此时上下文已被关闭）。
 
 实际的关闭流程委托给 doClose() 完成。
 

@@ -343,7 +343,7 @@ Start Flow:
 1. start Server
 2. start Service
 3. start [Connector](/docs/CS/Framework/Tomcat/Connector.md)
-4. register [Shutdown Hooks](/docs/CS/Java/JDK/JVM/destroy.md?id=shutdown-hooks)
+4. register [Shutdown Hooks](/docs/CS/Java/JDK/JVM/destroy.md?id=two-sets-of-shutdown-hooks)
 
 ```java
 // Catalina.java
