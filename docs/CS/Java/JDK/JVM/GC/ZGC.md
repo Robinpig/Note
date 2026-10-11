@@ -22,56 +22,50 @@ ZGC的特性
 
 
 
-A core design principle/choice in ZGC is the use of **load barriers** in combination with **colored object pointers** (i.e., colored oops).
+ZGC 的一个核心设计原则/选择，是**将 load barrier（读屏障）与 colored object pointers（着色对象指针，即 colored oops）结合使用**。
 
-the colored-pointers scheme offers some very attractive properties. In particular:
+着色指针方案具有一些非常吸引人的特性，具体而言：
 
-- It allows us to reclaim and reuse memory during the relocation/compaction phase, before pointers pointing into the reclaimed/reused regions have been fixed.
-  This helps keep the general heap overhead down. It also means that there is no need to implement a separate mark-compact algorithm to handle a full GC.
-- It allows us to have relatively few and simple GC barriers. This helps keep the runtime overhead down.
-  It also means that it's easier to implement, optimize and maintain the GC barrier code in our interpreter and JIT compilers.
-- We currently store marking and relocation related information in the colored pointers.
-  However, the versatile nature of this scheme allows us to store any type of information (as long as we can fit it into the pointer) and let the load barrier take any action it wants to based on that information.
-  We believe this will lay the foundation for many future features.
-  To pick one example, in a heterogeneous memory environment, this could be used to track heap access patterns to guide GC relocation decisions to move rarely used objects to cold storage.
-
+- 它允许我们在 relocation/compaction（重定位/压缩）阶段，**在指向被回收/复用区域的指针被修正之前**，就回收并复用这些内存。这有助于压低整体堆开销，也意味着无需为实现 Full GC 而单独实现一套 mark-compact 算法。
+- 它还意味着在解释器与 JIT 编译器中实现、优化和维护 GC 屏障代码都更容易。
+- 我们目前把标记与重定位相关的信息都存放在着色指针中。不过该方案的通用能让我们存放任意类型的信息（只要能塞进指针），并让 load barrier 基于这些信息采取任意动作。我们相信这为许多未来特性奠定了基础——例如，在异构内存环境下，可用它追踪堆访问模式，从而指导 GC 把极少使用的对象重定位到冷存储。
 From [ZGC The Next Generation Low-Latency Garbage Collector](http://cr.openjdk.java.net/~pliden/slides/ZGC-OracleDevLive-2020.pdf)
 
 ![](../img/ZGC-Concurrent.png)
 
-Regions
+Region 类型
 
-- Small 2MB for < 256KB
-- Medium 32MB for 256KB <= <= 4MB
-- Large N * 2MB
+- **Small（小 Region）**：2 MB，存放小于 256 KB 的对象
+- **Medium（中 Region）**：32 MB，存放 256 KB ~ 4 MB 的对象
+- **Large（大 Region）**：N × 2 MB，存放大于 4 MB 的对象（按 2 MB 粒度对齐）
 
-Colored Pointer/Tag Pointer/Version Pointer
+着色指针（Colored / Tag / Version Pointer）
 
-- Pause Mark Start Scan thread stacks
-- Concurrent Mark/Remap Walk object graph
-- Pause Mark End Synchronization point
-- Concurrent Prepare for Reloc. Reference processing Class unloading Relocation set selection
-- Pause Relocate Start Scan thread stacks
-- Concurrent Relocate Compact heap
+ZGC 的回收周期由以下阶段组成，仅三次与堆大小无关的短暂 STW：
+
+- **Pause Mark Start（标记开始暂停）**：扫描线程栈等根集
+- **Concurrent Mark / Remap（并发标记/重映射）**：遍历对象图
+- **Pause Mark End（标记结束暂停）**：同步点
+- **Concurrent Prepare for Relocate（并发重定位准备）**：引用处理、类卸载、重定位集选择
+- **Pause Relocate Start（重定位开始暂停）**：扫描线程栈
+- **Concurrent Relocate（并发重定位）**：压缩堆
 
 ### Colored Pointers
 
-- Core design concept in ZGC
-- Metadata stored in unused bits in 64-bit pointers
+- ZGC 的核心设计概念
+- 元数据存放在 64 位指针的未使用高位中
 
 ![](../img/ZGC-Colored-Pointer.png)
 
 ### Load Barrier
 
-A small piece of code injected by the JIT in strategic places
+读屏障是一小段由 JIT 在关键位置注入的代码：
 
-- When loading an **object reference** from the heap
+- 当从堆中加载一个**对象引用**时触发；
+- 检查加载出的对象引用是否带有"坏颜色"（bad color）；
+- 若是，则采取行动将其"修复"（heal）为正确地址。
 
-Checks if the loaded object reference has a bad color
-
-- If so, take action and heal it
-
-Like
+例如：
 
 ```java
 String n = person.name;
@@ -82,19 +76,16 @@ String n = person.name;
 > [!NOTE]
 > 分代 ZGC 由 **[JEP 439](https://openjdk.org/jeps/439)（Release 21）** 引入；自 **[JEP 474](https://openjdk.org/jeps/474)（Release 23）** 起，分代模式成为 ZGC 的默认（`ZGenerational` 默认值由 `false` 改为 `true`），非分代模式被废弃并计划在后续版本移除（[JEP 490](https://openjdk.org/jeps/490)）。因此 **JDK 23+ 仅写 `-XX:+UseZGC` 即使用分代 ZGC**；显式 `-XX:+ZGenerational` 反而会产生废弃警告。
 
-Young/Old Generation
+Young / Old 分代
 
-- Exploit the fact that most objects are short-lived
-  Benefits
-- Withstand higher allocation rates
-- Lower heap headroom
-- Lower CPU usage
+- 利用"多数对象朝生夕死"的事实；
+- 收益：能承受更高的分配速率、更低的堆冗余、更低的 CPU 占用。
 
-Applications running with Generational ZGC should enjoy
+运行分代 ZGC 的应用将享有：
 
-- Lower risks of allocations stalls,
-- Lower required heap memory overhead, and
-- Lower garbage collection CPU overhead.
+- 更低的分配停顿（stall）风险；
+- 更低的堆内存开销；
+- 更低的 GC CPU 开销。
 
 自 JDK 23 起 Generational ZGC 已是默认；如需（已废弃的）非分代模式可显式 `-XX:-ZGenerational`，但会得到废弃警告。
 
@@ -106,30 +97,23 @@ java -XX:+UseZGC -XX:+ZGenerational
 java -XX:+UseZGC
 ```
 
-Non-generational ZGC uses both colored pointers and load barriers.
-Generational ZGC also uses store barriers to efficiently keep track of references from objects in one generation to objects in another generation.
+非分代 ZGC 同时使用着色指针与读屏障。分代 ZGC 还额外使用 **store barrier（写屏障）**，以高效记录"一个代中对象指向另一个代中对象"的引用。
 
-A store barrier is a fragment of code injected by ZGC into the application wherever the application stores references into object fields.
-Generational ZGC adds new metadata bits to colored pointers so that store barriers can determine if the field being written has already been recorded as potentially containing an inter-generational pointer.
-Colored pointers make Generational ZGC's store barriers more efficient than traditional generational store barriers.
-The addition of store barriers allows Generational ZGC to move the work of marking reachable objects from load barriers to store barriers.
-That is, store barriers can use the metadata bits in colored pointers to efficiently determine if the object previously referred to by the field, prior to the store, needs to be marked.
+分代 ZGC 在对象字段写入处插入一小段 store barrier 代码。分代 ZGC 为着色指针新增了元数据位，使 store barrier 能判断"被写入的字段是否已被记录为可能含有跨代指针"。着色指针让分代 ZGC 的 store barrier 比传统分代 store barrier 更高效。引入 store barrier 后，分代 ZGC 得以把"标记可达对象"的工作从读屏障转移到写屏障：store barrier 可利用着色指针中的元数据位，高效判断"该字段此前指向的对象在写入前是否需要被标记"。
 
-Moving marking out of load barriers makes it easier to optimize them, which is important because load barriers are often more frequently executed than store barriers.
-Now when a load barrier interprets a colored pointer it need only update the object address, if the object was relocated, and update the metadata to indicate that the address is known to be correct.
-Subsequent load barriers will interpret this metadata and not check again whether the object has been relocated.
+把标记移出读屏障，使读屏障更易优化——这很重要，因为读屏障通常比写屏障执行得更频繁。现在当读屏障解析一个着色指针时，只需在对象被重定位时更新对象地址，并把元数据更新为"地址已知正确"；后续的读屏障会直接读取该元数据，不再重复检查对象是否已被重定位。
 
-Generational ZGC uses distinct sets of marking and relocation metadata bits in colored pointers, so that the generations can be collected independently.
+分代 ZGC 在着色指针中使用**相互独立的标记与重定位元数据位**，使各代可以独立回收。
 
-The remaining sections describe important design concepts that distinguish Generational ZGC from non-generational ZGC, and from other garbage collectors:
+下面的小节描述了区分分代 ZGC 与非分代 ZGC（以及与其他收集器）的重要设计概念：
 
-- No multi-mapped memory
-- Optimized barriers
-- Double-buffered remembered sets
-- Relocations without additional heap memory
-- Dense heap regions
-- Large objects
-- Full garbage collections
+- 无多重映射内存（No multi-mapped memory）
+- 优化后的屏障（Optimized barriers）
+- 双缓冲记忆集（Double-buffered remembered sets）
+- 重定位无需额外堆内存（Relocations without additional heap memory）
+- 密集堆 Region（Dense heap regions）
+- 大对象处理（Large objects）
+- Full GC（Full garbage collections）
 
 
 
@@ -682,6 +666,16 @@ void ZDriverMajor::collect_old() {
 
 ```
 
+
+## Pros, Cons and Fitness
+
+| 维度 | 说明 |
+| --- | --- |
+| 主要优势 | 全并发（着色指针 + 读屏障），暂停 <10 ms 且与堆大小、存活数据量解耦；支持 TB 级堆；主动归还内存给 OS |
+| 主要缺点 | 早期不支持分代（JDK 21+ 已补）；着色指针占用高位，不支持压缩普通对象指针；对透明大页/元空间有约束 |
+| 最佳场景 | 超大堆（数 TB）或要求亚 10 ms 级暂停的超低延迟服务 |
+| 关键限制 | 极早期实验版功能受限；堆小于 32 GB 时着色指针优势不明显，但压缩指针不可用 |
+| 启用方式 | `-XX:+UseZGC`（JDK 15+ 为 product；JDK 21 起分代、JDK 23 起分代默认） |
 
 ## Links
 

@@ -1,155 +1,95 @@
 ## Introduction
 
-Shenandoah is an open-source **region-based low-pause parallel and concurrent** garbage collection (GC) algorithm **targeting large heap** applications.
+Shenandoah 是一个开源的、**基于 Region 的低暂停并行且并发**垃圾回收算法，面向**大堆**应用。
 
-Snapshot At the Beginning Concurrent Marking and Brooks-style indirection pointer concurrent compaction enable significantly shorter GC pauses with durations that are independent of the application’s live data size.
-Our implementation of Shenandoah in OpenJDK allows us to do comparison testing with mature production quality GC algorithms.
+借助 SATB（Snapshot-At-The-Beginning）并发标记与 Brooks 风格的间接指针（indirection pointer）并发压缩，Shenandoah 实现了明显更短的 GC 暂停，且暂停时长与应用的存活数据量大小无关。我们在 OpenJDK 中的实现使其能与成熟的生产级 GC 算法做对比测试。
 
-Modern machines have more memory and more processors than ever before. Service Level Agreement (SLA) applications guarantee response times of 10-500ms.
-In order to meet the lower end of that goal we need garbage collection algorithms which are efficient enough to allow programs to run in the available memory,
-but also optimized to never interrupt the running program for more than a handful of milliseconds.
+现代机器的内存与处理器数量空前增长，SLA（Service Level Agreement）应用要求 10–500 ms 的响应时间。为满足这一目标的下限，我们需要既高效（能在可用内存中运行程序）、又优化到「从不打断运行中的程序超过几毫秒」的 GC 算法。
 
-Simply finding those references may require scanning the entire heap.
-Concurrent compaction is complicated because along with moving a potentially in-use object, you also have to atomically update all references to that object to point to the new location.
-The GC threads and the mutator threads copy the objects and use an atomic compare and swap (CAS) to update the forwarding pointer.
-If multiple GC and mutator threads were competing to move the same object only one CAS would succeed.
-References are updated during the next concurrent marking gc phase.
+光是找到这些引用可能就需要扫描整个堆。并发压缩之所以复杂，是因为在移动一个可能仍在使用的对象的同时，还必须原子地更新指向该对象的所有引用，使其指向新位置。GC 线程与 mutator 线程一起拷贝对象，并用原子 CAS 更新转发指针（forwarding pointer）；若多个 GC/mutator 线程竞争移动同一对象，只有一个 CAS 会成功。引用会在下一个并发标记阶段被更新。
 
-The compilers emit barriers only when running the Shenandoah collector.
+编译器仅在运行 Shenandoah 时才会发射（emit）相应的屏障。
 
-The trade off is that Shenandoah requires more space than other algorithms.
-
+代价是：Shenandoah 比其他算法需要更多的空间。
 > [!NOTE]
 > 版本基线：Shenandoah 于 **JDK 12 作为实验特性集成（[JEP 189](https://openjdk.org/jeps/189)）**，**JDK 15 转为生产特性（[JEP 379](https://openjdk.org/jeps/379)）**，不在默认收集器之列。分代模式 **JDK 24 引入（[JEP 404](https://openjdk.org/jeps/404)，实验性）**，需 `-XX:ShenandoahGCMode=generational`；**截至 JDK 27 默认仍是 `satb` 非分代模式**，分代成为默认是 JDK 28 的目标（[JEP 535](https://openjdk.org/jeps/535)，Targeted）。
 
 ### Object Layout
 
-The object layout for Shenandoah adds an additional word per object.
-This word is located directly preceding the object and is only allocated when using the Shenandoah collector.
-
-
-
-![Fig.1. Shenandoah Object layout](../img/Shenandoah-Object-Layout.png)
+Shenandoah 的对象布局为每个对象额外增加一个字（word）。这个字位于对象正前方，仅在使用 Shenandoah 收集器时才会被分配。
 
 ### Heap Layout
 
-The heap is broken up into equal sized regions.
-A region may contain newly allocated objects, long lived objects, or a mix of both.
-Any subset of the regions may be chosen to be collected during a GC cycle
+堆被切分为等大的 Region。一个 Region 可能包含新分配的对象、长生命周期对象，或两者混合。在任意一次 GC 周期中，可以选择任意 Region 子集进行回收：
 
-- Heap division, humongous regions, etc
-  are similar to G1
-- Collects garbage regions first by default
-- Not generational by default, no young/old separation, even temporally
-- Tracking inter-region references is not
-  needed by default
+- Region 的划分、Humongous（大对象）Region 等都与 G1 类似；
+- 默认优先回收垃圾最多的 Region；
+- 默认**非分代**，没有 young/old 的划分（时间上也没有）；
+- 默认不需要追踪跨 Region 引用。
 
-We’ve developed an interface for GC heuristics which track allocation and reclamation rates.
-We have several custom policies to decide when to start a concurrent mark and which regions to include in a collection set.
-Our default heuristic which was used for our measurements chooses only regions with 60 percent or more garbage and starts a concurrent marking cycle when 75 percent of regions have been allocated.
-
-![Fig.2. Shenandoah Heap layout](../img/Shenandoah-Heap-Layout.png)
+我们为 GC 启发式（heuristics）开发了一套接口，用于追踪分配与回收速率。Shenandoah 提供若干自定义策略，决定何时启动并发标记、以及把哪些 Region 纳入回收集合（collection set）。我们测量所用的默认启发式只挑选垃圾占比 60% 以上的 Region，并在已分配 Region 达到 75% 时启动并发标记周期。
 
 ## GC Phases
 
-Shenandoah Phases
+Shenandoah 的 GC 周期包含以下阶段：
 
-1. Initial Marking: Stops the world, scans the root set
-   (java threads, class statics, ...)
-2. Concurrent Marking: Trace the heap marking the live
-   objects, updating any references to regions evacuated
-   in the previous gc cycle.
-3. Final Marking: Stops the world, Re-scans the root set,
-   copy and update roots to point to to-region copies. Initiate concurrent compaction. Free any fully evacuated
-   regions from previous compaction.
-4. Concurrent Compaction: Evacuate live objects from
-   targeted regions.
+1. **Initial Marking（初始标记）**：Stop-The-World，扫描根集（Java 线程栈、类静态变量等）；
+2. **Concurrent Marking（并发标记）**：遍历堆，标记存活对象，并更新指向"上一周期已被疏散 Region"的引用；
+3. **Final Marking（最终标记）**：Stop-The-World，重新扫描根集，将根复制到 to-region 副本并做更新，发起并发压缩，释放上一轮压缩中已完全疏散的 Region；
+4. **Concurrent Compaction（并发压缩）**：从目标 Region 中疏散（evacuate）存活对象。
 
-Each GC cycle consists of two stop the world phases and 2 concurrent phases.
+每个 GC 周期由两个 STW 阶段和两个并发阶段组成：先在 Initial Mark 暂停中 STW 扫描根集，随后 Java 线程继续运行时做并发标记；再次 STW 做最终标记，然后进入并发疏散阶段。
 
-We stop the world to trace the root set during an Initial Mark pause, then we perform a concurrent mark while the Java threads are running.
-We stop the world again for a final mark, and then perform a concurrent evacuation phase.
-
-Memory Protection Trap
+内存保护陷阱（Memory Protection Trap）
 
 ### Concurrent Marking
 
-We use a Snapshot At the Beginning (SATB) algorithm
-which means that any object that was live at the beginning of marking
-or that has been allocated since the beginning of marking is considered live.
+我们使用 **SATB（Snapshot-At-The-Beginning，起点快照）** 算法：任何在标记开始时存活、或在标记开始后才被分配的对象，都被视为存活。
 
-Maintaining an SATB view of the heap requires a write barrier so that if the mutator overwrites a reference to an object that object still gets traced during marking.
-We accomplish this by having a write barrier put overwritten values onto a queue to be scanned by the marking threads.
+维持堆的 SATB 视图需要一个写屏障——当 mutator 覆盖某个对象的引用时，该对象仍会在标记期间被 tracing。实现方式是：写屏障把被覆盖的旧值放入一个队列，供标记线程扫描。
 
-Each concurrent marking thread keeps a thread local total of the live data for each heap region.
-We combine all of these at the end of the final mark phase. We later use this data for choosing which regions we want in our collection set.
-Our concurrent marking threads use a work stealing algorithm to take advantage of as many idle threads as are available on the machine.
+每个并发标记线程都为每个堆 Region 维护一份线程本地的存活数据总量统计。我们在最终标记阶段结束时汇总所有这些统计，随后用它来挑选回收集合（collection set）里要收纳的 Region。并发标记线程使用 **work stealing（工作窃取）** 算法，尽可能利用机器上所有空闲线程。
 
 ### Choosing the collection set
 
-We choose a collection set based on the regions with the least live data.
-Our goal is to keep up with mutation so we need to collect at least as much space as was allocated during the previous GC cyle.
-We have several available heuristics for choosing regions based on heap occupancy or region density.
-Pause times are proportional to the size of the root set, not the number of regions in the collection set,
-therefore we are free to choose a collection set based purely on collector efficiency.
+我们基于"存活数据最少"的 Region 来选择回收集合。目标是跟上 mutation 的步伐，因此需要回收的空间至少不少于上一 GC 周期内分配的空间。Shenandoah 提供若干启发式，可基于堆占用率或 Region 密度来挑选 Region。由于暂停时间与根集大小成正比、而与回收集合里的 Region 数量无关，我们可以纯粹按收集器效率来挑选回收集合。
 
 ### Concurrent Compaction
 
-Once the collection set has been chosen we start a concurrent compaction phase.
-The concurrent GC threads know how many bytes of data are live in the collection set, so they know how many regions to reserve.
-The GC threads all cooperate evacuating live objects from targeted regions.
+一旦回收集合确定，我们就启动并发压缩阶段。并发 GC 线程知道回收集合里有多少字节的存活数据，因此清楚要预留多少 Region。所有 GC 线程协作，从目标 Region 中疏散存活对象。
 
-A mutator may read an object in a targeted region
-however a write requires the mutator also attempt to make a copy so that we have one consistent view of the object.
-It is an invariant of our algorithm that writes never occur in from regions.
+mutator 可以读取目标 Region 中的对象，但一旦发生写入，mutator 也必须尝试自己拷贝一份，以保证对象视图的一致性。我们算法的一条不变式（invariant）是：**写入永远不会发生在 from Region**。
 
-The concurrent GC threads do most of the evacuation work using a speculative copy protocol.
+并发 GC 线程借助 **speculative copy（推测性拷贝）协议**完成大部分疏散工作：
 
-- They first speculatively copy the object into their thread local allocation buffer.
-- They then try to CAS the Brooks’ indirection pointer to point to their speculative copy.
-- If the CAS succeeds then they have the new address for the object.
-- If the CAS fails then another thread beat them in the race to copy the object.
-  The concurrent GC thread unrolls their speculative copy and proceeds using the value of the to-region pointer the other thread left in the indirection pointer.
+- 先 speculative 地把对象拷贝到自己的线程本地分配缓冲区（TLAB）；
+- 然后尝试用 CAS 把 Brooks 风格的间接指针（indirection pointer）指向自己的推测副本；
+- 若 CAS 成功，则拿到了对象的新地址；
+- 若 CAS 失败，说明有别的线程在拷贝竞争中胜出；此时该并发 GC 线程回滚（unroll）自己的推测副本，转而使用另一线程留在间接指针里的 to-region 指针值继续。
 
-When a Java thread wants to write to a from-space object it also uses the speculative allocation protocol to
-copy the object to it’s own thread local allocation buffer.
-Only once it has a new address for the object may it perform the intended write.
-A write into a to-region object is guaranteed to be safe because to-region objects won’t get moved during concurrent evacuation.
-We measured the amount of time the Java threads spent copying objects in write barriers when running the SpecJBB2015 benchmark and the time was negligible,
-less than 118 microseconds total over the two hour run.
+当 Java 线程想要写入一个 from-space 对象时，它同样使用推测性分配协议，把对象拷贝到自己的线程本地分配缓冲区；只有拿到对象的新地址后，才执行原本打算的写入。写入 to-region 对象是安全的，因为 to-region 对象在并发疏散期间不会被移动。我们在 SpecJBB2015 基准上测过 Java 线程在写屏障里花在拷贝对象上的时间，几乎可忽略——两小时跑下来总计不到 118 微秒。
 
-Java threads may continue to read from-region data while other threads are copying objects to to-regions.
-Once the object is copied, the indirection pointer will point to the new copy and accesses will be directed there.
-By contrast GCs which require all accesses to be in to-regions may suffer from read storms.
-During evacuation forward progress may be significantly delayed by the mutator performing GC work to maintain the all accesses must be in to-regions invariant".
-Our solution restricts this penalty to the normally far less frequent update case.
+在其它线程把对象拷贝到 to-region 期间，Java 线程仍可继续读取 from-region 数据。一旦对象被拷贝完，间接指针就会指向新副本，后续访问也将被导向那里。相比之下，要求"所有访问都必须在 to-region"的收集器可能遭受 read storms（读风暴）；在疏散期间，mutator 为维持"所有访问都在 to-region"的不变式而做 GC 工作，可能显著拖慢前进进度。Shenandoah 的解法把这种代价限制在平时远更少发生的"更新"路径上。
 
-**Note that reads of immutable data such as class pointers, array size, or final fields do not require read barriers because the value is the same in all copies of the object.**
+**注意：对不可变数据（如类指针、数组长度、final 字段）的读取不需要读屏障，因为这些值在所有副本中都相同。**
 
 ### Updating References
 
-Updating all of the references to from-region objects to point to their to-region copies requires a traversal of the entire heap.
-Rather than running this in a separate phase, and requiring stopping an additional time per gc cyle, we perform the updates during the next concurrent marking.
+把所有指向 from-region 对象的引用更新为指向其 to-region 副本，需要遍历整个堆。我们没有把它放到一个独立阶段、从而每个 GC 周期额外多一次停顿，而是在下一次并发标记期间顺带完成这些更新。
 
-## Barriers
+### Barriers
 
-Shenandoah relies on a read barrier to read through the Brooks’ indirection pointer as well as a double write barrier.
-We have the SATB write barrier on stores of object references into heap objects.
-These object reference stores queue the overwritten values to maintain SATB correctness.
+Shenandoah 依赖一个**读屏障**来穿过 Brooks 风格的间接指针，同时还有一道**双重写屏障（double write barrier）**。我们在"把对象引用存入堆中对象"的写操作上使用 SATB 写屏障——这些对象引用写操作会把被覆盖的旧值入队，以维持 SATB 的正确性。
 
-We also have a concurrent evacuation write barrier which aids the concurrent GC by copying
-about to be written objects out of targeted regions to maintain our "no writes in targeted regions" invariant.
+此外还有一道**并发疏散写屏障**，它通过把"即将被写入的对象"从目标 Region 中拷贝出去，来协助并发 GC 维持"目标 Region 中不发生写入"的不变式。
 
-We implemented our read and write barriers for each tier of compilation, however the solutions are very similar.
-Here we will only discuss the optimizing compiler.
+我们的读屏障和写屏障在每一编译层级上都做了实现，但各层解法非常相似，这里只讨论优化编译器（C2）的实现。
 
-Barriers are required in more places than just when reading or writing the fields of objects.
-Object locking writes to the mark word of an object and therefore requires a write barrier.
-Anytime the VM accesses an object in the heap that requires a barrier.
+需要屏障的地方不止于读写对象字段。对象加锁会写入对象的 mark word，因此也需要写屏障；只要 VM 访问堆中对象且涉及屏障语义，都需要相应的屏障处理。
 
 ### Read Barriers
 
-our compiled read barriers are a single assembly language instruction.
+我们编译出的读屏障只是一条汇编指令：
 
 ```cpp
 void
@@ -160,56 +100,39 @@ __ movptr(dst, Address(dst, -8));
 
 ### Write Barriers
 
-Write barriers need to do more work than read barriers but that is mitigated by their lower frequency.
-When concurrent marking is running we have an SATB write barrier
-which ensures that any values overwritten during concurrent marking are scanned by the concurrent marking thread.
+写屏障比读屏障需要做更多工作，但由于写操作频率更低，这一点被抵消了。当并发标记运行时，我们使用 SATB 写屏障，确保并发标记期间被覆盖的任何值都能被并发标记线程扫描到——这道屏障与 G1、CMS 使用的完全相同。此外还有一道 Shenandoah 特有的写屏障，仅在并发疏散阶段生效，它确保目标 Region 中的对象在写入发生前已被转发。
 
-This barrier is exactly the same as the one used by G1 and CMS.
-Plus we have an additional Shenandoah specific write barrier which is only performed when we are in a concurrent evacuation phase
-which ensures that objects in targeted regions are forwarded before the write is attempted.
-
-The order of the evacuation in progress check and the read of the indirection pointer is important.
-The evacuation in progress flag is set during the final marking STW phase,
-but cleared concurrently when all the copying work is complete.
-The flag may flip from true to false while we are in the write barrier.
-If we read the indirection pointer first, found the from-region object referencing it-self,
-and then read the false evacuation in progress field we might find ourselves writing to a from-region object.
-If we read the evacuation in progress flag first,
-than we are being conservative and are guaranteed to always call the write barrier when necessary.
+"疏散是否进行中（evacuation in progress）"的检查、与读取间接指针的顺序非常关键。evacuation in progress 标志在最终标记 STW 阶段被置位，而在所有拷贝工作完成时以并发方式清除；在我们处于写屏障期间，该标志可能从 true 翻转为 false。如果先读间接指针、发现 from-region 对象指向自身，再读到 false 的 evacuation in progress 字段，就可能误写到一个 from-region 对象。反过来，如果先读 evacuation in progress 标志，则采取的是保守策略，保证在必要时一定调用写屏障。
 
 ## Lessons Learned
 
 ### Weak References and Class Unloading
 
-Weak references and class unloading are the cause of bulk of our final marking pause times.
-We can discover weak references concurrently, but we must process them during a stop the world pause in the order of strength.
-All strong references must be completed first, followed by soft, weak, phantom, and jni in that order.
-Theoretically class unloading could be done concurrently, but it’s not straightforward and we haven’t tackled it yet.
+弱引用与类卸载是我们最终标记暂停时间的主要来源。我们可以并发地发现弱引用，但必须在 STW 暂停中按强度顺序处理它们：所有强引用必须先完成，随后依次是 soft、weak、phantom 与 JNI 引用。理论上类卸载可以并发完成，但这并不简单，我们目前尚未解决。
 
 ### Locked Objects
 
-Locking/Unlocking objects are writes and go through the write barrier protocol,
-however during out final-mark pause we eagerly evacuate all active monitors and this allows us to avoid a write-barrier on `monitor-exit`.
+对象的加锁/解锁属于写操作，要走写屏障协议；但在最终标记暂停期间，我们会主动（eagerly）疏散所有活跃监视器（monitor），从而得以在 `monitor-exit` 上避免一次写屏障。
 
 ## Cycle
 
 ### Overview
 
-Three major phases:
+三个主要阶段：
 
-1. Snapshot-at-the-beginning concurrent mark
-2. Concurrent evacuation
-3. Concurrent update references (optional)
+1. 基于起点快照（SATB）的并发标记
+2. 并发疏散（evacuation）
+3. 并发引用更新（可选）
 
 ## Concurrent Mark
 
 ### Three-Color Abstraction
 
-Assign colors to the objects:
+为对象分配颜色：
 
-1. White: not yet visited
-2. Gray: visited, but references are not scanned yet
-3. Black: visited, and fully scanned
+1. 白色（White）：尚未访问
+2. 灰色（Gray）：已访问，但引用尚未扫描
+3. 黑色（Black）：已访问，且引用已全部扫描
 
 ### Stop-The-World Mark
 
@@ -233,17 +156,17 @@ Brooks Pointers
 
 ### Two Pauses
 
-Init Mark:
+Init Mark（初始标记）：
 
-1. Stop the mutator to avoid races
-2. Color the rootset Black ← most heavy-weight
-3. Arm SATB barriers
+1. 停止 mutator 以避免竞争
+2. 把根集染黑（Black）← 最重量级
+3. 武装（Arm）SATB 屏障
 
-Final Mark:
+Final Mark（最终标记）：
 
-1. Stop the mutator to avoid races
-2. Drain the SATB buffers
-3. Finish work from SATB updates ← most heavy-weight
+1. 停止 mutator 以避免竞争
+2. 排空（Drain）SATB 缓冲区
+3. 完成 SATB 更新遗留的工作 ← 最重量级
 
 ## Generational Shenandoah
 
@@ -274,6 +197,16 @@ java -XX:+UnlockExperimentalVMOptions -XX:ShenandoahGCMode=generational
 | 压缩指针 | 支持（32 位 LRB） | 不支持（着色指针占用高位） |
 
 > 注意：Azul 的 C4 收集器早已分代但非开源；ZGC 分代在 JDK 21 已实现，且两者都不支持压缩对象指针。对绝大多数 heap 小于 32GB 的云负载，Shenandoah 分代支持压缩指针是相对 ZGC 分代的一个差异化优势。
+
+## Pros, Cons and Fitness
+
+| 维度 | 说明 |
+| --- | --- |
+| 主要优势 | 暂停与堆大小基本无关（并发重定位）；主动把空闲内存归还 OS；对大堆低延迟场景友好 |
+| 主要缺点 | 并发屏障（Brooks 指针 + 读屏障）带来更高的 CPU 开销；相比 G1/ZGC 吞吐略降；需要更多空间 |
+| 最佳场景 | 堆较大、且要求稳定低延迟（与堆大小解耦）的服务端应用 |
+| 关键限制 | 不在默认收集器之列；非分代模式为 JDK 27 默认（`satb`），分代（JEP 404/535）仍在演进 |
+| 启用方式 | `-XX:+UseShenandoahGC`（JDK 15+ 为 product；JDK 24+ 分代需 `-XX:ShenandoahGCMode=generational`） |
 
 ## Links
 

@@ -3,24 +3,11 @@
 > [!NOTE]
 > 版本基线：Parallel GC 是 **JDK 8 及更早版本的默认收集器**；自 **JDK 9（[JEP 248](https://openjdk.org/jeps/248)）** 起默认收集器改为 G1，**JDK 27（[JEP 523](https://openjdk.org/jeps/523)）进一步在全环境（含受限单机/小内存）默认 G1，Serial 不再被自动选中**。Parallel GC 仍可通过 `-XX:+UseParallelGC` 显式启用，适合**吞吐优先、对停顿不敏感**的服务端批量场景（如订单批处理、科学计算）。
 
-The parallel collector (also referred to here as the **throughput collector)** is a generational collector similar to the serial collector;
-the primary difference is that **multiple threads** are used to speed up garbage collection.
-The parallel collector is enabled with the command-line option `-XX:+UseParallelGC`.
-By default, with this option, both minor and major collections are executed in parallel to further reduce garbage collection overhead.
+并行收集器（也称**吞吐量收集器，throughput collector**）是一个与串行收集器类似的分代收集器，主要区别在于它使用**多线程**加速垃圾回收，通过 `-XX:+UseParallelGC` 启用。默认情况下，minor 与 major 收集都并行执行，以进一步降低 GC 开销。
 
-On a machine with N hardware threads where N is greater than 8, the parallel collector uses a fixed fraction of N as the number of garbage collector threads.
-The fraction is approximately 5/8 for large values of N. At values of N below 8, the number used is N. On selected platforms, the fraction drops to 5/16.
-The specific number of garbage collector threads can be adjusted with a command-line option (which is described later).
-On a host with one processor, the parallel collector will likely not perform as well as the serial collector because of the overhead required for parallel execution (for example, synchronization).
-However, when running applications with medium-sized to large-sized heaps, it generally outperforms the serial collector by a modest amount on machines with two processors,
-and usually performs significantly better than the serial collector when more than two processors are available.
+在硬件线程数 N > 8 的机器上，并行收集器使用 N 的一个固定比例作为 GC 线程数，大 N 时约为 5/8；N < 8 时直接使用 N；部分平台上该比例降至 5/16。具体线程数可用 `-XX:ParallelGCThreads=<N>` 调整。在单处理器主机上，并行收集器因并行执行的开销（如同步）可能不如串行收集器；但在中到大数据集、双处理器及以上的机器上，通常小幅优于串行收集器，多于两颗处理器时优势显著。
 
-The number of garbage collector threads can be controlled with the command-line option `-XX:ParallelGCThreads=<N>`.
-If explicit tuning of the heap is being done with command-line options, then the size of the heap needed for good performance with the parallel collector is the same as needed with the serial collector.
-However, enabling the parallel collector should make the collection pauses shorter.
-Because multiple garbage collector threads are participating in a minor collection, some fragmentation is possible due to promotions from the young generation to the tenured generation during the collection.
-Each garbage collection thread involved in a minor collection reserves a part of the tenured generation for promotions and the division of the available space into these "promotion buffers" can cause a fragmentation effect.
-Reducing the number of garbage collector threads and increasing the size of the tenured generation will reduce this fragmentation effect.
+由于多个 GC 线程参与 minor 收集，晋升（promotion）过程中可能产生碎片：每个参与 minor 的 GC 线程会在老年代预留一部分空间作为「晋升缓冲区（promotion buffer）」，这些缓冲区的切分会造成碎片效应。减少 GC 线程数、增大老年代可缓解该碎片效应。
 
 Skip dead objects at Full GC
 
@@ -93,6 +80,16 @@ Parallel GC 的堆由 `PSYoungGen`（Eden + 两个 Survivor）与 `PSOldGen` 组
 | Old 收集 | 并行 STW 压缩 | 单线程 STW 压缩 | 并发（CMS/G1/Shenandoah/ZGC）或部分 STW（G1 转移） |
 | 线程数 | `ParallelGCThreads` | 1 | 视收集器而定 |
 | 取向 | 吞吐优先 | 最小 footprint | 低延迟 / 平衡 |
+
+### Pros, Cons and Fitness
+
+| 维度 | 说明 |
+| --- | --- |
+| 主要优势 | 吞吐量最高；自适应调参（`UseAdaptiveSizePolicy`）免去手工调代；多核线性加速明显 |
+| 主要缺点 | 全程 STW，暂停随堆增大到秒级；晋升缓冲区碎片 |
+| 最佳场景 | 批处理、科学计算等后台任务，对延迟不敏感、追求峰值吞吐 |
+| 关键限制 | 延迟敏感场景（Web/交互式）不可用；单处理器上反不如 Serial |
+| 启用方式 | `-XX:+UseParallelGC`（JDK 8 及更早为默认；JDK 9+ 默认已由 G1 取代） |
 
 ### invoke
 

@@ -8,7 +8,7 @@ Serial Old收集器也是一个单线程收集器，使用“标记-整理”算
 Serial Old收集器不但会回收老年代的内存垃圾，也会回收年轻代的内存垃圾，因此一般触发FGC时都是由此收集器负责回收的
 
 
-for Serial and ParNew
+（Serial 与 ParNew 共用的相关选项，取自 `gc-globals.hpp`）：
 ```cpp
     // gc-globals.hpp
   product(size_t, PretenureSizeThreshold, 0,                                \
@@ -805,6 +805,25 @@ public:
 };
 ```
 
+
+## Place in the Collector Evolution
+
+Serial 是 HotSpot **最古老、实现最简单**的收集器，自 JDK 1.0 起即为默认（单处理器时代）。它代表「全程 STW + 单线程」的基线：所有 GC 工作在一个线程上完成，没有线程间协调开销，因此内存占用（footprint）最小、实现最易验证。
+
+在家族演进中，Serial 是起点：**Serial → Parallel**（多线程换吞吐）→ **CMS**（并发换延迟）→ **G1**（Region 化平衡）→ **Shenandoah/ZGC**（并发重定位，暂停与堆解耦）。
+
+> [!NOTE]
+> 自 **JDK 27（[JEP 523](https://openjdk.org/jeps/523)）** 起，Serial 不再被自动选为默认收集器：无论 CPU 数量与物理内存大小，未显式指定收集器时一律选 G1。Serial 仍可通过 `-XX:+UseSerialGC` 显式启用，其「单处理器 / 小堆（<100 MB）」的适用场景依然成立。
+
+## Pros, Cons and Fitness
+
+| 维度 | 说明 |
+| --- | --- |
+| 主要优势 | 实现最简单、运行时开销最小、内存占用（footprint）最低 |
+| 主要缺点 | 单线程，暂停随堆线性增长，无法利用多核 |
+| 最佳场景 | 单处理器机器；或堆很小（约 100 MB 以内）的应用；容器/CLI 工具 |
+| 关键限制 | 多处理器/大堆场景下暂停不可接受；JDK 27+ 不再自动默认 |
+| 启用方式 | `-XX:+UseSerialGC`（年轻代 Serial + 老年代 Serial Old） |
 
 ## Links
 
