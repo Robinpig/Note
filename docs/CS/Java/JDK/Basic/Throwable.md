@@ -1,170 +1,106 @@
 ## Introduction
 
-## Throwable Hierarchy
+Java 用 `Throwable` 统一表示「可被抛出」的对象，其下分为 **`Error`**（严重、通常不可恢复、不应被捕获）与 **`Exception`**（程序可合理处理的异常条件）。`Exception` 又分**受检（checked）**与 **`RuntimeException`（非受检，unchecked）**。`NullPointerException` 是日常最高频的 unchecked 异常——Java 层面的 NPE 分为两类：代码中主动抛出并被 JVM 捕获，或隐式 NPE（JVM 内部遇空指针访问产生 SIGSEGV，再在运行时检查处理）。
 
 ![Throwable](../img/Throwable.png)
 
-**NullPointerException**
-
-A null object invoke **non-static** method will throw NPE.
-
-Use == or != compare null value or use **Optional** to avoid comparison.
-
-Use exceptions only for exceptional conditions
-
-- Exceptions are, as their name implies, to be used only for exceptional conditions; they should never be used for ordinary control flow.
-- A well-designed API must not force its clients to use exceptions for ordinary control flow.
-
-Use checked exceptions for recoverable conditions and runtime exceptions for programming errors
-
-- use checked exceptions for conditions from which the caller can reasonably be expected to recover.
-- Use runtime exceptions to indicate programming errors.
-
-
-
-
-
-Java 层面的 NPE 主要分为两类，一类是代码中主动抛出 NPE 异常，并被 JVM 捕获 （这里的代码既可以是 Java 代码，也可以是 JVM 内部代码）；另一类隐式 NPE（其原理是 JVM 内部遇到空指针访问，会产生 SIGSEGV 信号， 在 JVM 内部还会检查运行时是否存在 SIGSEGV 信号）
-
-
-
-All of the unchecked throwables you implement should subclass `RuntimeException`.
-
-Avoid unnecessary use of checked exceptions
-Favor the use of standard exceptions
-Throw exceptions appropriate to the abstractionDocument all exceptions thrown by each method
-
-- Always declare checked exceptions individually, and document precisely the conditions under which each one is thrown using the Javadoc `@throws` tag.
-- Use the Javadoc `@throws` tag to document each exception that a method can throw, but do not use the throws keyword on unchecked exceptions.
-
-Include failure-capture information in detail messages.
-Strive for failure atomicity. Generally speaking, a failed method invocation should leave the object in the state that it was in prior to the invocation.
-If you choose to ignore an exception, the catch block should contain a comment explaining why it is appropriate to do so, and the variable should be named ignored
-
-
-## Error
-
-Error 类及其子类是程序中无法处理的错误，表示运行应用程序中出现了严重的错误
-这些错误是不受检异常，非代码性错误。因此，当此类错误发生时，应用程序不应该去处理此类错误
-因此不应该实现任何新的Error子类
-
-### VirtualMachineError
-
-Java 中的虚拟机错误 VirtualMachineError 包括以下几种
-
-- StackOverflowError
-- OutOfMemoryError
-- UnknownError
-- InternalError
-- ZipError
-
-
-比较关心的就是 StackOverflowError 与 OutOfMemoryError，剩下的 InternalError 一般是内部使用错误，UnknownError 是虚拟机发生未知异常
-
-参考 [Java 虚拟机规范官方文档：Run-Time Data Areas](https://docs.oracle.com/javase/specs/jvms/se15/html/jvms-2.html#jvms-2.5)
-
-
-StackOverflowError 一般都是递归导致调用栈过深 修改代码解决
-如果调用栈真的太深而线程栈大小不足，比如那种回调背压模型的框架，netty + reactor 这种，一般线程栈需要调大一点
-
-### OutOfMemoryError
-
-
-OOM分为多种情况
-
-
-java.lang.OutOfMemoryError: Java heap space
-
-
-OutOfMemoryError: unable to create native thread
-
-
-OutOfMemoryError: GC Overhead limit exceeded
-
-
-
-OutOfMemoryError: direct memory
-
-
-OutOfMemoryError: map failed
-
-
-[File MMAP](/docs/CS/Java/JDK/IO/NIO.md?id=mappedbytebuffer)时，如果系统内存不足，就会抛出这个异常
-
-
-这种情况下，考虑：
-
-增加系统内存
-采用文件分块，不要一次 mmap 很大的文件，也就是减少每次 mmap 文件的大小
-
-
-OutOfMemoryError: Requested array size exceeds VM limit
-
-当申请的数组大小超过堆内存限制，就会抛出这个异常
-
-
-
-OutOfMemoryError: Metaspace
-
-Metadata 占用空间超限（参考上面简述 Java 内存构成， class 这一块 包含两种，一种是 metadata，一种是 class space），会抛出这个异常
-
-
-OutOfMemoryError: Compressed class space
-
-class space 内存溢出导致的，和上一个异常类似，需要查看类信息统计定位问题。
-
-
-OutOfMemoryError: reason stack_trace_with_native_method
-
-这个发生在 JNI 调用中，内存不足
-
-
-打开 HeapDumpOnOutOfMemoryError 之后，不是所有的 OutOfMemoryError 都会触发
-
-
-
-## Exception
+## Hierarchy
+
+```text
+Throwable
+├── Error                 （严重错误，非代码性，不应捕获/实现子类）
+│   └── VirtualMachineError
+│       ├── StackOverflowError
+│       ├── OutOfMemoryError
+│       ├── InternalError
+│       └── UnknownError
+└── Exception
+    ├── RuntimeException  （unchecked：编程错误）
+    │   ├── NullPointerException
+    │   ├── IllegalArgumentException
+    │   ├── IllegalStateException
+    │   └── ...
+    └── 受检异常（checked：可合理恢复）
+        ├── IOException
+        ├── SQLException
+        └── ...
+```
+
+`NullPointerException` 的规避：用 `==`/`!=` 显式判空，或用 `Optional` 包装；对集合/流处理优先用 `Objects.requireNonNull` 或 `Optional`。
+
+## Error and Its Subclasses
+
+`Error` 类及其子类表示运行应用中出现的严重错误，是非受检且非代码性的——应用程序既不应捕获也不应实现新的 `Error` 子类。最关心的是 `VirtualMachineError` 与其下的 `OutOfMemoryError` 家族。
+
+`OutOfMemoryError` 的细分与排查方向：
+
+| 错误信息 | 触发原因 | 排查方向 |
+| --- | --- | --- |
+| `Java heap space` | 堆对象过多/泄漏，GC 无法回收 | 堆转储、对象保留链分析 |
+| `unable to create native thread` | 线程数达 OS/`ulimit` 上限 | 减小线程栈、限流、改用虚拟线程 |
+| `GC Overhead limit exceeded` | GC 耗时占比过高而回收极少 | 内存泄漏、调大堆 |
+| `Direct buffer memory` | 堆外 `DirectByteBuffer` 超限（`-XX:MaxDirectMemorySize`） | 减少直接缓冲、显式 `cleaner` |
+| `Map failed` | `FileChannel.map` 系统内存不足 | 文件分块、减小单次 mmap 大小 |
+| `Requested array size exceeds VM limit` | 申请数组超堆限制 | 改分批/流式处理 |
+| `Metaspace` / `Compressed class space` | 类元数据/Klass 占用超限 | 类加载泄漏、调大 `-XX:MaxMetaspaceSize` |
+| `reason: stack_trace_with_native_method` | JNI 调用中内存不足 | native 内存排查 |
+
+> 打开 `-XX:+HeapDumpOnOutOfMemoryError` 后，并非所有 `OutOfMemoryError` 都会触发堆转储（例如由 JNI/native 侧触发的部分类型不会）。
+
+`StackOverflowError` 多因递归过深，修改代码解决；若调用栈确实过深（如 Netty + Reactor 的回调背压模型），需调大线程栈。
+
+## Checked vs Unchecked
+
+Effective Java 的设计哲学：
+
+- **用受检异常表达可合理恢复的条件**（调用方应当且能够处理）；**用运行时异常表示编程错误**。
+- 所有自定义的 unchecked throwable 都应继承 `RuntimeException`。
+- 避免不必要的受检异常（过重的负担会迫使调用方吞噬或包装）；优先使用标准异常（`IllegalArgumentException`、`IllegalStateException`、`NullPointerException`、`UnsupportedOperationException`）；API 应声明每个受检异常（`@throws` 精确描述条件），uncheck 异常只用文档而非 `throws`。
+- 异常只应用于异常条件，绝不当普通控制流；文档化每个方法抛出的异常；失败原子性（failed invocation 后应让对象保持调用前状态）；忽略异常时 `catch` 块需注释理由且变量命名 `ignored`。
+
+## Chained Exceptions
+
+异常链（cause）让底层异常被包装进高层异常而不丢失根因：
+
+```java
+try {
+    lowLevelOp();
+} catch (LowerException e) {
+    throw new HigherException("context", e);   // 通过构造器或 initCause 设置 cause
+}
+```
+
+`Throwable.getCause()` 沿链回溯，`Throwable(Throwable cause)` 与 `initCause` 建立链接；标准受检/非受检异常大多提供带 `cause` 的构造器。日志与框架（如 Spring 的 `ApplicationContextException`）据此保留完整根因栈。
+
+## Suppressed Exceptions
+
+`try-with-resources` 关闭资源时若抛出异常，原异常（被抑制）会通过 `addSuppressed` 挂到主异常上，而非被覆盖：
+
+```java
+try (Resource r = open()) {
+    r.use();          // 假设此处抛主异常
+} catch (Exception e) {
+    for (Throwable s : e.getSuppressed()) { /* 关闭阶段被抑制的异常 */ }
+}
+```
 
 > [!TIP]
->
-> Never throw a new Exception in finally clause. Or using addSuppressed.
-> Using `try-with-resources`
+> 不要在 `finally` 中 `throw new Exception` 掩盖原异常；正确做法是让 try-with-resources 自动 `addSuppressed`，或用显式 `addSuppressed` 收集。
 
+## finally and Control Flow
 
-#### InterruptedException
+`finally` 的语义存在隐蔽陷阱：若 `finally` 块中含 `return` 或 `throw`，它会**抑制** try/catch 中待传播的值（异常屏蔽），这与 [semantics](/docs/CS/Java/JDK/Basic/semantics.md) 中「异常屏蔽」规则同源。因此 `finally` 只应用于资源清理，绝不承载返回值或异常。
 
-See [Interrupts](/docs/CS/Java/JDK/Concurrency/Thread.md?id=interruptions) in Thread.
+## Creating and Throwing
 
-## create Exception
+异常实例的构造十分昂贵：构造时需生成**栈轨迹（stack trace）**，逐一访问当前线程 Java 栈帧并记录调试信息（方法名、类名、文件名、行号）。`Throwable.fillInStackTrace` 会忽略异常构造器与填充栈帧的 Java 方法，从新建位置算起，并忽略标记为不可见的栈帧。
 
-异常实例的构造十分昂贵。这是由于在构造异常实例时，Java 虚拟机便需要生成该异常的
-栈轨迹（stack trace）。该操作会逐一访问当前线程的 Java 栈帧，并且记录下各种调试信
-息，包括栈帧所指向方法的名字，方法所在的类名、文件名，以及在代码中的第几行触发该
-异常
+可缓存异常实例复用（如静态常量），但会让栈轨迹指向复用点，可能误导定位。
 
-在生成栈轨迹时，Java 虚拟机会忽略掉异常构造器以及填充栈帧的 Java 方法
-（Throwable.fillInStackTrace），直接从新建异常位置开始算起。此外，Java 虚拟机还会
-忽略标记为不可见的 Java 方法栈帧
-
-可以缓存异常实例，在需要用到的时候直接抛出 但这种做法可能会误导开发人员，使其定位到错误的位置 
-
-
-在编译生成的字节码中，每个方法都附带一个异常表。异常表中的每一个条目代表一个异常
-处理器，并且由 from 指针、to 指针、target 指针以及所捕获的异常类型构成。这些指针
-的值是字节码索引（bytecode index，bci），用以定位字节码
-
-当程序触发异常时，Java 虚拟机会从上至下遍历异常表中的所有条目。当触发异常的字节
-码的索引值在某个异常表条目的监控范围内，Java 虚拟机会判断所抛出的异常和该条目想
-要捕获的异常是否匹配。如果匹配，Java 虚拟机会将控制流转移至该条目 target 指针指向
-的字节码。
-如果遍历完所有异常表条目，Java 虚拟机仍未匹配到异常处理器，那么它会弹出当前方法
-对应的 Java 栈帧，并且在调用者（caller）中重复上述操作。在最坏情况下，Java 虚拟机
-需要遍历当前线程 Java 栈上所有方法的异常表
-
+在编译生成的字节码中，每个方法都附带**异常表**，每个条目含 `from`/`to`/`target` 指针与捕获类型（值为 bytecode index）。触发异常时 JVM 自上而下遍历异常表，匹配则跳转 `target`；遍历完仍未匹配则弹栈并在调用者重复，最坏情况遍历整条调用栈。解释器侧 `athrow` 实现：
 
 ```cpp
 // Exceptions
-
 void TemplateTable::athrow() {
   transition(atos, vtos);
   __ null_check(rax);
@@ -172,260 +108,28 @@ void TemplateTable::athrow() {
 }
 ```
 
-### generate_throw_exception
+## InterruptedException
 
-```cpp
-
-void TemplateInterpreterGenerator::generate_throw_exception() {
-  // Entry point in previous activation (i.e., if the caller was
-  // interpreted)
-  Interpreter::_rethrow_exception_entry = __ pc();
-  // Restore sp to interpreter_frame_last_sp even though we are going
-  // to empty the expression stack for the exception processing.
-  __ movptr(Address(rbp, frame::interpreter_frame_last_sp_offset * wordSize), (int32_t)NULL_WORD);
-  // rax: exception
-  // rdx: return address/pc that threw exception
-  __ restore_bcp();    // r13/rsi points to call/send
-  __ restore_locals();
-  LP64_ONLY(__ reinit_heapbase());  // restore r12 as heapbase.
-  // Entry point for exceptions thrown within interpreter code
-  Interpreter::_throw_exception_entry = __ pc();
-  // expression stack is undefined here
-  // rax: exception
-  // r13/rsi: exception bcp
-  __ verify_oop(rax);
-  Register rarg = NOT_LP64(rax) LP64_ONLY(c_rarg1);
-  LP64_ONLY(__ mov(c_rarg1, rax));
-
-  // expression stack must be empty before entering the VM in case of
-  // an exception
-  __ empty_expression_stack();
-  // find exception handler address and preserve exception oop
-  __ call_VM(rdx,
-             CAST_FROM_FN_PTR(address,
-                          InterpreterRuntime::exception_handler_for_exception),
-             rarg);
-  // rax: exception handler entry point
-  // rdx: preserved exception oop
-  // r13/rsi: bcp for exception handler
-  __ push_ptr(rdx); // push exception which is now the only value on the stack
-  __ jmp(rax); // jump to exception handler (may be _remove_activation_entry!)
-
-  // If the exception is not handled in the current frame the frame is
-  // removed and the exception is rethrown (i.e. exception
-  // continuation is _rethrow_exception).
-  //
-  // Note: At this point the bci is still the bxi for the instruction
-  // which caused the exception and the expression stack is
-  // empty. Thus, for any VM calls at this point, GC will find a legal
-  // oop map (with empty expression stack).
-
-  // In current activation
-  // tos: exception
-  // esi: exception bcp
-
-  //
-  // JVMTI PopFrame support
-  //
-
-  Interpreter::_remove_activation_preserving_args_entry = __ pc();
-  __ empty_expression_stack();
-  // Set the popframe_processing bit in pending_popframe_condition
-  // indicating that we are currently handling popframe, so that
-  // call_VMs that may happen later do not trigger new popframe
-  // handling cycles.
-  const Register thread = NOT_LP64(rcx) LP64_ONLY(r15_thread);
-  NOT_LP64(__ get_thread(thread));
-  __ movl(rdx, Address(thread, JavaThread::popframe_condition_offset()));
-  __ orl(rdx, JavaThread::popframe_processing_bit);
-  __ movl(Address(thread, JavaThread::popframe_condition_offset()), rdx);
-
-  {
-    // Check to see whether we are returning to a deoptimized frame.
-    // (The PopFrame call ensures that the caller of the popped frame is
-    // either interpreted or compiled and deoptimizes it if compiled.)
-    // In this case, we can't call dispatch_next() after the frame is
-    // popped, but instead must save the incoming arguments and restore
-    // them after deoptimization has occurred.
-    //
-    // Note that we don't compare the return PC against the
-    // deoptimization blob's unpack entry because of the presence of
-    // adapter frames in C2.
-    Label caller_not_deoptimized;
-    Register rarg = NOT_LP64(rdx) LP64_ONLY(c_rarg1);
-    __ movptr(rarg, Address(rbp, frame::return_addr_offset * wordSize));
-    __ super_call_VM_leaf(CAST_FROM_FN_PTR(address,
-                               InterpreterRuntime::interpreter_contains), rarg);
-    __ testl(rax, rax);
-    __ jcc(Assembler::notZero, caller_not_deoptimized);
-
-    // Compute size of arguments for saving when returning to
-    // deoptimized caller
-    __ get_method(rax);
-    __ movptr(rax, Address(rax, Method::const_offset()));
-    __ load_unsigned_short(rax, Address(rax, in_bytes(ConstMethod::
-                                                size_of_parameters_offset())));
-    __ shll(rax, Interpreter::logStackElementSize);
-    __ restore_locals();
-    __ subptr(rlocals, rax);
-    __ addptr(rlocals, wordSize);
-    // Save these arguments
-    NOT_LP64(__ get_thread(thread));
-    __ super_call_VM_leaf(CAST_FROM_FN_PTR(address,
-                                           Deoptimization::
-                                           popframe_preserve_args),
-                          thread, rax, rlocals);
-
-    __ remove_activation(vtos, rdx,
-                         /* throw_monitor_exception */ false,
-                         /* install_monitor_exception */ false,
-                         /* notify_jvmdi */ false);
-
-    // Inform deoptimization that it is responsible for restoring
-    // these arguments
-    NOT_LP64(__ get_thread(thread));
-    __ movl(Address(thread, JavaThread::popframe_condition_offset()),
-            JavaThread::popframe_force_deopt_reexecution_bit);
-
-    // Continue in deoptimization handler
-    __ jmp(rdx);
-
-    __ bind(caller_not_deoptimized);
-  }
-
-  __ remove_activation(vtos, rdx, /* rdx result (retaddr) is not used */
-                       /* throw_monitor_exception */ false,
-                       /* install_monitor_exception */ false,
-                       /* notify_jvmdi */ false);
-
-  // Finish with popframe handling
-  // A previous I2C followed by a deoptimization might have moved the
-  // outgoing arguments further up the stack. PopFrame expects the
-  // mutations to those outgoing arguments to be preserved and other
-  // constraints basically require this frame to look exactly as
-  // though it had previously invoked an interpreted activation with
-  // no space between the top of the expression stack (current
-  // last_sp) and the top of stack. Rather than force deopt to
-  // maintain this kind of invariant all the time we call a small
-  // fixup routine to move the mutated arguments onto the top of our
-  // expression stack if necessary.
-#ifndef _LP64
-  __ mov(rax, rsp);
-  __ movptr(rbx, Address(rbp, frame::interpreter_frame_last_sp_offset * wordSize));
-  __ get_thread(thread);
-  // PC must point into interpreter here
-  __ set_last_Java_frame(thread, noreg, rbp, __ pc());
-  __ super_call_VM_leaf(CAST_FROM_FN_PTR(address, InterpreterRuntime::popframe_move_outgoing_args), thread, rax, rbx);
-  __ get_thread(thread);
-#else
-  __ mov(c_rarg1, rsp);
-  __ movptr(c_rarg2, Address(rbp, frame::interpreter_frame_last_sp_offset * wordSize));
-  // PC must point into interpreter here
-  __ set_last_Java_frame(noreg, rbp, __ pc());
-  __ super_call_VM_leaf(CAST_FROM_FN_PTR(address, InterpreterRuntime::popframe_move_outgoing_args), r15_thread, c_rarg1, c_rarg2);
-#endif
-  __ reset_last_Java_frame(thread, true);
-
-  // Restore the last_sp and null it out
-  __ movptr(rsp, Address(rbp, frame::interpreter_frame_last_sp_offset * wordSize));
-  __ movptr(Address(rbp, frame::interpreter_frame_last_sp_offset * wordSize), (int32_t)NULL_WORD);
-
-  __ restore_bcp();
-  __ restore_locals();
-  // The method data pointer was incremented already during
-  // call profiling. We have to restore the mdp for the current bcp.
-  if (ProfileInterpreter) {
-    __ set_method_data_pointer_for_bcp();
-  }
-
-  // Clear the popframe condition flag
-  NOT_LP64(__ get_thread(thread));
-  __ movl(Address(thread, JavaThread::popframe_condition_offset()),
-          JavaThread::popframe_inactive);
-
-#if INCLUDE_JVMTI
-  {
-    Label L_done;
-    const Register local0 = rlocals;
-
-    __ cmpb(Address(rbcp, 0), Bytecodes::_invokestatic);
-    __ jcc(Assembler::notEqual, L_done);
-
-    // The member name argument must be restored if _invokestatic is re-executed after a PopFrame call.
-    // Detect such a case in the InterpreterRuntime function and return the member name argument, or NULL.
-
-    __ get_method(rdx);
-    __ movptr(rax, Address(local0, 0));
-    __ call_VM(rax, CAST_FROM_FN_PTR(address, InterpreterRuntime::member_name_arg_or_null), rax, rdx, rbcp);
-
-    __ testptr(rax, rax);
-    __ jcc(Assembler::zero, L_done);
-
-    __ movptr(Address(rbx, 0), rax);
-    __ bind(L_done);
-  }
-#endif // INCLUDE_JVMTI
-```
-
-dispatch_next
-
-```cpp
-  __ dispatch_next(vtos);
-  // end of PopFrame support
-
-  Interpreter::_remove_activation_entry = __ pc();
-
-  // preserve exception over this code sequence
-  __ pop_ptr(rax);
-  NOT_LP64(__ get_thread(thread));
-  __ movptr(Address(thread, JavaThread::vm_result_offset()), rax);
-  // remove the activation (without doing throws on illegalMonitorExceptions)
-  __ remove_activation(vtos, rdx, false, true, false);
-  // restore exception
-  NOT_LP64(__ get_thread(thread));
-  __ get_vm_result(rax, thread);
-
-  // In between activations - previous activation type unknown yet
-  // compute continuation point - the continuation point expects the
-  // following registers set up:
-  //
-  // rax: exception
-  // rdx: return address/pc that threw exception
-  // rsp: expression stack of caller
-  // rbp: ebp of caller
-  __ push(rax);                                  // save exception
-  __ push(rdx);                                  // save return address
-  __ super_call_VM_leaf(CAST_FROM_FN_PTR(address,
-                          SharedRuntime::exception_handler_for_return_address),
-                        thread, rdx);
-  __ mov(rbx, rax);                              // save exception handler
-  __ pop(rdx);                                   // restore return address
-  __ pop(rax);                                   // restore exception
-  // Note that an "issuing PC" is actually the next PC after the call
-  __ jmp(rbx);                                   // jump to exception
-                                                 // handler of caller
-}
-```
+见 [Interrupts](/docs/CS/Java/JDK/Concurrency/Thread.md?id=interruptions) in Thread：阻塞方法（`Object.wait`/`Thread.sleep`/`BlockingQueue.take` 等）在中断时被唤醒并清除中断状态、抛出此异常，调用方应据需恢复中断标志或向上传递。
 
 ## Tips for Using Exceptions
 
-There is a certain amount of controversy about the proper use of exceptions. Some programmers believe that all checked exceptions are a nuisance, others can’t seem to throw enough of them.
-I think that exceptions (even checked exceptions) have their place, so I offer you these tips for their proper use.
+Effective Java（Item 64–73）要点摘录：
 
-1. Exception handling is not supposed to replace a simple test.
-2. Do not micromanage exceptions.
-3. Make good use of the exception hierarchy.
-4. Do not squelch exceptions.
-5. When you detect an error, “tough love” works better than indulgence.
-6. Propagating exceptions is not a sign of shame.
-7. Use standard methods for reporting null-pointer and out-of-bounds exceptions.
-8. Don’t show stack traces to end users.
+1. 异常处理不应替代简单测试。
+2. 不要过度微观管理异常（不要为每条语句单独 try）。
+3. 善用异常体系层级。
+4. 不要压制异常（squelch）。
+5. 检测到错误时「严厉之爱」优于纵容。
+6. 传播异常不是羞耻。
+7. 用标准方法报告 NPE / 越界异常。
+8. 不要把栈轨迹展示给终端用户。
 
 ## Links
 
 - [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
 
-
 ## References
 
 1. [Checked exceptions: Java’s biggest mistake](http://literatejava.com/exceptions/checked-exceptions-javas-biggest-mistake/)
+2. [Java Language Specification — Chapter 11 Exceptions](https://docs.oracle.com/javase/specs/jls/se25/html/jls-11.html)

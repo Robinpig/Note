@@ -1,39 +1,19 @@
 ## Introduction
 
-Java 6 has introduced a feature for discovering and loading implementations matching a given interface: **Service Provider Interface** (SPI).
+Java 6 introduced a feature for discovering and loading implementations matching a given interface: **Service Provider Interface** (SPI).
+An *extensible* application can be extended without modifying its original code base — new plug-ins or modules add functionality by dropping a JAR onto the class path or into an extension directory.
 
-An *extensible* application is one that you can extend without modifying its original code base.
-You can enhance its functionality with new plug-ins or modules. Developers, software vendors, and customers can add new functionality or application programming interfaces (APIs) by adding a new Java Archive (JAR) file onto the application class path or into an application-specific extension directory.
+SPI 的本质是将接口实现类的全限定名配置在文件中，并由服务加载器读取配置文件、加载实现类，从而在运行时动态为接口替换实现。核心原理可总结为：**基于接口的编程 + 策略模式 + 配置文件 + 反射机制**。
 
-SPI 的本质是将接口实现类的全限定名配置在文件中，并由服务加载器读取配置文件，加载实现类。这样可以在运行时，动态为接口替换实现类。
-正因此特性，我们可以很容易的通过 SPI 机制为我们的程序提供拓展功能。
-SPI的核心原理可以总结为：基于接口的编程 + 策略模式 + 配置文件 + 反射机制
+## Terminology
 
-The following are terms and definitions important to understand extensible applications:
+- **Service** — a set of programming interfaces and classes providing access to a specific feature. It defines the interfaces for the functionality and a way to retrieve an implementation, but does not implement it.
+- **Service Provider Interface (SPI)** — the set of public interfaces and abstract classes that a service defines.
+- **Service Provider** — a class that implements the SPI. Extensible applications let vendors and customers add providers without modifying the original code.
 
-- Service
-  A set of programming interfaces and classes that provide access to some specific application functionality or feature. 
-  The service can define the interfaces for the functionality and a way to retrieve an implementation. 
-  In the word-processor example, a dictionary service can define a way to retrieve a dictionary and the definition of a word, but it does not implement the underlying feature set. 
-  Instead, it relies on a *service provider* to implement that functionality.
-- Service provider interface (SPI)
-  The set of public interfaces and abstract classes that a service defines. The SPI defines the classes and methods available to your application.
-- Service Provider
-  Implements the SPI. An application with extensible services enable you, vendors, and customers to add service providers without modifying the original application.
+## Mechanism
 
-
-
-## ServiceLoader
-
-The `java.util.ServiceLoader` class helps you find, load, and use service providers. 
-It searches for service providers on your application's class path or in your runtime environment's extensions directory.
-It loads them and enables your application to use the provider's APIs.
-If you add new providers to the class path or runtime extension directory, the `ServiceLoader` class finds them. 
-If your application knows the provider interface, it can find and use different implementations of that interface. 
-**You can use the first loadable instance of the interface or iterate through all the available interfaces**.
-
-The `ServiceLoader` class is final, which means that you cannot make it a subclass or override its loading algorithms. 
-**You cannot, for example, change its algorithm to search for services from a different location**.
+The `java.util.ServiceLoader` class finds, loads, and uses service providers. It is `final` — you cannot subclass it or override its loading algorithm.
 
 ```java
 public final class ServiceLoader<S> implements Iterable<S> {
@@ -50,43 +30,12 @@ public final class ServiceLoader<S> implements Iterable<S> {
 
     // Cached providers, in instantiation order
     private LinkedHashMap<String,S> providers = new LinkedHashMap<>();
-
-    // The current lazy-lookup iterator
-    private LazyIterator lookupIterator;
 }
 ```
 
-
-
-From the perspective of the `ServiceLoader` class, all services have a single type, which is usually a single interface or abstract class. 
-The provider itself contains one or more concrete classes that extend the service type with an implementation specific to its purpose.
-The `ServiceLoader` class requires that the single exposed provider type has a default constructor, which requires no arguments. 
-This enables the `ServiceLoader` class to easily instantiate the service providers that it finds.
-
-Providers are located and instantiated on demand. 
-A service loader maintains a cache of the providers that were loaded. 
-Each invocation of the loader's `iterator` method returns an iterator that first yields all of the elements of the cache, in instantiation order. 
-The service loader then locates and instantiates any new providers, adding each one to the cache in turn. 
-You can clear the provider cache with the `reload` method.
-
-To create a loader for a specific class, provide the class itself to the `load` or `loadInstalled` method. 
-You can use default class loaders or provide your own `ClassLoader` subclass.
-
-The `loadInstalled` method searches the runtime environment's extension directory of installed runtime providers. 
-The default extension location is your runtime environment's `jre/lib/ext` directory. 
-You should use the extension location only for well-known, trusted providers because this location becomes part of the class path for all applications. 
-
-
-
-对`ServiceLoader`源码的分析，有下面几个重要结论：
-
-1. `ServiceLoader`在获取实现类的过程，可以分为初始化、解析、加载和实例化四步。
-2. `ServiceLoader`的初始化：通过`ServiceLoader.load`实现。注意这里并没有加载实现类，只是初始化了`ServiceLoader`，方法名字容易让人误解。
-3. 实现类的解析：是在调用`iterator.hasNext()`方法时完成的。
-4. 实现类的加载和实例化：是在调用`iterator.next()`完成的。
-
 ### load
-Creates a new service loader for the given service type, using the current thread's context class loader.
+
+`load` creates a loader using the current thread's context class loader. Note it only *initializes* the `ServiceLoader` — no provider class is loaded yet.
 
 ```java
 @CallerSensitive
@@ -96,183 +45,51 @@ public static <S> ServiceLoader<S> load(Class<S> service) {
 }
 ```
 
+The constructor defers to the system class loader when none is set, and enforces a boot-time restriction: before the VM has booted, only code in `java.base` may use `ServiceLoader`.
 
-获取SystemClassLoader 
 ```java
 private ServiceLoader(Class<?> caller, Class<S> svc, ClassLoader cl) {
     Objects.requireNonNull(svc);
-
     if (VM.isBooted()) {
         checkCaller(caller, svc);
-        if (cl == null) {
-            cl = ClassLoader.getSystemClassLoader();
-        }
+        if (cl == null) cl = ClassLoader.getSystemClassLoader();
     } else {
-
-        // if we get here then it means that ServiceLoader is being used
-        // before the VM initialization has completed. At this point then
-        // only code in the java.base should be executing.
+        // only code in java.base may use ServiceLoader during VM init
         Module callerModule = caller.getModule();
         Module base = Object.class.getModule();
         Module svcModule = svc.getModule();
-        if (callerModule != base || svcModule != base) {
+        if (callerModule != base || svcModule != base)
             fail(svc, "not accessible to " + callerModule + " during VM init");
-        }
-
-        // restricted to boot loader during startup
         cl = null;
     }
-
     this.service = svc;
     this.serviceName = svc.getName();
     this.layer = null;
     this.loader = cl;
     this.acc = (System.getSecurityManager() != null)
-            ? AccessController.getContext()
-            : null;
+            ? AccessController.getContext() : null;
 }
 ```
 
-### LayerLookupIterator
+### Lazy Loading
 
-iterator
+Providers are located and instantiated **on demand**. A service loader maintains a cache of loaded providers; each `iterator()` first yields the cached ones in instantiation order, then lazily locates and instantiates new ones.
 
-
-
-```java
-public Iterator<S> iterator() {
-
-    // create lookup iterator if needed
-    if (lookupIterator1 == null) {
-        lookupIterator1 = newLookupIterator();
-    }
-
-    return new Iterator<S>() {
-
-        // record reload count
-        final int expectedReloadCount = ServiceLoader.this.reloadCount;
-
-        // index into the cached providers list
-        int index;
-
-        /**
-         * Throws ConcurrentModificationException if the list of cached
-         * providers has been cleared by reload.
-         */
-        private void checkReloadCount() {
-            if (ServiceLoader.this.reloadCount != expectedReloadCount)
-                throw new ConcurrentModificationException();
-        }
-
-        @Override
-        public boolean hasNext() {
-            checkReloadCount();
-            if (index < instantiatedProviders.size())
-                return true;
-            return lookupIterator1.hasNext();
-        }
-
-        @Override
-        public S next() {
-            checkReloadCount();
-            S next;
-            if (index < instantiatedProviders.size()) {
-                next = instantiatedProviders.get(index);
-            } else {
-                next = lookupIterator1.next().get();
-                instantiatedProviders.add(next);
-            }
-            index++;
-            return next;
-        }
-
-    };
-}
-```
-
-
+The classpath lookup iterator skips classes in **named modules** (they are resolved through the module system instead):
 
 ```java
-private static class ProviderImpl<S> implements Provider<S> {
-    final Class<S> service;
-    final Class<? extends S> type;
-    final Method factoryMethod;  // factory method or null
-    final Constructor<? extends S> ctor; // public no-args constructor or null
-    @SuppressWarnings("removal")
-    final AccessControlContext acc;
-
-    ProviderImpl(Class<S> service,
-                 Class<? extends S> type,
-                 Method factoryMethod,
-                 @SuppressWarnings("removal") AccessControlContext acc) {
-        this.service = service;
-        this.type = type;
-        this.factoryMethod = factoryMethod;
-        this.ctor = null;
-        this.acc = acc;
-    }
-}
-```
-
-
-
-```java
-private final class LayerLookupIterator<T>
-    implements Iterator<Provider<T>>
-{
-    Deque<ModuleLayer> stack = new ArrayDeque<>();
-    Set<ModuleLayer> visited = new HashSet<>();
-    Iterator<ServiceProvider> iterator;
-
-    Provider<T> nextProvider;
-    ServiceConfigurationError nextError;
-
-    LayerLookupIterator() {
-        visited.add(layer);
-        stack.push(layer);
-    }
-}
-```
-
-### hasNext
-
-在hasNextService里做解析文件处理
-
-```java
-    private final class LazyClassPathLookupIterator<T>
-        implements Iterator<Provider<T>>
-    {
-@SuppressWarnings("removal")
-        @Override
-        public boolean hasNext() {
-            if (acc == null) {
-                return hasNextService();
-            } else {
-                PrivilegedAction<Boolean> action = new PrivilegedAction<>() {
-                    public Boolean run() { return hasNextService(); }
-                };
-                return AccessController.doPrivileged(action, acc);
-            }
-        }
-
 private boolean hasNextService() {
     while (nextProvider == null && nextError == null) {
         try {
             Class<?> clazz = nextProviderClass();
-            if (clazz == null)
-                return false;
-
+            if (clazz == null) return false;
             if (clazz.getModule().isNamed()) {
-                // ignore class if in named module
-                continue;
+                continue; // ignore class if in named module
             }
-
             if (service.isAssignableFrom(clazz)) {
                 Class<? extends S> type = (Class<? extends S>) clazz;
-                Constructor<? extends S> ctor
-                    = (Constructor<? extends S>)getConstructor(clazz);
-                ProviderImpl<S> p = new ProviderImpl<S>(service, type, ctor, acc);
-                nextProvider = (ProviderImpl<T>) p;
+                Constructor<? extends S> ctor = getConstructor(clazz);
+                nextProvider = new ProviderImpl<>(service, type, ctor, acc);
             } else {
                 fail(service, clazz.getName() + " not a subtype");
             }
@@ -282,225 +99,120 @@ private boolean hasNextService() {
     }
     return true;
 }
-    }
 ```
 
-### next
+For module layers, a separate iterator walks the `ModuleLayer` stack depth-first:
 
+```java
+private final class LayerLookupIterator<T> implements Iterator<Provider<T>> {
+    Deque<ModuleLayer> stack = new ArrayDeque<>();
+    Set<ModuleLayer> visited = new HashSet<>();
+    Iterator<ServiceProvider> iterator;
+    LayerLookupIterator() { visited.add(layer); stack.push(layer); }
+}
+```
 
-
-
+`next()` instantiates the provider through its public no-args constructor (or a `public static` factory method named `provider()` if present):
 
 ```java
 private Provider<T> nextService() {
-    if (!hasNextService())
-        throw new NoSuchElementException();
-
+    if (!hasNextService()) throw new NoSuchElementException();
     Provider<T> provider = nextProvider;
-    if (provider != null) {
-        nextProvider = null;
-        return provider;
-    } else {
-        ServiceConfigurationError e = nextError;
-        assert e != null;
-        nextError = null;
-        throw e;
-    }
+    if (provider != null) { nextProvider = null; return provider; }
+    throw nextError; // deferred ServiceConfigurationError
 }
 ```
 
-
-
-
-
-## Implementation
-
-- [JDBC](/docs/CS/Java/JDK/Basic/JDBC.md)
-- Log
-- Spring
-- [Dubbo](/docs/CS/Framework/Dubbo/SPI.md)
-- Netty
-- MyBatis
-- Hadoop
-
-## Sample
-
-
-
-### Define the Service Provider Interface
+A `Provider<S>` wraps the class and defers instantiation, exposing `get()` and `type()`:
 
 ```java
+private static class ProviderImpl<S> implements Provider<S> {
+    final Class<S> service;
+    final Class<? extends S> type;
+    final Method factoryMethod;  // factory method or null
+    final Constructor<? extends S> ctor; // public no-args constructor or null
+}
+```
+
+## Configuration File
+
+A provider is declared by a file named after the fully-qualified service interface, located at `META-INF/services/`:
+
+```
+META-INF/services/dictionary.spi.Dictionary
+```
+
+The file is UTF-8, one fully-qualified implementation class name per line. Whitespace and lines beginning with `#` are ignored. The class must be public, have a public no-args constructor, and be assignable to the service type.
+
+```
+# default English dictionary
+dictionary.GeneralDictionary
+dictionary.ExtendedDictionary
+```
+
+## Module System Integration
+
+Under JPMS, classpath-based `META-INF/services` still works, but modules should declare providers in the **module descriptor** instead, which the `LayerLookupIterator` then resolves:
+
+```java
+// module-info.java
+module com.example.app {
+    uses dictionary.spi.Dictionary;                 // the SPI the module consumes
+}
+module com.example.dict {
+    provides dictionary.spi.Dictionary             // the SPI implemented
+        with com.example.dict.ExtendedDictionary;  // concrete provider
+}
+```
+
+`ServiceLoader.load(ModuleLayer)` (or `load(Layer, Class)`) scopes discovery to a layer, enabling isolation in container/plugin architectures. A provider in a named module is **not** found via the classpath scanner — only through `provides ... with`.
+
+## Lazy Loading and Errors
+
+- **Laziness**: nothing is loaded until `iterator().hasNext()`/`next()` is called, and each provider is instantiated at most once and cached.
+- **`ServiceConfigurationError`**: thrown when a provider class cannot be found, is not assignable, lacks a public no-args constructor, or throws during instantiation. The error is *deferred* — it surfaces on the `next()` call that would return that provider, so it does not abort iteration over other providers.
+- **No caching of failures**: a provider that errors on first access can be retried on a later `next()` without being permanently blacklisted within the same loader.
+
+## Usage Example
+
+```java
+// service interface
 package dictionary.spi;
+public interface Dictionary { String getDefinition(String word); }
 
-public interface Dictionary {
-    public String getDefinition(String word);
+// retrieve all providers
+ServiceLoader<Dictionary> loader = ServiceLoader.load(Dictionary.class);
+for (Dictionary d : loader) {
+    String def = d.getDefinition("book");
+    if (def != null) { /* use first match */ break; }
 }
 ```
 
+The standard library itself uses SPI heavily: `java.sql.Driver` (JDBC), `java.nio.charset.spi.CharsetProvider`, `java.text.spi`, and `java.util.spi` are all SPI-based.
 
+## Third-party SPI
 
-### Define the Service That Retrieves the Service Provider Implementations
+- **Dubbo** extends the idea with `@SPI` (extensible interface), `@Adaptive` (generated adaptive proxy), and `@Activate` (conditional activation). See [Dubbo SPI](/docs/CS/Framework/Dubbo/SPI.md).
+- **Spring** historically used `META-INF/spring.factories` (`SpringFactoriesLoader`); since 2.7 it migrates to `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports` for auto-configuration.
+- **Netty / MyBatis / Hadoop** likewise publish providers via `META-INF/services`.
 
-```java
-package dictionary;
+## Limitations
 
-import dictionary.spi.Dictionary;
-import java.util.Iterator;
-import java.util.ServiceConfigurationError;
-import java.util.ServiceLoader;
-
-public class DictionaryService {
-
-    private static DictionaryService service;
-    private ServiceLoader<Dictionary> loader;
-
-  /**
-   * load class by java.util.ServiceLoader
-   */
-    private DictionaryService() {
-        loader = ServiceLoader.load(Dictionary.class);
-    }
-
-    public static synchronized DictionaryService getInstance() {
-        if (service == null) {
-            service = new DictionaryService();
-        }
-        return service;
-    }
-
-
-    public String getDefinition(String word) {
-        String definition = null;
-
-        try {
-            Iterator<Dictionary> dictionaries = loader.iterator();
-            while (definition == null && dictionaries.hasNext()) {
-                Dictionary d = dictionaries.next();
-                definition = d.getDefinition(word);
-            }
-        } catch (ServiceConfigurationError serviceError) {
-            definition = null;
-            serviceError.printStackTrace();
-
-        }
-        return definition;
-    }
-}
-```
-
-
-
-### Implement the Service Provider
-
-```java
-package dictionary;
-
-import dictionary.spi.Dictionary;
-import java.util.SortedMap;
-import java.util.TreeMap;
-
-public class GeneralDictionary implements Dictionary {
-
-    private SortedMap<String, String> map;
-    
-    public GeneralDictionary() {
-        map = new TreeMap<String, String>();
-        map.put(
-            "book",
-            "a set of written or printed pages, usually bound with " +
-                "a protective cover");
-        map.put(
-            "editor",
-            "a person who edits");
-    }
-
-    @Override
-    public String getDefinition(String word) {
-        return map.get(word);
-    }
-
-}
-```
-
-
-
-```java
-package dictionary;
-
-import dictionary.spi.Dictionary;
-import java.util.SortedMap;
-import java.util.TreeMap;
-
-public class ExtendedDictionary implements Dictionary {
-
-        private SortedMap<String, String> map;
-
-    public ExtendedDictionary() {
-        map = new TreeMap<String, String>();
-        map.put(
-            "xml",
-            "a document standard often used in web services, among other " +
-                "things");
-        map.put(
-            "REST",
-            "an architecture style for creating, reading, updating, " +
-                "and deleting data that attempts to use the common " +
-                "vocabulary of the HTTP protocol; Representational State " +
-                "Transfer");
-    }
-
-    @Override
-    public String getDefinition(String word) {
-        return map.get(word);
-    }
-
-}
-```
-
-
-
-### Create a Client That Uses the Service and Service Providers
-
-```java
-package dictionary;
-
-import dictionary.DictionaryService;
-
-public class DictionaryDemo {
-
-  public static void main(String[] args) {
-
-    DictionaryService dictionary = DictionaryService.getInstance();
-    System.out.println(DictionaryDemo.lookup(dictionary, "book"));
-    System.out.println(DictionaryDemo.lookup(dictionary, "editor"));
-    System.out.println(DictionaryDemo.lookup(dictionary, "xml"));
-    System.out.println(DictionaryDemo.lookup(dictionary, "REST"));
-  }
-
-  public static String lookup(DictionaryService dictionary, String word) {
-    String outputString = word + ": ";
-    String definition = dictionary.getDefinition(word);
-    if (definition == null) {
-      return outputString + "Cannot find definition for this word.";
-    } else {
-      return outputString + definition;
-    }
-  }
-}
-```
-
-
-
-## Summary
-
-
-
-1. Load all implemetions
-2. Less extensions
-3. exception not quite evidently
-4. not supported concurrency
-
-
+1. Eagerly loading all implementations (`for` over the iterator) instantiates every provider, which can be costly or have side effects.
+2. Provider ordering across JARs is **not guaranteed**.
+3. A malformed provider triggers `ServiceConfigurationError` rather than a clean typed exception.
+4. The built-in `ServiceLoader` is not designed for highly concurrent reconfiguration; modification during iteration throws `ConcurrentModificationException` (detected via a `reloadCount`).
+5. It requires a public no-args constructor (or a `provider()` factory), limiting dependency-injected providers — frameworks add their own DI-aware loaders on top.
 
 ## Links
-- [JDK basics](/docs/CS/Java/JDK/Basic/Basic.md)
+
+- [Java basics](/docs/CS/Java/JDK/Basic/Basic.md)
+- [Module system](/docs/CS/Java/JDK/Basic/module.md)
+- [JDBC](/docs/CS/Java/JDK/Basic/JDBC.md)
+- [Dubbo SPI](/docs/CS/Framework/Dubbo/SPI.md)
+
+## References
+
+1. [ServiceLoader (Java SE 25 API)](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/util/ServiceLoader.html)
+2. [JLS 7.7.4 (Service Loading)](https://docs.oracle.com/javase/specs/jls/se25/html/jls-7.html#jls-7.7.4)
+3. [JPMS: The `uses` and `provides` directives](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/lang/ModuleLayer.html)
