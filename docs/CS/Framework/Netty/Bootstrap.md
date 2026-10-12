@@ -353,7 +353,7 @@ private void initChild(final Channel child) {
 
 **AbstractChannel$AbstractUnsafe#register0** execute follow methods:
 
-1. [ChannelPipeline#fireChannelRegistered()](/docs/CS/Framework/Netty/ChannelHandler.md?id=firechannelactive)
+1. [ChannelPipeline#fireChannelRegistered()](/docs/CS/Framework/Netty/ChannelHandler.md?id=firechannelregistered)
 2. [AbstractChannel#beginRead()](/docs/CS/Framework/Netty/Channel.md?id=beginread)
 
 ### doBind0

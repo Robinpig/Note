@@ -3,6 +3,29 @@
 The code was inspired by the similarly named JCTools class:
 https://github.com/JCTools/JCTools/blob/master/jctools-core/src/main/java/org/jctools/queues/atomic
 
+> [!WARNING]
+>
+> **文件名 `MpscLinkedQueue` 是历史命名：这个类在 4.1 与 4.2 中均已不存在**（全树无定义）。本文实际记录的是 Netty 通过 shaded jctools 使用的 **MPSC 数组队列**家族，EventLoop 任务队列的默认实现是 `MpscUnboundedArrayQueue`。
+>
+> 实际类型由 `PlatformDependent` 的私有静态类 `Mpsc` 决定：
+>
+> ```java
+> static <T> Queue<T> newMpscQueue() {
+>     if (USE_MPSC_CHUNKED_ARRAY_QUEUE) { return new MpscUnboundedArrayQueue<T>(MPSC_CHUNK_SIZE); }
+>     return hasJctoolsVarHandle() ? new MpscUnboundedVarHandleArrayQueue<T>(MPSC_CHUNK_SIZE)
+>                                  : new MpscUnboundedAtomicArrayQueue<T>(MPSC_CHUNK_SIZE);
+> }
+>
+> static <T> Queue<T> newMpscQueue(final int maxCapacity) {          // 有界分支
+>     final int capacity = max(min(maxCapacity, MAX_ALLOWED_MPSC_CAPACITY), MIN_MAX_MPSC_CAPACITY);
+>     return newChunkedMpscQueue(MPSC_CHUNK_SIZE, capacity);
+> }
+> ```
+>
+> 即：无界路径优先用基于 Unsafe 的 `MpscUnboundedArrayQueue`，不支持 VarHandle 时用 `...AtomicArrayQueue`，支持 VarHandle 时用 4.2 新增的 `...VarHandleArrayQueue`。`MpscChunkedArrayQueue` 只在**有界**分支出现（`newMpscQueue(chunkSize, maxCapacity)`），不是 EventLoop 的默认路径。
+>
+> 另外 unpadded 系列的真实类名是 `MpscUnpaddedArrayQueue` / `MpscVarHandleUnpaddedArrayQueue` / `MpscAtomicUnpaddedArrayQueue`，**不存在 `MpscUnpaddedQueue`**。
+
 
 
 

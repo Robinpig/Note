@@ -2,7 +2,7 @@
 
 Netty uses its own buffer API instead of NIO [ByteBuffer](/docs/CS/Java/JDK/IO/NIO.md?id=buffers) to represent a sequence of bytes.
 This approach has significant advantages over using ByteBuffer. 
-Netty's new buffer type, ChannelBuffer has been designed from the ground up to address the problems of ByteBuffer and to meet the daily needs of network application developers. 
+Netty's new buffer type, ByteBuf has been designed from the ground up to address the problems of ByteBuffer and to meet the daily needs of network application developers. 
 To list a few cool features:
 
 - You can define your own buffer type if necessary.
@@ -149,7 +149,7 @@ In contrast, `ByteBuf.copy()` and `ByteBuf.readBytes(int)` are *not derived* buf
 
 
 
-Sometimes, a `ByteBuf` is contained by a buffer holder, such as `DatagramPacket`, `HttpContent`, and `WebSocketframe`.
+Sometimes, a `ByteBuf` is contained by a buffer holder, such as `DatagramPacket`, `HttpContent`, and `WebSocketFrame`.
 Those types extend a common interface called `ByteBufHolder`.
 A buffer holder shares the reference count of the buffer it contains, just like a derived buffer.
 
@@ -165,11 +165,25 @@ A buffer holder shares the reference count of the buffer it contains, just like 
 
 
 If you are in doubt or you want to simplify releasing the messages, you can use `ReferenceCountUtil.release()`.
-Alternatively, you could consider extending `SimpleChannelHandler` which calls `ReferenceCountUtil.release(msg)` for all messages you receive.
+Alternatively, you could consider extending `SimpleChannelInboundHandler` which calls `ReferenceCountUtil.release(msg)` for all messages you receive.
 
 
 
 ### RefCnt
+
+> [!NOTE]
+>
+> 下面的 `ReferenceCountUpdater` 是 **4.1 的实现**。4.2 把它换成了新的 `io.netty.util.internal.RefCnt`——一个"单态（monomorphic）"实现，静态初始化时三选一：`PlatformDependent.hasUnsafe()` → `UnsafeRefCnt`，否则 `hasVarHandle()` → `VarHandleRefCnt`，否则 `AtomicRefCnt`（仍用 `AtomicIntegerFieldUpdater`）。`AbstractReferenceCountedByteBuf` 自身不再持有 updater：
+>
+> ```java
+> private final RefCnt refCnt = new RefCnt();
+> ...
+> return handleRelease(RefCnt.release(refCnt));
+> ```
+>
+> 类注释说明了动机："Monomorphic reference counter implementation that always use the most efficient available atomic updater. This implementation is easier for the JIT compiler to optimize, compared to when `ReferenceCountUpdater` is used."——即让 JIT 只看到一个实现而非三条分支。
+>
+> **编码语义不变**：`volatile int value`，偶数值 → 真实计数 `value >>> 1`，奇数值 → 已释放（计数 0）。本文其余关于 `retain0` / `release` 的结论对 4.1 与 4.2 同时成立。
 
 refCnt use AtomicIntegerFieldUpdater rather than AtomicInteger to reduce memory
 

@@ -10,6 +10,23 @@ It greatly simplifies and streamlines network programming such as TCP and UDP so
 - **Performance**: Netty has better throughput and reduced latency than core Java APIs. It is also scalable thanks to its internal pooling of resources.
 - **Security**: Complete SSL/TLS and StartTLS support.
 
+## Version Baseline
+
+本文以 **Netty 4.2** 源码为准。版本事实（2026-10 核实）：
+
+| 系列   | 最新 GA                        | 说明                                                |
+| :--- | :--------------------------- | :------------------------------------------------ |
+| 4.1  | **4.1.139.Final**（2026-10-06） | 存量项目主流选择，`pooled` 分配器仍为默认                         |
+| 4.2  | **4.2.19.Final**（2026-10-06）  | 2025-04-03 首次 GA（4.2.0.Final）；4.1 升级无需改 API       |
+| 5.0  | 5.0.0.Alpha5（2022-09-28）     | 分支仍在活跃开发，未 GA；包名改为 `io.netty5.*`；不在本文范围          |
+
+Netty **不存在 4.3 分支**。4.2 相对 4.1 的四个破坏性/结构性变化（详见各专题页）：
+
+1. **IO 循环抽象成 `IoHandler`**：`NioEventLoop` / `EpollEventLoop` / `KQueueEventLoop` 全部 `@Deprecated`，改用 `MultiThreadIoEventLoopGroup` + `*IoHandler.newFactory()`，见 [原生传输层](/docs/CS/Framework/Netty/Transport.md?id=iohandler-abstraction)
+2. **默认分配器改为 `AdaptiveByteBufAllocator`**：`io.netty.allocator.type` 默认值由 `pooled` 变为 `adaptive`，见 [内存池](/docs/CS/Framework/Netty/memory.md?id=adaptivebytebufallocator)
+3. **引用计数实现换成 `RefCnt`**：`AbstractReferenceCountedByteBuf` 不再直接用 `AtomicIntegerFieldUpdater`，见 [ByteBuf](/docs/CS/Framework/Netty/ByteBuf.md?id=referencecounting)
+4. **`ioRatio` 默认 100 并引入任务时间片**：见 [EventLoop](/docs/CS/Framework/Netty/EventLoop.md)
+
 ## Architecture
 
 <div style="text-align: center;">
@@ -72,11 +89,7 @@ Netty 自己实现的 [Channel](/docs/CS/Framework/Netty/Channel.md) 是以 JDK 
 
 ## Sequence
 
-源码编译collection 包
-
-cd common 目录 执行 `mvn clean install -DskipTests=true -Dcheckstyle.skip=true`
-
-
+下面五条时序图串起服务端从启动到关闭的完整链路：Bind（绑定端口）→ Connect（接受连接）→ Read（读数据）→ Write（写数据）→ Shutdown（优雅关闭）。
 
 
 
@@ -872,7 +885,9 @@ Netty 的组件是层层引用的，按依赖顺序读比按包结构读省力�
 
 数据载荷是 [ByteBuf](/docs/CS/Framework/Netty/ByteBuf.md)，它的引用计数决定何时归还；归还之后内存在哪一级缓存里被复用属于内存池主题，统一记在 [Memory Pool](/docs/CS/Framework/Netty/memory.md)。所有异步动作的结果由 [Future and Promise](/docs/CS/Framework/Netty/Future.md) 承载，写侧背压的水位变化也靠它回报。
 
-支撑上述组件的 common 工具件各自对应一个 JDK 层面的具体缺陷：[FastThreadLocal](/docs/CS/Framework/Netty/FastThreadLocal.md) 用数组寻址替代 ThreadLocal 的哈希探测，并允许在池化对象上批量清理；[MpscLinkedQueue](/docs/CS/Framework/Netty/MpscLinkedQueue.md) 是 EventLoop 任务队列采用的单生产多消费无锁队列；[HashedWheelTimer](/docs/CS/Framework/Netty/HashedWheelTimer.md) 用时间轮把海量超时的管理成本从 O(log n) 降到 O(1)。
+支撑上述组件的 common 工具件各自对应一个 JDK 层面的具体缺陷：[FastThreadLocal](/docs/CS/Framework/Netty/FastThreadLocal.md) 用数组寻址替代 ThreadLocal 的哈希探测，并允许在池化对象上批量清理；[MpscLinkedQueue](/docs/CS/Framework/Netty/MpscLinkedQueue.md) 讲 EventLoop 任务队列采用的**多生产者单消费者（MPSC）**无锁队列；[HashedWheelTimer](/docs/CS/Framework/Netty/HashedWheelTimer.md) 用时间轮把海量超时的管理成本从 O(log n) 降到 O(1)。
+
+协议相关的内容分三块：[编解码器体系](/docs/CS/Framework/Netty/Codec.md) 讲粘包拆包与 `ByteToMessageDecoder` 的累积机制；[HTTP / WebSocket / TLS 协议栈](/docs/CS/Framework/Netty/Protocol.md) 讲协议支持层的 handler 组装与握手流程；[原生传输层](/docs/CS/Framework/Netty/Transport.md) 讲 NIO / epoll / kqueue / io_uring 四种实现的差异与 4.2 的 `IoHandler` 重构。
 
 另有两个横切专题：[流量整形 TrafficShaping](/docs/CS/Framework/Netty/Limiter.md) 讲读写速率控制及其与写水位线的相互作用；[TCP Fast Open 支持](/docs/CS/Framework/Netty/TPO.md) 说明省下一个 RTT 的能力为什么必须走 native epoll transport 才拿得到。
 
