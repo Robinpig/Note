@@ -1,29 +1,29 @@
 ## Introduction
 
-The Lock interface defines a number of abstract locking operations.
-Unlike intrinsic locking, Lock offers a choice of unconditional, polled, timed, and interruptible lock acquisition,
-and all lock and unlock operations are explicit.
-Lock implementations must provide the same memory-visibility semantics as intrinsic locks,
-but can differ in their locking semantics, scheduling algorithms, ordering guarantees, and performance characteristics.
+Lock 接口定义了一系列抽象的加锁操作。
+不同于语言内置（intrinsic）加锁，Lock 提供无条件、轮询、定时、可中断等多种获取锁的方式，
+且所有加锁与解锁操作都是显式的。
+Lock 的实现必须与内置锁提供相同的内存可见性（memory visibility）语义，
+但在加锁语义、调度算法、顺序保证和性能特征上可以有所不同。
 
 
 
 ## Lock
-Lock implementations provide more extensive locking operations than can be obtained using [synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md) methods and statements. 
-They allow more flexible structuring, may have quite different properties, and may support multiple associated Condition objects.*
+Lock 的实现提供了比使用 [synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md) 方法和语句更丰富的加锁操作。
+它允许更灵活的结构设计，可能具备截然不同的特性，并且可以支持多个关联的 Condition 对象。*
 
-A lock is a tool for controlling access to a shared resource by multiple threads. 
-Commonly, a lock provides exclusive access to a shared resource: only one thread at a time can acquire the lock and all access to the shared resource requires that the lock be acquired first. 
-However, some locks may allow concurrent access to a shared resource, such as the read lock of a ReadWriteLock.
+锁（Lock）是一种用于控制多个线程对共享资源访问的工具。
+通常，锁提供对共享资源的独占访问：同一时刻只有一个线程能获取该锁，而所有对共享资源的访问都要求先获取到该锁。
+不过，某些锁可能允许对共享资源的并发访问，例如 ReadWriteLock 的读锁。
 
-The use of synchronized methods or statements provides access to the implicit monitor lock associated with every object, but forces all lock acquisition and release to occur in a block-structured way: 
-when multiple locks are acquired they must be released in the opposite order, and all locks must be released in the same lexical scope in which they were acquired.
+使用 synchronized 方法或语句可以访问与每个对象关联的隐式 monitor 锁，但强制所有加锁与解锁都以「块结构」的方式进行：
+当获取了多个锁时，必须以相反的顺序释放它们，并且所有锁都必须在获取它们的同一词法作用域内释放。
 
-While the scoping mechanism for synchronized methods and statements makes it much easier to program with monitor locks, 
-and helps avoid many common programming errors involving locks, there are occasions where you need to work with locks in a more flexible way. 
-For example, some algorithms for traversing concurrently accessed data structures require the use of "hand-over-hand" or "chain locking": 
-you acquire the lock of node A, then node B, then release A and acquire C, then release B and acquire D and so on. 
-Implementations of the Lock interface enable the use of such techniques by allowing a lock to be acquired and released in different scopes, and allowing multiple locks to be acquired and released in any order.
+虽然 synchronized 方法与语句的作用域机制让 monitor 锁的编程变得简单得多，
+也有助于避免许多与锁相关的常见编程错误，但有时确实需要以更灵活的方式使用锁。
+例如，一些遍历并发访问数据结构的算法需要使用「hand-over-hand」（逐节点）或「chain locking」（链式加锁）：
+先获取节点 A 的锁，再获取节点 B 的锁，然后释放 A、获取 C，接着释放 B、获取 D，依此类推。
+Lock 接口的实现通过允许在不同作用域中加锁与解锁、并允许以任意顺序获取和释放多个锁，使这类技巧成为可能。
 
 
 
@@ -41,52 +41,48 @@ public interface Lock {
 }
 ```
 
-TicketLock
-
-CLHLock
-
-MCSLock
+**自旋锁与队列锁（理解 AQS 队列锁的来由）**：[Ticket / CLH / MCS](/docs/CS/Java/JDK/Concurrency/SpinQueueLocks.md) —— 从「全局热点变量」演进到「每线程本地自旋、O(1) 交接」，AQS 正是 CLH 的阻塞变体。
 
 ### Polled and Timed Lock Acquisition
 
-The timed and polled lock-acqusition modes provided by tryLock allow more sophisticated error recovery than unconditional acquisition. 
-With intrinsic locks, a deadlock is fatal—the only way to recover is to restart the application, and the only defense is to construct your program so that inconsistent lock ordering is impossible. 
-Timed and polled locking offer another option: probabalistic deadlock avoidance.
+tryLock 提供的定时与轮询获取模式，比无条件获取具备更强的错误恢复能力。
+对于内置锁，死锁是致命的——唯一的恢复手段是重启应用，唯一的防御办法是在程序构造上杜绝不一致的加锁顺序。
+定时与轮询加锁提供了另一种选择：概率性的死锁规避。
 
 ### Interruptible Lock Acquisition
 
-Just as timed lock acquisition allows exclusive locking to be used within timelimited activities, interruptible lock acquisition allows locking to be used within cancellable activities. 
-Several mechanisms, such as acquiring an intrinsic lock, that are not responsive to interruption. 
-These noninterruptible blocking mechanisms complicate the implementation of cancellable tasks. 
-The `lockInterruptibly` method allows you to try to acquire a lock while remaining responsive to interruption, and its inclusion in Lock avoids creating another category of non-interruptible blocking mechanisms.
+正如定时获取让独占锁可用于限时活动，可中断获取让锁可用于可取消的活动。
+一些机制（例如获取内置锁）对中断并不响应。
+这些不可中断的阻塞机制让可取消任务的实现变得复杂。
+`lockInterruptibly` 方法允许在保持对中断响应的同时尝试获取锁，将其纳入 Lock 接口也避免了再引入一类不可中断的阻塞机制。
 
-The canonical structure of interruptible lock acquisition is slightly more complicated than normal lock acquisition, as two try blocks are needed. 
-(If the interruptible lock acquisition can throw InterruptedException, the standard try-finally locking idiom works.) 
-The timed `tryLock` is also responsive to interruption and so can be used when you need both timed and interruptible lock acquisition.
+可中断获取的标准结构比普通获取略复杂，因为需要两层 try 块。
+（如果可中断获取会抛出 InterruptedException，标准的 try-finally 加锁习惯用法仍然适用。）
+定时的 `tryLock` 同样响应中断，因此在既需要定时又需要可中断获取时可以使用它。
 
 ### Non-block-structured Locking
 
-With intrinsic locks, acquire-release pairs are block-structured—a lock is always released in the same basic block in which it was acquired, regardless of how control exits the block. 
-Automatic lock release simplifies analysis and prevents potential coding errors, but sometimes a more flexible locking discipline is needed.
-In ConcurrentMap, we saw how reducing lock granularity can enhance scalability. Lock striping allows different hash chains in a hash-based collection to use different locks.
-An example of this technique, called **hand-over-hand locking** or **lock coupling**.
+对于内置锁，加锁与解锁总是成对出现在块结构中——无论控制流如何离开该块，锁总是在获取它的同一基本块中被释放。
+自动释放简化了分析并避免了潜在的编码错误，但有时确实需要更灵活的加锁规范。
+在 ConcurrentMap 中我们已经看到，降低锁粒度可以提升可扩展性；锁分段（Lock striping）让基于哈希的集合中不同的哈希链使用不同的锁。
+这种技巧的一个例子就是 **hand-over-hand locking**（逐节点加锁）或 **lock coupling**（锁耦合）。
 
 ### Fairness
 
-The ReentrantLock constructor offers a choice of two fairness options: create a nonfair lock (the default) or a fair lock.
-(*The polled `tryLock` always barges, even for fair locks*.)
+ReentrantLock 的构造函数提供两种公平性选项：创建非公平锁（默认）或公平锁。
+（*轮询式的 `tryLock` 总是会插队，即便是公平锁也是如此*。）
 
 
 
 
 ### Summary of Lock
 
-> ReentrantLock is an advanced tool for situations where intrinsic locking is not practical.
+> ReentrantLock 是一种高级工具，适用于内置加锁不切实际的场景。
 > 
-> Use it if you need its advanced features: 
-> timed, polled, or interruptible lock acquisition, fair queueing, or non-block-structured locking. 
+> 如果你需要它的高级特性才使用它：
+> 定时、轮询或可中断的锁获取，公平排队，或非块结构的加锁。
 > 
-> **Otherwise, prefer synchronized.**
+> **除此之外，优先使用 synchronized。**
 
 [AQS](/docs/CS/Java/JDK/Concurrency/AQS.md)
 
@@ -157,16 +153,15 @@ notEmpty.signal();    // 有新元素，唤醒消费者
 
 
 
-|               | Object                | Condition                          |
+| 维度 | `Object` | `Condition` |
 | ------------- | --------------------- | ---------------------------------- |
-| Method        | wait/notify           | await/signal                       |
-| Depend        | synchronized          | AQS                                |
-| Implement     | C++                   | Java                               |
-| Interruptibility | interruptibility |                                    |
-| wait time     |                       | could set a future time            |
-| Num           |                       | a Lock can use multiple Conditions |
-| Sleep         | Unsupported           | Supported                          |
-|               |                       |                                    |
+| 方法 | `wait` / `notify` | `await` / `signal` |
+| 依赖 | `synchronized` | AQS |
+| 实现语言 | C++ | Java |
+| 可中断性 | 只能整体中断 | 精确到单个等待条件 |
+| 等待超时 | 不支持（只有 `wait(timeout)`） | 可指定未来时刻（`await(time, unit)`） |
+| 数量 | 每个对象只有一个等待集 | 一个 Lock 可有多个条件谓词 |
+| 睡眠语义 | 不支持（必须持锁） | 支持（`await` 会完全释放锁） |
 
 
 
@@ -174,20 +169,20 @@ notEmpty.signal();    // 有新元素，唤醒消费者
 
 ## LockSupport
 
-**LockSupport call [Unsafe](/docs/CS/Java/JDK/Basic/unsafe.md)**.
+**LockSupport 调用 [Unsafe](/docs/CS/Java/JDK/Basic/unsafe.md)**。
 
 
 
 ### parker
 
-Disables the current thread for thread scheduling purposes unless the permit is available.
+除非许可（permit）可用，否则禁用当前线程的线程调度。
 
-If the permit is available then it is consumed and the call returns immediately; otherwise the current thread becomes disabled for thread scheduling purposes and lies dormant until one of three things happens:
-- Some other thread invokes unpark with the current thread as the target; or
-- Some other thread interrupts the current thread; or
-- The call spuriously (that is, for no reason) returns.
+如果许可可用，则将其消费并立即返回；否则当前线程将被禁用调度并陷入休眠，直到以下三件事之一发生：
+- 其他线程以当前线程为目标调用了 unpark；或
+- 其他线程中断了当前线程；或
+- 调用因故（即无原因地）伪唤醒而返回。
 
-This method does not report which of these caused the method to return. Callers should re-check the conditions which caused the thread to park in the first place. Callers may also determine, for example, the interrupt status of the thread upon return.
+该方法不会报告是哪一种原因导致返回。调用方应当重新检查最初导致线程 park 的条件；例如，调用方也可以在返回时查询线程的中断状态。
 
 ```java
  public static void park(Object blocker) {
@@ -202,15 +197,15 @@ private static void setBlocker(Thread t, Object arg) {
     UNSAFE.putObject(t, parkBlockerOffset, arg);
     }
 ```
-**sample**:
+**示例**：
 
 ```
 while (!canProceed()) { ... LockSupport.park(this); }
 ```
 
-Makes available the permit for the given thread, if it was not already available. 
-If the thread was blocked on park then it will unblock. 
-Otherwise, its next call to park is guaranteed not to block. This operation is not guaranteed to have any effect at all if the given thread has not been started.
+如果给定线程的许可尚不可用，则使其可用。
+如果该线程因 park 而阻塞，则将其解除阻塞。
+否则，保证它下一次对 park 的调用不会阻塞。如果给定线程尚未启动，该操作不保证产生任何效果。
 ```java
 public static void unpark(Thread thread) {
   if (thread != null)
@@ -252,6 +247,23 @@ class FIFOMutex {
   }
 ```
 
+## Lock Implementations Panorama
+
+`java.util.concurrent` 提供三类显式锁，加上语言内置的 `synchronized`，构成完整的互斥 / 读写工具箱。选型的优先级是：默认 `synchronized`，需要高级获取语义才上 `ReentrantLock`，读多写少才考虑读写锁，且 `StampedLock` 是 `ReentrantReadWriteLock` 的高吞吐替代而非补充：
+
+| 实现 | 模式 | 公平性 | 中断 / 超时 | 读优化 | 典型用途 |
+| --- | --- | --- | --- | --- | --- |
+| [synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md) | 独占 | 无（非公平） | 否 | 否 | 简单临界区，默认首选 |
+| [ReentrantLock](/docs/CS/Java/JDK/Concurrency/ReentrantLock.md) | 独占 | 可选 | 是 | 否 | 需要中断 / 超时 / 多条件 / 监控 |
+| [ReentrantReadWriteLock](/docs/CS/Java/JDK/Concurrency/ReadWriteLock.md) | 读写 | 可选 | 是 | 是（读共享） | 读多写少 |
+| [StampedLock](/docs/CS/Java/JDK/Concurrency/StampedLock.md) | 读写 + 乐观 | 无 | 否 | 是（乐观读） | 读极多、写极少，追求吞吐 |
+
+读写锁的演进与取舍见各专篇；独占锁的底层队列机制统一由 [AQS](/docs/CS/Java/JDK/Concurrency/AQS.md) 支撑。
+
 ## Links
-- [synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md)
 - [AQS](/docs/CS/Java/JDK/Concurrency/AQS.md)
+- [ReentrantLock](/docs/CS/Java/JDK/Concurrency/ReentrantLock.md)
+- [ReadWriteLock](/docs/CS/Java/JDK/Concurrency/ReadWriteLock.md)
+- [StampedLock](/docs/CS/Java/JDK/Concurrency/StampedLock.md)
+- [SpinQueueLocks](/docs/CS/Java/JDK/Concurrency/SpinQueueLocks.md)
+- [synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md)

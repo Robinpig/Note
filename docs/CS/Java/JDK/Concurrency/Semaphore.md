@@ -2,19 +2,19 @@
 
 
 
-A counting semaphore. Conceptually, a semaphore maintains a set of permits. 
-Each acquire blocks if necessary until a permit is available, and then takes it. Each release adds a permit, potentially releasing a blocking acquirer. 
-However, no actual permit objects are used; the Semaphore just keeps a count of the number available and acts accordingly.
-Semaphore is a classic concurrency tool.
-**Semaphores are often used to restrict the number of threads than can access some (physical or logical) resource.** 
+计数信号量（counting semaphore）。从概念上讲，信号量维护一组许可（permit）。
+每次 acquire 在必要时会阻塞，直到有许可可用时才取走它；每次 release 会增加一个许可，并可能唤醒一个正在阻塞的获取者。
+不过信号量并不使用真实的许可对象，而是只记录可用许可的数量，并据此行事。
+Semaphore 是一种经典的并发工具。
+**信号量常用于限制能够访问某类（物理或逻辑）资源的线程数量。**
 
-Before obtaining an item each thread must acquire a permit from the semaphore, guaranteeing that an item is available for use. When the thread has finished with the item it is returned back to the pool and a permit is returned to the semaphore, allowing another thread to acquire that item. Note that no synchronization lock is held when acquire is called as that would prevent an item from being returned to the pool. **The semaphore encapsulates the synchronization needed to restrict access to the pool, separately from any synchronization needed to maintain the consistency of the pool itself**.
-A semaphore initialized to one, and which is used such that it only has at most one permit available, can serve as a mutual exclusion lock. This is more commonly known as a binary semaphore, because it only has two states: one permit available, or zero permits available. When used in this way, the binary semaphore has the property (unlike many `java.util.concurrent.locks.Lock` implementations), that **the "lock" can be released by a thread other than the owner (as semaphores have no notion of ownership)**. This can be useful in some specialized contexts, such as deadlock recovery.
+线程在获取某一项之前，必须先向信号量申请一个许可，从而保证该项可用。线程用完该项后将其归还到池中，并向信号量归还一个许可，使其他线程能够获取该项。注意，调用 acquire 时不会持有任何同步锁，否则会阻止该项被归还到池中。**信号量封装了限制访问对象池所需的同步逻辑，与维护对象池自身一致性所需的同步逻辑相互独立。**
+初始化为 1、且最多只保持一个可用许可的信号量，可以充当互斥锁使用。这通常被称为二元信号量（binary semaphore），因为它只有两种状态：有 1 个许可可用，或 0 个许可可用。以这种方式使用时，二元信号量具有一个特性（与许多 `java.util.concurrent.locks.Lock` 实现不同）：**"锁"可以由非持有者线程释放（因为信号量没有所有权的概念）**。这在某些特殊场景下很有用，例如死锁恢复。
 
-The constructor for this class optionally accepts a fairness parameter. When set false, this class makes no guarantees about the order in which threads acquire permits. In particular, barging is permitted, that is, a thread invoking acquire can be allocated a permit ahead of a thread that has been waiting - logically the new thread places itself at the head of the queue of waiting threads. When fairness is set true, the semaphore guarantees that threads invoking any of the acquire methods are selected to obtain permits in the order in which their invocation of those methods was processed (first-in-first-out; FIFO). Note that FIFO ordering necessarily applies to specific internal points of execution within these methods. So, it is possible for one thread to invoke acquire before another, but reach the ordering point after the other, and similarly upon return from the method. Also note that the untimed tryAcquire methods do not honor the fairness setting, but will take any permits that are available.
-Generally, semaphores used to control resource access should be initialized as fair, to ensure that no thread is starved out from accessing a resource. When using semaphores for other kinds of synchronization control, the throughput advantages of non-fair ordering often outweigh fairness considerations.
-This class also provides convenience methods to acquire and release multiple permits at a time. Beware of the increased risk of indefinite postponement when these methods are used without fairness set true.
-**_Memory consistency effects_**: *Actions in a thread prior to calling release() **happen-before** actions following a successful acquire() in another thread.*
+该类的构造方法可选地接受一个公平性（fairness）参数。当该参数为 false 时，类不保证线程获取许可的顺序，尤其允许"插队"（barging）：即调用 acquire 的线程可能排在早已等待的线程之前获得许可——从逻辑上看，新线程把自己放到了等待线程队列的队首。当公平性为 true 时，信号量保证调用任意 acquire 方法的线程，按照这些方法被处理的顺序（先进先出；FIFO）获得许可。需要注意的是，FIFO 顺序必然只作用于这些方法内部特定的执行点。因此完全可能出现这样的情况：某线程比另一线程先调用 acquire，却在后一个到达排序点，从方法返回时同理。另需注意，不带超时的 tryAcquire 方法不遵守公平性设置，但会取走任何可用的许可。
+通常，用于控制资源访问的信号量应初始化为公平模式，以确保不会有线程因长期得不到资源访问权而被"饿死"。当把信号量用于其他类型的同步控制时，非公平顺序带来的吞吐优势往往超过公平性考量。
+该类还提供了便捷方法，可一次性获取或释放多个许可。当公平性未设为 true 而使用这些方法时，需警惕无限期推迟（indefinite postponement）的风险上升。
+**_内存一致性效应（memory consistency effects）_**：*线程中调用 release() 之前的操作 **happen-before** 另一线程中成功 acquire() 之后的操作。*
 
 
 
@@ -102,16 +102,16 @@ abstract static class Sync extends AbstractQueuedSynchronizer {
 
 
 
-Repeatedly:
+重复执行以下流程：
 
-1. Check if node now first
-2. if so, ensure head stable, else ensure valid predecessor
-3. if node is first or not yet enqueued, try acquiring
-4. else if node not yet created, create it
-5. else if not yet enqueued, try once to enqueue
-6. else if woken from park, retry (up to postSpins times)
-7. else if WAITING status not set, set and retry
-8. else park and clear WAITING status, and check cancellation
+1. 检查当前节点是否已是队首
+2. 若是，确保 head 稳定；否则确保前驱节点有效
+3. 若节点是队首或尚未入队，则尝试获取许可
+4. 否则若节点尚未创建，则创建它
+5. 否则若尚未入队，则尝试入队一次
+6. 否则若从 park 中被唤醒，则重试（最多 postSpins 次）
+7. 否则若尚未设置 WAITING 状态，则设置后重试
+8. 否则执行 park 并清除 WAITING 状态，同时检查取消
 
 ```java
 public void acquire() throws InterruptedException {
@@ -179,7 +179,7 @@ protected final boolean tryReleaseShared(int releases) {
 
 ## Example
 
-_For example, here is a class that uses a semaphore to control access to a pool of items:_
+_下面以一个简单的类为例，展示如何用信号量控制对对象池的访问：_
 
 ```java
   

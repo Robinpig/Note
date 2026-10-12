@@ -1,42 +1,38 @@
 ## Introduction
 
-Executor is a simple standardized interface for defining custom thread-like subsystems, including thread pools, asynchronous I/O, and lightweight task frameworks.
-Depending on which concrete Executor class is being used, tasks may execute in a newly created thread, an existing task-execution thread, or the thread calling execute, and may execute sequentially or concurrently.
+Executor 是用于定义类线程子系统（包括线程池、异步 I/O 与轻量级任务框架）的一个简单标准化接口。
+具体使用哪一个 Executor 实现类，决定了任务是在新创建的线程中、在已有的任务执行线程中，还是在调用 execute 的线程中运行，并决定任务是顺序执行还是并发执行。
 
-ExecutorService provides a more complete asynchronous task execution framework. An ExecutorService manages queuing and scheduling of tasks, and allows controlled shutdown.
-The ScheduledExecutorService subinterface and associated interfaces add support for delayed and periodic task execution.
-ExecutorServices provide methods arranging asynchronous execution of any function expressed as Callable, the result-bearing analog of Runnable.
-A Future returns the results of a function, allows determination of whether execution has completed, and provides a means to cancel execution.
-A RunnableFuture is a Future that possesses a run method that upon execution, sets its results.
+ExecutorService 提供了更完整的异步任务执行框架。它负责管理任务的排队与调度，并支持受控的关闭。
+ScheduledExecutorService 子接口及相关的接口增加了对延迟执行与周期性任务执行的支持。
+ExecutorService 提供了一系列方法，用于安排任意以 Callable 形式表达的函数（Callable 是带返回值的 Runnable 对应物）的异步执行。
+Future 返回函数的执行结果，可判断是否已执行完成，并提供取消执行的方式。
+RunnableFuture 是一种 Future，它带有一个 run 方法，在被执行时会设置其结果。
 
 ### Implementation
 
-Classes ThreadPoolExecutor and ScheduledThreadPoolExecutor provide tunable, flexible thread pools.
-The Executors class provides factory methods for the most common kinds and configurations of Executors, as well as a few utility methods for using them.
-Other utilities based on Executors include the concrete class FutureTask providing a common extensible implementation of Futures, and ExecutorCompletionService,
-that assists in coordinating the processing of groups of asynchronous tasks.
-Class ForkJoinPool provides an Executor primarily designed for processing instances of ForkJoinTask and its subclasses.
-These classes employ a work-stealing scheduler that attains high throughput for tasks conforming to restrictions that often hold in computation-intensive parallel processing.
+ThreadPoolExecutor 与 ScheduledThreadPoolExecutor 类提供了可调优、灵活的线程池。
+Executors 类为最常见种类与配置的 Executor 提供了工厂方法，以及一些使用它们的工具方法。
+基于 Executors 的其他工具包括具体类 FutureTask（提供了 Future 的一种通用可扩展实现），以及 ExecutorCompletionService（用于协调一组异步任务的处理）。
+ForkJoinPool 类提供了一个主要用于处理 ForkJoinTask 及其子类实例的 Executor。
+这些类采用工作窃取（work-stealing）调度器，对于符合计算密集型并行处理中常见约束的任务可达到高吞吐量。
 
 ### Disadvantages of Unbounded Thread Creation
 
-- Thread lifecycle overhead
-  Thread creation and teardown are not free. The actual overhead varies across platforms, but
-  thread creation takes time, introducing latency into request processing, and requires some processing activity by the
-  JVM and OS.
-- Resource consumption
-  Active threads consume system resources, especially memory. 
-  When there are more runnable threads than available processors, threads sit idle.
-- Stability
-  There is a limit on how many threads can be created.
+- 线程生命周期开销
+  线程的创建与销毁并非没有代价。实际开销因平台而异，但线程创建需要时间，会给请求处理引入延迟，并且需要 JVM 与操作系统进行一定的处理工作。
+- 资源消耗
+  活动线程会消耗系统资源，尤其是内存。当可运行线程数超过可用处理器数时，线程会处于空闲状态。
+- 稳定性
+  可创建的线程数量存在上限。
 
 ![ThreadPoolExecutor](../img/ThreadPoolExecutor.png)
 
 ## Executor
 
-Thread pools offer the same benefit for thread management, and `java.util.concurrent` provides a flexible thread pool implementation as part of the Executor framework.
-The primary abstraction for task execution in the Java class libraries is not Thread, but `Executor`.
-This interface provides a way of decoupling task submission from the mechanics of how each task will be run, including details of thread use, scheduling, etc.
+线程池在线程管理方面带来同样的收益，而 `java.util.concurrent` 在 Executor 框架中提供了灵活的线程池实现。
+Java 类库中任务执行的主要抽象并非 Thread，而是 `Executor`。
+该接口提供一种方式，将任务提交与任务如何运行的具体机制（包括线程使用、调度等细节）解耦。
 
 ```java
 public interface Executor {
@@ -47,9 +43,9 @@ public interface Executor {
 
 ### ExecutorService
 
-An Executor that provides methods to **manage termination** and methods that can produce a Future for tracking progress of one or more **asynchronous tasks**.
+ExecutorService 是提供**终止管理**方法、并能产生用于跟踪一个或多个**异步任务**进度的 Future 的 Executor。
 
-We could get different ExecutorService from [Executors](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md?id=executors).
+可从 [Executors](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md?id=executors) 获取不同的 ExecutorService 实例。
 
 ```java
 public interface ExecutorService extends Executor {
@@ -89,7 +85,7 @@ public interface ExecutorService extends Executor {
 
 ### AbstractExecutorService
 
-Wrap and execute [FutureTask](/docs/CS/Java/JDK/Concurrency/Future.md?id=futuretask) .
+包装并执行 [FutureTask](/docs/CS/Java/JDK/Concurrency/Future.md?id=futuretask) 。
 
 ```
 public <T> Future<T> submit(Runnable task, T result) {
@@ -127,15 +123,15 @@ private static <T> void cancelAll(ArrayList<Future<T>> futures, int j) {
 
 ##### **invokeAll**
 
-Executes the given tasks, returning a list of Futures holding their status and results when all complete.
-`Future.isDone` is true for each element of the returned list.
+执行给定的任务，在所有任务完成时返回一个持有其状态与结果的 Future 列表。
+返回列表中每个元素的 `Future.isDone` 均为 true。
 
-**Note that a completed task could have terminated either normally or by throwing an exception.**
-The results of this method are undefined if the given collection is modified while this operation is in progress.
+**注意，已完成的任务可能是正常结束，也可能是通过抛出异常结束。**
+若在执行过程中修改了给定的集合，本方法的结果未定义。
 
 > [DiscardPolicy may block invokeAll forever](https://bugs.openjdk.org/browse/JDK-8286463)
 
-If execute(f) normally, thread waiting at `Future.get()` until it returns or throws Exception.(DiscardPolicy-like is panic)
+若 execute(f) 正常返回，调用线程会等待于 `Future.get()` 直到其返回或抛出异常（类似 DiscardPolicy 的情况会导致永久阻塞）。
 
 ```java
 public abstract class AbstractExecutorService implements ExecutorService {
@@ -258,9 +254,9 @@ public abstract class AbstractExecutorService implements ExecutorService {
 
 ### ScheduledExecutorService
 
-An ExecutorService that can **schedule** commands to run after a given delay, or to execute periodically.
-The schedule methods create tasks with various delays and return a task object that can be used to cancel or check execution.
-The **scheduleAtFixedRate** and **scheduleWithFixedDelay** methods create and execute tasks that run periodically until cancelled.
+ScheduledExecutorService 是一种能够**调度**命令在给定延迟后运行，或周期性执行的 ExecutorService。
+schedule 方法创建带有不同延迟的任务，并返回一个可用于取消或检查执行状态的任务对象。
+**scheduleAtFixedRate** 与 **scheduleWithFixedDelay** 方法创建并执行周期性运行的任务，直到被取消。
 
 ```java
 public interface ScheduledExecutorService extends ExecutorService {
@@ -271,21 +267,21 @@ public interface ScheduledExecutorService extends ExecutorService {
 }
 ```
 
-Submits a periodic action that becomes enabled first after the given initial delay, and subsequently with the given delay between the termination of one execution and the commencement of the next.
+提交一个周期性动作，它在给定初始延迟后首次生效，之后在每次执行结束与下一次开始之间间隔给定延迟。
 
-- The sequence of task executions continues indefinitely until one of the following exceptional completions occur:
-- The task is explicitly cancelled via the returned future.
-- The executor terminates, also resulting in task cancellation.
-  An execution of the task throws an exception. In this case calling get on the returned future will throw ExecutionException, holding the exception as its cause.
+- 任务执行的序列会无限持续，直到出现以下任一异常结束情形：
+- 任务通过返回的 future 被显式取消。
+- executor 终止，这也会导致任务被取消。
+  任务的某次执行抛出异常。此时对返回的 future 调用 get 会抛出 ExecutionException，并以该异常作为原因（cause）。
 
-Subsequent executions are suppressed. Subsequent calls to isDone() on the returned future will return true.
+后续执行会被抑制。此后对返回 future 的 isDone() 调用将返回 true。
 
 ```
     public ScheduledFuture<?> scheduleWithFixedDelay(Runnable command, long initialDelay, long delay, TimeUnit unit);
 ```
 
-Submits a periodic action that becomes enabled first after the given initial delay, and subsequently with the given period; that is, executions will commence after initialDelay, then initialDelay + period, then initialDelay + 2 * period, and so on.
-**If any execution of this task takes longer than its period, then subsequent executions may start late, but will not concurrently execute.**
+提交一个周期性动作，它在给定初始延迟后首次生效，之后按给定周期执行；即执行将在 initialDelay 之后开始，然后是 initialDelay + period，再然后是 initialDelay + 2 * period，依此类推。
+**若任务的任意一次执行耗时超过其周期，则后续执行可能延迟开始，但不会并发执行。**
 
 ```
 public ScheduledFuture<?> scheduleAtFixedRate(Runnable command, long initialDelay, long period, TimeUnit unit);
@@ -293,43 +289,43 @@ public ScheduledFuture<?> scheduleAtFixedRate(Runnable command, long initialDela
 
 ## CompletionService
 
-A service that decouples the production of new asynchronous tasks from the consumption of the results of completed tasks. Producers submit tasks for execution. Consumers take completed tasks and process their results in the order they complete. A CompletionService can for example be used to manage asynchronous I/O, in which tasks that perform reads are submitted in one part of a program or system, and then acted upon in a different part of the program when the reads complete, possibly in a different order than they were requested.
-Typically, a CompletionService relies on a separate Executor to actually execute the tasks, in which case the CompletionService only manages an internal completion queue. The ExecutorCompletionService class provides an implementation of this approach.
+一种服务，它将新异步任务的生产与已完成任务结果的消费解耦。生产者提交任务执行；消费者获取已完成的任务，并按其完成顺序处理结果。例如，CompletionService 可用于管理异步 I/O：在程序或系统的某一部分提交执行读取的任务，待读取完成后由程序另一部分（可能以不同于提交时的顺序）进行处理。
+通常，CompletionService 依赖一个独立的 Executor 来真正执行任务，此时 CompletionService 仅管理一个内部的完成队列。ExecutorCompletionService 类提供了这种方法的一个实现。
 
-**Memory consistency effects:** Actions in a thread prior to submitting a task to a CompletionService happen-before actions taken by that task, which in turn happen-before actions following a successful return from the corresponding take().
+**内存一致性效果：** 线程中向 CompletionService 提交任务之前的操作 happen-before 该任务中的操作，而该任务中的操作又 happen-before 从相应的 take() 成功返回之后的操作。
 
 ## ThreadPoolExecutor
 
-An ExecutorService that executes each submitted task using one of possibly several pooled threads, normally  configured using Executors factory methods.
+ThreadPoolExecutor 是一种 ExecutorService，它使用若干个池中线程（通常借助 Executors 工厂方法配置）之一来执行每个被提交的任务。
 
-A thread pool, as its name suggests, manages a homogeneous pool of worker threads. A thread pool is tightly bound to a work queue holding tasks waiting to be executed.
-Worker threads have a simple life: request the next task from the work queue, execute it, and go back to waiting for another task
+顾名思义，线程池管理一组同质的工作线程。线程池与一个持有待执行任务的工作队列紧密绑定。
+工作线程的生命很简单：从工作队列获取下一个任务、执行它，然后回到等待下一个任务的状态。
 
-Thread pools address two different problems:
+线程池解决两类不同的问题：
 
-1. they usually provide improved performance when executing large numbers of asynchronous tasks, due to reduced per-task invocation overhead
-2. and they provide a means of bounding and managing the resources, including threads, consumed when executing a collection of tasks.
-   Each ThreadPoolExecutor also maintains some basic statistics, such as the number of completed tasks.
+1. 在执行大量异步任务时，由于降低了每个任务的调用开销，通常能提供更好的性能；
+2. 提供对执行一组任务时所消耗资源（包括线程）进行限制与管理的手段。
+   每个 ThreadPoolExecutor 还会维护一些基本统计信息，例如已完成任务的数量。
 
-To be useful across a wide range of contexts, this class provides many adjustable parameters and extensibility hooks.
-However, programmers are urged to use the more convenient Executors factory methods Executors.newCachedThreadPool (unbounded thread pool, with automatic thread reclamation), Executors.newFixedThreadPool (fixed size thread pool) and Executors.newSingleThreadExecutor (single background thread), that preconfigure settings for the most common usage scenarios.
-Otherwise, use the following guide when manually configuring and tuning this class:
+为在广泛的场景下可用，本类提供了许多可调节参数与可扩展钩子。
+不过，建议优先使用更为便捷的 Executors 工厂方法：Executors.newCachedThreadPool（无界线程池，自动回收线程）、Executors.newFixedThreadPool（固定大小线程池）与 Executors.newSingleThreadExecutor（单后台线程），它们为最常见的使用场景预置了配置。
+否则，在手动配置与调优本类时，请遵循以下指南：
 
 ### Core and maximum pool sizes
 
-A ThreadPoolExecutor will automatically adjust the pool size (see getPoolSize) according to the bounds set by corePoolSize (see getCorePoolSize) and maximumPoolSize (see getMaximumPoolSize).
-When a new task is submitted in method execute(Runnable), if fewer than corePoolSize threads are running, a new thread is created to handle the request, even if other worker threads are idle.
-Else if fewer than maximumPoolSize threads are running, a new thread will be created to handle the request only if the queue is full.
-By setting corePoolSize and maximumPoolSize the same, you create a fixed-size thread pool.
-By setting maximumPoolSize to an essentially unbounded value such as Integer.MAX_VALUE, you allow the pool to accommodate an arbitrary number of concurrent tasks.
-Most typically, core and maximum pool sizes are set only upon construction, but they may also be changed dynamically using setCorePoolSize and setMaximumPoolSize.
+ThreadPoolExecutor 会根据 corePoolSize（见 getCorePoolSize）与 maximumPoolSize（见 getMaximumPoolSize）设定的边界自动调整池大小（见 getPoolSize）。
+在 execute(Runnable) 方法提交新任务时，若运行的线程少于 corePoolSize，即使其他工作线程空闲，也会创建新线程来处理该请求。
+否则，仅当运行的线程少于 maximumPoolSize 且队列已满时，才会创建新线程来处理请求。
+将 corePoolSize 与 maximumPoolSize 设为相同值，即得到一个固定大小的线程池。
+将 maximumPoolSize 设为诸如 Integer.MAX_VALUE 这种实质上无界的值，可让线程池容纳任意数量的并发任务。
+最常见情况下，核心与最大池大小仅在构造时设定，但也可以使用 setCorePoolSize 与 setMaximumPoolSize 动态修改。
 
 #### setCorePoolSize
 
-Sets the core number of threads. This overrides any value set in the constructor.
+设置核心线程数。该值会覆盖构造器中设定的任何值。
 
-- If the new value is smaller than the current value, excess existing threads will be terminated when they next become idle.
-- If larger, new threads will, if needed, be started to execute any queued tasks.
+- 若新值小于当前值，多余的现有线程将在下次空闲时被终止。
+- 若大于当前值，则会在需要时启动新线程来执行任何已排队的任务。
 
 prestartAllCoreThreads
 
@@ -338,38 +334,38 @@ allowCoreThreadTimeOut
 
 #### setMaximumPoolSize
 
-Sets the maximum allowed number of threads. This overrides any value set in the constructor.
-If the new value is smaller than the current value, excess existing threads will be terminated when they next become idle.
+设置允许的最大线程数。该值会覆盖构造器中设定的任何值。
+若新值小于当前值，多余的现有线程将在下次空闲时被终止。
 
 - [Hystrix](/docs/CS/Framework/Spring_Cloud/Hystrix.md?id=hystrixthreadpool)
 
 #### prestartCoreThread
 
-By default, **even core threads are initially created and started only when new tasks arrive**, but this can be overridden dynamically using method prestartCoreThread or prestartAllCoreThreads.
-You probably want to prestart threads if you construct the pool with a non-empty queue.
+默认情况下，**即便是核心线程，也仅在有新任务到达时才初次创建并启动**，但可通过 prestartCoreThread 或 prestartAllCoreThreads 方法动态覆盖这一行为。
+若以非空队列构造线程池，则可能需要预先启动线程。
 
 - [Tomcat](/docs/CS/Framework/Tomcat/threads.md?id=standardthreadexecutor)
 - [Dubbo]()
 
 #### allowsCoreThreadTimeOut
 
-Returns true if this pool allows core threads to time out and terminate if no tasks arrive within the keepAlive time, being replaced if needed when new tasks arrive.
+若线程池允许核心线程在 keepAlive 时间内无任务到达时超时终止、并在新任务到达时按需重建，则返回 true。
 
-- When true, the same keep-alive policy applying to non-core threads applies also to core threads.
-- When false (the default), core threads are never terminated due to lack of incoming tasks.
+- 为 true 时，应用于非核心线程的同一保活策略也应用于核心线程。
+- 为 false（默认）时，核心线程绝不会因缺少到达的任务而被终止。
 
 
 
 
 ### ThreadFactory
 
-New threads are created using a `ThreadFactory`.
-If not otherwise specified, a `Executors.defaultThreadFactory` is used, that creates threads to all be in the **same ThreadGroup** and with the **same NORM_PRIORITY priority** and **non-daemon status**.
+新线程通过 `ThreadFactory` 创建。
+若未另行指定，则使用 `Executors.defaultThreadFactory`，它创建的线程全部位于**同一个 ThreadGroup** 中，并拥有**相同的 NORM_PRIORITY 优先级**与**非守护（non-daemon）状态**。
 
-By supplying a different ThreadFactory, you can alter the thread's name, thread group, priority, daemon status, etc.
-If a ThreadFactory fails to create a thread when asked by returning null from newThread, the executor will continue, but might not be able to execute any tasks.
-Threads should possess the "modifyThread" RuntimePermission.
-If worker threads or other threads using the pool do not possess this permission, service may be degraded: configuration changes may not take effect in a timely manner, and a shutdown pool may remain in a state in which termination is possible but not completed.
+通过提供不同的 ThreadFactory，可以改变线程的名称、线程组、优先级、守护状态等。
+若 ThreadFactory 在 newThread 中返回 null 而未能创建线程，executor 会继续运行，但可能无法执行任何任务。
+线程应拥有 "modifyThread" RuntimePermission。
+若使用线程池的工作线程或其他线程不拥有该权限，服务可能会降级：配置变更可能无法及时生效，且已关闭的线程池可能停留在一种可终止但尚未完成的状态。
 
 ```java
 // Executors
@@ -403,19 +399,19 @@ private static class DefaultThreadFactory implements ThreadFactory {
 
 ### Keep-alive times
 
-If the pool currently has more than corePoolSize threads, excess threads will be terminated if they have been idle for more than the keepAliveTime (see getKeepAliveTime(TimeUnit)).
+若线程池当前拥有多于 corePoolSize 的线程，多余的线程若空闲时间超过 keepAliveTime（见 getKeepAliveTime(TimeUnit)），将被终止。
 
-This provides a means of reducing resource consumption when the pool is not being actively used. If the pool becomes more active later, new threads will be constructed.
+这提供了一种在线程池未被积极使用时降低资源消耗的手段。若之后线程池变得更活跃，会重新构造新线程。
 
-This parameter can also be changed dynamically using method `setKeepAliveTime(long, TimeUnit)`.
-Using a value of Long.MAX_VALUE TimeUnit.NANOSECONDS effectively disables idle threads from ever terminating prior to shut down.
-By default, the keep-alive policy applies only when there are more than corePoolSize threads, but method `allowCoreThreadTimeOut(boolean)` can be used to apply this time-out policy to core threads as well, so long as the keepAliveTime value is non-zero.
+该参数也可通过 `setKeepAliveTime(long, TimeUnit)` 方法动态修改。
+将 Long.MAX_VALUE 个 TimeUnit.NANOSECONDS 作为参数实际上会禁用空闲线程在关闭前终止。
+默认情况下，保活策略仅在线程多于 corePoolSize 时生效，但 `allowCoreThreadTimeOut(boolean)` 方法也可将该超时策略应用于核心线程，前提是 keepAliveTime 值非零。
 
 ### ctl
 
-The main pool control state, ctl, is an atomic integer packing two conceptual fields workerCount, indicating the effective number of threads runState, indicating whether running, shutting down etc In order to pack them into one int, we limit workerCount to **(2^29)-1** (about 500 million) threads rather than (2^31)-1 (2 billion) otherwise representable. If this is ever an issue in the future, the variable can be changed to be an AtomicLong, and the shift/mask constants below adjusted. But until the need arises, this code is a bit faster and simpler using an int.
+线程池主控制状态 ctl 是一个原子整数，打包了两个概念字段：workerCount，表示有效的线程数量；runState，表示是否运行中、正在关闭等。为了将其打包进一个 int，workerCount 被限制为 **(2^29)-1**（约 5 亿）个线程，而非原本可表示的 (2^31)-1（20 亿）。若未来这成为问题，可将变量改为 AtomicLong，并相应调整下方的移位/掩码常量。但在需求出现之前，使用 int 的这段代码更快、更简单。
 
-The workerCount is the number of workers that have been permitted to start and not permitted to stop. The value may be transiently different from the actual number of live threads, for example when a ThreadFactory fails to create a thread when asked, and when exiting threads are still performing bookkeeping before terminating. The user-visible pool size is reported as the current size of the workers set.
+workerCount 是已被允许启动且未被允许停止的工作线程数量。该值可能暂时与实际存活线程数不同，例如当 ThreadFactory 在请求时创建线程失败，以及当退出线程仍在执行终止前的记账工作之时。对用户可见的池大小以 workers 集合的当前大小报告。
 
 ```
 private final AtomicInteger ctl = new AtomicInteger(ctlOf(RUNNING, 0));
@@ -446,21 +442,21 @@ private static boolean isRunning(int c) {
 
 ### runState
 
-The runState provides the main lifecycle control, taking on values:
+runState 提供主要的生命周期控制，取值如下：
 
-- RUNNING: Accept new tasks and process queued tasks
-- SHUTDOWN: Don't accept new tasks, but process queued tasks
-- STOP: Don't accept new tasks, don't process queued tasks, and interrupt in-progress tasks
-- TIDYING: All tasks have terminated, workerCount is zero, the thread transitioning to state TIDYING will run the terminated() hook method
-- TERMINATED: terminated() has completed The numerical order among these values matters, to allow ordered comparisons. The runState monotonically increases over time, but need not hit each state.
+- RUNNING：接受新任务并处理已排队任务
+- SHUTDOWN：不接受新任务，但处理已排队任务
+- STOP：不接受新任务，不处理已排队任务，并中断正在进行的任务
+- TIDYING：所有任务已终止，workerCount 为零，转入 TIDYING 状态的线程将运行 terminated() 钩子方法
+- TERMINATED：terminated() 已完成。这些值的数值顺序很重要，以便进行比较。runState 随时间单调递增，但不一定经历每个状态。
 
-The transitions are: RUNNING -> SHUTDOWN On invocation of shutdown(), perhaps implicitly in finalize()
+状态转换：RUNNING -> SHUTDOWN，在调用 shutdown() 时（或许隐式地发生在 finalize() 中）。
 
-(RUNNING or SHUTDOWN) -> STOP On invocation of shutdownNow() SHUTDOWN -> TIDYING When both queue and pool are empty STOP -> TIDYING When pool is empty TIDYING -> TERMINATED
+(RUNNING 或 SHUTDOWN) -> STOP，在调用 shutdownNow() 时。SHUTDOWN -> TIDYING，当队列与池均为空时。STOP -> TIDYING，当池为空时。TIDYING -> TERMINATED。
 
-When the terminated() hook method has completed Threads waiting in awaitTermination() will return when the state reaches TERMINATED.
+当 terminated() 钩子方法执行完成时，处于 awaitTermination() 中等待的线程会在状态到达 TERMINATED 时返回。
 
-Detecting the transition from SHUTDOWN to TIDYING is less straightforward than you'd like because the queue may become empty after non-empty and vice versa during SHUTDOWN state, but we can only terminate if, after seeing that it is empty, we see that workerCount is 0 (which sometimes entails a recheck -- see below).
+检测从 SHUTDOWN 到 TIDYING 的转换比期望的更不直观，因为在 SHUTDOWN 状态下队列可能先空后非空、又再变空；但只有在看到队列为空且 workerCount 为 0 时（有时需要重新检查——见下文）才能终止。
 
 ```java
 // runState is stored in the high-order bits
@@ -471,23 +467,21 @@ private static final int TIDYING    =  2 << COUNT_BITS;
 private static final int TERMINATED =  3 << COUNT_BITS;
 ```
 
-Transfer of state:
+状态转换：
 
 ![ThreadPoolExecutor](../img/ThreadPoolExecutor-state.png)
 
 ### create ThreadPoolExecutor
 
-Creates a new ThreadPoolExecutor with the given initial parameters:
+以给定初始参数创建一个新的 ThreadPoolExecutor：
 
-1. corePoolSize – the number of threads to keep in the pool, even if they are idle, unless allowCoreThreadTimeOut is set
-2. maximumPoolSize – the maximum number of threads to allow in the pool
-3. keepAliveTime – when the number of threads is greater than the core, this is the maximum time that excess idle
-
-   threads will wait for new tasks before terminating.
-4. unit – the time unit for the keepAliveTime argument
-5. workQueue – the queue to use for holding tasks before they are executed. This queue will hold only the Runnable tasks submitted by the execute method.
-6. threadFactory – the factory to use when the executor creates a new thread
-7. handler – the handler to use when execution is blocked because the thread bounds and queue capacities are reached
+1. corePoolSize —— 池中保留的线程数，即使它们空闲，除非设置了 allowCoreThreadTimeOut；
+2. maximumPoolSize —— 池中允许的最大线程数；
+3. keepAliveTime —— 当线程数大于核心数时，多余的空闲线程在终止前等待新任务的最长时间；
+4. unit —— keepAliveTime 参数的时间单位；
+5. workQueue —— 用于在执行前保存任务的队列。该队列只保存由 execute 方法提交的 Runnable 任务；
+6. threadFactory —— executor 创建新线程时使用的工厂；
+7. handler —— 当执行因线程边界与队列容量达到上限而被阻塞时使用的处理器；
 
 ```java
 public ThreadPoolExecutor(int corePoolSize,
@@ -514,17 +508,17 @@ public ThreadPoolExecutor(int corePoolSize,
 
 ### BlockingQueue
 
-Any [BlockingQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=blockingqueue) may be used to transfer and hold submitted tasks. The use of this queue interacts with pool sizing:
+任何 [BlockingQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=blockingqueue) 都可用于传递与保存被提交的任务。该队列的使用与池大小调节相互作用：
 
-- If fewer than corePoolSize threads are running, the Executor always prefers adding a new thread rather than queuing.
-- If corePoolSize or more threads are running, the Executor always prefers queuing a request rather than adding a new thread.
-- If a request cannot be queued, a new thread is created unless this would exceed maximumPoolSize, in which case, the task will be rejected.
+- 若运行的线程少于 corePoolSize，Executor 总是优先新增线程而非入队。
+- 若运行的线程达到或超过 corePoolSize，Executor 总是优先将请求入队而非新增线程。
+- 若请求无法入队，则会创建新线程，除非这会超过 maximumPoolSize，此时该任务将被拒绝。
 
-There are three general strategies for queuing:
+排队有三种通用策略：
 
-1. Direct handoffs. A good default choice for a work queue is a `SynchronousQueue` that hands off tasks to threads without otherwise holding them. Here, an attempt to queue a task will fail if no threads are immediately available to run it, so a new thread will be constructed. This policy avoids lockups when handling sets of requests that might have internal dependencies. Direct handoffs generally **require unbounded maximumPoolSizes** to avoid rejection of new submitted tasks. This in turn admits the possibility of unbounded thread growth when commands continue to arrive on average faster than they can be processed.
-2. Unbounded queues. Using an unbounded queue (for example a `LinkedBlockingQueue` without a predefined capacity) will cause new tasks to wait in the queue when all corePoolSize threads are busy. Thus, no more than corePoolSize threads will ever be created. (And the value of **the maximumPoolSize therefore doesn't have any effect**.) This may be appropriate when each task is completely independent of others, so tasks cannot affect each others execution; for example, in a web page server. While this style of queuing can be useful in smoothing out transient bursts of requests, it admits the possibility of unbounded work queue growth when commands continue to arrive on average faster than they can be processed.
-3. Bounded queues. A bounded queue (for example, an `ArrayBlockingQueue`) helps prevent resource exhaustion when used with finite maximumPoolSizes, but can be more difficult to tune and control. Queue sizes and maximum pool sizes may be traded off for each other: Using large queues and small pools minimizes CPU usage, OS resources, and context-switching overhead, but can lead to artificially low throughput. If tasks frequently block (for example if they are I/O bound), a system may be able to schedule time for more threads than you otherwise allow. Use of small queues generally requires larger pool sizes, which keeps CPUs busier but may encounter unacceptable scheduling overhead, which also decreases throughput.
+1. 直接移交（Direct handoffs）。工作队列的一个良好默认选择是 `SynchronousQueue`，它将任务直接移交给线程而不另行保存。此时，若没有立即可用的线程来运行任务，尝试入队会失败，于是会构造新线程。该策略在处理可能具有内部依赖的请求集合时避免死锁。直接移交通常**要求无界的 maximumPoolSizes**，以避免拒绝新提交的任务。这反过来又带来命令平均到达速度快于处理速度时线程无界增长的可能。
+2. 无界队列（Unbounded queues）。使用无界队列（例如未预设容量的 `LinkedBlockingQueue`）会在所有 corePoolSize 线程都繁忙时让新任务在队列中等待。因此，最多只会创建 corePoolSize 个线程（此时 **maximumPoolSize 的值因此不起作用**）。当每个任务彼此完全独立、不会相互影响执行时（例如网页服务器），这或许是合适的。虽然这种排队方式能平滑瞬时请求突发，但同样带来命令平均到达速度快于处理速度时工作队列无界增长的可能。
+3. 有界队列（Bounded queues）。有界队列（例如 `ArrayBlockingQueue`）配合有限的 maximumPoolSizes 使用有助于防止资源耗尽，但更难调优与控制。队列大小与最大池大小可相互权衡：使用大队列与小池可最小化 CPU 使用率、操作系统资源与上下文切换开销，但可能导致吞吐量被人为压低。若任务频繁阻塞（例如 I/O 密集型），系统或许能调度出比允许值更多的线程。使用小队列通常要求更大的池大小，使 CPU 更忙，但可能遇到难以接受的调度开销，同样会降低吞吐量。
 
 ### Rejected tasks
 
@@ -535,31 +529,31 @@ final void reject(Runnable command) {
 }
 ```
 
-RejectedExecution method that may be invoked by a ThreadPoolExecutor when execute cannot accept a task.This may occur when **no more threads or queue slots are available** because :
+当 execute 无法接受任务时，ThreadPoolExecutor 可能调用 RejectedExecution 方法。这可能发生在 **没有可用线程或队列槽位** 时，原因是：
 
-- **their bounds would be exceeded**
-- **upon shutdown of the Executor**
+- **超出了它们的边界**
+- **executor 关闭时**
 
-In either case, the execute method invokes the `RejectedExecutionHandler.rejectedExecution(Runnable, ThreadPoolExecutor)` method of its RejectedExecutionHandler. Four predefined handler policies are provided:
+无论哪种情况，execute 方法都会调用其 RejectedExecutionHandler 的 `RejectedExecutionHandler.rejectedExecution(Runnable, ThreadPoolExecutor)` 方法。预定义了四种处理器策略：
 
-1. In the **default** `ThreadPoolExecutor.AbortPolicy`, the handler throws a runtime RejectedExecutionException upon rejection.
-2. In `ThreadPoolExecutor.CallerRunsPolicy`, the thread that invokes execute itself runs the task. This provides a simple feedback control mechanism that will slow down the rate that new tasks are submitted.
-3. In `ThreadPoolExecutor.DiscardPolicy`, a task that cannot be executed is simply dropped.
+1. 在默认的 `ThreadPoolExecutor.AbortPolicy` 中，处理器在拒绝时抛出运行时异常 RejectedExecutionException。
+2. 在 `ThreadPoolExecutor.CallerRunsPolicy` 中，调用 execute 的线程自己运行该任务。这提供了一种简单的反馈控制机制，能降低新任务的提交速率。
+3. 在 `ThreadPoolExecutor.DiscardPolicy` 中，无法执行的任务被直接丢弃。
 
-   This policy is designed only for those rare cases in which task completion is never relied upon.
-4. In `ThreadPoolExecutor.DiscardOldestPolicy`, if the executor is not shut down, the task at the head of the work queue is dropped, and then execution is retried (which can fail again, causing this to be repeated.)
-   This policy is rarely acceptable.  In nearly all cases, you should also cancel the task to cause an exception in any component waiting for its completion, and/or log the failure.
+   该策略仅用于极少见的、从不依赖任务完成的情况。
+4. 在 `ThreadPoolExecutor.DiscardOldestPolicy` 中，若 executor 未关闭，则丢弃工作队列队首的任务，然后重试执行（可能再次失败并导致重复）。
+   该策略几乎不可接受。在几乎所有情况下，还应取消该任务以让任何等待其完成的组件抛出异常，和/或记录失败日志。
 
-It is possible to define and use other kinds of RejectedExecutionHandler classes. Doing so requires some care  especially when policies are designed to work only under particular capacity or queuing policies.
+也可以定义并使用其他种类的 RejectedExecutionHandler 类。这样做需要谨慎，尤其是当策略被设计为仅在特定的容量或排队策略下工作时。
 
 ### execute
 
-Executes the given task sometime in the future. The task may execute in a new thread or in an existing pooled thread.
+在未来某个时刻执行给定任务。任务可能在新线程或已有的池中线程中执行。
 
-If the task cannot be submitted for execution,
+若任务无法被提交执行，
 
-1. either because this executor **has been shutdown**
-2. or because its **capacity has been reached**, the task is handled by the current `RejectedExecutionHandler`.
+1. 是因为本 executor **已关闭**，
+2. 或是因为其**容量已达上限**，则该任务由当前的 `RejectedExecutionHandler` 处理。
 
 ```java
 public void execute(Runnable command) {
@@ -583,28 +577,26 @@ public void execute(Runnable command) {
 }
 ```
 
-Proceed in 3 steps:
+执行分为 3 步：
 
-1. If fewer than corePoolSize threads are running, try to start a new thread with the given command as its first task.
-   The call to **addWorker atomically checks runState and workerCount**, and so prevents false alarms that would add threads when it shouldn't, by returning false.
-2. If a task can be successfully queued, then we still **need to double-check whether we should have added a thread (because existing ones died since last checking) or that the pool shut down** since entry into this method.
-   So we recheck state and if necessary roll back the enqueuing if stopped, or start a new thread if there are none.
-3. If we cannot queue task, then we try to add a new thread.  If it fails, we know we are shut down or saturated and so reject the task.
+1. 若运行的线程少于 corePoolSize，则尝试以给定命令作为首个任务启动新线程。对 **addWorker 的调用会原子性地检查 runState 与 workerCount**，从而通过返回 false 避免在不该增加线程时增加线程的误报。
+2. 若任务成功入队，仍 **需要再次确认是否本应新增线程（因为上次检查后已有线程消亡），或本方法进入后池已关闭**。因此再次检查状态，必要时在停止时回滚入队，或在无工作线程时启动新线程。
+3. 若无法入队，则尝试新增线程；若失败，则可知已关闭或饱和，于是拒绝该任务。
 
-**Consider schedule threads in OS and GC cost**.
+**需考虑操作系统线程调度与 GC 开销**。
 
-priority of I/O threads higher than business threads
+I/O 线程的优先级应高于业务线程
 
 ### addWorker
 
-Checks if a new worker can be added with respect to current pool state and the given bound (either core or maximum). If so, the worker count is adjusted accordingly, and, if possible, a new worker is created and started, running firstTask as its first task.
+根据当前池状态与给定边界（核心或最大）检查是否可新增工作线程。若可以，则相应调整工作线程计数，并尽可能创建并启动一个新的工作线程，以 firstTask 作为首个任务。
 
-This method returns false:
+本方法在以下情况返回 false：
 
-1. if the pool is stopped or eligible to shut down.
-2. if the thread factory fails to create a thread when asked.
+1. 池已停止或符合关闭条件；
+2. 线程工厂在请求时未能创建线程。
 
-If the thread creation fails, either due to the thread factory returning null, or due to an exception (typically OutOfMemoryError in Thread.start()), we roll back cleanly.
+若线程创建失败（或因线程工厂返回 null，或因异常——通常是 Thread.start() 中的 OutOfMemoryError），将干净地回滚。
 
 ```java
 public class ThreadPoolExecutor extends AbstractExecutorService {
@@ -709,12 +701,12 @@ public class ThreadPoolExecutor extends AbstractExecutorService {
 
 #### Worker
 
-Class Worker mainly maintains interrupt control state for threads running tasks, along with other minor bookkeeping.
-This class opportunistically extends **AbstractQueuedSynchronizer** to simplify acquiring and releasing a lock surrounding each task execution.
-This protects against interrupts that are intended to wake up a worker thread waiting for a task from instead interrupting a task being run.
-We implement a simple non-reentrant mutual exclusion lock rather than use ReentrantLock because we do not want worker tasks to be able to reacquire the lock when they invoke pool control methods like setCorePoolSize.
+Worker 类主要维护运行任务的线程的中断控制状态，以及少量其他记账信息。
+该类顺便扩展 **AbstractQueuedSynchronizer**，以简化每次任务执行前后的加锁与释放。
+这可防止本意是唤醒等待任务的 worker 线程的中断，转而中断正在运行的任务。
+实现的是简单的不可重入互斥锁，而非使用 ReentrantLock，因为我们不希望 worker 任务在调用 setCorePoolSize 等池控制方法时能够重新获取该锁。
 
-*Additionally, to suppress interrupts until the thread actually starts running tasks, we **initialize lock state to a negative value**, and **clear it upon start (in runWorker)**.*
+*此外，为在线程真正开始运行任务前抑制中断，将锁状态**初始化为负值**，并**在启动时（runWorker 中）清除**它。*
 
 ```java
 // Creates with given first task and thread from ThreadFactory.
@@ -752,7 +744,7 @@ protected boolean tryRelease(int unused) {
 }
 ```
 
-only call by `shutdownNow()`
+仅由 `shutdownNow()` 调用
 
 ```java
 void interruptIfStarted() {
@@ -766,7 +758,7 @@ void interruptIfStarted() {
 }
 ```
 
-Delegates main run loop to outer runWorker
+将主运行循环委托给外层的 runWorker
 
 ```java
 public void run() {
@@ -776,19 +768,13 @@ public void run() {
 
 #### runWorker
 
-Main worker run loop. **Repeatedly gets tasks from queue and executes them, while coping with a number of issues**:
+work 线程主运行循环。**反复从队列获取任务并执行，同时应对若干情形**：
 
-1. We may start out with an initial task, in which case we don't need to get the first one. Otherwise, as long as pool is running, we get tasks from getTask. 
-If it returns null then the worker exits due to changed pool state or configuration parameters. 
-Other exits result from exception throws in external code, in which case completedAbruptly holds, which usually leads processWorkerExit to replace this thread.
-2. Before running any task, the lock is acquired to prevent other pool interrupts while the task is executing, and then we ensure that unless pool is stopping, this thread does not have its interrupt set.
-3. Each task run is preceded by a call to beforeExecute, which might throw an exception, in which case we cause thread to die (breaking loop with completedAbruptly true) without processing the task.
-4. Assuming beforeExecute completes normally, we run the task, gathering any of its thrown exceptions to send to afterExecute. 
-We separately handle RuntimeException, Error (both of which the specs guarantee that we trap) and arbitrary Throwables. 
-Because we cannot rethrow Throwables within Runnable.run, we wrap them within Errors on the way out (to the thread's UncaughtExceptionHandler). 
-Any thrown exception also conservatively causes thread to die.
-5. After task.run completes, we call afterExecute, which may also throw an exception, which will also cause thread to die. According to JLS Sec 14.20, this exception is the one that will be in effect even if task.run throws. 
-The net effect of the exception mechanics is that afterExecute and the thread's UncaughtExceptionHandler have as accurate information as we can provide about any problems encountered by user code.
+1. 可能以初始任务启动，此时无需获取第一个任务；否则只要池在运行，就从 getTask 获取任务。若其返回 null，则工作线程因池状态或配置参数改变而退出。其他退出源于外部代码抛出的异常，此时 completedAbruptly 为真，通常会导致 processWorkerExit 替换该线程。
+2. 运行任何任务前，先获取锁以防止任务执行期间其他池中断，然后确保除非池正在停止，否则本线程的中断位未被设置。
+3. 每次任务运行前都会调用 beforeExecute，它可能抛出异常，此时会导致线程死亡（以 completedAbruptly 为 true 跳出循环），且不处理该任务。
+4. 若 beforeExecute 正常完成，则运行任务，收集其抛出的任何异常以传给 afterExecute。分别处理 RuntimeException、Error（二者规范保证会被捕获）以及任意 Throwable。由于无法在 Runnable.run 内重新抛出 Throwable，在退出时将其包装进 Error（传给线程的 UncaughtExceptionHandler）。任何抛出的异常也会保守地导致线程死亡。
+5. task.run 完成后调用 afterExecute，它也可能抛出异常并导致线程死亡。根据 JLS 第 14.20 节，即使 task.run 抛出异常，生效的也是该异常。异常机制的整体效果，是让 afterExecute 与线程的 UncaughtExceptionHandler 能获得关于用户代码所遇问题尽可能准确的信息。
 
 ```java
 final void runWorker(Worker w) {
@@ -838,12 +824,12 @@ final void runWorker(Worker w) {
 
 #### getTask
 
-Performs blocking or timed wait for a task, depending on current configuration settings, or **returns null if this worker must exit because of any of**:
+根据当前配置设定，对任务进行阻塞或限时的等待；若本工作线程因以下任一原因必须退出，则**返回 null**：
 
-1. There are more than maximumPoolSize workers (due to a call to setMaximumPoolSize).
-2. The pool is stopped.
-3. The pool is shutdown and the queue is empty.
-4. This worker timed out waiting for a task, and timed-out workers are subject to termination (that is, allowCoreThreadTimeOut || workerCount > corePoolSize) both before and after the timed wait, and if the queue is non-empty, this worker is not the last thread in the pool.
+1. 工作线程数超过了 maximumPoolSize（因调用了 setMaximumPoolSize）；
+2. 池已停止；
+3. 池已关闭且队列为空；
+4. 本工作线程等待任务超时，且超时的工作线程在等待前后都可被终止（即 allowCoreThreadTimeOut || workerCount > corePoolSize），并且当队列非空时，本线程并非池中最后一个线程。
 
 ```java
 private Runnable getTask() {
@@ -890,7 +876,7 @@ private Runnable getTask() {
 
 #### processWorkerExit
 
-*Performs cleanup and bookkeeping for a dying worker. Called only from worker threads. Unless completedAbruptly is set, assumes that workerCount has already been adjusted to account for exit. This method removes thread from worker set, and possibly terminates the pool or replaces the worker if either it exited due to user task exception or if fewer than corePoolSize workers are running or queue is non-empty but there are no workers.*
+*对被消亡的工作线程执行清理与记账。仅从工作线程调用。除非 completedAbruptly 被设置，否则假设 workerCount 已为退出做了调整。本方法将线程从 workers 集合中移除，并可能在以下情况终止池或替换工作线程：因用户任务异常而退出，或运行的工作线程少于 corePoolSize，或队列非空但已无工作线程。*
 
 ```java
 private void processWorkerExit(Worker w, boolean completedAbruptly) {
@@ -924,12 +910,12 @@ private void processWorkerExit(Worker w, boolean completedAbruptly) {
 
 #### tryTerminate
 
-Transitions to TERMINATED state if :
+在以下情况转换到 TERMINATED 状态：
 
-1. either (SHUTDOWN and pool and queue empty)
-2. or (STOP and pool empty).
+1. （SHUTDOWN 且池与队列均为空）；
+2. 或（STOP 且池为空）。
 
-If otherwise eligible to terminate but workerCount is nonzero, interrupts an idle worker to ensure that shutdown signals propagate. This method must be called following any action that might make termination possible -- reducing worker count or removing tasks from the queue during shutdown. The method is non-private to allow access from ScheduledThreadPoolExecutor.
+若符合终止条件但 workerCount 非零，则中断一个空闲工作线程以确保关闭信号得以传播。任何可能使终止成为可行的操作（关闭期间减少工作线程数或从队列移除任务）之后都必须调用本方法。本方法非 private，以便 ScheduledThreadPoolExecutor 访问。
 
 ```java
 final void tryTerminate() {
@@ -966,17 +952,17 @@ final void tryTerminate() {
 
 ### Hook methods
 
-This class provides protected overridable beforeExecute(Thread, Runnable) and afterExecute(Runnable, Throwable) methods that are called before and after execution of each task. These can be used to manipulate the execution environment; for example, reinitializing ThreadLocals, gathering statistics, or adding log entries. Additionally, method terminated can be overridden to perform any special processing that needs to be done once the Executor has fully terminated.
-If hook, callback, or BlockingQueue methods throw exceptions, internal worker threads may in turn fail, abruptly terminate, and possibly be replaced.
-Queue maintenance
-Method getQueue() allows access to the work queue for purposes of monitoring and debugging. Use of this method for any other purpose is strongly discouraged. Two supplied methods, remove(Runnable) and purge are available to assist in storage reclamation when large numbers of queued tasks become cancelled.
+本类提供了受保护的、可重写的 beforeExecute(Thread, Runnable) 与 afterExecute(Runnable, Throwable) 方法，分别在每任务执行前后调用。它们可用于调整执行环境，例如重新初始化 ThreadLocal、收集统计信息或添加日志条目。此外，可重写 terminated 方法，在 Executor 完全终止后执行所需的特殊处理。
+若钩子、回调或 BlockingQueue 方法抛出异常，内部工作线程可能随之失败、突然终止，并可能被替换。
+队列维护
+getQueue() 方法允许出于监控与调试目的访问工作队列。强烈不建议将该方用于其他任何目的。当大量已排队的任务被取消时，可使用两个提供的方法 remove(Runnable) 与 purge 来辅助回收存储空间。
 
 ### Reclamation
 
-A pool that is no longer referenced in a program AND has no remaining threads may be reclaimed (garbage collected) without being explicitly shutdown.
-You can configure a pool to allow all unused threads to eventually die by setting appropriate keep-alive times, using a lower bound of zero core threads and/or setting allowCoreThreadTimeOut(boolean).
+程序中不再被引用且没有剩余线程的池，可在未显式关闭的情况下被回收（垃圾回收）。
+可通过设置合适的 keep-alive 时间、将核心线程下限设为 0 和/或设置 allowCoreThreadTimeOut(boolean)，将池配置为允许所有未用线程最终消亡。
 
-Extension example. Most extensions of this class override one or more of the protected hook methods. For example, here is a subclass that adds a simple pause/resume feature:
+扩展示例。本类的大多数扩展会重写一个或多个受保护的钩子方法。例如，下面是一个添加了简单暂停/恢复功能的子类：
 
 ```java
  class PausableThreadPoolExecutor extends ThreadPoolExecutor {
@@ -1021,8 +1007,8 @@ Extension example. Most extensions of this class override one or more of the pro
 
 ### shutdown
 
-Initiates an orderly shutdown in which previously submitted **tasks are executed**, but **no new tasks will be accepted**. Invocation has no additional effect if already shut down.
-This method does **not wait for previously submitted tasks to complete execution**. Use *awaitTermination* to do that.
+发起有序关闭，其间执行先前提交的**任务，但**不再接受新任务**。若已关闭则调用无额外效果。
+本方法**不会等待先前提交的任务执行完成**。可使用 *awaitTermination* 来做到这一点。
 
 ```java
 public void shutdown() {
@@ -1042,14 +1028,14 @@ public void shutdown() {
 
 #### shutdownNow
 
-Attempts to **stop all actively executing tasks**, halts the processing of waiting tasks, and returns a list of the tasks that were awaiting execution.
-These tasks are drained (removed) from the task queue upon return from this method.
+尝试**停止所有正在执行的任务**，停止等待任务的处理，并返回等待执行的任务列表。
+这些任务在方法返回时从该任务队列中排出（移除）。
 
-This method does not wait for actively executing tasks to terminate.
-Use `awaitTermination` to do that.
+本方法不等待正在执行的任务终止。
+可使用 `awaitTermination` 来做到这一点。
 
-There are no guarantees beyond best-effort attempts to stop processing actively executing tasks.
-This implementation interrupts tasks via `Thread.interrupt`; **any task that fails to respond to interrupts may never terminate**.
+除尽力停止处理正在执行的任务外，不作任何保证。
+本实现通过 `Thread.interrupt` 中断任务；**任何未能响应中断的任务可能永远无法终止**。
 
 ```java
 public List<Runnable> shutdownNow() {
@@ -1096,11 +1082,10 @@ void interruptIfStarted() {
 
 > [ExecutorService::shutdownNow may block invokeAll indefinitely](https://bugs.openjdk.org/browse/JDK-8160037)
 
-shutdownNow returns a list of never-started tasks, while [invokeAll](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md?id=invokeall)  waits for all tasks to be completed,
-so it seems natural for it to hang if the never-started task list is simply discarded.
-It is possible for the caller of shutdownNow to cancel all returned tasks, releasing the caller of invokeAll.
+shutdownNow 返回的是从未启动的任务列表，而 [invokeAll](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md?id=invokeall) 会等待所有任务完成，因此若直接丢弃未启动的任务列表，它挂起似乎在所难免。
+shutdownNow 的调用者可以取消所有返回的任务，从而释放 invokeAll 的调用者。
 
-So in fact users can in practice do:
+因此在实践中用户可做如下处理：
 
 ```java
 for (Runnable r : pool.shutdownNow()) {
@@ -1128,27 +1113,27 @@ VariableLinkedBlockingQueue
 
 #### setWorkQueueSize
 
-[LinkedBlockingQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=linkedblockingqueue) can not change capacity.
+[LinkedBlockingQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=linkedblockingqueue) 无法更改容量。
 
-Or we can override a LinkedBlockingQueue to allow resizing thread safe.
+也可以重写一个 LinkedBlockingQueue，使其支持线程安全的大小调整。
 
 ## Executors
 
-Factory and utility methods for Executor, ExecutorService, ScheduledExecutorService, ThreadFactory, and Callable classes defined in this package. This class supports the following kinds of methods:
-Methods that create and return an ExecutorService set up with commonly useful configuration settings.
-Methods that create and return a ScheduledExecutorService set up with commonly useful configuration settings.
-Methods that create and return a "wrapped" ExecutorService, that disables reconfiguration by making implementation-specific methods inaccessible.
-Methods that create and return a ThreadFactory that sets newly created threads to a known state.
-Methods that create and return a Callable out of other closure-like forms, so they can be used in execution methods requiring Callable.
+本包中定义的 Executor、ExecutorService、ScheduledExecutorService、ThreadFactory 与 Callable 类的工厂与工具方法。本类支持以下几类方法：
+创建并返回以常用配置设定好的 ExecutorService 的方法；
+创建并返回以常用配置设定好的 ScheduledExecutorService 的方法；
+创建并返回“包装后”的 ExecutorService 的方法，它通过使实现相关方法不可访问来禁用重新配置；
+创建并返回将新创建线程设置为已知状态的 ThreadFactory 的方法；
+从其他类似闭包的形式创建并返回 Callable 的方法，以便用于需要 Callable 的执行方法中。
 
 <!-- tabs:start -->
 
 ##### **newWorkStealingPool**
 
-Creates a thread pool that maintains enough threads to support the given parallelism level, and may use multiple queues to reduce contention.
-The parallelism level corresponds to the maximum number of threads actively engaged in, or available to engage in, task processing.
-The actual number of threads may grow and shrink dynamically.
-A work-stealing pool makes no guarantees about the order in which submitted tasks are executed.
+创建一个维持足够线程数以支持给定并行度（parallelism）级别的线程池，并可能使用多个队列来减少竞争。
+并行度级别对应于积极参与或可用于参与任务处理的最大线程数。
+实际线程数可能动态增减。
+工作窃取池不保证已提交任务的执行顺序。
 
 ```java
 public static ExecutorService newWorkStealingPool(int parallelism) {
@@ -1161,10 +1146,10 @@ public static ExecutorService newWorkStealingPool(int parallelism) {
 
 ##### **newFixedThreadPool**
 
-Creates a thread pool that reuses a fixed number of threads operating off a shared unbounded queue, using the provided ThreadFactory to create new threads when needed. At any point, at most nThreads threads will be active processing tasks.
-If additional tasks are submitted when all threads are active, they will wait in the queue until a thread is available.
-If any thread terminates due to a failure during execution prior to shutdown, a new one will take its place if needed to execute subsequent tasks.
-The threads in the pool will exist until it is explicitly shutdown.
+创建一个复用固定数量线程、运行于共享无界队列上的线程池，并在需要时通过提供的 ThreadFactory 创建新线程。任意时刻最多有 nThreads 个线程处于活跃处理任务状态。
+若所有线程都活跃时提交了额外任务，它们会在队列中等待，直到有可用线程。
+若任何线程在关闭前因执行期间失败而终止，会在需要时由新线程替代以执行后续任务。
+池中的线程将一直存在，直到被显式关闭。
 
 ```java
 public static ExecutorService newFixedThreadPool(int nThreads, ThreadFactory threadFactory) {
@@ -1177,7 +1162,7 @@ public static ExecutorService newFixedThreadPool(int nThreads, ThreadFactory thr
 
 ##### **newCachedThreadPool**
 
-Creates a thread pool that creates new threads as needed, but will reuse previously constructed threads when they are available, and uses the provided ThreadFactory to create new threads when needed.
+创建一个按需创建新线程、但在可用时复用先前构造线程的线程池，并在需要时通过提供的 ThreadFactory 创建新线程。
 
 ```java
 public static ExecutorService newCachedThreadPool(ThreadFactory threadFactory) {
@@ -1190,7 +1175,7 @@ public static ExecutorService newCachedThreadPool(ThreadFactory threadFactory) {
 
 ##### **newSingleThreadExecutor**
 
-Creates an Executor that uses a single worker thread operating off an unbounded queue, and uses the provided ThreadFactory to create a new thread when needed. Unlike the otherwise equivalent newFixedThreadPool(1, threadFactory) the returned executor is guaranteed not to be reconfigurable to use additional threads.
+创建一个使用单个工作线程、运行于无界队列上的 Executor，并在需要时通过提供的 ThreadFactory 创建新线程。与被等价替代的 newFixedThreadPool(1, threadFactory) 不同，返回的 executor 保证不可被重配置为使用额外线程。
 
 ```java
 public static ExecutorService newSingleThreadExecutor(ThreadFactory threadFactory) {
@@ -1206,7 +1191,7 @@ public static ExecutorService newSingleThreadExecutor(ThreadFactory threadFactor
 
 ##### **newScheduledThreadPool**
 
-Creates a thread pool that can schedule commands to run after a given delay, or to execute periodically.
+创建一个能在给定延迟后调度命令运行、或周期性执行的线程池。
 
 ```java
 public static ScheduledExecutorService newScheduledThreadPool(
@@ -1217,11 +1202,11 @@ public static ScheduledExecutorService newScheduledThreadPool(
 
 <!-- tabs:end -->
 
-|              | Cache                 | Fix                   |
+|              | Cache（缓存线程池）     | Fix（固定线程池）        |
 | ------------ | --------------------- | --------------------- |
-| threads      | all non-core threads  | all core threads      |
-| None tasks   | recycle after 60s     | block on queue.take() |
-| disadvantage | unbound thread counts | unbound linked queue |
+| 线程         | 全部为非核心线程        | 全部为核心线程          |
+| 无任务时     | 60 秒后回收           | 阻塞于 queue.take()    |
+| 缺点         | 线程数无上限          | 链表队列无上限        |
 |              |                       |                       |
 
 
@@ -1249,7 +1234,6 @@ public static ScheduledExecutorService newScheduledThreadPool(
 - ✅ 核心链路：自定义策略 → 记录指标、降级返回、写本地磁盘/DB异步补偿、或触发熔断
 - ⚠️ `CallerRunsPolicy`：可反压调用方，但可能阻塞主线程，仅适用于同步调用链且有超时控制场景
 - 📦 推荐封装：`FallbackRejectedExecutionHandler`，结合 Sentinel/Resilience4j 实现快速失败
-
 
 
 

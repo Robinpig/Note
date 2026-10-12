@@ -1,13 +1,13 @@
 ## Introduction
 
-Provides a framework for [implementing blocking locks](/docs/CS/Java/JDK/Concurrency/Concurrency.md?id=locking) and related [synchronizers](/docs/CS/Java/JDK/Concurrency/Concurrency.md?id=synchronizers) (semaphores, events, etc) that rely on first-in-first-out (**FIFO**) [wait queues](/docs/CS/Java/JDK/Concurrency/AQS.md?id=wait-queue). 
+为[实现阻塞锁](/docs/CS/Java/JDK/Concurrency/Concurrency.md?id=locking)及相关[同步器](/docs/CS/Java/JDK/Concurrency/Concurrency.md?id=synchronizers)（信号量、事件等）提供了一个框架，这些同步器都依赖先进先出（**FIFO**）的[等待队列](/docs/CS/Java/JDK/Concurrency/AQS.md?id=wait-queue)。
 
-This class is designed to be a useful basis for most kinds of synchronizers that rely on a single atomic int value to represent state. 
+该类被设计为大多数同步器的有用基础，这些同步器依赖单个原子 int 值来表示状态。
 
-Subclasses must define the protected methods that change this state, and which define what that state means in terms of this object being acquired or released. 
-Given these, the other methods in this class carry out all queuing and blocking mechanics. 
+子类必须定义用于改变该状态的 protected 方法，并由这些方法定义该状态在本对象被获取或释放方面的含义。
+有了这些方法，本类中的其他方法便可承担全部排队与阻塞机制。
 
-Subclasses can maintain other state fields, but only the atomically updated int value manipulated using methods `getState`, `setState` and `compareAndSetState` is tracked with respect to synchronization.
+子类可以维护其他状态字段，但只有通过 `getState`、`setState` 和 `compareAndSetState` 方法操作的、以原子方式更新的 int 值，才在同步方面被跟踪。
 
 ## Architecture
 
@@ -63,13 +63,14 @@ public final boolean hasQueuedPredecessors() {
 }
 ```
 
-Queries whether any threads have been waiting to acquire longer than the current thread.
-An invocation of this method is equivalent to (but may be more efficient than):
+查询是否有线程等待获取的时间长于当前线程。
+调用该方法等价于（但可能比以下写法更高效）：
 
  getFirstQueuedThread() != Thread.currentThread() && hasQueuedThreads()
 
-Note that because cancellations due to interrupts and timeouts may occur at any time, a true return does not guarantee that some other thread will acquire before the current thread. Likewise, it is possible for another thread to win a race to enqueue after this method has returned false, due to the queue being empty.
-This method is designed to be used by **a fair synchronizer** to avoid barging. Such a synchronizer's tryAcquire method should return false, and its tryAcquireShared method should return a negative value, if this method returns true (unless this is a reentrant acquire). For example, the tryAcquire method for a fair, reentrant, exclusive mode synchronizer might look like this:
+需要注意的是，由于中断和超时引起的取消可能在任意时刻发生，返回 true 并不保证某个其他线程会先于当前线程获取。同样，由于队列为空，在该方法返回 false 之后，另一个线程仍有可能在入队竞争中获胜。
+
+该方法供**公平同步器**使用，以避免插队（barging）。若该方法返回 true，则此类同步器的 tryAcquire 方法应返回 false，其 tryAcquireShared 方法应返回负值（除非是可重入获取）。例如，一个公平的、可重入的独占模式同步器，其 tryAcquire 方法可能如下：
 
 ```java
 protected boolean tryAcquire(int arg) {
@@ -87,26 +88,26 @@ protected boolean tryAcquire(int arg) {
 
 ### isHeldExclusively
 
-Returns true if synchronization is held exclusively with respect to the current (calling) thread. This method is invoked upon each call to a AbstractQueuedSynchronizer.ConditionObject method.
-The default implementation throws UnsupportedOperationException. **This method is invoked internally only within AbstractQueuedSynchronizer.ConditionObject methods, so need not be defined if conditions are not used.**
+若同步被当前（调用）线程独占持有，则返回 true。每次调用 AbstractQueuedSynchronizer.ConditionObject 的方法时，都会调用该方法。
+默认实现抛出 UnsupportedOperationException。**该方法仅在 AbstractQueuedSynchronizer.ConditionObject 的方法内部被调用，因此若不使用条件，则无需定义它。**
 
 
 
 
 ## Wait Queue
 
-| Queue  | Sync list               | Condition           |
+| 队列          | 同步队列                   | 条件队列            |
 | ------ | ----------------------- | ------------------- |
-| Struct | use Node.prev/Node.next | use Node.nextWaiter |
+| 结构 | 使用 Node.prev/Node.next | 使用 Node.nextWaiter |
 
 
 
 ### Node
 
-The wait queue is a variant of a "CLH" (Craig, Landin, and Hagersten) lock queue. CLH locks are normally used for spinlocks.  We instead use them for blocking synchronizers by including explicit ("prev" and "next") links plus a "status" field that allow nodes to signal successors when releasing locks, and handle cancellation due to interrupts and timeouts.
-The status field includes bits that track whether a thread needs a signal (using LockSupport.unpark). Despite these additions, we maintain most CLH locality properties.
+等待队列是 "CLH"（Craig、Landin 与 Hagersten）锁队列的一个变体。CLH 锁通常用于自旋锁。这里改为将它们用于阻塞同步器，方法是加入显式的（"prev" 和 "next"）链接以及一个 "status" 字段，使节点能够在释放锁时通知其后继，并处理因中断和超时导致的取消。
+status 字段中包含若干位，用于跟踪线程是否需要被通知（借助 LockSupport.unpark）。尽管加入了这些机制，本实现仍保留了 CLH 大部分局部性性质。
 
-To enqueue into a CLH lock, you atomically splice it in as new tail. To dequeue, you set the head field, so the next eligible waiter becomes first.
+要入队到 CLH 锁中，只需以原子方式将节点拼接为新的 tail；要出队，则设置 head 字段，使下一个符合条件的等待者成为队首。
 
 ```java
 /**      +------+  prev +-----+       +-----+
@@ -117,38 +118,37 @@ To enqueue into a CLH lock, you atomically splice it in as new tail. To dequeue,
 
 
 
-Insertion into a CLH queue requires only a single atomic operation on "tail", so there is a simple point of demarcation from unqueued to queued. The "next" link of the predecessor is set by the enqueuing thread after successful CAS. Even though non-atomic, this suffices to ensure that any blocked thread is signalled by a predecessor when eligible (although in the case of cancellation, possibly with the assistance of a signal in method cleanQueue). Signalling is based in part on a Dekker-like scheme in which the to-be waiting thread indicates WAITING status, then retries acquiring, and then rechecks status before blocking. The signaller atomically clears WAITING status when unparking.
+插入 CLH 队列只需对 "tail" 做一次原子操作，因此从未入队到已入队之间存在一个简单的分界点。前驱节点的 "next" 链接由入队线程在 CAS 成功后设置。虽然该设置不是原子的，但这已足以保证任何被阻塞的线程在前驱变得可通知时被通知（在取消的情况下，可能还需要 cleanQueue 方法中发出的信号协助）。通知机制部分基于一种 Dekker 式方案：即将等待的线程先标记 WAITING 状态，然后重试获取，并在真正阻塞之前再次检查状态。通知方在 unpark 时以原子方式清除 WAITING 状态。
 
 
 
-Dequeuing on acquire involves detaching (nulling) a node's "prev" node and then updating the "head". Other threads check if a node is or was dequeued by checking "prev" rather than head. We enforce the nulling then setting order by spin-waiting if necessary. Because of this, the lock algorithm is not itself strictly "lock-free" because an acquiring thread may need to wait for a previous acquire to make progress. When used with exclusive locks, such progress is required anyway. However Shared mode may (uncommonly) require a spin-wait before setting head field to ensure proper propagation. (Historical note: This allows some simplifications and efficiencies compared to previous versions of this class.)
-
-A node's predecessor can change due to cancellation while it is waiting, until the node is first in queue, at which point it cannot change. The acquire methods cope with this by rechecking "prev" before waiting. The prev and next fields are modified only via CAS by cancelled nodes in method cleanQueue. The unsplice strategy is reminiscent of Michael-Scott queues in that after a successful CAS to prev field, other threads help fix next fields.  Because cancellation often occurs in bunches that complicate decisions about necessary signals, each call to cleanQueue traverses the queue until a clean sweep. Nodes that become relinked as first are unconditionally unparked (sometimes unnecessarily, but those cases are not worth avoiding).
+获取成功后的出队，涉及先摘除（置空）节点的 "prev"，然后更新 "head"。其他线程通过检查 "prev" 而非 head，来判断某节点是否已出队或曾经出队。必要时通过自旋等待来保证「先置空、后设置」的顺序。因此，该锁算法本身并非严格意义上的「无锁」（lock-free），因为获取线程可能需要等待此前的获取完成才能推进。在与独占锁配合使用时，这种推进本来就是必需的。不过 Shared 模式可能（少见地）在设置 head 字段之前需要自旋等待，以确保正确传播。（历史说明：与本类的早期版本相比，这样做可以简化实现并提升效率。）
 
 
+节点的前驱可能因等待期间的取消而改变，直到该节点成为队首为止；一旦成为队首，前驱便不再改变。各 acquire 方法通过在等待之前重新检查 "prev" 来应对这一点。prev 与 next 字段只由 cleanQueue 方法中被取消的节点通过 CAS 修改。这种摘链策略与 Michael-Scott 队列类似：对 prev 字段 CAS 成功之后，由其他线程协助修复 next 字段。由于取消往往是成批发生的，会使「是否需要发出信号」的判断复杂化，因此每次调用 cleanQueue 都会遍历队列直到完成一次彻底清理。那些重新链接为队首的节点会被无条件地 unpark（有时确无必要，但不值得为此增加开销）。
 
-A thread may try to acquire if it is first (frontmost) in the queue, and sometimes before.  Being first does not guarantee
-success; it only gives the right to contend. We balance throughput, overhead, and fairness by allowing incoming threads to "barge" and acquire the synchronizer while in the process of enqueuing, in which case an awakened first thread may need to rewait.  To counteract possible repeated unlucky rewaits, we exponentially increase retries (up to 256) to acquire each time a thread is unparked. Except in this case, AQS locks do not spin; they instead interleave attempts to acquire with bookkeeping steps. (Users who want spinlocks can use tryAcquire.)
 
-To improve garbage collectibility, fields of nodes not yet on list are null. (It is not rare to create and then throw away a
-node without using it.) Fields of nodes coming off the list are nulled out as soon as possible. This accentuates the challenge of externally determining the first waiting thread (as in method getFirstQueuedThread). This sometimes requires the fallback of traversing backwards from the atomically updated "tail" when fields appear null. (This is never needed in the process of signalling though.)
 
+当线程位于队首（最靠前）时，可能尝试获取，有时也在成为队首之前就尝试。位于队首并不能保证成功；它只是获得了参与竞争的权利。为在吞吐量、开销与公平性之间取得平衡，允许新到达的线程在入队过程中「插队」（barge）并直接获取同步器，此时被唤醒的队首线程可能需要重新等待。为抵消可能反复出现的不幸重等，线程每次被 unpark 时都按指数增加重试次数（上限为 256 次）。除这种情况外，AQS 锁并不自旋，而是把获取尝试与簿记步骤交替进行。（需要自旋锁的用户可以使用 tryAcquire。）
+
+为提高可回收性，尚未入链的节点其字段均为 null。（创建随后又直接丢弃一个节点并不罕见。）出链节点的字段会尽快置空。这使得从外部确定首个等待线程（如 getFirstQueuedThread 方法所做的）变得更为困难。当字段显示为 null 时，有时需要退回到从已原子更新的 "tail" 开始反向遍历。（不过在发出信号的过程中绝不需要这样做。）
 
 
 
 
-CLH queues need a dummy header node to get started. But we don't create them on construction, because it would be wasted effort if there is never contention. Instead, the node is constructed and head and tail pointers are set upon first contention.
-Shared mode operations differ from Exclusive in that an acquire signals the next waiter to try to acquire if it is also
-Shared. The tryAcquireShared API allows users to indicate the degree of propagation, but in most applications, it is more efficient to ignore this, allowing the successor to try acquiring in any case.
-Threads waiting on Conditions use nodes with an additional link to maintain the (FIFO) list of conditions. Conditions only need to link nodes in simple (non-concurrent) linked queues because they are only accessed when exclusively held.  Upon await, a node is inserted into a condition queue.  Upon signal, the node is enqueued on the main queue.  A special status field value is used to track and atomically trigger this. Accesses to fields head, tail, and state use full Volatile mode, along with CAS. Node fields status, prev and next also do so while threads may be signallable, but sometimes use weaker modes otherwise. Accesses to field "waiter" (the thread to be signalled) are always sandwiched between other atomic accesses so are used in Plain mode. We use jdk.internal Unsafe versions of atomic access methods rather than VarHandles to avoid potential VM bootstrap issues.
+
+CLH 队列需要一个虚拟头节点才能启动。但这里不在构造时创建它们，因为若始终不存在竞争，这么做只是徒劳。取而代之的做法是，等到首次出现竞争时才构造该节点并设置 head 与 tail 指针。
+Shared 模式的操作与 Exclusive 的不同之处在于：若下一个等待者同样处于 Shared 模式，则获取成功时会通知它去尝试获取。tryAcquireShared API 允许用户指定传播的程度，但在大多数应用中，忽略它更高效，让后继者无论如何都尝试获取即可。
+在 Condition 上等待的线程使用带有一条额外链接的节点，以维护条件的（FIFO）链表。条件只需要在简单（非并发）的链式队列中链接节点，因为它们仅在独占持有时被访问。
+调用 await 时，节点被插入条件队列。调用 signal 时，节点被放入主队列。
+这里使用 status 字段的一个特殊取值来跟踪并以原子方式触发这一过程。对 head、tail 和 state 字段的访问采用完整的 Volatile 模式，并配合 CAS。节点的 status、prev 与 next 字段在线程可能被通知时也采用同样方式，其他时候则使用较弱的模式。对 "waiter" 字段（待通知的线程）的访问始终夹在其他原子访问之间，因此采用 Plain 模式。这里使用 jdk.internal 的 Unsafe 版原子访问方法而非 VarHandle，以避免潜在的 VM 引导期问题。
 
 
 
-Most of the above is performed by primary internal method acquire, that is invoked in some way by all exported acquire
-methods.  (It is usually easy for compilers to optimize call-site specializations when heavily used.)
-There are several arbitrary decisions about when and how to check interrupts in both acquire and await before and/or after blocking. The decisions are less arbitrary in implementation updates because some users appear to rely on original behaviors in ways that are racy and so (rarely) wrong in general but hard to justify changing.
+上述大部分工作由内部主要方法 acquire 完成，所有对外暴露的 acquire 方法都会以某种方式调用它。（在使用频繁时，编译器通常很容易优化调用点的特化。）
+在 acquire 与 await 中，关于在阻塞之前和/或之后何时以及如何检查中断，存在若干处任意的决策。由于一些用户似乎以存在竞态的方式依赖原有的行为，因而在实现更新时这些决策的改动较小——虽然这些行为通常（尽管很少）并不正确，但很难有理由去改变。
 
-Thanks go to Dave Dice, Mark Moir, Victor Luchangco, Bill Scherer and Michael Scott, along with members of JSR-166 expert group, for helpful ideas, discussions, and critiques on the design of this class.
+感谢 Dave Dice、Mark Moir、Victor Luchangco、Bill Scherer 与 Michael Scott，以及 JSR-166 专家组的成员，感谢他们对本类设计提出的宝贵建议、讨论与批评意见。
 
 
 
@@ -232,23 +232,23 @@ static final int CONDITION = -2;
 static final int PROPAGATE = -3;
 ```
 
-Status field, taking on only the values: 
+status 字段，仅取以下几种取值：
 
-- SIGNAL: The successor of this node is (or will soon be) blocked (via park), so the current node must unpark its successor when it releases or cancels. To avoid races, acquire methods must first indicate they need a signal, then retry the atomic acquire, and then, on failure, block. 
-- CANCELLED: This node is cancelled due to timeout or interrupt. Nodes never leave this state. In particular, a thread with cancelled node never again blocks. 
-- CONDITION: This node is currently on a condition queue. It will not be used as a sync queue node until transferred, at which time the status will be set to 0. (Use of this value here has nothing to do with the other uses of the field, but simplifies mechanics.) 
-- PROPAGATE: A `releaseShared` should be propagated to other nodes. This is set (for head node only) in `doReleaseShared` to ensure propagation continues, even if other operations have since intervened. 
-- 0: None of the above 
+- SIGNAL：本节点的后继（或即将）已被阻塞（通过 park），因此当前节点在释放或取消时必须 unpark 其后继。为避免竞态，acquire 方法必须先表明自身需要被通知，再重试原子获取，失败后才阻塞。
+- CANCELLED：本节点因超时或中断而被取消。节点永不离开此状态。特别地，持有一个已取消节点的线程不会再阻塞。
+- CONDITION：本节点当前位于条件队列中。在被转移之前不会作为同步队列节点使用，转移时其 status 将被置为 0。（此处对该取值的使用与该字段的其他用途无关，但它简化了机制。）
+- PROPAGATE：某次 `releaseShared` 需要传播到其他节点。在 `doReleaseShared` 中设置该值（仅用于 head 节点），以确保即使期间有其他操作介入，传播仍能继续。
+- 0：以上皆非
 
-The values are arranged numerically to simplify use. Non-negative values mean that a node doesn't need to signal. So, most code doesn't need to check for particular values, just for sign. 
+这些取值在数值上的排列方式是为了简化使用。非负值意味着该节点不需要发出信号。因此，大多数代码无需检查具体取值，只需判断符号。
 
-The field is initialized to 0 for normal sync nodes, and CONDITION for condition nodes. It is modified using CAS (or when possible,
+对普通同步节点，该字段初始化为 0；对条件节点则初始化为 CONDITION。它通过 CAS 修改（或在可能时，
 
 
 
 #### nextWaiter
 
-Link to **next node waiting on condition**, or **the special value SHARED**. Because condition queues are accessed only when holding in exclusive mode, we just need a simple linked queue to hold nodes while they are waiting on conditions. They are then transferred to the queue to re-acquire. And because conditions can only be exclusive, we save a field by using special value to indicate shared mode.
+指向**下一个在条件上等待的节点**，或**特殊值 SHARED**。由于条件队列只在独占持有模式下被访问，这里只需一个简单的链式队列来容纳等待条件的节点，随后它们被转移到队列中重新获取。又因为条件只能是独占的，这里用一个特殊值来表示共享模式，从而省下一个字段。
 
 
 
@@ -263,7 +263,7 @@ Link to **next node waiting on condition**, or **the special value SHARED**. Bec
    2. parkAndCheckInterrupt
 4. selfInterrupt
 
-Acquires in exclusive mode, ignoring interrupts. Implemented by invoking at least once tryAcquire, returning on success. Otherwise the thread is queued, possibly repeatedly blocking and unblocking, invoking tryAcquire until success. This method can be used to implement method `Lock.lock`.
+以独占模式获取，忽略中断。实现方式是至少调用一次 tryAcquire，成功即返回。否则线程会被入队，可能反复阻塞与解除阻塞，不断调用 tryAcquire 直到成功。本方法可用于实现 `Lock.lock` 方法。
 
 ```java
 public final void acquire(int arg) {
@@ -283,9 +283,9 @@ public final void acquireInterruptibly(int arg)
 
 #### addWaiter
 
-Set node.prev first, then set prev.node when `compareAndSetTail`success 
+先设置 node.prev，再在 `compareAndSetTail` 成功后设置 pred.node
 
-so it is not safe to iterate from head, node.next maybe null
+因此不能安全地从 head 开始遍历，node.next 可能为 null
 
 ```java
 /**
@@ -420,7 +420,7 @@ private static boolean shouldParkAfterFailedAcquire(Node pred, Node node) {
 
 #### parkAndCheckInterrupt
 
-Clear interrupt for next [park](/docs/CS/Java/JDK/Basic/unsafe.md?id=parker)
+为下一次 [park](/docs/CS/Java/JDK/Basic/unsafe.md?id=parker) 清除中断状态
 
 ```java
 private final boolean parkAndCheckInterrupt() {
@@ -433,10 +433,10 @@ private final boolean parkAndCheckInterrupt() {
 
 #### cancelAcquire
 
-when will we invoke cancelAcquire:
+何时会调用 cancelAcquire：
 
-1. exception
-2. Else timeout, throw new InterruptedException 
+1. 抛出异常
+2. 其余情况是超时，抛出 new InterruptedException 
 
 
 
@@ -659,7 +659,7 @@ JDK 8 的写法在 `java.util.concurrent.locks` 里已经不存在：
 状态位的语义整体被简化了：旧的四个负值常量变成了两个正数位，
 并且大量原本靠 CAS 循环修改 `waitStatus` 的地方改用了 `Node` 上的专用原语
 （`getAndUnsetStatus` / `setStatusRelaxed` / `clearStatus`），注释里直接写明了用途
-（`for signalling` / `for off-queue assignment` / `for reducing unneeded signals`）。
+（用于标记「需要 signal」「用于 off-queue 赋值」「用于削减多余 signal」）。
 读旧代码里的 `waitStatus` 时要意识到这一点，否则会以为在读当前实现。
 
 ## ConditionObject
@@ -708,14 +708,14 @@ public class ConditionObject implements Condition, java.io.Serializable {
 
 ### await
 
-Implements interruptible condition wait.
+实现可中断的条件等待。
 
-1. If current thread is interrupted, throw InterruptedException.
-2. Save lock state returned by getState.
-3. Invoke release with saved state as argument, throwing IllegalMonitorStateException if it fails.
-4. Block until signalled or interrupted.
-5. Reacquire by invoking specialized version of acquire with saved state as argument.
-6. If interrupted while blocked in step 4, throw InterruptedException.
+1. 若当前线程已被中断，抛出 InterruptedException。
+2. 保存 getState 返回的锁状态。
+3. 以保存的状态为参数调用 release，若失败则抛出 IllegalMonitorStateException。
+4. 阻塞直到被通知或被中断。
+5. 以保存的状态为参数调用 acquire 的特化版本重新获取。
+6. 若在第 4 步的阻塞期间被中断，抛出 InterruptedException。
 
 ```java
 public final void await() throws InterruptedException {
@@ -741,7 +741,7 @@ public final void await() throws InterruptedException {
 
 
 #### addConditionWaiter
-If lastWaiter is cancelled, clean out, add nextWaiter
+若 lastWaiter 已被取消，则清理掉，并添加 nextWaiter
 ```java
 private Node addConditionWaiter() {
     Node t = lastWaiter;
@@ -762,7 +762,7 @@ private Node addConditionWaiter() {
 
 
 
-Unlinks cancelled waiter nodes from condition queue. Called only while holding lock. This is called when cancellation occurred during condition wait, and upon insertion of a new waiter when lastWaiter is seen to have been cancelled. This method is needed to avoid garbage retention in the absence of signals. So even though it may require a full traversal, it comes into play only when timeouts or cancellations occur in the absence of signals. It traverses all nodes rather than stopping at a particular target to unlink all pointers to garbage nodes without requiring many re-traversals during cancellation storms.
+将已取消的等待节点从条件队列中摘除。仅在持有锁时调用。当条件等待期间发生取消时会调用它；当插入新等待者时若发现 lastWaiter 已被取消，也会调用它。该方法用于避免在没有信号时滞留垃圾数据。因此，尽管它可能需要一次完整遍历，但只有在没有信号的情况下发生超时或取消时才会发挥作用。它会遍历所有节点而非停在某个特定目标上，从而摘除指向垃圾节点的全部指针，而无需在取消风暴期间反复重新遍历。
 
 ```java
 private void unlinkCancelledWaiters() {
@@ -814,7 +814,7 @@ final int fullyRelease(Node node) {
 
 
 
-use [Thread#yield()](/docs/CS/Java/JDK/Concurrency/Thread.md?id=yield)
+使用 [Thread#yield()](/docs/CS/Java/JDK/Concurrency/Thread.md?id=yield)
 
 ```java
 private int checkInterruptWhileWaiting(Node node) {
@@ -878,7 +878,7 @@ private void reportInterruptAfterWait(int interruptMode)
 
 ### signal
 
-Moves the longest-waiting thread, if one exists, from the wait queue for this condition to the wait queue for the owning lock.
+把等待时间最长的线程（若存在）从该条件的等待队列移动到持有者锁的等待队列。
 
 ```java
 public final void signal() {
@@ -902,7 +902,7 @@ public final void signalAll() {
 
 #### doSignal
 
-Removes and transfers nodes until hit non-cancelled one or null. Split out from signal in part to encourage compilers to inline the case of no waiters.
+不断移除并转移节点，直到遇到未取消的节点或 null。部分从 signal 中拆分出来，是为了促使编译器把「无等待者」这一情形内联。
 
 ```java
 private void doSignal(Node first) {
@@ -929,7 +929,7 @@ private void doSignalAll(Node first) {
 
 #### transferForSignal
 
-enq
+入队（enq）
 
 ```java
 final boolean transferForSignal(Node node) {
@@ -952,7 +952,7 @@ final boolean transferForSignal(Node node) {
 ```
 
 ## Example
-From JDK:
+摘自 JDK：
 ```java
 class Mutex implements Lock, java.io.Serializable {
 
@@ -1012,7 +1012,7 @@ class Mutex implements Lock, java.io.Serializable {
  }
 ```
 
-Here is a latch class that is like a CountDownLatch except that it only requires a single signal to fire. Because a latch is non-exclusive, it uses the shared acquire and release methods.
+下面是一个闩（latch）类，它与 CountDownLatch 类似，只是只需一个信号即可触发。由于闩是非独占的，因此它使用共享的 acquire 与 release 方法。
 
 ```java
  class BooleanLatch {
@@ -1039,9 +1039,9 @@ Here is a latch class that is like a CountDownLatch except that it only requires
  }
 ```
 
-1. Exclusive ReentrantLock
-2. Share Semaphore/CountDownLatch
-3. Both ReadWriteLock/StampedLock
+1. 独占模式：`ReentrantLock`
+2. 共享模式：`Semaphore` / `CountDownLatch`
+3. 两者兼有：`ReadWriteLock` / `StampedLock`
 
 
 

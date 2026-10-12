@@ -2,19 +2,19 @@
 
 ## Introduction
 
-A ReadWriteLock maintains a pair of associated locks, one for read-only operations and one for writing. The read lock may be held simultaneously by multiple reader threads, so long as there are no writers. The write lock is exclusive.
+ReadWriteLock 维护一对关联的锁，一把用于只读操作，一把用于写入。只要没有写者，读锁就可以同时被多个读线程持有；写锁则是独占的。
 
-All ReadWriteLock implementations must guarantee that the memory synchronization effects of writeLock operations (as specified in the Lock interface) also hold with respect to the associated readLock. That is, a thread successfully acquiring the read lock will see all updates made upon previous release of the write lock.
-A read-write lock allows for a greater level of concurrency in accessing shared data than that permitted by a mutual exclusion lock. It exploits the fact that while only a single thread at a time (a writer thread) can modify the shared data, in many cases any number of threads can concurrently read the data (hence reader threads). In theory, the increase in concurrency permitted by the use of a read-write lock will lead to performance improvements over the use of a mutual exclusion lock. In practice this increase in concurrency will only be fully realized on a multi-processor, and then only if the access patterns for the shared data are suitable.
-Whether or not a read-write lock will improve performance over the use of a mutual exclusion lock depends on the frequency that the data is read compared to being modified, the duration of the read and write operations, and the contention for the data - that is, the number of threads that will try to read or write the data at the same time. For example, a collection that is initially populated with data and thereafter infrequently modified, while being frequently searched (such as a directory of some kind) is an ideal candidate for the use of a read-write lock. However, if updates become frequent then the data spends most of its time being exclusively locked and there is little, if any increase in concurrency. Further, if the read operations are too short the overhead of the read-write lock implementation (which is inherently more complex than a mutual exclusion lock) can dominate the execution cost, particularly as many read-write lock implementations still serialize all threads through a small section of code. Ultimately, only profiling and measurement will establish whether the use of a read-write lock is suitable for your application.
-Although the basic operation of a read-write lock is straight-forward, there are many policy decisions that an implementation must make, which may affect the effectiveness of the read-write lock in a given application. Examples of these policies include:
+所有 ReadWriteLock 的实现都必须保证：writeLock 操作的内存同步效果（如 Lock 接口所规定）对关联的 readLock 同样成立。也就是说，成功获取读锁的线程能看到此前写锁释放时所做的全部更新。
+与互斥锁相比，读写锁允许以更高的并发度访问共享数据。它利用了这样一个事实：虽然同一时刻只有一个线程（写线程）能修改共享数据，但在很多情况下任意数量的线程都可以并发读取数据（因此称为读线程）。理论上，使用读写锁带来的并发度提升会带来比互斥锁更好的性能；实际上，这种提升只有在多处理器上、且数据共享的访问模式合适时才能充分体现。
+读写锁能否比互斥锁带来性能提升，取决于数据被读取相对于被修改的频率、读写操作的持续时间，以及数据竞争程度——即同一时刻尝试读写数据的线程数量。例如，一个先填充数据、之后很少修改却频繁查询（如某种目录）的集合，就是使用读写锁的理想候选。然而，如果更新变得频繁，数据大部分时间都处于独占锁定状态，并发度几乎得不到提升。此外，如果读取操作过短，读写锁实现（本质上比互斥锁更复杂）的开销就会主导执行成本，尤其是许多读写锁实现仍会让所有线程串行地经过一小段代码。归根到底，只有借助性能剖析与实测，才能判断读写锁是否适合你的应用。
+尽管读写锁的基本操作很简单，但实现必须做出许多策略决策，这些决策会影响读写锁在特定应用中的效果。这类策略包括：
 
-1. Determining whether to grant the read lock or the write lock, when both readers and writers are waiting, at the time that a writer releases the write lock. Writer preference is common, as writes are expected to be short and infrequent. Reader preference is less common as it can lead to lengthy delays for a write if the readers are frequent and long-lived as expected. Fair, or "in-order" implementations are also possible.
-2. Determining whether readers that request the read lock while a reader is active and a writer is waiting, are granted the read lock. Preference to the reader can delay the writer indefinitely, while preference to the writer can reduce the potential for concurrency.
-3. Determining whether the locks are reentrant: can a thread with the write lock reacquire it? Can it acquire a read lock while holding the write lock? Is the read lock itself reentrant?
-4. Can the write lock be downgraded to a read lock without allowing an intervening writer? Can a read lock be upgraded to a write lock, in preference to other waiting readers or writers?
+1. 当读写线程都在等待、且写者释放写锁时，决定授予读锁还是写锁。写者优先很常见，因为写入通常预期短暂且不频繁。读者优先则较少见，因为如果读者频繁且存活时间长，可能导致写者长时间延迟。公平（"in-order"）实现也是可能的。
+2. 当读锁已被持有时有写者在等待，此时新请求读锁的读者是否被授予读锁。偏向读者可能让写者无限期延迟，而偏向写者则会降低潜在的并发度。
+3. 决定锁是否可重入：持有写锁的线程能否再次获取它？持有写锁时能否获取读锁？读锁本身是否可重入？
+4. 写锁能否在不插入写者的情况下降级为读锁？读锁能否优先于其他等待的读者或写者升级为写锁？
 
-You should consider all of these things when evaluating the suitability of a given implementation for your application.
+在评估某个实现是否适合你的应用时，应当把以上这些都考虑进去。
 
 ```java
 public interface ReadWriteLock {
@@ -27,22 +27,22 @@ public interface ReadWriteLock {
 ```
 
 
-The interaction between the read and write locks allows for a number of possible implementations. Some of the implementation options for a ReadWriteLock are”
+读锁与写锁之间的相互作用允许多种可能的实现。ReadWriteLock 的部分实现选项包括”
 
-- **Release preference**. 
-  When a writer releases the write lock and both readers and writers are queued up, who should be given preference—readers, writers, or whoever asked first?
-- **Reader barging**. 
-  If the lock is held by readers but there are waiting writers, should newly arriving readers be granted immediate access, or should they wait behind the writers? 
-  Allowing readers to barge ahead of writers enhances concurrency but runs the risk of starving writers.
-- **Reentrancy**. 
-  Are the read and write locks reentrant?
-- **Downgrading**. 
-  If a thread holds the write lock, can it acquire the read lock without releasing the write lock? 
-  This would let a writer “downgrade” to a read lock without letting other writers modify the guarded resource in the meantime.
-- **Upgrading**. 
-  Can a read lock be upgraded to a write lock in preference to other waiting readers or writers? 
-  Most read-write lock implementations do not support upgrading, because without an explicit upgrade operation it is deadlock-prone. 
-  (If two readers simultaneously attempt to upgrade to a write lock, neither will release the read lock.)”
+- **释放偏好（Release preference）**。 
+  当写者释放写锁、且读者与写者都在排队时，应当优先给谁——读者、写者，还是先请求的？
+- **读者插队（Reader barging）**。 
+  如果锁被读者持有但已有写者在等待，新到达的读者是否应立即获得访问权，还是应当排在写者之后？ 
+  允许读者插到写者前面能提升并发度，但有饿死写者的风险。
+- **可重入（Reentrancy）**。 
+  读锁和写锁是否可重入？
+- **降级（Downgrading）**。 
+  如果某线程持有写锁，它能否在不释放写锁的情况下获取读锁？ 
+  这样写者就能「降级」为读锁，同时不让其他写者在此期间修改受保护资源。
+- **升级（Upgrading）**。 
+  读锁能否优先于其他等待的读者或写者升级为写锁？ 
+  大多数读写锁实现都不支持升级，因为没有显式的升级操作很容易导致死锁。 
+  （如果两个读者同时尝试升级为写锁，谁都不会释放读锁。）”
 
 
 
@@ -194,9 +194,9 @@ public void lock() {
 
 
 
-tryAcquireShared Walkthrough:
-1. If write lock held by another thread, fail.
-2. Otherwise, this thread is eligible for lock wrt state, so ask if it should block because of queue policy. If not, try to grant by CASing state and updating count. Note that step does not check for reentrant acquires, which is postponed to full version to avoid having to check hold count in the more typical non-reentrant case. If step 2 fails either because thread apparently not eligible or CAS fails or count saturated, chain to version with full retry loop.
+tryAcquireShared 走查：
+1. 若写锁被其他线程持有，失败。
+2. 否则，本线程在状态层面有资格获取锁，于是询问是否因队列策略而应当阻塞；若否，则通过 CAS 更新状态与计数来尝试授予。注意这一步不检查可重入获取，而是推迟到完整版本，以避免在更常见的非重入情况下检查持有计数。若第 2 步失败（线程明显无资格、CAS 失败或计数饱和），则转入带完整重试循环的版本。
 
 ```java
 protected final int tryAcquireShared(int unused) {
@@ -234,7 +234,7 @@ protected final int tryAcquireShared(int unused) {
 
 NonFairLock
 
-As a heuristic to avoid indefinite writer starvation, block if the thread that momentarily appears to be head of queue, if one exists, is a waiting writer.  This is only a probabilistic effect since a new reader will not block if there is a waiting writer behind other enabled readers that have not yet drained from the queue.
+作为一种启发式以避免写者无限期饿死：若（存在的）队列头部线程恰好是一个等待中的写者，则阻塞。这只是一个概率性效果，因为若等待中的写者后面还有其他已启用的读者尚未离开队列，新读者并不会被阻塞。
 
 ```java
 // FairLock
@@ -336,11 +336,11 @@ final int fullTryAcquireShared(Thread current) {
 
 ### tryAcquire
 
-tryAcquire Walkthrough:
+tryAcquire 走查：
 
-1. If read count nonzero or write count nonzero and owner is a different thread, fail.
-2. If count would saturate, fail. (This can only happen if count is already nonzero.)
-3. Otherwise, this thread is eligible for lock if it is either a reentrant acquire or queue policy allows it. If so, update state and set owner.
+1. 若读计数非零，或写计数非零且持有者并非本线程，失败。
+2. 若计数将溢出，失败。（这仅在计数已非零时发生。）
+3. 否则，若本次为可重入获取，或队列策略允许，则本线程有资格获取锁；若是，则更新状态并设置持有者。
 
 ```java
 protected final boolean tryAcquire(int acquires) {
@@ -364,9 +364,9 @@ protected final boolean tryAcquire(int acquires) {
     return true;
 }
 ```
-writerShouldBlock:
-- FairLock will invoke hasQueuedPredecessors
-- NonFairLock always return false
+writerShouldBlock：
+- FairLock 会调用 hasQueuedPredecessors
+- NonFairLock 始终返回 false
 
 
 
@@ -388,7 +388,7 @@ public void unlock() {
 
 #### tryReleaseShared
 
-if nextc still > 0, return fase and not invoke [doReleaseShared]() to wake up next waiter
+若 nextc 仍 > 0，返回 false 且不会调用 [doReleaseShared]() 来唤醒下一个等待者
 
 ```java
 protected final boolean tryReleaseShared(int unused) {
@@ -427,7 +427,7 @@ protected final boolean tryReleaseShared(int unused) {
 
 #### tryRelease
 
-Note that tryRelease and tryAcquire can be called by Conditions. So it is possible that their arguments contain both read and write holds that are all released during a condition wait and re-established in tryAcquire.
+注意，tryRelease 与 tryAcquire 都可能被 Condition 调用。因此它们的参数中可能同时包含读锁与写锁的持有计数，这些计数会在一次条件等待期间被全部释放，并在 tryAcquire 中重新建立。
 
 ```java
 protected final boolean tryRelease(int releases) {
@@ -551,17 +551,17 @@ if (lock.tryWriteLock()) {
 
 |      | ReadLock                | WriteLock                                                    |
 | ---- | ----------------------- | ------------------------------------------------------------ |
-| Lock | ReadLock allow ReadLock | WriteLock block both ReadLock/WriteLock(unless W -> R of self) |
-| Condition |         not supported      |   supported    |
-|  Up/Down Grade    |         not support upgrade                |        support downgrade |
+| Lock | 读锁允许读锁 | 写锁阻塞读锁和写锁（除非自身 W → R） |
+| Condition |         不支持      |   支持    |
+| 升级/降级    |         不支持升级                |        支持降级 |
 
 
 
-Read-write locks are a performance optimization designed to allow greater concurrency in certain situations.
-In practice, read-write locks can improve performance for frequently accessed read-mostly data structures on multiprocessor systems;
-under other conditions they perform slightly worse than exclusive locks due to their greater complexity.
-Whether they are an improvement in any given situation is best determined via profiling; because ReadWriteLock uses Lock for the read and write portions of the lock,
-it is relatively easy to swap out a readwrite lock for an exclusive one if profiling determines that a read-write lock is not a win.
+读写锁是一种性能优化手段，目的是在特定场景下提供更高的并发度。
+实践中，在多用处理器的系统上，读写锁能够提升那些频繁读取、基本只读的数据结构的性能；
+但在其他条件下，由于其更高的复杂度，它表现反而略逊于独占锁。
+读写锁是否在特定场景下带来改善，最好通过性能剖析来判断；由于 ReadWriteLock 在读、写两部分都使用 Lock，
+若剖析表明读写锁并无收益，将其替换为独占锁也相对容易。
 
 
 ## Links

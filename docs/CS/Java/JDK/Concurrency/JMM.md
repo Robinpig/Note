@@ -1,25 +1,25 @@
 ## Introduction
 
 
-A *memory model* describes, given a program and an execution trace of that program, whether the execution trace is a legal execution of the program.
-The Java programming language memory model works by examining each read in an execution trace and checking that the write observed by that read is valid according to certain rules.
+所谓 *memory model*（内存模型），是指在给定一个程序及其执行轨迹（execution trace）的前提下，判定该执行轨迹是否为程序的合法执行。
+Java 语言的内存模型通过检查执行轨迹中的每一次读操作，并依据特定规则验证该读操作所观察到的写操作是否合法来运作。
 
-The memory model describes possible behaviors of a program.
-An implementation is free to produce any code it likes, as long as all resulting executions of a program produce a result that can be predicted by the memory model.
+内存模型描述的是程序的可能行为（possible behaviors）。
+只要程序的所有执行结果都能被内存模型预测，具体实现便可以自由地生成任意代码。
 
-This provides a great deal of freedom for the implementor to perform a myriad of code transformations, including the reordering of actions and removal of unnecessary synchronization.
-
-
-A memory model specifies how threads and objects interact
-- **Atomicity**
-  Locking to obtain mutual exclusion for field updates
-- **Visibility**
-  Ensuring that changes made in one thread are seen in other threads
-- **Ordering**
-  Ensuring that you aren’t surprised by the order in which statements are executed
+这为实现者提供了极大的自由度，使其能够进行大量代码变换，包括操作重排序（reordering）以及去除不必要的同步。
 
 
-The Java Memory Model (JMM) is a relaxed memory model which acts as a contract between Java programmers, compiler writers and JVM implementors.
+内存模型规定了线程与对象之间的交互方式：
+- **原子性（Atomicity）**
+  通过加锁获得字段更新的互斥访问
+- **可见性（Visibility）**
+  确保一个线程所作的修改对其他线程可见
+- **有序性（Ordering）**
+  确保语句的执行顺序不会带来意料之外的结果
+
+
+Java 内存模型（JMM）是一种宽松（relaxed）的内存模型，在 Java 程序员、编译器编写者与 JVM 实现者之间充当一种契约。
 
 ## Cache Coherence
 
@@ -27,26 +27,25 @@ The Java Memory Model (JMM) is a relaxed memory model which acts as a contract b
 
 ### Memory Consistency Properties
 
-Defines the happens-before relation on memory operations such as reads and writes of shared variables.
-The results of a write by one thread are guaranteed to be visible to a read by another thread only if the write operation happens-before the read operation.
-The synchronized and volatile constructs, as well as the Thread.start() and Thread.join() methods, can form happens-before relationships.
-In particular: Each action in a thread happens-before every action in that thread that comes later in the program's order.
-An unlock (synchronized block or method exit) of a monitor happens-before every subsequent lock (synchronized block or method entry) of that same monitor.
-And because the happens-before relation is transitive, all actions of a thread prior to unlocking happen-before all actions subsequent to any thread locking that monitor.
-A write to a volatile field happens-before every subsequent read of that same field.
-Writes and reads of volatile fields have similar memory consistency effects as entering and exiting monitors, but do not entail mutual exclusion locking.
-A call to start on a thread happens-before any action in the started thread.
+定义了共享变量（shared variables）的读、写等内存操作之间的 happens-before 关系。
+仅当某线程的写操作 happens-before 另一线程的读操作时，前者的写结果才保证对后者的读可见。
+synchronized 与 volatile 构造，以及 Thread.start() 和 Thread.join() 方法，均可以形成 happens-before 关系。
+具体而言：线程中的任一动作 happens-before 该线程程序顺序中在其之后的所有动作。
+对监视器（monitor）的解锁（退出 synchronized 块或方法）happens-before 随后对该同一监视器的每一次加锁（进入 synchronized 块或方法）。
+由于 happens-before 关系具有传递性，线程在解锁前的所有动作 happens-before 任何其他线程对该监视器加锁后的所有动作。
+对 volatile 字段的写 happens-before 随后对该同一字段的每一次读。
+volatile 字段的读写具有与进入/退出监视器相似的内存一致性效果，但不需要互斥加锁。
+对线程调用 start 的动作 happens-before 被启动线程中的任一动作。
 
-All actions in a thread happen-before any other thread successfully returns from a join on that thread.
-The methods of all classes in java.util.concurrent and its subpackages extend these guarantees to higher-level synchronization.
-In particular:
-Actions in a thread prior to placing an object into any concurrent collection happen-before actions subsequent to the access or removal of that element from the collection in another thread.
-Actions in a thread prior to the submission of a Runnable to an Executor happen-before its execution begins. Similarly for Callables submitted to an ExecutorService.
-Actions taken by the asynchronous computation represented by a Future happen-before actions subsequent to the retrieval of the result via Future.get() in another thread.
-Actions prior to "releasing" synchronizer methods such as Lock.unlock, S
-emaphore.release, and CountDownLatch.countDown happen-before actions subsequent to a successful "acquiring" method such as Lock.lock, Semaphore.acquire, Condition.await, and CountDownLatch.await on the same synchronizer object in another thread.
-For each pair of threads that successfully exchange objects via an Exchanger, actions prior to the exchange() in each thread happen-before those subsequent to the corresponding exchange() in another thread.
-Actions prior to calling CyclicBarrier.await and Phaser.awaitAdvance (as well as its variants) happen-before actions performed by the barrier action, and actions performed by the barrier action happen-before actions subsequent to a successful return from the corresponding await in other threads.
+线程中的所有动作 happens-before 任何其他线程成功从该线程的 join 返回。
+java.util.concurrent 及其子包中所有类的方法，将这些保证扩展到了更高层次的同步。
+具体而言：
+线程将对象放入任一并发集合前的动作 happens-before 另一线程从该集合访问或移除该元素后的动作。
+线程向 Executor 提交 Runnable 前的动作 happens-before 其开始执行。向 ExecutorService 提交 Callable 同理。
+由 Future 代表的异步计算所采取的动作 happens-before 另一线程通过 Future.get() 取回结果后的动作。
+在调用 Lock.unlock、Semaphore.release、CountDownLatch.countDown 等“释放”同步器方法前的动作 happens-before 另一线程对同一同步器对象成功调用 Lock.lock、Semaphore.acquire、Condition.await、CountDownLatch.await 等“获取”方法后的动作。
+每一对通过 Exchanger 成功交换对象的线程，各自在 exchange() 之前的动作 happens-before 另一线程对应 exchange() 之后的动作。
+在调用 CyclicBarrier.await 与 Phaser.awaitAdvance（及其变体）之前的动作 happens-before 由屏障动作（barrier action）执行的动作，而屏障动作执行的动作 happens-before 其他线程成功从对应 await 返回之后的动作。
 
 
 ### MESI
@@ -61,19 +60,19 @@ Modified（已修改）, Exclusive（独占的）,Shared（共享的），Invali
 
 由于MESI缓存一致性协议，需要不断对主线进行内存嗅探，大量的交互会导致总线带宽达到峰值。
 
-NUMA(Non-Uniform Memory Access Architecture)
+NUMA（非统一内存访问架构，Non-Uniform Memory Access Architecture）
 
 ## Java Memory Model
 
 ### Shared Variables
 
-Memory that can be shared between threads is called *shared memory* or *heap memory*.
+线程之间可以共享的内存称为 *shared memory*（共享内存）或 *heap memory*（堆内存）。
 
-All instance fields, `static` fields, and array elements are stored in heap memory. In this chapter, we use the term *variable* to refer to both fields and array elements.
+所有实例字段、`static` 字段与数组元素都存储在堆内存中。本章使用术语 *variable*（变量）来同时指代字段与数组元素。
 
-Local variables ([§14.4](https://docs.oracle.com/javase/specs/jls/se8/html/jls-14.html#jls-14.4)), formal method parameters ([§8.4.1](https://docs.oracle.com/javase/specs/jls/se8/html/jls-8.html#jls-8.4.1)), and exception handler parameters ([§14.20](https://docs.oracle.com/javase/specs/jls/se8/html/jls-14.html#jls-14.20)) are never shared between threads and are unaffected by the memory model.
+局部变量（[§14.4](https://docs.oracle.com/javase/specs/jls/se8/html/jls-14.html#jls-14.4)）、方法的形式参数（[§8.4.1](https://docs.oracle.com/javase/specs/jls/se8/html/jls-8.html#jls-8.4.1)）以及异常处理器的参数（[§14.20](https://docs.oracle.com/javase/specs/jls/se8/html/jls-14.html#jls-14.20)）永远不会在线程之间共享，因此不受内存模型影响。
 
-Two accesses to (reads of or writes to) the same variable are said to be *conflicting* if at least one of the accesses is a write.
+对同一个变量的两次访问（读或写），只要其中至少一次是写，就称为 *conflicting*（冲突访问）。
 
 
 
@@ -81,33 +80,31 @@ Two accesses to (reads of or writes to) the same variable are said to be *confli
 
 ### Ordering
 
-- compiler, JIT Instruction Reorder
+- 编译器、JIT 指令重排序
 - CPU
-- Memory
+- 内存
 
 
 
 ### volatile
 
-Variants of lock rule apply to volatile fields and thread control
-- Writing a volatile has same basic memory effects as unlock
-- Reading a volatile has same basic memory effects as lock
+锁规则的变体同样适用于 volatile 字段与线程控制
+- 写入 volatile 具有与解锁（unlock）基本相同的内存效果
+- 读取 volatile 具有与加锁（lock）基本相同的内存效果
 
-Similarly for thread start and termination
+线程的启动与终止同理
 
-Details differ from locks in minor ways
+与锁的差别仅在细枝末节上
 
-- visually
-- prevent reorder
+- 可见性层面
+- 防止重排序
 
 volatile 只给可见性与有序性，**不给互斥性**（`count++` 仍会丢更新），且只覆盖引用本身而不覆盖被引用对象的内部状态；
 屏障落地的具体形态见 [volatile](/docs/CS/Java/JDK/Concurrency/volatile.md)。
 
 
 ### Final fields
-All threads will read the final value so long as it is guaranteed
-to be assigned before the object could be made visible to other
-threads. So DON'T write:
+只要能保证 final 字段在对象对其他线程可见之前完成赋值，所有线程都会读到该 final 值。因此不要写出这样的代码：
 
 
 ```java
@@ -118,181 +115,180 @@ class Stupid implements Runnable {
 }
 ```
 
-Extremely weak rules for unsynchronized, non-volatile, non-final
-reads and writes
-type-safe, not-out-of-thin-air, but can be reordered, invisible
+对于未同步、非 volatile、非 final 的读与写，规则极其宽松
+保持类型安全、不会出现凭空（out-of-thin-air）的值，但可以被重排序、且不可见
 
 
 
 ### Programs and Program Order
 
-Among all the inter-thread actions performed by each thread *t*, the *program order* of *t* is a total order that reflects the order in which these actions would be performed according to the intra-thread semantics of *t*.
+在线程 *t* 所执行的全部线程间动作中，*t* 的*程序顺序*（program order）是一个全序，它反映了按照 *t* 的线程内语义这些动作本应被执行的先后次序。
 
-A set of actions is *sequentially consistent* if all actions occur in a total order (the execution order) that is consistent with program order, and furthermore, each read *r* of a variable *v* sees the value written by the write *w* to *v* such that:
+若一组动作满足以下条件，则称其*顺序一致*（sequentially consistent）：所有动作都发生在一个与程序顺序相一致的全序（即执行顺序）之中；此外，对变量 *v* 的每次读 *r*，都能看到对 *v* 的某次写 *w* 所写入的值，该 *w* 满足：
 
-- *w* comes before *r* in the execution order, and
-- there is no other write *w*' such that *w* comes before *w*' and *w*' comes before *r* in the execution order.
+- *w* 在执行顺序中位于 *r* 之前，并且
+- 不存在另一次写 *w*'，使得 *w* 在执行顺序中位于 *w*' 之前、且 *w*' 位于 *r* 之前。
 
-Sequential consistency is a very strong guarantee that is made about visibility and ordering in an execution of a program. Within a sequentially consistent execution, there is a total order over all individual actions (such as reads and writes) which is consistent with the order of the program, and each individual action is atomic and is immediately visible to every thread.
+顺序一致是关于程序执行中可见性与有序性的一个极强的保证。在一次顺序一致的执行中，存在一个与程序顺序相一致的全序，涵盖所有单个动作（如读和写），并且每个单个动作都是原子的，且立即对每个线程可见。
 
-If a program has no data races, then all executions of the program will appear to be sequentially consistent.
+如果一个程序不存在数据竞争，那么该程序的所有执行看上去都是顺序一致的。
 
-Sequential consistency and/or freedom from data races still allows errors arising from groups of operations that need to be perceived atomically and are not.
+顺序一致和/或不存在数据竞争，仍无法排除由「本应被原子地感知、实际却未被原子感知」的一组操作所引发的错误。
 
-If we were to use sequential consistency as our memory model, many of the compiler and processor optimizations that we have discussed would be illegal. For example, in the trace in [Table 17.4-C](https://docs.oracle.com/javase/specs/jls/se8/html/jls-17.html#jls-17.4-C), as soon as the write of `3` to `p.x` occurred, subsequent reads of that location would be required to see that value.
+如果把顺序一致作为内存模型，本文讨论过的许多编译器与处理器优化都将是非法的。例如，在 [Table 17.4-C](https://docs.oracle.com/javase/specs/jls/se8/html/jls-17.html#jls-17.4-C) 的执行轨迹中，一旦对 `p.x` 写入了 `3`，后续对该位置的读就必须看到该值。
 
 
 
 ### Synchronization Order
 
-**Every execution has a *synchronization order*.** A synchronization order is a total order over all of the synchronization actions of an execution. For each thread *t*, the synchronization order of the synchronization actions ([§17.4.2](https://docs.oracle.com/javase/specs/jls/se8/html/jls-17.html#jls-17.4.2)) in *t* is consistent with the program order ([§17.4.3](https://docs.oracle.com/javase/specs/jls/se8/html/jls-17.html#jls-17.4.3)) of *t*.
+**每次执行都有一个 *synchronization order*（同步顺序）。** 同步顺序是一次执行中所有同步动作的全序。对每个线程 *t*，*t* 中同步动作的顺序（[§17.4.2](https://docs.oracle.com/javase/specs/jls/se8/html/jls-17.html#jls-17.4.2)）与 *t* 的程序顺序（[§17.4.3](https://docs.oracle.com/javase/specs/jls/se8/html/jls-17.html#jls-17.4.3)）相一致。
 
-Synchronization actions induce the *synchronized-with* relation on actions, defined as follows:
+同步动作在动作之间导出 *synchronized-with*（同步于）关系，定义如下：
 
-- An unlock action on monitor *m* *synchronizes-with* all subsequent lock actions on *m* (where "subsequent" is defined according to the synchronization order).
+- 对监视器 *m* 的解锁动作 *synchronizes-with* 其后对 *m* 的所有加锁动作（这里的「其后」按同步顺序来定义）。
 
-- A write to a volatile variable *v* ([§8.3.1.4](https://docs.oracle.com/javase/specs/jls/se8/html/jls-8.html#jls-8.3.1.4)) *synchronizes-with* all subsequent reads of *v* by any thread (where "subsequent" is defined according to the synchronization order).
+- 对 volatile 变量 *v* 的写（[§8.3.1.4](https://docs.oracle.com/javase/specs/jls/se8/html/jls-8.html#jls-8.3.1.4)）*synchronizes-with* 其后任意线程对 *v* 的所有读（这里的「其后」按同步顺序来定义）。
 
-- An action that starts a thread *synchronizes-with* the first action in the thread it starts.
+- 启动线程的动作 *synchronizes-with* 被启动线程中的首个动作。
 
-- The write of the default value (zero, `false`, or `null`) to each variable *synchronizes-with* the first action in every thread.
+- 对每个变量写入默认值（`0`、`false` 或 `null`）*synchronizes-with* 每个线程中的首个动作。
 
-  Although it may seem a little strange to write a default value to a variable before the object containing the variable is allocated, conceptually every object is created at the start of the program with its default initialized values.
+  在包含该变量的对象被分配之前就写入默认值，看起来或许有些奇怪；但从概念上讲，每个对象都是在程序开始时以默认初始值创建出来的。
 
-- The final action in a thread `T1` *synchronizes-with* any action in another thread `T2` that detects that `T1` has terminated.
+- 线程 `T1` 中的最后一个动作 *synchronizes-with* 另一线程 `T2` 中检测到 `T1` 已终止的任意动作。
 
-  `T2` may accomplish this by calling `T1``.isAlive()` or `T1``.join()`.
+  `T2` 可以通过调用 `T1``.isAlive()` 或 `T1``.join()` 来完成这一检测。
 
-- If thread `T1` interrupts thread `T2`, the interrupt by `T1` *synchronizes-with* any point where any other thread (including `T2`) determines that `T2` has been interrupted (by having an `InterruptedException` thrown or by invoking `Thread.interrupted` or `Thread.isInterrupted`).
+- 若线程 `T1` 中断了线程 `T2`，则 `T1` 发出的中断 *synchronizes-with* 任意其他线程（包括 `T2`）判定 `T2` 已被中断的任意时点（无论是抛出了 `InterruptedException`，还是调用了 `Thread.interrupted` 或 `Thread.isInterrupted`）。
 
-The source of a *synchronizes-with* edge is called a *release*, and the destination is called an *acquire*.
+*synchronizes-with* 边的起点称为 *release*（释放），终点称为 *acquire*（获取）。
 
 
 
 ### Happens-before Order
 
-Two actions can be ordered by a *happens-before* relationship. If one action *happens-before* another, then the first is visible to and ordered before the second.
+两个动作之间可以通过 *happens-before* 关系来定序。若动作 a *happens-before* 动作 b，则 a 对 b 可见，且在 b 之前发生。
 
-If we have two actions *x* and *y*, we write *hb(x, y)* to indicate that *x happens-before y*.
+对于两个动作 *x* 与 *y*，记 *hb(x, y)* 表示 *x happens-before y*。
 
-- If *x* and *y* are actions of the same thread and *x* comes before *y* in program order, then *hb(x, y)*.
-- There is a *happens-before* edge from the end of a constructor of an object to the start of a finalizer ([§12.6](https://docs.oracle.com/javase/specs/jls/se8/html/jls-12.html#jls-12.6)) for that object.
-- If an action *x* *synchronizes-with* a following action *y*, then we also have *hb(x, y)*.
-- If *hb(x, y)* and *hb(y, z)*, then *hb(x, z)*.
+- 若 *x* 与 *y* 是同一线程中的动作，且 *x* 在程序顺序中位于 *y* 之前，则 *hb(x, y)* 成立。
+- 从某对象构造函数的结束到该对象终结器（finalizer）的开始（[§12.6](https://docs.oracle.com/javase/specs/jls/se8/html/jls-12.html#jls-12.6)）之间存在一条 *happens-before* 边。
+- 若动作 *x* *synchronizes-with* 其后的动作 *y*，则同样有 *hb(x, y)*。
+- 若 *hb(x, y)* 且 *hb(y, z)*，则 *hb(x, z)*。
 
-The `wait` methods of class `Object` ([§17.2.1](https://docs.oracle.com/javase/specs/jls/se8/html/jls-17.html#jls-17.2.1)) have lock and unlock actions associated with them; their *happens-before* relationships are defined by these associated actions.
+`Object` 类的 `wait` 方法（[§17.2.1](https://docs.oracle.com/javase/specs/jls/se8/html/jls-17.html#jls-17.2.1)）关联着加锁与解锁动作；它们的 *happens-before* 关系由这些关联的动作定义。
 
-It should be noted that the presence of a *happens-before* relationship between two actions does not necessarily imply that they have to take place in that order in an implementation. If the reordering produces results consistent with a legal execution, it is not illegal.
+需要注意，两个动作之间存在 *happens-before* 关系，并不必然意味着在具体实现中它们必须按此顺序发生。只要重排序产生的结果与某次合法执行一致，这种重排序就不算非法。
 
-For example, the write of a default value to every field of an object constructed by a thread need not happen before the beginning of that thread, as long as no read ever observes that fact.
+例如，某线程构造的对象中每个字段的默认值写入，无须 happens-before 该线程的开端，只要没有任何读观察到这一点即可。
 
-More specifically, if two actions share a *happens-before* relationship, they do not necessarily have to appear to have happened in that order to any code with which they do not share a *happens-before* relationship. Writes in one thread that are in a data race with reads in another thread may, for example, appear to occur out of order to those reads.
+更具体地说，若两个动作共享 *happens-before* 关系，那么对于与它们不共享 *happens-before* 关系的代码而言，它们并不必然表现为按该顺序发生。例如，一个线程中的写若与另一线程中的读构成数据竞争，就可能相对这些读表现为乱序。
 
-The *happens-before* relation defines when data races take place.
+*happens-before* 关系定义了数据竞争发生的时间点。
 
-A set of synchronization edges, *S*, is *sufficient* if it is the minimal set such that the transitive closure of *S* with the program order determines all of the *happens-before* edges in the execution. This set is unique.
+一组同步边 *S* 若满足：它是使 *S* 与程序顺序的传递闭包能够确定本次执行中全部 *happens-before* 边的最小集合，则称该集合 *sufficient*（充分）。这样的集合是唯一的。
 
-It follows from the above definitions that:
+由上述定义可推出：
 
-- An unlock on a monitor *happens-before* every subsequent lock on that monitor.
-- A write to a `volatile` field *happens-before* every subsequent read of that field.
-- A call to `start()` on a thread *happens-before* any actions in the started thread.
-- All actions in a thread *happen-before* any other thread successfully returns from a `join()` on that thread.
-- The default initialization of any object *happens-before* any other actions (other than default-writes) of a program.
+- 对某监视器的解锁 *happens-before* 其后对该监视器的每次加锁。
+- 对 `volatile` 字段的写 *happens-before* 其后对该字段的每次读。
+- 对某线程调用 `start()` *happens-before* 被启动线程中的任意动作。
+- 某线程中的所有动作 *happen-before* 另一线程从该线程的 `join()` 成功返回。
+- 任意对象的默认初始化 *happens-before* 程序中其他所有动作（默认写除外）。
 
-When a program contains two conflicting accesses that are not ordered by a happens-before relationship, it is said to contain a *data race*.
+当一个程序包含两个未被 happens-before 关系定序的冲突访问时，称该程序包含 *data race*（数据竞争）。
 
-The semantics of operations other than inter-thread actions, such as reads of array lengths, executions of checked casts, and invocations of virtual methods, are not directly affected by data races.
+线程间动作之外的操作语义，例如读取数组长度、执行受检类型转换、调用虚方法等，不受数据竞争的直接影响。
 
-Therefore, a data race cannot cause incorrect behavior such as returning the wrong length for an array.
+因此，数据竞争不会导致「为数组返回错误长度」这类错误行为。
 
-A program is *correctly synchronized* if and only if all sequentially consistent executions are free of data races.
+当且仅当所有顺序一致的执行都不含数据竞争时，称程序是 *correctly synchronized*（正确同步的）。
 
-If a program is correctly synchronized, then all executions of the program will appear to be sequentially consistent.
+若程序已正确同步，则该程序的所有执行看上去都是顺序一致的。
 
-This is an extremely strong guarantee for programmers. Programmers do not need to reason about reorderings to determine that their code contains data races. Therefore they do not need to reason about reorderings when determining whether their code is correctly synchronized. Once the determination that the code is correctly synchronized is made, the programmer does not need to worry that reorderings will affect his or her code.
+这对程序员而言是极强的保证。程序员无需推理重排序即可判定代码中是否存在数据竞争，因此在判断代码是否正确同步时也不必推理重排序。一旦确认代码已正确同步，程序员便无需再担心重排序会影响代码。
 
-A program must be correctly synchronized to avoid the kinds of counterintuitive behaviors that can be observed when code is reordered. The use of correct synchronization does not ensure that the overall behavior of a program is correct. However, its use does allow a programmer to reason about the possible behaviors of a program in a simple way; the behavior of a correctly synchronized program is much less dependent on possible reorderings. Without correct synchronization, very strange, confusing and counterintuitive behaviors are possible.
+程序必须正确同步，才能避免代码被重排序时出现的那类反直觉行为。正确同步并不能确保程序的整体行为正确，但它的确让程序员能够以简单的方式推理程序可能的行为；正确同步的程序，其行为对可能的重排序的依赖要小得多。缺乏正确同步时，则可能出现非常奇怪、令人困惑且反直觉的行为。
 
-We say that a read *r* of a variable *v* is allowed to observe a write *w* to *v* if, in the *happens-before* partial order of the execution trace:
+若在执行轨迹的 *happens-before* 偏序中满足以下条件，则称对变量 *v* 的读 *r* 被允许观察到对 *v* 的写 *w*：
 
-- *r* is not ordered before *w* (i.e., it is not the case that *hb(r, w)*), and
-- there is no intervening write *w*' to *v* (i.e. no write *w*' to *v* such that *hb(w, w')* and *hb(w', r)*).
+- *r* 不在 *w* 之前（即不存在 *hb(r, w)*），并且
+- 中间不存在对 *v* 的写 *w*'（即不存在满足 *hb(w, w')* 且 *hb(w', r)* 的对 *v* 的写 *w*'）。
 
-Informally, a read *r* is allowed to see the result of a write *w* if there is no *happens-before* ordering to prevent that read.
+非正式地说，只要不存在阻止该读的 *happens-before* 定序，读 *r* 就被允许看到写 *w* 的结果。
 
-A set of actions *A* is *happens-before consistent* if for all reads *r* in *A*, where *W(r)* is the write action seen by *r*, it is not the case that either *hb(r, W(r))* or that there exists a write *w* in *A* such that *w.v* = *r.v* and *hb(W(r), w)* and *hb(w, r)*.
+若对动作集合 *A* 中的每个读 *r*（设 *W(r)* 为 *r* 所看到的写动作），既不存在 *hb(r, W(r))*，也不存在 *A* 中的写 *w* 满足 *w.v* = *r.v* 且 *hb(W(r), w)* 且 *hb(w, r)*，则称动作集合 *A* 是 *happens-before consistent*（happens-before 一致的）。
 
-In a *happens-before consistent* set of actions, each read sees a write that it is allowed to see by the *happens-before* ordering.
+在一个 *happens-before consistent* 的动作集合中，每个读看到的都是按 *happens-before* 次序它被允许看到的某次写。
 
 
 
 ## happens-before
 
-Before presenting the Java memory model in full, we will present a simpler memory model, called the happens-before memory model. 
+在完整介绍 Java 内存模型之前，先介绍一个更简单的模型，称为 happens-before 内存模型。
 
-This model involves several properties/requirements:
-- There is a total order over all synchronization actions, known as the synchronization order. This order is consistent with program order and with mutual exclusion of locks.
-- Synchronization actions induce synchronizes-with edges between matched actions.
-- The transitive closure of the synchronizes-with edges and program order gives a partial order known as the happens-before order.
-- The values that can be seen by a non-volatile read are determined by a rule known as happens before consistency.
-- The value seen by a volatile read are determined by a rule known as synchronization order consistency. 
-
+该模型包含若干性质与要求：
+- 所有同步动作之上存在一个全序，称为同步顺序（synchronization order）。该顺序与程序顺序以及锁的互斥性相一致。
+- 同步动作在相互匹配的动作之间导出 synchronizes-with 边。
+- synchronizes-with 边与程序顺序的传递闭包给出一个偏序，称为 happens-before 顺序。
+- 非 volatile 读可以看到的值，由一条称为 happens-before 一致性（happens before consistency）的规则决定。
+- volatile 读所看到的值，由一条称为同步顺序一致性（synchronization order consistency）的规则决定。
   
 
-Happens-before consistency says that a read r of a variable v is allowed to observe a write w to v if, in the happens-before partial order of the execution trace: 
 
-- r is not ordered before w (i.e., it is not the case that r hb → w), and 
-- there is no intervening write w 0 to v (i.e., no write w 0 to v such that w hb → w 0 hb → r). 
+happens-before 一致性规定：在执行轨迹的 happens-before 偏序中，若满足以下条件，则对变量 v 的读 r 被允许观察到对 v 的写 w：
 
-Synchronization order consistency says that each read r of a volatile variable v returns the last write to v to come before it in the synchronization order. 
+- r 不在 w 之前（即不存在 r hb → w），并且
+- 中间不存在对 v 的写 w 0（即不存在满足 w hb → w 0 hb → r 的对 v 的写 w 0）。
 
-For example, the behavior shown in Figure 1 is allowed by the happens-before memory model. 
-There are no synchronizes-with or happens-before edges between threads, and each read is allowed to see the write by the other thread.
+同步顺序一致性规定：对 volatile 变量 v 的每次读 r，返回同步顺序中位于它之前的最后一次对 v 的写。
 
-
-
-snooping
+例如，图 1 所示的行为是 happens-before 内存模型所允许的。
+线程之间不存在 synchronizes-with 边或 happens-before 边，且每次读都被允许看到另一线程的写。
 
 
-**The rules for happens‐before are:**
-- Program order rule. 
-  Each action in a thread happens‐before every action in that thread that comes later in the program order.
-- Monitor lock rule. 
-  An unlock on a monitor lock happens‐before every subsequent lock on that same monitor lock.(Locks and unlocks on explicit Lock objects have the same memory semantics as intrinsic locks.)
-- Volatile variable rule. 
-  A write to a volatile field happens‐before every subsequent read of that same field.(Reads and writes of atomic variables have the same memory semantics as volatile variables.)
-- Thread start rule. 
-  A call to Thread.start on a thread happens‐before every action in the started thread.
-- Thread termination rule. 
-  Any action in a thread happens‐before any other thread detects that thread has terminated, either by successfully return from Thread.join or by Thread.isAlive returning false.
-- Interruption rule. 
-  A thread calling interrupt on another thread happens‐before the interrupted thread detects the interrupt (either by having InterruptedException thrown, or invoking isInterrupted or interrupted).
-- Finalizer rule. 
-  The end of a constructor for an object happens‐before the start of the finalizer for that object.
-- Transitivity. 
-  If A happens‐before B, and B happens‐before C, then A happens‐before C.
+
+snooping（总线嗅探）
+
+
+**happens-before 的规则如下：**
+- 程序顺序规则。
+  线程中的每个动作 happens-before 该线程中在程序顺序上更靠后的每个动作。
+- 监视器锁规则。
+  对监视器锁的解锁 happens-before 此后对同一监视器锁的每次加锁。（对显式 Lock 对象的加锁与解锁具有与内在锁相同的内存语义。）
+- volatile 变量规则。
+  对 volatile 字段的写 happens-before 此后对同一字段的每次读。（对原子变量的读写具有与 volatile 变量相同的内存语义。）
+- 线程启动规则。
+  对某线程调用 Thread.start happens-before 被启动线程中的每个动作。
+- 线程终止规则。
+  线程中的任一动作 happens-before 其他线程检测到该线程已终止的时刻，无论通过从 Thread.join 成功返回，还是通过 Thread.isAlive 返回 false。
+- 中断规则。
+  一个线程对另一个线程调用 interrupt happens-before 被中断的线程检测到该中断的时刻（无论是通过抛出 InterruptedException，还是通过调用 isInterrupted 或 interrupted）。
+- 终结器规则。
+  对象构造函数的结束 happens-before 该对象终结器的开始。
+- 传递性。
+  若 A happens-before B，且 B happens-before C，则 A happens-before C。
 
 ### Piggybacking on Synchronization
 
-The implementation of the protected AbstractQueuedSynchronizer methods in FutureTask illustrates piggybacking. 
-AQS maintains an integer of synchronizer state that FutureTask uses to store the task state: running, completed, or cancelled. 
-But FutureTask also maintains additional variables, such as the result of the computation. 
-When one thread calls set to save the result and another thread calls get to retrieve it, the two had better be ordered by happens‐before. 
-This could be done by making the reference to the result volatile, but it is possible to exploit existing synchronization to achieve the same result at lower cost.
+`FutureTask` 中对 `AbstractQueuedSynchronizer` 受保护方法的实现就是「搭便车」（piggybacking）的例子。
+AQS 维护一个表示同步器状态的整数值，`FutureTask` 用它来存放任务状态：运行中、已完成或已取消。
+但 `FutureTask` 还维护着额外的变量，例如计算结果。
+当一个线程调用 `set` 保存结果、另一个线程调用 `get` 取回结果时，二者最好由 happens-before 定序。
+一种做法是把结果的引用声明为 volatile，但也可以复用已有的同步，以更低的代价达到同样的效果。
 
-FutureTask is carefully crafted to ensure that a successful call to tryReleaseShared always happens‐before a subsequent call to TRyAcquireShared; 
-ry-ReleaseShared always writes to a volatile variable that is read by TRyAcquire-Shared. 
+`FutureTask` 的实现经过精心设计，确保成功调用 `tryReleaseShared` 总是 happens-before 随后对 `TRyAcquireShared` 的调用；
+`tryReleaseShared` 总是写入一个 volatile 变量，而该变量正是由 `tryAcquireShared` 读取的。
 
-We call this technique "piggybacking" because it uses an existing happens‐before ordering that was created for some other reason to ensure the visibility of object X, rather than creating a happens‐before ordering specifically for publishing X.
+之所以称这一手法为「搭便车」，是因为它复用了因其他原因而创建的既有 happens-before 次序，以保证对象 X 的可见性，而不是专门为发布 X 而新建一条 happens-before 次序。
 
-Other happens‐before orderings guaranteed by the class library include:
-- Placing an item in a thread‐safe collection happens‐before another thread retrieves that item from the collection;
-- Counting down on a CountDownLatch happens‐before a thread returns from await on that latch;
-- Releasing a permit to a Semaphore happens‐before acquiring a permit from that same Semaphore;
-- Actions taken by the task represented by a Future happens‐before another thread successfully returns from Future.get;
-- Submitting a Runnable or Callable to an Executor happens‐before the task begins execution; and
-- A thread arriving at a CyclicBarrier or Exchanger happens‐before the other threads are released from that same barrier or exchange point. If CyclicBarrier uses a barrier action, arriving at the barrier happens‐before the barrier action, which in turn happens‐before threads are released from the barrier.
+类库所保证的其他 happens-before 次序还包括：
+- 将某元素放入线程安全集合 happens-before 另一线程从该集合中取出该元素；
+- 在某个 CountDownLatch 上计数减一 happens-before 某线程从该 latch 的 await 返回；
+- 向 Semaphore 释放一个许可 happens-before 从同一个 Semaphore 获取一个许可；
+- 由 Future 表示的任务所执行的动作 happens-before 另一线程从 Future.get 成功返回；
+- 向 Executor 提交 Runnable 或 Callable happens-before 该任务开始执行；以及
+- 线程到达 CyclicBarrier 或 Exchanger happens-before 其他线程从同一屏障或交换点被释放。若 CyclicBarrier 使用了屏障动作（barrier action），则到达屏障 happens-before 屏障动作，屏障动作又 happens-before 线程从屏障处被释放。
 
 
 
@@ -301,13 +297,15 @@ Other happens‐before orderings guaranteed by the class library include:
 
 写读
 
-Buffer Fully Flush
+缓冲区完全刷新（Buffer Fully Flush）
 
 
 
 
 ## Links
 - [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
+- [VarHandle](/docs/CS/Java/JDK/Concurrency/VarHandle.md)
+- [volatile](/docs/CS/Java/JDK/Concurrency/volatile.md)
 - [JSR 133: JavaTM Memory Model and Thread Specification Revision](https://jcp.org/en/jsr/detail?id=133)
 - [JEP 188: Java Memory Model Update](http://openjdk.java.net/jeps/188)
 - [Java Memory Model Examples: Good, Bad and Ugly](https://groups.inf.ed.ac.uk/request/jmmexamples.pdf)

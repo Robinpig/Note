@@ -1,32 +1,32 @@
 ## Introduction
 
-A small toolkit of classes that **support lock-free thread-safe programming on single variables**.
-In essence, **the classes in this package extend the notion of volatile values, fields, and array elements to those that also provide an atomic conditional update operation of the form**:
+一组用于**在单个变量上支持无锁线程安全编程**的类。
+本包中的类把 volatile 值、字段以及数组元素的语义扩展为：在常规访问之外，还提供如下形式的原子条件更新操作
 
 ```java
  boolean compareAndSet(expectedValue, updateValue);
 ```
 
-This method (which varies in argument types across different classes) **atomically sets a variable to the updateValue if it currently holds the expectedValue, reporting true on success**.
-The classes in this package also contain methods to **get and unconditionally set values**, as well as a weaker conditional atomic update operation **weakCompareAndSet** described below.
+该方法在不同类中参数类型略有差异：**若变量当前持有 expectedValue，则以原子方式将其设置为 updateValue，并在成功时返回 true**。
+本包中的类还提供了**读取并无条件设置值**的方法，以及下文介绍的一个较弱的条件原子更新操作 **weakCompareAndSet**。
 
-The specifications of these methods enable implementations to employ **efficient machine-level atomic instructions** that are available on contemporary processors.
-However on some platforms, support may entail some form of **internal locking**. **Thus the methods are not strictly guaranteed to be non-blocking -- a thread may block transiently before performing the operation**.
+这些方法的规定使实现可以借助当代处理器上提供的**高效的机器级原子指令**。
+但在某些平台上，对这些操作的支持可能需要某种形式的**内部加锁**，因此**这些方法严格来说并不保证无阻塞——线程在执行操作前可能短暂阻塞**。
 
-The memory effects for accesses and updates of atomics generally follow the rules for volatiles, as stated in The Java Language Specification (17.4 Memory Model) :
+原子变量的访问与更新在内存效果上通常遵循 volatile 变量的规则，参见《Java 语言规范》第 17.4 节（内存模型）：
 
-1. get has the memory effects of reading a volatile variable.
-2. set has the memory effects of writing (assigning) a volatile variable.
-3. lazySet has the memory effects of writing (assigning) a volatile variable except that it permits reorderings with subsequent (but not previous) memory actions that do not themselves impose reordering constraints with ordinary non-volatile writes.
-4. Among other usage contexts, lazySet may apply when nulling out, for the sake of garbage collection, a reference that is never accessed again.
-5. weakCompareAndSet **atomically reads and conditionally writes a variable but does not create any happens-before orderings**, so provides no guarantees with respect to previous or subsequent reads and writes of any variables other than the target of the weakCompareAndSet.
-6. compareAndSet and all other read-and-update operations such as getAndIncrement **have the memory effects of both reading and writing volatile variables**.
+1. `get` 的内存效果等同于读取一个 volatile 变量。
+2. `set` 的内存效果等同于写入（赋值）一个 volatile 变量。
+3. `lazySet` 的内存效果等同于写入（赋值）一个 volatile 变量，但它允许与后续（而非先前）的内存操作重排序，只要这些操作本身不对普通的非 volatile 写入施加重排序约束。
+4. 除了其他使用场景，`lazySet` 还适用于这样的情形：为垃圾回收而将某个此后不再被访问的引用置空。
+5. `weakCompareAndSet` **以原子方式读取并有条件地写入变量，但不会建立任何 happens-before 序**，因此除该方法的目标变量之外，它对其他变量的先前或后续读写都不提供任何保证。
+6. `compareAndSet` 以及 `getAndIncrement` 等所有「读取并更新」的操作，**同时具有读取和写入 volatile 变量的内存效果**。
 
 ![Atomic](img/Atomic.png)
 
-Instances of classes **AtomicBoolean, AtomicInteger, AtomicLong, and AtomicReference each provide access and updates to a single variable of the corresponding type**.
-Each class also provides appropriate utility methods for that type. For example, classes AtomicLong and AtomicInteger provide atomic increment methods.
-One application is to generate sequence numbers, as in:
+**AtomicBoolean、AtomicInteger、AtomicLong 和 AtomicReference 的实例各自提供对单个相应类型变量的访问与更新**。
+每个类还提供适用于该类型的工具方法。例如，AtomicLong 和 AtomicInteger 都提供了原子自增方法。
+一种典型用途是生成序列号，如下所示：
 
 ```java
 class Sequencer {
@@ -38,36 +38,35 @@ class Sequencer {
  }
 ```
 
-In addition to classes representing single values, this package contains Updater classes that can be used to obtain compareAndSet operations on any selected volatile field of any selected class.
-**AtomicReferenceFieldUpdater, AtomicIntegerFieldUpdater, and AtomicLongFieldUpdater are reflection-based utilities that provide access to the associated field types**.
-These are mainly of use in atomic data structures in which several volatile fields of the same node (for example, the links of a tree node) are independently subject to atomic updates.
-**These classes enable greater flexibility in how and when to use atomic updates, at the expense of more awkward reflection-based setup, less convenient usage, and weaker guarantees**.
+除表示单值的类之外，本包还包含若干 Updater 类，可在任意选定类的任意选定 volatile 字段上获得 compareAndSet 操作。
+**AtomicReferenceFieldUpdater、AtomicIntegerFieldUpdater 和 AtomicLongFieldUpdater 是基于反射的工具类，提供对相应字段类型的访问**。
+它们主要用于这样的原子数据结构：同一节点的若干 volatile 字段（例如树节点的左右链接）各自独立地进行原子更新。
+**这类类在「何时、如何使用原子更新」上提供了更大的灵活性，代价是基于反射的初始化较为笨拙、使用不够便利、保证也更弱**。
 
-The `AtomicIntegerArray`, `AtomicLongArray`, and `AtomicReferenceArray` classes further extend atomic operation support to arrays of these types.
-These classes are also notable in providing `volatile` access semantics for their array elements.
+`AtomicIntegerArray`、`AtomicLongArray` 和 `AtomicReferenceArray` 把原子操作的支持进一步扩展到上述类型的数组上。
+这些类的另一个特点是：为数组元素提供了 `volatile` 访问语义。
 
-The atomic classes also support method **weakCompareAndSet**, which has **limited applicability**.
-On some platforms, the weak version may be more efficient than compareAndSet in the normal case, but differs in that any given invocation of the **weakCompareAndSet method may return false spuriously (that is, for no apparent reason)**.
-A false return means only that the operation may be retried if desired, relying on the guarantee that repeated invocation when the variable holds expectedValue and no other thread is also attempting to set the variable will eventually succeed.
-(Such spurious failures may for example be due to memory contention effects that are unrelated to whether the expected and current values are equal.)
-Additionally **weakCompareAndSet does not provide ordering guarantees that are usually needed for synchronization control**.
-However, the method may be useful for updating counters and statistics when such updates are unrelated to the other happens-before orderings of a program.
-When a thread sees an update to an atomic variable caused by a weakCompareAndSet, it does not necessarily see updates to any other variables that occurred before the weakCompareAndSet.
-This may be acceptable when, for example, updating performance statistics, but rarely otherwise.*
+原子类还支持 **weakCompareAndSet** 方法，但它的**适用范围有限**。
+在某些平台上，弱版本在正常情况下可能比 compareAndSet 更高效，区别在于**weakCompareAndSet 的某一次调用可能无缘无故地返回 false**。
+返回 false 仅意味着：如果愿意，可以重试该操作；其依据的保证是——当变量持有 expectedValue 且没有其他线程也在尝试设置该变量时，反复调用最终会成功。
+（例如，这类虚假失败可能源自与「期望值是否等于当前值」无关的内存竞争效应。）
+此外，**weakCompareAndSet 不提供同步控制通常所需的顺序保证**。
+不过，当这类更新与程序中其他 happens-before 序无关时，该方法对更新计数器和统计信息仍然有用。
+当线程看到由 weakCompareAndSet 引起的原子变量更新时，它未必能看到该 weakCompareAndSet 之前发生的其他变量的更新。
+这在更新性能统计信息之类场合或许可以接受，但除此之外很少适用。
 
-The **AtomicMarkableReference class associates a single boolean with a reference**.
-For example, this bit might be used inside a data structure to mean that the object being referenced has logically been deleted.
+**AtomicMarkableReference 类将一个布尔值与一个引用关联起来**。
+例如，可以用这个标志位在数据结构内部表示「被引用的对象已在逻辑上被删除」。
 
-The **AtomicStampedReference class associates an integer value with a reference**.
-This may be used for example, to represent version numbers corresponding to series of updates.
+**AtomicStampedReference 类将一个整数值与一个引用关联起来**。
+例如，可以用它表示一系列更新所对应的版本号。
 
-Atomic classes are designed primarily as building blocks for implementing non-blocking data structures and related infrastructure classes.
-**The compareAndSet method is not a general replacement for locking. It applies only when critical updates for an object are confined to a single variable**.
-The **Atomic classes are not general purpose replacements for java.lang.Integer and related classes**.
-They do not define methods such as equals, hashCode and compareTo. (Because atomic variables are expected to be mutated, they are poor choices for hash table keys.)
-Additionally, classes are provided only for those types that are commonly useful in intended applications. For example, there is no atomic class for representing byte.
-In those infrequent cases where you would like to do so, **you can use an AtomicInteger to hold byte values, and cast appropriately**.
-You can also hold floats using Float.floatToRawIntBits and Float.intBitsToFloat conversions, and doubles using Double.doubleToRawLongBits and Double.longBitsToDouble conversions.
+原子类主要被设计为实现非阻塞数据结构及相关基础设施类的构件。
+**compareAndSet 方法不能作为加锁的通用替代品，它仅适用于某个对象的关键更新被限制在单个变量上的场合**。
+**原子类也不是 java.lang.Integer 及相关类的通用替代品**。
+它们不定义 equals、hashCode 和 compareTo 之类的方法。（原子变量预期会被修改，因此不适合作为哈希表的键。）
+此外，仅为预期应用中常用的类型提供相应的类。例如，并不存在表示 byte 的原子类；在少数确实需要这么做的场合，**可以用 AtomicInteger 保存 byte 值，再做恰当的类型转换**。
+同样地，可以用 Float.floatToRawIntBits 与 Float.intBitsToFloat 之间的转换来保存浮点值，用 Double.doubleToRawLongBits 与 Double.longBitsToDouble 之间的转换来保存双精度值。
 
 ## AtomicInteger
 
@@ -79,9 +78,9 @@ private volatile int value;
 ```
 
 
-Atomically updates Java variable to x if it is currently holding expected.
-This operation has memory semantics of a volatile read and write. 
-Corresponds to C11 atomic_compare_exchange_strong.
+若 Java 变量当前持有 expected，则以原子方式将其更新为 x。
+该操作具有 volatile 读与写的内存语义。
+对应 C11 的 atomic_compare_exchange_strong。
 ```java
 public final class Unsafe {
     @ForceInline
@@ -106,17 +105,17 @@ Lock
 
 ## LongAdder
 
-One or more variables that together maintain an initially zero long sum. When updates (method add) are contended across threads, the set of variables may grow dynamically to reduce contention. Method sum (or, equivalently, longValue) returns the current total combined across the variables maintaining the sum.
-This class is usually preferable to AtomicLong when multiple threads update a common sum that is used for purposes such as collecting statistics, not for fine-grained synchronization control. Under low update contention, the two classes have similar characteristics. But under high contention, expected throughput of this class is significantly higher, at the expense of higher space consumption.
-LongAdders can be used with a [java.util.concurrent.ConcurrentHashMap]() to maintain a scalable frequency map (a form of histogram or multiset). For example, to add a count to a ConcurrentHashMap<String,LongAdder> freqs, initializing if not already present, you can use freqs.computeIfAbsent(k -> new LongAdder()).increment();
-This class extends Number, but does not define methods such as equals, hashCode and compareTo because instances are expected to be mutated, and so are not useful as collection keys.
+一个或多个变量共同维护一个初始值为零的 long 型累加和。当更新（方法 `add`）在多个线程间存在竞争时，这组变量可以动态增长以降低竞争。方法 `sum`（等价地，`longValue`）返回当前所有变量合计出的总和。
+当多个线程更新同一个总和、且该总和仅用于收集统计之类的用途（而非细粒度的同步控制）时，通常应优先使用本类而非 `AtomicLong`。更新竞争较低时，两者的特性相近；但竞争较高时，本类的预期吞吐量显著更高，代价是占用更多空间。
+`LongAdder` 可以与 [java.util.concurrent.ConcurrentHashMap]() 搭配，用来维护可扩展的频次映射（直方图或多重集的一种形式）。例如，要给一个 `ConcurrentHashMap<String,LongAdder>` 类型的 `freqs` 增加计数（若尚未初始化则先初始化），可以写成 `freqs.computeIfAbsent(k -> new LongAdder()).increment()`；
+本类继承自 `Number`，但不定义 equals、hashCode 和 compareTo 之类的方法——实例预期会被修改，因此不适合作为集合的键。
 
 ```java
 public class LongAdder extends Striped64 implements Serializable {
 }
 ```
 
-Padded variant of AtomicLong supporting only raw accesses plus **CAS**. JVM intrinsics note: It would be possible to use a release-only form of CAS here, if it were provided.
+`AtomicLong` 的带填充（padded）变体，只支持原始访问加上 **CAS**。关于 JVM 内建函数（intrinsics）的说明：如果提供了仅带 release 语义的 CAS 形式，这里本可以使用它。
 
 ```java
 // Striped64
@@ -156,7 +155,7 @@ public void add(long x) {
 }
 ```
 
-Handles cases of updates involving initialization, resizing, creating new Cells, and/or contention. See above for explanation. This method suffers the usual non-modularity problems of optimistic retry code, relying on rechecked sets of reads.
+处理涉及初始化、扩容、创建新 Cell 以及/或竞争等各种更新情形。相关说明见上文。该方法存在乐观重试代码常见的非模块化问题：它依赖于对一组读取结果反复重新检查。
 
 ```java
 // Striped64
@@ -248,11 +247,11 @@ final void longAccumulate(long x, LongBinaryOperator fn,
 
 ### LongAccumulator
 
-One or more variables that together maintain a running long value updated using a supplied function. When updates (method accumulate) are contended across threads, the set of variables may grow dynamically to reduce contention. Method get (or, equivalently, longValue) returns the current value across the variables maintaining updates.
-This class is usually preferable to AtomicLong when multiple threads update a common value that is used for purposes such as collecting statistics, not for fine-grained synchronization control. Under low update contention, the two classes have similar characteristics. But under high contention, expected throughput of this class is significantly higher, at the expense of higher space consumption.
-The order of accumulation within or across threads is not guaranteed and cannot be depended upon, so this class is only applicable to functions for which the order of accumulation does not matter. The supplied accumulator function should be side-effect-free, since it may be re-applied when attempted updates fail due to contention among threads. The function is applied with the current value as its first argument, and the given update as the second argument. For example, to maintain a running maximum value, you could supply Long::max along with Long.MIN_VALUE as the identity.
-Class LongAdder provides analogs of the functionality of this class for the common special case of maintaining counts and sums. *The call new LongAdder() is equivalent to new LongAccumulator((x, y) -> x + y, 0L.*
-This class extends Number, but does not define methods such as equals, hashCode and compareTo because instances are expected to be mutated, and so are not useful as collection keys.
+一个或多个变量共同维护一个 long 型累积值，更新时使用外部提供的函数。当更新（方法 `accumulate`）在多个线程间存在竞争时，这组变量可以动态增长以降低竞争。方法 `get`（等价地，`longValue`）返回当前所有变量合计出的值。
+当多个线程更新同一个值、且该值仅用于收集统计之类的用途（而非细粒度的同步控制）时，通常应优先使用本类而非 `AtomicLong`。更新竞争较低时，两者的特性相近；但竞争较高时，本类的预期吞吐量显著更高，代价是占用更多空间。
+累积在单线程内部以及跨线程之间的顺序均无保证，也不可依赖，因此本类仅适用于那些累积顺序无关紧要的函数。所提供的累积函数应当无副作用（side-effect-free），因为线程间的竞争可能使失败的更新被重新应用。调用该函数时，当前值作为第一个参数传入，给定的更新值作为第二个参数传入。例如，要维护一个滚动最大值，可以提供 `Long::max`，并以 `Long.MIN_VALUE` 作为单位元。
+类 `LongAdder` 为「维护计数与累加和」这一常见特例提供了与本类功能类似的实现。*`new LongAdder()` 等价于 `new LongAccumulator((x, y) -> x + y, 0L)`。*
+本类继承自 `Number`，但不定义 equals、hashCode 和 compareTo 之类的方法——实例预期会被修改，因此不适合作为集合的键。
 
 ```java
 public void accumulate(long x) {
@@ -275,7 +274,7 @@ public void accumulate(long x) {
 
 
 
-Get/Set with VarHandle.getVolatile.
+通过 `VarHandle.getVolatile` 实现 Get/Set。
 ```java
 
 private static final VarHandle AA = MethodHandles.arrayElementVarHandle(int[].class);
@@ -290,8 +289,38 @@ private static final VarHandle AA = MethodHandles.arrayElementVarHandle(int[].cl
 
 ```
 
+## Implementation Status (JDK 25)
+
+「并发包已经全部 VarHandle 化」是流传很广的说法。核对 JDK 25（jdk-25+36）源码后，实际情况是**分裂的**：
+
+| 类 | JDK 25 实现 | 源码依据 |
+| --- | --- | --- |
+| `AtomicIntegerArray` / `AtomicLongArray` / `AtomicReferenceArray` | `MethodHandles.arrayElementVarHandle` | 上文 Array 一节的 `AA` VarHandle |
+| `AtomicInteger` / `AtomicReference` 等单值类 | **仍是 `jdk.internal.misc.Unsafe`** | `AtomicInteger.java:58-61` 注释：*本类原计划使用 VarHandle 实现，但存在尚未解决的循环启动依赖。* |
+| `ThreadLocalRandom` / `Striped64` | **仍是 Unsafe** | `U.putLong(...)` / `UNSAFE.compareAndSwapLong(...)` |
+
+即单值原子类**本意**要用 VarHandle，但 `java.lang.invoke` 与 `java.util.concurrent.atomic` 之间存在启动期循环依赖，尚未解开。判断「某类实际用什么实现」要读字段声明，不能看 API 表面——这正是「存在 ≠ 生效」在 API 层的变体。访问模式与内存序的权威表述见 [VarHandle](/docs/CS/Java/JDK/Concurrency/VarHandle.md)。
+
+### Field Updaters
+
+`AtomicReferenceFieldUpdater` / `AtomicIntegerFieldUpdater` / `AtomicLongFieldUpdater` 提供对**任意类的任意 volatile 字段**的 CAS 能力，适合「同一节点的多个 volatile 字段各自独立原子更新」的场面（如并发数据结构里树节点的左右链接）：
+
+```java
+class Node {
+    volatile int next;
+    private static final AtomicIntegerFieldUpdater<Node> UPDATER =
+        AtomicIntegerFieldUpdater.newUpdater(Node.class, "next");
+}
+
+UPDATER.compareAndSet(node, expect, update);
+```
+
+代价在引言里已写明：**反射式建立、用法笨拙、保证更弱**——字段必须是 `volatile` 且调用方与字段满足访问权限。单变量场景直接包一个 `AtomicInteger` 通常更简单也更快；FieldUpdater 的真正价值是省掉一层包装对象、让多个字段共享节点内存布局。
+
 ## Links
 
 - [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
+- [VarHandle](/docs/CS/Java/JDK/Concurrency/VarHandle.md)
+- [unsafe](/docs/CS/Java/JDK/Basic/unsafe.md)
 
 ## References

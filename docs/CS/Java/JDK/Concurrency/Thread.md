@@ -1,12 +1,10 @@
 ## Introduction
 
-One of the primary reasons to use threads is to improve performance. Using threads can improve resource utilization by letting applications more easily exploit available processing capacity, and can improve responsiveness by letting applications begin processing new tasks immediately while existing tasks are still running.
+使用线程的主要原因之一是为了提升性能。线程能够让应用程序更充分地利用可用的处理能力，从而改善资源利用率；同时也能让应用程序在既有任务仍在运行时立即开始处理新任务，从而提升响应性。
 
 ## Create
 
-Threads are represented by the `Thread` class. The only way for a user to create a thread is to **create an object of this class**; 
-each thread is associated with such an object. 
-A thread will start when the `start()` method is invoked on the corresponding `Thread` object.
+线程由 `Thread` 类表示。用户创建线程的唯一途径是**创建该类的对象**；每个线程都关联着一个这样的对象。在对应的 `Thread` 对象上调用 `start()` 方法后，线程便会启动。
 
 ```java
 // Allocates a new Thread object.
@@ -21,13 +19,11 @@ public Thread(Runnable target) {
 ```
 
 ### init
-Threads are divided into two types: normal threads and daemon threads.
+线程分为两类：普通线程（normal thread）与守护线程（daemon thread）。
 
-Normal threads and daemon threads differ only in what happens when they exit. 
-When a thread exits, the JVM performs an inventory of running threads, and if the only threads that are left are daemon threads, it initiates an orderly shutdown. 
-When the JVM halts, any remaining daemon threads are abandoned ‐ finally blocks are not executed, stacks are not unwound ‐ the JVM just exits.
+普通线程与守护线程的区别仅在于退出时的行为。线程退出时，JVM 会清点在运行的线程；若仅剩下守护线程，JVM 便开始有序关闭。JVM 停止时，任何残留的守护线程都会被直接抛弃——finally 块不会执行，栈也不会被展开——JVM 直接退出。
 
-Daemon threads are not a good substitute for properly managing the lifecycle of services within an application.
+守护线程并不能很好地替代对应用内服务生命周期的妥善管理。
 ```java
 private void init(ThreadGroup g, Runnable target, String name,
                   long stackSize) {
@@ -102,10 +98,10 @@ private void init(ThreadGroup g, Runnable target, String name,
 
 ### Example
 
-1. create a thread extends Thread directly
-2. use [ThreadLocalExecutor](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md?id=threadpoolexecutor)
-3. use [CompletableFuture](/docs/CS/Java/JDK/Concurrency/Future.md?id=completablefuture) submit task
-4. use [FutureTask](/docs/CS/Java/JDK/Concurrency/Future.md?id=futuretask)
+1. 直接继承 Thread 创建线程
+2. 使用 [ThreadLocalExecutor](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md?id=threadpoolexecutor)
+3. 使用 [CompletableFuture](/docs/CS/Java/JDK/Concurrency/Future.md?id=completablefuture) 提交任务
+4. 使用 [FutureTask](/docs/CS/Java/JDK/Concurrency/Future.md?id=futuretask)
 
 
 
@@ -114,16 +110,16 @@ private void init(ThreadGroup g, Runnable target, String name,
 ## Lifetime
 
 
-A thread can be in one of the following states:
+线程可能处于以下状态之一：
 
 | State        | Description                                                                                                           |
 | ------------ |-----------------------------------------------------------------------------------------------------------------------|
-| NEW          | A thread that has not yet started is in this state.                                                                   |
-| RUNNABLE     | A thread executing in the Java virtual machine is in this state.                                                      |
-| BLOCKED      | A thread that is blocked waiting for a [monitor lock]() is in this state.                                             |
-| WATING       | A thread that is waiting indefinitely for another thread to perform a particular action is in this state.             |
-| TIME_WAITING | A thread that is waiting for another thread to perform an action for up to a specified waiting time is in this state. |
-| TERMINATED   | A thread that has exited is in this state.                                                                            |
+| NEW          | 尚未启动的线程处于此状态。                                                                   |
+| RUNNABLE     | 在 Java 虚拟机中执行的线程处于此状态。                                                      |
+| BLOCKED      | 正在阻塞等待 [monitor lock]() 的线程处于此状态。                                             |
+| WATING       | 无限期等待其他线程执行特定操作的线程处于此状态。             |
+| TIME_WAITING | 等待其他线程在指定等待时间内执行某个操作的线程处于此状态。 |
+| TERMINATED   | 已退出的线程处于此状态。                                                                            |
 
 
 图源《Java并发编程的艺术》4.1.4节:
@@ -134,16 +130,16 @@ A thread can be in one of the following states:
 
 ## Start
 
-Causes this thread to begin execution; the Java Virtual Machine calls the run method of this thread.
+使该线程开始执行；Java 虚拟机（JVM）会调用该线程的 run 方法。
 
-The result is that **two threads are running concurrently**: 
+结果是**两个线程并发运行**：
 
-1. *the current thread (which returns from the call to the start method)*
-2. *the other thread (which executes its run method).*
+1. *当前线程（从 start 方法调用返回的那个）*
+2. *另一个线程（执行其 run 方法的那个）*
 
-It is never legal to start a thread more than once.
+一个线程被多次启动永远是不合法的。
 
-using synchronized and volatile
+使用 synchronized 与 volatile
 
 ```java
 private volatile int threadStatus;
@@ -176,7 +172,7 @@ public synchronized void start() {
 private native void start0();
 ```
 
-call [JVM_StartThread](/docs/CS/Java/JDK/Concurrency/Thread.md?id=jvm_startthread)
+调用 [JVM_StartThread](/docs/CS/Java/JDK/Concurrency/Thread.md?id=jvm_startthread)
 ```c
 //Thread.c
 static JNINativeMethod methods[] = {
@@ -205,12 +201,12 @@ static JNINativeMethod methods[] = {
 JVM_StartThread:
 
 1. `native_thread = new JavaThread`
-   1. `os::create_thread invoke pthread_create()`
-   2. ` while (state  == ALLOCATED), Monitor::wait(Mutex::_no_safepoint_check_flag)`
-   3. `after Monitor::notify, thread->call_run()`
+   1. `os::create_thread` 调用 `pthread_create()`
+   2. `while (state  == ALLOCATED)，Monitor::wait(Mutex::_no_safepoint_check_flag)`
+   3. `Monitor::notify` 之后，`thread->call_run()`
 2. `Thread::start(native_thread)`
-   1. `os::start_thread(thread), set_state(RUNNABLE)`
-   2. `pd_start_thread invoke Monitor::notify`
+   1. `os::start_thread(thread)`，设置 `set_state(RUNNABLE)`
+   2. `pd_start_thread` 调用 `Monitor::notify`
 
 
 ```cpp
@@ -246,16 +242,14 @@ JVM_ENTRY(void, JVM_StartThread(JNIEnv* env, jobject jthread))
       jlong size =
              java_lang_Thread::stackSize(JNIHandles::resolve_non_null(jthread));
 ```
-Allocate the C++ Thread structure and create the native thread.  The
-stack size retrieved from java is 64-bit signed, but the constructor takes
-size_t (an unsigned type), which may be 32 or 64-bit depending on the platform.
- - Avoid truncating on 32-bit platforms if size is greater than UINT_MAX.
- - Avoid passing negative values which would result in really large stacks.
+分配 C++ 层 Thread 结构并创建本地（native）线程。从 Java 获取的栈大小是 64 位有符号值，而构造函数接收的是 size_t（无符号类型），根据平台不同可能是 32 位或 64 位。
+ - 在 32 位平台上，若大小超过 UINT_MAX，应避免截断。
+ - 应避免传入负值，否则会产生极大的栈。
 ```
       NOT_LP64(if (size > SIZE_MAX) size = SIZE_MAX;)
       size_t sz = size > 0 ? (size_t) size : 0;
 ```
-call [new JavaThread](/docs/CS/Java/JDK/Concurrency/Thread.md?id=javathreadjavathread)
+调用 [new JavaThread](/docs/CS/Java/JDK/Concurrency/Thread.md?id=javathreadjavathread)
 ```cpp
       native_thread = new JavaThread(&thread_entry, sz);
 
@@ -294,7 +288,7 @@ JVM_END
 
 
 
-`thread_entry` for JavaCalls 
+`thread_entry` 用于 JavaCalls 
 
 ```cpp
 // jvm.cpp
@@ -348,7 +342,7 @@ JavaThread::JavaThread(ThreadFunction entry_point, size_t stack_sz) :
 
 ### os::create_thread
 
-todo PTHREAD_CREATE_DETACHED
+待办 PTHREAD_CREATE_DETACHED
 
 ```cpp
 //os_linux.cpp
@@ -513,9 +507,9 @@ static void *thread_native_entry(Thread *thread) {
 
 ### Thread::start
 
-Initialize the thread state to RUNNABLE before starting this thread.
+在该线程启动前，将其线程状态初始化为 RUNNABLE。
 
-Can not set it after the thread started because we do not know the exact thread state at that time. It could be in MONITOR_WAIT or in SLEEPING or some other state. 
+线程启动后便不能再设置，因为此时无法确定其确切状态——它可能处于 MONITOR_WAIT、SLEEPING 或其他状态。
 
 
 ```cpp
@@ -646,9 +640,8 @@ void JavaThread::run() {
 
 void JavaThread::thread_main_inner() {
 ```
-Execute thread entry point unless this thread has a pending exception
-or has been stopped before starting.
-Note: Due to `JVM_StopThread` we can have pending exceptions already!
+除非该线程存在待处理异常或在启动前已被停止，否则执行线程入口点。
+注意：由于 `JVM_StopThread` 的存在，可能已经存在待处理异常！
 ```cpp
   if (!this->has_pending_exception() &&
       !java_lang_Thread::is_stillborn(this->threadObj())) {
@@ -659,7 +652,7 @@ Note: Due to `JVM_StopThread` we can have pending exceptions already!
     }
     HandleMark hm(this);
 ```
-execute entry_point -> run_method_name(`Thread.run()`)
+执行 entry_point -> run_method_name(`Thread.run()`)
 ```cpp
     this->entry_point()(this, this);
   }
@@ -673,31 +666,27 @@ execute entry_point -> run_method_name(`Thread.run()`)
 
 ## Wait Sets and Notification
 
-Every object, in addition to having an associated monitor, has an associated *wait set*. A wait set is a set of threads.
+除关联的监视器（monitor）外，每个对象还拥有一个关联的*等待集（wait set）*。等待集是一组线程的集合。
 
-When an object is first created, its wait set is empty. Elementary actions that add threads to and remove threads from wait sets are atomic.
+对象刚被创建时，其等待集为空。将线程加入或移出等待集的基本操作是原子的。
 
-Wait sets are manipulated solely through the methods `Object``.``wait`, `Object``.``notify`, and `Object``.``notifyAll`.
+等待集只能通过 `Object``.``wait`、`Object``.``notify` 和 `Object``.``notifyAll` 这些方法进行操作。
 
 ### wait
-**The current thread must own [this object's monitor](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=objectmonitor).** use `CHECK_OWNER`.
+**当前线程必须持有 [this object's monitor](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=objectmonitor)。** 使用 `CHECK_OWNER`。
 
 > [!NOTE]
 > 
-> Use `wait` in a while loop avoid **spurious wakeups**.
+> 在 while 循环中调用 `wait`，以避免**虚假唤醒（spurious wakeups）**。
 
-Causes the current thread to wait until:
-- either another thread invokes the `Object::notify` or the `Object::notifyAll` for this object
-- or a specified amount of time has elapsed.
-- or if any thread interrupted the current thread. **The interrupted status of the current thread is cleared when this exception is thrown.**
+导致当前线程等待，直到满足以下条件之一：
+- 其他线程对该对象调用了 `Object::notify` 或 `Object::notifyAll`；
+- 或经过了指定的时间；
+- 或当前线程被其他线程中断。**抛出异常时，当前线程的中断状态会被清除。**
 
-Each thread must determine an order over the events that could cause it to be removed from a wait set. 
-That order does not have to be consistent with other orderings, but the thread must behave as though those events occurred in that order.
+每个线程都必须对可能导致自身被移出等待集的事件确定一个顺序。该顺序无需与其他顺序保持一致，但线程必须表现得如同这些事件就是按该顺序发生的。
 
-For example, if a thread t is in the wait set for m, and then both an interrupt of t and a notification of m occur, there must be an order over these events. 
-If the interrupt is deemed to have occurred first, then t will eventually return from wait by throwing InterruptedException, 
-and some other thread in the wait set for m (if any exist at the time of the notification) must receive the notification. 
-If the notification is deemed to have occurred first, then t will eventually return normally from wait with an interrupt still pending.
+例如，若线程 t 位于对象 m 的等待集中，随后 t 被中断且 m 被通知，那么这两类事件之间必须存在一个顺序。若认定中断先发生，则 t 最终会抛出 InterruptedException 从 wait 返回，而 m 的等待集中其他线程（若在通知时尚存在）必须收到通知。若认定通知先发生，则 t 最终会正常从 wait 返回，且中断仍处于挂起状态。
 
 
 ```java
@@ -715,14 +704,10 @@ public final void wait() throws InterruptedException {
 
 #### join
 
-Waits at most millis milliseconds for this thread to die. 
-A timeout of 0 means to wait forever.
-This implementation uses **a loop of this.wait** calls conditioned on this.isAlive.
-As a thread terminates the this.notifyAll method is invoked.
-**It is recommended that applications not use wait, notify, or notifyAll on Thread instances.**
+最多等待 millis 毫秒，直到该线程终止。超时为 0 表示永久等待。该实现使用以 this.isAlive 为条件的 **this.wait 循环调用**。线程终止时会调用 this.notifyAll 方法。**建议应用程序不要在 Thread 实例上调用 wait、notify 或 notifyAll。**
 
 
-Actually call [wait](/docs/CS/Java/JDK/Concurrency/Thread.md?id=wait)
+实际调用 [wait](/docs/CS/Java/JDK/Concurrency/Thread.md?id=wait)
 ```java
 public final synchronized void join(long millis) throws InterruptedException {
     //...
@@ -736,7 +721,7 @@ public final synchronized void join(long millis) throws InterruptedException {
 
 #### ObjectSynchronizer::wait
 
-must get monitor by [ObjectSynchronizer::inflate](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=inflate)
+必须通过 [ObjectSynchronizer::inflate](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=inflate) 获取监视器
 
 ```cpp
 // NOTE: must use heavy weight monitor to handle wait()
@@ -756,12 +741,12 @@ int ObjectSynchronizer::wait(Handle obj, jlong millis, TRAPS) {
 
 #### ObjectMonitor::wait
 
-1. check for a pending interrupt and ClearInterrupted, THROW(vmSymbols::java_lang_InterruptedException())
+1. 检查是否存在待处理中断并 ClearInterrupted，THROW(vmSymbols::java_lang_InterruptedException())
 2. CHECK_OWNER
-3. **AddWaiter**, enter the wait queue
-4. exit monitor
-5. **`Park`** Self
-6. ReenterI  or enter when unPark by other Thread
+3. **AddWaiter**，进入等待队列
+4. 退出监视器
+5. **`Park`** 自身
+6. ReenterI，或在被其他线程 unPark 时进入
 
 ```cpp
 //objectMonitor.cpp
@@ -853,13 +838,13 @@ void ObjectMonitor::wait(jlong millis, bool interruptible, TRAPS) {
 
 ### Notification
 
-wake up thread when exit the sync block
+退出同步块时唤醒线程
 
 |       | notify | notifyAll |
 | ----- | ------ | --------- |
-| order | FIFO   | LIFO      |
+| 顺序  | FIFO   | LIFO      |
 
-notifyAll foreach from tail -> head
+notifyAll 从尾到头遍历
 
 
 
@@ -870,16 +855,14 @@ public final native void notifyAll();
 
 ```
 
-**TODO**: *Consider: If the lock is cool (cxq == null && succ == null) and we're on an MP system then instead of transferring a thread from the WaitSet to the EntryList we might just dequeue a thread from the WaitSet and directly unpark() it.*
+**待办**：*考虑：若锁处于空闲状态（cxq == null && succ == null）且处于多处理器（MP）系统，那么与其将线程从 WaitSet 转移到 EntryList，不如直接从 WaitSet 取出一个线程并对其调用 unpark()。*
 
-*Consider: a not-uncommon synchronization bug is to use `notify()` when `notifyAll()` is more appropriate, potentially resulting in stranded threads; 
-this is one example of a lost wakeup. A useful diagnostic option is to force all notify() operations to behave as notifyAll().*
+*考虑：一种并不少见的同步错误是在应使用 `notifyAll()` 的场合误用 `notify()`，可能导致线程被搁置（stranded threads）；这正是丢失唤醒（lost wakeup）的一个例子。一个有用的诊断手段是强制所有 notify() 操作表现得如同 notifyAll()。*
 
-*Note: We can also detect many such problems with a "minimum wait". 
-When the "minimum wait" is set to a small non-zero timeout value and the program does not hang whereas it did absent "minimum wait", that suggests a lost wakeup bug.*
+*注意：我们也可以通过"最小等待（minimum wait）"来检测许多这类问题。当"最小等待"被设为一个较小的非零超时值、且程序不再像没有"最小等待"时那样卡死时，就提示存在丢失唤醒的 bug。*
 
 
-dequeue from the WaitSet to the EntryList or _cxq
+从 WaitSet 出队到 EntryList 或 _cxq
 
 ```cpp
 void ObjectMonitor::notify(TRAPS) {
@@ -931,10 +914,7 @@ void ObjectMonitor::INotify(Thread * Self) {
       }
     }
 ```
-_WaitSetLock protects the wait queue, not the EntryList.  
-We could move the add-to-EntryList operation, above, outside the critical section protected by _WaitSetLock.  In practice that's not useful.  
-With the exception of  wait() timeouts and interrupts the monitor owner is the only thread that grabs _WaitSetLock.  
-There's almost no contention on _WaitSetLock so it's not profitable to reduce the length of the critical section.
+_WaitSetLock 保护的是等待队列，而非 EntryList。我们可以将上方的"加入 EntryList"操作移到 _WaitSetLock 保护的临界区之外。但在实践中这并无益处。除了 wait() 的超时与中断外，监视器的持有者（owner）是唯一会获取 _WaitSetLock 的线程。_WaitSetLock 上几乎不存在竞争，因此缩短临界区长度并无收益。
 
 ```cpp
     iterator->wait_reenter_begin(this);
@@ -945,11 +925,9 @@ There's almost no contention on _WaitSetLock so it's not profitable to reduce th
 
 
 
-*_WaitSetLock protects the wait queue, not the EntryList.  We could move the add-to-EntryList operation, above, outside the critical section protected by _WaitSetLock.  
-In practice that's not useful.  With the exception of  wait() timeouts and interrupts the monitor owner is the only thread that grabs _WaitSetLock.  
-**There's almost no contention on _WaitSetLock** so it's not profitable to reduce the length of the critical section.*
+*_WaitSetLock 保护的是等待队列，而非 EntryList。我们可以将上方的"加入 EntryList"操作移到 _WaitSetLock 保护的临界区之外。但在实践中这并无益处。除了 wait() 的超时与中断外，监视器的持有者是唯一会获取 _WaitSetLock 的线程。**_WaitSetLock 上几乎不存在竞争**，因此缩短临界区长度并无收益。*
 
-**notifyAll** when JavaThread exit
+**notifyAll**：JavaThread 退出时
 
 ```cpp
 void JavaThread::exit(bool destroy_vm, ExitType exit_type) {
@@ -1189,26 +1167,25 @@ void ObjectMonitor::ExitEpilog(Thread * Self, ObjectWaiter * Wakee) {
 
 ### Interruptions
 
-*The `interrupt` method interrupts **this thread**.*
-Unless the current thread is interrupting itself, which is always permitted, the checkAccess method of this thread is invoked, which may cause a SecurityException to be thrown.
-The interruption is that it doesn’t actually interrupt a running thread — it just requests that the thread interrupt itself at the next convenient opportunity.
-1. If this thread is blocked in an invocation of the wait(), wait(long), or wait(long, int) methods of the Object class, or of the join(), join(long), join(long, int), sleep(long), or sleep(long, int), methods of this class, then its interrupt status will be cleared and it will receive an InterruptedException.
+*`interrupt` 方法会中断**该线程**.*
+除非是当前线程中断自身（这始终被允许），否则会调用该线程的 checkAccess 方法，这可能抛出 SecurityException。
+所谓中断，实际上并不会真正打断一个正在运行的线程——它只是请求该线程在下一个合适的时机自行中断。
+1. 若该线程因调用 Object 类的 wait()、wait(long) 或 wait(long, int) 方法，或本类的 join()、join(long)、join(long, int)、sleep(long) 或 sleep(long, int) 方法而阻塞，则其中断状态会被清除，并收到 InterruptedException。
 
-2. If this thread is blocked in an I/O operation upon an InterruptibleChannel then the channel will be closed, the thread's interrupt status will be set, and the thread will receive a java.nio.channels.ClosedByInterruptException.
-   If this thread is blocked in a java.nio.channels.Selector then the thread's interrupt status will be set and it will return immediately from the selection operation, possibly with a non-zero value, just as if the selector's wakeup method were invoked.
+2. 若该线程在 InterruptibleChannel 上的 I/O 操作中阻塞，则通道会被关闭，线程的中断状态会被设置，并收到 java.nio.channels.ClosedByInterruptException。若该线程在 java.nio.channels.Selector 上阻塞，则其中断状态会被设置，并立即从选择操作中返回（可能携带非零值），如同调用了选择器的 wakeup 方法一样。
 
-3. If none of the previous conditions hold then this thread's interrupt status will be set.
+3. 若以上条件均不满足，则设置该线程的中断状态。
 
-4. Interrupting a thread that is not alive need not have any effect.
+4. 中断一个未存活的线程不会产生任何效果。
 
-Threads may block for several reasons: waiting to wake up from a Thread.sleep(), waiting to acquire a lock, waiting for I/O completion, or waiting for the result of a computation in another thread, among others.
+线程可能因多种原因阻塞：等待从 Thread.sleep() 唤醒、等待获取锁、等待 I/O 完成，或等待另一线程的计算结果等。
 
-The InterruptedException is usually thrown by all blocking methods so that it can be handled and the corrective action can be performed. There are several methods in Java that throw InterruptedException. These include Thread.sleep(), Thread.join(), the wait() method of the Object class, and put() and take() methods of BlockingQueue, to name a few.
-
+InterruptedException 通常由所有阻塞方法抛出，以便被捕获后采取纠正措施。Java 中有多个方法会抛出 InterruptedException，例如 Thread.sleep()、Thread.join()、Object 类的 wait() 方法，以及 BlockingQueue 的 put() 和 take() 方法等。
 
 
-*The `interrupted` method Tests whether the **current thread** has been interrupted and clear interrupted status.*
-*The `isInterrupted` method tests whether **this thread** has been interrupted. A thread interruption ignored because a thread was not alive at the time of the interrupt will be reflected by this method returning false.*
+
+*`interrupted` 方法用于检测**当前线程**是否已被中断，并清除其中断状态。*
+*`isInterrupted` 方法用于检测**该线程**是否已被中断。若因中断发生时线程尚未存活而忽略中断，本方法会返回 false 来反映这一点。*
 
 ```java
 public void interrupt() {
@@ -1310,22 +1287,21 @@ void os::interrupt(Thread* thread) {
 
 
 ### Interactions of Waits, Notification, and Interruption
-> From JLS:
+> 摘自 JLS：
 > 
-> If a thread is both notified and interrupted while waiting, it may either:
-> - return normally from wait, while still having a pending interrupt (in other words, a call to `Thread.interrupted` would return true)
-> - return from wait by throwing an `InterruptedException`
-> The thread may not reset its interrupt status and return normally from the call to `wait`.
+> 若线程在等待期间同时被通知和中断，它可能：
+> - 正常从 wait 返回，但仍存在一个挂起的中断（换言之，调用 `Thread.interrupted` 会返回 true）
+> - 或抛出 `InterruptedException` 从 wait 返回
+> 线程不能既重置其中断状态、又正常从 wait 调用返回。
 > 
-> Similarly, **notifications cannot be lost due to interrupts**. 
-> Assume that a set *s* of threads is in the wait set of an object *m*, and another thread performs a `notify` on *m*. Then either:
+> 类似地，**通知不会因中断而丢失**。假设线程集合 *s* 位于对象 *m* 的等待集中，另一个线程对 *m* 执行了 `notify`，那么必定满足以下之一：
 > 
-> - at least one thread in *s* must return normally from `wait`, or
-> - all of the threads in *s* must exit `wait` by throwing `InterruptedException`
+> - *s* 中至少有一个线程正常从 `wait` 返回，或
+> - *s* 中所有线程都通过抛出 `InterruptedException` 退出 `wait`
 > 
-> **Note that if a thread is both interrupted and woken via `notify`, and that thread returns from `wait` by throwing an `InterruptedException`, then some other thread in the wait set must be notified.**
+> **注意：若一个线程既被中断又因 `notify` 被唤醒，且该线程通过抛出 `InterruptedException` 从 wait 返回，那么等待集中必有另一线程被通知。**
 
-Such as two threads wait for lock, may thread1 be notified and `Thread.interrupted` return true while the other thread still waiting.
+例如两个线程等待锁时，可能出现 thread1 被通知且 `Thread.interrupted` 返回 true，而另一线程仍在等待的情况。
 
 ```
 synchronized (lockObject) {
@@ -1340,35 +1316,35 @@ synchronized (lockObject) {
 ## Sleep and Yield
 
 
-`Thread.sleep()` causes the currently executing thread to sleep (temporarily cease execution) for the specified duration, subject to the precision and accuracy of system timers and schedulers. 
-The thread **does not lose ownership of any monitors**, and resumption of execution will depend on scheduling and the availability of processors on which to execute the thread.
+`Thread.sleep()` 使当前线程在指定时长内休眠（暂停执行），实际精度与准确度取决于系统定时器与调度器的实现。
+线程**不会失去对任何监视器的所有权**，何时恢复执行则取决于调度情况以及是否有可用处理器。
 
-**It is important to note that neither `Thread.sleep` nor `Thread.yield` have any synchronization semantics.** 
-In particular, the compiler does not have to flush writes cached in registers out to shared memory before a call to sleep or yield, 
-nor does the compiler have to reload values cached in registers after a call to sleep or yield. 
+**需要注意，`Thread.sleep` 与 `Thread.yield` 均不具备任何同步语义。**
+具体而言，编译器不必在调用 sleep 或 yield 之前把缓存在寄存器中的写入刷新到共享内存，
+也不必在调用 sleep 或 yield 之后重新加载缓存在寄存器中的值。
 
-> For example, in the following (broken) code fragment, assume that this.done is a non-volatile boolean field:
+> 例如，在下面这段（有缺陷的）代码中，假定 this.done 是一个非 volatile 的 boolean 字段：
 
 ```
     while (!this.done)
         Thread.sleep(1000);
 ```
 
-> The compiler is free to read the field this.done just once, and reuse the cached value in each execution of the loop.
-> This would mean that the loop would never terminate, even if another thread changed the value of this.done.
+> 编译器完全可以只读取一次 this.done 字段，并在循环的每次执行中复用缓存的值。
+> 这意味着即便其他线程修改了 this.done 的值，该循环也永远不会终止。
 
 
 
 |              | wait      | yield       | sleep       |
 |--------------|-----------| ----------- | ----------- |
-| From         | Object    | Thread      | Thread      |
-| Lock         | Dependent | Independent | Independent |
-| Interruption | Throws    |             | Throws      |
-| CPU          | release   |         release    | release      |
+| 来源         | Object    | Thread      | Thread      |
+| 锁           | 相关      | 无关        | 无关        |
+| 中断         | 抛异常    |             | 抛异常      |
+| CPU          | 释放      |         释放      | 释放      |
 
 
 ### sleep
-if millis = 0, `os::naked_yield()` like [Thread#yield()](/docs/CS/Java/JDK/Concurrency/Thread.md?id=yield)
+若 millis = 0，则行为类似 `os::naked_yield()`，参见 [Thread#yield()](/docs/CS/Java/JDK/Concurrency/Thread.md?id=yield)
 ```cpp
 
 ​```c
@@ -1429,7 +1405,7 @@ JVM_END
 1. `OSThread::set_interrupted(true)`
 2. `ParkEvent::park`
 
-When `ParkEvent::unpark` by [interrupt()](/docs/CS/Java/JDK/Concurrency/Thread.md?id=jvm_interrupt), use `OSThread::set_interrupted(true)` at next iteration.
+当由 [interrupt()](/docs/CS/Java/JDK/Concurrency/Thread.md?id=jvm_interrupt) 触发 `ParkEvent::unpark` 时，在下一次循环中使用 `OSThread::set_interrupted(true)`。
 
 ```cpp
 // os_posix.cpp
@@ -1508,7 +1484,7 @@ int os::sleep(Thread* thread, jlong millis, bool interruptible) {
 ```
 
 ### yield
-call os::naked_yield()
+调用 os::naked_yield()
 ```c
 //Thread.c
 static JNINativeMethod methods[] = {
@@ -1524,12 +1500,11 @@ JVM_ENTRY(void, JVM_Yield(JNIEnv *env, jclass threadClass))
 JVM_END
 ```
 
-Linux CFS scheduler (since 2.6.23) does not guarantee sched_yield(2) will actually give up the CPU. Since skip buddy (v2.6.28):
-- Sets the yielding task as skip buddy for current CPU's run queue.
-- Picks next from run queue, if empty, picks a skip buddy (can be the yielding task).
-- Clears skip buddies for this run queue (yielding task no longer a skip buddy).
-  An alternative is calling os::naked_short_nanosleep with a small number to avoid
-  getting re-scheduled immediately.
+Linux CFS 调度器（自 2.6.23 起）并不保证 `sched_yield(2)` 真的会让出 CPU。自 skip buddy 机制（v2.6.28）引入后：
+- 将正在让出的任务设为当前 CPU 运行队列上的 skip buddy。
+- 先从运行队列中选取下一个任务；若运行队列为空，则选取某个 skip buddy（可能就是正在让出的那个任务）。
+- 清除该运行队列上的 skip buddy（正在让出的任务不再是 skip buddy）。
+  另一种做法是以较小的时长调用 os::naked_short_nanosleep，以避免被立即重新调度。
 
 ```cpp
 // os_linux.cpp
@@ -1541,27 +1516,27 @@ void os::naked_yield() {
 
 ## Timing
 
-The TimeUnit class provides multiple granularities (including nanoseconds) for specifying and controlling time-out based operations.
-Most classes in the package contain operations based on time-outs in addition to indefinite waits.
-In all cases that time-outs are used, the time-out specifies the minimum time that the method should wait before indicating that it timed-out.
-Implementations make a "best effort" to detect time-outs as soon as possible after they occur.
-However, an indefinite amount of time may elapse between a time-out being detected and a thread actually executing again after that time-out.
-All methods that accept timeout parameters treat values less than or equal to zero to mean not to wait at all.
-To wait "forever", you can use a value of Long.MAX_VALUE.
+`TimeUnit` 类为指定和控制基于超时的操作提供了多种粒度（包括纳秒级）。
+本包中的大多数类除无限期等待之外，也包含基于超时的操作。
+所有使用超时的地方，超时值都表示方法在宣告超时之前至少应等待的时长。
+各实现会「尽力而为」，在超时发生后尽快将其检测出来。
+但从超时被检测到，到线程在该超时之后真正重新执行之间，仍可能流逝不定长的时间。
+所有接受超时参数的方法都把小于或等于零的值视为完全不等待。
+若要「永远」等待，可以传入 `Long.MAX_VALUE`。
 
 
-A TimeUnit represents time durations at a given unit of granularity and provides utility methods to convert across units, and to perform timing and delay operations in these units. 
-A TimeUnit does not maintain time information, but only helps organize and use time representations that may be maintained separately across various contexts.
+`TimeUnit` 表示某个给定粒度单位下的时间跨度，并提供在各单位之间换算、以及以这些单位执行计时与延时操作的工具方法。
+`TimeUnit` 本身并不保存时间信息，只是帮助组织和使用那些可能在不同上下文中被分别保存的时间表示。
 
-A TimeUnit is mainly used to inform time-based methods how a given timing parameter should be interpreted.
+`TimeUnit` 主要用于告知基于时间的方法，某个时间参数应如何解释。
 
-Note however, that there is no guarantee that a particular timeout implementation will be able to notice the passage of time at the same granularity as the given TimeUnit.
+但需注意，并没有保证某个具体的超时实现能够以与所给 `TimeUnit` 相同的粒度感知时间的流逝。
 
 
 
-**Convenience Methods:**
+**便捷方法：**
 
-| Method         | Convenience Method in TimeUnit |
+| 方法           | TimeUnit 中的便捷方法 |
 | -------------- | ------------------------------ |
 | *Object.wait*  | *timedWait*                    |
 | *Thread.join*  | *timedJoin*                    |
@@ -1610,7 +1585,7 @@ public void sleep(long timeout) throws InterruptedException {
 ## Thread Affinity
 
 
-See [OpenHFT Java Thread Affinity library](https://github.com/OpenHFT/Java-Thread-Affinity)
+参见 [OpenHFT Java Thread Affinity library](https://github.com/OpenHFT/Java-Thread-Affinity)
 
 ## features
 
@@ -1636,11 +1611,11 @@ ThreadLocal
 
 ## Fiber
 
-See [Loom](/docs/CS/Java/JDK/Loom.md).
+参见 [Loom](/docs/CS/Java/JDK/Loom.md)。
 
-Preemptive Threads-Scheduling
+抢占式线程调度（Preemptive Thread Scheduling）
 
-Virtual Thread
+虚拟线程（Virtual Thread）
 
 
 ## Tuning

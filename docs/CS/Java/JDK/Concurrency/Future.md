@@ -6,14 +6,14 @@
 
 ![Future](img/Future.png)
 
-We could create a [Thread](/docs/CS/Java/JDK/Concurrency/Thread.md) object with a **Runnable** target, also use **FutureTask** to get **Future**.
+我们可以通过 [Thread](/docs/CS/Java/JDK/Concurrency/Thread.md) 对象以 **Runnable** 作为任务目标来创建线程，也可以使用 **FutureTask** 来获取 **Future**。
 
 ### Runnable
 
-The Runnable interface should be implemented by any class whose instances are intended to be **executed by a thread**. The class must define a method of no arguments **called run**.
-This interface is designed to provide a common protocol for objects that wish to execute code while they are active. **Runnable is implemented by class Thread.**
+任何希望其实例被**线程执行**的类都应实现 Runnable 接口，并且必须定义一个无参方法 **run**。
+该接口旨在为那些希望在自身活跃期间执行代码的对象提供统一的协议。**Thread 类本身即实现了 Runnable 接口。**
 
-A class that implements Runnable can run without subclassing Thread by instantiating a Thread instance and passing itself in as the target.his is important because classes should not be subclassed unless the programmer intends on modifying or enhancing the fundamental behavior of the class.
+实现了 Runnable 接口的类无需继承 Thread 即可运行——只需创建 Thread 实例并将自身作为任务目标传入即可。这一点很重要：除非开发者确实打算修改或增强类的基础行为，否则不应通过继承 Thread 来实现。
 
 ```java
 @FunctionalInterface
@@ -27,13 +27,13 @@ public interface Runnable {
 
 ### Callable
 
-A task that **returns a result and may throw an exception**. Implementors define a single method with no arguments **called call**.
+Callable 表示一个**有返回值且可能抛出异常**的任务，实现类需定义一个无参方法 **call**。
 
-**Runnable does not return a result and cannot throw a checked exception.**
+**Runnable 不返回结果，也不能抛出受检异常。**
 
-**The Callable interface is similar to Runnable**, in that both are designed for classes whose instances are potentially executed by another thread. 
+**Callable 接口与 Runnable 类似**，二者都是为那些实例可能被其他线程执行的类而设计的。 
 
-The **Executors** class contains utility methods to convert from other common forms to Callable classes.
+**Executors** 类中提供了一些工具方法，可将其他常见形式转换为 Callable 类。
 
 ```java
 @FunctionalInterface
@@ -49,12 +49,12 @@ public interface Callable<V> {
 
 
 
-The AccessController class is used for access control operations and decisions.
-More specifically, the AccessController class is used for three purposes:
+AccessController 类用于执行访问控制操作与决策。
+更具体地说，AccessController 类用于以下三个目的：
 
-1. to decide whether an access to a critical system resource is to be allowed or denied, based on the security policy currently in effect,
-2. to mark code as being "privileged", thus affecting subsequent access determinations, and
-3. to obtain a "snapshot" of the current calling context so access-control decisions from a different context can be made with respect to the saved context.
+1. 依据当前生效的安全策略，决定是否允许对关键系统资源的访问；
+2. 将代码标记为"特权（privileged）"状态，从而影响后续的访问判定；
+3. 获取当前调用上下文的"快照（snapshot）"，以便基于所保存的上下文在不同的上下文中做出访问控制决策。
 
 
 
@@ -205,7 +205,7 @@ interface ArchiveSearcher { String search(String target); }
 
 
 
-**Memory consistency effects**: Actions taken by the asynchronous computation happen-before actions following the corresponding Future.get() in another thread.
+**内存一致性效应（memory consistency effects）**：异步计算所执行的操作，happen-before 另一线程中在相应 Future.get() 调用之后的操作。
 
 ```java
 /**
@@ -260,7 +260,7 @@ public interface Future<V> {
 
 ### RunnableFuture
 
-A Future that is Runnable. Successful execution of the run method causes completion of the Future and **allows access to its results**.
+既是 Future 又是 Runnable 的接口。run 方法成功执行会导致 Future 完成，并**允许获取其结果**。
 
 ```java
 public interface RunnableFuture<V> extends Runnable, Future<V> {
@@ -273,26 +273,26 @@ public interface RunnableFuture<V> extends Runnable, Future<V> {
 
 ## FutureTask
 
-**A cancellable asynchronous computation**. 
-This class provides a base implementation of *Future*, with methods to start and cancel a computation, query to see if the computation is complete, and retrieve the result of the computation. 
+**可取消的异步计算**。
+该类为 *Future* 提供了基础实现，包含启动与取消计算、查询计算是否完成以及获取计算结果的方法。
 
-The result can only be retrieved when the computation has completed; the **get methods will block if the computation has not yet completed**. 
-Once the computation has completed, the computation **cannot be restarted or cancelled (unless the computation is invoked using runAndReset)**.
+只有在计算完成后才能获取结果；若计算尚未完成，**get 方法将阻塞**。
+一旦计算完成，就**无法重新启动或取消（除非通过 runAndReset 调用计算）**。
 
-A FutureTask can be used to wrap a *Callable* or *Runnable* object. 
-Because FutureTask implements Runnable, a FutureTask can be submitted to an **Executor** for execution. 
-For example, the above construction with submit could be replaced by:
+FutureTask 可用于包装一个 *Callable* 或 *Runnable* 对象。
+由于 FutureTask 实现了 Runnable，它可以被提交给一个 **Executor** 执行。
+例如，上面用 submit 的写法可以替换为：
 
 ```
 FutureTask future = new FutureTask<>(task);
 executor.execute(future);
 ```
 
-In addition to serving as a standalone class, this class provides protected functionality that may be useful when creating customized task classes.
+除了作为独立类使用外，该类还提供了一些 protected 方法，在创建自定义任务类时可能会有用。
 
 
 
-see [Piggybacking on Synchronization - JMM](/docs/CS/Java/JDK/Concurrency/JMM.md?id=piggybacking-on-synchronization)
+参见 [Piggybacking on Synchronization - JMM](/docs/CS/Java/JDK/Concurrency/JMM.md?id=piggybacking-on-synchronization)
 
 ```java
 public class FutureTask<V> implements RunnableFuture<V> {
@@ -312,19 +312,19 @@ public class FutureTask<V> implements RunnableFuture<V> {
 
 ### state
 
-**Revision notes**:
-This differs from previous versions of this class that relied on AbstractQueuedSynchronizer, mainly to avoid surprising users about retaining interrupt status during cancellation races.
-Sync control in the current design relies on a "state" field updated via CAS to track completion, along with a simple Treiber stack to hold waiting threads.
+**修订说明**：
+这与该类早期依赖 AbstractQueuedSynchronizer 的版本不同，主要目的是避免在取消竞争期间保留中断状态时给用户带来意外行为。
+当前设计的同步控制依赖于通过 CAS 更新的 "state" 字段来跟踪完成情况，同时使用一个简单的 Treiber 栈来保存等待线程。
 
 
 
-The run state of this task, initially NEW. 
+任务的运行状态，初始为 NEW。
 
-The run state transitions to a terminal state only in methods set, setException, and cancel. 
+运行状态只有在 set、setException 和 cancel 方法中才会转换到终态。
 
-During completion, state may take on transient values of COMPLETING (while outcome is being set)  or INTERRUPTING (only while interrupting the runner to satisfy a cancel(true)). Transitions from these intermediate to final states use cheaper ordered/lazy writes because values are unique and cannot be further modified. 
+在完成过程中，state 可能会短暂地取 COMPLETING（正在设置 outcome 期间）或 INTERRUPTING（仅为满足 cancel(true) 而中断 runner 期间）这样的中间值。从中间状态到终态的转换使用代价更低的 ordered/lazy 写，因为这些值是唯一的、无法再被修改。
 
-Possible state transitions: 
+可能的状态转换：
 
 ```dot
 digraph g{
@@ -353,7 +353,7 @@ private static final int INTERRUPTED  = 6;
 
 
 
-Constructor
+构造方法
 
 ```java
 public class FutureTask<V> implements RunnableFuture<V> {
@@ -454,9 +454,9 @@ public class FutureTask<V> implements RunnableFuture<V> {
 
 ### handlePossibleCancellationInterrupt
 
-Ensures that any interrupt from a possible cancel(true) is only delivered to a task while in run or runAndReset.
+确保可能由 cancel(true) 引发的中断，只会在任务处于 run 或 runAndReset 期间被投递给该任务。
 
-**TODO**: why delete `Thread.interrupted();` ?
+**TODO**：为何删除 `Thread.interrupted();` ？
 
 ```java
 private void handlePossibleCancellationInterrupt(int s) {
@@ -829,9 +829,9 @@ public class FutureTask<V> implements RunnableFuture<V> {
 
 ### get
 
-If state = NEW, it will block on `Future.get()`.
+若 state 为 NEW，则会在 `Future.get()` 上阻塞。
 
-Try to use `Future.get(long timeout, TimeUnit unit)` when using `DiscardPolicy` or `DiscardOldestPolicy`.
+在使用 `DiscardPolicy` 或 `DiscardOldestPolicy` 时，建议改用 `Future.get(long timeout, TimeUnit unit)`。
 
 ```java
 public V get() throws InterruptedException, ExecutionException {
@@ -869,13 +869,13 @@ private V report(int s) throws ExecutionException {
 
 #### awaitDone
 
-Awaits completion or aborts on interrupt or timeout.
+等待完成，或在被中断或超时时中止。
 
-The code below is very delicate, to achieve these goals:
-- call nanoTime exactly once for each call to park
-- if nanos <= 0L, return promptly without allocation or nanoTime
-- if nanos == Long.MIN_VALUE, don't underflow
-- if nanos == Long.MAX_VALUE, and nanoTime is non-monotonic and we suffer a spurious wakeup, we will do no worse than to park-spin for a while
+下面的代码非常精妙，旨在实现以下目标：
+- 每次调用 park 时恰好调用一次 nanoTime
+- 若 nanos <= 0L，则立即返回，不分配对象也不调用 nanoTime
+- 若 nanos == Long.MIN_VALUE，避免下溢
+- 若 nanos == Long.MAX_VALUE，且 nanoTime 非单调并发生虚假唤醒，最坏情况也只是 park 自旋一段时间
 
 ```java
 private int awaitDone(boolean timed, long nanos)
@@ -934,7 +934,7 @@ private int awaitDone(boolean timed, long nanos)
 
 #### removeWaiter
 
-Tries to unlink a timed-out or interrupted wait node to avoid accumulating garbage. Internal nodes are simply unspliced without *CAS* since it is harmless if they are traversed anyway by releasers. To avoid effects of unsplicing from already removed nodes, the list is retraversed in case of an apparent race. This is slow when there are a lot of nodes, but we don't expect lists to be long enough to outweigh higher-overhead schemes.
+尝试断开（unlink）超时或中断的等待节点，以避免垃圾堆积。内部节点直接摘除而无需使用 *CAS*，因为即便被释放方（releaser）遍历到也无妨。为避免对已移除节点进行摘除带来的副作用，在出现明显竞争时会重新遍历链表。当节点数量很多时这会比较慢，但预计链表不会长到足以抵消更高开销方案的程度。
 
 ```java
  private void removeWaiter(WaitNode node) {
@@ -993,28 +993,32 @@ public boolean cancel(boolean mayInterruptIfRunning) {
 
 ## CompletableFuture
 
-A Future that may be explicitly completed (setting its value and status), and may be used as a CompletionStage, supporting dependent functions and actions that trigger upon its completion.
-When two or more threads attempt to complete, completeExceptionally, or cancel a CompletableFuture, only one of them succeeds.
-In addition to these and related methods for directly manipulating status and results, CompletableFuture implements interface CompletionStage with the following policies:
+> [!TIP]
+>
+> 本节是总览；完整的操作族、执行语义、异常传播与内部结构见专篇 [CompletableFuture](/docs/CS/Java/JDK/Concurrency/CompletableFuture.md)。
 
-- Actions supplied for dependent completions of non-async methods may be performed by the thread that completes the current CompletableFuture, or by any other caller of a completion method.
-- All async methods without an explicit Executor argument are performed using the **ForkJoinPool.commonPool()** (unless it does not support a parallelism level of at least two, in which case, a new Thread is created to run each task). This may be overridden for non-static methods in subclasses by defining method defaultExecutor(). To simplify monitoring, debugging, and tracking, all generated asynchronous tasks are instances of the marker interface CompletableFuture.AsynchronousCompletionTask. Operations with time-delays can use adapter methods defined in this class, for example: supplyAsync(supplier, delayedExecutor(timeout, timeUnit)). To support methods with delays and timeouts, this class maintains at most one daemon thread for triggering and cancelling actions, not for running them.
-- All CompletionStage methods are implemented independently of other public methods, so the behavior of one method is not impacted by overrides of others in subclasses.
-- All CompletionStage methods return CompletableFutures. To restrict usages to only those methods defined in interface CompletionStage, use method minimalCompletionStage. Or to ensure only that clients do not themselves modify a future, use method copy.
+一种可以显式完成（设置其值与状态）的 Future，也可作为 CompletionStage 使用，支持在其完成时触发的依赖函数与动作。
+当两个以上线程尝试完成、completeExceptionally 或取消一个 CompletableFuture 时，只有一个会成功。
+除了上述及相关的直接操纵状态与结果的方法外，CompletableFuture 实现 CompletionStage 接口时遵循以下策略：
 
-
-
-
-
-CompletableFuture also implements Future with the following policies:
-
-- Since (unlike FutureTask) this class has no direct control over the computation that causes it to be completed, cancellation is treated as just another form of exceptional completion. Method cancel has the same effect as completeExceptionally(new CancellationException()). Method isCompletedExceptionally can be used to determine if a CompletableFuture completed in any exceptional fashion.
-- In case of exceptional completion with a CompletionException, methods get() and get(long, TimeUnit) throw an ExecutionException with the same cause as held in the corresponding CompletionException. To simplify usage in most contexts, this class also defines methods join() and getNow that instead throw the CompletionException directly in these cases.
+- 非异步（non-async）方法的依赖完成动作，可能由完成当前 CompletableFuture 的线程执行，也可能由任意其他调用了完成方法的线程执行。
+- 所有未显式指定 Executor 参数的异步方法都使用 **ForkJoinPool.commonPool()** 执行（除非其并行度不足 2，此时会为每个任务新建一个 Thread 来运行）。非静态方法可在子类中通过重写 defaultExecutor() 来改变这一行为。为便于监控、调试与追踪，所有生成的异步任务都是标记接口 CompletableFuture.AsynchronousCompletionTask 的实例。带时间延迟的操作可使用本类定义的适配方法，例如 supplyAsync(supplier, delayedExecutor(timeout, timeUnit))。为支持带延迟与超时的方法，本类最多维护一个守护线程用于触发和取消动作，而非运行它们。
+- 所有 CompletionStage 方法都独立于其他 public 方法实现，因此某一方法的行为不受子类中其他方法重写的影响。
+- 所有 CompletionStage 方法都返回 CompletableFuture。若只想暴露接口 CompletionStage 中定义的方法，可使用 minimalCompletionStage 方法；若想确保调用方无法自行修改 future，可使用 copy 方法。
 
 
 
-Arguments used to pass a completion result (that is, for parameters of type T) for methods accepting them may be null, but passing a null value for any other parameter will result in a NullPointerException being thrown.
-Subclasses of this class should normally override the "virtual constructor" method newIncompleteFuture, which establishes the concrete type returned by CompletionStage methods. For example, here is a class that substitutes a different default Executor and disables the obtrude methods:
+
+
+CompletableFuture 实现 Future 接口时还遵循以下策略：
+
+- 与 FutureTask 不同，本类无法直接控制导致其完成的计算，因此取消被视为异常完成的另一种形式。cancel 方法的效果等同于 completeExceptionally(new CancellationException())。isCompletedExceptionally 方法可用于判断 CompletableFuture 是否以任何异常方式完成。
+- 若以 CompletionException 异常完成，get() 和 get(long, TimeUnit) 会抛出 ExecutionException，其根因与对应 CompletionException 中保存的一致。为简化大多数场景下的使用，本类还定义了 join() 和 getNow 方法，它们在上述情况下直接抛出 CompletionException。
+
+
+
+对于接受完成结果（即类型为 T 的参数）的方法，传入的参数可以为 null；但其他任何参数传 null 都会抛出 NullPointerException。
+本类的子类通常应重写"虚拟构造器"方法 newIncompleteFuture，它决定了 CompletionStage 方法返回的具体类型。例如，下面这个类替换了默认的 Executor 并禁用了 obtrude 系列方法：
 
 ```java
 
@@ -1034,7 +1038,7 @@ Subclasses of this class should normally override the "virtual constructor" meth
 
 
 
-Default executor -- ForkJoinPool.commonPool()
+默认执行器 —— ForkJoinPool.commonPool()
 
 ```java
 private static final boolean USE_COMMON_POOL =
@@ -1045,7 +1049,7 @@ private static final Executor ASYNC_POOL = USE_COMMON_POOL ?
     ForkJoinPool.commonPool() : new ThreadPerTaskExecutor();
 ```
 
-result stack
+结果栈
 
 ```java
 public class CompletableFuture<T> implements Future<T>, CompletionStage<T> {
@@ -1054,7 +1058,7 @@ public class CompletableFuture<T> implements Future<T>, CompletionStage<T> {
 }
 ```
 
-Completion
+完成
 
 
 
@@ -1080,7 +1084,7 @@ public static CompletableFuture<Void> runAsync(Runnable runnable, Executor execu
 
 
 
-then execute another task
+随后执行另一个任务
 
 ```java
 public <U> CompletableFuture<U> thenApplyAsync(
@@ -1114,9 +1118,9 @@ public <U> CompletableFuture<U> handleAsync(
 }
 ```
 
-Exception most will be wrap into `CompletionException.getCause()`
+异常大多会被包装进 `CompletionException.getCause()`
 
-use  `ExceptionUtils.extractRealException(err)` to get real Exception
+使用 `ExceptionUtils.extractRealException(err)` 获取真实的异常
 
 ### collect Results
 
@@ -1205,7 +1209,7 @@ public static CompletableFuture<Object> anyOf(CompletableFuture<?>... cfs) {
 
 
 
-The result type returned by this future's join and get methods
+该 future 的 join 与 get 方法所返回的结果类型
 
 ```java
 public T join() {
@@ -1235,6 +1239,7 @@ private static Object reportJoin(Object r) {
 ## Links
 
 - [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
+- [CompletableFuture](/docs/CS/Java/JDK/Concurrency/CompletableFuture.md)
 - [ThreadPool](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md)
 - [RxJava](/docs/CS/Framework/RxJava/RxJava.md)
 - [Reactor](/docs/CS/Framework/reactor/Reactor.md)

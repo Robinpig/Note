@@ -55,6 +55,30 @@ ScopedValue.where(CURRENT_USER, "alice").run(() -> {
 这与虚拟线程模型契合：请求内 fork 出成千上万虚拟线程并发调用下游服务，它们共享同一份请求上下文（用户身份、trace id、租户），
 却不需要每个线程复制存储；scope 结束，所有子任务结束，绑定整体失效。
 
+## Rebinding and Carriers
+
+绑定可以**嵌套与重绑定**（rebind）：`where` 可以链式多次调用，同一 key 的内层绑定在其 `run`/`call` 区间内遮蔽（shadow）外层绑定，区间结束后外层绑定恢复：
+
+```java
+private static final ScopedValue<String> USER = ScopedValue.newInstance();
+
+ScopedValue.where(USER, "alice").run(() -> {
+    System.out.println(USER.get());            // alice
+    ScopedValue.where(USER, "bob").run(() -> {
+        System.out.println(USER.get());        // bob（内层遮蔽）
+    });
+    System.out.println(USER.get());            // alice（恢复）
+});
+```
+
+「绑定栈」随**载体线程（carrier thread）**走，这划清了 ScopedValue 与 `InheritableThreadLocal` 的边界：
+
+- 结构化 fork 出的子任务**只读继承**全部可见绑定（[StructuredTaskScope](/docs/CS/Java/JDK/Concurrency/StructuredTaskScope.md) 的父子关系是传播通道）；
+- 普通 `new Thread(...)` 或普通线程池提交的任务**看不到**父线程的绑定——不存在「创建时拷贝一份」的隐式继承，拿不到就是 `NoSuchElementException`；
+- 绑定不可变、不可逆：下游没有任何 API 能把值传回父线程或改写绑定，`run` 返回后绑定即撤销。
+
+JEP 506 在 JDK 25 将其转为正式特性，上述语义（不可变绑定、有界生命周期、结构化传播）即最终形态。
+
 ## ThreadLocal vs ScopedValue
 
 | 维度 | ThreadLocal | ScopedValue |

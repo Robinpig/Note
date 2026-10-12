@@ -2,14 +2,14 @@
 
 
 
-A synchronization aid that allows **a set of threads** to all wait for each other to reach a common barrier point.
-A CyclicBarrier is a resettable multiway synchronization point useful in some styles of parallel programming.
+一种同步辅助工具，允许**一组线程**互相等待，直到所有线程都到达一个共同的屏障点。
+CyclicBarrier 是一个可重置的多路同步点，在某些并行编程风格中很有用。
 
-CyclicBarriers are useful in programs involving a fixed sized party of threads that must occasionally wait for each other. 
-The barrier is called cyclic because it can be re-used after the waiting threads are released.
-A CyclicBarrier supports an optional Runnable command that is run once per barrier point, after the last thread in the party arrives, 
-but before any threads are released. This barrier action is useful for updating shared-state before any of the parties continue.
-Sample usage: Here is an example of using a barrier in a parallel decomposition design:
+CyclicBarrier 适用于这样的程序：其中一组固定数量的线程必须偶尔互相等待。
+之所以称为「cyclic」（可循环），是因为它在等待的线程被释放后可以重复使用。
+CyclicBarrier 支持一个可选的 Runnable 命令，该命令在每一轮屏障点、即方（party）中最后一个线程到达之后、但在任何线程被释放之前执行一次。
+这个屏障动作对于在各方继续之前更新共享状态很有用。
+示例用法：下面是一个在并行分解设计中使用屏障的例子：
 
 ```java
  class Solver {
@@ -57,8 +57,8 @@ Sample usage: Here is an example of using a barrier in a parallel decomposition 
 ```
 
 
-Here, each worker thread processes a row of the matrix then waits at the barrier until all rows have been processed. When all rows are processed the supplied Runnable barrier action is executed and merges the rows. If the merger determines that a solution has been found then done() will return true and each worker will terminate.
-If the barrier action does not rely on the parties being suspended when it is executed, then any of the threads in the party could execute that action when it is released. To facilitate this, each invocation of await returns the arrival index of that thread at the barrier. You can then choose which thread should execute the barrier action, for example:
+这里，每个工作线程先处理矩阵的一行，然后在屏障处等待，直到所有行都处理完毕。当所有行都处理完后，所提供的 Runnable 屏障动作会被执行并合并各行。如果合并者判定已找到解，则 done() 返回 true，各工作线程随之终止。
+如果屏障动作在执行时并不依赖各方处于挂起状态，那么方中任意一个线程在被释放时都可以执行该动作。为了方便这一点，每次调用 await 都会返回该线程在屏障处的到达序号（index）。于是你可以选择由哪个线程来执行屏障动作，例如：
 ```java
  if (barrier.await() == 0) {
    // log the completion of this iteration
@@ -66,14 +66,13 @@ If the barrier action does not rely on the parties being suspended when it is ex
 ```
 
 
-The CyclicBarrier uses an all-or-none breakage model for failed synchronization attempts: 
-If a thread leaves a barrier point prematurely because of interruption, failure, or timeout, 
-all other threads waiting at that barrier point will also leave abnormally via *BrokenBarrierException* (or *InterruptedException* 
-if they too were interrupted at about the same time).
+CyclicBarrier 对失败的同步尝试采用「全有或全无」的破坏模型：
+如果某个线程因为中断、失败或超时而提前离开屏障点，
+所有在该屏障点等待的其他线程也会异常离开，抛出 *BrokenBarrierException*（若它们也在大约同时被中断，则抛出 *InterruptedException*）。
 
-**Memory consistency effects**: 
-Actions in a thread prior to calling await() happen-before actions that are part of the barrier action, 
-which in turn happen-before actions following a successful return from the corresponding await() in other threads.
+**内存一致性效果**：
+某线程在调用 await() 之前的操作 happen-before 属于屏障动作的操作，
+而后者又 happen-before 其他线程中对应 await() 成功返回之后的操作。
 
 ```java
 public CyclicBarrier(int parties, Runnable barrierAction) {
@@ -88,27 +87,27 @@ public CyclicBarrier(int parties, Runnable barrierAction) {
 
 ## await
 
-Waits until all parties have invoked await on this barrier, or the specified waiting time elapses.
-If the current thread is not the last to arrive then it is disabled for thread scheduling purposes and lies dormant until one of the following things happens:
+等待，直到所有方（party）都在此屏障上调用了 await，或指定的等待时间耗尽。
+如果当前线程不是最后一个到达的，则它被禁用调度并陷入休眠，直到以下之一发生：
 
-1. The last thread arrives; or
-2. The specified timeout elapses; or
-3. Some other thread interrupts the current thread; or
-4. Some other thread interrupts one of the other waiting threads; or
-5. Some other thread times out while waiting for barrier; or
-6. Some other thread invokes reset on this barrier.
+1. 最后一个线程到达；或
+2. 指定的超时时间耗尽；或
+3. 其他线程中断了当前线程；或
+4. 其他线程中断了某个其他等待中的线程；或
+5. 其他线程在等待屏障时超时；或
+6. 其他线程在此屏障上调用了 reset。
 
-If the current thread:
+如果当前线程：
 
-1. has its interrupted status set on entry to this method; or
-2. is interrupted while waiting
+1. 进入该方法时中断状态已置位；或
+2. 在等待期间被中断，
 
-then InterruptedException is thrown and the current thread's interrupted status is cleared.
+则抛出 InterruptedException，且当前线程的中断状态被清除。
 
-If the specified waiting time elapses then TimeoutException is thrown. If the time is less than or equal to zero, the method will not wait at all.
-If the barrier is reset while any thread is waiting, or if the barrier is broken when await is invoked, or while any thread is waiting, then *BrokenBarrierException* is thrown.
-If any thread is interrupted while waiting, then all other waiting threads will throw BrokenBarrierException and the barrier is placed in the broken state.
-If the current thread is the last thread to arrive, and a non-null barrier action was supplied in the constructor, then the current thread runs the action before allowing the other threads to continue. If an exception occurs during the barrier action then that exception will be propagated in the current thread and the barrier is placed in the broken state.
+如果指定的等待时间耗尽，则抛出 TimeoutException。若时间小于等于零，该方法根本不等待。
+如果在任何线程等待期间屏障被重置，或当调用 await 时屏障已损坏，或在任意线程等待期间屏障损坏，则抛出 *BrokenBarrierException*。
+如果任意线程在等待期间被中断，则所有其他等待线程都会抛出 BrokenBarrierException，并且屏障进入损坏（broken）状态。
+如果当前线程是最后一个到达的，且构造时提供了非空的屏障动作，则当前线程会在允许其他线程继续之前先运行该动作。若屏障动作执行过程中发生异常，该异常会在当前线程中传播，并且屏障进入损坏状态。
 
 ```java
 public int await(long timeout, TimeUnit unit)
@@ -188,7 +187,7 @@ private int dowait(boolean timed, long nanos)
 }
 ```
 
-CyclicBarrier will new `Generation` when count == 0 || call `reset` method, so make sure num of threads is a multiple of parties or block at `await`.
+CyclicBarrier 会在 count == 0 或调用 `reset` 方法时创建新的 `Generation`，因此要确保线程数量是 parties 的整数倍，否则会在 `await` 处阻塞。
 
 ## breakBarrier
 
@@ -208,7 +207,7 @@ private void breakBarrier() {
 
 ## nextGeneration
 
-called by `dowait` or `reset`
+由 `dowait` 或 `reset` 调用
 
 ```java
 /**
@@ -228,7 +227,7 @@ private void nextGeneration() {
 
 ### reset
 
-Resets the barrier to its initial state. If any parties are currently waiting at the barrier, they will return with a BrokenBarrierException. Note that resets after a breakage has occurred for other reasons can be complicated to carry out; threads need to re-synchronize in some other way, and choose one to perform the reset. It may be preferable to instead create a new barrier for subsequent use.
+将屏障重置为初始状态。如果当前有任何方正在屏障处等待，它们将返回并抛出 BrokenBarrierException。注意，若屏障已因其他原因损坏，随后的重置操作可能比较复杂：线程需要以其他方式重新同步，并选定其中一个来执行重置。更可取的做法或许是为后续使用直接创建一个新的屏障。
 
 ```java
 public void reset() {
@@ -272,11 +271,11 @@ public void reset() {
 
 |                  | CyclicBarrier             | CountDownLatch                          |
 | ---------------- | ------------------------- | --------------------------------------- |
-| Inner Class      | ReentrantLock & Condition | Sync extends AbstractQueuedSynchronizer |
-| Reuse            | :white_check_mark:        | :x:                                     |
-| Count            | same as Threads Number    | -                                       |
-| Block method     | `await`                   | `await`                                 |
-| Decrement method | `await`                   | `countDwon`                             |
+| 内部类      | ReentrantLock & Condition | Sync extends AbstractQueuedSynchronizer |
+| 可重用            | :white_check_mark:        | :x:                                     |
+| 计数            | 与线程数相同    | -                                       |
+| 阻塞方法     | `await`                   | `await`                                 |
+| 递减方法 | `await`                   | `countDwon`                             |
 
 
 ## Links

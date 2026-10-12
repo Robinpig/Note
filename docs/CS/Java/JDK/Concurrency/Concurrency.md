@@ -1,63 +1,63 @@
 ## Introduction
 
-[Threads](/docs/CS/Java/JDK/Concurrency/Thread.md) are an inescapable feature of the Java language, and they can simplify the development of complex systems by turning complicated asynchronous code into simpler straight-line code.
-In addition, threads are the easiest way to tap the computing power of multiprocessor systems.
-And, as processor counts increase, exploiting concurrency effectively will only become more important.
+[Threads](/docs/CS/Java/JDK/Concurrency/Thread.md)（线程）是 Java 语言中无法回避的特性，它能把复杂的异步代码改写为更简单的直线式代码，从而简化复杂系统的开发。
+此外，线程是发挥多处理器系统计算能力最便捷的途径。
+随着处理器核数不断增加，高效利用并发将变得愈发重要。
 
-Several motivating factors led to the development of operating systems that allowed multiple programs to execute simultaneously:
+促使操作系统支持多个程序并发执行（simultaneously）的动机主要有以下几点：
 
-- Resource utilization
-- Fairness
-- Convenience
+- 资源利用率
+- 公平性
+- 便利性
 
-Threads are sometimes called lightweight processes, and most modern operating systems treat threads, not processes, as the basic units of scheduling.
-In the absence of explicit coordination, threads execute simultaneously and asynchronously with respect to one another.
-Since threads share the memory address space of their owning process, all threads within a process have access to the same variables and allocate objects from the same heap,
-which allows finer-grained data sharing than inter-process mechanisms.
-But without explicit synchronization to coordinate access to shared data, a thread may modify variables that another thread is in the middle of using, with unpredictable results.
+线程有时被称为轻量级进程（lightweight processes），大多数现代操作系统把线程而非进程作为调度的基本单位。
+在没有显式协调的情况下，线程彼此之间同时、异步地执行。
+由于线程共享其所属进程的内存地址空间，同一进程内的所有线程都能访问相同的变量，并从同一个堆（heap）中分配对象，
+这使得线程间的数据共享比进程间机制更细粒度。
+但若没有显式同步来协调对共享数据的访问，一个线程可能修改另一个线程正在使用的变量，从而产生不可预测的结果。
 
-**Benefits of Threads**
+**线程的优势**
 
-1. Exploiting Multiple Processors
-2. Simplicity of Modeling
-3. Simplified Handling of Asynchronous Events
-4. More Responsive User Interfaces
+1. 发挥多处理器的能力
+2. 建模更简单
+3. 简化异步事件的处理
+4. 更灵敏的用户界面
 
-**Risks of Threads**
+**线程的风险**
 
-1. Safety Hazards
-2. Liveliness Hazards
-3. Performance Hazards
+1. 安全性问题
+2. 活跃性问题
+3. 性能问题
 
 #### Safety Hazards
 
-Thread safety can be unexpectedly subtle because, in the absence of sufficient synchronization, the ordering of operations in multiple threads is unpredictable and sometimes surprising.
+线程安全有时会出人意料地微妙，因为在缺乏充分同步时，多个线程中操作的执行顺序是不可预测的，有时甚至会令人惊讶。
 
-Because threads share the same memory address space and run concurrently, they can access or modify variables that other threads might be using.
-This is a tremendous convenience, because it makes data sharing much easier than would other inter-thread communications mechanisms.
-But it is also a significant risk: threads can be confused by having data change unexpectedly.
-Allowing multiple threads to access and modify the same variables introduces an element of nonsequentiality into an otherwise sequential programming model,
-which can be confusing and difficult to reason about.
-For a multithreaded program's behavior to be predictable, access to shared variables must be properly coordinated so that threads do not interfere with one another.
-Fortunately, Java provides synchronization mechanisms to coordinate such access.
+由于线程共享同一内存地址空间并并发执行，它们能够访问或修改其他线程可能正在使用的变量。
+这带来了极大的便利，因为比起其他线程间通信机制，数据共享变得容易得多。
+但这同时也是重大风险：数据被意外修改会让线程陷入混乱。
+允许多个线程访问并修改同一变量，会给原本顺序的编程模型引入非顺序性，
+这容易让人困惑，也难以推理。
+要让多线程程序的行为可预测，必须正确协调对共享变量的访问，使线程互不干扰。
+幸运的是，Java 提供了同步机制来协调此类访问。
 
-In the absence of synchronization, the compiler, hardware, and runtime are allowed to take substantial liberties with the timing and ordering of actions,
-such as caching variables in registers or processor-local caches where they are temporarily (or even permanently) invisible to other threads.
-These tricks are in aid of better performance and are generally desirable, but they place a burden on the developer to clearly identify
-where data is being shared across threads so that these optimizations do not undermine safety.
+在没有同步的情况下，编译器、硬件和运行时（runtime）可以随心所欲地调整操作的时机与顺序，
+例如把变量缓存在寄存器或处理器本地缓存中，使它们在一段时间内（甚至永久）对其他线程不可见。
+这些手段是为了提升性能，通常是可取的，但它们要求开发者清楚地识别
+哪些数据在线程间共享，以免这些优化破坏安全性。
 
 #### Liveness Hazards
 
-While safety means “nothing bad ever happens”, liveness concerns the complementary goal that “something good eventually happens”.
-A liveness failure occurs when an activity gets into a state such that it is permanently unable to make forward progress.
-One form of liveness failure that can occur in sequential programs is an inadvertent infinite loop, where the code that follows the loop never gets executed.
-The use of threads introduces additional liveness risks.
+安全性关注「坏事永远不会发生」，而活跃性关注其互补目标——「好事最终会发生」。
+当某个活动进入一种永远无法向前推进的状态时，就发生了活跃性失败（liveness failure）。
+顺序程序中也会出现一种活跃性失败：无意的无限循环，导致循环之后的代码永远无法执行。
+使用线程还会引入额外的活跃性风险。
 
-For example, if thread A is waiting for a resource that thread B holds exclusively, and B never releases it, A will wait forever.
+例如，若线程 A 正在等待线程 B 独占持有的资源，而 B 永远不释放，A 就会永远等待。
 
-We will describe various forms of [liveness failures](/docs/CS/OS/Deadlocks.md) and how to avoid them, including deadlock, starvation, and livelock.
+后文将介绍各种形式的 [liveness failures](/docs/CS/OS/Deadlocks.md)（活跃性失败）及其避免方法，包括死锁（deadlock）、饥饿（starvation）与活锁（livelock）。
 
-Deadlock issues:
+死锁相关 issue：
 
 - [JDK-8198928 (so) SocketChannel connect may deadlock if closed at around same time that connect fails](https://bugs.openjdk.org/browse/JDK-8198928)
 
@@ -66,21 +66,21 @@ ThreadMXBean
 
 #### Performance Hazards
 
-Related to liveness is performance. Liveness means that something good eventually happens, eventually may not be good enough—we often want good things to happen quickly.
-Performance issues subsume a broad range of problems, including poor service time, responsiveness, throughput, resource consumption, or scalability.
-Just as with safety and liveness, multithreaded programs are subject to all the performance hazards of single-threaded programs,
-and to others as well that are introduced by the use of threads.
+与活跃性相关的是性能。活跃性要求「好事最终发生」，但「最终」往往不够——我们通常希望好事尽快发生。
+性能问题涵盖面很广，包括服务时间差、响应迟缓、吞吐量低、资源消耗过大或扩展性不足。
+与安全性和活跃性一样，多线程程序不仅面临单线程程序的所有性能隐患，
+还会因使用线程而引入新的隐患。
 
-In well designed concurrent applications the use of threads is a net performance gain, but threads nevertheless carry some degree of runtime overhead.
-Context switches—when the scheduler suspends the active thread temporarily so another thread can run—are more frequent in applications with many threads,
-and have significant costs: saving and restoring execution context, loss of locality, and CPU time spent scheduling threads instead of running them.
-When threads share data, they must use synchronization mechanisms that can inhibit compiler optimizations,
-flush or invalidate memory caches, and create synchronization traffic on the shared memory bus.
-All these factors introduce additional performance costs.
+在精心设计的并发应用中，使用线程总体上能带来性能收益，但线程始终带有一定程度的运行时开销。
+上下文切换（context switch）——即调度器临时挂起活动线程以让其他线程运行——在多线程应用中更为频繁，
+并带来显著代价：保存与恢复执行上下文、局部性（locality）损失，以及本可用于运行线程却被调度消耗的 CPU 时间。
+当线程共享数据时，必须使用同步机制，而同步会抑制编译器优化、
+刷新或使内存缓存失效，并在共享内存总线上产生同步流量。
+所有这些因素都带来了额外的性能开销。
 
 ### Digraph
 
-In the future we'll want to think about eliminating [Parker](/docs/CS/Java/JDK/Concurrency/Parker.md) and using ParkEvent instead.
+后续考虑移除 [Parker](/docs/CS/Java/JDK/Concurrency/Parker.md)，改用 ParkEvent。
 
 ```dot
 strict digraph {
@@ -98,112 +98,111 @@ strict digraph {
 
 ### Thread Safety
 
-A class is **thread-safe** if it behaves correctly when accessed from multiple threads, regardless of the scheduling or interleaving of the execution of those threads by the runtime environment,
-and with no additional synchronization or other coordination on the part of the calling code.
+所谓 **thread-safe**（线程安全），是指一个类在被多个线程访问时能正确运作，无论运行时环境如何调度或交错这些线程的执行，
+且调用方代码无需额外的同步或其他协调。
 
-Writing thread-safe code is, at its core, about managing access to state, and in particular to *shared*, *mutable state*.(See sharing objects)
+编写线程安全代码的核心，在于管理对状态（state）的访问，尤其是 *shared*（共享）、*mutable*（可变）状态。（参见 sharing objects）
 
-If multiple threads access the same mutable state variable without appropriate synchronization, your program is broken. There are three ways to fix it:
+若多个线程在没有适当同步的情况下访问同一个可变状态变量，程序就存在问题。修复方法有三种：
 
-- Don't share the state variable across threads;
-- Make the state variable immutable; or
-- Use synchronization whenever accessing the state variable.
+- 不在线程间共享该状态变量；
+- 将该状态变量设为不可变（immutable）；或
+- 每次访问该状态变量时都使用同步。
 
 > [!TIP]
 >
-> Stateless objects are always thread-safe.
+> 无状态对象永远是线程安全的。
 
 #### Atomicity
 
-**To preserve state consistency, update related state variables in a single atomic operation.**
+**为保证状态一致性，应在一次原子操作中更新所有相关的状态变量。**
 
 ##### Race Condition
 
-A *critical section* is a piece of code that accesses a shared resource, usually a variable or data structure.
+*临界区（critical section）* 是访问共享资源（通常是一个变量或数据结构）的一段代码。
 
-A *race condition* is that the results depend on the timing execution of the code.
-Multiple threads of execution enter the critical section at roughly the same time; the threads race to perform their respective operations(attempt to update the shared data structure).
+*竞态条件（race condition）* 指结果依赖于代码执行的时序。
+多个执行线程几乎同时进入临界区，彼此竞争执行各自的操作（试图更新共享数据结构）。
 
-data race to mean the specific type of race condition that arises because of concurrent modification to a single object.
+数据竞争（data race）特指由于对单个对象并发修改而引发的那种竞态条件。
 
-We refer collectively to `check-then-act` and `read-modify-write` sequences as compound actions:
-sequences of operations that must be executed atomically in order to remain thread-safe.
+我们把 `check-then-act`（先检查后执行）和 `read-modify-write`（读-改-写）序列统称为复合操作（compound actions）：
+即必须原子执行、才能保持线程安全的一组操作。
 
-Where practical, use existing thread-safe objects, like [AtomicLong](/docs/CS/Java/JDK/Concurrency/Atomic.md), to manage your class's state.
-It is simpler to reason about the possible states and state transitions for existing thread-safe objects than it is for arbitrary state variables,
-and this makes it easier to maintain and verify thread safety.
+在可行的情况下，使用已有的线程安全对象（如 [AtomicLong](/docs/CS/Java/JDK/Concurrency/Atomic.md)）来管理类的状态。
+相比任意状态变量，对既有线程安全对象的可能状态与状态转移进行推理更简单，
+也更便于维护和验证线程安全性。
 
-The design process for a thread‐safe class should include these three basic elements:
+设计线程安全类的流程应包含三个基本要素：
 
-- Identify the variables that form the object's state;
-- Identify the invariants that constrain the state variables;
-- Establish a policy for managing concurrent access to the object's state.
+- 找出构成对象状态的变量；
+- 找出约束状态变量的不变式（invariants）；
+- 建立管理对象状态并发访问的策略。
 
-Constraints placed on states or state transitions by invariants and post‐conditions create additional synchronization or encapsulation requirements. 
-If certain states are invalid, then the underlying state variables must be encapsulated, otherwise client code could put the object into an invalid state. 
-If an operation has invalid state transitions, it must be made atomic. 
-On the other hand, if the class does not impose any such constraints, we may be able to relax encapsulation or serialization requirements to obtain greater flexibility or better performance.
+不变式和后置条件（post-conditions）对状态或状态转移施加的约束，会带来额外的同步或封装要求。
+若某些状态非法，则底层状态变量必须被封装，否则客户端代码可能把对象置于非法状态。
+若某操作存在非法的状态转移，则必须将其设为原子操作。
+反之，若类不施加此类约束，则可放宽封装或序列化要求，以获得更大灵活性或更好性能。
 
 #### Locking
 
 ##### Intrinsic Locks
 
-Java provides a built-in locking mechanism for enforcing atomicity: the [synchronized block](/docs/CS/Java/JDK/Concurrency/synchronized.md).
-A synchronized block has two parts: a reference to an object that will serve as the lock, and a block of code to be guarded by that lock.
-A synchronized method is a shorthand for a synchronized block that spans an entire method body, and whose lock is the object on which the method is being invoked.
-(Static synchronized methods use the Class object for the lock.)
+Java 提供了用于保证原子性的内置锁机制：[synchronized block](/docs/CS/Java/JDK/Concurrency/synchronized.md)（同步块）。
+同步块由两部分组成：一个充当锁的对象的引用，以及一段受该锁保护的代码。
+同步方法（synchronized method）是同步块的简写，其锁范围为整个方法体，锁对象即方法被调用时的目标对象。
+（静态同步方法使用对应的 Class 对象作为锁。）
 
-Every Java object can implicitly act as a lock for purposes of synchronization; these built-in locks are called **intrinsic locks** or **monitor locks**.
-The lock is automatically acquired by the executing thread before entering a synchronized block and automatically released when control exits the synchronized block,
-whether by the normal control path or by throwing an exception out of the block.
-The only way to acquire an intrinsic lock is to enter a synchronized block or method guarded by that lock.
+每个 Java 对象都可隐式充当同步用途的锁；这类内置锁称为 **intrinsic locks**（内置锁）或 **monitor locks**（监视器锁）。
+执行线程在进入同步块前会自动获取该锁，并在退出同步块时（无论是正常控制流退出还是抛异常退出）自动释放。
+获取内置锁的唯一途径，就是进入由该锁保护的同步块或同步方法。
 
-There are advantages to using a private lock object instead of an object's intrinsic lock (or any other publicly accessible lock). 
-Making the lock object private encapsulates the lock so that client code cannot acquire it, whereas a publicly accessible lock allows client code to participate in its synchronization policy ‐ correctly or incorrectly. 
-Clients that improperly acquire another object's lock could cause liveness problems, and verifying that a publicly accessible lock is properly used requires examining the entire program rather than a single class.
+使用私有锁对象而非对象的内置锁（或任何其他公开可访问的锁）有诸多好处。
+将锁对象设为私有可封装该锁，使客户端代码无法获取它；而公开可访问的锁允许客户端代码（无论正确与否）参与其同步策略。
+客户端若错误地获取了另一个对象的锁，可能引发活跃性问题；而要验证一个公开锁是否被正确使用，需要检查整个程序而非单个类。
 
 ##### Reentrancy
 
-Reentrancy means that locks are acquired on a per-thread rather than per-invocation basis.
+可重入（Reentrancy）指锁是按线程而非按调用获取。
 
 > [!ATTENTION]
-> Code that would Deadlock if Locks were Not Reentrant.
+> 若锁不可重入，下列代码将发生死锁。
 
 ##### Guarding State with Locks
 
-For every invariant that involves more than one variable, all the variables involved in that invariant must be guarded by the same lock.
+对于涉及多个变量的不变式，该不变式中涉及的所有变量必须由同一把锁保护。
 
 ##### Liveness and Performance
 
-Avoid holding locks during lengthy computations or operations at risk of not completing quickly such as network or console I/O.
+在耗时计算或可能无法快速完成的操作（如网络 I/O、控制台 I/O）期间，应避免持有锁。
 
 ### Sharing Objects
 
 #### Visibility
 
-Nonatomic 64-bit Operations
+非原子的 64 位操作
 
-Locking and Visibility
+加锁与可见性
 
-Volatile Variables
+volatile 变量
 
 #### Publication and Escape
 
 #### Thread Confinement
 
-- Ad-hoc Thread Confinement
-- Stack Confinement
+- 非正式的线程封闭（Ad-hoc Thread Confinement）
+- 栈封闭（Stack Confinement）
 - [ThreadLocal](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md)
 - [ScopedValue](/docs/CS/Java/JDK/Concurrency/ScopedValues.md) — ThreadLocal 在请求上下文场景的不可变替代品（JDK 25 转正）
 
 #### Immutability
 
 > [!TIP]
-> An object is immutable if:
+> 满足以下条件的对象即为不可变（immutable）：
 >
-> - Its state cannot be modified after construction;
-> - All its fields are final; and
-> - It is properly constructed (the this reference does not escape during construction).
+> - 构造之后其状态不可被修改；
+> - 所有字段均为 final；且
+> - 构造过程正确（this 引用在构造期间未逸出）。
 
 ### Building Blocks
 
@@ -211,118 +210,113 @@ Volatile Variables
 
 #### Queues
 
-The ConcurrentLinkedQueue class supplies an efficient scalable thread-safe non-blocking FIFO queue.
-The ConcurrentLinkedDeque class is similar, but additionally supports the java.util.Deque interface.
-Five implementations in java.util.concurrent support the extended [BlockingQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=blockingqueue) interface, that defines blocking versions of put and take:
-LinkedBlockingQueue, ArrayBlockingQueue, SynchronousQueue, PriorityBlockingQueue, and DelayQueue.
-The different classes cover the most common usage contexts for producer-consumer, messaging, parallel tasking, and related concurrent designs.
+ConcurrentLinkedQueue 类提供了一个高效、可伸缩、线程安全的非阻塞 FIFO 队列。
+ConcurrentLinkedDeque 类与之类似，但额外支持 java.util.Deque 接口。
+java.util.concurrent 中有五个实现支持扩展的 [BlockingQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=blockingqueue) 接口，该接口定义了阻塞版的 put 与 take 方法：
+LinkedBlockingQueue、ArrayBlockingQueue、SynchronousQueue、PriorityBlockingQueue 和 DelayQueue。
+这些不同的类覆盖了生产者-消费者、消息传递、并行任务处理等常见并发场景。
 
-Extended interface [TransferQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=linkedtransferqueue), and implementation LinkedTransferQueue introduce a synchronous transfer method (along with related features) in which a producer may optionally block awaiting its consumer.
-The BlockingDeque interface extends BlockingQueue to support both FIFO and LIFO (stack-based) operations. Class LinkedBlockingDeque provides an implementation.
+扩展接口 [TransferQueue](/docs/CS/Java/JDK/Collection/Queue.md?id=linkedtransferqueue) 及其实现类 LinkedTransferQueue 引入了一种同步传输方法（以及相关特性），生产者可以选择阻塞等待消费者到来。
+BlockingDeque 接口扩展 BlockingQueue，同时支持 FIFO 与 LIFO（基于栈）操作，其实现类为 LinkedBlockingDeque。
 
 #### Concurrent Collections
 
-Besides Queues, this package supplies Collection implementations designed for use in multithreaded contexts:
+除队列外，该包还提供面向多线程场景设计的 Collection 实现：
 
-- [ConcurrentHashMap](/docs/CS/Java/JDK/Collection/Map.md?id=concurrenthashmap),
-- [ConcurrentSkipListMap](/docs/CS/Java/JDK/Collection/Map.md?id=concurrentskiplistmap),
-- [ConcurrentSkipListSet](/docs/CS/Java/JDK/Collection/Set.md?id=concurrentskiplistset),
-- [CopyOnWriteArrayList](/docs/CS/Java/JDK/Collection/List.md?id=copyonwritearraylist),
-- and [CopyOnWriteArraySet](/docs/CS/Java/JDK/Collection/Set.md?id=copyonwritearrayset).
+- [ConcurrentHashMap](/docs/CS/Java/JDK/Collection/Map.md?id=concurrenthashmap)
+- [ConcurrentSkipListMap](/docs/CS/Java/JDK/Collection/Map.md?id=concurrentskiplistmap)
+- [ConcurrentSkipListSet](/docs/CS/Java/JDK/Collection/Set.md?id=concurrentskiplistset)
+- [CopyOnWriteArrayList](/docs/CS/Java/JDK/Collection/List.md?id=copyonwritearraylist)
+- [CopyOnWriteArraySet](/docs/CS/Java/JDK/Collection/Set.md?id=copyonwritearrayset)
 
-When many threads are expected to access a given collection, a ConcurrentHashMap is normally preferable to a synchronized HashMap,
-and a ConcurrentSkipListMap is normally preferable to a synchronized TreeMap.
-A CopyOnWriteArrayList is preferable to a synchronized ArrayList when the expected number of reads and traversals greatly outnumber the number of updates to a list.
-The "Concurrent" prefix used with some classes in this package is a shorthand indicating several differences from similar "synchronized" classes.
-For example `java.util.Hashtable` and `Collections.synchronizedMap(new HashMap())` are synchronized. But ConcurrentHashMap is "concurrent".
+当预期有多个线程访问同一个集合时，通常应选择 ConcurrentHashMap 而非加 synchronized 的 HashMap，同理应选择 ConcurrentSkipListMap 而非加 synchronized 的 TreeMap。
+若列表的读操作与遍历次数远多于更新次数，则 CopyOnWriteArrayList 优于加 synchronized 的 ArrayList。
+本包中部分类名所带的 "Concurrent" 前缀是一种简写，表示它们与相应的 "synchronized" 类存在若干差异：
+例如 `java.util.Hashtable` 和 `Collections.synchronizedMap(new HashMap())` 属于 synchronized 类，而 ConcurrentHashMap 属于 "concurrent" 类。
 
-A concurrent collection is thread-safe, but not governed by a single exclusion lock.
-In the particular case of ConcurrentHashMap, it safely permits any number of concurrent reads as well as a tunable number of concurrent writes.
+并发集合是线程安全的，但不受单一互斥锁支配。
+以 ConcurrentHashMap 为例，它能安全地允许任意数量的并发读，以及数量可调的并发写。
 
-"Synchronized" classes can be useful when you need to prevent all access to a collection via a single lock, at the expense of poorer scalability.
-In other cases in which multiple threads are expected to access a common collection, "concurrent" versions are normally preferable.
-And unsynchronized collections are preferable when either collections are unshared, or are accessible only when holding other locks.
-Most concurrent Collection implementations (including most Queues) also differ from the usual java.util conventions in that their Iterators and Spliterators provide weakly consistent rather than fast-fail traversal:
-- they may proceed concurrently with other operations
-- they will never throw ConcurrentModificationException
-- they are guaranteed to traverse elements as they existed upon construction exactly once, and may (but are not guaranteed to) reflect any modifications subsequent to construction.
+当需要用一把锁阻断对集合的全部访问时，"Synchronized" 类是有用的，代价是扩展性较差。
+在其他多线程访问同一集合的场合，"concurrent" 版本通常更为合适；
+而当集合不被共享、或仅在持有其他锁时才可访问时，不加同步的集合更合适。
+多数并发 Collection 实现（包括多数队列）还与 java.util 的通常约定不同：其 Iterator 与 Spliterator 提供的是弱一致性（weakly consistent）遍历，而非快速失败（fast-fail）遍历：
+- 遍历可以与其他操作并发进行
+- 永远不会抛出 ConcurrentModificationException
+- 保证恰好遍历一次构造时存在的元素，并且可能（但不保证）反映构造之后的修改。
 
 #### Synchronizers
 
-A synchronizer is any object that coordinates the control flow of threads based on its state.
-Blocking queues can act as synchronizers; other types of synchronizers include semaphores, barriers, and latches.
+同步器（synchronizer）是任何依据自身状态协调线程控制流的对象。
+阻塞队列可以充当同步器；其他类型的同步器还包括信号量、栅栏（barrier）和闩锁（latch）。
 
 ##### Latches
 
-A latch is a synchronizer that can delay the progress of threads until it reaches its terminal state.
-A latch acts as a gate: until the latch reaches the terminal state the gate is closed and no thread can pass, and in the terminal state the gate opens, allowing all threads to pass.
-Once the latch reaches the terminal state, it cannot change state again, so it remains open forever.
+闩锁是一种同步器，可将线程的推进延迟到自身到达终止状态为止。
+闩锁如同一道闸门：在到达终止状态之前闸门关闭，任何线程都无法通过；进入终止状态后闸门打开，允许所有线程通过。
+闩锁一旦到达终止状态便再也无法改变状态，因此将永久保持打开。
 
-Latches can be used to ensure that certain activities do not proceed until other one-time activities complete, such as:
+闩锁可用于确保某些活动在其他一次性活动完成之前不继续进行，例如：
 
-- Ensuring that a computation does not proceed until resources it needs have been initialized.
-  A simple binary (two-state) latch could be used to indicate “Resource R has been initialized”, and any activity that requires R would wait first on this latch.
-- Ensuring that a service does not start until other services on which it depends have started.
-  Each service would have an associated binary latch; starting service S would involve first waiting on the latches for other services on which S depends,
-  and then releasing the S latch after startup completes so any services that depend on S can then proceed.
-- Waiting until all the parties involved in an activity, for instance the players in a multi-player game, are ready to proceed.
-  In this case, the latch reaches the terminal state after all the players are ready.
+- 确保某项计算在所需资源初始化完成之前不推进。
+  可以用一个简单的二元（两状态）闩锁来表示“资源 R 已初始化”，任何需要 R 的活动都应先等待这个闩锁。
+- 确保某项服务在其依赖的其他服务启动之前不启动。
+  每项服务都关联一个二元闩锁；启动服务 S 时，先等待 S 所依赖的其他服务的闩锁，
+  待启动完成后再释放 S 的闩锁，从而让依赖 S 的服务得以继续。
+- 等待某项活动的所有参与方（例如多人游戏中的玩家）都准备好继续进行。
+  此时所有玩家就绪后，闩锁到达终止状态。
 
-[CountDownLatch](/docs/CS/Java/JDK/Concurrency/CountDownLatch.md?id=introduction) is a flexible latch implementation.
-It allows one or more threads to wait for a set of events to occur.
-The latch state consists of a counter initialized to a positive number, representing the number of events to wait for.
-The countDown method decrements the counter, indicating that an event has occurred, and the await methods wait for the counter to reach zero, which happens when all the events have occurred.
-If the counter is nonzero on entry, await blocks until the counter reaches zero, the waiting thread is interrupted, or the wait times out.
+[CountDownLatch](/docs/CS/Java/JDK/Concurrency/CountDownLatch.md?id=introduction) 是一种灵活的闩锁实现。
+它允许一个或多个线程等待一组事件发生。
+闩锁的状态是一个初始化为正数的计数器，代表需要等待的事件数量。
+countDown 方法递减计数器，表示某个事件已经发生；await 方法则等待计数器减至零，而计数器归零意味着所有事件都已发生。
+若进入时计数器不为零，await 会阻塞，直到计数器减至零、等待线程被中断或等待超时。
 
-[FutureTask](/docs/CS/Java/JDK/Concurrency/Future.md) also acts like a latch. (FutureTask implements Future, which describes an abstract result-bearing computation).
-FutureTask is used by the Executor framework to represent asynchronous tasks, and can also be used to represent any potentially lengthy computation that can be started before the results are needed.
+[FutureTask](/docs/CS/Java/JDK/Concurrency/Future.md) 的行为同样类似闩锁（FutureTask 实现了 Future，后者描述一种会产生结果的抽象计算）。
+Executor 框架使用 FutureTask 表示异步任务，也可以用它表示任何耗时较长、可在需要结果之前就启动的计算。
 
 ##### Semaphores
 
-Counting [semaphores](/docs/CS/Java/JDK/Concurrency/Semaphore.md?id=introduction) are used to control the number of activities that can access a certain resource or perform a given action at the same time.
+计数[信号量](/docs/CS/Java/JDK/Concurrency/Semaphore.md?id=introduction)用于控制同一时刻可以访问某项资源或执行某个动作的活动数量。
 
 ##### Barriers
 
-[CyclicBarrier](/docs/CS/Java/JDK/Concurrency/CyclicBarrier.md?id=introduction) allows a fixed number of parties to rendezvous repeatedly at a barrier point and is useful in parallel iterative algorithms
-that break down a problem into a fixed number of independent subproblems.
-Threads call await when they reach the barrier point, and await blocks until all the threads have reached the barrier point.
-If all threads meet at the barrier point, the barrier has been successfully passed, in which case all threads are released and the barrier is reset so it can be used again.
-If a call to await times out or a thread blocked in await is interrupted, then the barrier is considered broken and all outstanding calls to await terminate with BrokenBarrierException.
-If the barrier is successfully passed, await returns a unique arrival index for each thread, which can be used to “elect” a leader that takes some special action in the next iteration.
-CyclicBar rier also lets you pass a barrier action to the constructor; this is a Runnable that is executed (in one of the subtask threads) when the barrier is successfully passed but before the blocked threads are released.
+[CyclicBarrier](/docs/CS/Java/JDK/Concurrency/CyclicBarrier.md?id=introduction) 允许固定数量的参与方在栅栏点反复会合，适用于把问题拆分为固定数量独立子问题的并行迭代算法。
+线程到达栅栏点时调用 await，await 会阻塞直到所有线程都到达栅栏点。
+若所有线程都到达栅栏点，则栅栏被成功越过，所有线程被释放，栅栏同时被重置以备再次使用。
+若对 await 的调用超时，或阻塞在 await 中的线程被中断，则栅栏被视为已损坏，所有尚未完成的 await 调用都以 BrokenBarrierException 终止。
+若栅栏被成功越过，await 会为每个线程返回一个唯一的到达序号，可用来“选出”某个领导者，由它在下一轮迭代中执行特殊动作。
+CyclicBarrier 还允许在构造器中传入一个栅栏动作（barrier action）；这是一个 Runnable，在栅栏被成功越过之后、阻塞的线程被释放之前，由其中一个子任务线程执行。
 
-Another form of barrier is [Exchanger](/docs/CS/Java/JDK/Concurrency/Exchanger.md?id=introduction), a two-party barrier in which the parties exchange data at the barrier point.
-Exchangers are useful when the parties perform asymmetric activities, for example when one thread fills a buffer with data and the other thread consumes the data from the buffer;
-these threads could use an Exchanger to meet and exchange a full buffer for an empty one.
-When two threads exchange objects via an Exchanger, the exchange constitutes a safe publication of both objects to the other party.
+栅栏的另一种形式是 [Exchanger](/docs/CS/Java/JDK/Concurrency/Exchanger.md?id=introduction)，这是一个双方参与方在栅栏点交换数据的栅栏。
+当双方执行的工作不对称时，Exchanger 很有用，例如一个线程向缓冲区填充数据、另一个线程消费缓冲区中的数据；
+这两个线程可以用 Exchanger 会合，用一个已填满的缓冲区交换一个空缓冲区。
+两个线程通过 Exchanger 交换对象时，这次交换本身就构成了将两个对象安全发布（safe publication）给对方。
 
-[Phaser](/docs/CS/Java/JDK/Concurrency/Phaser.md?id=introduction) is a reusable synchronization barrier, similar in functionality to CyclicBarrier and CountDownLatch but supporting more flexible usage.
+[Phaser](/docs/CS/Java/JDK/Concurrency/Phaser.md?id=introduction) 是一种可复用的同步栅栏，功能上类似 CyclicBarrier 和 CountDownLatch，但支持更灵活的使用方式。
 
 ### Summary of Fundamentals
 
 > [!NOTE]
-> We've covered a lot of material so far! The following "concurrency cheat sheet" summarizes the main concepts and rules:
+> 到目前为止已经讨论了大量内容！下面这份「并发速查表」总结了主要概念与规则：
 >
-> - It's the mutable state, stupid.
->   All concurrency issues boil down to coordinating access to mutable state. The less mutable state, the easier it is to
->   ensure thread safety.
-> - Make fields final unless they need to be mutable.
-> - Immutable objects are automatically thread‐safe.
->   Immutable objects simplify concurrent programming tremendously. They are simpler and safer, and can be shared
->   freely without locking or defensive copying.
-> - Encapsulation makes it practical to manage the complexity.
->   You could write a thread‐safe program with all data stored in global variables, but why would you want to?
->   Encapsulating data within objects makes it easier to preserve their invariants; encapsulating synchronization within
->   objects makes it easier to comply with their synchronization policy.
-> - Guard each mutable variable with a lock.
-> - Guard all variables in an invariant with the same lock.
-> - Hold locks for the duration of compound actions.
-> - A program that accesses a mutable variable from multiple threads without synchronization is a broken program.
-> - Don't rely on clever reasoning about why you don't need to synchronize.
-> - Include thread safety in the design processor explicitly document that your class is not thread‐safe.
-> - Document your synchronization policy.
+> - 问题出在可变状态上。
+>   所有并发问题都可归结为对可变状态访问的协调。可变状态越少，保证线程安全就越容易。
+> - 除非确实需要可变，否则字段一律声明为 final。
+> - 不可变对象自动是线程安全的。
+>   不可变对象能极大简化并发编程：更简单、更安全，且无需加锁或防御性复制即可自由共享。
+> - 封装让复杂度的管理变得可行。
+>   完全可以把数据都存放在全局变量中写出一个线程安全的程序，但没有理由这么做。
+>   把数据封装在对象内部，更容易维持其不变式；把同步封装在对象内部，更容易遵守其同步策略。
+> - 用一把锁守护每个可变变量。
+> - 用同一把锁守护某个不变式涉及的所有变量。
+> - 在整个复合操作期间持有锁。
+> - 多线程无同步访问可变变量的程序，是有缺陷的程序。
+> - 不要依赖「我认为不需要同步」这类想当然的推理。
+> - 在设计阶段就考虑线程安全性；若类不是线程安全的，请在文档中显式说明。
+> - 记录你的同步策略。
 
-Given these definitions:
+给定以下定义：
 
 ```tex
 \begin{aligned}
@@ -332,13 +326,13 @@ Given these definitions:
 \end{aligned}
 ```
 
-The optimal pool size for keeping the processors at the desired utilization is:
+使处理器保持目标利用率时的最优池大小为：
 
 ```tex
 N_{threads} = N_{cpu}*U_{cpu}*(1+\frac{W}C)
 ```
 
-You can determine the number of CPUs using Runtime:
+可以用 Runtime 获取 CPU 数量：
 
 ```tex
 int N_CPUS = Runtime.getRuntime().availableProcessors();
@@ -348,20 +342,20 @@ int N_CPUS = Runtime.getRuntime().availableProcessors();
 
 ### Task Execution
 
-Most concurrent applications are organized around the execution of *tasks*: abstract, discrete units of work.
-Dividing the work of an application into tasks simplifies program organization, facilitates error recovery by providing natural transaction boundaries,
-and promotes concurrency by providing a natural structure for parallelizing work.
+大多数并发应用都围绕*任务*的执行来组织：任务是抽象的、离散的工作单元。
+把应用的工作划分为任务，可以简化程序组织，通过提供天然的事务边界来简化错误恢复，
+并为工作的并行化提供天然结构，从而促进并发。
 
-Most server applications offer a natural choice of task boundary: individual client requests.
+大多数服务器应用都存在一个天然的任务边界选择：单个客户端请求。
 
-1. Executing Tasks Sequentially
-2. Explicitly Creating Threads for Tasks
+1. 顺序执行任务
+2. 为任务显式创建线程
 
-Disadvantages of Unbounded Thread Creation
+无限制创建线程的缺点
 
-1. Thread lifecycle overhead
-2. Resource consumption
-3. Stability
+1. 线程生命周期开销
+2. 资源消耗
+3. 稳定性
 
 ### The Executor Framework
 
@@ -393,51 +387,51 @@ new ThreadPoolExecutor(0, Integer.MAX_VALUE, 60L, TimeUnit.SECONDS,
 
 #### Thread Pools
 
-The class library provides a flexible thread pool implementation along with some useful predefined configurations.
-You can create a thread pool by calling one of the static factory methods in `Executors`.
+类库提供了一个灵活的线程池实现，并附带若干实用的预定义配置。
+可以通过调用 `Executors` 中的静态工厂方法来创建线程池。
 
 选池子时唯一可靠的做法是**测量**：先用固定池跑压测，观察任务排队与 CPU 利用率，再调 `corePoolSize`。
 不要用「经验公式」直接定线程数——阻塞型 I/O 任务与纯计算任务的最优值能差一个数量级。
 
 #### Cancellation and Shutdown
 
-We've seen how to create an Executor but not how to shut one down. 
-An Executor implementation is likely to create threads for processing tasks.
-But the JVM can't exit until all the (nondaemon) threads have terminated, so failing to shut down an Executor could prevent the JVM from exiting.
+前面已经说明了如何创建 Executor，但还没讲如何关闭它。
+Executor 的实现通常会创建线程来处理任务。
+但 JVM 必须等到所有（非守护）线程都终止后才能退出，因此未能关闭 Executor 会导致 JVM 无法退出。
 
 #### Delayed and Periodic Tasks
 
-The Timer facility manages the execution of deferred (“run this task in 100 ms”) and periodic (“run this task every 10 ms”) tasks.
-However, Timer has some drawbacks, and [ScheduledThreadPoolExecutor](/docs/CS/Java/JDK/sche.md) should be thought of as its replacement.
-You can construct a ScheduledThreadPoolExecutor through its constructor or through the newScheduledThreadPool factory.
+Timer 设施用于管理延迟任务（“100 毫秒后执行该任务”）和周期任务（“每 10 毫秒执行一次该任务”）。
+不过 Timer 存在一些缺点，应当把 [ScheduledThreadPoolExecutor](/docs/CS/Java/JDK/sche.md) 视为它的替代方案。
+ScheduledThreadPoolExecutor 既可以通过其构造器创建，也可以通过 newScheduledThreadPool 工厂方法创建。
 
 ## Performance
 
-Improving performance means doing more work with fewer resources. 
-The meaning of "resources" can vary; for a given activity, some specific resource is usually in shortest supply, whether it is CPU cycles, memory, network bandwidth, I/O bandwidth, database requests, disk space, or any number of other resources. 
-When the performance of an activity is limited by availability of a particular resource, we say it is bound by that resource: CPU‐bound, database‐bound, etc.
+提升性能意味着用更少的资源完成更多工作。
+“资源”的含义并不固定：对某项活动而言，通常有某一种特定资源最为短缺，可能是 CPU 周期、内存、网络带宽、I/O 带宽、数据库请求数、磁盘空间，或其他任何一种资源。
+当某项活动的性能受限于某种特定资源的可用量时，就称它受该资源约束，即 CPU 受限、数据库受限等。
 
-In using concurrency to achieve better performance, we are trying to do two things: utilize the processing resources we have more effectively, and enable our program to exploit additional processing resources if they become available.
-From a performance monitoring perspective, this means we are looking to keep the CPUs as busy as possible.
+借助并发来获得更好的性能，目标在于两件事：更有效地利用已有的处理资源，以及在额外处理资源可用时让程序能够利用它们。
+从性能监控的角度看，就是尽可能让 CPU 保持繁忙。
 
 > [!TIP]
-> Avoid premature optimization. First make it right, then make it fast ‐ if it is not already fast enough.
+> 避免过早优化。先保证正确，再让它变快——如果它还不够快的话。
 
 ### Amdahl's Law
 
-Amdahl's law describes how much a program can theoretically be sped up by additional computing resources, based on the proportion of parallelizable and serial components. If F is the fraction of the calculation that must be executed serially, then Amdahl's law says that on a machine with N processors, we can achieve a speedup of at most:
+Amdahl 定律描述的是：依据可并行部分与串行部分所占的比例，程序在理论上最多能通过增加计算资源提升多少速度。若 F 为计算中必须串行执行的比例，则 Amdahl 定律指出，在拥有 N 个处理器的机器上，速度提升至多为：
 
 ```tex
 Speedup \leq \frac{1}{F+\frac{1-F}N}
 ```
 
-As N approaches infinity, the maximum speedup converges to 1/F.
+当 N 趋于无穷时，最大加速比收敛于 1/F。
 
 ### Costs Introduced by Threads
 
 #### Context Switching
 
-Context switches are not free; thread scheduling requires manipulating shared data structures in the OS and JVM. The OS and JVMuse the same CPUs your program does; more CPU time spent in JVM and OS code means less is available for your program. But OS and JVM activity is not the only cost of context switches. When a new thread is switched in, the data it needs is unlikely to be in the local processor cache, so a context switch causes a flurry of cache misses, and thus threads run a little more slowly when they are first scheduled.
+上下文切换不是免费的；线程调度需要在操作系统与 JVM 中操作共享数据结构。操作系统和 JVM 与程序使用同一批 CPU；花在 JVM 与操作系统代码上的 CPU 时间越多，留给程序的就越少。但操作系统与 JVM 的开销并不是上下文切换的唯一代价。当一个新线程被切换进来时，它所需的数据很可能不在本地处理器缓存中，因此一次上下文切换会引发一连串缓存未命中，线程在被首次调度时运行得也会稍慢一些。
 
 #### Memory Synchronization
 
@@ -531,52 +525,52 @@ public class RaceTest {
 
 ### Explicit Locks
 
-Before Java 5.0, the only mechanisms for coordinating access to shared data were [synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md) and [volatile](/docs/CS/Java/JDK/Concurrency/volatile.md).
+Java 5.0 之前，协调共享数据访问的机制只有 [synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md) 和 [volatile](/docs/CS/Java/JDK/Concurrency/volatile.md)。
 
-Java 5.0 adds another option: ***ReentrantLock***.
-ReentrantLock is not a replacement for intrinsic locking, but rather an alternative with advanced features for when intrinsic locking proves too limited.
+Java 5.0 增加了另一种选择：***ReentrantLock***。
+ReentrantLock 并非内置锁的替代品，而是在内置锁显得力不从心时，提供更高级特性的另一种方案。
 
 ![locks](../img/juc-locks.png)
 
-The [Lock](/docs/CS/Java/JDK/Concurrency/Lock.md) interface defines a number of abstract locking operations.
-Unlike intrinsic locking, Lock offers a choice of unconditional, polled, timed, and interruptible lock acquisition,
-and all lock and unlock operations are explicit.
-Lock implementations must provide the same memory-visibility semantics as intrinsic locks,
-but can differ in their locking semantics, scheduling algorithms, ordering guarantees, and performance characteristics.
+[Lock](/docs/CS/Java/JDK/Concurrency/Lock.md) 接口定义了一组抽象的加锁操作。
+与内置锁不同，Lock 提供了多种加锁方式的选择：无条件加锁、轮询加锁、定时加锁以及可中断加锁，
+并且所有加锁与解锁操作都是显式的。
+Lock 的实现必须提供与内置锁相同的内存可见性语义，
+但在加锁语义、调度算法、顺序保证和性能特征上可以有所不同。
 
-[ReentrantLock](/docs/CS/Java/JDK/Concurrency/ReentrantLock.md) implements Lock, providing the same mutual exclusion and memory-visibility guarantees as synchronized.
+[ReentrantLock](/docs/CS/Java/JDK/Concurrency/ReentrantLock.md) 实现了 Lock，提供了与 synchronized 相同的互斥性和内存可见性保证。
 
 #### Read-write Locks
 
-In many cases, data structures are “read-mostly”—they are mutable and are sometimes modified, but most accesses involve only reading.
-In these cases, it would be nice to relax the locking requirements to allow multiple readers to access the data structure at once.
-As long as each thread is guaranteed an up-to-date view of the data and no other thread modifies the data while the readers are viewing it, there will be no problems.
-This is what [read-write locks](/docs/CS/Java/JDK/Concurrency/ReadWriteLock.md) allow: a resource can be accessed by multiple readers or a single writer at a time, but not both.
+在许多情况下，数据结构是“读多写少”的——它们是可变的，偶尔会被修改，但绝大多数访问只涉及读取。
+在这些场景下，如果能放宽加锁要求、允许多个读者同时访问数据结构，将是非常理想的。
+只要保证每个线程看到的数据都是最新的，且在读者查看期间没有其他线程修改数据，就不会存在问题。
+这正是[读写锁](/docs/CS/Java/JDK/Concurrency/ReadWriteLock.md)所允许的：一个资源在同一时刻可以被多个读者访问，或被一个写者访问，但不可两者兼有。
 
 [StampedLock](/docs/CS/Java/JDK/Concurrency/StampedLock.md)
 
 ### Atomic Variables and Nonblocking Synchronization
 
-Much of the recent research on concurrent algorithms has focused on *nonblocking algorithms*,
-which use low-level atomic machine instructions such as `compare-and-swap` instead of locks to ensure data integrity under concurrent access.
-Nonblocking algorithms are used extensively in operating systems and JVMs for thread and process scheduling, garbage collection,
-and to implement locks and other concurrent data structures.
+近年关于并发算法的研究，很大一部分聚焦于*非阻塞算法*：
+它们用 `compare-and-swap` 这类底层原子机器指令代替锁，来保证并发访问下的数据完整性。
+非阻塞算法在操作系统和 JVM 中被广泛用于线程与进程调度、垃圾回收，
+以及实现锁和其他并发数据结构。
 
-Nonblocking algorithms are considerably more complicated to design and implement than lock-based alternatives, but they can offer significant scalability and liveness advantages.
-They coordinate at a finer level of granularity and can greatly reduce scheduling overhead because they don't block when multiple threads contend for the same data.
-Further, they are immune to deadlock and other liveness problems.
-In lock-based algorithms, other threads cannot make progress if a thread goes to sleep or spins while holding a lock, whereas nonblocking algorithms are impervious to individual thread failures.
+非阻塞算法的设计和实现比基于锁的方案复杂得多，但它们能带来可观的可伸缩性和活跃性优势。
+它们的协调粒度更细，而且在多个线程争用同一份数据时不会阻塞，因此能大幅降低调度开销。
+此外，它们不受死锁和其他活跃性问题的影响。
+在基于锁的算法中，如果持锁线程进入休眠或自旋，其他线程就无法推进；而非阻塞算法不受单个线程故障的影响。
 
-Atomic variables can also be used as “better volatile variables” even if you are not developing nonblocking algorithms.
-Atomic variables offer the same memory semantics as volatile variables, but with additional support for atomic updates—making them ideal for counters,
-sequence generators, and statistics gathering while offering better scalability than lock-based alternatives.
+即使不打算开发非阻塞算法，原子变量也可以用作“更好的 volatile 变量”。
+原子变量具有与 volatile 变量相同的内存语义，但额外支持原子更新——这使它们非常适合用于计数器、
+序列生成器和统计收集，同时比基于锁的方案具备更好的可伸缩性。
 
-Locking has a few other disadvantages. 
-When a thread is waiting for a lock, it cannot do anything else.
-If a thread holding a lock is delayed (due to a page fault, scheduling delay, or the like), then no thread that needs that lock can make progress.
-This can be a serious problem if the blocked thread is a high-priority thread but the thread holding the lock is a lower-priority thread—a performance hazard known as priority inversion.
-Even though the higher-priority thread should have precedence, it must wait until the lock is released, and this effectively downgrades its priority to that of the lower-priority thread.
-If a thread holding a lock is permanently blocked (due to an infinite loop, deadlock, livelock, or other liveness failure), any threads waiting for that lock can never make progress.
+加锁还有一些其他缺点。
+线程在等待锁时无法做其他任何事情。
+如果持锁线程被延迟（由于缺页、调度延迟或类似原因），那么所有需要该锁的线程都无法推进。
+如果被阻塞的是高优先级线程，而持锁的是低优先级线程，这就会成为严重问题——这种性能隐患被称为优先级反转。
+尽管高优先级线程本应优先执行，但它必须等到锁被释放，这实际上把它的优先级降到了低优先级线程的水平。
+如果持锁线程被永久阻塞（由于死循环、死锁、活锁或其他活跃性故障），那么所有等待该锁的线程都永远无法推进。
 
 
 
@@ -613,10 +607,10 @@ volatile
 
 本页是总纲（线程安全三要素、共享对象、并发容器、Amdahl 定律与锁竞争），全目录沿「线程语义 → 锁与同步器 → 执行框架 → Loom 时代原语」四条线展开：
 
-- 线程与内存模型：[Thread](/docs/CS/Java/JDK/Concurrency/Thread.md)、[JMM](/docs/CS/Java/JDK/Concurrency/JMM.md)、[volatile](/docs/CS/Java/JDK/Concurrency/volatile.md)、[synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md)
+- 线程与内存模型：[Thread](/docs/CS/Java/JDK/Concurrency/Thread.md)、[JMM](/docs/CS/Java/JDK/Concurrency/JMM.md)、[volatile](/docs/CS/Java/JDK/Concurrency/volatile.md)、[synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md)、[VarHandle](/docs/CS/Java/JDK/Concurrency/VarHandle.md)（访问模式与 fence 的底层入口）
 - 锁的基础：[Parker](/docs/CS/Java/JDK/Concurrency/Parker.md)（JVM 层阻塞原语）、[AQS](/docs/CS/Java/JDK/Concurrency/AQS.md)、[Lock](/docs/CS/Java/JDK/Concurrency/Lock.md)、[ReentrantLock](/docs/CS/Java/JDK/Concurrency/ReentrantLock.md)、[ReadWriteLock](/docs/CS/Java/JDK/Concurrency/ReadWriteLock.md)、[StampedLock](/docs/CS/Java/JDK/Concurrency/StampedLock.md)
 - 同步器与原子量：[Semaphore](/docs/CS/Java/JDK/Concurrency/Semaphore.md)、[CountDownLatch](/docs/CS/Java/JDK/Concurrency/CountDownLatch.md)、[CyclicBarrier](/docs/CS/Java/JDK/Concurrency/CyclicBarrier.md)、[Phaser](/docs/CS/Java/JDK/Concurrency/Phaser.md)、[Exchanger](/docs/CS/Java/JDK/Concurrency/Exchanger.md)、[Atomic](/docs/CS/Java/JDK/Concurrency/Atomic.md)
-- 执行框架：[ThreadPoolExecutor](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md)、[ForkJoinPool](/docs/CS/Java/JDK/Concurrency/ForkJoinPool.md)、[Future](/docs/CS/Java/JDK/Concurrency/Future.md)、[定时执行](/docs/CS/Java/JDK/sche.md)
+- 执行框架：[ThreadPoolExecutor](/docs/CS/Java/JDK/Concurrency/ThreadPoolExecutor.md)、[ForkJoinPool](/docs/CS/Java/JDK/Concurrency/ForkJoinPool.md)、[Future](/docs/CS/Java/JDK/Concurrency/Future.md)、[CompletableFuture](/docs/CS/Java/JDK/Concurrency/CompletableFuture.md)、[定时执行](/docs/CS/Java/JDK/sche.md)、[Flow](/docs/CS/Java/JDK/Concurrency/Flow.md)（响应式流互操作）
 - Loom 与线程上下文：[ThreadLocal](/docs/CS/Java/JDK/Concurrency/ThreadLocal.md)、[ThreadLocalRandom](/docs/CS/Java/JDK/Concurrency/ThreadLocalRandom.md)、[ScopedValue](/docs/CS/Java/JDK/Concurrency/ScopedValues.md)、[VirtualThread](/docs/CS/Java/JDK/Concurrency/VirtualThread.md)、[StructuredTaskScope](/docs/CS/Java/JDK/Concurrency/StructuredTaskScope.md)
 
 ## Links

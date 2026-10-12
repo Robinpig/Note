@@ -1,29 +1,29 @@
 ## Introduction
 
-Java provides a built-in locking mechanism for enforcing atomicity: the **synchronized block**.
-A synchronized block has two parts: a reference to an object that will serve as the lock, and a block of code to be guarded by that lock.
-A synchronized method is a shorthand for a synchronized block that spans an entire method body, and whose lock is the object on which the method is being invoked
-(Static synchronized methods use the Class object for the lock).
+Java 提供了用于保证原子性的内置加锁机制：**synchronized 代码块**。
+synchronized 代码块包含两部分：作为锁的对象引用，以及被该锁保护的代码块。
+synchronized 方法是覆盖整个方法体的 synchronized 代码块的简写形式，其锁为调用该方法的对象
+（静态 synchronized 方法使用 Class 对象作为锁）。
 
-Every Java object can implicitly act as a lock for purposes of synchronization; these built-in locks are called intrinsic locks or monitor locks.
-The lock is automatically acquired by the executing thread before entering a synchronized block and automatically released when control exits the synchronized block,
-whether by the normal control path or by throwing an exception out of the block.
-The only way to acquire an intrinsic lock is to enter a synchronized block or method guarded by that lock.
+每个 Java 对象都可以隐式地充当同步用的锁；这些内置锁被称为 intrinsic locks（内置锁）或 monitor locks（管程锁）。
+执行线程在进入 synchronized 代码块前会自动获取该锁，并在退出 synchronized 代码块时自动释放，
+无论是通过正常的控制流退出，还是通过抛出异常退出。
+获取 intrinsic lock 的唯一途径是进入由该锁保护的 synchronized 代码块或方法。
 
-Intrinsic locks in Java act as mutexes (or mutual exclusion locks), which means that at most one thread may own the lock.
-When thread A attempts to acquire a lock held by thread B, A must wait, or block, until B releases it.
-If B never releases the lock, A waits forever.
+Java 中的 intrinsic lock 表现为互斥锁（mutex），即至多只能有一个线程持有该锁。
+当线程 A 尝试获取线程 B 持有的锁时，A 必须等待（阻塞）直到 B 释放该锁。
+若 B 永不释放锁，A 将永远等待。
 
-The Java monitor pattern is inspired by Hoare's work on monitors (Hoare, 1974), though there are significant differences between this pattern and a true monitor. 
+Java 的管程（monitor）模式受到 Hoare 关于 monitors 的研究启发（Hoare, 1974），但该模式与真正的 monitor 之间存在显著差异。
 
 
-The bytecode instructions for entering and exiting a synchronized block are even called `monitorenter` and `monitorexit`, and Java's built‐in (intrinsic) locks are sometimes called monitor locks or monitors.
+进入和退出 synchronized 代码块的字节码指令分别名为 `monitorenter` 和 `monitorexit`，Java 的内置（intrinsic）锁有时也被称为 monitor locks 或 monitors。
 > [!NOTE]
 > 
-> [monitorenter](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=monitorenter) & [exit](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=monitorexit) are symmetric routines; which is reflected in the assembly code structure as well.
+> [monitorenter](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=monitorenter) 与 [exit](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=monitorexit) 是对称的两个例程，这一点同样体现在汇编代码的结构上。
 
 
-use javap -c   *.class
+使用 javap -c   *.class
 
 ```
 //synchronized with block finally add monitorexit
@@ -36,7 +36,7 @@ ACC_SYNCHRONIZED
 
 
 ### MarkWord
-[MarkWord](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=markword) in [Oop](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=oop) header.
+[MarkWord](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=markword) 位于 [Oop](/docs/CS/Java/JDK/JVM/Oop-Klass.md?id=oop) 对象头（header）中。
 
 
 ## Process
@@ -50,15 +50,15 @@ ACC_SYNCHRONIZED
 
 
 
-In TemplateInterpreter
+在 TemplateInterpreter（模板解释器）中
 
-Synchronization Stack layout:
-- expressions    <--- rsp               = expression stack top
-- expressions   
-- monitor entry  <--- monitor block top = expression stack bot
-- monitor entry 
-- frame data     <--- monitor block bot
-- saved rbp      <--- rbp
+同步栈布局（Synchronization Stack layout）：
+- expressions（表达式栈）    <--- rsp               = 表达式栈顶
+- expressions（表达式栈）
+- monitor entry（管程条目）  <--- monitor block top = 表达式栈底
+- monitor entry（管程条目）
+- frame data（栈帧数据）     <--- monitor block bot
+- saved rbp（保存的 rbp）    <--- rbp
 
 ```cpp
 void TemplateTable::monitorenter() {
@@ -146,7 +146,7 @@ void TemplateTable::monitorenter() {
   __ increment(rbcp);
 
 ```
-store object, call [lock object](/docs/CS/Java/JDK/JVM/interpreter.md?id=lock_object)
+存储对象，调用 [lock object](/docs/CS/Java/JDK/JVM/interpreter.md?id=lock_object)
 ```cpp
   __ movptr(Address(rmon, BasicObjectLock::obj_offset_in_bytes()), rax);
   __ lock_object(rmon);
@@ -161,7 +161,7 @@ store object, call [lock object](/docs/CS/Java/JDK/JVM/interpreter.md?id=lock_ob
 }
 ```
 
-in bytecodeInterpreter
+在 bytecodeInterpreter 中
 ```cpp
 // bytecodeInterpreter.cpp
 CASE(_monitorenter): {
@@ -306,8 +306,8 @@ IRT_ENTRY_NO_ASYNC(void, InterpreterRuntime::monitorenter(JavaThread* thread, Ba
 IRT_END
 ```
 
-1. support Biased Lock, call `ObjectSynchronizer::fast_enter`
-2. Or call `ObjectSynchronizer::slow_enter`, use light lock
+1. 支持偏向锁，调用 `ObjectSynchronizer::fast_enter`
+2. 否则调用 `ObjectSynchronizer::slow_enter`，使用轻量级锁
 
 
 
@@ -392,7 +392,7 @@ IRT_END
 
 
 
-`hashcode()` and `wait()` depend on monitor, so wil never use light lock directly after them completed,
+`hashcode()` 与 `wait()` 依赖 monitor，因此在它们执行完毕后不会再直接使用轻量级锁。
 
 批量重偏向是以class而不是对象为单位的，每个class会维护一个偏向锁的撤销计数器，每当该class的对象发生偏向锁的撤销时，该计数器会加一，当这个值达到默认阈值20时，jvm就会认为这个锁对象不再适合原线程，
 因此进行批量重偏向。而距离上次批量重偏向的25秒内，如果撤销计数达到40，就会发生批量撤销，如果超过25秒，那么就会重置在[20, 40)内的计数。
@@ -455,10 +455,10 @@ class BasicObjectLock { // Lock Record
 
 **ObjectSynchronizer::fast_enter():**
 
-1. check `if(UseBiasedLocking) `
-    1. `if is_at_safepoint())`, invoke `BiasedLocking::revoke_at_safepoint()`
-    2. Else invoke `BiasedLocking::revoke_and_rebias()` success, return
-2. Others, `ObjectSynchronizer::slow_enter()`
+1. 检查 `if(UseBiasedLocking) `
+    1. 若 `if is_at_safepoint())`，调用 `BiasedLocking::revoke_at_safepoint()`
+    2. 否则调用 `BiasedLocking::revoke_and_rebias()`，成功后返回
+2. 其他情况，调用 `ObjectSynchronizer::slow_enter()`
 
 ```cpp
 //synchronizer.cpp
@@ -484,11 +484,11 @@ void ObjectSynchronizer::fast_enter(Handle obj, BasicLock* lock, bool attempt_re
 
 #### revoke and rebias
 
-**must not be called while at safepoint**
+**不能在安全点（safepoint）调用**
 
-use CAS
+使用 CAS
 
-1. `Get markOop`
+1. 获取 `markOop`
 2.  `if (mark->is_biased_anonymously() && !attempt_rebias) `
 
 ```cpp
@@ -609,15 +609,15 @@ BiasedLocking::Condition BiasedLocking::revoke_and_rebias(Handle obj, bool attem
 
 #### revoke bias
 
-BiasedLocking::revoke_at_safepoint must only be called while at safepoint, so don't need CAS.
+BiasedLocking::revoke_at_safepoint 只能在安全点（safepoint）调用，因此无需使用 CAS。
 
-update_heuristics:
+update_heuristics（更新启发式策略）：
 
- Heuristics to attempt to throttle the number of revocations.
- Stages:
+ 用于限制撤销（revocation）次数的启发式策略（heuristics）。
+ 阶段如下：
 
- 1. Revoke the biases of all objects in the heap of this type,    but allow rebiasing of those objects if unlocked.
-  2. Revoke the biases of all objects in the heap of this type   and don't allow rebiasing of these objects. Disable  allocation of objects of that type with the bias bit set.
+ 1. 撤销堆中该类型所有对象的偏向，但若对象处于未锁定状态则允许其重偏向。
+  2. 撤销堆中该类型所有对象的偏向，且不允许这些对象重偏向；禁止分配带有偏向位的该类型对象。
 
 ```cpp
 //biasedLocking.cpp
@@ -651,13 +651,13 @@ enum HeuristicsResult {
 
 ### Lightweight Lock
 
-Displaced Mark Word = 25 hashcode + 4 age + 1 biased flag
-Mark Word = pointer to Displaced Mark Word
+Displaced Mark Word（被替换的 Mark Word）= 25 位 hashcode + 4 位 age + 1 位 biased flag
+Mark Word（对象头标记字）= 指向 Displaced Mark Word 的指针
 
 #### ObjectSynchronizer::slow_enter
-1. is_neutral, cas set mark
-2. has_locker, set_displaced_header
-3. [ObjectSynchronizer::inflate](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=inflate) then [ObjectMonitor::enter](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=objectmonitorenter)
+1. 若 is_neutral，通过 CAS 设置 mark
+2. 若 has_locker，设置 displaced_header
+3. [ObjectSynchronizer::inflate](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=inflate) 然后 [ObjectMonitor::enter](/docs/CS/Java/JDK/Concurrency/synchronized.md?id=objectmonitorenter)
 
 ```cpp
 // synchronizer.cpp
@@ -701,7 +701,7 @@ void ObjectSynchronizer::slow_enter(Handle obj, BasicLock* lock, TRAPS) {
 
 #### ObjectSynchronizer::slow_exit
 
-We take the slow-path of **possible inflation** and then exit. -- see `ObjectSynchronizer::inflate()`
+我们走**可能发生膨胀（inflation）**的慢速路径，然后退出。——参见 `ObjectSynchronizer::inflate()`
 
 ```cpp
 // synchronizer.cpp
@@ -768,13 +768,13 @@ void ObjectSynchronizer::fast_exit(oop object, BasicLock* lock, TRAPS) {
 
 #### ObjectMonitor
 
-The ObjectMonitor class implements the heavyweight version of a JavaMonitor.
-The lightweight BasicLock/stack lock version has been inflated into an ObjectMonitor.
-This inflation is typically due to contention or use of [Object.wait()](/docs/CS/Java/JDK/Concurrency/Thread.md?id=wait).
+ObjectMonitor 类实现了 JavaMonitor 的重量级版本。
+轻量级的 BasicLock/栈锁（stack lock）版本已被膨胀（inflate）为 ObjectMonitor。
+这种膨胀通常由竞争（contention）或使用 [Object.wait()](/docs/CS/Java/JDK/Concurrency/Thread.md?id=wait) 引起。
 
 
-Only onDeck, owner and threads not in cxq can get Lock.
-Owner move other threads to onDeck from EntryList, and move cxq into EntryList.
+只有 onDeck、owner 以及不在 cxq 中的线程能够获取锁。
+owner 会将 EntryList 中的其他线程移动到 onDeck，并将 cxq 移入 EntryList。
 
 WaitSet -> cxq
 
@@ -830,81 +830,62 @@ class ObjectMonitor : public CHeapObj<mtInternal> {
 }
 ```
 
-ObjectMonitor Layout Overview/Highlights/Restrictions:
+ObjectMonitor 布局概述/要点/限制（Layout Overview/Highlights/Restrictions）：
 
-- The _header field must be at offset 0 because the displaced header
-  from markWord is stored there. We do not want markWord.hpp to include
-  ObjectMonitor.hpp to avoid exposing ObjectMonitor everywhere. This
-  means that ObjectMonitor cannot inherit from any other class nor can
-  it use any virtual member functions. This restriction is critical to
-  the proper functioning of the VM.
-- The _header and _owner fields should be separated by enough space
-  to avoid false sharing due to parallel access by different threads.
-  This is an advisory recommendation.
-- The general layout of the fields in ObjectMonitor is:
+- _header 字段必须位于偏移量 0，因为 markWord 中被替换的 header 存储于此。我们不希望 markWord.hpp 包含 ObjectMonitor.hpp，以免 ObjectMonitor 被到处暴露。这意味着 ObjectMonitor 不能继承自任何其他类，也不能使用任何虚成员函数。该限制对虚拟机的正常运作至关重要。
+- _header 与 _owner 字段之间应留有足够空间，以避免不同线程并行访问导致的伪共享（false sharing）。此为建议性约束。
+- ObjectMonitor 中字段的总体布局为：
     _header
     <lightly_used_fields>
     <optional padding>
     _owner
     <remaining_fields>
-- The VM assumes write ordering and machine word alignment with
-  respect to the _owner field and the <remaining_fields> that can
-  be read in parallel by other threads.
-- Generally fields that are accessed closely together in time should
-  be placed proximally in space to promote data cache locality. That
-  is, temporal locality should condition spatial locality.
-- We have to balance avoiding false sharing with excessive invalidation
-  from coherence traffic. As such, we try to cluster fields that tend
-  to be _written_ at approximately the same time onto the same data
-  cache line.
-- We also have to balance the natural tension between minimizing
-  single threaded capacity misses with excessive multi-threaded
-  coherency misses. There is no single optimal layout for both
-  single-threaded and multi-threaded environments.
+- 虚拟机假定针对 _owner 字段以及 <remaining_fields> 的写入顺序与机器字对齐，这些字段可能被其他线程并行读取。
+- 通常，时间上被紧密访问的字段应在空间上相邻放置，以提升数据缓存的局部性。换言之，时间局部性应当决定空间局部性。
+- 必须在避免伪共享与减少一致性流量导致的过度失效之间取得平衡。因此，我们尽量将大致同时被写入（_written_）的字段聚集到同一条数据缓存行上。
+- 我们还必须在减少单线程容量缺失与过多多线程一致性缺失之间取得平衡。对于单线程和多线程环境，不存在单一的最优布局。
 
-- See TEST_VM(ObjectMonitor, sanity) gtest for how critical restrictions are enforced.
-- Adjacent ObjectMonitors should be separated by enough space to avoid
-  false sharing. This is handled by the ObjectMonitor allocation code
-  in synchronizer.cpp. Also see TEST_VM(SynchronizerTest, sanity) gtest.
+- 关于关键限制如何被强制实施，参见 TEST_VM(ObjectMonitor, sanity) gtest。
+- 相邻的 ObjectMonitor 之间应留有足够空间以避免伪共享。这由 synchronizer.cpp 中的 ObjectMonitor 分配代码处理。另见 TEST_VM(SynchronizerTest, sanity) gtest。
 
 
-Futures notes:
-  - Separating _owner from the <remaining_fields> by enough space to avoid false sharing might be profitable. 
-    The CAS in monitorenter will invalidate the line underlying _owner. 
-    We want to avoid an L1 data cache miss on that same line for monitorexit. 
-    Putting these <remaining_fields>:
-    _recursions, _EntryList, _cxq, and _succ, all of which may be fetched in the inflated unlock path, on a different cache line would make them immune to CAS-based invalidation from the _owner field.
+后续说明（Futures notes）：
+  - 将 _owner 与 <remaining_fields> 之间留出足够空间以避免伪共享，可能是有益的。
+    monitorenter 中的 CAS 会使 _owner 所在的缓存行失效。
+    我们希望 monitorexit 时该缓存行不出现 L1 数据缓存缺失。
+    将以下 <remaining_fields>：
+    _recursions、_EntryList、_cxq 与 _succ（它们在膨胀后的解锁路径中都可能被读取）放到不同的缓存行上，可使其免受来自 _owner 字段的 CAS 失效影响。
 
-  - The _recursions field should be of type int, or int32_t but not intptr_t. There's no reason to use a 64-bit type for this field in a 64-bit JVM.
+  - _recursions 字段应为 int 或 int32_t 类型，而非 intptr_t。在 64 位 JVM 中没有理由对该字段使用 64 位类型。
 
 
 
-ContentionList LIFO Lock-Free
-only Owner thread can get elements from tail
-insert into head by CAS
+ContentionList：LIFO、无锁（Lock-Free）
+仅 Owner 线程可以从队尾取元素
+通过 CAS 从队头插入
 
-Owner thread move elements from ContentionList to EntryList and set Ready(OnDeck) of a element from EntryList(usually head)
+Owner 线程将元素从 ContentionList 移动到 EntryList，并将 EntryList 中的某个元素（通常为队头）置为就绪（Ready/OnDeck）状态
 
-OnDeck thread change to Owner thread when get lock, 
-or still in EntryList
+OnDeck 线程在获取到锁后转变为 Owner 线程，
+否则仍停留在 EntryList 中
 
-if Owner thread block by wait, then to WaitSet and wait for notify/notifyAll/interrupt then to EntryList
+若 Owner 线程因 wait 而阻塞，则进入 WaitSet，等待 notify/notifyAll/interrupt 后被移入 EntryList
 
-spin lock before insert into EntryList
+在插入 EntryList 之前先自旋（spin lock）
 
 
 
 #### inflate
 
-1. in loop
-2. Get Mark Word
-3. if has_monitor, return
-4. If markOopDesc::INFLATING, continue loop until has_monitor
-5. if `has_locker`(`Light Lock`), CAS set mark = markOopDesc:INFLATING, _owner = Lock Record
-6. Else non-lock, CAS set mark = markOopDesc:INFLATING, _owner = NULL
+1. 在循环中
+2. 获取 Mark Word
+3. 若 has_monitor，返回
+4. 若 markOopDesc::INFLATING，继续循环直到 has_monitor
+5. 若 `has_locker`（轻量级锁），通过 CAS 将 mark 置为 markOopDesc::INFLATING，_owner = Lock Record
+6. 否则处于无锁状态，通过 CAS 将 mark 置为 markOopDesc::INFLATING，_owner = NULL
 
-`ObjectSynchronizer::inflate` just get monitor
-lock operation in `ObjectMonitor::enter`
+`ObjectSynchronizer::inflate` 仅获取 monitor
+加锁操作在 `ObjectMonitor::enter` 中完成
 
 
 ```cpp
@@ -1108,11 +1089,11 @@ ObjectMonitor* ObjectSynchronizer::inflate(Thread * Self,
 
 #### ObjectMonitor::enter
 
-1. CAS set  _owner = cur Thread success, return
-2. If recursion,  _recursions++
-3. if Self is_lock_owned，set _recursions = 1， _owner = Self
-4. Else trySpin -- Adaptive Spinning Support
-5. EnterI in loop
+1. 通过 CAS 将 _owner 设置为当前线程成功，则直接返回
+2. 若为重入（recursion），则 _recursions++
+3. 若 Self is_lock_owned，则设置 _recursions = 1，_owner = Self
+4. 否则执行 trySpin —— 自适应自旋（Adaptive Spinning）支持
+5. 在循环中执行 EnterI
 
 ```cpp
 // objectMonitor.cpp
@@ -1275,13 +1256,13 @@ void ObjectMonitor::enter(TRAPS) {
 
 #### ObjectMonitor::EnterI
 
-1. tryLock
-2. trySpin
-3. wrap to node add push "Self" onto **the front of the _cxq(ContentionList)**
-4. tryLock and trySpin in a loop with [ParkEvent](/docs/CS/Java/JDK/Concurrency/Parker.md?id=parkevent)
-   1. if tryLock and trySpin fail, park self
-   2. unpark in exit by other Thread
-5. Unlink Self from the cxq or EntryList.
+1. tryLock（尝试加锁）
+2. trySpin（尝试自旋）
+3. 包装为节点，将 "Self" 压入 **_cxq（ContentionList）的队头**
+4. 在循环中通过 [ParkEvent](/docs/CS/Java/JDK/Concurrency/Parker.md?id=parkevent) 执行 tryLock 与 trySpin
+   1. 若 tryLock 与 trySpin 均失败，则 park 自身
+   2. 由其他线程在 exit 中 unpark 唤醒
+5. 将 Self 从 cxq 或 EntryList 中解除链接。
 
 ```cpp
    void ObjectMonitor::EnterI(TRAPS) {
@@ -1351,28 +1332,24 @@ void ObjectMonitor::enter(TRAPS) {
        }
      }
 ```    
-Check for cxq|EntryList edge transition to non-null.  This indicates
-the onset of contention.  While contention persists exiting threads
-will use a ST:MEMBAR:LD 1-1 exit protocol.  When contention abates exit
-operations revert to the faster 1-0 mode.  This enter operation may interleave
-(race) a concurrent 1-0 exit operation, resulting in stranding, so we
-arrange for one of the contending thread to use a timed park() operations
-to detect and recover from the race.  (Stranding is form of progress failure
-where the monitor is unlocked but all the contending threads remain parked).
-That is, at least one of the contended threads will periodically poll _owner.
-One of the contending threads will become the designated "Responsible" thread.
-The Responsible thread uses a timed park instead of a normal indefinite park
-operation -- it periodically wakes and checks for and recovers from potential
-strandings admitted by 1-0 exit operations.   We need at most one Responsible
-thread per-monitor at any given moment.  Only threads on cxq|EntryList may
-be responsible for a monitor.
+检测 cxq|EntryList 是否转变为非空。这标志着竞争（contention）的开始。
+只要竞争持续存在，退出的线程将使用 ST:MEMBAR:LD 的 1-1 退出协议；
+当竞争减弱时，退出操作回退到更快的 1-0 模式。
+该进入操作可能与并发的 1-0 退出操作交错（竞争），从而导致搁浅（stranding），
+因此我们需要安排某个竞争线程使用带超时的 park() 操作来检测并从该竞争状态中恢复。
+（搁浅是一种进展失败（progress failure）的形式：monitor 虽已解锁，但所有竞争线程仍处于 park 状态。）
+也就是说，至少有一个竞争线程会周期性地轮询 _owner。
+其中一个竞争线程会成为指定的 "Responsible" 线程。
+Responsible 线程使用带超时的 park，而非普通的无限期 park——
+它会周期性唤醒，检测并恢复由 1-0 退出操作可能导致的搁浅。
+在任意时刻，每个 monitor 至多只需要一个 Responsible 线程。
+只有位于 cxq|EntryList 上的线程才可能成为某个 monitor 的 Responsible。
 
-Currently, one of the contended threads takes on the added role of "Responsible".
-A viable alternative would be to use a dedicated "stranding checker" thread
-that periodically iterated over all the threads (or active monitors) and unparked
-successors where there was risk of stranding.  This would help eliminate the
-timer scalability issues we see on some platforms as we'd only have one thread
--- the checker -- parked on a timer.
+目前，某个竞争线程会额外承担 "Responsible" 的角色。
+一种可行的替代方案是使用专门的 "搁浅检查（stranding checker）" 线程，
+周期性地遍历所有线程（或活动 monitor），并在存在搁浅风险时 unpark 后继线程。
+这有助于消除我们在某些平台上看到的定时器可扩展性问题，因为届时只有一个线程——
+即检查线程——在定时器上 park。
 
 ```cpp   
      if (nxt == NULL && _EntryList == NULL) {
@@ -1444,12 +1421,12 @@ timer scalability issues we see on some platforms as we'd only have one thread
      }
 ```
    
-Egress :
-Self has acquired the lock -- Unlink Self from the cxq or EntryList.
-Normally we'll find Self on the EntryList .
-From the perspective of the lock owner (this thread), the EntryList is stable and cxq is prepend-only.
-The head of cxq is volatile but the interior is stable.
-In addition, Self.TState is stable.
+退出（Egress）：
+Self 已获取锁 —— 将 Self 从 cxq 或 EntryList 中解除链接。
+通常我们会在 EntryList 上找到 Self。
+从锁持有者（即本线程）的视角看，EntryList 是稳定的，而 cxq 仅支持前插（prepend-only）。
+cxq 的头部是易变的，但其内部是稳定的。
+此外，Self.TState 也是稳定的。
 ```cpp
      assert(_owner == Self, "invariant");
      assert(object() != NULL, "invariant");
@@ -1467,43 +1444,34 @@ In addition, Self.TState is stable.
      }
 ```
 
-We may leave threads on cxq|EntryList without a designated"Responsible" thread.  This is benign.  
-When this thread subsequently exits the monitor it can "see" such preexisting "old" threads -- threads that arrived on the cxq|EntryList before the fence, above -- by LDing cxq|EntryList.  
-Newly arrived threads -- that is, threads that arrive on cxq after the ST:MEMBAR, above -- will set Responsible non-null and elect a new "Responsible" timer thread.
+我们可能会在 cxq|EntryList 上留下线程而不指定 "Responsible" 线程。这是无害的。
+当本线程随后退出 monitor 时，它可以通过 LD cxq|EntryList 来“看到”这些既存的“旧”线程——
+即那些在上述内存屏障（fence）之前到达 cxq|EntryList 的线程。
+新到达的线程——即在上述 ST:MEMBAR 之后到达 cxq 的线程——会将 Responsible 置为非空，并选举一个新的 "Responsible" 定时器线程。
 
-This thread executes:
-ST Responsible=null; MEMBAR    (in enter epilogue - here)
-LD cxq|EntryList               (in subsequent exit)
+本线程执行：
+ST Responsible=null; MEMBAR    （位于 enter 的收尾部分，即此处）
+LD cxq|EntryList               （位于随后的 exit 中）
 
-Entering threads in the slow/contended path execute:
-ST cxq=nonnull; MEMBAR; LD Responsible (in enter prolog)
-The (ST cxq; MEMBAR) is accomplished with CAS().
+走慢路径/竞争路径的进入线程执行：
+ST cxq=nonnull; MEMBAR; LD Responsible （位于 enter 的开头部分）
+其中（ST cxq; MEMBAR）通过 CAS() 实现。
 
-The MEMBAR, above, prevents the LD of cxq|EntryList in the subsequent
-exit operation from floating above the ST Responsible=null.
+上述 MEMBAR 可防止后续 exit 操作中对 cxq|EntryList 的 LD 浮动到 ST Responsible=null 之上。
 
-We've acquired ownership with CAS().
-CAS is serializing -- it has MEMBAR/FENCE-equivalent semantics.
-But since the CAS() this thread may have also stored into _succ,
-EntryList, cxq or Responsible.  These meta-data updates must be
-visible __before this thread subsequently drops the lock.
-Consider what could occur if we didn't enforce this constraint --
-STs to monitor meta-data and user-data could reorder with (become
-visible after) the ST in exit that drops ownership of the lock.
-Some other thread could then acquire the lock, but observe inconsistent
-or old monitor meta-data and heap data.  That violates the JMM.
-To that end, the 1-0 exit() operation must have at least STST|LDST
-"release" barrier semantics.  Specifically, there must be at least a
-STST|LDST barrier in exit() before the ST of null into _owner that drops
-the lock.   The barrier ensures that changes to monitor meta-data and data
-protected by the lock will be visible before we release the lock, and
-therefore before some other thread (CPU) has a chance to acquire the lock.
-See also: http://gee.cs.oswego.edu/dl/jmm/cookbook.html.
+所有权已通过 CAS() 获取。
+CAS 是序列化指令，具有等价于 MEMBAR/FENCE 的语义。
+但自该 CAS() 之后，本线程在此期间还可能向 _succ、EntryList、cxq 或 Responsible 写入过数据。
+这些元数据的更新必须在本线程随后释放锁**之前**可见。
+若不施加这一约束会发生什么：对 monitor 元数据和用户数据的 ST 可能与 exit 中释放所有权的 ST 发生重排（即变得可见得更晚）。
+此时其他线程可能拿到锁，却观察到不一致的或过期的 monitor 元数据与堆数据，这违反了 JMM。
+为此，1-0 模式的 exit() 操作至少必须具备 STST|LDST 的“release”屏障语义。
+具体来说，在 exit() 中把 null 存入 _owner（即释放锁）的那次 ST 之前，必须至少有一道 STST|LDST 屏障。
+该屏障保证：对 monitor 元数据以及受锁保护的数据的修改，在释放锁之前已经可见，因此也早于其他线程（CPU）有机会获取该锁。
+另见：http://gee.cs.oswego.edu/dl/jmm/cookbook.html。
 
-Critically, any prior STs to _succ or EntryList must be visible before
-the ST of null into _owner in the *subsequent* (following) corresponding
-monitorexit.  Recall too, that in 1-0 mode monitorexit does not necessarily
-execute a serializing instruction.
+关键在于，对 _succ 或 EntryList 的任何先前 ST，都必须早于*随后那一次*对应的 monitorexit 中把 null 存入 _owner 的 ST 而可见。
+还要记得，在 1-0 模式下 monitorexit 并不必然执行序列化指令。
 ```cpp
      return;
    }
@@ -1514,7 +1482,8 @@ execute a serializing instruction.
 
 #### ObjectMonitor::TrySpin
 
-`Adaptive spin-then-block - rational spinning`
+自适应“自旋后阻塞”——理性自旋（adaptive spin-then-block, rational spinning）。
+先做有限次数的自旋探测，成功则直接持锁，失败则入队并阻塞。
 
 ```cpp
 // Spinning: Fixed frequency (100%), vary duration
@@ -1713,16 +1682,16 @@ int ObjectMonitor::TryLock (Thread * Self) {
 #### ObjectMonitor::exit
 
 
-1. if _owner != Self  & is_lock_owned(Light Lcok), set _owner = Self
-2. if _recursions != 0, _recursions-- then return
-4. Or else drop the lock and check if we need to wake a successor
-5. If other threads are acquiring lock, return
+1. 若 _owner != Self 且 is_lock_owned(轻量级锁)，则将 _owner 设为 Self
+2. 若 _recursions != 0，则 _recursions-- 后返回
+4. 否则释放锁，并检查是否需要唤醒后继者
+5. 若已有其他线程正在竞争该锁，直接返回
 3. 释放当前锁，并根据QMode的模式判断，是否将_cxq中挂起的线程唤醒。还是其他操作
 
 
-Chose onDeck from EntryList
+从 EntryList 中选出 onDeck
 
-Drain _cxq into EntryList - bulk transfer. -- by owner
+将 _cxq 批量转移到 EntryList（bulk transfer）—— 由 owner 执行
 
 ```cpp
 void ObjectMonitor::exit(bool not_suspended, TRAPS) {
@@ -1772,44 +1741,29 @@ void ObjectMonitor::exit(bool not_suspended, TRAPS) {
       return;
     }
 ```
-Other threads are blocked trying to acquire the lock.
+有其他线程正阻塞在获取该锁上。
 
 
-Normally the exiting thread is responsible for ensuring succession,
-but if other successors are ready or other entering threads are spinning
-then this thread can simply store NULL into _owner and exit without
-waking a successor.  The existence of spinners or ready successors
-guarantees proper succession (liveness).  Responsibility passes to the
-ready or running successors.  The exiting thread delegates the duty.
-More precisely, if a successor already exists this thread is absolved
-of the responsibility of waking (unparking) one.
+通常由退出的线程负责保证后继继任，但若已有其他后继者处于就绪状态，或有其他进入线程正在自旋，
+本线程只需把 NULL 存入 _owner 后退出，而不必唤醒后继者。
+自旋线程或就绪后继者的存在本身已保证了正确的继任（liveness），责任转移给它们，退出线程只是把这份职责交出去。
+更准确地说，若后继者已经存在，本线程就免除了唤醒（unpark）某个线程的责任。
 
-The _succ variable is critical to reducing futile wakeup frequency.
-_succ identifies the "heir presumptive" thread that has been made
-ready (unparked) but that has not yet run.  We need only one such
-successor thread to guarantee progress.
-See http://www.usenix.org/events/jvm01/full_papers/dice/dice.pdf
-section 3.3 "Futile Wakeup Throttling" for details.
+_succ 变量对于降低无效唤醒（futile wakeup）的频率至关重要。
+_succ 标识那个已被置为就绪（已 unpark）但尚未真正运行的“推定继承者”线程。
+只要有一个这样的后继线程就足以保证系统推进。
+细节参见 http://www.usenix.org/events/jvm01/full_papers/dice/dice.pdf 第 3.3 节 “Futile Wakeup Throttling”。
 
-Note that spinners in Enter() also set _succ non-null.
-In the current implementation spinners opportunistically set
-_succ so that exiting threads might avoid waking a successor.
-Another less appealing alternative would be for the exiting thread
-to drop the lock and then spin briefly to see if a spinner managed
-to acquire the lock.  If so, the exiting thread could exit
-immediately without waking a successor, otherwise the exiting
-thread would need to dequeue and wake a successor.
-(Note that we'd need to make the post-drop spin short, but no
-shorter than the worst-case round-trip cache-line migration time.
-The dropped lock needs to become visible to the spinner, and then
-the acquisition of the lock by the spinner must become visible to
-the exiting thread).
+注意 Enter() 中的自旋线程同样会把 _succ 置为非空。
+在当前实现中，自旋线程会 opportunistically（顺带地）设置 _succ，从而让退出线程有可能不必唤醒后继者。
+另一种吸引力更低的方案是：退出线程释放锁后短暂自旋，看看是否有自旋线程抢到了锁；
+若有，退出线程可直接退出而无需唤醒后继者；否则退出线程仍需从队列中摘出并唤醒一个后继者。
+（注意释放锁后的自旋必须足够短，但不能短于缓存行迁移的最坏往返时间：
+释放的锁要先对自旋线程可见，而自旋线程获取锁的结果又要对退出线程可见。）
 
-It appears that an heir-presumptive (successor) must be made ready.
-Only the current lock owner can manipulate the EntryList or
-drain _cxq, so we need to reacquire the lock.  If we fail
-to reacquire the lock the responsibility for ensuring succession
-falls to the new owner.
+看起来必须把某个推定继承者（后继者）置为就绪状态。
+只有当前的锁持有者才能操作 EntryList 或清空 _cxq，因此需要重新获取该锁。
+若重新获取失败，保证继任的责任就落到新的持有者身上。
 
 ```cpp
     if (!Atomic::replace_if_null(THREAD, &_owner)) {
@@ -1817,17 +1771,14 @@ falls to the new owner.
     }
 
 ```
-I'd like to write: guarantee (w->_thread != Self).
-But in practice an exiting thread may find itself on the EntryList.
-Let's say thread T1 calls O.wait().  Wait() enqueues T1 on O's waitset and
-then calls exit().  Exit release the lock by setting O._owner to NULL.
-Let's say T1 then stalls.  T2 acquires O and calls O.notify().  The
-notify() operation moves T1 from O's waitset to O's EntryList. T2 then
-release the lock "O".  T2 resumes immediately after the ST of null into
-_owner, above.  T2 notices that the EntryList is populated, so it
-reacquires the lock and then finds itself on the EntryList.
-Given all that, we have to tolerate the circumstance where "w" is
-associated with Self.
+理想情况下这里应写成：guarantee (w->_thread != Self)。
+但实际情况中，退出线程可能会发现自己也位于 EntryList 上。
+例如线程 T1 调用了 O.wait()，wait() 把 T1 加入 O 的 waitset，随后调用 exit()；
+exit() 通过把 O._owner 置为 NULL 来释放锁。设此时 T1 停顿下来，T2 获取到 O 并调用 O.notify()，
+notify() 会把 T1 从 O 的 waitset 移到 O 的 EntryList；T2 随后释放锁 "O"，
+并从上面把 null 存入 _owner 的 ST 处继续执行。T2 会注意到 EntryList 非空，于是重新获取锁，
+结果发现它自己也在 EntryList 上。
+因此必须容忍 "w" 与 Self 关联这种情况。
 
 
 ```cpp
@@ -1839,12 +1790,12 @@ associated with Self.
       return;
     }
 ```
-If we find that both _cxq and EntryList are null then just re-run the exit protocol from the top.
+若发现 _cxq 与 EntryList 都为空，则从头重新执行退出协议。
 ```cpp
     w = _cxq;
     if (w == NULL) continue;
 ```
-Drain _cxq into EntryList - bulk transfer.
+将 _cxq 批量转移到 EntryList（bulk transfer）。
 ```cpp
     // First, detach _cxq.
     // The following loop is tantamount to: w = swap(&cxq, NULL)
@@ -1877,11 +1828,11 @@ Drain _cxq into EntryList - bulk transfer.
       q = p;
     }
 ```
- In 1-0 mode we need: ST EntryList; MEMBAR #storestore; ST _owner = NULL
- The MEMBAR is satisfied by the release_store() operation in ExitEpilog().
+ 在 1-0 模式下需要：ST EntryList; MEMBAR #storestore; ST _owner = NULL
+该 MEMBAR 由 ExitEpilog() 中的 release_store() 操作满足。
 
- See if we can abdicate to a spinner instead of waking a thread.
- A primary goal of the implementation is to reduce the context-switch rate.
+ 看看能否把职责让给某个自旋线程，从而不必唤醒线程。
+ 该实现的一个主要目标是降低上下文切换频率。
 ```cpp
     if (_succ != NULL) continue;
 
@@ -1899,7 +1850,7 @@ Drain _cxq into EntryList - bulk transfer.
 
 #### ObjectMonitor::ExitEpilog
 
-Exit protocol:
+退出协议：
 1. ST _succ = wakee
 2. membar #loadstore|#storestore;
 2. ST _owner = NULL
@@ -1932,25 +1883,25 @@ void ObjectMonitor::ExitEpilog(JavaThread* current, ObjectWaiter* Wakee) {
 
 
 
-Deflate the specified ObjectMonitor if not in-use. Returns true if it was deflated and false otherwise.
+若指定的 ObjectMonitor 未被使用，则对其执行收缩（deflate）。收缩成功返回 true，否则返回 false。
 
-The async deflation protocol sets owner to DEFLATER_MARKER and makes contentions negative as signals to contending threads that an async deflation is in progress. 
-There are a number of checks as part of the protocol to make sure that the calling thread has not lost the race to a contending thread.
+异步收缩协议会把 _owner 置为 DEFLATER_MARKER，并把 contentions 置为负值，作为信号通知竞争线程：异步收缩正在进行。
+协议中还包含若干检查，以确保调用线程没有在竞争中被其他竞争线程抢先。
 
-The ObjectMonitor has been successfully async deflated when: (contentions < 0)
-Contending threads that see that condition know to retry their operation.
+当满足 contentions < 0 时，说明该 ObjectMonitor 已被成功异步收缩；
+竞争线程看到该条件后便知道需要重试自己的操作。
 
 
 ## Summary
 
-Using ParkEvent(A wrapper of mutex).
+使用 ParkEvent（mutex 的封装）。
 
 
-| Lock           | Bias Lock    | Light lock   | Heavy Lock                            |
-| -------------- | ------------ | ------------ | ------------------------------------- |
-| Race condition | Mark Word    | Mark Word    | ObjectMonitor                         |
-| Recursion      | Lock Record nums | Lock Record nums| _recursions in ObjectMonitor(use CAS) |
-|                |              |              |                                       |
+| 锁              | 偏向锁            | 轻量级锁         | 重量级锁                              |
+| --------------- | --------------- | --------------- | ------------------------------------- |
+| 竞争标记        | Mark Word       | Mark Word       | ObjectMonitor                         |
+| 重入计数        | Lock Record 数量 | Lock Record 数量 | ObjectMonitor 中的 _recursions（使用 CAS） |
+|                 |                |                |                                       |
 
 
 

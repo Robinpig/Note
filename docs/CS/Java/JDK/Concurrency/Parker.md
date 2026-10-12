@@ -1,23 +1,23 @@
 ## Introduction
 
 
-A word of caution: The JVM uses 2 very similar constructs:
-1. ParkEvent are used for Java-level "monitor" synchronization.
-2. Parkers are used by JSR166-JUC park-unpark.
+需要注意：JVM 使用了两种非常相似的机制：
+1. ParkEvent 用于 Java 层的 "monitor" 同步。
+2. Parker 用于 JSR166-JUC 的 park-unpark。
 
 > [!NOTE]
 > 
-> In the future we'll want to think about eliminating Parker and using ParkEvent instead.
-> There's considerable duplication between the two services.
+> 未来我们希望考虑移除 Parker，转而使用 ParkEvent。
+> 这两种机制之间存在大量重复。
 
 ## Parker
-Per-thread blocking support for JSR166. 
-See the Java-level documentation for rationale. Basically, `park` acts like `wait`, `unpark` like `notify`.
+为 JSR166 提供的每线程阻塞支持。
+相关理由参见 Java 层文档。本质上，`park` 类似于 `wait`，`unpark` 类似于 `notify`。
 
-Parkers are inherently part of their associated JavaThread and are only accessed when the JavaThread is guaranteed to be alive (e.g. by operating on the current thread, or by having the thread protected by a ThreadsListHandle.
+Parker 本质上属于其关联的 JavaThread，并且只有在 JavaThread 保证存活时才会被访问（例如操作当前线程，或线程受到 ThreadsListHandle 的保护。
 
-Class Parker is declared in shared code and extends the platform-specific os::PlatformParker class, which contains the actual implementation mechanics (condvars/events etc). 
-The implementation for park() and unpark()are also in the platform-specific os_<os>.cpp files.
+Parker 类在共享代码中声明，并继承自平台相关的 os::PlatformParker 类，后者包含真正的实现机制（条件变量/事件等）。
+park() 与 unpark() 的实现同样位于平台相关的 os_<os>.cpp 文件中。
 
 
 
@@ -40,12 +40,12 @@ class Parker : public os::PlatformParker {
 ### PlatformParker
 
 
-PlatformParker provides the platform dependent base class for the Parker class. 
-It basically provides the internal data structures: - mutex and convars which are then used directly by the Parker methods defined in the OS specific implementation files.
+PlatformParker 为 Parker 类提供平台相关的基类。
+它主要提供内部数据结构：mutex（互斥量）与 condvars（条件变量），随后被 OS 特定实现文件中定义的 Parker 方法直接使用。
 
-There is significant overlap between the funcionality supported in the combination of Parker+PlatformParker and PlatformEvent (above). 
-If Parker were more like ObjectMonitor we could use PlatformEvent in both (with some API updates of course). 
-But Parker methods use fastpaths that break that level of encapsulation - so combining the two remains a future project.
+Parker 与 PlatformParker 的组合所支持的功能，与上文的 PlatformEvent 之间存在大量重叠。
+如果 Parker 能更像 ObjectMonitor，我们就能在两种场景都使用 PlatformEvent（当然需要一些 API 调整）。
+但 Parker 的方法使用了破坏该层封装的快速路径（fastpath），因此将二者合并仍是一个未来的项目。
 
 ```cpp
 // os/posix/os_posix.hpp
@@ -72,9 +72,9 @@ class PlatformParker {
 #### Parker::park
 
 
-Parker::park decrements count if > 0, else does a condvar wait.  Unpark sets count to 1 and signals condvar.  
-Only one thread ever waits on the condvar. Contention seen when trying to park implies that someone is unparking you, so don't wait. 
-And spurious returns are fine, so there is no need to track notifications.
+Parker::park 在计数 > 0 时将其减一，否则执行条件变量等待。Unpark 将计数置为 1 并唤醒条件变量。
+任何时刻最多只有一个线程在该条件变量上等待。若尝试 park 时观察到竞争，意味着有人在 unpark 你，因此无需等待。
+伪唤醒是允许的，因此无需记录通知。
 
 ```cpp
 void Parker::park(bool isAbsolute, jlong time) {
@@ -190,30 +190,30 @@ void Parker::unpark() {
 ## ParkEvent
 
 
-ParkEvents are type-stable and immortal.
+ParkEvent 是类型稳定（type-stable）且不可销毁（immortal）的。
 
-Lifecycle: 
-Once a ParkEvent is associated with a thread that ParkEvent remains associated with the thread for the thread's entire lifetime - the relationship is stable. 
-**A thread will be associated at most one ParkEvent.** 
-When the thread expires, the ParkEvent moves to the EventFreeList.
-New threads attempt to allocate from the EventFreeList before creating a new Event.
-Type-stability frees us from worrying about stale Event or Thread references in the objectMonitor subsystem.
-(A reference to ParkEvent is always valid, even though the event may no longer be associated with the desired or expected thread.
-A key aspect of this design is that the callers of park, unpark, etc must tolerate stale references and spurious wakeups).
+生命周期：
+一旦某个 ParkEvent 与某线程关联，它在整个线程生命周期内都保持关联——这种关系是稳定的。
+**一个线程最多关联一个 ParkEvent。**
+线程退出后，该 ParkEvent 会进入 EventFreeList。
+新线程在创建新事件前会先尝试从 EventFreeList 中分配。
+类型稳定性使我们从不必担心 objectMonitor 子系统中出现失效的 Event 或 Thread 引用。
+（对 ParkEvent 的引用始终有效，即便该事件可能已不再与期望的线程关联。
+这一设计的关键在于，park、unpark 等的调用方必须容忍失效引用与伪唤醒。）
 
-Only the "associated" thread can block (park) on the ParkEvent, although any other thread can `unpark` a reachable `parkevent`.
-**Park() is allowed to return spuriously.**
-In fact park-unpark a really just an optimization to avoid unbounded spinning and surrender the CPU to be a polite system citizen.
-A degenerate albeit "impolite" park-unpark implementation could simply return.
+只有「关联」的线程才能在 ParkEvent 上阻塞（park），但任何其他线程都可以 `unpark` 一个可达的 `parkevent`。
+**Park() 允许伪唤醒返回。**
+事实上，park-unpark 本质上只是一种避免无限自旋、主动让出 CPU 的礼貌性优化。
+一个退化但「不礼貌」的 park-unpark 实现甚至可以直接返回。
 
-Eventually I'd like to eliminate Events and ObjectWaiters, both of which serve as thread proxies, and simply make the THREAD structure type-stable and persistent.
-Currently, we unpark events associated with threads, but ideally we'd just unpark threads.
+最终我希望移除 Events 与 ObjectWaiters（二者都充当线程代理），直接让 THREAD 结构具备类型稳定且持久的特性。
+目前我们 unpark 与线程关联的事件，但理想情况下应该直接 unpark 线程。
 
-The base-class, PlatformEvent, is platform-specific while the ParkEvent is platform-independent.
-PlatformEvent provides park(), unpark(), etc., and is abstract -- that is, a PlatformEvent should never be instantiated except as part of a ParkEvent.
+基类 PlatformEvent 是平台相关的，而 ParkEvent 是平台无关的。
+PlatformEvent 提供 park()、unpark() 等，且是抽象的——也就是说，PlatformEvent 除作为 ParkEvent 的一部分外不应被单独实例化。
 
-Equivalently we could have defined a platform-independent base-class that exported Allocate(), Release(), etc.  
-The platform-specific class would extend that base-class, adding park(), unpark(), etc.
+等价地，我们也可以定义一个导出 Allocate()、Release() 等的平台无关基类，
+再由平台相关的类继承它并补充 park()、unpark() 等。
 
 
 ```cpp
@@ -267,23 +267,23 @@ class ParkEvent : public os::PlatformEvent {
 
 ### PlatformEvent
 
-Shared pthread_mutex/cond based PlatformEvent implementation.
-Not currently usable by Solaris.
+基于共享 pthread_mutex/cond 的 PlatformEvent 实现。
+目前 Solaris 尚不可用。
 
-Assumption:
-   Only one parker can exist on an event, which is why we allocate them per-thread. Multiple unparkers can coexist.
+前提假设：
+   一个事件上只能存在一个 parker，这正是我们按线程分配的原因。多个 unparker 可以共存。
 
-_event serves as a restricted-range semaphore.
-  -1 : thread is blocked, i.e. there is a waiter
-   0 : neutral: thread is running or ready,
-       could have been signaled after a wait started
-   1 : signaled - thread is running or ready
+_event 充当一个有限值域的信号量（semaphore）。
+  -1 : 线程已阻塞，即存在等待者
+   0 : 中性：线程正在运行或就绪，
+       可能在等待开始后已被唤醒
+   1 : 已唤醒——线程正在运行或就绪
 
-   Having three states allows for some detection of bad usage - see
-   comments on unpark().
+   三个状态可用于检测部分误用——详见
+   unpark() 上的注释。
 
-This is the platform-specific implementation underpinning the ParkEvent class, which itself underpins [Java-level monitor](/docs/CS/Java/JDK/Concurrency/synchronized.md) operations. See `park.hpp` for details.
-Events are associated with a thread for the lifetime of the thread.
+这是支撑 ParkEvent 类的平台相关实现，而 ParkEvent 类本身又支撑着 [Java-level monitor](/docs/CS/Java/JDK/Concurrency/synchronized.md) 操作。详见 `park.hpp`。
+事件在线程的整个生命周期内都与该线程关联。
 ```cpp
 
 // os/posix/os_posix.hpp

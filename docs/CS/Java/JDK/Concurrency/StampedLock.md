@@ -1,61 +1,61 @@
 ## Introduction
 
-A capability-based lock with three modes for controlling read/write access. 
-**The state of a StampedLock consists of a version and mode**. 
-Lock acquisition methods return a stamp that represents and controls access with respect to a lock state; 
-"try" versions of these methods may instead return the special value zero to represent failure to acquire access. 
-Lock release and conversion methods require stamps as arguments, and fail if they do not match the state of the lock. 
+一种基于能力（capability）的锁，提供三种模式来控制读/写访问。
+**StampedLock 的状态由一个版本号和模式（mode）组成**。
+加锁方法会返回一个邮戳（stamp），用来表示并控制对某个锁状态的访问；
+这些方法的 "try" 版本可能返回特殊值 0，表示获取访问失败。
+解锁与转换方法需要以邮戳作为参数，并且如果邮戳与锁状态不匹配就会失败。
 
-The three modes are:
+三种模式如下：
 
-Writing. Method writeLock possibly blocks waiting for exclusive access, returning a stamp that can be used in method unlockWrite to release the lock. 
-Untimed and timed versions of tryWriteLock are also provided.
-When the lock is held in write mode, no read locks may be obtained, and all optimistic read validations will fail.
+写模式（Writing）。writeLock 方法可能会阻塞以等待独占访问，返回一个可用于 unlockWrite 方法释放锁的邮戳。
+同时提供了 tryWriteLock 的无时限与有时限版本。
+当锁处于写模式时，无法获取任何读锁，并且所有乐观读校验都会失败。
 
-Reading. Method readLock possibly blocks waiting for non-exclusive access, returning a stamp that can be used in method unlockRead to release the lock. 
-Untimed and timed versions of tryReadLock are also provided.
+读模式（Reading）。readLock 方法可能会阻塞以等待非独占访问，返回一个可用于 unlockRead 方法释放锁的邮戳。
+同时提供了 tryReadLock 的无时限与有时限版本。
 
-Optimistic Reading. Method tryOptimisticRead returns a non-zero stamp only if the lock is not currently held in write mode. 
-Method validate returns true if the lock has not been acquired in write mode since obtaining a given stamp. 
-This mode can be thought of as an extremely weak version of a read-lock, that can be broken by a writer at any time. 
-The use of optimistic mode for short read-only code segments often reduces contention and improves throughput. 
-However, its use is inherently fragile. Optimistic read sections should only read fields and hold them in local variables for later use after validation. 
-Fields read while in optimistic mode may be wildly inconsistent, so usage applies only when you are familiar enough with data representations to check consistency and/or repeatedly invoke method `validate()`. 
+乐观读（Optimistic Reading）。tryOptimisticRead 方法仅当锁当前未被写模式持有时，才返回一个非零邮戳。
+validate 方法在获取给定邮戳之后锁未被写模式获取过的情况下返回 true。
+该模式可以看作是一种极弱的读锁，随时可能被写者打破。
+在短小的只读代码片段中使用乐观模式，通常能减少竞争并提升吞吐量。
+但它的使用本质上很脆弱。乐观读代码段应当只读取字段并将其保存在局部变量中，留待校验之后使用。
+在乐观模式下读取到的字段可能极其不一致，因此只有在你足够熟悉数据表示、能够检查一致性并/或反复调用 `validate()` 方法时才能使用。 
 
-For example, such steps are typically required when first reading an object or array reference, and then accessing one of its fields, elements or methods.
-This class also supports methods that conditionally provide conversions across the three modes. 
-For example, method tryConvertToWriteLock attempts to "upgrade" a mode, returning a valid write stamp if 
+例如，当先读取某个对象或数组引用、再访问其字段、元素或方法时，通常就需要这类步骤。
+本类还支持在三种模式之间进行有条件转换的方法。
+例如，tryConvertToWriteLock 方法会尝试"升级"模式，在以下情况下返回有效的写邮戳： 
 
-1. already in writing mode 
-2. in reading mode and there are no other readers or 
-3. in optimistic mode and the lock is available. 
+1. 已经处于写模式 
+2. 处于读模式，且没有其他读者 
+3. 处于乐观模式，且锁可用 
 
-The forms of these methods are designed to help reduce some of the code bloat that otherwise occurs in retry-based designs.
+这些方法的形式旨在减少基于重试的设计中本会出现的一些代码膨胀。
 
-StampedLocks are designed for use as internal utilities in the development of thread-safe components. 
-Their use relies on knowledge of the internal properties of the data, objects, and methods they are protecting. 
-They are not reentrant, so locked bodies should not call other unknown methods that may try to re-acquire locks (although you may pass a stamp to other methods that can use or convert it). 
-The use of read lock modes relies on the associated code sections being side-effect-free. 
-Unvalidated optimistic read sections cannot call methods that are not known to tolerate potential inconsistencies.
-Stamps use finite representations, and are not cryptographically secure (i.e., a valid stamp may be guessable).
-Stamp values may recycle after (no sooner than) one year of continuous operation.
-A stamp held without use or validation for longer than this period may fail to validate correctly.
-StampedLocks are serializable, but always deserialize into initial unlocked state, so they are not useful for remote locking.
+StampedLock 被设计为开发线程安全组件时的内部工具。
+它的使用依赖于对所保护数据、对象及方法内部特性的了解。
+它不可重入，因此被锁保护的代码体不应调用其他可能尝试重新获取锁的未知方法（不过，你可以把一个邮戳传给其他能够使用或转换它的方法）。
+读锁模式的使用依赖于相关代码段无副作用。
+未经校验的乐观读代码段不能调用那些无法确定能否容忍潜在不一致性的方法。
+邮戳采用有限位表示，且并非加密安全的（即一个有效邮戳有可能被猜测出来）。
+邮戳值会在连续运行（不早于）一年后发生回收。
+若邮戳在超过该时长后仍未被使用或校验，就可能无法通过校验。
+StampedLock 可序列化，但反序列化后总是处于初始未加锁状态，因此不适合用于远程加锁。
 
-The scheduling policy of StampedLock does not consistently prefer readers over writers or vice versa. 
-All "try" methods are best-effort and do not necessarily conform to any scheduling or fairness policy. 
-A zero return from any "try" method for acquiring or converting locks does not carry any information about the state of the lock; a subsequent invocation may succeed.
-Because it supports coordinated usage across multiple lock modes, this class does not directly implement the Lock or ReadWriteLock interfaces.
-However, a StampedLock may be viewed asReadLock(), asWriteLock(), or asReadWriteLock() in applications requiring only the associated set of functionality.
-Sample Usage. The following illustrates some usage idioms in a class that maintains simple two-dimensional points. 
-The sample code illustrates some try/catch conventions even though they are not strictly needed here because no exceptions can occur in their bodies.
+StampedLock 的调度策略并不会一味偏向读者或写者。
+所有 "try" 方法都是尽最大努力（best-effort）的，不一定遵循任何调度或公平性策略。
+任何用于获取或转换锁的 "try" 方法返回 0，并不携带关于锁状态的任何信息；随后的再次调用可能会成功。
+由于它支持跨多种锁模式的协调使用，本类并未直接实现 Lock 或 ReadWriteLock 接口。
+不过，在只需要相应功能集的应用中，可以将 StampedLock 视为 asReadLock()、asWriteLock() 或 asReadWriteLock()。
+使用示例。下面展示了在一个维护简单二维点的类中用法的惯用写法。
+示例代码展示了一些 try/catch 约定，尽管这里并非严格需要，因为其方法体内不会发生任何异常。
 
 
 
 ## Sample
 
-Sample Usage. The following illustrates some usage idioms in a class that maintains simple two-dimensional points.
-The sample code illustrates some try/catch conventions even though they are not strictly needed here because no exceptions can occur in their bodies. 
+使用示例。下面展示了在一个维护简单二维点的类中用法的惯用写法。
+示例代码展示了一些 try/catch 约定，尽管这里并非严格需要，因为其方法体内不会发生任何异常。 
 
 ```java
 class Point {
@@ -117,13 +117,13 @@ class Point {
 
 #### validate()
 
-use [Unsafe#loadFence()](/docs/CS/Java/JDK/Basic/unsafe.md?id=memory-barrier)
+使用 [Unsafe#loadFence()](/docs/CS/Java/JDK/Basic/unsafe.md?id=memory-barrier)
 
-1. Returns true if the lock has not been exclusively acquired since issuance of the given stamp.
-2.  Always returns false if the stamp is zero.
-3.  Always returns true if the stamp represents a currently held lock. 
+1. 若自给定邮戳（stamp）签发以来该锁未被独占获取，则返回 true。
+2. 若邮戳为零，则始终返回 false。
+3. 若邮戳表示一个当前持有的锁，则始终返回 true。
 
-Invoking this method with a value not obtained from `tryOptimisticRead` or a locking method for this lock has no defined effect or result.
+若传入的不是通过本锁的 `tryOptimisticRead` 或加锁方法获取到的邮戳，调用本方法没有定义的效果或结果。
 
 
 ```java
@@ -625,16 +625,19 @@ interrupt() 可能会导致 CPU 使用率飙升。
 
 |           | StampedLock                             | ReentrantReadWriteLock    |
 | --------- | --------------------------------------- | ------------------------- |
-| Mode      | Support Read/Write/OptimisticRead       | Support Read/Write        |
-| Reentrant | not support(dead lock when write twice) | support                   |
-| Lock      | support Read <-> Write                  | not support Read -> Write |
-| Condition | not support                             | support                   |
+| 模式      | 支持 读/写/乐观读                        | 支持 读/写                |
+| 可重入    | 不支持（写两次会死锁）                   | 支持                      |
+| 锁        | 支持 读 <-> 写                          | 不支持 读 -> 写           |
+| 条件      | 不支持                                  | 支持                      |
 |           |                                         |                           |
 
 
 ## Links
 - [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
 - [AQS](/docs/CS/Java/JDK/Concurrency/AQS.md)
+- [Lock](/docs/CS/Java/JDK/Concurrency/Lock.md)
+- [ReentrantLock](/docs/CS/Java/JDK/Concurrency/ReentrantLock.md)
+- [ReadWriteLock](/docs/CS/Java/JDK/Concurrency/ReadWriteLock.md)
 
 ## References
 

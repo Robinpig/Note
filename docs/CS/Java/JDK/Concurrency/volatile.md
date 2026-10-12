@@ -175,6 +175,7 @@ inline void OrderAccess::fence() {
 
 - [Concurrency](/docs/CS/Java/JDK/Concurrency/Concurrency.md)
 - [JMM](/docs/CS/Java/JDK/Concurrency/JMM.md)
+- [VarHandle](/docs/CS/Java/JDK/Concurrency/VarHandle.md)
 - [Atomic](/docs/CS/Java/JDK/Concurrency/Atomic.md)
 - [synchronized](/docs/CS/Java/JDK/Concurrency/synchronized.md)
 

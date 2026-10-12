@@ -1,14 +1,14 @@
 ## Introduction
 
-This class provides thread-local variables. 
-These variables differ from their normal counterparts in that each thread that accesses one (via its get or set method) has its own, independently initialized copy of the variable. 
-**ThreadLocal instances are typically private static fields in classes that wish to associate state with a [thread](/docs/CS/Java/JDK/Concurrency/Thread.md) (e.g., a user ID or Transaction ID)**.
+ThreadLocal 提供线程局部变量（thread-local variable）。
+与普通变量不同，每个访问该变量的线程（通过 get 或 set 方法）都拥有变量的一份独立初始化副本。
+**ThreadLocal 通常是类中用于把状态与 [thread](/docs/CS/Java/JDK/Concurrency/Thread.md) 关联的私有静态字段（例如用户 ID 或事务 ID）**。
 
-Each thread holds an implicit reference to its copy of a thread-local variable as long as the thread is alive and the ThreadLocal instance is accessible; 
-**after a thread goes away, all of its copies of thread-local instances are subject to garbage collection (unless other references to these copies exist**).
+只要线程存活且 ThreadLocal 实例可达，该线程就隐式持有其线程局部变量副本的引用；
+**线程结束后，除非还存在指向这些副本的其他引用，否则 ThreadLocal 实例的全部副本都将被垃圾回收**。
 
 
-> Don't Cache Expensive Reusable Objects in Thread-Local Variables
+> 不要把昂贵且可复用的对象缓存在 ThreadLocal 变量里
 
 ## ThreadLocal
 
@@ -43,9 +43,9 @@ public class ThreadLocal<T> {
 
 ### Set value in ThreadLocal
 
-`ThreadLocalMap map=getMap(t)` actually get **ThreadLocal.ThreadLocalMap** of currentThread
+`ThreadLocalMap map=getMap(t)` 实际获取的是当前线程的 **ThreadLocal.ThreadLocalMap**
 
-`create ThreadLocalMap when set the first value`
+在第一次 set 值时创建 ThreadLocalMap
 
 ```java
 public class ThreadLocal<T> {
@@ -75,11 +75,11 @@ public class ThreadLocal<T> {
 
 **ThreadLocalMap**
 
-Create ThreadLocalMap at **first set/get in ThreadLocal**.
+在 ThreadLocal 中**首次 set/get 时创建 ThreadLocalMap**。
 
-ThreadLocalMap is a customized hash map suitable only for maintaining thread local values. No operations are exported outside of the ThreadLocal class. **The class is package private to allow declaration of fields in class Thread.** To help **deal with very large and long-lived usages, the hash table entries use WeakReferences for keys**. 
+ThreadLocalMap 是一种定制化的哈希表，仅用于维护线程局部值，不对外暴露任何操作。**该类被声明为包私有（package private），以便在 Thread 类中声明相关字段。** 为应对**超大规模、长生命周期的使用场景，哈希表的条目（entry）对 key 使用了弱引用（WeakReference）**。
 
-However, since **reference queues are not used, stale entries are guaranteed to be removed only when the table starts running out of space**.
+但由于**未使用引用队列（reference queue），过期条目（stale entry）只有在表空间即将耗尽时才会被保证清除**。
 
 ```Java
 static class ThreadLocalMap {
@@ -109,7 +109,7 @@ static class ThreadLocalMap {
 
 **Entry**
 
-The entries in this hash map **extend WeakReference**, using its **main ref field as the key (which is always a ThreadLocal object)**. Note that **null keys (i.e. entry.get() == null) mean that the key is no longer referenced, so the entry can be expunged from table**. Such entries are referred to as "**stale entries**" in the code that follows.
+该哈希表中的条目**继承自 WeakReference**，以**主引用字段（main ref field）作为 key（始终是 ThreadLocal 对象）**。需要注意：**key 为 null（即 entry.get() == null）意味着该 key 已不再被引用，因此该条目可从表中清除**。后文将这类条目称为 "**stale entries（过期条目）**"。
 
 ```java
 static class Entry extends WeakReference<ThreadLocal<?>> {
@@ -125,12 +125,12 @@ static class Entry extends WeakReference<ThreadLocal<?>> {
 
 ### hash
 
-ThreadLocals rely on **per-thread linear-probe hash maps** attached to each thread (**Thread.threadLocals and inheritableThreadLocals**). 
-The ThreadLocal objects act as keys, searched via threadLocalHashCode. This is a custom hash code (**useful only within ThreadLocalMaps**) that **eliminates collisions in the common case where consecutively constructed ThreadLocals are used by the same threads**, while remaining well-behaved in less common cases.
+ThreadLocal 依赖**绑定在每个线程上的线性探测（linear-probe）哈希表**——即 **Thread.threadLocals 与 inheritableThreadLocals**。
+ThreadLocal 对象作为 key，通过 threadLocalHashCode 检索。这是一个定制哈希码（**仅在 ThreadLocalMap 内部有意义**），它**在「连续构造的 ThreadLocal 被同一批线程使用」这一常见情况下消除了哈希冲突**，同时在少见情况下也表现良好。
 
 **HASH_INCREMENT = 0x61c88647**
 
-The difference between successively generated hash codes - turns implicit sequential thread-local IDs into **near-optimally spread multiplicative hash values** for **power-of-two-sized tables**.
+连续生成的哈希码之间的差值，把隐式的顺序线程局部 ID 转化为适用于**容量为 2 的幂次（power-of-two-sized）的表**的**近乎最优散布的乘法哈希值**。
 
 ` 0x61c88647 = (long) ((1L << 31) * (Math.sqrt(5) - 1))`
 
@@ -149,7 +149,7 @@ private static int nextHashCode() {
 
 ### Set in ThreadLocalMap
 
-We don't use a fast path as with get() because it is at  least as common to use set() to create new entries as it is to replace existing ones, in which case, a fast path would fail more often than not.
+这里不像 get() 那样走快速路径，因为通过 set() 创建新条目与替换已有条目同样常见；若设置快速路径，多数情况下反而会失效。
 
 ```java
 private void set(ThreadLocal<?> key, Object value) {
@@ -185,14 +185,14 @@ private void set(ThreadLocal<?> key, Object value) {
 
 ### replaceStaleEntry
 
-Replace a stale entry encountered during a set operation with an entry for the specified key. The value passed in the value parameter is stored in the entry, whether or not an entry already exists for the specified key. As a side effect, this method expunges all stale entries in the "run" containing the stale entry. (**A run is a sequence of entries between two null slots**.)
+用指定 key 的条目替换 set 过程中遇到的过期条目；无论该 key 是否已存在条目，传入的 value 都会被存入条目。其副作用是：会清除包含该过期条目所在的 "run" 中的所有过期条目。（**run 指两个 null 槽位之间的一段连续条目**。）
 
-1. Back up to find prior stale entry util the null entry
-2. From staleSlot to check the key of  entry util the null entry
-   1. if find key, swap and expunge
-   2. If key not found, put new entry in stale slot
-      1. If we didn't find stale entry on backward scan, the first stale entry seen while scanning for key is the first still present in the run.
-      2. If there are any other stale entries in run, expunge them
+1. 向前回溯，找到上一个过期条目，直到遇到 null 槽位
+2. 从 staleSlot 开始向后检查条目的 key，直到遇到 null 槽位
+   1. 若找到匹配的 key，交换位置并清除过期条目
+   2. 若未找到 key，把新条目放入 stale 槽位
+      1. 若向后扫描时没发现过期条目，则在查找 key 的过程中遇到的第一个过期条目，即为该 run 中现存的第一个过期条目
+      2. 若 run 中还有其它过期条目，一并清除
 
 ```java
 private void replaceStaleEntry(ThreadLocal<?> key, Object value,
@@ -259,11 +259,11 @@ private void replaceStaleEntry(ThreadLocal<?> key, Object value,
 
 ### cleanSomeSlots
 
-**Heuristically scan some cells looking for stale entries.**
+**启发式地扫描部分槽位，寻找过期条目。**
 
-This is invoked when either a new element is **added**, or another stale one has been **expunged**.
+该方法在新增一个元素、或清除另一个过期条目时被调用。
 
-It **performs a logarithmic number of scans**, as a balance between no scanning (fast but retains garbage) and a number of scans proportional to number of elements, that would find all garbage but **would cause some insertions to take O(n) time**.
+它**执行的扫描次数为对数级**，是在「完全不扫描（快但会保留垃圾）」与「扫描次数与元素数量成正比（能找全垃圾，但**会让部分插入操作退化为 O(n) 时间**）」之间的折中。
 
 ```java
 private boolean cleanSomeSlots(int i, int n) {
@@ -289,10 +289,10 @@ private boolean cleanSomeSlots(int i, int n) {
 
 ### expungeStaleEntry
 
-1. Expunge a stale entry by **rehashing any possibly colliding entries lying between staleSlot and the next null slot**.
-2. This also **expunges any other stale entries encountered before the trailing null**.
+1. 清除过期条目，并对 **staleSlot 与下一个 null 槽位之间、可能发生哈希冲突的条目重新散列**。
+2. 同时**清除末尾 null 之前遇到的所有其它过期条目**。
 
-**See Knuth, Section 6.4 -- todo**
+**参见 Knuth 第 6.4 节——待补充**
 
 ```java
 private int expungeStaleEntry(int staleSlot) {
@@ -337,8 +337,8 @@ private int expungeStaleEntry(int staleSlot) {
 
 ### rehash
 
-1. expungeStaleEntries and decrement size
-2. if size >= threshold - threshold / 4, double the capacity of the table
+1. 清除所有过期条目，并递减 size
+2. 若 size >= threshold - threshold / 4，将表容量翻倍
 
 ```java
 private void rehash() {
@@ -399,7 +399,7 @@ private void resize() {
 
 ### Get in ThreadLocal
 
-Returns the value in the current thread's copy of this thread-local variable. If the variable has no value for the current thread, it is first initialized to the value returned by an invocation of the initialValue method.
+返回当前线程中该线程局部变量的副本值。若该变量对当前线程尚无值，则先以调用 initialValue 方法返回的值完成初始化。
 
 ```java
 public T get() {
@@ -473,11 +473,11 @@ private Entry getEntryAfterMiss(ThreadLocal<?> key, int i, Entry e) {
 
 ### remove in ThreadLocal
 
-Removes the current thread's value for this thread-local variable.
+移除当前线程中该线程局部变量的值。
 
-If this thread-local variable is subsequently read by the current thread, its value will be reinitialized by invoking its initialValue method, unless its value is set by the current thread in the interim. **This may result in multiple invocations of the initialValue method in the current thread**.
+若当前线程随后再次读取该线程局部变量，除非期间已由当前线程赋值，否则其值会通过调用 initialValue 方法重新初始化。**这可能导致当前线程中反复调用 initialValue 方法**。
 
-**Invoke remove method if no longer used.** 
+**不再使用时请调用 remove 方法。** 
 
 ```java
      public void remove() {
@@ -598,14 +598,14 @@ JDK 25 转正的 [ScopedValue](/docs/CS/Java/JDK/Concurrency/ScopedValues.md) �
 
 ## Practice
 
-1. session/token for use
-2. TraceId for trace request
+1. 保存 session/token 供使用
+2. 用 TraceId 追踪请求
 
 
 
 
 
-[TransmittableThreadLocal](https://github.com/alibaba/transmittable-thread-local) is a missing Java std lib(simple & 0-dependency) for framework/middleware, provide an enhanced InheritableThreadLocal that transmits values **between threads even using thread pooling components**.
+[TransmittableThreadLocal](https://github.com/alibaba/transmittable-thread-local) 是 Java 标准库中缺失的一环（简单、零依赖），面向框架与中间件，提供了一个增强版的 InheritableThreadLocal，可**在线程池等复用线程的组件场景下，仍然在线程之间传递值**。
 
 
 
