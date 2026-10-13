@@ -1,139 +1,182 @@
 ## Introduction
 
-**OpenClaw** 并不是传统意义上像 LangChain 或 AutoGen 那样侧重于“复杂任务拆解与多智能体协作”的底层算法框架，而是一个**极其强大、本地优先（Local-first）的个人 AI 助手网关与运行平台**。它的核心目标是打造一个运行在你自己设备上的“全能数字管家”，能够接管你所有的通讯渠道，并具备强大的本地工具执行能力
+**OpenClaw** 是一个 **terminal-first 的个人 / 团队 AI 助手平台**，本质上是一套 **AI agent 编排系统**：prompts、tools、protocols、integrations 都由它统一编排，因此主语言选 TypeScript（可 hack、易读、迭代快）。它不服务于「写代码」这一类场景，而是要成为运行在用户自己设备上的「全能数字管家」——通过一个本地常驻的 Gateway，把 AI 能力分发到日常使用的通讯软件与原生客户端里。
 
-OpenClaw 的架构可以概括为：**“网关驱动（Gateway-driven） + 本地优先（Local-first） + 多智能体路由（Multi-agent Routing）”**。
+两条设计哲学决定了整个架构：
 
-它的核心哲学是：**Gateway（网关）只是控制平面，真正的产品是那个无处不在的助手。** 它不依赖于云端 SaaS，而是将 AI 的能力通过统一的控制平面，分发到你日常使用的所有 20 多种通讯软件中
+- **隐私与安全优先**：默认把数据与控制权留在本地，Gateway 是用户自己的服务，不依赖云端 SaaS。
+- **精简 core + 插件化**：core 里每多一个 tool / prompt / config key，都会对每次模型请求产生「按调用征税」的成本，所以可选能力一律下沉到插件、skills、channels、apps。
 
-## Architecture
+项目历史上经历过多次改名：**Warelay → Clawdbot → Moltbot → OpenClaw**。运行形态有两种：**个人安装**（独占一台设备）与 **共享 Gateway**（团队协作，同一 session 可承载多个人类、信用与历史）。
 
-OpenClaw 的架构可以清晰地划分为以下五个核心层：
+架构一句话概括：**Gateway 驱动 + 本地优先 + 多 agent 路由**——Gateway 只是控制平面，真正的产品是那个无处不在的助手；入站消息按来源（渠道、账户、联系人或群组）路由到相互隔离的 Agent 工作区，每个人设、记忆、文件与上下文完全隔离。
 
-#### 1. Channel Adapters Layer (Channel Adapters Layer)
+另有一条贯穿全栈的主线：**run authority / live authority**——任何执行前先认领权限，副作用前再重校验。它在渠道准入、worker placement、会话写路径、压缩、审批、出站投递里反复出现，形态各异而内核同一；[Security](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Security.md?id=the-authority-chain) 页末尾把这条主线完整串了一遍，是理解全篇最省力的一条线索。
 
-这是 OpenClaw 最直观的“触角”，采用了经典的**适配器模式（Adapter Pattern）**。
+## Architecture Map
 
-- **功能**：将极其碎片化的通讯协议统一抽象为标准化的内部消息格式。
-- **覆盖面**：支持高达 20+ 种主流 IM，包括 WhatsApp、Telegram、Slack、Discord、Signal、iMessage、微信（WeChat）、QQ、飞书（Feishu）、Matrix 等。
-- **架构意义**：实现了“一次接入，全渠道响应”。无论用户从哪个 App 发消息，Gateway 都能无缝接收并路由。
+下面这张图是 OpenClaw 的总架构。读法：**左侧一列自上而下是主链路**（入口 → Gateway → 路由 → 执行内核 → provider），**右侧三块**分别是工具与扩展、执行位置、存储，**顶部右侧**是贯穿全栈的横切层（安全与观测），它们用虚线挂在所约束的层上。
 
-#### 2. Gateway & Control Plane (Gateway & Control Plane)
+抓住两个事实就够：Gateway 只是控制平面、自己不跑模型；而执行位置可以是本机也可以是远端 worker，两者都受同一套 turn claim 约束。
 
-这是 OpenClaw 的**核心枢纽（大脑）**，完全由 TypeScript/Node.js 构建。
+```dot
+digraph openclaw_architecture {
+  rankdir=TB;
+  node [shape=box, style="rounded,filled", fillcolor="#eef3fb", fontname="Helvetica", fontsize=10];
+  edge [color="#5a6673", fontsize=9];
 
-- **会话与状态管理**：维护所有渠道的长连接、消息队列和会话上下文。
-- **多智能体路由 (Multi-agent Routing)**：这是其架构的灵魂。它不是把所有消息扔给同一个大模型，而是**根据消息来源（渠道、账户、特定联系人或群组），将消息路由到不同的、相互隔离的 Agent（工作区）**。
-- **事件总线**：处理工具调用结果、系统事件和异步任务。
+  subgraph cluster_ingress {
+    label="Ingress · 入口形态";
+    style="rounded,filled"; fillcolor="#fdf6ec"; color="#c8a97e";
+    node [fillcolor="#fce9cd"];
+    cli  [label="CLI / TUI / wizard"];
+    app  [label="Native Apps (Swift)\n设备身份 + WS"];
+    ui   [label="Control UI\n同端口挂载"];
+    chan [label="Channels\nSlack / Telegram / WhatsApp…"];
+    ext  [label="外部协议面\nOpenAI API · ACP · MCP"];
+  }
 
-#### 3. Agent Runtime & Workspace (Agent Runtime & Workspace)
+  subgraph cluster_gateway {
+    label="Gateway · 控制平面 (18789 单端口)";
+    style="rounded,filled"; fillcolor="#eaf1fb"; color="#7d97b8";
+    node [fillcolor="#dbe7f7"];
+    transport [label="单端口多路复用\nHTTP + WS RPC + Control UI"];
+    rpcs      [label="RPC 方法面与派发围栏\n规格表 · 节流 · 授权"];
+    lifecycle [label="热重载与生命周期\nconfig-reload · node-registry"];
+    display   [label="展示投影\nchat-display-projection"];
+  }
 
-在 Gateway 之下，是具体的 Agent 运行环境。
+  routing [label="纯函数路由\n九档 binding + matchedBy", fillcolor="#e4eef7"];
 
-- **Workspace 隔离**：每个被路由到的 Agent 拥有独立的工作区（Workspace）和独立的会话状态（Per-agent sessions）。这意味着你的“工作助手 Agent”和“家庭助手 Agent”不仅人设不同，其记忆、文件和上下文也是完全物理/逻辑隔离的。
-- **本地上下文**：Agent 可以读取本地文件系统，实现真正的“个人助理”功能（如整理本地笔记、管理本地代码等）。
+  subgraph cluster_runtime {
+    label="Runtime · 执行内核";
+    style="rounded,filled"; fillcolor="#eef7ee"; color="#8bb089";
+    node [fillcolor="#dff0df"];
+    admit    [label="admitted run\nturn claim / run authority"];
+    loop     [label="双层循环\nrun 重试 + turn 内 tool-call"];
+    provider [label="Provider 抽象\nllm-core → provider 插件"];
+    ctx      [label="上下文构建与压缩\n九步拼装 · 四路由"];
+  }
 
-#### 4. Tool & Sandbox Execution Layer (Tool & Sandbox Execution)
+  subgraph cluster_tools {
+    label="Tools · Extensions";
+    style="rounded,filled"; fillcolor="#f5eef8"; color="#a58cb5";
+    node [fillcolor="#e9dcf1"];
+    tools   [label="四类 tool 来源汇聚\n内置 · 插件 · channel · MCP"];
+    plugins [label="插件两平面\ncontrol-plane / runtime-plane"];
+    mcp     [label="MCP 双边\nserver + client"];
+  }
 
-这是 OpenClaw 在**安全性与能力**之间取得平衡的关键架构设计。它提供了一个极其精细的安全模型：
+  subgraph cluster_storage {
+    label="Storage · 全部 SQLite";
+    style="rounded,filled"; fillcolor="#f2f4f7"; color="#8f98a3";
+    node [fillcolor="#e4e8ee"];
+    rw       [label="投影读 / 分层写\ncommit guard + writer fence"];
+    shared   [label="共享 state DB\nlease · audit · approval"];
+    peragent [label="per-agent SQLite\ntranscript · session_nodes"];
+  }
 
-- **Main Session（主会话/单用户模式）**：默认情况下，如果是你本人直接与 Agent 交互（Main session），工具（如执行 Shell 命令、读写文件）**直接在宿主机（Host）上运行**。这赋予了 Agent 最高的本地控制权限，实现“极致的本地体验”。
-- **Non-main Session（非主会话/多用户/群聊模式）**：当 Agent 在群聊中，或者处理来自不可信联系人的消息时，架构会自动切换安全策略。通过配置 `sandbox.mode: "non-main"`，Agent 的工具执行会被强制放入**沙箱**中。
-- **沙箱后端支持**：默认使用 **Docker** 进行容器级隔离，同时也支持 **SSH** 和 **OpenShell** 后端，确保即使 Agent 被恶意 Prompt 注入，也无法破坏宿主机。
+  subgraph cluster_place {
+    label="Execution Placement";
+    style="rounded,filled"; fillcolor="#fdf0f0"; color="#c08989";
+    node [fillcolor="#f8dcdc"];
+    local  [label="local embedded"];
+    worker [label="远端 worker\nplacement + turn claim"];
+  }
 
-#### 5. Client & UI Layer (Client & UI Layer)
+  subgraph cluster_cross {
+    label="Cross-cutting · 横切";
+    style="rounded,filled"; fillcolor="#fffbe8"; color="#c9b96a";
+    node [fillcolor="#fdf3cf"];
+    sec [label="Security / Audit\nEd25519 · scope · approval"];
+    obs [label="Observability\nlogging · diagnostics · trajectory"];
+  }
 
-除了 IM 渠道，OpenClaw 还提供了原生的富交互客户端。
+  cli -> transport; app -> transport; ui -> transport; chan -> transport; ext -> transport;
+  transport -> rpcs;
+  rpcs -> routing [label="入站信封"];
+  routing -> admit [label="routeSessionKey"];
+  admit -> loop;
+  loop -> provider;
+  loop -> ctx [label="每轮拼装"];
+  ctx -> provider [label="压缩后重投影"];
+  loop -> tools [label="tool_use"];
+  tools -> loop [label="回灌 tool_result", style=dashed];
+  plugins -> tools; mcp -> tools;
+  admit -> local; admit -> worker;
+  lifecycle -> display;
+  loop -> rw [label="回写"];
+  rw -> shared; rw -> peragent;
 
-- **跨平台原生应用**：使用 **Swift (macOS/iOS)** 和 **Kotlin (Android)** 开发，保证了在移动端的语音交互（Speak and Listen）体验极其流畅和低延迟。
-- **Live Canvas**：支持在客户端渲染动态的、可控的 Canvas（画布），用于展示复杂的 UI、图表或交互式内容，突破了纯文本聊天的限制。
+  // 以下边只表达语义、不参与分层约束，避免把主干拉偏
+  routing -> rw [label="读投影", constraint=false];
+  display -> peragent [label="读 transcript", style=dashed, constraint=false];
+  sec -> rpcs [style=dashed, color="#c9892f", constraint=false];
+  sec -> admit [style=dashed, color="#c9892f", constraint=false];
+  sec -> rw [style=dashed, color="#c9892f", label="live authority", constraint=false];
+  obs -> rpcs [style=dashed, color="#2f8fc9", constraint=false];
+  obs -> loop [style=dashed, color="#2f8fc9", constraint=false];
+  obs -> peragent [style=dashed, color="#2f8fc9", constraint=false];
+}
+```
 
+三条读图提示：
 
+- **Gateway 不是执行者**。它负责接入、路由、投影、授权与广播；真正跑模型的是它下游的 Runtime，且可以落在本机也可以落在远端 worker。
+- **工具调用是一条闭环**，不是单向：`loop → tools` 出去、`tools → loop` 回灌 `tool_result`，压缩与上下文构建就挂在这条闭环上。
+- **虚线是校验与记录，不是数据流**。橙色是 live authority（每次副作用前重校验），蓝色是观测与审计落盘——它们不改变主链路走向。九个校验点的完整串联见 [Security](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Security.md?id=the-authority-chain)。
 
-## Memory
+## Tech Stack and Monorepo Layout
 
-OpenClaw 的所有核心记忆都以纯文本 Markdown 文件的形式存储在用户的本地文件系统中（通常位于 ~/.openclaw/workspace/memory/ 目录下）
+pnpm workspace 组织：
 
+```
+packages:
+  - .              # 根包 = 主运行时（构建到 dist/）
+  - ui             # Control UI 前端
+  - packages/*     # 共享核心库
+  - extensions/*   # 插件
+  - examples/*
+```
 
-OpenClaw 的内置记忆系统模仿了人类的海马体-新皮层记忆巩固机制，分为短期和长期两层
-GitHub
-：
-短期/每日记忆（Daily Logs）：系统会自动创建 memory/YYYY-MM-DD.md 文件，作为每日的追加日志（append-only）
-博客园
-。在每次会话（Session）启动时，系统会自动加载“今天”和“昨天”的日志，为 AI 提供最新的短期上下文
-en.1991421.cn
-。
-长期/核心记忆（Curated Memory）：MEMORY.md 文件用于存储经过提炼的长期记忆
-GitHub
-。这里存放着用户的核心偏好、重要事实、长期项目状态等需要永久记住的信息。
-记忆巩固（Consolidation）：系统会通过特定的机制（如 Memory Hook 或子代理），定期审查每日的短期日志，并将其中重要的信息提取、总结并写入到 MEMORY.md 中，完成从短期到长期的“记忆巩固”
-GitHub
-。
+| 层 | 语言 | 目录 | 职责 |
+| :--- | :--- | :--- | :--- |
+| 主运行时（core） | TypeScript | `src/` | Gateway、CLI、agents、channels、plugins、llm、state、config 等，构建产物 `dist/` |
+| 共享核心库 | TypeScript | `packages/` | `agent-core`、`llm-core`、`gateway-client`、`plugin-sdk`、`gateway-protocol`、`model-catalog-core` 等 |
+| 插件 | TypeScript | `extensions/` | 模型 provider（anthropic / bedrock / deepseek / openai…）、消息 channel（telegram / whatsapp / slack…）、工具与能力插件（browser / canvas / memory…） |
+| 原生客户端 | Swift 为主 | `apps/` | macOS / iOS / Android / Linux 等跨端应用 |
+| Rust 组件 | Rust | `crates/` | 只承担两件边界事：远端 Node worker 的 Rust 宿主（`openclaw-node-host`）与 Gateway WebSocket 客户端库（`openclaw-gateway-client`） |
+| 控制界面 | TypeScript | `ui/` | Web Control UI，与 Gateway 共享状态 |
 
+技术栈结论：**TypeScript 编排核心为中枢，Swift 负责跨端原生体验，Rust 仅是「边界库」而非主体**。macOS / iOS 原生 app 走 Swift 原生 `OpenClawKit.GatewayChannelActor`，不经过 Rust；Rust gateway-client 实际主要服务远端 node worker。
 
+启动链本身也分层：`openclaw.mjs` 这个 launcher 只做 Node 运行时校验（`node:sqlite` 能力、Node ≥ 24.16 / ≥ 26.1）与 compile-cache respawn，真正逻辑在 `dist/entry.js`——**launcher 不等于 runtime**。
 
+## How to Read the Subsystem Notes
 
-虽然源文件是 Markdown，但为了实现高效的检索，OpenClaw 在底层实现了向量化和索引机制：
-本地 SQLite 向量库：OpenClaw 会将 MEMORY.md 和 memory/*.md 等文件切分成块（例如约 400 个 Token，80 个 Token 的重叠），生成向量嵌入，并存储在本地每个 Agent 专属的 SQLite 数据库中（如 ~/.openclaw/memory/.sqlite）[[8], [10]]。
-Active Memory（主动记忆）：这是一个可选的、由插件拥有的阻塞型记忆子代理（sub-agent）
-docs.openclaw.ai
-。它会在 AI 生成主要回复之前运行，根据当前对话自动在向量库中搜索相关记忆，并将其注入到上下文中。
-Memory Hooks（记忆钩子）：系统通过会话记忆钩子（session-memory hook）监听对话事件（如会话结束或特定触发词），自动将上下文刷新并持久化到记忆文件中
-lucaberton.com
-。
+这一组笔记按「控制面 → 执行内核 → 边界」的顺序展开。先从 [Gateway](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Gateway.md) 入手：它是全仓最大的子系统，也是唯一枢纽，18789 单端口同时承载 HTTP、WebSocket RPC 与 Control UI，理解它的两阶段启动（control-plane 预载、runtime-plane 挂载）才能看懂后面所有子系统的挂载时机；它的 RPC 方法面与 OpenAI 兼容 API 也在同一页。
 
-### Multi-Slot Memory
+往下一层是执行内核 [Runtime](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Runtime.md)：所谓 provider 的 tool-call 循环其实不在 provider 代码里，真正的循环是 provider 无关的，位于 `packages/agent-core`；同一页还覆盖模型清单装配、上下文压缩的四条路由、纯文本优先的记忆机制，以及子代理如何复用父 run 的 worker turn 而非重新认领。工具从哪来属于 [Plugins](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Plugins.md)——control-plane 与 runtime-plane 分离、两个激活 planner、以及 Claw 包从 plan 到 consent 再到 apply 的事务链。
 
-OpenClaw 的内置 Markdown 系统虽然优秀，但在处理超大规模上下文或复杂知识图谱时可能存在瓶颈。为此，OpenClaw 设计了多插槽记忆架构（Multi-Slot Memory Architecture）
-GitHub
-。
-这意味着 OpenClaw 支持插件化替换，用户可以完全替换默认的记忆提供者，接入更高级的第三方方案
-GitHub
-。
-社区生态与高级插件：
-QMD (Query-Memory-Database)：一种混合检索引擎，能大幅提升记忆召回率[[14], [16]]。
-Mem0 / MemSearch：第三方记忆插件，提供跨会话的持久化记忆、多层级架构或知识图谱支持[[2], [9], [17]]。
-Obsidian 集成：用户可以直接将 Obsidian 笔记库作为外部大脑接入 OpenClaw
-GitHub
-。
-分层记忆（Hierarchical Memory）：用轻量级索引+下钻详情文件来替代扁平的 MEMORY.md，以解决记忆文件过大导致的 Token 消耗问题[[6], [11]]。
-总结
+消息的两端在 [Channels](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Channels.md)：具体渠道（Slack / Telegram / WhatsApp 等）全是 extension 插件，`src/channels/` 只留核心机制层；入站是一条 adapter-driven 的 turn 管线，出站分被动 reply 与主动 send 两条路。消息落在哪个会话、怎么落盘由 [Storage](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Storage.md) 决定：全库只有 SQLite 一种存储，读侧走内存投影、写侧走带 commit guard 的分层链路，远端执行还有一套 worker placement 与 turn claim 的状态机。
 
-
-## SubAgent
-
-
-
-在 OpenClaw 的架构中，主 Agent 和子代理之间存在着明确的层级关系和通信机制：
-
-创建关系：主 Agent 通过 sessions_spawn 工具创建子代理，可以指定子代理的任务描述、使用的模型、超时时间等参数。
-
-通信机制：子代理执行完成后，结果会自动推送给主 Agent。主 Agent 无需轮询检查子代理状态，这种推送机制减少了不必要的资源消耗。
-
-状态管理：主 Agent 可以通过 subagents 工具查看当前活跃的子代理列表，也可以在必要时终止或引导子代理的行为。
-
-资源继承：子代理可以继承主 Agent 的部分资源和权限，如文件系统访问、网络访问等，但也可以被限制在特定的权限范围内。
-
-sessions_spawn 工具详解
-
-sessions_spawn 是 OpenClaw 框架中用于创建子代理的核心工具。通过这个工具，主 Agent 可以动态创建新的子代理实例，并为其分配特定的任务。sessions_spawn 的设计遵循"简单易用、灵活可控"的原则，提供了丰富的参数配置选项。
-
-
-
-
-
-
-
+安全那条主线集中在 [Security](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Security.md)：设备身份用 Ed25519 签名证明持有私钥、operator scope 是 8 个闭集且未分类 default-deny、审批状态机直接写死在 DDL 的 CHECK 元组里；该页末尾的 The Authority Chain 把九个校验点串成一张图，值得单独读一遍。剩下三页是边界：外部 agent 互操作与多模态 I/O 在 [Integrations](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Integrations.md)，入口形态与部署托管（含 Daemon 与 Fleet）在 [Clients](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Clients.md)，日志诊断与执行轨迹导出在 [Observability](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Observability.md)。
 
 ## Links
 
-- [TypeScript](/docs/CS/TypeScript/TypeScript.md)
-- [Nodejs](/docs/CS/front-end/Nodejs.md)
-- [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md) / [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md)
-
-
+- [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md)
+- [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md)
+- [MCP](/docs/CS/AI/LLM/Protocol/MCP.md)
+- [Codex](/docs/CS/AI/LLM/Agent/Product/Codex.md) / [OpenCode](/docs/CS/AI/LLM/Agent/Product/OpenCode.md)
+- [TypeScript](/docs/CS/TypeScript/TypeScript.md) / [Nodejs](/docs/CS/front-end/Nodejs.md)
 
 ## References
 
-1. [深入理解OpenClaw技术架构与实现原理（上）-阿里云开发者社区](https://developer.aliyun.com/article/1717849)
-1. [深入理解OpenClaw技术架构与实现原理（下）-阿里云开发者社区](https://developer.aliyun.com/article/1719929)
+- [深入理解OpenClaw技术架构与实现原理（上）-阿里云开发者社区](https://developer.aliyun.com/article/1717849)
+- [深入理解OpenClaw技术架构与实现原理（下）-阿里云开发者社区](https://developer.aliyun.com/article/1719929)
+- [OpenClaw 官方文档](https://docs.openclaw.ai)
+- [ClawHub 官方文档](https://docs.openclaw.ai/clawhub)
+- [openclaw/clawhub 仓库](https://github.com/openclaw/clawhub)
+- [OpenClaw Gateway Client V3 Device Auth Reference](https://github.com/KangCaijun/openclaw-gateway-client)
+- [OpenClaw Assistant Device Identity and Pairing（DeepWiki）](https://deepwiki.com/yuga-hashimoto/openclaw-assistant/3.3-device-identity-and-pairing)
+- [Agent Client Protocol 官方站](https://agentclientprotocol.com/)

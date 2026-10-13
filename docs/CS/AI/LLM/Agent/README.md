@@ -32,7 +32,7 @@
 - **[OpenCode](/docs/CS/AI/LLM/Agent/Product/OpenCode.md)** 与 **[Pi](/docs/CS/AI/LLM/Agent/Product/Pi.md)** 的卖点是**模型无关**——同一套 Agent loop 驱动 Anthropic / OpenAI / 任意 OpenAI 兼容端点。OpenCode 是客户端/服务器架构（内核是本地 HTTP 服务，TUI/Web/IDE 都是客户端，可远程 attach），Pi 则把能力藏进基础操作里（会话树、`@` 引用、Shell 集成），并把 Skill 与 Extension 的分工划得很清。
 - **[DSH](/docs/CS/AI/LLM/Agent/Product/DSH.md)** 是**架构哲学最激进的一个**：「一切皆插件」，连驱动 Agent 运转的主循环都只是默认插件实现之一，没有特权内核。它也是本目录里唯一逐行读源码的笔记（793 行，涵盖 Cordis 微内核、七层洋葱模型、子进程管理的 pid 复用边界、PTY）。
 - **[OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw.md)** 走的是另一条路：**本地优先的个人助手网关**，核心是接管 20 多种通讯软件 + 多 agent 路由，不服务于「写代码」这件事。
-- **[AgentScope](/docs/CS/AI/LLM/Agent/Product/AgentScope.md)** 是这层里**唯一的通用 Python Agent 框架**（非编程 Agent 产品），阿里巴巴开源，v2.0 起把 Framework 和 Harness 两层合并：单一 `Agent` 类内置 ReAct 循环、七 hook 中间件、五模式权限引擎、结构化上下文压缩与运行时状态注入，再往上附带 FastAPI Agent Service（多租户、频道接入、Hub、调度）。源码级剖析见该文。
+- **[AgentScope](/docs/CS/AI/LLM/Agent/Product/AgentScope.md)** 是这层里**唯一的通用 Python Agent 框架**（非编程 Agent 产品），阿里巴巴开源，v2.0 起把 Framework 和 Harness 两层合并：单一 `Agent` 类内置 ReAct 循环、七 hook 中间件、五模式权限引擎、结构化上下文压缩与运行时状态注入，往下有 formatter / workspace 沙箱 / RAG / Skill 四套基础设施，再往上附带 FastAPI Agent Service（多租户、频道接入、Hub、调度）。源码级剖析见该文。
 
 一篇横向对照见 [OpenCode 与 Claude Code 的对照表](/docs/CS/AI/LLM/Agent/Product/OpenCode.md?id=comparison-with-claude-code)，它把客户端架构、模型绑定、规则文件兼容性与扩展方式逐项列出。
 
