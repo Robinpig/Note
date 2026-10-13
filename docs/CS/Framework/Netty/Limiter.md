@@ -11,7 +11,7 @@ Netty 的“限流”指的是**流量整形（Traffic Shaping）**：对读写�
 
 `AbstractTrafficShapingHandler` 继承自 `ChannelDuplexHandler`，同时拦截读（`channelRead`）和写（`write`）。其工作原理基于一个简化的令牌桶/信用累积模型：
 
-- 配置读限速 `checkInterval`（检查周期）、`writeLimit` / `readLimit`（每周期允许的字节数）、峰值速率等。
+- 配置限速三参数：`checkInterval`（统计周期，默认 1000 ms）、`writeLimit` / `readLimit`（**每秒**允许的字节数，单位是 bytes/s，**不是**每周期字节数）、峰值速率。
 - 数据经过时统计字节数；若超出允许速率，就把本次读写**挂起并延迟（suspend/delay）**，通过 `TrafficCounter` 计算需要等待的时间，到点再用 EventLoop 的定时任务继续 flush/read，而不是直接拒绝。
 - 因此整形的手段是“**延迟发送/读取**”（平滑），而非丢包或报错——这与 QPS 限流的“拒绝”不同。
 

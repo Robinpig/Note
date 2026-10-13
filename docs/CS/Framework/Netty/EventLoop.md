@@ -17,9 +17,15 @@ EventLoopGroup 是 Netty Reactor 线程模型的具体实现方式，Netty 通�
 
 不同IO模型下，EventLoop有着不同的实现，我们只需要切换不同的实现类就可以完成对NettyIO模型的切换
 
-| BIO                        | NIO           | AIO           |
-|----------------------------|---------------|---------------|
-| ThreadPerChannelEventGroup | NioEventGroup | AioEventGroup |
+| BIO                              | NIO                 | AIO               |
+|----------------------------------|---------------------|-------------------|
+| `ThreadPerChannelEventLoopGroup` | `NioEventLoopGroup` | `AioEventLoopGroup` |
+
+> [!WARNING]
+>
+> 上表是 Netty 4.0 时代的分类。**AIO transport（`io.netty.channel.aio`）已在 Netty 4.1 中被彻底移除**，官方给出的理由是 Linux 上的 AIO 实现并不比 epoll 更快，且 Windows 上的 IOCP 语义难以与 Netty 的线程模型对齐。因此 4.1/4.2 只剩 BIO 与 NIO 两条路，`AioEventLoopGroup` 不再存在（OIO 包 `io.netty.channel.socket.oio` 整体 `@Deprecated`，推荐改用 NIO / epoll / kqueue）。
+>
+> 另外 4.2 中 `NioEventLoopGroup`、`EpollEventLoopGroup`、`KQueueEventLoopGroup` 也已 `@Deprecated`，迁移方式见 [IoHandler](#iohandler)。
 
 
 
@@ -219,7 +225,7 @@ digraph  {
             
             
              subgraph cluster_queue {
-                label="MpscChunkedArrayQueue";
+                label="MpscUnboundedArrayQueue";
                 queue [label="<f0> Task | <f1> Task | <f2> ...", color=black, fillcolor=white, style=filled];
             }
             
@@ -632,6 +638,35 @@ private volatile int ioRatio = 50;
 private int cancelledKeys;
 private boolean needsToSelectAgain;
 ```
+
+> [!NOTE]
+>
+> 上面这段是 **Netty 4.1** 的 `NioEventLoop` 字段。4.2 的变化有两点：
+>
+> 1. `ioRatio` 移到 `SingleThreadIoEventLoop`，且**默认值由 50 改为 100**：
+>
+> ```java
+> static final int DEFAULT_IO_RATIO = Math.max(1, Math.min(100,
+>         SystemPropertyUtil.getInt("io.netty.eventLoop.ioRatio", 100)));
+> private static final long DEFAULT_MAX_TASK_PROCESSING_QUANTUM_NS =
+>         TimeUnit.MILLISECONDS.toNanos(Math.max(100, SystemPropertyUtil.getInt(
+>                 "io.netty.eventLoop.maxTaskProcessingQuantumMs", 1000)));
+> ```
+>
+> 2. 语义变了。`ioRatio == 100` 表示"任务预算恒为 `maxTaskProcessingQuantumNs`（默认 1000ms）"，即不再按 IO 耗时比例切分；只有显式设成小于 100 才启用比例切分：
+>
+> ```java
+> runIo();
+> if (ioRatio == 100 || activeIoTimeNanos == -1) {
+>     taskQuantumNs = maxTaskProcessingQuantumNs;
+> } else {
+>     long quantum = Math.min(maxTaskProcessingQuantumNs, activeIoTimeNanos * (100 - ioRatio) / ioRatio);
+>     taskQuantumNs = quantum == 0 ? maxTaskProcessingQuantumNs : quantum;
+> }
+> runAllTasks(taskQuantumNs);
+> ```
+>
+> 也就是说 4.2 用"绝对时间片（默认 1 秒）"兜底替代了 4.1 的"按比例"模型，避免 IO 极轻时任务时间片被算得过小。设置范围由 `ObjectUtil.checkInRange(ioRatio, 1, 100, "ioRatio")` 校验。
 
 ## execute
 
@@ -1217,7 +1252,11 @@ This method stops running the tasks in the task queue and returns if it ran long
 
 NioEventLoop 不仅负责处理 I/O 事件，还要兼顾执行任务队列中的任务。任务队列遵循 FIFO 规则，可以保证任务执行的公平性。NioEventLoop 处理的任务类型基本可以分为三类。
 
-1. **普通任务**：通过 NioEventLoop 的 execute() 方法向任务队列 taskQueue  中添加任务。例如 Netty 在写数据时会封装 WriteAndFlushTask 提交给 taskQueue。taskQueue  的实现类是多生产者单消费者队列 MpscChunkedArrayQueue，在多线程并发添加任务时，可以保证线程安全。
+1. **普通任务**：通过 NioEventLoop 的 execute() 方法向任务队列 taskQueue  中添加任务。例如 Netty 在写数据时会封装 WriteAndFlushTask 提交给 taskQueue。taskQueue  的实现类是**多生产者单消费者**队列 **MpscUnboundedArrayQueue**（jctools），在多线程并发添加任务时，可以保证线程安全。
+
+> [!NOTE]
+>
+> 具体类型由 `SingleThreadIoEventLoop#newTaskQueue0` 决定：`maxPendingTasks == Integer.MAX_VALUE`（默认）时走 `PlatformDependent.newMpscQueue()` 无参分支，返回 `MpscUnboundedArrayQueue`，且在支持 VarHandle 时退化为 `MpscUnboundedVarHandleArrayQueue`。`MpscChunkedArrayQueue` 只在 `newMpscQueue(chunkSize, maxCapacity)` 的**有界**分支出现，不是 EventLoop 的默认路径。详见 [MpscLinkedQueue](/docs/CS/Framework/Netty/MpscLinkedQueue.md)。
 2. **定时任务**：通过调用 NioEventLoop 的 schedule() 方法向定时任务队列  scheduledTaskQueue 添加一个定时任务，用于周期性执行该任务。例如，心跳消息发送等。定时任务队列  scheduledTaskQueue 采用优先队列 PriorityQueue 实现。
 3. **尾部队列**：tailTasks 相比于普通任务队列优先级较低，在每次执行完 taskQueue 中任务后会去获取尾部队列中任务执行。尾部任务并不常用，主要用于做一些收尾工作，例如统计事件循环的执行时间、监控信息上报等。
 
@@ -1354,6 +1393,24 @@ public interface EventLoop extends OrderedEventExecutor, EventLoopGroup {
 
 `IoHandler` 直接继承 `EventLoop.Unsafe`，即注册能力是 IO 处理的前置部分。除 `wakeup(boolean)` 之外，所有方法都必须在 EventLoop 线程上执行，用户代码不应直接调用。
 
+> [!WARNING]
+>
+> 下面这段源码取自 4.2 的早期 alpha，与 **4.2 GA** 的签名已经不一致。以 4.2.19 源码为准的接口形态是：
+>
+> ```java
+> public interface IoHandler {
+>     int run(IoHandlerContext context);
+>     void initialize();
+>     void prepareToDestroy();
+>     void destroy();
+>     IoRegistration register(IoHandle handle) throws IOException;
+>     void wakeup();
+>     boolean isCompatible(Class<?> handleType);
+> }
+> ```
+>
+> 差异：不再继承 `EventLoop.Unsafe`；`wakeup()` 去掉了布尔参数；上下文类型从 `IoExecutionContext` 改为 `IoHandlerContext`；`register` 返回 `IoRegistration`（其核心是 `submit(IoOps)`，取代 4.1 里直接改 `SelectionKey.interestOps` / 调 `epoll_ctl` 的做法）。阅读时以 GA 签名为准。
+
 ```java
 public interface IoHandler extends EventLoop.Unsafe {
     /**
@@ -1456,9 +1513,36 @@ public int run(IoExecutionContext runner) {
 }
 ```
 
+### Group and Migration
+
+4.2 GA 中这个类的正式名字是 **`NioIoHandler`**（`public final class NioIoHandler implements IoHandler`），`run` 的签名与上文一致。它取代了 4.1 里 `NioEventLoop#run` 的全部职责：select 策略、空轮询重建、`processSelectedKeys` 都搬到了这里；`NioEventLoop` 本身缩到 233 行只剩委派。
+
+宿主 EventLoopGroup 相应换成 `MultiThreadIoEventLoopGroup`：
+
+```java
+// 4.1 写法（4.2 中已 @Deprecated）
+EventLoopGroup group = new NioEventLoopGroup();
+
+// 4.2 写法
+EventLoopGroup group = new MultiThreadIoEventLoopGroup(NioIoHandler.newFactory());
+// epoll：EpollIoHandler.newFactory()
+// kqueue：KQueueIoHandler.newFactory()
+// io_uring：IoUringIoHandler.newFactory()
+```
+
+`MultiThreadIoEventLoopGroup extends MultithreadEventLoopGroup implements IoEventLoopGroup`，单线程侧对应 `SingleThreadIoEventLoop extends SingleThreadEventLoop implements IoEventLoop`。注意 **不存在 `MultiThreadIoEventLoop` 这个类**。
+
+各 transport 的旧 Group 类（`NioEventLoopGroup` / `EpollEventLoopGroup` / `KQueueEventLoopGroup`）在 4.2 中保留但全部 `@Deprecated`，Javadoc 一律指向 `MultiThreadIoEventLoopGroup` + 对应 `IoHandler.newFactory()`。io_uring 没有旧 Group 兼容类，只有 `IoHandler` 一条路。详见 [原生传输层](/docs/CS/Framework/Netty/Transport.md?id=iohandler-abstraction)。
+
 ## Implementation
 
 ### Epoll
+
+> [!NOTE]
+>
+> 下面这段是 **4.1 形态**的 `EpollEventLoop`。4.2 中 `EpollEventLoop extends SingleThreadIoEventLoop`，本体不含 `epoll_wait` 逻辑，`run()` 已迁到 `EpollIoHandler#run(IoHandlerContext)`；且 `epollInReadyRunnablePending` 字段在 4.2 中已移除。见 [Transport](/docs/CS/Framework/Netty/Transport.md?id=event-loop)。
+
+
 
 > [!NOTE]
 > 

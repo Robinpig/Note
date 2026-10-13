@@ -368,6 +368,82 @@ private void notifyListeners() {
 
 
 
+## State Machine
+
+`DefaultPromise` 的结果落在一个 `Object result` 字段上，用三个哨兵对象区分终态：
+
+```java
+private static final Object SUCCESS = new Object();
+private static final Object UNCANCELLABLE = new Object();
+private static final CauseHolder CANCELLATION_CAUSE_HOLDER = new CauseHolder(
+        ThrowableUtil.unknownStackTrace(new CancellationException(), DefaultPromise.class, "cancel(...)"));
+
+private volatile Object result;
+```
+
+状态迁移只有一条真正需要 CAS 的路——`setValue`：
+
+```java
+private boolean setValue0(Object objResult) {
+    if (RESULT_UPDATER.compareAndSet(this, null, objResult) ||
+        RESULT_UPDATER.compareAndSet(this, UNCANCELLABLE, objResult)) {
+        if (checkNotifyWaiters()) {
+            notifyListeners();
+        }
+        return true;
+    }
+    return false;
+}
+```
+
+两个 CAS 分支对应两种"未完成"状态：`null` 是未完成的初始值，`UNCANCELLABLE` 是调用过 `setUncancellable()` 之后的状态——`cancel()` 只能把 `null` 换成 `CauseHolder`，换不掉 `UNCANCELLABLE`，这就是"承诺不可取消"的实现方式。一旦 `result` 变成 `SUCCESS` 或 `CauseHolder`，所有后续 CAS 都失败，`isDone()` 返回 `true`。
+
+```java
+@Override
+public Promise<V> setSuccess(V result) {
+    if (setSuccess0(result)) {
+        return this;
+    }
+    throw new IllegalStateException("complete already: " + this);
+}
+
+@Override
+public boolean trySuccess(V result) {
+    return setSuccess0(result);
+}
+```
+
+`setXxx` 失败抛异常、`tryXxx` 失败返回 false，这是 `Promise` 接口成对方法的全部区别。
+
+唤醒分两步：`checkNotifyWaiters()` 在有人 `await()` 时 `notifyAll()`（用 `waiters` 计数避免无谓唤醒），`notifyListeners()` 再回调监听器。监听器通知有重入保护：
+
+```java
+private void notifyListeners() {
+    EventExecutor executor = executor();
+    if (executor.inEventLoop()) {
+        final InternalThreadLocalMap threadLocals = InternalThreadLocalMap.get();
+        final int stackDepth = threadLocals.futureListenerStackDepth();
+        if (stackDepth < MAX_LISTENER_STACK_DEPTH) {
+            threadLocals.setFutureListenerStackDepth(stackDepth + 1);
+            try {
+                notifyListenersNow();
+            } finally {
+                threadLocals.setFutureListenerStackDepth(stackDepth);
+            }
+            return;
+        }
+    }
+    safeExecute(executor, new Runnable() {
+        @Override
+        public void run() {
+            notifyListenersNow();
+        }
+    });
+}
+```
+
+`MAX_LISTENER_STACK_DEPTH = 8`：监听器里再触发下一个 promise 完成时，递归深度超过 8 就改为投递到 executor 异步执行，防止栈溢出。
+
 ## DefaultChannelPromise
 
 The default ChannelPromise implementation. It is recommended to use `Channel.newPromise()` to create a new ChannelPromise rather than calling the constructor explicitly.

@@ -22,7 +22,11 @@ PoolArena 的默认个数为 availableProcessors * 2 , 因为 Netty 中的 React
 在服务端NioServerSocketChannel的配置类NioServerSocketChannelConfig以及客户端NioSocketChannel的配置类NioSocketChannelConfig实例化的时候会触发 PooledByteBufAllocator 的创建 
 创建出来的PooledByteBufAllocator实例保存在DefaultChannelConfig类中的ByteBufAllocator allocator字段中
 
-默认情况下是使用pooled的 除非在 Android 中
+默认情况下是使用 pooled 的（Android 上是 unpooled）——这是 **4.1** 的行为。
+
+> [!WARNING]
+>
+> **4.2 起默认值已改为 `adaptive`**，`ByteBufAllocator.DEFAULT` 不再是 `PooledByteBufAllocator.DEFAULT`，而是 `new AdaptiveByteBufAllocator()`（官方 4.2.0 release note 原文："In Netty 4.1.x the adaptive memory allocator was experimental. We have now made it the new default instead of the pooled allocator."）。4.2 上要退回池化需显式 `-Dio.netty.allocator.type=pooled`。未知值回落到 `PooledByteBufAllocator.DEFAULT`。详见 [AdaptiveByteBufAllocator](#adaptivebytebufallocator)。
 
 
 ```java
@@ -41,7 +45,7 @@ public final class ByteBufUtil {
 
     static {
         String allocType = SystemPropertyUtil.get(
-            "io.netty.allocator.type", PlatformDependent.isAndroid() ? "unpooled" : "pooled");
+            "io.netty.allocator.type", PlatformDependent.isAndroid() ? "unpooled" : "adaptive");
 
         ByteBufAllocator alloc;
         if ("unpooled".equals(allocType)) {
@@ -587,6 +591,32 @@ Java 中频繁地创建和销毁对象的开销是很大的，所以很多人会
 通过重用对象，不仅避免频繁地创建和销毁所带来的性能损耗，而且对 JVM GC 是友好的，这就是对象池的作用
 
 Recycler 是 Netty 提供的自定义实现的轻量级对象回收站，借助 Recycler 可以完成对象的获取和回收
+
+> [!WARNING]
+>
+> **下面的 Stack / WeakOrderQueue / Link / DefaultHandle 四组件是 Netty 4.0~4.1 早期的设计，现版本源码中已不存在。** 经核实：`WeakOrderQueue` 在 4.1 当前 HEAD 与 4.2 的 `Recycler.java` 中**均无定义**（grep 计数为 0），跨线程回收改由 jctools 的 `MessagePassingQueue<H> pooledHandles` 承担；`BLOCKING_POOL_LIMIT` 同样不存在（4.1 只有 `io.netty.recycler.blocking` 开关，4.2 连这个开关也删了）。
+>
+> 现版本（4.2）的结构是：
+>
+> ```java
+> public abstract class Recycler<T> {
+>     private static final int DEFAULT_INITIAL_MAX_CAPACITY_PER_THREAD = 4 * 1024;  // Use 4k instances as default.
+>     static final int DEFAULT_QUEUE_CHUNK_SIZE = 32;
+>     private static final int RATIO = max(0, SystemPropertyUtil.getInt("io.netty.recycler.ratio", 8));
+>     private static final boolean BATCH_FAST_TL_ONLY =
+>             SystemPropertyUtil.getBoolean("io.netty.recycler.batchFastThreadLocalOnly", true);
+>     private final FastThreadLocal<LocalPool<?, T>> threadLocalPool;
+> }
+> ```
+>
+> - 池本体是 `LocalPool`，分 `GuardedLocalPool` / `UnguardedLocalPool`（后者不校验 owner 线程）
+> - `maxCapacityPerThread` 读 `io.netty.recycler.maxCapacityPerThread`（回退读 `io.netty.recycler.maxCapacity`），`< 0` 时回落 4096，构造时 `max(4, ...)`
+> - `chunkSize` 默认 32，构造时 `max(2, min(chunkSize, maxCapacityPerThread >> 1))`
+> - **回收比率语义**：`ratioInterval` 默认 8，即**每 8 次 recycle 才真正入池 1 次**（`ratioCounter = ratioInterval; // Start at interval so the first one will be recycled.`）
+> - `BATCH_FAST_TL_ONLY` 默认 true：批量回收只对 `FastThreadLocalThread` 生效
+>
+> 下文各处源码按旧实现记录，读的时候请对照这一节；原理层面"每线程一个本地池 + 跨线程异步归还 + 抽样入池"的结论仍然成立。
+
 对象池包含四个核心组件：Stack、WeakOrderQueue、Link、DefaultHandle
 
 
@@ -1496,6 +1526,132 @@ private  void freeEntry(Entry entry, boolean finalizer) {
 ```
 
 `freeEntry()` 最终落到 `PoolArena.freeChunk()`，见 [free](/docs/CS/Framework/Netty/memory.md?id=free)。
+
+## Adaptive Allocator
+
+Netty 4.2 把 [默认分配器](#introduction) 从 `PooledByteBufAllocator` 换成了 `AdaptiveByteBufAllocator`。这一节讲它是什么、为什么这样设计。
+
+### AdaptiveByteBufAllocator
+
+```java
+/**
+ * An auto-tuning pooling {@link ByteBufAllocator}, that follows an anti-generational hypothesis.
+ * <p>
+ * <strong>Note:</strong> this allocator is <strong>experimental</strong>. It is recommended to roll out usage slowly,
+ * and to carefully monitor application performance in the process.
+ * <p>
+ * See the {@link AdaptivePoolingAllocator} class documentation for implementation details.
+ */
+public final class AdaptiveByteBufAllocator extends AbstractByteBufAllocator
+        implements ByteBufAllocatorMetricProvider, ByteBufAllocatorMetric {
+```
+
+它是 `final class`，**没有 `@UnstableApi` 注解**，"experimental" 只写在 Javadoc 里（反之，内部的 `AdaptivePoolingAllocator` 带 `@UnstableApi` 且是包级私有）。三个构造器只有 `()`、`(boolean preferDirect)`、`(boolean preferDirect, boolean useCacheForNonEventLoopThreads)`，**没有 initial/min/max 容量参数**——容量默认值来自 `AbstractByteBufAllocator`（initial 256、max `Integer.MAX_VALUE`）。
+
+内部持有**两个** `AdaptivePoolingAllocator` 实例：
+
+```java
+public AdaptiveByteBufAllocator(boolean preferDirect, boolean useCacheForNonEventLoopThreads) {
+    super(preferDirect);
+    direct = new AdaptivePoolingAllocator(new DirectChunkAllocator(this), useCacheForNonEventLoopThreads);
+    heap = new AdaptivePoolingAllocator(new HeapChunkAllocator(this), useCacheForNonEventLoopThreads);
+}
+```
+
+`isDirectBufferPooled()` 返回 `true`，`metric()` 返回自身。相关开关：
+
+```java
+DEFAULT_USE_CACHED_MAGAZINES_FOR_NON_EVENT_LOOP_THREADS = SystemPropertyUtil.getBoolean(
+        "io.netty.allocator.useCachedMagazinesForNonEventLoopThreads", false);
+```
+
+即：只有 EventLoop 线程（`ThreadExecutorMap.currentExecutor() != null`）或显式打开该属性时，才为线程创建线程本地的 `MagazineGroup[]`；普通用户线程共用共享数组，避免虚拟线程场景下线程本地缓存爆炸。
+
+> [!NOTE]
+>
+> 名字相近但层次完全不同的两个类：`AdaptiveByteBufAllocator`（`io.netty.buffer`，**内存分配器**）vs `AdaptiveRecvByteBufAllocator`（`io.netty.channel`，只**预测每次 read 该分配多少字节**）。别混。
+
+### AdaptivePoolingAllocator
+
+"anti-generational hypothesis（反代际假设）"是它与 jemalloc 风格池化最大的分歧点：传统池化假设"刚分配的对象很快会释放"，按对象生命周期分代；自适应分配器则假设**缓冲区的存活期与分配它的线程/任务绑定**，因此按 magazine 分片而不是按代回收。
+
+结构自上而下是 `MagazineGroup[]` → `Magazine[]` → `Chunk` → `AdaptiveByteBuf`：
+
+| 类                    | 声明                                                       | 关键字段                                                                                                      |
+| :------------------- | :------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------- |
+| `MagazineGroup`      | `private static final class`                               | `threadLocalMagazine`、`volatile Magazine[] magazines`、`chunkCache`、`chunkManagementStrategy`               |
+| `Magazine`           | `private static final class`                               | `Chunk current`、`volatile Chunk nextInLine`、`StampedLock allocationLock`、`AdaptiveRecycler recycler`    |
+| `Chunk`              | `static class Chunk implements ChunkInfo`                  | `AbstractByteBuf delegate`、`RefCnt refCnt`、`capacity`、`allocatedBytes`（bump pointer 游标）              |
+| `SizeClassedChunk`   | `static class SizeClassedChunk extends Chunk`              | `segments`、`segmentSize`、`MpscIntQueue externalFreeList`、`IntStack localFreeList`、`ownerThread`      |
+| `BuddyChunk`         | `private static final class BuddyChunk extends Chunk`      | `MIN_BUDDY_SIZE = 32768`、`byte[] buddies`、`MpscIntQueue freeList`                                    |
+
+取 magazine 的方式不是简单轮转：
+
+```java
+long threadId = currentThread.getId();
+do {
+    mags = magazines;
+    int mask = mags.length - 1;
+    int index = (int) (threadId & mask);
+    for (int i = 0, m = mags.length << 1; i < m; i++) {
+        Magazine mag = mags[index + i & mask];
+        if (buf == null) { buf = mag.newBuffer(); }
+        if (mag.tryAllocate(size, maxCapacity, buf, reallocate)) { return buf; }
+    }
+    expansions++;
+} while (expansions <= EXPANSION_ATTEMPTS && tryExpandMagazines(mags.length));
+```
+
+先按 `threadId & (length - 1)` 直接定位；失败才在数组内轮转最多 `2 * length` 次；仍失败则 `tryExpandMagazines()` 把数组翻倍（上限 `MAX_STRIPES = availableProcessors() * 2`），最多 `EXPANSION_ATTEMPTS = 3` 次。初始长度 `INITIAL_MAGAZINES = 1`。`Magazine.tryAllocate` 用 `StampedLock.tryWriteLock()`，拿不到锁时走 `allocateWithoutLock`（借 `nextInLine` 或 `chunkCache`），这是降低竞争的关键。
+
+切分算法有三套：
+
+- 基类 `Chunk` 是朴素游标：`startIndex = allocatedBytes; allocatedBytes = startIndex + startingCapacity;`
+- `SizeClassedChunk` 用**双空闲表**：owner 线程从 `IntStack localFreeList` pop，非 owner 线程 offer 到 `MpscIntQueue externalFreeList`（不是位图）
+- `BuddyChunk` 走伙伴算法，最小粒度 32 KiB，每 byte 编码 `[1: is claimed][1: has claimed children][30: size shift]`
+
+size class 共 **16 档**：
+
+```java
+private static final int[] SIZE_CLASSES = {
+        32, 64, 128, 256, 512, 640, /* 512 + 128 */ 1024, 1152, /* 1024 + 128 */
+        2048, 2304, /* 2048 + 256 */ 4096, 4352, /* 4096 + 256 */
+        8192, 8704, /* 8192 + 512 */ 16384, 16896, /* 16384 + 512 */
+};
+```
+
+设计注释原文："most allocations... aim to be a power-of-2... we seem to get a lot of mileage out of having both power-of-2 sizes, and power-of-2-plus-a-bit."——即在 2 的幂之外额外加一档"幂 + 一点"，覆盖带定长头的协议包。
+
+关键常量：
+
+```java
+static final int MIN_CHUNK_SIZE = 128 * 1024;
+private static final int EXPANSION_ATTEMPTS = 3;
+private static final int INITIAL_MAGAZINES = 1;
+private static final int BUFS_PER_CHUNK = 8;
+private static final int MAX_CHUNK_SIZE = IS_LOW_MEM ? 2 * 1024 * 1024 : 8 * 1024 * 1024;
+static final int MAX_POOLED_BUF_SIZE = MAX_CHUNK_SIZE / BUFS_PER_CHUNK;
+```
+
+`MIN_CHUNK_SIZE` 取 128 KiB 的注释理由是"encourage the system allocator to delegate to mmap for chunk allocations... glibc will do this"。
+
+内存还给 OS 的路径：`AdaptiveByteBuf.deallocate()` → `chunk.releaseSegment(...)` → 所有段归还且 CAS 到 `DEALLOCATED` → `Chunk.deallocate()` → `delegate.release()`。此外还有 purge 机制：`CHUNK_PURGE_POLLS_THREAD_LOCAL=16` / `CHUNK_PURGE_POLLS_SHARED=128` 次 poll 后扫描，连续 `CHUNK_PURGE_THRESHOLD=3` 个周期空闲即驱逐空闲 chunk（保留 `purgeRetentionFloor`）。
+
+### Difference from PooledByteBufAllocator
+
+| 维度       | `AdaptivePoolingAllocator`（4.2）                              | `PooledByteBufAllocator`                     |
+| :------- | :----------------------------------------------------------- | :------------------------------------------- |
+| 规格划分     | 16 档固定 size class；超出走 Buddy 伙伴算法                             | 多级 size class + `PoolSubpage`                |
+| chunk 大小 | `max(128 KiB, segmentSize * 32)`；大 buffer 侧 `maxChunkSize` 单调增长记忆峰值 | 固定 `pageSize << maxOrder` = 8 KiB << 9 = 4 MiB |
+| 线程缓存     | `ThreadLocalSizeClassedChunkCache`（每档上限 8 MiB）+ magazine 本地 buffer 队列（1024） | `PoolThreadCache`                            |
+| 竞争削减     | Magazine 数组分片 + `tryWriteLock` 无锁回退 + 数组按需翻倍                 | Arena 分片 + `PoolThreadCache`                 |
+| 统计自适应    | 类 Javadoc 仍描述 histogram / 99-percentile，但**当前代码中已无 histogram**，自适应改由 `ChunkController` 与 `AtomicInteger maxChunkSize` 承担 | 固定策略，无自适应                                    |
+
+> [!WARNING]
+>
+> 上面最后一行的"文档与实现脱节"是 4.2 HEAD（4.2.20-SNAPSHOT）上的实测状态：`AdaptivePoolingAllocator` 的类 Javadoc 完整描述了 histogram 与"big enough to service 10 allocations of the 99-percentile size"，但源码中 `histogram` 只出现在注释里，没有任何对应的数据结构。读这段 Javadoc 时不要当真。
+>
+> 该类的实现在 4.2.x 迭代中变化很快（早期版本用位图分配，后来换成空闲表 + Buddy），本文以 4.2.19.Final 对应的分支 HEAD 为准。
 
 ## Recv Allocator
 

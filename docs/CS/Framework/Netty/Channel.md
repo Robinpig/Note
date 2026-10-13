@@ -6,7 +6,7 @@ Channel 的字面意思是“通道”，它是网络通信的载体。Channel�
 
 ![Channel](img/Channel.png)
 
-bstractChannel 是整个家族的基类，派生出  AbstractNioChannel、AbstractOioChannel、AbstractEpollChannel  等子类，每一种都代表了不同的 I/O 模型和协议类型。常用的 Channel 实现类有：
+AbstractChannel 是整个家族的基类，派生出  AbstractNioChannel、AbstractOioChannel、AbstractEpollChannel  等子类，每一种都代表了不同的 I/O 模型和协议类型。常用的 Channel 实现类有：
 
 NioServerSocketChannel 异步 TCP 服务端。
 
@@ -19,6 +19,10 @@ OioSocketChannel 同步 TCP 客户端。
 NioDatagramChannel 异步 UDP 连接。
 
 OioDatagramChannel 同步 UDP 连接
+
+> [!WARNING]
+>
+> `io.netty.channel.socket.oio` 整个包（上面三个 `Oio*Channel`）自 4.1 起已整体 `@Deprecated`（官方建议改用 NIO / epoll / kqueue transport）。另外 4.2 中 `NioEventLoopGroup` / `EpollEventLoopGroup` / `KQueueEventLoopGroup` 也已 `@Deprecated`，见 [EventLoop](/docs/CS/Framework/Netty/EventLoop.md) 与 [原生传输层](/docs/CS/Framework/Netty/Transport.md)。
 
 ## Channel
 
@@ -112,7 +116,7 @@ public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparabl
 
 
 
-hannel 会有多种状态，如**连接建立、连接注册、数据读写、连接销毁**等。随着状态的变化，Channel 处于不同的生命周期，每一种状态都会绑定相应的事件回调
+Channel 会有多种状态，如**连接建立、连接注册、数据读写、连接销毁**等。随着状态的变化，Channel 处于不同的生命周期，每一种状态都会绑定相应的事件回调
 
 
 
@@ -323,8 +327,8 @@ public final void register(EventLoop eventLoop, final ChannelPromise promise) {
 
 1. 调用 JDK 底层 [java.nio.channels.SelectableChannel](/docs/CS/Java/JDK/IO/NIO.md?id=channels) 进行注册
 2. `ChannelPipeline#invokeHandlerAddedIfNeeded()` 调用 ChannelInitializer 实现的 initChannel() 方法做 pipeline的初始化
-3. [ChannelPipeline#fireChannelRegistered()](/docs/CS/Framework/Netty/ChannelHandler.md?id=firechannelactive)
-4. 调用 pipeline.fireChannelActive() 方法触发 channelActive 事件 最终调用到 [AbstractChannel#beginRead()](/docs/CS/Framework/Netty/ChannelHandler.md) 
+3. [ChannelPipeline#fireChannelRegistered()](/docs/CS/Framework/Netty/ChannelHandler.md?id=firechannelregistered)
+4. 调用 pipeline.fireChannelActive() 方法触发 channelActive 事件 最终调用到 [AbstractChannel#beginRead()](/docs/CS/Framework/Netty/Channel.md?id=beginread) 
 
 
 register0() 主要做了四件事：调用 JDK 底层进行 Channel 注册、触发 handlerAdded 事件、触发 channelRegistered 事件、Channel 当前状态为活跃时，触发 channelActive 事件

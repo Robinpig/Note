@@ -259,6 +259,49 @@ public ChannelFuture disconnect(final ChannelPromise promise) {
 }
 ```
 
+### fireChannelRegistered
+
+`fireChannelRegistered()` 是 Channel 成功注册到 EventLoop 后由 pipeline 触发的首个入站事件，沿 `HeadContext` 向后传播，逐个调用各 `ChannelInboundHandler.channelRegistered(ctx)`。它发生在 `fireChannelActive()` 之前——只有注册完成后才会进入 active 状态。
+
+```java
+// DefaultChannelPipeline
+@Override
+public final ChannelPipeline fireChannelRegistered() {
+    AbstractChannelHandlerContext.invokeChannelRegistered(head);
+    return this;
+}
+
+static void invokeChannelRegistered(final AbstractChannelHandlerContext next) {
+    EventExecutor executor = next.executor();
+    if (executor.inEventLoop()) {
+        next.invokeChannelRegistered();
+    } else {
+        executor.execute(new Runnable() {
+            @Override
+            public void run() {
+                next.invokeChannelRegistered();
+            }
+        });
+    }
+}
+```
+
+```java
+// AbstractChannel#register0()
+// 注册完成后的调用序列（节选）
+pipeline.fireChannelRegistered();
+if (isActive()) {
+    // 仅当 channel 已处于 active 才继续触发 active / autoRead
+    if (firstRegistration) {
+        pipeline.fireChannelActive();
+    } else if (config().isAutoRead()) {
+        beginRead();
+    }
+}
+```
+
+与 `fireChannelActive` 一样，若当前线程不是 EventLoop 线程，传播动作会被封装成 task 提交到该 EventExecutor，保证所有 handler 回调都在同一 EventLoop 线程串行执行。
+
 ## ChannelHandler
 
 Handles an I/O event or intercepts an I/O operation, and forwards it to its next handler in its ChannelPipeline.
