@@ -21,6 +21,8 @@ LLM 本身只会输出 token，是**工具（Tools / Function Calling）**让它
 - **副作用走审批**：删改文件、下单付款等动作要经策略层和人工确认，设计参考 Codex 的沙箱/策略/审批/schema 四层（fail closed）。
 - **并行/顺序调用**：无依赖的调用可并发；有依赖的由模型多轮决策。
 
+上面四条的前提是「模型仍在生成文本，只是被要求生成得规矩」。另一条路是**让架构本身不生成**：选项与评分标准由代码预先定义，模型只在自己被给定的类型里返回结果与概率，解析与校验这一层整个消失——[Jev](/docs/CS/AI/LLM/Model/Jev.md) 这类决策模型走的就是这条路，代价是不能再输出定义之外的任何内容。
+
 ### MCP: Standardizing Tool Access
 
 没有协议时，N 个 Agent × M 个工具要写 N×M 个适配；[MCP](/docs/CS/AI/LLM/Protocol/MCP.md) 把它降为 N+M：工具实现为 MCP Server，任何支持 MCP 的 Agent（Client）都能发现（list tools）并调用。这与 JDBC/ODBC 之于数据库、LSP 之于编辑器是同一种「统一驱动」思想。

@@ -79,6 +79,12 @@
 
 **什么时候该多供应商**：当能力档位接近时（$2/$10 这个价位已经有 Sol、Sonnet 5.5、Gemini 3.1 Pro 三家），把「用哪家」变成一个按实时价格与可用性做的路由决策，而不是冻在两季度前写下的 SDK import 里。DeepSeek 的峰谷定价尤其适合做这件事——把批处理与夜间跑批路由到空闲时段，账单直接砍半。
 
+## A Different Class: Decision Models
+
+上面所有价格与档位比的都是同一类东西——**会生成文本的模型**。但 Agent Harness 里有一大批调用根本不需要文本：意图路由、风险门控、严重度打分。这类「输入自由文本加一条判断标准、输出必须被代码直接消费」的任务，用旗舰模型写 Prompt 太慢且格式偶发不稳，自训一个 BERT 级分类器又快又准但零迁移。2026 年 9 月出现的**决策模型（System One model）**是第三条路：TypeSafe 的 [Jev](/docs/CS/AI/LLM/Model/Jev.md) 把生成能力整个砍掉，只返回类型化判断（Choice / Score / Noul）与**校准过的置信度**，输入 $0.042/MTok、**输出免费**，端到端 70~500 ms。
+
+它的价值不来自「更聪明」，而来自**概率可信**：RLHF 之后的 LLM 会系统性过度自信，所以 `if confidence > 0.9` 这种写法在生成模型上一直没有统计意义，而决策模型把校准本身当训练目标（原因见 [Jev](/docs/CS/AI/LLM/Model/Jev.md?id=calibrated-probabilities-and-confidence)）。选型判据因此不是能力档位而是**答案空间是否封闭**：封闭选项、等级与是非判断可以切过去，要生成、要解释、要多跳推理的仍回到上面那张表。这条路线的成立程度有个旁证——OpenAI 在 2026-10-06 跟进了 Decisions API，AWS 在 10-01 开源了 Strands Decider 2B。
+
 ## Local Deployment: A Parallel Path
 
 上面所有价格都是云端 API。但只要负载够稳定，自托管就从成本题变成能力题：把「每百万 token 多少钱」换成「一张卡跑多久」，高频固定负载下自建几乎总是更便宜，且**数据不出内网**这个合规收益往往比省钱更关键。
@@ -102,6 +108,8 @@
 - [Qwen](/docs/CS/AI/LLM/Model/Qwen.md)
 - [开源模型全景](/docs/CS/AI/LLM/Model/Open_Model.md)
 - [本地部署与推理引擎](/docs/CS/AI/LLM/Model/Inference.md)
+- [Jev](/docs/CS/AI/LLM/Model/Jev.md)
+- [Jev](/docs/CS/AI/LLM/Model/Jev.md)
 
 ## References
 

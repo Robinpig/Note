@@ -178,6 +178,7 @@ for ep in range(20000):
 
 - [ML](/docs/CS/AI/ML/ML.md)
 - [LLM](/docs/CS/AI/LLM/LLM.md)
+- [Jev](/docs/CS/AI/LLM/Model/Jev.md)
 
 ## References
 

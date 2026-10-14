@@ -53,6 +53,8 @@ LLM 在结构上就是"把 [Transformer](/docs/CS/AI/Transformer.md) 的 decoder
 
 [模型总览](/docs/CS/AI/LLM/Model/Overview.md) 是这块的枢纽，横向汇总了闭源三家与中国模型的价格、上下文与协议，并单列了最容易记错的几处（比如「Llama 4 非商用」是误传、国产旗舰的协议正在集体收紧、OpenAI 的 272K 是整单重算的台阶而非斜坡）。各家的完整型号表与架构演进在专页：[DeepSeek](/docs/CS/AI/LLM/Model/DeepSeek.md) 的峰谷分时定价与 encoder–decoder MoE、[OpenAI](/docs/CS/AI/LLM/Model/OpenAI.md) 的 GPT-6 家族与长上下文台阶、[Claude](/docs/CS/AI/LLM/Model/Claude.md) 的四档命名与自适应 thinking、[Qwen](/docs/CS/AI/LLM/Model/Qwen.md) 与[开源模型全景](/docs/CS/AI/LLM/Model/Open_Model.md) 的协议陷阱。当负载稳定到一定程度，云端按 token 计费就该换成自建——这条路见[本地部署与推理引擎](/docs/CS/AI/LLM/Model/Inference.md)。
 
+还有一类模型不在「会不会写文本」这条轴上：[Jev](/docs/CS/AI/LLM/Model/Jev.md) 是 TypeSafe 的 **System One model**，架构层面就不生成文本，只输出类型化判断与校准过的概率，用来承接 Harness 里那些「小而快」的决策调用（意图路由、风险门控、严重度打分）。它值得单列，是因为第一次让 `if confidence > 0.9` 这种阈值判断有了统计学意义——RLHF 之后的 LLM 概率是**自信语气**，校准之后的决策概率才是**可信信号**。选型时的判据、以及它替代不了生成模型的边界，都写在那一页。
+
 ## Make It Better the More You Use It
 
 能完成任务只是及格线。[Self-Evolving](/docs/CS/AI/LLM/Agent/Practice/Self-Evolving.md) 关心的是另一件事：一次会话里的经历，能不能沉淀成下次可用的能力。它把这件事拆成上下文/记忆进化与结构进化两条路径，并配套了评测、CI/CD 和人在其中的位置。想知道这条路真跑起来长什么样，[Hermes](/docs/CS/AI/LLM/Agent/Practice/Hermes.md) 是个完整落地标本——三层记忆、定时唤醒、Skill 自创建都在里面。

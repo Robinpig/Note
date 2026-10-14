@@ -17,6 +17,8 @@
 
 [模型总览](/docs/CS/AI/LLM/Model/Overview.md) 是这块的枢纽，横向汇总了闭源三家与中国模型的价格、上下文与协议，并单列了几处最常见的误传。各家专页：[DeepSeek](/docs/CS/AI/LLM/Model/DeepSeek.md)（峰谷分时定价与 encoder–decoder MoE）、[OpenAI](/docs/CS/AI/LLM/Model/OpenAI.md)（GPT-6 家族与 272K 长上下文台阶）、[Claude](/docs/CS/AI/LLM/Model/Claude.md)（四档命名与无法关闭的 thinking）、[Qwen](/docs/CS/AI/LLM/Model/Qwen.md) 与[开源模型全景](/docs/CS/AI/LLM/Model/Open_Model.md)（协议陷阱）。负载稳定到一定程度就该自建，[本地部署与推理引擎](/docs/CS/AI/LLM/Model/Inference.md) 讲这条路。
 
+另有一类模型不参与「会不会写文本」的比较：[Jev](/docs/CS/AI/LLM/Model/Jev.md) 是 TypeSafe 的 System One model，架构层面不生成文本，只输出类型化判断与校准概率，专门承接 Harness 里那些小而快的决策调用。
+
 ## Protocol
 
 模型只会输出 token，是**工具调用**让它从「会说」变成「能做」——而工具如何做到「一次实现、处处接入」，目前的事实标准是 MCP（常被比作 AI 应用的 USB-C）。再往前一步，当协作发生在多个 Agent 之间而不是 Agent 与工具之间时，缺的是另一层协议，那便是与 MCP 互补的 A2A。

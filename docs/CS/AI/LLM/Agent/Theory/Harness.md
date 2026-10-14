@@ -168,6 +168,7 @@ Codex 把"能不能执行一个动作"拆成四层，缺一不可：
 - [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) / [Self-Evolving](/docs/CS/AI/LLM/Agent/Practice/Self-Evolving.md)
 - [Codex](/docs/CS/AI/LLM/Agent/Product/Codex.md) / [DSH](/docs/CS/AI/LLM/Agent/Product/DSH.md) — 两个 Harness 工程实例（Codex 有源码级分析）
 - [LLM 应用开发平台](/docs/CS/AI/LLM/Platform/Platform.md) — Harness 的产品化形态：Coze / Dify 把这套执行面做成了默认件
+- [Jev](/docs/CS/AI/LLM/Model/Jev.md)
 
 ## References
 
