@@ -155,7 +155,17 @@ Choice 只看最高概率离均匀分布多远（所以 `(0.6,0.3,0.1)` 与 `(0.
 
 评测口径要一起记：官方的 workflow 评测**取 GPT-6 Astra 与 Fable 5.1 的平均作为参考答案**（等于偏向 OpenAI/Anthropic 自己），LLM 基线套了自家「System One LLM wrapper」强制结构化输出（他们承认这样更慢更贵），工作流由本团队能力组编写（承认存在选择偏差），计时是在美西笔记本上跑的。官方把这些写进了 nuance——**这类自我披露本身值得学，但也意味着 40x ~ 200x 是「自家评测里的上界」而不是可复现基准**。
 
-第三方口径可以拿来对冲：**JevBench**（Benchmark Heaven 出品，2026-09-19 建仓，测类型化判断的准确率、校准、延迟与成本）与 **JevServe-bench**（2026-10-02，专门测「决策模型替 serving 系统做决定」做得好不好——路由、缓存、调度、验证、护栏、工具调用六类任务，打分是从系统默认值的 0 分到先知 oracle 的 100 分，且每个分数带 95% 区间）已经公开了排行榜；斯坦福与 Nvidia 的研究者报告他们开源的 **CLM-8B** 在部分任务上比 Jev 快至多九倍，代价是工具调用准确率更低——**注意这是他们自己的工作负载与部署配置下的结论**，恰好也是「开源小决策模型能不能自建」这个问题的第一个公开数据点。
+第三方口径可以拿来对冲：**JevBench**（Benchmark Heaven 出品，2026-09-19 建仓，测类型化判断的准确率、校准、延迟与成本）、Cloudflare 的 **Jev Decision Index**、以及 **JevServe-bench**（2026-10-02，专门测「决策模型替 serving 系统做决定」做得好不好——路由、缓存、调度、验证、护栏、工具调用六类任务，打分是从系统默认值的 0 分到先知 oracle 的 100 分，且每个分数带 95% 区间）已经公开了排行榜；斯坦福与 Nvidia 的研究者报告他们开源的 **CLM-8B** 在部分任务上比 Jev 快至多九倍，代价是工具调用准确率更低——**注意这是他们自己的工作负载与部署配置下的结论**，恰好也是「开源小决策模型能不能自建」这个问题的第一个公开数据点。
+
+**同一个 Jev 的延迟，三把尺子量出三个数**，这一组对比比任何单一数字都更该记住：
+
+| 测量方 | 口径 | Jev 延迟 |
+| :--- | :--- | :--- |
+| TypeSafe 官方 | 自家评测、美西笔记本计时 | 端到端 **70 ~ 500 ms**，文档称多数约 100 ms |
+| Cloudflare（Jev Decision Index） | 43 项评测的中间值 | **中位 524.1 ms / p95 536 ms**（Clef 209.3、Clef-flash 38.8、Laya 5.8） |
+| Laya README 对拍表 | 单问 p50，走 API | **236 ~ 276 ms**（其自托管编码器 32.8 ms） |
+
+差别来自任务复杂度、是否含公网往返、以及各家 wrapper 的实现——**引用延迟数字时必须连测量方与负载一起写**。这也再次说明官方那句「比前沿 LLM 快 40~200 倍」是相对它自己选定的工作流而言的，不是可搬运的物理常数。
 
 ## Engineering Practice: How to Use It Well
 
@@ -225,7 +235,7 @@ count = sum(result.nouls[f"item_{i}"].noul > YES for i in range(len(items)))
 | 延迟 | 毫秒级 | 秒到几十秒（开 thinking 更久） | 70~500 ms |
 | 输出侧计费 | 自建 GPU | 输出约为输入 5 倍价 | 输出免费 |
 | 生成 / 解释 / 多跳推理 | ✗ | ✅ | ✗ |
-| 私有化 / 离线 | ✅ | ⚠️ 开权重模型可自建 | ✗ 目前只有 API，权重不开 |
+| 私有化 / 离线 | ✅ | ⚠️ 开权重模型可自建 | ✗ Jev 本身只有 API、权重不开；但**同接口的开权重实现已可自建**（Laya / Clef / Strands Decider 2B），见 [The Interface Won](/docs/CS/AI/LLM/Model/Jev.md?id=the-interface-won-jev-compatible-decision-models) |
 | 迁移与泛化 | ✗ 单任务 | ✅ | ✅ 但**只覆盖判断形状的任务** |
 
 一句话判据：**答案空间封闭 + 代码是消费者 + 要概率可卡阈值** → 决策模型；**要生成、要解释、要多跳** → 生成模型；**任务极窄、量极大、必须私有化或延迟要求变态** → 仍然自训小模型。中间地带还有官方的 SDE cascade（mini → verify → reasoning 三段级联），本质是「先用便宜的判断层把贵的推理层省掉」。
@@ -243,7 +253,9 @@ TypeSafe 的原文表述有两句，一句在发布公告，一句在工程文�
 
 这套叙事在 2026 年的落点是自洽的：如果一次判断的成本掉到 $0.042/MTok 且输出免费，那么原本「不值得为这一步单独调模型」的微决策全部变得可行——每个工单、每句话、每个候选段落、每次工具返回都可以问一遍。**判断的单价塌下去，判断的次数爆炸**，总账单与总算力需求反而上升。官方的 cookbook 恰好是这个回弹的现场证据：一次问 13 题比串行便宜 12.2 倍，于是没人会只问一题。
 
-⚠️ 两点保留。**其一，悖论是厂商的叙事，不是被验证的结论**——回弹效应在能源与算力上的实证幅度学界一直在吵（有专门讨论 AI 场景 Jevons 悖论与 rebound 的 arXiv 综述，见 References）。**其二，它同时是限流口径的解释**：官方文档明写限额「随大 GPU 订单落地」而变动，即需求侧确实把供给顶住了。这个「效率提升 → 需求增长」的链条与本库其它结论同源：定价结构里真正决定账单的是缓存、思考 token 与台阶加价（见 [Overview](/docs/CS/AI/LLM/Model/Overview.md)），**成本下降从来不会自动等于总成本下降**。
+**接下来发生的事，比任何评论都更像对这条叙事的检验**：Jev 发布四周内，Cloudflare 把托管的 Clef-flash 从 $0.09 一路降到 **$0.038/MTok——刻意低于 Jev**，OpenAI 的 Decisions API 定在 $0.10，AWS 直接开源一个 2B 让你自建。判断的单价在被继续往下打，而每一家降价的理由都是「用量会更大」。**这正是杰文斯悖论的双向读法**：厂商用它解释自己为什么敢把输出定价为零，而竞争格局用它解释了为什么三个月内出现了四个可互换的实现。至于回弹到底发生多少，目前只有间接证据——TypeSafe 自己在文档里写「限额随 GPU 供给动态调整、我们正在承接非常大的需求量」，即**需求确实把供给顶住了**。
+
+⚠️ 但要把话说清楚：**悖论是厂商的叙事，不是被验证的结论**。回弹效应的实证幅度在能源与算力上一直有争议，判断「效率提升是否真的增加了总消耗」需要区分单位效率、总需求与弹性三个量（AI 场景下的系统讨论见 References 里的 arXiv 综述）。对本库更有用的读法在 [Overview](/docs/CS/AI/LLM/Model/Overview.md) 那一侧：**定价结构里真正决定账单的是缓存、思考 token 与台阶加价，成本下降从来不会自动等于总成本下降**——杰文斯悖论给的是这件事的一个具体版本。
 
 ## Ecosystem and Adoption
 
@@ -255,17 +267,37 @@ TypeSafe 的原文表述有两句，一句在发布公告，一句在工程文�
 | :--- | :--- |
 | 09-15 | TypeSafe 结束两年隐身发布 Jev，同步 $40M 种子轮（DCVC 领投），early access |
 | 09-18 ~ 09-20 | Vercel 称 Jev 是 AI Gateway **史上被采纳最快的模型**：上线 24 小时内近 **13% 的付费团队**接入，超过以往任何一次模型发布同期覆盖的两倍；三天内 Cloudflare、LangChain（`TypeSafeClassifier`）、Langfuse 完成接入 |
-| 09-19 | 第三方决策模型基准 **JevBench** 建仓（测判断准确率、校准、延迟与成本，独立排行榜） |
+| 09-18 | 开源同类 **Laya** 建仓（`NandhaKishorM/laya`，Apache 2.0，编码器 421M / 322M，四周内 3.2 万 star） |
+| 09-19 | 第三方决策模型基准 **JevBench** 建仓（Benchmark Heaven 出品，测类型化判断的准确率、校准、延迟与成本） |
 | 09-21 前后 | 中文媒体报道「爆火一周后正式全面开放」 |
 | 09-25 | OpenRouter 上架 `typesafe/jev-router` 条目 |
-| 10-01 | AWS 开源同类决策模型 **Strands Decider 2B**（Apache 2.0，自托管） |
-| 10-06 | OpenAI 推出 **Decisions API**：首版直接跑 GPT-6 Luna 不做额外训练，输入 $0.10/MTok、输出免费；**接受图像输入**（Jev 仅文本） |
-| 10-09 | TypeSafe 宣布 **$870M Series A**（a16z 领投，Sequoia 与 DCVC 参与，估值 $7.5B，a16z 的 Martin Casado 进董事会），距发布 24 天；此前 Cloudflare 已在 Workers AI 上推出同类决策模型 **Clef / Clef-flash** |
+| 10-01 | AWS 开源 **Strands Decider 2B**（Apache 2.0，自托管）；同日 Cloudflare 发布 **Clef / Clef-flash**（Apache 2.0 开权重 + Workers AI 托管，自称「完全 Jev-API 兼容」）与**决策模型 RL 微调平台**——事后披露的时间线是「周五晚决定、周末训练、周四上线」 |
+| 10-06 | OpenAI 推出 **Decisions API**：首版直接跑 GPT-6 Luna 不做额外训练，输入 $0.10/MTok、输出免费；**接受图像输入**（Jev 仅文本）。OpenAI 的 Nikunj Handa 公开承认是 Jev「激发了这一切」，且该 API 四周前还不在路线图上 |
+| 10-09 | TypeSafe 宣布 **$870M Series A**（a16z 领投，Sequoia 与 DCVC 参与，估值 $7.5B，a16z 的 Martin Casado 进董事会），距发布 24 天；同日 Cloudflare 发 **Clef-omni**（音频 / 视频 / 图像 / 文本），**把 Clef-flash 降到 $0.038/MTok 以低于 Jev**，并把托管版 flash 的上下文从 64k 砍到 24k |
 | 10-13 | 阿里云 AgentCore 公众号发布《深度解析 Jev 模型》中文长文（本笔记的主要中文来源） |
 
-需要打折的地方有三处。**其一**，「三分之一财富 500 强在用 Jev」是公司口径（约 167 家），领投方同一天的帖子写的是 25%（约 125 家，且措辞是「已完成集成」），**两边都没解释差异**——采用率类数字一律按营销读。**其二**，竞品跟进（OpenAI / AWS / Cloudflare）是这条路线成立的最强旁证，但也意味着**「决策模型」不是独家护城河，定价与配额都会变**。**其三**，排行榜本身也要看口径：AWS 发布对比图时引用了公开的 JevBench 结果，却把 Jev 与自己即将发布的 checkpoint 一起略去——**看这类图先查它缺了谁**。
+需要打折的地方有四处。**其一**，「三分之一财富 500 强在用 Jev」是公司口径（约 167 家），领投方同一天的帖子写的是 25%（约 125 家，且措辞是「已完成集成」），**两边都没解释差异**——采用率类数字一律按营销读。**其二**，竞品跟进（OpenAI / AWS / Cloudflare）是这条路线成立的最强旁证，但也意味着**「决策模型」不是独家护城河**：Cloudflare 自己披露的节奏是「周五晚决定、周末训练、周四上线」。**其三**，排行榜本身要看口径，AWS 发布对比图时引用了公开的 JevBench 结果，却把 Jev 与自己即将发布的 checkpoint 一起略去——**看这类图先查它缺了谁**。**其四**，中文圈流传的 **jevai.net 是社区站而非官方站**（自述「与 TypeSafe AI、Cloudflare 无隶属或背书关系」，页面同时推荐第三方转售通道 DefAPI 的半价额度）。它的三篇对比文章把 Jev / Laya / Clef 摆进同一张表，作为**线索**很有用，但三处口径要纠正：它写 Jev 输入价 $0.084/MTok，而官方文档当前是 **$0.042/MTok**（要么是早期定价、要么是笔误，以 docs 为准）；它说「公开资料未列明 DPA 与数据保留」，而官方 `/legal` 页其实列了 DPA、Privacy Policy 与企业级 ZDR（SOC 2 / ISO / on-prem 确实未见）；它对 Clef 与 Laya 的定性描述与两家的一手发布基本一致，可以引用。**结论：二手站只用来找线索，任何数字都回一手核对。**
 
 中文生态里最实用的两份材料在阿里云开源的《Alibaba Cloud AI Agent Handbook》里：一篇是上面那篇 Jev 深度解析（含中文分诊实测），另一篇是 `HiRoute：Jev 模型智能路由实践`——把长程 Agent 任务里的「整理资料 / 设计方案 / 实现代码 / 核验结果」按阶段路由到不同档位模型，这正好是本文第 [Engineering Practice](/docs/CS/AI/LLM/Model/Jev.md?id=engineering-practice-how-to-use-it-well) 节那条判据的落地样本。
+
+## The Interface Won: Jev-Compatible Decision Models
+
+Jev 真正的行业影响不是模型本身，而是 **`POST /v1/systemone` 这套接口形状在四周内变成了事实标准**——多家实现直接宣称「Jev API 兼容」，连原语名 `choice` / `score` / `noul` 都被照抄。但兼容只到 wire protocol 为止，**语义差别恰好落在决定阈值的地方**，这是选型最容易翻车的位置。
+
+| 实现 | 许可与底座 | 接口与语义差异（相对 Jev） |
+| :--- | :--- | :--- |
+| **Cloudflare Clef / Clef-flash / Clef-omni**（10-01、10-09） | **Apache 2.0 开权重** + Workers AI 托管；冻结 Qwen3.8-27B（flash 用 Qwen3.5-9B、omni 用 Qwen3-Omni-30B-A3B MoE）加 rank-256 LoRA，配两阶段注意力路由与 lexical prior，后训练用 label-smoothed CE + Brier 校准 | 同一请求体与 answers / usage 结构；**带视觉编码器**（omni 连音频与视频帧一起吃）、官方称上下文 64k；定价 Clef $0.24、flash 从 $0.09 降到 **$0.038/MTok（低于 Jev）**、omni $0.15；降价的代价是 **flash 托管上下文从 64k 砍到 24k**（权重自托管可跑到 256k）；Cloudflare 同时上线**决策模型 RL 微调平台**（AI Gateway 沉淀数据集 → Workers AI 跑 rollout → Containers 打分 → Trainer → BYO Model 部署回去） |
+| **Laya**（09-18 建仓，四周 3.2 万 star） | **Apache 2.0**，三个 ModernBERT-large 421M / mmBERT-base 322M 编码器 + 一个 typed-decisions 微调版，`Router` 按语言与任务分派；单次前向 T4 32.8 ms、批量 7.2 ms/问 | `laya-serve` 直接暴露 `/v1/systemone` 与 `/v1/systemone/batch`（≤64 state），另加 `lang` / `min_confidence` / `max_len` / `head_max_len`；但 **`confidence` 是 1 减归一化熵，不是 Jev 的 `(n·p_max − 1)/(n − 1)`**，其 README 原话是「A threshold carried over from Jev does not transfer」；选项共享 192 / 256 token 预算，**不是 Jev 的 255 选项上限** |
+| **AWS Strands Decider 2B**（10-01） | **Apache 2.0 开权重**，自托管 | 发布对比图引用了公开的 JevBench 结果，但把 Jev 与自己待发布的 checkpoint 一起略去 |
+| **OpenAI Decisions API**（10-06） | 托管，首版直接跑 GPT-6 Luna 不加训练 | **接受图像**（Jev 仅文本），输入 $0.10/MTok、输出同样免费 |
+
+一句提醒：Cloudflare 拿「64k vs Jev 的 32k」做对比时，取的是 Jev 的 **`state` + 最长单问**预算；官方口径其实是单请求 64K、其中 state + 最长单问 32K。**两家说的不是同一个数**，这类跨厂商对比要先对齐定义。
+
+三条可以直接抄进设计文档的结论：
+
+1. **换后端不等于换 base URL**。`confidence` 在不同实现里是不同的函数，**迁移必须用边界样本重标阈值**，别假设 0.8 还是 0.8。
+2. **开源侧的诚实代价值得读**。Laya 的 README 明确写：base checkpoint 在 typed-decisions 上零样本只有 0.362 / 0.352，**低于 0.461 的多数类基线**，要拿到 0.766 得自己微调并拟合温度，且 `noul` 有标签敏感性、`score` 有位置偏置。自托管换来的是控制权与一份模型工程工作，不是白拿的精度。
+3. **高基数选项目前仍是 Jev 的结构性优势**（选项预算与 255 上限的差异），而**多模态与可微调是它的结构性短板**——正好是 Clef 与 RL 微调平台切进去的两个口子。
 
 ## Links
 
@@ -296,4 +328,8 @@ TypeSafe 的原文表述有两句，一句在发布公告，一句在工程文�
 - [TypeSafe's Jev hits 13% of Vercel paid teams in 24 hours](https://aiweekly.co/alerts/typesafes-jev-hits-13-of-vercel-paid-teams-in-24-hours)
 - [JevBench: Benchmark for AI Decision Models](https://github.com/fstandhartinger/jevbench)
 - [JevServe-bench Leaderboard](https://supercomputing-system-ai-lab.github.io/jevserve-bench/)
+- [Introducing Clef: our open-source decision models, and new RL fine-tuning platform](https://blog.cloudflare.com/clef-decision-models/)
+- [Introducing Clef-omni with full multimodality, plus a faster Clef and a cheaper Clef-flash](https://blog.cloudflare.com/clef-faster-cheaper-multimodal/)
+- [Laya: non-autoregressive System 1 decision engine](https://github.com/NandhaKishorM/laya)
+- [Jev AI 文章（社区站，含 Jev 入门 / Jev vs Laya / Clef vs Jev）](https://jevai.net/zh-cn/articles/)
 - [From Efficiency Gains to Rebound Effects: The Problem of Jevons Paradox in AI](https://arxiv.org/abs/2501.16548)
