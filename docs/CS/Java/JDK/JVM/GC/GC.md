@@ -34,7 +34,7 @@ JDK 10 的 [JEP 304: Garbage Collector Interface](https://openjdk.org/jeps/304) 
 1. **卡表标记（Card Marking）**：把跨区域引用记录在 Card Table 中；
 2. **两指令（Two-Instruction）**方案：以少量指令开销完成卡表更新。
 
-详见 [G1 Roots](/docs/CS/Java/JDK/JVM/GC/G1.md?id=roots) 与各收集器页；记忆集与写屏障的全景见 [GC 屏障全景](#gc-barrier-panorama-write-barrier-read-barrier-and-remembered-set)。跨代引用假说（分代回收的理论基础）见 [Intergenerational Reference Hypothesis](#intergenerational-reference-hypothesis)。
+详见 [G1 RSet（含 Root Scanning）](/docs/CS/Java/JDK/JVM/GC/G1/RSet.md) 与各收集器页；记忆集与写屏障的全景见 [GC 屏障全景](#gc-barrier-panorama-write-barrier-read-barrier-and-remembered-set)。跨代引用假说（分代回收的理论基础）见 [Intergenerational Reference Hypothesis](#intergenerational-reference-hypothesis)。
 
 ### mark
 
@@ -110,7 +110,7 @@ product(bool, UseCondCardMark, false,                                     \
 
 1. **卡表标记（Card Marking）**：当存储创建"老生代→新生代"（或跨区域）的引用时，把对应卡（card）标记为脏，GC 只扫描脏卡而非整个老生代。G1 / CMS / 分代 Shenandoah 使用；详见 [CardTable](/docs/CS/Java/JDK/JVM/GC/CardTable.md)。
 2. **SATB 写屏障**：引用字段被覆盖前，把旧值压入 SATB 队列（G1 / Shenandoah 并发标记阶段）。
-3. **增量更新写屏障**：黑色对象指向白色对象时记录（CMS）。
+3. **增量更新写屏障**：黑色对象指向白色对象时记录（CMS，见 [CMS Incremental Update](/docs/CS/Java/JDK/JVM/GC/CMS/IncrementalUpdate.md)）。
 4. **并发转移写屏障**：Shenandoah 在并发压缩阶段，若对象仍指向 from-region，则先将其转移到 to-region 再写，以维持"目标无转发"不变式。
 
 ### Read Barrier (Load Barrier)
@@ -124,7 +124,7 @@ product(bool, UseCondCardMark, false,                                     \
 
 ### Relation Between Remembered Set and Card Table
 
-**记忆集** 是"记录从本区/本代指向其他区/代的所有引用"的数据结构，目的是让收集某区域时**不必扫描整个堆**。其实现通常就是卡表（写屏障标脏）；G1 还用更精细的 Per-Region Remembered Set（RSet，基于卡表），见 [G1 的 Remembered Set 小节](/docs/CS/Java/JDK/JVM/GC/G1.md?id=remembered-set) 与 [CardTable](/docs/CS/Java/JDK/JVM/GC/CardTable.md)。
+**记忆集** 是"记录从本区/本代指向其他区/代的所有引用"的数据结构，目的是让收集某区域时**不必扫描整个堆**。其实现通常就是卡表（写屏障标脏）；G1 还用更精细的 Per-Region Remembered Set（RSet，基于卡表），见 [G1 RSet Refinement](/docs/CS/Java/JDK/JVM/GC/G1/RSet.md) 与 [CardTable](/docs/CS/Java/JDK/JVM/GC/CardTable.md)。
 
 | 收集器 | 写屏障 | 读屏障 | 记忆集 / 卡表 |
 | :--- | :--- | :--- | :--- |
@@ -162,10 +162,10 @@ product(bool, UseCondCardMark, false,                                     \
 
 | 算法 | 核心思想 | 如何借写屏障实现 | 代表收集器 |
 | :--- | :--- | :--- | :--- |
-| **增量更新（Incremental Update）** | 不丢"黑→白"的新增引用：一旦黑对象新指向白对象，将该黑对象**重新置灰**（或记录待重新扫描），重新扫描它 | 写屏障在"黑色对象字段写入白色引用"时，将黑色对象重新入灰 | **CMS**（被称为 *incremental update*，见 [CMS 页](/docs/CS/Java/JDK/JVM/GC/CMS.md)） |
+| **增量更新（Incremental Update）** | 不丢"黑→白"的新增引用：一旦黑对象新指向白对象，将该黑对象**重新置灰**（或记录待重新扫描），重新扫描它 | 写屏障在"黑色对象字段写入白色引用"时，将黑色对象重新入灰 | **CMS**（被称为 *incremental update*，见 [CMS Incremental Update](/docs/CS/Java/JDK/JVM/GC/CMS/IncrementalUpdate.md)） |
 | **SATB（Snapshot At The Beginning）** | 不丢"被删除的引用"：以标记**开始时刻的堆快照**为准，开始时存活的对象都算存活；mutator 覆盖某引用时，把**旧值**记录进 SATB 队列，标记线程随后补扫 | 写屏障在"引用字段被覆盖"时，将旧引用压入 `SATBMarkQueue` | **G1**、**Shenandoah**（见 [Shenandoah 页](/docs/CS/Java/JDK/JVM/GC/Shenandoah.md)）；CMS 的 Remark 阶段也部分借鉴 |
 
-> 直觉：增量更新保的是"新连上的引用"，SATB 保的是"断开前的旧引用"。前者写屏障重（每次黑→白都要处理），后者实现更简单、对 mutator 写路径侵入小，但会把"标记开始时存活、之后立刻死亡"的对象延迟到下一周期才回收（浮动垃圾）。CMS 用增量更新（可能因漏标而触发 Concurrent Mode Failure 后回退到 Full GC），G1 / Shenandoah 用 SATB。
+> 直觉：增量更新保的是"新连上的引用"，SATB 保的是"断开前的旧引用"。前者写屏障重（每次黑→白都要处理），后者实现更简单、对 mutator 写路径侵入小，但会把"标记开始时存活、之后立刻死亡"的对象延迟到下一周期才回收（浮动垃圾）。CMS 用增量更新（可能因漏标而触发 [Concurrent Mode Failure](/docs/CS/Java/JDK/JVM/GC/CMS/ConcurrentModeFailure.md) 后回退到 Full GC），G1 / Shenandoah 用 SATB。
 
 G1 中存活对象由 `G1SATBCardTableModRefBS`（继承自 card-table 写屏障）实现：运行时引用字段被覆盖前把旧值 enqueue；并发标记线程在最终标记（Remark）阶段 drain 完 SATB 队列，确保所有"开始时刻"的对象都已标黑。相关源码位于 `src/hotspot/share/gc/g1/`。
 
@@ -200,7 +200,7 @@ G1 中存活对象由 `G1SATBCardTableModRefBS`（继承自 card-table 写屏障
 ### Trigger Timing
 
 - **minor / Young GC**：Eden 满（或发生分配时 Survivor 无空间）。
-- **并发标记启动**：老年代 / 整堆占用达阈值（如 G1 的 IHOP、CMS 的 `CMSInitiatingOccupancyFraction` 默认 ~92%）；也可能由分配压力、元空间耗尽等触发。
+- **并发标记启动**：老年代 / 整堆占用达阈值（如 G1 的 IHOP、CMS 的 `CMSInitiatingOccupancyFraction` 默认 ~92%，详见 [CMS Concurrent Mode Failure](/docs/CS/Java/JDK/JVM/GC/CMS/ConcurrentModeFailure.md)）；也可能由分配压力、元空间耗尽等触发。
 - **Full GC**：老年代空间不足且并发回收来不及、晋升失败、`System.gc()`（除非 `-XX:+DisableExplicitGC`）、元空间（Metaspace）耗尽。FGC 通常暂停长。
 
 ## Reference Processing
@@ -288,7 +288,7 @@ HotSpot 的收集器家族，其演进主线是**把越来越多的 GC 工作从
 代际替换关系：
 
 - **Serial → Parallel**：用多线程换取吞吐量，代价是 STW 暂停随堆增大而变长。
-- **Parallel → CMS**：引入并发标记/清除，换取更短暂停，代价是内存碎片、Concurrent Mode Failure 风险与更高的 CPU 占用。
+- **Parallel → CMS**：引入并发标记/清除，换取更短暂停，代价是内存碎片、[Concurrent Mode Failure](/docs/CS/Java/JDK/JVM/GC/CMS/ConcurrentModeFailure.md) 风险与更高的 CPU 占用。
 - **CMS → G1**：以 Region 化堆与可预测暂停模型取代 CMS 的「标记-清除」碎片问题，目标是平衡吞吐与延迟。
 - **G1 → Shenandoah / ZGC**：进一步把对象重定位（relocation）也并发化——Shenandoah 用 Brooks Pointer + 读屏障，ZGC 用着色指针（Colored Pointer）+ 读屏障——把暂停时间与堆大小彻底解耦，做到亚 10 ms 级暂停、TB 级堆。
 - **Epsilon** 是旁支：不做任何回收，仅用于性能基准测试与已知短命进程。
@@ -299,7 +299,7 @@ HotSpot 的收集器家族，其演进主线是**把越来越多的 GC 工作从
 | --- | --- | --- | --- | --- | --- |
 | `Serial` | 全程 STW（单线程） | 实现最简单、运行时开销最小、内存占用最低 | 单线程，暂停随堆线性增长 | 单处理器 / 小堆（<100 MB） | 无法利用多核 |
 | `Parallel` | 年轻代/老年代 STW（多线程） | 吞吐量最高 | 暂停长（可到秒级，随堆增大） | 批处理、科学计算等后台任务 | 延迟敏感场景不可用 |
-| `CMS`（已移除） | 标记/清除并发，回收仍 STW | 相对更短暂停 | 内存碎片、Concurrent Mode Failure、浮动垃圾、CPU 占用高 | JDK 14 前的中堆低延迟服务 | JDK 14 起移除，不可再用 |
+| `CMS`（已移除） | 标记/清除并发，回收仍 STW | 相对更短暂停 | 内存碎片、[Concurrent Mode Failure](/docs/CS/Java/JDK/JVM/GC/CMS/ConcurrentModeFailure.md)、浮动垃圾、CPU 占用高 | JDK 14 前的中堆低延迟服务 | JDK 14 起移除，不可再用，见 [CMS Removal](/docs/CS/Java/JDK/JVM/GC/CMS/Removal.md) |
 | `G1` | 并发标记 + STW 回收（Region 化） | 吞吐/延迟平衡、可预测暂停、大堆友好 | 内存与 CPU 开销高于 CMS、调优面较宽 | >4 GB 堆的通用服务端 | 小堆反而更慢 |
 | `Shenandoah` | 并发标记 + **并发**重定位 | 暂停与堆大小基本无关、主动归还内存给 OS | CPU 开销高（并发屏障） | 大堆且要求稳定低延迟 | 相比 G1/ZGC 吞吐略降 |
 | `ZGC` | 全并发（着色指针 + 读屏障） | 暂停 <10 ms、支持 TB 级堆、归还内存 | 早期不支持分代（JDK 21+ 已补）、对透明大页/元空间有约束 | 超大堆 / 超低延迟 | 极早期版本功能受限 |
@@ -323,7 +323,7 @@ Serial 使用 Cheney 复制算法（以及 Moon 算法变体）完成存活对�
 #### Serial Old
 
 - 与 Parallel 配合（自 JDK 5）；
-- 在 CMS 发生 Concurrent Mode Failure 时作为后备收集器。
+- 在 CMS 发生 [Concurrent Mode Failure](/docs/CS/Java/JDK/JVM/GC/CMS/ConcurrentModeFailure.md) 时作为后备收集器。
 
 ### Parallel Scavenge
 
@@ -377,7 +377,7 @@ Shenandoah 于 **JDK 12 作为实验特性集成（[JEP 189](https://openjdk.org
 
 Shenandoah 相对 G1 的关键优势是：它在与应用线程并发的过程中完成了更多 GC 周期工作。G1 只能在应用暂停时搬迁堆区域，而 Shenandoah 可与应用并发地重定位对象。Shenandoah 能压缩存活对象、清理垃圾，并在检测到空闲内存后几乎立即把 RAM 归还 OS。由于这一切都在应用运行时并发进行，Shenandoah 的 CPU 开销更高。
 
-启用 Shenandoah：`-XX:+UseShenandoahGC`（自 JDK 15 起为 product 选项，不再需要 `-XX:+UnlockExperimentalVMOptions`；JDK 24+ 的分代实验模式见 [Generational Shenandoah](/docs/CS/Java/JDK/JVM/GC/Shenandoah.md)）。
+启用 Shenandoah：`-XX:+UseShenandoahGC`（自 JDK 15 起为 product 选项，不再需要 `-XX:+UnlockExperimentalVMOptions`；JDK 24+ 的分代实验模式见 [Shenandoah Generational](/docs/CS/Java/JDK/JVM/GC/Shenandoah/Generational.md)）。
 
 [JEP 189: Shenandoah: A Low-Pause-Time Garbage Collector (Experimental)](https://openjdk.java.net/jeps/189)
 

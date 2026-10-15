@@ -2213,11 +2213,11 @@ with jvisualvm
 ## This Directory Navigation
 
 JVM 笔记沿「类加载 → 运行时数据区 → 执行引擎 → 运行时支撑」展开，垃圾回收单独成页（见末条）。
-本子树已整体按 **jdk-27-ga** 源码重核过一轮，新增的五篇都源于原来「概念被反复引用却没有承载页」的空白：
+本子树已整体按 **jdk-27-ga** 源码重核过一轮，新增各篇都源于原来「概念被反复引用却没有承载页」的空白：
 
 - 类加载与元数据：[ClassFile](/docs/CS/Java/JDK/JVM/ClassFile.md)（class 文件格式、常量池与属性表全集）、[ClassLoader](/docs/CS/Java/JDK/JVM/ClassLoader.md)、[Method](/docs/CS/Java/JDK/JVM/Method.md)、[Oop-Klass](/docs/CS/Java/JDK/JVM/Oop-Klass.md)（oop / klass 二分）、[Metaspace](/docs/CS/Java/JDK/JVM/Metaspace.md)（弹性 Metaspace 的 chunk 树）、[SymbolTable](/docs/CS/Java/JDK/JVM/SymbolTable.md)（interned 符号与 StringTable 的分界）
 - 对象与栈的内存布局：[Runtime Data Area](/docs/CS/Java/JDK/JVM/Runtime_Data_Area.md)、[Object_Header](/docs/CS/Java/JDK/JVM/Object_Header.md)（`markWord` 位布局、压缩指针与 JEP 534 紧凑对象头）、[Stack](/docs/CS/Java/JDK/JVM/Stack.md)（线程栈这块内存本身）、[frame](/docs/CS/Java/JDK/JVM/frame.md)（如何解读其中一段）、[TLAB](/docs/CS/Java/JDK/JVM/TLAB.md)（分配 fast path，写下去的第一个字就是对象头）
-- 执行引擎与编译：[ExecutionEngine](/docs/CS/Java/JDK/JVM/ExecutionEngine.md)（入口分派与四条执行路径的导览）、[interpreter](/docs/CS/Java/JDK/JVM/interpreter.md)（模板解释器）、[c1](/docs/CS/Java/JDK/JVM/c1.md)、[JIT](/docs/CS/Java/JDK/JVM/JIT.md)（分层编译）、[Deoptimization](/docs/CS/Java/JDK/JVM/Deoptimization.md)（推测破产时把编译帧退回解释帧）、[CodeCache](/docs/CS/Java/JDK/JVM/CodeCache.md)、[Javac](/docs/CS/Java/JDK/JVM/Javac.md)
+- 执行引擎与编译：[ExecutionEngine](/docs/CS/Java/JDK/JVM/ExecutionEngine.md)（入口分派与四条执行路径的导览）、[interpreter](/docs/CS/Java/JDK/JVM/interpreter.md)（模板解释器）、[c1](/docs/CS/Java/JDK/JVM/c1.md)、[c2](/docs/CS/Java/JDK/JVM/c2.md)（server 层优化编译器：Ideal 图、各优化阶段与 Chaitin-Briggs 寄存器分配的完整管线）、[JIT](/docs/CS/Java/JDK/JVM/JIT.md)（分层编译）、[Deoptimization](/docs/CS/Java/JDK/JVM/Deoptimization.md)（推测破产时把编译帧退回解释帧）、[CodeCache](/docs/CS/Java/JDK/JVM/CodeCache.md)、[Javac](/docs/CS/Java/JDK/JVM/Javac.md)
 - 线程与运行时支撑：[Thread](/docs/CS/Java/JDK/JVM/Thread.md)、[Handles](/docs/CS/Java/JDK/JVM/Handles.md)（GC 会移动对象，所以热路径上拿的是句柄而非裸 `oop`；含 JNI 引用表的内部实现）、[Safepoint](/docs/CS/Java/JDK/JVM/Safepoint.md)、[JavaCall](/docs/CS/Java/JDK/JVM/JavaCall.md)
 - 生命周期与启动加速：[start](/docs/CS/Java/JDK/JVM/start.md)（构建与 `create_vm`）、[Startup_Acceleration](/docs/CS/Java/JDK/JVM/Startup_Acceleration.md)（CDS / 动态归档 / AOT class linking / AOT method / final image）、[destroy](/docs/CS/Java/JDK/JVM/destroy.md)（有序、`halt` 与崩溃三条终止路径）
 - 可观测性与性能：[Serviceability](/docs/CS/Java/JDK/JVM/Serviceability.md)（统一日志、NMT、dcmd 与 attach 这套底座）、[JMH](/docs/CS/Java/JDK/JVM/JMH.md)、[Graal](/docs/CS/Java/JDK/JVM/Graal.md)

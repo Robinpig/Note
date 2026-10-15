@@ -516,96 +516,18 @@ c2i是指编译模式到解释模式（Compiler-to-Interpreter），i2c是指解
 
 ## c2
 
-[CompilerThread](/docs/CS/Java/JDK/JVM/Thread.md?id=compilerthread) -> `C2Compiler::compile_method`
+C2 的完整管线已独立成篇：[c2](/docs/CS/Java/JDK/JVM/c2.md)（入口降级阶梯、Ideal 图与 Parse、GVN、Optimize 各阶段、指令选择、Chaitin-Briggs 寄存器分配、输出与安装）。这里只留两段速查。
 
-### compile_method
-
-```cpp
-
-void C2Compiler::compile_method(ciEnv* env, ciMethod* target, int entry_bci, bool install_code, DirectiveSet* directive) {
-  assert(is_initialized(), "Compiler thread must be initialized");
-
-  bool subsume_loads = SubsumeLoads;
-  bool do_escape_analysis = DoEscapeAnalysis;
-  bool do_iterative_escape_analysis = DoEscapeAnalysis;
-  bool eliminate_boxing = EliminateAutoBox;
-  bool do_locks_coarsening = EliminateLocks;
-
-  while (!env->failing()) {
-    // Attempt to compile while subsuming loads into machine instructions.
-    Options options(subsume_loads, do_escape_analysis, do_iterative_escape_analysis, eliminate_boxing, do_locks_coarsening, install_code);
-    Compile C(env, target, entry_bci, options, directive);
-
-    // Check result and retry if appropriate.
-    if (C.failure_reason() != NULL) {
-      if (C.failure_reason_is(retry_class_loading_during_parsing())) {
-        env->report_failure(C.failure_reason());
-        continue;  // retry
-      }
-      if (C.failure_reason_is(retry_no_subsuming_loads())) {
-        assert(subsume_loads, "must make progress");
-        subsume_loads = false;
-        env->report_failure(C.failure_reason());
-        continue;  // retry
-      }
-      if (C.failure_reason_is(retry_no_escape_analysis())) {
-        assert(do_escape_analysis, "must make progress");
-        do_escape_analysis = false;
-        env->report_failure(C.failure_reason());
-        continue;  // retry
-      }
-      if (C.failure_reason_is(retry_no_iterative_escape_analysis())) {
-        assert(do_iterative_escape_analysis, "must make progress");
-        do_iterative_escape_analysis = false;
-        env->report_failure(C.failure_reason());
-        continue;  // retry
-      }
-      if (C.failure_reason_is(retry_no_locks_coarsening())) {
-        assert(do_locks_coarsening, "must make progress");
-        do_locks_coarsening = false;
-        env->report_failure(C.failure_reason());
-        continue;  // retry
-      }
-      if (C.has_boxed_value()) {
-        // Recompile without boxing elimination regardless failure reason.
-        assert(eliminate_boxing, "must make progress");
-        eliminate_boxing = false;
-        env->report_failure(C.failure_reason());
-        continue;  // retry
-      }
-      // Pass any other failure reason up to the ciEnv.
-      // Note that serious, irreversible failures are already logged
-      // on the ciEnv via env->record_method_not_compilable().
-      env->record_failure(C.failure_reason());
-    }
-    if (StressRecompilation) {
-      if (subsume_loads) {
-        subsume_loads = false;
-        continue;  // retry
-      }
-      if (do_escape_analysis) {
-        do_escape_analysis = false;
-        continue;  // retry
-      }
-      if (do_locks_coarsening) {
-        do_locks_coarsening = false;
-        continue;  // retry
-      }
-    }
-    // print inlining for last compilation only
-    C.dump_print_inlining();
-
-    // No retry; just break the loop.
-    break;
-  }
-}
-```
+`C2Compiler::compile_method`（`c2compiler.cpp:123`）的重试阶梯：失败时按 `retry_no_subsuming_loads` → `retry_no_escape_analysis` → `retry_no_iterative_escape_analysis` → `retry_no_reduce_allocation_merges` → `retry_no_locks_coarsening` → `retry_no_superword` → `has_boxed_value` 的顺序逐个关掉优化开关重编，每轮 `assert(..., "must make progress")`。**旧文（JDK 8/11 口径）里的 `retry_class_loading_during_parsing` 在 jdk-27 已被移除**，别按七级阶梯对日志。`StressRecompilation`（develop，默认 false）分支在失败处理块之外——编译成功也会强制重编，只重试 subsume_loads / escape_analysis / locks_coarsening 三项。
 
 Or see PhaseTraceId
+
+`PhaseTraceId` 定义在 **`phase.hpp`** 的 `ALL_PHASE_TRACE_IDS` 宏（`phase.hpp:69-130`，枚举在 `phase.hpp:131-136`）——**不是** `phasetype.hpp`：后者装的是另一套打印用的 `CompilerPhaseType` 枚举（117 项，`phasetype.hpp:32-149`），两个枚举常被混为一谈。
 
 ```cpp
 
   enum PhaseTraceId {
+    _t_none,
     _t_parser,
     _t_optimizer,
       _t_escapeAnalysis,
@@ -659,11 +581,13 @@ Or see PhaseTraceId
       _t_registerMethod,
     _t_temporaryTimer1,
     _t_temporaryTimer2,
+    _t_testPhase1,
+    _t_testPhase2,
     max_phase_timers
    };
 ```
 
-Compile::Compile -> Compile::Optimize
+`Compile::Compile` → `Compile::Optimize`（阶段顺序）→ `Compile::Code_Gen`（matcher / GCM / RA / output / install）的完整展开见 [c2](/docs/CS/Java/JDK/JVM/c2.md)。
 
 ## Optimization
 

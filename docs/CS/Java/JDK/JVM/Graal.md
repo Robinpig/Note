@@ -45,7 +45,7 @@ java -XX:+UnlockExperimentalVMOptions -XX:+UseJVMCICompiler
 
 Graal 这个项目实际有**两个方向**，容易混淆：
 
-1. **作为 GraalVM 的 JIT 编译器**（经 JVMCI 接入）——本质是 C2 的替代品，做更激进的优化。
+1. **作为 GraalVM 的 JIT 编译器**（经 JVMCI 接入）——本质是 [C2](/docs/CS/Java/JDK/JVM/c2.md) 的替代品，做更激进的优化。
 2. **作为语言实现框架 Truffle** —— 用 Java 写**自优化 AST 解释器**，Graal 编译器再用**部分求值（partial evaluation）**把解释器针对具体程序特化成机器码。GraalJS、GraalPy、TruffleRuby 都是这条路。
 
 Truffle 的核心思想来自「第一费马投影」：**特化一个解释器就等于得到一个编译器**。你只需要写一个相对容易的 AST 解释器，Graal 编译器在运行时分析热点 AST、消除解释器自身的分派开销，产出接近手写编译器的机器码。节点通过 `@Specialization` 注解声明多种特化形式，运行时根据实际观测到的类型自我重写（self-optimizing），推测失效时回退并重新编译。
