@@ -104,6 +104,7 @@
 - [Posture and Load](/docs/Sports/Spine_Health/Posture_and_Load.md)
 - [Weight Management](/docs/Sports/Weight_Management/Weight_Management.md)
 - [Anatomy](/docs/Sports/Anatomy.md)
+- [Hip and Knee](/docs/Sports/Joint_Health/Hip_and_Knee.md)
 
 ## References
 

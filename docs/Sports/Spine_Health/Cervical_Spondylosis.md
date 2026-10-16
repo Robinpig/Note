@@ -106,6 +106,8 @@
 - [Spine Health](/docs/Sports/Spine_Health/Spine_Health.md)
 - [Posture and Load](/docs/Sports/Spine_Health/Posture_and_Load.md)
 - [Anatomy](/docs/Sports/Anatomy.md)
+- [Shoulder](/docs/Sports/Joint_Health/Shoulder.md)
+- [Elbow and Wrist](/docs/Sports/Joint_Health/Elbow_and_Wrist.md)
 
 ## References
 

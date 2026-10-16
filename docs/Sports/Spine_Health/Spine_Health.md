@@ -123,6 +123,7 @@
 - [Lumbar Disc Herniation](/docs/Sports/Spine_Health/Lumbar_Disc_Herniation.md)
 - [Scoliosis](/docs/Sports/Spine_Health/Scoliosis.md)
 - [Sports](/docs/Sports/Sports.md)
+- [Joint Health](/docs/Sports/Joint_Health/Joint_Health.md)
 
 ## References
 

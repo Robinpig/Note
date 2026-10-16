@@ -57,6 +57,7 @@
 - [基础医学](/docs/Medicine/Basic_Medicine.md)
 - [概率论与数理统计](/docs/Mathematics/Probability_Statistics.md)
 - [医学史与医学伦理](/docs/Medicine/Medical_History_Ethics.md)
+- [Joint Health](/docs/Sports/Joint_Health/Joint_Health.md)
 
 ## References
 

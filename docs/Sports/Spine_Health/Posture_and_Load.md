@@ -103,6 +103,7 @@
 - [Cervical Spondylosis](/docs/Sports/Spine_Health/Cervical_Spondylosis.md)
 - [Lumbar Disc Herniation](/docs/Sports/Spine_Health/Lumbar_Disc_Herniation.md)
 - [Scoliosis](/docs/Sports/Spine_Health/Scoliosis.md)
+- [Tendon and Load](/docs/Sports/Joint_Health/Tendon_and_Load.md)
 
 ## References
 
