@@ -44,7 +44,7 @@ Note/
 │   ├── Psychology/     分支学科枢纽页 + 各分支
 │   ├── Philosophy/
 │   ├── Economics/
-│   └── Sports/         Philosophy/Economics/Sports 为少量读书摘录
+│   └── Sports/         运动生理学与训练应用（见「科学减重专题的组织」）；Philosophy/Economics 为少量读书摘录
 ├── out/                IDE 编译产物副本 —— 只读，不要改（本机、不入库）
 ├── src/                忽略，不要改
 └── wiki/、knowledge-base/、outputs/   空占位，不要改
@@ -91,6 +91,16 @@ Note/
 - ⚠️ **内容口径：学科框架为主，谨慎写临床细节**。剂量、诊疗路径、指南推荐等级、各类指标阈值、给药方案与器械参数**不收录**——它们随指南更新而变化，写死必然过时且有出错风险。需要时只写「关注点与判断逻辑」，并在页首用 `> [!WARNING]` 块声明「不收录具体规程，以最新指南与机构规范为准」。
 - ⚠️ 医学笔记用**中文术语 + 英文原名**（如「循证医学（evidence-based medicine）」首次出现时），这是本库其他领域（CS/哲学/心理学）一致的做法。
 - 医学与本库其他领域的固定交叉点：`Sports/Anatomy.md`（解剖）、`Psychology/Biological_Psychology.md`（生理基础）、`Philosophy/Ethics.md`（伦理四原则的哲学源流）、`Mathematics/Probability_Statistics.md`（研究设计与统计推断）、`CS/AI/AI.md`（AI 辅助决策的算法责任）。新增医学页时优先链到这些已有页，不要重复新建。
+
+## 科学减重专题的组织（`docs/Sports/Weight_Management/`）
+
+2026-10 新增，本库**第一个运动学专题子树**，也是 `Sports/` 目前唯一有子目录的主题：
+
+- 结构为 `Weight_Management.md`（总纲，含**三条贯穿主线：缺口的三个维度 / 瘦体重是承重墙 / 维持是另一道题**）+ 5 篇机制分册：`Energy_Balance.md`、`Nutrition_Intervention.md`、`Exercise_Prescription.md`、`Assessment_and_Tracking.md`、`Behavior_and_Maintenance.md`。五页按「存得下 → 吃什么 → 怎么动 → 怎么量 → 怎么守」的因果链分工，**同一结论只有归属分册可以展开写，其它页只链接不重述**（各页开头已写明分工，新增内容先确认归属再动笔）。
+- 领域枢纽是 `Sports/Sports.md`，**新增子目录后必须回它挂入口**（本库通用规则，此处同样适用）。
+- ⚠️ **内容口径：机制 + 自我管理**。不收录药物、代谢手术、诊疗路径、指南推荐等级与个体化热量处方——与 `Medicine/` 口径一致，但本专题额外要求**不得写成减重操作方案**（不写「摄入须低于 X kcal」这类硬阈值、不给极端限制的执行细节），并保留「不适合自行减重」与进食障碍求助边界的小节。页首一律用 `> [!WARNING]` 块声明口径。
+- ⚠️ **引用纪律高于全库平均水平**：这个题目网上伪科学极多，正文数字断言必须能指到一手文献。外部引用一律经 PubMed eutils 的 `esearch` + `esummary` 核对 PMID 与标题**逐字一致**后才写；`pubmed.ncbi.nlm.nih.gov/<PMID>/` 的 HTML 页在本机返回 **203 拦截页**，**不要用它的状态码判断链接是否有效**（eutils 返回 200 + JSON 才算）。核实不上的结论改成机制叙述，不要留数字。
+- 与本库其它领域的固定交叉点：`Sports/Anatomy.md`（动作模式与肌群，运动处方页只借用其框架）、`Psychology/Biological_Psychology.md`（食欲与内分泌调控）、`Psychology/Cognitive_Bias.md` 与 `Psychology/Positive_Psychology.md`（进食行为与动机）、`Medicine/Public_Health.md`（肥胖的流行病学与三级预防）、`Mathematics/Probability_Statistics.md`（测量噪声与均值）。新增内容优先链到这些已有页，不要重复新建。
 
 ## Linux 内核笔记的组织（当前主力方向）
 
