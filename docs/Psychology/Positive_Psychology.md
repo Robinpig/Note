@@ -47,6 +47,7 @@ Csikszentmihalyi 提出，当**挑战与技能相匹配**时，人会进入高�
 - [人格心理学](/docs/Psychology/Personality_Psychology.md)
 - [临床与异常心理学](/docs/Psychology/Clinical_Psychology.md)
 - [发展心理学](/docs/Psychology/Developmental_Psychology.md)
+- [Behavior and Maintenance](/docs/Sports/Weight_Management/Behavior_and_Maintenance.md)
 
 ## References
 

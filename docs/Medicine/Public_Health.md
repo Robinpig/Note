@@ -100,6 +100,7 @@
 - [诊断学](/docs/Medicine/Diagnosis.md)
 - [概率论与数理统计](/docs/Mathematics/Probability_Statistics.md)
 - [护理学](/docs/Medicine/Nursing/Nursing.md)
+- [Nutrition Intervention](/docs/Sports/Weight_Management/Nutrition_Intervention.md)
 
 ## References
 

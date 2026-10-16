@@ -44,6 +44,7 @@
 - [认知心理学](/docs/Psychology/Cognitive_Psychology.md)
 - [临床与异常心理学](/docs/Psychology/Clinical_Psychology.md)
 - [行为主义与学习](/docs/Psychology/Behaviorism.md)
+- [Energy Balance](/docs/Sports/Weight_Management/Energy_Balance.md)
 
 ## References
 

@@ -45,3 +45,5 @@
 ## Links
 
 - [Sports](/docs/Sports/Sports.md)
+- [Weight Management](/docs/Sports/Weight_Management/Weight_Management.md)
+- [Exercise Prescription](/docs/Sports/Weight_Management/Exercise_Prescription.md)

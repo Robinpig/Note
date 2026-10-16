@@ -51,6 +51,7 @@ Kahneman 与 Tversky 的「启发式与偏差」纲领是这一领域的奠基�
 - [认知心理学](/docs/Psychology/Cognitive_Psychology.md)
 - [社会心理学](/docs/Psychology/Social_Psychology.md)
 - [精神分析](/docs/Psychology/Psychoanalysis.md)
+- [Behavior and Maintenance](/docs/Sports/Weight_Management/Behavior_and_Maintenance.md)
 
 ## References
 
