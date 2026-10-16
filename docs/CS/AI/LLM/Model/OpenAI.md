@@ -136,7 +136,7 @@ OpenAI 与 Anthropic 各自选了自己有利的评测集，effort 设定与 har
 - **只有「Astra 明显不够」才上 `gpt-6-astra`**。它的 2.5 倍价差要靠「更少的 token 数」和「更少返工」摊回来，这依赖你的负载形状，必须自己测。
 - **大规模抽取、分类、路由、日志归类走 `gpt-6-luna`**（$0.10／$0.50）。这个档位的输入价已经低于 [DeepSeek V4.1-Flash](/docs/CS/AI/LLM/Model/DeepSeek.md) 的 0.15 美元／输出 0.60 美元同一量级，但上下文大得多。
 - **别把 Fast mode 当默认**。它只买延迟，不买质量，价钱是双倍。
-- **Agent 与编码工具的接入方式**见 [Codex](/docs/CS/AI/LLM/Agent/Product/Codex.md)。
+- **Agent 与编码工具的接入方式**见 [Codex](/docs/CS/AI/LLM/Agent/Product/Codex/Codex.md)。
 
 ## Links
 

@@ -7,7 +7,7 @@
 | 目录 | 装什么 | 枢纽 |
 | :--- | :--- | :--- |
 | [`Theory/`](https://github.com/Robinpig/Note/blob/master/docs/CS/AI/LLM/Agent/Theory/Agent.md) | 机制与概念：Agent 四组件、Harness 工程、权限与沙箱、Skill 规范、上下文压缩 | [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) |
-| [`Product/`](https://github.com/Robinpig/Note/blob/master/docs/CS/AI/LLM/Agent/Product/Codex.md) | 具体的 Agent 产品与框架实现 | [Codex 源码剖析](/docs/CS/AI/LLM/Agent/Product/Codex.md) |
+| [`Product/`](https://github.com/Robinpig/Note/blob/master/docs/CS/AI/LLM/Agent/Product/Codex/Codex.md) | 具体的 Agent 产品与框架实现 | [Codex 源码剖析](/docs/CS/AI/LLM/Agent/Product/Codex/Codex.md) |
 | [`Practice/`](https://github.com/Robinpig/Note/blob/master/docs/CS/AI/LLM/Agent/Practice/Self-Evolving.md) | 演进方向与开发方式的自变化 | [Self-Evolving](/docs/CS/AI/LLM/Agent/Practice/Self-Evolving.md) |
 
 ## How the Five Theory Articles Divide Responsibilities
@@ -24,17 +24,18 @@
 
 **Compaction** 讲长会话怎么在窗口耗尽前活下来。它最反直觉的地方在**代价结构**上：压缩不是免费的，而是拿「模型对原始上下文的可见性」换「更长的会话时长」——厂商承认能力会下降（Codex 每次压缩后向用户发警告，说长线程与多次压缩会让模型变得不够准确）。这篇的骨架是六件事：阈值怎么定（**几乎全是 token 预算，不是「最近 N 轮」**）、保留什么、摘要由谁生成（**基本都要额外调一次 LLM**）、能否恢复（**原文通常还在盘上，但模型几乎都取不回**）、失败怎么处理、以及和 KV 缓存的交互（**各家在压缩过程中刻意在保缓存**：DSH 把指令放在回放前缀之后以复用热前缀，Claude Code 复用 system prompt 层，Pi 干脆禁掉摘要请求的 cache 写入）。附一张五家对比表与「陷阱」清单——其中「压缩会不会丢 skill 正文」的精确答案在 Claude Code 官方表里：**会重新注入，但每 skill 上限 5K、总计 25K token，超限时最老的先被丢弃**，这比直接消失更隐蔽。
 
-## Product: Seven Implementations
+## Product: Eight Implementations
 
 编程 Agent 是这一层最成熟的产品形态，几家的差异比想象中大，**不在「谁更强」而在架构选择**：
 
-- **[Claude Code](/docs/CS/AI/LLM/Agent/Product/ClaudeCode.md)** 与 **[Codex](/docs/CS/AI/LLM/Agent/Product/Codex.md)** 绑定单一模型厂商（Anthropic / OpenAI），但把各自厂商的 Harness 特性用得最透。Codex 那篇是**源码级剖析**（Rust 实现，从 `start_or_steer` 到 `run_turn` 的主循环、事件汇合、审批的异步实现），想理解「一个 Harness 内部长什么样」看它。
-- **[OpenCode](/docs/CS/AI/LLM/Agent/Product/OpenCode.md)** 与 **[Pi](/docs/CS/AI/LLM/Agent/Product/Pi.md)** 的卖点是**模型无关**——同一套 Agent loop 驱动 Anthropic / OpenAI / 任意 OpenAI 兼容端点。OpenCode 是客户端/服务器架构（内核是本地 HTTP 服务，TUI/Web/IDE 都是客户端，可远程 attach），Pi 则把能力藏进基础操作里（会话树、`@` 引用、Shell 集成），并把 Skill 与 Extension 的分工划得很清。
-- **[DSH](/docs/CS/AI/LLM/Agent/Product/DSH.md)** 是**架构哲学最激进的一个**：「一切皆插件」，连驱动 Agent 运转的主循环都只是默认插件实现之一，没有特权内核。它也是本目录里唯一逐行读源码的笔记（793 行，涵盖 Cordis 微内核、七层洋葱模型、子进程管理的 pid 复用边界、PTY）。
-- **[OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw.md)** 走的是另一条路：**本地优先的个人助手网关**，核心是接管 20 多种通讯软件 + 多 agent 路由，不服务于「写代码」这件事。
-- **[AgentScope](/docs/CS/AI/LLM/Agent/Product/AgentScope.md)** 是这层里**唯一的通用 Python Agent 框架**（非编程 Agent 产品），阿里巴巴开源，v2.0 起把 Framework 和 Harness 两层合并：单一 `Agent` 类内置 ReAct 循环、七 hook 中间件、五模式权限引擎、结构化上下文压缩与运行时状态注入，往下有 formatter / workspace 沙箱 / RAG / Skill 四套基础设施，再往上附带 FastAPI Agent Service（多租户、频道接入、Hub、调度）。源码级剖析见该文。
+- **[Claude Code](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/ClaudeCode.md)** 与 **[Codex](/docs/CS/AI/LLM/Agent/Product/Codex/Codex.md)** 绑定单一模型厂商（Anthropic / OpenAI），但把各自厂商的 Harness 特性用得最透。Claude Code 已拆分为枢纽主文件 + 7 个专题页（Architecture / Permission / Hooks / Memory / Subagents / Extensions / Headless），以 `@anthropic-ai/claude-code` 2.1.301 与官方文档为基线，覆盖三阶段 agentic loop、六权限模式与 auto mode 后台 classifier（默认拦截清单、3/20 次回退阈值）、Bash sandbox（Seatbelt / bubblewrap+socat）、33 个 hook 事件与 matcher/if 两级过滤、CLAUDE.md 四层拼接加载与 rules 路径限定、subagent 与 agent teams 的 mailbox 架构、Skills/Plugins/MCP/Output styles 四层扩展，以及 `claude -p` / `--bare` / GitHub Actions 的非交互面。Codex 那篇是**源码级剖析**（Rust 实现，从 `start_or_steer` 到 `run_turn` 的主循环、事件汇合、审批的异步实现），想理解「一个 Harness 内部长什么样」看它。已拆分为枢纽主文件 + 8 个专题页（Architecture / Turn / Tools / Approval / Sandbox / AppServer / Extensions / MultiAgent），以 commit `6b991972c5b5` 为基线覆盖 crate 地图、`run_turn` 主循环与采样前压缩、`ToolCallRuntime` 的 RwLock 并发闸门、审批 fail closed 与 `Granular` 五类开关、三平台沙箱后端、app-server v1/v2 协议、MCP/Skills/Plugins/Hooks/Connectors 五套扩展与多 Agent V2 / Memories / Code Mode。
+- **[OpenCode](/docs/CS/AI/LLM/Agent/Product/OpenCode/OpenCode.md)** 与 **[Pi](/docs/CS/AI/LLM/Agent/Product/Pi/Pi.md)** 的卖点是**模型无关**——同一套 Agent loop 驱动 Anthropic / OpenAI / 任意 OpenAI 兼容端点。OpenCode 是客户端/服务器架构（内核是本地 HTTP 服务，TUI/Web/IDE 都是客户端，可远程 attach），已拆分为枢纽主文件 + 10 个专题页（Architecture / Agent / Tools / Rules / Skills / Commands / TUI / MCP / Plugin / CLI，2.0 为独立主版本线、1.x 永不被动推到 2.x），以 npm `opencode-ai` 1.19.2 稳定线为基线覆盖 C/S 边界、双主 Agent 与 13 键权限模型、Markdown 扩展面与 Plugin 事件钩子；Pi 则把能力藏进基础操作里（会话树、`@` 引用、Shell 集成），并把 Skill 与 Extension 的分工划得很清。Pi 已拆分为枢纽主文件 + 6 个专题页（Session / Interaction / Context / Extensions / Security / Architecture，原 `LLM/Pi-Architecture.md` 已并入家族目录），以 v1.3.0 + main 为基线覆盖 JSONL 会话树与三分支操作、每命令独立 shell 进程的 Shell 集成、压缩阈值公式与切割点规则、Agent Skills 规范与 Extension 工具 exposure 五态、project trust 决策链与四类隔离环境、11 个 workspace 包的两层协作循环。
+- **[DSH](/docs/CS/AI/LLM/Agent/Product/DSH/DSH.md)** 是**架构哲学最激进的一个**：「一切皆插件」，连驱动 Agent 运转的主循环都只是默认插件实现之一，没有特权内核。已拆分为枢纽主文件 + 7 个子文件（Cordis 微内核、Agent Loop & Session、Context/Memory/Knowledge、Permission & Sandbox、Subprocess Management、Tool Layer、Plugin Development），逐行源码剖析覆盖了 Fiber 状态机、事件分派五模式、进程树收割六类死法等底层机制。
+- **[OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw/OpenClaw.md)** 走的是另一条路：**本地优先的个人助手网关**，核心是接管 20 多种通讯软件 + 多 agent 路由，不服务于「写代码」这件事。已拆分为枢纽主文件 + 15 个专题页（Gateway / Lifecycle / Clients / Deployment / Runtime / Memory / SubAgent / Process / Channels / Storage / Plugins / Integrations / Media / Security / Observability），源码级覆盖 18789 单端口协议面、worker placement 的 turn claim 权威链、SQLite-only 存储与 context engine 插件化压缩。
+- **[AgentScope](/docs/CS/AI/LLM/Agent/Product/AgentScope/AgentScope.md)** 是这层里**唯一的通用 Python Agent 框架**（非编程 Agent 产品），阿里巴巴开源，v2.0 起把 Framework 和 Harness 两层合并：单一 `Agent` 类内置 ReAct 循环、七 hook 中间件、五模式权限引擎、结构化上下文压缩与运行时状态注入，往下有 formatter / workspace 沙箱 / RAG / Skill 四套基础设施，再往上附带 FastAPI Agent Service（多租户、频道接入、Hub、调度）。源码级剖析见该文。
+- **[AgentScopeJava](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/AgentScopeJava.md)** 与上面的 AgentScope 是**同族不同语言的两个独立框架**（`agentscope-java` 仓库，Java 21+/Reactor 响应式），不是后者的移植版——Event/Message 模型、Session Log 持久化、沙箱后端选型都是独立设计。它把 Session Log（commits/blobs/inbox 三层结构 + 原子 CAS）做成一等模块，往下扩出 Workspace（文件系统模式 × 沙箱后端 × IsolationScope 三维）、Skill（四层合成 + 市场后端 + 自学习闭环）与 SubAgent（同步/后台/远程三态）。已拆分为枢纽主文件 + 7 个子文件。
 
-一篇横向对照见 [OpenCode 与 Claude Code 的对照表](/docs/CS/AI/LLM/Agent/Product/OpenCode.md?id=comparison-with-claude-code)，它把客户端架构、模型绑定、规则文件兼容性与扩展方式逐项列出。
+一篇横向对照见 [OpenCode 与 Claude Code 的对照表](/docs/CS/AI/LLM/Agent/Product/OpenCode/OpenCode.md?id=comparison-with-claude-code)，它把客户端架构、模型绑定、规则文件兼容性与扩展方式逐项列出。
 
 ## Where Practice Is Heading
 

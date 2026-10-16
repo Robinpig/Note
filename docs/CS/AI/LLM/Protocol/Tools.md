@@ -48,7 +48,7 @@ LLM 本身只会输出 token，是**工具（Tools / Function Calling）**让它
 - [Skill](/docs/CS/AI/LLM/Agent/Theory/Skill.md) — 技能包规范
 - [LLM 应用开发平台](/docs/CS/AI/LLM/Platform/Platform.md) — 平台侧的插件/工具生态（Coze 插件、Dify 插件市场）
 - [Hermes](/docs/CS/AI/LLM/Agent/Practice/Hermes.md) — 自动创建/修补 Skill 的自进化案例
-- [Codex](/docs/CS/AI/LLM/Agent/Product/Codex.md) — 生产级工具路由与沙箱实例
+- [Codex](/docs/CS/AI/LLM/Agent/Product/Codex/Codex.md) — 生产级工具路由与沙箱实例
 
 ## References
 

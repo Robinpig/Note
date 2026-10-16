@@ -4,7 +4,7 @@
 
 [Anthropic](https://www.anthropic.com) 的 Claude 家族在 2026 年下半年**几乎换了一遍**：Fable 5.1（09-01）、Opus 5.5（09-22）、Sonnet 5.5（09-28）三款在 20 天内连发，前一代 Opus 5（07-24）与 Sonnet 5（06-30）已经退居legacy。Anthropic 的档位命名是 **Fable（最贵）／Opus（旗舰）／Sonnet（主力）／Haiku（最快最便宜）**，价格与定位一一对应，**没有中间的空档**——这是与 OpenAI 三档 GPT-6 最明显的结构差异。
 
-Claude Code 这个命令行工具另有专篇 [Claude Code](/docs/CS/AI/LLM/Agent/Product/ClaudeCode.md)。本文只记模型本身。
+Claude Code 这个命令行工具另有专篇 [Claude Code](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/ClaudeCode.md)。本文只记模型本身。
 
 ## Current Lineup
 

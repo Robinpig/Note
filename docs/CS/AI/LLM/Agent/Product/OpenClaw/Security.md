@@ -1,6 +1,6 @@
 ## Introduction
 
-安全是 OpenClaw 的两条设计哲学之一，主轴是 **run authority / live authority**。这一页覆盖认证与设备身份、scope 授权、审批状态机、审计与巡检，并在末尾用 **The Authority Chain** 把散落在渠道准入、worker placement、会话写路径、压缩、审批、出站投递里的同一种范式串成一条主线——那是理解整个 [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw.md) 架构最省力的一条线索。
+安全是 OpenClaw 的两条设计哲学之一，主轴是 **run authority / live authority**。这一页覆盖认证与设备身份、scope 授权、审批状态机、审计与巡检，并在末尾用 **The Authority Chain** 把散落在渠道准入、worker placement、会话写路径、压缩、审批、出站投递里的同一种范式串成一条主线——那是理解整个 [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw/OpenClaw.md) 架构最省力的一条线索。
 
 ## Security and Approval
 
@@ -31,6 +31,21 @@
 **Hooks**：本地可信代码扩展点，每个 hook 是一个目录（HOOK.md frontmatter + handler）；四种来源优先级 bundled < plugin < managed < workspace，**workspace 钩子默认禁用**需显式启用；加载有边界检查（handler 必须落在 hook root 内），整代原子提交，单 handler 抛错不阻断其余。
 
 **Secrets**：SecretRef 语义 fail-closed——provider 必须 enabled、未被 deny、在 allowlist 内才应用。
+
+## Pairing
+
+`src/pairing/` 目录混装着**两套互不相关的配对**，读代码前先分开：**(A) 渠道 DM 配对**——决定谁能私聊 agent（[Channels](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Channels.md) allow-in 门的上游）；**(B) 设备配对的 setup-code minting**——原生 app ↔ Gateway 的上游，握手的加密 / 状态本体在本目录之外（`src/infra/device-*` 与 Gateway 的 join-http 路由）。
+
+**(A) 渠道 DM 配对**：`issuePairingChallenge` 建码并回复提示（owner 跑 `openclaw pairing approve`），同时发 `channel_pairing_requested` hook。码是 8 位大写、去掉易混字符 `0O1I`（`crypto.randomInt`）；pending TTL 1h、每 account 上限 3 个待处理；store key 经小写 + 路径消毒。状态落**共享 state DB** 的 `channel_pairing_requests` + `channel_pairing_allow_entries` 两表（Kysely）。
+
+**(B) 设备配对**的流程是一条「短码 → payload → 握手 → 长效凭据」的链：
+
+1. Gateway 铸 `PairingSetupPayload`（base64url JSON：`{url, bootstrapToken, expiresAtMs, tlsFingerprint}`——**TLS 指纹随 payload 下发，配对即钉证书**）并注册一个随机短码（128-bit → `device_pairing_join_codes` 表，必填过期），呈现为 QR `/j/<code>`；
+2. app 打 `/j` → `redeemDevicePairingJoinCode` **burn-once**（读后即删、先清过期）换回 payload；
+3. app 用 bootstrap token（32B base64url，TTL 10min，常量时间比较）作认证源连 WS，建 / 载自身 device keypair 签 canonical payload；
+4. `device_pair_setup_completions` 关联一次性 setup（同 `setupId` 不可二次兑换），此后用存储的 device token + key 认证。
+
+签名曲线有一条**跨客户端的分叉**值得记住：Swift/macOS app 侧走 Secure Enclave 的 **P-256**（Apple 安全芯片不支持 Ed25519，架构文档自标「待进一步确认」），而 Node/TS owner `infra/device-identity.ts` 是 **Ed25519**（`signEd25519Payload` / `verifyEd25519Signature`）——二者是不同客户端的不同签名路径，不是同一个协议的两种实现。
 
 ## The Authority Chain
 
@@ -84,10 +99,10 @@
 
 ## Links
 
-- [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw.md)
+- [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw/OpenClaw.md)
 - [Gateway](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Gateway.md) / [Storage](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Storage.md)
 - [Channels](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Channels.md) / [Runtime](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Runtime.md)
-- [Integrations](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Integrations.md)
+- [Lifecycle](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Lifecycle.md) / [Process](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Process.md)
 - [MCP](/docs/CS/AI/LLM/Protocol/MCP.md)
 
 ## References

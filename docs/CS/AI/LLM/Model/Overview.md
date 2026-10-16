@@ -56,16 +56,18 @@
 | 智谱 GLM | GLM-5.3 | ✅ | ⚠️ 旗舰转自定义 | **1M** | 有 |
 | 月之暗面 | Kimi K3（2.8T） | ✅ 仅权重 | 自定义 | **1M** | 有 |
 | MiniMax | MiniMax-M2 | ✅ | ⚠️ Modified MIT | — | 有 |
+| 阶跃星辰 | **Step 5 Preview**（600B/27B） | ✅ 2026-10-15 开源 | ⚠️ StepFun Model License 1.0 | **1M** | ✅ **¥7／¥20（约 $1／$2.70）** |
 | 讯飞星火 | X2.5 | ⚠️ 仅端侧 4B/1.7B | — | 256K | — |
 
-**四个最容易记错的点**：
+**五个最容易记错的点**：
 
 - **「国产模型都开源」不成立**。星火只开源了端侧小模型，293B 基座不开源；Kimi K3 **只开权重，训练代码与数据不开源**，严格说是 open-weight 不是 open source。
-- **协议正在集体收紧**。Qwen 的旗舰 MoE 从 Apache-2.0 换成自定义协议；GLM 旗舰 GLM-5.3 从 MIT 转自定义；MiniMax-M2 是 Modified MIT 而非 Apache-2.0。**只有 Llama 系与 Qwen 的部分 dense 型号还留在宽松协议上**，而且 Llama 那份见下条。
+- **协议正在集体收紧**。Qwen 的旗舰 MoE 从 Apache-2.0 换成自定义协议；GLM 旗舰 GLM-5.3 从 MIT 转自定义；MiniMax-M2 是 Modified MIT 而非 Apache-2.0；Step 5 Preview 的 StepFun Model License 1.0 自称 Apache-2.0-style，却加了署名、硬件厂商单独授权与 MaaS 营收门槛。**只有 Llama 系与 Qwen 的部分 dense 型号还留在宽松协议上**，而且 Llama 那份见下条。
 - **Llama 4 的开源标签是误传**。它是 `Llama 4 Community License Agreement`，**允许商用**，真正的限制是 7 亿 MAU 门槛、欧盟多模态禁令、署名义务与竞品训练禁令。而 Meta 在 2026-08 转向了 Apache-2.0 的 Muse Glimmer，所以**今天真正「宽松开源」的 Meta 模型反而是新的那个**。
 - **国产算力已能跑前沿模型训练**。GLM-5 被官方描述为首个全流程在非 NVIDIA 算力上训练的前沿模型，SGLang 官方硬件页把昇腾 NPU 与摩尔线程 MUSA 列为原生支持平台。瓶颈在 MoE 的 all-to-all 通信（约为国际旗舰的 50–65%）。
+- **Step 5 Preview 的缓存价在 2026-10-14 翻倍，且只对新用户生效**。缓存命中输入从 0.35 调到 0.70 元／百万 tokens，首次调用在调价前的用户保留旧价——按 10-14 前的旧教程估 Agent 循环成本会低估一半，而这类负载的输入 token 约 96% 命中缓存，差额全在缓存价上。
 
-各家详情见 [DeepSeek](/docs/CS/AI/LLM/Model/DeepSeek.md)、[Qwen](/docs/CS/AI/LLM/Model/Qwen.md)、[开源模型全景](/docs/CS/AI/LLM/Model/Open_Model.md)。
+各家详情见 [DeepSeek](/docs/CS/AI/LLM/Model/DeepSeek.md)、[Qwen](/docs/CS/AI/LLM/Model/Qwen.md)、[StepFun](/docs/CS/AI/LLM/Model/StepFun.md)、[开源模型全景](/docs/CS/AI/LLM/Model/Open_Model.md)。
 
 ## Three Real Selection Logics
 
@@ -109,7 +111,7 @@
 - [开源模型全景](/docs/CS/AI/LLM/Model/Open_Model.md)
 - [本地部署与推理引擎](/docs/CS/AI/LLM/Model/Inference.md)
 - [Jev](/docs/CS/AI/LLM/Model/Jev.md)
-- [Jev](/docs/CS/AI/LLM/Model/Jev.md)
+- [StepFun](/docs/CS/AI/LLM/Model/StepFun.md)
 
 ## References
 

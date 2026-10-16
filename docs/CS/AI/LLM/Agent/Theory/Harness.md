@@ -5,7 +5,7 @@
 一句话总结：Harness 的价值不是绝对的，它始终是对模型能力缺口的补偿面（Compensation Surface）
 。模型每强一分，补偿面就移一寸——知道何时该加、何时该减，才是真正的工程判断力
 
-> 本文是 Harness 这个主题的专页。Harness 在 [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) 四组件中的定位（它是基础设施层、Agent = LLM + Harness）在那篇里，本文不重复；这里专注三件事：Agent 会在哪四种情况下失效、Harness 做什么、以及 Runtime / Framework / Harness 三层怎么分。具体的编程 Agent 实现见 [Codex 源码剖析](/docs/CS/AI/LLM/Agent/Product/Codex.md)，能力封装机制见 [Skill](/docs/CS/AI/LLM/Agent/Theory/Skill.md)，而八项共性里最吃重的两项——权限与上下文压缩——各有一篇专页：[权限与沙箱](/docs/CS/AI/LLM/Agent/Theory/Permission.md) 与[上下文压缩](/docs/CS/AI/LLM/Agent/Theory/Compaction.md)。
+> 本文是 Harness 这个主题的专页。Harness 在 [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) 四组件中的定位（它是基础设施层、Agent = LLM + Harness）在那篇里，本文不重复；这里专注三件事：Agent 会在哪四种情况下失效、Harness 做什么、以及 Runtime / Framework / Harness 三层怎么分。具体的编程 Agent 实现见 [Codex 源码剖析](/docs/CS/AI/LLM/Agent/Product/Codex/Codex.md)，能力封装机制见 [Skill](/docs/CS/AI/LLM/Agent/Theory/Skill.md)，而八项共性里最吃重的两项——权限与上下文压缩——各有一篇专页：[权限与沙箱](/docs/CS/AI/LLM/Agent/Theory/Permission.md) 与[上下文压缩](/docs/CS/AI/LLM/Agent/Theory/Compaction.md)。
 
 ## Four Core Failure Modes of Agents
 
@@ -79,11 +79,11 @@ Claude Code、Codex、Manus、Cursor 等产品定位不同，处理复杂任务�
 
 | 共性 | 解决什么 | 本库哪里有 |
 | :--- | :--- | :--- |
-| **1. 文件系统操作** | 让 Agent 能「打开文件看」而不是靠猜；是 Harness 存在的基础前提 | [Codex](/docs/CS/AI/LLM/Agent/Product/Codex.md)、[DSH](/docs/CS/AI/LLM/Agent/Product/DSH.md) 的 fs 插件 |
+| **1. 文件系统操作** | 让 Agent 能「打开文件看」而不是靠猜；是 Harness 存在的基础前提 | [Codex](/docs/CS/AI/LLM/Agent/Product/Codex/Codex.md)、[DSH](/docs/CS/AI/LLM/Agent/Product/DSH/DSH.md) 的 fs 插件 |
 | **2. 任务规划** | 目标漂移的解药：先出计划再执行，而不是走一步看一步 | [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) 的 Plan-and-Execute |
 | **3. 工具编排** | 并行还是串行、失败怎么重试、结果怎么写回上下文 | [Tools](/docs/CS/AI/LLM/Protocol/Tools.md) |
-| **4. 子任务委派** | 长任务分片并行；也用于隔离污染主上下文的副作用输出 | [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) 的 SubAgent、[OpenCode](/docs/CS/AI/LLM/Agent/Product/OpenCode.md) 的三个内置子 Agent |
-| **5. 状态恢复** | 失败级联与中断的解药：让长任务能断点续跑 | [DSH](/docs/CS/AI/LLM/Agent/Product/DSH.md) 的 Session 持久化、[Codex](/docs/CS/AI/LLM/Agent/Product/Codex.md) 的 Rollout |
+| **4. 子任务委派** | 长任务分片并行；也用于隔离污染主上下文的副作用输出 | [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) 的 SubAgent、[OpenCode](/docs/CS/AI/LLM/Agent/Product/OpenCode/OpenCode.md) 的三个内置子 Agent |
+| **5. 状态恢复** | 失败级联与中断的解药：让长任务能断点续跑 | [DSH](/docs/CS/AI/LLM/Agent/Product/DSH/DSH.md) 的 Session 持久化、[Codex](/docs/CS/AI/LLM/Agent/Product/Codex/Codex.md) 的 Rollout |
 | **6. 权限控制** | 越界执行的解药：区分自决动作与需确认动作 | **[权限与沙箱](/docs/CS/AI/LLM/Agent/Theory/Permission.md)** |
 | **7. 可观测性** | 让 Agent 的行为可审计——企业落地的硬前提 | [权限与沙箱](/docs/CS/AI/LLM/Agent/Theory/Permission.md) 的企业策略注入一节 |
 | **8. 上下文管理** | 上下文溢出的解药：按需读取 + 主动压缩 | **[上下文压缩](/docs/CS/AI/LLM/Agent/Theory/Compaction.md)** |
@@ -102,7 +102,7 @@ Claude Code、Codex、Manus、Cursor 等产品定位不同，处理复杂任务�
 
 ## Engineering Example: Codex
 
-OpenAI Codex 是 Harness 概念的生产级实现（Rust），可以作为理解抽象概念的具体标本。本节提炼可迁移的设计；仓库目录、源码文件路径、`run_turn` 主循环与 app-server 协议等实现细节见 [Codex](/docs/CS/AI/LLM/Agent/Product/Codex.md)。
+OpenAI Codex 是 Harness 概念的生产级实现（Rust），可以作为理解抽象概念的具体标本。本节提炼可迁移的设计；仓库目录、源码文件路径、`run_turn` 主循环与 app-server 协议等实现细节见 [Codex](/docs/CS/AI/LLM/Agent/Product/Codex/Codex.md)。
 
 四条定位：
 
@@ -166,7 +166,7 @@ Codex 把"能不能执行一个动作"拆成四层，缺一不可：
 
 - [上下文压缩](/docs/CS/AI/LLM/Agent/Theory/Compaction.md) / [权限与沙箱](/docs/CS/AI/LLM/Agent/Theory/Permission.md) — 八项共性里最吃重的两项专页
 - [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) / [Self-Evolving](/docs/CS/AI/LLM/Agent/Practice/Self-Evolving.md)
-- [Codex](/docs/CS/AI/LLM/Agent/Product/Codex.md) / [DSH](/docs/CS/AI/LLM/Agent/Product/DSH.md) — 两个 Harness 工程实例（Codex 有源码级分析）
+- [Codex](/docs/CS/AI/LLM/Agent/Product/Codex/Codex.md) / [DSH](/docs/CS/AI/LLM/Agent/Product/DSH/DSH.md) — 两个 Harness 工程实例（Codex 有源码级分析）
 - [LLM 应用开发平台](/docs/CS/AI/LLM/Platform/Platform.md) — Harness 的产品化形态：Coze / Dify 把这套执行面做成了默认件
 - [Jev](/docs/CS/AI/LLM/Model/Jev.md)
 

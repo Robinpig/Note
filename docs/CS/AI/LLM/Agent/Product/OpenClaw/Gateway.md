@@ -1,6 +1,6 @@
 ## Introduction
 
-Gateway 是 OpenClaw 的控制平面与唯一枢纽：CLI、原生 app、Control UI、远端 worker、外部 harness 全部连它。这一页覆盖它的**启动结构**、**RPC / HTTP 协议面**，以及运行期的**热重载与生命周期服务**三块；它与 [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw.md) 枢纽页的「Tech Stack」一节相接，往下又分出会话存储、插件、渠道与安全几条支线。
+Gateway 是 OpenClaw 的控制平面与唯一枢纽：CLI、原生 app、Control UI、远端 worker、外部 harness 全部连它。这一页覆盖它的**启动结构**与**RPC / HTTP 协议面**两角；运行期的热重载与生命周期服务在 [Lifecycle](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Lifecycle.md)，会话存储在 [Storage](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Storage.md)，插件与渠道契约在 [Plugins](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Plugins.md) / [Channels](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Channels.md)，安全校验点在 [Security](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Security.md)。它与 [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw/OpenClaw.md) 枢纽页的「Tech Stack」一节相接。
 
 ## Gateway: The Center
 
@@ -115,23 +115,12 @@ Gateway 里有**两个投影层，维度不同**：[Storage](/docs/CS/AI/LLM/Age
 
 ## Hot Reload and Lifecycle Services
 
-Gateway 的「状态写入 / 授权 / 生命周期」子系统分散在审批之外还有一整层，全部落**共享 state DB**（不是 per-agent DB）。
-
-### Config Reload
-
-有效 runtime 契约是二元的：`resolveGatewayReloadSettings` 只收 `off | hybrid`（schema 里的 `restart` / `hot` 已退役，由 doctor 归一到 hybrid）。检测 = chokidar（`awaitWriteFinish` stability 200ms，watcher 重建最多 3 次）+ Gateway RPC 写的进程内 fast path（不等 fs 事件）。config-diff 递归 dotted path 后过 **policy 表分类**：auth token + secrets.egressProxy ⇒ restart，`agents.defaults` / `gateway.controlUi` ⇒ hot，`plugins.load | installs` ⇒ reloadPlugins（capability ownership 变更会替换持有其 route 的插件代际）；auth 凭据轮换是 restart 的热例外。reload 前有 blocker 环：六个 live 计数器、poll 500ms、30s warn、超时后仍执行 reload。重启 sentinel 持久在 state DB（`gateway_restart_sentinel` 表，CAS）。
-
-### Node Registry and Session Services
-
-- **node-registry 是活连接 roster**（纯内存 Map，无 node 表）：durable 身份在 device pairing 表族（`device_identities` / `device_auth_tokens` / `device_bootstrap_tokens`），经投影回读。**node 可 host worker，但 node 注册 ≠ worker placement**（后者是 durable 表，见 [Storage](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Storage.md) 的 Worker Placement）。declared caps 受 per-session ceiling 压制；invoke 结果对最近签发的 invoke 精确匹配（TTL + grace，terminal 即忘）。
-- **session-sharing**：session-scoped 请求的授权 / 可见性 owner——方法集分 agent-run-start（`agent` / `chat.send` / `message.action` / `sessions.dispatch` / `talk.*` / `tools.invoke` / `wake`…）与 visibility-authorized 两类；**admin 旁路对 agent-run 授权与 progress-card 绑定刻意保留不给**。
-- **compaction checkpoints**（与 Runtime 页的压缩决策 / 执行互补）：checkpoint 捕获 / 分支 / 恢复 owner，caps 25/session、64MiB leaf、128MiB retained；捕获是 **identity-only**（不复制 transcript），branch / restore 在一个写事务里复制 transcript 行 + 更新 `session_nodes.entry_json`。
-- **chat.abort**：run-abort registry + **terminal ownership 先于 listeners 预留** → 释放 delegated authority → 级联取消（subagent → worker turn claim）→ 广播一次触达 WS / node-session / 渠道三路。
+配置热重载、node registry 与 session 生命周期服务（session-sharing、compaction checkpoints、`chat.abort`）已独立成页：[Lifecycle](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Lifecycle.md)。那里与这一页是「怎么说话 / 活着的时候怎么变」的分工；它与 [Storage](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Storage.md) 的写路径、[Security](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Security.md) 的权威链直接相接。
 
 ## Links
 
-- [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw.md)
+- [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw/OpenClaw.md)
 - [Runtime](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Runtime.md) / [Plugins](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Plugins.md)
 - [Storage](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Storage.md) / [Security](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Security.md)
-- [Clients](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Clients.md)
+- [Lifecycle](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Lifecycle.md) / [Clients](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Clients.md)
 - [TypeScript](/docs/CS/TypeScript/TypeScript.md) / [Nodejs](/docs/CS/front-end/Nodejs.md)

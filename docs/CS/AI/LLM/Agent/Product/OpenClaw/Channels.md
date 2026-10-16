@@ -1,6 +1,6 @@
 ## Introduction
 
-渠道是 OpenClaw 的入站 / 出站两端：消息从 Slack / Telegram / WhatsApp / CLI / Web UI / 原生 app 进来，路由到 agent，再投递回平台。这一页展开 [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw.md) 枢纽那条主链路的两端——入站 turn 管线与出站双路径；消息进来之后交给 [Runtime](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Runtime.md)，落哪个会话由 [Storage](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Storage.md) 决定，准入与投递的校验点属于 [Security](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Security.md) 的 authority 主线。
+渠道是 OpenClaw 的入站 / 出站两端：消息从 Slack / Telegram / WhatsApp / CLI / Web UI / 原生 app 进来，路由到 agent，再投递回平台。这一页展开 [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw/OpenClaw.md) 枢纽那条主链路的两端——入站 turn 管线与出站双路径；消息进来之后交给 [Runtime](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Runtime.md)，落哪个会话由 [Storage](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Storage.md) 决定，准入与投递的校验点属于 [Security](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Security.md) 的 authority 主线。
 
 ## Message Path
 
@@ -73,8 +73,8 @@ account 归一有几条硬规则：`DEFAULT_ACCOUNT_ID = "default"`，`normalize
 
 ## Links
 
-- [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw.md)
+- [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw/OpenClaw.md)
 - [Gateway](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Gateway.md) / [Runtime](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Runtime.md)
 - [Plugins](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Plugins.md) / [Storage](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Storage.md)
 - [Security](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Security.md)
-- [Integrations](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Integrations.md)
+- [Media](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Media.md) / [Process](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Process.md)

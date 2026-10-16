@@ -279,7 +279,7 @@ const model = agent.model
 ## Links
 
 - [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) / [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md) / [Skill](/docs/CS/AI/LLM/Agent/Theory/Skill.md)
-- [Claude Code](/docs/CS/AI/LLM/Agent/Product/ClaudeCode.md) / [Codex](/docs/CS/AI/LLM/Agent/Product/Codex.md) / [Pi](/docs/CS/AI/LLM/Agent/Product/Pi.md) / [DSH](/docs/CS/AI/LLM/Agent/Product/DSH.md) / [OpenCode](/docs/CS/AI/LLM/Agent/Product/OpenCode.md)
+- [Claude Code](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/ClaudeCode.md) / [Codex](/docs/CS/AI/LLM/Agent/Product/Codex/Codex.md) / [Pi](/docs/CS/AI/LLM/Agent/Product/Pi/Pi.md) / [DSH](/docs/CS/AI/LLM/Agent/Product/DSH/DSH.md) / [OpenCode](/docs/CS/AI/LLM/Agent/Product/OpenCode/OpenCode.md)
 
 ## References
 

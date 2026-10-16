@@ -1,6 +1,6 @@
 ## Introduction
 
-这一页是 OpenClaw 的「外部形态」：用户从哪些入口进来（CLI 命令层 / TUI / 原生 app / Control UI / OpenAI 兼容 API），以及它怎么被部署和托管（容器 / 平台 / Daemon / Fleet）。入口全部连到 [Gateway](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Gateway.md) 的 18789 单端口；其余没展开成独立页的子系统收在末尾的对照表里，作为 [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw.md) 枢纽的补充索引。
+这一页是 OpenClaw 的「外部形态」：用户从哪些入口进来（CLI 命令层 / TUI / 原生 app / Control UI / OpenAI 兼容 API）。入口全部连到 [Gateway](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Gateway.md) 的 18789 单端口；部署与托管（容器 / 平台 / Daemon / Fleet）在 [Deployment](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Deployment.md)；其余没展开成独立页的子系统收在末尾的对照表里，作为 [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw/OpenClaw.md) 枢纽的补充索引。
 
 ## Command Implementation Layer
 
@@ -49,40 +49,24 @@ TUI 是**手写组件式**终端 UI，框架是 `@earendil-works/pi-tui`——**
 
 | 子系统 | 一句话 |
 | :--- | :--- |
-| Cron | command（纯 exec，不启动 agent）与 agent（真触发一次 run）两类 payload；执行权绑定 admitted run + 一次性消息动作权 |
-| Boards / Canvas | widget 落 per-agent SQLite，pinned widget 需显式 grant；`show_widget` 工具是内容生产端 |
+| Cron | command（纯 exec，不启动 agent）与 agent（真触发一次 run）两类 payload；执行权绑定 admitted run + 一次性消息动作权。完整机制（含任务账本判活）见 [Process](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Process.md) |
+| Boards / Canvas | widget 落 per-agent SQLite，pinned widget 需显式 grant；`show_widget` 工具是内容生产端。canvas 文档服务走**主端口 18789**（node-capability auth 门后），18790 sandbox 只服务 `/mcp-app-sandbox` |
 | Flows | **不是业务工作流**，是安装与诊断的流程编排（channel onboarding + doctor 健康自检） |
-| meeting-bot / talk | 会议机器人（agent / bidi / transcribe 三模式，CDP 驱动真实浏览器入会）与语音交互；语音是 Channels 之外的另一 I/O 模态，其输出侧 owner 是 `src/tts/` |
+| meeting-bot / talk | 会议机器人（agent / bidi / transcribe 三模式，CDP 驱动真实浏览器入会）与语音交互（唤醒名 ≤2 词、语音 turn 有界上下文 32）；语音是 Channels 之外的另一 I/O 模态，见 [Media](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Media.md) |
 | Routing | 纯函数入站路由（无 I/O）：九档 binding 优先级 + `matchedBy` 溯源；读顶层 `cfg.bindings` |
 | Model catalog / plugin-state | 模型清单 = manifest + remote overlay（merge-key 冲突整条丢弃）；插件数据落 `plugin_state_entries` + `plugin_blob_entries` 两表（专用 worker 同步事务，journal 是表上 append 约定非独立表，`core:` 前缀保留是 core/plugin 边界） |
 | session-cards / projects | 进度卡落 per-agent `session_progress_cards`，项目注册表落共享 state `projects` 表 |
-| pairing | 两套不相关的配对：渠道 DM 配对（8 位码、1h TTL、每 account 上限 3）与设备配对（join code burn-once + 10min bootstrap token + setup payload 带 TLS 指纹） |
+| pairing | 两套不相关的配对：渠道 DM 配对（8 位码、1h TTL、每 account 上限 3）与设备配对（join code burn-once + 10min bootstrap token + setup payload 带 TLS 指纹）；细节见 [Security](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Security.md) |
 
 ## Deployment, Daemon and Fleet
 
-部署形态按「由内到外」分三层：
-
-- **本地原生 + 本地 Gateway**：`apps/` 作为前端连本机 Gateway。
-- **容器 / 平台**：Docker Compose 里 `openclaw-gateway`（18789 + 18790）与 `openclaw-cli` 共享 gateway 网络命名空间，`cap_drop: NET_RAW/NET_ADMIN`、`no-new-privileges`、只读 host 路径 pin；另有 `fly.toml`（Fly.io）与 `render.yaml`（Render）。
-- **共享 vs 个人**：共享 Gateway 用于团队协作，个人安装独占设备。
-
-**Daemon** 管「单机 Gateway 如何成为系统守护进程」，几处设计相当克制：
-
-- macOS 走 launchd **事务性** plist 安装 / 卸载（先 `launchctl bootout` 再移入 `.Trash`，带 rollback），而不是覆盖式写文件。
-- **自适应堆策略**：按物理 / 受限内存算 `maxOldSpaceSize`，floor 2048 MiB、cap 8192 MiB——既防小内存机起不来，也防大内存机上 Gateway 无限吃内存。
-- **托管停机**先校验进程身份与 cgroup（读 `/proc/<pid>/cgroup`），并区分监督者：由外部 supervisor 托管时**拒绝自停**，避免把被监督的进程误杀。
-
-**Fleet** 管「多机 cell」，把多个 Gateway 实例容器化成 cell 统一管理：
-
-- `FleetCellRecord`（tenantId / image / runtime / hostPort / containerName / dataDir）；**hostPort 在单写锁内分配**，防并发争抢。
-- 对同一 cell 的并发操作用 state DB 的 `state_leases` 表做**带 TTL 的操作租约**（与 claw package、plugin-lifecycle 共用同一张表、三种 scope）。
-- 容器化默认 docker bridge，podman 支持 `--internal` 网络；创建时做端口探测但**明确标注 TOCTOU 间隙**——runtime bind 才是权威，又一次「探测不等于生效」。
-- CLI 读 `fleet_cells` **必须走只读事务**，避免把自己挂进 Gateway 可写 SQLite 的生命周期里。
+部署与托管形态（容器 / 平台 / Daemon / Fleet）已独立成页：[Deployment](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Deployment.md)。那页与这一页是「用户从哪进来 / Gateway 被谁托管」的分工。
 
 ## Links
 
-- [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw.md)
+- [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw/OpenClaw.md)
 - [Gateway](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Gateway.md) / [Security](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Security.md)
-- [Storage](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Storage.md) / [Observability](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Observability.md)
+- [Deployment](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Deployment.md) / [Storage](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Storage.md)
+- [Observability](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Observability.md) / [Media](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Media.md)
 - [Plugins](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Plugins.md) / [Runtime](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Runtime.md)
 - [TypeScript](/docs/CS/TypeScript/TypeScript.md) / [Nodejs](/docs/CS/front-end/Nodejs.md)

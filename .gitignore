@@ -60,3 +60,4 @@ __pycache__/
 # ai
 .claude
 .opencode
+.trae

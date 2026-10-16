@@ -1,6 +1,6 @@
 ## Introduction
 
-这一页是 OpenClaw 的**执行内核**：一次 agent run 怎么跑起来、模型怎么调、上下文怎么压缩、记忆与子代理如何长在上面，以及后台任务与进程底座如何支撑它们。它是 [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw.md) 枢纽那条「入站 → agent runtime → provider → 工具 → 回写」链路的中段；工具来源与插件契约在 [Plugins](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Plugins.md)，会话落盘在 [Storage](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Storage.md)。
+这一页是 OpenClaw 的**执行内核**：一次 agent run 怎么跑起来、模型怎么调、工具从哪来、上下文怎么压缩。它是 [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw/OpenClaw.md) 枢纽那条「入站 → agent runtime → provider → 工具 → 回写」链路的中段；工具来源与插件契约在 [Plugins](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Plugins.md)，会话落盘在 [Storage](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Storage.md)；长在内核之上的记忆、子代理与后台工作各自独立成页（文末「Where the Loop Grows Things」给出指针）。
 
 ## Agent Runtime and Tool Loop
 
@@ -64,49 +64,20 @@ OpenClaw 同时扮演 **MCP server** 与 **MCP client** 两个角色：
 
 压缩执行复用 run authority：`writerFence` 校验 `expectedWriterRunId` / `expectedLifecycleRevision`，不匹配抛 `SessionTranscriptWriterClaimReboundError`——**压缩不绕过写权限**。此外还有恢复性压缩 `compactEmbeddedRunForRecovery` 与上下文溢出兜底 `recoverEmbeddedRunOverflow` 两个入口。
 
-物理落点三件套：压缩产生 `session_windows` 新代际（`reason='compaction'`）、推进 `transcript_rewrite_watermarks`、活跃物化 `session_transcript_active_events` 经 `context_eligible` 重新标记哪些事件有资格进压缩后的 prompt。压缩后展示层读的是这个物化层而非全表，见 [Gateway](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Gateway.md) 的 chat display projection；checkpoint 的捕获 / 分支 / 恢复则在该页的生命周期服务里，两处互补。
+物理落点三件套：压缩产生 `session_windows` 新代际（`reason='compaction'`）、推进 `transcript_rewrite_watermarks`、活跃物化 `session_transcript_active_events` 经 `context_eligible` 重新标记哪些事件有资格进压缩后的 prompt。压缩后展示层读的是这个物化层而非全表，见 [Gateway](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Gateway.md) 的 chat display projection；用户 / 系统主动捕获的 compaction checkpoints（捕获 / 分支 / 恢复）则在 [Lifecycle](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Lifecycle.md) 的会话生命周期服务里，与这里的自动压缩互补。压缩的**执行者**是 context engine 注册表里的插件（内建 compact 只是 legacy delegate），见 [Memory](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Memory.md)。
 
-## Memory
+## Where the Loop Grows Things
 
-OpenClaw 的记忆是**纯文本 Markdown 优先**：
+执行内核之上还长着三块可插拔机制，各自独立成页：
 
-- **短期 / 每日记忆**：`memory/YYYY-MM-DD.md` 追加式日志，会话启动时自动加载今天与昨天，提供最新短期上下文。
-- **长期 / 核心记忆**：`MEMORY.md` 存放提炼后的长期事实（用户偏好、重要事实、长期项目状态）。
-- **记忆巩固（dreaming）**：三阶段 `light / deep / rem`，由 managed cron（默认每天凌晨）触发；deep 阶段有校准过的评分门槛（minScore 0.75、minRecallCount 3、recency half-life 14d、maxAge 30d），按阶段分层执行预算（fast/cheap → balanced/medium → slow/expensive）。
-- **单槽机制**：`plugins.slots.memory` 同刻仅一个 memory 插件生效（默认 `memory-core`，可置 `"none"` 关闭）；第三方记忆引擎可经 sidecar 授权并存做 consolidation，但 slot-owner facts 被剥掉防借用权限。
-- **来源证明**：记忆文件写入带 hash chain 账本——`originClass: "agent"` 只有当前记录的 `fileHash === sha256(contentBefore)` 才成立，否则降级为 `"untrusted"`。
-- **记忆事件流**：recall / promotion / dream 四类事件落共享 state DB 的 `plugin_state_entries`（非专用表），zod 校验 + UTF8-safe 截断 + 有界保留。
-
-## SubAgent
-
-主 Agent 通过 `sessions_spawn` / `sessions_send_child` 工具派生子代理，子代理执行完成后结果**自动推送**回主 Agent，无需轮询。
-
-准入有三类约束：**深度**（`maxSpawnDepth`，child 自己知道能否再派生子代理，形成递归深度门控）、**并发 / 扇出**（每 agent 子代数、swarm 组并发与总数）、**目标白名单**（`allowAgents` / `requireAgentId`，防越权派发）。
-
-核心机制是**复用而非另起炉灶**：child 派发被封装成一次 Gateway `agent` RPC，最终复用 worker placement 调度 child run；parent 的 worker turn claim / delegated authority 经身份信封下传为 child admission 身份——**child run 的调度权继承自 parent 的 worker turn，而非重新认领**。派发本身在 Gateway 进程内时走进程内直转（连 WS 都省了），且仅 `agent` 方法带 runId 幂等键，transport 歧义失败时只重试显式 provisional replay，不会二次 launch。
-
-spawn 是三阶段管线（initialize → dispatchTurn → register），register 同步插入注册表避免 slot 重复计数；失败回滚按相位进行——register 失败但 Gateway 已 accept 时，会主动终止那个「已接受但未登记」的孤儿 run。结果聚合有四种 completionMode：`collector`（汇入 swarm collector）、`thread-direct`（绑渠道线程）、`announce`（回传 requester）、`quiet`（仅落库）；announce 还会唤醒等待该 child 的下游 requester 续跑。
-
-## Background Tasks, Process and System Agent
-
-三层分工：`src/process/` 是**进程底座**（无任务语义）、`src/tasks/` 是**持久任务账本**、`src/system-agent/` 是**OpenClaw 自己的管家 agent**。
-
-一个常见误解要纠正：**任务 owner 不止 cron**——`TASK_RUNTIMES = ["subagent", "acp", "cron", "cli"]` 四类 runtime 家族各是一名 owner，`task_runs` / `task_delivery_state` / `flow_runs` 三表是它们的共同账本。「这个任务还活着吗」不靠心跳猜，而靠 `execution_owner_{host, pid, startIdentity}` **三元组判活**：Gateway 重启后由 maintenance 把对不上的任务判 `lost` 而非重放执行。
-
-进程底座是双 spawn 路径：长跑 / PTY 走**全局 supervisor 单例**，同步短命令走 execa 封装并用 AsyncLocalStorage 把 AbortSignal 与子进程集合绑成可级联停止的 scope。POSIX 下 spawn 即 detached，终止靠 `kill(-pid, 0)` 探测进程组再整组 SIGTERM/SIGKILL，并显式调度「过继僵尸回收」防止树杀后的后代变成未跟踪僵尸。几个有意思的点：
-
-- **`spawn-broker` 让子进程在 Gateway 重启时「过户」而非被杀**——跨进程 spawn 代理经 IPC handoff 交出句柄与管道。
-- `child-process-bridge` **不是 Gateway 桥**，是父→子的信号转发桥。
-- `CommandLane` 枚举（Main / SystemAgent / Cron / Subagent / Background / HookDispatch）是调度隔离词汇；后台 work 在 command-queue 之上按 owner key 注册 lane，**全局封顶 3 且只允许 leaf work**（防嵌套等待）。
-- `linux-oom-score` 调子进程 OOM 优先级——**防网关自己被 OOM killer 选中**。
-- 插件想声称自己是某个 task 的 requester 会被 **WeakSet 注册表**挡住，scope 只能由宿主签发。
-
-**System-agent**（`SYSTEM_AGENT_ID = "openclaw"`）是真实 agent：与用户 agent 共用同一条 embedded loop、session transcript、tool pipeline，但**工具面收窄到单一 ring-zero `openclaw` 工具**，指令是闭集 command vocabulary（「自由文本永不直接执行」），超时按本地路由 120s / 外部路由 30s。它的审批是**独立的一套**（不与 [Security](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Security.md) 里的通用 approval store 混）：三条安全线——**host 而非会话模型决定 armed**、**agent loop 永不自我批准**、模糊输入交给独立的 single-shot classifier 且要求 provider / model / authFingerprint **全等**否则回退；待批准操作以 `sha256(stableStringify(operation))` 指纹绑定，**批准只对该精确变更有效**。
+- **记忆与上下文引擎**在 [Memory](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Memory.md)：记忆是纯文本 Markdown 优先（`memory/YYYY-MM-DD.md` 每日日志 + `MEMORY.md` 长期事实），会话之间的固化靠 dreaming 三阶段；「压缩」的实际执行者是 context engine 注册表里的插件，内建 compact 只是 legacy delegate。该页还澄清了一个命名陷阱——`compaction-watchdog.ts` **不是计时器**，而是标记 canonical runtime delegate 的 process-global WeakSet。
+- **子代理编排**在 [SubAgent](/docs/CS/AI/LLM/Agent/Product/OpenClaw/SubAgent.md)：`sessions_spawn` / `sessions_send_child` 派生的 child run 不重新认领权限，而是把 parent 的 worker turn claim 经身份信封下传为 child admission 身份。
+- **后台工作三层底座**在 [Process](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Process.md)：进程底座（supervisor / spawn-broker / lane 队列）、任务账本（`TASK_RUNTIMES` 四类 owner）、以及 OpenClaw 自己的 system-agent 管家。
 
 ## Links
 
-- [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw.md)
+- [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw/OpenClaw.md)
 - [Gateway](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Gateway.md) / [Plugins](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Plugins.md)
 - [Storage](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Storage.md) / [Security](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Security.md)
-- [Integrations](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Integrations.md)
+- [Memory](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Memory.md) / [SubAgent](/docs/CS/AI/LLM/Agent/Product/OpenClaw/SubAgent.md) / [Process](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Process.md)
 - [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) / [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md)

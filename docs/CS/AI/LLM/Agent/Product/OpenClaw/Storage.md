@@ -1,6 +1,6 @@
 ## Introduction
 
-OpenClaw 的存储只有一条铁律——**全部 SQLite**。这一页覆盖会话的两层数据库、读投影与写路径，以及 agent run 可被调度到远端 worker 的 placement 机制；它是 [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw.md) 主链路里「回写 Session」那一站的完整展开，与 [Runtime](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Runtime.md) 的压缩写入、[Security](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Security.md) 的 commit guard 校验点直接相接。
+OpenClaw 的存储只有一条铁律——**全部 SQLite**。这一页覆盖会话的两层数据库、读投影与写路径，以及 agent run 可被调度到远端 worker 的 placement 机制；它是 [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw/OpenClaw.md) 主链路里「回写 Session」那一站的完整展开，与 [Runtime](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Runtime.md) 的压缩写入、[Security](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Security.md) 的 commit guard 校验点直接相接。
 
 ## Sessions and Storage
 
@@ -56,7 +56,8 @@ local → requested → provisioning → syncing → starting → active → dra
 
 ## Links
 
-- [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw.md)
-- [Gateway](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Gateway.md) / [Runtime](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Runtime.md)
-- [Security](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Security.md) / [Observability](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Observability.md)
+- [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw/OpenClaw.md)
+- [Gateway](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Gateway.md) / [Lifecycle](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Lifecycle.md)
+- [Runtime](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Runtime.md) / [Security](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Security.md)
+- [Observability](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Observability.md)
 - [Nodejs](/docs/CS/front-end/Nodejs.md)

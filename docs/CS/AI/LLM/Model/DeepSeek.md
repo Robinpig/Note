@@ -4,7 +4,7 @@
 
 [DeepSeek](https://www.deepseek.com) 是杭州深度求索人工智能基础技术研究有限公司的产品。它最早因「开源权重 + 极低定价」成名，而到 2026 年 10 月，它的 API 已是全球最便宜的前沿模型之一——同能力档位下比 OpenAI 与 Anthropic 低一到两个数量级，这条价格优势来自它独特的 **峰谷分时定价**，而不是阶段性补贴。
 
-本文只记模型与 API 事实。Agent 侧的 [DeepSeek Harness（dsh）](/docs/CS/AI/LLM/Agent/Product/DSH.md) 另有一篇。
+本文只记模型与 API 事实。Agent 侧的 [DeepSeek Harness（dsh）](/docs/CS/AI/LLM/Agent/Product/DSH/DSH.md) 另有一篇。
 
 ## API Models
 
@@ -117,7 +117,7 @@ DeepSeek 是少数直接提供 **Anthropic 兼容 Base URL** 的国产厂商，�
 
 - [Model 总览](/docs/CS/AI/LLM/Model/Overview.md)
 - [本地部署与推理引擎](/docs/CS/AI/LLM/Model/Inference.md)
-- [DeepSeek Harness（dsh）](/docs/CS/AI/LLM/Agent/Product/DSH.md)
+- [DeepSeek Harness（dsh）](/docs/CS/AI/LLM/Agent/Product/DSH/DSH.md)
 - [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md)
 - [Transformer](/docs/CS/AI/Transformer.md)
 - [LLM](/docs/CS/AI/LLM/LLM.md)

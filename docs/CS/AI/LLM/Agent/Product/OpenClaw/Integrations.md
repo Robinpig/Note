@@ -1,6 +1,6 @@
 ## Introduction
 
-这一页装两块「对外的边」：**ACP** 让 OpenClaw 与外部 agent 互操作（session/turn 级，与 MCP 的 tool 级互补），**媒体与多模态 I/O** 是内置 tools 的实体部分（图像 / 视频 / 音乐生成、入站附件理解、语音输出、网页抓取）。二者都是 [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw.md)「精简 core」原则下的产物：vendor 与协议 adapter 都在插件 / 扩展侧，core 只留契约与护栏。
+这一页装 OpenClaw 对外互操作的那张牌：**ACP**（Agent Client Protocol）让 OpenClaw 与外部 agent 在 session / turn 级互操作，与 MCP 的 tool 级互补。媒体与多模态 I/O 在 [Media](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Media.md)。二者都是 [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw/OpenClaw.md)「精简 core」原则下的产物：vendor 与协议 adapter 都在插件 / 扩展侧，core 只留契约与护栏。
 
 ## ACP: Agent Client Protocol
 
@@ -34,33 +34,13 @@ Bridge 侧几处工程细节值得单独记：
 
 ## Media and Multimodal I/O
 
-媒体是四类 tool 来源里「内置 tools」的实体部分，分三层：**共享底座**（`src/media/`，modality-agnostic 的 probe / transcode / ffmpeg 沙箱 / media store，被生成与理解两侧同时复用）、**生成侧**（`media-generation/` 共享 registry + image / video / music 各模态 runtime）、**理解侧 + 语音 + 网页**（`media-understanding/` `tts/` `realtime-transcription/` `web-*`）。
-
-生成侧的关键差别：**生成不走 LLM 的 `streamText` provider 调用，而是独立的 capability-provider 契约**（`provider.generateImage/Video/Music()` 直接执行）。三模态共用同一个 provider registry factory，配有序候选 fallback 引擎与几何归一；候选来自 `agents.defaults.mediaModels.<modality>`、override 与跨 provider auto fallback。 vendor（OpenAI / Google / fal / 阿里百炼等）是 `extensions/*` 插件，经 `registerImageGenerationProvider` 一类 API 注册；core 提供 OpenAI 兼容 / DashScope 兼容的 provider factory 供它们复用。工具名是 `image_generate` / `video_generate` / `music_generate`——**没有配置对应能力模型时 creator 返回 null，工具根本不注册**。生成结果**落文件 media store**（`<configDir>/media` 下按工具分子目录），SQLite 只记引用；任务状态是进程内 Map，不进 SQLite。
-
-三条容易搞反的事实：
-
-1. **理解是回退而非默认**：`runCapability` 里 native-vision 门控——活跃 chat 模型本身支持视觉时**跳过 image 理解**，图直接进模型上下文；理解只在模型不具备该能力时才发生。
-2. **不是「生成 + 理解干净二分」**：生成侧的下载 helper 反而 import 自 `media-understanding/shared.js`，同一 registry 也服务两个转写 key。
-3. **语音归属**：`src/tts/` 是 reply→audio 的**输出** owner，被 talk / meeting-bot 与渠道 reply 共享；`realtime-transcription/` 是入站 streaming STT（talk 经 transcription-relay 消费）。二者是 meeting-bot / talk 这个双向模态的两侧对偶，不是「一个补入站一个补出站」。
-
-底座侧两处护栏：**ffmpeg 沙箱**有硬上限（buffer 10MB、ffprobe 10s、ffmpeg 45s、audio 20min）；读侧 hydrate 出不透明的 **`media://inbound/<id>` claim-check URI**（Gateway offload 写出），媒体不直接内联进存储。渠道扩展**不得直接 import `src/media`**，只走 plugin-sdk 的 `core.channel.media.*`。
-
-网页 I/O 有两条内置 tool 与一个非工具富化环节，边界要分清：`src/web-*` 是 **provider 选择 / 执行层**，不是工具本体——工具是 `src/agents/tools/web-fetch.ts` / `web-search.ts`。
-
-`web_fetch` 的**默认引擎在 tool 内**（core 直取 + Readability），`src/web-fetch/` 只负责 provider fallback 选择。执行流是：cache → `fetchWithWebToolsNetworkGuard`（SSRF-guarded）→ 内容整形（cf-markdown 直通 / HTML 经 `extractReadableContent` → provider fallback → 基本 HTML / JSON pretty）→ **untrusted 包裹**（来自 `security/external-content.js`，呼应 [Security](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Security.md) 家族）+ 有界截断 + 私域内容 temp spill。两个「唯一」值得记：readability 的唯一 registrant 是 `extensions/web-readability`，唯一 fetch provider 是 `extensions/firecrawl`。
-
-`web_search` 的候选序是 explicit → metadata → configured/auto，且**额外 consult provider auth profile**——用 codex / xai 时无需单独配 web key；provider（brave / perplexity / duckduckgo / exa / tavily 等）都是 extension 插件经 manifest 的 `webSearchProviders` capability 注册。这里有个易冲突点：**host `web_search` 与 provider-hosted `web_search` 服务工具不能撞车**，靠 `allowedHostedToolTypes` 过滤。
-
-`link-understanding` 不是 tool，而是入站消息的**链接富化**：`extractLinksFromMessage` 先去 markdown-link span、用 `isBlockedHostnameOrIp` 预筛、默认 cap 3 条，然后严格 SSRF fetch + CLI processors，结果写进 `ctx.LinkUnderstanding`；时机是 media 理解之后、agent dispatch 之前。
-
-**SSRF 只有一个 owner**：`src/infra/net/ssrf.ts`（`SsrFBlockedError` / `isBlockedHostnameOrIp` / `createPinnedDispatcher`）加 guard `fetch-guard.ts`（`GUARDED_FETCH_MODE` 三档 strict / trusted_env_proxy / trusted_explicit_proxy），web tool 与 link-understanding 共用；browser 扩展里那个同名文件只是 re-export shim。另外 guard 会在 `OPENCLAW_DEBUG_PROXY_ENABLED` 时 lazy-import proxy-capture 做 debug 抓取，与 [Observability](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Observability.md) 那页接上。
+媒体与多模态 I/O（图像 / 视频 / 音乐生成、入站附件理解、语音输出与实时转写、会议机器人、网页抓取搜索）已独立成页：[Media](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Media.md)。那一页与 ACP 同属「精简 core 原则下的对外边界」：vendor 与协议 adapter 都在插件 / 扩展侧，core 只留契约与护栏。
 
 ## Links
 
-- [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw.md)
+- [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw/OpenClaw.md)
 - [Runtime](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Runtime.md) / [Plugins](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Plugins.md)
-- [Channels](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Channels.md) / [Security](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Security.md)
+- [Media](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Media.md) / [Security](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Security.md)
 - [MCP](/docs/CS/AI/LLM/Protocol/MCP.md)
 
 ## References

@@ -178,7 +178,7 @@ Vibe Coding → SDD 这条线是 Harness 命题的最好例证：**代码产出�
 - Agent 动代码前的闸门 → [Permission](/docs/CS/AI/LLM/Agent/Theory/Permission.md)
 - 自建 Skill 与自进化 → [Self-Evolving](/docs/CS/AI/LLM/Agent/Practice/Self-Evolving.md) / [Hermes](/docs/CS/AI/LLM/Agent/Practice/Hermes.md)
 
-另外，vibe coding 撞上的不只是"规范不够"这一个问题，更是**本目录 Product 层那批产品各自补的同一个缺口**——[Claude Code](/docs/CS/AI/LLM/Agent/Product/ClaudeCode.md) 的 plan mode、Codex 的计划与审批、DSH 的权限与沙箱，都是"人在环"的具体形态。SDD 是方法论，Plan Mode / 审批 / 沙箱是它的实现零件。
+另外，vibe coding 撞上的不只是"规范不够"这一个问题，更是**本目录 Product 层那批产品各自补的同一个缺口**——[Claude Code](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/ClaudeCode.md) 的 plan mode、Codex 的计划与审批、DSH 的权限与沙箱，都是"人在环"的具体形态。SDD 是方法论，Plan Mode / 审批 / 沙箱是它的实现零件。
 
 ## Links
 
@@ -187,7 +187,7 @@ Vibe Coding → SDD 这条线是 Harness 命题的最好例证：**代码产出�
 - [Permission](/docs/CS/AI/LLM/Agent/Theory/Permission.md) — 动代码之前的闸门
 - [Skill](/docs/CS/AI/LLM/Agent/Theory/Skill.md) — 规则文件与 skill 的成本侧
 - [Self-Evolving](/docs/CS/AI/LLM/Agent/Practice/Self-Evolving.md) — 从「人写规则」到「Agent 自建 Skill」
-- [Claude Code](/docs/CS/AI/LLM/Agent/Product/ClaudeCode.md) — plan mode 是 SDD 的产品化实现
+- [Claude Code](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/ClaudeCode.md) — plan mode 是 SDD 的产品化实现
 
 ## References
 

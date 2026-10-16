@@ -31,7 +31,7 @@ LLM 的四个局限——只会说不会做、没有记忆、知识截止、不�
 
 这一层内部又按**机制 / 产品 / 演进**分三层，入口是 [Agent 目录](/docs/CS/AI/LLM/Agent/README.md)。其中真正决定成败的是 [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md)，而它最反直觉的一点是：**Harness 是对模型能力缺口的补偿面**。模型每强一分，曾经必需的组件就该抽掉一层；照抄别人的组件清单不会让 Agent 变强，反而可能在长任务里拖后腿。所以那篇值得读的不是「有哪些组件」，而是「现在该补哪一块、该拆哪一块」的判断方法。另一个高频踩坑点是 [Skill](/docs/CS/AI/LLM/Agent/Theory/Skill.md)——它的字段规范有「拼错不报错」的坑，而正文一旦加载就跨轮持续占用上下文，不是你以为的一次性提示词。
 
-编程 Agent 是这一层最成熟的产品形态，几个常被放在一起比：[Claude Code](/docs/CS/AI/LLM/Agent/Product/ClaudeCode.md) 与 [Codex](/docs/CS/AI/LLM/Agent/Product/Codex.md) 绑定单一厂商但把 Harness 特性用得最透，后者是源码级剖析；[OpenCode](/docs/CS/AI/LLM/Agent/Product/OpenCode.md) 与 [Pi](/docs/CS/AI/LLM/Agent/Product/Pi.md) 的卖点是模型无关，差异在客户端架构与扩展方式；[DeepSeek Harness](/docs/CS/AI/LLM/Agent/Product/DSH.md) 展示「一切皆插件」的另一种解法。能完成任务只是及格线，[Self-Evolving](/docs/CS/AI/LLM/Agent/Practice/Self-Evolving.md) 关心的是经历能否沉淀成下次可用的能力，[Hermes](/docs/CS/AI/LLM/Agent/Practice/Hermes.md) 是个完整落地标本，而 [Vibe](/docs/CS/AI/LLM/Agent/Practice/Vibe.md) 记录的是这套工具对开发方式本身的影响。
+编程 Agent 是这一层最成熟的产品形态，几个常被放在一起比：[Claude Code](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/ClaudeCode.md) 与 [Codex](/docs/CS/AI/LLM/Agent/Product/Codex/Codex.md) 绑定单一厂商但把 Harness 特性用得最透，后者是源码级剖析；[OpenCode](/docs/CS/AI/LLM/Agent/Product/OpenCode/OpenCode.md) 与 [Pi](/docs/CS/AI/LLM/Agent/Product/Pi/Pi.md) 的卖点是模型无关，差异在客户端架构与扩展方式；[DeepSeek Harness](/docs/CS/AI/LLM/Agent/Product/DSH/DSH.md) 展示「一切皆插件」的另一种解法。能完成任务只是及格线，[Self-Evolving](/docs/CS/AI/LLM/Agent/Practice/Self-Evolving.md) 关心的是经历能否沉淀成下次可用的能力，[Hermes](/docs/CS/AI/LLM/Agent/Practice/Hermes.md) 是个完整落地标本，而 [Vibe](/docs/CS/AI/LLM/Agent/Practice/Vibe.md) 记录的是这套工具对开发方式本身的影响。
 
 ## Platform
 

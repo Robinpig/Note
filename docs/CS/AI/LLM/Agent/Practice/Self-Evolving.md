@@ -222,7 +222,7 @@ Agent 可能保存错误记忆、把偶然成功误判为通用经验、Skill �
 - [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) / [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md)
 - [Skill](/docs/CS/AI/LLM/Agent/Theory/Skill.md) — Skill 是自进化沉淀的核心载体
 - [Hermes](/docs/CS/AI/LLM/Agent/Practice/Hermes.md) — 自进化 Agent 的完整工程案例
-- [DSH](/docs/CS/AI/LLM/Agent/Product/DSH.md) / [LLM](/docs/CS/AI/LLM/LLM.md)
+- [DSH](/docs/CS/AI/LLM/Agent/Product/DSH/DSH.md) / [LLM](/docs/CS/AI/LLM/LLM.md)
 
 ## References
 

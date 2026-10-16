@@ -252,9 +252,9 @@ Agent 的 Token 消耗很大，怎么优化成本？
 - [Self-Evolving](/docs/CS/AI/LLM/Agent/Practice/Self-Evolving.md)
 - [MCP](/docs/CS/AI/LLM/Protocol/MCP.md)
 - [LLM 应用开发平台](/docs/CS/AI/LLM/Platform/Platform.md)
-- [DSH](/docs/CS/AI/LLM/Agent/Product/DSH.md)
+- [DSH](/docs/CS/AI/LLM/Agent/Product/DSH/DSH.md)
 - [Skill](/docs/CS/AI/LLM/Agent/Theory/Skill.md)
-- [Codex](/docs/CS/AI/LLM/Agent/Product/Codex.md)
+- [Codex](/docs/CS/AI/LLM/Agent/Product/Codex/Codex.md)
 
 ## References
 

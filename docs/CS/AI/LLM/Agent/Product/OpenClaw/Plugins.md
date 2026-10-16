@@ -1,6 +1,6 @@
 ## Introduction
 
-OpenClaw 把「可选能力」一律下沉到插件，理由是 core 里每多一个 tool / prompt / config key 都会对每次模型请求「按调用征税」。这一页覆盖插件的两平面结构、注册契约、激活规划、生命周期事务链，以及 Claw 包分发，是 [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw.md) 枢纽里「精简 core + 插件化」那条设计哲学的落地细节；插件贡献的工具如何被调用见 [Runtime](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Runtime.md)。
+OpenClaw 把「可选能力」一律下沉到插件，理由是 core 里每多一个 tool / prompt / config key 都会对每次模型请求「按调用征税」。这一页覆盖插件的两平面结构、注册契约、激活规划、生命周期事务链，以及 Claw 包分发，是 [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw/OpenClaw.md) 枢纽里「精简 core + 插件化」那条设计哲学的落地细节；插件贡献的工具如何被调用见 [Runtime](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Runtime.md)。
 
 ## Plugin System
 
@@ -66,10 +66,10 @@ core 与插件的边界就压在 `core:` 前缀上：`createCorePluginStateKeyed
 
 ## Links
 
-- [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw.md)
+- [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw/OpenClaw.md)
 - [Gateway](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Gateway.md) / [Runtime](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Runtime.md)
 - [Channels](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Channels.md) / [Storage](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Storage.md)
-- [Integrations](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Integrations.md)
+- [Memory](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Memory.md) / [Process](/docs/CS/AI/LLM/Agent/Product/OpenClaw/Process.md)
 - [MCP](/docs/CS/AI/LLM/Protocol/MCP.md)
 
 ## References

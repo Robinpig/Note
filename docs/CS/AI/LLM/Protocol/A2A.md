@@ -99,7 +99,7 @@ submitted → working → input-required → completed / failed / cancelled
 
 - [MCP](/docs/CS/AI/LLM/Protocol/MCP.md) — agent ↔ 工具的标准协议，与 A2A 互补
 - [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) / [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md)
-- [DSH](/docs/CS/AI/LLM/Agent/Product/DSH.md) / [Self-Evolving](/docs/CS/AI/LLM/Agent/Practice/Self-Evolving.md)
+- [DSH](/docs/CS/AI/LLM/Agent/Product/DSH/DSH.md) / [Self-Evolving](/docs/CS/AI/LLM/Agent/Practice/Self-Evolving.md)
 
 ## References
 

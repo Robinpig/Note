@@ -51,7 +51,7 @@ LLM 在结构上就是"把 [Transformer](/docs/CS/AI/Transformer.md) 的 decoder
 
 模型能力的问题最终会落成成本问题，而 2026 年的定价结构让这件事比想象复杂：同档位模型的输入价格正在收敛，但缓存倍率、长上下文是否加价、thinking token 按什么计价，这三项的差距远大于标价差距。比如同样把一个 900K token 的代码库一次性喂进去，按标价算一遍和按某家的无台阶结构算一遍，账单可以差三倍以上。
 
-[模型总览](/docs/CS/AI/LLM/Model/Overview.md) 是这块的枢纽，横向汇总了闭源三家与中国模型的价格、上下文与协议，并单列了最容易记错的几处（比如「Llama 4 非商用」是误传、国产旗舰的协议正在集体收紧、OpenAI 的 272K 是整单重算的台阶而非斜坡）。各家的完整型号表与架构演进在专页：[DeepSeek](/docs/CS/AI/LLM/Model/DeepSeek.md) 的峰谷分时定价与 encoder–decoder MoE、[OpenAI](/docs/CS/AI/LLM/Model/OpenAI.md) 的 GPT-6 家族与长上下文台阶、[Claude](/docs/CS/AI/LLM/Model/Claude.md) 的四档命名与自适应 thinking、[Qwen](/docs/CS/AI/LLM/Model/Qwen.md) 与[开源模型全景](/docs/CS/AI/LLM/Model/Open_Model.md) 的协议陷阱。当负载稳定到一定程度，云端按 token 计费就该换成自建——这条路见[本地部署与推理引擎](/docs/CS/AI/LLM/Model/Inference.md)。
+[模型总览](/docs/CS/AI/LLM/Model/Overview.md) 是这块的枢纽，横向汇总了闭源三家与中国模型的价格、上下文与协议，并单列了最容易记错的几处（比如「Llama 4 非商用」是误传、国产旗舰的协议正在集体收紧、OpenAI 的 272K 是整单重算的台阶而非斜坡）。各家的完整型号表与架构演进在专页：[DeepSeek](/docs/CS/AI/LLM/Model/DeepSeek.md) 的峰谷分时定价与 encoder–decoder MoE、[OpenAI](/docs/CS/AI/LLM/Model/OpenAI.md) 的 GPT-6 家族与长上下文台阶、[Claude](/docs/CS/AI/LLM/Model/Claude.md) 的四档命名与自适应 thinking、[StepFun](/docs/CS/AI/LLM/Model/StepFun.md) 的 92 层窄深架构与训进策略里的 Context Compaction、[Qwen](/docs/CS/AI/LLM/Model/Qwen.md) 与[开源模型全景](/docs/CS/AI/LLM/Model/Open_Model.md) 的协议陷阱。当负载稳定到一定程度，云端按 token 计费就该换成自建——这条路见[本地部署与推理引擎](/docs/CS/AI/LLM/Model/Inference.md)。
 
 还有一类模型不在「会不会写文本」这条轴上：[Jev](/docs/CS/AI/LLM/Model/Jev.md) 是 TypeSafe 的 **System One model**，架构层面就不生成文本，只输出类型化判断与校准过的概率，用来承接 Harness 里那些「小而快」的决策调用（意图路由、风险门控、严重度打分）。它值得单列，是因为第一次让 `if confidence > 0.9` 这种阈值判断有了统计学意义——RLHF 之后的 LLM 概率是**自信语气**，校准之后的决策概率才是**可信信号**。选型时的判据、以及它替代不了生成模型的边界，都写在那一页。
 
@@ -69,7 +69,7 @@ LLM 在结构上就是"把 [Transformer](/docs/CS/AI/Transformer.md) 的 decoder
 
 以上都是"用别人的平台"。另一条路是自己攒：[LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md) 给出模型与工具的跨厂商抽象，[LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md) 在它下面给出有状态图运行时——循环重试、断点恢复、人工审批闸门都落在这一层。这条代码框架线与平台线各自适合谁、同层还有哪些玩家，[LLM 应用开发框架](/docs/CS/AI/LangTools.md) 画了一张横向地图。
 
-框架再往下，真在终端直接跑起来的 coding agent 产品也在这个谱系里：[Pi](/docs/CS/AI/LLM/Agent/Product/Pi.md) 把"核心能力最小化、靠扩展叠加"做到极致，其内部运行时就是上面 Agent / Harness 抽象在 TypeScript 工程里的落地；其内部实现（包分层、两层协作循环、工具批次链路）单独整理在 [Pi 架构](/docs/CS/AI/LLM/Pi-Architecture.md)，对照本篇的 Loop / Tools / Memory / Harness 四构成看最清楚。
+框架再往下，真在终端直接跑起来的 coding agent 产品也在这个谱系里：[Pi](/docs/CS/AI/LLM/Agent/Product/Pi/Pi.md) 把"核心能力最小化、靠扩展叠加"做到极致，其内部运行时就是上面 Agent / Harness 抽象在 TypeScript 工程里的落地；其内部实现（包分层、两层协作循环、工具批次链路）单独整理在 [Pi 架构](/docs/CS/AI/LLM/Agent/Product/Pi/Architecture.md)，对照本篇的 Loop / Tools / Memory / Harness 四构成看最清楚。
 
 ## Links
 

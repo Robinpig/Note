@@ -284,9 +284,9 @@ Claude Code 自带的 bundled skills（文档点名的）：`/doctor`（别名 `
 
 - [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md)
 - [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md)
-- [Claude Code](/docs/CS/AI/LLM/Agent/Product/ClaudeCode.md)
-- [Codex](/docs/CS/AI/LLM/Agent/Product/Codex.md)
-- [DSH](/docs/CS/AI/LLM/Agent/Product/DSH.md)
+- [Claude Code](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/ClaudeCode.md)
+- [Codex](/docs/CS/AI/LLM/Agent/Product/Codex/Codex.md)
+- [DSH](/docs/CS/AI/LLM/Agent/Product/DSH/DSH.md)
 - [Tools](/docs/CS/AI/LLM/Protocol/Tools.md)
 - [MCP](/docs/CS/AI/LLM/Protocol/MCP.md)
 

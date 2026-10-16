@@ -1,10 +1,10 @@
 ## Introduction
 
-> **版本基线：2026-10-05 核实。** 型号参数与许可证以 HuggingFace / ModelScope 的 `config.json`、`LICENSE` 原文为准；发布日期取官方博客与模型仓库 News 条目；基准分数为厂商自报，除标注外未经第三方复现。
+> **版本基线：2026-10-16 核实。** 型号参数与许可证以 HuggingFace / ModelScope 的 `config.json`、`LICENSE` 原文为准；发布日期取官方博客与模型仓库 News 条目；基准分数为厂商自报，除标注外未经第三方复现。
 
-「开源模型」这个说法在 2026 年已经不能当技术判据用了。**open-weight（开放权重）** 与 **open source（开源）** 已经是两件不同的事：前者只给权重，后者还要给训练数据与训练代码。当前能真正称为开源的只有少数（Qwen3.8-27B 的Apache-2.0、GLM-5/5.1/5.2/5.3-Flash 的 MIT、Muse Glimmer 30B 的 Apache-2.0），而参数规模最大的那批模型（Kimi K3、GLM-5.3、Qwen3.8-2.4T）全部是自定义协议或只开权重。
+「开源模型」这个说法在 2026 年已经不能当技术判据用了。**open-weight（开放权重）** 与 **open source（开源）** 已经是两件不同的事：前者只给权重，后者还要给训练数据与训练代码。当前能真正称为开源的只有少数（Qwen3.8-27B 的Apache-2.0、GLM-5/5.1/5.2/5.3-Flash 的 MIT、Muse Glimmer 30B 的 Apache-2.0），而参数规模最大的那批模型（Kimi K3、GLM-5.3、Qwen3.8-2.4T、Step 5 Preview）全部是自定义协议或只开权重。
 
-本文覆盖 Llama、GLM、Kimi、MiniMax、Mistral、星火六家国产外阵营。各家单篇细节见 [Qwen](/docs/CS/AI/LLM/Model/Qwen.md) 与 [DeepSeek](/docs/CS/AI/LLM/Model/DeepSeek.md)，部署侧见 [Inference](/docs/CS/AI/LLM/Model/Inference.md)。
+本文覆盖 Llama、GLM、Kimi、MiniMax、阶跃、Mistral、星火七家国产外阵营。各家单篇细节见 [Qwen](/docs/CS/AI/LLM/Model/Qwen.md)、[DeepSeek](/docs/CS/AI/LLM/Model/DeepSeek.md) 与 [StepFun](/docs/CS/AI/LLM/Model/StepFun.md)，部署侧见 [Inference](/docs/CS/AI/LLM/Model/Inference.md)。
 
 ## Current Landscape
 
@@ -16,6 +16,7 @@
 | 智谱 GLM（Flash） | GLM-5.3-Flash | 2026-08-26 | 320B / 18B 激活，多模态 | 未查到 | **MIT** |
 | 月之暗面 | **Kimi K3** | 2026-07-16 | **2.8T / 104B 激活** | 1M | ⚠️ Kimi K3 License（只开权重） |
 | MiniMax | MiniMax-M2 | 2025-10-26 | 230B / 10B 激活 | 未查到 |⚠️ Modified MIT |
+| 阶跃星辰 | **Step 5 Preview** | 2026-10-15 | **600B / 27B 激活** | **1M** | ⚠️ StepFun Model License 1.0 |
 | Mistral | Mistral Medium 3.5 | 2026-04-28 | **128B dense**（非 MoE） | 256K |⚠️ Modified MIT |
 | 讯飞星火 | ⚠️ 仅端侧 X2.5-4B / 1.7B | 2026-09-01 | 4B / 1.7B | 1M | 未查到 |
 
@@ -92,6 +93,18 @@ Kimi K3 License 的实质约束有两条，比 Qwen 与 GLM 都更严：
 
 参数：230B 总 / 10B 激活 MoE，2025-10-26 上线。10B 激活的定位是端到端工具使用与 agentic 任务。**未查到 M3 的官方发布**。
 
+### Step 5 Preview Opens Weights With an Apache-2.0-Style License
+
+> ⚠️ **StepFun Model License 1.0 不是 Apache-2.0。** 阶跃星辰在 2026-10-15 开放 Step 5 Preview 权重（FP8 / BF16 / NVFP4 三个精度，HuggingFace 与 ModelScope 双通道，公开无门禁），许可证自称 "Apache-2.0-style"——永久免版税的使用、修改、再分发与专利授权都在，但额外有三条门槛。
+
+三条实质约束，按触发面排序：
+
+1. **署名条款**：商业产品或服务月活超 **1 亿**或月收入超 **2000 万美元**，须显著展示 "Powered by StepFun AI"。
+2. **单独商业授权**：两类主体须先取得 StepFun 授权——① 把模型能力装进手机、汽车、智能眼镜、可穿戴、机器人、智能家居的**硬件厂商**；② 年收入超 **2000 万美元**的 **MaaS 提供商**。**内部使用豁免。**
+3. **衍生作品口径宽**：用 Step 5 输出在实质程度上训练的模型，被认定为包含模型的实质部分，即衍生作品。
+
+参数为 600B 总 / 27B 激活稀疏 MoE，92 层窄深架构，1M 上下文，原生文本 + 视觉输入（平台文档另支持视频）。它是「为长程 Agent 任务设计」这条路线的代表——上下文压缩（Context Compaction）被训进策略而非外挂规则，详见 [StepFun](/docs/CS/AI/LLM/Model/StepFun.md)。**部署门槛是数据中心级**：FP8 需 4×B300 或 8×H200，BF16 需 8×B300 或 16×H200，没有单卡方案。
+
 ### Mistral Merged Three Product Lines
 
 Mistral Medium 3.5（2026-04-28 发布，权重 04-29，05-22 GA）最值得记的不是参数而是产品策略：**它把三条产品线合并成单权重**——退役 Mistral Medium 3.1（通用）、Magistral（推理）、Devstral 2（编码），统一为一个权重 + 逐请求 `reasoning_effort` 参数（`none` 走快答，`high` 走长思维链）。从「三个 checkpoint 常驻」变成「一个 checkpoint + 一个参数」。
@@ -110,16 +123,17 @@ Mistral Medium 3.5（2026-04-28 发布，权重 04-29，05-22 GA）最值得记�
 
 ## Architecture Convergence: Signals in 2026
 
-抛开各家宣传，2026 年最实质的技术变化是**多路独立收敛到同一个架构组合：混合线性注意力 + MoE**。四家各自的命名不同，但解决的是同一个问题——全注意力在长上下文上的计算与 KV cache 成本：
+抛开各家宣传，2026 年最实质的技术变化是**多路独立收敛到「不让每个 token 看所有 token」**，但走成了两支：**混合线性注意力**与**块索引稀疏注意力**。前者改注意力的计算形式，后者改索引方式，要解决的问题是同一个——全注意力在长上下文上的计算与 KV cache 成本：
 
-| 家族 | 线性/稀疏注意力 | MoE 配置 |
+| 家族 | 长上下文机制 | MoE 配置 |
 | :--- | :--- | :--- |
 | Kimi K3 | KDA（Kimi Delta Attention）+ Gated MLA，69:24 混排 | 896 专家选 16，2.8T/104B |
 | Qwen3.5/3.8 | Gated DeltaNet + Gated Attention，3:1 混排 | 512 专家选 10+1，2.4T/95B |
 | GLM-5/5.2/5.3 | DeepSeek Sparse Attention（DSA） | 256 专家选 8，744B/40B |
 | GLM-5.3-Flash | 线性 + 稀疏混合（`glm5_next`） | 320B/18B |
+| Step 5 Preview | **Sparse GQA**（8 token 块索引）+ Block-wise Token Merging | 600B/27B，92 层窄深 |
 
-这个收敛意味着**过去两年「谁用 MLA / 谁用 DSA / 谁用线性注意力」的路线之争基本结束了**，现在的问题是「混合比例调多少、每多少层插一次全注意力」。对做推理部署的人，直接影响是：KV cache 的形状和计算模式在各家趋同，量化与缓存优化的通用方案更容易跨模型复用。DeepSeek 那篇的 V4.1-Flash 用的 causal encoder–decoder 是另一条独立路线，见 [DeepSeek](/docs/CS/AI/LLM/Model/DeepSeek.md)。
+这个收敛意味着**过去两年「谁用 MLA / 谁用 DSA / 谁用线性注意力」的路线之争基本结束了**，现在的问题是「混合比例调多少、每多少层插一次全注意力」或「索引块开多大」。对做推理部署的人，直接影响是：KV cache 的形状和计算模式在各家趋同，量化与缓存优化的通用方案更容易跨模型复用。DeepSeek 那篇的 V4.1-Flash 用的 causal encoder–decoder 是另一条独立路线，见 [DeepSeek](/docs/CS/AI/LLM/Model/DeepSeek.md)。
 
 ## Selection Quick Reference
 
@@ -130,6 +144,7 @@ Mistral Medium 3.5（2026-04-28 发布，权重 04-29，05-22 GA）最值得记�
 - **要单卡消费级显卡跑 agent** → `Muse Glimmer 30B`（Apache-2.0，30B，24GB 起步，附 DFlash 草稿模型）
 - **要最大开放权重、且营收低于 2000 万美元** → `Kimi K3`（2.8T，1M，MXFP4 出厂）。过了这条线要谈单独协议。
 - **要一个权重同时做对话/推理/编码** → `Mistral Medium 3.5`（128B dense）。但要 4 卡或 96GB 统一内存。
+- **要数据中心级 agentic 编码 + 金融垂直** → `Step 5 Preview`（600B/27B，1M，DeepSWE 67.7）。代价是 FP8 起就要 4×B300 或 8×H200，且 MaaS 年收入超 2000 万美元要单独授权。
 - **只做内部部署、不对外提供服务** → Qwen 与 GLM 的营收门槛都不触发，随便选。
 - **必须国产算力 + 端侧小模型** → 星火 X2.5-4B / 1.7B
 - **不要选**：235B-A22B（上一代，已被同代更小型号超越）、Qwen 480B（查不到此规格）、Llama 4（最小109B 总参，单卡跑不了，且欧盟实体用不了多模态）
@@ -138,7 +153,7 @@ Mistral Medium 3.5（2026-04-28 发布，权重 04-29，05-22 GA）最值得记�
 
 - [Model 总览](/docs/CS/AI/LLM/Model/Overview.md)
 - [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md)
-- [Claude Code](/docs/CS/AI/LLM/Agent/Product/ClaudeCode.md)
+- [Claude Code](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/ClaudeCode.md)
 - [OpenAI](/docs/CS/AI/LLM/Model/OpenAI.md)
 - [Claude](/docs/CS/AI/LLM/Model/Claude.md)
 - [Transformer](/docs/CS/AI/Transformer.md)
