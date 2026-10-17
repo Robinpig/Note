@@ -1,14 +1,13 @@
 ## Introduction
 
-[Netty](https://netty.io) is *an asynchronous event-driven network application framework* for rapid development of maintainable high performance protocol servers & clients
+[Netty](https://netty.io) 是*一个异步的、事件驱动的网络应用框架*，用于快速开发可维护的高性能协议服务端与客户端。
 
-Netty is a [NIO](/docs/CS/Java/JDK/IO/NIO.md) client server framework which enables quick and easy development of network applications such as protocol servers and clients.
-It greatly simplifies and streamlines network programming such as TCP and UDP socket server.
+Netty 是一个基于 [NIO](/docs/CS/Java/JDK/IO/NIO.md) 的客户端/服务端框架，可以快速、轻松地开发协议服务端、客户端这类网络应用，并把 TCP、UDP socket 服务端这种网络编程大幅化简。
 
-- **Ease of use**: Netty is simpler to use than plain Java NIO and has an extensive set of examples covering most use cases
-- **Minimal dependency**: As we will see in a minute, you can get the whole framework with just a single dependency
-- **Performance**: Netty has better throughput and reduced latency than core Java APIs. It is also scalable thanks to its internal pooling of resources.
-- **Security**: Complete SSL/TLS and StartTLS support.
+- **易用性**：比原生 Java NIO 简单得多，且自带覆盖大多数使用场景的完整示例
+- **依赖极小**：整个框架只需引入一个依赖（下文示例即可看到）
+- **高性能**：相比 JDK 核心 API 有更高的吞吐与更低的延迟；内部的资源池化让它同样具备良好的伸缩性
+- **安全性**：完整支持 SSL/TLS 与 StartTLS
 
 ## Version Baseline
 
@@ -29,6 +28,10 @@ Netty **不存在 4.3 分支**。4.2 相对 4.1 的四个破坏性/结构性变�
 
 ## Architecture
 
+Netty 的架构有两张常见的图、两个不同的视角：**模块视角**回答"代码分成哪几块"，**逻辑视角**回答"一次请求穿过哪些层"。先分模块，再分层。
+
+### Modules
+
 <div style="text-align: center;">
 
 ![Fig.1. Netty architecture](https://netty.io/images/components.png)
@@ -36,7 +39,7 @@ Netty **不存在 4.3 分支**。4.2 相对 4.1 的四个破坏性/结构性变�
 </div>
 
 <p style="text-align: center;">
-Fig.1. Netty architecture.
+图 1. Netty 架构。
 </p>
 
 
@@ -51,6 +54,8 @@ Netty 结构一共分为三个模块：
 
 
 
+### Logical Architecture
+
 Netty 的逻辑处理架构为典型网络分层架构设计，共分为网络通信层、事件调度层、服务编排层，每一层各司其职
 
 
@@ -61,7 +66,7 @@ Netty 的逻辑处理架构为典型网络分层架构设计，共分为网络�
 </div>
 
 <p style="text-align: center;">
-Fig.1. Netty logic architecture.
+图 2. Netty 逻辑架构。
 </p>
 
 
@@ -93,26 +98,37 @@ Netty 自己实现的 [Channel](/docs/CS/Framework/Netty/Channel.md) 是以 JDK 
 
 
 
-In Java-based networking, the fundamental construct is the class Socket .
-Netty’s Channel interface provides an API that greatly simplifies the complexity of working directly with Socket.
-To work with TCP/IP Channels, we will deal with SocketChannel which represents the TCP connection between client and servers:
+在 Java 网络编程里，最基础的构造是 `Socket` 类；直接操作它来屏蔽连接、读写、关闭的细节相当繁琐。Netty 的 `Channel` 接口提供的 API 把这份复杂度大幅收敛。要处理 TCP/IP 连接，落到具体的类型是 `SocketChannel`，它代表客户端与服务端之间的一条 TCP 连接。
 
-SocketChannels are managed by EventLoop which is looking for new events, such as incoming data.. When an event occurs, it is eventually passed on to the appropriate Handler for example a ChannelHandler.
+`SocketChannel` 由 `EventLoop` 管理：EventLoop 一直在等待新事件（比如有数据到达），事件发生后最终会被交给合适的 Handler（例如某个 `ChannelHandler`）处理。
 
-Next, to share resources like threads, Netty groups each EventLoop into an EventLoopGroup.
+多个 EventLoop 为了共享线程等资源，会被 Netty 归入同一个 `EventLoopGroup`。
 
-Finally, to handle the bootstrapping of Netty and its resources, you can use the BootStrap class.
+最后，Netty 自身及其资源的引导启动交给 `Bootstrap` 类完成。
 
-Let’s see how to use the above Classes with a simple Server echo example.
+下面用一个最简单的服务端 echo 例子把这些类串起来。
 
-> [Example writing a Discard Server](https://netty.io/wiki/user-guide-for-4.x.html#writing-a-discard-server)
+> [写一个 Discard Server 的完整示例](https://netty.io/wiki/user-guide-for-4.x.html#writing-a-discard-server)
+
+### Startup
+
+服务端从配置到监听就绪，按顺序走完八步；下面 Bind 时序图展示的是第 7 步 `bind()` 内部发生了什么。
+
+1. [创建 EventLoopGroup](/docs/CS/Framework/Netty/EventLoop.md?id=create-eventloopgroup)
+2. [创建 ServerBootstrap](/docs/CS/Framework/Netty/Bootstrap.md?id=bind)
+3. 设置 [Channel](/docs/CS/Framework/Netty/Channel.md)
+4. 设置 [ChannelHandler](/docs/CS/Framework/Netty/ChannelHandler.md)
+5. Option
+6. ChildOption
+7. [ServerBootstrap#bind()](/docs/CS/Framework/Netty/Bootstrap.md?id=bind)
+8. [ChannelFuture](/docs/CS/Framework/Netty/Future.md)
 
 ### Bind
 
-- [Create EventLoopGroup](/docs/CS/Framework/Netty/EventLoop.md?id=create-eventloopgroup)
-- BossEventLoop starts thread when register ServerSocketChannel
-- first register(Selector, 0, ServerSocketChannel)
-- selectionKey.interestOps(OP_ACCEPT) when fireChannelActive() after bind
+- [创建 EventLoopGroup](/docs/CS/Framework/Netty/EventLoop.md?id=create-eventloopgroup)
+- 注册 ServerSocketChannel 时，BossEventLoop 才启动线程
+- 首次注册为 `register(Selector, 0, ServerSocketChannel)`，此时 interestOps 为 0
+- bind 之后在 `fireChannelActive()` 里才把 `selectionKey.interestOps` 置为 OP_ACCEPT
 
 ```plantuml
 skinparam backgroundColor #DDDDDD
@@ -167,6 +183,136 @@ deactivate bl
 NioServerSocketChannel 中包含了一种特殊的处理器 ServerBootstrapAcceptor，最终通过  ServerBootstrapAcceptor 的 channelRead() 方法将新建的客户端 Channel 分配到  WorkerEventLoopGroup 中。WorkerEventLoopGroup 中包含多个 NioEventLoop，它会选择其中一个  NioEventLoop 与新建的客户端 Channel 绑定
 
 
+
+- BossEventLoop 通过 `select()` 等待 OP_ACCEPT 事件
+- WorkerEventLoop 在被注册时才启动线程
+- 首次注册为 `register(Selector, 0, SocketChannel)`，interestOps 为 0
+- 在 `fireChannelActive()` 里才把 `selectionKey.interestOps` 置为 OP_READ
+
+```plantuml
+skinparam backgroundColor #DDDDDD
+
+title: Connect sequence
+participant BossNioEventLoop as bg
+participant Channel.Unsafe as us
+participant ServerSocketChannel as sc
+participant ServerBootstrapAceptor as sa
+participant WorkerEventLoopGroup as wg
+participant WorkerEventLoop as el
+participant SocketChannel as sl
+participant ChannelPipeline as pipe
+activate bg
+bg ->> bg: Selector.select()
+note left: OP_ACCEPT event
+bg ->> us: NioUnsafe.read()
+us ->> sc: create SocketChannel
+note right: ServerSocketChannel.accept()
+sc -->> us: SocketChannel
+us ->> sa: pipeline.fireChannelRead()
+sa ->> sa: init SocketChannel
+sa ->> wg: regster()
+wg ->> el: execute()
+el --> el: startThread()
+activate el
+el -> sl: register(selector, 0, Channel)
+sl ->> pipe: fireChannelRegistered()
+sl ->> pipe: fireChannelActive()
+note right: selectionKey.interestOps(OP_READ)
+```
+
+### Read
+
+当客户端向服务端发送数据时，NioEventLoop 会监听到 OP_READ 事件，然后分配 ByteBuf 并读取数据，读取完成后将数据传递给 Pipeline 进行处理
+
+
+
+Netty 读取数据的核心流程，Netty 会在一个 read loop 中不断循环读取 Socket 中的数据直到数据读取完毕或者读取次数已满 16 次，当循环读取了 16 次还没有读取完毕时，Netty 就不能在继续读了，因为 Netty 要保证 Reactor 线程可以均匀的处理注册在它上边的所有 Channel 中的 IO 事件。剩下未读取的数据等到下一次 read loop 在开始读取。
+
+除此之外，在每次 read loop 开始之前，Netty 都会分配一个初始化大小为 2048 的 DirectByteBuffer 来装载从 Socket 中读取到的数据，当整个 read loop 结束时，会根据本次读取数据的总量来判断是否为该 DirectByteBuffer 进行扩容或者缩容，目的是在下一次 read loop 的时候可以为其分配一个容量大小合适的 DirectByteBuffer
+
+
+Netty服务端对于一次OP_READ事件的处理，会在一个do{}while()循环read loop中分多次从客户端NioSocketChannel中读取网络数据。每次读取我们分配的ByteBuffer容量大小，初始容量为2048。
+- ChanneRead事件：一次循环读取一次数据，就触发一次ChannelRead事件。本次最多读取在read loop循环开始分配的DirectByteBuffer容量大小。这个容量会动态调整
+- ChannelReadComplete事件：当读取不到数据或者不满足continueReading的任意一个条件就会退出read loop，这时就会触发ChannelReadComplete事件。表示本次OP_READ事件处理完毕
+
+> 触发ChannelReadComplete事件并不代表NioSocketChannel中的数据已经读取完了，只能说明本次OP_READ事件处理完毕
+> 因为有可能是客户端发送的数据太多，Netty读了16次还没读完，那就只能等到下次OP_READ事件到来的时候在进行读取了
+
+
+
+
+- 一次 ReadComplete 包含多次 Read（最多 16 次）
+- `AdaptiveRecvByteBufAllocator` 缩容要连续满足两次条件才动手，扩容一次就放大
+- Handler 默认在 WorkerEventLoop 上执行，也可以在添加 Handler 时指定独立线程池
+
+> [!TIP]
+>
+> 不要用 EventLoopGroup 执行业务逻辑——它的线程亲和性会让业务阻塞直接顶在 IO 线程上。
+
+```plantuml
+skinparam backgroundColor #DDDDDD
+
+title: Read sequence
+participant WorkEventLoop as we
+participant Selector as se
+activate we
+we ->> we: Selector.select()
+note right: OP_READ event
+participant Channel.Unsafe as ue
+we ->> ue: read()
+participant NioSocketChannel as so
+participant Allocator as ac
+participant ByteBuf as bb
+participant ChannelPipeline as pipe
+participant ChannelInboundHandler as ch
+loop continueReading
+    ue ->> ac: allocate()
+    ac -->> ue: ByteBuf 
+    ue ->> so: doReadBytes(ByteBuf) 
+        note over so, bb #AAAAAA
+            javaChannel.readBytes()
+        end note
+    break read EOF
+    bb -->> bb: release()
+        note over so #AAAAAA
+            close = true
+        end note
+    end
+    break IOException | OOM
+        so -->> so: closeOnRead()
+    end
+    alt readPending
+        so ->> pipe: fireChannelRead()
+        pipe ->> ch: fireChannelRead()
+            note right
+                handle data
+                From Head to Tail
+            end note
+    end
+end
+so ->> ac: readComplete()
+so ->> pipe: fireChannelReadComplete()
+participant ChannelOutboundBuffer as ob
+alt close == true
+    so -->> so: closeOnRead()
+    so -->> pipe: deRegister()
+    so -->> so: doCLose()
+        note right 
+        close javaChannel
+        cancel SelectionKey
+        end note
+    so -->> pipe: deRegister()
+    so -->> ob: fail pending message \n ChannelOutboundBuffer = null
+    so -->> pipe: fireChannelInactive()
+    so -->> pipe: fireChannelUnRegister()
+end
+
+```
+
+
+#### AdaptiveRecvByteBufAllocator
+
+上面 read loop 里「每轮从 2048 起步、按上轮读取量扩容缩容」的策略由 AdaptiveRecvByteBufAllocator 决定。它并不真正分配内存，只负责给出"这次该分多大"的建议，真正动手的是 `ByteBufAllocator`（池化场景即 `PooledByteBufAllocator`）。源码走一遍：
 
 最终会在NioSocketChannelConfig的父类DefaultChannelConfig的构造器中创建AdaptiveRecvByteBufAllocator。并保存在RecvByteBufAllocator rcvBufAllocator字段中
 
@@ -380,131 +526,6 @@ private final class HandleImpl implements ExtendedHandle {
 满足两次缩容条件才会进行缩容，且缩容步长为1，缩容比较谨慎
 满足一次扩容条件就进行扩容，并且扩容步长为4， 扩容比较奔放
 
-
-- BossEventLoop select() for OP_ACCEPT
-- WorkerEventLoop starts thread when register
-- first register(Selector, 0, SocketChannel)
-- selectionKey.interestOps(OP_READ) when fireChannelActive()
-
-```plantuml
-skinparam backgroundColor #DDDDDD
-
-title: Connect sequence
-participant BossNioEventLoop as bg
-participant Channel.Unsafe as us
-participant ServerSocketChannel as sc
-participant ServerBootstrapAceptor as sa
-participant WorkerEventLoopGroup as wg
-participant WorkerEventLoop as el
-participant SocketChannel as sl
-participant ChannelPipeline as pipe
-activate bg
-bg ->> bg: Selector.select()
-note left: OP_ACCEPT event
-bg ->> us: NioUnsafe.read()
-us ->> sc: create SocketChannel
-note right: ServerSocketChannel.accept()
-sc -->> us: SocketChannel
-us ->> sa: pipeline.fireChannelRead()
-sa ->> sa: init SocketChannel
-sa ->> wg: regster()
-wg ->> el: execute()
-el --> el: startThread()
-activate el
-el -> sl: register(selector, 0, Channel)
-sl ->> pipe: fireChannelRegistered()
-sl ->> pipe: fireChannelActive()
-note right: selectionKey.interestOps(OP_READ)
-```
-
-### Read
-
-当客户端向服务端发送数据时，NioEventLoop 会监听到 OP_READ 事件，然后分配 ByteBuf 并读取数据，读取完成后将数据传递给 Pipeline 进行处理
-
-
-
-Netty 读取数据的核心流程，Netty 会在一个 read loop 中不断循环读取 Socket 中的数据直到数据读取完毕或者读取次数已满 16 次，当循环读取了 16 次还没有读取完毕时，Netty 就不能在继续读了，因为 Netty 要保证 Reactor 线程可以均匀的处理注册在它上边的所有 Channel 中的 IO 事件。剩下未读取的数据等到下一次 read loop 在开始读取。
-
-除此之外，在每次 read loop 开始之前，Netty 都会分配一个初始化大小为 2048 的 DirectByteBuffer 来装载从 Socket 中读取到的数据，当整个 read loop 结束时，会根据本次读取数据的总量来判断是否为该 DirectByteBuffer 进行扩容或者缩容，目的是在下一次 read loop 的时候可以为其分配一个容量大小合适的 DirectByteBuffer
-
-
-Netty服务端对于一次OP_READ事件的处理，会在一个do{}while()循环read loop中分多次从客户端NioSocketChannel中读取网络数据。每次读取我们分配的ByteBuffer容量大小，初始容量为2048。
-- ChanneRead事件：一次循环读取一次数据，就触发一次ChannelRead事件。本次最多读取在read loop循环开始分配的DirectByteBuffer容量大小。这个容量会动态调整
-- ChannelReadComplete事件：当读取不到数据或者不满足continueReading的任意一个条件就会退出read loop，这时就会触发ChannelReadComplete事件。表示本次OP_READ事件处理完毕
-
-> 触发ChannelReadComplete事件并不代表NioSocketChannel中的数据已经读取完了，只能说明本次OP_READ事件处理完毕
-> 因为有可能是客户端发送的数据太多，Netty读了16次还没读完，那就只能等到下次OP_READ事件到来的时候在进行读取了
-
-
-
-
-- ReadComplete contains multiple Reads(max 16)
-- AdaptiveRecvByteBufAllocator try 2 reduce size and expand quickly
-- default execute in WorkerEventLoop, also can define own ThreadPool when add Handlers
-
-> [!TIP]
->
-> Don't use EventLoopGroup to execute business because of its thread affinity.
-
-```plantuml
-skinparam backgroundColor #DDDDDD
-
-title: Read sequence
-participant WorkEventLoop as we
-participant Selector as se
-activate we
-we ->> we: Selector.select()
-note right: OP_READ event
-participant Channel.Unsafe as ue
-we ->> ue: read()
-participant NioSocketChannel as so
-participant Allocator as ac
-participant ByteBuf as bb
-participant ChannelPipeline as pipe
-participant ChannelInboundHandler as ch
-loop continueReading
-    ue ->> ac: allocate()
-    ac -->> ue: ByteBuf 
-    ue ->> so: doReadBytes(ByteBuf) 
-        note over so, bb #AAAAAA
-            javaChannel.readBytes()
-        end note
-    break read EOF
-    bb -->> bb: release()
-        note over so #AAAAAA
-            close = true
-        end note
-    end
-    break IOException | OOM
-        so -->> so: closeOnRead()
-    end
-    alt readPending
-        so ->> pipe: fireChannelRead()
-        pipe ->> ch: fireChannelRead()
-            note right
-                handle data
-                From Head to Tail
-            end note
-    end
-end
-so ->> ac: readComplete()
-so ->> pipe: fireChannelReadComplete()
-participant ChannelOutboundBuffer as ob
-alt close == true
-    so -->> so: closeOnRead()
-    so -->> pipe: deRegister()
-    so -->> so: doCLose()
-        note right 
-        close javaChannel
-        cancel SelectionKey
-        end note
-    so -->> pipe: deRegister()
-    so -->> ob: fail pending message \n ChannelOutboundBuffer = null
-    so -->> pipe: fireChannelInactive()
-    so -->> pipe: fireChannelUnRegister()
-end
-
-```
 
 ### Write
 
@@ -743,9 +764,9 @@ clearOpWrite() 方法，由于 channel 上的 OP_WRITE 事件就绪，表明此�
 
 
 
-- check isActive & isWritable
-- OP_WRITE for could write
-- write/flush run in EventLoop
+- 写之前先校验 `isActive` 与 `isWritable`
+- Socket 缓冲区不可写时注册 OP_WRITE，等可写后再继续写
+- `write` / `flush` 最终都在 EventLoop 线程里执行
 
 ```plantuml
 skinparam backgroundColor #DDDDDD
@@ -798,6 +819,19 @@ end
 
 
 
+### Read vs Write
+
+Read 与 Write 都跑在 EventLoop 上、都受 16 次循环上限约束，但缓冲策略与背压手段完全不同：
+
+在每次 read loop 之前，会分配一个大小固定的 diretByteBuffer 用来装载读取数据。每轮 read loop 完全结束之后，才会决定是否对下一轮的读取过程分配的 directByteBuffer 进行扩容或者缩容。
+在每次 write loop 之前，都会获取本次 write loop 最大能够写入的字节数，根据这个最大写入字节数从 ChannelOutboundBuffer 中转换 JDK NIO ByteBuffer 。每次写入 Socket 之后都需要重新评估是否对这个最大写入字节数进行扩容或者缩容。
+read loop 和 write loop 都被默认限定最多执行 16 次。
+在一个完整的 read loop 中，如果还读取不完数据，直接退出。等到 reactor 线程执行完其他 channel 上的 IO 事件再来读取未读完的数据。
+而在一个完整的 write loop 中，数据发送不完，则分两种情况。
+Socket 缓冲区满无法在继续写入。这时就需要向 reactor 注册 OP_WRITE 事件。等 Socket 缓冲区变的可写时，epoll 通知 reactor 线程继续发送。
+Socket 缓冲区可写，但是由于发送数据太多，导致虽然写满 16 次但依然没有写完。这时就直接向 reactor 丢一个 flushTask 进去，等到 reactor 线程执行完其他 channel 上的 IO 事件，在回过头来执行 flushTask。
+OP_READ 事件的注册是在 NioSocketChannel 被注册到对应的 Reactor 中时就会注册。而 OP_WRITE 事件只会在 Socket 缓冲区满的时候才会被注册。当 Socket 缓冲区再次变得可写时，要记得取消 OP_WRITE 事件的监听。否则的话就会一直被通知
+
 ### Shutdown
 
 ```plantuml
@@ -832,29 +866,6 @@ deactivate el
 deactivate el
 ```
 
-1. [Create EventLoopGroup](/docs/CS/Framework/Netty/EventLoop.md?id=create-eventloopgroup)
-2. [Create ServerBootstrap](/docs/CS/Framework/Netty/Bootstrap.md?id=bind)
-3. Set [Channel](/docs/CS/Framework/Netty/Channel.md)
-4. Set [ChannelHandler](/docs/CS/Framework/Netty/ChannelHandler.md)
-5. Option
-6. ChildOption
-7. [ServerBootstrap#bind()](/docs/CS/Framework/Netty/Bootstrap.md?id=bind)
-8. [ChannelFuture](/docs/CS/Framework/Netty/Future.md)
-
-### close
-
-
-将读取数据和发送数据的不同之处总结如下几点供大家回忆对比：
-
-在每次 read loop 之前，会分配一个大小固定的 diretByteBuffer 用来装载读取数据。每轮 read loop 完全结束之后，才会决定是否对下一轮的读取过程分配的 directByteBuffer 进行扩容或者缩容。
-在每次 write loop 之前，都会获取本次 write loop 最大能够写入的字节数，根据这个最大写入字节数从 ChannelOutboundBuffer 中转换 JDK NIO ByteBuffer 。每次写入 Socket 之后都需要重新评估是否对这个最大写入字节数进行扩容或者缩容。
-read loop 和 write loop 都被默认限定最多执行 16 次。
-在一个完整的 read loop 中，如果还读取不完数据，直接退出。等到 reactor 线程执行完其他 channel 上的 IO 事件再来读取未读完的数据。
-而在一个完整的 write loop 中，数据发送不完，则分两种情况。
-Socket 缓冲区满无法在继续写入。这时就需要向 reactor 注册 OP_WRITE 事件。等 Socket 缓冲区变的可写时，epoll 通知 reactor 线程继续发送。
-Socket 缓冲区可写，但是由于发送数据太多，导致虽然写满 16 次但依然没有写完。这时就直接向 reactor 丢一个 flushTask 进去，等到 reactor 线程执行完其他 channel 上的 IO 事件，在回过头来执行 flushTask。
-OP_READ 事件的注册是在 NioSocketChannel 被注册到对应的 Reactor 中时就会注册。而 OP_WRITE 事件只会在 Socket 缓冲区满的时候才会被注册。当 Socket 缓冲区再次变得可写时，要记得取消 OP_WRITE 事件的监听。否则的话就会一直被通知
-
 
 ## Under Hood
 
@@ -869,9 +880,68 @@ OP_READ 事件的注册是在 NioSocketChannel 被注册到对应的 Reactor 中
 
 ### Zero Copy
 
-- 用 Direct Memory 分配 `ByteBuf`，写 socket 时省掉堆到堆外的一次拷贝
-- 用 Composite 或 wrap 组合多个 `ByteBuf`，合并消息时不复制内容
-- 文件传输交给 `FileChannel.transferTo`
+Netty 语境下的"零拷贝"不是某一个系统调用，而是三组各不相同的省拷贝手段：
+
+- **缓冲层不拷贝**：用 Direct Memory 分配 `ByteBuf`，写 socket 时省掉堆到堆外的一次拷贝；用 `CompositeByteBuf` 或 `Unpooled.wrappedBuffer` 组合多个 `ByteBuf`，合并消息时只拼指针不动内容
+- **文件传输不拷贝**：`DefaultFileRegion` 把 `FileChannel#transferTo` 包装成 pipeline 可传播的对象，底层即 `sendfile` 系统调用——数据从 page cache 直接进 socket 缓冲区，用户态全程不经过
+- **大文件边读边写**：`ChunkedWriteHandler` 把 `ChunkedFile` 切成固定小块逐块写入，避免把整个文件读进内存
+
+## Practice
+
+机制讲完之后，落到代码里真正踩得到的三件事：调什么参数、怎么测、避开哪些坑。
+
+### Tuning
+
+Netty 的调优面分两层：全局的 `io.netty.*` 系统属性（进程级、启动时定），以及每个 Channel 的 `ChannelOption`（连接级、[Bootstrap](/docs/CS/Framework/Netty/Bootstrap.md) 装配时定）。常用项：
+
+| 系统属性 | 默认值 | 说明 |
+| :--- | :--- | :--- |
+| `io.netty.allocator.type` | 4.1 `pooled` / **4.2 `adaptive`** | 分配器类型：`pooled` / `unpooled` / `adaptive` |
+| `io.netty.leakDetection.level` | `simple` | 泄漏检测级别：`disabled` < `simple` < `advanced` < `paranoid`，`paranoid` 每个 Buffer 都记录采样，压测环境慎用 |
+| `io.netty.maxDirectMemory` | `0`（跟随 `-XX:MaxDirectMemorySize`） | 直接内存上限，`0` 表示不覆盖 JDK 行为 |
+| `io.netty.threadLocalDirectBufferSize` | `65536` | 线程本地直接内存缓存块大小，8KB~16MB |
+| `io.netty.recycler.maxCapacityPerThread` | `4096` | 每线程 `Recycler` 对象池上限 |
+| `io.netty.recycler.linkCapacity` | `16` | 池满时退化的 weak/soft 引用链长度 |
+| `io.netty.transport.native.workdir` | `java.io.tmpdir` | native transport 库的解压目录 |
+
+| `ChannelOption` | 默认值 | 说明 |
+| :--- | :--- | :--- |
+| `SO_BACKLOG` | `128` | 服务端全连接队列长度，同时受内核 `net.core.somaxconn` 截断 |
+| `TCP_NODELAY` | `true` | 禁 Nagle，小包即时发；批量场景可考虑关 |
+| `SO_KEEPALIVE` | `false` | 内核保活，默认探测间隔约 2 小时，应用层保活一般用 `IdleStateHandler` 替代 |
+| `SO_SNDBUF` / `SO_RCVBUF` | `-1`（取系统值） | 收发缓冲区，`-1` 表示用内核默认 |
+| `SO_LINGER` | `-1` | close 时是否等数据发完 |
+| `WRITE_BUFFER_WATER_MARK` | `32KB` / `64KB` | 写水位线，超过 high 判不可写，见 [Limiter](/docs/CS/Framework/Netty/Limiter.md) |
+| `ALLOCATOR` / `RCVBUF_ALLOCATOR` | 跟随全局属性 | 该 Channel 的 Buffer 分配器与读缓冲分配策略 |
+
+其余调优点（EventLoop 线程数、线程亲和、IO 比）见 [EventLoop - Tuning](/docs/CS/Framework/Netty/EventLoop.md?id=tuning)。
+
+### Testing
+
+handler 是可以脱离 socket 单测的：`EmbeddedChannel`（`io.netty.channel.embedded`）在内存里模拟整条 pipeline，`writeInbound` 模拟收到字节，`readInbound` 取出解码后的对象；`writeOutbound` / `readOutbound` 同理覆盖出站。
+
+```java
+EmbeddedChannel channel = new EmbeddedChannel(
+        new LengthFieldBasedFrameDecoder(65536, 0, 4, 0, 4),
+        new StringDecoder(CharsetUtil.UTF_8));
+
+channel.writeInbound(Unpooled.wrappedBuffer(frameBytes)); // 送入一帧
+String decoded = channel.readInbound();                   // 取解码结果
+assertEquals("hello", decoded);
+channel.finishAndReleaseAll();                            // 断言无残留并释放
+```
+
+`EmbeddedChannel` 是 transport 层的测试替身，不覆盖 selector、真实 socket 选项与 native transport 行为——那部分仍要上真机。
+
+### Pitfalls
+
+1. **在 EventLoop 里阻塞**：同步 RPC、慢 SQL、大 JSON 序列化都会把该线程上所有 Channel 的 IO 全部拖死。解法：自定义 `EventExecutorGroup` 给重 handler 单独线程，或丢给业务线程池，**不要用 EventLoopGroup 执行业务**（见上文 `[!TIP]`）
+2. **ByteBuf 泄漏**：解出 `msg` 后忘记 `release`，或释放后继续读；`SimpleChannelInboundHandler` 会自动 release 收到的 msg，手工 decode 的场景要自己负责。用 `-Dio.netty.leakDetection.level=paranoid` 抓现场
+3. **出站 handler 放错位置**：outbound 事件从 Tail 向 Head 传播，编码器必须加在业务 handler **之后**（靠近 Tail），否则编出来的字节没人往下传
+4. **只 write 不 flush**：`write` 只入 `ChannelOutboundBuffer`，必须 `flush` 才真正写 socket
+5. **忽略 `ChannelFuture` 失败**：对端已关闭时写失败若无 listener，错误静默消失，表现为"偶发丢消息"
+6. **跨线程操作共享状态**：`channel.write()` 从业务线程调用是安全的（内部会转成 task 提交），但 handler 里的字段没有同步——先想清楚哪些状态只被 EventLoop 线程访问
+7. **不优雅停机**：直接退出 JVM 会丢掉 `ChannelOutboundBuffer` 里未写完的数据，正确做法是 `shutdownGracefully()` 并在其 `ChannelFuture` 完成后再退出
 
 ## What to Read Next
 
