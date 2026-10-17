@@ -46,7 +46,7 @@ managed settings 里也可以直接用 `claudeMd` 键写组织级指令（只在
 - 块级 HTML 注释（`<!-- ... -->`）在注入上下文前被剥掉，代码块内的注释保留——可以用来给人写维护备注而不花 token。
 - monorepo 里被别的团队的 CLAUDE.md 打扰，用 `claudeMdExcludes` 按路径/glob 跳过。
 
-### Import 语法
+### Import Syntax
 
 CLAUDE.md 里可以用 `@path/to/file` 导入其他文件，导入的文件在启动时连同宿主文件一起展开加载：
 

@@ -58,6 +58,22 @@ make web          # macOS/Linux；Windows 用 docker compose -f ./docker/docker-
 
 **开源版与云版的差异**要心里有数：开源版开放的是引擎骨架与核心能力（上述模块），云版的插件数量、模板、发布渠道与托管资源更丰富；开源版插件支持自行开发，但生态规模小于云端。
 
+## Under the Hood
+
+想把 Coze 当工程对象读，而不是当产品用，按这三篇走（以 Studio tag `v0.5.1` 为基线，全部结论来自源码而非文档）：
+
+| 分册 | 回答什么 |
+|------|----------|
+| [架构设计](/docs/CS/AI/LLM/Platform/Coze/Architecture.md) | 进程拓扑、DDD 分层与 `crossdomain` 契约、存储选型、事件总线、代码沙箱边界 |
+| [链路设计](/docs/CS/AI/LLM/Platform/Coze/Pipeline.md) | 画布 JSON 怎么变成可执行图、三种执行模式、事件回流、中断恢复、Agent 与 RAG 各走哪条路 |
+| [源码分析](/docs/CS/AI/LLM/Platform/Coze/Source_Code.md) | 仓库地图、workflow 域内部解剖、21 个节点、扩展点与十步阅读顺序 |
+
+三件事值得先记住，它们决定了后面所有细节的形状：
+
+1. **编排不自己实现，而是翻译成 [Eino](/docs/CS/AI/LLM/Agent/Theory/Harness.md) 的图**——`domain/workflow/internal/compose/workflow.go` 里工作流就是 `compose.Workflow[map[string]any, map[string]any]`。想改执行语义要去 Eino，不在本仓库。
+2. **DDD 是代码分层，不是进程拆分**——部署形态是单个 Go 二进制 `opencoze`（官方文档里"microservices"的说法与 compose 实际内容不符），跨域调用靠 `crossdomain/` 的运行时单例契约打破 Go 的循环 import 限制。
+3. **代码节点默认沙箱是 Deno + Pyodide（WASM）**，但 `coderunner` 的 `switch` 里 default 分支是**无隔离的 direct**（本机 python3）——示例 `.env` 给的 `sandbox` 只是配置值，不是代码默认值。自部署时必须确认这一项真的生效。
+
 ## Coze Loop: Making the Agent No Longer a Black Box
 
 Loop 覆盖上线前后的四个环节，正好对应 Agent 最容易"看不见"的部分：
@@ -98,6 +114,8 @@ Loop 覆盖上线前后的四个环节，正好对应 Agent 最容易"看不见"
 
 - [LLM](/docs/CS/AI/LLM/LLM.md)
 - [Vibe](/docs/CS/AI/LLM/Agent/Practice/Vibe.md)
+- [MCP](/docs/CS/AI/LLM/Protocol/MCP.md)
+- [向量数据库](/docs/CS/DB/vector.md)
 
 ## References
 

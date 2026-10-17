@@ -19,7 +19,7 @@ OpenCode 自带两个主 Agent 和三个子 Agent，外加三个隐藏系统 Age
 
 ## Custom Agents
 
-### Markdown 声明
+### Markdown Declaration
 
 全局放 `~/.config/opencode/agents/`，项目放 `.opencode/agents/`，**文件名（去掉 `.md`）即 Agent 名**（`review.md` → `/review` 与 `@review`）。`opencode agent create` 可交互式生成，也可直接写文件：
 
@@ -41,11 +41,11 @@ permission:
 你是一个严格的评审者，先列问题再给结论，不要直接改代码。
 ```
 
-### JSON 声明
+### JSON Declaration
 
 也可以在 `opencode.json` 的 `agent` 键里用 JSON 声明，二者字段一致。未写 `model` 时，主 Agent 用全局模型，子 Agent 继承调用者的模型。
 
-### 配置选项
+### Configuration Options
 
 | 字段 | 说明 |
 | :--- | :--- |
@@ -65,7 +65,7 @@ permission:
 
 OpenCode 用 `permission` 配置决定每个动作是自动运行、询问还是阻断。每条规则解析为三态之一：`allow` / `ask` / `deny`。
 
-### 权限键
+### Permission Keys
 
 权限按**工具名**匹配（同一套语法对内置工具、自定义工具、MCP 工具都生效）：
 
@@ -85,7 +85,7 @@ OpenCode 用 `permission` 配置决定每个动作是自动运行、询问还是
 | `external_directory` | 工具触及工作目录之外的路径时触发 |
 | `doom_loop` | 同一工具调用以相同输入重复 3 次时触发 |
 
-### 粒度语法
+### Granularity Syntax
 
 大多数键接受简写的动作字符串，或「glob/模式 → 动作」的对象做细粒度控制：
 
@@ -101,11 +101,11 @@ OpenCode 用 `permission` 配置决定每个动作是自动运行、询问还是
 
 规则按模式匹配求值，**最后匹配的规则生效**（catch-all `*` 放前、具体规则放后是常见写法）。模式支持 `*`（零或多字符）与 `?`（单个字符），`~` / `$HOME` 可放在模式开头引用主目录。
 
-### 默认与守卫
+### Defaults and Guards
 
 不配置时 OpenCode 从宽松默认起步：多数权限默认 `allow`，但 `doom_loop` 与 `external_directory` 默认 `ask`，且 `.env` 文件默认 `deny`（防止密钥泄露）。`--auto` 启动可自动批准未被显式 `deny` 的权限请求（显式 `deny` 仍强制阻断），`opencode run --auto` 同样适用。询问时 UI 给出三种结果：`once` / `always`（当前会话内对建议模式免问）/ `reject`。
 
-### 每 Agent 覆盖
+### Per-Agent Overrides
 
 Agent 权限与全局配置合并，Agent 规则优先。例如给 `build` 收紧 git push：
 

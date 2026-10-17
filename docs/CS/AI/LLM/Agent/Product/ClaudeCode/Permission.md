@@ -17,7 +17,7 @@ Claude Code 的权限体系回答一个问题：**哪些操作可以直接做，
 
 两个命名坑：CLI 里显示为 **Manual** 的那个模式，config value 是 `default`（hooks 与 SDK 集成都用这个值），`manual` 是 CLI 接受的别名；**`dontAsk` 字面像「不询问就放行」，实际是「不询问就拒绝」**——语义完全相反。
 
-### 起始模式
+### Starting Mode
 
 会话起始模式取第一个适用的来源：`--permission-mode` flag → settings 的 `permissions.defaultMode` → 内置默认。
 
@@ -48,13 +48,13 @@ mode 只是基线，rules 在其上叠加。几条硬语义：
 
 auto 模式把「问你」换成「问分类器」：一个独立的 classifier 模型在动作执行前审查，拦截超出你请求范围的升级、瞄准不认识的基础设施的动作、或看起来被 Claude 读到的敌意内容驱动的动作。**它减少提示但不保证安全**——用于你信任大方向的任务，不能替代对敏感操作的审查。
 
-### 可用性
+### Availability
 
 - 计划：所有计划（v2.1.283+）；更早版本仅 Pro/Max/Team。
 - 模型（Anthropic API 与 Claude Platform on AWS）：Opus 4.6+、Sonnet 4.6+、Haiku 5.5 或 Fable 模型。Bedrock / Agent Platform / Foundry / Claude apps gateway 只支持 Sonnet 5+、Opus 4.7+、Haiku 5.5 与 Fable。
 - 组织：Team/Enterprise 默认可用，管理员可 `disableAutoMode` 关停。
 
-### Classifier 默认拦截清单
+### Classifier Default Blocklist
 
 classifier 信任会话启动时配置的工作目录与 remotes——会话中途 `git remote add`/`set-url` 进来的 remote 不算信任。默认阻止：
 

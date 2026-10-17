@@ -282,6 +282,7 @@ Claude Code 自带的 bundled skills（文档点名的）：`/doctor`（别名 `
 
 ## Links
 
+- [Agent 目录](/docs/CS/AI/LLM/Agent/README.md)
 - [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md)
 - [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md)
 - [Claude Code](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/ClaudeCode.md)

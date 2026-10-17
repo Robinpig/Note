@@ -45,6 +45,8 @@ Dify（源自 "Do It For You"）是 LangGenius 出品的开源 LLM 应用开发�
 - **超时与重试必须配**：HTTP / LLM 节点都会超时，30–60 秒超时 + 1–2 次重试是常规配置。
 - **变量别泛滥**：复杂流程里变量节点超过 20 个就该用一个 Code 节点聚合。
 
+画布只是编辑态；这些节点在运行时怎样被调度、变量怎样在节点间流动，见 [链路设计](/docs/CS/AI/LLM/Platform/Dify/Pipeline.md)。
+
 ## RAG Knowledge Pipeline
 
 这是 Dify 相对其他可视化平台最扎实的一块，可配置项也最多：
@@ -60,9 +62,11 @@ Dify（源自 "Do It For You"）是 LangGenius 出品的开源 LLM 应用开发�
 
 向量存储默认是 Postgres 上的 pgvector，也可接外部向量库；它与 [RAG](/docs/CS/AI/RAG.md) 笔记里「索引器 / 检索器 / 生成器」的三段式分层正好对应起来。调不好 RAG 时先怀疑切分与检索方式，而不是先怪模型。
 
+索引与检索是两条独立的 Celery 链路，rerank 只在检索合并后介入，细节见 [链路设计](/docs/CS/AI/LLM/Platform/Dify/Pipeline.md)。
+
 ## Plugin System and Model Access
 
-Dify **v1.0.0（2025-02-17）** 是架构分水岭：把模型与工具从核心里解耦成可热插拔的插件，并上线 Dify Marketplace，第三方不必改核心代码就能扩展能力。插件打包为 `.difypkg`，可以贡献：
+Dify **v1.0.0（2025-02-28）** 是架构分水岭：把模型与工具从核心里解耦成可热插拔的插件，并上线 Dify Marketplace，第三方不必改核心代码就能扩展能力。插件打包为 `.difypkg`，可以贡献：
 
 - 工具 Tool（OpenAPI 描述或自定义实现）
 - 新的工作流节点类型
@@ -73,7 +77,7 @@ Dify **v1.0.0（2025-02-17）** 是架构分水岭：把模型与工具从核心
 
 ## Recent Versions: From 'Can Build' to 'Can Fight' (1.17 / Agent V2)
 
-**v1.17.0（2026-08-28）** 集中解决了 Agent 的工程化落地问题：
+**v1.17.0（2026-08-25，写笔记时最新 release 为 1.17.1 / 2026-09-10）** 集中解决了 Agent 的工程化落地问题：
 
 - **Agent 运行时**：新增 E2B 云沙箱后端（环境变量 `DIFY_AGENT_RUNTIME_BACKEND` 切换，配套 `docker-compose.e2b.yaml`），不必自己维护代码沙箱容器；**Home Snapshots** 在发布时固化沙箱主目录状态，使已发布 Agent 每次运行都从同一文件系统状态启动（可复现）。
 - **Workspace 级 Skill 管理**：可复用、带版本（草稿 → 发布 → 版本）的能力包，包含代码与工具定义，供 Agent 发现与调用——和 [Skill](/docs/CS/AI/LLM/Agent/Theory/Skill.md) 的思路一致。
@@ -112,6 +116,8 @@ Dify **v1.0.0（2025-02-17）** 是架构分水岭：把模型与工具从核心
 
 官方 `docker compose up` 即可起全套，生产上要注意：为 Agent V2 预留更多内存（官方建议 6 G 起步、8 G 以上更稳）、备份 Postgres 与向量数据卷、把 Nginx 换成自己的网关处理 TLS 与 SSO、并规划 sandbox 的出网策略——沙箱一旦能随意出网，工作流里的 Code 节点就是一条 SSRF 通道。
 
+1.17 起这套拓扑多出 `api_websocket`、`agent_backend`、`local_sandbox` 三个进程，api / worker / beat 则由同一镜像按 `MODE` 分派，各自的隔离网段见 [架构设计](/docs/CS/AI/LLM/Platform/Dify/Architecture.md)。
+
 ## When to Choose Dify
 
 | 选 Dify 的信号 | 不选 Dify 的信号 |
@@ -122,6 +128,16 @@ Dify **v1.0.0（2025-02-17）** 是架构分水岭：把模型与工具从核心
 | 需要把应用统一封装成 API/MCP 对外提供服务 | 极端性能敏感场景（平台层有额外开销） |
 
 真正挤在同一条走廊上的对手分几拨：开源同行（[Coze](/docs/CS/AI/LLM/Platform/Coze.md) 开源版、FastGPT、RAGFlow、Flowise、Langflow）、自动化工具派（n8n、Make、Zapier Agents）、以及云厂商的企业版形态（阿里云百炼、腾讯云 ADP、百度千帆、火山 HiAgent，海外是 Copilot Studio、Gemini Enterprise Agent Platform、Bedrock Agents）。它们各自不在一个维度上竞争，完整地图见 [LLM 应用开发平台](/docs/CS/AI/LLM/Platform/Platform.md) 的「竞争格局：五类玩家」。
+
+## Going Deeper
+
+这一篇停留在「Dify 是什么、该怎么选」。真要把它在生产里跑起来，还有三块需要单独读，三篇按**静态结构 → 动态行为 → 代码细节**分工，互不重复：
+
+- **[架构设计](/docs/CS/AI/LLM/Platform/Dify/Architecture.md)** —— 进程拓扑、分层契约、存储与三条网络边界。核心结论是 1.17 已把工作流引擎内核拆成独立的 `graphon` 包，Dify 仓库里的 `core/workflow/` 只剩适配层。**自部署做容量规划和安全评审从这里开始。**
+- **[链路设计](/docs/CS/AI/LLM/Platform/Dify/Pipeline.md)** —— 一次请求怎么流。最重要的一条：**Chat / Completion 走进程内线程 + 进程内队列，只有 Workflow / Advanced-Chat 走 Celery + Redis Pub/Sub**。排查「为什么卡住不吐字」看这里。
+- **[源码分析](/docs/CS/AI/LLM/Platform/Dify/Source_Code.md)** —— 代码地图、关键类与签名、以及一份十步阅读顺序。**要二开或定位 bug 从这里开始。**
+
+三篇的版本基线都是 tag `1.17.1`。
 
 ## Links
 
@@ -134,5 +150,6 @@ Dify **v1.0.0（2025-02-17）** 是架构分水岭：把模型与工具从核心
 2. [Dify 开源仓库](https://github.com/langgenius/dify)
 3. [Dify 文档](https://docs.dify.ai/)
 4. [Dify Marketplace（插件市场）](https://marketplace.dify.ai/)
-5. [Dify 1.17.0 发布说明](https://github.com/langgenius/dify/releases)
-6. [Dify 1.17.0 全面解读：Agent 沙箱云端化、技能管理、统一追踪](https://blog.51cto.com/moonfdd/14924280)
+5. [Dify 1.17.0 发布说明](https://github.com/langgenius/dify/releases/tag/1.17.0)
+6. [langgenius/graphon（1.17 起的工作流引擎内核）](https://github.com/langgenius/graphon)
+7. [Dify 1.17.0 全面解读：Agent 沙箱云端化、技能管理、统一追踪](https://blog.51cto.com/moonfdd/14924280)

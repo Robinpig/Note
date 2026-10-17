@@ -411,6 +411,13 @@ Claude Code 官方文档自己列了 12 条限制，挑最该记住的：
 
 **结论：`minimal` 确实不加载 compaction，该条记录成立**，可从 Compaction 的未查到项中移出。
 
+## Links
+
+- [Agent 目录](/docs/CS/AI/LLM/Agent/README.md)
+- [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) / [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md) / [Paradigm](/docs/CS/AI/LLM/Agent/Theory/Paradigm.md) / [Skill](/docs/CS/AI/LLM/Agent/Theory/Skill.md)
+- [Claude Code](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/ClaudeCode.md) / [Codex](/docs/CS/AI/LLM/Agent/Product/Codex/Codex.md) / [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw/OpenClaw.md) / [DSH](/docs/CS/AI/LLM/Agent/Product/DSH/DSH.md) / [OpenCode](/docs/CS/AI/LLM/Agent/Product/OpenCode/OpenCode.md)
+- [MCP](/docs/CS/AI/LLM/Protocol/MCP.md) / [Tools](/docs/CS/AI/LLM/Protocol/Tools.md)
+
 ## References
 
 1. [Claude Code — Sandboxing](https://code.claude.com/docs/en/sandboxing.md)

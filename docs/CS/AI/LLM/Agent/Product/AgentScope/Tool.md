@@ -70,6 +70,51 @@ self.name = f"mcp__{mcp_name}__{sanitized_tool}"
 
 用 `x` 而不是 `_` 的理由写在注释里——避免混淆 `"__"` 这个分隔符。原始名字保留在 `self._tool.name`，回服务端调用时用。
 
+### FunctionTool in Practice
+
+把任意 Python 函数变成可被 Agent 调用的工具，只需包一层 `FunctionTool`，schema 从签名 + docstring 自动抽（可用 `Annotated[..., Field(...)]` 补约束），然后塞进 `Toolkit`：
+
+```python
+from pydantic import BaseModel, Field
+from agentscope.agent import Agent
+from agentscope.tool import FunctionTool, Toolkit
+from agentscope.model import OpenAIChatModel
+from agentscope.credential import OpenAICredential
+
+def get_weather(
+    city: str = Field(description="城市名，如 Hangzhou"),
+) -> str:
+    """查询指定城市的实时天气。"""
+    return f"{city}: 晴 22°C"
+
+tool = FunctionTool(
+    func=get_weather,
+    is_read_only=True,          # 只读 → 权限系统 fast path 直接 ALLOW，不弹确认
+    # is_concurrency_safe 默认 True；is_state_injected 默认 False
+)
+
+agent = Agent(
+    name="assistant",
+    system_prompt="你是天气助手。",
+    model=OpenAIChatModel(
+        credential=OpenAICredential(api_key="sk-..."), model="gpt-4.1",
+    ),
+    toolkit=Toolkit(tools=[tool]),   # tools 接受 list[ToolBase]
+)
+```
+
+两个关键点：① `description` 默认从 docstring 第一行抽，参数描述从 `Field(description=...)` 抽（纯 annotation 不带说明时 schema 只剩类型）；② `is_read_only=True` 让该工具在**所有五个 mode** 下都走 `read_only` fast path 直接 `ALLOW`，配合 `FunctionTool` 默认的 `check_permissions` 返回 ASK——即「只读默认放行、其它默认问」的语义落地到自定义函数上。`Toolkit` 还支持 `mcps=[...]`（直接挂 MCP client）和 `skills_or_loaders=[...]`（注册 skill 目录），三者统一进 `"basic"` 工具组，重名工具组会 `ValueError`。
+
+### I/O Delegation: LocalBackend
+
+13 个内置工具「自己不做任何 I/O」不是比喻——真正的文件系统读写在 `tool/_builtin/_backend.py` 的 `LocalBackend`（`BackendBase` 的唯二实现之一，另一个是抽象基类）里。`Read` / `Write` / `Edit` / `Grep` / `Glob` / `Bash` 这类工具只负责三件事：
+
+- **参数校验**：路径是否绝对、文件是否存在、命中数是否超额；
+- **结果整形**：把 `LocalBackend` 返回的原始字节/字符串包成 `ToolChunk`；
+- **缓存策略**：`read-before-write` 的 mtime 校验依赖 `AgentState.tool_context.read_file_cache`（LRU + 字节双限，见上）。
+
+`LocalBackend` 持有进程内的实际句柄（如 `rg` 子进程、`open()` 文件描述符），工具层只调它的方法拿结果。这套分离的好处是——沙箱场景只需替换 `BackendBase` 的具体实现，把 I/O 转发到远端 workspace（见 [App 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/App.md) 的 WorkspaceManager 后端矩阵），工具层的校验与整形逻辑一行不用动。
+
 ### Compression Tool
 
 `CompressContext` 是 AgentScope 自动注册的内置工具。Agent 可以主动调它来压缩——设计动机是「在任务边界处（比如读完文档、还没开始写代码）压缩，比跑着跑着被强制压缩更准」。这个工具的调用是 `PermissionDecision(ALLOW, bypass_immune=True)`，永远允许。
@@ -79,7 +124,7 @@ self.name = f"mcp__{mcp_name}__{sanitized_tool}"
 ## Links
 
 - [AgentScope](/docs/CS/AI/LLM/Agent/Product/AgentScope/AgentScope.md)
-- [AgentScope 中间件分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Middleware.md)
+- [Middleware 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Middleware.md)
 - [MCP 协议](/docs/CS/AI/LLM/Protocol/MCP.md)
 
 ## References

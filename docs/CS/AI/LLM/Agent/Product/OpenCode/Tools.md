@@ -40,12 +40,12 @@
 
 自定义工具是你可以创建的、LLM 能在会话里调用的函数——它们与内置工具（read / write / bash）并列工作。定义用 TypeScript 或 JavaScript（仅工具定义本身需 TS/JS，实际逻辑可以是任意语言的脚本）。
 
-### 位置
+### Location
 
 - 项目级：`.opencode/tools/`
 - 全局：`~/.config/opencode/tools/`
 
-### 结构
+### Structure
 
 最省事的方式是用 `@opencode-ai/plugin` 的 `tool()` helper（自带类型安全与校验）：
 
@@ -67,15 +67,15 @@ export default tool({
 
 **文件名即工具名**（上例生成 `database` 工具）。同一文件可导出多个工具，每个导出变成 `<文件名>_<导出名>` 形式的工具（如 `math.ts` 导出 `add` / `multiply` → `math_add` / `math_multiply`）。
 
-### 覆盖内置工具
+### Overriding Built-in Tools
 
 自定义工具按工具名匹配；若与内置工具同名，**自定义工具优先**。例如下面的 `bash.ts` 会替换内置 `bash` 工具。除非有意替换，否则建议用唯一名字；只想禁用内置又不想覆盖时，走 `permission`。
 
-### 参数与上下文
+### Arguments and Context
 
 参数用 `tool.schema`（即 Zod）定义，也可直接 import `zod` 返回纯对象。工具执行时收到 `context`，包含 `agent`、`sessionID`、`messageID`、`directory`（会话工作目录）、`worktree`（git worktree 根）等会话信息。
 
-### 任意语言逻辑
+### Arbitrary Language Logic
 
 工具定义用 TS/JS，但真正干活的脚本可以是任意语言。下面用 `Bun.$` 调用 Python：
 

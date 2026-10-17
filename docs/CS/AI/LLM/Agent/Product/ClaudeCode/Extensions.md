@@ -22,11 +22,11 @@ Claude Code 的扩展面有四层，都叠在核心 agentic loop 之上（见 [A
 
 Skill 是带 frontmatter 的 `SKILL.md`：frontmatter 的 description 告诉 Claude 何时自动加载，正文是运行时才读的指令。Claude Code 的 skills 遵循 **Agent Skills 开放标准**（跨工具通用），在此之上扩展了调用控制、subagent 执行、动态上下文注入等能力。通用规范见 [Skill 理论篇](/docs/CS/AI/LLM/Agent/Theory/Skill.md)，本文只讲 Claude Code 侧。
 
-### 与旧 commands 格式的关系
+### Relation to the Legacy commands Format
 
 **自定义命令已合并进 skills**：`.claude/commands/deploy.md` 与 `.claude/skills/deploy/SKILL.md` 等价（都创建 `/deploy`），旧文件继续可用；skill 多出支持文件目录、调用控制 frontmatter、自动加载三样能力。新工作一律用 skill 格式。
 
-### 加载位置
+### Load Locations
 
 | 位置 | 路径 | 加载范围 |
 | :--- | :--- | :--- |
@@ -40,7 +40,7 @@ Skill 是带 frontmatter 的 `SKILL.md`：frontmatter 的 description 告诉 Cla
 
 monorepo 语义：从启动目录起**向上直到仓库根**都扫 `.claude/skills/`；启动目录之下的 skill 不随启动加载，等 Claude 读写该子目录文件时才可用。`--worktree` 会话只扫到 worktree 根；worktree 里没有 `.claude/skills` 时（v2.1.277+）回退加载主 checkout 的项目 skills。保留名：`synced`（claude.ai 下载位）与 `anthropic-skills` 开头的名字不加载。
 
-### 动态上下文注入
+### Dynamic Context Injection
 
 SKILL.md 里 `!`command`` 行会在 Claude 看到内容**之前**被执行、并把输出内联防进来——官方的例子是在 skill 里写 ``!`git diff HEAD``` 让摘要指令带着真实 diff 到达。
 

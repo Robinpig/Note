@@ -36,6 +36,8 @@ ReAct 循环四步：
 
 循环强依赖两个条件：①执行结果要被保留并作为 Context 输入后续执行（否则每轮都是全新过程）；②需要指挥官统一协调循环与工具调用——由此引出 `Memory` 和 `Harness` 两个模块。**Agent 由四个核心构成：Loop、Tools、Memory、Harness。**
 
+> 循环内部的"思考与行动"有哪几种组织方式——ReAct 每步重新决策、Plan-and-Solve 先画蓝图再施工、Reflection 干完之后再自我批判迭代——以及一个 TypeScript 最小 Agent Loop 的完整实现，见 [Paradigm](/docs/CS/AI/LLM/Agent/Theory/Paradigm.md)。
+
 
 
 ## Advance
@@ -137,7 +139,7 @@ AGENTS.md is an open standard for agent-specific documentation.
 
 ## Pattern
 
-六种核心设计模式
+六种核心设计模式。每种范式的机制、代价与最小代码实现见 [Paradigm](/docs/CS/AI/LLM/Agent/Theory/Paradigm.md)，本节只保留模式地图。
 
 
 ### ReAct
@@ -156,9 +158,13 @@ Agent先推理当前情况，决定下一步做什么，然后执行行动，观
 
 
 
+### Tool Use
+
 Tool Use 也是Function Calling
 
 
+
+### Reflection
 
 反思模式允许Agent对自己的输出进行批评和修正。它通过多轮迭代来提升输出质量
 
@@ -181,6 +187,8 @@ Tool Use 也是Function Calling
 
 
 
+
+### Human-in-the-Loop
 
 人机协同模式是AI Agent落地的安全阀。在涉及资金、权限、敏感数据的操作上，必须加入人工确认环节，而不是完全交给AI自主决策
 
@@ -248,11 +256,10 @@ Agent 的 Token 消耗很大，怎么优化成本？
 
 ## Links
 
-- [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md)
+- [Agent 目录](/docs/CS/AI/LLM/Agent/README.md)
 - [Self-Evolving](/docs/CS/AI/LLM/Agent/Practice/Self-Evolving.md)
 - [MCP](/docs/CS/AI/LLM/Protocol/MCP.md)
 - [LLM 应用开发平台](/docs/CS/AI/LLM/Platform/Platform.md)
-- [DSH](/docs/CS/AI/LLM/Agent/Product/DSH/DSH.md)
 - [Skill](/docs/CS/AI/LLM/Agent/Theory/Skill.md)
 - [Codex](/docs/CS/AI/LLM/Agent/Product/Codex/Codex.md)
 

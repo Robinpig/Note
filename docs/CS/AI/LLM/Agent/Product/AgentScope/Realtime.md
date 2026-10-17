@@ -56,6 +56,25 @@ async def _barge_in_locked(self):
 
 `TruncationSupport` 三值枚举（`NONE / SERVER / EXPLICIT`）就是为这种差异准备的抽象——RealtimeAgent 的代码必须按这三个档次分支。
 
+### A Minimal Voice Session
+
+`RealtimeAgent` 的入口语义和 `Agent` 完全不同：`connect()` 打开模型会话（随 Agent 生命周期，不随 transport）、`reply_stream(transport)` 是**常驻会话循环**、`LocalAudioTransport` 拥有声卡。`async with` 两段式把「模型会话」与「声音设备」刻意分开——前者断了可重建，后者换了不丢会话：
+
+```python
+from agentscope.agent._realtime._agent import RealtimeAgent
+from agentscope.realtime._transport._local import LocalAudioTransport
+# model 是 RealtimeModelBase 子类（如 DashScopeRealtimeModel），此处略
+
+agent = RealtimeAgent("Friday", "Be brief.", model)
+
+async with agent:                              # 打开模型会话（随 Agent 存活）
+    async with LocalAudioTransport() as t:     # 占有声卡
+        async for event in agent.reply_stream(t):   # 循环直到 transport 结束
+            print(event)
+```
+
+几个对照上文的落点：① `reply_stream` 的参数是 transport 而不是 `Msg`——因为它没有 request/reply 边界，音频持续流入、事件持续流出；② 三层生命周期分离在这里可见：客户端断开 `LocalAudioTransport` 不会丢 `agent` 持有的模型会话；③ 真要打断正在生成的回复，不能调 `UserInterruptEvent`（那只对 parked reply 有意义），而是取消底层 task，Agent 自己走 `CancelledError` 清理（见 `Why It Cannot Reuse Agent` 表的「中断」行）。注意 `RealtimeAgent` / `LocalAudioTransport` 在 v2.0.8 是**下划线私有路径**，正式导出名请查 `agentscope.agent` / `agentscope.realtime` 的 `__init__`。
+
 
 
 ## Links

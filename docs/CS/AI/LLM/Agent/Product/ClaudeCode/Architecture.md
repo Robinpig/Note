@@ -20,7 +20,7 @@ Claude 执行一个任务时在三个阶段间循环，三个阶段互相交融�
 
 循环由两个组件驱动：**模型**（推理，`/model` 切换，Sonnet 应付多数编码任务、Opus 强在复杂架构决策）与**工具**（行动）。工具每次调用返回的信息喂回循环，成为下一步决策的输入——官方给的例子是「修失败测试」：跑测试 → 读报错 → 搜源文件 → 读文件 → 改代码 → 重跑测试。
 
-### 工具五分类
+### Five Tool Categories
 
 内置工具按「赋予了哪种行动能力」分五类：
 
@@ -34,7 +34,7 @@ Claude 执行一个任务时在三个阶段间循环，三个阶段互相交融�
 
 在此之上还有编排类工具：Task（派生子 agent，见 [Subagents](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Subagents.md)）、AskUserQuestion（向用户提问）。扩展能力——skills（补充知识）、MCP（接外部服务）、hooks（自动化工作流）、subagents（卸载任务）——都叠在这层核心循环之上，本文只讲核心。
 
-### SDK 里的同一个循环
+### The Same Loop in the SDK
 
 Agent SDK（Python / TypeScript）把同一个循环嵌进用户程序，消息流与 CLI 完全一致：
 

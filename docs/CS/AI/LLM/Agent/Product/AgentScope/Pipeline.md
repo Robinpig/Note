@@ -74,7 +74,40 @@ else:
 - `pass` / `impossible` → `break_loop=True`，循环结束（`impossible` 只打一条 info 日志）。
 - `fail` → `self._iters += 1`；若 `verifier_reset_context` 则清上下文；若 `_iters >= max_iters` 则结束；否则把 verifier 的 `message` 作为 feedback 包成 system-reminder 回喂 executor 下一轮改进。
 
-两条失败路径都会触发「executor 没交卷」的重试：若 executor 没产出合法 `_ExecutionReport`，注入提示让它调用 `GenerateStructuredOutput` 工具重来；verifier 同理。这复用了 Agent 层「吞掉 ReplyEndEvent 逼多跑一轮」的同一能力（见 [AgentScope 中间件分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Middleware.md)）。
+两条失败路径都会触发「executor 没交卷」的重试：若 executor 没产出合法 `_ExecutionReport`，注入提示让它调用 `GenerateStructuredOutput` 工具重来；verifier 同理。这复用了 Agent 层「吞掉 ReplyEndEvent 逼多跑一轮」的同一能力（见 [Middleware 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Middleware.md)）。
+
+### A Minimal GoalPipeline Example
+
+executor 与 verifier 就是两个普通 `Agent`，差别只在 system prompt 的「角色」。`GoalPipeline` 把它们套进 executor–verifier 双 Agent 循环，把「目标是否达成」变成硬契约：
+
+```python
+from agentscope.agent import Agent
+from agentscope.credential import OpenAICredential
+from agentscope.message import UserMsg
+from agentscope.model import OpenAIChatModel
+from agentscope.pipeline import GoalPipeline
+from agentscope.tool import Toolkit
+
+def build(model):
+    return Agent(name="worker", system_prompt="...", model=model, toolkit=Toolkit())
+
+model = OpenAIChatModel(credential=OpenAICredential(api_key="sk-..."), model="gpt-4.1")
+
+pipeline = GoalPipeline(
+    executor=build(model),        # 负责干活，交 _ExecutionReport
+    verifier=build(model),        # 负责核验，判 pass/fail/impossible
+    max_iters=10, max_retries=3,
+)
+
+# reply_stream 返回与 Agent.reply_stream 完全相同的 AgentEvent 流
+async for event in pipeline.reply_stream(
+    UserMsg(name="user", content="写一个 hello.py 并打印 Hello, World。"),
+):
+    if event.type == "reply_end":
+        print("finished_reason =", event.finished_reason)
+```
+
+落点对照上文：① `reply_stream` 入参是 `Msg | list[Msg]`，也能吃 HITL 事件（`UserConfirmResultEvent` / `UserInterruptEvent` / `ExternalExecutionResultEvent`）做断点续跑；② 循环预算 `self._iters` 挂在**实例**上——一次新鲜 `Msg` 输入会清零，外部回灌的确认/中断事件不会，因此 parked 后 resume 不会偷偷多给轮次；③ verifier 每轮核验后默认清上下文（`verifier_reset_context=True`），但工具/任务状态保留，避免它记住上一轮细节而放水。Team Pipeline 在 v2.0.10 才独立成 `_team_pipeline.py`（Leader 委派 Worker），v2.0.8 只有 `GoalPipeline` 一个内置 pipeline。
 
 ## Event System
 
@@ -146,7 +179,7 @@ Agent yields RequireExternalExecutionEvent(tool_calls=[...]) 并立即 return
 
 - **`ReplyFinishedReason`**（`types/_reply.py`）：`COMPLETED` / `INTERRUPTED` / `EXCEED_MAX_ITERS` / `ERROR` 四值。
 - **`ErrorType`**（`types/_reply.py`）：9 个值；配套 `ErrorInfo`（`ErrorType` + `message` + 可选 `detail`），仅在 `ReplyEndEvent.error` 里出现。
-- **`AgentHookTypes`**（`types/_hook.py`）：`pre_reply` / `post_reply` / `pre_observe` / `post_observe` / `pre_print` / `post_print`——这是**旧式 Agent 级 hook** 命名，与中间件 `_base.py` 的 `on_*` 系列（见 [AgentScope 中间件分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Middleware.md)）**是两套独立的机制**，写笔记时容易混。
+- **`AgentHookTypes`**（`types/_hook.py`）：`pre_reply` / `post_reply` / `pre_observe` / `post_observe` / `pre_print` / `post_print`——这是**旧式 Agent 级 hook** 命名，与中间件 `_base.py` 的 `on_*` 系列（见 [Middleware 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Middleware.md)）**是两套独立的机制**，写笔记时容易混。
 - **`ReActAgentHookTypes`**（`types/_hook.py`）：在 `AgentHookTypes` 基础上追加 `pre_reasoning` / `post_reasoning` / `pre_acting` / `post_acting`，是 ReAct Agent 专用的扩展。
 - **`Embedding`**（`types/_object.py`）：就是 `List[float]`，没有更花哨的封装。
 
@@ -196,8 +229,8 @@ elif event.type == EventType.DATA_BLOCK_DELTA and event.data:
 
 - [AgentScope](/docs/CS/AI/LLM/Agent/Product/AgentScope/AgentScope.md)
 - [Agent 理论](/docs/CS/AI/LLM/Agent/Theory/Agent.md)
-- [AgentScope 中间件分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Middleware.md)
-- [AgentScope 应用层分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/App.md)
+- [Middleware 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Middleware.md)
+- [App 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/App.md)
 
 ## References
 

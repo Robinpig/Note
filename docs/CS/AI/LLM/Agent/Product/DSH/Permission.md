@@ -30,15 +30,15 @@ DSH 的「沙箱」其实是两个不同层次的能力，常被人混为一谈�
 
 `SandboxMode` 只管**文件效果**三态：`read-only`（拒绝写入，POSIX runner 仅给 `/dev/null` 接收器）、`workspace-write`（允许在工作区根与临时区写）、`danger-full-access`（绕过隔离，消费方直接 spawn 不调 `ctx.sandbox`）。**网络可见性与进程可见性不在 `SandboxMode` 的词汇内**——这部分由沙箱后端外的其它机制负责。
 
-### fs-sandbox（策略围栏）
+### fs-sandbox (Policy Fence)
 
 文件系统后端在 `writeText` / `editText` 上携带 `sandboxPolicy`；策略插件（`dsh-fs-observation-policy`）通过 `fs/write-intent`、`fs/edit-intent` 两个单槽 waterfall 裁决，未加载策略插件时退化为「无条件裸写入」。它本质是 canonicalize-then-contain 的路径围栏，错误码 `FS_SANDBOX_DENIED` 区别于内核拒绝的 `FS_PERMISSION_DENIED`。
 
-### sandbox-local（内核边界）
+### sandbox-local (Kernel Boundary)
 
 `dsh-sandbox-local` 提供平台后端——**Linux 用 bwrap / Landlock、macOS 用 Seatbelt、Windows 用受限令牌（restricted-token）ACL**。强制完整性由后端报告：`full`（管控了模式承诺的全部文件效果）或 `partial`（老旧 Landlock ABI、Windows ACL 的硬链接 / 宽松读 / AppContainer 缺口，归为 `partial`——要求绝对边界的消费方必须拒绝或向上暴露）。消费方按后端方言（`denialSignatures`：bwrap 的 EROFS、Landlock 的 EACCES、Seatbelt 的 EPERM）从 stderr 识别「沙箱正常工作但命令被拦」，与「runner 本身故障」区分开。
 
-### per-call 策略 + fail closed
+### per-call Policy and Fail-Closed
 
 完整策略（`SandboxExecutionPolicy`）逐次能力调用解析并携带，因此 bash 与受限子 agent 可在同一瞬间向同一提供方请求不同边界；无可用后端时 `ctx.sandbox.confine()` 抛 `SandboxUnavailableError`（`SANDBOX_UNAVAILABLE`），**静默的无隔离透传永远不合法**。
 

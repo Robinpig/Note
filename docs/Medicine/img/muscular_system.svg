@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 520" font-family="-apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif">
+  <rect width="920" height="520" fill="#fafbfc"/>
+  <text x="220" y="34" text-anchor="middle" font-size="16" font-weight="bold" fill="#2c3e50">前视图 Anterior</text>
+  <text x="650" y="34" text-anchor="middle" font-size="16" font-weight="bold" fill="#2c3e50">后视图 Posterior</text>
+
+  <!-- 前视图人形 -->
+  <g stroke="#9fb3c0" stroke-width="2" fill="#eef3f6">
+    <circle cx="220" cy="72" r="24"/>
+    <polygon points="180,110 260,110 248,278 192,278"/>
+    <path d="M180,114 L150,202 L142,258" fill="none" stroke-width="16" stroke-linecap="round"/>
+    <path d="M260,114 L290,202 L298,258" fill="none" stroke-width="16" stroke-linecap="round"/>
+    <path d="M198,278 L188,398 L184,488" fill="none" stroke-width="22" stroke-linecap="round"/>
+    <path d="M242,278 L252,398 L256,488" fill="none" stroke-width="22" stroke-linecap="round"/>
+  </g>
+
+  <!-- 后视图人形 -->
+  <g stroke="#9fb3c0" stroke-width="2" fill="#eef3f6">
+    <circle cx="650" cy="72" r="24"/>
+    <polygon points="610,110 690,110 678,278 622,278"/>
+    <path d="M610,114 L580,202 L572,258" fill="none" stroke-width="16" stroke-linecap="round"/>
+    <path d="M690,114 L720,202 L728,258" fill="none" stroke-width="16" stroke-linecap="round"/>
+    <path d="M628,278 L618,398 L614,488" fill="none" stroke-width="22" stroke-linecap="round"/>
+    <path d="M672,278 L682,398 L686,488" fill="none" stroke-width="22" stroke-linecap="round"/>
+  </g>
+
+  <!-- 前视图标注 -->
+  <g font-size="11" text-anchor="middle" dominant-baseline="central">
+    <g><circle cx="236" cy="92" r="9" fill="#c0392b"/><text x="236" y="92" fill="#fff">1</text></g>
+    <g><circle cx="272" cy="122" r="9" fill="#c0392b"/><text x="272" y="122" fill="#fff">2</text></g>
+    <g><circle cx="230" cy="150" r="9" fill="#c0392b"/><text x="230" y="150" fill="#fff">3</text></g>
+    <g><circle cx="288" cy="168" r="9" fill="#c0392b"/><text x="288" y="168" fill="#fff">4</text></g>
+    <g><circle cx="220" cy="205" r="9" fill="#c0392b"/><text x="220" y="205" fill="#fff">5</text></g>
+    <g><circle cx="200" cy="210" r="9" fill="#c0392b"/><text x="200" y="210" fill="#fff">6</text></g>
+    <g><circle cx="205" cy="335" r="9" fill="#c0392b"/><text x="205" y="335" fill="#fff">7</text></g>
+    <g><circle cx="246" cy="340" r="9" fill="#c0392b"/><text x="246" y="340" fill="#fff">8</text></g>
+    <g><circle cx="192" cy="445" r="9" fill="#c0392b"/><text x="192" y="445" fill="#fff">9</text></g>
+    <g><circle cx="250" cy="450" r="9" fill="#c0392b"/><text x="250" y="450" fill="#fff">10</text></g>
+  </g>
+
+  <!-- 后视图标注 -->
+  <g font-size="11" text-anchor="middle" dominant-baseline="central">
+    <g><circle cx="650" cy="120" r="9" fill="#c0392b"/><text x="650" y="120" fill="#fff">11</text></g>
+    <g><circle cx="632" cy="200" r="9" fill="#c0392b"/><text x="632" y="200" fill="#fff">12</text></g>
+    <g><circle cx="612" cy="122" r="9" fill="#c0392b"/><text x="612" y="122" fill="#fff">13</text></g>
+    <g><circle cx="588" cy="168" r="9" fill="#c0392b"/><text x="588" y="168" fill="#fff">14</text></g>
+    <g><circle cx="650" cy="265" r="9" fill="#c0392b"/><text x="650" y="265" fill="#fff">15</text></g>
+    <g><circle cx="628" cy="340" r="9" fill="#c0392b"/><text x="628" y="340" fill="#fff">16</text></g>
+    <g><circle cx="666" cy="350" r="9" fill="#c0392b"/><text x="666" y="350" fill="#fff">17</text></g>
+    <g><circle cx="684" cy="450" r="9" fill="#c0392b"/><text x="684" y="450" fill="#fff">18</text></g>
+    <g><circle cx="645" cy="175" r="9" fill="#c0392b"/><text x="645" y="175" fill="#fff">19</text></g>
+  </g>
+</svg>

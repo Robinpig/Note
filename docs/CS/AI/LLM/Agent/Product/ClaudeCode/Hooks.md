@@ -52,7 +52,7 @@ Hooks 是 Claude Code 生命周期上的自动化触点：在特定事件发生�
 
 不同事件匹配的字段不同：工具类事件匹配 `tool_name`；`SessionStart` 匹配启动方式（`startup`/`resume`/`clear`/`compact`/`fork`）；`PreCompact`/`PostCompact` 匹配触发方式（`manual`/`auto`）；`PreModelSwitch`/`PostModelSwitch` 匹配模型 canonical 名。**十个事件根本不支持 matcher**（`UserPromptSubmit`、`Stop`、`CwdChanged`、`TaskCreated` 等），给它们加 `matcher` 会被静默忽略——不报错，只是没用。
 
-### MCP 工具匹配
+### MCP Tool Matching
 
 MCP 工具在工具事件里就是普通工具，命名 `mcp__<server>__<tool>`：
 

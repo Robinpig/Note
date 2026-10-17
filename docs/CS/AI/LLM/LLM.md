@@ -39,7 +39,7 @@ LLM 在结构上就是"把 [Transformer](/docs/CS/AI/Transformer.md) 的 decoder
 
 ## From 'Can Talk' to 'Can Do': Closing the Model's Four Gaps
 
-前面列的四个局限，其实指向同一件事——**LLM 缺的不是更多参数，而是一个能在真实环境里执行、持久记住、并且会自我纠错的包裹层**。这个包裹层就是 Agent，它的四构成（Loop / Tools / Memory / Harness）在 [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) 里有完整拆解。这一层内部按**机制 / 产品 / 演进**再分三层，入口是 [Agent 目录](/docs/CS/AI/LLM/Agent/README.md)。
+前面列的四个局限，其实指向同一件事——**LLM 缺的不是更多参数，而是一个能在真实环境里执行、持久记住、并且会自我纠错的包裹层**。这个包裹层就是 Agent，它的四构成（Loop / Tools / Memory / Harness）在 [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) 里有完整拆解。这一层内部按**机制 / 产品 / 演进**再分三层，入口是 [Agent 目录](/docs/CS/AI/LLM/Agent/README.md)。循环内部的"思考与行动"到底有哪几种组织方式——ReAct / Plan-and-Solve / Reflection 三种经典范式与一个 TypeScript 最小实现——见 [Paradigm](/docs/CS/AI/LLM/Agent/Theory/Paradigm.md)。
 
 其中真正决定成败的是 Harness，而它最反直觉的一点写在 [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md) 里：**Harness 是对模型能力缺口的补偿面**。模型每强一分，曾经必需的组件就该抽掉一层；照抄别人的组件清单并不会让你的 Agent 变强，反而可能在长任务里拖后腿。所以那篇笔记值得读的不是"有哪些组件"，而是"现在该补哪一块、该拆哪一块"的判断方法。
 

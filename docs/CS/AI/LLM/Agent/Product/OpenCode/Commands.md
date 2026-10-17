@@ -42,7 +42,7 @@ model: anthropic/claude-sonnet-4
 剩余上下文：$ARGUMENTS
 ```
 
-### 模板语法
+### Template Syntax
 
 - `$ARGUMENTS`：命令后的全部文本
 - `$1`、`$2`、`$3`：位置参数
@@ -51,7 +51,7 @@ model: anthropic/claude-sonnet-4
 
 **自定义命令可以覆盖同名内置命令**——定义同名命令即可替换。
 
-### 配置选项
+### Configuration Options
 
 | 选项 | 说明 |
 | :--- | :--- |

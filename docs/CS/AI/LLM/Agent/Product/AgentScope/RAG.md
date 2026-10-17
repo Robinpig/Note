@@ -51,6 +51,50 @@ async def search(self, queries: list[str | TextBlock | DataBlock],
 
 **一个重要的职责边界**：Parser 和 Chunker **不挂在 `KnowledgeBase` 上**。它只吃已经切好的 `list[Chunk]`，真正的解析-入库编排（鉴权、维度策略、blob 存储、索引 worker）在 `app/rag/knowledge_base_manager/`。也就是说 `rag/` 是**纯算法层**，可被完全独立使用；托管的那一套在服务层。
 
+### End-to-End Example (Library Mode, No Service)
+
+`rag/` 完全可以脱离 FastAPI 独立跑。下面是把上面的 parser/chunker/embedding/store 串起来的最小切片（精简自仓库 `examples/rag/index_and_search.py`，全部 API 取 v2.0.8）：
+
+```python
+import asyncio
+from agentscope.credential import DashScopeCredential
+from agentscope.embedding import DashScopeEmbeddingModel
+from agentscope.message import TextBlock
+from agentscope.rag import (
+    ApproxTokenChunker, KnowledgeBase, QdrantStore, TextParser,
+)
+
+async def main() -> None:
+    # 1. 四个构建块 —— 也是 service 模式 create_app 内部用的同一套
+    embedding = DashScopeEmbeddingModel(
+        credential=DashScopeCredential(api_key="sk-..."),
+        model="text-embedding-v4", dimensions=1024,
+    )
+    parser = TextParser()
+    chunker = ApproxTokenChunker(chunk_size=256, overlap=32)
+    store = QdrantStore(location=":memory:")   # 换 url= 即远端 Qdrant
+
+    async with store:                            # 进入即开 client，退出即关
+        kb = KnowledgeBase(
+            name="demo-kb", description="玩具语料",
+            embedding_model=embedding, vector_store=store, collection="demo-kb",
+        )
+        # 2. 入库：bytes → Section → Chunk → embed + 写 collection
+        sections = await parser.parse(b"# AgentScope\n多智能体框架。", "as.md")
+        chunks = await chunker.chunk(sections)
+        doc_id = await kb.insert_document(chunks, document_metadata={"f": "as.md"})
+
+        # 3. 检索：多 query 批量 embed 后并发查，去重键 (document_id, chunk_index)
+        results = await kb.search(queries=["什么是多智能体框架？"], top_k=3)
+        for r in results:
+            text = r.chunk.content.text if isinstance(r.chunk.content, TextBlock) else "<非文本>"
+            print(f"score={r.score:.4f} doc={r.document_id} :: {text[:80]}")
+
+asyncio.run(main())
+```
+
+要点对照上文：① `QdrantStore` 是 async context manager，进入才开连接；② `KnowledgeBase` 构造**零 I/O**，collection 在首次 `insert_document` 时惰性创建，全新部署无需手动建库；③ `insert_document(chunks, document_id?, document_metadata?)` 返回 `document_id`，`metadata_filter > chunk 自身 metadata > document_metadata` 的优先级在这里生效——传入的 `document_metadata` 会被强制打在每个 chunk 上；④ `search` 返回的 `VectorSearchResult` 多一个 `score`（`Chunk` 本身不含 score，保持语义稳定），`score` 越大越相关。
+
 ### RAGMiddleware: Two Modes
 
 把 RAG 接进主循环的是 `middleware/_rag.py` 里的 `RAGMiddleware`，两种模式：

@@ -184,7 +184,7 @@ Note over L: 全批 terminate===true → hasMoreToolCalls=false → 本轮 turn 
 
 > 以上两层结构在 main 仍成立：压缩文档引用的 `prepareNextTurn` / `shouldCompact` / `firstKeptEntryId` 与 `src/index.ts` 的导出面（`AgentSession`、`SessionManager`、`compact`、`createCodingTools`…）与 v1.0.0 核实结果一致；新增的是 JSON 事件流模式（见下文「运行模式」）。
 
-### Nested Tool Calls and Exposure（main 新增面）
+### Nested Tool Calls and Exposure (New in main)
 
 v1.0.0 之后工具层长出两套机制。**嵌套调用**：工具内部经 `ctx.executeTool(name, args, { signal, onUpdate })` 再调子工具，与模型发起的调用走同一套参数校验和 `tool_call`/`tool_result` 钩子；嵌套 id 形如 `<parent id>/n`，不进转录，只在调用方结果的 `nestedCalls` 里留有界记录（参数 >8KiB、结果 >32KiB 省略，至多 256 条，丢失标 `complete: false`），各层 `usage` 汇总进调用方。**Exposure 五态**：`direct`（默认，声明给模型且可被调）、`model-only`（只声明）、`codemode`（可被调、被 codemode 列出，不声明）、`deferred`（只有 `tool_search` 能找到）、`hidden`（注册不可达，重新注册即撤回）；配套 `reachesTools(input)` 声明一次调用触及哪些工具、`prepareLoadout` 让编排型工具改写声明集。用户侧入口是 `--tools` / `--exclude-tools` / `defaultTools`，详见 [Extensions](/docs/CS/AI/LLM/Agent/Product/Pi/Extensions.md)。
 

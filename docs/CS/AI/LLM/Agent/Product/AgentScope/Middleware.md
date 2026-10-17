@@ -2,7 +2,7 @@
 
 中间件是 AgentScope 最值得细看的设计：它把「跨切面的横切逻辑」（预算、追踪、记忆、TTS、权限、提示词改写）全部收拢到 `MiddlewareBase` 的少数几个 hook 里，而不是散落在 `Agent` 主循环。`Agent` 在构造时按 `is_implemented()` 把中间件分派到 7 个列表，运行时沿洋葱链 / 转换器链调用。
 
-本分册覆盖 **MiddlewareBase 的 7 个 hook 与分派机制**、**内置中间件家族**（预算 / TTS / 追踪 / 长期记忆三实现）、以及 **权限 DSL 的完整细节**（5 模式 × 4 行为、rule_content 语义、引擎 6 步判定、bypass_immune 安全 ASK）。Pipeline 与事件机制见 [AgentScope Pipeline 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Pipeline.md)，应用层见 [AgentScope 应用层分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/App.md)。
+本分册覆盖 **MiddlewareBase 的 7 个 hook 与分派机制**、**内置中间件家族**（预算 / TTS / 追踪 / 长期记忆三实现）、以及 **权限 DSL 的完整细节**（5 模式 × 4 行为、rule_content 语义、引擎 6 步判定、bypass_immune 安全 ASK）。Pipeline 与事件机制见 [Pipeline 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Pipeline.md)，应用层见 [App 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/App.md)。
 
 ## MiddlewareBase: Seven Hooks
 
@@ -68,6 +68,36 @@ cost = input_token_weight * input_tokens + output_token_weight * output_tokens
 - `ReMeMiddleware`（`_reme/_middleware.py:88`）：模型在构造时固定（不取自 agent），按 `session_id` 隔离；`mode` 只决定「是否暴露 `memory_search` 工具」，而「每轮回复后写回」在所有 mode 都发生（`_reme/_middleware.py:15-17`）。
 - `AgenticMemoryMiddleware`（`_agentic_memory/_middleware.py:359`）：`on_system_prompt` 追加指令 + 有界 `MEMORY.md`，`on_reply` 起异步检索，`on_reasoning` 注入 hint；4 类 frontmatter（`user`/`feedback`/`project`/`reference`）；**没有记忆工具**，Agent 用 `Write` 主动管理自己的记忆文件。
 
+### Custom Middleware
+
+`MiddlewareBase` 的每个 hook 默认实现都 `raise RuntimeError`，子类只覆盖需要的——构造时 `is_implemented(hook_name)` 用 `base_method is not sub_method` 探测，把中间件分派进 7 个列表。两种模式各给一个最小实现：
+
+```python
+from agentscope.middleware import MiddlewareBase
+from agentscope.agent import Agent
+
+# 1. 洋葱模式：on_reply / on_reasoning 等在 next_handler() 前后插入逻辑
+class LoggingMiddleware(MiddlewareBase):
+    async def on_reasoning(self, agent, input_kwargs, next_handler):
+        print(f"[before reasoning] {agent.name}")
+        async for event in next_handler():
+            yield event
+        print(f"[after reasoning] {agent.name}")
+
+# 2. 转换器模式：on_system_prompt 拿上一个输出当输入，改写 system prompt
+class DateStampMiddleware(MiddlewareBase):
+    def on_system_prompt(self, agent, current_prompt: str) -> str:
+        from datetime import date
+        return f"{current_prompt}\n\n今天的日期是 {date.today().isoformat()}。"
+
+agent = Agent(
+    name="a", system_prompt="你是助手。", model=...,
+    middlewares=[LoggingMiddleware(), DateStampMiddleware()],
+)
+```
+
+两个落点：① `on_reply` 是唯一能**吞掉 `ReplyEndEvent` 逼 Agent 多跑一轮**的 hook——只要不 yield 它、直到最终 `Msg` 逃出整条链才产出；但 `INTERRUPTED` 的 end 不能被吞（见 `ReplyBudgetControlMiddleware` 的 `on_reply` 用法）；② `on_system_prompt` 是串行管道，多个中间件依次改写同一字符串，所以是给 system prompt 注入「日期 / 角色约束 / 记忆指令」的标准位置——三个长期记忆中间件都靠它暴露/隐藏工具。自定义中间件与内置中间件地位相同，都经 `is_implemented` 分派，没有优先级冲突问题。
+
 ## Permission DSL
 
 权限系统与 Agent 主循环解耦，由 `PermissionEngine` + `PermissionRule` + `PermissionDecision` + `PermissionContext` 四个类组成（均在 `src/agentscope/permission/`）。
@@ -132,8 +162,8 @@ cost = input_token_weight * input_tokens + output_token_weight * output_tokens
 ## Links
 
 - [AgentScope](/docs/CS/AI/LLM/Agent/Product/AgentScope/AgentScope.md)
-- [AgentScope Pipeline 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Pipeline.md)
-- [AgentScope 应用层分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/App.md)
+- [Pipeline 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Pipeline.md)
+- [App 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/App.md)
 - [权限理论](/docs/CS/AI/LLM/Agent/Theory/Permission.md)
 
 ## References

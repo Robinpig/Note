@@ -6,15 +6,157 @@ AgentScope 是阿里巴巴开源的 Python Agent 框架，从 v2.0 开始面向�
 
 本笔记以 **v2.0.8** 为基准
 
-本笔记采用「枢纽 + 分册」结构：主干保留架构叙事与跨模块分析，以下主题已拆为独立分册（均基于 v2.0.8 源码逐文件核实，统一放在 `AgentScope/` 子目录）：
+本笔记采用「枢纽 + 分册」结构：主干保留架构叙事与跨模块分析，七个专题已拆为独立分册（均基于 v2.0.8 源码逐文件核实，统一放在 `AgentScope/` 子目录）。各分册由哪里接手、按什么顺序读，见下文 [How to Read the Subsystem Notes](#how-to-read-the-subsystem-notes)。
 
-- 工具体系 → [AgentScope 工具分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Tool.md)
-- RAG 子系统 → [AgentScope RAG 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/RAG.md)
-- 模型抽象 → [AgentScope 模型分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Model.md)
-- Realtime Agent → [AgentScope Realtime 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Realtime.md)
-- Pipeline / 事件 / 类型系统 → [AgentScope Pipeline 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Pipeline.md)
-- 中间件 / 权限 DSL → [AgentScope 中间件分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Middleware.md)
-- 应用层（App Service）→ [AgentScope App 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/App.md)
+## Quickstart: From Zero to a Running Agent
+
+这一节给一个**最小可运行**的纵向切片，把「装包 → 造模型 → 造 Agent → 跑对话 → 流式渲染 → 拿结构化结果」六个动作串起来。所有 API 取自 v2.0.8 的公开符号：`agentscope.agent.Agent` / `agentscope.model.*` / `agentscope.tool.Toolkit` / `agentscope.message.UserMsg` / `agentscope.console.launch_console` / `agentscope.event`。
+
+### Installation
+
+```bash
+pip install "agentscope[tools]"   # [tools] 提供内置 Grep 依赖的 ripgrep 二进制
+```
+
+### A Minimal Conversational Agent
+
+不带任何工具、不做权限交互，可以直接 `reply()` 拿最终结果：
+
+```python
+import asyncio
+from agentscope.agent import Agent
+from agentscope.credential import OpenAICredential
+from agentscope.message import UserMsg
+from agentscope.model import OpenAIChatModel
+from agentscope.tool import Toolkit
+
+async def main() -> None:
+    agent = Agent(
+        name="Friday",
+        system_prompt="You are a helpful assistant.",
+        model=OpenAIChatModel(
+            credential=OpenAICredential(api_key="sk-..."),
+            model="gpt-4.1",
+            stream=True,
+        ),
+        toolkit=Toolkit(),          # 空工具集 = 纯对话
+    )
+    reply = await agent.reply(
+        UserMsg(name="user", content="用一句话解释什么是 ReAct。"),
+    )
+    print(reply.content[0].text)   # content 是 list[ContentBlock]，文本在 TextBlock.text
+
+asyncio.run(main())
+```
+
+两个容易踩的点：① `UserMsg(name, content)` 的 `content` 既可以是纯字符串（自动包成 `TextBlock`）也可以是 `list[TextBlock | DataBlock]`；② `reply()` 内部把整条事件流消费完、返回**最后一条** `Msg`，中间的工具调用 / 思考事件不出现在返回值里。
+
+### A Full Agent in the Terminal (Tools and HITL)
+
+想要文件工具、skill、工具调用人工确认、Ctrl+C 中断这一整套终端体验，用 `launch_console` 一行接管，不用自己写事件渲染与交互：
+
+```python
+import asyncio, os
+from agentscope.agent import Agent
+from agentscope.console import launch_console
+from agentscope.credential import DashScopeCredential
+from agentscope.message import UserMsg
+from agentscope.model import DashScopeChatModel
+from agentscope.tool import Toolkit
+from agentscope.workspace import LocalWorkspace
+
+async def main() -> None:
+    async with LocalWorkspace(workdir="./workspace") as ws:
+        agent = Agent(
+            name="Friday",
+            system_prompt="You are Friday. Use the provided tools when helpful.\n"
+                          + await ws.get_instructions(),
+            model=DashScopeChatModel(
+                credential=DashScopeCredential(api_key=os.environ["DASHSCOPE_API_KEY"]),
+                model="qwen3.7-max", stream=True,
+            ),
+            toolkit=Toolkit(tools=await ws.list_tools(),
+                            skills_or_loaders=await ws.list_skills()),
+            offloader=ws,                  # 压缩掉的上下文 / 超大工具结果落盘到 workspace
+        )
+        await launch_console(agent)
+
+asyncio.run(main())
+```
+
+（这是仓库 `examples/console/main.py` 的精简版；`LocalWorkspace` 同时提供文件系统后端与 skill 来源，文件系统级长期记忆由 `AgenticMemoryMiddleware` 注入。）
+
+### Adding a Custom Tool
+
+```python
+from agentscope.tool import FunctionTool
+
+def get_weather(city: str) -> str:
+    """查询指定城市的当前天气。
+
+    Args:
+        city: 城市名称，例如「北京」
+    """
+    return f"{city}: 晴，25°C"
+
+agent = Agent(
+    ...,
+    toolkit=Toolkit(tools=[FunctionTool(get_weather)]),
+)
+```
+
+`FunctionTool` 从函数签名 + docstring **自动抽取 JSON schema**；默认 `is_concurrency_safe=True`、`is_read_only=False`，因此默认权限是 ASK——这就是为什么带工具的 Agent 走 `launch_console` 这类带 HITL 的入口最顺。想在非交互脚本里直接放行，把 `AgentState.permission_context.mode` 设成 `BYPASS`（见 [Permission System](#permission-system)）。
+
+### Streaming Rendering
+
+`reply_stream()` 产出 `AsyncGenerator[AgentEvent | Msg]`。下面的骨架把文本增量与工具调用增量分别渲染（事件类型与 `Msg.append_event()` 重建规则见 [Pipeline 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Pipeline.md)）：
+
+```python
+from agentscope.event import TextBlockDeltaEvent, ToolCallDeltaEvent
+from agentscope.message import Msg
+
+async for chunk in agent.reply_stream(UserMsg(name="user", content="...")):
+    if isinstance(chunk, TextBlockDeltaEvent):
+        print(chunk.delta, end="", flush=True)   # 文本增量
+    elif isinstance(chunk, ToolCallDeltaEvent):
+        ...                                       # 工具调用增量（参数 JSON 片段）
+    elif isinstance(chunk, Msg):                  # 最后一条完整消息
+        break
+```
+
+### Structured Output
+
+`msg.content` 是自由文本，但很多时候你要的是**强类型的字段**。`Agent.reply()` / `reply_stream()` 的 `structured_schema` 参数接受一个 Pydantic `BaseModel` 子类，模型被要求按该 schema 输出 JSON，校验通过后的字典挂在返回 `Msg` 的 `structured_output` 上（`None` 表示未请求，或回复在产出前就中断 / 出错——见 `Msg.structured_output` 的字段注释）。
+
+```python
+from pydantic import BaseModel
+from agentscope.message import UserMsg
+
+class Weather(BaseModel):
+    city: str
+    temp_c: int
+    condition: str
+
+reply = await agent.reply(
+    UserMsg(name="user", content="北京现在天气怎么样？"),
+    structured_schema=Weather,
+)
+print(reply.structured_output)   # {'city': '北京', 'temp_c': 25, 'condition': '晴'}
+```
+
+流式场景要显式 `yield_final_msg=True`——否则 `reply_stream()` 默认只 yield 事件、跳过最后的 `Msg`：
+
+```python
+async for chunk in agent.reply_stream(
+    UserMsg(name="user", content="..."),
+    structured_schema=Weather,
+    yield_final_msg=True,
+):
+    if isinstance(chunk, Msg):
+        print(chunk.structured_output)
+```
+
+结构化输出失败属于 `DeveloperOrientedException` 里的 `StructuredOutputError`——是配置或模型能力问题，框架把它和工具层错误明确分开（见 [Supporting Types](#supporting-types-exception-a2a-task)）。模型不支持时的降级（回退为文本 + 后处理解析）逻辑在 [Model 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Model.md)。
 
 ## Architecture Overview
 
@@ -27,6 +169,18 @@ AgentScope v2.0 的核心架构可以概括为三层：
 | **Service** | FastAPI 后端 + Web UI | 多租户多会话、频道接入、Hub（MCP/Skill）、定时调度 |
 
 核心设计选择只有一个——**一切围绕 `Agent` 类展开**。没有 BaseAgent → ReActAgent → PlanAgent 的类继承层次，`Agent` 就是唯一入口。ReAct 循环是内置的，规划、子 Agent、HITL、中断、压缩全都是这个类里的方法或中间件实现。这意味着一个 AgentScope Agent 可以同时具备 ReAct、Plan-and-Execute、HITL、上下文压缩等能力，而不需要切换类。
+
+## How to Read the Subsystem Notes
+
+七个分册按「**装配 → 边界 → 编排 → 服务化**」四条线组织，大致对应上面三层表里的 Infrastructure 与 Service 两层。只想把框架用起来的读者读完 Quickstart 与 Architecture Overview 即可；要改框架行为、或判断某个能力该不该自己补，按下面四条线找对应分册。
+
+**装配线：一个 Agent 身上挂什么。**[Tool 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Tool.md) 讲工具体系——内置 13 个工具自己不做任何 I/O、全部委托 `BackendBase`，`ToolBase` 之下的三种实现（手写类 / `FunctionTool` / `MCPTool`）统一走中间件洋葱链，模型拿到的永远是同一套 JSON schema。[Middleware 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Middleware.md) 讲最值得细看的一层：`MiddlewareBase` 的 7 个 hook 与 `is_implemented()` 分派、内置中间件家族（预算 / TTS / 追踪 / 长期记忆三实现），以及权限 DSL 的完整细节（5 模式 × 4 行为、引擎 6 步判定、`bypass_immune` 安全 ASK）。[Model 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Model.md) 讲模型层——「统一 `Msg` 序列 → 厂商 JSON」的翻译为什么收拢在 formatter、10 个厂商子模块的卡片清单，以及 retry 包着的直通调用线。
+
+**边界线：Agent 伸手能碰到什么。**[RAG 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/RAG.md) 讲自带的那套完整 RAG（`rag/`，纯算法层、可完全独立使用）：Parser → Section → Chunk → embed → VectorStore 的数据流、`Chunk` 比 `Section` 多出的两个字段为什么服务检索期，以及它与服务层托管版（`app/rag/knowledge_base_manager/`）的边界。
+
+**编排线：一串 Agent 怎么跑。**[Pipeline 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Pipeline.md) 讲 AgentScope 的「事件织物」：`PipelineProtocol` 只暴露 `reply_stream()` 一个方法、强类型事件系统（`EventType` 28 值）、支撑类型（`ReplyFinishedReason` / `ErrorInfo` / Hook 类型），以及 `Msg` 的状态机式增量重建——尤其是 DataBlock 的 base64 拼接陷阱。[Realtime 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Realtime.md) 讲另一个完全不继承 `Agent` 的类：双向语音会话、无 request/reply 边界，turn-taking 状态机夹在实时模型与 transport 之间。
+
+**服务化线：怎么上线。**[App 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/App.md) 讲 v2.0.8 起成为正式包的 Agent Service：`create_app` 工厂与 15 个路由、`lifespan` 的 AsyncExitStack 生命周期、Redis + 异步 SQLAlchemy 双存储后端、Hub 抽象（GitHub MCP + ClawHub Skill）、Workspace 隔离策略与跨 owner 资源访问策略。
 
 ## The Unified Agent Class
 
@@ -87,7 +241,7 @@ REPLY_START → MODEL_CALL_START → TEXT_BLOCK_START → TEXT_BLOCK_DELTA* → 
 
 HITL 交互的核心设计：Agent 在遇到需要确认的工具调用时，**不抛出异常也不返回结果**，而是 yield `RequireUserConfirmEvent` 后停在 await 点。调用方（Web UI、Console、上游 Agent）决定后把结果作为下一次 `reply()` 的输入传回来——同一个 Agent 实例、同一条上下文、循环从断点继续。
 
-事件类型枚举（`EventType` 28 值）、`Msg.append_event` 状态机与 DataBlock base64 增量拼接陷阱的完整清单见 [AgentScope Pipeline 分册（事件与类型）](/docs/CS/AI/LLM/Agent/Product/AgentScope/Pipeline.md)。
+事件类型枚举（`EventType` 28 值）、`Msg.append_event` 状态机与 DataBlock base64 增量拼接陷阱的完整清单见 [Pipeline 分册（事件与类型）](/docs/CS/AI/LLM/Agent/Product/AgentScope/Pipeline.md)。
 
 ## ReAct Loop: The Core
 
@@ -182,7 +336,7 @@ async def on_xxx(self, agent, input_kwargs, next_handler):
 
 中间件链内部用递归构造执行器（`execute_chain`），和 Koa/Express 的洋葱模型写法一模一样。
 
-七个 `on_*` hook 的签名语义、`ReplyBudgetControlMiddleware` / `TTSMiddleware` / `TracingMiddleware` / 三类长期记忆中间件，以及权限 DSL（`PermissionMode` / `PermissionRule` / `PermissionDecision` / `PermissionContext` / `bypass_immune` 安全 ASK）的逐文件事实见 [AgentScope 中间件分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Middleware.md)。
+七个 `on_*` hook 的签名语义、`ReplyBudgetControlMiddleware` / `TTSMiddleware` / `TracingMiddleware` / 三类长期记忆中间件，以及权限 DSL（`PermissionMode` / `PermissionRule` / `PermissionDecision` / `PermissionContext` / `bypass_immune` 安全 ASK）的逐文件事实见 [Middleware 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Middleware.md)。
 
 ## Permission System
 
@@ -210,7 +364,7 @@ deny_rules → ask_rules → read_only → tool.check_permissions → allow_rule
 
 3. **Concurrent batch 内的 ASK 去重**：并发执行多个工具时，同一批次的 `kept_rules` 列表累积已确认生成的 allow rule。后续工具的 ASK 如果已被某个 earlier rule 覆盖，就不再弹第二次——只对非安全 ASK 生效。
 
-权限 DSL 的完整逐文件事实（五种模式字段语义、`_check_<mode>` 分发顺序、`suggested_rules` 生成、`DenyAllResourceAccessPolicy` 跨 owner 访问）见 [AgentScope 中间件分册（权限）](/docs/CS/AI/LLM/Agent/Product/AgentScope/Middleware.md)。
+权限 DSL 的完整逐文件事实（五种模式字段语义、`_check_<mode>` 分发顺序、`suggested_rules` 生成、`DenyAllResourceAccessPolicy` 跨 owner 访问）见 [Middleware 分册（权限）](/docs/CS/AI/LLM/Agent/Product/AgentScope/Middleware.md)。
 
 ## Context Management
 
@@ -266,7 +420,7 @@ ContextConfig(
 
 ## Tool System
 
-> 工具层的完整事实（13 个内置工具、三种 Adapter 实现、`BashCommandParser` 真实解析、`BackendBase` 三原语与后端矩阵、Compression Tool）已拆到独立分册：[AgentScope 工具分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Tool.md)。本节在主干中仅保留枢纽定位。
+> 工具层的完整事实（13 个内置工具、三种 Adapter 实现、`BashCommandParser` 真实解析、`BackendBase` 三原语与后端矩阵、Compression Tool）已拆到独立分册：[Tool 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Tool.md)。本节在主干中仅保留枢纽定位。
 ## Workspace and Sandbox
 
 上一节的工具做的是「参数校验 + 结果整形」，真正的读写在一层极易被忽略的抽象里——**`BackendBase`**。这是 AgentScope 把「Agent 在哪台机器上跑」和「Agent 怎么调工具」彻底解耦的地方，也是它能从笔记本本地执行无缝切到容器沙箱的原因。
@@ -341,7 +495,7 @@ ${workdir}/
 
 ## RAG Subsystem
 
-> RAG 子系统的完整事实（`_document`/`_parser`/`_chunker`/`_knowledge` 算法层、`RAGMiddleware` 双模式、与服务层 `knowledge_base_manager` 的边界）已拆到：[AgentScope RAG 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/RAG.md)。
+> RAG 子系统的完整事实（`_document`/`_parser`/`_chunker`/`_knowledge` 算法层、`RAGMiddleware` 双模式、与服务层 `knowledge_base_manager` 的边界）已拆到：[RAG 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/RAG.md)。
 ## Skill Loading
 
 Skill 的数据结构极简（`skill/_base.py` 的 dataclass，六个字段：`name` / `description` / `dir` / `markdown` / `updated_at`），加载逻辑也就没什么花样：
@@ -397,7 +551,7 @@ async def format(self, *args, **kwargs) -> list[dict[str, Any]]:
 
 ## Model Abstraction
 
-> 模型抽象层的完整事实（`ModelBase` 调用流、retry 直通线、block.id 流式累加、结构化输出回退、token 计数、`CredentialFactory`）已拆到：[AgentScope 模型分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Model.md)。
+> 模型抽象层的完整事实（`ModelBase` 调用流、retry 直通线、block.id 流式累加、结构化输出回退、token 计数、`CredentialFactory`）已拆到：[Model 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Model.md)。
 ## Supporting Types: Exception, A2A, Task
 
 ### Exception Model
@@ -425,13 +579,23 @@ Plan 机制的数据模型在 `state/_task.py`：一个带 DAG 依赖的通用 T
 
 ## Realtime Agent
 
-> `RealtimeAgent`（双向语音、turn-taking 状态机、不继承 `Agent`）的完整事实已拆到：[AgentScope Realtime 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Realtime.md)。
+> `RealtimeAgent`（双向语音、turn-taking 状态机、不继承 `Agent`）的完整事实已拆到：[Realtime 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Realtime.md)。
 
 ## Pipeline & Agent Service
 
-`PipelineProtocol` 与 `Agent` 共用 `reply_stream()` 接口——Pipeline 是「固化逻辑的多 Agent 编排器」，按预设顺序把消息喂给一串 Agent；`GoalPipeline` 在此基础上加 executor/verifier 循环与目标检查。事件类型枚举（`EventType` 28 值）、`Msg.append_event` 状态机、DataBlock base64 增量拼接陷阱，以及 Types 系统（`ReplyFinishedReason` / `ErrorType` / `AgentHookTypes`）的完整事实见 [AgentScope Pipeline 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Pipeline.md)。
+`PipelineProtocol` 与 `Agent` 共用 `reply_stream()` 接口——Pipeline 是「固化逻辑的多 Agent 编排器」，按预设顺序把消息喂给一串 Agent；`GoalPipeline` 在此基础上加 executor/verifier 循环与目标检查。事件类型枚举（`EventType` 28 值）、`Msg.append_event` 状态机、DataBlock base64 增量拼接陷阱，以及 Types 系统（`ReplyFinishedReason` / `ErrorType` / `AgentHookTypes`）的完整事实见 [Pipeline 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Pipeline.md)。
 
-Agent Service（`src/agentscope/app/`）到 v2.0.8 已是正式包：2MB、约 200 文件的应用层，按职责分 `_router/` `_service/` `_manager/` `_tool/` `storage/` `rag/` `hub/` `workspace_manager/` 八目录，外加 Feishu / Discord / DingTalk 频道适配与 GitHub MCP Hub、ClawHub Skill Hub。依赖按组分包（`agentscope[service]` / `[storage-sql]` / `[workspace-docker]` / `[tools]`），连内置 Grep 工具都锁 `ripgrep>=14.1,<15`（15.x 缺 Windows / glibc<2.39 / musl / aarch64 的 wheel，远程沙箱走镜像内安装）。存储层有两套后端（`AsyncSQLAlchemyStorage` + `RedisStorage`），**路由器注册 15 个而非 16 个**——`_router/_schema` 是 Pydantic 模型集合不是路由。完整事实见 [AgentScope App 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/App.md)。
+Agent Service（`src/agentscope/app/`）到 v2.0.8 已是正式包：2MB、约 200 文件的应用层，按职责分 `_router/` `_service/` `_manager/` `_tool/` `storage/` `rag/` `hub/` `workspace_manager/` 八目录，外加 Feishu / Discord / DingTalk 频道适配与 GitHub MCP Hub、ClawHub Skill Hub。依赖按组分包（`agentscope[service]` / `[storage-sql]` / `[workspace-docker]` / `[tools]`），连内置 Grep 工具都锁 `ripgrep>=14.1,<15`（15.x 缺 Windows / glibc<2.39 / musl / aarch64 的 wheel，远程沙箱走镜像内安装）。存储层有两套后端（`AsyncSQLAlchemyStorage` + `RedisStorage`），**路由器注册 15 个而非 16 个**——`_router/_schema` 是 Pydantic 模型集合不是路由。完整事实见 [App 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/App.md)。
+
+### Hub Subsystem: Registry as Assembly
+
+Agent Service 不直接 hardcode MCP server 或 skill 的来源，而是把它们抽象成 **Hub**——一个「从远端注册中心发现并装载」的抽象（`app/hub/_base.py`）。v2.0.8 含两类：
+
+- **MCPHubBase** —— 发现并装载 MCP server；首实现 `GitHubHub`（`hub/_mcp/_github_hub.py`），从 GitHub 上的 MCP 注册中心拉取 server 清单并装载。
+- **SkillHubBase** —— 发现并装载 skill；首实现 `ClawHub`（`hub/_skill/_claw_hub.py`）。
+
+`hub_id` 受 `HUB_ID_PATTERN = [a-zA-Z0-9_-]+` 约束，`create_app` 的 `_index_hubs` 按 id 建索引，重复 id 直接 `ValueError`——同一 kind 的 hub 必须 id 唯一，否则路由无法唯一定址。`hub` router 把「发现 / 装载 / 列出」能力暴露成 HTTP 端点。完整事实（生命周期、索引、与 workspace 网关的关系）见 [App 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/App.md)。
+
 ## Comparison
 
 ### AgentScope vs LangChain / LangGraph
@@ -651,7 +815,7 @@ AgentScope 的输出是 `AsyncGenerator[AgentEvent | Msg]`，每种事件都是�
 
 这不是巧合——AgentScope 设计 Agent 和 Pipeline 时就把它们放在同一个抽象层：都是能"输入 Msg/Event、输出事件流"的东西。区别只是：Agent 内部是一次 ReAct 循环，Pipeline 内部是多次 Agent 调用的编排。
 
-### GoalPipeline 的 Executor-Verifier 双 Agent 模式
+### GoalPipeline: The Executor-Verifier Pattern
 
 `GoalPipeline` 的核心逻辑：
 
@@ -848,19 +1012,10 @@ session_id = uuid5(
 ## Links
 
 - [Agent 目录](/docs/CS/AI/LLM/Agent/README.md)
-- [Agent Theory](/docs/CS/AI/LLM/Agent/Theory/Agent.md)
-- [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md)
-- [Permission](/docs/CS/AI/LLM/Agent/Theory/Permission.md)
-- [Compaction](/docs/CS/AI/LLM/Agent/Theory/Compaction.md)
+- [AgentScopeJava](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/AgentScopeJava.md) / [OpenCode](/docs/CS/AI/LLM/Agent/Product/OpenCode/OpenCode.md) / [Pi](/docs/CS/AI/LLM/Agent/Product/Pi/Pi.md) / [OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw/OpenClaw.md)
 - [LLM 应用开发框架](/docs/CS/AI/LangTools.md)
-- [AgentScope 工具分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Tool.md)
-- [AgentScope RAG 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/RAG.md)
-- [AgentScope 模型分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Model.md)
-- [AgentScope Realtime 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Realtime.md)
-- [AgentScope Pipeline 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Pipeline.md)
-- [AgentScope 中间件分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Middleware.md)
-- [AgentScope App 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/App.md)
-- [AgentScopeJava](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/AgentScopeJava.md) — 同族不同语言的 Java 版独立框架（非移植），含 Session Log / Workspace / Skill 市场等本版没有的机制
+- [Agent Theory](/docs/CS/AI/LLM/Agent/Theory/Agent.md) / [Permission](/docs/CS/AI/LLM/Agent/Theory/Permission.md) / [Compaction](/docs/CS/AI/LLM/Agent/Theory/Compaction.md)
+
 ## References
 
 - [AgentScope GitHub](https://github.com/agentscope-ai/agentscope)

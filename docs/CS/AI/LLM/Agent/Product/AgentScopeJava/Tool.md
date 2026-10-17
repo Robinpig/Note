@@ -1,225 +1,235 @@
+# Tool
+
 ## Introduction
 
-本分册覆盖 AgentScope Java 执行链路上的四块机制：**工具体系**（`Toolkit` 与三种工具写法、MCP）、**权限系统**（五模式 + 规则 DSL + 工具自带检查）、**中间件**（三类 hook 六个扩展点）与 **Plan Mode**（阶段级工具白名单）。四者的共同点是都挂在「一次工具调用怎么被放行、怎么被执行、怎么被拦截」这条路上，合册阅读最能看清整条链路。
+本分册覆盖 AgentScope Java 执行链路上的四块机制：**工具体系**（`Toolkit` 与三种工具写法、MCP）、**权限系统**（五模式 + 规则 DSL + 工具自带检查）、**中间件**（5 个 hook）与 **Plan Mode**（阶段级工具白名单）。四者的共同点是都挂在「一次工具调用怎么被放行、怎么被执行、怎么被拦截」这条路上，合册阅读最能看清整条链路。
 
-与 Python 版的差异值得一提：Python 版中间件是 7 个 hook 反射自动检测，Java 版是 6 个扩展点显式声明 `activePoints()`；Python 版权限的安全 ASK 靠 `bypass_immune` 标记，Java 版靠 `checkPermissions` 不可绕过 + 危险路径强制 ASK 两层。
+本分册所有类名、方法签名、枚举值与默认值均核对自本地 `v2.0.4` 源码树（`agentscope-core/.../tool/`、`.../permission/`、`.../middleware/`、`.../state/PlanModeContextState.java`，`agentscope-harness/.../middleware/`），与官方文档冲突处以源码为准。
 
-## Toolkit
+与 Python 版的差异值得一提：Python 版中间件是 7 个 hook 反射自动检测，Java 版是 **5 个 hook**（4 洋葱 + 1 管道）+ `order()` 显式排序；Python 版权限的安全 ASK 靠 `bypass_immune` 标记，Java 版靠 `checkPermissions` 的 bypass-immune 求值次序 + 危险路径强制 ASK 两层。
 
-三个概念：**Tool**（实现 `AgentTool` 接口的对象，或带 `@Tool` 注解的普通类——后者称 reflective function tool，由 `Toolkit#registerTool(Object)` 反射注册）、**Toolkit**（容器，注册 tool / MCP 客户端 / skill，向模型暴露 JSON schema，分发每次调用）、**Tool Group**（一组带名称的 tool / MCP / skill，可整体激活或停用，Agent 运行时用内置 meta tool 切换，保持上下文聚焦）。
+## Toolkit And Tool Registration
 
-```java
-Toolkit toolkit = new Toolkit();
-toolkit.registerTool(new TodoTools());      // 通过反射注册带 @Tool 的方法
-toolkit.registerTool(new MyCustomTools());  // 自定义工具类
-```
-
-只调 `registerTool(Object)` 时，所有 `@Tool` 方法进特殊的 **`"basic"` 组**——该组始终激活。出现额外 tool group 或 skill 时，Toolkit 自动注册 `reset_tools` meta tool 与 `load_skill_through_path`，无需手动实例化。
-
-## Java Tool
-
-`ToolBase` 是 `AgentTool` 的抽象实现。向 agent 与运行时描述工具的属性：`getName()` / `getDescription()` / `getParameters()`（JSON Schema）/ `isConcurrencySafe()` / `isReadOnly()` / `isExternalTool()` / `isStateInjected()` / `isMcp()` / `getMcpName()`。接入执行与权限的方法：`checkPermissions(toolInput, context)`（必需，返回 `Mono<PermissionDecision>`）、`matchRule(ruleContent, toolInput)`（可选，权限规则自定义匹配）、`generateSuggestions(toolInput)`（可选，生成建议规则）、`callAsync(param)`（可选，返回 `Mono<ToolResultBlock>`，外部执行工具不实现）。
-
-### Annotation Style
-
-最轻量写法——`@Tool` + `@ToolParam`，框架自动从 Java 类型推导 JSON schema：
+`Toolkit` 是工具总入口，两类注册 API（`tool/Toolkit.java`）：
 
 ```java
-public class SimpleTools {
-    @Tool(name = "get_current_time", description = "Returns the current time in a given IANA timezone.",
-          readOnly = true, concurrencySafe = true)
-    public String getCurrentTime(
-            @ToolParam(name = "timezone", description = "IANA timezone, e.g. Asia/Shanghai") String timezone) {
-        return LocalDateTime.now(ZoneId.of(timezone)).format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
-    }
-}
+// 1. 流式 builder（registration() 返回 ToolRegistration）
+toolkit.registration()
+        .tool(toolObject)                       // POJO，反射 @Tool 方法
+        .agentTool(agentTool)                   // AgentTool 实例
+        .mcpClient(mcpClientWrapper)            // MCP 客户端
+        .subAgent(provider)                     // 子 Agent 提供者（可带 SubAgentConfig）
+        .mcpToolNamePrefix(prefix)              // MCP 工具名前缀
+        .enableTools(List.of(...))              // 只启用列出的工具
+        ...;
+
+// 2. 直接方法
+public void registerTool(Object toolObject);
+public void registerAgentTool(AgentTool tool);
+public Mono<Void> registerMcpClient(McpClientWrapper wrapper);   // 异步：要握手
+public Mono<Void> removeMcpClient(String name);
+public void closeMcpClients();
+public void registerMetaTool();
+public Toolkit copy();
 ```
 
-`@Tool` 常用属性：`name`（默认方法名）/ `description` / `readOnly`（默认 false）/ `concurrencySafe`（默认 true）/ `stateInjected`（注入 `AgentState` 参数）/ `dangerousFiles` / `dangerousDirectories`（追加危险路径）/ `converter`（自定义返回值到 `ToolResultBlock` 的转换器）。
+工具组（运行时切换，配合元工具）：`createToolGroup(name, desc, active)`、`registerToolGroup(ToolGroup)`、`addToolToGroup(group, tool)`、`updateToolGroups(names, active)`、`setActiveGroups(...)` / `getActiveGroups()`、`removeToolGroups(...)`、`createSkillToolGroup(...)`、`findSkillToolGroupsByActivateOnSkill(skillName)`。
 
-**执行状态要显式返回**：成功用 `ToolResultBlock.success(text)`、失败用 `ToolResultBlock.error(message)`，不要靠文本前缀判断失败；`ToolResultBlock.text(text)` 默认是 RUNNING，保留既有 JSON / 多行输出要用 `withState(...)` 明确终态。
+执行侧：`callTool(ToolCallParam)` → `Mono<ToolResultBlock>`、`callTools(...)` 三个重载、`setChunkCallback(BiConsumer<ToolUseBlock, ToolResultBlock>)`、`isExternalTool(name)`、`getToolSchemas(Collection<String> activeGroups)`。
 
-### ToolBase Style
+⚠️ `copy()` 的语义要读注释（`Toolkit.java:928-946`）：**构建期隔离用，不要 per-call 用**。用户工具实例按引用共享（必须线程安全），工具组与激活标志深拷贝；框架元工具重新绑到新 registry。per-call 的工具面差异应该用 `ToolRequestConfig` 组合表达（`getTool(name, requestConfig)` / `getToolSchemas(groups, requestConfig)`），而不是拷贝 toolkit。
 
-需要自定义权限策略、外部执行或复杂 schema 时继承 `ToolBase`，重写 `checkPermissions` 与 `callAsync`：
+### Three Ways To Write A Tool
+
+| 写法 | 基类/注解 | 适用 |
+| :--- | :--- | :--- |
+| 注解反射 | POJO 方法打 `@Tool` | 最常用，框架反射生成 schema |
+| 继承 `ToolBase` | `public abstract class ToolBase implements AgentTool` | 要自定义 `checkPermissions` / `matchRule` / `generateSuggestions` |
+| 直接实现 `AgentTool` | 接口 | 完全手工（元工具、远程代理就是这么写的） |
+
+`@Tool` 注解的**全部 11 个属性**（`tool/Tool.java`）：
 
 ```java
-public class WebSearchTool extends ToolBase {
-    public WebSearchTool() {
-        super(ToolBase.builder().name("WebSearch")
-                .description("Search the web for information on a given query.")
-                .inputSchema(Map.of("type", "object",
-                        "properties", Map.of("query", Map.of("type", "string",
-                                "description", "The search query.")),
-                        "required", List.of("query")))
-                .readOnly(true).concurrencySafe(true));
-    }
-
-    @Override
-    public Mono<PermissionDecision> checkPermissions(Map<String, Object> toolInput, PermissionContextState context) {
-        return Mono.just(PermissionDecision.allow("Web search is read-only."));
-    }
-
-    @Override
-    public Mono<ToolResultBlock> callAsync(ToolCallParam param) {
-        String query = (String) param.getInput().get("query");
-        return doSearchAsync(query).map(text -> ToolResultBlock.builder()
-                .id(param.getId()).name(getName())
-                .output(List.of(TextBlock.builder().text(text).build())).build());
-    }
-}
+String name() default "";
+String description() default "";
+boolean strict() default false;                    // schema 严格模式
+boolean readOnly() default false;                  // EXPLORE 模式放行判据
+boolean concurrencySafe() default true;
+boolean externalTool() default false;              // 外部执行（HITL 挂起）
+boolean stateInjected() default false;             // 注入 AgentState 参数
+boolean returnDirect() default false;              // 结果直接作为 agent 回复
+String[] dangerousFiles() default {};              // 追加危险文件
+String[] dangerousDirectories() default {};        // 追加危险目录
+Class<? extends ToolResultConverter> converter() default DefaultToolResultConverter.class;
 ```
 
-### External Execution Tool
+`ToolBase` 的关键方法：`getName()` / `getDescription()` / `getParameters()`（均 final）、`isConcurrencySafe()` / `isReadOnly()` / `isReturnDirect()` / `isExternalTool()` / `isStateInjected()` / `isMcp()`、`callAsync(ToolCallParam)`、`checkPermissions(input, context)`、`matchRule(ruleContent, toolInput)`、`generateSuggestions(toolInput)`、`isDangerousPath(filePath)`。
 
-`externalTool(true)` 且不实现 `callAsync`：Agent 调用时发 `RequireExternalExecutionEvent` 并暂停，外部（人工操作员或外部系统）完成后回传匹配的 `ToolResultBlock`，agent 发 `ExternalExecutionResultEvent`（`replyId` 相同）后继续。这是 human-in-the-loop 工作流的基础。
+### Meta Tool
 
-### Receiving Context
+**只有一个元工具，名字是 `reset_equipped_tools`**（`tool/MetaToolFactory.java:51`，`Toolkit.registerMetaTool()` 注册，日志原文 "Registered meta tool: reset_equipped_tools"）。它的语义是**替换而非增量**——javadoc 原文强调「The input list is the FINAL set of active tool groups, not incremental changes. Any group not included in the list will be deactivated」，并建议「只激活当前任务需要的、用完立刻停用以节省上下文空间」。参数 `to_activate`（数组，enum 只含 **META scope** 的组名）。
 
-`RuntimeContext` 自动透传到所在 reply 内每一次工具调用。注解式工具里**没有 `@ToolParam` 的参数**按优先级解析：`ToolEmitter`（流式中间产物）→ `Agent` → `AgentState`（经 `RuntimeContext.getAgentState()`）→ `RuntimeContext` → `ToolExecutionContext`（已废弃兼容层）→ 用户自定义 POJO（`runtimeContext.get(ParamType.class)`，即调用方 `put(ParamType.class, value)` 注册的对象）。自定义 POJO 的判定：无 `@ToolParam`、非基本类型、非 ContentBlock / Msg、不在 `java.*` / `javax.*` 包下——模型不需要把它写进 JSON 参数，schema 里也不出现。
+`ToolGroupScope` 两值决定谁能动一个组（`tool/ToolGroupScope.java:29-42`）：**META**（元工具可管，进 enum、跟替换语义）与 **EXTERNAL**（只归开发者代码管，元工具看不见也改不了）。
 
-`ToolEmitter.emit()` 发布中间进度（`ToolProgressEvent`，仅展示）；`emitter.getToolCallId()` 可把进度与前端状态关联。`ToolBase.callAsync` 则通过 `ToolCallParam` 取 context。
-
-### MCP
-
-MCP 客户端经 `McpClientBuilder` 构建后 `toolkit.registerMcpClient(...)`，list 到的工具包装成统一 `ToolBase`（`isMcp=true`）：
-
-```java
-McpClientWrapper amap = McpClientBuilder.create("amap")
-        .streamableHttpTransport("https://mcp.amap.com/mcp?key=" + System.getenv("AMAP_API_KEY"))
-        .buildAsync().block();
-toolkit.registerMcpClient(amap).block();
-```
-
-工作区根目录的 `tools.json` 也可声明式配置 MCP server + 工具白名单，build 时一次性读取，`${ENV_VAR}` 语法做环境变量替换。注意 **allow / deny 在所有工具注册完之后才应用**，用 allow 列白名单时要一并列出要保留的内置工具。
-
-## Permission System
-
-权限回答「Agent 能不能调某个工具、在什么条件下调」。引擎评估产出 `PermissionDecision`：`allow(message)` / `deny(message)` / `ask(message)` / `passthrough(message)`——PASSTHROUGH 表示「工具不强加判断，交给引擎按 rules / mode 评估」。
+## Permission
 
 ### Five Modes
 
-| Mode | 行为 | 适用场景 |
+`PermissionMode`（`permission/PermissionMode.java:33-38`）5 值，JSON 值小写：
+
+| 枚举 | JSON | 行为（javadoc 原文） |
 | :--- | :--- | :--- |
-| `DEFAULT` | 所有操作都需要显式规则或用户确认 | 最安全，推荐默认值 |
-| `ACCEPT_EDITS` | 自动放行工作目录内的文件操作 | 用户在场的活跃开发 |
-| `EXPLORE` | 只读：放行读、拒绝所有写与命令 | 代码探索、规划 |
-| `BYPASS` | 放行一切（deny / ask 规则仍生效） | 完全可信的沙箱 |
-| `DONT_ASK` | 把所有 ASK 转为 DENY | 无人值守 / 计划任务 |
+| `DEFAULT` | `default` | 所有操作都要求显式 allow 规则 |
+| `ACCEPT_EDITS` | `accept_edits` | 工作目录内的文件编辑自动放行 |
+| `EXPLORE` | `explore` | 只读模式，修改类工具一律 DENY |
+| `BYPASS` | `bypass` | 不求值规则，全部放行 |
+| `DONT_ASK` | `dont_ask` | ASK 决策降级为 DENY（无人值守跑） |
 
-初始化经 `permissionContext(PermissionContextState.builder().mode(...).build())`；运行期可用 `agent.setPermissionMode(ctx, PermissionMode.BYPASS)` 翻转（保留该 session 已配规则，重建缓存的权限引擎，下一次 call 生效；进行中的 call 仍用启动时的引擎）。BYPASS 会关闭所有规则评估，应作为显式的按 session 主动操作并配合沙箱；想要无人值守且不弹确认但仍保留管控，用 `DONT_ASK`。
+`PermissionBehavior`（`PermissionBehavior.java:32-36`）4 值：`ALLOW` / `DENY` / `ASK` / **`PASSTHROUGH`**（工具把决策踢回引擎做规则匹配）。
 
-### Permission Rule
+### Evaluation Order
 
-`PermissionRule`（record）把 tool + 调用模式映射到 ALLOW / DENY / ASK / PASSTHROUGH：
+`PermissionEngine.checkPermission(ToolBase tool, Map<String,Object> toolInput)` → `Mono<PermissionDecision>`（`PermissionEngine.java:139-178`），六步次序，**引擎构造时把规则快照进自己的可变表，原始 context 永不被修改**；`addRule()` 可在运行时扩充：
 
-| 字段 | 类型 | 说明 |
-| :--- | :--- | :--- |
-| `toolName` | String | 规则适用的 tool 名（必填） |
-| `ruleContent` | String \| null | 匹配模式，语义由该 tool 的 `matchRule()` 解释；null 表示匹配该 tool 所有调用 |
-| `behavior` | PermissionBehavior | ALLOW / DENY / ASK / PASSTHROUGH |
-| `source` | String | 规则来源：userSettings / projectSettings / session / suggested |
-
-```java
-PermissionContextState permCtx = PermissionContextState.builder()
-        .mode(PermissionMode.DEFAULT)
-        .addAllowRule("safe_read", new PermissionRule("safe_read", null, PermissionBehavior.ALLOW, "userSettings"))
-        .addAskRule("dangerous_delete", new PermissionRule("dangerous_delete", null, PermissionBehavior.ASK, "userSettings"))
-        .addDenyRule("drop_table", new PermissionRule("drop_table", null, PermissionBehavior.DENY, "userSettings"))
-        .build();
+```text
+1. deny 规则            （最高优先级）
+2. ask 规则             （命中时挂上 tool.generateSuggestions(input) 的建议规则）
+3. 工具自带检查          （bypass-immune：EXPLORE/ACCEPT_EDITS 只读处理 + 危险路径 + ToolBase.checkPermissions）
+4. allow 规则
+5. BYPASS 模式兜底
+6. 默认 ASK（DONT_ASK 模式下变 DENY）
 ```
 
-ASK 决策会基于本次调用自动生成**建议规则**（挂在 `PermissionDecision` 上，权限钩子可见），把已接受的规则附在 `ConfirmResult.acceptedRules` 回传即写入引擎，今后相同调用自动放行。
+第三步的 bypass-immune 体现在：即使 `BYPASS` 模式，工具自带检查仍先于 allow 规则求值——`continueAfterToolCheck()` 里的 BYPASS 兜底排在工具检查之后（`:188-196`）。工具返回 `PASSTHROUGH` 时引擎走空（`Mono.empty()`）继续往后匹配（`:222-224`）。
 
-### Built-in Checks: The Non-bypassable Layer
+模式与只读判定：`EXPLORE` 下 `tool.isReadOnly()` 为真才 ALLOW，否则 DENY；`ACCEPT_EDITS` 下只读工具直接 ALLOW，非只读继续走后续步骤（`checkExploreMode`，`:229-263`）。
 
-每个 tool 的 `checkPermissions(toolInput, context)` 在运行时基于真实入参执行检查，**无论 mode 或 rules 是什么都生效**。`ToolBase` 内置的危险路径列表（`ToolDangerousPathConstants`）覆盖 shell 配置（`.bashrc` / `.zshrc`）、git 配置、SSH 密钥、凭证文件（`.env` / `.npmrc` / `.aws/credentials`）与 `.git/` `.ssh/` `.aws/` `.kube/` 目录——**命中后即使在 BYPASS 模式下也强制 ASK**。自定义工具可在 `@Tool` 上追加 `dangerousFiles` / `dangerousDirectories` 并入受保护集合。
+### Rule DSL
 
-### HITL Integration
+`PermissionRule` 是个四字段 record（`PermissionRule.java:33-37`）：
 
-引擎返回 ASK 时 agent 暂停并发 `GenerateReason.PERMISSION_ASKING` 的响应。`call` 模式从返回 `Msg` 里筛 `ToolCallState.ASKING` 的 `ToolUseBlock`；`streamEvents` 模式直接收 `RequireUserConfirmEvent.getToolCalls()`。恢复方式相同：`ConfirmResult` 附在新消息 metadata（`Msg.METADATA_CONFIRM_RESULTS`）里再次 call。拒绝全部工具时默认继续下一轮推理（模型只看到 "Permission denied by user"，易产生无效推理）——要停止得装备一个 `onActing` middleware 观察 `AllToolsDeniedEvent` 并发 `RequestStopEvent`，此后 `Msg.getGenerateReason()` 返回 `ALL_TOOLS_DENIED`。无人值守场景用 `DONT_ASK` + allow 规则：只放行显式列出的命令，其余静默拒绝。
+```java
+public record PermissionRule(
+        @JsonProperty("tool_name")     String toolName,        // 目标工具，非空
+        @JsonProperty("rule_content")  String ruleContent,     // 工具特定的匹配模式，可空
+        @JsonProperty("behavior")      PermissionBehavior behavior,
+        @JsonProperty("source")        String source) {}       // 如 "userSettings" / "suggested"
+```
+
+**匹配语义（`ruleMatches`，`PermissionEngine.java:310-316`）**：
+
+```java
+String content = rule.ruleContent();
+if (content == null || content.isEmpty()) {
+    return true;                          // 规则内容为空 = 对该工具的所有调用生效
+}
+return tool.matchRule(content, input);    // 否则交给工具自己的匹配器解释
+```
+
+也就是说**规则内容的语法由工具定义**，引擎不解释——`ToolBase.matchRule` 是扩展点。规则按 `toolName` 分三个表（allow / deny / ask）存，命中即返回对应 `PermissionDecision`（带 `message` 与 `decisionReason`，如 `"Rule: " + rule.ruleContent()`）。
+
+### Dangerous Paths
+
+`ToolDangerousPathConstants`（`tool/ToolDangerousPathConstants.java`）三张默认表：
+
+- `DEFAULT_DANGEROUS_FILES`（23 项）：shell rc（`.bashrc` / `.zshrc` / `.profile` …）、`.ssh/config`、`.ssh/authorized_keys`、`.netrc`、`.npmrc`、`.pypirc`、`.gitconfig`、`.gitmodules`、以及 8 个 `.env*` 变体（`.env` / `.envrc` / `.env.local` / `.env.development[.local]` / `.env.test[.local]` / `.env.staging` / `.env.production[.local]`）。javadoc 明确「Aligned with Python `tool/_constants.py`」。
+- `DEFAULT_DANGEROUS_DIRECTORIES`（4 项）：`.git` / `.vscode` / `.idea` / `.ssh`——路径中**任何一段**命中即算敏感。
+- `DANGEROUS_COMMANDS`（11 项）：`rm -rf` / `sudo rm` / `dd` / `mkfs` / `fdisk` / `format` / `chmod 777` / `chmod -R 777` / `chown -R` / `kill -9` / `> /dev/`。
+
+⚠️ 一个覆盖语义坑（类 javadoc 原文）：「Tools that override the fields on `ToolBase` **replace the defaults entirely rather than appending to them**」——子类覆写 `dangerousFiles` / `dangerousDirectories` 是整体替换，不是追加，容易把默认保护悄悄关掉。
+
+`ToolBase.isDangerousPath(filePath)` 是引擎第三步调用的判定入口；`@Tool(dangerousFiles=...)` / `@Tool(dangerousDirectories=...)` 则让单个工具方法自带额外清单。
+
+### External Execution And Suspend
+
+标记 `@Tool(externalTool = true)`（或 `SchemaOnlyTool` 注册）的工具不在框架内执行：抛 `ToolSuspendException`（`tool/ToolSuspendException.java`）把执行权交出去，框架发 `RequireExternalExecutionEvent`，结果由调用方回传，见 [智能体分册 HITL](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Agent.md)。
 
 ## Middleware
 
-中间件在 agent 生命周期的固定点位拦截行为。三类形态：
+`MiddlewareBase` 是**接口**（`middleware/MiddlewareBase.java:59`），提供 **5 个 hook**，分两种模式：
 
-- **Onion（洋葱式）**——包裹下一层 handler，可在 `next.apply(input)` 前后插逻辑、用 Reactor 算子观察 / 改写中间事件流。
-- **Transformer（变换式）**——middleware 串成流水线，前一个输出是后一个输入，无「内层」概念。
-- **Notification（通知式）**——单向同步通知，无 next 委托，固定点位按序执行。
+**洋葱型（4 个，before/after 包裹）**：
 
-嵌套关系（`onSystemPrompt` 嵌在 `onReasoning` 内，因为它在组装 system prompt 时触发）：
-
-```
-onAgent/
-├── onAgentStateReady（call 级 AgentState 就绪，输入尚未进入流水线）
-└── ReAct loop（每一轮）/
-    ├── onReasoning/
-    │   ├── onSystemPrompt（组装 system prompt）
-    │   └── onModelCall（模型 API 调用）
-    └── onActing（每次工具调用）
+```java
+default Flux<AgentEvent> onAgent(Agent agent, RuntimeContext ctx, AgentInput input,
+                                 Function<AgentInput, Flux<AgentEvent>> next);
+default Flux<AgentEvent> onReasoning(Agent agent, RuntimeContext ctx, ReasoningInput input,
+                                 Function<ReasoningInput, Flux<AgentEvent>> next);
+default Flux<AgentEvent> onActing(Agent agent, RuntimeContext ctx, ActingInput input,
+                                 Function<ActingInput, Flux<AgentEvent>> next);
+default Flux<AgentEvent> onModelCall(Agent agent, RuntimeContext ctx, ModelCallInput input,
+                                 Function<ModelCallInput, Flux<AgentEvent>> next);
 ```
 
-同一个 middleware 类可实现六个位置中任意子集（未实现的 Onion / Transformer 位置默认直通 `next.apply(input)`，通知式默认无操作），传给 builder 的 `middlewares(...)` 即可装备。`onActing` 只包裹 agent 运行时内部的工具执行，external execution 在 agent 外部执行的工具不被追踪。
+**管道型（1 个，顺序变换字符串）**：
+
+```java
+default Mono<String> onSystemPrompt(Agent agent, RuntimeContext ctx, String currentPrompt);
+```
+
+排序：`order()` 默认 **1**，数值越大越靠外层（`2` 在 `1` 之前执行），同级保持 builder 注册顺序。所有 hook 默认直接委托 `next`，子类只覆写关心的。
+
+一个高价值细节写在 `onModelCall` 的 javadoc 里（`:127-131`）：**中间件对返回流中 `TextBlockDeltaEvent` 的变换会反映进最终回复消息**，因此可以在原生结构化输出解析之前归一化模型文本。
+
+配套输入类型：`AgentInput`（消息）、`ReasoningInput`（消息 + 工具 + 选项）、`ActingInput`（工具调用）、`ModelCallInput`（消息 + 工具 + 选项 + model）、`MiddlewareChain`。
 
 ### Built-in Middleware
 
-| 中间件 | 作用 |
+**core 两个**：`FinalAnswerFilterMiddleware`（最终答复过滤）、`TaskReminderMiddleware`（任务提醒）。
+
+**harness 二十个**（`agentscope-harness/.../middleware/`，按职责分组）：
+
+| 分组 | 类 |
 | :--- | :--- |
-| `OtelTracingMiddleware`（`io.agentscope.core.tracing`） | 全生命周期 OpenTelemetry：`invoke_agent` 包裹整次 reply、`chat` 包裹每次模型调用、`execute_tool` 包裹每次工具执行。未配 SDK 时所有 hook 短路直通，近零开销。构造时（首次）会注册 JVM 级 Reactor hook 做跨线程 span 传播——**要在组装需要传播的管道之前先构造** |
-| `TaskReminderMiddleware` | 配合 `enableTaskList(true)`，每个 reasoning step 前把 `AgentState.tasksContext` 渲染成 `<system-reminder>` 注入，防长任务偏离计划 |
-| `FinalAnswerFilterMiddleware` | 只输出 ReAct 最终轮次文本，中间轮次文本被缓冲到模型调用结束（只有未观察到工具调用才能确认是最终轮） |
+| 上下文与压缩 | `CompactionMiddleware`（onReasoning，阈值超限时 5 步压缩）、`ToolResultEvictionMiddleware`（超大工具结果卸载到文件系统）、`WorkspaceContextMiddleware`（onSystemPrompt 注入 AGENTS.md / MEMORY.md / knowledge） |
+| 记忆 | `MemoryFlushMiddleware`（onAgent 的 doOnComplete，fire-and-forget 抽取事实）、`MemoryMaintenanceMiddleware`（周期维护：过期日文件归档 + LLM 合并，节流执行） |
+| 技能 | `HarnessSkillMiddleware`（harness 原生技能合成，onSystemPrompt 渲染 `<available_skills>`）、`SkillUsageMiddleware`（ SkillBox 技能调用计数，只记 `created_by="agent"`/`"agent-draft"`）、`SkillCuratorMiddleware`（call 结束后调度 curator，单线程守护Executor，不阻塞 agent loop）、`DynamicSkillMiddleware`（core 侧 legacy，已被 HarnessSkillMiddleware 取代） |
+| 子 Agent 与团队 | `SubagentsMiddleware`（默认模式造 `AgentSpawnTool` + `DefaultAgentManager`；session 模式注入外部 `SessionsTool` 替换之）、`DynamicSubagentsMiddleware`（每轮推理重新解析子 agent 集合，两层加载）、`SubagentEntry`、`TeamsMiddleware`（注入 AgentTeams 上下文 + 角色裁剪的 `TeamTool`） |
+| 输入与信箱 | `AtPathExpansionMiddleware`（展开用户消息里的 `@path`，追加 `<attached_file>`）、`InboxMiddleware`（每轮推理前 drain 信箱，以 `HintBlock` 注入并发 `HintBlockEvent`）、`AsyncToolMiddleware`（acting 超时的工具转后台，占位结果 + 完成推送 inbox） |
+| 运行时与沙箱 | `HarnessRuntimeMiddleware`（框架装配标记，`fromAgent(...)` 不复制）、`SandboxLifecycleMiddleware`（每次 call 前后借还沙箱会话、4 分支工作区初始化）、`TranscriptMiddleware`（每次 call 结束持久化 transcript，独立于 memory flush） |
+| 可观测 | `AgentTraceMiddleware`（INFO 摘要 / DEBUG 详单） |
 
-### Custom Middleware
+`DynamicSubagentsMiddleware` 的两层加载值得单记（javadoc）：**Layer 1（override）** `filesystem.glob("*.md", "subagents")` + 逐文件 read，后端的 `NamespaceFactory` 透明生效，每个用户看到自己的覆盖；**Layer 2** 继承静态声明。
 
-实现 `MiddlewareBase`，只重写需要的 hook 并用 `activePoints()` 声明：
-
-```java
-public class FullObservabilityMiddleware implements MiddlewareBase {
-    @Override
-    public Set<ExtensionPoint> activePoints() {
-        return EnumSet.of(ExtensionPoint.ON_AGENT, ExtensionPoint.ON_REASONING,
-                ExtensionPoint.ON_MODEL_CALL, ExtensionPoint.ON_SYSTEM_PROMPT);
-    }
-
-    @Override
-    public Flux<AgentEvent> onReasoning(Agent agent, RuntimeContext ctx,
-            ReasoningInput input, Function<ReasoningInput, Flux<AgentEvent>> next) {
-        return next.apply(input).doOnComplete(() -> System.out.println("[reasoning] end"));
-    }
-
-    @Override
-    public Mono<String> onSystemPrompt(Agent agent, RuntimeContext ctx, String currentPrompt) {
-        return Mono.just(currentPrompt);
-    }
-}
-```
-
-Harness 的自定义 middleware 注意：用 `.middleware(...)` 会跑在所有 Harness 内置 middleware **之前**；读身份走 `RuntimeContext`，写工作区必须用 `harnessAgent.getWorkspaceManager()`——直接 `java.nio.Files` 在沙箱 / 远端模式下会写错地方。
+中间件要动态注册工具时，必须用 `Agent.getToolkit()` 拿**运行时 toolkit**（`Agent.java:101-113` javadoc 原文提醒：agents may deep-copy the toolkit during construction，build 时捕获的引用可能不是 agent 实际用的那个）。
 
 ## Plan Mode
 
-Plan Mode 是**阶段级工具白名单 + HITL 退出**：只读思考阶段写计划，获批后才进执行阶段。本质是「用计划文件把『想清楚』与『做出来』解耦」，实现上完全靠工具放行名单。
+`PlanModeContextState`（`state/PlanModeContextState.java:37-40`）只有两个字段，但存放位置是关键：
 
-三个工具：`plan_enter`（进入）/ `plan_write`（写计划到 `plans/PLAN.md`）/ `plan_exit`（退出到执行阶段，HITL 确认）。`plan_write` 是专门设计的写入入口——避开把通用 `write_file` 加进白名单的安全风险。中间调用非白名单工具会被即时拒绝，模型看到 `PlanModeMiddleware.DENY_MESSAGE` 原文后自然切回「先写计划」。
+```java
+private boolean planActive;
+private String currentPlanFile;   // workspace 相对路径，markdown 蓝图
+```
 
-Builder：`enablePlanMode()` / `planFileDirectory(String)` / `allowShellInPlanMode()`。**默认禁 shell**——shell 是双用途工具，同一次调用可能是读（cat / ls / grep）也可能是写（rm / npm install），而 Plan Mode 只按工具名判定；放开后专用文件编辑工具（`write_file` / `edit_file`）仍被拒，只读保证比默认情况弱，建议配合沙箱文件系统。
+类 javadoc 说明了为什么它在 `AgentState` 里而不是进程内存：「agentscope agents are distributed and resumable: a plan-mode session must survive process restarts and hand-offs across nodes. Toggling the flag and persisting the `AgentState` is therefore the canonical way to switch modes dynamically at runtime.」
 
-运行终态有四态，`isPlanModeActive() == false` 是有歧义的——从未进入（合法决定）/ 进入并退出成功 / 仍在 plan 且有 PLAN.md（待批准）/ 仍在 plan 且无 PLAN.md（只说不做），要在代码里区分得同时记录是否调用过 `plan_enter` / `plan_write`。程序化入口：`agent.enterPlanMode(ctx)` / `exitPlanMode(ctx)` / `isPlanModeActive(ctx)`；配了 admin starter 还有对应 HTTP 接口。
+执行者是 `PlanModeMiddleware`（harness），javadoc 原文要点：
 
-Plan Mode 状态随 `AgentState` 持久化（进程重启、跨副本恢复后仍在），计划文件写工作区 `plans/` 跟随 filesystem 模式。Plan Mode 期间 spawn 的子 agent 自动继承只读限制。与 `todo_write` 的分工：Plan Mode 管阶段与计划文件，`todo_write` 管执行阶段的结构化清单（全量替换语义，必须恰好一个 in_progress），典型工作流是 plan 写完 → plan_exit → todo 拆解 → 逐条推进。
+- 求值发生在 **`onActing`**，且是确定性的；
+- 放行条件：**只读工具**，或计划控制工具之一（`plan_enter` / `plan_write` / `plan_exit` / `todo_write`）；
+- 其余工具得到一条**合成 `DENIED` tool result**（写进上下文并作为事件流出）而不真正执行；
+- 刻意**不复用 `PermissionMode`**——计划模式是阶段级约束，与权限模式正交。
+
+计划文件落 `plans/PLAN.md`（可用 `.planFileDirectory("design-docs")` 改路径），跨调用保留；Plan Mode 下 spawn 的子 Agent 会自动继承只读限制，详见 [技能分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Skill.md)。
+
+## MCP And Tool Groups
+
+`mcp/` 包：`McpClientManager`（客户端生命周期）、`McpClientWrapper`（`Toolkit.registerMcpClient` 的参数）、`RegisteredToolFunction` / `ReflectiveFunctionTool` / `SchemaOnlyTool` / `MetaToolFactory` / `SimpleExtendedModel` / `ExtendedModel`（扩展模型能力）、`ToolExecutor` / `ToolMethodInvoker`（反射调用）、`ToolSchemaGenerator` / `ToolSchemaModule` / `ToolSchemaProvider`（JSON Schema 生成）、`SkillToolGroup`（技能工具组）、`ToolMergeMode`。
+
+工具组相关：`ToolGroup`、`ToolGroupManager`（`replaceMetaActiveGroups(toActivate)` 是元工具的落点、`getMetaGroupNames()`、`isActiveTool(name, activeGroups)`）、`ToolGroupScope`（META / EXTERNAL）、`ToolkitConfig`（`parallel` 默认 **true**——同一轮多个同步工具调用并行推进）。
 
 ## Links
 
-- [AgentScope Java 主笔记](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/AgentScopeJava.md)
-- [AgentScope Java 智能体分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Agent.md)
-- [AgentScope Java 技能分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Skill.md)
-- [Permission Theory](/docs/CS/AI/LLM/Agent/Theory/Permission.md)
-- [Tools Protocol](/docs/CS/AI/LLM/Protocol/Tools.md)
-- [MCP Protocol](/docs/CS/AI/LLM/Protocol/MCP.md)
+- [主笔记](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/AgentScopeJava.md)
+- [智能体分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Agent.md)
+- [上下文分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Context.md)
+- [Permission](/docs/CS/AI/LLM/Agent/Theory/Permission.md)
+- [AgentScope（Python 版）](/docs/CS/AI/LLM/Agent/Product/AgentScope/AgentScope.md)
 
 ## References
 
 - [AgentScope Java 工具](https://java.agentscope.io/v2/zh/docs/building-blocks/tool)
 - [AgentScope Java 权限系统](https://java.agentscope.io/v2/zh/docs/building-blocks/permission-system)
 - [AgentScope Java 中间件](https://java.agentscope.io/v2/zh/docs/building-blocks/middleware)
-- [AgentScope Java 计划模式](https://java.agentscope.io/v2/zh/docs/harness/plan-mode)
+- [AgentScope Java Plan Mode](https://java.agentscope.io/v2/zh/docs/harness/plan-mode)

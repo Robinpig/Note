@@ -72,7 +72,7 @@ Blob 走独立的 `BlobStoreBase`（`app/rag/blob_store.py`），v2.0.8 提供 `
 
 `assign_workspace_id`（`_base.py:83`）按 policy 三档逻辑决定 id（`:95-132`）。`bind_storage` / `get_workspace` / `close` / `close_all` 是其余抽象方法。
 
-v2.0.8 的后端矩阵（`workspace_manager/`）：`LocalWorkspaceManager`（本地进程）、`DockerWorkspaceManager`、`KubernetesWorkspaceManager`、`DaytonaWorkspaceManager` / `E2BWorkspaceManager`（远端托管沙箱）、`BubblewrapWorkspaceManager`（源码注释警告**它不是网络沙箱**）、`OpenSandboxWorkspaceManager`、`AppleContainerWorkspaceManager`（macOS 原生容器）。公共基类 `SandboxedWorkspaceBase` 提供生命周期钩子、`_mcp_gateway_app.py` 网关启动、健康探测（`/health` 轮询，退避 0.1s→1.0s，超时 tail 日志）、清理。只有沙箱才有 MCP 网关——沙箱内的 MCP client 统一走网关代理（见 [AgentScope Workspace 与沙箱](/docs/CS/AI/LLM/Agent/Product/AgentScope/AgentScope.md) 的 BackendBase 三层划分）。
+v2.0.8 的后端矩阵（`workspace_manager/`）：`LocalWorkspaceManager`（本地进程）、`DockerWorkspaceManager`、`KubernetesWorkspaceManager`、`DaytonaWorkspaceManager` / `E2BWorkspaceManager`（远端托管沙箱）、`BubblewrapWorkspaceManager`（源码注释警告**它不是网络沙箱**）、`OpenSandboxWorkspaceManager`、`AppleContainerWorkspaceManager`（macOS 原生容器）。公共基类 `SandboxedWorkspaceBase` 提供生命周期钩子、`_mcp_gateway_app.py` 网关启动、健康探测（`/health` 轮询，退避 0.1s→1.0s，超时 tail 日志）、清理。只有沙箱才有 MCP 网关——沙箱内的 MCP client 统一走网关代理（见 [AgentScope 的 Workspace and Sandbox](/docs/CS/AI/LLM/Agent/Product/AgentScope/AgentScope.md?id=workspace-and-sandbox) 的 BackendBase 三层划分）。
 
 ## ResourceAccessPolicy
 
@@ -90,6 +90,32 @@ v2.0.8 的后端矩阵（`workspace_manager/`）：`LocalWorkspaceManager`（本
 
 `src/agentscope/app/channel/` 在 v2.0.8 已有**真实平台适配器**（非仅抽象层）：`Feishu`（飞书，`_feishu/`）、`Discord`（`_discord/`）、`DingTalk`（钉钉，`_dingtalk/`，含 `_card` / `_openapi` / `_tools`）。`ChannelBase` + `ChannelTypeRegistry` 是注册骨架；`ChannelClients` / `ChannelGateway` / `ChannelLifecycleDispatcher` 是连接与路由层。注意：**只有在 `channel_type_registry` 非空时才接线 channel 子系统**——否则 dispatcher 的 reconcile 会打到未实现 channel 方法的 storage 后端（`_lifespan.py:122-162`）。
 
+## Minimal create_app (Library Mode)
+
+`create_app` 三个依赖是必填：`storage` / `message_bus` / `workspace_manager`，其余全可选。`storage` 与 `message_bus` **刻意解耦**——持久化后端（SQL）和传输后端（Redis）可以不同。一个最小可跑的库模式接线（SQLite + 本地 workspace）：
+
+```python
+from agentscope.app import create_app
+from agentscope.app.storage._sql._storage import AsyncSQLAlchemyStorage
+from agentscope.app.workspace_manager._local_workspace_manager import (
+    LocalWorkspaceManager,
+)
+from agentscope.app.message_bus import InMemoryMessageBus   # 本地用；远程换 RedisMessageBus
+
+storage = AsyncSQLAlchemyStorage("sqlite+aiosqlite:///./as.db")  # 首次进入惰性建表
+workspace = LocalWorkspaceManager(basedir="./workspaces")          # PER_AGENT 隔离
+
+app = create_app(
+    storage=storage,
+    message_bus=InMemoryMessageBus(),     # 传输后端；远程部署换 RedisMessageBus
+    workspace_manager=workspace,
+    # 可选：knowledge_base_manager / mcp_hubs / skill_hubs /
+    #       channels / resource_access_policy / enable_scheduler ...
+)
+```
+
+落点对照上文：① `AsyncSQLAlchemyStorage(url)` 的 `__aenter__` 才建引擎、`create_tables=True` 时跑 `Base.metadata.create_all`，全新部署无需手动建库；时间戳统一存 naive UTC（`_utcnow` 生成）；② `LocalWorkspaceManager(basedir, isolation=PER_AGENT)` 的 workdir 从 `basedir/agent_id` 确定性重建，缓存 miss 时不需要查存储；③ 15 个 router 在 `create_app` 内部一次性 `include_router`，但只有当对应子系统被接线（如 `channel_type_registry` 非空、或传入 `mcp_hubs`）时才真正生效——否则 dispatcher 的 reconcile 会打到未实现该方法的 storage 后端而报错。生产部署建议 `agentscope[service]` + `agentscope[storage-sql]` + 远端 `WorkspaceManager`（Docker/K8s/Daytona/E2B）与 `RedisStorage` / `RedisMessageBus`。
+
 ## Packaging
 
 依赖按组分包，核心包只依赖模型 SDK：
@@ -102,8 +128,8 @@ v2.0.8 的后端矩阵（`workspace_manager/`）：`LocalWorkspaceManager`（本
 ## Links
 
 - [AgentScope](/docs/CS/AI/LLM/Agent/Product/AgentScope/AgentScope.md)
-- [AgentScope Pipeline 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Pipeline.md)
-- [AgentScope 中间件分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Middleware.md)
+- [Pipeline 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Pipeline.md)
+- [Middleware 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Middleware.md)
 
 ## References
 

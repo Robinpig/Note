@@ -8,6 +8,8 @@ Hermes Agent（"The agent that grows with you"）是 **Nous Research 开源、NV
 
 > 本笔记聚焦 Hermes 自身的工程机制；自进化的评测体系、CI/CD 与人的校准作用见 Self-Evolving。下文所有配置项均来自仓库 `cli-config.yaml.example`，实现细节来自对应源码模块。
 
+> 本笔记定位为 **Self-Evolving 的落地标本**（机制视角）。Hermes 同时是一个完整产品，其**工程实现侧的源码级拆解**已独立成族：[Hermes 产品家族](/docs/CS/AI/LLM/Agent/Product/Hermes/Hermes.md)（主笔记 + 7 个专题页：Architecture / AgentLoop / Tools / Skills / Memory / Gateway / Extensions），基线 main @ 2026-10-17。两篇互为表里，配置项数字若有差异以产品家族的源码核查为准（例如 delegation 默认 `max_concurrent_children: 10` / `max_spawn_depth: 1`，见其 Tools 篇）。
+
 ## Architecture: Three-Layer Backbone + Multiple Entries
 
 | 层 | 组件 | 职责（已核实） |
@@ -137,6 +139,7 @@ Hermes 的主路径是**上下文/记忆进化**；Skill 创建与 patch 是 Har
 
 ## Links
 
+- [Hermes 产品家族（源码剖析）](/docs/CS/AI/LLM/Agent/Product/Hermes/Hermes.md) — 主笔记 + 7 个专题页，工程实现侧的源码级拆解
 - [Self-Evolving](/docs/CS/AI/LLM/Agent/Practice/Self-Evolving.md) — 自进化理论、评测与 CI/CD（Hermes 案例的完整上下文）
 - [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md) — Harness 补偿面理论与 Agent 开发三层
 - [Skill](/docs/CS/AI/LLM/Agent/Theory/Skill.md) — SKILL.md 规范（与 Hermes 的 agentskills.io 格式同构）

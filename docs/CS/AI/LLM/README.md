@@ -2,12 +2,12 @@
 
 `LLM/` 下面有四层，按**「一个 LLM 应用从选模型到上线」的真实顺序**组织。这一页是 `LLM/` 的入口，模型层的细节从 [模型总览](/docs/CS/AI/LLM/Model/Overview.md) 进。
 
-| 目录 | 装什么 | 枢纽 |
+| 分层 | 装什么 | 入口 |
 | :--- | :--- | :--- |
-| [`Model/`](https://github.com/Robinpig/Note/blob/master/docs/CS/AI/LLM/Model/Overview.md) | 模型本体与厂商：型号、架构、定价、权重与许可 | [模型总览](/docs/CS/AI/LLM/Model/Overview.md) |
-| [`Protocol/`](https://github.com/Robinpig/Note/blob/master/docs/CS/AI/LLM/Protocol/Tools.md) | 跨厂商接入协议：工具调用、MCP、A2A | [Tools](/docs/CS/AI/LLM/Protocol/Tools.md) |
-| [`Agent/`](https://github.com/Robinpig/Note/blob/master/docs/CS/AI/LLM/Agent/README.md) | 包裹模型的运行框架与编程 Agent，按机制 / 产品 / 演进分三层 | [Agent 目录](/docs/CS/AI/LLM/Agent/README.md) |
-| [`Platform/`](https://github.com/Robinpig/Note/blob/master/docs/CS/AI/LLM/Platform/Platform.md) | 可视化把模型组装成服务的现成产品 | [LLM 应用开发平台](/docs/CS/AI/LLM/Platform/Platform.md) |
+| Model | 模型本体与厂商：型号、架构、定价、权重与许可 | [模型总览](/docs/CS/AI/LLM/Model/Overview.md) |
+| Protocol | 跨厂商接入协议：工具调用、MCP、A2A | [Tools](/docs/CS/AI/LLM/Protocol/Tools.md) |
+| Agent | 包裹模型的运行框架与编程 Agent，按机制 / 产品 / 演进分三层 | [Agent 目录](/docs/CS/AI/LLM/Agent/README.md) |
+| Platform | 可视化把模型组装成服务的现成产品 | [LLM 应用开发平台](/docs/CS/AI/LLM/Platform/Platform.md) |
 
 先说清这个目录最常见的混淆点：**「模型」和「模型上的东西」不是一回事**。DeepSeek 有模型，也开源了 agent 框架（dsh）；Anthropic 有 Claude 模型，也有 Claude Code 工具。两者在工程上完全不同——模型是 API 定价的消费者，Agent 是 API 的调用方。所以它们分处 `Model/` 与 `Agent/`，前者关心上下文长度与每百万 token 的价格，后者关心 loop、工具与记忆。搞混这一点，选型时会拿完全不同的指标去比。
 

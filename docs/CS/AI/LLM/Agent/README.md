@@ -4,17 +4,19 @@
 
 这个目录按**「机制 → 产品 → 演进」**三层组织。这个划分不是按篇幅或时间，而是按**读者要回答的问题**：想搞懂原理看 Theory，想选一个工具干活看 Product，想知道这层架构往哪走看 Practice。
 
-| 目录 | 装什么 | 枢纽 |
+| 分层 | 装什么 | 入口 |
 | :--- | :--- | :--- |
-| [`Theory/`](https://github.com/Robinpig/Note/blob/master/docs/CS/AI/LLM/Agent/Theory/Agent.md) | 机制与概念：Agent 四组件、Harness 工程、权限与沙箱、Skill 规范、上下文压缩 | [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) |
-| [`Product/`](https://github.com/Robinpig/Note/blob/master/docs/CS/AI/LLM/Agent/Product/Codex/Codex.md) | 具体的 Agent 产品与框架实现 | [Codex 源码剖析](/docs/CS/AI/LLM/Agent/Product/Codex/Codex.md) |
-| [`Practice/`](https://github.com/Robinpig/Note/blob/master/docs/CS/AI/LLM/Agent/Practice/Self-Evolving.md) | 演进方向与开发方式的自变化 | [Self-Evolving](/docs/CS/AI/LLM/Agent/Practice/Self-Evolving.md) |
+| Theory | 机制与概念：Agent 四组件、经典范式、Harness 工程、权限与沙箱、Skill 规范、上下文压缩 | [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) |
+| Product | 具体的 Agent 产品与框架实现 | [Codex 源码剖析](/docs/CS/AI/LLM/Agent/Product/Codex/Codex.md) / [Hermes 源码剖析](/docs/CS/AI/LLM/Agent/Product/Hermes/Hermes.md) |
+| Practice | 演进方向与开发方式的自变化 | [Self-Evolving](/docs/CS/AI/LLM/Agent/Practice/Self-Evolving.md) |
 
-## How the Five Theory Articles Divide Responsibilities
+## How the Six Theory Articles Divide Responsibilities
 
 这几篇的关系是**从抽象到具体**，不是并列：
 
 **Agent** 是总纲。它给出最核心的那个定义——**AI Agent 是一个能调用工具的循环系统**，以及四组件（Loop / Tools / Memory / Harness）。它的 ReAct 循环四步（Reason / Act / Observe / 回环）是所有 Agent 表面不同、底层一致的那层机制。常见的 Agent 模式（ReAct、Plan-and-Execute、Multi-Agent、SubAgent）也在这篇。
+
+**Paradigm** 回答循环内部的组织方式问题：同样的 Reason-Act-Observe 四步，ReAct 每步重新决策（走一步看一步）、Plan-and-Solve 先一次性产出完整计划再严格执行（三思而后行）、Reflection 在任务完成后追加"执行-反思-优化"的自我批判迭代。三种范式各自的机制、提示词设计、代价与选型都在这篇。它的落点是一个 **TypeScript 最小 Agent Loop**——单文件、零第三方依赖，把提示词协议、正则解析、history 回灌、Finish 收敛、maxSteps 安全阀全部写进一个十几行的循环里；框架做的事，就是在这十几行上加重试、观测、权限与压缩，所以想看懂框架的抽象层究竟加在哪，先读这十几行。
 
 **Harness** 是四组件里最容易被误解的一个，也是真正决定成败的一个。它的定义反直觉：**Harness 不是「越多越好」，而是对模型能力缺口的补偿面**。模型每强一分，曾经必需的组件就该抽掉一层——照抄别人的组件清单不会让 Agent 变强，反而可能在长任务里拖后腿。所以那篇值得读的不是「有哪些组件」，而是「现在该补哪一块、该拆哪一块」的判断方法。它还厘清了一个高频混淆：Runtime / Framework / Harness 三层分别解决「能稳定运行」「能方便开发」「能直接完成复杂任务」。
 
@@ -24,7 +26,7 @@
 
 **Compaction** 讲长会话怎么在窗口耗尽前活下来。它最反直觉的地方在**代价结构**上：压缩不是免费的，而是拿「模型对原始上下文的可见性」换「更长的会话时长」——厂商承认能力会下降（Codex 每次压缩后向用户发警告，说长线程与多次压缩会让模型变得不够准确）。这篇的骨架是六件事：阈值怎么定（**几乎全是 token 预算，不是「最近 N 轮」**）、保留什么、摘要由谁生成（**基本都要额外调一次 LLM**）、能否恢复（**原文通常还在盘上，但模型几乎都取不回**）、失败怎么处理、以及和 KV 缓存的交互（**各家在压缩过程中刻意在保缓存**：DSH 把指令放在回放前缀之后以复用热前缀，Claude Code 复用 system prompt 层，Pi 干脆禁掉摘要请求的 cache 写入）。附一张五家对比表与「陷阱」清单——其中「压缩会不会丢 skill 正文」的精确答案在 Claude Code 官方表里：**会重新注入，但每 skill 上限 5K、总计 25K token，超限时最老的先被丢弃**，这比直接消失更隐蔽。
 
-## Product: Eight Implementations
+## Product: Nine Implementations
 
 编程 Agent 是这一层最成熟的产品形态，几家的差异比想象中大，**不在「谁更强」而在架构选择**：
 
@@ -32,6 +34,7 @@
 - **[OpenCode](/docs/CS/AI/LLM/Agent/Product/OpenCode/OpenCode.md)** 与 **[Pi](/docs/CS/AI/LLM/Agent/Product/Pi/Pi.md)** 的卖点是**模型无关**——同一套 Agent loop 驱动 Anthropic / OpenAI / 任意 OpenAI 兼容端点。OpenCode 是客户端/服务器架构（内核是本地 HTTP 服务，TUI/Web/IDE 都是客户端，可远程 attach），已拆分为枢纽主文件 + 10 个专题页（Architecture / Agent / Tools / Rules / Skills / Commands / TUI / MCP / Plugin / CLI，2.0 为独立主版本线、1.x 永不被动推到 2.x），以 npm `opencode-ai` 1.19.2 稳定线为基线覆盖 C/S 边界、双主 Agent 与 13 键权限模型、Markdown 扩展面与 Plugin 事件钩子；Pi 则把能力藏进基础操作里（会话树、`@` 引用、Shell 集成），并把 Skill 与 Extension 的分工划得很清。Pi 已拆分为枢纽主文件 + 6 个专题页（Session / Interaction / Context / Extensions / Security / Architecture，原 `LLM/Pi-Architecture.md` 已并入家族目录），以 v1.3.0 + main 为基线覆盖 JSONL 会话树与三分支操作、每命令独立 shell 进程的 Shell 集成、压缩阈值公式与切割点规则、Agent Skills 规范与 Extension 工具 exposure 五态、project trust 决策链与四类隔离环境、11 个 workspace 包的两层协作循环。
 - **[DSH](/docs/CS/AI/LLM/Agent/Product/DSH/DSH.md)** 是**架构哲学最激进的一个**：「一切皆插件」，连驱动 Agent 运转的主循环都只是默认插件实现之一，没有特权内核。已拆分为枢纽主文件 + 7 个子文件（Cordis 微内核、Agent Loop & Session、Context/Memory/Knowledge、Permission & Sandbox、Subprocess Management、Tool Layer、Plugin Development），逐行源码剖析覆盖了 Fiber 状态机、事件分派五模式、进程树收割六类死法等底层机制。
 - **[OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw/OpenClaw.md)** 走的是另一条路：**本地优先的个人助手网关**，核心是接管 20 多种通讯软件 + 多 agent 路由，不服务于「写代码」这件事。已拆分为枢纽主文件 + 15 个专题页（Gateway / Lifecycle / Clients / Deployment / Runtime / Memory / SubAgent / Process / Channels / Storage / Plugins / Integrations / Media / Security / Observability），源码级覆盖 18789 单端口协议面、worker placement 的 turn claim 权威链、SQLite-only 存储与 context engine 插件化压缩。
+- **[Hermes](/docs/CS/AI/LLM/Agent/Product/Hermes/Hermes.md)** 是 **Nous Research 开源、MIT 许可的自进化个人 AI agent**：同一套 agent core 跑在 CLI / TUI / 消息网关（约 27 个平台）/ Electron 桌面端，跨会话持续沉淀记忆与 Skill，用 40+ 个 model-provider、在本地硬件或云端 24/7 运行。已拆分为枢纽主文件 + 8 个专题页（Architecture / AgentLoop / Tools / Skills / Memory / Gateway / Evolve / Extensions / Infrastructure），源码级覆盖 facade/siblings 三层骨架、34 段 turn 循环、registry 自发现 28 toolset、curator 自进化 Skill 生命周期与 background review 复盘、FTS5+CJK 会话检索、双消息守卫网关、「插件不碰 core」铁律，以及 fts5_cjk / pm / docker / acp_adapter 差异化基建。与 OpenClaw 同源本地优先个人助手路线，并显式提供 `hermes claw migrate` 一键迁移。
 - **[AgentScope](/docs/CS/AI/LLM/Agent/Product/AgentScope/AgentScope.md)** 是这层里**唯一的通用 Python Agent 框架**（非编程 Agent 产品），阿里巴巴开源，v2.0 起把 Framework 和 Harness 两层合并：单一 `Agent` 类内置 ReAct 循环、七 hook 中间件、五模式权限引擎、结构化上下文压缩与运行时状态注入，往下有 formatter / workspace 沙箱 / RAG / Skill 四套基础设施，再往上附带 FastAPI Agent Service（多租户、频道接入、Hub、调度）。源码级剖析见该文。
 - **[AgentScopeJava](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/AgentScopeJava.md)** 与上面的 AgentScope 是**同族不同语言的两个独立框架**（`agentscope-java` 仓库，Java 21+/Reactor 响应式），不是后者的移植版——Event/Message 模型、Session Log 持久化、沙箱后端选型都是独立设计。它把 Session Log（commits/blobs/inbox 三层结构 + 原子 CAS）做成一等模块，往下扩出 Workspace（文件系统模式 × 沙箱后端 × IsolationScope 三维）、Skill（四层合成 + 市场后端 + 自学习闭环）与 SubAgent（同步/后台/远程三态）。已拆分为枢纽主文件 + 7 个子文件。
 
@@ -43,13 +46,13 @@
 
 **[Self-Evolving](/docs/CS/AI/LLM/Agent/Practice/Self-Evolving.md)** 问的是：一次会话里的经历，能不能沉淀成下次可用的能力。它把这件事拆成上下文/记忆进化与结构进化两条路径，并配上评测体系（没有评测就没有进化）、Agent CI/CD 与人的校准位置。它也诚实地写了对立面——**闭环存在 ≠ 每次循环都会变好**，并给出「五类不能永久交给 Agent 的决策」。
 
-**[Hermes](/docs/CS/AI/LLM/Agent/Practice/Hermes.md)** 是这条路的完整落地标本：三层记忆、Periodic Nudges 后台复盘、Autonomous Skill Creation 让 Agent 自建 Skill。它同时是理解 Harness 工程的具体实例——三层的每一层都能在其他产品里找到对应物。
+**[Hermes](/docs/CS/AI/LLM/Agent/Practice/Hermes.md)** 是这条路的完整落地标本：三层记忆、Periodic Nudges 后台复盘、Autonomous Skill Creation 让 Agent 自建 Skill。它同时是理解 Harness 工程的具体实例——三层的每一层都能在其他产品里找到对应物。其工程实现侧的源码级拆解见 [Hermes 产品家族](/docs/CS/AI/LLM/Agent/Product/Hermes/Hermes.md)（主笔记 + 8 个专题页）。
 
 **[Vibe](/docs/CS/AI/LLM/Agent/Practice/Vibe.md)** 记录的是这层工具对开发方式本身的反向影响：从 Karpathy 2025-02 提出的「氛围编程」，到他在 2026-02 亲手判定它 passé 并改推「agentic engineering」，再到 SDD（规范驱动开发）成为严肃工程的答案。它也订正了一个常见误解——原教旨版 vibe coding 是「不读 diff、只适合扔掉级项目」，把这个纪律用到生产系统上才是风险来源；后者（用 AI 写代码然后认真 review）其实是普通的软件开发。讨论「AI 参与写代码之后，人该把注意力放在哪」——答案是方向、判断与品味，以及把它们固定下来的 spec。
 
 ## A Sense of Orientation
 
-四个组件各自对应什么、谁最容易被搞错，一张表收尾：
+四组件与 Skill 封装各自对应什么、谁最容易被搞错，一张表收尾：
 
 | 组件 | 是什么 | 最常见的误解 | 详见 |
 | :--- | :--- | :--- | :--- |
@@ -67,6 +70,6 @@
 
 - [LLM 总纲](/docs/CS/AI/LLM/LLM.md)
 - [模型总览](/docs/CS/AI/LLM/Model/Overview.md)
-- [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md)
-- [Skill](/docs/CS/AI/LLM/Agent/Theory/Skill.md)
-- [Self-Evolving](/docs/CS/AI/LLM/Agent/Practice/Self-Evolving.md)
+- [Paradigm](/docs/CS/AI/LLM/Agent/Theory/Paradigm.md)
+- [Permission](/docs/CS/AI/LLM/Agent/Theory/Permission.md)
+- [Compaction](/docs/CS/AI/LLM/Agent/Theory/Compaction.md)

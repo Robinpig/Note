@@ -87,7 +87,7 @@
 
 ## Links
 
-- [解剖学](/docs/Sports/Anatomy.md)
+- [解剖学](/docs/Medicine/Anatomy.md)
 - [概率论与数理统计](/docs/Mathematics/Probability_Statistics.md)
 - [生理心理学](/docs/Psychology/Biological_Psychology.md)
 - [伦理学](/docs/Philosophy/Ethics.md)

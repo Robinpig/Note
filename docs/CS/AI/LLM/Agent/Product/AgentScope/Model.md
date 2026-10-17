@@ -94,6 +94,45 @@ _adapter = TypeAdapter(
 - `EmbeddingModelBase`（`embedding/_embedding_base.py`）——`__call__(inputs, **kwargs)` 按 `batch_size` 切批后 `asyncio.gather` 并发，最后按序 merge 保序；`TextBlock` 入参自动解包取 `.text`。另有 `EmbeddingCacheBase` / `FileEmbeddingCache`
 - `TTSModelBase`（`tts/_tts_base.py`）——`synthesize()` 唯一抽象，`push()` 非阻塞且可能返回空 `TTSResponse`；`connect()` / `close()` 只对 realtime 场景有意义
 
+### Model Instantiation and Structured Output
+
+构造一个 chat 模型只需凭据 + 模型名（formatter 与 `_format_tools` 由子类在 `__init__` 注入，无需用户传）。结构化输出有两种入口——直接走模型，或交给 Agent 在 `reply()` 时声明：
+
+```python
+from pydantic import BaseModel
+from agentscope.agent import Agent
+from agentscope.credential import OpenAICredential
+from agentscope.message import UserMsg
+from agentscope.model import OpenAIChatModel
+from agentscope.tool import Toolkit
+
+model = OpenAIChatModel(
+    credential=OpenAICredential(api_key="sk-..."),
+    model="gpt-4.1", stream=True, max_retries=3,
+)
+
+# 入口 1：模型直出结构化对象（四级 fallback 链见上文）
+class Answer(BaseModel):
+    lang: str
+    summary: str
+
+resp = await model.generate_structured_output(
+    messages=[UserMsg(name="user", content="用一句话介绍 AgentScope。")],
+    structured_model=Answer,          # 也可传 dict schema
+)
+print(resp.content)                   # Answer 实例（或 None）
+
+# 入口 2：交给 Agent，reply 返回 Msg，结构化结果进 Msg.structured_output
+agent = Agent(name="a", system_prompt="...", model=model, toolkit=Toolkit())
+reply = await agent.reply(
+    UserMsg(name="user", content="..."),
+    structured_schema=Answer,         # Agent.reply / reply_stream 都接受
+)
+data = reply.structured_output        # dict（不是 Answer 实例）
+```
+
+两个易混点：① 模型直出的 `generate_structured_output` 返回的是**模型实例**（`structured_model` 是 `BaseModel` 子类时），而经 Agent 的 `structured_schema` 落到 `Msg.structured_output` 里的是**字典**——Agent 层统一把结构反序列化成 `dict` 透传给上层，避免把 Pydantic 依赖强加给调用方；② 模型直出时若显式传了 `tool_choice`，整条 fallback 链退化为单策略 `("explicit", ...)`，不会再做 forced→auto→no_think 的降级尝试。`stream=True` 下走流式累加（见 `Stream Accumulation by Block ID`）；非流式则直接拿整条 `ChatResponse`。
+
 
 
 ## Links
