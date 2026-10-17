@@ -133,6 +133,18 @@ Note/
 - 固定交叉点：`Spine_Health/Posture_and_Load.md`（**红旗表与 24 小时判读规则的母本，只引用不重述**）、`Spine_Health/Cervical_Spondylosis.md`（神经根型与"颈痛是结局标记"）、`Sports/Anatomy.md`（渐进超负荷的一般原则）、`Weight_Management/`（体重改变的是峰值负荷）、`Medicine/Diagnosis.md`（鉴别与危险分层的方法学）、`Medicine/Basic_Medicine.md`（解剖学入口——⚠️ `Medicine/Anatomy.md` 目前尚未入库，不要挂链到它）。
 - 领域枢纽是 `Sports/Sports.md`（它是**四条线**：解剖 / 减重 / 脊柱 / 关节肌腱，改子树时同步那个数字与 Links）。
 
+## Higress 笔记的组织（`docs/CS/Framework/Higress/`）
+
+2026-10 拆分，`Framework/` 里第一个「枢纽 + 多分册」形态的中间件子树（原先是一篇平面笔记）：
+
+- 结构为 `Higress.md`（枢纽，含**三条贯穿主线：先问能力在哪一层 / 插件行为由 phase 与 priority 决定而非插件名 / 二手描述普遍比官方文档乐观**）+ 9 篇分册：`Architecture.md`、`AI_Gateway.md`、`Plugin_System.md`、`Wasm_Development.md`、`Traffic_Governance.md`、`Service_Discovery.md`、`Security_and_Auth.md`、`Observability.md`、`Deployment_and_Ops.md`。**枢纽沿用原文件名 `Higress.md`，全库原有 12 处入链不受影响**——拆分不改名、不移动，这是本子树的做法。
+- **分册按「机制差异最大的维度」切开，不按功能清单平铺**：架构页的重心是**翻译链 + pilot fork 边界**（四个配置入口 → Istio 资源 → xDS）；AI 网关页是**能力分布在三层**（Wasm 插件 / 控制台路由层 / 网关内置 filter，模型级 fallback 只在第二层）；插件体系页独占**阶段与优先级总表**；流量页是限流与灰度各自的多套入口；服务发现页是 `McpBridge` 与 destination 命名规则；安全页是"哪些认证插件走 consumer 模型"这个归类问题。加新分册前先定主导维度，不要写成第二份「Higress 功能大全」。
+- ⚠️ **两处共用件只引用不重述**：`Plugin_System.md` 的 phase/priority 总表、`Wasm_Development.md` 的 cluster 寻址规则。本子树多条结论都由它们推出——"缓存命中会绕过 token 限流与配额"、"Redis 与追踪后端必须先注册成服务来源"、"`redis.static` 不写端口连的是 80"。
+- ⚠️ **信源与核实口径**（本库目前唯一以官方文档站为一手信源的子树，因为**源码通道在本机不可用**）：这个题目二手博客与生成式资料泛滥，正文的字段名、默认值、端口、枚举必须回 `higress.ai/docs/latest/` 逐条核实。取正文的做法：`curl` 抓 Astro Starlight 页 + 正则抽 `<div class="sl-markdown-content">`（**WebFetch 抓这些页会 120s 超时**）；**文档 URL 一律取自 `https://higress.ai/llms.txt`，不要凭印象拼路径**（`higress.io/en/docs/...` 返回 404）。⚠️ `raw.githubusercontent` / `cdn.jsdelivr.net` / `unpkg` / `registry.npmjs.org` 本机均不可用（连接被重置或 000），`api.github.com` 全机共享 60/小时极易打光，**整仓 clone 与 blobless sparse clone 都超时失败** → 源码级断言拿不到；凡"必须回源码才能确认"的内容，一律降级成文档口径或明确写进该页 `## Unverified`。**每篇分册末尾都有 `## Unverified` 小节，这是本子树的固定结构，也是硬禁区：那里面的东西一条都不许写进正文。**
+- ⚠️ **已证伪、禁止再写回正文的清单**（都曾以"事实"形态流传）：`ai-security-guard` 的 "block / mask / audit 三种处置"（只有检查+拒绝，脱敏属 `ai-data-masking`）；"WAF 依赖 ModSecurity 引擎"（底座是 Coraza，兼容的是 SecLang 与 Phase 规范）；"多 API Key 轮询"（文档原文是随机）；"模型级 fallback 是 `ai-proxy` 的能力"（在控制台 AI 路由管理的降级配置）；指标端口 15090（三处证据只有 15020）；"LITE_METRICS 精简指标开关"（无对应字段）；"50+ 官方插件"（官方标 41）；"本地限流配 100 QPS、3 副本实际约 300 QPS"（无出处；官方"每实例"口径是 `higress.io/route-limit-rps|rpm`，且带默认 **5 倍** burst 放大）；`ProcessStreamDone`（真名 `wrapper.ProcessStreamDoneBy`）；"`hgctl config`"（子命令是 profile / install / upgrade / dashboard / uninstall / plugin）；"nacos 可作 MCP server 注册源"（仅 `nacos3`）；"Http2Rpc 支持 Dubbo3 Triple"（官方逐字"暂不支持 Triple 协议"，Triple 走 gRPC 直接代理）；语义缓存阈值字段 `similarityThreshold`（实为 `vector.threshold` + `vector.thresholdRelation`，且默认组合对 Cosine / DotProduct 永不命中）。
+- 领域枢纽是 `Framework/README.md` 的 `Service Mesh and Gateway` 一节（与 Istio 子树并列）；`docs/CS/CS.md` 的云原生一节也挂了入口。
+- 固定交叉点：`Istio/Istio.md`（xDS 与 pilot 的母本）、`Istio/Envoy.md`、`Istio/WasmPlugin.md`（Higress 的 `extensions.higress.io/v1alpha1` 与 Istio 原生 CRD 的关系）、`Istio/TrafficManagement.md`、`Istio/Security.md`、`Istio/Observability.md`、`Spring_Cloud/gateway.md` 与 `Spring_Cloud/Alibaba.md`、`Container/k8s/Ingress.md`、`CN/nginx/compare.md`（ingress-nginx 停维与迁移动机）、`nacos/Nacos.md`、`Dubbo/Dubbo.md`、`gRPC/gRPC.md`、`consul/Consul.md`、`eureka/Eureka.md`、`AI/AI.md` 与 `AI/LLM/LLM.md`（AI 网关的模型侧）。新增内容优先链到这些已有页，不要重复新建。
+
 ## Linux 内核笔记的组织（当前主力方向）
 
 `docs/CS/OS/Linux/` 是全库最活跃的子树，组织规则容易踩错：
