@@ -14,7 +14,7 @@
 | `workspace-write` | 工作区内可写，配 `writable_roots` 等细项 |
 | `danger-full-access` | 完全访问，无沙箱保护 |
 
-**默认 `read-only`**——这与 Claude Code 沙箱默认关闭正好相反，是 Codex 保守安全姿态的基线。模式由 `TrustLevel`（项目目录信任级）与显式配置共同决定，见 [Approval](/docs/CS/AI/LLM/Agent/Product/Codex/Approval.md)。
+**默认 `read-only`**——这与 Claude Code 沙箱默认关闭正好相反，是 Codex 偏保守的安全基线。模式由 `TrustLevel`（项目目录信任级）与显式配置共同决定，见 [Approval](/docs/CS/AI/LLM/Agent/Product/Codex/Approval.md)。
 
 ## Platform Backends
 
@@ -26,7 +26,7 @@
 | Linux | 进程内限制（`no_new_privs` + seccomp）+ bubblewrap 文件系统隔离 | `linux-sandbox/src/`（`seccomp.rs`、`bwrap.rs`、`launcher.rs`、`fd_mount.rs`） |
 | Windows | 受限令牌沙箱 + 独立服务进程 | `windows-sandbox-rs`、`windows-sandbox-service`、`mxc-sandbox` |
 
-几个值得知道的实现细节：
+几个实现细节：
 
 - **Linux 侧双管齐下**：`no_new_privs` + seccomp 收窄系统调用（进程内、无外部依赖），bubblewrap 做文件系统命名空间隔离；bwrap 可以打包随二进制分发，且**启动前做摘要校验**（`BUNDLED_BWRAP_DIGEST_VERIFICATION_FAILURE_EXIT_CODE = 8`），校验失败直接拒绝启动
 - **Seatbelt 有配套 daemon 与 TLS 测试**：`seatbelt_daemon.rs`、`seatbelt_tls_tests.rs`、`seatbelt_network_tests.rs` 说明网络与 TLS 行为是沙箱策略的一等公民

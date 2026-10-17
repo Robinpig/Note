@@ -2,7 +2,7 @@
 
 ## Introduction
 
-OpenAI Codex 是一个 AI 编程代理（AI Coding Agent），目标不是帮你补全代码，而是直接参与并完成整个开发任务——写代码、修 Bug、跑测试、提 Pull Request。它有多种形态：本地 CLI、IDE 扩展（VS Code / Cursor / Windsurf）、桌面应用（`codex app`）与云端 Codex Web，但**它们共享同一个 Rust 实现的内核**——这正是它作为 Harness 工程样本的价值：协议不变，前端可以任意增加。
+OpenAI Codex 是一个 AI 编程代理（AI Coding Agent），目标不是帮你补全代码，而是直接参与并完成整个开发任务——写代码、修 Bug、跑测试、提 Pull Request。它有多种形态：本地 CLI、IDE 扩展（VS Code / Cursor / Windsurf）、桌面应用（`codex app`）与云端 Codex Web，但**它们共享同一个 Rust 实现的内核**——协议不变，前端可以任意增加。
 
 Harness 的通用概念（三层边界 Host/Harness/Model、Thread/Turn/Step/Item 四级粒度、四层安全、业务系统接入要点）已提炼到 [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md) 笔记的「工程实例：Codex」一节。本篇是 Codex 的**总入口**：安装、总体结构与八个专题页的导览；源码级实现细节在 `Codex/` 子目录的各分册。
 
@@ -23,7 +23,7 @@ brew install --cask codex
 - 认证凭据落在 `~/.codex/`（`CODEX_HOME`）下，默认 `auth.json`，也可配置系统 keyring 后端
 - 强制走 GitHub Releases：`CODEX_INSTALLER_USE_RELEASES_OPENAI_COM=false curl -fsSL https://chatgpt.com/codex/install.sh | sh`
 
-## Architecture at A Glance
+## 架构速览
 
 仓库三块：`codex-cli`（Node.js 包装层）、`codex-rs`（Rust 工作区，Harness 主体，约 110 个 crate）、`sdk/`（Python / TypeScript SDK）。crate 按职责分十组——内核（core/protocol/config）、执行（exec/exec-server）、沙箱（sandboxing/linux-sandbox/windows-sandbox-*）、工具（tools/codex-mcp）、控制面（app-server 一族）、Agent 协作（agent-roles/graph-store/message-board）、扩展（plugin/skills/hooks/connectors）、记忆（memories）、持久化（rollout/thread-store）、云与远程（cloud-tasks/code-mode/realtime-webrtc）。
 

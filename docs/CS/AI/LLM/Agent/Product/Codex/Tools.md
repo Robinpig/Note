@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Codex 的工具系统回答三个问题：**模型能看到哪些工具**（ToolRouter 的 `model_visible_specs`）、**多个工具调用怎么并发**（ToolCallRuntime 的锁闸门）、**执行过程怎么留痕**（`executed_tool_calls` 记录器）。再加上 `spec_plan` 的计划层与网络审批上下文，构成「模型能力 ↔ 执行器」之间的完整中间层。
+Codex 的工具系统回答三个问题：**模型能看到哪些工具**（ToolRouter 的 `model_visible_specs`）、**多个工具调用怎么并发**（ToolCallRuntime 的锁闸门）、**执行过程怎么留痕**（`executed_tool_calls` 记录器）。再加上 `spec_plan` 的计划层与网络审批上下文，构成「模型能力 ↔ 执行器」之间的中间层。
 
 ## ToolRouter
 

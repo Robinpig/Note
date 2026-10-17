@@ -15,7 +15,7 @@ codex/
 └── sdk/                # Python / TypeScript SDK
 ```
 
-分发形态有三条互不依赖的安装路径（curl 安装脚本 / npm / Homebrew），加上 IDE 扩展、桌面应用（`codex app`）与云端 Codex Web——**它们共享同一个 Rust 内核**，差异只在 Host 层。这正是 Harness 作为集成层的直接证据：协议不变，前端可以任意增加。
+分发形态有三条互不依赖的安装路径（curl 安装脚本 / npm / Homebrew），加上 IDE 扩展、桌面应用（`codex app`）与云端 Codex Web——**它们共享同一个 Rust 内核**，差异只在 Host 层——协议不变，前端可以任意增加。
 
 ## Crate Map
 
