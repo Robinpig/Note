@@ -264,6 +264,7 @@ INS-08 修复 waypoint/kube-gateway workload socket 与 **SPIRE CSI driver 不�
 - [ecosystem](/docs/CS/Framework/Istio/ecosystem.md)
 - [Identity](/docs/CS/Container/k8s/Identity.md)
 - [Spring Security](/docs/CS/Framework/Spring/Security.md)
+- [Higress Security and Auth](/docs/CS/Framework/Higress/Security_and_Auth.md)
 
 ## References
 

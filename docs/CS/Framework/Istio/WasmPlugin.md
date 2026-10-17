@@ -358,6 +358,8 @@ fail-open 的实现方式：agent 转换失败时插入 RBAC filter 兜底（`al
 - [Troubleshooting](/docs/CS/Framework/Istio/Troubleshooting.md)
 - [Security](/docs/CS/Framework/Istio/Security.md)
 - [Higress（Wasm 网关实践的另一条路径）](/docs/CS/Framework/Higress/Higress.md)
+- [Higress Plugin System](/docs/CS/Framework/Higress/Plugin_System.md)
+- [Higress Wasm Development](/docs/CS/Framework/Higress/Wasm_Development.md)
 
 ## References
 

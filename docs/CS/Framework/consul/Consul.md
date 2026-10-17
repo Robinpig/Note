@@ -173,6 +173,7 @@ Consul 和 etcd / ZooKeeper / Nacos 都提供"一致性的分布式键值 + 协�
 - [ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)
 - [Nacos](/docs/CS/Framework/nacos/Nacos.md)
 - [Spring Cloud Consul](/docs/CS/Framework/Spring_Cloud/Consul.md)
+- [Higress Service Discovery](/docs/CS/Framework/Higress/Service_Discovery.md)
 
 ## References
 

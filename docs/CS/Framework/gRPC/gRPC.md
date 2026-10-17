@@ -17,3 +17,4 @@ In gRPC, a client application can directly call a method on a server application
 - [Kitex](/docs/CS/Framework/kitex.md) — Go RPC 框架对照
 - [Protocol Buffers](/docs/CS/Distributed/RPC/ProtoBuf.md)
 - [Netty](/docs/CS/Framework/Netty/Netty.md)
+- [Higress Service Discovery](/docs/CS/Framework/Higress/Service_Discovery.md)

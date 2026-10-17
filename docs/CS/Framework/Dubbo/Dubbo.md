@@ -783,3 +783,4 @@ Dubbo 3 的能力可以按「一次调用经过哪些环节」串起来阅读：
 - [Metadata](/docs/CS/Framework/Dubbo/Metadata.md)
 - [gRPC](/docs/CS/Framework/gRPC/gRPC.md)
 - [ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)
+- [Higress Service Discovery](/docs/CS/Framework/Higress/Service_Discovery.md)

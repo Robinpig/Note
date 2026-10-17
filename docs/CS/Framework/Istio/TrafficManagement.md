@@ -465,6 +465,7 @@ http:
 - [Observability](/docs/CS/Framework/Istio/Observability.md)
 - [Spring Cloud Alibaba（含 Sentinel 限流对比）](/docs/CS/Framework/Spring_Cloud/Alibaba.md)
 - [Resilience4j（应用层熔断重试对照）](/docs/CS/Framework/Spring_Cloud/Resilience4j.md)
+- [Higress Traffic Governance](/docs/CS/Framework/Higress/Traffic_Governance.md)
 
 ## References
 

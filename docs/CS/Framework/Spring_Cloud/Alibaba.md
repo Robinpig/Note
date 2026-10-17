@@ -166,6 +166,7 @@ spring:
 - [Seata](/docs/CS/Framework/Seata/Seata.md)
 - [RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md)
 - [Higress](/docs/CS/Framework/Higress/Higress.md)
+- [Higress Service Discovery](/docs/CS/Framework/Higress/Service_Discovery.md)
 
 ## References
 

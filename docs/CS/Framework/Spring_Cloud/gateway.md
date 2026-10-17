@@ -267,3 +267,4 @@ spring:
 - [统一异常处理](/docs/CS/Framework/Spring/Exception.md)
 - [Spring Security](/docs/CS/Framework/Spring/Security.md)
 - [Higress](/docs/CS/Framework/Higress/Higress.md)
+- [Higress Traffic Governance](/docs/CS/Framework/Higress/Traffic_Governance.md)

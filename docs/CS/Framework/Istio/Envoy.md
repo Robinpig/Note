@@ -255,6 +255,7 @@ Kubernetes SIG Network 与安全响应委员会宣布 ingress-nginx 退役，**�
 - [ecosystem](/docs/CS/Framework/Istio/ecosystem.md)
 - [Higress](/docs/CS/Framework/Higress/Higress.md)
 - [gateway](/docs/CS/Framework/Spring_Cloud/gateway.md)
+- [Higress Architecture](/docs/CS/Framework/Higress/Architecture.md)
 
 ## References
 

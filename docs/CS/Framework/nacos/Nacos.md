@@ -604,6 +604,7 @@ Nacos 与 etcd 定位有交集也有分野：etcd 是**通用的强一致 KV 协
 - [一致性抽象层](/docs/CS/Framework/nacos/consistency.md)
 - [Distro（AP 协议深潜）](/docs/CS/Framework/nacos/distro.md)
 - [Config Push（配置推送深潜）](/docs/CS/Framework/nacos/config-push.md)
+- [Higress Service Discovery](/docs/CS/Framework/Higress/Service_Discovery.md)
 
 ## References
 1. [Quick Start for Nacos Spring Boot Projects](https://nacos.io/en-us/docs/quick-start-spring-boot.html)

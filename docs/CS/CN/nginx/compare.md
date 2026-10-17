@@ -84,6 +84,7 @@ Cloudflare 开源的 Rust 框架（0.9.0，2026-09），支撑其 CDN 每秒数�
 - [Practice](/docs/CS/CN/nginx/practice.md) — ingress-nginx 退役后的迁移路径
 - [Load Balance](/docs/CS/CN/Load%20Balance.md) — 负载均衡通用概念
 - [Higress](/docs/CS/Framework/Higress/Higress.md) — 阿里开源、Envoy 内核的云原生 API 网关
+- [Higress Traffic Governance](/docs/CS/Framework/Higress/Traffic_Governance.md)
 
 ## References
 

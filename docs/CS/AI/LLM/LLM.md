@@ -79,3 +79,4 @@ LLM 在结构上就是"把 [Transformer](/docs/CS/AI/Transformer.md) 的 decoder
 - [Skill](/docs/CS/AI/LLM/Agent/Theory/Skill.md)
 - [AI](/docs/CS/AI/AI.md)
 - [NLP](/docs/CS/AI/NLP/NLP.md)
+- [Higress AI Gateway](/docs/CS/Framework/Higress/AI_Gateway.md)

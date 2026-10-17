@@ -63,6 +63,7 @@ AI
 - [OS](/docs/CS/OS/OS.md)
 - [NumPy](/docs/CS/Python/NumPy.md)
 - [Ecosystem](/docs/CS/Python/Ecosystem.md)
+- [Higress AI Gateway](/docs/CS/Framework/Higress/AI_Gateway.md)
 
 ## References
 

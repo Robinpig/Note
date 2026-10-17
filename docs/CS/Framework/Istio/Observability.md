@@ -307,6 +307,7 @@ Grafana dashboards 由 jsonnet + helm template 生成到 `manifests/addons/dashb
 - [TrafficManagement](/docs/CS/Framework/Istio/TrafficManagement.md)
 - [Ambient](/docs/CS/Framework/Istio/Ambient.md)
 - [Kubernetes](/docs/CS/Container/k8s/K8s.md)
+- [Higress Observability](/docs/CS/Framework/Higress/Observability.md)
 
 ## References
 

@@ -69,7 +69,7 @@ digraph framework_index {
 ## Service Mesh and Gateway
 
 - [Istio](/docs/CS/Framework/Istio/Istio.md)：K8s 原生服务网格，流量治理、安全、Ambient、Envoy 扩展。
-- [Higress](/docs/CS/Framework/Higress/Higress.md)：基于 Envoy 的高性能云原生网关（Ingress / API 网关 / AI 代理）。
+- [Higress](/docs/CS/Framework/Higress/Higress.md)：基于 Istio + Envoy 的云原生 AI 网关，已拆为**枢纽 + 9 分册**，三条贯穿主线是"先问能力在哪一层 / 插件行为由 phase 与 priority 决定而非插件名 / 二手描述普遍比官方文档乐观"。按机制差异切开：[Architecture](/docs/CS/Framework/Higress/Architecture.md)（翻译链与 pilot fork 边界）、[AI_Gateway](/docs/CS/Framework/Higress/AI_Gateway.md)（协议转换、token 计量与配额、语义缓存、三条 MCP 路径）、[Plugin_System](/docs/CS/Framework/Higress/Plugin_System.md)（41 插件、两套作用域口径、phase/priority 总表、ECDS 热更新）、[Wasm_Development](/docs/CS/Framework/Higress/Wasm_Development.md)（Go SDK 真实 API 名与 cluster 寻址）、[Traffic_Governance](/docs/CS/Framework/Higress/Traffic_Governance.md)（限流、灰度、nginx annotation 兼容矩阵）、[Service_Discovery](/docs/CS/Framework/Higress/Service_Discovery.md)（McpBridge、多注册中心、Http2Rpc）、[Security_and_Auth](/docs/CS/Framework/Higress/Security_and_Auth.md)（consumer 模型的六个与三个例外、Coraza WAF、ACME）、[Observability](/docs/CS/Framework/Higress/Observability.md)、[Deployment_and_Ops](/docs/CS/Framework/Higress/Deployment_and_Ops.md)。
 
 ## Computing and Data
 

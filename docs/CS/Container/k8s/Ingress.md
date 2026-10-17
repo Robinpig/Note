@@ -161,6 +161,8 @@ metadata:
 - [K8s 网络](/docs/CS/Container/k8s/net.md)
 - [Scaling](/docs/CS/Container/k8s/Scaling.md)
 - [Nginx](/docs/CS/CN/nginx/nginx.md)
+- [Higress Traffic Governance](/docs/CS/Framework/Higress/Traffic_Governance.md)
+- [Higress Architecture](/docs/CS/Framework/Higress/Architecture.md)
 
 ## References
 

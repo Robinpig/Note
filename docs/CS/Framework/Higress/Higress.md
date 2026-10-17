@@ -1,282 +1,52 @@
 ## Introduction
 
-Higress 是阿里巴巴开源的云原生 API 网关，内核基于 Istio 与 Envoy，以 Wasm 插件（Go / Rust / JS）扩展能力，提供开箱即用的控制台与数十个通用插件。它诞生于阿里内部，用于解决 Tengine reload 影响长连接、以及对 gRPC / Dubbo 流量负载均衡能力不足的问题；阿里云基于 Higress 构建了云原生 API 网关产品（为企业客户提供 99.99% 网关高可用保障）。Higress 已于 2023 年进入 CNCF 沙箱（CNCF Sandbox），最新开源稳定线为 **2.2.x**。
+Higress 是阿里巴巴开源、已进入 CNCF Sandbox 的云原生 API 网关，基于 Istio 与 Envoy 构建，用 Wasm 插件（Go / Rust / JS）扩展能力，官方文档站当前收录 **41 款插件、5 个分类**。它诞生于阿里内部，用来解决 Tengine reload 损伤长连接、以及对 gRPC / Dubbo 流量负载均衡能力不足的问题；阿里云基于它构建云原生 API 网关产品，并用它支撑通义千问 App、百炼大模型 API、PAI 平台等 AI 业务。
 
 > [!NOTE]
-> 版本线：截至 2026 年，开源稳定线为 **2.2.x**（最新 2.2.4，2026-08 发布）；2.2.2（2026-05）新增 AWS Bedrock 直连与 vLLM 支持，2.1.x 起控制台支持 AI 流量入口管理，2.2.x 增加对 CNCF AI 基础设施（如 LLM-D）的集成。社区版免费且开源，企业版仅 patch 节奏不同（major/minor 对齐，patch 不保证逐版本对齐）。Higress 当前已支持 100+ 主流大模型统一接入。
+> **版本锚点**：本子树全部结论锚定开源最新 release **v2.2.5**（2026-10-04 发布），信源为官方文档站 `higress.ai/docs/latest/`（即 Astro Starlight 文档，`higress.cn` 为同一套内容的中文站）。两条与版本有关、容易被写错的事实：① **插件版本与主工程版本解耦**——仓库另有 `wasm-go-ai-proxy-v1.0.0`、`wasm-go-cluster-key-rate-limit-v1.0.0` 这类按插件打的 tag，官方插件镜像的稳定 tag 统一是 `1.0.0`，开发版是 `latest`；② 文档里的 `roadmap` 页是**计划表不是事实表**（它把 v2.2.0 的预计发布写成 2025-12、v2.3.0 写成 2026-06），不要据它推断某个特性"已发布/未发布"。
 
-Higress 在 [Spring Cloud Alibaba](/docs/CS/Framework/Spring_Cloud/Alibaba.md) 体系中是**推荐的云原生网关**，可作为 [Spring Cloud Gateway](/docs/CS/Framework/Spring_Cloud/gateway.md) 的替代。它与 [Nacos](/docs/CS/Framework/nacos/Nacos.md)、[Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md)、[Sentinel](/docs/CS/Framework/Sentinel/Sentinel.md) 等微服务技术栈深度集成，可直接从注册中心发现服务并路由。
+官方给出的使用场景是**四条**而不是三条：AI 网关、Kubernetes Ingress 网关、微服务网关、安全防护网关。把它们看成同一台网关的四个侧面是对的——[什么是 AI 网关](https://higress.ai/docs/latest/overview/what-is-higress/)的原文口径是 "AI Gateway = AI Native API Gateway"，即 AI 场景下 API 研发 / 供应 / 消费 / 观测各自演进出新能力，而不是另做一个产品。它与 [Spring Cloud Gateway](/docs/CS/Framework/Spring_Cloud/gateway.md)、[Nacos](/docs/CS/Framework/nacos/Nacos.md)、[Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md)、[Sentinel](/docs/CS/Framework/Sentinel/Sentinel.md) 的集成关系见 [Spring Cloud Alibaba](/docs/CS/Framework/Spring_Cloud/Alibaba.md)。
 
-### Three Gateway Roles
+## Three Threads
 
-- **AI 网关**：以统一协议接入国内外主流大模型，提供 AI 可观测、多模型负载均衡 / 兜底、AI token 限流、AI 缓存等能力；并可作为 MCP Server 的托管网关，为工具调用提供统一鉴权、限流与审计。
-- **Kubernetes Ingress 控制器**：兼容 nginx ingress controller 的多数 annotation，并规划平滑迁移到 Gateway API。
-- **微服务网关**：从 Nacos、ZooKeeper、Consul、Eureka 等注册中心发现服务，深度对接 Dubbo / Nacos / Sentinel。
+拆分这批笔记时反复用到三条判断，各分册只展开自己那一份，其余地方引用：
 
-### Architecture: Control Plane and Data Plane
+**一、先问"这个能力在哪一层"，再问"怎么配"。** 同一个需求可能落在四个完全不同的层：Ingress annotation、Higress 自有 CRD（`McpBridge` / `Http2Rpc`）、`WasmPlugin` 的 YAML、或者**只在控制台路由层有入口**。最典型的错位是模型级 Fallback：`ai-proxy` 里没有这个字段（它的 `failover` 摘的是同一厂商的 apiToken，`retryOnFailure` 只支持非流式重试），真正的降级要到控制台"AI 路由管理 → 降级配置"去配；同理，四层 TCP 路由走的是 Gateway API 的 `TCPRoute` 而不是任何 annotation，且受 `global.enableGatewayAPI`（默认 false）与版本区间两条约束。判错层，配置就静默不生效。
 
-Higress 采用**三平面**架构，控制面与数据面分离，二者通过 xDS 协议通信：
+**二、插件的实际行为由 phase + priority + 作用域三者决定，不由插件名决定。** `ai-cache` 跑在**认证阶段 priority 10**，而 `ai-token-ratelimit`（600）、`ai-quota`（750）跑在**默认阶段**——所以缓存命中的请求可能根本走不到限流与配额；`frontend-gray` 名字在"转换"分类里，实际也在认证阶段；`oidc` / `opa` / `ext-auth` 三个认证插件**不走** `consumers` + `allow` + `global_auth` 模型；`opa` 的字段是 camelCase 而邻居都是 snake_case。完整的阶段与优先级表在 [Plugin System](/docs/CS/Framework/Higress/Plugin_System.md)。
 
-- **Console（管理面）**：可视化 UI，后端为 Java / SpringBoot 服务，前端为 Node.js 应用。
-- **Controller（控制面，higress-controller）**：含两个容器组件。
-  - `higress-core` 监听 Kubernetes API，把 Ingress、Higress CRD 翻译为 Istio API 对象（VirtualService / DestinationRule / Gateway / EnvoyFilter）。
-  - `pilot` 是 Istio `istiod` 的 pilot 模块 fork，把 Istio API 对象转换为 xDS 资源并推送给数据面。
-- **Gateway（数据面，higress-gateway）**：内嵌 Envoy 代理，真正执行请求转发、Wasm 插件、路由、限流、认证。
+**三、这个题目的二手描述普遍比官方文档乐观。** 本次逐条回文档核实，以下几条在现有资料里流传很广但**找不到一手出处**，本子树一律不写：`ai-security-guard` 的 "block / mask / audit 三种处置动作"（实际只有 `checkRequest` / `checkResponse` + `denyCode` / `denyMessage`，脱敏属于另一个插件 `ai-data-masking`）；"WAF 依赖 ModSecurity 引擎"（实现底座是 Coraza，兼容的是 SecLang 与 Phase 规范）；"多 API Key 轮询"（文档原文是**随机**选取）；指标端口 15090（三处证据只支持 15020）；"50+ 官方插件"（插件市场页自标 41 款）；"本地限流配 100 QPS、3 副本实际放行约 300 QPS"（两个限流插件正文都没有副本数与放大系数的任何表述，真正的"每实例"口径来自 `higress.io/route-limit-rps|rpm` annotation，还带一个默认 5 倍的 burst 放大）。
 
-Higress 复用 Istio 的 **xDS 协议**、K8s CRD 配置存储机制以及多注册中心的服务发现能力，因此所有配置以 CRD 形式落于 Kubernetes etcd，无需外部数据库。配置流转如下：
+## How to Read This Subtree
 
-| 配置来源 | 转换产物 | 下发通道 |
-| --- | --- | --- |
-| Ingress / Gateway API / Istio API | VirtualService / DestinationRule / Gateway | xDS（gRPC 流） |
-| Higress CRD：McpBridge / WasmPlugin / Http2Rpc | EnvoyFilter / ServiceEntry | xDS（gRPC 流） |
-| Ingress annotation | 等价 Istio 配置 | xDS（gRPC 流） |
+按"接到一个需求 → 定位它在哪一层 → 再查具体字段"的顺序读：
 
-`McpBridge` 用于**解耦核心网关与具体注册中心**：把 Nacos / Consul / DNS 等注册源转换为 Istio 的 `ServiceEntry`。`WasmPlugin Controller` 把 Higress 的 WasmPlugin 映射到 Istio WasmPlugin，支持 global / route 两种作用域。
+理解[架构与控制面](/docs/CS/Framework/Higress/Architecture.md)是所有判断的前提：Higress 的控制面**不自己实现 xDS**，而是把 Ingress / Gateway API / 自有 CRD / annotation 翻译成一整套 Istio 资源，交给一个 istiod 的 fork 下发。由此推出两个结论——它为什么能同时吃四种配置入口，以及为什么内置的 `istio` 不等于独立安装的 Istio。数据面那侧的机制细节交给 [Envoy](/docs/CS/Framework/Istio/Envoy.md)，xDS 与 Wasm 的通用原理交给 [WasmPlugin](/docs/CS/Framework/Istio/WasmPlugin.md)，本子树不重述。
 
-> [!WARNING]
-> 控制面里的 `istio` 是在原生 Istio 基础上改造的 fork，与独立安装的 Istio 并不等价。若需要使用 Istio 原生的服务网格能力，建议单独安装 Istio，而非依赖 Higress 内置的 fork。
+配置入口确定后，扩展能力看[插件体系](/docs/CS/Framework/Higress/Plugin_System.md)：作用域在控制台与 CRD 侧是**两套口径**（三级 vs 四级），热更新靠 ECDS 订阅而非重启，官方插件以 OCI 镜像分发。要自己写插件（Go SDK 的真实 API 名、外部 HTTP / Redis 调用、Go 1.24 编译换代）在 [Wasm Development](/docs/CS/Framework/Higress/Wasm_Development.md)。
 
-### Deployment and Configuration Entry
+流量与路由的日常操作集中在[Traffic Governance](/docs/CS/Framework/Higress/Traffic_Governance.md)：两个限流插件的配置面**完全不对称**，灰度有 annotation / 插件 / Kruise Rollout 三条路，nginx 注解兼容矩阵的实际分档是"兼容 / 部分兼容 / Higress 扩展"三档。后端服务从哪来、HTTP 怎么转 Dubbo，在 [Service Discovery and RPC](/docs/CS/Framework/Higress/Service_Discovery.md)。
 
-- **Helm 安装**：`helm repo add higress.io https://higress.cn/helm-charts` 后 `helm install higress -n higress-system higress.io/higress --create-namespace`；本地测试（Kind 等）加 `--set global.local=true`。
-- **Docker 一键体验**：`docker run -d --rm --name higress -p 8001:8001 -p 8080:8080 -p 8443:8443 higress/all-in-one:latest`，其中 8001 为控制台、8080 为 HTTP 入口、8443 为 HTTPS 入口。
-- **配置优先级**：插件配置分 global / domain / route / service 多层级，细粒度覆盖粗粒度，规则匹配顺序为 Domain → Ingress → Default（路由级 > 域名级 > 全局级）。典型用法是全局开启 JWT 认证（`global_auth: false` 避免健康检查也被拦截），再在路由级按需覆盖。
+安全与认证单列一页（[Security and Auth](/docs/CS/Framework/Higress/Security_and_Auth.md)），因为最容易写错的是"哪些插件属于同一个模型"：六个走 consumer，三个不走；而自动签发证书是**真实存在且默认开启**的，代价是一条很少人提到的限制——只对 Ingress 模式生效。观测（[Observability](/docs/CS/Framework/Higress/Observability.md)）只收通用三支柱，AI 侧的 token 计量与成本核算跟着 `ai-statistics` 写在 [AI Gateway](/docs/CS/Framework/Higress/AI_Gateway.md)，因为它与限流、配额是一组共生关系，拆开就看不出"缓存命中会绕过配额"这类后果。
 
-### AI Gateway (Deep Dive)
-
-Higress 把 AI 流量作为一等公民，核心能力包括：
-
-- **多模型统一接入**：对 OpenAI 兼容接口及主流大模型提供统一网关入口，屏蔽厂商鉴权与接口差异，便于快速切换与多活；支持模型负载均衡与 Fallback 提升可靠性。
-- **Token 流量管理**：除传统 QPS 限流外，提供基于 Token 消耗的配额管理与限流（ai-token-ratelimit），结合 API Key 池轮询与消费者鉴权，防止模型过载并管控客户端额度。
-- **语义缓存（ai-cache）**：基于语义相似度缓存 LLM 响应，相同或近似 prompt 直接从缓存返回，将延迟从秒级降到毫秒级并显著降本。
-- **MCP 统一管理**：支持 HTTP 到 MCP 的协议转换，以及原生 MCP 服务的代理，把分散的工具能力收敛为统一入口；`openapi-to-mcpserver` 工具可将任意 OpenAPI 规范在数分钟内转为远程 MCP Server 插件。MCP 工具调用复用与 LLM API 相同的鉴权、限流与审计日志。
-- **AI 内容安全（ai-security-guard）**：提示词注入检测、敏感内容识别、数据脱敏，支持 block / mask / audit 三种风险处置动作。
-
-内置 AI 插件（部分）如下：
-
-| 插件 | 作用 |
-| --- | --- |
-| ai-proxy | 统一对接 OpenAI / 通义千问 / Claude 等所有 LLM 厂商，协议转换 + 负载均衡 |
-| ai-cache | LLM 响应缓存，支持语义缓存与精确匹配 |
-| ai-token-ratelimit | 基于 Token 的限流，按 API Key / IP / Consumer 精确控制消耗 |
-| ai-load-balancer | LLM 感知负载均衡（KV Cache 亲和、vLLM metrics、最小请求数） |
-| ai-security-guard | AI 输入 / 输出安全防护 |
-| ai-quota | AI 配额管理（按时间 / 总量限制） |
-| ai-rag | 检索增强生成，对接知识库 |
-| model-router | 按请求特征路由到不同模型 |
-
-### Rate Limiting and Traffic Governance
-
-Higress 提供从单机到集群的多层次限流，覆盖「防过载」与「配额管理」两类诉求：
-
-- **本地限流（key-rate-limit）**：每个 Gateway Pod 独立计数，零延迟、无外部依赖；缺点是总限流随 Pod 副本数线性放大（例如配置 100 QPS、3 副本实际放行约 300 QPS）。适合粗粒度保护、抗突发流量。
-- **集群限流（cluster-key-rate-limit）**：基于 Redis 的全局一致限流，适合精确控制 API 调用配额（如免费用户每日 1000 次）。支持两种模式：规则级全局阈值（global_threshold）与 Key 级动态限流（按 URL 参数、请求头、客户端 IP、Consumer 名称或 Cookie 取值分组）。任一规则命中即拒绝，默认返回 429（Too many requests）。
-- **Sentinel 流控**：Higress 提供 Sentinel 集成能力，可对接 Sentinel Dashboard 与 Token Server 实现集群流控（Cluster Flow Control），适合已有 Sentinel 体系、需要动态规则与熔断降级的团队。
-- **灰度与流量打标**：`traffic-tag` 插件按 header / 参数 / Cookie 匹配（支持 equal、prefix、in、regex、percentage 等算子与 and / or 组合）或按权重（weightGroups）为请求染色，配合下游路由规则实现金丝雀发布；`frontend-gray` 面向前端灰度。同时兼容 nginx ingress 的 canary 注解（`higress.io/canary`、`higress.io/canary-weight`、`nginx.ingress.kubernetes.io/canary-by-header`），并可与 OpenKruise Rollout 联动做渐进式发布。
-- **熔断**：基于 Envoy 的异常点检测（Outlier Detection）实现后端实例自动熔断与驱逐，结合本地限流做粗粒度保护、集群限流做细粒度配额，形成「本地防 DDoS + 集群管配额」的双层防护。
-
-### Service Discovery and RPC Routing
-
-Higress 支持从多种注册中心发现后端服务：Nacos、Consul、ZooKeeper、Eureka、Kubernetes、DNS。对于 Dubbo 等 RPC 协议，通过 **Http2Rpc CRD** 完成 HTTP 到 RPC 的服务发现与协议转换，使网关侧以标准 HTTP 路由即可把流量导向 Dubbo Triple（基于 HTTP/2）接口。与 Nacos / Dubbo / Sentinel 的深度对接使 Higress 在 Alibaba 微服务栈中可同时承担流量网关、微服务网关与安全网关（三网关合一）。
-
-### Configuration Example: Nacos Service Discovery and Routing
-
-下面给出一段最小可运行配置：先用 McpBridge 把 Nacos 2.x（gRPC）注册中心接入，再用 Ingress 把流量路由到注册在 Nacos 上的 `user-center` 服务，最后用 WasmPlugin 对该路由开启 Key 认证。
-
-```yaml
-# 1) 服务来源：对接 Nacos 2.x
-apiVersion: networking.higress.io/v1
-kind: McpBridge
-metadata:
-  name: default
-  namespace: higress-system
-spec:
-  registries:
-    - name: my-nacos
-      type: nacos2            # Nacos 2.x，基于 gRPC，变更感知更快
-      domain: 127.0.0.1
-      port: 8848
-      nacosNamespaceId: d8ac64f3-xxxx-xxxx-xxxx-47a814ecf358
-      nacosGroups:
-        - DEFAULT_GROUP
----
-# 2) 路由：把 / 转发到 Nacos 上的 user-center 服务
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: user
-  namespace: default
-  annotations:
-    higress.io/destination: "user-center.DEFAULT-GROUP.d8ac64f3-xxxx-xxxx-xxxx-47a814ecf358.nacos"
-spec:
-  rules:
-    - http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              resource:
-                apiGroup: networking.higress.io
-                kind: McpBridge
-                name: default
----
-# 3) 插件：对该网关开启 Key 认证
-apiVersion: extensions.istio.io/v1alpha1
-kind: WasmPlugin
-metadata:
-  name: key-auth
-  namespace: higress-system
-spec:
-  selector:
-    matchLabels:
-      higress: higress-system-higress-gateway
-  pluginConfig:
-    consumers:
-      - name: app-a
-        key: abc123
-  url: oci://higress-registry.cn-hangzhou.cr.aliyuncs.com/plugins/key-auth:1.0.0
-```
-
-> [!NOTE]
-> Ingress 中 `higress.io/destination` 的格式为 `服务名.服务分组.命名空间ID.nacos`，下划线会按 DNS 规则转换为连字符。Spring Cloud 微服务无需改造即可接入，相比 Spring Cloud Gateway / Zuul 等传统 Java 网关性能高出 2 倍以上。
-
-### Plugin System and Extensions
-
-Higress 提供 50+ 官方内置 Wasm 插件，覆盖 AI、认证、安全、流量管理、转换五大类。插件以 Go / Rust / JS 编写并编译为 Wasm 模块，通过 WasmPlugin CRD 引用，运行于 Envoy 数据面的 Wasm 沙箱中（安全隔离 + 热更新，不重启网关即可生效）。
-
-| 类别 | 代表插件 |
-| --- | --- |
-| 认证 | basic-auth、key-auth、hmac-auth、jwt-auth、oidc、oauth2、ext-auth、opa |
-| 安全 | waf（ModSecurity + OWASP CRS）、cors、ip-restriction、bot-detect、request-block、replay-protection、geo-ip |
-| 流量管理 | key-rate-limit、cluster-key-rate-limit（基于 Redis 的集群限流）、custom-response、traffic-tag（灰度打标）、request-validation、transformer、cache-control、frontend-gray |
-| AI | ai-proxy、ai-cache、ai-token-ratelimit、ai-security-guard、ai-rag、model-router 等（见上节） |
-
-自定义插件开发使用 `wasm-go`（Go SDK）、Rust SDK 或 JS，编译产物经 `WasmPlugin` CRD 部署，支持 global / domain / route / service 作用域与细粒度匹配规则。
-
-### Observability
-
-Higress 提供 Metrics / Logging / Tracing 三大支柱，均通过 Helm values 与 `higress-config` ConfigMap 配置，同时作用于控制面与数据面：
-
-- **指标（Metrics）**：Gateway Pod 在 15020 端口暴露 Prometheus 指标（`/stats/prometheus`，另含 15090），配合 `prometheus.io/scrape`、`prometheus.io/port`、`prometheus.io/path` 注解即可被自动抓取。资源受限环境可开 `LITE_METRICS=on` 精简指标基数。关键 AI 指标包括 `higress_ai_token_count`（按 provider / route 的输入输出 Token）、`higress_ai_cache_hit_ratio`（语义缓存命中率）、`higress_ai_fallback_count`（模型兜底次数）、`higress_ai_provider_request_duration_ms`（各供应商延迟）。
-- **日志（Logging）**：默认输出结构化 JSON 访问日志；启用 AI 统计插件后，访问日志会注入 `input_token`、`output_token`、`llm_service_duration`、`llm_first_token_duration`（TTFT，流式首 Token 时延）、`ai_log` 等字段，便于按模型 / 路由核算成本。
-- **追踪（Tracing）**：支持 Skywalking、Zipkin、OpenTelemetry 三种后端，采样率默认 100%，通过生成 `custom_bootstrap.json` 挂载到网关生效。
-- **零停机更新**：配置变更经 xDS 动态下发，Envoy 在工作线程动态生效，无需 reload / 重启；Wasm 插件也支持热更新，流量无损。运维侧提供 `hgctl` CLI（install / config 等子命令）检视网关内部状态。
-
-### Security Capabilities
-
-Higress 内置完善的认证、防护与 WAF 能力，开箱即用：
-
-| 能力 | 代表插件 |
-| --- | --- |
-| 认证 | key-auth、basic-auth、hmac-auth、jwt-auth、oidc、oauth2、ext-auth（对接外部鉴权）、opa（Open Policy Agent） |
-| 防护 | waf（基于 ModSecurity + OWASP CRS）、cors、ip-restriction、bot-detect、request-block、replay-protection（防重放）、geo-ip |
-| 请求治理 | request-validation（参数校验）、transformer（请求 / 响应转换）、cache-control |
-
-证书方面支持对接 Let's Encrypt 自动签发与续签免费证书；安全插件与认证插件均支持 global / domain / route / service 多作用域，可与限流、灰度策略在同一路由上叠加生效。
-
-### Trade-offs with Spring Cloud Gateway
-
-- Higress 基于 Envoy 数据面，原生擅长长连接、gRPC / Dubbo 等 RPC 流量与高性能转发；Spring Cloud Gateway 基于 Spring WebFlux，更贴合 Spring 生态、上手简单。
-- 若网关需同时承载 AI 流量、K8s Ingress、以及 Dubbo / gRPC 等 RPC 协议，Higress 的一体化能力更契合；纯 Spring HTTP 微服务场景用 Spring Cloud Gateway 亦可。
-
-> [!NOTE]
-> 性能上，Higress 基于 Envoy C++ 内核，相比 Spring Cloud Gateway / Zuul 等 Java 网关吞吐高 2 倍以上，且彻底摆脱 nginx reload 对长连接的损耗——配置变更毫秒级生效、业务无感，在阿里双十一等数十万级 QPS 场景生产验证；在支持非特权端口的内核（>= 4.11.0）上以非 root（UID 1337）运行。
-
-### Wasm Plugin Development in Practice
-
-Higress 的插件用 Go / Rust / JS 编写、编译为 Wasm 模块，经 `WasmPlugin` CRD 引用，运行于 Envoy 数据面的 Wasm 沙箱中（内存安全隔离 + 热更新）。Go 开发基于 `wasm-go` SDK（封装了 Tetrate 的 proxy-wasm-go-sdk，利用 Go 1.18 泛型简化上下文处理）。
-
-最小插件模板（Go 1.24 起已原生支持编译 Wasm，逻辑从 `main` 挪到 `init` 注册）：
-
-```go
-package main
-
-import (
-    "github.com/higress-group/wasm-go/pkg/wrapper"
-    "github.com/higress-group/proxy-wasm-go-sdk/proxywasm"
-    "github.com/higress-group/proxy-wasm-go-sdk/proxywasm/types"
-    "github.com/tidwall/gjson"
-)
-
-func init() {
-    wrapper.SetCtx(
-        "my-plugin",
-        wrapper.ParseConfig(parseConfig),
-        wrapper.ProcessRequestHeaders(onHttpRequestHeaders),
-    )
-}
-
-type MyConfig struct{ Enabled bool }
-
-func parseConfig(json gjson.Result, config *MyConfig) error {
-    config.Enabled = json.Get("enabled").Bool()
-    return nil
-}
-
-func onHttpRequestHeaders(ctx wrapper.HttpContext, config MyConfig) types.Action {
-    if config.Enabled {
-        proxywasm.AddHttpRequestHeader("x-my-header", "hello")
-    }
-    return types.HeaderContinue
-}
-```
-
-构建与部署三步：
-
-```bash
-# 1) 编译为 Wasm（Go 1.24 原生）
-GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o main.wasm ./
-
-# 2) 打包镜像
-cat > Dockerfile <<'EOF'
-FROM scratch
-COPY main.wasm plugin.wasm
-EOF
-docker build -t my-registry/my-plugin:1.0.0 .
-
-# 3) 下发 WasmPlugin
-kubectl apply -f - <<'EOF'
-apiVersion: extensions.istio.io/v1alpha1
-kind: WasmPlugin
-metadata:
-  name: my-plugin
-  namespace: higress-system
-spec:
-  selector:
-    matchLabels:
-      higress: higress-system-higress-gateway
-  pluginConfig:
-    enabled: true
-  url: oci://my-registry/my-plugin:1.0.0
-EOF
-```
-
-插件可挂载的执行阶段包括 `ProcessRequestHeaders` / `ProcessRequestBody` / `ProcessResponseHeaders` / `ProcessResponseBody` / `ProcessStreamDone`，天然支持 SSE 等流式报文的在途处理；借助 host 提供的 HTTP Client 与 Redis 调用能力，还能实现外部鉴权、有状态限流等复杂逻辑。
-
-### Code Directory Structure
-
-- cmd：命令行参数解析等处理代码
-- pkg/ingress：Ingress 资源转换为 Istio 资源等相关代码
-- pkg/bootstrap：包括启动 gRPC / xDS / HTTP server 等的代码
-- registry：实现对接多种注册中心进行服务发现的代码
-- envoy：依赖的 envoy 仓库 commit
-- istio：依赖的 istio 仓库 commit
-- plugins：Higress 插件 SDK，以及官方内置插件代码（wasm-go 子目录为 Go 插件源码）
-- script / docker：编译与镜像构建相关脚本
+[AI Gateway](/docs/CS/Framework/Higress/AI_Gateway.md) 是本子树写得最深的一篇：协议转换怎么发生、33 个厂商 type 字符串、负载均衡策略的真实名字（含一个**只有仓库 README、没有文档站页面**的 `ai-load-balancer`）、语义缓存在默认参数下为什么静默不命中、MCP 的三条互不相同的托管路径。最后，[Deployment and Ops](/docs/CS/Framework/Higress/Deployment_and_Ops.md) 覆盖三种部署形态（其中两种官方明写"没有大规模生产使用过"）、升级顺序、以及"配置正确但没生效"时必须按层定位的四段排障链。
 
 ## Links
 
 - [Istio](/docs/CS/Framework/Istio/Istio.md)
-- [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md)
-- [gateway](/docs/CS/Framework/Spring_Cloud/gateway.md)
+- [Envoy](/docs/CS/Framework/Istio/Envoy.md)
+- [WasmPlugin](/docs/CS/Framework/Istio/WasmPlugin.md)
+- [Ingress](/docs/CS/Container/k8s/Ingress.md)
+- [Nginx Compare](/docs/CS/CN/nginx/compare.md)
 - [Spring Cloud Alibaba](/docs/CS/Framework/Spring_Cloud/Alibaba.md)
-- [Nacos](/docs/CS/Framework/nacos/Nacos.md)
-- [Sentinel](/docs/CS/Framework/Sentinel/Sentinel.md)
 
 ## References
 
-- Higress GitHub 仓库：https://github.com/alibaba/higress
-- 架构文档：https://github.com/alibaba/higress/blob/main/docs/architecture.md
-- AI 网关产品页：https://higress.ai/ai-gateway
-- 插件市场：https://higress.ai/en/plugins/
-- 版本计划 / Roadmap：https://higress.io/docs/latest/overview/roadmap
+- [Higress 是什么](https://higress.ai/docs/latest/overview/what-is-higress/)
+- [Higress 参数配置](https://higress.ai/docs/latest/user/configurations/)
+- [Mcp Bridge 配置说明](https://higress.ai/docs/latest/user/mcp-bridge/)
+- [Higress 自定义 CRD 开发指引](https://higress.ai/docs/latest/dev/customresourcedefinition/)
+- [Wasm 插件使用简介](https://higress.ai/docs/latest/user/plugins/intro/)
+- [Higress 插件市场](https://higress.ai/plugins/)
+- [版本计划](https://higress.ai/docs/latest/overview/roadmap/)
+- [Higress GitHub 仓库](https://github.com/alibaba/higress)

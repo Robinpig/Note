@@ -98,6 +98,7 @@ Slot 通过互相配合的方式执行了各项检查任务。比如有的 Slot 
 - [Hystrix](/docs/CS/Framework/Spring_Cloud/Hystrix.md)
 - [Resilience4j](/docs/CS/Framework/Spring_Cloud/Resilience4j.md)
 - [Spring Cloud Alibaba](/docs/CS/Framework/Spring_Cloud/Alibaba.md)
+- [Higress Traffic Governance](/docs/CS/Framework/Higress/Traffic_Governance.md)
 
 
 ## References

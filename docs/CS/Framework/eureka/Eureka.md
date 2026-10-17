@@ -318,6 +318,7 @@ Eureka2.0改进
 - [Server](/docs/CS/Framework/eureka/Server.md)
 - [ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)
 - [Nacos](/docs/CS/Framework/nacos/Nacos.md)
+- [Higress Service Discovery](/docs/CS/Framework/Higress/Service_Discovery.md)
 
 ## References
 
