@@ -144,6 +144,8 @@ spec:
 - [Nacos](/docs/CS/Framework/nacos/Nacos.md)
 - [Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md)
 - [Higress](/docs/CS/Framework/Higress/Higress.md)
+- [Service Registry Internals](/docs/CS/Framework/Higress/Service_Registry_Internals.md)
+- [Config Pipeline](/docs/CS/Framework/Higress/Config_Pipeline.md)
 
 ## References
 

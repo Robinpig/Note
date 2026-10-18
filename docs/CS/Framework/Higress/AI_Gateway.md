@@ -141,18 +141,19 @@ MCP 有三条互不相同的路径，名字高度相似：
 | 语义缓存阈值字段 `similarityThreshold` | `vector.threshold` + `vector.thresholdRelation`，默认组合不可用 | 字段名改正并写坑 |
 | nacos（任意版本）可作 MCP 注册源 | 仅 `nacos3` | 收窄 |
 | token 限流多条规则叠加生效 | `rule_items` 命中第一条即停 | 采信官方 |
-| `openapi-to-mcpserver` 是独立工具 / 插件 | 官方文档站无页面，本次未核实存在性 | 不写 |
-| 存在 `mcp-router` 插件 | 仅二手博客出现 | 不写 |
+| `openapi-to-mcpserver` 是独立工具 / 插件 | 官方文档站无页面；本仓源码里也**没有**这个目录（`plugins/wasm-go/extensions` 全清单已比对） | 不作为已核实名称写 |
+| 不存在 `mcp-router` | **源码里有**：`plugins/wasm-go/extensions/mcp-router/` 是真实目录，`plugins/release/console/` 下也有一份发布件；但**功能与配置面本次未读** | 存在性成立、语义不写 |
 
 ## Unverified
 
-**源码层级全部未核实**（本机 clone 失败，见 [Architecture](/docs/CS/Framework/Higress/Architecture.md) 末节）：33 个 `type` 是否等于 `ai-proxy` 源码里的 provider 数、是否存在文档未收录的 type；`ai-load-balancer` 在 **v2.2.5** 的确切策略集合与默认值（含 `AdaptiveScore` 是否已进 2.2.5、`endpoint_metrics` 与 `metrics_based` 哪个是有效值）；`higress.io/load-balance` 注解的取值集合；`ai-proxy` 对 OpenAI Responses / Fine-Tuning 接口的支持；`ai-token-ratelimit` 是否也依赖 `ai-statistics` 取数（`ai-quota` 依赖已核实）；其余 AI 插件的执行阶段与优先级；控制台"AI 路由管理"最终落成哪种 K8s 对象；HiMarket"计量计费"由哪个组件承载、能否脱离 Higress 使用。
+**信源层级说明**：本页正文的字段名、默认值、阶段与优先级**全部来自官方文档站正文**（逐条 `[摘要级]`）。本地源码树（v2.2.5）现已可用，本轮完成的源码级核对仅限**插件的存在性与语言层归属**——`ai-load-balancer` 与 `mcp-router` 确认存在于 `plugins/wasm-go/extensions/`，认证基础族确认在 `plugins/wasm-cpp/`，`ai-data-masking` 确认在 `plugins/wasm-rust/`（见 [Source Map](/docs/CS/Framework/Higress/Source_Map.md)）。**未做的是逐个读 AI 插件的实现代码**，因此以下各项仍是"文档口径或未决"，不得当成源码结论：33 个 `type` 是否等于 `ai-proxy` 源码里的 provider 数；`ai-load-balancer` 在 **v2.2.5 tag** 的确切策略集合与默认值（README 取自 main 分支，`AdaptiveScore` 是否已进 2.2.5、`endpoint_metrics` 与 `metrics_based` 哪个是有效值均未决）；`mcp-router` 的功能与配置面；`higress.io/load-balance` 注解取值集合；`ai-proxy` 对 OpenAI Responses / Fine-Tuning 的支持；`ai-token-ratelimit` 是否也依赖 `ai-statistics` 取数（`ai-quota` 的依赖已核实）；其余 AI 插件的执行阶段与优先级；控制台"AI 路由管理"最终落成哪种 K8s 对象；HiMarket"计量计费"由哪个组件承载、能否脱离 Higress 使用。
 
 ## Links
 
 - [Plugin System](/docs/CS/Framework/Higress/Plugin_System.md)
+- [Source Map](/docs/CS/Framework/Higress/Source_Map.md)
 - [Observability](/docs/CS/Framework/Higress/Observability.md)
-- [Service Discovery](/docs/CS/Framework/Higress/Service_Discovery.md)
+- [Service Registry Internals](/docs/CS/Framework/Higress/Service_Registry_Internals.md)
 - [Traffic Governance](/docs/CS/Framework/Higress/Traffic_Governance.md)
 - [AI](/docs/CS/AI/AI.md)
 - [Higress](/docs/CS/Framework/Higress/Higress.md)

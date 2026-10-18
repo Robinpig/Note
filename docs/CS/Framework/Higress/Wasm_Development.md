@@ -18,7 +18,7 @@ Higress 的插件开发以 Go 为主路径（`wasm-go` SDK 封装了 higress-gro
 | `wrapper.ProcessStreamDoneBy(onHttpStreamDone)` | — | 流式 / 请求结束回调 |
 
 > [!WARNING]
-> **`ProcessStreamDone` 这个 API 不存在**，真名是 `wrapper.ProcessStreamDoneBy`，惯用回调名 `onHttpStreamDone`。旧资料常写成前者。另注意 Go SDK 原理页的示例里有一处 `wrappper.ProcessStreamDoneBy`（三个 p）是**文档笔误**，不要照抄。
+> **`ProcessStreamDone` 与 `ProcessStreamDoneBy` 两个名字都真实存在**，用途不同：`*By` 系列是文档 Go SDK 原理页给出的形态（配 `ParseConfigBy` / `ProcessRequestBodyBy` 一起用），而**主仓自带的 MCP 插件走的是不带 `By` 的 `wrapper.ProcessStreamDone(onHttpStreamDone)`**（`plugins/wasm-go/pkg/mcp/server/plugin.go:910`）。`wrapper` 包来自外部模块 `github.com/higress-group/wasm-go`（不在本仓 `plugins/wasm-go/pkg/` 下，那里只有 `mcp` 与 `pathutil`），因此本机无法枚举它的全部导出项——**照抄文档示例时以 `*By` 系列为准，读主仓插件源码时会看到两种写法混用**。另注意文档示例里有一处 `wrappper.ProcessStreamDoneBy`（三个 p）是**页面笔误**。
 
 最小可编译骨架，注意 Go 1.24 形态下 `main()` 是空的、注册在 `init()`：
 
@@ -77,6 +77,8 @@ SDK 帮你做的三件自动行为：注册了 body / streaming 回调才会置 
 go mod tidy && GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o main.wasm ./
 ```
 
+这条在源码里能直接对上：**主仓的插件构建用的就是同一行**（`plugins/wasm-go/Makefile:68`，`GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o ./main.wasm .`），该模块 `go.mod:3` 要求 `go 1.24.1`，`grep tinygo` 在 `plugins/wasm-go/Makefile` 中零命中，SDK 依赖 pin 在 `github.com/higress-group/proxy-wasm-go-sdk v0.0.0-20250611100342-...`（`plugins/wasm-go/go.mod:7`）。旧写法 `tinygo build -o plugin.wasm -scheduler=none -target=wasi ...` 已不是当前口径。
+
 迁移带来三处必须改的代码，这是老插件升级时的清单：① 初始化逻辑从 `main()` 挪到 `init()`；② Header 阶段需要暂停等待外部回调时，`types.ActionPause` 要改成 **`types.HeaderStopAllIterationAndWatermark`**（官方注明"0.2.1 ABI 中的 `types.ActionPause` 实际上对应就是这个状态"）；③ `go-re2` 换回官方 `regexp`。
 
 Header 阶段的三个状态语义要分清，选错会丢包：`HeaderContinue` 正常继续；`HeaderStopIteration` 暂停后续 header 迭代但**允许 body 继续缓冲**；`HeaderStopAllIterationAndBuffer` 停掉整个迭代、body 继续缓冲（**超过缓冲上限会丢包**）。暂停后必须显式恢复：`proxywasm.ResumeHttpRequest()` / `ResumeHttpResponse()`，或直接用 `SendHttpResponseWithDetail()` 回响应。
@@ -124,6 +126,7 @@ Envoy 侧的插件类型有三种，Higress 网关逻辑用的是第一种：Htt
 - [Higress](/docs/CS/Framework/Higress/Higress.md)
 - [WasmPlugin](/docs/CS/Framework/Istio/WasmPlugin.md)
 - [Envoy](/docs/CS/Framework/Istio/Envoy.md)
+- [Source Map](/docs/CS/Framework/Higress/Source_Map.md)
 
 ## References
 

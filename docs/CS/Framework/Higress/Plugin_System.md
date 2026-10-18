@@ -18,6 +18,8 @@ Higress 的扩展能力全部收敛到一个模型：**插件是 Envoy HTTP filt
 
 还有一条比清单本身更重要：**文档站索引不等于插件全集**。`ai-load-balancer` 是真实存在的 wasm-go 插件，但它的文档页取不到正文、`llms.txt` 里也没有条目，属于"只有仓库 README、没有文档站页面"的那一类。用索引当权威清单会系统性漏能力（详见 [AI Gateway](/docs/CS/Framework/Higress/AI_Gateway.md)）。
 
+源码侧把这个偏差量化了：`plugins/wasm-go/extensions/` 在 v2.2.5 有 **53** 个目录（其中约 20 个不进文档站，含 `mcp-router`、Go 版 `model-router`、`nginx-rewrite-compatible`、`ai-context-limit`、`ai-endpoint-picker`、`response-cache`、`traffic-editor` 等），而**文档收录的认证基础族根本不在 wasm-go 里**——`key-auth`、`basic-auth`、`jwt-auth`、`hmac-auth`、`oauth`、`bot-detect`、`request-block`、`key-rate-limit`、`custom-response`、`sni-misdirect`、`model-mapper`、`model-router` 都在 **`plugins/wasm-cpp/extensions/`（snake_case 目录，bazel 构建）**，`ai-data-masking` 在 **`plugins/wasm-rust/`**。⇒ 41 与 53 是两个不相等的集合，按"官方插件都用 Go 写的"去找源码会一无所获；完整分布表在 [Source Map](/docs/CS/Framework/Higress/Source_Map.md)。
+
 ## Two Scope Systems
 
 "作用域有几级"这个问题有两个答案，因为它们说的是两套东西：
@@ -37,6 +39,8 @@ matchRules:
 
 > [!NOTE]
 > 两条容易漏掉的规则：① **多条 `matchRules` 按数组书写顺序优先匹配**，不是按特异性；官方建议把 `ingress` 匹配放在 `domain` 之前，控制台就是这么做的。② `configDisable` 与 `defaultConfigDisable` **确实存在**（Go SDK 原理页的 basic-auth 样例里真实出现，分别关闭某条规则与默认配置），但 `intro` 页的字段表没列——引用出处要用后者。
+
+源码侧还有三条只在实现里看得到的规则（`convertIstioWasmPlugin` @ `pkg/ingress/config/ingress_config.go:1199`）：**① `spec.pluginConfig` 与 `matchRules` 互斥且前者优先**——`pluginConfig` 非空时函数直接返回，`matchRules` 完全不看（`:1227-1229`），这条文档没写；**② `matchRules` 某条的 `config` 为 nil 是合法的**（自动补空 struct，`:1245-1249`），但三个匹配条件（ingress / domain / service）**全空会让整份 CR 翻译失败**（`:1322-1328`），且失败后**旧配置继续生效**（`:1373-1375` 只打 error、不动缓存）；**③ `_rules_` / `_match_domain_` / `_match_route_` / `_match_service_` 四个键是内联字符串字面量，没有导出常量**（`:1332/1314/1276/1295`），想在自定义控制器里复用这套约定只能照抄字面量。另外 `spec.phase` 与 `spec.priority` 是 CRD 顶层字段、被原样拷进 Istio 侧（`:1200-1216`），`defaultConfigDisable` / `configDisable` 走 `BoolValue` 三态判定（`:1347-1349`）——**"没写"与"写了 false"不是一回事**。
 
 ## Phase and Priority Registry
 
@@ -107,6 +111,7 @@ kubectl exec <higress-gateway-pod> -n higress-system -- \
 - [AI Gateway](/docs/CS/Framework/Higress/AI_Gateway.md)
 - [WasmPlugin](/docs/CS/Framework/Istio/WasmPlugin.md)
 - [Higress](/docs/CS/Framework/Higress/Higress.md)
+- [Config Pipeline](/docs/CS/Framework/Higress/Config_Pipeline.md)
 
 ## References
 

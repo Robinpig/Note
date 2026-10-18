@@ -83,19 +83,21 @@ acmeIssuer:
   - name: letsencrypt         # 当前只支持这一个 issuer
     email: <通知邮箱>
 credentialConfig:
-  - tlsIssuer: letsencrypt    # 填了它，domains 只能一个且不能泛域名
+  - tlsIssuer: letsencrypt    # 填了它，domains 最多一个（泛域名无代码校验，但 HTTP-01 签不出来）
     domains: [foo.com]
     tlsSecret: foo-com-secret
 ```
 
-Helm 侧等价开关是 `higress-core.controller.automaticHttps.enabled`（默认 true）与 `.automaticHttps.email`（**为空时系统随机生成邮箱地址**）。
+Helm 侧等价开关是 `higress-core.controller.automaticHttps.enabled`（默认 true）与 `.automaticHttps.email`。**"为空时系统随机生成邮箱地址"要加两个限定**：只在 `higress-https` 不存在、需要新建默认配置那一次生成（`config.go:192-194`），生成的是不存在的假域名 `your%d@yours%d.com`（`config.go:307-311`，域名段少一个字母、疑似 typo，收不到任何到期通知）；而**已存在的 ConfigMap 里把 email 改成空是硬报错**（`config.go:109-111`），不会重新生成。
 
 > [!WARNING]
-> 三条限制必须和这个能力一起写：① **当前仅对 Ingress 模式生效，Gateway API 暂不支持**（文档原文），而 Gateway API 本身默认就是关闭的（`global.enableGatewayAPI` 默认 false）；② **泛域名与 ACME 互斥**——`tlsIssuer: letsencrypt` 时 `domains` 只能填一个且不能是泛域名，且 `tlsSecret` 不能是已存在的、非 Higress 创建的自动证书；只有**不填** `tlsIssuer` 时才能用泛域名批量管理 secret；③ 另有 `higress-console.certmanager.enabled` 默认 false，不要把它当成 ACME 的开关。
+> 这个能力的真实边界比文档叙述窄，五条要一起写（源码 `pkg/cert` @ v2.2.5，细节见 [Certificates and ACME](/docs/CS/Framework/Higress/Certificates_and_ACME.md)）：① **challenge 只有 HTTP-01**（TLS-ALPN 显式关闭、零 DNS-01 代码，`certmgr.go:91-92`），应答方式是临时创建一个 `higress` class 的 Ingress 指向 `higress-controller:8889`（`ingress.go:32-38`）⇒ **域名必须公网 80 可达**，纯内网签不出来；② **仅 Ingress 模式生效**这条有正面代码证据（`pkg/ingress/kube/gateway/` 对 `pkg/cert` 与 `higress-https` 零引用），Gateway API 的 `certificateRefs` 完全不查这个 ConfigMap；③ **"不能泛域名"只实现了一半**——`tlsIssuer: letsencrypt` 时"最多一个 domain"是硬校验（`config.go:134-138`），但**代码里没有任何泛域名检查**，写 `*.example.com` 会通过校验并进签发队列、只在 ACME 层失败；不填 `tlsIssuer` 时泛域名才是合法且主要的用法（那时它只是"域名 → 自备 Secret"的映射表，根本不碰 ACME）；④ **`renewBeforeDays` 实际是个比例**（`renewBeforeDays / 90` 喂给 certmagic 的 `RenewalWindowRatio`），合法区间 **1..89、越界报错而非夹紧**，"提前 N 天"只在 LE 的 90 天证书上碰巧成立；⑤ **多副本之间没有任何互斥**（`Lock` / `Unlock` 是空实现 + 全仓无 leader election），而 Helm 默认 `enabled: true` 且 `maxReplicas: 5` ⇒ **"生产建议单副本"这条运维偏好在代码侧是有支撑的**；同时"自动签发不会覆盖手写同名 Secret"不成立——那道守卫检查的是刚构造出来的新对象、条件永真，实际会整体 `Update` 覆盖。另有 `higress-console.certmanager.enabled`（默认 false）与 ACME 无关，不要当开关用。
 
 其余证书与 TLS 事实：证书来源还可以是普通 K8s TLS Secret（Ingress 的 `secretName` + `fallbackForInvalidSecret` 兜底匹配）；域名级 TLS 版本用 `higress.io/tls-min-protocol-version`（默认 TLSv1.0）与 `higress.io/tls-max-protocol-version`（默认 TLSv1.3），`nginx.ingress.kubernetes.io/ssl-cipher` 仅 TLSv1.0–1.2 生效；`ssl-redirect` 与 `force-ssl-redirect` 在 Higress 里**不区分对待**，都是强制 HTTP → HTTPS。网关到后端的 mTLS 走 `proxy-ssl-secret` + **必须存在同名字加 `-cacert` 的 CA Secret**（`auth-tls-secret` 侧同样是 `<名字>-cacert` 格式且被标为"部分兼容"），具体 annotation 组合在 [Traffic Governance](/docs/CS/Framework/Higress/Traffic_Governance.md)。信任域由 `higress-core.meshConfig.trustDomain` 决定（默认 `cluster.local`，用于生成服务证书与 JWT Token），`higress-core.pilot.jwksResolverExtraRootCA` 可让 pilot 解析 JWKS URI 时额外信任一个 PEM 根证书。
 
-关于凭据，本子树只记录机制不记录值：服务发现认证用 `authSecretName` 指向 `higress-system` 下的 Secret（nacos 存 `nacosUsername` / `nacosPassword`，consul 存 `consulToken`）；Docker Compose 的 `-k/--data-enc-key` **长度必须 32 个字符**，未设置则自动生成随机密钥，**集群部署时必须显式设置**，否则各节点密钥不一致。
+关于凭据，本子树只记录机制不记录值：服务发现认证用 `authSecretName` 指向 `higress-system` 下的 Secret（nacos 存 `nacosUsername` / `nacosPassword`，consul 存 `consulToken`）。Docker Compose 的 `-k/--data-enc-key` **长度必须 32 个字符**，未设置则自动生成随机密钥，**集群部署时必须显式设置**，否则各节点密钥不一致。
+
+两条源码侧的修正（细节见 [Service Registry Internals](/docs/CS/Framework/Higress/Service_Registry_Internals.md)）：**认证在 v1 系 Nacos 上是无效的**——`nacos`(v1) watcher 接收 `authOption` 但构造客户端配置时从不读取它，真正消费凭据的只有 `nacos2` / `nacos3` / nacos3-mcpserver / `consul`，而 `etcdUsername` / `etcdPassword` 两个 key 是无人消费的死字段；**Secret 必须与控制器同命名空间，取不到会让整个服务来源 watcher 创建失败**（不是降级为匿名），所以"配了 authSecretName 但名字写错"的表现是该来源完全不生效。
 
 ## Unverified
 
@@ -104,11 +106,13 @@ Helm 侧等价开关是 `higress-core.controller.automaticHttps.enabled`（默�
 ## Links
 
 - [Plugin System](/docs/CS/Framework/Higress/Plugin_System.md)
+- [Certificates and ACME](/docs/CS/Framework/Higress/Certificates_and_ACME.md)
+- [Service Registry Internals](/docs/CS/Framework/Higress/Service_Registry_Internals.md)
 - [Traffic Governance](/docs/CS/Framework/Higress/Traffic_Governance.md)
-- [Architecture](/docs/CS/Framework/Higress/Architecture.md)
 - [AI Gateway](/docs/CS/Framework/Higress/AI_Gateway.md)
 - [Istio Security](/docs/CS/Framework/Istio/Security.md)
 - [Higress](/docs/CS/Framework/Higress/Higress.md)
+- [Architecture](/docs/CS/Framework/Higress/Architecture.md)
 
 ## References
 

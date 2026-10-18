@@ -28,6 +28,8 @@ Higress 有四种官方部署形态，但**它们不是"从重到轻"的同一�
 
 Standalone 形态值得记的是它的**配置源选择**：`-c/--config-url` 可指向独立 Nacos（**版本不低于 2.0.0**，格式 `nacos://192.168.0.1:8848`）或本地磁盘（`file:///opt/higress/conf`）；`--use-builtin-nacos` 用内置 Nacos、官方注明不建议用于生产；`--nacos-ns` 默认 `higress-system`；`-k/--data-enc-key` 是敏感信息加密密钥，**长度必须 32 个字符**，不设则随机生成，**集群部署时必须显式设置**否则各节点密钥不一致（这里只记机制，不记值）。容器名在官方两处文档不一致（创建用 `higress-ai`，`view-logs` 的示例是 `docker exec -it higress-ai-gateway bash`），**照抄前先换成自己创建的名字**。
 
+源码侧（`higress-standalone` @ `aio-v2.2.5`）把这段"脱离 K8s"的实现说清楚了，也修正了两处常见误解：**默认 profile 实际常驻约 10 个容器而不是 5 个**（另有 nacos、plugin-server 与观测四件套），且 apiserver 的持久层**没有 etcd**——`--storage` 只有 `nacos`（默认）与 `file` 两个合法值，CR 实例分别落到 Nacos 配置项（`dataId = <resource>.<name>` + `ListenConfig` 模拟 watch）与本地文件树（fsnotify 模拟 watch）。那个"模拟 K8s API Server"的组件是 **kubernetes `sample-apiserver` 的直接 fork**（`k8s.io/apiserver` v0.31.2），不是 k3s / kine / envtest；controller / pilot / console 拿 precheck 现生成的自签证书与 kubeconfig 连它的 8443，走的就是常规 list/watch，**所以主仓控制面不需要为此改一行代码**。另外，那串端口与凭据参数属于 **`bin/configure.sh`**（822 行，参数逐个核到 case 块 `:85-191`，还有一批文档未列的 `-r/--rerun`、`-s/--storage`、`--nacos-service-port` 等）；本仓另有一个 `src/get-higress.sh` **与主仓同名但不同物**，它是安装器、只认 `-h` 与 `-u`，**不吃这些参数**。All-in-One 则是 supervisord 编排 10 个进程、按 priority 0→3000 依次拉起，且**只有 file 存储、没有 Nacos**，网关端口默认也变成 8080 / 8443。这些细节、参数对照表与可复现性凭据（`release-provenance.json` 把主仓 commit 与五个镜像 digest 钉死）在 [Standalone and All-in-One](/docs/CS/Framework/Higress/Standalone_and_AllInOne.md)。
+
 控制台侧的登录口径是：**首次访问需先初始化管理员账号，初始化完成后跳转登录页**，没有"内置默认口令"这回事；集群内可用 `hgctl dashboard console` 打开。相关 values：`higress-console.web.login.prompt`（登录页提示文案）、`higress-console.swagger.enabled`（默认 false）。
 
 ## Helm Values That Matter
@@ -99,7 +101,12 @@ helm upgrade higress --version ${higress_version} -n higress-system higress.io/h
 
 ## hgctl and Troubleshooting Chain
 
-`hgctl` 的子命令是 **`profile`（list / dump）、`install`、`upgrade`、`dashboard`、`uninstall`、`plugin`** 六组。安装核心参数只有 `-s/--set` 与 `-f/--filename`，profile 取值文档里出现的是 `local-k8s` 与 `local-docker`。**没有 `hgctl config` 这个子命令**（旧资料的"install / config 等"不成立）；`plugin` 子命令组的二级动作本次未逐条核实，只可写"另有 plugin 子命令组"。
+`hgctl` 的源码在顶层 `hgctl/`（独立 go module，**不是文档目录表暗示的 `tools/hgctl`**），命令树在 `hgctl/pkg/root.go:35-47`，共 13 个顶层子命令：`profile`（list / dump）、`install`、`upgrade`、`dashboard`、`uninstall`、`plugin`，另有 `version`、**`config`**、`manifest`、`completion`、`code-debug`、`mcp`、`agent`。
+
+> [!WARNING]
+> **`hgctl config` 确实存在**，但它的语义是**抓 xDS 配置**——二级命令 `all` / `bootstrap` / `cluster` / `endpoint` / `listener` / `route`（`hgctl/pkg/config_cmd.go:45-50`），文档站的 hgctl 页整段没提它。反过来，`profile` / `install` / `upgrade` / `dashboard` / `uninstall` 这些是 **root 的子命令**，不是 `config` 的子命令；旧资料把两组混成"hgctl config 的子命令是 profile / install / …"是错的。`plugin` 子命令组的真实动作是 `build` / `install` / `uninstall` / `ls` / `test` / `config` / `init`（`hgctl/pkg/plugin/plugin.go:36-42`）。
+
+install 核心参数只有 `-s/--set` 与 `-f/--filename`，profile 取值文档里出现的是 `local-k8s` 与 `local-docker`。`dashboard` 可打开 Console、Controller Debug、Envoy、Grafana、Prometheus 五个界面（`--browser` 默认 true）。
 
 "配置改了但没生效"必须按层定位，四段链依次是控制面生成、pilot 收到、pilot 推出、数据面生效：
 
@@ -129,14 +136,17 @@ FAQ 与场景页给出的、值得照抄进决策清单的口径：
 
 ## Unverified
 
-`hgctl install` 支持的完整 profile 取值集合与 hgctl 级参数全集；Standalone 各参数的必填性校验规则（例如 `-c` 与 `--use-builtin-nacos` 之外的组合约束、`-k` 在升级时是否会轮换既有密文）；Console 管理员账号是否落地为某个 K8s Secret、密码重置方式与登录失败锁定策略；`crd.yaml` 在各版本间的差异；企业版（MSE 云原生网关）与开源版在 WAF / 认证插件上的功能差异清单；Envoy 与 Istio 在 v2.2.5 里被 pin 的内核版本号。
+`hgctl install` 支持的完整 profile 取值集合与 hgctl 级参数全集；Standalone 各参数的必填性校验规则（参数**存在性已逐个核到源码**，但 `-c` 与 `--use-builtin-nacos` 之外的组合约束、`-k` 在升级时是否会轮换既有密文仍未核）；Console 管理员账号是否落地为某个 K8s Secret、密码重置方式与登录失败锁定策略；`crd.yaml` 在各版本间的差异；企业版（MSE 云原生网关）与开源版在 WAF / 认证插件上的功能差异清单。
+
+Istio / Envoy 的内核版本已不再是未决项——主仓 `.gitmodules` 把 fork 分支钉在 **`istio-1.27`**（`istio/pkg` 单独走 `istio-1.19`）与 **`envoy-1.36`**，K8s 侧依赖 pin 在 v0.34.1，证据与推导链在 [Source Map](/docs/CS/Framework/Higress/Source_Map.md)。
 
 ## Links
 
 - [Architecture](/docs/CS/Framework/Higress/Architecture.md)
+- [Standalone and All-in-One](/docs/CS/Framework/Higress/Standalone_and_AllInOne.md)
+- [Certificates and ACME](/docs/CS/Framework/Higress/Certificates_and_ACME.md)
 - [Observability](/docs/CS/Framework/Higress/Observability.md)
-- [Plugin System](/docs/CS/Framework/Higress/Plugin_System.md)
-- [Traffic Governance](/docs/CS/Framework/Higress/Traffic_Governance.md)
+- [Source Map](/docs/CS/Framework/Higress/Source_Map.md)
 - [Helm](/docs/CS/Container/k8s/Helm.md)
 - [Higress](/docs/CS/Framework/Higress/Higress.md)
 

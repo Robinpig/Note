@@ -56,7 +56,7 @@ Higress 自有的、nginx 侧没有对应的路由增强 annotation：`higress.i
 
 三条路，解决的问题不同：
 
-**一、canary annotation，路由级切流。** 家族共 7 条：`canary`、`canary-by-header`、`canary-by-header-value`（精确）、`canary-by-header-pattern`（正则）、`canary-by-cookie`、`canary-weight`、`canary-weight-total`。官方明确 **`higress.io` 与 `nginx.ingress.kubernetes.io` 两个前缀是等价的**，可按使用习惯任选。两条常见误解：只配 `canary-by-header` 时 header 值**必须是 `always`** 才进灰度（要自定义值得再配 `-by-header-value`）；`canary-by-cookie` **根本不支持自定义值，只能 `always`**。多种方式的优先级官方给的是 **Header > Cookie > 权重**，并声明灰度支持多个版本服务、无上限。
+**一、canary annotation，路由级切流。** 家族共 7 条：`canary`、`canary-by-header`、`canary-by-header-value`（精确）、`canary-by-header-pattern`（正则）、`canary-by-cookie`、`canary-weight`、`canary-weight-total`。官方明确 **`higress.io` 与 `nginx.ingress.kubernetes.io` 两个前缀是等价的**，而源码把这句话收窄了：canary 家族走 `*ASAP` 解析（`pkg/ingress/kube/annotations/parser.go:130`），**双前缀确实都认，但 nginx 前缀优先**；`destination`、`route-limit-*`、`request/response-header-control-*`、`match-*` 这些走 `*ForHigress` 的能力**只认 `higress.io`**（`Source Map` 的注解表逐条标了归属）。两条常见误解：只配 `canary-by-header` 时 header 值**必须是 `always`** 才进灰度（要自定义值得再配 `-by-header-value`）；`canary-by-cookie` **根本不支持自定义值，只能 `always`**。多种方式的优先级官方给的是 **Header > Cookie > 权重**，并声明灰度支持多个版本服务、无上限。
 
 **二、`traffic-tag`，只染色不决策**（默认阶段、priority 400）。定位是"根据权重或特定请求内容**通过添加特定请求头的方式**对请求流量进行染色"，转发决策交给下游消费这个 header 的路由规则或全链路灰度。顶层 `conditionGroups` / `weightGroups` / `defaultTagKey` / `defaultTagVal`（后两者**当且仅当同时配置**才生效）。条件算子 7 个：`equal`、`not_equal`、`prefix`、`in`、`not_in`、`regex`、`percentage`；`conditionType` 3 个：`header`、`parameter`、`cookie`；组合逻辑 `logic` 取 `and` / `or`，**官方原文强调必须为小写字母**；`regex` 用的是 **RE2** 引擎。`value` 字段是**数组**，即使 `equal` 也要写成 `- bar`，且只有 `in` / `not_in` 支持多值。
 
@@ -105,7 +105,9 @@ Higress 能从 ingress-nginx 平滑迁移，靠的就是这张表——[兼容�
 
 ## Unverified
 
-四项未核到一手出处，不写成事实：Envoy 异常点检测（Outlier Detection）在 Higress 侧的暴露入口——文档没有对应页面或字段；`higress.io/load-balance` 与 `consistenthash` 之类取值只在搜索结果正文读到、未在文档页二次核对；HTTP Method / query 作为路由匹配条件是否有独立的字段级入口（只能落到 canary 与 `traffic-tag` 两条路径上，控制台路由表单的全量匹配条件无法从文档站核实）；同一 Ingress 内是否存在原生 weighted routing 字段（官方做法是"多 Ingress + `canary-weight`"）；`canary-weight-total` 在多个灰度 Ingress 下的分母作用域。
+有一项已**从源码转正**：HTTP Method / query / header 作为路由匹配条件确实有字段级入口，是四条 Higress 自有注解 `higress.io/match-method`、`match-query`、`match-header`、`match-pseudo-header`（`pkg/ingress/kube/annotations/match.go:29-32`）——文档站的兼容矩阵页没列它们，完整注解表在 [Source Map](/docs/CS/Framework/Higress/Source_Map.md)。同类转正的还有 `mirror-target-fqdn` 与 `mirror-target-fqdn-port`（`mirror.go:27-28`，文档未列的镜像目标写法）。
+
+仍不知道的：**Envoy 异常点检测（Outlier Detection）在 Higress 侧的暴露入口**——文档没有对应页面，`pkg/ingress/kube/annotations/` 的 21 个 parser 里也没有对应 handler；`higress.io/load-balance` 与 `consistenthash` 那组取值只在搜索结果正文读到、未与 `loadbalance.go:25-46` 的常量逐项比对；同一 Ingress 内是否存在原生 weighted routing 字段（官方做法仍是"多 Ingress + `canary-weight`"）；`canary-weight-total` 在多个灰度 Ingress 下的分母作用域；`traffic-tag` 染出的 `x-mse-tag` 具体被谁消费（`applyCanaryIngresses` 处理的是 Ingress 层的 canary 合并，与插件染色的关系未追）。
 
 ## Links
 
@@ -115,6 +117,7 @@ Higress 能从 ingress-nginx 平滑迁移，靠的就是这张表——[兼容�
 - [Nginx Compare](/docs/CS/CN/nginx/compare.md)
 - [TrafficManagement](/docs/CS/Framework/Istio/TrafficManagement.md)
 - [Higress](/docs/CS/Framework/Higress/Higress.md)
+- [Config Pipeline](/docs/CS/Framework/Higress/Config_Pipeline.md)
 
 ## References
 

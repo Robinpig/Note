@@ -38,9 +38,12 @@ Higress 自有 CRD 的 group 是 `networking.higress.io`，两个版本的 `apiV
 
 **内置的 istio 不等于 Istio。** `global.enableIstioAPI` 默认 false 这件事本身就是边界声明：Higress 不假定你要用、也不能直接用完整的 Istio API。pilot 容器是 istiod 的 pilot 模块 fork，若干网格能力在这套形态里被关掉了——从 Helm 参数就能看出取舍：`PILOT_ENABLE_METADATA_EXCHANGE` 默认 **false**、`PILOT_ENABLE_CROSS_CLUSTER_WORKLOAD_ENTRY` 默认 **false**、`VALIDATION_ENABLED` 默认 **false**，而 `PILOT_SCOPE_GATEWAY_TO_NAMESPACE` 默认 **true**（网关只能访问自己命名空间的服务）。需要完整服务网格能力时应当单独安装 Istio。
 
+> [!IMPORTANT]
+> **而且这个 fork 不是另一个进程。** `go.mod:302-314` 用 replace 把 `istio.io/{api,pkg,client-go,istio}` 与 go-control-plane 全部指向构建期生成的 `./external/*`，`pkg/bootstrap/server.go` 直接 import `pilot/pkg/xds`、`pilot/pkg/config/aggregate`、`pilot/pkg/serviceregistry/aggregate`，并把同一个 `*xds.DiscoveryServer` 指针分别交给翻译层（`:240`）与证书模块（`:440`）。⇒ **没有 istiod 进程、没有 RPC / UDS 边界、也没有"外部控制器向 istiod 上传配置"的通道**，耦合强度是编译期 + 内存对象级；方向还是反的——是 pilot **反向 pull** Higress 的配置存储。这既解释了 Higress 为什么能零成本复用 pilot 的 xDS 实现，也解释了它为什么必须紧跟 fork 的内部 API 演进（`server.go:580-589` 因 istio 1.27 删掉 ledger 而整段注释）。逐跳证据在 [Config Pipeline](/docs/CS/Framework/Higress/Config_Pipeline.md)。
+
 ## Configuration Storage without Kubernetes
 
-"是否必须有 Kubernetes"的官方答案是**不需要**：一行 Docker 命令即可启动，也支持虚拟机与物理机场景。但独立部署的实现方式值得单独记一笔，因为它反过来印证了架构——Standalone 形态用 **5 个容器把 K8s 控制面重新演了一遍**：
+"是否必须有 Kubernetes"的官方答案是**不需要**：一行 Docker 命令即可启动，也支持虚拟机与物理机场景。独立部署的实现方式值得单独记一笔，因为它反过来印证了这套架构的解耦点在哪——**Standalone 没有改控制面一行代码，而是补了一个假的 kube-apiserver**：
 
 | 服务 | 职责 |
 | --- | --- |
@@ -50,11 +53,16 @@ Higress 自有 CRD 的 group 是 `networking.higress.io`，两个版本的 `apiV
 | `gateway` | 数据面 |
 | `console` | 管理界面 |
 
-配置的持久化位置由 `-c/--config-url` 决定：独立 Nacos（要求版本不低于 2.0.0，格式 `nacos://192.168.0.1:8848`）或本地磁盘（`file:///opt/higress/conf`）；另有 `--use-builtin-nacos` 走内置 Nacos，官方注明**不建议用于生产**。也就是说，Higress 的翻译链并不依赖 etcd，它依赖的是"有一个能被监听的配置源"。命令与参数全集见 [Deployment and Ops](/docs/CS/Framework/Higress/Deployment_and_Ops.md)。
+源码侧要修正两点。**其一，"5 个容器"是核心五件套，默认真正常驻约 10 个**（另有 nacos、plugin-server 与 prometheus / promtail / loki / grafana 四件套，`compose/.env` 的 `COMPOSE_PROFILES='nacos,plugin-server'`）。**其二，那个 apiserver 不是 k3s、不是 kine、不是 envtest，而是 Kubernetes `sample-apiserver` 的直接 fork**（模块 `github.com/alibaba/higress/api-server`，`k8s.io/apiserver` v0.31.2），注册约 21 类资源、对外就是标准 REST + list/watch，controller 拿自签证书生成的 kubeconfig 连它的 8443——所以主仓完全不需要知道下面是什么。
+
+配置的持久化位置也因此不是 etcd：`--storage` 只有 `nacos`（默认）与 `file` 两个合法取值，CR 实例分别落成 Nacos 配置项（`dataId = <resource>.<name>`，靠 `ListenConfig` 模拟 watch）或本地文件树（靠 fsnotify 模拟 watch）。命令行侧对应 `-c/--config-url`（独立 Nacos 要求版本不低于 2.0.0，格式 `nacos://192.168.0.1:8848`；或 `file:///opt/higress/conf`），`--use-builtin-nacos` 官方注明不建议用于生产。**结论：Higress 的翻译链不依赖 etcd，只依赖"有一个能被 list/watch 的配置源"。** 部署命令与参数见 [Deployment and Ops](/docs/CS/Framework/Higress/Deployment_and_Ops.md)，容器拓扑、存储实现与可复现性凭据见 [Standalone and All-in-One](/docs/CS/Framework/Higress/Standalone_and_AllInOne.md)。
 
 ## Source Layout
 
 [源码阅读指引](https://higress.ai/docs/latest/dev/code/)与 [自定义 CRD 开发指引](https://higress.ai/docs/latest/dev/customresourcedefinition/)给出的目录职责表（后者更细，取两表并集）：
+
+> [!NOTE]
+> 这两张表**已经滞后于 v2.2.5 的真实树**：表里没有 `hgctl`、没有 `client`，`script` 实际在 `tools/` 下，而 `tools/hgctl` 根本不存在——**hgctl 在仓库顶层且是独立 go module**（`go.mod:316` 的 replace 为证）。以源码为准的完整模块地图（含 `api/` 的 buf + cue-gen 生成管线、`client/` 的 code-generator 产物、14 个 ingress 子控制器、注解注册表、插件的四种语言层分布）在 [Source Map](/docs/CS/Framework/Higress/Source_Map.md)。
 
 | 目录 | 内容 |
 | --- | --- |
@@ -74,18 +82,21 @@ Higress 自有 CRD 的 group 是 `networking.higress.io`，两个版本的 `apiV
 
 构建入口按改动范围分档：Controller 用 `make build`（本地产物）/ `make docker-build`（镜像）/ `make build-istio-local`（编译它用的 Istio pilot 镜像）；Gateway 分**快速构建** `make build-gateway-local`（没改 Envoy 本体时）与**完整构建** `make build-envoy`（产物落在 `external/package/`，需上传到下载服务器且文件名以架构结尾，如 `envoy-amd64.tar.gz`，再用 `ENVOY_PACKAGE_URL_PATTERN` 指过去）。
 
-## Unverified
+## Version Pins and Remaining Gaps
 
-以下三项在 v2.2.5 的官方文档正文里**没有读到**，本子树不写成事实：Envoy 与 Istio 被 pin 的具体版本号（`roadmap` 只说 v2.0.0 做过一次 Istio / Envoy 内核升级）；`crd.yaml` 在各版本间的差异；AI 路由在控制台之外最终落成哪种 K8s 对象（只核实到控制台路径与 `ai-proxy` 的 YAML 写法）。本机也无法回源码核对——整仓 clone 与 blobless sparse clone 两条通道都因网络超时失败，所以源码级断言一律标注到文档表述这一层。
+v2.2.5 依赖的内核版本不再是未决项——本地源码树的 `.gitmodules` 直接给出 fork 分支：`istio/api`、`istio/istio`、`istio/client-go` 走 higress-group 的 **`istio-1.27`** 分支（`istio/pkg` 单独走 **`istio-1.19`**），`istio/proxy`、`envoy/go-control-plane`、`envoy/envoy` 走 **`envoy-1.36`**；`go.mod:284-300` 把 K8s 侧依赖钉在 **v0.34.1**（cli-runtime / kubectl 是 v0.33.3），`go.mod:3` 是 `go 1.26.0`。三条推论：控制面语义以 **Istio 1.27** 为基线（`pkg/bootstrap/server.go:580-589` 有整段 "ledger has been removed in istio 1.27" 的删除注释，`DistributionTrackingEnabled` 等字段留在原地却无人消费）、数据面以 **Envoy 1.36** 为基线、而 `DEP_VERSION` 里的 `higress-console: v2.1.9` 说明 **console 走独立发布线**（与 standalone 仓 `release-provenance.json` 钉的 console **2.2.5** 不同步）。完整证据表在 [Source Map](/docs/CS/Framework/Higress/Source_Map.md)。
+
+仍未闭合的三类：`IngressRoute` 等核心聚合类型**定义在 pilot fork**（`pkg/ingress/kube/common/model.go:22` 只是 import 方），而 `istio/` 与 `envoy/` 子模块**在本工作树均未 checkout、`external/` 要 `make prebuild` 才生成**，所以 fork 内部的默认值（push debounce 的实际算法、`AlwaysPushLabel` 的字面值、Http2Rpc EnvoyFilter 的 patch 与 filter 名）本地不可核；`changes/` 不是版本 changelog（现存 4 个文件全是贡献流程记录）；`McpServer` 这个 Gvk 被控制器引用（`pkg/ingress/kube/mcpserver/model.go:22`）却不在 `api/` 生成源与 `helm/core/crds` 三件套里，**由谁安装未确认**。这些一律留在各页的 `## Unverified`，不写进正文结论。
 
 ## Links
 
+- [Config Pipeline](/docs/CS/Framework/Higress/Config_Pipeline.md)
+- [Source Map](/docs/CS/Framework/Higress/Source_Map.md)
+- [Service Registry Internals](/docs/CS/Framework/Higress/Service_Registry_Internals.md)
+- [Standalone and All-in-One](/docs/CS/Framework/Higress/Standalone_and_AllInOne.md)
 - [Plugin System](/docs/CS/Framework/Higress/Plugin_System.md)
-- [Service Discovery](/docs/CS/Framework/Higress/Service_Discovery.md)
-- [Deployment and Ops](/docs/CS/Framework/Higress/Deployment_and_Ops.md)
-- [Envoy](/docs/CS/Framework/Istio/Envoy.md)
 - [WasmPlugin](/docs/CS/Framework/Istio/WasmPlugin.md)
-- [Higress](/docs/CS/Framework/Higress/Higress.md)
+- [Envoy](/docs/CS/Framework/Istio/Envoy.md)
 
 ## References
 

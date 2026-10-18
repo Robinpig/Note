@@ -68,6 +68,8 @@ tracing:
 - [Observability](/docs/CS/Framework/Istio/Observability.md)
 - [Envoy](/docs/CS/Framework/Istio/Envoy.md)
 - [Higress](/docs/CS/Framework/Higress/Higress.md)
+- [Config Pipeline](/docs/CS/Framework/Higress/Config_Pipeline.md)
+- [Certificates and ACME](/docs/CS/Framework/Higress/Certificates_and_ACME.md)
 
 ## References
 
