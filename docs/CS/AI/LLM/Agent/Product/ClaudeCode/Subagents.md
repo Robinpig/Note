@@ -2,7 +2,7 @@
 
 Subagents 是 Claude Code 的任务卸载机制：把一个会往主对话里灌搜索结果、日志、文件内容的旁支任务，丢给一个**独立上下文窗口**里跑的专门 agent，它干完只把摘要带回来。往上是 agent teams——多个 teammate 组成的协作团队。两者都建立在 Task/Agent 工具之上，本文覆盖定义方式、内置类型、团队架构与权限语义。
 
-事实基线：`@anthropic-ai/claude-code` **2.1.301**（2026-10-15），官方 sub-agents / agent-teams 页（2026-10-16 核实）。
+事实基线：`@anthropic-ai/claude-code` **2.1.302**（2026-10-16），官方 sub-agents / agent-teams 页（2026-10-18 核实）。
 
 ## What A Subagent Is
 
@@ -64,6 +64,12 @@ You are a code improvement specialist...
 项目级 subagent 从 cwd 向上逐级扫描 `.claude/agents/`，同名取**最靠近工作目录**的那份；`.claude/agents/` 与 `~/.claude/agents/` 都递归扫描，子目录路径不影响身份（身份只来自 frontmatter 的 `name`）。同一目录下两个文件声明同名 `name` 只会加载一个（按文件系统读序，无文档化优先级），`/doctor` 会报这种冲突。
 
 除 `tools`/`model` 外，frontmatter 还支持 `disallowedTools`、`effort`、`autoCompactWindow` 等字段；定义可以通过插件分发。
+
+## Fork 型子代理
+
+`subagent_type: "fork"` 的子代理启动时带一份主对话的上下文副本（普通子代理不带历史），适合需要完整上下文的旁支任务。[Architecture](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Architecture.md) 的上下文小节提到它是唯一启动即带对话副本的子代理类型。
+
+v2.1.302 起，fork 子代理在 `claude -p`、Agent SDK、桌面 app 与 VS Code 中**默认开启**（终端此前已默认）；`CLAUDE_CODE_FORK_SUBAGENT=0` 可整体关闭，`claude mcp serve` 永不提供 fork 子代理。
 
 ## Agent Teams
 

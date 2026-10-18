@@ -2,7 +2,7 @@
 
 Hooks 是 Claude Code 生命周期上的自动化触点：在特定事件发生时执行用户定义的 shell 命令、HTTP 端点、MCP 工具调用、LLM 提示或子 agent。它是「把 harness 行为钉死」的最硬手段——[Permission](/docs/CS/AI/LLM/Agent/Theory/Permission.md) 理论篇说过 CLAUDE.md 只是 context 不是 enforced configuration，而 hook 是真正的强制层。
 
-事实基线：`@anthropic-ai/claude-code` **2.1.301**（2026-10-15），官方 hooks reference（2026-10-16 核实）。本文覆盖事件全表、匹配语义、五种 handler、以及与旧版笔记的差异。
+事实基线：`@anthropic-ai/claude-code` **2.1.302**（2026-10-16），官方 hooks reference（2026-10-18 核实）。本文覆盖事件全表、匹配语义、五种 handler、以及与旧版笔记的差异。
 
 ## Event Cadence
 
@@ -70,7 +70,7 @@ MCP 工具在工具事件里就是普通工具，命名 `mcp__<server>__<tool>`�
 
 ## Handler Types
 
-五种 handler，全部匹配的 hook **并行执行**：
+五种 handler，全部匹配的 hook **并行执行**（v2.1.302 起，同一事件的 `prompt` / `agent` hook 至多 12 个同时跑，其余排队；`command` / `http` / `mcp_tool` 不受此限）：
 
 | 类型 | 做什么 |
 | :--- | :--- |
@@ -79,6 +79,21 @@ MCP 工具在工具事件里就是普通工具，命名 `mcp__<server>__<tool>`�
 | `mcp_tool` | 调用已配置 MCP server 的工具，文本输出视同 command 的 stdout |
 | `prompt` | 单轮问一个 Claude 模型，模型以 JSON 返回决策 |
 | `agent` | 派一个能用 Read/Grep/Glob 验证条件的子 agent 再给决策（实验性） |
+
+`prompt` handler 有个容易踩的边界：**只有 `Stop` / `SubagentStop` / `UserPromptSubmit` / `PreToolUse` 四个事件支持它**，其余事件只能用 `command`（官方 plugin-dev skill 明确列出）。需要模型判定但事件不在此列，只能换事件或改用 `agent`。完整取舍与可抄的样例见 [HookPatterns](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/HookPatterns.md)。
+
+### Async Versus AsyncRewake
+
+两者都「不等这个 hook」，但**第二个字段的含义此前未见官方文档记载**——它来自 `security-guidance` 插件的实际用法：
+
+| 字段 | 行为 |
+| :--- | :--- |
+| `async: true` | hook 后台跑，**不阻塞当前 turn**，结果不保证回到对话 |
+| `asyncRewake: true` | hook 后台跑，**完成后主动重新唤醒会话**，把结果交给 Claude |
+
+`asyncRewake` 配两个文本字段：`rewakeMessage` 是唤醒时给 **Claude** 的完整提示词，`rewakeSummary` 是给**用户**看的一行摘要。官方插件的措辞值得抄：「处理或确认下面的发现，然后继续用户的原始请求，或继续等待用户回复」——它显式承认「此刻用户可能在等你回话」这个场景。
+
+这个模式是为**重活**设计的：要读多个文件、跑多次工具调用与模型推理的 hook（比如 agentic 的 commit 安全审查）不可能同步等，而 `async` 又会让结论石沉大海。`asyncRewake` 是「不打断 + 必达」的中间态。
 
 默认 timeout 差异很大，且有几个事件的默认值被单独压低：
 
@@ -137,6 +152,8 @@ hooks 在 subagent 里同样触发，输入带 `agent_id` 与 `agent_type` 标�
 
 插件可以把 hook 写成 **JavaScript 函数**，在 Claude Code 自己进程里运行，还能画界面、加命令——这种插件叫 **mod**。本文讲的 JSON 配置 hooks 与 mod 并存不冲突，但 mod 走的是 `tool.check` 等事件处理通道，配置在插件侧而非 settings JSON。
 
+mod 已经发展成完整的编程平台（`$` 宿主对象、十余个 hook 事件、`claude plugin test` / `validate` 工具链、组织管控下的权力削减边界），单独立篇见 [Mods](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Mods.md)。
+
 ## Common Recipes
 
 - **自动格式化**：`PostToolUse` + `matcher: "Edit|Write"` 跑 prettier。
@@ -150,6 +167,8 @@ hooks 在 subagent 里同样触发，输入带 `agent_id` 与 `agent_type` 标�
 - [Permission 产品篇](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Permission.md)
 - [Permission 理论篇](/docs/CS/AI/LLM/Agent/Theory/Permission.md)
 - [Extensions](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Extensions.md)
+- [Mods](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Mods.md)
+- [Security](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Security.md)
 
 ## References
 

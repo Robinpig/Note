@@ -7,7 +7,7 @@ Claude Code 的记忆分两套互补机制，都在每次会话开始时加载�
 
 外加两套相邻能力：`.claude/rules/` 把指令按路径拆分，AGENTS.md 支持让你复用给别的编码 agent 写的指令文件。压缩与上下文窗口的通用原理见 [Compaction](/docs/CS/AI/LLM/Agent/Theory/Compaction.md)，本文讲 Claude Code 的实现。
 
-事实基线：`@anthropic-ai/claude-code` **2.1.301**（2026-10-15），官方 memory 页（2026-10-16 核实）。
+事实基线：`@anthropic-ai/claude-code` **2.1.302**（2026-10-16），官方 memory 页（2026-10-18 核实）。
 
 ## CLAUDE.md vs Auto Memory
 

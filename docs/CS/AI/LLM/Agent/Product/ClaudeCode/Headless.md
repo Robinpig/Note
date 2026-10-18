@@ -2,7 +2,7 @@
 
 同一个 agentic loop 换个外壳就能进脚本：Agent SDK 提供 CLI（`claude -p`）、Python 与 TypeScript 三种入口，把 Claude Code 的工具、循环与上下文管理嵌进你的程序。本文覆盖非交互运行、`--bare` 模式、退出语义与 GitHub Actions 集成。循环内部机制见 [Architecture](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Architecture.md)。
 
-事实基线：`@anthropic-ai/claude-code` **2.1.301**（2026-10-15），官方 headless / github-actions 页（2026-10-16 核实）。
+事实基线：`@anthropic-ai/claude-code` **2.1.302**（2026-10-16），官方 headless / github-actions 页（2026-10-18 核实）。
 
 ## Print Mode
 

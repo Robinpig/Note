@@ -2,7 +2,7 @@
 
 Claude Code 的权限体系回答一个问题：**哪些操作可以直接做，哪些要问你**。它由两层组成——permission mode（会话基线上「要不要问」）与 permission rules（在基线上叠具体工具的预批准/阻断），再加上独立的 Bash sandbox（OS 强制边界，管「跑起来之后能碰到什么」）。通用机制（沙箱技术形态、fail-closed、审批粒度）见 [Permission 理论篇](/docs/CS/AI/LLM/Agent/Theory/Permission.md)，本文只讲 Claude Code 的产品实现。
 
-事实基线：`@anthropic-ai/claude-code` **2.1.301**（2026-10-15），官方 permissions / permission-modes / sandboxing 三页（2026-10-16 核实）。
+事实基线：`@anthropic-ai/claude-code` **2.1.302**（2026-10-16），官方 permissions / permission-modes / sandboxing 三页（2026-10-18 核实）。
 
 ## Six Modes
 
@@ -21,12 +21,22 @@ Claude Code 的权限体系回答一个问题：**哪些操作可以直接做，
 
 会话起始模式取第一个适用的来源：`--permission-mode` flag → settings 的 `permissions.defaultMode` → 内置默认。
 
-**v2.1.283 起，交互式终端与 VS Code 会话的内置默认起始模式是 `auto`**（此前是 Manual；更早版本仅 Pro/Max/Team 计划如此）。另有若干修正：
+**v2.1.283 起，交互式终端与 VS Code 会话的内置默认起始模式是 `auto`**（此前是 Manual；更早版本仅 Pro/Max/Team 计划如此）。但「默认进auto」这件事分四版走完、且每版覆盖的会话类型不同，读文档时极易写成过时的全局结论：
+
+| 版本 | 变化 |
+| :--- | :--- |
+| 2.1.283 | 交互式会话在第三方 provider 或 telemetry 关闭时也进auto |
+| 2.1.284 | 交互式会话扩展到**所有套餐与 provider** |
+| 2.1.285 | `claude -p` 与 Python Agent SDK 在第三方 provider 或 telemetry 关闭时进 auto |
+| 2.1.302 | **反向修订**：`-p` 与 SDK 在第三方 provider + telemetry 关闭或全新安装时回到 **`default`**，要 auto 得显式 `--permission-mode auto` |
+
+其余若干修正：
 
 - project / local settings 里设 `"auto"` **不生效**（落到内置默认），设 `"bypassPermissions"` 也不生效（会话以 Manual 启动）。
-- `claude -p` 与 Agent SDK 默认 `default`（拉 feature flags 的会话）；HIPAA 配置的组织默认 Manual（v2.1.285+）。
+- HIPAA 配置的组织默认 Manual（v2.1.285+）。
 - flag/settings/内置默认选了 auto 但会话不可用（模型不支持、组织关闭、服务端临时关停）时，会话以 Manual 启动。
-- 管理员可用 managed settings 的 `permissions.disableAutoMode: "disable"` 移除 auto，或 `disableBypassPermissionsMode: "disable"` 禁掉 bypass。
+- 管理员可用 managed settings 的 `permissions.disableAutoMode: "disable"` 移除 auto，或 `disableBypassPermissionsMode: "disable"` 禁掉 bypass；`allowedProviders` 可限定机器能用哪些 provider（v2.1.285+）。
+- cloud session 的 auto 更严：Cowork cloud session 下 `PermissionRequest` hook **不能再批准 shell 命令或 subagent**，这类提示改为等待或拒绝（v2.1.299）；hook 的 allow 里带 `setMode` 更新被忽略（v2.1.300）。
 
 ## Rules On Top
 
@@ -81,6 +91,10 @@ classifier 信任会话启动时配置的工作目录与 remotes——会话中�
 3. 其余交给 classifier（关键路径移除按默认处理走）。
 4. 装了的 mod 若处理 `tool.check`，可在第 3 步前批准，classifier 不再检查。
 
+第 4 步是一个明显的口子——`tool.check` 上任何 hook 都能回答任何裁决，那么「用来消掉提示」的插件岂不也能消掉 deny 规则？**在组织管控的机器上不会**，机制是**双跑**：先照原样跑一遍链，若发现裁决被改写过（改写 = 更宽松，或同样裁决换了理由；收紧不算），就把 user 层整个摘掉再跑一次（`next.to(e, "append")`）；这个裁决没过任何个人插件，规则在其中被求值，两次跑只差user 层，所以差异即证明改写。deny 一律替换掉链的答案，ask 则在点名了背后是什么（`rule` / `hook` / `setting` / `ceiling` / `decider`）时被原样返回。完整规格见 [Security](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Security.md)。
+
+注意这条保护**管不到个人安装的 classic `PreToolUse` hook**——引擎在那时根本不发起 ask，`tool.check` 不会跑。这与「没装任何插件」时一模一样。
+
 classifier 的审查范围：Claude Code 自己发的 classifier 请求里，classifier 看得到用户消息、工具调用（只读查询除外）与 CLAUDE.md 内容，**工具结果被剥掉**——文件或网页里的敌意内容无法直接操纵 classifier。`PostToolUse` hook 可用 `classifierContext` 字段给调用结果附上应用侧上下文（v2.1.236+）。另有一个服务端探针在 Claude 读之前先扫工具结果里的可疑内容。
 
 ### Fallbacks
@@ -93,7 +107,7 @@ classifier 的审查范围：Claude Code 自己发的 classifier 请求里，cla
 
 ### Cost And Latency
 
-classifier 默认跑在 Claude Sonnet 5 上（服务端配置优先；会话模型是 Sonnet 4.6 或 `availableModels` 排除 Sonnet 5 时用会话模型，Fable 会话用 Opus）。Enterprise 与 API/Bedrock/Foundry 等账户上，classifier 调用计入 token 用量，每次检查带一轮往返；只读与工作目录内编辑跳过 classifier，开销主要来自 shell 命令与网络操作。服务端审查（把审查并进会话的模型请求）则没有单独调用可计——`CLAUDE_CODE_AUTO_MODE_SERVER=0` 可强制只用本地 classifier 请求。
+classifier 默认跑在 Claude Sonnet 5 上（服务端配置优先；会话模型是 Sonnet 4.6 或 `availableModels` 排除 Sonnet 5 时用会话模型，Fable 会话用 Opus）。客户端分类器模型可用 `CLAUDE_CODE_AUTO_MODE_MODEL` 环境变量指定（v2.1.302 引入，只改客户端分类器、不影响服务端自动模式）。Enterprise 与 API/Bedrock/Foundry 等账户上，classifier 调用计入 token 用量，每次检查带一轮往返；只读与工作目录内编辑跳过 classifier，开销主要来自 shell 命令与网络操作。服务端审查（把审查并进会话的模型请求）则没有单独调用可计——`CLAUDE_CODE_AUTO_MODE_SERVER=0` 可强制只用本地 classifier 请求。
 
 ## Bash Sandbox
 

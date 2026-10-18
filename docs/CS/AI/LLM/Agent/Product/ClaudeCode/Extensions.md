@@ -2,7 +2,7 @@
 
 Claude Code 的扩展面有四层，都叠在核心 agentic loop 之上（见 [Architecture](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Architecture.md)）：**skills**（补充知识）、**MCP servers**（接外部服务）、**plugins**（把上述成分打包分发）、**output styles**（改会话级的角色与文风）。此外 hooks（自动化工作流）见 [Hooks](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Hooks.md)，subagents 见 [Subagents](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Subagents.md)。
 
-事实基线：`@anthropic-ai/claude-code` **2.1.301**（2026-10-15），官方 skills / plugins / mcp / output-styles 页（2026-10-16 核实）。
+事实基线：`@anthropic-ai/claude-code` **2.1.302**（2026-10-16），官方 skills / plugins / mcp / output-styles 页（2026-10-18 核实）。
 
 ## Choosing The Right Extension
 
@@ -54,7 +54,7 @@ Claude Code 自带一批 prompt 型 bundled skills：`/doctor`（安装与配置
 
 Plugin 是打包分发的单位：一个目录（带 `.claude-plugin/plugin.json` manifest）装上 skills、agents、hooks、MCP servers，一次安装整体生效。
 
-- **mod**：hooks 写成 JavaScript 函数的插件，函数在 Claude Code 进程内运行、能画界面能加命令。
+- **mod**：hooks 写成 JavaScript 函数的插件，函数在 Claude Code 进程内运行、能画界面能加命令——它已是完整的编程平台（`$` 宿主对象、mod hook 事件族、managed settings 下的权力边界），单独立篇见 [Mods](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Mods.md)。
 - **marketplace**：带 `.claude-plugin/marketplace.json` 的仓库/目录，是 catalog 不是 hosted store。官方 marketplace（`claude-plugins-official`）首次交互式终端会话自动添加；官方市场里可看每个插件的 **Context cost 预估**。
 - **安装 scope**：user（本机所有项目）/ project（提交 `.claude/settings.json`，协作者各自安装）/ local（本仓库仅自己）。cloud session 不加载本地 settings 里的插件。
 - **常驻成本**：插件里每个可被 Claude 自动调用的成分，其 name+description 每轮都在上下文里（计用量），全文只在被用时加载；MCP servers 随启用插件的每个会话常驻运行。
@@ -83,12 +83,34 @@ Output style 是一组指令，设定整个会话里 Claude 的角色、语气�
 
 style 只是指令，不保证行为；它不改权限模式（Proactive 不改变哪些工具调用免问）。自定义 style 可以把它变成写作助手、数据分析师之类的非软工角色。
 
+## Official Plugins From The Public Repo
+
+官方 GitHub 仓库 [`anthropics/claude-code`](https://github.com/anthropics/claude-code) 随包发布一批官方插件（同时是插件系统的范例），经 `/plugin` 从官方 marketplace 安装，或 `--plugin-dir` 直接加载本地克隆。以下为仓库 `plugins/` 目录当前的官方插件——与上文的内置 bundled skills 是不同层（这些需显式安装，内置 skill 随客户端分发）：
+
+| 插件 | 内容 |
+| :--- | :--- |
+| `frontend-design` | 自动调用的 skill，做出有辨识度、生产级的前端界面，避开通用 AI 审美 |
+| `code-review` | `/code-review` 命令，5 个并行 Sonnet agent 做 CLAUDE.md 合规 / bug / 历史 / PR 历史 / 注释审查 |
+| `pr-review-toolkit` | `/pr-review-toolkit:review-pr`，多视角 PR 审查 agent（注释、测试、错误、类型、质量、简化） |
+| `commit-commands` | `/commit`、`/commit-push-pr`、`/clean_gone` 等 git 工作流命令 |
+| `feature-dev` | `/feature-dev` 七阶段功能开发工作流，配 `code-explorer` / `code-architect` / `code-reviewer` agent |
+| `agent-sdk-dev` | `/new-sdk-app` 新建 Agent SDK 项目，配 verifier agent |
+| `plugin-dev` | 插件开发工具箱，8 阶段 `/plugin-dev:create-plugin` + 7 个专家 skill |
+| `hookify` | `/hookify` 系列命令，按对话模式或显式指令自动生成 hook 防不当行为 |
+| `ralph-wiggum` | `/ralph-loop` 自主迭代循环，同一任务反复跑到完成 |
+| `security-guidance` | PreToolUse hook，编辑文件时警示命令注入 / XSS / eval / pickle 等 9 类安全问题 |
+| `explanatory-output-style` | SessionStart hook，注入教学性上下文（复刻已弃用的 Explanatory style） |
+| `learning-output-style` | SessionStart hook，决策点请你写 5~10 行代码（复刻未发布的 Learning style） |
+| `claude-opus-4-5-migration` | 把 Sonnet 4.x / Opus 4.1 代码与 prompt 迁移到 Opus 4.5 的 skill |
+
+仓库另含 `mods/`（JavaScript 函数式 hook 范例，见 [Mods](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Mods.md)）与 `examples/`（含 HIPAA 等示例 settings），是官方 marketplace 内容的来源。
+
 ## Links
 
 - [ClaudeCode 主枢纽](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/ClaudeCode.md)
 - [Skill 理论篇](/docs/CS/AI/LLM/Agent/Theory/Skill.md)
 - [MCP 协议](/docs/CS/AI/LLM/Protocol/MCP.md)
-- [Hooks](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Hooks.md)
+- [Mods](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Mods.md)
 
 ## References
 
