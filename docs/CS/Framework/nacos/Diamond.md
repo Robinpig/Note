@@ -1,3 +1,5 @@
+# Diamond (Alibaba Internal Origin)
+
 ## Introduction
 
 Diamond是阿里集团内广泛使用的配置中心，提供持久化管理和动态配置推送服务。应用方发布的配置会通过持久化存储保存，与发布者的生命周期无关。 动态配置推送，则是Diamond的核心功能，在阿里内部有很多应用场景，如数据库动态切换和扩容，业务系统开关配置运行时变更等。
@@ -194,4 +196,4 @@ NoClassDefFoundError
 
 ## References
 
-1. [阿里配置中心Diamond探索](https://developer.aliyun.com/article/912197)
+- <https://developer.aliyun.com/article/912197>

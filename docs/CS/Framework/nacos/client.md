@@ -110,7 +110,8 @@ spring:
 - **配置发布走 CI**，不手改控制台；利用 `his_config_info` 历史做回滚。
 - **临时实例优先**（默认），只有「宕机也不能丢注册信息」的强一致诉求才用持久实例（写经 JRaft，代价高）。
 - **客户端缓存兜底**：关键配置开启本地缓存，Nacos 全挂时仍能以最后已知值启动。
-- **监控客户端指标**：`nacos_monitor{name='configListenSize'}`、`subServiceCount` / `pubServiceCount`、`nacos_client_request_seconds_*` 可观测客户端负载（见 [Monitoring](/docs/CS/Framework/nacos/monitoring.md)）。
+- **监控客户端指标**（3.2.4 实测只有这几个，见 [Monitoring](/docs/CS/Framework/nacos/monitoring.md)）：`nacos_monitor{module="config",name="listenConfigCount"}`、`nacos_monitor{module="naming",name="serviceInfoMapSize"}`、`nacos_client_request{module,method,url,code}`、`nacos_client_naming_request_failed_total`。
+  早期文档里的 `configListenSize` / `subServiceCount` / `pubServiceCount` 在 3.x **已不存在**。
 
 ## Links
 
@@ -123,6 +124,6 @@ spring:
 
 ## References
 
-- <https://nacos.io/docs/v3.0/guide/user/sdk/java-sdk/>
+- <https://nacos.io/docs/latest/manual/user/java-sdk/usage/>
 - <https://spring.io/projects/spring-cloud-alibaba>
-- <https://nacos.io/docs/latest/manual/user/quick-start/>
+- <https://nacos.io/docs/latest/quick-start/>

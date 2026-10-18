@@ -1,3 +1,5 @@
+# Nacos Service Registry
+
 ## Introduction
 
 
@@ -915,152 +917,74 @@ public class DistroFilter implements Filter {
 
 ### InstanceController
 
-当客户端使用[HTTP注册](/docs/CS/Framework/nacos/registry.md?id=reqapi)会走到此处
-
-<!-- tabs:start -->
-
-##### **InstanceController**
+3.x 的 HTTP 注册/发现入口统一收敛到 **`/v3`** 命名 API（`InstanceControllerV3`，位于 `naming/controllers/v3/`）。经典的 v1 `com.alibaba.nacos.naming.controllers.InstanceController` 与 2.x 的 `InstanceControllerV2` 在 3.2.4 中均已移除，OpenAPI 不再提供 `/v1/ns/instance`、`/v2/ns/instance` 路由。
 
 ```java
-// com.alibaba.nacos.naming.controllers.InstanceController /v1/ns/instance
-@CanDistro
+// InstanceControllerV3.register（3.2.4，/v3/ns/instance）
 @PostMapping
 @TpsControl(pointName = "NamingInstanceRegister", name = "HttpNamingInstanceRegister")
-@Secured(action = ActionTypes.WRITE)
-public String register(HttpServletRequest request) throws Exception {
-
-    final String namespaceId = WebUtils.optional(request, CommonParams.NAMESPACE_ID,
-            Constants.DEFAULT_NAMESPACE_ID);
-    final String serviceName = WebUtils.required(request, CommonParams.SERVICE_NAME);
-    NamingUtils.checkServiceNameFormat(serviceName);
-
-    final Instance instance = HttpRequestInstanceBuilder.newBuilder()
-            .setDefaultInstanceEphemeral(switchDomain.isDefaultInstanceEphemeral()).setRequest(request).build();
-
-    getInstanceOperator().registerInstance(namespaceId, serviceName, instance);
-    NotifyCenter.publishEvent(new RegisterInstanceTraceEvent(System.currentTimeMillis(),
-            NamingRequestUtil.getSourceIpForHttpRequest(request), false, namespaceId,
-            NamingUtils.getGroupName(serviceName), NamingUtils.getServiceName(serviceName), instance.getIp(),
-            instance.getPort()));
-    return "ok";
-}
-```
-
-##### **InstanceControllerV2**
-```java
-@CanDistro
-@PostMapping
-@TpsControl(pointName = "NamingInstanceRegister", name = "HttpNamingInstanceRegister")
-@Secured(action = ActionTypes.WRITE)
+@Secured(action = ActionTypes.WRITE, apiType = ApiType.ADMIN_API)
 public Result<String> register(InstanceForm instanceForm) throws NacosException {
-    // check param
     instanceForm.validate();
-    checkWeight(instanceForm.getWeight());
-    // build instance
-    Instance instance = buildInstance(instanceForm);
-    instanceServiceV2.registerInstance(instanceForm.getNamespaceId(), buildCompositeServiceName(instanceForm),
-            instance);
+    NamingRequestUtil.checkWeight(instanceForm.getWeight());
+    Instance instance =
+        InstanceUtil.buildInstance(instanceForm, switchDomain.isDefaultInstanceEphemeral());
+    String namespaceId = instanceForm.getNamespaceId();
+    String groupName = instanceForm.getGroupName();
+    String serviceName = instanceForm.getServiceName();
+    instanceService.registerInstance(namespaceId, groupName, serviceName, instance);
     NotifyCenter.publishEvent(
-            new RegisterInstanceTraceEvent(System.currentTimeMillis(), NamingRequestUtil.getSourceIp(), false,
-                    instanceForm.getNamespaceId(), instanceForm.getGroupName(), instanceForm.getServiceName(),
-                    instance.getIp(), instance.getPort()));
+        new RegisterInstanceTraceEvent(System.currentTimeMillis(),
+            NamingRequestUtil.getSourceIp(), false,
+            namespaceId, groupName, serviceName, instance.getIp(), instance.getPort()));
     return Result.success("ok");
 }
 ```
 
-<!-- tabs:end -->
 
+> [!WARNING]
+> 以下为 **≤2.1** 的命名 v1 注册链路（`ServiceManager.registerInstance` → `createServiceIfAbsent` → `putServiceAndInit` → `addInstance`，并经 `ConsistencyService.listen` / `KeyBuilder.buildInstanceListKey` 注册监听）。在 **3.2.4** 中这些类与方法已全部移除，见 [consistency](/docs/CS/Framework/nacos/consistency.md)。3.x 注册改为走命名 **v2 Client 模型**，见下文。
+
+#### 3.x 注册入口：ClientOperationService
+
+3.2.4 的命名注册统一由 `com.alibaba.nacos.naming.core.v2.service.ClientOperationService` 接口承担，按下表分流到两个实现：
+
+| 实例类型 | 实现类 | 一致性 | 机制 |
+| --- | --- | --- | --- |
+| 临时（ephemeral） | `EphemeralClientOperationServiceImpl` | AP | 写入 `EphemeralClient`，发布 `ClientRegisterServiceEvent`，由 Distro 同步与索引模块异步消费 |
+| 持久（persistent） | `PersistentClientOperationServiceImpl`（`extends RequestProcessor4CP`） | CP | 注册作为 JRaft 写请求经 `onApply` 落盘 |
+
+`ServiceManager`（v2，`naming/core/v2/ServiceManager.java`）仅维护 `Service` 单例仓库（`singletonRepository`），`getSingleton(service)` 负责服务单例的获取/创建，不再持有 `ConsistencyService` 监听。
 
 ```java
-// ServiceManager
-public void registerInstance(String namespaceId, String serviceName, Instance instance) throws NacosException {
-    
-    createEmptyService(namespaceId, serviceName, instance.isEphemeral());
-    
-    Service service = getService(namespaceId, serviceName);
-    
-    addInstance(namespaceId, serviceName, instance.isEphemeral(), instance);
-}
-```
-
-
-#### createService
-
-Create service if not exist.
-```java
-public void createServiceIfAbsent(String namespaceId, String serviceName, boolean local, Cluster cluster)
+// EphemeralClientOperationServiceImpl.registerInstance（3.2.4）
+@Override
+public void registerInstance(Service service, Instance instance, String clientId)
         throws NacosException {
-    Service service = getService(namespaceId, serviceName);
-    if (service == null) {
-        
-        Loggers.SRV_LOG.info("creating empty service {}:{}", namespaceId, serviceName);
-        service = new Service();
-        service.setName(serviceName);
-        service.setNamespaceId(namespaceId);
-        service.setGroupName(NamingUtils.getGroupName(serviceName));
-        // now validate the service. if failed, exception will be thrown
-        service.setLastModifiedMillis(System.currentTimeMillis());
-        service.recalculateChecksum();
-        if (cluster != null) {
-            cluster.setService(service);
-            service.getClusterMap().put(cluster.getName(), cluster);
-        }
-        service.validate(); // validate service name & cluster name is mathch 0-9a-zA-Z- 
-        
-        putServiceAndInit(service);
-        if (!local) {
-            addOrReplaceService(service);
-        }
+    NamingUtils.checkInstanceIsLegal(instance);
+
+    Service singleton = ServiceManager.getInstance().getSingleton(service);
+    if (!singleton.isEphemeral()) {
+        throw new NacosRuntimeException(NacosException.INVALID_PARAM,
+            String.format("Current service %s is persistent service, can't register ephemeral instance.",
+                singleton.getGroupedServiceName()));
     }
+    Client client = clientManager.getClient(clientId);
+    checkClientIsLegal(client, clientId);
+    InstancePublishInfo instanceInfo = getPublishInfo(instance);
+    client.addServiceInstance(singleton, instanceInfo);
+    client.setLastUpdatedTime();
+    client.recalculateRevision();
+    NotifyCenter
+        .publishEvent(new ClientOperationEvent.ClientRegisterServiceEvent(singleton, clientId));
+    NotifyCenter
+        .publishEvent(new MetadataEvent.InstanceMetadataEvent(singleton,
+            instanceInfo.getMetadataId(), false));
 }
 ```
 
-#### putServiceAndInit
+> 旧版的「双写 + `KeyBuilder.buildInstanceListKey` 监听」语义已被 `Client.addServiceInstance` + 事件总线取代；`DistroConsistencyServiceImpl`、`ConsistencyService.listen`、`KeyBuilder.buildInstanceListKey` 在 3.x 均不存在。
 
-```java
-    private void putServiceAndInit(Service service) throws NacosException {
-        putService(service);
-        service = getService(service.getNamespaceId(), service.getName());
-        service.init();
-        consistencyService
-        .listen(KeyBuilder.buildInstanceListKey(service.getNamespaceId(), service.getName(), true), service);
-        consistencyService
-        .listen(KeyBuilder.buildInstanceListKey(service.getNamespaceId(), service.getName(), false), service);
-    }    
-
-    public void init() {
-        HealthCheckReactor.scheduleCheck(clientBeatCheckTask);
-        for (Map.Entry<String, Cluster> entry : clusterMap.entrySet()) {
-            entry.getValue().setService(this);
-            entry.getValue().init();
-        }
-    }
-```
-
-#### addInstance
-
-Add instance to service.
-
-针对临时实例 这里存储层服务默认是DistroConsistencyServiceImpl
-
-```java
-public void addInstance(String namespaceId, String serviceName, boolean ephemeral, Instance... ips)
-        throws NacosException {
-    
-    String key = KeyBuilder.buildInstanceListKey(namespaceId, serviceName, ephemeral);
-    
-    Service service = getService(namespaceId, serviceName);
-    
-    synchronized (service) {
-        List<Instance> instanceList = addIpAddresses(service, ephemeral, ips);
-        
-        Instances instances = new Instances();
-        instances.setInstanceList(instanceList);
-        
-        consistencyService.put(key, instances);
-    }
-}
-```
 
 ## Distro
 
@@ -1389,82 +1313,51 @@ BaseGrpcServer startServer-> addServices GrpcRequestAccptor -> RequestHandler ->
 2. getService and hanle beat
 3. return result
 
+> [!WARNING]
+> 以下 `InstanceController.beat`（`@PutMapping("/beat")`）与 `InstanceOperatorServiceImpl.handleBeat` 均为 **≤2.1** 的 v1 HTTP 心跳路径。3.2.4 中经典 v1 `InstanceController` 与 `InstanceOperatorServiceImpl` 均已移除，`InstanceControllerV3` 也无 `beat` 端点；HTTP `/beat` 兼容 API 已删除，心跳改由 gRPC 连接保活驱动。
+
+3.x 的 beat 处理现为 `InstanceOperatorClientImpl`（实现 `InstanceOperator`），按 `IpPortBasedClient` 定位客户端并派发 `ClientBeatProcessorV2`：
+
 ```java
-@CanDistro
-@PutMapping("/beat")
-@Secured(parser = NamingResourceParser.class, action = ActionTypes.WRITE)
-public ObjectNode beat(HttpServletRequest request) throws Exception {
-    
-    ObjectNode result = JacksonUtils.createEmptyJsonNode();
-    result.put(SwitchEntry.CLIENT_BEAT_INTERVAL, switchDomain.getClientBeatInterval());
-    
-    String beat = WebUtils.optional(request, "beat", StringUtils.EMPTY);
-    RsInfo clientBeat = null;
-    if (StringUtils.isNotBlank(beat)) {
-        clientBeat = JacksonUtils.toObj(beat, RsInfo.class);
-    }
-    String clusterName = WebUtils
-            .optional(request, CommonParams.CLUSTER_NAME, UtilsAndCommons.DEFAULT_CLUSTER_NAME);
-    String ip = WebUtils.optional(request, "ip", StringUtils.EMPTY);
-    int port = Integer.parseInt(WebUtils.optional(request, "port", "0"));
-    if (clientBeat != null) {
-        if (StringUtils.isNotBlank(clientBeat.getCluster())) {
-            clusterName = clientBeat.getCluster();
-        } else {
-            // fix #2533
-            clientBeat.setCluster(clusterName);
+// InstanceOperatorClientImpl.handleBeat（3.2.4）
+@Override
+public int handleBeat(String namespaceId, String groupName, String serviceName, String ip,
+        int port, String cluster,
+        RsInfo clientBeat, BeatInfoInstanceBuilder builder) throws NacosException {
+    Service service = Service.newService(namespaceId, groupName, serviceName, true);
+    String clientId =
+        IpPortBasedClient.getClientId(ip + InternetAddressUtil.IP_PORT_SPLITER + port, true);
+    IpPortBasedClient client = (IpPortBasedClient) clientManager.getClient(clientId);
+    String groupedServiceName = NamingUtils.getGroupedName(serviceName, groupName);
+    if (null == client || !client.getAllPublishedService().contains(service)) {
+        if (null == clientBeat) {
+            return NamingResponseCode.RESOURCE_NOT_FOUND;
         }
-        ip = clientBeat.getIp();
-        port = clientBeat.getPort();
+        Instance instance =
+            builder.setBeatInfo(clientBeat).setServiceName(groupedServiceName).build();
+        registerInstance(namespaceId, groupName, serviceName, instance);
+        client = (IpPortBasedClient) clientManager.getClient(clientId);
     }
-    String namespaceId = WebUtils.optional(request, CommonParams.NAMESPACE_ID, Constants.DEFAULT_NAMESPACE_ID);
-    String serviceName = WebUtils.required(request, CommonParams.SERVICE_NAME);
-    NamingUtils.checkServiceNameFormat(serviceName);
-    BeatInfoInstanceBuilder builder = BeatInfoInstanceBuilder.newBuilder();
-    builder.setRequest(request);
-    int resultCode = getInstanceOperator()
-            .handleBeat(namespaceId, serviceName, ip, port, clusterName, clientBeat, builder);
-    result.put(CommonParams.CODE, resultCode);
-    result.put(SwitchEntry.CLIENT_BEAT_INTERVAL,
-            getInstanceOperator().getHeartBeatInterval(namespaceId, serviceName, ip, port, clusterName));
-    result.put(SwitchEntry.LIGHT_BEAT_ENABLED, switchDomain.isLightBeatEnabled());
-    return result;
+    if (!ServiceManager.getInstance().containSingleton(service)) {
+        throw new NacosException(NacosException.SERVER_ERROR,
+            "service not found: " + groupedServiceName + "@" + namespaceId);
+    }
+    if (null == clientBeat) {
+        clientBeat = new RsInfo();
+        clientBeat.setIp(ip);
+        clientBeat.setPort(port);
+        clientBeat.setCluster(cluster);
+        clientBeat.setServiceName(groupedServiceName);
+    }
+    ClientBeatProcessorV2 beatProcessor =
+        new ClientBeatProcessorV2(namespaceId, clientBeat, client);
+    HealthCheckReactor.scheduleNow(beatProcessor);
+    client.setLastUpdatedTime();
+    return NamingResponseCode.OK;
 }
 ```
 
-### handleBeat
-
-```java
-    // com.alibaba.nacos.naming.core.InstanceOperatorServiceImpl
-    @Override
-    public int handleBeat(String namespaceId, String serviceName, String ip, int port, String cluster,
-            RsInfo clientBeat, BeatInfoInstanceBuilder builder) throws NacosException {
-        com.alibaba.nacos.naming.core.Instance instance = serviceManager
-                .getInstance(namespaceId, serviceName, cluster, ip, port);
-        
-        if (instance == null) {
-            if (clientBeat == null) {
-                return NamingResponseCode.RESOURCE_NOT_FOUND;
-            }
-            
-            instance = parseInstance(builder.setBeatInfo(clientBeat).setServiceName(serviceName).build());
-            serviceManager.registerInstance(namespaceId, serviceName, instance);
-        }
-        
-        Service service = serviceManager.getService(namespaceId, serviceName);
-        
-        serviceManager.checkServiceIsNull(service, namespaceId, serviceName);
-        
-        if (clientBeat == null) {
-            clientBeat = new RsInfo();
-            clientBeat.setIp(ip);
-            clientBeat.setPort(port);
-            clientBeat.setCluster(cluster);
-        }
-        service.processClientBeat(clientBeat);
-        return NamingResponseCode.OK;
-    }
-```
+> 旧的 `serviceManager.registerInstance / getInstance / getService / checkServiceIsNull`（v1 `ServiceManager`）在 3.x 不存在；v2 `ServiceManager` 仅提供 `containSingleton` 等单例仓库方法。
 
 ## Client subscribe
 
@@ -1752,6 +1645,12 @@ public class ServiceInfoHolder implements Closeable {
 
 ## Tuning
 
+> [!WARNING]
+> 本节是 **2019–2020 年 EDAS 时代的 Eureka → Nacos 迁移方案**，依赖链已严重过时。迁移前请一并读完节末的「3.x 时代的迁移方式」：
+> - `com.alibaba.edas:edas-sc-migration-starter` 最新版本是 **1.0.5（2020-09-24 发布）**，此后再无更新（Maven Central 元数据核实）；其 POM 直接依赖 `spring-cloud-starter-netflix-ribbon`，父级锁在 Spring Cloud `Finchley.SR2` / Spring Boot `2.0.1.RELEASE`。
+> - **Ribbon 已在 Spring Cloud 2020.0（Ilford）从 release train 中移除**，官方替代是 Spring Cloud LoadBalancer。因此下文基于 `@RibbonClients(defaultConfiguration = MigrationRibbonConfiguration.class)` 的「多注册中心聚合订阅」，**只在 Spring Cloud Hoxton 及更早版本（≤ Spring Boot 2.3）上成立**；Spring Boot 2.x 的开源支持已于 2023 年结束。
+> - 本节保留作为历史方案与「双注册 / 灰度切流」思路的参考，**不要在新项目或 Spring Boot 3/4 上照抄**。
+
 Eureka迁移nacos
 
 通过多注册和聚合订阅平滑迁移到 Nacos 的架构图如下：
@@ -1810,6 +1709,24 @@ http://ip:port/actuator/migration-server-list ## Spring Boot 2.x 版本
 - 建议是从最下层 Provider 开始迁移。 但如果调用链路太复杂， 比较难分析， 所以我们设计的方案中是支持随便找⼀个非流量入口应用进行迁移。
 - 因为流量入口的应⽤比较特殊， 所以建议迁移流量入口应⽤时需要根据自己应⽤的实际情况考虑迁移方案。
 
+### 3.x 时代的迁移方式
+
+> [!NOTE]
+> 核验时间 2026-10，以 Nacos 3.2.4 与当前 Spring Cloud release train 为准。
+
+Ribbon 退场后，「双注册 + 聚合订阅」这条链路在 Spring Boot 3/4 上不再有官方 starter 支撑。按对应用代码的侵入性从低到高，实际可选方案：
+
+| 方案 | 做法 | 适用场景 | 现状 |
+| --- | --- | --- | --- |
+| 服务端双向同步 | 部署 `nacos-sync`，在 Eureka 与 Nacos 之间做服务实例双向同步；应用侧逐个切注册中心，不改业务代码 | 存量应用无法改动、双中心并存期较长 | nacos-group 仓库仍在维护（最近推送 2026-10-16，Apache-2.0），但 issue 积压较多，生产使用前需自行压测 |
+| 应用侧双注册 | 同时引入 Eureka Client 与 `spring-cloud-starter-alibaba-nacos-discovery`，让实例在两个注册中心都注册；消费者侧由 Spring Cloud LoadBalancer 聚合多个 `DiscoveryClient` | 可以改代码、希望灰度节奏自己掌控 | 需自行处理两个 `DiscoveryClient` 的优先级与实例去重 |
+| 直接切换 | 先迁最下层 Provider，逐个应用替换依赖后重新部署，最后下线 Eureka 集群 | 调用链简单、允许分批重启 | 风险集中在切换窗口，需实时监控 |
+
+配套要点：
+
+- 负载均衡器统一换成 `spring-cloud-starter-loadbalancer`；`@LoadBalanced` 在 `RestTemplate` / `RestClient` / `WebClient.Builder` 上继续生效，但**自定义 Ribbon `IRule` 不会自动迁移**，需自行实现 `ReactorServiceInstanceLoadBalancer`。
+- 注册依赖用 `spring-cloud-starter-alibaba-nacos-discovery` 对接 Nacos；注意 3.x 服务端 OpenAPI 只剩 `/v3` 路由（见 `### InstanceController`），老版本客户端直连 3.x 需先确认 SDK 兼容性。
+- 本节原文给出的迁移顺序仍然成立：**从最下层 Provider 开始，流量入口应用最后迁移**。
 
 ## Links
 
@@ -1818,4 +1735,7 @@ http://ip:port/actuator/migration-server-list ## Spring Boot 2.x 版本
 
 ## References
 
-1. [Nacos 2.1.0 注册中心源码分析图](https://www.processon.com/view/link/64116327bad505275e0585dc)
+- <https://www.processon.com/view/link/64116327bad505275e0585dc>
+- <https://github.com/nacos-group/nacos-sync>
+- <https://central.sonatype.com/artifact/com.alibaba.edas/edas-sc-migration-starter>
+- <https://spring.io/blog/2019/11/28/spring-cloud-hoxton-released>

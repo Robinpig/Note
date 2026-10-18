@@ -28,7 +28,12 @@ Nacos 的故障大半集中在「端口 / 一致性 / 持久化边界」三个�
 
 **症状**：多节点共用 Derby 启动报错 / 锁冲突（`load derby-schema.sql error` 或 lock）。
 **原因**：Derby 是内嵌单文件库，**不支持多节点并发写**；集群模式必须用 MySQL。
-**修复**：切 `spring.datasource.platform=mysql` + `db.url.0=...`，导入 `conf/mysql-schema.sql`；Docker 环境 Derby 初始化失败也直接切 MySQL。
+**修复**：切 `spring.sql.init.platform=mysql` + `db.url.0=...`，导入官方建表脚本；Docker 环境 Derby 初始化失败也直接切 MySQL。
+
+> [!WARNING]
+> 两点在 3.x 已变：① 平台属性改为 **`spring.sql.init.platform`**（`spring.datasource.platform` 已降级为兼容旧键）；
+> ② **建表脚本不在 `conf/`**——3.2.4 的 `distribution/conf/` 已无 `mysql-schema.sql`，脚本随数据源插件分发
+> （`nacos-datasource-plugin-mysql/.../META-INF/mysql-schema.sql`），详见 [Storage](/docs/CS/Framework/nacos/storage.md)。
 
 ## 403 invalid token
 

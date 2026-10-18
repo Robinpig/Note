@@ -15,7 +15,7 @@ Nacos 的推送刻意「小」：推送消息只携带变更标识（`dataId + g
 
 ## 2.x Long Polling (HTTP)
 
-2.x 及以前，客户端用 HTTP 长轮询监听（`/nacos/v1/cs/configs/listener`）。服务端 `ConfigLongPollingService` 用 Servlet 3.0 的 `AsyncContext` 把请求**挂起**：
+2.x 及以前，客户端用 HTTP 长轮询监听（`/nacos/v1/cs/configs/listener`）。服务端 `LongPollingService`（3.2.4 里的类名；很多文章写作 `ConfigLongPollingService`，**该名字在 3.x 全树 0 命中**）用 `AsyncContext` 把请求**挂起**：
 
 - 客户端把订阅的 dataId 列表（每批最多 3000 个）连同本地 **MD5 摘要**发到服务端，请求超时设 **30 s**。
 - 服务端收到后比对本地 MD5：已变更则立即返回变更项；未变更则挂起，**最多等 29.5 s**（提前 500 ms 响应，防止网络延迟导致客户端 `SocketTimeoutException`）。
@@ -33,12 +33,19 @@ Nacos 的推送刻意「小」：推送消息只携带变更标识（`dataId + g
 - 感知延迟受轮询空档影响，最长接近一个轮询周期（秒级）。
 - 订阅项极多时，单次长轮询请求 body 很大。
 
+> [!NOTE]
+> 「30 s 超时 / 29.5 s 提前返回」是 **2.x 客户端的默认值**。3.2.4 服务端不再写死这个数：
+> 超时取 `max(开关 MIN_LONG_POOLING_TIMEOUT 默认 10000 ms, 请求头 Long-Pulling-Timeout - delayTime)`，
+> 由客户端通过 `Long-Pulling-Timeout` 头申报（见 `LongPollingService.addLongPollingClient`），
+> 「提前 500 ms 返回避免客户端 SocketTimeout」的策略保留。
+> 另外 3.x 用的是 `jakarta.servlet.AsyncContext`（Jakarta EE），不再是 `javax.*`。
+
 ## 3.x gRPC Long-Connection Push
 
 2.x 起通信协议从 HTTP 短连接升级为 gRPC 双向流，配置监听改为长连接推送：
 
 - 客户端启动后建一条 gRPC 长连接（`ConfigBatchListenRequest` 批量注册关心的 dataId 列表）。
-- 服务端用 `ClientWatchContext` 维护「哪些连接关注哪些配置」。
+- 服务端用 `ConfigChangeListenContext`（`config/server/remote/`）维护「哪些连接关注哪些配置」——**不是** `ClientWatchContext`（该名在 3.x 全树 0 命中）。
 - 配置发布后，拥有客户端长连接的节点发 `ConfigChangeNotifyRequest` 把变更推下去。
 - 客户端收到通知**不直接塞内容**，而是内部再发一次 `ConfigQueryRequest` 查最新内容，与本地缓存比对，确认确实变了才回调 `Listener`。
 
@@ -55,11 +62,24 @@ Nacos 的推送刻意「小」：推送消息只携带变更标识（`dataId + g
 
 ## Canary Watch (beta / tag)
 
-Nacos 支持按 IP 灰度发布。dump 阶段对应 `DumpAllBetaProcessor` / `DumpAllTagProcessor` 把 beta / tag 配置单独落盘；监听侧客户端可订阅灰度配置，验证无误后全量发布。灰度配置与主配置共用同一推送通道，只是 dataId 维度不同。
+Nacos 支持灰度发布。dump 阶段由 `DumpAllGrayProcessor`（+ `DumpAllGrayTask`）把灰度配置单独落盘；监听侧客户端可订阅灰度配置，验证无误后全量发布。灰度配置与主配置共用同一推送通道，只是 dataId 维度不同。
+
+> [!WARNING]
+> 2.x 的 `DumpAllBetaProcessor` / `DumpAllTagProcessor` 在 3.2.4 **已删除**（0 命中），
+> 与 `config_info_beta` / `config_info_tag` 表被移除一致；3.x 只剩 `DumpAllProcessor` 与 `DumpAllGrayProcessor`。
+> 灰度模型统一叫 **gray**（`ConfigCacheGray` / `config_info_gray` / `dumpGray`），不再叫 beta。
 
 ## 3.x Breaking Changes
 
-Nacos 3.x 的 Client OpenAPI **不再提供 HTTP 长轮询的配置监听能力**——配置监听必须走官方 SDK 的 gRPC 长连接。这意味着 Spring Cloud Alibaba **2025.1.0.0** 起，配置监听底层完全依赖 gRPC。迁移到 3.x 时，若仍用旧版 SDK 的 HTTP 长轮询监听，会收不到变更通知（见 [Troubleshooting](/docs/CS/Framework/nacos/troubleshooting.md) 的版本错配段）。
+Nacos 3.x 的 Client OpenAPI **不再提供 HTTP 长轮询的配置监听能力**——配置监听必须走官方 SDK 的 gRPC 长连接。迁移到 3.x 时，若仍用旧版 SDK 的 HTTP 长轮询监听，会收不到变更通知（见 [Troubleshooting](/docs/CS/Framework/nacos/troubleshooting.md) 的版本错配段）。
+
+> [!NOTE]
+> 这条结论在 3.2.4 源码里可验证：路由 `configs/listener` **全树 0 命中**，
+> 而 `LongPollingService` 唯一的生产调用方 `ConfigServletInner` **没有任何其它类引用**（死代码）。
+> 注意 v3 的 `/listener` 是**管理员查询「哪些客户端在监听」**的接口（`ConfigControllerV3.getListeners`），别当成长轮询端点。
+>
+> 生态侧：Spring Cloud Alibaba **2025.1.0.0**（适配 Spring Boot 4.0 / Spring Cloud 2025.1）内置 **Nacos Client 3.1.1**，
+> 并**正式移除 `bootstrap.yml`**，改用 `spring.config.import`——配置监听自此完全走 gRPC。
 
 ## Comparison with etcd Watch
 
@@ -83,5 +103,4 @@ Nacos 3.x 的 Client OpenAPI **不再提供 HTTP 长轮询的配置监听能力*
 
 - <https://blog.csdn.net/weixin_29229261/article/details/164665410>
 - <https://thomas-sir.blog.csdn.net/article/details/165117885>
-- <https://www.mhpn.cn/news/2035106>
-- <https://nacos.io/docs/v3.0/manual/user/configuration/config-push/>
+- <https://nacos.io/docs/latest/manual/user/config/publish-query-listen/>

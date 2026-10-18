@@ -13,7 +13,7 @@ Nacos 官方对自带鉴权的定位非常明确：**它是一个为「可信内
 鉴权开关在 `application.properties`（非 Docker 部署）或环境变量（Docker），**修改后立即生效，无需重启**：
 
 ```properties
-# 选鉴权插件（3.x 规范键 nacos.plugin.auth.type，旧别名 nacos.core.auth.system.type）
+# 选鉴权插件（3.2.4 实测只有这一个键，常量 Constants.Auth.NACOS_CORE_AUTH_SYSTEM_TYPE）
 nacos.core.auth.system.type=nacos
 # 开启客户端 / SDK / OpenAPI / gRPC 鉴权
 nacos.core.auth.enabled=true
@@ -69,7 +69,15 @@ Docker 镜像用环境变量等价开启：`NACOS_AUTH_ENABLE=true` / `NACOS_AUT
 
 ## Auth Plugin
 
-Nacos 3.x 把鉴权做成插件 SPI，`nacos.core.auth.system.type`（规范键 `nacos.plugin.auth.type`）选择：
+Nacos 3.x 把鉴权做成插件 SPI，`nacos.core.auth.system.type` 选择。
+
+> [!WARNING]
+> 网上不少地方写「3.x 规范键是 `nacos.plugin.auth.type`，旧别名 `nacos.core.auth.system.type`」——**以 3.2.4 源码为准这是反的**：
+> `nacos.plugin.auth.type` 在全树 **0 命中**；真实存在的只有 `nacos.core.auth.system.type`
+> （常量 `Constants.Auth.NACOS_CORE_AUTH_SYSTEM_TYPE`），`AuthErrorCode.INVALID_TYPE` 的报错文案也是
+> "Please set `nacos.core.auth.system.type`"。别按前者配，配了不生效。
+
+3.2.4 自带的三个 auth 插件（`plugin-default-impl/` 下）：`nacos-default-auth-plugin`、`nacos-ldap-auth-plugin`、`nacos-oidc-auth-plugin`。
 
 | 模式 | 值 | 适用 |
 | :-- | :-- | :-- |

@@ -23,20 +23,27 @@ Nacos 的「配置中心」与「命名里的持久实例」需要**强一致 + 
 
 ## Components and Startup Chain
 
-Nacos 把一个 CP 数据类型抽象成 `LogProcessor4CP`：每种需要 Raft 一致的数据（配置、持久实例元数据……）注册自己的 processor，Raft 日志提交后由对应 processor 应用到内存状态机。启动链路大致是：
+Nacos 把一个 CP 数据类型抽象成 **processor**：每种需要 Raft 一致的数据（配置、持久实例元数据……）注册自己的 processor，Raft 日志提交后由对应 processor 应用到内存状态机。启动链路大致是：
 
 ```java
 // ProtocolManager 根据一致性协议类型选择 RaftProtocol
 //   -> RaftConfig（group / peers / dataDir）
 //   -> JRaftProtocol.init()
 //   -> JRaftServer.start()：为每个 Raft group 起一个 RaftGroupService
-//   -> 日志提交后回调对应的 LogProcessor4CP.onApply(...)
+//   -> 日志提交后由 NacosStateMachine.onApply 分发给对应 processor
 ```
+
+> [!WARNING]
+> 很多文章（包括本文早期版本）把 CP 侧的 processor 抽象写成 **`LogProcessor4CP`**，并称「状态机由 `LogProcessor4CP` 实现」。
+> 以 3.2.4 源码为准：**不存在 `LogProcessor4CP` 这个类型**——它只出现在 `consistency/Config.java`
+> 与 `JRaftProtocol.java` 的**注释 / ASCII 架构图**里，是文档概念名。
+> 真正的 JRaft 状态机是 `core/distributed/raft/NacosStateMachine.java`（`class NacosStateMachine extends StateMachineAdapter`），
+> 由它的 `onApply` / `onSnapshotSave` / `onSnapshotLoad` 把已提交日志分发给已注册的 processor。
 
 要点：
 
 - **Raft group**：JRaft 以 group 为单位组织复制组，每个 group 有独立的 Leader / 日志 / 快照。Nacos 按 CP 数据类型划分 group（配置、命名持久元数据等）。
-- **StateMachine = LogProcessor4CP**：JRaft 的 `StateMachine.onApply(task)` 在 Nacos 侧由 `LogProcessor4CP` 实现，把已提交日志落到内存结构 + 外部 DB。
+- **StateMachine = `NacosStateMachine`**：JRaft 的 `StateMachine.onApply(task)` 在 Nacos 侧由 `NacosStateMachine`（继承 `StateMachineAdapter`）实现，把已提交日志落到内存结构 + 外部 DB。
 - **多数派**：写入成功的判定是「日志复制到半数以上节点」，与 etcd / ZK 一致。
 
 ## Leader Election
@@ -58,7 +65,7 @@ Nacos 集群里 CP 侧同一时刻只有一个 Leader；`nacos_monitor{name='lea
 2. Leader 把变更追加为 Raft 日志条目（未提交）。
 3. Leader 并行复制日志给所有 Follower。
 4. **多数派（quorum）持久化成功** → Leader 将该条目标记为 **committed**。
-5. Leader 将 committed 日志 **apply** 到状态机（`LogProcessor4CP.onApply`）：更新内存 + 写 MySQL。
+5. Leader 将 committed 日志 **apply** 到状态机（`NacosStateMachine.onApply` → 分发给对应 processor）：更新内存 + 写 MySQL。
 6. 应答客户端；Follower 在收到 commit 位点后也 apply。
 
 只有 committed 的日志才对读可见——这保证了 `readAfterWrite` 与崩溃恢复后日志不丢（已提交日志不会被新 Leader 覆盖）。
@@ -112,6 +119,6 @@ JRaft 只在 CP 节点间用 7848 通信；Distro（AP）走另一套临时实�
 
 ## References
 
-- <https://nacos.io/docs/v3.0/manual/admin/cluster/>
+- <https://nacos.io/docs/latest/manual/admin/deployment/deployment-cluster/>
 - <https://github.com/alibaba/nacos/tree/master/consistency>
 - <https://nacos.io/docs/latest/manual/admin/deployment/deployment-best-practices>

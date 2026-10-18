@@ -1,7 +1,6 @@
-## Overview
+# Nacos Config Center
 
-
-
+## Introduction
 Nacos 配置管理⼀致性协议分为两个大部分， 第⼀部分是 Server 间⼀致性协议， ⼀个是 SDK 与
 Server 的⼀致性协议， 配置作为分布式系统中非强⼀致数据， 在出现脑裂的时候可用性高于⼀致性，
 因此阿里配置中心是采用 AP ⼀致性协议。  
@@ -40,6 +39,12 @@ CacheItem在Nacos服务端对应一个配置文件，缓存了配置的md5，持
 
 
 
+> [!WARNING]
+> 下面这版 `CacheItem`（`md5` / `lastModifiedTs` / `isBeta` / `md54Beta`）是 **2.x 形态**。
+> 3.2.4 里 `CacheItem` 已重构：md5 不再直接挂在 `CacheItem` 上，而是下沉到
+> `ConfigCache`（由 `ConfigCacheFactoryDelegate` 创建），beta 也被统一的**灰度模型 `ConfigCacheGray`** 取代。
+> 3.x 真实结构见本段第二段代码。
+
 ```java
 public class CacheItem {
 
@@ -62,16 +67,45 @@ public class CacheItem {
 }
 ```
 
+3.2.4 的 `config/src/main/java/com/alibaba/nacos/config/server/model/CacheItem.java`：
+
+```java
+public class CacheItem {
+    
+    final String groupKey;
+    
+    public String type;
+    
+    ConfigCache configCache = ConfigCacheFactoryDelegate.getInstance().createConfigCache();
+    
+    /**
+     * Use for gray.
+     */
+    private volatile Map<String, ConfigCacheGray> configCacheGray = null;
+    
+    List<ConfigCacheGray> sortedConfigCacheGrayList = null;
+    
+    private final SimpleReadWriteLock rwLock = new SimpleReadWriteLock();
+    
+    public CacheItem(String groupKey, String encryptedDataKey) {
+        this.groupKey = StringPool.get(groupKey);
+        this.getConfigCache().setEncryptedDataKey(encryptedDataKey);
+    }
+    
+    public CacheItem(String groupKey) {
+        this.groupKey = StringPool.get(groupKey);
+    }
+}
+```
+
+对应地，`ConfigCacheService` 在 3.x **没有** `PersistService` 成员（也不再是 `private static final`）：
 
 ```java
 public class ConfigCacheService {
     /**
      * groupKey -> cacheItem.
      */
-    private static final ConcurrentHashMap<String, CacheItem> CACHE = new ConcurrentHashMap<>();
-
-    @Autowired
-    private static PersistService persistService;
+    static final ConcurrentHashMap<String, CacheItem> CACHE = new ConcurrentHashMap<>();
 }
 ```
 
@@ -164,11 +198,9 @@ ProceedingJoinPoint.proceed前后都有ConfigChangePluginService的执行
 
 
 
-ConfigOperationService.oublishConfig
+`ConfigOperationService.publishConfig`（3.2.4 是 **class** 不是 interface，位于 `config/server/service/ConfigOperationService.java`）
 
-
-
-configInfoPersistService.insertOrUpdate
+`ConfigInfoPersistService.insertOrUpdate`（3.2.4 是 **interface**，按存储形态有两个实现：`EmbeddedConfigInfoPersistServiceImpl` 走 Derby / `ExternalConfigInfoPersistServiceImpl` 走外部库）
 
 这里有tag和cas的一些处理
 
@@ -476,6 +508,14 @@ public class ConfigChangePublisher {
 
 
 
+> [!WARNING]
+> 下面这段 `AsyncNotifyService` 是 **2.x 双通道（HTTP + gRPC）通知**的形态：按 `MemberUtil.isSupportedLongCon(member)`
+> 把成员分到 `httpQueue`（`NotifySingleTask` + `NacosAsyncRestTemplate`）或 `rpcQueue`。
+> **3.2.4 里 HTTP 通道已完全移除**——`AsyncNotifyService` 中 `httpQueue` / `NacosAsyncRestTemplate` / `NotifySingleTask`
+> 全部 0 命中，只剩 `rpcQueue`（即上文 `handleConfigDataChangeEvent` 那版）。
+> 配套的 `CommunicationController` 的 `/dataChange` HTTP 回调端点在 3.x **也已不存在**（全树 0 命中），
+> 节点间变更通知统一走 gRPC。
+
 ```java
 
 @Service
@@ -725,149 +765,69 @@ public NacosConfigService(Properties properties) throws NacosException {
 
 
 
-ClientWorker里两个单线程池 一个负责10ms一次配置变更检查 将长轮询请求[LongPollingRunnable](/docs/CS/Framework/nacos/Nacos.md) dispatch到另一个线程池处理
+> [!WARNING]
+> 下面这一整块是 **2.0 之前的「HTTP 长轮询」客户端模型**，在 3.2.4 已被**整体删除**：
+> - `LongPollingRunnable`、`ClientWorker.checkConfigInfo()`、`checkUpdateDataIds(...)`、`HttpAgent` 在全树 **0 命中**。
+> - 2.0 起配置监听改为 **gRPC 长连接**：服务端通过 `ConfigChangeNotifyRequest` 主动推送变更的 dataId/group，
+>   客户端再按需拉取内容，不再有「10ms 轮询 + 长轮询线程」这一套。
+> 保留原文用于理解演进，实现请以下面的 3.x 结构为准。
+
+3.2.4 的 `ClientWorker`（`client/src/main/java/com/alibaba/nacos/client/config/impl/ClientWorker.java`）只依赖一个基于 gRPC 的传输客户端：
 
 ```java
-public class NacosConfigService implements ConfigService {
-    
-    private ClientWorker worker;
+public class ClientWorker implements Closeable {
 
-    @Override
-    public void addListener(String dataId, String group, Listener listener) throws NacosException {
-        worker.addTenantListeners(dataId, group, Arrays.asList(listener));
-    }
+    /**
+     * groupKey -> cacheData.
+     */
+    private final AtomicReference<Map<String, CacheData>> cacheMap =
+            new AtomicReference<>(new HashMap<>());
 
-    public ClientWorker(final HttpAgent agent, final ConfigFilterChainManager configFilterChainManager,
-                        final Properties properties) {
-        this.agent = agent;
+    private final ConfigFilterChainManager configFilterChainManager;
+
+    /** 3.x：传输层统一为 gRPC，不再是 HttpAgent。 */
+    private final ConfigRpcTransportClient agent;
+
+    public ClientWorker(final ConfigFilterChainManager configFilterChainManager,
+            ConfigServerListManager serverListManager, final NacosClientProperties properties)
+            throws NacosException {
         this.configFilterChainManager = configFilterChainManager;
-
-        // Initialize the timeout parameter
 
         init(properties);
 
-        this.executor = Executors.newScheduledThreadPool(1, new ThreadFactory() {
-            @Override
-            public Thread newThread(Runnable r) {
-                Thread t = new Thread(r);
-                t.setName("com.alibaba.nacos.client.Worker." + agent.getName());
-                t.setDaemon(true);
-                return t;
-            }
-        });
+        agent = new ConfigRpcTransportClient(properties, serverListManager);
 
-        this.executorService = Executors
-                .newScheduledThreadPool(Runtime.getRuntime().availableProcessors(), new ThreadFactory() {
-                    @Override
-                    public Thread newThread(Runnable r) {
-                        Thread t = new Thread(r);
-                        t.setName("com.alibaba.nacos.client.Worker.longPolling." + agent.getName());
-                        t.setDaemon(true);
-                        return t;
-                    }
-                });
+        configFuzzyWatchGroupKeyHolder = new ConfigFuzzyWatchGroupKeyHolder(agent, uuid);
 
-        this.executor.scheduleWithFixedDelay(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    checkConfigInfo();
-                } catch (Throwable e) {
-                    LOGGER.error("[" + agent.getName() + "] [sub-check] rotate check error", e);
-                }
-            }
-        }, 1L, 10L, TimeUnit.MILLISECONDS);
+        ThreadPoolExecutor executor = instantiateClientExecutor(properties);
+        agent.setExecutor(executor);
+
+        agent.start();
+        configFuzzyWatchGroupKeyHolder.start();
     }
-    
-    public void checkConfigInfo() {
-        // Dispatch tasks.
-        int listenerSize = cacheMap.size();
-        // Round up the longingTaskCount.
-        int longingTaskCount = (int) Math.ceil(listenerSize / ParamUtil.getPerTaskConfigSize());
-        if (longingTaskCount > currentLongingTaskCount) {
-            for (int i = (int) currentLongingTaskCount; i < longingTaskCount; i++) {
-                // The task list is no order.So it maybe has issues when changing.
-                executorService.execute(new LongPollingRunnable(i));
-            }
-            currentLongingTaskCount = longingTaskCount;
-        }
+
+    public void addTenantListeners(String dataId, String group, List<? extends Listener> listeners)
+            throws NacosException {
+        // 监听注册到 cacheMap 里的 CacheData，变更由 agent 推送驱动
     }
+
+    /** 3.x 新增：模糊监听（按 dataId/group 模式匹配）。 */
+    public ConfigFuzzyWatchContext addTenantFuzzyWatcher(String dataIdPattern, String groupPattern,
+            List<? extends Listener> listeners) { ... }
 }
 ```
-#### LongPollingRunnable
 
-1. check failover config
-2. longPoll check server config
-```java
-class LongPollingRunnable implements Runnable {
-        private int taskId;
+几个与 2.x 对照的关键变化：
 
-        public LongPollingRunnable(int taskId) {
-            this.taskId = taskId;
-        }
+| 2.x（长轮询） | 3.x（长连接） |
+| :-- | :-- |
+| `HttpAgent` / `ServerHttpAgent` | `ConfigRpcTransportClient extends ConfigTransportClient` |
+| `executor.scheduleWithFixedDelay(checkConfigInfo, 1L, 10L, MILLISECONDS)` | 无轮询；由服务端推送 `ConfigChangeNotifyRequest` 触发 |
+| `LongPollingRunnable` 批量 `checkUpdateDataIds` | 变更通知直接落到 `CacheData`，再回调 listener |
+| 两个线程池（Worker + longPolling） | 一个 `ThreadPoolExecutor`（`SynchronousQueue` + `CallerRunsPolicy`），大小由 `PropertyKeyConst.CLIENT_WORKER_THREAD_COUNT` 控制 |
 
-    @Override
-    public void run() {
-
-        List<CacheData> cacheDatas = new ArrayList<CacheData>();
-        List<String> inInitializingCacheList = new ArrayList<String>();
-        try {
-            // check failover config
-            for (CacheData cacheData : cacheMap.values()) {
-                if (cacheData.getTaskId() == taskId) {
-                    cacheDatas.add(cacheData);
-                    try {
-                        checkLocalConfig(cacheData);
-                        if (cacheData.isUseLocalConfigInfo()) {
-                            cacheData.checkListenerMd5();
-                        }
-                    } catch (Exception e) {
-                        LOGGER.error("get local config info error", e);
-                    }
-                }
-            }
-
-            // check server config
-            List<String> changedGroupKeys = checkUpdateDataIds(cacheDatas, inInitializingCacheList);
-
-            for (String groupKey : changedGroupKeys) {
-                String[] key = GroupKey.parseKey(groupKey);
-                String dataId = key[0];
-                String group = key[1];
-                String tenant = null;
-                if (key.length == 3) {
-                    tenant = key[2];
-                }
-                try {
-                    ConfigResponse response = getServerConfig(dataId, group, tenant, 3000L);
-                    CacheData cache = cacheMap.get(GroupKey.getKeyTenant(dataId, group, tenant));
-                    cache.setContent(response.getContent());
-                    cache.setEncryptedDataKey(response.getEncryptedDataKey());
-                    if (null != response.getConfigType()) {
-                        cache.setType(response.getConfigType());
-                    }
-                } catch (NacosException ioe) {
-                    // log
-                }
-            }
-            for (CacheData cacheData : cacheDatas) {
-                if (!cacheData.isInitializing() || inInitializingCacheList
-                        .contains(GroupKey.getKeyTenant(cacheData.dataId, cacheData.group, cacheData.tenant))) {
-                    cacheData.checkListenerMd5();
-                    cacheData.setInitializing(false);
-                }
-            }
-            inInitializingCacheList.clear();
-
-            executorService.execute(this);
-
-        } catch (Throwable e) {
-            // If the rotation training task is abnormal, the next execution time of the task will be punished
-            executorService.schedule(this, taskPenaltyTime, TimeUnit.MILLISECONDS);
-        }
-    }
-}
-```
+> [!NOTE]
+> 3.x 客户端还新增了**模糊监听**（fuzzy watch，按 dataId / group 的模式匹配批量订阅），由 `ConfigFuzzyWatchGroupKeyHolder` 单独维护——这是 2.x 完全不存在的能力。
 
 
 ### Refresh Listener
@@ -1012,165 +972,116 @@ protected void processTasks() {
 }
 ```
 
-dumpProcessor
+### DumpProcessor
+
+> [!WARNING]
+> 下面这版用的是 `PersistService`（`dumpService.getPersistService()`）+ `findConfigInfo4Beta` + tag 分支。
+> **3.2.4 里 `PersistService` 与 `getPersistService()` 已全树 0 命中**，
+> 取而代之的是构造注入的 `ConfigInfoPersistService` + `ConfigInfoGrayPersistService`；
+> `ConfigCacheService.dumpBeta` / `dumpTag` 也已删除（只剩 `removeBeta` / `removeTag` 的兼容痕迹），
+> 灰度统一走 `dumpGray` / `removeGray`。3.x 真实实现见下方代码。
+
+3.2.4 的 `config/src/main/java/com/alibaba/nacos/config/server/service/dump/processor/DumpProcessor.java`：
+
 ```java
 public class DumpProcessor implements NacosTaskProcessor {
-    
-    final DumpService dumpService;
+
+    final ConfigInfoPersistService configInfoPersistService;
+
+    final ConfigInfoGrayPersistService configInfoGrayPersistService;
+
+    public DumpProcessor(ConfigInfoPersistService configInfoPersistService,
+            ConfigInfoGrayPersistService configInfoGrayPersistService) {
+        this.configInfoPersistService = configInfoPersistService;
+        this.configInfoGrayPersistService = configInfoGrayPersistService;
+    }
+
     @Override
     public boolean process(NacosTask task) {
-        final PersistService persistService = dumpService.getPersistService();
-        DumpTask dumpTask = (DumpTask) task;
-        String[] pair = GroupKey2.parseKey(dumpTask.getGroupKey());
-        String dataId = pair[0];
-        String group = pair[1];
-        String tenant = pair[2];
-        long lastModified = dumpTask.getLastModified();
-        String handleIp = dumpTask.getHandleIp();
-        boolean isBeta = dumpTask.isBeta();
-        String tag = dumpTask.getTag();
-        
-        ConfigDumpEvent.ConfigDumpEventBuilder build = ConfigDumpEvent.builder().namespaceId(tenant).dataId(dataId)
-                .group(group).isBeta(isBeta).tag(tag).lastModifiedTs(lastModified).handleIp(handleIp);
-        
-        if (isBeta) {
-            // if publish beta, then dump config, update beta cache
-            ConfigInfo4Beta cf = persistService.findConfigInfo4Beta(dataId, group, tenant);
-            
-            build.remove(Objects.isNull(cf));
-            build.betaIps(Objects.isNull(cf) ? null : cf.getBetaIps());
-            build.content(Objects.isNull(cf) ? null : cf.getContent());
-            build.encryptedDataKey(Objects.isNull(cf) ? null : cf.getEncryptedDataKey());
-            
-            return DumpConfigHandler.configDump(build.build());
-        }
-        if (StringUtils.isBlank(tag)) {
-            ConfigInfo cf = persistService.findConfigInfo(dataId, group, tenant);
-            
+        // ... 从 dumpTask 取 dataId / group / tenant / lastModified / handleIp / grayName
+        ConfigDumpEvent.ConfigDumpEventBuilder build =
+                ConfigDumpEvent.builder().namespaceId(tenant).dataId(dataId)
+                        .group(group).grayName(grayName).handleIp(handleIp);
+
+        // 3.x：灰度分支用 grayName 判定，不再是 isBeta
+        if (StringUtils.isNotBlank(grayName)) {
+            ConfigInfoGrayWrapper cf =
+                    configInfoGrayPersistService.findConfigInfo4Gray(dataId, group, tenant, grayName);
             build.remove(Objects.isNull(cf));
             build.content(Objects.isNull(cf) ? null : cf.getContent());
             build.type(Objects.isNull(cf) ? null : cf.getType());
             build.encryptedDataKey(Objects.isNull(cf) ? null : cf.getEncryptedDataKey());
-        } else {
-            ConfigInfo4Tag cf = persistService.findConfigInfo4Tag(dataId, group, tenant, tag);
-            
-            build.remove(Objects.isNull(cf));
-            build.content(Objects.isNull(cf) ? null : cf.getContent());
-            
+            build.lastModifiedTs(Objects.isNull(cf) ? lastModifiedOut : cf.getLastModified());
+            build.grayName(grayName);
+            build.grayRule(Objects.isNull(cf) ? null : cf.getGrayRule());
+            return DumpConfigHandler.configDump(build.build());
         }
+
+        ConfigInfoWrapper cf = configInfoPersistService.findConfigInfo(dataId, group, tenant);
+        build.remove(Objects.isNull(cf));
+        build.content(Objects.isNull(cf) ? null : cf.getContent());
+        build.type(Objects.isNull(cf) ? null : cf.getType());
+        build.encryptedDataKey(Objects.isNull(cf) ? null : cf.getEncryptedDataKey());
+        build.lastModifiedTs(Objects.isNull(cf) ? lastModifiedOut : cf.getLastModified());
         return DumpConfigHandler.configDump(build.build());
     }
 }
 ```
 
+### DumpConfigHandler
 
-DumpConfigHandler
+落地侧同样按 **gray** 而非 beta 分支（3.2.4 `dump/DumpConfigHandler.java`）：
 
 ```java
-
-public class DumpConfigHandler extends Subscriber<ConfigDumpEvent> {
-
-    public static boolean configDump(ConfigDumpEvent event) {
-        final String dataId = event.getDataId();
-        final String group = event.getGroup();
-        final String namespaceId = event.getNamespaceId();
-        final String content = event.getContent();
-        final String type = event.getType();
-        final long lastModified = event.getLastModifiedTs();
-        final String encryptedDataKey = event.getEncryptedDataKey();
-        if (event.isBeta()) {
-            boolean result;
-            if (event.isRemove()) {
-                result = ConfigCacheService.removeBeta(dataId, group, namespaceId);
-                if (result) {
-                    ConfigTraceService.logDumpEvent(dataId, group, namespaceId, null, lastModified, event.getHandleIp(),
-                            ConfigTraceService.DUMP_EVENT_REMOVE_OK, System.currentTimeMillis() - lastModified, 0);
-                }
-                return result;
-            } else {
-                result = ConfigCacheService
-                        .dumpBeta(dataId, group, namespaceId, content, lastModified, event.getBetaIps(),
-                                encryptedDataKey);
-                if (result) {
-                    ConfigTraceService.logDumpEvent(dataId, group, namespaceId, null, lastModified, event.getHandleIp(),
-                            ConfigTraceService.DUMP_EVENT_OK, System.currentTimeMillis() - lastModified,
-                            content.length());
-                }
+public static boolean configDump(ConfigDumpEvent event) {
+    // gray
+    if (StringUtils.isNotBlank(event.getGrayName())) {
+        boolean result = false;
+        if (!event.isRemove()) {
+            result = ConfigCacheService.dumpGray(dataId, group, namespaceId, event.getGrayName(),
+                    event.getGrayRule(), content, lastModified, event.getEncryptedDataKey());
+            if (result) {
+                ConfigTraceService.logDumpGrayNameEvent(dataId, group, namespaceId,
+                        event.getGrayName(), null, lastModified, event.getHandleIp(),
+                        ConfigTraceService.DUMP_TYPE_OK,
+                        System.currentTimeMillis() - lastModified, content.length());
             }
-            
-            return result;
-        }
-        if (StringUtils.isBlank(event.getTag())) {
-            if (dataId.equals(AggrWhitelist.AGGRIDS_METADATA)) {
-                AggrWhitelist.load(content);
-            }
-            
-            if (dataId.equals(ClientIpWhiteList.CLIENT_IP_WHITELIST_METADATA)) {
-                ClientIpWhiteList.load(content);
-            }
-            
-            if (dataId.equals(SwitchService.SWITCH_META_DATAID)) {
-                SwitchService.load(content);
-            }
-            
-            boolean result;
-            if (!event.isRemove()) {
-                result = ConfigCacheService
-                        .dump(dataId, group, namespaceId, content, lastModified, type, encryptedDataKey);
-                
-                if (result) {
-                    ConfigTraceService.logDumpEvent(dataId, group, namespaceId, null, lastModified, event.getHandleIp(),
-                            ConfigTraceService.DUMP_EVENT_OK, System.currentTimeMillis() - lastModified,
-                            content.length());
-                }
-            } else {
-                result = ConfigCacheService.remove(dataId, group, namespaceId);
-                
-                if (result) {
-                    ConfigTraceService.logDumpEvent(dataId, group, namespaceId, null, lastModified, event.getHandleIp(),
-                            ConfigTraceService.DUMP_EVENT_REMOVE_OK, System.currentTimeMillis() - lastModified, 0);
-                }
-            }
-            return result;
         } else {
-            //
-            boolean result;
-            if (!event.isRemove()) {
-                result = ConfigCacheService
-                        .dumpTag(dataId, group, namespaceId, event.getTag(), content, lastModified, encryptedDataKey);
-                if (result) {
-                    ConfigTraceService.logDumpEvent(dataId, group, namespaceId, null, lastModified, event.getHandleIp(),
-                            ConfigTraceService.DUMP_EVENT_OK, System.currentTimeMillis() - lastModified,
-                            content.length());
-                }
-            } else {
-                result = ConfigCacheService.removeTag(dataId, group, namespaceId, event.getTag());
-                if (result) {
-                    ConfigTraceService.logDumpEvent(dataId, group, namespaceId, null, lastModified, event.getHandleIp(),
-                            ConfigTraceService.DUMP_EVENT_REMOVE_OK, System.currentTimeMillis() - lastModified, 0);
-                }
-            }
-            return result;
+            result = ConfigCacheService.removeGray(dataId, group, namespaceId, event.getGrayName());
+            // ... DUMP_TYPE_REMOVE_OK
         }
-        
+        return result;
     }
-    
-    @Override
-    public void onEvent(ConfigDumpEvent event) {
-        configDump(event);
+
+    // 正式配置
+    boolean result;
+    if (!event.isRemove()) {
+        result = ConfigCacheService.dump(dataId, group, namespaceId, content, lastModified,
+                event.getType(), event.getEncryptedDataKey());
+        // ... ConfigTraceService.logDumpEvent(..., DUMP_TYPE_OK, ...)
+    } else {
+        result = ConfigCacheService.remove(dataId, group, namespaceId);
+        // ... DUMP_TYPE_REMOVE_OK
     }
-    
-    @Override
-    public Class<? extends Event> subscribeType() {
-        return ConfigDumpEvent.class;
-    }
+    return result;
 }
 ```
+
+> [!NOTE]
+> 3.x 的 dump 链路里还有两处细节与 2.x 不同：
+> ① 常量名 `SwitchService.SWITCH_META_DATA_ID`（3.x）取代了 2.x 的 `SWITCH_META_DATAID`；
+> ② `AggrWhitelist`（聚合配置白名单）分支在 3.x 的 `configDump` 中已不存在——与 `config_info_aggr` 表的移除一致。
 
 
 ## Summary
 
 1. use ScheduledThreadPool.scheduleWithFixedDelay and longPoll
+
+> [!WARNING]
+> 这条小结是 **2.0 之前**的结论。以 3.2.4 为准应为：
+> ① **客户端不再长轮询**——`LongPollingRunnable` / `checkConfigInfo` / `checkUpdateDataIds` 已删除，改由 gRPC 长连接接收服务端 `ConfigChangeNotifyRequest` 推送；
+> ② **服务端仍保留 `scheduleWithFixedDelay`**——`NacosDelayTaskExecuteEngine` 处理 dump 任务，`DumpService` 的 `DUMP_ALL_INTERVAL_IN_MINUTE = 6 * 60`（每 6 小时全量 dump 一次）依然成立；
+> ③ **节点间通知只剩 gRPC**——HTTP 的 `/dataChange` 回调端点已移除。
 
 
 
@@ -1180,4 +1091,4 @@ public class DumpConfigHandler extends Subscriber<ConfigDumpEvent> {
 
 
 ## References
-1. [Listen for configurations](https://nacos.io/en-us/docs/open-api.html)
+- <https://nacos.io/en-us/docs/open-api.html>

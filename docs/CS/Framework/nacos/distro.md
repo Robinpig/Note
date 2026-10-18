@@ -34,7 +34,7 @@ digraph distro {
   TA  [label="DistroTransportAgent\n(网络传输, gRPC)"];
   FH  [label="DistroFailedTaskHandler\n(失败重试)"];
   TE  [label="DistroDelayTaskExecuteEngine\n(延迟合并引擎)"];
-  EW  [label="ExecuteWorkersManager\n(并发执行)"];
+  EW  [label="NacosExecuteTaskExecuteEngine\n(并发执行)"];
 
   DP -> CH;
   CH -> DS; CH -> DP2; CH -> TA; CH -> FH;
@@ -90,7 +90,7 @@ public void merge(AbstractDelayTask task) {
 
 ### Phase 2: Concurrent Execution (ExecuteWorkersManager)
 
-延迟窗口到达后，`DistroDelayTaskProcessor` 把任务转成 `DistroSyncChangeTask` / `DistroSyncDeleteTask`，交 `ExecuteWorkersManager` 的线程池并发执行，最终由 `TransportAgent.syncData()` 经 gRPC 发给目标节点：
+延迟窗口到达后，`DistroDelayTaskProcessor` 把任务转成 `DistroSyncChangeTask` / `DistroSyncDeleteTask`，交 **`NacosExecuteTaskExecuteEngine`** 并发执行，最终由 `TransportAgent.syncData()` 经 gRPC 发给目标节点：
 
 ```java
 public class DistroSyncChangeTask extends AbstractDistroExecuteTask {
@@ -122,7 +122,7 @@ public class DistroSyncChangeTask extends AbstractDistroExecuteTask {
 
 ## Periodic Verification and Self-Healing
 
-`DistroVerifyTimedTask` 每 **5000 ms**（`nacos.core.protocol.distro.verify.interval`）运行一次：收集本节点负责的所有 client 的 `clientId + revision`，向其它节点发 verify 请求比对版本。版本一致则过；不一致则发布 `ClientVerifyFailedEvent`：
+`DistroVerifyTimedTask` 每 **5000 ms**（`nacos.core.protocol.distro.data.verify.intervalMs`）运行一次：收集本节点负责的所有 client 的 `clientId + revision`，向其它节点发 verify 请求比对版本。版本一致则过；不一致则发布 `ClientVerifyFailedEvent`：
 
 ```java
 // DistroProtocol.onVerify -> DistroClientDataProcessor.processVerifyData
@@ -147,13 +147,16 @@ private void syncToVerifyFailedServer(ClientEvent.ClientVerifyFailedEvent event)
 
 ## New Node Full Load
 
-新 Nacos 节点启动时内存为空，跑 `DistroLoadDataTask`：先启动定时校验，再向已有节点拉全量快照 `transportAgent.getDatumSnapshot()`，交给 processor 灌入本地存储并标记 `initialized`。加载失败按 `loadDataRetryDelay`（默认 **30 s**）重试。
+新 Nacos 节点启动时内存为空，跑 `DistroLoadDataTask`：先启动定时校验，再向已有节点拉全量快照 `transportAgent.getDatumSnapshot()`，交给 processor 灌入本地存储并标记 `initialized`。加载失败按 `nacos.core.protocol.distro.data.load.retryDelayMs`（默认 **30000 ms / 30 s**）重试。
 
 加载完成后，每台机器都持有集群内全部临时实例数据——这正是「读本地即全量」的前提。
 
 ## Failure Retry
 
-同步失败不抛异常、不指数退避，而是固定延迟重投：`DistroClientTaskFailedHandler.retry()` 用 `SyncRetryDelayMillis`（默认 **3000 ms**）构造新的 `DistroDelayTask` 重新入队。固定延迟比指数退避更利于「短暂网络抖动后快速追平」，符合 AP 场景对时效的偏好。
+同步失败不抛异常、不指数退避，而是固定延迟重投：`DistroClientTaskFailedHandler.retry()` 用 `DistroConfig.getSyncRetryDelayMillis()`（配置项 `nacos.core.protocol.distro.data.sync.retryDelayMs`，默认 **3000 ms**）构造新的 `DistroDelayTask` 重新入队。固定延迟比指数退避更利于「短暂网络抖动后快速追平」，符合 AP 场景对时效的偏好。
+
+> [!NOTE]
+> Distro 的超时/重试参数在 3.2.4 全部由 `core/distributed/distro/DistroConfig.java` 统一持有，属性名一律带 `.data.` 中段与 `Ms` 后缀，常量定义在 `DistroConstants`。完整默认值（实测）：`data.sync.delayMs=1000`、`data.sync.timeoutMs=3000`、`data.sync.retryDelayMs=3000`、`data.verify.intervalMs=5000`、`data.verify.timeoutMs=3000`、`data.load.retryDelayMs=30000`。
 
 ## Distro vs Gossip / etcd
 
@@ -177,4 +180,4 @@ private void syncToVerifyFailedServer(ClientEvent.ClientVerifyFailedEvent event)
 
 - <https://www.besthub.dev/articles/dissecting-nacos-3-x-distro-protocol-the-distributed-design-behind-the-1000-ms-delay-8bb4be2f4767>
 - <https://blog.csdn.net/weixin_34297704/article/details/88765079>
-- <https://nacos.io/docs/v3.0/manual/admin/cluster/>
+- <https://nacos.io/docs/latest/manual/admin/deployment/deployment-cluster/>

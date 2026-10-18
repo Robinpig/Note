@@ -1,3 +1,5 @@
+# Nacos
+
 ## Introduction
 
 Nacos `/nɑ:kəʊs/` 是 Dynamic Naming and Configuration Service的首字母简称，一个更易于构建云原生应用的动态服务发现、配置管理和服务管理平台 
@@ -193,29 +195,10 @@ public class ProtocolManager extends MemberChangeListener implements DisposableB
 
 
 
-由于 Nacos 的服务模块存储，更多的都是根据单个或者多个唯 key 去执行点查的操作，因此Key Value 类型的存储接口最适合不过
+由于 Nacos 的服务模块存储，更多是按唯一 key 做点查，因此 KV 语义的存储抽象最合适。3.x 里这层抽象落在 **Core 一致性层**（`ConsistencyProtocol` / `ProtocolManager`）：命名临时实例读本地内存（`DataStore`，即 Distro 的 AP 内存注册表），持久实例与配置走 `CPProtocol`（`JRaftProtocol`）经 Raft 日志 + `NacosStateMachine` 落外部 DB。
 
-```java
-public interface KvStorage {
-    
-    enum KvType {
-        /**
-         * Local file storage.
-         */
-        File,
-    
-        /**
-         * Local memory storage.
-         */
-        Memory,
-    
-        /**
-         * RocksDB storage.
-         */
-        RocksDB,
-    }
-}
-```
+> [!WARNING]
+> 早期文档里出现的 `KvStorage` 接口与 `KvType{File, Memory, RocksDB}` 枚举，**在 3.x 源码中已不存在**（全树 `git grep` 仅剩 `KvStorageException`，无 `interface KvStorage`、无 `enum KvType`）。不要据此理解当前实现——当前存储分界见 [Storage](/docs/CS/Framework/nacos/storage.md)。
 
 
 
@@ -230,11 +213,11 @@ A concrete implementation of CP protocol: JRaft.
  *                                           ┌──────────────────────┐
  *            ┌──────────────────────┐       │                      ▼
  *            │   ProtocolManager    │       │        ┌───────────────────────────┐
- *            └──────────────────────┘       │        │for p in [LogProcessor4CP] │
+ *            └──────────────────────┘       │        │for p in [NacosStateMachine] │
  *                        │                  │        └───────────────────────────┘
  *                        ▼                  │                      │
  *      ┌──────────────────────────────────┐ │                      ▼
- *      │    discovery LogProcessor4CP     │ │             ┌─────────────────┐
+ *      │    discovery NacosStateMachine     │ │             ┌─────────────────┐
  *      └──────────────────────────────────┘ │             │  get p.group()  │
  *                        │                  │             └─────────────────┘
  *                        ▼                  │                      │
@@ -273,6 +256,66 @@ A concrete implementation of CP protocol: JRaft.
 
 
 
+
+## 3.x 模块地图与演进（以 3.2.4 为准）
+
+读源码先认模块。3.2.4 的顶层 Maven 模块（节选，已 `ls` 核实）与 2.x 差异明显——**3.x 把持久化、AI、控制台前端、MCP/Copilot 都拆了出来或新增**：
+
+| 模块 | 作用（3.2.4） |
+| :-- | :-- |
+| `api` / `common` / `core` | 公共 API、工具、内核（一致性 `core/distributed`、集群寻址 `core/cluster`、安全 `core/plugin`） |
+| `naming` | 服务发现（v2 Client 模型在 `naming/core/v2/`，`naming/consistency/KeyBuilder` 仍在但 API 已变） |
+| `config` | 配置中心（含 `controller/v3` 的 `/v3` API） |
+| `consistency` | 独立的一致性抽象模块（`com.alibaba.nacos.consistency.ap/.cp`，`ProtocolManager` 取用的 `APProtocol`/`CPProtocol` 来自这里） |
+| `persistence` | **3.x 新增**：持久化拆为独立模块，数据源**插件化**（`plugin-default-impl/nacos-default-datasource-plugin/` 内含 `mysql` / `derby` / `oracle` / `postgresql` 实现；PostgreSQL 官方支持已验证） |
+| `auth` / `plugin-default-impl/nacos-default-auth-plugin` | 鉴权（含 `controller/v3`） |
+| `ai` / `ai-registry-adaptor` | **3.x 新增**：AI / MCP 相关，库里有 `ai_resource` 等资源表（schema 已验证） |
+| `console` / `console-ui` / `console-ui-next` | 控制台；`console-ui-next` 是 **3.x 新前端** |
+| `copilot` / `k8s-sync` / `lock` / `skills` / `specs` / `bootstrap` / `client-basic` / `server` | 3.x 陆续新增（Copilot、K8s 同步、分布式锁、技能、Bootstrap/Server 拆分等） |
+
+与 2.x 的关键差异（事实已在 Nacos.md 顶部 NOTE 说明，这里给**模块级证据**）：
+
+- **持久化下沉为 `persistence` 模块 + 数据源插件**：3.x 不再把 DB 访问写死在 config 模块，而是走 `plugin-default-impl` 的多方言实现；切换数据源（含 PostgreSQL）改插件而非改业务代码。
+- **`/v3` API 上下文**：core / config / naming / auth 下均有 `controller/v3` 包，3.x 在 2.x gRPC 基础上进一步统一了 v3 HTTP API。
+- **AI / MCP 成为一等公民**：`ai` 与 `ai-registry-adaptor` 模块 + `ai_resource` 表，对应 3.x 把模型/工具/MCP 资源纳入 namespace 体系。
+- **控制台前端重写**：`console-ui-next` 与老 `console-ui` 并存，新控制台基于新前端。
+
+> [!NOTE]
+> 2.x 文档里常见的「`config` 模块直接持有一堆 Mapper」的描述在 3.x 已不准确；DB 访问统一走 `persistence` + 数据源插件。源码路径以 `git grep` 在 `3.2.4` tag 上核实为准。
+
+### 3.x 新增能力：AI Registry / 分布式锁 / K8s 同步
+
+除了「注册 + 配置」两块老本行，3.x 还长出了三个独立子系统。它们的共同点是**复用 Nacos 既有的 namespace 体系与一致性设施**，而不是另起炉灶：
+
+| 子系统 | 模块 | 一致性 | 落库 |
+| :-- | :-- | :-- | :-- |
+| AI Registry | `ai` / `ai-registry-adaptor` / `skills` | 配置通道（复用 config 存储） | `ai_resource` + `ai_resource_version` |
+| 分布式锁 | `lock` | **CP**（JRaft） | Raft 日志 + 快照 |
+| K8s 同步 | `k8s-sync` | —（旁路同步进程） | 无独立表 |
+
+#### AI Registry
+
+3.x 把 **MCP Server / Agent / Skill / Prompt / A2A** 这类 AI 资源也当作「可注册的公民」，纳入与配置同样的 namespace 隔离。Admin 侧与 Client 侧各有独立 controller：`McpAdminController`、`AgentSpecAdminController`、`SkillAdminController`、`PromptAdminController`、`A2aAdminController`，外加 `PipelineAdminController` 与 `AiResourceImportAdminController`（导入 / 同步）。
+
+存储层是 `NacosConfigAiResourceStorage` + `AiResourcePersistServiceImpl`，最终落在 `ai_resource` 表。该表几个值得注意的列（3.2.4 `mysql-schema.sql` 实测）：
+
+- `type`：资源类型（MCP / Agent / Skill / Prompt …），与 `name` + `namespace_id` 一起定位资源。
+- `scope`：`PUBLIC` / `PRIVATE`，决定跨 namespace 可见性。
+- `meta_version`：乐观锁版本号，避免并发覆盖。
+- `c_from`：来源标识（默认 `local`），用于区分本地创建与从外部导入 / 同步。
+
+#### 分布式锁
+
+`lock` 模块提供可重入互斥锁：`NacosLockManager implements LockManager`，底层是 `MutexAtomicLock` 与 `AtomicLockService`，并带 `RequestLockAspect` 注解切面、`LockMetricsMonitor` 监控。
+
+**它走 CP**——`LockOperationServiceImpl extends RequestProcessor4CP`，构造时取 `ProtocolManager.getCpProtocol()`，加锁请求作为 `WriteRequest` 经 `onApply()` 走 Raft 提交，快照由 `NacosLockSnapshotOperation` 处理。也就是说，分布式锁与持久实例、配置变更共用同一条 JRaft 通道，代价是每次加锁都要过一轮多数派确认。
+
+> [!NOTE]
+> 官方文档把分布式锁归在 **experimental** 目录下，接口与配置项在 3.x 内仍可能调整，生产使用前建议先压测确认时延。
+
+#### K8s 同步
+
+`k8s-sync` 是一个旁路同步组件（`K8sSyncServer` + `K8sSyncConfig` + `K8sSyncEnabledFilter`），负责把 Kubernetes 的 Service 与 Nacos 的服务数据做双向同步，让 K8s 内的服务与 Nacos 注册中心保持一致。它不参与 Nacos 的一致性协议，独立启停。
 
 ## Cluster
 
@@ -454,112 +497,12 @@ public class AddressServerMemberLookup extends AbstractMemberLookup {
 
 ## Tuning
 
-### Rate Limiting
+生产面的限流、黑名单、长连接上限、端口冲突等内容已抽到独立笔记，避免 Nacos.md 过度膨胀：
 
+- [Nacos 运维与调优（tuning.md）](/docs/CS/Framework/nacos/tuning.md)：Nginx 侧 QPS 限流（单接口 / 单机约 500QPS / 全服务）、长连接上限（8C16G 约 9000 gRPC 连接）、IP / 读写 / 应用维度黑名单、9848 端口被占用等坑。
 
-
-Tomcat限流 maxConnection
-
-
-
-Nginx限流
-
-
-
-
-
-限制qps
-
-
-
-Nacos 每个接口执行的代价不尽相同， 般来说写操作代价比读操作大，与此同时还有高频操作和低频操作之分，SDK 调用的接口 般来说是高频接口，容易出现问题，所以在生产环境需要将这些接口区别对待，根据服务自身的实际情况采取合理的限流策略，以防错用方打垮 Nacos 服务。
-
-
-
-限制单个接口的请求 QPS
-
-limit get config 对读操作进行限流，正常使用 Nacos 获取动态配置 般就启动和运行时修改配置推送到 client，获取配置相对来说是低频操作，如果频繁获取配置肯定是 client 有错用或者应用不正常（比如数据平台任务 failover 重试任务）。
-
-
-
-limit publish config 对写操作进行限流，可以有效防止热点写问题。对同 个数据的高频写会触发 mysql 的行锁，从而导致 mysql 的多线程任务因等待行锁排队，最终导致 mysql 所有操作都超时服务不可用。这里通过 nginx lua 模块获取 post 请求的参数，设置 limit key 。
-
-
-
-
-
-限制单机访问 QPS
-
-perclient 对单个 client 的所有请求限制低于 500QPS，可以有效防止单台 client 的重试攻击。
-
-
-
-
-
-
-
-限制 Nacos 服务 QPS
-
-perserver 限制整个 Nacos 服务的 QPS，Nacos 的服务部署在 nginx 之后，nginx 可以保证到达
-
-Nacos 的流量不会打垮 Nacos。
-
-
-
-限制并发连接数
-
-
-
-/nacos/v1/cs/configs/listener 接口是 Nacos 的长连接通道， 般来说， 个 client 个长连接就可以满足生产需求。limit conn client 限制 client 的连接数不超过 10 个，limit conn server限制 Nacos 单机（8 核 16 G 内存）支撑最多 9000 个长连接，最多可以同时服务 9000 个应用节点。
-
-
-
-黑名单
-
-1、 P 黑名单
-
-当生产环境发现有错用的 client 影响到 Nacos 服务，可以使用 nginx 黑名单限制 client 的访问。
-
-
-
-读写黑名单分离
-
-有时候通过 P 维度直接限制 client 访问所有 Nacos 接口粒度过大，会导致应用服务不可用，可以将读操作和写操作分开，禁止 client 写 Nacos，依然允许其进行读。
-
-```shell
-# 1 limit read, 0 no limit
-map "$remote addr" $limit read {
-#10.2.24.252 1;
-default 0;
-}
-# 1 limit write, 0 no limit
-map "$remote addr" $limit write {
-#10.2.24.252 1;
-default 0;
-}
-location /some url to write {
-if ($limit write = 1) {
-return 403;
-}
-}
-```
-
-
-
-应用黑名单
-
-P 黑名单功能是 nginx 提供的基础能力，能够限制某些 P 的访问，但是 般 个应用会有很多台机器，当 个应用出问题的时候，会有很多 P 访问都有问题，通过 P 的维度来限制访问达不到预期，需要有应用的维度来限制。
-
-namespace（命名空间）是 个可以区分不同应用的维度，不同的应用 般会使用不同的 namespace，这样可以在 namespace 维度对服务的访问进行限制。
-
-
-
-
-## Tuning
-
-Windows下阿里云盘的SyncAppServer.exe占用了端口9848导致启动失败
-
-
+> [!NOTE]
+> Nacos 自身无内置细粒度 QPS 限流，限流与黑名单主要在 **Nacos 前层的 Nginx** 实现；3.x 默认鉴权加强，运维接入注意 token（见 [Security](/docs/CS/Framework/nacos/security.md)）。
 
 
 ## Comparison with etcd
@@ -586,25 +529,18 @@ Nacos 与 etcd 定位有交集也有分野：etcd 是**通用的强一致 KV 协
 
 ## Links
 
-
-
-- [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md)
-- [etcd](/docs/CS/Framework/etcd/etcd.md)
-- [etcd 横向对照](/docs/CS/Framework/etcd/compare.md)
-- [ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)
-- [Eureka](/docs/CS/Framework/eureka/Eureka.md)
-- [Spring Cloud Alibaba](/docs/CS/Framework/Spring_Cloud/Alibaba.md)
 - [Nacos 目录索引](/docs/CS/Framework/nacos/README.md)
-- [JRaft（CP 共识）](/docs/CS/Framework/nacos/jraft.md)
-- [Storage（存储与持久化）](/docs/CS/Framework/nacos/storage.md)
-- [Client（客户端 SDK）](/docs/CS/Framework/nacos/client.md)
-- [Security（鉴权与 RBAC）](/docs/CS/Framework/nacos/security.md)
-- [Monitoring（监控）](/docs/CS/Framework/nacos/monitoring.md)
-- [Troubleshooting（故障排查）](/docs/CS/Framework/nacos/troubleshooting.md)
 - [一致性抽象层](/docs/CS/Framework/nacos/consistency.md)
 - [Distro（AP 协议深潜）](/docs/CS/Framework/nacos/distro.md)
+- [JRaft（CP 共识）](/docs/CS/Framework/nacos/jraft.md)
 - [Config Push（配置推送深潜）](/docs/CS/Framework/nacos/config-push.md)
-- [Higress Service Discovery](/docs/CS/Framework/Higress/Service_Discovery.md)
+- [Spring Cloud Alibaba](/docs/CS/Framework/Spring_Cloud/Alibaba.md)
 
 ## References
-1. [Quick Start for Nacos Spring Boot Projects](https://nacos.io/en-us/docs/quick-start-spring-boot.html)
+
+- <https://nacos.io/docs/latest/quick-start/>
+- <https://nacos.io/en-us/docs/quick-start-spring-boot.html>
+- <https://nacos.io/docs/latest/manual/admin/deployment/deployment-cluster/>
+- <https://nacos.io/docs/latest/manual/user/ai/ai-registry-overview/>
+- <https://nacos.io/docs/latest/experimental/distributed-lock/>
+- <https://nacos.io/docs/latest/ecology/use-nacos-with-k8s-sync/>

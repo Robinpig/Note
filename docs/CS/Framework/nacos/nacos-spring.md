@@ -1,3 +1,5 @@
+# Nacos Spring Integration
+
 ## Introduction
 
 
@@ -21,3 +23,8 @@ Nacos 的 @NacosPropertySource 注解可以从 Nacos 服务端拉取相应的配
 
 - [Nacos](/docs/CS/Framework/nacos/Nacos.md)
 - [Spring](/docs/CS/Framework/Spring/Spring.md)
+
+## References
+
+- <https://nacos.io/docs/latest/ecology/use-nacos-with-spring/>
+- <https://nacos.io/docs/latest/ecology/use-nacos-with-spring-boot3/>

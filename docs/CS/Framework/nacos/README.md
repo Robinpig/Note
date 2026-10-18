@@ -46,13 +46,13 @@ digraph Nacos {
 
 ## Consensus Layer: AP / CP Coexist
 
-- [一致性抽象层](/docs/CS/Framework/nacos/consistency.md)：两套一致性抽象（ConsistencyProtocol / ConsistencyService）、按 key 路由 AP/CP、临时实例走 Distro / 持久实例走 JRaft 的双写、为什么 AP+CP 能共存。
+- [一致性抽象层](/docs/CS/Framework/nacos/consistency.md)：3.x 的 Core 层 `ProtocolManager` → `APProtocol`(`DistroProtocol`) / `CPProtocol`(`JRaftProtocol`)；旧 KV 层 `ConsistencyService`（`DelegateConsistencyServiceImpl` 等）**已在 3.x 移除**，仅作文末历史；命名 v2 Client 模型按 `isEphemeral()` 分流 AP/CP、为什么 AP+CP 能共存。
 - [Distro（AP 协议深潜）](/docs/CS/Framework/nacos/distro.md)：责任分片、双层任务引擎、两阶段延迟合并（1000ms 窗口）、定时校验与自愈、新节点全量加载、失败重试。
 - [JRaft](/docs/CS/Framework/nacos/jraft.md)：Nacos 为什么在配置侧用 Raft、Leader 选举 / 日志复制 / 提交 / 快照 / 成员变更、端口与 Distro 的分工。
 
 ## Storage and Persistence
 
-- [Storage](/docs/CS/Framework/nacos/storage.md)：AP 命名在内存、CP 配置落库的边界；Derby（单机不可集群）与 MySQL（集群生产）；表结构、data_id+group_id+tenant_id 唯一键、容量 quota、PostgreSQL 插件。
+- [Storage](/docs/CS/Framework/nacos/storage.md)：AP 命名在内存、CP 配置落库的边界；Derby（单机不可集群）与 MySQL（集群生产）；3.2.4 实测 13 张表的清单（`config_info_beta`/`_tag`/`_aggr` 已移除，灰度改 `config_info_gray`）、data_id+group_id+tenant_id 唯一键、容量 quota、数据源插件化（MySQL/Derby/PostgreSQL/Oracle）。
 
 ## Subsystem
 
@@ -73,7 +73,16 @@ digraph Nacos {
 
 - [Monitoring](/docs/CS/Framework/nacos/monitoring.md)：Actuator 暴露 Prometheus、关键指标、3.x 健康检查接口、Grafana 与告警。
 - [Troubleshooting](/docs/CS/Framework/nacos/troubleshooting.md)：端口冲突、成员列表不一致、Derby 不可集群、403 token、推送失败、Distro 重启丢实例、长连接上限、版本错配。
-- 集群与调优目前内联在 [Nacos](/docs/CS/Framework/nacos/Nacos.md) 的 `## Cluster`（MemberLookup：Standalone / FileConfig / AddressServer）与 `## Tuning`（限流 / 黑名单）段。
+- [Nacos 运维与调优](/docs/CS/Framework/nacos/tuning.md)：限流（单接口 / 单机约 500QPS / 全服务）、长连接上限（8C16G 约 9000 gRPC 连接）、IP / 读写 / 应用维度黑名单、9848 端口被占用等坑。
+- 集群内联在 [Nacos](/docs/CS/Framework/nacos/Nacos.md) 的 `## Cluster`（MemberLookup：Standalone / FileConfig / AddressServer）；调优已独立为上面的 tuning.md；3.x 模块地图与演进见 Nacos.md 的 `## 3.x 模块地图与演进`。
+
+## 3.x New Capabilities (Beyond Registry + Config)
+
+3.x 在「注册 + 配置」之外长出了三个独立子系统，均复用 Nacos 既有的 namespace 体系与一致性设施：
+
+- **AI Registry**（`ai` / `ai-registry-adaptor` / `skills` 模块）：把 MCP Server / Agent / Skill / Prompt / A2A 当作可注册资源，落 `ai_resource` + `ai_resource_version` 表。见 [Nacos](/docs/CS/Framework/nacos/Nacos.md) 的 `### 3.x 新增能力`。
+- **分布式锁**（`lock` 模块）：`NacosLockManager` 可重入互斥锁，**走 CP**（`LockOperationServiceImpl extends RequestProcessor4CP`，经 JRaft 提交）。官方定位 experimental。
+- **K8s 同步**（`k8s-sync` 模块）：`K8sSyncServer` 旁路同步 K8s Service 与 Nacos 服务，不参与一致性协议。
 
 ## Horizontal Comparison
 

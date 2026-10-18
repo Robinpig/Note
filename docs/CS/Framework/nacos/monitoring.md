@@ -82,7 +82,24 @@ scrape_configs:
 
 **请求与 JVM**：`http_server_requests_seconds`（HTTP 次数 / 时延）、`grpc_server_requests`（gRPC 时延，带 requestClass / success / errorCode / module）、`grpc_server_executor`（gRPC 线程池 active / pool / queued）、`system_cpu_usage` / `jvm_memory_used_bytes` / `jvm_gc_pause_seconds_*` / `jvm_threads_daemon`。
 
-客户端侧：`nacos_monitor{name="configListenSize"}`、`subServiceCount` / `pubServiceCount`、`nacos_client_request_seconds_*`。
+**客户端侧**（3.2.4 `client/monitor/MetricsMonitor.java`，只有下面这几个）：
+
+| 指标 | 含义 |
+| :-- | :-- |
+| `nacos_monitor{module="config",name="listenConfigCount"}` | 客户端监听的配置数 |
+| `nacos_monitor{module="naming",name="serviceInfoMapSize"}` | 客户端缓存的服务数 |
+| `nacos_client_request{module,method,url,code}` | 客户端请求直方图（config / naming） |
+| `nacos_client_naming_request_failed_total{module,req_class,res_status,res_code,err_class}` | naming 请求失败计数 |
+
+> [!WARNING]
+> 早期文档里常见的客户端指标 **`configListenSize` / `subServiceCount` / `pubServiceCount` 在 3.2.4 全树 0 命中**
+> ——正确写法分别是 `listenConfigCount`（配置监听数）与 `serviceInfoMapSize`（服务缓存数）。
+
+> [!WARNING]
+> 上表的 `longPolling` 指标字段虽然在 3.2.4 的 `MetricsMonitor` 里还在，但**实际恒为 0**——HTTP 长轮询在 3.x 已是死代码：
+> 路由 `configs/listener` 全树 **0 命中**，`ConfigServletInner` **没有任何调用方**（只有它自己和单测引用 `LongPollingService`）。
+> v3 的 `/listener` 是**管理员查询「哪些客户端在监听」的接口**（`ConfigControllerV3.getListeners`），不是长轮询端点。
+> 所以这条指标不要拿来做告警，见 [config-push](/docs/CS/Framework/nacos/config-push.md)。
 
 ## 3.x Health Check Interface
 
@@ -106,7 +123,7 @@ scrape_configs:
 - **`failedPush` 升高 / `avgPushCost` 变大**：服务发现推送跟不上，客户端连接多或网络差 → 看长连接数与 `grpc_server_executor` 队列。
 - **`nacos_exception{name="db"}` 非零**：MySQL 异常（连接 / 慢 SQL / 锁）→ 查 MySQL 与连接池。
 - **`leaderStatus` 频繁变**：CP 侧 Leader 切换，JRaft 端口 7848 不通或节点抖动 → 见 [JRaft](/docs/CS/Framework/nacos/jraft.md) 与 [Troubleshooting](/docs/CS/Framework/nacos/troubleshooting.md)。
-- **`longConnection` 逼近单机上限**（8C16G 约 9000）：长连接过多，需扩容或限流（[Nacos](/docs/CS/Framework/nacos/Nacos.md) 的 Tuning 段有 nginx 限流示例）。
+- **`longConnection` 逼近单机上限**（8C16G 约 9000）：长连接过多，需扩容或限流（[运维与调优](/docs/CS/Framework/nacos/tuning.md) 有 nginx 限流示例与黑名单配置）。
 
 ## Links
 
