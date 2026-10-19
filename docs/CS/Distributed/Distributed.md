@@ -210,6 +210,12 @@
 然而，对活性性质，我们被允许附加前提条件：例如我们可以说，仅当多数节点没有崩溃、且网络最终从中断中恢复时，一个请求才需要收到响应。
 半同步模型的定义本身就要求系统最终回到同步状态——也就是说，任何网络中断只持续有限时长，随后被修复。
 
+## Time
+
+[时钟与时间](/docs/CS/Distributed/Time.md)
+
+**工程实践**：分布式唯一 ID 生成器（如 Twitter Snowflake）直接建立在「单调时钟 + 机器 ID + 序列号」假设之上，时钟回拨（Clock Skew）是其核心故障模式，详见 [Id](/docs/CS/Distributed/Id.md)。
+
 ## Consistency and Consensus
 
 构建容错系统的最佳方式，是找到一些带有有用保证的、通用目的的抽象，实现它们一次，然后让应用依赖这些保证。这与我们在[事务](/docs/CS/SE/Transaction.md)上采用的方法相同：
@@ -717,10 +723,6 @@ PRAM 保证：来自一个进程的写操作会按该进程执行它们的顺序
 
 以客户端为中心的一致性模型所描述的性质是令人向往的，并且在大多数情况下被分布式系统开发者用来验证他们的系统、简化系统的使用。
 
-## Time
-
-[时钟与时间](/docs/CS/Distributed/Time.md)
-
 ## Consensus
 
 [共识](/docs/CS/Distributed/Consensus/Consensus.md) 是容错分布式系统中的一个基本问题。
@@ -1135,37 +1137,11 @@ Plumtrees 通过创建节点的生成树覆盖，以最小开销主动分发消�
 
 [Distributed Snapshots - Determining Global States of a Distributed System](https://www.microsoft.com/en-us/research/uploads/prod/2016/12/Determining-Global-States-of-a-Distributed-System.pdf)
 
-## System Index
+前文铺垫了故障模型、一致性、共识、复制、传播与快照等抽象与机制，下面进入**具体系统的落地**：先是由这些机制直接构成的分布式存储，再到构建其上的分布式计算，以及支撑二者的元数据存储与经典系统索引。
 
-[Google Cluster](/docs/CS/Distributed/Google.md)
+## Distributed Storage
 
-[Dynamo](/docs/CS/Distributed/Dynamo.md)
-
-[F1](https://courses.cs.washington.edu/courses/cse550/21au/papers/CSE550.F1.pdf)
-
-[MillWheel: Fault-Tolerant Stream Processing at Internet Scale]()
-
-[Dryad]
-
-[Ceph]
-
-[RAMCloud]
-
-[HyperDex: A Distributed, Searchable Key-Value Store](https://www.cs.cornell.edu/people/egs/papers/hyperdex-sigcomm.pdf)
-
-[PNUTS: Yahoo!'s Hosted Data Serving Platform](https://people.mpi-sws.org/~druschel/courses/ds/papers/cooper-pnuts.pdf)
-
-[Azure Data Lake Store: A Hyperscale Distributed File Service for Big Data Analytics]()
-
-[Amazon Aurora: Design Considerations for High Throughput Cloud-Native Relational Databases]()
-
-[Wormhole: Reliable Pub-Sub to Support Geo-replicated Internet Services](https://www.usenix.org/system/files/conference/nsdi15/nsdi15-paper-sharma.pdf)
-
-[All Aboard the Databus! LinkedIn's Scalable Consistent Change Data Capture Platform](https://engineering.linkedin.com/research/2012/all-aboard-the-databus-linkedlns-scalable-consistent-change-data-capture-platform)
-
-[Cloud Design Patterns](https://docs.microsoft.com/en-us/azure/architecture/patterns/)
-
-[Concurrency Control in Distributed Database Systems](https://people.eecs.berkeley.edu/~brewer/cs262/concurrency-distributed-databases.pdf)
+分布式存储是分布式系统的一个核心子领域，按**访问接口**切成文件 / 对象 / 块三类，外加一类常被当作"存储层"的分布式 KV / 数据库。它与本目录的多个经典系统直接同源：[GFS](/docs/CS/Distributed/GFS.md) 是 HDFS 的设计原型，[Haystack](/docs/CS/Distributed/Haystack.md) 是海量小对象存储的奠基之作。完整分类、选型决策表与运维要点见 [Distributed Storage](/docs/CS/Distributed/Distributed_Storage.md)。
 
 ## Computation
 
@@ -1195,6 +1171,52 @@ engine
 etcd
 zookeeper
 
+经典系统索引（论文与工业实现）汇总见下，它把前文的理论与机制锚定到具体的分布式系统上：
+
+## System Index
+
+[Google Cluster](/docs/CS/Distributed/Google.md)
+
+[Dynamo](/docs/CS/Distributed/Dynamo.md)
+
+[F1](/docs/CS/Distributed/F1.md)
+
+[MillWheel: Fault-Tolerant Stream Processing at Internet Scale](/docs/CS/Distributed/MillWheel.md)
+
+[Pregel](/docs/CS/Distributed/Pregel.md)
+
+[Dryad](/docs/CS/Distributed/Dryad.md)
+
+[Ceph](/docs/CS/Distributed/Ceph.md)
+
+[RAMCloud](/docs/CS/Distributed/RAMCloud.md)
+
+[HyperDex](/docs/CS/Distributed/HyperDex.md)
+
+[PNUTS](/docs/CS/Distributed/PNUTS.md)
+
+[Azure Data Lake Store](/docs/CS/Distributed/Azure_Data_Lake_Store.md)
+
+[Amazon Aurora: Design Considerations for High Throughput Cloud-Native Relational Databases](/docs/CS/Distributed/Aurora.md)
+
+[CockroachDB](/docs/CS/Distributed/CockroachDB.md)
+
+[Distributed Transaction Patterns](/docs/CS/Distributed/Distributed_Transaction_Patterns.md)
+
+[Wormhole](/docs/CS/Distributed/Wormhole.md)
+
+[Databus](/docs/CS/Distributed/Databus.md)
+
+[Cloud Design Patterns](/docs/CS/Distributed/Cloud_Design_Patterns.md)
+
+[Distributed Concurrency Control](/docs/CS/Distributed/Distributed_Concurrency_Control.md)
+
+[Mesos](/docs/CS/Distributed/Mesos.md)
+
+[NetChain](/docs/CS/Distributed/NetChain.md)
+
+[Middleware](/docs/CS/Distributed/Middleware.md)
+
 ## Engineering Implementation
 
 对于分布式计算（无状态）的情况，系统内部的协调需要做哪些工作
@@ -1216,6 +1238,8 @@ zookeeper
 - [Tracing（可观测性）](/docs/CS/Distributed/Tracing/README.md)
 - [Byzantine Generals](/docs/CS/Distributed/Byzantine.md)
 - [Replica](/docs/CS/Distributed/Replica.md)
+- [Partition](/docs/CS/Distributed/Partition.md)
+- [Time（时钟与同步）](/docs/CS/Distributed/Time.md)
 - [CAP](/docs/CS/Distributed/CAP.md)
 
 ## References

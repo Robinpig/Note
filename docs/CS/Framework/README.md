@@ -1,6 +1,6 @@
 ## Introduction
 
-本目录是 **Framework（框架与中间件）** 领域的入口页，收录后端与基础设施层的技术栈笔记：Java 体系（Spring / MyBatis / Dubbo）、分布式协调与服务治理（ZooKeeper / etcd / Nacos / Consul / Sentinel / Seata）、网络与 RPC（Netty / Tomcat / gRPC）、服务网格与网关（Istio / Higress）、计算与数据（Hadoop / Flink / Spark / ES）、响应式编程。LLM 应用开发框架（LangChain / LangGraph / Langflow / Pydantic AI 等）已迁至 [AI/LLM/LangTool/](/docs/CS/AI/LLM/LangTool/LangChain.md)，本目录仅保留指向它的入口链接。
+本目录是 **Framework（框架与中间件）** 领域的入口页，收录后端与基础设施层的技术栈笔记：Java 体系（Spring / MyBatis / Dubbo）、分布式协调与服务治理（ZooKeeper / etcd / Nacos / Consul / Sentinel / Seata）、网络与 RPC（Netty / Tomcat / gRPC）、服务网格与网关（Istio / Higress）、计算与数据（Hadoop / Flink / Spark / ES）、响应式编程。LLM 应用开发框架（LangChain / LangGraph / Langflow / Pydantic AI 等）已迁至 [AI/LLM/LangTool/](/docs/CS/AI/LLM/LangTool/LangChain.md)，本目录仅保留指向它的入口链接。**分布式存储（HDFS / Ceph / MinIO / TiKV 等）作为子领域归在 [Distributed/](/docs/CS/Distributed/Distributed.md)，本目录按"产品 / 中间件"视角只保留 [Hadoop](/docs/CS/Framework/Hadoop/Hadoop.md)（含 HDFS）入口。**
 
 目录按**技术栈**组织，每个领域一个子目录，多数子目录以与目录同名的笔记为主入口（如 [Spring](/docs/CS/Framework/Spring/Spring.md) 是Spring 全家桶的枢纽）。若某个领域内部笔记较多且已具备完整分层（如 [etcd](/docs/CS/Framework/etcd/README.md)、[ZooKeeper](/docs/CS/Framework/ZooKeeper/README.md)、[nacos](/docs/CS/Framework/nacos/README.md)、[consul](/docs/CS/Framework/consul/README.md)），则额外提供目录首页 `README.md` 作为该领域的分层索引。
 
@@ -69,7 +69,7 @@ digraph framework_index {
 ## Service Mesh and Gateway
 
 - [Istio](/docs/CS/Framework/Istio/Istio.md)：K8s 原生服务网格，流量治理、安全、Ambient、Envoy 扩展。
-- [Higress](/docs/CS/Framework/Higress/Higress.md)：基于 Istio + Envoy 的云原生 AI 网关，已拆为**枢纽 + 14 分册**，三条贯穿主线是"先问能力在哪一层 / 插件行为由 phase 与 priority 决定而非插件名 / 二手描述普遍比官方文档乐观，而文档又比源码乐观"。按机制差异切开：[Architecture](/docs/CS/Framework/Higress/Architecture.md)（翻译链与 pilot fork 边界）、[AI_Gateway](/docs/CS/Framework/Higress/AI_Gateway.md)（协议转换、token 计量与配额、语义缓存、三条 MCP 路径）、[Plugin_System](/docs/CS/Framework/Higress/Plugin_System.md)（41 插件、两套作用域口径、phase/priority 总表、ECDS 热更新）、[Wasm_Development](/docs/CS/Framework/Higress/Wasm_Development.md)（Go SDK 真实 API 名与 cluster 寻址）、[Traffic_Governance](/docs/CS/Framework/Higress/Traffic_Governance.md)（限流、灰度、nginx annotation 兼容矩阵）、[Service_Discovery](/docs/CS/Framework/Higress/Service_Discovery.md)（McpBridge、多注册中心、Http2Rpc）、[Security_and_Auth](/docs/CS/Framework/Higress/Security_and_Auth.md)（consumer 模型的六个与三个例外、Coraza WAF、ACME）、[Observability](/docs/CS/Framework/Higress/Observability.md)、[Deployment_and_Ops](/docs/CS/Framework/Higress/Deployment_and_Ops.md)；另有五篇**源码级**（锚 v2.2.5，断言带 `路径:行号`）：[Config_Pipeline](/docs/CS/Framework/Higress/Config_Pipeline.md)（链路逐跳：pilot 反向 pull、每次 List 全量重算、Higress 侧无 debounce 生效、fork 与控制器同进程）、[Source_Map](/docs/CS/Framework/Higress/Source_Map.md)（真实模块地图、108 条注解 key、插件的四种语言层、`.gitmodules` 的版本 pin）、[Service_Registry_Internals](/docs/CS/Framework/Higress/Service_Registry_Internals.md)（`registry/` 的 watcher 模型、FQDN 拼装与凭据真实适用范围）、[Standalone_and_AllInOne](/docs/CS/Framework/Higress/Standalone_and_AllInOne.md)（fork 一个 sample-apiserver、CR 存 Nacos 或文件树、supervisord 十进程）、[Certificates_and_ACME](/docs/CS/Framework/Higress/Certificates_and_ACME.md)（只有 HTTP-01、续期其实是比例、副本之间无互斥）。
+- [Higress](/docs/CS/Framework/Higress/Higress.md)：基于 Istio + Envoy 的云原生 AI 网关，已拆为**枢纽 + 13 分册**，三条贯穿主线是"先问能力在哪一层 / 插件行为由 phase 与 priority 决定而非插件名 / 二手描述普遍比官方文档乐观，而文档又比源码乐观"。按机制差异切开：[Architecture](/docs/CS/Framework/Higress/Architecture.md)（翻译链与 pilot fork 边界）、[AI_Gateway](/docs/CS/Framework/Higress/AI_Gateway.md)（协议转换、token 计量与配额、语义缓存、三条 MCP 路径）、[Plugin](/docs/CS/Framework/Higress/Plugin.md)（41 插件、两套作用域口径、phase/priority 总表、ECDS 热更新、Go SDK 真实 API 名与 cluster 寻址）、[Traffic_Governance](/docs/CS/Framework/Higress/Traffic_Governance.md)（限流、灰度、nginx annotation 兼容矩阵）、[Service_Discovery](/docs/CS/Framework/Higress/Service_Discovery.md)（McpBridge、多注册中心、Http2Rpc）、[Security_and_Auth](/docs/CS/Framework/Higress/Security_and_Auth.md)（consumer 模型的六个与三个例外、Coraza WAF、ACME）、[Observability](/docs/CS/Framework/Higress/Observability.md)、[Deployment_and_Ops](/docs/CS/Framework/Higress/Deployment_and_Ops.md)；另有五篇**源码级**（锚 v2.2.5，断言带 `路径:行号`）：[Config_Pipeline](/docs/CS/Framework/Higress/Config_Pipeline.md)（链路逐跳：pilot 反向 pull、每次 List 全量重算、Higress 侧无 debounce 生效、fork 与控制器同进程）、[Source_Map](/docs/CS/Framework/Higress/Source_Map.md)（真实模块地图、108 条注解 key、插件的四种语言层、`.gitmodules` 的版本 pin）、[Service_Registry_Internals](/docs/CS/Framework/Higress/Service_Registry_Internals.md)（`registry/` 的 watcher 模型、FQDN 拼装与凭据真实适用范围）、[Standalone_and_AllInOne](/docs/CS/Framework/Higress/Standalone_and_AllInOne.md)（fork 一个 sample-apiserver、CR 存 Nacos 或文件树、supervisord 十进程）、[Certificates_and_ACME](/docs/CS/Framework/Higress/Certificates_and_ACME.md)（只有 HTTP-01、续期其实是比例、副本之间无互斥）。
 
 ## Computing and Data
 
@@ -77,6 +77,10 @@ digraph framework_index {
 - [Flink](/docs/CS/Framework/Flink/Flink.md)：流批一体计算，DataStream / Table API / 状态与Checkpoint。
 - [Spark](/docs/CS/Framework/Spark/Spark.md)：批处理与 Spark SQL。
 - [ES](/docs/CS/Framework/ES/ES.md)：Elasticsearch 分布式检索与倒排索引。
+
+## Distributed Storage
+
+分布式存储（HDFS / Ceph / MinIO / TiKV 等）作为**子领域**归在 [Distributed/](/docs/CS/Distributed/Distributed.md)，按"访问接口分类 + 选型"的学科视角串起 GFS → HDFS、Haystack → S3 / MinIO 等。本目录按"产品 / 中间件"视角只保留 [Hadoop](/docs/CS/Framework/Hadoop/Hadoop.md)（含 HDFS）作为入口。
 
 ## Reactive Programming
 
@@ -88,7 +92,7 @@ digraph framework_index {
 - [LangTool（LLM Agent 框架）](/docs/CS/AI/LLM/LangTool/LangChain.md)：以 [LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md) 为主线串起 [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md)、[Langflow](/docs/CS/AI/LLM/LangTool/Langflow.md)、[LangChain4j](/docs/CS/AI/LLM/LangTool/LangChain4j.md)——Java/Python 双生态的 Agent 编排框架。
 - [FastAPI](/docs/CS/Framework/FastAPI.md)：Python 现代 Web 框架（异步、类型注解、OpenAPI）。
 - [gorm](/docs/CS/Framework/gorm.md)：Go ORM 框架。
-- [PydanticAI](/docs/CS/AI/LLM/PydanticAI.md)：Python 侧的类型驱动 AI Agent 框架。
+- [PydanticAI](/docs/CS/AI/LLM/LangTool/PydanticAI.md)：Python 侧的类型驱动 AI Agent 框架。
 
 ## Links
 
