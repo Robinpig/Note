@@ -960,7 +960,7 @@ kafka的log文件是以分区为单位的 日志未采用mmap
 
 ## Links
 - [MQ 总纲](/docs/CS/MQ/MQ.md)
-- [MQ](/docs/CS/MQ/MQ.md?id=mqs)
+- [MQ 产品取舍对比](/docs/CS/MQ/MQ.md?id=product-trade-offs)
 - [Producer](/docs/CS/MQ/Kafka/Producer.md)
 - [Consumer](/docs/CS/MQ/Kafka/Consumer.md)
 - [Broker](/docs/CS/MQ/Kafka/Broker.md)

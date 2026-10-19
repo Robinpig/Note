@@ -6,7 +6,7 @@ Nacos 提供多语言 SDK，但生产主力是 **Java SDK**（核心包 `nacos-c
 
 Nacos 服务端端口派生在 [JRaft](/docs/CS/Framework/nacos/jraft.md) 已列：SDK 默认连 **9848（gRPC，`server.port + 1000`）**，旧版 1.x 走 HTTP 8848 长轮询。客户端与服务端**大版本必须匹配**（2.x 客户端连 2.x/3.x 服务端，1.x 客户端连 1.x），否则协议不兼容。
 
-## Java SDK：ConfigService
+## Java SDK: ConfigService
 
 `ConfigService` 管配置中心的读写与监听：
 
@@ -35,7 +35,7 @@ configService.addListener("example.yaml", "DEFAULT_GROUP", new Listener() {
 - `publishConfig` 返回 `boolean`，失败（如容量超限、鉴权拒绝）直接抛 / 返 false。
 - **`addListener` 是推送语义**：2.x 客户端与服务端建立 gRPC 长连接，配置变更由服务端主动推；1.x 才是 HTTP 长轮询（每 30s 阻塞一次）。不要自己写「定时 getConfig 轮询」——既浪费配额又慢。
 
-## Java SDK：NamingService
+## Java SDK: NamingService
 
 `NamingService` 管服务注册与发现：
 

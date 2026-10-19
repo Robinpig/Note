@@ -279,7 +279,7 @@ marker 走普通 entry 写入路径 —— 即事务提交标记与其他消息�
 | 已在 K8s、需要弹性 | Functions（K8s runtime）| Pod 编排 |
 | 数据库/ES/Redis 接入 | **pulsar-io connector** | 与 Function 共用 runtime |
 | 复杂有状态流计算 | **Flink**（见 [Flink](/docs/CS/Framework/Flink/Flink.md)）| Functions 状态能力有限 |
-| 跨集群/跨地域复制 | 4.x 已移除内置方案 | 需 MirrorMaker 或自研 |
+| 跨集群/跨地域复制 | broker 内置 replicator（独立 `pulsar-replication` 模块已在 4.x 移除）| 见 [Cluster](/docs/CS/MQ/Pulsar/Cluster.md) |
 
 > [!IMPORTANT]
 > Pulsar Functions 4.2.4 中**仍是完整可用的独立子系统**（9 个子模块、独立 WorkerConfig、3 个 JVM runtime + K8S、NAR 打包、`pulsar-package-management` 集成），**不能简单说「已废弃」**。

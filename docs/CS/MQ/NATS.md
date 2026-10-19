@@ -160,6 +160,7 @@ ordered consumer 提供按序重放、带每消费者序列号，且**不做重�
 - [发布/订阅与消息代理](/docs/CS/MQ/MQ.md?id=message-system)
 - [Pulsar（同样提供 subject 路由与持久化流）](/docs/CS/MQ/Pulsar/Pulsar.md)
 - [Kafka（生态与吞吐路线的对照）](/docs/CS/MQ/Kafka/Kafka.md)
+- [未来发展方向（agent 通信这条线的证据）](/docs/CS/MQ/Future.md?id=consumer-shapes-change-ai-era-workloads)
 - [CS 主题总纲](/docs/CS/CS.md)
 
 ## References

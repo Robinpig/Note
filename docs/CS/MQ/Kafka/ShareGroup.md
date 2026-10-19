@@ -163,6 +163,8 @@ public static final String DEFAULT_GROUP_PROTOCOL = GroupProtocol.CLASSIC.name()
 
 4.3.0 相关 KIP：KIP-1244 弃用 streams-scala；KIP-1259 `state.cleanup.dir.max.age.ms`；KIP-1271/1285 State Store 存 Headers。
 
+这条时间线（4.0 early access → 4.2 GA）本身是「日志型系统内建队列语义」这一演进方向最硬的证据，跨产品对照与断言强度见 [Future](/docs/CS/MQ/Future.md?id=queue-semantics-grow-inside-log-based-brokers)。
+
 ## Common Claims That Need Debunking
 
 | 说法 | 4.3.1 实况 |

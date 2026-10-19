@@ -273,7 +273,7 @@ Markdown 增强写法：
 | `scripts/kb-check.sh` | **一键全量门禁**（推荐入口）：链接校验 + 密度门禁 + 全库 dot 校验 + CDN 可达性（仅告警）；前几项任一不通过即非零退出 |
 | `scripts/validate_links.py <file\|dir...>` | **主力校验**：死链 DEAD / 坏锚点 BAD ANCHOR / 相对链接 RELATIVE / 西里尔字母 CYRILLIC（均致命）+ 中英夹杂 GARBLED（告警）。可 `import` 出 `slugify()` 复用 |
 | `scripts/analyze_crosslinks.py --root <目录> --dirs <子目录...> [--gate --min-indegree N]` | 量化链入/链出、孤立页、弱链出页；`--gate` 做密度门禁。**目录只能用 `--root`/`--dirs` 传，写位置参数会报错退出**（`-h` 看完整说明）。默认根是 `docs/CS/Framework`，跑别的子树必须显式 `--root`。带 `?id=`／`#` 片段的链接与 `%20` 转义路径**都计入**图；根目录下的散文件（`CS.md`、`Languages.md`）不作为节点 |
-| `scripts/check_dot.js <dir...>` | 用站点实际加载的 viz.js 复现 dot 图渲染，防 Graphviz 语法错误导致整页白屏（需 node）。viz.js 地址**从 `index.html` 现读**（改 CDN 不必回来改脚本），失败回退 unpkg；下载内容会校验首行是否 `<!DOCTYPE html>`。离线/被墙机器用 `VIZ_JS=<本地路径>` 指定手工下载的副本 |
+| `scripts/check_dot.js <dir...>` | 用站点实际加载的 viz.js 复现 dot 图渲染，防 Graphviz 语法错误导致整页白屏（需 node）。viz.js 地址**从 `index.html` 现读**（改 CDN 不必回来改脚本），失败按 unpkg → npmmirror 回退；下载内容不仅查首行是否 `<!DOCTYPE html>`，还用 `new vm.Script()` **试解析**，专防 curl 超时留下的截断半成品。离线/被墙机器用 `VIZ_JS=<本地路径>` 指定手工下载的副本 |
 | `scripts/check_cdn.sh` | 逐条验证 `index.html` 的外部资源可达。**「页面完全无法渲染」时先跑这个**（需 curl） |
 | `scripts/fix_garbled.py` | 修 `validate_links.py` 报的 GARBLED（在 CJK 与 Latin 边界补空格） |
 | `scripts/find_hub_gaps.py` | 定位 hub 页 `## Links` 中未链到的子笔记 |
@@ -359,6 +359,7 @@ python3 -m http.server 8899   # 打开 http://127.0.0.1:8899/index.html
 
 - ✅ **校验脚本入库问题已修**（2026-10-06）：脚本原在 `.workbuddy/tools/`（被 `.gitignore` 忽略），CI 却调用它们 → 新机器与 Actions 上必然缺文件。已迁到 `scripts/`，`.gitignore` 加 `!scripts/*.py` 放行。**遗留的小不对称**：`ci.yml` 仍只跑 Framework + Linux 两项，而 `scripts/kb-check.sh` 多跑 MQ 校验与全库 dot 校验 —— 若想让 CI 与本地完全一致，把 `ci.yml` 的 4 个 step 换成一句 `bash scripts/kb-check.sh` 即可（ubuntu-latest 自带 node，可直接跑 dot 校验）。
 - ✅ **`check_dot.js` 的 viz.js 源与站点漂移已修**（2026-10-06）：脚本硬编码 `unpkg.com`（站点本体早已全量挂 jsdelivr），本机连不上 unpkg 时这一步必失败，看起来像"内容写坏了"其实是取不到渲染器。现在**从 `index.html` 现读** viz.js 地址、失败回退 unpkg、下载内容校验首行是否 `<!DOCTYPE html>`、超时压到 connect 8s / 总 30s，离线或被墙的机器用 `VIZ_JS=<本地路径>` 指定手工下载的副本即可跑。
+- ✅ **`check_dot.js` 的截断缓存中毒已修**（2026-10-18）：上一版的可用性判据只有「首行不是 `<!DOCTYPE html>` + 长度 > 100KB」，而 curl 超时/SSL 中断会把**半份** 2.4MB 包写在缓存路径上（本机实测残留 295KB），此后每次运行都把这份残缺文件当有效缓存加载，报的是 `SyntaxError: Unexpected end of input`，看起来像"dot 图写坏了"其实是缓存中毒，且永不自愈。现在判据改为 `new vm.Script()` **试解析**（约 40ms），下载先写 `<缓存>.part`、解析通过才 rename，取不到 viz.js 时打印结论并 exit 1 而不是甩栈；`--max-time` 放宽到 60s，回退链补了 npmmirror（本机 jsdelivr 会间歇 SSL 失败，unpkg 连不上）。另：`VIZ_JS=` 指向的用户副本**不再被脚本删除**，副本无效时直接报错。
 - ✅ **`analyze_crosslinks.py` 漏计带锚点的链接已修**（2026-10-06）：旧正则只匹配 `](/docs/x.md)`，凡是 `?id=` 锚点链接与 `%20` 转义路径**全部不计入图**，导致枢纽页链出被系统性低估、门禁数字偏冷（边只增不减，修完门禁阈值不用动）。同时它的真实接口是 `--root`/`--dirs`，而本节旧版写成位置参数 `[dir...]` —— 已改正文档，并让脚本误用位置参数时打印用法而非只报"未知参数"。
 - 部分目录缺同名入口 md（见禁区一节），目录索引只能链接到具体笔记。
 - 全库仍有若干主题零覆盖（DAMON、dm-crypt / LUKS、md / RAID、kTLS、Landlock），部分主题偏薄（livepatch、kdump、pidfd、psi、MPTCP）。定时任务主题的缺口（Python / Rust / C++ 定时器、Go 运行时深处、K8s CronJob、crontab / systemd timer）单独记在 `docs/CS/SE/Scheduled_Task.md` 的 Open Gaps 一节，**以那里为准，不在本文件重复列**。

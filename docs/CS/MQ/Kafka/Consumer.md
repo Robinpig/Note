@@ -1,5 +1,6 @@
 ## Introduction
 
+> 版本基线：**4.3.1**。4.0 起 ZooKeeper 模式彻底移除；KIP-848 新消费组协议在服务端 GA（客户端需显式 opt-in `group.protocol=consumer`）；Share Group（KIP-932）在 4.2 GA。
 
 Consumers read messages. 
 In other publish/subscribe systems, these clients may be called subscribers or readers. 
@@ -1844,9 +1845,58 @@ CommitFailedException 异常
 监控
 1. kafka-consumer-groups script
 2. AdminClient.listConsumerGroupOffsets
-3. JMX kafka.consumer:type=consumer-fetch-managermetrics,client-id=“{client-id} records-lag-max records-lead-min
+3. JMX kafka.consumer:type=consumer-fetch-managermetrics,client-id="{client-id}" records-lag-max records-lead-min
 
+## KIP-848: Next Generation Consumer Rebalance Protocol
 
+KIP-848 在 4.0 GA，是 Kafka 消费组协议的**最大重构**。它解决了经典协议（Eager Rebalance）的核心痛点——rebalance 期间所有消费者停止消费（"stop-the-world"）。
+
+### Classic vs New Protocol
+
+| 维度 | Classic（`group.protocol=classic`） | New（`group.protocol=consumer`） |
+| ---- | ------------------------------------- | ---------------------------------- |
+| Rebalance 类型 | Eager：每次 rebalance 所有 partition 全量收回 | Cooperative：只 rebalance 变更的 partition |
+| JoinGroup RPC | 有 | **移除**（改用 ConsumerGroupHeartbeat） |
+| SyncGroup RPC | 有 | **移除** |
+| Assignment 决策 | **客户端** assignor 实现 | **服务端** `GroupCoordinator` |
+| 状态持久化 | 无 | `__consumer_offsets` 中存 assignment epoch |
+| 成员 fencing | 靠 memberId + generationId | 靠 memberEpoch（单调递增，避免乱序） |
+
+### 客户端 Opt-in
+
+> [!IMPORTANT]
+> **默认仍是 `classic`。** 即使 4.0+ 服务端已默认启用新协议，客户端不显式设置 `group.protocol=consumer` 就走经典协议。升级后最容易忽略此点。
+
+### Consumer 线程模型变化
+
+4.x 的 `KafkaConsumer` 内部消费逻辑已重构：
+- 经典协议路径下沉到 `internals/ClassicKafkaConsumer`
+- 新协议路径在 `internals/consumer/*.java`（`ConsumerNetworkClient` + `GroupCoordinatorClient`）
+- 两套路径共享上层 `poll()` 主循环（详见 [ConsumerFlow](/docs/CS/MQ/Kafka/ConsumerFlow.md)）
+
+### KIP-1274: Classic Protocol Deprecation (4.3)
+
+4.3 起经典 rebalance protocol 标记 **deprecated**（日志告警），5.0 移除。服务端配置 `group.coordinator.rebalance.protocols` 在 4.3 也已弃用（KIP-1237），5.0 起所有协议强制启用，改用 `kafka-features.sh` 管理 feature version。
+
+## KIP-1106: Duration-based Offset Reset (4.0)
+
+经典 `auto.offset.reset` 只支持 `earliest` / `latest` / `none`。KIP-1106 在 4.0 新增**基于时间窗口**的重置：
+
+```properties
+# 消费过去 24 小时的消息（而非从最早或最新）
+auto.offset.reset.by.duration=PT24H
+auto.offset.reset=strings
+```
+
+格式遵循 ISO-8601 Duration（`PT1H`、`P1D`、`PT30M`）。当消费位点无效或过期时，consumer 会回到「当前时间减去 duration」的偏移，而不是盲目扫全量或跳尾部。
+
+## KIP-1102: Proactive Rebootstrap (4.0)
+
+KIP-1102 增强 consumer 网络层韧性：
+- 长时间收不到 metadata 更新时**主动触发 rebootstrap**
+- 服务端可通过特定错误码**显式通知客户端 rebootstrap**（如 broker 列表大变更后）
+
+之前客户端只有在所有 broker 都不可达时才会重新 bootstrap，现在可以更主动地刷新 cluster 视图。
 
 ## Links
 

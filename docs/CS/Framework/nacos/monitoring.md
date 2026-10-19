@@ -38,6 +38,29 @@ scrape_configs:
 
 端口 / 上下文路径变化就改 `targets` 与 `metrics_path`。Grafana 用 Prometheus 作数据源，社区维护的 Dashboard 模板（nacos-template）可直接导入，分核心监控、曲线、告警三个模块。
 
+## Prometheus Service Discovery (reverse integration)
+
+上面是「Prometheus 抓 Nacos 自己的指标」；3.2.4 还支持**反向**用法——**让 Prometheus 把 Nacos 当作服务发现源**，自动发现注册在 Nacos 里的业务实例并抓取它们。这件事由独立的 `prometheus` 模块（`PrometheusApp` + `PrometheusController`）承担，不是 Actuator：
+
+| 端点 | 起始版本 | 返回 |
+| :-- | :-- | :-- |
+| `/prometheus` | 2.2.0 | 全命名空间全部实例 |
+| `/prometheus/namespaceId/{namespaceId}` | 2.3.0 | 指定命名空间下的实例 |
+| `/prometheus/namespaceId/{namespaceId}/service/{service}` | 2.3.0 | 指定服务下的实例 |
+
+返回体是 Prometheus **HTTP SD** 格式的 JSON 数组（由 `PrometheusUtils.assembleArrayNodes` 组装 target 与 label），配置侧用 `http_sd_configs` 消费：
+
+```yaml
+scrape_configs:
+  - job_name: nacos-sd
+    http_sd_configs:
+      - url: http://10.0.0.1:8848/prometheus/namespaceId/public
+        refresh_interval: 30s
+```
+
+> [!NOTE]
+> `prometheus` 模块是**独立应用**，自带 `PrometheusAuthFilter` 与 `PrometheusSecurityConfiguration`——开启鉴权后访问这些端点同样要过鉴权，不是在 Nacos 主端口上顺带开放的路径。它与上面 `/nacos/actuator/prometheus` 是两件事：**前者暴露「Nacos 里注册了谁」，后者暴露「Nacos 自己跑得怎么样」**。
+
 ## Key Metrics
 
 指标名带 Micrometer 类型后缀（timer 通常导出 `_seconds_count` / `_seconds_sum`），排障先搜基名再看 label。

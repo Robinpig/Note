@@ -2,7 +2,7 @@
 
 Claude Code 是 Anthropic 官方的终端 agentic 助手：模型推理、工具行动、Claude Code 本身做外面那层 harness——提供工具、管理模型看到的上下文。官方把这层外围直接称为 agentic harness，与 [Harness 理论篇](/docs/CS/AI/LLM/Agent/Theory/Harness.md) 精确对应。除终端外还有桌面 app、VS Code / JetBrains 扩展、claude.ai/code、Slack 与 CI/CD 等界面，底层循环完全相同（见 [Architecture](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Architecture.md)）。
 
-本家族为「主枢纽 + 十三个专题分册」结构，事实基线统一为 npm `@anthropic-ai/claude-code` **2.1.302**（2026-10-16 发布；stable 通道 2.1.292）。结论主要来自官方文档 `code.claude.com/docs`，并已与官方 GitHub 仓库的 CHANGELOG 及 **`mods/types/claude-code.d.ts` 类型契约**全量比对（2026-10-18）——文档给概念，CHANGELOG 给版本边界，类型契约给**精确接口面**（字面量常量、事件联合类型、完整签名）。Claude Code 的核心客户端仍以编译型 npm 包分发，但官方仓库 [`anthropics/claude-code`](https://github.com/anthropics/claude-code) 已公开——内含**mod API 的完整类型契约**、五个可读的官方 mod 实现（`diff` / `sec-default` / `agents-md` / `telemetry`）、官方插件与 marketplace、CHANGELOG 与 SECURITY 政策（应用源码本身未开放）。
+本家族为「主枢纽 + 十四个专题分册」结构，事实基线统一为 npm `@anthropic-ai/claude-code` **2.1.302**（2026-10-16 发布；stable 通道 2.1.292）。结论主要来自官方文档 `code.claude.com/docs`，并已与官方 GitHub 仓库的 CHANGELOG 及 **`mods/types/claude-code.d.ts` 类型契约**全量比对（2026-10-18）——文档给概念，CHANGELOG 给版本边界，类型契约给**精确接口面**（字面量常量、事件联合类型、完整签名）。Claude Code 的核心客户端仍以编译型 npm 包分发，但官方仓库 [`anthropics/claude-code`](https://github.com/anthropics/claude-code) 已公开——内含**mod API 的完整类型契约**、五个可读的官方 mod 实现（`diff` / `sec-default` / `agents-md` / `telemetry`）、官方插件与 marketplace、CHANGELOG 与 SECURITY 政策（应用源码本身未开放）。
 
 ## Installation
 
@@ -47,7 +47,7 @@ Debian / Fedora / RHEL / Alpine 还支持 apt / dnf / apk。Homebrew 与 WinGet 
 
 两个容易被忽略的：`Esc` 随时打断进行中的工具调用；**不打断直接回车**则把消息排队，当前工具调用结束后同一 turn 内读取。
 
-## The Thirteen Companion Volumes
+## The Fourteen Companion Volumes
 
 主链路是 [Architecture](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Architecture.md)：三阶段 agentic loop（gather context → take action → verify）、工具五分类、JSONL 会话与 checkpoint、上下文窗口的自动管理，以及运行面（Claude apps gateway 的**部署实况**、cloud/self-hosted runner、advisor、worktree 隔离）。围绕它的十一个专题：
 
@@ -57,6 +57,7 @@ Debian / Fedora / RHEL / Alpine 还支持 apt / dnf / apk。Homebrew 与 WinGet 
 - **[ModInternals](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/ModInternals.md)**——从四个内置 mod 的**真实源码**读出的实现机制：`engine.create` 折叠里**给 `$` 添加自己的 noun**（jQuery `$.fn` 式声明合并）、跨 mod 的 noun 契约与测试 provider 约定、测试文件布局约定、窄宿主接口（`Host`）模式、内置功能退场后插件接手的机制、以及类型契约落后于客户端版本的风险。
 - **[Security](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Security.md)**——官方内置组织安全基线 `sec-default` 的设计规格：tier 落座机制、`tool.check` **双跑**如何让 deny 规则不被插件消掉、19 个钉死环境变量、两项管理员选项的 fail-closed 语义。
 - **[PluginSpec](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/PluginSpec.md)**——写插件的字段级契约：`plugin.json` 全字段与路径四规则、slash command frontmatter 全字段、命令发现与命名空间、hook 两种 handler 的取舍与退出码语义、`${CLAUDE_PLUGIN_ROOT}` 可移植性、marketplace 分发注意事项。
+- **[PluginPatterns](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/PluginPatterns.md)**——官方自己怎么用这些机制：`code-review` 的**按模型档位分层派 agent**（haiku 门禁 / sonnet 汇总 / opus 找 bug）与高信号判据、`feature-dev` 的七阶段编排与只读 agent 权限隔离、`ralph-wiggum` 用 `Stop` hook + `decision:block` 做自主循环、`hookify` 的 Markdown 规则 + Python 引擎范式。
 - **[HookPatterns](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/HookPatterns.md)**——官方最大插件 `security-guidance` 的实现拆解：三层安全模型（正则 / LLM diff 审查 / agentic 跨文件审查）、26 条规则清单、prompt injection 防御、`asyncRewake` 接法、代码组织范式，以及它与 auto classifier 的机制对照。
 - **[Memory](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Memory.md)**——CLAUDE.md 四层作用域与拼接式加载、`@path` 导入、`.claude/rules/` 路径限定、auto memory、AGENTS.md 互通、967K 压缩触发点。
 - **[Subagents](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Subagents.md)**——subagent 的独立上下文与定义方式、内置 Explore/Plan/general-purpose、agent teams 的 mailbox 架构与 agent 间消息的信任边界。

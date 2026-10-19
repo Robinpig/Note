@@ -257,7 +257,7 @@ A concrete implementation of CP protocol: JRaft.
 
 
 
-## 3.x 模块地图与演进（以 3.2.4 为准）
+## 3.x Module Map and Evolution (baseline 3.2.4)
 
 读源码先认模块。3.2.4 的顶层 Maven 模块（节选，已 `ls` 核实）与 2.x 差异明显——**3.x 把持久化、AI、控制台前端、MCP/Copilot 都拆了出来或新增**：
 
@@ -271,7 +271,11 @@ A concrete implementation of CP protocol: JRaft.
 | `auth` / `plugin-default-impl/nacos-default-auth-plugin` | 鉴权（含 `controller/v3`） |
 | `ai` / `ai-registry-adaptor` | **3.x 新增**：AI / MCP 相关，库里有 `ai_resource` 等资源表（schema 已验证） |
 | `console` / `console-ui` / `console-ui-next` | 控制台；`console-ui-next` 是 **3.x 新前端** |
-| `copilot` / `k8s-sync` / `lock` / `skills` / `specs` / `bootstrap` / `client-basic` / `server` | 3.x 陆续新增（Copilot、K8s 同步、分布式锁、技能、Bootstrap/Server 拆分等） |
+| `prometheus` | **独立应用**（`PrometheusApp`）：对外提供 **Prometheus HTTP Service Discovery** 端点，见 [Monitoring](/docs/CS/Framework/nacos/monitoring.md) |
+| `istio` | **独立应用**（`IstioApp` + `IstioServer` + `NacosMcpService`）：以 MCP over gRPC 把 Nacos 服务数据喂给 Istio，让 Nacos 充当服务网格的注册源 |
+| `address` | **AddressServer 寻址服务**：`AddressServerMemberLookup` 依赖的那个「地址服务器」，见下文 `## Cluster` |
+| `cmdb` | CMDB 插件（`CmdbProvider` / `SwitchAndOptions`），用于就近路由等扩展元数据 |
+| `copilot` / `k8s-sync` / `lock` / `skills` / `specs` / `bootstrap` / `client-basic` / `maintainer-client` / `server` | 3.x 陆续新增（Copilot、K8s 同步、分布式锁、技能、Bootstrap/Server 拆分、运维客户端等） |
 
 与 2.x 的关键差异（事实已在 Nacos.md 顶部 NOTE 说明，这里给**模块级证据**）：
 
@@ -283,13 +287,24 @@ A concrete implementation of CP protocol: JRaft.
 > [!NOTE]
 > 2.x 文档里常见的「`config` 模块直接持有一堆 Mapper」的描述在 3.x 已不准确；DB 访问统一走 `persistence` + 数据源插件。源码路径以 `git grep` 在 `3.2.4` tag 上核实为准。
 
-### 3.x 新增能力：AI Registry / 分布式锁 / K8s 同步
+#### External Ecosystem Integrations
+
+Nacos 不只被 SDK 直连，也常被**网关 / 服务网格 / 监控系统**当作数据源接进去。3.2.4 里为此留了专门的模块与端点：
+
+| 集成方 | Nacos 侧承担者 | 说明 |
+| :-- | :-- | :-- |
+| Prometheus | `prometheus` 模块 | HTTP SD 端点 `/prometheus`，见 [Monitoring](/docs/CS/Framework/nacos/monitoring.md) |
+| Istio | `istio` 模块 | `NacosMcpService` 提供 MCP over xDS（`ServiceEntryMcpGenerator` 与 `CdsGenerator` / `EdsGenerator` / `LdsGenerator` / `RdsGenerator`），开关 `nacos.istio.mcp.server.enabled=false` |
+| Higress | 外部项目接 Nacos 为注册源 | [Higress 服务发现](/docs/CS/Framework/Higress/Service_Discovery.md) 的 `McpBridge` 支持 `nacos` / `nacos2` / `nacos3` 三种 `type` |
+| Kubernetes | `k8s-sync` 模块 | Service 双向同步 |
+
+### 3.x Additions: AI Registry / Distributed Lock / K8s Sync
 
 除了「注册 + 配置」两块老本行，3.x 还长出了三个独立子系统。它们的共同点是**复用 Nacos 既有的 namespace 体系与一致性设施**，而不是另起炉灶：
 
 | 子系统 | 模块 | 一致性 | 落库 |
 | :-- | :-- | :-- | :-- |
-| AI Registry | `ai` / `ai-registry-adaptor` / `skills` | 配置通道（复用 config 存储） | `ai_resource` + `ai_resource_version` |
+| AI Registry | `ai` / `ai-registry-adaptor` / `skills` / `copilot` | 规格走配置（CP）+ 端点走注册（AP） | `ai_resource` + `ai_resource_version` + `pipeline_execution` |
 | 分布式锁 | `lock` | **CP**（JRaft） | Raft 日志 + 快照 |
 | K8s 同步 | `k8s-sync` | —（旁路同步进程） | 无独立表 |
 
@@ -304,7 +319,9 @@ A concrete implementation of CP protocol: JRaft.
 - `meta_version`：乐观锁版本号，避免并发覆盖。
 - `c_from`：来源标识（默认 `local`），用于区分本地创建与从外部导入 / 同步。
 
-#### 分布式锁
+> 五类资源（MCP Server / A2A Agent / Skill / AgentSpec / Prompt）各自的 group、dataId、API 前缀、gRPC 推送、MCP Registry 协议适配（独立端口 `9080`）与内置 Copilot，见 [AI Registry](/docs/CS/Framework/nacos/ai-registry.md)。
+
+#### Distributed Lock
 
 `lock` 模块提供可重入互斥锁：`NacosLockManager implements LockManager`，底层是 `MutexAtomicLock` 与 `AtomicLockService`，并带 `RequestLockAspect` 注解切面、`LockMetricsMonitor` 监控。
 
@@ -313,7 +330,7 @@ A concrete implementation of CP protocol: JRaft.
 > [!NOTE]
 > 官方文档把分布式锁归在 **experimental** 目录下，接口与配置项在 3.x 内仍可能调整，生产使用前建议先压测确认时延。
 
-#### K8s 同步
+#### K8s Sync
 
 `k8s-sync` 是一个旁路同步组件（`K8sSyncServer` + `K8sSyncConfig` + `K8sSyncEnabledFilter`），负责把 Kubernetes 的 Service 与 Nacos 的服务数据做双向同步，让 K8s 内的服务与 Nacos 注册中心保持一致。它不参与 Nacos 的一致性协议，独立启停。
 

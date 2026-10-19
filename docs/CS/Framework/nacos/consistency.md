@@ -11,7 +11,7 @@ Nacos 最容易被混淆的一点是：同一个组件里**服务发现默认 AP
 
 - **Core 层 `ConsistencyProtocol` / `ProtocolManager`**：协议接口下沉到内核（`core/distributed/`），`ProtocolManager` 选 `CPProtocol`(`JRaftProtocol`) / `APProtocol`(`DistroProtocol`)。这是 3.x 命名 Client 模型与配置模块的主路径，[Nacos](/docs/CS/Framework/nacos/Nacos.md) 的 `## Consistency` 已详述。
 
-## Core 层一致性抽象（3.x 当前模型）
+## Core-layer Consistency Abstraction (current 3.x model)
 
 `ProtocolManager`（`core/distributed/ProtocolManager.java`）从 Spring 容器取 `APProtocol` / `CPProtocol` 两个 bean（包名分别在 `com.alibaba.nacos.consistency.ap` / `com.alibaba.nacos.consistency.cp`，即独立的 `consistency` 模块），分别对应：
 
@@ -31,7 +31,7 @@ public class ProtocolManager extends MemberChangeListener implements DisposableB
 }
 ```
 
-## 命名 v2 Client 模型：AP/CP 如何分流
+## Naming v2 Client Model: How AP/CP Splits
 
 3.x 命名走 **v2 Client 模型**（`naming/core/v2/client/` 下的 `Client` 抽象与 `AbstractClient`）。ephemeral / persistent 的分流**不再依赖旧 `KeyBuilder.matchEphemeralKey`**（该方法在 3.x 已删除），而是由 Client 类型与 `isEphemeral()` 决定：
 
@@ -53,7 +53,7 @@ digraph persistent_3x {
 }
 ```
 
-## 配置侧：全程 CP
+## Config Side: Always CP
 
 配置（config）没有「临时/持久」之分，必须强一致，因此 **config 模块只接 `CPProtocol`（`JRaftProtocol`）**，不接 Distro。配置内容、灰度、标签、历史、租户、权限全部经 Raft 复制并落外部数据库（见 [Storage](/docs/CS/Framework/nacos/storage.md)）。
 
@@ -83,7 +83,7 @@ CAP 理论针对的是「**数据的一致性**」，不是「整个组件」。
 
 etcd / ZK 不需要分流，因为它们是「通用协调底座」，所有数据都走同一强一致协议；Nacos 是「注册中心 + 配置中心」合体，把可用性（AP）留给注册发现、把可靠性（CP）留给配置。
 
-## 历史：旧 KV 一致性层（≤2.1，3.x 已移除）
+## History: Legacy KV Consistency Layer (<=2.1, removed in 3.x)
 
 > [!NOTE]
 > 以下为 **3.x 之前（主要是 1.x / 早期 2.x）** 的架构，列在此仅供追溯演进，**3.2.4 源码中这些类均已不存在**（已用 `git grep` 全树核实：`ConsistencyService` / `DelegateConsistencyServiceImpl` / `EphemeralConsistencyService` / `DistroConsistencyServiceImpl` / `PersistentConsistencyServiceDelegateImpl` / `BasePersistentServiceProcessor` / `EmbeddedDistroProtocol` / `JRaftConsistencyServiceImpl` / `KeyBuilder.matchEphemeralKey` 全部 0 命中）。

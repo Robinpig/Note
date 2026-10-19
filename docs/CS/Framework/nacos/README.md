@@ -76,11 +76,15 @@ digraph Nacos {
 - [Nacos 运维与调优](/docs/CS/Framework/nacos/tuning.md)：限流（单接口 / 单机约 500QPS / 全服务）、长连接上限（8C16G 约 9000 gRPC 连接）、IP / 读写 / 应用维度黑名单、9848 端口被占用等坑。
 - 集群内联在 [Nacos](/docs/CS/Framework/nacos/Nacos.md) 的 `## Cluster`（MemberLookup：Standalone / FileConfig / AddressServer）；调优已独立为上面的 tuning.md；3.x 模块地图与演进见 Nacos.md 的 `## 3.x 模块地图与演进`。
 
+## AI Registry (3.x)
+
+- [AI Registry](/docs/CS/Framework/nacos/ai-registry.md)：MCP Server / A2A Agent / Skill / AgentSpec / Prompt 五类资源的注册与治理。核心是**不新建存储**——规格进配置中心（CP）、端点进注册中心（AP）、统一元数据进 `ai_resource` + `ai_resource_version`（3.2.4 新增 `pipeline_execution`）；配套 gRPC 动态推送、MCP / Skills Registry 协议适配（独立端口 `9080`）、发布 Pipeline 与内置 Copilot。
+
 ## 3.x New Capabilities (Beyond Registry + Config)
 
 3.x 在「注册 + 配置」之外长出了三个独立子系统，均复用 Nacos 既有的 namespace 体系与一致性设施：
 
-- **AI Registry**（`ai` / `ai-registry-adaptor` / `skills` 模块）：把 MCP Server / Agent / Skill / Prompt / A2A 当作可注册资源，落 `ai_resource` + `ai_resource_version` 表。见 [Nacos](/docs/CS/Framework/nacos/Nacos.md) 的 `### 3.x 新增能力`。
+- **AI Registry**（`ai` / `ai-registry-adaptor` / `skills` / `copilot` 模块）：见上面 [AI Registry](/docs/CS/Framework/nacos/ai-registry.md)。
 - **分布式锁**（`lock` 模块）：`NacosLockManager` 可重入互斥锁，**走 CP**（`LockOperationServiceImpl extends RequestProcessor4CP`，经 JRaft 提交）。官方定位 experimental。
 - **K8s 同步**（`k8s-sync` 模块）：`K8sSyncServer` 旁路同步 K8s Service 与 Nacos 服务，不参与一致性协议。
 
@@ -88,6 +92,8 @@ digraph Nacos {
 
 - [etcd 横向对照](/docs/CS/Framework/etcd/compare.md)：etcd / ZooKeeper / Nacos / Consul 维度矩阵（Nacos 在 `## Nacos 特有能力` 段）。
 - [ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)、[Consul](/docs/CS/Framework/consul/Consul.md)、[etcd](/docs/CS/Framework/etcd/etcd.md)。
+- **[Higress 服务发现](/docs/CS/Framework/Higress/Service_Discovery.md)**：Higress 网关通过 `McpBridge` 把 Nacos 接为后端注册源，`type` 枚举含 `nacos` / `nacos2` / `nacos3` 三个并列取值（`nacos`=1.x 仅 HTTP，`nacos2`=2.x 支持 gRPC，`nacos3` 被官方点名用作 MCP Server 注册源）——这是 Nacos 在网关侧最主要的落地形态之一。
+- [Eureka](/docs/CS/Framework/eureka/Eureka.md)：迁移对照见 [Registry](/docs/CS/Framework/nacos/registry.md) 的 `## Tuning` 段。
 
 ## Links
 

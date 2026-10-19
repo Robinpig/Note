@@ -16,6 +16,11 @@
  *      留一个可用的镜像作最后退路；版本号一致，仍是 viz.js@1.8.0 里的 1.7.1 构建）。
  *   下载成功还会校验首行不是 `<!DOCTYPE html>`——CDN 被拦截时可能返回 200 + HTML
  *   错误页，只看状态码会误判成"拿到了源码"。
+ *   长度阈值不足以识别**截断**：curl 超时（35/28）会把半份文件留在磁盘上，2.4MB 的
+ *   包截到 300KB 仍然远超阈值，之后每次运行都把这份残缺缓存当有效资源加载，报
+ *   `Unexpected end of input` 而不是"下载失败"。因此缓存与下载结果一律用
+ *   `new vm.Script()` 试解析（约 40ms）判定有效性，且下载先写 `.part`、解析通过
+ *   才 rename 成正式缓存，中断不可能留下半成品。
  *
  * 已知坑：Graphviz 2.40 不支持 `subgraph ID [显示标签]` 语法（会报
  * "syntax error near '['"），必须写 `subgraph cluster_xxx { label="..." }`。
@@ -51,36 +56,57 @@ function vizUrls() {
   return urls.concat(VIZ_FALLBACK_URLS.filter((u) => !urls.includes(u)));
 }
 
+/** 判定一段文本是否是可用的 viz.js 包；返回 null 表示可用，否则返回不可用原因。 */
+function bundleProblem(code) {
+  if (/^\s*<!DOCTYPE html>/i.test(code)) return '内容是 HTML 页面（被拦截或 404）';
+  if (code.length < 100000) return '体积过小（' + code.length + ' 字节，真实包约 2.4MB）';
+  try {
+    new vm.Script(code);   // 只解析不执行，能识别 curl 超时留下的截断半成品
+  } catch (e) {
+    return 'JS 解析失败（疑似下载被截断）: ' + String(e.message).split('\n')[0];
+  }
+  return null;
+}
+
 /** 取 viz.js 源码：优先本地缓存 / VIZ_JS，其次按地址清单下载。 */
 function readVizCode() {
+  const isOwnCache = !process.env.VIZ_JS;   // VIZ_JS 指向用户手工放的副本，脚本无权删
+  const reject = (p) => { if (fs.existsSync(p)) fs.rmSync(p, { force: true }); };
   if (fs.existsSync(VIZ_LOCAL)) {
     const cached = fs.readFileSync(VIZ_LOCAL, 'utf8');
-    // 缓存里可能是 HTML 错误页，或 curl 失败时留下的空文件（真实体积约 2.4MB）
-    if (!/^\s*<!DOCTYPE html>/i.test(cached) && cached.length > 100000) return cached;
-    fs.unlinkSync(VIZ_LOCAL);   // 只清理本脚本自己写的这份缓存，重下
+    const problem = bundleProblem(cached);
+    if (!problem) return cached;
+    if (isOwnCache) fs.rmSync(VIZ_LOCAL, { force: true });   // 重下；用户手放的只报告不删
+    else throw new Error('VIZ_JS 指向的文件不可用：' + VIZ_LOCAL + '\n' + problem);
   }
   const { execSync } = require('child_process');
   const tried = [];
   for (const url of vizUrls()) {
+    const part = VIZ_LOCAL + '.part';
+    reject(part);
     tried.push(url);
     try {
-      execSync(`curl -sL --fail --connect-timeout 8 --max-time 30 "${url}" -o "${VIZ_LOCAL}"`, { stdio: 'pipe' });
+      execSync(`curl -sL --fail --create-dirs --connect-timeout 8 --max-time 60 "${url}" -o "${part}"`, { stdio: 'pipe' });
     } catch (e) {
-      continue;   // 网络不通 / 404，换下一个源
+      reject(part);
+      continue;   // 网络不通 / 404 / 超时，换下一个源
     }
-    if (!fs.existsSync(VIZ_LOCAL)) continue;
-    const code = fs.readFileSync(VIZ_LOCAL, 'utf8');
-    if (/^\s*<!DOCTYPE html>/i.test(code) || code.length < 100000) {
-      fs.unlinkSync(VIZ_LOCAL);
-      continue;   // 200 但内容是 HTML 错误页 / 空文件，不算拿到源码
+    if (!fs.existsSync(part)) continue;
+    const code = fs.readFileSync(part, 'utf8');
+    const problem = bundleProblem(code);
+    if (problem) {
+      reject(part);
+      tried[tried.length - 1] += '（' + problem + '）';
+      continue;   // 200 但内容是 HTML 错误页 / 半份文件，不算拿到源码
     }
+    fs.renameSync(part, VIZ_LOCAL);   // 解析通过才落正式缓存，中断不会留下半成品
     return code;
   }
   throw new Error(
     '无法获取 viz.js：本地无 ' + VIZ_LOCAL + ' 且下载失败。\n' +
     '已尝试: ' + tried.join(' , ') + '\n' +
     '离线机器请手工下载一份后设 VIZ_JS=<路径>，或直接执行：\n' +
-    '  curl -sL "' + tried[0] + '" -o ' + VIZ_LOCAL
+    '  curl -sL --fail --max-time 60 "' + tried[0].split('（')[0] + '" -o ' + VIZ_LOCAL
   );
 }
 
@@ -122,7 +148,14 @@ function main() {
   const targets = args.filter((a) => !a.startsWith('--'));
   if (targets.length === 0) targets.push(path.join(REPO, 'docs'));
 
-  const viz = loadViz();
+  let viz;
+  try {
+    viz = loadViz();
+  } catch (e) {
+    // 取不到 viz.js 是环境/网络问题，不是笔记写坏了——只报结论，别甩栈
+    console.error(String(e.message).split('\n').join('\n'));
+    process.exit(1);
+  }
   let fileFail = 0;
   let blockFail = 0;
   let blockOk = 0;

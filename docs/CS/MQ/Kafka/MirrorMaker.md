@@ -169,7 +169,7 @@ MirrorMaker v2（MM2）把一个 Kafka 集群的 topic、配置、ACL 与消费�
 - [Connect](/docs/CS/MQ/Kafka/Connect.md)
 - [KRaft](/docs/CS/MQ/Kafka/KRaft.md)
 - [Consumer](/docs/CS/MQ/Kafka/Consumer.md)
-- [Pulsar（对比：其跨地域复制已在 4.x 移除）](/docs/CS/MQ/Pulsar/Cluster.md)
+- [Pulsar（对比：其独立的 pulsar-replication 模块已移除，但 broker 内置 replicator 仍在）](/docs/CS/MQ/Pulsar/Cluster.md)
 
 ## References
 

@@ -781,7 +781,7 @@ RocketMQ 消息消费端会从 3 个维度进行限流：
 - [LiteTopic](/docs/CS/MQ/RocketMQ/LiteTopic.md)
 - [Spring Cloud Alibaba](/docs/CS/Framework/Spring_Cloud/Alibaba.md)
 
-消息可靠性与数据面细节分散在几篇专题里：存储引擎的三类文件、mmap 与刷盘两阶段见 [Store](/docs/CS/MQ/RocketMQ/Store.md)，2PC + 补偿的事务消息链路见 [事务消息](/docs/CS/MQ/RocketMQ/Transaction.md)，Tag/SQL92 过滤的实现位置与开关见 [消息过滤](/docs/CS/MQ/RocketMQ/Filter.md)，而 5.x 的无状态 Proxy、gRPC SDK 仓库归属与 POP 模型见 [RocketMQ 5.x](/docs/CS/MQ/RocketMQ/RocketMQ5.md)。
+消息可靠性与数据面细节分散在几篇专题里：存储引擎的三类文件、mmap 与刷盘两阶段见 [Store](/docs/CS/MQ/RocketMQ/Store.md)，2PC + 补偿的事务消息链路见 [事务消息](/docs/CS/MQ/RocketMQ/Transaction.md)，Tag/SQL92 过滤的实现位置与开关见 [消息过滤](/docs/CS/MQ/RocketMQ/Filter.md)，而 5.x 的无状态 Proxy、gRPC SDK 仓库归属与 POP 模型见 [RocketMQ 5.x](/docs/CS/MQ/RocketMQ/RocketMQ5.md)。5.5.0 的 LiteTopic 把订阅通道下沉到**会话粒度**（官方定性 designed for AI scenarios），这条演进方向的一手证据与断言强度记在 [Future](/docs/CS/MQ/Future.md?id=consumer-shapes-change-ai-era-workloads)。
 
 ## References
 

@@ -1,5 +1,7 @@
 ## Introduction
 
+> 版本基线：**4.3.1**。4.0 起 ZooKeeper 模式彻底移除，`ZK_BROKER` listener type 枚举已删除。本文档中代码摘录标注了 `ZK_BROKER` 的位置仅作历史参考。
+
 The network server for kafka. Now application specific code here, just general network server stuff.
 <br>
 The classes Receive and Send encapsulate the incoming and outgoing transmission of bytes.
@@ -751,7 +753,7 @@ See https://kafka.apache.org/documentation/#configuration
 
 ```properties
 auto.create.topics.enable: false
-unclean.leader.election.enable：false
+unclean.leader.election.enable：false    # 4.0+ KRaft 默认 false；ZK 模式历史默认 true
 auto.leader.rebalance.enable：false
 ```
 

@@ -104,7 +104,7 @@ public class DistroSyncChangeTask extends AbstractDistroExecuteTask {
 }
 ```
 
-### 1.x → 3.x Evolution
+### Evolution from 1.x to 3.x
 
 - **1.x**：合并阈值是「1000 条变更」或「距上次发送超 2s」二者之一触发，偏批量。
 - **3.x**：改为统一的 **1000 ms 延迟窗口**，无论变更条数，延迟可控、感知更平稳。

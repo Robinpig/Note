@@ -128,6 +128,9 @@ proxy  remoting  srvutil  store  style  test  tieredstore  tools
 
 5.0 在队列模型之上引入**无状态消费模型（POP）**，在同一个主体上同时支持两种消费模型，体现消息与流的「二象性」：面向流场景用高性能队列模型，面向消息场景用无状态消息模型。
 
+> [!NOTE]
+> 「队列语义与日志语义在同一套系统里合流」是全行业的方向，Kafka 侧的对应物是 4.x 的 [ShareGroup](/docs/CS/MQ/Kafka/ShareGroup.md)；方向本身与一手证据见 [Future](/docs/CS/MQ/Future.md?id=queue-semantics-grow-inside-log-based-brokers)。
+
 **POP 是 Broker 侧能力**，不是客户端特性：
 
 | 事实 | 值 | 出处 |

@@ -284,7 +284,7 @@ public enum State {
 > | `PulsarBackup` / `PulsarClientBackup` | ❌ 0 命中 |
 > | `backupVersion` 配置 | ❌ 0 命中 |
 >
-> 这是 4.x 相对 2.x/3.x 的**重大功能收缩**。跨地域复制需另用 MirrorMaker（Kafka 侧）或自研方案；备份需靠 BookKeeper 层的 ledger 复制 + HDFS/S3 侧能力。
+> 这是 4.x 相对 2.x/3.x 的收缩，但**收缩的是独立模块与备份工具**：跨地域复制作为 broker 能力仍然存在（文档 `concepts-replication` 现行，由 broker 管理的 replicator 尾随本地 region 再转发到远端 region；5.0 发布说明还明列「Fixes across geo-replication」）。备份侧才真的需要靠 BookKeeper 层的 ledger 复制 + HDFS/S3 能力自建。
 
 保留的跨集群配置是 metadata 层：`configurationStoreServers`(161) 与 `configurationMetadataStoreUrl`(168) 并存，解析优先级见 `:4153-4156`（后者优先，回落前者）。
 

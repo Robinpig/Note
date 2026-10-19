@@ -1,5 +1,6 @@
 ## Introduction
 
+> 版本基线：**4.3.1**。4.0 起 ZooKeeper 模式彻底移除，KRaft 成为 Kafka 的**唯一**控制面实现。
 
 If you opt to run Kafka using the new quorum controller,
 all metadata responsibilities previously undertaken by the Kafka controller and ZooKeeper are merged into this one new service, running inside the Kafka cluster itself. 
@@ -239,6 +240,30 @@ private void handleResponse(RaftResponse.Inbound response, long currentTimeMs) {
     }
 ```
 
+### Pre-Vote (KIP-996, 4.0)
+
+KIP-996 在 4.0 引入 Pre-Vote 机制，解决 Raft leader 选举中的**无效投票风暴**问题（详见 [Replica](/docs/CS/MQ/Kafka/Replica.md?id=pre-vote-kip-996)）。
+
+核心变化是在 `KafkaRaftClient` 的状态机中增加一个**不递增 term 的预投票阶段**：节点只有在 pre-vote 成功（确认没有更高 term 的 leader）后，才会递增 term 进入正式 Candidate 状态。这避免了网络分区时每个隔离节点都盲目发起选举，大幅减少 term 膨胀和选举收敛时间。
+
+### Dynamic Configuration (4.3)
+
+4.3 之前，KRaft 的 quorum voter 列表**不支持动态变更**——只有使用静态 quorum（`controller.quorum.voters` 写死在 `server.properties`）时才能通过 `kafka-metadata-quorum.sh` 动态调整。4.3 起这个限制解除，所有 KRaft 集群都支持动态增删 controller 节点。
+
+相关配置（4.3 新增）：
+- `controller.quorum.fetch.snapshot.max.bytes`：FetchSnapshot 请求的最大字节数（KIP-1219）
+- `controller.quorum.fetch.max.bytes`：Fetch 请求的最大字节数（KIP-1219）
+
+### Metadata Log
+
+KRaft 的元数据变更以 **Record** 形式写入 Raft log（`__cluster_metadata` topic），每条 Record 对应一次配置或状态变更：
+
+```
+TopicRecord / PartitionRecord / ConfigRecord / FeatureFlagRecord / ...
+```
+
+Broker 和 controller 通过消费这个 log 来获取最新的集群状态。`kafka-metadata-quorum.sh` 是管理这个 quorum 的主要 CLI 工具。
+
 ## Links
 
 - [Kafka](/docs/CS/MQ/Kafka/Kafka.md)
@@ -246,8 +271,11 @@ private void handleResponse(RaftResponse.Inbound response, long currentTimeMs) {
 - [Broker](/docs/CS/MQ/Kafka/Broker.md)
 - [ShareGroup（ShareCoordinator）](/docs/CS/MQ/Kafka/ShareGroup.md)
 - [Storage（metadata log 之外的日志存储）](/docs/CS/MQ/Kafka/Storage.md)
+- [Replica（ELR 与 Pre-Vote 的副本侧视角）](/docs/CS/MQ/Kafka/Replica.md)
 
 ## References
 
 1. [KIP-500: Replace ZooKeeper with a Self-Managed Metadata Quorum](https://cwiki.apache.org/confluence/display/KAFKA/KIP-500%3A+Replace+ZooKeeper+with+a+Self-Managed+Metadata+Quorum)
-2. [Apache Kafka Made Simple: A First Glimpse of a Kafka Without ZooKeeper](https://www.confluent.io/blog/kafka-without-zookeeper-a-sneak-peek/)
+2. [KIP-996: Pre-Vote](https://cwiki.apache.org/confluence/display/KAFKA/KIP-996%3A+Pre-Vote)
+3. [KIP-1219: Configurations for KRaft Fetch and FetchSnapshot Byte Size](https://cwiki.apache.org/confluence/x/yQkGFw)
+4. [Apache Kafka Made Simple: A First Glimpse of a Kafka Without ZooKeeper](https://www.confluent.io/blog/kafka-without-zookeeper-a-sneak-peek/)

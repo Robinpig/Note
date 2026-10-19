@@ -191,6 +191,75 @@ policy 层同样印证了文档：`deny-rules-hold.ts` 只有 19 行，判定式
 
 官方自己也在 `mods/README.md` 末尾声明了同一边界：hooks 模块只在函数 hook 开启处加载，**这些 mod 所依赖的 API 可能在小版本间无预告变更**；它们不在本仓库的 marketplace 里，**真正起作用的是已经在你 Claude Code 里的那些副本**。
 
+## Git Interaction Without Stepping On The User
+
+`diff` 要不停跑 git 读未提交改动，同时用户可能正在同一个仓库敲 git 命令。17 个 `git/` 子模块里两个常量把这件事处理得很干净：
+
+```ts
+// 每个探测都带这个 flag，好让一次读永远不抢用户 git 的 index 锁
+export const NO_OPTIONAL_LOCKS = '--no-optional-locks'
+
+// 覆盖每个 git 子进程的环境：C locale，让 --shortstat 与 git 消息在任何
+// locale 下解析一致。其余一概不固定——与内置面板自己的 diff 子进程相同：
+// partial clone 该lazy-fetch 就 lazy-fetch。
+export const GIT_CHILD_ENV = { LC_ALL: 'C', LANGUAGE: '' } as const
+```
+
+这两条注释本身就是两条经验：
+
+- **`--no-optional-locks`** —— 只读的 `git status` / `git diff` 默认也会去抢 `.git/index.lock`，用户此刻正在 `git add` 就会冲突失败。凡是后台轮询 git 的工具都该带这个 flag。
+- **`LC_ALL=C`** —— 人类可读的 git 输出**不是稳定的接口**：commit graph 的相对时间（"2 days ago"）、shortstat 的数字分组（`1,234`）与措辞都随 locale 变。要解析就必须钉死 locale。但**其余环境刻意不固定**——钉死了会破坏 partial clone 的 lazy-fetch 行为（代理或稀疏检出时该拉的 blob 得让它拉）。
+
+## Rendering Degrades By Terminal Width
+
+面板在四个宽度档位间切换行为，档位边界是**内置面板自己的**，写成了具名常量：
+
+```ts
+export const WIDTH_BUCKETS = ['under_110', '110_to_143', '144_to_199', '200_plus'] as const
+```
+
+这解释了 README 里那两个魔数——**144 列是 `144_to_199` 的下界，110 是 `110_to_143` 的下界**，即「用户从未选过时用 `144_to_199` 档（宽屏才自动开），保持过（说明用户接受过较宽布局）则降到 `110_to_143`」。宽度不够时列表优先丢掉 agent 数与 token 数。
+
+同类的具名常量还有触发来源：
+
+```ts
+export const SHOWN_TRIGGERS = ['auto_open', 'manual'] as const
+```
+
+**把「宽到什么程度」「什么触发的」写成枚举而不是散落的数字/布尔**，是这份源码的一致风格——遥测要按维度分组上报时，枚举比原始值有用得多。类似的还有 `git/` 下的 `git-base-modes`、`mark-outcome`、`base-outcomes`。
+
+## AGENTS.md 的发现算法与它的 8 条边界
+
+`agents-md`（75 文件）是一个受 `instructionFiles` 选项控制的 mod，四个取值：`claude-md`（只读 `CLAUDE.md`）、`claude-md-or-agents-md`（默认，项目自己没有指令文件时才用 `AGENTS.md`）、`claude-md-and-agents-md`（两者并用）、`managed-only`（丢掉项目与个人的，只留组织的）。
+
+判定「项目自己的」是**读引擎实际加载了什么**，而不是猜：根到工作目录任一层有 `CLAUDE.md` / `.claude/CLAUDE.md` / `CLAUDE.local.md`，整个项目就让给引擎。**组织的 managed 文件、`~/.claude/CLAUDE.md`、`.claude/rules` 不算**——因为嵌套遍历也看不见它们。
+
+路径判定用**拼写而非解析**，源码里写得很直白：
+
+```ts
+export const isBelow = (path: string, dir: string): boolean =>
+  normalSpellingOf(path).startsWith(`${normalSpellingOf(dir)}/`)
+```
+
+不跟随符号链接，与引擎给嵌套 `CLAUDE.md` 划界的方式一致。`outsideClaudeDirs` 则简单直接——**某目录有自己的 `CLAUDE.md`，该目录的 `AGENTS.md` 就让出去，而不是合并**。
+
+### 它诚实列出的 8 条能力边界
+
+这份 README 有一节专列「与 `CLAUDE.md` 仍有差异」，每条都点明是「一个插件通过现有事件够不到的事实」。这份清单本身就是插件能力边界的教科书：
+
+1. **嵌套文件只随文本 `Read` 附加** —— 引擎还会在 `@` 提及的文件、IDE 打开的文件或选区、`Read` 的 notebook/图片/PDF 结果上附加。
+2. **附加的嵌套文件不进入循环的已读文件状态** —— 所以压缩后引擎不会把它恢复进「最近读过」，而插件会在下次该目录下的 `Read` 再附一次；会话中途的修改也不会重新通告。
+3. **`/cd` 的提示里带的是新树的 `CLAUDE.md`** —— 插件的文件走引擎的指令通告在下一个请求里一起到。
+4. **路径按拼写比较** —— 引擎会先解析工作目录的符号链接别名再判断文件是否在内。
+5. **`--add-dir` 目录不提供 `AGENTS.md`**，而引擎能加载那里的 `CLAUDE.md`。
+6. **`/memory` 与 `#` 快捷键不认识 `AGENTS.md`**。
+7. **`AGENTS.md` 内部的工作目录外 `@` 导入**，只在引擎为 `CLAUDE.md` 外部导入弹过审批之后才生效（且审批框只为 `CLAUDE.md` 的导入弹）。
+8. **非 fork 的 subagent 会在自己首次 `Read` 某目录时拿到嵌套 `AGENTS.md`**，即使父循环已经拿到过；引擎不会这样重复给 subagent `CLAUDE.md`。
+
+值得学的是**列边界的方式**：不是笼统说「还不完全」，而是逐条说明「这是哪个引擎行为插件够不到」。这种写法让使用者能自己判断在哪些场景下受影响。
+
+还有一个**兼容策略**值得一提：该选项最初叫 `projectInstructions`、取值是 `claude` / `agents-fallback` / `both` / `none`。新键 `instructionFiles` 一旦被设成非默认值，**旧键就不再读**，且 transcript 会提示去删掉它；未设新键时旧值仍被解释，并在每次加载的首次 `session.start` 于 transcript 里说明它是怎么被理解的。
+
 ## Traps
 
 - 想在 `$` 上加 noun：`engine.create` + `types/index.d.ts` 声明合并，**且不能替换别人的 noun**（会失败并卸载你的插件）。

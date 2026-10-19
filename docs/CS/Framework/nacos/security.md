@@ -37,7 +37,7 @@ nacos.core.auth.plugin.nacos.token.secret.key=${custom_base64_token_secret_key}
 
 Docker 镜像用环境变量等价开启：`NACOS_AUTH_ENABLE=true` / `NACOS_AUTH_SYSTEM_TYPE=nacos` / `NACOS_AUTH_TOKEN` / `NACOS_AUTH_IDENTITY_KEY` / `NACOS_AUTH_IDENTITY_VALUE`。注意 3.3+ 官方镜像默认开启 Client API 鉴权。
 
-## Token（JWT）
+## Token (JWT)
 
 默认 Nacos 鉴权用 **JWT**：登录后签发 token，后续请求带 token 访问。
 

@@ -351,10 +351,17 @@ if (targetOffset >= localLog.logEndOffset()) {
 
 ## Tiered Storage
 
+> [!NOTE]
+> **状态**：KIP-405 页面原文「This KIP has been merged and marked production-ready **since Kafka 3.9**」，3.9.0 发布说明（2024-11-06）同样写明「Tiered storage is now production-ready in Kafka 3.9」。它是**已 GA 的能力**，不是实验特性；而把本地盘也换掉的那一步（KIP-1150 Diskless Topics）截至本次核实仍是 Under Discussion 提案 —— 两者不要合并成「Kafka 已支持 diskless」，方向与证据见 [Future](/docs/CS/MQ/Future.md?id=storage-moves-to-object-store)。
+
 > [!WARNING]
 > 配置名是 **`remote.storage.enable`**（**没有 `log.` 前缀**），默认 **false**（`LogConfig.java:136` `DEFAULT_REMOTE_STORAGE_ENABLE = false`，ConfigDef `:243`）。
 >
 > 写成 `log.remote.storage.enable` 会因未知配置导致启动失败。
+>
+> **broker 级总开关是 `remote.log.storage.system.enable`**（4.3 文档原文「Whether to enable tiered storage functionality in a broker or not」，Default **false**）—— 只配 topic 级 `remote.storage.enable` 而不开这一项，功能不会生效。网上流传的 `tiered.storage.enabled` **在 4.3 的配置表里不存在**。
+>
+> 本地层的容量边界分两级命名，容易混：**topic 级**是 `local.retention.ms` / `local.retention.bytes`（下表），**broker 级**是 `log.local.retention.ms` / `log.local.retention.bytes`（默认同为 -2，文档原文「it represents `log.retention.ms` value is to be used」）。两档都只约束 **local segments**，不影响远端层的保留。注意官方**没有**把本地层描述成「S3 的缓存」，本地 tier 仍是「与原版 Kafka 相同的本地磁盘日志」。
 
 | 配置名 | 默认值 | 出处 |
 | ------ | ------ | ---- |
@@ -378,6 +385,7 @@ if (targetOffset >= localLog.logEndOffset()) {
 | 「`log.cleaner.enable` 默认 false，建议关掉省资源」 | ❌ 默认 **true** 且已弃用，官方明确要求不要设 false |
 | 「`log.isolation.level` 默认 read_uncommitted」 | ⚠️ 配置名错，**它不存在**；是消费者端 `isolation.level` |
 | 「有 `log.remote.storage.enable`」 | ❌ 真实名 `remote.storage.enable`（无 `log.` 前缀）|
+| 「用 `tiered.storage.enabled` 开启分层存储」 | ❌ **4.3 配置表里没有这一项**；broker 级开关是 `remote.log.storage.system.enable`（默认 false），topic 级才是 `remote.storage.enable` |
 | 「`LogWriteAheadManager` 做异步刷盘」 | ❌ 类不存在 |
 | 「有 `activeIndex` 字段」 | ❌ 4.x 改为 `bytesSinceLastIndexEntry` 计数器 |
 | 「段文件含 `leader-epoch-checkpoint` 和 `partition.metadata`」 | ❌ epoch checkpoint 在 **partition 目录级**（`__leader_epoch`）；`partition.metadata` 已移除；4.x 新增 `.txnindex` |

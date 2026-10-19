@@ -945,7 +945,7 @@ public Result<String> register(InstanceForm instanceForm) throws NacosException 
 > [!WARNING]
 > 以下为 **≤2.1** 的命名 v1 注册链路（`ServiceManager.registerInstance` → `createServiceIfAbsent` → `putServiceAndInit` → `addInstance`，并经 `ConsistencyService.listen` / `KeyBuilder.buildInstanceListKey` 注册监听）。在 **3.2.4** 中这些类与方法已全部移除，见 [consistency](/docs/CS/Framework/nacos/consistency.md)。3.x 注册改为走命名 **v2 Client 模型**，见下文。
 
-#### 3.x 注册入口：ClientOperationService
+#### 3.x Register Entry: ClientOperationService
 
 3.2.4 的命名注册统一由 `com.alibaba.nacos.naming.core.v2.service.ClientOperationService` 接口承担，按下表分流到两个实现：
 
@@ -1709,7 +1709,7 @@ http://ip:port/actuator/migration-server-list ## Spring Boot 2.x 版本
 - 建议是从最下层 Provider 开始迁移。 但如果调用链路太复杂， 比较难分析， 所以我们设计的方案中是支持随便找⼀个非流量入口应用进行迁移。
 - 因为流量入口的应⽤比较特殊， 所以建议迁移流量入口应⽤时需要根据自己应⽤的实际情况考虑迁移方案。
 
-### 3.x 时代的迁移方式
+### Migration Path in the 3.x Era
 
 > [!NOTE]
 > 核验时间 2026-10，以 Nacos 3.2.4 与当前 Spring Cloud release train 为准。

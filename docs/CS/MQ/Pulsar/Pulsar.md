@@ -2,9 +2,12 @@
 
 [Pulsar](https://pulsar.apache.org) is a distributed pub-sub messaging platform with a very flexible messaging model and an intuitive client API.
 
-> 版本基线：**4.2.4**（tag `v4.2.4`，当前稳定版，2026-08-03 发布）。另有里程碑版 `v5.0.0-M1/M2`（2026-06/09），**里程碑版不是生产可用基线**。
+> 版本基线：**4.2.4**（tag `v4.2.4`，2026-08-03 发布）。本目录各分册的源码核实结论**都以 4.2.4 为准**。
+> ⚠️ **5.0.0 已于 2026-10-05 发布，官方称其为新的 LTS**（首页横幅与 5.0.x release highlights 均可见）—— 但本目录尚未按 5.0 重做源码核实，5.0 的新内容（Scalable Topics、v5 client API、Oxia 成为推荐元数据存储）只记在 [Future](/docs/CS/MQ/Future.md?id=metadata-layer-moves-inward)，不要把它当成 4.2.4 的能力，也不要据 4.2.4 的结论断言 5.0 的行为。
 > 依赖 BookKeeper **4.17.3**（根 `pom.xml:185`）。
-> ⚠️ 4.x 相对 2.x/3.x 有**大量类删除与包路径迁移**（geo-replication、pulsar-streams、`enableIdempotence` 均已移除），照旧资料写必错 —— 逐条对照见 [BookKeeper](/docs/CS/MQ/Pulsar/BookKeeper.md) 与 [集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md) 的对照表。
+> ⚠️ 4.x 相对 2.x/3.x 有**大量类删除与包路径迁移**（独立的 `pulsar-replication` 模块、`pulsar-streams`、`enableIdempotence` 均已移除），照旧资料写必错 —— 逐条对照见 [BookKeeper](/docs/CS/MQ/Pulsar/BookKeeper.md) 与 [集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md) 的对照表。
+>
+> ⚠️ 但**「geo-replication 被移除」是说法过头**：被移除的是独立模块与 `PulsarBackup` 类；跨地域复制作为 broker 能力仍在（文档 `concepts-replication` 现行，5.0 发布说明还明列「Fixes across geo-replication」）。机制在 Broker 侧的 replicator，见下文。
 
 
 ```dot
@@ -80,7 +83,7 @@ Pulsar 与 Kafka 最本质的差异是**存储与计算解耦**。消息数据�
 这是 4.2.4 最需要注意的部分 —— **相对 2.x/3.x 有大量类删除与功能移除**，照旧资料写必错：
 
 > [!WARNING]
-> **已彻底移除**：`pulsar-replication` 模块（跨地域复制）、`PulsarBackup`（备份恢复）、`pulsar-streams`（并入 `pulsar-io`）、**幂等生产者开关**（`enableIdempotence` API 与配置字段双双消失，改为 `ProducerAccessMode`）、`GoRuntimeFactory`、tiered namespace 概念、`OverloadSheddingService`。
+> **已彻底移除**：`pulsar-replication` **独立模块**（注意：不是 broker 内置的跨地域复制能力）、`PulsarBackup`（备份恢复）、`pulsar-streams`（并入 `pulsar-io`）、**幂等生产者开关**（`enableIdempotence` API 与配置字段双双消失，改为 `ProducerAccessMode`）、`GoRuntimeFactory`、tiered namespace 概念、`OverloadSheddingService`。
 >
 > **默认值陷阱**：**默认 quorum 是 2/2/2**（不是 `ManagedLedgerConfig` 原生的 3/2/2）—— E=2 且 W-Q=0 意味着一台 bookie 挂掉写入就阻塞；`maxUnackedMessagesPerConsumer` 是 **50000** 不是 -1；`brokerDeleteInactiveTopicsEnabled` **默认 true**；**元数据默认回退是 ZK 不是 RocksDB**（4.2.4 另提供 `etcd:` 与 `oxia:` 两个新 provider）。
 >

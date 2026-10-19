@@ -1,5 +1,7 @@
 ## Introduction
 
+> 版本基线：**4.3.1**。4.0 起 ZooKeeper 模式彻底移除；message format v0/v1 与旧客户端协议版本已删除；Java 11（Clients）/ Java 17（Brokers）为最低要求。
+
 A Kafka producer sends messages to a topic, and messages are distributed to partitions according to a mechanism such as key hashing (more on it below).
 
 There are many reasons an application might need to write messages to Kafka: recording user activities for auditing or analysis, recording metrics, storing log messages, 
@@ -1031,6 +1033,36 @@ So mostly we use multiple producers for multiple servers.
 ## Tuning
 
 `connections.max.idle.ms`
+
+## Deprecated & Removed in 4.x
+
+> [!WARNING]
+> 以下移除在 4.0 生效，照旧资料写必错：
+> - **Message format v0 / v1 已移除**（KIP-724）—— broker 不再接受 magic=0/1 的 record batch；旧 producer（Kafka < 0.10）无法连接 4.0+ broker
+> - **旧客户端协议版本已移除**（KIP-896）—— broker 最低支持的 protocol version 提升，客户端升级前必须确认 broker ≥ 2.1
+> - **ZooKeeper 相关配置全部删除**—— `--zookeeper` 参数、`zookeeper.connect` 等面对 4.0+ broker 直接启动失败
+
+## KIP-890: Transaction Server-Side Defense Phase 2 (4.0)
+
+KIP-890 在 3.9 引入了事务的客户端防御（fenced producer 自动 abort），4.0 完成**服务端防御 phase 2**：
+
+核心改进是 **Producer ID fencing 的严格化**。在旧版本中，broker 端处理事务时，如果一个 producer 被新 producer（更高 epoch）fence，旧 producer 的 in-flight produce request 仍可能成功写入（race condition）。phase 2 的修复让 broker 在检测到 producer epoch 过期时，**主动关闭该连接**，强制旧 producer 感知 fencing。
+
+这减少了 "zombie transaction"（僵尸事务）在 producer 故障期间的存活窗口。
+
+## KIP-1102: Proactive Rebootstrap (4.0)
+
+与 Consumer 共享的网络层改进。Producer 在长时间收不到 metadata 更新时会**主动触发 rebootstrap**，而非等所有 broker 不可达才重新 bootstrap。服务端也可通过特定错误码显式通知 producer rebootstrap。
+
+## KIP-1030: Default Value Changes (4.0)
+
+4.0 变更了若干配置默认值以"开箱即用更安全"：
+
+| 配置 | 旧默认 | 新默认 |
+| ---- | ------ | ------ |
+| `socket.connection.setup.timeout.ms` | N/A（新增） | 10000 |
+| `socket.connection.setup.timeout.max.ms` | N/A（新增） | 30000 |
+| `producer.acknowledgement.timeout.ms` | N/A（新增） | 30000 |
 
 ## Links
 

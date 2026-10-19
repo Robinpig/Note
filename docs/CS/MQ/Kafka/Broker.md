@@ -1,5 +1,7 @@
 ## Introduction
 
+> 版本基线：**4.3.1**。4.0 起 ZooKeeper 模式彻底移除，`KafkaServer`（ZK 模式）类已删除，仅存 `KafkaRaftServer`。本文档中部分旧代码摘录标注了 ZK 路径（如 `KafkaServer`、`ZkAdminManager`），仅作历史对照；4.x 实际运行走 KRaft 路径。
+
 A single Kafka server is called a `broker`.
 The broker receives messages from producers, assigns offsets to them, and commits the messages to storage on disk.
 It also services consumers, responding to fetch requests for partitions and responding with the messages that have been committed to disk.
@@ -2024,6 +2026,9 @@ Run recovery on the given segment.
 
 ## Controller
 
+> [!NOTE]
+> 下方 `Zookeeper` 小节与 `elect()` 代码块（`zkClient`）是 **Kafka 3.x 及更早版本** 的实现。4.0 起 ZooKeeper 模式彻底移除，controller 选举与状态管理全部走 KRaft（见 [KRaft](/docs/CS/MQ/Kafka/KRaft.md)）。保留这段仅作历史对照。
+
 ControlPlaneAcceptorAndProcessor
 
 
@@ -3694,6 +3699,37 @@ log.roll.jitter.ms > 0 通过给日志段切分执行时间加一个扰动值的
             offsetIndex().isFull() || timeIndex().isFull() || !canConvertToRelativeOffset(rollParams.maxOffsetInMessages);
     }
 ```
+
+## Broker Cordon (KIP-1066, 4.1 Preview → 4.3 GA)
+
+KIP-1066 在 broker 级别和 log dir 级别引入 **cordon** 状态。cordon 后的 broker 不再接受新的 partition 分配（leader 不再迁入、follower 不再迁入），但**已有的 leader/follower 正常工作**。
+
+这解决了运维场景的痛点：之前下线 broker 只能先 `PreferredReplicaLeaderElection` 把 leader 全部迁走再停机，如果中途新 partition 又被分配过来就前功尽弃。cordon 让 broker 可以**安全排空**再下线。
+
+相关配置：
+- `kafka-cordon.sh`：新 CLI，管理 broker / log dir 的 cordon 状态
+- `BrokerRegistrationRecord.cordoned`：metadata log 中记录的 cordon 状态（KRaft）
+
+## Follower Fetch from Tiered Offset (KIP-1023, 4.1)
+
+Tiered Storage（分层存储）中，冷数据被搬到对象存储（S3 等）。KIP-1023 解决 **follower 从 tiered offset 开始 fetch** 的问题。
+
+在旧版本中，follower 只从 leader 的 LEO 往后 fetch。如果 leader 的 log 被裁剪到 tiered storage 里，新 follower 加入 ISR 时必须从 leader 的 logStartOffset（已经很靠前）开始同步，浪费大量网络带宽。
+
+4.1 起支持 follower **跳过本地裁剪的 segment**，直接从 tiered offset 之后 fetch。相关 broker 配置（4.3 更新）：
+- `follower.fetch.last.tiered.offset.enable`（4.3）：允许 follower 从 tiered log 的最新 offset 开始 fetch
+
+## Default Value Changes (KIP-1030, 4.0)
+
+4.0 broker 侧的关键默认值变更：
+
+| 配置 | 旧默认 | 新默认 |
+| ---- | ------ | ------ |
+| `socket.connection.setup.timeout.ms` | N/A（新增） | 10000 |
+| `socket.connection.setup.timeout.max.ms` | N/A（新增） | 30000 |
+| `unclean.leader.election.enable` | `true` | `false`（KRaft 模式） |
+
+最后一项 **`unclean.leader.election.enable` 默认 `true` → `false`** 是最值得关注的变更：KRaft 模式下默认不允许 unclean leader election，优先数据安全而非高可用。升级后如果 ISR 为空导致无法选 leader，需要**显式设置 `unclean.leader.election.enable=true`** 才会恢复。
 
 ## Links
 

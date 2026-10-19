@@ -171,6 +171,64 @@
 
 对 `allowModsToOverrideDenyRules`，还有一条容易被忽略的限制：**它只从 managed 源读**——所以一个人自己可写的策略文档（Windows 的 `HKCU` hive）、或服务器尚未确认的远程策略，**都不提供这个选项**；那种策略仍hold 它所 hold 的，只是什么也不授予。
 
+## Policy Presets And MDM Deployment
+
+仓库的 `examples/` 目录给出**四套成型的策略预设**与**三条 MDM 铺开路径**——这是「组织管控」从规格落到实操的现成材料。
+
+### Four Presets
+
+| 预设 | 定位 | 关键字段 |
+| :--- | :--- | :--- |
+| `settings-lax.json` | 最小可用 | 只有 `disableBypassPermissionsMode` + `strictKnownMarketplaces: []` |
+| `settings-strict.json` | 严格管控 | 追加 `permissions.ask: ["Bash"]`、**`deny: ["WebSearch","WebFetch"]`**、`allowManagedPermissionRulesOnly`、`allowManagedHooksOnly`、完整 `sandbox` 网络段全空 |
+| `settings-bash-sandbox.json` | 只开沙箱 | `sandbox.enabled: true` + `allowManagedPermissionRulesOnly`，**不开** `autoAllowBashIfSandboxed` |
+| `settings-hipaa.json` | 合规场景 | 见下，是四套里最完整的组织蓝图 |
+
+注意 `strict` 的一个刻意的「不对称」：**ask 只问 Bash、deny 直接禁掉网络工具**——读代码可以过、外发不行。`bash-sandbox` 预设里 `autoAllowBashIfSandboxed: false`，即**沙箱内也不自动放行**（与「沙箱开了就放心」是两种不同强度的承诺）。
+
+### The HIPAA Preset As A Blueprint
+
+`settings-hipaa.json` 值得逐层看，它是「一个组织真要把 Claude Code 管起来」时的完整清单：
+
+**① 身份与 provider 收紧**：`forceLoginMethod: "claudeai"` + `forceLoginOrgUUID` + `allowedProviders: ["anthropic"]`——**只允许走订阅登录且必须属于指定组织**，禁止用 API key 落到别的 provider。
+
+**② 扩展面全封**：`allowManagedHooksOnly` / `allowManagedMcpServersOnly` / `strictPluginOnlyCustomization` / **`disableSideloadFlags`**（禁掉 `--plugin-dir` 这类旁路）+ `allowedHttpHookUrls: []` + MCP 的 `allowedMcpServers` 与 `deniedMcpServers`（点名禁用 `claude-in-chrome`、`computer-use`、`ide` 三个 server）+ `syncClaudeAiSkills`/`syncClaudeAiPlugins: false`。
+
+**③ 跨会话与出站收紧**：`crossSessionInbound: "refuse"`（**拒绝跨会话传入消息**）、`disableRemoteControl: true`、`enableArtifact: false`。
+
+**④ 34 条 deny 规则**，覆盖读与写两个方向，凭据类路径逐个点名：`~/.ssh/**`、`~/.aws/**`、`~/.config/gh/**`、`~/.npmrc`、`~/.claude/.credentials.json`、`~/.claude.json`、`~/.claude.json.backup*`、`~/.claude/backups/**`、`~/.git-credentials`、`~/.config/git/credentials`、`~/.netrc`、`~/_netrc`——注意**每条都同时给 Read 与 Edit 两个版本**，只 deny 读挡不住改写。
+
+**⑤ auto mode 显式配置**：`autoMode.environment` / `soft_deny` / `hard_deny` 三档各带 `$defaults`，再叠 **`classifyAllShell: true`**（**所有 shell 命令都过 classifier**，不只挑敏感的）。
+
+**⑥ 沙箱的三重凭据防护**——这一层最值得学：
+
+| 子段 | 做什么 |
+| :--- | :--- |
+| `filesystem.denyWrite` | 12 条写禁写路径 |
+| `filesystem.allowManagedReadPathsOnly` | 只允许 managed 侧声明的读路径 |
+| `credentials.files` | 11 个凭据文件逐个 `mode: "deny"` |
+| `credentials.envVars` | **16 个凭据环境变量逐个 `deny`**（`AWS_*` 三件套、`GITHUB_TOKEN`/`GH_TOKEN`/`GH_ENTERPRISE_TOKEN`/`GITHUB_ENTERPRISE_TOKEN`、`NPM_TOKEN`、`NODE_AUTH_TOKEN`、`YARN_*`、`COREPACK_NPM_*`、`BUN_CONFIG_TOKEN`、`ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN`） |
+| `network` | `allowManagedDomainsOnly: true` + 显式域名白名单，`allowAllUnixSockets: false`、`allowLocalBinding: false` |
+| 顶层 | `failIfUnavailable: true`（**沙箱起不来就失败，不许降级裸跑**）、`allowUnsandboxedCommands: false` |
+
+**它还反向印证了 [Observability](/docs/CS/AI/LLM/Agent/Product/ClaudeCode/Observability.md) 的「项目级 settings 忽略 OTel 开关」**：`env` 里显式设了 `CLAUDE_CODE_ENABLE_TELEMETRY=1` 与一整套 `OTEL_*`——因为这些**只能在这里设**（managed 级）。而内容捕获**全部关闭**（`OTEL_LOG_USER_PROMPTS` / `OTEL_LOG_ASSISTANT_RESPONSES` / `OTEL_LOG_TOOL_DETAILS` / `OTEL_LOG_TOOL_CONTENT` / `OTEL_LOG_RAW_API_BODIES` 全为 `0`），同时经代理强制出口（`HTTPS_PROXY` 四种拼写全设、`NO_PROXY` 排除本地与 collector）。**「要遥测数据」与「不要外发对话内容」这两件事被分开对待**——正是那份文档的安全姿态。
+
+`cleanupPeriodDays: 30` 控制本地留存。
+
+### MDM Deployment
+
+三条铺开路径，指向同一个 managed settings：
+
+| 平台 | 机制 | 落点 |
+| :--- | :--- | :--- |
+| 任意 | `managed-settings.json` 直接部署 | 系统配置目录 |
+| macOS | Jamf / Kandji **Custom Settings** payload，preference domain `com.anthropic.claudecode`；或用完整 `.mobileconfig` profile | plist |
+| Windows | Intune **Platform scripts** 跑 `Set-ClaudeCodePolicy.ps1`，或**导入 ADMX**（ADMX + ADML） | 前者写 `C:\Program Files\ClaudeCode\managed-settings.json`，后者写注册表 `HKLM\SOFTWARE\Policies\ClaudeCode\Settings`（REG_SZ，单行 JSON） |
+
+仓库对这套模板的自我评价很直接：**「这些是社区维护的模板，可能不受支持或不正确；你要为自己的部署配置的正确性负责」**。
+
+两条实操要点：`.mobileconfig` 里的 `PayloadUUID` 与 `PayloadOrganization` 要换成自己的（`uuidgen`）；**部署到 fleet 前先在单台机器验证，并确认 `/status` 的 Setting sources 里列出了该来源**（macOS 显示 `Enterprise managed settings (plist)`、Windows 显示 `Enterprise managed settings (HKLM)`）。这种设置位于**优先级最顶端，用户无法覆盖**。
+
 ## Anthropic's Own Hardening
 
 官方仓库根部的 [`CLAUDE.md`](https://github.com/anthropics/claude-code/blob/main/CLAUDE.md) 是**写给 Claude Code 及其他编码 agent 看的仓库自述**，其中记录了 Anthropic 自己在自家 CI 里跑 Claude Code 的**三重防护**——这是「组织管控」在真实工程里的落地样本，也印证本文描述的机制确实被官方自己用着：
