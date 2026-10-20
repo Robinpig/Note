@@ -1,11 +1,21 @@
 ## Introduction
 
-## send
-send async
+本篇覆盖 Pulsar 客户端发送路径：`ProducerImpl.sendAsync` 的完整主链、批处理（batching）与自动分块（chunking）两条机制、sequenceId 层面的去重判定，以及分区路由 `MessageRoutingMode`。消息组装后经自定义二进制协议的 `SEND` 帧下发，帧格式与握手见 [Protocol](/docs/CS/MQ/Pulsar/Protocol.md)；消息落到 broker 之后的 `handleSend`、流控与写 ledger 流程见 [Broker](/docs/CS/MQ/Pulsar/Broker.md) 与 [BookKeeper 存储层](/docs/CS/MQ/Pulsar/BookKeeper.md)；与发送对称的消费侧（`ConsumerBase`、retry、Retention、Reader）见 [Consumer](/docs/CS/MQ/Pulsar/Consumer.md)。
 
-1. applyCompression
-2. canAddToBatch
-3. serializeAndSendMessage
+## send
+
+发送主链 `sendAsync` 依次做三件事：
+
+1. **applyCompression** —— 未开批处理、或带 `deliverAtTime`（延迟消息必须单发）的消息先压缩；开批处理的消息则延迟到 batch 关闭时统一压缩。
+2. **canAddToBatch** —— 判定能否并入当前 batch，顺带做消息大小校验与 chunk 数量计算。
+3. **serializeAndSendMessage** —— 组装 `SEND` 命令（压缩、加密、schema 就绪检查），再按「进 batch」与「单条直发」两条路径分流到 `processOpSendMsg`。
+
+外层 `internalSendAsync` 包住 interceptor 回调与发送统计，`internalSendWithTxnAsync` 则先向事务注册 produced topic 再走同一条链路。
+
+有两条值得单独记住的行为：
+
+- **chunking 是隐式的** —— 超过 `ClientCnx.getMaxMessageSize()` 的消息自动切块（`uuid` 串起同一消息的多个 chunk），无须用户介入；只有 persistent topic 支持。
+- **sequenceId 去重判定在客户端** —— `lastSequenceIdPushed` / `lastSequenceIdPublished` 两个水位配合 `isLastSequenceIdPotentialDuplicated` 标记，重连后重发的消息靠它识别「确定重复」与「可能重复」；4.x 起服务端去重开关 `enableIdempotence` 已移除，改由 `ProducerAccessMode` + namespace 策略驱动，详见 [Functions 与事务](/docs/CS/MQ/Pulsar/Functions.md)。
 ```java
 public class ProducerImpl<T> extends ProducerBase<T> implements TimerTask, ConnectionHandler.Connection {
     public void sendAsync(Message<?> message, SendCallback callback) {
@@ -366,13 +376,30 @@ public class ProducerImpl<T> extends ProducerBase<T> implements TimerTask, Conne
 
 ### MessageRoutingMode
 
+分区 topic 的 producer 需要一个「这条消息发往哪个分区」的决策。4.2.4 的 `MessageRoutingMode` 枚举（`pulsar-client-api/.../api/MessageRoutingMode.java`）**只有三个值**，默认是 `RoundRobinPartition`：
 
+| 模式 | 无 key 时的行为（源码注释原文语义） |
+| ---- | ---- |
+| `RoundRobinPartition`（默认）| 跨所有分区轮转发送；**轮转粒度不是单条消息而是 batch 边界**（`batchReceiveTimeout` 期间的批量共用同一目标），以保证批处理效率 |
+| `SinglePartition` | 随机挑一个分区，之后所有消息都发往该分区 |
+| `CustomPartition` | 调用用户实现的 `MessageRouter` 决定分区 |
 
+> [!IMPORTANT]
+> **「有 key 时按 hash 定分区」不是第四种模式**，而是三种模式一致的覆盖行为：消息带 key 时 `TypedMessageBuilder#key(String)` 让 partitioned producer 直接 hash key 落到固定分区，`MessageRoutingMode` 的选择被短路。旧资料说的「四种路由」是把这条覆盖行为误当成独立模式 —— 枚举里只有三个值，别照旧资料写。
 
+`CustomPartition` 配合 `ProducerBuilder.messageRouter(MessageRouter)` 使用，典型用法是按业务字段（如租户 ID）自建路由，与 `SinglePartition` 的「钉死一个分区」是两种相反的极端。
 ## Links
 
 - [Pulsar](/docs/CS/MQ/Pulsar/Pulsar.md)
+- [Broker](/docs/CS/MQ/Pulsar/Broker.md)
+- [Consumer](/docs/CS/MQ/Pulsar/Consumer.md)
 - [BookKeeper 存储层](/docs/CS/MQ/Pulsar/BookKeeper.md)
 - [Functions 与事务](/docs/CS/MQ/Pulsar/Functions.md)
-- [Broker](/docs/CS/MQ/Pulsar/Broker.md)
+
+## References
+
+1. [Apache Pulsar 4.2.4 Release](https://github.com/apache/pulsar/releases/tag/v4.2.4)
+2. [ProducerImpl.java (v4.2.4)](https://github.com/apache/pulsar/blob/v4.2.4/pulsar-client/src/main/java/org/apache/pulsar/client/impl/ProducerImpl.java)
+3. [MessageRoutingMode.java (v4.2.4)](https://github.com/apache/pulsar/blob/v4.2.4/pulsar-client-api/src/main/java/org/apache/pulsar/client/api/MessageRoutingMode.java)
+4. [Pulsar 官方文档](https://pulsar.apache.org/docs/)
 

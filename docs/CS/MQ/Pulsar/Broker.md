@@ -1,5 +1,15 @@
 ## Introduction
 
+本篇是本目录最长的源码级笔记，按 4.2.4（tag `v4.2.4`）源码覆盖 Pulsar broker 进程从启动到服务请求的完整生命周期，顺序为「启动与子系统 → 领导选举 → topic 生命周期 → 数据面 → 元数据与认证」：
+
+- `## Structure` 列出 broker 进程内的六个子系统（coordinationService / leaderElectionService / schemaStorage / brokerService / loadManager / webService + webSocketService），是全篇的地图。
+- `## start` 从 `PulsarBrokerStarter.main`（OOM 监听与 shutdown hook）进入 `PulsarService.start`，逐段看 localMetadataStore、coordinationService 等初始化顺序与启动期校验（如 authorizationEnabled 必须伴随 authenticationEnabled）。
+- `## elect` 讲 `LeaderElectionImpl` 的领导选举：抢临时 znode `/loadbalance/leader` 成功才进入 `tryToBecomeLeader`，其余 broker 走缓存观测。
+- `## Topic` 是最大的一节，覆盖 topic 生命周期的四个动作：`createPersistentTopic`（创建与加载）、`lookup`（含 `selectBrokerForAssignment` 的 owner 选择）、`unload`（卸载与 `doLoadShedding`）。
+- `## handleSend` 与 `## handleFlow` 是数据面两极：`publishMessage` → `asyncAddEntry` 的写入流控与 `Rollover Ledger` / `asyncCreateLedger` 的滚动创建；以及 flow 许可 → `asyncReadEntry` → `sendMessages` 的读取分发。
+- `## Metadata` 与 `## Authentication` 收尾：前者是 `OwnershipCache` 维护的 bundle→owner 归属缓存，后者是认证四提供者 + `PulsarAuthorizationProvider` 授权。
+
+协议帧格式、握手与 keep-alive 在 [Protocol](/docs/CS/MQ/Pulsar/Protocol.md)；存储侧（entry/cursor、quorum、rollover 判定）在 [BookKeeper 存储层](/docs/CS/MQ/Pulsar/BookKeeper.md)；bundle 切分、负载均衡与分层存储在 [集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md)；客户端行为在 [Producer](/docs/CS/MQ/Pulsar/Producer.md) 与 [Consumer](/docs/CS/MQ/Pulsar/Consumer.md)。
 
 ## Structure
 
@@ -1074,6 +1084,8 @@ public class LoadSheddingTask implements Runnable {
 
 ## handleSend
 
+`handleSend` 是 broker 侧接收 `SEND` 命令的入口（协议帧的拆解见 [Protocol](/docs/CS/MQ/Pulsar/Protocol.md)），处理顺序与 `publishMessage` 的校验、`asyncAddEntry` 的写入及 `Rollover Ledger` 的滚动条件如下。客户端侧的发送路径（`ProducerImpl`、chunking、`MessageRoutingMode` 三模式）见 [Producer](/docs/CS/MQ/Pulsar/Producer.md)。
+
 ```java
 package org.apache.pulsar.broker.service;
 
@@ -1662,11 +1674,26 @@ public class Consumer {
 
 ## Metadata
 
-Caffeine
+broker 侧的元数据访问核心是 `OwnershipCache`（`pulsar-broker/.../broker/namespace/OwnershipCache.java`）：它用 Caffeine 的 `AsyncLoadingCache` 缓存「service unit（bundle）→ owner broker」的归属关系，并同时承担 metadata store 的读写入口 —— 对外提供 ownership 查询（lookup 链路消费它，见上文 [lookup](#lookup)），对内通过 `ResourceLock` 抢占本地 broker 成为某 bundle 的 owner。类注释原文定位是 *a cache service for all the service unit ownership among the brokers*。
 
-
+与之配套的还有 `MetadataStoreCacheLoader`（`pulsar-broker-common/.../broker/resources/`）—— metadata store 读路径的缓存加载器。注意本节讲的是 broker 进程内的元数据缓存；topic/ledger 级元数据本身存在 metadata store（provider 选型见 [Pulsar 主篇](/docs/CS/MQ/Pulsar/Pulsar.md)），两者不要混为一谈。
 
 ## Authentication
+
+4.2.4 的认证授权实现在 `pulsar-broker-common` 模块（`org.apache.pulsar.broker.authentication` / `authorization`），分两层：
+
+**认证（Authentication）** —— `AuthenticationProvider` 接口，内置四个实现：
+
+| 实现 | 机制 |
+| ---- | ---- |
+| `AuthenticationProviderTls` | mTLS 客户端证书 |
+| `AuthenticationProviderToken` | JWT 令牌 |
+| `AuthenticationProviderBasic` | HTTP Basic |
+| `AuthenticationProviderList` | 多提供者组合（任一通过即通过）|
+
+`AuthenticationService` 在连接建立时按协议取凭证：`AuthenticationDataCommand`（自定义二进制协议）/ `AuthenticationDataHttp` / `AuthenticationDataHttps` / `AuthenticationDataSubscription` 四种 `AuthenticationDataSource`；状态机是 `AuthenticationState` 与 `OneStageAuthenticationState`（单阶段完成的简化态）。
+
+**授权（Authorization）** —— `AuthorizationProvider` 接口，默认实现 `PulsarAuthorizationProvider`（ACL 条目存 metadata store，按 `role` + `destination` 匹配），另有 `MultiRolesTokenAuthorizationProvider` 支持一个 token 携带多个 role。MQ 总纲的安全分层（认证 → 传输加密 → 授权）见 [MQ 产品取舍对比](/docs/CS/MQ/MQ.md?id=product-trade-offs) 的 Security 一行。
 
 
 
@@ -1678,4 +1705,15 @@ Caffeine
 - [BookKeeper 存储层](/docs/CS/MQ/Pulsar/BookKeeper.md)
 - [集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md)
 - [Functions 与事务](/docs/CS/MQ/Pulsar/Functions.md)
+- [Consumer](/docs/CS/MQ/Pulsar/Consumer.md)
+- [Producer](/docs/CS/MQ/Pulsar/Producer.md)
+
+## References
+
+1. [Apache Pulsar 4.2.4 Release](https://github.com/apache/pulsar/releases/tag/v4.2.4)
+2. [PulsarService.java (v4.2.4)](https://github.com/apache/pulsar/blob/v4.2.4/pulsar-broker/src/main/java/org/apache/pulsar/broker/PulsarService.java)
+3. [OwnershipCache.java (v4.2.4)](https://github.com/apache/pulsar/blob/v4.2.4/pulsar-broker/src/main/java/org/apache/pulsar/broker/namespace/OwnershipCache.java)
+4. [AuthenticationProvider.java (v4.2.4)](https://github.com/apache/pulsar/blob/v4.2.4/pulsar-broker-common/src/main/java/org/apache/pulsar/broker/authentication/AuthenticationProvider.java)
+5. [AuthorizationProvider.java (v4.2.4)](https://github.com/apache/pulsar/blob/v4.2.4/pulsar-broker-common/src/main/java/org/apache/pulsar/broker/authorization/AuthorizationProvider.java)
+6. [Pulsar 官方文档](https://pulsar.apache.org/docs/)
 

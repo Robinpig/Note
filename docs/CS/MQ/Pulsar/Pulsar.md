@@ -68,13 +68,13 @@ Pulsar 与 Kafka 最本质的差异是**存储与计算解耦**。消息数据�
 
 ## End-to-End Message Path
 
-客户端先通过 metadata store 查到 topic 归属的 broker 直连发送（Proxy 是 4.x 的可选无状态接入层）。Broker 收到后调 `ManagedLedger.asyncAppend`，BookKeeper 按 E/Qw/Qa 三级 quorum 写入 ledger；随后 `ReputMessageService` 异步为每个 cursor 维护消费位点。
+客户端先通过 metadata store 查到 topic 归属的 broker 直连发送（Proxy 是 4.x 的可选无状态接入层）。连接建立后先走 `CONNECT` / `CONNECTED` 握手（协商协议版本与 maxMessageSize），随后 broker 收到 `SEND` 帧调 `ManagedLedger.asyncAppend`，BookKeeper 按 E/Qw/Qa 三级 quorum 写入 ledger；`ReputMessageService` 再异步为每个 cursor 维护消费位点。帧格式与握手细节见 [Protocol](/docs/CS/MQ/Pulsar/Protocol.md)。
 
 存储侧要落到 entry 与 cursor 两级的区别、ledger 层级、rollover 判定与 quorum 语义，见 [BookKeeper 存储层](/docs/CS/MQ/Pulsar/BookKeeper.md)。集群侧的 bundle 切分、`ModularLoadManager`、unload 的两条路径与分层存储的 offload 事件驱动机制，见 [集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md)。轻量计算与事务状态机见 [Functions 与事务](/docs/CS/MQ/Pulsar/Functions.md)。
 
 ## Reading Guide
 
-`Pulsar` 主篇给出领域模型（tenant / namespace / topic 三级多租户）与整体架构，是理解其余篇章的前提。`Broker` 篇是本目录最长的源码级笔记（1677 行），从启动顺序、SocketServer 请求处理到 topic 加载、handleSend 流控、Controller 选举，逐层展开。`Producer` 与 `Consumer` 分别覆盖发送路径（含 `MessageRoutingMode` 的四种路由）与消费侧（`ConsumerBase`、retry、Retention、Reader），`Consumer` 篇的 Retention 一节解释了 Pulsar 特有的「消费即删除」与 cursor 独立存储。
+`Pulsar` 主篇给出领域模型（tenant / namespace / topic 三级多租户）与整体架构，是理解其余篇章的前提。`Broker` 篇是本目录最长的源码级笔记（1717 行），从启动顺序、SocketServer 请求处理到 topic 加载、handleSend 流控、Controller 选举，逐层展开。`Producer` 与 `Consumer` 分别覆盖发送路径（含 `MessageRoutingMode` 的三种路由模式）与消费侧（`ConsumerBase`、retry、Retention、Reader），`Consumer` 篇的 Retention 一节解释了 Pulsar 特有的「消费即删除」与 cursor 独立存储。`Protocol` 篇覆盖最底层：自定义二进制协议的帧格式、命令全集、版本协商（v0~v21）、握手与 keep-alive —— 它是读 Broker 篇 `handleSend` / `handleFlow` 的前置。
 
 轻量计算与集群能力是两个独立方向：`Functions` 篇覆盖三种 Runtime 选型、WorkerConfig 与事务协调器；`Cluster` 篇覆盖 bundle 负载均衡、unload 与分层存储。
 
@@ -119,11 +119,22 @@ The diagram below illustrates a Pulsar cluster:
 
 ### Topic
 
+Topic 名是四段式 `domain://tenant/namespace/topic`，两个维度组合出四种形态：
+
+| 维度 | 取值 |
+| ---- | ---- |
+| domain | `persistent`（消息落 BookKeeper）/ `non-persistent`（只在内存中转发） |
+| 分区 | `PartitionedTopic`（N 个分区，各自独立 ledger 与 quorum）/ `NonPartitionedTopic`（单分区，无分区后缀） |
+
 PartitionedTopic
 
 - NonPartitionedTopic -- only one partition
 
 Persistent
+
+#### Topic Lookup
+
+客户端不直连某个 broker，而是先发 lookup 请求由服务端返回 owner broker 地址再回连（[Metadata 寻址机制](/docs/CS/MQ/MQ.md) 在总纲层展开）。Pulsar 里这条寻址有两个实现落点：broker 侧的 `ServerCnx.handleLookup` 校验 topic 名与权限后转 `lookupTopicAsync`，非 owner broker 会返回 redirect；proxy 侧的 `LookupProxyHandler` 则代客户端向后端 broker 转发 lookup，并按 redirect 次数有限重试。两者的源码摘录如下：
 
 ```java
 package org.apache.pulsar.broker.service;
@@ -267,9 +278,9 @@ public class LookupProxyHandler {
 }
 ```
 
-Ledger Fragment
+#### Bundle
 
-Bundle -> multi-topics
+一个 namespace 按 hash 区间切成多个 bundle，每个 bundle 分配一个 owner broker —— topic 数量增长触发拆分、broker 负载变化触发 bundle 转移，这是 Pulsar 细粒度扩容与 unload 的载体，切分规则见 [集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md)。`BundleData` 是 broker 为每个 bundle 维护的负载统计数据（短/长期时间窗口的消息量 + 其下 topic 计数），供 LoadManager 做均衡决策：
 
 ```java
 public class BundleData {
@@ -288,10 +299,12 @@ public class BundleData {
 }
 ```
 
+> [!WARNING]
+> 注意与 `BundlesData` 区分：后者（`pulsar-client-admin-api/.../data/BundlesData.java`）存的是 bundle 的 **hash 边界与数量**（`boundaries` / `numBundles`），是 metadata store 里的拆分事实；`BundleData` 只是内存中的负载统计。`NamespaceBundleData` 这个类名在 4.2.4 已不存在，详见 [集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md)。
+
 #### CompactedTopic
 
-view to latest messages of topic keys.
-though append null like delete
+compacted topic 按 key 只保留最新值：旧版本的消息在 compaction 后不再可读，等价于「追加一条 value 为 null 的消息表示删除」的 tombstone 语义。触发方式与两阶段算法见 [BookKeeper 存储层](/docs/CS/MQ/Pulsar/BookKeeper.md) 的 Compaction 一节。
 
 ## Brokers
 
@@ -314,7 +327,7 @@ A Pulsar instance consists of one or more Pulsar  *clusters* . Clusters, in turn
 * A ZooKeeper quorum used for cluster-level configuration and coordination
 * An ensemble of bookies used for [persistent storage](https://pulsar.apache.org/docs/next/concepts-architecture-overview#persistent-storage) of messages
 
-Clusters can replicate among themselves using [geo-replication](https://pulsar.apache.org/docs/next/concepts-replication).XCon
+Clusters can replicate among themselves using [geo-replication](https://pulsar.apache.org/docs/next/concepts-replication).
 
 > For a guide to managing Pulsar clusters, see the [clusters](https://pulsar.apache.org/docs/next/admin-api-clusters) guide.
 
@@ -352,7 +365,7 @@ A Pulsar instance can have a single local cluster, multiple local clusters, or m
 配置项为 `configurationMetadataStoreUrl`（`ServiceConfiguration.java:168`）与 `configurationStoreServers`（`:161`），解析优先级见 `:4153-4156`（前者优先，回落后者）。
 
 > [!WARNING]
-> **4.2.4 已移除内置的跨地域复制与备份**：`pulsar-replication` 模块、`PulsarGeoReplicationGroupCoordinator`、`PulsarBackup` / `PulsarClientBackup`、配置 `backupVersion` 全部零命中。跨集群/跨地域复制需外部方案（如 MirrorMaker），备份需靠 BookKeeper 层能力。
+> **4.2.4 的收缩边界要说准，不要说反**：`pulsar-replication` **独立模块**、`PulsarGeoReplicationGroupCoordinator`、`PulsarBackup` / `PulsarClientBackup`、配置 `backupVersion` 全部零命中 —— 移除的是「模块化的分组协调器与备份工具」；**但 broker 内置的跨地域复制能力仍在**（`GeoPersistentReplicator` 尾随本地 region 的 ledger 再转发到远端 region，见上文 [Brokers](#brokers) 一节与 [集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md) 的逐条对照）。备份侧才真的需要靠 BookKeeper 层能力自建。
 
 ## Persistent storage
 
@@ -506,14 +519,17 @@ public class PulsarClientImpl implements PulsarClient {
 
 ## Links
 - [MQ 总纲](/docs/CS/MQ/MQ.md)
-- [MQ](/docs/CS/MQ/MQ.md)
+- [MQ 产品取舍对比](/docs/CS/MQ/MQ.md?id=product-trade-offs)
+- [Broker](/docs/CS/MQ/Pulsar/Broker.md)
+- [Producer](/docs/CS/MQ/Pulsar/Producer.md)
+- [Consumer](/docs/CS/MQ/Pulsar/Consumer.md)
+- [Protocol](/docs/CS/MQ/Pulsar/Protocol.md)
 - [BookKeeper 存储层](/docs/CS/MQ/Pulsar/BookKeeper.md)
 - [集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md)
 - [Functions 与事务](/docs/CS/MQ/Pulsar/Functions.md)
-- [Broker](/docs/CS/MQ/Pulsar/Broker.md)
-- [BookKeeper](/docs/CS/Framework/BooKeeper/BooKeeper.md)
 - [Apache Kafka](/docs/CS/MQ/Kafka/Kafka.md) —— 存算一体路线的对照
 - [Apache RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md) —— 单文件 commitlog 路线的对照
+- [BookKeeper](/docs/CS/Framework/BooKeeper/BooKeeper.md)
 - [etcd](/docs/CS/Framework/etcd/etcd.md) —— 可选的 metadata store 之一
 - [Flink](/docs/CS/Framework/Flink/Flink.md) —— 与 Pulsar Functions 的流处理取舍
 ## References

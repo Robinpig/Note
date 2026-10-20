@@ -753,6 +753,7 @@ RocketMQ 提供**同步双写 + 同步刷盘**的组合，可以把「broker 确
 
 - **存储引擎**：多文件 vs 单文件路线的取舍 → [Kafka Storage](/docs/CS/MQ/Kafka/Storage.md) · [RocketMQ Store](/docs/CS/MQ/RocketMQ/Store.md) · [Pulsar BookKeeper](/docs/CS/MQ/Pulsar/BookKeeper.md)
 - **零拷贝与内核机制**：`transferTo` vs `mmap` → [ZeroCopy](/docs/CS/OS/Linux/ZeroCopy.md)
+- **私有协议与网络层**：自定义帧、编解码、连接管理 → [Kafka Network](/docs/CS/MQ/Kafka/Network.md) · [RocketMQ Remoting](/docs/CS/MQ/RocketMQ/Remoting.md) · [Pulsar Protocol](/docs/CS/MQ/Pulsar/Protocol.md)
 - **事务消息**：2PC+回查 vs 事务协调器 → [RocketMQ 事务消息](/docs/CS/MQ/RocketMQ/Transaction.md) · [Pulsar Functions 与事务](/docs/CS/MQ/Pulsar/Functions.md) · [Kafka ShareGroup](/docs/CS/MQ/Kafka/ShareGroup.md)
 - **消息过滤**：SQL92 表达式与开关 → [RocketMQ 消息过滤](/docs/CS/MQ/RocketMQ/Filter.md)
 - **控制面**：元数据与协调 → [Kafka KRaft](/docs/CS/MQ/Kafka/KRaft.md) · [Pulsar 集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md)

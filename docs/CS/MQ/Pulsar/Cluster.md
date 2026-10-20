@@ -388,7 +388,7 @@ return Optional.empty();   // → 不触发
 | 消费位点 | **cursor**，独立于消息存储 | offset 存在 `__consumer_offsets` |
 | 消息删除 | 单条可删（ack 时写 delete marker） | 只能按 offset 截断（log retention）|
 | 多租户 | 强（tenant/namespace/topic + bundle 隔离） | 弱（靠 topic 名约定）|
-| 跨集群复制 | 4.x **已移除**，需外部方案 | MirrorMaker 2 成熟 |
+| 跨集群复制 | 独立模块 `pulsar-replication` 已移除，但 **broker 内置 replicator 仍在**（`GeoPersistentReplicator` 尾随本地 region 再转发）| MirrorMaker 2 成熟 |
 | 延迟退读 | 分层存储（tiered storage）| 需自建 |
 
 ## Common Claims That Need Debunking
