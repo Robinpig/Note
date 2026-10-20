@@ -2,6 +2,22 @@
 
 软件工程（Software Engineering）研究的是如何在**规模、时间和不确定性**下持续交付可靠软件：1968 年 NATO 会议创造这个词，正是为了应对"软件危机"——个人写程序的手艺无法直接扩展到多人、多年、数十万行代码的系统。它覆盖从需求、设计、编码、测试、发布到运维的全生命周期，核心矛盾是：需求会变、人会流动、系统会腐化，而代码必须在这些变化中持续可演进。
 
+## Map of This Section
+
+这一节的笔记可以按"一个人做工程时依次会遇到的问题"来读，而不是按主题字母序。
+
+**先建立判断框架，再谈手段。** [Basic](/docs/CS/SE/Basic.md) 记的是那些非技术性的认知——本质复杂度与偶然复杂度、抽象的反噬、测试只能证伪——它们决定后面每一个手段什么时候该用。[Programming](/docs/CS/SE/Programming.md) 与 [reactive](/docs/CS/SE/reactive.md) 是范式层的选择，写出来的代码是否整洁看 [Clean Code](/docs/CS/SE/Clean_Code.md)、腐化之后怎么收拾看 [Refactoring](/docs/CS/SE/Refactoring.md) 与 [Code](/docs/CS/SE/Code.md)；出错之后，缺陷的分类与定位思路在 [Bug](/docs/CS/SE/Bug.md) 与 [Debug](/docs/CS/SE/Debug.md)。
+
+**然后决定系统的形状。** [Architecture](/docs/CS/SE/Architecture.md) 给出风格谱系与微服务的真实代价，[DDD](/docs/CS/SE/DDD.md) 解决"边界画在哪"，[registry](/docs/CS/SE/registry.md) 是服务化的第一块基础设施，[中台](/docs/CS/SE/中台.md) 讲组织与复用的张力，[Serverless](/docs/CS/SE/Serverless.md) 与 [Mini Program](/docs/CS/SE/MiniProgram/Mini_Program.md) 是两种交付/端形态；综合演练见 [SystemDesign](/docs/CS/SE/SystemDesign.md)。
+
+**形状定了之后是正确性。** 并发让"看起来对"的代码出错：基础模型见 [Concurrency](/docs/CS/SE/Concurrency.md)，互斥与分布式锁见 [Lock](/docs/CS/SE/Lock.md)，跨服务的一致性见 [Transaction](/docs/CS/SE/Transaction.md)，多步骤业务的过程保证见 [Workflow](/docs/CS/SE/Workflow.md)。
+
+**再往后是规模与韧性。** 流量上来后第一道防线是缓存：[Cache](/docs/CS/SE/Cache.md) 讲体系与一致性，[Caffeine](/docs/CS/SE/Caffeine.md) 与 [JetCache](/docs/CS/SE/JetCache.md) 是两种落地；保护自己的手段是 [RateLimiter](/docs/CS/SE/RateLimiter.md) 与 [CircuitBreaker](/docs/CS/SE/CircuitBreaker.md)；异步与兜底靠 [Scheduled Task](/docs/CS/SE/Scheduled_Task.md)，支付这类"不能少一次"的场景看 [掉单机制](/docs/CS/SE/掉单机制.md)。
+
+**最后是反馈回路。** 快慢要先度量：[Performance](/docs/CS/SE/Performance.md) 定指标，[Optimize](/docs/CS/SE/Optimize.md) 是定位到热点之后的机器级改写，[Stress testing](/docs/CS/SE/Stress_testing.md) 与 [Test](/docs/CS/SE/Test.md) 做验证，线上真相对照 [APM](/docs/CS/SE/APM.md)。
+
+**场景类笔记是上述所有手段的合流处**：[Feed](/docs/CS/SE/Feed.md)、[秒杀](/docs/CS/SE/秒杀.md)、[Live](/docs/CS/SE/Live.md)，以及自成体系的 [IM](/docs/CS/SE/IM/IM.md)（[Client](/docs/CS/SE/IM/Client.md)、[DTIM](/docs/CS/SE/IM/DTIM.md)、[MQTT](/docs/CS/SE/IM/MQTT.md)、[闲鱼 IM](/docs/CS/SE/IM/闲鱼IM.md)）。
+
 ## Coding Standards
 
 > 代码行长度应该不超过 80 个字符——这条惯例常被追溯到 Fortran 时代的穿孔卡片（80 列），后来被终端 80×24 字符界面固化。现代宽屏下 Google Java Style 取 100、Python PEP 8 取 79，本质目的不变：便于并排 diff、控制单行复杂度、让眼睛扫视不换行。
@@ -52,5 +68,5 @@
 ## References
 
 1. [Software Engineering Body of Knowledge (SWEBOK)](https://www.computer.org/education/bodies-of-knowledge/software-engineering)
-2. [No Silver Bullet — Fred Brooks](https://www.cs.unc.edu/eu/fields/860/06Spring/brooks.pdf)
+2. [No Silver Bullet — Fred Brooks (UNC TR86-020)](https://www.cs.unc.edu/techreports/86-020.pdf)
 3. [DORA DevOps Research and Assessment](https://dora.dev/research/)

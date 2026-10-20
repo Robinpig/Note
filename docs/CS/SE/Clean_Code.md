@@ -33,15 +33,33 @@
 
 方法名应当是动词或动词短语
 
+## Functions and Comments
+
+- **函数只做一件事**：判断标准是能否再拆出一个有意义的子函数；合理的结果是函数变短、调用层级变平，副作用被挤到边界上。
+- **参数越少越好**：零参最好，单参次之；布尔标志参数往往说明这个函数其实同时做了两件事。
+- **注释只写"代码讲不出来的那部分"**：为什么这么写、为什么不能那样写、外部约束来自哪里。复述代码的注释会先于代码失效，最终变成错误的说明；能用命名与类型表达的就别写注释。
+
+## Error Handling and Boundaries
+
+- 用异常表达非预期的失败路径，而不是返回魔法值（`null` / `-1`），并带上足以定位的上下文。
+- **别返回 null，也别传 null**：集合用空集合而非 `null`，避免调用方层层判空。
+- 错误处理与正常逻辑分离（`try` 块内尽量只有一行调用），否则主流程会被淹没。
+- 第三方边界要用适配层隔离：包装掉不友好的 API，用少量冒烟测试把外部行为钉住，避免上游升级波及整个代码库。
+
 
 
 
 
 ## Links
 
-- [SE](/docs/CS/SE/Basic.md)
+- [Basic](/docs/CS/SE/Basic.md)
+- [Refactoring](/docs/CS/SE/Refactoring.md)
+- [Programming](/docs/CS/SE/Programming.md)
+- [Engineering](/docs/CS/SE/Engineering.md)
+- [Bug](/docs/CS/SE/Bug.md)
+- [Test](/docs/CS/SE/Test.md)
 
 ## References
 
-1. [Clean Code]()
-2. [Working Effectively with Legacy Code]()
+1. 《Clean Code》— Robert C. Martin
+2. 《Working Effectively with Legacy Code》— Michael Feathers

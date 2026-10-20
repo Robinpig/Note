@@ -19,12 +19,9 @@ each managed by a Subscription.
 
 ## Links
 
-- [APM](/docs/CS/SE/APM.md)
-- [Architecture](/docs/CS/SE/Architecture.md)
-- [Basic](/docs/CS/SE/Basic.md)
-- [Bug](/docs/CS/SE/Bug.md)
-- [Cache](/docs/CS/SE/Cache.md)
-- [Caffeine](/docs/CS/SE/Caffeine.md)
+- [Concurrency](/docs/CS/SE/Concurrency.md)
+- [Programming](/docs/CS/SE/Programming.md)
+- [Performance](/docs/CS/SE/Performance.md)
 
 ## References
 1. [ReactiveX](http://reactivex.io/)
