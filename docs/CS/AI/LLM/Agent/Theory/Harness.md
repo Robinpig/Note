@@ -2,10 +2,9 @@
 
 当模型能力达到一定水位后，Agent 在长任务中的表现瓶颈不在模型本身，而在于包裹模型的架构（Harness）。
 更进一步的反直觉发现是：随着模型迭代，曾经不可或缺的 Harness 组件必须被主动拆除，否则反而成为性能负担。
-一句话总结：Harness 的价值不是绝对的，它始终是对模型能力缺口的补偿面（Compensation Surface）
-。模型每强一分，补偿面就移一寸——知道何时该加、何时该减，才是真正的工程判断力
+一句话总结：Harness 的价值不是绝对的，它始终是对模型能力缺口的补偿面（Compensation Surface）。模型每强一分，补偿面就移一寸——知道何时该加、何时该减，才是真正的工程判断力
 
-> 本文是 Harness 这个主题的专页。Harness 在 [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) 四组件中的定位（它是基础设施层、Agent = LLM + Harness）在那篇里，本文不重复；这里专注三件事：Agent 会在哪四种情况下失效、Harness 做什么、以及 Runtime / Framework / Harness 三层怎么分。具体的编程 Agent 实现见 [Codex 源码剖析](/docs/CS/AI/LLM/Agent/Product/Codex/Codex.md)，能力封装机制见 [Skill](/docs/CS/AI/LLM/Agent/Theory/Skill.md)，而八项共性里最吃重的两项——权限与上下文压缩——各有一篇专页：[权限与沙箱](/docs/CS/AI/LLM/Agent/Theory/Permission.md) 与[上下文压缩](/docs/CS/AI/LLM/Agent/Theory/Compaction.md)。
+> 本文是 Harness 这个主题的专页。Harness 在 [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) 四组件中的定位（它是基础设施层、Agent = LLM + Harness）在那篇里，本文不重复。全文按「问题 → 定义 → 定位 → 演进 → 标本」推进：先看 Agent 会在哪四种情况下失效；再讲 Harness 做什么——三层职责、八项共性，以及何时该加、何时该拆；然后厘清 Runtime / Framework / Harness 三层分工，以及 Prompt → Context → Harness 三个工程层次的边界；最后以 Codex 为生产级标本。具体的编程 Agent 实现见 [Codex 源码剖析](/docs/CS/AI/LLM/Agent/Product/Codex/Codex.md)，能力封装机制见 [Skill](/docs/CS/AI/LLM/Agent/Theory/Skill.md)，而八项共性里最吃重的两项——权限与上下文压缩——各有一篇专页：[权限与沙箱](/docs/CS/AI/LLM/Agent/Theory/Permission.md) 与[上下文压缩](/docs/CS/AI/LLM/Agent/Theory/Compaction.md)。
 
 ## Four Core Failure Modes of Agents
 
@@ -18,7 +17,7 @@ Harness 的设计要解决什么，得先看 Agent 在哪里会坏。这四种�
 | **失败级联** | 一个工具调用失败后，后续步骤全在错误假设上继续 | 错误没有传播机制，Agent 不知道失败了 | 失败恢复：诊断并重试，而不是硬撑 |
 | **越界执行** | Agent 做了不该做的操作（删文件、动生产环境） | 权限模型缺失或授权粒度太粗 | 分层审批：区分自决动作与需确认动作 → [权限与沙箱](/docs/CS/AI/LLM/Agent/Theory/Permission.md) |
 
-这四条决定了 Harness 的组件清单。**八项共性**（文件操作、任务规划、工具编排、子任务委派、状态恢复、权限控制、可观测性、上下文管理）不是凭空列的，而是前四种失效模式的解法集合——每一项都能对上表里某一行。
+这四条决定了 Harness 的组件清单——下一节看这份清单具体长什么样。
 
 ## What the Harness Does
 
@@ -30,7 +29,41 @@ Harness 的设计要解决什么，得先看 Agent 在哪里会坏。这四种�
 - **认知（Cognition）**——上下文管理。哪些信息进窗口、哪些留在外部、按什么顺序、什么时候压缩。对应 Context Engineering
 - **行动（Action）**——工具编排与执行。调什么、并行还是串行、失败怎么重试、权限怎么判。对应工具调度、失败恢复、分层审批
 
-这三层与下面「三个工程层次」表里的同名概念是一回事，只是把「Harness 做了什么」换成「做在哪一层」来问。
+这三层与工程注意力扩张的三个阶段大致同向：心智层主要由提示词工程解决「表达」问题，认知层由上下文工程解决「信息」问题，行动层则由 Harness 工程整套接管——三者的边界见下文。
+
+### Eight Commonalities of Successful Agent Products
+
+Claude Code、Codex、Manus、Cursor 等产品定位不同，处理复杂任务时都逐渐长出相似能力——这不是巧合，任务足够复杂时它们就从锦上添花变成必需品。
+
+这八项不是随意罗列的清单——**每一项都能对上四种失效模式的解法**，也各对应本库的一篇专页或某个已有机制：
+
+| 共性 | 解决什么 | 本库哪里有 |
+| :--- | :--- | :--- |
+| **1. 文件系统操作** | 让 Agent 能「打开文件看」而不是靠猜；是 Harness 存在的基础前提 | [Codex](/docs/CS/AI/LLM/Agent/Product/Codex/Codex.md)、[DSH](/docs/CS/AI/LLM/Agent/Product/DSH/DSH.md) 的 fs 插件 |
+| **2. 任务规划** | 目标漂移的解药：先出计划再执行，而不是走一步看一步 | [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) 的 Plan-and-Execute |
+| **3. 工具编排** | 并行还是串行、失败怎么重试、结果怎么写回上下文 | [Tools](/docs/CS/AI/LLM/Protocol/Tools.md) |
+| **4. 子任务委派** | 长任务分片并行；也用于隔离污染主上下文的副作用输出 | [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) 的 SubAgent、[OpenCode](/docs/CS/AI/LLM/Agent/Product/OpenCode/OpenCode.md) 的三个内置子 Agent |
+| **5. 状态恢复** | 失败级联与中断的解药：让长任务能断点续跑 | [DSH](/docs/CS/AI/LLM/Agent/Product/DSH/DSH.md) 的 Session 持久化、[Codex](/docs/CS/AI/LLM/Agent/Product/Codex/Codex.md) 的 Rollout |
+| **6. 权限控制** | 越界执行的解药：区分自决动作与需确认动作 | **[权限与沙箱](/docs/CS/AI/LLM/Agent/Theory/Permission.md)** |
+| **7. 可观测性** | 让 Agent 的行为可审计——企业落地的硬前提 | [权限与沙箱](/docs/CS/AI/LLM/Agent/Theory/Permission.md) 的企业策略注入一节 |
+| **8. 上下文管理** | 上下文溢出的解药：按需读取 + 主动压缩 | **[上下文压缩](/docs/CS/AI/LLM/Agent/Theory/Compaction.md)** |
+
+其中第 6 与第 8 项是两篇独立专页——它们虽然只是八项里的两项，却是**最容易被实现错、且错了代价最大**的两项：权限配错会让 Agent 删掉不该删的文件，压缩策略配错会让长任务在十几轮后「忘记自己为什么出发」。
+
+> ⚠️ **一项值得注意的规律**：这八项里**只有第 1 项是几乎所有产品都做的**（文件操作），其余七项的实现深度在各产品间差异极大。判断一个 Agent 产品的成熟度，不是看它「有没有规划功能」，而是看**压缩策略、权限粒度、恢复语义这三项做得对不对**——前两项决定了它能不能在真实项目里跑长任务，后一项决定了它出问题时能不能接上。
+
+### When to Add, When to Remove
+
+八项共性是一张地图，不是一张处方。每一项组件都在补偿一种失效模式，而失效模式本身是模型能力的函数——**模型每强一分，对应的缺口就小一寸，补偿面就该跟着移**。照抄别人的组件清单不会让 Agent 变强，反而可能在长任务里拖后腿。
+
+对应的判断方法是三步：
+
+1. **先定位缺口**：看当前模型在目标任务上真实暴露的是四种失效模式里的哪一种（还是一种都没有）——没有缺口，就没有补偿的必要
+2. **只补已证实的缺口**：不补想象中的缺口。「什么时候才需要 Harness」有一张明确的特征清单（见下文 Codex 一节），单文档摘要这类任务直接调模型即可
+3. **模型变强要敢拆**：曾经不可或缺的组件，在缺口消失之后必须主动拆除——它剩下的只是负担：额外的上下文占用、额外的延迟、对模型行为的额外约束。会做加法的是工匠，会做减法的是工程师
+
+这条规律在本页就能找到证据：八项共性中**只有文件系统操作是几乎所有产品都做的**，其余七项各产品的实现深度差异极大——补偿面本来就各家不同；Codex 把「什么时候才需要 Harness」写成一张明确的特征清单，正是「缺口存在性」决策的样板。Runtime / Framework / Harness 三层的进退也是同一个逻辑：上层替你补的缺口如果你用不上（或反过来在拖后腿），往下退一层才划算——LangChain 家族的选择线即此逻辑，见 [LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md) 与 [Deep Agents](/docs/CS/AI/LLM/LangTool/DeepAgents.md)。
+
 ## Three Levels of Agent Development
 
 常被混淆的三件事："让 Agent 跑起来"、"让开发更方便"、"让 Agent 完成复杂任务"——对应三层架构：
@@ -43,14 +76,16 @@ Harness 的设计要解决什么，得先看 Agent 在哪里会坏。这四种�
 
 - **Runtime = 操作系统**：图式执行、状态管理、持久化、人机协作（human-in-the-loop）、流式输出——不决定 Agent 做什么，负责让执行**可靠、可恢复、可管理**
 - **Framework = 标准工具箱**：模型调用统一接口、工具注册调用、Agent 循环、提示词与中间件——价值在**标准化和易用性**
-- **Harness = 布置好的工具间**：面向复杂任务预置反复出现的通用能力——**文件系统操作、任务规划、子 Agent 委派、长期记忆、上下文管理**。这些能力在简单问答里是锦上添花，处理代码库/长流程/持续协作时变成基础设施
+- **Harness = 布置好的工具间**：面向复杂任务预置反复出现的通用能力——**文件系统操作、任务规划、子 Agent 委派、长期记忆、上下文管理**等（完整清单即上一节的八项共性）。这些能力在简单问答里是锦上添花，处理代码库/长流程/持续协作时变成基础设施
 
 三层不是替代关系而是**分工关系**：需要最大控制力 → 深入 Runtime；快速搭标准 Agent → 用 Framework；让 Agent 面对真实复杂任务 → 用 Harness。一句话：**Runtime 解决"能稳定运行"，Framework 解决"能方便开发"，Harness 解决"能直接完成复杂任务"。**
 
 ## From Prompt Engineering to Context Engineering, to Harness Engineering
 
+工程注意力扩张的三个阶段，每一层要回答的核心问题逐层外扩：
+
 | 工程层次 | 核心问题 | 主要对象 | 典型能力 |
-| --- | --- | --- | --- |
+| :--- | :--- | :--- | :--- |
 | Prompt Engineering | 怎么把任务说清楚？ | 指令、示例、角色、输出约束 | 角色设定、Few-shot、结构化输出 |
 | Context Engineering | 模型此刻应该看到什么？ | 文件、记忆、状态、检索结果、工具输出 | 按需读取、上下文筛选、结构化存储 |
 | Harness Engineering | 整个 Agent 如何持续完成任务？ | Agent 运行环境与工程系统 | 规划、工具编排、子 Agent、恢复、权限、观测 |
@@ -69,28 +104,9 @@ Harness 的设计要解决什么，得先看 Agent 在哪里会坏。这四种�
 
 以 Deep Agents 的虚拟文件系统为例：`read_file` 按需读取、`write_file` 保存中间结论、`grep`/`glob` 定位信息、大文件只读必要片段。上下文只保留当前步骤需要的信息，其余存外部环境，需要时取回——和人的工作方式一样：不会把所有文档背在脑中，而是先明确问题，再开文件、做笔记、搜资料。**上下文工程的本质不是堆 Prompt，而是为模型建立一套高效获取、筛选、保存和恢复信息的基础设施。**
 
-### Harness Engineering: Eight Commonalities of Successful Agent Products
+### Harness Engineering
 
-Claude Code、Codex、Manus、Cursor 等产品定位不同，处理复杂任务时都逐渐长出相似能力——这不是巧合，任务足够复杂时它们就从锦上添花变成必需品：
-
-**Harness Engineering = 围绕模型和 Runtime，构建一套能够规划任务、管理上下文、调用工具、委派工作、控制风险并恢复执行的工程系统**（正在形成中的工程概念）。
-
-这八项不是随意罗列的清单——**每一项都能对上前面四种失效模式的解法**，也各对应本库的一篇专页或某个已有机制：
-
-| 共性 | 解决什么 | 本库哪里有 |
-| :--- | :--- | :--- |
-| **1. 文件系统操作** | 让 Agent 能「打开文件看」而不是靠猜；是 Harness 存在的基础前提 | [Codex](/docs/CS/AI/LLM/Agent/Product/Codex/Codex.md)、[DSH](/docs/CS/AI/LLM/Agent/Product/DSH/DSH.md) 的 fs 插件 |
-| **2. 任务规划** | 目标漂移的解药：先出计划再执行，而不是走一步看一步 | [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) 的 Plan-and-Execute |
-| **3. 工具编排** | 并行还是串行、失败怎么重试、结果怎么写回上下文 | [Tools](/docs/CS/AI/LLM/Protocol/Tools.md) |
-| **4. 子任务委派** | 长任务分片并行；也用于隔离污染主上下文的副作用输出 | [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) 的 SubAgent、[OpenCode](/docs/CS/AI/LLM/Agent/Product/OpenCode/OpenCode.md) 的三个内置子 Agent |
-| **5. 状态恢复** | 失败级联与中断的解药：让长任务能断点续跑 | [DSH](/docs/CS/AI/LLM/Agent/Product/DSH/DSH.md) 的 Session 持久化、[Codex](/docs/CS/AI/LLM/Agent/Product/Codex/Codex.md) 的 Rollout |
-| **6. 权限控制** | 越界执行的解药：区分自决动作与需确认动作 | **[权限与沙箱](/docs/CS/AI/LLM/Agent/Theory/Permission.md)** |
-| **7. 可观测性** | 让 Agent 的行为可审计——企业落地的硬前提 | [权限与沙箱](/docs/CS/AI/LLM/Agent/Theory/Permission.md) 的企业策略注入一节 |
-| **8. 上下文管理** | 上下文溢出的解药：按需读取 + 主动压缩 | **[上下文压缩](/docs/CS/AI/LLM/Agent/Theory/Compaction.md)** |
-
-其中第 6 与第 8 项是两篇独立专页——它们虽然只是八项里的两项，却是**最容易被实现错、且错了代价最大**的两项：权限配错会让 Agent 删掉不该删的文件，压缩策略配错会让长任务在十几轮后「忘记自己为什么出发」。
-
-> ⚠️ **一项值得注意的规律**：这八项里**只有第 1 项是几乎所有产品都做的**（文件操作），其余七项的实现深度在各产品间差异极大。判断一个 Agent 产品的成熟度，不是看它「有没有规划功能」，而是看**压缩策略、权限粒度、恢复语义这三项做得对不对**——前两项决定了它能不能在真实项目里跑长任务，后一项决定了它出问题时能不能接上。
+**Harness Engineering = 围绕模型和 Runtime，构建一套能够规划任务、管理上下文、调用工具、委派工作、控制风险并恢复执行的工程系统**（正在形成中的工程概念）。它的组件清单就是上一节的八项共性——四种失效模式各有着落。
 
 ### Three-Sentence Summary
 
@@ -152,7 +168,7 @@ Codex 把"能不能执行一个动作"拆成四层，缺一不可：
 
 ### When You Actually Need a Harness
 
-单文档摘要这类简单任务直接调模型即可。出现以下特征再上 Harness：多步"观察-行动"循环、修改真实状态、需要实时人工介入、长任务、需要权限与审计。
+单文档摘要这类简单任务直接调模型即可。出现以下特征再上 Harness：多步"观察-行动"循环、修改真实状态、需要实时人工介入、长任务、需要权限与审计。——这正是上文「只补已证实的缺口」那一步的展开。
 
 接入业务系统时的职责边界：**业务系统是 system of record，Harness 管推理动作闭环**。五个要点：
 
