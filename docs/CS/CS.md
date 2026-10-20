@@ -140,14 +140,6 @@ Docker、Kubernetes、CNI、Ingress、Helm
 
 <div class="kb-card">
 
-### [Java and JVM](/docs/CS/Java/JDK/JDK.md)
-
-JDK 源码、集合与并发、虚拟线程、内存与 GC
-
-</div>
-
-<div class="kb-card">
-
 ### [Programming Languages](/docs/CS/Languages.md)
 
 各语言入口、特性速览与适用场景的横向对比
@@ -226,7 +218,7 @@ JDK 源码、集合与并发、虚拟线程、内存与 GC
 
 云原生让组织在公有云、私有云、混合云环境中**以可编程、可重复的方式大规模开发、构建与部署工作负载**；其特征是松耦合、可互操作，并且安全、有韧性、可管理、可持续、可观测。技术组合是容器、服务网格、多租户、微服务、不可变基础设施、Serverless 与声明式 API。
 
-入口 [Container](/docs/CS/Container/Container.md)：[Docker](/docs/CS/Container/Docker/Docker.md) 与容器网络，[K8s](/docs/CS/Container/k8s/K8s.md) 侧从 [Architecture](/docs/CS/Container/k8s/Architecture.md)、[Pod](/docs/CS/Container/k8s/Pod.md)、[scheduler](/docs/CS/Container/k8s/scheduler.md) 读到 [Service](/docs/CS/Container/k8s/Service.md)、[Ingress](/docs/CS/Container/k8s/Ingress.md)、[Storage](/docs/CS/Container/k8s/Storage.md)，再到 [Helm](/docs/CS/Container/k8s/Helm.md)、[client-go](/docs/CS/Container/k8s/client-go.md)、[containerd](/docs/CS/Container/k8s/containerd.md) 与 [Eviction](/docs/CS/Container/k8s/Eviction.md)。隔离与限额的真实机制回到内核：[namespace](/docs/CS/OS/Linux/namespace.md)、[cgroup](/docs/CS/OS/Linux/cgroup/README.md)、[LXC](/docs/CS/OS/Linux/LXC.md)；网格与入口见 [Istio](/docs/CS/Framework/Istio/Istio.md)、[Higress](/docs/CS/Framework/Higress/Higress.md)（后者已展开为枢纽 + 14 分册，含 [AI 网关](/docs/CS/Framework/Higress/AI_Gateway.md)、[插件体系](/docs/CS/Framework/Higress/Plugin_System.md)与五篇源码级的 [配置链路](/docs/CS/Framework/Higress/Config_Pipeline.md)、[源码地图](/docs/CS/Framework/Higress/Source_Map.md)）；云产品与事件规范见 [Cloud](/docs/CS/Cloud/Cloud.md)、[CloudEvent](/docs/CS/Cloud/CloudEvent.md)；无服务器形态见 [Serverless](/docs/CS/SE/Serverless.md)。安全与密码学基础独立成篇：[Security](/docs/CS/Security/Security.md)。
+入口 [Container](/docs/CS/Container/Container.md)：[Docker](/docs/CS/Container/Docker/Docker.md) 与容器网络，[K8s](/docs/CS/Container/k8s/K8s.md) 侧从 [Architecture](/docs/CS/Container/k8s/Architecture.md)、[Pod](/docs/CS/Container/k8s/Pod.md)、[scheduler](/docs/CS/Container/k8s/scheduler.md) 读到 [Service](/docs/CS/Container/k8s/Service.md)、[Ingress](/docs/CS/Container/k8s/Ingress.md)、[Storage](/docs/CS/Container/k8s/Storage.md)，再到 [Helm](/docs/CS/Container/k8s/Helm.md)、[client-go](/docs/CS/Container/k8s/client-go.md)、[containerd](/docs/CS/Container/k8s/containerd.md) 与 [Eviction](/docs/CS/Container/k8s/Eviction.md)。隔离与限额的真实机制回到内核：[namespace](/docs/CS/OS/Linux/namespace.md)、[cgroup](/docs/CS/OS/Linux/cgroup/README.md)、[LXC](/docs/CS/OS/Linux/LXC.md)；网格与入口见 [Istio](/docs/CS/Framework/Istio/Istio.md)、[Higress](/docs/CS/Framework/Higress/Higress.md)（后者已展开为枢纽 + 13 分册，含 [AI 网关](/docs/CS/Framework/Higress/AI_Gateway.md)、[插件体系](/docs/CS/Framework/Higress/Plugin.md)与五篇源码级的 [配置链路](/docs/CS/Framework/Higress/Config_Pipeline.md)、[源码地图](/docs/CS/Framework/Higress/Source_Map.md)）；云产品与事件规范见 [Cloud](/docs/CS/Cloud/Cloud.md)、[CloudEvent](/docs/CS/Cloud/CloudEvent.md)；无服务器形态见 [Serverless](/docs/CS/SE/Serverless.md)。安全与密码学基础独立成篇：[Security](/docs/CS/Security/Security.md)。
 
 ## Engineering and Frameworks
 

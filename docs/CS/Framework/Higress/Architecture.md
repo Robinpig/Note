@@ -18,10 +18,10 @@ Higress 的架构判断只有一句话：**它不重写数据面，也不重写�
 
 1. **监听**。`pkg/ingress` 下的各 controller 用 informer 机制监听 K8s 资源变化。监听范围由三个全局参数决定：`global.ingressClass`（默认 `higress`；设为 `nginx` 则监听 class 为 nginx **或为空**的 Ingress，设为空字符串则监听集群内全部 Ingress——这是平滑迁移期的关键开关）、`global.watchNamespace`（默认空，非空则只监听该命名空间，用于"每个业务命名空间一套独立网关"的多租户形态）、以及 `global.enableIstioAPI` / `global.enableGatewayAPI`（**默认都是 false**）。
 2. **翻译**。核心实现是 `pkg/ingress/config/ingress_config.go`。文档明确写出的产物有两类：自定义 CRD 变更"实现相关业务逻辑，比如生成 istio EnvoyFilter 等"（[自定义 CRD 开发指引](https://higress.ai/docs/latest/dev/customresourcedefinition/)），以及 Higress `WasmPlugin` → Istio `WasmPlugin` 的 `convertIstioWasmPlugin`。至于 Ingress 侧，[源码阅读指引](https://higress.ai/docs/latest/dev/code/)的表述是"把 Ingress 资源转换为 Istio 资源"，**并未逐字列出 VirtualService / DestinationRule**——把它们写进对照表是合理的推断，但不是文档原话。
-3. **汇聚**。`higress-core` 通过 **MCP over XDS** 把翻译结果同步给 pilot。这条通道在 Wasm 插件的下发链路里被明确画出（见 [Plugin System](/docs/CS/Framework/Higress/Plugin_System.md)）。
+3. **汇聚**。`higress-core` 通过 **MCP over XDS** 把翻译结果同步给 pilot。这条通道在 Wasm 插件的下发链路里被明确画出（见 [Plugin System](/docs/CS/Framework/Higress/Plugin.md)）。
 4. **下发**。pilot 生成 xDS，经 ADS/LDS 推给数据面。`global.onlyPushRouteCluster` 默认 **true**，即对 K8s 服务**只推送被路由关联到的 cluster**——副本数多、Service 多的集群里，这个默认值直接控制 Envoy 的内存与推送体量。
 
-**无损生效**是这条链路的收益，官方口径是"配置变更毫秒级生效且业务无感"，动机正是它诞生时要解决的问题：Tengine / nginx 的 reload 对长连接业务有损。需要区分两件事：路由配置的动态生效来自 xDS 增量推送；**Wasm 插件的热更新来自 ECDS 订阅**，机制不同、代价不同，展开在 [Wasm 插件体系](/docs/CS/Framework/Higress/Plugin_System.md) 与 [Wasm Development](/docs/CS/Framework/Higress/Wasm_Development.md)。
+**无损生效**是这条链路的收益，官方口径是"配置变更毫秒级生效且业务无感"，动机正是它诞生时要解决的问题：Tengine / nginx 的 reload 对长连接业务有损。需要区分两件事：路由配置的动态生效来自 xDS 增量推送；**Wasm 插件的热更新来自 ECDS 订阅**，机制不同、代价不同，展开在 [Wasm 插件体系](/docs/CS/Framework/Higress/Plugin.md) 与 [Wasm Development](/docs/CS/Framework/Higress/Plugin.md)。
 
 ## Custom CRDs
 
@@ -94,7 +94,7 @@ v2.2.5 依赖的内核版本不再是未决项——本地源码树的 `.gitmodu
 - [Source Map](/docs/CS/Framework/Higress/Source_Map.md)
 - [Service Registry Internals](/docs/CS/Framework/Higress/Service_Registry_Internals.md)
 - [Standalone and All-in-One](/docs/CS/Framework/Higress/Standalone_and_AllInOne.md)
-- [Plugin System](/docs/CS/Framework/Higress/Plugin_System.md)
+- [Plugin System](/docs/CS/Framework/Higress/Plugin.md)
 - [WasmPlugin](/docs/CS/Framework/Istio/WasmPlugin.md)
 - [Envoy](/docs/CS/Framework/Istio/Envoy.md)
 

@@ -123,7 +123,7 @@ proto 里**没有 `plural:` marker**，复数形式（mcpbridges / http2rpcs / w
 
 - [Config Pipeline](/docs/CS/Framework/Higress/Config_Pipeline.md)
 - [Service Registry Internals](/docs/CS/Framework/Higress/Service_Registry_Internals.md)
-- [Plugin System](/docs/CS/Framework/Higress/Plugin_System.md)
+- [Plugin System](/docs/CS/Framework/Higress/Plugin.md)
 - [Traffic Governance](/docs/CS/Framework/Higress/Traffic_Governance.md)
 - [Architecture](/docs/CS/Framework/Higress/Architecture.md)
 - [Higress](/docs/CS/Framework/Higress/Higress.md)

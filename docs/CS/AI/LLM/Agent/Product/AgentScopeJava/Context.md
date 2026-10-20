@@ -70,18 +70,10 @@ Builder 支持 `sessionId/userId/agentState/put/putAll/toolExecutionContext/tool
 
 ## Context Construction
 
-工作区材料每次 call 读取一次，由最终 Context 构建器分层组织，**不把全部文件直接追加进 System**：
+工作区材料**每次 call 读取一次**，由最终 Context 构建器分层组织，**不把全部文件直接追加进 System**——`AGENTS.md` 进 `project_rules`、`MEMORY.md` / `knowledge` / `additionalContextFile` 以参考消息（`HARNESS_CONTEXT`）形式注入，预算不足时后三者可被省略（只有 `additionalContextFile` 是必需材料）。
 
-| 材料 | 模型中的位置 | 预算行为 |
-| :--- | :--- | :--- |
-| `AGENTS.md` | System / `project_rules` | 不直接淘汰，计入最终预算 |
-| 工作原则、环境信息 | System / `working_principles`、`environment` | 计入最终预算 |
-| `MEMORY.md` | USER 参考消息 / `HARNESS_CONTEXT`，`kind=memory` | 准备时可截断，最终预算不足时可省略 |
-| `knowledge` 入口及路径索引 | USER / `HARNESS_CONTEXT`，`kind=knowledge` | 可因最终预算省略 |
-| `additionalContextFile` | USER / `HARNESS_CONTEXT`，`kind=additional` | **必需材料，不能任意淘汰** |
+各材料的落点、预算行为与 `maxContextTokens`（默认 **8000**，只用于工作区材料准备，不代表最终模型输入上限）的完整对照表，见 [工作区分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Workspace.md) 的 Material Loading And Budget。几条 Context 层独有、值得记住的细节：
 
-- `maxContextTokens` 默认 **8000**，只用于工作区材料准备，**不代表**最终模型输入上限；
-- 最终预算还包括 System、历史、状态和工具 Schema，仍超限则**拒绝请求**；
 - `MEMORY.md` 在记忆工具与 hooks 都关闭时不加载；
 - 知识目录只加载入口和索引，其余文件由模型按需读取；
 - 同一次 call 内文件变化不自动刷新，下一次 call 重新加载。

@@ -4,17 +4,17 @@
 
 这个目录按**「机制 → 产品 → 演进」**三层组织。这个划分不是按篇幅或时间，而是按**读者要回答的问题**：想搞懂原理看 Theory，想选一个工具干活看 Product，想知道这层架构往哪走看 Practice。
 
-| 分层 | 装什么 | 入口 |
-| :--- | :--- | :--- |
-| Theory | 机制与概念：Agent 四组件、经典范式、Harness 工程、权限与沙箱、Skill 规范、上下文压缩 | [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) |
-| Product | 具体的 Agent 产品与框架实现 | [Codex 源码剖析](/docs/CS/AI/LLM/Agent/Product/Codex/Codex.md) / [Hermes 源码剖析](/docs/CS/AI/LLM/Agent/Product/Hermes/Hermes.md) |
-| Practice | 演进方向与开发方式的自变化 | [Self-Evolving](/docs/CS/AI/LLM/Agent/Practice/Self-Evolving.md) |
+| 分层 | 装什么 | 
+| :--- | :--- |  
+| Theory | 机制与概念：Agent 四组件、经典范式、Harness 工程、权限与沙箱、Skill 规范、上下文压缩 |  
+| Product | 具体的 Agent 产品与框架实现 |  
+| Practice | 演进方向与开发方式的自变化 | 
 
 ## How the Six Theory Articles Divide Responsibilities
 
 这几篇的关系是**从抽象到具体**，不是并列：
 
-**Agent** 是总纲。它给出最核心的那个定义——**AI Agent 是一个能调用工具的循环系统**，以及四组件（Loop / Tools / Memory / Harness）。它的 ReAct 循环四步（Reason / Act / Observe / 回环）是所有 Agent 表面不同、底层一致的那层机制。常见的 Agent 模式（ReAct、Plan-and-Execute、Multi-Agent、SubAgent）也在这篇。
+**[Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md)** 是总纲。它给出最核心的那个定义——**AI Agent 是一个能调用工具的循环系统**，以及四组件（Loop / Tools / Memory / Harness）。它的 ReAct 循环四步（Reason / Act / Observe / 回环）是所有 Agent 表面不同、底层一致的那层机制。常见的 Agent 模式（ReAct、Plan-and-Execute、Multi-Agent、SubAgent）也在这篇。
 
 **Paradigm** 回答循环内部的组织方式问题：同样的 Reason-Act-Observe 四步，ReAct 每步重新决策（走一步看一步）、Plan-and-Solve 先一次性产出完整计划再严格执行（三思而后行）、Reflection 在任务完成后追加"执行-反思-优化"的自我批判迭代。三种范式各自的机制、提示词设计、代价与选型都在这篇。它的落点是一个 **TypeScript 最小 Agent Loop**——单文件、零第三方依赖，把提示词协议、正则解析、history 回灌、Finish 收敛、maxSteps 安全阀全部写进一个十几行的循环里；框架做的事，就是在这十几行上加重试、观测、权限与压缩，所以想看懂框架的抽象层究竟加在哪，先读这十几行。
 
@@ -70,7 +70,7 @@
 
 ## Links
 
-- [LLM 总纲](/docs/CS/AI/LLM/LLM.md)
+- [LLM](/docs/CS/AI/LLM/LLM.md)
 - [模型总览](/docs/CS/AI/LLM/Model/Overview.md)
 - [Paradigm](/docs/CS/AI/LLM/Agent/Theory/Paradigm.md)
 - [Permission](/docs/CS/AI/LLM/Agent/Theory/Permission.md)

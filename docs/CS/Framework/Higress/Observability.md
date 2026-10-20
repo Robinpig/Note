@@ -46,7 +46,7 @@ tracing:
   # 或 opentelemetry: { service, port }
 ```
 
-后端支持 **Skywalking、Zipkin、OpenTelemetry** 三种，官方注意事项原文是"**不能同时设置，只有一个配置能生效**"。服务名的写法与服务列表 FQDN 一致（如 `my-server.dns`），也就是**追踪后端自己也要先注册成服务来源**（原因见 [Wasm Development](/docs/CS/Framework/Higress/Wasm_Development.md) 的 cluster 寻址）。另有 Helm 级参数 `higress-core.pilot.traceSampling`（默认 `1`，页面注释为 1.0 即 100%）——**两处都能碰采样，配置时要以 `higress-config` 的 `tracing.sampling` 为运行时准，Helm 值只在安装 / 升级时生效**。Skywalking 单独有一组 values：`higress-core.skywalking.enabled`（默认 false）、`service.address`、`service.port`（默认 11800）。
+后端支持 **Skywalking、Zipkin、OpenTelemetry** 三种，官方注意事项原文是"**不能同时设置，只有一个配置能生效**"。服务名的写法与服务列表 FQDN 一致（如 `my-server.dns`），也就是**追踪后端自己也要先注册成服务来源**（原因见 [Wasm Development](/docs/CS/Framework/Higress/Plugin.md) 的 cluster 寻址）。另有 Helm 级参数 `higress-core.pilot.traceSampling`（默认 `1`，页面注释为 1.0 即 100%）——**两处都能碰采样，配置时要以 `higress-config` 的 `tracing.sampling` 为运行时准，Helm 值只在安装 / 升级时生效**。Skywalking 单独有一组 values：`higress-core.skywalking.enabled`（默认 false）、`service.address`、`service.port`（默认 11800）。
 
 追踪的通用原理与 Envoy 侧配置在 [Observability](/docs/CS/Framework/Istio/Observability.md)（Istio 子树），本页只记 Higress 的入口与默认值。
 
@@ -64,7 +64,7 @@ tracing:
 
 - [AI Gateway](/docs/CS/Framework/Higress/AI_Gateway.md)
 - [Deployment and Ops](/docs/CS/Framework/Higress/Deployment_and_Ops.md)
-- [Wasm Development](/docs/CS/Framework/Higress/Wasm_Development.md)
+- [Wasm Development](/docs/CS/Framework/Higress/Plugin.md)
 - [Observability](/docs/CS/Framework/Istio/Observability.md)
 - [Envoy](/docs/CS/Framework/Istio/Envoy.md)
 - [Higress](/docs/CS/Framework/Higress/Higress.md)

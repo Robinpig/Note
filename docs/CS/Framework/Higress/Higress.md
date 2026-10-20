@@ -13,7 +13,7 @@ Higress 是阿里巴巴开源、已进入 CNCF Sandbox 的云原生 API 网关�
 
 **一、先问"这个能力在哪一层"，再问"怎么配"。** 同一个需求可能落在四个完全不同的层：Ingress annotation、Higress 自有 CRD（`McpBridge` / `Http2Rpc`）、`WasmPlugin` 的 YAML、或者**只在控制台路由层有入口**。最典型的错位是模型级 Fallback：`ai-proxy` 里没有这个字段（它的 `failover` 摘的是同一厂商的 apiToken，`retryOnFailure` 只支持非流式重试），真正的降级要到控制台"AI 路由管理 → 降级配置"去配；同理，四层 TCP 路由走的是 Gateway API 的 `TCPRoute` 而不是任何 annotation，且受 `global.enableGatewayAPI`（默认 false）与版本区间两条约束。判错层，配置就静默不生效。
 
-**二、插件的实际行为由 phase + priority + 作用域三者决定，不由插件名决定。** `ai-cache` 跑在**认证阶段 priority 10**，而 `ai-token-ratelimit`（600）、`ai-quota`（750）跑在**默认阶段**——所以缓存命中的请求可能根本走不到限流与配额；`frontend-gray` 名字在"转换"分类里，实际也在认证阶段；`oidc` / `opa` / `ext-auth` 三个认证插件**不走** `consumers` + `allow` + `global_auth` 模型；`opa` 的字段是 camelCase 而邻居都是 snake_case。完整的阶段与优先级表在 [Plugin System](/docs/CS/Framework/Higress/Plugin_System.md)。
+**二、插件的实际行为由 phase + priority + 作用域三者决定，不由插件名决定。** `ai-cache` 跑在**认证阶段 priority 10**，而 `ai-token-ratelimit`（600）、`ai-quota`（750）跑在**默认阶段**——所以缓存命中的请求可能根本走不到限流与配额；`frontend-gray` 名字在"转换"分类里，实际也在认证阶段；`oidc` / `opa` / `ext-auth` 三个认证插件**不走** `consumers` + `allow` + `global_auth` 模型；`opa` 的字段是 camelCase 而邻居都是 snake_case。完整的阶段与优先级表在 [插件体系](/docs/CS/Framework/Higress/Plugin.md)。
 
 **三、这个题目的二手描述普遍比官方文档乐观，而官方文档又比源码乐观。** 前一层已在本子树逐条清掉：`ai-security-guard` 的 "block / mask / audit 三种处置动作"（实际只有 `checkRequest` / `checkResponse` + `denyCode` / `denyMessage`，脱敏属于另一个插件 `ai-data-masking`）、"WAF 依赖 ModSecurity 引擎"（实现底座是 Coraza）、"多 API Key 轮询"（文档原文是**随机**）、指标端口 15090、"50+ 官方插件"（插件市场页自标 41）、"本地限流 100 QPS × 3 副本 ≈ 300 QPS"（两个限流插件正文都没有副本数表述）。补上源码这一层之后，还要加三条**是文档本身不准**的：`hgctl config` 其实存在（是抓 xDS 的 `all/cluster/route/...`，文档站整段没提，反而让人误以为 "config" 指的是 profile / install 那一组）；"两个注解前缀等价"只对走 ASAP 解析的能力成立且 **nginx 前缀优先**（`destination`、`route-limit-*`、`header-control-*`、`match-*` 只认 `higress.io`）；文档的 41 款插件**并不都在 wasm-go**——认证基础族在 `plugins/wasm-cpp/`、`ai-data-masking` 在 `plugins/wasm-rust/`，而 wasm-go 的 53 个目录里约 20 个没有文档页。
 
@@ -23,7 +23,7 @@ Higress 是阿里巴巴开源、已进入 CNCF Sandbox 的云原生 API 网关�
 
 理解[架构与控制面](/docs/CS/Framework/Higress/Architecture.md)是所有判断的前提：Higress 的控制面**不自己实现 xDS**，而是把 Ingress / Gateway API / 自有 CRD / annotation 翻译成一整套 Istio 资源，交给一个 istiod 的 fork 下发。由此推出两个结论——它为什么能同时吃四种配置入口，以及为什么内置的 `istio` 不等于独立安装的 Istio。数据面那侧的机制细节交给 [Envoy](/docs/CS/Framework/Istio/Envoy.md)，xDS 与 Wasm 的通用原理交给 [WasmPlugin](/docs/CS/Framework/Istio/WasmPlugin.md)，本子树不重述。
 
-配置入口确定后，扩展能力看[插件体系](/docs/CS/Framework/Higress/Plugin_System.md)：作用域在控制台与 CRD 侧是**两套口径**（三级 vs 四级），热更新靠 ECDS 订阅而非重启，官方插件以 OCI 镜像分发。要自己写插件（Go SDK 的真实 API 名、外部 HTTP / Redis 调用、Go 1.24 编译换代）在 [Wasm Development](/docs/CS/Framework/Higress/Wasm_Development.md)。
+配置入口确定后，扩展能力看[插件体系](/docs/CS/Framework/Higress/Plugin.md)：作用域在控制台与 CRD 侧是**两套口径**（三级 vs 四级），热更新靠 ECDS 订阅而非重启，官方插件以 OCI 镜像分发；自己写插件（Go SDK 的真实 API 名、外部 HTTP / Redis 调用、Go 1.24 编译换代）也在同一篇的 Wasm 开发小节。
 
 流量与路由的日常操作集中在[Traffic Governance](/docs/CS/Framework/Higress/Traffic_Governance.md)：两个限流插件的配置面**完全不对称**，灰度有 annotation / 插件 / Kruise Rollout 三条路，nginx 注解兼容矩阵的实际分档是"兼容 / 部分兼容 / Higress 扩展"三档。后端服务从哪来、HTTP 怎么转 Dubbo，在 [Service Discovery and RPC](/docs/CS/Framework/Higress/Service_Discovery.md)。
 
@@ -38,8 +38,8 @@ Higress 是阿里巴巴开源、已进入 CNCF Sandbox 的云原生 API 网关�
               枢纽 ─────┤                ├─ Service Registry Internals
                         │                ├─ Standalone and All-in-One
                         │                └─ Certificates and ACME
-                        ├─ Plugin System ─┬─ Wasm Development
-                        │                 └─ AI Gateway
+                        ├─ Plugin
+                        ├─ AI Gateway
                         ├─ Traffic Governance ── Service Discovery
                         ├─ Security and Auth
                         └─ Observability ── Deployment and Ops

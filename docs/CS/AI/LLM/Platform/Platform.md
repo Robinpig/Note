@@ -77,7 +77,7 @@ n8n、Make、Zapier Agents、Gumloop、Relay.app、Lindy、Relevance AI、Voicef
 
 ### Category Four: Code Framework Faction (not a product, but building blocks)
 
-[LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md)、CrewAI、OpenAI Agents SDK、Claude Agent SDK、[Pydantic AI](/docs/CS/AI/LLM/PydanticAI.md)。
+[LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md)、CrewAI、OpenAI Agents SDK、Claude Agent SDK、[Pydantic AI](/docs/CS/AI/LLM/LangTool/PydanticAI.md)。
 
 这一派内部的层次关系（Harness / Framework / Runtime / Platform）与选型路径，见 [LLM 应用开发框架](/docs/CS/AI/LangTools.md)。
 

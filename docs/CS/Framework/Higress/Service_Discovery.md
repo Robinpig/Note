@@ -130,7 +130,7 @@ spec:
 
 ## Consuming Discovery from Plugins
 
-服务发现这套体系还有一层副作用值得单独指出：**Wasm 插件里发起的 HTTP / Redis 外调，寻址单位是 Envoy cluster 名，不是 URL**。各种来源生成的 cluster 名规则（`outbound|<Port>|<Version>|<FQDN>` 家族）与由此产生的限制，展开在 [Wasm Development](/docs/CS/Framework/Higress/Wasm_Development.md)。这条链解释了为什么限流插件的 Redis 必须先注册成服务来源、为什么 `redis.static` 不写端口会连到 80。
+服务发现这套体系还有一层副作用值得单独指出：**Wasm 插件里发起的 HTTP / Redis 外调，寻址单位是 Envoy cluster 名，不是 URL**。各种来源生成的 cluster 名规则（`outbound|<Port>|<Version>|<FQDN>` 家族）与由此产生的限制，展开在 [Wasm Development](/docs/CS/Framework/Higress/Plugin.md)。这条链解释了为什么限流插件的 Redis 必须先注册成服务来源、为什么 `redis.static` 不写端口会连到 80。
 
 ## Unverified
 
@@ -140,7 +140,7 @@ spec:
 
 - [Architecture](/docs/CS/Framework/Higress/Architecture.md)
 - [Traffic Governance](/docs/CS/Framework/Higress/Traffic_Governance.md)
-- [Wasm Development](/docs/CS/Framework/Higress/Wasm_Development.md)
+- [Wasm Development](/docs/CS/Framework/Higress/Plugin.md)
 - [Nacos](/docs/CS/Framework/nacos/Nacos.md)
 - [Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md)
 - [Higress](/docs/CS/Framework/Higress/Higress.md)

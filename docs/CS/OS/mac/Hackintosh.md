@@ -25,7 +25,12 @@
 | [OpenCore Configurator](https://github.com/notiflux/OpenCore-Configurator) | Mac                 |
 | [ProperTree](https://github.com/corpnewt/ProperTree)                       | Mac, Linux, Windows |
 | [OpenCore Auxiliary Tools](https://github.com/ic005k/OCAuxiliaryTools)     | Mac, Linux, Windows |
+| [OC Gen-X](https://github.com/Pavo-IM/OC-Gen-X)                            | Mac, Linux, Windows |
+| [OpenCore Sanity Checker](https://opencore.slowgeek.com/)                  | Web |
 
+前四个是 `config.plist` 编辑器；后两个是辅助工具：OC Gen-X 用于生成 EFI 骨架，Sanity Checker 用于上传 `config.plist` 做规则检查（能查出大部分低级配置错误）。
+
+在虚拟机里跑 macOS 走的是另一条路，见 [Virtualization](/docs/CS/OS/mac/Virtualization.md)。
 
 
 > [!WARNING]
@@ -190,6 +195,10 @@ pmset -g custom
 ## Links
 
 - [MacOS](/docs/CS/OS/mac/mac.md)
+- [Virtualization](/docs/CS/OS/mac/Virtualization.md)
+- [Boot](/docs/CS/OS/mac/Boot.md)
+- [Darwin](/docs/CS/OS/mac/Darwin.md)
+- [Security](/docs/CS/OS/mac/Security.md)
 
 
 ## References

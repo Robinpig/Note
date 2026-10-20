@@ -64,7 +64,7 @@ CR 实例的持久层二选一（`pkg/apiserver/apiserver.go:188` NewFileREST / 
 | `--use-builtin-nacos` | 真实存在（`:104`） | 关；置位则 profile 含 nacos（而 `.env` 默认就含） |
 | `-r/--rerun`、`-a/--auto-start`、`-s/--storage`、`--nacos-ns`（默认 `higress-system`）、`--nacos-username/-password`、`--nacos-port/--nacos-console-port(8888)/--nacos-service-port(8848)`、`--use-plugin-server/--no-plugin-server` | 真实存在，**文档未列** | 见 `compose/.env` |
 
-它的实际动作是：解析参数 → **整文件重写 `compose/.env`**（`:669` 起，含 COMPOSE_PROFILES / CONFIG_STORAGE / NACOS_* / 全部镜像 tag / `WASM_PLUGIN_URL_PATTERN` / `MCP_SERVER_WASM_URL` / 观测 tag / 四个端口）→ 跑 initializer 容器 → 写 `.configured` → `-a` 时调 `startup.sh`。开 plugin-server 时写入的是模板串 `http://plugin-server:8080/plugins/${name}/${version}/plugin.wasm`，与主仓侧的内置插件镜像地址替换是同一个占位符约定（见 [Plugin System](/docs/CS/Framework/Higress/Plugin_System.md)）。
+它的实际动作是：解析参数 → **整文件重写 `compose/.env`**（`:669` 起，含 COMPOSE_PROFILES / CONFIG_STORAGE / NACOS_* / 全部镜像 tag / `WASM_PLUGIN_URL_PATTERN` / `MCP_SERVER_WASM_URL` / 观测 tag / 四个端口）→ 跑 initializer 容器 → 写 `.configured` → `-a` 时调 `startup.sh`。开 plugin-server 时写入的是模板串 `http://plugin-server:8080/plugins/${name}/${version}/plugin.wasm`，与主仓侧的内置插件镜像地址替换是同一个占位符约定（见 [Plugin System](/docs/CS/Framework/Higress/Plugin.md)）。
 
 一个容易混的点：本仓也有 `src/get-higress.sh`（279 行），但它与主仓的 `get-higress.sh` **同名不同物**——本仓的是安装器，只认 `-h` 与 `-u/--update`（`:38/:42`），VERSION 为空时去 GitHub releases 取最新 tag（`:179-185`）再下载 tar 包解包（`:193`），平台白名单 darwin / linux / windows × amd64 / arm64；**上面那串端口与凭据参数它全不吃**。文档若不区分两仓两个同名脚本，读者会把参数用到错的脚本上。
 

@@ -663,7 +663,7 @@ LangGraph 把人工介入做成运行时原语，而不是让应用层自己轮�
 - [LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md)
 - [Langflow](/docs/CS/AI/LLM/LangTool/Langflow.md)
 - [LangTools](/docs/CS/AI/LangTools.md)
-- [Pydantic AI](/docs/CS/AI/LLM/PydanticAI.md)
+- [Pydantic AI](/docs/CS/AI/LLM/LangTool/PydanticAI.md)
 - [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md)
 - [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md)
 

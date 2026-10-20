@@ -1,6 +1,6 @@
 ## Introduction
 
-Higress 的"安全网关"角色由三块拼成：认证鉴权插件族、防护插件族、证书与传输安全。这一页最容易写错的不是某个字段，而是**归类**——"所有认证插件都用同一套 consumer 模型"这句话会被官方文档直接证伪（六个走、三个不走），"WAF 依赖 ModSecurity"也不成立（实现底座是 Coraza）。插件的阶段与优先级全表在 [Plugin System](/docs/CS/Framework/Higress/Plugin_System.md)，本页只解释这些顺序造成的安全后果。
+Higress 的"安全网关"角色由三块拼成：认证鉴权插件族、防护插件族、证书与传输安全。这一页最容易写错的不是某个字段，而是**归类**——"所有认证插件都用同一套 consumer 模型"这句话会被官方文档直接证伪（六个走、三个不走），"WAF 依赖 ModSecurity"也不成立（实现底座是 Coraza）。插件的阶段与优先级全表在 [Plugin System](/docs/CS/Framework/Higress/Plugin.md)，本页只解释这些顺序造成的安全后果。
 
 ## Consumer Model
 
@@ -105,7 +105,7 @@ Helm 侧等价开关是 `higress-core.controller.automaticHttps.enabled`（默�
 
 ## Links
 
-- [Plugin System](/docs/CS/Framework/Higress/Plugin_System.md)
+- [Plugin System](/docs/CS/Framework/Higress/Plugin.md)
 - [Certificates and ACME](/docs/CS/Framework/Higress/Certificates_and_ACME.md)
 - [Service Registry Internals](/docs/CS/Framework/Higress/Service_Registry_Internals.md)
 - [Traffic Governance](/docs/CS/Framework/Higress/Traffic_Governance.md)

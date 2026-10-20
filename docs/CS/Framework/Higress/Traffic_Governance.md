@@ -16,7 +16,7 @@
 
 集群版才是"全局一致"的那个，官方定位逐字是"适用于需要跨多个 Higress Gateway 实例进行全局一致速率限制的场景"。9 个 key 维度：`limit_by_header` / `limit_by_param` / `limit_by_consumer`（按 consumer 名，无需实际值，写成 `''`）/ `limit_by_cookie`，以及逐键分别计数的 `limit_by_per_header` / `per_param` / `per_consumer` / `per_cookie` / `per_ip`——**不存在裸 `limit_by_ip`**，IP 维度只有 per_ip，取值 `from-header-<名>`（如 `from-header-x-forwarded-for`）或 `from-remote-addr`。`limit_keys[].key` 支持 `regexp:^d.*`、`*`、`1.1.1.0/24`、`0.0.0.0/0`。两条顺序规则：`global_threshold` 与 `rule_items` 二选一；**`rule_items` 按排列顺序匹配，命中第一条后后续规则被忽略**。
 
-Redis 侧有两个真实踩坑点。第一，`redis.service_name` 要求**带服务类型的完整 FQDN**（`my-redis.dns`、`redis.my-ns.svc.cluster.local`，官方示例一律写 `redis.static`）——Redis 必须**先作为服务来源注册进 Higress**才能被限流插件用，不是任意网络地址（原因见 [Wasm Development](/docs/CS/Framework/Higress/Wasm_Development.md) 的 cluster 寻址）。第二，**`service_port` 的默认值按服务类型分叉：static 类型默认 80，其它服务类型默认 6379**，所以照抄 `redis.static` 而不写端口，连的是 80。
+Redis 侧有两个真实踩坑点。第一，`redis.service_name` 要求**带服务类型的完整 FQDN**（`my-redis.dns`、`redis.my-ns.svc.cluster.local`，官方示例一律写 `redis.static`）——Redis 必须**先作为服务来源注册进 Higress**才能被限流插件用，不是任意网络地址（原因见 [Wasm Development](/docs/CS/Framework/Higress/Plugin.md) 的 cluster 寻址）。第二，**`service_port` 的默认值按服务类型分叉：static 类型默认 80，其它服务类型默认 6379**，所以照抄 `redis.static` 而不写端口，连的是 80。
 
 > [!WARNING]
 > 两条经常被写成事实、但**官方正文里找不到**的说法：① "本地限流配 100 QPS、3 副本实际放行约 300 QPS"——两个限流插件正文都没有副本数、倍数或放大的任何表述，"多副本线性放大"是推论不是文档结论；② `key-rate-limit` 的"本地 / 单实例"定性**只出现在文档索引条目名《基于 Key 的本地限流》里**，页面正文没有出现"本地"二字。真要写"每实例限流"，官方口径来自另外三个 annotation：`higress.io/route-limit-rps` / `higress.io/route-limit-rpm` 逐字写着"该 Ingress 定义的路由在**每个网关实例上**每秒/每分钟最大请求次数"，且瞬时最大值要乘 `higress.io/route-limit-burst-multiplier`（**默认 5**）。这个默认 5 倍的瞬时放大，比"×副本数"更容易被读者误算。
@@ -112,7 +112,7 @@ Higress 能从 ingress-nginx 平滑迁移，靠的就是这张表——[兼容�
 ## Links
 
 - [Service Discovery](/docs/CS/Framework/Higress/Service_Discovery.md)
-- [Plugin System](/docs/CS/Framework/Higress/Plugin_System.md)
+- [Plugin System](/docs/CS/Framework/Higress/Plugin.md)
 - [AI Gateway](/docs/CS/Framework/Higress/AI_Gateway.md)
 - [Nginx Compare](/docs/CS/CN/nginx/compare.md)
 - [TrafficManagement](/docs/CS/Framework/Istio/TrafficManagement.md)

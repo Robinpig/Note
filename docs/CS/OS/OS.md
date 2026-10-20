@@ -1,263 +1,321 @@
 ## Introduction
 
-There is a body of software, in fact, that is responsible for making it easy to run programs, allowing programs to share memory, enabling programs to interact with devices, and other fun stuff like that. 
-That body of software is called the operating system (OS), as it is in charge of making sure the system operates correctly and efficiently in an easy-to-use manner.
-An operating system (OS) is a software program that serves as the interface between other applications and the hardware on a computer or mobile device.
+操作系统（Operating System，简称 OS）是计算机系统中最核心的软件层，位于硬件与应用程序之间，负责**管理硬件资源**、**提供抽象接口**、**隔离并发执行**和**保障系统安全**。没有操作系统，每个应用都必须直接面向裸机编程，不仅效率极低，也无法安全地共享硬件。
 
+从用户视角看，操作系统让"运行程序"变得简单——你只需双击图标或输入命令，操作系统便会替你完成加载代码、分配内存、调度 CPU、读写文件、收发网络数据等一整套底层操作。从程序员视角看，操作系统暴露了一组**系统调用接口**（system call），应用通过这些接口请求内核服务，而不必关心硬件的具体差异。
 
-操作系统具备的功能
+概括起来，操作系统的核心使命是：
 
-- Abstract
-- Multiplex, sharing and isolation
-- Security
-- Performance
+- **抽象（Abstraction）**：将物理硬件抽象成统一的虚拟接口——CPU 被抽象为进程，内存被抽象为地址空间，磁盘被抽象为文件系统。上层应用无需了解物理细节。
+- **复用与隔离（Multiplexing & Isolation）**：让多个程序看起来"同时"运行在同一台机器上，且互不干扰。CPU 通过时分复用实现并发，内存通过地址空间隔离实现保护。
+- **安全（Security）**：在用户态与内核态之间建立边界，限制应用的越权操作；在进程之间建立访问控制，防止恶意或错误的程序破坏其他进程的数据。
+- **性能（Performance）**：以合理的开销实现上述目标——虚拟化不能太慢，隔离不能太贵，抽象不能泄漏过多底层细节。
 
-### Implementation Strategies
+这四条使命不是并列关系，而是两两冲突的：抽象越彻底，性能往往越差；隔离越强，跨越边界的代价越高；功能越集中在内核，出一次错的爆炸半径就越大。**操作系统设计的全部艺术，就是在这些冲突之间找平衡点**。
 
-Currently, there are two main paradigms on which the implementation of operating systems is based:
+本文按一条因果链推进：先摆出贯穿始终的**三条设计张力**，再看 OS 用来兑现这些承诺的**机制**（虚拟化与控制权），然后看这些机制在代码里的**结构形态**（宏内核 / 微内核 / 外核），接着是**资源的分派**、**并发的组织方式**、**隔离粒度的上移**（容器），以及如何**度量这一切的代价**，最后用**历史**说明这些张力在真实系统里各自被怎么取舍。
 
-1. Microkernels — In these, only the most elementary functions are implemented directly in a central kernel — the microkernel.
-   All other functions are delegated to autonomous processes that communicate with the central kernel via clearly defined communication interfaces — for example, various filesystems, memory management, and so on.
-   (Of course, the most elementary level of memory management that controls communication with the system itself is in the microkernel. However, handling on the system call level is implemented in external servers.)
-   Theoretically, this is a very elegant approach because the individual parts are clearly segregated from each other, and this forces programmers to use ‘‘clean‘‘ programming techniques.
-   Other benefits of this approach are dynamic extensibility and the ability to swap important components at run time.
-   However, owing to the additional CPU time needed to support complex communication between the components, microkernels have not really established themselves in practice although they have been the subject of active and varied research for some time now.
-2. Monolithic Kernels — They are the alternative, traditional concept.
-   Here, the entire code of the kernel — including all its subsystems such as memory management, filesystems, or device drivers — is packed into a single file.
-   Each function has access to all other parts of the kernel; this can result in elaborately nested source code if programming is not done with great care.
+---
 
-The main differences between the Microkernel and Monolithic Kernel are as follows:
+## Three Design Tensions
 
-| Features                                       | Microkernel                                                  | Monolithic Kernel                                            |
-| :--------------------------------------------- | :----------------------------------------------------------- | :----------------------------------------------------------- |
-| **Definition**                                 | It is a kernel type that implements an operating system by providing low-level address space management, IPC, and thread management. | It is a type of kernel in which the complete operating system runs at the kernel speed. |
-| **Size**                                       | It is smaller in size.                                       | It is bigger than the microkernel.                           |
-| **Speed**                                      | Its process execution is slower.                             | Its process execution is faster.                             |
-| **Basic**                                      | It implements kernel and user services in different address spaces. | It implements both user and kernel services in the same address space. |
-| **Security**                                   | It is more secure than the monolithic kernel.                | It is less secure than the microkernel.                      |
-| **Stability**                                  | A single process failure does not affect other processes.    | In a monolithic kernel, if a service fails, the entire system fails. |
-| **Extendible**                                 | It is easy to extend.                                        | It is hard to extend.                                        |
-| **Code**                                       | More code is necessary to write a microkernel.               | Less code is necessary to write a monolithic kernel.         |
-| **Inter-Process**                              | Communication Microkernels use the messaging queues to achieve IPC. | The monolithic kernels use signals and sockets to achieve IPC. |
-| **Maintainability It is easily maintainable.** | Maintenance takes extra time and resources.                  |                                                              |
-| **Debug**                                      | It is easy to debug.                                         | It is hard to debug.                                         |
-| **Example**                                    | Symbian, L4Linux, K42, Mac OS X, PikeOS, HURD, etc.          | Linux, BSDs, Solaris, OS-9, DOS, OpenVMS, etc.               |
+理解任何一个操作系统决策，几乎都可以还原成下面三个问题之一。它们是本文的主线，后面每一节都会回到这里。
 
+### Abstraction vs. Power
 
+操作系统靠抽象把硬件变得可编程：CPU 变成进程，内存变成地址空间，磁盘变成文件。抽象越彻底，应用越好写、越可移植；代价是硬件的真实能力被通用接口"藏"了起来——一个数据库很清楚自己的访问模式，却只能透过通用页缓存和通用文件系统去碰磁盘；一个网络服务知道自己的报文生命周期，却只能透过通用 socket 缓冲去收发。
 
-Because, at the moment, the performance of monolithic kernels is still greater than that of microkernels, Linux was and still is implemented according to this paradigm.
-However, one major innovation has been introduced.
-Modules with kernel code that can be inserted or removed while the system is up-and-running support the dynamic addition of a whole range of functions to the kernel, thus compensating for some of the disadvantages of monolithic kernels.
-This is assisted by elaborate means of communication between the kernel and userland that allows for implementing hotplugging and dynamic loading of modules.
+因此有了那句箴言 *Don't hide power*：抽象的职责是**暴露能力**，而不只是**遮蔽差异**。这条张力在宏内核与外核之争中反复出现——前者用一套通用抽象覆盖所有人，后者干脆只做保护、把抽象还给应用。
+
+### Isolation vs. Cost
+
+隔离必须有硬件边界支撑，而每一次跨越边界都有代价：用户态到内核态要陷入、进程之间要切页表、地址空间之间要传消息而不是传指针。边界划得越细（每个文件系统、每个驱动各自一个进程），单个组件出错的爆炸半径越小，但完成一件普通的事要跨越的边界就越多。
+
+宏内核与微内核的分歧本质上就是**这条边界划在哪里**：是划在"内核 vs. 用户"这一处，还是划在内核内部的每个组件之间。容器技术则是这条张力的另一个侧面——它把隔离的粒度从进程抬到整个应用，代价是共享同一个内核。
+
+### Policy vs. Mechanism
+
+操作系统应该替应用做决策，还是只提供机制让应用自己决策？通用策略（比如"用 LRU 近似换页""用 CFS 公平分时间片"）让大多数程序在不做任何调优的前提下工作良好；但总有一类应用比内核更了解自己，它们需要的是**能覆盖策略的口子**——`mmap` 让数据库自己管缓存、`io_uring` 让网络服务自己管提交队列、`O_DIRECT` 让存储引擎绕开页缓存。
+
+外核（Exokernel）把这一条推到极致：内核只回答"这个资源属于谁"，完全不回答"这个资源该怎么用"。而可加载模块、eBPF、`/sys` 可调项则是宏内核在不动架构的前提下给出的妥协答案。
+
+---
 
 ## Virtualization
 
-The primary way the OS does this is through a general technique that we call virtualization.
-That is, the OS takes a physical resource (such as the processor, or memory, or a disk) and transforms it into a more general, powerful, and easy-to-use virtual form of itself.
-Thus, we sometimes refer to the operating system as a virtual machine.
+操作系统兑现上述承诺的核心手段是**虚拟化**：把物理资源转换为更通用、更强大、更易用的虚拟形态。虚拟化作用在三类资源上——**CPU** 被虚拟成进程、**内存** 被虚拟成地址空间（见 [memory](/docs/CS/OS/memory.md)）、**磁盘** 被虚拟成文件（见 [file](/docs/CS/OS/file.md)）。
 
-In order to virtualize the CPU, the operating system needs to somehow share the physical CPU among many jobs running seemingly at the same time.
-The basic idea is simple: run one process for a little while, then run another one, and so forth. By time sharing the CPU in this manner, virtualization is achieved.
+本节以 CPU 虚拟化为主线展开，因为它是三者中最先要解决的问题：在让多个程序共享 CPU 之前，操作系统必须先解决**自己怎么拿回 CPU**。虚拟内存与文件系统分别在各自的子系统笔记里展开。
 
-There are a few challenges, however, in building such virtualization machinery.
+### CPU Virtualization
 
-- The first is performance how can we implement virtualization without adding excessive overhead to the system?
-- The second is control: how can we run processes efficiently while retaining control over the CPU?
+CPU 虚拟化的核心挑战是**时分复用**：让一个物理 CPU 在多个进程之间快速切换，使得每个进程都以为自己独占 CPU。基本思路很简单——让进程 A 跑一小段时间，切换到进程 B，再切回 A，如此往复。人类的感知阈值约为 100ms，而现代操作系统的时间片通常只有几毫秒，所以用户感觉是"同时运行"。
 
-> THE CRUX:
-> HOW TO EFFICIENTLY VIRTUALIZE THE CPU WITH CONTROL
-> The OS must virtualize the CPU in an efficient manner while retaining control over the system.
+但"感觉同时运行"不等于"真的并行"。真正的并行（Parallelism）需要多个物理核心。虚拟化实现的是**看似同时**（Concurrency）。这两个概念在多线程编程中经常被混淆，但它们是不同的东西。
 
-### How to Perform Restricted Operations?
+CPU 虚拟化面临两个核心挑战：
 
-A process must be able to perform I/O and some other restricted operations, but without giving the process complete control over the system.
-How can the OS and hardware work together to do so?
+1. **性能**：虚拟化本身不能引入过高的开销，否则操作系统就失去了存在意义
+2. **控制权**：必须在高效执行用户代码的同时，保留对 CPU 的控制权——应用不能绕过操作系统直接操控硬件
 
-- Thus, the approach we take is to introduce a new processor mode, known as **user mode**; code that runs in user mode is restricted in what it can do.
-- In contrast to user mode is **kernel mode**, which the operating system(or kernel) runs in.
-  In this mode, code that runs can do what it likes, including privileged operations such as issuing I/O requests and executing all types of restricted instructions.
+第一个挑战靠硬件直接执行来回答：用户进程的代码就跑在物理 CPU 上，不作解释、不作翻译，只有在需要内核服务时才进入内核。第二个挑战才是真正需要设计的部分。
 
-To allow a user process do when it wishes to perform some kind of privileged operation, virtually all modern hardware provides the ability for user programs to perform a **system call**.
-Special instructions to trap into the kernel and return-from-trap back to user-mode programs are also provided, as well as instructions that allow the OS to tell the hardware where the trap table resides in memory
+### User Mode and Kernel Mode
 
-The kernel does so by setting up a **trap table** at boot time.
-When the machine boots up, it does so in privileged (kernel) mode, and thus is free to configure machine hardware as need be.
-One of the first things the OS thus does is to tell the hardware what code to run when certain exceptional events occur.
+解决"控制权"问题的关键是硬件提供的**特权级机制**。几乎所有现代 CPU 都至少有两种执行模式：
 
-### How to regain control of the CPU
+- **用户态（User Mode）**：权限受限。用户态代码不能执行特权指令（如直接操作页表、关中断、触发 I/O），访问受限资源时会触发异常陷阱，交由内核处理。
+- **内核态（Kernel Mode）**：拥有完全权限。内核态代码可以执行任意指令、操作硬件、管理内存映射。
 
-A Cooperative Approach: Wait For System Calls
+应用程序默认运行在用户态。当它需要执行特权操作（如读写文件、分配内存）时，必须通过**系统调用（System Call）** 显式地请求内核服务。系统调用会触发一次从用户态到内核态的**陷入（Trap）**，内核完成服务后再通过 **return-from-trap** 指令返回用户态。
 
-A Non-Cooperative Approach: The OS Takes Control
+启动引导程序是第一个在内核态运行的代码。它初始化硬件、建立**陷入表（Trap Table）**——告诉硬件"当发生中断/异常时跳到哪里执行"——然后启动第一个用户态进程（通常是 init）。此后，所有特权操作都必须经过内核。
 
-#### How to regain control without cooperation
+这套机制同时回答了上面三条张力里的两条：特权级就是"隔离"的物理形态（张力二），而系统调用的集合就是内核愿意提供的"抽象面"（张力一）——系统调用表里有什么，应用就只能用什么样的抽象。
 
-The addition of a timer interrupt gives the OS the ability to run again on a CPU even if processes act in a non-cooperative fashion.
+### Regaining Control: Timer Interrupt
 
-During the boot sequence, the OS must start the timer, which is of course a privileged operation.
-Once the timer has begun, the OS can thus feel safe in that control will eventually be returned to it, and thus the OS is free to run user programs.
-The timer can also be turned off (also a privileged operation).
+如果一个进程永远不主动发起系统调用，操作系统如何重新获得 CPU 的控制权？
 
-Note that the hardware has some responsibility when an interrupt occurs, in particular to save enough of the state of the program that was running when the interrupt occurred such that a subsequent return-fromtrap instruction will be able to resume the running program correctly.
-This set of actions is quite similar to the behavior of the hardware during an explicit system-call trap into the kernel, with various registers thus getting saved (e.g., onto a kernel stack) and thus easily restored by the return-from-trap instruction.
+- **协作式抢占（Cooperative Preemption）**：内核依赖进程主动发起系统调用或让出 CPU。如果某个进程写了一个死循环且不调用任何系统调用，它就会永远霸占 CPU，整个系统卡死。早期操作系统（如 Windows 3.x）采用这种方式。
+- **抢占式调度（Preemptive Scheduling）**：硬件定时器周期性触发时钟中断，强制将控制权还给内核。内核在启动时开启定时器（特权操作），之后不管进程是否合作，时间到了都会被打断。现代操作系统全部采用抢占式调度。
 
-Now that the OS has regained control, whether cooperatively via a system call, or more forcefully via a timer interrupt, a decision has to be made: whether to continue running the currently-running process, or switch to a different one.
-This decision is made by a part of the operating system known as the scheduler.
+定时器中断的完整流程：
 
-##### Context Switch
+1. 硬件在启动时由内核配置好定时器周期
+2. 时间到，硬件触发中断，自动保存当前程序计数器和部分寄存器到内核栈
+3. 跳转到中断处理函数（由陷入表指定）
+4. 处理函数完成必要的清理后，调用**调度器**决定接下来运行哪个进程
+5. 调度器选择好目标进程后，执行**上下文切换**
+6. **return-from-trap** 指令恢复目标进程的寄存器，返回用户态继续执行
 
-If the decision is made to switch, the OS then executes a low-level piece of code which we refer to as a **context switch**.
-A context switch is conceptually simple: all the OS has to do is save a few register values for the currently-executing process (onto its kernel stack, for example) and restore a few for the soon-to-be-executing process (from its kernel stack).
-By doing so, the OS thus ensures that when the return-from-trap instruction is finally executed, instead of returning to the process that was running, the system resumes execution of another process.
+注意这里的设计取舍：定时器周期越短，交互越流畅、单个进程的延迟越低，但上下文切换的开销占比越高；周期越长则相反。这个旋钮本身就是三条张力的日常体现。
 
-To save the context of the currently-running process, the OS will execute some low-level assembly code to save the general purpose registers, PC, and the kernel stack pointer of the currently-running process, and then restore said registers, PC, and switch to the kernel stack for the soon-to-be-executing process.
-By switching stacks, the kernel enters the call to the switch code in the context of one process (the one that was interrupted) and returns in the context of another (the soon-to-be-executing one).
-When the OS then finally executes a return-from-trap instruction, the soon-to-be-executing process becomes the currently-running process.
-And thus the context switch is complete.
+### Context Switch
 
-> [!TIP]
->
-> Reboot is Useful
->
-> The only solution to infinite loops (and similar behaviors) under cooperative preemption is to reboot the machine.
->
-> - Specifically, reboot is useful because it moves software back to a known and likely more tested state.
-> - Reboots also reclaim stale or leaked resources (e.g., memory) which may otherwise be hard to handle.
-> - Finally, reboots are easy to automate.
+**上下文切换（Context Switch）** 是调度器真正执行"换进程"的底层操作。概念很简单：把当前进程的寄存器状态存下来，把下一个进程的寄存器状态恢复上去。但实际上它是整个内核最频繁的操作之一，开销直接影响系统吞吐量。
 
-## Architecture
+一个典型的上下文切换需要保存和恢复：
 
-- [Processes and Threads](/docs/CS/OS/process.md)
-- [Memory Management](/docs/CS/OS/memory.md)
-- [File Systems](/docs/CS/OS/file.md)
-- [Input/Output](/docs/CS/OS/IO.md)
-- [Security](/docs/CS/OS/Security.md)
+- 通用寄存器（x86-64 下是 RAX–R15，ARM64 下是 X0–X29）
+- 程序计数器（PC / RIP）
+- 栈指针（SP / RSP）
+- 页表基址寄存器（CR3 / TTBR0_EL1）—— 这会触发 TLB 刷新
+- 浮点 / SIMD 寄存器（如果启用了懒保存）
 
-> *Adding more code adds more bugs.*
+上下文切换的开销主要来自两个方面：**寄存器的保存/恢复**（通常几百纳秒）和 **TLB 刷新后的缓存失效**（可能导致后续数千条指令的缓存缺失，这部分开销远大于保存寄存器本身）。
+
+这也是"隔离 vs. 成本"最直观的计价方式：地址空间隔离带来的好处是进程之间互不干扰，账单则是每次切换都要付一次 TLB 失效的代价。线程之所以比进程"轻"，正是因为它放弃了地址空间隔离、从而免掉了这一部分账单。
 
 > [!TIP]
 >
-> *Don’t hide power.*
+> **Reboot is Useful**
+>
+> 在协作式抢占下，死循环的唯一解法就是重启。重启的价值不止于此——它能把软件状态重置回一个已知且充分测试过的初始态、回收泄漏的资源（内存、文件描述符、socket）、以及它本身就容易自动化。
+>
+> Windows 的"重启能解决 90% 的问题"的民间智慧，底层逻辑就是这里说的：操作系统的许多状态在运行时会悄然漂移，而重新启动能一次性把它们都洗干净。
 
-System Structure
+---
 
-Layered Systems
+## Kernel Structure
 
-Exokernels
+机制定了之后，下一个问题是**代码怎么摆**：哪些逻辑跑在内核态、它们之间怎么组织。这就是内核结构（Kernel Structure）要回答的问题，也是上文"隔离 vs. 成本""策略 vs. 机制"两条张力最激烈的战场。
 
-Microkernels
+### Monolithic Kernels
 
-Extensible Systems
+宏内核是更传统的方案：内存管理、文件系统、设备驱动、网络协议栈等全部编译进一个内核二进制，运行在同一地址空间内。优点是系统调用开销低（函数调用级别的跳转），缺点是任何一个组件的 bug 都可能导致整个内核崩溃。Linux、所有 BSD 分支、Solaris、Windows NT 内核都属于这一类。
 
-Top-Down vs. Bottom-Up
+现代宏内核通过**可加载模块（Loadable Kernel Module, LKM）** 弥补了部分缺陷——驱动、文件系统等可以在运行时动态插入或卸载，不必每次都重新编译内核。这让宏内核获得了一定的动态可扩展性，同时保留了性能优势。Linux 上还有更细粒度的口子：eBPF 允许在不写模块的前提下向内核注入受限的自定义逻辑，[cgroup](/docs/CS/OS/Linux/cgroup/README.md) 与 [namespace](/docs/CS/OS/Linux/namespace.md) 则为隔离提供了可组合的原语。
 
-While it is best to design the system top down, in theory it can be implemented top down or bottom up.
-The problem with this approach is that it is hard to test anything with only the top-level procedures available.
-For this reason, many dev elopers find it more practical to actually build the system bottom up.
+### Microkernels
 
-Synchronous vs. Asynchronous Communication
+微内核只把最基础的机制留在内核态：**地址空间管理**、**进程间通信（IPC）** 和 **线程调度**。文件系统、内存管理、驱动、网络协议栈等全部变成独立的**用户态服务进程**，通过消息传递与微内核交互。理论上这种架构更安全（服务崩溃不影响内核和其他服务）、更易扩展、更适合分布式部署，但每次服务请求都要经过 IPC 切换，性能开销显著高于宏内核的函数调用。
 
-Other operating systems build their interprocess communication using asynchronous primitives. In a way, asynchronous communication is even simpler than its synchronous cousin.
-A client process sends a message to a server, but rather than wait for the message to be delivered or a reply to be sent back, it just continues executing.
-Of course, this means that it also receives the reply asynchronously and should remember which request corresponded to it when it arrives.
-The server typically processes the requests (events) as a single thread in an event loop.
+微内核在学术界（Mach、L4、K42）和特定领域（QNX、PikeOS——用于汽车、航天等对安全有严格要求的嵌入式场景）有成功应用，但在通用桌面和服务器市场始终未能替代宏内核。Mach 的后代 **XNU**（macOS/iOS 的内核）是一个**混合内核**——它把 BSD 的文件系统和网络协议栈放进内核态，以弥补纯微内核的性能短板，同时保留微内核的进程管理模型。Google 的 Fuchsia 内核 Zircon 也是微内核。
 
-Whenever the request requires the server to contact other servers for further proc essing it sends an asynchronous message of its own and, rather than block, continues with the next request.
-Multiple threads are not needed. With only a single thread processing events, the problem of multiple threads accessing shared data structures cannot occur.
-On the other hand, a long-running event handler makes the single-threaded server’s response sluggish.
+### Comparison
 
-Whether threads or events are the better programming model is a long-standing controversial issue that has stirred the hearts of zealots on either side ever since John Ousterhout’s classic paper:
-‘Why threads are a bad idea (for most purposes)’’(1996).
-Ousterhout argues that threads make everything needlessly complicated:locking, debugging, callbacks, performance—you name it. Of course, it would not be a controversy if everybody agreed.
-A few years after Ousterhout’s paper, Von Behren et al. (2003) published a paper titled ‘‘Why events are a bad idea (for high concurrency servers).’’
-Thus, deciding on the right programming model is a hard, but important decision for system designers. There is no slam-dunk winner.
-Web servers like apache firmly embrace synchronous communication and threads, but others like lighttpd are based on the ev ent-driven paradigm. Both are very popular.
-In our opinion, events are often easier to understand and debug than threads.
-As long as there is no need for per-core concurrency, they are probably a good choice.
+| 维度 | 宏内核 | 微内核 |
+| :-- | :-- | :-- |
+| **定义** | 完整操作系统运行在内核态，所有子系统共享同一地址空间 | 仅地址空间管理、IPC、线程调度在内核态；其余为用户态服务进程 |
+| **内核大小** | 极大：Linux 6.13 源码总量 39,819,522 行（含注释、文档、空行与构建脚本，其中驱动约 2500 万行） | 极小：seL4 内核约 8700 行 C + 600 行汇编，其形式化证明脚本约 20 万行 Isabelle |
+| **系统调用开销** | 低（函数调用级切换） | 高（需经 IPC，上下文切换 + 消息传递） |
+| **隔离性** | 进程隔离靠 MMU；内核内部无隔离，一个组件崩溃可导致全系统 panic | 服务进程各自独立地址空间；单个服务崩溃不影响内核和其他服务 |
+| **可扩展性** | 需内核模块或重新编译 | 新增服务只需启动新进程，无需动内核 |
+| **可调试性** | 内核 panic 会导致重启，调试困难 | 服务可独立崩溃和重启，调试体验接近用户态程序 |
+| **典型代表** | Linux、FreeBSD、OpenBSD、NetBSD、Solaris、Windows NT | QNX、PikeOS、L4 家族、seL4、Zircon（Fuchsia）、Mach（macOS/iOS XNU） |
 
-## Lifecycle
+> [!NOTE]
+>
+> **混合内核（Hybrid Kernel）**
+>
+> 很多现代内核自称"混合内核"——在微内核架构中把性能关键的组件（如文件系统、网络协议栈）搬进内核态。Windows NT 内核、macOS 的 XNU、iOS 的内核都属于这一类。这本质上是宏内核为主、微内核理念为辅的折中方案。
 
-[BootLoader](/docs/CS/OS/BootLoader.md) 负责把内核装入内存并移交控制权；Linux 上最常用的实现是遵循 Multiboot 规范的 [GRUB](/docs/CS/OS/Boot/Grub.md)。
+### Exokernels
 
+**外核（Exokernel）** 是一种极端的"瘦身内核"思路：内核只做资源隔离和保护，把几乎所有传统上在内核里的管理逻辑（页表管理、磁盘块分配）都交给用户态的**库操作系统（Library OS）** 来完成。Exokernel 本身只管"这个资源分配给哪个进程"，不关心"这个资源怎么用"。
 
-## OSs
+这种设计的动机是让应用可以绕开内核的通用抽象，自定义更高效的资源管理策略——比如一个数据库可以自己决定如何布局磁盘数据、如何组织内存页，而不必被通用文件系统和虚拟内存系统的策略束缚。Exokernel 在学术界（MIT Exokernel 项目）影响很大，但至今没有成功的商业化通用操作系统产品。
 
-1971年11月3日: [UNIX](/docs/CS/OS/unix/Unix.md) 第1版（UNIX V1）诞生 出版的第一版《Unix 程序员手册》中，将1971/1/1作为Unix纪元的开始
-1973年: 汤普逊和里奇用C语言重写了Unix，形成第三版UNIX
+它是"策略 vs. 机制"这条张力的极端答案：**只留机制，不设策略**。今天宏内核里的 `mmap`、`O_DIRECT`、`io_uring`、eBPF，本质上都是在同一条思路上做的局部让步——在不拆掉通用策略的前提下，给特定应用开一个绕过它的口子。
 
-1978年: 大约600台计算机在运行UNIX。伯克利大学推出以第6版UNIX为基础，加上改进和新功能而成的Unix，命名为BSD，开创Unix的另一分支：BSD系列
+### Layered Systems
 
-DOS是1979年由微软公司为IBM个人电脑开发的MS-DOS,它是一个单用户单任务操作系统
+**分层系统（Layered System）** 将操作系统按功能划分成若干水平层，每层只依赖其下层提供的服务，不允许跨层直接调用。经典例子是 Dijkstra 的 THE 系统（1968），分为 6 层：硬件 → 调度器 → 内存管理 → 文件系统 → I/O 缓冲 → 用户进程。
 
-1984年，苹果公司发布Macintosh
+分层设计的优点是**模块边界清晰**、**层内可独立替换**，缺点是跨层调用的开销累积起来很高，且某些功能天然难以严格分层（如文件系统既要用内存管理又要用 I/O 驱动）。它与宏/微内核之争是**正交**的：分层回答"组件之间怎么依赖"，宏/微回答"组件之间隔不隔离"。
 
-1985年11月20日，微软正式发布 [Windows](/docs/CS/OS/Windows/Windows.md) 1.0
-早期的 windows，其实就是套在 DOS 外面的一个"壳"，只是起到操作界面的作用。最开始，微软把它称之为"界面管理器"
+### Building It: Top-Down or Bottom-Up
 
+从纯设计角度，**自顶向下（Top-Down）** 应该是更合理的方式：先定义系统接口和上层模块，再逐步向下填充实现细节。但这种方式在实践中有一个致命的测试问题——只有顶层接口可用时，你无法验证下层是否正确。因此许多开发者发现**自底向上（Bottom-Up）** 更实用：先在硬件层实现可测试的组件（如内存管理、中断处理），再层层向上叠加。操作系统的实际开发通常是两种方式混合：高层先定接口，底层先写能跑的最小实现。
 
-1991年年底，Linux Torvalds公开了 [Linux](/docs/CS/OS/Linux/Linux.md) 内核源码0.02版
+> [!NOTE]
+>
+> **两条设计箴言**
+>
+> > *Adding more code adds more bugs.*
+> >
+> > *Don't hide power.*
+>
+> 第一条提醒我们——内核代码量越大，bug 和安全漏洞就越多。微内核把大部分功能移到用户态，正是这种哲学的极端体现。第二条说的是操作系统应该尽量暴露硬件能力，而不是用通用抽象把它们"藏起来"——exokernel 的设计正是为了对抗过度抽象。
 
-1995年，System 7 的 7.5.1 版本发布，Mac 系统开始改名为Mac OS
+---
 
+## Boot: From Bare Metal to the First Process
 
-2016 年 WWDC 上，苹果发布了macOS 10.12 Sierra。Mac OS X 的名字被更简洁优雅的 [macOS](/docs/CS/OS/mac/mac.md) 所取代
+前面说的机制（陷入表、特权级、定时器）都不是凭空存在的，它们由内核在启动时亲手建立。启动过程因此是理解 OS 的天然起点：它展示了"一台裸机如何变成能跑进程的机器"。
 
-随着智能手机和平板电脑的兴起 IOS 和 [Android](/docs/CS/OS/Android/Android.md) 成为移动设备的主流操作系统
+1. **固件初始化**（[BIOS](/docs/CS/OS/BIOS.md) / UEFI）：加电自检（POST）、枚举硬件、建立最小化的 I/O 服务，然后定位启动介质上的 Bootloader 并加载执行
+2. **Bootloader**（如 [GRUB](/docs/CS/OS/Boot/Grub.md)、systemd-boot、U-Boot）：加载内核镜像和初始 RAM 文件系统，将控制权转交给内核入口点。这一步是硬件与内核之间的桥梁，负责把内核从磁盘搬到内存并设置好启动参数
+3. **内核启动**：内核解压、初始化内存管理和中断子系统、建立陷入表并开启定时器、最后启动第一个用户态进程（Linux 下是 init 或 systemd），后者再拉起整个用户空间
 
-[xv6](/docs/CS/OS/xv6/xv6.md) 是 MIT 开发的一个教学用的完整的类 Unix 操作系统，并且在 MIT 的操作系统课程 6.828 中使用
+到第三步结束，上文那套机制就完整了：陷入表就位意味着系统调用可用，定时器开启意味着抢占可用，第一个用户进程就绪意味着用户态与内核态的分工真正开始运转。此后进程完整的创建、切换与销毁见 [process](/docs/CS/OS/process.md)。
 
-除 xv6 之外，常见的教学/实战入门内核还有：用 Rust 重写 OS 实验的 [rCore](/docs/CS/OS/rCore.md)（RISC-V + SBI，清华 rCore-Tutorial）；
-川合秀实《30天自制操作系统》的 [osask](/docs/CS/OS/osask.md)（从 16 位实模式一路写到 GUI）；
-以及混合内核教学项目 [BookOS](/docs/CS/OS/Book/BookOS.md)（xbook2）。
-它们通常运行在 [Bochs](/docs/CS/OS/Bochs.md) 或 [QEMU](/docs/CS/OS/qemu.md) 模拟器上，由 [GRUB](/docs/CS/OS/Boot/Grub.md) 之类的 Bootloader 加载。
+详细的启动流程和内核早期初始化见 [BootLoader](/docs/CS/OS/BootLoader.md) 和 [Linux boot](/docs/CS/OS/Linux/boot/Start.md)。
 
+---
 
-[Fuchsia](/docs/CS/OS/Fuchsia/Fuchsia.md) 是Google开发的操作系统，与基于Linux内核的ChromeOS和Android等不同，
-Fuchsia基于新的名为Zircon的微内核，受Little Kernel启发，用于嵌入式系统，主要使用C语言和C++编写
+## Core Subsystems
 
-## Performance
+机制与结构都只是框架，操作系统真正的日常是**分派资源**。每类物理资源都要回答同一个问题：一份有限、且往往不可同时使用的资源，如何分给多个竞争者，既保证公平与安全，又不浪费。四类子系统给出的是四种不同形态的答案——CPU 靠时间切片、内存靠地址空间与换页、存储靠命名空间与缓存、设备靠中断与驱动模型。
 
-Performance metrics are selected statistics generated by the system, applications, or additional tools that measure activity of interest.
-They are studied for performance analysis and monitoring, either numerically at the command line or graphically using visualizations.
+| 子系统 | 核心职责 | 主要笔记 |
+| :-- | :-- | :-- |
+| **进程与线程** | 进程生命周期、调度算法、上下文切换、IPC、信号 | [process.md](/docs/CS/OS/process.md)、[scheduling.md](/docs/CS/OS/scheduling.md)、[Linux/proc](/docs/CS/OS/Linux/proc/README.md) |
+| **内存管理** | 虚拟内存、页表、缺页中断、内存回收、NUMA | [memory.md](/docs/CS/OS/memory.md)、[Linux/mm](/docs/CS/OS/Linux/mm/README.md) |
+| **文件系统** | VFS 层、本地文件系统、网络文件系统、FUSE | [file.md](/docs/CS/OS/file.md)、[Linux/fs](/docs/CS/OS/Linux/fs/README.md) |
+| **I/O 与设备** | 设备模型、驱动框架、中断、I/O 多路复用 | [IO.md](/docs/CS/OS/IO.md)、[interrupt.md](/docs/CS/OS/interrupt.md)、[Linux/IO](/docs/CS/OS/Linux/IO/README.md) |
+| **安全** | 权限模型、身份认证、安全隔离 | [Security.md](/docs/CS/OS/Security.md) |
+| **死锁** | 死锁检测、预防、解除 | [Deadlocks.md](/docs/CS/OS/Deadlocks.md) |
+| **虚拟机** | 虚拟化平台、容器、Hypervisor | [VM.md](/docs/CS/OS/VM.md)、[Container](/docs/CS/Container/Container.md) |
 
-Common types of system performance metrics include:
+---
 
-- **Throughput:** Either operations or data volume per second
-- **IOPS:** I/O operations per second
-- **Utilization:** How busy a resource is, as a percentage
-- **Latency:** Operation time, as an average or percentile
+## Concurrency and Communication
 
-The usage of throughput depends on its context. Database throughput is usually a measure of queries or requests (operations) per second.
-Network throughput is a measure of bits or bytes (volume) per second.
+进程之间不是孤立的，它们要协作。协作方式的选择，是"策略 vs. 机制"张力在编程模型上的投影：是把并发的复杂性交给运行时（线程 + 锁），还是交给应用自己（事件循环 + 状态机）。
 
-IOPS is a throughput measurement for I/O operations only (reads and writes). Again, context matters, and definitions can vary.
+### Synchronous vs. Asynchronous Communication
 
-Performance metrics are not free; at some point, CPU cycles must be spent to gather and store them.
-This causes overhead, which can negatively affect the performance of the target of measurement.
-This is called the _observer effect_.
+进程间通信（IPC）的风格决定了操作系统组件之间的交互模式：
 
-You might assume that a software vendor has provided metrics that are well chosen, are bug-free, and provide complete visibility.
-In reality, metrics can be confusing, complicated, unreliable, inaccurate, and even plain wrong (due to bugs).
-Sometimes a metric was correct in one software version but did not get updated to reflect the addition of new code and code paths.
+- **同步通信**：发送方阻塞等待接收方回复。早期 Unix 的管道、System V 的消息队列、传统的 RPC 都采用这种模型。调用语义清晰，但一个慢服务会拖慢整个调用链。
+- **异步通信**：发送方不等待回复，继续执行后续逻辑。回复到达时通过回调或事件通知处理。这种模型下，单个线程可以并发处理大量请求，不会因为某个慢调用而阻塞。Web 服务器（如 lighttpd、nginx）、消息中间件、现代微服务框架普遍采用事件驱动的异步模型。
 
-## Others
+### Threads vs. Events
 
-[Containerization](/docs/CS/Container/Container.md) is the packaging of software code with just the operating system (OS) libraries and dependencies required to 
-run the code to create a single lightweight executable—called a container—that runs consistently on any infrastructure.
+**线程（Thread） vs. 事件驱动（Event-driven）** 是操作系统设计中最持久的争论之一。John Ousterhout 在 1996 年的经典论文《Why threads are a bad idea (for most purposes)》中论证了线程模型让一切变得不必要地复杂：锁、调试、回调、性能问题——全都源于多线程访问共享状态的困难。几年后 Von Behren 等人反驳说事件驱动在高并发服务器上也有自己的问题。双方至今没有压倒性的结论。
+
+在工程实践中，只要没有强烈的 per-core 并行需求，事件驱动通常更容易理解和调试。但多核 CPU 普及后，线程 + 异步 I/O 的混合模式（如 Go 的 goroutine、Rust 的 async/await）逐渐成为主流——它本质上是在两种模型之间再折中一次：用线程吃满多核，用异步避免每连接一个线程的成本。
+
+---
+
+## Isolation at Application Scale
+
+前面所有的隔离都是**进程级**的：进程之间互不可见，但它们共享同一份系统配置、同一个文件系统视图、同一台机器的主机名与网络栈。当我们想交付的不是一个进程而是一整个**应用**（代码 + 依赖 + 配置），进程级隔离就不够用了。
+
+### Containerization
+
+容器化（Containerization）是一种轻量级的操作系统级虚拟化技术：它把应用代码和它运行所需的依赖（库、配置、运行时）打包成一个标准化的**容器镜像**，在运行时与其他容器共享宿主机的内核和硬件。这与传统虚拟机不同——虚拟机需要完整的 Guest OS，而容器只需隔离进程、文件系统和网络命名空间。
+
+容器的巧妙之处在于它**没有引入新的机制**，而是把上文已有的虚拟化能力按新粒度重新组合：**cgroup** 负责资源分派（CPU、内存、I/O 的配额与记账），**namespace** 负责视图隔离（PID、mount、network、UTS 等各自一套），**overlayfs** 提供分层文件系统，**SELinux/AppArmor** 提供强制访问控制。Docker、Kubernetes 等平台的全部底层技术都来自 Linux 内核。Windows 和 macOS 上的容器运行时本质上也是通过 Linux 虚拟机或 Hyper-V 来模拟这些能力的。详见 [Container](/docs/CS/Container/Container.md)。
+
+放到"隔离 vs. 成本"的张力上看：容器把隔离边界从进程抬到应用，换来的是部署单元的一致性和可移植性，付出的是**所有容器共享同一个内核**——内核的漏洞对所有容器一视同仁。虚拟机（[VM](/docs/CS/OS/VM.md)）则把边界划得更硬（各自独立内核），代价是更高的启动与内存开销。选容器还是选虚拟机，就是在为这条边界定价。
+
+---
+
+## Measuring the Cost
+
+"隔离不能太贵、抽象不能太慢"是一句无法验证的话，除非能度量。操作系统的每一层抽象都有一张账单，账单的形式就是性能指标。
+
+性能指标是系统、应用或监控工具生成的统计量，用于衡量和分析系统的运行状态。常见类型包括：
+
+- **吞吐量（Throughput）**：单位时间内完成的操作量或数据量。数据库吞吐量通常指每秒查询数（QPS），网络吞吐量指每秒传输的数据量（bit/s 或 B/s）
+- **IOPS**：每秒 I/O 操作数，专用于磁盘和存储设备的吞吐度量
+- **利用率（Utilization）**：资源繁忙程度的百分比。CPU 100% 说明满负载，磁盘 0% 说明基本空闲
+- **延迟（Latency）**：单次操作耗时。通常用平均值或百分位数（如 P99）表示
+
+采集性能指标本身也有成本——要消耗 CPU 周期来收集和存储数据，这会反过来影响被测目标的行为。这种观测者效应（Observer Effect）在高负载系统中尤其显著，选型监控方案时必须考虑开销。Linux 上的动态追踪工具（如 [DTrace](/docs/CS/OS/DTrace.md)）正是为降低这种侵入性而设计的。
+
+> [!WARNING]
+>
+> 不要盲目相信指标。指标可能因为软件版本迭代未同步更新、采集逻辑有 bug、或统计定义发生变化而给出误导性数据。解读性能指标时，始终要确认**这个指标是怎么采集的、在哪个版本上验证的、统计窗口是多大**。
+
+---
+
+## OS History
+
+回看历史会发现，前面那三条张力几乎就是所有分岔的原因：UNIX 选了薄抽象 + 可组合（"一切皆文件"），Windows NT 选了统一对象模型 + 内核态子系统，微内核家族把隔离边界推到极致，Linux 用宏内核 + 模块 + 开源协作换来了生态速度，容器则把隔离粒度从进程抬到应用。没有哪一个选择是"正确"的，只有在不同硬件约束与不同使用场景下的不同取舍。
+
+### UNIX
+
+UNIX 1969 年起源于贝尔实验室那台"角落里没人用的 PDP-7"，1971 年第一版手册对应 PDP-11/20 上的汇编器版本。真正的转折点是 **1973 年的第四版用 C 重写了内核**——但"可移植"要到 1977-78 年移植到 Interdata 8/32、1979 年 32V 移植到 VAX 才算被证明，不是重写当年就成立的。
+
+- **BSD 分支**：1977 年底伯克利的第一盘磁带只是叠加在授权 V6 之上的自研软件层，不是可独立分发的系统；BSD 真正自成一支要等到 32V（V7 的 VAX 移植）之后的 3BSD
+- **System V 分支**：AT&T 的商业产品线，1989 年的 SVR4 把 System V、BSD 与 Xenix 三方合流，成为 AIX、HP-UX、IRIX、UnixWare 与 Solaris 的共同底子
+- **Linux**：1991 年 Linus Torvalds 在 Minix 的启发下公开了内核 0.02 版。Linux 遵循 GPL，彻底开放源码，成为当今服务器、嵌入式、云基础设施的事实标准。[Linux 内核子树](/docs/CS/OS/Linux/Linux.md) 是本库最活跃的主题之一
+- **macOS / iOS**：Apple 的两大平台共享 XNU 内核，而 XNU 是 **Mach + 源自 FreeBSD 一支的 BSD 层 + I/O Kit**，见 [mac](/docs/CS/OS/mac/mac.md) 与 [Darwin](/docs/CS/OS/mac/Darwin.md)。macOS 源自 NeXTSTEP（1988）— OPENSTEP — Mac OS X（2001），2016 年起改称 macOS。iOS 自 2007 年发布起即基于同一内核
+
+血统、POSIX 符合性与 UNIX 商标是三件互不等价的事（Linux 无 Unix 血统却接口兼容，macOS 有血统且注册了商标，FreeBSD 有血统却从未认证），家谱、现代分支对照与 Unix API 契约的展开都在 [UNIX 家族](/docs/CS/OS/unix/Unix.md)。UNIX 的"一切皆文件"哲学在后续所有现代操作系统中都能找到影子，Linux 侧的具体实现见 [文件系统机制](/docs/CS/OS/Linux/fs/README.md)。
+
+### Windows
+
+- **DOS**：1979 年微软为 IBM PC 开发的 MS-DOS，单用户单任务，内核极小
+- **Windows**：1985 年 11 月 20 日发布 1.0，最初是套在 DOS 外面的图形界面壳（"Interface Manager"）。1993 年 Windows NT 引入了真正的 32 位内核架构（NT 内核），脱离了 DOS 基础。后续 Windows 2000、XP、Vista、7、10、11 都基于同一 NT 内核演化，详见 [Windows](/docs/CS/OS/Windows/Windows.md)。NT 那一套是**混合内核**：借鉴了 Mach 式微内核的分层，实则把文件系统、网络栈、图形与驱动全部放进 Ring 0；它的子系统构造（[架构](/docs/CS/OS/Windows/Architecture.md)、[I/O 与 IOCP](/docs/CS/OS/Windows/IO.md)、[安全模型](/docs/CS/OS/Windows/Security.md)）都与 Unix 那一支差别极大，是理解"同样一件事为什么 Windows 上不是那个做法"的主要来源
+
+### Mobile OS
+
+- **Android**：Google 2008 年发布。基于 Linux 内核，上半部分是 Java 虚拟机（早期 Dalvik，后 ART）和 Android 框架层。当今智能手机和平板的主流系统之一。详见 [Android](/docs/CS/OS/Android/Android.md)
+- **iOS**：Apple 2007 年发布。基于与 macOS 同源的 XNU 内核，以 Objective-C/Swift 为主要开发语言
+
+### Teaching Kernels
+
+- **xv6**：MIT 为 6.828 课程设计的精简版类 Unix 内核，实现了进程、虚拟内存、文件系统等核心功能，代码量小、结构清晰，是学习操作系统实现的绝佳起点。详见 [xv6](/docs/CS/OS/xv6/xv6.md)
+- **rCore**：清华大学 [rCore-Tutorial](/docs/CS/OS/rCore.md) 项目，用 Rust 在 RISC-V SBI 上从零实现 OS 实验的教学内核
+- **osask**：川合秀实《[30 天自制操作系统](/docs/CS/OS/osask.md)》的配套内核，从 16 位实模式一路写到 GUI 系统
+- **BookOS**（xbook2）：混合内核教学项目，覆盖 x86 和 ARM 平台，详见 [BookOS](/docs/CS/OS/Book/BookOS.md)
+
+这些内核通常运行在 [QEMU](/docs/CS/OS/qemu.md) 或 [Bochs](/docs/CS/OS/Bochs.md) 模拟器上，由 [GRUB](/docs/CS/OS/Boot/Grub.md) 或 U-Boot 加载。
+
+### Others
+
+- **Fuchsia / Zircon**：Google 开发的微内核系统，受 Little Kernel 启发，面向嵌入式和物联网场景。Zircon 是微内核本身，上层运行基于 Flutter 的图形栈。详见 [Fuchsia](/docs/CS/OS/Fuchsia/Fuchsia.md)
+
+---
 
 ## Links
 
-- [Linux](/docs/CS/OS/Linux/Linux.md)
-- [Parallel（并行调度：Work-Stealing/二选一）](/docs/CS/OS/Parallel.md)
+- [并行调度：Work-Stealing](/docs/CS/OS/Parallel.md)
 - [Android 调度](/docs/CS/OS/Android/schedule.md)
-- [命令与 ELF（command）](/docs/CS/OS/command.md)
+- [命令与 ELF](/docs/CS/OS/command.md)
+- [CSAPP 学习笔记](/docs/CS/OS/CSAPP.md)
 - [Computer Organization](/docs/CS/CO/CO.md)
-- [Data Structures and Algorithms](/docs/CS/Algorithms/Algorithms.md)
-- [Computer Network](/docs/CS/CN/CN.md)
-- [Distributed system](/docs/CS/Distributed/Distributed.md)
+- [Distributed System](/docs/CS/Distributed/Distributed.md)
+
+---
 
 ## References
 
 1. [Operating Systems: Three Easy Pieces](https://pages.cs.wisc.edu/~remzi/OSTEP/)
-2. [Operating Systems Concepts]()
+2. [Operating Systems Concepts](https://www.wiley.com/en-us/Operating+System+Concepts%2C+10th+Edition-p-9781119800363)
 3. [Modern Operating Systems](https://media.pearsoncmg.com/bc/abp/cs-resources/products/product.html#product,isbn=013359162X)
