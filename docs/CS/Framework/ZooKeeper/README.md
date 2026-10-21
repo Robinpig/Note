@@ -47,19 +47,23 @@ digraph "ZooKeeperStack" {
 
 ## Layered Navigation
 
-**总览与数据模型** —— 一切的起点。[ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md) 讲清 znode 树、createNode、watch 一次性语义、session、ACL、Zab 总览、动态重配置，以及与 Chubby / etcd 的对照；[start](/docs/CS/Framework/ZooKeeper/start.md) 覆盖部署与启动；序列化线格式见 [Jute](/docs/CS/Framework/ZooKeeper/Jute.md)。
+**总览与数据模型** —— 一切的起点。[ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md) 是**概念枢纽**：讲清 znode 树、createNode、watch 一次性语义、session、ACL、一致性保证、Zab 总览，以及与 Chubby / etcd 的对照；序列化线格式见 [Jute](/docs/CS/Framework/ZooKeeper/Jute.md)。
 
-**共识与日志复制** —— [Zab](/docs/CS/Framework/ZooKeeper/Zab.md) 深入原子广播：Leader 选举（phase 0/1/2）、事务提案/提交、恢复与同步、quorum 数学，是理解"为何只有 Leader 能写"的钥匙。
+**共识：Zab 与选主** —— [Zab](/docs/CS/Framework/ZooKeeper/Zab.md) 讲协议本身：Leader/Follower/Observer 角色、proposal 广播与提交（zxid、过半 ACK）、discovery→synchronization→broadcast 三阶段、与 Raft 对照；[Election](/docs/CS/Framework/ZooKeeper/Election.md) 是**选主源码深潜**——QuorumCnxManager 通信层、FastLeaderElection 四步状态机、QuorumPeer::run 主循环、故障切换与状态同步。
 
-**存储与内存** —— [storage](/docs/CS/Framework/ZooKeeper/storage.md) 拆解 FileTxnLog / FileSnap / FileTxnSnapLog 与 ZKDatabase / DataTree / DataNode，解释 zxid、快照触发（shouldSnapshot）与启动恢复（快照 + 日志 replay）。
+**存储与内存** —— [storage](/docs/CS/Framework/ZooKeeper/storage.md) 拆解 FileTxnLog / FileSnap / FileTxnSnapLog 与 ZKDatabase / DataTree / DataNode，解释 zxid、快照触发（shouldSnapshot）、启动恢复（快照 + 日志 replay）与**自动清理**（DatadirCleanupManager / PurgeTxnLog）。
 
 **请求处理链** —— [pipeline](/docs/CS/Framework/ZooKeeper/pipeline.md) 梳理 Leader / Follower / Observer 各自的 RequestProcessor 链，澄清"读本地、写经 Leader"以及 `sync()` 如何实现线性读。
 
-**客户端与协议** —— [client](/docs/CS/Framework/ZooKeeper/client.md) 覆盖连接串/chroot、会话生命周期、watch 一次性语义与持久化 watch、异常分类与重试策略、ACL 设置与最佳实践。
+**网络层** —— [IO](/docs/CS/Framework/ZooKeeper/IO.md) 是网络层汇总与对比（Netty 实现、NIO vs Netty、连接处理）；[NIO](/docs/CS/Framework/ZooKeeper/NIO.md) 是默认实现 `NIOServerCnxnFactory` 的源码深潜（configure / Queue / AcceptThread / SelectorThread / doIO）。
 
-**协调原语** —— [Recipes](/docs/CS/Framework/ZooKeeper/Recipes.md) 记录锁 / 选主 / 屏障等分布式配方，[Curator](/docs/CS/Framework/ZooKeeper/Curator.md) 是 Netflix 出品的高层客户端（重试、缓存、配方实现），生产首选。
+**客户端与协议** —— [client](/docs/CS/Framework/ZooKeeper/client.md) 覆盖连接串/chroot、会话生命周期、watch 用法、异常分类与重试策略、最佳实践；watch / session / ACL 的**服务端实现与数据模型深潜**分别见 [Watches](/docs/CS/Framework/ZooKeeper/Watches.md) / [Session](/docs/CS/Framework/ZooKeeper/Session.md) / [ACL](/docs/CS/Framework/ZooKeeper/ACL.md)。
 
-**安全** —— [security](/docs/CS/Framework/ZooKeeper/security.md) 梳理节点级 ACL（scheme:id:permission）、digest / ip / sasl / x509 / super 五种身份来源、SASL（Kerberos）、3.9 起补齐的 TLS 与 superDigest 应急。
+**协调原语** —— [Recipes](/docs/CS/Framework/ZooKeeper/Recipes.md) 记录屏障 / 队列 / 锁 / 两阶段提交 / 选主等配方的原理，[Curator](/docs/CS/Framework/ZooKeeper/Curator.md) 是 Netflix 出品的高层客户端（重试、缓存、配方实现），生产首选。
+
+**安全** —— [ACL](/docs/CS/Framework/ZooKeeper/ACL.md) 讲权限数据模型（scheme:id:permission、aversion CAS、ACL 不继承陷阱），[security](/docs/CS/Framework/ZooKeeper/security.md) 梳理五种身份来源（digest / ip / sasl / x509 / super）、SASL（Kerberos）、3.9 起补齐的 TLS 与 superDigest 应急。
+
+**部署与引导** —— [Bootstrap](/docs/CS/Framework/ZooKeeper/Bootstrap.md) 是源码编译与启动引导深潜（QuorumPeerMain 入口、QuorumPeer 状态机、Standalone 模式）；[start](/docs/CS/Framework/ZooKeeper/start.md) 汇总部署运维要点与 **zxid 溢出触发选主**这一高价值坑。
 
 **生产运维** —— [cluster](/docs/CS/Framework/ZooKeeper/cluster.md) 讲 ensemble 规模、quorum、Observer 跨 DC 只读扩展、动态重配置、滚动升级与备份；[monitoring](/docs/CS/Framework/ZooKeeper/monitoring.md) 列四字命令、mntr 指标、JMX、Prometheus 与告警；[troubleshooting](/docs/CS/Framework/ZooKeeper/troubleshooting.md) 是磁盘爆满、只读模式、leader 切换、watch 泄漏、会话过期的 on-call 速查。
 
@@ -71,6 +75,12 @@ digraph "ZooKeeperStack" {
 - [etcd 横向对照](/docs/CS/Framework/etcd/compare.md)
 - [Nacos](/docs/CS/Framework/nacos/Nacos.md)
 - [Consul](/docs/CS/Framework/consul/Consul.md)
+- [Election（选主源码深潜）](/docs/CS/Framework/ZooKeeper/Election.md)
+- [NIO（默认网络层深潜）](/docs/CS/Framework/ZooKeeper/NIO.md)
+- [Bootstrap（启动引导深潜）](/docs/CS/Framework/ZooKeeper/Bootstrap.md)
+- [Watches](/docs/CS/Framework/ZooKeeper/Watches.md)
+- [Session](/docs/CS/Framework/ZooKeeper/Session.md)
+- [ACL](/docs/CS/Framework/ZooKeeper/ACL.md)
 - [Curator](/docs/CS/Framework/ZooKeeper/Curator.md)
 - [Recipes](/docs/CS/Framework/ZooKeeper/Recipes.md)
 - [BooKeeper](/docs/CS/Framework/BooKeeper/BooKeeper.md)

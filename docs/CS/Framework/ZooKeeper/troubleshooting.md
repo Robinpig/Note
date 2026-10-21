@@ -26,7 +26,7 @@ ZooKeeper 生产故障大多集中在四类：**磁盘（快照+日志堆积）*
 
 **症状**：日志出现 `will be dropped if server is in read-only mode`，写请求被拒。
 
-**根因**：集群无法选出/维持 Leader（Leader 失效、网络分区、超过半数节点不可用），存活节点退化为只读，避免脑裂写不一致。详见 [ZooKeeper Issues 段](/docs/CS/Framework/ZooKeeper/ZooKeeper.md?id=issues) 与只读模式机制（[pipeline](/docs/CS/Framework/ZooKeeper/pipeline.md?id=readonlyrequestprocessor-and-read-only-mode)）。
+**根因**：集群无法选出/维持 Leader（Leader 失效、网络分区、超过半数节点不可用），存活节点退化为只读，避免脑裂写不一致。详见 [ZooKeeper 运维与调优段](/docs/CS/Framework/ZooKeeper/ZooKeeper.md) 与只读模式机制（[pipeline](/docs/CS/Framework/ZooKeeper/pipeline.md?id=readonlyrequestprocessor-and-read-only-mode)）。
 
 **处置**：
 
