@@ -10,7 +10,7 @@ Dubbo 没有直接使用 Java 原生的 [SPI](/docs/CS/Java/JDK/Basic/SPI.md)，
 
 那么「扩展实例属于哪个模型」这个问题由谁回答？答案是 `@SPI` 上的 `scope()` 属性。它决定了这个 SPI 的实现类实例会被挂到 `FrameworkModel` / `ApplicationModel` / `ModuleModel` 中的哪一层去，是全局一份、一个应用一份，还是一个服务模块一份。这是 Dubbo 3.x 最大的架构变化，也是本篇新增篇幅最多的部分。
 
-本文版本基线：**Apache Dubbo 3.3.6**（tag `dubbo-3.3.6`）。所有代码块、SPI 文件内容、方法签名均逐文件核对自源码树，代码块首行注释给出文件路径与行号。本篇不重复 [Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md?id=scopemodel) 里 ScopeModel 的模型树与生命周期叙述，只讲**它如何决定扩展加载与实例归属**；扩展点的实际用法见 [Filter](/docs/CS/Framework/Dubbo/Filter.md) 与 [cluster](/docs/CS/Framework/Dubbo/cluster.md)。
+本文版本基线：**Apache Dubbo 3.3.6**（tag `dubbo-3.3.6`）。所有代码块、SPI 文件内容、方法签名均逐文件核对自源码树，代码块首行注释给出文件路径与行号。本篇不重复 [ScopeModel](/docs/CS/Framework/Dubbo/ScopeModel.md) 中的模型树与生命周期叙述，只讲**它如何决定扩展加载与实例归属**；扩展点的实际用法见 [Filter](/docs/CS/Framework/Dubbo/Filter.md) 与 [cluster](/docs/CS/Framework/Dubbo/cluster.md)。
 
 ## Why Not Use Java SPI Directly
 
@@ -1273,7 +1273,7 @@ Dubbo AOP 用 wrapper 模式实现，一个类要成为 AOP wrapper 必须同时
 
 ## Links
 
-- [Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md?id=scopemodel)
+- [ScopeModel](/docs/CS/Framework/Dubbo/ScopeModel.md)
 - [cluster](/docs/CS/Framework/Dubbo/cluster.md)
 - [Filter](/docs/CS/Framework/Dubbo/Filter.md)
 - [Protocol](/docs/CS/Framework/Dubbo/Protocol.md)
