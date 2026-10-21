@@ -1,63 +1,42 @@
 ## Introduction
 
+SCTP 在客户端与服务端之间提供「关联（associations）」。
 
+SCTP 是面向消息的（message-oriented）。
 
-SCTP provides *associations* between clients and servers.
+SCTP 能够在连接端点之间提供多条流（multiple streams），每条流各自拥有可靠的、按序的消息交付。其中一条流上的消息丢失，不会阻塞其他流上的消息交付。这与 TCP 形成对比：TCP 单条字节流中任何一点的丢失都会阻塞该连接上此后所有数据的交付，直到丢失被修复。
 
-2960 3309 3286
+SCTP 还提供多归属（multihoming）特性，允许单个 SCTP 端点支持多个 IP 地址。
 
-SCTP is message-oriented.
-
-SCTP can provide multiple streams between connection endpoints, each with its own reliable sequenced delivery of messages.
-A lost message in one of these streams does not block delivery of messages in any of the other streams.
-This approach is in contrast to TCP, where a loss at any point in the single stream of bytes blocks delivery of all future data on the connection until the loss is repaired.
-
-SCTP also provides a multihoming feature, which allows a single SCTP endpoint to support multiple IP addresses.
-
-SCTP is connection-oriented like TCP, so it also has association establishment and termination handshakes. 
-However, SCTP’s handshakes are different than TCP’s, so we describe them here.
+SCTP 像 TCP 一样面向连接，因此也有关联建立与终止的握手。不过 SCTP 的握手与 TCP 不同，故在此描述。
 
 ### Four-Way Handshake
 
-The following scenario, similar to TCP, occurs when an SCTP association is established:
-1. The server must be prepared to accept an incoming association. This preparation is normally done by calling socket, bind, and listen and is called a passive open.
-2. The client issues an active open by calling connect or by sending a message, which implicitly opens the association. 
-   This causes the client SCTP to send an INIT message (which stands for ‘‘initialization’’) to tell the server the client’s list of IP addresses, initial sequence number, 
-   initiation tag to identify all packets in this association, number of outbound streams the client is requesting, and number of inbound streams the client can support.
-3. The server acknowledges the client’s INIT message with an INIT-ACK message, which contains the server’s list of IP addresses, 
-   initial sequence number, initiation tag, number of outbound streams the server is requesting, number of inbound streams the server can support, and a state cookie. 
-   The state cookie contains all of the state that the server needs to ensure that the association is valid, and is digitally signed to ensure its validity.
-4. The client echos the server’s state cookie with a COOKIE-ECHO message. This message may also contain user data bundled within the same packet.
-5. The server acknowledges that the cookie was correct and that the association was established with a COOKIE-ACK message. 
-   This message may also contain user data bundled within the same packet.
+与 TCP 类似，SCTP 关联建立时发生如下过程：
 
-The minimum number of packets required for this exchange is four; hence, this process is called SCTP’s *four-way handshake*.
-The SCTP four-way handshake is similar in many ways to TCP’s three-way handshake, except for the cookie generation, which is an integral part. 
+1. 服务端必须准备好接受入站关联。这一准备通常通过调用 socket、bind、listen 完成，称为被动打开（passive open）；
+2. 客户端通过调用 connect 或发送消息发起主动打开（active open），隐式打开关联。这会让客户端 SCTP 发送一条 INIT 消息（initialization，初始化），告知服务端客户端的 IP 地址列表、初始序列号、用于标识本关联内所有报文的组合标签（initiation tag）、客户端请求的出口流数，以及客户端能支持的入口流数；
+3. 服务端用 INIT-ACK 消息确认客户端的 INIT，其中包含服务端的 IP 地址列表、初始序列号、initiation tag、服务端请求的出口流数、服务端能支持的入口流数，以及一个状态 Cookie（state cookie）。该 Cookie 包含服务端为确认关联有效所需的全部状态，并经数字签名以保证其有效性；
+4. 客户端以 COOKIE-ECHO 消息回显服务端的 Cookie，该消息也可在同一报文内携带用户数据；
+5. 服务端以 COOKIE-ACK 消息确认 Cookie 正确、关联已建立，该消息同样可携带用户数据。
 
-SCTP’s four-way handshake using Cookies formalizes a method of protection against denial-of-service attack.
-Many TCP implementations use a similar method; the big difference is that in TCP, the cookie state must be encoded into the initial sequence number, which is only 32 bits.
-SCTP provides an arbitrary-length field, and requires cryptographic security to prevent attacks.
+这一交换最少需要四个报文，因此称为 SCTP 的「四路握手（four-way handshake）」。SCTP 四路握手在许多方面与 TCP 的三次握手相似，区别在于 Cookie 的生成是其不可分割的一部分。
 
+SCTP 使用 Cookie 的四路握手，将一种防御拒绝服务攻击的方法形式化。许多 TCP 实现采用类似方法，最大区别在于：TCP 的 Cookie 状态必须编码进仅有 32 位的初始序列号中；而 SCTP 提供了任意长度的字段，并要求使用密码学安全手段来防止攻击。
 
 ### Association Termination
 
-Unlike TCP, SCTP does not permit a ‘‘half-closed’’ association.
-When one end shuts down an association, the other end must stop sending new data. The receiver of the shutdown request sends the data that was queued, if any, and then completes the shutdown.
+与 TCP 不同，SCTP 不允许「半关闭（half-closed）」的关联。当一端关闭关联时，另一端必须停止发送新数据。关闭请求的接收方先发送队列中已有的数据（若有），然后完成关闭。
 
-
-SCTP does not have a TIME_WAIT state like TCP, due to its use of verification tags.
-All chunks are tagged with the tag exchanged in the INIT chunks; a chunk from an old connection will arrive with an incorrect tag. 
-Therefore, in lieu of keeping an entire connection in TIME_WAIT, SCTP instead places verification tag values in TIME_WAIT.
-
-
-
+SCTP 不像 TCP 那样存在 TIME_WAIT 状态，因为它使用了验证标签（verification tags）。所有块（chunk）都带有在 INIT 块中交换的标签；来自旧连接的块会带着错误的标签到达。因此，SCTP 不是把整个连接保留在 TIME_WAIT，而是把验证标签值保留在 TIME_WAIT。
 
 ### State Transition Diagram
 
-
-
-
-
-
 ## Links
+
 - [Computer Network](/docs/CS/CN/CN.md)
+- [TCP](/docs/CS/CN/TCP/TCP.md)
+
+## References
+
+1. [RFC 4960 - Stream Control Transmission Protocol](https://datatracker.ietf.org/doc/html/rfc4960)

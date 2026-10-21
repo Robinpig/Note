@@ -1,155 +1,101 @@
 ## Introduction
 
-DNS is a distributed client/server networked database that is used by TCP/IP applications to map between host names and IP addresses (and vice versa), 
-to provide electronic mail routing information, service naming, and other capabilities.
+DNS（Domain Name System，域名系统）是一个分布式的客户端/服务器网络数据库，供 TCP/IP 应用程序在主机名与 IP 地址之间（以及反向）相互映射，并提供电子邮件路由信息、服务命名等能力。
 
-> Because accuracy is essential, TCP or some other reliable protocol must be used for AXFR requests.
+> 由于准确性至关重要，AXFR 区域传送请求必须使用 TCP 或其他可靠协议。
 
-在绝大多数情况下，DNS 都是使用 UDP 协议进行通信的，DNS 协议在设计之初也推荐我们在进行域名解析时首先使用 UDP
+在绝大多数情况下，DNS 都使用 UDP 协议通信，协议设计之初也推荐域名解析优先使用 UDP。实际上，DNS 不仅使用 UDP，也使用 TCP：
 
-实际上，DNS 不仅使用了 UDP 协议，也使用了 TCP 协议
+1. 设计之初就在区域传输中引入 TCP，常规查询使用 UDP；
+2. 当响应超过 512 字节上限时，规范首次明确「查询被截断应使用 TCP 重试」；
+3. 随后引入的 EDNS 机制允许 UDP 最多传输 4096 字节，但受 MTU 限制易分片丢包，仍不够可靠；
+4. 近年规范规定 DNS 应同时支持 UDP 与 TCP，TCP 不再是仅用于重试的备选。
 
-DNS 查询的类型不止包含 A 记录、CNAME 记录等常见查询，还包含 AXFR 类型的特殊查询，这种特殊查询主要用于 [DNS 区域传输](https://en.wikipedia.org/wiki/DNS_zone_transfer)，它的作用就是在多个命名服务器之间快速迁移记录，由于查询返回的响应比较大，所以会使用 TCP 协议来传输数据包
+DNS 是一个以层级 DNS 服务器实现的分布式数据库，同时也是一种允许主机查询该数据库的应用层协议。DNS 服务器多为运行 BIND（Berkeley Internet Name Domain）软件的 UNIX 主机 [BIND 2016]，协议基于 UDP、使用 53 端口。
 
-1. DNS 在设计之初就在区域传输中引入了 TCP 协议，在查询中使用 UDP 协议；
-2. 当 DNS 超过了 512 字节的限制，我们第一次在 DNS 协议中明确了『当 DNS 查询被截断时，应该使用 TCP 协议进行重试』这一规范；
-3. 随后引入的 EDNS 机制允许我们使用 UDP 最多传输 4096 字节的数据，但是由于 MTU 的限制导致的数据分片以及丢失，使得这一特性不够可靠；
-4. 在最近的几年，我们重新规定了 DNS 应该同时支持 UDP 和 TCP 协议，TCP 协议也不再只是重试时的选择
+除主机名到 IP 地址的转换外，DNS 还提供几项重要服务：
 
-The DNS is a distributed database implemented in a hierarchy of DNS servers, and an application-layer protocol that allows hosts to query the distributed database. 
-The DNS servers are often UNIX machines running the Berkeley Internet Name Domain (BIND) software [BIND 2016]. 
-The DNS protocol runs over UDP and uses port 53.
+- 主机别名（Host aliasing）
+- 邮件服务器别名（Mail server aliasing）
+- 负载均衡（Load distribution）
 
+DNS 解析流程：
 
-DNS provides a few other important services in addition to translating hostnames to IP addresses:
-- Host aliasing
-- Mail server aliasing
-- Load distribution
-
-DNS解析流程
-
-1. 询问local DNS server，有缓存IP即自动返回
-2. local DNS server询问root DNS server，逐步遍历出子DNS server 获取IP，缓存到本地后返回
-
-
-
-
+1. 先询问本地 DNS 服务器（local DNS server），若已有缓存的 IP 则直接返回；
+2. 本地服务器再向根 DNS 服务器（root）发起查询，逐级遍历各子域 DNS 服务器取得目标 IP，缓存到本地后返回给客户端。
 
 ## Implementation
 
-A simple design for DNS would have one DNS server that contains all the mappings.
-Although the simplicity of this design is attractive, it is inappropriate for today’s Internet, with its vast (and growing) number of hosts. 
-The problems with a centralized design include:
+DNS 最简单的设计是只用一台服务器保存全部映射。尽管简单，但对今天规模庞大且持续增长的互联网主机而言并不合适。集中式设计的问题包括：
 
-- A single point of failure.
-- Traffic volume.
-- Distant centralized database. This can lead to significant delays.
-- Maintenance.
+- 单点故障（single point of failure）；
+- 流量集中（traffic volume）；
+- 远程集中数据库会导致显著时延（distant centralized database）；
+- 维护困难（maintenance）。
 
-In summary, a centralized database in a single DNS server simply doesn’t scale. Consequently, the DNS is distributed by design.
+总而言之，单台 DNS 服务器的集中式数据库根本无法扩展，因此 DNS 从设计上就是分布式的。
 
-A Distributed, Hierarchical Database
+### Distributed, Hierarchical Database
 
-- Root DNS servers
-- Top-level domain (TLD) servers
-- Authoritative DNS servers
+DNS 服务器按层级分为三类：
 
-There is another important type of DNS server called the local DNS server. 
-A local DNS server does not strictly belong to the hierarchy of servers but is nevertheless central to the DNS architecture.
+- 根 DNS 服务器（Root DNS servers）
+- 顶级域服务器（Top-level domain, TLD servers）
+- 权威 DNS 服务器（Authoritative DNS servers）
 
-
-
+此外还有一类重要的本地 DNS 服务器（local DNS server）。它并不严格属于上述层级，却是 DNS 架构的核心：它代理客户端的递归查询，并缓存结果。
 
 ### Caching
 
-DNS extensively exploits DNS caching in order to improve the delay performance and to reduce the number of DNS messages ricocheting around the Internet.
+DNS 大量利用缓存来改善时延性能、减少在互联网上兜圈子的 DNS 报文数量。常见的诊断与配置命令：
 
 ```shell
-cat /etc/hosts
-
-```'
-
-```shell
-
-cat /etc/resolv.conf | grep nameserver
-
-nslookup
-
-# +trace
-dig
-
-drill
-
+cat /etc/hosts                        # 本地静态主机名映射
+cat /etc/resolv.conf | grep nameserver  # 查看本机配置的 DNS 服务器
+nslookup example.com                  # 交互式查询
+dig example.com +trace                # 显示完整解析链路
+drill example.com                     # 类似 dig 的查询工具
+systemctl restart networking          # 重启网络（修改 resolv.conf 后）
 ```
 
-```shell
-
-systemctl restart networking
-```
-
-also cache DNS
-
-in JAVA
-`InetAddress`
-
-please using singleton to avoid resolving DNS each time
+Java 程序也会缓存 DNS 解析结果（`InetAddress` 内部维护缓存）。为避免每次网络调用都重新解析，建议使用单例（singleton）复用同一 `InetAddress` 实例。
 
 ## DNS Records and Messages
 
-The DNS servers that together implement the DNS distributed database store resource records (RRs), including RRs that provide hostname-to-IP address mappings.
+共同实现 DNS 分布式数据库的各类服务器，存储着资源记录（Resource Records, RRs），其中包括提供主机名到 IP 地址映射的记录。
 
-A resource record is a four-tuple that contains the following fields:
+一条资源记录是一个四元组，包含以下字段：
 
 ```
 (Name, Value, Type, TTL)
 ```
 
-TTL is the time to live of the resource record; it determines when a resource should be removed from a cache. 
-In the example records given below, we ignore the TTL field. 
-The meaning of Name and Value depend on Type :
+TTL（Time To Live）表示该资源记录的生存时间，决定它何时应从缓存中移除；下面的示例记录忽略 TTL 字段。Name 与 Value 的含义取决于 Type：
 
-- If Type=A , then Name is a hostname and Value is the IP address for the hostname. 
-  Thus, a Type A record provides the standard hostname-to-IP address mapping. 
-  As an example,(relay1.bar.foo.com, 145.37.93.126, A) is a Type A record.
-- If Type=AAAA  
-- If Type=NS , then Name is a domain (such as foo.com ) and Value is the hostname of an authoritative DNS server that knows how to obtain the IP addresses for hosts in the domain. 
-  This record is used to route DNS queries further along in the query chain. 
-  As an example, (foo.com, dns.foo.com, NS) is a Type NS record.
-- If Type=CNAME , then Value is a canonical hostname for the alias hostname Name. 
-  This record can provide querying hosts the canonical name for a hostname. 
-  As an example, (foo.com, relay1.bar.foo.com, CNAME) is a CNAME record.
-- If Type=MX , then Value is the canonical name of a mail server that has an alias hostname Name.
-  As an example, (foo.com, mail.bar.foo.com, MX) is an MX record. 
-  MX records allow the hostnames of mail servers to have simple aliases.
-- If Type=TXT
-- If Type=SRV
-- If Type=SOA
-- If Type=PTR
-  
-
+- 若 Type=A，则 Name 是主机名，Value 是该主机名对应的 IP 地址。A 记录提供标准的主机名到 IP 地址映射，例如 `(relay1.bar.foo.com, 145.37.93.126, A)`。
+- 若 Type=AAAA，则 Name 是主机名，Value 是 IPv6 地址（A 对应 IPv4，AAAA 对应 IPv6）。
+- 若 Type=NS，则 Name 是一个域（如 foo.com），Value 是知道如何获取该域内主机 IP 的权威 DNS 服务器主机名。该记录用于将查询进一步路由到下一跳，例如 `(foo.com, dns.foo.com, NS)`。
+- 若 Type=CNAME，则 Value 是别名主机名 Name 的规范主机名（canonical hostname）。它让查询方能拿到主机名的规范名，例如 `(foo.com, relay1.bar.foo.com, CNAME)`。
+- 若 Type=MX，则 Value 是别名为 Name 的邮件服务器的规范名。MX 记录允许邮件服务器拥有简单别名，例如 `(foo.com, mail.bar.foo.com, MX)`。
+- 若 Type=TXT，则 Value 是一段文本字符串，常用于域名验证、SPF 等策略声明。
+- 若 Type=SRV，记录某服务所在的主机与端口（如 `_sip._tcp.example.com`），用于服务发现。
+- 若 Type=SOA，是区域的起始授权记录，包含该区域的权威信息（主服务器、管理员邮箱、序列号、刷新/重试/过期/最小 TTL 等）。
+- 若 Type=PTR，用于反向解析，Name 是 IP 地址（逆序的 in-addr.arpa 形式），Value 是对应的主机名。
 
 ## Attacks on the DNS
 
-There have been two main forms of attacks against the DNS. 
-- The first form involves a DoS attack where the DNS is rendered inoperative because of overloading of important DNS servers, such as the root or TLD servers. 
-- The second form alters the contents of resource records or masquerades as an official DNS server but responds with bogus resource records, 
-  thereby causing hosts to contact the incorrect IP address when attempting to connect to another machine.
+针对 DNS 的攻击主要有两类：
 
+- 第一类是 DoS 攻击：通过压垮根服务器、TLD 服务器等关键节点，使 DNS 整体无法工作；
+- 第二类是篡改资源记录或伪装成官方 DNS 服务器返回伪造记录，使主机在尝试连接时误连到错误的 IP 地址。
 
-DNS劫持
+**DNS 劫持**是上述第二类的典型表现：攻击者控制了解析结果，将用户导向钓鱼或恶意站点。
 
-DNS调用次数 服务多了之后域名多需要解析更多域名
-
-客户端程序启动时跑马测试出最快的IP, 之后使用IP直连
-
-自建DNS
-
-
+当服务规模变大、需要解析的域名增多时，DNS 调用次数也随之上升。一种常见优化是：客户端在启动阶段对各候选 IP 做测速（「跑马」），之后改用 IP 直连，跳过每次的域名解析开销。在可控环境下也可自建 DNS 以缩短解析链路。
 
 ## Links
 
 - [Computer Network](/docs/CS/CN/CN.md)
-- [HTTP](/docs/CS/CN/HTTP/HTTP.md)
 
 ## References
 
