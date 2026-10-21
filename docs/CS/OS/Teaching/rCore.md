@@ -31,7 +31,7 @@ RISC-V 有三个特权级：
 
 rCore-Tutorial-v3 各章大致对应一个 OS 子系统（也是阅读主线）：
 
-1. **应用程序与基本执行环境**：`no_std` 裸机程序、SBI 调用、`println!`、函数调用栈（与 QEMU 用法，见 [qemu](/docs/CS/OS/qemu.md)）。
+1. **应用程序与基本执行环境**：`no_std` 裸机程序、SBI 调用、`println!`、函数调用栈（与 QEMU 用法，见 [qemu](/docs/CS/OS/Virtualization/qemu.md)）。
 2. **批处理操作系统**：多个应用一次性载入内存、顺序运行；特权级切换、S/U 态、`ecall` 系统调用的雏形。
 3. **多道程序与协作式调度**：应用主动 `yield` 时切换任务，引入任务控制块与任务切换汇编。
 4. **地址空间**：SV39 页表、内核/应用地址空间隔离、按需分配；对照 [xv6 memory](/docs/CS/OS/xv6/memory.md) 与 Linux 的 [vm](/docs/CS/OS/Linux/mm/vm.md)。
@@ -92,7 +92,7 @@ cd os && make run
 - [xv6](/docs/CS/OS/xv6/xv6.md)
 - [xv6 Interrupt](/docs/CS/OS/xv6/Interrupt.md)
 - [xv6 memory](/docs/CS/OS/xv6/memory.md)
-- [qemu](/docs/CS/OS/qemu.md)
+- [qemu](/docs/CS/OS/Virtualization/qemu.md)
 - [Linux vm](/docs/CS/OS/Linux/mm/vm.md)
 - [Kernel Locking](/docs/CS/OS/Linux/Lock/README.md)
 

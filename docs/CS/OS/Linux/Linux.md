@@ -27,7 +27,7 @@ Linux系统诞生于1991年10月5日
 跨平台在其它OS下使用Linux
 
 - [Docker](/docs/CS/Container/Docker/Docker.md)
-- [VM](/docs/CS/OS/VM.md)
+- [VM](/docs/CS/OS/Virtualization/VM.md)
 
 Windows下使用Linux
 
@@ -63,7 +63,7 @@ Linux在最初是宏内核架构 同时也逐渐融入了微内核的精华 如�
 
 内核源码的获取、阅读与构建单独成篇：怎么装源码包、用 ctags / bootlin 读代码、`.config` 配置、`make` 构建与 `bzImage` 的拼接机制，见 [内核构建](/docs/CS/OS/Linux/build.md)。
 
-想读一份**读得完的 Linux**，可以看 0.11 版本 [Linux 0.11](/docs/CS/OS/Linux/0.11.md)：1991 年的内核源码展开后仅 325KB，却已具备进程调度、信号、块设备与文件系统的雏形，用 [Bochs](/docs/CS/OS/Bochs.md) 就能跑起来。它和 xv6 / rCore 那类**教学内核**不是一回事——0.11 是 Linux 自己的早期版本，是现代内核的直系祖先，不是为教学另写的简化系统。它的启动部分（`boot/bootsect.s` → `setup.s` → `head.S` 三段接力）与现代差异极大，正好和下面的启动链对照着看这套机制是怎么演化过来的。
+想读一份**读得完的 Linux**，可以看 0.11 版本 [Linux 0.11](/docs/CS/OS/Linux/0.11.md)：1991 年的内核源码展开后仅 325KB，却已具备进程调度、信号、块设备与文件系统的雏形，用 [Bochs](/docs/CS/OS/Virtualization/Bochs.md) 就能跑起来。它和 xv6 / rCore 那类**教学内核**不是一回事——0.11 是 Linux 自己的早期版本，是现代内核的直系祖先，不是为教学另写的简化系统。它的启动部分（`boot/bootsect.s` → `setup.s` → `head.S` 三段接力）与现代差异极大，正好和下面的启动链对照着看这套机制是怎么演化过来的。
 
 ## Boot
 

@@ -1,6 +1,6 @@
 ## Introduction
 
-xv6 的教学价值很大程度来自"能跑、能改、能调试"。本笔记汇总在两个官方移植版（x86 的 `mit-pdos/xv6-public` 与 RISC-V 的 `mit-pdos/xv6-riscv`）上搭建 QEMU 运行环境、用 gdb 单步内核、以及编译运行自己的用户程序的方法。硬件虚拟化与 QEMU 本身见 [QEMU](/docs/CS/OS/qemu.md)。
+xv6 的教学价值很大程度来自"能跑、能改、能调试"。本笔记汇总在两个官方移植版（x86 的 `mit-pdos/xv6-public` 与 RISC-V 的 `mit-pdos/xv6-riscv`）上搭建 QEMU 运行环境、用 gdb 单步内核、以及编译运行自己的用户程序的方法。硬件虚拟化与 QEMU 本身见 [QEMU](/docs/CS/OS/Virtualization/qemu.md)。
 
 > 选哪个版本：6.S081（RISC-V）是当前主流课程分支，工具链与社区资料更全；x86 版适合对照"实模式→保护模式"的教材式启动（见 [Boot](/docs/CS/OS/xv6/Boot.md)）。下面分别给命令，按本机系统挑一段即可。
 
@@ -206,8 +206,8 @@ int main() {
 - [xv6 启动流程](/docs/CS/OS/xv6/Boot.md)
 - [xv6 系统调用](/docs/CS/OS/xv6/Syscall.md)
 - [xv6 进程](/docs/CS/OS/xv6/proc.md)
-- [QEMU](/docs/CS/OS/qemu.md)
-- [Bochs](/docs/CS/OS/Bochs.md)
+- [QEMU](/docs/CS/OS/Virtualization/qemu.md)
+- [Bochs](/docs/CS/OS/Virtualization/Bochs.md)
 
 ## References
 

@@ -178,7 +178,7 @@ kernelshark trace.dat
 - [eBPF](/docs/CS/OS/Linux/Tools/eBPF.md)
 - [perf](/docs/CS/OS/Linux/Tools/Perf.md)
 - [strace](/docs/CS/OS/Linux/Tools/strace.md)
-- [DTrace](/docs/CS/OS/DTrace.md)
+- [DTrace](/docs/CS/OS/Tools/DTrace.md)
 
 ## References
 

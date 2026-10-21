@@ -246,7 +246,7 @@ FreeBSD 在这一层对外输出的东西比它引进的多：`kqueue(2)` / `kev
 
 ## Observability
 
-`dtrace(1)` **自 7.1 起就在 base**（这是 man 页自己的 HISTORY 口径），15.1 把 SDT 静态探针开到 powerpc64 与 powerpc64le，使这两档也能用 DTrace。与 Linux 侧对照见 [DTrace](/docs/CS/OS/DTrace.md)。系统调用与进程侧是 `ktrace` / `truss` / `procstat(1)`，硬件事件计数是 `pmc(3)` / `pmcstat(1)` 加 `hwpmc(4)`（需内核选项 `HWPMC_HOOKS`）。
+`dtrace(1)` **自 7.1 起就在 base**（这是 man 页自己的 HISTORY 口径），15.1 把 SDT 静态探针开到 powerpc64 与 powerpc64le，使这两档也能用 DTrace。与 Linux 侧对照见 [DTrace](/docs/CS/OS/Tools/DTrace.md)。系统调用与进程侧是 `ktrace` / `truss` / `procstat(1)`，硬件事件计数是 `pmc(3)` / `pmcstat(1)` 加 `hwpmc(4)`（需内核选项 `HWPMC_HOOKS`）。
 
 FreeBSD 在"给机器读的输出"这件事上比多数系统早：`libxo(3)` 让 base 命令用 `--libxo` 产出 **TEXT / XML / JSON / HTML** 四种形态，`-F json` 是最常用的那个开关；配合 `sysctl(8)`、`vmstat -z/-m`、`systat(1)`（14.0 新增 `iolat` 命令，读 CAM I/O 调度器算出的 I/O 延迟，Netflix 资助）能拼出一套不需 agent 的观测面。
 
@@ -342,7 +342,7 @@ Netflix 那条线还解释了 FreeBSD 网络栈为什么长这样：OCA 论文�
 - [Linux](/docs/CS/OS/Linux/Linux.md)
 - [Darwin 与 XNU](/docs/CS/OS/mac/Darwin.md)
 - [Socket 编程接口](/docs/CS/CN/Socket.md)
-- [DTrace](/docs/CS/OS/DTrace.md)
+- [DTrace](/docs/CS/OS/Tools/DTrace.md)
 
 ## References
 

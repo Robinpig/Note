@@ -1,8 +1,8 @@
 ## Introduction
 
-**BookOS** 是一个用于学习的 x86 32 位（i386）操作系统，基于作者自研的 **xbook2 内核**（[GitHub](https://github.com/hzcx998/BookOS)）。它可运行在 QEMU（默认）、[Bochs](/docs/CS/OS/Bochs.md)、VirtualBox、VMware 等虚拟机中，具备所需驱动时也可在物理机上运行。xbook2 相比第一版 xbook 的宏内核，第二版采用**混合内核（hybrid kernel）**思路：把多进程、虚拟内存、进程间通信、驱动留在核心，而把文件系统、网络协议栈、图形界面放到用户态。
+**BookOS** 是一个用于学习的 x86 32 位（i386）操作系统，基于作者自研的 **xbook2 内核**（[GitHub](https://github.com/hzcx998/BookOS)）。它可运行在 QEMU（默认）、[Bochs](/docs/CS/OS/Virtualization/Bochs.md)、VirtualBox、VMware 等虚拟机中，具备所需驱动时也可在物理机上运行。xbook2 相比第一版 xbook 的宏内核，第二版采用**混合内核（hybrid kernel）**思路：把多进程、虚拟内存、进程间通信、驱动留在核心，而把文件系统、网络协议栈、图形界面放到用户态。
 
-它在教学内核谱系里属于"中文社区自研、目标更接近完整可用系统"的一类，可与 [xv6](/docs/CS/OS/xv6/xv6.md)（精炼 Unix 教材内核）、[rCore](/docs/CS/OS/rCore.md)（Rust/RISC-V）、[osask](/docs/CS/OS/osask.md)（30 天自制）、[Linux 0.11](/docs/CS/OS/Linux/0.11.md)（真实历史内核）对照学习。
+它在教学内核谱系里属于"中文社区自研、目标更接近完整可用系统"的一类，可与 [xv6](/docs/CS/OS/xv6/xv6.md)（精炼 Unix 教材内核）、[rCore](/docs/CS/OS/Teaching/rCore.md)（Rust/RISC-V）、[osask](/docs/CS/OS/Teaching/osask.md)（30 天自制）、[Linux 0.11](/docs/CS/OS/Linux/0.11.md)（真实历史内核）对照学习。
 
 ## xbook2 Kernel
 
@@ -49,17 +49,17 @@ make qemu      # 显式用 qemu
 make clean     # 清理产物
 ```
 
-macOS 上需自行准备 i386-elf 工具链（如 `i386-elf-gcc`）与 nasm/qemu；Linux 上安装 `gcc nasm qemu-system-x86` 即可，需要性能可启用 KVM。调试可改用 [Bochs](/docs/CS/OS/Bochs.md) 的内置指令级调试器观察引导与早期内核。
+macOS 上需自行准备 i386-elf 工具链（如 `i386-elf-gcc`）与 nasm/qemu；Linux 上安装 `gcc nasm qemu-system-x86` 即可，需要性能可启用 KVM。调试可改用 [Bochs](/docs/CS/OS/Virtualization/Bochs.md) 的内置指令级调试器观察引导与早期内核。
 
 ## Links
 
 - [Operating Systems](/docs/CS/OS/OS.md)
 - [xv6](/docs/CS/OS/xv6/xv6.md)
-- [rCore](/docs/CS/OS/rCore.md)
-- [osask](/docs/CS/OS/osask.md)
+- [rCore](/docs/CS/OS/Teaching/rCore.md)
+- [osask](/docs/CS/OS/Teaching/osask.md)
 - [Linux 0.11](/docs/CS/OS/Linux/0.11.md)
-- [Bochs](/docs/CS/OS/Bochs.md)
-- [qemu](/docs/CS/OS/qemu.md)
+- [Bochs](/docs/CS/OS/Virtualization/Bochs.md)
+- [qemu](/docs/CS/OS/Virtualization/qemu.md)
 - [GRUB](/docs/CS/OS/Boot/Grub.md)
 
 ## References

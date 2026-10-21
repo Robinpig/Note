@@ -84,8 +84,8 @@ xv6 源码按"一个 `.c` 管一个子系统"组织，关键文件与归属：
 - [xv6 文件系统](/docs/CS/OS/xv6/file.md)
 - [xv6 设备管理](/docs/CS/OS/xv6/device.md)
 - [xv6 ELF 与 exec](/docs/CS/OS/xv6/ELF.md)
-- [QEMU](/docs/CS/OS/qemu.md)
-- [Bochs](/docs/CS/OS/Bochs.md)
+- [QEMU](/docs/CS/OS/Virtualization/qemu.md)
+- [Bochs](/docs/CS/OS/Virtualization/Bochs.md)
 - [Unix](/docs/CS/OS/unix/Unix.md)
 
 ## References

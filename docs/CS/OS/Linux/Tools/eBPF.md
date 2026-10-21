@@ -160,7 +160,7 @@ int xdp_drop(struct xdp_md *ctx) {
 - [Tools](/docs/CS/OS/Linux/Tools/Tools.md)
 - [Scheduler](/docs/CS/OS/Linux/proc/sche.md)
 - [tcpdump](/docs/CS/CN/Tools/tcpdump.md)
-- [DTrace](/docs/CS/OS/DTrace.md)
+- [DTrace](/docs/CS/OS/Tools/DTrace.md)
 
 ## References
 

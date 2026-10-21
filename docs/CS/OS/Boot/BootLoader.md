@@ -145,9 +145,9 @@ GRUB 实现了 Multiboot 规范，xv6 等教学内核也可以在 ELF 中嵌入 
 ## Links
 
 - [Operating Systems](/docs/CS/OS/OS.md)
-- [BIOS 与 UEFI](/docs/CS/OS/BIOS.md)
+- [BIOS 与 UEFI](/docs/CS/OS/Boot/BIOS.md)
 - [GRUB](/docs/CS/OS/Boot/Grub.md)
-- [Bochs](/docs/CS/OS/Bochs.md)
+- [Bochs](/docs/CS/OS/Virtualization/Bochs.md)
 
 
 ## References

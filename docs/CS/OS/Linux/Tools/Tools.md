@@ -221,4 +221,4 @@ nc
 - [网络工具（network）](/docs/CS/OS/Linux/Tools/network.md)
 - [curl](/docs/CS/OS/Linux/Tools/curl.md)
 - [Linux](/docs/CS/OS/Linux/Linux.md)
-- [ELF 与 execve 命令](/docs/CS/OS/command.md)
+- [ELF 与 execve 命令](/docs/CS/OS/Tools/command.md)

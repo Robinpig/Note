@@ -170,7 +170,7 @@ V3 手册里只有 `kill.2`、`intr.2`、`quit.2`；`signal.2` 与 `alarm.2` 要
 | :--- | :--- | :--- | :--- |
 | 等待多个 fd 上的事件 | `kqueue`（FreeBSD 4.1 起） | `epoll`（2.5.44 起） | `select`/`poll` 加 event ports |
 | 内核状态与调参入口 | `sysctl` 为主 | 额外有 `/proc` 与 `/sys` 两套伪文件系统 | `sysctl` 为主 |
-| 生产环境动态插桩 | 曾内置 DTrace（macOS 多年后移除） | ftrace 与 eBPF（`bpf()` 自 3.18 起被描述为"通用内核虚拟机"） | **DTrace 是它的原生机制**，见 [DTrace](/docs/CS/OS/DTrace.md) |
+| 生产环境动态插桩 | 曾内置 DTrace（macOS 多年后移除） | ftrace 与 eBPF（`bpf()` 自 3.18 起被描述为"通用内核虚拟机"） | **DTrace 是它的原生机制**，见 [DTrace](/docs/CS/OS/Tools/DTrace.md) |
 | 服务与启动管理 | `launchd`（macOS）、`rc.d`（BSD） | 早期 SysV `init`，后为 systemd，见 [启动链](/docs/CS/OS/Linux/boot/README.md) | SMF |
 | 系统级分区 | 无（靠 jail 做容器） | `namespace` + `cgroup`，见 [namespace](/docs/CS/OS/Linux/namespace.md) 与 [cgroup](/docs/CS/OS/Linux/cgroup/README.md) | Zones（Global / Non-Global） |
 | 进程间通信 | 管道、Unix domain socket、共享内存 | 同前，另加 netlink | 同前 |

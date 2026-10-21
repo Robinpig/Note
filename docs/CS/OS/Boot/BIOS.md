@@ -46,6 +46,6 @@ It is distinct from the "MBR boot code" method that was used by legacy BIOS syst
 
 - [Operating System](/docs/CS/OS/OS.md)
 - [Computer Organization](/docs/CS/CO/CO.md)
-- [BootLoader](/docs/CS/OS/BootLoader.md)
+- [BootLoader](/docs/CS/OS/Boot/BootLoader.md)
 - [GRUB](/docs/CS/OS/Boot/Grub.md)
-- [Bochs](/docs/CS/OS/Bochs.md)
+- [Bochs](/docs/CS/OS/Virtualization/Bochs.md)

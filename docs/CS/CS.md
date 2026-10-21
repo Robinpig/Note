@@ -172,15 +172,15 @@ Docker、Kubernetes、CNI、Ingress、Helm
 
 ### Computer Organization
 
-组成原理讲**程序为什么在硬件上跑出这个速度**：逻辑门与指令集、寻址方式、流水线与分支预测（[BranchPrediction](/docs/CS/OS/BranchPrediction.md)）、异常与中断、以及由寄存器到外存的**存储层次**——缓存一致性与局部性决定了上层所有性能优化的上限。入口 [CO](/docs/CS/CO/CO.md)，系统视角的入门读法见 [CSAPP](/docs/CS/OS/CSAPP.md)；动手跑指令与启动实验用 [Bochs](/docs/CS/OS/Bochs.md) 与 [qemu](/docs/CS/OS/qemu.md)。
+组成原理讲**程序为什么在硬件上跑出这个速度**：逻辑门与指令集、寻址方式、流水线与分支预测（[BranchPrediction](/docs/CS/CO/BranchPrediction.md)）、异常与中断、以及由寄存器到外存的**存储层次**——缓存一致性与局部性决定了上层所有性能优化的上限。入口 [CO](/docs/CS/CO/CO.md)，系统视角的入门读法见 [CSAPP](/docs/CS/OS/Teaching/CSAPP.md)；动手跑指令与启动实验用 [Bochs](/docs/CS/OS/Virtualization/Bochs.md) 与 [qemu](/docs/CS/OS/Virtualization/qemu.md)。
 
 ### Operating System
 
-操作系统是硬件之上、应用之下的**资源管理者**，主线只有五条：进程与调度、内存管理、文件系统、I/O、同步原语，再加从固件到 `init` 的启动链。通用理论见 [OS](/docs/CS/OS/OS.md)（[process](/docs/CS/OS/process.md)、[scheduling](/docs/CS/OS/scheduling.md)、[memory](/docs/CS/OS/memory.md)、[file](/docs/CS/OS/file.md)、[IO](/docs/CS/OS/IO.md)、[Deadlocks](/docs/CS/OS/Deadlocks.md)、[VM](/docs/CS/OS/VM.md)、[Parallel](/docs/CS/OS/Parallel.md)）。
+操作系统是硬件之上、应用之下的**资源管理者**，主线只有五条：进程与调度、内存管理、文件系统、I/O、同步原语，再加从固件到 `init` 的启动链。通用理论见 [OS](/docs/CS/OS/OS.md)（[process](/docs/CS/OS/process.md)、[scheduling](/docs/CS/OS/scheduling.md)、[memory](/docs/CS/OS/memory.md)、[file](/docs/CS/OS/file.md)、[IO](/docs/CS/OS/IO.md)、[Deadlocks](/docs/CS/OS/Deadlocks.md)、[VM](/docs/CS/OS/Virtualization/VM.md)、[Parallel](/docs/CS/OS/Parallel.md)）。
 
 本库以 Linux 内核为主线对照源码，[Linux](/docs/CS/OS/Linux/Linux.md) 是该子树**唯一枢纽**，各子系统有独立地图：[proc](/docs/CS/OS/Linux/proc/README.md)、[mm](/docs/CS/OS/Linux/mm/README.md)、[fs](/docs/CS/OS/Linux/fs/README.md)、[net](/docs/CS/OS/Linux/net/README.md)、[IO](/docs/CS/OS/Linux/IO/README.md)、[Lock](/docs/CS/OS/Linux/Lock/README.md)、[boot](/docs/CS/OS/Linux/boot/README.md)、[dev](/docs/CS/OS/Linux/dev/README.md)、[struct](/docs/CS/OS/Linux/struct/README.md)、[module](/docs/CS/OS/Linux/module/README.md)、[cgroup](/docs/CS/OS/Linux/cgroup/README.md)、[PM](/docs/CS/OS/Linux/PM/README.md)、[Distribution](/docs/CS/OS/Linux/Distribution/README.md)。横切机制留在根目录：[Interrupt](/docs/CS/OS/Linux/Interrupt.md)、[Calls](/docs/CS/OS/Linux/Calls.md)、[timer](/docs/CS/OS/Linux/timer.md)、[workqueue](/docs/CS/OS/Linux/workqueue.md)、[namespace](/docs/CS/OS/Linux/namespace.md)、[Swap](/docs/CS/OS/Linux/Swap.md)、[ZeroCopy](/docs/CS/OS/Linux/ZeroCopy.md)、[KVM](/docs/CS/OS/Linux/KVM.md)、[performance](/docs/CS/OS/Linux/performance.md)、[SELinux](/docs/CS/OS/Linux/SELinux.md)、[build](/docs/CS/OS/Linux/build.md)。
 
-其余血统各有入口：[Unix](/docs/CS/OS/unix/Unix.md)、[Windows](/docs/CS/OS/Windows/Windows.md)、[mac](/docs/CS/OS/mac/mac.md)、[Android](/docs/CS/OS/Android/Android.md)、[Fuchsia](/docs/CS/OS/Fuchsia/Fuchsia.md)，教学与合作内核 [xv6](/docs/CS/OS/xv6/xv6.md)、[rCore](/docs/CS/OS/rCore.md)、[osask](/docs/CS/OS/osask.md)；早期版本 [0.11](/docs/CS/OS/Linux/0.11.md) 是现代内核的直系祖先。
+其余血统各有入口：[Unix](/docs/CS/OS/unix/Unix.md)、[Windows](/docs/CS/OS/Windows/Windows.md)、[mac](/docs/CS/OS/mac/mac.md)、[Android](/docs/CS/OS/Android/Android.md)、[Fuchsia](/docs/CS/OS/Fuchsia/Fuchsia.md)，教学与合作内核 [xv6](/docs/CS/OS/xv6/xv6.md)、[rCore](/docs/CS/OS/Teaching/rCore.md)、[osask](/docs/CS/OS/Teaching/osask.md)；早期版本 [0.11](/docs/CS/OS/Linux/0.11.md) 是现代内核的直系祖先。
 
 ### Compiler and Toolchain
 
