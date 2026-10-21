@@ -39,7 +39,7 @@ digraph framework_index {
 
 按"强一致键值底座 / 配置与注册中心"两类定位取舍，完整维度矩阵见 [etcd 横向对照](/docs/CS/Framework/etcd/compare.md)。
 
-- [etcd](/docs/CS/Framework/etcd/README.md)：K8s 后端首选的强一致 KV，配套完整的共识（raft/tracker）、存储（boltdb/MVCC）、网关、运维笔记。
+- [etcd](/docs/CS/Framework/etcd/README.md)：K8s 后端首选的强一致 KV；枢纽 + boot（启动生命周期）/ request（请求路径）/ features（服务发现·事务）分册，配套完整的共识（raft/tracker）、存储（boltdb/MVCC）、网关、运维笔记。
 - [ZooKeeper](/docs/CS/Framework/ZooKeeper/README.md)：经典协调底座，Zab 共识、znode树、watch 与 session 配方。
 - [Nacos](/docs/CS/Framework/nacos/README.md)：配置中心 + 注册中心，AP（Distro）与 CP（JRaft）双模式。
 - [Consul](/docs/CS/Framework/consul/README.md)：服务网络平台，服务发现 + 服务网格（Envoy mTLS）+ 多DC 联邦，另有成员发现（Serf）与网关专篇。

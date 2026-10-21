@@ -52,6 +52,18 @@
 - 3（小集群）或 5（生产）；**不要为"高可用"堆到 7+**——更多 voter 拖慢 Raft 提交、放大快照广播；
 - 跨机房容错靠**多 DC 联邦**（[Gateway](/docs/CS/Framework/consul/gateway.md)），而非单 DC 加 server。
 
+## Tuning by Symptom
+
+| 症状 | 先调什么 | 别动什么 |
+| :--- | :--- | :--- |
+| leader 频繁易主 | `-data-dir` 换低延迟磁盘；适当调大 `raft_multiplier` | 别靠加 server 掩盖磁盘瓶颈 |
+| server 反复被移出投票圈 | 查跨 AZ RTT（平均 <50ms / p99 <100ms）；调 `serf_lan` 重传 | 别盲目调大 `max_trailing_logs`（只会掩盖慢节点） |
+| 快照 / WAL IO 打满 | 调大 `raft_snapshot_threshold`（减少快照频率） | 别调小（恢复 replay 变长、raft.db 膨胀） |
+| ACL 变更生效慢 | 调小 `acl.*_ttl`（默认 30s） | 别设为 0（每次请求都打主 DC） |
+| 写延迟高 | 查磁盘 fsync 与 `raft_multiplier`；减少写放大 | 别用 stale 读掩盖写路径问题 |
+| sidecar 拉配置慢 | xDS 走 `8503`（TLS）；确认 sidecar 连接数与网络 | 别为性能关掉 mTLS（放弃零信任） |
+| 发现结果陈旧 | 查反熵同步延迟与 agent 缓存 | 别急着把读切成一致读（打爆 leader） |
+
 ## Tuning Comparison with etcd
 
 | 项 | Consul | etcd |
@@ -64,6 +76,7 @@
 ## Links
 
 - [Consul（架构与启动流程）](/docs/CS/Framework/consul/Consul.md)
+- [配置参考](/docs/CS/Framework/consul/config.md)
 - [Raft（共识）](/docs/CS/Framework/consul/raft.md)
 - [Serf（成员发现）](/docs/CS/Framework/consul/serf.md)
 - [Security（安全）](/docs/CS/Framework/consul/security.md)

@@ -84,6 +84,7 @@ Consul 的"通用协议接入"让非 Go 技术栈、甚至无 SDK 的遗留系�
 ## Links
 
 - [Consul（架构与启动流程）](/docs/CS/Framework/consul/Consul.md)
+- [数据模型](/docs/CS/Framework/consul/data_model.md)
 - [KV（存储）](/docs/CS/Framework/consul/kv.md)
 - [Discovery（服务发现）](/docs/CS/Framework/consul/discovery.md)
 - [Security（安全）](/docs/CS/Framework/consul/security.md)
