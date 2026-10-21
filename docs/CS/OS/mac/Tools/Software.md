@@ -201,13 +201,13 @@ Wallpaper
 - iStat Menu(付费)
 - Better MenuBar(Apple Store免费)
 - [SMCAMDProcessor](https://github.com/trulyspinach/SMCAMDProcessor) 适用AMD CPU
-- [RunCat]
+- RunCat（菜单栏跑猫动画，Mac App Store）
 - [Stats](https://mac-stats.com/)
 
 ## Markdown
 
-- [Typora]()(付费)
-- Marked 2
+- Typora（付费）
+- [Marked 2](https://marked2app.com/)
 - [Glow](https://github.com/charmbracelet/glow) is a terminal based markdown reader designed from the ground up to bring out the beauty—and power—of the CLI.
 
 
@@ -319,9 +319,11 @@ https://vscode.cdn.azure.cn/stable/3866c3553be8b268c8a7f8c0482c0c0177aa8bfa/VSCo
 ## Links
 
 - [Mac Tools](/docs/CS/OS/mac/Tools/Tools.md)
+- [Homebrew](/docs/CS/OS/mac/Tools/Homebrew.md)
+- [Terminal](/docs/CS/OS/mac/Tools/Terminal.md)
+- [CLI](/docs/CS/OS/mac/Tools/CLI.md)
 - [Package](/docs/CS/OS/mac/Package.md)
 - [Development](/docs/CS/OS/mac/Development.md)
-- [MacOS](/docs/CS/OS/mac/mac.md)
 
 ## References
 

@@ -114,4 +114,4 @@ Pages purgeable:                              9.
 
 1. [Memory Usage Performance Guidelines](https://developer.apple.com/library/archive/documentation/Performance/Conceptual/ManagingMemory/Articles/AboutMemory.html)
 2. [Mach Memory Management](https://developer.apple.com/library/archive/documentation/Darwin/Conceptual/KernelProgramming/vm/vm.html)
-3. [vm_stat and memory pressure on macOS](https://developer.apple.com/library/archive/documentation/Performance/Conceptual/ManagingMemory/Articles/InvestigatingMemory.html)
+3. [Memory Allocation — Managing Memory](https://developer.apple.com/library/archive/documentation/Performance/Conceptual/ManagingMemory/Articles/MemoryAlloc.html)

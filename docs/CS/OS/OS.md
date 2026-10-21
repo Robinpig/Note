@@ -272,9 +272,10 @@ CPU 虚拟化面临两个核心挑战：
 UNIX 1969 年起源于贝尔实验室那台"角落里没人用的 PDP-7"，1971 年第一版手册对应 PDP-11/20 上的汇编器版本。真正的转折点是 **1973 年的第四版用 C 重写了内核**——但"可移植"要到 1977-78 年移植到 Interdata 8/32、1979 年 32V 移植到 VAX 才算被证明，不是重写当年就成立的。
 
 - **BSD 分支**：1977 年底伯克利的第一盘磁带只是叠加在授权 V6 之上的自研软件层，不是可独立分发的系统；BSD 真正自成一支要等到 32V（V7 的 VAX 移植）之后的 3BSD
+- **FreeBSD**：4.4BSD-Lite 的直系后代（2.0 于 1994-11-23 发布，此前的 1.x 还建在 Net/2 上），当前发布线是 15.1（2026-06-16）与 14.5（2026-09-08）。它与 Linux 最根本的差别不在内核写法，而在**发布单位**——base system 是一个整体发布物，用 `make buildworld` 从源码构建、用 `freebsd-update` 或 pkgbase 升级，而不是发行版拼装。[FreeBSD](/docs/CS/OS/unix/FreeBSD.md) 展开它的发布节奏、平台分层、内核机制、pkgbase 与安全流水线
 - **System V 分支**：AT&T 的商业产品线，1989 年的 SVR4 把 System V、BSD 与 Xenix 三方合流，成为 AIX、HP-UX、IRIX、UnixWare 与 Solaris 的共同底子
 - **Linux**：1991 年 Linus Torvalds 在 Minix 的启发下公开了内核 0.02 版。Linux 遵循 GPL，彻底开放源码，成为当今服务器、嵌入式、云基础设施的事实标准。[Linux 内核子树](/docs/CS/OS/Linux/Linux.md) 是本库最活跃的主题之一
-- **macOS / iOS**：Apple 的两大平台共享 XNU 内核，而 XNU 是 **Mach + 源自 FreeBSD 一支的 BSD 层 + I/O Kit**，见 [mac](/docs/CS/OS/mac/mac.md) 与 [Darwin](/docs/CS/OS/mac/Darwin.md)。macOS 源自 NeXTSTEP（1988）— OPENSTEP — Mac OS X（2001），2016 年起改称 macOS。iOS 自 2007 年发布起即基于同一内核
+- **macOS / iOS**：Apple 的两大平台共享 XNU 内核，而 XNU 是 **Mach + 源自 FreeBSD 一支的 BSD 层 + I/O Kit**，见 [mac](/docs/CS/OS/mac/mac.md) 与 [Darwin](/docs/CS/OS/mac/Darwin.md)。macOS 源自 NeXTSTEP（1988）— OPENSTEP — Mac OS X（2001），2016 年起改称 macOS。iOS 自 2007 年发布起即基于同一内核。macOS 子树已按内核分层、[启动链](/docs/CS/OS/mac/Boot.md)、[文件系统卷组](/docs/CS/OS/mac/File_System.md)、[服务管理](/docs/CS/OS/mac/Service_Management.md)、[安全模型](/docs/CS/OS/mac/Security.md)、[虚拟内存](/docs/CS/OS/mac/Virtual_Memory.md) 与 [Apple Silicon](/docs/CS/OS/mac/Apple_Silicon.md) 拆开展开
 
 血统、POSIX 符合性与 UNIX 商标是三件互不等价的事（Linux 无 Unix 血统却接口兼容，macOS 有血统且注册了商标，FreeBSD 有血统却从未认证），家谱、现代分支对照与 Unix API 契约的展开都在 [UNIX 家族](/docs/CS/OS/unix/Unix.md)。UNIX 的"一切皆文件"哲学在后续所有现代操作系统中都能找到影子，Linux 侧的具体实现见 [文件系统机制](/docs/CS/OS/Linux/fs/README.md)。
 

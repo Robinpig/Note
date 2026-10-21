@@ -15,6 +15,10 @@ xv6启动 在main() -> tvinit()中完成IDT的初始化
 
 CPU不切换到内核的页表，不切换到内核的栈，不保存除`pc`外的其它寄存器。那些事需要由内核来做。在trap的过程中CPU做尽量少的工作，这是为了给软件提供尽可能高的灵活性
 
+## Map of This Section
+
+中断/异常/trap 是用户态进入内核的唯一硬件通道，也是时钟中断驱动调度的前提。本页讲 trapframe、向量表（x86 的 IDT / RISC-V 的PLIC 向量）、trap 公共入口与返回，两种移植对照。相关：[xv6 启动流程](/docs/CS/OS/xv6/Boot.md) 里 `tvinit`/`trapinit` 初始化向量；系统调用经此通道进入见 [Syscall](/docs/CS/OS/xv6/Syscall.md)；[memory](/docs/CS/OS/xv6/memory.md) 讲内核/用户页表切换；时钟中断触发调度见 [proc](/docs/CS/OS/xv6/proc.md)。
+
 ## x86
 
 
@@ -287,3 +291,6 @@ IDT表中的每一项都指向相关联的处理代码入口，这些入口处�
 ## Links
 
 - [xv6](/docs/CS/OS/xv6/xv6.md)
+- [xv6 启动流程](/docs/CS/OS/xv6/Boot.md)
+- [xv6 内存管理](/docs/CS/OS/xv6/memory.md)
+- [xv6 系统调用](/docs/CS/OS/xv6/Syscall.md)
