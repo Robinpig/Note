@@ -34,6 +34,16 @@
 
 层级组织：**cell → 串（string，32–64 cell） → 阵列 → 页（page，2–16 KiB，读写最小单元） → 块（block，64–512 page，擦除最小单元） → 平面（plane） → die**。
 
+<div style="text-align: center;">
+
+![Fig.1. SSD Organization Schematics.](img/SSD-Organization-Schematics.png)
+
+</div>
+
+<p style="text-align: center;">
+Fig.1. SSD Organization Schematics.
+</p>
+
 ### FTL：闪存转换层
 
 闪存**只能整块擦除、页须顺序写、有写入寿命（P/E cycles）**，不可能直接当随机写块设备。FTL（固件中的映射层）负责：
@@ -51,6 +61,8 @@
 - **SATA SSD**：沿用 AHCI，受限于单队列（深度 32）；
 - **NVMe SSD**：走 [PCIe](/docs/CS/CO/PCI.md)，多队列（每核独立提交/完成队列）、低延迟、高并行，是今天高性能盘的事实标准。
 
+NVMe 不只是"走 PCIe"，它把并行性显式暴露给软件：**每个 I/O 队列由一对提交队列（SQ）+ 完成队列（CQ）组成**，管理员另有一对管理队列；命令条目固定 64 B，单队列深度可达 64K 条；namespace 是设备内的命名空间抽象（一块盘可切成多个逻辑盘）；中断靠 MSI-X 每队列一个（见 [PCIe](/docs/CS/CO/PCI.md)）。这套"每核一组队列"的设计让 NVMe 的并行度随 CPU 核数扩展，与 AHCI 的单队列 32 深度形成代差。
+
 SSD 无机械寻道，随机 vs 顺序差距远小于 HDD，但仍受 GC、预取、内部并行度影响。OS 侧需 `TRIM/DISCARD` 通知盘哪些页已释放，让 GC 提前回收。
 
 ## HDD vs SSD 速查
@@ -59,8 +71,8 @@ SSD 无机械寻道，随机 vs 顺序差距远小于 HDD，但仍受 GC、预�
 |------|-----|-----|
 | 随机 I/O | 极慢（毫秒级寻道） | 快（微秒级） |
 | 顺序吞吐 | 受转速限制 | 受 PCIe/NAND 接口限制，高得多 |
-|  latency 来源 | 寻道 + 旋转 | 页读 + 写放大 + GC |
-| 寿命模型 |  mechanical 损耗 | P/E 擦写次数（写放大是关键） |
+| 延迟来源 | 寻道 + 旋转 | 页读 + 写放大 + GC |
+| 寿命模型 | 机械损耗 | P/E 擦写次数（写放大是关键） |
 | 典型接口 | SATA/SAS | SATA（AHCI）或 NVMe（PCIe） |
 
 ## 与系统软件的接口

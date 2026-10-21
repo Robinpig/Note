@@ -1,10 +1,6 @@
 ## Introduction
 
-
-
-
-
-
+缓存（cache）是存储层次中衔接 CPU 与主存的一层：以**缓存行（cache line）**为单位在两者间搬运数据，命中时把访问延迟从 DRAM 的约百纳秒压到数纳秒。它上承[存储层次](/docs/CS/CO/CO.md)的整体金字塔，下接[多处理器内存](/docs/CS/CO/memory.md)的 UMA/NUMA 组织，其延迟模型直接决定[流水线](/docs/CS/CO/pipeline.md)中 load-use 冒险的停顿拍数。本页讲**单核视角的缓存组织**：结构与三种缺失、映射方式、替换与写策略；多核一致性（MESI 状态机、store buffer、invalidate queue 与内存屏障）拆至[缓存一致性与内存序](/docs/CS/CO/coherence.md)。
 
 ## Cache Structure
 
@@ -18,128 +14,57 @@
 Fig.1. Modern Computer System Cache Structure.
 </p>
 
-Data flows among the CPUs’ caches and memory in fixed-length blocks called “cache lines”, which are normally a power of two in size, ranging from 16 to 256 bytes.
-When a given data item is first accessed by a given CPU, it will be absent from that CPU’s cache, meaning that a “cache miss” (or, more specifically, a “startup” or “warmup” cache miss) has occurred.
-The cache miss means that the CPU will have to wait (or be “stalled”) for hundreds of cycles while the item is fetched from memory.
-However, the item will be loaded into that CPU’s cache, so that subsequent accesses will find it in the cache and therefore run at full speed.
+数据在 CPU 缓存与内存之间以定长块搬运，即**缓存行（cache line）**，大小通常是 2 的幂，从 16 到 256 字节（今日 x86 / ARM 主流为 64 B）。某个数据第一次被某颗 CPU 访问时必然不在它的缓存里，称为**强制性缺失（compulsory / cold / warmup miss）**，CPU 要停顿数百个周期等内存取数；取回后该行进入缓存，后续访问全速命中。
 
-After some time, the CPU’s cache will fill, and subsequent misses will likely need to eject an item from the cache in order to make room for the newly fetched item.
-Such a cache miss is termed a “capacity miss”, because it is caused by the cache’s limited capacity.
-However, most caches can be forced to eject an old item to make room for a new item even when they are not yet full.
-This is due to the fact that large caches are implemented as hardware hash tables with fixedsize hash buckets (or “sets”, as CPU designers call them) and no chaining, as shown in Figure 2.
+缓存被填满后，新行需要淘汰旧行让位，这种缺失叫**容量缺失（capacity miss）**。但大缓存即使没满也可能被迫淘汰——因为大缓存实现为**固定桶大小、无碰撞链的硬件哈希表**，CPU 设计者把这些桶叫作**组（set）**（见 Fig.1）：一个地址只能落到唯一一组，组内行位有限，组满即需淘汰，由此产生**冲突缺失（conflict miss）**。
 
+典型多核系统的层级：**L1**（分指令 L1i 与数据 L1d，各核私有，约 1 ns）→ **L2**（核私有，数 ns）→ **L3**（socket 内共享，十余 ns）→ DRAM（约百 ns）。越往下越慢越大，这是[存储层次](/docs/CS/CO/CO.md)金字塔在单芯片上的投影。
 
+## 映射方式（Mapping）
 
+主存块到缓存行的放置策略，是缓存组织方式的核心：
 
-- L1
-  - L1d cache
-  - L1i cache
-- L2
-- L3
+| 方式 | 规则 | 特点 |
+|------|------|------|
+| 直接映射（direct-mapped） | 每块只能落到唯一一组（常为 `addr mod 组数`） | 查找最快（一次比较），冲突缺失最高 |
+| 组相联（set-associative） | 每块可落到唯一一组内的任意行（N 路） | 现代 CPU 主流（L1 多为 8 路） |
+| 全相联（fully associative） | 每块可落到任意行 | 冲突缺失最低，查找需并行比较所有 tag，仅适合小缓存（如 TLB） |
 
+访存地址因此被切成三段：**tag | index（选组）| offset（行内偏移）**。组相联下每组并行比较各路 tag，命中即按 offset 取数据；全部不命中则走替换策略选牺牲行。
 
-## Cache-Coherence Protocols
+## 替换与写策略
 
-Cache-coherency protocols manage cache-line states so as to prevent inconsistent or lost data.
-These protocols can be quite complex, with many tens of states,2 but for our purposes we need only concern ourselves with the four-state MESI cache-coherence protocol.
+- **替换**：直接映射无须选择；组相联常用 **LRU** 或其近似（伪 LRU / PLRU，硬件只需少量位即可逼近），也有随机替换。替换发生在缺失需要让位时。
+- **写命中**：**写直达（write-through）**同时写缓存与内存（简单但慢）；**写回（write-back）**只改缓存并置脏位，行被淘汰时才写内存（主流，脏行让位靠[一致性协议](/docs/CS/CO/coherence.md)的 M 态落地）。
+- **写缺失**：**写分配（write-allocate）**先把行取入缓存再写（配合 write-back）；**不写分配（no-write-allocate）**直接写内存（配合 write-through）。
 
-### MESI
+## 缓存性能：AMAT 与多级缺失代价
 
-MESI stands for “modified”, “exclusive”, “shared”, and “invalid”, the four states a given cache line can take on using this protocol.
-Caches using this protocol therefore maintain a two-bit state “tag” on each cache line in addition to that line’s physical address and data.
+映射、替换、写策略都是"怎么组织"，而**平均访存时间（AMAT）**是组织好坏唯一的量化裁判：
 
-Many of the transitions described in the previous section require communication among the CPUs.
-If the CPUs are on a single shared bus, the following messages suffice:
+$$\text{AMAT} = \text{hit time} + \text{miss rate} \times \text{miss penalty}$$
 
-- **Read:**
-  The “read” message contains the physical address of the cache line to be read.
-- **Read Response:**
-  The “read response” message contains the data requested by an earlier “read” message.
-  This “read response” message might be supplied either by memory or by one of the other caches.
-  For example, if one of the caches has the desired data in “modified” state, that cache must supply the “read response” message.
-- **Invalidate:**
-  The “invalidate” message contains the physical address of the cache line to be invalidated.
-  All other caches must remove the corresponding data from their caches and respond.
-- **Invalidate Acknowledge:**
-  A CPU receiving an “invalidate” message must respond with an “invalidate acknowledge” message after removing the specified data from its cache.
-- **Read Invalidate:**
-  The “read invalidate” message contains the physical address of the cache line to be read, while at the same time directing other caches to remove the data.
-  Hence, it is a combination of a “read” and an “invalidate”, as indicated by its name.
-  A “read invalidate” message requires both a “read response” and a set of “invalidate acknowledge” messages in reply.
-- **Writeback:**
-  The “writeback” message contains both the address and the data to be written back to memory (and perhaps “snooped” into other CPUs’ caches along the way).
-  This message permits caches to eject lines in the “modified” state as needed to make room for other data.
+- **hit time**：命中时的访问延迟（L1 ~1 ns，含 tag 比较与数据读取）；
+- **miss rate**：访问未命中的比例，与三种缺失直接对应——强制性（cold）、容量（capacity）、冲突（conflict）；
+- **miss penalty**：缺失后从下一层取回行的全部代价（L1 miss 到 DRAM 约 80–100 ns）。
 
-<div style="text-align: center;">
+多级缓存是 AMAT 的链式展开：**L1 的 miss penalty 就是 L2 的 AMAT**，L2 的 miss penalty 是 L3 的 AMAT，最后一级的 miss penalty 才落到内存。这解释了层级设计的优化方向：
 
-![Fig.1. MESI Cache-Coherency State Diagram.](img/Cache-MESI.png)
+- 压低 hit time（少用大容量全相联、VIPT 并行 TLB 查找，见 [TLB](/docs/CS/CO/tlb.md)）；
+- 压低 miss rate（更大容量、更高相联度、更好的替换——但边际收益递减，8 路以上再涨收益很小）；
+- 压低 miss penalty（更快的下一层、预取、多级并行 miss——**MLP** 让多个缺失同时进行，等效摊薄 penalty，见[数据通路](/docs/CS/CO/datapath.md)）。
 
-</div>
-
-<p style="text-align: center;">
-Fig.2. MESI Cache-Coherency State Diagram.
-</p>
-
-The transition arcs in this figure are as follows:
-
-- **Transition (a):**
-  A cache line is written back to memory, but the CPU retains it in its cache and further retains the right to modify it.
-  This transition requires a “writeback” message.
-- **Transition (b):**
-  The CPU writes to the cache line that it already had exclusive access to. This transition does not require any messages to be sent or received.
-- **Transition (c):**
-  The CPU receives a “read invalidate” message for a cache line that it has modified.
-  The CPU must invalidate its local copy, then respond with both a “read response” and an “invalidate acknowledge” message, both sending the data to the requesting CPU and indicating that it no longer has a local copy
-- **Transition (d):**
-  The CPU does an atomic readmodify-write operation on a data item that was not present in its cache.
-  It transmits a “read invalidate”, receiving the data via a “read response”. The CPU can complete the transition once it has also received a full set of “invalidate acknowledge” responses.
-- **Transition (e):**
-  The CPU does an atomic readmodify-write operation on a data item that was previously read-only in its cache.
-  It must transmit “invalidate” messages, and must wait for a full set of “invalidate acknowledge” responses before completing the transition.
-- **Transition (f):**
-  Some other CPU reads the cache line, and it is supplied from this CPU’s cache, which retains a read-only copy, possibly also writing it back to memory.
-  This transition is initiated by the reception of a “read” message, and this CPU responds with a “read response” message containing the requested data.
-- **Transition (g):**
-  Some other CPU reads a data item in this cache line, and it is supplied either from this CPU’s cache or from memory. In either case, this CPU retains a read-only copy.
-  This transition is initiated by the reception of a “read” message, and this CPU responds with a “read response” message containing the requested data.
-- **Transition (h):**
-  This CPU realizes that it will soon need to write to some data item in this cache line, and thus transmits an “invalidate” message.
-  The CPU cannot complete the transition until it receives a full set of “invalidate acknowledge” responses.
-  Alternatively, all other CPUs eject this cache line from their caches via “writeback” messages (presumably to make room for other cache lines), so that this CPU is the last CPU caching it.
-- **Transition (i):**
-  Some other CPU does an atomic read-modify-write operation on a data item in a cache line held only in this CPU’s cache, so this CPU invalidates it from its cache.
-  This transition is initiated by the reception of a “read invalidate” message, and this CPU responds with both a “read response” and an “invalidate acknowledge” message.
-- **Transition (j):**
-  This CPU does a store to a data item in a cache line that was not in its cache, and thus transmits a “read invalidate” message.
-  The CPU cannot complete the transition until it receives the “read response” and a full set of “invalidate acknowledge” messages.
-  The cache line will presumably transition to “modified” state via transition (b) as soon as the actual store completes.
-- **Transition (k):**
-  This CPU loads a data item in a cache line that was not in its cache. The CPU transmits a “read” message, and completes the transition upon receiving the corresponding “read response”.
-- **Transition (l):**
-  Some other CPU does a store to a data item in this cache line, but holds this cache line in read-only state due to its being held in other CPUs’ caches (such as the current CPU’s cache).
-  This transition is initiated by the reception of an “invalidate” message, and this CPU responds with an “invalidate acknowledge” message.
-
-## Store Buffers
-
-## Invalidate Queues
-
-## Memory Barrier
-
-Because reordering memory references allows much better performance, and so memory barriers are needed to force ordering in things like synchronization primitives whose correct operation depends on ordered memory references.
-
-Many CPU architectures therefore provide weaker memory-barrier instructions that do only one or the other of these two.
-Roughly speaking, a “read memory barrier” marks only the invalidate queue and a “write memory barrier” marks only the store buffer. while a full-fledged memory barrier does both.
-
-The effect of this is that a read memory barrier orders only loads on the CPU that executes it, so that all loads preceding the read memory barrier will appear to have completed before any load following the read memory barrier.
-Similarly, a write memory barrier orders only stores, again on the CPU that executes it, and again so that all stores preceding the write memory barrier will appear to have completed before any store following the write memory barrier.
-A full-fledged memory barrier orders both loads and stores, but again only on the CPU executing the memory barrier.
+经验法则：一次 L1 miss 约等于几百条指令的执行时间，而 L1 hit 只需几个周期——**缓存系统的全部设计，本质都是在 miss rate 与 hit time 之间做交易**。软件侧减少 miss 的手段（分块、数据布局、预取）的收益上限，同样可以用 AMAT 估出来。
 
 ## Links
 
 - [Computer Organization（组成原理枢纽）](/docs/CS/CO/CO.md)
+- [缓存一致性与内存序](/docs/CS/CO/coherence.md)
 - [多处理器内存（UMA/NUMA 与缓存一致性）](/docs/CS/CO/memory.md)
+- [并行与伪共享](/docs/CS/OS/Parallel.md)
 - [Linux 内存管理](/docs/CS/OS/Linux/mm/memory.md)
 
 ## References
 
 1. [Memory Barriers: a Hardware View for Software Hackers](http://www.rdrop.com/users/paulmck/scalability/paper/whymb.2010.06.07c.pdf)
+2. [Computer Architecture: A Quantitative Approach（Hennessy & Patterson）](https://shop.elsevier.com/books/computer-architecture/hennessy/978-0-12-811905-1)

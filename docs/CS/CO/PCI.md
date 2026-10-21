@@ -23,15 +23,18 @@ PCIe 链路由若干条 **lane**（发送一对差分线 + 接收一对差分线
 | PCIe 4.0 | 128b/130b | ≈ 1.97 GB/s | ≈ 31.5 GB/s |
 | PCIe 5.0 | 128b/130b | ≈ 3.94 GB/s | ≈ 63 GB/s |
 | PCIe 6.0 | PAM4 + FLIT | ≈ 7.56 GB/s | ≈ 121 GB/s |
+| PCIe 7.0 | PAM4 + FLIT | ≈ 15.1 GB/s | ≈ 242 GB/s |
 
 全双工意味着上下行各有一份带宽。GPU 通常用 x16，NVMe SSD 用 x4，普通网卡 x4/x8。
+
+PCIe 7.0 规范已于 2025-06 正式发布（128.0 GT/s，PCI-SIG 宣称 x16 双向最高 512 GB/s），PCIe 8.0（256 GT/s）已于 2025-08 立项、计划 2028；目前市场主流仍是 4.0/5.0，6.0 硬件直到 2025-08 才真正上市。
 
 ## Software Perspective: Enumeration, BAR and DMA
 
 - **配置空间（Configuration Space）**：每个 PCIe 功能（function）有 256B（扩展为 4KB）配置寄存器，记录厂商 ID、设备 ID、BAR、能力链。系统启动时由根复合体（Root Complex）递归枚举总线，分配地址与中断——`lspci -vv` 读的就是它。
 - **BAR（Base Address Register）**：设备寄存器被映射到 CPU 物理地址空间（MMIO），驱动通过读写 BAR 指向的内存地址来操作设备，无需专门的 I/O 指令。
 - **DMA（Direct Memory Access）**：设备绕过 CPU 直接读写主存；高带宽设备（NVMe/网卡）必须 DMA。DMA 的安全问题催生 **IOMMU**（Intel VT-d/AMD-Vi）：像虚拟内存给进程做地址翻译一样，给设备做 DMA 地址翻译与权限限制，也是虚拟化设备直通（VFIO passthrough）的基础。
-- **MSI/MSI-X**：设备通过向特定内存地址写数据触发中断；MSI-X 支持更大的中断向量表，NVMe/多队列网卡为每个完成队列分配独立中断（与 NAPI、[多队列 IO] 配合），避免共享中断的串行化。
+- **MSI/MSI-X**：设备通过向特定内存地址写数据触发中断；MSI-X 支持更大的中断向量表，NVMe/多队列网卡为每个完成队列分配独立中断（与 NAPI、多队列 I/O 配合），避免共享中断的串行化。
 
 ## Topology and Inspection
 
@@ -56,11 +59,11 @@ lspci -t -v           # 树形拓扑
 
 - GPU 训练多卡场景：PCIe（或 NVIDIA NVLink，带宽更高）承载梯度同步的 all-reduce 流量，见并行计算相关笔记；
 - 虚拟化：virtio 是半虚拟化队列模型，VFIO + IOMMU 是设备直通；SR-IOV 让一张物理网卡虚拟出多个 VF 直通给虚拟机/容器；
-- CXL（Compute Express Link，基于 PCIe 5.0 物理层）允许内存池化与设备一致缓存访问，是后续内存解耦的方向。
+- CXL（Compute Express Link，3.0 起基于 PCIe 6.0 物理层，早期 1.x/2.0 基于 PCIe 5.0）允许内存池化与设备一致缓存访问，是后续内存解耦的方向。
 
 ## Links
 
-- [Computer Organization](/docs/CS/CO/CO.md)
+- [Computer Organization（组成原理枢纽）](/docs/CS/CO/CO.md)
 - [多处理器内存（UMA/NUMA）](/docs/CS/CO/memory.md)
 - [存储设备（NVMe SSD / HDD）](/docs/CS/CO/disk.md)
 - [Linux IO 子系统](/docs/CS/OS/Linux/IO/IO.md)
