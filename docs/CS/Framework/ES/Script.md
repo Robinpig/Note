@@ -72,10 +72,11 @@ POST /orders/_update/1 { "script": { "id": "increment-count", "params": { "n": 2
 
 ## Links
 
-- [Elasticsearch](/docs/CS/Framework/ES/ES.md)
-- [Lucene](/docs/CS/Framework/ES/Lucene.md)
-- [ES Cluster](/docs/CS/Framework/ES/Cluster.md)
-- [OpenSearch](/docs/CS/Framework/ES/OpenSearch.md)
+- [Elasticsearch（枢纽页）](/docs/CS/Framework/ES/ES.md)
+- [Query DSL：查询与分页](/docs/CS/Framework/ES/Query_DSL.md)
+- [Mapping：数据模型与字段映射](/docs/CS/Framework/ES/Mapping.md)
+- [Lucene：倒排、段与分片](/docs/CS/Framework/ES/Lucene.md)
+- [Troubleshooting：排障](/docs/CS/Framework/ES/Troubleshooting.md)
 
 ## References
 

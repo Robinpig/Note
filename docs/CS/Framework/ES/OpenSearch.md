@@ -33,9 +33,10 @@ OpenSearch 是一个开源的分布式搜索与分析套件，起源于 **2021 �
 
 ## Links
 
-- [Elasticsearch](/docs/CS/Framework/ES/ES.md)
-- [Lucene](/docs/CS/Framework/ES/Lucene.md)
-- [ES Cluster](/docs/CS/Framework/ES/Cluster.md)
+- [Elasticsearch（枢纽页）](/docs/CS/Framework/ES/ES.md)
+- [Install：安装与节点角色](/docs/CS/Framework/ES/Install.md)
+- [Lucene：倒排、段与分片](/docs/CS/Framework/ES/Lucene.md)
+- [Cluster：集群与选举](/docs/CS/Framework/ES/Cluster.md)
 - [Kibana（OpenSearch Dashboards 的对应物）](/docs/CS/Framework/ES/Kibana.md)
 
 ## References

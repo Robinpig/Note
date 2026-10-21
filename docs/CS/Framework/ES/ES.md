@@ -1,320 +1,81 @@
 ## Introduction
 
-[Elasticsearch](https://www.elastic.co/cn/elasticsearch) is a distributed, RESTful search and analytics engine capable of addressing a growing number of use cases. 
-As the heart of the Elastic Stack, it centrally stores your data for lightning fast search, fine‑tuned relevancy, and powerful analytics that scale with ease.
+[Elasticsearch](https://www.elastic.co/guide/en/elasticsearch/reference/current/index.html) 是 Elastic Stack 核心的分布式 RESTful 搜索与分析引擎：以 JSON 文档为中心，提供近实时（NRT）全文检索、相关性打分与聚合分析，通过分片/副本水平扩展。
 
-> ELK包括 Elasticsearch、[Kibana](/docs/CS/Framework/ES/Kibana.md)、[Beats](/docs/CS/Framework/ES/Beats.md) 和 [Logstash](/docs/CS/Framework/ES/Logstash.md)
+> [!IMPORTANT]
+> **版本基线：Elasticsearch 9.5.5**（2026-10 发布，内置 Lucene 10.5.1、OpenJDK 27）。本篇各子专题的默认值均以 9.5.5 源码为准并标注 `文件:行号`。旧资料里的以下说法已失效：`minimum_master_nodes`、`node.master`/`node.data` 布尔配置、`"index": "not_analyzed"`、`/index/type/id` 文档 API、主分片默认 5、堆上限 32GB。升级至少需要 8.19 才能与 9.x 互通（索引兼容下限 8.0.0）。
 
+OpenSearch 起源于 2021 年 Elastic 的许可证变更，基于最后一个 Apache 2.0 版本 ES 7.10.2 fork，详见 [OpenSearch](/docs/CS/Framework/ES/OpenSearch.md)。
 
-[OpenSearch](/docs/CS/Framework/ES/OpenSearch.md) 起源于 2021 年许可证变更，基于最后一个开源版本 ES 7.10.2 fork
-目前已经和 Elasticsearch 在API、插件、默认配置和安全模型不再完全兼容
+## 笔记导航
 
-
+| 专题 | 内容 |
+| ---- | ---- |
+| [Install：安装与节点角色](/docs/CS/Framework/ES/Install.md) | 目录结构、Bundled JDK 27、JVM 与堆（自动配置上限 31GB）、启动配置默认值、14 种节点角色、集群形成与插件管理 |
+| [Mapping：数据模型与字段映射](/docs/CS/Framework/ES/Mapping.md) | text vs keyword、`not_analyzed` 打假、动态映射四档、索引级默认值、translog 与刷新 |
+| [Query DSL：查询与分页](/docs/CS/Framework/ES/Query_DSL.md) | Query Then Fetch（含 can_match 预过滤）、filter vs query、核心查询语义、路由、search_after/PIT |
+| [Analyzer：分词体系](/docs/CS/Framework/ES/Analyzer.md) | Analyzer 三段组成、standard 停用词空集打假、内置清单、custom/normalizer、中文分词选型 |
+| [Troubleshooting：排障](/docs/CS/Framework/ES/Troubleshooting.md) | 写路径顺序、熔断器默认值（95%/40%/60%）、OOM 退出码、unassigned 19 种原因、红黄绿判定、ILM/DLM |
+| [Replication：写入与复制协议](/docs/CS/Framework/ES/Replication.md) | bulk 分片分组、ReplicationOperation 链路、seq_no/primary_term/in-sync、noop、translog 内部（checkpoint/trim/generation）、flush 五触发源、Lucene 侧 ES 配置 |
+| [Search Internals：搜索内部机制](/docs/CS/Framework/ES/Search_Internals.md) | 分片 topN=from+size、reduce 与 batchedReduceSize、DFS 统计求和、11 个 fetch 子 phase 顺序、preference 5 种、scroll/PIT 内部、eager_global_ordinals 预热 |
+| [Cluster State：集群状态与分配](/docs/CS/Framework/ES/Cluster_State.md) | publication 四级流水线、`_state` Lucene 持久化、join 与 voting config、21+ 个分配决策器清单、磁盘水位 85/90/95、failed allocation 线性重试 |
+| [Merge：段合并与 store](/docs/CS/Framework/ES/Merge.md) | Tiered vs LogByteSize（time-based 默认）、merge 参数表、ThreadPoolMergeScheduler（9.x 新默认）、forcemerge 语义、磁盘布局与 HybridDirectory |
+| [Thread Pools：线程池模型](/docs/CS/Framework/ES/Thread_Pools.md) | 24 个池清单、协调/执行分离、三种 executor 与拒绝策略、429 来源、inflight breaker 与线程池两条背压路径 |
+| [Lucene：底层检索引擎](/docs/CS/Framework/ES/Lucene.md) | 倒排索引、不可变 segment、段合并、shard/segment 层级 |
+| [Cluster：集群与选举](/docs/CS/Framework/ES/Cluster.md) | 分片/副本、发现与主节点选举、读写路径、Query Then Fetch |
+| [Scripting / Painless](/docs/CS/Framework/ES/Script.md) | 脚本上下文、doc vs _source、编译缓存陷阱、runtime fields |
+| [Kibana](/docs/CS/Framework/ES/Kibana.md) | 可视化、KQL、Dev Tools |
+| [Beats / Filebeat](/docs/CS/Framework/ES/Beats.md) | 轻量采集、harvester/registry、背压 |
+| [Logstash](/docs/CS/Framework/ES/Logstash.md) | pipeline、grok、持久化队列 |
+| [OpenSearch](/docs/CS/Framework/ES/OpenSearch.md) | 许可分叉、与 ES 的兼容性差异 |
 
 ## Architecture
 
+### 节点角色
 
-集群
+9.x 角色定义在 `DiscoveryNodeRole.java:145-271`，共 14 种（默认节点是下述除 `voting_only`/`search` 外的合体；`node.master`/`node.data` 布尔配置已移除，统一走 `node.roles` 列表）：
 
-节点
-- master CPU高 内存要求低
-- coordinate CPU 带宽高
-- data CPU内存都要高
-- ingest
+| 角色 | 职责 | 资源画像 |
+| ---- | ---- | ---- |
+| `master`（m） | 集群管理：索引元数据、分片分配、选举 | CPU 要求高、内存要求低 |
+| `data` + `data_content/hot/warm/cold/frozen`（d/s/h/w/c/f） | 存分片、执行 CRUD/搜索/聚合 | CPU、内存都要高 |
+| `ingest`（i） | 入库前预处理（pipeline） | CPU 偏高 |
+| `ml`（l）/ `transform`（t） | 机器学习 / 转换任务 | 按需 |
+| `remote_cluster_client`（r） | 跨集群检索客户端 | 网络带宽高 |
+| `voting_only`（v）/ `search`（S） | 仅投票 / 仅搜索（均非默认） | — |
 
+生产常见拆法：独立 master 节点组（3 个）、hot/warm 分层 data 节点、协调负载由任意节点兼任（ES 没有独立 coordinating 角色，所有节点都能当协调节点）。详见 [Install](/docs/CS/Framework/ES/Install.md)。
 
-日志采集系统
+### 日志采集链路
 
-filebeat -> MQ -> Logstash -> ES -> Kibana
+高可用场景不让业务系统直连 Logstash，而是日志先落本地文件：
 
-filebeat配置
-
-
-Logstash负责解析转换日志
-
-
-从高可用的角度出发，我们通常并不会将业务系统与 Logstash 直连，取而代之的是将日
-志写入本地文件，然后通过 Filebeat 之类的工具收集本地 log 文件，并传输给
-Logstash。
-这样做的好处是，无论 Logstash 和应用服务器之间的连接通路是否顺畅，日志文件都会
-落盘保存，并不会因网络异常而丢失。另一方面，Filebeat 使用了一种“背压敏感协
-议”技术，用来应对海量数据访问的压力，它会根据 Logstash 的处理速率调整文件读取
-速度，如果 Logstash 正忙，Filebeat 就会降低读取文件的速度
-
-
-
-
-告警
-规则设置与通知机制
-
-
-Elasticsearch 在分布式架构中有两个最常见的应用场景，一个是宽表、解决跨库 Join，另一个就是全文搜索
-
-
-订单join:
-- 根据订单号分库可以把订单表和订单详细信息表或者订单物流表分配到同库join
-- 当根据用户id去查询所有订单时就会出现跨库
-
-> 社区 [discuss.elastic](https://discuss.elastic.co/) 和 [elastic中文社区](https://elasticsearch.cn/)
-
-
-
-## Install
-
-
-sebp/elk 镜像已经为我们集成了完整的 ELK 环境，只需要稍加配置就能迅速构建 ELK 环
-境，而且异常排查也比较方便
-
-docker pull sebp/elk:7.16.1
-
-
-
-Elastic7.13.7启动报错error updating geoip database
-
-在配置文件elasticsearch.yml设置ingest.geoip.downloader.enabled: false
-
-
-ES8开发环境配置
-```properties
-# disable other discovery configs
-discovery.type: single-node
-
-# disable security features
-xpack.security.enabled: false
-
-ingest.geoip.downloader.enabled: false
+```
+业务写本地日志 -> Filebeat 采集 -> Kafka(缓冲削峰) -> Logstash(解析转换) -> Elasticsearch -> Kibana
 ```
 
+Filebeat 用「背压敏感协议」按 Logstash 处理速率调整读取速度，下游拥塞时自动降速，未确认事件落队列；链路细节见 [Beats](/docs/CS/Framework/ES/Beats.md) 与 [Logstash](/docs/CS/Framework/ES/Logstash.md)。
 
+### 典型应用场景
 
-
-
-
-
-<!-- tabs:start -->
-
-
-
-##### **Windows**
-
-
-
-
-##### **Ubuntu**
-
-
-
-
-##### **Docker**
-
-
-可以通过环境变量禁用所有安全功能, 添加 -e "xpack.security.enabled=false"
-
-```shell
-docker run -d --name elasticsearch \
-  -p 9200:9200 -p 9300:9300 \
-  -e "discovery.type=single-node" \
-  -e "ES_JAVA_OPTS=-Xms1g -Xmx1g" \
-  -e "xpack.security.enabled=false" \
-  docker.elastic.co/elasticsearch/elasticsearch:8.1.3
-```
-
-
-<!-- tabs:end -->
-
-验证
-
-curl ’http://localhost:9200/?pretty‘
-
-
-
-
-### start
-
-注意节点启动顺序 有Master选举
-```shell
-bin/elasticsearch -E node.name=node0 -E cluster.name=es -E path.data=node0_data -d
-bin/elasticsearch -E node.name=node1 -E cluster.name=es -E path.data=node1_data -d
-bin/elasticsearch -E node.name=node2 -E cluster.name=es -E path.data=node2_data -d
-bin/elasticsearch -E node.name=node3 -E cluster.name=es -E path.data=node3_data -d
-```
-查看节点 `http://localhost:9200/_cat/nodes`
-
-
-### Plugins
-
-查看安装插件
-```shell
-bin/elasticsearch-plugin list
-```
-
-
-```shell
-bin/elasticsearch-plugin install analysis-icu
-```
-
-## Data Model
-
-
-Document会序列化成JSON格式
-
-每个Document都会有一份metadata
-
-一个 Elasticsearch 集群可以包含多个 索引（数据库），也就是说其中包含了很多 类型（表）。这些类型中包含了很多的 文档（行），然后每个文档中又包含了很多的 字段（列）
-
-
-Elasticsearch  ⇒ 索引   ⇒ 类型  ⇒ 文档  ⇒ 字段(Fields)
-
-
-
-
-for example
-```http
-PUT /megacorp/employee/1
-{
-”first_name“ : ”John“,
-”last_name“ :  ”Smith“,
-”age“ :        25,
-”about“ :      ”I love to go rock climbing“,
-”interests“: [ ”sports“, ”music“ ]
-}
-```
-
-
-获取内容包含元数据信息
-
-```http
-GET /megacorp/employee/1
-```
-
-
-
-
-
-
-
-
-
-## Cluster
-Node是ES的实例 对于内存要求高 生产环境建议一台机器一个实例 每个node都有一个name node在启动之后会分配一个UUID存储在data目录
-
-
-
-## query
-
-
-ES的查询分为两个阶段
-
-- 协调节点分发请求到分片
-- 协调节点汇总data node的结果转换成最终结果
-
-
-
-
-## Analyzer
-
-通常说"ES分词器"指的其实是Analyzer，"分析器"也是指的Analyzer，但Tokenizer（中文翻译过来也是分词器）是Analyzer组成不可缺少的部分
-
- 
-
-分词是指将文本转换成一系列单词( term or token )的过程,也可以叫做文本分析,在es里面称为Analysis 
-
-
-
-## Inverted Index
-
-ES 的倒排索引、不可变 segment、段合并与 shard/segment 层级关系由底层的 [Lucene](/docs/CS/Framework/ES/Lucene.md) 提供；查询/更新中嵌入动态逻辑（Painless）见 [Scripting](/docs/CS/Framework/ES/Script.md)。
-
-
-### KD Tree
-
-The data-structure that underlies dimensional points is called a block KD tree,
-which in the case of a single dimension is a simple binary search tree that stores blocks of values on the leaves rather than individual values.
-Lucene currently defaults to having between 512 and 1024 values on the leaves.
-
-This is quite similar to the b-trees that are used in most regular databases in order to index data.
-In the case of Lucene, the fact that files are write-once makes the writing easy since we can build a perfectly balanced tree and then not worry about rebalancing since the tree will never be modified.
-Merging is easy too since you can get a sorted iterator over the values that are stored in a segment,
-then merge these iterators into a sorted iterator on the fly and build the tree of the merged segment from this sorted iterator.
-
-
-
-## Issues
-
-### OOM
-
-Elastic Search 集群出现OOM
-```
-[---][ERROR][o.e.b.ElasticsearchUncaughtExceptionHandler] [master-172.16.0.135-9200] fatal error in thread [Thread-7], exiting
-java.lang.OutOfMemoryError: Java heap space
-	at io.netty.buffer.PoolArena$HeapArena.newChunk(PoolArena.java:656) ~[?:?]
-	at io.netty.buffer.PoolArena.allocateNormal(PoolArena.java:237) ~[?:?]
-	at io.netty.buffer.PoolArena.allocate(PoolArena.java:221) ~[?:?]
-	at io.netty.buffer.PoolArena.allocate(PoolArena.java:141) ~[?:?]
-	at io.netty.buffer.PooledByteBufAllocator.newHeapBuffer(PooledByteBufAllocator.java:272) ~[?:?]
-	at io.netty.buffer.AbstractByteBufAllocator.heapBuffer(AbstractByteBufAllocator.java:160) ~[?:?]
-	at io.netty.buffer.AbstractByteBufAllocator.heapBuffer(AbstractByteBufAllocator.java:151) ~[?:?]
-	at io.netty.buffer.AbstractByteBufAllocator.ioBuffer(AbstractByteBufAllocator.java:133) ~[?:?]
-	at io.netty.channel.DefaultMaxMessagesRecvByteBufAllocator$MaxMessageHandle.allocate(DefaultMaxMessagesRecvByteBufAllocator.java:73) ~[?:?]
-	at io.netty.channel.nio.AbstractNioByteChannel$NioByteUnsafe.read(AbstractNioByteChannel.java:117) ~[?:?]
-	at io.netty.channel.nio.NioEventLoop.processSelectedKey(NioEventLoop.java:642) ~[?:?]
-	at io.netty.channel.nio.NioEventLoop.processSelectedKeysPlain(NioEventLoop.java:527) ~[?:?]
-	at io.netty.channel.nio.NioEventLoop.processSelectedKeys(NioEventLoop.java:481) ~[?:?]
-	at io.netty.channel.nio.NioEventLoop.run(NioEventLoop.java:441) ~[?:?]
-	at io.netty.util.concurrent.SingleThreadEventExecutor$5.run(SingleThreadEventExecutor.java:858) ~[?:?]
-	at java.lang.Thread.run(Thread.java:882) [?:1.8.0_152]
-```
-
-
-基本通过如下几种方式来解决OOM问题：
-修改调用链保存时间。调用链默认保存7天，比如说修改为3天，这样可以降低集群的数据量。
-调整shards的数据量，可以从默认的16调整到32或48。Elasticsearch中一个索引是由若干个shard组成的，通过增加shard数，可以降低每个shard的数据量，以达到降低节点内存占用的效果。
-扩容节点内存和数量。
-
-这几个优化的手段都尝试了，但现场反馈仍然存在OOM问题。截止第一阶段的优化，现场一共有16台机器，其中3台为master不作为datanode，13台为datanode。节点的内存配置为 72GB 或 48GB ，并且按照Elasticsearch官方建议，Elasticsearch进程的JVM堆最大已经调整到接近 32GB
-
-副本冗余是需要的 当某节点损坏后清理掉数据 没有副本就会永久丢失部分数据 再重新启动后索引会变成red 节点状态正常 日志无报错 但是 读取shard情况 发现总会存在 shard unassign的状态
-curl -POST '127.0.0.1:9200/_cat/shards?v'
-此时无法忽略这个丢失的shard 只能清理掉 red index
-
-一个本不需要做索引的大字段，被错误设置成了全文检索类型，导致高并发写入时数据无法及时索引落盘，最终引发堆溢出
-
-
-错误定义了索引
-"index":"not_analyzed" 并不是不做索引，而是不对内容进行全文索引，仅是作为一个keyword来索引。
-```json
-{
-  "spanEvents": {
-    "type": "text",
-    "index": "not_analyzed"
-  }
-}
-```
-应该定义为
-
-```json
-{
-  "spanEvents": {
-    "type": "text",
-    "index": false
-  }
-}
-```
-
+- **宽表 / 跨库 Join**：把多张业务表冗余进宽文档，一次检索替代跨库 join；
+- **全文检索**：倒排索引 + BM25 相关性排序，见 [Lucene](/docs/CS/Framework/ES/Lucene.md) 与 [Query DSL](/docs/CS/Framework/ES/Query_DSL.md)；
+- **日志与可观测性**：配合 Kibana/ILM/DLM 做留存治理，见 [Troubleshooting](/docs/CS/Framework/ES/Troubleshooting.md)；
+- **向量检索**：9.x 的 kNN 搜索会强制走 DFS 打分（`TransportSearchAction.java:836-841`）。
 
 ## Links
 
-- [Lucene（底层检索引擎）](/docs/CS/Framework/ES/Lucene.md)
-- [Cluster 集群与 Query Then Fetch](/docs/CS/Framework/ES/Cluster.md)
-- [Scripting / Painless](/docs/CS/Framework/ES/Script.md)
-- [Kibana](/docs/CS/Framework/ES/Kibana.md)
-- [Beats / Filebeat](/docs/CS/Framework/ES/Beats.md)
-- [Logstash](/docs/CS/Framework/ES/Logstash.md)
-- [OpenSearch](/docs/CS/Framework/ES/OpenSearch.md)
-- [Kafka](/docs/CS/MQ/Kafka/Kafka.md)
+- [Install：安装与节点角色](/docs/CS/Framework/ES/Install.md)
+- [Mapping：数据模型与字段映射](/docs/CS/Framework/ES/Mapping.md)
+- [Query DSL：查询与分页](/docs/CS/Framework/ES/Query_DSL.md)
+- [Analyzer：分词体系](/docs/CS/Framework/ES/Analyzer.md)
+- [Troubleshooting：排障](/docs/CS/Framework/ES/Troubleshooting.md)
+- [Lucene：底层检索引擎](/docs/CS/Framework/ES/Lucene.md)
+
+> 更深一层的机制拆解（写入复制、搜索内部、集群状态、段合并、线程池）见上方「笔记导航」表。
 
 ## References
 
 1. [Elasticsearch Reference](https://www.elastic.co/guide/en/elasticsearch/reference/current/index.html)
-2. [Searching numb3rs in 5.0](https://www.elastic.co/blog/searching-numb3rs-in-5-0)
-3. [伴鱼数据库之慢日志系统](https://tech.ipalfish.com/blog/2020/07/21/tidb_slowlog/)
+2. [Elastic Stack 文档总入口](https://www.elastic.co/guide/index.html)
+3. [elastic/elasticsearch v9.5.5 源码](https://github.com/elastic/elasticsearch/tree/v9.5.5)
