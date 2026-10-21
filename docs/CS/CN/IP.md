@@ -16,15 +16,34 @@ The term connectionless means that:
 
 Again, some protocol above IP (usually TCP) has to handle all of these potential problems in order to provide an error-free delivery abstraction for applications.
 
-The official specification for IPv4 is given in [RFC0791]. A series of RFCs describe IPv6, starting with [RFC2460].
+The official specification for IPv4 is given in [RFC 791](https://datatracker.ietf.org/doc/html/rfc791). 
+IPv6 is specified by [RFC 8200](https://datatracker.ietf.org/doc/html/rfc8200) (STD 86), which obsoleted RFC 2460.
 
 
 ## IPv4 and IPv6 Headers
 
+IPv4 头部字段（RFC 791）：
 
+| 字段 | 位数 | 说明 |
+| --- | --- | --- |
+| Version | 4 | 协议版本，IPv4 为 4 |
+| IHL | 4 | 头部长度，以 32 bit 字为单位，最小为 5（即 20 字节） |
+| DS | 8 | 区分服务字段；RFC 2474 起 = DSCP 6 bit + CU 2 bit，RFC 3168 把 CU 2 bit 用作 ECN：00 Not-ECT、10 ECT(0)、01 ECT(1)、11 CE |
+| Total Length | 16 | 头部加数据的总字节数，最大 65535 |
+| Identification | 16 | 标识被分片的同一原始数据报 |
+| Flags | 3 | bit0 保留必须为 0；bit1 为 DF；bit2 为 MF |
+| Fragment Offset | 13 | 分片在原始数据中的偏移，**以 8 字节为单位** |
+| TTL | 8 | 每经一跳路由器减 1 |
+| Protocol | 8 | 上层协议号：1 = ICMP、6 = TCP、17 = UDP |
+| Header Checksum | 16 | 仅覆盖头部，逐跳重算 |
+| Source Address | 32 | 源地址 |
+| Destination Address | 32 | 目的地址 |
+
+分片（fragmentation）：数据报超过链路 MTU 且未设置 DF 标志时才可能被分片，只有第一个分片带有 TCP/UDP 头部，重组只在目的主机进行。 
+DF 置位而路由器又无法不分片转发时，路由器回 ICMP Destination Unreachable（type 3, code 4）——这是路径 MTU 发现（PMTUD）的基础。
 
 The *Time-to-Live* field, or *TTL*, sets an upper limit on the number of routers through which a datagram can pass. 
-It is initialized by the sender to some value (64 is recommended [RFC1122], although 128 or 255 is not uncommon) and decremented by 1 by every router that forwards the datagram. 
+It is initialized by the sender to some value (64 is recommended in [RFC 1122](https://datatracker.ietf.org/doc/html/rfc1122), although 128 or 255 is not uncommon) and decremented by 1 by every router that forwards the datagram. 
 When this field reaches 0, the datagram is thrown away, and the sender is notified with an ICMP message. 
 This prevents packets from getting caught in the network forever should an unwanted routing loop occur.
 
@@ -96,22 +115,31 @@ Default unsupport fragment.
 
 IPv6
 
-
+IPv6 头部为固定的 40 字节：没有头部校验和（去掉了逐跳校验的负担，转发更快，但差错检测完全依赖上层协议），也不再由路由器分片——分片改由源主机通过 Fragment 扩展头完成；新增的 Flow Label 字段用于标识同一条流以便特殊处理。更多细节见 [Linux IPv6](/docs/CS/OS/Linux/net/IPv6.md)。
 
 
 ## Attacks Involving IP
 
 
-Without authentication or encryption (or when it is disabled for IPv6), IP spoofing attacks are possible.
+Without authentication or encryption (or when it is disabled for IPv6), IP spoofing attacks are possible. 
+常见缓解手段是入口过滤（ingress filtering，BCP 38 / RFC 2827）与 uRPF 检查；IPv6 同样没有内建的源地址认证机制。
 
 
 ## IPSec
 
-
-
-
+IPsec 在 IP 层提供安全服务：传输模式（transport mode）保护上层载荷，隧道模式（tunnel mode）封装整个 IP 数据报，是 VPN 的常见基础。 
+两个核心协议是 AH（协议号 51，提供认证与完整性）与 ESP（协议号 50，在认证之外提供加密）；安全参数由 IKEv2 协商建立。详细内容见 [Security](/docs/CS/CN/Security.md)。
 
 ## Links
 
 - [Computer Network](/docs/CS/CN/CN.md)
 - [Linux IP](/docs/CS/OS/Linux/net/IP.md)
+
+## References
+
+1. [RFC 791 - Internet Protocol](https://datatracker.ietf.org/doc/html/rfc791)
+1. [RFC 8200 - Internet Protocol, Version 6 (IPv6) Specification](https://datatracker.ietf.org/doc/html/rfc8200)
+1. [RFC 1122 - Requirements for Internet Hosts — Communication Layers](https://datatracker.ietf.org/doc/html/rfc1122)
+1. [RFC 2474 - Definition of the Differentiated Services Field (DS Field) in the IPv4 and IPv6 Headers](https://datatracker.ietf.org/doc/html/rfc2474)
+1. [RFC 3168 - The Addition of Explicit Congestion Notification (ECN) to IP](https://datatracker.ietf.org/doc/html/rfc3168)
+1. [RFC 2827 - Network Ingress Filtering: Defeating Denial of Service Attacks which employ IP Source Address Spoofing](https://datatracker.ietf.org/doc/html/rfc2827)

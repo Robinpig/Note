@@ -4,7 +4,7 @@
 
 > [!NOTE]
 > **版本基线：1.31.6 mainline / 1.30.5 stable**（2026-10 逐篇核实，解官方 tarball 后 Grep 取默认值，**别凭印象**）。
-> 本目录 20/23 篇需回查本页基线；导航以本页为唯一枢纽。
+> 本目录各专题页的默认值均以本页基线为准；导航以本页为唯一枢纽。
 >
 > **最容易记错的几条**（默认值与直觉相反）：
 > - `accept_mutex` 默认 **off**；抢accept 的优先级是 reuseport > accept_mutex > EPOLLEXCLUSIVE > 普通
@@ -30,7 +30,7 @@ nginx 快的原因不是某一个魔法优化，而是一组彼此咬合的设�
 | 零拷贝链路 | `sendfile`、`aio`、`directio`、`accept4`、`TCP_CORK` 全部按平台能力启用 |
 | 模块化的流水线 | 阶段（phase）+ 过滤链（filter chain），第三方能力以模块挂载而非改核心 |
 
-> 版本基线（2026-10 核对）：**stable 1.30.5 / mainline 1.31.6**。下文所有源码事实均取自 `nginx-1.31.6`。奇数版本是主线，偶数版本是稳定版；新特性先出现在主线，稳定版只收 bugfix。写笔记与做方案时务必先确认落地的那个版本号，因为 nginx 有大量"默认值悄悄改变"的历史（见 [常见坑](#常见坑)）。
+> 版本基线（2026-10 核对）：**stable 1.30.5 / mainline 1.31.6**。下文所有源码事实均取自 `nginx-1.31.6`。奇数版本是主线，偶数版本是稳定版；新特性先出现在主线，稳定版只收 bugfix。写笔记与做方案时务必先确认落地的那个版本号，因为 nginx 有大量"默认值悄悄改变"的历史（见 [Common Pitfalls](#common-pitfalls)）。
 
 生态与竞品：
 
@@ -47,29 +47,17 @@ nginx 快的原因不是某一个魔法优化，而是一组彼此咬合的设�
 
 ### Notes Navigation
 
-本目录按「由浅入深」分层组织，主笔记（本文）给出全貌，专题各管一块：
+本目录以本文为唯一枢纽：先读本文建立「事件驱动 + 多进程 + 内存池 + 模块化流水线」的整体框架，再按工作需要下沉专题。
 
-| 层 | 笔记 | 内容 |
-| :-- | :-- | :-- |
-| 机制 | [Event](/docs/CS/CN/nginx/event.md) | 事件循环、accept、惊群、定时器 |
-| 机制 | [HTTP](/docs/CS/CN/nginx/HTTP.md) | 11 个阶段、过滤链、子请求 |
-| 机制 | [Memory](/docs/CS/CN/nginx/memory.md) | 内存池、共享内存、slab |
-| 机制 | [stream](/docs/CS/CN/nginx/stream.md) | 四层代理：7 阶段、ssl_preread、双向对拷 |
-| 机制 | [HTTP/3](/docs/CS/CN/nginx/http3.md) | QUIC 传输、连接迁移与 eBPF、0-RTT |
-| 机制 | [njs](/docs/CS/CN/nginx/njs.md) | 官方 JS 引擎：阶段挂载、对象模型、共享字典 |
-| 配置 | [Configuration](/docs/CS/CN/nginx/config.md) | 配置体系、location 匹配、变量 |
-| 配置 | [TLS](/docs/CS/CN/nginx/tls.md) | 握手、会话复用、证书、回源 TLS |
-| 配置 | [Log](/docs/CS/CN/nginx/log.md) | 日志格式、缓冲、error_log、JSON |
-| 数据面 | [Upstream](/docs/CS/CN/nginx/upstream.md) | 负载均衡算法、重试、长连接 |
-| 数据面 | [Cache](/docs/CS/CN/nginx/cache.md) | 缓存状态机、击穿防护 |
-| 协议 | [gRPC](/docs/CS/CN/nginx/grpc.md) | HTTP/2 上游、trailer、流式与重试语义 |
-| 协议 | [mail](/docs/CS/CN/nginx/mail.md) | SMTP/POP3/IMAP 状态机与 auth_http |
-| 工程 | [Module](/docs/CS/CN/nginx/module.md) | 模块骨架、四类写法、编译接入 |
-| 工程 | [Practice](/docs/CS/CN/nginx/practice.md) | 优雅下线、灰度、容器化、Ingress |
-| 工程 | [Troubleshooting](/docs/CS/CN/nginx/troubleshooting.md) | 状态码与日志关键字对照、故障剧本 |
-| 工程 | [security](/docs/CS/CN/nginx/security.md) | 访问控制、认证、限流、签名 URL、WAF |
-| 工程 | [Recipes](/docs/CS/CN/nginx/recipes.md) | 可抄配置集 |
-| 工程 | [Benchmark](/docs/CS/CN/nginx/benchmark.md) | 8 组实测对照与压测方法论 |
+**机制层**回答「nginx 为什么快」：[event](/docs/CS/CN/nginx/event.md) 讲事件循环、accept 与惊群、定时器，是理解单 worker 维持数万连接的根；[memory](/docs/CS/CN/nginx/memory.md) 讲连接与请求背后的内存池、共享内存与 slab 分配；[HTTP](/docs/CS/CN/nginx/HTTP.md) 把一个请求拆成 11 个阶段与过滤链；[stream](/docs/CS/CN/nginx/stream.md) 是与 http 平行、不共享 location/rewrite 语法的四层代理实现，同端口混用二者时 `nginx -t` 不报错，排障必读。
+
+**配置层**是日常接触最多的部分：[config](/docs/CS/CN/nginx/config.md) 建立上下文、location 匹配与变量的心智模型，[tls](/docs/CS/CN/nginx/tls.md) 管握手、会话复用与回源加密，[log](/docs/CS/CN/nginx/log.md) 管日志格式、缓冲与 error_log——排障时这三页使用频率最高。
+
+**数据面**决定流量实际怎么走：[upstream](/docs/CS/CN/nginx/upstream.md) 覆盖负载均衡算法、重试与长连接，[cache](/docs/CS/CN/nginx/cache.md) 覆盖缓存状态机与击穿防护，两者共同决定后端压力与源站命中率。
+
+**协议扩展**里，[http3](/docs/CS/CN/nginx/http3.md) 讲 QUIC 传输、连接迁移与 0-RTT，[grpc](/docs/CS/CN/nginx/grpc.md) 讲 HTTP/2 上游的流式与重试语义，[mail](/docs/CS/CN/nginx/mail.md) 讲 SMTP/POP3/IMAP 代理的 auth_http 认证，[njs](/docs/CS/CN/nginx/njs.md) 提供不引第三方依赖的官方 JS 脚本能力。
+
+**工程层**面向落地与协作：[module](/docs/CS/CN/nginx/module.md) 写 C 模块，[practice](/docs/CS/CN/nginx/practice.md) 管灰度发布与优雅下线，[security](/docs/CS/CN/nginx/security.md) 汇总访问控制、限流与签名 URL，[troubleshooting](/docs/CS/CN/nginx/troubleshooting.md) 是状态码与日志关键字对照的故障剧本，[recipes](/docs/CS/CN/nginx/recipes.md) 是可直接抄的配置集，[benchmark](/docs/CS/CN/nginx/benchmark.md) 用实测数据给前面所有结论兜底。
 
 ### Quick Start
 
@@ -923,12 +911,11 @@ gdb /usr/sbin/nginx <core file>
 
 ## Links
 
-- [Event](/docs/CS/CN/nginx/event.md) — 事件循环、accept、惊群、定时器
-- [HTTP](/docs/CS/CN/nginx/HTTP.md) — 11 个阶段、过滤链、子请求
-- [Configuration](/docs/CS/CN/nginx/config.md) — 配置体系、location 匹配、变量
-- [Upstream](/docs/CS/CN/nginx/upstream.md) — 负载均衡算法、重试、长连接
-- [Cache](/docs/CS/CN/nginx/cache.md) — 缓存子系统与击穿防护
-- [Memory](/docs/CS/CN/nginx/memory.md) — 内存池、共享内存、slab
+- [Computer Network](/docs/CS/CN/CN.md)
+- [HTTP](/docs/CS/CN/HTTP/HTTP.md)
+- [TCP](/docs/CS/CN/TCP/TCP.md)
+- [Socket](/docs/CS/CN/Socket.md)
+- [Caddy](/docs/CS/CN/Caddy.md)
 
 ## References
 

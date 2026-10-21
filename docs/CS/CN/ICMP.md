@@ -6,7 +6,7 @@ We sometimes refer to this protocol as ICMPv4 to distinguish it from ICMPv6.
 
 The [IP protocol](/docs/CS/CN/IP.md) alone provides no direct way for an end system to learn the fate of IP packets that fail to make it to their destinations. 
 In addition, IP provides no direct way of obtaining diagnostic information (e.g., which routers are used along a path or a method to estimate the round-trip time). 
-To address these deficiencies, a special protocol called the [Internet Control Message Protocol (ICMP)](https://en.wikipedia.org/wiki/Internet_Control_Message_Protocol) 
+To address these deficiencies, a special protocol called the [Internet Control Message Protocol (ICMP)](https://datatracker.ietf.org/doc/html/rfc792) 
 is used in conjunction with IP to provide diagnostics and control information related to the configuration of the IP protocol layer and the disposition of IP packets. 
 ICMP is often considered part of the IP layer itself, and it is required to be present with any IP implementation. 
 It uses the IP protocol for transport. So, precisely, it is neither a network nor a transport protocol but lies somewhere between the two.
@@ -31,6 +31,34 @@ ICMP messages are grouped into two major categories:
 - those messages relating to problems with delivering IP datagrams (called *error messages*)
 - and those related to information gathering and configuration (called *query or informational messages*)
 
+下表汇总 ICMPv4 的消息类型（RFC 792 "Summary of Message Types"）及后续废止情况：
+
+| Type | 消息 | 状态 |
+| --- | --- | --- |
+| 0 | Echo Reply | 现行 |
+| 3 | Destination Unreachable | 现行 |
+| 4 | Source Quench | 已被 RFC 6633 废止 |
+| 5 | Redirect | 现行 |
+| 8 | Echo Request | 现行 |
+| 11 | Time Exceeded | 现行 |
+| 12 | Parameter Problem | 现行 |
+| 13/14 | Timestamp / Timestamp Reply | 现行 |
+| 15/16 | Information Request / Reply | 已被 RFC 6918 废止 |
+| 17/18 | Address Mask Request / Reply | RFC 950 定义，已被 RFC 6918 废止 |
+
+Type 3（Destination Unreachable）用 code 进一步说明原因：
+
+| Code | 含义 | 通常由谁发出 |
+| --- | --- | --- |
+| 0 | net unreachable | 网关 |
+| 1 | host unreachable | 网关 |
+| 2 | protocol unreachable | 主机 |
+| 3 | port unreachable | 主机 |
+| 4 | fragmentation needed and DF set | 网关 |
+| 5 | source route failed | 网关 |
+
+Type 11（Time Exceeded）有两个 code：0 表示 time to live exceeded in transit，1 表示 fragment reassembly time exceeded。
+
 
 
 
@@ -47,11 +75,19 @@ Echo reply  0
 The TTL value varies depends on the version of an operating system and device.
 The default initial TTL value for Linux/Unix is 64, and TTL value for Windows is 128.
 
+> [!NOTE]
+> 这是常见初始值，各系统/设备会有差异。
+
 
 
 ### traceroute
 
+traceroute 用于探测源主机到目的主机之间经过的路由器序列（路径）。 
+原理是利用 TTL 字段：工具发送 TTL 从 1 开始逐次递增的探测报文，沿途路由器每转发一跳将 TTL 减 1；当 TTL 减到 0 时路由器丢弃报文，并回送 ICMP Time Exceeded（type 11, code 0），由此暴露该路由器的地址。 
+探测最终到达目的地时，目标主机按探测方式给出两种「终点信号」之一：基于 UDP 的探测回 ICMP Port Unreachable（type 3, code 3），基于 ICMP 的探测则回 Echo Reply（type 0）。
 
+> [!WARNING]
+> traceroute 机制本身没有 IETF RFC 定义，属业界惯常实践；RFC 1393 曾提出基于 IP 选项的替代方案（Traceroute Using an IP Option），现已废为 Historic。
 
 ```shell
 #cent os
@@ -72,8 +108,12 @@ ICMP attacks against TCP have been documented separately.
 ## Links
 
 - [Computer Network](/docs/CS/CN/CN.md)
+- [Linux ICMP](/docs/CS/OS/Linux/net/ICMP.md)
+- [tcpdump](/docs/CS/CN/Tools/tcpdump.md)
 
+## References
 
-## Reference
-
-1. [wiki-ICMP](https://en.wikipedia.org/wiki/Internet_Control_Message_Protocol)
+1. [RFC 792 - Internet Control Message Protocol](https://datatracker.ietf.org/doc/html/rfc792)
+1. [RFC 1122 - Requirements for Internet Hosts — Communication Layers](https://datatracker.ietf.org/doc/html/rfc1122)
+1. [RFC 6633 - Deprecation of ICMP Source Quench Messages](https://datatracker.ietf.org/doc/html/rfc6633)
+1. [RFC 6918 - Formally Deprecating Some ICMPv4 Message Types](https://datatracker.ietf.org/doc/html/rfc6918)

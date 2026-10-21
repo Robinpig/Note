@@ -1,8 +1,6 @@
 ## Introduction
 
-The [tcpdump](https://www.tcpdump.org/) command can be used to capture network traffic on a Linux system.
-
-*libpcap*, a portable C/C++ library for network traffic capture.
+[tcpdump](https://www.tcpdump.org/) 命令用于在 Linux 系统上抓取网络流量，底层依赖 *libpcap*——一个可移植的 C/C++ 网络流量捕获库。
 
 ```dot
 strict digraph {
@@ -14,15 +12,19 @@ strict digraph {
 }
 ```
 
-tcpdump before ip_rcv or arp_rcv
+tcpdump 的抓包点位于 `ip_rcv` / `arp_rcv` 之前，即报文进入 IP / ARP 协议栈处理之前。
+
+> [!TIP]
+> 
+> 抓包前先用 BPF 表达式收敛流量，是成本最低的手段：只关心 80 端口时写 `port 80`，让无关报文在内核侧尽早丢弃（可配合下文 `strace tcpdump port 80` 观察过滤表达式如何抵达内核）。
 
 ## lookup
 
-pcap-npf.c has its own pcap_lookupdev(), for compatibility reasons, as it actually returns the names of all interfaces, with a NUL separator between them; some callers may depend on that.
+`pcap-npf.c` 需要自己的 `pcap_lookupdev()`：出于兼容性考虑，它实际返回所有接口的名字，彼此以 NUL 分隔，某些调用方可能依赖这一行为。
 
-MS-DOS has its own pcap_lookupdev(), but that might be useful only as an optimization.
+MS-DOS 也有自己的 `pcap_lookupdev()`，不过那大概只能算一种优化。
 
-In all other cases, we just use pcap_findalldevs() to get a list of devices, and pick from that list.
+其余情况下，统一调用 `pcap_findalldevs()` 获取设备列表，再从中挑选一个。
 
 ```c
 #if !defined(HAVE_PACKET32) && !defined(MSDOS)
@@ -107,12 +109,7 @@ pcap_lookupdev(char *errbuf)
 
 ### pcap_findalldevs
 
-/*
- * Get a list of all capture sources that are up and that we can open.
- * Returns -1 on error, 0 otherwise.
- * The list, as returned through "alldevsp", may be null if no interfaces
- * were up and could be opened.
- */
+获取所有已启动且可打开的抓包源列表：出错返回 -1，成功返回 0；若没有任何接口处于 up 且可打开，通过 `alldevsp` 返回的列表可能为 NULL。
 ```c
 int
 pcap_findalldevs(pcap_if_t **alldevsp, char *errbuf)
@@ -176,7 +173,7 @@ static const struct net_proto_family packet_family_ops = {
 strace tcpdump port 80
 ```
 
-call [create socket](/docs/CS/OS/Linux/net/socket.md?id=create)
+调用[创建 socket](/docs/CS/OS/Linux/net/socket.md?id=create)
 
 ```shell
 #define ETH_P_ALL	0x0003		/* Every packet (be careful!!!) */
@@ -189,9 +186,9 @@ socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL))
 
 #### packet_create
 
-set `po->prot_hook.func = packet_rcv;`
+设置 `po->prot_hook.func = packet_rcv;`
 
-__register_prot_hook
+再由 `__register_prot_hook` 注册协议钩子
 
 ```c
 static int packet_create(struct net *net, struct socket *sock, int protocol,
@@ -270,7 +267,7 @@ out:
 }
 ```
 
-__register_prot_hook must be invoked through register_prot_hook or from a context in which asynchronous accesses to the packet socket is not possible (packet_create()).
+`__register_prot_hook` 必须通过 `register_prot_hook` 调用，或者在不存在对 packet socket 异步访问的上下文中调用（`packet_create()` 即属后者）。
 
 ```c
 //
@@ -294,10 +291,9 @@ static void __register_prot_hook(struct sock *sk)
 
 #### packet_rcv
 
-This function makes lazy skb cloning in hope that most of packets are discarded by BPF.
-Note tricky part: we DO mangle shared skb! skb->data, skb->len and skb->cb are mangled.
-It works because (and until) packets falling here are owned by current CPU. Output packets are cloned by dev_queue_xmit_nit(), input packets are processed by net_bh sequentially, so that if we return skb to original state on exit,
-we will not harm anyone.
+该函数对 skb 采取惰性克隆：寄望大部分报文在 BPF 过滤阶段就被丢弃，从而省下这次拷贝。
+需要注意的微妙之处：这里确实会改写共享的 skb——`skb->data`、`skb->len` 与 `skb->cb` 都会被改动。
+之所以安全，是因为（且仅当）落到这里的报文归当前 CPU 所有：出口报文由 `dev_queue_xmit_nit()` 负责克隆，入口报文由 `net_bh` 串行处理；因此只要在退出时把 skb 恢复原状，就不会波及他人。
 
 ```c
 // 
@@ -419,8 +415,7 @@ drop:
 
 #### packet_recvmsg
 
-Pull a packet from our receive queue and hand it to the user.
-If necessary we block.
+从接收队列中取出一个报文并交给用户态；必要时阻塞等待。
 
 ```c
 // 
@@ -574,6 +569,10 @@ out:
 
 ## Summary
 
+一次抓包可以串成完整链路：用户态经 libpcap 创建 AF_PACKET socket，`packet_create` 把 `packet_rcv` 挂成协议钩子；每个流经网卡的报文在 `ip_rcv` / `arp_rcv` 之前命中该钩子，先过一遍 BPF 过滤器（`run_filter`），命中的报文惰性克隆后进入 socket 接收队列；最后 `packet_recvmsg` 把队列中的报文拷贝到用户缓冲区。
+
+这条链路直接解释两类常见现象：过滤器写得太宽，BPF 拦不住流量，拷贝与队列压力随之上升；抓包量超过接收缓冲区时，内核直接丢包并累计丢弃计数（`tp_drops`），表现为抓包结果出现丢包。排查时应先把 `port 80` 这类表达式写窄，再核对两端的报文数差距。
+
 ## Links
 
 - [BPF](/docs/CS/OS/Linux/Tools/BPF.md)
@@ -584,5 +583,5 @@ out:
 ## References
 
 1. [TCPDUMP & LiBPCAP](https://www.tcpdump.org/index.html#documentation)
-2. [Linux内核角度分析tcpdump原理](https://mp.weixin.qq.com/s?__biz=Mzg5MTU1ODgyMA==&mid=2247483799&idx=1&sn=d31ddd924b8809040c004c5f163cb61d&chksm=cfcacf5cf8bd464abdab4c3a9b571d6e52d0a8d0ee9d71191bbe8ed3c3dfb084e303b636afce&scene=178&cur_album_id=2086465918313775105#rd)
+2. [Linux 内核角度分析 tcpdump 原理](https://mp.weixin.qq.com/s?__biz=Mzg5MTU1ODgyMA==&mid=2247483799&idx=1&sn=d31ddd924b8809040c004c5f163cb61d&chksm=cfcacf5cf8bd464abdab4c3a9b571d6e52d0a8d0ee9d71191bbe8ed3c3dfb084e303b636afce&scene=178&cur_album_id=2086465918313775105#rd)
 3. [The BSD Packet Filter: A New Architecture for User-level Packet Capture](https://www.tcpdump.org/papers/bpf-usenix93.pdf)

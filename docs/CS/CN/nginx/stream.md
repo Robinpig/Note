@@ -37,7 +37,7 @@ stream {
 | :-- | :-- | :-- |
 | HTTP/HTTPS 反代、需要改头、缓存、限流 | `http{}` | 只有 http 有头、URI、location |
 | 透传 TLS（不想在 nginx 终止证书） | `stream{}` | 证书留在后端，nginx 只搬字节 |
-| 按 SNI 把 443 分给不同后端 | `stream{}` + `ssl_preread` | 见 [ssl_preread 一节](#ssl-preread不解密的-sni-分流) |
+| 按 SNI 把 443 分给不同后端 | `stream{}` + `ssl_preread` | 见 [ssl_preread 一节](#ssl_preread-sni-splitting-without-decryption) |
 | MySQL / Redis / SSH / 自定义 TCP | `stream{}` | http 看不懂这些协议 |
 | UDP（DNS、QUIC 之外的 UDP 服务） | `stream{}` | http 不支持 UDP |
 | 需要 `grpc_pass` | `http{}` | gRPC 是 HTTP/2 |
