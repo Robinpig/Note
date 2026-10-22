@@ -177,7 +177,7 @@ FreeBSD 的锁家族在 man 层面是并列的，选用哪种是个真正的工�
 
 ### Memory
 
-内核对象分配统一在 `uma(9)` 之下（"general-purpose kernel object allocator"，按 zone 管理 item），`malloc(9)` 是 UMA 之上的一层，`vmstat -z` 看 zone、`vmstat -m` 看 malloc 类型；mbuf 分配器自 5.3 起也是 UMA 的包装（`mbuf(9)`）。用户态 `malloc(3)` 就是 jemalloc 5.3.0，调优入口 `/etc/malloc.conf` 与 `MALLOC_CONF`（本库的 allocator 侧细节见 [jemalloc](/docs/CS/memory/jemalloc.md)）。swap 侧的 FreeBSD 特色是**一次性密钥加密交换区**：`geli(8) onetime -d ada0s1b`；`swapon(8)` 的 man 里还留了一句有用的警告——对交换设备启用 `BIO_DELETE` 可能**把崩溃转储一起擦掉**。
+内核对象分配统一在 `uma(9)` 之下（"general-purpose kernel object allocator"，按 zone 管理 item），`malloc(9)` 是 UMA 之上的一层，`vmstat -z` 看 zone、`vmstat -m` 看 malloc 类型；mbuf 分配器自 5.3 起也是 UMA 的包装（`mbuf(9)`）。用户态 `malloc(3)` 就是 jemalloc 5.3.0，调优入口 `/etc/malloc.conf` 与 `MALLOC_CONF`（本库的 allocator 侧细节见 [jemalloc](/docs/CS/memory/jemalloc/jemalloc.md)）。swap 侧的 FreeBSD 特色是**一次性密钥加密交换区**：`geli(8) onetime -d ada0s1b`；`swapon(8)` 的 man 里还留了一句有用的警告——对交换设备启用 `BIO_DELETE` 可能**把崩溃转储一起擦掉**。
 
 ## Storage and ZFS
 

@@ -76,6 +76,7 @@ b) heap默认是64M，降低每个heap的size（笔者测试时设置为512K）�
 
 - [C](/docs/CS/C/C.md)
 - [malloc](/docs/CS/C/malloc.md)
+- [jemalloc](/docs/CS/memory/jemalloc/jemalloc.md)
 
 ## References
 

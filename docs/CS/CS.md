@@ -184,7 +184,7 @@ Docker、Kubernetes、CNI、Ingress、Helm
 
 ### Compiler and Toolchain
 
-编译器把源码逐层降到 IR、机器码与可执行文件，链接与加载再把它们变成进程：阶段与优化见 [Compiler](/docs/CS/Compiler/Compiler.md)，工具链见 [GCC](/docs/CS/Compiler/GCC.md)，产物格式见 [ELF](/docs/CS/Compiler/ELF.md)，最低层的表达是 [assembly](/docs/CS/assembly/assembly.md)。程序运行时的真实内存由分配器决定，见 [memory](/docs/CS/memory/memory.md)（[GC](/docs/CS/memory/GC.md)、[jemalloc](/docs/CS/memory/jemalloc.md)）与 [glibc](/docs/CS/C/glibc.md)；工具与许可证背景见 [GNU](/docs/CS/GNU/GNU.md)。这条链与 [Computability](/docs/CS/Algorithms/Computability.md) 相接：语义等价性不可判定，所以优化必须保守。
+编译器把源码逐层降到 IR、机器码与可执行文件，链接与加载再把它们变成进程：阶段与优化见 [Compiler](/docs/CS/Compiler/Compiler.md)，工具链见 [GCC](/docs/CS/Compiler/GCC.md)，产物格式见 [ELF](/docs/CS/Compiler/ELF.md)，最低层的表达是 [assembly](/docs/CS/assembly/assembly.md)。程序运行时的真实内存由分配器决定，见 [memory](/docs/CS/memory/memory.md)（[GC](/docs/CS/memory/GC.md)、[jemalloc](/docs/CS/memory/jemalloc/jemalloc.md)）与 [glibc](/docs/CS/C/glibc.md)；工具与许可证背景见 [GNU](/docs/CS/GNU/GNU.md)。这条链与 [Computability](/docs/CS/Algorithms/Computability.md) 相接：语义等价性不可判定，所以优化必须保守。
 
 ## Networks and Data
 
@@ -224,7 +224,7 @@ Docker、Kubernetes、CNI、Ingress、Helm
 
 ### Software Engineering
 
-软件工程关心**如何让系统长期可演进**，而不是一次跑通。判断框架先于手段：[Basic](/docs/CS/SE/Basic.md) 记的是复杂度、抽象的反噬与"没有银弹"这类认知，[Programming](/docs/CS/SE/Programming.md) 与 [reactive](/docs/CS/SE/reactive.md) 是范式层的选择，写出来是否整洁看 [Clean_Code](/docs/CS/SE/Clean_Code.md)、腐化之后怎么收拾看 [Refactoring](/docs/CS/SE/Refactoring.md) 与 [Code](/docs/CS/SE/Code.md)，出错之后看 [Bug](/docs/CS/SE/Bug.md) 与 [Debug](/docs/CS/SE/Debug.md)。
+软件工程关心**如何让系统长期可演进**，而不是一次跑通。判断框架先于手段：[Basic](/docs/CS/SE/Basic.md) 记的是复杂度、抽象的反噬与"没有银弹"这类认知，这些认知在真实业务系统里如何表现为"每加一个功能都更难改"，由 [Complexity](/docs/CS/SE/Complexity.md) 展开（隐性耦合的长尾、架构短视是开发方式的产物、复用的边界）；[Programming](/docs/CS/SE/Programming.md) 与 [reactive](/docs/CS/SE/reactive.md) 是范式层的选择，写出来是否整洁看 [Clean_Code](/docs/CS/SE/Clean_Code.md)、腐化之后怎么收拾看 [Refactoring](/docs/CS/SE/Refactoring.md) 与 [Code](/docs/CS/SE/Code.md)，出错之后看 [Bug](/docs/CS/SE/Bug.md) 与 [Debug](/docs/CS/SE/Debug.md)。
 
 系统的形状由架构决定：[Architecture](/docs/CS/SE/Architecture.md) 给风格谱系，[DDD](/docs/CS/SE/DDD.md) 回答边界画在哪，[registry](/docs/CS/SE/registry.md) 是服务化的第一块基础设施，[中台](/docs/CS/SE/中台.md) 讲组织与复用的张力，[Serverless](/docs/CS/SE/Serverless.md) 与 [Mini Program](/docs/CS/SE/MiniProgram/Mini_Program.md) 是两种交付形态。形状定了之后才是正确性——[Concurrency](/docs/CS/SE/Concurrency.md)、[Lock](/docs/CS/SE/Lock.md)、[Transaction](/docs/CS/SE/Transaction.md)、[Workflow](/docs/CS/SE/Workflow.md)；再往后是规模与韧性——[Cache](/docs/CS/SE/Cache.md)（[Caffeine](/docs/CS/SE/Caffeine.md)、[JetCache](/docs/CS/SE/JetCache.md)）、[RateLimiter](/docs/CS/SE/RateLimiter.md)、[CircuitBreaker](/docs/CS/SE/CircuitBreaker.md)、[Scheduled_Task](/docs/CS/SE/Scheduled_Task.md)、[掉单机制](/docs/CS/SE/掉单机制.md)。
 
