@@ -39,7 +39,7 @@ digraph framework_index {
 
 按"强一致键值底座 / 配置与注册中心"两类定位取舍，完整维度矩阵见 [etcd 横向对照](/docs/CS/Framework/etcd/compare.md)。
 
-- [etcd](/docs/CS/Framework/etcd/README.md)：K8s 后端首选的强一致 KV，配套完整的共识（raft/tracker）、存储（boltdb/MVCC）、网关、运维笔记。
+- [etcd](/docs/CS/Framework/etcd/README.md)：K8s 后端首选的强一致 KV；枢纽 + boot（启动生命周期）/ request（请求路径）/ features（服务发现·事务）分册，配套完整的共识（raft/tracker）、存储（boltdb/MVCC）、网关、运维笔记。
 - [ZooKeeper](/docs/CS/Framework/ZooKeeper/README.md)：经典协调底座，Zab 共识、znode树、watch 与 session 配方。
 - [Nacos](/docs/CS/Framework/nacos/README.md)：配置中心 + 注册中心，AP（Distro）与 CP（JRaft）双模式。
 - [Consul](/docs/CS/Framework/consul/README.md)：服务网络平台，服务发现 + 服务网格（Envoy mTLS）+ 多DC 联邦，另有成员发现（Serf）与网关专篇。
@@ -76,7 +76,7 @@ digraph framework_index {
 - [Hadoop](/docs/CS/Framework/Hadoop/Hadoop.md)：HDFS 与 MapReduce 生态。
 - [Flink](/docs/CS/Framework/Flink/Flink.md)：流批一体计算，DataStream / Table API / 状态与Checkpoint。
 - [Spark](/docs/CS/Framework/Spark/Spark.md)：批处理与 Spark SQL。
-- [ES](/docs/CS/Framework/ES/ES.md)：Elasticsearch 分布式检索与倒排索引。
+- [ES](/docs/CS/Framework/ES/ES.md)：Elasticsearch 分布式检索与倒排索引。已拆为**枢纽 + 17 分册**（基线 9.5.5，默认值均带 `文件:行号`），打假点集中在 `not_analyzed` 已抛异常、`minimum_master_nodes` 已移除、bundled JDK 27、写路径是 Lucene 先/translog 后、熔断器默认 95%/40%/60%、堆上限 31GB。机制层：[Replication](/docs/CS/Framework/ES/Replication.md)（bulk 分组/seq_no/primary_term/in-sync/noop/translog）、[Search_Internals](/docs/CS/Framework/ES/Search_Internals.md)（分片 topN=from+size/batched reduce/11 个 fetch 子 phase/scroll 内部）、[Cluster_State](/docs/CS/Framework/ES/Cluster_State.md)（publication 四级/`_state` 持久化/21 决策器/磁盘水位）、[Merge](/docs/CS/Framework/ES/Merge.md)（Tiered vs LogByteSize/ThreadPoolMergeScheduler/HybridDirectory）、[Thread_Pools](/docs/CS/Framework/ES/Thread_Pools.md)（24 池/协调执行分离/429 来源/两条背压）；应用层：[Install](/docs/CS/Framework/ES/Install.md)、[Mapping](/docs/CS/Framework/ES/Mapping.md)、[Query_DSL](/docs/CS/Framework/ES/Query_DSL.md)、[Analyzer](/docs/CS/Framework/ES/Analyzer.md)、[Troubleshooting](/docs/CS/Framework/ES/Troubleshooting.md)、[Lucene](/docs/CS/Framework/ES/Lucene.md)、[Cluster](/docs/CS/Framework/ES/Cluster.md)、[Script](/docs/CS/Framework/ES/Script.md)、[Kibana](/docs/CS/Framework/ES/Kibana.md)、[Beats](/docs/CS/Framework/ES/Beats.md)、[Logstash](/docs/CS/Framework/ES/Logstash.md)、[OpenSearch](/docs/CS/Framework/ES/OpenSearch.md)。
 
 ## Distributed Storage
 

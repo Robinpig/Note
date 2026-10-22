@@ -1,36 +1,22 @@
 ## Introduction
 
-- Configuration Management
-- Rendezvous
-- Group Membership
-- Simple Locks
-- Read/Write Locks
+本页记录基于 ZooKeeper 原始 API 实现的**分布式协调配方（Recipes）**：屏障、队列、锁、两阶段提交、选主。配方基于 znode 的三大原语组合而成：**顺序节点（SEQUENCE）** 提供全局有序、**临时节点（EPHEMERAL）** 绑定会话存活、**一次性 watch** 提供变更通知。
 
-The replicated database is an **in-memory** database containing the entire data tree.
-Each znode in the tree stores a maximum of 1MB of data by default, but this maximum value is a configuration parameter that can be changed in specific cases.
-For recoverability, we efficiently log updates to disk, and we force writes to be on the disk media before they are applied to the in-memory database.
-In fact, as Chubby, we keep a replay log (a write-ahead log, in our case) of committed operations and generate periodic snapshots of the in-memory database.
+> [!IMPORTANT]
+> 生产环境**不要手写这些配方**——直接使用 [Curator](/docs/CS/Framework/ZooKeeper/Curator.md) 的 `InterProcessMutex` / `InterProcessQueue` / `LeaderSelector` 等经过验证的实现。本页用于理解原理与面试/排障，Curator 是生产首选。
 
-Every ZooKeeper server services clients. Clients connect to exactly one server to submit its requests.
-As we noted earlier, read requests are serviced from the local replica of each server database.
-Requests that change the state of the service, write requests, are processed by an agreement protocol.
+### 页内导航
 
-As part of the agreement protocol write requests are forwarded to a single server, called the leader1.
-The rest of the ZooKeeper servers, called followers, receive message proposals consisting of state changes from the leader and agree upon state changes.
+| 配方 | 实现要点 |
+| :--- | :--- |
+| **[Barriers](#barriers)** | 屏障节点存在即"阻塞"；`exists`+watch 循环等待节点消失（双屏障同步计算起止） |
+| **[Queues](#queues)** | `queue-` 前缀 + SEQUENCE\|EPHEMERAL；取最小序号消费（优先级队列加 `YY` 优先级前缀） |
+| **[Locks](#locks)** | 临时顺序节点排序取最小者持锁；watch 前驱避免惊群，无轮询无超时 |
+| **[Two-phased Commit](#two-phased-commit)** | 协调者建事务节点，各站点写 commit/abort 投票；改进：O(n) 消息复杂度 + 临时节点探测故障 |
+| **[Leader Election](#leader-election)** | `n_` + SEQUENCE\|EPHEMERAL；序号最小者当选，watch 前驱接棒 |
 
-Since the messaging layer is atomic, we guarantee that the local replicas never diverge, although at any point in time some servers may have applied more transactions than others.
-Unlike the requests sent from clients, the transactions are *idempotent*.
-When the leader receives a write request, it calculates what the state of the system will be when the write is applied and transforms it into a transaction that captures this new state.
-The future state must be calculated because there may be outstanding transactions that have not yet been applied to the database.
-For example, if a client does a conditional setData and the version number in the request matches the future version number of the znode being updated, the service generates a setDataTXN that contains the new data, the new version number, and updated time stamps.
-If an error occurs, such as mismatched version numbers or the znode to be updated does not exist, an errorTXN is generated instead.
-
-During normal operation Zab does deliver all messages in order and exactly once, but since Zab does not
-persistently record the id of every message delivered,
-Zab may redeliver a message during recovery. Because
-we use idempotent transactions, multiple delivery is acceptable as long as they are delivered in order. In fact,
-ZooKeeper requires Zab to redeliver at least all messages
-that were delivered after the start of the last snapshot.
+> [!NOTE]
+> 所有配方的共同陷阱：一旦涉及 watch，**通知可能丢失**（一次性语义，见 [Watches](/docs/CS/Framework/ZooKeeper/Watches.md)）。锁与队列的正确性依赖"watch 前驱 + 重新读取子节点"组合，而非"恰好一次的事件"。Kleppmann 指出一次性 watch 正是分布式锁的脆弱点之一。
 
 ### Barriers
 
@@ -282,8 +268,19 @@ private void makeOffer() throws KeeperException, InterruptedException {
     }
 ```
 
-
 ## Links
 
-- [ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)
-- [Curator](/docs/CS/Framework/ZooKeeper/Curator.md)
+- [Curator（生产级配方实现，生产首选）](/docs/CS/Framework/ZooKeeper/Curator.md)
+- [ZooKeeper（概念枢纽）](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)
+- [Watches（一次性语义与丢失窗口）](/docs/CS/Framework/ZooKeeper/Watches.md)
+- [Session（临时节点与会话绑定）](/docs/CS/Framework/ZooKeeper/Session.md)
+- [Leader Flapping 排查（troubleshooting）](/docs/CS/Framework/ZooKeeper/troubleshooting.md)
+- [start（zxid 溢出触发选主）](/docs/CS/Framework/ZooKeeper/start.md)
+- [How to do distributed locking](https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html)
+
+## References
+
+1. [ZooKeeper Recipes](https://zookeeper.apache.org/doc/current/recipes.html)
+2. [ZooKeeper Programmer's Guide](https://zookeeper.apache.org/doc/current/zookeeperProgrammers.html)
+3. [How to do distributed locking (Kleppmann)](https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html)
+4. [Distributed Locks are Dead; Long Live Distributed Locks!](https://hazelcast.com/blog/long-live-distributed-locks/)

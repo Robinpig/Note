@@ -1,8 +1,16 @@
 ## Introduction
 
-[Pingora](https://github.com/cloudflare/pingora) 是 Cloudflare 开源的 **Rust 网络服务框架**（Apache-2.0），用于构建快速、可靠、可编程的代理与网关。它支撑着 Cloudflare CDN 每秒数千万级别的请求，2024 年初开源。
+> [!NOTE]
+> 版本基线（2026-10-21 经 GitHub releases API 核实）：最新 release 为 **0.9.0**（2026-09-09 发布）。项目仍处 0.x，官方明言 pre-1.0 阶段 API 稳定性不做保证。
 
-版本现状（2026-10）：**0.9.0**（2026-09-09 发布）——注意它仍然是 **0.x 的框架**，**不提供开箱即用的服务器二进制**；你用 Rust 实现 `ProxyHttp` trait 写出自己的代理再编译。价值主张是「内存安全地替代 C/C++ 写的代理服务」，定位与 nginx/Caddy 这类现成产品完全不同。
+[Pingora](https://github.com/cloudflare/pingora) 是 Cloudflare 用 **Rust** 写的可编程 HTTP 代理框架（Apache-2.0）：2022 年 9 月首次对外披露时日请求量已超 1 万亿，2024 年 2 月正式开源，替代了 Cloudflare 原先基于 nginx 的代理基础设施，如今支撑其每秒 4000 万级（README 口径 40M+）的互联网请求。同流量对比旧服务，官方口径是 CPU 约省 70%、内存约省 67%。
+
+它有两个与 nginx 截然不同的个性：
+
+- **多线程，而非事件循环单线程**：tokio 多线程运行时加 work stealing，连接池跨线程共享，没有 nginx 按 worker 进程各自维护连接池、进程越多复用率越劣化的问题
+- **无配置文件**：官方原话 "Pingora is a library and toolset, not an executable binary"——Rust 代码即配置，你用 `ProxyHttp` trait 写出自己的代理再编译，拿不到开箱即用的服务器二进制
+
+价值主张是「内存安全地替代 C/C++ 写的代理服务」，定位与 nginx/Caddy 这类现成产品完全不同。
 
 ## Core Features
 
@@ -65,10 +73,11 @@ nginx 做同样的事是几行配置；Pingora 是几百行起步的框架——
 ## Links
 
 - [nginx](/docs/CS/CN/nginx/nginx.md)
-- [compare](/docs/CS/CN/nginx/compare.md) — 四代代理横评
-- [Event](/docs/CS/CN/nginx/event.md) — 惊群问题的进程/线程解法对照
+- [Caddy](/docs/CS/CN/Caddy.md)
 
 ## References
 
-- <https://github.com/cloudflare/pingora>
-- <https://blog.cloudflare.com/pingora-open-source/>
+- [cloudflare/pingora](https://github.com/cloudflare/pingora)
+- [Pingora releases](https://github.com/cloudflare/pingora/releases)
+- [Cloudflare Blog - Open sourcing Pingora](https://blog.cloudflare.com/pingora-open-source/)
+- [Cloudflare Blog - How we built Pingora, the proxy that connects Cloudflare to the Internet](https://blog.cloudflare.com/how-we-built-pingora-the-proxy-that-connects-cloudflare-to-the-internet/)

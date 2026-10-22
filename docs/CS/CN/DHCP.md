@@ -35,6 +35,12 @@ Shorter leases tend to keep the pool available for other clients, with a consequ
 Common defaults include 12 to 24 hours, depending on the particular DHCP server being used.
 Clients begin trying to renew leases after half of the lease duration has passed.
 
+续期由两个计时器驱动（RFC 2131 §4.4.5）：
+
+- T1 默认为租约时长的 0.5 倍：到点后客户端进入 RENEWING 状态，向原服务器**单播** REQUEST——这正是上面「一半租约时开始续期」的由来。
+- T2 默认为租约时长的 0.875 倍：原服务器仍未回应时，客户端进入 REBINDING 状态，**广播** REQUEST 给任意可达服务器。
+- 租约到期仍未续上，客户端必须停止使用该地址。
+
 When making a DHCP request, a client is able to provide information to the server. 
 This information can include the name of the client, its requested lease duration, a copy of the address it is already using or last used, and other parameters. 
 When the server receives such a request, it can make use of whatever information the client has provided (including the requesting MAC address) 
@@ -51,6 +57,8 @@ Subnet
 Lease
 
 
+## DHCP Operation
+
 For a newly arriving host, the DHCP protocol is a four-step process.
 The four steps are:
 
@@ -65,13 +73,18 @@ The four steps are:
 
 ![DHCP Operation](img/DHCP.png)
 
-DHCP NAK
+每种 DHCP 报文都携带 option 53（DHCP Message Type，RFC 2132 §9.6），消息类型与 DORA 的对应关系如下：
 
-DHCP RELEASE
-
-DHCP INFORM
-
-DHCP DECLINE
+| option 53 取值 | 消息类型 | 用途 |
+| --- | --- | --- |
+| 1 | DHCP DISCOVER | 客户端广播寻找服务器 |
+| 2 | DHCP OFFER | 服务器响应 DISCOVER，提供地址与配置参数 |
+| 3 | DHCP REQUEST | 客户端接受 OFFER，以及续租（T1/T2 到点）时发送 |
+| 4 | DHCP DECLINE | 客户端检测到地址已被占用时拒绝该地址 |
+| 5 | DHCP ACK | 服务器确认参数，租约生效 |
+| 6 | DHCP NAK | 服务器拒绝请求（如租约已过期），客户端需重新走 DORA |
+| 7 | DHCP RELEASE | 客户端主动放弃租约 |
+| 8 | DHCP INFORM | 客户端已有地址，仅请求其他配置参数 |
 
 客户端监听68端口 服务端监听67端口
 
@@ -79,7 +92,7 @@ DHCP DECLINE
 
 使用UDP广播
 
-1. 客户端发起DHCP DISCOVER，UDP广播 （225.225.225.255:67/0.0.0.0:68）
+1. 客户端发起DHCP DISCOVER，UDP广播 （255.255.255.255:67/0.0.0.0:68）
 2. 服务端 DHCP OFFER 还是广播发送
 3. 客户端 DHCP REQUEST
 4. 服务端 DHCP ACK
@@ -88,11 +101,16 @@ DHCP DECLINE
 
 DHCP中继代理
 
+DHCP 依赖广播来发现服务器，而广播通常被路由器限制在本地子网内。 
+当客户端与服务器不在同一子网时，需要由路由器（或专门主机）充当中继代理（relay agent）转发 DHCP 报文，这样每个子网就不必各配一台 DHCP 服务器。 
+中继代理转发报文时会填充 giaddr（中继接口的网关 IP）与 hops 字段，服务器据此判断客户端所在子网、选择对应的地址池。
 
 ## Links
 
 - [Computer Network](/docs/CS/CN/CN.md)
+- [UDP](/docs/CS/CN/UDP.md)
 
 ## References
 
 1. [RFC 2131 - Dynamic Host Configuration Protocol](https://www.rfc-editor.org/info/rfc2131)
+1. [RFC 2132 - DHCP Options and BOOTP Vendor Extensions](https://www.rfc-editor.org/info/rfc2132)

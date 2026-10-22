@@ -37,6 +37,39 @@ Consul 还提供 [Semaphore](https://developer.hashicorp.com/consul/api-docs/sem
 
 HTTP 带 `index=<ModifyIndex>` + `wait=<duration>`（默认最长 5m，Consul 2.0 起 HTTP 读超时提到 15min 以容纳长轮询）做长轮询：服务端在 `ModifyIndex` 变更或超时前挂起返回。语义比 etcd watch 灵活（任意索引点阻塞），但**不支持按历史 revision 回溯**——想要"全量变更流"得客户端自己维护游标。
 
+## Command Cheatsheet
+
+```bash
+# 基础读写
+consul kv put app/config '{"timeout":30}'   # 写
+consul kv get -raw app/config               # 读（-raw 输出明文，默认是 Base64）
+consul kv get -recurse app/                 # 递归读前缀
+consul kv get -detailed app/config          # 带元数据（ModifyIndex / LockIndex / Session）
+consul kv delete app/config                 # 删
+
+# CAS：无锁乐观并发，只有 ModifyIndex 等于给定值才写成功
+consul kv get -detailed app/config          # 取当前 ModifyIndex
+consul kv put -cas=<ModifyIndex> app/config 'new'   # 索引不符则写入失败
+
+# session：锁与临时键的载体
+consul session create -ttl=30s -behavior=delete      # 创建 session
+consul kv put -session=<sid> -behavior=delete app/tmp 'x'   # 临时键，session 失效即删
+consul session destroy <sid>                          # 手动销毁
+
+# 分布式锁
+consul kv put -acquire=<sid> lock/leader 'me'        # 取锁（已有持有者则失败）
+consul kv put -release=<sid> lock/leader 'me'        # 放锁
+```
+
+```bash
+# HTTP：阻塞查询（长轮询）——index 用上次响应的 X-Consul-Index
+curl -s 'http://127.0.0.1:8500/v1/kv/app/config?recurse' -D- -o/dev/null | grep -i x-consul-index
+curl -s 'http://127.0.0.1:8500/v1/kv/app/config?index=<X-Consul-Index>&wait=5m'
+```
+
+> [!TIP]
+> `consul kv get` 默认输出 **Base64 编码**的值，脚本里记得加 `-raw` 免去解码。阻塞查询返回的 `X-Consul-Index` 是"下一次轮询要带的下标"，务必回传，否则等于退化成轮询。
+
 ## Comparison with etcd
 
 | 维度 | Consul KV | etcd KV |
@@ -54,6 +87,7 @@ Consul KV 的定位是"配合服务发现与配置的小型强一致存储"，�
 
 - [Consul（架构与启动流程）](/docs/CS/Framework/consul/Consul.md)
 - [Raft（共识）](/docs/CS/Framework/consul/raft.md)
+- [数据模型](/docs/CS/Framework/consul/data_model.md)
 - [Discovery（服务发现）](/docs/CS/Framework/consul/discovery.md)
 - [Client（客户端）](/docs/CS/Framework/consul/client.md)
 - [etcd MVCC](/docs/CS/Framework/etcd/MVCC.md)

@@ -1,591 +1,492 @@
 ## Introduction
 
-A [computer network](https://en.wikipedia.org/wiki/Computer_network) is a set of computers sharing resources located on or provided by network nodes.
-The computers use common communication protocols over digital interconnections to communicate with each other.
-These interconnections are made up of telecommunication network technologies, based on physically wired, optical,
-and wireless radio-frequency methods that may be arranged in a variety of network topologies.
+[计算机网络](https://en.wikipedia.org/wiki/Computer_network)（computer network）是一组由网络节点提供或位于网络节点上的、共享资源的计算机。
+这些计算机通过通用的通信协议在数字化的互联链路上相互通信。
+互联链路由电信网络技术构成，可以是有线、光纤，也可以是无线射频，并组织成各种网络拓扑。
+
+## Knowledge Map
+
+本目录的阅读顺序建议自顶向下：先用下面各章建立分层模型与端到端论证的直觉，再按工作需要下沉到具体协议的专题页。
+
+**应用层**的入口是 [HTTP](/docs/CS/CN/HTTP/HTTP.md)——消息格式、连接管理、版本演进都从它展开，其下设五个分册：[HTTPS](/docs/CS/CN/HTTP/HTTPS.md) 把 TLS 插进 HTTP 与 TCP 之间并算清握手的 RTT 成本，[QUIC](/docs/CS/CN/HTTP/QUIC.md) 是 HTTP/3 的传输底座，[HOL](/docs/CS/CN/HTTP/HOL.md) 解释队头阻塞这一限制 HTTP 演进的关键约束，[OAuth](/docs/CS/CN/HTTP/OAuth.md) 与 [Security](/docs/CS/CN/HTTP/Security.md) 分别覆盖授权框架与浏览器侧安全头。名称解析走 [DNS](/docs/CS/CN/DNS.md)，地址分配走 [DHCP](/docs/CS/CN/DHCP.md)，文件与邮件传输是 [FTP](/docs/CS/CN/FTP.md) 与 [SMTP](/docs/CS/CN/SMTP.md)（附件编码看 [MIME](/docs/CS/CN/MIME.md)），全双工推送看 [WebSocket](/docs/CS/CN/WebSocket.md)；把万级并发连接作为一类工程问题单独讨论的是 [C10k](/docs/CS/CN/C10k.md)。
+
+**传输层**的主体是 [TCP](/docs/CS/CN/TCP/TCP.md)——状态机、重传、窗口与拥塞控制的全貌；拥塞控制另立 [Congestion](/docs/CS/CN/TCP/Congestion.md) 存放算法专题与经典论文。与 TCP 并列的另外两种传输语义：[UDP](/docs/CS/CN/UDP.md) 轻量不可靠，[SCTP](/docs/CS/CN/SCTP.md) 面向多宿主与多流消息。而套接字 API 的统一入口是 [Socket](/docs/CS/CN/Socket.md)，select/poll/epoll 的 I/O 模型演进与它同主线，配合 [MultiIO](/docs/CS/CN/MultiIO.md) 阅读。
+
+**网络层与链路层**由三页支撑：[IP](/docs/CS/CN/IP.md) 管寻址与转发，[ICMP](/docs/CS/CN/ICMP.md) 管控制报文与诊断，[ARP](/docs/CS/CN/ARP.md) 管 IP 到 MAC 的解析。
+
+**安全**是一条横切主线：[TLS](/docs/CS/CN/TLS.md) 是协议本身（各版本差异与握手细节），[Security](/docs/CS/CN/Security.md) 是防护视角的总览，[Attack](/docs/CS/CN/Attack.md) 从攻击面反推防御，[VPN](/docs/CS/CN/VPN.md) 覆盖远程接入与隧道；学科框架见 [CyberSecurity](/docs/CS/CN/CyberSecurity/CyberSecurity.md)。
+
+**服务器与代理**是本目录最大的工程分支：[nginx](/docs/CS/CN/nginx/nginx.md) 是其下全部专题的唯一枢纽，事件循环、内存池、upstream、缓存、TLS 各有专篇，各代代理的系统性对比在 [compare](/docs/CS/CN/nginx/compare.md)。同代或同类的还有四层能力更细的 [HAProxy](/docs/CS/CN/Tools/HAProxy.md)、配置极简的 [Caddy](/docs/CS/CN/Caddy.md)、Rust 重写的 [Pingora](/docs/CS/CN/Pingora.md)；负载均衡的通用概念收敛在 [Load Balance](/docs/CS/CN/Load%20Balance.md)。排查工具集中在 Tools 目录：抓包看 [tcpdump](/docs/CS/CN/Tools/tcpdump.md) 与 [WireShark](/docs/CS/CN/Tools/WireShark.md)，防火墙与连接跟踪看 [netfilter](/docs/CS/CN/Tools/netfilter.md)，抓包分析平台看 [Xcap](/docs/CS/CN/Tools/Xcap.md)。运维层面的方法论——分层视角、五大故障分类、监控三视角、告警收敛与拓扑定位——单独成篇：[Ops](/docs/CS/CN/Ops.md)。
 
 ## Computer Networks and the Internet
 
 ### Network Protocols
 
-> A protocol defines the format and the order of messages exchanged between two or more communicating entities, as well as the actions taken on the transmission and/or receipt of a message or other event
+> 协议（protocol）定义了两个或多个通信实体之间交换报文的格式与顺序，以及报文传输和/或接收时（或其他事件发生时）所采取的动作。——Kurose & Ross 的经典定义
 
-Protocol Data Unit(PDU)
+协议是计算机网络的核心抽象：发送方与接收方必须对「报文长什么样、按什么顺序发、收到后做什么」达成一致，通信才可能进行。
+围绕协议有两个贯穿全篇的概念：
 
-SDU
+- **PDU（Protocol Data Unit，协议数据单元）**：某一层协议处理的数据单位，即该层的报文（如链路层的帧、网络层的数据报、传输层的报文段）。
+- **SDU（Service Data Unit，服务数据单元）**：上层交给本层的数据，加上本层的头部（有时还有尾部）后成为本层的 PDU——一层输出的 PDU 是下一层的 SDU。
 
 ### The Network Edge
 
-Furthermore, an increasing number of non-traditional “things” are being attached to the Internet as end systems.
-End systems are also referred to as *hosts*.
-Hosts are sometimes further divided into two categories: *clients* and *servers*.
+越来越多的非传统「物」（things）正作为端系统（end system）接入互联网。
+端系统也称**主机（host）**。
+主机常进一步分为两类：**客户端（client）**与**服务器（server）**。
 
 ### The Network Core
 
-The network core — the mesh of packet switches and links that interconnects the Internet’s end systems.
+网络核心（network core）是由分组交换机与链路组成的网格，把互联网的端系统互连起来。
+端系统接入网络的方式主要有两类，对应核心中两种交换范式：
 
-Circuit Switching
+**电路交换（Circuit Switching）**
 
-- low delay
-- ordering
-- no conflict
+- 低时延（链路资源预留，排队可忽略）
+- 保序（同一电路上的比特按序到达）
+- 无冲突（独占资源，不会互相碰撞）
 
-Packet Switching
+**分组交换（Packet Switching）**
 
-- connectionless
-- high reliable
-- forward delay
+- 无连接（每个分组独立选路，不事先建立电路）
+- 高可靠（路由冗余，单点故障可绕行）
+- 有转发时延（存储转发：每个分组要在交换机排队并整体收下才能发出）
 
-### Group Switching
+### Packet Switching Delay
 
-A packet starts in a host (the source), passes through a series of routers, and ends its journey in another host (the destination).
-As a packet travels from one node (host or router) to the subsequent node (host or router) along this path, the packet suffers from several types of delays at each node along the path.
-The most important of these delays are the nodal processing delay, queuing delay, transmission delay, and propagation delay; together, these delays accumulate to give a total nodal delay.
+一个分组从源主机出发，经过一系列路由器，最终到达另一台目的主机。
+分组沿路径从一个节点（主机或路由器）传到下一个节点时，在每个节点都会遭受几种时延。
+其中最重要的是**结点处理时延**、**排队时延**、**传输时延**和**传播时延**，它们累加为总的结点时延：
 
-- The time required to examine the packet’s header and determine where to direct the packet is part of the processing delay.
-- At the queue, the packet experiences a queuing delay as it waits to be transmitted onto the link.
-  The length of the queuing delay of a specific packet will depend on the number of earlier-arriving packets that are queued and waiting for transmission onto the link.
-- The transmission delay is the amount of time required for the router to push out the packet;
-  it is a function of the packet’s length and the transmission rate of the link, but has nothing to do with the distance between the two routers.
-- The propagation delay, on the other hand, is the time it takes a bit to propagate from one router to the next;
-  it is a function of the distance between the two routers, but has nothing to do with the packet’s length or the transmission rate of the link.
+- 检查分组首部、决定把分组导向何处所需的时间属于**处理时延** $d_{proc}$。
+- 分组在队列中等待发送到链路上时经历**排队时延** $d_{queue}$，其长度取决于队列中早已到达、正在等待传输的分组数量。
+- **传输时延** $d_{trans}$ 是路由器把分组全部推入链路所需的时间，只与分组长度和链路传输速率有关，与两台路由器间的距离无关。
+- **传播时延** $d_{prop}$ 则是一个比特从一台路由器传播到下一台所需的时间，只与距离有关，与分组长度和链路速率无关。
 
-If we let $d_{proc}$ , $d_{queue}$ , $d_{trans}$ , and $d_{prop}$ denote the processing, queuing, transmission, and propagation delays, then the total nodal delay is given by
+若用 $d_{proc}$、$d_{queue}$、$d_{trans}$、$d_{prop}$ 分别表示这四种时延，则总结点时延为
 
 $$
 d_{nodal}=d_{proc}+d_{queue}+d_{trans}+d_{prop}
 
 $$
 
-The most complicated and interesting component of nodal delay is the queuing delay, $d_{queue}$ .
+结点时延中最复杂、最有意思的成分是排队时延 $d_{queue}$。记流量强度（traffic intensity）为 $La/R$（$a$ 为分组平均到达率，$L$ 为分组长度，$R$ 为链路速率）：
 
 > [!TIP]
 >
-> Design your system so that the traffic intensity is no greater than 1.
+> 设计系统时，让流量强度不大于 1。
 
-As the traffic intensity approaches 1, the average queuing delay increases rapidly.
-A small percentage increase in the intensity will result in a much larger percentage-wise increase in delay.
-
-The fraction of lost packets increases as the traffic intensity increases.
-Therefore, performance at a node is often measured not only in terms of delay, but also in terms of the probability of packet loss.
-
-- connectionless
-- forward delay
+当流量强度接近 1 时，平均排队时延会急剧上升——强度的小幅百分比增长会带来时延大得多的百分比增长。
+丢包率也随流量强度上升。因此结点的性能通常不仅用时延衡量，也用丢包概率衡量。
 
 ### Performance
 
-- Speed
-- Bandwidth
-- Throughput
-- Delay
-- RTT
+评价网络性能的常用维度：
+
+- Speed（速率）——链路每秒能传多少比特
+- Bandwidth（带宽）——链路上限速率
+- Throughput（吞吐量）——端到端实际达到的速率
+- Delay（时延）——上面四种时延的累加
+- RTT（Round-Trip Time，往返时延）——报文到达对端再返回的总时间
 
 ### Network Model
 
 #### OSI Model
 
-A common way to describe the layers in a network is to use the International Organization for Standardization (ISO) open systems interconnection (OSI) model for computer communications.
+描述网络分层的一种通用方式是国际标准化组织（ISO）的开放系统互连（OSI）模型。
+七层从下到上依次为：物理层、链路层、网络层、传输层、会话层、表示层、应用层。
 
 > [!TIP]
 >
-> See [科来-网络通信协议图-2020](http://www.colasoft.com.cn/download/network-protocol-map-2020.pdf)
+> 一张图看懂各层协议分布：[科来-网络通信协议图-2020](http://www.colasoft.com.cn/download/network-protocol-map-2020.pdf)
 
-It is possible for an application to bypass the transport layer and use IPv4 or IPv6 directly. This is called a *raw socket*.
+应用可以绕过传输层直接使用 IPv4/IPv6，这称为**原始套接字（raw socket）**。
 
-The upper three layers of the OSI model are combined into a single layer called the application.
-This is the Web client (browser), Telnet client, Web server, FTP server, or whatever application we are using.
-With the Internet protocols, there is rarely any distinction between the upper three layers of the OSI model.
+OSI 模型的上三层在互联网协议栈中被合并为一个**应用层**——它就是 Web 客户端（浏览器）、Telnet 客户端、Web 服务器、FTP 服务器等我们正在使用的程序。
+使用互联网协议时，上三层几乎不做区分。
 
-The sockets programming interfaces described in this book are interfaces from the upper three layers (the ‘‘application’’) into the transport layer.
-Why do sockets provide the interface from the upper three layers of the OSI model into the transport layer?
+本书讲述的[套接字编程接口](/docs/CS/CN/Socket.md)，正是上三层（应用层）进入传输层的接口。
+为什么套接字恰好提供「上三层 → 传输层」的接口？
 
-- First, the upper three layers handle all the details of the application (FTP, Telnet, or HTTP, for example) and know little about the communication details.
-  The lower four layers know little about the application, but handle all the communication details: sending data, waiting for acknowledgments, sequencing data that arrives out of order, calculating and verifying checksums, and so on.
-- The second reason is that the upper three layers often form what is called a user process while the lower four layers are normally provided as part of the operating system (OS) kernel.
-  Unix provides this separation between the user process and the kernel, as do many other contemporary operating systems.
+- 其一，上三层处理应用的全部细节（FTP、Telnet、HTTP 等），对通信细节知之甚少；下四层则对应用一无所知，却包办了所有通信细节：发送数据、等待确认、重排乱序到达的数据、计算并校验校验和等。
+- 其二，上三层通常构成所谓的**用户进程**，而下四层一般由操作系统内核提供。Unix 以及许多同时代的操作系统都提供了这种用户进程与内核的分离。
 
-Therefore, the interface between layers 4 and 5 is the natural place to build the API.
+因此，第 4 层与第 5 层之间的界面是构建 API 的自然位置。
 
 
 
 
 ## Application Layer
 
-Network applications are the raisons exist of a computer network.
+网络应用是计算机网络存在的理由（raison d'être）。
 
-An application-layer protocol is distributed over multiple end systems, with the application in one end system using the protocol to exchange packets of information with the application in another end system.
-We’ll refer to this packet of information at the application layer as a **message**.
+应用层协议分布在多个端系统上：一个端系统中的应用使用该协议与另一个端系统中的应用交换信息。
+我们把应用层的这个信息包称为**报文（message）**。
 
-[Dynamic Host Configuration Protocol](/docs/CS/CN/DHCP.md)
-
-[FTP](/docs/CS/CN/FTP.md)、[SMTP](/docs/CS/CN/SMTP.md)
+- [Dynamic Host Configuration Protocol](/docs/CS/CN/DHCP.md)——地址自动分配
+- [FTP](/docs/CS/CN/FTP.md)、[SMTP](/docs/CS/CN/SMTP.md)——文件传输与邮件传输（附件编码看 [MIME](/docs/CS/CN/MIME.md)）
 
 ### HTTP
 
-The [Hypertext Transfer Protocol (HTTP)](/docs/CS/CN/HTTP/HTTP.md) is an application-level protocol with the lightness and speed necessary for distributed, collaborative, hypermedia information systems.
+[超文本传输协议（HTTP）](/docs/CS/CN/HTTP/HTTP.md) 是一个应用层协议，为分布式协作式超媒体信息系统提供所需的轻量与速度。
 
 ### DNS
 
-[DNS](/docs/CS/CN/DNS.md) is a distributed client/server networked database that is used by TCP/IP applications to map between host names and IP addresses (and vice versa),
-to provide electronic mail routing information, service naming, and other capabilities.
+[DNS](/docs/CS/CN/DNS.md) 是一个分布式客户机/服务器网络数据库，TCP/IP 应用用它来在主机名与 IP 地址之间互相映射（反之亦然），
+并提供邮件路由信息、服务命名等能力。
 
 ### Websocket
 
-[WebSocket](/docs/CS/CN/WebSocket.md)
+[WebSocket](/docs/CS/CN/WebSocket.md)——全双工的长连接推送，见专页。
 
 ## Transport Layer
 
-A transport-layer protocol provides for logical communication between application processes running on different hosts.
-By logical communication, we mean that from an application’s perspective, it is as if the hosts running the processes were directly connected;
-in reality, the hosts may be on opposite sides of the planet, connected via numerous routers and a wide range of link types.
-Application processes use the logical communication provided by the transport layer to send messages to each other, free from the worry of the details of the physical infrastructure used to carry these messages.
-We’ll refer to a transport-layer packet as a **segment**.
+传输层协议为运行在不同主机上的应用进程提供**逻辑通信**。
+所谓逻辑通信，是指从应用的视角看，两台运行进程的主机好像直接相连；实际上它们可能在地球两端，中间隔着无数路由器与各种链路类型。
+应用进程借助传输层提供的逻辑通信互发报文，无须关心承载这些报文的物理基础设施细节。
+传输层的数据包称为**报文段（segment）**。
 
-Transport-layer protocols are implemented in the end systems but not in network routers.
-On the sending side, the transport layer converts the application-layer messages it receives from a sending application process into transport-layer packets, known as transport-layer segments in Internet terminology.
-This is done by (possibly) breaking the application messages into smaller chunks and adding a transport-layer header to each chunk to create the transport-layer segment.
-The transport layer then passes the segment to the network layer at the sending end system, where the segment is encapsulated within a network-layer packet (a datagram) and sent to the destination.
-It’s important to note that network routers act only on the network-layer fields of the datagram; that is, they do not examine the fields of the transport-layer segment encapsulated with the datagram.
-On the receiving side, the network layer extracts the transport-layer segment from the datagram and passes the segment up to the transport layer.
-The transport layer then processes the received segment, making the data in the segment available to the receiving application.
+传输层协议只在端系统中实现，不在网络路由器中实现。
+发送侧，传输层把从发送应用进程收到的应用层报文转换成传输层分组（即报文段）：可能把应用报文切成小块，给每块加上传输层首部。
+然后传输层把报文段交给网络层，封装成网络层分组（数据报）发往目的地。
+注意：**网络路由器只作用于数据报的网络层字段，不检查封装在内的传输层报文段字段**。
+接收侧，网络层从数据报中取出传输层报文段上交传输层，传输层处理该报文段，把其中的数据提供给接收应用。
 
-The services that a transport protocol can provide are often constrained by the service model of the underlying network-layer protocol.
-If the network-layer protocol cannot provide delay or bandwidth guarantees for transport-layer segments sent between hosts,
-then the transport-layer protocol cannot provide delay or bandwidth guarantees for application messages sent between processes.
+传输协议能提供的服务常受底层网络层协议服务模型的约束：
+如果网络层不能为端主机间的报文段提供时延或带宽保证，传输层也就无法为应用报文提供相应保证。
 
-Nevertheless, certain services can be offered by a transport protocol even when the underlying network protocol doesn’t offer the corresponding service at the network layer.
-For example, a transport protocol can offer reliable data transfer service to an application even when the underlying network protocol is unreliable, that is, even when the network protocol loses, garbles, or duplicates packets.
-As another example, a transport protocol can use encryption to guarantee that application messages are not read by intruders,
-even when the network layer cannot guarantee the confidentiality of transport-layer segments.
+不过，有些服务即使底层网络协议不提供，传输层仍能提供。例如：
 
+- 底层网络协议不可靠（丢包、损坏、重复）时，传输层仍能向应用提供**可靠数据传输**；
+- 网络层无法保证机密性时，传输层仍能用加密保证应用报文不被入侵者读取。
+
+主流传输协议的能力对照：
 
 |                    | [TCP](/docs/CS/CN/TCP/TCP.md)                                                       | [UDP](/docs/CS/CN/UDP.md)    |
 | -------------------- | --------------------------------------------------------------------------------- | ------------------------------ |
-| Connection         | connections                                                                     | connectionless               |
-| Reliability        | acknowledgments, sequence numbers, RTT estimation, timeouts, or retransmissions | no                           |
-| Flow Control       | yes                                                                             | no                           |
-| Congestion Control | yes                                                                             | no                           |
-| Full-duplex        | yes                                                                             | can be                       |
-|                    | one to one                                                                      | one to one / one to multiple |
+| 连接性         | 面向连接                                                                     | 无连接               |
+| 可靠性        | 确认、序号、RTT 估计、超时、重传 | 无                           |
+| 流量控制       | 有                                                                             | 无                           |
+| 拥塞控制 | 有                                                                             | 无                           |
+| 全双工        | 有                                                                             | 可以                       |
+| 通信模式        | 一对一                                                                      | 一对一 / 一对多 |
 
-At any given time, multiple processes can be using any given transport: [UDP](/docs/CS/CN/UDP.md), SCTP, or [TCP](/docs/CS/CN/TCP/TCP.md).
-All three transport layers use 16-bit integer port numbers to differentiate between these processes.
+任意时刻，多个进程可以共用同一种传输协议：[UDP](/docs/CS/CN/UDP.md)、[SCTP](/docs/CS/CN/SCTP.md) 或 [TCP](/docs/CS/CN/TCP/TCP.md)。
+三者的传输层都用 16 位整数端口号来区分这些进程。
 
 ### Multiplexing and Demultiplexing
 
-Now let’s consider how a receiving host directs an incoming transport-layer segment to the appropriate socket.
-Each transport-layer segment has a set of fields in the segment for this purpose.
-At the receiving end, the transport layer examines these fields to identify the receiving socket and then directs the segment to that socket.
-This job of delivering the data in a transport-layer segment to the correct socket is called *demultiplexing*.
-The job of gathering data chunks at the source host from different sockets, encapsulating each data chunk with header information (that will later be used in demultiplexing) to create segments,
-and passing the segments to the network layer is called *multiplexing*.
+接收主机如何把收到的传输层报文段导向正确的套接字？
+每个报文段有一组用于此目的的字段：接收侧传输层检查这些字段，识别出接收套接字，再把报文段交给它。
+把报文段中的数据交付到正确套接字的工作称为**分用（demultiplexing）**；
+在源主机把不同套接字的数据块收集起来、各自加上首部信息（供后续分用）打成报文段、再交给网络层的工作称为**复用（multiplexing）**。
 
-How the transport layer could implement the demultiplexing service:
-Each socket in the host could be assigned a **port number**, and when a segment arrives at the host, the transport layer examines the destination port number in the segment and directs the segment to the corresponding socket.
-The segment’s data then passes through the socket into the attached process.
-As we’ll see, this is basically how UDP does it.
-However, we’ll also see that multiplexing/demultiplexing in TCP is yet more subtle.
+传输层实现分用的一种方式：给主机中每个套接字分配一个**端口号**，报文段到达时传输层检查其目的端口号，把报文段导向对应套接字，数据经套接字进入绑定的进程。
+UDP 基本就是这样做的；而 TCP 的复用/分用还要更精细（见 [TCP 专页](/docs/CS/CN/TCP/TCP.md)）。
 
 ### Reliable Data Transfer
 
-Checksums, sequence numbers, timers, and positive and negative acknowledgment packets each play a crucial and necessary role in the operation of the protocol.
+校验和、序号、定时器以及肯定/否定确认报文，在协议运行中各司其职又缺一不可。
 
-Rather than operate in a stop-and-wait manner, the sender is allowed to send multiple packets without waiting for acknowledgments.
-Since the many in-transit sender-to-receiver packets can be visualized as filling a pipeline, this technique is known as **pipelining**.
-Pipelining has the following consequences for reliable data transfer protocols:
+发送方不必停下来等待确认，而可以连续发送多个分组——由于在途的发送方到接收方分组可以被想象成填满一条流水线，这种技术称为**流水线（pipelining）**。
+流水线对可靠数据传输协议带来以下影响：
 
-- The range of sequence numbers must be increased, since each in-transit packet (not counting retransmissions) must have a unique sequence number and there may be multiple, in-transit, unacknowledged packets.
-- The sender and receiver sides of the protocols may have to buffer more than one packet.
-  Minimally, the sender will have to buffer packets that have been transmitted but not yet acknowledged.
-  Buffering of correctly received packets may also be needed at the receiver, as discussed below.
-- The range of sequence numbers needed and the buffering requirements will depend on the manner in which a data transfer protocol responds to lost, corrupted, and overly delayed packets.
-  Two basic approaches toward pipelined error recovery can be identified: **Go-Back-N** and **selective repeat**.
+- 序号范围必须扩大：每个在途分组（不含重传）都要有唯一序号，在途未确认的分组可能有多个。
+- 协议两端可能需要缓存多个分组：发送方至少要缓存已发送但未确认的分组；接收方也可能需要缓存已正确收到的分组。
+- 序号范围与缓存需求取决于协议如何应对丢失、损坏和过度延迟的分组。流水线的差错恢复有两大基本思路：**Go-Back-N（GBN）**与**选择重传（selective repeat）**。
 
-In a Go-Back-N (GBN) protocol, the sender is allowed to transmit multiple packets (when available) without waiting for an acknowledgment, but is constrained to have no more than some maximum allowable number, N, of unacknowledged packets in the pipeline.
-N is often referred to as the **window size** and the GBN protocol itself as a **sliding-window protocol**.
+在 GBN 协议中，发送方可以连续发送多个分组（在有数据时），但在途未确认分组数不得超过一个上限 N。
+N 常称为**窗口长度（window size）**，GBN 协议本身也称为**滑动窗口协议（sliding-window protocol）**。
 
-Why not allow an unlimited number of such packets?
-We’ll see that flow control is one reason to impose a limit on the sender.
-We’ll examine another reason to do so in TCP congestion control.
+为什么不允许无限多个在途分组？
+原因之一是流量控制——必须限制发送方的发送速率；
+另一个原因见 [TCP 拥塞控制](/docs/CS/CN/TCP/Congestion.md)。
 
-The GBN sender must respond to three types of events:
+GBN 发送方必须响应三类事件：
 
-- Invocation from above.
-- Receipt of an ACK.
-  In our GBN protocol, an acknowledgment for a packet with sequence number n will be taken to be a cumulative acknowledgment, indicating that all packets with a sequence number up to and including n have been correctly received at the receiver.
-- A timeout event.
+- 上层调用（有数据要发）。
+- 收到 ACK。GBN 中序号为 n 的确认被理解为**累积确认**，表明序号不超过 n 的所有分组都已被正确接收。
+- 超时事件。
 
-The GBN protocol allows the sender to potentially “fill the pipeline” with packets, thus avoiding the channel utilization problems we noted with stop-and-wait protocols.
-There are, however, scenarios in which GBN itself suffers from performance problems.
-In particular, when the window size and bandwidth-delay product are both large, many packets can be in the pipeline.
-A single packet error can thus cause GBN to retransmit a large number of packets, many unnecessarily.
-As the probability of channel errors increases, the pipeline can become filled with these unnecessary retransmissions.
+GBN 允许发送方「填满流水线」，从而避免了停等方式的信道利用率问题。
+但 GBN 自身也有性能隐患：当窗口长度与带宽时延积都很大时，流水线里可以容纳很多分组，**一个分组的差错就可能触发大量不必要的重传**；信道差错率越高，流水线越容易被这些无谓重传占满。
 
-**Summary of reliable data transfer mechanisms and their use**
+**可靠数据传输机制及其用途一览**
 
+| 机制 | 用途与说明 |
+| --- | --- |
+| 校验和 | 检测传输分组中的比特差错。 |
+| 定时器 | 超时并重传分组（分组或其 ACK 可能在信道中丢失）。 |
+| 序号 | 给发送方到接收方的数据分组顺序编号；接收端序号的缺口让接收方检测到分组丢失，重复的序号让接收方检测到重复副本。 |
+| 确认 | 接收方告知发送方一个或一组分组已被正确接收；确认通常携带被确认分组的序号，可以是个别的或累积的，取决于协议。 |
+| 否定确认 | 接收方告知发送方某分组未被正确接收；通常携带未被正确接收的分组序号。 |
+| 窗口、流水线 | 发送方只能发送序号落在给定范围内的分组；允许多个分组在途未确认，使发送方利用率高于停等方式。 |
 
-| Mechanism               | Use, Comments                                                                                                                                                                                                                                                                                     |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Checksum                | Used to detect bit errors in a transmitted packet.                                                                                                                                                                                                                                                |
-| Timer                   | Used to timeout/retransmit a packet, possibly because the packet (or its ACK) was lost within the channel.                                                                                                                                                                                        |
-| Sequence number         | Used for sequential numbering of packets of data flowing from sender to receiver.<br />Gaps in the sequence numbers of received packets allow the receiver to detect a lost packet. <br />Packets with duplicate sequence numbers allow the receiver to detect duplicate copies of a packet.      |
-| Acknowledgment          | Used by the receiver to tell the sender that a packet or set of packets has been received correctly.<br />Acknowledgments will typically carry the sequence number of the packet or packets being acknowledged. <br />Acknowledgments may be individual or cumulative, depending on the protocol. |
-| Negative acknowledgment | Used by the receiver to tell the sender that a packet has not been received correctly.<br />Negative acknowledgments will typically carry the sequence number of the packet that was not received correctly.                                                                                      |
-| Window, pipelining      | The sender may be restricted to sending only packets with sequence numbersthat fall within a given range.<br />By allowing multiple packets to be transmitted but not yet acknowledged, sender utilization can be increased over a stop-and-wait mode of operation.                               |
+可靠数据传输协议的经典参考：
 
-[RFC 908 - Reliable Data Protocol](https://datatracker.ietf.org/doc/rfc908/)
-
-[RFC 1151 - Version 2 of the Reliable Data Protocol (RDP)](https://datatracker.ietf.org/doc/rfc1151/)
-
-
-
+- [RFC 908 - Reliable Data Protocol](https://datatracker.ietf.org/doc/rfc908/)
+- [RFC 1151 - Version 2 of the Reliable Data Protocol (RDP)](https://datatracker.ietf.org/doc/rfc1151/)
 
 ### Connection
 
 #### Connectionless
 
-It is important to note that a [UDP](/docs/CS/CN/UDP.md) socket is fully identified by a two-tuple consisting of a destination IP address and a destination port number.
-As a consequence, if two UDP segments have different source IP addresses and/or source port numbers, but have the same destination IP address and destination port number,
-then the two segments will be directed to the same destination process via the same destination socket.
+注意：[UDP](/docs/CS/CN/UDP.md) 套接字完全由一个二元组（目的 IP 地址 + 目的端口号）标识。
+因此，若两个 UDP 报文段的源 IP/源端口不同但目的 IP 与目的端口相同，它们会被导向同一个目的套接字、交给同一个进程。
 
 #### Connection-Oriented
 
-The socket pair for a [TCP](/docs/CS/CN/TCP/TCP.md) connection is the four-tuple that defines the two endpoints of the connection: the local IP address, local port, foreign IP address, and foreign port.
-A socket pair uniquely identifies every TCP connection on a network.
-For SCTP, an association is identified by a set of local IP addresses, a local port, a set of foreign IP addresses, and a foreign port.
-In its simplest form, where neither endpoint is multihomed, this results in the same four-tuple socket pair used with TCP.
-However, when either of the endpoints of an association are multihomed, then multiple four-tuple sets(with different IP addresses but the same port numbers) may identify the same association.
+[TCP](/docs/CS/CN/TCP/TCP.md) 连接的套接字对（socket pair）是定义连接两端点的四元组：本地 IP、本地端口、外部 IP、外部端口。
+一个套接字对在全网唯一确定一条 TCP 连接。
+SCTP 的关联（association）则由一组本地 IP、一个本地端口、一组外部 IP 和一个外部端口标识；
+在最简单的双宿主（非 multihomed）形式下与 TCP 的四元组相同，但任一端多宿主时，同一个关联可能对应多组四元组（IP 不同、端口相同）。
 
-The two values that identify each endpoint, an IP address and a port number, are often called a *socket*.
+标识每个端点的两个值——IP 地址与端口号——合称一个**套接字（socket）**。
 
-We can extend the concept of a socket pair to UDP, even though UDP is connectionless.
-When we describe the socket functions (bind, connect, getpeername, etc.), we will note which functions specify which values in the socket pair.
-For example, bind lets the application specify the local IP address and local port for TCP, UDP, and SCTP sockets.
+套接字对的概念也可以扩展到 UDP（尽管 UDP 无连接）。
+讲述套接字函数（bind、connect、getpeername 等）时会说明各函数指定套接字对中的哪些值：
+例如 bind 让应用为 TCP、UDP、SCTP 套接字指定本地 IP 与本地端口。
+服务端要同时照看成千上万条连接时，select/poll/epoll 的 I/O 多路复用模型演进见 [I/O Multiplexing](/docs/CS/CN/MultiIO.md)。
 
 ## Network Layer
 
-There is a piece of the network layer in each and every host and router in the network.
-We’ll see that the network layer can be decomposed into two interacting parts, the **data-plane** and the **control-plane**.
+网络中的每一台主机和路由器都有一部分是网络层。
+网络层可以分解为两个相互作用的部分：**数据平面（data-plane）**与**控制平面（control-plane）**。
 
-We’ll first cover the data plane functions of the network layer—the perrouter functions in the network layer that determine how a datagram (that is, a network-layer packet) arriving on one of a router’s input links is forwarded to one of that router’s output links.
-We’ll cover both traditional IP forwarding (where forwarding is based on a datagram’s destination address) and generalized forwarding (where forwarding and other functions may be performed using values in several different fields in the datagram’s header).
+数据平面是网络层的本地功能：决定从路由器某条输入链路到达的数据报（即网络层分组）如何被转发到该路由器的某条输出链路。
+既包括传统的 IP 转发（依据数据报的目的地址），也包括广义转发（利用首部中多个字段的值执行转发及其他功能）。
 
-We’ll cover the control plane functions of the network layer—the network-wide logic that controls how a datagram is routed among routers along an end-to-end path from the source host to the destination host.
-We’ll cover routing algorithms, as well as routing protocols, such as OSPF and BGP, that are in widespread use in today’s Internet.
-Traditionally, these control-plane routing protocols and data-plane forwarding functions have been implemented together, monolithically, within a router.
-Software-defined networking (SDN) explicitly separates the data plane and control plane by implementing these control plane functions as a separate service, typically in a remote “controller.”
+控制平面是全网络范围的逻辑：决定数据报如何沿端到端路径在一系列路由器之间从源主机选路到目的主机。
+包括路由算法，以及 OSPF、BGP 等当今互联网广泛使用的路由协议。
+传统上，控制平面的路由协议与数据平面的转发功能在路由器内单体实现；
+软件定义网络（SDN）则把控制平面功能实现为独立的远程服务（controller），显式分离数据平面与控制平面。
 
-The primary role of the network layer is deceptively simple—to move packets from a sending host to a receiving host.
-To do so, two important network-layer functions can be identified:
+网络层的主要作用看似简单——把分组从发送主机搬到接收主机。为此可以识别出两个重要功能：
 
-- **Forwarding.**
-  Forwarding refers to the router-local action of transferring a packet from an input link interface to the appropriate output link interface.
-  Forwarding takes place at very short timescales (typically a few nanoseconds), and thus is typically implemented in hardware.
-  Forwarding is the key function performed by the data-plane functionality of the network layer
-- **Routing.**
-  Routing refers to the network-wide process that determines the end-to-end paths that packets take from source to destination.
-  Routing takes place on much longer timescales(typically seconds), and as we will see is often implemented in software.
+- **转发（Forwarding）**：路由器本地的动作，把分组从一条输入链路接口转移到合适的输出链路接口。
+  转发发生在极短的时间尺度上（通常几纳秒），因此通常由硬件实现，是网络层数据平面的关键功能。
+- **路由（Routing）**：全网范围的过程，决定分组从源到目的地所走的端到端路径。
+  路由发生在长得多的时间尺度上（通常以秒计），通常由软件实现。
 
-A key element in every network router is its *forwarding table*.
-A router forwards a packet by examining the value of one or more fields in the arriving packet’s header, and then using these header values to index into its forwarding table.
-The value stored in the forwarding table entry for those values indicates the outgoing link interface at that router to which that packet is to be forwarded.
+每台路由器中的关键部件是**转发表（forwarding table）**。
+路由器转发分组时检查到达分组首部中一个或多个字段的值，用这些值索引转发表；表项中存的值指示该分组应从哪条输出链路接口发出。
 
 ### SDN
 
-
+SDN（软件定义网络）把「怎么转发」（数据平面，交换机内）与「往哪转」（控制平面，远端控制器）显式分离：
+控制器集中掌握全网拓扑与策略，通过南向接口（如 OpenFlow）向交换机下发流表。
+由此带来可编程的网络控制、快速的策略部署，以及控制平面的集中化风险（单点故障需要多控制器集群缓解）。
 
 ### Routing Algorithms
 
-The network layer must determine the route or path taken by packets as they flow from a sender to a receiver.
-The algorithms that calculate these paths are referred to as **routing algorithms**.
+网络层必须决定分组从发送方流向接收方时经过的路径，计算这些路径的算法称为**路由算法**。
 
-Broadly, one way in which we can classify routing algorithms is according to whether they are centralized or decentralized.
+第一种分类维度是集中式还是分散式：
 
-- A **centralized routing algorithm** computes the least-cost path between a source and destination using complete, global knowledge about the network.
-  Algorithms with global state information are often referred to as **link-state (LS) algorithms**, since the algorithm must be aware of the cost of each link in the network.
-- In a **decentralized routing algorithm**, the calculation of the least-cost path is carried out in an iterative, distributed manner by the routers.
+- **集中式路由算法**用完整的全局网络知识计算源到目的地的最小费用路径。掌握全局状态信息的算法常称为**链路状态（LS）算法**，因为算法必须知道网络中每条链路的费用。
+- **分散式路由算法**中，最小费用路径的计算以迭代、分布式的方式由路由器们共同完成。
 
-A second broad way to classify routing algorithms is according to whether they are static or dynamic.
-
-A third way to classify routing algorithms is according to whether they are load-sensitive or loadinsensitive.
+第二种维度是静态还是动态；第三种维度是负载敏感（load-sensitive）还是负载不敏感（load-insensitive）。
 
 #### The Link-State (LS) Routing Algorithm
 
-Recall that in a link-state algorithm, the network topology and all link costs are known, that is, available as input to the LS algorithm.
+回顾：链路状态算法中，网络拓扑与所有链路费用都是已知的，即作为 LS 算法的输入。
+实践中由各路由器洪泛链路状态通告（LSA），每个节点据此构建一致的拓扑图，再运行 Dijkstra 最短路径算法。
 
 #### The Distance-Vector (DV) Routing Algorithm
 
-Whereas the LS algorithm is an algorithm using global information, the distance-vector (DV) algorithm is iterative, asynchronous, and distributed.
-It is distributed in that each node receives some information from one or more of its directly attached neighbors, performs a calculation, and then distributes the results of its calculation back to its neighbors.
-It is iterative in that this process continues on until no more information is exchanged between neighbors. (Interestingly, the algorithm is also self-terminating—there is no signal that the computation should stop; it just stops.)
-The algorithm is asynchronous in that it does not require all of the nodes to operate in lockstep with each other.
+LS 算法使用全局信息，而距离向量（DV）算法是迭代、异步、分布式的。
+分布式：每个节点从一个或多个直连邻居接收信息，执行计算，再把计算结果分发回邻居。
+迭代：这个过程不断持续，直到邻居之间不再交换信息（有趣的是算法会自行终止——没有任何信号通知计算停止，它自己就停了）。
+异步：不要求所有节点锁步操作。
+实践中即 RIP 与 BGP 的路径向量思想所本，代表性问题是计数到无穷大。
 
 #### OSPF
 
+OSPF（Open Shortest Path First）是内部网关协议（IGP），链路状态类型，运行在 IP 之上，按区域（area）分层收敛。
+
 #### BGP
+
+BGP（Border Gateway Protocol）是互联网事实上的域间路由协议，路径向量类型，在自治系统（AS）之间交换可达性信息与策略。
 
 ### IP
 
-[Internet Protocol(IP)](/docs/CS/CN/IP.md)
+[Internet Protocol(IP)](/docs/CS/CN/IP.md)——寻址、分片、转发的基本约定，见专页。
 
-[I/O Multiplexing](/docs/CS/CN/MultiIO.md)
-
-In essence, the NAT-enabled router is hiding the details of the home network from the outside world.
+本质上，启用 NAT 的路由器把家庭网络的细节对外部世界隐藏起来：对外只暴露一个公网地址，内网主机共享它出网。
 
 ### ICMP
 
-[Internet Control Message Protocol](/docs/CS/CN/ICMP.md)
+[Internet Control Message Protocol](/docs/CS/CN/ICMP.md)——控制报文与诊断（ping/traceroute 的载体），见专页。
 
 ## Data Link Layer
 
-We’ll find it convenient in this chapter to refer to any device that runs a link-layer (i.e., layer 2) protocol as a **node**.
-Nodes include hosts, routers, switches, and WiFi access points.
-We will also refer to the communication channels that connect adjacent nodes along the communication path as **links**.
-Over a given link, a transmitting node encapsulates the datagram in a **link-layer frame** and transmits the frame into the link.
+本章把运行链路层（即第 2 层）协议的任何设备方便地称为**节点（node）**。
+节点包括主机、路由器、交换机和 WiFi 接入点。
+把通信路径上相邻节点之间的通信信道称为**链路（link）**。
+在给定链路上，发送节点把网络层数据报封装进**链路层帧（link-layer frame）**，再把帧发送到链路中。
 
-Possible services that can be offered by a link-layer protocol include:
+链路层协议可能提供的服务：
 
-- **Framing.**
-  Almost all link-layer protocols encapsulate each network-layer datagram within a link-layer frame before transmission over the link.
-- **Link access.**
-  A medium access control (MAC) protocol specifies the rules by which a frame is transmitted onto the link.
-- **Reliable delivery.**
-  When a link-layer protocol provides reliable delivery service, it guarantees to move each network-layer datagram across the link without error.
-  A link-layer reliable delivery service is often used for links that are prone to high error rates, such as a wireless link,
-  with the goal of correcting an error locally—on the link where the error occurs—rather than forcing an end-to-end retransmission of the data by a transport- or application-layer protocol.
-  However, link-layer reliable delivery can be considered an unnecessary overhead for low bit-error links, including fiber, coax, and many twisted-pair copper links.
-  For this reason, many wired link-layer protocols do not provide a reliable delivery service.
-- **Error detection and correction.**
-  Such bit errors are introduced by signal attenuation and electromagnetic noise.
-  The Internet’s transport layer and network layer also provide a limited form of error detection—the Internet checksum.
-  Error detection in the link layer is usually more sophisticated and is implemented in hardware.
-  Error correction is similar to error detection, except that a receiver not only detects when bit errors have occurred in the frame but also determines exactly where in the frame the errors have occurred (and then corrects these errors).
+- **成帧（Framing）**：几乎所有链路层协议在传输前都把每个网络层数据报封装在链路层帧中。
+- **链路接入（Link access）**：介质访问控制（MAC）协议规定帧发送到链路上的规则。
+- **可靠交付（Reliable delivery）**：链路层提供可靠交付服务时，保证无差错地把每个网络层数据报搬过链路。
+  常用于差错率高的链路（如无线），目的是就地纠正错误，而不是迫使传输层/应用层做端到端重传。
+  但对光纤、同轴电缆和许多双绞铜线这类低误码链路，可靠交付是不必要的开销，因此许多有线链路层协议不提供该服务。
+- **差错检测与纠正（Error detection and correction）**：比特差错由信号衰减与电磁噪声引入。
+  互联网的传输层与网络层也提供有限形式的差错检测——互联网校验和；链路层的差错检测通常更复杂且由硬件实现。
+  差错纠正在检测之外还能定位帧中错误发生的位置并予以纠正。
 
-For the most part, the link layer is implemented in a **network adapter**, also sometimes known as a **network interface card (NIC)**.
+链路层大部分实现在**网络适配器（network adapter，又称网卡 NIC）**中。
 
 ### Error-Detection and Correction
 
-Generally, more sophisticated error-detection and-correction techniques (that is, those that have a smaller probability of allowing undetected bit errors) incur a larger overhead—more computation is needed to compute and transmit a larger number of error-detection and -correction bits.
+一般而言，越复杂的差错检测/纠正技术（漏检比特差错的概率越小），开销越大——需要更多计算来算并传输更多的检错/纠错比特。
 
-Let’s now examine three techniques for detecting errors in the transmitted data:
+三种检测传输数据差错的技术：
 
-- parity checks (to illustrate the basic ideas behind error detection and correction),
-- checksumming methods (which are more typically used in the transport layer), and
-- cyclic redundancy checks (which are more typically used in the link layer in an adapter).
+- **奇偶校验（parity checks）**——说明差错检测与纠正的基本思想；
+- **校验和（checksumming）**——更多用于传输层；
+- **循环冗余检查（CRC）**——更多用于适配器中的链路层。
 
 #### CRC
 
-An error-detection technique used widely in today’s computer networks is based on **cyclic redundancy check (CRC) codes**.
-CRC codes are also known as **polynomial codes**, since it is possible to view the bit string to be sent as a polynomial whose coefficients are the 0 and 1 values in the bit string, with operations on the bit string interpreted as polynomial arithmetic.
+当今计算机网络广泛使用的差错检测技术基于**循环冗余码（CRC）**。
+CRC 也称**多项式码（polynomial codes）**：把要发送的比特串看作一个多项式（系数为比特串中的 0/1），比特串上的运算解释为多项式算术。
 
 ### Multiple Access Links and Protocols
 
-How to coordinate the access of multiple sending and receiving nodes to a shared broadcast channel—the **multiple access problem**.
-Computer networks similarly have protocols—so-called **multiple access protocols**—by which nodes regulate their transmission into the shared broadcast channel.
+如何协调多个收发节点对一条共享广播信道的接入——**多路访问问题（multiple access problem）**。
+计算机网络用相应的协议——**多路访问协议（multiple access protocols）**——来规范节点向共享广播信道的发送。
 
-We can classify just about any multiple access protocol as belonging to one of three categories: **channel partitioning protocols**, **random access protocols**, and **taking-turns protocols**.
+几乎任何多路访问协议都可归入三类之一：**信道划分协议**、**随机接入协议**与**轮流协议**。
 
-Ideally, a multiple access protocol for a broadcast channel of rate R bits per second should have the following desirable characteristics:
+理想情况下，对速率为 R bit/s 的广播信道，多路访问协议应有以下特性：
 
-1. When only one node has data to send, that node has a throughput of R bps.
-2. When M nodes have data to send, each of these nodes has a throughput of R/M bps.
-   This need not necessarily imply that each of the M nodes always has an instantaneous rate of R/M, but rather that each node should have an average transmission rate of R/M over some suitably defined interval of time.
-3. The protocol is decentralized; that is, there is no master node that represents a single point of failure for the network.
-4. The protocol is simple, so that it is inexpensive to implement.
+1. 只有一个节点要发送时，该节点吞吐量为 R bps。
+2. M 个节点都要发送时，每个节点吞吐量为 R/M bps。
+   这不要求每个节点瞬时速率都是 R/M，而是要求在一个适当定义的时间区间内平均传输速率为 R/M。
+3. 协议是去中心化的：没有代表单点故障的主节点。
+4. 协议简单，实现成本低。
 
 #### Channel Partitioning Protocols
 
-**Time-division multiplexing (TDM)** and **frequency-division multiplexing (FDM)** are two techniques that can be used to partition a broadcast channel’s bandwidth among all nodes sharing that channel.
-A third channel partitioning protocol is **code division multiple access (CDMA)**.
-While TDM and FDM assign time slots and frequencies, respectively, to the nodes, CDMA assigns a different code to each node.
+**时分复用（TDM）**与**频分复用（FDM）**是两种在共享信道所有节点间划分广播信道带宽的技术。
+第三种信道划分协议是**码分多址（CDMA）**：TDM 与 FDM 分别给节点分配时隙与频率，CDMA 则给每个节点分配不同的编码。
 
 #### Random Access Protocols
 
-In a random access protocol, a transmitting node always transmits at the full rate of the channel, namely, *R* bps.
-When there is a collision, each node involved in the collision repeatedly retransmits its frame (that is, packet) until its frame gets through without a collision.
-But when a node experiences a collision, it doesn’t necessarily retransmit the frame right away. Instead it waits a random delay before retransmitting the frame.
-**Each node involved in a collision chooses independent random delays.**
-Because the random delays are independently chosen, it is possible that one of the nodes will pick a delay that is sufficiently less than the delays of the other colliding nodes and will therefore be able to sneak its frame into the channel without a collision.
+随机接入协议中，发送节点总是以信道的全速率 R bps 发送。
+发生碰撞时，参与的每个节点反复重传其帧，直到帧无碰撞地通过。
+但节点遭遇碰撞后不会立即重传，而是等待一个随机时延。
+**碰撞涉及的每个节点选择相互独立的随机时延。**
+正因为随机时延独立选择，有可能某个节点选中的时延足够小于其他碰撞节点，从而能把帧「溜」进信道而不发生碰撞。
 
-ALOHA
-
-CSMA
+- **ALOHA**：纯 ALOHA 与时隙 ALOHA，最早的随机接入协议，最大效率分别约 18% 与 37%。
+- **CSMA（载波监听多路访问）**：发送前先监听信道（1-坚持、非坚持、p-坚持等变体），碰撞仍未避免时配合冲突检测（CSMA/CD，以太网）或碰撞避免（CSMA/CA，WiFi）。
 
 #### Taking-Turns Protocols
 
-The **polling protocol** eliminates the collisions and empty slots that plague random access protocols.
-This allows polling to achieve a much higher efficiency. But it also has a few drawbacks.
+**轮询协议（polling）**消除了困扰随机接入协议的碰撞与空时隙，因此能达到高得多的效率，但有两个缺点：
 
-- The first drawback is that the protocol introduces a polling delay—the amount of time required to notify a node that it can transmit.
-- The second drawback, which is potentially more serious, is that if the master node fails, the entire channel becomes inoperative.
+- 其一，协议引入轮询时延——通知某节点可以发送所需的时间；
+- 其二（可能更严重），主节点故障时整个信道瘫痪。
 
-The second taking-turns protocol is the **token-passing protocol**. In this protocol there is no master node.
-A small, special-purpose frame known as a token is exchanged among the nodes in some fixed order.
+第二种轮流协议是**令牌传递协议（token-passing）**：没有主节点，一个称为令牌（token）的特殊小帧在节点间按某种固定顺序传递，拿到令牌才有权发送。
 
 ### Link-Layer Addressing
 
-[ARP: Address Resolution Protocol](/docs/CS/CN/ARP.md)
+[ARP: Address Resolution Protocol](/docs/CS/CN/ARP.md)——IP 地址到 MAC 地址的解析，见专页。
 
 ## Physical Layer
 
-serial
-parallel
+物理层关心比特在链路上的电气/光学表示：
 
-Byte
-synchronization
-async
+- **serial / parallel**：串行传输（一位一位，抗干扰强、距离远）与并行传输（多位同时，需解决线间串扰，适合板内短距）。
+- **Byte synchronization**：字节同步——接收方如何从比特流中划分字节边界。
+- **async / sync**：异步传输（起止位定界，如 UART）与同步传输（共享时钟或时钟恢复，如同步以太网）。
 
 ### Signal
 
+物理层把比特表示为可在信道上传输的信号：数字信号（方波、NRZ、曼彻斯特编码等）或模拟信号（ASK/FSK/PSK/QAM 调制），核心指标是带宽、信噪比与码元速率。
+
 ### Encoding
+
+线路编码（如 4B/5B、8B/10B、PAM）在比特与电平/码元之间建立映射，兼顾直流平衡、时钟恢复与检错能力。
 
 ## Wireless and Mobile Networks
 
-We can identify the following elements in a wireless network:
+无线网络的组成元素：
 
-- Wireless hosts.
-- Wireless links.
+- **无线主机（wireless hosts）**。
+- **无线链路（wireless links）**。
 
-We can find a number of important differences between a wired link and a wireless link:
+有线链路与无线链路的重要差异：
 
-- **Decreasing signal strength.**
-  Electromagnetic radiation attenuates as it passes through matter (e.g., a radio signal passing through a wall).
-  Even in free space, the signal will disperse, resulting in decreased signal strength (sometimes referred to as path loss) as the distance between sender and receiver increases.
-- **Interference from other sources.**
-  Radio sources transmitting in the same frequency band will interfere with each other.
-  In addition to interference from transmitting sources, electromagnetic noise within the environment(e.g., a nearby motor, a microwave) can result in interference.
-- **Multipath propagation.**
-  Multipath propagation occurs when portions of the electromagnetic wave reflect off objects and the ground, taking paths of different lengths between a sender and receiver.
-  This results in the blurring of the received signal at the receiver.
-  Moving objects between the sender and receiver can cause multipath propagation to change over time.
+- **信号强度衰减**：电磁辐射穿过物质时衰减（如无线电穿墙）；即使在自由空间，信号也会扩散，随收发双方距离增加而强度下降（称为**路径损耗 path loss**）。
+- **来自其他源的干扰**：同频段发射的无线源会互相干扰；环境中的电磁噪声（附近的电机、微波炉）也会造成干扰。
+- **多径传播（multipath propagation）**：电磁波的部分能量经物体和地面反射，以不同长度的路径到达接收方，导致接收信号模糊；收发之间移动的物体会使多径传播随时间变化。
 
-The **signal-to-noise ratio(SNR)** is a relative measure of the strength of the received signal (i.e., the information being transmitted) and this noise.
-The SNR is typically measured in units of decibels (dB).
+**信噪比（signal-to-noise ratio, SNR）**是接收信号强度（所传信息）与噪声的相对度量，通常以分贝（dB）计。
 
-The **bit error rate(BER)** —roughly speaking, the probability that a transmitted bit is received in error at the receiver.
+**比特差错率（bit error rate, BER）**大致而言是传输的比特在接收端被收错的概率。
 
-Several physical-layer characteristics that are important in understanding higher-layer wireless communication protocols:
+理解高层无线通信协议所需的几个物理层特性：
 
-- For a given modulation scheme, the higher the SNR, the lower the BER.
-- For a given SNR, a modulation technique with a higher bit transmission rate (whether in error or not) will have a higher BER.
-- Dynamic selection of the physical-layer modulation technique can be used to adapt the modulation technique to channel conditions.
+- 对给定调制方案，SNR 越高，BER 越低。
+- 对给定 SNR，比特传输速率越高的调制技术，BER 越高。
+- 可以动态选择物理层调制技术，使调制适配信道条件。
 
-**Code division multiple access (CDMA)** belongs to the family of channel partitioning protocols. It is prevalent in wirelzess LAN and cellular technologies
+**码分多址（CDMA）**属于信道划分协议家族，广泛用于无线局域网与蜂窝技术。
 
 ### WiFi
 
-The **IEEE 802.11 wireless LAN**, also known as **WiFi**.
+**IEEE 802.11 无线局域网**，通称 **WiFi**。
 
 ## Networks Under Attack
 
-[Computer security](/docs/CS/CN/CyberSecurity/CyberSecurity.md) (also cybersecurity, digital security, or information technology (IT) security) is a subdiscipline within the field of information security. 
-It consists of the protection of computer software, systems and networks from threats that can lead to unauthorized information disclosure, 
-theft or damage to hardware, software, or data, as well as from the disruption or misdirection of the services they provide.
+[计算机安全](/docs/CS/CN/CyberSecurity/CyberSecurity.md)（computer security，又称 cybersecurity、digital security 或 IT security）是信息安全领域下的一个子学科，
+研究如何保护计算机软件、系统与网络免受威胁——这些威胁可能导致未授权的信息泄露、硬件/软件/数据被窃取或损坏，以及服务被中断或误导。
 
 ### Malware
 
-Viruses
+恶意软件的两大经典形态：
 
-Worms
+- **病毒（Viruses）**：依附于宿主程序传播，需要用户交互（打开文件、执行程序）才会感染。
+- **蠕虫（Worms）**：自我复制、自主通过网络传播，无须用户交互，可在短时间内大规模扩散。
 
 #### Attack Servers and Network Infrastructure
 
-Another broad class of security threats are known as denial-of-service (DoS) attacks.
+另一大类安全威胁是拒绝服务（DoS）攻击：
 
-- Vulnerability attack.
-- Bandwidth flooding.
-- Connection flooding.
+- **漏洞攻击（Vulnerability attack）**：利用协议或实现缺陷发送少量精心构造的报文使服务崩溃。
+- **带宽洪泛（Bandwidth flooding）**：用海量流量塞满链路，耗尽受害者的接入带宽。
+- **连接洪泛（Connection flooding）**：建立大量半开或完整连接，耗尽受害者的连接表/内存等资源。
 
 ### Sniff Packets
 
-The basic tool for observing the messages exchanged between executing protocol entities is called a *packet sniffer*.
-Sniffed packets can then be analyzed offline for sensitive information.
-
-Indeed, the [Wireshark](/docs/CS/CN/Tools/WireShark.md) is a packet sniffer.
+观察执行中的协议实体之间交换报文的基本工具称为**分组嗅探器（packet sniffer）**。
+嗅探到的分组可以离线分析，从中提取敏感信息。
+[Wireshark](/docs/CS/CN/Tools/WireShark.md) 就是这样一个分组嗅探器。
 
 #### Masquerade as Someone You Trust
 
-The ability to inject packets into the Internet with a false source address is known as IP spoofing, and is but one of many ways in which one user can masquerade as another user.
+用虚假源地址向互联网注入分组的能力称为 **IP 欺骗（IP spoofing）**，
+它是众多「一个用户冒充另一个用户」手法中的一种。
 
-## Network Management
+## Operations
 
-The middle of the network typically does not move as fast as the edges, as the clients and the servers of the world.
-The network protocols that these boxes might want to inspect, and have ideas about what is okay and what is not then have this problem: 
-these boxes were deployed some time ago when the protocols had a feature set of that time. 
-Introducing new features or changes in behavior that were not known before risks ending up considered bad or illegal by such boxes.
-Such traffic may well just be dropped or delayed to the degree that users really do not want to use those features.
-This is called "**protocol ossification**".
-
-
-## SNMP
-
-
-
-## Tools
-
-[WireShark](/docs/CS/CN/Tools/WireShark.md)
-
-[nginx](/docs/CS/CN/nginx/nginx.md)
-
-[Caddy](/docs/CS/CN/Caddy.md)
-
-
-## Tuning
-
-
-我们将网络世界细分为六大层次：首层为链路层，涵盖各种物理链路，如同经纬交织般将各类网络设备紧密相连，无论是咫尺之距的机架设备互联，还是跨越国界的长途链路；第二层为硬件设施层，包括交换机、路由器、网关等关键组件，它们犹如网络世界的导航员，负责精准地对数据包进行路由转发；第三层则是运行于硬件之上的系统软件层，诸如阿里NOS之类的资源管理系统，它们扮演着统筹调度软硬件资源的核心角色；第四层则聚焦于设备上运行的各种协议，如BGP、OSPF、ISIS等，它们宛如无形的指挥棒，决定了数据报文在网络中的行进轨迹；第五层涉及到设备上配置的具体参数；而最顶层则是承载实际业务流量的实际运作层面。
-
-我们将网络故障大致归结为五大类别：一为链路故障，包括链路抖动、频繁切换、传输质量恶化、链路中断、数据包错误等问题；二为硬件故障，涉及板卡异常、芯片失效、CPU或内存过载、端口异常及CRC校验错误等；三为软件层面故障，包括堆叠分裂、软件缺陷、COPP限速等问题；四为协议层面故障，常见如协议抖动、路由劫持、路由黑洞、转发表项错误等；五为流量层面故障，表现为流量峰值过高导致丢包、优先级队列积压、Incast现象、微突发流量等问题。
-
-前页所述的故障诱因错综复杂，涵盖了硬件、软件乃至人为因素。随着网络规模的不断壮大和变更需求的日益增多，故障发生的概率也随之提升，尽管我们竭力减少故障的发生，但完全避免却近乎不可能。然而，面对网络故障的必然性，我们能否减轻其对业务的影响呢？答案是肯定的，因为一个成功的系统架构中，高可用性是一个至关重要的衡量指标。网络设计应具备冗余机制，当故障发生时，能迅速将故障设备从网络中隔离，我们称之为“故障自愈”能力。
-
-以往，在设备宕机或健康状态无法被其他设备感知的情况下，往往需要依赖运维人员介入，依靠他们的经验、工具及操作效率去排查故障并进行隔离，这种方式不仅难以复制推广，且不具备可持续性。因此，关键能力在于构建一套系统化、自动化的故障快速发现与定位机制，这是实现故障自愈的核心所在。
-
-综上所述，伴随着网络规模的不断扩张，网络故障虽难以避免，但我们可以通过强化故障自愈能力，建立起高效的故障发现与定位体系，从而最大限度地减小网络故障对业务造成的影响。
-
-我们如何进行网络故障收敛操作。首先从端侧视角剖析，我们通过在终端层面监测重传数据包的现象以识别网络故障，此法的优点在于与业务感知紧密贴合，且精准度较高；然而其短板则体现在依赖于端侧的数据上报机制，一旦故障发生可能阻碍数据的有效上传，并对客户端CPU占用率有着严格的要求，以免影响业务的正常运行。此外，该方法的灵活性相对受限，客户端特性的迭代速度亦较为迟缓，且难以直接锁定故障设备的具体身份，需借助其他定位工具进行辅助判断。
-
-其次，我们将焦点转向设备侧监控维度。在此视角下，我们通过收集设备的各项关键指标，如错误包、丢包情况、端口状态、设备CPU和内存使用状况、流量水位以及设备日志等信息，以实现对故障的发现与定位。这种方式的优势在于直截了当，能够根据故障成因制定针对性的SOP方案，但其局限性在于无法穷举所有可能的故障类型，对于策略配置类故障引发的数据平面问题或静默丢包场景，往往无法有效察觉。
-
-再者，我们采用链路监控作为第三种定位手段，旨在让探测流覆盖所有可能的网络路径，理论上能确保100%发现网络故障。然而，这种方法的不足之处在于确定具体故障设备时仍需结合其他工具来进行精确定位。
-
-实际运维过程中，我们整合运用链路监控与设备侧监控两种方式，前者确保全面覆盖网络链路，后者负责快速识别并定位故障。本节着重介绍链路监控故障发现的核心思路：利用南北向的探测流遍历所有层次化的网络拓扑结构（包括但不限于机房集群、POD、SR、FITGROUP等层级），当探测过程中某层级出现故障时，通过对失败流的目的IP进行聚合分析，即可迅速定位到故障点。
-
-面对纷繁复杂的网络异常情况，我们需要在运营及故障定位层面都关注少量的有效告警，为此我们设计了一套告警发现流程：首要步骤是对数据进行过滤降噪处理，随后对告警进行收敛，低维度告警归并至高维度告警，同时针对探测源进行收敛以减少源端问题导致的多目标告警。网络中的噪音多元多样，如由于网络隔离造成的长期通信不畅、服务器主动运维带来的丢包现象以及长途传输抖动所导致的丢包等问题。我们采用诸如黑名单过滤及告警收敛等方法，致力于将每日告警数量精简至个位数。
-
-在详述故障发现之后，紧接着要介绍的是我们的故障定位体系，它由四大部分组成：基于网络事件的庖丁定位技术、基于FLOW的精准定位手段、热点路径分析法以及综合定位决策系统。其中，综合定位系统依据网络发生的事件及丢包分布特征，科学决策最优定位结果。
-
-庖丁定位工具首当其冲，它不仅能根据端口互联关系，运用图计算算法构建出最短路径生成网络物理及虚拟拓扑，而且还能依据拓扑上的设备拉取各类异常事件，如SMT、SISLOG巡检异常，以及其他业务异常日志，从而揭示网络设备所遭遇的问题及其变化趋势。我们将庖丁定位视为线下故障定位的关键门户。
-
-另一款定位工具NDB流统，则借助特殊DSCP标记的探测报文，配合庖丁拓扑来检测每个层级网络设备的报文进出数量是否一致，以此精准定位丢包集中所在的设备。然而，NDB在实际应用中也面临一些挑战，例如DSCP标记污染可能导致基数统计不准确，以及设备端口众多情况下流统计数读取时常超时等问题。为优化这一过程，我们创新性地提出在发送端统计发出和接收报文数量的一致性，在首尾设备采集流统计数以判断是否存在丢包，并采取尽力而为的方式叠加庖丁拓扑与设备流统计数形成流量拓扑，进而提升定位准确性。
-此外，我们还运用异常路径热点定位法，通过正反向trace追踪丢包探测流形成的多条路径，找出其中的热点设备以识别故障所在。在实现故障发现与定位的过程中，我们运用故障回放工具将整个流程的关键信息、决策依据可视化展现，并进行复盘分析，对定位结果进行标注，持续评估和改进工具效能。目前，我们在已覆盖场景下的故障发现率已达90%，定位准确率也达到了85%，生动展现了链路监控在阿里内外网环境下的显著成效
-
-
-HAProxy
-
-```c
-apt install haproxy
-```
-
-对于 Linux 系统， Haproxy 的配置一般存在 /etc 目录之下。以 Ubuntu 为例，路径是 /etc/haproxy/haproxy.cfg 。根据实际场景编辑配置文件，然后重启服务即可生效：
-
-```c
-service haproxy restart
-```
-
-The c10m problem! 依靠内核是不能胜任这个问题的，内核恰恰是问题所在！
-
+分层运维视角、五大故障分类、故障发现与定位体系，以及 HAProxy 的快速上手另见 [Ops](/docs/CS/CN/Ops.md)；万级并发（C10K）与千万级并发（C10M）的调度问题见 [C10k](/docs/CS/CN/C10k.md)。
 
 ## Links
 
 - [Operating Systems](/docs/CS/OS/OS.md)
+- [Linux Networking](/docs/CS/OS/Linux/net/network.md)
 - [Data Structures and Algorithms](/docs/CS/Algorithms/Algorithms.md)
 - [Computer Organization](/docs/CS/CO/CO.md)
-- [Security](/docs/CS/CN/Security.md) / [Attack](/docs/CS/CN/Attack.md) / [VPN](/docs/CS/CN/VPN.md)
-- [TLS](/docs/CS/CN/TLS.md) / [FTP](/docs/CS/CN/FTP.md) / [ARP](/docs/CS/CN/ARP.md)
-- [Internet Assigned Numbers Authority](https://www.iana.org/)
 
 ## References
 
 1. [Computer Networking: A Top-Down Approach 8 edition](https://gaia.cs.umass.edu/kurose_ross/interactive/)
+2. [Internet Assigned Numbers Authority](https://www.iana.org/)

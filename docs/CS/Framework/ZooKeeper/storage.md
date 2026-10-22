@@ -150,6 +150,206 @@ digraph "Recover" {
 | `autopurge.snapRetainCount` | 保留的快照/日志文件数 | 3 |
 | `autopurge.purgeInterval` | 自动清理间隔（小时，0=关） | 0 |
 
+## Purge: 自动清理快照与事务日志
+
+由于 ZooKeeper 的任何一个变更操作都产生事务，事务日志需要持久化到硬盘；写操作达到阈值后会把内存数据快照到磁盘以加快启动。随着运行时间增长，transaction log 和 snapshot 越来越多，需定期清理。`DatadirCleanupManager` 启动一个 `Timer` 定时任务清理 DataDir 中的 snapshot 及对应 transaction log。
+
+相关配置见上方参数表（`autopurge.purgeInterval` / `autopurge.snapRetainCount`）。`start()` 中当 `purgeInterval <= 0` 时不启动定时任务；`dataDir` / `dataLogDir` 两目录分别存 snapshot 与事务日志（默认只有 dataDir），ZK 自身不会清理，需靠此定时任务或管理员处理。
+
+查看 snapshot 内容可运行 `SnapshotFormatter` 类（`-d` 指定快照绝对路径）。
+
+具体清理方法主要调用 `PurgeTxnLog` 类的 `purge` 方法：
+
+```java
+public class DatadirCleanupManager {
+
+    private PurgeTaskStatus purgeTaskStatus = PurgeTaskStatus.NOT_STARTED;
+
+    private final File snapDir;
+
+    private final File dataLogDir;
+
+    private final int snapRetainCount;
+
+    private final int purgeInterval;
+
+    private Timer timer;
+    public DatadirCleanupManager(File snapDir, File dataLogDir, int snapRetainCount, int purgeInterval) {
+        this.snapDir = snapDir;
+        this.dataLogDir = dataLogDir;
+        this.snapRetainCount = snapRetainCount;
+        this.purgeInterval = purgeInterval;
+        LOG.info("autopurge.snapRetainCount set to {}", snapRetainCount);
+        LOG.info("autopurge.purgeInterval set to {}", purgeInterval);
+    }
+}
+```
+
+
+```java
+public void start() {
+    if (PurgeTaskStatus.STARTED == purgeTaskStatus) {
+        return;
+    }
+    // Don't schedule the purge task with zero or negative purge interval.
+    if (purgeInterval <= 0) {
+        return;
+    }
+
+    timer = new Timer("PurgeTask", true);
+    TimerTask task = new PurgeTask(dataLogDir, snapDir, snapRetainCount);
+    timer.scheduleAtFixedRate(task, 0, TimeUnit.HOURS.toMillis(purgeInterval));
+
+    purgeTaskStatus = PurgeTaskStatus.STARTED;
+}
+```
+
+### PurgeTask
+
+创建清理任务PurgeTask开启定时器以一定间隔时间来执行PurgeTask中的定时任务，定时任务在执行的时候会触发定时任务的run方法
+
+```java
+static class PurgeTask extends TimerTask {
+
+    private File logsDir;
+    private File snapsDir;
+    private int snapRetainCount;
+
+    @Override
+    public void run() {
+        try {
+            PurgeTxnLog.purge(logsDir, snapsDir, snapRetainCount);
+        } catch (Exception e) {
+            LOG.error("Error occurred while purging.", e);
+        }
+        LOG.info("Purge task completed.");
+    }
+
+}
+```
+
+
+```java
+public static void purge(File dataDir, File snapDir, int num) throws IOException {
+    if (num < 3) {
+        throw new IllegalArgumentException(COUNT_ERR_MSG);
+    }
+
+    FileTxnSnapLog txnLog = new FileTxnSnapLog(dataDir, snapDir);
+
+    List<File> snaps = txnLog.findNValidSnapshots(num);
+    int numSnaps = snaps.size();
+    if (numSnaps > 0) {
+        purgeOlderSnapshots(txnLog, snaps.get(numSnaps - 1));
+    }
+}
+```
+
+创建事物快照日志文件对象FileTxnSnapLog，然后根据参数获取获取到需要保留的文件数量， 然后根据保留的文件数量计算出保留文件中最小的那个zxid， 然后根据最小的zxid找到需要保留的事物日志文件列表 (事物日志当前最小的那个id之前的1个不能清理在zookeeper事物日志中可能发生滚动日志之前的文件也是会记录到最新的数据)， 然后过滤所有事物日志文件过滤出来需要删除的事物日志文件， 在过滤所有的快照文件找到所有需要删除的快照文件，最后循环删除需要删除的事物日志和快照文件
+
+#### findNValidSnapshots
+
+```java
+public List<File> findNValidSnapshots(int n) {
+    FileSnap snaplog = new FileSnap(snapDir);
+    return snaplog.findNValidSnapshots(n);
+}
+
+protected List<File> findNValidSnapshots(int n) {
+        List<File> files = Util.sortDataDir(snapDir.listFiles(), SNAPSHOT_FILE_PREFIX, false);
+        int count = 0;
+        List<File> list = new ArrayList<>();
+        for (File f : files) {
+            // we should catch the exceptions
+            // from the valid snapshot and continue
+            // until we find a valid one
+            try {
+                if (SnapStream.isValidSnapshot(f)) {
+                    list.add(f);
+                    count++;
+                    if (count == n) {
+                        break;
+                    }
+                }
+            } catch (IOException e) {
+                LOG.warn("invalid snapshot {}", f, e);
+            }
+        }
+        return list;
+    }
+```
+
+#### purgeOlderSnapshots
+
+在处理事物日志和快照的时候，事物日志不能直接删除掉所有比需要保留最小zxid更小的日志文件 ，因为比需要保留最小zxid快照文件的事物日志可能存在于当前最小需要保留zxid的前一个文件中， 也就是说事物日志要比快快照日志多保留一个，这个于日志写入时的滚动机制有关
+
+We delete all files with a zxid in their name that is less than leastZxidToBeRetain. This rule applies to both snapshot files as well as log files, with the following exception for log files.
+
+A log file with zxid less than X may contain transactions with zxid larger than X.  More
+precisely, a log file named log.(X-a) may contain transactions newer than snapshot.X if
+there are no other log files with starting zxid in the interval (X-a, X].  Assuming the latter condition is true, log.(X-a) must be retained to ensure that snapshot.X is recoverable.  In fact, this log file may very well extend beyond snapshot.X to newer snapshot files if these newer snapshots were not accompanied by log rollover (possible in the learner state machine at the time of this writing).  We can make more precise determination of whether log.(leastZxidToBeRetain-a) for the smallest 'a' is actually needed or not (e.g. not needed if there's a log file named log.(leastZxidToBeRetain+1)), but the complexity quickly adds up with gains only in uncommon scenarios.  It's safe and simple to just preserve log.(leastZxidToBeRetain-a) for the smallest 'a' to ensure recoverability of all snapshots being retained.  We determine that log file here by calling txnLog.getSnapshotLogs().
+
+
+```java
+static void purgeOlderSnapshots(FileTxnSnapLog txnLog, File snapShot) {
+    final long leastZxidToBeRetain = Util.getZxidFromName(snapShot.getName(), PREFIX_SNAPSHOT);
+
+    final Set<File> retainedTxnLogs = new HashSet<>();
+    retainedTxnLogs.addAll(Arrays.asList(txnLog.getSnapshotLogs(leastZxidToBeRetain)));
+
+    /**
+     * Finds all candidates for deletion, which are files with a zxid in their name that is less
+     * than leastZxidToBeRetain.  There's an exception to this rule, as noted above.
+     */
+    class MyFileFilter implements FileFilter {
+
+        private final String prefix;
+        MyFileFilter(String prefix) {
+            this.prefix = prefix;
+        }
+        public boolean accept(File f) {
+            if (!f.getName().startsWith(prefix + ".")) {
+                return false;
+            }
+            if (retainedTxnLogs.contains(f)) {
+                return false;
+            }
+            long fZxid = Util.getZxidFromName(f.getName(), prefix);
+            return fZxid < leastZxidToBeRetain;
+        }
+
+    }
+    // add all non-excluded log files
+    File[] logs = txnLog.getDataLogDir().listFiles(new MyFileFilter(PREFIX_LOG));
+    List<File> files = new ArrayList<>();
+    if (logs != null) {
+        files.addAll(Arrays.asList(logs));
+    }
+
+    // add all non-excluded snapshot files to the deletion list
+    File[] snapshots = txnLog.getSnapDir().listFiles(new MyFileFilter(PREFIX_SNAPSHOT));
+    if (snapshots != null) {
+        files.addAll(Arrays.asList(snapshots));
+    }
+
+    // remove the old files
+    for (File f : files) {
+        final String msg = String.format(
+            "Removing file: %s\t%s",
+            DateFormat.getDateTimeInstance().format(f.lastModified()),
+            f.getPath());
+
+        LOG.info(msg);
+        System.out.println(msg);
+
+        if (!f.delete()) {
+            System.err.println("Failed to remove " + f.getPath());
+        }
+    }
+
+}
+```
+
 ## Links
 
 - [ZooKeeper（架构与数据模型）](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)

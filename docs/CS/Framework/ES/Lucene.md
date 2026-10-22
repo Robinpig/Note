@@ -4,6 +4,9 @@ Apache Lucene 是一个用 Java 编写的**高性能、全文检索库**，不�
 
 Lucene 提供的核心能力：倒排索引、分词分析（Analyzer）、多种 Query、相关性打分（BM25/历史的 TF-IDF）、列式存储（Doc Values，用于排序/聚合）、以及基于不可变段的存储结构。Solr 与 Elasticsearch 同样构建在 Lucene 之上。
 
+> [!NOTE]
+> **版本基线**：本篇对应 Lucene 10.5.1（Elasticsearch 9.5.5 内置版本，见 `build-tools-internal/version.properties`）。底层机制跨版本稳定，但具体 API 与默认参数以 ES 9.5.5 内置的 Lucene 为准。
+
 ## Inverted Index
 
 与传统数据库按“文档 → 字段值”组织的正排不同，**倒排索引（inverted index）**按“词项（term）→ 包含它的文档列表”组织，这是全文检索能做到毫秒级的根本：
@@ -63,8 +66,10 @@ Lucene 的单个索引受单机资源限制，ES 通过**分片（shard）**把�
 
 ## Links
 
-- [Elasticsearch](/docs/CS/Framework/ES/ES.md)
-- [ES Cluster 与 Query Then Fetch](/docs/CS/Framework/ES/Cluster.md)
+- [Elasticsearch（枢纽页）](/docs/CS/Framework/ES/ES.md)
+- [Install：安装与节点角色](/docs/CS/Framework/ES/Install.md)
+- [Mapping：数据模型与字段映射](/docs/CS/Framework/ES/Mapping.md)
+- [Analyzer：分词体系](/docs/CS/Framework/ES/Analyzer.md)
 - [OpenSearch](/docs/CS/Framework/ES/OpenSearch.md)
 
 ## References

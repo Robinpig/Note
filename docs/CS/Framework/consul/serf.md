@@ -43,6 +43,32 @@ LAN / WAN gossip 流量可用**对称密钥环**加密（`encrypt` 配置，Base
 > [!WARNING]
 > gossip 加密只是"链路对称加密 + 认证"，**不等于 ACL 授权**。任何拿到密钥的节点都能加入集群并读 catalog。真正的访问控制仍靠 [Security](/docs/CS/Framework/consul/security.md) 的 ACL + mTLS。
 
+## Operational Commands
+
+```bash
+# 查看成员与状态——排查 gossip 分区的第一入口
+consul members                    # 本 agent 感知到的成员与状态
+consul members -detailed          # 附带网络坐标（Vivaldi 估算值）
+consul members -wan               # 只看 WAN 池成员（跨 DC）
+consul monitor                    # 实时事件流（join / leave / fail）
+
+# 手动入群 / 优雅离群
+consul join 10.0.0.12             # 主动加入（等价 retry_join）
+consul leave                      # 优雅离开：打 leave 标记，避免被误判 failed
+```
+
+```bash
+# gossip 加密密钥环零停机轮转：install → use → remove
+consul keygen                                 # 生成新密钥
+consul keyring -list                          # 查看当前密钥环
+consul keyring -install=<new-key>             # 安装
+consul keyring -use=<new-key>                 # 切换为使用新密钥
+consul keyring -remove=<old-key>              # 移除旧密钥
+```
+
+> [!TIP]
+> 节点下线用 `consul leave` 而**不要直接 kill**：leave 会让 peers 立即标记为 left，避免 gossip 误判 `failed` 而触发 Raft 重选与 Autopilot 清理。滚动升级时"先 leave 再停进程"能把影响面压到最小。
+
 ## Comparison with etcd / ZooKeeper
 
 | 维度 | Consul（Serf） | etcd | ZooKeeper |
@@ -58,6 +84,7 @@ Consul 用"gossip 管成员、Raft 管状态"的解耦，换来了比 etcd/ZooKe
 ## Links
 
 - [Consul（架构与启动流程）](/docs/CS/Framework/consul/Consul.md)
+- [架构深潜](/docs/CS/Framework/consul/architecture.md)
 - [Raft（共识）](/docs/CS/Framework/consul/raft.md)
 - [Gateway（网关与联邦）](/docs/CS/Framework/consul/gateway.md)
 - [Security（安全）](/docs/CS/Framework/consul/security.md)

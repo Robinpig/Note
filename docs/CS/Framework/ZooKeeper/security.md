@@ -9,7 +9,7 @@ ZooKeeper 的安全分三层：**ACL（节点级授权）**、**认证（客户�
 
 ## ACL Model: scheme:id:permission
 
-每个 znode 上挂着一组 ACL 项，格式为 `scheme:id:permission`。访问时服务器用"请求携带的身份"去匹配对应 scheme 的 id，并校验权限位。
+每个 znode 上挂着一组 ACL 项，格式为 `scheme:id:permission`。访问时服务器用"请求携带的身份"去匹配对应 scheme 的 id，并校验权限位。ACL 的**数据模型与 `aversion` 版本语义**（如何挂在 `DataNode`、`setACL` 的 CAS 更新、`PrepRequestProcessor.checkAcl` 校验）见 [ACL](/docs/CS/Framework/ZooKeeper/ACL.md)。
 
 ### scheme (Identity Source)
 

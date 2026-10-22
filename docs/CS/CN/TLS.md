@@ -7,6 +7,9 @@ Although TLS can be used on top of any low-level transport protocol, the origina
 HTTP encrypted using TLS is commonly referred to as HTTPS. 
 TLS-encrypted web traffic is by convention exchanged on port 443 by default, while unencrypted HTTP uses port 80 by default. 
 
+> [!WARNING]
+> **版本口径（2026-10 逐条核实）**：TLS 1.3 的**现行规范是 RFC 9846（2026-07）**，RFC 8446（2018-08）已被其废止——中文资料与旧笔记普遍停在 8446，引用规范时以 9846 为准，8446 仅作历史版本。TLS 1.2（RFC 5246）同样已被 8446/9846 废止，但现网仍有大量部署，读旧配置教程时注意甄别。
+
 
 
 ## Protocols
@@ -241,17 +244,16 @@ AES
 
 ## Links
 
-- [ARP](/docs/CS/CN/ARP.md)
-- [Attack](/docs/CS/CN/Attack.md)
-- [C10k](/docs/CS/CN/C10k.md)
-- [CN](/docs/CS/CN/CN.md)
-- [Caddy](/docs/CS/CN/Caddy.md)
-- [DHCP](/docs/CS/CN/DHCP.md)
+- [Computer Network](/docs/CS/CN/CN.md)
+- [HTTPS](/docs/CS/CN/HTTP/HTTPS.md)
+- [nginx tls](/docs/CS/CN/nginx/tls.md)
+- [Socket](/docs/CS/CN/Socket.md)
 
 ## References
 
 1. [RFC 2246 - The TLS Protocol Version 1.0](https://www.rfc-editor.org/rfc/rfc2246.html)
 2. [RFC 4346 - The Transport Layer Security (TLS) Protocol Version 1.1](https://www.rfc-editor.org/rfc/rfc4346.html)
 3. [RFC 5246 - The Transport Layer Security (TLS) Protocol Version 1.2](https://www.rfc-editor.org/rfc/rfc5246.html)
-4. [RFC 8446 - The Transport Layer Security (TLS) Protocol Version 1.3](https://www.rfc-editor.org/rfc/rfc8446.html)
-5. [Transport Layer Security](https://developer.mozilla.org/en-US/docs/Web/Security/Transport_Layer_Security)
+4. [RFC 9846 - The Transport Layer Security (TLS) Protocol Version 1.3](https://www.rfc-editor.org/rfc/rfc9846.html)
+5. [RFC 8446 - The Transport Layer Security (TLS) Protocol Version 1.3](https://www.rfc-editor.org/rfc/rfc8446.html)
+6. [Transport Layer Security](https://developer.mozilla.org/en-US/docs/Web/Security/Transport_Layer_Security)

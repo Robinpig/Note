@@ -72,6 +72,8 @@ key_prefix "config/" {
 ## Links
 
 - [Consul（架构与启动流程）](/docs/CS/Framework/consul/Consul.md)
+- [配置参考](/docs/CS/Framework/consul/config.md)
+- [版本与许可](/docs/CS/Framework/consul/license.md)
 - [Serf（成员发现）](/docs/CS/Framework/consul/serf.md)
 - [Mesh（服务网格）](/docs/CS/Framework/consul/mesh.md)
 - [Cluster（集群运维）](/docs/CS/Framework/consul/cluster.md)

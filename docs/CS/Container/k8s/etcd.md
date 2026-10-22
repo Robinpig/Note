@@ -53,6 +53,7 @@ apiserver 会为每类资源维护一个 **watch cache**（`storage/cacher`）�
 
 - [watch cache 读路径底座](/docs/CS/Container/k8s/WatchCache.md)
 - [etcd](/docs/CS/Framework/etcd/etcd.md)
+- [etcd 目录索引（按层导航）](/docs/CS/Framework/etcd/README.md)
 - [MVCC](/docs/CS/Framework/etcd/MVCC.md)
 - [watch](/docs/CS/Framework/etcd/watch.md)
 - [client-go](/docs/CS/Container/k8s/client-go.md)

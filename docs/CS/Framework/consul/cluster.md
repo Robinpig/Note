@@ -64,6 +64,9 @@ Consul 的 client/server 分离 + 自动引导 + Autopilot，运维面比 etcd �
 ## Links
 
 - [Consul（架构与启动流程）](/docs/CS/Framework/consul/Consul.md)
+- [架构深潜](/docs/CS/Framework/consul/architecture.md)
+- [配置参考](/docs/CS/Framework/consul/config.md)
+- [版本与许可](/docs/CS/Framework/consul/license.md)
 - [Raft（共识）](/docs/CS/Framework/consul/raft.md)
 - [Serf（成员发现）](/docs/CS/Framework/consul/serf.md)
 - [Security（安全）](/docs/CS/Framework/consul/security.md)

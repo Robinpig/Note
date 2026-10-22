@@ -59,6 +59,7 @@ HTTP 带 `index` + `wait` 做长轮询（详见 [KV](/docs/CS/Framework/consul/k
 
 - [Consul（架构与启动流程）](/docs/CS/Framework/consul/Consul.md)
 - [KV（存储）](/docs/CS/Framework/consul/kv.md)
+- [数据模型](/docs/CS/Framework/consul/data_model.md)
 - [Serf（成员发现）](/docs/CS/Framework/consul/serf.md)
 - [Client（客户端）](/docs/CS/Framework/consul/client.md)
 - [Mesh（服务网格）](/docs/CS/Framework/consul/mesh.md)

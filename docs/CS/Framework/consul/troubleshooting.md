@@ -2,6 +2,22 @@
 
 本篇汇总 Consul 生产常见故障，每类给出**症状 → 原因 → 修复**。对标 etcd 的 [troubleshooting](/docs/CS/Framework/etcd/troubleshooting.md)。
 
+## Diagnostic Command Cheatsheet
+
+排障第一步永远是"看清状态"，下面几条命令能覆盖八成问题：
+
+| 命令 | 看什么 | 典型异常 |
+| :--- | :--- | :--- |
+| `consul members` | gossip 成员与状态 | 出现 `failed` 或数量忽增忽减 → gossip 分区（第 2 节） |
+| `consul members -detailed` | 成员 + 网络坐标 | 坐标偏移大 → 跨 AZ 延迟高 |
+| `consul operator raft list-peers` | Raft peer 集 | peer 少于预期 → 有 server 被 Autopilot 清理 |
+| `consul status` | 当前 leader（HTTP `/v1/status/leader`） | 返回空 → 失去 quorum，写不可用（第 1 节） |
+| `consul operator autopilot health` | `Healthy` / `FailureTolerance` | `Healthy=false` → 落后日志超 `max_trailing_logs` |
+| `consul catalog services` | 目录内容 | 服务数骤减 → 反熵未同步或健康检查批量失败 |
+| `consul agent services` | 本 agent 注册的服务与检查 | 检查 `Status=critical` → 该实例已被摘流 |
+| `consul monitor` | 实时事件流（join/leave/fail） | 持续刷 `failed` → 定位反复掉线的节点 |
+| `consul snapshot save <file>` | 备份 Raft 状态 | 备份前先确认 leader 存在（见 [Cluster](/docs/CS/Framework/consul/cluster.md)） |
+
 ## 1. Quorum Loss → Cluster Read-Only
 
 - **症状**：API 返回 "No cluster leader" / 写报 500；`/v1/status/leader` 为空。
@@ -56,9 +72,18 @@
 - **原因**：跨大版本直升、raft protocol 版本跳变、BSL 许可变化未评估。
 - **修复**：走 Autopilot 滚动（先升 follower）；`raft_protocol` 按官方升级指南逐级升；跨 1.x→2.0 重点看 BSL 与配置兼容性。详见 [Cluster](/docs/CS/Framework/consul/cluster.md)。
 
+## 10. Client Cannot Join ("No known Consul servers")
+
+- **症状**：client agent 启动后持续重试，日志反复出现 `No known Consul servers`；`consul members` 只有自己。
+- **原因**：`retry_join` 地址不可达，或 8301（LAN gossip）/ 8300（RPC）被防火墙拦；`datacenter` 与 server 不一致（gossip 池按 DC 隔离）；server 侧还在等 `bootstrap_expect` 凑齐、尚未选出 leader。
+- **修复**：核对所有节点 `datacenter` 一致；放开 8300 / 8301（TCP+UDP）；确认 server 集群已选主（`consul status` 有输出）后再启动 client；用 `consul join <server_addr>` 手动入群，再 `consul members` 验证。配置写法见 [Config](/docs/CS/Framework/consul/config.md)。
+
 ## Links
 
 - [Consul（架构与启动流程）](/docs/CS/Framework/consul/Consul.md)
+- [架构深潜](/docs/CS/Framework/consul/architecture.md)
+- [数据模型](/docs/CS/Framework/consul/data_model.md)
+- [配置参考](/docs/CS/Framework/consul/config.md)
 - [Raft（共识）](/docs/CS/Framework/consul/raft.md)
 - [Serf（成员发现）](/docs/CS/Framework/consul/serf.md)
 - [KV（存储）](/docs/CS/Framework/consul/kv.md)

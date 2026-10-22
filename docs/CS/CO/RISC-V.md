@@ -1,5 +1,7 @@
 ## Introduction
 
+> 规范口径（2026-10 核实）：寄存器、特权级与扩展状态以 **RISC-V ISA 手册 20260120 版**（Volume I Unprivileged / Volume II Privileged，2026-01 发布）为准；RVA23 / RVB23 Profiles 为 v1.0（2024-10），Server Platform 为 v1.0（2026-05）。读到与旧版手册（如 20191213）冲突的表述时，以 20260120 为准。
+
 RISC-V 是 2010 年起由 UC Berkeley 发起的**开放、免费、模块化**指令集架构（ISA），区别于需授权的 x86 / ARM。它把"组成原理"里讲的设计哲学（精简、规整、便于[流水线](/docs/CS/CO/pipeline.md)与[硬布线控制](/docs/CS/CO/datapath.md)）落到了一个真实可用的 ISA 上，因此既是教学首选，也是[组成原理枢纽](/docs/CS/CO/CO.md)里 RISC 一脉的活样例。本节在原有"三种启动模式"基础上，补齐寄存器、指令格式、扩展集与特权层级。
 
 ## 设计哲学
@@ -39,7 +41,7 @@ RISC-V 是 2010 年起由 UC Berkeley 发起的**开放、免费、模块化**�
 | U | 取高位立即数（lui, auipc） |
 | J | 无条件跳转 jal |
 
-立即数按格式分散在各比特位，硬件译码时**拼接重组**（这是组成原理里"指令格式"的典型考点）。
+立即数按格式分散在各比特位，硬件译码时**拼接重组**（这是组成原理里"指令格式"的典型考点，展开见[指令系统与 ISA](/docs/CS/CO/isa.md)）。
 
 ## 扩展集
 
@@ -52,7 +54,7 @@ RISC-V 是 2010 年起由 UC Berkeley 发起的**开放、免费、模块化**�
 | C | 压缩（Compressed） | 16 位短指令，省代码体积 |
 | G | = IMAFD | "通用"组合，编译器默认目标 |
 
-此外还有 B（位操作）、V（向量，RVV）、Zicsr（CSR 访问）等。与 x86（CISC，变长指令、微码翻译）和 ARM（RISC，但有条件执行、变长 Thumb）相比，RISC-V 最"纯"：无延迟槽、无条件执行、格式最少。
+此外，**B（位操作）与 V（向量，RVV）在 20240411 版手册起已 Ratified**，Zicsr/Zifencei 等 Z 系列提供 CSR 访问与指令流控制，P（Packed SIMD）仍为 Draft。与 x86（CISC，变长指令、微码翻译）和 ARM（RISC，但有条件执行、变长 Thumb）相比，RISC-V 最"纯"：无延迟槽、无条件执行、格式最少。
 
 ## 与组成原理的对应
 
@@ -67,6 +69,7 @@ RISC-V 是 2010 年起由 UC Berkeley 发起的**开放、免费、模块化**�
 - [数据通路与控制](/docs/CS/CO/datapath.md)
 - [流水线](/docs/CS/CO/pipeline.md)
 - [多处理器内存（UMA/NUMA）](/docs/CS/CO/memory.md)
+- [数据并行与加速器（RVV）](/docs/CS/CO/simd.md)
 - [汇编](/docs/CS/assembly/assembly.md)
 
 ## References

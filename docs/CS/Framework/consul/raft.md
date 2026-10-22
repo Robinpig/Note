@@ -68,6 +68,8 @@ Consul 把"成员发现"与"共识"拆成两套协议是最显著的架构差异
 ## Links
 
 - [Consul（架构与启动流程）](/docs/CS/Framework/consul/Consul.md)
+- [架构深潜](/docs/CS/Framework/consul/architecture.md)
+- [配置参考](/docs/CS/Framework/consul/config.md)
 - [Serf（成员发现）](/docs/CS/Framework/consul/serf.md)
 - [Troubleshooting（故障排查）](/docs/CS/Framework/consul/troubleshooting.md)
 - [Cluster（集群运维）](/docs/CS/Framework/consul/cluster.md)

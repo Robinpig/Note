@@ -44,6 +44,8 @@ digraph "Session" {
 - **会话超时**：`sessionTimeout` 必须在服务端 `minSessionTimeout` ~ `maxSessionTimeout` 之间（默认 `2×tickTime` ~ `20×tickTime`）。客户端发心跳（ping）续租；若服务端在 `sessionTimeout` 内未收到任何包，判定会话过期。
 - **过期后果（不可逆）**：该会话创建的 **ephemeral 节点被删除**，已注册的 watch 全部失效，客户端必须新建 `ZooKeeper` 实例。这是 `SessionExpiredException` 必须当作"致命、重建"而不是"重试"的根本原因。
 
+> 会话在服务端的追踪实现（`SessionTrackerImpl` / `ExpiryQueue` 批量过期）与 `SessionMovedException` 历史坑见 [Session](/docs/CS/Framework/ZooKeeper/Session.md)。
+
 ## Watcher: One-Shot Semantics
 
 ZooKeeper 的 watch 是**一次性**的——触发一次后就被注销，需重新注册才能继续接收：
@@ -64,7 +66,7 @@ zk.getData("/app/config", new Watcher() {
 > [!WARNING]
 > **一次性 watch 的"丢失窗口"**：在 `getData` 返回到 `process` 触发、再到你重新注册的间隙，若数据又变了，这一变更可能不被看到（因为旧 watch 已消费、新 watch 还没挂上）。高频变更场景必须用 **持久化 watch**：`zk.addWatch(path, watcher, AddWatchMode.PERSISTENT)`（3.6+），或标准 watch + `with(` 递归模式，避免错过事件。
 
-读路径上的 watch 与本地读语义见 [pipeline](/docs/CS/Framework/ZooKeeper/pipeline.md)；Kleppmann 的经典文章指出一次性 watch 正是 ZooKeeper 分布式锁的脆弱点之一（见 [Recipes](/docs/CS/Framework/ZooKeeper/Recipes.md)）。
+读路径上的 watch 与本地读语义见 [pipeline](/docs/CS/Framework/ZooKeeper/pipeline.md)；watch 的服务端实现（`WatchManager` / 惊群 / 与 etcd 对照）与一致性边界见 [Watches](/docs/CS/Framework/ZooKeeper/Watches.md)。Kleppmann 的经典文章指出一次性 watch 正是 ZooKeeper 分布式锁的脆弱点之一（见 [Recipes](/docs/CS/Framework/ZooKeeper/Recipes.md)）。
 
 ## Exception Classification and Retry Strategy
 
@@ -93,7 +95,7 @@ zk.create("/app/secrets", data,
     ZooDefs.Ids.CREATOR_ALL_ACL, CreateMode.PERSISTENT);   // 创建者获全权
 ```
 
-- 详见节点级 ACL 的 scheme 与权限位：[security](/docs/CS/Framework/ZooKeeper/security.md)。
+- 详见节点级 ACL 的 scheme 与权限位：[security](/docs/CS/Framework/ZooKeeper/security.md)；ACL 的**数据模型与 `aversion` 版本语义**（如何挂在 znode、CAS 更新）见 [ACL](/docs/CS/Framework/ZooKeeper/ACL.md)。
 - 注意：`delete` 权限在**父节点**，不意外的"删不掉子节点"多因父节点缺 `d` 位。
 
 ## Jute Serialization
