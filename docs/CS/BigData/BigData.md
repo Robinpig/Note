@@ -51,3 +51,6 @@ Gelly
 ## Links
 
 - [Hadoop](/docs/CS/Framework/Hadoop/Hadoop.md)
+- [Flink](/docs/CS/Framework/Flink/Flink.md)
+- [Spark](/docs/CS/Framework/Spark/Spark.md)
+- [MapReduce](/docs/CS/Distributed/MapReduce.md)

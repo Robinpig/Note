@@ -1,6 +1,6 @@
 ## Introduction
 
-Apache Flink 是一个框架和分布式处理引擎，用于对无界和有界数据流进行状态计算
+Apache Flink 是一个框架和分布式处理引擎，用于对无界和有界数据流进行**状态计算**。基本数据模型是**数据流与事件（Event）序列**；批（batch）被视为"有界的流"，与流共用同一个运行时。
 
 **Flink应用场景**
 
@@ -9,9 +9,9 @@ Apache Flink 是一个框架和分布式处理引擎，用于对无界和有界�
 - 物联网: 实时数据采集|实时报警
 - 银行和金融业: 实时结算|风险检测
 
-早期 Lambda架构（第二代）用两套系统，同时保证低延迟和结果准确
+早期 Lambda架构（第二代）用两套系统，同时保证低延迟和结果准确；Flink 的路线是把两者统一到一个引擎里。
 
-Flink核心特点
+**Flink核心特点**
 
 - 高吞吐、低延迟
 - 结果的正确性 （时间语义 事件时间 ）
@@ -19,10 +19,13 @@ Flink核心特点
 - 可以与众多常用存储系统链接
 - 高可用、支持动态扩展
 
-Spark 适合处理批次数据
+**与 Spark 的分工**
 
-- Spark采用RDD模型。Spark Streaming的DStream实际上也就是一组组小批数据RDD的集合
+- Spark采用RDD模型。Spark Streaming的DStream实际上也就是一组组小批数据RDD的集合，适合处理批次数据
 - Flink基本数据模型是数据流，以及事件（Event）序列
+
+> [!NOTE]
+> 本页是 Flink 子树的**枢纽页**，只保留全貌与导航，各机制的细节见下面各子页。最新稳定版为 2.3.0（2026-06 发布）；2.x 是继 1.0 之后九年来第一个大版本，升级风险见 [Deployment](/docs/CS/Framework/Flink/Deployment.md)。
 
 ## build
 
@@ -36,197 +39,61 @@ standalone的Flink会启动MiniCluster模拟分布式集群环境 和真正的�
 
 ## Architecture
 
-Flink技术架构如图
+Flink集群主要包含3部分：JobManager、TaskManager和 Client，三者均为独立的JVM进程。Flink集群启动后，会至少启动一个JobManager和多个TaskManager。
 
-Flink集群主要包含3部分：JobManager、TaskManager和 Client，三者均为独立的JVM进程。
-Flink集群启动后，会至少启动一个JobManager和多个TaskManager。
-Client 本地执行 main() 解析 JobGraph 对象 将 JobGraph 提交到JobManager，
-JobManager再将任务拆分成Task并调度到各个TaskManager中执行，最后TaskManager将Task执行的情况汇报给JobManager
+- [Client](/docs/CS/Framework/Flink/Client.md)：本地执行 main() 解析 JobGraph 对象，将 JobGraph 提交到 JobManager；
+- [JobManager](/docs/CS/Framework/Flink/JobManager.md)：将任务拆分成 Task 并调度到各个 TaskManager，负责 Checkpoint 协调；
+- [TaskManager](/docs/CS/Framework/Flink/TaskManager.md)：提供计算资源（内存、CPU 被切成 Slot），执行 Task 并向 JobManager 汇报。
 
-客户端会在内部运行提交的作业，然后基于作业的代码逻辑构建JobGraph结构，最终将JobGraph提交到运行时中运行。
-JobGraph是客户端和集群运行时之间约定的统一抽象数据结构，
-也就是说，不管是什么类型的作业，都会通过客户端将提交的应用程序构建成JobGraph结构，最后提交到集群上运行
+JobGraph是客户端和集群运行时之间约定的**统一抽象数据结构**，也就是说，不管是什么类型的作业，都会通过客户端将提交的应用程序构建成JobGraph结构，最后提交到集群上运行。
 
-TaskManager作为整个集群的工作节点，主要作用是向集群提供计算资源，每个TaskManager都包含一定数量的内存、CPU等计算资源
-这些计算资源会被封装成Slot资源卡槽，然后通过主节点中的ResourceManager组件进行统一协调和管理，而任务中并行的Task会被分配到Slot计算资源中。
+TaskManager作为整个集群的工作节点，主要作用是向集群提供计算资源。这些计算资源会被封装成Slot资源卡槽，然后通过主节点中的ResourceManager组件进行统一协调和管理，而任务中并行的Task会被分配到Slot计算资源中。
 
-根据底层集群资源管理器的不同，TaskManager的启动方式及资源管理形式也会有所不同
-例如，在基于Standalone模式的集群中，所有的TaskManager都是按照固定数量启动的；而YARN、Kubernetes等资源管理器上创建的Flink集群则支持按需动态启动TaskManager节点
+根据底层集群资源管理器的不同，TaskManager的启动方式及资源管理形式也会有所不同：在基于Standalone模式的集群中，所有的TaskManager都是按照固定数量启动的；而YARN、Kubernetes等资源管理器上创建的Flink集群则支持按需动态启动TaskManager节点。
 
-WordCount demo
+图从 StreamGraph → JobGraph → ExecutionGraph → 物理执行 Task 的四层演进，以及算子链（operator chain）、数据交换与背压，统一在 [Dataflow](/docs/CS/Framework/Flink/Dataflow.md) 里展开。
 
-```java
-package com.yh.flink;
+### 部署模式与资源提供者
 
-import org.apache.flink.api.common.typeinfo.Types;
-import org.apache.flink.api.java.ExecutionEnvironment;
-import org.apache.flink.api.java.operators.AggregateOperator;
-import org.apache.flink.api.java.operators.DataSource;
-import org.apache.flink.api.java.operators.FlatMapOperator;
-import org.apache.flink.api.java.operators.UnsortedGrouping;
-import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.util.Collector;
+三种集群运行模式（session、per-job、application）与三种资源管理器（Standalone / YARN / Kubernetes）的完整对比、Slot 资源模型与高可用方案，见 [Deployment](/docs/CS/Framework/Flink/Deployment.md)。一句话结论：**生产推荐 Application 模式**，底层优先 Kubernetes（Operator）或 YARN。
 
-import java.util.Objects;
+## WordCount demo
 
-public class BatchWordCount {
-    public static void main(String[] args) throws Exception {
-        //1.创建一个执行环境
-        ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
-        //2.从文件读取数据
-        DataSource<String> lineDataSource = env.readTextFile(Objects.requireNonNull(BatchWordCount.class.getResource("/")).getPath()+"input/words.txt");
-        // 3.将每行数据进行分词，然后转换成二元组类型
-        FlatMapOperator<String, Tuple2<String, Long>> wordAndOneTuple = lineDataSource.flatMap((String line, Collector<Tuple2<String, Long>> out) -> {
-            //将一行文本进行分词
-            String[] words = line.split(" ");
-            //将每个单词转换成二元组输出
-            for (String word : words) {
-                out.collect(Tuple2.of(word, 1L));
-            }
-        }).returns(Types.TUPLE(Types.STRING, Types.LONG));
-        //4.按照word进行分组
-        UnsortedGrouping<Tuple2<String, Long>> wordAndOneGroup = wordAndOneTuple.groupBy(0);
-        //5.分组内进行聚合统计
-        AggregateOperator<Tuple2<String, Long>> sum = wordAndOneGroup.sum(1);
-        //6.打印结果
-        sum.print();
-    }
-}
-```
+流式写法（DataStream API）：
 
 ```java
-package com.yh.flink;
-
-import org.apache.flink.api.common.typeinfo.Types;
-import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.streaming.api.datastream.DataStreamSource;
-import org.apache.flink.streaming.api.datastream.KeyedStream;
-import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
-import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.util.Collector;
-
-import java.util.Objects;
-
-public class BatchWordCount {
+public class StreamWordCount {
     public static void main(String[] args) throws Exception {
-        String filePath = Objects.requireNonNull(BatchWordCount.class.getResource("/")).getPath() + "input/words.txt";
-
-        //1.创建流式的执行环境
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-        //2.读取文件
-        DataStreamSource<String> lineDataStreamSource = env.readTextFile(filePath);
-        //3.转换计算
-        SingleOutputStreamOperator<Tuple2<String, Long>> wordAndOneTuple = lineDataStreamSource.flatMap((String line, Collector<Tuple2<String, Long>> out) -> {
-            String[] words = line.split(" ");
-            for (String word : words) {
-                out.collect(Tuple2.of(word, 1L));
-            }
-        }).returns(Types.TUPLE(Types.STRING, Types.LONG));
 
-        //4.分组操作
-        KeyedStream<Tuple2<String, Long>, String> wordAndOneKeyedStream = wordAndOneTuple.keyBy(data -> data.f0);
-        //5.求和
-        SingleOutputStreamOperator<Tuple2<String, Long>> sum = wordAndOneKeyedStream.sum(1);
-        // 6.打印
-        sum.print();
-        //7.启动执行
-        env.execute();
+        DataStreamSource<String> lineDataStreamSource = env.readTextFile(filePath);
+
+        SingleOutputStreamOperator<Tuple2<String, Long>> wordAndOneTuple =
+                lineDataStreamSource.flatMap((String line, Collector<Tuple2<String, Long>> out) -> {
+                    for (String word : line.split(" ")) {
+                        out.collect(Tuple2.of(word, 1L));
+                    }
+                }).returns(Types.TUPLE(Types.STRING, Types.LONG));
+
+        wordAndOneTuple
+                .keyBy(data -> data.f0)
+                .sum(1)
+                .print();
+
+        env.execute();   // 流式作业必须显式触发执行
     }
 }
 ```
 
-集群运行模式
+批式写法在 2.x 里不再使用独立的 DataSet API，而是**同一套 DataStream API + 批执行模式**：
 
-3种集群运行模式（session、per-job、application)
-
-
-|      | session                                                                                                                                                                                                                                       | per-job                                                                                                                             | application                                                                                                                                                                                            |
-| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 描述 | client会向一个已预先建立好的session集群提交一个个job，<br />所有job共享集群资源，包括JobManager和TaskManager的资源                                                                                                                            | client向集群提交job后，集群资源管理器（如Yarn、K8s）会为每个job单独建立JobManager和TaskManager                                      | client向集群提交job时，不会执行Flink应用程序的main方法，而是直接提交给集群。<br />每个应用程序对应一个JobManager，且同一个JobManager下可以运行多个job                                                  |
-| 优点 | 不需要每次提交job都花费开销去建立资源，JobManager和TaskManager是长期运行的<br />多个job跑在相同的JobManager和TaskManager，因此资源利用率高                                                                                                    | job之间的资源是隔离的，互不影响 资源伸缩性好，根据每个job不同的需求申请合适的资源                                                   | 由于client不执行程序以及上传依赖包（通过HDFS统一管理依赖包），因此负载和带宽消耗都很低，解放了client 资源伸缩性好，根据每个job不同的需求申请合适的资源 TaskManager资源隔离，JobManager应用间也是隔离的 |
-| 缺点 | 资源隔离性差，如果其中一个job把某个TaskManager搞挂了，那么该TaskManager下的所有job都会受影响<br />资源都是预分配的，<br />所以资源扩展性差<br /><br /> client负责生成JobGraph以及上传依赖包到集群，当job很多时client的负载和带宽消耗都比较大 | 每个job都会建立JobManager，资源利用率相对低些 client负责生成JobGraph以及上传依赖包到集群，当job很多时client的负载和带宽消耗都比较大 | 没有明显的缺点，也是目前社区主推的运行模式，适用于生产环境                                                                                                                                             |
-| 场景 | 只适用于测试环境，不适用生产环境                                                                                                                                                                                                              | per-job运行模式在生产环境上用的比较多也比较成熟稳定                                                                                 |                                                                                                                                                                                                        |
-
-
-集群部署资源管理器支持
-
-
-主要是 Yarn 和 Kubernetes
-
-
-<!-- tabs:start -->
-
-##### **Standalone**
-
-Standalone集群 仅支持 Session 模式提交 Job
-
-```shell
-cd flink & ./bin/start-cluster.sh
+```java
+ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();   // 1.x DataSet API，2.x 已移除
+// 2.x 等价做法：StreamExecutionEnvironment + execution.runtime-mode = BATCH
 ```
 
-##### **Yarn**
-
-Yarn 部署 资源隔离 特别是网络资源的隔离不够完善
-离线和实时作业同时运行相互干扰
-Kerberos 认证超期问题导致 checkpoint 无法持久化
-
-##### **Kubernetes**
-
-
-```shell
-kubectl create -f flink-configuration-configmap.yaml
-
-
-
-```
-
-<!-- tabs:end -->
-
-## JobManager
-
-JobManager 内部组件（Dispatcher / ResourceManager / JobMaster）、作业生命周期与高可用的完整拆解见 [JobManager](/docs/CS/Framework/Flink/JobManager.md)。
-
-JobManager是整个集群的管理节点，负责接收和执行来自客户端提交的JobGraph。
-
-JobManager也会负责整个任务的Checkpoint协调工作，内部负责协调和调度提交的任务，并将JobGraph转换为ExecutionGraph结构，然后通过调度器调度并执行ExecutionGraph的节点。
-ExecutionGraph中的ExecutionVertex节点会以Task的形式在TaskManager中执行
-
-Task 部署和调度
-
-TaskManager 注册与管理
-JobManager会对整个集群的计算资源进行统一管理，所有TaskManager的计算资源都会注册到JobManager节点中，然后分配给不同的任务使用。
-
-ResourceManager
-
-Checkpoint Coordinator
-
-## TaskManager
-
-Slot 资源切分、Task 执行、Data Exchange/Shuffle、Checkpoint 快照、内存管理与 RPC 的完整分析见 [TaskManager](/docs/CS/Framework/Flink/TaskManager.md)。
-
-Task Execution
-
-Shuffle Environment
-
-Data Exchange
-
-Actor system
-
-Network Manager
-
-Memory Management
-
-## Client
-
-Client 执行用户 main()、构建 StreamGraph 并优化为 JobGraph 后提交集群的完整提交流程见 [Client](/docs/CS/Framework/Flink/Client.md)；图的四层演进与数据 push/shuffle 模型见 [Dataflow](/docs/CS/Framework/Flink/Dataflow.md)。
-
-JobGraph Generate
-
-Execution Environment
-
-Rpc with JobManager
-
-Cluster Deploy
+> [!WARNING]
+> Flink 2.x 已移除 DataSet API。批作业应统一使用 DataStream API 的 BATCH 运行时模式（或 Table API / SQL），不要再用 `ExecutionEnvironment`。
 
 ## DataStream
 
@@ -234,158 +101,78 @@ Cluster Deploy
 
 内置的数据读取支持从内存、文件和网络读取 同时支持使用Flink连接器 自定义读取函数 读取外部存储数据
 
-```java
-public class StreamExecutionEnvironment implements AutoCloseable {
-    @PublicEvolving
-    public <OUT> DataStreamSource<OUT> createInput(
-            InputFormat<OUT, ?> inputFormat, TypeInformation<OUT> typeInfo) {
-        DataStreamSource<OUT> source;
+Flink 支持的数据源连接器通过 addSource 函数添加，之后通过 addSink 添加到转换流程中；2.x 起推荐 `env.fromSource()` + `stream.sinkTo()`（见 [Connector](/docs/CS/Framework/Flink/Connector.md)）。
 
-        if (inputFormat instanceof FileInputFormat) {
-            @SuppressWarnings("unchecked")
-            FileInputFormat<OUT> format = (FileInputFormat<OUT>) inputFormat;
+DataStream代表一系列同类型数据的集合，可以通过转换操作生成新的DataStream。DataStream用于表达业务转换逻辑，实际上并没有存储真实数据。
 
-            source =
-                    createFileInput(
-                            format,
-                            typeInfo,
-                            "Custom File source",
-                            FileProcessingMode.PROCESS_ONCE,
-                            -1);
-        } else {
-            source = createInput(inputFormat, typeInfo, "Custom Source");
-        }
-        return source;
-    }
+DataStream数据结构包含两个主要成员：StreamExecutionEnvironment和Transformation<T> transformation。其中transformation是当前DataStream对应的上一次的转换操作，换句话讲，就是通过transformation生成当前的DataStream。
 
-    private <OUT> DataStreamSource<OUT> createInput(
-            InputFormat<OUT, ?> inputFormat, TypeInformation<OUT> typeInfo, String sourceName) {
-
-        InputFormatSourceFunction<OUT> function =
-                new InputFormatSourceFunction<>(inputFormat, typeInfo);
-        return addSource(function, sourceName, typeInfo);
-    }
-
-    private <OUT> DataStreamSource<OUT> addSource(
-            final SourceFunction<OUT> function,
-            final String sourceName,
-            @Nullable final TypeInformation<OUT> typeInfo,
-            final Boundedness boundedness) {
-        checkNotNull(function);
-        checkNotNull(sourceName);
-        checkNotNull(boundedness);
-
-        TypeInformation<OUT> resolvedTypeInfo =
-                getTypeInfo(function, sourceName, SourceFunction.class, typeInfo);
-
-        boolean isParallel = function instanceof ParallelSourceFunction;
-
-        clean(function);
-
-        final StreamSource<OUT, ?> sourceOperator = new StreamSource<>(function);
-        return new DataStreamSource<>(
-                this, resolvedTypeInfo, sourceOperator, isParallel, sourceName, boundedness);
-    }
-}
-```
-
-
-
-Flink 支持的数据源连接器 通过 addSource 函数添加
-之后通过 addSink 添加到转换流程中
-
-
-
-
-
-
-
-
-
-
-
-
-DataStream代表一系列同类型数据的集合，可以通过转换操作生成新的DataStream。
-DataStream用于表达业务转换逻辑，实际上并没有存储真实数据。
-
-DataStream数据结构包含两个主要成员：StreamExecutionEnvironment和Transformation<T> transformation。
-其中transformation是当前DataStream对应的上一次的转换操作，换句话讲，就是通过transformation生成当前的DataStream
-
-当用户通过DataStream API构建Flink作业时，StreamExecutionEnvironment会将DataStream之间的转换操作存储至StreamExecutionEnvironment的List<Transformation<?>> transformations集合，
-然后基于这些转换操作构建作业Pipeline拓扑，用于描述整个作业的计算逻辑。
-其中流式作业对应的Pipeline实现类为StreamGraph，批作业对应的Pipeline实现类为Plan
-
-
+当用户通过DataStream API构建Flink作业时，StreamExecutionEnvironment会将DataStream之间的转换操作存储至List<Transformation<?>> transformations集合，然后基于这些转换操作构建作业Pipeline拓扑，用于描述整个作业的计算逻辑。其中流式作业对应的Pipeline实现类为StreamGraph，批作业对应的Pipeline实现类为Plan。
 
 转换操作
-- 单数据
-  - map
-  - filter
-  - flatmap
-- window
-  - timeWindowAll
-  - countWindow
-- 多流合并
-  - join
-  - connect
-  - coGroup
-  - union
-  - interval join
-- 单流切分
-  - split
-  - sideOutput
 
-
+- 单数据：map、filter、flatmap
+- window（见 [Window](/docs/CS/Framework/Flink/Window.md)）：timeWindowAll、countWindow
+- 多流合并：join、connect、coGroup、union、interval join
+- 单流切分：split、sideOutput
 
 ### Transformation
 
-在Transformation的基础上又抽象出了PhysicalTransformation类。
-PhysicalTransformation中提供了setChainingStrategy()方法，可以将上下游算子按照指定的策略连接
+在Transformation的基础上又抽象出了PhysicalTransformation类。PhysicalTransformation中提供了setChainingStrategy()方法，可以将上下游算子按照指定的策略连接
 
-ChainingStrategy支持如下四种策略
+ChainingStrategy支持如下四种策略：ALWAYS、NEVER、HEAD、HEAD_WITH_SOURCES
 
-- ALWAYS
-- NEVER
-- HEAD
-- HEAD_WITH_SOURCES
+Transformation结构中最主要的组成部分就是StreamOperator。StreamOperator最终会通过StreamOperatorFactory封装在Transformation结构中，并存储在StreamGraph和JobGraph结构中，直到运行时执行StreamTask时，才会调用StreamOperatorFactory.createStreamOperator()方法在StreamOperatorFactory中定义StreamOperator实例
 
-Transformation结构中最主要的组成部分就是StreamOperator
-
-StreamOperator最终会通过StreamOperatorFactory封装在Transformation结构中，并存储在StreamGraph和JobGraph结构中，
-直到运行时执行StreamTask时，才会调用StreamOperatorFactory.createStreamOperator()方法在StreamOperatorFactory中定义StreamOperator实例
-
-DataStream API中大部分转换操作都是通过SimpleOperatorFactory进行封装和创建的
-SimpleStreamOperatorFactory根据算子类型的不同，拓展出了InputFormatOperatorFactory、UdfStreamOperatorFactory和OutputFormatOperatorFactory三种接口实现
-
-
-
-
+DataStream API中大部分转换操作都是通过SimpleOperatorFactory进行封装和创建的。SimpleStreamOperatorFactory根据算子类型的不同，拓展出了InputFormatOperatorFactory、UdfStreamOperatorFactory和OutputFormatOperatorFactory三种接口实现
 
 ## Function
 
 Function作为Flink中最小的数据处理单元，在Flink中占据非常重要的地位。和Java提供的Function接口类似，Flink实现的Function接口专门用于处理接入的数据元素。StreamOperator负责对内部Function的调用和执行，当StreamOperator被Task调用和执行时，StreamOperator会将接入的数据元素传递给内部Function进行处理，然后将Function处理后的结果推送给下游的算子继续处理
 
-## SQL
-
 ## Runtime
 
-Resource Manager
+运行时两块核心是资源与执行环境：
 
-Execution Environment
+- **Resource Manager**：JobManager 侧组件，管理 TaskManager 注册上来的 Slot，不足时向底层平台申请新节点（见 [JobManager](/docs/CS/Framework/Flink/JobManager.md)）
+- **Execution Environment**：Client 侧执行环境，把用户代码编译成图结构并提交执行（见 [Client](/docs/CS/Framework/Flink/Client.md)）
+
+运行时的另外两根支柱是**状态**与**容错**：[State](/docs/CS/Framework/Flink/State.md) 负责算子记住什么，[Checkpoint](/docs/CS/Framework/Flink/Checkpoint.md) 负责失败后回到哪里。
+
+## SQL
+
+SQL / Table API 是 Flink 的声明式接口：用**动态表 + 连续查询**表达流计算，优化器生成计划后仍落到同一套运行时。窗口 TVF、各类 join、changelog 模式、物化表与 Streaming Lakehouse 见 [Table_SQL](/docs/CS/Framework/Flink/Table_SQL.md)。
 
 ## Metrics
 
+生产可观测性主要看四组指标：
+
+| 类别 | 关注点 | 典型指标 |
+| ---- | ---- | ---- |
+| 吞吐 / 延迟 | 算子是否跟得上 | numRecordsIn/Out、Watermark 推进速度 |
+| 背压 | 瓶颈算子定位 | 各 Task 背压比例（见 [Dataflow](/docs/CS/Framework/Flink/Dataflow.md) 的 credit-based 流控） |
+| Checkpoint | 容错健康度 | Duration、对齐时长、持久化大小、失败次数（见 [Checkpoint](/docs/CS/Framework/Flink/Checkpoint.md)） |
+| 资源 | 是否资源瓶颈 | JVM 堆/堆外、GC、网络缓冲、Slot 利用率（见 [TaskManager](/docs/CS/Framework/Flink/TaskManager.md)） |
+
+用户侧可用 MetricGroup（Counter / Gauge / Meter / Histogram）上报业务指标，通过 Reporter 推送到 Prometheus 等系统。
+
 ## Links
 
-- [Dataflow 数据流与四层图](/docs/CS/Framework/Flink/Dataflow.md)
+- [Dataflow](/docs/CS/Framework/Flink/Dataflow.md)
+- [Time](/docs/CS/Framework/Flink/Time.md)
+- [Window](/docs/CS/Framework/Flink/Window.md)
+- [State](/docs/CS/Framework/Flink/State.md)
+- [Checkpoint](/docs/CS/Framework/Flink/Checkpoint.md)
+- [Connector](/docs/CS/Framework/Flink/Connector.md)
+- [Table_SQL](/docs/CS/Framework/Flink/Table_SQL.md)
+- [Deployment](/docs/CS/Framework/Flink/Deployment.md)
 - [Client](/docs/CS/Framework/Flink/Client.md)
 - [JobManager](/docs/CS/Framework/Flink/JobManager.md)
 - [TaskManager](/docs/CS/Framework/Flink/TaskManager.md)
 - [Storm](/docs/CS/Framework/Flink/Storm.md)
 - [Spark](/docs/CS/Framework/Spark/Spark.md)
-- [Yarn](/docs/CS/Framework/Hadoop/Yarn.md)
-- [MapReduce](/docs/CS/Framework/Hadoop/MapReduce.md)
 - [Kafka](/docs/CS/MQ/Kafka/Kafka.md)
+- [Yarn](/docs/CS/Framework/Hadoop/Yarn.md)
 - [Hadoop](/docs/CS/Framework/Hadoop/Hadoop.md)
 
 ## References

@@ -9,7 +9,7 @@
 - `## handleSend` 与 `## handleFlow` 是数据面两极：`publishMessage` → `asyncAddEntry` 的写入流控与 `Rollover Ledger` / `asyncCreateLedger` 的滚动创建；以及 flow 许可 → `asyncReadEntry` → `sendMessages` 的读取分发。
 - `## Metadata` 与 `## Authentication` 收尾：前者是 `OwnershipCache` 维护的 bundle→owner 归属缓存，后者是认证四提供者 + `PulsarAuthorizationProvider` 授权。
 
-协议帧格式、握手与 keep-alive 在 [Protocol](/docs/CS/MQ/Pulsar/Protocol.md)；存储侧（entry/cursor、quorum、rollover 判定）在 [BookKeeper 存储层](/docs/CS/MQ/Pulsar/BookKeeper.md)；bundle 切分、负载均衡与分层存储在 [集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md)；客户端行为在 [Producer](/docs/CS/MQ/Pulsar/Producer.md) 与 [Consumer](/docs/CS/MQ/Pulsar/Consumer.md)。
+协议帧格式、握手与 keep-alive 在 [Protocol](/docs/CS/MQ/Pulsar/Protocol.md)；存储侧（entry/cursor、quorum、rollover 判定）在 [ManagedLedger 存储层](/docs/CS/MQ/Pulsar/ManagedLedger.md)；bundle 切分、负载均衡与分层存储在 [集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md)；客户端行为在 [Producer](/docs/CS/MQ/Pulsar/Producer.md) 与 [Consumer](/docs/CS/MQ/Pulsar/Consumer.md)。
 
 ## Structure
 
@@ -1702,7 +1702,7 @@ broker 侧的元数据访问核心是 `OwnershipCache`（`pulsar-broker/.../brok
 ## Links
 
 - [Pulsar](/docs/CS/MQ/Pulsar/Pulsar.md)
-- [BookKeeper 存储层](/docs/CS/MQ/Pulsar/BookKeeper.md)
+- [ManagedLedger 存储层](/docs/CS/MQ/Pulsar/ManagedLedger.md)
 - [集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md)
 - [Functions 与事务](/docs/CS/MQ/Pulsar/Functions.md)
 - [Consumer](/docs/CS/MQ/Pulsar/Consumer.md)

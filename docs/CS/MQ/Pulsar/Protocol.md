@@ -135,7 +135,7 @@ keep-alive 由 `PulsarHandler` 统一实现（客户端与 broker 共用），�
 
 **Checksum**：仅当 `ChecksumType.Crc32c` 时存在，布局是 2 字节 magic（`magicCrc32c = 0x0e01`，`Commands.java:132`）+ 4 字节 checksum（`Commands.java:135`），覆盖 **metadata + payload**，不含 CMD 与长度头；非 Crc32c 类型时这 6 字节整体消失（`Commands.java:1700-1701`）。checksum 先占位后回填：序列化时跳过 4 字节，算出 `computeChecksum(headers)` 再 `resumeChecksum` 把 payload 续进去，最后 `setInt` 写回占位处（`Commands.java:1717-1739`）。
 
-**BrokerEntryMetadata**：broker 把消息写入 BookKeeper entry 前，会在头部插入一段 broker 侧元数据，格式为 2 字节 magic（`magicBrokerEntryMetadata = 0x0e02`，`Commands.java:134`）+ 4 字节长度 + protobuf（`Commands.java:1751-1768`）；读侧用 `skipBrokerEntryMetadataIfExist` 按同样 magic 识别并跳过（`Commands.java:1781-1789`）。该能力由协议版本 v16（服务端）/ v18（客户端）门控。entry 层细节见 [BookKeeper 存储层](/docs/CS/MQ/Pulsar/BookKeeper.md)。
+**BrokerEntryMetadata**：broker 把消息写入 BookKeeper entry 前，会在头部插入一段 broker 侧元数据，格式为 2 字节 magic（`magicBrokerEntryMetadata = 0x0e02`，`Commands.java:134`）+ 4 字节长度 + protobuf（`Commands.java:1751-1768`）；读侧用 `skipBrokerEntryMetadataIfExist` 按同样 magic 识别并跳过（`Commands.java:1781-1789`）。该能力由协议版本 v16（服务端）/ v18（客户端）门控。entry 层细节见 [ManagedLedger 存储层](/docs/CS/MQ/Pulsar/ManagedLedger.md)。
 
 **MessageMetadata**（`PulsarApi.proto:107-137`）每条消息必带的 protobuf 元数据，与 payload 之间以 `METADATA_SIZE` 分隔：
 

@@ -11,7 +11,7 @@ Dataflow（数据流 / 数据传递模型）描述 Flink 作业中算子之间�
 
 ## Graph Evolution
 
-一个 Flink 作业从代码到物理执行要经过四层图的转换，前三步发生在 [Client](/docs/CS/Framework/Flink/Client.md) 与 [JobManager](/docs/CS/Framework/Flink/JobManager.md)：
+一个 Flink 作业从代码到物理执行要经过四层图的转换，前三步发生在 [Client](/docs/CS/Framework/Flink/Client.md) 与 [JobManager](/docs/CS/Framework/Flink/JobManager.md)。SQL / Table API 作业经过优化器后同样落到这四层图上（见 [Table_SQL](/docs/CS/Framework/Flink/Table_SQL.md)）：
 
 1. **StreamGraph**：在 Client 端由用户 API 生成，是 DAG 的最初形态，节点对应每个算子 Transformation（`map`、`keyBy`、`window` 等），一一对应、不做合并。
 2. **JobGraph**：Client 对 StreamGraph 做优化，把可以 chain 在一起的算子合并成一个 **JobVertex**，并加上中间数据集（IntermediateDataSet），是提交给集群的统一抽象（流/批都转成 JobGraph）。
@@ -70,8 +70,7 @@ Flink 会把满足条件的多个算子**链（chain）**在一起，放进同�
 - [Client](/docs/CS/Framework/Flink/Client.md)
 - [JobManager](/docs/CS/Framework/Flink/JobManager.md)
 - [TaskManager](/docs/CS/Framework/Flink/TaskManager.md)
-- [Spark](/docs/CS/Framework/Spark/Spark.md)
-- [MapReduce](/docs/CS/Framework/Hadoop/MapReduce.md)
+- [Table_SQL](/docs/CS/Framework/Flink/Table_SQL.md)
 
 ## References
 

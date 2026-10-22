@@ -16,7 +16,7 @@ JobManager 是 Flink 集群的**管理节点（master）**，负责接收并执�
 
 - 负责集群**资源的分配与管理**，在一个 Flink 集群中只有一个。
 - 管理注册上来的 TaskManager 及其空闲 Slot（TaskExecutor 注册 slot 到 RM）。
-- 当 JobMaster 申请资源、现有 Slot 不足时，向底层资源平台**动态申请新的 TaskManager**：
+- 当 JobMaster 申请资源、现有 Slot 不足时，向底层资源平台**动态申请新的 TaskManager**（各部署形态的差异见 [Deployment](/docs/CS/Framework/Flink/Deployment.md)）：
 
   - Standalone：资源是固定预启动的，RM 只能分配已注册的 Slot，无法弹性扩容；
   - [Yarn](/docs/CS/Framework/Hadoop/Yarn.md)：申请新的 TaskManager container；
@@ -28,7 +28,7 @@ JobManager 是 Flink 集群的**管理节点（master）**，负责接收并执�
 - 作业级别的核心协调者，一个作业对应一个 JobMaster。
 - 把接收到的 **JobGraph 转换成 ExecutionGraph**（按并行度把 JobVertex 展开为多个 ExecutionVertex）。
 - 向 **ResourceManager 申请执行任务所需的 Slot**；拿到足够资源后，把 ExecutionGraph 的各个 ExecutionVertex 以 Task 的形式**部署（deploy）到 TaskManager** 上。
-- 运行期间负责所有需要**中央协调**的工作，最典型的是 **Checkpoint 协调（CheckpointCoordinator）**：周期性触发检查点、收集各 Task 的 ack、在所有任务成功后把检查点标记为 complete，从而实现 exactly-once 状态一致性。
+- 运行期间负责所有需要**中央协调**的工作，最典型的是 **Checkpoint 协调（CheckpointCoordinator）**：周期性触发检查点、收集各 Task 的 ack、在所有任务成功后把检查点标记为 complete，从而实现 exactly-once 状态一致性（完整流程见 [Checkpoint](/docs/CS/Framework/Flink/Checkpoint.md)）。
 - 还负责任务失败后的重启策略、故障恢复（从最近 checkpoint 恢复）、作业状态机（CREATED→RUNNING→FAILING/RESTARTING→…→FINISHED/CANCELED）。
 
 ## Job Lifecycle
@@ -68,7 +68,8 @@ Client 提交 JobGraph
 - [Client](/docs/CS/Framework/Flink/Client.md)
 - [TaskManager](/docs/CS/Framework/Flink/TaskManager.md)
 - [Dataflow](/docs/CS/Framework/Flink/Dataflow.md)
-- [Yarn](/docs/CS/Framework/Hadoop/Yarn.md)
+- [Checkpoint](/docs/CS/Framework/Flink/Checkpoint.md)
+- [Deployment](/docs/CS/Framework/Flink/Deployment.md)
 
 ## References
 

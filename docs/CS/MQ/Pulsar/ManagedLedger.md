@@ -2,6 +2,10 @@
 
 Pulsar 的存储是三层解耦的架构：**Broker 只管调度，数据落到 BookKeeper 的 ledger，元数据（ledger 列表、cursor 位点、bundle 归属）落到 metadata store**。这种「计算无状态、存储无状态」的分层是 Pulsar 与 Kafka 最本质的架构差异。
 
+> **本篇的范围**：Pulsar 侧的存储层是 **managed-ledger**（`ManagedLedgerImpl` / `ManagedCursorImpl`），它决定「什么时候切 ledger、entry 怎么缓存、cursor 位点怎么存、compaction 怎么做」；而 **BookKeeper 自身**（ledger/segment/entry 模型、quorum 确认、journal 与 entry log 落盘、auto-recovery）已拆出为独立子树，见 [BookKeeper](/docs/CS/Framework/BookKeeper/BookKeeper.md)。
+>
+> 简单说：**本篇讲 Pulsar 怎么用 BookKeeper，BookKeeper 自己怎么工作在那边**。两边版本号也不同 —— 本篇是 Pulsar 4.2.4 的行为，那边是 BookKeeper 4.18.1 的源码。
+
 > 版本基线：**4.2.4**（tag `v4.2.4`，当前稳定版，2026-08-03 发布）。
 > ⚠️ 另有里程碑版 `v5.0.0-M1/M2`（2026-06/09），**里程碑版不是生产可用基线**，本文所有结论出自 4.2.4。
 > BookKeeper 版本：**4.17.3**（根 `pom.xml:185`）。
@@ -321,118 +325,18 @@ Java 侧：
 
 ## BookKeeper Side
 
-### Terminology: segment Is Not fragment
-
-> [!WARNING]
-> BookKeeper 4.17.3 源码中**没有 "fragment" 这个术语**，实际是 **`segment`**。
-
-`bookkeeper-proto/src/main/proto/DataFormats.proto:26-65`：
-
-```protobuf
-message LedgerMetadataFormat {
-    required int32 quorumSize = 1;      // ← 即 writeQuorum（字段名不对称！）
-    required int32 ensembleSize = 2;
-    required int64 length = 3;
-    optional int64 lastEntryId = 4;
-    enum State { OPEN = 1; IN_RECOVERY = 2; CLOSED = 3; }
-    required State state = 5 [default = OPEN];
-    message Segment {
-        repeated string ensembleMember = 1;
-        required int64 firstEntryId = 2;
-    }
-    repeated Segment segment = 6;       // ← 副本集合变更的历史记录
-    optional int32 ackQuorumSize = 9;   // ← 独立字段
-}
-```
-
-真实关系是：**ledger（由 metadata 描述）→ segment（副本集合变更记录，`ensembleMember` 是 bookie 列表）→ entry（按 entryId 索引的实际数据）**。
-
-> [!TIP]
-> 两个易踩的坑：
-> - proto 字段叫 `quorumSize`，但 Java 接口方法是 **`getWriteQuorumSize()`**（`client/api/LedgerMetadata.java:56`）—— 字段名与方法名不对称。
-> - `ackQuorumSize` 是**独立字段**（:9），不在 `quorumSize` 里。
-> - 「一个 ledger 固定写 E 个 bookie」**不严谨** —— `segment` 记录了 ensemble 变更历史，ensemble 可通过 ensemble change 调整。
-
-### quorum Confirmation Logic
-
-`PendingAddOp.java`：
-
-```java
-// 276-278：每个 bookie 响应都记 ack
-boolean ackQuorum = false;
-if (BKException.Code.OK == rc) {
-    ackQuorum = ackSet.completeBookieAndCheck(bookieIndex);
-    addEntrySuccessBookies.add(ensemble.get(bookieIndex));
-}
-...
-// 358-384：达到 ack quorum 才回调成功
-if (ackQuorum && !completed) {
-    if (clientCtx.getConf().enforceMinNumFaultDomainsForWrite
-            && !clientCtx.getPlacementPolicy().areAckedBookiesAdheringToPlacementPolicy(...)) {
-        // 延迟：acked bookie 未跨足够 fault domain        // 359-372
-    } else {
-        completed = true;                                              // 374
-        this.qwcLatency = MathUtils.elapsedNanos(requestTimeNanos);     // 375
-        sendAddSuccessCallbacks();        // ← ENTRY_ADDED 在此发出      // 384
-    }
-}
-```
-
-AckSet 判定式（`RoundRobinDistributionSchedule.java:311`）：
-
-```java
-return ackSet.cardinality() >= ackQuorumSize;
-```
-
-ack quorum 被打破的判定（`:319`）：
-
-```java
-return failed() > (writeQuorumSize - ackQuorumSize);
-```
-
-即 **E 个副本中最多容忍 W-Q 个失败**。以默认 2/2/2 为例：W-Q = 0，即**一个 bookie 挂掉写入就阻塞**。
-
-> [!TIP]
-> `AckSetImpl.create(ensembleSize, writeQuorumSize, ackQuorumSize)` 来自 `RoundRobinDistributionSchedule.java:260`。`DistributionSchedule.java:165-167` 的注释是官方定义：「An ack set represents the set of bookies from which a response must be received so that an entry can be considered to be replicated on a quorum.」
-
 > [!NOTE]
-> **`minBookies` 在 4.17.3 中未查到**（grep 返回空）。相近能力以 `enforceMinNumFaultDomainsForWrite` / `minNumRacksPerWriteQuorum` 形式存在。
-
-### entry Persistence: LedgerStorage First, Then Journal
-
-`BookieImpl.java:957-993` `addEntryInternal`：
-
-```java
-long entryId = handle.addEntry(entry);          // 961  先写 LedgerStorage
-bookieStats.getWriteBytes().addCount(entry.readableBytes());
-// 965-966 注释：journal addEntry 应在 entry 加入 ledger storage 之后，
-//           否则 journal entry 可能在 ledger 创建前被 roll
-...
-if (!writeDataToJournal) {                      // 981
-    cb.writeComplete(0, ledgerId, entryId, null, ctx);   // 982  未开 journal 则直接成功
-    return;
-}
-getJournal(ledgerId).logAddEntry(entry, ackBeforeSync, cb, ctx);   // 992  再写 Journal(WAL)
-```
-
-> [!IMPORTANT]
-> **重要纠正**：BK 4.17.3 中 **`memLimit` / `bytesSinceLastSync` 均已不存在**（全库零命中）。旧版「写满 memLimit 才刷盘」的机制已被移除。
+> 这一段（segment 术语、quorum 确认、entry 落盘、LedgerHandle 合并）已拆到独立的 BookKeeper 子树，那里以 **BookKeeper 4.18.1** 为基线展开：
 >
-> `LedgerCacheImpl` 现在**只是索引页管理者**（`IndexInMemPageMgr` + `IndexPersistenceMgr`），**不持有 entry 数据缓存**。`LedgerDescriptorImpl`（`:156`）也只把读写委派给 `LedgerStorage`。
+> - [BookKeeper](/docs/CS/Framework/BookKeeper/BookKeeper.md)：术语与一致性模型（entry / ledger / segment / E-Qw-Qa）
+> - [Ledger](/docs/CS/Framework/BookKeeper/Ledger.md)：ledger 元数据格式、`segment` 而非 `fragment`、fencing 与 recovery
+> - [Write](/docs/CS/Framework/BookKeeper/Write.md)：quorum 确认（AckSet）、ensemble change、Journal 与 EntryLog 的先后
+> - [Read](/docs/CS/Framework/BookKeeper/Read.md)：读路径、LAC、speculative read、索引定位
+> - [Storage](/docs/CS/Framework/BookKeeper/Storage.md)：journal / entry log / index 三件套与 GC
+> - [Cluster](/docs/CS/Framework/BookKeeper/Cluster.md)：元数据布局、放置策略、auto-recovery
+> - [Ops](/docs/CS/Framework/BookKeeper/Ops.md)：配置、监控、故障与 CLI
 >
-> 即：**entry 数据不在 bookie 内存长期缓存**，而是写入 **entry log（LedgerStorage）+ Journal（WAL）**。写入的内存聚合由 `EntryMemTable` / `EntryMemTableWithParallelFlusher` 承担。
->
-> 这与「写满内存才刷盘」的旧描述完全不同 —— 内存压力不再驱动刷盘。
-
-### LedgerHandle Has Been Merged
-
-`client/LedgerHandle.java:94`（2384 行）：
-
-```java
-public class LedgerHandle implements WriteHandle
-```
-
-`LedgerHandleImpl` / `PackagePrivateLedgerHandleImpl` **均不存在**。引用 `LedgerHandleImpl.asyncWriteEntry` 会指向不存在的类。
+> 下面只保留 Pulsar 视角必须交代的一点：**E/Qw/Qa 由 managed-ledger 在创建 ledger 时一次性传给 BookKeeper，之后不再由 Pulsar 参与确认逻辑**（`ManagedLedgerImpl.java:4684-4685`）。
 
 ## Metadata Storage: Important Changes in 4.x
 
@@ -621,6 +525,7 @@ proto：`PulsarApi.proto:117` `optional string partition_key = 6;`、`:139` `par
 - [Producer](/docs/CS/MQ/Pulsar/Producer.md)
 - [Consumer](/docs/CS/MQ/Pulsar/Consumer.md)
 - [集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md)
+- [BookKeeper（本篇依赖的存储层）](/docs/CS/Framework/BookKeeper/BookKeeper.md)
 - [etcd（可作 metadata store）](/docs/CS/Framework/etcd/etcd.md)
 
 ## References

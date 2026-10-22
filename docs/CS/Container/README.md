@@ -9,8 +9,27 @@
  │  Namespace + Cgroup 隔离原理 / OCI 运行时对比 / 容器 ↔ 进程定位
  ├── locate.md —— 容器 ID ↔ 宿主机 PID 双向换算（inspect / cgroup / nsenter）
  ├── Docker (Docker/)
- │     ├── Docker.md —— 镜像、架构、常用命令
- │     └── net.md —— bridge/host/container/none 网络模式
+ │     ├── Docker.md —— 枢纽：定位、安装、架构、底层三机制与分册导航
+ │     ├── 原理与运行时
+ │     │     └── runtime.md —— OCI 规范、dockerd→containerd→shim→runc、rootless
+ │     ├── 镜像与构建
+ │     │     ├── image.md —— 分层与内容寻址、registry、体积优化、供应链
+ │     │     ├── registry.md —— OCI Distribution Spec、私有 registry、鉴权、GC、加速器
+ │     │     ├── Dockerfile.md —— 指令语义、多阶段、BuildKit 缓存与 secret
+ │     │     └── buildx.md —— 多平台构建、builder 实例、缓存导出、Bake
+ │     ├── 数据与网络
+ │     │     ├── storage.md —— volume/bind/tmpfs、overlay2 与 containerd snapshotter
+ │     │     └── net.md —— bridge/host/container/none、端口发布、内嵌 DNS
+ │     ├── 使用与编排
+ │     │     ├── compose.md —— project/service/container 三层与字段陷阱
+ │     │     ├── lifecycle.md —— PID 1/僵尸、信号与优雅终止、重启策略、健康检查
+ │     │     ├── swarm.md —— 内建集群编排：服务/栈、overlay+routing mesh
+ │     │     └── cli.md —— 命令速查、inspect 模板、排查一条龙
+ │     └── 质量与配套
+ │           ├── logging.md —— 两层日志模型、driver 全目录、轮转、dual logging
+ │           ├── security.md —— capabilities、非 root、seccomp/LSM、签名与 secret
+ │           ├── performance.md —— cgroup v2 限额、OOM、IO 与观测
+ │           └── tools.md —— runlike/whaler/dive：反推与审计
  └── Kubernetes (k8s/)
        ├── K8s.md —— 主笔记：架构 / 资源模型 / Pod / Service
        ├── Architecture.md —— 四条主链路串联 + 三个贯穿契约
@@ -46,7 +65,22 @@
 |------|------|--------|
 | 容器隔离原理 | [Container](/docs/CS/Container/Container.md) | Namespace 边界 + Cgroup 限额，runc/Kata/gVisor 对比 |
 | 容器进程定位 | [locate](/docs/CS/Container/locate.md) | 容器 ID ↔ 宿主机 PID：inspect / `NSpid` / `/proc/PID/cgroup` / nsenter |
-| 镜像与运行时 | [Docker](/docs/CS/Container/Docker/Docker.md) | 分层镜像、容器引擎架构 |
+| 镜像与运行时 | [Docker](/docs/CS/Container/Docker/Docker.md) | 枢纽页：定位、安装、架构、底层三机制 |
+| 运行时链路 | [Docker 运行时](/docs/CS/Container/Docker/runtime.md) | OCI 三件套、dockerd→containerd→shim→runc、隔离四道防线 |
+| 镜像格式 | [Docker 镜像](/docs/CS/Container/Docker/image.md) | 内容寻址、CoW、registry 交互、体积优化与签名 |
+| 构建 | [Dockerfile](/docs/CS/Container/Docker/Dockerfile.md) | 指令语义、CMD vs ENTRYPOINT、多阶段、BuildKit |
+| 持久化 | [Docker 存储](/docs/CS/Container/Docker/storage.md) | volume/bind/tmpfs、overlay2 与 containerd snapshotter |
+| 网络 | [Docker 网络](/docs/CS/Container/Docker/net.md) | 六种网络模式、端口发布、内嵌 DNS、排障 |
+| 多容器编排 | [Docker Compose](/docs/CS/Container/Docker/compose.md) | project/service/container、depends_on 与字段陷阱 |
+| 命令速查 | [Docker CLI](/docs/CS/Container/Docker/cli.md) | inspect 模板、exec/logs、排查一条龙 |
+| 容器安全 | [Docker 安全](/docs/CS/Container/Docker/security.md) | capabilities、非 root、seccomp/LSM、供应链与 secret |
+| 资源与性能 | [Docker 性能](/docs/CS/Container/Docker/performance.md) | cgroup v2 限额映射、两种 OOM、IO 与观测 |
+| 反推工具 | [Docker 工具](/docs/CS/Container/Docker/tools.md) | runlike 还原 run 命令、whaler/dive 还原镜像 |
+| 日志 | [Docker 日志](/docs/CS/Container/Docker/logging.md) | 两层日志模型、driver 全目录、轮转、dual logging |
+| 多平台构建 | [Docker Buildx](/docs/CS/Container/Docker/buildx.md) | builder 实例、QEMU 多架构、缓存导出、Bake、云构建 |
+| 生命周期 | [容器生命周期](/docs/CS/Container/Docker/lifecycle.md) | PID 1/僵尸、信号与优雅终止、重启策略、健康检查 |
+| 镜像仓库 | [Docker Registry](/docs/CS/Container/Docker/registry.md) | OCI Distribution Spec、私有 registry、鉴权、GC、加速器 |
+| 集群编排 | [Docker Swarm](/docs/CS/Container/Docker/swarm.md) | 服务/栈、overlay+routing mesh、与 K8s 对比 |
 | 运行时链路 | [containerd](/docs/CS/Container/k8s/containerd.md) | CRI 之下：五大模块、shim、runc |
 | 最小调度单元 | [Pod](/docs/CS/Container/k8s/Pod.md) | pause 容器、生命周期、QoS、优雅终止 |
 | 集群主笔记 | [K8s](/docs/CS/Container/k8s/K8s.md) | 架构、资源对象、CRI、探针 |

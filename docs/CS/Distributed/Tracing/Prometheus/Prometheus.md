@@ -26,13 +26,16 @@ Prometheus 受启发于 Google 的 Borgmon 监控系统。Prometheus 基于 Gola
 
 ```bash
 # 下载并解压（版本可按需调整）
-wget https://github.com/prometheus/prometheus/releases/download/v2.53.0/prometheus-2.53.0.linux-amd64.tar.gz
-tar -xzf prometheus-2.53.0.linux-amd64.tar.gz
-cd prometheus-2.53.0.linux-amd64
+wget https://github.com/prometheus/prometheus/releases/download/v3.15.0/prometheus-3.15.0.linux-amd64.tar.gz
+tar -xzf prometheus-3.15.0.linux-amd64.tar.gz
+cd prometheus-3.15.0.linux-amd64
 
 # 启动
 ./prometheus --config.file=prometheus.yml
 ```
+
+> [!NOTE]
+> 版本事实截至 2026-10：Prometheus 当前主线为 **3.x**（最新 3.15.0，2026-09-24），**3.13.x 是当前 LTS 线**（3.13.0 于 2026-07-01 发布，支持至 2027-07-31）。2.53 及更早的 2.x 线已全部 EOL，新部署不要再选。minor 版本大约每 6 周一个周期，且维护窗口很短（非 LTS 的 minor 通常只维护到下一个 minor 发布后不久），因此生产环境要么跟 LTS，要么保持频繁升级。
 
 默认监听 `http://localhost:9090`。
 
@@ -468,8 +471,11 @@ receivers:
 ## Links
 
 - [Tracing](/docs/CS/Distributed/Tracing/Tracing.md)
+- [Grafana](/docs/CS/Distributed/Tracing/Grafana.md)
+- [Loki](/docs/CS/Distributed/Tracing/Loki.md)
+- [Tempo](/docs/CS/Distributed/Tracing/Tempo.md)
+- [Grafana Alloy](/docs/CS/Distributed/Tracing/Alloy.md)
 - [Jaeger](/docs/CS/Distributed/Tracing/Jaeger.md)
-- [Zipkin](/docs/CS/Distributed/Tracing/Zipkin.md)
 
 ## References
 
