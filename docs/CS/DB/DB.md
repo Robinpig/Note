@@ -140,7 +140,7 @@
 | 键值 · 磁盘引擎 | LSM Tree，可嵌入进程 | [LevelDB](/docs/CS/DB/LevelDB/LevelDB.md)、[RocksDB](/docs/CS/DB/RocksDB/RocksDB.md)、[SSDB](/docs/CS/DB/SSDB.md)、[Pika](/docs/CS/DB/Pika.md) |
 | 文档 | BSON 嵌套树 + 二级索引 | [MongoDB](/docs/CS/DB/MongoDB.md) |
 | 宽列 | 多维 map、列族内行存、LSM 后端 | [HBase](/docs/CS/DB/HBase.md)、[Cassandra](/docs/CS/DB/Cassandra.md) |
-| 列式 / 时序 | 按列连续存 + 压缩 + 向量化执行 | [ClickHouse](/docs/CS/DB/ClickHouse.md)、[Doris](/docs/CS/DB/Doris.md)、[Druid](/docs/CS/DB/Druid.md)、[InfluxDB](/docs/CS/DB/InfluxDB.md)、[Presto](/docs/CS/DB/Presto.md) |
+| 列式 / 时序 | 按列连续存 + 压缩 + 向量化执行 | [Timeseries](/docs/CS/DB/Timeseries.md)、[ClickHouse](/docs/CS/DB/ClickHouse.md)、[Doris](/docs/CS/DB/Doris.md)、[Druid](/docs/CS/DB/Druid.md)、[Presto](/docs/CS/DB/Presto.md) |
 | 图 | 免索引邻接 / 外部 KV 上的邻接表 | [graph](/docs/CS/DB/graph/graph.md)、[Neo4j](/docs/CS/DB/graph/Neo4j.md)、[JanusGraph](/docs/CS/DB/graph/JanusGraph.md)、[NebulaGraph](/docs/CS/DB/graph/NebulaGraph.md) |
 | 向量 | ANN 图索引与聚类索引 | [vector](/docs/CS/DB/vector.md)、[Milvus](/docs/CS/DB/Milvus/Milvus.md) |
 | 中间件（不改存储） | 分库分表、binlog 增量订阅 | [ShardingSphere](/docs/CS/DB/ShardingSphere.md)、[TDDL](/docs/CS/DB/TDDL.md)、[canal](/docs/CS/DB/canal.md) |
@@ -840,7 +840,7 @@ SQL 在这方面表现出相当的灵活性：OLTP 型与 OLAP 型查询它都�
 如今许多数据库厂商只专注事务处理或分析负载中的一端，而不是两者通吃。
 也有 Microsoft SQL Server、SAP HANA 这样的产品同时支持事务处理与数据仓库，但它们内部正越来越清晰地分裂成两套存储与查询引擎，只是共享同一个 SQL 接口。
 
-往下读：列式引擎的两条实现路线（MergeTree 与向量化执行）见 [ClickHouse](/docs/CS/DB/ClickHouse.md) 与 [Doris](/docs/CS/DB/Doris.md)，实时分析取数见 [Druid](/docs/CS/DB/Druid.md)，时序专用于 [InfluxDB](/docs/CS/DB/InfluxDB.md)，不存数据只做联邦查询的是 [Presto](/docs/CS/DB/Presto.md)；离线一侧的批量计算见 [BigData](/docs/CS/BigData/BigData.md)。
+往下读：列式引擎的两条实现路线（MergeTree 与向量化执行）见 [ClickHouse](/docs/CS/DB/ClickHouse.md) 与 [Doris](/docs/CS/DB/Doris.md)，实时分析取数见 [Druid](/docs/CS/DB/Druid.md)，纯时序与可观测数据库的总览、存储路线对比和各产品入口集中在 [Timeseries](/docs/CS/DB/Timeseries.md)（含 InfluxDB、GreptimeDB、VictoriaMetrics、TimescaleDB、TDengine），不存数据只做联邦查询的是 [Presto](/docs/CS/DB/Presto.md)；离线一侧的批量计算见 [BigData](/docs/CS/BigData/BigData.md)。
 
 ## Choosing
 
@@ -969,7 +969,7 @@ LevelDB 支持范围查询、快照等现代应用需要的能力。
 
 ### Column Store
 
-[ClickHouse](/docs/CS/DB/ClickHouse.md) 是开源的列式 OLAP 数据库；[Doris](/docs/CS/DB/Doris.md) 是兼容 MySQL 协议的 MPP 分析型数仓。时序负载另见 [InfluxDB](/docs/CS/DB/InfluxDB.md)；不搬数据、直接对已有存储做联邦 SQL 查询的引擎见 [Presto](/docs/CS/DB/Presto.md)。
+[ClickHouse](/docs/CS/DB/ClickHouse.md) 是开源的列式 OLAP 数据库；[Doris](/docs/CS/DB/Doris.md) 是兼容 MySQL 协议的 MPP 分析型数仓；[Druid](/docs/CS/DB/Druid.md) 面向实时分析。**时序 / 可观测数据库**总览与各产品入口集中在 [Timeseries](/docs/CS/DB/Timeseries.md)——涵盖 InfluxDB 3.x、GreptimeDB、VictoriaMetrics、TimescaleDB、TDengine 五个代表产品，每条独立路线在该 Hub 页展开。不搬数据、直接对已有存储做联邦 SQL 查询的引擎见 [Presto](/docs/CS/DB/Presto.md)。
 
 ### Wide Column Store
 

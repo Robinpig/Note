@@ -156,7 +156,7 @@ WinRE 是一个独立的、极小的 Windows，跑在安装之外的一个恢复
 - [Windows 进程与线程](/docs/CS/OS/Windows/Process_Thread.md)
 - [Windows 内存管理](/docs/CS/OS/Windows/Memory.md)
 - [Windows 安全模型](/docs/CS/OS/Windows/Security.md)
-- [系统启动](/docs/CS/OS/BootLoader.md)
+- [系统启动](/docs/CS/OS/Boot/BootLoader.md)
 
 ---
 

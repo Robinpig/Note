@@ -75,10 +75,10 @@ p %eip
 
 - [Operating System](/docs/CS/OS/OS.md)
 - [Computer Organization](/docs/CS/CO/CO.md)
-- [VM](/docs/CS/OS/VM.md)
-- [Bochs](/docs/CS/OS/Bochs.md)
+- [VM](/docs/CS/OS/Virtualization/VM.md)
+- [Bochs](/docs/CS/OS/Virtualization/Bochs.md)
 - [xv6](/docs/CS/OS/xv6/xv6.md)
-- [rCore](/docs/CS/OS/rCore.md)
+- [rCore](/docs/CS/OS/Teaching/rCore.md)
 
 ## References
 

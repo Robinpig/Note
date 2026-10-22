@@ -8,7 +8,7 @@ GRUB 在整条启动链中的位置：
 上电 → BIOS/UEFI → (MBR/GPT) → GRUB → 内核 bzImage + initramfs → 内核启动 → systemd/init
 ```
 
-前面固件与主引导记录的通用原理（0x7C00、MBR 的 446+64+2 字节布局、活动分区、卷引导记录）见 [BootLoader](/docs/CS/OS/BootLoader.md) 与 [BIOS/UEFI](/docs/CS/OS/BIOS.md)；本笔记聚焦 GRUB 自身。
+前面固件与主引导记录的通用原理（0x7C00、MBR 的 446+64+2 字节布局、活动分区、卷引导记录）见 [BootLoader](/docs/CS/OS/Boot/BootLoader.md) 与 [BIOS/UEFI](/docs/CS/OS/Boot/BIOS.md)；本笔记聚焦 GRUB 自身。
 
 ## Why GRUB
 
@@ -98,8 +98,8 @@ GRUB_CMDLINE_LINUX="quiet splash"
 
 ## Links
 
-- [BootLoader](/docs/CS/OS/BootLoader.md)
-- [BIOS and UEFI](/docs/CS/OS/BIOS.md)
+- [BootLoader](/docs/CS/OS/Boot/BootLoader.md)
+- [BIOS and UEFI](/docs/CS/OS/Boot/BIOS.md)
 - [Linux 0.11](/docs/CS/OS/Linux/0.11.md)
 - [xv6](/docs/CS/OS/xv6/xv6.md)
 - [Operating Systems](/docs/CS/OS/OS.md)

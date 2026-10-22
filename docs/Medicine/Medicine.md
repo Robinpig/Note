@@ -92,8 +92,23 @@
 - [生理心理学](/docs/Psychology/Biological_Psychology.md)
 - [伦理学](/docs/Philosophy/Ethics.md)
 
-## References
+## Organization Conventions
 
-1. [World Health Organization](https://www.who.int/)
-2. [中国国家卫生健康委员会](http://www.nhc.gov.cn/)
-3. [OpenStax Anatomy and Physiology](https://openstax.org/subjects/science/anatomy-and-physiology)
+### 目录结构
+
+- `Medicine/Medicine.md` 是本领域**唯一总纲**，分支页为 `Basic_Medicine.md`、`Clinical_Medicine.md`、`Diagnosis.md`、`Public_Health.md`、`Medical_History_Ethics.md`。
+- 护理学是**唯一有子目录**的分支：`Medicine/Nursing/` 下 `Nursing.md`（总纲）+ 分支页，按**基础层 / 场景层 / 延伸层**三层组织；后续若深化其他科室（呼吸科、消化科、糖尿病等），**照 `Nursing/Cardiovascular/` 结构新建 `Nursing/<Specialty>/`**（总纲 + 该专科疾病谱分册），不要平铺进 `Nursing/`。
+- 新增医学内容一律按上述分层，不要在根目录平铺新的分支页。
+
+### 内容口径
+
+- **学科框架为主，谨慎写临床细节**。剂量、诊疗路径、指南推荐等级、各类指标阈值、给药方案与器械参数**不收录**——它们随指南更新而变化，写死必然过时且有出错风险。需要时只写「关注点与判断逻辑」，并在页首用 `> [!WARNING]` 块声明「不收录具体规程，以最新指南与机构规范为准」。
+- 医学笔记用**中文术语 + 英文原名**（如「循证医学（evidence-based medicine）」首次出现时），这是本库其他领域（CS/哲学/心理学）一致的做法。
+
+### 交叉点
+
+- **医学 × CS 的固定交叉点**：`Nursing/Nursing_Informatics.md` 是本库医学与计算机科学最直接的交叉页（决策支持、远程护理、可穿戴、AI 辅助），链向 `CS/AI/AI.md` 与 `CS/AI/LLM/LLM.md`。写 AI 相关医学内容时**从这篇转链**，不要重复叙述 AI 原理。
+- 新增医学页时优先链到这些已有页，不要重复新建：`Sports/Anatomy.md`（解剖）、`Psychology/Biological_Psychology.md`（生理基础）、`Philosophy/Ethics.md`（伦理四原则的哲学源流）、`Mathematics/Probability_Statistics.md`（研究设计与统计推断）。
+- ⚠️ **`Medicine/Anatomy.md` 尚未入库**，不要挂链到它（关节与脊柱子树原都有这个 caveat）。解剖学入口暂用 `Sports/Anatomy.md` 和 `Medicine/Basic_Medicine.md`。
+
+## References

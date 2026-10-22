@@ -28,7 +28,7 @@ Linux 内存管理维护的是三个对象之间的关系：**内存介质**（R
 
 ## Kernel Side: Byte-Level Objects and Emergency Guarantees
 
-buddy 只给整页，但内核的需求以**字节**为单位——为一个 20 字节的 `task_struct` 分配一整页是灾难。于是有了建在 buddy 之上的 [slab](/docs/CS/OS/Linux/mm/slab.md)：把整页再切成字节级对象池，并缓存常用对象的初始化状态、做 slab 着色提高 CPU cache 利用率。`task_struct` / `mm_struct` / `struct file` / `struct socket` 等频繁创建释放的对象都走专属 slab。现代内核常用实现是 **slub**（精简元数据、针对多核与 NUMA 优化），嵌入式小内存场景用 **slob**。主干是 [kmem_cache](/docs/CS/OS/Linux/mm/slab.md?id=kmem_cache) 与通用入口 [kmalloc](/docs/CS/OS/Linux/mm/slab.md?id=kmalloc)。
+buddy 只给整页，但内核的需求以**字节**为单位——为一个 20 字节的 `task_struct` 分配一整页是灾难。于是有了建在 buddy 之上的 [slab](/docs/CS/OS/Linux/mm/slab.md)：把整页再切成字节级对象池，并缓存常用对象的初始化状态、做 slab 着色提高 CPU cache 利用率。`task_struct` / `mm_struct` / `struct file` / `struct socket` 等频繁创建释放的对象都走专属 slab。**SLUB 是当前主线唯一实现**（SLOB 已在 v6.4、SLAB 在 v6.8 从主线移除；极小内存嵌入式场景由 `CONFIG_SLUB_TINY` 覆盖），6.18 起还引入可选的 per-CPU sheaves 缓存层进一步降低快路径开销。主干是 [kmem_cache](/docs/CS/OS/Linux/mm/slab.md?id=kmem_cache) 与通用入口 [kmalloc](/docs/CS/OS/Linux/mm/slab.md?id=kmalloc)。
 
 slab 解决"省"，但解决不了"绝不能失败"。块设备层做 I/O 时，请求对象的分配**必须成功、又不能触发可能睡眠的回收**，否则系统卡死。这就需要在 slab 之上再叠一层预留担保 [mempool](/docs/CS/OS/Linux/mm/mempool.md)：核心是 `min_nr` 个常驻保底元素，[mempool_alloc](/docs/CS/OS/Linux/mm/mempool.md?id=mempool_alloc) 在底层分配失败时才动用预留池，[mempool_free](/docs/CS/OS/Linux/mm/mempool.md?id=mempool_free) 则优先把元素补回池中自愈，从而保证前向进展。这是典型的"用空间换确定性"。
 
@@ -42,11 +42,19 @@ slab 解决"省"，但解决不了"绝不能失败"。块设备层做 I/O 时，
 
 用户程序主动建立映射的系统调用入口是 [mmap](/docs/CS/OS/Linux/mm/mmap.md)：`ksys_mmap_pgoff` → `do_mmap` → `mmap_region`，把一段虚拟区域接到**匿名页**或**文件**上。接匿名页就是绕开 malloc 直接拿内存，接文件则让进程通过缺页直接读写 [页缓存](/docs/CS/OS/Linux/mm/PageCache.md)，省掉 read/write 的一次拷贝。解除映射见 [munmap](/docs/CS/OS/Linux/mm/mmap.md?id=munmap)。
 
+## Large Mappings: THP
+
+前面讲 VMA 只是"地址区间的约定"、页表把它兑现成翻译，但翻译的**粒度**默认是 4 KiB 一页——TLB 容量有限，大片连续虚拟地址要占掉大量 TLB 项，访存密集程序因此频繁 TLB miss。[THP（透明大页）](/docs/CS/OS/Linux/mm/THP.md) 在不改应用的前提下把映射粒度放大到 2 MiB（PMD 级）甚至 1 GiB（PUD 级）：缺页时直接分配 order-9 连续 folio 建 PMD 叶子，拿不到连续块则退化到 4 KiB 并交给 khugepaged 后台折叠。它同时要求物理层能给出连续大块——于是和上面的 [Compaction](/docs/CS/OS/Linux/mm/Compaction.md?id=kcompactd-background-compaction) 直接挂钩（`defrag=always` 下每次缺页都可能触发同步压缩），也和 [pagetable](/docs/CS/OS/Linux/mm/pagetable.md?id=page-table-pages-are-special-pages-ptdesc) 的 PMD 大页叶子、以及 [NUMA 平衡](/docs/CS/OS/Linux/mm/Numa.md) 里"大页迁移前要先拆分"的反作用紧紧咬合。mTHP（`hugepages-<size>kB`）还能只开 64 KiB 级大页，兼顾 TLB 收益与碎片。
+
 ## Home of File Data: Page Cache
 
 磁盘和内存差着几个数量级，Linux 用 [PageCache](/docs/CS/OS/Linux/mm/PageCache.md) 把读过/写过的文件页缓存到内存里。它以 `address_space` 为索引挂在 inode 上，是 buffered I/O 与 mmap 文件映射共同的落点：读时不在缓存就分配新页、触发预读从磁盘填充；写时先改缓存页、把落盘延迟（write back），从而合并多次小写。`/proc/meminfo` 里的 `Active(file)` / `Inactive(file)` 就是 file-backed 页。
 
 页缓存和前面两环咬合得很紧：mmap 访问文件时的缺页由它来满足，而缓存页本身也是**回收**最重要的对象——干净页可直接丢弃，脏页必须先回写。这种"可被回收"正是它能放心占用大量空闲内存的前提。
+
+## Memory Deduplication: KSM
+
+回收是"把不用的页还回去"，而 [KSM（同页合并）](/docs/CS/OS/Linux/mm/KSM.md) 是另一条减少驻留内存的路：它把多个进程里**内容完全相同**的匿名页合并成单一物理页、以 Copy-On-Write 共享。这跟 [PageCache](/docs/CS/OS/Linux/mm/PageCache.md) 的"文件页缓存共享"是不同层的去重——KSM 只合匿名页，从不碰 page cache。代价是合并出的只读共享页一旦被写就要 COW 分裂；且被 GUP pin 住的页（见 [GUP](/docs/CS/OS/Linux/mm/gup.md)）因要求独占、与 KSM 的"非独占"前提互斥而无法合并。它通过 `madvise(MADV_MERGEABLE)` 进入、由后台扫描线程在 stable/unstable 双树上做去重，是 VM 密度场景（同镜像多实例）的关键杠杆。
 
 ## Memory Pressure: Memory Reclaim
 
@@ -55,6 +63,10 @@ slab 解决"省"，但解决不了"绝不能失败"。块设备层做 I/O 时，
 单页去留在 [shrink_folio_list](/docs/CS/OS/Linux/mm/Reclaim.md?id=shrink_folio_list-decision-tree-for-keeping-or-evicting-a-single-page) 这棵决策树里判定：文件干净页直接丢、脏页回写、匿名页换出到 [Swap](/docs/CS/OS/Linux/Swap.md)、被引用的页激活或保留。除了页，[shrinker](/docs/CS/OS/Linux/mm/Reclaim.md?id=shrink_slab-and-shrinker) 机制还让 slab/dentry/inode 缓存等内核对象注册自己的回收回调。回收把页还给 buddy，分配才得以重试成功——它是 buddy 慢路径与 OOM 之间的关键缓冲。
 
 传统 active / inactive LRU 在大内存机器上扫描与链表开销高、冷热判定粗糙，6.1 起可选 [MGLRU 多代 LRU](/docs/CS/OS/Linux/mm/MGLRU.md)：把页按"代"组织、直接批量走查页表读 accessed 位判冷热，回收更省、误伤工作集更少，可与传统回收模型二选一启用。
+
+## Compressed Swap Cache: zswap
+
+匿名页被 [Reclaim](/docs/CS/OS/Linux/mm/Reclaim.md?id=shrink_folio_list-decision-tree-for-keeping-or-evicting-a-single-page) 选中换出时，[zswap](/docs/CS/OS/Linux/mm/zswap.md) 先在内存里开一个**压缩写回缓存**兜底：页先被压缩存进池子，而不是直接写盘；池子满或压缩失败才真正落到 swap 设备。它和 zram（压缩块设备）不同——zswap 是真实 swap 设备的**前端缓存**，store 成功即无 swap IO。v7.2 里它已 folio 化、用 xarray 多树索引、并由 memcg-aware 的 shrinker 负责把冷页回写；cgroup v2 的 `memory.zswap.max/current/writeback` 三接口把压缩占用也纳入容器限额。它是"换出"与"真实磁盘 IO"之间的一层缓冲，决定了匿名内存紧张时是省下 IO 还是吃掉更多内存。
 
 ## Defragmentation: Memory Compaction
 
@@ -76,7 +88,7 @@ slab 解决"省"，但解决不了"绝不能失败"。块设备层做 I/O 时，
 
 - ✅ **boot 探测**：[memory.md](/docs/CS/OS/Linux/mm/memory.md)——e820 / `mem_init` / `paging_init` / 早期 kmalloc 启动路径完整，定位为序章而非总入口。
 - ✅ **物理内存主线**：[pm.md](/docs/CS/OS/Linux/mm/pm.md)——node / zone / 内存模型 / memblock / buddy / alloc_pages（fast+slow）/ free 自洽。
-- ✅ **内核对象与担保**：[slab.md](/docs/CS/OS/Linux/mm/slab.md)（slab/slub/slob、kmem_cache、kmalloc/kfree）与 [mempool.md](/docs/CS/OS/Linux/mm/mempool.md)（三级降级、前向进展）均已独立成篇。
+- ✅ **内核对象与担保**：[slab.md](/docs/CS/OS/Linux/mm/slab.md)（SLUB 唯一实现、kmem_cache、kmalloc/kfree、分配/释放路径、调试与可观测性）与 [mempool.md](/docs/CS/OS/Linux/mm/mempool.md)（三级降级、前向进展）均已独立成篇。
 - ✅ **用户侧**：[vm.md](/docs/CS/OS/Linux/mm/vm.md)（mm_struct / VMA / page fault / vmalloc）与 [mmap.md](/docs/CS/OS/Linux/mm/mmap.md)（建立/解除映射）完整。
 - ✅ **页表**：[pagetable.md](/docs/CS/OS/Linux/mm/pagetable.md)——把 VMA 兑现成翻译的底层机制：4 级/5 级布局与运行时 `pgdir_shift`、层级折叠（`__PAGETABLE_*_FOLDED`）、表项位与软件位复用、页表页的 `ptdesc` 表示与 `pagetable_*_ctor`、缺页时逐级惰性生长、`free_pgtables` 递归下降、`mmu_gather` 批量 TLB 失效与页表页延迟释放、`delayed_rmap`、`CONFIG_PT_RECLAIM` 页表回收。
 - ✅ **VMA 的索引结构**：[maple_tree.md](/docs/CS/OS/Linux/mm/maple_tree.md)——区间树替换 rbtree 的完整机制：节点四种形态与位编码、`ma_state` 游标、RCU 无锁读与死节点检测、写路径九种 store 分类、gap 空洞记账与 `mas_empty_area()`。
@@ -84,6 +96,9 @@ slab 解决"省"，但解决不了"绝不能失败"。块设备层做 I/O 时，
 - ✅ **碎片 / 局部性 / 回收模型增强**：[Compaction.md](/docs/CS/OS/Linux/mm/Compaction.md)（双扫描器、kcompactd、主动压缩）、[Numa.md](/docs/CS/OS/Linux/mm/Numa.md)（AutoNUMA、mempolicy、zone_reclaim_mode）、[MGLRU.md](/docs/CS/OS/Linux/mm/MGLRU.md)（多代 LRU、页表老化）均已独立成篇。
 - ✅ **横切**：[memcg.md](/docs/CS/OS/Linux/mm/memcg.md)——记账、限额、三档超限路径、K8s 映射完整。
 - ✅ **对外借出用户页**：[gup.md](/docs/CS/OS/Linux/mm/gup.md)——GUP 的两条路径（慢路径 `follow_page_mask` / `faultin_page`、快路径关中断无锁遍历与"先 pin 再验证 PTE"的双向协议）、`FOLL_*` 完整标志表与 `is_valid_gup_args` 的四条不变量、`GUP_PIN_COUNTING_BIAS` 的 refcount 高位编码与 `folio_maybe_dma_pinned` 的模糊语义、pin 对 fork / 迁移 / 回收 / KSM / COW / soft-dirty 的反作用、`FOLL_LONGTERM` 的落点合规与迁移重试契约。
+- ✅ **大页：THP**：[THP.md](/docs/CS/OS/Linux/mm/THP.md)——anon/file THP、khugepaged 折叠、`defrag` 五档与 `vma_thp_gfp_mask`、mTHP（`hugepages-<size>kB`）、`transparent_hugepage=` / `thp_anon=` 启动参数、与 buddy/Compaction/pagetable/Reclaim 的耦合。
+- ✅ **去重：KSM**：[KSM.md](/docs/CS/OS/Linux/mm/KSM.md)——stable/unstable 双树、`ksm_rmap_item` 即 unstable 节点、`MADV_MERGEABLE`、与 GUP 经 `PageAnonExclusive` 互斥、sysfs 全量接口。
+- ✅ **压缩换出缓存：zswap**：[zswap.md](/docs/CS/OS/Linux/mm/zswap.md)——xarray 多树索引、`zswap_store/load` 的 folio 化路径、memcg-aware shrinker 回写、`memory.zswap.*` 三接口、与 zram 的区分。
 - ⏭️ **后续可选**：分层内存的 demote/promote、异构内存（CXL / HMAT）的源码级展开——这些与 NUMA、回收强相关，留作下一阶段。
 
 ## Links

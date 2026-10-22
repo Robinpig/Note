@@ -2261,6 +2261,8 @@ static int do_sys_openat2(int dfd, const char __user *filename,
 
 - [Linux](/docs/CS/OS/Linux/Linux.md)
 - [I/O Multiplexing](/docs/CS/CN/MultiIO.md)
+- [Unix](/docs/CS/OS/unix/Unix.md)
+- [FreeBSD](/docs/CS/OS/unix/FreeBSD.md)
 
 ## References
 

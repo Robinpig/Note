@@ -58,5 +58,5 @@ quiet_cmd_image = BUILD   $@
 ## Links
 
 - [Linux](/docs/CS/OS/Linux/Linux.md)
-- [BootLoader](/docs/CS/OS/BootLoader.md)
-- [BIOS](/docs/CS/OS/BIOS.md)
+- [BootLoader](/docs/CS/OS/Boot/BootLoader.md)
+- [BIOS](/docs/CS/OS/Boot/BIOS.md)

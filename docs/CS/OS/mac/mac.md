@@ -63,7 +63,9 @@ Darwin <host> 24.3.0 Darwin Kernel Version 24.3.0: Thu Jan  2 20:24:16 PST 2025;
 
 **硬件侧的分水岭是 Apple Silicon**，不只是换架构：统一内存、大小核（`hw.nperflevels`）、AMX 与神经引擎、16 KiB 页、arm64e 的 PAC、以及 Rosetta 2 的翻译层，都改变了性能调优和二进制兼容的判断方式。见 [Apple Silicon](/docs/CS/OS/mac/Apple_Silicon.md)。
 
-**边界地带留了两篇**：在非 Apple 硬件上安装 macOS 的 [Hackintosh](/docs/CS/OS/mac/Hackintosh.md)，以及在虚拟机里跑 macOS 的 [Virtualization](/docs/CS/OS/mac/Virtualization.md)——后者要区分 Apple 官方的 Virtualization.framework 与 VMware Fusion / UTM 这类第三方方案。日常命令、调试器与工具链散件收在 [Mac Tools](/docs/CS/OS/mac/Tools/Tools.md) 与 [LLDB](/docs/CS/OS/mac/LLDB.md)。
+**边界地带留了两篇**：在非 Apple 硬件上安装 macOS 的 [Hackintosh](/docs/CS/OS/mac/Hackintosh.md)，以及在虚拟机里跑 macOS 的 [Virtualization](/docs/CS/OS/mac/Virtualization.md)——后者要区分 Apple 官方的 Virtualization.framework 与 VMware Fusion / UTM 这类第三方方案。
+
+**日常工具自成一个子树**，入口在 [Mac Tools](/docs/CS/OS/mac/Tools/Tools.md)。它的前提值得先记住：macOS 自带的是 BSD 命令行而不是 GNU coreutils，所以 Linux 上写熟的 `sed -i`、`date -d` 在这里要么报错要么给出不同结果，见 [CLI](/docs/CS/OS/mac/Tools/CLI.md)。装软件走 [Homebrew](/docs/CS/OS/mac/Tools/Homebrew.md)（Apple Silicon 上前缀是 `/opt/homebrew`，Rosetta 下才是 `/usr/local`），终端与 shell 配置见 [Terminal](/docs/CS/OS/mac/Tools/Terminal.md)。想知道"系统现在在干什么"要靠苹果自己的动态追踪 [DTrace](/docs/CS/OS/mac/Tools/DTrace.md)（SIP 开着时受限），性能与功耗有 [Performance](/docs/CS/OS/mac/Tools/Performance.md)，网络排查有 [Network](/docs/CS/OS/mac/Tools/Network.md)（网络配置存在 configd 里而不是配置文件）。第三方应用选型清单在 [Software](/docs/CS/OS/mac/Tools/Software.md)，调试器见 [LLDB](/docs/CS/OS/mac/LLDB.md)。
 
 ## Quick Orientation
 
@@ -92,6 +94,6 @@ pmset -g custom               # 电源与睡眠配置
 
 1. [apple-oss-distributions/xnu](https://github.com/apple-oss-distributions/xnu)
 2. [Apple Open Source Releases](https://opensource.apple.com/releases/)
-3. [Darwin — Apple Open Source](https://opensource.apple.com/source/xnu/)
+3. [Apple Open Source](https://opensource.apple.com/)
 4. [macOS Release Notes](https://developer.apple.com/documentation/macos-release-notes)
 5. [Apple Platform Security](https://support.apple.com/guide/security/welcome/web)

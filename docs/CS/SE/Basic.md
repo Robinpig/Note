@@ -12,7 +12,7 @@
 
 > 设计软件有两种方式：一种是简单到明显没有缺陷，另一种是复杂到没有明显缺陷。前者要难得多。 —— C. A. R. Hoare
 
-抽象的代价常被低估：**抽象层次越高，表达能力越低，越难理解**。这一条在组织层面同样成立——中台越往上抽象一层，前台业务要用它就越别扭，见 [中台](/docs/CS/SE/中台.md)。判断抽象是否过度的标准是：它在多少次真实变化里被复用过，而不是它看起来有多通用。
+抽象的代价常被低估：**抽象层次越高，表达能力越低，越难理解**。这一条在组织层面同样成立——中台越往上抽象一层，前台业务要用它就越别扭，见 [中台](/docs/CS/SE/中台.md)。判断抽象是否过度的标准是：它在多少次真实变化里被复用过，而不是它看起来有多通用。同一判断框架在真实业务系统里的具体表现（隐性耦合的长尾、架构为何必然短视、复用的边界在哪）见 [Complexity](/docs/CS/SE/Complexity.md)。
 
 ## Functional Programming
 
@@ -35,6 +35,7 @@
 - [Clean Code](/docs/CS/SE/Clean_Code.md)
 - [Refactoring](/docs/CS/SE/Refactoring.md)
 - [中台](/docs/CS/SE/中台.md)
+- [Complexity](/docs/CS/SE/Complexity.md)
 
 ## References
 

@@ -81,8 +81,8 @@ sudo vim /etc/fstab
 
 
 
-[QEMU](/docs/CS/OS/qemu.md) 和 
-[Bochs](/docs/CS/OS/Bochs.md) 用纯软件的方式完全模拟x86 CPU 和外围设备 所以运行性能较差
+[QEMU](/docs/CS/OS/Virtualization/qemu.md) 和 
+[Bochs](/docs/CS/OS/Virtualization/Bochs.md) 用纯软件的方式完全模拟x86 CPU 和外围设备 所以运行性能较差
 
 
 

@@ -54,8 +54,41 @@ Higress 是阿里巴巴开源、已进入 CNCF Sandbox 的云原生 API 网关�
 - [Nginx Compare](/docs/CS/CN/nginx/compare.md)
 - [Spring Cloud Alibaba](/docs/CS/Framework/Spring_Cloud/Alibaba.md)
 
-## References
+## Verification Protocol
 
+### 信源与核实口径（两层）
+
+本子树的信源有两层：**官方文档站** `higress.ai/docs/latest/`（Astro Starlight 文档）与 **v2.2.5 tag 的源码**，凡文档与源码冲突**一律以源码为准**，且偏差散在各页正文里说。
+
+- **取文档正文**：用 `curl` 抓页面 + 正则抽 `<div class="sl-markdown-content">`（**WebFetch 抓这些页会 120s 超时**）；**文档 URL 一律取自 `https://higress.ai/llms.txt`，不要凭印象拼路径**（`higress.io/en/docs/...` 返回 404）。
+- **取源码**：`git clone --branch v2.2.5`（主仓）与 `--branch aio-v2.2.5`（`higress-standalone`，独立部署形态）。**不要假定本机有源码树**：`raw.githubusercontent` / `cdn.jsdelivr.net` / `unpkg` / `registry.npmjs.org` 在部分网络下全不可用，`api.github.com` 共享 60/小时极易打光，整仓 clone 与 blobless sparse clone 都可能超时失败——**没有源码时一律降级成文档口径并把"需回源码确认"的项显式写进该页 `## Unverified`**。
+- **每篇分册末尾都有 `## Unverified`**，这是本子树的固定结构，也是硬禁区：那里面的东西一条都不许写进正文。
+
+### 已证伪清单（尚未在 Three Threads 覆盖的条目）
+
+以下条目曾以"事实"形态流传，已被源码或文档核实推翻：
+
+- `ai-security-guard` 的 "block / mask / audit 三种处置"（只有检查+拒绝，脱敏属 `ai-data-masking`）
+- "WAF 依赖 ModSecurity 引擎"（底座是 Coraza，兼容的是 SecLang 与 Phase 规范）
+- "多 API Key 轮询"（文档原文是随机）
+- "模型级 fallback 是 `ai-proxy` 的能力"（在控制台 AI 路由管理的降级配置）
+- 指标端口 15090（三处证据只有 15020）
+- "LITE_METRICS 精简指标开关"（无对应字段）
+- "50+ 官方插件"（文档站标 41）
+- "本地限流配 100 QPS、3 副本实际约 300 QPS"（无出处；官方"每实例"口径是 `higress.io/route-limit-rps|rpm`，且带默认 **5 倍** burst 放大）
+- "nacos 可作 MCP server 注册源"（仅 `nacos3`，且这条限制在源码里是**软校验**——nacos2 配了只打 error 日志后静默跳过）
+- "Http2Rpc 支持 Dubbo3 Triple"（官方逐字"暂不支持 Triple 协议"，Triple 走 gRPC 直接代理）
+- 语义缓存阈值字段 `similarityThreshold`（实为 `vector.threshold` + `vector.thresholdRelation`，且默认组合对 Cosine / DotProduct 永不命中）
+
+### 源码核对后推翻的三条（含本库自己上一版的错误）
+
+① **`hgctl config` 确实存在**（`hgctl/pkg/config_cmd.go:45-50`，是抓 xDS 的 all / bootstrap / cluster / endpoint / listener / route），文档站 hgctl 页没提它——旧版把它写成"不存在的子命令"是**反了**；`profile` / `install` / `upgrade` 等是 root 的子命令。
+② **`wrapper.ProcessStreamDone` 与 `ProcessStreamDoneBy` 两个名字都真实存在**（前者见主仓 `plugins/wasm-go/pkg/mcp/server/plugin.go:910`，后者是文档 SDK 页形态；`wrapper` 包在外部模块 `github.com/higress-group/wasm-go`，本地不可枚举导出项），不许再写"其中一个不存在"。
+③ **文档的 41 款插件不都在 wasm-go**：认证基础族（`key_auth` / `basic_auth` / `jwt_auth` / `hmac_auth` / `oauth` / `bot_detect` / `request_block` / `key_rate_limit` / `custom_response` 等）在 **`plugins/wasm-cpp/`（snake_case、bazel）**，`ai-data-masking` 在 **`wasm-rust/`**；而 `plugins/wasm-go/extensions/` 有 **53** 个目录、约 20 个没有文档页（`mcp-router` 就在此列——**存在性成立、语义未读**，旧版"不存在 mcp-router"是错的）。
+
+另有一批源码事实值得常驻：**pilot fork 与 Higress 控制器同进程**（`go.mod:302-314` replace + 共享 `*xds.DiscoveryServer` 指针，不是两个服务）、**配置是 pilot 反向 pull、每次 List 全量重算、Higress 侧 debounce 是死字段**、**`higress-config` 的 `mesh` 段不走 Higress 解析**（注入的是 `meshwatcher.NewTestWatcher` 空对象）、**ACME 只有 HTTP-01 且多副本零互斥**、**独立部署的 apiserver 是 `sample-apiserver` fork、CR 存 Nacos 或文件树而非 etcd**。
+
+## References
 - [Higress 是什么](https://higress.ai/docs/latest/overview/what-is-higress/)
 - [Higress 参数配置](https://higress.ai/docs/latest/user/configurations/)
 - [Mcp Bridge 配置说明](https://higress.ai/docs/latest/user/mcp-bridge/)

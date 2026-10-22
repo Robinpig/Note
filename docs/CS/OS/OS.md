@@ -185,13 +185,13 @@ CPU 虚拟化面临两个核心挑战：
 
 前面说的机制（陷入表、特权级、定时器）都不是凭空存在的，它们由内核在启动时亲手建立。启动过程因此是理解 OS 的天然起点：它展示了"一台裸机如何变成能跑进程的机器"。
 
-1. **固件初始化**（[BIOS](/docs/CS/OS/BIOS.md) / UEFI）：加电自检（POST）、枚举硬件、建立最小化的 I/O 服务，然后定位启动介质上的 Bootloader 并加载执行
+1. **固件初始化**（[BIOS](/docs/CS/OS/Boot/BIOS.md) / UEFI）：加电自检（POST）、枚举硬件、建立最小化的 I/O 服务，然后定位启动介质上的 Bootloader 并加载执行
 2. **Bootloader**（如 [GRUB](/docs/CS/OS/Boot/Grub.md)、systemd-boot、U-Boot）：加载内核镜像和初始 RAM 文件系统，将控制权转交给内核入口点。这一步是硬件与内核之间的桥梁，负责把内核从磁盘搬到内存并设置好启动参数
 3. **内核启动**：内核解压、初始化内存管理和中断子系统、建立陷入表并开启定时器、最后启动第一个用户态进程（Linux 下是 init 或 systemd），后者再拉起整个用户空间
 
 到第三步结束，上文那套机制就完整了：陷入表就位意味着系统调用可用，定时器开启意味着抢占可用，第一个用户进程就绪意味着用户态与内核态的分工真正开始运转。此后进程完整的创建、切换与销毁见 [process](/docs/CS/OS/process.md)。
 
-详细的启动流程和内核早期初始化见 [BootLoader](/docs/CS/OS/BootLoader.md) 和 [Linux boot](/docs/CS/OS/Linux/boot/Start.md)。
+详细的启动流程和内核早期初始化见 [BootLoader](/docs/CS/OS/Boot/BootLoader.md) 和 [Linux boot](/docs/CS/OS/Linux/boot/Start.md)。
 
 ---
 
@@ -207,7 +207,7 @@ CPU 虚拟化面临两个核心挑战：
 | **I/O 与设备** | 设备模型、驱动框架、中断、I/O 多路复用 | [IO.md](/docs/CS/OS/IO.md)、[interrupt.md](/docs/CS/OS/interrupt.md)、[Linux/IO](/docs/CS/OS/Linux/IO/README.md) |
 | **安全** | 权限模型、身份认证、安全隔离 | [Security.md](/docs/CS/OS/Security.md) |
 | **死锁** | 死锁检测、预防、解除 | [Deadlocks.md](/docs/CS/OS/Deadlocks.md) |
-| **虚拟机** | 虚拟化平台、容器、Hypervisor | [VM.md](/docs/CS/OS/VM.md)、[Container](/docs/CS/Container/Container.md) |
+| **虚拟机** | 虚拟化平台、容器、Hypervisor | [VM.md](/docs/CS/OS/Virtualization/VM.md)、[Container](/docs/CS/Container/Container.md) |
 
 ---
 
@@ -240,7 +240,7 @@ CPU 虚拟化面临两个核心挑战：
 
 容器的巧妙之处在于它**没有引入新的机制**，而是把上文已有的虚拟化能力按新粒度重新组合：**cgroup** 负责资源分派（CPU、内存、I/O 的配额与记账），**namespace** 负责视图隔离（PID、mount、network、UTS 等各自一套），**overlayfs** 提供分层文件系统，**SELinux/AppArmor** 提供强制访问控制。Docker、Kubernetes 等平台的全部底层技术都来自 Linux 内核。Windows 和 macOS 上的容器运行时本质上也是通过 Linux 虚拟机或 Hyper-V 来模拟这些能力的。详见 [Container](/docs/CS/Container/Container.md)。
 
-放到"隔离 vs. 成本"的张力上看：容器把隔离边界从进程抬到应用，换来的是部署单元的一致性和可移植性，付出的是**所有容器共享同一个内核**——内核的漏洞对所有容器一视同仁。虚拟机（[VM](/docs/CS/OS/VM.md)）则把边界划得更硬（各自独立内核），代价是更高的启动与内存开销。选容器还是选虚拟机，就是在为这条边界定价。
+放到"隔离 vs. 成本"的张力上看：容器把隔离边界从进程抬到应用，换来的是部署单元的一致性和可移植性，付出的是**所有容器共享同一个内核**——内核的漏洞对所有容器一视同仁。虚拟机（[VM](/docs/CS/OS/Virtualization/VM.md)）则把边界划得更硬（各自独立内核），代价是更高的启动与内存开销。选容器还是选虚拟机，就是在为这条边界定价。
 
 ---
 
@@ -255,7 +255,7 @@ CPU 虚拟化面临两个核心挑战：
 - **利用率（Utilization）**：资源繁忙程度的百分比。CPU 100% 说明满负载，磁盘 0% 说明基本空闲
 - **延迟（Latency）**：单次操作耗时。通常用平均值或百分位数（如 P99）表示
 
-采集性能指标本身也有成本——要消耗 CPU 周期来收集和存储数据，这会反过来影响被测目标的行为。这种观测者效应（Observer Effect）在高负载系统中尤其显著，选型监控方案时必须考虑开销。Linux 上的动态追踪工具（如 [DTrace](/docs/CS/OS/DTrace.md)）正是为降低这种侵入性而设计的。
+采集性能指标本身也有成本——要消耗 CPU 周期来收集和存储数据，这会反过来影响被测目标的行为。这种观测者效应（Observer Effect）在高负载系统中尤其显著，选型监控方案时必须考虑开销。Linux 上的动态追踪工具（如 [DTrace](/docs/CS/OS/Tools/DTrace.md)）正是为降低这种侵入性而设计的。
 
 > [!WARNING]
 >
@@ -272,9 +272,10 @@ CPU 虚拟化面临两个核心挑战：
 UNIX 1969 年起源于贝尔实验室那台"角落里没人用的 PDP-7"，1971 年第一版手册对应 PDP-11/20 上的汇编器版本。真正的转折点是 **1973 年的第四版用 C 重写了内核**——但"可移植"要到 1977-78 年移植到 Interdata 8/32、1979 年 32V 移植到 VAX 才算被证明，不是重写当年就成立的。
 
 - **BSD 分支**：1977 年底伯克利的第一盘磁带只是叠加在授权 V6 之上的自研软件层，不是可独立分发的系统；BSD 真正自成一支要等到 32V（V7 的 VAX 移植）之后的 3BSD
+- **FreeBSD**：4.4BSD-Lite 的直系后代（2.0 于 1994-11-23 发布，此前的 1.x 还建在 Net/2 上），当前发布线是 15.1（2026-06-16）与 14.5（2026-09-08）。它与 Linux 最根本的差别不在内核写法，而在**发布单位**——base system 是一个整体发布物，用 `make buildworld` 从源码构建、用 `freebsd-update` 或 pkgbase 升级，而不是发行版拼装。[FreeBSD](/docs/CS/OS/unix/FreeBSD.md) 展开它的发布节奏、平台分层、内核机制、pkgbase 与安全流水线
 - **System V 分支**：AT&T 的商业产品线，1989 年的 SVR4 把 System V、BSD 与 Xenix 三方合流，成为 AIX、HP-UX、IRIX、UnixWare 与 Solaris 的共同底子
 - **Linux**：1991 年 Linus Torvalds 在 Minix 的启发下公开了内核 0.02 版。Linux 遵循 GPL，彻底开放源码，成为当今服务器、嵌入式、云基础设施的事实标准。[Linux 内核子树](/docs/CS/OS/Linux/Linux.md) 是本库最活跃的主题之一
-- **macOS / iOS**：Apple 的两大平台共享 XNU 内核，而 XNU 是 **Mach + 源自 FreeBSD 一支的 BSD 层 + I/O Kit**，见 [mac](/docs/CS/OS/mac/mac.md) 与 [Darwin](/docs/CS/OS/mac/Darwin.md)。macOS 源自 NeXTSTEP（1988）— OPENSTEP — Mac OS X（2001），2016 年起改称 macOS。iOS 自 2007 年发布起即基于同一内核
+- **macOS / iOS**：Apple 的两大平台共享 XNU 内核，而 XNU 是 **Mach + 源自 FreeBSD 一支的 BSD 层 + I/O Kit**，见 [mac](/docs/CS/OS/mac/mac.md) 与 [Darwin](/docs/CS/OS/mac/Darwin.md)。macOS 源自 NeXTSTEP（1988）— OPENSTEP — Mac OS X（2001），2016 年起改称 macOS。iOS 自 2007 年发布起即基于同一内核。macOS 子树已按内核分层、[启动链](/docs/CS/OS/mac/Boot.md)、[文件系统卷组](/docs/CS/OS/mac/File_System.md)、[服务管理](/docs/CS/OS/mac/Service_Management.md)、[安全模型](/docs/CS/OS/mac/Security.md)、[虚拟内存](/docs/CS/OS/mac/Virtual_Memory.md) 与 [Apple Silicon](/docs/CS/OS/mac/Apple_Silicon.md) 拆开展开
 
 血统、POSIX 符合性与 UNIX 商标是三件互不等价的事（Linux 无 Unix 血统却接口兼容，macOS 有血统且注册了商标，FreeBSD 有血统却从未认证），家谱、现代分支对照与 Unix API 契约的展开都在 [UNIX 家族](/docs/CS/OS/unix/Unix.md)。UNIX 的"一切皆文件"哲学在后续所有现代操作系统中都能找到影子，Linux 侧的具体实现见 [文件系统机制](/docs/CS/OS/Linux/fs/README.md)。
 
@@ -291,11 +292,11 @@ UNIX 1969 年起源于贝尔实验室那台"角落里没人用的 PDP-7"，1971 
 ### Teaching Kernels
 
 - **xv6**：MIT 为 6.828 课程设计的精简版类 Unix 内核，实现了进程、虚拟内存、文件系统等核心功能，代码量小、结构清晰，是学习操作系统实现的绝佳起点。详见 [xv6](/docs/CS/OS/xv6/xv6.md)
-- **rCore**：清华大学 [rCore-Tutorial](/docs/CS/OS/rCore.md) 项目，用 Rust 在 RISC-V SBI 上从零实现 OS 实验的教学内核
-- **osask**：川合秀实《[30 天自制操作系统](/docs/CS/OS/osask.md)》的配套内核，从 16 位实模式一路写到 GUI 系统
-- **BookOS**（xbook2）：混合内核教学项目，覆盖 x86 和 ARM 平台，详见 [BookOS](/docs/CS/OS/Book/BookOS.md)
+- **rCore**：清华大学 [rCore-Tutorial](/docs/CS/OS/Teaching/rCore.md) 项目，用 Rust 在 RISC-V SBI 上从零实现 OS 实验的教学内核
+- **osask**：川合秀实《[30 天自制操作系统](/docs/CS/OS/Teaching/osask.md)》的配套内核，从 16 位实模式一路写到 GUI 系统
+- **BookOS**（xbook2）：混合内核教学项目，覆盖 x86 和 ARM 平台，详见 [BookOS](/docs/CS/OS/Teaching/BookOS.md)
 
-这些内核通常运行在 [QEMU](/docs/CS/OS/qemu.md) 或 [Bochs](/docs/CS/OS/Bochs.md) 模拟器上，由 [GRUB](/docs/CS/OS/Boot/Grub.md) 或 U-Boot 加载。
+这些内核通常运行在 [QEMU](/docs/CS/OS/Virtualization/qemu.md) 或 [Bochs](/docs/CS/OS/Virtualization/Bochs.md) 模拟器上，由 [GRUB](/docs/CS/OS/Boot/Grub.md) 或 U-Boot 加载。
 
 ### Others
 
@@ -307,8 +308,8 @@ UNIX 1969 年起源于贝尔实验室那台"角落里没人用的 PDP-7"，1971 
 
 - [并行调度：Work-Stealing](/docs/CS/OS/Parallel.md)
 - [Android 调度](/docs/CS/OS/Android/schedule.md)
-- [命令与 ELF](/docs/CS/OS/command.md)
-- [CSAPP 学习笔记](/docs/CS/OS/CSAPP.md)
+- [命令与 ELF](/docs/CS/OS/Tools/command.md)
+- [CSAPP 学习笔记](/docs/CS/OS/Teaching/CSAPP.md)
 - [Computer Organization](/docs/CS/CO/CO.md)
 - [Distributed System](/docs/CS/Distributed/Distributed.md)
 

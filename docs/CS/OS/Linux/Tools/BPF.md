@@ -82,7 +82,7 @@ tcpdump -dd 'tcp port 80'     # -dd 打印 C 数组形态的 sock_filter
 - [perf](/docs/CS/OS/Linux/Tools/Perf.md)
 - [strace](/docs/CS/OS/Linux/Tools/strace.md)
 - [tcpdump](/docs/CS/CN/Tools/tcpdump.md)
-- [DTrace](/docs/CS/OS/DTrace.md)
+- [DTrace](/docs/CS/OS/Tools/DTrace.md)
 
 ## References
 

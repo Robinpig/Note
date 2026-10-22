@@ -138,7 +138,7 @@ $PSVersionTable
 - [Windows 工具链](/docs/CS/OS/Windows/Tools.md)
 - [Windows 架构](/docs/CS/OS/Windows/Architecture.md)
 - [Windows](/docs/CS/OS/Windows/Windows.md)
-- [命令与 ELF](/docs/CS/OS/command.md)
+- [命令与 ELF](/docs/CS/OS/Tools/command.md)
 - [Shell 与终端](/docs/CS/OS/Linux/Tools/README.md)
 
 ---

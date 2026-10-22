@@ -837,7 +837,9 @@ unmap_writable:
 	if (writable_file_mapping)
 		mapping_unmap_writable(file->f_mapping);
 	file = vma->vm_file;
-	ksm_add_vma(vma);
+	/* KSM: per-VMA merge registration is NOT done in mmap_region on v7.2;
+	 * it is driven by madvise(MADV_MERGEABLE) -> __ksm_enter -> ksm_add_vmas
+	 * -> __ksm_add_vma. See [KSM](/docs/CS/OS/Linux/mm/KSM.md). */
 expanded:
 	perf_event_mmap(vma);
 

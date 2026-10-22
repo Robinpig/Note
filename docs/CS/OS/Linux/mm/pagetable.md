@@ -717,7 +717,7 @@ nomap:
 三个失败条件是关键：
 
 - `pmd_none` / `!pmd_present`：这张 pte 表刚被撤掉；
-- `pmd_trans_huge`：该 pmd 项已经**变成一个大页**（THP），下面根本没有 pte 表；
+- `pmd_trans_huge`：该 pmd 项已经**变成一个大页**（[THP](/docs/CS/OS/Linux/mm/THP.md)），下面根本没有 pte 表；
 - `pmd_bad`：表项内容非法（通常是内核 bug 或内存损坏），报告并清掉。
 
 **失败路径会 `rcu_read_unlock()` 并返回 NULL；成功路径不解锁**，解锁责任交给后面的 `pte_unmap()`。所以调用者必须处理 NULL——这在 v6.11 之前是不需要的（那时 `pte_offset_map()` 只是指针算术，永不失败）。现代内核里看到 `if (!pte) return;` 这类判断，都是这次语义变更留下的印记。

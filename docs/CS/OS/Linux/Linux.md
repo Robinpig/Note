@@ -27,7 +27,7 @@ Linux系统诞生于1991年10月5日
 跨平台在其它OS下使用Linux
 
 - [Docker](/docs/CS/Container/Docker/Docker.md)
-- [VM](/docs/CS/OS/VM.md)
+- [VM](/docs/CS/OS/Virtualization/VM.md)
 
 Windows下使用Linux
 
@@ -63,7 +63,7 @@ Linux在最初是宏内核架构 同时也逐渐融入了微内核的精华 如�
 
 内核源码的获取、阅读与构建单独成篇：怎么装源码包、用 ctags / bootlin 读代码、`.config` 配置、`make` 构建与 `bzImage` 的拼接机制，见 [内核构建](/docs/CS/OS/Linux/build.md)。
 
-想读一份**读得完的 Linux**，可以看 0.11 版本 [Linux 0.11](/docs/CS/OS/Linux/0.11.md)：1991 年的内核源码展开后仅 325KB，却已具备进程调度、信号、块设备与文件系统的雏形，用 [Bochs](/docs/CS/OS/Bochs.md) 就能跑起来。它和 xv6 / rCore 那类**教学内核**不是一回事——0.11 是 Linux 自己的早期版本，是现代内核的直系祖先，不是为教学另写的简化系统。它的启动部分（`boot/bootsect.s` → `setup.s` → `head.S` 三段接力）与现代差异极大，正好和下面的启动链对照着看这套机制是怎么演化过来的。
+想读一份**读得完的 Linux**，可以看 0.11 版本 [Linux 0.11](/docs/CS/OS/Linux/0.11.md)：1991 年的内核源码展开后仅 325KB，却已具备进程调度、信号、块设备与文件系统的雏形，用 [Bochs](/docs/CS/OS/Virtualization/Bochs.md) 就能跑起来。它和 xv6 / rCore 那类**教学内核**不是一回事——0.11 是 Linux 自己的早期版本，是现代内核的直系祖先，不是为教学另写的简化系统。它的启动部分（`boot/bootsect.s` → `setup.s` → `head.S` 三段接力）与现代差异极大，正好和下面的启动链对照着看这套机制是怎么演化过来的。
 
 ## Boot
 
@@ -201,12 +201,15 @@ cgroup 的完整机制在 [cgroup 知识地图](/docs/CS/OS/Linux/cgroup/README.
 - [物理内存 pm](/docs/CS/OS/Linux/mm/pm.md) — node/zone/内存模型/memblock/buddy/alloc/free
 - [虚拟内存 vm](/docs/CS/OS/Linux/mm/vm.md) — mm_struct/VMA/page fault/vmalloc
 - [页表 pagetable](/docs/CS/OS/Linux/mm/pagetable.md) — 多级布局与层级折叠、表项位与软件位复用、ptdesc 页表页、缺页时逐级惰性生长、free_pgtables 递归下降、mmu_gather 批量 TLB 失效与页表页延迟释放
+- [THP 透明大页](/docs/CS/OS/Linux/mm/THP.md) — anon/file 大页、khugepaged 折叠、mTHP、与 Compaction/buddy 的耦合
 - [GUP 与 pin 页](/docs/CS/OS/Linux/mm/gup.md) — 慢路径 follow_page_mask/faultin_page、快路径关中断无锁遍历与"先 pin 再验证 PTE"协议、GUP_PIN_COUNTING_BIAS 编码、pin 对迁移/回收/COW/soft-dirty 的反作用、FOLL_LONGTERM 落点合规
 - [maple tree](/docs/CS/OS/Linux/mm/maple_tree.md) — 替换 VMA 红黑树的 RCU 安全区间树：节点形态与位编码、ma_state 游标、九种 store 分类、gap 空洞记账
 - [slab](/docs/CS/OS/Linux/mm/slab.md) — buddy 之上的小对象分配器
 - [mmap](/docs/CS/OS/Linux/mm/mmap.md)
 - [PageCache](/docs/CS/OS/Linux/mm/PageCache.md)
+- [KSM 同页合并](/docs/CS/OS/Linux/mm/KSM.md) — 匿名页去重、与 GUP 经 PageAnonExclusive 互斥
 - [内存回收 Reclaim](/docs/CS/OS/Linux/mm/Reclaim.md) — 水位线/kswapd/LRU 老化/shrinker/memcg 回收
+- [zswap 压缩换出缓存](/docs/CS/OS/Linux/mm/zswap.md) — 换出前的压缩前端、memory.zswap.* 接口
 - [多代 LRU MGLRU](/docs/CS/OS/Linux/mm/MGLRU.md) — 多代组织、页表 accessed 位老化，替代传统 LRU
 - [内存压缩 Compaction](/docs/CS/OS/Linux/mm/Compaction.md) — 双扫描器、kcompactd、主动压缩，整理物理连续块
 - [NUMA 平衡](/docs/CS/OS/Linux/mm/Numa.md) — AutoNUMA hinting fault 迁移、mempolicy、zone_reclaim_mode
@@ -327,10 +330,67 @@ Linux 网络子系统（socket 抽象、协议栈收发、NAPI 软中断、TCP �
 | [鸟哥的Linux私房菜](https://linux.vbird.org/) |  |  
 
 
+## Subtree Organization
 
+本子树是全库最活跃的领域，以下规则修改时必须遵守：
 
+### 目录与文件
 
+- **`Linux/Linux.md` 是唯一枢纽**，全库被引最多的文件，**不要改名**。`Linux/` 下没有 `README.md` 是全库常态——很多目录都缺，别顺手新建。
+- **`Linux/` 根目录放横切机制**（不属于单一子系统）：`Interrupt.md`、`Calls.md`、`timer.md`、`workqueue.md`、`LXC.md` / `namespace.md` / `cgroup.md` / `SELinux.md`、`KVM.md`、`Swap.md`、`ZeroCopy.md`、`performance.md`、`Architecture.md`、`Experience.md`、`build.md`。
+- **子系统各建子目录**：`proc/`（进程/调度/信号/IPC）、`mm/`、`fs/`、`net/`、`IO/`、`Lock/`、`dev/`、`boot/`（启动链）、`module/`、`struct/`（内核数据结构）、`Tools/`、`Distribution/`。
+- **较新的两个子目录**（2026-10 新增，各有独立 README 枢纽）：`cgroup/`（v2 三篇：知识地图 / 控制器接口 / 委派实践；根目录的 `cgroup.md` 保留为 **v1 视角**入口）、`PM/`（电源管理六篇：知识地图 / cpuidle / cpufreq / suspend / runtime PM / devfreq）。
+- **新增子目录后必须回 `Linux.md` 挂入口**（踩过：目录迁移完忘了挂，新目录的 README 引用数一度为 0）。
+- **所有锁相关笔记统一放 `Linux/Lock/`**，不要在 `Linux/` 根目录新建 `lock.md`（历史撞名已合并）。
 
+### 命名与结构陷阱
+
+- ⚠️ **`Linux/0.11.md` 讲的是 Linux 自己 1991 年的早期版本**（`bootsect.s` / `setup.s` / `head.S` / `init/main.c`），是现代内核的直系祖先，**不是教学内核**，不要迁到 `OS/` 根或与 xv6 / rCore / osask 并列。
+- ⚠️ **`OS/Boot/` 与 `OS/Linux/boot/` 是两个不同目录**：前者只有旧的 `Grub.md`，启动链主题在后者（`README.md` / `Start.md` / `init.md` / `U-Boot.md` / `arm.md` / `crash.md`）。
+- ⚠️ `mm/memory.md` 是 **boot 阶段的初始化笔记**，**不是内存子系统总入口**（全站有旧链接把它当 "Linux Memory"，属历史错配）。
+- ⚠️ **`struct/struct.md` 只讲 llist**，文件名覆盖面远大于内容，是历史沿用名；`struct/` 的地图以 `struct/README.md` 为准。同理 `Tools/Tools.md`（命令速查表）与 `Tools/README.md`（笔记导航）**不是一回事**。
+- ⚠️ **标题避免用全角标点**（如 `## freezer：冻结与终止`）：`validate_links.py` 的 `anchors_of()` 会按全角冒号把标题切成两个锚点，与 docsify 的 `slugify()` 行为不一致，导致 BAD ANCHOR 误报。中英混排标题用**半角空格**分隔。
+
+### 内核源码核实
+
+**先确认本机有没有源码树**：
+
+```bash
+ls -d ~/Tools/linux-* ~/src/linux-* /usr/src/linux-* 2>/dev/null
+```
+
+有就优先用本地树（`grep` 最快，还能跨文件检索）；没有再走远程端点。
+
+远程端点用 kernel.org 的 `plain` 接口。**tag 必须写 `v7.2`**（真实 tag 就是 `v7.2` = 7.2.0；**`v7.2.7` 不存在**，写错拿到的是 404 HTML，不是源码）：
+
+```bash
+K="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/plain"
+curl -sL -m 40 "$K/kernel/panic.c?h=v7.2"
+```
+
+**端点可用性随机器与网络而变**：`elixir.bootlin.com` 有 Anubis 反爬，`/source`、`?raw=1`、`/A/` 简写、`/api/v1/source/` 都可能返回 **HTTP 200 但正文是 "Making sure you're not a bot!"**；GitHub API 有 403 限流、`raw` 有 429。**判断"是否真拿到了内容"要看 `wc -l` 与首行是不是 `<!DOCTYPE html>`，不要只看 HTTP 状态码。**
+
+**四个必须知道的操作坑**：
+
+1. **判断文件是否存在不能只看 `curl -w %{http_code}`** —— 该状态码会因缓存给出过期值（曾把 404 的 2932 字节 HTML 当成正常响应，导致"文件存在"的错误结论，进而引用了不存在的符号）。可靠做法：`wc -l` 看行数 + `head -1` 判断是否 `<!DOCTYPE html>`。
+2. **猜路径极易落空，v7.2 大量文件已搬迁/改名**。用 tree 页取真实清单（比 `Makefile` 反推更准）：
+   ```bash
+   curl -sL "https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/fs/btrfs?h=v7.2" \
+     | grep -oE "fs/btrfs/[a-z0-9_-]+\.(h|c)" | sort -u
+   ```
+   搬迁大户：`kernel/tty.c` → 拆成 `drivers/tty/tty_{io,ioctl,jobctrl,buffer,ldisc}.c`；`kernel/crash.c` → `kernel/crash_core.c` + `crash_reserve.c`；`fs/fuse/fuse.h` → `fuse_i.h` + `dev.h`；`drivers/input/core.c` → `input.c`；`fs/btrfs/*.h` 改**下划线命名**（`block-group.h`/`delayed-ref.h`）。
+3. **结构体定义可能不在你以为的头文件里** —— 例如 btrfs 核心定义搬到了 **uapi 头** `include/uapi/linux/btrfs_tree.h`；`struct btrfs_key` 不在 `fs/btrfs/` 下。
+4. **大批量 grep 偶发返回空结果**：对确认含目标串的大文件（数千行）执行 `grep` 曾多次返回空，而同样的检索改用专用搜索工具（Grep / ripgrep）或把源码落盘后再 `grep` 却正常。**若 grep 结果与预期矛盾，换检索方式重试，不要据此认定"符号不存在"**。
+
+**文件命名反推**：某目录的头文件常与 Makefile 里的 `.o` 名同源（下划线）；`/include/uapi/linux/` 下的类型定义优先于私有头。
+
+**API 迁移强度**（v7.x 相较旧资料改动极大，写作时**必须逐个核实符号是否存在**）：`cpuidle_go_billiard()` 已删、`struct suspend_ops`→`platform_suspend_ops`（成员全变）、cpufreq 的 `name` 从函数指针变定长数组且 `target` 已 Deprecated、`pci_iomap*`→`pcim_*`、`struct spi_master`→`spi_controller`、FUSE 的 `FUSE_CAP_*` 去 `CAP_` 中缀且语义翻转、`FUSE_OPT` 宏移除。**凭印象写必错**。
+
+**版本事实陷阱**：sysctl / feature gate **存在 ≠ 它还生效**。判断"当前实际行为"要读**消费方函数读的是哪个变量**以及**默认值代码**，只看 sysctl 表条目或 gate 状态会写出过时结论。同类陷阱还有两条：① 官方文档可能过时于源码（如 kdump.rst 写 "at least 256M" 而 `DEFAULT_CRASH_KERNEL_LOW_SIZE` 已是 128 MiB）——**常量以源码为准**；② 符号"存在 ≠ 仍是原语义"（`FUSE_INIT_RESERVED` 占 bit 31 导致 64 位能力从 bit 32 起）。
+
+### 移动笔记
+
+`git mv` → 脚本全库精确替换旧路径 → grep 复核残留 → **回枢纽页补新目录入口** → 全库死链扫描（路径必须 `urllib.parse.unquote`，否则 `%20` 误报）。同时告知用户 GitHub Pages 上被收藏的 URL 有 404 风险。
 
 ## References
 

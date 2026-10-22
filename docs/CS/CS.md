@@ -172,19 +172,19 @@ Docker、Kubernetes、CNI、Ingress、Helm
 
 ### Computer Organization
 
-组成原理讲**程序为什么在硬件上跑出这个速度**：逻辑门与指令集、寻址方式、流水线与分支预测（[BranchPrediction](/docs/CS/OS/BranchPrediction.md)）、异常与中断、以及由寄存器到外存的**存储层次**——缓存一致性与局部性决定了上层所有性能优化的上限。入口 [CO](/docs/CS/CO/CO.md)，系统视角的入门读法见 [CSAPP](/docs/CS/OS/CSAPP.md)；动手跑指令与启动实验用 [Bochs](/docs/CS/OS/Bochs.md) 与 [qemu](/docs/CS/OS/qemu.md)。
+组成原理讲**程序为什么在硬件上跑出这个速度**：逻辑门与指令集、寻址方式、流水线与分支预测（[BranchPrediction](/docs/CS/CO/BranchPrediction.md)）、异常与中断、以及由寄存器到外存的**存储层次**——缓存一致性与局部性决定了上层所有性能优化的上限。入口 [CO](/docs/CS/CO/CO.md)，系统视角的入门读法见 [CSAPP](/docs/CS/OS/Teaching/CSAPP.md)；动手跑指令与启动实验用 [Bochs](/docs/CS/OS/Virtualization/Bochs.md) 与 [qemu](/docs/CS/OS/Virtualization/qemu.md)。
 
 ### Operating System
 
-操作系统是硬件之上、应用之下的**资源管理者**，主线只有五条：进程与调度、内存管理、文件系统、I/O、同步原语，再加从固件到 `init` 的启动链。通用理论见 [OS](/docs/CS/OS/OS.md)（[process](/docs/CS/OS/process.md)、[scheduling](/docs/CS/OS/scheduling.md)、[memory](/docs/CS/OS/memory.md)、[file](/docs/CS/OS/file.md)、[IO](/docs/CS/OS/IO.md)、[Deadlocks](/docs/CS/OS/Deadlocks.md)、[VM](/docs/CS/OS/VM.md)、[Parallel](/docs/CS/OS/Parallel.md)）。
+操作系统是硬件之上、应用之下的**资源管理者**，主线只有五条：进程与调度、内存管理、文件系统、I/O、同步原语，再加从固件到 `init` 的启动链。通用理论见 [OS](/docs/CS/OS/OS.md)（[process](/docs/CS/OS/process.md)、[scheduling](/docs/CS/OS/scheduling.md)、[memory](/docs/CS/OS/memory.md)、[file](/docs/CS/OS/file.md)、[IO](/docs/CS/OS/IO.md)、[Deadlocks](/docs/CS/OS/Deadlocks.md)、[VM](/docs/CS/OS/Virtualization/VM.md)、[Parallel](/docs/CS/OS/Parallel.md)）。
 
 本库以 Linux 内核为主线对照源码，[Linux](/docs/CS/OS/Linux/Linux.md) 是该子树**唯一枢纽**，各子系统有独立地图：[proc](/docs/CS/OS/Linux/proc/README.md)、[mm](/docs/CS/OS/Linux/mm/README.md)、[fs](/docs/CS/OS/Linux/fs/README.md)、[net](/docs/CS/OS/Linux/net/README.md)、[IO](/docs/CS/OS/Linux/IO/README.md)、[Lock](/docs/CS/OS/Linux/Lock/README.md)、[boot](/docs/CS/OS/Linux/boot/README.md)、[dev](/docs/CS/OS/Linux/dev/README.md)、[struct](/docs/CS/OS/Linux/struct/README.md)、[module](/docs/CS/OS/Linux/module/README.md)、[cgroup](/docs/CS/OS/Linux/cgroup/README.md)、[PM](/docs/CS/OS/Linux/PM/README.md)、[Distribution](/docs/CS/OS/Linux/Distribution/README.md)。横切机制留在根目录：[Interrupt](/docs/CS/OS/Linux/Interrupt.md)、[Calls](/docs/CS/OS/Linux/Calls.md)、[timer](/docs/CS/OS/Linux/timer.md)、[workqueue](/docs/CS/OS/Linux/workqueue.md)、[namespace](/docs/CS/OS/Linux/namespace.md)、[Swap](/docs/CS/OS/Linux/Swap.md)、[ZeroCopy](/docs/CS/OS/Linux/ZeroCopy.md)、[KVM](/docs/CS/OS/Linux/KVM.md)、[performance](/docs/CS/OS/Linux/performance.md)、[SELinux](/docs/CS/OS/Linux/SELinux.md)、[build](/docs/CS/OS/Linux/build.md)。
 
-其余血统各有入口：[Unix](/docs/CS/OS/unix/Unix.md)、[Windows](/docs/CS/OS/Windows/Windows.md)、[mac](/docs/CS/OS/mac/mac.md)、[Android](/docs/CS/OS/Android/Android.md)、[Fuchsia](/docs/CS/OS/Fuchsia/Fuchsia.md)，教学与合作内核 [xv6](/docs/CS/OS/xv6/xv6.md)、[rCore](/docs/CS/OS/rCore.md)、[osask](/docs/CS/OS/osask.md)；早期版本 [0.11](/docs/CS/OS/Linux/0.11.md) 是现代内核的直系祖先。
+其余血统各有入口：[Unix](/docs/CS/OS/unix/Unix.md)、[Windows](/docs/CS/OS/Windows/Windows.md)、[mac](/docs/CS/OS/mac/mac.md)、[Android](/docs/CS/OS/Android/Android.md)、[Fuchsia](/docs/CS/OS/Fuchsia/Fuchsia.md)，教学与合作内核 [xv6](/docs/CS/OS/xv6/xv6.md)、[rCore](/docs/CS/OS/Teaching/rCore.md)、[osask](/docs/CS/OS/Teaching/osask.md)；早期版本 [0.11](/docs/CS/OS/Linux/0.11.md) 是现代内核的直系祖先。
 
 ### Compiler and Toolchain
 
-编译器把源码逐层降到 IR、机器码与可执行文件，链接与加载再把它们变成进程：阶段与优化见 [Compiler](/docs/CS/Compiler/Compiler.md)，工具链见 [GCC](/docs/CS/Compiler/GCC.md)，产物格式见 [ELF](/docs/CS/Compiler/ELF.md)，最低层的表达是 [assembly](/docs/CS/assembly/assembly.md)。程序运行时的真实内存由分配器决定，见 [memory](/docs/CS/memory/memory.md)（[GC](/docs/CS/memory/GC.md)、[jemalloc](/docs/CS/memory/jemalloc.md)）与 [glibc](/docs/CS/C/glibc.md)；工具与许可证背景见 [GNU](/docs/CS/GNU/GNU.md)。这条链与 [Computability](/docs/CS/Algorithms/Computability.md) 相接：语义等价性不可判定，所以优化必须保守。
+编译器把源码逐层降到 IR、机器码与可执行文件，链接与加载再把它们变成进程：阶段与优化见 [Compiler](/docs/CS/Compiler/Compiler.md)，工具链见 [GCC](/docs/CS/Compiler/GCC.md)，产物格式见 [ELF](/docs/CS/Compiler/ELF.md)，最低层的表达是 [assembly](/docs/CS/assembly/assembly.md)。程序运行时的真实内存由分配器决定，见 [memory](/docs/CS/memory/memory.md)（[GC](/docs/CS/memory/GC.md)、[jemalloc](/docs/CS/memory/jemalloc/jemalloc.md)）与 [glibc](/docs/CS/C/glibc.md)；工具与许可证背景见 [GNU](/docs/CS/GNU/GNU.md)。这条链与 [Computability](/docs/CS/Algorithms/Computability.md) 相接：语义等价性不可判定，所以优化必须保守。
 
 ## Networks and Data
 
@@ -224,7 +224,7 @@ Docker、Kubernetes、CNI、Ingress、Helm
 
 ### Software Engineering
 
-软件工程关心**如何让系统长期可演进**，而不是一次跑通。判断框架先于手段：[Basic](/docs/CS/SE/Basic.md) 记的是复杂度、抽象的反噬与"没有银弹"这类认知，[Programming](/docs/CS/SE/Programming.md) 与 [reactive](/docs/CS/SE/reactive.md) 是范式层的选择，写出来是否整洁看 [Clean_Code](/docs/CS/SE/Clean_Code.md)、腐化之后怎么收拾看 [Refactoring](/docs/CS/SE/Refactoring.md) 与 [Code](/docs/CS/SE/Code.md)，出错之后看 [Bug](/docs/CS/SE/Bug.md) 与 [Debug](/docs/CS/SE/Debug.md)。
+软件工程关心**如何让系统长期可演进**，而不是一次跑通。判断框架先于手段：[Basic](/docs/CS/SE/Basic.md) 记的是复杂度、抽象的反噬与"没有银弹"这类认知，这些认知在真实业务系统里如何表现为"每加一个功能都更难改"，由 [Complexity](/docs/CS/SE/Complexity.md) 展开（隐性耦合的长尾、架构短视是开发方式的产物、复用的边界）；[Programming](/docs/CS/SE/Programming.md) 与 [reactive](/docs/CS/SE/reactive.md) 是范式层的选择，写出来是否整洁看 [Clean_Code](/docs/CS/SE/Clean_Code.md)、腐化之后怎么收拾看 [Refactoring](/docs/CS/SE/Refactoring.md) 与 [Code](/docs/CS/SE/Code.md)，出错之后看 [Bug](/docs/CS/SE/Bug.md) 与 [Debug](/docs/CS/SE/Debug.md)。
 
 系统的形状由架构决定：[Architecture](/docs/CS/SE/Architecture.md) 给风格谱系，[DDD](/docs/CS/SE/DDD.md) 回答边界画在哪，[registry](/docs/CS/SE/registry.md) 是服务化的第一块基础设施，[中台](/docs/CS/SE/中台.md) 讲组织与复用的张力，[Serverless](/docs/CS/SE/Serverless.md) 与 [Mini Program](/docs/CS/SE/MiniProgram/Mini_Program.md) 是两种交付形态。形状定了之后才是正确性——[Concurrency](/docs/CS/SE/Concurrency.md)、[Lock](/docs/CS/SE/Lock.md)、[Transaction](/docs/CS/SE/Transaction.md)、[Workflow](/docs/CS/SE/Workflow.md)；再往后是规模与韧性——[Cache](/docs/CS/SE/Cache.md)（[Caffeine](/docs/CS/SE/Caffeine.md)、[JetCache](/docs/CS/SE/JetCache.md)）、[RateLimiter](/docs/CS/SE/RateLimiter.md)、[CircuitBreaker](/docs/CS/SE/CircuitBreaker.md)、[Scheduled_Task](/docs/CS/SE/Scheduled_Task.md)、[掉单机制](/docs/CS/SE/掉单机制.md)。
 
