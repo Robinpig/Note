@@ -460,6 +460,8 @@ static unsigned long shrink_inactive_list(unsigned long nr_to_scan,
 
 判断通过、确实能释放的页，最后经 `free_unref_page_list()` 归还伙伴系统（[free](/docs/CS/OS/Linux/mm/pm.md?id=free)）；没能释放的经 `move_folios_to_lru()` 放回相应 LRU，等下轮 priority 更激进时再扫。
 
+> 冷匿名页在 `shrink_folio_list()` **主循环之后**还有一条可选的降级路径：若开启了分层内存，被选中且无法立即回收的页会被 **demote（降级）** 到更低 tier 的 node（如 CXL/PMem）保留，而非立刻写 swap；降级失败才回到普通回收。`struct scan_control` 的 `no_demotion` 标志控制"直接丢弃还是尝试降级"。这条路径的使能与 tier 来源见 [Tiered_Memory](/docs/CS/OS/Linux/mm/Tiered_Memory.md)。
+
 ## shrink_slab and shrinker
 
 内存里不只有 page 和 page cache，还有大量 **slab 缓存**——dentry（dcache）、inode（icache）、各种子系统自己的对象池。它们同样占着物理页，同样能被回收，但"怎么回收"只有各自的子系统知道。内核因此提供 **shrinker** 回调机制：
@@ -515,9 +517,17 @@ cgroup v2 的 `memory.max` 超限时走的是**局部回收**：`scan_control` �
 
 另外两个相关但更偏分配侧的旋钮：`overcommit_memory` 决定匿名映射是否严格记账，从而影响"回收与 OOM 谁先发生"；NUMA 平衡（`numa_balancing`）决定跨 node 访问的页要不要主动迁移，属于下一阶段的主题。
 
+## Observing Reclaim: PSI and DAMON
+
+回收的副作用最终体现在**延迟**上：direct reclaim 让分配者原地阻塞，同步 compaction 与 swap 读回同理。[PSI](/docs/CS/OS/Linux/mm/PSI.md) 把这段阻塞量化——内核在这些路径上用 `psi_memstall_enter/leave` 打标，`/proc/pressure/memory` 的 `some`/`full` 告诉你"任务为等内存卡了多久"，其中 `full` 表示**没有有产出的任务在跑**。调完上面的旋钮后看 `full/avg300` 是否下降，比只看 `free` 内存更能说明"压力真的缓解了"。
+
+另一条互补的路径是 [DAMON](/docs/CS/OS/Linux/mm/DAMON.md)：它不靠水位线、而靠采样访问热度主动找冷页，`damon_reclaim` 模块的 `DAMOS_PAGEOUT` 走的是与 `shrink_folio_list` 相同的换出落点——但触发依据是"这块内存长期没人碰"而不是"系统缺内存"，属于**压力到来之前**的主动回收。它与 `memory.reclaim`（`scan_control.proactive`，用户态写接口触发一次全量扫描）机制不同：前者按访问模式定点挑页，后者由用户态显式发起整轮扫描。
+
 ## Links
 
 - [物理内存地图（mm 枢纽）](/docs/CS/OS/Linux/mm/README.md)
+- [PSI 压力失速](/docs/CS/OS/Linux/mm/PSI.md)
+- [DAMON 访问监控](/docs/CS/OS/Linux/mm/DAMON.md)
 
 ## References
 

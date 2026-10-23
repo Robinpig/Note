@@ -100,10 +100,15 @@ aging 被刻意做得**懒惰**：`should_run_aging()` 检查代的数量与各�
 
 全开时读出 `0x0007`。另有 `min_ttl_ms`：写入 N 可保护工作集 N 毫秒内不被驱逐，用于压住抖动型负载的过早回收。需要 `CONFIG_LRU_GEN` 编译支持，启用还需 `CONFIG_LRU_GEN_ENABLED`；未启用或不支持的位会被忽略。运行统计仍走 `/proc/vmstat`，refault 相关字段是评估"回收是否误伤工作集"的关键口径。
 
+## Sibling Mechanism: DAMON
+
+MGLRU 与 [DAMON](/docs/CS/OS/Linux/mm/DAMON.md) 追求同一个目标——更准的冷热判定，但手段不同：MGLRU 用"代"重新定义老化顺序，**只影响回收顺序、不主动回收**；DAMON 用采样 + 自适应区域独立观察访问热度，并可通过 `DAMOS` 直接施加动作。二者底层读的都是 PTE/PMD 的 accessed 位，因此 MGLRU 开启 `0x0002`/`0x0004` 清位时也会影响 DAMON 的采样结果。`damon_lru_sort`（`DAMOS_LRU_PRIO/DEPRIO`）则是在同一份 LRU 上直接挪位置，与 MGLRU 存在竞争关系，实践中通常择一为主。
+
 ## Links
 
 - [内存管理知识地图](/docs/CS/OS/Linux/mm/README.md)
 - [虚拟内存](/docs/CS/OS/Linux/mm/vm.md)
+- [DAMON 访问监控](/docs/CS/OS/Linux/mm/DAMON.md)
 
 ## References
 

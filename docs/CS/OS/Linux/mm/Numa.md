@@ -79,7 +79,7 @@ AutoNUMA 是"内核猜"，但数据库等 workload 往往更清楚自己的访�
 
 ## demote and promote on the Reclaim Side
 
-NUMA 还重塑了回收的去向。分层内存（如配了慢速但大容量的持久内存 node）上，回收冷页不必直接丢弃或写 swap，可以 **demote**（降级）到更便宜的下层 node，再次访问时再 **promote**（提升）回快速 node。这与 `MPOL_WEIGHTED_INTERLEAVE` 面向异构 node 的思路一致，是冷热分层在 NUMA 维度的延伸。
+NUMA 还重塑了回收的去向。分层内存（如配了慢速但大容量的持久内存 node）上，回收冷页不必直接丢弃或写 swap，可以 **demote**（降级）到更便宜的下层 node，再次访问时再 **promote**（提升）回快速 node。这与 `MPOL_WEIGHTED_INTERLEAVE` 面向异构 node 的思路一致，是冷热分层在 NUMA 维度的延伸。这两条流向的源码级展开（memory tier 抽象、`shrink_folio_list` 里的 demote 触发、AutoNUMA 的 promote、`demotion_enabled` 开关、以及 HMAT/CXL 如何决定 tier）见 [Tiered_Memory](/docs/CS/OS/Linux/mm/Tiered_Memory.md)。
 
 ## Tuning and Observation
 
@@ -97,6 +97,7 @@ NUMA 还重塑了回收的去向。分层内存（如配了慢速但大容量的
 
 - [内存管理知识地图](/docs/CS/OS/Linux/mm/README.md)
 - [虚拟内存](/docs/CS/OS/Linux/mm/vm.md)
+- [Page Migration 页迁移](/docs/CS/OS/Linux/mm/Page_Migration.md) — promote 经 migrate_misplaced_folio，是引擎的 MR_NUMA_MISPLACED 调用方
 
 ## References
 

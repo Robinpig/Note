@@ -64,6 +64,10 @@ slab 解决"省"，但解决不了"绝不能失败"。块设备层做 I/O 时，
 
 传统 active / inactive LRU 在大内存机器上扫描与链表开销高、冷热判定粗糙，6.1 起可选 [MGLRU 多代 LRU](/docs/CS/OS/Linux/mm/MGLRU.md)：把页按"代"组织、直接批量走查页表读 accessed 位判冷热，回收更省、误伤工作集更少，可与传统回收模型二选一启用。
 
+## Observability: Pressure Stall Information
+
+前面所有环节都在回答"内存怎么被管理"，但没有一处在回答"**我的进程到底卡了多久**"。[PSI](/docs/CS/OS/Linux/mm/PSI.md) 补上这个观测面：它不问利用率，只问"资源稀缺到任务开始排队等待"的那段时间，分**内存 / IO / CPU**（`CONFIG_IRQ_TIME_ACCOUNTING` 下还有 IRQ）三个维度各自给出 `some`（有人在等）与 `full`（**没有有产出的任务在跑**）两组数据。内存维度的失速直接来自 direct reclaim、同步 compaction、swap 读回这些阻塞路径（内核用 `psi_memstall_enter/leave` 在这些点打标），所以 `memory PSI` 比 `free` 内存灵敏得多——内存看着还有，分配早已卡在回收里。cgroup v2 的 `memory.pressure` 把同一口径细化到组，是 K8s 里判断 Pod 是否内存受迫的**前置信号**，早于 OOMKilled。
+
 ## Compressed Swap Cache: zswap
 
 匿名页被 [Reclaim](/docs/CS/OS/Linux/mm/Reclaim.md?id=shrink_folio_list-decision-tree-for-keeping-or-evicting-a-single-page) 选中换出时，[zswap](/docs/CS/OS/Linux/mm/zswap.md) 先在内存里开一个**压缩写回缓存**兜底：页先被压缩存进池子，而不是直接写盘；池子满或压缩失败才真正落到 swap 设备。它和 zram（压缩块设备）不同——zswap 是真实 swap 设备的**前端缓存**，store 成功即无 swap IO。v7.2 里它已 folio 化、用 xarray 多树索引、并由 memcg-aware 的 shrinker 负责把冷页回写；cgroup v2 的 `memory.zswap.max/current/writeback` 三接口把压缩占用也纳入容器限额。它是"换出"与"真实磁盘 IO"之间的一层缓冲，决定了匿名内存紧张时是省下 IO 还是吃掉更多内存。
@@ -72,9 +76,25 @@ slab 解决"省"，但解决不了"绝不能失败"。块设备层做 I/O 时，
 
 回收解决"空闲页不够"，但还剩一种情况——**空闲页总量够、却凑不出物理连续的大块**：长期运行让空闲页以 order-0 散落。驱动的大 DMA 缓冲、THP 大页都要物理连续，于是慢路径在水位允许时进入 [Compaction](/docs/CS/OS/Linux/mm/Compaction.md)。它用两个**相向扫描器**：低地址端隔离可移动的占用页、高地址端隔离空闲页，再把前者搬到后者上，空闲页因此在一端聚集出连续块；页的数据一页不少，只改物理排布。压缩既由后台 [kcompactd](/docs/CS/OS/Linux/mm/Compaction.md?id=kcompactd-background-compaction) 异步做，也可在分配中同步直接做，并支持按碎片指数触发的[主动压缩](/docs/CS/OS/Linux/mm/Compaction.md?id=proactive-compaction)。压缩需要空闲页落脚，所以常与回收前后配合——先回收出余量、再压缩。
 
+## Contiguous Blocks: CMA
+
+[Compaction](/docs/CS/OS/Linux/mm/Compaction.md) 擅长把空闲页聚成连续块，但有个前提——被聚拢的页得能搬走。还有一类需求更"硬"：某些硬件（显示、视频编解码、部分 DMA）的 **DMA 不支持 scatter-gather**，必须拿到**预约好的大块物理连续内存**。这类内存不能靠 compaction 临时凑，于是有了 [CMA](/docs/CS/OS/Linux/mm/CMA.md)：启动时为设备预留一段区域，平时以 `MIGRATE_CMA` 身份**借给可移动分配**当普通内存用，设备真要时再 `cma_alloc` 把这段隔离出来、把区间里已分配的页全部迁走（复用 [Page Migration](/docs/CS/OS/Linux/mm/Page_Migration.md) 引擎）交给设备。它是 buddy 之上"连续块预留 + 动态回收"的一层，和 zswap/zram 不同、也和 THP 的恰好 2MB 连续块不同。
+
 ## Locality Optimization: NUMA Balancing
 
 [node](/docs/CS/OS/Linux/mm/pm.md?id=node) 切分只给了"位置"，但任务和它的数据未必同处一个 node，会产生大量代价更高的远端访问。[Numa](/docs/CS/OS/Linux/mm/Numa.md) 让二者尽量靠拢：内核侧的 **AutoNUMA** 周期性把页表标记为不可访问，任务一旦真访问就触发 hinting fault，内核据此把页迁移到当前 node（`do_numa_page` / `migrate_misplaced_folio`），并用 `task_numa_fault` 的评分反向把任务迁到数据所在的 node，形成双向收敛；用户也可用 **mempolicy**（`MPOL_BIND` / `INTERLEAVE` / `PREFERRED` 等）显式指定放置。分配时本地 node 不足是"先本地回收还是直接用远端"由 `zone_reclaim_mode` 决定——内存充裕的机器上盲目开启本地回收，是 direct reclaim 抖动的常见根因。
+
+## Tiered Memory: Demote / Promote and Heterogeneous Hardware
+
+[Numa](/docs/CS/OS/Linux/mm/Numa.md) 讲的是"把任务和数据摆到同一个 node"，但没说完冷热页在**不同速度**的 node 之间怎么流动。分层内存把 node 按速度排成 tier：最快的 DRAM 在顶层，PMem / CXL.mem 这类慢速大容量介质在底层。[Tiered_Memory](/docs/CS/OS/Linux/mm/Tiered_Memory.md) 补齐这层——回收冷匿名页时不必立刻写 swap，可以先 **demote**（降级）到下层 node 保留（[Reclaim](/docs/CS/OS/Linux/mm/Reclaim.md) 的 `shrink_folio_list` 主循环之后触发），再次变热时由 AutoNUMA 的 **promote**（提升）搬回 DRAM；而"哪层多快"根本不是内核写死的，是 HMAT（ACPI）与 CXL（CDAT）经 abstract distance 喂给 `memory_tiering` 基础设施算出来的。它是 NUMA 平衡与回收在异构硬件上的自然延伸，也决定了 demote 的去向。
+
+## Access Monitoring and Proactive Control: DAMON
+
+前面各机制都只在**压力到来之后**或**按粗粒度规则**行动：kswapd 看水位、MGLRU 按"代"老化、AutoNUMA 靠 hinting fault 猜冷热。[DAMON](/docs/CS/OS/Linux/mm/DAMON.md) 提供另一条路——它用**采样 + 自适应区域**独立观察访问热度（底层仍是读/清 PTE/PMD 的 Accessed 位，而非插桩访存），再把"观察"直接变成"动作"：**DAMOS**（DAMON-based Operation Schemes）按尺寸 / 访问频次 / age 三维区间筛出命中 region，然后施加 `DAMOS_PAGEOUT`（主动回收）、`DAMOS_LRU_PRIO/DEPRIO`（改写 LRU 顺序）、`DAMOS_MIGRATE_HOT/COLD`（按热度迁移）、`DAMOS_COLLAPSE`（促折叠大页）等动作。内置的 `damon_reclaim` 是 proactive reclaim 的 DAMON 实现（比 kswapd 更前置、目标更准，v7.2 起配额由 PSI 反馈自动调节），`damon_lru_sort` 则用采样结果直接挪动 LRU 位置。注意一个常被误解的点：DAMON 只做**冷热分类**，迁移的目标 node 由用户态按 `memory_tiering` 显式配置，它自己不推断 tier 拓扑。
+
+## Moving Pages: Page Migration
+
+前面每个涉及"移动内存"的环节——[Compaction](/docs/CS/OS/Linux/mm/Compaction.md) 聚连续块、[Numa](/docs/CS/OS/Linux/mm/Numa.md) 的 promote、[Tiered_Memory](/docs/CS/OS/Linux/mm/Tiered_Memory.md) 的 demote、[DAMON](/docs/CS/OS/Linux/mm/DAMON.md) 的 `DAMOS_MIGRATE_*`、[THP](/docs/CS/OS/Linux/mm/THP.md) 拆大页后逐 4K 搬、[CMA](/docs/CS/OS/Linux/mm/CMA.md) 隔离区间——最终都落到同一个引擎上。[Page Migration](/docs/CS/OS/Linux/mm/Page_Migration.md) 是这层"暗物质"：它把一页的内容与全部映射从旧物理页搬到新物理页，靠 rmap 把旧 PTE 改成迁移专用条目、搬完再重定向。关键约束是**被 pin 的页不能迁移**——[gup](/docs/CS/OS/Linux/mm/gup.md) 占用的 refcount 高位让迁移引擎直接拒绝，这正是"外设拿不到连续内存""NUMA 迁移跳过 pin 页"的根因。
 
 ## Last Resort: OOM Killer
 
@@ -99,7 +119,11 @@ slab 解决"省"，但解决不了"绝不能失败"。块设备层做 I/O 时，
 - ✅ **大页：THP**：[THP.md](/docs/CS/OS/Linux/mm/THP.md)——anon/file THP、khugepaged 折叠、`defrag` 五档与 `vma_thp_gfp_mask`、mTHP（`hugepages-<size>kB`）、`transparent_hugepage=` / `thp_anon=` 启动参数、与 buddy/Compaction/pagetable/Reclaim 的耦合。
 - ✅ **去重：KSM**：[KSM.md](/docs/CS/OS/Linux/mm/KSM.md)——stable/unstable 双树、`ksm_rmap_item` 即 unstable 节点、`MADV_MERGEABLE`、与 GUP 经 `PageAnonExclusive` 互斥、sysfs 全量接口。
 - ✅ **压缩换出缓存：zswap**：[zswap.md](/docs/CS/OS/Linux/mm/zswap.md)——xarray 多树索引、`zswap_store/load` 的 folio 化路径、memcg-aware shrinker 回写、`memory.zswap.*` 三接口、与 zram 的区分。
-- ⏭️ **后续可选**：分层内存的 demote/promote、异构内存（CXL / HMAT）的源码级展开——这些与 NUMA、回收强相关，留作下一阶段。
+- ✅ **分层与异构内存：Tiered_Memory**：[Tiered_Memory.md](/docs/CS/OS/Linux/mm/Tiered_Memory.md)——memory tier 抽象（adistance / tier 编号 / `virtual/memory_tiering` sysfs）、demote 路径（`shrink_folio_list` 之后、`no_demotion` 控制、`numa_demotion_enabled` 默认关）、promote 路径（AutoNUMA + `NUMA_BALANCING_MEMORY_TIERING` 位默认未置 + 速率限制）、HMAT/CXL 经 adistance 决定 tier 的完整因果链。
+- ✅ **访问监控与主动控制：DAMON**：[DAMON.md](/docs/CS/OS/Linux/mm/DAMON.md)——采样 + 自适应区域模型、`damon_va_ops` / `damon_pa_ops` 两个 monitor ops（全靠 PTE/PMD Accessed 位）、`struct damos` 三维匹配（尺寸 / 频次 / age）、`enum damos_action` 完整动作集（含 v7.2 新增 `DAMOS_COLLAPSE`）、`damon_reclaim`（PSI 反馈式配额 auto-tuning）/ `damon_lru_sort` / `damon_stat`、sysfs `admin/` 唯一接口（debugfs 已彻底移除）、`CONFIG_DAMON` 默认关。
+- ✅ **压力失速观测：PSI**：[PSI.md](/docs/CS/OS/Linux/mm/PSI.md)——`some` vs `full` 语义、`psi_memstall_enter/leave` 在 direct reclaim / 同步 compaction / swap 读回的标记点、`NR_MEMSTALL_RUNNING` 为何独立计数（full 判定排除 reclaim 型任务）、`psi_group` / `psi_group_cpu` 与 EWMA 聚合（`PSI_FREQ` = 2s）、`/proc/pressure/*` 与 cgroup v2 `memory.pressure`（rw 但仅注册 trigger）、`CONFIG_PSI` 默认关。
+- ✅ **连续内存分配器：CMA**：[CMA.md](/docs/CS/OS/Linux/mm/CMA.md)——多段 `struct cma`（`base_pfn`/`bitmap` 下沉到 `cma_memrange`）、`MIGRATE_CMA=4` 受 buddy 保护、`cma_declare_contiguous_nid` 预留 + `cma_activate_area` 把页以 movable 复用、`cma_alloc` → `alloc_contig_frozen_range` → `start_isolate_page_range` + `migrate_pages(MR_CONTIG_RANGE)`、sysfs `/sys/kernel/mm/cma/<name>/` 与 debugfs `/sys/kernel/debug/cma/<name>/` 区分、`cma=` 由 `early_cma`（`kernel/dma/contiguous.c`）解析。
+- ✅ **页迁移引擎：Page Migration**：[Page_Migration.md](/docs/CS/OS/Linux/mm/Page_Migration.md)——`migrate_pages()` folio 链表入口、`migrate_folio_unmap` + `migrate_folio_move` 两段式（旧 `unmap_and_move` 已拆分）、`try_to_migrate`/`remove_migration_ptes` 经 rmap 改写映射、`folio_expected_ref_count()+1` 引用计数、GUP pin 经 rmap 拒绝 unshare + refcount 双重互斥、`MIGRATE_ASYNC/SYNC_LIGHT/SYNC` 三模式（无 `MIGRATE_SYNC_NO_COPY`）、`MR_*` 原因码、与 Compaction/Numa/Tiered/DAMON/THP/CMA/KSM 的调用关系。
 
 ## Links
 
