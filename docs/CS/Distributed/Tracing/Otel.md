@@ -50,7 +50,7 @@ OpenTelemetry  ──── ┼── Metrics  (counters, histograms)   ──�
 |---|---|
 | 插桩 / API 与 SDK（创建 span、传播上下文） | OpenTelemetry |
 | 导出协议 | OTLP（或经 Collector 转换的 Jaeger/Zipkin 协议） |
-| 存储 + 查询 + UI（真正的"追踪系统"） | [Jaeger](/docs/CS/Distributed/Tracing/Jaeger.md)、[Zipkin](/docs/CS/Distributed/Tracing/Zipkin.md)、[SkyWalking](/docs/CS/Distributed/Tracing/SkyWalking.md)、Grafana Tempo、各商业厂商 |
+| 存储 + 查询 + UI（真正的"追踪系统"） | [Jaeger](/docs/CS/Distributed/Tracing/Jaeger.md)、[Zipkin](/docs/CS/Distributed/Tracing/Zipkin.md)、[SkyWalking](/docs/CS/Distributed/Tracing/SkyWalking.md)、[Tempo](/docs/CS/Distributed/Tracing/Tempo.md)、各商业厂商 |
 | 跨信号的仪表盘 | [Grafana](/docs/CS/Distributed/Tracing/Grafana.md) |
 
 OpenTelemetry 并不取代 Jaeger/Zipkin/SkyWalking——它取代的是它们底下的 **插桩层**。
@@ -358,6 +358,7 @@ export OTEL_TRACES_EXPORTER=otlp
 - [Zipkin](/docs/CS/Distributed/Tracing/Zipkin.md)
 - [Prometheus](/docs/CS/Distributed/Tracing/Prometheus/Prometheus.md)
 - [Grafana](/docs/CS/Distributed/Tracing/Grafana.md)
+- [Loki](/docs/CS/Distributed/Tracing/Loki.md)
 
 ## References
 

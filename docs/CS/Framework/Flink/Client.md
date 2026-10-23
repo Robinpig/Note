@@ -22,13 +22,13 @@ Client 是 Flink 作业提交链路的起点，是一个独立的 JVM 进程（�
 - `StreamExecutionEnvironment.getExecutionEnvironment()`：按 classpath/上下文自动选择本地或远程执行器。
 - `createLocalEnvironment()`：本地 MiniCluster，用于开发调试（IDE 里直接跑 main）。
 - `createRemoteEnvironment(host, port, jars...)`：显式提交到远程集群。
-- SQL/Table 场景对应 `StreamTableEnvironment`。
+- SQL/Table 场景对应 `StreamTableEnvironment`，无论 DataStream 还是 SQL 作业，最终都收敛成同一份 JobGraph（SQL 侧的编译与优化见 [Table_SQL](/docs/CS/Framework/Flink/Table_SQL.md)）。
 
 命令行提交则由 `flink run` 这个 CLI Client 完成，它解析参数、上传用户 jar、调用同样的提交逻辑。
 
 ## Deploy Modes and Client Role
 
-Client 是否在本地执行 `main()`、是否上传依赖，随部署模式而变（详见主笔记 [Flink](/docs/CS/Framework/Flink/Flink.md) 的三种模式对比）：
+Client 是否在本地执行 `main()`、是否上传依赖，随部署模式而变（三种模式与底层资源管理器的完整对比见 [Deployment](/docs/CS/Framework/Flink/Deployment.md)）：
 
 | 模式 | main() 在哪执行 | 依赖上传 | Client 负担 |
 | ---- | ---- | ---- | ---- |
@@ -50,7 +50,8 @@ Application 模式正是为了解决 Session/Per-Job 下“Client 既要本地�
 - [Dataflow](/docs/CS/Framework/Flink/Dataflow.md)
 - [JobManager](/docs/CS/Framework/Flink/JobManager.md)
 - [TaskManager](/docs/CS/Framework/Flink/TaskManager.md)
-- [Yarn](/docs/CS/Framework/Hadoop/Yarn.md)
+- [Deployment](/docs/CS/Framework/Flink/Deployment.md)
+- [Table_SQL](/docs/CS/Framework/Flink/Table_SQL.md)
 
 ## References
 

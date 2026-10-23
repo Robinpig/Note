@@ -1,172 +1,26 @@
+> [!NOTE]
+> 源码基于 Netflix/eureka **v1.10.19**（完整索引见 [目录索引](/docs/CS/Framework/eureka/README.md)）。**注意修正一处常见误传**：老版本文档里的 `new DiscoveryClient(applicationInfoManager, eurekaClientConfig, getTransportClientFactories(), getDiscoveryClientOptionalArgs())` 与带 `EurekaServerHttpClientFactory` 的 5 参 `PeerAwareInstanceRegistryImpl` 在 1.10 已不存在，实际只有 2 参/4 参构造。
+
 ## Introduction
 
+Eureka Server 有两条启动路径，最终都收敛到同一套组件装配：
 
+| 部署形态                       | 入口                                  | 触发方式                                                |
+| :------------------------- | :---------------------------------- | :-------------------------------------------------- |
+| 裸 war / Servlet 容器         | `com.netflix.eureka.EurekaBootStrap` | 实现 `ServletContextListener`，容器启动即 `contextInitialized` |
+| Spring Cloud（`@EnableEurekaServer`） | `EurekaServerBootstrap` + `EurekaServerInitializerConfiguration` | `SmartLifecycle#start()` 里另起线程调用               |
 
+本页只讲「组件怎么装起来、定时器怎么起」，具体的数据逻辑分散在 [registry](/docs/CS/Framework/eureka/registry.md)、[cache](/docs/CS/Framework/eureka/cache.md)、[self preservation](/docs/CS/Framework/eureka/self_preservation.md)、[replication](/docs/CS/Framework/eureka/replication.md) 四篇。
 
-
-编译测试
-
-<!-- tabs:start -->
-
-
-###### **改动后**
-
-```java
-public class EurekaClientServerRestIntegrationTest {
-    private static void startServer() throws Exception {
-        server = new Server(8080);
-
-        WebAppContext webAppCtx = new WebAppContext(new File("./src/main/webapp").getAbsolutePath(), "/");
-        webAppCtx.setDescriptor(new File("./src/main/webapp/WEB-INF/web.xml").getAbsolutePath());
-        webAppCtx.setResourceBase(new File("./src/main/resources").getAbsolutePath());
-        webAppCtx.setClassLoader(Thread.currentThread().getContextClassLoader());
-        server.setHandler(webAppCtx);
-        server.start();
-
-        eurekaServiceUrl = "http://localhost:8080/v2";
-    }
-}
-```
-
-###### **改动前**
-
-原有实现是在war包上进行
-```java
-public class EurekaClientServerRestIntegrationTest {
-    private static void startServer() throws Exception {
-        File warFile = findWar();
-
-        server = new Server(8080);
-
-        WebAppContext webapp = new WebAppContext();
-        webapp.setContextPath("/");
-        webapp.setWar(warFile.getAbsolutePath());
-        server.setHandler(webapp);
-
-        server.start();
-
-        eurekaServiceUrl = "http://localhost:8080/v2";
-    }
-}
-```
-
-<!-- tabs:end -->
-
-
-## start
-
-Eureka Server首先是个web容器
-
-- EurekaServerBootstrap是在 Spring Cloud 启动 eureka server 的类
-- EurekaBootStrap 是用来启动 eureka server 的类 EurekaBootStrap 实现了 ServletContextListener，在容器启动的时候就会调用 EurekaBootStrap#contextInitialized 从而完成对 Eureka 核心组件的初始化
-
-
-
-
-### EurekaServerBootstrap
-
-EurekaServer在SpringCloud中的启动分析与 [EurekaBootStrap](/docs/CS/Framework/eureka/Server.md?id=eurekabootstrap) 类似
-
-@EnableEurekaServer开启 使用自动配置EurekaServerAutoConfiguration
-```java
-@Configuration(
-    proxyBeanMethods = false
-)
-@Import({EurekaServerInitializerConfiguration.class})
-@ConditionalOnBean({EurekaServerMarkerConfiguration.Marker.class})
-@EnableConfigurationProperties({EurekaDashboardProperties.class, InstanceRegistryProperties.class, EurekaProperties.class})
-@PropertySource({"classpath:/eureka/server.properties"})
-public class EurekaServerAutoConfiguration implements WebMvcConfigurer {
-    
-}
-```
-
-
+## EurekaBootStrap
 
 ```java
-public class EurekaServerInitializerConfiguration implements ServletContextAware, SmartLifecycle, Ordered {
-    @Autowired
-    private EurekaServerConfig eurekaServerConfig;
-    private ServletContext servletContext;
-    @Autowired
-    private ApplicationContext applicationContext;
-    @Autowired
-    private EurekaServerBootstrap eurekaServerBootstrap;
-    private boolean running;
-    private final int order = 1;
-
-    public void start() {
-        (new Thread(() -> {
-            try {
-                this.eurekaServerBootstrap.contextInitialized(this.servletContext);
-                this.publish(new EurekaRegistryAvailableEvent(this.getEurekaServerConfig()));
-                this.running = true;
-                this.publish(new EurekaServerStartedEvent(this.getEurekaServerConfig()));
-            } catch (Exception var2) {
-            }
-
-        })).start();
-    }
-
-
-}
-```
-
-#### initEurekaServerContext
-
-从其它peer同步注册信息
-
-开启定时evict任务
-```java
-public class EurekaServerBootstrap {
-   public void contextInitialized(ServletContext context) {
-      try {
-         initEurekaServerContext();
-
-         context.setAttribute(EurekaServerContext.class.getName(), this.serverContext);
-      }
-      catch (Throwable e) {
-         log.error("Cannot bootstrap eureka server :", e);
-         throw new RuntimeException("Cannot bootstrap eureka server :", e);
-      }
-   }
-
-   protected void initEurekaServerContext() throws Exception {
-      // For backward compatibility
-      JsonXStream.getInstance().registerConverter(new V1AwareInstanceInfoConverter(), XStream.PRIORITY_VERY_HIGH);
-      XmlXStream.getInstance().registerConverter(new V1AwareInstanceInfoConverter(), XStream.PRIORITY_VERY_HIGH);
-
-      if (isAws(this.applicationInfoManager.getInfo())) {
-         this.awsBinder = new AwsBinderDelegate(this.eurekaServerConfig, this.eurekaClientConfig, this.registry,
-                 this.applicationInfoManager);
-         this.awsBinder.start();
-      }
-
-      EurekaServerContextHolder.initialize(this.serverContext);
-
-
-      // Copy registry from neighboring eureka node
-      int registryCount = this.registry.syncUp();
-      this.registry.openForTraffic(this.applicationInfoManager, registryCount);
-
-      // Register all monitoring statistics.
-      EurekaMonitors.registerAllStats();
-   }
-}
-```
-
-### EurekaBootStrap
-
-
-Initializes Eureka, including syncing up with other Eureka peers and publishing the registry.
-```java
-public abstract class EurekaBootStrap implements ServletContextListener {
+public class EurekaBootStrap implements ServletContextListener {
     @Override
     public void contextInitialized(ServletContextEvent event) {
         try {
             initEurekaEnvironment();
             initEurekaServerContext();
-
             ServletContext sc = event.getServletContext();
             sc.setAttribute(EurekaServerContext.class.getName(), serverContext);
         } catch (Throwable e) {
@@ -177,125 +31,63 @@ public abstract class EurekaBootStrap implements ServletContextListener {
 }
 ```
 
-Double check 的单例配置
+`initEurekaEnvironment()` 做的是 Archaius 的 deployment context 设置，用 double check 的写法把 datacenter / environment 灌进配置实例（缺省落到 `default` / `test`）。
+
+核心在第二步：
 
 ```java
-public abstract class EurekaBootStrap implements ServletContextListener {
-    protected void initEurekaEnvironment() throws Exception {
-        String dataCenter = ConfigurationManager.getConfigInstance().getString(EUREKA_DATACENTER);
-        if (dataCenter == null) {
-            ConfigurationManager.getConfigInstance().setProperty(ARCHAIUS_DEPLOYMENT_DATACENTER, DEFAULT);
-        } else {
-            ConfigurationManager.getConfigInstance().setProperty(ARCHAIUS_DEPLOYMENT_DATACENTER, dataCenter);
-        }
-        String environment = ConfigurationManager.getConfigInstance().getString(EUREKA_ENVIRONMENT);
-        if (environment == null) {
-            ConfigurationManager.getConfigInstance().setProperty(ARCHAIUS_DEPLOYMENT_ENVIRONMENT, TEST);
-        }
+protected void initEurekaServerContext() throws Exception {
+    EurekaServerConfig eurekaServerConfig = new DefaultEurekaServerConfig();
+
+    // 向后兼容：V1 形状的实例信息转换器
+    JsonXStream.getInstance().registerConverter(new V1AwareInstanceInfoConverter(), XStream.PRIORITY_VERY_HIGH);
+    XmlXStream.getInstance().registerConverter(new V1AwareInstanceInfoConverter(), XStream.PRIORITY_VERY_HIGH);
+
+    ServerCodecs serverCodecs = new DefaultServerCodecs(eurekaServerConfig);
+
+    ApplicationInfoManager applicationInfoManager = null;
+    // Server 自身也是一个 Eureka Client —— 这是 syncUp() 与 peer 发现的前提
+    if (eurekaClient == null) {
+        EurekaInstanceConfig instanceConfig = isCloud(ConfigurationManager.getDeploymentContext())
+                ? new CloudInstanceConfig()
+                : new MyDataCenterInstanceConfig();
+        applicationInfoManager = new ApplicationInfoManager(
+                instanceConfig, new EurekaConfigBasedInstanceInfoProvider(instanceConfig).get());
+        EurekaClientConfig eurekaClientConfig = new DefaultEurekaClientConfig();
+        eurekaClient = new DiscoveryClient(applicationInfoManager, eurekaClientConfig);
+    } else {
+        applicationInfoManager = eurekaClient.getApplicationInfoManager();
     }
+
+    PeerAwareInstanceRegistry registry;
+    if (isAws(applicationInfoManager.getInfo())) {
+        registry = new AwsInstanceRegistry(eurekaServerConfig, eurekaClient.getEurekaClientConfig(), serverCodecs, eurekaClient);
+        awsBinder = new AwsBinderDelegate(...);
+        awsBinder.start();
+    } else {
+        registry = new PeerAwareInstanceRegistryImpl(eurekaServerConfig, eurekaClient.getEurekaClientConfig(), serverCodecs, eurekaClient);
+    }
+
+    PeerEurekaNodes peerEurekaNodes = getPeerEurekaNodes(registry, eurekaServerConfig, eurekaClient.getEurekaClientConfig(), serverCodecs, applicationInfoManager);
+    serverContext = new DefaultEurekaServerContext(eurekaServerConfig, serverCodecs, registry, peerEurekaNodes, applicationInfoManager);
+
+    EurekaServerContextHolder.initialize(serverContext);
+    serverContext.initialize();
+
+    // 从邻居节点搬运注册信息
+    int registryCount = registry.syncUp();
+    registry.openForTraffic(applicationInfoManager, registryCount);
+
+    EurekaMonitors.registerAllStats();
 }
 ```
 
-#### initEurekaServerContext
+两个易忽略的点：
 
-The class that kick starts the eureka server.
-The eureka server is configured by using the configuration EurekaServerConfig specified by eureka.server.props in the classpath.
-The eureka client component is also initialized by using the configuration EurekaInstanceConfig specified by eureka.client.props.
-If the server runs in the AWS cloud, the eureka server binds it to the elastic ip as specified.
+1. **Server 里嵌了一个 `DiscoveryClient`**。它不是装饰器而是刚需：`syncUp()` 要用它去邻居节点拉全量注册表；AWS 场景下 EIP 绑定也依赖它的 `ApplicationInfoManager`。
+2. `serverContext.initialize()` 必须在 `syncUp()` **之前**，因为前者把 `PeerEurekaNodes` 与各种 Timer 起起来，后者才谈得上搬数据。
 
-```java
-public abstract class EurekaBootStrap implements ServletContextListener {
-    protected void initEurekaServerContext() throws Exception {
-        EurekaServerConfig eurekaServerConfig = new DefaultEurekaServerConfig();
-
-        // For backward compatibility
-        JsonXStream.getInstance().registerConverter(new V1AwareInstanceInfoConverter(), XStream.PRIORITY_VERY_HIGH);
-        XmlXStream.getInstance().registerConverter(new V1AwareInstanceInfoConverter(), XStream.PRIORITY_VERY_HIGH);
-
-        ServerCodecs serverCodecs = new DefaultServerCodecs(eurekaServerConfig);
-
-        ApplicationInfoManager applicationInfoManager = null;
-        // init DiscoveryClient
-        if (eurekaClient == null) {
-            EurekaInstanceConfig instanceConfig = isCloud(ConfigurationManager.getDeploymentContext())
-                    ? new CloudInstanceConfig()
-                    : new MyDataCenterInstanceConfig();
-
-            applicationInfoManager = new ApplicationInfoManager(
-                    instanceConfig, new EurekaConfigBasedInstanceInfoProvider(instanceConfig).get());
-
-            EurekaClientConfig eurekaClientConfig = new DefaultEurekaClientConfig();
-            eurekaClient = new DiscoveryClient(applicationInfoManager, eurekaClientConfig, getTransportClientFactories(),
-                    getDiscoveryClientOptionalArgs());
-        } else {
-            applicationInfoManager = eurekaClient.getApplicationInfoManager();
-        }
-
-        EurekaServerHttpClientFactory eurekaServerHttpClientFactory = getEurekaServerHttpClientFactory();
-
-        PeerAwareInstanceRegistry registry;
-        if (isAws(applicationInfoManager.getInfo())) {
-            registry = new AwsInstanceRegistry(
-                    eurekaServerConfig,
-                    eurekaClient.getEurekaClientConfig(),
-                    serverCodecs,
-                    eurekaClient,
-                    eurekaServerHttpClientFactory
-            );
-            awsBinder = new AwsBinderDelegate(eurekaServerConfig, eurekaClient.getEurekaClientConfig(), registry, applicationInfoManager);
-            awsBinder.start();
-        } else {
-            registry = new PeerAwareInstanceRegistryImpl(
-                    eurekaServerConfig,
-                    eurekaClient.getEurekaClientConfig(),
-                    serverCodecs,
-                    eurekaClient,
-                    eurekaServerHttpClientFactory
-            );
-        }
-
-        PeerEurekaNodes peerEurekaNodes = getPeerEurekaNodes(
-                registry,
-                eurekaServerConfig,
-                eurekaClient.getEurekaClientConfig(),
-                serverCodecs,
-                applicationInfoManager
-        );
-
-        serverContext = new DefaultEurekaServerContext(
-                eurekaServerConfig,
-                serverCodecs,
-                registry,
-                peerEurekaNodes,
-                applicationInfoManager
-        );
-
-        EurekaServerContextHolder.initialize(serverContext);
-
-        serverContext.initialize();
-
-        // Copy registry from neighboring eureka node
-        int registryCount = registry.syncUp();
-        registry.openForTraffic(applicationInfoManager, registryCount);
-
-        // Register all monitoring statistics.
-        EurekaMonitors.registerAllStats();
-    }
-}
-```
-
-init DiscoveryClient
-
-
-
-create PeerAwareInstanceRegistry
-
-
-init PeerEurekaNodes
-
-
-#### initialize
-init EurekaServerContext
+### DefaultEurekaServerContext.initialize
 
 ```java
 @Singleton
@@ -313,258 +105,122 @@ public class DefaultEurekaServerContext implements EurekaServerContext {
 }
 ```
 
+`peerEurekaNodes.start()` 先解析一次 peer URL，然后起名为 `Eureka-PeerNodesUpdater` 的守护线程，按 `peerEurekaNodesUpdateIntervalMs`（**10 分钟**）周期性刷新，节点可以热插拔。
+
+`registry.init()` 做四件事：
 
 ```java
-public abstract class PeerEurekaNodes {
-    public void start() {
-        taskExecutor = Executors.newSingleThreadScheduledExecutor(
-                new ThreadFactory() {
-                    @Override
-                    public Thread newThread(Runnable r) {
-                        Thread thread = new Thread(r, "Eureka-PeerNodesUpdater");
-                        thread.setDaemon(true);
-                        return thread;
-                    }
-                }
-        );
-        try {
-            updatePeerEurekaNodes(resolvePeerUrls());
-            Runnable peersUpdateTask = new Runnable() {
-                @Override
-                public void run() {
-                    try {
-                        updatePeerEurekaNodes(resolvePeerUrls());
-                    } catch (Throwable e) {
-                        logger.error("Cannot update the replica Nodes", e);
-                    }
-
-                }
-            };
-            taskExecutor.scheduleWithFixedDelay(
-                    peersUpdateTask,
-                    serverConfig.getPeerEurekaNodesUpdateIntervalMs(),
-                    serverConfig.getPeerEurekaNodesUpdateIntervalMs(),
-                    TimeUnit.MILLISECONDS
-            );
-        } catch (Exception e) {
-            throw new IllegalStateException(e);
-        }
-        for (PeerEurekaNode node : peerEurekaNodes) {
-            logger.info("Replica node URL:  {}", node.getServiceUrl());
-        }
-    }
-}
-```
-
-
-初始化了缓存信息
-
-```java
-@Singleton
-public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry implements PeerAwareInstanceRegistry {
-    @Override
-    public void init(PeerEurekaNodes peerEurekaNodes) throws Exception {
-        this.numberOfReplicationsLastMin.start();
-        this.peerEurekaNodes = peerEurekaNodes;
-        initializedResponseCache();
-        scheduleRenewalThresholdUpdateTask();
-        initRemoteRegionRegistry();
-    }
-}
-```
-
-##### initializedResponseCache
-
-ResponseCacheImpl 初始化
-
-- 在 ResponseCacheImpl 初始化的时候通过 [ConcurrentHashMap](/docs/CS/Java/JDK/Collection/Map.md?id=concurrenthashmap) 构建一级只读缓存 readOnlyCacheMap；
-- 通过 [Guava]() 创建的 readWriteCacheMap expire timeout = 180s
-- readOnlyCacheMap 会通过定时任务 TimerTask 从 readWriteCacheMap 构建二级读写缓存进行比对更新(每 30 秒执行一次)
-- 在 ResponseCacheImpl 中还提供了 invalidate 方法进行手动过期，当 Eureka Server 发生了服务注册、下线、故障会自动过期该缓存
-
-```java
-// AbstractInstanceRegistry
 @Override
-public synchronized void initializedResponseCache() {
-    if (responseCache == null) {
-        responseCache = new ResponseCacheImpl(serverConfig, serverCodecs, this);
-    }
-}
-
-// ResponseCacheImpl
-public class ResponseCacheImpl implements ResponseCache {
-    private final ConcurrentMap<Key, Value> readOnlyCacheMap = new ConcurrentHashMap<Key, Value>();
-    private final java.util.Timer timer = new java.util.Timer("Eureka-CacheFillTimer", true);
-
-    ResponseCacheImpl(EurekaServerConfig serverConfig, ServerCodecs serverCodecs, AbstractInstanceRegistry registry) {
-        this.serverCodecs = serverCodecs;
-        this.shouldUseReadOnlyResponseCache = serverConfig.shouldUseReadOnlyResponseCache();
-        this.registry = registry;
-
-        long responseCacheUpdateIntervalMs = serverConfig.getResponseCacheUpdateIntervalMs();
-        this.readWriteCacheMap =
-                CacheBuilder.newBuilder().initialCapacity(serverConfig.getInitialCapacityOfResponseCache())
-                        .expireAfterWrite(serverConfig.getResponseCacheAutoExpirationInSeconds(), TimeUnit.SECONDS)
-                        .removalListener(new RemovalListener<Key, Value>() {
-                            @Override
-                            public void onRemoval(RemovalNotification<Key, Value> notification) {
-                                Key removedKey = notification.getKey();
-                                if (removedKey.hasRegions()) {
-                                    Key cloneWithNoRegions = removedKey.cloneWithoutRegions();
-                                    regionSpecificKeys.remove(cloneWithNoRegions, removedKey);
-                                }
-                            }
-                        })
-                        .build(new CacheLoader<Key, Value>() {
-                            @Override
-                            public Value load(Key key) throws Exception {
-                                if (key.hasRegions()) {
-                                    Key cloneWithNoRegions = key.cloneWithoutRegions();
-                                    regionSpecificKeys.put(cloneWithNoRegions, key);
-                                }
-                                Value value = generatePayload(key);
-                                return value;
-                            }
-                        });
-
-        if (shouldUseReadOnlyResponseCache) {
-            timer.schedule(getCacheUpdateTask(),
-                    new Date(((System.currentTimeMillis() / responseCacheUpdateIntervalMs) * responseCacheUpdateIntervalMs)
-                            + responseCacheUpdateIntervalMs),
-                    responseCacheUpdateIntervalMs);
-        }
-        SpectatorUtil.monitoredValue("responseCacheSize", this, ResponseCacheImpl::getCurrentSize);
-    }
+public void init(PeerEurekaNodes peerEurekaNodes) throws Exception {
+    this.numberOfReplicationsLastMin.start();
+    this.peerEurekaNodes = peerEurekaNodes;
+    initializedResponseCache();
+    scheduleRenewalThresholdUpdateTask();
+    initRemoteRegionRegistry();
 }
 ```
 
+即：复制速率统计开始、初始化[响应缓存](/docs/CS/Framework/eureka/cache.md)、启动 15 分钟的阈值更新任务、初始化 remote region 拉取器。
 
-当 Eureka Client 获取注册表的时候，首先会从只读缓存中获取数据
-如果只读缓存为空就会从读写缓存中获取数据，并把读取到的值添加到只读缓存当中
+## EurekaServerBootstrap
+
+Spring Cloud 版本不再读 Archaius 配置文件（`initEurekaEnvironment` 那套被 Spring `Environment` 取代），组件由 IoC 注入，但后面几步完全一致：
+
 ```java
-Value getValue(final Key key, boolean useReadOnlyCache) {
-        Value payload = null;
+public class EurekaServerBootstrap {
+    public void contextInitialized(ServletContext context) {
         try {
-            if (useReadOnlyCache) {
-                final Value currentPayload = readOnlyCacheMap.get(key);
-                if (currentPayload != null) {
-                    payload = currentPayload;
-                } else {
-                    payload = readWriteCacheMap.get(key);
-                    readOnlyCacheMap.put(key, payload);
-                }
-            } else {
-                payload = readWriteCacheMap.get(key);
-            }
-        } catch (Throwable t) {
-            logger.error("Cannot get value for key : {}", key, t);
+            initEurekaServerContext();
+            context.setAttribute(EurekaServerContext.class.getName(), this.serverContext);
+        } catch (Throwable e) {
+            log.error("Cannot bootstrap eureka server :", e);
+            throw new RuntimeException("Cannot bootstrap eureka server :", e);
         }
-        return payload;
+    }
+
+    protected void initEurekaServerContext() throws Exception {
+        JsonXStream.getInstance().registerConverter(new V1AwareInstanceInfoConverter(), XStream.PRIORITY_VERY_HIGH);
+        XmlXStream.getInstance().registerConverter(new V1AwareInstanceInfoConverter(), XStream.PRIORITY_VERY_HIGH);
+
+        if (isAws(this.applicationInfoManager.getInfo())) {
+            this.awsBinder = new AwsBinderDelegate(this.eurekaServerConfig, this.eurekaClientConfig, this.registry, this.applicationInfoManager);
+            this.awsBinder.start();
+        }
+
+        EurekaServerContextHolder.initialize(this.serverContext);
+
+        int registryCount = this.registry.syncUp();
+        this.registry.openForTraffic(this.applicationInfoManager, registryCount);
+
+        EurekaMonitors.registerAllStats();
+    }
 }
 ```
 
+触发方是 `EurekaServerInitializerConfiguration`（`SmartLifecycle`，phase 0、order 1），它 `start()` 时起新线程避免阻塞 Spring 容器刷新线程，完成后发布 `EurekaRegistryAvailableEvent` 与 `EurekaServerStartedEvent`。更多 Spring 侧装配细节见 [Spring Cloud](/docs/CS/Framework/eureka/spring_cloud.md)。
 
-#### sync registry
-
-Copy registry from neighboring eureka node
+## syncUp and openForTraffic
 
 ```java
-@Singleton
-public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry implements PeerAwareInstanceRegistry {
-
-    @Override
-    public int syncUp() {
-        // Copy entire entry from neighboring DS node
-        int count = 0;
-
-        for (int i = 0; ((i < serverConfig.getRegistrySyncRetries()) && (count == 0)); i++) {
-            if (i > 0) {
+@Override
+public int syncUp() {
+    int count = 0;
+    for (int i = 0; ((i < serverConfig.getRegistrySyncRetries()) && (count == 0)); i++) {
+        if (i > 0) {
+            try {
+                Thread.sleep(serverConfig.getRegistrySyncRetryWaitMs());
+            } catch (InterruptedException e) {
+                logger.warn("Interrupted during registry transfer..");
+                break;
+            }
+        }
+        Applications apps = eurekaClient.getApplications();
+        for (Application app : apps.getRegisteredApplications()) {
+            for (InstanceInfo instance : app.getInstances()) {
                 try {
-                    Thread.sleep(serverConfig.getRegistrySyncRetryWaitMs());
-                } catch (InterruptedException e) {
-                    logger.warn("Interrupted during registry transfer..");
-                    break;
-                }
-            }
-            Applications apps = eurekaClient.getApplications();
-            for (Application app : apps.getRegisteredApplications()) {
-                for (InstanceInfo instance : app.getInstances()) {
-                    try {
-                        if (isRegisterable(instance)) {
-                            register(instance, instance.getLeaseInfo().getDurationInSecs(), true);
-                            count++;
-                        }
-                    } catch (Throwable t) {
-                        logger.error("During DS init copy", t);
+                    if (isRegisterable(instance)) {
+                        register(instance, instance.getLeaseInfo().getDurationInSecs(), true);
+                        count++;
                     }
+                } catch (Throwable t) {
+                    logger.error("During DS init copy", t);
                 }
             }
         }
-        return count;
     }
+    return count;
 }
 ```
 
-开启心跳统计的定时任务
+`syncUp()` 是**空集群冷启动时的数据搬运**：它借用内嵌客户端已有的注册表缓存，向邻居逐个拉全量并以 `isReplication=true` 写本地（因此不会再转发给 peer）。注意 Spring Cloud 侧 `registry-sync-retries` 默认是 **0**，即只试一次。
+
+随后 `openForTraffic(applicationInfoManager, count)`：把 `expectedNumberOfClientsSendingRenews` 设为 count → 重算阈值 → 记录 `startupTime` → AWS 场景下预热 replica 连接 → 把自身状态置为 `UP`（这一点很关键：Server 未 UP 时 `StatusFilter` 会对所有请求返回 307）→ 调用 `super.postInit()`。
+
+`postInit()` 里起的就是剔除定时器：
 
 ```java
-@Singleton
-public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry implements PeerAwareInstanceRegistry {
-    @Override
-    public void openForTraffic(ApplicationInfoManager applicationInfoManager, int count) {
-        // Renewals happen every 30 seconds and for a minute it should be a factor of 2.
-        this.expectedNumberOfClientsSendingRenews = count;
-        updateRenewsPerMinThreshold();
-        logger.info("Got {} instances from neighboring DS node", count);
-        logger.info("Renew threshold is: {}", numberOfRenewsPerMinThreshold);
-        this.startupTime = System.currentTimeMillis();
-        if (count > 0) {
-            this.peerInstancesTransferEmptyOnStartup = false;
-        }
-        DataCenterInfo.Name selfName = applicationInfoManager.getInfo().getDataCenterInfo().getName();
-        boolean isAws = Name.Amazon == selfName;
-        if (isAws && serverConfig.shouldPrimeAwsReplicaConnections()) {
-            logger.info("Priming AWS connections for all replicas..");
-            primeAwsReplicas(applicationInfoManager);
-        }
-        applicationInfoManager.setInstanceStatus(InstanceStatus.UP);
-        super.postInit();
+protected void postInit() {
+    renewsLastMin.start();
+    if (evictionTaskRef.get() != null) {
+        evictionTaskRef.get().cancel();
     }
+    evictionTaskRef.set(new EvictionTask());
+    evictionTimer.schedule(evictionTaskRef.get(),
+            serverConfig.getEvictionIntervalTimerInMs(),
+            serverConfig.getEvictionIntervalTimerInMs());
 }
 ```
-evict Timer启动 60s一次 淘汰90s*2时间内未续期的服务实例
 
-```java
+MeasuredRate 的统计方式：
 
-   protected void postInit() {
-      renewsLastMin.start();
-      if (evictionTaskRef.get() != null) {
-         evictionTaskRef.get().cancel();
-      }
-      evictionTaskRef.set(new EvictionTask());
-      evictionTimer.schedule(evictionTaskRef.get(),
-              serverConfig.getEvictionIntervalTimerInMs(),
-              serverConfig.getEvictionIntervalTimerInMs());
-   }
-```
-
-MeasuredRate负责统计续约次数
-- currentBucket会在renew时increment
-- 每60s会将currentBucket的值copy到lastBucket 即为最近60s的续约次数
 ```java
 public class MeasuredRate {
     private final AtomicLong lastBucket = new AtomicLong(0);
     private final AtomicLong currentBucket = new AtomicLong(0);
 
-    private final long sampleInterval;
-    private final Timer timer;
-
-    private volatile boolean isActive;
-
     public synchronized void start() {
         if (!isActive) {
             timer.schedule(new TimerTask() {
-
                 @Override
                 public void run() {
                     try {
@@ -575,135 +231,35 @@ public class MeasuredRate {
                     }
                 }
             }, sampleInterval, sampleInterval);
-
             isActive = true;
         }
     }
 }
 ```
 
-#### EvictionTask
-```java
-class EvictionTask extends TimerTask {
-   @Override
-   public void run() {
-      try {
-         long compensationTimeMs = getCompensationTimeMs();
-         logger.info("Running the evict task with compensationTime {}ms", compensationTimeMs);
-         evict(compensationTimeMs);
-      } catch (Throwable e) {
-      }
-   }
-}
-```
+## Timer Summary
 
-compute a compensation time defined as the actual time this task was executed since the prev iteration, vs the configured amount of time for execution.
-This is useful for cases where changes in time (due to clock skew or gc for example) causes the actual eviction task to execute later than the desired time according to the configured cycle.
+| 定时器（线程名）                       | 周期    | 作用                                     | 配置项                                       |
+| :------------------------------- | :---- | :------------------------------------- | :---------------------------------------- |
+| `Eureka-EvictionTimer`           | 60 s  | 剔除过期租约                                 | `eviction-interval-timer-in-ms`            |
+| `Eureka-DeltaRetentionTimer`     | 30 s  | 清理超过 3 分钟的增量条目                         | `delta-retention-timer-interval-ms`        |
+| `Eureka-CacheFillTimer`          | 30 s  | readOnly 缓存回填                          | `response-cache-update-interval-ms`        |
+| `Eureka-PeerNodesUpdater`        | 10 min | 刷新 peer 列表                            | `peer-eureka-nodes-update-interval-ms`     |
+| renewal threshold（无名 Timer）      | 15 min | 重新评估期望续约数                              | `renewal-threshold-update-interval-ms`     |
+| `MeasuredRate`（60s 采样窗口）         | 60 s  | 上一分钟续约计数                               | 固定，`new MeasuredRate(1000 * 60 * 1)`       |
 
-```java
-long getCompensationTimeMs() {
-            long currNanos = getCurrentTimeNano();
-            long lastNanos = lastExecutionNanosRef.getAndSet(currNanos);
-            if (lastNanos == 0l) {
-                return 0l;
-            }
-
-            long elapsedMs = TimeUnit.NANOSECONDS.toMillis(currNanos - lastNanos);
-            long compensationTime = elapsedMs - serverConfig.getEvictionIntervalTimerInMs();
-            return compensationTime <= 0l ? 0l : compensationTime;
-        }
-```
-
-
-evict 从registry缓存中获取注册实例信息 判断过期加入expiredLeases中 最后随机(Knuth shuffle algorithm)从过期列表淘汰
-- Eureka Client 在进行续约的时候是把 lastUpdateTimestamp 设置成系统的当前时间 + 90 秒。
-  然后 Eureka Server 在进行服务过期判断的时候是：最后一次续约时间 + 90 秒 + 补偿时间小于系统当前时间就会以服务进行过期。
-  最后在 Eureka Client 拉取注册表是每 30 秒进行拉取。所以一个服务不可用时其它服务需要感知到这个服务不可用就需要：90 秒 + 90 秒 + 30 秒 = 210秒，也就是 3 分半才能感知到
-- Eureka Server 在服务过期的时候会根据：应用实例 * 0.15 与 心跳过期应用个数随机顺序将它们剔除出去。
-  因为对于需要大量剔除服务应用时，如果我们不这样做，我们可能会在 Eureka 自我保护开始之前清除整个应用程序。通过随机化,影响应该均匀分布在所有应用程序中
-
-```java
-public abstract class AbstractInstanceRegistry implements InstanceRegistry {
-    public void evict(long additionalLeaseMs) {
-
-        if (!isLeaseExpirationEnabled()) {
-            return;
-        }
-
-        // We collect first all expired items, to evict them in random order. For large eviction sets,
-        // if we do not that, we might wipe out whole apps before self preservation kicks in. By randomizing it,
-        // the impact should be evenly distributed across all applications.
-        List<Lease<InstanceInfo>> expiredLeases = new ArrayList<>();
-        for (Entry<String, Map<String, Lease<InstanceInfo>>> groupEntry : registry.entrySet()) {
-            Map<String, Lease<InstanceInfo>> leaseMap = groupEntry.getValue();
-            if (leaseMap != null) {
-                for (Entry<String, Lease<InstanceInfo>> leaseEntry : leaseMap.entrySet()) {
-                    Lease<InstanceInfo> lease = leaseEntry.getValue();
-                    if (lease.isExpired(additionalLeaseMs) && lease.getHolder() != null) {
-                        expiredLeases.add(lease);
-                    }
-                }
-            }
-        }
-
-        // To compensate for GC pauses or drifting local time, we need to use current registry size as a base for
-        // triggering self-preservation. Without that we would wipe out full registry.
-        int registrySize = (int) getLocalRegistrySize();
-        int registrySizeThreshold = (int) (registrySize * serverConfig.getRenewalPercentThreshold());
-        int evictionLimit = registrySize - registrySizeThreshold;
-
-        int toEvict = Math.min(expiredLeases.size(), evictionLimit);
-        if (toEvict > 0) {
-
-            Random random = new Random(System.currentTimeMillis());
-            for (int i = 0; i < toEvict; i++) {
-                // Pick a random item (Knuth shuffle algorithm)
-                int next = i + random.nextInt(expiredLeases.size() - i);
-                Collections.swap(expiredLeases, i, next);
-                Lease<InstanceInfo> lease = expiredLeases.get(i);
-
-                String appName = lease.getHolder().getAppName();
-                String id = lease.getHolder().getId();
-                EXPIRED.increment();
-                internalCancel(appName, id, false);
-            }
-        }
-    }
-}
-```
-
-判断是否允许expire
-- 首先判断 Eureka Server 是否开启了自我保护机制 eureka.enableSelfPreservation 为 true 开启反之不开启。如果没有开启直接返回 true，可以进行服务过期处理。
-- 然后判断每分钟期望的续约数(numberOfRenewsPerMinThreshold) 大于 0 并且实际每分钟的续约数(getNumOfRenewsInLastMin()) 大于每分钟期望的续约数(numberOfRenewsPerMinThreshold
-
-```java
-@Override
-public boolean isLeaseExpirationEnabled() {
-    if (!isSelfPreservationModeEnabled()) {
-        // The self preservation mode is disabled, hence allowing the instances to expire.
-        return true;
-    }
-    return numberOfRenewsPerMinThreshold > 0 && getNumOfRenewsInLastMin() > numberOfRenewsPerMinThreshold;
-}
-```
-
-
-```java
-protected void updateRenewsPerMinThreshold() {
-    this.numberOfRenewsPerMinThreshold = (int) (this.expectedNumberOfClientsSendingRenews
-            * (60.0 / serverConfig.getExpectedClientRenewalIntervalSeconds())
-            * serverConfig.getRenewalPercentThreshold());
-}
-```
-
-## serve
-
-ServletContainer是 jersey 框架的核心处理类，每一个 Web 框架都会有一个前端处理器。统一接收并处理客户端的请求。类似于 Spring MVC 中的 DispatcherServlet
-与 DispatcherServlet 是一个 Servlet 不同的是它既是一个 Servlet 同时也实现了 Filter
-
-
-#### register monitor
-
+全部是 daemon `Timer` / 单线程池，**任何一个 TimerTask 里出现未捕获异常都会让该定时器整体停摆**——这也是 GC 停顿或 OOM 之后 Server 行为诡异（不再剔除、缓存不刷新）的常见原因之一。
 
 ## Links
+
 - [Eureka](/docs/CS/Framework/eureka/Eureka.md)
+- [Registry](/docs/CS/Framework/eureka/registry.md)
+- [Cache](/docs/CS/Framework/eureka/cache.md)
+- [Self Preservation](/docs/CS/Framework/eureka/self_preservation.md)
+- [Replication](/docs/CS/Framework/eureka/replication.md)
+- [Spring Cloud](/docs/CS/Framework/eureka/spring_cloud.md)
+
+## References
+
+1. [Netflix/eureka · EurekaBootStrap](https://github.com/Netflix/eureka/blob/v1.10.19/eureka-core/src/main/java/com/netflix/eureka/EurekaBootStrap.java)
+2. [Netflix/eureka · DefaultEurekaServerContext](https://github.com/Netflix/eureka/blob/v1.10.19/eureka-core/src/main/java/com/netflix/eureka/DefaultEurekaServerContext.java)

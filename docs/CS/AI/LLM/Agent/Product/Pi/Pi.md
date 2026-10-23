@@ -49,6 +49,18 @@ Nix 用户装 flake（从源码构建）：`nix profile add github:earendil-work
 
 **扩展体系**在 [Extensions](/docs/CS/AI/LLM/Agent/Product/Pi/Extensions.md)：Skill（Agent Skills 规范，两阶段加载）、Prompt Template（文件名即命令）、Pi Package（npm/git 分发 + peerDependencies 纪律）、TypeScript Extension（工具 exposure 五态、嵌套调用、生命周期纪律）四层由浅入深。
 
+**代码执行（codemode）**在 [CodeMode](/docs/CS/AI/LLM/Agent/Product/Pi/CodeMode.md)：模型写 JS、在 QuickJS WASM 沙箱里调工具的机制——沙箱内核（三类 Sandbox）/ 脚本环境全局 / 工具桥接与嵌套调用 / 声明 loadout（on·only）/ 执行器链路 / 确定性重放 start()。
+
+**工具系统**在 [Tools](/docs/CS/AI/LLM/Agent/Product/Pi/Tools.md)：默认四件套（read/bash/edit/write）与只读集（grep/find/ls）的真实实现与限制、`createCodingTools` 等工厂、共享截断 `truncate` 与并发锁 `withFileMutationQueue`、可插拔 `operations` 如何成为远程执行接缝。
+
+**Provider 与模型目录**在 [Providers](/docs/CS/AI/LLM/Agent/Product/Pi/Providers.md)：`pi-ai` 与 `coding-agent` 的包边界、`builtinProviders()` 聚合 42 个 Provider、目录三重生成（MODELS/IMAGE_MODELS/CLASSIFIER_MODELS）、分层刷新（baseline>dynamic>stored>fetched>filtered）、`models.json` 用户覆盖、`envApiKeyAuth` 凭证链与跨层优先级、faux 测试桩纠正。
+
+**扩展事件 / 钩子总表**在 [Events](/docs/CS/AI/LLM/Agent/Product/Pi/Events.md)：`pi.on()` 全部事件按 A–J 分类（启动/会话/Agent 运行/轮次/提供方/消息/工具/模型/输入 Shell/UI 缓存）、handler 六种组合模式（通知/原地修改/链式转换/Gate/行为边界/最后覆盖）、嵌套调用贯穿与生命周期顺序。
+
+**远程执行环境**在 [Env](/docs/CS/AI/LLM/Agent/Product/Pi/Env.md)：`pi-env` 包经 SSH 部署内容寻址（SHA-256）的 daemon、`RemoteExecutionEnv` RPC 客户端（句柄/分块/流式 exec）、`ExecutionEnv` 统一接口的两套后端（本地 `NodeExecutionEnv` / 远端 daemon）、零转发的安全姿态，以及它如何作为工具 `operations` 的远端后端。
+
+**持久化 Agent 框架**在 [Durable](/docs/CS/AI/LLM/Agent/Product/Pi/Durable.md)：`pi-durable` 的四层可替换架构（Storage 多后端 → Session 单变更线内核 → Harness 耐执行引擎 → Tasks/Docs/Env）、`BUILTIN_TASKS`（generation/tool/compaction）、`ExecutionEnv` 抽象如何被 `pi-env` 远端实现，以及为何生产 `coding-agent` 暂未采用其 Harness。
+
 **信任与隔离**在 [Security](/docs/CS/AI/LLM/Agent/Product/Pi/Security.md)：Pi 无内置权限系统，project trust 管加载（决策链四级、`trust.json`、非交互模式行为），隔离靠 Docker / Docker Sandboxes / OpenShell / Gondolin 四法，凭证处理各有取舍。
 
 **内部架构**在 [Architecture](/docs/CS/AI/LLM/Agent/Product/Pi/Architecture.md)：11 个 workspace 包的分层与依赖图、`AgentSession` 驱动 `pi-agent-core` 的两层协作循环、工具批次与事件持久化顺序、四种运行模式与 SDK、构建顺序与质量门禁。

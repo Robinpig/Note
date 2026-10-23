@@ -1,6 +1,6 @@
 ## Introduction
 
-本篇覆盖 Pulsar 客户端发送路径：`ProducerImpl.sendAsync` 的完整主链、批处理（batching）与自动分块（chunking）两条机制、sequenceId 层面的去重判定，以及分区路由 `MessageRoutingMode`。消息组装后经自定义二进制协议的 `SEND` 帧下发，帧格式与握手见 [Protocol](/docs/CS/MQ/Pulsar/Protocol.md)；消息落到 broker 之后的 `handleSend`、流控与写 ledger 流程见 [Broker](/docs/CS/MQ/Pulsar/Broker.md) 与 [BookKeeper 存储层](/docs/CS/MQ/Pulsar/BookKeeper.md)；与发送对称的消费侧（`ConsumerBase`、retry、Retention、Reader）见 [Consumer](/docs/CS/MQ/Pulsar/Consumer.md)。
+本篇覆盖 Pulsar 客户端发送路径：`ProducerImpl.sendAsync` 的完整主链、批处理（batching）与自动分块（chunking）两条机制、sequenceId 层面的去重判定，以及分区路由 `MessageRoutingMode`。消息组装后经自定义二进制协议的 `SEND` 帧下发，帧格式与握手见 [Protocol](/docs/CS/MQ/Pulsar/Protocol.md)；消息落到 broker 之后的 `handleSend`、流控与写 ledger 流程见 [Broker](/docs/CS/MQ/Pulsar/Broker.md) 与 [ManagedLedger 存储层](/docs/CS/MQ/Pulsar/ManagedLedger.md)；与发送对称的消费侧（`ConsumerBase`、retry、Retention、Reader）见 [Consumer](/docs/CS/MQ/Pulsar/Consumer.md)。
 
 ## send
 
@@ -393,7 +393,7 @@ public class ProducerImpl<T> extends ProducerBase<T> implements TimerTask, Conne
 - [Pulsar](/docs/CS/MQ/Pulsar/Pulsar.md)
 - [Broker](/docs/CS/MQ/Pulsar/Broker.md)
 - [Consumer](/docs/CS/MQ/Pulsar/Consumer.md)
-- [BookKeeper 存储层](/docs/CS/MQ/Pulsar/BookKeeper.md)
+- [ManagedLedger 存储层](/docs/CS/MQ/Pulsar/ManagedLedger.md)
 - [Functions 与事务](/docs/CS/MQ/Pulsar/Functions.md)
 
 ## References

@@ -629,7 +629,7 @@ topic 数量增多时 Kafka 吞吐会明显下降而 RocketMQ 稳定，原因在
 
 ### Pulsar
 
-[Pulsar](/docs/CS/MQ/Pulsar/Pulsar.md) 的独特之处是计算与存储彻底分离：Broker 无状态，数据落到 BookKeeper ledger，元数据落到可插拔的 metadata store。这个分层决定了它几乎所有能力（多租户、细粒度扩容、unload）的形态。存储侧要落到 entry 与 cursor 两级、ledger 层级与 quorum 语义见 [BookKeeper 存储层](/docs/CS/MQ/Pulsar/BookKeeper.md)；集群侧的 bundle 切分、`ModularLoadManager`、unload 与分层存储（offload 事件驱动机制）见 [集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md)；轻量计算与事务状态机见 [Functions 与事务](/docs/CS/MQ/Pulsar/Functions.md)，内部实现见 [Broker](/docs/CS/MQ/Pulsar/Broker.md) 与 [Consumer](/docs/CS/MQ/Pulsar/Consumer.md)。
+[Pulsar](/docs/CS/MQ/Pulsar/Pulsar.md) 的独特之处是计算与存储彻底分离：Broker 无状态，数据落到 BookKeeper ledger，元数据落到可插拔的 metadata store。这个分层决定了它几乎所有能力（多租户、细粒度扩容、unload）的形态。存储侧要落到 entry 与 cursor 两级、ledger 层级与 quorum 语义见 [ManagedLedger 存储层](/docs/CS/MQ/Pulsar/ManagedLedger.md)；集群侧的 bundle 切分、`ModularLoadManager`、unload 与分层存储（offload 事件驱动机制）见 [集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md)；轻量计算与事务状态机见 [Functions 与事务](/docs/CS/MQ/Pulsar/Functions.md)，内部实现见 [Broker](/docs/CS/MQ/Pulsar/Broker.md) 与 [Consumer](/docs/CS/MQ/Pulsar/Consumer.md)。
 
 > [!WARNING]
 > **4.x 相对 2.x/3.x 有大量功能移除**：`pulsar-replication`（**独立模块**，不是 broker 内置的跨地域复制能力）、`PulsarBackup`（备份）、`pulsar-streams`、`enableIdempotence` 幂等开关、`GoRuntimeFactory` 均已删除或改造，照旧资料写必错。
@@ -751,7 +751,7 @@ RocketMQ 提供**同步双写 + 同步刷盘**的组合，可以把「broker 确
 
 按机制横向阅读（有些机制是跨产品通用的，可对照读）：
 
-- **存储引擎**：多文件 vs 单文件路线的取舍 → [Kafka Storage](/docs/CS/MQ/Kafka/Storage.md) · [RocketMQ Store](/docs/CS/MQ/RocketMQ/Store.md) · [Pulsar BookKeeper](/docs/CS/MQ/Pulsar/BookKeeper.md)
+- **存储引擎**：多文件 vs 单文件路线的取舍 → [Kafka Storage](/docs/CS/MQ/Kafka/Storage.md) · [RocketMQ Store](/docs/CS/MQ/RocketMQ/Store.md) · [Pulsar ManagedLedger](/docs/CS/MQ/Pulsar/ManagedLedger.md) · [BookKeeper 本体](/docs/CS/Framework/BookKeeper/BookKeeper.md)（[Write](/docs/CS/Framework/BookKeeper/Write.md) · [Storage](/docs/CS/Framework/BookKeeper/Storage.md) · [Cluster](/docs/CS/Framework/BookKeeper/Cluster.md)）
 - **零拷贝与内核机制**：`transferTo` vs `mmap` → [ZeroCopy](/docs/CS/OS/Linux/ZeroCopy.md)
 - **私有协议与网络层**：自定义帧、编解码、连接管理 → [Kafka Network](/docs/CS/MQ/Kafka/Network.md) · [RocketMQ Remoting](/docs/CS/MQ/RocketMQ/Remoting.md) · [Pulsar Protocol](/docs/CS/MQ/Pulsar/Protocol.md)
 - **事务消息**：2PC+回查 vs 事务协调器 → [RocketMQ 事务消息](/docs/CS/MQ/RocketMQ/Transaction.md) · [Pulsar Functions 与事务](/docs/CS/MQ/Pulsar/Functions.md) · [Kafka ShareGroup](/docs/CS/MQ/Kafka/ShareGroup.md)

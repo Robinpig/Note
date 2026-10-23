@@ -43,8 +43,8 @@ digraph framework_index {
 - [ZooKeeper](/docs/CS/Framework/ZooKeeper/README.md)：经典协调底座，Zab 共识、znode树、watch 与 session 配方。
 - [Nacos](/docs/CS/Framework/nacos/README.md)：配置中心 + 注册中心，AP（Distro）与 CP（JRaft）双模式。
 - [Consul](/docs/CS/Framework/consul/README.md)：服务网络平台，服务发现 + 服务网格（Envoy mTLS）+ 多DC 联邦，另有成员发现（Serf）与网关专篇。
-- [Eureka](/docs/CS/Framework/eureka/eureka.md)：Netflix 注册中心，AP 自注册/续约。
-- [BooKeeper](/docs/CS/Framework/BooKeeper/BooKeeper.md)：面向 ZooKeeper 编程的抽象层。
+- [Eureka](/docs/CS/Framework/eureka/README.md)：Netflix 注册中心，AP 自注册/续约。枢纽 + Server/Client 两端 + [注册表](/docs/CS/Framework/eureka/registry.md)（写路径与剔除）、[缓存](/docs/CS/Framework/eureka/cache.md)、[自我保护](/docs/CS/Framework/eureka/self_preservation.md)、[集群复制](/docs/CS/Framework/eureka/replication.md) 四条主线，配套 REST 契约、传输层、[配置](/docs/CS/Framework/eureka/config.md)、[调优](/docs/CS/Framework/eureka/tuning.md) 与 [排障](/docs/CS/Framework/eureka/troubleshooting.md)。
+- [BookKeeper](/docs/CS/Framework/BookKeeper/BookKeeper.md)：可独立部署的 **append-only 分布式日志存储**（WAL / 消息存储底座，[Pulsar](/docs/CS/MQ/Pulsar/Pulsar.md) 的存储引擎）。枢纽 + [Ledger](/docs/CS/Framework/BookKeeper/Ledger.md)（元数据与 fencing/recovery）、[Write](/docs/CS/Framework/BookKeeper/Write.md)（quorum 与 ensemble change）、[Read](/docs/CS/Framework/BookKeeper/Read.md)（LAC 与 speculative read）、[Storage](/docs/CS/Framework/BookKeeper/Storage.md)（journal/entry log/index 与 GC）、[Cluster](/docs/CS/Framework/BookKeeper/Cluster.md)（元数据布局与 auto-recovery）、[Ops](/docs/CS/Framework/BookKeeper/Ops.md)（配置与运维）。
 
 ## Service Governance and Operations
 

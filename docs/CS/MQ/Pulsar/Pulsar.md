@@ -5,7 +5,7 @@
 > 版本基线：**4.2.4**（tag `v4.2.4`，2026-08-03 发布）。本目录各分册的源码核实结论**都以 4.2.4 为准**。
 > ⚠️ **5.0.0 已于 2026-10-05 发布，官方称其为新的 LTS**（首页横幅与 5.0.x release highlights 均可见）—— 但本目录尚未按 5.0 重做源码核实，5.0 的新内容（Scalable Topics、v5 client API、Oxia 成为推荐元数据存储）只记在 [Future](/docs/CS/MQ/Future.md?id=metadata-layer-moves-inward)，不要把它当成 4.2.4 的能力，也不要据 4.2.4 的结论断言 5.0 的行为。
 > 依赖 BookKeeper **4.17.3**（根 `pom.xml:185`）。
-> ⚠️ 4.x 相对 2.x/3.x 有**大量类删除与包路径迁移**（独立的 `pulsar-replication` 模块、`pulsar-streams`、`enableIdempotence` 均已移除），照旧资料写必错 —— 逐条对照见 [BookKeeper](/docs/CS/MQ/Pulsar/BookKeeper.md) 与 [集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md) 的对照表。
+> ⚠️ 4.x 相对 2.x/3.x 有**大量类删除与包路径迁移**（独立的 `pulsar-replication` 模块、`pulsar-streams`、`enableIdempotence` 均已移除），照旧资料写必错 —— 逐条对照见 [ManagedLedger 存储层](/docs/CS/MQ/Pulsar/ManagedLedger.md) 与 [集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md) 的对照表。
 >
 > ⚠️ 但**「geo-replication 被移除」是说法过头**：被移除的是独立模块与 `PulsarBackup` 类；跨地域复制作为 broker 能力仍在（文档 `concepts-replication` 现行，5.0 发布说明还明列「Fixes across geo-replication」）。机制在 Broker 侧的 replicator，见下文。
 
@@ -70,7 +70,7 @@ Pulsar 与 Kafka 最本质的差异是**存储与计算解耦**。消息数据�
 
 客户端先通过 metadata store 查到 topic 归属的 broker 直连发送（Proxy 是 4.x 的可选无状态接入层）。连接建立后先走 `CONNECT` / `CONNECTED` 握手（协商协议版本与 maxMessageSize），随后 broker 收到 `SEND` 帧调 `ManagedLedger.asyncAppend`，BookKeeper 按 E/Qw/Qa 三级 quorum 写入 ledger；`ReputMessageService` 再异步为每个 cursor 维护消费位点。帧格式与握手细节见 [Protocol](/docs/CS/MQ/Pulsar/Protocol.md)。
 
-存储侧要落到 entry 与 cursor 两级的区别、ledger 层级、rollover 判定与 quorum 语义，见 [BookKeeper 存储层](/docs/CS/MQ/Pulsar/BookKeeper.md)。集群侧的 bundle 切分、`ModularLoadManager`、unload 的两条路径与分层存储的 offload 事件驱动机制，见 [集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md)。轻量计算与事务状态机见 [Functions 与事务](/docs/CS/MQ/Pulsar/Functions.md)。
+存储侧要落到 entry 与 cursor 两级的区别、ledger 层级、rollover 判定与 quorum 语义，见 [ManagedLedger 存储层](/docs/CS/MQ/Pulsar/ManagedLedger.md)。集群侧的 bundle 切分、`ModularLoadManager`、unload 的两条路径与分层存储的 offload 事件驱动机制，见 [集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md)。轻量计算与事务状态机见 [Functions 与事务](/docs/CS/MQ/Pulsar/Functions.md)。
 
 ## Reading Guide
 
@@ -95,7 +95,7 @@ Pulsar 与 Kafka 最本质的差异是**存储与计算解耦**。消息数据�
 
 Pulsar 的独特之处在于**计算与存储彻底分离**：Broker 无状态，数据落到 BookKeeper ledger，元数据落到 metadata store。这个分层决定了它几乎所有能力（多租户、细粒度扩容、unload）的形态。
 
-理解存储要落到 entry 与 cursor 两级 —— 见 [BookKeeper 存储层](/docs/CS/MQ/Pulsar/BookKeeper.md)；理解集群要抓住 bundle 切分与独立 LoadManager —— 见 [集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md)；Functions 与事务在 [Functions 与事务](/docs/CS/MQ/Pulsar/Functions.md)。
+理解存储要落到 entry 与 cursor 两级 —— 见 [ManagedLedger 存储层](/docs/CS/MQ/Pulsar/ManagedLedger.md)；理解集群要抓住 bundle 切分与独立 LoadManager —— 见 [集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md)；Functions 与事务在 [Functions 与事务](/docs/CS/MQ/Pulsar/Functions.md)。
 
 ## Architecture
 
@@ -104,7 +104,7 @@ At the highest level, a Pulsar instance is composed of one or more Pulsar cluste
 In a Pulsar cluster:
 
 - One or more brokers handles and load balances incoming messages from producers, dispatches messages to consumers, communicates with the Pulsar configuration store to handle various coordination tasks, stores messages in BookKeeper instances (aka bookies), and more.
-- [BookKeeper](/docs/CS/Framework/BooKeeper/BooKeeper.md) cluster consisting of one or more bookies handles persistent storage of messages.
+- [BookKeeper](/docs/CS/Framework/BookKeeper/BookKeeper.md) cluster consisting of one or more bookies handles persistent storage of messages.
 - **Metadata store** cluster specific to that cluster handles coordination tasks.
 
 The diagram below illustrates a Pulsar cluster:
@@ -304,7 +304,7 @@ public class BundleData {
 
 #### CompactedTopic
 
-compacted topic 按 key 只保留最新值：旧版本的消息在 compaction 后不再可读，等价于「追加一条 value 为 null 的消息表示删除」的 tombstone 语义。触发方式与两阶段算法见 [BookKeeper 存储层](/docs/CS/MQ/Pulsar/BookKeeper.md) 的 Compaction 一节。
+compacted topic 按 key 只保留最新值：旧版本的消息在 compaction 后不再可读，等价于「追加一条 value 为 null 的消息表示删除」的 tombstone 语义。触发方式与两阶段算法见 [ManagedLedger 存储层](/docs/CS/MQ/Pulsar/ManagedLedger.md) 的 Compaction 一节。
 
 ## Brokers
 
@@ -355,7 +355,7 @@ In a Pulsar instance:
 > BookKeeper 自己的元数据可独立配置（`bookkeeperMetadataServiceUri`，`:2031`，默认空），未设置时与 Pulsar **共享同一 MetadataStore 实例**。
 
 > [!WARNING]
-> 术语纠正：BookKeeper 4.17.3 中**没有 "fragment" 这个概念**，实际术语是 **`segment`**。层级是 **ledger → segment（副本集合变更记录）→ entry**。详见 [BookKeeper 存储层](/docs/CS/MQ/Pulsar/BookKeeper.md)。
+> 术语纠正：BookKeeper 4.17.3 中**没有 "fragment" 这个概念**，实际术语是 **`segment`**。层级是 **ledger → segment（副本集合变更记录）→ entry**。详见 [ManagedLedger 存储层](/docs/CS/MQ/Pulsar/ManagedLedger.md) 与 [BookKeeper Ledger](/docs/CS/Framework/BookKeeper/Ledger.md)。
 
 ## Configuration store
 
@@ -524,12 +524,12 @@ public class PulsarClientImpl implements PulsarClient {
 - [Producer](/docs/CS/MQ/Pulsar/Producer.md)
 - [Consumer](/docs/CS/MQ/Pulsar/Consumer.md)
 - [Protocol](/docs/CS/MQ/Pulsar/Protocol.md)
-- [BookKeeper 存储层](/docs/CS/MQ/Pulsar/BookKeeper.md)
+- [ManagedLedger 存储层](/docs/CS/MQ/Pulsar/ManagedLedger.md)
 - [集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md)
 - [Functions 与事务](/docs/CS/MQ/Pulsar/Functions.md)
 - [Apache Kafka](/docs/CS/MQ/Kafka/Kafka.md) —— 存算一体路线的对照
 - [Apache RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md) —— 单文件 commitlog 路线的对照
-- [BookKeeper](/docs/CS/Framework/BooKeeper/BooKeeper.md)
+- [BookKeeper](/docs/CS/Framework/BookKeeper/BookKeeper.md)
 - [etcd](/docs/CS/Framework/etcd/etcd.md) —— 可选的 metadata store 之一
 - [Flink](/docs/CS/Framework/Flink/Flink.md) —— 与 Pulsar Functions 的流处理取舍
 ## References
