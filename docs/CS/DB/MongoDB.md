@@ -5,7 +5,7 @@ MongoDB 是最流行的**文档型 NoSQL 数据库**（2009 起，SSPL/商业双
 与关系库的概念映射：
 
 | MongoDB | 关系数据库 |
-|---------|-----------|
+| :--- | :--- |
 | database | database |
 | collection | table |
 | document（BSON） | row |
@@ -14,44 +14,70 @@ MongoDB 是最流行的**文档型 NoSQL 数据库**（2009 起，SSPL/商业双
 | `$lookup`（聚合管道） | join |
 | embedded document / array | 一对多（预关联） |
 
-## Data Model: Embedding vs Reference
+本文是枢纽页：定位、版本与导航。具体机制拆到 `MongoDB/` 下的专题笔记，按下面的顺序读即可。
 
-建模决策是 MongoDB 的核心：
+## Version Notes
 
-- **嵌入（embedded）**：一对多且从属对象总是随父文档一起读（订单 + 订单项），一次 IO 取全、原子更新，但文档上限 16MB、文档越大重写代价越高（BSON 原地更新要求编码后不超长）；
-- **引用（reference，手动外键）**：多对多、对象被多处共享、从属数量无界时，存 `{ "$ref": ... }` 或直接存 `userId`，应用层二次查询（或聚合 `$lookup`）拼装。
+| 版本 | 发布 | 关键特性 |
+| :--- | :--- | :--- |
+| 5.0 | 2021-07 | 时间序列集合、在线 resharding、`$setWindowFields`、版本化 API |
+| 6.0 | 2022-07 | Change Streams 前后镜像、时间序列增强、Queryable Encryption 预览 |
+| 7.0 | 2023-08 | Queryable Encryption 等值查询 GA、SBE 成为默认执行引擎、OIDC、AutoMerger |
+| 8.0 | 2024-10 | 读写性能提升、`bulkWrite`、config shard、`moveCollection` / `unshardCollection`、QE 范围查询、per-CPU TCMalloc、`w:majority` 语义变化 |
+| 8.2 | 2025-09 | 改为 Major / Minor 双轨发布；Minor 版也开始面向本地部署的特定场景 |
+| 9.0 | 2026-09 | QE 前缀/后缀/子串查询 GA、单操作内存上限、事务并发上限、`$queryStats` 默认采样、时间序列单命名空间存储 |
 
-经验法则：先按查询模式（读什么、写什么、一起访问的频率）建模，而不是先做 ER 图；文档保持小而集中，避免无限增长的数组。
+> 本文基线 **MongoDB 8.0**（Major Release，五年生命周期）。8.2 / 9.0 的差异在各专题里单独标注。
 
-## Query and Aggregation
+## Data Model
 
-```javascript
-// 条件 + 投影
-db.users.find({ age: { $gte: 18 }, city: "BJ" }, { name: 1, _id: 0 }).sort({ age: -1 }).limit(10)
-// 更新：操作符修改，避免整文档重写
-db.orders.updateOne({ _id: 1 }, { $set: { status: "PAID" }, $inc: { version: 1 } })
-// upsert / 数组操作
-db.carts.updateOne({ uid: 7 }, { $addToSet: { items: "sku_1" } }, { upsert: true })
-```
+建模决策是 MongoDB 的核心，也是"前期很爽、后期还债"的分水岭：
 
-复杂分析用**聚合管道**：`$match → $group → $lookup → $project → $sort/$limit`，等价于 SQL 的 WHERE/GROUP BY/JOIN/SELECT/ORDER BY 的流式组合。MongoDB 4.2+ 也支持部分 join、事务、视图。
+- **嵌入（embedded）**：一对多且从属对象总是随父文档一起读（订单 + 订单项），一次 IO 取全、单文档原子更新；代价是 16MB 文档上限与文档膨胀。
+- **引用（reference）**：多对多、对象被多处共享、从属数量无界时，存 `userId` 或 `{ "$ref": ... }`，应用层二次查询或聚合 `$lookup` 拼装。
 
-索引方面支持 B+Tree 二级索引、复合索引（同样遵循最左前缀）、多键索引（数组字段自动多键）、文本索引、地理空间索引（2dsphere）；执行计划用 `explain('executionStats')` 看是否 IXSCAN、docsExamined 与键数。
+经验法则：先按**查询模式**（读什么、写什么、是否总一起访问）建模，而不是先做 ER 图；数组要有明确上界，否则用分桶或独立集合。BSON 类型、ObjectId、schema 校验与九种设计模式见 [Data Model](/docs/CS/DB/MongoDB/DataModel.md)。
 
-## Storage Engine and Transaction
+## Query, Aggregation, and Index
 
-- **WiredTiger**（3.2 起默认）：文档级并发控制（乐观并发 + 文档级 latch）、MVCC 快照、按 checkpoint 落盘；写先记 WAL（journal，对应 redo log）保证崩溃恢复，原理可对照 [WAL](/docs/CS/DB/WAL.md) 与 [MySQL redo](/docs/CS/DB/MySQL/redolog.md)。
-- 早期 MMAPv1 已移除，其整库锁/内存映射时代结束。
-- 单文档原子性由引擎天然保证；4.0 支持副本集多文档事务、4.2 支持分片事务，但跨文档事务有性能与超时代价，官方仍建议优先用文档嵌入建模把一致性收敛到单文档内。
+查询语言是 MQL：`find` 负责过滤与分页，聚合管道负责变换与统计。真正决定性能的是**索引是否能同时支撑过滤与排序**——复合索引按 E-S-R（Equality、Sort、Range）排列，覆盖查询可以完全避免回表。
 
-## High Availability and Horizontal Scaling
+- 查询语义、游标、`explain` 与查询计划： [Query](/docs/CS/DB/MongoDB/Query.md)
+- 聚合管道、`$lookup`、窗口函数与 Change Streams 的关系： [Aggregation](/docs/CS/DB/MongoDB/Aggregation.md)
+- 索引类型、复合索引、TTL/文本/多键与索引构建： [Index](/docs/CS/DB/MongoDB/Index.md)
 
-- **副本集（Replica Set）**：一主多从，oplog（幂等的操作日志，本质 capped collection）驱动异步复制，心跳 + Raft-like 选举自动故障转移，多数派写关注 `w: majority` 配合 `j: true` 保证已提交不丢；多数派原则与 [Redis Sentinel](/docs/CS/DB/Redis/sentinel.md) 的异步主从相比安全性更高。
-- **分片（Sharding）**：数据按 shard key 分布到多个副本集，mongos 路由 + config server 存元数据；支持范围分片与哈希分片，shard key 一旦选定几乎无法改，必须在建库初期按基数、写均匀度、查询亲和性谨慎选择（热点写入是最大坑）。
+## Storage and Transactions
+
+WiredTiger 是唯一的生产存储引擎（MMAPv1 已在 4.2 移除）。它的关键设计是**更新不原地修改**：每次写生成新版本挂到更新链，journal（默认 100ms）保证崩溃恢复，checkpoint（60 秒）提供一致落盘点，后台淘汰把合并后的页重新压缩写回。读靠快照与 hazard pointer，不阻塞写。
+
+单文档更新天然原子；多文档事务 4.0（副本集）/ 4.2（分片）补齐，默认快照隔离，写冲突以 `TransientTransactionError` 的形式要求重试。机制细节：
+
+- [Storage Engine](/docs/CS/DB/MongoDB/StorageEngine.md)
+- [Transaction](/docs/CS/DB/MongoDB/Transaction.md)
+
+## Replication and Sharding
+
+**副本集**是一主多从 + 多数派选举：oplog 记录幂等写操作，`w: "majority"` 决定写确认，`readConcern: "majority"` 决定读可见性，`priority` 与 PV1 协议决定谁当选。8.0 把 majority 确认从"多数派应用完成"改为"多数派写入 oplog"，这是从节点读一致性的一个重要分界。
+
+**分片**把集合按 shard key 切成 128MB 的 chunk，`mongos` 定向或广播路由，config server 存元数据，balancer 在后台迁移。shard key 的基数、频率、单调性决定是否热点；5.0 起可在线 reshard，8.0 起可搬移未分片集合或退回未分片状态。
+
+- [Replication](/docs/CS/DB/MongoDB/Replication.md)
+- [Sharding](/docs/CS/DB/MongoDB/Sharding.md)
+- [Architecture](/docs/CS/DB/MongoDB/Architecture.md)
+
+## Specialized Workloads
+
+时间序列集合（5.0）把同源、相邻时间的数据压进列式桶，适合指标与传感器数据，支持 TTL 自动过期；它与业务文档同库同语言，省掉一套时序栈。见 [Time Series](/docs/CS/DB/MongoDB/TimeSeries.md)。
+
+实时变更订阅用 Change Streams：建在聚合框架上、读 oplog、带 resume token，6.0 起支持前后镜像。它的续读能力受 oplog 窗口约束，机制见 [Replication](/docs/CS/DB/MongoDB/Replication.md)。
+
+## Operations and Security
+
+生产上真正需要长期关注的是**工作集与 WT 缓存、oplog 窗口、索引与 shard key** 三件事；备份、监控、升级与容量规划见 [Operations](/docs/CS/DB/MongoDB/Operations.md)。安全侧按认证、RBAC、TLS、静态加密、客户端字段级加密、审计六层收紧，见 [Security](/docs/CS/DB/MongoDB/Security.md)。
 
 ## Applicable Boundaries
 
-适合：schema 多变、聚合结构数据、高写入吞吐、需要水平扩展的场景；不适合：强事务跨实体（银行核心账务）、大量复杂 ad-hoc join、严格范式化报表分析（这类更适合关系库或 [ClickHouse](/docs/CS/DB/ClickHouse.md)）。
+适合：schema 多变、聚合结构数据、高写入吞吐、需要水平扩展的场景；不适合：强事务跨实体（银行核心账务）、大量复杂 ad-hoc join、严格范式化报表分析（这类更适合关系库或 [ClickHouse](/docs/CS/DB/ClickHouse.md)）。与 PostgreSQL JSONB、Cassandra、HBase、Elasticsearch、Redis 的逐项对照见 [Comparison](/docs/CS/DB/MongoDB/Comparison.md)。
 
 ## Install
 
@@ -65,13 +91,17 @@ IDEA 可以安装 plugin Mongo DB Browser；命令行用 `mongosh`（新版 shel
 
 ## Links
 
-- [DataBases](/docs/CS/DB/DB.md)
-- [WAL](/docs/CS/DB/WAL.md)
-- [Redis](/docs/CS/DB/Redis/Redis.md)
-- [HBase](/docs/CS/DB/HBase.md)
-- [Cassandra](/docs/CS/DB/Cassandra.md)
+- [Architecture](/docs/CS/DB/MongoDB/Architecture.md)
+- [Data Model](/docs/CS/DB/MongoDB/DataModel.md)
+- [Query](/docs/CS/DB/MongoDB/Query.md)
+- [Index](/docs/CS/DB/MongoDB/Index.md)
+- [Replication](/docs/CS/DB/MongoDB/Replication.md)
+- [Sharding](/docs/CS/DB/MongoDB/Sharding.md)
 
 ## References
 
-1. [MongoDB 中文网](https://mongodb.net.cn/)
-2. [MongoDB Manual（官方手册）](https://www.mongodb.com/docs/manual/)
+- [MongoDB Manual](https://www.mongodb.com/docs/manual/)
+- [MongoDB Versioning](https://www.mongodb.com/docs/manual/reference/versioning/)
+- [Release Notes for MongoDB 8.0](https://www.mongodb.com/docs/manual/release-notes/8.0/)
+- [Release Notes for MongoDB 9.0](https://www.mongodb.com/docs/manual/release-notes/9.0/)
+- [BSON Specification](https://bsonspec.org/)

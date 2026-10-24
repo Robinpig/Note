@@ -1,90 +1,101 @@
+## Version Baseline
+
+> [!IMPORTANT]
+> 本页及 `Memcached/` 子树的所有默认值、命令可用性均以 **Memcached 1.6.45（2026-07-09）** 为基线。
+> 读到与下表冲突的旧口径表述时，一律以本基线为准。
+
+**当前版本**：1.6.45，发布于 2026-07-09（`git` tag `1.6.45`）。
+
+**支持状态**（来源：官方仓库 memcached/memcached 的 `SECURITY.md`）：
+
+Memcached 没有 Redis 那样的官方支持矩阵或年限承诺，**唯一稳定信号是 1.6.x 作为当前主线**。1.5.0（2017-02）引入 modern LRU 并默认启用；1.6.0（2020-03）引入内建 Lua Proxy，是架构分水岭。
+
+**许可证**：BSD-3-Clause，从始至终未变。
+
+**1.6.x 关键能力节点**（用于判断某特性是否可用）：
+
+| 版本 | 日期 | 关键变化 |
+| :-- | :-- | :-- |
+| 1.5.0 | 2017-02 | modern LRU 默认启用（Segmented LRU + LRU Maintainer + LRU Crawler） |
+| 1.6.0 | 2020-03 | **内建 Lua Proxy**（`mcp_config` 系列）；Meta Text Protocol（`mc.mget` / `mc.set`） |
+| 1.6.6 | 2021-03 | Slab Automover 默认开启（`slab_automover`） |
+| 1.6.23 | 2024-05 | 多队列哈希表（`-o hashtable` 可选） |
+| **1.6.45** | 2026-07 | 当前最新 GA；安全修复（CVE-2026-90698 已于 1.6.44 修复） |
+
+---
+
 ## Introduction
 
-[Memcached](https://www.memcached.org/) 是一个内存键值存储系统，用于存储数据库调用、API 调用或页面渲染结果中的任意小数据块（字符串、对象）。
-它是一个免费开源、高性能、分布式的内存对象缓存系统，本质上是通用的，但旨在通过减轻数据库负载来加速动态 Web 应用程序。
+[Memcached](https://memcached.org/) 是纯内存键值缓存系统，诞生于 2003 年 Brad Fitzpatrick 为 LiveJournal 解决数据库压力的需求。它的设计哲学极度收敛：**只做 KV 缓存、不做持久化、不做数据结构、不做服务端分片**——所有复杂度都压进客户端和上层应用。
 
-- Mc 最大的特性是高性能，单节点压测性能能达到百万级的 QPS。
-- 其次因为 Mc 的访问协议很简单，只有 get/set/cas/touch/gat/stats 等有限的几个命令。Mc 的访问协议简单，跟它的存储结构也有关系。
-- Mc 存储结构很简单，只存储简单的 key/value 键值对，而且对 value 直接以二进制方式存储，不识别内部存储结构，所以有限几个指令就可以满足操作需要。
-- Mc 完全基于内存操作，在系统运行期间，在有新 key 写进来时，如果没有空闲内存分配，就会对最不活跃的 key 进行 eviction 剔除操作。
-- 最后，Mc 服务节点运行也特别简单，不同 Mc 节点之间互不通信，由 client 自行负责管理数据分布
+Memcached 的典型场景是「加速」而非「存储」：当数据库查询、API 调用或页面渲染结果可在一定时间窗口内复用时，把它们以小数据块（字符串或对象序列化后的二进制）的形式放进 Memcached，后续请求直接命中内存返回，从而减轻后端数据库的负载。
 
+核心特性归纳为五点：
 
-## Installation
+- **单节点百万级 QPS**：主线程 accept + 多 worker 线程各自跑独立 event loop，共享哈希表和 slab 分配器，锁粒度细化到 slabclass 内部的子 LRU 和哈希表的分桶锁。
+- **协议极简**：文本协议仅约 12 条命令（`get` / `set` / `add` / `replace` / `append` / `prepend` / `cas` / `touch` / `gat` / `incr` / `decr` / `delete` / `flush_all` / `stats`），二进制协议字段化适配高并发，Meta 协议（1.6.0+）提供 `E` 标志位做服务端版本戳对比。
+- **Opaque Value**：对 value 不做任何语义解析，客户端负责序列化；这是性能的根基——服务端零解析负担，但也意味着没有 `HGET` / `ZRANGE` 这种结构查询能力。
+- **Slab 内存分配**：启动时预分配，运行时按需增 slab，避免 malloc/free 碎片；chunk 按增长因子逐级放大，最接近拟合每个 item 的实际大小。
+- **客户端分布式**：服务节点之间零通信，客户端自己决定 key 路由到哪台 Memcached 实例。
 
+---
 
-```shell
-# cent os
-yum install -y memcached
+## Knowledge Map
 
-systemctl start memcached
-systemctl enable memcached
-```
+Memcached 的代码结构可以沿着「请求进来 → 找到 item → 分配内存 → 维护内存」这一条数据路径拆开。以下各子文件按因果递进组织：
 
+### Architecture：从 socket 到线程
 
-## Architecture
+请求首先由主线程 accept，然后通过自管道（self-pipe）唤醒某个 worker 线程的 libevent loop，后续协议解析、命令执行、响应发送全部在该 worker 内完成。后台线程（LRU Maintainer、LRU Crawler、Slab Automover、Stats Maintainer）不处理任何客户端请求，只负责维持缓存的健康度。完整的线程角色分工和事件循环细节见 [Architecture](/docs/CS/DB/Memcached/Architecture.md)。
 
-Mc 的系统架构主要包括网络处理模块、多线程处理模块、哈希表、LRU、slab 内存分配模块 5 部分。
-Mc 基于 Libevent 实现了网络处理模块，通过多线程并发处理用户请求；基于哈希表对 key 进行快速定位，基于 LRU 来管理冷数据的剔除淘汰，基于 slab 机制进行快速的内存分配及存储
+### Memory Allocation：Slab 的分层拟合
 
-Mc 基于 Libevent 开发实现了多线程网络模型。Mc 的多线程网络模型分为主线程、工作线程。这些线程通过多路复用 IO 来进行网络 IO 接入以及读写处理。
-在 Linux 下，通常使用 epoll。通过多路复用 IO，特别是 epoll 的使用，Mc 线程无须遍历整个被侦听的描述符集，只要在被通知后遍历 Ready 队列的描述符集合就 OK 了。
-这些描述符是在各项准备工作完成之后，才被内核 IO 事件异步通知。也就是说，只在连接做好准备后，系统才会进行事件通知，Mc 才会进行 I/O 操作。这样就不会发生阻塞，使 Mc 在支持高并发的同时，拥有非常高的 IO 吞吐效率。
-Mc 除了用于 IO 的主线程和工作线程外，还用于多个辅助线程，如 Item 爬虫线程、LRU 维护线程、哈希表维护线程等，通过多线程并发工作，Mc 可以充分利用机器的多个核心，实现很好的网络 IO 性能和数据处理能力。
+value 进来之前，先决定放进哪个 slabclass。slab 是 1 MB 的页面，每个 slab 在创建时被等切成固定大小的 chunk；slabclass 1 的 chunk 最小（102 字节默认），后续按 `-f` 增长因子（默认 1.25）逐级放大，再对 8 取整。新 item 写入时选择**能装下它的最小 chunk**，避免浪费。当某个 slabclass 的全部 chunk 用完时，要么该 slabclass 新申请一个 slab，要么走淘汰流程。详见 [Memory_Allocation](/docs/CS/DB/Memcached/Memory_Allocation.md)。
 
-Mc 通过哈希表即 Hashtable 来快速定位 key。数据存储时，数据 Item 结构在存入 slab 中的 chunk 后，也会被存放到 Hashtable 中。
-同时，Mc 的哈希表会在每个桶，通过 Item 记录一个单向链表，以此来解决不同 key 在哈希表中的 Hash 冲突问题。 
-当需要查找给定 key 的 Item 时，首先计算 key 的 Hash 值，然后对哈希表中与 Hash 值对应的 bucket 中进行搜索，通过轮询 bucket 里的单向链表，找到该 key 对应的 Item 指针，这样就找到了 key 对应的存储 Item
-正常情况下，Mc 对哈希表的插入、查找操作都是在主表中进行的。当表中 Item 数量大于哈希表 bucket 节点数的 1.5 倍时，就对哈希表进行扩容。
-如下图所示，扩容时，Mc 内部使用两张 Hashtable，一个主哈希表 primary_hashtable，一个是旧哈希表 old_hashtable
-当扩容开始时，原来的主哈希表就成为旧哈希表，而新分配一个 2 倍容量的哈希表作为新的主表。
-扩容过程中，维护线程会将旧表的 Item 指针，逐步复制插入到新主哈希表。迁移过程中，根据迁移位置，用户请求会同时查旧表和新的主表，当数据全部迁移完成，所有的操作就重新回到主表中进行
+### Hash Table：渐进式扩容
 
-在 Mc 启动时，会创建 64 个 slabclass，但索引为 0 的 slabclass 做 slab 重新分配之用，基本不参与其他 slabclass 的日常分配活动。每个 slabclass 会根据需要不断分配默认大小为 1MB 的 slab
-每个 slab 又被分为相同大小的 chunk。chunk 就是 Mc 存储数据的基本存储单位。
-slabclass 1 的 chunk size 最小，默认最小 chunk 的大小是 102 字节，后续的 slabclass 会按照增长因子逐步增大 chunk size，具体数值会进一步对 8 取整。
-Mc 默认的增长因子是 1.25，启动时可以通过 -f 将增长因子设为其他值。比如采用默认值，slabclass 1 的 chunk size 是 102，slabclass 2 的 chunk size 是 102×1.25，再对 8 取整后是 128。
+item 写进 chunk 后，会把 `key → Item` 的映射插入主哈希表。查找时一次 hash + 遍历同桶链表即可定位。当表中 item 数超过 bucket 数的 1.5 倍时触发扩容：旧主表变成 `old_hashtable`，新申请两倍容量的表作为 `primary_hashtable`。扩容过程中用户请求同时查两张表，由后台线程逐步把旧表的 item 指针迁移到新表，迁完后回收旧表。这是 Memcached 为数不多使用双份数据结构的地方。详见 [Hash_Table](/docs/CS/DB/Memcached/Hash_Table.md)。
 
-Mc slab 中的 chunk 中通过 Item 结构存 key/value 键值对，Item 结构体的头部存链表的指针、flag、过期时间等，然后存 key 及 value。
-一般情况下，Item 并不会将 chunk 填满，但由于每个 key/value 在存储时，都会根据 kev/value size，选择最接近的 slabclass，所以 chunk 浪费的字节非常有限，基本可以忽略。
-每次新分配一个 slab 后，会将 slab 空间等分成相同 size 的 chunk，这些 chunk 会被加入到 slabclass 的 freelist 中，在需要时进行分配。分配出去的 chunk 存储 Item 数据，在过期被剔除后，会再次进入 freelist，供后续使用
+### Eviction：Segmented LRU + Crawler
 
+内存不够用时不做随机淘汰。Memcached 1.5.0 起默认启用的 Segmented LRU 把每个 slabclass 的 LRU 拆成 HOT / WARM / COLD / TEMP 四段子队列，每段有自己的 mutex。HOT 只放新进且只被 fetch 过一次的 item，WARM 放被 fetch 过至少两次的热点，COLD 放冷数据，TEMP 专门接住 TTL 很短（通常几秒）的临时 item。真正的淘汰发生在 COLD 尾部。与此同时，LRU Crawler 后台线程沿着四段子 LRU 从下往上爬行，主动回收过期 item，避免它们一直占坑。两者配合使得缓存的「死内存」占比大幅下降。详见 [Eviction](/docs/CS/DB/Memcached/Eviction.md)。
 
+### Protocol：文本 / 二进制 / Meta
 
+文本协议是最通用的交互方式，命令以 `\r\n` 分隔、行式输入，适合人工 `telnet` 调试和脚本快速接入。二进制协议把字段固定化，省掉分隔符解析，适合需要极低延迟的客户端。Meta 协议（1.6.0 起）是在文本协议之上加了 `mc.mget` / `mc.set` 等带扩展标志的命令，支持服务端版本戳（CAS value）和客户端自定义版本号，让客户端可以做「我这份比你新才写入」的条件更新。三种协议共用同一个 TCP 端口，服务端自动识别首包格式。详见 [Protocol](/docs/CS/DB/Memcached/Protocol.md)。
 
+### Commands：命令集速查
 
-- main thread
-- cthread pool
+从存储命令（`set` / `add` / `replace` / `append` / `prepend` / `cas`）到检索命令（`get` / `gets` / `gat` / `gats`），再到变更（`incr` / `decr`）和管理（`touch` / `delete` / `flush_all` / `stats`）的完整命令集，连同每个命令的响应码、边界条件和常见踩坑，集中在 [Commands](/docs/CS/DB/Memcached/Commands.md)。
 
+### Built-in Proxy：内建 Lua 代理
 
+1.6.0 起引入的内建代理让单台 Memcached 实例可以同时做缓存和代理：客户端命令进来后，每个 worker 线程上跑自己的 Lua VM，可以在 Lua 里做路由（把 key 映射到不同的后端 Memcached 集群）、读写穿透到不同数据源、甚至在 Lua 里做聚合。这使得 Memcached 从「纯缓存节点」演进成「缓存 + 代理」二合一。详见 [Proxy](/docs/CS/DB/Memcached/Proxy.md)。
 
+### Configuration：启动参数与运行时调优
 
-worker thread
-- notiofy_receive_fd
-- notiofy_send_fd
+`-m`（总内存）、`-f`（增长因子）、`-t`（worker 线程数）、`-c`（最大连接数）、`-o modern`（modern 模式开关）等常用启动参数，以及运行时通过 `stats` 和 `lru tune` 做的在线调优参数说明，集中在 [Configuration](/docs/CS/DB/Memcached/Configuration.md)。
 
+### Distributed：客户端分片
 
-thread_libevent_process
+Memcached 服务节点之间不通信，集群能力完全由客户端库（Twemcache、libmemcached、SpyMemcached 等）实现：客户端维护一份节点列表，对 key 做 hash（通常是一致性哈希或 ketama 环），直接连到目标节点。节点增删时哈希环的重分布影响被限制在相邻节点之间。Proxy 模式下服务端也可以做路由，但本质还是客户端不关心后端拓扑的黑盒。详见 [Distributed](/docs/CS/DB/Memcached/Distributed.md)。
 
+### Comparison：与 Redis / Dragonfly 的对比
 
+三者都在内存里跑，但设计目标完全不同：Redis 是「数据结构服务器」，值本身有类型语义；Dragonfly 是「垂直扩展的 Redis/Memcached 兼容替代」，用 thread-per-core 吃满单机器；Memcached 是「最轻量的纯缓存」，值是不透明字节串。选型对比见 [Comparison](/docs/CS/DB/Memcached/Comparison.md)。
 
-## Distributed
-
-Memcached Server不互相通信
-
-客户端实现分布式
+---
 
 ## Links
 
 - [DataBases](/docs/CS/DB/DB.md)
-- [Cache](/docs/CS/SE/Cache.md)
 - [Redis](/docs/CS/DB/Redis/Redis.md)
-- Twemcache
-- Twemproxy
-- MemcacheDB
-- MemcacheQ
-
+- [Dragonfly](/docs/CS/DB/Dragonfly.md)
+- [Cache](/docs/CS/SE/Cache.md)
 
 ## References
-1. [Scaling Memcached at Facebook](https://www.usenix.org/system/files/conference/nsdi13/nsdi13-final170_update.pdf) 
-2. 
+
+1. [Scaling Memcached at Facebook](https://www.usenix.org/system/files/conference/nsdi13/nsdi13-final170_update.pdf) — NSDI 2013，Facebook 的大规模 Memcached 集群实践
+2. [Memcached GitHub Repository](https://github.com/memcached/memcached) — 官方仓库，`doc/protocol.txt` 是最权威的协议文档
+3. [Replacing the Cache Replacement Algorithm in Memcached](https://memcached.org/blog/modern-lru) — 2018 年官方博客，解释 Segmented LRU + LRU Crawler 的设计动机与实现
+4. [Memcached Documentation — Internal Architecture](http://docs.memcached.org/features/proxy/arch/) — 内建 Proxy 架构文档

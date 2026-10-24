@@ -42,10 +42,11 @@ series_key  ──▶  (timestamp, value)  的有序流
 
 | 产品 | 引擎 | 核心设计 |
 | :-- | :-- | :-- |
-| [InfluxDB](/docs/CS/DB/InfluxDB.md) | 自研（Rust），底层用 Apache Arrow + Parquet + DataFusion | 3.x 把 TSDB 定位为实时缓冲 + Parquet 落盘；SQL 和 InfluxQL 双查询 |
+| [InfluxDB](/docs/CS/DB/InfluxDB.md) | 自研（Rust），底层用 Apache Arrow + Parquet + DataFusion | 3.x 把 TSDB 定位为实时缓冲 + Parquet 落盘；SQL 和 InfluxQL 双查询，Flux 已全线移除 |
 | [GreptimeDB](/docs/CS/DB/GreptimeDB.md) | **Mito**（Rust），LSM + Parquet SST + TWCS compaction | Tag + Timestamp + Field 模型；Region 路由；时间范围 / row-group 统计 / 索引三层 scan pruning |
 | [VictoriaMetrics](/docs/CS/DB/VictoriaMetrics.md) | 自研（Go），按月分区 LSM + 自研压缩格式 | 轻量、PromQL 兼容、无 WAL；vminsert/vmstorage/vmselect 三组件 |
 | [TDengine](/docs/CS/DB/TDengine.md) | 自研（C），列式 LSM + 每列独立压缩 | Supertable/subtable 两级表模型；一设备一表 |
+| [DolphinDB](/docs/CS/DB/DolphinDB.md) | 自研（C++），TSDB 引擎 LSM + PAX 行列混存，另配 OLAP/PKEY/IMOLTP/VECTORDB | sortKey 索引 + block 列存 + Level File 尾部 zonemap；五引擎多模并存 |
 
 这条路线的共同语言是 [LSM Tree](/docs/CS/Algorithms/tree/LSM.md)，但每个产品在以下两点做出了不同选择：
 
@@ -92,6 +93,7 @@ series_key  ──▶  (timestamp, value)  的有序流
 | GreptimeDB | ✅（MySQL/PG wire） | PromQL | 最完整的双通道 |
 | TimescaleDB | ✅（完整 PostgreSQL SQL） | ❌ | 只有 SQL |
 | TDengine | ✅（类 MySQL SQL） | ❌ | 自定义 SQL 方言 |
+| DolphinDB | ✅（SQL-92，兼容 Oracle/MySQL 方言） | ❌ | 库内图灵完备脚本，流批一体 |
 | QuestDB | ✅（普通 SQL + SAMPLE BY + ASOF JOIN） | ❌ | SQL-first、极致低延迟、Parquet 冷层 |
 | IoTDB | ✅（类 SQL，双模型语法不同） | ❌ | Apache 顶级、TsFile 自研、IoT 友好 |
 | OpenTSDB | ❌（metric expression string） | 自定义 DSL | 2010 年开源、HBase 之上、legacy 产品 |
@@ -108,6 +110,7 @@ series_key  ──▶  (timestamp, value)  的有序流
 | **GreptimeDB** | 独立引擎（Rust，Mito LSM） | Tag + Timestamp + Field | SQL + PromQL | 可观测 metrics/logs/traces 统一 + 对象存储 + Flow | [GreptimeDB](/docs/CS/DB/GreptimeDB.md) |
 | **TimescaleDB** | PostgreSQL C 扩展 | hypertable + chunk 分区 | PostgreSQL SQL | 需要关系能力 + 时序能力混合的 IoT / 金融 | [TimescaleDB](/docs/CS/DB/TimescaleDB.md) |
 | **TDengine** | 独立引擎（C，列式 LSM） | supertable + subtable（一设备一表） | TDengine SQL | 国内 IoT、工业物联网、电力场景 | [TDengine](/docs/CS/DB/TDengine.md) |
+| **DolphinDB** | 独立引擎（C++，五引擎多模） | TSDB sortKey 分区 + OLAP/PKEY/IMOLTP/VECTORDB | SQL-92 + Oracle/MySQL 方言 | 金融量化、电力与工业高频数据、流批一体 | [DolphinDB](/docs/CS/DB/DolphinDB.md) |
 | **QuestDB** | 独立引擎（Java+C+++Rust，WAL+本地列式+Parquet 冷层） | symbol + timestamp + 多列 | 普通 SQL + SAMPLE BY + ASOF JOIN | 交易地板、任务控制、极致低延迟 | [QuestDB](/docs/CS/DB/QuestDB.md) |
 | **Apache IoTDB** | 独立引擎（Java，列式 LSM + Apache TsFile） | 双模型：tree（路径）+ table（TAG/FIELD） | 类 SQL | Apache 顶级、工业 IoT、百万设备 | [IoTDB](/docs/CS/DB/IoTDB.md) |
 | **OpenTSDB（legacy）** | HBase 之上（Java，AsyncHBase 客户端） | metric + uid + timestamp + tag | metric expression string | 2010 年开源、理解时序库基础设计范式 | [OpenTSDB](/docs/CS/DB/OpenTSDB.md) |
@@ -121,7 +124,8 @@ series_key  ──▶  (timestamp, value)  的有序流
 5. 需要与现有 PostgreSQL 共享生态（extensions、UDFs、BI 工具）吗？需要 → TimescaleDB。
 6. 极致低延迟（交易地板、任务控制、微秒级摄入 + 毫秒级查询最新状态）是第一优先级吗？是 → **QuestDB**（zero-GC + 三层存储 + ASOF JOIN）。
 7. 工业物联网 / 电力 / 百万设备层级树场景吗？是 → **IoTDB**（Apache TsFile + 双模型）或 **TDengine**（一设备一表，国内生态最强）。
-8. 评估 legacy OpenTSDB 迁移路径吗？是 → 直接上 Prometheus（简单迁移）或 VictoriaMetrics（Prom 协议兼容）。
+8. 金融量化（因子研究、流批一体、库内机器学习）或高频工业数据吗？是 → **DolphinDB**（TSDB/OLAP/PKEY/IMOLTP/VECTORDB 五引擎 + 流批一体 + MCP 原生）。
+9. 评估 legacy OpenTSDB 迁移路径吗？是 → 直接上 Prometheus（简单迁移）或 VictoriaMetrics（Prom 协议兼容）。
 
 ## Links
 
@@ -133,6 +137,7 @@ series_key  ──▶  (timestamp, value)  的有序流
 - [VictoriaMetrics](/docs/CS/DB/VictoriaMetrics.md)
 - [TimescaleDB](/docs/CS/DB/TimescaleDB.md)
 - [TDengine](/docs/CS/DB/TDengine.md)
+- [DolphinDB](/docs/CS/DB/DolphinDB.md)
 - [QuestDB](/docs/CS/DB/QuestDB.md)
 - [IoTDB](/docs/CS/DB/IoTDB.md)
 - [OpenTSDB](/docs/CS/DB/OpenTSDB.md)

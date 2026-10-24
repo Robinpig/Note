@@ -333,7 +333,7 @@ Timsort 的核心思想是通过识别和利用数据集中已有的有序性，
 - **升序 Run**：如果后一个元素大于等于前一个元素，则继续扩展 Run。
 - **降序 Run**：如果后一个元素小于前一个元素，则继续扩展 Run，随后将该 Run 反转为升序
 
-为了提高小规模数据的排序效率，Timsort 引入了一个 Run 最小的长度 `MIN_RUN`。其值一般根据待排序数组的长度动态计算，通常为 3232![32](data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7) 至 6464![64](data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7) 之间。
+为了提高小规模数据的排序效率，Timsort 引入了一个 Run 最小的长度 `MIN_RUN`。其值一般根据待排序数组的长度动态计算，通常为 32 至 64 之间。
 
 - 如果识别的 Run 长度大于等于 `MIN_RUN`，则不需要额外操作，直接将 Run 压入栈中。
 - 如果识别的 Run 长度小于 `MIN_RUN`，则使用二分插入排序将该 Run 的后续元素插入到 Run 中，直到 Run 的长度达到 `MIN_RUN`，然后将其压入栈中。
@@ -358,29 +358,29 @@ Timsort 是一种稳定的排序算法，即相同元素在排序后仍然保持
 
 为进一步提升归并效率，Timsort 引入了 **加速模式（Galloping Mode）**。在标准的归并过程中，算法会逐一比较两个 Run 中的元素，将较小的元素放入结果数组。然而，如果一侧的 Run 中有大量连续元素比另一侧的当前元素要小，逐一比较会造成不必要的开销。
 
-为了解决这一问题，Timsort 设定了一个阈值 `Min_Gallop`（默认值为 77![7](data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7)）。当一侧 Run 中的元素连续比较胜利的次数达到 `Min_Gallop` 时，算法会进入加速模式，快速定位元素位置，其具体步骤如下：
+为了解决这一问题，Timsort 设定了一个阈值 `Min_Gallop`（默认值为 7）。当一侧 Run 中的元素连续比较胜利的次数达到 `Min_Gallop` 时，算法会进入加速模式，快速定位元素位置，其具体步骤如下：
 
-1. **指数查找**：从当前位置开始，算法以指数增长的步长 (1,2,4,8,…)(1,2,4,8,…)![(1, 2, 4, 8, \dots)](data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7) 在一侧的 Run 中查找，直到找到一个区间，使得目标元素位于该区间内。
+1. **指数查找**：从当前位置开始，算法以指数增长的步长 $(1, 2, 4, 8, \dots)$ 在一侧的 Run 中查找，直到找到一个区间，使得目标元素位于该区间内。
 2. **二分查找**：一旦确定了包含目标元素的区间，算法会在该区间内使用二分查找，精确定位目标元素的位置。
 
 通过这种方式，Timsort 可以跳过大量不必要的比较，快速处理一侧 Run 中连续的、较小（或较大）的元素，将它们批量移动到合并结果中。
 
 然而，加速模式并非在所有情况下都更高效。在某些数据分布下，加速模式可能导致更多的比较次数。为此，Timsort 采用了动态调整策略：
 
-- **阈值调整**：维护一个可变的 `Min_Gallop` 参数。当加速模式表现良好（即连续多次从同一 Run 中选取元素）时，`Min_Gallop` 减 11![1](data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7)，鼓励继续使用加速模式；当加速模式效果不佳（频繁在两个 Run 之间切换）时，`Min_Gallop` 加 11![1](data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7)，降低加速模式的使用频率。
+- **阈值调整**：维护一个可变的 `Min_Gallop` 参数。当加速模式表现良好（即连续多次从同一 Run 中选取元素）时，`Min_Gallop` 减 1，鼓励继续使用加速模式；当加速模式效果不佳（频繁在两个 Run 之间切换）时，`Min_Gallop` 加 1，降低加速模式的使用频率。
 
-通过动态调整 `Min_Gallop` 的值，算法能够根据实际数据情况，在普通归并模式和加速模式之间取得平衡。对于部分有序或高度有序的数据，加速模式可以显著提高效率，使 Timsort 的性能接近 𝑂(𝑛)O(n)![O(n)](data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7)；而对于随机数据，算法会逐渐倾向于使用普通归并，从而保证 𝑂(𝑛log⁡𝑛)O(nlog⁡n)![O(n \log n)](data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7) 的时间复杂度
+通过动态调整 `Min_Gallop` 的值，算法能够根据实际数据情况，在普通归并模式和加速模式之间取得平衡。对于部分有序或高度有序的数据，加速模式可以显著提高效率，使 Timsort 的性能接近 $O(n)$；而对于随机数据，算法会逐渐倾向于使用普通归并，从而保证 $O(n \log n)$ 的时间复杂度
 
 Timsort 的时间复杂度取决于数据的有序性：
 
-- 最优情况：$𝑂(𝑛)$
-  - 当数据已经有序或近似有序时，算法识别出的 Run 长度接近 𝑛n![n](data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7)，归并次数减少，复杂度趋近于 𝑂(𝑛)O(n)![O(n)](data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7)。
-- 最坏情况：$𝑂(𝑛log⁡𝑛)$
-  - 在数据完全无序的情况下，每一个 Run 的长度都接近 11![1](data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7)，因此需要 𝑂(log⁡𝑛)O(log⁡n)![O(\log n)](data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7) 次归并，每次归并的代价为 𝑂(𝑛)O(n)![O(n)](data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7)，总复杂度为 𝑂(𝑛log⁡𝑛)O(nlog⁡n)![O(n \log n)](data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7)。
+- 最优情况：$O(n)$
+  - 当数据已经有序或近似有序时，算法识别出的 Run 长度接近 $n$，归并次数减少，复杂度趋近于 $O(n)$。
+- 最坏情况：$O(n \log n)$
+  - 在数据完全无序的情况下，每一个 Run 的长度都接近 1，因此需要 $O(\log n)$ 次归并，每次归并的代价为 $O(n)$，总复杂度为 $O(n \log n)$。
 
 
 
-对于空间复杂度，由于 Timsort 大致需要额外的 𝑂(𝑛)O(n)![O(n)](data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7) 空间用于存储栈和临时缓冲区，因此总的空间复杂度为 𝑂(𝑛)
+对于空间复杂度，由于 Timsort 大致需要额外的 $O(n)$ 空间用于存储栈和临时缓冲区，因此总的空间复杂度为 $O(n)$
 
 
 
@@ -453,6 +453,7 @@ The Pancake Flipping problem is NP-hard.(see [Pancake Flipping is Hard](https://
 
 - [数据结构](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
 - [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
+- [Quick Select](/docs/CS/Algorithms/Quick_Select.md)
 
 ## References
 

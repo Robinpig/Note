@@ -34,7 +34,7 @@
 
 
 $$
-f(n) = 2f(n-1) + f(n)
+f(n) = 2f(n-1) + 1
 $$
 
 ```java
@@ -69,16 +69,36 @@ void solveHanota(List<Integer> A, List<Integer> B, List<Integer> C) {
 }
 ```
 
-汉诺塔问题形成一棵高度为 n 的递归树，每个节点代表一个子问题，对应一个开启的 dfs() 函数，因此时间复杂度为 $O(z^n)$ ，空间复杂度为 $O(n)$
+汉诺塔问题形成一棵高度为 n 的递归树，每个节点代表一个子问题，对应一个开启的 dfs() 函数，节点总数为 $2^n - 1$，因此时间复杂度为 $O(2^n)$ ，空间复杂度为 $O(n)$
 
 
 
 ## Iterative Solution
+
+递归写法清晰，但 $n$ 较大时函数调用开销可观。汉诺塔有一个**不用递归**的经典规则解法，利用一个观察：**最小的圆盘永远只在两根柱子之间来回**，而其余圆盘的合法移动在任意时刻都是唯一的。
+
+1. 若 $n$ 为偶数，先把目标柱与缓冲柱对调（等价于让最小盘的移动方向固定为 A → B → C 循环）；
+2. 循环执行直到全部移动完（共 $2^n - 1$ 步）：
+   - 把**最小的圆盘**移到循环顺序中的下一根柱子；
+   - 在**不碰最小圆盘**的两根柱子之间，执行唯一合法的那次移动。
+
+```text
+# n 为偶数时交换 B、C，使最小盘始终沿 A→B→C 循环
+while 未完成:
+    移动最小盘到循环中的下一根柱      # 第 1、3、5… 步
+    在另外两根柱间做唯一合法移动      # 第 2、4、6… 步
+```
+
+可以验证该序列与递归解逐项一致，且每步 $O(1)$。它的工程价值不在汉诺塔本身，而在于提示了一类通用思路：**当状态转移规则确定且合法移动唯一时，模拟优于搜索**。
+
 ## Links
 
 - [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
+- [Recursion](/docs/CS/Algorithms/Recursion.md)
+- [Divide and Conquer](/docs/CS/Algorithms/Divide-and-Conquer.md)
+- [Backtracking](/docs/CS/Algorithms/Backtracking.md)
 
 ## References
 
 1. [Tower of Hanoi - Wolfram MathWorld](https://mathworld.wolfram.com/TowerofHanoi.html)
-2. [A000139 - OEIS: 3^n - 1 形式的汉诺塔最少移动次数](https://oeis.org/A000139)
+2. [A000225 - OEIS: 汉诺塔最少移动次数 2^n - 1](https://oeis.org/A000225)

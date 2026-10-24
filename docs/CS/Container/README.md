@@ -38,6 +38,10 @@
        ├── Storage.md —— 存储链路：PVC 绑定 → Attach → 两阶段挂载
        ├── WatchCache.md —— 读路径底座：watch cache、list 分流、流式 list
        ├── Identity.md —— 身份与证书：TLS bootstrap、CSR 审批签发、token 轮换
+       ├── Workloads.md —— 工作负载：Deployment / StatefulSet / DaemonSet / Job / CronJob
+       ├── Extension.md —— 扩展机制：CRD、Operator、聚合 API、准入 Webhook
+       ├── Observability.md —— 可观测性：metrics / logs / traces 三条链路
+       ├── GitOps.md —— 持续交付：pull 模型、Kustomize、Argo CD / Flux
        ├── 架构组件
        │     ├── apiserver.md      kubelet.md
        │     ├── scheduler.md      kube-proxy.md
@@ -83,6 +87,10 @@
 | 集群编排 | [Docker Swarm](/docs/CS/Container/Docker/swarm.md) | 服务/栈、overlay+routing mesh、与 K8s 对比 |
 | 运行时链路 | [containerd](/docs/CS/Container/k8s/containerd.md) | CRI 之下：五大模块、shim、runc |
 | 最小调度单元 | [Pod](/docs/CS/Container/k8s/Pod.md) | pause 容器、生命周期、QoS、优雅终止 |
+| 工作负载 | [Workloads](/docs/CS/Container/k8s/Workloads.md) | 五个控制器的默认值、滚动更新算式、身份与顺序 |
+| 扩展机制 | [Extension](/docs/CS/Container/k8s/Extension.md) | CRD、Operator、聚合 API、准入 Webhook 与 VAP |
+| 可观测性 | [Observability](/docs/CS/Container/k8s/Observability.md) | kubelet 指标端点、metrics API、日志路径、OTLP 链路 |
+| 持续交付 | [GitOps](/docs/CS/Container/k8s/GitOps.md) | pull 模型、Kustomize、Argo CD / Flux、漂移与渐进式发布 |
 | 集群主笔记 | [K8s](/docs/CS/Container/k8s/K8s.md) | 架构、资源对象、CRI、探针 |
 | 四条主链路 | [Architecture](/docs/CS/Container/k8s/Architecture.md) | 写请求 / 控制回路 / 调度 / 落地，及 RV、OwnerReference、水平触发 |
 | 删除与级联 | [Deletion](/docs/CS/Container/k8s/Deletion.md) | deletionTimestamp + finalizer、三种级联、优雅终止与 force delete |

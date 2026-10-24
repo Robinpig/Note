@@ -135,5 +135,8 @@ $$
 
 - [数据结构](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
 - [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
+- [Divide and Conquer](/docs/CS/Algorithms/Divide-and-Conquer.md)
+- [Hanoi](/docs/CS/Algorithms/question/Hanoi.md)
+- [N-Queens](/docs/CS/Algorithms/question/N-Queens.md)
 
 ## References

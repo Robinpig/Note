@@ -50,6 +50,10 @@ If p = 1/2, using MaxLevel = 16 is appropriate for data structures containing up
 
 ## Links
 
+- [Linked List](/docs/CS/Algorithms/struct/linked-list.md)
+- [Red-Black Tree](/docs/CS/Algorithms/tree/Red-Black-Tree.md)
+- [Algorithms](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
+
 ## References
 
 1. [Skip List(跳表) - Torch-Fan](https://www.torch-fan.site/2023/04/08/%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84-Skip-List-%E8%B7%B3%E8%A1%A8/)

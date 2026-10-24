@@ -57,6 +57,8 @@ def backtrack(参数):
 
 - [数据结构](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
 - [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
+- [N-Queens](/docs/CS/Algorithms/question/N-Queens.md)
+- [Recursion](/docs/CS/Algorithms/Recursion.md)
 
 ## References
 

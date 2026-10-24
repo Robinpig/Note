@@ -277,3 +277,4 @@ Cassandra 和 Riak 采取不同的方法：它们在节点间使用 gossip 协�
 
 - [Replica](/docs/CS/Distributed/Replica.md)
 - [HBase](/docs/CS/DB/HBase.md)
+- [HBase RowKey Design](/docs/CS/DB/HBase/RowKey_Design.md)

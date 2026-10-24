@@ -159,7 +159,8 @@ This is the fundamental idea behind Skip Lists.
 ## Links
 
 - [数据结构](/docs/CS/Algorithms/Algorithms.md?id=data-structures)
--
+- [List](/docs/CS/Algorithms/struct/list.md)
+- [Skip List](/docs/CS/Algorithms/struct/skiplist.md)
 
 ## References
 

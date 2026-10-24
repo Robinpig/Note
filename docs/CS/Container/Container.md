@@ -107,6 +107,8 @@ Mount Namespace修改的，是容器进程对文件系统“挂载点”的认�
 
 编排层的内部结构——四条主链路如何串行分布式组件的读写、为什么"唯一的写入口 + 自治控制回路"这个模型能让组件互不相识却最终收敛——见 [K8s 架构与四条主链路](/docs/CS/Container/k8s/Architecture.md)。
 
+编排之上还有四层云原生能力，它们回答的是不同问题：**怎么跑**（[工作负载控制器](/docs/CS/Container/k8s/Workloads.md)：Deployment / StatefulSet / DaemonSet / Job / CronJob 对 Pod 身份与顺序的不同假设）、**怎么扩展**（[扩展机制](/docs/CS/Container/k8s/Extension.md)：CRD、Operator、聚合 API、准入 Webhook）、**怎么观测**（[可观测性](/docs/CS/Container/k8s/Observability.md)：kubelet 指标端点、metrics API、容器日志与 OTLP 链路）、**怎么交付**（[GitOps](/docs/CS/Container/k8s/GitOps.md)：以 Git 为唯一期望状态、由集群内 agent 持续拉取）。四者都不改变"声明期望、控制器收敛"这条主线，只是把这条主线分别用在对象模型、API 表面、运行时可观测性和发布流程上。
+
 
 
 

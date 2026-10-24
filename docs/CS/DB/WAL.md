@@ -56,7 +56,7 @@ A long-running Read operation can prevent a new Checkpoint from moving forward, 
 - [H2 MVStore](/docs/CS/DB/h2/MVStore.md)
 - [Milvus WAL and StreamingNode](/docs/CS/DB/Milvus/WAL_and_StreamingNode.md)
 - [Redo Log](/docs/CS/DB/MySQL/redolog.md)
-- [Binlog](/docs/CS/DB/MySQL/binlog.md)
+- [SQLite](/docs/CS/DB/SQLite.md)
 
 ## References
 

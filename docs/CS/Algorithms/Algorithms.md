@@ -89,7 +89,7 @@
 - 枚举（Enumeration）：暴力遍历所有可能，常与剪枝配合。见 [Enumeration](/docs/CS/Algorithms/Enumeration.md)。
 - 回溯（Backtracking）：在枚举基础上按约束回退搜索。见 [Backtracking](/docs/CS/Algorithms/Backtracking.md)。
 - 贪心（Greedy）：每步取局部最优，依赖最优子结构。见 [Greedy](/docs/CS/Algorithms/Greedy.md)。
-- 动态规划（Dynamic Programming）：子问题重叠时，每个子问题只算一次并存入表格，避免分治的重复计算，常用于最值与计数。见 [DP](/docs/CS/Algorithms/DP/DP.md)，含背包、LCS、LIS、树形与区间 DP 及优化技巧。
+- 动态规划（Dynamic Programming）：子问题重叠时，每个子问题只算一次并存入表格，避免分治的重复计算，常用于最值与计数。见 [DP](/docs/CS/Algorithms/DP/DP.md)，含线性 DP、背包四型（0-1 / 完全 / 多重 / 分组）、LCS、编辑距离、树形、区间、状态压缩、博弈与概率 DP 及优化技巧。
 - 分治（Divide and Conquer）：分解 → 递归 → 合并。见 [Divide and Conquer](/docs/CS/Algorithms/Divide-and-Conquer.md)（已在复杂度一节提及）。
 - 随机算法（Randomized）：引入随机性以简化或加速。见 [Randomized](/docs/CS/Algorithms/Randomized.md)。
 - 均摊分析（Amortized Analysis）：把偶发的昂贵操作摊到一系列廉价操作上。见 [Amortized](/docs/CS/Algorithms/Amortized.md)。
@@ -102,9 +102,9 @@
 
 - 判定与构造：[Computability](/docs/CS/Algorithms/Computability.md)（可判定性与图灵机）、[NP](/docs/CS/Algorithms/NP.md)（NP 完全与 $P \neq NP$，自 1971 年起是理论计算机科学最深的开问题之一）。
 - 搜索：[search](/docs/CS/Algorithms/search.md)（二分、DFS、BFS）、[string-search](/docs/CS/Algorithms/string/string-search.md)（朴素 / Rabin-Karp / KMP / BM / 后缀数组）、[string](/docs/CS/Algorithms/string/string.md)（字符串基础与哈希）。
-- 排序与次序统计：[sort](/docs/CS/Algorithms/sort.md)（比较排序与非比较排序、外排）。
+- 排序与选择：[sort](/docs/CS/Algorithms/sort.md)（比较排序与非比较排序、外排）与 [Quick Select](/docs/CS/Algorithms/Quick_Select.md)（第 $k$ 小与中位数，平均线性时间，BFPRT 给出最坏线性保证）。
 - 最优化：[graph](/docs/CS/Algorithms/graph/graph.md) 下的最小生成树与最短路，二分图 [Matching](/docs/CS/Algorithms/graph/Matching.md)，以及 [Network_Flow](/docs/CS/Algorithms/Network_Flow.md)（网络流）。题解见 [Shortest-Path](/docs/CS/Algorithms/question/Shortest-Path.md)。
-- 计数与统计：[PageRank](/docs/CS/Algorithms/PageRank.md)（随机游走平稳分布）、[HyperLogLog](/docs/CS/Algorithms/HyperLogLog.md)（基数估计）、[Number_Theory](/docs/CS/Algorithms/Number_Theory.md)（筛法、快速幂、模逆元、Pollard–Rho）。
+- 计数与统计：[PageRank](/docs/CS/Algorithms/PageRank.md)（随机游走平稳分布）、[HyperLogLog](/docs/CS/Algorithms/HyperLogLog.md)（基数估计）、[Count-Min Sketch](/docs/CS/Algorithms/Count_Min_Sketch.md)（数据流频次估计，与基数估计互补）、[Number_Theory](/docs/CS/Algorithms/Number_Theory.md)（筛法、快速幂、模逆元、Pollard–Rho）。
 - 几何与游戏：[Computational_Geometry](/docs/CS/Algorithms/Computational_Geometry.md)（凸包、扫描线、鲁棒性）、[Algorithmic Game Theory](/docs/CS/Algorithms/Algorithmic_Game_Theory.md)（Minimax、α-β 剪枝、PVS、MCTS/UCT）。
 - 压缩：[JPEG](/docs/CS/Algorithms/JPEG.md)（DCT + 量化 + 游程 / 哈夫曼）。
 

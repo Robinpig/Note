@@ -3,182 +3,24 @@
 [HikariCP](https://github.com/brettwooldridge/HikariCP) contains many micro-optimizations that individually are barely measurable, but together combine as a boost to overall performance.
 Some of these optimizations are measured in fractions of a millisecond amortized over millions of invocations.
 
+Version baseline: 最新稳定版 **7.1.0**（2026-06），**HikariCP 6.x / 7.x 要求 Java 11+**；Java 8 只能停留在 5.x（4.0.3 处于维护模式）。7.x 用 `VarHandle` 重写了并发控制，进一步压低 `ConcurrentBag` 的争用开销。HikariCP 是 **Spring Boot 2.0+ 的默认连接池**，依赖 `spring-boot-starter-jdbc` / `data-jpa` 即自动装配。
 
+HikariCP 与同类实现的取舍见 [DataSource](/docs/CS/Java/ConnectionPool/ConnectionPool.md) 的 `## Implementations Map`；重监控/防注入能力对照 [Druid](/docs/CS/Java/ConnectionPool/Druid.md)，通用稳健型对照 [DBCP](/docs/CS/Java/ConnectionPool/DBCP.md)。
 
+## Map of This Section
 
+HikariCP 的「快」不是玄学，而是一组可被拆解的工程选择。本节四篇分册从四个角度把它讲透：
 
-### ArrayList
-
-One non-trivial (performance-wise) optimization was eliminating the use of an ArrayList<Statement> instance in the ConnectionProxy used to track open Statement instances.
-When a Statement is closed, it must be removed from this collection, and when the Connection is closed it must iterate the collection and close any open Statement instances, and finally must clear the collection.
-The Java ArrayList, wisely for general purpose use, performs a range check upon every `get(int index)` call.
-However, because we can provide guarantees about our ranges, this check is merely overhead.
-
-Additionally, the `remove(Object)` implementation performs a scan from head to tail,
-however common patterns in JDBC programming are to close Statements immediately after use, or in reverse order of opening.
-For these cases, a scan that starts at the tail will perform better.
-Therefore, ArrayList<Statement> was replaced with a custom class FastList which eliminates range checking and performs removal scans **from tail to head**.
-
-Link: [ArrayList - JDK](/docs/CS/Java/JDK/Collection/List.md?id=arraylist)
-
-### ConcurrentBag
-
-HikariCP contains a custom lock-free collection called a ConcurrentBag.
-The idea was borrowed from the C# .NET ConcurrentBag class, but the internal implementation quite different.
-The ConcurrentBag provides...
-
-- A lock-free design
-- ThreadLocal caching
-- Queue-stealing
-- Direct hand-off optimizations
-
-...resulting in a high degree of concurrency, extremely low latency, and minimized occurrences of false-sharing.
-
-### Invocation
-
-`invokevirtual` -> `invokestatic`
-
-```java
-public final class ProxyFactory {
-    private ProxyFactory() {
-        // unconstructable
-    }
-
-    static ProxyConnection getProxyConnection(final PoolEntry poolEntry, final Connection connection, final FastList<Statement> openStatements, final ProxyLeakTask leakTask, final long now, final boolean isReadOnly, final boolean isAutoCommit) {
-        // Body is replaced (injected) by JavassistProxyFactory
-        throw new IllegalStateException("You need to run the CLI build and you need target/classes in your classpath to run.");
-    }
-}
-```
-
-```plantuml
-HikariDataSource -> HikariPool: getConnection
-HikariPool -> ConcurrentBag: borrow
-ConcurrentBag  --> HikariPool: PoolEntry
-
-HikariPool -> ProxyFactory : createProxyConnection
-ProxyFactory --> HikariPool: ProxyConnection
-HikariPool --> HikariDataSource: Connection”
-```
-
-
-```java
-public class HikariDataSource extends HikariConfig implements DataSource, Closeable {
-
-    private final AtomicBoolean isShutdown = new AtomicBoolean();
-
-    private final HikariPool fastPathPool;
-    private volatile HikariPool pool;
-
-    @Override
-    public Connection getConnection() throws SQLException
-    {
-        if (isClosed()) {
-            throw new SQLException("HikariDataSource " + this + " has been closed.");
-        }
-
-        if (fastPathPool != null) {
-            return fastPathPool.getConnection();
-        }
-
-        // See http://en.wikipedia.org/wiki/Double-checked_locking#Usage_in_Java
-        HikariPool result = pool;
-        if (result == null) {
-            synchronized (this) {
-                result = pool;
-                if (result == null) {
-                    validate();
-                    try {
-                        pool = result = new HikariPool(this);
-                        this.seal();
-                    }
-                    catch (PoolInitializationException pie) {
-                        if (pie.getCause() instanceof SQLException) {
-                            throw (SQLException) pie.getCause();
-                        }
-                        else {
-                            throw pie;
-                        }
-                    }
-                }
-            }
-        }
-
-        return result.getConnection();
-    }
-}
-```
-
-
-## ProxyConnection
-
-
-Closing statements can cause connection eviction, so this must run before the conditional below
-
-```java
-public abstract class ProxyConnection implements Connection {
-    @Override
-    public final void close() throws SQLException {
-        // Closing statements can cause connection eviction, so this must run before the conditional below
-        closeStatements();
-
-        if (delegate != ClosedConnection.CLOSED_CONNECTION) {
-            leakTask.cancel();
-
-            try {
-                if (isCommitStateDirty && !isAutoCommit) {
-                    delegate.rollback();
-                    lastAccess = currentTime();
-                    LOGGER.debug("{} - Executed rollback on connection {} due to dirty commit state on close().", poolEntry.getPoolName(), delegate);
-                }
-
-                if (dirtyBits != 0) {
-                    poolEntry.resetConnectionState(this, dirtyBits);
-                    lastAccess = currentTime();
-                }
-
-                delegate.clearWarnings();
-            } catch (SQLException e) {
-                // when connections are aborted, exceptions are often thrown that should not reach the application
-                if (!poolEntry.isMarkedEvicted()) {
-                    throw checkException(e);
-                }
-            } finally {
-                delegate = ClosedConnection.CLOSED_CONNECTION;
-                poolEntry.recycle(lastAccess);
-            }
-        }
-    }
-
-    private synchronized void closeStatements() {
-        final int size = openStatements.size();
-        if (size > 0) {
-            for (int i = 0; i < size && delegate != ClosedConnection.CLOSED_CONNECTION; i++) {
-                try (Statement ignored = openStatements.get(i)) {
-                    // automatic resource cleanup
-                } catch (SQLException e) {
-                    LOGGER.warn("{} - Connection {} marked as broken because of an exception closing open statements during Connection.close()",
-                            poolEntry.getPoolName(), delegate);
-                    leakTask.cancel();
-                    poolEntry.evict("(exception closing Statements during Connection.close())");
-                    delegate = ClosedConnection.CLOSED_CONNECTION;
-                }
-            }
-
-            openStatements.clear();
-        }
-    }
-}
-```
-
-
-## Connection
-
-Configure your HikariCP idleTimeout and maxLifeTime settings to be one minute less than the wait_timeout of MySQL.
+- [Architecture](/docs/CS/Java/ConnectionPool/HiKariCP/Architecture.md) 是骨架：先把 `HikariDataSource` → `HikariPool` → `ConcurrentBag` → `ProxyConnection` 这条主链路，以及 `PoolEntry`、`HouseKeeper` 等关键组件讲清楚，理解连接是怎么被借出、归还与回收的。
+- [Performance](/docs/CS/Java/ConnectionPool/HiKariCP/Performance.md) 解释为什么快：`FastList` 替换 `ArrayList`、`ConcurrentBag` 的无锁设计、以及构建期用 Javassist 生成代理把 `invokevirtual` 改成 `invokestatic` 这几项微优化如何叠加成借还开销的数量级下降，并给出与 Druid / DBCP 的对照。
+- [Configuration](/docs/CS/Java/ConnectionPool/HiKariCP/Configuration.md) 是把旋钮拧进生产：所有时间参数的单位与默认值、`minIdle = maxPoolSize` 的固定池语义、`maxLifetime` 必须短于 DB `wait_timeout` 的铁律，以及 Spring Boot 的 `spring.datasource.hikari.*` 装配与时钟同步陷阱。
+- [Monitoring](/docs/CS/Java/ConnectionPool/HiKariCP/Monitoring.md) 讲如何观测：HikariCP 不像 Druid 有内置 Web 控制台，它的可观测性来自 `HikariPoolMXBean`、Micrometer / Dropwizard 指标、泄漏检测日志三件套，本节给出接入 Actuator / Prometheus 的具体路径。
 
 ## Links
 
 - [DataSource](/docs/CS/Java/ConnectionPool/ConnectionPool.md)
+- [Druid](/docs/CS/Java/ConnectionPool/Druid.md)
+- [DBCP](/docs/CS/Java/ConnectionPool/DBCP.md)
 
 ## References
 

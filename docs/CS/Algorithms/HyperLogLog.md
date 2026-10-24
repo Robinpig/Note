@@ -30,6 +30,11 @@ In some implementations ([Redis](/docs/CS/DB/Redis/struct/HyperLogLog.md)) the n
 
 ## Links
 
+- [Bloom Filter](/docs/CS/Algorithms/struct/BloomFilter.md)
+- [Hash](/docs/CS/Algorithms/hash.md)
+- [Randomized](/docs/CS/Algorithms/Randomized.md)
+- [Algorithms](/docs/CS/Algorithms/Algorithms.md?id=classic-algorithm-topics)
+
 ## References
 
 1. [HyperLogLog: the analysis of a near-optimal cardinality estimation algorithm (Flajolet et al., ICDT 2007)](https://algo.inria.fr/flajolet/Publications/FlFuGaMe07.pdf)

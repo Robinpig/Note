@@ -12,9 +12,10 @@
 | 8.1.0 | 2025-03-31 | `COMMANDLOG` 命令族；`io-threads` 改为可运行时修改；双通道复制 |
 | 9.0.0 | 2025-10-21 | `CLUSTER MIGRATESLOTS`/`FLUSHSLOT`/`GETSLOTMIGRATIONS`；`DELIFEQ`；`HGETEX`/`HSETEX` |
 | 9.1.0 | 2026-05-19 | `CLUSTER SCAN` |
-| **9.1.2** | 2026-09-01 | 当前最新；安全修复（RDMA UAF、Lua 解释器 UAF） |
+| **9.1.2** | 2026-09-01 | 当前最新稳定版；安全修复（RDMA UAF、Lua 解释器 UAF） |
+| 9.2.0-rc1 | 2026-09-16 | forkless BGSAVE（opt-in）、流式压缩复制/快照、B+ 树有序集、Path Hash 新类型；GA 目标 2026-11-15 |
 
-另有9.2.0-rc1（2026-09-16，预发布），GA 未发布。
+旧线 8.1.10 / 7.2.14 仍接收安全更新（valkey.io「latest supported version of past releases」）。9.2.0-rc1 已于 2026-09-16 放出，GA 目标 2026-11-15（见上表）。
 
 ## Introduction
 
@@ -53,16 +54,67 @@
 
 ## Architecture Evolution
 
-- **多线程 I/O**：network read/write 与命令执行解耦（类似 Redis 6 的 I/O threads 并持续增强），单线程命令执行保证无锁语义。Redis 侧 `io-threads` 是 `IMMUTABLE_CONFIG`（8.10.2 `src/config.c:3507`），Valkey 侧可通过 `updateIOThreads` 回调动态调整。
-- **Cluster**：无中心分片（16384 slot），Gossip 维护拓扑，支持 reshard/replica。
-- **数据结构**：string/hash/list/set/zset/stream 等，RDB/AOF 持久化，pub-sub、Lua 脚本。
+### I/O Threading
+
+- **多线程 I/O、单线程命令执行**：网络 read/write 与命令解析可 offload 到 I/O 线程，主线程与 I/O 线程并发（8.0 起异步 I/O threading + 命令批处理 + key 预取），但**命令仍在主线程串行执行**以保证无锁语义——这是与 Dragonfly shared-nothing 多线程执行的根本区别（其架构见 `Dragonfly.md` 的 `## Architecture`）。
+- 8.0 在 AWS r7g 上可达 **1.2M QPS**（旧上限 380K）；8.1 把 TLS 卸载也移出主线程，解除新连接接纳瓶颈。
+- `io-threads` 在 Valkey 可运行时动态调整（通过 `updateIOThreads` 回调）；Redis 侧是 `IMMUTABLE_CONFIG`（8.10.2 `src/config.c:3507`）。经验起点是「物理核心数 / 2」，过配反而因上下文切换受损。
+
+### Cluster
+
+- 无中心分片（16384 slot），Gossip 维护拓扑，支持 reshard / replica。
+- 8.0 每个 slot 引入独立字典与 per-slot 指标（key 数、CPU、网络吞吐），`CLUSTER SLOT-STATS` 可观测，开销约 0.7% QPS。
+- 8.0 起 slot migration 状态在 `CLUSTER SETSLOT` 执行前先同步复制到 replica，故障切换时自动恢复迁移状态，缩小空窗。
+
+### Dual-Channel Replication
+
+- 8.0 引入**双通道复制**：RDB 快照走专用通道，增量命令流走主通道，两者并行传输，主节点不再把整段写流缓在 Client Output Buffer（COB）里。
+- 对主节点内存压力显著下降；重读场景下同步时间最多缩短 **50%**。
+- **仅在主节点开启 diskless sync 时生效**（`repl-diskless-sync yes` + `dual-channel-replication-enabled yes`，均可运行时切换）；8.0+ replica 协商双通道，旧 replica 透明回退单通道。
+
+### Memory Structure Rewrites
+
+Valkey 的内存效率提升来自对核心数据结构的**连续低层重构**，而非一次性重写；按版本累加，简单 `SET` 负载下单 key 内存从 7.2.14 的 102.48 B 降到 9.1.1 的 64.02 B（**累计 −37.5%**）：
+
+| 版本 | 改动 | 收益 |
+| :-- | :-- | :-- |
+| 8.0 | 键内联进 `dictEntry`（`embeddedDictEntry`），一次分配替代两次 | −8 B/key |
+| 8.1 | **缓存行大小哈希表**：桶正好 64 B（一个 cache line），key+value 内嵌，取消 `dictEntry` 结构体，查找路径 4 跳→约 2 跳 | −20~−30 B/kv（**单版最大降幅 −23.8%**） |
+| 9.0 | 未针对内存 | 基本无变化 |
+| 9.1 | `embstr` 阈值 64→128 B；复用 `robj->ptr` 的 8 字节直接内嵌短字符串 | 短字符串最多 −20%（均值约 −26%，区间 17%~44%） |
+
+> [!NOTE]
+>
+> 8.1 的 64 B 缓存行哈希表是对标内存效率的关键一步，思路与 Dragonfly 的 DashTable「减少元数据 / 内存跳数」一致，但路径不同：Valkey 仍保持单线程命令执行的链式/内嵌哈希，Dragonfly 则是 shared-nothing 段式开放寻址。
+
+### Persistence
+
+- 沿用 **RDB + AOF**（MP-AOF）持久化；RDB 可被 Redis/Valkey 各版本互加载，但 **Valkey 刻意使用独立的 RDB 版本号空间**（9.1 写入版本 **80**，与 Redis 的版本号不重叠），以保证跨引擎可识别性——把 Valkey 9.1 的 RDB 喂给不理解该版本的旧引擎会失败。
+- **9.2 引入 opt-in 的 forkless BGSAVE**：快照由后台线程直接写出，而非 fork 子进程，消除写时复制内存尖峰。实测 1.1 GB 数据集在持续写入下，fork() 方式内存上涨 354 MB，forkless 仅 **9.9 MB**；代价是保存更慢（约 5–6 s vs 3 s）、写入吞吐略降约 15%，但最差 PING 反而更低（无 fork() 卡主线程）。
+
+### Observability
+
+- **`COMMANDLOG` 命令族**（8.1 起）：取代/增强 slowlog；`slowlog-log-slower-than` / `slowlog-max-len` 已改名为 `commandlog-execution-slower-than` / `commandlog-slow-execution-max-len`（旧名保留为 deprecated 别名，单位微秒）。
+- per-slot 指标（`CLUSTER SLOT-STATS`）、`CLIENT LIST` 每连接网络/命令指标、key 内存取样（`MEMORY USAGE`）。
+
+### Valkey 9.2 Internals
+
+9.2（rc1 已出，GA 目标 2026-11-15）在「降低内存开销 + 提升复制效率」上继续推进：
+
+- **B+ 树有序集**：较大有序集（skiplist 编码）改写为优化的 B+ 树，叶子 512 B 紧凑打包，提升内存局部性；特定负载下 mutation 最多快约 **2×**（issue #3166）。
+- **Path Hash**：面向层次/前缀查询的新数据类型，直接用例是 LLM 推理 KV 缓存的 token 前缀复用（PR #4506）；索引留在 Valkey，大 tensor 仍在 GPU/主机内存。
+- **流式压缩复制/快照**：跨更大字节流做 LZ4/ZSTD 压缩，跨 region 传输字节数降 **50%~60%**（issue #3195）。
+- 运维弹性：replica 落后时的复制节流、管理员保留连接、cluster 流量优先级、热 key 可观测、ACL 角色、条件事务。
 
 ## Links
 
 - [Redis](/docs/CS/DB/Redis/Redis.md)
+- [Dragonfly](/docs/CS/DB/Dragonfly.md)
 - [DataBases](/docs/CS/DB/DB.md)
 
 ## References
 
 - [Valkey GitHub](https://github.com/valkey-io/valkey)
 - [Valkey: A New In-Memory Data Store](https://valkey.io/)
+- [Valkey 8.0: Enhanced Performance and Reliability](https://valkey.io/blog/valkey-8-0-0-rc1)
+- [Reducing Memory Overhead in Valkey 9.1](https://valkey.io/blog/9.1-memory-efficiency)
