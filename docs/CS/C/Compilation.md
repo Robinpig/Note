@@ -94,6 +94,7 @@ gcc -std=c11 -Wall -Wextra -O2 -g -Iinclude -Llib -lm main.c util.c -o app
 - [make](/docs/CS/C/make.md)
 - [CMake](/docs/CS/C/CMake.md)
 - [GDB](/docs/CS/C/GDB.md)
+- [汇编器与工具链（-S / objdump / 反汇编）](/docs/CS/assembly/Assembler_and_Toolchain.md)
 
 ## References
 

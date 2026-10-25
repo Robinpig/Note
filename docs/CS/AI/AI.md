@@ -1,6 +1,6 @@
 ## Introduction
 
-AI（人工智能）是研究如何让机器表现出感知、推理、学习与决策能力的学科总称。本目录按方法层级组织：传统机器学习（[ML](/docs/CS/AI/ML/ML.md)）→ 深度学习（[DL](/docs/CS/AI/DL/DL.md)）→ 大语言模型（[LLM](/docs/CS/AI/LLM/LLM.md)），并横向覆盖 [NLP](/docs/CS/AI/NLP/NLP.md)、[CV](/docs/CS/AI/CV.md)、[推荐系统](/docs/CS/RecommenderSystem/RecommenderSystem.md)等应用方向，以及 [PyTorch](/docs/CS/AI/PyTorch.md)、[TensorFlow](/docs/CS/AI/TensorFlow.md)、[Scikit-Learn](/docs/CS/AI/Scikit-Learn.md) 等工具。
+AI（人工智能）是研究如何让机器表现出感知、推理、学习与决策能力的学科总称。本目录按方法层级组织：传统机器学习（[ML](/docs/CS/AI/ML/ML.md)）→ 深度学习（[DL](/docs/CS/AI/DL/DL.md)）→ 大语言模型（[LLM](/docs/CS/AI/LLM/LLM.md)），并横向覆盖 [NLP](/docs/CS/AI/NLP/NLP.md)、[CV](/docs/CS/AI/CV.md)（分类、检测、分割、跟踪等任务，已展开为枢纽 + 分册）、[推荐系统](/docs/CS/RecommenderSystem/RecommenderSystem.md)等应用方向，以及 [PyTorch](/docs/CS/AI/PyTorch.md)、[TensorFlow](/docs/CS/AI/TensorFlow.md)、[Scikit-Learn](/docs/CS/AI/Scikit-Learn.md) 等工具。
 
 现代 AI 的分水岭是 2017 年 NeurIPS 上 Google 论文《Attention Is All You Need》提出的 **Transformer**（见 [Transformer](/docs/CS/AI/Transformer.md)）：它用 self-attention 取代 RNN 的顺序递推，使训练可大规模并行、规模可扩展。基于 Transformer 的 [LLM](/docs/CS/AI/LLM/LLM.md)（BERT/GPT 及后续模型）把 NLP、CV（ViT）、多模态乃至 Agent 统一到同一套预训练范式下。
 
@@ -20,7 +20,7 @@ AI
 │   └── GAN / Diffusion → 生成式模型
 ├── 应用方向
 │   ├── [NLP]：分类、NER、翻译、摘要、对话、语义检索
-│   ├── [CV]：分类、检测、分割、OCR、视频理解、图像生成
+│   ├── [CV]：分类、检测、分割、跟踪、OCR、视频理解、图像生成（枢纽 + 任务/方法/工程分册）
 │   ├── 推荐系统、语音识别、搜索排序
 │   └── [RAG]：检索增强生成，连接私域知识与 LLM
 └── Agent 化：LLM + 工具 + 记忆 + 规划（见 [LLM/Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md)、[MCP](/docs/CS/AI/LLM/Protocol/MCP.md)、[A2A](/docs/CS/AI/LLM/Protocol/A2A.md)）

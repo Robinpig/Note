@@ -85,7 +85,7 @@ Tomasulo 的局限同样出名：load/store 不走保留站，**内存访问不�
 - [流水线](/docs/CS/CO/pipeline.md)
 - [计算机算术](/docs/CS/CO/arithmetic.md)
 - [RISC-V（微程序 vs 硬布线对照）](/docs/CS/CO/RISC-V.md)
-- [汇编（指令编码与数据通路对应）](/docs/CS/assembly/assembly.md)
+- [指令集与常用指令（指令编码与数据通路对应）](/docs/CS/assembly/Instruction_Set.md)
 
 ## References
 

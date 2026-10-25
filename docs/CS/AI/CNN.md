@@ -93,7 +93,7 @@ cnn = nn.Sequential(
 )
 ```
 
-训练流程（取 batch、前向、损失、反向、更新）见 [Training](/docs/CS/AI/DL/Training.md)。CNN 的应用面——分类、检测、分割——见 [CV](/docs/CS/AI/CV.md)。
+训练流程（取 batch、前向、损失、反向、更新）见 [Training](/docs/CS/AI/DL/Training.md)。CNN 的应用面——分类（[Classification](/docs/CS/AI/CV/Classification.md)）、检测（[Detection](/docs/CS/AI/CV/Detection.md)）、分割（[Segmentation](/docs/CS/AI/CV/Segmentation.md)）——入口见 [CV](/docs/CS/AI/CV.md)。
 
 ## Applicability Boundaries and Alternatives
 

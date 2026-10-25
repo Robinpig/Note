@@ -1,10 +1,12 @@
 ## Introduction
 
-计算机视觉（Computer Vision，CV）研究**让机器从图像和视频中提取信息、理解世界**，是深度学习最早取得突破、落地最广的领域。它与模型层的分工：[CNN](/docs/CS/AI/CNN.md) 讲"网络怎么设计"，本篇讲"视觉问题有哪些、各自用什么范式求解"。
+计算机视觉（Computer Vision，CV）研究**让机器从图像和视频中提取信息、理解世界**，是深度学习最早取得突破、落地最广的领域。安防、工业质检、自动驾驶、医疗影像、内容生产——凡是人用眼睛做的判断，都在这条技术线的射程内。
 
-## Tasks
+本页是 CV 子树的枢纽。与相邻笔记的分工：[CNN](/docs/CS/AI/CNN.md) 讲"网络怎么设计"（卷积、残差、感受野），本页讲"视觉问题有哪些、各自用什么范式求解"，九个分册把每个问题展开到可动手的程度。
 
-视觉任务按输出粒度递进：**分类**（图中有什么）→ **检测**（在哪、是什么）→ **分割**（每个像素属于什么）→ **跟踪**（跨帧持续在哪）。除这四项外还有若干平行任务：
+## Task Landscape
+
+视觉任务按输出粒度递进：**分类**（图中有什么）→ **检测**（在哪、是什么）→ **分割**（每个像素属于什么）→ **跟踪**（跨帧持续在哪）。输出结构从固定长度标签，变成数量不定的框集合，再变成与输入同尺寸的掩码图，最后加上帧间身份——每一步都引入新机制，也淘汰旧假设。
 
 | 任务 | 输出 | 典型方法 |
 | ------ | ------ | ------ |
@@ -18,89 +20,45 @@
 | Tracking 多目标跟踪 | 帧间同一目标 ID | 检测 + 卡尔曼滤波 + 匈牙利匹配（SORT / DeepSORT） |
 | Generation 生成 | 图像/视频 | GAN、Diffusion（Stable Diffusion）、DiT |
 
-### Image Classification
+平行任务里，人脸识别走「分类 → 度量学习」路线，姿态估计是分类思想在关键点上的复用，OCR 是检测 + 序列识别的组合，深度与光流撑起三维与运动理解，生成式模型（GAN → 扩散模型 → DiT）则把 CV 从理解推向合成。
 
-输出整图类别。CNN 的主战场，基准是 ImageNet（1000 类）；常见预训练骨干 ResNet、VGG、EfficientNet，迁移学习用"预训练骨干 + 换头微调"几乎是一切视觉任务的起手式。
+## Chapter Map
 
-### Object Detection
+分册按「任务 → 方法 → 工程」三层组织，阅读顺序也大致如此。
 
-输出多个**边界框 + 类别 + 置信度**。两大流派：
+**任务层四篇**，各对应一种输出结构。[Classification](/docs/CS/AI/CV/Classification.md) 是起点：最经典的任务，也是所有骨干预训练的来源，讲基准协议、迁移配方与长尾——它本身简单，但下游全建立在它的表示之上。[Detection](/docs/CS/AI/CV/Detection.md) 是工程密度最高的一篇：候选区域、锚点、标签分配、NMS、DETR 家族逐条讲，因为检测的机制最庞杂。[Segmentation](/docs/CS/AI/CV/Segmentation.md) 把粒度推到像素，重点是语义/实例/全景三档的统一，以及 SAM 把分割重构成可提示基础模型后范式如何改变。[Tracking](/docs/CS/AI/CV/Tracking.md) 处理时间维：检测给框、关联给 ID，两段式链路与端到端 Transformer 跟踪并存。
 
-- **两阶段（two-stage）**：先产生候选区域（Region Proposal）再分类回归——R-CNN → Fast R-CNN → **Faster R-CNN**（区域建议网络 RPN 端到端）。精度高、速度慢
-- **单阶段（one-stage）**：一次前向直接出框——**YOLO** 系列（把检测当回归问题，实时）、SSD。速度快，小目标精度历来略逊；**RetinaNet** 用 Focal Loss 压住海量易分负样本的损失权重，把单阶段精度拉回两阶段水平
+**方法层三篇**回答"模型凭什么工作"。[Traditional CV](/docs/CS/AI/CV/Traditional_CV.md) 是深度学习之前的手工特征范式，今天仍在 SLAM、拼接、工业质检服役，也是理解卷积与多尺度的思想源头。[Representation Learning](/docs/CS/AI/CV/Representation_Learning.md) 讲特征如何从数据中学出来：对比学习、掩码重建、自蒸馏三条自监督路线，到 CLIP 的图文对齐与 VLM，是预训练—微调范式的理论底座。[Metrics](/docs/CS/AI/CV/Metrics.md) 讲 IoU 与 mAP 的口径——指标塑造了检测器的演化史，读论文数字前先读它。
 
-### Segmentation
+**工程层两篇**管落地。[Data and Preprocessing](/docs/CS/AI/CV/Data_and_Preprocessing.md) 从张量表示讲到标注格式与类别不平衡，数据管线决定精度上限。[Deployment](/docs/CS/AI/CV/Deployment.md) 讲导出、量化、蒸馏、运行时选型，以及 AGPL 许可证这类非技术但致命的陷阱。
 
-- **语义分割（Semantic Segmentation）**：逐像素分类，同类不区分个体——FCN 开创全卷积路数，**U-Net**（对称编码器-解码器 + 跳跃连接）是医学影像与通用分割的常青结构
-- **实例分割（Instance Segmentation）**：逐像素 + 区分个体——**Mask R-CNN** 在 Faster R-CNN 上加一条掩码分支
-- 全景分割（Panoptic）= 语义 + 实例的合并任务
-- **SAM**（Segment Anything）把分割重构成**以点/框/文本为 prompt 的零样本基础模型**任务：在超大规模掩码数据上预训练，无需针对新类别训练即可分割任意物体
+## From Tasks to Foundation Models
 
-### Other Tasks
-
-人脸识别（分类 → 度量学习）、OCR（检测 DBNet + 识别 CRNN 两阶段）、姿态估计（OpenPose、MediaPipe）、深度与光流（立体匹配、RAFT、单目深度估计）、图像生成（GAN、扩散模型、DiT）与多模态理解（图文对齐，通往 [LLM](/docs/CS/AI/LLM/LLM.md) 的视觉-语言模型）。
-
-**视频跟踪**（SORT / DeepSORT）是"检测 + 关联"两段式：逐帧检测出框，再用卡尔曼滤波预测运动、匈牙利算法做帧间匹配；DeepSORT 额外引入外观特征（ReID）应对遮挡与交叉。
-
-## Traditional CV
-
-深度学习之前的主流范式，仍在工程中广泛服役：
-
-- **边缘检测**：Canny 算子
-- **局部特征**：SIFT/SURF 关键点 + 描述子，特征匹配、图像拼接
-- **形状分析**：霍夫变换找直线/圆
-- **手工特征 + 分类器**：HOG 特征 + [SVM](/docs/CS/AI/ML/SVM.md) 做行人检测，是深度学习时代的经典基线
-
-传统特征（SIFT/ORB 的尺度不变关键点与描述子）在 SLAM、图像拼接中仍在服役，优势是可解释、无需训练数据。
-
-## Representation Learning
-
-深度学习带来的根本转变是**特征由数据学出来**，而非人手工设计：
-
-- **自监督**：不依赖人工标注，用代理任务学表示——对比学习（SimCLR、MoCo：拉近同图的不同增强、推开异图）、掩码重建（MAE：遮住部分像素再还原）
-- **多模态对齐**：CLIP 用 4 亿图文对把图像与文本映射到同一向量空间，支持零样本分类与"文搜图"；BLIP、LLaVA 等视觉语言模型（VLM）进一步支持图文对话
-
-## Metrics
-
-检测与分割的核心指标建立在 **IoU（交并比）**上：
-
-$$
-\mathrm{IoU}=\frac{|A\cap B|}{|A\cup B|}
-$$
-
-IoU 超过阈值（常取 0.5）才算检出成功。**mAP（mean Average Precision）**：对每个类别算 PR 曲线下的 AP，再对类别取平均——mAP@0.5、mAP@0.5:0.95 是检测论文的标准报告口径。分割的 Dice 系数与 IoU 高度相关。分类指标见 [ML](/docs/CS/AI/ML/ML.md) 的评价指标一节。
-
-## Data and Preprocessing
-
-图像在进入网络前是张量：RGB 三通道、像素值 0–255；常见预处理是 resize / center-crop、归一化到均值 0 方差 1。视频多一个时间维，用 3D 卷积或抽帧后走 2D 网络。图像压缩原理（YCbCr、DCT、量化、Huffman）见 [JPEG](/docs/CS/Algorithms/JPEG.md)。
+一条清晰的收敛曲线：早期每个任务一个专用模型，2017 年后 Transformer 统一架构，2023 年起基础模型把任务边界也抹平了——**SAM 3**（2025-11）一个模型同时做检测、分割、跟踪，用文本或示例提示词指定概念；CLIP 系让分类变成"造句"；DINOv3 的冻结特征被 RT-DETRv4 直接蒸馏进实时检测器。视觉的终局不是某个任务的更高精度，而是**一个可提示的视觉基础模型 + 下游轻量任务头**的分层生态。
 
 ## Practice
 
-torchvision 提供预训练模型，分类任务几行即可推理：
+torchvision 提供预训练模型，分类任务几行即可推理；权重与预处理绑定，避免手工对齐均值方差的坑：
 
 ```python
 from torchvision.models import resnet50, ResNet50_Weights
 
-weights = ResNet50_Weights.IMAGENET1K_V2          # 权重与预处理绑定
+weights = ResNet50_Weights.IMAGENET1K_V2
 model = resnet50(weights=weights).eval()
-# preds = model(preprocess(img).unsqueeze(0))     # top-1 类别 + 概率
+preprocess = weights.transforms()
+# preds = model(preprocess(img).unsqueeze(0))
 ```
 
-检测 / 分割同理：`torchvision.models.detection.fasterrcnn_resnet50_fpn`、`maskrcnn_resnet50_fpn` 开箱即用（文档见下）。
-
-## Engineering Practice
-
-- 数据是主战场：采集与标注规范、类别不平衡（过采样 / Focal Loss）、分辨率与长宽比处理、增强策略（Mosaic、Copy-Paste）
-- 部署：模型量化（INT8）、蒸馏、TensorRT / ONNX Runtime 加速；端侧用 MobileNet、YOLO-nano 一类轻量结构
-- 视频链路通常是**抽帧 → 检测 → 跟踪（ReID 特征关联）→ 事件聚合**，而不是逐帧独立识别
+检测 / 分割同理：`torchvision.models.detection.fasterrcnn_resnet50_fpn`、`maskrcnn_resnet50_fpn` 开箱即用；追求实时与边缘部署走 Ultralytics 线（YOLO26），链路见 [Deployment](/docs/CS/AI/CV/Deployment.md)。
 
 ## Links
 
-- [AI](/docs/CS/AI/AI.md)
 - [CNN](/docs/CS/AI/CNN.md)
-- [DL](/docs/CS/AI/DL/DL.md)
-- [PyTorch](/docs/CS/AI/PyTorch.md)
-- [ML](/docs/CS/AI/ML/ML.md)
+- [Detection](/docs/CS/AI/CV/Detection.md)
+- [Segmentation](/docs/CS/AI/CV/Segmentation.md)
+- [Representation Learning](/docs/CS/AI/CV/Representation_Learning.md)
+- [Metrics](/docs/CS/AI/CV/Metrics.md)
+- [Deployment](/docs/CS/AI/CV/Deployment.md)
 
 ## References
 
@@ -109,5 +67,6 @@ model = resnet50(weights=weights).eval()
 3. [U-Net: Convolutional Networks for Biomedical Image Segmentation](https://arxiv.org/abs/1505.04597)
 4. [Mask R-CNN](https://arxiv.org/abs/1703.06870)
 5. [Segment Anything](https://arxiv.org/abs/2304.02643)
-6. [Learning Transferable Visual Models From Natural Language Supervision-CLIP](https://arxiv.org/abs/2103.00020)
-7. [torchvision 官方文档](https://pytorch.org/vision/stable/index.html)
+6. [SAM 3: Segment Anything with Concepts](https://arxiv.org/abs/2511.16719)
+7. [Learning Transferable Visual Models From Natural Language Supervision-CLIP](https://arxiv.org/abs/2103.00020)
+8. [torchvision 官方文档](https://pytorch.org/vision/stable/index.html)

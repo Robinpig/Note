@@ -159,6 +159,7 @@ Ubuntu 多个版本gcc
 
 - [Compiler](/docs/CS/Compiler/Compiler.md)
 - [ELF](/docs/CS/Compiler/ELF.md)
+- [惯用法与优化（读编译器输出的汇编）](/docs/CS/assembly/Optimization_and_Idioms.md)
 
 ## References
 

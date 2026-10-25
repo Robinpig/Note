@@ -841,7 +841,7 @@ SQL 在这方面表现出相当的灵活性：OLTP 型与 OLAP 型查询它都�
 如今许多数据库厂商只专注事务处理或分析负载中的一端，而不是两者通吃。
 也有 Microsoft SQL Server、SAP HANA 这样的产品同时支持事务处理与数据仓库，但它们内部正越来越清晰地分裂成两套存储与查询引擎，只是共享同一个 SQL 接口。
 
-往下读：列式引擎的两条实现路线（MergeTree 与向量化执行）见 [ClickHouse](/docs/CS/DB/ClickHouse.md) 与 [Doris](/docs/CS/DB/Doris.md)，实时分析取数见 [Druid](/docs/CS/DB/Druid.md)，纯时序与可观测数据库的总览、存储路线对比和各产品入口集中在 [Timeseries](/docs/CS/DB/Timeseries.md)（含 InfluxDB、GreptimeDB、VictoriaMetrics、TimescaleDB、TDengine），不存数据只做联邦查询的是 [Presto](/docs/CS/DB/Presto.md)；以时序为核心、把多模存储引擎与流批一体计算框架打包进同一集群的国产实时计算平台见 [DolphinDB](/docs/CS/DB/DolphinDB.md)；离线一侧的批量计算与 SQL-on-Hadoop 数仓见 [Hive](/docs/CS/DB/Hive.md) 与 [BigData](/docs/CS/BigData/BigData.md)。
+往下读：列式引擎的两条实现路线（MergeTree 与向量化执行）见 [ClickHouse](/docs/CS/DB/ClickHouse.md) 与 [Doris](/docs/CS/DB/Doris.md)，实时分析取数见 [Druid](/docs/CS/DB/Druid.md)，纯时序与可观测数据库的总览、存储路线对比和各产品入口集中在 [Timeseries](/docs/CS/DB/Timeseries.md)（含 InfluxDB、GreptimeDB、VictoriaMetrics、TimescaleDB、TDengine），不存数据只做联邦查询的是 [Presto](/docs/CS/DB/Presto.md)；以时序为核心、把多模存储引擎与流批一体计算框架打包进同一集群的国产实时计算平台见 [DolphinDB](/docs/CS/DB/DolphinDB.md)；离线一侧的批量计算与 SQL-on-Hadoop 数仓见 [Hive](/docs/CS/DB/Hive.md) 与 [BigData](/docs/CS/BigData/BigData.md)；列存编码、压缩与谓词下推的原理见 [Storage Format](/docs/CS/BigData/Storage_Format.md)，把一堆不可变文件组织成「表」的事务与快照机制见 [Table Format](/docs/CS/BigData/Table_Format.md)。
 
 ## Choosing
 

@@ -71,6 +71,8 @@ Spark 的流处理走**微批（micro-batch）**：以固定时间间隔（几�
 
 与 [Flink](/docs/CS/Framework/Flink/Flink.md) 的模型差异：Flink 的基本数据模型是数据流与事件序列，逐事件流水式处理，可做到亚秒级延迟；Spark 是"攒一批 → 调度 → 算完 → 攒下一批"，吞吐优势明显而延迟更高。选型上，延迟敏感且要求事件时间正确性选 Flink；以批与 SQL 为主、能容忍秒级延迟选 Spark。
 
+微批与"批是有界的流"是统一批流的两种相反路线，四种计算模式与三种投递语义的横向对比见 [Processing Model](/docs/CS/BigData/Processing_Model.md)，这套取舍在架构层的投射见 [Lambda and Kappa Architecture](/docs/CS/BigData/Lambda_Kappa.md)。
+
 ## Links
 
 - [RDD](/docs/CS/Framework/Spark/RDD.md)

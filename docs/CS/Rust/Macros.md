@@ -180,7 +180,7 @@ const ARR: [i32; 3] = from_list!(1, 2, 3);
 
 ### asm global_asm and naked_asm
 
-三者都在 `core::arch::` 下，`naked_asm!` 只配 `#[unsafe(naked)]` 函数（裸 `#[naked]` 在 edition 2024 报 "unsafe attribute used without unsafe"）。两个实测到的坑：**`--emit=metadata` 不校验汇编串**——往 `global_asm!` 里塞一句彻底非法的汇编，`--emit=metadata` 干净通过，`--emit=obj` 才报 `error: unexpected token in argument list` + `note: instantiated into assembly here --> <inline asm>:1:9`，也就是说 `cargo check` **发现不了**内联汇编语法错误；以及 naked 函数里用 `asm!` 是 `E0787: the 'asm!' macro is not allowed in naked functions`，诊断直接建议改 `naked_asm!`。unsafe 语义与 ABI 部分见 [Unsafe_FFI.md](/docs/CS/Rust/Unsafe_FFI.md)。
+三者都在 `core::arch::` 下，`naked_asm!` 只配 `#[unsafe(naked)]` 函数（裸 `#[naked]` 在 edition 2024 报 "unsafe attribute used without unsafe"）。两个实测到的坑：**`--emit=metadata` 不校验汇编串**——往 `global_asm!` 里塞一句彻底非法的汇编，`--emit=metadata` 干净通过，`--emit=obj` 才报 `error: unexpected token in argument list` + `note: instantiated into assembly here --> <inline asm>:1:9`，也就是说 `cargo check` **发现不了**内联汇编语法错误；以及 naked 函数里用 `asm!` 是 `E0787: the 'asm!' macro is not allowed in naked functions`，诊断直接建议改 `naked_asm!`。unsafe 语义与 ABI 部分见 [Unsafe_FFI.md](/docs/CS/Rust/Unsafe_FFI.md)；内联汇编的操作数约束、clobber 与各架构调用约定见 [内联汇编](/docs/CS/assembly/Inline_Assembly.md)。
 
 ## Procedural Macros
 

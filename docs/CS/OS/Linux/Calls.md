@@ -2263,6 +2263,7 @@ static int do_sys_openat2(int dfd, const char __user *filename,
 - [I/O Multiplexing](/docs/CS/CN/MultiIO.md)
 - [Unix](/docs/CS/OS/unix/Unix.md)
 - [FreeBSD](/docs/CS/OS/unix/FreeBSD.md)
+- [系统调用（汇编层调用序列与调用号表）](/docs/CS/assembly/System_Calls.md)
 
 ## References
 

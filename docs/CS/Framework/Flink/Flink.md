@@ -9,7 +9,7 @@ Apache Flink 是一个框架和分布式处理引擎，用于对无界和有界�
 - 物联网: 实时数据采集|实时报警
 - 银行和金融业: 实时结算|风险检测
 
-早期 Lambda架构（第二代）用两套系统，同时保证低延迟和结果准确；Flink 的路线是把两者统一到一个引擎里。
+早期 Lambda架构（第二代）用两套系统，同时保证低延迟和结果准确；Flink 的路线是把两者统一到一个引擎里。这三次范式更替（Lambda / Kappa / 流批一体）的完整脉络与取舍见 [Lambda and Kappa Architecture](/docs/CS/BigData/Lambda_Kappa.md)，批与流在语义上的本质差异见 [Processing Model](/docs/CS/BigData/Processing_Model.md)。
 
 **Flink核心特点**
 

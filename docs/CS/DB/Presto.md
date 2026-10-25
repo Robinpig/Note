@@ -46,6 +46,7 @@ Presto 是一个**分布式 SQL 查询引擎**，最初由 Facebook（现 Meta�
 - [Doris](/docs/CS/DB/Doris.md)
 - [HBase](/docs/CS/DB/HBase.md)
 - [Analytics](/docs/CS/DB/DB.md?id=analytics)
+- [SQL Engine](/docs/CS/BigData/SQL_Engine.md)
 
 ## References
 

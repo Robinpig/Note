@@ -184,7 +184,7 @@ Docker、Kubernetes、CNI、Ingress、Helm
 
 ### Compiler and Toolchain
 
-编译器把源码逐层降到 IR、机器码与可执行文件，链接与加载再把它们变成进程：阶段与优化见 [Compiler](/docs/CS/Compiler/Compiler.md)，工具链见 [GCC](/docs/CS/Compiler/GCC.md)，产物格式见 [ELF](/docs/CS/Compiler/ELF.md)，最低层的表达是 [assembly](/docs/CS/assembly/assembly.md)。程序运行时的真实内存由分配器决定，见 [memory](/docs/CS/memory/memory.md)（[GC](/docs/CS/memory/GC.md)、[jemalloc](/docs/CS/memory/jemalloc/jemalloc.md)）与 [glibc](/docs/CS/C/glibc.md)；工具与许可证背景见 [GNU](/docs/CS/GNU/GNU.md)。这条链与 [Computability](/docs/CS/Algorithms/Computability.md) 相接：语义等价性不可判定，所以优化必须保守。
+编译器把源码逐层降到 IR、机器码与可执行文件，链接与加载再把它们变成进程：阶段与优化见 [Compiler](/docs/CS/Compiler/Compiler.md)，工具链见 [GCC](/docs/CS/Compiler/GCC.md)，产物格式见 [ELF](/docs/CS/Compiler/ELF.md)，最低层的表达是 [assembly](/docs/CS/assembly/assembly.md)（[调用约定](/docs/CS/assembly/Calling_Convention.md)、[内联汇编](/docs/CS/assembly/Inline_Assembly.md)、[汇编器与工具链](/docs/CS/assembly/Assembler_and_Toolchain.md)）。程序运行时的真实内存由分配器决定，见 [memory](/docs/CS/memory/memory.md)（[GC](/docs/CS/memory/GC.md)、[jemalloc](/docs/CS/memory/jemalloc/jemalloc.md)）与 [glibc](/docs/CS/C/glibc.md)；工具与许可证背景见 [GNU](/docs/CS/GNU/GNU.md)。这条链与 [Computability](/docs/CS/Algorithms/Computability.md) 相接：语义等价性不可判定，所以优化必须保守。
 
 ## Networks and Data
 
@@ -199,6 +199,12 @@ Docker、Kubernetes、CNI、Ingress、Helm
 数据库研究**存得下、找得快、改得安全**：存储引擎与索引决定读写路径，事务与隔离级别决定并发下的正确性，复制与分片决定规模上限。不同用途差别极大——热数据、冷存储、分析查询、键值访问、时序与大对象各有各的答案，选型方法与全景见 [DB](/docs/CS/DB/DB.md)。
 
 机制页：[Index](/docs/CS/DB/Index.md)、[BLink-Tree](/docs/CS/DB/BLink-Tree.md)、[WAL](/docs/CS/DB/WAL.md)、[Shard](/docs/CS/DB/Shard.md)。家族按模型分：关系型 [MySQL](/docs/CS/DB/MySQL/MySQL.md)、[PostgreSQL](/docs/CS/DB/PostgreSQL/PostgreSQL.md)、[Oracle](/docs/CS/DB/Oracle/Oracle.md)、国产分布式 [TiDB](/docs/CS/DB/TiDB.md)、[OceanBase](/docs/CS/DB/OceanBase.md)、[PolarDB](/docs/CS/DB/PolarDB/PolarDB.md)；键值与缓存 [Redis](/docs/CS/DB/Redis/Redis.md)、[Memcached](/docs/CS/DB/Memcached.md)、[RocksDB](/docs/CS/DB/RocksDB/RocksDB.md)、[LevelDB](/docs/CS/DB/LevelDB/LevelDB.md)；文档 [MongoDB](/docs/CS/DB/MongoDB.md)、宽表 [HBase](/docs/CS/DB/HBase.md)、[Cassandra](/docs/CS/DB/Cassandra.md)；OLAP [ClickHouse](/docs/CS/DB/ClickHouse.md)、[Doris](/docs/CS/DB/Doris.md)、[Druid](/docs/CS/DB/Druid.md)、[Presto](/docs/CS/DB/Presto.md)；[vector](/docs/CS/DB/vector.md) 与 [graph](/docs/CS/DB/graph/graph.md) 是 AI 与关系建模的新战场；中间件层 [ShardingSphere](/docs/CS/DB/ShardingSphere.md)、[TDDL](/docs/CS/DB/TDDL.md)、[canal](/docs/CS/DB/canal.md)。离线与大规模计算见 [BigData](/docs/CS/BigData/BigData.md)。
+
+### Big Data
+
+大数据研究的是**当数据规模超出单机之后，如何把它存下、算完、管住**：计算侧分批处理、流处理、交互式与图计算四种模式，存储侧是文件格式（列存编码）与表格式（事务与快照）两层，两者叠上廉价对象存储与多引擎可读，就是当下主流的湖仓形态。全景与版本口径见 [BigData](/docs/CS/BigData/BigData.md)。
+
+分册按层次排：[Processing Model](/docs/CS/BigData/Processing_Model.md) 讲四种计算模式、投递语义与时间窗口；[Storage Format](/docs/CS/BigData/Storage_Format.md) 讲列存编码、压缩与谓词下推；[Table Format](/docs/CS/BigData/Table_Format.md) 对比 Iceberg / Delta Lake / Hudi 三强；[Lakehouse](/docs/CS/BigData/Lakehouse.md) 讲从数据湖到湖仓的演进与分层建模；[Lambda and Kappa](/docs/CS/BigData/Lambda_Kappa.md) 讲「既要实时又要准确」的两代架构取舍；[Shuffle and Data Skew](/docs/CS/BigData/Shuffle.md) 讲数据重分布与倾斜治理；[Resource Scheduling](/docs/CS/BigData/Resource_Scheduling.md) 讲 YARN 与 Kubernetes 的分工；[SQL Engine](/docs/CS/BigData/SQL_Engine.md) 讲 SQL-on-Hadoop 谱系与查询优化；[Data Integration](/docs/CS/BigData/Data_Integration.md) 讲 CDC 与数据入湖；[Data Governance](/docs/CS/BigData/Governance.md) 讲元数据、血缘与数据质量。引擎实现见 [Hadoop](/docs/CS/Framework/Hadoop/Hadoop.md)、[Spark](/docs/CS/Framework/Spark/Spark.md)、[Flink](/docs/CS/Framework/Flink/Flink.md)。
 
 ### Message Queue
 
@@ -254,6 +260,8 @@ Docker、Kubernetes、CNI、Ingress、Helm
 ### Artificial Intelligence
 
 人工智能研究让机器**表现出感知、推理、学习与决策能力**的程序。方法层级是 [ML](/docs/CS/AI/ML/ML.md)（从数据中学规律）→ [DL](/docs/CS/AI/DL/DL.md)（多层网络做表示学习）→ [LLM](/docs/CS/AI/LLM/LLM.md)（预训练 + 上下文），分界线是 2017 年的 [Transformer](/docs/CS/AI/Transformer.md)：self-attention 取代顺序递推，使训练可大规模并行。学科地图与三范式对比见 [AI](/docs/CS/AI/AI.md)，应用方向见 [NLP](/docs/CS/AI/NLP/NLP.md)、[CV](/docs/CS/AI/CV.md)、[RAG](/docs/CS/AI/RAG.md)，训练与推理框架见 [PyTorch](/docs/CS/AI/PyTorch.md)。
+
+视觉侧按「任务 → 方法 → 工程」展开为枢纽加分册：任务层 [Classification](/docs/CS/AI/CV/Classification.md)、[Detection](/docs/CS/AI/CV/Detection.md)、[Segmentation](/docs/CS/AI/CV/Segmentation.md)、[Tracking](/docs/CS/AI/CV/Tracking.md)；方法层 [Representation Learning](/docs/CS/AI/CV/Representation_Learning.md)、[Traditional CV](/docs/CS/AI/CV/Traditional_CV.md)、[Metrics](/docs/CS/AI/CV/Metrics.md)；工程层 [Data and Preprocessing](/docs/CS/AI/CV/Data_and_Preprocessing.md)、[Deployment](/docs/CS/AI/CV/Deployment.md)。
 
 「机器能否思考」的可操作判据及其限度，见 [The Turing Test](/docs/CS/AI/AI.md?id=the-turing-test)。
 
