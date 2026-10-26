@@ -58,7 +58,7 @@ OpenTelemetry 并不取代 Jaeger/Zipkin/SkyWalking——它取代的是它们�
 
 两点实践注记：
 
-- **上下文传播被标准化**：OTel 采用 W3C Trace Context / Baggage 头（`traceparent`、`tracestate`），因此即使各服务用了不同的厂商/工具插桩，也能参与同一条 trace。以前各厂商传播自己的头格式（如 Zipkin 的 `b3`），跨系统追踪很脆弱。
+- **上下文传播被标准化**：OTel 采用 W3C Trace Context / Baggage 头（`traceparent`、`tracestate`），因此即使各服务用了不同的厂商/工具插桩，也能参与同一条 trace。以前各厂商传播自己的头格式（如 Zipkin 的 [`b3` 传播](/docs/CS/Distributed/Tracing/Zipkin/Transport.md)），跨系统追踪很脆弱。
 - **SkyWalking** 既是 APM 后端，也有自己的插桩生态（SW agent、自有协议）；在混合环境中，常见做法是保留 OTel SDK 做插桩，数据经 SkyWalking 的 OTLP receiver 写入。
 
 ## Components

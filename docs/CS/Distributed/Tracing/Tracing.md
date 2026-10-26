@@ -143,7 +143,7 @@ OpenTelemetry 聚焦于遥测数据的生成、采集、管理与导出。
 该数据的存储与可视化被刻意留给其它工具完成。
 
 详见 [OpenTelemetry](/docs/CS/Distributed/Tracing/Otel.md)（API/SDK、Collector、OTLP、signals、instrumentation），
-以及它与 OpenTracing 和 Jaeger/Zipkin/SkyWalking 等追踪后端的关系。
+以及它与 OpenTracing 和 Jaeger、[Zipkin（Span 模型）](/docs/CS/Distributed/Tracing/Zipkin/Data_Model.md)、SkyWalking 等追踪后端的关系。
 
 
 

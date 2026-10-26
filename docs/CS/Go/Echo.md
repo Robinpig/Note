@@ -59,6 +59,7 @@ g.Use(middleware.BasicAuth(auth))   // 只对该组生效
 ## Links
 
 - [Gin](/docs/CS/Go/Framework/Gin.md)
+- [Iris](/docs/CS/Go/Framework/Iris.md) — 同类极简框架中功能面最宽的一个
 - [Go net](/docs/CS/Go/net.md) — 底层 net/http
 - [Go](/docs/CS/Go/Go.md)
 

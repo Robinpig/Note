@@ -4,6 +4,7 @@
 
 - [How to start Spring Boot Application?](/docs/CS/Framework/Spring_Boot/Start.md)
 - [Actuator](/docs/CS/Framework/Spring_Boot/actuator.md)
+- [分布式链路追踪（Micrometer Tracing）](/docs/CS/Framework/Spring_Boot/tracing.md)
 
 ## Architecture
 

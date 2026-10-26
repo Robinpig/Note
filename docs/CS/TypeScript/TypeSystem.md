@@ -301,6 +301,8 @@ const parsed: User = UserSchema.parse(JSON.parse(body))   // 运行时 + 编译�
 - [TypeScript](/docs/CS/TypeScript/TypeScript.md)
 - [TypeScript 编译器](/docs/CS/TypeScript/Compiler.md)
 - [tsconfig 工程配置](/docs/CS/TypeScript/Tsconfig.md)
+- [TypeScript 模块系统](/docs/CS/TypeScript/Modules.md)
+- [TypeScript 工具链](/docs/CS/TypeScript/Toolchain.md)
 - [Nodejs](/docs/CS/front-end/Nodejs.md)
 
 ## References

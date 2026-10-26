@@ -110,6 +110,7 @@
 - [Qwen](/docs/CS/AI/LLM/Model/Qwen.md)
 - [开源模型全景](/docs/CS/AI/LLM/Model/Open_Model.md)
 - [本地部署与推理引擎](/docs/CS/AI/LLM/Model/Inference.md)
+- [Post-Training：模型是怎么造出来的](/docs/CS/AI/LLM/Model/Post_Training.md)
 - [Jev](/docs/CS/AI/LLM/Model/Jev.md)
 - [StepFun](/docs/CS/AI/LLM/Model/StepFun.md)
 

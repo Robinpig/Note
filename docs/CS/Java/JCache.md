@@ -73,6 +73,8 @@ Guava cache
 | Caffeine     |   :x:             | :x:      | :white_check_mark:   |   :x:    |  :x:      | :x: |
 | Spring Cache |     :x:     | :x: |  :white_check_mark:   |    :x:    | :white_check_mark: |
 
+> 表中「兼容其它缓存框架」按各项目的**核心包**计：Caffeine 核心包不实现 JSR-107，但官方提供独立的 jcache 适配 artifact（`com.github.ben-manes.caffeine:jcache`），经 ServiceLoader 提供标准 JCache 实现（见 [Caffeine Integration](/docs/CS/SE/Caffeine/Integration.md)）。
+
 
 
 ## Links

@@ -1,164 +1,106 @@
 ## Introduction
 
-TDengine 是 C 写的国产时序数据库，由涛思数据（TAOS Data）开发，核心设计思路是"**一设备一表**"（One table per device）——每个数据采集点（传感器、电表、汽车、机器人……）对应一张独立表，同类采集点共享 schema 但拥有自己的静态标签。这套设计让 TDengine 在 IoT、电力、工业物联网、车联网场景尤其受欢迎，目前在国内这几个领域是安装量最大的时序数据库之一。
+TDengine 是涛思数据（TAOS Data）用 C 写的**国产开源时序数据库**，现在官方产品名是 TDengine TSDB。它的底色有两条：**一设备一表**（One table per device）——每个采集点（传感器、电表、汽车、机器人）对应一张子表，同类采集点用超级表共享 schema、各带静态标签；**极简时序数据平台**——时序数据库之外，缓存、数据订阅、流计算、AI 智能体全部内置，官方明确说应用因此不必再集成 Kafka / Redis / HBase / Spark。许可证是 **AGPL-3.0**（仓库根 `LICENSE` 即 GNU AGPL v3），集群功能全部开源。
 
-TDengine 当前稳定版本 **3.x / 4.x**。它的开源版（TDengine Community）和商业版功能差距比其他时序库小得多——社区版已经包含分布式集群、C 驱动、HTTP API、Prometheus 协议支持、生态对接等能力。
+版本锚点 **3.4.x**：GitHub 最新稳定版 **3.4.3.3（2026-10-19）**，本库所有结论以官方文档（docs.taosdata.com）与源码为准。3.4 这条线有三个发行形态，差异比一般开源/商业二分更细：
+
+| 形态 | 服务端平台 | 客户端平台 | 说明 |
+| :-- | :-- | :-- | :-- |
+| **TDengine TSDB-OSS** | Linux、macOS | Linux、macOS、Windows | 社区版，集群、多副本（replica 3）、TMQ、流计算、TDgpt 全都有 |
+| **TDengine TSDB-Enterprise** | Linux、Windows | Linux、macOS、Windows | 企业版：安全（RBAC/MFA/加密）、多级存储、taosX HA、Explorer SSO、模型评估工具等 |
+| **TDengine Cloud** | 云服务 | — | 免部署的托管形态 |
+
+3.4 还有两条硬断点：**OSS 客户端从此连不上 Enterprise 服务端**（反向可以），且**不支持滚动升级**——集群必须整集群停机后逐节点升级。
+
+本页是 TDengine 的**枢纽页**：只放定位、架构总览、选型与最要紧的反直觉事实；架构逻辑单元、数据模型、存储引擎、压缩、SQL、流计算与订阅、TDgpt、生态工具、部署运维九个方向各有分册展开。
 
 ## Architecture
 
-TDengine 的集群架构是典型的 "mnode 管理 + vnode 数据" 模式：
+TDengine 的集群是"**mnode 管元数据 + vgroup 存数据 + taosc 驱动**"的形状，全部服务器侧代码跑在**一个进程 `taosd`** 里，逻辑节点是进程内的角色而非独立二进制：
 
-| 组件 | 运行在哪 | 职责 |
+| 逻辑单元 | 载体 | 职责 |
 | :-- | :-- | :-- |
-| **mnode（Management Node）** | dnode 内（可与 vnode 共置） | 集群元数据管理、用户权限、schema、拓扑、调度。**Raft 共识**实现 HA，最多 3 个 mnode 组成 HA 组 |
-| **vnode（Virtual Node）** | dnode 内 | 数据存储与查询执行的核心单元。一个 vnode 管理 supertable/subtable 的一个子集，内部有独立的列式 LSM |
-| **dnode（Data Node）** | 独立进程 `taosd` | 一个物理节点，承载 1+ mnode + 0+ vnode。多 dnode 组成集群 |
-| **taosc** | 客户端 | C 语言驱动库，被各语言绑定（Python/Go/Java/Node/Rust）调用。**无状态、直连** |
-| **taosAdapter** | 独立进程 | HTTP/gRPC/Prometheus/InfluxDB Line Protocol/OpenTSDB 的协议适配层——让 TDengine 不用改内核就能对接主流生态 |
-| **taosCLI** | 独立进程 | 命令行管理工具 |
+| **pnode** | 物理机/虚拟机/容器 | 由 FQDN 标识，集群网络通信完全依赖 FQDN |
+| **dnode** | `taosd` 实例 | 由 endpoint（FQDN + 端口，默认 `serverPort` 6030）唯一标识；一台 pnode 可起多个 dnode |
+| **mnode** | dnode 内角色（每 dnode 最多 1 个） | 元数据（用户、库、超级表、拓扑）、调度；**多 mnode 组 Raft**，最多 3 个 |
+| **vnode** | dnode 内角色 | 存储与查询的基本单元，一个 vnode "就是一个独立数据库"；一个 vnode 只属于一个数据库 |
+| **vgroup** | 跨 dnode 的 vnode 组 | vnode 间 **Raft 复制**，写只在 leader，异步同步 follower；vgroup 数量即副本数 |
+| **qnode** | dnode 内角色 | 查询计算节点，集群级共享，**存算分离**的执行侧；没有 qnode 时计算退回 vnode |
+| **snode** | dnode 内角色 | 流计算节点，同样集群级共享 |
+| **bnode** | dnode 内角色 | 订阅节点，拉起子进程 `taosmqtt` 对外提供 MQTT 订阅 |
+| **taosc** | 客户端库 | C 驱动，被 JDBC/Go/Python/Node/C#/Rust 连接器内嵌；负责 SQL 解析、计划、调度与最后一级聚合 |
 
-与其他时序库的关键差异：mnode 用 Raft 共识做元数据 HA，vnode 之间的数据分片和负载均衡由 mnode 调度——不需要自己做分片管理和 vnode 间的共识复制（TDengine 默认不做数据副本，副本是企业版特性）。
+写入侧还有 `taosAdapter`（HTTP/REST/WebSocket/InfluxDB Line Protocol/Prometheus 的协议适配层）与 `taosKeeper`（监控导出）两个独立进程。数据从客户端到落盘的完整路径、各逻辑单元的创建 SQL（`CREATE MNODE/QNODE/SNODE/BNODE`）与 FQDN/端口解析顺序，见 [Architecture](/docs/CS/DB/TDengine/Architecture.md)。
 
-```
-          mnode (Raft)
-         /     \
-     dnode-1  dnode-2        客户端 → taosAdapter / taosc
-    ┌──────┐  ┌──────┐
-    │vnode │  │vnode │       vnode 内部：
-    │  SST │  │  SST │         ┌───────────────┐
-    └──────┘  └──────┘         │  WAL + Memtable │
-                               ├───────────────┤
-                               │  SST (列式)    │
-                               └───────────────┘
-```
+## Map of This Section
 
-## Data Model
+九个分册对应九类问题，也对应使用 TDengine 时九种不同的翻车方式：
 
-TDengine 对时序数据的核心建模只有三个概念：
+- **[Architecture](/docs/CS/DB/TDengine/Architecture.md)**——「集群到底是什么形状」。pnode/dnode/vnode/vgroup/qnode/snode/bnode 的职责边界、Raft 用在哪些层、taosc 的双重角色、FQDN 与 endpoint 解析、三个发行形态的功能矩阵。理解所有其他分册的地图。
+- **[Data_Model](/docs/CS/DB/TDengine/Data_Model.md)**——「该怎么建模」。超级表/子表/标签/度量列的角色分工、一设备一表的代价与收益、自动建表、标签基数、schema 演进限制、3.4 的虚拟表（vtable）。建表前必读。
+- **[Storage_Engine](/docs/CS/DB/TDengine/Storage_Engine.md)**——「数据落在哪」。WAL、memtable（红黑树 + 跳表）、TDB 元数据 B+Tree、TSDB 的五类文件（head/data/sma/tomb/stt）、时间分区、一致性哈希分表、四层缓存与默认值。调 `BUFFER`/`PAGES`/`CACHEMODEL` 之前从这页读起。
+- **[Compression](/docs/CS/DB/TDengine/Compression.md)**——「压缩率从哪来」。一阶段按列编码（timestamp 差分、整数 zigzag、浮点 delta-delta、字符串字典）、二阶段通用压缩（LZ4/ZLIB/ZSTD/XZ）、有损压缩 TSZ、硬件加速库替换、传输压缩。这是 TDengine "存储不及通用库 1/10" 的来源。
+- **[SQL](/docs/CS/DB/TDengine/SQL.md)**——「SQL 到底能写到哪一步」。类 MySQL 方言的时序扩展、窗口算子全家桶、JOIN 的三个版本断点（3.3.0.0 / 3.4.3.0）、查询策略 `queryPolicy`、UDF、TSMA 预计算、虚拟表查询优化。
+- **[Stream_Compute](/docs/CS/DB/TDengine/Stream_Compute.md)**——「实时计算和消息队列在哪」。流计算（snode + `CREATE STREAM`，含回填与多种触发方式）与数据订阅 TMQ（topic 三型、消费者组、WAL offset、rebalance）、bnode MQTT 订阅。替代 Kafka + Flink 的那部分。
+- **[TDgpt](/docs/CS/DB/TDengine/TDgpt.md)**——「AI 到底跑在哪」。TDgpt 是跑在独立 Anode（Python 动态加载）上的时序分析智能体，通过 `FORECAST()`/`ANOMALY_WINDOW()`/`FILL_HOLE()` 等 SQL 函数提供服务；内置算法库、自研时序基础模型 TDtsfm、自定义算法接入方式。注意它**不在 taosd 进程里**。
+- **[Ecosystem](/docs/CS/DB/TDengine/Ecosystem.md)**——「怎么接现有系统」。七门语言连接器、taosAdapter 的协议矩阵（InfluxDB/Prometheus/OpenTSDB 兼容）、taosTools（taosBenchmark/taosdump）、taosX 数据迁移、taosKeeper、Grafana 等第三方集成。
+- **[Operations](/docs/CS/DB/TDengine/Operations.md)**——「怎么装、怎么扩、怎么救」。安装包/Docker/K8s 部署、配置项作用域、扩缩容与 rebalance、备份恢复、监控日志、taosBenchmark 压测、3.4 升级的停机约束。
 
-| 概念 | 含义 | 类比关系库 |
-| :-- | :-- | :-- |
-| **supertable（STable）** | 同类采集点的集合，定义共享 schema | 类似 CREATE TABLE 声明 + 标签模板 |
-| **table（subtable）** | 单个采集点，有独立的表名和静态 tag 值 | 类似每个设备一张独立表 |
-| **column** | 三种角色：timestamp（时间戳）、metric（动态测量值）、tag（静态标签） | 关系列，但 tag/metric 物理分开存储 |
+## Applicable Scenarios
 
-建表示例（监控 1000 个电表的耗电量和电压）：
+TDengine 的甜点区一句话：**采集点数量巨大、schema 同质、按设备维度查询为主、且希望整个实时链路（写入→缓存→订阅→流计算→AI 分析）收在一个系统里**。
 
-```sql
--- 1. 先建超级表：所有电表的 schema + tag 定义
-CREATE STABLE meters (
-    ts        TIMESTAMP,
-    current   FLOAT,      -- metric：动态采集值
-    voltage   FLOAT       -- metric
-) TAGS (
-    groupid   INT,        -- tag：静态，安装时确定，采集时不变
-    location  BINARY(64)  -- tag
-);
+适合：
 
--- 2. 每个电表一张子表，自动从 supertable 继承 schema
-CREATE TABLE meters_001 USING meters TAGS (groupid=1, location='北京');
-CREATE TABLE meters_002 USING meters TAGS (groupid=1, location='上海');
--- ... 可以有几百万张子表
-```
+- **工业互联网 / 电力 / 车联网 / IT 运维**：百万级采集点、同类设备同 schema，正是超级表 + 一设备一表的目标负载；国内这几个场景它的安装量最大。
+- **不想养 Kafka + Redis + Spark 的系统**：内置消息队列（TMQ）、缓存（last/last_row）、流计算（stream）和 AI 分析，架构上直接砍掉三个外部依赖。
+- **需要库内 AI 的场景**：异常检测、预测、补全一条 SQL 搞定，数据不出库；私有化部署同样完整可用（TDgpt 不依赖外部大模型服务）。
+- **Prometheus / InfluxDB 生态迁移**：taosAdapter 吃 Line Protocol 与 Prometheus remote 读写，存量采集端可以不改。
 
-### 为什么"一设备一表"是关键设计
+不适合：
 
-- **零写入开销**：每个子表独立追加写，不需要全局协调器，写入路径极短。
-- **天然负载隔离**：热设备的写压不会影响冷设备。
-- **高效聚合查询**：查询 supertable 时 TDengine 自动并发向所有子表拉数据、做聚合——不需要在应用层做 UNION ALL。
-- **标签分离存储**：tag 列（静态）和 metric 列（动态）物理分开存放，聚合查询只扫 metric 列 + 少量 tag 索引，扫描体积远小于传统宽列模型。
+- **强关系型负载**：虽然 3.3.0.0 起 JOIN 已经相当完整（含 ASOF/WINDOW JOIN），但它终究是为时序优化的引擎，复杂关系建模和 OLTP 事务不是设计目标。
+- **多信号可观测统一（metrics + logs + traces）**：纯时序定位，不像 InfluxDB 3.x / GreptimeDB 那样把 logs/traces 当一等公民。
+- **对象存储原生的存算分离**：3.4 的存算分离靠 qnode 计算节点 + 企业版共享存储（`SS_*` 参数）实现，社区版没有对象存储卸载这条路。
+- **Windows 服务端**：只有企业版支持 Windows server。
 
-### 与其他时序库的数据模型对比
+| 条件 | 选择 |
+| :--- | :--- |
+| 百万设备、同 schema、国内 IoT/工业生态 | TDengine |
+| 关系 + 时序混合查询 | TimescaleDB |
+| 多信号可观测一体化、对象存储 | GreptimeDB / InfluxDB 3.x |
+| Prometheus 生态长保留、最轻量 | VictoriaMetrics |
+| Apache 生态、树形设备路径 | IoTDB |
 
-| 产品 | 等价概念 | 差异 |
-| :-- | :-- | :-- |
-| InfluxDB | measurement → supertable, tag values → subtable id | InfluxDB 用一个 measurement 存全部数据、用 tag 区分序列；TDengine 是真的多张表 |
-| VictoriaMetrics / Prometheus | metric name + labels → 单一序列 | 标签不同就是不同序列，但仍然存在同一个 metric name 下；不存在"每个 tag 组合独立表"的物理边界 |
-| GreptimeDB | PRIMARY KEY(tag, ...) 把标签放一个表 | GreptimeDB 一张表包含所有 tag 组合，靠 PRIMARY KEY 排序保证局部性 |
+## Facts Worth Pinning Down
 
-## Storage Engine
+最容易被默认值、版本和文档惯性坑到的几条，完整清单散布在各分册：
 
-TDengine 的存储引擎是一个**列式 LSM Tree**——每条 SSTable 内部按列独立存储和压缩。
-
-### WAL + Memtable
-
-- WAL 本地磁盘，保护尚未 flush 的内存数据。
-- Memtable 按列组织：一个 vnode 里所有子表的 metric 列和 timestamp 列分别存在各自的内存 buffer 里。
-- Flush 时把 memtable 转成不可变 SST 文件，按 vnode 目录组织。
-
-### SSTable 列式存储
-
-每个 SST 文件内部是列式布局——一个子表的时间戳列全堆在一起，current 列全堆在一起，voltage 列全堆在一起。每列独立压缩：
-
-| 列类型 | 算法 | 适用场景 |
-| :-- | :-- | :-- |
-| **timestamp** | **delta-of-delta**（二阶差分） | 相邻时间戳差值通常稳定（如 5 秒、1 分钟） |
-| **integer** | **ZigZag + delta** | 有符号整数先 ZigZag 转无符号再做差值编码 |
-| **float/double** | **XOR** | 相邻浮点值 XOR 后零值极多 |
-| **string（低基数 tag）** | 字典编码 | tag 值种类有限，字典表存一次 |
-
-典型压缩率 **10-20x**。压缩后列文件直接写入 vnode 目录，底层用 `mmap` 访问。
-
-### Compaction
-
-TDengine 的 compaction 是**按子表内部做**，不跨子表合并——一设备一表的边界直接变成了 compaction 边界，避免了 LSM Tree 常见的"合并时扫描全数据集"的问题。
-
-### 查询路径
-
-查询 supertable 时：
-1. mnode 把 query 下发到所有相关 vnode。
-2. 每个 vnode 并发向其持有的子表集合发查询——只扫 metric 列 + tag 索引。
-3. 所有 vnode 并行返回局部结果，mnode 汇总后返回给客户端。
-4. 时间范围查询自动跳过不相关 SST 文件。
-
-## Query Language
-
-TDengine 使用**类 MySQL SQL**——大部分语法能直接用，但有以下扩展：
-
-| 扩展 | 示例 |
-| :-- | :-- |
-| Supertable 关键字 | `CREATE STABLE meters (...) TAGS (...);` |
-| TAGS 子句 | `WHERE groupid = 1 AND location = '北京'`（直接在 supertable 上过滤 tag） |
-| Show supertable | `SHOW STABLES;` |
-| 采样函数 | `_wstart`（窗口起始时间）、`_wend`（窗口结束） |
-| 时间间隔语法 | `INTERVAL(5m)`、`INTERVAL(1d, start_time)` |
-| 流式计算 | `CREATE CONTINUOUS QUERY`（类似 InfluxDB CQ） |
-
-TDengine SQL **不支持 JOIN**——设计哲学是 tag 列和 metric 列已经在 supertable 聚合查询中自然分离，不需要跨表 JOIN。
-
-## Comparison
-
-| 维度 | TDengine | TimescaleDB | InfluxDB 3.x | GreptimeDB | VictoriaMetrics |
-| :-- | :-- | :-- | :-- | :-- | :-- |
-| 语言 | C | C（PostgreSQL 扩展） | Rust | Rust | Go |
-| 数据模型 | supertable + 一设备一表 | hypertable + 时间分区 | measurement + tag + fields | Tag + Timestamp + Field | metric + labels |
-| 存储引擎 | 列式 LSM（自研） | PostgreSQL 行存 + 列式压缩 | Arrow + Parquet + DataFusion | Mito LSM + Parquet SST | 自研 LSM part |
-| WAL | ✅ | ✅（PG 自带） | ✅（可关） | ✅ 多模式 | ❌ |
-| SQL | 类 MySQL SQL（无 JOIN） | 完整 PostgreSQL SQL | SQL + InfluxQL | SQL + PromQL | ❌ |
-| 集群组件 | mnode（Raft）+ vnode | 靠 PG 复制 | Router + Ingester + Querier | Metasrv + Frontend + Datanode | vminsert + vmstorage + vmselect |
-| 存算分离 | ❌ | ❌ | ✅ 对象存储原生 | ✅ 对象存储原生 | ❌ |
-| 多信号 | ❌（纯时序） | ❌（纯时序） | metrics + logs + traces | metrics + logs + traces | metrics only |
-| 一设备一表 | ✅ | ❌ | ❌ | ❌ | ❌ |
-| 典型场景 | 国内 IoT、电力、工业 | 关系 + 时序混合 | 可观测一体化 | 可观测统一 + 对象存储 | Prom 生态长保留 |
+1. **社区版支持 replica 3，不支持 replica 2**。`CREATE DATABASE` 的 `replica` 取值 `1/2/3`、默认 `1`，官方文档原话是"`2` 仅在企业版支持"——即多副本高可用（3 副本）是开源能力，双副本反而是企业版限定。副本数必须 ≤ dnode 数；单副本可变双副本，但双副本不能转其他副本数、三副本不能转双副本。
+2. **`WAL_LEVEL` 默认 1，不 fsync**。写 WAL 但数据只到文件系统缓存，掉电丢最近写入；要可靠性得显式 `WAL_LEVEL 2`（配 `WAL_FSYNC_PERIOD`，默认 3000 ms）。性能/可靠权衡是建库时的显式决策。
+3. **JOIN 不是"不支持"，而是分三步开放的**：3.3.0.0 之前只有 INNER；3.3.0.0 起有 LEFT/RIGHT/FULL/SEMI/ANTI-SEMI 和时序特色的 ASOF/WINDOW JOIN；3.4.3.0 起才有显式 CROSS JOIN、无条件逗号 join 与混合嵌套 JOIN。按"TDengine 无 JOIN"做选型结论会直接错。
+4. **浮点列压缩是 delta-delta，不是 XOR**。官方压缩文档：timestamp 用相邻差分、数值统一 zigzag、float/double 用 delta-delta、布尔按位紧致、字符串字典编码；之后再过一层通用压缩。网上（含早期二手资料）流传的"浮点 XOR"是错的。
+5. **`CACHEMODEL` 默认 `none`**——读缓存默认关闭。一旦设为 `last_row`/`last_value`/`both`，每个 vnode 会额外拉起一个**持久化 RocksDB 实例**做 last cache，`sLastCache*` 参数（`taos.cfg`）都是惰性生效，改完要重启 dnode。
+6. **`KEEP` 默认 3650 天且必须 ≥ 3 × `DURATION`**（`DURATION` 默认 10d）。设 `KEEP 30` 而 `DURATION` 默认 10d 是合法边界；社区版配多个 `KEEP` 不生效，只取最大值（多级存储是企业版）。
+7. **TDgpt 不在 taosd 里**。查询涉及时序 AI 时 vnode 把请求转发到独立组件 Anode（Python 算法动态加载），部署 TDgpt 要单独装它，不是 taosd 的自带功能。
+8. **TMQ 的 offset 是 WAL 版本号**，消费单位是 vnode（对标 Kafka partition），语义 at-least-once；消费者组 rebalance 每 2 秒检查一次，心跳超时 `session.timeout.ms` 默认 45 s（v3.4.3.6 起，此前 12 s）。
+9. **3.4 起 OSS 客户端连不上 Enterprise 服务端，且不支持滚动升级**。混合部署和滚动发布计划都要按这条重新排。
+10. **表在 vnode 间的分布是一致性哈希**，不由表名算法细节外露；查询超级表时 taosc 先向 mnode 要元数据、再扇出到各 vnode 本地计算，最后由 qnode（或缺省 vnode）做全局聚合——这条两阶段路径是超级表查询延迟的主要构成。
 
 ## Links
 
-- [DataBases](/docs/CS/DB/DB.md)
 - [Timeseries](/docs/CS/DB/Timeseries.md)
 - [InfluxDB](/docs/CS/DB/InfluxDB.md)
-- [GreptimeDB](/docs/CS/DB/GreptimeDB.md)
-- [TimescaleDB](/docs/CS/DB/TimescaleDB.md)
-- [VictoriaMetrics](/docs/CS/DB/VictoriaMetrics.md)
-- [QuestDB](/docs/CS/DB/QuestDB.md)
 - [IoTDB](/docs/CS/DB/IoTDB.md)
-- [OpenTSDB](/docs/CS/DB/OpenTSDB.md)
 - [LSM Tree](/docs/CS/Algorithms/tree/LSM.md)
 - [WAL](/docs/CS/DB/WAL.md)
+- [DataBases](/docs/CS/DB/DB.md)
 
 ## References
 
-1. [TDengine 官方文档](https://docs.taosdata.com/)
-2. [TDengine TSDB Architecture](https://tdengine.com/tsdb-architecture-core-technology-explained/)
-3. [TDengine 2026 Product White Paper](https://content.tdengine.com/hubfs/Downloads/TDengine%202026%20Product%20White%20Paper-v5-compressed.pdf)
-4. [Supertable Design](https://tdengine.com/data-modeling-practice-guide-super-table-creation/)
-5. [TDengine 开源版 vs 企业版](https://www.taosdata.com/enterprise)
+1. [TDengine TSDB 官方文档](https://docs.taosdata.com/)
+2. [taosdata/TDengine README-CN](https://github.com/taosdata/TDengine/blob/main/README-CN.md)
+3. [TDengine TSDB 3.4 Release Notes](https://tdengine.com/?p=30263/)
+4. [技术内幕：整体架构](https://docs.taosdata.com/internals/arch/)
+5. [TDengine SQL：CREATE DATABASE](https://docs.taosdata.com/reference/taos-sql/database/)
+6. [TDgpt：背景介绍](https://docs.taosdata.com/ai-and-advanced-analytics/tdgpt/introduction)

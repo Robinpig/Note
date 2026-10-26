@@ -10,7 +10,7 @@
 - **知识截止**——训练数据有截止日期，昨天发生的事它不知道
 - **不会规划**——你让它"做一份竞品分析"，它只会线性回答，不会自己拆解成"先搜集资料、再逐个分析、再对比价格"这样的步骤
 
-驱动真实 LLM 的关键在于提示工程（Prompt Engineering）
+驱动真实 LLM 的关键在于提示工程（Prompt Engineering）——同一模型，提示写法的差距往往大过换一个档位的模型，系统写法见 [Prompt](/docs/CS/AI/Prompt.md)
 
 ## Classification in This Repository
 
@@ -23,6 +23,8 @@
 | `Agent/` | 包裹模型的运行框架与编程 Agent，按机制 / 产品 / 演进分三层 | [Agent 目录](/docs/CS/AI/LLM/Agent/README.md) |
 | `Platform/` | 可视化把模型组装成服务的现成产品 | [LLM 应用开发平台](/docs/CS/AI/LLM/Platform/Platform.md) |
 
+先说清这个目录最常见的混淆点：**「模型」和「模型上的东西」不是一回事**。DeepSeek 有模型，也开源了 agent 框架（dsh）；Anthropic 有 Claude 模型，也有 Claude Code 工具。两者在工程上完全不同——模型是 API 定价的消费者，Agent 是 API 的调用方。所以它们分处 `Model/` 与 `Agent/`，前者关心上下文长度与每百万 token 的价格，后者关心 loop、工具与记忆。搞混这一点，选型时会拿完全不同的指标去比。
+
 ## Model Basics
 
 LLM 在结构上就是"把 [Transformer](/docs/CS/AI/Transformer.md) 的 decoder-only 变体堆到很大，再用海量语料做自监督预训练"。因此许多看起来像产品问题的现象，根因都在架构里（详见 [Transformer](/docs/CS/AI/Transformer.md)）：
@@ -34,6 +36,10 @@ LLM 在结构上就是"把 [Transformer](/docs/CS/AI/Transformer.md) 的 decoder
 | 首字延迟（TTFT） vs 生成速度 | prefill 算力密集、decode 带宽密集两个阶段 |
 | 幻觉 | 建模目标是 token 分布而非事实，靠 [RAG](/docs/CS/AI/RAG.md) 从外部补事实 |
 | 位置信息、长文本外推 | 位置编码：RoPE / ALiBi 及其插值扩展 |
+
+## From Base Model to Chat Model
+
+上面那张表里的 base model，出厂时只会续写文本——你问它问题，它可能接着提问。市面上那些会对话、守边界、能调工具的模型，都是在预训练之后又过了几道后训练：SFT 教交互格式，偏好优化（DPO 一系或 GRPO + 可验证奖励）教"什么算好"，PEFT（LoRA/QLoRA）决定这一切要花多少卡，蒸馏决定能不能便宜复刻。整条流水线的数据形状、代价与失败模式见 [Post-Training](/docs/CS/AI/LLM/Model/Post_Training.md)——选型时"开源 base 自己调"与"直接调 API"的账，本质上就是这条流水线的账。
 
 ## From 'Can Talk' to 'Can Do': Closing the Model's Four Gaps
 
@@ -49,7 +55,7 @@ LLM 在结构上就是"把 [Transformer](/docs/CS/AI/Transformer.md) 的 decoder
 
 模型能力的问题最终会落成成本问题，而 2026 年的定价结构让这件事比想象复杂：同档位模型的输入价格正在收敛，但缓存倍率、长上下文是否加价、thinking token 按什么计价，这三项的差距远大于标价差距。比如同样把一个 900K token 的代码库一次性喂进去，按标价算一遍和按某家的无台阶结构算一遍，账单可以差三倍以上。
 
-[模型总览](/docs/CS/AI/LLM/Model/Overview.md) 是这块的枢纽，横向汇总了闭源三家与中国模型的价格、上下文与协议，并单列了最容易记错的几处（比如「Llama 4 非商用」是误传、国产旗舰的协议正在集体收紧、OpenAI 的 272K 是整单重算的台阶而非斜坡）。各家的完整型号表与架构演进在专页：[DeepSeek](/docs/CS/AI/LLM/Model/DeepSeek.md) 的峰谷分时定价与 encoder–decoder MoE、[OpenAI](/docs/CS/AI/LLM/Model/OpenAI.md) 的 GPT-6 家族与长上下文台阶、[Claude](/docs/CS/AI/LLM/Model/Claude.md) 的四档命名与自适应 thinking、[StepFun](/docs/CS/AI/LLM/Model/StepFun.md) 的 92 层窄深架构与训进策略里的 Context Compaction、[Qwen](/docs/CS/AI/LLM/Model/Qwen.md) 与[开源模型全景](/docs/CS/AI/LLM/Model/Open_Model.md) 的协议陷阱。当负载稳定到一定程度，云端按 token 计费就该换成自建——这条路见[本地部署与推理引擎](/docs/CS/AI/LLM/Model/Inference.md)。
+[模型总览](/docs/CS/AI/LLM/Model/Overview.md) 是这块的枢纽，横向汇总了闭源三家与中国模型的价格、上下文与协议，并单列了最容易记错的几处（比如「Llama 4 非商用」是误传、国产旗舰的协议正在集体收紧、OpenAI 的 272K 是整单重算的台阶而非斜坡）。各家的完整型号表与架构演进在专页：[DeepSeek](/docs/CS/AI/LLM/Model/DeepSeek.md) 的峰谷分时定价与 encoder–decoder MoE、[OpenAI](/docs/CS/AI/LLM/Model/OpenAI.md) 的 GPT-6 家族与长上下文台阶、[Claude](/docs/CS/AI/LLM/Model/Claude.md) 的四档命名与自适应 thinking、[StepFun](/docs/CS/AI/LLM/Model/StepFun.md) 的 92 层窄深架构与训进策略里的 Context Compaction、[Qwen](/docs/CS/AI/LLM/Model/Qwen.md) 与[开源模型全景](/docs/CS/AI/LLM/Model/Open_Model.md) 的协议陷阱。当负载稳定到一定程度，云端按 token 计费就该换成自建——这条路见[本地部署与推理引擎](/docs/CS/AI/LLM/Model/Inference.md)；自建之后"为什么快、慢在哪"是 serving 系统的共同内核，见 [Serving](/docs/CS/AI/LLM/Model/Serving.md)。
 
 还有一类模型不在「会不会写文本」这条轴上：[Jev](/docs/CS/AI/LLM/Model/Jev.md) 是 TypeSafe 的 **System One model**，架构层面就不生成文本，只输出类型化判断与校准过的概率，用来承接 Harness 里那些「小而快」的决策调用（意图路由、风险门控、严重度打分）。它值得单列，是因为第一次让 `if confidence > 0.9` 这种阈值判断有了统计学意义——RLHF 之后的 LLM 概率是**自信语气**，校准之后的决策概率才是**可信信号**。选型时的判据、以及它替代不了生成模型的边界，都写在那一页。
 

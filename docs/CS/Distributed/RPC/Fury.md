@@ -4,6 +4,19 @@
 定位是比 JSON、[Protocol Buffers](/docs/CS/Distributed/RPC/ProtoBuf.md)、[Thrift](/docs/CS/Distributed/RPC/Thrift.md)
 更快的对象序列化，同时保持对 Java 对象图（共享引用、循环引用、多态）的完整表达能力。它既可以用作 RPC 的编解码层，也可以用于数据缓存、跨语言数据交换。
 
+> [!WARNING]
+>
+> **项目已改名：Apache Fury → Apache Fory（2025-06-06 生效）。** 本页文件名沿用 `Fury.md` 以保持既有双向链接不断裂，但所有新增引用请使用新名称。
+> 改名的起因是 ASF Brand Management 识别出命名冲突（商标问题），经社区讨论与正式投票后执行。新名称被反解为 "Fast serialization framework FOR You"。
+>
+> 影响范围：
+>
+> - Java 包名 `org.apache.fury` → `org.apache.fory`
+> - 类名 `XXXFury` / `FuryXXX` → `XXXFory` / `ForyXXX`
+> - Maven 坐标 `org.apache.fury:fury-core` → `org.apache.fory:fory-core`（旧坐标仍存在，对应 1.4.0 之前的历史版本）
+> - GitHub 仓库 `apache/fury` → `apache/fory`，网站仓库 `apache/fory-site`
+> - 邮件列表迁移到 `@fory.apache.org`
+
 ## Design
 
 Fury 性能的关键来自两点：JIT 化的序列化器与元数据共享。
@@ -43,6 +56,14 @@ Fury 性能的关键来自两点：JIT 化的序列化器与元数据共享。
 而需要严格 schema 契约、跨组织接口、长期存档时，[ProtoBuf](/docs/CS/Distributed/RPC/ProtoBuf.md) 的兼容性纪律更稳妥。
 Fury 属于二进制编码范畴，与 [Marshalling](/docs/CS/Distributed/RPC/Marshalling.md) 中讨论的各类编码格式是同一问题空间。
 
+## Version Baseline
+
+| 组件 | 版本 | 日期 |
+| :--- | :--- | :--- |
+| Apache Fory（原 Apache Fury） | 1.7.7 | 2026-10-12 |
+
+1.4.0 修复了包括 `CVE-2026-64606`（CVSS 9.8，Java lambda 反序列化可绕过类注册检查）在内的四个严重漏洞，跨 Java / C++ / Rust 实现。使用旧版本且会反序列化不可信数据的场景需要评估升级。
+
 ## Links
 
 - [RPC](/docs/CS/Distributed/RPC/RPC.md)
@@ -53,5 +74,7 @@ Fury 属于二进制编码范畴，与 [Marshalling](/docs/CS/Distributed/RPC/Ma
 
 ## References
 
-1. [Apache Fury](https://fury.apache.org/)
-2. [Apache Fury (GitHub)](https://github.com/apache/fury)
+1. [Apache Fory](https://fory.apache.org/)
+2. [Apache Fory (GitHub)](https://github.com/apache/fory)
+3. [Important Announcement - Apache Fury is Now Apache Fory](https://fory.apache.org/blog/fury_renamed_to_fory/)
+4. [Apache Fory Download](https://fory.apache.org/download)

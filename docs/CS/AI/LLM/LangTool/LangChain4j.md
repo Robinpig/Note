@@ -2,7 +2,7 @@
 
 LangChain4j 是 LangChain 思想的 **Java 实现**：用统一抽象屏蔽各家大模型 API 差异，把 Prompt、记忆、工具调用、RAG、Agent 编排组装成可工程化的应用框架。它的目标用户是已经身处 Spring/Quarkus 生态、希望把 LLM 能力引入后端服务（而非另起一个 Python 服务）的 Java 团队。
 
-与 Python 版 [LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md) 的关系：**理念同源、API 各自地道**。LangChain4j 不是逐行移植，而是按 Java 习惯重新设计（Builder、接口、声明式 AiServices），并深度集成 Spring Boot / Quarkus。需要长流程有状态编排（检查点、分叉、人机协同）时，Java 侧通常直接用 Spring AI 或自研状态机，对应 Python 生态的 [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md)。
+与 Python 版 [LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md) 的关系：**理念同源、API 各自地道**。LangChain4j 不是逐行移植，而是按 Java 习惯重新设计（Builder、接口、声明式 AiServices），并深度集成 Spring Boot / [Quarkus](/docs/CS/Java/Quarkus.md)。需要长流程有状态编排（检查点、分叉、人机协同）时，Java 侧通常直接用 Spring AI 或自研状态机，对应 Python 生态的 [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md)。
 
 ## Core Abstractions
 

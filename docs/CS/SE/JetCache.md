@@ -2,7 +2,7 @@
 
 JetCache 是一个由阿里巴巴开源的、面向 Java/Spring 生态的轻量级缓存抽象框架。它不替代 Redis 或本地缓存组件，而是站在业务应用层，提供一套统一、易用、生产级的缓存开发与管理方案。
 
-如果熟悉 Spring Cache，可以把 JetCache 理解为"同一件事的更完整版本"：它在注解式缓存之上补出了 **TTL、两级缓存、自动刷新、防击穿** 这几项在生产里绕不开的能力，同时保留了一套脱离注解也能用的 Cache API。缓存自身的体系问题（命中率、一致性、穿透/雪崩）见 [Cache](/docs/CS/SE/Cache.md)，本地缓存的实现原理见 [Caffeine](/docs/CS/SE/Caffeine.md)。
+如果熟悉 Spring Cache，可以把 JetCache 理解为"同一件事的更完整版本"：它在注解式缓存之上补出了 **TTL、两级缓存、自动刷新、防击穿** 这几项在生产里绕不开的能力，同时保留了一套脱离注解也能用的 Cache API。缓存自身的体系问题（命中率、一致性、穿透/雪崩）见 [Cache](/docs/CS/SE/Cache.md)，本地缓存的实现原理见 [Caffeine Architecture](/docs/CS/SE/Caffeine/Architecture.md)。
 
 ## Configuration Shape
 

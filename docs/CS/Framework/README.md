@@ -42,6 +42,7 @@ digraph framework_index {
 - [etcd](/docs/CS/Framework/etcd/README.md)：K8s 后端首选的强一致 KV；枢纽 + boot（启动生命周期）/ request（请求路径）/ features（服务发现·事务）分册，配套完整的共识（raft/tracker）、存储（boltdb/MVCC）、网关、运维笔记。
 - [ZooKeeper](/docs/CS/Framework/ZooKeeper/README.md)：经典协调底座，Zab 共识、znode树、watch 与 session 配方。
 - [Nacos](/docs/CS/Framework/nacos/README.md)：配置中心 + 注册中心，AP（Distro）与 CP（JRaft）双模式。
+- [Apollo](/docs/CS/Framework/Apollo/Apollo.md)：携程出品的分布式**配置管理中心**，定位是「配置发布平台」——app/env/cluster/namespace 四维坐标、修改与发布双权限、灰度分支、编辑审计。已拆为**枢纽 + 分册**（[Architecture](/docs/CS/Framework/Apollo/Architecture.md) / [Client](/docs/CS/Framework/Apollo/Client.md) / [Config Push](/docs/CS/Framework/Apollo/Config_Push.md) / [Namespace](/docs/CS/Framework/Apollo/Namespace.md) / [Portal](/docs/CS/Framework/Apollo/Portal.md) / [Storage](/docs/CS/Framework/Apollo/Storage.md) / [Deployment and Ops](/docs/CS/Framework/Apollo/Deployment_and_Ops.md)），四条判定线是「四维坐标先问维度、服务端唯一外部依赖 MySQL、推送是通知+拉取两段式、Java 客户端已拆到独立仓库 apollo-java」。版本基线：服务端 3.0.0（Java 17，database-discovery 默认），客户端线独立演进。
 - [Consul](/docs/CS/Framework/consul/README.md)：服务网络平台，服务发现 + 服务网格（Envoy mTLS）+ 多DC 联邦，另有成员发现（Serf）与网关专篇。
 - [Eureka](/docs/CS/Framework/eureka/README.md)：Netflix 注册中心，AP 自注册/续约。枢纽 + Server/Client 两端 + [注册表](/docs/CS/Framework/eureka/registry.md)（写路径与剔除）、[缓存](/docs/CS/Framework/eureka/cache.md)、[自我保护](/docs/CS/Framework/eureka/self_preservation.md)、[集群复制](/docs/CS/Framework/eureka/replication.md) 四条主线，配套 REST 契约、传输层、[配置](/docs/CS/Framework/eureka/config.md)、[调优](/docs/CS/Framework/eureka/tuning.md) 与 [排障](/docs/CS/Framework/eureka/troubleshooting.md)。
 - [BookKeeper](/docs/CS/Framework/BookKeeper/BookKeeper.md)：可独立部署的 **append-only 分布式日志存储**（WAL / 消息存储底座，[Pulsar](/docs/CS/MQ/Pulsar/Pulsar.md) 的存储引擎）。枢纽 + [Ledger](/docs/CS/Framework/BookKeeper/Ledger.md)（元数据与 fencing/recovery）、[Write](/docs/CS/Framework/BookKeeper/Write.md)（quorum 与 ensemble change）、[Read](/docs/CS/Framework/BookKeeper/Read.md)（LAC 与 speculative read）、[Storage](/docs/CS/Framework/BookKeeper/Storage.md)（journal/entry log/index 与 GC）、[Cluster](/docs/CS/Framework/BookKeeper/Cluster.md)（元数据布局与 auto-recovery）、[Ops](/docs/CS/Framework/BookKeeper/Ops.md)（配置与运维）。
@@ -53,7 +54,8 @@ digraph framework_index {
 - [Seata](/docs/CS/Framework/Seata/Seata.md)：分布式事务（AT / TCC / XA）。
 - [HSF](/docs/CS/Framework/HSF/HSF.md)、[SOFARegistry](/docs/CS/Framework/SOFARegistry.md)：阿里 Sofas 中间件体系（RPC 框架与注册中心）。
 - [Hippo4j](/docs/CS/Framework/Hippo4j.md)：动态线程池与监控告警。
-- [Job（任务调度）](/docs/CS/Framework/Job/Quartz/Quartz.md)：调度器集合——[Quartz](/docs/CS/Framework/Job/Quartz/Quartz.md)、[xxl-job](/docs/CS/Framework/Job/xxl-job.md)、[PowerJob](/docs/CS/Framework/Job/PowerJob.md)、[ElasticJob](/docs/CS/Framework/Job/ElasticJob.md)、[DolphinScheduler](/docs/CS/Framework/Job/DolphinScheduler.md)、[ScheduleX](/docs/CS/Framework/Job/ScheduleX.md)。跨语言与跨层（内核定时器、时间轮、MQ 延时消息、DB 自建延迟队列）的总览见 [Scheduled Task](/docs/CS/SE/Scheduled_Task.md)。
+- [Job（任务调度）](/docs/CS/Framework/Job/Job.md)：分布式任务调度枢纽——核心概念对齐（调度中心/执行器/路由/分片/阻塞/misfire）、四族演进与选型。成员：[Quartz](/docs/CS/Framework/Job/Quartz/Quartz.md)（内嵌库，[集群](/docs/CS/Framework/Job/Quartz/Clustering.md) 分册）、[xxl-job](/docs/CS/Framework/Job/xxl-job.md)（中心式平台，[执行器](/docs/CS/Framework/Job/xxl-job-executor.md) / [调度中心](/docs/CS/Framework/Job/xxl-job-scheduler.md) 分册）、[ElasticJob](/docs/CS/Framework/Job/ElasticJob.md)（去中心化 + ZK 分片）、[PowerJob](/docs/CS/Framework/Job/PowerJob.md)（调度 + MapReduce 计算 + Workflow），另有大数据工作流方向的 [DolphinScheduler](/docs/CS/Framework/Job/DolphinScheduler.md) 与云调度 [ScheduleX](/docs/CS/Framework/Job/ScheduleX.md)。跨语言与跨层（内核定时器、时间轮、MQ 延时消息、DB 自建延迟队列）的总览见 [Scheduled Task](/docs/CS/SE/Scheduled_Task.md)。
+- [Workflow（工作流引擎）](/docs/CS/Framework/Workflow/Workflow.md)：BPMN 2.0 工作流引擎三强——[Flowable](/docs/CS/Framework/Workflow/Flowable.md)（轻量嵌入式、Apache 2.0、BPMN+CMMN+DMN）/ [Camunda](/docs/CS/Framework/Workflow/Camunda.md)（7 嵌入式+RDBMS 与 8/Zeebe 云原生双线，8 为 source-available 许可证）/ [Activiti](/docs/CS/Framework/Workflow/Activiti.md)（三者共同祖先，activiti-core/cloud 拆分）。三者共祖 Activiti 5、表前缀同为 `ACT_`，枢纽页给出血统、三向对比与选型指引；概念层与"与相关概念区分"见 [SE/Workflow](/docs/CS/SE/Workflow.md)。
 
 ## Networking and RPC
 
@@ -62,7 +64,7 @@ digraph framework_index {
 - [Jetty](/docs/CS/Framework/Jetty/Jetty.md)：轻量容器与嵌入式服务器子树（12.1.x）——核心与 EE 层解耦、连接与线程模型、请求推进链路、非阻塞 IO 抽象。
 - [Undertow](/docs/CS/Framework/Undertow/Undertow.md)：基于 XNIO 的非阻塞容器子树（2.4.x）——exchange 与 dispatch、handler 链与 predicate、Servlet 部署层。
 - 三者的线程模型、Servlet 依赖位置与版本线差异对照见 [三容器横向对照](/docs/CS/Framework/Tomcat/compare.md)。
-- [gRPC](/docs/CS/Framework/gRPC/gRPC.md)：跨语言 RPC 框架，配合 Protobuf。
+- [gRPC](/docs/CS/Framework/gRPC/gRPC.md)：跨语言 RPC 框架，配合 Protobuf；子树分三册——[Architecture](/docs/CS/Framework/gRPC/Architecture.md)（HTTP/2 帧映射、状态码、codec）、[Streaming](/docs/CS/Framework/gRPC/Streaming.md)（四种流模式、流控与超时传播）、[Ecosystem](/docs/CS/Framework/gRPC/Ecosystem.md)（拦截器、命名解析与负载均衡、xDS、可观测性、grpc-gateway）。
 - [kitex](/docs/CS/Framework/kitex.md)（Go）、[Netpoll](/docs/CS/Framework/Netpoll.md)（Go）、[evio](/docs/CS/Framework/evio.md)（Go）：Go 生态的 RPC/网络库。
 - [Pandora](/docs/CS/Framework/Pandora.md)：容器内进程管理与网络接管，常与多进程后端服务配合。
 
@@ -90,7 +92,8 @@ digraph framework_index {
 ## Cross-Language and AI Frameworks
 
 - [LangTool（LLM Agent 框架）](/docs/CS/AI/LLM/LangTool/LangChain.md)：以 [LangChain](/docs/CS/AI/LLM/LangTool/LangChain.md) 为主线串起 [LangGraph](/docs/CS/AI/LLM/LangTool/LangGraph.md)、[Langflow](/docs/CS/AI/LLM/LangTool/Langflow.md)、[LangChain4j](/docs/CS/AI/LLM/LangTool/LangChain4j.md)——Java/Python 双生态的 Agent 编排框架。
-- [FastAPI](/docs/CS/Framework/FastAPI.md)：Python 现代 Web 框架（异步、类型注解、OpenAPI）。
+- [FastAPI](/docs/CS/Framework/FastAPI.md)：Python 现代 Web 框架（异步、类型注解、OpenAPI）。单文件笔记，版本基线 0.146.0（2026-10，需 Python 3.10+）：类型即契约（参数解析/校验/序列化/OpenAPI 全由注解驱动）、依赖注入做横切、`fastapi` CLI（`dev`/`run`）、数据层自选 SQLAlchemy 2.0 + Alembic（框架**不自带 ORM**）、原生 WebSocket 与 ASGI、鉴权靠 `fastapi.security` 组合而非内置后端、OpenAPI schema 可派生客户端 SDK。部署要点：Uvicorn 多 worker 用 **spawn**；Gunicorn 侧的 `uvicorn.workers` 已弃用，改用独立包 `uvicorn-worker`（`uvicorn_worker.UvicornWorker`），Gunicorn 26 另有原生 `--worker-class asgi`。
+- [Django](/docs/CS/Framework/Django.md)：Python 全栈 Web 框架（ORM / admin / auth / migration 一体化，MVT 架构，约定强耦合）——与 FastAPI 的选型对照见 [Python/Ecosystem](/docs/CS/Python/Ecosystem.md)。API 层通常再接 [Django REST Framework](https://www.django-rest-framework.org/)（第三方事实标准）。版本基线 6.1（2026-08 特性版）+ 5.2 LTS（维护至 2028-04），DEP 20 已定 2028 起改年度发布。
 - [gorm](/docs/CS/Framework/gorm.md)：Go ORM 框架。
 - [PydanticAI](/docs/CS/AI/LLM/LangTool/PydanticAI.md)：Python 侧的类型驱动 AI Agent 框架。
 

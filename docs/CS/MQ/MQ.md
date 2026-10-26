@@ -523,7 +523,7 @@ RocketMQ 是业界唯一一个既支持自定义编解码，又支持成熟编�
 
 **RabbitMQ**
 
-经典镜像队列（`ha-mode` 那一套）**已在 4.0 移除**，现行路线是 **quorum queue**（每条队列一个独立 Raft 组，始终经 leader）+ 元数据层的 Khepri（Raft，4.3 起唯一）。两者的多数派要求不同：quorum 队列容忍副本数内的少数故障，Khepri 要求集群多数节点在线才能写拓扑。详见 [RabbitMQ](/docs/CS/MQ/RabbitMQ.md)。
+经典镜像队列（`ha-mode` 那一套）**已在 4.0 移除**，现行路线是 **quorum queue**（每条队列一个独立 Raft 组，始终经 leader）+ 元数据层的 Khepri（Raft，4.3 起唯一）。两者的多数派要求不同：quorum 队列容忍副本数内的少数故障，Khepri 要求集群多数节点在线才能写拓扑。详见 [RabbitMQ](/docs/CS/MQ/RabbitMQ.md) 与 [集群与元数据](/docs/CS/MQ/RabbitMQ/Cluster_and_Metadata.md)。
 
 **Kafka**
 
@@ -701,17 +701,23 @@ RocketMQ 提供**同步双写 + 同步刷盘**的组合，可以把「broker 确
 
 ## Other Message Queues
 
-除上面三个深度笔记（Kafka / RocketMQ / Pulsar）与 RabbitMQ 外，下列队列代表了几类不同的架构取舍，适合作为「补充/速览」对照阅读。细节见各自页面。
+除上面三个深度笔记（Kafka / RocketMQ / Pulsar）外，下列队列代表了几类不同的架构取舍，适合作为「补充/速览」对照阅读。细节见各自页面。
 
 | 产品 | 当前版本 | 存储模型 | 投递语义 | 消费模型 | 典型场景 |
 | ---- | -------- | -------- | -------- | -------- | -------- |
-| [NATS (JetStream)](/docs/CS/MQ/NATS.md) | v2.15.0 | Core 无存储；JetStream 用 memory/file | Core at-most-once；JetStream at-least-once | subject + stream/consumer（push/pull） | 实时数据流、边缘计算、agent 间通信 |
+| [NATS (JetStream)](/docs/CS/MQ/NATS.md) | v2.15.1 | Core 无存储；JetStream 用 memory/file | Core at-most-once；JetStream at-least-once | subject + stream/consumer（push/pull） | 实时数据流、边缘计算、agent 间通信 |
 | [ActiveMQ Artemis](/docs/CS/MQ/ActiveMQ.md) | 2.57.0 | 文件 journal（AIO/NIO/MAPPED）+ 可选 JDBC | at-least-once；exactly-once 经 XA / 去重 | JMS 目的地（queue/topic、共享订阅、消息组） | Java/Jakarta 企业集成、多协议互操作 |
 | [NSQ](/docs/CS/MQ/NSQ.md) | v1.3.0 | 内存优先、超限溢写 diskqueue | at-least-once（可能重复） | push + RDY 流控；topic→channel 广播、channel→consumer 均分 | 实时日志/事件聚合、任务队列 |
 | [ZeroMQ](/docs/CS/MQ/ZeroMQ.md) | libzmq 4.3.5 | 无（纯内存 socket 缓冲） | 因模式而异，默认不保证 | 应用自组拓扑，无 broker / 消费组 | 低延迟 IPC、分布式 mesh、自建 broker |
 
+> [!NOTE]
+> **RabbitMQ 与 NATS 也已升级为分册系列**。RabbitMQ 的分册按「架构 → 路由 → 队列类型 → 消费流控 → 生命周期 → 集群元数据」这条主线铺开，再加协议面、安全、插件、运维与升级五篇横切面 —— 详见 [RabbitMQ 枢纽](/docs/CS/MQ/RabbitMQ.md)；NATS 的六篇见 [Core NATS 路由层](/docs/CS/MQ/NATS/Core_NATS.md) · [JetStream 持久化层](/docs/CS/MQ/NATS/JetStream.md) · [集群与 Raft 复制](/docs/CS/MQ/NATS/Clustering.md) · [部署形态与跨集群](/docs/CS/MQ/NATS/Topologies.md) · [安全模型](/docs/CS/MQ/NATS/Security.md) · [运维与升级](/docs/CS/MQ/NATS/Operations.md)。
+
 > [!TIP]
 > 这四个都不以「分区日志 + 消费者位移」为核心：NATS 走 subject、Artemis 走 JMS 目的地、NSQ 走 topic/channel、ZeroMQ 根本是库而非 broker。选型时先把「是否需要分区顺序与重放」想清楚，再决定要不要上 Kafka。
+
+> [!NOTE]
+> **NATS 已升级为分册系列**，不再是单篇速览。它是本目录里唯一把「无存储路由层」与「可选持久化层」拆成两个独立层来讲的产品 —— 这个分层决定了它的全部形态：单二进制既是 broker 又是存储、集群既是路由 mesh 又是复制组、边缘部署靠 leaf node 桥接。六篇依次是 [Core NATS 路由层](/docs/CS/MQ/NATS/Core_NATS.md) · [JetStream 持久化层](/docs/CS/MQ/NATS/JetStream.md) · [集群与 Raft 复制](/docs/CS/MQ/NATS/Clustering.md) · [部署形态与跨集群](/docs/CS/MQ/NATS/Topologies.md) · [安全模型](/docs/CS/MQ/NATS/Security.md) · [运维与升级](/docs/CS/MQ/NATS/Operations.md)。
 
 > [!NOTE]
 > Redis 也能客串消息队列（Pub/Sub / Streams），但它在 DB 目录已有[专篇](/docs/CS/DB/Redis/MQ.md)，本文不重复收录，需要时在 DB 侧查阅。
@@ -744,7 +750,7 @@ RocketMQ 提供**同步双写 + 同步刷盘**的组合，可以把「broker 确
 - [Apache RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md) —— 业务消息队列
 - [Apache Pulsar](/docs/CS/MQ/Pulsar/Pulsar.md) —— 云原生存算分离队列
 - [RabbitMQ](/docs/CS/MQ/RabbitMQ.md)
-- [NATS (JetStream)](/docs/CS/MQ/NATS.md) —— 轻量高吞吐，subject 路由 + 可叠加持久化
+- [NATS (JetStream)](/docs/CS/MQ/NATS.md) —— 轻量高吞吐，subject 路由 + 可叠加持久化（六篇分册：路由层 / 持久化层 / 集群复制 / 部署形态 / 安全 / 运维）
 - [ActiveMQ Artemis](/docs/CS/MQ/ActiveMQ.md) —— JMS 企业级 broker，多协议互操作
 - [NSQ](/docs/CS/MQ/NSQ.md) —— Go 实时分布式，去中心化无 SPOF
 - [ZeroMQ](/docs/CS/MQ/ZeroMQ.md) —— brokerless 消息库，拓扑自组
@@ -756,8 +762,9 @@ RocketMQ 提供**同步双写 + 同步刷盘**的组合，可以把「broker 确
 - **私有协议与网络层**：自定义帧、编解码、连接管理 → [Kafka Network](/docs/CS/MQ/Kafka/Network.md) · [RocketMQ Remoting](/docs/CS/MQ/RocketMQ/Remoting.md) · [Pulsar Protocol](/docs/CS/MQ/Pulsar/Protocol.md)
 - **事务消息**：2PC+回查 vs 事务协调器 → [RocketMQ 事务消息](/docs/CS/MQ/RocketMQ/Transaction.md) · [Pulsar Functions 与事务](/docs/CS/MQ/Pulsar/Functions.md) · [Kafka ShareGroup](/docs/CS/MQ/Kafka/ShareGroup.md)
 - **消息过滤**：SQL92 表达式与开关 → [RocketMQ 消息过滤](/docs/CS/MQ/RocketMQ/Filter.md)
-- **控制面**：元数据与协调 → [Kafka KRaft](/docs/CS/MQ/Kafka/KRaft.md) · [Pulsar 集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md)
-- **可靠性工程**：重试、死信、幂等 → 各产品 Consumer 篇与本文 Features 章节
+- **控制面**：元数据与协调 → [Kafka KRaft](/docs/CS/MQ/Kafka/KRaft.md) · [Pulsar 集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md) · [NATS Raft 复制与期望状态](/docs/CS/MQ/NATS/Clustering.md)
+- **可靠性工程**：重试、死信、幂等 → 各产品 Consumer 篇与本文 Features 章节；JetStream 的 ack/nak/term 四态应答与去重窗口见 [NATS JetStream 持久化层](/docs/CS/MQ/NATS/JetStream.md)
+- **多租户与身份**：账号隔离与权限模型 → [NATS 安全模型](/docs/CS/MQ/NATS/Security.md)（account / operator / NKey / JWT）与 [NATS 部署形态](/docs/CS/MQ/NATS/Topologies.md)（leaf node 与跨集群 gateway）
 
 ## References
 

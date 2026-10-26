@@ -140,11 +140,11 @@
 | 键值 · 磁盘引擎 | LSM Tree，可嵌入进程 | [LevelDB](/docs/CS/DB/LevelDB/LevelDB.md)、[RocksDB](/docs/CS/DB/RocksDB/RocksDB.md)、[SSDB](/docs/CS/DB/SSDB.md)、[Pika](/docs/CS/DB/Pika.md) |
 | 文档 | BSON 嵌套树 + 二级索引 | [MongoDB](/docs/CS/DB/MongoDB.md) |
 | 宽列 | 多维 map、列族内行存、LSM 后端 | [HBase](/docs/CS/DB/HBase.md)、[Cassandra](/docs/CS/DB/Cassandra.md) |
-| 列式 / 时序 | 按列连续存 + 压缩 + 向量化执行 | [Timeseries](/docs/CS/DB/Timeseries.md)、[ClickHouse](/docs/CS/DB/ClickHouse.md)、[Doris](/docs/CS/DB/Doris.md)、[Druid](/docs/CS/DB/Druid.md)、[Presto](/docs/CS/DB/Presto.md)、[DolphinDB](/docs/CS/DB/DolphinDB.md) |
+| 列式 / 时序 | 按列连续存 + 压缩 + 向量化执行 | [Timeseries](/docs/CS/DB/Timeseries.md)、[ClickHouse](/docs/CS/DB/ClickHouse.md)、[Doris](/docs/CS/DB/Doris.md)、[Druid](/docs/CS/DB/Druid.md)、[Presto](/docs/CS/DB/Presto.md)、[DolphinDB](/docs/CS/DB/DolphinDB.md)、[DuckDB](/docs/CS/DB/DuckDB.md) |
 | 数据仓库 / SQL-on-Hadoop | SQL 编译为 Tez DAG，HMS 为共享元数据 | [Hive](/docs/CS/DB/Hive.md) |
 | 图 | 免索引邻接 / 外部 KV 上的邻接表 | [graph](/docs/CS/DB/graph/graph.md)、[Neo4j](/docs/CS/DB/graph/Neo4j.md)、[JanusGraph](/docs/CS/DB/graph/JanusGraph.md)、[NebulaGraph](/docs/CS/DB/graph/NebulaGraph.md) |
 | 向量 | ANN 图索引与聚类索引 | [vector](/docs/CS/DB/vector.md)、[Milvus](/docs/CS/DB/Milvus/Milvus.md) |
-| 中间件（不改存储） | 分库分表、binlog 增量订阅 | [ShardingSphere](/docs/CS/DB/ShardingSphere.md)、[TDDL](/docs/CS/DB/TDDL.md)、[canal](/docs/CS/DB/canal.md) |
+| 中间件（不改存储） | 分库分表、binlog 增量订阅 | [ShardingSphere](/docs/CS/DB/ShardingSphere.md)、[MyCat](/docs/CS/DB/MyCat/MyCat.md)、[TDDL](/docs/CS/DB/TDDL.md)、[canal](/docs/CS/DB/canal.md) |
 
 跨模型复用的机制页单列一份：[Index](/docs/CS/DB/Index.md)（索引结构）、[WAL](/docs/CS/DB/WAL.md)（预写日志）、[BLink-Tree](/docs/CS/DB/BLink-Tree.md)（并发下的 B+Tree）、[Shard](/docs/CS/DB/Shard.md)（分片与再均衡）；算法与分布式侧的 [LSM Tree](/docs/CS/Algorithms/tree/LSM.md)、[Bigtable](/docs/CS/Distributed/Bigtable.md) 也已在本库。
 
@@ -841,7 +841,7 @@ SQL 在这方面表现出相当的灵活性：OLTP 型与 OLAP 型查询它都�
 如今许多数据库厂商只专注事务处理或分析负载中的一端，而不是两者通吃。
 也有 Microsoft SQL Server、SAP HANA 这样的产品同时支持事务处理与数据仓库，但它们内部正越来越清晰地分裂成两套存储与查询引擎，只是共享同一个 SQL 接口。
 
-往下读：列式引擎的两条实现路线（MergeTree 与向量化执行）见 [ClickHouse](/docs/CS/DB/ClickHouse.md) 与 [Doris](/docs/CS/DB/Doris.md)，实时分析取数见 [Druid](/docs/CS/DB/Druid.md)，纯时序与可观测数据库的总览、存储路线对比和各产品入口集中在 [Timeseries](/docs/CS/DB/Timeseries.md)（含 InfluxDB、GreptimeDB、VictoriaMetrics、TimescaleDB、TDengine），不存数据只做联邦查询的是 [Presto](/docs/CS/DB/Presto.md)；以时序为核心、把多模存储引擎与流批一体计算框架打包进同一集群的国产实时计算平台见 [DolphinDB](/docs/CS/DB/DolphinDB.md)；离线一侧的批量计算与 SQL-on-Hadoop 数仓见 [Hive](/docs/CS/DB/Hive.md) 与 [BigData](/docs/CS/BigData/BigData.md)；列存编码、压缩与谓词下推的原理见 [Storage Format](/docs/CS/BigData/Storage_Format.md)，把一堆不可变文件组织成「表」的事务与快照机制见 [Table Format](/docs/CS/BigData/Table_Format.md)。
+往下读：列式引擎的两条实现路线（MergeTree 与向量化执行）见 [ClickHouse](/docs/CS/DB/ClickHouse.md) 与 [Doris](/docs/CS/DB/Doris.md)，实时分析取数见 [Druid](/docs/CS/DB/Druid.md)，纯时序与可观测数据库的总览、存储路线对比和各产品入口集中在 [Timeseries](/docs/CS/DB/Timeseries.md)（含 InfluxDB、GreptimeDB、VictoriaMetrics、TimescaleDB、TDengine），不存数据只做联邦查询的是 [Presto](/docs/CS/DB/Presto.md)；以时序为核心、把多模存储引擎与流批一体计算框架打包进同一集群的国产实时计算平台见 [DolphinDB](/docs/CS/DB/DolphinDB.md)；把分析型引擎塞进单个进程、直接对本地文件与对象存储跑 SQL 的嵌入式路线是 [DuckDB](/docs/CS/DB/DuckDB.md)；离线一侧的批量计算与 SQL-on-Hadoop 数仓见 [Hive](/docs/CS/DB/Hive.md) 与 [BigData](/docs/CS/BigData/BigData.md)；列存编码、压缩与谓词下推的原理见 [Storage Format](/docs/CS/BigData/Storage_Format.md)，把一堆不可变文件组织成「表」的事务与快照机制见 [Table Format](/docs/CS/BigData/Table_Format.md)。
 
 ## Choosing
 
@@ -970,7 +970,7 @@ LevelDB 支持范围查询、快照等现代应用需要的能力。
 
 ### Column Store
 
-[ClickHouse](/docs/CS/DB/ClickHouse.md) 是开源的列式 OLAP 数据库；[Doris](/docs/CS/DB/Doris.md) 是兼容 MySQL 协议的 MPP 分析型数仓；[Druid](/docs/CS/DB/Druid.md) 面向实时分析。**时序 / 可观测数据库**总览与各产品入口集中在 [Timeseries](/docs/CS/DB/Timeseries.md)——涵盖 InfluxDB 3.x、GreptimeDB、VictoriaMetrics、TimescaleDB、TDengine 五个代表产品，每条独立路线在该 Hub 页展开。以时序为核心、把多模存储引擎（TSDB / OLAP / PKEY / IMOLTP / VECTORDB）与流批一体计算框架打包进同一集群的国产实时计算平台是 [DolphinDB](/docs/CS/DB/DolphinDB.md)。不搬数据、直接对已有存储做联邦 SQL 查询的引擎见 [Presto](/docs/CS/DB/Presto.md)。
+[ClickHouse](/docs/CS/DB/ClickHouse.md) 是开源的列式 OLAP 数据库；[Doris](/docs/CS/DB/Doris.md) 是兼容 MySQL 协议的 MPP 分析型数仓；[Druid](/docs/CS/DB/Druid.md) 面向实时分析——不可变时间分片 + 多角色摄取集群是它的底色，本库以它为枢纽拆出分册（架构 / 存储格式 / 查询引擎 / 摄取 / 数据管理 / 扩展 / 数据生态 / 部署运维），版本锚点 38.0.0（2026-10-01）。**时序 / 可观测数据库**总览与各产品入口集中在 [Timeseries](/docs/CS/DB/Timeseries.md)——涵盖 InfluxDB 3.x、GreptimeDB、VictoriaMetrics、TimescaleDB、TDengine 五个代表产品，每条独立路线在该 Hub 页展开。以时序为核心、把多模存储引擎（TSDB / OLAP / PKEY / IMOLTP / VECTORDB）与流批一体计算框架打包进同一集群的国产实时计算平台是 [DolphinDB](/docs/CS/DB/DolphinDB.md)。不搬数据、直接对已有存储做联邦 SQL 查询的引擎见 [Presto](/docs/CS/DB/Presto.md)。反方向上，[DuckDB](/docs/CS/DB/DuckDB.md) 把同一套向量化列存内核做成**进程内引擎**：没有集群、没有端口，直接查 Parquet/CSV 乃至 S3 上的数据集，本库以它为枢纽拆了七个分册（架构 / 存储格式 / 执行引擎 / 类型系统 / 扩展 / 数据生态 / 部署运维）。
 
 ### Wide Column Store
 
@@ -996,12 +996,12 @@ Dragonfly 与 Valkey 代表了同一目标下的两种工程取舍：前者用�
 
 嵌入式数据库跑在应用进程内，「服务器」作为部署单位消失了：不需要准备连接池，没有端口要开防火墙，备份就是一次文件拷贝。
 代价是单写者的进程模型——一个 JVM 或一个地址空间独占文件——因此这类引擎买来的是测试与边缘部署的便利，而不是横向扩展。
-[H2](/docs/CS/DB/h2/H2.md) 是 Java 侧的代表（纯 Java、嵌入式 *与* server 双模式、可选项 in-memory、以及叫 MVStore 的 copy-on-write 日志结构存储）；[SQLite](/docs/CS/DB/SQLite.md) 是它的 C 语言对应物，也是这一格里生态最宽的一个——公有领域许可、冻结了二十年的单文件格式、五档文件锁与 WAL 两种并发模型，以及「竞争对手是 `fopen()`」的部署量；本库以它为枢纽拆了六个分册（文件格式 / 事务与锁 / 查询规划 / 类型系统 / 配置 / 运维）；Derby 与 HSQLDB 是更老的纯 Java 引擎。
+[H2](/docs/CS/DB/h2/H2.md) 是 Java 侧的代表（纯 Java、嵌入式 *与* server 双模式、可选项 in-memory、以及叫 MVStore 的 copy-on-write 日志结构存储）；[SQLite](/docs/CS/DB/SQLite.md) 是它的 C 语言对应物，也是这一格里生态最宽的一个——公有领域许可、冻结了二十年的单文件格式、五档文件锁与 WAL 两种并发模型，以及「竞争对手是 `fopen()`」的部署量；本库以它为枢纽拆了六个分册（文件格式 / 事务与锁 / 查询规划 / 类型系统 / 配置 / 运维）；Derby 与 HSQLDB 是更老的纯 Java 引擎。负载换成分析型时，同一格里坐着 [DuckDB](/docs/CS/DB/DuckDB.md)——进程内、向量化、直接对 Parquet/CSV 跑 SQL，单写者进程的文件模型与 SQLite 同构，被官方称作 "the SQLite for analytics"。
 Spring Boot 的 `@DataJpaTest` 会悄悄换成内存 H2，这正是「厂商专有 SQL 测试全绿、上线即炸」的原因。
 
 ### Sharding and CDC Middleware
 
-不改应用就扛住单库容量上限的中间件层：[ShardingSphere](/docs/CS/DB/ShardingSphere.md) 与 [TDDL](/docs/CS/DB/TDDL.md) 站在 JDBC/Proxy 层做分库分表、读写分离与分布式事务，[canal](/docs/CS/DB/canal.md) 伪装成从库消费 binlog，把增量变更订阅出去喂给缓存、搜索引擎与数仓。分片本身的机制见 [Shard](/docs/CS/DB/Shard.md)。
+不改应用就扛住单库容量上限的中间件层：[ShardingSphere](/docs/CS/DB/ShardingSphere.md) 与 [TDDL](/docs/CS/DB/TDDL.md) 站在 JDBC/Proxy 层做分库分表、读写分离与分布式事务，[MyCat](/docs/CS/DB/MyCat/MyCat.md) 则是代理形态的代表——前端讲 MySQL 协议、后端走 JDBC，对多语言接入与零侵入改造最友好，自身演化出 1.6 与 MyCAT2（Calcite 内核）两条线；[canal](/docs/CS/DB/canal.md) 伪装成从库消费 binlog，把增量变更订阅出去喂给缓存、搜索引擎与数仓。分片本身的机制见 [Shard](/docs/CS/DB/Shard.md)。
 
 ### Vector Databases
 
@@ -1077,10 +1077,12 @@ Dgraph 是一个分布式图数据库，使用 Go 语言开发，支持 GraphQL 
 
 - join 查询需要去多个库查询后在代码层处理
 - 分库就需要分布式事务支持，使用 Seata 或者 RocketMQ 实现最终一致性
+- 只按业务归属拆表、不切单表容量：垂直分片的边界与代价见 [Shard](/docs/CS/DB/Shard.md)
 
 水平分库分表
 
 - 唯一 id 的生成
+- 切分算法、全局主键、再均衡与热点散法均见 [Shard](/docs/CS/DB/Shard.md)
 
 ### Troubleshooting
 
@@ -1102,6 +1104,7 @@ Dgraph 是一个分布式图数据库，使用 Go 语言开发，支持 GraphQL 
 - [SSDB](/docs/CS/DB/SSDB.md) / [Pika](/docs/CS/DB/Pika.md) / [Dragonfly](/docs/CS/DB/Dragonfly.md)
 - [BLink-Tree](/docs/CS/DB/BLink-Tree.md)
 - [WAL](/docs/CS/DB/WAL.md) / [Indexes](/docs/CS/DB/Index.md)
+- [Shard](/docs/CS/DB/Shard.md)
 - [ClickHouse](/docs/CS/DB/ClickHouse.md)
 - [DolphinDB](/docs/CS/DB/DolphinDB.md)
 - [RocksDB](/docs/CS/DB/RocksDB/RocksDB.md)
@@ -1112,6 +1115,9 @@ Dgraph 是一个分布式图数据库，使用 Go 语言开发，支持 GraphQL 
 - [NebulaGraph](/docs/CS/DB/graph/NebulaGraph.md)
 - [Druid](/docs/CS/DB/Druid.md)
 - [Valkey](/docs/CS/DB/Valkey.md)
+- [DuckDB](/docs/CS/DB/DuckDB.md)
+- [MyCat](/docs/CS/DB/MyCat/MyCat.md)
+- [ShardingSphere](/docs/CS/DB/ShardingSphere.md) / [TDDL](/docs/CS/DB/TDDL.md)
 
 
 ## References

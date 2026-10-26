@@ -8,20 +8,13 @@
 
 值得上工作流引擎的信号：流程节点多且顺序常变、需要可视化配置与审批轨迹、有会签/加签/驳回/委派/超时升级、需要流程级别的事务与补偿。不值得的信号：只是简单的三态状态流转——此时用一个枚举 + 状态机（Spring StateMachine/Squirrel）更轻，引入引擎反而是过度设计。
 
-## Flowable
+## Engine Implementations
 
-[Flowable](https://www.flowable.com/open-source) 是当前 Java 生态主流的轻量工作流引擎，从 Activiti 分叉而来，同一批核心作者，全面支持 BPMN 2.0，并扩展出 CMMN（案例管理）、DMN（决策表）。
+具体引擎的实现机制、表结构、Spring Boot 集成与代码示例已拆分到框架层：[Workflow (BPMN Engines)](/docs/CS/Framework/Workflow/Workflow.md) 枢纽对比 **Flowable / Camunda / Activiti** 三者（共同祖先 Activiti 5、版本基线、架构代际、许可证），并链接各自的实现分册：
 
-- 架构：流程定义部署为 BPMN XML（表 `ACT_RE_*`），运行时状态写 `ACT_RU_*`（流程结束即删除），历史写 `ACT_HI_*`；`ACT_ID_*` 为身份表。大量 `ACT_` 表是它最显著的运维特征。
-- 异步执行：Job Executor 定时扫 `ACT_RU_JOB` 表执行异步服务任务/定时器，配合排他模式保证集群下单实例只执行一次；死信任务进 `ACT_RU_DEADLETTER_JOB`。
-- 集成方式：与 Spring Boot  starter 集成，`RuntimeService` 启动流程、`TaskService` 办理待办、`HistoryService` 查轨迹；服务任务可用 `flowable:delegateExpression` 挂 Spring Bean。
-- 监听器：ExecutionListener / TaskListener 可在节点创建、完成等生命周期切入，用于埋点与通知。
-
-```java
-runtimeService.startProcessInstanceByKey("expense", vars);          // 发起
-Task task = taskService.createTaskQuery().taskAssignee(uid).singleResult();
-taskService.complete(task.getId(), Map.of("approved", true));        // 审批通过，自动走条件网关
-```
+- [Flowable](/docs/CS/Framework/Workflow/Flowable.md)：轻量嵌入式、Apache 2.0、BPMN+CMMN+DMN 一把梭，国内社区大。
+- [Camunda](/docs/CS/Framework/Workflow/Camunda.md)：**双线**——Camunda 7（嵌入式+RDBMS+ACT_ 表+Apache 2.0）与 Camunda 8/Zeebe（云原生、事件溯源、Raft、gRPC、source-available 许可证）。
+- [Activiti](/docs/CS/Framework/Workflow/Activiti.md)：三者共同祖先，Apache 2.0，拆为 activiti-core / activiti-cloud，但社区活跃度与标准覆盖弱于前两者。
 
 ## Distinction from Related Concepts
 
@@ -37,6 +30,7 @@ taskService.complete(task.getId(), Map.of("approved", true));        // 审批�
 
 ## Links
 
+- [Workflow (BPMN Engines)](/docs/CS/Framework/Workflow/Workflow.md)
 - [DDD](/docs/CS/SE/DDD.md)
 - [Transaction](/docs/CS/SE/Transaction.md)
 - [SystemDesign](/docs/CS/SE/SystemDesign.md)
@@ -44,5 +38,4 @@ taskService.complete(task.getId(), Map.of("approved", true));        // 审批�
 
 ## References
 
-1. [Flowable Open Source Documentation](https://www.flowable.com/open-source/docs)
-2. [BPMN 2.0 Specification](https://www.omg.org/spec/BPMN/2.0.2/)
+1. [BPMN 2.0 Specification](https://www.omg.org/spec/BPMN/2.0.2/)

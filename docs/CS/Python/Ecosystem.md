@@ -41,7 +41,7 @@ ASGI 之所以**必须**带一个事件循环：协议把"一次交互"拆成了
 | Flask | 请求分发 + 模板渲染，其余靠扩展拼装 | WSGI | 能力在扩展手里，维护状态参差，风险随扩展数量上升 |
 | FastAPI | 类型注解驱动校验与文档，路由层很薄 | ASGI | 契约完全绑在类型系统与 pydantic 上 |
 
-怎么选：按"你还得自己搭多少东西"排，而不是按压测数字排。业务核心是权限、后台管理与关系数据 → Django；边界清楚的内部小服务 → Flask 更省认知；接口契约（请求/响应模型、OpenAPI）是团队协作的主要摩擦点 → FastAPI。三者的机制与代码组织不在这里展开，见 [FastAPI](/docs/CS/Framework/FastAPI.md)。
+怎么选：按"你还得自己搭多少东西"排，而不是按压测数字排。业务核心是权限、后台管理与关系数据 → Django；边界清楚的内部小服务 → Flask 更省认知；接口契约（请求/响应模型、OpenAPI）是团队协作的主要摩擦点 → FastAPI。三者的机制与代码组织不在这里展开，见 [FastAPI](/docs/CS/Framework/FastAPI.md) 与 [Django](/docs/CS/Framework/Django.md)。
 
 ### Serving and Reverse Proxy
 
@@ -171,7 +171,7 @@ C 扩展是成本的放大器：要么 CI 为每个（平台 × ABI）产出二�
 | 层次 | 代表项目 | 何时用 | 对应本库笔记 |
 |---|---|---|---|
 | Web 协议 | WSGI / ASGI | 依赖树端到端异步才选 ASGI | [Asyncio](/docs/CS/Python/Asyncio.md) |
-| Web 框架 | Django / Flask / FastAPI | 按"还要自己搭多少"选 | [FastAPI](/docs/CS/Framework/FastAPI.md) |
+| Web 框架 | Django / Flask / FastAPI | 按"还要自己搭多少"选 | [Django](/docs/CS/Framework/Django.md) |
 | HTTP server | gunicorn / uvicorn / hypercorn | prefork 换 CPU，事件循环换 I/O 复用 | [Concurrency](/docs/CS/Python/Concurrency.md) |
 | 任务队列 | Celery / RQ / arq / Dramatiq | 有 broker 语义需求才上 Celery | [MQ](/docs/CS/MQ/MQ.md) |
 | 定时调度 | APScheduler / cron / Celery beat | 先决定它属于哪一层 | [Scheduled_Task](/docs/CS/SE/Scheduled_Task.md) |

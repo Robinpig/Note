@@ -40,7 +40,7 @@ Go 语言没有用 public、private 这样的修饰符来修饰函数是公有�
 
 C语言中的函数指针就是个函数地址。函数指针的类型类 似于函数声明，编译器参考这种类型信息并依据调用约定来生成传参等汇编指令
 
-定Function Value确实是个指针，而且是个两级指针。 Function Value不直接指向目标函数，而是一个目标函数的指针
+Function Value确实是个指针，而且是个两级指针。Function Value不直接指向目标函数，而是一个目标函数的指针
 
 Go语言在设计上用这种两级指针结构将函数指针和闭包统一为Function Value，运行阶段调用者不 需要关心调用的函数是个普通的函数还是个闭包函数，一致对待就可以了
 
@@ -60,23 +60,23 @@ Go语言在设计上用这种两级指针结构将函数指针和闭包统一为
 
 ```go
 func main() {
-    cl:=colsure()
-    fmt.Println(cl())
-    fmt.Println(cl())
-    fmt.Println(cl())
+	cl := closure()
+	fmt.Println(cl())
+	fmt.Println(cl())
+	fmt.Println(cl())
 }
 
-func colsure() func() int {
-    i:=0
-    return func() int {
-        i++
-        return i
-    }
+func closure() func() int {
+	i := 0
+	return func() int {
+		i++
+		return i
+	}
 }
 ```
 
 运行这个代码，你会看到输出打印的结果是：1 2 3
-这都得益于匿名函数闭包的能力，让我们自定义的 colsure 函数，可以返回一个匿名函数，并且持有外部函数 colsure 的变量 i。因而在 main 函数中，每调用一次 cl()，i 的值就会加 1。
+这都得益于匿名函数闭包的能力，让我们自定义的 closure 函数，可以返回一个匿名函数，并且持有外部函数 closure 的变量 i。因而在 main 函数中，每调用一次 cl()，i 的值就会加 1。
 小提示：在 Go 语言中，函数也是一种类型，它也可以被用来声明函数类型的变量、参数或者作为另一个函数的返回值类型。
 
 

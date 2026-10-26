@@ -468,7 +468,7 @@ Jackson 3 迁移时，日期格式、属性顺序、null 处理的默认行为�
 
 ## Observability
 
-spring-kafka 通过 Micrometer Observation 埋点（`KafkaListenerObservation`，见上面 `doInvokeRecordListener` 源码），监听器耗时、成功与失败计数可直接接入 [链路追踪](/docs/CS/Framework/Spring_Cloud/Sleuth.md)。容器自身的指标按 `client-id` 分组，可经 `container.metrics()` 获取。
+spring-kafka 通过 Micrometer Observation 埋点（`KafkaListenerObservation`，见上面 `doInvokeRecordListener` 源码），监听器耗时、成功与失败计数可直接接入 [链路追踪](/docs/CS/Framework/Spring_Boot/tracing.md)。容器自身的指标按 `client-id` 分组，可经 `container.metrics()` 获取。
 
 ## Links
 

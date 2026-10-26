@@ -60,7 +60,7 @@ Native Image 把应用编译成独立可执行文件，代价是引入 **closed-
 - 动态代理：需 `proxy-config.json`；
 - JNI、资源、`ServiceLoader`：都要相应配置。
 
-这正是 Native Image 最大的工程成本：**可移植性换启动速度，代价是构建期复杂度**。上手可用 Quarkus、Micronaut、Spring AOT 等框架，它们把这些配置自动化了。
+这正是 Native Image 最大的工程成本：**可移植性换启动速度，代价是构建期复杂度**。上手可用 [Quarkus](/docs/CS/Java/Quarkus/NativeImage.md)、Micronaut、Spring AOT 等框架，它们把这些配置自动化了。
 
 ## GraalVM Ecosystem Overview
 

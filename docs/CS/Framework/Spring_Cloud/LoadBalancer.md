@@ -199,7 +199,7 @@ spring:
 
 产生的指标可与 Micrometer Tracing 联动，在一次链路里看到"选了哪个实例、花了多久"。
 
-若调用链涉及重试，链路能否连贯取决于是否使用框架自动装配的客户端 Builder（参见 [链路追踪](/docs/CS/Framework/Spring_Cloud/Sleuth.md)）。
+若调用链涉及重试，链路能否连贯取决于是否使用框架自动装配的客户端 Builder（参见 [链路追踪](/docs/CS/Framework/Spring_Boot/tracing.md)）。
 
 ## Links
 

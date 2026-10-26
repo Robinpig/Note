@@ -1,4 +1,4 @@
-## Introfuction
+## Introduction
 
 Morse code is an old system of encoding messages that is used to send telegraphic information using signals and rhythm. 
 In written communication, Morse code uses dots and dashes to represent a limited number of alphabet letters, numbers, punctuation and special characters of a given message. 

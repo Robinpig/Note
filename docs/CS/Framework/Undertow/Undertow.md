@@ -57,7 +57,7 @@ digraph undertow_layers {
 
 ## Current status and selection
 
-Undertow 在框架生态里的位置这些年变化明显：Spring Boot 一侧已经不再把它作为受支持的内嵌容器选项（本库 [Spring WebFlux](/docs/CS/Framework/Spring/webflux.md) 记录了这一变更及其口径），因此「Boot 项目换 Undertow 省内存」这类旧建议需要重新验证。它仍然活跃的地方是 WildFly / Quarkus 系与需要「把 HTTP 服务器当库用」的场景。是否选它的判断维度（内存占用、启动速度、非阻塞程度、规范完整度、生态维护）在对照页里逐项列了出处。
+Undertow 在框架生态里的位置这些年变化明显：Spring Boot 一侧已经不再把它作为受支持的内嵌容器选项（本库 [Spring WebFlux](/docs/CS/Framework/Spring/webflux.md) 记录了这一变更及其口径），因此「Boot 项目换 Undertow 省内存」这类旧建议需要重新验证。它仍然活跃的地方是 WildFly / [Quarkus](/docs/CS/Java/Quarkus.md) 系与需要「把 HTTP 服务器当库用」的场景。是否选它的判断维度（内存占用、启动速度、非阻塞程度、规范完整度、生态维护）在对照页里逐项列了出处。
 
 一个提醒：这一页和全部子页的事实都来自本地源码镜像（Maven Central 的 `-sources.jar`），凡是镜像里没有源码的模块（`undertow-karaf`、`jastow`/JSP、examples）一律没有写实现细节；引用这些模块前需要另外核实。
 

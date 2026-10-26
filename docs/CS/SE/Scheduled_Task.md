@@ -60,7 +60,7 @@ Dubbo 的超时检测是时间轮的另一个典型用法：`DefaultFuture` 每�
 
 调度框架内部也用时间轮收敛"扫库"开销：PowerJob Server 先按 15s 窗口批量捞 `nextTriggerTime`，再放进**秒/分/时三级时间轮**做精确投递，避免为每个任务轮询数据库（见 [时间轮](/docs/CS/Framework/Job/PowerJob.md?id=timing-wheel)）。
 
-同一招在缓存过期上同样成立：Caffeine 用层级时间轮组织过期条目而不是给每个 entry 挂定时器，且清理是惰性的（见 [Caffeine](/docs/CS/SE/Caffeine.md)）；Pulsar broker 的事务超时同样直接复用 Netty 的 `HashedWheelTimer`（见 [Pulsar Broker](/docs/CS/MQ/Pulsar/Broker.md)）。
+同一招在缓存过期上同样成立：Caffeine 用层级时间轮组织过期条目而不是给每个 entry 挂定时器，且清理是惰性的（见 [Caffeine Expiration](/docs/CS/SE/Caffeine/Expiration.md)）；Pulsar broker 的事务超时同样直接复用 Netty 的 `HashedWheelTimer`（见 [Pulsar Broker](/docs/CS/MQ/Pulsar/Broker.md)）。
 
 ## Delayed Delivery in Message Queues
 

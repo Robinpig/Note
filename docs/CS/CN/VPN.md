@@ -66,6 +66,7 @@ OpenVPN（TLS + 虚拟 TUN/TAP 网卡）、WireGuard（UDP + 现代密码学，�
 - [TLS](/docs/CS/CN/TLS.md)
 - [Security](/docs/CS/CN/Security.md)
 - [IP](/docs/CS/CN/IP.md)
+- [Cryptography](/docs/CS/CN/CyberSecurity/Cryptography.md)
 
 ## References
 

@@ -83,12 +83,12 @@ docker run --rm -d -p 16686:16686 -p 4317:4317 -p 4318:4318 \
 | --- | --- | --- |
 | 起源 | Uber（Dapper 论文） | Twitter |
 | 客户端 | 已弃用，推荐 OTel SDK | 多语言 reporter，也可接 OTel |
-| 模型 | trace/span + FollowsFrom | span 树 + annotation |
+| 模型 | trace/span + FollowsFrom | span 树 + [annotation](/docs/CS/Distributed/Tracing/Zipkin/Data_Model.md) |
 | 传播 | W3C TraceContext / B3 | B3（多/单 header） |
-| 存储 | ES/Cassandra/Kafka/Badger | MySQL/ES/Cassandra/内存 |
+| 存储 | ES/Cassandra/Kafka/Badger | [MySQL/ES/Cassandra/内存](/docs/CS/Distributed/Tracing/Zipkin/Collector_and_Storage.md) |
 | 采样 | probabilistic + remote + tail | 多在客户端，生态较小 |
 
-两者模型高度相似，OTel Collector 都能桥接；选型更多取决于存储与运维栈（ES 生态偏 Jaeger，轻量简单偏 Zipkin）。
+两者模型高度相似，OTel Collector 都能桥接；选型更多取决于存储与运维栈（ES 生态偏 Jaeger，轻量简单偏 Zipkin）。Zipkin 单进程架构、可插拔存储与检索开关详见 [Zipkin Architecture](/docs/CS/Distributed/Tracing/Zipkin/Architecture.md) 与 [Collector/Storage](/docs/CS/Distributed/Tracing/Zipkin/Collector_and_Storage.md)。
 
 ## Use Cases
 

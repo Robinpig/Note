@@ -30,7 +30,7 @@ RAGFlow 是 InfiniFlow 出品、**Apache-2.0** 许可的开源 RAG 引擎（GitH
 | 版本 | 时间 | 主要变化 |
 |------|------|----------|
 | v0.21.0 | 2025 | 新增 Ingestion Pipeline 切分模板 |
-| v0.25.0 | 2026-04 | Agentic 工作流 + **MCP Server**、Elasticsearch 9.x（原 8.x）、MinIO 镜像改用 `pgsty/minio` |
+| v0.25.0 | 2026-04 | Agentic 工作流 + **MCP Server**、Elasticsearch 9.x（原 8.x）、MinIO 镜像改用 `pgsty/minio`（即社区维护 fork [Silo](/docs/CS/Distributed/Silo.md)，后更名 `pgsty/silo`） |
 | v0.25.1 | 2026-04-29 | 大 PDF 懒加载、RESTful API 统一、DeepSeek v4 支持 |
 | v0.26.x | 2026 年中 | 当前稳定线（v0.26.4） |
 

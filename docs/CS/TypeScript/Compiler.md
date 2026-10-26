@@ -201,6 +201,7 @@ TS 7 出现前，社区的常规做法就是"**用 esbuild 换速度，丢掉检
 - [TypeScript](/docs/CS/TypeScript/TypeScript.md)
 - [TypeScript 类型系统](/docs/CS/TypeScript/TypeSystem.md)
 - [tsconfig 工程配置](/docs/CS/TypeScript/Tsconfig.md)
+- [TypeScript 工具链](/docs/CS/TypeScript/Toolchain.md)
 - [Nodejs](/docs/CS/front-end/Nodejs.md)
 - [Webpack](/docs/CS/front-end/Webpack.md)
 

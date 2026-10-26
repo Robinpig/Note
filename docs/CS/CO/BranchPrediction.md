@@ -126,17 +126,14 @@
 
 首先 CPU 分支预测的优化是肯定的，那关于随机情况下 if 还是优于 switch 的话这我就有点不太确定为什么了，可能是 JIT 做了什么优化操作，或者是随机情况下分支预测成功带来的效益大于预测失败的情形？
 
-难道是我枚举值太少了体现不出 switch 的效果？不过在随机情况下 switch 也不应该弱于 if 啊，我又加了 7 个枚举值，一共 12 个值又测试了一遍，结果如下：
+难道是我枚举值太少了体现不出 switch 的效果？不过在随机情况下 switch 也不应该弱于 if 啊，我又加了 7 个枚举值，一共 12 个值又测试了一遍：
 
-![Image](data:image/gif;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQImWNgYGBgAAAABQABh6FO1AAAAABJRU5ErkJggg==)
 
 好像距离被拉近了，我看有戏，于是我背了波 26 个字母，实不相瞒还是唱着打的字母。
 
-![Image](data:image/gif;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQImWNgYGBgAAAABQABh6FO1AAAAABJRU5ErkJggg==)
 
 扩充了分支的数量后又进行了一波测试，这次 swtich 争气了，终于比 if 强了。
 
-![Image](data:image/gif;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQImWNgYGBgAAAABQABh6FO1AAAAABJRU5ErkJggg==)
 
 > 题外话: 我看网上也有对比 if 和 switch 的，它们对比出来的结果是 switch 优于 if，首先 jmh 就没写对，定义一个常量来测试 if 和 switch，并且测试方法的 result 写了没有消费，这代码也不知道会被 JIT 优化成啥样了，写了几十行，可能直接优化成 return 某个值了。
 
@@ -160,9 +157,8 @@
 
 接下来咱们再来看看这个分支预测到底是怎么弄的，为什么会有分支预测这玩意，不过在谈到分支预测之前需要先介绍下指令流水线（Instruction pipelining），也就是现代微处理器的 pipeline。
 
-CPU 本质就是取指执行，而取指执行我们来看下五大步骤，分别是获取指令(IF)、指令解码(ID)、执行指令(EX)、内存访问(MEM)、写回结果(WB)，再来看下维基百科上的一个图。
+CPU 本质就是取指执行，而取指执行我们来看下五大步骤，分别是获取指令(IF)、指令解码(ID)、执行指令(EX)、内存访问(MEM)、写回结果(WB)（维基百科上有对应的流水线示意图，可对照着看）。
 
-![Image](data:image/gif;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQImWNgYGBgAAAABQABh6FO1AAAAABJRU5ErkJggg==)
 
 当然步骤实际可能更多，反正就是这个意思需要经历这么多步，所以说一次执行可以分成很多步骤，那么这么多步骤就可以并行，来提升处理的效率。
 
@@ -170,7 +166,6 @@ CPU 本质就是取指执行，而取指执行我们来看下五大步骤，分�
 
 就像我们工厂的流水线一样，我这个奥特曼的脚拼上去了马上拼下一个奥特曼的脚，我可不会等上一个奥特曼的都组装完了再组装下一个奥特曼。
 
-![Image](data:image/gif;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQImWNgYGBgAAAABQABh6FO1AAAAABJRU5ErkJggg==)
 
 当然也没有这么死板，不一定就是顺序执行，有些指令在等待而后面的指令其实不依赖前面的结果，所以可以提前执行，这种叫**乱序执行**。
 

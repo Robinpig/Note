@@ -1,22 +1,10 @@
 ## Introduction
 
-[Zipkin](https://zipkin.io/) 是一个分布式追踪系统。
-它帮助收集排查服务架构中延迟问题所需的时序数据。
-其功能包括对这些数据的收集与查询。
+[Zipkin](https://zipkin.io/) 是 **OpenZipkin** 维护的分布式追踪系统，由 Twitter 于 2012 年开源，直接受 Google [Dapper](/docs/CS/Distributed/Tracing/Tracing.md) 论文启发，是 Dapper 思路最早的开源实现之一。它帮助收集排查服务架构中延迟问题所需的时序数据，功能涵盖这些追踪数据的**收集、存储、检索与可视化**。
 
-### Architecture
-
-Tracer 运行在你的应用中，记录下所发生操作的时间与元数据。
-它们通常会对各类库做 instrumentation（埋点），因此对用户是透明的。
-收集到的追踪数据称为一个 Span。
-
-Instrumentation 被设计为可在生产环境安全使用，且开销极小。
-出于这个原因，它们只在带内传播 ID，以告知接收方当前有一条 trace 正在进行。
-Trace instrumentation 异步上报 span，以免追踪系统自身的延迟或故障拖慢、打断用户代码。
+Zipkin 的设计哲学是「轻量、低运维开销、低侵入」：Instrumentation（埋点）对业务代码透明，trace instrumentation 异步上报 span 以免追踪系统自身的延迟或故障拖慢用户代码，生产环境可安全使用。这是它与 [Jaeger](/docs/CS/Distributed/Tracing/Jaeger.md) 在架构取向上的核心差异——Zipkin 以**单进程**承载 collector、storage、query、UI 全部组件，部署简单，但 collector 与 query 不能独立水平扩展。
 
 下面这张来自 Zipkin 官网的图描述了这一流程：
-
-
 
 <div style="text-align: center;">
 
@@ -28,225 +16,76 @@ Trace instrumentation 异步上报 span，以免追踪系统自身的延迟或�
 Fig.1. Architecture
 </p>
 
+## Architecture
 
+一条请求的追踪数据从被埋点的应用出发，经过 Reporter → Collector → Storage → Query → Web UI 这五个逻辑环节。完整的组件划分、数据流图与「带内传播 ID」机制见 [Zipkin Architecture](/docs/CS/Distributed/Tracing/Zipkin/Architecture.md)。
+
+| 逻辑组件 | 职责 |
+| --- | --- |
+| **Tracer / Instrumentation** | 运行在应用内，记录操作时间与元数据；对常见库做埋点，对用户透明 |
+| **Reporter** | 应用内负责把 span 发给 Zipkin 的组件（HTTP / Kafka / RabbitMQ / Scribe 等传输） |
+| **Collector** | 守护进程，接收 span、校验、建立索引并交由存储持久化 |
+| **Storage** | 可插拔存储抽象，原生支持内存、Cassandra、Elasticsearch、MySQL |
+| **Query Service** | 提供 REST API 检索 trace，主要消费者是 Web UI |
+| **Web UI** | 单页应用，检索并以时间轴 / 依赖图可视化 trace |
+
+## Data Model
+
+Zipkin 使用 **v2 数据模型**：一条 Trace 由共享同一 `traceId` 的若干 Span 构成树状结构，Span 之间靠 `parentId` 串联。每个 Span 携带 `id`、`traceId`、`parentId`、`name`、`timestamp`（epoch 微秒）、`duration`（微秒）、`kind`（CLIENT/SERVER/PRODUCER/CONSUMER）、`annotations`、`tags`、`localEndpoint` / `remoteEndpoint` 等字段。RPC 场景下客户端（`cs`/`cr`）与服务端（`sr`/`ss`）共享同一 spanId，由 collector 合并成完整记录。
+
+字段级细节、注解语义（`cs`/`sr`/`ss`/`cr`、`ws`/`wr`）、`kind` 与 `shared` 标志见 [Zipkin Data Model](/docs/CS/Distributed/Tracing/Zipkin/Data_Model.md)。
 
 ## Transport
 
-被埋点的库发出的 span 必须被传输，从被追踪的服务送达 Zipkin collectors。
-主要有三种传输方式：HTTP、Kafka 与 Scribe。
+被埋点的库发出的 span 必须经某种传输送达 Zipkin collector。主流方式有 **HTTP**（`POST /api/v2/spans`）、**Kafka**、**RabbitMQ** 与 **Scribe**；应用内的 **Reporter** 负责编码并发送，其中 `AsyncReporter` 通过有界队列缓冲、独立 flush 线程发送，并在队列满或发送失败时丢 span 并计入 metrics。
 
-### Reporters
+Java 侧最主要的 instrumentation 库是 **Brave**；Spring 生态历史上是 **Sleuth**（已 EOL，由 Micrometer Tracing 取代）。传输层、Reporter / Sender / AsyncReporter 实现与多语言客户端见 [Zipkin Transport](/docs/CS/Distributed/Tracing/Zipkin/Transport.md)。
 
-被埋点的应用中，负责把数据发送给 Zipkin 的组件称为 Reporter。
-Reporter 通过若干种传输方式之一，将追踪数据发送给 Zipkin collectors，由后者把追踪数据持久化到存储中。
+## Collector and Storage
 
-```java
-public interface Reporter<S> {
-  Reporter<Span> NOOP = new Reporter<Span>() {
-    @Override public void report(Span span) {
-    }
+Collector 守护进程收到 span 后，先校验、建立索引，再交给 StorageComponent 持久化。存储是可插拔的：
 
-    @Override public String toString() {
-      return "NoopReporter{}";
-    }
-  };
-  Reporter<Span> CONSOLE = new Reporter<Span>() {
-    @Override public void report(Span span) {
-      System.out.println(span.toString());
-    }
+- **内存**：默认，零配置，重启即丢，仅适合演示。
+- **Cassandra**：Twitter 内部的原始选型，扩展性好、schema 灵活。
+- **Elasticsearch**：检索能力强、生态成熟，是生产常用选择。
+- **MySQL**：v1 组件，schema 简单易懂但不为性能设计，数据量大后查询会退化到秒级。
 
-    @Override public String toString() {
-      return "ConsoleReporter{}";
-    }
-  };
+`SEARCH_ENABLED=false` 可关闭检索索引以降低存储成本 / 提升写入吞吐，代价是只能按 traceId 点查。完整后端对比、依赖聚合与 `StorageComponent` 见 [Zipkin Collector and Storage](/docs/CS/Distributed/Tracing/Zipkin/Collector_and_Storage.md)。
 
-  /**
-   * Schedules the span to be sent onto the transport.
-   *
-   * @param span Span, should not be <code>null</code>.
-   */
-  void report(S span);
-}
+## Query Service and UI
+
+数据落盘并建立索引后，**Query Service** 提供一组 REST API（基址 `localhost:9411/api/v2`）：`POST /spans` 接收、`GET /traces` 检索、`GET /trace/{traceId}` 点查、`GET /services`、`GET /spans`、`GET /dependencies` 等，主要消费者是 Web UI。
+
+Web UI 提供 trace 列表检索、单条 trace 的**时间轴瀑布图**、以及汇总「各应用间被追踪请求量」的**依赖图**，可帮助识别错误路径或过时服务的调用。API 端点清单与 UI 能力见 [Zipkin Query and UI](/docs/CS/Distributed/Tracing/Zipkin/Query_and_UI.md)。
+
+## Relationship to OpenTelemetry
+
+Zipkin 与 [OpenTelemetry](/docs/CS/Distributed/Tracing/Otel.md) 的分工是「生成 vs 后端」：OTel SDK 负责埋点、上下文传播（默认 W3C Trace Context）与通过 OTLP 上报；Zipkin 作为后端接收并存储这些 span。OTel Collector 内置 **zipkin exporter**，可直接把 OTLP 转成 Zipkin v2 格式写入；需要让 OTel 与既有 Zipkin 服务共存时，可在 OTel 侧启用 **B3 propagator**（多 / 单 header）来对齐 Zipkin 的上下文传播格式。新版项目通常以 OTel 为起点、Zipkin 作后端，而不再引入 Zipkin 专有客户端。
+
+## Quickstart
+
+运行一个全功能的 Zipkin 后端只需一条命令（内存存储，UI 端口 9411）：
+
+```bash
+docker run -d -p 9411:9411 openzipkin/zipkin
+# UI: http://localhost:9411
 ```
 
-#### Sleuth
-```java
-	private static final class CompositeReporter implements Reporter<zipkin2.Span> {
-
-		private static final Log log = LogFactory.getLog(CompositeReporter.class);
-
-		private final List<SpanAdjuster> spanAdjusters;
-
-		private final Reporter<zipkin2.Span> spanReporter;
-
-		private CompositeReporter(List<SpanAdjuster> spanAdjusters,
-				List<Reporter<Span>> spanReporters) {
-			this.spanAdjusters = spanAdjusters;
-			this.spanReporter = spanReporters.size() == 1 ? spanReporters.get(0)
-					: new ListReporter(spanReporters);
-		}
-
-		@Override
-		public void report(Span span) {
-			Span spanToAdjust = span;
-			for (SpanAdjuster spanAdjuster : this.spanAdjusters) {
-				spanToAdjust = spanAdjuster.adjust(spanToAdjust);
-			}
-			this.spanReporter.report(spanToAdjust);
-		}
-
-		private static final class ListReporter implements Reporter<zipkin2.Span> {
-
-			private final List<Reporter<Span>> spanReporters;
-
-			private ListReporter(List<Reporter<Span>> spanReporters) {
-				this.spanReporters = spanReporters;
-			}
-
-			@Override
-			public void report(Span span) {
-				for (Reporter<zipkin2.Span> spanReporter : this.spanReporters) {
-					try {
-						spanReporter.report(span);
-					}
-					catch (Exception ex) {
-						log.warn("Exception occurred while trying to report the span " + span, ex);
-					}
-				}
-			}
-		}
-
-	}
-```
-#### Asynchronous
-```java
-static final class BoundedAsyncReporter<S> extends AsyncReporter<S> {
-    static final Logger logger = Logger.getLogger(BoundedAsyncReporter.class.getName());
-    final AtomicBoolean started, closed;
-    final BytesEncoder<S> encoder;
-    final ByteBoundedQueue<S> pending;
-    final Sender sender;
-    final int messageMaxBytes;
-    final long messageTimeoutNanos, closeTimeoutNanos;
-    final CountDownLatch close;
-    final ReporterMetrics metrics;
-    final ThreadFactory threadFactory;
-
-    void startFlusherThread() {
-        BufferNextMessage<S> consumer =
-                BufferNextMessage.create(encoder.encoding(), messageMaxBytes, messageTimeoutNanos);
-        Thread flushThread = threadFactory.newThread(new Flusher<>(this, consumer));
-        flushThread.setName("AsyncReporter{" + sender + "}");
-        flushThread.setDaemon(true);
-        flushThread.start();
-    }
-
-    @Override
-    public void report(S next) {
-        if (next == null) throw new NullPointerException("span == null");
-        // Lazy start so that reporters never used don't spawn threads
-        if (started.compareAndSet(false, true)) startFlusherThread();
-        metrics.incrementSpans(1);
-        int nextSizeInBytes = encoder.sizeInBytes(next);
-        int messageSizeOfNextSpan = sender.messageSizeInBytes(nextSizeInBytes);
-        metrics.incrementSpanBytes(nextSizeInBytes);
-        if (closed.get() ||
-                // don't enqueue something larger than we can drain
-                messageSizeOfNextSpan > messageMaxBytes ||
-                !pending.offer(next, nextSizeInBytes)) {
-            metrics.incrementSpansDropped(1);
-        }
-    }
-
-    @Override
-    public final void flush() {
-        if (closed.get()) throw new ClosedSenderException();
-        flush(BufferNextMessage.create(encoder.encoding(), messageMaxBytes, 0));
-    }
-
-
-    void flush(BufferNextMessage<S> bundler) {
-        pending.drainTo(bundler, bundler.remainingNanos());
-
-        // record after flushing reduces the amount of gauge events vs on doing this on report
-        metrics.updateQueuedSpans(pending.count);
-        metrics.updateQueuedBytes(pending.sizeInBytes());
-
-        // loop around if we are running, and the bundle isn't full
-        // if we are closed, try to send what's pending
-        if (!bundler.isReady() && !closed.get()) return;
-
-        // Signal that we are about to send a message of a known size in bytes
-        metrics.incrementMessages();
-        metrics.incrementMessageBytes(bundler.sizeInBytes());
-
-        // Create the next message. Since we are outside the lock shared with writers, we can encode
-        ArrayList<byte[]> nextMessage = new ArrayList<>(bundler.count());
-        bundler.drain(new SpanWithSizeConsumer<S>() {
-            @Override public boolean offer(S next, int nextSizeInBytes) {
-                nextMessage.add(encoder.encode(next)); // speculatively add to the pending message
-                if (sender.messageSizeInBytes(nextMessage) > messageMaxBytes) {
-                    // if we overran the message size, remove the encoded message.
-                    nextMessage.remove(nextMessage.size() - 1);
-                    return false;
-                }
-                return true;
-            }
-        });
-
-        try {
-            sender.sendSpans(nextMessage).execute();
-        } catch (Throwable t) {
-            // In failure case, we increment messages and spans dropped.
-            int count = nextMessage.size();
-            Call.propagateIfFatal(t);
-            metrics.incrementMessagesDropped(t);
-            metrics.incrementSpansDropped(count);
-
-            Level logLevel = FINE;
-
-            if (shouldWarnException) {
-                logger.log(WARNING, "Spans were dropped due to exceptions. "
-                        + "All subsequent errors will be logged at FINE level.");
-                logLevel = WARNING;
-                shouldWarnException = false;
-            }
-
-            if (logger.isLoggable(logLevel)) {
-                logger.log(logLevel,
-                        format("Dropped %s spans due to %s(%s)", count, t.getClass().getSimpleName(),
-                                t.getMessage() == null ? "" : t.getMessage()), t);
-            }
-
-            // Raise in case the sender was closed out-of-band.
-            if (t instanceof ClosedSenderException) throw (ClosedSenderException) t;
-
-            // Old senders in other artifacts may be using this less precise way of indicating they've been closed
-            // out-of-band.
-            if (t instanceof IllegalStateException && t.getMessage().equals("closed"))
-                throw (IllegalStateException) t;
-        }
-    }
-}
-```
-
-## Collectors
-当追踪数据抵达 Zipkin collector 守护进程后，它会对其进行校验、存储并建立索引，以便被 Zipkin collector 查询。
-
-
-## Storage
-
-Zipkin 最初构建在 Cassandra 之上，因为 Cassandra 具备良好的可扩展性、灵活的 schema，并且在 Twitter 内部被大量使用。
-不过我们让这一组件变得可插拔。除 Cassandra 外，我们还原生支持 ElasticSearch 与 MySQL。
-其它后端可能以第三方扩展的形式提供。
-
-## Query Service
-
-数据被存储并建立索引后，我们需要一种方式把它取出来。Query 守护进程提供了一个简单的 JSON API，用于查找与检索 traces。
-该 API 的主要消费者是 Web UI。
-
+切换到持久化存储通过环境变量完成，例如 `STORAGE_TYPE=elasticsearch` 并配套 `ES_HOSTS`；从源码运行需 **JDK 17+**。版本基线：**3.6.x（3.6.1，2026-04）**，镜像发布于 Docker Hub `openzipkin/zipkin` 与 GHCR `ghcr.io/openzipkin/zipkin`，另提供 `zipkin-slim` 精简镜像与 Helm Chart（`helm repo add zipkin https://zipkin.io/zipkin-helm`）。运维细节见 [Zipkin Collector and Storage](/docs/CS/Distributed/Tracing/Zipkin/Collector_and_Storage.md)。
 
 ## Links
 
-- [Tracing](/docs/CS/Distributed/Tracing/Tracing.md)
-- [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md)
+- [Tracing](/docs/CS/Distributed/Tracing/Tracing.md) — 可观测性三支柱、trace/span 数据模型
+- [Jaeger](/docs/CS/Distributed/Tracing/Jaeger.md) — CNCF 追踪后端，Zipkin 的主要对照
+- [OpenTelemetry](/docs/CS/Distributed/Tracing/Otel.md) — vendor-agnostic 遥测框架，可桥接 Zipkin
+- [SkyWalking](/docs/CS/Distributed/Tracing/SkyWalking.md) — 国产 APM 平台
+- [Spring Cloud Sleuth](/docs/CS/Framework/Spring_Cloud/Sleuth.md) — Spring 生态历史 Zipkin 客户端（已 EOL）
+- [Micrometer](/docs/CS/log/Micrometer.md) — JVM 侧埋点门面，Sleuth 的继任者
+
+## References
+
+1. [Zipkin](https://zipkin.io/) — 官方网站
+2. [Zipkin API v2](https://zipkin.io/zipkin-api/#/default/post_spans) — v2 REST API 规范
+3. [Instrumenting a library](https://zipkin.io/pages/instrumenting) — 埋点与 B3 传播官方文档
+4. [B3 Propagation](https://github.com/openzipkin/b3-propagation) — B3 传播格式规范
+5. [Zipkin GitHub](https://github.com/openzipkin/zipkin) — 源码与发布

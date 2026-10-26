@@ -342,7 +342,7 @@ ios:
 
 Guava Cache
 
-[Caffeine](/docs/CS/SE/Caffeine.md)（W-TinyLFU 命中率优化、时间轮过期，详见专文）
+[Caffeine](/docs/CS/SE/Caffeine.md)（W-TinyLFU 命中率优化、时间轮过期；架构/淘汰/过期/加载/集成/运维六个方向各有分册）
 
 本地缓存更适合存储一些变化频率极低，数据量较小的场景，诸如基础数据、配置了类型的数据缓存等
 
@@ -443,7 +443,7 @@ key 的数量也是一个重要考虑因素。如果 key 数量不大，可以�
 被动 + 主动执行即在被动执行的基础上，构建缓存对象时还会额外启动一个后台定时任务，每隔一段时间判断所有缓存条目是否需要过期删除，这样即使很长时间未能触发被动执行，依然能实现缓存的过期和删除。
 另外完全主动肯定是不行的，否则可能会读到已经过期的缓存。
 - guava cache采用的就是纯被动执行，源码比较复杂就不贴了，总结一下就是在每次写入操作之前（preWrite），或在X次读取操作之后（postRead），或在主动调用cleanUp方法时，都会触发缓存过期的判断和删除，其开销分摊在每一次用户读写请求中。
-- caffeine采用的就是被动 + 主动执行，源码更复杂。被动部分整体逻辑和guava差不多，主动就是还有一个额外的定时任务。那具体哪个线程来执行这个定时任务呢？第一反应可能是caffeine内部自己维护了一个线程或者线程池，但其实不然，看代码可知，caffeine会使用用户在构建缓存对象时传入的Executor，若用户未传入，则使用ForkJoinPool.commonPool()
+- caffeine 3.x 默认是纯被动执行：不配置 scheduler 时（默认 disabledScheduler）根本没有任何后台任务，过期只发生在读写触发的维护循环里；显式配置 Scheduler.systemScheduler()（或自定义 scheduler）之后才是被动 + 主动——到点后的延迟任务经 CompletableFuture.delayedExecutor 提交到用户构建时传入的 Executor，未传入则用 ForkJoinPool.commonPool()，且两次执行之间至少有约 1 秒的 pacing。详见 [Caffeine Expiration](/docs/CS/SE/Caffeine/Expiration.md)
 
 
 回顾当前的场景需求.

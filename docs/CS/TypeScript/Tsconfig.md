@@ -36,7 +36,7 @@ TS 7 起 `strict` 默认为开。逐条理解它的组成，才知道升级后�
 
 | 选项 | 归属 | 管什么 |
 |------|------|--------|
-| `strict` | 总开关 | 下面 `strict*` 的全包笔记本式归 Obervation。＝ 下列全部 |
+| `strict` | 总开关 | 下列 `strict*` 项的全包，一项不漏 |
 | `noImplicitAny` | strict | 推断不出类型、也没写注解时报错，而不是悄悄退化成 `any` |
 | `strictNullChecks` | strict | `null`/`undefined` 不自动并入其他类型——这是收益最大的一项 |
 | `strictFunctionTypes` | strict | **函数类型**的参数按逆变检查（方法写法仍是双变） |
@@ -221,6 +221,7 @@ class Derived extends Base {
 - [TypeScript](/docs/CS/TypeScript/TypeScript.md)
 - [TypeScript 类型系统](/docs/CS/TypeScript/TypeSystem.md)
 - [TypeScript 编译器](/docs/CS/TypeScript/Compiler.md)
+- [TypeScript 模块系统](/docs/CS/TypeScript/Modules.md)
 - [Nodejs](/docs/CS/front-end/Nodejs.md)
 - [Webpack](/docs/CS/front-end/Webpack.md)
 

@@ -16,8 +16,8 @@
 ### 追踪后端
 
 - [Jaeger](/docs/CS/Distributed/Tracing/Jaeger.md) — CNCF 分布式追踪后端，兼容 OpenTelemetry。
-- [Zipkin](/docs/CS/Distributed/Tracing/Zipkin.md) — 起源于 Twitter 的轻量追踪系统，Dapper 思路的早期实现。
-- [SkyWalking](/docs/CS/Distributed/Tracing/SkyWalking.md) — 国产 APM 平台，涵盖追踪、拓扑与告警。
+- [Zipkin](/docs/CS/Distributed/Tracing/Zipkin.md) — 起源于 Twitter 的轻量追踪系统，Dapper 思路的早期实现；架构 / 数据模型 / 传输(B3) / 存储 / 查询已拆为子分册。
+- [SkyWalking](/docs/CS/Distributed/Tracing/SkyWalking.md) — 国产 APM 平台，覆盖追踪/拓扑/告警；数据模型 / 传输(sw8) / OAP 后端与存储 / 查询与 UI 拆为子分册，架构并入枢纽页，并附实现机理分册（两级采样、拓扑推导、BanyanDB 存储模型）。
 - [Tempo](/docs/CS/Distributed/Tracing/Tempo.md) — Grafana 的追踪后端，Parquet 块 + 对象存储，TraceQL。
 
 ### 指标与日志

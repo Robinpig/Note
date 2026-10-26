@@ -1,3 +1,5 @@
+# Compiler
+
 ## Introduction
 
 Programming languages are notations for describing computations to people and to machines.
@@ -8,7 +10,7 @@ The software systems that do this translation are called *compilers*.
 
 ## Language Processors
 
-Simply stated, a compiler is a program that can read a program in one language(the source language) and translate it into an equivalent program in another language(the target language) see Figure 1.
+Simply stated, a compiler is a program that can read a program in one language (the source language) and translate it into an equivalent program in another language (the target language), see Figure 1.
 An important role of the compiler is to report any errors in the source program that it detects during the translation process.
 
 <div style="text-align: center;">
@@ -28,7 +30,7 @@ digraph g{
 Fig.1. A compiler.
 </p>
 
-If the target program is an executable machine-language program, it can then be called by the user to process inputs and produce outputs; see Figure 2.
+If the target program is an executable machine-language program, it can then be called by the user to process inputs and produce outputs, see Figure 2.
 
 <div style="text-align: center;">
 
@@ -49,8 +51,7 @@ Fig.2. Running the target program.
 </p>
 
 An interpreter is another common kind of language processor.
-Instead of producing a target program as a translation, an interpreter appears to directly execute the operations specified in the source program on inputs supplied by the user,
-as shown in Figure 3.
+Instead of producing a target program as a translation, an interpreter appears to directly execute the operations specified in the source program on inputs supplied by the user, as shown in Figure 3.
 
 <div style="text-align: center;">
 
@@ -73,15 +74,14 @@ digraph g{
 Fig.3. An interpreter.
 </p>
 
-The machine-language target program produced by a compiler is usually much faster than an interpreter at mapping inputs to outputs .
+The machine-language target program produced by a compiler is usually much faster than an interpreter at mapping inputs to outputs.
 An interpreter, however, can usually give better error diagnostics than a compiler, because it executes the source program statement by statement.
 
 Java language processors combine compilation and interpretation, as shown in Figure 4.
-A Java source program may First be compiled into an intermediate form called bytecodes.
+A Java source program may first be compiled into an intermediate form called bytecodes.
 The bytecodes are then interpreted by a virtual machine.
 A benefit of this arrangement is that bytecodes compiled on one machine can be interpreted on another machine, perhaps across a network.
-In order to achieve faster processing of inputs to outputs, some Java compilers, called just-in-time compilers,
-translate the bytecodes into machine language immediately before they run the intermediate program to process the input.
+In order to achieve faster processing of inputs to outputs, some Java compilers, called just-in-time compilers, translate the bytecodes into machine language immediately before they run the intermediate program to process the input.
 
 <div style="text-align: center;">
 
@@ -89,16 +89,13 @@ translate the bytecodes into machine language immediately before they run the in
 digraph g{
     source[label="source program", shape=none]
     Translator[label="Translator", shape=box]
-  
     IR[label="intermediate program", shape=none]
     VM[label="Virtual Machine", shape=box]
     Output[label="Output", shape=none]
     {rank="same";IR;VM;Output;}
-  
     source->Translator->IR -> VM -> Output
     Input[label="Input", shape=none]
     Input -> VM
- 
 }
 ```
 
@@ -162,14 +159,10 @@ The analysis part also collects information about the source program and stores 
 The *synthesis* part constructs the desired target program from the intermediate representation and the information in the symbol table.
 The analysis part is often called the front end of the compiler; the synthesis part is the back end.
 
-If we examine the compilation process in more detail, we see that it operates
-as a sequence of phases each of which transforms one representation of the source program to another.
+If we examine the compilation process in more detail, we see that it operates as a sequence of phases, each of which transforms one representation of the source program to another.
 A typical decomposition of a compiler into phases is shown in Figure 6.
-In practice, several phases may be grouped together, and the intermediate representations between the grouped phases need not be constructed explicitly The symbol table, which stores information about the
-entire source program, is used by all phases of the compiler.
-
-The process of converting the source code into machine code involves several phases or stages, which are collectively known as the phases of a compiler. The typical phases of a compiler are:
-
+In practice, several phases may be grouped together, and the intermediate representations between the grouped phases need not be constructed explicitly.
+The symbol table, which stores information about the entire source program, is used by all phases of the compiler.
 
 <div style="text-align: center;">
 
@@ -189,7 +182,7 @@ digraph g{
     MDCO[label="Machine Dependent\nCode Optimizer", shape=box]
     target2[label="target machine code", shape=none]
     character-> LA -> token -> SA -> syntax -> ICG -> IR -> MICO -> ir2 -> CG -> target -> MDCO -> target2
-  
+
     ST[label="Symbol Table", shape=box]
     xx[style="invis", shape=box]
     bb[style="invis", shape=box, label="xxxxx      xxxxxxxxx      xxx"]
@@ -206,171 +199,58 @@ Fig.6. Phases of a compiler.
 </p>
 
 In summary, the phases of a compiler are: lexical analysis, syntax analysis, semantic analysis, intermediate code generation, optimization, and code generation.
-
-Symbol Table – It is a data structure being used and maintained by the compiler, consisting of all the identifier’s names along with their types. It helps the compiler to function smoothly by finding the identifiers quickly.
-
-
+The symbol table is a data structure being used and maintained by the compiler, consisting of all the identifier's names along with their types; it helps the compiler find identifiers quickly.
 
 Some compilers have a machine-independent optimization phase between the front end and the back end.
-The purpose of this optimization phase is to perform transformations on the intermediate representation,
-so that the back end can produce a better target program than it would have otherwise produced from an unoptimized intermediate representation.
+The purpose of this optimization phase is to perform transformations on the intermediate representation, so that the back end can produce a better target program than it would have otherwise produced from an unoptimized intermediate representation.
 Since optimization is optional, one or the other of the two optimization phases shown in Figure 6 may be missing.
 
-The analysis of a source program is divided into mainly three phases. They are:
+The analysis of a source program is divided into mainly three phases:
 
-- Linear Analysis-
-  This involves a scanning phase where the stream of characters is read from left to right. It is then grouped into various tokens having a collective meaning.
-- Hierarchical Analysis-
-  In this analysis phase, based on a collective meaning, the tokens are categorized hierarchically into nested groups.
-- Semantic Analysis-
-  This phase is used to check whether the components of the source program are meaningful or not.
+- **Linear Analysis** — a scanning phase where the stream of characters is read from left to right and grouped into tokens having a collective meaning.
+- **Hierarchical Analysis** — tokens are categorized hierarchically into nested groups based on their collective meaning.
+- **Semantic Analysis** — checks whether the components of the source program are meaningful or not.
 
+### Three-stage Compiler
 
-### Lexical Analysis
-
-The first phase of a compiler is called *lexical analysis* or *scanning*.
-The lexical analyzer reads the stream of characters making up the source program and groups the characters into meaningful sequences called lexemes For each lexeme,
-the lexical analyzer produces as output a token of the form that it passes on to the subsequent phase, syntax analysis.
+传统编译器采用三段式设计：前端只认源码、后端只认目标机，中间靠 IR 解耦——换一门语言只需换前端，换一个架构只需换后端：
 
 ```
-<token-name attribute-value>
-```
-
-In the token, the first component token-name is an abstract symbol that is used during syntax analysis, and the second component attribute-value points to an entry in the symbol table for this token.
-Information from the symbol-table entry is needed for semantic analysis and code generation.
-
-### Syntax Analysis
-
-The second phase of the compiler is *syntax analysis* or *parsing*.
-The parser uses the first components of the tokens produced by the lexical analyzer to create a tree-like intermediate representation that depicts the grammatical structure of the token stream.
-A typical representation is a syntax tree in which each interior node represents an operation and the children of the node represent the arguments of the operation.
-
-### Semantic Analysis
-
-The semantic analyzer uses the syntax tree and the information in the symbol table to check the source program for semantic consistency with the language definition.
-It also gathers type information and saves it in either the syntax tree or the symbol table, for subsequent use during intermediate-code generation.
-
-An important part of semantic analysis is *type checking*, where the compiler checks that each operator has matching operands.
-For example, many programming language definitions require an array index to be an integer; the compiler must report an error if a oating-point number is used to index an array
-
-The language specification may permit some type conversions called *coercions*.
-For example, a binary arithmetic operator may be applied to either a pair of integers or to a pair of oating-point numbers.
-If the operator is applied to a oating-point number and an integer, the compiler may convert or coerce the integer into a oating-point number.
-
-### Intermediate Code Generation
-
-In the process of translating a source program into target code, a compiler may construct one or more intermediate representations, which can haveavariety of forms.
-Syntax trees are a form of intermediate representation; they are commonly used during syntax and semantic analysis.
-
-After syntax and semantic analysis of the source program, many compilers generate an explicit low-level or machine-like intermediate representation, which we can think of as a program for an abstract machine.
-This intermediate representation should have two important properties: it should be easy to produce and it should be easy to translate into the target machine.
-
-### Code Optimization
-
-The machine-independent code-optimization phase attempts to improve the intermediate code so that better target code will result.
-Usually better means faster, but other objectives may be desired, such as shorter code, or target code that consumes less power.
-For example, a straightforward algorithm generates the intermediate code (1.3), using an instruction for each operator in the tree representation that comes from the semantic analyzer.
-
-A simple intermediate code generation algorithm followed by code optimization is a reasonable way to generate good target code.
-The optimizer can deduce that the conversion of 60 from integer to oating point can be done once and for all at compile time, so the inttooat operation can be eliminated by replacing the integer 60 by the oating-point number 60.0.
-Moreover, t3 is used only once to transmit its value to id1 so the optimizer can transform (1.3) into the shorter sequence.
-
-```
-t1 id3 60.0
-id1 id2 t1 (1.4)
-```
-
-There is a great variation in the amount of code optimization dierent compilers perform.
-In those that do the most, the so-called \optimizing compilers," a significant amount of time is spent on this phase.
-There are simple optimizations that significantly improve the running time of the target program without slowing down compilation too much.
-
-### Code Generation
-
-The code generator takes as input an intermediate representation of the source program and maps it into the target language.
-If the target language is machine code, registers or memory locations are selected for each of the variables used by the program.
-Then, the intermediate instructions are translated into sequences of machine instructions that perform the same task.
-A crucial aspect of code generation is the judicious assignment of registers to hold variables.
-
-### Symbol-Table Management
-
-An essential function of a compiler is to record the variable names used in the source program and collect information about various attributes of each name.
-These attributes may provide information about the storage allocated for a name, its type, its scope (where in the program its value may be used), and in the case of procedure names,
-such things as the number and types of its arguments, the method of passing each argument (for example, by value or by reference), and the type returned.
-
-The symbol table is a data structure containing a record for each variable name, with elds for the attributes of the name.
-The data structure should be designed to allow the compiler to nd the record for each name quickly and to store or retrieve data from that record quickly.
-
-## Three-stage Compiler
-
-传统编译器采用三段式设计
-
-
-```
-┏━━━━━━━━━━━┓     ┏━━━━━━━━━━━━━━━━━━━━━━━ Compiler ━━━━━━━━━━━━━━━━━━━━┓    ┏━━━━━━━━━━━┓
+┏━━━━━━━━━━━┓     ┏━━━━━━━━━━━━━━━━━━━━━━━ Compiler ━━━━━━━━━━━━━━━━━━━━━━━━┓    ┏━━━━━━━━━━━┓
 ┃  source   ┃     ┃    ┏━━━━━━━━━━━┓ IR ┏━━━━━━━━━━━┓ IR ┏━━━━━━━━━━━┓  ┃    ┃  target   ┃
-┃           ┣━━━━━╋━━━>┃ front end ┣━━━>┃ optimizer ┣━━━>┃ back end  ┣━━╋━━━>┃           ┃       
+┃           ┣━━━━━╋━━━>┃ front end ┣━━━>┃ optimizer ┣━━━>┃ back end  ┣━━╋━━═>┃           ┃
 ┃  program  ┃     ┃    ┗━━━━━━━━━━━┛    ┗━━━━━━━━━━━┛    ┗━━━━━━━━━━━┛  ┃    ┃  program  ┃
 ┗━━━━━━━━━━━┛     ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛    ┗━━━━━━━━━━━┛
 ```
 
-编译器前端 优化器 编译器后端
+编译器的 IR 可能有多个层级，会进行多次优化，如识别冗余代码、识别内存逃逸等。
+LLVM 把这一分工推到了极致：一套 IR 支撑数十种语言前端与数十种目标后端，详见 [GCC](/docs/CS/Compiler/GCC.md) 与 [ELF](/docs/CS/Compiler/ELF.md) 对产物格式的记录。
 
-编译器的IR可能有多个 会进行多次优化 如识别冗余代码 识别内存逃逸等
+## Map of This Section
 
-## Lexical Analysis
+本页只讲编译器作为「语言处理器」的整体形态与三段式骨架；每个阶段的细节展开在以下分册，阅读顺序即数据流向：
 
-## Syntax Analysis
+- [Lexical Analysis](/docs/CS/Compiler/Lexical_Analysis.md) 把字符流切成 token，回答「正则如何变成识别器」；
+- [Parsing](/docs/CS/Compiler/Parsing.md) 把 token 流组织成语法树，回答「文法如何变成分析器」，LL 与 LR 两条路线的取舍是本节主线；
+- [Semantic Analysis](/docs/CS/Compiler/Semantic_Analysis.md) 在语法树上做属性计算与类型检查，符号表与作用域在这里成型；
+- [Intermediate Representation](/docs/CS/Compiler/Intermediate_Representation.md) 选定前端的产物形态，从三地址码到 SSA，IR 的设计直接决定后续优化的上限；
+- [Optimization](/docs/CS/Compiler/Optimization.md) 在 IR 上做等价变换，数据流分析是通用框架，循环优化收益最大；
+- [Code Generation](/docs/CS/Compiler/Code_Generation.md) 把 IR 落到目标机：指令选择、寄存器分配、指令调度三件事互相纠缠；
+- [Runtime Environment](/docs/CS/Compiler/Runtime_Environment.md) 描述编译器为运行期生成的契约——栈帧、调用约定、存储布局；
+- [Instruction-Level Parallelism](/docs/CS/Compiler/Instruction_Level_Parallelism.md) 从硬件流水线视角看编译器如何挖掘指令级并行。
 
-## Lexical Analysis
-
-## Intermediate-Code Generation
-
-1. HIR
-2. LIR
-3. MIR
-
-Basic Block
-
-## Run-Time Environments
-
-A compiler must accurately implement the abstractions embodied in the sourcelanguage definition.
-These abstractions typically include such as names, scopes, bindings, data types, operators, procedures, parameters, and ow-of-control constructs.
-The compiler must cooperate with the operating system and other systems software to support these abstractions on the target machine.
-
-To do so, the compiler creates and manages a run-time environment in which it assumes its target programs are being executed.
-This environment deals with a variety of issues such as the layout and allocation of storage locations for the objects named in the source program, the mechanisms used by the target program to access variables,
-the linkages between procedures, the mechanisms for passing parameters, and the interfaces to the operating system, input/output devices, and other programs.
-
-### Storage Organization
-
-From the perspective of the compiler writer, the executing target program runs in its own logical address space in which each program value has a location.
-The management and organization of this logical address space is shared between the compiler, operating system, and target machine.
-The operating system maps the logical addresses into physical addresses, which are usually spread throughout memory.
-
-Control Flow Graph
-
-## Instruction-Level Parallelism
-
-
-
-## Compilers
-
-GCC
-
-
-LLVM = clang + lllvm
-
-
-
+分册之外，[GCC](/docs/CS/Compiler/GCC.md) 记录 GNU 工具链的驱动流程与实战选项，[ELF](/docs/CS/Compiler/ELF.md) 记录链接产物的二进制格式；最底层表达是 [assembly](/docs/CS/assembly/assembly.md)（调用约定、内联汇编、汇编器与工具链）。
 
 ## Links
 
-- [TypeScript 编译器](/docs/CS/TypeScript/Compiler.md)
-- [TypeScript](/docs/CS/TypeScript/TypeScript.md)
+- [Lexical Analysis](/docs/CS/Compiler/Lexical_Analysis.md)
+- [Parsing](/docs/CS/Compiler/Parsing.md)
+- [Optimization](/docs/CS/Compiler/Optimization.md)
+- [Code Generation](/docs/CS/Compiler/Code_Generation.md)
 - [GCC](/docs/CS/Compiler/GCC.md)
-- [ELF](/docs/CS/Compiler/ELF.md)
-- [Bytecode](/docs/CS/Python/Bytecode.md)
+- [assembly](/docs/CS/assembly/assembly.md)
 
 ## References
 
-1. [Compilers: Principles, Techniques, and Tools]()
+1. [Compilers: Principles, Techniques, and Tools](https://www.pearson.com/en-us/subject-catalog/p/compilers-principles-techniques-and-tools/P200000005771)
+2. [GCC Online Documentation](https://gcc.gnu.org/onlinedocs/)

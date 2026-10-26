@@ -1709,6 +1709,8 @@ K8s 对"怎么跑应用"的回答不是单个对象，而是五个控制器各�
 
 这条链路在实现上被切成两段：**Pod 网络的建立权交给了容器运行时**——kubelet 只发 CRI 的 `RunPodSandbox`，CNI 插件由 containerd / CRI-O 调用，`pkg/kubelet/network/` 在 v1.36 只剩 DNS 相关代码；**Service 网络的实现权在 kube-proxy**，它把 Service/EndpointSlice 翻译成内核规则，数据面在 iptables / IPVS / nftables 三者中选一（v1.36 默认仍是 iptables）。一个报文从出 netns、命中规则、DNAT 到 conntrack 反向还原的完整旅程见 [K8s 网络](/docs/CS/Container/k8s/net.md)。
 
+南北向的七层入口则是另一条演进线：Ingress 之后的新标准是 [Gateway API](/docs/CS/Container/k8s/Gateway_API.md)——把 Gateway（平台侧）与 Route（应用侧）按角色拆开、路由语义可移植，ingress-nginx 终止维护后的官方迁移方向即此；旧模型的能力边界与灰度写法见 [Ingress](/docs/CS/Container/k8s/Ingress.md)。
+
 
 
 ## Resource Management

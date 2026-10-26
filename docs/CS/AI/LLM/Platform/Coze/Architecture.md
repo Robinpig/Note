@@ -151,6 +151,10 @@ Embedding 与 Rerank 是独立可替换的：
 
 `STORAGE_TYPE` 取 `minio`（默认）/ `tos`（火山）/ `s3`。上传组件本身还有一层开关 `FILE_UPLOAD_COMPONENT_TYPE=storage`。
 
+> [!WARNING]
+>
+> 上表钉的 `minio/minio:RELEASE.2025-06-13T11-33-47Z-cpuv1` 属于已停更的 MinIO 社区版：官方镜像 `minio/minio` 与 `minio/mc` 已于 2026-09-11 从 Docker Hub 删除，该 tag 如今拉不到。沿用同一份 compose 时可换成社区维护 fork [Silo](/docs/CS/Distributed/Silo.md)（`pgsty/silo`，S3 协议与 `xl.meta` 磁盘格式兼容、drop-in 替换、继续收 CVE 修复）。
+
 ## Event Bus
 
 `infra/eventbus` 定义 Producer / Consumer，实现按 `COZE_MQ_TYPE` 分派五种：`nsq`（默认）/ `kafka` / `rmq`（RocketMQ）/ `pulsar` / `nats`（`infra/eventbus/impl/eventbus.go:52-60`）。
@@ -203,6 +207,7 @@ Eino 的组件来自 `github.com/cloudwego/eino-ext/components/{model,embedding}
 - [RAG](/docs/CS/AI/RAG.md)
 - [Milvus](/docs/CS/DB/vector.md)
 - [Redis](/docs/CS/DB/Redis/Redis.md)
+- [MinIO（默认对象存储）](/docs/CS/Distributed/MinIO.md)
 
 ## References
 

@@ -232,7 +232,7 @@ networks:
     name: milvus
 ```
 
-> 提示：上面的 compose 把镜像钉在 `milvusdb/milvus:v3.0.0` 与 `zilliz/attu:v3.0.0`，比本页锚定的 v3.0.1 落后一个补丁版；且该 standalone compose 未显式配 `mq.type`，按 v3.0.1 的 default 解析规则（standalone 优先 rocksmq，判据是 `rocksmq.path` 非空、默认为 `/var/lib/milvus/rdb_data`）会落到 RocksMQ，与 [Deploy](/docs/CS/DB/Milvus/Deploy.md) 三节点集群的 Kafka 路径不同。
+> 提示：上面的 compose 把镜像钉在 `milvusdb/milvus:v3.0.0` 与 `zilliz/attu:v3.0.0`，比本页锚定的 v3.0.1 落后一个补丁版；且该 standalone compose 未显式配 `mq.type`，按 v3.0.1 的 default 解析规则（standalone 优先 rocksmq，判据是 `rocksmq.path` 非空、默认为 `/var/lib/milvus/rdb_data`）会落到 RocksMQ，与 [Deploy](/docs/CS/DB/Milvus/Deploy.md) 三节点集群的 Kafka 路径不同。另外 compose 里的 `minio/minio:RELEASE.2024-05-28T17-19-04Z` 如今已拉不到——官方镜像 `minio/minio` 与 `minio/mc` 于 2026-09-11 从 Docker Hub 删除，替换成社区维护 fork [Silo](/docs/CS/Distributed/Silo.md)（`pgsty/silo`，S3 协议与 `xl.meta` 磁盘格式兼容、drop-in 替换）即可。
 
 ##### **Milvus Distributed**
 
