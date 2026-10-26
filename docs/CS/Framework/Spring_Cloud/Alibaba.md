@@ -85,7 +85,7 @@ Spring Cloud Alibaba 以 BOM 形式统一管理各组件版本，不要手工指
 
 - **Nacos Discovery**：starter 自动向 Nacos 注册服务实例、拉取服务列表，并使 Spring Cloud LoadBalancer 从中读取实例（见 [LoadBalancer](/docs/CS/Framework/Spring_Cloud/LoadBalancer.md)）。启用即 `@EnableDiscoveryClient`（多数版本已自动开启）。注册中心的原理见 [registry](/docs/CS/Framework/nacos/registry.md)。
 - **Nacos Config**：优先 Boot 4 的 `spring.config.import` 方式接入（见下一节）。配置中心本身的推送机制见 [config](/docs/CS/Framework/nacos/config.md) 与 [ConfigServer](/docs/CS/Framework/nacos/ConfigServer.md)。
-- **Sentinel**：starter 会自动为 MVC、WebFlux、Feign、RestTemplate、Gateway 注入埋点，使其受流控规则管辖。规则可以从控制台推送到本地，也可以托管到 Nacos 之类的外部数据源做持久化。限流算法本身见 [RateLimiter](/docs/CS/Framework/Sentinel/RateLimiter.md) 与 [CircuitBreaker](/docs/CS/Framework/Sentinel/CircuitBreaker.md)。
+- **Sentinel**：starter 会自动为 MVC、WebFlux、Feign、RestTemplate、Gateway 注入埋点，使其受流控规则管辖。规则可以从控制台推送到本地，也可以托管到 Nacos 之类的外部数据源做持久化。限流算法与流量整形本身见 [流量控制 FlowControl](/docs/CS/Framework/Sentinel/FlowControl.md) 与 [熔断降级 CircuitBreaker](/docs/CS/Framework/Sentinel/CircuitBreaker.md)。
 - **Seata**：靠数据源代理（`DataSourceProxy`）在本地事务里偷偷记录回滚日志，二阶段提交/回滚由 Seata Server（TC）协调。注意它会替换你的数据源 Bean，若项目里有多数据源或自定义数据源，需要留意整合方式。
 
 ## Ecosystem: Gateway and RPC
