@@ -2,7 +2,7 @@
 
 KVM（Kernel-based Virtual Machine）不是一个独立的虚拟机软件，而是**内核里的一个模块**：它把 Linux 内核本身变成一个 hypervisor。加载 `kvm.ko` + `kvm-intel.ko`（或 `kvm-amd.ko`）之后，内核多出一个字符设备 `/dev/kvm`，用户态程序打开它、发 ioctl，就能创建虚拟机。
 
-这个设计带来一个常被误读的分类问题。按 [虚拟机](/docs/CS/OS/VM.md) 的 Type-1 / Type-2 划分，KVM 看上去像 Type-2——它"跑在操作系统上"。但真正跑 guest 代码时，vCPU 是直接在物理 CPU 上以 guest 模式执行的，host 内核退到一边，只负责处理退出事件；从"谁在裸机上执行指令"这个角度看，它和 Type-1 没有区别。所以准确的说法是：**KVM 是用 Type-2 的组织形式，达成 Type-1 的执行效率**——借 host 内核现成的调度器、内存管理、设备驱动，省掉一整套独立的 VMM。
+这个设计带来一个常被误读的分类问题。按 [虚拟机](/docs/CS/OS/Virtualization/VM.md) 的 Type-1 / Type-2 划分，KVM 看上去像 Type-2——它"跑在操作系统上"。但真正跑 guest 代码时，vCPU 是直接在物理 CPU 上以 guest 模式执行的，host 内核退到一边，只负责处理退出事件；从"谁在裸机上执行指令"这个角度看，它和 Type-1 没有区别。所以准确的说法是：**KVM 是用 Type-2 的组织形式，达成 Type-1 的执行效率**——借 host 内核现成的调度器、内存管理、设备驱动，省掉一整套独立的 VMM。
 
 理解 KVM 的第一个关键是**它只做三件事，剩下的全交给用户态**：
 
@@ -11,7 +11,7 @@ KVM（Kernel-based Virtual Machine）不是一个独立的虚拟机软件，而�
 | CPU 虚拟化（VMX/SVM 进入退出、VMCS 管理） | KVM 内核 | 需要最高特权级，且退出处理在内核做最快 |
 | 内存虚拟化（EPT/NPT 二维页表、影子页表） | KVM 内核 | 缺页是热路径，放内核避免每次退出到用户态 |
 | 中断虚拟化（LAPIC / IOAPIC / PIC 建模） | KVM 内核 | 中断注入同样热，且能直接用 posted interrupt |
-| **设备模拟**（磁盘、网卡、显卡、BIOS/ACPI） | 用户态（[QEMU](/docs/CS/OS/qemu.md)） | 设备模型复杂多变，放内核会让内核膨胀且不稳定 |
+| **设备模拟**（磁盘、网卡、显卡、BIOS/ACPI） | 用户态（[QEMU](/docs/CS/OS/Virtualization/qemu.md)） | 设备模型复杂多变，放内核会让内核膨胀且不稳定 |
 | 固件、启动、迁移、快照 | 用户态 | 纯策略问题，内核不该管 |
 
 这个切分是刻意的：把机制放内核、策略放用户态。KVM 因此只有几万行，而 QEMU 有上百万行。

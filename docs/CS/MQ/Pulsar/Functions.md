@@ -316,7 +316,7 @@ marker 走普通 entry 写入路径 —— 即事务提交标记与其他消息�
 
 - [Pulsar](/docs/CS/MQ/Pulsar/Pulsar.md)
 - [Broker](/docs/CS/MQ/Pulsar/Broker.md)
-- [BookKeeper 存储层](/docs/CS/MQ/Pulsar/BookKeeper.md)
+- [ManagedLedger 存储层](/docs/CS/MQ/Pulsar/ManagedLedger.md)
 - [集群复制与分层存储](/docs/CS/MQ/Pulsar/Cluster.md)
 - [Flink](/docs/CS/Framework/Flink/Flink.md)
 - [Kafka Streams](/docs/CS/MQ/Kafka/Streams.md)

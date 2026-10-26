@@ -539,7 +539,7 @@ backlog 是未被确认消息的集合，它有一个大前提是，这些消息
 
 - `startMessageId(MessageId)` —— 从任意位点开始（`MessageId.earliest` / `latest` 或具体消息 ID），这是 reader 与 consumer 最大的分野：consumer 续读 cursor，reader 由调用方决定「从哪读起」。
 - `startMessageIdInclusive()` —— 上面指定位点是否包含该消息本身。
-- `readCompacted(boolean)` —— 只读 compacted topic 的最新值视图（配合 [BookKeeper 存储层](/docs/CS/MQ/Pulsar/BookKeeper.md) 的 compaction 语义）。
+- `readCompacted(boolean)` —— 只读 compacted topic 的最新值视图（配合 [ManagedLedger 存储层](/docs/CS/MQ/Pulsar/ManagedLedger.md) 的 compaction 语义）。
 
 读取侧 `Reader` 接口只有一组 `readNext` 三态：阻塞 `readNext()`、带超时 `readNext(timeout, unit)`（超时返回 null）、`readNextAsync()`（返回 `CompletableFuture`，源码注释要求**串行调用**，否则会在应用侧堆积 receive backlog）。Reader 没有 listener 模式 —— 它本质是「带位点控制的拉式扫描」，与 Kafka 的无组消费（assign + seek）是同一思路的不同实现。
 
@@ -548,7 +548,7 @@ backlog 是未被确认消息的集合，它有一个大前提是，这些消息
 - [Pulsar](/docs/CS/MQ/Pulsar/Pulsar.md)
 - [Producer](/docs/CS/MQ/Pulsar/Producer.md)
 - [Broker](/docs/CS/MQ/Pulsar/Broker.md)
-- [BookKeeper 存储层](/docs/CS/MQ/Pulsar/BookKeeper.md)
+- [ManagedLedger 存储层](/docs/CS/MQ/Pulsar/ManagedLedger.md)
 - [Functions 与事务](/docs/CS/MQ/Pulsar/Functions.md)
 
 ## References

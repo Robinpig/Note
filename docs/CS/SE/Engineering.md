@@ -6,7 +6,7 @@
 
 这一节的笔记可以按"一个人做工程时依次会遇到的问题"来读，而不是按主题字母序。
 
-**先建立判断框架，再谈手段。** [Basic](/docs/CS/SE/Basic.md) 记的是那些非技术性的认知——本质复杂度与偶然复杂度、抽象的反噬、测试只能证伪——它们决定后面每一个手段什么时候该用。[Programming](/docs/CS/SE/Programming.md) 与 [reactive](/docs/CS/SE/reactive.md) 是范式层的选择，写出来的代码是否整洁看 [Clean Code](/docs/CS/SE/Clean_Code.md)、腐化之后怎么收拾看 [Refactoring](/docs/CS/SE/Refactoring.md) 与 [Code](/docs/CS/SE/Code.md)；出错之后，缺陷的分类与定位思路在 [Bug](/docs/CS/SE/Bug.md) 与 [Debug](/docs/CS/SE/Debug.md)。
+**先建立判断框架，再谈手段。** [Basic](/docs/CS/SE/Basic.md) 记的是那些非技术性的认知——本质复杂度与偶然复杂度、抽象的反噬、测试只能证伪——它们决定后面每一个手段什么时候该用；这些认知在真实业务系统里如何表现为"改不动"，由 [Complexity](/docs/CS/SE/Complexity.md) 展开（隐性耦合的长尾、架构短视是开发方式的产物）。[Programming](/docs/CS/SE/Programming.md) 与 [reactive](/docs/CS/SE/reactive.md) 是范式层的选择，写出来的代码是否整洁看 [Clean Code](/docs/CS/SE/Clean_Code.md)、腐化之后怎么收拾看 [Refactoring](/docs/CS/SE/Refactoring.md) 与 [Code](/docs/CS/SE/Code.md)；出错之后，缺陷的分类与定位思路在 [Bug](/docs/CS/SE/Bug.md) 与 [Debug](/docs/CS/SE/Debug.md)。
 
 **然后决定系统的形状。** [Architecture](/docs/CS/SE/Architecture.md) 给出风格谱系与微服务的真实代价，[DDD](/docs/CS/SE/DDD.md) 解决"边界画在哪"，[registry](/docs/CS/SE/registry.md) 是服务化的第一块基础设施，[中台](/docs/CS/SE/中台.md) 讲组织与复用的张力，[Serverless](/docs/CS/SE/Serverless.md) 与 [Mini Program](/docs/CS/SE/MiniProgram/Mini_Program.md) 是两种交付/端形态；综合演练见 [SystemDesign](/docs/CS/SE/SystemDesign.md)。
 
@@ -45,9 +45,9 @@
 
 ## Cost and Debt
 
-- **技术债务**：为短期速度选择的次优方案相当于借债——不还也能跑，但每次修改都要付"利息"（理解成本、bug 率），复利累积最终拖慢一切。债务要显式登记并在迭代中偿还，不能假装不存在。
+- **技术债务**：为短期速度选择的次优方案相当于借债——不还也能跑，但每次修改都要付"利息"（理解成本、bug 率），复利累积最终拖慢一切。债务要显式登记并在迭代中偿还，不能假装不存在。扩张期借债像加杠杆，收益可能覆盖利息；问题从来不是"要不要欠债"，而是"何时还、还多少、怎么还"。
 - **Brooks's Law**：向延期项目加人只会更延期——新成员需要老人培训，沟通成本按人数平方增长。
-- **没有银弹（No Silver Bullet）**：Brooks 指出软件的本质复杂度（业务本身）无法靠语言/工具消除，工程管理只能压缩偶然复杂度。
+- **没有银弹（No Silver Bullet）**：Brooks 指出软件的本质复杂度（业务本身）无法靠语言/工具消除，工程管理只能压缩偶然复杂度。工具链提效解决的是偶然复杂度那一半，业务建模、隐性耦合与架构腐化属于另一半，见 [Complexity](/docs/CS/SE/Complexity.md)。
 - **过早优化是万恶之源**（Knuth）：先 [度量](/docs/CS/SE/Performance.md)再优化，针对瓶颈而非臆测。
 
 ## Metrics

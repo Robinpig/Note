@@ -679,6 +679,8 @@ struct free_area {
 ```
 
 
+其中 `MIGRATE_CMA`（`include/linux/mmzone.h:135`，值 4）是 CMA 在 buddy 里的身份标签；它的"预约 + 平时借给 movable + 设备要时隔离迁移"机制见 [CMA](/docs/CS/OS/Linux/mm/CMA.md)。
+
 ```c
 enum migratetype {
     MIGRATE_UNMOVABLE,

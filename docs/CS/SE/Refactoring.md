@@ -50,15 +50,20 @@ The idea that global variables and side effects are bad is directly attributable
 
 
 
+## When to Refactor
+
+重构是"结构性的腐化唯一的解药"，但它的收益难以量化、因而最难争取到时间窗口；腐化是怎么来的、什么时候该主动还而不是被崩溃逼着还、以及哪些债**不该**还，见 [Complexity](/docs/CS/SE/Complexity.md)。
+
 ## Links
 
-- [APM](/docs/CS/SE/APM.md)
-- [Architecture](/docs/CS/SE/Architecture.md)
 - [Basic](/docs/CS/SE/Basic.md)
-- [Bug](/docs/CS/SE/Bug.md)
-- [Cache](/docs/CS/SE/Cache.md)
-- [Caffeine](/docs/CS/SE/Caffeine.md)
+- [Clean Code](/docs/CS/SE/Clean_Code.md)
+- [Complexity](/docs/CS/SE/Complexity.md)
+- [Code](/docs/CS/SE/Code.md)
+- [Architecture](/docs/CS/SE/Architecture.md)
+- [Engineering](/docs/CS/SE/Engineering.md)
 
 ## References
 
 1. [Refactoring Guru](https://refactoring.guru/refactoring)
+2. [Refactoring Catalog](https://refactoring.com/catalog/)

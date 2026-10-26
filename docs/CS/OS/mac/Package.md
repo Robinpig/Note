@@ -127,4 +127,4 @@ pkgutil --forget <package-id>           # 从登记库里移除（不删文件�
 2. [Code Signing Guide](https://developer.apple.com/library/archive/documentation/Security/Conceptual/CodeSigningGuide/Introduction/Introduction.html)
 3. [Bundle Programming Guide](https://developer.apple.com/library/archive/documentation/CoreFoundation/Conceptual/CFBundles/Introduction/Introduction.html)
 4. [App Sandbox](https://developer.apple.com/documentation/security/app-sandbox)
-5. [Distributing outside the Mac App Store](https://developer.apple.com/documentation/security/distributing-outside-the-mac-app-store)
+5. [Distributing your app for beta testing and releases](https://developer.apple.com/documentation/xcode/distributing-your-app-for-beta-testing-and-releases)

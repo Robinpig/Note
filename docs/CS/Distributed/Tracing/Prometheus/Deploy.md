@@ -109,7 +109,7 @@ version: '3.8'
 
 services:
   prometheus:
-    image: prom/prometheus:v2.53.0
+    image: prom/prometheus:v3.15.1
     container_name: prometheus
     restart: always
     network_mode: host
@@ -126,7 +126,7 @@ services:
       - '--web.enable-admin-api'
 
   alertmanager:
-    image: prom/alertmanager:v0.27.0
+    image: prom/alertmanager:v0.34.1
     container_name: alertmanager
     restart: always
     network_mode: host
@@ -142,7 +142,7 @@ services:
       - '--cluster.peer=192.168.1.13:9094'
 
   grafana:
-    image: grafana/grafana:11.1.0
+    image: grafana/grafana:13.2.4
     container_name: grafana
     restart: always
     network_mode: host
@@ -155,7 +155,7 @@ services:
       - prometheus
 
   node-exporter:
-    image: prom/node-exporter:v1.8.1
+    image: prom/node-exporter:v1.12.1
     container_name: node-exporter
     restart: always
     network_mode: host

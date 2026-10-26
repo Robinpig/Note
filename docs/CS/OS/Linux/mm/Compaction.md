@@ -2,7 +2,7 @@
 
 [buddy 伙伴系统](/docs/CS/OS/Linux/mm/pm.md?id=buddy)用 2 的幂次空闲块缓解外部碎片，但它无法**消除**碎片——随着系统长期运行、页不断分配释放，空闲页会逐渐以 order-0 的形式散落各处。于是出现一种尴尬：系统空闲页总量还很多，却凑不出一块物理上连续的高阶内存。
 
-这类需求真实存在：驱动要大的 DMA 缓冲、THP（透明大页）要一个 2MB 的 huge page、内核要分配高阶的连续页表结构。**内存压缩（memory compaction，也译内存规整）** 解决的就是"有内存、但不连续"——它把 zone 一端占用的**可移动页**搬到另一端的空闲页上，搬运完成后空闲页就在 zone 的某一端聚集出连续大块。本篇讲清双扫描器模型、迁移主干、kcompactd 与主动压缩。
+这类需求真实存在：驱动要大的 DMA 缓冲、THP（[透明大页](/docs/CS/OS/Linux/mm/THP.md)）要一个 2MB 的 huge page、内核要分配高阶的连续页表结构。**内存压缩（memory compaction，也译内存规整）** 解决的就是"有内存、但不连续"——它把 zone 一端占用的**可移动页**搬到另一端的空闲页上，搬运完成后空闲页就在 zone 的某一端聚集出连续大块。本篇讲清双扫描器模型、迁移主干、kcompactd 与主动压缩。
 
 > 注意 compaction 与 [Reclaim](/docs/CS/OS/Linux/mm/Reclaim.md) 的区别：回收是"**减少**占用、把页释放掉"，压缩是"**挪动**占用、页的数据一页不少"。压缩不增加空闲页总量，只改变它们的物理排布。
 
@@ -59,7 +59,7 @@ while ((ret = compact_finished(cc)) == COMPACT_CONTINUE) {
 }
 ```
 
-关键在 `migrate_pages()` 的两个回调：`compaction_alloc` 每搬一个源页，就从空闲扫描器已隔离的 `cc->freepages` 里取一个目标页；没有现成目标页时，它会推动空闲扫描器再向前隔离一批。迁移失败、没搬成的页由 `putback_movable_pages()` 放回，不丢数据。
+关键在 `migrate_pages()` 的两个回调：`compaction_alloc` 每搬一个源页，就从空闲扫描器已隔离的 `cc->freepages` 里取一个目标页；没有现成目标页时，它会推动空闲扫描器再向前隔离一批。迁移失败、没搬成的页由 `putback_movable_pages()` 放回，不丢数据。"怎么把一页搬到另一页、并把所有 PTE 重定向"这套底层机制见 [Page Migration](/docs/CS/OS/Linux/mm/Page_Migration.md)——compaction 只是它的一个大调用方（reason=`MR_COMPACTION`）。
 
 ## Compaction Intensity: compact_priority
 

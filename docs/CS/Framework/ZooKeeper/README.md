@@ -83,7 +83,7 @@ digraph "ZooKeeperStack" {
 - [ACL](/docs/CS/Framework/ZooKeeper/ACL.md)
 - [Curator](/docs/CS/Framework/ZooKeeper/Curator.md)
 - [Recipes](/docs/CS/Framework/ZooKeeper/Recipes.md)
-- [BooKeeper](/docs/CS/Framework/BooKeeper/BooKeeper.md)
+- [BookKeeper](/docs/CS/Framework/BookKeeper/BookKeeper.md)
 
 ## References
 

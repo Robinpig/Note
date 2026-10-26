@@ -155,20 +155,20 @@ Title: 单 tool batch 执行时序(生产路径)
 
 participant L as runLoop
 participant P as prepareToolCall
-participant B as beforeToolCall 钩子
+participant B as tool_call 钩子
 participant E as executePreparedToolCall
-participant A as afterToolCall 钩子
+participant A as tool_result 钩子
 participant M as SessionManager/事件总线
 
 L->>P: 对每个 toolCall 走准备
 P->>P: 工具查找→prepareArguments→validateToolArguments
-P->>B: beforeToolCall(权限检查/改写)
+P->>B: tool_call(权限检查/改写 input, 可 block)
 alt block 或 terminate
   B-->>L: 拦截结果(可终止整批)
 else 放行
   B->>E: 执行(可 onUpdate 推送 tool_execution_update 增量)
   E-->>A: result
-  A->>A: 改写结果/置 terminate?
+  A->>A: tool_result 改写结果/置 terminate?
   A-->>L: toolResult
 end
 L->>M: tool_execution_start/_update/_end
@@ -177,7 +177,7 @@ L->>M: message_start/message_end(物化进 context+历史)
 Note over L: 全批 terminate===true → hasMoreToolCalls=false → 本轮 turn 早停
 ```
 
-- `beforeToolCall` / `afterToolCall` **贯穿嵌套调用**：工具内部再调子工具（`runToolCall`）时也过这两道钩子，权限检查不漏底。
+- `tool_call` / `tool_result` **贯穿嵌套调用**：工具内部再调子工具（`ctx.executeTool`）时也过这两道钩子，子调用 id 形如 `<parent id>/<n>` 且携带 `parentToolCallId`，权限检查不漏底（详见 [Events](/docs/CS/AI/LLM/Agent/Product/Pi/Events.md)）。
 - 事件持久化顺序固定：扩展先看到事件（`_emitExtensionEvent`）→ 通知外部监听器 → `SessionManager` 落盘（`message_end` 时 `appendMessage`）。保证"看到的即已持久化"。
 - **压缩 3 类触发**：阈值（`shouldCompact` 命中）、溢出（`isContextOverflow`，可恢复时走"压缩+重试"且 `_overflowRecoveryAttempted` 仅允许一次）、手动（`/compact`/RPC，永不续跑被打断的 turn）。生产路径在 `core/compaction/`，与 `pi-durable` 的 `CompactionTask` 是两套并行实现。
 - **取消**经 `AbortSignal` 向生成与工具传播；运行中 `abort()` 置 `_agentRunAbortRequested`，外层在下一判定点退出结算，不伪造结果。
@@ -220,6 +220,12 @@ v1.0.0 之后工具层长出两套机制。**嵌套调用**：工具内部经 `c
 - [Pi 枢纽](/docs/CS/AI/LLM/Agent/Product/Pi/Pi.md)
 - [Session：会话树](/docs/CS/AI/LLM/Agent/Product/Pi/Session.md) / [Context：上下文与压缩](/docs/CS/AI/LLM/Agent/Product/Pi/Context.md)
 - [Extensions：扩展体系](/docs/CS/AI/LLM/Agent/Product/Pi/Extensions.md) / [Security：信任与隔离](/docs/CS/AI/LLM/Agent/Product/Pi/Security.md)
+- [CodeMode：codemode 实现机制](/docs/CS/AI/LLM/Agent/Product/Pi/CodeMode.md)
+- [Tools：工具系统](/docs/CS/AI/LLM/Agent/Product/Pi/Tools.md)
+- [Providers：Provider 与模型目录](/docs/CS/AI/LLM/Agent/Product/Pi/Providers.md)
+- [Events：扩展事件 / 钩子总表](/docs/CS/AI/LLM/Agent/Product/Pi/Events.md) — 工具批次时序里的 `tool_call`/`tool_result` 钩子出处
+- [Env：远程执行环境](/docs/CS/AI/LLM/Agent/Product/Pi/Env.md) — `env` 包在 11 包分层中的位置（依赖 chord, durable）
+- [Durable：持久化 Agent 框架](/docs/CS/AI/LLM/Agent/Product/Pi/Durable.md) — `durable` 在支线中的定位与四层可替换架构
 - [LLM](/docs/CS/AI/LLM/LLM.md)
 
 ## References

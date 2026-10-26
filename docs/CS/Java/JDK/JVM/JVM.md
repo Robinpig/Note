@@ -30,7 +30,7 @@ JVM was initially designed to support only Java.
 However, over the time, many other languages such as Scala, Kotlin and Groovy were adopted on the Java platform.
 All of these languages are collectively known as JVM languages.
 
-Before we jump into the JVM, let's revisit the concept of a [Virtual Machine (VM)](/docs/CS/OS/VM.md).
+Before we jump into the JVM, let's revisit the concept of a [Virtual Machine (VM)](/docs/CS/OS/Virtualization/VM.md).
 Similar to virtual machines, the JVM creates an isolated space on a host machine.
 This space can be used to execute Java programs irrespective of the platform or operating system of the machine.
 

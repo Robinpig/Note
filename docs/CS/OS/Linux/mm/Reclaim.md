@@ -48,7 +48,7 @@ enum lru_list {
 };
 ```
 
-- **anon vs file**：两类页"归还"的代价不同——文件页有磁盘副本，干净的直接丢；匿名页必须先写 swap（或 zswap/zram 压缩）才能丢。代价不同，扫描时的比例就得动态平衡；
+- **anon vs file**：两类页"归还"的代价不同——文件页有磁盘副本，干净的直接丢；匿名页必须先写 swap（或 [zswap](/docs/CS/OS/Linux/mm/zswap.md)/zram 压缩）才能丢。代价不同，扫描时的比例就得动态平衡；
 - **active vs inactive**：粗略的"热度"两档。新页先进 inactive 尾部（`folio_add_lru`），被访问过就带上 `PG_referenced`，扫描时凭它与 `PG_active` 决定升级到 active 还是留在原地等待淘汰。这就是 **二次机会（second chance）**——不给新页立刻判死刑。
 
 active 链表不是只进不出：当 inactive 太少（`inactive_is_low`），会调用 `shrink_active_list()` 把 active 尾部批量降级回 inactive，补充"待淘汰"的池子。`shrink_lruvec()` 末尾那段逻辑就是在干这件事。
@@ -454,11 +454,13 @@ static unsigned long shrink_inactive_list(unsigned long nr_to_scan,
 
 1. **还有人用吗**：`folio_check_references()` 看页是否近期被访问（rmap 反查）。近期访问过的新页放回 active，给一次机会；没有引用且没有映射的页才是候选。
 2. **映射着吗**（`mapcount`）：有页表映射就要先 `try_to_unmap()` 断开——这一步依赖反向映射（rmap）找到所有引用它的进程页表。
-3. **匿名的先换出**：`add_to_swap()` 把匿名页写进 swap（或 zswap 压缩池），成功后才能释放原页；没有 swap 可用就只能保留（这也是"没 swap 的机器更早 OOM"的原因）。
+3. **匿名的先换出**：`add_to_swap()` 把匿名页写进 swap（或 [zswap](/docs/CS/OS/Linux/mm/zswap.md) 压缩池），成功后才能释放原页；没有 swap 可用就只能保留（这也是"没 swap 的机器更早 OOM"的原因）。
 4. **文件脏的先回写**：脏文件页走 `pageout()` → `writepage`；若页正在回写中（`PG_writeback`），不阻塞等待，先放回 LRU 等下次；回写压力过大触发节流（`reclaim_throttle(..., VMSCAN_THROTTLE_WRITEBACK)`）。
 5. **钉住的跳过**：`mlock`、`PG_unevictable`、被驱动 pin 住的页（`GUP` 长期持有）不动，归入 `LRU_UNEVICTABLE`。
 
 判断通过、确实能释放的页，最后经 `free_unref_page_list()` 归还伙伴系统（[free](/docs/CS/OS/Linux/mm/pm.md?id=free)）；没能释放的经 `move_folios_to_lru()` 放回相应 LRU，等下轮 priority 更激进时再扫。
+
+> 冷匿名页在 `shrink_folio_list()` **主循环之后**还有一条可选的降级路径：若开启了分层内存，被选中且无法立即回收的页会被 **demote（降级）** 到更低 tier 的 node（如 CXL/PMem）保留，而非立刻写 swap；降级失败才回到普通回收。`struct scan_control` 的 `no_demotion` 标志控制"直接丢弃还是尝试降级"。这条路径的使能与 tier 来源见 [Tiered_Memory](/docs/CS/OS/Linux/mm/Tiered_Memory.md)。
 
 ## shrink_slab and shrinker
 
@@ -515,9 +517,17 @@ cgroup v2 的 `memory.max` 超限时走的是**局部回收**：`scan_control` �
 
 另外两个相关但更偏分配侧的旋钮：`overcommit_memory` 决定匿名映射是否严格记账，从而影响"回收与 OOM 谁先发生"；NUMA 平衡（`numa_balancing`）决定跨 node 访问的页要不要主动迁移，属于下一阶段的主题。
 
+## Observing Reclaim: PSI and DAMON
+
+回收的副作用最终体现在**延迟**上：direct reclaim 让分配者原地阻塞，同步 compaction 与 swap 读回同理。[PSI](/docs/CS/OS/Linux/mm/PSI.md) 把这段阻塞量化——内核在这些路径上用 `psi_memstall_enter/leave` 打标，`/proc/pressure/memory` 的 `some`/`full` 告诉你"任务为等内存卡了多久"，其中 `full` 表示**没有有产出的任务在跑**。调完上面的旋钮后看 `full/avg300` 是否下降，比只看 `free` 内存更能说明"压力真的缓解了"。
+
+另一条互补的路径是 [DAMON](/docs/CS/OS/Linux/mm/DAMON.md)：它不靠水位线、而靠采样访问热度主动找冷页，`damon_reclaim` 模块的 `DAMOS_PAGEOUT` 走的是与 `shrink_folio_list` 相同的换出落点——但触发依据是"这块内存长期没人碰"而不是"系统缺内存"，属于**压力到来之前**的主动回收。它与 `memory.reclaim`（`scan_control.proactive`，用户态写接口触发一次全量扫描）机制不同：前者按访问模式定点挑页，后者由用户态显式发起整轮扫描。
+
 ## Links
 
 - [物理内存地图（mm 枢纽）](/docs/CS/OS/Linux/mm/README.md)
+- [PSI 压力失速](/docs/CS/OS/Linux/mm/PSI.md)
+- [DAMON 访问监控](/docs/CS/OS/Linux/mm/DAMON.md)
 
 ## References
 

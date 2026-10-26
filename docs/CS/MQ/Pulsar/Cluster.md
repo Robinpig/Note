@@ -59,7 +59,7 @@ public boolean is_active;
 > [!WARNING]
 > `SystemTopicNames.TIERED_NAMESPACE_TOPIC` **不存在**，tiered namespace 这个概念在 4.2.4 中**全仓零命中**（`tierStoragePolicies` / `TIERED_NAMESPACE_TOPIC` / `tiered_namespace` 全部 0 命中）。
 >
-> 4.2.4 的分层存储配置是 `OffloadPolicies`（`pulsar-client-admin-api/.../data/OffloadPolicies.java:23`），走 **driver 名 + 阈值**，不是策略名引用。详见 [BookKeeper 存储分层](/docs/CS/MQ/Pulsar/BookKeeper.md) 与本文「分层存储」一节。
+> 4.2.4 的分层存储配置是 `OffloadPolicies`（`pulsar-client-admin-api/.../data/OffloadPolicies.java:23`），走 **driver 名 + 阈值**，不是策略名引用。详见 [ManagedLedger 存储层](/docs/CS/MQ/Pulsar/ManagedLedger.md) 与本文「分层存储」一节。
 
 ## Bundle Splitting
 
@@ -422,7 +422,7 @@ return Optional.empty();   // → 不触发
 
 - [Pulsar](/docs/CS/MQ/Pulsar/Pulsar.md)
 - [Broker](/docs/CS/MQ/Pulsar/Broker.md)
-- [BookKeeper 存储层](/docs/CS/MQ/Pulsar/BookKeeper.md)
+- [ManagedLedger 存储层](/docs/CS/MQ/Pulsar/ManagedLedger.md)
 - [Consumer](/docs/CS/MQ/Pulsar/Consumer.md)
 - [Functions 与事务](/docs/CS/MQ/Pulsar/Functions.md)
 - [Kafka](/docs/CS/MQ/Kafka/Kafka.md)

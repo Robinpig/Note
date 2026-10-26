@@ -37,6 +37,7 @@
 
 - [DataBases](/docs/CS/DB/DB.md?id=mysql)
 - [Druid](/docs/CS/DB/Druid.md)
+- [Timeseries](/docs/CS/DB/Timeseries.md)
 - [RocksDB](/docs/CS/DB/RocksDB/RocksDB.md)
 
 ## References

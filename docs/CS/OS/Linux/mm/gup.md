@@ -1193,7 +1193,7 @@ static inline bool folio_needs_cow_for_dma(struct vm_area_struct *vma,
 
 ### KSM: Pinned Pages Are Not Merged
 
-如前所述，KSM 只合并 `PageAnonExclusive` 为假的页，而 pin 要求独占，两者互斥。
+如前所述，KSM 只合并 `PageAnonExclusive` 为假的页，而 pin 要求独占，两者互斥（机制与源码证据见 [KSM](/docs/CS/OS/Linux/mm/KSM.md) 的"与 GUP 的互斥"一节）。
 
 ### soft-dirty / CRIU: Write Protection Skipped
 

@@ -73,6 +73,10 @@ Logs 也可以看作是一条带时间戳、标明事件发生时刻、并附带
 [Elasticsearch](https://www.elastic.co/)、[Fluentd](https://www.fluentd.org/) 与 [Kibana](https://www.elastic.co/kibana)
 （二者同属 EFK 技术栈，支持全文与结构化检索）常被用于日志集中化。
 
+另一条路线是以 [Loki](/docs/CS/Distributed/Tracing/Loki.md) 为代表的**轻索引**方案：只索引标签、不索引正文，
+日志压缩成块直接进对象存储。它牺牲了全文检索的速度，换来极低的存储成本，并且因为标签模型与 Prometheus 同源，
+天然便于与 metrics、traces 关联——这也是 LGTM 栈选择它的原因。
+
 ## OpenTracing
 
 或许从"OpenTracing 不是什么"说起会更简单。
@@ -147,13 +151,11 @@ OpenTelemetry 聚焦于遥测数据的生成、采集、管理与导出。
 ## Links
 
 - [Distributed Systems](/docs/CS/Distributed/Distributed.md)
-- [OpenTelemetry](/docs/CS/Distributed/Tracing/Otel.md)
-- [Jaeger](/docs/CS/Distributed/Tracing/Jaeger.md)
-- [Zipkin](/docs/CS/Distributed/Tracing/Zipkin.md)
-- [SkyWalking](/docs/CS/Distributed/Tracing/SkyWalking.md)
-- [Prometheus](/docs/CS/Distributed/Tracing/Prometheus/Prometheus.md)
+- [Loki](/docs/CS/Distributed/Tracing/Loki.md)
+- [Tempo](/docs/CS/Distributed/Tracing/Tempo.md)
 - [Grafana](/docs/CS/Distributed/Tracing/Grafana.md)
-- [Micrometer](/docs/CS/log/Micrometer.md)
+- [Grafana Alloy](/docs/CS/Distributed/Tracing/Alloy.md)
+- [SkyWalking](/docs/CS/Distributed/Tracing/SkyWalking.md)
 
 
 ## References

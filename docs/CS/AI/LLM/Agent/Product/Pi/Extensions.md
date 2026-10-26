@@ -128,6 +128,12 @@ Extension 是最高形态：跑在 Pi 进程内、与 Pi 同权限的 TS 模块�
 - [Security：信任与隔离](/docs/CS/AI/LLM/Agent/Product/Pi/Security.md) — 扩展与包的信任门槛
 - [Skill 理论](/docs/CS/AI/LLM/Agent/Theory/Skill.md) — Agent Skills 概念的通用机制
 - [MCP](/docs/CS/AI/LLM/Protocol/MCP.md) — Pi 内置 MCP 客户端与 tool exposure 的配合
+- [CodeMode：codemode 实现机制](/docs/CS/AI/LLM/Agent/Product/Pi/CodeMode.md) — 本页 `codemode` 暴露态与 `reachesTools` 在沙箱里的落地
+- [Tools：工具系统](/docs/CS/AI/LLM/Agent/Product/Pi/Tools.md) — 默认工具与 `operations` 接缝的落地实现
+- [Providers：Provider 与模型目录](/docs/CS/AI/LLM/Agent/Product/Pi/Providers.md) — 工具经此调用模型、沙箱 `models.*` 全局来源
+- [Events：扩展事件 / 钩子总表](/docs/CS/AI/LLM/Agent/Product/Pi/Events.md) — `pi.on()` 全事件与 handler 组合模式的总入口
+- [Env：远程执行环境](/docs/CS/AI/LLM/Agent/Product/Pi/Env.md) — 扩展经 `operations` 把工具 I/O 路由到 SSH daemon 远端
+- [Durable：持久化 Agent 框架](/docs/CS/AI/LLM/Agent/Product/Pi/Durable.md) — 扩展任务如何并入 `BUILTIN_TASKS` 之外的注册表
 
 ## References
 

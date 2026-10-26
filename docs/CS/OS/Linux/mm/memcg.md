@@ -262,7 +262,7 @@ memcg 的用户态视图是一组文件。v2 把它们统一放在 `<cgroup>/mem
 | `memory.oom.group` | rw | 设为 `1` 时 OOM 把本组（含子孙）当**不可分割负载**整体处理 | `0` |
 | `memory.events` | ro | 层级化事件计数（见下） | — |
 | `memory.stat` | ro | 内存足迹分解（见下） | — |
-| `memory.pressure` | rw | 本组的 PSI 压力停顿信息 | — |
+| `memory.pressure` | rw | 本组的 PSI 压力停顿信息（详见 [PSI](/docs/CS/OS/Linux/mm/PSI.md)；"写"仅用于注册 poll trigger，不能改统计值） | — |
 | `memory.numa_stat` | ro | 按 node 拆分的用量 | — |
 
 `memory.high` 与 `memory.max` 可以带 `O_NONBLOCK` 打开，此时**同步回收（和 max 时的 OOM kill）被绕过**：管理员进程改限额不会让自己的 CPU 卡在回收上，代价是目标组要等到下一次 charge 请求才真正受约束——这也意味着用量可能在限额下方"滞留"一段时间。
@@ -400,6 +400,7 @@ memcg 是容器内存隔离的全部内核基础，K8s 层的字段最终都落�
 
 - [内存管理知识地图（mm 枢纽）](/docs/CS/OS/Linux/mm/README.md)
 - [Linux](/docs/CS/OS/Linux/Linux.md)
+- [PSI 压力失速](/docs/CS/OS/Linux/mm/PSI.md)
 
 ## References
 

@@ -1,6 +1,6 @@
 ## Introduction
 
-大模型（LLM）狭义上指基于深度学习算法进行训练的自然语言处理（NLP）模型，主要应用于自然语言理解和生成等领域，广义上还包括机器视觉（CV）大模型、多模态大模型和科学计算大模型等。
+大模型（LLM）狭义上指基于深度学习算法进行训练的自然语言处理（[NLP](/docs/CS/AI/NLP/NLP.md)）模型，主要应用于自然语言理解和生成等领域，广义上还包括机器视觉（CV）大模型、多模态大模型和科学计算大模型等。
 它是由具有大量参数（通常数十亿个权重或更多）的[人工神经网络](/docs/CS/AI/CNN.md)组成的一类语言模型，使用自监督学习或半监督学习对大量未标记文本进行训练
 
 ## Limitations of LLMs
@@ -22,8 +22,6 @@
 | `Protocol/` | 跨厂商的接入协议：工具调用、MCP、A2A | [Tools](/docs/CS/AI/LLM/Protocol/Tools.md) |
 | `Agent/` | 包裹模型的运行框架与编程 Agent，按机制 / 产品 / 演进分三层 | [Agent 目录](/docs/CS/AI/LLM/Agent/README.md) |
 | `Platform/` | 可视化把模型组装成服务的现成产品 | [LLM 应用开发平台](/docs/CS/AI/LLM/Platform/Platform.md) |
-
-先说清一件事：**「模型」和「模型上的东西」是这个目录最常见的混淆点**。DeepSeek 有模型也开源了 agent 框架（dsh），Anthropic 有 Claude 模型也有 Claude Code 工具，两者在工程上完全不同——模型是 API 定价的消费者，Agent 是 API 的调用方。所以它们分处 `Model/` 与 `Agent/`，前者关心上下文长度与每百万 token 的价格，后者关心 loop、工具与记忆。
 
 ## Model Basics
 

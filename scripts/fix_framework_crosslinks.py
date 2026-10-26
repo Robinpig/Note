@@ -15,10 +15,10 @@ LINK_RE = re.compile(r'\((/docs/CS/Framework/[^)]+)\)')
 MATRIX = {
     # 协调 / 注册 / 配置中心簇
     "etcd/etcd.md":          ["ZooKeeper/ZooKeeper.md", "nacos/Nacos.md"],
-    "ZooKeeper/ZooKeeper.md":["etcd/etcd.md", "nacos/Nacos.md", "eureka/Eureka.md", "BooKeeper/BooKeeper.md"],
+    "ZooKeeper/ZooKeeper.md":["etcd/etcd.md", "nacos/Nacos.md", "eureka/Eureka.md", "BookKeeper/BookKeeper.md"],
     "nacos/Nacos.md":        ["etcd/etcd.md", "ZooKeeper/ZooKeeper.md", "eureka/Eureka.md", "Spring_Cloud/Spring_Cloud.md"],
     "eureka/Eureka.md":      ["ZooKeeper/ZooKeeper.md", "nacos/Nacos.md", "Spring_Cloud/Spring_Cloud.md"],
-    "BooKeeper/BooKeeper.md":["ZooKeeper/ZooKeeper.md"],
+    "BookKeeper/BookKeeper.md":["ZooKeeper/ZooKeeper.md"],
     "ZooKeeper/Curator.md":  ["ZooKeeper/ZooKeeper.md"],
     # RPC 簇
     "Dubbo/Dubbo.md":        ["gRPC/gRPC.md", "HSF/HSF.md", "ZooKeeper/ZooKeeper.md"],

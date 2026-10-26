@@ -15,7 +15,7 @@
 | [Python](/docs/CS/Python/Python.md) | 表达力与 AI / 数据生态 | 运行时三件套（[GIL](/docs/CS/Python/GIL.md) / [Memory](/docs/CS/Python/Memory.md) / [Bytecode](/docs/CS/Python/Bytecode.md)）、[Concurrency](/docs/CS/Python/Concurrency.md)、[Typing](/docs/CS/Python/Typing.md)、[Packaging](/docs/CS/Python/Packaging.md)、[NumPy](/docs/CS/Python/NumPy.md) |
 | [Rust](/docs/CS/Rust/Rust.md) | 编译期保证内存安全 | compile |
 | [TypeScript](/docs/CS/TypeScript/TypeScript.md) | 浏览器 / 全栈的唯一选择 | Compiler、Tsconfig、TypeSystem（运行时语义来自 JS） |
-| [Scala](/docs/CS/Scala/Scala.md) | JVM 上的函数式表达力 | 单篇 |
+| [Scala](/docs/CS/Scala/Scala.md) | JVM 上的函数式表达力 | [类型系统](/docs/CS/Scala/Type_System.md)、[上下文抽象](/docs/CS/Scala/Contextual_Abstractions.md)、[模式匹配](/docs/CS/Scala/Pattern_Matching.md)、[集合库](/docs/CS/Scala/Collections.md)、[效应系统](/docs/CS/Scala/Effects.md)、[生态](/docs/CS/Scala/Ecosystem.md) |
 | [Assembly](/docs/CS/assembly/assembly.md) | 最接近机器的抽象 | 单篇 |
 | [Dart](/docs/CS/Dart/Dart.md) | Flutter 的专属语言，也能做 CLI/Web/服务端 | 单篇；与 [Flutter](/docs/CS/Flutter.md) 强绑定 |
 
@@ -32,7 +32,7 @@
 | [Rust](/docs/CS/Rust/Rust.md) | 编译到机器码（LLVM 后端） | 静态、强、所有权 + 借用检查 | 编译期决定，无 GC | `std::thread`、async/await，无数据竞争 | 无运行时（可 `no_std`） |
 | [Python](/docs/CS/Python/Python.md) | 源码 → 字节码 → 特化解释器（JIT 实验性） | 动态、强（duck typing），标注仅静态可见 | 引用计数为主 + 分代 GC 兜环，pymalloc 分层 | 单锁 GIL；free-threaded 构建、多解释器、多进程、asyncio | CPython 解释器 |
 | [TypeScript](/docs/CS/TypeScript/TypeScript.md) | 转译为 JS → JIT | 渐进可选静态、结构化、unsound | GC（宿主负责） | 单线程事件循环 + worker | JS 引擎（V8 等） |
-| [Scala](/docs/CS/Scala/Scala.md) | 源码 → 字节码 → JVM | 静态、强，含类型推断与高阶类型 | JVM GC | Future / Akka / 协程库 | JVM |
+| [Scala](/docs/CS/Scala/Scala.md) | 源码 → 字节码 → JVM（另有 Scala.js → JS/Wasm、Scala Native → LLVM AOT） | 静态、强，含类型推断、高阶类型与类型层编程 | JVM GC（Native 端为自带 GC） | Future / actor（Akka·Pekko）/ IO monad / 虚拟线程直接式 | JVM（另有 JS 引擎、Scala Native 运行时） |
 | [Dart](/docs/CS/Dart/Dart.md) | 开发 JIT + 发布 AOT（Web 转 JS） | 静态、强、可选标注、null safety | GC（分代） | isolate（无共享内存、消息传递）+ async/await | Dart VM / 嵌入运行时 |
 
 三个容易看漏的列：
@@ -95,8 +95,10 @@ JVM 提供了跨平台的内存管理、JIT 与成熟的可观测性，生态是
 
 同时吃 JVM 生态与函数式表达力：类型推断、模式匹配、高阶类型、不可变集合。代价是编译慢、学习曲线陡、写法差异极大（有人当"更好的 Java"，有人当 Haskell 用）。
 
+主线有三条：**类型层**（[类型系统](/docs/CS/Scala/Type_System.md) 的联合/交集/opaque/match type，配合 [上下文抽象](/docs/CS/Scala/Contextual_Abstractions.md) 的 given/using 与 [模式匹配](/docs/CS/Scala/Pattern_Matching.md)），**落地**（[JVM 互操作](/docs/CS/Scala/JVM_Interop.md)、[编译流水线](/docs/CS/Scala/Compilation.md) 与 TASTy、[三平台](/docs/CS/Scala/Platforms.md)），**副作用怎么组织**（[并发](/docs/CS/Scala/Concurrency.md) 与 [效应系统](/docs/CS/Scala/Effects.md)）。另需注意它的版本是三条并行线（Scala 2.13 / 3 LTS / 3 Next），见 [版本线与迁移](/docs/CS/Scala/Migration_and_Versions.md)。
+
 - **适合**：数据管道与流处理（Spark/Flink 的原生语言）、需要强表达力且已有 JVM 基建的团队。
-- **不宜**：团队流动大的项目——代码风格方差过大是真实的维护风险。
+- **不宜**：团队流动大的项目——代码风格方差过大是真实的维护风险。选型前还需查许可：Akka 自 2022 年起是 BSL 1.1，Apache Pekko 是其 Apache-2.0 分叉，见 [生态系统](/docs/CS/Scala/Ecosystem.md)。
 
 ## Dart
 

@@ -34,6 +34,10 @@ enum procstate { UNUSED, USED, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
 
 
+## Map of This Section
+
+进程子系统是 xv6 运行时的核心。本页聚焦进程控制块（PCB）结构、进程状态机、`fork`/`exec` 语义、上下文切换（`swtch`）与时间片轮转调度。来龙去脉：[xv6 启动流程](/docs/CS/OS/xv6/Boot.md) 中的 `userinit` 造出首进程、`scheduler` 启动调度；进程私有地址空间与页表切换由 [memory](/docs/CS/OS/xv6/memory.md) 提供；`fork`/`wait`/`exec` 作为系统调用的入口见 [Syscall](/docs/CS/OS/xv6/Syscall.md)，`exec` 如何装载新程序见 [ELF](/docs/CS/OS/xv6/ELF.md)。
+
 ## x86
 
 
@@ -353,3 +357,7 @@ scheduler(void)
 ## Links
 
 - [xv6](/docs/CS/OS/xv6/xv6.md)
+- [xv6 启动流程](/docs/CS/OS/xv6/Boot.md)
+- [xv6 内存管理](/docs/CS/OS/xv6/memory.md)
+- [xv6 系统调用](/docs/CS/OS/xv6/Syscall.md)
+- [xv6 ELF 与 exec](/docs/CS/OS/xv6/ELF.md)

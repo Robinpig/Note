@@ -2,7 +2,7 @@
 
 LLM 应用开发平台（也称 LLMOps / Agent 平台）指的是一类**可视化地把模型、提示词、知识库、工具和工作流组装成可用服务的产品**。它介于"直接调模型 API"和"用代码框架自己写"之间：往上屏蔽掉模型差异，往下替你搭好画布、会话、权限、API、日志与观测。
 
-本笔记是这个谱系的枢纽：[Coze](/docs/CS/AI/LLM/Platform/Coze.md)、[Dify](/docs/CS/AI/LLM/Platform/Dify.md) 各有一篇专记，这里解决三件事——**平台到底是什么（和解决什么问题）、各家怎么横向选、自部署有哪些红线**。
+这里解决三件事——**平台到底是什么（和解决什么问题）、各家怎么横向选、自部署有哪些红线**。
 
 ## Why a Platform Layer Is Needed
 
@@ -103,30 +103,66 @@ n8n、Make、Zapier Agents、Gumloop、Relay.app、Lindy、Relevance AI、Voicef
 | 代码框架派 | 表达力上限最高，沉淀为自有资产 | 一切都得自己写 | 复杂状态机、长任务、必须先上审计再上线 |
 | 模型厂商一站式 | 与该厂商模型配合最顺、起步最快 | 画布层可能被砍，锁定单一模型生态 | 快速验证，或已完全绑定该厂商 |
 
-## How to Choose: A Decision Tree
+## How to Choose: A Decision Graph
 
-```
-先判数据主权（一票否决）
-├─ 数据必须留在内网 / 信创环境
-│   ├─ 有运维能力 → 开源自建派（Dify / Coze 开源 / FastGPT / RAGFlow）
-│   └─ 没有运维能力 → 云厂商的私有化版本（腾讯云 ADP、火山 HiAgent、阿里云百炼专属版…）
-└─ 数据可以上云
-    ├─ 已重仓某朵云与其办公套件 → 直接用那家的（百炼/ADP/千帆/HiAgent，或 Copilot Studio / Gemini / Bedrock）
-    ├─ 要快速验证想法、预算有限 → Coze 云版 / Dify Cloud / Flowise
-    └─ 追求可控与可迁移 → 开源自建（同上）
+```dot
+digraph PlatformSelection {
+  rankdir=TB;
+  node [fontname="Helvetica", fontsize=12, style="rounded,filled", color="#cbd5e1"];
+  edge [color="#475569", fontsize=11];
 
-再看需求主体是什么
-├─ 业务流程自动化（CRM/工单/邮件/表格），AI 只是其中一步 → n8n / Make / Zapier Agents
-├─ 主打文档问答 / 知识库助手
-│   ├─ 文档复杂（表格、扫描件、版式）→ RAGFlow
-│   ├─ 需要快速私有化、小团队 → FastGPT / AnythingLLM
-│   └─ 需要可调的 RAG 管线 + 生产运维 → Dify
-├─ 想要「搭建 + 评测 + 观测」一体 / 国内渠道发布 → Coze（Studio + Loop）
-├─ 强监管 / 要审计追溯（金融、政企）→ 蚂蚁 Agentar、360 智语，或退回自研
-├─ 团队 Python 为主，画布只是过渡最终要落地代码 → Langflow（或 LangGraph）
-├─ 团队 JS/TS 为主，要快速出可嵌入的对话助手 → Flowise
-└─ 需要深度控制执行循环 / 长任务状态机 / 严格合规审计
-    → 别用平台，写自己的 Harness（LangGraph + 自研）
+  // 阶段一：数据主权（一票否决）
+  root [label="① 数据主权 · 一票否决", fillcolor="#2563eb", fontcolor="white", color="#1e3a8a"];
+  b1 [label="数据必须留内网 / 信创", fillcolor="#b45309", fontcolor="white"];
+  b2 [label="数据可以上云", fillcolor="#15803d", fontcolor="white"];
+  l1 [label="有运维能力\n→ 开源自建派\nDify / Coze开源 / FastGPT / RAGFlow", fillcolor="#FAEEDA"];
+  l2 [label="无运维能力\n→ 云厂商私有化\nADP / HiAgent / 百炼专属版", fillcolor="#FAEEDA"];
+  l3 [label="已重仓某朵云 + 办公套件\n→ 用那家的\n百炼/ADP/千帆/Copilot/Gemini/Bedrock", fillcolor="#EAF3DE"];
+  l4 [label="快速验证 / 预算有限\n→ Coze云版 / Dify Cloud / Flowise", fillcolor="#EAF3DE"];
+  l5 [label="追求可控可迁移\n→ 开源自建派", fillcolor="#EAF3DE"];
+
+  root -> b1;
+  root -> b2;
+  b1 -> l1;
+  b1 -> l2;
+  b2 -> l3;
+  b2 -> l4;
+  b2 -> l5;
+
+  // 过渡
+  trans [label="然后看需求主体 ↓", shape=plaintext, fontsize=13, fontcolor="#334155"];
+  l5 -> trans [style=dashed, arrowhead=none];
+
+  // 阶段二：需求主体
+  s2 [label="② 需求主体是什么", fillcolor="#334155", fontcolor="white", color="#1e293b"];
+  trans -> s2;
+
+  c1 [label="业务流程自动化\n(CRM/工单/邮件/表格, AI只一步)\n→ n8n / Make / Zapier Agents", fillcolor="#ffffff"];
+  c2 [label="文档问答 / 知识库助手", fillcolor="#ffffff"];
+  c2a [label="文档复杂(表格/扫描/版式)\n→ RAGFlow", fillcolor="#ffffff"];
+  c2b [label="快速私有化 / 小团队\n→ FastGPT / AnythingLLM", fillcolor="#ffffff"];
+  c2c [label="可调 RAG 管线 + 生产运维\n→ Dify", fillcolor="#ffffff"];
+  c3 [label="搭建+评测+观测一体 / 国内发布\n→ Coze (Studio + Loop)", fillcolor="#ffffff"];
+  c4 [label="强监管 / 审计追溯(金融·政企)\n→ 蚂蚁Agentar / 360智语 / 自研", fillcolor="#ffffff"];
+  c5 [label="Python团队 / 画布只是过渡到代码\n→ Langflow / LangGraph", fillcolor="#ffffff"];
+  c6 [label="JS/TS团队 / 可嵌入对话助手\n→ Flowise", fillcolor="#ffffff"];
+  c7 [label="深度控制 / 长任务状态机 / 严格合规\n→ 离开平台自研 Harness", fillcolor="#FCEBEB", color="#A32D2D"];
+
+  s2 -> c1;
+  s2 -> c2;
+  s2 -> c3;
+  s2 -> c4;
+  s2 -> c5;
+  s2 -> c6;
+  s2 -> c7;
+  c2 -> c2a;
+  c2 -> c2b;
+  c2 -> c2c;
+
+  { rank=same; b1; b2; }
+  { rank=same; l1; l2; l3; l4; l5; }
+  { rank=same; c1; c2; c3; c4; c5; c6; c7; }
+}
 ```
 
 选平台时真正该先回答的三个问题（比功能清单有用得多）：**数据住在哪？谁来维护它？这个 Agent 被允许做哪些动作？** 这三个答案含糊时，讨论平台选型为时过早。

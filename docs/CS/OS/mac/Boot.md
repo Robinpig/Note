@@ -131,4 +131,4 @@ macOS 的 `hibernatemode` 与 Linux 的 S3/S4 不是一一对应的：`3` 是默
 1. [Boot process for a Mac with Apple silicon](https://support.apple.com/guide/security/boot-process-secac71d5623/web)
 2. [Startup Security Utility for a Mac with Apple silicon](https://support.apple.com/guide/security/startup-security-utility-sec2f6b3c1c8/web)
 3. [Apple Platform Security Guide](https://help.apple.com/pdf/security/en_AU/apple-platform-security-guide-x.pdf)
-4. [Kernel debugging with boot-args](https://developer.apple.com/library/archive/technotes/tn2118/_index.html)
+4. [Kernel Debug Kit downloads](https://developer.apple.com/download/all/?q=kernel+debug+kit)

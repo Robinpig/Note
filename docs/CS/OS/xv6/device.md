@@ -4,6 +4,10 @@
 
 本笔记对照 xv6 的两个移植版（x86 与 RISC-V）。主线以 RISC-V 版为主，硬件平台是 QEMU 提供的 virt 机器：16550 兼容 UART 与 virtio-blk 磁盘。整体启动与主循环见 [xv6](/docs/CS/OS/xv6/xv6.md)，中断进入机制见 [Interrupt](/docs/CS/OS/xv6/Interrupt.md)，页表与地址映射见 [memory](/docs/CS/OS/xv6/memory.md)。
 
+## Map of This Section
+
+设备子系统是"硬件寄存器 ↔ 内核抽象"的边界。本页覆盖 MMIO 编址、UART 控制台（轮询发送/中断接收）、virtio-blk 磁盘（描述符环 + 中断）、设备抽象表，以及用 buffer cache 吸收磁盘延迟。相关：中断如何把设备信号带进内核见 [Interrupt](/docs/CS/OS/xv6/Interrupt.md)；buffer cache 向上承文件系统、向下接磁盘见 [file](/docs/CS/OS/xv6/file.md)；启动期 `uartinit`/`virtio_disk_init` 调用见 [Boot](/docs/CS/OS/xv6/Boot.md)。
+
 ## Memory-mapped I/O
 
 RISC-V 版 xv6 不使用独立的 I/O 端口指令，设备寄存器被映射到固定的物理地址：
@@ -95,7 +99,7 @@ xv6 的取舍很好地展示了两种 I/O 同步方式：
 - [memory](/docs/CS/OS/xv6/memory.md)
 - [file](/docs/CS/OS/xv6/file.md)
 - [Syscall](/docs/CS/OS/xv6/Syscall.md)
-- [Operating Systems](/docs/CS/OS/OS.md)
+- [xv6 启动流程](/docs/CS/OS/xv6/Boot.md)
 
 ## References
 

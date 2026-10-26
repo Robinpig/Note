@@ -17,6 +17,10 @@
 
 xv6 对于物理内存的组织管理使用的是空闲链表法
 
+## Map of This Section
+
+内存子系统分两层：底层 `kalloc` 用空闲链表管物理页，上层 `vm` 用页表给每个进程私有地址空间并实现内核直映射。本页覆盖 x86（二级页表）与 RISC-V（SV39）两种实现。相关：[xv6 启动流程](/docs/CS/OS/xv6/Boot.md) 里 `entrypgdir`/`kvminit` 首次开分页；陷阱处理依赖页表切换见 [Interrupt](/docs/CS/OS/xv6/Interrupt.md)；`exec` 用 `uvmalloc` 建进程地址空间见 [ELF](/docs/CS/OS/xv6/ELF.md)；`sbrk` 调整大小经 [Syscall](/docs/CS/OS/xv6/Syscall.md)。
+
 
 
 
@@ -462,3 +466,6 @@ sfence_vma()
 ## Links
 
 - [xv6](/docs/CS/OS/xv6/xv6.md)
+- [xv6 启动流程](/docs/CS/OS/xv6/Boot.md)
+- [xv6 中断与异常](/docs/CS/OS/xv6/Interrupt.md)
+- [xv6 ELF 与 exec](/docs/CS/OS/xv6/ELF.md)

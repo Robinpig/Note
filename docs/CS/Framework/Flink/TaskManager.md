@@ -49,6 +49,8 @@ Flink 在 TaskManager 内做了精细的**自主内存管理**，这是它稳定
 - 大量内部数据（排序、哈希、RocksDB 批量写、缓存）使用基于 `MemorySegment` 的**堆外/托管内存**，减少 JVM GC 压力并避免大对象带来的停顿。
 - Managed Memory 用于 RocksDB state backend、批模式的 sort/hash/shuffle 缓存等，可按比例配置。
 
+算子持有的实际状态如何存储（堆内 / RocksDB / 分离式后端）以及 TTL 清理，见 [State](/docs/CS/Framework/Flink/State.md)；状态如何被周期性落盘，见 [Checkpoint](/docs/CS/Framework/Flink/Checkpoint.md)。
+
 ## Actor / RPC
 
 较新 Flink 已用 **Akka/Pekko（Actor 模型）+ RPC** 承载 TaskManager 与 JobManager 之间的控制消息（TaskManagerRunner 注册、心跳、Task 部署/取消），数据通路则单独走 Netty，控制面与数据面分离。TaskManager 启动后向 ResourceManager 注册，并通过心跳维持存活与 Slot 状态同步。
@@ -59,6 +61,8 @@ Flink 在 TaskManager 内做了精细的**自主内存管理**，这是它稳定
 - [JobManager](/docs/CS/Framework/Flink/JobManager.md)
 - [Dataflow](/docs/CS/Framework/Flink/Dataflow.md)
 - [Client](/docs/CS/Framework/Flink/Client.md)
+- [State](/docs/CS/Framework/Flink/State.md)
+- [Checkpoint](/docs/CS/Framework/Flink/Checkpoint.md)
 
 ## References
 
