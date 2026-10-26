@@ -62,7 +62,7 @@ SELECT extension_name FROM duckdb_extensions() WHERE install_mode = 'STATICALLY_
 
 ## Links
 
-- [DuckDB](/docs/CS/DB/DuckDB.md)
+- [DuckDB](/docs/CS/DB/DuckDB/DuckDB.md)
 - [Ecosystem](/docs/CS/DB/DuckDB/Ecosystem.md)
 - [Operations](/docs/CS/DB/DuckDB/Operations.md)
 - [Type System](/docs/CS/DB/DuckDB/Type_System.md)

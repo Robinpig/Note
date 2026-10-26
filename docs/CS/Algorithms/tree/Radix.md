@@ -40,7 +40,7 @@
 
 - [Trie](/docs/CS/Algorithms/tree/Trie.md)
 - [Tree](/docs/CS/Algorithms/tree/tree.md)
-- [Hash](/docs/CS/Algorithms/hash.md)
+- [Hash](/docs/CS/Algorithms/struct/hash.md)
 
 ## References
 

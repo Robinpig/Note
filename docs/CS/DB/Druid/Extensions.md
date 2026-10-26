@@ -68,7 +68,7 @@ K8s 是 Druid 云上部署的主线，有三条并存的路：
 
 ## Links
 
-- [Druid](/docs/CS/DB/Druid.md)
+- [Druid](/docs/CS/DB/Druid/Druid.md)
 - [Query Engine](/docs/CS/DB/Druid/Query_Engine.md)
 - [Operations](/docs/CS/DB/Druid/Operations.md)
 - [Data Management](/docs/CS/DB/Druid/Data_Management.md)

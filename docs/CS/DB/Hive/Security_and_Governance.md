@@ -38,7 +38,7 @@ HS2 支持 Thrift over HTTP（JWT 认证走此通道），可用 TLS/SSL 加密�
 
 ## Links
 
-- [Hive](/docs/CS/DB/Hive.md)
+- [Hive](/docs/CS/DB/Hive/Hive.md)
 - [Architecture](/docs/CS/DB/Hive/Architecture.md)
 - [Operations](/docs/CS/DB/Hive/Operations.md)
 

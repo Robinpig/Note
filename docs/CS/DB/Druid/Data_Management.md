@@ -63,7 +63,7 @@ Coordinator 按数据源上的两组规则做决策，规则按顺序匹配、�
 
 ## Links
 
-- [Druid](/docs/CS/DB/Druid.md)
+- [Druid](/docs/CS/DB/Druid/Druid.md)
 - [Architecture](/docs/CS/DB/Druid/Architecture.md)
 - [Storage Format](/docs/CS/DB/Druid/Storage_Format.md)
 - [Ingestion](/docs/CS/DB/Druid/Ingestion.md)

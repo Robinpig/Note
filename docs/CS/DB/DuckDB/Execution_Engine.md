@@ -90,11 +90,11 @@ DuckDB 的并行单位是 **morsel**：行组（默认 122,880 行）在扫描�
 
 ## Links
 
-- [DuckDB](/docs/CS/DB/DuckDB.md)
+- [DuckDB](/docs/CS/DB/DuckDB/DuckDB.md)
 - [Architecture](/docs/CS/DB/DuckDB/Architecture.md)
 - [Storage Format](/docs/CS/DB/DuckDB/Storage_Format.md)
 - [Type System](/docs/CS/DB/DuckDB/Type_System.md)
-- [Indexes](/docs/CS/DB/Index.md)
+- [Indexes](/docs/CS/DB/Concept/Index.md)
 
 ## References
 

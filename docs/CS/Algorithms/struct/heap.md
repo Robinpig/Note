@@ -9,7 +9,7 @@ A priority queue is called an *ascending – priority* queue, if the item with t
 Similarly, a priority queue is said to be a *descending – priority* queue if the item with the largest key has the highest priority (delete the maximum element always).
 Since these two types are symmetric we will be concentrating on one of them: ascending-priority queue.
 
-Priority queues are also important in the implementation of  [*greedy algorithms*](/docs/CS/Algorithms/Greedy.md) , which operate by repeatedly finding a minimum.
+Priority queues are also important in the implementation of  [*greedy algorithms*](/docs/CS/Algorithms/paradigm/Greedy.md) , which operate by repeatedly finding a minimum.
 
 ## Priority Queue ADT
 The following operations make priority queues an ADT.

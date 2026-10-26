@@ -32,7 +32,7 @@ minor / major compaction 的「触发与合并哪些文件」由 `CompactionPoli
 
 ## Links
 
-- [HBase](/docs/CS/DB/HBase.md)
+- [HBase](/docs/CS/DB/HBase/HBase.md)
 - [Write Path](/docs/CS/DB/HBase/Write_Path.md)
 - [Read Path](/docs/CS/DB/HBase/Read_Path.md)
 - [LSM Tree](/docs/CS/Algorithms/tree/LSM.md)

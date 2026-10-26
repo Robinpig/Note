@@ -152,7 +152,7 @@ Consider the following guidelines for optimizing redo logging:
 - [binlog 二进制日志](/docs/CS/DB/MySQL/binlog.md)
 - [Buffer Pool](/docs/CS/DB/MySQL/memory.md)
 - [Doublewrite Buffer](/docs/CS/DB/MySQL/Double-Buffer.md)
-- [Write-Ahead Logging](/docs/CS/DB/WAL.md)
+- [Write-Ahead Logging](/docs/CS/DB/Concept/WAL.md)
 
 ## References
 

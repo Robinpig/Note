@@ -59,7 +59,7 @@ FAST 用圆周上 16 像素的亮度比较，速度快一个量级，是 ORB 的
 
 ## Links
 
-- [CV](/docs/CS/AI/CV.md)
+- [CV](/docs/CS/AI/CV/CV.md)
 - [Detection](/docs/CS/AI/CV/Detection.md)
 - [Representation Learning](/docs/CS/AI/CV/Representation_Learning.md)
 - [Deployment](/docs/CS/AI/CV/Deployment.md)

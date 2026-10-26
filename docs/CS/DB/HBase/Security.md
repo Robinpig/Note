@@ -11,7 +11,7 @@ HBase 的安全分三层：认证（Kerberos）、授权（表/列族/列 ACL + 
 
 ## Links
 
-- [HBase](/docs/CS/DB/HBase.md)
+- [HBase](/docs/CS/DB/HBase/HBase.md)
 - [HFile](/docs/CS/DB/HBase/HFile.md)
 - [ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)
 

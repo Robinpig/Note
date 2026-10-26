@@ -33,7 +33,7 @@ HBase 的读路径是「内存 + 若干不可变文件」的归并：MemStore �
 
 ## Links
 
-- [HBase](/docs/CS/DB/HBase.md)
+- [HBase](/docs/CS/DB/HBase/HBase.md)
 - [Write Path](/docs/CS/DB/HBase/Write_Path.md)
 - [Compaction](/docs/CS/DB/HBase/Compaction.md)
 - [LSM Tree](/docs/CS/Algorithms/tree/LSM.md)

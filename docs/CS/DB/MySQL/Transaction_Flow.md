@@ -377,7 +377,7 @@ static bool trx_serialisation_number_get(
 - [Binlog](/docs/CS/DB/MySQL/binlog.md)
 - [Undo Log](/docs/CS/DB/MySQL/undolog.md)
 - [Mvcc](/docs/CS/DB/MySQL/Mvcc.md)
-- [Shard](/docs/CS/DB/Shard.md)
+- [Shard](/docs/CS/DB/Concept/Shard.md)
 
 ## References
 

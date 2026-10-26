@@ -52,8 +52,8 @@ $$
 
 - [Bloom Filter](/docs/CS/Algorithms/struct/BloomFilter.md)
 - [HyperLogLog](/docs/CS/Algorithms/HyperLogLog.md)
-- [Hash](/docs/CS/Algorithms/hash.md)
-- [Randomized](/docs/CS/Algorithms/Randomized.md)
+- [Hash](/docs/CS/Algorithms/struct/hash.md)
+- [Randomized](/docs/CS/Algorithms/paradigm/Randomized.md)
 - [Algorithms](/docs/CS/Algorithms/Algorithms.md?id=classic-algorithm-topics)
 
 ## References

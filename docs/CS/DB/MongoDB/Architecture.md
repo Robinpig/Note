@@ -64,11 +64,11 @@ WiredTiger 内部缓存默认取 **50% × (RAM − 1GB)** 与 **256MB** 中的�
 
 ## Links
 
-- [MongoDB](/docs/CS/DB/MongoDB.md)
+- [MongoDB](/docs/CS/DB/MongoDB/MongoDB.md)
 - [Storage Engine](/docs/CS/DB/MongoDB/StorageEngine.md)
 - [Replication](/docs/CS/DB/MongoDB/Replication.md)
 - [Sharding](/docs/CS/DB/MongoDB/Sharding.md)
-- [WAL](/docs/CS/DB/WAL.md)
+- [WAL](/docs/CS/DB/Concept/WAL.md)
 
 ## References
 

@@ -83,7 +83,7 @@
 - [MyCat](/docs/CS/DB/MyCat/MyCat.md)
 - [Configuration](/docs/CS/DB/MyCat/Configuration.md)
 - [SQL_Routing](/docs/CS/DB/MyCat/SQL_Routing.md)
-- [Shard](/docs/CS/DB/Shard.md)
+- [Shard](/docs/CS/DB/Concept/Shard.md)
 
 ## References
 

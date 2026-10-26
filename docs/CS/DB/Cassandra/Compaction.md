@@ -63,7 +63,7 @@ HBase 的 major compaction 是「整 region 全量重写」，代价集中、可
 
 ## Links
 
-- [Cassandra](/docs/CS/DB/Cassandra.md)
+- [Cassandra](/docs/CS/DB/Cassandra/Cassandra.md)
 - [Storage Engine](/docs/CS/DB/Cassandra/StorageEngine.md)
 - [Operations](/docs/CS/DB/Cassandra/Operations.md)
 - [Distributed](/docs/CS/DB/Cassandra/Distributed.md)

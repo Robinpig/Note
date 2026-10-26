@@ -81,11 +81,11 @@ SELECT * FROM events;
 
 ## Links
 
-- [DuckDB](/docs/CS/DB/DuckDB.md)
+- [DuckDB](/docs/CS/DB/DuckDB/DuckDB.md)
 - [Architecture](/docs/CS/DB/DuckDB/Architecture.md)
 - [Ecosystem](/docs/CS/DB/DuckDB/Ecosystem.md)
 - [Storage Format](/docs/CS/DB/DuckDB/Storage_Format.md)
-- [WAL](/docs/CS/DB/WAL.md)
+- [WAL](/docs/CS/DB/Concept/WAL.md)
 
 ## References
 

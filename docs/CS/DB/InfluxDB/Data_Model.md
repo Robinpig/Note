@@ -70,11 +70,11 @@ InfluxDB 模型在"多值序列"上最灵活：一个 measurement 一次采样�
 
 ## Links
 
-- [InfluxDB 枢纽](/docs/CS/DB/InfluxDB.md)
+- [InfluxDB 枢纽](/docs/CS/DB/InfluxDB/InfluxDB.md)
 - [Architecture](/docs/CS/DB/InfluxDB/Architecture.md)
 - [Storage_Engine](/docs/CS/DB/InfluxDB/Storage_Engine.md)
-- [Timeseries](/docs/CS/DB/Timeseries.md)
-- [GreptimeDB](/docs/CS/DB/GreptimeDB.md)
+- [Timeseries](/docs/CS/DB/Concept/Timeseries.md)
+- [GreptimeDB](/docs/CS/DB/Timeseries/GreptimeDB.md)
 
 ## References
 

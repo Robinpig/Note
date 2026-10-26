@@ -16,7 +16,7 @@
 把两种基本结构组合起来，就能「造」出常见结构：
 
 - **邻接矩阵就是二维数组，邻接表就是链表**。邻接矩阵判断两点是否相连 $O(1)$、可做矩阵运算，但稀疏图浪费空间（$O(n^2)$）；邻接表省空间（$O(n+m)$），但判连通要遍历。图论枢纽见 [graph](/docs/CS/Algorithms/graph/graph.md)。
-- **散列表就是数组 + 链表/探测**：用散列函数把键映射到大数组。冲突处理的两条路线各自依赖一种基本结构——拉链法需要链表存同桶元素，操作简单但费指针空间；开放寻址法需要数组连续寻址，省空间但聚集敏感，见 [hash](/docs/CS/Algorithms/hash.md)。
+- **散列表就是数组 + 链表/探测**：用散列函数把键映射到大数组。冲突处理的两条路线各自依赖一种基本结构——拉链法需要链表存同桶元素，操作简单但费指针空间；开放寻址法需要数组连续寻址，省空间但聚集敏感，见 [hash](/docs/CS/Algorithms/struct/hash.md)。
 - **树用数组实现就是堆**：完全二叉树的形状规则，用数组存储不需要任何节点指针，`parent(i) = (i-1)/2` 一步算出，见 [heap](/docs/CS/Algorithms/struct/heap.md)。非完全二叉树不适合数组，于是用指针树，并在其上叠加约束得到 BST、AVL、[红黑树](/docs/CS/Algorithms/tree/Red-Black-Tree.md)、B 树等平衡家族。
 - **跳表 = 链表 + 多级索引**：本质是有序链表加上「快速通道」，用概率平衡替代严格旋转，见 [skiplist](/docs/CS/Algorithms/struct/skiplist.md)。
 - **位数组 + 多个哈希 = 布隆过滤器**：放弃精确换取空间，见 [BloomFilter](/docs/CS/Algorithms/struct/BloomFilter.md)。
@@ -44,8 +44,8 @@
 数组与链表也决定了遍历的写法差异：
 
 - **数组**天然适合迭代，`for` 下标递增即可，深度无关。
-- **树与图**的遍历天然是递归定义，但递归深度等于树高/图深，最坏 $O(n)$ 时会**栈溢出**。工程解法是改成显式栈的迭代（DFS）或显式队列的迭代（BFS），见 [Recursion](/docs/CS/Algorithms/Recursion.md) 与 [Divide-and-Conquer](/docs/CS/Algorithms/Divide-and-Conquer.md)。
-- 递归转迭代不总是可行：需要「回溯现场」的搜索（如 [Backtracking](/docs/CS/Algorithms/Backtracking.md)）本质是递归，用显式栈模拟时代码复杂度显著上升，通常不如限制深度 + 尾递归优化。
+- **树与图**的遍历天然是递归定义，但递归深度等于树高/图深，最坏 $O(n)$ 时会**栈溢出**。工程解法是改成显式栈的迭代（DFS）或显式队列的迭代（BFS），见 [Recursion](/docs/CS/Algorithms/paradigm/Recursion.md) 与 [Divide-and-Conquer](/docs/CS/Algorithms/paradigm/Divide-and-Conquer.md)。
+- 递归转迭代不总是可行：需要「回溯现场」的搜索（如 [Backtracking](/docs/CS/Algorithms/paradigm/Backtracking.md)）本质是递归，用显式栈模拟时代码复杂度显著上升，通常不如限制深度 + 尾递归优化。
 
 ## Links
 

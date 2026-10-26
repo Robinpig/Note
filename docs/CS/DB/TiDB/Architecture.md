@@ -2,7 +2,7 @@
 
 TiDB 是 PingCAP 开源的分布式关系型数据库，对外暴露 MySQL 协议，同时提供行存（TiKV）与列存（TiFlash）两套引擎，构成 HTAP 形态。理解 TiDB 的关键是接受一个前提：**它不是在单机数据库外面套一层分片代理，而是把单机数据库的各个子系统拆成独立进程重新实现一遍**——SQL 解析与优化在 TiDB Server，事务与一致性在 TiKV/TiDB Server 协作的 Percolator 模型里，元信息与调度在 PD，列存与 MPP 计算在 TiFlash。本页把这四个组件的拓扑、数据流与部署形态讲清楚；每个组件的内部机制另立分册。
 
-与「中间件分片」路线（本库 [ShardingSphere](/docs/CS/DB/ShardingSphere.md)、[TDDL](/docs/CS/DB/TDDL.md)）相比，TiDB 的分片与再均衡做进内核：应用看到的是单一 endpoint 与标准 SQL，不需要自己选分片键、处理跨分片事务与二次扩容时的数据迁移。代价是写路径必须走分布式共识与两阶段提交，单行点写的延迟与吞吐上限都受这条链路约束——选型时这是最需要掂量的取舍。
+与「中间件分片」路线（本库 [ShardingSphere](/docs/CS/DB/Middleware/ShardingSphere.md)、[TDDL](/docs/CS/DB/Middleware/TDDL.md)）相比，TiDB 的分片与再均衡做进内核：应用看到的是单一 endpoint 与标准 SQL，不需要自己选分片键、处理跨分片事务与二次扩容时的数据迁移。代价是写路径必须走分布式共识与两阶段提交，单行点写的延迟与吞吐上限都受这条链路约束——选型时这是最需要掂量的取舍。
 
 ## Component Topology
 

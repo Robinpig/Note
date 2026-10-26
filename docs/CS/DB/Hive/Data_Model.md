@@ -35,7 +35,7 @@ Hive 的数据模型是「数据库 → 表 → 分区 → 分桶 → 行」的�
 
 ## Links
 
-- [Hive](/docs/CS/DB/Hive.md)
+- [Hive](/docs/CS/DB/Hive/Hive.md)
 - [Storage Formats](/docs/CS/DB/Hive/Storage_Formats.md)
 - [HiveQL](/docs/CS/DB/Hive/HiveQL.md)
 - [ACID and Transactions](/docs/CS/DB/Hive/ACID_and_Transactions.md)

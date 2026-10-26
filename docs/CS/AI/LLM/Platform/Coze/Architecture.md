@@ -205,7 +205,7 @@ Eino 的组件来自 `github.com/cloudwego/eino-ext/components/{model,embedding}
 - [LLM](/docs/CS/AI/LLM/LLM.md)
 - [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md)
 - [RAG](/docs/CS/AI/RAG.md)
-- [Milvus](/docs/CS/DB/vector.md)
+- [Milvus](/docs/CS/DB/Concept/vector.md)
 - [Redis](/docs/CS/DB/Redis/Redis.md)
 - [MinIO（默认对象存储）](/docs/CS/Distributed/MinIO.md)
 

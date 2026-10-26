@@ -38,7 +38,7 @@ ORC / Parquet 的「列存」把同列跨行压在一起面向扫描聚合，这
 
 ## Links
 
-- [Hive](/docs/CS/DB/Hive.md)
+- [Hive](/docs/CS/DB/Hive/Hive.md)
 - [Data Model](/docs/CS/DB/Hive/Data_Model.md)
 - [ACID and Transactions](/docs/CS/DB/Hive/ACID_and_Transactions.md)
 - [Iceberg Integration](/docs/CS/DB/Hive/Iceberg_Integration.md)

@@ -107,11 +107,11 @@ db.orders.collMod("orders", "index", "createdAt_1", { hidden: false })
 
 ## Links
 
-- [MongoDB](/docs/CS/DB/MongoDB.md)
+- [MongoDB](/docs/CS/DB/MongoDB/MongoDB.md)
 - [Query](/docs/CS/DB/MongoDB/Query.md)
 - [Aggregation](/docs/CS/DB/MongoDB/Aggregation.md)
 - [Storage Engine](/docs/CS/DB/MongoDB/StorageEngine.md)
-- [BLink-Tree](/docs/CS/DB/BLink-Tree.md)
+- [BLink-Tree](/docs/CS/DB/Concept/BLink-Tree.md)
 
 ## References
 

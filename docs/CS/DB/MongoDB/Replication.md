@@ -117,7 +117,7 @@ read preference 只决定"发给谁"，不保证数据新旧。从节点可能�
 
 ## Links
 
-- [MongoDB](/docs/CS/DB/MongoDB.md)
+- [MongoDB](/docs/CS/DB/MongoDB/MongoDB.md)
 - [Architecture](/docs/CS/DB/MongoDB/Architecture.md)
 - [Transaction](/docs/CS/DB/MongoDB/Transaction.md)
 - [Sharding](/docs/CS/DB/MongoDB/Sharding.md)

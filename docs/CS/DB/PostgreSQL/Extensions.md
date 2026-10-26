@@ -64,7 +64,7 @@ FDW 让 PG 像查本地表一样查外部数据源，是扩展机制的重要应
 - [PostgreSQL](/docs/CS/DB/PostgreSQL/PostgreSQL.md)
 - [PostgreSQL Internals](/docs/CS/DB/PostgreSQL/Internals.md)
 - [Replication](/docs/CS/DB/PostgreSQL/Replication.md)
-- [pgvector 与向量检索](/docs/CS/DB/vector.md)
+- [pgvector 与向量检索](/docs/CS/DB/Concept/vector.md)
 
 ## References
 

@@ -63,7 +63,7 @@ SQLite 的默认值没有一条是随便定的，但也没有一条替你考虑�
 
 - [SQLite](/docs/CS/DB/SQLite.md)
 - [DataBases](/docs/CS/DB/DB.md)
-- [WAL](/docs/CS/DB/WAL.md)
+- [WAL](/docs/CS/DB/Concept/WAL.md)
 - [H2](/docs/CS/DB/h2/H2.md)
 - [Transactions_and_Locking](/docs/CS/DB/SQLite/Transactions_and_Locking.md)
 

@@ -67,7 +67,7 @@ Druid 的运维关键词是**进程角色 + 外部依赖 + 在线配置**：集�
 
 ## Links
 
-- [Druid](/docs/CS/DB/Druid.md)
+- [Druid](/docs/CS/DB/Druid/Druid.md)
 - [Architecture](/docs/CS/DB/Druid/Architecture.md)
 - [Data Management](/docs/CS/DB/Druid/Data_Management.md)
 - [Extensions](/docs/CS/DB/Druid/Extensions.md)

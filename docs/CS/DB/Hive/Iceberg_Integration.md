@@ -36,7 +36,7 @@ Iceberg 让 Hive 写的表成为开放、引擎无关的资产：Spark 做 ETL/M
 
 ## Links
 
-- [Hive](/docs/CS/DB/Hive.md)
+- [Hive](/docs/CS/DB/Hive/Hive.md)
 - [ACID and Transactions](/docs/CS/DB/Hive/ACID_and_Transactions.md)
 - [Storage Formats](/docs/CS/DB/Hive/Storage_Formats.md)
 - [Operations](/docs/CS/DB/Hive/Operations.md)

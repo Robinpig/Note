@@ -17,7 +17,7 @@ HBase 2.x 起 `hbck` 退化成只读诊断，真正的修复移交独立的 HBCK
 
 ## Links
 
-- [HBase](/docs/CS/DB/HBase.md)
+- [HBase](/docs/CS/DB/HBase/HBase.md)
 - [Architecture](/docs/CS/DB/HBase/Architecture.md)
 - [Write Path](/docs/CS/DB/HBase/Write_Path.md)
 - [Security](/docs/CS/DB/HBase/Security.md)

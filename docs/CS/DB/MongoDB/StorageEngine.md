@@ -101,12 +101,12 @@ WiredTiger 本身提供带时间戳的 MVCC，MongoDB 在其上实现：
 
 ## Links
 
-- [MongoDB](/docs/CS/DB/MongoDB.md)
+- [MongoDB](/docs/CS/DB/MongoDB/MongoDB.md)
 - [Architecture](/docs/CS/DB/MongoDB/Architecture.md)
 - [Transaction](/docs/CS/DB/MongoDB/Transaction.md)
 - [Replication](/docs/CS/DB/MongoDB/Replication.md)
-- [WAL](/docs/CS/DB/WAL.md)
-- [BLink-Tree](/docs/CS/DB/BLink-Tree.md)
+- [WAL](/docs/CS/DB/Concept/WAL.md)
+- [BLink-Tree](/docs/CS/DB/Concept/BLink-Tree.md)
 
 ## References
 

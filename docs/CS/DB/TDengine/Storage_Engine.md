@@ -77,11 +77,11 @@ TSDB 的后台合并发生在两个层面：LSM 通用的**数据文件合并**�
 
 ## Links
 
-- [TDengine](/docs/CS/DB/TDengine.md)
+- [TDengine](/docs/CS/DB/TDengine/TDengine.md)
 - [Architecture](/docs/CS/DB/TDengine/Architecture.md)
 - [Compression](/docs/CS/DB/TDengine/Compression.md)
 - [Data_Model](/docs/CS/DB/TDengine/Data_Model.md)
-- [WAL](/docs/CS/DB/WAL.md)
+- [WAL](/docs/CS/DB/Concept/WAL.md)
 - [LSM Tree](/docs/CS/Algorithms/tree/LSM.md)
 
 ## References

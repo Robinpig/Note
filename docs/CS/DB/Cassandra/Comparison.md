@@ -56,10 +56,10 @@ Cassandra 不是「万能数据库」，选它意味着接受其设计权衡。�
 
 ## Links
 
-- [Cassandra](/docs/CS/DB/Cassandra.md)
+- [Cassandra](/docs/CS/DB/Cassandra/Cassandra.md)
 - [Architecture](/docs/CS/DB/Cassandra/Architecture.md)
 - [Consistency](/docs/CS/DB/Cassandra/Consistency.md)
-- [HBase](/docs/CS/DB/HBase.md)
+- [HBase](/docs/CS/DB/HBase/HBase.md)
 
 ## References
 

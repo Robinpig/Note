@@ -115,7 +115,7 @@ Loop 覆盖上线前后的四个环节，正好对应 Agent 最容易"看不见"
 - [LLM](/docs/CS/AI/LLM/LLM.md)
 - [Vibe](/docs/CS/AI/LLM/Agent/Practice/Vibe.md)
 - [MCP](/docs/CS/AI/LLM/Protocol/MCP.md)
-- [向量数据库](/docs/CS/DB/vector.md)
+- [向量数据库](/docs/CS/DB/Concept/vector.md)
 
 ## References
 

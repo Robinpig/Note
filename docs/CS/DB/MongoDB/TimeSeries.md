@@ -98,11 +98,11 @@ TTL 线程约每 60 秒跑一轮，删除有延迟；对合规要求"到点必�
 
 ## Links
 
-- [MongoDB](/docs/CS/DB/MongoDB.md)
+- [MongoDB](/docs/CS/DB/MongoDB/MongoDB.md)
 - [Data Model](/docs/CS/DB/MongoDB/DataModel.md)
 - [Aggregation](/docs/CS/DB/MongoDB/Aggregation.md)
 - [Sharding](/docs/CS/DB/MongoDB/Sharding.md)
-- [Timeseries](/docs/CS/DB/Timeseries.md)
+- [Timeseries](/docs/CS/DB/Concept/Timeseries.md)
 
 ## References
 

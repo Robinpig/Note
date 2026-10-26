@@ -129,7 +129,7 @@ detector = fasterrcnn_resnet50_fpn(weights="DEFAULT").eval()
 
 ## Links
 
-- [CV](/docs/CS/AI/CV.md)
+- [CV](/docs/CS/AI/CV/CV.md)
 - [CNN](/docs/CS/AI/CNN.md)
 - [Segmentation](/docs/CS/AI/CV/Segmentation.md)
 - [Metrics](/docs/CS/AI/CV/Metrics.md)

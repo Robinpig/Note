@@ -2,7 +2,7 @@
 
 文件格式回答的是"一个文件内部的字节怎么摆"。它是大数据栈里最容易被忽视、但收益最确定的一层：换一个格式不动任何代码，存储成本与扫描耗时就可能差出数倍。原因很简单——分析型查询的共性是**读少数列、扫大量行**，而行存格式强迫你为了三列把整行读出来。
 
-这一层的选择独立于上层引擎：同一份 Parquet 文件，[Spark](/docs/CS/Framework/Spark/Spark.md)、Trino、Impala、[Flink](/docs/CS/Framework/Flink/Flink.md) 都能读。正因如此，Parquet 成了跨引擎共享的公约数，而绑定更深的 ORC 则在 [Hive](/docs/CS/DB/Hive.md) 生态里不可替代（ACID 事务必需）。Hive 视角下的两格式结构对比见 [Storage Formats](/docs/CS/DB/Hive/Storage_Formats.md)，本页讲编码与列存原理本身。
+这一层的选择独立于上层引擎：同一份 Parquet 文件，[Spark](/docs/CS/Framework/Spark/Spark.md)、Trino、Impala、[Flink](/docs/CS/Framework/Flink/Flink.md) 都能读。正因如此，Parquet 成了跨引擎共享的公约数，而绑定更深的 ORC 则在 [Hive](/docs/CS/DB/Hive/Hive.md) 生态里不可替代（ACID 事务必需）。Hive 视角下的两格式结构对比见 [Storage Formats](/docs/CS/DB/Hive/Storage_Formats.md)，本页讲编码与列存原理本身。
 
 > [!NOTE]
 > 版本口径：Parquet 的格式规范（thrift 定义）最新为 **2.13.0**（2026-06-13），ORC 最新实现为 **2.3.1**（2026-07-16）。规范版本号与实现版本号是两套编号——`parquet-format` 独立于 parquet-java / arrow-rs 发布，且主版本号对应文件里 `FileMetadata.version` 字段。
@@ -14,7 +14,7 @@
 - **IO**："查一亿行里的两个字段"，行存要读完整行，列存只读那两列。这是列存最大的收益来源，列越宽、查询用到的列越少，差距越大。
 - **压缩**：同一列的数据类型相同、值域相近、重复度高，压缩比远高于混合了多种类型的行。字典编码对低基数列尤其有效。
 
-代价在写入侧：一行数据要拆散写到 N 个列块，写入路径变复杂，单行点查退化成 N 次随机读。所以列存适合**扫描聚合**，不适合**按主键点查**——后者是 [HBase](/docs/CS/DB/HBase.md) 这类 LSM 宽列存储的领地。注意"列存"与"宽列存储"是两回事，前者按列跨行压，后者按列族内行存。
+代价在写入侧：一行数据要拆散写到 N 个列块，写入路径变复杂，单行点查退化成 N 次随机读。所以列存适合**扫描聚合**，不适合**按主键点查**——后者是 [HBase](/docs/CS/DB/HBase/HBase.md) 这类 LSM 宽列存储的领地。注意"列存"与"宽列存储"是两回事，前者按列跨行压，后者按列族内行存。
 
 ## Encoding
 

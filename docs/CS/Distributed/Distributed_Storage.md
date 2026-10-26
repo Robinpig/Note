@@ -50,7 +50,7 @@
 
 - **经典 lineage（本目录）**：[GFS](/docs/CS/Distributed/GFS.md) 是 HDFS 的设计原型——单一 Master + 多 ChunkServer + 追加写，HDFS 几乎逐一对齐；[Haystack](/docs/CS/Distributed/Haystack.md) 是 Facebook 的海量小对象（图片）存储，现代对象存储（[MinIO](/docs/CS/Distributed/MinIO.md) / S3）在"海量小文件高吞吐"这一命题上与之同源。把分类与选型放在本目录，正是因为它们首先是**分布式系统的子领域**。
 - **与计算**：[HDFS](/docs/CS/Framework/Hadoop/Hadoop.md) 是 [Hadoop](/docs/CS/Framework/Hadoop/Hadoop.md) / [Spark](/docs/CS/Framework/Spark/Spark.md) / [Flink](/docs/CS/Framework/Flink/Flink.md) 的默认存储底座，数据本地性（data locality）直接决定批 / 流作业性能。
-- **与数据库**：[Cassandra](/docs/CS/DB/Cassandra.md) 与 [TiDB / TiKV](/docs/CS/DB/TiDB.md) 既是"存储"也是"数据库"，后者用 Raft 把 KV 与 SQL 层解耦。
+- **与数据库**：[Cassandra](/docs/CS/DB/Cassandra/Cassandra.md) 与 [TiDB / TiKV](/docs/CS/DB/TiDB/TiDB.md) 既是"存储"也是"数据库"，后者用 Raft 把 KV 与 SQL 层解耦。
 - **与容器编排**：[K8s](/docs/CS/Container/Container.md) 的 StatefulSet（MySQL、Kafka 等）依赖块存储提供稳定持久卷，Ceph RBD / Longhorn / OpenEBS 是主流实现。
 - **与协调组件**：HDFS HA 依赖 [ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)，TiKV 的 PD 依赖 [etcd](/docs/CS/Framework/etcd/README.md) 做元数据与调度——存储集群的"大脑"往往是协调层。
 
@@ -79,8 +79,8 @@
 - [GFS（HDFS 的设计原型）](/docs/CS/Distributed/GFS.md)
 - [Haystack（海量小对象存储）](/docs/CS/Distributed/Haystack.md)
 - [Hadoop（HDFS）](/docs/CS/Framework/Hadoop/Hadoop.md)
-- [Cassandra](/docs/CS/DB/Cassandra.md)
-- [TiDB / TiKV](/docs/CS/DB/TiDB.md)
+- [Cassandra](/docs/CS/DB/Cassandra/Cassandra.md)
+- [TiDB / TiKV](/docs/CS/DB/TiDB/TiDB.md)
 - [Container（K8s 持久化）](/docs/CS/Container/Container.md)
 
 ## References

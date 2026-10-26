@@ -7,7 +7,7 @@
 这一层的产品叫 SQL-on-Hadoop / SQL-on-lakehouse 引擎，它们的差别不在 SQL 方言（大同小异），而在**执行模型**：算得快还是算得稳。
 
 > [!NOTE]
-> 版本口径：[Hive](/docs/CS/DB/Hive.md) **4.2.1**（执行引擎收敛为 Tez 唯一，CBO 由 Apache Calcite 驱动，4.0 升 1.25、4.1 升 1.33）、Spark **4.2.0**、[Flink](/docs/CS/Framework/Flink/Flink.md) **2.3.0**、Trino **483**（2026-07-17）。
+> 版本口径：[Hive](/docs/CS/DB/Hive/Hive.md) **4.2.1**（执行引擎收敛为 Tez 唯一，CBO 由 Apache Calcite 驱动，4.0 升 1.25、4.1 升 1.33）、Spark **4.2.0**、[Flink](/docs/CS/Framework/Flink/Flink.md) **2.3.0**、Trino **483**（2026-07-17）。
 
 ## Two Execution Models
 
@@ -32,7 +32,7 @@
 - **Trino / Presto / Impala**：为交互式而生的 MPP 引擎，不存数据、只做联邦查询，见 [Presto](/docs/CS/DB/Presto.md)。Impala 是 C++ 实现、绑定 HDFS/HBase 生态的同类方案。
 - **Flink SQL**：流与批统一的 SQL，是流批一体落到业务侧的接口。
 
-自带存储的 OLAP 引擎（[ClickHouse](/docs/CS/DB/ClickHouse.md)、[Doris](/docs/CS/DB/Doris.md)、[Druid](/docs/CS/DB/Druid.md)）不在这个谱系里：它们是"存算一体的分析型数据库"，数据是自己的格式与副本管理，查询快是因为数据布局为查询服务，而不是因为它们读了湖上的 Parquet。
+自带存储的 OLAP 引擎（[ClickHouse](/docs/CS/DB/ClickHouse.md)、[Doris](/docs/CS/DB/Doris.md)、[Druid](/docs/CS/DB/Druid/Druid.md)）不在这个谱系里：它们是"存算一体的分析型数据库"，数据是自己的格式与副本管理，查询快是因为数据布局为查询服务，而不是因为它们读了湖上的 Parquet。
 
 ## Query Optimization
 
@@ -78,7 +78,7 @@
 - [Shuffle and Data Skew](/docs/CS/BigData/Shuffle.md)
 - [Lakehouse](/docs/CS/BigData/Lakehouse.md)
 - [Presto](/docs/CS/DB/Presto.md)
-- [Hive](/docs/CS/DB/Hive.md)
+- [Hive](/docs/CS/DB/Hive/Hive.md)
 - [Spark SQL](/docs/CS/Framework/Spark/SQL.md)
 
 ## References

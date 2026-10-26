@@ -38,7 +38,7 @@ delta 文件不断堆积，必须靠 compaction 收敛，否则读放大失控�
 
 ## Links
 
-- [Hive](/docs/CS/DB/Hive.md)
+- [Hive](/docs/CS/DB/Hive/Hive.md)
 - [Storage Formats](/docs/CS/DB/Hive/Storage_Formats.md)
 - [Data Model](/docs/CS/DB/Hive/Data_Model.md)
 - [Iceberg Integration](/docs/CS/DB/Hive/Iceberg_Integration.md)

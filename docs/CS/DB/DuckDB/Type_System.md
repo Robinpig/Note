@@ -60,10 +60,10 @@ DuckDB 对嵌套类型的**更新是「DELETE + INSERT」**，不是原地改值
 
 ## Links
 
-- [DuckDB](/docs/CS/DB/DuckDB.md)
+- [DuckDB](/docs/CS/DB/DuckDB/DuckDB.md)
 - [Execution Engine](/docs/CS/DB/DuckDB/Execution_Engine.md)
 - [Extensions](/docs/CS/DB/DuckDB/Extensions.md)
-- [Indexes](/docs/CS/DB/Index.md)
+- [Indexes](/docs/CS/DB/Concept/Index.md)
 - [SQLite Type System](/docs/CS/DB/SQLite/Type_System.md)
 
 ## References

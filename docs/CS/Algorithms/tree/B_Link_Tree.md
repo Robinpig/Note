@@ -26,7 +26,7 @@ PostgreSQL 的BTree 索引的实现就是采用 B-Link-Tree的 L&Y 方案，但�
 ## Links
 
 - [B Tree](/docs/CS/Algorithms/tree/B-tree.md)
-- [BLink-Tree（数据库实现视角）](/docs/CS/DB/BLink-Tree.md)
+- [BLink-Tree（数据库实现视角）](/docs/CS/DB/Concept/BLink-Tree.md)
 
 
 

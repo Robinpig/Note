@@ -49,11 +49,11 @@ TDgpt 是**可扩展**的：把自己的算法加进去后，应用照样用 SQL
 
 ## Links
 
-- [TDengine](/docs/CS/DB/TDengine.md)
+- [TDengine](/docs/CS/DB/TDengine/TDengine.md)
 - [SQL](/docs/CS/DB/TDengine/SQL.md)
 - [Stream_Compute](/docs/CS/DB/TDengine/Stream_Compute.md)
 - [Architecture](/docs/CS/DB/TDengine/Architecture.md)
-- [Timeseries](/docs/CS/DB/Timeseries.md)
+- [Timeseries](/docs/CS/DB/Concept/Timeseries.md)
 
 ## References
 

@@ -85,7 +85,7 @@ Change Streams 用 `db.collection.watch(pipeline)` 订阅变更，内部读取 o
 
 ## Links
 
-- [MongoDB](/docs/CS/DB/MongoDB.md)
+- [MongoDB](/docs/CS/DB/MongoDB/MongoDB.md)
 - [Query](/docs/CS/DB/MongoDB/Query.md)
 - [Index](/docs/CS/DB/MongoDB/Index.md)
 - [Replication](/docs/CS/DB/MongoDB/Replication.md)

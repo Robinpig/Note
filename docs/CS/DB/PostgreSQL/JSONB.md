@@ -80,7 +80,7 @@ SELECT title FROM articles WHERE tsv @@ to_tsquery('english', 'postgres & replic
 - [PostgreSQL](/docs/CS/DB/PostgreSQL/PostgreSQL.md)
 - [Index](/docs/CS/DB/PostgreSQL/Index.md)
 - [Extensions](/docs/CS/DB/PostgreSQL/Extensions.md)
-- [pgvector 与向量检索](/docs/CS/DB/vector.md)
+- [pgvector 与向量检索](/docs/CS/DB/Concept/vector.md)
 
 ## References
 

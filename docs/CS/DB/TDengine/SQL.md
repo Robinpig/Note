@@ -80,11 +80,11 @@ TSMA（物化聚合）把"固定窗口的固定聚合"在写入侧就算好、�
 
 ## Links
 
-- [TDengine](/docs/CS/DB/TDengine.md)
+- [TDengine](/docs/CS/DB/TDengine/TDengine.md)
 - [Storage_Engine](/docs/CS/DB/TDengine/Storage_Engine.md)
 - [Stream_Compute](/docs/CS/DB/TDengine/Stream_Compute.md)
 - [TDgpt](/docs/CS/DB/TDengine/TDgpt.md)
-- [Timeseries](/docs/CS/DB/Timeseries.md)
+- [Timeseries](/docs/CS/DB/Concept/Timeseries.md)
 
 ## References
 

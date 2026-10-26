@@ -96,7 +96,7 @@ MV 让 Cassandra 自动维护「以另一列作主键」的冗余表。但实现
 
 ## Links
 
-- [Cassandra](/docs/CS/DB/Cassandra.md)
+- [Cassandra](/docs/CS/DB/Cassandra/Cassandra.md)
 - [Data Model](/docs/CS/DB/Cassandra/DataModel.md)
 - [Indexing](/docs/CS/DB/Cassandra/Indexing.md)
 - [Consistency](/docs/CS/DB/Cassandra/Consistency.md)

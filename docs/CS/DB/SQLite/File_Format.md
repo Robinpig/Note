@@ -119,8 +119,8 @@ payload 超过页内容放得下的部分进溢出页链。设可用大小 `U`�
 
 - [SQLite](/docs/CS/DB/SQLite.md)
 - [DataBases](/docs/CS/DB/DB.md)
-- [WAL](/docs/CS/DB/WAL.md)
-- [Indexes](/docs/CS/DB/Index.md)
+- [WAL](/docs/CS/DB/Concept/WAL.md)
+- [Indexes](/docs/CS/DB/Concept/Index.md)
 - [RocksDB Table_Format](/docs/CS/DB/RocksDB/Table_Format.md)
 
 ## References

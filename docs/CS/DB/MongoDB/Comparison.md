@@ -73,11 +73,11 @@ InfluxDB、TimescaleDB、TDengine 在压缩、降采样、保留策略上更专�
 
 ## Links
 
-- [MongoDB](/docs/CS/DB/MongoDB.md)
+- [MongoDB](/docs/CS/DB/MongoDB/MongoDB.md)
 - [Data Model](/docs/CS/DB/MongoDB/DataModel.md)
 - [Sharding](/docs/CS/DB/MongoDB/Sharding.md)
-- [Cassandra](/docs/CS/DB/Cassandra.md)
-- [HBase](/docs/CS/DB/HBase.md)
+- [Cassandra](/docs/CS/DB/Cassandra/Cassandra.md)
+- [HBase](/docs/CS/DB/HBase/HBase.md)
 - [PostgreSQL](/docs/CS/DB/PostgreSQL/PostgreSQL.md)
 
 ## References

@@ -22,14 +22,14 @@ CockroachDB 是一个**云原生分布式 SQL 数据库**，对外兼容 **Postg
 
 ## Relation to Other Topics
 
-- 与 [TiDB / TiKV](/docs/CS/DB/TiDB.md)：两者都是"分布式 SQL + 存储计算分离 + Raft + 兼容 MySQL / PG"，但 TiDB 用 Percolator 式 MVCC 与 PD 调度、TiKV 基于 Raft；CockroachDB 自包含、用 HLC 而非 PD。
+- 与 [TiDB / TiKV](/docs/CS/DB/TiDB/TiDB.md)：两者都是"分布式 SQL + 存储计算分离 + Raft + 兼容 MySQL / PG"，但 TiDB 用 Percolator 式 MVCC 与 PD 调度、TiKV 基于 Raft；CockroachDB 自包含、用 HLC 而非 PD。
 - 与 [F1](/docs/CS/Distributed/F1.md)：F1 把 SQL 架在 Spanner 之上（解耦），CockroachDB 自包含存储 + SQL；路线相反。
 - 与 Distributed Storage：是"强一致在线业务"的代表方案之一（与 TiKV 并列）。
 
 ## Links
 
 - [Distributed Storage](/docs/CS/Distributed/Distributed_Storage.md)
-- [TiDB / TiKV](/docs/CS/DB/TiDB.md)
+- [TiDB / TiKV](/docs/CS/DB/TiDB/TiDB.md)
 - [Time（时钟与同步）](/docs/CS/Distributed/Time.md)
 - [F1](/docs/CS/Distributed/F1.md)
 - [Replica](/docs/CS/Distributed/Replica.md)

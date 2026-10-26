@@ -194,7 +194,7 @@ Milvus 的段模型是「不可变文件 + 删除日志 + 后台合并」，与 
 | 写停摆反压 | `Write Stall` 按 L0 文件数与待压实字节数限速 | 没有停写；反压表现为**提前 seal 最早的 growing 段**（blockingL0 策略），把压力转给 compaction 而不是转给客户端 |
 | 空间回收 | compaction 内联删旧 SST + `DeleteFile` | compaction 只让元数据失效；对象存储由独立慢循环 GC，默认小时/天级滞后 |
 
-HBase 的 compaction 对照见 [HBase](/docs/CS/DB/HBase.md)：它同样把「合并」和「回收」分开，但没有 Milvus 这层「段即索引、加载后不可变」的约束，也就不需要压实与建索引互相排队。
+HBase 的 compaction 对照见 [HBase](/docs/CS/DB/HBase/HBase.md)：它同样把「合并」和「回收」分开，但没有 Milvus 这层「段即索引、加载后不可变」的约束，也就不需要压实与建索引互相排队。
 
 ## Operational Diagnosis
 

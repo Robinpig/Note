@@ -72,12 +72,12 @@ TDengine 把实时链路里原本属于 Kafka + Flink 的两块能力收进了�
 
 ## Links
 
-- [TDengine](/docs/CS/DB/TDengine.md)
+- [TDengine](/docs/CS/DB/TDengine/TDengine.md)
 - [SQL](/docs/CS/DB/TDengine/SQL.md)
 - [TDgpt](/docs/CS/DB/TDengine/TDgpt.md)
 - [Architecture](/docs/CS/DB/TDengine/Architecture.md)
 - [Storage_Engine](/docs/CS/DB/TDengine/Storage_Engine.md)
-- [WAL](/docs/CS/DB/WAL.md)
+- [WAL](/docs/CS/DB/Concept/WAL.md)
 
 ## References
 

@@ -81,7 +81,7 @@ datasource（逻辑表，如 "wikipedia"）
 
 ## Links
 
-- [Druid](/docs/CS/DB/Druid.md)
+- [Druid](/docs/CS/DB/Druid/Druid.md)
 - [Architecture](/docs/CS/DB/Druid/Architecture.md)
 - [Data Management](/docs/CS/DB/Druid/Data_Management.md)
 - [Query Engine](/docs/CS/DB/Druid/Query_Engine.md)

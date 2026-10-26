@@ -59,7 +59,7 @@ MyCAT2 的仓库里有一个 `seata` 模块——外部事务协调者的集成�
 - [MyCat](/docs/CS/DB/MyCat/MyCat.md)
 - [Read_Write_Split](/docs/CS/DB/MyCat/Read_Write_Split.md)
 - [SQL_Routing](/docs/CS/DB/MyCat/SQL_Routing.md)
-- [Shard](/docs/CS/DB/Shard.md)
+- [Shard](/docs/CS/DB/Concept/Shard.md)
 
 ## References
 

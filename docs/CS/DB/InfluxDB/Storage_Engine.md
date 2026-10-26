@@ -83,10 +83,10 @@ Enterprise 新引擎多两层：
 
 ## Links
 
-- [InfluxDB 枢纽](/docs/CS/DB/InfluxDB.md)
+- [InfluxDB 枢纽](/docs/CS/DB/InfluxDB/InfluxDB.md)
 - [Architecture](/docs/CS/DB/InfluxDB/Architecture.md)
 - [Data_Model](/docs/CS/DB/InfluxDB/Data_Model.md)
-- [WAL](/docs/CS/DB/WAL.md)
+- [WAL](/docs/CS/DB/Concept/WAL.md)
 - [LSM Tree](/docs/CS/Algorithms/tree/LSM.md)
 
 ## References

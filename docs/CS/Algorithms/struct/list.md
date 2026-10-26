@@ -20,7 +20,7 @@
 顺序表把元素按次序存进一整块连续内存，第 $i$ 个元素的地址为 `base + (i-1) × sizeof(element)`，一次乘法一次加法即可定位，因此随机访问是 $O(1)$。
 
 - **静态顺序表**：编译期定长，容量不可变，适合规模已知的场景。
-- **动态顺序表**（dynamic array / vector / ArrayList）：满时翻倍扩容、拷贝旧元素，插入摊还 $O(1)$，见 [array](/docs/CS/Algorithms/struct/array.md) 与 [Amortized](/docs/CS/Algorithms/Amortized.md)。
+- **动态顺序表**（dynamic array / vector / ArrayList）：满时翻倍扩容、拷贝旧元素，插入摊还 $O(1)$，见 [array](/docs/CS/Algorithms/struct/array.md) 与 [Amortized](/docs/CS/Algorithms/paradigm/Amortized.md)。
 - 主要代价是**插入/删除要搬移元素**：在头部插入需要移动全部 $n$ 个元素，这也是「数组不适合频繁头插」的原因。
 
 ## Linked List
@@ -34,7 +34,7 @@
 - **循环链表**：尾节点指回头节点，适合需要环形遍历的场景（如时间片轮转的进程队列）。
 - **静态链表**：用数组下标代替指针，为不提供指针的语言设计。
 
-工程上普遍加一个**头结点（哨兵）**：它的数据域无意义，但让「空表」「在头部插入」「删除第一个节点」不再需要特殊分支，显著减少边界 bug。快慢指针判环（Floyd）等技巧见 [linked-list](/docs/CS/Algorithms/struct/linked-list.md) 与 [Two-Pointers](/docs/CS/Algorithms/Two-Pointers.md)。
+工程上普遍加一个**头结点（哨兵）**：它的数据域无意义，但让「空表」「在头部插入」「删除第一个节点」不再需要特殊分支，显著减少边界 bug。快慢指针判环（Floyd）等技巧见 [linked-list](/docs/CS/Algorithms/struct/linked-list.md) 与 [Two-Pointers](/docs/CS/Algorithms/paradigm/Two-Pointers.md)。
 
 ## Operation Complexity
 

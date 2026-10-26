@@ -262,7 +262,7 @@ Home Snapshots 通过 `POST /v1/snapshot/save`（tar + zstd 流）和 `POST /v1/
 - [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md)
 - [PostgreSQL](/docs/CS/DB/PostgreSQL/PostgreSQL.md)
 - [Redis](/docs/CS/DB/Redis/Redis.md)
-- [向量数据库](/docs/CS/DB/vector.md)
+- [向量数据库](/docs/CS/DB/Concept/vector.md)
 
 ## References
 

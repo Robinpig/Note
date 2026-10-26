@@ -64,7 +64,7 @@ HS2 启动后自动在 ZK 注册，客户端（Beeline / JDBC）通过 ZK 拿到
 
 ## Links
 
-- [Hive](/docs/CS/DB/Hive.md)
+- [Hive](/docs/CS/DB/Hive/Hive.md)
 - [Architecture](/docs/CS/DB/Hive/Architecture.md)
 - [Security and Governance](/docs/CS/DB/Hive/Security_and_Governance.md)
 - [Execution Engines](/docs/CS/DB/Hive/Execution_Engines.md)

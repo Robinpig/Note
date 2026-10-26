@@ -96,7 +96,7 @@ Dijkstra、A*、Johnson 与负环判定的完整推导见 [Shortest-Path](/docs/
 它的价值在于**两侧可二分**这个性质把匹配问题变成结构化的可解问题，也天然对应现实中的「资源-需求」「账户-交易」双边市场。核心问题是**二分图匹配**（最大匹配、增广路、匈牙利算法、Hopcroft-Karp），详见 [Matching](/docs/CS/Algorithms/graph/Matching.md)；由 König 定理，最大匹配数等于最小点覆盖数，由此衍生出「用最少点覆盖所有边」的一类应用。
 
 ## Network Flow
-把「容量」引入边、把「守恒」引入顶点，就得到网络流模型。它把许多看起来无关的问题——「最小割」「最大匹配」「最小费用调度」——统一成一个「求最大流」的子问题，而最大流又有高效的组合算法（Dinic 等）。这是图论中抽象能力最强的一支，详见 [Network Flow](/docs/CS/Algorithms/Network_Flow.md)。
+把「容量」引入边、把「守恒」引入顶点，就得到网络流模型。它把许多看起来无关的问题——「最小割」「最大匹配」「最小费用调度」——统一成一个「求最大流」的子问题，而最大流又有高效的组合算法（Dinic 等）。这是图论中抽象能力最强的一支，详见 [Network Flow](/docs/CS/Algorithms/graph/Network_Flow.md)。
 
 ## Centrality Algorithms
 用于衡量图中顶点重要程度和影响力的算法：
@@ -114,7 +114,7 @@ Dijkstra、A*、Johnson 与负环判定的完整推导见 [Shortest-Path](/docs/
 - [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
 - [Tarjan](/docs/CS/Algorithms/graph/Tarjan.md)
 - [Matching](/docs/CS/Algorithms/graph/Matching.md)
-- [Network Flow](/docs/CS/Algorithms/Network_Flow.md)
+- [Network Flow](/docs/CS/Algorithms/graph/Network_Flow.md)
 - [Eulerian Graph](/docs/CS/Algorithms/graph/Eulerian_Graph.md)
 - [Shortest Path](/docs/CS/Algorithms/question/Shortest-Path.md)
 

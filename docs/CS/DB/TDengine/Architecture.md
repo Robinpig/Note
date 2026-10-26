@@ -103,10 +103,10 @@ taosc 以 C/C++ 原生接口提供，被 JDBC、Go、Python、Node.js、C#、Rus
 
 ## Links
 
-- [TDengine](/docs/CS/DB/TDengine.md)
+- [TDengine](/docs/CS/DB/TDengine/TDengine.md)
 - [Storage_Engine](/docs/CS/DB/TDengine/Storage_Engine.md)
 - [SQL](/docs/CS/DB/TDengine/SQL.md)
-- [WAL](/docs/CS/DB/WAL.md)
+- [WAL](/docs/CS/DB/Concept/WAL.md)
 
 ## References
 

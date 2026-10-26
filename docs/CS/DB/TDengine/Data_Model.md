@@ -28,7 +28,7 @@ CREATE TABLE meters_001 USING meters TAGS (groupid=1, location='北京');
 CREATE TABLE meters_002 USING meters TAGS (groupid=1, location='上海');
 ```
 
-对比其它时序库的模型分野（详见 [Timeseries](/docs/CS/DB/Timeseries.md)）：InfluxDB 用一个 measurement 存全部设备、靠 tag 组合区分序列；TDengine 是**真的多张物理表**，标签不同就是不同子表；GreptimeDB 则反过来把标签做成关系表的 PRIMARY KEY。
+对比其它时序库的模型分野（详见 [Timeseries](/docs/CS/DB/Concept/Timeseries.md)）：InfluxDB 用一个 measurement 存全部设备、靠 tag 组合区分序列；TDengine 是**真的多张物理表**，标签不同就是不同子表；GreptimeDB 则反过来把标签做成关系表的 PRIMARY KEY。
 
 ## Why One Table per Device
 
@@ -74,12 +74,12 @@ TDengine 的 schema 演进能力比关系库弱、比 InfluxDB 强：
 
 ## Links
 
-- [TDengine](/docs/CS/DB/TDengine.md)
+- [TDengine](/docs/CS/DB/TDengine/TDengine.md)
 - [Storage_Engine](/docs/CS/DB/TDengine/Storage_Engine.md)
 - [SQL](/docs/CS/DB/TDengine/SQL.md)
-- [Timeseries](/docs/CS/DB/Timeseries.md)
-- [InfluxDB](/docs/CS/DB/InfluxDB.md)
-- [GreptimeDB](/docs/CS/DB/GreptimeDB.md)
+- [Timeseries](/docs/CS/DB/Concept/Timeseries.md)
+- [InfluxDB](/docs/CS/DB/InfluxDB/InfluxDB.md)
+- [GreptimeDB](/docs/CS/DB/Timeseries/GreptimeDB.md)
 
 ## References
 

@@ -60,7 +60,7 @@ N3 仍是贪心，星型 schema（大事实表 + 多个小维度表）会在搜�
 
 - [SQLite](/docs/CS/DB/SQLite.md)
 - [DataBases](/docs/CS/DB/DB.md)
-- [Indexes](/docs/CS/DB/Index.md)
+- [Indexes](/docs/CS/DB/Concept/Index.md)
 - [MySQL Optimizer](/docs/CS/DB/MySQL/Optimizer.md)
 - [RocksDB Read_Path](/docs/CS/DB/RocksDB/Read_Path.md)
 

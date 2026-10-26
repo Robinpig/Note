@@ -31,7 +31,7 @@ metadata.json            ← 表当前指针，指向当前 snapshot 与 schema
 
 行级删除有两种承载方式：**position delete**（按"文件 + 行号"定位，写时不需要知道完整行）与 **equality delete**（按列值相等匹配，适合流式场景没有稳定行号时）。读时合并的方式又分 **copy-on-write**（直接重写文件，读快写放大）与 **merge-on-read**（写 delete 文件，读时合并，写轻读重）；1.12 还引入了把 equality delete 转换成 deletion vector 的维护任务。
 
-生态上 Iceberg 是**中立性最强的**：Spark、Flink、Trino、[Hive](/docs/CS/DB/Hive.md) 4.x、Impala 都原生支持，REST Catalog 规范让 catalog 本身也能独立成服务（Unity Catalog、Polaris 等）。
+生态上 Iceberg 是**中立性最强的**：Spark、Flink、Trino、[Hive](/docs/CS/DB/Hive/Hive.md) 4.x、Impala 都原生支持，REST Catalog 规范让 catalog 本身也能独立成服务（Unity Catalog、Polaris 等）。
 
 ## Delta Lake: Transaction Log
 
@@ -90,7 +90,7 @@ Hudi 的两张表类型：
 - **要多个引擎读同一张表**（Spark 写、Trino 查、Flink 流读）——选 Iceberg。它的 REST Catalog 与中立治理是三家里最成熟的。
 - **技术栈以 Spark / Databricks 为主**，且希望最少的运维心智——选 Delta Lake。UniForm 保留了将来转 Iceberg 的退路。
 - **主链路是 CDC 入湖、高频 upsert**，或希望引擎自己把 compaction / clustering 管起来——选 Hudi。RLI 在大规模点更新场景是决定性的。
-- **已有 Hive 数仓要演进**——Iceberg 是 [Hive](/docs/CS/DB/Hive.md) 4.x 的一等公民表格式，见 [Iceberg Integration](/docs/CS/DB/Hive/Iceberg_Integration.md)；Hive 原生的 ACID ORC 方案见 [ACID and Transactions](/docs/CS/DB/Hive/ACID_and_Transactions.md)。
+- **已有 Hive 数仓要演进**——Iceberg 是 [Hive](/docs/CS/DB/Hive/Hive.md) 4.x 的一等公民表格式，见 [Iceberg Integration](/docs/CS/DB/Hive/Iceberg_Integration.md)；Hive 原生的 ACID ORC 方案见 [ACID and Transactions](/docs/CS/DB/Hive/ACID_and_Transactions.md)。
 
 三强的边界正在模糊：Delta 用 UniForm 生成 Iceberg 元数据，Iceberg 引入 deletion vector 与聚簇，Hudi 也在靠 metadata table 收敛规划代价。**真正该锁定的不是格式，而是"数据文件是不是开放的 Parquet / ORC"**——只要底座开放，格式迁移的成本就可控。
 

@@ -264,7 +264,7 @@
 - [Index](/docs/CS/DB/MySQL/Index.md)
 - [Experiences](/docs/CS/DB/MySQL/Experiences.md)
 - [SQL](/docs/CS/DB/MySQL/SQL.md)
-- [ShardingSphere](/docs/CS/DB/ShardingSphere.md)
+- [ShardingSphere](/docs/CS/DB/Middleware/ShardingSphere.md)
 
 ## References
 

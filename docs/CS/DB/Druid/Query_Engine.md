@@ -68,11 +68,11 @@ Druid 的 join 分两个时代：
 
 ## Links
 
-- [Druid](/docs/CS/DB/Druid.md)
+- [Druid](/docs/CS/DB/Druid/Druid.md)
 - [Storage Format](/docs/CS/DB/Druid/Storage_Format.md)
 - [Ingestion](/docs/CS/DB/Druid/Ingestion.md)
 - [Extensions](/docs/CS/DB/Druid/Extensions.md)
-- [Index](/docs/CS/DB/Index.md)
+- [Index](/docs/CS/DB/Concept/Index.md)
 
 ## References
 

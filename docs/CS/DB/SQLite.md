@@ -77,10 +77,10 @@ B-tree + Pager ── 页缓存（默认约 2 MB）→ 文件锁管理 → OS �
 ## Links
 
 - [DataBases](/docs/CS/DB/DB.md)
-- [WAL](/docs/CS/DB/WAL.md)
+- [WAL](/docs/CS/DB/Concept/WAL.md)
 - [H2](/docs/CS/DB/h2/H2.md)
 - [RocksDB](/docs/CS/DB/RocksDB/RocksDB.md)
-- [Indexes](/docs/CS/DB/Index.md)
+- [Indexes](/docs/CS/DB/Concept/Index.md)
 
 ## References
 

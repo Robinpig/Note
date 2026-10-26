@@ -5,7 +5,7 @@
 
 
 ## Backtracking Solution
-[回溯算法（Backtracking）](/docs/CS/Algorithms/Backtracking.md) 是解决 N 皇后问题的标准方法
+[回溯算法（Backtracking）](/docs/CS/Algorithms/paradigm/Backtracking.md) 是解决 N 皇后问题的标准方法
 该算法通过尝试在棋盘上放置皇后，当发现当前放置方案无法继续时，就撤销最近的选择，回溯到上一步并尝试其他可能性，直到找到完整解或尝试所有可能后确认无解
 
 使用一个数组记录每行放置的皇后的列下标，依次在每一行放置一个皇后。
@@ -72,13 +72,13 @@ public class Solution {
 - 时间复杂度：$O(n!)$，其中 $n$ 是皇后数量。
 - 空间复杂度：$O(n)$，递归调用层数不会超过 $n$，每层保存一个长度为 $n$ 的列下标数组。
 
-一个常用的位运算优化：用三个整数分别记录已被占用的列、左对角线、右对角线（通过移位判断），把合法性检查从 $O(n)$ 降到 $O(1)$，见 [Bits](/docs/CS/Algorithms/Bits.md)。
+一个常用的位运算优化：用三个整数分别记录已被占用的列、左对角线、右对角线（通过移位判断），把合法性检查从 $O(n)$ 降到 $O(1)$，见 [Bits](/docs/CS/Algorithms/paradigm/Bits.md)。
 
 ## Links
 
-- [Backtracking](/docs/CS/Algorithms/Backtracking.md)
-- [Recursion](/docs/CS/Algorithms/Recursion.md)
-- [Bits](/docs/CS/Algorithms/Bits.md)
+- [Backtracking](/docs/CS/Algorithms/paradigm/Backtracking.md)
+- [Recursion](/docs/CS/Algorithms/paradigm/Recursion.md)
+- [Bits](/docs/CS/Algorithms/paradigm/Bits.md)
 
 ## References
 

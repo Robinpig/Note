@@ -57,7 +57,7 @@ CREATE SCHEDULED QUERY refresh_daily
 
 ## Links
 
-- [Hive](/docs/CS/DB/Hive.md)
+- [Hive](/docs/CS/DB/Hive/Hive.md)
 - [Data Model](/docs/CS/DB/Hive/Data_Model.md)
 - [Architecture](/docs/CS/DB/Hive/Architecture.md)
 - [ACID and Transactions](/docs/CS/DB/Hive/ACID_and_Transactions.md)

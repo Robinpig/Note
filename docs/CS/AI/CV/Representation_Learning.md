@@ -73,7 +73,7 @@ SAM 3（2025-11）代表了另一条路：不把视觉压成一个向量，而�
 
 ## Links
 
-- [CV](/docs/CS/AI/CV.md)
+- [CV](/docs/CS/AI/CV/CV.md)
 - [Classification](/docs/CS/AI/CV/Classification.md)
 - [Traditional CV](/docs/CS/AI/CV/Traditional_CV.md)
 - [Detection](/docs/CS/AI/CV/Detection.md)

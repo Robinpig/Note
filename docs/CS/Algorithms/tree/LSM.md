@@ -1,7 +1,7 @@
 ## Introduction
 
 The Log-Structured Merge-tree (LSM-tree) has been widely adopted in the storage layers of modern NoSQL systems,
-including [BigTable](/docs/CS/Distributed/Bigtable.md), [Dynamo](/docs/CS/Distributed/Dynamo.md), [HBase](/docs/CS/DB/HBase.md), [Cassandra](/docs/CS/DB/Cassandra.md), [LevelDB](/docs/CS/DB/LevelDB/LevelDB.md), [RocksDB](/docs/CS/DB/RocksDB/RocksDB.md), and AsterixDB.
+including [BigTable](/docs/CS/Distributed/Bigtable.md), [Dynamo](/docs/CS/Distributed/Dynamo.md), [HBase](/docs/CS/DB/HBase/HBase.md), [Cassandra](/docs/CS/DB/Cassandra/Cassandra.md), [LevelDB](/docs/CS/DB/LevelDB/LevelDB.md), [RocksDB](/docs/CS/DB/RocksDB/RocksDB.md), and AsterixDB.
 
 The Log-Structured Merge-tree (LSM-tree) is a disk-based data structure designed to provide low-cost indexing for a file experiencing a high rate of record inserts (and deletes) over an extended period.
 The LSM-tree uses an algorithm that defers and batches index changes, cascading the changes from a memory-based component through one or more disk components in an efficient manner reminiscent of merge sort.

@@ -116,7 +116,7 @@ FT_DROP_ALL()
 
 索引的实时性靠**自动创建的触发器**维持（内部触发器名统一以 `FT_` 前缀命名），所以它是「用触发器把写入同步进倒排表」的经典做法，而不是引擎内特性。Java 侧 API 与之一一对应：`init` / `createIndex` / `dropIndex` / `reindex` / `dropAll` / `search` / `searchData`，`FullText` 另提供 `setIgnoreList`、`setWhitespaceChars`、`closeAll`。
 
-三点判断：**能力可用但朴素**（没有短语检索、字段权重、高亮、增量分词控制这些现代搜索特性）；**索引写放大明显**（每次 DML 多一次触发器 + 倒排表更新），高吞吐写入路径上要谨慎；**需要真正的搜索语义时该走外部引擎**——把非主键维度倒排到 Elasticsearch 再回表，是同一问题的常规解法，见 [HBase 的二级索引三类补偿](/docs/CS/DB/HBase.md)。
+三点判断：**能力可用但朴素**（没有短语检索、字段权重、高亮、增量分词控制这些现代搜索特性）；**索引写放大明显**（每次 DML 多一次触发器 + 倒排表更新），高吞吐写入路径上要谨慎；**需要真正的搜索语义时该走外部引擎**——把非主键维度倒排到 Elasticsearch 再回表，是同一问题的常规解法，见 [HBase 的二级索引三类补偿](/docs/CS/DB/HBase/HBase.md)。
 
 ## Not Available in H2
 
@@ -136,7 +136,7 @@ FT_DROP_ALL()
 - [Compatibility Modes](/docs/CS/DB/h2/Compatibility_Modes.md)
 - [Transactions and Locks](/docs/CS/DB/h2/Transactions_and_Locks.md)
 - [MVStore](/docs/CS/DB/h2/MVStore.md)
-- [Index](/docs/CS/DB/Index.md)
+- [Index](/docs/CS/DB/Concept/Index.md)
 - [Tools and Operations](/docs/CS/DB/h2/Tools_and_Operations.md)
 
 ## References

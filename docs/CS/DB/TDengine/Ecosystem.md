@@ -59,7 +59,7 @@ TDengine 的接入面分三层：**原生驱动**（taosc + 各语言连接器�
 
 ## Links
 
-- [TDengine](/docs/CS/DB/TDengine.md)
+- [TDengine](/docs/CS/DB/TDengine/TDengine.md)
 - [Architecture](/docs/CS/DB/TDengine/Architecture.md)
 - [Compression](/docs/CS/DB/TDengine/Compression.md)
 - [Operations](/docs/CS/DB/TDengine/Operations.md)

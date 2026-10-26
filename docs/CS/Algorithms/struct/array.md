@@ -19,7 +19,7 @@ address(a[i]) = base + i × sizeof(element)
 ## Static and Dynamic Arrays
 
 - **静态数组**：编译期定长，`int a[100]` 或 Go 的定长数组，长度不可变。
-- **动态数组**（dynamic array / vector / ArrayList）：容量不足时开辟更大的块并把旧元素整体拷贝过去。常见策略是翻倍扩容，使 $n$ 次追加的总拷贝量构成等比级数、不到 $2n$，因此**追加摊还 $O(1)$**，见 [Amortized](/docs/CS/Algorithms/Amortized.md)。
+- **动态数组**（dynamic array / vector / ArrayList）：容量不足时开辟更大的块并把旧元素整体拷贝过去。常见策略是翻倍扩容，使 $n$ 次追加的总拷贝量构成等比级数、不到 $2n$，因此**追加摊还 $O(1)$**，见 [Amortized](/docs/CS/Algorithms/paradigm/Amortized.md)。
 - 工程细节：多数动态数组只自动扩容、**不自动缩容**（避免反复搬移的抖动），或要求缩容阈值明显低于扩容阈值；`std::vector` 的 `capacity` 与 `size` 分离正是为此暴露出来的。
 
 ## Two-Dimensional Arrays
@@ -63,7 +63,7 @@ address(a[i]) = base + i × sizeof(element)
 
 - [List](/docs/CS/Algorithms/struct/list.md)
 - [Linked List](/docs/CS/Algorithms/struct/linked-list.md)
-- [Amortized Analysis](/docs/CS/Algorithms/Amortized.md)
+- [Amortized Analysis](/docs/CS/Algorithms/paradigm/Amortized.md)
 - [Structure](/docs/CS/Algorithms/struct/Structure.md)
 
 ## References

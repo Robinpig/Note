@@ -53,7 +53,7 @@ TDengine 官方对压缩效果的表述是"压缩率通常在 10% 以内，某�
 
 ## Links
 
-- [TDengine](/docs/CS/DB/TDengine.md)
+- [TDengine](/docs/CS/DB/TDengine/TDengine.md)
 - [Storage_Engine](/docs/CS/DB/TDengine/Storage_Engine.md)
 - [Data_Model](/docs/CS/DB/TDengine/Data_Model.md)
 - [Storage Format](/docs/CS/BigData/Storage_Format.md)

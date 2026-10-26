@@ -96,7 +96,7 @@ CLUSTERED BY channel
 
 ## Links
 
-- [Druid](/docs/CS/DB/Druid.md)
+- [Druid](/docs/CS/DB/Druid/Druid.md)
 - [Storage Format](/docs/CS/DB/Druid/Storage_Format.md)
 - [Query Engine](/docs/CS/DB/Druid/Query_Engine.md)
 - [Data Management](/docs/CS/DB/Druid/Data_Management.md)

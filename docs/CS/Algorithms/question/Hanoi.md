@@ -94,9 +94,9 @@ while 未完成:
 ## Links
 
 - [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
-- [Recursion](/docs/CS/Algorithms/Recursion.md)
-- [Divide and Conquer](/docs/CS/Algorithms/Divide-and-Conquer.md)
-- [Backtracking](/docs/CS/Algorithms/Backtracking.md)
+- [Recursion](/docs/CS/Algorithms/paradigm/Recursion.md)
+- [Divide and Conquer](/docs/CS/Algorithms/paradigm/Divide-and-Conquer.md)
+- [Backtracking](/docs/CS/Algorithms/paradigm/Backtracking.md)
 
 ## References
 

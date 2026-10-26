@@ -57,14 +57,14 @@ $$
 1. **精确算法**：回溯 + 强剪枝、分支限界、整数规划求解器。现代 CDCL SAT 求解器能处理工业界百万变量级的实例——「指数最坏情况」与「实例上跑不动」是两件事。
 2. **近似算法**：牺牲最优性换多项式时间。如度量 TSP 的 Christofides 算法近似比 $3/2$；顶点覆盖的极大匹配近似比 $2$；集合覆盖的贪心近似比 $O(\ln n)$。反过来，**PCP 定理**给出不可近似性下界（例如一般 TSP 不存在任意常数的多项式近似，除非 P = NP）。
 3. **参数化算法**：复杂度写成 $f(k) \cdot n^{O(1)}$，其中 $k$ 是小参数。如顶点覆盖的 $O(2^k \cdot n)$ FPT 算法——$k$ 小时完全可用。
-4. **启发式与局部搜索**：模拟退火、遗传算法、禁忌搜索等，不保证最优与时间上界，但对大规模实例常能快速给出够用的解，见 [Randomized](/docs/CS/Algorithms/Randomized.md)。
+4. **启发式与局部搜索**：模拟退火、遗传算法、禁忌搜索等，不保证最优与时间上界，但对大规模实例常能快速给出够用的解，见 [Randomized](/docs/CS/Algorithms/paradigm/Randomized.md)。
 
 ## Links
 
 - [Algorithms](/docs/CS/Algorithms/Algorithms.md)
 - [Computability](/docs/CS/Algorithms/Computability.md)
 - [Dynamic Programming](/docs/CS/Algorithms/DP/DP.md)
-- [Backtracking](/docs/CS/Algorithms/Backtracking.md)
+- [Backtracking](/docs/CS/Algorithms/paradigm/Backtracking.md)
 
 ## References
 

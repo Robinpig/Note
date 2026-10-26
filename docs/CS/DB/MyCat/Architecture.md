@@ -92,7 +92,7 @@ Router 拿解析结果去查两样东西：schema.xml 里的逻辑表配置（da
 - [Configuration](/docs/CS/DB/MyCat/Configuration.md)
 - [SQL_Routing](/docs/CS/DB/MyCat/SQL_Routing.md)
 - [Read_Write_Split](/docs/CS/DB/MyCat/Read_Write_Split.md)
-- [Shard](/docs/CS/DB/Shard.md)
+- [Shard](/docs/CS/DB/Concept/Shard.md)
 
 ## References
 

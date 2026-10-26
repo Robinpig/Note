@@ -166,5 +166,5 @@ public int trap(int[] height) {
 ## Links
 
 - [Dynamic Programming](/docs/CS/Algorithms/DP/DP.md)
-- [Recursion](/docs/CS/Algorithms/Recursion.md)
+- [Recursion](/docs/CS/Algorithms/paradigm/Recursion.md)
 - [Monotonic Stack](/docs/CS/Algorithms/struct/MonotonicStack.md)

@@ -113,7 +113,7 @@ db.users.find({ city: "BJ", age: { $gte: 18 } }).explain("executionStats")
 
 ## Links
 
-- [MongoDB](/docs/CS/DB/MongoDB.md)
+- [MongoDB](/docs/CS/DB/MongoDB/MongoDB.md)
 - [Aggregation](/docs/CS/DB/MongoDB/Aggregation.md)
 - [Index](/docs/CS/DB/MongoDB/Index.md)
 - [Data Model](/docs/CS/DB/MongoDB/DataModel.md)

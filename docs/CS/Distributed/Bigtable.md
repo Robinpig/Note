@@ -104,7 +104,7 @@ Bloom 过滤器允许我们询问一个 SSTable 是否可能包含某个指定�
 
 - [Google](/docs/CS/Distributed/Google.md)
 - [GFS](/docs/CS/Distributed/GFS.md)
-- [HBase](/docs/CS/DB/HBase.md)
+- [HBase](/docs/CS/DB/HBase/HBase.md)
 - [HBase Architecture](/docs/CS/DB/HBase/Architecture.md)
 
 

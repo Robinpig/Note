@@ -120,7 +120,7 @@
 
 ### Vector
 
-随着数据脱离了传统数据库整齐的行和列，开始以文本、图片、音频、代码以及关系图的形式存在，一种新的数据处理方式变得必要。向量数据库应运而生来应对这一变化。它们通过将数据表示为由嵌入生成的高维向量来存储意义，而不是标签。在这个空间里，相似性变成了一个距离问题，而不是关键词匹配。这使得向量数据库在现代 AI 系统中不可或缺，比如语义搜索、推荐引擎、RAG 流水线、欺诈检测和多模态助手，因为相关性依赖于上下文和意图，而不是精确匹配。它们的兴起也反映了从基于规则的软件向基于表示的学习的转变，在这种学习中，理解来自于潜在空间中的接近性。整个门类的原理与选型坐标见 [vector](/docs/CS/DB/vector.md)。
+随着数据脱离了传统数据库整齐的行和列，开始以文本、图片、音频、代码以及关系图的形式存在，一种新的数据处理方式变得必要。向量数据库应运而生来应对这一变化。它们通过将数据表示为由嵌入生成的高维向量来存储意义，而不是标签。在这个空间里，相似性变成了一个距离问题，而不是关键词匹配。这使得向量数据库在现代 AI 系统中不可或缺，比如语义搜索、推荐引擎、RAG 流水线、欺诈检测和多模态助手，因为相关性依赖于上下文和意图，而不是精确匹配。它们的兴起也反映了从基于规则的软件向基于表示的学习的转变，在这种学习中，理解来自于潜在空间中的接近性。整个门类的原理与选型坐标见 [vector](/docs/CS/DB/Concept/vector.md)。
 
 向量数据库旨在存储和管理高维数据，而传统数据库管理系统（DBMS）难以有效处理这些数据。
 这种创新的数据库利用称为向量的数学表示，向量可包含多个维度，通常从数十到数千不等，具体取决于数据的复杂度。
@@ -135,18 +135,18 @@
 | 数据模型 | 存储与索引路线 | 本库入口 |
 | :-- | :-- | :-- |
 | 关系（行式） | B+Tree 聚簇 + WAL + MVCC | [MySQL](/docs/CS/DB/MySQL/MySQL.md)、[PostgreSQL](/docs/CS/DB/PostgreSQL/PostgreSQL.md)、[Oracle](/docs/CS/DB/Oracle/Oracle.md)、[h2](/docs/CS/DB/h2/H2.md) |
-| 关系 · 分布式 | 分片 + 共识日志，兼容 MySQL 生态 | [TiDB](/docs/CS/DB/TiDB.md)、[OceanBase](/docs/CS/DB/OceanBase.md)、[PolarDB](/docs/CS/DB/PolarDB/PolarDB.md) |
+| 关系 · 分布式 | 分片 + 共识日志，兼容 MySQL 生态 | [TiDB](/docs/CS/DB/TiDB/TiDB.md)、[OceanBase](/docs/CS/DB/OceanBase.md)、[PolarDB](/docs/CS/DB/PolarDB/PolarDB.md) |
 | 键值 / 缓存 | 内存 hashtable + skiplist | [Redis](/docs/CS/DB/Redis/Redis.md)、[Memcached](/docs/CS/DB/Memcached.md)、[Valkey](/docs/CS/DB/Valkey.md)、[Dragonfly](/docs/CS/DB/Dragonfly.md) |
 | 键值 · 磁盘引擎 | LSM Tree，可嵌入进程 | [LevelDB](/docs/CS/DB/LevelDB/LevelDB.md)、[RocksDB](/docs/CS/DB/RocksDB/RocksDB.md)、[SSDB](/docs/CS/DB/SSDB.md)、[Pika](/docs/CS/DB/Pika.md) |
-| 文档 | BSON 嵌套树 + 二级索引 | [MongoDB](/docs/CS/DB/MongoDB.md) |
-| 宽列 | 多维 map、列族内行存、LSM 后端 | [HBase](/docs/CS/DB/HBase.md)、[Cassandra](/docs/CS/DB/Cassandra.md) |
-| 列式 / 时序 | 按列连续存 + 压缩 + 向量化执行 | [Timeseries](/docs/CS/DB/Timeseries.md)、[ClickHouse](/docs/CS/DB/ClickHouse.md)、[Doris](/docs/CS/DB/Doris.md)、[Druid](/docs/CS/DB/Druid.md)、[Presto](/docs/CS/DB/Presto.md)、[DolphinDB](/docs/CS/DB/DolphinDB.md)、[DuckDB](/docs/CS/DB/DuckDB.md) |
-| 数据仓库 / SQL-on-Hadoop | SQL 编译为 Tez DAG，HMS 为共享元数据 | [Hive](/docs/CS/DB/Hive.md) |
+| 文档 | BSON 嵌套树 + 二级索引 | [MongoDB](/docs/CS/DB/MongoDB/MongoDB.md) |
+| 宽列 | 多维 map、列族内行存、LSM 后端 | [HBase](/docs/CS/DB/HBase/HBase.md)、[Cassandra](/docs/CS/DB/Cassandra/Cassandra.md) |
+| 列式 / 时序 | 按列连续存 + 压缩 + 向量化执行 | [Timeseries](/docs/CS/DB/Concept/Timeseries.md)、[ClickHouse](/docs/CS/DB/ClickHouse.md)、[Doris](/docs/CS/DB/Doris.md)、[Druid](/docs/CS/DB/Druid/Druid.md)、[Presto](/docs/CS/DB/Presto.md)、[DolphinDB](/docs/CS/DB/DolphinDB.md)、[DuckDB](/docs/CS/DB/DuckDB/DuckDB.md) |
+| 数据仓库 / SQL-on-Hadoop | SQL 编译为 Tez DAG，HMS 为共享元数据 | [Hive](/docs/CS/DB/Hive/Hive.md) |
 | 图 | 免索引邻接 / 外部 KV 上的邻接表 | [graph](/docs/CS/DB/graph/graph.md)、[Neo4j](/docs/CS/DB/graph/Neo4j.md)、[JanusGraph](/docs/CS/DB/graph/JanusGraph.md)、[NebulaGraph](/docs/CS/DB/graph/NebulaGraph.md) |
-| 向量 | ANN 图索引与聚类索引 | [vector](/docs/CS/DB/vector.md)、[Milvus](/docs/CS/DB/Milvus/Milvus.md) |
-| 中间件（不改存储） | 分库分表、binlog 增量订阅 | [ShardingSphere](/docs/CS/DB/ShardingSphere.md)、[MyCat](/docs/CS/DB/MyCat/MyCat.md)、[TDDL](/docs/CS/DB/TDDL.md)、[canal](/docs/CS/DB/canal.md) |
+| 向量 | ANN 图索引与聚类索引 | [vector](/docs/CS/DB/Concept/vector.md)、[Milvus](/docs/CS/DB/Milvus/Milvus.md) |
+| 中间件（不改存储） | 分库分表、binlog 增量订阅 | [ShardingSphere](/docs/CS/DB/Middleware/ShardingSphere.md)、[MyCat](/docs/CS/DB/MyCat/MyCat.md)、[TDDL](/docs/CS/DB/Middleware/TDDL.md)、[canal](/docs/CS/DB/Middleware/canal.md) |
 
-跨模型复用的机制页单列一份：[Index](/docs/CS/DB/Index.md)（索引结构）、[WAL](/docs/CS/DB/WAL.md)（预写日志）、[BLink-Tree](/docs/CS/DB/BLink-Tree.md)（并发下的 B+Tree）、[Shard](/docs/CS/DB/Shard.md)（分片与再均衡）；算法与分布式侧的 [LSM Tree](/docs/CS/Algorithms/tree/LSM.md)、[Bigtable](/docs/CS/Distributed/Bigtable.md) 也已在本库。
+跨模型复用的机制页单列一份：[Index](/docs/CS/DB/Concept/Index.md)（索引结构）、[WAL](/docs/CS/DB/Concept/WAL.md)（预写日志）、[BLink-Tree](/docs/CS/DB/Concept/BLink-Tree.md)（并发下的 B+Tree）、[Shard](/docs/CS/DB/Concept/Shard.md)（分片与再均衡）；算法与分布式侧的 [LSM Tree](/docs/CS/Algorithms/tree/LSM.md)、[Bigtable](/docs/CS/Distributed/Bigtable.md) 也已在本库。
 
 ## Storing Data
 
@@ -223,7 +223,7 @@ B-Tree 是最流行的存储结构之一。许多开源数据库都基于 B-Tree
 > 扇出与高度互为倒数关系：扇出越高，高度越低。
 > 扇出高意味着每个节点能挂更多子节点，节点总数随之减少，高度也就降了下来。
 
-落地成对：InnoDB 的 [B-Tree](/docs/CS/DB/MySQL/B-Tree.md) 与 [BLink-Tree](/docs/CS/DB/BLink-Tree.md)（并发下的 B+Tree）、LevelDB/RocksDB 的 [LSM Tree](/docs/CS/Algorithms/tree/LSM.md)。
+落地成对：InnoDB 的 [B-Tree](/docs/CS/DB/MySQL/B-Tree.md) 与 [BLink-Tree](/docs/CS/DB/Concept/BLink-Tree.md)（并发下的 B+Tree）、LevelDB/RocksDB 的 [LSM Tree](/docs/CS/Algorithms/tree/LSM.md)。
 
 
 不可变数据结构常用于函数式编程语言，并因其安全特性越来越受欢迎：一旦创建就不会改变，所有引用都可并发访问，其完整性由「不可被修改」这一事实保证。
@@ -285,7 +285,7 @@ B-Tree 是最流行的存储结构之一。许多开源数据库都基于 B-Tree
 
 ### Index Files
 
-索引是一种在磁盘上组织数据记录、以便高效检索的数据结构。索引文件被组织成专门的结构，把 key 映射到数据文件中的位置——这些位置存放着 key 对应的记录（heap file 情形）或主键（IOT 情形）。本库关于索引结构与类型的完整笔记见 [Indexes](/docs/CS/DB/Index.md)。
+索引是一种在磁盘上组织数据记录、以便高效检索的数据结构。索引文件被组织成专门的结构，把 key 映射到数据文件中的位置——这些位置存放着 key 对应的记录（heap file 情形）或主键（IOT 情形）。本库关于索引结构与类型的完整笔记见 [Indexes](/docs/CS/DB/Concept/Index.md)。
 
 构建在数据（主）文件上的索引称为主索引（primary index）；多数情况下还可以进一步认为，主索引建立在主键或被认定为主键的一组 key 之上。其余索引都称为二级索引（secondary index）。
 
@@ -573,7 +573,7 @@ SQL Server 用 table lookup 指代一种「既用索引、又读表行」的访�
 
 
 
-往下读：MySQL 的索引与执行计划见 [Index](/docs/CS/DB/MySQL/Index.md) 与 [Optimizer](/docs/CS/DB/MySQL/Optimizer.md)；Redis 的有序集合靠跳表，见 [zset](/docs/CS/DB/Redis/struct/zset.md) 与 [skiplist](/docs/CS/DB/Redis/struct/skiplist.MD)；索引的通用结构（B-Tree 与 LSM 的取舍）在 [Index](/docs/CS/DB/Index.md)。
+往下读：MySQL 的索引与执行计划见 [Index](/docs/CS/DB/MySQL/Index.md) 与 [Optimizer](/docs/CS/DB/MySQL/Optimizer.md)；Redis 的有序集合靠跳表，见 [zset](/docs/CS/DB/Redis/struct/zset.md) 与 [skiplist](/docs/CS/DB/Redis/struct/skiplist.MD)；索引的通用结构（B-Tree 与 LSM 的取舍）在 [Index](/docs/CS/DB/Concept/Index.md)。
 
 ## Changing Safely
 
@@ -587,7 +587,7 @@ SQL Server 用 table lookup 指代一种「既用索引、又读表行」的访�
 
 ### Recovery
 
-*write-ahead log*（简称 WAL，也叫 commit log）是一种 append-only 的辅助磁盘驻留结构，用于崩溃恢复与事务恢复。page cache 允许把对页内容的修改缓冲在内存里；在缓存内容刷回磁盘之前，唯一能保留操作历史的磁盘副本就存在 WAL 中。许多数据库系统都使用 append-only 的预写日志，例如 PostgreSQL 与 MySQL（MySQL 侧的落地见 [redolog](/docs/CS/DB/MySQL/redolog.md) 与 [undolog](/docs/CS/DB/MySQL/undolog.md)，通用机制见 [WAL](/docs/CS/DB/WAL.md)）。
+*write-ahead log*（简称 WAL，也叫 commit log）是一种 append-only 的辅助磁盘驻留结构，用于崩溃恢复与事务恢复。page cache 允许把对页内容的修改缓冲在内存里；在缓存内容刷回磁盘之前，唯一能保留操作历史的磁盘副本就存在 WAL 中。许多数据库系统都使用 append-only 的预写日志，例如 PostgreSQL 与 MySQL（MySQL 侧的落地见 [redolog](/docs/CS/DB/MySQL/redolog.md) 与 [undolog](/docs/CS/DB/MySQL/undolog.md)，通用机制见 [WAL](/docs/CS/DB/Concept/WAL.md)）。
 
 WAL 的主要作用可以总结为：
 
@@ -734,7 +734,7 @@ OCC 通常用在 [数据争用](https://en.wikipedia.org/wiki/Block_contention) 
 
 基本协议使用两种锁：*Shared*（共享锁）与 *Exclusive*（排他锁）。基本协议的改进版可能引入更多锁类型。由于使用会阻塞进程的锁，2PL 可能遭遇 [deadlock](https://en.wikipedia.org/wiki/Deadlock)（两个及以上事务互相阻塞）。
 
-往下读：MySQL 侧的完整链路是 [Transaction](/docs/CS/DB/MySQL/Transaction.md) → [Mvcc](/docs/CS/DB/MySQL/Mvcc.md) → [lock](/docs/CS/DB/MySQL/lock.md) → [redolog](/docs/CS/DB/MySQL/redolog.md) / [undolog](/docs/CS/DB/MySQL/undolog.md) / [binlog](/docs/CS/DB/MySQL/binlog.md)；Redis 用单线程与 [Transaction](/docs/CS/DB/Redis/Transaction.md)、[Lock](/docs/CS/DB/Redis/Lock.md) 绕过整个锁矩阵；日志与恢复的通用机制见 [WAL](/docs/CS/DB/WAL.md)。
+往下读：MySQL 侧的完整链路是 [Transaction](/docs/CS/DB/MySQL/Transaction.md) → [Mvcc](/docs/CS/DB/MySQL/Mvcc.md) → [lock](/docs/CS/DB/MySQL/lock.md) → [redolog](/docs/CS/DB/MySQL/redolog.md) / [undolog](/docs/CS/DB/MySQL/undolog.md) / [binlog](/docs/CS/DB/MySQL/binlog.md)；Redis 用单线程与 [Transaction](/docs/CS/DB/Redis/Transaction.md)、[Lock](/docs/CS/DB/Redis/Lock.md) 绕过整个锁矩阵；日志与恢复的通用机制见 [WAL](/docs/CS/DB/Concept/WAL.md)。
 
 ## Scaling Out
 
@@ -756,7 +756,7 @@ OCC 通常用在 [数据争用](https://en.wikipedia.org/wiki/Block_contention) 
 
 无主路线（Dynamo/Cassandra）不做共识选举，而是读写各自取 quorum：只要 `W + R > N`，读集合与写集合必相交，再用 read-repair 与 anti-entropy 后台补齐，并把不可达节点的写暂存为 hint 后递送。代价是冲突要额外机制裁决（时间戳、last write wins）。
 
-跨地域要同步就要付 RTT，跨地域要异步就要接受丢数据——「两地三中心」通常按 Zone 拆：同区间同步、跨区间异步。落点：MySQL 的 [replica](/docs/CS/DB/MySQL/replica.md)、Redis 的 [Replication](/docs/CS/DB/Redis/Replication.md) 与 [sentinel](/docs/CS/DB/Redis/sentinel.md)、宽列的 [Cassandra](/docs/CS/DB/Cassandra.md)。
+跨地域要同步就要付 RTT，跨地域要异步就要接受丢数据——「两地三中心」通常按 Zone 拆：同区间同步、跨区间异步。落点：MySQL 的 [replica](/docs/CS/DB/MySQL/replica.md)、Redis 的 [Replication](/docs/CS/DB/Redis/Replication.md) 与 [sentinel](/docs/CS/DB/Redis/sentinel.md)、宽列的 [Cassandra](/docs/CS/DB/Cassandra/Cassandra.md)。
 
 ### Sharding
 
@@ -767,7 +767,7 @@ OCC 通常用在 [数据争用](https://en.wikipedia.org/wiki/Block_contention) 
 - **热点**：bucket split——一个哈希桶承载多个分区，桶内再按负载动态拆分；或对热 key 做拆分/读写分离。
 - **二级索引**：terminating 方式在索引里存匹配记录的主键（索引分片要回查数据分片），global 方式由索引自己按主键分片（写时要跨片更新，但读不再扇出）。
 
-对应用透明地做这件事，就是中间件的定位：[ShardingSphere](/docs/CS/DB/ShardingSphere.md) 与 [TDDL](/docs/CS/DB/TDDL.md) 在 JDBC/Proxy 层分库分表，[canal](/docs/CS/DB/canal.md) 伪装从库把 binlog 增量订阅出去喂缓存与数仓；而 [TiDB](/docs/CS/DB/TiDB.md)、[OceanBase](/docs/CS/DB/OceanBase.md) 把分片与再均衡做进内核。术语与算法细节见 [Shard](/docs/CS/DB/Shard.md)。
+对应用透明地做这件事，就是中间件的定位：[ShardingSphere](/docs/CS/DB/Middleware/ShardingSphere.md) 与 [TDDL](/docs/CS/DB/Middleware/TDDL.md) 在 JDBC/Proxy 层分库分表，[canal](/docs/CS/DB/Middleware/canal.md) 伪装从库把 binlog 增量订阅出去喂缓存与数仓；而 [TiDB](/docs/CS/DB/TiDB/TiDB.md)、[OceanBase](/docs/CS/DB/OceanBase.md) 把分片与再均衡做进内核。术语与算法细节见 [Shard](/docs/CS/DB/Concept/Shard.md)。
 
 ### Atomic Commit and Consensus
 
@@ -775,12 +775,12 @@ OCC 通常用在 [数据争用](https://en.wikipedia.org/wiki/Block_contention) 
 
 - **2PC**（two-phase commit）：协调者先让所有参与者 prepare（写满 redo 并持锁），全部同意后再广播 commit。它是阻塞的——协调者在 prepare 之后、commit 之前崩溃，参与者只能一直等，锁也不能放。
 - **3PC** 用超时与 can-commit 状态缓解，但建立在「网络故障可被超时区分」的假设上，真实异步系统里并不成立，工业界主流仍是 2PC + 更强的容灾。
-- **共识（Paxos/Raft）**解决的不是「一次事务要不要提交」，而是「这条日志该不该被写下」，从而构造复制状态机并顺带选出 leader。分片 × 共识 = 每个分区/region 一组副本各自跑共识：[TiDB](/docs/CS/DB/TiDB.md) 的 Region + Raft、[OceanBase](/docs/CS/DB/OceanBase.md) 的日志流 + 自研 Paxos（多数派持久化成功才算写成功，因此 RPO = 0）。
+- **共识（Paxos/Raft）**解决的不是「一次事务要不要提交」，而是「这条日志该不该被写下」，从而构造复制状态机并顺带选出 leader。分片 × 共识 = 每个分区/region 一组副本各自跑共识：[TiDB](/docs/CS/DB/TiDB/TiDB.md) 的 Region + Raft、[OceanBase](/docs/CS/DB/OceanBase.md) 的日志流 + 自研 Paxos（多数派持久化成功才算写成功，因此 RPO = 0）。
 - 单分片内的原子性仍由 WAL + 崩溃恢复保证（见上文 Recovery），共识只负责把同一份日志复制到多副本——两者不要混为一谈。
 
 跨节点事务的实现路径（Percolator 式的 2PC 加状态表、Google Spanner 的 TrueTime 外部一致性）与共识协议本身，见 [Distributed](/docs/CS/Distributed/Distributed.md) 与 [Consensus](/docs/CS/Distributed/Consensus/Consensus.md)。
 
-往下读：分片算法与再均衡见 [Shard](/docs/CS/DB/Shard.md)；MySQL 复制见 [replica](/docs/CS/DB/MySQL/replica.md)，Redis 侧见 [Replication](/docs/CS/DB/Redis/Replication.md)、[cluster](/docs/CS/DB/Redis/cluster.md) 与 [sentinel](/docs/CS/DB/Redis/sentinel.md)；共识协议本身见 [Consensus](/docs/CS/Distributed/Consensus/Consensus.md)；「分片交给中间件」与「分片做进内核」两条路，分别是 [ShardingSphere](/docs/CS/DB/ShardingSphere.md) / [TDDL](/docs/CS/DB/TDDL.md) 与 [TiDB](/docs/CS/DB/TiDB.md) / [OceanBase](/docs/CS/DB/OceanBase.md) / [PolarDB](/docs/CS/DB/PolarDB/PolarDB.md)。TiDB 的组件级细节已拆为分册：[Architecture](/docs/CS/DB/TiDB/Architecture.md)、[TiDB_Server](/docs/CS/DB/TiDB/TiDB_Server.md)、[TiKV](/docs/CS/DB/TiDB/TiKV.md)、[Transaction](/docs/CS/DB/TiDB/Transaction.md)、[PD](/docs/CS/DB/TiDB/PD.md)、[TiFlash](/docs/CS/DB/TiDB/TiFlash.md)、[Tools](/docs/CS/DB/TiDB/Tools.md)。
+往下读：分片算法与再均衡见 [Shard](/docs/CS/DB/Concept/Shard.md)；MySQL 复制见 [replica](/docs/CS/DB/MySQL/replica.md)，Redis 侧见 [Replication](/docs/CS/DB/Redis/Replication.md)、[cluster](/docs/CS/DB/Redis/cluster.md) 与 [sentinel](/docs/CS/DB/Redis/sentinel.md)；共识协议本身见 [Consensus](/docs/CS/Distributed/Consensus/Consensus.md)；「分片交给中间件」与「分片做进内核」两条路，分别是 [ShardingSphere](/docs/CS/DB/Middleware/ShardingSphere.md) / [TDDL](/docs/CS/DB/Middleware/TDDL.md) 与 [TiDB](/docs/CS/DB/TiDB/TiDB.md) / [OceanBase](/docs/CS/DB/OceanBase.md) / [PolarDB](/docs/CS/DB/PolarDB/PolarDB.md)。TiDB 的组件级细节已拆为分册：[Architecture](/docs/CS/DB/TiDB/Architecture.md)、[TiDB_Server](/docs/CS/DB/TiDB/TiDB_Server.md)、[TiKV](/docs/CS/DB/TiDB/TiKV.md)、[Transaction](/docs/CS/DB/TiDB/Transaction.md)、[PD](/docs/CS/DB/TiDB/PD.md)、[TiFlash](/docs/CS/DB/TiDB/TiFlash.md)、[Tools](/docs/CS/DB/TiDB/Tools.md)。
 
 ## Analytics
 
@@ -841,7 +841,7 @@ SQL 在这方面表现出相当的灵活性：OLTP 型与 OLAP 型查询它都�
 如今许多数据库厂商只专注事务处理或分析负载中的一端，而不是两者通吃。
 也有 Microsoft SQL Server、SAP HANA 这样的产品同时支持事务处理与数据仓库，但它们内部正越来越清晰地分裂成两套存储与查询引擎，只是共享同一个 SQL 接口。
 
-往下读：列式引擎的两条实现路线（MergeTree 与向量化执行）见 [ClickHouse](/docs/CS/DB/ClickHouse.md) 与 [Doris](/docs/CS/DB/Doris.md)，实时分析取数见 [Druid](/docs/CS/DB/Druid.md)，纯时序与可观测数据库的总览、存储路线对比和各产品入口集中在 [Timeseries](/docs/CS/DB/Timeseries.md)（含 InfluxDB、GreptimeDB、VictoriaMetrics、TimescaleDB、TDengine），不存数据只做联邦查询的是 [Presto](/docs/CS/DB/Presto.md)；以时序为核心、把多模存储引擎与流批一体计算框架打包进同一集群的国产实时计算平台见 [DolphinDB](/docs/CS/DB/DolphinDB.md)；把分析型引擎塞进单个进程、直接对本地文件与对象存储跑 SQL 的嵌入式路线是 [DuckDB](/docs/CS/DB/DuckDB.md)；离线一侧的批量计算与 SQL-on-Hadoop 数仓见 [Hive](/docs/CS/DB/Hive.md) 与 [BigData](/docs/CS/BigData/BigData.md)；列存编码、压缩与谓词下推的原理见 [Storage Format](/docs/CS/BigData/Storage_Format.md)，把一堆不可变文件组织成「表」的事务与快照机制见 [Table Format](/docs/CS/BigData/Table_Format.md)。
+往下读：列式引擎的两条实现路线（MergeTree 与向量化执行）见 [ClickHouse](/docs/CS/DB/ClickHouse.md) 与 [Doris](/docs/CS/DB/Doris.md)，实时分析取数见 [Druid](/docs/CS/DB/Druid/Druid.md)，纯时序与可观测数据库的总览、存储路线对比和各产品入口集中在 [Timeseries](/docs/CS/DB/Concept/Timeseries.md)（含 InfluxDB、GreptimeDB、VictoriaMetrics、TimescaleDB、TDengine），不存数据只做联邦查询的是 [Presto](/docs/CS/DB/Presto.md)；以时序为核心、把多模存储引擎与流批一体计算框架打包进同一集群的国产实时计算平台见 [DolphinDB](/docs/CS/DB/DolphinDB.md)；把分析型引擎塞进单个进程、直接对本地文件与对象存储跑 SQL 的嵌入式路线是 [DuckDB](/docs/CS/DB/DuckDB/DuckDB.md)；离线一侧的批量计算与 SQL-on-Hadoop 数仓见 [Hive](/docs/CS/DB/Hive/Hive.md) 与 [BigData](/docs/CS/BigData/BigData.md)；列存编码、压缩与谓词下推的原理见 [Storage Format](/docs/CS/BigData/Storage_Format.md)，把一堆不可变文件组织成「表」的事务与快照机制见 [Table Format](/docs/CS/BigData/Table_Format.md)。
 
 ## Choosing
 
@@ -948,7 +948,7 @@ Redis 与 Couchbase 则通过异步写盘提供弱持久性。
 ### MySQL
 
 [MySQL Server](/docs/CS/DB/MySQL/MySQL.md) 是全球最受欢迎的开源数据库，MySQL Cluster 则是实时的开源事务数据库。
-围绕 MySQL 协议与生态，还长出了一批分布式与云原生实现：[TiDB](/docs/CS/DB/TiDB.md)、[OceanBase](/docs/CS/DB/OceanBase.md) 与 [PolarDB](/docs/CS/DB/PolarDB/PolarDB.md)。
+围绕 MySQL 协议与生态，还长出了一批分布式与云原生实现：[TiDB](/docs/CS/DB/TiDB/TiDB.md)、[OceanBase](/docs/CS/DB/OceanBase.md) 与 [PolarDB](/docs/CS/DB/PolarDB/PolarDB.md)。
 
 ### Redis
 
@@ -965,22 +965,22 @@ LevelDB 支持范围查询、快照等现代应用需要的能力。
 
 [RocksDB](/docs/CS/DB/RocksDB/RocksDB.md) 是 Facebook 对 LevelDB 的改造：保留 log-structured merge tree，但几乎把每一条策略都变成旋钮。column family 让一个进程拥有多个独立调优、共享同一份 write-ahead log 的键空间；compaction 可选 leveled、universal 或 FIFO；读路径由 Bloom 或 Ribbon filter、partitioned index 与 block cache 守护。引擎之上还有 merge operator、基于快照的 MVCC、事务数据库、做键值分离的 BlobDB，以及嵌入式存储通常欠缺的运维面——checkpoint、备份引擎与外部 SST 导入。[Write_Path](/docs/CS/DB/RocksDB/Write_Path.md)、[Read_Path](/docs/CS/DB/RocksDB/Read_Path.md)、[Compaction](/docs/CS/DB/RocksDB/Compaction.md)、[Table_Format](/docs/CS/DB/RocksDB/Table_Format.md)、[Transactions](/docs/CS/DB/RocksDB/Transactions.md) 与 [Operations](/docs/CS/DB/RocksDB/Operations.md) 逐个展开这些轴，[Column_Families](/docs/CS/DB/RocksDB/Column_Families.md) 则讲清键空间之间的隔离边界。
 
-需要在高速本地存储上做多机本地状态存储的系统通常直接选这个引擎：[Pika](/docs/CS/DB/Pika.md) 与 [SSDB](/docs/CS/DB/SSDB.md) 在它之上做 Redis 兼容，[TiDB](/docs/CS/DB/TiDB.md) 拿它当 KV 层，[NebulaGraph](/docs/CS/DB/graph/NebulaGraph.md) 拿它做图存储。CockroachDB 与 MyRocks 也是使用者，只是本库暂未单列笔记。
+需要在高速本地存储上做多机本地状态存储的系统通常直接选这个引擎：[Pika](/docs/CS/DB/Pika.md) 与 [SSDB](/docs/CS/DB/SSDB.md) 在它之上做 Redis 兼容，[TiDB](/docs/CS/DB/TiDB/TiDB.md) 拿它当 KV 层，[NebulaGraph](/docs/CS/DB/graph/NebulaGraph.md) 拿它做图存储。CockroachDB 与 MyRocks 也是使用者，只是本库暂未单列笔记。
 
 
 ### Column Store
 
-[ClickHouse](/docs/CS/DB/ClickHouse.md) 是开源的列式 OLAP 数据库；[Doris](/docs/CS/DB/Doris.md) 是兼容 MySQL 协议的 MPP 分析型数仓；[Druid](/docs/CS/DB/Druid.md) 面向实时分析——不可变时间分片 + 多角色摄取集群是它的底色，本库以它为枢纽拆出分册（架构 / 存储格式 / 查询引擎 / 摄取 / 数据管理 / 扩展 / 数据生态 / 部署运维），版本锚点 38.0.0（2026-10-01）。**时序 / 可观测数据库**总览与各产品入口集中在 [Timeseries](/docs/CS/DB/Timeseries.md)——涵盖 InfluxDB 3.x、GreptimeDB、VictoriaMetrics、TimescaleDB、TDengine 五个代表产品，每条独立路线在该 Hub 页展开。以时序为核心、把多模存储引擎（TSDB / OLAP / PKEY / IMOLTP / VECTORDB）与流批一体计算框架打包进同一集群的国产实时计算平台是 [DolphinDB](/docs/CS/DB/DolphinDB.md)。不搬数据、直接对已有存储做联邦 SQL 查询的引擎见 [Presto](/docs/CS/DB/Presto.md)。反方向上，[DuckDB](/docs/CS/DB/DuckDB.md) 把同一套向量化列存内核做成**进程内引擎**：没有集群、没有端口，直接查 Parquet/CSV 乃至 S3 上的数据集，本库以它为枢纽拆了七个分册（架构 / 存储格式 / 执行引擎 / 类型系统 / 扩展 / 数据生态 / 部署运维）。
+[ClickHouse](/docs/CS/DB/ClickHouse.md) 是开源的列式 OLAP 数据库；[Doris](/docs/CS/DB/Doris.md) 是兼容 MySQL 协议的 MPP 分析型数仓；[Druid](/docs/CS/DB/Druid/Druid.md) 面向实时分析——不可变时间分片 + 多角色摄取集群是它的底色，本库以它为枢纽拆出分册（架构 / 存储格式 / 查询引擎 / 摄取 / 数据管理 / 扩展 / 数据生态 / 部署运维），版本锚点 38.0.0（2026-10-01）。**时序 / 可观测数据库**的门类原理、数据模型与选型坐标集中在 [Timeseries](/docs/CS/DB/Concept/Timeseries.md)；InfluxDB 3.x 走独立的 [InfluxDB](/docs/CS/DB/InfluxDB/InfluxDB.md) 分册体系、TDengine 走 [TDengine](/docs/CS/DB/TDengine/TDengine.md) 分册，其余以单页速写存在的代表产品归入 [Timeseries 目录](/docs/CS/DB/Timeseries/)：[GreptimeDB](/docs/CS/DB/Timeseries/GreptimeDB.md)、[IoTDB](/docs/CS/DB/Timeseries/IoTDB.md)、[OpenTSDB](/docs/CS/DB/Timeseries/OpenTSDB.md)、[QuestDB](/docs/CS/DB/Timeseries/QuestDB.md)、[TimescaleDB](/docs/CS/DB/Timeseries/TimescaleDB.md)、[VictoriaMetrics](/docs/CS/DB/Timeseries/VictoriaMetrics.md)。以时序为核心、把多模存储引擎（TSDB / OLAP / PKEY / IMOLTP / VECTORDB）与流批一体计算框架打包进同一集群的国产实时计算平台是 [DolphinDB](/docs/CS/DB/DolphinDB.md)。不搬数据、直接对已有存储做联邦 SQL 查询的引擎见 [Presto](/docs/CS/DB/Presto.md)。反方向上，[DuckDB](/docs/CS/DB/DuckDB/DuckDB.md) 把同一套向量化列存内核做成**进程内引擎**：没有集群、没有端口，直接查 Parquet/CSV 乃至 S3 上的数据集，本库以它为枢纽拆了七个分册（架构 / 存储格式 / 执行引擎 / 类型系统 / 扩展 / 数据生态 / 部署运维）。
 
 ### Wide Column Store
 
-[HBase](/docs/CS/DB/HBase.md) 与 [Cassandra](/docs/CS/DB/Cassandra.md) 把数据建模为按列族组织的多维 map：列族在建表时声明，qualifier 却可以随手加，行则按 key 全局有序。
+[HBase](/docs/CS/DB/HBase/HBase.md) 与 [Cassandra](/docs/CS/DB/Cassandra/Cassandra.md) 把数据建模为按列族组织的多维 map：列族在建表时声明，qualifier 却可以随手加，行则按 key 全局有序。
 正是这个顺序让前缀扫描与范围扫描很便宜——也正是它把二级索引（进而热点）推给了设计 schema 的人。
 不要把这种布局与上面的列式存储混为一谈：在一个列族内部，同一行的值是放在一起的，负载因此是点查与有界扫描，而不是整列聚合。
 
 ### Document Store
 
-[MongoDB](/docs/CS/DB/MongoDB.md) 以 BSON 文档存数据，模式灵活，一对多关系可以嵌在父文档里；它支持聚合管道、WiredTiger 的 MVCC 存储、副本集与分片。
+[MongoDB](/docs/CS/DB/MongoDB/MongoDB.md) 以 BSON 文档存数据，模式灵活，一对多关系可以嵌在父文档里；它支持聚合管道、WiredTiger 的 MVCC 存储、副本集与分片。
 
 ### Key-Value / In-Memory Alternatives
 
@@ -996,16 +996,16 @@ Dragonfly 与 Valkey 代表了同一目标下的两种工程取舍：前者用�
 
 嵌入式数据库跑在应用进程内，「服务器」作为部署单位消失了：不需要准备连接池，没有端口要开防火墙，备份就是一次文件拷贝。
 代价是单写者的进程模型——一个 JVM 或一个地址空间独占文件——因此这类引擎买来的是测试与边缘部署的便利，而不是横向扩展。
-[H2](/docs/CS/DB/h2/H2.md) 是 Java 侧的代表（纯 Java、嵌入式 *与* server 双模式、可选项 in-memory、以及叫 MVStore 的 copy-on-write 日志结构存储）；[SQLite](/docs/CS/DB/SQLite.md) 是它的 C 语言对应物，也是这一格里生态最宽的一个——公有领域许可、冻结了二十年的单文件格式、五档文件锁与 WAL 两种并发模型，以及「竞争对手是 `fopen()`」的部署量；本库以它为枢纽拆了六个分册（文件格式 / 事务与锁 / 查询规划 / 类型系统 / 配置 / 运维）；Derby 与 HSQLDB 是更老的纯 Java 引擎。负载换成分析型时，同一格里坐着 [DuckDB](/docs/CS/DB/DuckDB.md)——进程内、向量化、直接对 Parquet/CSV 跑 SQL，单写者进程的文件模型与 SQLite 同构，被官方称作 "the SQLite for analytics"。
+[H2](/docs/CS/DB/h2/H2.md) 是 Java 侧的代表（纯 Java、嵌入式 *与* server 双模式、可选项 in-memory、以及叫 MVStore 的 copy-on-write 日志结构存储）；[SQLite](/docs/CS/DB/SQLite.md) 是它的 C 语言对应物，也是这一格里生态最宽的一个——公有领域许可、冻结了二十年的单文件格式、五档文件锁与 WAL 两种并发模型，以及「竞争对手是 `fopen()`」的部署量；本库以它为枢纽拆了六个分册（文件格式 / 事务与锁 / 查询规划 / 类型系统 / 配置 / 运维）；Derby 与 HSQLDB 是更老的纯 Java 引擎。负载换成分析型时，同一格里坐着 [DuckDB](/docs/CS/DB/DuckDB/DuckDB.md)——进程内、向量化、直接对 Parquet/CSV 跑 SQL，单写者进程的文件模型与 SQLite 同构，被官方称作 "the SQLite for analytics"。
 Spring Boot 的 `@DataJpaTest` 会悄悄换成内存 H2，这正是「厂商专有 SQL 测试全绿、上线即炸」的原因。
 
 ### Sharding and CDC Middleware
 
-不改应用就扛住单库容量上限的中间件层：[ShardingSphere](/docs/CS/DB/ShardingSphere.md) 与 [TDDL](/docs/CS/DB/TDDL.md) 站在 JDBC/Proxy 层做分库分表、读写分离与分布式事务，[MyCat](/docs/CS/DB/MyCat/MyCat.md) 则是代理形态的代表——前端讲 MySQL 协议、后端走 JDBC，对多语言接入与零侵入改造最友好，自身演化出 1.6 与 MyCAT2（Calcite 内核）两条线；[canal](/docs/CS/DB/canal.md) 伪装成从库消费 binlog，把增量变更订阅出去喂给缓存、搜索引擎与数仓。分片本身的机制见 [Shard](/docs/CS/DB/Shard.md)。
+不改应用就扛住单库容量上限的中间件层：[ShardingSphere](/docs/CS/DB/Middleware/ShardingSphere.md) 与 [TDDL](/docs/CS/DB/Middleware/TDDL.md) 站在 JDBC/Proxy 层做分库分表、读写分离与分布式事务，[MyCat](/docs/CS/DB/MyCat/MyCat.md) 则是代理形态的代表——前端讲 MySQL 协议、后端走 JDBC，对多语言接入与零侵入改造最友好，自身演化出 1.6 与 MyCAT2（Calcite 内核）两条线；[canal](/docs/CS/DB/Middleware/canal.md) 伪装成从库消费 binlog，把增量变更订阅出去喂给缓存、搜索引擎与数仓。分片本身的机制见 [Shard](/docs/CS/DB/Concept/Shard.md)。
 
 ### Vector Databases
 
-向量数据库把「相似」变成一等公民：数据以高维向量表示，检索靠距离而非精确匹配，因此传统数据库的 B-Tree 索引在这里几乎无用武之地，取而代之的是 ANN 图索引与聚类索引。整个门类的原理与选型坐标见 [vector](/docs/CS/DB/vector.md)。落到工程上，这个品类分化成两条路：一条是**扩展**——[pgvector](/docs/CS/DB/PostgreSQL/PostgreSQL.md) 这类嵌入既有关系库的插件，胜在事务与运维复用，受限于单机上限；另一条是**独立系统**，把向量的分区、副本、增量写入与索引重建当成数据库问题重做一遍，[Milvus](/docs/CS/DB/Milvus/Milvus.md) 是其中架构最「云原生」的一个：存算分离、以 WAL 为唯一事实来源、检索由 C++ 的 segcore 承担，因而代价是组件与外部依赖（日志后端、元数据 KV、对象存储）远比一个扩展多。选型时的真实分界线不是召回率，而是数据规模能否摊平这套分布式架构的运维成本。
+向量数据库把「相似」变成一等公民：数据以高维向量表示，检索靠距离而非精确匹配，因此传统数据库的 B-Tree 索引在这里几乎无用武之地，取而代之的是 ANN 图索引与聚类索引。整个门类的原理与选型坐标见 [vector](/docs/CS/DB/Concept/vector.md)。落到工程上，这个品类分化成两条路：一条是**扩展**——[pgvector](/docs/CS/DB/PostgreSQL/PostgreSQL.md) 这类嵌入既有关系库的插件，胜在事务与运维复用，受限于单机上限；另一条是**独立系统**，把向量的分区、副本、增量写入与索引重建当成数据库问题重做一遍，[Milvus](/docs/CS/DB/Milvus/Milvus.md) 是其中架构最「云原生」的一个：存算分离、以 WAL 为唯一事实来源、检索由 C++ 的 segcore 承担，因而代价是组件与外部依赖（日志后端、元数据 KV、对象存储）远比一个扩展多。选型时的真实分界线不是召回率，而是数据规模能否摊平这套分布式架构的运维成本。
 
 ### Graph
 
@@ -1044,7 +1044,7 @@ Dgraph 是一个分布式图数据库，使用 Go 语言开发，支持 GraphQL 
 
 
 
-选型时把这条链倒过来读就够了：先看**访问模式**能不能被一个模型天然表达（嵌套一对多 → 文档；多跳关系 → 图；相似性检索 → 向量；整列聚合 → 列式），再看**一致性需求**允许多弱的复制与事务（能接受最终一致才有无主/多主路线，要 RPO = 0 就得付共识延迟），最后用**规模与运维成本**裁掉不可选项——数据量摊不平一套分布式架构的运维开销时，选单机加索引与读写分离；反之，靠中间件硬撑单库会把自己锁死在再均衡与跨片事务上。这个取舍坐标的完整版在 [vector](/docs/CS/DB/vector.md)（向量门类）与 [Shard](/docs/CS/DB/Shard.md)（分片），索引收益在 [Index](/docs/CS/DB/Index.md)。
+选型时把这条链倒过来读就够了：先看**访问模式**能不能被一个模型天然表达（嵌套一对多 → 文档；多跳关系 → 图；相似性检索 → 向量；整列聚合 → 列式），再看**一致性需求**允许多弱的复制与事务（能接受最终一致才有无主/多主路线，要 RPO = 0 就得付共识延迟），最后用**规模与运维成本**裁掉不可选项——数据量摊不平一套分布式架构的运维开销时，选单机加索引与读写分离；反之，靠中间件硬撑单库会把自己锁死在再均衡与跨片事务上。这个取舍坐标的完整版在 [vector](/docs/CS/DB/Concept/vector.md)（向量门类）与 [Shard](/docs/CS/DB/Concept/Shard.md)（分片），索引收益在 [Index](/docs/CS/DB/Concept/Index.md)。
 
 ## Tuning
 
@@ -1077,12 +1077,12 @@ Dgraph 是一个分布式图数据库，使用 Go 语言开发，支持 GraphQL 
 
 - join 查询需要去多个库查询后在代码层处理
 - 分库就需要分布式事务支持，使用 Seata 或者 RocketMQ 实现最终一致性
-- 只按业务归属拆表、不切单表容量：垂直分片的边界与代价见 [Shard](/docs/CS/DB/Shard.md)
+- 只按业务归属拆表、不切单表容量：垂直分片的边界与代价见 [Shard](/docs/CS/DB/Concept/Shard.md)
 
 水平分库分表
 
 - 唯一 id 的生成
-- 切分算法、全局主键、再均衡与热点散法均见 [Shard](/docs/CS/DB/Shard.md)
+- 切分算法、全局主键、再均衡与热点散法均见 [Shard](/docs/CS/DB/Concept/Shard.md)
 
 ### Troubleshooting
 
@@ -1097,27 +1097,27 @@ Dgraph 是一个分布式图数据库，使用 Go 语言开发，支持 GraphQL 
 ## Links
 
 - [MySQL](/docs/CS/DB/MySQL/MySQL.md)
-- [MongoDB](/docs/CS/DB/MongoDB.md)
+- [MongoDB](/docs/CS/DB/MongoDB/MongoDB.md)
 - [Oracle](/docs/CS/DB/Oracle/Oracle.md)
 - [PostgreSQL](/docs/CS/DB/PostgreSQL/PostgreSQL.md)
 - [Redis](/docs/CS/DB/Redis/Redis.md)
 - [SSDB](/docs/CS/DB/SSDB.md) / [Pika](/docs/CS/DB/Pika.md) / [Dragonfly](/docs/CS/DB/Dragonfly.md)
-- [BLink-Tree](/docs/CS/DB/BLink-Tree.md)
-- [WAL](/docs/CS/DB/WAL.md) / [Indexes](/docs/CS/DB/Index.md)
-- [Shard](/docs/CS/DB/Shard.md)
+- [BLink-Tree](/docs/CS/DB/Concept/BLink-Tree.md)
+- [WAL](/docs/CS/DB/Concept/WAL.md) / [Indexes](/docs/CS/DB/Concept/Index.md)
+- [Shard](/docs/CS/DB/Concept/Shard.md)
 - [ClickHouse](/docs/CS/DB/ClickHouse.md)
 - [DolphinDB](/docs/CS/DB/DolphinDB.md)
 - [RocksDB](/docs/CS/DB/RocksDB/RocksDB.md)
-- [Cassandra](/docs/CS/DB/Cassandra.md)
+- [Cassandra](/docs/CS/DB/Cassandra/Cassandra.md)
 - [H2](/docs/CS/DB/h2/H2.md)
 - [SQLite](/docs/CS/DB/SQLite.md)
-- [Milvus](/docs/CS/DB/Milvus/Milvus.md) / [vector](/docs/CS/DB/vector.md)
+- [Milvus](/docs/CS/DB/Milvus/Milvus.md) / [vector](/docs/CS/DB/Concept/vector.md)
 - [NebulaGraph](/docs/CS/DB/graph/NebulaGraph.md)
-- [Druid](/docs/CS/DB/Druid.md)
+- [Druid](/docs/CS/DB/Druid/Druid.md)
 - [Valkey](/docs/CS/DB/Valkey.md)
-- [DuckDB](/docs/CS/DB/DuckDB.md)
+- [DuckDB](/docs/CS/DB/DuckDB/DuckDB.md)
 - [MyCat](/docs/CS/DB/MyCat/MyCat.md)
-- [ShardingSphere](/docs/CS/DB/ShardingSphere.md) / [TDDL](/docs/CS/DB/TDDL.md)
+- [ShardingSphere](/docs/CS/DB/Middleware/ShardingSphere.md) / [TDDL](/docs/CS/DB/Middleware/TDDL.md)
 
 
 ## References

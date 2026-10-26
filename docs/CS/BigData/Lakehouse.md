@@ -43,7 +43,7 @@
 3. **存算分离**：存储是对象存储，计算是独立的引擎集群，各自伸缩。这与 [YARN](/docs/CS/Framework/Hadoop/Yarn.md) 时代"数据与计算必须在同一台机器"的假设决裂。
 4. **多引擎共享一份数据**：Spark 做 ETL、Trino 做交互查询、[Flink](/docs/CS/Framework/Flink/Flink.md) 做流、Python 做 ML，全部指向同一批文件、同一个 catalog。
 
-第 4 条是湖仓真正区别于"带事务的数据湖"的地方，也是它依赖开放格式的原因：如果数据是专有格式，多引擎共享就无从谈起。这也解释了为什么 catalog（[Hive](/docs/CS/DB/Hive.md) Metastore、Iceberg REST Catalog、Unity Catalog）在湖仓里的地位被抬高——它从"查表在哪"变成了"跨引擎的统一命名空间与权限边界"。
+第 4 条是湖仓真正区别于"带事务的数据湖"的地方，也是它依赖开放格式的原因：如果数据是专有格式，多引擎共享就无从谈起。这也解释了为什么 catalog（[Hive](/docs/CS/DB/Hive/Hive.md) Metastore、Iceberg REST Catalog、Unity Catalog）在湖仓里的地位被抬高——它从"查表在哪"变成了"跨引擎的统一命名空间与权限边界"。
 
 ## Layered Modeling
 
@@ -71,7 +71,7 @@
 
 ## Where Hive Fits
 
-在湖仓叙事里 [Hive](/docs/CS/DB/Hive.md) 的位置发生了分化，值得单独说明：它的**查询执行层（HS2 + Tez + LLAP）**份额在收缩，被 Trino / Spark SQL 这类引擎挤占；但它的 **Metastore（HMS）**反而成了湖仓的事实标准 catalog——Iceberg、Delta、Hudi 都支持 HMS，连 Spark 与 Trino 也常靠它找表。4.x 起 Hive 自己也成了 Iceberg 的一等公民，见 [Iceberg Integration](/docs/CS/DB/Hive/Iceberg_Integration.md)。
+在湖仓叙事里 [Hive](/docs/CS/DB/Hive/Hive.md) 的位置发生了分化，值得单独说明：它的**查询执行层（HS2 + Tez + LLAP）**份额在收缩，被 Trino / Spark SQL 这类引擎挤占；但它的 **Metastore（HMS）**反而成了湖仓的事实标准 catalog——Iceberg、Delta、Hudi 都支持 HMS，连 Spark 与 Trino 也常靠它找表。4.x 起 Hive 自己也成了 Iceberg 的一等公民，见 [Iceberg Integration](/docs/CS/DB/Hive/Iceberg_Integration.md)。
 
 所以"要不要用 Hive"在 2026 年是两个问题：**要不要用 HMS 当 catalog**（多数情况下仍值得）与**要不要用 HS2 跑查询**（新建项目通常不必）。
 
@@ -80,7 +80,7 @@
 - [BigData](/docs/CS/BigData/BigData.md)
 - [Table Format](/docs/CS/BigData/Table_Format.md)
 - [Storage Format](/docs/CS/BigData/Storage_Format.md)
-- [Hive](/docs/CS/DB/Hive.md)
+- [Hive](/docs/CS/DB/Hive/Hive.md)
 - [SQL Engine](/docs/CS/BigData/SQL_Engine.md)
 - [Data Governance](/docs/CS/BigData/Governance.md)
 

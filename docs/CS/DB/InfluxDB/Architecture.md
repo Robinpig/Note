@@ -77,7 +77,7 @@ Core 是这三者在单进程内的形态；Enterprise 多节点则是同一套�
 
 ## Links
 
-- [InfluxDB 枢纽](/docs/CS/DB/InfluxDB.md)
+- [InfluxDB 枢纽](/docs/CS/DB/InfluxDB/InfluxDB.md)
 - [Storage_Engine](/docs/CS/DB/InfluxDB/Storage_Engine.md)
 - [Query](/docs/CS/DB/InfluxDB/Query.md)
 - [Processing_Engine](/docs/CS/DB/InfluxDB/Processing_Engine.md)

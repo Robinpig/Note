@@ -71,7 +71,7 @@ WAL 模式下的日常：默认自动 checkpoint（1000 页）多数场景够用
 
 - [SQLite](/docs/CS/DB/SQLite.md)
 - [DataBases](/docs/CS/DB/DB.md)
-- [WAL](/docs/CS/DB/WAL.md)
+- [WAL](/docs/CS/DB/Concept/WAL.md)
 - [Transactions_and_Locking](/docs/CS/DB/SQLite/Transactions_and_Locking.md)
 - [H2 Tools_and_Operations](/docs/CS/DB/h2/Tools_and_Operations.md)
 - [RocksDB Operations](/docs/CS/DB/RocksDB/Operations.md)

@@ -171,7 +171,7 @@ print(f.__type_params__, IntList, type(IntList).__name__)   # (T,) IntList TypeA
 
 结构化与名义的分工细节在 [Data_Model](/docs/CS/Python/Data_Model.md)（含 `NamedTuple` 与 dataclass 家族），类型系统取哪一侧是语言层面的权衡，横向对照见 [Languages](/docs/CS/Languages.md)；静态结构类型做得更彻底的是 [TypeScript](/docs/CS/TypeScript/TypeScript.md)，它的结构化子类型与鸭子类型几乎同义，而 Python 的 `Protocol` 只是把这套判断搬到检查器里，运行时仍靠 ABC 的名义继承兜底。
 
-`Annotated` 是 pydantic 与 FastAPI 契约的承载点：`Annotated[int, Field(gt=0)]` 之所以成立，正因为 `__metadata__` 在运行时读得到（见 [FastAPI](/docs/CS/Framework/FastAPI.md)）。
+`Annotated` 是 pydantic 与 FastAPI 契约的承载点：`Annotated[int, Field(gt=0)]` 之所以成立，正因为 `__metadata__` 在运行时读得到（见 [FastAPI 请求与响应](/docs/CS/Framework/FastAPI/Request_and_Response.md)）。
 
 ## Typed Third-Party Packages and Checker Config
 

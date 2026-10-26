@@ -76,7 +76,7 @@ CDC 给的是"这一行现在是什么"，而分析往往要"这一行在过去�
 
 | 类别 | 代表 | 特点 |
 | :--- | :--- | :--- |
-| 日志型 CDC 采集 | Debezium、canal（见 [canal](/docs/CS/DB/canal.md)） | 解析 binlog / WAL，产出变更流 |
+| 日志型 CDC 采集 | Debezium、canal（见 [canal](/docs/CS/DB/Middleware/canal.md)） | 解析 binlog / WAL，产出变更流 |
 | 流式集成框架 | Kafka Connect（见 [Connect](/docs/CS/MQ/Kafka/Connect.md)）、Flink CDC（见 [Connector](/docs/CS/Framework/Flink/Connector.md)） | 托管 connector 的生命周期与位点 |
 | 批量数据同步 | DataX、Sqoop | 全量 / 按字段增量，跨异构数据源；适合一次性搬迁与离线补数 |
 | 日志与埋点采集 | Flume、Filebeat、各类 agent | 非数据库数据源的接入 |
@@ -91,7 +91,7 @@ CDC 给的是"这一行现在是什么"，而分析往往要"这一行在过去�
 - [Lakehouse](/docs/CS/BigData/Lakehouse.md)
 - [Kafka Connect](/docs/CS/MQ/Kafka/Connect.md)
 - [Flink Connector](/docs/CS/Framework/Flink/Connector.md)
-- [canal](/docs/CS/DB/canal.md)
+- [canal](/docs/CS/DB/Middleware/canal.md)
 
 ## References
 

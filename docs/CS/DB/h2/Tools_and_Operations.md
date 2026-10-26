@@ -103,7 +103,7 @@ H2 的可观测面全部走 SQL 查询，没有旁路进程：
 - [Connection and Servers](/docs/CS/DB/h2/Connection_and_Servers.md)
 - [SQL Language](/docs/CS/DB/h2/SQL_Language.md)
 - [Compatibility Modes](/docs/CS/DB/h2/Compatibility_Modes.md)
-- [WAL](/docs/CS/DB/WAL.md)
+- [WAL](/docs/CS/DB/Concept/WAL.md)
 
 ## References
 

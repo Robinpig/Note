@@ -1,6 +1,6 @@
 # HyperDex
 
-HyperDex 是 2012 年（SIGCOMM）提出的**可搜索分布式 KV 存储**，目标是解决普通分布式 KV（[Dynamo](/docs/CS/Distributed/Dynamo.md) / [Cassandra](/docs/CS/DB/Cassandra.md)）只能按主键查询、无法按对象属性检索的短板。它用 **hyperspace hashing（超空间哈希）** 把每个对象的多维属性映射到高维坐标空间，从而支持**等值查询、范围查询、多维联合检索**，同时保持分布式 KV 的可扩展与容错。
+HyperDex 是 2012 年（SIGCOMM）提出的**可搜索分布式 KV 存储**，目标是解决普通分布式 KV（[Dynamo](/docs/CS/Distributed/Dynamo.md) / [Cassandra](/docs/CS/DB/Cassandra/Cassandra.md)）只能按主键查询、无法按对象属性检索的短板。它用 **hyperspace hashing（超空间哈希）** 把每个对象的多维属性映射到高维坐标空间，从而支持**等值查询、范围查询、多维联合检索**，同时保持分布式 KV 的可扩展与容错。
 
 ## Hyperspace Hashing
 
@@ -15,12 +15,12 @@ HyperDex 是 2012 年（SIGCOMM）提出的**可搜索分布式 KV 存储**，�
 
 ## Position
 
-HyperDex 是"在分布式 KV 上叠加查询能力"这一方向上的学术代表；工业界更常见的落地是用 [Cassandra](/docs/CS/DB/Cassandra.md) 的二级索引 / SASI、或把 KV 与搜索引擎（Elasticsearch）组合。它与 [Distributed Storage](/docs/CS/Distributed/Distributed_Storage.md) 枢纽里的"分布式 KV"一类直接对照：KV 不止能按 key 取，还能被"搜"。
+HyperDex 是"在分布式 KV 上叠加查询能力"这一方向上的学术代表；工业界更常见的落地是用 [Cassandra](/docs/CS/DB/Cassandra/Cassandra.md) 的二级索引 / SASI、或把 KV 与搜索引擎（Elasticsearch）组合。它与 [Distributed Storage](/docs/CS/Distributed/Distributed_Storage.md) 枢纽里的"分布式 KV"一类直接对照：KV 不止能按 key 取，还能被"搜"。
 
 ## Links
 
 - [Dynamo](/docs/CS/Distributed/Dynamo.md)
-- [Cassandra](/docs/CS/DB/Cassandra.md)
+- [Cassandra](/docs/CS/DB/Cassandra/Cassandra.md)
 - [Distributed Storage](/docs/CS/Distributed/Distributed_Storage.md)
 - [Replica](/docs/CS/Distributed/Replica.md)
 

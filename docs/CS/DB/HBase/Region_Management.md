@@ -22,7 +22,7 @@ Region 是 HBase 分布式与负载均衡的单位，它的分裂与合并直接
 
 ## Links
 
-- [HBase](/docs/CS/DB/HBase.md)
+- [HBase](/docs/CS/DB/HBase/HBase.md)
 - [Architecture](/docs/CS/DB/HBase/Architecture.md)
 - [RowKey Design](/docs/CS/DB/HBase/RowKey_Design.md)
 

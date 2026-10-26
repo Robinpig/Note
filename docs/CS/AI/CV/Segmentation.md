@@ -2,7 +2,7 @@
 
 语义分割回答**每个像素属于什么**。分类给一张图一个标签，检测给若干框，分割把预测粒度推到像素级——输出与输入同尺寸的掩码图。它是医学影像（器官/病灶勾画）、自动驾驶（可行驶区域）、图像编辑（抠图/换背景）、遥感（地物分类）的底座。
 
-分割按「是否区分同类个体」分三档：**语义分割**同类不分个体，**实例分割**同类也分开，**全景分割**两者合并（既分 things 也分 stuff）。任务全景见 [CV](/docs/CS/AI/CV.md)，检测机制见 [Detection](/docs/CS/AI/CV/Detection.md)，指标见 [Metrics](/docs/CS/AI/CV/Metrics.md)。
+分割按「是否区分同类个体」分三档：**语义分割**同类不分个体，**实例分割**同类也分开，**全景分割**两者合并（既分 things 也分 stuff）。任务全景见 [CV](/docs/CS/AI/CV/CV.md)，检测机制见 [Detection](/docs/CS/AI/CV/Detection.md)，指标见 [Metrics](/docs/CS/AI/CV/Metrics.md)。
 
 ## Semantic Segmentation
 
@@ -68,7 +68,7 @@ SAM 3 内建开放词汇检测器，把「分割」与「检测」合并进同�
 
 ## Links
 
-- [CV](/docs/CS/AI/CV.md)
+- [CV](/docs/CS/AI/CV/CV.md)
 - [Detection](/docs/CS/AI/CV/Detection.md)
 - [Tracking](/docs/CS/AI/CV/Tracking.md)
 - [CNN](/docs/CS/AI/CNN.md)

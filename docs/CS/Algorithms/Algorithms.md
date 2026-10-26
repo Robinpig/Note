@@ -46,13 +46,13 @@
 
 > 一个算法的运行时间是多项式级的，则称它是**高效的**。
 
-**均摊复杂度**（见 [Amortized](/docs/CS/Algorithms/Amortized.md)）是第三种视角：它不看单次操作的极端耗时，而把一系列操作的总代价摊到每个操作上，从而描述「偶发一次昂贵、但长期平均便宜」的结构（如动态数组扩容、并查集按秩合并）。它与平均复杂度不是一回事——后者依赖输入分布，前者是对任意操作序列成立的确定性保证。
+**均摊复杂度**（见 [Amortized](/docs/CS/Algorithms/paradigm/Amortized.md)）是第三种视角：它不看单次操作的极端耗时，而把一系列操作的总代价摊到每个操作上，从而描述「偶发一次昂贵、但长期平均便宜」的结构（如动态数组扩容、并查集按秩合并）。它与平均复杂度不是一回事——后者依赖输入分布，前者是对任意操作序列成立的确定性保证。
 
 ### Computation Model and Computability
 精确的（非渐进的）效率度量通常需要假定一个**计算模型**（如随机访问机RAM、图灵机，或规定某些操作为单位时间）。模型有弱点：它假设所有操作耗时相同、内存无限，因而忽略磁盘分页、cache 等现实因素。关于「哪些问题原则上不可判定」的形式化讨论见 [Computability](/docs/CS/Algorithms/Computability.md)；资源度量的前提正是计算模型，否则「一条指令耗多少」无从谈起。
 
 ### Recursion and Divide and Conquer
-递归（recursion）在定义中调用自身，把原问题化为同构但规模更小的子问题；程序上靠栈帧实现，层数过深会栈溢出。分治（divide-and-conquer）是递归的典型套路：分解 → 递归求解子问题 → 合并。详见 [Recursion](/docs/CS/Algorithms/Recursion.md) 与 [Divide and Conquer](/docs/CS/Algorithms/Divide-and-Conquer.md)；斐波那契数列的递推式求解（定义式、记忆化、矩阵幂、快倍增）也是这一思路的经典示例。
+递归（recursion）在定义中调用自身，把原问题化为同构但规模更小的子问题；程序上靠栈帧实现，层数过深会栈溢出。分治（divide-and-conquer）是递归的典型套路：分解 → 递归求解子问题 → 合并。详见 [Recursion](/docs/CS/Algorithms/paradigm/Recursion.md) 与 [Divide and Conquer](/docs/CS/Algorithms/paradigm/Divide-and-Conquer.md)；斐波那契数列的递推式求解（定义式、记忆化、矩阵幂、快倍增）也是这一思路的经典示例。
 
 ## Data Structures
 数据结构是计算机中**存储与组织数据的特定方式**，目的是高效使用数据。按元素组织方式可分两类：**线性结构**（按顺序访问，但不必顺序存储，如链表、栈、队列）与**非线性结构**（树、图）。它是「支撑结构」轴的展开——同一算法换一种支撑结构，复杂度往往就变了。
@@ -70,7 +70,7 @@
 - 跳表（skiplist）、树状数组（Fenwick Tree）、单调栈（Monotonic Stack）等变体：见 [skiplist](/docs/CS/Algorithms/struct/skiplist.md)、[Fenwick-Tree](/docs/CS/Algorithms/struct/Fenwick-Tree.md)、[MonotonicStack](/docs/CS/Algorithms/struct/MonotonicStack.md)。
 
 ### Hashing
-哈希表（hash table）支持字典操作 INSERT / DELETE / SEARCH，最坏情况 $Θ(n)$，期望 $O(1)$。冲突处理（拉链法、开放寻址）依赖链表与数组特性；扩容策略与一致性哈希是分布式场景的关键补充。见 [hash](/docs/CS/Algorithms/hash.md)。
+哈希表（hash table）支持字典操作 INSERT / DELETE / SEARCH，最坏情况 $Θ(n)$，期望 $O(1)$。冲突处理（拉链法、开放寻址）依赖链表与数组特性；扩容策略与一致性哈希是分布式场景的关键补充。见 [hash](/docs/CS/Algorithms/struct/hash.md)。
 
 ### Trees
 树是支撑结构里分支最密的一支：
@@ -86,24 +86,24 @@
 ## Algorithm Design Paradigms
 这是「构造方式」轴的展开——同一问题常有多种解法，按**设计思想**归为若干族：
 
-- 枚举（Enumeration）：暴力遍历所有可能，常与剪枝配合。见 [Enumeration](/docs/CS/Algorithms/Enumeration.md)。
-- 回溯（Backtracking）：在枚举基础上按约束回退搜索。见 [Backtracking](/docs/CS/Algorithms/Backtracking.md)。
-- 贪心（Greedy）：每步取局部最优，依赖最优子结构。见 [Greedy](/docs/CS/Algorithms/Greedy.md)。
+- 枚举（Enumeration）：暴力遍历所有可能，常与剪枝配合。见 [Enumeration](/docs/CS/Algorithms/paradigm/Enumeration.md)。
+- 回溯（Backtracking）：在枚举基础上按约束回退搜索。见 [Backtracking](/docs/CS/Algorithms/paradigm/Backtracking.md)。
+- 贪心（Greedy）：每步取局部最优，依赖最优子结构。见 [Greedy](/docs/CS/Algorithms/paradigm/Greedy.md)。
 - 动态规划（Dynamic Programming）：子问题重叠时，每个子问题只算一次并存入表格，避免分治的重复计算，常用于最值与计数。见 [DP](/docs/CS/Algorithms/DP/DP.md)，含线性 DP、背包四型（0-1 / 完全 / 多重 / 分组）、LCS、编辑距离、树形、区间、状态压缩、博弈与概率 DP 及优化技巧。
-- 分治（Divide and Conquer）：分解 → 递归 → 合并。见 [Divide and Conquer](/docs/CS/Algorithms/Divide-and-Conquer.md)（已在复杂度一节提及）。
-- 随机算法（Randomized）：引入随机性以简化或加速。见 [Randomized](/docs/CS/Algorithms/Randomized.md)。
-- 均摊分析（Amortized Analysis）：把偶发的昂贵操作摊到一系列廉价操作上。见 [Amortized](/docs/CS/Algorithms/Amortized.md)。
-- 双指针（Two Pointers）：用两个游标收缩区间，常配合有序性。见 [Two-Pointers](/docs/CS/Algorithms/Two-Pointers.md)。
-- 位运算（Bits）：用二进制位直接操作提升效率。见 [Bits](/docs/CS/Algorithms/Bits.md)。
-- 前缀和 / 差分：区间求和与区间修改的预处理技巧；文本差分（Myers 等）的写法见 [diff](/docs/CS/Algorithms/diff.md)。
+- 分治（Divide and Conquer）：分解 → 递归 → 合并。见 [Divide and Conquer](/docs/CS/Algorithms/paradigm/Divide-and-Conquer.md)（已在复杂度一节提及）。
+- 随机算法（Randomized）：引入随机性以简化或加速。见 [Randomized](/docs/CS/Algorithms/paradigm/Randomized.md)。
+- 均摊分析（Amortized Analysis）：把偶发的昂贵操作摊到一系列廉价操作上。见 [Amortized](/docs/CS/Algorithms/paradigm/Amortized.md)。
+- 双指针（Two Pointers）：用两个游标收缩区间，常配合有序性。见 [Two-Pointers](/docs/CS/Algorithms/paradigm/Two-Pointers.md)。
+- 位运算（Bits）：用二进制位直接操作提升效率。见 [Bits](/docs/CS/Algorithms/paradigm/Bits.md)。
+- 前缀和 / 差分：区间求和与区间修改的预处理技巧；文本差分（Myers 等）的写法见 [diff](/docs/CS/Algorithms/paradigm/diff.md)。
 
 ## Classic Algorithm Topics
 按**问题形态**归类的具体算法：
 
 - 判定与构造：[Computability](/docs/CS/Algorithms/Computability.md)（可判定性与图灵机）、[NP](/docs/CS/Algorithms/NP.md)（NP 完全与 $P \neq NP$，自 1971 年起是理论计算机科学最深的开问题之一）。
 - 搜索：[search](/docs/CS/Algorithms/search.md)（二分、DFS、BFS）、[string-search](/docs/CS/Algorithms/string/string-search.md)（朴素 / Rabin-Karp / KMP / BM / 后缀数组）、[string](/docs/CS/Algorithms/string/string.md)（字符串基础与哈希）。
-- 排序与选择：[sort](/docs/CS/Algorithms/sort.md)（比较排序与非比较排序、外排）与 [Quick Select](/docs/CS/Algorithms/Quick_Select.md)（第 $k$ 小与中位数，平均线性时间，BFPRT 给出最坏线性保证）。
-- 最优化：[graph](/docs/CS/Algorithms/graph/graph.md) 下的最小生成树与最短路，二分图 [Matching](/docs/CS/Algorithms/graph/Matching.md)，以及 [Network_Flow](/docs/CS/Algorithms/Network_Flow.md)（网络流）。题解见 [Shortest-Path](/docs/CS/Algorithms/question/Shortest-Path.md)。
+- 排序与选择：[sort](/docs/CS/Algorithms/sort/sort.md)（比较排序与非比较排序、外排）与 [Quick Select](/docs/CS/Algorithms/sort/Quick_Select.md)（第 $k$ 小与中位数，平均线性时间，BFPRT 给出最坏线性保证）。
+- 最优化：[graph](/docs/CS/Algorithms/graph/graph.md) 下的最小生成树与最短路，二分图 [Matching](/docs/CS/Algorithms/graph/Matching.md)，以及 [Network_Flow](/docs/CS/Algorithms/graph/Network_Flow.md)（网络流）。题解见 [Shortest-Path](/docs/CS/Algorithms/question/Shortest-Path.md)。
 - 计数与统计：[PageRank](/docs/CS/Algorithms/PageRank.md)（随机游走平稳分布）、[HyperLogLog](/docs/CS/Algorithms/HyperLogLog.md)（基数估计）、[Count-Min Sketch](/docs/CS/Algorithms/Count_Min_Sketch.md)（数据流频次估计，与基数估计互补）、[Number_Theory](/docs/CS/Algorithms/Number_Theory.md)（筛法、快速幂、模逆元、Pollard–Rho）。
 - 几何与游戏：[Computational_Geometry](/docs/CS/Algorithms/Computational_Geometry.md)（凸包、扫描线、鲁棒性）、[Algorithmic Game Theory](/docs/CS/Algorithms/Algorithmic_Game_Theory.md)（Minimax、α-β 剪枝、PVS、MCTS/UCT）。
 - 压缩：[JPEG](/docs/CS/Algorithms/JPEG.md)（DCT + 量化 + 游程 / 哈夫曼）。

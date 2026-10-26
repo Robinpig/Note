@@ -91,10 +91,10 @@ duckdb -storage-version v1.2.0 my.duckdb       -- CLI 参数
 
 ## Links
 
-- [DuckDB](/docs/CS/DB/DuckDB.md)
+- [DuckDB](/docs/CS/DB/DuckDB/DuckDB.md)
 - [Architecture](/docs/CS/DB/DuckDB/Architecture.md)
 - [Operations](/docs/CS/DB/DuckDB/Operations.md)
-- [WAL](/docs/CS/DB/WAL.md)
+- [WAL](/docs/CS/DB/Concept/WAL.md)
 - [Table Format](/docs/CS/BigData/Table_Format.md)
 
 ## References

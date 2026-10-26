@@ -59,7 +59,7 @@ COCO 采用全点插值（不取 11 个等差点），并对 80 类取平均：
 
 ## Links
 
-- [CV](/docs/CS/AI/CV.md)
+- [CV](/docs/CS/AI/CV/CV.md)
 - [Detection](/docs/CS/AI/CV/Detection.md)
 - [Segmentation](/docs/CS/AI/CV/Segmentation.md)
 - [Tracking](/docs/CS/AI/CV/Tracking.md)

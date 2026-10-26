@@ -17,7 +17,7 @@ SQL 进入 Router 后的第一件事是看分片键：
   └─ 全分片广播：所有 dataNode 都执行，归并结果
 ```
 
-三种路径的性能差距是数量级的：**精确路由只打一个分片、走一次网络、无归并**；广播则打全部分片、全部网络、全部归并。所以 MyCAT 使用的第一条军规是：**查询必须带分片键**。不带分片键的即席查询会把中间件打成瓶颈——这不是缺陷，是分片架构的固有代价，见 [Shard](/docs/CS/DB/Shard.md)。
+三种路径的性能差距是数量级的：**精确路由只打一个分片、走一次网络、无归并**；广播则打全部分片、全部网络、全部归并。所以 MyCAT 使用的第一条军规是：**查询必须带分片键**。不带分片键的即席查询会把中间件打成瓶颈——这不是缺陷，是分片架构的固有代价，见 [Shard](/docs/CS/DB/Concept/Shard.md)。
 
 第二条军规与解析器有关：默认 `druidparser` 解析不了或解析异常的 SQL，路由会退化成广播甚至报错。**同一个 SQL 在 MySQL 上能跑、在 MyCAT 上行为不同，先怀疑解析层**。
 
@@ -70,7 +70,7 @@ MyCAT2 把查询引擎换成 Apache Calcite 后，同一批 SQL 的处理能力�
 
 - [MyCat](/docs/CS/DB/MyCat/MyCat.md)
 - [Sharding_Rules](/docs/CS/DB/MyCat/Sharding_Rules.md)
-- [Shard](/docs/CS/DB/Shard.md)
+- [Shard](/docs/CS/DB/Concept/Shard.md)
 - [Architecture](/docs/CS/DB/MyCat/Architecture.md)
 
 ## References

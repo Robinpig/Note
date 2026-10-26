@@ -2,7 +2,7 @@
 
 分布式事务的落地分两条路线：**协议层**与**应用层模式**。[Consensus/Consensus.md](/docs/CS/Distributed/Consensus/Consensus.md) 已经覆盖了 2PC / 3PC / Quorum NWR 这类**原子提交协议**——它们由基础设施（事务协调器、数据库）保证 ACID，但代价是同步阻塞、锁资源、可用性低，难以直接套在跨多个微服务、长生命周期的业务上。本篇聚焦**应用层事务模式**：Saga 与 TCC，它们主动牺牲强隔离、用"可补偿 / 可预留"的设计换取高可用与横向扩展，是微服务架构下跨服务一致性的主流选择。
 
-数据库层也有原生的分布式事务实现，可作为对照：[TiDB](/docs/CS/DB/TiDB.md) 用 Percolator 的两阶段提交 + MVCC，[CockroachDB](/docs/CS/Distributed/CockroachDB.md) 用 HLC + 分布式事务——它们把一致性下沉到存储引擎，应用无感；而 Saga / TCC 是应用自己编排的。
+数据库层也有原生的分布式事务实现，可作为对照：[TiDB](/docs/CS/DB/TiDB/TiDB.md) 用 Percolator 的两阶段提交 + MVCC，[CockroachDB](/docs/CS/Distributed/CockroachDB.md) 用 HLC + 分布式事务——它们把一致性下沉到存储引擎，应用无感；而 Saga / TCC 是应用自己编排的。
 
 ## 2PC/3PC as the Baseline
 
@@ -64,7 +64,7 @@ TCC 的代价：业务侵入强——每个参与服务都要手写 Try/Confirm/
 
 - [Consensus（2PC/3PC/Quorum）](/docs/CS/Distributed/Consensus/Consensus.md)
 - [Seata](/docs/CS/Framework/Seata/Seata.md)
-- [TiDB](/docs/CS/DB/TiDB.md)
+- [TiDB](/docs/CS/DB/TiDB/TiDB.md)
 - [CockroachDB](/docs/CS/Distributed/CockroachDB.md)
 
 ## References

@@ -72,7 +72,7 @@ BUSY 与 LOCKED 的分界线就是「跨连接」与「连接内」：前者等�
 
 - [SQLite](/docs/CS/DB/SQLite.md)
 - [DataBases](/docs/CS/DB/DB.md)
-- [WAL](/docs/CS/DB/WAL.md)
+- [WAL](/docs/CS/DB/Concept/WAL.md)
 - [File_Format](/docs/CS/DB/SQLite/File_Format.md)
 - [H2 Transactions_and_Locks](/docs/CS/DB/h2/Transactions_and_Locks.md)
 - [MySQL MVCC](/docs/CS/DB/MySQL/Mvcc.md)

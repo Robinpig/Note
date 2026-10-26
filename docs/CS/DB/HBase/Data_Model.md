@@ -1,6 +1,6 @@
 ## Introduction
 
-HBase 的数据模型是它所有性能的源头，也是所有坑的根：表是「稀疏、多维、有序的 map」，按 RowKey 全局字典序排列。本页拆出列族、列限定符、版本、Cell 的语义与建表默认值，并解释「宽列 ≠ 列式存储」这一最常被混用的概念，以及中等对象（MOB）这条独立 IO 路径。完整数据模型与 [HBase](/docs/CS/DB/HBase.md) 的其它机制串在一起看。
+HBase 的数据模型是它所有性能的源头，也是所有坑的根：表是「稀疏、多维、有序的 map」，按 RowKey 全局字典序排列。本页拆出列族、列限定符、版本、Cell 的语义与建表默认值，并解释「宽列 ≠ 列式存储」这一最常被混用的概念，以及中等对象（MOB）这条独立 IO 路径。完整数据模型与 [HBase](/docs/CS/DB/HBase/HBase.md) 的其它机制串在一起看。
 
 ## Data Model
 
@@ -12,7 +12,7 @@ HBase 的数据模型是稀疏、多维、有序的 map，逻辑坐标即 `Map<R
 - **Timestamp / Version**：每个 cell 按时间戳保留多版本，列族默认 `VERSIONS => 1`。
 - **Cell**：由 `(rowkey, column family, qualifier, timestamp)` 定位，值是无类型 `byte[]`。
 
-列族（column family）不等于列式存储（column store）。宽表把「同一行、同一列族」的数据存在一起，面向按行取；OLAP 列存把「同一列、跨行」的值压缩在一起，面向扫描聚合。两者的取舍见 [HBase](/docs/CS/DB/HBase.md) 的 Comparison，混用这两个概念是最常见的表述错误。
+列族（column family）不等于列式存储（column store）。宽表把「同一行、同一列族」的数据存在一起，面向按行取；OLAP 列存把「同一列、跨行」的值压缩在一起，面向扫描聚合。两者的取舍见 [HBase](/docs/CS/DB/HBase/HBase.md) 的 Comparison，混用这两个概念是最常见的表述错误。
 
 建表时的列族默认值（`ColumnFamilyDescriptorBuilder`，branch-2.6 与 branch-3.0 一致）：
 
@@ -43,7 +43,7 @@ HBase 的数据模型是稀疏、多维、有序的 map，逻辑坐标即 `Map<R
 
 ## Links
 
-- [HBase](/docs/CS/DB/HBase.md)
+- [HBase](/docs/CS/DB/HBase/HBase.md)
 - [LSM Tree](/docs/CS/Algorithms/tree/LSM.md)
 - [Bigtable](/docs/CS/Distributed/Bigtable.md)
 

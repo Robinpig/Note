@@ -88,11 +88,11 @@ SELECT * FROM distinct_cache('sensors') WHERE machine_id = 'm-07';
 
 ## Links
 
-- [InfluxDB 枢纽](/docs/CS/DB/InfluxDB.md)
+- [InfluxDB 枢纽](/docs/CS/DB/InfluxDB/InfluxDB.md)
 - [Architecture](/docs/CS/DB/InfluxDB/Architecture.md)
 - [Storage_Engine](/docs/CS/DB/InfluxDB/Storage_Engine.md)
 - [Processing_Engine](/docs/CS/DB/InfluxDB/Processing_Engine.md)
-- [Timeseries](/docs/CS/DB/Timeseries.md)
+- [Timeseries](/docs/CS/DB/Concept/Timeseries.md)
 
 ## References
 

@@ -99,13 +99,13 @@ DolphinDB 内置一门图灵完备的脚本语言，支持命令式、函数式�
 ## Links
 
 - [DataBases](/docs/CS/DB/DB.md)
-- [Timeseries](/docs/CS/DB/Timeseries.md)
+- [Timeseries](/docs/CS/DB/Concept/Timeseries.md)
 - [LSM Tree](/docs/CS/Algorithms/tree/LSM.md)
-- [WAL](/docs/CS/DB/WAL.md)
+- [WAL](/docs/CS/DB/Concept/WAL.md)
 - [ClickHouse](/docs/CS/DB/ClickHouse.md)
-- [TDengine](/docs/CS/DB/TDengine.md)
-- [InfluxDB](/docs/CS/DB/InfluxDB.md)
-- [vector](/docs/CS/DB/vector.md)
+- [TDengine](/docs/CS/DB/TDengine/TDengine.md)
+- [InfluxDB](/docs/CS/DB/InfluxDB/InfluxDB.md)
+- [vector](/docs/CS/DB/Concept/vector.md)
 
 ## References
 

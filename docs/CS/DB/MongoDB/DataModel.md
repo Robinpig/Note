@@ -112,7 +112,7 @@ db.createCollection("users", {
 
 ## Links
 
-- [MongoDB](/docs/CS/DB/MongoDB.md)
+- [MongoDB](/docs/CS/DB/MongoDB/MongoDB.md)
 - [Query](/docs/CS/DB/MongoDB/Query.md)
 - [Index](/docs/CS/DB/MongoDB/Index.md)
 - [Time Series](/docs/CS/DB/MongoDB/TimeSeries.md)

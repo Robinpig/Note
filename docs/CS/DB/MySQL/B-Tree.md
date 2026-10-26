@@ -252,7 +252,7 @@ constexpr uint32_t BTR_CUR_FINE_HISTORY_LENGTH = 100000;
 - [InnoDB Storage Engine](/docs/CS/DB/MySQL/InnoDB.md)
 - [Memory](/docs/CS/DB/MySQL/memory.md)
 - [Undo Log](/docs/CS/DB/MySQL/undolog.md)
-- [B Link Tree](/docs/CS/DB/BLink-Tree.md)
+- [B Link Tree](/docs/CS/DB/Concept/BLink-Tree.md)
 
 ## References
 

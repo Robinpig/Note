@@ -1,6 +1,6 @@
 ## Introduction
 
-HBase 的集群由 HMaster（管调度、不碰数据）、HRegionServer（干活的节点）、Region（按 RowKey 范围切分、均衡单位）、hbase:meta（路由权威）组成。本页讲清角色分工、Region 数量治理，以及 3.0 把客户端引导从 ZooKeeper 改成 RPC registry 这一关键断点——这是写设计文档时最容易踩的版本陷阱。深入 RowKey 与写路径见 [HBase](/docs/CS/DB/HBase.md) 的其它分册。
+HBase 的集群由 HMaster（管调度、不碰数据）、HRegionServer（干活的节点）、Region（按 RowKey 范围切分、均衡单位）、hbase:meta（路由权威）组成。本页讲清角色分工、Region 数量治理，以及 3.0 把客户端引导从 ZooKeeper 改成 RPC registry 这一关键断点——这是写设计文档时最容易踩的版本陷阱。深入 RowKey 与写路径见 [HBase](/docs/CS/DB/HBase/HBase.md) 的其它分册。
 
 ## Architecture
 
@@ -67,7 +67,7 @@ HBASE-23797 在 3.0.0 **移除了 `hbase-protocol` 模块**，所有 protobuf �
 
 ## Links
 
-- [HBase](/docs/CS/DB/HBase.md)
+- [HBase](/docs/CS/DB/HBase/HBase.md)
 - [HDFS](/docs/CS/Framework/Hadoop/HDFS.md)
 - [ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)
 - [Region Management](/docs/CS/DB/HBase/Region_Management.md)

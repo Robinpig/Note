@@ -28,10 +28,10 @@ HBase 自身没有 SQL、也没有原生二级索引（见 [RowKey Design](/docs
 
 ## Links
 
-- [HBase](/docs/CS/DB/HBase.md)
+- [HBase](/docs/CS/DB/HBase/HBase.md)
 - [RowKey Design](/docs/CS/DB/HBase/RowKey_Design.md)
 - [Replication](/docs/CS/DB/HBase/Replication.md)
-- [TiDB](/docs/CS/DB/TiDB.md)
+- [TiDB](/docs/CS/DB/TiDB/TiDB.md)
 - [OceanBase](/docs/CS/DB/OceanBase.md)
 
 ## References

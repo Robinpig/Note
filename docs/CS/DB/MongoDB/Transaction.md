@@ -98,7 +98,7 @@ try {
 
 ## Links
 
-- [MongoDB](/docs/CS/DB/MongoDB.md)
+- [MongoDB](/docs/CS/DB/MongoDB/MongoDB.md)
 - [Storage Engine](/docs/CS/DB/MongoDB/StorageEngine.md)
 - [Replication](/docs/CS/DB/MongoDB/Replication.md)
 - [Sharding](/docs/CS/DB/MongoDB/Sharding.md)

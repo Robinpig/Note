@@ -26,7 +26,7 @@ HBase 的写路径是 LSM 写优化的典型实现：WAL 顺序追加 → MemSto
 
 ### Bulk Load
 
-Bulk Load 是把 TB 级数据灌入 HBase 的唯一合理做法（[HBase](/docs/CS/DB/HBase.md) 的 Consistency 一节已点出它绕开 WAL 与 MemStore）。它分两步，核心是「先用 MapReduce 产出 HBase 原生 HFile，再把文件直接 adopt 进在线集群」，因此**不占用 RegionServer 的写路径、不写 WAL、不进 MemStore**，CPU 与网络开销远低于走客户端 API：
+Bulk Load 是把 TB 级数据灌入 HBase 的唯一合理做法（[HBase](/docs/CS/DB/HBase/HBase.md) 的 Consistency 一节已点出它绕开 WAL 与 MemStore）。它分两步，核心是「先用 MapReduce 产出 HBase 原生 HFile，再把文件直接 adopt 进在线集群」，因此**不占用 RegionServer 的写路径、不写 WAL、不进 MemStore**，CPU 与网络开销远低于走客户端 API：
 
 1. **生成 HFile**：用 `HFileOutputFormat2` 跑一个 MapReduce 作业，把源数据写成 HBase 内部存储格式。关键是让每个输出 HFile 落在单个 Region 内——通过 `configureIncrementalLoad()` 基于表的当前 Region 边界自动建好 `TotalOrderPartitioner`（全局有序分区器），reduce 数设为目标表 Region 数；mapper 自己实现，value 可以是 `KeyValue` / `Put` / `Delete`。
 2. **导入并 adopt**：`completebulkload` 工具（底层 `LoadIncrementalHFiles`）逐个检查生成的 HFile，定位其所属 Region，联系对应 RegionServer 把文件**移动**进存储目录并加载对外服务。
@@ -58,7 +58,7 @@ Master 不参与数据读写，但**宕机恢复是 Master 的责任**。RegionS
 
 ## Links
 
-- [HBase](/docs/CS/DB/HBase.md)
+- [HBase](/docs/CS/DB/HBase/HBase.md)
 - [HDFS](/docs/CS/Framework/Hadoop/HDFS.md)
 - [LSM Tree](/docs/CS/Algorithms/tree/LSM.md)
 - [Operations](/docs/CS/DB/HBase/Operations.md)

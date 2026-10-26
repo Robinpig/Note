@@ -1,6 +1,6 @@
 ## Introduction
 
-RowKey 是 HBase 唯一的查询主键，也是唯一的分区键——分布是否均匀、前缀扫描是否可用、能否定位到单 Region，三件事全压在这一个字段上。本页讲热点（hotspotting）的成因与四类官方缓解手段（salting / 哈希 / 复合前缀 / 预分裂），以及二级索引的三类补偿方案。它是 [HBase](/docs/CS/DB/HBase.md) 数据模型之后最该先读的一页。
+RowKey 是 HBase 唯一的查询主键，也是唯一的分区键——分布是否均匀、前缀扫描是否可用、能否定位到单 Region，三件事全压在这一个字段上。本页讲热点（hotspotting）的成因与四类官方缓解手段（salting / 哈希 / 复合前缀 / 预分裂），以及二级索引的三类补偿方案。它是 [HBase](/docs/CS/DB/HBase/HBase.md) 数据模型之后最该先读的一页。
 
 ## RowKey Design
 
@@ -21,11 +21,11 @@ RowKey 是 HBase 唯一的查询主键，也是唯一的分区键，三件事同
 
 - **长度**：RowKey 是 `byte[]`，会被复制进 meta、Bloom filter、每个 KV 的 key。业务上「越短越好」，定长优于变长，能用 `long`/`int` 二进制就别用字符串。
 - **不可更新**：改 RowKey 只能「读旧行 → 写新行 → 删旧行」，删掉的行只留 tombstone，要等 major compaction 才真正消失，所以高频改主键的场景本身就不该用 HBase。
-- **二级索引**：HBase 自身不提供。补偿办法是三类——① 用 [Phoenix](/docs/CS/DB/HBase/Coprocessor_and_Phoenix.md)（或 Trafodion）在表上建**全局 / 本地索引**，把索引写成另一张 HBase 表；② 自建**异构索引表**，索引表 RowKey 用查询维度、value 存主表 RowKey，写入时双写或用 Coprocessor / [canal](/docs/CS/DB/canal.md) 异步同步；③ 把非主键维度倒排到 [Elasticsearch](/docs/CS/Framework/ES/ES.md)，ES 出 RowKey、HBase 取明细。三类都逃不过索引与主数据的一致性维护。
+- **二级索引**：HBase 自身不提供。补偿办法是三类——① 用 [Phoenix](/docs/CS/DB/HBase/Coprocessor_and_Phoenix.md)（或 Trafodion）在表上建**全局 / 本地索引**，把索引写成另一张 HBase 表；② 自建**异构索引表**，索引表 RowKey 用查询维度、value 存主表 RowKey，写入时双写或用 Coprocessor / [canal](/docs/CS/DB/Middleware/canal.md) 异步同步；③ 把非主键维度倒排到 [Elasticsearch](/docs/CS/Framework/ES/ES.md)，ES 出 RowKey、HBase 取明细。三类都逃不过索引与主数据的一致性维护。
 
 ## Links
 
-- [HBase](/docs/CS/DB/HBase.md)
+- [HBase](/docs/CS/DB/HBase/HBase.md)
 - [LSM Tree](/docs/CS/Algorithms/tree/LSM.md)
 - [Bigtable](/docs/CS/Distributed/Bigtable.md)
 

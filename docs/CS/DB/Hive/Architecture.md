@@ -52,7 +52,7 @@ HMS 的元数据存储在后端关系库中，核心表包括 `DBS`（库）、`
 
 ## Links
 
-- [Hive](/docs/CS/DB/Hive.md)
+- [Hive](/docs/CS/DB/Hive/Hive.md)
 - [Data Model](/docs/CS/DB/Hive/Data_Model.md)
 - [Execution Engines](/docs/CS/DB/Hive/Execution_Engines.md)
 - [Security and Governance](/docs/CS/DB/Hive/Security_and_Governance.md)

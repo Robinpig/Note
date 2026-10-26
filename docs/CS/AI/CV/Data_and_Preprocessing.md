@@ -65,7 +65,7 @@ YOLO 默认 letterbox；分类惯用"随机尺度裁剪"当增强。**补边值�
 
 ## Links
 
-- [CV](/docs/CS/AI/CV.md)
+- [CV](/docs/CS/AI/CV/CV.md)
 - [Classification](/docs/CS/AI/CV/Classification.md)
 - [Detection](/docs/CS/AI/CV/Detection.md)
 - [Deployment](/docs/CS/AI/CV/Deployment.md)

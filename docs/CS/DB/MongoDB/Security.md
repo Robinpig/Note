@@ -94,7 +94,7 @@ net:
 
 ## Links
 
-- [MongoDB](/docs/CS/DB/MongoDB.md)
+- [MongoDB](/docs/CS/DB/MongoDB/MongoDB.md)
 - [Architecture](/docs/CS/DB/MongoDB/Architecture.md)
 - [Operations](/docs/CS/DB/MongoDB/Operations.md)
 - [Replication](/docs/CS/DB/MongoDB/Replication.md)

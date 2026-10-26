@@ -80,7 +80,7 @@ MotherDuck 是 DuckDB 团队参与的云托管服务（`motherduck` 扩展接入
 
 ## Links
 
-- [DuckDB](/docs/CS/DB/DuckDB.md)
+- [DuckDB](/docs/CS/DB/DuckDB/DuckDB.md)
 - [Extensions](/docs/CS/DB/DuckDB/Extensions.md)
 - [Storage Format](/docs/CS/DB/DuckDB/Storage_Format.md)
 - [Table Format](/docs/CS/BigData/Table_Format.md)

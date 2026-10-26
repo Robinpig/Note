@@ -10,7 +10,7 @@ v3 的关键增量是 **per-cell Tags**：每个 cell 可以挂任意 tag（cell
 
 ## Links
 
-- [HBase](/docs/CS/DB/HBase.md)
+- [HBase](/docs/CS/DB/HBase/HBase.md)
 - [Data Model](/docs/CS/DB/HBase/Data_Model.md)
 - [Bigtable](/docs/CS/Distributed/Bigtable.md)
 - [LSM Tree](/docs/CS/Algorithms/tree/LSM.md)

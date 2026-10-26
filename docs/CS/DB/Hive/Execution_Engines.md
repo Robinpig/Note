@@ -41,7 +41,7 @@ LLAP: 常驻守护 + 缓存, 叠加在 Tez 之上做交互式加速
 
 ## Links
 
-- [Hive](/docs/CS/DB/Hive.md)
+- [Hive](/docs/CS/DB/Hive/Hive.md)
 - [Architecture](/docs/CS/DB/Hive/Architecture.md)
 - [Operations](/docs/CS/DB/Hive/Operations.md)
 

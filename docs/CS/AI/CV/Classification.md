@@ -53,7 +53,7 @@ preprocess = weights.transforms()          # resize/center-crop/归一化一体
 
 ## Links
 
-- [CV](/docs/CS/AI/CV.md)
+- [CV](/docs/CS/AI/CV/CV.md)
 - [CNN](/docs/CS/AI/CNN.md)
 - [Representation Learning](/docs/CS/AI/CV/Representation_Learning.md)
 - [Data and Preprocessing](/docs/CS/AI/CV/Data_and_Preprocessing.md)

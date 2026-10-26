@@ -86,7 +86,7 @@ Binder 是第一个「知道数据库存在」的阶段：
 
 ## Links
 
-- [DuckDB](/docs/CS/DB/DuckDB.md)
+- [DuckDB](/docs/CS/DB/DuckDB/DuckDB.md)
 - [Execution Engine](/docs/CS/DB/DuckDB/Execution_Engine.md)
 - [Storage Format](/docs/CS/DB/DuckDB/Storage_Format.md)
 - [Ecosystem](/docs/CS/DB/DuckDB/Ecosystem.md)

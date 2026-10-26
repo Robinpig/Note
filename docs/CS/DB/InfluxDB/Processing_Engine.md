@@ -65,7 +65,7 @@ ORDER BY event_time DESC LIMIT 20;
 
 ## Links
 
-- [InfluxDB 枢纽](/docs/CS/DB/InfluxDB.md)
+- [InfluxDB 枢纽](/docs/CS/DB/InfluxDB/InfluxDB.md)
 - [Query](/docs/CS/DB/InfluxDB/Query.md)
 - [Architecture](/docs/CS/DB/InfluxDB/Architecture.md)
 - [Deployment](/docs/CS/DB/InfluxDB/Deployment.md)

@@ -66,7 +66,7 @@ OpenCV 5（2026-06 发布）的新 DNN 引擎值得注意：重写为类型化�
 
 ## Links
 
-- [CV](/docs/CS/AI/CV.md)
+- [CV](/docs/CS/AI/CV/CV.md)
 - [Detection](/docs/CS/AI/CV/Detection.md)
 - [Tracking](/docs/CS/AI/CV/Tracking.md)
 - [Data and Preprocessing](/docs/CS/AI/CV/Data_and_Preprocessing.md)

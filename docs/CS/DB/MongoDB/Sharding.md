@@ -110,11 +110,11 @@ zone 的区间必须基于 shard key 字段（复合键要包含前缀）。定�
 
 ## Links
 
-- [MongoDB](/docs/CS/DB/MongoDB.md)
+- [MongoDB](/docs/CS/DB/MongoDB/MongoDB.md)
 - [Architecture](/docs/CS/DB/MongoDB/Architecture.md)
 - [Replication](/docs/CS/DB/MongoDB/Replication.md)
 - [Transaction](/docs/CS/DB/MongoDB/Transaction.md)
-- [Shard](/docs/CS/DB/Shard.md)
+- [Shard](/docs/CS/DB/Concept/Shard.md)
 
 ## References
 

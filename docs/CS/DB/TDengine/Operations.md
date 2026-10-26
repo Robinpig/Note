@@ -88,7 +88,7 @@ SELECT SERVER_VERSION();                       -- 版本自检
 
 ## Links
 
-- [TDengine](/docs/CS/DB/TDengine.md)
+- [TDengine](/docs/CS/DB/TDengine/TDengine.md)
 - [Architecture](/docs/CS/DB/TDengine/Architecture.md)
 - [Storage_Engine](/docs/CS/DB/TDengine/Storage_Engine.md)
 - [Ecosystem](/docs/CS/DB/TDengine/Ecosystem.md)

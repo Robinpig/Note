@@ -83,8 +83,8 @@ README 与 release notes 里点名的坑，接入前逐条对账：
 - [MyCat](/docs/CS/DB/MyCat/MyCat.md)
 - [Configuration](/docs/CS/DB/MyCat/Configuration.md)
 - [Read_Write_Split](/docs/CS/DB/MyCat/Read_Write_Split.md)
-- [ShardingSphere](/docs/CS/DB/ShardingSphere.md)
-- [Shard](/docs/CS/DB/Shard.md)
+- [ShardingSphere](/docs/CS/DB/Middleware/ShardingSphere.md)
+- [Shard](/docs/CS/DB/Concept/Shard.md)
 
 ## References
 

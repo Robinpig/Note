@@ -92,7 +92,7 @@ Feature List 里那句「cost-based optimizer，复杂查询用遗传算法」**
 - [MVStore](/docs/CS/DB/h2/MVStore.md)
 - [Connection and Servers](/docs/CS/DB/h2/Connection_and_Servers.md)
 - [SQL Language](/docs/CS/DB/h2/SQL_Language.md)
-- [WAL](/docs/CS/DB/WAL.md)
+- [WAL](/docs/CS/DB/Concept/WAL.md)
 - [RocksDB Compaction](/docs/CS/DB/RocksDB/Compaction.md)
 
 ## References

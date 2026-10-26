@@ -75,7 +75,7 @@ SQLite 是**柔性类型**（官方对照词：flexibly typed vs rigidly typed�
 - [DataBases](/docs/CS/DB/DB.md)
 - [H2 SQL_Language](/docs/CS/DB/h2/SQL_Language.md)
 - [MySQL Type](/docs/CS/DB/MySQL/Type.md)
-- [Indexes](/docs/CS/DB/Index.md)
+- [Indexes](/docs/CS/DB/Concept/Index.md)
 
 ## References
 

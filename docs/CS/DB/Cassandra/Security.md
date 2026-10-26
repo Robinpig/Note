@@ -58,7 +58,7 @@ CREATE TABLE users (id uuid PRIMARY KEY, ssn text MASKED WITH (FUNCTION = 'parti
 
 ## Links
 
-- [Cassandra](/docs/CS/DB/Cassandra.md)
+- [Cassandra](/docs/CS/DB/Cassandra/Cassandra.md)
 - [Operations](/docs/CS/DB/Cassandra/Operations.md)
 - [Architecture](/docs/CS/DB/Cassandra/Architecture.md)
 - [Replication](/docs/CS/DB/Cassandra/Replication.md)

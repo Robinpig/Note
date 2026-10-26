@@ -509,7 +509,7 @@ $$
 dp[S][j] = \min_{i \in S \setminus \{j\}} \Big(dp[S \setminus \{j\}][i] + w_{ij}\Big)
 $$
 
-时间 $O(2^n n^2)$、空间 $O(2^n n)$，是「指数状态 + 多项式转移」的典型。类似地，N 皇后可按「列、两条对角线的占用掩码」逐行 DFS 加位运算剪枝，本质是把三维占用状态压进三个整数（位运算基础见 [Bits](/docs/CS/Algorithms/Bits.md)）。
+时间 $O(2^n n^2)$、空间 $O(2^n n)$，是「指数状态 + 多项式转移」的典型。类似地，N 皇后可按「列、两条对角线的占用掩码」逐行 DFS 加位运算剪枝，本质是把三维占用状态压进三个整数（位运算基础见 [Bits](/docs/CS/Algorithms/paradigm/Bits.md)）。
 
 ## Game DP
 
@@ -577,10 +577,10 @@ $L$（最长严格上升子序列）是 DP 最经典的模型之一，也是「�
 ## Links
 
 - [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
-- [Greedy](/docs/CS/Algorithms/Greedy.md)
-- [Divide and Conquer](/docs/CS/Algorithms/Divide-and-Conquer.md)
-- [Recursion](/docs/CS/Algorithms/Recursion.md)
-- [Backtracking](/docs/CS/Algorithms/Backtracking.md)
+- [Greedy](/docs/CS/Algorithms/paradigm/Greedy.md)
+- [Divide and Conquer](/docs/CS/Algorithms/paradigm/Divide-and-Conquer.md)
+- [Recursion](/docs/CS/Algorithms/paradigm/Recursion.md)
+- [Backtracking](/docs/CS/Algorithms/paradigm/Backtracking.md)
 
 ## References
 

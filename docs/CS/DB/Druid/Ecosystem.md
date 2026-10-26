@@ -46,14 +46,14 @@ Druid 的生态位可以这样理解：**它不是数据湖格式，而是一个
 | :--- | :--- |
 | vs [ClickHouse](/docs/CS/DB/ClickHouse.md) | Druid：多角色集群 + 松耦合摄取，实时摄取与弹性是卖点；ClickHouse：单体极致扫描性能 + 极简部署 |
 | vs Apache Pinot | 架构最近亲（都是实时 OLAP + 段存储）；Pinot 与 Kafka 耦合更深、部署面更窄 |
-| vs [Timeseries](/docs/CS/DB/Timeseries.md) 系（InfluxDB/GreptimeDB 等） | Druid 是通用事件 OLAP，时序只是其一种数据；TSDB 在时序函数与压缩上更专 |
+| vs [Timeseries](/docs/CS/DB/Concept/Timeseries.md) 系（InfluxDB/GreptimeDB 等） | Druid 是通用事件 OLAP，时序只是其一种数据；TSDB 在时序函数与压缩上更专 |
 | vs [Presto](/docs/CS/DB/Presto.md) / Trino | Presto 不存数据只做联邦；Druid 存算一体、为固定形状高 QPS 查询优化 |
-| vs [DuckDB](/docs/CS/DB/DuckDB.md) | DuckDB 是进程内单机分析；Druid 是分布式服务 |
+| vs [DuckDB](/docs/CS/DB/DuckDB/DuckDB.md) | DuckDB 是进程内单机分析；Druid 是分布式服务 |
 | vs [Doris](/docs/CS/DB/Doris.md) | Doris 是兼容 MySQL 协议的 MPP 数仓、Join 能力强；Druid 是时序分区 OLAP、摄取实时性强 |
 
 ## Links
 
-- [Druid](/docs/CS/DB/Druid.md)
+- [Druid](/docs/CS/DB/Druid/Druid.md)
 - [Ingestion](/docs/CS/DB/Druid/Ingestion.md)
 - [Query Engine](/docs/CS/DB/Druid/Query_Engine.md)
 - [Kafka](/docs/CS/MQ/Kafka/Kafka.md)

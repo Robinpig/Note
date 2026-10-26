@@ -24,7 +24,7 @@
 
 catalog 在大数据里承担两个不同但容易混淆的角色，务必分开：
 
-1. **表注册与定位**（"这个表名对应哪些文件"）——这是 [Hive](/docs/CS/DB/Hive.md) Metastore 的传统职责，也是 Spark / Trino / Flink 找表的地方。在湖仓里它升级为跨引擎的命名空间与权限边界，Iceberg 的 REST Catalog 就是往这个方向走的独立服务（见 [Table Format](/docs/CS/BigData/Table_Format.md)）。
+1. **表注册与定位**（"这个表名对应哪些文件"）——这是 [Hive](/docs/CS/DB/Hive/Hive.md) Metastore 的传统职责，也是 Spark / Trino / Flink 找表的地方。在湖仓里它升级为跨引擎的命名空间与权限边界，Iceberg 的 REST Catalog 就是往这个方向走的独立服务（见 [Table Format](/docs/CS/BigData/Table_Format.md)）。
 2. **数据目录 / 资产发现**（"我该用哪张表"）——这是 OpenMetadata、DataHub 这类产品的职责，是给人用的搜索与理解层。
 
 两者会被混为一谈是因为 HMS 长期兼任了两者，而它其实做不好第二件事：没有血缘、没有质量、没有 glossary、也没有像样的搜索。
@@ -96,7 +96,7 @@ Hadoop 生态里的传统组合是 Apache Atlas（元数据与分类）+ Apache 
 - [Lakehouse](/docs/CS/BigData/Lakehouse.md)
 - [Table Format](/docs/CS/BigData/Table_Format.md)
 - [Data Integration](/docs/CS/BigData/Data_Integration.md)
-- [Hive](/docs/CS/DB/Hive.md)
+- [Hive](/docs/CS/DB/Hive/Hive.md)
 
 ## References
 

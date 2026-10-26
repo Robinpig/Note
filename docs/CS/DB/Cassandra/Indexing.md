@@ -70,7 +70,7 @@ Cassandra 本身不提供「全局二级索引」这种零读放大方案。需�
 
 ## Links
 
-- [Cassandra](/docs/CS/DB/Cassandra.md)
+- [Cassandra](/docs/CS/DB/Cassandra/Cassandra.md)
 - [Data Model](/docs/CS/DB/Cassandra/DataModel.md)
 - [CQL](/docs/CS/DB/Cassandra/CQL.md)
 - [Storage Engine](/docs/CS/DB/Cassandra/StorageEngine.md)

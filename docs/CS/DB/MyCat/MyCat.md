@@ -1,6 +1,6 @@
 ## Introduction
 
-MyCAT 是一个**服务器端数据库代理中间件**：前端讲 MySQL 原生协议，对应用表现为一台普通的 MySQL 服务器；后端用 JDBC 连接真实的数据库集群，在中间完成分库分表路由、读写分离、结果归并。业务代码零侵入——应用连的是 MyCAT，不是 MySQL，这是它与 [ShardingSphere](/docs/CS/DB/ShardingSphere.md) 这类客户端中间件的根本分野。
+MyCAT 是一个**服务器端数据库代理中间件**：前端讲 MySQL 原生协议，对应用表现为一台普通的 MySQL 服务器；后端用 JDBC 连接真实的数据库集群，在中间完成分库分表路由、读写分离、结果归并。业务代码零侵入——应用连的是 MyCAT，不是 MySQL，这是它与 [ShardingSphere](/docs/CS/DB/Middleware/ShardingSphere.md) 这类客户端中间件的根本分野。
 
 它有两条需要分开叙述的血脉：
 
@@ -9,7 +9,7 @@ MyCAT 是一个**服务器端数据库代理中间件**：前端讲 MySQL 原生
 
 「同一个名字、两套代码」是理解 MyCAT 生态的第一道门槛：网上绝大多数教程（含官方站 mycat.org.cn 的入门文档）讲的是 1.6；看到 Calcite、datasource.json、8066 端口，说的是 MyCAT2。
 
-本页是枢纽页：只放定位、架构总览、选型与最要紧的版本事实；配置细节、分片算法、SQL 路由、读写分离、事务、运维七个方向各有分册展开。分片本身的通用机制（为什么分、怎么分）见 [Shard](/docs/CS/DB/Shard.md)，本页不重述。
+本页是枢纽页：只放定位、架构总览、选型与最要紧的版本事实；配置细节、分片算法、SQL 路由、读写分离、事务、运维七个方向各有分册展开。分片本身的通用机制（为什么分、怎么分）见 [Shard](/docs/CS/DB/Concept/Shard.md)，本页不重述。
 
 ## Architecture
 
@@ -37,7 +37,7 @@ MySQL 结果报文 ── 客户端看到的是一个单库单表的世界
 三个结构性事实：
 
 - **后端不挑数据库**：前端协议只有一种，后端只要是 JDBC 可达即可——MySQL、Oracle、DB2、SQL Server、PostgreSQL（1.6 起有 native 协议）、MongoDB 都可作为存储节点。MyCAT2 进一步内置了 ClickHouse 后端数据源（仅 select/insert，无自增值返回）。
-- **中间件不持有数据**：元数据、事务、持久化全部在后端 MySQL 集群，MyCAT 挂掉不丢数据，重启即恢复——这是它与 [TiDB](/docs/CS/DB/TiDB.md)、[OceanBase](/docs/CS/DB/OceanBase.md) 这类 NewSQL 的本质区别，也是它扩容/缩容时数据要搬家的原因。
+- **中间件不持有数据**：元数据、事务、持久化全部在后端 MySQL 集群，MyCAT 挂掉不丢数据，重启即恢复——这是它与 [TiDB](/docs/CS/DB/TiDB/TiDB.md)、[OceanBase](/docs/CS/DB/OceanBase.md) 这类 NewSQL 的本质区别，也是它扩容/缩容时数据要搬家的原因。
 - **MyCAT1 与 MyCAT2 的执行内核不同**：1.x 的路由与归并逻辑内建于 `io.mycat.route` 与 `io.mycat.server`；2.x 把这部分交给 Calcite 的 rule+cost 优化器和自研物理执行引擎，还支持用自研 DSL 直接改写物理执行计划。跨库 join 的能力上限因此完全不同。
 
 ## Map of This Section
@@ -68,7 +68,7 @@ MyCAT 的甜点区可以一句话概括：**存储是现成的 MySQL 主从集�
 - **追求极限延迟的 OLTP**：多一跳网络 + 一次结果归并，事务语义还降级，换来的是架构上的便利而不是性能。
 - **强一致分布式事务是硬需求**：弱 XA 是尽力而为，XA 只是两阶段提交的最低保障；真需要 Serializable 跨分片事务，应该看 NewSQL。
 - **SQL 极其灵活多变的场景**：路由依赖分片键，不带分片键的即席查询会退化成全分片广播，中间件只会放大这个问题。
-- **Java 单体且愿意引 jar**：同代数下 [ShardingSphere](/docs/CS/DB/ShardingSphere.md)-JDBC 少一跳，能力还更全。
+- **Java 单体且愿意引 jar**：同代数下 [ShardingSphere](/docs/CS/DB/Middleware/ShardingSphere.md)-JDBC 少一跳，能力还更全。
 
 | 条件 | 选择 |
 | :--- | :--- |
@@ -92,9 +92,9 @@ MyCAT 的甜点区可以一句话概括：**存储是现成的 MySQL 主从集�
 
 ## Links
 
-- [Shard](/docs/CS/DB/Shard.md)
-- [ShardingSphere](/docs/CS/DB/ShardingSphere.md)
-- [TDDL](/docs/CS/DB/TDDL.md)
+- [Shard](/docs/CS/DB/Concept/Shard.md)
+- [ShardingSphere](/docs/CS/DB/Middleware/ShardingSphere.md)
+- [TDDL](/docs/CS/DB/Middleware/TDDL.md)
 - [DB](/docs/CS/DB/DB.md)
 - [MySQL](/docs/CS/DB/MySQL/MySQL.md)
 

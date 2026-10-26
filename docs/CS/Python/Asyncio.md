@@ -142,7 +142,7 @@ async with asyncio.TaskGroup() as tg:             # 对象全建，在飞的只�
 
 两条硬约束：`add_signal_handler()` 只在 Unix 可用，且**必须像 `signal.signal()` 一样在主线程调用**（回调被排进循环、与 `_ready`
 里其他回调同批执行，这是从信号处理里安全驱动循环的正解）；Windows 的 Proactor 不支持 `add_reader()` / `add_writer()`，Selector
-反过来不支持管道与子进程。信号与跨线程唤醒（`call_soon_threadsafe`）的边界见 [Concurrency](/docs/CS/Python/Concurrency.md)；async 路由见 [FastAPI](/docs/CS/Framework/FastAPI.md)。
+反过来不支持管道与子进程。信号与跨线程唤醒（`call_soon_threadsafe`）的边界见 [Concurrency](/docs/CS/Python/Concurrency.md)；async 路由见 [FastAPI 异步与 WebSocket](/docs/CS/Framework/FastAPI/Async_and_WebSockets.md)。
 
 ## Third-party alternatives
 

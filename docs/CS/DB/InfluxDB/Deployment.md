@@ -62,7 +62,7 @@ Enterprise Trial / Home license 不需要销售沟通即可下载评估；Core �
 
 ## Links
 
-- [InfluxDB 枢纽](/docs/CS/DB/InfluxDB.md)
+- [InfluxDB 枢纽](/docs/CS/DB/InfluxDB/InfluxDB.md)
 - [Architecture](/docs/CS/DB/InfluxDB/Architecture.md)
 - [Data_Model](/docs/CS/DB/InfluxDB/Data_Model.md)
 - [Processing_Engine](/docs/CS/DB/InfluxDB/Processing_Engine.md)
