@@ -424,9 +424,8 @@ E0502 那一段的读法值得自己跑一遍：`rustc --edition 2024 --crate-ty
 - [Lifetime](/docs/CS/Rust/Lifetime.md)
 - [Smart_Pointers](/docs/CS/Rust/Smart_Pointers.md)
 - [Drop](/docs/CS/Rust/Drop.md)
-- [Memory_Layout](/docs/CS/Rust/Memory_Layout.md)
 - [Move](/docs/CS/C++/Move.md)
-
+- [Closures](/docs/CS/Rust/Closures.md)
 ## References
 
 - [The Rust Programming Language - What Is Ownership](https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html)

@@ -184,92 +184,13 @@ const ARR: [i32; 3] = from_list!(1, 2, 3);
 
 ## Procedural Macros
 
-### Three Kinds
+过程宏的全部细节——三种形态（derive / attribute / function-like）的输入输出、为什么必须住在独立 crate（展开器要加载编译好的 dylib，与 C++ 模板"文本塞进同一 TU"的分水岭）、`proc-macro2` / `syn` / `quote` / `darling` / `paste` 五件套、derive 的能做与不能做（不能加字段、不能实现 `Drop`、机械加泛型 bound 的陷阱）、span 与错误定位、以及 `cargo expand` 的 nightly 依赖——拆到了 [Proc_Macro](/docs/CS/Rust/Proc_Macro.md)，本页只留三条与 macro_rules 直接对照的结论：
 
-| 形态 | 属性 | 输入 | 输出 | 典型用途 |
-| :--- | :--- | :--- | :--- | :--- |
-| function-like | `#[proc_macro]` | 括号内 `TokenStream` | 任意语法片段 | DSL、`macro_rules!` 做不了的拼接 |
-| derive | `#[proc_macro_derive]` | 目标**项**的 token | **额外**生成项 | `Clone`、`serde::Serialize` |
-| attribute | `#[proc_macro_attribute]` | 属性参数 + 被标注项 | **替换**被标注项 | `#[tokio::main]`、`#[derive_builder]` |
+1. **分工不同。** macro_rules 处理 token 的**形状**（重复、分隔、片段、follow set），过程宏处理 token 的**语义**——需要读"字段列表、类型、属性"再生成代码时，macro_rules 做不到，才上过程宏。
+2. **卫生性不同。** macro_rules 有混合站点卫生（局部变量不泄漏也不被遮蔽），过程宏没有这套机制，只有 `Span::call_site()` / `mixed_site()` 两个原始工具，手搓 `String` + `parse()` 会一次丢掉错误定位、IDE 跳转与格式化三件事。
+3. **成本不同。** 过程宏是宿主动态库：改宏 crate 让所有使用者重编，`TokenStream` 转换与解析是真实编译期开销——`cargo check` 变慢、IDE 卡顿的常见根因。测量与缓解见 [工具链](/docs/CS/Rust/Tooling.md)。
 
-derive 只能"在旁边加东西"，attribute 宏可以整段重写目标项——这条区别决定了 `#[derive(Clone)]` 永远改不了字段。
-
-### Why Procedural Macros Must Live in Their Own Crate
-
-`[lib] proc-macro = true` 不是打包偏好，而是因果必需。四条本机实测诊断摆出整条链：``the `#[proc_macro]` attribute is only usable with crates of the `proc-macro` crate type``、`E0432: unresolved import 'proc_macro'`（普通 crate 链接不到该 crate）、`can't use a procedural macro from the same crate that defines it`、`` `proc-macro` crate types currently cannot export any items other than functions tagged with `#[proc_macro]`, `#[proc_macro_derive]`, or `#[proc_macro_attribute]` ``。
-
-链条是：**展开器要调用你的代码，而调用意味着加载一个已编译的宿主平台动态库。** 你自己的 crate 此刻正在被编译、还没有可用产物，于是循环。所以过程宏必须是"在使用者之前编好的独立 crate"，且只能导出宏入口——内部逻辑得拆到另一个普通 crate，这正是很多宏库同时有 `foo` 与 `foo-derive` 两个包的原因。这也正是与 C++ 的分水岭：C++ 的 `#include` 把声明与定义**文本地塞进同一个编译单元**，模板因此能在同一 TU 里惰性实例化、边解析边求值，顺手得到一门图灵完备的编译期语言（见 [Templates.md](/docs/CS/C++/Templates.md)），代价是头文件依赖、ODR、编译时间和几百行的模板报错。Rust 反过来：编译期可执行代码被关进一个预先编好的沙箱 crate，边界干净、增量可控，但宏永远看不到类型。
-
-### The de Facto Toolchain
-
-手写 `TokenStream` 字符串拼接是可证明的坏主意：`format!("...").parse().unwrap()` 会丢掉全部原始 span（新 token 一律落在 call site），错误定位退化成"指到宏属性那一行"，还容易 panic。事实标准：
-
-| crate | 角色 |
-| :--- | :--- |
-| `proc-macro2` | 可脱离编译器测试的 `TokenStream` 替身 + `Span::call_site()` / `Span::mixed_site()` 显式卫生控制 |
-| `syn` | 把 token 解析成 Rust 语法树（`DeriveInput`、`Fields`、`Type`……） |
-| `quote` | `quote! { }` 反引用插值生成 token，`#( ... )*` 对应重复 |
-| `darling` | 解析 attribute 参数（`#[builder(default)]` 这类选项） |
-| `paste` | 标识符拼接 |
-
-本机 `index.crates.io` 不可达（curl 超时），但本地 registry 缓存足够 `--offline` 构建，解析到 `syn 2.0.119` / `quote 1.0.47` / `proc-macro2 1.0.107` / `paste 1.0.15`（缓存里同时有 `syn 1.0.109` 与 `syn 3.0.6`：大版本 API 不兼容，动手前先确认依赖树锁了哪条线；`darling` 缓存有 0.20 至 0.24）。下面这个 derive 在本机真实编译，使用方 `Cfg::builder().host(s).port(1).build()` 也通过，是可以直接抄的最小骨架：
-
-```rust
-use proc_macro::TokenStream;
-use quote::{format_ident, quote};
-use syn::{parse_macro_input, Data, DeriveInput, Fields};
-
-#[proc_macro_derive(Builder)]
-pub fn derive_builder(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-    let Data::Struct(s) = &input.data else { panic!("Builder 只能 derive 到 struct") };
-    let Fields::Named(n) = &s.fields else { panic!("Builder 只支持具名字段的 struct") };
-    let name = &input.ident;
-    let builder = format_ident!("{}Builder", name);
-    let idents: Vec<_> = n.named.iter().map(|f| f.ident.as_ref().unwrap()).collect();
-    let tys: Vec<_> = n.named.iter().map(|f| &f.ty).collect();
-    let out = quote! {
-        struct #builder { #(#idents: Option<#tys>),* }
-        impl #name { fn builder() -> #builder { #builder { #(#idents: None),* } } }
-        impl #builder {
-            #(fn #idents(mut self, v: #tys) -> Self { self.#idents = Some(v); self })*
-            fn build(self) -> Result<#name, String> {
-                Ok(#name { #(#idents: self.#idents.ok_or_else(|| stringify!(#idents).to_string())? ),* })
-            }
-        }
-    };
-    out.into()
-}
-```
-
-`format_ident!` 就是"受控的 `##`"；`#(#idents: Option<#tys>),*` 把几个平行 Vec 同步展开成逗号列表。`syn` 只负责解析、`quote` 只负责生成、互不越界，是这套工具能用少数原语覆盖绝大多数宏的原因。
-
-### What derive Can and Cannot Do
-
-- **不能给被 derive 的类型加字段。** derive 的输出是"另发的项"，原类型定义不动一行；要改字段只能用 attribute 宏重写整个项，或用 function-like 宏生成字段列表。
-- **不能实现 `Drop`。** 实测 `#[derive(Drop)]` → ``error: cannot find derive macro `Drop` in this scope`` + `= note: 'Drop' is in scope, but it is only a trait, without a derive macro`。析构必须手写，理由见 [Drop.md](/docs/CS/Rust/Drop.md)。
-- **不能声明未登记的辅助属性。** 上例没写 `attributes(builder)`，于是使用方的 `#[builder(default)]` 报 `error: cannot find attribute 'builder' in this scope`。
-- **会给泛型加机械的 bound**，这是最著名的陷阱：
-
-```rust
-#[derive(Clone)]
-pub struct Handle<T> { inner: std::rc::Rc<T> }
-pub struct NotClone;
-pub fn needs_clone<H: Clone>(_h: H) {}
-pub fn probe(h: Handle<NotClone>) { needs_clone(h); }   // E0277
-```
-
-`Rc<T>` 对**任何** `T` 都是 `Clone`，但 derive 生成的是 `impl<T: Clone> Clone for Handle<T>`。真实诊断替你把解法写出来了：``= help: consider manually implementing `Clone` to avoid undesired bounds``。解法是手写 `impl<T> Clone for Handle<T> { fn clone(&self) -> Self { Self { inner: self.inner.clone() } } }`（本机通过）。同一机制解释了 `#[derive(Default)]` 对 `PhantomData<T>` 加 `T: Default` 的问题：derive 只看类型参数是否**出现**，不看字段是否真的需要它。机制细节在 [Trait_System.md](/docs/CS/Rust/Trait_System.md) 与 [Generics.md](/docs/CS/Rust/Generics.md)。
-
-### Failure Modes of Attribute Macros
-
-**一、错误定位在展开产物上。** 一个把项复制两遍的 attribute 宏，本机报 `E0428: the name 'solo' is defined multiple times`，caret 只落在 `#[duplicate]` 那一行，并附 `= note: this error originates in the attribute macro 'duplicate' (in Nightly builds, run with -Z macro-backtrace for more info)`。诊断能告诉你是哪个宏造成的，但给不出展开后的行号；要看完整展开链得开 `-Z macro-backtrace`，那是 nightly 专属。
-
-**二、宏内部 panic 只剩一条几乎无信息的错误。** 上面那个 `Builder` derive 用在 `enum` 上会走 `panic!` 分支，本机报 `error: proc-macro derive panicked` + `= help: message: Builder 只能 derive 到 struct`，caret 只落在 `#[derive(Builder)]` 的属性名上。panic 穿越展开器时丢了文件行号与上下文。`proc_macro_error`（以及后续 `unwind` 方向的工作）解决的就是这件事：**用 `abort!` 输出正常诊断而不是 panic**；更朴素的写法是把 `syn::Error` 转成 `to_compile_error()` 返回。写宏时应把"用户输入不合法"和"宏自己有 bug"分成两条路径。
-
-**三、span 是卫生性的载体。** `Span::call_site()` 生成的 token 属于调用点（会被调用方局部变量遮蔽、错误落在调用点），`Span::mixed_site()` 则按声明宏规则处理局部符号。手搓 `String` + `parse()` 把所有 token 变成 call-site span，副作用三合一：错误定位差、IDE 跳转失效、`rustfmt` 无从格式化。
-
-**四、编译期与交互成本。** 过程宏是宿主 dylib：改宏 crate 会让所有使用者重编，展开时反复做 `TokenStream` 转换与解析是真实开销——`cargo check` 变慢、IDE 卡顿的常见根因就在这里。测量与缓解见 [Tooling.md](/docs/CS/Rust/Tooling.md)。
+原节的 `Builder` derive 最小骨架、`#[derive(Clone)]` 给泛型加 bound 的实测诊断、属性宏的四种失败模式随迁，见 [Proc_Macro](/docs/CS/Rust/Proc_Macro.md)。
 
 ## Expansion and Tooling
 
@@ -309,9 +230,8 @@ Java 那行值得多说一句：它是几家里最接近"过程宏能读到类�
 - [Cargo.md](/docs/CS/Rust/Cargo.md)
 - [Trait_System.md](/docs/CS/Rust/Trait_System.md)
 - [Preprocessor.md](/docs/CS/C/Preprocessor.md)
-- [Ecosystem.md](/docs/CS/Rust/Ecosystem.md)
 - [Rust.md](/docs/CS/Rust/Rust.md)
-
+- [Proc_Macro](/docs/CS/Rust/Proc_Macro.md)
 ## References
 
 - [Rust Reference: Macros By Example](https://doc.rust-lang.org/reference/macros-by-example.html)

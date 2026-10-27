@@ -152,45 +152,13 @@ rt.spawn(eager);                                    // 注册 waker 时，事件
 
 ## Pin Exists Because the State Machine Is Self-Referential
 
-`async fn` 编译出的状态机会把"跨 `.await` 存活的局部变量"存进自身，还会**引用自己的字段**（`v` 与指向它的 `r` 在同一个结构体里）。
-一旦这个值被移动，`r` 就指向旧地址——这是真实的悬垂。于是编译器要求 `poll` 的接收者是 `Pin<&mut Self>`：**承诺不把这个值再移动**。
+`async fn` 编译出的状态机会把"跨 `.await` 存活的局部变量"存进自身，还会**引用自己的字段**（`v` 与指向它的 `r` 在同一个结构体里）。一旦这个值被移动，`r` 就指向旧地址——这是真实的悬垂。于是编译器要求 `poll` 的接收者是 `Pin<&mut Self>`：**承诺不把这个值再移动**。
 
-本机实测最反直觉的一条：**编译器生成的 future 一律 `!Unpin`**，哪怕它根本没有自引用：
-
-```rust
-fn needs_unpin<T: Unpin>(_t: T) {}
-async fn leaf() -> u32 { 1 } // 无借用、无 await，最干净的状态机
-needs_unpin(leaf());
-```
-
-```text
-error[E0277]: `{async fn body of leaf()}` cannot be unpinned
-  = note: consider using the `pin!` macro
-          consider using `Box::pin` if you need to access the pinned value outside of the current scope
-```
-
-所以不要指望"我这个 future 应该没自引用所以能 `Pin::new`"——编译器的答案对**所有** `async fn` / `async{}` 都是 `!Unpin`。
-反过来，普通含 `PhantomPinned` 的类型报的是同族诊断（实测）：`the trait Unpin is not implemented for PhantomPinned`，
-同一个 help 文案。
-
-选择清单：
-
-| 需求 | 写法 | 代价与陷阱 |
-| :--- | :--- | :--- |
-| 在 `async fn` 里 await 一个本地 future | `let f = foo(); f.await;` 直接 await 即可（本机实测通过） | 一旦要把 future 存在 `async fn` 之外再 await，就得先 `pin!` |
-| 当前作用域内固定 | `let f = std::pin::pin!(foo());` | 离开作用域即失效，不能返回 |
-| 需要逃逸 / 装箱进容器 / `dyn` | `Box::pin(foo())` → `Pin<Box<dyn Future<Output = T> + Send>>` | 一次堆分配；`Pin<Box<T>>` 与 `Box<T>` 同宽（本机实测 16 B，`Pin` 是零开销 newtype） |
-| 已保证不移动、想要 `Pin` | `unsafe { Pin::new_unchecked(&mut f) }` | 见下 |
-| 类型本身可以安全移动 | `Unpin` 是 auto trait，绝大多数普通类型自动满足，可直接 `Pin::new`；`futures::pin_mut!` 是 std `pin!` 的历史替身 | `!Unpin` 的对象只有 `pin!` / `Box::pin` / `unsafe` 三条路 |
-
-`Pin::new_unchecked` 的安全不变式（"被 pin 的内存地址从此不再变化，且不能把 `&T` 交出去让人移动它"）**自 1.99.0 起被改动过**：
-1.99.0 的 Compatibility Notes 原文是一条 *"The `Pin::new_unchecked` has had its safety invariants changed slightly"*。
-本机是 1.98.1，跑不出改动前后的差异，**具体新措辞请以 1.99.0 的 std 文档为准**；能确定的是：这条改动被记在
-"兼容性说明"里，意味着旧代码的 `unsafe` 前提可能要重审。相关的字段级固定 `#[pin]` / `pin_ergonomics` **至今 unstable**（Unstable Book 仍在列）。
+`Pin` 的全部机制——`Unpin` 是 auto trait 且编译器生成的 future 一律 `!Unpin`（实测最反直觉的一条）、`pin!` 与 `Box::pin` 的选择清单、结构体投影与 `pin-project`、`new_unchecked` 的安全不变式（**1.99.0 起措辞有改动**）——拆到了 [Pin](/docs/CS/Rust/Pin.md)。本页只留一条与 trait 设计直接相关的结论：`poll` 收 `Pin<&mut Self>` 而不是 `&mut Self>`，是"状态机可能自引用"这件事在签名上的唯一痕迹，`Stream::poll_next` 同构；`async fn` in trait 与 `dyn` 的兼容性（本节之后）处处受它约束。
 
 ## The Runtime Is the Scheduler
 
-`block_on` 与 `spawn` 都是库提供的。tokio 实测（`#[tokio::main(flavor = "current_thread")]`，即"单线程 + 协作"）：
+`block_on` 与 `spawn` 都是库提供的，语言侧一个都没给。本页保留本机实测最核心的一组数字（`rustc 1.98.1` + tokio 1.53.2，`#[tokio::main(flavor = "current_thread")]`）：
 
 | 写法 | 实测耗时 |
 | :--- | :--- |
@@ -201,8 +169,9 @@ error[E0277]: `{async fn body of leaf()}` cannot be unpinned
 | `multi_thread` worker 4，16 个 task | 落到 **2 个**不同 OS 线程 |
 | 单个 task 连续 `yield_now()` 64 次 | 始终 **1 个**线程（本机未观察到迁移） |
 
-两点读法：**"并发"来自 `join!` / `select!` / `spawn`，不来自 `await`**（顺序 `await` 就是串行）；
-最后一行**不能当保证用**——task 不绑定线程，别在 async 代码里依赖 `thread_local!` 或"同一线程"假设；需要每任务上下文就用 `tokio::task_local!`。
+两点读法：**"并发"来自 `join!` / `select!` / `spawn`，不来自 `await`**（顺序 `await` 就是串行）；最后一行**不能当保证用**——task 不绑定线程，别在 async 代码里依赖 `thread_local!` 或"同一线程"假设；需要每任务上下文就用 `tokio::task_local!`。
+
+运行时的完整展开——reactor / executor / timer 三件套、tokio 的 work-stealing 与 `worker_threads` / `max_blocking_threads` 默认值、`Send` 传染与 `LocalSet` / `spawn_local`、任务泄漏与结构化并发、tokio / async-std / smol / glommio / compio / embassy 的对比、可观测性（`tokio-console`、`tracing`）、与线程世界的桥（`spawn_blocking` / `block_on` / `block_in_place`）——拆到了 [Async_Runtime](/docs/CS/Rust/Async_Runtime.md)。
 
 `spawn` 的约束是库写的，报错也就长在库上（本机 `cargo check`，tokio 1.53.2）：
 
@@ -218,23 +187,15 @@ note: required by a bound in `tokio::spawn`
 176 |         F: Future + Send + 'static,
 ```
 
-诊断法：**先读"used across an await"指出的那一行**，它直接点名"哪个变量跨了 await 点"。三条出路，按优先级：
-把该变量的生命周期收紧到 `await` 之前（`let x = ...; drop(x); fut.await`）；换成 `Arc`；或者干脆承认它是单线程的，
-用 `LocalSet` + `spawn_local`（本机实测跑通了持 `Rc` 的 future，返回值 7）。`'static` 那一半则常表现为
-`E0521: borrowed data escapes outside of function`——想 await 一个借用的东西，得先 clone 或改成结构化并发作用域。
+诊断法：**先读"used across an await"指出的那一行**，它直接点名"哪个变量跨了 await 点"。三条出路，按优先级：把该变量的生命周期收紧到 `await` 之前（`let x = ...; drop(x); fut.await`）；换成 `Arc`；或者干脆承认它是单线程的，用 `LocalSet` + `spawn_local`（本机实测跑通了持 `Rc` 的 future，返回值 7）。`'static` 那一半则常表现为 `E0521: borrowed data escapes outside of function`——想 await 一个借用的东西，得先 clone 或改成结构化并发作用域。
 
-阻塞调用毒害线程池的机理与 netpoller 那套是镜像问题：Go 遇到阻塞系统调用会把 P 交出去换别的 goroutine 跑（运行时兜底），
-Rust 的 runtime **不知道**你在 `std::thread::sleep`，它只会傻等这次 `poll` 返回。两条出路各有代价：
-`spawn_blocking` 把活儿丢进独立阻塞线程池（有 `max_blocking_threads` 上限，多一次线程切换与队列延迟）；
-`block_in_place` 把当前 worker 的队列"整体搬到别的线程"，**且只在多线程 runtime 可用**——在 current_thread 上调用会 panic，
-本机实测原文是 `can call blocking only when running on the multi-threaded runtime`。同族还有另一条只能在运行期撞到的 panic：
-在 async 上下文里 drop 掉嵌套创建的 runtime（`block_on` 里再建一个 runtime）会得到
-`Cannot drop a runtime in a context where blocking is not allowed`——**runtime 必须建在 async 世界之外**。
+阻塞调用毒害线程池的机理与 netpoller 那套是镜像问题：Go 遇到阻塞系统调用会把 P 交出去换别的 goroutine 跑（运行时兜底），Rust 的 runtime **不知道**你在 `std::thread::sleep`，它只会傻等这次 `poll` 返回。两条出路各有代价：`spawn_blocking` 把活儿丢进独立阻塞线程池（有 `max_blocking_threads` 上限，多一次线程切换与队列延迟）；`block_in_place` 把当前 worker 的队列"整体搬到别的线程"，**且只在多线程 runtime 可用**——在 current_thread 上调用会 panic，本机实测原文是 `can call blocking only when running on the multi-threaded runtime`。同族还有另一条只能在运行期撞到的 panic：在 async 上下文里 drop 掉嵌套创建的 runtime（`block_on` 里再建一个 runtime）会得到 `Cannot drop a runtime in a context where blocking is not allowed`——**runtime 必须建在 async 世界之外**。
 
 ## Cancellation Safety in select! and JoinSet
 
-Rust 没有"取消异常"。`select!` / `tokio::time::timeout` / `JoinHandle::abort` 的取消动作**就是 drop 那个 future**，
-于是"future 在 `poll` 里做过什么不可回滚的副作用"变成了一类真实 bug——**只有 Rust 需要担心这件事**，
+Rust 没有"取消异常"。`select!` / `tokio::time::timeout` / `JoinHandle::abort` 的取消动作**就是 drop 那个 future**，于是"future 在 `poll` 里做过什么不可回滚的副作用"变成了一类真实 bug——**只有 Rust 需要担心这件事**，因为有栈协程的取消是抛异常进挂起点，而无栈状态机的取消只是"不再被 poll"。
+
+判据与模式：**读了一半的 IO 不可回滚**（`AsyncReadExt::read` 取消后再读会漏数据——要恢复必须自己缓冲）；`select!` 的分支是公平随机的，被丢弃分支的副作用要按"从未发生"推理；`JoinSet` 的 `abort` 是协作式的，任务下一次 `poll` 才真正结束，`join_next` 之前它还在跑。完整清单与代码模式见 [Async_Runtime](/docs/CS/Rust/Async_Runtime.md)。
 因为有栈的运行时（Go / Loom）取消时要么整个栈丢掉、要么函数自己返回。
 
 本机在 tokio 上做了对照实验：两个 `Arc<Mutex<VecDeque<u32>>>`，初始各 2 条消息，`select!` 里让一个 5 ms 定时器先赢（即另一支被 drop）：
@@ -288,24 +249,7 @@ tokio 的文档为常用 await 方法逐条写了 Cancel safety 小节，判断�
 
 ## Four Async Designs Side by Side
 
-| 维度 | Rust + tokio | Go | Python asyncio | Java Loom |
-| :--- | :--- | :--- | :--- | :--- |
-| 谁产生状态机 | rustc（`async` → 匿名结构体） | 无（有栈协程，不需要状态机） | 编译器把 `yield` 帧化成 generator 帧 | 编译器不变，JVM 提供 `Continuation` |
-| 谁调度 | **库**（tokio 等，可选） | Go runtime（语言自带） | 标准库 event loop（单线程） | JVM（ForkJoin 载体线程池） |
-| 挂起时保存什么 | future 结构体里的字段（**无栈**） | 整段 goroutine 栈（可增长堆栈） | coroutine 帧 | continuation 的栈帧（堆上） |
-| 让出时机 | 只在 `.await`（返回 `Pending`） | 系统调用 / channel / 显式点 + 信号式抢占 | 只在 `await` | 阻塞 API 内部自动让出 |
-| 抢占 | 无，纯协作 | **有**（Go 1.14 起异步抢占） | 无 | 载体线程有抢占，任务本身协作 |
-| 并发单位与栈 | `Task` = 一个 future，几十字节，可无分配 | goroutine，初始栈约 2 KB 后增长 | Task + coroutine 对象 | 虚拟线程，栈在堆上 |
-| 取消 | `drop` future（需库配合，如 `abort`） | `context.Context` 显式传播 | 抛 `CancelledError` 进挂起点 | `Thread.interrupt()` |
-| 阻塞调用的后果 | 独占 worker，整池吞吐塌方 → 需 `spawn_blocking` | runtime 自动 handoff，P 转给别人 | 整个循环停摆（见 Asyncio） | 载体线程被 pin（synchronized / native 帧） |
-| 类型系统承担的成本 | `Pin` / `Unpin` / `Send` 泄漏到签名上 | 无（代价在运行期与栈内存） | 无（代价是运行时警告与调试） | 无（代价是 pinning 与调试可见性） |
-| 能否吃满多核 | 能（多线程 runtime，无全局锁） | 能 | 不能（GIL，见 [GIL](/docs/CS/Python/GIL.md)） | 能 |
-
-一句话总结这三家的分工：**Go 用运行时把复杂度吃进自己、把简单留给语法**；**Python 把让出点写在语法里、调度留给标准库**；
-**Rust 反过来——语法只给糖，运行时外包给库，代价由类型系统（`Pin` + `Send`）替所有调用方预付**。
-Loom 的虚拟线程机制细节见 [VirtualThread](/docs/CS/Java/JDK/Concurrency/VirtualThread.md)，
-Go 的 fd 就绪路径见 [netpoller](/docs/CS/Go/netpoller.md)，调度器与抢占见 [runtime](/docs/CS/Go/runtime.md)，
-epoll 层见 [Netpoll](/docs/CS/Framework/Netpoll.md)。
+Rust 与 Go / Python asyncio / Java Loom 的横向对比（谁产生状态机、谁调度、挂起时保存什么、让出时机、有无抢占、取消语义、阻塞调用的后果、类型系统承担的成本）已随运行时拆到 [Async_Runtime](/docs/CS/Rust/Async_Runtime.md)，本页只留那句总结：**Go 用运行时把复杂度吃进自己、把简单留给语法**；**Python 把让出点写在语法里、调度留给标准库**；**Rust 反过来——语法只给糖，运行时外包给库，代价由类型系统（`Pin` + `Send`）替所有调用方预付**。语言侧的代价因此集中在两处：本页的状态机与 `Pin`、以及 [Async in Traits](#async-in-traits-today) 那张表里的每一项。
 
 ## When This Design Hurts
 
@@ -326,9 +270,8 @@ Web 框架与生态选型（axum / actix-web / hyper / tower 的取舍）不在�
 - [Lifetime](/docs/CS/Rust/Lifetime.md)
 - [Trait_System](/docs/CS/Rust/Trait_System.md)
 - [Rust](/docs/CS/Rust/Rust.md)
-- [netpoller](/docs/CS/Go/netpoller.md)
-- [Asyncio](/docs/CS/Python/Asyncio.md)
-
+- [Async_Runtime](/docs/CS/Rust/Async_Runtime.md)
+- [Pin](/docs/CS/Rust/Pin.md)
 ## References
 
 - [std::future::Future](https://doc.rust-lang.org/std/future/trait.Future.html)

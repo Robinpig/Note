@@ -427,13 +427,12 @@ note: required for `Box<u8>` to implement `Parse`
 
 ## Links
 
-- [Generics](/docs/CS/Rust/Generics.md)
 - [Lifetime](/docs/CS/Rust/Lifetime.md)
 - [ObjectModel](/docs/CS/C++/ObjectModel.md)
 - [RTTI](/docs/CS/C++/RTTI.md)
 - [Reflection](/docs/CS/Go/Reflection.md)
 - [Rust](/docs/CS/Rust/Rust.md)
-
+- [Closures](/docs/CS/Rust/Closures.md)
 ## References
 
 - [The Rust Reference — Dyn compatibility](https://doc.rust-lang.org/reference/items/traits.html#dyn-compatibility)

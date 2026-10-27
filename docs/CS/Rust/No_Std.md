@@ -2,7 +2,7 @@
 
 `#![no_std]` 是 Rust 唯一一个「改变 crate 与外部世界连接方式」的 crate 级属性。它的常见误读是「禁用标准库」，但真实机制更精确：**它只是让编译器把隐式注入的 `extern crate std` 换成 `extern crate core`**。剩下的一切——`Vec` 找不到、`main` 不能写、必须自己写 `#[panic_handler]`——都是这一次换链的后果，而不是某个开关直接禁止了你用什么。
 
-理解这一点之后，no_std 的全部难点收敛成三个可枚举的问题：**哪些能力随 `std` 一起消失**（`core` / `alloc` / `std` 三层的能力边界）、**消失的能力中哪些必须由 crate 作者自己补上**（panic 运行时、入口、全局分配器）、**怎么让同一个 crate 在两边都能用**（feature 双模）。嵌入式生态（embedded-hal、cortex-m、heapless、embassy、defmt、probe-rs）与 **BSP crate** 本质上是这三问的工程答案，而不是另一套语言。
+理解这一点之后，no_std 的全部难点收敛成三个可枚举的问题：**哪些能力随 `std` 一起消失**（`core` / `alloc` / `std` 三层的能力边界）、**消失的能力中哪些必须由 crate 作者自己补上**（panic 运行时、入口、全局分配器）、**怎么让同一个 crate 在两边都能用**（feature 双模）。嵌入式生态与 WASM 目标是这三问的工程答案，已各自成篇：固件侧的分层栈、MMIO 与中断见 [Embedded](/docs/CS/Rust/Embedded.md)，wasm 目标谱系与 `wasm-bindgen` 见 [WASM](/docs/CS/Rust/WASM.md)。
 
 > [!NOTE]
 > 写作时最新 stable 为 **Rust 1.99.0（2026-10-01）**，最新 edition 为 2024。本篇所有编译诊断与运行结果都在本机 `rustc 1.98.1 (48a229cea 2026-09-01)`（host `aarch64-apple-darwin`）上实跑，报错原文照抄；crate 版本取自 crates.io sparse index（`https://index.crates.io/...`）实测。**本机是 macOS 宿主，没有裸机目标、没有 nightly 工具链**（`rustup toolchain list` 只有 `stable` 与 `1.95.0`，`rustup target list --installed` 只有 `aarch64-apple-darwin`），因此链接脚本、中断向量表、`-Z build-std`、真实芯片上的 `_start` 等一律标注「未在裸机实测」或「据文档」，不谎称实测。
@@ -37,7 +37,7 @@ error[E0433]: cannot find module or crate `std` in this scope
 | `Box` / `Rc` | ✗ | ✓ | ✓ | `Box` 在 `alloc`（实测 E0425），`Rc` 在 `alloc::rc` |
 | `Arc` / `std::sync::Mutex` | ✗ | ✗ | ✓ | 需要线程概念 |
 | `BTreeMap` / `VecDeque` / `LinkedList` / `BinaryHeap` | ✗ | ✓ | ✓ | `alloc::collections` |
-| `HashMap` / `HashSet` | ✗ | ✗ | ✓ | 需要 `RandomState`（随机化的 hasher 来自 `std`）；`wasm32-unknown-unknown` 是特例，见 WASM 节 |
+| `HashMap` / `HashSet` | ✗ | ✗ | ✓ | 需要 `RandomState`（随机化的 hasher 来自 `std`）；`wasm32-unknown-unknown` 是特例，见 [WASM](/docs/CS/Rust/WASM.md) |
 | 全局分配器契约 `GlobalAlloc` / `Layout` | ✓（trait 定义） | ✓ | ✓ | trait 在 `core::alloc`，**实现**由你给 |
 | 原子 `AtomicUsize` / `Ordering` | ✓（target 支持时） | ✓ | ✓ | 单核 MCU 上 CAS 由 `critical-section` 或 `portable-atomic` 补 |
 | `std::time::Instant` / `SystemTime` | ✗ | ✗ | ✓ | 需要 OS 时钟 |
@@ -175,7 +175,7 @@ sum=140 len=8 size_of_Vec=24
 
 `std` 下 `catch_unwind` 能工作正是因为 unwind；no_std 下没有 unwind，也就没有 `catch_unwind`——错误必须靠返回值传播，没有「抛出异常」这条路。这直接决定了下一节的写法。
 
-一个易混点：`core::panic!` 与 `std` 的 panic 是**同一个宏的两个面**。`panic!` 在 `core` 里就存在（实测 no_std lib 里 `panic!("too big")` 与 `core::panic!("always")` 都编译通过），它做的是构造 `PanicInfo` 然后调用 panic 运行时。no_std 下这个运行时是你的 `#[panic_handler]`；`std` 下是 `std::panicking` 里那一套（打印 backtrace、跑 hook、unwind 或 abort）。**宏与格式化逻辑共用，运行时分离**——`defmt` 就是利用这一点把格式化整个换掉的（见生态节）。
+一个易混点：`core::panic!` 与 `std` 的 panic 是**同一个宏的两个面**。`panic!` 在 `core` 里就存在（实测 no_std lib 里 `panic!("too big")` 与 `core::panic!("always")` 都编译通过），它做的是构造 `PanicInfo` 然后调用 panic 运行时。no_std 下这个运行时是你的 `#[panic_handler]`；`std` 下是 `std::panicking` 里那一套（打印 backtrace、跑 hook、unwind 或 abort）。**宏与格式化逻辑共用，运行时分离**——`defmt` 就是利用这一点把格式化整个换掉的（见 [Embedded](/docs/CS/Rust/Embedded.md)）。
 
 ## Writing a Dual-Mode Crate
 
@@ -249,80 +249,18 @@ error[E0425]: cannot find type `Box` in this scope
 
 顺带一句：`core::fmt::Display` 与 `write!` 完全可用（实测在 no_std lib 里手写 `impl fmt::Display` 编译通过），但 `core::fmt` **没有 `std::io::Write` 那样的 sink**，输出到哪里（UART / RTT / semihosting）由你决定，这正是 `defmt` 与 `embedded-io` 各自切入的位置。
 
-## The Embedded Ecosystem
+## Where the Ecosystem Answers These Questions
 
-版本号均取自 crates.io sparse index 实测（2026-10-08），MSRV 取自索引里的 `rust_version` 字段：
+本篇前四节是「no_std 要求你自供的四件套 + 三层能力边界」，生态里对应的两个场景分别把这套机制落成了可复用的栈：
 
-| crate | 版本 | MSRV | 在栈里的位置 |
-| :-- | :-- | :-- | :-- |
-| embedded-hal | 1.0.0 | 1.60 | **HAL trait 层**：定义 `OutputPin` / `SpiBus` / `DelayNs` 等 trait |
-| cortex-m | 0.7.9 | 1.85 | Cortex-M 内核外设（NVIC、SysTick、`asm::wfi`）+ `critical-section` 实现 |
-| critical-section | 1.2.0 | — | 「临界区」的统一抽象槽位 |
-| nb | 1.1.0 | 1.60 | 非阻塞 API 的 `Result<T, WouldBlock>` 约定 |
-| heapless | 0.9.3 | 1.87 | 无堆集合：`Vec<T, N>` / `Deque` / `String<N>` / `spsc::Queue` |
-| embassy-executor | 0.10.0 | — | 异步执行器（无 OS 线程、可无堆） |
-| defmt | 1.1.1 | — | 把格式化搬到宿主端的日志框架 |
-| probe-rs | 0.32.0 | 1.89 | 宿主侧调试 / 烧录工具链（替代 OpenOCD） |
-| postcard | 1.1.3 | — | 面向 no_std 的紧凑序列化（COBS + serde） |
-| wasm-bindgen | 0.2.129 | 1.81 | WASM 互操作（宿主侧代码生成） |
-| libc | 0.2.190 | 1.65 | FFI 声明；**可 no_std**（只是声明，不调用 OS） |
-| zerocopy | 0.8.61 | 1.56.0 | 零拷贝字节 ↔ 结构体转换 |
+- **固件**（Cortex-M 等裸机）：PAC → HAL → BSP 分层，驱动只依赖 `embedded-hal` 的 trait；`heapless` 补无堆集合，`embassy` 补无 OS 的 async，`defmt` 补低开销日志，`probe-rs` 补宿主侧调试。全部展开见 [Embedded](/docs/CS/Rust/Embedded.md)。
+- **浏览器 / WASI**：`wasm32-unknown-unknown` 有 std 但 OS API 是失败桩，`wasm32v1-none` 才必须 no_std；跨语言互操作不走 C ABI 而走 `wasm-bindgen` 生成的 JS 胶水。目标谱系与体积优化见 [WASM](/docs/CS/Rust/WASM.md)。
 
-一处需要点名的索引事实：**`critical-section` 索引里存在 1.3.0，但它已被 yanked，最新可用版本就是 1.2.0**。只看「最大值」的自动化工具会在这里踩坑。
-
-### embedded-hal: Why a Trait Layer
-
-HAL 的意义不是「省事」，而是**把「驱动」与「芯片」两件事解耦**：驱动 crate（比如一个 SSD1306 OLED 驱动）只依赖 `embedded_hal::i2c::I2c` 这个 trait，不依赖 STM32 也不依赖 nRF；芯片厂提供的 HAL crate（如 `stm32f4xx-hal`）为具体芯片实现这些 trait。于是 `驱动 × 芯片` 的组合数从乘积变成和。
-
-1.0.0 相对 0.2.x 的关键改动是**把错误类型拆成独立的 `ErrorType` trait**。实测：给 `struct Pin` 直接 `impl OutputPin`（两个方法返回 `Result<(), core::convert::Infallible>`）而不写 `ErrorType`，得到
-
-```text
-error[E0277]: the trait bound `Pin: embedded_hal::digital::ErrorType` is not satisfied
-  --> src/lib.rs:5:5
-   |
- 5 |     fn set_low(&mut self) -> Result<(), core::convert::Infallible> { Ok(...
-   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ unsatisfied trait bound
-help: the trait `embedded_hal::digital::ErrorType` is not implemented for `Pin`
-```
-
-补上 `impl ErrorType for Pin { type Error = core::convert::Infallible; }` 后编译通过（与 `nb 1.1.0`、`critical-section 1.2.0`、`postcard 1.1.3` 同处一个 `#![no_std]` crate 里一次编过）。0.2.x 用 `void::Void` 表达「不会失败」，1.0.0 换成 `core::convert::Infallible`——**这是 no_std 友好化的一部分**：不再需要外部 `void` crate。
-
-### heapless: Collections Without a Heap
-
-与 [集合类型](/docs/CS/Rust/Collections.md) 的对照点很直接：`heapless::Vec<T, N>` 的容量 `N` 是**类型参数**，存储内联在结构体里，因此 `size_of::<Vec<u8, 8>>()` 是编译期常量、无间接层、无重分配。代价是 `push` 可能返回 `Err`（容量满），而不是悄悄扩容。实测在 `#![no_std]` crate 里写 `let mut v: Vec<u8, 8> = Vec::new(); v.push(1).unwrap();`，`cargo build` 通过，依赖树只有 `heapless → byteorder / hash32 / stable_deref_trait`，**没有一个拉回 std**——这是「依赖树干净」的正面样本。
-
-### embassy-executor: Async Without an OS
-
-与 [异步](/docs/CS/Rust/Async.md) 的交叉点最容易写错：嵌入式 async **不需要 OS 线程，也不需要堆**。`async fn` 编译出的状态机是**存在栈上（或 `static` 里）的结构体**，`Waker` 由硬件中断触发（而不是线程池唤醒）。`embassy-executor` 做的是一个单栈、协作式的任务轮询器：任务 `await` 某个外设时让出，中断来了把对应 `Waker` 标为就绪，执行器再轮询。没有抢占、没有每任务独立栈、无 `Arc` 也能跑。这是 Rust `async` 设计成「零分配状态机 + 外部 executor」而非「内置运行时」的直接收益——Go / JavaScript 那种带运行时 goroutine / 事件循环的模型在这里塞不进去。
-
-### critical-section: A Slot for Critical Sections
-
-单核 MCU 上「关中断」没有统一指令（Cortex-M 用 `PRIMASK`，RISC-V 用 `mie`），而 `alloc` / `embassy` 这类通用 crate 又需要它。`critical-section` 的做法与 `GlobalAlloc` 完全同构：**定义契约，由平台 crate 在链接期填一个实现**。用户代码写 `critical_section::with(|cs| { ... })`，具体是关中断还是别的手段由 `cortex-m` 或 `riscv` 的实现决定。这是 no_std 生态里反复出现的设计模式——**用 lang-item 式的契约槽替代运行时多态**（`GlobalAlloc`、`panic_handler`、`critical_section`、`defmt::Logger` 四处同构）。
-
-### defmt: Moving Formatting to the Host
-
-`format!("x = {}", x)` 在固件里的代价是：格式化代码 + 格式字符串 + `Display` 实现全部进 flash，可能几十 KB。`defmt` 的做法是**固件侧只发一个「 interned 字符串索引 + 参数字节流」**，真正的格式化由宿主上的 `defmt-decoder` 结合 ELF 里的符号表完成（所以 `defmt` 要求链接脚本额外放一个 `.defmt` 段，并需要 ELF 文件参与解码——与 [ELF](/docs/CS/Compiler/ELF.md) 的知识在这里接上）。
-
-### probe-rs: The Host-Side Toolchain
-
-`probe-rs` 用 Rust 重写了调试探针协议（SWD / JTAG），替代 OpenOCD + GDB 的组合，并原生支持 `defmt` 的 RTT 解码与 `cargo embed` / `cargo flash` 工作流。它是**宿主侧的 std 程序**，不是固件的一部分——这个区分很重要：no_std 只约束跑在芯片上的那一半。
-
-### BSP Crate: The Board Layer
-
-栈的层次从上到下是：`应用` → `驱动 crate`（按 embedded-hal trait 写）→ `HAL crate`（芯片厂 / 社区，实现 trait + 提供 `Peripherals` 单例）→ `PAC crate`（外设寄存器映射，通常由 `svd2rust` 从厂商 SVD 生成）→ **BSP crate（板级支持包）**。
-
-BSP crate 存在的理由与本文前几节一一对应：
-
-1. **它固化入口与链接脚本**。链接脚本（`memory.x`，声明 FLASH / RAM 的 Origin 与 Length）、启动代码、`.vector_table` 段位置都是板级的，不是芯片级也不是应用级。`cortex-m-rt` 提供 `#[entry]` 宏与默认链接脚本骨架，BSP 负责给出本板的 `memory.x`——这正是上一节「入口是 ABI 约定」的落地。
-2. **它完成契约槽的填充**：`#[panic_handler]`、`#[global_allocator]`（如果要用 `alloc-*` 类分配器）、`critical-section` 实现、`defmt` 的 `#[defmt::global_logger]`。这些全图只能有一份，天然属于「最后一个链接者」。
-3. **它把引脚编号绑定成名字**。同一颗 STM32 在不同板子上接的 LED 引脚不同，BSP 提供 `Led` / `Button` / `Uart` 这类已配置好的类型，应用不再关心 `PA5` 还是 `PB7`。
-4. **它固化时钟配置**。系统时钟树（PLL、分频、flash latency）是板级决策（取决于焊的晶振频率）。
-
-典型命名：`stm32f4xx-hal` 是 HAL，`stm32f4-discovery` 是 BSP；`rp2040-hal` 是 HAL，`rp-pico` / `pimoroni-pico-explorer` 是 BSP。**BSP 就是「把本文前四节要求你自供的四件套 + 板级硬件事实打包好」的那一层**——这也是为什么写固件时几乎总是从 BSP 开始，而不是从 `#![no_std]` 开始。
+两个场景共享同一条设计模式：**用契约槽替代运行时多态**——`GlobalAlloc`、`panic_handler`、`critical-section` 实现、`defmt::Logger` 四处都是「定义 trait、链接期填一份实现」。
 
 ## MMIO and volatile
 
-与 [unsafe 与 FFI](/docs/CS/Rust/Unsafe_FFI.md) 的交叉点：MMIO 是 `unsafe` 最正当的用途之一，而且**必须 volatile**。理由不是「内存可能被别的线程改」而是「编译器有权把看起来冗余的读写删掉」。实测（`rustc -O --emit asm`，`aarch64-apple-darwin`）：
+与 [unsafe 与 FFI](/docs/CS/Rust/Unsafe.md) 的交叉点：MMIO 是 `unsafe` 最正当的用途之一，而且**必须 volatile**。理由不是「内存可能被别的线程改」而是「编译器有权把看起来冗余的读写删掉」。实测（`rustc -O --emit asm`，`aarch64-apple-darwin`）：
 
 ```rust
 #[no_mangle] pub unsafe fn plain(p: *mut u32)       { core::ptr::write(p, 1); core::ptr::write(p, 2); }
@@ -350,23 +288,11 @@ _plain:                _vol:                    _read_twice:          _read_twic
 
 ## WebAssembly Targets
 
-WASM 是最容易写错的一节，因为「WASM」不是一个目标。据 rustc book 的 platform support 页面（**未在本机实测，本机未安装任何 wasm target**）：
+WASM 目标谱系是 no_std 判断最容易出错的地方，完整表格（五个 triple 的 std 支持、宿主模型、输出格式）与选型清单见 [WASM](/docs/CS/Rust/WASM.md)。这里只留本篇相关的三条结论：
 
-| 目标 | std | 能力 | 典型用途 |
-| :-- | :-- | :-- | :-- |
-| `wasm32-unknown-unknown` | ✓（但大量 API 不可用） | 原文：「`println!` does nothing, `std::fs` always return errors, `std::thread::spawn` will panic」；`core` 与 `alloc` 完整支持；**额外支持 `std` 的 `HashMap`**（但不随机化） | 浏览器 / JS 宿主，配 wasm-bindgen |
-| `wasm32-wasip1` | ✓（基于 WASIp1 syscalls） | 导入 `wasi_snapshot_preview1`，可与 C/C++ 互操作，输出 core wasm module | Wasmtime / wasmtime-cli 等 WASI 运行时 |
-| `wasm32-wasip1-threads` | ✓ | WASIp1 + 线程 | 需要线程的 WASI 场景 |
-| `wasm32-wasip2` | ✓（原文 "supports std fully"） | 基于 Component Model 的 WASI 0.2，输出 **component** 而非 core module | Wasmtime 17+ |
-| `wasm32v1-none` | **✗（只有 `core` + `alloc`）** | 不 import 任何宿主函数、不开任何 post-1.0 proposal | 最小 wasm、无宿主环境 |
-
-关键区分，别混：
-
-- **`wasm32-unknown-unknown` 不是 no_std**。它链的是真 `std`，只是 `std` 里依赖 OS 的部分被做成「返回错误的桩」。所以你能用 `String` / `Vec` / `HashMap`，但 `std::fs` 一定失败。这里 `no_std` 是一个**可选**的体积优化，不是必需。
-- **`wasm32v1-none` 才是「必须 no_std」的那个**。原文明确「does not support std, only core and alloc」，理由也写得很直白：既然什么都不 import，任何用 OS 设施的 std 部分到最后都得做成失败桩，`unknown-unknown` 上那套桩的体验「was deemed not something worth repeating」。
-- **`wasip1` / `wasip2` 有完整 std**，因为它们假定宿主提供 WASI syscall。要写 WASI CLI 程序（比如 `wasmtime foo.wasm`）用这两个，不要用 `unknown-unknown`。
-
-`wasm-bindgen 0.2.129` 属于 `unknown-unknown` 那条路：它生成 JS 胶水代码，让 Rust 侧能直接调 DOM API。它本身是宿主侧的 std 工具链 + 过程宏，不是固件 crate。
+1. **`wasm32-unknown-unknown` 不是 no_std**——它链真 `std`，只是 `println!` / `std::fs` / `thread::spawn` 是失败桩；它是浏览器配 `wasm-bindgen` 的主目标。
+2. **`wasm32v1-none` 才是必须 no_std 的那个**——只提供 `core` / `alloc`，不 import 任何宿主函数，用于最小 wasm。
+3. **`wasm32-wasip1` / `wasip2` 有完整 std**，假定宿主提供 WASI syscall；写 WASI CLI 程序用它们，不要用 `unknown-unknown`。
 
 ## build-std and Custom Targets
 
@@ -411,15 +337,16 @@ WASM 是最容易写错的一节，因为「WASM」不是一个目标。据 rust
 | 12 | 无 FPU 的 MCU 上用浮点 | 链接到不存在的硬件浮点指令 | 据文档：确认 target 的 ABI（`eabi` vs `eabihf`）与 softfloat 支持；**未在裸机实测** |
 | 13 | 以为 `HashMap` 在 `alloc` | 找不到 | 它在 `std`（`RandomState` 依赖 std） |
 | 14 | 以为 `wasm32-unknown-unknown` 必须 no_std | 白费功夫 | 它有 std，只是 fs/net 是失败桩；必须 no_std 的是 `wasm32v1-none` |
-| 15 | 用已 yanked 的版本 | 构建失败或解析到旧版 | 例：`critical-section` 1.3.0 已 yanked，最新可用为 1.2.0 |
+| 15 | 用已 yanked 的版本 | 构建失败或解析到旧版 | 例：`critical-section` 1.3.0 已 yank，最新可用为 1.2.0 |
 
 ## Links
 
 - [Rust](/docs/CS/Rust/Rust.md)
-- [Languages](/docs/CS/Languages.md)
+- [Embedded](/docs/CS/Rust/Embedded.md)
+- [WASM](/docs/CS/Rust/WASM.md)
+- [Unsafe](/docs/CS/Rust/Unsafe.md)
 - [ELF](/docs/CS/Compiler/ELF.md)
-- [Linux](/docs/CS/OS/Linux/Linux.md)
-- [Memory_Layout](/docs/CS/Rust/Memory_Layout.md)
+- [Edition 与 MSRV](/docs/CS/Rust/Edition_MSRV.md)
 
 ## References
 
@@ -430,21 +357,9 @@ WASM 是最容易写错的一节，因为「WASM」不是一个目标。据 rust
 - [`core::alloc::GlobalAlloc`](https://doc.rust-lang.org/core/alloc/trait.GlobalAlloc.html)
 - [`core::ptr::read_volatile`](https://doc.rust-lang.org/core/ptr/fn.read_volatile.html)
 - [The rustc book — Platform Support](https://doc.rust-lang.org/rustc/platform-support.html)
-- [The rustc book — `wasm32-unknown-unknown`](https://doc.rust-lang.org/rustc/platform-support/wasm32-unknown-unknown.html)
-- [The rustc book — `wasm32-wasip1`](https://doc.rust-lang.org/rustc/platform-support/wasm32-wasip1.html)
-- [The rustc book — `wasm32-wasip2`](https://doc.rust-lang.org/rustc/platform-support/wasm32-wasip2.html)
 - [The rustc book — `wasm32v1-none`](https://doc.rust-lang.org/rustc/platform-support/wasm32v1-none.html)
 - [The rustc book — Custom Targets (target spec JSON)](https://doc.rust-lang.org/rustc/targets/custom.html)
 - [The Cargo Book — Unstable Features (`build-std`)](https://doc.rust-lang.org/cargo/reference/unstable.html)
 - [The Cargo Book — Profiles (`panic`)](https://doc.rust-lang.org/cargo/reference/profiles.html)
 - [The Embedded Rust Book — A no_std Rust Environment](https://docs.rust-embedded.org/book/intro/no-std.html)
 - [The Embedonomicon — The smallest no_std program](https://docs.rust-embedded.org/embedonomicon/smallest-no-std.html)
-- [docs.rs — embedded-hal 1.0.0](https://docs.rs/embedded-hal/1.0.0/embedded_hal/)
-- [docs.rs — heapless 0.9.3](https://docs.rs/heapless/0.9.3/heapless/)
-- [docs.rs — cortex-m 0.7.9](https://docs.rs/cortex-m/0.7.9/cortex_m/)
-- [docs.rs — critical-section 1.2.0](https://docs.rs/critical-section/1.2.0/critical_section/)
-- [docs.rs — embassy-executor 0.10.0](https://docs.rs/embassy-executor/0.10.0/embassy_executor/)
-- [docs.rs — defmt 1.1.1](https://docs.rs/defmt/1.1.1/defmt/)
-- [defmt — the deferred formatter](https://defmt.ferrous-systems.com/)
-- [probe-rs](https://probe.rs/)
-- [docs.rs — postcard 1.1.3](https://docs.rs/postcard/1.1.3/postcard/)

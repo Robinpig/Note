@@ -372,13 +372,11 @@ C 侧没有这两件东西（见 [C Array String](/docs/CS/C/Array_String.md)：
 
 ## Links
 
-- [Generics](/docs/CS/Rust/Generics.md)
 - [Smart Pointers](/docs/CS/Rust/Smart_Pointers.md)
-- [Performance](/docs/CS/Rust/Performance.md)
 - [STL](/docs/CS/C++/STL.md)
 - [C 数组与字符串](/docs/CS/C/Array_String.md)
 - [Rust](/docs/CS/Rust/Rust.md)
-
+- [Type_Conversion](/docs/CS/Rust/Type_Conversion.md)
 ## References
 
 - [std::collections — Rust API docs](https://doc.rust-lang.org/std/collections/index.html)

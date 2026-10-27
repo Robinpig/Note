@@ -170,75 +170,13 @@ error: the option `Z` is only accepted on the nightly compiler
 
 ## Atomic Ordering
 
-### Five Levels, Not Six
+原子操作的全部细节——五档内存序的逐条语义与 C++20 对照表、发布-订阅的最小正确形态、`fence` 与操作自带顺序的四种配对、CAS 循环与伪失败、`Arc` / `Weak` 为什么是两个序问题、原子类型的平台分裂与 `portable-atomic`、缓存行伪共享、以及 loom 能证明与不能证明的边界——拆到了 [Atomics](/docs/CS/Rust/Atomics.md)，本页只留与线程模型直接相关的三条结论：
 
-`std::sync::atomic::Ordering` **只有五档**：`Relaxed`、`Acquire`、`Release`、`AcqRel`、`SeqCst`。写"六档"通常是把 C++ 的 `memory_order_consume` 算进来了——Rust 从未提供 `Consume`（社区共识是它无法被安全实现）。std 文档在每一档下明确标注"Corresponds to memory_order_xxx in C++20"，也就是说 Rust 的原子序是 C++20 菜单的一个**去掉 consume 的子集**。
+1. **`Send` / `Sync` 是编译期的"无数据竞争"保证，原子是运行期的手动档位。** 前者由编译器替你推导（[Send 与 Sync 两条编码](#send-and-sync-encode-the-same-rule-twice)），后者每一行都要你自己论证顺序；两者的分工是"能编译期证明的不手动，不能的才原子"。
+2. **锁与原子不是竞争关系而是层级关系。** [选 Mutex 还是无锁](#choosing-between-mutex-rwlock-and-lock-free)的判据在这里复用：单变量用原子，复合不变量回锁——原子保证"一次操作不可分割"，不保证"一组不变式同时成立"。
+3. **`loom` 是并发测试的默认工具**（`0.7.2`，2024-04 后无新版）：它穷举线程交错把弱序路径变成断言失败，但既不完整也不健全（`SeqCst` 被当 `AcqRel`、不探索 load buffering），"loom 跑过"不等于"已证明正确"。
 
-另外该枚举是 `#[non_exhaustive]`：不带通配地穷举五档会报 `error[E0004]: non-exhaustive patterns: \`_\` not covered`（实测），所以 `match` 它必须留兜底分支。
-
-语义表（"同步"指的是两个线程之间建立 happens-before 边，不是"保证顺序"这种模糊说法）：
-
-| Ordering | 与相邻操作的顺序 | 与别的线程建立同步 | 典型用途 |
-| :--- | :--- | :--- | :--- |
-| `Relaxed` | 无（只保证原子性与单变量修改顺序全序） | **不建立** | 计数器、统计、引用计数增减 |
-| `Acquire` | 其后的读写不得上提越过它 | 与一个 `Release` 配对 | load 端读锁、消费标志 |
-| `Release` | 其前的读写下不得下沉越过它 | 被某个 `Acquire` 看到 | store 端发布数据 |
-| `AcqRel` | 两侧都要 | 双向 | `fetch_add` / CAS 等读改写 |
-| `SeqCst` | `AcqRel` + 所有 SeqCst 操作构成**单一全序** | 全局一致 | 不确定时的默认；多变量协议 |
-
-只有 `Release`/`Acquire`/`AcqRel`/`SeqCst` 的**读**能看到某个 `Release` 写之前的所有副作用；`Relaxed` 之间永远只建立"同一变量的修改顺序"，不建立跨变量的 happens-before。
-
-### Publish-Subscribe Needs Acquire and Release
-
-```rust
-static DATA: AtomicUsize = AtomicUsize::new(0);
-static FLAG: AtomicBool = AtomicBool::new(false);
-
-fn producer_relaxed() { DATA.store(42, Ordering::Relaxed); FLAG.store(true, Ordering::Relaxed); }
-fn consumer_relaxed() {
-    while !FLAG.load(Ordering::Relaxed) { std::hint::spin_loop(); }
-    let x = DATA.load(Ordering::Relaxed);   // 可能读到 0，也可能被编译器整个提出循环
-}
-
-fn producer() { DATA.store(42, Ordering::Relaxed); FLAG.store(true, Ordering::Release); }
-fn consumer() {
-    while !FLAG.load(Ordering::Acquire) { std::hint::spin_loop(); }
-    let x = DATA.load(Ordering::Relaxed);   // 这里 DATA 用 Relaxed 就够了：发布已被 flag 的同步覆盖
-}
-```
-
-两段都能编译——**这正是本篇的论点**：`Relaxed` 版本不是类型错误，抽象机层面它允许 `FLAG` 先到 `true` 而 `DATA` 仍是旧值。第二个版本的 `DATA.load` 用 `Relaxed` 是正确的（同步关系已经由 flag 上的 `Release`/`Acquire` 建立，额外加序只是白付钱）。我没有在本机给出"Relaxed 版实际读到 0"的复现：单次采样触发不了弱内存序窗口，把"没跑出来"写成"没问题"和把"理论上可以"写成"实测复现"是同一种错误。
-
-### A Micro-Benchmark With Its Caveats
-
-本机 `rustc 1.98.1 -O`、`aarch64-apple-darwin`（Apple Silicon，弱内存序）、每场景连跑多轮取区间，工具只有 `std::time::Instant` + `std::hint::black_box`——**没有 criterion 的预热与统计置信，也没有排除频率漂移**，所以下面的数字只用于判断"量级差异在不在"，不要当性能结论。
-
-- **单线程、无争用的 store：`Relaxed` 与 `SeqCst` 差异淹没在噪声里**（2M 次 store，两者各轮耗时区间互相覆盖）。所以在 aarch64 上"把 SeqCst 改成 Relaxed 提速"这个常见建议，对无争用的单变量写基本是空操作——`stlr` 在无争用缓存行上很便宜。
-- **读改写指令本身才是成本**：无争用 2M 次下 `swap(SeqCst)` ≈ 11–14 ms、`compare_exchange` ≈ 30–38 ms，而 `store` ≈ 0.7–1.2 ms。差 1–2 个数量级的不是内存序，是"独占缓存行"。
-- **争用下才看得到序的差别**：4 线程争同一行、各 500k 次 `fetch_add`，3 轮结果 `Relaxed` ≈ 39–42 ms，`AcqRel` ≈ 74–91 ms，`SeqCst` ≈ 74–80 ms。即 **Relaxed 约为后两者的 1/2，而 `AcqRel` 与 `SeqCst` 在本机测不出稳定差异**（全局全序的额外代价在这里体现不出来，两者都是带屏障的 RMW）。
-
-判据由此变得很简单：`Relaxed` 的收益只在**高争用的读改写**上才可观，且必须先证明你不需要跨变量的同步关系；否则选 `AcqRel` 是免费的。
-
-### Reference Counts Are an Ordering Problem too
-
-`Arc` 是全库最常被"白嫖"内存序的地方，它内部那两个计数都是原子量（计数机制本身见 [Smart_Pointers](/docs/CS/Rust/Smart_Pointers.md)，这里只讲并发侧为什么必须是原子的）：
-
-- **递减到 0 的那一次必须"看到"其他所有线程的写**：`Arc::drop` 走的是 `Release` 递减 + 最后一个持有者 `Acquire` 读回，否则析构函数会在还没看到他人写入的状态上运行。这是 `Arc<T>` 只要求 `T: Send + Sync` 却能安全析构的全部依据。
-- **强计数与弱计数必须是两个量**：`Weak::upgrade` 不能"先读强计数非零、再抬升"——中间有任何一次 `drop` 都会让它复活一个正在析构的对象。唯一安全形态是把"弱计数递增 + 强计数检查 + 强计数抬升"压进一次 CAS 序列，这也是 `Weak` 存在的意义。
-- `Weak::upgrade` **不是选举**。实测 4 个线程同时 `upgrade` 同一个仍然活着的 `Weak`，返回 `Some` 的次数是 **4**（`hits = 4`）；`Arc::strong_count` / `weak_count` 打印出 `strong=1 weak=1`。用"我 `upgrade` 成功了"来判定"我是唯一 owner"是错的，需要唯一性得再叠一层 CAS 或锁。
-- 最后一个 `Arc` 掉完后 `upgrade` 返回 `None`（实测 `true`），而不是 panic——`Weak` 的并发语义是"可能失败的所有权尝试"。
-
-### Which Atomic Types Exist on Stable
-
-稳定的类型族是 `AtomicBool`、`AtomicPtr` 与 8 / 16 / 32 / 64 / `size` 各宽度的有符号无符号整数。`AtomicI128` / `AtomicU128` **仍不稳定**，实测报 `error[E0658]: use of unstable library feature \`integer_atomics\``。
-
-一个容易踩的分裂：`cfg!(target_has_atomic = "128")` 在本机是 **`true`**（与 `= "64"`、`= "ptr"` 一样为真），但类型仍不存在。**硬件与 ABI 支持 128 位原子操作 ≠ stable std 暴露了它**。用 `#[cfg(target_has_atomic = "…")]` 做可选路径是对的，但别据此假定 `AtomicU128` 可写。
-
-### loom for Permutation Checking
-
-无锁结构的正确性靠人脑推理内存序几乎必错，本库的默认工具是 **`loom`**（当前 `0.7.2`，crates.io 最后更新 **2024-04-23**）。它不是运行时监测器，而是把 `loom::sync::atomic::*` 换掉 std 原子类型后，**穷举线程交错（permutation）+ 内存序可能取值**，把"某条弱序路径会失败"变成断言失败。测试写法是把 `#[test]` 放进 `loom::model!` 或直接跑 loom 版测试、release 版跑普通测试。
-
-⚠️ `loom` 自 2024 年以来没有新版本，**不要把它描述成活跃开发中**；它仍是这类工具的参考实现，但状态是"成熟且基本不动"。相关：无锁并发容器的 epoch 回收见 `crossbeam-epoch`（`0.9.21`，2026-09-05）。
+原节的实测数据（弱内存序架构上的基准与争用对照）与平台分裂清单随迁，见 [Atomics](/docs/CS/Rust/Atomics.md)。
 
 ## Channels Transfer Ownership Rather than Sharing Access
 
@@ -418,11 +356,10 @@ let total: i64 = sums.iter().sum();
 
 - [Async](/docs/CS/Rust/Async.md)
 - [Smart_Pointers](/docs/CS/Rust/Smart_Pointers.md)
-- [Unsafe_FFI](/docs/CS/Rust/Unsafe_FFI.md)
 - [Go Concurrency Memory Model](/docs/CS/Go/Concurrency/MemoryModel.md)
 - [Java JMM](/docs/CS/Java/JDK/Concurrency/JMM.md)
 - [Rust](/docs/CS/Rust/Rust.md)
-
+- [Atomics](/docs/CS/Rust/Atomics.md)
 ## References
 
 1. [The Rust Reference — Memory model](https://doc.rust-lang.org/reference/memory-model.html)

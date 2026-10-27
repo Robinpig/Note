@@ -419,11 +419,10 @@ fn main() {
 
 - [Drop 与析构](/docs/CS/Rust/Drop.md)
 - [并发与同步](/docs/CS/Rust/Concurrency.md)
-- [内存布局](/docs/CS/Rust/Memory_Layout.md)
 - [C++ 智能指针](/docs/CS/C++/SmartPtr.md)
 - [垃圾回收](/docs/CS/memory/GC.md)
 - [Rust](/docs/CS/Rust/Rust.md)
-
+- [Interior_Mutability](/docs/CS/Rust/Interior_Mutability.md)
 ## References
 
 - [std::boxed — Box](https://doc.rust-lang.org/std/boxed/struct.Box.html)
