@@ -368,11 +368,9 @@ error[E0658]: use of unstable library feature `iter_next_chunk`
 
 - [Rust](/docs/CS/Rust/Rust.md)
 - [Trait_System](/docs/CS/Rust/Trait_System.md)
-- [Generics](/docs/CS/Rust/Generics.md)
 - [Async](/docs/CS/Rust/Async.md)
 - [compile](/docs/CS/Rust/compile.md)
-- [Memory_Layout](/docs/CS/Rust/Memory_Layout.md)
-
+- [Closures](/docs/CS/Rust/Closures.md)
 ## References
 
 - [std::iter - module documentation](https://doc.rust-lang.org/std/iter/index.html)

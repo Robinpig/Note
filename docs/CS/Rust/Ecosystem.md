@@ -309,12 +309,10 @@ sqlx 0.9.0 的核心卖点是**编译期查询校验**：`query!()` 宏在编译
 ## Links
 
 - [Rust](/docs/CS/Rust/Rust.md)
-- [Performance](/docs/CS/Rust/Performance.md)
-- [Generics](/docs/CS/Rust/Generics.md)
 - [Smart_Pointers](/docs/CS/Rust/Smart_Pointers.md)
 - [Trait_System](/docs/CS/Rust/Trait_System.md)
 - [Macros](/docs/CS/Rust/Macros.md)
-
+- [Serde](/docs/CS/Rust/Serde.md)
 ## References
 
 - [crates.io — Rust Package Registry](https://crates.io/)
