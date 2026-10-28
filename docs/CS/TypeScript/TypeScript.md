@@ -68,20 +68,20 @@ function greet(u) {
 | 参数属性 `constructor(private x: number)` | **是** | 会生成赋值语句 |
 | 装饰器 | **是** | 生成额外调用逻辑 |
 
-正因为这四项"擦不掉"，它们无法被**只做删类型的工具**（Node 的 `--experimental-strip-types`、esbuild 的 transform）正确处理。TS 5.8 为此引入了 `--erasableSyntaxOnly`，把这些"不可擦除语法"直接标为错误——一旦打开，你的代码就能被任何 type-stripping 工具链直接吃下。
+正因为这四项"擦不掉"，它们无法被**只做删类型的工具**（Node 的 type stripping、esbuild 的 transform）正确处理。TS 5.8 为此引入了 `--erasableSyntaxOnly`，把这些"不可擦除语法"直接标为错误——一旦打开，你的代码就能被任何 type-stripping 工具链直接吃下。装饰器的两种形态与元数据发射，单独见 [TypeScript 装饰器](/docs/CS/TypeScript/Decorators.md)。
 
 ### How Types Bypass tsc and Run Directly
 
-TS 的类型擦除粒度足够简单，于是各类运行时选择跳过 `tsc` 直接strip：
+TS 的类型擦除粒度足够简单，于是各类运行时选择跳过 `tsc` 直接 strip：
 
 | 运行时 / 工具 | 做法 | 代价 |
 |------|------|------|
-| Node.js 22.6+ | `--experimental-strip-types`，后续版本逐步默认开启 | 不检查类型，只删类型；不支持 enum / namespace |
+| Node.js 22.18+ | 默认开启 type stripping（`node app.ts`） | 不检查类型，只删类型；transform 类语法仍需 flag |
 | Deno | 原生支持 TS | 同上，需要先单独 `deno check` |
 | Bun | 内置转译器 | 同上 |
 | esbuild / swc | 极速 transform | 同上，且不支持 emitDecoratorMetadata 等复杂场景 |
 
-这张表引出一个工程上常见的分工：`tsc --noEmit`（或 TS 7 的 check）负责**正确性**，esbuild / swc / Vite 负责**产出**，两者解耦。
+这张表引出一个工程上常见的分工：`tsc --noEmit`（或 TS 7 的检查）负责**正确性**，esbuild / swc / Vite 负责**产出**，两者解耦。分层细节见 [TypeScript 工具链](/docs/CS/TypeScript/Toolchain.md)。
 
 ## Version Evolution: From Self-Hosted to Go-Native
 
@@ -97,29 +97,44 @@ TypeScript 编译器前 14 年一直是**自托管（self-hosted）**的——�
 | 2026-06-18 | TypeScript 7.0 RC，进入 npm 标准包 |
 | 2026-07-08 | **TypeScript 7.0 GA**，编译器换成 Go 原生二进制 |
 | 2026-08-20 | typescript-go 仓库合并回 microsoft/TypeScript 主线 |
-| 2026-11（计划） | 7.1，补齐稳定的**编程式 API** |
+| 2026-10-20 | **7.1 beta**：Content Mapper / Emit / Language Service API 稳定化 |
+| 2026-11（计划） | 7.1 stable，补齐稳定的**编程式 API** |
+
+7.0 GA 之后，`npm install typescript` 拿到的 `tsc` 就是原生二进制；`tsgo` 这个名字退回到 nightly 预览包（`@typescript/native-preview`，日期化 dev 版本，不应锁进生产依赖），`typescript@next` 跟踪 7.1 开发线。
 
 TS 7 的核心事实，见 [TypeScript 编译器](/docs/CS/TypeScript/Compiler.md)：
 
 - 全量构建相比 6.0 提速 **8~12 倍**，来源有二：原生二进制取代 VM 约 3~4 倍，真正的共享内存并行再带来 2~3 倍；
 - 类型检查逻辑与 6.0 **结构完全相同**，语义刻意保持一致——这是一次移植，不是重新设计；
-- 新增 `--checkers`（检查worker 数，默认 4）、`--builders`、`--singleThreaded` 控制并行；
+- 新增 `--checkers`（检查 worker 数，默认 4）、`--builders`、`--singleThreaded` 控制并行；
 - 6.0 的弃用项在 7.0 变成硬错误：ES5 target、AMD / UMD / SystemJS 模块、`moduleResolution: node10` 全部移除，**`strict` 与 `esnext` 成为默认值**；
-- **没有稳定的编程式 API**，`typescript` 主入口不再导出 `createProgram` 等经典 API。这是当前最大的迁移阻塞点。
+- **没有稳定的编程式 API**，`typescript` 主入口不再导出 `createProgram` 等经典 API。这是当前最大的迁移阻塞点，7.1 beta 已开始补齐。
 
 最后这条决定了大量项目的升级节奏，请先核对自己是否踩在这些位置上：
 
 | 受影响的工具 | 状态 |
 |------|------|
-| typescript-eslint | 7.0 发布当日尚未支持，支持上限暂止于 6.x |
-| ts-jest、ts-morph | 等待 7.1 |
-| Vue / Volar、Svelte、Astro、MDX、Angular 模板类型检查 | 等待 7.1 |
-| webpack loader（依赖 compiler API） | 等待 7.1 |
+| typescript-eslint | peer 上限 `<6.1.0`，与 TS 7 并存直接 ERESOLVE；等 7.1 |
+| ts-jest、ts-morph、typedoc 等 compiler API 消费者 | 等 7.1 |
+| Vue / Volar、Svelte、Astro、MDX、Angular 模板类型检查 | 等 7.1 |
+| webpack loader（依赖 compiler API） | 等 7.1 |
 
-微软提供的过渡方案是 `@typescript/typescript6` 兼容包，它导出名为 `tsc6` 的可执行文件与 6.0 API，可与 TS 7 并行安装、逐项对比。只用 `tsc` 检查自己的代码的项目，基本可以当天升完；依赖上述工具链的，建议保留 6.x 作为 emit 真相源，等 7.1。
+微软提供的过渡方案是 `@typescript/typescript6` 兼容包（npm alias 安装：`"@typescript/typescript6": "npm:typescript@^6.0.0"`），它导出名为 `tsc6` 的可执行文件与 6.0 API，可与 TS 7 并行安装、逐项对比。只用 `tsc` 检查自己的代码的项目，基本可以当天升完；依赖上述工具链的，建议保留 6.x 作为 emit 真相源，等 7.1 stable。
 
 > [!WARNING]
 > 从 6.0 平滑到 7.0 的前置条件是：在 6.0 下开启 `stableTypeOrdering`、不使用 `ignoreDeprecations`、且没有弃用告警。官方的做法是**先升 6.0 并清干净告警**，再跳 7.0。
+
+## Map of This Section
+
+七册分册对应七个独立的问题，按"语言 → 编译 → 配置 → 边界 → 生态 → 工具 → 元数据"递进：
+
+- **[类型系统](/docs/CS/TypeScript/TypeSystem.md)** 回答"怎么把形状说准"：结构化子类型为什么漏报、CFA 怎么让类型随分支流动、泛型变型为什么那样规定、类型体操的边界在哪里。这是理解其余一切的地基。
+- **[编译器](/docs/CS/TypeScript/Compiler.md)** 回答"tsc 内部怎么跑"：从 Scanner 到 Emitter 的六阶段管线、AST 环状结构如何逼出 Go 选型、原生并行的 checker worker 池。搞清管线才能判断报错为什么出现、为什么慢、能不能被替换。
+- **[tsconfig](/docs/CS/TypeScript/Tsconfig.md)** 回答"一个编译单元长什么样"：`include`/`references` 圈定 program 边界，`module`/`moduleResolution` 必须配套，strict 家族逐条在管什么。它是编译单元与模块世界的总配置面。
+- **[模块系统](/docs/CS/TypeScript/Modules.md)** 回答"跨文件引用在哪个世界生效"：Node 的 ESM/CJS 双模块规则、条件导出的顺序陷阱、打包器如何重写解析规则。Vite 里好的 Node 里炸，根源都在这里。
+- **[声明文件](/docs/CS/TypeScript/Declarations.md)** 回答"JS 生态的类型怎么附着过来"：`.d.ts` 的三种来源（自带 / `@types` / 手写）、声明合并与模块增强、`isolatedDeclarations` 与发布前检查。
+- **[工具链](/docs/CS/TypeScript/Toolchain.md)** 回答"检查、产出、lint、测试怎么分层"：tsc 7 与 esbuild/swc 的新分工、lint 三阵营（typescript-eslint / Biome / Oxlint）在 TS 7 断层期的真实状态、Node 直跑 TS 的版本线与限制。
+- **[装饰器](/docs/CS/TypeScript/Decorators.md)** 回答"元数据从哪来"：legacy 与 Stage 3 两套互斥实现共用一个 `@`，`emitDecoratorMetadata` 如何支撑整个 DI 生态，以及它为什么迁不走。
 
 ## The Skeleton of the Type System
 
@@ -168,7 +183,7 @@ TS 本身不定义任何运行时能力，它的运行时契约完全由宿主�
 - [tsconfig 工程配置](/docs/CS/TypeScript/Tsconfig.md)
 - [Nodejs](/docs/CS/front-end/Nodejs.md)
 - [编程语言横向对比](/docs/CS/Languages.md)
-- [Webpack](/docs/CS/front-end/Webpack.md)
+- [TypeScript 工具链](/docs/CS/TypeScript/Toolchain.md)
 
 ## References
 

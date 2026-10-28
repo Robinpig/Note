@@ -30,9 +30,9 @@ Rust 的全部设计可以压成一句话：**把内存安全从运行时挪到�
 
 ## Two Worlds of Concurrency
 
-并发是本库拆得最清楚的一处，因为它天然分两个世界，而混谈这两个世界是绝大多数异步文章出错的根源。 [Concurrency](/docs/CS/Rust/Concurrency.md) 是线程世界：操作系统线程、`Send` / `Sync` 作为"无数据竞争"的类型化表达、`Mutex` 与原子操作。关键点在于 `Send` / `Sync` 是 auto trait，编译器替你推导，而你自己手写 `unsafe impl` 就等于把整套担保接过肩膀。
+并发是本库拆得最清楚的一处，因为它天然分两个世界，而混谈这两个世界是绝大多数异步文章出错的根源。 [Concurrency](/docs/CS/Rust/Concurrency.md) 是线程世界：操作系统线程、`Send` / `Sync` 作为"无数据竞争"的类型化表达、`Mutex` 与原子操作——最后这一层是唯一把内存模型直接交到使用者手上的地方，五档 `Ordering` 买到什么、不买到什么，由你自己论证，见 [Atomics](/docs/CS/Rust/Atomics.md)。关键点在于 `Send` / `Sync` 是 auto trait，编译器替你推导，而你自己手写 `unsafe impl` 就等于把整套担保接过肩膀。
 
- [Async](/docs/CS/Rust/Async.md) 是另一个世界：`Future` 是状态机而不是绿色线程，谁来推进它由运行时决定，由此衍生出 `Pin` 的自引用问题和跨 `.await` 的 `Send` 传染问题。两个世界之间有桥（`spawn_blocking`、`block_on`），但语义不通用——比如 `std::sync::Mutex` 的 guard 跨 `.await` 是典型事故。差别不在语法而在调度主体。
+ [Async](/docs/CS/Rust/Async.md) 是另一个世界：`Future` 是状态机而不是绿色线程，谁来推进它由运行时决定，由此衍生出 `Pin` 的自引用问题和跨 `.await` 的 `Send` 传染问题。前者要求 `poll` 的接收者必须是 `Pin<&mut Self>`、并连带出 `Unpin` 的两处流行误读，完整推导在 [Pin](/docs/CS/Rust/Pin.md)；分界线运行时那一侧（调度、reactor、定时器，以及 `.await` 向你收的税）在 [Async_Runtime](/docs/CS/Rust/Async_Runtime.md)。两个世界之间有桥（`spawn_blocking`、`block_on`），但语义不通用——比如 `std::sync::Mutex` 的 guard 跨 `.await` 是典型事故。差别不在语法而在调度主体。
 
 ## Where Safety Ends
 
@@ -44,7 +44,7 @@ Rust 的全部设计可以压成一句话：**把内存安全从运行时挪到�
 
 工程侧的展开顺序几乎是固定的。先弄清 [Cargo](/docs/CS/Rust/Cargo.md) ：manifest 表达的其实是三层东西——约束、`Cargo.lock` 里那张具体依赖图、以及被打散成多个编译单元的构建图；版本需求里的 caret 语义、feature 只能是加法的铁律、resolver 三代的行为差异都是日常会撞到的。它之上是 [Module_System](/docs/CS/Rust/Module_System.md) 那套容易混淆的三层概念（crate 是编译单元、package 是 Cargo 概念、module 是命名空间树），其中"私有"的真实含义是**对当前模块及其后代可见**，这一条解释了很多反直觉现象。
 
-交付流程由两篇分担： [Testing](/docs/CS/Rust/Testing.md) 处理单元测试、 `tests/` 下的集成测试与文档测试三种不同编译单元的区别，`#[bench]` 被硬错误化之后基准该怎么搭； [Tooling](/docs/CS/Rust/Tooling.md) 处理 rustup 通道模型、rust-analyzer、rustfmt、clippy、rustdoc 与 Miri 各自守的是哪一段。最后往上接到真实世界—— [Ecosystem](/docs/CS/Rust/Ecosystem.md) 按职能分层给出 crate 选型，核心方法论是看 MSRV、看依赖树宽度、看维护活跃度，并且牢记 0.x 版本的 minor 就是破坏性变更。
+交付流程由两篇分担： [Testing](/docs/CS/Rust/Testing.md) 处理单元测试、 `tests/` 下的集成测试与文档测试三种不同编译单元的区别，`#[bench]` 被硬错误化之后基准该怎么搭； [Tooling](/docs/CS/Rust/Tooling.md) 处理 rustup 通道模型、rust-analyzer、rustfmt、clippy、rustdoc 与 Miri 各自守的是哪一段。最后往上接到真实世界—— [Ecosystem](/docs/CS/Rust/Ecosystem.md) 按职能分层给出 crate 选型，核心方法论是看 MSRV、看依赖树宽度、看维护活跃度，并且牢记 0.x 版本的 minor 就是破坏性变更。交付目标也不止本机二进制：编译进浏览器或 WASI 运行时要换一套宿主能力模型与体积纪律，见 [WASM](/docs/CS/Rust/WASM.md)。
 
 ## How It Evolves Without Breaking
 

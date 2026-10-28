@@ -69,6 +69,8 @@ spring:
 
 `CacheConfigurationImportSelector` 根据 `CacheType` 从一份映射表里挑出对应的 `*CacheConfiguration` 导入，这就是不同 provider 各自装配逻辑的切换开关。
 
+`spring.cache.caffeine.spec` 的完整语法（键清单、时长格式、spec 表达不了的旋钮）与 `CaffeineCacheManager` 的接口语义见 [Caffeine Integration](/docs/CS/SE/Caffeine/Integration.md)；Caffeine 自身的架构与算法见其枢纽页。
+
 ## Simple Fallback
 
 ```java

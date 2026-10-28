@@ -81,7 +81,7 @@ Cassandra 以「节点对等、线性扩展」著称，但「易扩展」不等�
 
 ## Links
 
-- [Cassandra](/docs/CS/DB/Cassandra.md)
+- [Cassandra](/docs/CS/DB/Cassandra/Cassandra.md)
 - [Compaction](/docs/CS/DB/Cassandra/Compaction.md)
 - [Distributed](/docs/CS/DB/Cassandra/Distributed.md)
 - [Security](/docs/CS/DB/Cassandra/Security.md)

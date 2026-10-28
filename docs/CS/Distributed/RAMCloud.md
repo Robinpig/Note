@@ -2,7 +2,7 @@
 
 RAMCloud 是 Stanford 在 2010 年（FAST）提出的**分布式内存存储系统**，核心主张激进：**所有数据常驻 DRAM，DRAM 即真相源（source of truth）**，副本在内存中同步复制，持久化只靠把日志/备份异步写到磁盘、SSD 或其他节点的内存。目标是把客户端访问延迟压到**读约 5µs、写约 10µs** 量级——比基于磁盘/SSD 的存储快约 100 倍。
 
-RAMCloud 与 [Aurora](/docs/CS/Distributed/Aurora.md)（计算存储分离、仍以磁盘为主）、[TiDB](/docs/CS/DB/TiDB.md)（磁盘/SSD 真相源）走的是相反路线：传统系统以持久介质为真相源、内存只是缓存；RAMCloud 以 DRAM 为真相源、磁盘仅做备份。
+RAMCloud 与 [Aurora](/docs/CS/Distributed/Aurora.md)（计算存储分离、仍以磁盘为主）、[TiDB](/docs/CS/DB/TiDB/TiDB.md)（磁盘/SSD 真相源）走的是相反路线：传统系统以持久介质为真相源、内存只是缓存；RAMCloud 以 DRAM 为真相源、磁盘仅做备份。
 
 ## Architecture
 
@@ -23,7 +23,7 @@ RAMCloud 证明了一条与"磁盘/SSD 中心"相反的存储路线：当容量�
 ## Links
 
 - [Aurora](/docs/CS/Distributed/Aurora.md)
-- [TiDB](/docs/CS/DB/TiDB.md)
+- [TiDB](/docs/CS/DB/TiDB/TiDB.md)
 - [Dynamo](/docs/CS/Distributed/Dynamo.md)
 - [Distributed Storage](/docs/CS/Distributed/Distributed_Storage.md)
 

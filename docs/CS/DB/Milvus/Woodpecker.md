@@ -100,7 +100,7 @@ auto 的判定发生在 embed client 构造期：先查 etcd 是否已有历史�
 - [WAL and StreamingNode](/docs/CS/DB/Milvus/WAL_and_StreamingNode.md)
 - [Write Path](/docs/CS/DB/Milvus/Write_Path.md)
 - [Deployment and Ops](/docs/CS/DB/Milvus/Deployment_and_Ops.md)
-- [WAL](/docs/CS/DB/WAL.md)
+- [WAL](/docs/CS/DB/Concept/WAL.md)
 - [Message Queues](/docs/CS/MQ/MQ.md)
 
 ## References

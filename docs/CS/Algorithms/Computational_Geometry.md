@@ -243,9 +243,9 @@ digraph convex_hull_demo {
 ## Links
 
 - [Algorithms](/docs/CS/Algorithms/Algorithms.md)
-- [Divide and Conquer](/docs/CS/Algorithms/Divide-and-Conquer.md)
+- [Divide and Conquer](/docs/CS/Algorithms/paradigm/Divide-and-Conquer.md)
 - [Monotonic Stack](/docs/CS/Algorithms/struct/MonotonicStack.md)
-- [Greedy](/docs/CS/Algorithms/Greedy.md)
+- [Greedy](/docs/CS/Algorithms/paradigm/Greedy.md)
 
 ## References
 

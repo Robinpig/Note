@@ -5,7 +5,8 @@
 流传最广的三个说法，本文逐条从源码推翻：
 
 - **「`MetadataReportFactory` 的默认实现是 Redis，所以默认走 Redis 元数据中心」**——不成立。`String DEFAULT = "redis"` 这个常量确实还在源码里，但 **3.3.6 主仓库没有 Redis 元数据实现**：`dubbo-metadata/` 只有 `api` / `definition-protobuf` / `processor` / `report-nacos` / `report-zookeeper` 五个子模块，`MetadataReportFactory` 的 SPI 注册文件全仓只有 nacos 与 zookeeper 两份。默认扩展名指向一个不存在的实现，想用必须显式引入外部 artifact。
-- **「元数据存在 `/dubbo/mapping/{interface}`，接口定义靠 `publishServiceDefinition` 上报」**——不成立。`mapping/` 这一层路径已被去掉（issue #4671），3.3.6 的真实路径是 `/dubbo/{interface}`；接口上的方法名是 `storeProviderMetadata`。`publishServiceDefinition` 只是 `MetadataUtils` 里的一个 `static` 辅助方法，且那个类在 `dubbo-registry-api` 而不在 `dubbo-metadata/`。
+- **「接口定义靠 `publishServiceDefinition` 上报」**——不成立。接口上的方法名是 `storeProviderMetadata`。`publishServiceDefinition` 只是 `MetadataUtils` 里的一个 `static` 辅助方法，且那个类在 `dubbo-registry-api` 而不在 `dubbo-metadata/`。
+- **「`buildGroup` 注释掉 `mapping/`，所以 ZK 上节点变成 `/dubbo/{interface}`」**——不成立。远端节点仍是 **`/dubbo/mapping/{interface}`**；被 issue #4671 去掉 `mapping/` 前缀的只是**本地缓存 key**。这两件事必须分开看，详见 [Mapping Path: Local Cache vs Remote Node](#mapping-path-local-cache-vs-remote-node)。
 - **「元数据是逐条实时写中心，provider 侧 key 形如 `provider:{interface}`」**——不成立。3.x 的核心是 `MetadataInfo` 的 **revision 聚合**：先在内存里把本应用全部接口算出一个 revision，再整体写成一份 JSON，多个实例算出相同 revision 就**共享同一份元数据节点**。存储 key 也不是前缀式，而是 `KeyTypeEnum` 的双轨制（`PATH` 用 `/`、`UNIQUE_KEY` 用 `:`），provider 是路径里的一个**段**。
 
 版本基线：Apache Dubbo **3.3.6**，源码 tag `dubbo-3.3.6`。本文所有类路径、方法签名、存储 key 格式、默认值、行号均取自该 tag 官方源码。
@@ -62,19 +63,23 @@ public enum KeyTypeEnum {
 | 接口级元数据（含 revision） | `ServiceMetadataIdentifier.java:51,55` | `/dubbo/metadata/{pathTag}/{iface}/{version}/{group}/{side}/{protocol}/revision:{revision}` | `{iface}:{version}:{group}:{side}:{protocol}:revision:{revision}` |
 | 应用级元数据 | `SubscriberMetadataIdentifier.java:42-48` + `BaseApplicationMetadataIdentifier.java:40-47` | `/dubbo/metadata/{application}/{revision}` | `{application}:{revision}` |
 | 接口定义 | `MetadataIdentifier.java:50-56` + `BaseServiceMetadataIdentifier.java:47-61` | `/dubbo/metadata/{iface}/{version}/{group}/{side}/{application}` | `{iface}:{version}:{group}:{side}:{application}` |
-| 接口→应用映射 | `ServiceNameMapping.java:67-71` + `ZookeeperMetadataReport.java:215-217` | **`/dubbo/{serviceInterface}`** | — |
+| 接口→应用映射 | `ZookeeperMetadataReport.java:163,183` + `buildPathKey():215-217` | **`/dubbo/mapping/{serviceInterface}`** | — |
 
 > [!WARNING]
 > **provider 那一段不是前缀，是路径中的一段。** Provider 侧接口定义的 `PATH` 是 `/dubbo/metadata/{iface}/{version}/{group}/provider/{application}`，其中 `provider` 是 `side` **段**（`BaseServiceMetadataIdentifier` 的字段之一），不是 `provider:{interface}` 那种前缀式 key。混用这两种形态去找节点必然落空。
 
 根目录默认 `"dubbo"`（`AbstractMetadataReport.java:86` `DEFAULT_ROOT = "dubbo"`），`ZookeeperMetadataReport.toRootDir()`（`:79-85`）把它处理成 `/dubbo/`。`revision` 前缀常量 `KEY_REVISION_PREFIX = "revision"`（`MetadataConstants.java:22`），拼接结果是字面量 `revision:{值}`。
 
-### Mapping Path Has Removed the `mapping/` Layer
+### Mapping Path: Local Cache vs Remote Node
 
-2.7.x 时代 ZK 上的映射节点是 `/dubbo/mapping/{interface}`，内容是逗号分隔的多个应用名。**3.3.6 里 `mapping/` 这一层被注释掉了**：
+`buildGroup()` 里确实有一行被注释掉的代码，但它**只影响本地缓存 key，不影响 ZK 节点路径**——把这两件事混为一谈是本库此前的一处错误，2026-10 复核源码后更正：
 
 ```java
-// dubbo-metadata/dubbo-metadata-api/src/main/java/org/apache/dubbo/metadata/ServiceNameMapping.java:67-71
+// dubbo-metadata/dubbo-metadata-api/src/main/java/org/apache/dubbo/metadata/ServiceNameMapping.java:63-71
+static String buildMappingKey(URL url) {
+    return buildGroup(url.getServiceInterface());
+}
+
 static String buildGroup(String serviceInterface) {
     // the issue : https://github.com/apache/dubbo/issues/4671
     //        return DEFAULT_MAPPING_GROUP + SLASH + serviceInterface;
@@ -82,18 +87,38 @@ static String buildGroup(String serviceInterface) {
 }
 ```
 
-`DEFAULT_MAPPING_GROUP = "mapping"` 常量**还在**（`:46`），但 `buildGroup` 已不拼它。配合 `ZookeeperMetadataReport.buildPathKey(group, serviceKey)`（`:215-217`，即 `toRootDir() + group + "/" + serviceKey`），实际路径变成裸接口名。以 ZK 为例，3.3.6 读映射：
+`buildMappingKey` 的**全部**调用点都落在本地缓存上——`AbstractServiceNameMapping.java:98,119,137,187,239`（`putCachedMapping` / `getCachedMapping` / `mappingCacheManager`）与 `ServiceDiscoveryRegistry.java:206,441,449,450`。它**从不参与远端路径拼装**。
+
+远端路径由元数据存储自己决定：`MetadataServiceNameMapping` 把**裸接口名**作为 `serviceKey` 传给 `MetadataReport`（`:167` 读、`:180` 读+监听），ZK 实现再把 `DEFAULT_MAPPING_GROUP`（字面量 `"mapping"`）作为 `group` 拼进去：
+
+```java
+// dubbo-metadata/dubbo-metadata-report-zookeeper/.../ZookeeperMetadataReport.java:162-164, 182-184, 215-217
+public Set<String> getServiceAppMapping(String serviceKey, MappingListener listener, URL url) {
+    String path = buildPathKey(DEFAULT_MAPPING_GROUP, serviceKey);
+    ...
+}
+public Set<String> getServiceAppMapping(String serviceKey, URL url) {
+    String path = buildPathKey(DEFAULT_MAPPING_GROUP, serviceKey);
+    return getAppNames(zkClient.getContent(path));
+}
+
+private String buildPathKey(String group, String serviceKey) {
+    return toRootDir() + group + PATH_SEPARATOR + serviceKey;
+}
+```
+
+`toRootDir()` 是 `/dubbo/`（`root` 取自 `url.getGroup(DEFAULT_ROOT)`，`DEFAULT_ROOT = "dubbo"` 见 `AbstractMetadataReport.java:86`；构造函数 `ZookeeperMetadataReport.java:72-85`）。因此 3.3.6 读映射：
 
 ```shell
 $ ./zkCli.sh
-$ get /dubbo/org.apache.dubbo.demo.DemoService
+$ get /dubbo/mapping/org.apache.dubbo.demo.DemoService
 $ demo-provider,two-demo-provider,dubbo-demo-annotation-provider
 ```
 
 值格式（逗号分隔多应用名）仍成立：`ServiceNameMapping.getAppNames()`（`:88-96`）按 `COMMA_SEPARATOR` 切分并 trim。
 
-> [!NOTE]
-> `ZookeeperMetadataReport` 的读写实现里，**path 仍是用 `DEFAULT_MAPPING_GROUP` 拼的**（`getServiceAppMapping` 里 `buildPathKey(DEFAULT_MAPPING_GROUP, serviceKey)`，`:161`），只是这个 `group` 是**服务名**而非字面量 `mapping`——因为传进来的 `serviceKey` 本身就是 `buildGroup(url.getServiceInterface())` 的结果。读代码时容易把这两层看成「拼出 mapping 前缀」，实际上拼出的是裸接口名。
+> [!WARNING]
+> 一句话版本：**本地缓存 key = 裸接口名（无 `mapping/`），远端 ZK 节点 = `/dubbo/mapping/{interface}`（有 `mapping/`）**。只改了前者，后者从 2.7 到 3.3.6 一直没变。排障时按「裸接口名」去 ZK 上找节点必然落空。
 
 ## `MetadataInfo`: revision Aggregation Mechanism
 
@@ -702,7 +727,8 @@ dubbo.metadata-report.sync.report=false    ##非必须,default值为false
 | 已注册的元数据实现 | `zookeeper`、`nacos` | 2 份 SPI 文件 |
 | `MetadataReportFactory` 的 `@Adaptive` key | `PROTOCOL_KEY` | `MetadataReportFactory.java:33` |
 | `ServiceNameMapping` 扩展名 / scope | `metadata` / `APPLICATION` | `ServiceNameMapping.java:38` |
-| 映射根节点 | `/dubbo/{interface}`（**无 `mapping/`**） | `ServiceNameMapping.java:67-71` |
+| 映射远端节点 | `/dubbo/mapping/{interface}` | `ZookeeperMetadataReport.java:163,183` |
+| 映射本地缓存 key | `{interface}`（无 `mapping/`） | `ServiceNameMapping.java:67-71` |
 | 应用元数据节点 | `/dubbo/metadata/{app}/{revision}` | `BaseApplicationMetadataIdentifier.java:44-47` |
 | 重试次数 / 周期 | `100` / `3000` ms | `support/Constants.java:22-28` |
 | 每日定时刷新 | `true` | `DEFAULT_METADATA_REPORT_CYCLE_REPORT` |
@@ -721,7 +747,7 @@ dubbo.metadata-report.sync.report=false    ##非必须,default值为false
 | :--- | :--- | :--- |
 | 「默认元数据中心是 Redis」 | `DEFAULT = "redis"` 存在但主仓库无实现，SPI 只有 zk/nacos | 启动时报找不到扩展 |
 | 「`publishServiceDefinition` 是 `MetadataReport` 接口方法」 | 接口上是 `storeProviderMetadata`；前者是 `MetadataUtils` 的 static 方法 | 实现新元数据中心时找不到要实现的方法 |
-| 「映射节点在 `/dubbo/mapping/{iface}`」 | `buildGroup` 已注释掉 `mapping/`，实为 `/dubbo/{iface}`（issue #4671） | 读不到映射，接口级订阅退化 |
+| 「`buildGroup` 去掉了 `mapping/`，所以 ZK 节点是 `/dubbo/{iface}`」 | 去掉的只是**本地缓存 key** 的前缀，远端仍是 `/dubbo/mapping/{iface}` | 按 `/dubbo/{iface}` 去 ZK 找节点落空，误判映射未上报 |
 | 「有 `CompositeMetadataReport` 做多中心组合」 | 3.3.6 无此类；组合靠 `MetadataReportInstance` 的 Map | 找类失败 |
 | 「有 `RetryMetadataReport` 封装重试」 | 无此类；是 `AbstractMetadataReport` 的内部类 `MetadataReportRetry` | 找类失败 |
 | 「provider 元数据 key 是 `provider:{iface}`」 | `provider` 是 `side` **段**，形如 `{iface}/{version}/{group}/provider/{app}` | 按前缀式拼 key 必然落空 |

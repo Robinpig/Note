@@ -34,7 +34,7 @@ WAL 的后端可替换，抽象点是 `pkg/streaming/walimpls/` 下的统一接�
 
 三者的分工对应三个目标：**多 collection 共享一条日志**由「多个 VChannel 落到同一 PChannel」实现，物理 topic 数与 collection 数解耦；**单 collection 内保序**由「VChannel 是 DML 路由、事务、segment 分配的粒度」保证，同一 VChannel 内的消息经 TimeTick 形成全序；**集群级广播唯一排序点**由 CChannel 承担——像 RBAC 这类与任何 collection 无关的变更，通过 Broadcaster 写入所有目标 PChannel，但回调按 CChannel 的 TimeTick 序统一执行，从而有确定的全局顺序。
 
-VChannel 到 PChannel 的映射由 StreamingCoord 内的 `ChannelManager.AllocVirtualChannels` 分配，它把可用 PChannel 按当前 VChannel 数排序后取前 `shardNum` 个，即按 VChannel 负载做公平挑选；`balancer/policy/vchannelfair` 策略管的是下一层——这些 PChannel 各自落到哪些 StreamingNode。shard 作为数据分布概念的更多细节见 [Shard](/docs/CS/DB/Shard.md)。
+VChannel 到 PChannel 的映射由 StreamingCoord 内的 `ChannelManager.AllocVirtualChannels` 分配，它把可用 PChannel 按当前 VChannel 数排序后取前 `shardNum` 个，即按 VChannel 负载做公平挑选；`balancer/policy/vchannelfair` 策略管的是下一层——这些 PChannel 各自落到哪些 StreamingNode。shard 作为数据分布概念的更多细节见 [Shard](/docs/CS/DB/Concept/Shard.md)。
 
 ### Atomic Broadcast Path
 
@@ -130,7 +130,7 @@ Truncate 与这一 checkpoint 直接挂钩：截断点只能推进到「恢复�
 - [Query Path](/docs/CS/DB/Milvus/Query_Path.md)
 - [CDC and Replication](/docs/CS/DB/Milvus/CDC_and_Replication.md)
 - [Woodpecker](/docs/CS/DB/Milvus/Woodpecker.md)
-- [WAL](/docs/CS/DB/WAL.md)
+- [WAL](/docs/CS/DB/Concept/WAL.md)
 
 ## References
 

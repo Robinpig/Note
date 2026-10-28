@@ -7,7 +7,7 @@
 
 OpenSearch 起源于 2021 年 Elastic 的许可证变更，基于最后一个 Apache 2.0 版本 ES 7.10.2 fork，详见 [OpenSearch](/docs/CS/Framework/ES/OpenSearch.md)。
 
-## 笔记导航
+## Map of This Section
 
 | 专题 | 内容 |
 | ---- | ---- |
@@ -25,13 +25,17 @@ OpenSearch 起源于 2021 年 Elastic 的许可证变更，基于最后一个 Ap
 | [Cluster：集群与选举](/docs/CS/Framework/ES/Cluster.md) | 分片/副本、发现与主节点选举、读写路径、Query Then Fetch |
 | [Scripting / Painless](/docs/CS/Framework/ES/Script.md) | 脚本上下文、doc vs _source、编译缓存陷阱、runtime fields |
 | [Kibana](/docs/CS/Framework/ES/Kibana.md) | 可视化、KQL、Dev Tools |
-| [Beats / Filebeat](/docs/CS/Framework/ES/Beats.md) | 轻量采集、harvester/registry、背压 |
-| [Logstash](/docs/CS/Framework/ES/Logstash.md) | pipeline、grok、持久化队列 |
+| [Beats：采集器家族](/docs/CS/Framework/ES/Beats.md) | libbeat、Beat 家族、Elastic Agent/Fleet、背压协议 |
+| [Filebeat：日志采集](/docs/CS/Framework/ES/Filebeat.md) | input/harvester/registry、filestream 与 file_identity、parsers 多行、modules、内部队列、at-least-once |
+| [Logstash：服务端管道](/docs/CS/Framework/ES/Logstash.md) | pipeline、grok、持久化队列、选型 |
+| [Logstash：执行模型与可靠性](/docs/CS/Framework/ES/Logstash_Pipeline.md) | worker/批处理、内存队列 vs PQ、DLQ、多 pipeline、整链背压 |
+| [Logstash：filter 插件](/docs/CS/Framework/ES/Logstash_Filters.md) | 事件模型、grok/dissect/date/mutate/json/geoip/ruby、条件路由、ECS |
+| [Logstash：配置与部署](/docs/CS/Framework/ES/Logstash_Config.md) | logstash.yml、目录布局、Docker、JVM 堆、调试 |
 | [OpenSearch](/docs/CS/Framework/ES/OpenSearch.md) | 许可分叉、与 ES 的兼容性差异 |
 
 ## Architecture
 
-### 节点角色
+### Node Roles
 
 9.x 角色定义在 `DiscoveryNodeRole.java:145-271`，共 14 种（默认节点是下述除 `voting_only`/`search` 外的合体；`node.master`/`node.data` 布尔配置已移除，统一走 `node.roles` 列表）：
 
@@ -46,7 +50,7 @@ OpenSearch 起源于 2021 年 Elastic 的许可证变更，基于最后一个 Ap
 
 生产常见拆法：独立 master 节点组（3 个）、hot/warm 分层 data 节点、协调负载由任意节点兼任（ES 没有独立 coordinating 角色，所有节点都能当协调节点）。详见 [Install](/docs/CS/Framework/ES/Install.md)。
 
-### 日志采集链路
+### Log Collection Pipeline
 
 高可用场景不让业务系统直连 Logstash，而是日志先落本地文件：
 
@@ -54,14 +58,20 @@ OpenSearch 起源于 2021 年 Elastic 的许可证变更，基于最后一个 Ap
 业务写本地日志 -> Filebeat 采集 -> Kafka(缓冲削峰) -> Logstash(解析转换) -> Elasticsearch -> Kibana
 ```
 
-Filebeat 用「背压敏感协议」按 Logstash 处理速率调整读取速度，下游拥塞时自动降速，未确认事件落队列；链路细节见 [Beats](/docs/CS/Framework/ES/Beats.md) 与 [Logstash](/docs/CS/Framework/ES/Logstash.md)。
+Filebeat 用「背压敏感协议」按 Logstash 处理速率调整读取速度，下游拥塞时自动降速，未确认事件落队列；链路细节见 [Filebeat](/docs/CS/Framework/ES/Filebeat.md) 与 [Logstash](/docs/CS/Framework/ES/Logstash.md)。
 
-### 典型应用场景
+### Typical Use Cases
 
 - **宽表 / 跨库 Join**：把多张业务表冗余进宽文档，一次检索替代跨库 join；
 - **全文检索**：倒排索引 + BM25 相关性排序，见 [Lucene](/docs/CS/Framework/ES/Lucene.md) 与 [Query DSL](/docs/CS/Framework/ES/Query_DSL.md)；
 - **日志与可观测性**：配合 Kibana/ILM/DLM 做留存治理，见 [Troubleshooting](/docs/CS/Framework/ES/Troubleshooting.md)；
 - **向量检索**：9.x 的 kNN 搜索会强制走 DFS 打分（`TransportSearchAction.java:836-841`）。
+
+## Inverted Index
+
+全文检索的底座是一次方向反转：文档集合天然按"文档 → 词条"的正向顺序组织，而检索永远按"词条 → 文档"发问，于是两侧都建——后者即**倒排索引**（term → posting list）。写入时文本经过分析链（字符过滤 → 分词 → 词元过滤）切成词条，每个词条记录包含它的文档与位置信息；查询时输入走同一条分析链，再用词条集合去并发地查 posting list，命中的文档按相关性打分排序。
+
+ES 把这件事分在三层：字段类型决定分析链（`text` 走分析、`keyword` 原样保留），Lucene 段内不可变的倒排结构决定存储与合并，Query Then Fetch 决定查询如何被分发与归并。段内结构与合并细节见 [Lucene](/docs/CS/Framework/ES/Lucene.md)，分析链配置见 [Analyzer](/docs/CS/Framework/ES/Analyzer.md)，查询语义见 [Query DSL](/docs/CS/Framework/ES/Query_DSL.md)。
 
 ## Links
 

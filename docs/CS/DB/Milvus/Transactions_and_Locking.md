@@ -107,7 +107,7 @@ timetick interceptor 给每条非 TimeTick 消息分配 `Acker`：从 TSO 取时
 
 - [Milvus](/docs/CS/DB/Milvus/Milvus.md)
 - [Compaction and Lifecycle](/docs/CS/DB/Milvus/Compaction_and_Lifecycle.md)
-- [WAL](/docs/CS/DB/WAL.md)
+- [WAL](/docs/CS/DB/Concept/WAL.md)
 - [Distributed Systems](/docs/CS/Distributed/Distributed.md)
 
 ## References

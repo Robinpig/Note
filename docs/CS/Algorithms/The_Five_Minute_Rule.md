@@ -24,9 +24,9 @@ Trading off space and time seems like a new problem in an environment with multi
 
 - [Algorithmic_Game_Theory](/docs/CS/Algorithms/Algorithmic_Game_Theory.md)
 - [Algorithms](/docs/CS/Algorithms/Algorithms.md)
-- [Amortized](/docs/CS/Algorithms/Amortized.md)
-- [Backtracking](/docs/CS/Algorithms/Backtracking.md)
-- [Bits](/docs/CS/Algorithms/Bits.md)
+- [Amortized](/docs/CS/Algorithms/paradigm/Amortized.md)
+- [Backtracking](/docs/CS/Algorithms/paradigm/Backtracking.md)
+- [Bits](/docs/CS/Algorithms/paradigm/Bits.md)
 - [Computational_Geometry](/docs/CS/Algorithms/Computational_Geometry.md)
 
 ## References

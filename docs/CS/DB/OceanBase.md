@@ -141,9 +141,9 @@ CREATE TENANT web_tenant RESOURCE_POOL_LIST = ('pool_web') SET ob_tcp_invited_no
 
 - [DB](/docs/CS/DB/DB.md)
 - [MySQL](/docs/CS/DB/MySQL/MySQL.md)
-- [TiDB](/docs/CS/DB/TiDB.md)
+- [TiDB](/docs/CS/DB/TiDB/TiDB.md)
 - [PolarDB](/docs/CS/DB/PolarDB/PolarDB.md)
-- [canal](/docs/CS/DB/canal.md)
+- [canal](/docs/CS/DB/Middleware/canal.md)
 
 ## References
 

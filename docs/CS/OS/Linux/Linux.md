@@ -209,7 +209,12 @@ cgroup 的完整机制在 [cgroup 知识地图](/docs/CS/OS/Linux/cgroup/README.
 - [PageCache](/docs/CS/OS/Linux/mm/PageCache.md)
 - [KSM 同页合并](/docs/CS/OS/Linux/mm/KSM.md) — 匿名页去重、与 GUP 经 PageAnonExclusive 互斥
 - [内存回收 Reclaim](/docs/CS/OS/Linux/mm/Reclaim.md) — 水位线/kswapd/LRU 老化/shrinker/memcg 回收
+- [分层与异构内存 Tiered_Memory](/docs/CS/OS/Linux/mm/Tiered_Memory.md) — memory tier 抽象（adistance/tier 编号）、demote（shrink_folio_list 之后降级）、promote（AutoNUMA 提升）、HMAT/CXL 经 abstract distance 决定 tier
 - [zswap 压缩换出缓存](/docs/CS/OS/Linux/mm/zswap.md) — 换出前的压缩前端、memory.zswap.* 接口
+- [DAMON 访问监控](/docs/CS/OS/Linux/mm/DAMON.md) — 采样+自适应区域、DAMOS 操作方案、damon_reclaim/lru_sort、sysfs admin/ 接口
+- [PSI 压力失速](/docs/CS/OS/Linux/mm/PSI.md) — some/full 语义、memstall 标记点、/proc/pressure 与 memory.pressure
+- [Page Migration 页迁移](/docs/CS/OS/Linux/mm/Page_Migration.md) — migrate_pages 引擎、rmap 改写映射、GUP pin 互斥、MR_* 原因码
+- [CMA 连续内存分配](/docs/CS/OS/Linux/mm/CMA.md) — 多段 struct cma、MIGRATE_CMA、cma_alloc 隔离+迁移、sysfs/debugfs 区分
 - [多代 LRU MGLRU](/docs/CS/OS/Linux/mm/MGLRU.md) — 多代组织、页表 accessed 位老化，替代传统 LRU
 - [内存压缩 Compaction](/docs/CS/OS/Linux/mm/Compaction.md) — 双扫描器、kcompactd、主动压缩，整理物理连续块
 - [NUMA 平衡](/docs/CS/OS/Linux/mm/Numa.md) — AutoNUMA hinting fault 迁移、mempolicy、zone_reclaim_mode

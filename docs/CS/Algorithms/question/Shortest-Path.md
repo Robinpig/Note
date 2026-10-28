@@ -148,7 +148,7 @@ A*算法是把启发式方法（heuristic approaches）如BFS（完全使用贪�
 ## Links
 
 - [graph](/docs/CS/Algorithms/graph/graph.md)
-- [Greedy](/docs/CS/Algorithms/Greedy.md)
+- [Greedy](/docs/CS/Algorithms/paradigm/Greedy.md)
 
 ## References
 

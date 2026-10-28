@@ -356,7 +356,7 @@ public interface Cache {
 | 后端 | 说明 |
 |---|---|
 | JDK `ConcurrentMap` | `ConcurrentMapCacheManager`，内存 Map，无 TTL/淘汰，仅适合开发测试 |
-| [Caffeine](/docs/CS/Java/JDK/Collection/Map.md) | Guava Cache 的 Java 8+ 继任者，高性能、支持大小/时间/引用淘汰，生产默认选择 |
+| [Caffeine](/docs/CS/SE/Caffeine.md) | Guava Cache 的继任者（3.x 起要求 Java 11+），高性能、支持大小/时间/引用淘汰，生产默认选择 |
 | Ehcache 2.x / 3.x | 2.x 有专用集成；3.x 走 JSR-107 |
 | JSR-107 兼容实现 | 符合 JCache 标准的任意 provider（Ehcache 3、Hazelcast、Infinispan 等） |
 | GemFire / 分布式缓存 | 适合多节点共享缓存的场景 |

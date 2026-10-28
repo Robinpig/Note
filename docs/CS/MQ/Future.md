@@ -86,7 +86,7 @@ Agent 会话的负载特征是：**海量通道、每条几乎空闲、生命周
 
 另两个可核实的定位声明（强度低于上面三条，因为是站内宣传而非行为规范）：
 
-- **NATS** 官网现称「The Real-Time Communication Fabric for Distributed Agents and Applications」，并称把 messaging、streaming、state 统一成一套实时系统，「connecting services, devices, and AI agents from cloud to edge」。见 [NATS](/docs/CS/MQ/NATS.md)。
+- **NATS** 官网现称「The Real-Time Communication Fabric for Distributed Agents and Applications」，并称把 messaging、streaming、state 统一成一套实时系统，「connecting services, devices, and AI agents from cloud to edge」。见 [NATS](/docs/CS/MQ/NATS.md)；其 messaging / streaming / state 三位一体的落地形态是 [Core NATS 路由层](/docs/CS/MQ/NATS/Core_NATS.md) 与 [JetStream 持久化层](/docs/CS/MQ/NATS/JetStream.md) 的叠加。
 - **RobustMQ** 官网称「Communication Infrastructure for the AI Era」，列了 native A2A、AgentCard 语义发现、per-agent 持久 mailbox（FETCH + ACK 拉取、离线投递）与「Million-scale lightweight Topics」。
 
 > [!WARNING]

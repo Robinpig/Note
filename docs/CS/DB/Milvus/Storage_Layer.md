@@ -113,7 +113,7 @@ manifest 用 Apache Avro 二进制编码，头部是 `MAGIC int32 = 0x4D494C56` 
 | `ObjectStorage` | `GetObject`、`PutObject`、`StatObject`、`WalkWithObjects`、`RemoveObject`、`CopyObjectCrossBucket` | 单个后端的原语，`GetObject` 带 `offset` 与 `size` 即 range read |
 | `ChunkManager` | 由 `RemoteChunkManager` 实现 | 面向 bucket 与 rootPath 的分块语义 |
 
-另有 `CrossBucketCopier` 独立接口承载跨桶复制。后端按 `objectstorage.Config` 的 `CloudProvider` 分派：Azure 走 `newAzureObjectStorageWithConfig`，GCP 原生走 `newGcpNativeObjectStorageWithConfig`，其余走 MinIO 即 S3 兼容路径；`pkg/objectstorage/` 下另有 `aliyun`、`huawei`、`tencent`、`gcp` 子包与 `options.go` 的 `Config`。本地模式是 `local_chunk_manager.go` 的 posix 实现。C++ 侧经 `InitRemoteArrowFileSystem` 访问同一份对象存储，避免两套客户端语义漂移。range read 是整个抽象的价值所在：查询不需要下载整个 binlog，只需读出命中的列与行组——这与 [HBase](/docs/CS/DB/HBase.md) 把 HFile 放 HDFS 上按需读取的思路同源，只是 Milvus 走对象存储 HTTP API 而非文件系统 `pread`。
+另有 `CrossBucketCopier` 独立接口承载跨桶复制。后端按 `objectstorage.Config` 的 `CloudProvider` 分派：Azure 走 `newAzureObjectStorageWithConfig`，GCP 原生走 `newGcpNativeObjectStorageWithConfig`，其余走 MinIO 即 S3 兼容路径；`pkg/objectstorage/` 下另有 `aliyun`、`huawei`、`tencent`、`gcp` 子包与 `options.go` 的 `Config`。本地模式是 `local_chunk_manager.go` 的 posix 实现。C++ 侧经 `InitRemoteArrowFileSystem` 访问同一份对象存储，避免两套客户端语义漂移。range read 是整个抽象的价值所在：查询不需要下载整个 binlog，只需读出命中的列与行组——这与 [HBase](/docs/CS/DB/HBase/HBase.md) 把 HFile 放 HDFS 上按需读取的思路同源，只是 Milvus 走对象存储 HTTP API 而非文件系统 `pread`。
 
 ## Metadata KV Layer
 

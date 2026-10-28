@@ -4,4 +4,4 @@
 
 ## Model.md (Archived 2026-10-07)
 
-原为薄壳笔记，只有一段斐波那契递推式与 Binet 闭式解（且 `## Links` 区列的是与内容无关的模板链接）。其唯一有价值的内容已并入 [Recursion.md](/docs/CS/Algorithms/Recursion.md) 的「递推式求解：斐波那契数列」一节，并补充了记忆化、矩阵快速幂、快倍增与闭式解的取舍对比。原 `## Model` 锚点无外部引用。
+原为薄壳笔记，只有一段斐波那契递推式与 Binet 闭式解（且 `## Links` 区列的是与内容无关的模板链接）。其唯一有价值的内容已并入 [Recursion.md](/docs/CS/Algorithms/paradigm/Recursion.md) 的「递推式求解：斐波那契数列」一节，并补充了记忆化、矩阵快速幂、快倍增与闭式解的取舍对比。原 `## Model` 锚点无外部引用。

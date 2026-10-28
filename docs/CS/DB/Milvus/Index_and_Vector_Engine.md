@@ -4,7 +4,7 @@ Milvus 不自己实现 ANN 算法。IVF 的聚类中心、HNSW 的图层、Vaman
 
 v3.0.1 有两个容易踩错的结构性事实。其一，**向量索引类型的权威清单不在 Milvus 源码里**：`internal/util/vecindexmgr` 在启动时经 cgo 调 `knowhere::IndexFactory::Instance().GetIndexFeatures()` 拉取一张「索引名 → 特性位」表，Go 里所有 `hnsw_checker.go` / `ivf_pq_checker.go` 之类的逐类型校验器都已消失，只剩同名测试文件，向量索引统一走 `vecIndexChecker`，参数合法性由 `C.ValidateIndexParams` 交给 Knowhere 判定。其二，**标量索引是另一套实现**，完全不经 Knowhere：C++ 侧由 `IndexFactory` 分派到 `ScalarIndexSort` / `StringIndexMarisa` / `BitmapIndex` / `InvertedIndexTantivy` / `HybridScalarIndex` / `NgramInvertedIndex` / `RTreeIndexWrapper`，其中倒排与全文落在 Rust 的 tantivy 绑定上。
 
-本篇的边界：索引构建任务的调度与执行者归属（DataCoord 下发、DataNode 本地执行）见 [Write Path](/docs/CS/DB/Milvus/Write_Path.md) 与 [Compaction and Lifecycle](/docs/CS/DB/Milvus/Compaction_and_Lifecycle.md)；segcore 的检索执行、cgo 边界与双态 segment 见 [Query Path](/docs/CS/DB/Milvus/Query_Path.md)；索引文件在对象存储里怎么摆见 [Storage Layer](/docs/CS/DB/Milvus/Storage_Layer.md)。HNSW / IVF / PQ 的算法原理见 [vector](/docs/CS/DB/vector.md)，向量召回的工程语境见 [Recall](/docs/CS/RecommenderSystem/Recall.md)，本篇不重讲。末尾的能力矩阵与竞品定位是这一篇存在的另一半理由：索引面广不等于适合你。
+本篇的边界：索引构建任务的调度与执行者归属（DataCoord 下发、DataNode 本地执行）见 [Write Path](/docs/CS/DB/Milvus/Write_Path.md) 与 [Compaction and Lifecycle](/docs/CS/DB/Milvus/Compaction_and_Lifecycle.md)；segcore 的检索执行、cgo 边界与双态 segment 见 [Query Path](/docs/CS/DB/Milvus/Query_Path.md)；索引文件在对象存储里怎么摆见 [Storage Layer](/docs/CS/DB/Milvus/Storage_Layer.md)。HNSW / IVF / PQ 的算法原理见 [vector](/docs/CS/DB/Concept/vector.md)，向量召回的工程语境见 [Recall](/docs/CS/RecommenderSystem/Recall.md)，本篇不重讲。末尾的能力矩阵与竞品定位是这一篇存在的另一半理由：索引面广不等于适合你。
 
 ## Knowhere Position and Call Path
 
@@ -185,7 +185,7 @@ Milvus 的取舍很直白：它是唯一「开源 + 存算分离 + 水平伸缩 
 - [Query Path](/docs/CS/DB/Milvus/Query_Path.md)
 - [Write Path](/docs/CS/DB/Milvus/Write_Path.md)
 - [Compaction and Lifecycle](/docs/CS/DB/Milvus/Compaction_and_Lifecycle.md)
-- [vector](/docs/CS/DB/vector.md)
+- [vector](/docs/CS/DB/Concept/vector.md)
 - [Recall](/docs/CS/RecommenderSystem/Recall.md)
 
 ## References

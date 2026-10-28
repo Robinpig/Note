@@ -293,6 +293,10 @@ This substring also occurs at positions substr-rank[2].index = 4 and substr-rank
 ## Links
 
 - [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
+- [String](/docs/CS/Algorithms/string/string.md)
+- [Trie](/docs/CS/Algorithms/tree/Trie.md)
+- [Suffix Tree](/docs/CS/Algorithms/tree/Suffix_Tree.md)
+- [Hash](/docs/CS/Algorithms/struct/hash.md)
 
 ## References
 

@@ -59,3 +59,12 @@ fastjson在某些场景下会导致jvm crash
 - [Protocol Buffers](/docs/CS/Distributed/RPC/ProtoBuf.md)
 - [Thrift](/docs/CS/Distributed/RPC/Thrift.md)
 - [Fury](/docs/CS/Distributed/RPC/Fury.md)
+
+## References
+
+1. [Martin Kleppmann - Designing Data-Intensive Applications, Chapter 4: Encoding and Evolution](https://dataintensive.net/)
+2. [Apache Thrift](https://thrift.apache.org/)
+3. [Protocol Buffers Documentation](https://protobuf.dev/)
+4. [Apache Avro](https://avro.apache.org/)
+5. [RFC 4648 - The Base16, Base32, and Base64 Data Encodings](https://datatracker.ietf.org/doc/rfc4648/)
+6. [Comparison of data-serialization formats](https://en.wikipedia.org/wiki/Comparison_of_data-serialization_formats)

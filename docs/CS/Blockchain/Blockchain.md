@@ -71,7 +71,7 @@
 区块链的安全边界远不止共识算法：
 
 - **共识层**：51% 攻击、自私挖矿、长程攻击、日蚀攻击，见 [Security](/docs/CS/Blockchain/Security.md)；
-- **应用层**：重入、预言机操纵、闪电贷、权限配置错误；
+- **应用层**：重入、预言机操纵、闪电贷、权限配置错误，见 [DeFi and NFT](/docs/CS/Blockchain/Web3/DeFi_and_NFT.md)；
 - **跨链层**：桥是历史上损失最集中的环节，锁仓-铸造模型把两条链的安全假设绑定在一起；
 - **密钥层**：私钥泄露、钓鱼、供应链攻击无法靠协议挽回，见 [Wallet](/docs/CS/Blockchain/Bitcoin/Wallet.md)；
 - **经济层**：MEV、流动性挖矿、治理攻击，把协议激励变成可套利的市场。
@@ -94,7 +94,8 @@ Hyperledger Fabric、Hyperledger Besu、Corda 的差异与选型见 [Permissione
 - **Layer 2**：建在 L1 之上的扩展网络（Rollup、状态通道），把大量交易在链下处理后把结果提交主链；
 - **智能合约**：以太坊引入的链上可执行代码（Solidity/EVM），催生 DeFi、NFT；
 - **Token**：同质化代币、NFT、稳定币、生息凭证，是链上经济的记账单位，见 [Token](/docs/CS/Blockchain/Token.md)；
-- **Web3**：钱包、身份、DAO、去中心化存储与索引，是应用层的组织方式，见 [Web3](/docs/CS/Blockchain/Web3.md)。
+- **Web3**：钱包、身份、DAO、去中心化存储与索引，是应用层的组织方式，见 [Web3](/docs/CS/Blockchain/Web3.md)；
+- **链下依赖**：RPC、索引器、存储、预言机、桥与前端托管，往往比链本身更中心化，见 [Infrastructure](/docs/CS/Blockchain/Web3/Infrastructure.md)。
 
 ## Reading Path
 

@@ -85,7 +85,19 @@
 
 上面所有价格与档位比的都是同一类东西——**会生成文本的模型**。但 Agent Harness 里有一大批调用根本不需要文本：意图路由、风险门控、严重度打分。这类「输入自由文本加一条判断标准、输出必须被代码直接消费」的任务，用旗舰模型写 Prompt 太慢且格式偶发不稳，自训一个 BERT 级分类器又快又准但零迁移。2026 年 9 月出现的**决策模型（System One model）**是第三条路：TypeSafe 的 [Jev](/docs/CS/AI/LLM/Model/Jev.md) 把生成能力整个砍掉，只返回类型化判断（Choice / Score / Noul）与**校准过的置信度**，输入 $0.042/MTok、**输出免费**，端到端 70~500 ms。
 
-它的价值不来自「更聪明」，而来自**概率可信**：RLHF 之后的 LLM 会系统性过度自信，所以 `if confidence > 0.9` 这种写法在生成模型上一直没有统计意义，而决策模型把校准本身当训练目标（原因见 [Jev](/docs/CS/AI/LLM/Model/Jev.md?id=calibrated-probabilities-and-confidence)）。选型判据因此不是能力档位而是**答案空间是否封闭**：封闭选项、等级与是非判断可以切过去，要生成、要解释、要多跳推理的仍回到上面那张表。这条路线的成立程度有个最强旁证：它的**接口形状**在四周内变成了事实标准——OpenAI 在 10-06 跟进 Decisions API，AWS 在 10-01 开源 Strands Decider 2B，Cloudflare 在 10-01 发布开权重且自称「完全 Jev-API 兼容」的 Clef / Clef-flash（并把价格压到低于 Jev），社区侧还有同一 wire protocol 的开源实现 Laya 与 JevBench 排行榜。**能被换掉的实现说明品类成立，也说明这一格没有护城河**——判断口径见 [Jev](/docs/CS/AI/LLM/Model/Jev.md?id=the-interface-won-jev-compatible-decision-models)。
+它的价值不来自「更聪明」，而来自**概率可信**：RLHF 之后的 LLM 会系统性过度自信，所以 `if confidence > 0.9` 这种写法在生成模型上一直没有统计意义，而决策模型把校准本身当训练目标（原因见 [Jev](/docs/CS/AI/LLM/Model/Jev.md?id=calibrated-probabilities-and-confidence)）。选型判据因此不是能力档位而是**答案空间是否封闭**：封闭选项、等级与是非判断可以切过去，要生成、要解释、要多跳推理的仍回到上面那张表。下表按「闭源托管 / 开权重自托管 / training-free」把这一格的玩家列全：
+
+| 形态 | 模型 | 厂商/作者 | 底座 | 许可 | 接口兼容 | 一句话定位 |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 闭源托管 | **Jev** | TypeSafe AI | —（未公开） | 闭源 API | 事实标准 | 品类开创者，RLCD 校准 |
+| 闭源托管 | **OpenAI Decisions API** | OpenAI | GPT-6 Luna | 托管 | 自研 | 接受**图像**输入，Jev 仅文本 |
+| 开权重自托管 | **Clef / Clef-flash / Clef-omni** | Cloudflare | 冻结 Qwen3.8/3.5 + LoRA | Apache-2.0 | Jev-API 兼容 | omni 多模态，flash 压价低于 Jev |
+| 开权重自托管 | **AWS Strands Decider 2B** | AWS | 自托管 | Apache-2.0 | Jev-API 兼容 | 2B，vLLM 部署 |
+| 开权重自托管 | **Laya** | Convai Innovations | ModernBERT-large 421M + mmBERT 322M | Apache-2.0 | laya-serve 兼容 | CPU 友好、100+ 语言，需微调 |
+| 开权重自托管 | **Kev** | Jared Palmer | Qwen3.5（0.8B/4B/9B）+ Qwen3.8（27B）LoRA | Apache-2.0 | TypeSafe SDK 零改动 | System One Score **第一**，最可替换 |
+| training-free | **SemIf** | TheoLeeCJ | 冻结 Qwen3.5-4B（或 MiniCPM5 2B） | MIT | 自研（读 logits） | 不训练、单张 3090 跑 4B |
+
+能被换掉的实现说明品类成立，也说明这一格没有护城河——判断口径、语义差异与阈值迁移陷阱见 [Jev](/docs/CS/AI/LLM/Model/Jev.md?id=the-interface-won-jev-compatible-decision-models)；各家完整型号表、定价与架构见 [Kev](/docs/CS/AI/LLM/Model/Kev.md) 与 [SemIf](/docs/CS/AI/LLM/Model/SemIf.md)。
 
 ## Local Deployment: A Parallel Path
 
@@ -110,8 +122,11 @@
 - [Qwen](/docs/CS/AI/LLM/Model/Qwen.md)
 - [开源模型全景](/docs/CS/AI/LLM/Model/Open_Model.md)
 - [本地部署与推理引擎](/docs/CS/AI/LLM/Model/Inference.md)
+- [Post-Training：模型是怎么造出来的](/docs/CS/AI/LLM/Model/Post_Training.md)
 - [Jev](/docs/CS/AI/LLM/Model/Jev.md)
 - [StepFun](/docs/CS/AI/LLM/Model/StepFun.md)
+- [Kev](/docs/CS/AI/LLM/Model/Kev.md)
+- [SemIf](/docs/CS/AI/LLM/Model/SemIf.md)
 
 ## References
 

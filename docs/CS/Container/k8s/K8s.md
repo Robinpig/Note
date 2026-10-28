@@ -1695,6 +1695,12 @@ type IngressSpec struct {
 
 
 
+## Workload Management
+
+K8s 对"怎么跑应用"的回答不是单个对象，而是五个控制器各自对 Pod 的身份、顺序与生命周期做出不同假设：Deployment 以 ReplicaSet 为版本单位做滚动替换，StatefulSet 直接管理 Pod 与 PVC 并保证稳定序号和 DNS，DaemonSet 绕过调度器给每个合格节点放一个 Pod，Job 管"成功 N 次"，CronJob 只是按 cron 表达式生成 Job 的薄壳。
+
+"会用"与"懂"的差距通常落在三处：**默认值**（`replicas=1`、`maxSurge`/`maxUnavailable=25%`、`backoffLimit=6`、`progressDeadlineSeconds=600`）、**滚动更新的算式**（`maxSurge` 向上取整、`maxUnavailable` 向下取整，两者都算成 0 时 `maxUnavailable` 被抬到 1）、以及**超时不会自动回滚**（`progressDeadline` 只把失败写进 condition）。逐条源码核对见 [工作负载控制器](/docs/CS/Container/k8s/Workloads.md)，ReplicaSet 与 Job 的调谐细节另见 [ReplicaSetController](/docs/CS/Container/k8s/ReplicaSetController.md)、[jobController](/docs/CS/Container/k8s/jobController.md)。
+
 ## Network Management
 
 
@@ -1702,6 +1708,8 @@ type IngressSpec struct {
 [Kubernetes 网络模型](/docs/CS/Container/k8s/net.md) 设计的一个基本原则是 每个Pod都拥有一个独立的 IP 地址 并假定所有的 Pod 都在一个可以直接联通、扁平的网络空间
 
 这条链路在实现上被切成两段：**Pod 网络的建立权交给了容器运行时**——kubelet 只发 CRI 的 `RunPodSandbox`，CNI 插件由 containerd / CRI-O 调用，`pkg/kubelet/network/` 在 v1.36 只剩 DNS 相关代码；**Service 网络的实现权在 kube-proxy**，它把 Service/EndpointSlice 翻译成内核规则，数据面在 iptables / IPVS / nftables 三者中选一（v1.36 默认仍是 iptables）。一个报文从出 netns、命中规则、DNAT 到 conntrack 反向还原的完整旅程见 [K8s 网络](/docs/CS/Container/k8s/net.md)。
+
+南北向的七层入口则是另一条演进线：Ingress 之后的新标准是 [Gateway API](/docs/CS/Container/k8s/Gateway_API.md)——把 Gateway（平台侧）与 Route（应用侧）按角色拆开、路由语义可移植，ingress-nginx 终止维护后的官方迁移方向即此；旧模型的能力边界与灰度写法见 [Ingress](/docs/CS/Container/k8s/Ingress.md)。
 
 
 
@@ -1738,6 +1746,12 @@ K8s 集群是一个具有严格 [acl](/docs/CS/Container/k8s/acl.md) 控制机�
 
 容器运行时链路（kubelet → CRI → containerd → shim → runc）见 [containerd](/docs/CS/Container/k8s/containerd.md)。部署工具链：[kubeadm](/docs/CS/Container/k8s/kubeadm.md) 负责引导集群，[Helm](/docs/CS/Container/k8s/Helm.md) 负责应用包管理，日常操作见 [kubectl](/docs/CS/Container/k8s/kubectl.md)，故障排查速查见 [Issues](/docs/CS/Container/k8s/Issues.md)。
 
+K8s 的 API 本身是开放可扩展的：CRD 让你在不改 apiserver 的前提下注册新类型，Controller/Operator 把运维知识写成调谐循环，聚合 apiserver 与准入 Webhook 分别扩展"资源从哪来"和"写入前怎么校验"。四类扩展点的分工、失败模式（`failurePolicy: Fail` 会直接卡住写请求）与 v1.36 中 GA 的 ValidatingAdmissionPolicy / MutatingAdmissionPolicy 见 [扩展机制](/docs/CS/Container/k8s/Extension.md)。
+
+集群"跑起来"之后要回答三个问题：出了什么问题、为什么慢、请求经过了哪。指标侧 kubelet 暴露 `/metrics`、`/metrics/cadvisor`、`/metrics/resource` 三组端点，metrics-server 只取资源核算那一组，完整监控栈另走 Prometheus；日志落在 `/var/log/pods` 并按 10Mi × 5 轮转；链路追踪统一走 OTLP。三条链路的采集点、指标 API 的分层（`metrics.k8s.io` / `custom.metrics.k8s.io` / `external.metrics.k8s.io`）与常见反模式见 [可观测性](/docs/CS/Container/k8s/Observability.md)。
+
+最后，YAML 怎么进集群也在演进：从 CI 里 `kubectl apply` 的 push 模型，转向集群内 agent 持续拉取 Git 的 pull 模型。GitOps 的关键不是工具，而是"Git 是唯一期望状态来源、集群内只有一个写入者"这两条约束，Argo CD / Flux 只是它的两种实现；漂移纠正、渐进式发布与 Secret 入库的取舍见 [GitOps 交付](/docs/CS/Container/k8s/GitOps.md)。
+
 ## Summary
 
 K8s 改变了传统的应用部署发布的方式，给容器化的应用服务提供了灵活方便的容器编排、容器调度和简单的服务发现机制，但缺少了更丰富和更细粒度的服务治理能力
@@ -1746,19 +1760,11 @@ K8s 改变了传统的应用部署发布的方式，给容器化的应用服务�
 
 ## Links
 
-- [Docker](/docs/CS/Container/Docker/Docker.md)
-- [Container](/docs/CS/Container/Container.md)
-- [Pod](/docs/CS/Container/k8s/Pod.md)
-- [K8s 网络](/docs/CS/Container/k8s/net.md)
-- [etcd 存储](/docs/CS/Container/k8s/etcd.md)
-- [访问控制](/docs/CS/Container/k8s/acl.md)
-- [Service](/docs/CS/Container/k8s/Service.md)
-- [Ingress](/docs/CS/Container/k8s/Ingress.md)
-- [扩缩容与 HPA](/docs/CS/Container/k8s/Scaling.md)
-- [containerd 运行时](/docs/CS/Container/k8s/containerd.md)
-- [kubectl](/docs/CS/Container/k8s/kubectl.md)
-- [Helm](/docs/CS/Container/k8s/Helm.md)
-- [常见问题排查](/docs/CS/Container/k8s/Issues.md)
+- [K8s 架构与四条主链路](/docs/CS/Container/k8s/Architecture.md)
+- [工作负载控制器](/docs/CS/Container/k8s/Workloads.md)
+- [扩展机制](/docs/CS/Container/k8s/Extension.md)
+- [可观测性](/docs/CS/Container/k8s/Observability.md)
+- [GitOps 交付](/docs/CS/Container/k8s/GitOps.md)
 - [容器知识地图](/docs/CS/Container/README.md)
 
 

@@ -64,7 +64,7 @@ bit 0   = 叶子页 / 内部页
 > [!WARNING]
 > **`commit()` 与 `tryCommit()` 在持久性上不可互换**，而「自动提交延迟」根本不等于 fsync：默认路径下数据进了 page cache 就算完成，掉电窗口由磁盘写缓存决定（见 [H2 的持久性边界](/docs/CS/DB/h2/H2.md)）。
 >
-> 还要破除一个心智模型：**2.x 的 H2 没有一条独立于主文件的 WAL**。官方 `features.html#database_file_layout` 列出的持久化库文件是 `.mv.db`、`.newFile`、`.tempFile`、`.lock.db`、`.trace.db`、`<db>.<id>.temp.db`——**里面没有 `.log`**；而 `.mv.db` 自己的描述就是「Contains the transaction log, indexes, and data for all tables」，即日志在 MVStore 文件内部。`features.html#logging_recovery` 那段「变更先写事务日志、主数据区稍后落盘」的叙述属于已删除的 `PageStore` / `RawStore` 时代（两个类在源码里已不存在），别按它理解恢复流程。讨论「H2 有没有 WAL」，正确答案是「存储层本身就是 log-structured」——这也正是 [WAL](/docs/CS/DB/WAL.md) 与 LSM 设计的共同根脉（对照 [RocksDB Write Path](/docs/CS/DB/RocksDB/Write_Path.md) 里 WAL 与 memtable 分离的做法）。
+> 还要破除一个心智模型：**2.x 的 H2 没有一条独立于主文件的 WAL**。官方 `features.html#database_file_layout` 列出的持久化库文件是 `.mv.db`、`.newFile`、`.tempFile`、`.lock.db`、`.trace.db`、`<db>.<id>.temp.db`——**里面没有 `.log`**；而 `.mv.db` 自己的描述就是「Contains the transaction log, indexes, and data for all tables」，即日志在 MVStore 文件内部。`features.html#logging_recovery` 那段「变更先写事务日志、主数据区稍后落盘」的叙述属于已删除的 `PageStore` / `RawStore` 时代（两个类在源码里已不存在），别按它理解恢复流程。讨论「H2 有没有 WAL」，正确答案是「存储层本身就是 log-structured」——这也正是 [WAL](/docs/CS/DB/Concept/WAL.md) 与 LSM 设计的共同根脉（对照 [RocksDB Write Path](/docs/CS/DB/RocksDB/Write_Path.md) 里 WAL 与 memtable 分离的做法）。
 >
 > 另一个单位陷阱：`Builder.cacheSize(mb)` 与 `getCacheSize()` 单位是 **MB**，而 `setCacheSize(int kb)` 内部会除以 1024、单位是 **KB**（`MVStore.java:2094/1205/1225`）；SQL 层 `SET CACHE_SIZE` 也是 KB（默认按内存自动取 64 MB/每 GB RAM 并向上取 2 的幂）。三层单位混过一次就会写出 1024 倍误差的配置。
 

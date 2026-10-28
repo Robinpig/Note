@@ -56,7 +56,7 @@ NetworkTopologyStrategy 下，每个 DC 独立维持自己的 RF 份副本。写
 
 ## Links
 
-- [Cassandra](/docs/CS/DB/Cassandra.md)
+- [Cassandra](/docs/CS/DB/Cassandra/Cassandra.md)
 - [Consistency](/docs/CS/DB/Cassandra/Consistency.md)
 - [Distributed](/docs/CS/DB/Cassandra/Distributed.md)
 - [Storage Engine](/docs/CS/DB/Cassandra/StorageEngine.md)

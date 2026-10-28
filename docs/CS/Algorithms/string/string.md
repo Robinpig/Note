@@ -99,6 +99,10 @@
 ## Links
 
 - [复杂度分析](/docs/CS/Algorithms/Algorithms.md?id=algorithm-analysis)
+- [String Search](/docs/CS/Algorithms/string/string-search.md)
+- [Trie](/docs/CS/Algorithms/tree/Trie.md)
+- [Suffix Tree](/docs/CS/Algorithms/tree/Suffix_Tree.md)
+- [Hash](/docs/CS/Algorithms/struct/hash.md)
 
 ## References
 

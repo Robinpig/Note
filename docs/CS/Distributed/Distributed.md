@@ -978,7 +978,10 @@ PRAM 保证：来自一个进程的写操作会按该进程执行它们的顺序
 
 ## Message Passing
 
-[RPC（远程调用）](/docs/CS/Distributed/RPC/RPC.md)
+[RPC（远程调用）](/docs/CS/Distributed/RPC/RPC.md) 是实践中最广泛使用的消息传递抽象：它把请求-响应封装成一次看似本地的过程调用，
+由 stub 负责参数编组、网络传输与结果解包，让程序员无需显式编写消息收发代码。
+概念模型（绑定、幂等性、孤儿、重复执行语义）见 [RPC](/docs/CS/Distributed/RPC/RPC.md)，
+序列化与主流框架的细分入口见 [RPC 目录](/docs/CS/Distributed/RPC/README.md)。
 
 ### Atomic Broadcast
 

@@ -14,7 +14,7 @@
 
 **网络层与链路层**由三页支撑：[IP](/docs/CS/CN/IP.md) 管寻址与转发，[ICMP](/docs/CS/CN/ICMP.md) 管控制报文与诊断，[ARP](/docs/CS/CN/ARP.md) 管 IP 到 MAC 的解析。
 
-**安全**是一条横切主线：[TLS](/docs/CS/CN/TLS.md) 是协议本身（各版本差异与握手细节），[Security](/docs/CS/CN/Security.md) 是防护视角的总览，[Attack](/docs/CS/CN/Attack.md) 从攻击面反推防御，[VPN](/docs/CS/CN/VPN.md) 覆盖远程接入与隧道；学科框架见 [CyberSecurity](/docs/CS/CN/CyberSecurity/CyberSecurity.md)。
+**安全**是一条横切主线：[TLS](/docs/CS/CN/TLS.md) 是协议本身（各版本差异与握手细节），[Security](/docs/CS/CN/Security.md) 是防护视角的总览，[Attack](/docs/CS/CN/Attack.md) 从攻击面反推防御，[VPN](/docs/CS/CN/VPN.md) 覆盖远程接入与隧道；学科框架见 [CyberSecurity](/docs/CS/CN/CyberSecurity/CyberSecurity.md)，其下按密码学原语、PKI、防火墙、IDS/IPS、恶意软件、认证协议、无线安全七个分册展开。
 
 **服务器与代理**是本目录最大的工程分支：[nginx](/docs/CS/CN/nginx/nginx.md) 是其下全部专题的唯一枢纽，事件循环、内存池、upstream、缓存、TLS 各有专篇，各代代理的系统性对比在 [compare](/docs/CS/CN/nginx/compare.md)。同代或同类的还有四层能力更细的 [HAProxy](/docs/CS/CN/Tools/HAProxy.md)、配置极简的 [Caddy](/docs/CS/CN/Caddy.md)、Rust 重写的 [Pingora](/docs/CS/CN/Pingora.md)；负载均衡的通用概念收敛在 [Load Balance](/docs/CS/CN/Load%20Balance.md)。排查工具集中在 Tools 目录：抓包看 [tcpdump](/docs/CS/CN/Tools/tcpdump.md) 与 [WireShark](/docs/CS/CN/Tools/WireShark.md)，防火墙与连接跟踪看 [netfilter](/docs/CS/CN/Tools/netfilter.md)，抓包分析平台看 [Xcap](/docs/CS/CN/Tools/Xcap.md)。运维层面的方法论——分层视角、五大故障分类、监控三视角、告警收敛与拓扑定位——单独成篇：[Ops](/docs/CS/CN/Ops.md)。
 
@@ -442,7 +442,7 @@ CRC 也称**多项式码（polynomial codes）**：把要发送的比特串看�
 
 ### WiFi
 
-**IEEE 802.11 无线局域网**，通称 **WiFi**。
+**IEEE 802.11 无线局域网**，通称 **WiFi**。安全体制（WEP/WPA2/WPA3 与 KRACK、Dragonblood 等）见 [Wireless Security](/docs/CS/CN/CyberSecurity/Wireless_Security.md)。
 
 ## Networks Under Attack
 

@@ -51,13 +51,13 @@
 ## Variants
 - **带权二分图匹配 / KM 算法**：求最大权匹配，边权取两侧顶点权值的组合时可用 $O(V^3)$ 的 KM 算法；本质是「顶权转边权」后跑最优匹配。
 - **一般图匹配**：不含二分图性质时，最大匹配可用 Edmonds「开花算法」（blossom）$O(V^3)$，需处理「奇环缩花」，复杂度与实现难度都显著上升。
-- **最小费用最大流**：把「匹配」看作流量、「收益」看作费用，可统一处理带权、最优等多目标场景，见 [Network Flow](/docs/CS/Algorithms/Network_Flow.md)。
+- **最小费用最大流**：把「匹配」看作流量、「收益」看作费用，可统一处理带权、最优等多目标场景，见 [Network Flow](/docs/CS/Algorithms/graph/Network_Flow.md)。
 - **稳定匹配 / 稳定婚姻**：不追求「匹配数最多」，而追求「没人愿意换搭档」的**稳定性**，由 Gale–Shapley 算法求解，$O(N^2)$——它在 [Algorithms](/docs/CS/Algorithms/Algorithms.md) 的「经典主题」一节有提及。
 
 ## Links
 
 - [graph](/docs/CS/Algorithms/graph/graph.md)
-- [Network Flow](/docs/CS/Algorithms/Network_Flow.md)
+- [Network Flow](/docs/CS/Algorithms/graph/Network_Flow.md)
 - [Search](/docs/CS/Algorithms/search.md)
 
 ## References

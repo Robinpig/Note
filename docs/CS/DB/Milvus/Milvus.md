@@ -2,7 +2,7 @@
 
 Milvus 是一个开源云原生向量数据库，专为在海量向量数据集上进行高性能相似性搜索而设计。它把 ANN 检索与数据库该有的东西——schema、事务边界、一致性级别、多租户、备份恢复、权限——装进同一套存算分离架构里，因此理解它的成本几乎全部落在「组件之间如何传递事实」这一件事上。
 
-> 向量数据库的整体图景（ANN 原理、选型坐标）见 [vector](/docs/CS/DB/vector.md)。本目录下的笔记锚定 **v3.0.1** 源码：3.0 相对 2.x 做了一次架构级迁移，凭 2.x 印象写的组件职责大多是错的，下面「Two Architectural Ruptures」一节先说清哪里变了。
+> 向量数据库的整体图景（ANN 原理、选型坐标）见 [vector](/docs/CS/DB/Concept/vector.md)。本目录下的笔记锚定 **v3.0.1** 源码：3.0 相对 2.x 做了一次架构级迁移，凭 2.x 印象写的组件职责大多是错的，下面「Two Architectural Ruptures」一节先说清哪里变了。
 
 ## Two Architectural Ruptures
 
@@ -232,7 +232,7 @@ networks:
     name: milvus
 ```
 
-> 提示：上面的 compose 把镜像钉在 `milvusdb/milvus:v3.0.0` 与 `zilliz/attu:v3.0.0`，比本页锚定的 v3.0.1 落后一个补丁版；且该 standalone compose 未显式配 `mq.type`，按 v3.0.1 的 default 解析规则（standalone 优先 rocksmq，判据是 `rocksmq.path` 非空、默认为 `/var/lib/milvus/rdb_data`）会落到 RocksMQ，与 [Deploy](/docs/CS/DB/Milvus/Deploy.md) 三节点集群的 Kafka 路径不同。
+> 提示：上面的 compose 把镜像钉在 `milvusdb/milvus:v3.0.0` 与 `zilliz/attu:v3.0.0`，比本页锚定的 v3.0.1 落后一个补丁版；且该 standalone compose 未显式配 `mq.type`，按 v3.0.1 的 default 解析规则（standalone 优先 rocksmq，判据是 `rocksmq.path` 非空、默认为 `/var/lib/milvus/rdb_data`）会落到 RocksMQ，与 [Deploy](/docs/CS/DB/Milvus/Deploy.md) 三节点集群的 Kafka 路径不同。另外 compose 里的 `minio/minio:RELEASE.2024-05-28T17-19-04Z` 如今已拉不到——官方镜像 `minio/minio` 与 `minio/mc` 于 2026-09-11 从 Docker Hub 删除，替换成社区维护 fork [Silo](/docs/CS/Distributed/Silo.md)（`pgsty/silo`，S3 协议与 `xl.meta` 磁盘格式兼容、drop-in 替换）即可。
 
 ##### **Milvus Distributed**
 
@@ -250,7 +250,7 @@ Milvus Distributed 可以部署在 Kubernetes 集群上。这种部署采用云�
 
 查询侧的难点不是算得快，而是**一次请求要横跨十几个 shard，还得让它们给出同一个时间点的答案**。[Query Path](/docs/CS/DB/Milvus/Query_Path.md) 沿这条线展开：一致性级别如何落成一个具体要等待的时间戳、QueryCoord 为什么用「目标视图」而不是直接分配段、shard leader 的 delegator 如何把内存里的 growing 段与对象存储上的 sealed 段合成一份答案、以及删除墓碑（L0 段）在读取时才被应用成位图。真正做向量检索的是 C++ 的 segcore，Go 与它之间只过 plan、placeholder 与 bitset——segcore 内部如何同时服务无锁追加的 growing 段与按 chunk 组织的 sealed 段、计划树与表达式在那里怎么执行、检索与归并的分界在哪，见 [Segcore](/docs/CS/DB/Milvus/Segcore.md)。
 
-检索质量的天花板则由索引决定。[Index and Vector Engine](/docs/CS/DB/Milvus/Index_and_Vector_Engine.md) 给出 v3.0.1 的完整能力面：Knowhere 承担的算法层、稠密与稀疏索引的类型矩阵、每种索引支持哪些向量数据类型、mmap 与磁盘型索引如何换取内存、标量与 JSON 与全文倒排索引各自适合什么谓词，最后用功能矩阵说清它与 pgvector / Qdrant / Weaviate 的分工边界——ANN 算法本身的原理不在此重复，见 [vector](/docs/CS/DB/vector.md)。语义相似之外还有一类需求是**精确词项匹配**——订单号、错误码、专有名词；Milvus 用 analyzer 链加 tantivy 倒排补齐这块能力，并让文本字段经 function 直接产出 BM25 稀疏向量，与向量检索共存于同一次混合查询，见 [Full Text Search](/docs/CS/DB/Milvus/Full_Text_Search.md)。
+检索质量的天花板则由索引决定。[Index and Vector Engine](/docs/CS/DB/Milvus/Index_and_Vector_Engine.md) 给出 v3.0.1 的完整能力面：Knowhere 承担的算法层、稠密与稀疏索引的类型矩阵、每种索引支持哪些向量数据类型、mmap 与磁盘型索引如何换取内存、标量与 JSON 与全文倒排索引各自适合什么谓词，最后用功能矩阵说清它与 pgvector / Qdrant / Weaviate 的分工边界——ANN 算法本身的原理不在此重复，见 [vector](/docs/CS/DB/Concept/vector.md)。语义相似之外还有一类需求是**精确词项匹配**——订单号、错误码、专有名词；Milvus 用 analyzer 链加 tantivy 倒排补齐这块能力，并让文本字段经 function 直接产出 BM25 稀疏向量，与向量检索共存于同一次混合查询，见 [Full Text Search](/docs/CS/DB/Milvus/Full_Text_Search.md)。
 
 ## Durability and Cost
 
@@ -285,9 +285,9 @@ Milvus Distributed 可以部署在 Kubernetes 集群上。这种部署采用云�
 - [Deploy](/docs/CS/DB/Milvus/Deploy.md)
 - [Write Path](/docs/CS/DB/Milvus/Write_Path.md)
 - [Query Path](/docs/CS/DB/Milvus/Query_Path.md)
-- [vector](/docs/CS/DB/vector.md)
+- [vector](/docs/CS/DB/Concept/vector.md)
 - [DataBases](/docs/CS/DB/DB.md)
-- [WAL](/docs/CS/DB/WAL.md)
+- [WAL](/docs/CS/DB/Concept/WAL.md)
 
 ## References
 

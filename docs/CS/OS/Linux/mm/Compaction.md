@@ -59,7 +59,7 @@ while ((ret = compact_finished(cc)) == COMPACT_CONTINUE) {
 }
 ```
 
-关键在 `migrate_pages()` 的两个回调：`compaction_alloc` 每搬一个源页，就从空闲扫描器已隔离的 `cc->freepages` 里取一个目标页；没有现成目标页时，它会推动空闲扫描器再向前隔离一批。迁移失败、没搬成的页由 `putback_movable_pages()` 放回，不丢数据。
+关键在 `migrate_pages()` 的两个回调：`compaction_alloc` 每搬一个源页，就从空闲扫描器已隔离的 `cc->freepages` 里取一个目标页；没有现成目标页时，它会推动空闲扫描器再向前隔离一批。迁移失败、没搬成的页由 `putback_movable_pages()` 放回，不丢数据。"怎么把一页搬到另一页、并把所有 PTE 重定向"这套底层机制见 [Page Migration](/docs/CS/OS/Linux/mm/Page_Migration.md)——compaction 只是它的一个大调用方（reason=`MR_COMPACTION`）。
 
 ## Compaction Intensity: compact_priority
 

@@ -82,7 +82,7 @@ Cassandra 的存储引擎属于 **LSM-tree 谱系**（与 LevelDB / RocksDB / HB
 
 ## Links
 
-- [Cassandra](/docs/CS/DB/Cassandra.md)
+- [Cassandra](/docs/CS/DB/Cassandra/Cassandra.md)
 - [Compaction](/docs/CS/DB/Cassandra/Compaction.md)
 - [Data Model](/docs/CS/DB/Cassandra/DataModel.md)
 - [Distributed](/docs/CS/DB/Cassandra/Distributed.md)

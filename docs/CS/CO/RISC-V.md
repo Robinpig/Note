@@ -70,7 +70,7 @@ RISC-V 是 2010 年起由 UC Berkeley 发起的**开放、免费、模块化**�
 - [流水线](/docs/CS/CO/pipeline.md)
 - [多处理器内存（UMA/NUMA）](/docs/CS/CO/memory.md)
 - [数据并行与加速器（RVV）](/docs/CS/CO/simd.md)
-- [汇编](/docs/CS/assembly/assembly.md)
+- [寄存器与寻址方式（含 RV64 与 x86-64 / AArch64 对照）](/docs/CS/assembly/Registers_and_Addressing.md)
 
 ## References
 

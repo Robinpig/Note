@@ -2,7 +2,7 @@
 
 **数论**（number theory）是研究整数性质的分支。在算法域里它的地位特殊：它既是一切「离散数学味」问题的基础（整除、同余、质数），又因为**大量数论问题存在「暴力不可行、但存在精巧的筛法与分解法」**的结构，而成为算法竞赛与密码学中最密集的技巧来源之一。
 
-它与本库其他部分的接口清晰：欧几里得算法见 [Algorithms](/docs/CS/Algorithms/Algorithms.md) 入口，$P \neq NP$ 的理论背景见 [NP](/docs/CS/Algorithms/NP.md)，模运算的密码学应用见 [Security](/docs/CS/Security/Security.md)，而「递归求解递推式」在 [Recursion](/docs/CS/Algorithms/Recursion.md) 的斐波那契一节有呼应。
+它与本库其他部分的接口清晰：欧几里得算法见 [Algorithms](/docs/CS/Algorithms/Algorithms.md) 入口，$P \neq NP$ 的理论背景见 [NP](/docs/CS/Algorithms/NP.md)，模运算的密码学应用见 [Security](/docs/CS/Security/Security.md)，而「递归求解递推式」在 [Recursion](/docs/CS/Algorithms/paradigm/Recursion.md) 的斐波那契一节有呼应。
 
 本页聚焦算法视角的数论：**如何不枚举到 $n$ 就回答关于 $1 \sim n$ 的问题**。
 
@@ -107,8 +107,8 @@ $$
 
 - [Algorithms](/docs/CS/Algorithms/Algorithms.md)
 - [NP](/docs/CS/Algorithms/NP.md)
-- [Recursion](/docs/CS/Algorithms/Recursion.md)
-- [bit operations](/docs/CS/Algorithms/Bits.md)
+- [Recursion](/docs/CS/Algorithms/paradigm/Recursion.md)
+- [bit operations](/docs/CS/Algorithms/paradigm/Bits.md)
 
 ## References
 

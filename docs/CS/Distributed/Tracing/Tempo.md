@@ -13,7 +13,7 @@ Tempo 的设计哲学很直接：**trace 是很少被查、但必须被留一阵
 
 | 维度 | Tempo | [Jaeger](/docs/CS/Distributed/Tracing/Jaeger.md) | [Zipkin](/docs/CS/Distributed/Tracing/Zipkin.md) |
 | --- | --- | --- | --- |
-| 存储 | 对象存储 + Parquet 块，无外部数据库 | Elasticsearch / OpenSearch / Cassandra / ClickHouse | Cassandra / Elasticsearch / MySQL |
+| 存储 | 对象存储 + Parquet 块，无外部数据库 | Elasticsearch / OpenSearch / Cassandra / ClickHouse | [Cassandra / Elasticsearch / MySQL](/docs/CS/Distributed/Tracing/Zipkin/Collector_and_Storage.md) |
 | 索引 | 轻索引（按 trace id 定位） | 依赖后端的索引能力 | 依赖后端的索引能力 |
 | 查询语言 | TraceQL | 自有 UI + ES 查询 | 自有 UI |
 | 成本 | 低（对象存储为主） | 中到高（取决于后端） | 中 |
@@ -150,6 +150,7 @@ metrics-generator 是可选组件，从摄入的 span 派生两类派生指标�
 - [Loki](/docs/CS/Distributed/Tracing/Loki.md)
 - [Jaeger](/docs/CS/Distributed/Tracing/Jaeger.md)
 - [Zipkin](/docs/CS/Distributed/Tracing/Zipkin.md)
+- [Zipkin Query and UI](/docs/CS/Distributed/Tracing/Zipkin/Query_and_UI.md) — 检索 API 与依赖图
 
 ## References
 

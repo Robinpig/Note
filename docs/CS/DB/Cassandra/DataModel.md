@@ -80,7 +80,7 @@ CREATE TABLE device_metrics (
 
 ## Links
 
-- [Cassandra](/docs/CS/DB/Cassandra.md)
+- [Cassandra](/docs/CS/DB/Cassandra/Cassandra.md)
 - [CQL](/docs/CS/DB/Cassandra/CQL.md)
 - [Indexing](/docs/CS/DB/Cassandra/Indexing.md)
 - [Storage Engine](/docs/CS/DB/Cassandra/StorageEngine.md)

@@ -89,6 +89,8 @@ Groth16 与部分 PLONK 实现需要**公共参考串（CRS）**：
 - **可验证计算**：外包计算并证明结果正确，适用于 AI 推理、数据市场；
 - **游戏与投票**：隐藏手牌、匿名投票、可验证随机性。
 
+隐私类应用在多数辖区同时面临反洗钱与制裁约束，"证明资金不属于已知非法集合"是当下主流的折中路线，见 [Privacy and Compliance](/docs/CS/Blockchain/Web3/Privacy_and_Compliance.md)。
+
 ## Costs and Limits
 
 - **证明时间**：复杂电路可能需要数分钟到数小时，GPU/ASIC 加速与分布式证明是主要优化方向；

@@ -52,7 +52,7 @@ n 个任务随机分配到 n 个队列（随机放置）时，最大负载约为
 - [Operating Systems](/docs/CS/OS/OS.md)
 - [Linux 调度](/docs/CS/OS/Linux/proc/sche.md)
 - [Go 并发模型](/docs/CS/Go/Concurrency/Concurrency.md)
-- [Amortized Analysis](/docs/CS/Algorithms/Amortized.md)
+- [Amortized Analysis](/docs/CS/Algorithms/paradigm/Amortized.md)
 - [Computer Organization](/docs/CS/CO/CO.md)
 
 ## References

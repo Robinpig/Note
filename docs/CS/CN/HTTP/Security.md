@@ -89,6 +89,8 @@ Access-Control-Max-Age: 86400
 
 - [Computer Network](/docs/CS/CN/CN.md)
 - [HTTP](/docs/CS/CN/HTTP/HTTP.md)
+- [CyberSecurity](/docs/CS/CN/CyberSecurity/CyberSecurity.md)
+- [Authentication](/docs/CS/CN/CyberSecurity/Authentication.md)
 
 ## References
 

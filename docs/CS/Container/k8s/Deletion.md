@@ -290,7 +290,7 @@ if m.canBeDeleted(logger, pod, status.status, status.podIsFinished) {
 }
 ```
 
-注意写法是 `new(int64)` 而不是 `ptr.To[int64](0)`——这也是按字面 pattern 搜不到的原因之一。
+注意写法是 `new(int64)` 而不是用 `ptr.To` 显式构造 `int64` 零值——这也是按字面 pattern 搜不到的原因之一。
 
 触发条件 `canBeDeleted`（`:1241-1258`）要求**四条同时满足**：
 

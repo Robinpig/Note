@@ -16,7 +16,7 @@
 | [Rust](/docs/CS/Rust/Rust.md) | 编译期保证内存安全 | compile |
 | [TypeScript](/docs/CS/TypeScript/TypeScript.md) | 浏览器 / 全栈的唯一选择 | Compiler、Tsconfig、TypeSystem（运行时语义来自 JS） |
 | [Scala](/docs/CS/Scala/Scala.md) | JVM 上的函数式表达力 | [类型系统](/docs/CS/Scala/Type_System.md)、[上下文抽象](/docs/CS/Scala/Contextual_Abstractions.md)、[模式匹配](/docs/CS/Scala/Pattern_Matching.md)、[集合库](/docs/CS/Scala/Collections.md)、[效应系统](/docs/CS/Scala/Effects.md)、[生态](/docs/CS/Scala/Ecosystem.md) |
-| [Assembly](/docs/CS/assembly/assembly.md) | 最接近机器的抽象 | 单篇 |
+| [Assembly](/docs/CS/assembly/assembly.md) | 最接近机器的抽象 | 语法方言、寄存器与寻址、指令集、调用约定、栈帧、系统调用、内联汇编、工具链 |
 | [Dart](/docs/CS/Dart/Dart.md) | Flutter 的专属语言，也能做 CLI/Web/服务端 | 单篇；与 [Flutter](/docs/CS/Flutter.md) 强绑定 |
 
 相关框架（非语言）：[Flutter](/docs/CS/Flutter.md)——由 [Dart](/docs/CS/Dart/Dart.md) 编写，Dart 已在上方作为语言收录。

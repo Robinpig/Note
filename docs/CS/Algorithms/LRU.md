@@ -13,7 +13,7 @@ LRU（Least Recently Used，最近最久未使用）是最常用的缓存/页面
 ## Data Structure: HashMap + Doubly Linked List
 单一结构都不够：
 
-- 纯[哈希表](/docs/CS/Algorithms/hash.md)能 O(1) 查找，但无序，无法知道谁最久未用；
+- 纯[哈希表](/docs/CS/Algorithms/struct/hash.md)能 O(1) 查找，但无序，无法知道谁最久未用；
 - 纯[链表](/docs/CS/Algorithms/struct/linked-list.md)能 O(1) 增删，但查找要 O(n)。
 
 经典组合是 **HashMap + 双向链表**：
@@ -63,7 +63,7 @@ Java 可直接用 [LinkedHashMap](/docs/CS/Java/JDK/Collection/Map.md)：构造�
 ## Links
 
 - [页面置换算法](/docs/CS/Algorithms/Algorithms.md?id=page-replacement-algorithms)
-- [hash](/docs/CS/Algorithms/hash.md)
+- [hash](/docs/CS/Algorithms/struct/hash.md)
 - [linked-list](/docs/CS/Algorithms/struct/linked-list.md)
 - [Redis memory](/docs/CS/DB/Redis/memory.md)
 - [MySQL InnoDB Buffer Pool](/docs/CS/DB/MySQL/memory.md?id=lru-algorithm)

@@ -21,7 +21,7 @@ AgentScope Java 按「核心 / Harness / 扩展」分层发包，Maven groupId �
 | 沙箱扩展 | `agentscope-extensions-sandbox-{docker,kubernetes,daytona,e2b,agentrun}` | 五类沙箱后端（Docker / K8s / Daytona / E2B / 阿里云 AgentRun） |
 | 频道扩展 | `agentscope-extensions-channel-{feishu,dingtalk,wecom,weixin,github,gitlab}` | 消息平台接入 |
 | 技能扩展 | `agentscope-extensions-skill-{git,mysql}-repository`、`agentscope-extensions-nacos-skill` | 技能市场后端 |
-| 框架集成 | `agentscope-{openai,dashscope,...}-spring-boot-starter`、`agentscope-admin-spring-boot-starter` | Spring Boot 自动装配；另有 Micronaut / Quarkus 扩展 |
+| 框架集成 | `agentscope-{openai,dashscope,...}-spring-boot-starter`、`agentscope-admin-spring-boot-starter` | Spring Boot 自动装配；另有 Micronaut / [Quarkus](/docs/CS/Java/Quarkus.md) 扩展 |
 
 两个值得记住的设计事实：
 

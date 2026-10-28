@@ -235,7 +235,7 @@ count = sum(result.nouls[f"item_{i}"].noul > YES for i in range(len(items)))
 | 延迟 | 毫秒级 | 秒到几十秒（开 thinking 更久） | 70~500 ms |
 | 输出侧计费 | 自建 GPU | 输出约为输入 5 倍价 | 输出免费 |
 | 生成 / 解释 / 多跳推理 | ✗ | ✅ | ✗ |
-| 私有化 / 离线 | ✅ | ⚠️ 开权重模型可自建 | ✗ Jev 本身只有 API、权重不开；但**同接口的开权重实现已可自建**（Laya / Clef / Strands Decider 2B），见 [The Interface Won](/docs/CS/AI/LLM/Model/Jev.md?id=the-interface-won-jev-compatible-decision-models) |
+| 私有化 / 离线 | ✅ | ⚠️ 开权重模型可自建 | ✗ Jev 本身只有 API、权重不开；但**同接口的开权重实现已可自建**（Laya / Clef / Strands Decider 2B / Kev / SemIf），见 [The Interface Won](/docs/CS/AI/LLM/Model/Jev.md?id=the-interface-won-jev-compatible-decision-models) |
 | 迁移与泛化 | ✗ 单任务 | ✅ | ✅ 但**只覆盖判断形状的任务** |
 
 一句话判据：**答案空间封闭 + 代码是消费者 + 要概率可卡阈值** → 决策模型；**要生成、要解释、要多跳** → 生成模型；**任务极窄、量极大、必须私有化或延迟要求变态** → 仍然自训小模型。中间地带还有官方的 SDE cascade（mini → verify → reasoning 三段级联），本质是「先用便宜的判断层把贵的推理层省掉」。
@@ -266,6 +266,8 @@ TypeSafe 的原文表述有两句，一句在发布公告，一句在工程文�
 | 时间 | 事件 |
 | :--- | :--- |
 | 09-15 | TypeSafe 结束两年隐身发布 Jev，同步 $40M 种子轮（DCVC 领投），early access |
+| 09-16 | **SemIf**（TheoLeeCJ，MIT，前身 OpenJev）开源：冻结 Qwen3.5-4B 直读 logits 的 training-free 决策模型 |
+| 09-17 | **Kev**（Jared Palmer，Apache-2.0）开源：Qwen3.5/3.8 上的开权重决策模型家族，TypeSafe SDK 零改动接入 |
 | 09-18 ~ 09-20 | Vercel 称 Jev 是 AI Gateway **史上被采纳最快的模型**：上线 24 小时内近 **13% 的付费团队**接入，超过以往任何一次模型发布同期覆盖的两倍；三天内 Cloudflare、LangChain（`TypeSafeClassifier`）、Langfuse 完成接入 |
 | 09-18 | 开源同类 **Laya** 建仓（`NandhaKishorM/laya`，Apache 2.0，编码器 421M / 322M，四周内 3.2 万 star） |
 | 09-19 | 第三方决策模型基准 **JevBench** 建仓（Benchmark Heaven 出品，测类型化判断的准确率、校准、延迟与成本） |
@@ -288,6 +290,8 @@ Jev 真正的行业影响不是模型本身，而是 **`POST /v1/systemone` 这�
 | :--- | :--- | :--- |
 | **Cloudflare Clef / Clef-flash / Clef-omni**（10-01、10-09） | **Apache 2.0 开权重** + Workers AI 托管；冻结 Qwen3.8-27B（flash 用 Qwen3.5-9B、omni 用 Qwen3-Omni-30B-A3B MoE）加 rank-256 LoRA，配两阶段注意力路由与 lexical prior，后训练用 label-smoothed CE + Brier 校准 | 同一请求体与 answers / usage 结构；**带视觉编码器**（omni 连音频与视频帧一起吃）、官方称上下文 64k；定价 Clef $0.24、flash 从 $0.09 降到 **$0.038/MTok（低于 Jev）**、omni $0.15；降价的代价是 **flash 托管上下文从 64k 砍到 24k**（权重自托管可跑到 256k）；Cloudflare 同时上线**决策模型 RL 微调平台**（AI Gateway 沉淀数据集 → Workers AI 跑 rollout → Containers 打分 → Trainer → BYO Model 部署回去） |
 | **Laya**（09-18 建仓，四周 3.2 万 star） | **Apache 2.0**，三个 ModernBERT-large 421M / mmBERT-base 322M 编码器 + 一个 typed-decisions 微调版，`Router` 按语言与任务分派；单次前向 T4 32.8 ms、批量 7.2 ms/问 | `laya-serve` 直接暴露 `/v1/systemone` 与 `/v1/systemone/batch`（≤64 state），另加 `lang` / `min_confidence` / `max_len` / `head_max_len`；但 **`confidence` 是 1 减归一化熵，不是 Jev 的 `(n·p_max − 1)/(n − 1)`**，其 README 原话是「A threshold carried over from Jev does not transfer」；选项共享 192 / 256 token 预算，**不是 Jev 的 255 选项上限** |
+| **Kev**（09-17，Jared Palmer） | **Apache 2.0**，Qwen3.5（0.8B/4B/9B）+ Qwen3.8（27B）LoRA rank-16 + pointer head，基座冻结；TypeSafe SDK 改 `base_url` 即用（官方称「最可替换」） | 同 `/v1/systemone` 请求/响应；**自带校准温度**（Kev-4B T=2.41，改变概率不改答案）；概率是选项得分 softmax，**非 Jev 的 `(n·p_max − 1)/(n − 1)`**；OpenRouter Kev-4B $0.042/MTok 与 Jev 同价；System One Score 89.9 排第一、best calibrated，27B 校准误差 0.022 最低 |
+| **SemIf**（09-16，TheoLeeCJ，前身 OpenJev） | **MIT**，**training-free**：冻结 Qwen3.5-4B（或 MiniCPM5 2B）直读候选 logits，不微调；单张 RTX 3090 跑 4B，支持 CUDA/MLX/CPU/WebGPU | 不生成文本、零生成 token；21 决策 ~1s 比 JSON 快 5.2×；`shared` 模式吞吐 2.33→20.03/s；内置温度校准；非 Jev-API 形状（自研读 logits），换后端阈值要重标 |
 | **AWS Strands Decider 2B**（10-01） | **Apache 2.0 开权重**，自托管 | 发布对比图引用了公开的 JevBench 结果，但把 Jev 与自己待发布的 checkpoint 一起略去 |
 | **OpenAI Decisions API**（10-06） | 托管，首版直接跑 GPT-6 Luna 不加训练 | **接受图像**（Jev 仅文本），输入 $0.10/MTok、输出同样免费 |
 

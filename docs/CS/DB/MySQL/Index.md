@@ -419,7 +419,7 @@ rocksDB的存储引擎
 - [存储引擎](/docs/CS/DB/MySQL/plugin.md)
 - [Optimizer](/docs/CS/DB/MySQL/Optimizer.md)
 - [Elasticsearch](/docs/CS/Framework/ES/ES.md)
-- [Cassandra](/docs/CS/DB/Cassandra.md)
+- [Cassandra](/docs/CS/DB/Cassandra/Cassandra.md)
 
 ## References
 

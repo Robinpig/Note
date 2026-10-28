@@ -35,7 +35,7 @@ Put/Write → WriteThread(batch group) → WAL(.log) → MemTable(skiplist)
 四个关键结构值得先记住名字，后面几篇都围绕它们展开：
 
 - **`MemTable`**：内存中的有序可变结构，默认 skiplist（`memtable.h:579`，`ConcurrentArena` 分配）。写请求在 WAL 之后进这里。
-- **`Version` / `VersionEdit` / `MANIFEST`**：一个 `Version` 是「某一刻该列族拥有哪些 SST 与 blob 文件」的不可变快照；每次 flush/compaction 产出一条 `VersionEdit` 追加进 `MANIFEST` 文件，`CURRENT` 单文件记录当前生效的 MANIFEST 名（见 [WAL](/docs/CS/DB/WAL.md) 里对元数据快照的同类处理）。
+- **`Version` / `VersionEdit` / `MANIFEST`**：一个 `Version` 是「某一刻该列族拥有哪些 SST 与 blob 文件」的不可变快照；每次 flush/compaction 产出一条 `VersionEdit` 追加进 `MANIFEST` 文件，`CURRENT` 单文件记录当前生效的 MANIFEST 名（见 [WAL](/docs/CS/DB/Concept/WAL.md) 里对元数据快照的同类处理）。
 - **`SuperVersion`**：把 `{mem, imm, current, mutable_cf_options, version_number}` 打包成一个原子可读视图（`column_family.h:207`），读路径靠它一次拿全、避免逐把加锁；线程本地缓存命中时**连引用计数都不做**。
 - **`WriteController`**：全 DB 共享的写限速/停写仲裁者。一个列族触发停顿会波及整个实例，这是 RocksDB 最著名的运维陷阱（详见 [Write_Path](/docs/CS/DB/RocksDB/Write_Path.md)）。
 

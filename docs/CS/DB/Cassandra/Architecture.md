@@ -65,11 +65,11 @@ Apache Cassandra 是一个**无主（masterless）、宽列（wide-column）分�
 
 ## Links
 
-- [Cassandra](/docs/CS/DB/Cassandra.md)
+- [Cassandra](/docs/CS/DB/Cassandra/Cassandra.md)
 - [Data Model](/docs/CS/DB/Cassandra/DataModel.md)
 - [Consistency](/docs/CS/DB/Cassandra/Consistency.md)
 - [Comparison](/docs/CS/DB/Cassandra/Comparison.md)
-- [HBase](/docs/CS/DB/HBase.md)
+- [HBase](/docs/CS/DB/HBase/HBase.md)
 
 ## References
 

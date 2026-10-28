@@ -59,7 +59,7 @@ hinted handoff 与 read-repair 只能收敛**近期**分歧；磁盘静默错误
 
 ## Links
 
-- [Cassandra](/docs/CS/DB/Cassandra.md)
+- [Cassandra](/docs/CS/DB/Cassandra/Cassandra.md)
 - [Architecture](/docs/CS/DB/Cassandra/Architecture.md)
 - [Replication](/docs/CS/DB/Cassandra/Replication.md)
 - [Consistency](/docs/CS/DB/Cassandra/Consistency.md)

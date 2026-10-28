@@ -2,7 +2,7 @@
 
 [Micrometer](https://micrometer.io/) 是 JVM 应用的**可观测性门面（facade）**：在代码里只依赖一套中立的 meter API，运行时再绑定到具体后端——[Prometheus](/docs/CS/Distributed/Tracing/Prometheus/Prometheus.md)、[OpenTelemetry](/docs/CS/Distributed/Tracing/Otel.md)、Datadog、StatsD、JMX 等。官方定位是 **"SLF4J, but for metrics"**：正如 SLF4J 让日志 API 与 logback/log4j2 实现解耦，Micrometer 让指标埋点与监控后端解耦。
 
-需要注意定位差异：Micrometer 最初是 **metrics** 门面；Micrometer Tracing（前身 Spring Cloud Sleuth）补上 **tracing** 桥接，底层委托给 OpenTelemetry 或 Brave/Zipkin  reporter；日志仍走 SLF4J/[logback](/docs/CS/log/logback.md)。三者通过 trace id 相互关联（见 [三大信号关联](/docs/CS/Distributed/Tracing/Otel.md?id=correlating-the-three-signals)）。
+需要注意定位差异：Micrometer 最初是 **metrics** 门面；Micrometer Tracing（前身 Spring Cloud Sleuth）补上 **tracing** 桥接，底层委托给 OpenTelemetry 或 [Brave/Zipkin reporter](/docs/CS/Distributed/Tracing/Zipkin/Transport.md)；日志仍走 SLF4J/[logback](/docs/CS/log/logback.md)。三者通过 trace id 相互关联（见 [三大信号关联](/docs/CS/Distributed/Tracing/Otel.md?id=correlating-the-three-signals)）。
 
 ## Modules
 

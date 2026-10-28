@@ -77,16 +77,16 @@ client 调用其 stub 时，使用常规调用序列。stub 随后收集参数�
 
 有人会说："别用全局变量。" 这是一种应对方式，但与指针的情形一样，它破坏了 RPC 的透明性承诺。
 
-### Time Series
-
 ### Binding
 
 最灵活的方案是使用动态绑定（dynamic binding），在首次发起 RPC 时于运行时查找 server。client stub 首次被调用时，会联系 name server 以确定 server 所在的传输地址。
 
 绑定包含两部分：
 
-- 命名（Naming）：
-- 定位（Locating）：
+- 命名（Naming）：为服务起一个 client 可以引用的名字，使其与具体机器解耦。
+- 定位（Locating）：在运行时把名字解析成实际的传输地址。
+
+配套的导入导出流程：
 
 - 提供服务的 server 导出（export）一个接口供其使用。导出接口即将其注册到系统，使 client 可以使用。
 - client 必须在通信开始前导入（import）一个（已导出的）接口。
@@ -161,17 +161,22 @@ Netty的`Channel.writeAndFlush` 会返回一个 `channelFuture`返回true只代�
 
 在数据库场景中，client 常请求 server 执行某操作以查找满足谓词的元组。使用 RPC 时，server 必须等找到所有元组后才能回复。若查找全部元组耗时较长，client 可能长时间空闲等待最后一条元组。
 
-如今 [gRPC](/docs/CS/Framework/gRPC/gRPC.md) 与 Finagle 支持构建流式 client 与 server。
+如今 [gRPC](/docs/CS/Framework/gRPC/gRPC.md) 与 Finagle 支持构建流式 client 与 server，四种流模式与流控细节见 [gRPC Streaming](/docs/CS/Framework/gRPC/Streaming.md)。
 
-[Thrift](/docs/CS/Distributed/RPC/Thrift.md)
+## Frameworks
 
-[Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md)
+概念模型落到工程实现，各家取舍的重点不同：
 
-[Kitex](/docs/CS/Framework/kitex.md)：字节跳动开源的 Go RPC 框架，默认 Thrift + [Netpoll](/docs/CS/Framework/Netpoll.md)
+| 框架 | 语言 | 传输/编码 | 重点 |
+| :--- | :--- | :--- | :--- |
+| [gRPC](/docs/CS/Framework/gRPC/gRPC.md) | 多语言 | HTTP/2 + Protobuf | 跨语言互通、流式、可插拔治理 |
+| [Thrift](/docs/CS/Distributed/RPC/Thrift.md) | 多语言 | 分层可替换 | 传输与编码正交组合 |
+| [Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md) | Java | 自定义协议 | 服务治理、注册发现、SPI 扩展 |
+| [Kitex](/docs/CS/Framework/kitex.md) | Go | 默认 Thrift | 高性能，底层 [Netpoll](/docs/CS/Framework/Netpoll.md) |
+| Motan | Java | 自定义协议 | 微博内部使用，2016 年开源 |
+| Tars | C++ | 自定义协议 | 腾讯内部使用，2017 年开源 |
 
-Motan：微博内部使用的 RPC 框架，于 2016 年对外开源，仅支持 Java 语言
-
-Tars：腾讯内部使用的 RPC 框架，于 2017 年对外开源，仅支持 C++ 语言
+选型上真正起作用的是生态契合度而非框架本身的优劣：以 Java 为主的存量系统用 Dubbo，跨语言且需要网关转译时用 gRPC，Go 技术栈且已在 CloudWeGo 体系内则用 Kitex。
 
 ## Links
 
@@ -186,9 +191,9 @@ Tars：腾讯内部使用的 RPC 框架，于 2017 年对外开源，仅支持 C
 
 ## References
 
-1. [RFC 647 - Procedure Call Protocol Documents，Version 2](https://datatracker.ietf.org/doc/rfc647/)
-2. [Implementing Remote Procedure Calls](https://web.eecs.umich.edu/~mosharaf/Readings/RPC.pdf)
-4. [RFC 1057 - RPC: Remote Procedure Call Protocol Specification Version 2](https://datatracker.ietf.org/doc/rfc1057/)
-2. [A Critique of the Remote Procedure Call Paradigm](https://www.win.tue.nl/~johanl/educ/2II45/2010/Lit/Tanenbaum%20RPC%2088.pdf)
-5. [A Note on Distributed Computing](https://scholar.harvard.edu/files/waldo/files/waldo-94.pdf)
-1. [Remote Procedure Call](https://christophermeiklejohn.com/pl/2016/04/12/rpc.html)
+1. [RFC 647 - Procedure Call Protocol Documents, Version 2](https://datatracker.ietf.org/doc/rfc647/)
+2. [RFC 1057 - RPC: Remote Procedure Call Protocol Specification Version 2](https://datatracker.ietf.org/doc/rfc1057/)
+3. [Birrell & Nelson - Implementing Remote Procedure Calls](https://web.eecs.umich.edu/~mosharaf/Readings/RPC.pdf)
+4. [Tanenbaum & van Renesse - A Critique of the Remote Procedure Call Paradigm](https://www.win.tue.nl/~johanl/educ/2II45/2010/Lit/Tanenbaum%20RPC%2088.pdf)
+5. [Waldo et al. - A Note on Distributed Computing](https://scholar.harvard.edu/files/waldo/files/waldo-94.pdf)
+6. [Remote Procedure Call](https://christophermeiklejohn.com/pl/2016/04/12/rpc.html)

@@ -42,7 +42,7 @@ digraph cloud_index {
 
 - [Resilience4j](/docs/CS/Framework/Spring_Cloud/Resilience4j.md)：熔断、限流、重试、舱壁（Spring AOP 下 order 越小越外层）。
 - [Hystrix](/docs/CS/Framework/Spring_Cloud/Hystrix.md)：Netflix 遗留熔断器。
-- [Sleuth](/docs/CS/Framework/Spring_Cloud/Sleuth.md)：遗留链路追踪（已被 Micrometer Tracing 取代）。
+- [Sleuth](/docs/CS/Framework/Spring_Cloud/Sleuth.md)：遗留链路追踪（Boot 2.x，已被 Micrometer Tracing 取代；现代做法见 [Spring Boot 链路追踪](/docs/CS/Framework/Spring_Boot/tracing.md)）。
 
 ## Configuration
 

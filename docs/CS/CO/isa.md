@@ -65,7 +65,7 @@ ISA 的第二半契约是**特权**——用户代码不能直接动页表、关
 
 ## ABI 与调用约定
 
-ISA 之上还有一层软件契约——**应用二进制接口（ABI）**：参数放哪些寄存器、返回值放哪、栈怎么长、调用者/被调用者各自负责保存哪些寄存器。它不属于 ISA 但由 ISA 决定形态：x86-64 SysV 用 `rdi/rsi/rdx/rcx/r8/r9` 传参、返回 `rax`；RISC-V 用 `a0~a7` 传参、`a0/a1` 返回；ARM AAPCS 用 `x0~x7`。调用约定的细节是[汇编](/docs/CS/assembly/assembly.md)与编译器后端的必修课，也是跨语言 FFI 出问题的重灾区。
+ISA 之上还有一层软件契约——**应用二进制接口（ABI）**：参数放哪些寄存器、返回值放哪、栈怎么长、调用者/被调用者各自负责保存哪些寄存器。它不属于 ISA 但由 ISA 决定形态：x86-64 SysV 用 `rdi/rsi/rdx/rcx/r8/r9` 传参、返回 `rax`；RISC-V 用 `a0~a7` 传参、`a0/a1` 返回；ARM AAPCS 用 `x0~x7`。调用约定的细节是[汇编](/docs/CS/assembly/assembly.md)与编译器后端的必修课，也是跨语言 FFI 出问题的重灾区——System V 与 Win64 的寄存器划分、栈对齐与 red zone 的完整对照见 [调用约定与 ABI](/docs/CS/assembly/Calling_Convention.md)。
 
 ## Links
 

@@ -88,7 +88,7 @@ creation_code = init_code ++ runtime_code
 - **CREATE2**：地址由发送者、salt 与初始化代码哈希决定，可预测，适合状态通道、确定性部署与"反事实地址"；
 - **最小代理（EIP-1167）**：用 45 字节的转发代码把调用委托给实现合约，大幅降低部署成本；
 - **SELFDESTRUCT**：Cancun 的 EIP-6780 后，只有同一交易内创建的合约才能真正删除，旧合约只能转走余额；
-- **EOF**：可扩展字节码格式讨论多年，部署状态随硬分叉规划反复，当前不应假设其已可用。
+- **EOF**：可扩展字节码格式讨论多年，2025 年 4 月被移出 Fusaka，此后随 Glamsterdam 推进；截至 2026 年 10 月主网仍未启用，部署前须核对当前硬分叉清单。
 
 字节码在部署前会经过编译器优化，但**链上验证的是字节码，不是源码**。区块浏览器上的源码需要项目方提交并匹配，未验证合约无法直接审计。
 
@@ -116,6 +116,7 @@ creation_code = init_code ++ runtime_code
 | 0x09 | BLAKE2b F 压缩函数 |
 | 0x0a | KZG point evaluation（blob 验证） |
 | 0x0b–0x11 | BLS12-381 运算（Pectra） |
+| 0x0100 | secp256r1 / P-256 签名验证（EIP-7951，Fusaka） |
 
 预编译是以太坊"密码学能力"的边界：新的曲线或证明系统需要硬分叉加入预编译，否则只能靠昂贵的纯 EVM 实现，这也是 zk 应用与 L2 选择自定义预编译的原因。
 
@@ -126,7 +127,7 @@ creation_code = init_code ++ runtime_code
 - **EIP-4337**：不改变协议，引入 `UserOperation`、`EntryPoint` 合约、Bundler、Paymaster、Smart Account。用户签的是 UserOperation，Bundler 打包上链，Paymaster 可代付 gas；
 - **EIP-7702**：Pectra 引入，允许 EOA 签署授权，把执行委托给指定合约代码，同时保留 EOA 地址与余额。它让现有 EOA 也能获得智能账户能力，但引入了委托目标与存储语义的新风险。
 
-账户抽象改善了用户体验，却把"签名验证"从协议层移到了合约层——**钱包安全从私钥保护扩展到合约审计**。
+账户抽象改善了用户体验，却把"签名验证"从协议层移到了合约层——**钱包安全从私钥保护扩展到合约审计**。完整的 UserOperation 生命周期、EntryPoint 版本、模块化账户（ERC-7579）与 Passkey 签名见 [Account Abstraction](/docs/CS/Blockchain/Web3/Account_Abstraction.md)。
 
 ## Determinism and Upgrades
 

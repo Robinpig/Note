@@ -6,7 +6,7 @@
 
 1. **可视化 DAG 拖拽**：这是它最大的卖点。用户可以通过 Web 界面直接拖拽任务节点、连线来定义任务依赖关系，无需编写复杂的代码或 XML 配置文件，极大地降低了使用门槛。
 2. **丰富的任务类型支持**：原生支持 Shell、Python、Spark、Flink、MapReduce、Hive SQL、DataX、SQOOP、Flink 等主流大数据和脚本组件。
-3. **高可用与去中心化**：采用去中心化的多 Master 和多 Worker 架构，基于 [ZooKeeper]()（或 Registry Center）实现集群的高可用，避免单点故障。
+3. **高可用与去中心化**：采用去中心化的多 Master 和多 Worker 架构，基于 [ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)（或 Registry Center）实现集群的高可用，避免单点故障。
 4. **多租户系统**：支持 Linux 用户级别的多租户隔离，适合企业级多团队共用一个集群。
 5. **强大的告警与容错机制**：支持邮件、企业微信、钉钉、WebHook 等多种告警方式；任务失败支持自动重试或手动恢复（支持从失败节点继续执行，无需重跑整个流程）。
 6. **定时调度与依赖调度**：支持基于 Cron 表达式的定时调度，也支持跨工作流的自定义依赖调度。
@@ -44,9 +44,15 @@ DolphinScheduler 的架构可以清晰地划分为五个逻辑层：
 
 
 ## Links
+- [Job](/docs/CS/Framework/Job/Job.md)
 - [Task](/docs/CS/Framework/Spring/Task.md)
 
 - Airflow
 - Prefect
 - Kestra
 - [Scheduled Task](/docs/CS/SE/Scheduled_Task.md)
+
+## References
+
+- [Apache DolphinScheduler](https://dolphinscheduler.apache.org/)
+- [Apache DolphinScheduler GitHub](https://github.com/apache/dolphinscheduler)

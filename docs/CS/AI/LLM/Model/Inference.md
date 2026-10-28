@@ -153,10 +153,12 @@ MUSA 在 **SGLang 官方硬件页有独立条目**（`mthreads_gpu`），通过 
 ## Links
 
 - [Model 总览](/docs/CS/AI/LLM/Model/Overview.md)
+- [Serving：continuous batching 与 PagedAttention](/docs/CS/AI/LLM/Model/Serving.md)
 - [RAG](/docs/CS/AI/RAG.md)
 - [PyTorch](/docs/CS/AI/PyTorch.md)
 - [LLM](/docs/CS/AI/LLM/LLM.md)
 - [Tools](/docs/CS/AI/LLM/Protocol/Tools.md)
+- [Post-Training：SFT / 偏好优化 / PEFT / 蒸馏](/docs/CS/AI/LLM/Model/Post_Training.md)
 - [Dify](/docs/CS/AI/LLM/Platform/Dify.md)
 
 ## References

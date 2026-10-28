@@ -74,7 +74,7 @@ $$
 | 需求 | 常用存储 | 取舍 |
 | ------ | ------ | ------ |
 | 用户画像/特征点查（微秒级、QPS 高） | KV（[Redis](/docs/CS/DB/Redis/Redis.md) 一类） | 内存成本高，容量要按热数据裁剪 |
-| 超宽特征表、批量扫描 | 宽表 LSM 系（[HBase](/docs/CS/DB/HBase.md) 一类） | 点查延迟高于 KV，扩容便宜 |
+| 超宽特征表、批量扫描 | 宽表 LSM 系（[HBase](/docs/CS/DB/HBase/HBase.md) 一类） | 点查延迟高于 KV，扩容便宜 |
 | 标签与约束过滤 | 倒排/搜索引擎（[ES](/docs/CS/Framework/ES/ES.md)） | 更新有可见延迟，深分页代价高 |
 | 向量近邻 | 专用向量库（[Milvus](/docs/CS/DB/Milvus/Milvus.md)）或 pgvector（见 [PostgreSQL](/docs/CS/DB/PostgreSQL/PostgreSQL.md)） | 召回率—延迟—内存三角折中，见 [Recall](/docs/CS/RecommenderSystem/Recall.md) |
 | 关系类召回（共同购买、社交邻居） | 图库（见 [Neo4j](/docs/CS/DB/graph/Neo4j.md)） | 多跳查询延迟不可预测，通常预计算 |

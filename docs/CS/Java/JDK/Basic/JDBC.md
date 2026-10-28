@@ -50,7 +50,7 @@ JDBC 规范由 JSR 221 维护，至今**最新版本仍是 JDBC 4.3（Java SE 9 
 JDBC 提供**两条**获取 `Connection` 的路径：
 
 1. **`DriverManager`（遗留/简单场景）**：JDK 6 起 `java.sql.Driver` 实现通过 [SPI](/docs/CS/Java/JDK/Basic/SPI.md) 的 ServiceLoader 机制**自动注册**，无需 `Class.forName("xxx.Driver")`；`DriverManager.getConnection(url, user, pwd)` 按 URL 前缀匹配已注册驱动。
-2. **`DataSource`（首选）**：工厂接口，返回的连接来自连接池或中间件，**不暴露驱动细节**。应用服务器/框架（如 HikariCP、Tomcat JDBC Pool）注入 `DataSource` 即可。
+2. **`DataSource`（首选）**：工厂接口，返回的连接来自连接池或中间件，**不暴露驱动细节**。应用服务器/框架（如 [HikariCP](/docs/CS/Java/ConnectionPool/HiKariCP.md)、Tomcat JDBC Pool）注入 `DataSource` 即可。连接池的选型、参数与生命周期见 [ConnectionPool](/docs/CS/Java/ConnectionPool/ConnectionPool.md)。
 
 ```java
 // 路径一：DriverManager（自动加载 Driver）

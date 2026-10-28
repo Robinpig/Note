@@ -109,7 +109,7 @@ delay 的执行者是 `WriteController`：默认限速 32 MB/s，每 1 ms 补充
 - [Column Families](/docs/CS/DB/RocksDB/Column_Families.md)
 - [Compaction](/docs/CS/DB/RocksDB/Compaction.md)
 - [Read Path](/docs/CS/DB/RocksDB/Read_Path.md)
-- [WAL](/docs/CS/DB/WAL.md)
+- [WAL](/docs/CS/DB/Concept/WAL.md)
 - [Transactions](/docs/CS/DB/RocksDB/Transactions.md)
 
 ## References

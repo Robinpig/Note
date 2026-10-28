@@ -83,7 +83,7 @@ Cassandra 6.0 引入 **Accord（CEP-15）**——**leaderless、strict-serializa
 
 ## Links
 
-- [Cassandra](/docs/CS/DB/Cassandra.md)
+- [Cassandra](/docs/CS/DB/Cassandra/Cassandra.md)
 - [Replication](/docs/CS/DB/Cassandra/Replication.md)
 - [Distributed](/docs/CS/DB/Cassandra/Distributed.md)
 - [Architecture](/docs/CS/DB/Cassandra/Architecture.md)

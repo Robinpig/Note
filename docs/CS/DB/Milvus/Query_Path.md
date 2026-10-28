@@ -153,7 +153,7 @@ Go 与 C++ 的错误经 `HandleCStatus` 分类成 merr 哨兵，即 `merr.Segcor
 - [WAL and StreamingNode](/docs/CS/DB/Milvus/WAL_and_StreamingNode.md)
 - [Compaction and Lifecycle](/docs/CS/DB/Milvus/Compaction_and_Lifecycle.md)
 - [Index and Vector Engine](/docs/CS/DB/Milvus/Index_and_Vector_Engine.md)
-- [Shard](/docs/CS/DB/Shard.md)
+- [Shard](/docs/CS/DB/Concept/Shard.md)
 
 ## References
 

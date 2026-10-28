@@ -206,7 +206,7 @@ management.endpoints.web.exposure.include=health,httpexchanges
 management.httpexchanges.recording.include=TIME_TAKEN,REQUEST_HEADERS
 ```
 
-它记录时间戳、principal、session、请求/响应头与耗时，对排查线上问题很有用，但**只应作为开发期手段**：内存环形缓冲有上限、多实例下不聚合、重启即丢。生产的可观测性应交给 Micrometer Tracing / OpenTelemetry，参见 [Sleuth 与链路追踪](/docs/CS/Framework/Spring_Cloud/Sleuth.md)。
+它记录时间戳、principal、session、请求/响应头与耗时，对排查线上问题很有用，但**只应作为开发期手段**：内存环形缓冲有上限、多实例下不聚合、重启即丢。生产的可观测性应交给 Micrometer Tracing / OpenTelemetry，参见 [链路追踪](/docs/CS/Framework/Spring_Boot/tracing.md)。
 
 ## Custom Endpoints
 

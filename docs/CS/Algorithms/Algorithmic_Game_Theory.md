@@ -80,7 +80,7 @@ UCB1 = (W_c / N_c) + C · sqrt( ln(N_parent) / N_c )
 
 - [Algorithms](/docs/CS/Algorithms/Algorithms.md)
 - [Game Theory (Economics)](/docs/Economics/Game_Theory.md)
-- [Randomized Algorithms](/docs/CS/Algorithms/Randomized.md) — MCTS 依赖随机模拟
+- [Randomized Algorithms](/docs/CS/Algorithms/paradigm/Randomized.md) — MCTS 依赖随机模拟
 - [NP](/docs/CS/Algorithms/NP.md) — 大规模博弈树搜索的复杂度背景
 
 ## References
