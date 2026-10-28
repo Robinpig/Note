@@ -1,547 +1,176 @@
 ## Introduction
 
-SchedulerX 是阿里巴巴自研的分布式任务调度平台（兼容开源 XXL-JOB/ElasticJob/Spring Schedule/K8s Job），
-支持 Cron 定时、一次性任务、工作流任务编排、分布式跑批，具有高可用、可视化、低延时等能力, 集成监控大盘、日志服务、短信报警等服务。
+SchedulerX 是**阿里巴巴自研的商业化分布式任务调度平台**（本仓库文件名沿用旧写法 `ScheduleX.md`，官方写法为 **SchedulerX**），托管在阿里云 MSE（微服务引擎）之下，对外以"分布式任务调度 SchedulerX 版"售卖。它兼容开源 XXL-JOB / ElasticJob / Spring Schedule / K8s Job，支持 Cron 定时、一次性任务、可视化工作流任务编排与分布式跑批，并集成监控大盘、日志服务与多渠道报警。
 
-用户可以登录分布式任务调度平台管理定时调度任务、查询任务执行记录和运行日志，还可以通过工作流进行任务编排和数据传递。
-SchedulerX提供了简单、易用的分布式编程模型，通过几行代码就可以将海量数据分发到多台机器上执行
+本页是 Job 子树里 SchedulerX 的枢纽，父级入口见 [Job](/docs/CS/Framework/Job/Job.md)。
 
+它与本子树另外三族（[Quartz](/docs/CS/Framework/Job/Quartz.md)、[XXL-JOB](/docs/CS/Framework/Job/xxl-job.md)、[ElasticJob](/docs/CS/Framework/Job/ElasticJob.md)、[PowerJob](/docs/CS/Framework/Job/PowerJob.md)）的根本差别不在功能多少，而在**它是云托管服务而不是可自建的软件**：Server 端不对用户开放，用户只持有 Worker（Agent）侧；调度能力、执行历史、报警链路、日志服务都按云产品的方式计费与运维。因此读 SchedulerX 的正确姿势不是"读源码"，而是"读客户端 SDK + 读服务端发布记录"。
 
+> [!NOTE]
+>
+> 版本基线（2026-10-27 现场核实）：Java SDK `com.aliyun.schedulerx:schedulerx2-worker` 最新 **1.14.2**（Maven Central `maven-metadata.xml`，`lastUpdated=20260805040521`），`schedulerx2-spring-boot-starter` 同步 1.14.2。Go SDK 为独立仓库 `alibaba/schedulerx-worker-go`（无 release tag，以 `develop` 分支为准）。服务端能力以阿里云「服务端发布记录」为准（最近一次 2026-09-16）。本子树全部断言锚定上述来源；社区文章与早期博客（含 2019 年的 Akka 系列）只作架构原理佐证，不作版本事实来源。
 
+## Product Editions
 
+阿里云"分布式任务调度"目录下有两个不同的产品形态，选型第一步就是分清它们：
 
-> 基于Akka?
+| 维度 | SchedulerX 版 | XXL-JOB 版 |
+| :--- | :--- | :--- |
+| 内核 | 阿里云自研调度内核 | 同样以 SchedulerX 为内核，但**兼容开源 XXL-JOB 通信协议** |
+| 接入方式 | 需替换 SDK（引入 `schedulerx2-worker` / Go SDK / 脚本 / HTTP / K8s） | **无侵入**：不改代码，重新部署时以 `-D` 参数替换接入配置 |
+| 计费 | Serverless：按任务托管 CU + 任务调度 CU | 实例型：按申请规格（包年包月 / 按量） |
+| 公网应用 | 支持 | **不支持公网访问** |
+| 语言覆盖 | Java / Go SDK + 脚本任务（shell、python、go）+ HTTP + K8s | 仅 Java / Go SDK |
+| 适用判断 | 新接入、非 Java/Go 应用、公网部署 | 存量自建 XXL-JOB 平滑迁移上云 |
 
+SchedulerX 版内部再分**基础版**与**专业版**，差异不是"能不能用"，而是"运维能力到哪一层"：
+
+| 能力 | 基础版 | 专业版 |
+| :--- | :--- | :--- |
+| 日志服务 | 支持（每个任务限流 5 条/秒） | 支持 |
+| 查看堆栈 / Tracing / 用户大盘 / 工作流实例图 | 不支持 | 支持 |
+| 链路加密、标签路由策略 | 不支持 | 支持 |
+| 可视化 MapReduce | 最多 300 子任务、无搜索 | 最多 1000 子任务、可自定义标签、有搜索 |
+| 历史执行记录 | 最近 30 条 | 最近 300 条 + 60 天内归档可查 |
+| 报警渠道 | 钉钉、邮件 | 钉钉、邮件、短信、电话、企业微信、飞书 |
+| 单应用任务数上限 | 1000 | 10 万 |
+| OpenAPI | 仅创建/更新/删除任务 | 全部 API |
+| 计费项 | 任务托管 CU | 任务托管 CU + 任务调度 CU |
+
+计费公式里藏着两条对架构有指导意义的事实：**任务托管 CU = 启用的单机任务数 + 启用的非单机任务数 × Worker 数**（即广播/分片/MapReduce 的代价随执行端规模线性放大）；**任务调度 CU = 每次调度涉及的 Worker 数**，且 `second_delay` 类型每分钟只计一次调度 CU。换句话说，秒级任务的调度成本被刻意压低，而"让多台机器同时跑"是非单机任务的真实成本项。
 
 ## Architecture
 
+SchedulerX 是**中心化（Server/Worker）架构**，这一点与 XXL-JOB 同族、与 ElasticJob 相反。但它的 Server 侧是云托管的多租户集群，用户可见的只有 Worker Agent。
 
+```dot
+digraph schedulerx_arch {
+  rankdir=TB;
+  node [shape=box, style="rounded,filled", fillcolor="#eef3fb", fontname="Helvetica"];
+  edge [color="#555", fontsize=10];
 
-server
+  subgraph cluster_server {
+    label="SchedulerX Server（云托管，用户不可见）"; color="#999"; fontsize=11;
+    s_sched [label="定时调度器\ncron / fixed_rate / second_delay", fillcolor="#fdeccb"];
+    s_wf [label="工作流引擎\nDAG 编排", fillcolor="#fdeccb"];
+    s_sm [label="任务状态机\nRoutingActor → JobInstanceActor", fillcolor="#fdeccb"];
+    s_disp [label="分发引擎\n指定机器 / 标签路由 / 单元化", fillcolor="#fdeccb"];
+  }
 
+  subgraph cluster_worker {
+    label="Worker（用户进程内 Agent）"; color="#999"; fontsize=11;
+    w_actor [label="JobInstanceActor\n接收 / kill / 上报", fillcolor="#e7f4e4"];
+    w_tm [label="TaskMaster\nStandalone / Broadcast / Map / MapReduce", fillcolor="#e7f4e4"];
+    w_ct [label="Container\n线程 / 进程 / 容器", fillcolor="#e7f4e4"];
+    w_p [label="Processor\n业务代码", fillcolor="#e7f4e4"];
+    w_actor -> w_tm -> w_ct -> w_p;
+  }
 
-configserver
+  console [label="MSE 控制台 / OpenAPI", fillcolor="#efefef"];
+  alarm [label="报警：钉钉/邮件/短信/电话", fillcolor="#f7e9e4"];
+  sls [label="SLS 日志服务", fillcolor="#f7e9e4"];
 
-
-
-高可用
-
-
-安全防护
-
-高性能
-
-
-集成报警监控
-
-
-可观测
-
-支持eagleeye, skwaking
-
-
-
-## Client Access
-
-> https://www.alibabacloud.com/help/zh/schedulerx/getting-started/connect-an-agent-to-schedulerx/?spm=a2c63.p38356.0.0.38f57d87tuu7MI
-
-编程模型
-
-```java
-// JavaProcessor
-public void preProcess(JobContext context) throws Exception; （可选）
-public ProcessResult process(JobContext context) throws Exception; (必选)
-public void postProcess(JobContext context); （可选）
-public void kill(JobContext context); （可选）
-
-// MapJobProcessor
-public ProcessResult process(JobContext context) throws Exception; (必选)
-public void postProcess(JobContext context); （可选）
-public void kill(JobContext context); （可选）
-public ProcessResult map(List<? extends Object> taskList, String taskName); (必选
-
+  console -> s_sched [label="任务配置"];
+  s_sched -> s_disp;
+  s_wf -> s_disp;
+  s_disp -> w_actor [label="提交实例（Akka remoting）"];
+  w_actor -> s_sm [label="状态上报", style=dashed];
+  s_sm -> alarm [style=dashed];
+  w_p -> sls [style=dashed];
+}
 ```
 
+三件事值得单独拎出来：
 
+- **Server 无状态 + Akka 异步**：官方对高性能的解释是"分布式架构 + Akka 异步特性，支持海量任务和秒级别调度"。Server 端的定时调度器、工作流引擎、任务状态机都是 actor 模型，消息经 Akka eventbus 做 Pub-Sub。
+- **状态机靠 actor 顺序性保证**：所有实例状态消息先发给 `JobInstanceRoutingActor`，由它把同一 `instanceId` 的消息路由到同一个 `JobInstanceActor`；Akka 保证单 actor 按接收顺序处理，从而避免"先收到 failed 后收到 running"导致的状态机倒退。对使用者而言，这条设计意味着**状态乱序不是业务需要担心的问题**。
+- **Worker 三层结构**：`TaskMaster`（类似 YARN 的 AppMaster，管理整个 jobInstance 生命周期与子任务分发，默认实现有 Standalone / Broadcast / Map / MapReduce 四种）→ `Container`（执行容器，支持线程/进程/docker/actor）→ `Processor`（业务代码）。这也是"几行代码就能分布式跑批"的由来：业务只写 Processor，分发与容错在 TaskMaster 层。
 
-inject JobProcessor bean
+概念模型按官方定义收敛为五个词：**AppGroup（应用分组，隔离单位，生成 groupId）→ Job（最小调度单元）→ Job Instance（一次执行）→ Task（Map 产生的子任务）→ Workflow（编排 Job 的 DAG）**。另有 **schedule time**（预定执行时刻，`context.getScheduleTime()`）与 **data time**（数据时间，`context.getDataTime()`）两个时间语义，后者是"每天 00:30 跑但处理前一天数据"这类场景的官方解法。
 
-```java
-package com.aliyun.schedulerx.test.job;
+## How to Read This Subtree
 
-import com.alibaba.schedulerx.worker.domain.JobContext;
-import com.alibaba.schedulerx.worker.processor.JavaProcessor;
-import com.alibaba.schedulerx.worker.processor.ProcessResult;
+按"先分清你买的是哪个版本 → 再看任务怎么跑 → 最后查运维"的顺序读：
 
-@Component
-public class MyHelloJob extends JavaProcessor {
+- 架构与概念模型看 [Architecture](/docs/CS/Framework/Job/ScheduleX/Architecture.md)：Server/Worker 拓扑、Akka actor 与状态机、Worker 三层、命名空间/应用分组隔离、高可用与安全防护手段。
+- 任务长什么样看 [Job Types](/docs/CS/Framework/Job/ScheduleX/Job_Types.md)：九种 JobType、六种 ExecuteMode、Map/MapReduce 编程模型、推/拉两种子任务分发方式与三条硬限制（64 KB / 1000 B / 不保证精确一次）。
+- 什么时候触发看 [Timing](/docs/CS/Framework/Job/ScheduleX/Timing.md)：cron / fixed_rate / second_delay / one_time 四种时间类型、日历、时区、数据时间偏移与重刷数据、指定机器与标签路由。
+- 多任务依赖看 [Workflow](/docs/CS/Framework/Job/ScheduleX/Workflow.md)：DAG 编排、上下游数据传递、重跑与跳过、跨应用编排与"只有 Java 任务支持数据传输"这条硬限制。
+- 怎么接入看 [Client Access](/docs/CS/Framework/Job/ScheduleX/Client_Access.md)：Java SDK 与 Spring Boot Starter、`SchedulerxWorker` 配置参数表、Go SDK、脚本/HTTP/K8s 任务、兼容开源客户端的插件、优雅下线。
+- 上线之后看 [Operations](/docs/CS/Framework/Job/ScheduleX/Operations.md)：流控与优先级队列、重试与超时、报警与监控、日志、版本与计费要点、以及一份按报错信息组织的排障清单。
 
-    @Override
-    public ProcessResult process(JobContext context) throws Exception {
-        System.out.println("hello schedulerx2.0");
-        return new ProcessResult(true);
-    }
-}              
+```text
+                    ┌─ Architecture ──── Server/Worker、Akka、Worker 三层、隔离
+                    │
+                    ├─ Job Types ─────── JobType / ExecuteMode / MapReduce / 限制
+                    │
+            枢纽 ScheduleX ─┼─ Timing ────────── 时间类型 / 日历 / 时区 / 数据时间
+            (版本/架构/对比) │
+                    ├─ Workflow ──────── DAG 编排 / 数据传递 / 重跑与跳过
+                    │
+                    ├─ Client Access ─── SDK / Starter / Go / 脚本 / HTTP / K8s
+                    │
+                    └─ Operations ────── 流控 / 报警 / 日志 / 计费 / 排障
 ```
-在应用管理页面查看实例总数。
 
-如果实例总数为0，说明应用接入失败。请检查、修改本地应用。
-
-如果实例总数不为0，显示接入的实例个数，说明应用接入成功。在操作列单击查看实例，即可在连接实例对话框中查看实例列表。
-
-
-## Timer Scheduling
-
-- Crontab
-
-支持Unix Crontab表达式，不支持秒级别调度。更多信息，请参见Cron。
-
-- Fixed rate
-
-Crontab必须被60整除，不支持其它数量级时间间隔的任务，例如cron不支持每隔40分钟运行一次的定时任务。Fixed rate专门用来做定期轮询，表达式简单，不支持秒级别调度。更多信息，请参见Fixed rate。
-
-- Second delay
-
-适用于对实时性要求比较高的业务，例如执行间隔为10秒的定时调度任务。Second delay支持秒级别调度。更多信息，请参见Second delay。
-
-- One Time
-
-
-
-日历
-
-支持多种日历，您也可以自定义导入日历。常见的使用场景包括金融业务场景。例如，在每个交易日执行定时任务。
-
-时区
-
-适用于跨国业务，如需要在每个国家所在时区执行定时任务。
-
-数据时间
-
-SchedulerX可以处理具有数据状态的任务。创建任务时支持填写数据偏移。例如，某个任务是每天00:30运行，但实际上要处理上一天的数据，就可以向前偏移一个小时。运行时间不变，执行的时候通过context.getDataTime()获得的即为前一天23:30。
-## Scheduling Task Orchestration
-支持可拖拽的工作流DAG（Directed Acyclic Graph）进行任务编排，操作简单，前端直接拖拽即可。详细的任务状态图能让您直观地查看并排查下游任务未执行的原因。
-
-
-
-提供简单、易用的分布式编程模型，支持进行大数据批处理。
-
-- 单机
-  随机挑选一台机器执行。更多信息，请参见单机。
-- 广播
-  所有机器同时执行且等待全部结束。更多信息，请参见广播。
-
-### MapReduce
-
-
-MapReduce模型是SchedulerX自主研发的轻量级分布式跑批模型。通过MapJobProcessor或MapReduceJobProcessor接口将接入的Worker组成分布式计算引擎进行大数据跑批。相对于传统的大数据跑批（例如Hadoop、Spark等），MapReduce无需将数据导入大数据平台，且无额外存储及计算成本，即可实现秒级别海量数据处理，具有成本低、速度快、编程简单等特性。
-
-MapReduce模型是Map模型的扩展，废弃了postProcess方法，新增了Reduce接口。所有子任务完成后会执行Reduce方法，可以在Reduce方法中返回该任务实例的执行结果或者回调业务。
-
-
-
-**注意事项**
-
-- 单个子任务的大小不能超过64 KB。
-- ProcessResult的result返回值不能超过1000 Byte。
-- 如果使用reduce，所有子任务结果会缓存在Master节点，该情况对Master节点内存压力较大，建议子任务个数和result返回值不要太大。如果没有reduce需求，使用MapJobProcessor接口即可。
-- SchedulerX不保证子任务绝对执行一次。在特殊条件下会failover，可能导致子任务重复执行，需要业务方自行实现幂等。
-
-
-
-所有Worker节点的子任务执行完成后，会回调reduce方法。reduce由Master节点执行，一般用于数据聚合或通知下游，也可以用于工作流的上下游数据传递。
-
-reduce方法能处理所有子任务的结果。
-
-1. 子任务通过`return ProcessResult(true, result)`返回结果（例如返回订单号）。
-2. 执行reduce方法时，通过context获取所有子任务的状态（`context.getTaskStatuses()`）和结果（`context.getTaskResults()`），并进行相应的逻辑处理。
-
-**分发策略**
-
-
-- 轮询策略（默认）：每个Worker平均分配等量子任务，适用于每个子任务处理耗时基本一致的场景。
-- WorkerLoad最优策略：由主节点自动感知Worker节点的负载情况，适用于子任务和Worker机器处理耗时有较大差异的场景。
-
-子任务失败会自动重试，默认为0
-
-**子任务分发方式**
-
-- 推模型：每台机器平均分配子任务。
-- 拉模型：每台机器主动拉取子任务，没有木桶效应，支持动态扩容拉取子任务。拉取过程中，所有子任务会缓存在Master节点，对内存有压力，建议子任务数不超过10,000。
-
-
-
-cron、fix_rate不支持秒级别调度，您可以选择时间类型为second_delay，即上次跑完之后隔几秒再跑
-
-
-
-
-
-分片运行
-
-类似Elastic-Job模型，控制台配置分片参数，可以将分片平均分给多个客户端执行，支持多语言版本。更多信息，请参见多语言版本分片模型。
-
-### Task Timeout
-
-不支持子任务级别的超时时间，只支持整个任务的超时，可以通过控制台动态修改
-
-### Automatic Retry on Failure
-
-- 实例失败自动重试
-
-在任务管理的高级配置中，可以配置实例失败重试次数和重试间隔，例如，设置重试3次，每次间隔30秒。如果重试3次仍旧失败，该实例的状态才会变为失败，并发送报警。
-
-- 子任务失败自动重试
-
-如果是分布式任务（分片模型或MapReduce模型），子任务也支持失败自动重试和重试间隔，同样支持通过任务管理的高级配置进行配置。
-
-### Rate Limiting
-
-支持可抢占的任务优先级队列
-
-多种流控手段
-
-- 实例并发数
-
-- 任务级别流控，表示一个任务同时最多运行多少个实例，默认为1，即上一次跑完才能跑下一次。
-
-- 单机子任务并发数
-
-分布式任务流控，可以控制每台机器同时运行子任务的数量。
-
-全局子任务并发数
-
-分布式任务流控，当机器数量较多时，单机子任务并发数流量比较大。分布式任务可以选择拉模型，所有计算节点向master节点拉取子任务，控制全局最多同时运行多少子任务。
-
-任务优先级队列
-
-应用级别的流控，一个应用同时最多运行多少个任务
-
-
-
-## Log
-
-schedulerx日志目录: `${user.home}/logs/schedulerx`
-
-核心日志worker.log
-
-## issues
-
-某个时间点没有调度
-
-可能原因:
-
-- 某个单机任务有一个时间点没有调度运行时，您需要确认机器列表是否存在机器，并确认机器是否全部处于繁忙状态。如果不存在机器，请@机器人，按无可用机器或机器繁忙进行排查。
-- 检查任务是否指定了机器，该机器已下线则无法调度.
-
-如果是分钟级别的任务(间隔1分钟)没有执行, 很可能是SchedulerX服务端发布引起的, 一般这种场景对业务影响很小。
-
-
-
-No worker available for
-可能原因:
-
-- 客户端配置导致
-- 指定的worker下线
-
-此时可登录worker查看scheduleX的worker.log
-
-
-
-为什么实例停止之后还会执行
-
-**问题现象：**
-
-实例停止之后仍然执行。
-
-**可能原因：**
-
-- 任务实例停止后，SchedulerX会把Kill消息发送到客户端。
-- 客户端接收到Kill消息后，会停止下发和停止执行未执行的子任务、销毁该实例的上下文、销毁实例所有的线程池。
-- 对于已经在执行中的子任务不会被停止掉，只会中断对应的线程，所以子任务会继续运行直到结束。
-
-**解决方案：**
-
-- 一般情况下，您无需处理，等待子任务执行结束即可。
-- 如果确实需要停止后立即结束所有运行中的任务，需要修改子任务处理逻辑，增加对当前线程Interrupt状态的处理。
-
-
-
-
-
-
-one_time任务，跑完了在哪看历史记录
-
-**说明:**
-
-- **one_time任务，跑完会自动销毁，防止数据堆积，不保留任何历史记录。可以开启日志服务，可以保留最近2周所有任务的执行日志，方便排查问题。**
-
-
-任务调度无法找到JobProcessor
-
-**解决方案:**
-
-1. 应用管理链接机器看启动方式，确保是spring或者springboot。
-2. JobProcessor要注入为bean，比如加@Component注解。
-3. 排查pom依赖如果依赖spring-boot-devtools 请排除掉。
-4. 如果JobProcessor和process方法有aop注解，需要升级到最新版本SchedulerX客户端，低版本不支持aop。
-5. 因为多加了一层代理，导致bean类型不匹配。可以把断点打到DefaultListableBeanFactory这个类，里面有个beanDefinitionNames成员变量，是spring注册的bean列表， 里面可以看到bean被什么切面代理了。比如有用户方间接引入一个巨坑的二方库导致，排除掉就好了。
-6. 如果以上都不能解决，可以调试下ThreadContainer.start方法，如果是class.forName报错，class又确实存在，就是classLoader的问题，应该是业务方用了啥框架导致classLoader不一样。可以通过SchedulerxWorker.setClassLoader解决
-
-
-
-
-
-Dispatcher.timeout submit appGroupId xxx
-
-**原因:**
-
-- 业务应用是有重启、fullgc、load偏高现象导致任务提交失败
-- 客户端版本太低
-
-**解决方案:**
-
-- 配置任务失败重试
-- 保证自己的应用实例正常
-- 升级到最新版本
-
-
-
-ClassNotFoundException
-
-原因:
-
-- Processor类路径不正确或者ClassLoader没有加载到
-
-解决方案:
-
-- 说明执行任务的worker上没有这个类，请确保java任务配置的Processor类名必须是**类的全路径**，
-- 如果配置的jobProcessor类名正确，那就是worker上没这个类，一般是用户发错包了，或者这个应用还连了其他人的机器，可以自己登录worker机器，反编译看下
-
-
-
-jobInstance=xxx don't update progress more than 60s
-
-**可能原因:**
-
-- worker的机器销毁、执行过程中产生bug, 导致worker长时间未同步任务执行状态到server
-
-**解决方案:**
-
-- 检查执行任务节点是否正常
-- 升级到最新客户端版本
-
-机器繁忙（all workers are busy）
-
-可以通过应用管理->查看实例，看下是哪些worker繁忙了，然后点击“繁忙”，可以看到是哪个指标超过了阈值
-
-
-jobInstance=xxx don't update progress more than 60s”
-
-**可能原因:**
-
-- worker的机器销毁、执行过程中产生bug, 导致worker长时间未同步任务执行状态到server
-
-**解决方案:**
-
-- 检查执行任务节点是否正常
-- 升级到最新客户端版本
-
-
-机器繁忙（all workers are busy）
-
-可以通过应用管理->查看实例，看下是哪些worker繁忙了，然后点击“繁忙”，可以看到是哪个指标超过了阈值
-
-
-java.lang.ExceptionInInitializerError
-
-**原因**
-
-- 在于icu4j这个包与当前jdk版本不匹配；
-
-解决方案:（二选一）：
-
-- 找到工程中icu4j.jar该jar包，确认其他第三方组件不需要该jar的话剔除它即可。
-- 升级icu4j.jar到最新的版本。
-
-
-
-
-task list is empty"
-
-**原因:**
-
-- map传入的任务列表为空
-
-**解决方案:**
-
-- 代码中判断子任务为空, 则正常结束job
-
-
-
-
-force terminate instance by xx"
-
-**说明:**
-
-- 任务实例被强制停止. 可能是用户，也可能是系统。例如: 任务执行超时被强制停止。
-
-
-
-
-result size more than 1000 bytes"
-
-**原因:**
-
-- ProcessResult中传入的result字符长度>1000
-
-**解决方案:**
-
-- 保证result字符长度<1000
-- 升级到最新版本，字符长度超过1000时，会默认被截取
-
-
-
-
-timeout dispatch return init error
-
-**原因:**
-
-- 子任务分发失败，并且重置任务状态也失败
-
-**解决方案:**
-
-- 升级client到最新版本(低版本bug较多)，重试任务
-
-
-
-
-jobProcessor is null"
-
-**原因:**
-
-- 在spring context没有查找到class对应的bean(JobProcessor)
-
-**解决方案:**
-
-- 检查class是否存在该应用
-- 集团内不推荐使用Spring Schdule任务类型
-
-
-
-
-
-
-the response is not json object"
-
-**说明:**
-
-- HTTP请求后进行JSON反序列化失败
-
-**原因:**
-
-- HTTP url请求返回结果不是JSON格式数据。eg. 一些url访问需要鉴权 
-
-**解决方案:**
-
-- 通过curl验证url返回值是否符合预期
-
-
-
-
-The returned value is different from the expected value"
-
-**原因:**
-
-- HTTP url请求返回结果和自定义结果不同
-
-**解决方案:**
-
-- 通过curl验证url返回值是否符合预期
-
-
-
-
-A service call error occurred"
-
-**原因:**
-
-- HTTP url请求Reponse code和自定义response code不同
-
-**解决方案:**
-
-- 通过curl验证url返回值是否符合预期
-
-
-
-
-
-
-worker not ready for running"
-
-**原因:**
-
-- server开始提交任务，但worker还未初始化成功
-
-**解决方案:**
-
-- 可配置任务失败重试
-
-
-xx is still running!"
-
-**原因:**
-
-- server重复提交任务(eg.网络异常)
-
-**解决方案:**
-
-- 问题场景可忽略
-
-
-
-**如何解决SchedulerX SDK日志文件输出**
-正常情况下，SDK会输出上述章节描述的日志文件
-**办法一：升级客户端版本（待发布）**
-直接升级客户端版本至1.11.1，新的客户端版本已避免类似情况
-**办法二：应用依赖排包**
-在打包部署的模块搜索“log”关键词，进行排包处理
-Log4j2和Logback场景
-该场景是当前特别容易出现的情况，此时需要特别注意工程中是否存在log4j-to-slf4j这个jar包，如果它存在会出现日志文件无法输出问题
-**排包方案（二选一）：**
-1、继续保持两个日志组件同时存在，排除log4j-to-slf4j这个jar包
-2、确定自己工程使用logback还是log4j2，仅保留一个组件排除另外的
-排除logback：logback-classic、logback-core
-排查log4j2: log4j-api 2.x.x 和 log4j-core 2.x.x
-
-仅log4j1场景
-如果业务放采用了log4j1，且没有log4j2和logback，就要关注看下是否存在如下的log4j-over-slf4j这个jar包
-**处理方案**：
-1、继续使用log4j1，排除log4j-over-slf4j
-2、添加一个log4j2或者logback
-
-
-
-**办法三：添加日志配置**
-该方法适合的冲突场景：Log4j2和Logback混合，且存在log4j-to-slf4j时。该场景下在业务应用的logback配置文件中添加如下配置信息
-
-
-
-**如何排查任务失败的原因**
-如果是单机任务，业务直接抛异常，可以在控制台上任务实例详情看到错误信息，如下图
-
-
-如果没有抛异常，或者使用了分布式任务，专业版应用可以通过日志服务来排查（集团内暂不支持
-
+## Comparison
+
+| 维度 | SchedulerX | XXL-JOB | ElasticJob | PowerJob |
+| :--- | :--- | :--- | :--- | :--- |
+| 形态 | 云托管服务（Server 不可自建） | 自建平台 | 内嵌 jar + ZK | 自建平台 |
+| 拓扑 | 中心化 Server/Worker | 调度中心 + 执行器 | 去中心化（节点对等） | Server/Worker 多活分片 |
+| Worker 通信 | 自研协议（Akka remoting 系） | HTTP | ZK 协商 | 自研 remote（akka / MU） |
+| 调度精度 | 秒级（可毫秒级 `second_delay`） | 秒级时间轮 | 秒级（内嵌 Quartz） | 毫秒级时间轮 |
+| 分布式计算 | Map / MapReduce / 内存网格 / 分片 | 分片广播 | 分片 | Map / MapReduce |
+| 工作流 DAG | 原生可视化 | 无（父子任务模拟） | 不支持 | 原生 Workflow |
+| 多语言 | Java/Go SDK + 脚本 + HTTP + K8s | Java + GLUE 脚本 | Java | Java + Shell/Python |
+| 运维界面 | MSE 控制台（含计费） | 自带 Web UI | ElasticJob-UI | 自带 Console |
+| 成本模型 | 任务托管 CU + 任务调度 CU | 机器成本 | 机器 + ZK 成本 | 机器成本 |
+
+一句话取舍：**已经在阿里云上、不希望自建调度平台、且需要秒级调度或轻量分布式计算，SchedulerX 是阻力最小的选项**；它的代价是强绑定云厂商、Server 端不可控、以及非单机任务按 Worker 数线性计费。**要完全自控、代码即基础设施，选 XXL-JOB / PowerJob；已有 ZK 且任务天然分片，选 ElasticJob。**
+
+## Version Facts
+
+客户端（Java SDK，官方 Java SDK release notes）：
+
+- **1.14.2**（2026-08-05）：`JobContext` 可获取工作流参数；脚本任务支持强制终止；`clientInfo.log` 打印完整脚本输出（便于 SLS 采集）。
+- **1.14.0**（2026-07-30）：支持脚本任务子进程强制终止。
+- **1.13.5**（2026-03-20）：`second_delay` 任务支持优雅下线；脚本任务支持工作流上下游数据传递。
+- **1.13.4**（2026-02-13）：K8s 应用模式下 CPU 采集支持 cgroup v2。
+- **1.13.3**（2026-01-15）：Spring 任务兼容 Spring 7.x。
+- **1.13.1**（2025-07-28）：修复 Spring 父子容器场景下心跳注册过早上报；修复升级 SDK 时 map 任务意外停止。
+- **1.13.0**（2025-06-18）：新增链路加密（专业版，加密 Server-Client 通信中的敏感数据）。
+- **1.12.7**（2025-05-29）：Spring 升至 5.3.31 修安全漏洞；重构脚本任务占位符逻辑。
+- **1.12.2**（2024-11-20）：修复可视化 MapReduce 安全漏洞；**修复部分 Akka 接口安全漏洞**（这条同时是"Server/Worker 仍走 Akka 协议"的直接证据）。
+- **1.12.1**（2024-10-12）：新增 `@SchedulerX` 注解，可配合 Spring `@Scheduled` 接管部分 Spring 定时任务；移除 fastjson。
+- **1.12.3**（2025-01-03）：支持 `-Dschedulerx.log.path=` 配置 SDK 日志目录，支持覆盖默认 logback 配置。
+
+服务端（阿里云服务端发布记录摘要，最近三次）：
+
+- **2026-09-16**：任务支持配置过期时间，过期后默认自动禁用；任务超时终止后支持失败自动重试；支持任务同步到同命名空间其他应用；工作流支持一键导入。
+- **2026-08-05**：工作流参数（需 SDK ≥ 1.14.2 获取）；工作流画布升级，坐标不丢失；工作流管理拆分基本信息与 DAG 编辑。
+- **2026-07-30**：客户端 1.14.0；工作流中任务可禁用（跳过执行）；修复失败重试任务有概率卡住。
+
+> [!WARNING]
+>
+> 网上大量 SchedulerX 资料停留在 2019～2021 年（EDAS 时代的文档、个人博客、CSDN 转载），其中"控制台入口在 EDAS""按实例规格计费"等说法已过时：控制台现归 MSE，SchedulerX 版改 Serverless 计费，XXL-JOB 版才是实例型。以阿里云帮助中心 `schedulerx` 目录下现行文档与两份 release notes 为准。
 
 ## Links
-- [Task](/docs/CS/Framework/Spring/Task.md)
-- [Scheduled Task](/docs/CS/SE/Scheduled_Task.md)
 
-
-
-
+- [Job](/docs/CS/Framework/Job/Job.md)
+- [Architecture](/docs/CS/Framework/Job/ScheduleX/Architecture.md)
+- [Job Types](/docs/CS/Framework/Job/ScheduleX/Job_Types.md)
+- [Timing](/docs/CS/Framework/Job/ScheduleX/Timing.md)
+- [Workflow](/docs/CS/Framework/Job/ScheduleX/Workflow.md)
+- [Operations](/docs/CS/Framework/Job/ScheduleX/Operations.md)
 
 ## References
 
-1. [阿里云 分布式任务调度](https://help.aliyun.com/zh/mse/user-guide/distributed-task-scheduling/?spm=a2c4g.11186623.0.0.32e1521b69TsR4)
+- [什么是分布式任务调度 SchedulerX](https://help.aliyun.com/zh/schedulerx/schedulerx-serverless/product-overview/what-is-schedulerx/)
+- [什么是分布式任务调度（SchedulerX 版与 XXL-JOB 版选型）](https://help.aliyun.com/zh/doc-detail/2846644.html)
+- [计费概述（基础版 / 专业版、任务托管 CU、任务调度 CU）](https://help.aliyun.com/zh/schedulerx/schedulerx-serverless/product-overview/billing-1/)
+- [Java SDK release notes](https://www.alibabacloud.com/help/en/schedulerx/product-overview/java-sdk-release-notes)
+- [服务端发布记录](https://help.aliyun.com/zh/document_detail/2950302.html)
+- [产品优势（高可用 / 安全防护）](https://help.aliyun.com/document_detail/303859.htm)
+- [Akka in SchedulerX 2.0（阿里云开发者社区）](https://developer.aliyun.com/article/709946)
+- [schedulerx-worker-go（Go SDK）](https://github.com/alibaba/schedulerx-worker-go)

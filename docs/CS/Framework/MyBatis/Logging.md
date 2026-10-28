@@ -68,7 +68,7 @@ public final class LogFactory {
     });
     tryImplementation(() -> { useCommonsLogging(); });
     tryImplementation(() -> { useLog4J2Logging(); });
-    tryImplementation(() -> { seLog4JLogging(); });
+    tryImplementation(() -> { useLog4JLogging(); });
     tryImplementation(() -> { useJdkLogging(); });
     tryImplementation(() -> { useNoLogging(); });
   }

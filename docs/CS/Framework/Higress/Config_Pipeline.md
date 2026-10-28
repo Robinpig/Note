@@ -112,7 +112,6 @@ pilot / envoy fork 内部一律未核（本机 `istio/`、`envoy/` 子模块与 
 - [Source Map](/docs/CS/Framework/Higress/Source_Map.md)
 - [Service Registry Internals](/docs/CS/Framework/Higress/Service_Registry_Internals.md)
 - [Plugin System](/docs/CS/Framework/Higress/Plugin.md)
-- [Architecture](/docs/CS/Framework/Higress/Architecture.md)
 - [Traffic Governance](/docs/CS/Framework/Higress/Traffic_Governance.md)
 - [Higress](/docs/CS/Framework/Higress/Higress.md)
 - [Envoy](/docs/CS/Framework/Istio/Envoy.md)

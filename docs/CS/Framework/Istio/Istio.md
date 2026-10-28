@@ -206,9 +206,8 @@ Higress 复用 Istio 的 xDS 协议、CRD 存储与多注册中心服务发现�
 - [Envoy](/docs/CS/Framework/Istio/Envoy.md)
 - [Security](/docs/CS/Framework/Istio/Security.md)
 - [ecosystem](/docs/CS/Framework/Istio/ecosystem.md)
-- [Higress](/docs/CS/Framework/Higress/Higress.md)
 - [Kubernetes](/docs/CS/Container/k8s/K8s.md)
-- [Higress Architecture](/docs/CS/Framework/Higress/Architecture.md)
+- [Higress Architecture](/docs/CS/Framework/Higress/Higress.md?id=architecture)
 
 ## References
 

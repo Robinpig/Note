@@ -669,7 +669,7 @@ RDB 简单来说就是快照文件，也就是当 Redis 执行 SAVE 或者 BGSAV
 - [Redis](/docs/CS/DB/Redis/Redis.md)
 - [CircuitBreaker](/docs/CS/SE/CircuitBreaker.md)
 - [RateLimiter](/docs/CS/SE/RateLimiter.md)
-- [LRU](/docs/CS/Algorithms/LRU.md)
+- [LRU](/docs/CS/Algorithms/systems/LRU.md)
 
 ## References
 

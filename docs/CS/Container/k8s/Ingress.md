@@ -162,7 +162,7 @@ metadata:
 - [Scaling](/docs/CS/Container/k8s/Scaling.md)
 - [Nginx](/docs/CS/CN/nginx/nginx.md)
 - [Higress Traffic Governance](/docs/CS/Framework/Higress/Traffic_Governance.md)
-- [Higress Architecture](/docs/CS/Framework/Higress/Architecture.md)
+- [Higress Architecture](/docs/CS/Framework/Higress/Higress.md?id=architecture)
 
 ## References
 

@@ -30,3 +30,5 @@ If both the sender and the receiver have a copy of the dictionary, then previous
 ## Links
 
 - [CS](/docs/CS/CS.md)
+- [JPEG](/docs/CS/Algorithms/JPEG.md)
+- [Huffman Tree](/docs/CS/Algorithms/tree/Huffman-Tree.md)

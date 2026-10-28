@@ -377,7 +377,6 @@ HiMarket 不是网关组件：官方定义是"基于 Higress AI 网关构建的*
 
 ## Links
 
-- [Architecture](/docs/CS/Framework/Higress/Architecture.md)
 - [Security and Auth](/docs/CS/Framework/Higress/Security_and_Auth.md)
 - [AI Gateway](/docs/CS/Framework/Higress/AI_Gateway.md)
 - [Source Map](/docs/CS/Framework/Higress/Source_Map.md)

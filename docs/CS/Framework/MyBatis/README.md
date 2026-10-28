@@ -53,6 +53,18 @@ digraph mybatis_index {
 - [DataSource](/docs/CS/Framework/MyBatis/DataSource.md)：数据源与事务。
 - [MyBatis-Spring](/docs/CS/Framework/MyBatis/MyBatis-Spring.md)：与 Spring 集成（`SqlSessionFactoryBean`、Mapper 扫描、事务同步）。
 
+## MyBatis-Plus（增强工具包）
+
+[MyBatis-Plus](/docs/CS/Framework/MyBatis-Plus/MyBatis-Plus.md) 是 baomidou 组织的第三方增强层（与 MyBatis 官方无关）：启动期自动注入单表 CRUD、运行期用插件链做分页 / 逻辑删除 / 多租户 / 数据权限，并提供代码生成器。它不改 MyBatis 源码，但编译锁定 `mybatis` 3.5.19，升级 MyBatis 3.6.0 前需等 MP 兼容版本。
+
+- [Architecture](/docs/CS/Framework/MyBatis-Plus/Architecture.md)：两条接入路径（启动期 MappedStatement 注入 + 运行期插件拦截）与执行链路。
+- [CRUD](/docs/CS/Framework/MyBatis-Plus/CRUD.md)：`BaseMapper` / `IService` / `IRepository` API、批量语义与 3.5.7/3.5.8 弃用迁移。
+- [Wrapper](/docs/CS/Framework/MyBatis-Plus/Wrapper.md)：条件构造器与 `last()` / `apply()` 的 SQL 注入风险。
+- [Interceptor](/docs/CS/Framework/MyBatis-Plus/Interceptor.md)：`MybatisPlusInterceptor` 与内置 `InnerInterceptor`（分页 / 租户 / 防全表删 / 数据权限）。
+- [Features](/docs/CS/Framework/MyBatis-Plus/Features.md)：主键策略、逻辑删除、自动填充、乐观锁、字段策略、类型处理器。
+- [CodeGenerator](/docs/CS/Framework/MyBatis-Plus/CodeGenerator.md)：`FastAutoGenerator` 流式代码生成与可插拔模板引擎。
+- [SpringBoot](/docs/CS/Framework/MyBatis-Plus/SpringBoot.md)：starter 与自动装配关键配置项。
+
 ## Links
 
 - [MyBatis（架构与入口）](/docs/CS/Framework/MyBatis/MyBatis.md)

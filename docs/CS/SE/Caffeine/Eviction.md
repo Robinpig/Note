@@ -106,7 +106,7 @@ W-TinyLFU 论文的完整形态还有一层：window 与 main 的切分应该随
 - [Architecture](/docs/CS/SE/Caffeine/Architecture.md)
 - [Expiration](/docs/CS/SE/Caffeine/Expiration.md)
 - [Operations](/docs/CS/SE/Caffeine/Operations.md)
-- [LRU](/docs/CS/Algorithms/LRU.md)
+- [LRU](/docs/CS/Algorithms/systems/LRU.md)
 - [Cache](/docs/CS/SE/Cache.md)
 
 ## References

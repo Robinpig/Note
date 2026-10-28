@@ -172,8 +172,7 @@ AWS 当前实际布局：① **ECS Service Connect**（App Mesh 官方后继）�
 - [Security](/docs/CS/Framework/Istio/Security.md)
 - [Install](/docs/CS/Framework/Istio/Install.md)
 - [Kubernetes](/docs/CS/Container/k8s/K8s.md)
-- [Higress](/docs/CS/Framework/Higress/Higress.md)
-- [Higress Architecture](/docs/CS/Framework/Higress/Architecture.md)
+- [Higress Architecture](/docs/CS/Framework/Higress/Higress.md?id=architecture)
 - [Higress Deployment and Ops](/docs/CS/Framework/Higress/Deployment_and_Ops.md)
 
 ## References

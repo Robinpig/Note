@@ -78,7 +78,6 @@ certmagic fork（`github.com/2456868764/certmagic v1.0.2`）本机 module cache 
 - [Deployment and Ops](/docs/CS/Framework/Higress/Deployment_and_Ops.md)
 - [Source Map](/docs/CS/Framework/Higress/Source_Map.md)
 - [Higress](/docs/CS/Framework/Higress/Higress.md)
-- [Architecture](/docs/CS/Framework/Higress/Architecture.md)
 - [Service Discovery](/docs/CS/Framework/Higress/Service_Discovery.md)
 
 ## References

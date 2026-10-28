@@ -1876,7 +1876,7 @@ This **linked list defines the iteration ordering**:
 
 This implementation spares its clients from the unspecified, generally chaotic ordering provided by HashMap (and Hashtable), without incurring the increased cost associated with TreeMap.
 
-[Other LRU implements](/docs/CS/Algorithms/LRU.md)
+[Other LRU implements](/docs/CS/Algorithms/systems/LRU.md)
 
 
 Returns true if this map should remove its eldest entry. This method is invoked by put and putAll after inserting a new entry into the map. 

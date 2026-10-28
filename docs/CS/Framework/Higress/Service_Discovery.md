@@ -138,7 +138,6 @@ spec:
 
 ## Links
 
-- [Architecture](/docs/CS/Framework/Higress/Architecture.md)
 - [Traffic Governance](/docs/CS/Framework/Higress/Traffic_Governance.md)
 - [Wasm Development](/docs/CS/Framework/Higress/Plugin.md)
 - [Nacos](/docs/CS/Framework/nacos/Nacos.md)

@@ -103,9 +103,10 @@
 - 判定与构造：[Computability](/docs/CS/Algorithms/Computability.md)（可判定性与图灵机）、[NP](/docs/CS/Algorithms/NP.md)（NP 完全与 $P \neq NP$，自 1971 年起是理论计算机科学最深的开问题之一）。
 - 搜索：[search](/docs/CS/Algorithms/search.md)（二分、DFS、BFS）、[string-search](/docs/CS/Algorithms/string/string-search.md)（朴素 / Rabin-Karp / KMP / BM / 后缀数组）、[string](/docs/CS/Algorithms/string/string.md)（字符串基础与哈希）。
 - 排序与选择：[sort](/docs/CS/Algorithms/sort/sort.md)（比较排序与非比较排序、外排）与 [Quick Select](/docs/CS/Algorithms/sort/Quick_Select.md)（第 $k$ 小与中位数，平均线性时间，BFPRT 给出最坏线性保证）。
-- 最优化：[graph](/docs/CS/Algorithms/graph/graph.md) 下的最小生成树与最短路，二分图 [Matching](/docs/CS/Algorithms/graph/Matching.md)，以及 [Network_Flow](/docs/CS/Algorithms/graph/Network_Flow.md)（网络流）。题解见 [Shortest-Path](/docs/CS/Algorithms/question/Shortest-Path.md)。
+- 最优化：[graph](/docs/CS/Algorithms/graph/graph.md) 下的最小生成树与最短路，二分图 [Matching](/docs/CS/Algorithms/graph/Matching.md)，以及 [Network_Flow](/docs/CS/Algorithms/graph/Network_Flow.md)（网络流）；更一般的 [Linear Programming](/docs/CS/Algorithms/Linear_Programming.md)（Simplex、对偶、内点法）与 [Approximate](/docs/CS/Algorithms/Approximate.md)（近似比、PTAS/FPTAS）。题解见 [Shortest-Path](/docs/CS/Algorithms/question/Shortest-Path.md)。
 - 计数与统计：[PageRank](/docs/CS/Algorithms/PageRank.md)（随机游走平稳分布）、[HyperLogLog](/docs/CS/Algorithms/HyperLogLog.md)（基数估计）、[Count-Min Sketch](/docs/CS/Algorithms/Count_Min_Sketch.md)（数据流频次估计，与基数估计互补）、[Number_Theory](/docs/CS/Algorithms/Number_Theory.md)（筛法、快速幂、模逆元、Pollard–Rho）。
 - 几何与游戏：[Computational_Geometry](/docs/CS/Algorithms/Computational_Geometry.md)（凸包、扫描线、鲁棒性）、[Algorithmic Game Theory](/docs/CS/Algorithms/Algorithmic_Game_Theory.md)（Minimax、α-β 剪枝、PVS、MCTS/UCT）。
+- 在线算法：[Online](/docs/CS/Algorithms/Online.md)（竞争比分析，paging、k-server、负载均衡）。
 - 压缩：[JPEG](/docs/CS/Algorithms/JPEG.md)（DCT + 量化 + 游程 / 哈夫曼）。
 
 ### Page Replacement Algorithms
@@ -115,7 +116,7 @@
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | OPT                     | 优先淘汰最长时间内不会被访问的页面；缺页率最小、性能最好，但无法实现                                                              |
 | FIFO                    | 优先淘汰最先进入内存的页面；实现简单，但性能很差，可能出现 Belady 异常                                                          |
-| LRU                     | 优先淘汰最近最久没访问的页面；性能很好，但需要硬件支持、算法开销大。详见 [LRU](/docs/CS/Algorithms/LRU.md)                    |
+| LRU                     | 优先淘汰最近最久没访问的页面；性能很好，但需要硬件支持、算法开销大。详见 [LRU](/docs/CS/Algorithms/systems/LRU.md)                    |
 | CLOCK (NRU)             | 循环扫描，第一轮淘汰访问位=0 的页面并把扫过的访问位置 1；若没选中则第二轮再扫。实现简单、开销小，但未考虑页面是否被修改过          |
 | 改进型 CLOCK (改进型 NRU) | 以（访问位，修改位）表述：第一轮淘汰 (0,0)，第二轮淘汰 (0,1) 并把扫过的访问位置 0，第三轮淘汰 (0,0)，第四轮淘汰 (0,1)。开销较小、性能也不错 |
 
@@ -123,9 +124,9 @@
 算法不止于教科书：现实系统中的性能、存储、时延问题都靠专门算法支撑，且常需要在前沿理论之外做工程取舍。
 
 - 基数估计：[HyperLogLog](/docs/CS/Algorithms/HyperLogLog.md) 以极小内存近似计数。
-- 定时器管理：[TimingWheel](/docs/CS/Algorithms/TimingWheel.md) 以空间换时间，把海量定时器扫描降到接近 $O(1)$。
-- 存储权衡：[The_Five_Minute_Rule](/docs/CS/Algorithms/The_Five_Minute_Rule.md) 给出内存与磁盘 I/O 的经典经验律。
-- 缓存淘汰：[LRU](/docs/CS/Algorithms/LRU.md) 及其 $O(1)$ 实现（哈希表 + 双向链表）。
+- 定时器管理：[TimingWheel](/docs/CS/Algorithms/systems/TimingWheel.md) 以空间换时间，把海量定时器扫描降到接近 $O(1)$。
+- 存储权衡：[The_Five_Minute_Rule](/docs/CS/Algorithms/systems/The_Five_Minute_Rule.md) 给出内存与磁盘 I/O 的经典经验律。
+- 缓存淘汰：[LRU](/docs/CS/Algorithms/systems/LRU.md) 及其 $O(1)$ 实现（哈希表 + 双向链表）。
 - 共识算法（Paxos / Raft）属于分布式系统范畴，本域不展开，见 [Distributed](/docs/CS/Distributed/Distributed.md)。
 
 ## Problems and Practice

@@ -125,7 +125,6 @@ proto 里**没有 `plural:` marker**，复数形式（mcpbridges / http2rpcs / w
 - [Service Registry Internals](/docs/CS/Framework/Higress/Service_Registry_Internals.md)
 - [Plugin System](/docs/CS/Framework/Higress/Plugin.md)
 - [Traffic Governance](/docs/CS/Framework/Higress/Traffic_Governance.md)
-- [Architecture](/docs/CS/Framework/Higress/Architecture.md)
 - [Higress](/docs/CS/Framework/Higress/Higress.md)
 - [Service Discovery](/docs/CS/Framework/Higress/Service_Discovery.md)
 

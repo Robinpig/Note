@@ -789,7 +789,7 @@ public static Method selectInvocableMethod(Method method, @Nullable Class<?> tar
 
 ## Quartz Integration
 
-对于需要持久化、misfire 处理、集群调度等复杂场景，Spring 提供了对 [Quartz](/docs/CS/Framework/Job/Quartz/Quartz.md) 的集成，核心是几个 `FactoryBean`：
+对于需要持久化、misfire 处理、集群调度等复杂场景，Spring 提供了对 [Quartz](/docs/CS/Framework/Job/Quartz.md) 的集成，核心是几个 `FactoryBean`：
 
 - `JobDetailFactoryBean`：配置 Quartz 的 `JobDetail`（Job 类型、名称、组、是否持久化等）。
 - `MethodInvokingJobDetailFactoryBean`：不需要写 Quartz Job 类，直接调用某个 Spring bean 的指定方法。

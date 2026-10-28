@@ -25,6 +25,10 @@
 
 详见各自专文：[Maven](/docs/CS/BuildTool/Maven.md)、[Gradle](/docs/CS/BuildTool/Gradle.md)。
 
+Maven 的展开较深，因为它的复杂度集中在依赖解析与生命周期模型上。入口页 [Maven](/docs/CS/BuildTool/Maven.md) 给出整体心智模型与阅读路径，随后按"模型 → 依赖 → 生命周期 → 多模块 → 仓库配置 → 发布 → 性能排障 → Maven 4 迁移"分册展开：坐标与 Super POM 见 [Architecture](/docs/CS/BuildTool/Maven/Architecture.md)，传递依赖与仲裁规则见 [Dependency Resolution](/docs/CS/BuildTool/Maven/Dependency_Resolution.md)，阶段与插件绑定见 [Lifecycle and Plugins](/docs/CS/BuildTool/Maven/Lifecycle_and_Plugins.md)，reactor 与 CI-friendly 版本见 [Multi-Module Reactor](/docs/CS/BuildTool/Maven/Multi_Module_Reactor.md)，settings.xml 与镜像见 [Repositories and Mirrors](/docs/CS/BuildTool/Maven/Repositories_and_Mirrors.md)，Central Portal 发布链路见 [Publishing and Signing](/docs/CS/BuildTool/Maven/Publishing_and_Signing.md)，构建加速与症状索引见 [Performance and Troubleshooting](/docs/CS/BuildTool/Maven/Performance_and_Troubleshooting.md)，3.10.0 与 4.0.0-rc 的差异见 [Maven 4 Migration](/docs/CS/BuildTool/Maven/Maven4_Migration.md)。
+
+Gradle 的展开逻辑相同，但切入点不同——它的复杂度不在"有哪些命令"，而在"两阶段执行模型"这一处。入口页 [Gradle](/docs/CS/BuildTool/Gradle.md) 同样给出心智模型与症状索引表，随后按"架构 → 任务 → 依赖 → 版本目录 → 多项目 → 性能 → 发布安全 → 排障"分册展开：两阶段执行与 daemon、Configuration Cache 状态见 [Architecture](/docs/CS/BuildTool/Gradle/Architecture.md)，输入输出声明与 up-to-date 判定见 [Task Model](/docs/CS/BuildTool/Gradle/Task_Model.md)，configuration 与 api/implementation 语义、仲裁规则见 [Dependency Management](/docs/CS/BuildTool/Gradle/Dependency_Management.md)，`libs.versions.toml` 见 [Version Catalogs](/docs/CS/BuildTool/Gradle/Version_Catalogs.md)，buildSrc、included build 与 convention plugin 见 [Multi-Project Builds](/docs/CS/BuildTool/Gradle/Multi_Project_Builds.md)，三层加速机制见 [Performance](/docs/CS/BuildTool/Gradle/Performance.md)，Central Portal 发布与依赖校验见 [Publishing and Security](/docs/CS/BuildTool/Gradle/Publishing_and_Security.md)，症状索引与 9.0 移除项见 [Troubleshooting](/docs/CS/BuildTool/Gradle/Troubleshooting.md)。
+
 ## Typical Pipeline
 
 ```

@@ -584,7 +584,7 @@ Kafka 的 [Hierarchical Timing Wheels](/docs/CS/MQ/Kafka/Timer.md) 的多层时�
 - 调度器：其次是调度中心，调度中心主要负责任务管理，会分配任务给执行器。
 - 执行器：最后就是执行器，执行器接收调度器分派的任务并执行。
 
-[Quartz](/docs/CS/Framework/Job/Quartz/Quartz.md) 可以说是 Java 定时任务领域的老大哥或者说参考标准，其他的任务调度框架基本都是基于 Quartz 开发的，比如当当网的 [Elastic-job](/docs/CS/Framework/Job/ElasticJob.md) 就是基于 Quartz 二次开发之后的分布式调度解决方案。Quartz 虽然也支持分布式任务，但是，它是在数据库层面，通过数据库的锁机制做的，有非常多的弊端比如系统侵入性严重、节点负载不均衡。有点伪分布式的味道。
+[Quartz](/docs/CS/Framework/Job/Quartz.md) 可以说是 Java 定时任务领域的老大哥或者说参考标准，其他的任务调度框架基本都是基于 Quartz 开发的，比如当当网的 [Elastic-job](/docs/CS/Framework/Job/ElasticJob.md) 就是基于 Quartz 二次开发之后的分布式调度解决方案。Quartz 虽然也支持分布式任务，但是，它是在数据库层面，通过数据库的锁机制做的，有非常多的弊端比如系统侵入性严重、节点负载不均衡。有点伪分布式的味道。
 
 [XXL-JOB](/docs/CS/Framework/Job/xxl-job.md) 于 2015 年开源，是一款优秀的轻量级分布式任务调度框架，支持任务可视化管理、弹性扩容缩容、任务失败重试和告警、任务分片等功能。
 

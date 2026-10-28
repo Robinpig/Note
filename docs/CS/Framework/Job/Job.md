@@ -71,11 +71,13 @@ digraph job_topology {
 
 ### Quartz: the embedded library
 
-[Quartz](/docs/CS/Framework/Job/Quartz/Quartz.md) 是 Java 生态的事实标准调度库，以 jar 形式嵌入应用，核心抽象是 JobDetail（任务定义）与 Trigger（触发规则），集群能力靠共享数据库的 JobStoreTX 实现。它把"调度"做成了每个应用自己进程内的事——这也正是它的边界：调度逻辑与业务代码同生共死，任务量上涨后调度线程与业务线程互相挤占，DB 锁抢占导致节点负载悬殊。这些痛点直接催生了"调度中心 + 执行器"分离的平台型设计。
+[Quartz](/docs/CS/Framework/Job/Quartz.md) 是 Java 生态的事实标准调度库，以 jar 形式嵌入应用，核心抽象是 JobDetail（任务定义）与 Trigger（触发规则），集群能力靠共享数据库的 JobStoreTX 实现。它把"调度"做成了每个应用自己进程内的事——这也正是它的边界：调度逻辑与业务代码同生共死，任务量上涨后调度线程与业务线程互相挤占，DB 锁抢占导致节点负载悬殊。这些痛点直接催生了"调度中心 + 执行器"分离的平台型设计。
 
 ### XXL-JOB: centralized platform
 
 [XXL-JOB](/docs/CS/Framework/Job/xxl-job.md) 把调度行为抽象成独立的"调度中心"平台，业务侧只留轻量执行器，二者经 HTTP 通信、按 AppName 自动注册。它用最简单的技术栈（Spring Boot + MySQL + 自研秒级时间轮）实现了平台化，学习成本低、开箱即用，是国内中小团队自建调度的事实默认选项。代价是调度中心依赖 MySQL 单点写，规模上限取决于这张表的写入能力。
+
+它的调度内核是"秒级预读 + 60 槽时间轮"：扫库线程每秒抢一次 `xxl_job_lock` 行锁、预读未来 5s 到期的任务挂进内存时间轮，时间轮线程每秒跳一格投递触发——把"决定何时触发"从 DB 扫描路径上摘下来。执行器侧则是"一 jobId 一条线程 + 一个队列"，默认串行，用三种阻塞策略约定跑不过来时的行为。当前基线 **v3.5.0**（2026-10 发布，Spring Boot 4.1.1 / JDK 17），AccessToken 改为执行器维度隔离、新增任务管理 OpenAPI 与 GLUE 开关，升级需调度中心与执行器同步进行。实现细节拆成十篇分册：调度内核 [Scheduler](/docs/CS/Framework/Job/xxl-job/Scheduler.md)、触发链路 [Trigger](/docs/CS/Framework/Job/xxl-job/Trigger.md)、执行端 [Executor](/docs/CS/Framework/Job/xxl-job/Executor.md)、[阻塞策略](/docs/CS/Framework/Job/xxl-job/Block_Strategy.md)、[路由策略](/docs/CS/Framework/Job/xxl-job/Route_Strategy.md)、[注册发现](/docs/CS/Framework/Job/xxl-job/Registry_And_Discovery.md)、[数据模型](/docs/CS/Framework/Job/xxl-job/Data_Model.md)、[GLUE](/docs/CS/Framework/Job/xxl-job/GLUE.md)、[OpenAPI](/docs/CS/Framework/Job/xxl-job/OpenAPI.md)、[日志与告警](/docs/CS/Framework/Job/xxl-job/Log_And_Alarm.md)。
 
 ### ElasticJob: decentralized sharding
 
@@ -99,23 +101,25 @@ digraph job_topology {
 | 运维成本 | 低（无平台） | 低（一个 Web 应用） | 中（需运维 ZK） | 中（Server + Console） |
 | 适用规模 | 单机 / 小集群 | 中小规模、国内团队 | 有 ZK 基础、重分片场景 | 需要计算与编排合一 |
 
-经验法则：**纯单机或小集群定时任务，Quartz 或 Spring `@Scheduled` 足够；要一个带 UI、能托管全公司定时任务的平台，XXL-JOB 是阻力最小的选择；已有 ZooKeeper 且任务天然可分片，ElasticJob 的弹性设计最顺手；当任务开始需要"拆成子任务并行算再汇总"或"编排依赖"，直接上 PowerJob。** 超过万台执行器规模、或调度决策本身需要跨地域多活的场景，四者都不再合适，那属于数据中心级调度（Kubernetes CronJob、AWS Batch 一类）的领域。
+经验法则：**纯单机或小集群定时任务，Quartz 或 Spring `@Scheduled` 足够；要一个带 UI、能托管全公司定时任务的平台，XXL-JOB 是阻力最小的选择；已有 ZooKeeper 且任务天然可分片，ElasticJob 的弹性设计最顺手；当任务开始需要"拆成子任务并行算再汇总"或"编排依赖"，直接上 PowerJob。** 如果团队已经在阿里云上、且不打算自己运维一套调度平台，[ScheduleX](/docs/CS/Framework/Job/ScheduleX.md)（SchedulerX）是托管形态的同族选项——能力面接近 PowerJob，代价是强绑定云厂商、Server 端不可控、非单机任务按 Worker 数线性计费。超过万台执行器规模、或调度决策本身需要跨地域多活的场景，四者都不再合适，那属于数据中心级调度（Kubernetes CronJob、AWS Batch 一类）的领域。
 
 ## Adjacent Fields
 
 Job 子树的边界容易与三个相邻领域混淆，这里说清分工：
 
-- **DolphinScheduler** 与 **ScheduleX**：目标是 DAG 工作流编排——可视化拖拽、任务依赖、跨工作流调度，原生对接 Spark/Flink/DataX 等大数据组件。当"任务"本身是"一个 ETL 流程的一个步骤"时，该用的是它们而不是本页四族；反之纯定时触发、逻辑内聚的单任务，用四族更轻。细节见 [DolphinScheduler](/docs/CS/Framework/Job/DolphinScheduler.md) 与 [ScheduleX](/docs/CS/Framework/Job/ScheduleX.md)。
+- **ScheduleX**（阿里云 SchedulerX）：与四族同属"定时触发 + 分布式执行"的问题域，但形态不同——它是**云托管的商业服务**，Server 端不可自建、按任务托管 CU 与任务调度 CU 计费，用户只持有 Worker Agent。功能上看它是 PowerJob 的同族（中心化 Server/Worker、Map/MapReduce、原生 DAG 工作流），选型时真正的分歧点是"自建还是托管"。细节见 [ScheduleX](/docs/CS/Framework/Job/ScheduleX.md)。
+- **DolphinScheduler**：目标是 DAG 工作流编排——可视化拖拽、任务依赖、跨工作流调度，原生对接 Spark/Flink/DataX 等大数据组件。当"任务"本身是"一个 ETL 流程的一个步骤"时，该用的是它而不是本页四族；反之纯定时触发、逻辑内聚的单任务，用四族更轻。细节见 [DolphinScheduler](/docs/CS/Framework/Job/DolphinScheduler.md)。
 - **Spring Task**：单机进程内的 `@Scheduled` / `TaskScheduler` / `ThreadPoolTaskScheduler`，是理解"调度"一词的最小模型，也是 Quartz 的 Spring 抽象底座，见 [Task](/docs/CS/Framework/Spring/Task.md)。
 - **Scheduled Task**：跨层总览——从 Linux 内核定时器（hrtimer、时间轮）、Redis 延时队列、RocketMQ 延时消息到自建延迟表，回答"除了专用框架，还有哪些实现延时的路子"，见 [Scheduled Task](/docs/CS/SE/Scheduled_Task.md)。
 
 ## Links
 
-- [Quartz](/docs/CS/Framework/Job/Quartz/Quartz.md)
+- [Quartz](/docs/CS/Framework/Job/Quartz.md)
 - [xxl-job](/docs/CS/Framework/Job/xxl-job.md)
 - [ElasticJob](/docs/CS/Framework/Job/ElasticJob.md)
 - [PowerJob](/docs/CS/Framework/Job/PowerJob.md)
-- [Scheduled Task](/docs/CS/SE/Scheduled_Task.md)
+- [DolphinScheduler](/docs/CS/Framework/Job/DolphinScheduler.md)
+- [ScheduleX](/docs/CS/Framework/Job/ScheduleX.md)
 
 ## References
 

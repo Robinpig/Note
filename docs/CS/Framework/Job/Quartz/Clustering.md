@@ -68,7 +68,7 @@ spring.quartz.properties.org.quartz.scheduler.instanceId=AUTO
 
 ## Links
 
-- [Quartz](/docs/CS/Framework/Job/Quartz/Quartz.md)
+- [Quartz](/docs/CS/Framework/Job/Quartz.md)
 - [xxl-job](/docs/CS/Framework/Job/xxl-job.md)
 - [ElasticJob](/docs/CS/Framework/Job/ElasticJob.md)
 - [ZooKeeper](/docs/CS/Framework/ZooKeeper/ZooKeeper.md)

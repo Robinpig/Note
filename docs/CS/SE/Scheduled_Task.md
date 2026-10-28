@@ -44,13 +44,13 @@ Linux 用户态提供四种"睡眠到某时刻"的接口（`nanosleep`、`clock_
 
 ## Kernel Timers Under Everything
 
-所有用户态定时最终都落在内核的两套机制上：**低精度定时器**用分级时间轮（同一时刻的海量普通 timer 挂在按有效期位数分级的槽里，避免逐个扫描），**高精度定时器 hrtimer** 用红黑树按到期时间排序（需要 ns 级精度的场景，以及 tick 停掉之后模拟 tick）。两者取舍与用户态完全同构：**海量短超时用轮，少量精确到点用树/堆**（对照表见 [Comparison with Other Timer Schemes](/docs/CS/Algorithms/TimingWheel.md?id=comparison-with-other-timer-schemes)）。
+所有用户态定时最终都落在内核的两套机制上：**低精度定时器**用分级时间轮（同一时刻的海量普通 timer 挂在按有效期位数分级的槽里，避免逐个扫描），**高精度定时器 hrtimer** 用红黑树按到期时间排序（需要 ns 级精度的场景，以及 tick 停掉之后模拟 tick）。两者取舍与用户态完全同构：**海量短超时用轮，少量精确到点用树/堆**（对照表见 [Comparison with Other Timer Schemes](/docs/CS/Algorithms/systems/TimingWheel.md?id=comparison-with-other-timer-schemes)）。
 
 内核侧还有两件直接影响"定时准不准"的事：`NO_HZ` 会在系统空闲时停掉节拍中断，深睡的 CPU 醒来后靠 **tick broadcast** 补定时；定时任务在 CPU 间迁移时还要搬定时器。做容器化调度时，被 cgroup 限流的进程其定时器精度还会受调度延迟影响。整条链路的机制与排障见 [Linux 时间子系统](/docs/CS/OS/Linux/timer.md)。
 
 ## Timing Wheels in Middleware
 
-时间轮的数据结构本身只有一页纸（[Timing Wheel](/docs/CS/Algorithms/TimingWheel.md)），值得单独强调的是**各家选型上的分歧点**：
+时间轮的数据结构本身只有一页纸（[Timing Wheel](/docs/CS/Algorithms/systems/TimingWheel.md)），值得单独强调的是**各家选型上的分歧点**：
 
 Netty 的 `HashedWheelTimer` 是**单层**轮，默认 tick 100ms、wheel 512 槽，实例化即起一个 worker 线程，因此必须全应用共享一个实例——为每个连接 new 一个是最典型的误用。它和 EventLoop 自带的 `schedule()`（最小堆）适用范围不同：海量近似超时用轮，少量精确任务用堆（见 [Tick Duration](/docs/CS/Framework/Netty/HashedWheelTimer.md?id=tick-duration) 与 [compare schedule](/docs/CS/Framework/Netty/HashedWheelTimer.md?id=compare-schedule)）。
 
@@ -58,7 +58,7 @@ Kafka 用**层级**时间轮 + `DelayQueue` + 一个 Reaper 线程推动指针�
 
 Dubbo 的超时检测是时间轮的另一个典型用法：`DefaultFuture` 每个请求注册一个 timeout，30ms 是**时间轮 tick 精度**而不是"每 30ms 扫全表"——把它理解成扫描会得出完全错误的容量规划结论（见 [超时机制：时间轮定时器，不是扫描线程](/docs/CS/Framework/Dubbo/Protocol.md?id=timeout-mechanism-time-wheel-timer-not-a-scanning-thread)）。
 
-调度框架内部也用时间轮收敛"扫库"开销：PowerJob Server 先按 15s 窗口批量捞 `nextTriggerTime`，再放进**秒/分/时三级时间轮**做精确投递，避免为每个任务轮询数据库（见 [时间轮](/docs/CS/Framework/Job/PowerJob.md?id=timing-wheel)）。
+调度框架内部也用时间轮收敛"扫库"开销：PowerJob Server 先按 15s 窗口批量捞 `nextTriggerTime`，再放进**单层哈希轮**（精确轮 1ms/4096 槽 + 慢速轮 10s/12 槽 + 60s 长延迟降级）做精确投递，避免为每个任务轮询数据库——PowerJob 的时间轮是单层哈希轮而非"秒/分/时三级轮"（见 [时间轮](/docs/CS/Framework/Job/PowerJob/Timing_Wheel.md?id=single-layer-hashed-wheel)）。
 
 同一招在缓存过期上同样成立：Caffeine 用层级时间轮组织过期条目而不是给每个 entry 挂定时器，且清理是惰性的（见 [Caffeine Expiration](/docs/CS/SE/Caffeine/Expiration.md)）；Pulsar broker 的事务超时同样直接复用 Netty 的 `HashedWheelTimer`（见 [Pulsar Broker](/docs/CS/MQ/Pulsar/Broker.md)）。
 
@@ -88,13 +88,13 @@ ActiveMQ/Artemis 用消息属性 `_AMQ_SCHED_DELIVERY`（未来毫秒时间戳�
 
 任何分布式定时任务都由三个角色组成：**任务**（业务逻辑）、**调度器**（决定何时、派给谁）、**执行器**（接收并执行）。角色是否分离，是这些框架的第一条分水岭（角色模型见 [分布式定时任务](/docs/CS/Java/JDK/sche.md?id=distributed-scheduled-tasks)）。
 
-Quartz 是 Java 侧的事实标准，抽象出 `JobDetail` / `Trigger` / `Scheduler` + JDBC JobStore。它的"分布式"是在**数据库层用行锁抢占**：谁抢到 trigger 谁执行。代价写在它的四条不满里——API 侵入、业务 Job 要持久化进它的表、调度逻辑与业务同进程（任务一多就互相拖累）、抢占式导致节点负载悬殊；集群还依赖 DB 且节点数超过 3 个左右调度吞吐反而下降（见 [Cluster](/docs/CS/Framework/Job/Quartz/Quartz.md?id=cluster)）。
+Quartz 是 Java 侧的事实标准，抽象出 `JobDetail` / `Trigger` / `Scheduler` + JDBC JobStore。它的"分布式"是在**数据库层用行锁抢占**：谁抢到 trigger 谁执行。代价写在它的四条不满里——API 侵入、业务 Job 要持久化进它的表、调度逻辑与业务同进程（任务一多就互相拖累）、抢占式导致节点负载悬殊；集群还依赖 DB 且节点数超过 3 个左右调度吞吐反而下降（见 [Cluster](/docs/CS/Framework/Job/Quartz/Clustering.md)）。
 
 ElasticJob 是"Quartz + ZooKeeper 协调"的无中心化 jar 形态：靠 ZK 做节点注册与分片重排（resharding），弹性扩缩容时自动把分片重分一遍。它把 Quartz 的负载不均换成了 ZK 的运维与性能负担（见 [Architecture](/docs/CS/Framework/Job/ElasticJob.md?id=architecture)）。
 
-xxl-job 把调度器与执行器彻底拆开：调度中心用 `select ... from xxl_job_lock where lock_name = 'schedule_lock' for update` 抢数据库行锁，保证多实例下只有一个调度线程在推进，`JobScheduleHelper` 每次**预读未来 5 秒**（`PRE_READ_MS = 5000`）的触发放进触发线程池（`JobTriggerPoolHelper` 快慢两级池）。执行器注册上来后由调度中心按**路由策略**挑选（故障转移会按顺序探活、选中第一个存活的实例），并支持分片广播、失败重试与告警、可视化与手动触发；执行侧还有**阻塞处理策略**（单机串行 / 丢弃后续 / 覆盖之前）来兜住"上一轮还没跑完"的情况；错过触发的补偿由 `MisfireStrategyEnum`（`FIRE_ONCE_NOW` / `DO_NOTHING`）决定，调度线程本身还有一条硬编码兜底——**过期 5s 内立即补一次、过期超过 5s 则忽略本次并从现在重算下次时间**（见 [Scheduler](/docs/CS/Framework/Job/xxl-job.md?id=scheduler)、[过期处理策略](/docs/CS/Framework/Job/xxl-job.md?id=expiration-handling-strategy) 与 [调度 FailOver](/docs/CS/Framework/Job/xxl-job.md?id=scheduling-failover)）。瓶颈仍在调度中心的 Master。
+xxl-job 把调度器与执行器彻底拆开：调度中心用 `select ... from xxl_job_lock where lock_name = 'schedule_lock' for update` 抢数据库行锁，保证多实例下只有一个调度线程在推进，`JobScheduleHelper` 每次**预读未来 5 秒**（`PRE_READ_MS = 5000`）的触发放进触发线程池（`JobTriggerPoolHelper` 快慢两级池）。执行器注册上来后由调度中心按**路由策略**挑选（故障转移会按顺序探活、选中第一个存活的实例），并支持分片广播、失败重试与告警、可视化与手动触发；执行侧还有**阻塞处理策略**（单机串行 / 丢弃后续 / 覆盖之前）来兜住"上一轮还没跑完"的情况；错过触发的补偿由 `MisfireStrategyEnum`（`FIRE_ONCE_NOW` / `DO_NOTHING`）决定，调度线程本身还有一条硬编码兜底——**过期 5s 内立即补一次、过期超过 5s 则忽略本次并从现在重算下次时间**（见 [Scheduler](/docs/CS/Framework/Job/xxl-job/Scheduler.md)、[过期处理策略](/docs/CS/Framework/Job/xxl-job/Scheduler.md?id=misfire) 与 [调度 FailOver](/docs/CS/Framework/Job/xxl-job/Route_Strategy.md?id=failover)）。瓶颈仍在调度中心的 Master。
 
-PowerJob（原 OhMyScheduler）在调度之外补了**计算模型**：MapReduce 任务能把一个大任务拆成子任务分发到多个 Worker，适合"定时 + 分布式跑批"合一的场景。ScheduleX 是云托管形态，把调度器可用性、多机房容灾、任务编排（图形化且任务间可传递数据）、OpenAPI、灰度验证都算进产品能力（见 [定时调度](/docs/CS/Framework/Job/ScheduleX.md?id=timer-scheduling)）。
+PowerJob（原 OhMyScheduler）在调度之外补了**计算模型**：MapReduce 任务能把一个大任务拆成子任务分发到多个 Worker，适合"定时 + 分布式跑批"合一的场景。ScheduleX 是云托管形态，把调度器可用性、多机房容灾、任务编排（图形化且任务间可传递数据）、OpenAPI、灰度验证都算进产品能力（见 [定时调度](/docs/CS/Framework/Job/ScheduleX/Timing.md)）。
 
 六家的逐项对比（定时调度方式、任务编排、分布式跑批、多语言、可观测、报警、容灾、性能瓶颈）已经是一张现成的表，见 [分布式定时任务的对比表](/docs/CS/Java/JDK/sche.md?id=distributed-scheduled-tasks)，本篇不再抄一份。三句话判据：
 
@@ -112,7 +112,7 @@ PowerJob（原 OhMyScheduler）在调度之外补了**计算模型**：MapReduce
 
 **任务堆积**：与 MQ 堆积同构，需要限流与分片。关键约束是"单次执行时间 > 触发周期"——Fixed Delay 会自动拉开间隔，Fixed Rate 会追赶，两者在堆积时行为完全不同；调度框架下的分片（把 key 空间切成 N 片广播）才是根治办法，框架提供的单机阻塞策略（xxl-job 的串行 / 丢弃后续 / 覆盖之前）只是在三者之间选一种损失。
 
-**任务超时与重试**：超时杀线程并不等于业务没做一半，重试只有在幂等成立时才安全，且要配退避。框架侧一般提供超时告警 + 失败重试次数（见 [任务超时](/docs/CS/Framework/Job/ScheduleX.md?id=task-timeout)），但"杀掉后下游的挂起请求怎么办"要自己收口。
+**任务超时与重试**：超时杀线程并不等于业务没做一半，重试只有在幂等成立时才安全，且要配退避。框架侧一般提供超时告警 + 失败重试次数（见 [任务超时](/docs/CS/Framework/Job/ScheduleX/Operations.md?id=retry-and-timeout)），但"杀掉后下游的挂起请求怎么办"要自己收口。
 
 **时钟问题**：跨节点的 cron 语义依赖 NTP 同步（Quartz 明确要求集群节点时钟在 1 秒内）；容器里的 `TZ` 与宿主机不一致会导致"每天 0 点"跑到别的时区；夏令时会让 2 点这一小时不存在或重复；`clock_nanosleep` 用单调时钟还是墙上时钟，决定改系统时间时定时任务会不会被"提前触发"。
 

@@ -89,7 +89,6 @@ CR 实例的持久层二选一（`pkg/apiserver/apiserver.go:188` NewFileREST / 
 ## Links
 
 - [Deployment and Ops](/docs/CS/Framework/Higress/Deployment_and_Ops.md)
-- [Architecture](/docs/CS/Framework/Higress/Architecture.md)
 - [Service Registry Internals](/docs/CS/Framework/Higress/Service_Registry_Internals.md)
 - [Certificates and ACME](/docs/CS/Framework/Higress/Certificates_and_ACME.md)
 - [Helm](/docs/CS/Container/k8s/Helm.md)

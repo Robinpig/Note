@@ -1,6 +1,6 @@
 ## Introduction
 
-Higress 有四种官方部署形态，但**它们不是"从重到轻"的同一条谱系**：云原生 Helm 是唯一被推荐用于生产的形态，其余三种官方都明确写着"没有大规模生产使用过"。这一页收命令、参数、升级顺序和"配置改了没生效"的定位手法。控制面本身的结构在 [Architecture](/docs/CS/Framework/Higress/Architecture.md)。
+Higress 有四种官方部署形态，但**它们不是"从重到轻"的同一条谱系**：云原生 Helm 是唯一被推荐用于生产的形态，其余三种官方都明确写着"没有大规模生产使用过"。这一页收命令、参数、升级顺序和"配置改了没生效"的定位手法。控制面本身的结构在 [Higress Architecture](/docs/CS/Framework/Higress/Higress.md?id=architecture)。
 
 ## Four Forms
 
@@ -142,7 +142,6 @@ Istio / Envoy 的内核版本已不再是未决项——主仓 `.gitmodules` 把
 
 ## Links
 
-- [Architecture](/docs/CS/Framework/Higress/Architecture.md)
 - [Standalone and All-in-One](/docs/CS/Framework/Higress/Standalone_and_AllInOne.md)
 - [Certificates and ACME](/docs/CS/Framework/Higress/Certificates_and_ACME.md)
 - [Observability](/docs/CS/Framework/Higress/Observability.md)

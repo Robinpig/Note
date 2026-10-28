@@ -79,7 +79,7 @@ Caffeine 的甜点区一句话概括：**读多写少、数据能放进单机内
 - [Cache](/docs/CS/SE/Cache.md)
 - [JetCache](/docs/CS/SE/JetCache.md)
 - [Redis](/docs/CS/DB/Redis/Redis.md)
-- [LRU](/docs/CS/Algorithms/LRU.md)
+- [LRU](/docs/CS/Algorithms/systems/LRU.md)
 
 ## References
 

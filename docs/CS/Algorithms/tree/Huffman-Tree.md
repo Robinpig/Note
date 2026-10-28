@@ -126,6 +126,7 @@ $$L = \frac{1}{|S|}\sum_{i=1}^{n} f_i \, d_i = \frac{WPL(T)}{|S|}$$
 - [Tree](/docs/CS/Algorithms/tree/tree.md)
 - [heap](/docs/CS/Algorithms/struct/heap.md)
 - [Compress](/docs/CS/compress/Compress.md)
+- [JPEG](/docs/CS/Algorithms/JPEG.md)
 
 ## References
 

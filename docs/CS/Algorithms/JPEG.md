@@ -58,6 +58,7 @@ JPEG（Joint Photographic Experts Group）是最经典的**有损图像压缩**�
 ## Links
 
 - [Huffman Tree](/docs/CS/Algorithms/tree/Huffman-Tree.md) — 熵编码所用的最优前缀码
+- [Compress](/docs/CS/compress/Compress.md)
 - [Algorithms](/docs/CS/Algorithms/Algorithms.md)
 
 ## References

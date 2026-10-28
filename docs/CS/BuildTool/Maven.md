@@ -1,436 +1,110 @@
 ## Introduction
 
-Maven, a Yiddish word meaning accumulator of knowledge, began as an attempt to simplify the build processes in the Jakarta Turbine project.
-Maven's primary goal is to allow a developer to comprehend the complete state of a development effort in the shortest period of time.
-In order to attain this goal, Maven deals with several areas of concern:
-
-- Making the build process easy
-- Providing a uniform build system
-- Providing quality project information
-- Encouraging better development practices
-
-
-
-settings.xml 文件
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0" 
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 http://maven.apache.org/xsd/settings-1.0.0.xsd">
-
-    <!-- 本地仓库的位置 -->
-    <localRepository>${user.home}/.m2/repository</localRepository>
-  
-    <!-- Apache Maven 配置 -->
-    <pluginGroups/>
-    <proxies/>
-
-    <!-- 私服发布的用户名密码 -->
-    <servers>
-        <server>
-            <id>releases</id>
-            <username>deployment</username>
-            <password>He2019</password>
-        </server>
-        <server>
-            <id>snapshots</id>
-            <username>deployment</username>
-            <password>He2019</password>
-        </server>
-    </servers>
-    
-    <!-- 阿里云镜像 -->
-    <mirrors>
-        <mirror>
-            <id>alimaven</id>
-            <name>aliyun maven</name>
-            <!-- https://maven.aliyun.com/repository/public/ -->
-            <url>http://maven.aliyun.com/nexus/content/groups/public/</url>
-            <mirrorOf>central</mirrorOf>
-        </mirror>
-    </mirrors>
-
-    <!-- 配置: java8, 先从阿里云下载, 没有再去私服下载  -->
-    <!-- 20190929 hepengju 测试结果: 影响下载顺序的是profiles标签的配置顺序(后面配置的ali仓库先下载), 而不是activeProfiles的顺序 -->
-    <profiles>
-        <!-- 全局JDK1.8配置 -->
-        <profile>
-            <id>jdk1.8</id>
-            <activation>
-                <activeByDefault>true</activeByDefault>
-                <jdk>1.8</jdk>
-            </activation>
-            <properties>
-                <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-                <maven.compiler.source>1.8</maven.compiler.source>
-                <maven.compiler.target>1.8</maven.compiler.target>
-                <maven.compiler.compilerVersion>1.8</maven.compiler.compilerVersion>
-            </properties>
-        </profile>
-
-        
-        <!-- Nexus私服配置: 第三方jar包下载, 比如oracle的jdbc驱动等 -->
-        <profile>
-            <id>dev</id>
-            <repositories>
-                <repository>
-                    <id>nexus</id>
-                    <url>http://nexus.hepengju.cn:8081/nexus/content/groups/public/</url>
-                    <releases>
-                        <enabled>true</enabled>
-                    </releases>
-                    <snapshots>
-                        <enabled>true</enabled>
-                    </snapshots>
-                </repository>
-            </repositories>
-            <pluginRepositories>
-                <pluginRepository>
-                    <id>public</id>
-                    <name>Public Repositories</name>
-                    <url>http://nexus.hepengju.cn:8081/nexus/content/groups/public/</url>
-                </pluginRepository>
-            </pluginRepositories>
-        </profile>
-        
-        <!-- 阿里云配置: 提高国内的jar包下载速度 -->
-        <profile>
-            <id>ali</id>
-            <repositories>
-                <repository>
-                    <id>alimaven</id>
-                    <name>aliyun maven</name>
-                    <url>http://maven.aliyun.com/nexus/content/groups/public/</url>
-                    <releases>
-                        <enabled>true</enabled>
-                    </releases>
-                    <snapshots>
-                        <enabled>true</enabled>
-                    </snapshots>
-                </repository>
-            </repositories>
-            <pluginRepositories>
-                <pluginRepository>
-                    <id>alimaven</id>
-                    <name>aliyun maven</name>
-                    <url>http://maven.aliyun.com/nexus/content/groups/public/</url>
-                </pluginRepository>
-            </pluginRepositories>
-        </profile>
-
-    </profiles>
-    
-    <!-- 激活配置 --> 
-    <activeProfiles>
-        <activeProfile>jdk1.8</activeProfile>
-        <activeProfile>dev</activeProfile>
-        <activeProfile>ali</activeProfile>
-    </activeProfiles>
-</settings>
-```
+Maven 是 Java 生态事实上的标准构建工具。它的名字来自意第绪语，意为"知识的累积器"——这个双关很贴切：Maven 的目标不是跑得快，而是让任何一个接手的人**在最短时间内理解一个项目的完整状态**。
 
-## Dependency Mechanism
-
-### Transitive Dependencies
-
-Maven avoids the need to discover and specify the libraries that your own dependencies require by including transitive dependencies automatically.
-This feature is facilitated by reading the project files of your dependencies from the remote repositories specified.
-There is no limit to the number of levels that dependencies can be gathered from.
-A problem arises only if a cyclic dependency is discovered.
-
-With transitive dependencies, the graph of included libraries can quickly grow quite large.
-For this reason, there are additional features that limit which dependencies are included:
-
-- **Dependency mediation** - this determines what version of an artifact will be chosen when multiple versions are encountered as dependencies. Maven picks the "*nearest definition*".
-  That is, it uses the version of the closest dependency to your project in the tree of dependencies.
-  **Note that if two dependency versions are at the same depth in the dependency tree, the first declaration wins.**
-- **Dependency management** - this allows project authors to directly specify the versions of artifacts to be used when they are encountered in transitive dependencies or in dependencies where no version has been specified.
-- **Dependency scope** - this allows you to only include dependencies appropriate for the current stage of the build. This is described in more detail below.
-- **Excluded dependencies** - If project X depends on project Y, and project Y depends on project Z, the owner of project X can explicitly exclude project Z as a dependency, using the "exclusion" element.
-- **Optional dependencies** - If project Y depends on project Z, the owner of project Y can mark project Z as an optional dependency, using the "optional" element.
-
-Although transitive dependencies can implicitly include desired dependencies, it is a good practice to explicitly specify the dependencies your source code uses directly.
-This best practice proves its value especially when the dependencies of your project change their dependencies.
-Another reason to directly specify dependencies is that it provides better documentation for your project: one can learn more information by just reading the POM file in your project, or by executing mvn dependency:tree.
-
-### Dependency Scope
-
-Dependency scope is used to limit the transitivity of a dependency and to determine when a dependency is included in a classpath.
-
-There are 6 scopes:
-
-- **compile**
-  This is the default scope, used if none is specified. Compile dependencies are available in all classpaths of a project.
-  Furthermore, those dependencies are propagated to dependent projects.
-- **provided**
-  This is much like , but indicates you expect the JDK or a container to provide the dependency at runtime.
-  For example, when building a web application for the Java Enterprise Edition, you would set the dependency on the Servlet API and related Java EE APIs to scope because the web container provides those classes.
-  A dependency with this scope is added to the classpath used for compilation and test, but not the runtime classpath. It is not transitive.`compile``provided`
-- **runtime**
-  This scope indicates that the dependency is not required for compilation, but is for execution.
-  Maven includes a dependency with this scope in the runtime and test classpaths, but not the compile classpath.
-- **test**
-  This scope indicates that the dependency is not required for normal use of the application, and is only available for the test compilation and execution phases.
-  This scope is not transitive. Typically this scope is used for test libraries such as JUnit and Mockito.
-  It is also used for non-test libraries such as Apache Commons IO if those libraries are used in unit tests (src/test/java) but not in the model code (src/main/java).
-- **system**
-  This scope is similar to except that you have to provide the JAR which contains it explicitly.
-  The artifact is always available and is not looked up in a repository.`provided`
-- **import**
-  This scope is only supported on a dependency of type in the section.
-  It indicates the dependency is to be replaced with the effective list of dependencies in the specified POM's section.
-  Since they are replaced, dependencies with a scope of do not actually participate in limiting the transitivity of a dependency.`pom``<dependencyManagement>``<dependencyManagement>``import`
-
-Each of the scopes (except for ) affects transitive dependencies in different ways, as is demonstrated in the table below.
-If a dependency is set to the scope in the left column, a transitive dependency of that dependency with the scope across the top row results
-in a dependency in the main project with the scope listed at the intersection.
-If no scope is listed, it means the dependency is omitted.`import`
-
-
-| -        | compile    | provided | runtime  | test |
-| -------- | ---------- | -------- | -------- | ---- |
-| compile  | compile(*) | -        | runtime  | -    |
-| provided | provided   | -        | provided | -    |
-| runtime  | runtime    | -        | runtime  | -    |
-| test     | test       | -        | test     | -    |
-
-> [!Note]
->
-> It is intended that this should be runtime scope instead, so that all compile dependencies must be explicitly listed.
-> However, if a library you depend on extends a class from another library, both must be available at compile time. For this reason,
-> compile time dependencies remain as compile scope even when they are transitive.
-
-
-
-使用maven的配置从远程仓库下载jar包到本地仓库
-
-
-
-```shell
-mvn dependency:get -DgroupId=com.alibaba -DartifactId=fastjson -Dversion=1.2.70
-```
-
-
-
-## Lifecycle
-
-## Clean Lifecycle
-
-
-| Phase        | Description                                                   |
-| ------------ | ------------------------------------------------------------- |
-| `pre-clean`  | execute processes needed prior to the actual project cleaning |
-| `clean`      | remove all files generated by the previous build              |
-| `post-clean` | execute processes needed to finalize the project cleaning     |
-
-## Default Lifecycle
-
-
-
-
-| Phase                     | Description                                                                                                                                             |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `validate`                | validate the project is correct and all necessary information is available.                                                                             |
-| `initialize`              | initialize build state, e.g. set properties or create directories.                                                                                      |
-| `generate-sources`        | generate any source code for inclusion in compilation.                                                                                                  |
-| `process-sources`         | process the source code, for example to filter any values.                                                                                              |
-| `generate-resources`      | generate resources for inclusion in the package.                                                                                                        |
-| `process-resources`       | copy and process the resources into the destination directory, ready for packaging.                                                                     |
-| `compile`                 | compile the source code of the project.                                                                                                                 |
-| `process-classes`         | post-process the generated files from compilation, for example to do bytecode enhancement on Java classes.                                              |
-| `generate-test-sources`   | generate any test source code for inclusion in compilation.                                                                                             |
-| `process-test-sources`    | process the test source code, for example to filter any values.                                                                                         |
-| `generate-test-resources` | create resources for testing.                                                                                                                           |
-| `process-test-resources`  | copy and process the resources into the test destination directory.                                                                                     |
-| `test-compile`            | compile the test source code into the test destination directory                                                                                        |
-| `process-test-classes`    | post-process the generated files from test compilation, for example to do bytecode enhancement on Java classes.                                         |
-| `test`                    | run tests using a suitable unit testing framework. These tests should not require the code be packaged or deployed.                                     |
-| `prepare-package`         | perform any operations necessary to prepare a package before the actual packaging. This often results in an unpacked, processed version of the package. |
-| `package`                 | take the compiled code and package it in its distributable format, such as a JAR.                                                                       |
-| `pre-integration-test`    | perform actions required before integration tests are executed. This may involve things such as setting up the required environment.                    |
-| `integration-test`        | process and deploy the package if necessary into an environment where integration tests can be run.                                                     |
-| `post-integration-test`   | perform actions required after integration tests have been executed. This may including cleaning up the environment.                                    |
-| `verify`                  | run any checks to verify the package is valid and meets quality criteria.                                                                               |
-| `install`                 | install the package into the local repository, for use as a dependency in other projects locally.                                                       |
-| `deploy`                  | done in an integration or release environment, copies the final package to the remote repository for sharing with other developers and projects.        |
-
-## Site Lifecycle
-
-
-| Phase         | Description                                                                                  |
-| ------------- | -------------------------------------------------------------------------------------------- |
-| `pre-site`    | execute processes needed prior to the actual project site generation                         |
-| `site`        | generate the project's site documentation                                                    |
-| `post-site`   | execute processes needed to finalize the site generation, and to prepare for site deployment |
-| `site-deploy` | deploy the generated site documentation to the specified web server                          |
-
-
-
-
-
-## Repository
-
- maven 默认是不下载 snapshot 包
-
-```xml
-<repositories>
-    <repository>
-        <id>nexus</id>
-        <url>http://localhost:18081/repository/maven-public/</url>
-        <releases>
-            <enabled>true</enabled>
-            <updatePolicy>always</updatePolicy>
-        </releases>
-        <snapshots>
-            <!--Download snapshot-->
-            <enabled>true</enabled>
-            <updatePolicy>always</updatePolicy>
-        </snapshots>
-    </repository>
- </repositories>
-```
-
-set profile
-
-```xml
-<profiles>
-    <profile>
-        <id>dev</id>
-        <activation>
-            <activeByDefault>true</activeByDefault>
-        </activation>
-        <properties>
-            <spring.profiles.active>dev</spring.profiles.active>
-            <bvpro.api.version>2.0.0-SNAPSHOT</bvpro.api.version>
-        </properties>
-    </profile>
-    <profile>
-        <id>prod</id>
-        <properties>
-            <spring.profiles.active>prod</spring.profiles.active>
-            <bvpro.api.version>1.9.0</bvpro.api.version>
-        </properties>
-        </properties>
-    </profile>
-</profiles>
-```
-
-
-
-
-
-## use
-
-### clean
-
-pre-clean
-clean
-清理上一次构建生成的文件
-post-clean
-
-### default
-
-validate
-
-compile
-编译项目的主源码
-src/mainj/java下的Java文件→主classpath目录
-test-compile
-编译项目的测试代码
-test
-使用单元测试框架运行测试
-测试代码不会打包或部署
-package
-编译好的代码，打包成可发布的格式
-jar、war
-install
-将包安装到本地仓库
-deploy
-最终的包复制到远程仓库
-
-## Mirrors
-
-> [aliyun Maven 镜像](https://developer.aliyun.com/mirror/maven)
-
-add mirror into `<mirrors></mirrors>` of `~/.m2/settings.xml`
-
-```xml
-<mirror>
-  <id>nexus-163</id>
-  <mirrorOf>*</mirrorOf>
-  <name>Nexus 163</name>
-  <url>http://mirrors.163.com/maven/repository/maven-public/</url>
-</mirror>
-```
-
-other proxy repos into `<repositories></repositories>` of `~/.m2/settings.xml`:
-
-```xml
-<repositories>
-  <repository>
-    <id>nexus-163</id>
-    <name>Nexus 163</name>
-    <url>http://mirrors.163.com/maven/repository/maven-public/</url>
-    <layout>default</layout>
-    <snapshots>
-      <enabled>false</enabled>
-    </snapshots>
-    <releases>
-      <enabled>true</enabled>
-    </releases>
-  </repository>
-</repositories>
-<pluginRepositories>
-<pluginRepository>
-  <id>nexus-163</id>
-  <name>Nexus 163</name>
-  <url>http://mirrors.163.com/maven/repository/maven-public/</url>
-  <snapshots>
-    <enabled>false</enabled>
-  </snapshots>
-  <releases>
-    <enabled>true</enabled>
-  </releases>
-</pluginRepository>
-</pluginRepositories>
-```
-
-## Test
-
-debug test
-
-```shell
-mvn test -Dmaven.surefire.debug
-```
-
-## Plugins
-
-## Tuning
-
-### Dependency Conflicts
-
-检查依赖
-```
-mvn -Dverbose dependency:tree
-```
-
-omitted for conflict with xx
-
-依赖冲突会常导致发生NoClassDefFoundError、NoSuchMethodException、IllegalAccessError等错误
-
-
-### Build Issues
-
-快照版本用于测试 因为MANIFEST.MF文件里的jar名字是快照版本携带时间戳 报错ClassNotFoundException
-
-<useUniqueVersions>false</useUniqueVersions>
+要理解 Maven，抓住三件事就够了：
+
+**第一，它是一份模型，不是一串脚本。** 所有行为都从 POM（Project Object Model）推导出来。POM 描述"我是什么、依赖什么、怎么构建"，Maven 据此决定"该做什么"。写 Maven 的技艺，本质是**写好一份能被机器正确理解的模型**。
+
+**第二，它的核心是依赖管理。** Maven 最有价值的贡献不是"能编译"，而是"依赖地狱"这个问题被解决了一大半——传递依赖自动引入、冲突按规则仲裁、版本由 `dependencyManagement` 统一。这套机制理解了，依赖相关的诡异报错就都能自己推演。
+
+**第三，它靠约定而非配置驱动。** Super POM 提供了默认的目录结构、仓库和插件绑定，因此"什么都不配也能构建"。但这个约定会随版本演进变化——**Maven 3.10.0 移除了 Super POM 里的默认 `pluginManagement`，等于明确要求：插件版本必须自己锁**。
+
+这个子树按"模型 → 依赖 → 生命周期 → 模块 → 仓库 → 发布 → 性能 → 迁移"的顺序展开，是一条从"为什么"到"怎么做"再到"未来会怎样"的路径。
+
+## Reading Path
+
+**第一次接触 Maven**，按顺序读 [Architecture](/docs/CS/BuildTool/Maven/Architecture.md) → [Dependency Resolution](/docs/CS/BuildTool/Maven/Dependency_Resolution.md) → [Lifecycle and Plugins](/docs/CS/BuildTool/Maven/Lifecycle_and_Plugins.md)。这三篇构成 Maven 的骨架：坐标与模型、依赖图、阶段与插件。
+
+**正在解决具体问题**，直接查对应分册：
+
+| 症状 | 去读 |
+| :--- | :--- |
+| `NoSuchMethodError` / `ClassNotFoundException` | [Dependency Resolution](/docs/CS/BuildTool/Maven/Dependency_Resolution.md) |
+| 改上游模块后下游还是旧行为 | [Multi-Module Reactor](/docs/CS/BuildTool/Maven/Multi_Module_Reactor.md) |
+| 依赖下载慢 / 走错仓库 / 凭据不生效 | [Repositories and Mirrors](/docs/CS/BuildTool/Maven/Repositories_and_Mirrors.md) |
+| 发布到 Central 失败 | [Publishing and Signing](/docs/CS/BuildTool/Maven/Publishing_and_Signing.md) |
+| 构建太慢 | [Performance and Troubleshooting](/docs/CS/BuildTool/Maven/Performance_and_Troubleshooting.md) |
+| 升级 Maven 报错 | [Maven 4 Migration](/docs/CS/BuildTool/Maven/Maven4_Migration.md) |
+
+## Core Concepts
+
+- **坐标（GAV）** —— `groupId:artifactId:version` 唯一标识一个制品，映射到本地仓库的目录结构；`classifier` 是挂在坐标下的第四维（sources / javadoc / 平台相关）；
+- **POM 与 Super POM** —— 每个 POM 隐式继承一份内置模型，提供默认目录、仓库与插件绑定；这是"约定优于配置"的物理载体；
+- **传递依赖与仲裁** —— 依赖自动传递，冲突取"最近路径"的版本而非最新版本，同深度时先声明者胜；
+- **依赖范围（scope）** —— compile / provided / runtime / test / system / import，同时决定传递性与 classpath 归属；
+- **dependencyManagement 与 BOM** —— 只声明版本不引入依赖；`import` 引入 BOM 让一组依赖版本保持互相兼容；
+- **生命周期与阶段** —— clean / default / site 三条生命周期；执行的是阶段，阶段触发插件 goal；`mvn dependency:tree` 这类直接调用 goal 的写法不触发任何前置阶段；
+- **Reactor** —— 一次构建内的所有项目构成 reactor，按依赖关系拓扑排序；reactor 内的依赖解析到当前构建产物，而非仓库里的旧版本；
+- **本地仓库即缓存** —— `~/.m2/repository` 是无需数据库的扁平缓存，删掉可完整重建；
+- **可重复构建** —— 禁用 LATEST / RELEASE / 版本区间 / 生产用 SNAPSHOT；Maven 3.10.0 起 Reproducible Builds 默认启用。
+
+## Version Baseline
+
+| 组件 | 版本 | 状态 | 运行要求 |
+| :--- | :--- | :--- | :--- |
+| Maven 4 | `4.0.0-rc-7`（2026-09-24） | RC，官方标注不适合生产 | JDK 17+ |
+| Maven 3 | `3.10.0`（2026-09-27） | **GA，生产首选** | JDK 8+ |
+| Maven 3 | `3.9.16`（2026-05-13） | GA，维护中 | JDK 8+ |
+| Maven 3.8.9 及更早 | — | **已 EOL** | — |
+| Maven Daemon | `mvnd` 1.0.3 | GA；2.x 预览 | — |
+| Maven Resolver | `2.0.24` | 3.10 与 4 共用 lineage | — |
+
+官方维护策略：**只维护最近两个 GA 系列的最新版本**；插件的 Maven API 兼容下限为 `3.9.0`。
+
+## Maven 3.10.0 值得单独记住
+
+3.10.0 是当前生产环境的落点，也是通向 Maven 4 的跳板。它做了一件容易被忽略但影响极深的事：**把 Maven 3 的内部实现向 Maven 4 对齐**——共用 Resolver 2.0、classpath 顺序改为 level-order、Super POM 移除默认 `pluginManagement`、默认编码改 UTF-8。
+
+两个必须知道的破坏性变更：
+
+1. **POM 校验从 WARNING 提升为 ERROR** —— 重复的 dependency / plugin 条目、非法版本字符、畸形 SNAPSHOT 版本现在直接让构建失败；
+2. **parent 的 `relativePath` 开始校验** —— 此前任何 Maven 3.x 都不校验。
+
+**结论**：升级到 3.10.0 的第一步是把所有插件版本显式锁死，第二步是清理重复声明。
+
+## Common Misconceptions
+
+| 误解 | 事实 |
+| :--- | :--- |
+| "Maven 4 已经 GA 了" | 截至 2026-10-27 最新是 `4.0.0-rc-7`，官方明确写 NOT safe for production |
+| "依赖冲突 Maven 选最高版本" | 选**最近路径**的版本（nearest wins），与 Gradle 相反 |
+| "`dependencyManagement` 会引入依赖" | 只声明版本，不引入 |
+| "配了 `pluginManagement` 插件就会执行" | `pluginManagement` 只提供版本与配置；执行需要写在 `plugins` 里 |
+| "release 仓库可以覆盖重发" | 通常拒绝；已发布版本不可变，只能发新版本 |
+| "OSSRH 还能用" | **2025-06-30 已关停**，现在是 Central Publisher Portal |
+| "`mvn test` 会跑集成测试" | `test` 只跑单元测试；集成测试在 `verify` 阶段（failsafe） |
+| "改了上游模块，下游自动用新的" | 仅在同一次 reactor 内成立；单模块构建会去仓库拿旧版本（用 `-am`） |
+
+## Comparison with Gradle
+
+| 维度 | Maven | Gradle |
+| :--- | :--- | :--- |
+| 配置形式 | 声明式 XML（pom.xml） | Groovy/Kotlin DSL |
+| 模型 | 固定生命周期 | 任务有向无环图（DAG） |
+| 增量构建 | 基本没有 | 输入/输出快照，未变任务跳过 |
+| 构建缓存 | 无 | 本地/远程 build cache |
+| 守护进程 | 无（有独立的 `mvnd`） | Gradle Daemon |
+| 依赖仲裁 | 最近路径优先 | 默认选最高版本 |
+| 多模块 | reactor 聚合 | 同构支持更灵活 |
+| 典型地盘 | 传统企业/后端 Spring Boot 主流 | Android、多模块大型项目 |
+
+两者不是"谁更先进"的竞争关系，而是**两种权衡**：Maven 牺牲构建速度换取了确定性与低学习成本，Gradle 用更高的复杂度换取增量与缓存能力。同一团队两者并用是常态。详见 [Build Tools](/docs/CS/BuildTool/BuildTools.md)。
 
 ## Links
 
-- [Build Tools](/docs/CS/BuildTool/BuildTools.md)
-- [Gradle](/docs/CS/BuildTool/Gradle.md)
+- [Architecture](/docs/CS/BuildTool/Maven/Architecture.md)
+- [Dependency Resolution](/docs/CS/BuildTool/Maven/Dependency_Resolution.md)
+- [Lifecycle and Plugins](/docs/CS/BuildTool/Maven/Lifecycle_and_Plugins.md)
+- [Multi-Module Reactor](/docs/CS/BuildTool/Maven/Multi_Module_Reactor.md)
+- [Repositories and Mirrors](/docs/CS/BuildTool/Maven/Repositories_and_Mirrors.md)
+- [Performance and Troubleshooting](/docs/CS/BuildTool/Maven/Performance_and_Troubleshooting.md)
 
 ## References
 
-1. [Calendar Versioning](https://calver.org/)
-2. [Aliyun Maven Mirror](https://developer.aliyun.com/mirror/maven)
+1. [Maven — Official Site](https://maven.apache.org/)
+2. [Maven — Guides](https://maven.apache.org/guides/)
+3. [Maven Releases History](https://maven.apache.org/docs/history.html)
+4. [Maven 3.10.0 Release Notes](https://maven.apache.org/docs/3.10.0/release-notes.html)
+5. [Maven — What's new in Maven 4](https://maven.apache.org/whatsnewinmaven4.html)
+6. [Central Portal — OSSRH Sunset](https://central.sonatype.org/pages/ossrh-eol/)

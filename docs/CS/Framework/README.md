@@ -33,6 +33,7 @@ digraph framework_index {
 - [Spring Boot](/docs/CS/Framework/Spring_Boot/Spring_Boot.md)：Boot 4.x 自动装配、内嵌服务器、starter、生产特性。
 - [Spring Cloud](/docs/CS/Framework/Spring_Cloud/Spring_Cloud.md)：Cloud 微服务组件（Gateway / OpenFeign / LoadBalancer / Config / Bus / Stream 等），常与 [Nacos](/docs/CS/Framework/nacos/README.md) 搭配。
 - [MyBatis](/docs/CS/Framework/MyBatis/MyBatis.md)：持久层框架，源码级解析 mapper、插件、动态 SQL 与一级/二级缓存。
+- [MyBatis-Plus](/docs/CS/Framework/MyBatis-Plus/MyBatis-Plus.md)：MyBatis 第三方增强（baomidou），自动注入单表 CRUD、分页 / 逻辑删除 / 多租户 / 代码生成；基线 3.5.18，编译锁定 mybatis 3.5.19。
 - [Hibernate](/docs/CS/Framework/Hibernate/Hibernate.md)：JPA 实现，实体映射与会话语义。
 
 ## Distributed Coordination and Service Registry
@@ -54,7 +55,7 @@ digraph framework_index {
 - [Seata](/docs/CS/Framework/Seata/Seata.md)：分布式事务（AT / TCC / XA）。
 - [HSF](/docs/CS/Framework/HSF/HSF.md)、[SOFARegistry](/docs/CS/Framework/SOFARegistry.md)：阿里 Sofas 中间件体系（RPC 框架与注册中心）。
 - [Hippo4j](/docs/CS/Framework/Hippo4j.md)：动态线程池与监控告警。
-- [Job（任务调度）](/docs/CS/Framework/Job/Job.md)：分布式任务调度枢纽——核心概念对齐（调度中心/执行器/路由/分片/阻塞/misfire）、四族演进与选型。成员：[Quartz](/docs/CS/Framework/Job/Quartz/Quartz.md)（内嵌库，[集群](/docs/CS/Framework/Job/Quartz/Clustering.md) 分册）、[xxl-job](/docs/CS/Framework/Job/xxl-job.md)（中心式平台，[执行器](/docs/CS/Framework/Job/xxl-job-executor.md) / [调度中心](/docs/CS/Framework/Job/xxl-job-scheduler.md) 分册）、[ElasticJob](/docs/CS/Framework/Job/ElasticJob.md)（去中心化 + ZK 分片）、[PowerJob](/docs/CS/Framework/Job/PowerJob.md)（调度 + MapReduce 计算 + Workflow），另有大数据工作流方向的 [DolphinScheduler](/docs/CS/Framework/Job/DolphinScheduler.md) 与云调度 [ScheduleX](/docs/CS/Framework/Job/ScheduleX.md)。跨语言与跨层（内核定时器、时间轮、MQ 延时消息、DB 自建延迟队列）的总览见 [Scheduled Task](/docs/CS/SE/Scheduled_Task.md)。
+- [Job（任务调度）](/docs/CS/Framework/Job/Job.md)：分布式任务调度枢纽——核心概念对齐（调度中心/执行器/路由/分片/阻塞/misfire）、四族演进与选型。成员：[Quartz](/docs/CS/Framework/Job/Quartz.md)（内嵌库，[集群](/docs/CS/Framework/Job/Quartz/Clustering.md) 分册）、[xxl-job](/docs/CS/Framework/Job/xxl-job.md)（中心式平台，[执行器](/docs/CS/Framework/Job/xxl-job/Executor.md) / [调度中心](/docs/CS/Framework/Job/xxl-job/Scheduler.md) / [触发链路](/docs/CS/Framework/Job/xxl-job/Trigger.md) 等十篇分册）、[ElasticJob](/docs/CS/Framework/Job/ElasticJob.md)（去中心化 + ZK 分片）、[PowerJob](/docs/CS/Framework/Job/PowerJob.md)（调度 + MapReduce 计算 + Workflow），另有大数据工作流方向的 [DolphinScheduler](/docs/CS/Framework/Job/DolphinScheduler.md) 与云调度 [ScheduleX](/docs/CS/Framework/Job/ScheduleX.md)。跨语言与跨层（内核定时器、时间轮、MQ 延时消息、DB 自建延迟队列）的总览见 [Scheduled Task](/docs/CS/SE/Scheduled_Task.md)。
 - [Workflow（工作流引擎）](/docs/CS/Framework/Workflow/Workflow.md)：BPMN 2.0 工作流引擎三强——[Flowable](/docs/CS/Framework/Workflow/Flowable.md)（轻量嵌入式、Apache 2.0、BPMN+CMMN+DMN）/ [Camunda](/docs/CS/Framework/Workflow/Camunda.md)（7 嵌入式+RDBMS 与 8/Zeebe 云原生双线，8 为 source-available 许可证）/ [Activiti](/docs/CS/Framework/Workflow/Activiti.md)（三者共同祖先，activiti-core/cloud 拆分）。三者共祖 Activiti 5、表前缀同为 `ACT_`，枢纽页给出血统、三向对比与选型指引；概念层与"与相关概念区分"见 [SE/Workflow](/docs/CS/SE/Workflow.md)。
 
 ## Networking and RPC

@@ -112,7 +112,6 @@ Helm 侧等价开关是 `higress-core.controller.automaticHttps.enabled`（默�
 - [AI Gateway](/docs/CS/Framework/Higress/AI_Gateway.md)
 - [Istio Security](/docs/CS/Framework/Istio/Security.md)
 - [Higress](/docs/CS/Framework/Higress/Higress.md)
-- [Architecture](/docs/CS/Framework/Higress/Architecture.md)
 
 ## References
 
