@@ -424,6 +424,7 @@ scheduler      TaintToleration 插件读 spec.taints 拒绝新 Pod 落入
 - [kubelet](/docs/CS/Container/k8s/kubelet.md)
 - [controller-manager](/docs/CS/Container/k8s/controller-manager.md)
 - [调度器](/docs/CS/Container/k8s/scheduler.md)
+- [PodDisruptionBudget](/docs/CS/Container/k8s/PDB.md)
 - [常见问题排查](/docs/CS/Container/k8s/Issues.md)
 
 ## References

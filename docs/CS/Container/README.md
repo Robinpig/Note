@@ -11,12 +11,14 @@
  ├── Docker (Docker/)
  │     ├── Docker.md —— 枢纽：定位、安装、架构、底层三机制与分册导航
  │     ├── 原理与运行时
- │     │     └── runtime.md —— OCI 规范、dockerd→containerd→shim→runc、rootless
+ │     │     ├── runtime.md —— OCI 规范、dockerd→containerd→shim→runc、rootless
+ │     │     └── rootless.md —— rootless 模式、userns 映射、Docker Desktop/WSL2
  │     ├── 镜像与构建
  │     │     ├── image.md —— 分层与内容寻址、registry、体积优化、供应链
  │     │     ├── registry.md —— OCI Distribution Spec、私有 registry、鉴权、GC、加速器
  │     │     ├── Dockerfile.md —— 指令语义、多阶段、BuildKit 缓存与 secret
- │     │     └── buildx.md —— 多平台构建、builder 实例、缓存导出、Bake
+ │     │     ├── buildx.md —— 多平台构建、builder 实例、缓存导出、Bake
+ │     │     └── buildkit.md —— 构建引擎：LLB / solver / worker / mount / 缓存模型
  │     ├── 数据与网络
  │     │     ├── storage.md —— volume/bind/tmpfs、overlay2 与 containerd snapshotter
  │     │     └── net.md —— bridge/host/container/none、端口发布、内嵌 DNS
@@ -53,13 +55,26 @@
        │     ├── etcd.md（存储分层）      acl.md（认证/授权/准入）
        │     ├── containerd.md（CRI 之下）  client-go.md（Informer）
        │     └── kubectl.md（CLI）
+       ├── 配置与安全
+       │     ├── Config.md（ConfigMap/Secret：注入、Immutable、etcd 加密）
+       │     ├── Resource.md（requests/limits、QoS、LimitRange、ResourceQuota）
+       │     └── NetworkPolicy.md（Pod 网络隔离：默认拒绝、ingress/egress）
        ├── 网络与流量
        │     ├── net.md（Pod 网络建立 + 数据面全链路）
        │     ├── Service.md（服务发现与四种类型）
        │     └── Ingress.md（七层路由与金丝雀）
        ├── 弹性与部署
        │     ├── Scaling.md（HPA/VPA/CA）  kubeadm.md
-       │     └── Helm.md  Issues.md（排障）
+       │     ├── Helm.md  Issues.md（排障）
+       │     └── Upgrade.md（升级与版本偏移）
+       ├── 运行时与网络
+       │     ├── CNI.md（CNI 插件对比：Flannel/Calico/Cilium）
+       │     ├── CRI-O.md（K8s 专用 CRI 运行时、与版本锁步）
+       │     └── DevicePlugin.md（GPU/设备插件、Extended Resource）
+       ├── 安全与可用性
+       │     ├── PodSecurity.md（PSS 三档、PSA 命名空间标签）
+       │     ├── PDB.md（自愿中断保护、minAvailable/maxUnavailable）
+       │     └── Events.md（Events 排障 vs Audit 合规）
        └── Pod.md —— 最小调度单元详解
 ```
 
@@ -82,6 +97,7 @@
 | 反推工具 | [Docker 工具](/docs/CS/Container/Docker/tools.md) | runlike 还原 run 命令、whaler/dive 还原镜像 |
 | 日志 | [Docker 日志](/docs/CS/Container/Docker/logging.md) | 两层日志模型、driver 全目录、轮转、dual logging |
 | 多平台构建 | [Docker Buildx](/docs/CS/Container/Docker/buildx.md) | builder 实例、QEMU 多架构、缓存导出、Bake、云构建 |
+| 构建引擎 | [BuildKit](/docs/CS/Container/Docker/buildkit.md) | LLB、solver、worker、mount 类型、内容寻址缓存 |
 | 生命周期 | [容器生命周期](/docs/CS/Container/Docker/lifecycle.md) | PID 1/僵尸、信号与优雅终止、重启策略、健康检查 |
 | 镜像仓库 | [Docker Registry](/docs/CS/Container/Docker/registry.md) | OCI Distribution Spec、私有 registry、鉴权、GC、加速器 |
 | 集群编排 | [Docker Swarm](/docs/CS/Container/Docker/swarm.md) | 服务/栈、overlay+routing mesh、与 K8s 对比 |
@@ -104,15 +120,27 @@
 | 安全 | [acl](/docs/CS/Container/k8s/acl.md) | 认证 → 授权 → 准入三道关卡 |
 | 身份与证书 | [Identity](/docs/CS/Container/k8s/Identity.md) | TLS bootstrap 鸡生蛋、CSR 审批与签发、证书 70%~90% 轮换、SA token |
 | 排障 | [Issues](/docs/CS/Container/k8s/Issues.md) | CrashLoopBackOff / Pending / NotReady 速查 |
+| 升级与版本偏移 | [Upgrade](/docs/CS/Container/k8s/Upgrade.md) | skew 政策、升级顺序、不可跳版本、etcd 快照 |
 | 包管理 | [Helm](/docs/CS/Container/k8s/Helm.md) | Chart / Release / values |
 | 编程接口 | [client-go](/docs/CS/Container/k8s/client-go.md) | Informer / ListAndWatch / workqueue |
+| 配置管理 | [ConfigMap/Secret](/docs/CS/Container/k8s/Config.md) | env/volume 注入、Immutable、etcd 静态加密、External Secrets |
+| 资源配额 | [Resource](/docs/CS/Container/k8s/Resource.md) | requests/limits、QoS、LimitRange、ResourceQuota |
+| 网络策略 | [NetworkPolicy](/docs/CS/Container/k8s/NetworkPolicy.md) | 默认拒绝、podSelector/ipBlock、ingress/egress、CNI 依赖 |
+| 无根运行 | [Docker rootless](/docs/CS/Container/Docker/rootless.md) | userns 映射、slirp4netns、Docker Desktop/WSL2 |
+| CNI 插件 | [CNI](/docs/CS/Container/k8s/CNI.md) | Flannel/Calico/Cilium 对比、BGP/eBPF、kube-proxy 替代 |
+| 运行时 | [CRI-O](/docs/CS/Container/k8s/CRI-O.md) | 专为 K8s 的 CRI 运行时、与 K8s 版本锁步、conmon |
+| 设备插件 | [Device Plugin](/docs/CS/Container/k8s/DevicePlugin.md) | GPU/FPGA 暴露、Extended Resource、NVIDIA |
+| 工作负载安全 | [Pod Security Standards](/docs/CS/Container/k8s/PodSecurity.md) | PSS 三档、PSA、替代 PSP |
+| 可用性预算 | [PDB](/docs/CS/Container/k8s/PDB.md) | 自愿中断保护、minAvailable/maxUnavailable |
+| 事件与审计 | [Events](/docs/CS/Container/k8s/Events.md) | Events 排障 vs Audit 合规、保留与脱敏 |
+| 服务网格（与 K8s 关系） | [Service Mesh](/docs/CS/Container/k8s/ServiceMesh.md) | Istio 长在 K8s 之上：webhook 注入、CRD、Gateway API、叠加网络栈 |
 
 ## Relationship with Other Areas
 
 - 容器隔离的根基在操作系统层：[Namespace](/docs/CS/OS/Linux/namespace.md)、[Cgroup](/docs/CS/OS/Linux/cgroup.md)、[LXC](/docs/CS/OS/Linux/LXC.md)
 - 容器网络底层：[Linux 网络](/docs/CS/OS/Linux/net/network.md)
 - K8s 的分布式系统设计思想可对照 [Borg](/docs/CS/Distributed/Borg.md)
-- 服务网格（Istio）建立在 K8s 之上：[Istio](/docs/CS/Framework/Istio/Istio.md)
+- 服务网格（Istio）建立在 K8s 之上，与 K8s 的耦合关系见 [Service Mesh](/docs/CS/Container/k8s/ServiceMesh.md)，详细架构与流量/安全/可观测见 [Istio](/docs/CS/Framework/Istio/Istio.md)
 
 ## Links
 

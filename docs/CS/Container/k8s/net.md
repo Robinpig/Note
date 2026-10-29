@@ -121,7 +121,7 @@ CNI 插件的核心工作可以拆成两件事：
 | 模式 | 常量 | 状态 |
 |------|------|------|
 | `iptables` | `ProxyModeIPTables` | Linux 默认 |
-| `ipvs` | `ProxyModeIPVS` | 可用，但有弃用倾向（KEP-5495） |
+| `ipvs` | `ProxyModeIPVS` | **v1.35 deprecated**（KEP-5495，详见 [kube-proxy](/docs/CS/Container/k8s/kube-proxy.md)） |
 | `nftables` | `ProxyModeNFTables` | v1.33 GA，需显式开启 |
 | `kernelspace` | `ProxyModeKernelspace` | Windows 专用 |
 
@@ -359,6 +359,7 @@ Docker 自带一套网络实现（CNM 模型 + docker0 网桥），但 K8s 不�
 - [Service](/docs/CS/Container/k8s/Service.md)
 - [Ingress](/docs/CS/Container/k8s/Ingress.md)
 - [Docker 网络](/docs/CS/Container/Docker/net.md)
+- [CNI 插件对比](/docs/CS/Container/k8s/CNI.md)
 - [常见问题排查](/docs/CS/Container/k8s/Issues.md)
 
 ## References

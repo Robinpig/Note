@@ -138,6 +138,17 @@ docker compose pull && docker compose up -d   # 更新镜像后重启
 
 `docker compose config` 是排查"变量没生效 / 缩进不对 / 覆盖没合并"的第一工具，它输出的就是 Compose 真正理解的配置。
 
+### 一次性与服务内命令
+
+```shell
+docker compose run --rm api sh            # 一次性命令，跑完即删（默认忽略 ports）
+docker compose run --rm -e DEBUG=1 api pytest
+docker compose wait api                   # 等某服务 healthy/running 再继续（脚本用）
+docker compose cp api:/var/log/app.log ./local.log   # 拷文件进出容器
+```
+
+`pull_policy`（服务级）控制 `up` 时是否拉新镜像：`always` / `missing` / `never` / `build`。
+
 ## 与 Dockerfile 的关系
 
 | 维度 | Dockerfile | Compose |
@@ -160,6 +171,186 @@ services:
     image: myapp/api:1.2.3    # 同时指定时，构建出的镜像打这个 tag
 ```
 
+## 进阶字段与开发闭环
+
+### networks 进阶
+
+默认网络之外，可声明自定义网络的细节：
+
+```yaml
+networks:
+  backend:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: br-backend
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+services:
+  api:
+    networks:
+      backend:
+        aliases: [api-svc]         # 同网络内额外 DNS 名
+        ipv4_address: 172.28.0.10  # 固定 IP（调试用）
+  db:
+    networks:
+      - backend
+```
+
+外部已存在的网络用 `external: true`（不创建、只接入）：
+
+```yaml
+networks:
+  existing_net:
+    external: true
+```
+
+容器名解析仍是 service 名；`aliases` 给同网络内额外别名。
+
+### volumes 进阶
+
+volume 也能 `external`（接入已有卷）或指定 driver：
+
+```yaml
+volumes:
+  pgdata:
+    external: true                 # 不创建，接入同名已有卷
+  ceph:
+    driver: rexray
+    driver_opts:
+      size: "10Gi"
+```
+
+### secrets 与 configs
+
+避免把密钥写进 `environment` 明文或 bake 进镜像，改为文件挂载（默认只读、0400，挂到 `/run/secrets/`）：
+
+```yaml
+services:
+  api:
+    secrets: [db_password, api_key]
+    environment:
+      DB_PASSWORD_FILE: /run/secrets/db_password   # 官方镜像认 *_FILE
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
+  api_key:
+    file: ./secrets/api_key.txt
+configs:
+  nginx_conf:
+    file: ./nginx/nginx.conf
+```
+
+PostgreSQL / MySQL 等官方镜像原生支持 `POSTGRES_PASSWORD_FILE` 这类 `_FILE` 变量从 secret 读。
+
+### extends 与 include
+
+**extends** 继承另一 service 的配置（同文件或跨文件），做 DRY：
+
+```yaml
+# common.yaml
+services:
+  base-web:
+    init: true
+    restart: unless-stopped
+# compose.yaml
+services:
+  api:
+    extends: { file: common.yaml, service: base-web }
+    image: myapi:2.1.0
+```
+
+限制：不能 extends 用 `depends_on` / `volumes_from` / `links` 的 service；顶层 `networks` / `volumes` 不继承。
+
+**include** 把多个 compose 文件合并成一个 stack（Compose Spec v5.0.0 稳定；用 OCI include 需 v2.40.2+ 以修 CVE-2025-62725 路径穿越）：
+
+```yaml
+include:
+  - infra/db.yaml
+  - oci://docker.io/org/stack:latest
+```
+
+`include` 比多 `-f` 更干净，适合「基础设施栈与应用栈分文件维护」。
+
+### GPU / devices
+
+单机用 GPU 走 `deploy.resources.reservations.devices`（2026 Spec 正式稳定，需 NVIDIA Container Toolkit）：
+
+```yaml
+services:
+  ml:
+    image: pytorch/pytorch:2.2.0-cuda12.1-cudnn8-runtime
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+```
+
+注意：`deploy.resources.limits` 单机不生效（见关键字段），但 `reservations.devices` 在 Compose 下生效。
+
+### develop / watch（开发热重载）
+
+`develop.watch`（Compose 2.22.0+）把「改代码 → 重建 / 同步」自动化（inner loop）：
+
+```yaml
+services:
+  web:
+    build: .
+    develop:
+      watch:
+        - action: sync        # 同步文件，不重建
+          path: ./src
+          target: /app/src
+        - action: rebuild      # 改了依赖则重建镜像
+          path: ./package.json
+```
+
+`action` 取值：`sync`（拷文件）、`rebuild`（重建镜像并重创容器）、`sync+restart`、`sync+exec`（同步后容器内跑命令，2.32+）、`restart`（2.32+）。`initial_sync` 在 `watch` 启动时先全量同步。开发期用 `docker compose watch` 启动。
+
+### lifecycle hooks（pre_start / post_start / pre_stop）
+
+Compose 5.3+ 支持生命周期钩子：`pre_start` 在 service 容器启动前跑一次性 init 容器（如数据库迁移），非零退出即中断启动；`post_start` / `pre_stop` 在已运行容器内执行命令。
+
+```yaml
+services:
+  api:
+    depends_on:
+      db: { condition: service_healthy }
+    pre_start:
+      - command: ["./manage.py", "migrate"]
+```
+
+### x- 扩展字段与 YAML anchors
+
+顶层 `x-` 开头的 key 被 Compose 忽略，配合 YAML anchors（`&` / `*`）做重复配置去重：
+
+```yaml
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+services:
+  api:
+    <<: *logging
+```
+
+### 安全基线：read_only + tmpfs
+
+把容器根文件系统挂只读、仅给少量 tmpfs 可写，缩小被入侵后的落脚点：
+
+```yaml
+services:
+  app:
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /run
+```
+
+> 这些进阶字段与 [Docker 安全](/docs/CS/Container/Docker/security.md) 的 capabilities / 非 root / seccomp 是同一套纵深防线的不同层。
+
 ## 能力边界
 
 Compose 的定位是**单机开发/小型部署**，明确不解决的问题：
@@ -177,6 +368,7 @@ Compose 的定位是**单机开发/小型部署**，明确不解决的问题：
 - [Docker 网络](/docs/CS/Container/Docker/net.md)
 - [Docker 存储](/docs/CS/Container/Docker/storage.md)
 - [Docker](/docs/CS/Container/Docker/Docker.md)
+- [BuildKit](/docs/CS/Container/Docker/buildkit.md)
 
 ## References
 

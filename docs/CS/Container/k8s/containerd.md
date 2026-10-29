@@ -145,6 +145,7 @@ kubelet
 - [Pod](/docs/CS/Container/k8s/Pod.md)
 - [Container](/docs/CS/Container/Container.md)
 - [Docker](/docs/CS/Container/Docker/Docker.md)
+- [CRI-O 运行时](/docs/CS/Container/k8s/CRI-O.md)
 - [Namespace](/docs/CS/OS/Linux/namespace.md)
 - [Cgroup](/docs/CS/OS/Linux/cgroup.md)
 - [容器定位](/docs/CS/Container/locate.md)

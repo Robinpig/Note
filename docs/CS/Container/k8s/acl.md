@@ -71,10 +71,64 @@ roleRef:
 
 ## Admission Control
 
-准入控制作用于"对象写入 etcd 之前"，可以**修改**请求（Mutating）或**拒绝**请求（Validating），按配置顺序串行执行：
+准入控制作用于"对象写入 etcd 之前"，可以**修改**请求（Mutating）或**拒绝**请求（Validating）：
 
 - 内置插件：`NamespaceLifecycle`（向不存在的 namespace 创建对象会被拒）、`ResourceQuota`（配额检查）、`LimitRanger`（注入默认资源限制）、`ServiceAccount`（自动挂载 SA token）等。
 - 动态扩展：**Admission Webhook**（MutatingWebhookConfiguration / ValidatingWebhookConfiguration），是 Istio sidecar 自动注入、OPA Gatekeeper 策略引擎的实现基础。
+
+在请求里的位置：认证与授权都在 filter chain 里完成，而准入发生在 **REST handler 内部**——对象解码之后、写 etcd 之前，且 mutating 与 validating 被拆在两处。完整链路见 [apiserver 写路径](/docs/CS/Container/k8s/apiserver.md?id=write-path)。
+
+### Execution Order Is a Table, Not Registration Order
+
+准入插件的执行顺序由一张**硬编码顺序表**决定（`pkg/kubeapiserver/options/plugins.go:74`）：
+
+```go
+// AllOrderedPlugins is the list of all the plugins in order.
+var AllOrderedPlugins = []string{
+	admit.PluginName,                        // AlwaysAdmit
+	lifecycle.PluginName,                    // NamespaceLifecycle
+	...
+	// new admission plugins should generally be inserted above here
+	// webhook, resourcequota, and deny plugins must go at the end
+	mutatingadmissionpolicy.PluginName,   // MutatingAdmissionPolicy
+	mutatingwebhook.PluginName,           // MutatingAdmissionWebhook
+	validatingadmissionpolicy.PluginName, // ValidatingAdmissionPolicy
+	validatingwebhook.PluginName,         // ValidatingAdmissionWebhook
+	resourcequota.PluginName,             // ResourceQuota
+	deny.PluginName,                      // AlwaysDeny
+}
+
+// :128
+// The order of registration is irrelevant, see AllOrderedPlugins for execution order.
+```
+
+三个结论：
+
+1. **注册顺序与执行顺序无关**，各插件包里 `Register` 的先后不影响任何事；
+2. **webhook、resourcequota、deny 必须排在最后**——表末尾的注释是给插件作者看的约束，因为配额检查必须看到对象被所有 mutating 改完后的最终形态；
+3. 新增插件原则上插到"webhook 之前"那一档，不能插到末尾。
+
+### Default On / Off
+
+默认开启集合同样是硬编码（`:170`），共 24 个，**其余全部默认关闭**。值得留意的两点：
+
+- `NodeRestriction` **不在默认开启集合里**。它是 kubelet 权限收敛的关键插件，实践中由发行版或 kubeadm 显式加上；如果自己拼 apiserver 启动参数而照抄"默认"，会漏掉它。
+- 一批插件即便进了默认开启集合，仍受 feature gate 二次控制，例如 `ValidatingAdmissionPolicy`、`MutatingAdmissionPolicy`、`PodResizeValidator`（`InPlacePodVerticalScaling`）、`JobValidation`（`WorkloadWithJob`）、`PodTopologyLabels`（`PodTopologyLabelsAdmission`）。**列在默认开启里不等于一定生效**，还要看 gate。
+
+v1.36 新增的准入插件：`PodGroupProtection`、`PodGroupWorkloadExists`、`NodeDeclaredFeatureValidator`、`JobValidation`、`PodResizeValidator`。
+
+## Authorization Chain Details
+
+多个 authorizer 组合成 union：任一返回 Allow 即放行，全部 NoOpinion 才算拒绝——**是并集不是交集**。所以加一个宽松的 webhook 会直接把已有的 RBAC 约束架空，这是配置多模式时最常见的翻车方式。
+
+被聚合的（delegated）apiserver 走 `DelegatingAuthorizationOptions`，其中几条默认值值得知道（`staging/src/k8s.io/apiserver/pkg/server/options/authorization.go:78`）：
+
+| 项 | 默认值 | 说明 |
+|---|---|---|
+| `AlwaysAllowPaths` | `/healthz`、`/readyz`、`/livez` | 探活接口免鉴权，否则 kubelet 探活自己会先被鉴权卡住 |
+| `AlwaysAllowGroups` | `system:masters` | 源码注释说明这是硬编码 authorizer，避免管理员把自己锁在门外 |
+| `AllowCacheTTL` / `DenyCacheTTL` | 10s / 10s | webhook 鉴权结果的缓存时长 |
+| `ClientTimeout` | 10s | 向 `SubjectAccessReview` 发起请求的超时 |
 
 ## Pod Access Control
 
@@ -82,9 +136,17 @@ Pod 内应用访问 apiserver 时默认携带挂载的 ServiceAccount token，�
 
 ## Links
 
-- [Kubernetes](/docs/CS/Container/k8s/K8s.md)
 - [apiserver](/docs/CS/Container/k8s/apiserver.md)
-- [etcd](/docs/CS/Container/k8s/etcd.md)
-- [K8s 架构与四条主链路](/docs/CS/Container/k8s/Architecture.md)
 - [身份与证书](/docs/CS/Container/k8s/Identity.md)
+- [Pod Security Standards](/docs/CS/Container/k8s/PodSecurity.md)
+- [ResourceQuota 与配额计量](/docs/CS/Container/k8s/Resource.md)
+- [K8s 架构与四条主链路](/docs/CS/Container/k8s/Architecture.md)
 - [Istio](/docs/CS/Framework/Istio/Istio.md)
+
+## References
+
+1. [Controlling Access to the Kubernetes API](https://kubernetes.io/docs/concepts/security/controlling-access/)
+2. [Using Admission Controllers](https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/)
+3. [Dynamic Admission Control](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/)
+4. [Using RBAC Authorization](https://kubernetes.io/docs/reference/access-authn-authz/rbac/)
+5. [Using Node Authorization](https://kubernetes.io/docs/reference/access-authn-authz/node/)

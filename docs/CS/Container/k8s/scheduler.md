@@ -62,6 +62,46 @@ NextPod(activeQ.pop)            阻塞取当前最优 Pod
 1. 绑定失败时显式 `Cache.ForgetPod` 回收；
 2. 每次 `UpdateSnapshot` 时调用 `forgetAllAssumedPods` 做兜底。
 
+主循环本体在 `pkg/scheduler/scheduler.go:546`，只有两个动作值得记住：
+
+```go
+go wait.UntilWithContext(ctx, sched.ScheduleOne, 0)   // :560
+```
+
+- 周期是 0，意味着 `ScheduleOne` 返回后立刻再调用——串行性由 `NextPod` 阻塞在队列上保证，而不是靠定时器；
+- 必须放进**独立 goroutine**。源码注释解释了原因：`ScheduleOne` 会挂在取 Pod 上，若放在 `Run` 自身所在的 goroutine，关闭时 `SchedulingQueue.Close()` 就永远等不到它返回，直接死锁。
+
+另外调度器给 Pod 装的是 **in-place informer**（`NewInformerFactory` → `newPodInformer`，`scheduler.go:578`）：informer 直接复用 apiserver 返回的对象指针而不额外拷贝，因为调度器只读不写。
+
+## Snapshot: Only the Changed Nodes Are Copied
+
+每个调度周期开头都要 `UpdateSnapshot`，但如果每轮都把几千个 NodeInfo 深拷贝一遍，开销不可接受。v1.36 的做法是**按 generation 增量更新**（`backend/cache/cache.go:190`）：
+
+```go
+for node := cache.headNode; node != nil; node = node.next {
+	if node.info.Generation <= snapshotGeneration {
+		// all the nodes are updated before the existing snapshot. We are done.
+		break
+	}
+	...
+	clone := node.info.SnapshotConcrete()
+	*existing = *clone
+}
+if cache.headNode != nil {
+	nodeSnapshot.generation = cache.headNode.info.Generation
+}
+```
+
+三个实现要点：
+
+1. cache 里的 NodeInfo 是一条**按修改时间排序的双向链表**，headNode 最新。一旦遇到 generation 不大于快照世代的节点，后面都不必再看——这就是为什么遍历能提前 break；
+2. 只有变化过的节点才 `SnapshotConcrete()` 深拷贝，其余保持原指针；
+3. 派生列表（全部节点列表、有亲和性 Pod 的节点列表、有 required anti-affinity 的列表、usedPVCSet）各自有独立的 dirty flag，按需重建而不是每轮重建。
+
+每次进入还会先 `forgetAllAssumedPods`（`:217`）——这就是上文说的 assumed pod 兜底点。
+
+结尾有一次一致性自检：`nodeInfoList` 长度与 `nodeTree.numNodes` 不相等时，记录 `snapshot state is not consistent ... trying to recover` 并返回 error，本轮调度失败。**看到这条日志说明 cache 与快照已经跑偏**，属于需要上报的实现问题，不是可忽略的告警。
+
 ## Scheduling Queue
 
 `PriorityQueue` 由三个部分组成（`backend/queue/scheduling_queue.go:172`）：
@@ -149,6 +189,56 @@ func (pl *PrioritySort) Less(pInfo1, pInfo2 fwk.QueuedPodInfo) bool {
 
 NodeResourcesFit 的默认策略是 `LeastAllocated`，资源权重为 `cpu:1, memory:1`。
 
+权重在装配期就做合法性校验（`framework/runtime/framework.go:574`）：weight 为 0 会被当作 1，且所有插件的 `weight * MaxScore` 之和不得超过 `MaxTotalScore`，否则构造失败——这条保证 TotalScore 始终在 int64 范围内且不溢出。
+
+## Scoring Pipeline
+
+打分不是一个函数，是**三段并行**（`framework/runtime/framework.go:1339` `RunScorePlugins`）：
+
+| 阶段 | 并行维度 | 做什么 |
+|---|---|---|
+| Score | 按**节点**并行 | 对每个节点跑所有 Score 插件 |
+| NormalizeScore | 按**插件**并行 | 仅对实现了 `ScoreExtensions()` 的插件执行 |
+| 加权求和 | 按**节点**并行 | `weightedScore := score * weight`，累加成 `TotalScore` |
+
+```go
+// framework/runtime/framework.go:1390
+f.Parallelizer().Until(ctx, len(plugins), func(index int) {
+	pl := plugins[index]
+	if pl.ScoreExtensions() == nil {
+		return          // 没实现归一化的插件直接跳过
+	}
+	...
+})
+```
+
+> [!TIP]
+> **归一化是插件自己的责任，框架不代劳。** 这是理解各插件分值量纲的关键：框架只保证 `Score` 的返回值落在 `[0, MaxNodeScore]`，至于插件内部打的是 0~1 还是 0~100，一概由插件自己 `NormalizeScore` 拉平。所以自定义插件忘了实现 `ScoreExtensions`，它的原始分会被直接乘以权重，很容易在总分里压过所有内置插件。
+
+最终选节点用了一个堆（`schedule_one.go:1086` `nodeScoreHeap`）：
+
+```go
+func (h nodeScoreHeap) Less(i, j int) bool {
+	return (h[i].TotalScore > h[j].TotalScore ||
+		(h[i].TotalScore == h[j].TotalScore && h[i].Randomizer > h[j].Randomizer))
+}
+```
+
+并列时用 `Randomizer` 而非节点名字典序打破——**同分节点是随机选的，不是稳定的**。
+
+两条短路值得记：
+
+1. 过滤后只剩一个可行节点时**完全不打分**，直接返回（`schedule_one.go:596` 注释 *When only one node after predicate, just use it*）；
+2. 一个 Score 插件都没配、也没有 extender 时，所有节点统一 `TotalScore: 1`（`schedule_one.go:959`），退化成"随便挑一个"。
+
+HTTP extender 的分数要换算到同一量纲（`schedule_one.go:1021`）：
+
+```go
+finalscore := score * weight * (fwk.MaxNodeScore / extenderv1.MaxExtenderPriority)
+```
+
+之所以要乘这个比例，是因为 extender 的量纲（MaxExtenderPriority）与调度框架的 `MaxNodeScore`（100）可以完全不同。extender 打分失败不致命——只记日志跳过，让内置插件继续决定。
+
 ## Preemption
 
 只有 PostFilter 阶段才会触发抢占。流程是六步：`PodEligibleToPreemptOthers` 过滤 → `findCandidates` → `callExtenders` → `SelectCandidate` → 执行驱逐 → 返回被提名节点。
@@ -159,6 +249,35 @@ NodeResourcesFit 的默认策略是 `LeastAllocated`，资源权重为 `cpu:1, m
 > 网上常说的 `VictimsElectorPolicy`（LeastVictims / NewerVictims）在 v1.36.4 中**不存在**。全仓检索零命中，`DefaultPreemptionArgs` 只有上述两个 MinCandidate 字段。victim 选择仍走 `SelectVictimsOnNode`，按"优先级降序、同优先级运行时长降序"排序，并配合 PDB 做分组豁免。
 
 抢占并不会真的驱逐 Pod，它只是给被抢占者标记 `nominatedNodeName` 并通过 apiserver 删除 victim；真正的驱逐由 apiserver + kubelet 完成。
+
+## Nominated Node and Nominator
+
+抢占留下的 `status.nominatedNodeName` 不只是给人看的字段，它在下一轮调度里被**当作优先路径**（`schedule_one.go:663`）：
+
+```go
+// "NominatedNodeName" can potentially be set in a previous scheduling cycle as a result of preemption.
+// This node is likely the only candidate that will fit the pod, and hence we try it first before iterating over all nodes.
+if len(pod.Status.NominatedNodeName) > 0 || len(nodeHint) > 0 {
+	feasibleNodes, err := sched.evaluateNominatedNode(ctx, pod, schedFramework, state, nodeHint, diagnosis)
+	...
+	if len(feasibleNodes) != 0 {
+		return feasibleNodes, diagnosis, nodeHint, nil   // 提名节点过关，跳过全量遍历
+	}
+}
+```
+
+`evaluateNominatedNode`（`:720`）只对这个单一节点跑 filter 与 extender。命中就直接返回，**省掉整轮全集群过滤**——抢占后大量 Pod 重试时，这条捷径的价值非常明显。
+
+几个 v1.36 的位置变化需要留意：
+
+| 项 | v1.36.4 实际 |
+|---|---|
+| nominator 归属 | 挂在 **SchedulingQueue** 上（`SchedulingQueue.AddNominatedPod`，`:388` `:1280`），不在 scheduler cache |
+| NNN 的写入时机 | 分两处：抢占后（`:1280`）与绑定周期里可选的"预期写入"（`:410`） |
+| 预期写入的用途 | 注释写明是给 **cluster autoscaler 之类的外部组件**看的：告诉它们这个 Pod 即将落到哪个节点 |
+| 写入条件 | `NominatingInfo.Mode() == fwk.ModeOverride` 且值与当前不同时才写（`:1330`） |
+
+`clearNominatedNode`（`:172`）是一个 `ModeOverride + 空名` 的组合，调度失败时用它把 NNN 显式清空——注意 Mode 必须是 Override，`ModeNoop` 表示"不要动这个字段"。
 
 ## Where Bind Lands
 
@@ -181,6 +300,15 @@ err := b.handle.ClientSet().CoreV1().Pods(binding.Namespace).Bind(ctx, binding, 
 | HardPodAffinityWeight | 1 | `apis/config/v1/defaults.go:190` |
 | VolumeBinding BindTimeoutSeconds | 600 | `apis/config/v1/defaults.go:196` |
 | MaxScore / MaxNodeScore | 100 | `staging/.../interface.go:329,321` |
+| 主循环周期 | 0（`wait.UntilWithContext` 立即循环） | `pkg/scheduler/scheduler.go:560` |
+
+另有三条结构性变化，与旧资料冲突较多：
+
+| 常见认知 | v1.36.4 实际 |
+|---|---|
+| nominator 在 scheduler cache 里 | 已移到 `SchedulingQueue.AddNominatedPod`，cache 中零命中 |
+| 框架统一归一化插件分值 | 不代劳，只调插件自己的 `ScoreExtensions().NormalizeScore` |
+| `UpdateSnapshot` 每轮全量拷贝 | 按 NodeInfo generation 增量拷贝，链表遍历可提前 break |
 
 Permit 上限 15min 常被误记成 30s 或 5min，这是校验卡住时的常见排查点。
 

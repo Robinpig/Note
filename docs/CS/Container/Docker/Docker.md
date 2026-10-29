@@ -248,6 +248,7 @@ Docker 的正文按主题拆成下面这些分册，每篇只负责自己的那�
 - [Container](/docs/CS/Container/Container.md)
 - [Kubernetes](/docs/CS/Container/k8s/K8s.md)
 - [Linux](/docs/CS/OS/Linux/Linux.md)
+- [Docker rootless](/docs/CS/Container/Docker/rootless.md)
 - [容器知识地图](/docs/CS/Container/README.md)
 
 ## References

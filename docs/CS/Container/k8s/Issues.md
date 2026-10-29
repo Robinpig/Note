@@ -122,5 +122,7 @@ DNS 类故障占比极高：`nslookup kubernetes.default` 从业务 Pod 内先�
 - [Service](/docs/CS/Container/k8s/Service.md)
 - [kubelet](/docs/CS/Container/k8s/kubelet.md)
 - [etcd](/docs/CS/Container/k8s/etcd.md)
+- [Upgrade](/docs/CS/Container/k8s/Upgrade.md)
+- [Events 与审计](/docs/CS/Container/k8s/Events.md)
 - [kubectl](/docs/CS/Container/k8s/kubectl.md)
 - [容器定位](/docs/CS/Container/locate.md)

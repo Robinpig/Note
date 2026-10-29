@@ -152,6 +152,7 @@ docker buildx build --builder cloud-<org>-default -t ... --push .
 - [Docker 镜像](/docs/CS/Container/Docker/image.md)
 - [Docker 运行时](/docs/CS/Container/Docker/runtime.md)
 - [Docker 工具](/docs/CS/Container/Docker/tools.md)
+- [BuildKit](/docs/CS/Container/Docker/buildkit.md)
 
 ## References
 

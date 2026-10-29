@@ -42,6 +42,91 @@ apiserver 会为每类资源维护一个 **watch cache**（`storage/cacher`）�
 
 `resourceVersion` 的语义要在这个前提下才说得通：它是 etcd 的单调 revision，但服务端可能在**内存缓存**上回答一段 RV 区间内的请求。什么时候能这么做、什么时候必须透传 etcd，以及 `410 Gone` 与 `504` 分别意味着什么，见 [watch cache 读路径底座](/docs/CS/Container/k8s/WatchCache.md)。
 
+## Key Layout and Encoding
+
+key 不是随机生成的，由 `etcd3store.go` 两层前缀拼出：
+
+```go
+// staging/src/k8s.io/apiserver/pkg/storage/etcd3/store.go:148
+func New(c *kubernetes.Client, compactor Compactor, codec runtime.Codec,
+	newFunc, newListFunc func() runtime.Object, prefix, resourcePrefix string, ...) (*store, error) {
+	// no-op for default prefix of '/registry'.
+	pathPrefix := path.Join("/", prefix)
+	...
+}
+```
+
+- `prefix` 是全局前缀，由 `--etcd-prefix` 控制（默认 `/registry`）；
+- `resourcePrefix` 是资源类型前缀，例如 `pods`、`secrets`；
+- 落库时 `prepareKey`（`:1116`）把三者拼成 `/registry/pods/default/my-pod`。
+
+于是 etcd 的一个 `WithPrefix()` range 就等价于"列出某类资源"，namespace 只是 key 路径中的一段——**K8s 的 namespace 隔离在存储层就是前缀隔离**，没有独立的表或租户概念。这也解释了为什么按 namespace 列出是高效操作，而按 label 列出只能全量拉回再在 apiserver 侧过滤。
+
+### Storage Media Type
+
+`--storage-media-type` 的**代码默认值是 `application/json`**（`staging/src/k8s.io/apiserver/pkg/server/options/etcd.go:81`），但落到具体某类资源用什么 codec，取决于该资源 store 构造时传入的 codec，而不是这个 flag 单独决定。这就是为什么直接 `etcdctl get` 常常看到二进制而非 JSON——内建资源用的是 protobuf 编解码。
+
+判断某类资源实际存成什么，只能看该资源的 store 构造，不能只看 flag。
+
+### Encryption at Rest
+
+> [!WARNING]
+> **默认不加密。** 静态加密必须显式提供 `EncryptionConfiguration` 并给资源指定 provider（默认 provider 是 identity，即原样存储）。etcd 备份或磁盘泄露时明文可读，这在多数发行版里都是需要主动加固的项。
+
+envelope（信封）加密的格式很紧凑（`storage/value/encrypt/envelope/envelope.go:81`）：
+
+```
+[ uint16 加密后 DEK 的长度 ][ 加密后的 DEK ][ 用该 DEK 加密的数据 ]
+```
+
+三个实现要点：
+
+1. **每条数据一个 DEK**：`TransformToStorage` 每次都 `generateKey(32)`（256 位）新生成，用 KEK（KMS 或本地密钥）加密后前置在密文里；
+2. **DEK 不是每条都去问 KMS**：已解密的 DEK 放在 LRU 缓存里（`cacheSize > 0` 时，`envelope.go:71`），读多写少的场景下 KMS 调用量远小于请求量；
+3. **长度前缀用 uint16 而不是 uint8**，因为 256 位密钥的长度放不进单字节（源码注释明确写了这个原因）。
+
+密钥轮换的实际效果是：新写入用新 KEK，旧数据仍用旧 KEK 解密，因此**必须保留旧密钥直到所有数据被重写**，通常需要跑一次全量 rewrite。
+
+## Compaction and the resourceVersion Lifecycle
+
+etcd 保留每个 key 的历史版本，revision 单调增长；`compact` 把某个 revision 之前的历史全部丢弃。三者串起来的关系是：
+
+```
+写入 → revision 递增 → watch 从任意历史 revision 续接
+                    → compact(rv) 之后 rv 之前的历史不可再读
+                    → 客户端拿着过旧 RV 来 watch → 410 Gone，只能重新 List
+```
+
+apiserver 侧由 `--etcd-compaction-interval` 控制压缩节奏（0 表示禁用；`etcd.go:193`）。压缩与 watch cache 的滑动窗口是两件事：compact 决定 etcd 里还能回溯多远，watch cache 决定 apiserver 内存里还能回溯多远——**客户端先撞到哪个，就先报哪个的错**。区分见 [watch cache 读路径底座](/docs/CS/Container/k8s/WatchCache.md)。
+
+## Lease and TTL
+
+etcd 的 lease 在 K8s 里用得非常克制：`store.Create` 只在 `ttl != 0` 时才申请（`etcd3store.go:301`），绝大多数资源 ttl 为 0，即永不自动过期。
+
+真正依赖它的是 Event——`lease_manager.go:53` 处的注释直接写着"since all the events have the same ttl"。问题是每个 Event 都 Grant 一次 lease 会打爆 etcd，所以有个复用机制（`lease_manager.go:90`）：
+
+```go
+reuseDurationSeconds := l.getReuseDurationSecondsLocked(ttl)   // min(ttl*5%, 60s)
+valid      := now.Add(ttl).Before(l.prevLeaseExpirationTime)
+sufficient := now.Add(ttl + reuseDurationSeconds).After(l.prevLeaseExpirationTime)
+if valid && sufficient && l.leaseAttachedObjectCount <= l.leaseMaxAttachedObjectCount {
+	return l.prevLeaseID, nil    // 复用上一个 lease
+}
+ttl += reuseDurationSeconds
+lcr, err := l.client.Lease.Grant(ctx, ttl)
+```
+
+即：复用窗口取 `min(ttl*5%, 60s)`（`defaultLeaseReuseDurationSeconds = 60`，`:29`），Grant 时额外多申请一段，且单个 lease 上挂载的对象数有上限。这样同一时刻产生的一批 Event 共享一个 lease，过期时间略晚于各自 ttl。
+
+> [!NOTE]
+> 注意区分两个"ttl"：这里是**etcd lease 的 TTL**，用于让 Event 自动消失；`Lease` 这个 K8s 资源（`coordination.k8s.io`）是节点心跳与 leader election 用的，两者完全不同。
+
+## Storage Version Migration
+
+同一资源会有多个 version（`v1`、`v1beta1`…），但 etcd 里只存**一个**——storage version。升级 K8s 时若 storage version 变了，已存在的数据仍是旧版本格式，需要迁移。
+
+APIService / CRD 的 `status.storageVersions` 记录各 apiserver 实例实际在用什么版本；v1.36 的 controller-manager 里新增了 `storageversionmigrator` 控制器来驱动改写。迁移本质是"读出来按新 storage version 写回去"，会产生大量写请求，因此必须在低峰期做，并先确认 etcd 有足够空间承接 compaction 前的版本堆积。
+
 ## Operations Key Points
 
 - **容量与压缩**：etcd 默认 2GB 告警 / 8GB 上限，MVCC 历史版本靠 [compact](/docs/CS/Framework/etcd/compact.md) 回收，K8s 的 apiserver 每 5 分钟自动 compaction 一次。
@@ -51,10 +136,17 @@ apiserver 会为每类资源维护一个 **watch cache**（`storage/cacher`）�
 
 ## Links
 
-- [watch cache 读路径底座](/docs/CS/Container/k8s/WatchCache.md)
-- [etcd](/docs/CS/Framework/etcd/etcd.md)
-- [etcd 目录索引（按层导航）](/docs/CS/Framework/etcd/README.md)
-- [MVCC](/docs/CS/Framework/etcd/MVCC.md)
-- [watch](/docs/CS/Framework/etcd/watch.md)
-- [client-go](/docs/CS/Container/k8s/client-go.md)
 - [apiserver](/docs/CS/Container/k8s/apiserver.md)
+- [K8s 架构与四条主链路](/docs/CS/Container/k8s/Architecture.md)
+- [etcd lease](/docs/CS/Framework/etcd/lease.md)
+- [etcd 安全](/docs/CS/Framework/etcd/security.md)
+- [etcd watch](/docs/CS/Framework/etcd/watch.md)
+- [容器知识地图](/docs/CS/Container/README.md)
+
+## References
+
+1. [kube-apiserver v1.36.4 source](https://github.com/kubernetes/kubernetes/tree/v1.36.4/cmd/kube-apiserver)
+2. [Operating etcd clusters for Kubernetes](https://kubernetes.io/docs/tasks/administer-cluster/configure-upgrade-etcd/)
+3. [Encrypting Secret data at rest](https://kubernetes.io/docs/tasks/administer-cluster/encrypt-data/)
+4. [Using a KMS provider for data encryption](https://kubernetes.io/docs/tasks/administer-cluster/kms-provider/)
+5. [etcd storage limits and options](https://etcd.io/docs/latest/op-guide/configuration/)

@@ -1765,6 +1765,9 @@ K8s 改变了传统的应用部署发布的方式，给容器化的应用服务�
 - [扩展机制](/docs/CS/Container/k8s/Extension.md)
 - [可观测性](/docs/CS/Container/k8s/Observability.md)
 - [GitOps 交付](/docs/CS/Container/k8s/GitOps.md)
+- [配置管理 ConfigMap/Secret](/docs/CS/Container/k8s/Config.md)
+- [资源模型 Resource](/docs/CS/Container/k8s/Resource.md)
+- [网络策略 NetworkPolicy](/docs/CS/Container/k8s/NetworkPolicy.md)
 - [容器知识地图](/docs/CS/Container/README.md)
 
 
