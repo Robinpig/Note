@@ -295,60 +295,287 @@ func createAggregatorServer(aggregatorConfig *aggregatorapiserver.Config, delega
 
 
 
+## Config Construction
+
+`CreateServerChain` 只展示了"用" Config 的那一瞬间，而 Config 本身的构建链更长。完整链路从 `app.NewConfig(opts)` 开始（`cmd/kube-apiserver/app/config.go:74`）：
+
+```
+NewConfig(opts CompletedOptions) *Config
+│
+├── controlplaneapiserver.BuildGenericConfig(opts, schemes, resourceConfig, openAPIDefinitions, informerName)
+│   ├── genericConfig = genericapiserver.NewConfig(codecs)
+│   ├── opts.GenericServerRunOptions.ApplyTo(genericConfig)      // FeatureGate, EffectiveVersion, RequestTimeout...
+│   ├── opts.SecureServing.ApplyToConfig(genericConfig)          // TLS, ListenAddr
+│   ├── versionedInformers = clientgoinformers.NewSharedInformerFactoryWithOptions(...)
+│   ├── opts.Features.ApplyTo(...)                               // APF, CBOR, CoordinatedLeaderElection...
+│   ├── opts.APIEnablement.ApplyTo(...)                         // MergedResourceConfig
+│   ├── opts.EgressSelector.ApplyTo(...)                        // 出口流量代理
+│   ├── storageFactoryConfig.New()                              // DefaultStorageFactory（etcd3 + 加密转换）
+│   ├── opts.Etcd.ApplyWithStorageFactoryTo(...)                 // etcd 连接、Transport
+│   ├── opts.Authentication.ApplyTo(...)                         // 📌 JWT/OIDC/X509/ServiceAccount/Webhook
+│   ├── BuildAuthorizer(...)                                     // 📌 RBAC/Node/Webhook 联合鉴权
+│   └── opts.Audit.ApplyTo(...)                                  // 审计后端 + 策略
+│
+├── CreateKubeAPIServerConfig(opts, genericConfig, versionedInformers, storageFactory)
+│   ├── capabilities.Setup()                                     // Privileged, MaxConnectionBytesPerSec
+│   ├── CreateProxyTransport()                                   // 连接 kubelet 的 Transport
+│   ├── CreatePeerEndpointLeaseReconciler() + BuildPeerProxy()   // 跨 apiserver 版本互操作
+│   └── controlplaneapiserver.CreateConfig(...)
+│       ├── NewStorageFactoryConfigEffectiveVersion().Complete().New()   // 每资源 etcd prefix / 编码策略
+│       ├── opts.Admission.ApplyTo(...)                          // 📌 Admission Chain 组装（见下）
+│       └── ServiceAccountIssuer / ClusterAuthenticationInfo
+│
+├── CreateAPIExtensionsConfig(...)    // 复用 genericConfig + 注入 apiextensions specific informers
+│
+└── CreateAggregatorConfig(...)       // 复用 genericConfig + 注入 apiregistration informers
+```
+
+这套设计的关键是 **三份 Config 共享同一个 `genericapiserver.Config`**。StorageFactory、Serializer、LoopbackClientConfig、Authentication/Authorization 全部只构建一次，然后三份子 Config 各自 `.Complete().New()` 出独立的 `GenericAPIServer` 实例。
+
+### Admission Assembly
+
+Admission chain 的组装发生在 `controlplaneapiserver.CreateConfig` → `opts.Admission.ApplyTo()`（`pkg/admission/config.go`）。内部流程：
+
+```
+1. plugins.RegisterAll(plugins.NewPluginInitializer(...)) — 注册 30+ 内置插件到 registry
+2. 从 kubeadm 风格配置或命令行 --admission-control-list 确定启用集
+3. 对每个启用插件：
+   ├── 构造 pluginInitializer 参数（Informers, LoopbackClientConfig, ServiceResolver）
+   └── plugin.New(initializers...)  // 传入运行时依赖
+4. admission.NewChainHandler(plugins...) → chainAdmissionHandler
+```
+
+`chainAdmissionHandler`（`staging/src/k8s.io/apiserver/pkg/admission/chain.go:23`）是最核心的类型：它实现 `admission.Interface`，内部是 `[]Interface`，对 `Admit()` 和 `Validate()` 分别遍历链，遇到首个 error 即返回。Webhook plugin 是其中一环——它内部再调 `WebhookClient.Dispatch()` 去打外部 HTTP endpoint。
+
+### GenericAPIServer Internals
+
+`completedConfig.New(name, delegationTarget)`（`staging/src/k8s.io/apiserver/pkg/server/config.go:787`）是三个 GenericAPIServer 的工厂：
+
+```go
+apiServerHandler := NewAPIServerHandler(name, c.Serializer, handlerChainBuilder, delegationTarget.UnprotectedHandler())
+
+s := &GenericAPIServer{
+    Handler:            apiServerHandler,
+    delegationTarget:   delegationTarget,
+    admissionControl:   c.AdmissionControl,
+    Authorizer:         c.Authorization.Authorizer,
+    LoopbackClientConfig: c.LoopbackClientConfig,
+    // ... healthz/openapi/storageVersion/lifecycleSignals/postStartHooks/preShutdownHooks ...
+}
+```
+
+`handlerChainBuilder` 是一个闭包，把 `DefaultBuildHandlerChain` 绑定到当前 Config 上——所以每个 server 实例都得到**自己的一套完整 filter chain**。
+
+#### APIServerHandler 结构
+
+`APIServerHandler`（`staging/src/k8s.io/apiserver/pkg/server/handler.go:42`）是请求真正进来的地方：
+
+```
+APIServerHandler.ServeHTTP(w, r)
+  └── FullHandlerChain.ServeHTTP(w, r)   // handlerChainBuilder(director) 产出的完整链
+        └── Director.ServeHTTP(w, r)     // 路由分发器
+              ├── GoRestfulContainer.Dispatch(w, r)   // 已注册的 /api, /apis/apps/v1 等 REST 路由
+              └── NonGoRestfulMux.ServeHTTP(w, r)    // 未匹配 → 可能是 delegation 下一跳 or 404
+```
+
+`Director` 的核心逻辑：遍历 `GoRestfulContainer` 的已注册 WebService，按路径前缀匹配（`strings.HasPrefix(path, ws.RootPath())`）。匹配到 → gorestful 处理；**没匹配到的 → NonGoRestfulMux**——这是 delegation 能工作的关键：上层 server 注册了 `/apis` 但没注册 `/apis/mycompany.com/v1`，所以请求自然"漏"到 NonGoRestfulMux，那里挂着下层 delegation target 的 handler。
+
+> [!TIP]
+> 代码注释里写了 **"Hopefully no API consumers will ever have to deal with this level of detail. I think we should consider completely removing gorestful."** —— gorestful 因为 openapi-swagger 生成的历史原因还在用，社区长期想换成纯 net/http 路由。
+
+#### API Installation
+
+API 安装分两层：Server 层的 `InstallAPIs`（Kube-specific，`pkg/controlplane/apiserver/apis.go:88`）和 GenericAPIServer 层的 `InstallAPIGroups` / `InstallLegacyAPIGroup`。
+
+```
+Server.InstallAPIs(restStorageProviders...)
+│
+├── GenericStorageProviders(...)          // 返回 StorageProvider 列表：core, authentication,
+│                                        // authorization, certificates, coordination, rbac,
+│                                        // flowcontrol, admissionregistration, events, ...
+│
+└── 遍历 providers:
+    ├── NewRESTStorage(resourceConfig, restOptionsGetter) → APIGroupInfo
+    │     每个 Provider.GroupName() + Scheme + VersionedResourcesStorageMap{version: {resource: rest.Storage}}
+    │
+    ├── 空 group ("") → GenericAPIServer.InstallLegacyAPIGroup("/api", apiGroupInfo)
+    │     // core/v1 Pod/Service/Node 走这里
+    │
+    └── 非空 group → 收集到 nonLegacy 列表，最后 InstallAPIGroups(nonLegacy...)
+          │
+          └── GenericAPIServer.InstallAPIGroups → InstallAPIGroup (逐个 GroupVersion)
+                │
+                └── newAPIGroupVersion → APIInstaller.Install()
+                      │
+                      └── GoRestfulContainer.Add(WebService{
+                            /apis/apps/v1/deployments → GET → handlers.GetResource
+                            /apis/apps/v1/deployments → POST → handlers.CreateResource
+                            /apis/apps/v1/deployments/{name} → PUT → handlers.UpdateResource
+                            /apis/apps/v1/deployments/{name} → DELETE → handlers.DeleteResource
+                            /apis/apps/v1/deployments/{name} → WATCH → handlers.WatchResource
+                            ...
+                        })
+```
+
+RESTStorageProvider 接口极简——只有 `GroupName()` 和 `NewRESTStorage()`。每个内置组（core、apps、batch...）都有对应的 `rest` 子包提供实现，内部用 `genericregistry.Store` + 特定 Strategy 组装。
+
+### PostStartHooks
+
+GenericAPIServer 的 `Run` 不会阻塞一切启动——`PrepareRun()` 装完 OpenAPI/healthz/readyz/statusz 后，`RunWithContext` 会启一个 goroutine 跑 `PostStartHook`（`server.PrepareRun → prepared.Run → 启动 hookContext.Done() 关闭时执行`）。`pkg/controlplane/apiserver/server.go:93` 中 Kube Server `New()` 注册了 8 个 hook：
+
+| Hook 名 | 何时跑 | 作用 |
+|---|---|---|
+| `start-system-namespaces-controller` | 可选（`--system-namespaces`） | 创建 kube-system 等系统 namespace |
+| `start-kube-apiserver-coordinated-leader-election-controller` | feature gate | 新版协调式 leader election，用 Lease/LeaseCandidate |
+| `peer-endpoint-reconciler-controller` | UnknownVersionInteroperabilityProxy | 跨 apiserver 版本互操作的 endpoint lease |
+| `mixed-version-proxy-handler` | 同上 | 缓存同步完成信号 |
+| `local-discovery-cache-sync` | 同上 | 本地 peer 发现循环 |
+| `peer-discovery-workers` | 同上 | peer 发现 + active GV tracker + refilter |
+| `start-cluster-authentication-info-controller` | 必选 | ClientCA / RequestHeaderCA 变更时刷新 |
+| `start-kube-apiserver-identity-lease-controller` | APIServerIdentity feature | 身份 lease（标记此 apiserver 正在运行） |
+| `storage-readiness` | WatchCacheInit feature | watch cache ready hook |
+| `start-legacy-token-tracking-controller` | 必选 | 跟踪 legacy token 使用 |
+
+这些 hook **在 HTTP server 开始接请求之后才执行**。`MuxAndDiscoveryComplete` signal 就是为了让在 hook 期间进来的请求返回 503——等待 informers 和 hooks 初始化完才能接正常流量。
+
 ## Write Path
 
 一个 `POST /api/v1/namespaces/default/pods` 从进来到落盘，要穿过两道结构：外层是上文的三层 delegation，内层是 GenericAPIServer 的 filter chain 加上 handler 到存储的路径。
 
-### filter chain Order
+### Complete Handler Chain
 
-`DefaultBuildHandlerChain` 位于 `staging/src/k8s.io/apiserver/pkg/server/config.go:1036`。它的写法是**自内向外**层层包裹，因此实际执行顺序与代码阅读顺序相反——从最后一个 return 往回推，才是请求真正流过的次序：
+`DefaultBuildHandlerChain` 位于 `staging/src/k8s.io/apiserver/pkg/server/config.go:1036`。它的写法是**自内向外**层层包裹（`handler = filter(handler)` 然后 return），因此实际执行顺序从 return 处反向推。以下表格按**请求进入时先遇到的 filter** 排序（即最外层 → 最内层 → 最终到达 Director）：
 
 | 执行序 | Filter | 源码行 | 要点 |
 |---|---|---|---|
-| 1 | `WithAuditInit` | `:1116` | 最外层，保证连 panic 的请求也能留下审计记录 |
-| 2 | `WithPanicRecovery` | `:1115` | 必须在 RequestInfo 之外，才能拿到 ns/resource 去写日志 |
-| 3 | `WithRequestInfo` | `:1112` | 解析出 verb / namespace / resource，后续一切依赖它 |
-| 4 | `WithRequestReceivedTimestamp` | `:1113` | 记录收到时刻，后面的 deadline 以它为起点算 |
-| 5 | `WithRequestDeadline` / `WithTimeoutForNonLongRunningRequests` | `:1090` `:1088` | 长跑请求（watch / exec）豁免超时，非长跑超时返回 504 |
-| 6 | `WithAuthentication` | `:1077` | 失败走 `failedHandler` 返回 401，不再往下走 |
-| 7 | `WithAudit` | `:1064` | 请求级三段审计（Request / Response / Panic） |
-| 8 | `WithConstrainedImpersonation` | `:1056` | 1.36 起默认开启，否则回落到旧 `WithImpersonation` |
-| 9 | `WithPriorityAndFairness` | `:1048` | 默认 APF；`FlowControl == nil` 时降级为 `WithMaxInFlightLimit` |
-| 10 | `WithAuthorization` | `:1040` | **最内层**，RBAC / Node / Webhook 联合判定 |
+| 1 | `WithAuditInit` | `:1114` | 最外层，向 context 注入 audit sink，保证连 panic 的请求也能留下审计记录 |
+| 2 | `WithPanicRecovery` | `:1113` | 捕获 handler 内部 panic，写错误响应 |
+| 3 | `WithMuxAndDiscoveryComplete` | `:1112` | 等待所有 delegation server 的路由注册信号，返回 503 |
+| 4 | `WithRequestReceivedTimestamp` | `:1111` | 记录收到时刻，后面的 deadline 以它为起点算 |
+| 5 | `WithRequestInfo` | `:1110` | 🔑 核心 filter：从 URL path 解析出 verb / namespace / resource / subresource / GVR → 写入 context。后续一切 filter 和 handler 都依赖它 |
+| 6 | `WithLatencyTrackers` | `:1103` | 延迟追踪器，记录各段耗时 |
+| 7 | `WithHTTPLogging` | `:1102` | HTTP 访问日志 |
+| 8 | `WithRetryAfter` | `:1100` | 优雅关闭期间给新请求返回 `Retry-After` header |
+| 9 | `WithHSTS` | `:1098` | 加 `Strict-Transport-Security` header |
+| 10 | `WithCacheControl` | `:1097` | 加 `Cache-Control: no-store` |
+| 11 | `WithProbabilisticGoaway` | `:1094` | 概率性 HTTP2 GOAWAY，驱动客户端重连做负载均衡 |
+| 12 | `WithWatchTerminationDuringShutdown` | `:1091` | 关闭时优雅终止 watch 请求 |
+| 13 | `WithWaitGroup` | `:1090` | 用 WaitGroup 追踪 in-flight 请求，优雅关闭时等待 drain |
+| 14 | `WithRequestDeadline` | `:1088` | 非长跑请求的 hard deadline（默认 `--request-timeout`），超时返回 504 |
+| 15 | `WithTimeoutForNonLongRunningRequests` | `:1086` | 把非长跑请求丢到单独 goroutine，主 goroutine 守超时（长跑请求 watch/exec/log/portforward 豁免） |
+| 16 | `WithWarningRecorder` | `:1082` | 让后续 handler 可以往 response 写 Warning header |
+| 17 | `WithCORS` | `:1078` | CORS 预检处理 |
+| 18 | `WithAuthentication` | `:1075` | 🔐 认证，失败走 `failedHandler` 返回 401（不再往下走） |
+| 19 | `WithTracing` | `:1072` | OpenTelemetry tracing（放在认证之后，因为需要 authenticated user 信息做采样决策） |
+| 20 | `WithAudit` | `:1064` | 请求级三段审计（Request / Response / Panic），有独立的 audit sink |
+| 21 | `WithConstrainedImpersonation` | `:1056` | 用户伪装，默认开启（否则回落 `WithImpersonation`） |
+| 22 | `WithPriorityAndFairness` | `:1048` | ⚖️ APF：按 FlowSchema + PriorityLevel 分类排队；没有 APF 时降级为 `WithMaxInFlightLimit` |
+| 23 | `WithAuthorization` | `:1040` | 🔑 鉴权，RBAC / Node / Webhook 联合判定，**链的最内层** |
+| → | `Director` | `handler.go:121` | 根据 path 前缀分发：匹配 gorestful registered webservice 则走 GoRestfulContainer，否则走 NonGoRestfulMux（委托链） |
 
 > [!TIP]
-> **APF 排在 Authorization 之前**。给请求分流只需要 user（来自认证）和 RequestInfo（来自上一层），完全不需要鉴权结果，所以先排队再鉴权。
+> **APF 排在 Authorization 之前**。给请求分流只需要 user（来自认证）和 RequestInfo（来自第 5 步），完全不需要鉴权结果，所以先排队再鉴权。这意味着 APF 的排队是所有请求的入口级保护，不依赖 RBAC。
 
-认证器本身是一条 union 链，按序尝试 requestheader、x509、token file、ServiceAccount、Bootstrap Token、JWT/OIDC、webhook。
+**认证器本身是一条 union 链**（`pkg/authentication/authenticatorfactory/delegating.go`），按序尝试 requestheader → x509 client cert → static token file → ServiceAccount JWT → Bootstrap Token → OIDC webhook token。第一个成功认证的就返回，不再往下尝试。
 
-### From handler to etcd
+delegation chain 中的**每个 server 都有自己的完整 handler chain**。一个请求最多穿过 3 次（aggregator → kube → apiextensions），每层都独立跑认证、鉴权、APF——这是灵活性（各层可以独立配置认证方式）换来的代价。
 
-路由装在 `endpoints/installer.go`，落入 `handlers.CreateResource` 之后：
+### Create Handler Deep Dive
+
+路由装在 `endpoints/installer.go`，落入 `handlers.CreateResource` 之后（`endpoints/handlers/create.go`）。以 v1.37.2 源码为准，调用链比上面那段简化图要密：
 
 ```
-CreateResource      解码 → 清系统字段 → managedFields 合并
-  mutating admission   按 AllOrderedPlugins 顺序修改对象
-    Store.Create       FillObjectMetaSystemFields（UID 在本地生成）
-      BeforeCreate     PrepareForCreate → Validate → validating admission
-        DryRunnableStorage → CacheDelegator → etcd3 store
+createHandler(r rest.NamedCreater, scope *RequestScope, admit admission.Interface)
+  │
+  ├── Namer.Name(req)                  // 从 path /apis/v1/namespaces/{ns}/{resource}/{name} 提取 namespace + name
+  ├── NegotiateOutputMediaType / NegotiateInputSerializer
+  ├── limitedReadBodyWithRecordMetric  // 读 body（带 MaxRequestBodyBytes 限制）
+  ├── Decode(body → scope.HubGroupVersion)   // JSON/YAML/Protobuf → runtime.Object；HubGroupVersion 转换
+  │     strict decoding 错误在 FieldValidationWarn 下退化为 warning
+  ├── WipeObjectMetaSystemFields       // 清空 UID/ResourceVersion/CreationTimestamp 等系统字段
+  ├── EnsureObjectNamespaceMatchesRequestNamespace
+  │
+  ├── admissionAttributes := admission.NewAttributesRecord(obj, nil, ..., admission.Create, ...)
+  │
+  └── finisher.FinishRequest(ctx, func() {   // 外层包装：统一错误处理 + DryRun 支持
+        ├── FieldManager.UpdateNoErrors(liveObj, obj, managerOrUserAgent(options.FieldManager, req.UserAgent()))
+        │     // 🔑 Server-Side Apply 的核心：把请求字段合并进 liveObj，更新 managedFields
+        │
+        ├── fieldmanager.NewManagedFieldsValidatingAdmissionController(admit)
+        │     // 再包一层 admission，专门管 managedFields 的合法性
+        │
+        ├── mutatingAdmission.Admit(ctx, admissionAttributes, scope)
+        │     // 按 AllOrderedPlugins 顺序修改对象（字段默认、自动注入、Webhook 回调）
+        │
+        ├── dedupOwnerReferencesAndAddWarning  // Webhook 改完对象后再去重 ownerReferences
+        │
+        └── r.Create(ctx, name, obj, rest.AdmissionToValidateObjectFunc(admit, admissionAttributes, scope), options)
+              │
+              └── genericregistry.Store.Create(ctx, key, obj, createValidation, options)
+                    ├── CreateStrategy.PrepareForCreate(ctx, obj)    // 业务层默认值/预处理（Pod 填充 HostIP 等）
+                    ├── obj = strategy.Validate(ctx, obj)            // 业务层校验
+                    ├── CreateStrategy.Warnings(ctx, obj)            // 1.37 新增：校验时产生 warning 写入 response header
+                    ├── admission.Validate(ctx, admissionAttr)       // ✅ validating admission（链中插件遍历，首个 error 返回）
+                    ├── DryRun 判断 → 直接返回 obj 不落库
+                    ├── storage.Create(ctx, key, obj, out, ttl)       // CacheDelegator → etcd3 Store
+                    ├── AfterCreate(ctx, obj, ...)                    // 可选 hook（BeginCreate/AfterCreate）
+                    └── return obj 或 409 Conflict
+    })
 ```
 
-注意两个容易含糊的点：
+注意三个关键设计点：
 
-1. **UID 不由 etcd 决定**，而是 apiserver 本地 `uuid.NewUUID()` 生成后再写入对象；
-2. **写请求完全绕过 watchCache**，`CacheDelegator.Create` 直接透传给底层 etcd3 store。watchCache 只服务于读和 watch。
+1. **mutating admission 发生在 FieldManager 之后**——这样 Webhook 看到的对象已经是 SSA 合并后的版本，Webhook 改完再做一遍 ownerReferences 去重；
+2. **Validate 不是单一调用**——Create handler 自己调 `CreateStrategy.Validate()` + admission 链里的 validating plugin 遍历，两层独立校验；
+3. **UID/ResourceVersion 由 apiserver 本地生成**，写入对象后再交给 etcd 存储。
 
-最终落库是一次 etcd 事务：
+### genericregistry.Store 结构
+
+所有内置资源的 REST 实现最终都指向 `staging/src/k8s.io/apiserver/pkg/registry/generic/registry/store.go` 的 `Store` 类型。它是一个嵌入结构：
+
+```go
+type Store struct {
+    RESTCreateStrategy  // 业务层策略：PrepareForCreate / Validate / Canonicalize
+    RESTUpdateStrategy  // PrepareForUpdate / ValidateUpdate / Validate
+    RESTDeleteStrategy  // ValidateDelete / PrepareForDelete / DeleteReturnsFinalState
+
+    NewFunc            // 创建空对象
+    NewListFunc        // 创建空 list
+    CreateStrategy     // 同时持有 create/update/delete 三份 Strategy
+
+    Storage            // 底层 storage.Storage（实际是 CacheDelegator 装饰过的 etcd3 Store）
+    DefaultQualifiedResource schema.GroupResource
+}
+```
+
+`Store.Create` 本身不关心 etcd 细节——它只负责调 Strategy 做业务处理、调 admission 做准入、调 `storage.Create` 做实际写入。`storage.Storage` 是接口，实现链是：
+
+```
+CacheDelegator (staging/.../storage/cacher/delegator.go)
+  └── Cacher (staging/.../storage/cacher/cacher.go)        // 内存缓存 + watch buffer
+        └── etcd3.Store (staging/.../storage/etcd3/store.go)  // 实际 etcd 客户端
+```
+
+写请求**完全绕过 Cacher**——`CacheDelegator.Create` 直接透传给底层 `etcd3.Store.Create`。Cacher 只服务于读和 watch。
+
+### etcd 事务与 Conflict
+
+最终落库是一次 etcd Compare-And-Swap 事务：
 
 ```go
 // staging/src/k8s.io/apiserver/pkg/storage/etcd3/store.go:317
 txnResp, err := s.client.Kubernetes.OptimisticPut(ctx, preparedKey, newData, 0,
-	kubernetes.PutOptions{LeaseID: lease})
+    kubernetes.PutOptions{LeaseID: lease})
 ...
 err = s.decoder.Decode(data, out, txnResp.Revision)
 ```
 
 创建时 `expectedRevision` 为 0，等价于 `Compare(ModRevision == 0)`，天然实现"key 不存在才写"，这就是 409 Conflict 的来源。
+
+更新路径走 `GuaranteedUpdate` + 同样的 Compare-And-Put，冲突后重试——**全程无锁**。每次重试会重新 Get 当前值、重新做 conversion/validation/strategy/prepare。
+
+> [!NOTE]
+> 删除走的是同一套 `GuaranteedUpdate` 与同一套 etcd 事务（`OptimisticDelete`，`staging/src/k8s.io/apiserver/pkg/storage/etcd3/store.go:434`），但语义完全不同：**一次 DELETE 通常不删任何东西**，只写 `metadata.deletionTimestamp`，真正的删除由 GC 与 kubelet 接力完成。这条反向链路见 [删除与级联](/docs/CS/Container/k8s/Deletion.md)。
 
 ### The Origin of resourceVersion
 
@@ -362,14 +589,9 @@ OptimisticPut → txnResp.Revision (= txnResp.Header.Revision)
 
 写之前 `PrepareObjectForStorage` 会把 RV 和 SelfLink 清空，所以 RV 只由 etcd 决定，客户端永远带不进来。
 
-更新路径走 `GuaranteedUpdate` + 同样的 Compare-And-Put，冲突后重试——**全程无锁**。
-
-> [!NOTE]
-> 删除走的是同一套 `GuaranteedUpdate` 与同一套 etcd 事务（`OptimisticDelete`，`staging/src/k8s.io/apiserver/pkg/storage/etcd3/store.go:434`），但语义完全不同：**一次 DELETE 通常不删任何东西**，只写 `metadata.deletionTimestamp`，真正的删除由 GC 与 kubelet 接力完成。这条反向链路见 [删除与级联](/docs/CS/Container/k8s/Deletion.md)。
-
 ### etcd Client Generation Upgrade
 
-v1.36 依赖 etcd **v3.6.8**，写操作从手写 `clientv3.Txn` 改为 kubernetes-mode client 的 `OptimisticPut`：
+v1.37.2 依赖 etcd **v3.6.8**，写操作从手写 `clientv3.Txn` 改为 kubernetes-mode client 的 `OptimisticPut`：
 
 ```go
 // vendor/go.etcd.io/etcd/client/v3/kubernetes/client.go:83
@@ -404,7 +626,8 @@ if opts.GetOnFailure {
 
 ## References
 
-1. [kube-apiserver v1.36.4 source](https://github.com/kubernetes/kubernetes/tree/v1.36.4/cmd/kube-apiserver)
-2. [Kubernetes API Concepts](https://kubernetes.io/docs/reference/using-api/api-concepts/)
-3. [API Access Control](https://kubernetes.io/docs/concepts/security/controlling-access/)
-4. [Dynamic Admission Control](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/)
+1. [kube-apiserver v1.37.2 source (本地仓库)](https://github.com/kubernetes/kubernetes/tree/v1.37.2/cmd/kube-apiserver)
+2. [apiserver ARCHITECTURE.md (staging)](https://github.com/kubernetes/kubernetes/blob/v1.37.2/staging/src/k8s.io/apiserver/ARCHITECTURE.md)
+3. [Kubernetes API Concepts](https://kubernetes.io/docs/reference/using-api/api-concepts/)
+4. [API Access Control](https://kubernetes.io/docs/concepts/security/controlling-access/)
+5. [Dynamic Admission Control](https://kubernetes.io/docs/reference/access-authn-authz/extensible-admission-controllers/)

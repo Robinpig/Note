@@ -1,13 +1,15 @@
 ## Introduction
 
-client-go是一个调用kubernetes集群资源对象API的客户端，即通过client-go访问 kube-apiserver 实现对kubernetes集群中资源对象（包括deployment、service、ingress、replicaSet、pod、namespace、node等）的增删改查等操作
-大部分对kubernetes进行前置API封装的二次开发都通过client-go这个第三方包来实现
+client-go 是 Kubernetes 官方 Go 客户端，核心职责是把 REST HTTP API 封装成一个**可复用的、支持多种客户端类型的、带本地缓存的**对象。它暴露四种高层客户端：
 
-client-go 支持四种客户端对象，分别是 `RESTClient`，`ClientSet`，`DynamicClient` 和 `DiscoveryClient`
-每种客户端适用的场景不同，主要是对 `HTTP Request` 做了层层封装
-其中，`RESTClient` 是最基础的客户端对象，它封装了 `HTTP Request`，实现了 `RESTful` 风格的 `API`
-`ClientSet` 基于 `RESTClient`，封装了对于 `Resource` 和 `Version` 的请求方法
-`DynamicClient` 相比于 `ClientSet` 提供了全资源，包括自定义资源的请求方法 `DiscoveryClient` 用于发现 `kube-apiserver` 支持的资源组，资源版本和资源信息
+```
+ClientSet        强类型，覆盖所有内置组/版本，编译期类型安全
+DynamicClient    弱类型（runtime.Unstructured），覆盖所有资源包括 CRD
+DiscoveryClient  发现 apiserver 支持哪些 GVR
+RESTClient       底层原语，以上三种都基于它
+```
+
+所有四种最终都收敛到同一条链路：`rest.Config → Transport → Request → http.Client`。Informer 机制则在 REST 层之上叠加了"List + Watch + 本地缓存 + 事件回调"这一整套声明式同步模式。
 
 ```mermaid
 strict digraph {
@@ -15,453 +17,474 @@ strict digraph {
     ClientSet -> RESTClient
     DynamicClient -> RESTClient
     DiscoveryClient -> RESTClient
-    RESTClient -> kubeconfig
+    RESTClient -> Request -> http.Client -> RoundTripper
+    RoundTripper -> tlsCache
+    RoundTripper -> [auth wrappers]
+    tlsCache -> rest.Config
+    [auth wrappers] -> rest.Config
+    rest.Config -> kubeconfig
 }
 ```
 
+## Configuration Loading
 
-kubeconfig用于管理访问kube-apiserver的配置信息
-默认情况下 kubeconfig存放在`$HOME/.kube/config`文件中
+client-go 的配置来自 `rest.Config`——但用户通常不直接构造它，而是通过三种标准入口加载：
 
+| 入口 | 适用场景 | 源码 |
+|---|---|---|
+| `clientcmd.BuildConfigFromFlags(masterUrl, kubeconfigPath)` | 大多数 kubectl 风格 CLI | `tools/clientcmd/client_config.go` |
+| `clientcmd.NewDefaultClientConfigLoadingRules().Load()` | 多配置文件优先级合并 | `tools/clientcmd/loader.go` |
+| `rest.InClusterConfig()` | Pod 内运行的应用 | `rest/config.go:275` |
+
+### Precedence 链
+
+`ClientConfigLoadingRules.Precedence` 是一个字符串 slice，默认为：
+
+```
+KUBERNETES_SERVICE_HOST / KUBERNETES_SERVICE_PORT → InCluster 分支
+  → KUBECONFIG 环境变量（可能多个，用 : 分隔）
+  → ~/.kube/config
+  → /etc/kubernetes/admin.conf
+```
+
+合并规则由 `tools/clientcmd/loader.go:Load()` 严格定义：
 
 ```go
-// veendor/k8s.io/client-go/tools/clientcmd/loader.go
-// Load starts by running the MigrationRules and then
-// takes the loading rules and returns a Config object based on following rules.
-//   if the ExplicitPath, return the unmerged explicit file
-//   Otherwise, return a merged config based on the Precedence slice
-// A missing ExplicitPath file produces an error. Empty filenames or other missing files are ignored.
-// Read errors or files with non-deserializable content produce errors.
-// The first file to set a particular map key wins and map key's value is never changed.
-// BUT, if you set a struct value that is NOT contained inside of map, the value WILL be changed.
-// This results in some odd looking logic to merge in one direction, merge in the other, and then merge the two.
-// It also means that if two files specify a "red-user", only values from the first file's red-user are used.  Even
-// non-conflicting entries from the second file's "red-user" are discarded.
-// Relative paths inside of the .kubeconfig files are resolved against the .kubeconfig file's parent folder
-// and only absolute file paths are returned.
-func (rules *ClientConfigLoadingRules) Load() (*clientcmdapi.Config, error) {
-	if err := rules.Migrate(); err != nil {
-		return nil, err
-	}
+// 1. Migrate() — 处理旧格式 kubeconfig
+// 2. 逐个 ReadConfigFile()，不存在的跳过，读失败的收集到 errlist
+// 3. map 字段（clusters/contexts/users）→ mergo.Merge 正向遍历，先到先赢
+// 4. struct 字段（current-context）    → mergo.Merge 反向遍历，后到覆盖
+// 5. ResolveLocalPaths() — 相对路径全部转绝对路径
+```
 
-	errlist := []error{}
+"先到先赢"只作用于 map——如果两个文件都定义了 `red-user`（map key），**第一个文件的值永不被覆盖**，哪怕第二个文件多了非冲突字段。这是 mergo 的默认行为，也是 kubeconfig 合并最容易踩坑的点。
 
-	kubeConfigFiles := []string{}
+### In-Cluster Config
 
-	// Make sure a file we were explicitly told to use exists
-	if len(rules.ExplicitPath) > 0 {
-		if _, err := os.Stat(rules.ExplicitPath); os.IsNotExist(err) {
-			return nil, err
-		}
-		kubeConfigFiles = append(kubeConfigFiles, rules.ExplicitPath)
+Pod 内的路径完全不同——不走 kubeconfig 文件，而是读取：
 
-	} else {
-		kubeConfigFiles = append(kubeConfigFiles, rules.Precedence...)
-	}
+- `/var/run/secrets/kubernetes.io/serviceaccount/token`   → BearerToken
+- `/var/run/secrets/kubernetes.io/serviceaccount/ca.crt`  → CAData
+- 环境变量 `KUBERNETES_SERVICE_HOST` + `KUBERNETES_SERVICE_PORT` → Host
 
-	kubeconfigs := []*clientcmdapi.Config{}
-	// read and cache the config files so that we only look at them once
-	for _, filename := range kubeConfigFiles {
-		if len(filename) == 0 {
-			// no work to do
-			continue
-		}
+这三项由 service account 的 admission controller 自动写入 Pod manifest（见 [准入控制](/docs/CS/Container/k8s/apiserver.md) 的 MutatingAdmissionWebhook）。
 
-		config, err := LoadFromFile(filename)
-		if os.IsNotExist(err) {
-			// skip missing files
-			continue
-		}
-		if err != nil {
-			errlist = append(errlist, fmt.Errorf("Error loading config file \"%s\": %v", filename, err))
-			continue
-		}
+## Transport Construction
 
-		kubeconfigs = append(kubeconfigs, config)
-	}
+`rest.TransportFor(config)` 是连接 apiserver 的 RoundTripper 工厂，内部组装链分三层：
 
-	// first merge all of our maps
-	mapConfig := clientcmdapi.NewConfig()
+```
+rest.Config.TransportConfig() → transport.Config → transport.New(cfg) → HTTPWrappersForConfig(cfg, rt)
+```
 
-	for _, kubeconfig := range kubeconfigs {
-		mergo.Merge(mapConfig, kubeconfig)
-	}
+### 底层 RoundTripper：tlsCache
 
-	// merge all of the struct values in the reverse order so that priority is given correctly
-	// errors are not added to the list the second time
-	nonMapConfig := clientcmdapi.NewConfig()
-	for i := len(kubeconfigs) - 1; i >= 0; i-- {
-		kubeconfig := kubeconfigs[i]
-		mergo.Merge(nonMapConfig, kubeconfig)
-	}
+`transport.New(config)`（`transport/transport.go:38`）第一步决定**基础 Transport**：
 
-	// since values are overwritten, but maps values are not, we can merge the non-map config on top of the map config and
-	// get the values we expect.
-	config := clientcmdapi.NewConfig()
-	mergo.Merge(config, mapConfig)
-	mergo.Merge(config, nonMapConfig)
+```go
+if config.Transport != nil {
+    rt = config.Transport                    // 用户直接传了 http.RoundTripper → 用它
+} else {
+    rt, err = tlsCache.get(config)           // 正常路径：走 TLS 缓存
+}
+return HTTPWrappersForConfig(config, rt)     // 再套一层认证/UA/Impersonate
+```
 
-	if rules.ResolvePaths() {
-		if err := ResolveLocalPaths(config); err != nil {
-			errlist = append(errlist, err)
-		}
-	}
-	return config, utilerrors.NewAggregate(errlist)
+`tlsCache`（`transport/cache.go`）是一个包级单例 `var tlsCache = newTlsCache()`，它缓存的是 **TLS 配置完全相同** 的 `http.Transport`，key 由 CA cert hash + client cert/key hash + serverName + insecure 拼接而成。缓存命中直接返回，不命中才新建 `http.Transport` + `tls.Config`。
+
+TLS 配置的关键默认值（`transport/transport.go:80`）：
+
+| 字段 | 值 |
+|---|---|
+| MinVersion | tls.VersionTLS12 |
+| InsecureSkipVerify | 来自 `Config.TLS.Insecure`（即 kubeconfig 的 `insecure-skip-tls-verify: true`） |
+| RootCAs | 来自 CAData 或 CAFile；两者都空时用系统默认 |
+| GetClientCertificate | 静态 cert/key 或 cachingCertificateLoader（每秒最多读一次磁盘） |
+
+### HTTPWrappersForConfig：认证/UA/Impersonate 层
+
+拿到底层 Transport 后，`HTTPWrappersForConfig`（`transport/round_trippers.go:41`）按**自内向外**的顺序包装——实际请求进来时先遇到的是最后一层 Impersonate，然后逐层下钻到底层 TLS Transport：
+
+```
+① config.WrapTransport(rt)          // 用户自定义 wrapper（最内层）
+② DebugWrappers(rt)                 // klog V(6) 以上才启用，加 httptrace 埋点
+③ 认证 wrapper（三选一，互斥）：
+   ├── NewBearerAuthWithRefreshRoundTripper   // 优先
+   ├── NewBasicAuthRoundTripper               // 回退
+   └── 都没有 → 裸 rt（x509 认证由 TLS 层承担，不在 HTTP 层）
+④ NewUserAgentRoundTripper          // 加 User-Agent: client-go/<version>
+⑤ NewImpersonatingRoundTripper      // 加 Impersonate-User / Impersonate-Group 等 headers
+```
+
+> [!TIP]
+> **Bearer Token 可以动态刷新**。`NewBearerAuthWithRefreshRoundTripper` 在 tokenFile 非空时构造 `CachedFileTokenSource`，用 `os.Stat().ModTime()` 检测文件变化（每秒最多一次），一旦变化就读取新 token。这对 mount 了 ServiceAccount token 的 Pod 很重要——kubelet 会定期轮换 token 文件。
+
+`WrapTransport` 是另一条可以插入自定义 wrapper 的入口，最终用 `Wrappers(fns ...)` 合成：
+
+```go
+func Wrappers(fns ...WrapperFunc) WrapperFunc {
+    return func(rt http.RoundTripper) http.RoundTripper {
+        base := rt
+        for _, fn := range fns {
+            if fn != nil { base = fn(base) }
+        }
+        return base
+    }
 }
 ```
 
-## Clients
+### 连接池参数
 
+Go 标准库 `http.Transport` 会从 `http.DefaultTransport` 复制默认值，client-go 没有显式覆盖这些（`transport/transport.go` 里没有改 MaxIdleConns 等字段）。所以**最终连接池参数就是 Go runtime 默认值**：
 
-### RESTClient
+| 参数 | Go 默认 |
+|---|---|
+| MaxIdleConns | 100 |
+| MaxIdleConnsPerHost | 2（Go 1.20 起变成基于 `Dial` 动态决定，可能更大） |
+| IdleConnTimeout | 90s |
+| TLSHandshakeTimeout | 10s |
+
+> [!WARNING]
+> 如果你在高 QPS 场景下观察到大量 TIME_WAIT 连接或新建连接延迟，问题可能就在 `MaxIdleConnsPerHost` 这个默认 2 上——client-go 没有调大它。解决办法是在 `rest.Config.WrapTransport` 里传入一个预配好连接池参数的 Transport。
+
+## RESTClient + Request
+
+拿到 `rest.Config` 后，`RESTClientFor(config)`（`rest/config.go`）组装最终产物：
 
 ```go
-// veendor/k8s.io/client-go/rest/config.go
-// RESTClientFor returns a RESTClient that satisfies the requested attributes on a client Config
-// object. Note that a RESTClient may require fields that are optional when initializing a Client.
-// A RESTClient created by this method is generic - it expects to operate on an API that follows
-// the Kubernetes conventions, but may not be the Kubernetes API.
+// rest/config.go:218
 func RESTClientFor(config *Config) (*RESTClient, error) {
-	if config.GroupVersion == nil {
-		return nil, fmt.Errorf("GroupVersion is required when initializing a RESTClient")
-	}
-	if config.NegotiatedSerializer == nil {
-		return nil, fmt.Errorf("NegotiatedSerializer is required when initializing a RESTClient")
-	}
-	qps := config.QPS
-	if config.QPS == 0.0 {
-		qps = DefaultQPS
-	}
-	burst := config.Burst
-	if config.Burst == 0 {
-		burst = DefaultBurst
-	}
-
-	baseURL, versionedAPIPath, err := defaultServerUrlFor(config)
-	if err != nil {
-		return nil, err
-	}
-
-	transport, err := TransportFor(config)
-	if err != nil {
-		return nil, err
-	}
-
-	var httpClient *http.Client
-	if transport != http.DefaultTransport {
-		httpClient = &http.Client{Transport: transport}
-		if config.Timeout > 0 {
-			httpClient.Timeout = config.Timeout
-		}
-	}
-
-	return NewRESTClient(baseURL, versionedAPIPath, config.ContentConfig, qps, burst, config.RateLimiter, httpClient)
+    baseURL, versionedAPIPath := defaultServerUrlFor(config)
+    transport := TransportFor(config)
+    var httpClient *http.Client
+    if transport != http.DefaultTransport || config.Timeout > 0 {
+        httpClient = &http.Client{Transport: transport, Timeout: config.Timeout}
+    }
+    return NewRESTClient(baseURL, versionedAPIPath, config.ContentConfig,
+        qps, burst, config.RateLimiter, httpClient)
 }
-
 ```
 
+关键：`versionedAPIPath` 由 `GroupVersion` 决定——Core 组是 `/api/v1`，apps 组是 `/apis/apps/v1`。RESTClient 只服务一个固定的 baseURL + versionedAPIPath + Serializer 组合，这就是为什么 ClientSet 需要为每个 GV 创建独立子 client。
+
+### Request 生命周期
+
+`RESTClient.Get().Namespace("default").Resource("pods").Do()` 是一条典型的 Request 构造链，最终走到 `request.Do()`：
 
 ```go
-
-// Do formats and executes the request. Returns a Result object for easy response
-// processing.
-//
-// Error type:
-//  * If the request can't be constructed, or an error happened earlier while building its
-//    arguments: *RequestConstructionError
-//  * If the server responds with a status: *errors.StatusError or *errors.UnexpectedObjectError
-//  * http.Client.Do errors are returned directly.
+// rest/request.go
 func (r *Request) Do() Result {
-	r.tryThrottle()
-
-	var result Result
-	err := r.request(func(req *http.Request, resp *http.Response) {
-		result = r.transformResponse(resp, req)
-	})
-	if err != nil {
-		return Result{err: err}
-	}
-	return result
+    r.tryThrottle()                              // rate limiter 扣 token
+    return r.request(func(req, resp) Result {
+        return r.transformResponse(resp, req)   // HTTP 响应 → Result
+    })
 }
 ```
 
-request
+`request()` 方法（`rest/request.go`）内部是一个带重试的循环：
 
-```go
-// request connects to the server and invokes the provided function when a server response is
-// received. It handles retry behavior and up front validation of requests. It will invoke
-// fn at most once. It will return an error if a problem occurred prior to connecting to the
-// server - the provided function is responsible for handling server errors.
-func (r *Request) request(fn func(*http.Request, *http.Response)) error {
-	//Metrics for total request latency
-	start := time.Now()
-	defer func() {
-		metrics.RequestLatency.Observe(r.verb, r.finalURLTemplate(), time.Since(start))
-	}()
-
-	if r.err != nil {
-		glog.V(4).Infof("Error in request: %v", r.err)
-		return r.err
-	}
-
-	// TODO: added to catch programmer errors (invoking operations with an object with an empty namespace)
-	if (r.verb == "GET" || r.verb == "PUT" || r.verb == "DELETE") && r.namespaceSet && len(r.resourceName) > 0 && len(r.namespace) == 0 {
-		return fmt.Errorf("an empty namespace may not be set when a resource name is provided")
-	}
-	if (r.verb == "POST") && r.namespaceSet && len(r.namespace) == 0 {
-		return fmt.Errorf("an empty namespace may not be set during creation")
-	}
-
-	client := r.client
-	if client == nil {
-		client = http.DefaultClient
-	}
-
-	// Right now we make about ten retry attempts if we get a Retry-After response.
-	// TODO: Change to a timeout based approach.
-	maxRetries := 10
-	retries := 0
-	for {
-		url := r.URL().String()
-		req, err := http.NewRequest(r.verb, url, r.body)
-		if err != nil {
-			return err
-		}
-		if r.ctx != nil {
-			req = req.WithContext(r.ctx)
-		}
-		req.Header = r.headers
-
-		r.backoffMgr.Sleep(r.backoffMgr.CalculateBackoff(r.URL()))
-		if retries > 0 {
-			// We are retrying the request that we already send to apiserver
-			// at least once before.
-			// This request should also be throttled with the client-internal throttler.
-			r.tryThrottle()
-		}
-		resp, err := client.Do(req)
-		updateURLMetrics(r, resp, err)
-		if err != nil {
-			r.backoffMgr.UpdateBackoff(r.URL(), err, 0)
-		} else {
-			r.backoffMgr.UpdateBackoff(r.URL(), err, resp.StatusCode)
-		}
-		if err != nil {
-			// "Connection reset by peer" is usually a transient error.
-			// Thus in case of "GET" operations, we simply retry it.
-			// We are not automatically retrying "write" operations, as
-			// they are not idempotent.
-			if !net.IsConnectionReset(err) || r.verb != "GET" {
-				return err
-			}
-			// For the purpose of retry, we set the artificial "retry-after" response.
-			// TODO: Should we clean the original response if it exists?
-			resp = &http.Response{
-				StatusCode: http.StatusInternalServerError,
-				Header:     http.Header{"Retry-After": []string{"1"}},
-				Body:       ioutil.NopCloser(bytes.NewReader([]byte{})),
-			}
-		}
-
-		done := func() bool {
-			// Ensure the response body is fully read and closed
-			// before we reconnect, so that we reuse the same TCP
-			// connection.
-			defer func() {
-				const maxBodySlurpSize = 2 << 10
-				if resp.ContentLength <= maxBodySlurpSize {
-					io.Copy(ioutil.Discard, &io.LimitedReader{R: resp.Body, N: maxBodySlurpSize})
-				}
-				resp.Body.Close()
-			}()
-
-			retries++
-			if seconds, wait := checkWait(resp); wait && retries < maxRetries {
-				if seeker, ok := r.body.(io.Seeker); ok && r.body != nil {
-					_, err := seeker.Seek(0, 0)
-					if err != nil {
-						glog.V(4).Infof("Could not retry request, can't Seek() back to beginning of body for %T", r.body)
-						fn(req, resp)
-						return true
-					}
-				}
-
-				glog.V(4).Infof("Got a Retry-After %s response for attempt %d to %v", seconds, retries, url)
-				r.backoffMgr.Sleep(time.Duration(seconds) * time.Second)
-				return false
-			}
-			fn(req, resp)
-			return true
-		}()
-		if done {
-			return nil
-		}
-	}
+```
+maxRetries = 10
+for {
+    url := r.URL().String()                              // 从 baseURL + path 拼接
+    req, _ := http.NewRequest(r.verb, url, r.body)       // body 已由 Request 自己管理
+    
+    req.Header = r.headers                                // Accept, Content-Type 等
+    req = req.WithContext(r.ctx)                          // 带 context
+    
+    resp, err := client.Do(req)                           // ← RoundTripper 包装链在这里生效
+    if err != nil {
+        if IsConnectionReset(err) && verb == "GET" {
+            resp = &http.Response{                        // GET 请求的 "connection reset" 特殊处理
+                StatusCode: 500, Header: Retry-After: 1s
+            }
+        }
+        if !IsConnectionReset(err) || verb != "GET" { return err }
+    }
+    
+    // 关键：无论 retry 与否，都要确保 resp.Body 被完整读取并关闭
+    // 否则 TCP 连接不会回收到连接池
+    defer func() {
+        if resp.ContentLength <= 2 << 10 {
+            io.Copy(Discard, &LimitedReader{resp.Body, N: 2KB})
+        }
+        resp.Body.Close()
+    }()
+    
+    seconds, wait := checkWait(resp)                      // 读 Retry-After header
+    retries++
+    if wait && retries < maxRetries {
+        if seeker, ok := r.body.(io.Seeker); ok {
+            seeker.Seek(0, 0)                             // body 可回退才能重试写操作
+        }
+        Sleep(Retry-After 秒)
+        continue
+    }
+    fn(req, resp)    // 最终处理
+    return nil
 }
 ```
+
+三个最容易忽略的点：
+
+1. **写请求只有 body 实现了 `io.Seeker` 才能重试**——`bytes.Buffer` 满足这个接口，但 `os.File` 不满足。所以如果你用文件对象当 POST body，遇到 `Retry-After` 就会直接失败。
+2. **Retry-After header 是 apiserver 在 APF 排队超时（503）或优雅关闭时返回的**，client-go 严格遵守它。
+3. **resp.Body 必须读完才 Close**——不读完的话 Go 认为"连接可能还有数据"，直接关掉而不是复用。这是"为什么你的 client 总是新建 TCP 连接"的常见原因。
+
+### URL 拼接
+
+URL 构造（`rest/request.go:URL()`）最终是 `r.URL().Path + query params`。各层逐步追加：
+
+```
+baseURL:     https://cluster.example.com
+  → + versionedAPIPath: /api/v1
+  → + Namespace:        /namespaces/default
+  → + Resource:         /pods
+  → + Name:             /my-pod
+  → + Query params:     ?limit=100&resourceVersion=12345
+```
+
+最终：`https://cluster.example.com/api/v1/namespaces/default/pods/my-pod?resourceVersion=12345`
+
+### 请求级 Headers
+
+`Request` 在 `newHTTPRequest()` 里设置这些 headers（在 RoundTripper 包装之前）：
+
+| Header | 值 | 来源 |
+|---|---|---|
+| Accept | `application/json, application/yaml, application/vnd.kubernetes.protobuf, application/appleprotobuf;stream=watch` | `ContentConfig.AcceptContentTypes` |
+| Content-Type | 与 Accept 匹配的首项 | 协商结果 |
+| User-Agent | `client-go/<git-version>`（可由 Config 覆盖） | RoundTripper 层追加 |
+| Authorization | `Bearer <token>` | RoundTripper 层追加 |
+| Impersonate-* | 用户伪装值 | RoundTripper 层追加 |
+
+## ClientSet vs DynamicClient
+
 ### ClientSet
 
-ClientSet 对比RESTClient使用更加便捷
+`k8s.io/client-go/kubernetes` 包是代码生成的强类型客户端，`NewForConfig(c *rest.Config)` 内部就是为每个 GV 调一次 `RESTClientFor`。`CoreV1Client` 就是最简单的一例：
 
 ```go
-func NewForConfig(c *rest.Config) (*CoreV1Client, error) {
-	config := *c
-	if err := setConfigDefaults(&config); err != nil {
-		return nil, err
-	}
-	client, err := rest.RESTClientFor(&config)
-	if err != nil {
-		return nil, err
-	}
-	return &CoreV1Client{client}, nil
+// kubernetes/clientset.go
+type CoreV1Client struct { restClient rest.Interface }
+func (c *CoreV1Client) Pods(namespace string) PodInterface {
+    return newPods(c, namespace)  // newPods 里再构造 Resource("pods") 请求
 }
 ```
-
-
-```go
-type Clientset struct {
-	*discovery.DiscoveryClient
-	admissionregistration *admissionregistrationinternalversion.AdmissionregistrationClient
-	core                  *coreinternalversion.CoreClient
-	apps                  *appsinternalversion.AppsClient
-	authentication        *authenticationinternalversion.AuthenticationClient
-	authorization         *authorizationinternalversion.AuthorizationClient
-	autoscaling           *autoscalinginternalversion.AutoscalingClient
-	batch                 *batchinternalversion.BatchClient
-	certificates          *certificatesinternalversion.CertificatesClient
-	events                *eventsinternalversion.EventsClient
-	extensions            *extensionsinternalversion.ExtensionsClient
-	networking            *networkinginternalversion.NetworkingClient
-	policy                *policyinternalversion.PolicyClient
-	rbac                  *rbacinternalversion.RbacClient
-	scheduling            *schedulinginternalversion.SchedulingClient
-	settings              *settingsinternalversion.SettingsClient
-	
-```
-
-
-CoreV1Client
-```go
-// CoreV1Client is used to interact with features provided by the  group.
-type CoreV1Client struct {
-	restClient rest.Interface
-}
-```
-CoreV1Interface中包含了各种kubernetes对象的调用接口，例如PodsGetter是对kubernetes中pod对象增删改查操作的接口。ServicesGetter是对service对象的操作的接口
-
-```go
-type CoreV1Interface interface {
-	RESTClient() rest.Interface
-	ComponentStatusesGetter
-	ConfigMapsGetter
-	EndpointsGetter
-	EventsGetter
-	LimitRangesGetter
-	NamespacesGetter
-	NodesGetter
-	PersistentVolumesGetter
-	PersistentVolumeClaimsGetter
-	PodsGetter
-	PodTemplatesGetter
-	ReplicationControllersGetter
-	ResourceQuotasGetter
-	SecretsGetter
-	ServicesGetter
-	ServiceAccountsGetter
-}
-
-
 
 ### DynamicClient
 
+DynamicClient（`client-go/dynamic/simple.go`）是一个基于 `RESTClient` + `DiscoveryClient` 的泛型客户端，核心差异是它的 **Resource() 接受 `schema.GroupVersionResource` 作为运行时参数**：
 
-
-## informer
-
-
-
-`informer` 机制的核心组件包括：
-
-```
-  Reflector
+```go
+// dynamic/simple.go
+func (c *simpleClient) Resource(resource schema.GroupVersionResource) NamespaceableResourceInterface {
+    return &dynamicResourceClient{restClientForResource(c, resource), resource, ...}
+}
 ```
 
-  : 主要负责两类任务：
+`restClientForResource` 会根据 GVR 拼装正确的 `versionedAPIPath`——它用 `DiscoveryClient.ServerGroups()` 找 group/version 的 API path（core 组是 `/api/v1`，其它是 `/apis/<group>/<version>`）。
 
-  1. 通过 `client-go` 客户端对象 list `kube-apiserver` 资源，并且 watch `kube-apiserver` 资源变更。
-  2. 作为生产者，将获取的资源放入 `Delta FIFO` 队列。
+DynamicInformers（`client-go/dynamic/dynamicinformer/informer.go`）更进一步：它用 `SharedInformerFactory` 为每个发现到的 GVR 创建 Informer 实例，这样一个 DynamicInformer 就能监听集群里**所有资源**的变更，包括运行时才装的 CRD。
 
+## Watch Chain
+
+Watch 是 client-go 到 apiserver 的长连接核心。它的链路从 `Request.Watch()` 开始，到 Reflector 的事件循环结束。
+
+### Request.Watch
+
+`rest/request.go:Watch(ctx)` 和 `Do()` 的关键差异：**Do 会 retry 写操作，Watch 不做 QPS 限流**（因为 watch 不是高频操作）。它直接发 `GET ?watch=true` 请求，收到 200 OK 后进入 `newStreamWatcher`：
+
+```go
+// rest/request.go:760
+func (r *Request) Watch(ctx context.Context) (watch.Interface, error) {
+    // 直接 client.Do，不走 rateLimiter
+    resp, err := r.c.Client.Do(req)
+    if err == nil && resp.StatusCode == 200 {
+        return r.newStreamWatcher(ctx, resp)   // ← 持有 resp.Body，不关闭
+    }
+    // retryable 错误（EOF, timeout）用 retryFn 重发
+}
+
+// rest/request.go:833
+func (r *Request) newStreamWatcher(ctx context.Context, resp *http.Response) (watch.Interface, error) {
+    // 1. Negotiator.StreamDecoder → framer.NewFrameReader(resp.Body)
+    //    framer 负责把 HTTP 响应体按帧切分（JSON 是按行，protobuf 是 varint 长度前缀）
+    frameReader := framer.NewFrameReader(resp.Body)
+    
+    // 2. streaming.NewDecoder → 每帧解出一个 watch.Event{}
+    watchEventDecoder := streaming.NewDecoder(frameReader, streamingSerializer)
+    
+    // 3. NewStreamWatcherWithLogger → 一个 goroutine 不停地 Read()，解出的事件写入 resultChan
+    return watch.NewStreamWatcherWithLogger(...,
+        restclientwatch.NewDecoder(watchEventDecoder, objectDecoder), ...), nil
+}
 ```
 
+注意 `resp.Body` 的生命周期——它**不在这里关闭**，而是由 StreamWatcher 内部的 goroutine 持有，持续读 JSON 行直到流关闭或出错。一旦连接断了（EOF 或 error），goroutine 会关闭 resultChan，Reflector 那边检测到 channel close 就知道该重连了。
 
-## Informer
+### Reflector 主循环
 
-> [!WARNING]
-> 以下描述基于 **DeltaFIFO**。从 **Kubernetes v1.36 起，默认队列已经换成 RealFIFO**（`InOrderInformers` 已 GA 且 LockToDefault，不可关闭），同一 key 的多次变更不再被合并。老的手写 informer 代码如果依赖"同一 key 只会被处理一次"的旧语义，行为会发生变化。详见下文「队列实现的变化」。
+Reflector（`tools/cache/reflector.go`）是 Informer 的数据入口，它在一个后台 goroutine 里跑 `RunWithContext`：
 
+```go
+// reflector.go:423
+func (r *Reflector) RunWithContext(ctx context.Context) {
+    r.delayHandler.Until(ctx, true, true, func(ctx) (bool, error) {
+        if err := r.ListAndWatchWithContext(ctx); err != nil {
+            r.watchErrorHandler(ctx, r, err)   // 指数退避后重进 ListAndWatch
+        }
+        return false, nil   // 永不返回
+    })
+}
+```
 
-在Informer架构设计中，有多个核心组件，分别介绍如下。 
+`delayHandler` 内部是标准的 800ms 起始、2x 乘、30s 封顶的指数退避，且有 "2 分钟没退过就 reset" 机制——这就是为什么集群恢复后 Reflector 很快就能追上来。
 
-1. Reflector 
-   Reflector用于监控（Watch）指定的Kubernetes资源，当监控的资源发生变化时，触发相应的变更事件，例如Added（资源添加）事件、Updated（资源更新）事件、Deleted（资源删除）事件，并将其资源对象存放到本地缓存DeltaFIFO中。 
-2. DeltaFIFO 
-   DeltaFIFO可以分开理解，FIFO是一个先进先出的队列，它拥有队列操作的基本方法，例如Add、Update、Delete、List、Pop、Close等，而Delta是一个资源对象存储，它可以保存资源对象的操作类型，例如Added（添加）操作类型、Updated（更新）操作类型、Deleted（删除）操作类型、Sync（同步）操作类型等。 
-3. Indexer 
-   Indexer是client-go用来存储资源对象并自带索引功能的本地存储，Reflector从DeltaFIFO中将消费出来的资源对象存储至Indexer。Indexer与Etcd集群中的数据完全保持一致。client-go可以很方便地从本地存储中读取相应的资源对象数据，而无须每次从远程Etcd集群中读取，以减轻Kubernetes API Server和Etcd集群的压力
+### ListAndWatch 主入口
 
+```go
+// reflector.go:470
+func (r *Reflector) ListAndWatchWithContext(ctx context.Context) error {
+    fallbackToList := !r.useWatchList
+    
+    // 路径 A: WatchList（流式 list，默认开启）
+    if r.useWatchList {
+        w, err = r.watchList(ctx)    // 内部已经把 snapshot 存进 store 了
+        if err != nil {
+            fallbackToList = true    // 服务端不支持就降级
+        }
+    }
+    
+    // 路径 B: 传统 List + Watch
+    if fallbackToList {
+        r.list(ctx)                  // 全量 List → store.Replace
+        w = nil                      // 后面的 watchWithResync 会重新建 Watch
+    }
+    
+    return r.watchWithResync(ctx, w)  // 开始增量 Watch + 后台 Resync
+}
+```
 
+两个路径的共同点是**最终都走到同一个增量 Watch 循环**——WatchList 只是省去了单独一次 list 请求，把"全量快照"合成事件流的形式通过同一条 watch 连接返回。
 
-Informer是一个持久运行的goroutine
+### WatchList 路径（流式 List）
 
-通过Informer机制可以很容易地监控我们所关心的资源事件，例如，当监控Kubernetes Pod资源时，如果Pod资源发生了Added（资源添加）事件、Updated（资源更新）事件、Deleted（资源删除）事件，就通知client-go，告知Kubernetes资源事件变更了并且需要进行相应的处理
+`watchList`（`reflector.go:804`）发的是一条特殊 Watch 请求：
 
+```go
+options := metav1.ListOptions{
+    ResourceVersion:      lastKnownRV,
+    AllowWatchBookmarks:  true,
+    SendInitialEvents:    ptr.To(true),               // 🔑 关键：告诉 apiserver 先把"当前全量"合成事件流回来
+    ResourceVersionMatch: metav1.ResourceVersionMatchNotOlderThan,
+    TimeoutSeconds:       &timeoutSeconds,
+}
+w, err = r.listerWatcher.WatchWithContext(ctx, options)
+```
 
+然后它用一个**临时 Store**（`NewStore(...)`）来收集事件，直到收到带 `k8s.io/initial-events-end` 注解的 **Bookmark** 事件：
 
-Informer是可以共享使用的 也称为Shared Informer 同一类资源Informer可以共享Reflector
+```go
+// handleListWatch 收到 Bookmark 时退出事件消费循环
+exitOnWatchListBookmarkReceived := true
+watchListBookmarkReceived, err := handleListWatch(..., exitOnWatchListBookmarkReceived=true, ...)
+if watchListBookmarkReceived { break }
 
-主要负责三类任务：
+// 成功拿到快照 → 替换正式 Store
+r.store.Replace(temporaryStore.List(), resourceVersion)
+// 然后继续复用同一个 w 做增量 Watch
+return w, nil
+```
 
-1. 作为消费者，将 `Reflector` 放入队列的资源拿出来。
-2. 将资源交给 `indexer` 组件。
-3. 交给 `indexer` 组件之后触发回调函数，处理回调事件。
+这就是为什么 WatchList 更高效——**一条 HTTP 连接同时承载了"全量同步"和"后续增量"两段职责**，省掉了传统路径里"先 List 再单独建 Watch"的第二次 TLS 握手和第二次请求开销。
 
-`Indexer`: `indexer` 组件负责将资源信息存入到本地内存数据库（实际是 `map` 对象），该数据库作为缓存存在，
-其资源信息和 `ETCD` 中的资源信息完全一致（得益于 `watch` 机制）。
-因此，`client-go` 可以从本地 `indexer` 中读取相应的资源，而不用每次都从 `kube-apiserver` 中获取资源信息
-这也实现了 `client-go` 对于实时性的要求。
+### 传统 list() 路径
 
+`list()`（`reflector.go:674`）的关键设计：
 
+1. **分页**：`pager.SimplePageFunc`，默认每次 500 条，但在 `ResourceVersion != ""` 时把 `PageSize = 0`——这是为了**强制从 watch cache 走**（带 `resourceVersion` 的 list 在 apiserver 侧会优先用 watch cache，不带 Limit 时一次性返回全量）。
+2. **资源版本过期处理**：如果 list 时带的 resourceVersion 被 etcd 截断（Expired / TooLarge），自动 fallback 到 RV="" 重走一次。
+3. **store.Replace**：拿到完整 list 后直接替换——不是 Update + Delete 对账，而是全量替换。这意味着旧对象整体被覆盖掉。
 
+### handleWatch 事件消费循环
 
+拿到 Watch 连接后，`watch()` 方法（`reflector.go:561`）进入**增量事件循环**：
 
-### Resync
+```go
+// reflector.go:620 → handleWatch
+for {
+    w, err := r.listerWatcher.WatchWithContext(ctx, options)   // WatchList 路径复用已有 w；传统路径新建
+    err = handleWatch(ctx, start, w, r.store, ...)             // 消费事件直到出错
+    w = nil                                                     // 触发下一次循环重建
+    
+    if isExpiredError(err) { ... }                              // RV 过期 → 重新 ListAndWatch
+    if IsTooManyRequests(err) { Sleep(backoff); continue }      // 429 退避重连
+    if IsInternalError(err) && retry.ShouldRetry() { continue } // 500 短暂重连
+    if errorStopRequested { return nil }                        // context 取消 → 干净退出
+}
+```
 
-Resync机制会将Indexer本地存储中的资源对象同步到DeltaFIFO中，并将这些资源对象设置为Sync的操作类型。Resync函数在Reflector中定时执行，它的执行周期由NewReflector函数传入的resyncPeriod参数设定
+`handleWatch` 内部是 `handleAnyWatch`（`reflector.go:972`）——就是一个简单的 `for-select` 消费 `w.ResultChan()`：
 
-> [!IMPORTANT]
-> resync 的真实语义极易被误解，有三点必须说清楚：
-> 
-> 1. **`Reflector.Resync` 不发起任何 apiserver 请求**，它只是调用 `store.Resync()`，把本地缓存里的对象重新投递一遍 Sync delta。最终 handler 收到的是 `OnUpdate(old, new)` 且 `old == new`。
-> 2. **周期性的全量 re-LIST 只在 watch 断连时发生**，与 resync 毫无关系。
-> 3. **`HasSynced()` 与 resync 完全无关**（源码注释里明确写了 "This is unrelated to 'resync'"），它标记的是本地缓存是否已经灌满第一轮数据。
-> 
-> 另外，resync 事件只会投递给**显式请求了 resync 的 handler**——分发时会按 listener 是否订阅来过滤。
-> kube-controller-manager 的 resync 周期实际落在 **12h~24h** 之间（`MinResyncPeriod` 默认 12h，`ResyncPeriod()` 里乘 `rand.Float64() + 1`，即因子落在 `[1, 2)`），刻意随机化以避免多个控制器 lock-step 同时打爆 apiserver。回源码核对：`cmd/kube-controller-manager/app/controllermanager.go:191`、`staging/src/k8s.io/controller-manager/config/v1alpha1/defaults.go:31`。
+```go
+loop:
+for {
+    select {
+    case event, ok := <-w.ResultChan():
+        if !ok { break loop }            // channel 关了 → watch 连接断了
+        switch event.Type {
+        case watch.Added:    store.Add(event.Object)
+        case watch.Modified: store.Update(event.Object)
+        case watch.Deleted:  store.Delete(event.Object)
+        case watch.Bookmark: setLastSyncResourceVersion(...)   // 只记 RV，不写 store
+        case watch.Error:    return apierrors.FromObject(event.Object)
+        }
+    case <-ctx.Done(): return errorStopRequested
+    case err := <-errCh: return err     // Resync 出错
+    }
+}
+```
 
-### Changes in Queue Implementation
+Watch 的超时处理：Reflector 每次建 Watch 时给 `TimeoutSeconds` 一个**随机值**（`[5min, 10min]`），目的是**让所有客户端的 watch 断开时刻错开**，避免在 apiserver 侧形成"watch 惊群"。apiserver 会在这个时间点主动关闭连接，客户端收到 channel close 就重连——如果数据正常流动，重连时带上的是**已推进的 LastSyncResourceVersion**，所以不会丢事件也不会重复处理。
 
-v1.36 最容易被忽略的底层改动：Informer 的队列从 `DeltaFIFO` 换成了 `RealFIFO`。选择逻辑在 `tools/cache/controller.go` 的 `newQueueFIFO` 里：
+### Resync 机制
+
+`watchWithResync` 在后台起一个 goroutine 跑 `startResync`：
+
+```go
+// reflector.go:514
+func (r *Reflector) startResync(ctx, errc) {
+    for {
+        <-r.clock.After(r.resyncPeriod)   // 到期
+        if r.ShouldResync == nil || r.ShouldResync() {
+            r.store.Resync()              // ← 只投 Sync delta，不碰 apiserver
+        }
+    }
+}
+```
+
+> [!TIP]
+> Resync **不发起任何 apiserver 请求**——它只是把本地缓存里的对象重新投递一遍，handler 收到的是 `OnUpdate(old, new)` 且 `old == new`。周期性全量 re-LIST 只在 watch 断连时发生，与 resync 无关。kube-controller-manager 默认 resync 周期 12h~24h（`MinResyncPeriod = 12h`，乘 `rand.Float64() + 1` 因子）。
+
+## Informer Architecture
+
+Informer 是一个持久运行的 goroutine，职责是**从队列取对象 → 存进 Indexer → 触发回调**。Reflector 只负责 List + Watch，它把事件塞进 **FIFO 队列**（DeltaFIFO 或 RealFIFO），Informer 则从队列另一端消费。
+
+### RealFIFO（当前默认）
+
+从 Kubernetes v1.36 起，**默认队列已经换成 RealFIFO**（`InOrderInformers` 已 GA 且 LockToDefault）。选择逻辑在 `tools/cache/controller.go` 的 `newQueueFIFO` 里：
 
 ```go
 if clientgofeaturegate.FeatureGates().Enabled(clientgofeaturegate.InOrderInformers) {
-	options := RealFIFOOptions{...}
-	if clientgofeaturegate.FeatureGates().Enabled(clientgofeaturegate.AtomicFIFO) {
-		options.AtomicEvents = true
-		options.UnlockWhileProcessing = ...
-	}
-	f := NewRealFIFOWithOptions(options)
+    options := RealFIFOOptions{...}
+    if clientgofeaturegate.FeatureGates().Enabled(clientgofeaturegate.AtomicFIFO) {
+        options.AtomicEvents = true
+        options.UnlockWhileProcessing = ...
+    }
+    f := NewRealFIFOWithOptions(options)
 } else {
-	f := NewDeltaFIFOWithOptions(...)   // 1.36 中此分支已不可达
+    f := NewDeltaFIFOWithOptions(...)   // 1.37 中此分支已不可达
 }
 ```
 
@@ -475,25 +498,9 @@ if clientgofeaturegate.FeatureGates().Enabled(clientgofeaturegate.InOrderInforme
 
 连带影响：默认路径下 `KnownObjects == nil`，DeltaFIFO 那套靠 knownObjects 做删除判定与去重的逻辑不再生效，改由 `reconcileReplacement` 在消费侧对账。
 
-### Evolution of Pull Methods: Streaming list
+### SharedInformer 与 ProcessorListener
 
-v1.36 另一处影响握手方式的改动是 **WatchList（流式 list）**：Reflector 不再"先 LIST 再 WATCH"，而是直接发一个 `watch=true` + `sendInitialEvents=true` 的请求，由服务端把"当前全量"作为一串合成的 ADDED 事件流回来，最后用一个带 `k8s.io/initial-events-end` 注解的 BOOKMARK 收尾。
-
-客户端侧由**独立的** `WatchListClient` gate 控制，1.35 起默认开启：
-
-| 层 | gate | v1.36 状态 |
-|---|---|---|
-| client-go | `WatchListClient` | Beta，默认 true |
-| kube-apiserver | `WatchList` | Beta，默认 true |
-
-判定逻辑只有两行（`tools/cache/reflector.go:361`）：gate 开着、且 listerWatcher 没声明"不支持该语义"。服务端不支持时会**自动回退**到传统 List 并打一条日志——生产集群里看到 "Falling back to regular list" 是正常现象，不是故障。
-
-两处容易搞错的细节：
-
-- `WatchListPageSize` 只影响传统 List 的分页，对流式 list **无效**（流式路径不设 `Limit`）。
-- 流式 list 收到结束 BOOKMARK 后会**复用同一条 watch 流**继续收增量，不重新建连。
-
-服务端如何合成这串事件、以及缓存层怎么服务这类请求，见 [watch cache 读路径底座](/docs/CS/Container/k8s/WatchCache.md)。
+**SharedInformerFactory** 让同一种资源的多个 Informer 实例**共享同一个 Reflector + 同一个 FIFO 队列 + 同一个 Indexer**，只有**回调监听器（ProcessorListener）** 各自独立。这个设计避免了"N 个控制器每个都独立 Watch Pod"这种浪费。
 
 ## WorkQueue
 
@@ -505,27 +512,25 @@ Informer 负责把数据搬到缓存并触发回调，**真正的业务解耦发
 核心是 `dirty` 与 `processing` 两个集合：
 
 ```go
+// queue.go:Add
 func (q *Type) Add(item interface{}) {
-	q.cond.L.Lock()
-	defer q.cond.L.Unlock()
-	if q.shuttingDown { return }
-	if q.dirty.Has(item) {            // 已在待处理集合 → 幂等丢弃
-		return
-	}
-	q.dirty.Insert(item)
-	if q.processing.Has(item) {       // 正在处理 → 只标脏，不入队
-		return
-	}
-	q.queue.Push(item)
-	q.cond.Signal()
+    q.cond.L.Lock()
+    defer q.cond.L.Unlock()
+    if q.shuttingDown { return }
+    if q.dirty.Has(item) { return }    // 已在待处理集合 → 幂等丢弃
+    q.dirty.Insert(item)
+    if q.processing.Has(item) { return } // 正在处理 → 只标脏，不入队
+    q.queue.Push(item)
+    q.cond.Signal()
 }
 
+// queue.go:Done
 func (q *Type) Done(item interface{}) {
-	q.processing.Delete(item)
-	if q.dirty.Has(item) {            // 处理期间又被标脏 → 重新入队
-		q.queue.Push(item)
-		q.cond.Signal()
-	}
+    q.processing.Delete(item)
+    if q.dirty.Has(item) {                // 处理期间又被标脏 → 重新入队
+        q.queue.Push(item)
+        q.cond.Signal()
+    }
 }
 ```
 
@@ -542,28 +547,28 @@ func (q *Type) Done(item interface{}) {
 
 退避序列为 `5ms × 2^(n-1)`，即 5ms → 10ms → 20ms → … → 82s。控制器通常设有最大重试次数（Deployment 为 15 次），超过才丢弃并记录 error。
 
-## reconcile Loop
+## Reconcile Loop
 
 把所有部件拼起来，就是几乎每个控制器都在复制的同一个模板：
 
 ```go
 func (dc *DeploymentController) processNextWorkItem(ctx context.Context) bool {
-	key, quit := dc.queue.Get()      // 阻塞取出一个 key
-	if quit { return false }
-	defer dc.queue.Done(key)         // 必须配对，否则该 key 永久锁死在 processing
-	err := dc.syncHandler(ctx, key)
-	dc.handleErr(ctx, err, key)
-	return true
+    key, quit := dc.queue.Get()      // 阻塞取出一个 key
+    if quit { return false }
+    defer dc.queue.Done(key)         // 必须配对，否则该 key 永久锁死在 processing
+    err := dc.syncHandler(ctx, key)
+    dc.handleErr(ctx, err, key)
+    return true
 }
 
 func (dc *DeploymentController) handleErr(ctx context.Context, err error, key string) {
-	if err == nil { dc.queue.Forget(key); return }
-	if dc.queue.NumRequeues(key) < maxRetries {
-		dc.queue.AddRateLimited(key)  // 带退避重新入队
-		return
-	}
-	utilruntime.HandleError(err)
-	dc.queue.Forget(key)              // 超过上限才放弃
+    if err == nil { dc.queue.Forget(key); return }
+    if dc.queue.NumRequeues(key) < maxRetries {
+        dc.queue.AddRateLimited(key)  // 带退避重新入队
+        return
+    }
+    utilruntime.HandleError(err)
+    dc.queue.Forget(key)              // 超过上限才放弃
 }
 ```
 
@@ -587,6 +592,7 @@ func (dc *DeploymentController) handleErr(ctx context.Context, err error, key st
 
 ## References
 
-1. [Kubernetes: client-go 源码剖析（一）](https://www.cnblogs.com/xingzheanan/p/17904625.html)
-2. [client-go v1.36.4 source](https://github.com/kubernetes/kubernetes/tree/v1.36.4/staging/src/k8s.io/client-go)
-3. [Kubernetes Controllers](https://kubernetes.io/docs/concepts/architecture/controller/)
+1. [client-go ARCHITECTURE.md](https://github.com/kubernetes/kubernetes/blob/v1.37.2/staging/src/k8s.io/client-go/ARCHITECTURE.md)
+2. [client-go v1.37.2 source (本地仓库)](https://github.com/kubernetes/kubernetes/tree/v1.37.2/staging/src/k8s.io/client-go)
+3. [KEP-3157 Watch-List](https://github.com/kubernetes/enhancements/tree/master/keps/sig-api-machinery/3157-watch-list)
+4. [Kubernetes Controllers](https://kubernetes.io/docs/concepts/architecture/controller/)
