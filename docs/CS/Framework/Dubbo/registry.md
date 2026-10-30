@@ -303,7 +303,7 @@ protected void notify(URL url, NotifyListener listener, List<URL> urls) {
 注册中心实现通用缓存机制 减小注册中心的流量压力
 
 
-服务初始化时会从本地磁盘文件中把持久化的注册数据读到Properties对象中 加载到内存缓存
+服务初始化时会从本地磁盘文件中把持久化的注册数据读到 Properties 对象中 加载到内存缓存
 ```java
     private void loadProperties() {
         if (file == null || !file.exists()) {
@@ -1029,7 +1029,7 @@ public void unsubscribe(URL url, NotifyListener listener) {
 > [!WARNING]
 > **本节基于 2.7.x 的 `NacosRegistry` 展开，3.3.6 的实现类已明显增多。** 3.3.6 的 `dubbo-registry-nacos` 目录下除 `NacosRegistry` / `NacosRegistryFactory` 外，还新增了四个类：`NacosServiceDiscovery` 与 `NacosServiceDiscoveryFactory`（应用级服务发现）、`NacosConnectionManager`（订阅与连接的集中管理）、`NacosAggregateListener`（监听聚合）、`NacosNamingServiceWrapper`（Nacos NamingService 适配层）。读下文代码时注意这些新增职责在 2.7.x 版本里是没有的。
 
-当Dubbo使用3.0.0及以上版本时，需要使用Nacos 2.0.0及以上版本。
+当 Dubbo 使用3.0.0及以上版本时，需要使用 Nacos 2.0.0及以上版本。
 
 服务名前缀为 providers: 的信息为服务提供者的元信息，consumers: 则代表服务消费者的元信息
 应用级服务发现的 “服务名” 为应用名
@@ -2421,9 +2421,68 @@ public class RegistryDirectory<T> extends DynamicDirectory<T> {
 ```
 
 
+## RegistryProtocol
+
+`org.apache.dubbo.registry.integration.RegistryProtocol` is the integration layer that wraps any `Protocol` implementation (e.g. `DubboProtocol`, `TripleProtocol`) and attaches registry behaviors — register / subscribe / override-subscribe — to the export and refer lifecycle. It is selected by the `registry` URL protocol parameter (see `RegistryFactory` SPI).
+
+### export: register provider and subscribe override rules
+
+`RegistryProtocol.export(Invoker)` (`dubbo-registry-api/.../integration/RegistryProtocol.java:272`) runs the following steps:
+
+1. `getProviderUrl(originInvoker)` extracts the provider URL; `getRegistryUrl` extracts the registry URL.
+2. Build `overrideSubscribeUrl = getSubscribedOverrideUrl(providerUrl)` and an `OverrideListener`; the provider URL is rewritten by `overrideUrlWithConfig` (`:338`), which applies `ProviderConfigurationListener` and `ServiceConfigurationListener` (dynamic configuration override) **before** local export.
+3. `doLocalExport(originInvoker, providerUrl)` (`:349`) calls the underlying `protocol.export(...)` to open the server port; returns an `ExporterChangeableWrapper`.
+4. `getRegistry(registryUrl)` resolves the `Registry`; `customizeURL` produces `registeredProviderUrl`.
+5. Guarded by `REGISTER_KEY` (default `true`, both provider and registry params must agree), `register(registry, registeredProviderUrl)` (`:240`) wraps `registry.register(...)` in a `MetricsEventBus.post(RegistryEvent...)` plus `ApplicationDeployer.increaseServiceRefreshCount()`.
+6. `registerStatedUrl` records a `ProviderModel.RegisterStatedURL`.
+7. For 2.6.x compatibility only: if `ENABLE_26X_CONFIGURATION_LISTEN` (default `true`) and `!registry.isServiceDiscovery()`, it still `registry.subscribe(overrideSubscribeUrl, overrideSubscribeListener)` (deprecated path).
+8. `notifyExport` fires `RegistryProtocolListener.onExport`.
+
+### refer: subscribe consumer and join cluster
+
+`RegistryProtocol.refer(type, url)` (`:~540`) handles `type == RegistryService` by proxying the registry itself; for multi-group (`group="a,b"` or `"*"`) it uses `MERGEABLE_CLUSTER`. Otherwise `doRefer` (`:578`) → `getMigrationInvoker` (`:601`, returns `ServiceDiscoveryMigrationInvoker`) → `doCreateInvoker` (`:647`):
+
+- `directory.setRegistry(registry)` / `directory.setProtocol(protocol)`.
+- Build a `ServiceConfigURL` consumer URL (protocol `consumer`).
+- If `directory.isShouldRegister()`, `registry.register(directory.getRegisteredConsumerUrl())` (consumer self-registration).
+- `directory.buildRouterChain(urlToRegistry)`.
+- `directory.subscribe(toSubscribeUrl(urlToRegistry))` — `toSubscribeUrl` (`:687`) adds `CATEGORY_KEY = ALL_CATEGORIES`.
+- `cluster.join(directory, true)` returns the `ClusterInvoker`.
+
+The `OverrideListener` / `ServiceConfigurationListener` chain is what lets config-center rules (configurators) re-derive the provider URL at runtime without re-export.
+
+## Application Level Service Discovery
+
+3.x application-level discovery stores **application → instance** in the registry, not **interface → provider** URLs. The supporting SPI/types live in `dubbo-registry-api/.../client/`.
+
+### ServiceDiscovery / ServiceInstance / InstanceAddressURL
+
+`ServiceDiscovery` (`ServiceDiscovery.java:34`) `extends RegistryService, Prioritized`. Core methods: `register()` / `update()` / `unregister()`, `Set<String> getServices()`, `List<ServiceInstance> getInstances(String serviceName)`, `MetadataInfo getLocalMetadata()` / `getRemoteMetadata(String revision)` / `getRemoteMetadata(String revision, List<ServiceInstance> instances)`, `ServiceInstance getLocalInstance()`.
+
+`ServiceInstance` (`ServiceInstance.java:34`, `Serializable`) carries `getServiceName()`, `getHost()`, `getPort()`, `Map<String,String> getMetadata()` (holds `EXPORTED_SERVICES_REVISION_PROPERTY_NAME`, revision, etc.), `getExtendParams()`, `getAllParams()`.
+
+`InstanceAddressURL extends URL` (`InstanceAddressURL.java:48`) wraps a `ServiceInstance` + `MetadataInfo`. Its `getServiceInterface()` / `getGroup()` / `getVersion()` resolve from `RpcContext` rather than the URL itself — so **one instance URL can serve many interfaces**, each described by `MetadataInfo.services`. This is the bridge from an app-level address to interface-level RPC. How the interface name is translated to an app name is via `ServiceNameMapping` (see [Metadata](/docs/CS/Framework/Dubbo/Metadata.md?id=mapping-path-local-cache-vs-remote-node)).
+
+### ZookeeperServiceDiscovery node layout
+
+`ZookeeperServiceDiscovery` (`dubbo-registry-zookeeper/.../ZookeeperServiceDiscovery.java:63`) `extends AbstractServiceDiscovery`, with `DEFAULT_GROUP = "/services"` (`:67`); root path comes from `getRootPath(registryURL)` (default `/dubbo`, derived from the `group` parameter). It uses Curator's `ServiceDiscovery` (curator-x-discovery) to write each instance as an **ephemeral** node under:
+
+```
+/<root>/services/<applicationName>/<instanceId>
+```
+
+`doRegister(ServiceInstance)` (`:101`) → `serviceDiscovery.registerService(build(instance))`; `doUpdate` (`:117`) updates metadata then `serviceDiscovery.updateService`; `getInstances(serviceName)` (`:150`) reads them back.
+
+### ServiceDiscoveryRegistry
+
+`ServiceDiscoveryRegistry` (`dubbo-registry-api/.../client/ServiceDiscoveryRegistry.java:75`) `extends FailbackRegistry` and holds a `ServiceDiscovery serviceDiscovery` (`:79`). It is produced by `ServiceDiscoveryRegistryFactory`, registered under SPI key `service-discovery-registry` in `dubbo-registry-api/.../META-INF/dubbo/internal/org.apache.dubbo.registry.RegistryFactory`. It delegates interface-level address operations to an underlying delegate registry and uses `ServiceDiscovery` for app-level instance data. Address changes flow through `ServiceInstancesChangedListener.onEvent` → `ServiceDiscoveryRegistryDirectory` rebuilds Invokers from `InstanceAddressURL`s.
+
+> Note: interface-level nodes (`/dubbo/<service>/providers/...`) and app-level nodes (`/dubbo/services/<app>/<instanceId>`) **coexist** under `register-mode=all` (the default). They are not mutually exclusive.
+
 ## Links
 
 - [Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md)
+- [Metadata](/docs/CS/Framework/Dubbo/Metadata.md)
 - [config](/docs/CS/Framework/Dubbo/config.md)
 - [Mesh](/docs/CS/Framework/Dubbo/Mesh.md)
 

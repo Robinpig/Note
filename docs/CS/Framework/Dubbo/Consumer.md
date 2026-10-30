@@ -93,9 +93,9 @@ private void referServices() {
 }
 ```
 
-SimpleReferenceCache是一个用于缓存引用ReferenceConfigBase的util工具类
-ReferenceConfigBase是一个重对象，对于频繁创建ReferenceConfigBase的框架来说，有必要缓存这些对象。 如果需要使用复杂的策略，可以实现并使用自己的ReferenceConfigBase缓存 这个Cache是引用服务的开始如果我们想在代码中自定义一些服务引用的逻辑，可以直接创建SimpleReferenceCache类型对象然后调用其get方法进行引用服务
-在获取服务对象之外包装了一层缓存。如果出现了异常则执行referenceCache的destroy方法进行销毁引用配置
+SimpleReferenceCache 是一个用于缓存引用 ReferenceConfigBase 的 util 工具类
+ReferenceConfigBase 是一个重对象，对于频繁创建 ReferenceConfigBase 的框架来说，有必要缓存这些对象。 如果需要使用复杂的策略，可以实现并使用自己的 ReferenceConfigBase 缓存 这个 Cache 是引用服务的开始如果我们想在代码中自定义一些服务引用的逻辑，可以直接创建 SimpleReferenceCache 类型对象然后调用其 get 方法进行引用服务
+在获取服务对象之外包装了一层缓存。如果出现了异常则执行 referenceCache 的 destroy 方法进行销毁引用配置
 
 
 
@@ -527,7 +527,7 @@ protected void refreshServiceDiscoveryInvoker(CountDownLatch latch) {
 
 
 
-currentAvailableInvoker是后期服务调用使用的Invoker对象
+currentAvailableInvoker 是后期服务调用使用的 Invoker 对象
 
 
 ```java
@@ -1013,6 +1013,327 @@ Dubbo 对于建立的每一个连接，同时在客户端和服务端开启了 2
 多注册中心的消费 是将每个注册中心封装成单独的 Invoker 再通过 StaticDirectory 保存所有的 Invoker 最终通过 Cluster 合并成一个 Invoker
 
 
+
+## Three Reference Paths in createProxy
+
+`createProxy(Map)`（`ReferenceConfig.java:490-523`）在确定 `urls` 列表时走三条互斥路径。入口先调用 `meshModeHandleUrl`，再二选一：
+
+```java
+// ReferenceConfig.java:493-502
+meshModeHandleUrl(referenceParameters);
+
+if (StringUtils.isNotEmpty(url)) {
+    // user specified URL, could be peer-to-peer address, or register center's address.
+    parseUrl(referenceParameters);
+} else {
+    // if protocols not in jvm checkRegistry
+    aggregateUrlFromRegistry(referenceParameters);
+}
+createInvoker();
+```
+
+`getProxy(invoker, ProtocolUtils.isGeneric(generic))` 始终在末尾执行（`:522`），把最终 `invoker` 包成用户侧 proxy。
+
+### 1. meshModeHandleUrl — Mesh 模式
+
+仅当 `MESH_ENABLE=true` 时生效，由 `checkMeshConfig` 把关（`ReferenceConfig.java:582-600`）；若用户已显式指定 `url`，直接跳过。否则以 `providedBy`（K8S Service 名）+ pod 命名空间 + 集群域拼出一条 `tri://` 直连 URL：
+
+```java
+// ReferenceConfig.java:562-573
+// In mesh mode, providedBy equals K8S Service name.
+String providedBy = referenceParameters.get(PROVIDED_BY);
+// cluster_domain default is 'cluster.local',generally unchanged.
+String clusterDomain = Optional.ofNullable(System.getenv(CLUSTER_DOMAIN)).orElse(DEFAULT_CLUSTER_DOMAIN);
+Integer meshPort = Optional.ofNullable(getProviderPort()).orElse(DEFAULT_MESH_PORT);
+meshPort = meshPort > -1 ? meshPort : DEFAULT_MESH_PORT;
+// get mesh url.
+url = TRIPLE + "://" + providedBy + "." + podNamespace + SVC + clusterDomain + ":" + meshPort;
+```
+
+关键点：`checkMeshConfig` 在非 mesh 时**强制 `UNLOAD_CLUSTER_RELATED=false`**（`:585`），且 mesh 模式必须配置 `triple` 协议与 `providedBy`，否则 `IllegalStateException`。
+
+### 2. parseUrl — 用户直连 URL
+
+`url` 非空时进入。注意分隔符是**分号 `;`**，不是逗号——由 `SEMICOLON_SPLIT_PATTERN = Pattern.compile("\\s*[;]+\\s*")` 定义（`CommonConstants.java:95`）：
+
+```java
+// ReferenceConfig.java:605-628
+private void parseUrl(Map<String, String> referenceParameters) {
+    String[] us = SEMICOLON_SPLIT_PATTERN.split(url);   // 分号分隔多个直连地址
+    if (ArrayUtils.isNotEmpty(us)) {
+        for (String u : us) {
+            URL url = URL.valueOf(u);
+            if (StringUtils.isEmpty(url.getPath())) {
+                url = url.setPath(interfaceName);
+            }
+            url = url.setScopeModel(getScopeModel());
+            url = url.setServiceModel(consumerModel);
+            if (UrlUtils.isRegistry(url)) {
+                urls.add(url.putAttribute(REFER_KEY, referenceParameters));     // registry:// 地址
+            } else {
+                URL peerUrl = getScopeModel().getApplicationModel().getBeanFactory()
+                        .getBean(ClusterUtils.class).mergeUrl(url, referenceParameters);
+                peerUrl = peerUrl.putAttribute(PEER_KEY, true);                 // 直连 peer
+                urls.add(peerUrl);
+            }
+        }
+    }
+}
+```
+
+决策：`url` 可能是 `registry://`（注册中心直连地址，识别靠 `UrlUtils.isRegistry`）或普通 peer 地址；peer 会用 `ClusterUtils.mergeUrl` 把 `referenceParameters` 合并进去并打 `PEER_KEY=true`。多地址被逐个塞进 `urls`，后续 `createInvoker` 走「多 url」分支。
+
+### 3. aggregateUrlFromRegistry — 注册中心聚合
+
+`url` 为空时进入，从 `config` 拼出注册中心 URL（注意：这里拿的是 `registry://` 注册中心地址，真正的 provider 地址是在 `protocolSPI.refer(registryUrl)` → `RegistryProtocol.doRefer` 订阅时才拉到的，不在本方法内）：
+
+```java
+// ReferenceConfig.java:633-663
+private void aggregateUrlFromRegistry(Map<String, String> referenceParameters) {
+    checkRegistry();
+    List<URL> us = ConfigValidationUtils.loadRegistries(this, false);   // 各 <dubbo:registry> 的 registry:// 地址
+    if (CollectionUtils.isNotEmpty(us)) {
+        for (URL u : us) {
+            URL monitorUrl = ConfigValidationUtils.loadMonitor(this, u);
+            if (monitorUrl != null) {
+                u = u.putAttribute(MONITOR_KEY, monitorUrl);
+            }
+            u = u.setScopeModel(getScopeModel());
+            u = u.setServiceModel(consumerModel);
+            if (isInjvm() != null && isInjvm()) {
+                u = u.addParameter(LOCAL_PROTOCOL, true);                // injvm 标记
+            }
+            urls.add(u.putAttribute(REFER_KEY, referenceParameters));
+        }
+    }
+    if (urls.isEmpty() && shouldJvmRefer(referenceParameters)) {         // 无注册中心但允许 jvm 引用
+        URL injvmUrl = new URL(LOCAL_PROTOCOL, LOCALHOST_VALUE, 0, interfaceClass.getName())
+                .addParameters(referenceParameters);
+        urls.add(injvmUrl.putAttribute(REFER_KEY, referenceParameters));  // 本地 injvm://
+    }
+    if (urls.isEmpty()) {
+        throw new IllegalStateException("No such any registry to reference " + interfaceName + ...);
+    }
+}
+```
+
+`urls` 里**混合**了 `registry://` 与 `injvm://` 两种情况；`createInvoker` 靠 `UrlUtils.isRegistry(url)` 区分处理。
+
+### createInvoker 三分支决策
+
+已有骨架（`ReferenceConfig.java:669-714`）的盲区在于「何时套 `Cluster` / 何时构建 ClusterFilter 链」：
+
+| `urls` 形态 | 分支 | Cluster 包裹 | 构建 ClusterFilter 链（`buildFilterChain`） |
+| :--- | :--- | :--- | :--- |
+| size == 1 且非 `registry://` | 直连单个 | `Cluster.join(StaticDirectory, true)` | 是（`true`） |
+| size == 1 且为 `registry://` | 注册中心单点 | **不**套 Cluster（订阅/`Directory` 在 `RegistryProtocol` 内建） | 否 |
+| size > 1 且存在 `registry://` | 多注册中心 | `ZoneAwareCluster.join(StaticDirectory, false)` | **否**（`false`，呼应 [Pitfall 10](/docs/CS/Framework/Dubbo/Consumer.md?id=pitfall-list)） |
+| size > 1 全为直连 | 多直连 | `Cluster.join(StaticDirectory, true)` | 是（`true`） |
+
+即：单注册中心直连/多直连走 `Cluster.DEFAULT`（failover）+ `StaticDirectory` 并构建 ClusterFilter 链；多注册中心订阅默认 `zone-aware` 且 `wrap=false` **不建** ClusterFilter 链；单 `registry://` 根本不进 `Cluster`，由 `RegistryDirectory` 承载路由。
+
+## Startup Check: check Parameter
+
+消费端 `check` 参数控制**启动时是否要求 provider 必须在线**。默认行为由 `shouldCheck()` 决定：
+
+```java
+// dubbo-common/.../config/ReferenceConfigBase.java:108-119
+public boolean shouldCheck() {
+    checkDefault();
+    Boolean shouldCheck = isCheck();                 // 本 ReferenceConfig 的 check
+    if (shouldCheck == null && getConsumer() != null) {
+        shouldCheck = getConsumer().isCheck();       // 回退到 <dubbo:consumer check>
+    }
+    if (shouldCheck == null) {
+        // default true
+        shouldCheck = true;                          // 默认 true，无 DEFAULT_CHECK 常量
+    }
+    return shouldCheck;
+}
+```
+
+> [!NOTE]
+>
+> 全仓 `grep DEFAULT_CHECK` 结果为 **0**——默认 `true` 是 `shouldCheck()` 里硬编码的字面量，并未定义为 `DEFAULT_CHECK` 常量（任务假设不成立）。优先级：`ReferenceConfig.check` → `ConsumerConfig.check` → 默认 `true`。
+
+`init(check)` 在 `check=true` 时调用 `checkInvokerAvailable(0)`（`ReferenceConfig.java:392-394`）；`check=false` 时整段跳过（`init()` 也默认传 `true`，`ReferenceConfig.java:329`）。`checkInvokerAvailable` 的真实逻辑：
+
+```java
+// ReferenceConfig.java:716-767（节选）
+private void checkInvokerAvailable(long timeout) throws IllegalStateException {
+    if (!shouldCheck()) {
+        return;                                       // check=false → 直接返回，不校验
+    }
+    boolean available = invoker.isAvailable();
+    if (available) {
+        return;
+    }
+    long startTime = System.currentTimeMillis();
+    long checkDeadline = startTime + timeout;
+    do {
+        try { Thread.sleep(100); } catch (InterruptedException e) { ... }
+        available = invoker.isAvailable();            // 轮询等待 provider 上线
+    } while (!available && checkDeadline > System.currentTimeMillis());
+    if (!available) {
+        logger.error(CLUSTER_NO_VALID_PROVIDER, "provider not started", "", "No provider available.", ...);
+        throw new IllegalStateException("Failed to check the status of the service " + interfaceName
+                + ". No provider available for the service ...");   // 启动失败
+    }
+}
+```
+
+| `check` 取值 | 启动时 provider 离线 | 调用时 provider 离线 |
+| :--- | :--- | :--- |
+| `true`（默认） | `checkInvokerAvailable` 抛 `IllegalStateException("No provider available")`，**应用启动失败** | 正常走容错（failover 重试等） |
+| `false` | 仅 `logger.warn`，**启动成功**，延迟到首次调用才暴露问题 | 同左 |
+
+## Full Consumer Invoker Call Chain
+
+从 `proxyFactory.getProxy(invoker)` 得到 proxy，到真正发出网络的完整链路如下（← 表示一次 `invoke` 调用方向）：
+
+```
+proxy (AbstractProxyFactory.getProxy)
+  │  invoke
+  ▼
+ClusterFilter 链  ← AbstractCluster.join 时 buildClusterInvokerChain 构建（group=CONSUMER）
+  │  （选址前：Context / ClassLoader / RouterSnapshot / Metrics）
+  ▼
+MockClusterInvoker（若配置了 mock，由 MockClusterWrapper 包一层）
+  ▼
+FailoverClusterInvoker / ZoneAwareClusterInvoker（Cluster.join 结果）
+  │  list
+  ▼
+RegistryDirectory.list → StateRouter + Router 过滤出可用 invokers
+  │  select
+  ▼
+LoadBalance.select → 返回单个 Invoker
+  ▼
+Filter 链  ← ProtocolFilterWrapper.refer 时 buildInvokerChain 构建（group=CONSUMER）
+  │  （选址后：Consumer 侧 Filter）
+  ▼
+ListenerInvokerWrapper（ProtocolListenerWrapper.refer 包裹，若有 InvokerListener）
+  ▼
+DubboInvoker / TripleInvoker → ExchangeClient.request → 网络（DefaultFuture 等待响应）
+```
+
+两条链由**不同阶段**的两个构建者生成，易混淆：
+
+```java
+// dubbo-cluster/.../cluster/support/wrapper/AbstractCluster.java:58-96
+@Override
+public <T> Invoker<T> join(Directory<T> directory, boolean buildFilterChain) throws RpcException {
+    if (buildFilterChain) {
+        return buildClusterInterceptors(doJoin(directory));   // ClusterFilter 链在此构建
+    } else {
+        return doJoin(directory);
+    }
+}
+// ClusterFilterInvoker 构造器内：
+for (FilterChainBuilder builder : builders) {
+    tmpInvoker = builder.buildClusterInvokerChain(tmpInvoker, REFERENCE_FILTER_KEY, CommonConstants.CONSUMER);
+}
+```
+
+```java
+// dubbo-cluster/.../cluster/filter/ProtocolFilterWrapper.java:67-73
+@Override
+public <T> Invoker<T> refer(Class<T> type, URL url) throws RpcException {
+    if (UrlUtils.isRegistry(url)) {
+        return protocol.refer(type, url);
+    }
+    FilterChainBuilder builder = getFilterChainBuilder(url);
+    return builder.buildInvokerChain(protocol.refer(type, url), REFERENCE_FILTER_KEY, CommonConstants.CONSUMER);
+}
+```
+
+```java
+// dubbo-cluster/.../cluster/filter/DefaultFilterChainBuilder.java:44 / :83
+public <T> Invoker<T> buildInvokerChain(... key, group)            // Filter 链（选址后）
+public <T> ClusterInvoker<T> buildClusterInvokerChain(... key, group) // ClusterFilter 链（选址前）
+```
+
+| 链路环节 | 由谁构建 | 构建阶段（在 createProxy 内的时机） | group / key |
+| :--- | :--- | :--- | :--- |
+| `ClusterFilter` 链 | `AbstractCluster.join` → `DefaultFilterChainBuilder.buildClusterInvokerChain` | `createInvoker` 中 `Cluster.join(..., true)` 时 | `CONSUMER` / `REFERENCE_FILTER_KEY` |
+| `MockClusterInvoker` | `MockClusterWrapper.join` | `Cluster.join` 内部 | — |
+| `Filter` 链 | `ProtocolFilterWrapper.refer` → `DefaultFilterChainBuilder.buildInvokerChain` | `createInvoker` 中 `protocolSPI.refer(url)` 时（**早于** `Cluster.join`） | `CONSUMER` / `REFERENCE_FILTER_KEY` |
+| `ListenerInvokerWrapper` | `ProtocolListenerWrapper.refer` | 同 `protocolSPI.refer` 阶段 | `INVOKER_LISTENER_KEY` |
+
+> [!WARNING]
+>
+> 顺序很重要：`createInvoker` 先 `protocolSPI.refer`（建 Filter 链 + `ListenerInvokerWrapper`），再 `Cluster.join`（把前面得到的单个 invoker 包进 `StaticDirectory` 并建 ClusterFilter 链）。因此一次调用**先穿 ClusterFilter（外层，选址前），选址后再穿 Filter（内层，已在每个被选中 invoker 上）**。多注册中心 `zone-aware` 分支 `wrap=false`，ClusterFilter 链不构建（见上表）。
+
+## Generic & Native Stub Reference
+
+### Generic（泛化引用）
+
+`init()` 阶段若 `generic` 为真，把 `interfaceClass` 强制改为 `GenericService`：
+
+```java
+// ReferenceConfig.java:789-805
+if (ProtocolUtils.isGeneric(generic)) {
+    if (interfaceClass != null && !interfaceClass.equals(GenericService.class)) {
+        logger.warn(... "change 'interfaceClass' to 'GenericService' ...");
+    }
+    interfaceClass = GenericService.class;
+}
+```
+
+随后 `createProxy` 把这个事实传给 proxy 工厂（注意：传的是 `ProtocolUtils.isGeneric(generic)` 布尔）：
+
+```java
+// ReferenceConfig.java:522
+return (T) proxyFactory.getProxy(invoker, ProtocolUtils.isGeneric(generic));
+```
+
+泛化的差异完全在 `AbstractProxyFactory.getProxy(invoker, generic=true)` 内（`dubbo-rpc-api`，`:53-118`）：除底层真实接口外，额外把 url 里的 `INTERFACE` 真实接口和 `GenericService` 都加进 proxy 的接口集合（`:71-93`），使生成的 proxy 同时实现真实接口与 `GenericService`；若真实接口类加载不到，则退化为只实现 `GenericService`（`:98-117` 的 catch 分支）。
+
+> [!WARNING]
+>
+> 任务假设的 `GenericProxyFactory` 类在 3.3.6 **不存在**（全仓 0 命中）。泛化差异不在独立工厂，而在 `AbstractProxyFactory.getProxy` 的 `generic` 分支。`proxy=NATIVE_STUB` 分支见下。
+
+### Native Stub（原生 Stub）
+
+`init()` 通过 `getProxy()` 自动探测：若 `interfaceClass` 是 `DubboStub`，则设 `proxy=NATIVE_STUB`（`ReferenceConfig.java:344-346`）。该模式下不从 `interfaceClass` 注册，而是走 `StubSuppliers`：
+
+```java
+// ReferenceConfig.java:359-362
+if (CommonConstants.NATIVE_STUB.equals(getProxy())) {
+    serviceDescriptor = StubSuppliers.getServiceDescriptor(interfaceName);
+    repository.registerService(serviceDescriptor);
+    setInterface(serviceDescriptor.getInterfaceName());
+}
+```
+
+proxy 生成时 `proxyFactory` 被 `StubProxyFactoryWrapper`（`dubbo-rpc-api`，实现 `ProxyFactory`）包裹，它在底层 `proxyFactory.getProxy` 之外再包一层 stub 逻辑（`:64-65` 调 `proxyFactory.getProxy(invoker, generic)` 后处理）。
+
+### 两者差异对照
+
+| 维度 | Generic | Native Stub |
+| :--- | :--- | :--- |
+| `init` 中 `interfaceClass` | 被改为 `GenericService.class`（`:805`） | 保持原接口类，`StubSuppliers.getServiceDescriptor` 取描述符（`:360`） |
+| `createProxy` 差异点 | `getProxy(invoker, isGeneric=true)`，proxy 同时实现真实接口 + `GenericService` | `proxy=NATIVE_STUB`，`StubProxyFactoryWrapper` 包裹底层 proxy |
+| 类承载 | `AbstractProxyFactory.getProxy` 的 `generic` 分支 | `StubSuppliers` + `StubProxyFactoryWrapper` |
+
+## @DubboReference & ReferenceBean Spring Bridge
+
+Spring 集成侧的桥接类在 3.3.6 **仍然存在**：`ReferenceBean`（`dubbo-config/dubbo-config-spring/.../spring/ReferenceBean.java:110`，`implements FactoryBean<T>`）是 XML `<dubbo:reference>` 与 `@DubboReference` 注解字段/方法的统一承载 Bean；`@DubboReference` 的具体注入由 `ReferenceAnnotationBeanPostProcessor`（`.../spring/beans/factory/annotation/ReferenceAnnotationBeanPostProcessor.java`）这个 `BeanPostProcessor` 在 bean 初始化阶段扫描并生成 `ReferenceBean`。`ReferenceBean` 最终仍委托回 `ReferenceConfig`（父类）的 `get()` → `init()` → `createProxy()`。
+
+## Mock on Consumer Side
+
+Mock 是消费侧集群容错的最外层包装，由 `Cluster` SPI 的 `mock` 扩展名承载（`Consumer-Side Extension Point Overview` 的 Cluster 清单里 `mock=org.apache.dubbo.rpc.cluster.support.wrapper.MockClusterWrapper`）。它不是独立开关，而是**每一个 Cluster 都被包了一层**——`MockClusterWrapper.join()` 直接 `return new MockClusterInvoker<>(directory, this.cluster.join(...))`（`MockClusterWrapper.java:37-39`），无论 `failover` / `failfast` 最终都会经过 `MockClusterInvoker`。
+
+`MockClusterInvoker.invoke()`（`MockClusterInvoker.java:99-152`）按 URL 的 `mock` 方法级参数（`MOCK_KEY`）分三态：
+
+| `mock` 取值 | 行为 | 源码分支 |
+| :--- | :--- | :--- |
+| 空 / `false` | 不 mock，直达真实 `invoker.invoke` | `:105-107` |
+| 以 `force:` 开头（如 `force:return null`） | 强制 mock，完全不发请求 | `:108-118` 走 `doMockInvoke(invocation, null)` |
+| 其它（如 `fail:return null`） | 先真实调用，仅当抛**非业务** `RpcException` 或响应带非业务异常时才 mock | `:119-150` |
+
+关键的「fail-mock」判定：业务异常（`rpcException.isBiz()`）会**原样抛出**而非走 mock（`:125-131`、`:135-137`），只有网络 / 超时类 `RpcException` 才触发 `doMockInvoke`。
+
+`doMockInvoke`（`MockClusterInvoker.java:155-186`）通过 `selectMockInvoker` 选 mock 实现，默认回退到 `org.apache.dubbo.rpc.support.MockInvoker`（`dubbo-rpc-api`，`:164`）。注意 3.3.6 中 `MockClusterInvoker` 与 `AsyncRpcResult` 一样带 `setFutureWhenSync` 逻辑（`:180-184`）：同步模式下也会把 `FutureAdapter` 塞进 `RpcContext.getServiceContext().setFuture(...)`，保证 mock 结果与真实调用在 `getCompletableFuture()` 上语义一致。
 
 ## Pitfall List
 

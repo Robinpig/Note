@@ -69,6 +69,33 @@ Fig.1. Ten-Layer Code Architecture
 
 - **Microkernel + Plugin**：Microkernel 只负责组装 Plugin，Dubbo 自身的功能同样通过扩展点实现——这意味着**所有功能点都可被用户自定义扩展替换**，包括框架自带的那些。SPI 的加载机制、自适应扩展与作用域见 [SPI](/docs/CS/Framework/Dubbo/SPI.md)。
 - **URL 作为配置信息的统一格式**：所有扩展点通过传递 URL 携带配置信息。理解了这一点就理解了 Dubbo 为什么到处是 `url.getParameter(...)`——地址、配置、元数据、路由规则全部编码在 URL 里并贯穿全链路。
+- **面向接口编程 + 统一 `Invoker` 抽象**：调用方与提供方、本地与远程、单个节点与集群都收敛到 `Invoker<T>` 这一个接口（见下方 SPI 表与 [Five Core Abstractions](#five-core-abstractions)）；替换某一层实现时上层完全无感。
+
+## SPI Extension Points of Each Layer
+
+「Microkernel + Plugin」不是口号，它落实到下面这张表：每个被替换的层都对应一个 `@SPI` 接口，默认实现只是一个普通扩展点，**用户随时可以写一个新实现并通过 SPI 文件覆盖默认项**。这解释了为什么 Dubbo 自带功能（如 `FailoverCluster`、各种 `LoadBalance`）和你的自定义扩展站在同一机制上。
+
+| 十层归属 | SPI 接口（包路径） | `@SPI` 默认 | 核心方法 | 典型实现类 |
+| :--- | :--- | :--- | :--- | :--- |
+| Proxy | `org.apache.dubbo.rpc.ProxyFactory`（`dubbo-rpc-api`） | `"javassist"`（`scope=FRAMEWORK`） | `getProxy(Invoker)` / `getInvoker(proxy,type,url)` | `JavassistProxyFactory`、`ByteBuddyProxyFactory` |
+| Registry | `org.apache.dubbo.registry.RegistryFactory`（`dubbo-registry-api`） | 无默认（`scope=APPLICATION`） | `getRegistry(URL)` | `NacosRegistryFactory`、`ZookeeperRegistryFactory` |
+| Cluster | `org.apache.dubbo.rpc.cluster.Cluster`（`dubbo-cluster`） | `Cluster.DEFAULT` = `"failover"` | `<T> Invoker<T> join(Directory<T>, boolean)` | `FailoverCluster`、`FailfastCluster`、`FailsafeCluster` |
+| Router | `org.apache.dubbo.rpc.cluster.router.state.StateRouter`（`dubbo-cluster`） | 经 `StateRouterFactory` 激活 | `BitList<Invoker<T>> route(BitList, URL, Invocation, boolean, Holder)` | `MeshRuleRouter`、`ConditionStateRouter`（3.3.6 的路由全改名 `*StateRouter`，无 `ConditionRouter`） |
+| LoadBalance | `org.apache.dubbo.rpc.cluster.LoadBalance`（`dubbo-cluster`） | `RandomLoadBalance.NAME` = `"random"` | `<T> Invoker<T> select(List<Invoker>, URL, Invocation)` | `RandomLoadBalance`、`RoundRobinLoadBalance`、`LeastActiveLoadBalance` |
+| Protocol | `org.apache.dubbo.rpc.Protocol`（`dubbo-rpc-api`） | `"dubbo"`（`scope=FRAMEWORK`） | `<T> Exporter<T> export(Invoker<T>)` / `<T> Invoker<T> refer(Class, URL)` | `DubboProtocol`、`TripleProtocol` |
+| Exchange | `org.apache.dubbo.remoting.exchange.Exchanger`（`dubbo-remoting-api`） | `HeaderExchanger.NAME` = `"header"`（`scope=FRAMEWORK`） | `ExchangeServer bind(URL, ExchangeHandler)` / `ExchangeClient connect(...)` | `HeaderExchanger` |
+| Transport | `org.apache.dubbo.remoting.Transporter`（`dubbo-remoting-api`） | `"netty"`（`scope=FRAMEWORK`） | `RemotingServer bind(URL, ChannelHandler)` / `Client connect(...)` | `NettyTransporter`（3.3.6 主仓库仅 netty4，无 Mina/Grizzly） |
+| Serialize | `org.apache.dubbo.common.serialize.Serialization`（`dubbo-serialization-api`） | 无默认（`scope=FRAMEWORK`） | `ObjectOutput serialize(URL, OutputStream)` / `ObjectInput deserialize(URL, InputStream)` | 主仓库仅 `Hessian2Serialization`、`Fastjson2Serialization` |
+| Compiler | `org.apache.dubbo.common.compiler.Compiler`（`dubbo-common`） | `"javassist"`（`scope=FRAMEWORK`） | `Class<?> compile(Class, String, ClassLoader)` | `JavassistCompiler`、`JdkCompiler` |
+| Logger | `org.apache.dubbo.common.logger.Logger` 由 `LoggerAdapter` SPI 产出（`dubbo-common`） | `LoggerAdapter` 默认 `"slf4j"` | `info/warn/error(...)` 等 | `Slf4jLogger`、`Log4j2Logger`、`JdkLogger` |
+
+几点值得强调的源码事实：
+
+- **`ProxyFactory` 的两个 `getProxy` 都标了 `@Adaptive({PROXY_KEY})`**（`ProxyFactory.java:38/43/50`）。`PROXY_KEY="proxy"`，意味着实际用哪个代理实现由运行时 URL 上的 `proxy=` 参数决定，而不是写死——这就是「URL 作为配置总线」+「自适应扩展」的叠加工效。
+- **`Protocol.export()` 与 `refer()` 注释明确要求幂等**（`Protocol.java:72`：`export() must be idempotent`），`refer()` 返回的 `Invoker` 由协议自己实现、负责真正把请求发往远端（`Protocol.java:39/43`）。这把「协议」和「调用模型」彻底解耦：换协议 = 换 `Invoker` 实现，上层 `Cluster`/`Filter` 无感知。
+- **`Router` 与 `StateRouter` 是两套接口**（`Router.java:35` 老接口；`StateRouter.java:39` 新接口）。3.3.6 的路由工厂走 `StateRouterFactory` SPI，`getActivateExtension(url, ROUTER_KEY)` 决定哪些路由器被激活——`StandardMeshRuleRouterFactory` 正是靠 `@Activate(order=-50)` 被纳入，见 [Mesh](/docs/CS/Framework/Dubbo/Mesh.md?id=how-meshrulerouter-joins-the-state-router-chain)。
+- **`Logger` 本身不是 `@SPI`**，它通过 `LoggerAdapter` 这个 `@SPI` 接口创建（`Logger.java` 上无 `@SPI` 注解），换日志框架只需换 `LoggerAdapter` 实现。
+- `Exchanger` / `Transporter` / `Codec2` / `Compiler` / `Serialization` 的 `@SPI` 都带 `scope=FRAMEWORK`，意味着这些扩展在 **FrameworkModel 级共享**，而 `RegistryFactory` 是 `APPLICATION` 级（每个应用可不同注册中心）——作用域差异来自三层域模型，见 [ScopeModel](/docs/CS/Framework/Dubbo/ScopeModel.md)。
 
 ## Registry Data Layout in 3.x
 

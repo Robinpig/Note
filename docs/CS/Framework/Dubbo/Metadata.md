@@ -547,6 +547,28 @@ private boolean isUsedRegistryAsMetadataCenter(RegistryConfig registryConfig) {
 
 3.3.6 另有 **`MetadataServiceV2`**（`MetadataServiceV2.java:21`），`extends org.apache.dubbo.rpc.model.DubboStub`，走 protobuf/Triple 序列化，配 `dubbo-metadata-definition-protobuf` 模块与 `MetadataServiceV2OuterClass` / `MetadataInfoV2OrBuilder` 生成类。版本协商由 `MetadataServiceVersionUtils` 处理。新部署建议直接用 V2。
 
+### MetadataService RPC Interface
+
+`MetadataService` 暴露的 RPC 入口以 `$` 前缀（如 `$getMetadataInfo` / `$getServiceDefinition`）标识，消费端据此向 Provider 拉取接口级元数据。核心方法（行号取自 `dubbo-metadata-api/.../metadata/MetadataService.java`）：
+
+| 方法 | 返回 | 作用 |
+| :--- | :--- | :--- |
+| `MetadataInfo getMetadataInfo(String revision)` (`:167`) | `MetadataInfo` | 返回某 revision 聚合后的元数据 JSON —— 内含 `services: Map<String, ServiceInfo>`，每个 `ServiceInfo` 描述一个导出服务（方法列表、经 `MetadataParamsFilter` 过滤的参数）。与 `/dubbo/metadata/{app}/{revision}` 节点内容一致。 |
+| `List<MetadataInfo> getMetadataInfos()` (`:169`) | `List<MetadataInfo>` | 该 Provider 持有的全部 revision。 |
+| `String getServiceDefinition(String serviceKey)` (`:165`) | `String`（JSON） | 返回单个接口的 `FullServiceDefinition`（方法签名、参数类型），即 `storeProviderMetadata` 写入的内容；另有 `getServiceDefinition(interfaceName, group, version)` 重载。 |
+| `SortedSet<String> getExportedURLs()` / `getSubscribedURLs()` | URL 集合 | 2.x 接口级 URL 列表，向后兼容。 |
+| `String version()` (`:69`) | 协议版本 | 供 `MetadataServiceVersionUtils` 做版本协商握手。 |
+
+消费端先用 `ServiceNameMapping` 解析出应用名，再调 `$getMetadataInfo(revision)`，按其 `ProtocolServiceKey` 匹配 `ServiceInfo` 构建可调用方法列表。`MetadataServiceV2` 用 protobuf 替换上述 JSON，效率更高。
+
+## Decoupling Metadata from Address Discovery
+
+设计理念：3.x 把注册中心与元数据中心彻底分层 —— 注册中心**只存地址**（应用 → 实例），元数据中心**只存接口定义 + 接口↔应用映射 + revision JSON**。拆分的收益：
+
+- **降低注册中心写压力。** 扩缩容只改体量很小的实例节点；接口定义（极少变化）被聚合成单个 revision JSON、由相同实例共享一份（见前文 `MetadataInfo` revision 聚合）。`all` 模式下注册中心不再逐接口写 provider URL，除非 `register-mode` 显式要求。
+- **两个独立伸缩轴。** 元数据规模随**接口数**增长，注册中心规模随**实例数**增长，互不影响（对照 [registry](/docs/CS/Framework/Dubbo/registry.md?id=application-level-service-discovery) 的应用级节点布局）。
+- **兼容迁移。** `register-mode=all` 保留接口级节点以兼容 2.x 消费端；`instance` 模式为纯应用级。接口→应用的翻译通过 `ServiceNameMapping`（`/dubbo/mapping/<interface>`）离带外解析，绝不进入注册中心的地址空间。
+
 ## Startup Process
 
 元数据中心在 `DefaultApplicationDeployer.start()` 流程里启动，**在 `startMetadataCenter()` 这一步**（源码 `:238` 处的调用，方法注释标注 `@since 2.7.8`）：

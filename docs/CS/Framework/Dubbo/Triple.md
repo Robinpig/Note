@@ -297,6 +297,223 @@ private String[] produces;
 
 因此 `tri` 与 `rest2` 的关系是「同一引擎的两种协议名」，REST 风格的服务既能按 `tri` 导出（HTTP/2 + RESTful 语义），也能按 `rest2` 导出。注意**不存在 `TripleRestProtocol` 这个类**，REST 能力不在独立类里。
 
+## TripleProtocol Class Hierarchy
+
+`TripleProtocol` 是 Triple 引擎的**具体**实现类（不是抽象类），继承 RPC 层基类：
+
+```java
+// dubbo-rpc/dubbo-rpc-triple/.../tri/TripleProtocol.java:59-99
+public class TripleProtocol extends AbstractProtocol {
+    public static boolean REST_ENABLED = true;     // :70 由 H2_SETTINGS_REST_ENABLED 控制
+    @Override public int getDefaultPort() { return 50051; }
+}
+```
+
+`GrpcProtocol` 与 `RestProtocol` 只是换名的空子类（`GrpcProtocol.java:21` 已给出），所以 `tri` / `grpc` / `rest2` 三个 SPI 名共享同一套 `TripleProtocol` 逻辑，差异只体现在入口层：同一个 `serviceKey` 在 `export()` 时既注册到 gRPC 的 `PathResolver`，也（当 `REST_ENABLED`）注册到 `RequestMappingRegistry`（`TripleProtocol.java:102-151`）。
+
+> [!TIP]
+> 「差异只体现在入口层」这句话在**协议名层面**成立，但要说清它到底差在哪：`tri` / `grpc` / `rest2` 三个名字**不改变 `TripleProtocol` 的任何一行逻辑**（三者继承链上没有任何字段或方法被覆写），真正的差异在 `RequestHandlerMapping` 这一层——服务端收到请求后由 `DefaultRequestRouter` 遍历所有 `RequestHandlerMapping` 扩展，先返回非 null handler 的那个接管请求，并把 `mapping.getType()`（`"grpc"` 或 `"rest"`）写进 `TripleConstants.HANDLER_TYPE_KEY`。详见 [tri vs grpc vs rest2 Handler Routing](#tri-vs-grpc-vs-rest2-handler-routing)。
+
+`export()` 与 `refer()` 都走 `PortUnificationExchanger`：
+
+```java
+// TripleProtocol.java:161-195
+private void bindServerPort(URL url) {
+    ...
+    if (bindPort) PortUnificationExchanger.bind(url, new DefaultPuHandler());  // :178 服务端绑定
+}
+public <T> Invoker<T> refer(Class<T> type, URL url) {
+    optimizeSerialization(url);
+    AbstractConnectionClient connectionClient =
+        Http3Exchanger.isEnabled(url) ? Http3Exchanger.connect(url)
+                                      : PortUnificationExchanger.connect(url, new DefaultPuHandler()); // :188-190
+    return new TripleInvoker<>(type, url, acceptEncodings, connectionClient, invokers, streamExecutor);
+}
+```
+
+注意 `protocolBindingRefer` 在 `TripleProtocol` 里直接 `return null`（`TripleProtocol.java:206-209`）—— Triple 不走 `AbstractProtocol.protocolBindingRefer` 的默认模板，而是自己重写 `refer()` 完成建连。
+
+## TripleInvoker Connection and Invocation
+
+消费端 `TripleInvoker` 不负责建连，它复用 `TripleProtocol.refer()` 已经建好的 `AbstractConnectionClient`：
+
+```java
+// dubbo-rpc/dubbo-rpc-triple/.../tri/TripleInvoker.java:89-122
+public class TripleInvoker<T> extends AbstractInvoker<T> {
+    private final AbstractConnectionClient connectionClient;   // 来自 PortUnificationExchanger.connect
+    private final TripleWriteQueue writeQueue = new TripleWriteQueue(256);
+    ...
+}
+```
+
+`doInvoke` 的发送流程：
+
+```java
+// TripleInvoker.java:141-189
+protected Result doInvoke(final Invocation invocation) {
+    if (!connectionClient.isConnected()) {        // :143 未连上直接返回 UNAVAILABLE
+        ... return new AsyncRpcResult(future, invocation);
+    }
+    ConsumerModel consumerModel = ...;            // 取 ServiceDescriptor / MethodDescriptor
+    ExecutorService callbackExecutor =
+        isSync(methodDescriptor, invocation) ? new ThreadlessExecutor() : streamExecutor;  // sync unary 用 ThreadlessExecutor
+    ClientCall call = new TripleClientCall(
+        connectionClient, callbackExecutor, getUrl().getOrDefaultFrameworkModel(), writeQueue);  // :171
+    switch (methodDescriptor.getRpcType()) {       // :176 按 RpcType 分流
+        case UNARY:          result = invokeUnary(...);           break;
+        case SERVER_STREAM:  result = invokeServerStream(...);    break;
+        case CLIENT_STREAM:
+        case BI_STREAM:      result = invokeBiOrClientStream(...); break;
+    }
+    return result;
+}
+```
+
+要点：真正在 HTTP/2 上开流、写首部帧与 body 的是 `TripleClientCall` 借由 `connectionClient`（底层 `dubbo-remoting-http12` 的 Netty HTTP/2 编解码）。源码里**没有名为 `HttpClient` 的类**——所谓「建连」就是 `PortUnificationExchanger.connect` 返回的 `AbstractConnectionClient`，tri/grpc/rest2 三种协议名共用它。同步一元调用为了不额外占线程，用 `ThreadlessExecutor` 把结果挂回调用线程；流式调用则交给 `streamExecutor`。
+
+## gRPC Interop Boundary service method naming content type trailer
+
+Triple 与标准 gRPC 互通靠一组成对的 HTTP/2 头，全部由 `TripleHeaderEnum` 定义（注意前缀是 `grpc-`，与 gRPC 规范一致）：
+
+```java
+// dubbo-rpc/dubbo-rpc-triple/.../tri/TripleHeaderEnum.java:32-44
+HTTP_STATUS_KEY("http-status"),
+STATUS_KEY("grpc-status"),                  // gRPC 状态码
+MESSAGE_KEY("grpc-message"),               // 错误描述
+STATUS_DETAIL_KEY("grpc-status-details-bin"), // 结构化错误详情（protobuf 二进制）
+TIMEOUT("grpc-timeout"),                   // 调用超时（gRPC 时间格式，如 "1S"）
+GRPC_ENCODING("grpc-encoding"),            // 消息压缩
+GRPC_ACCEPT_ENCODING("grpc-accept-encoding"),
+CONSUMER_APP_NAME_KEY("tri-consumer-appname"),
+SERVICE_VERSION("tri-service-version"),
+SERVICE_GROUP("tri-service-group"),
+SERVICE_TIMEOUT("tri-service-timeout"),
+TRI_HEADER_CONVERT("tri-header-convert"),  // 大小写头名转换开关
+TRI_EXCEPTION_CODE("tri-exception-code");
+```
+
+互通边界的关键点：
+
+- **service / method 命名**：gRPC 路径形如 `/package.Service/Method`，Triple 通过 `PathResolver` 把 `serviceKey` 映射到该 HTTP/2 `:path`；方法经 `MethodDescriptor.RpcType` 识别为 `UNARY/SERVER_STREAM/CLIENT_STREAM/BI_STREAM` 四种之一（见 Four Invocation Modes）。
+- **content-type**：有两个媒体类型常量，都在 `dubbo-remoting/dubbo-remoting-http12/.../message/MediaType.java`——`APPLICATION_GRPC = "application/grpc"`（`:47`）与 `APPLICATION_GRPC_PROTO = "application/grpc+proto"`（`:49`）。**Triple 默认发的是后者**（`TripleInvoker.java:319` 用 `APPLICATION_GRPC_PROTO.getName()` 构造 `MethodDescriptor`），而 gRPC 兼容路径（`GrpcCompositeCodec`）用的是 `APPLICATION_GRPC`（`tri/h12/grpc/GrpcCompositeCodec.java:131`）。服务端判断「是不是 gRPC 请求」用**前缀匹配**：`contentType.startsWith(MediaType.APPLICATION_GRPC.getName())`（`GrpcUtils.java:91`）——所以 `application/grpc+proto` 也能被识别成 gRPC。
+- **trailer**：最终状态与错误通过 HTTP/2 **trailer** 头回传，`grpc-status` / `grpc-status-details-bin` 放在 trailer 而非 header，与 gRPC 规范一致；流结束时据此判定成功或失败（`TriRpcStatus` 映射 gRPC code）。客户端的解析入口是 `AbstractTripleClientStream.statusFromTrailers`（`tri/stream/AbstractTripleClientStream.java:330-352`）：先取 trailer 里的 `grpc-status`，没有则取 `grpc-message` 拼描述；**连 `grpc-status` 都没有**时，若已收到 header 则报 `"missing GRPC status in response"`，否则退化用 HTTP 状态码经 `TriRpcStatus.httpStatusToGrpcCode` 转换。
+- **attachment 过滤**：`excludeAttachmentsSet`（`TripleHeaderEnum.java:48`）显式排除 pseudo-header 与内部头（group、interface、path、remote.application、application、serialization 等），避免它们被当作业务 attachment 透传。
+
+这意味着 Dubbo 的 `RpcContext` attachment 与 gRPC 的 metadata 并非一一对应：只有非内部的、非伪头的 key 才会以 gRPC metadata 形式出现在 `tri-*` / 自定义头里。
+
+## TriplePathResolver Path Mapping
+
+`PathResolver` 是 Triple 服务端把「HTTP/2 `:path`」映射回「哪个 Invoker」的核心，3.3.6 的实现是 `TriplePathResolver`（SPI 注册名 `tri`）：
+
+```java
+// dubbo-rpc/dubbo-rpc-triple/.../tri/TriplePathResolver.java:37-52
+public void register(Invoker<?> invoker) {
+    URL url = invoker.getUrl();
+    String serviceKey = url.getServiceKey();
+    String serviceInterface = url.getServiceModel().getServiceModel().getInterfaceName();
+
+    register0(serviceKey, serviceInterface, invoker, url);
+
+    // Path pattern: '{interfaceName}' or '{contextPath}/{interfaceName}'
+    String path = url.getPath();
+    int index = path.lastIndexOf('/');
+    if (index == -1) {
+        return;
+    }
+    String fallbackPath = path.substring(0, index + 1) + serviceInterface;
+    register0(URL.buildKey(path, url.getGroup(), url.getVersion()), fallbackPath, invoker, url);
+}
+```
+
+设计要点：
+
+- **双路径注册**：主路径是 `serviceKey`（含 group/version），回退路径是 `{contextPath}/{interfaceName}`。`TripleProtocol.RESOLVE_FALLBACK_TO_DEFAULT`（默认 `true`，`TripleProtocol.java:68`）控制是否也注册回退路径。
+- **路径冲突直接抛异常**：`register0` 里若主路径已被占用且**不是**回退路径，直接抛 `IllegalStateException`（`TriplePathResolver.java:65-69`）——两个服务用同一个 `:path` 是启动期错误，不是运行期错误。
+- **查找时逐级降级**：`resolve(path, group, version)` 先按 `URL.buildKey(path, group, version)` 精确找；找不到则按 `(path, group, DEFAULT_VERSION)` 找；再找不到则按**裸 path** 找（`TriplePathResolver.java:116-124`）。三级降级让「客户端按 gRPC 标准路径 `/package.Service/Method` 调用」能命中「服务端按 Dubbo 风格 `group/interface:version` 暴露」的服务。
+- **`nativeStubs` 单独一张表**：`addNativeStub` / `hasNativeStub` 标记那些由 Dubbo 自身生成桩代码的服务（`:127-135`）。
+
+## tri vs grpc vs rest2 Handler Routing
+
+三个协议名的实际差异落在 `RequestHandlerMapping` 这个 SPI 上，只有两个实现：
+
+```properties
+# dubbo-rpc/dubbo-rpc-triple/src/main/resources/META-INF/dubbo/internal/org.apache.dubbo.rpc.protocol.tri.route.RequestHandlerMapping
+grpc=org.apache.dubbo.rpc.protocol.tri.h12.grpc.GrpcRequestHandlerMapping
+rest=org.apache.dubbo.rpc.protocol.tri.rest.mapping.RestRequestHandlerMapping
+```
+
+服务端收到请求后由 `DefaultRequestRouter` 依次询问，谁先返回非 null handler 谁接管：
+
+```java
+// dubbo-rpc/dubbo-rpc-triple/.../tri/route/DefaultRequestRouter.java:44-60
+for (int i = 0, size = requestHandlerMappings.size(); i < size; i++) {
+    RequestHandlerMapping mapping = requestHandlerMappings.get(i);
+    RequestHandler handler = mapping.getRequestHandler(url, request, response);
+    if (handler == null) {
+        continue;
+    }
+    handler.setAttribute(TripleConstants.HANDLER_TYPE_KEY, mapping.getType());
+    handler.setAttribute(TripleConstants.HTTP_REQUEST_KEY, request);
+    handler.setAttribute(TripleConstants.HTTP_RESPONSE_KEY, response);
+    return handler;
+}
+return null;
+```
+
+`mapping.getType()` 返回的正是 `TripleConstants.TRIPLE_HANDLER_TYPE_GRPC`（`"grpc"`）或 `TRIPLE_HANDLER_TYPE_REST`（`"rest"`）（`GrpcRequestHandlerMapping.java:84`、`RestRequestHandlerMapping.java:150`），下游据此分流：
+
+- `HttpContextFilter`（`tri/h12/HttpContextFilter.java:37`）读 `HANDLER_TYPE_KEY` 决定要不要把 HTTP 上下文写进 `RpcContext`；
+- `RestFilterAdapter` / `RestHeaderFilterAdapter`（`tri/rest/filter/`）只在 handler type 为 `"rest"` 时才介入。
+
+> [!NOTE]
+> 所以「`grpc=` 与 `tri=` 有区别吗」这个问题的准确答案是：**协议实现层没有区别，请求分发层有区别**。`tri` 协议名导出的服务，`grpc` 的 `RequestHandlerMapping` 与 `rest` 的 `RequestHandlerMapping` 都会尝试处理同一个请求——先命中谁取决于 HTTP 请求的实际形态（路径、方法、content-type），而不是取决于 SPI 名字。`tri` 之所以能同时服务 gRPC 客户端和 REST 客户端，靠的就是这个「两个 mapping 并存、谁先匹配谁接管」的机制。
+
+## TripleConstants Reference
+
+`TripleConstants`（`dubbo-rpc/dubbo-rpc-triple/.../tri/TripleConstants.java`）是 Triple 层的常量集中地，几个关键项：
+
+| 常量 | 值 | 用途 |
+| :--- | :--- | :--- |
+| `DEFAULT_VERSION` | `"1.0.0"` | `TriplePathResolver.resolve` 降级查找时的默认版本 |
+| `HESSIAN2` / `HESSIAN4` | `"hessian2"` / `"hessian4"` | wrapper 层的序列化名换算（见 [Serialization](/docs/CS/Framework/Dubbo/Serialization.md)） |
+| `HANDLER_TYPE_KEY` | `"tri.handler.type"` | 请求 attribute，值为 `"grpc"` 或 `"rest"` |
+| `HTTP_REQUEST_KEY` / `HTTP_RESPONSE_KEY` | `"tri.http.request"` / `"tri.http.response"` | 原始 HTTP 消息的 attribute |
+| `REMOTE_ADDRESS_KEY` | `"tri.remote.address"` | 对端地址 |
+| `HTTPS_SCHEME` / `HTTP_SCHEME` | `"https"` / `"http"` | Netty `AsciiString` 形式的 scheme 常量 |
+| `HEADER_BIN_SUFFIX` | `"-bin"` | 二进制 metadata 后缀 |
+
+## Triple Static Switches and H2 Settings Keys
+
+`TripleProtocol` 有一组 `public static boolean` 开关，在**构造器里**从环境/全局配置一次性读入（`TripleProtocol.java:66-71` 定义，`:73-95` 赋值）：
+
+```java
+// dubbo-rpc/dubbo-rpc-triple/.../tri/TripleProtocol.java:82-91
+Configuration conf = ConfigurationUtils.getEnvConfiguration(ApplicationModel.defaultModel());
+CONVERT_NO_LOWER_HEADER = conf.getBoolean(H2_SETTINGS_SUPPORT_NO_LOWER_HEADER_KEY, true);
+IGNORE_1_0_0_VERSION = conf.getBoolean(H2_SETTINGS_IGNORE_1_0_0_VERSION, false);
+RESOLVE_FALLBACK_TO_DEFAULT = conf.getBoolean(H2_SETTINGS_RESOLVE_FALLBACK_TO_DEFAULT_KEY, true);
+
+// init global settings
+Configuration globalConf = ConfigurationUtils.getGlobalConfiguration(frameworkModel.defaultApplication());
+VERBOSE_ENABLED = globalConf.getBoolean(H2_SETTINGS_VERBOSE_ENABLED, false);
+REST_ENABLED = globalConf.getBoolean(H2_SETTINGS_REST_ENABLED, true);
+OPENAPI_ENABLED = globalConf.getBoolean(H2_SETTINGS_OPENAPI_ENABLED, false);
+```
+
+对应的配置 key 定义在 `dubbo-rpc/dubbo-rpc-api/.../rpc/Constants.java`：
+
+| 常量 | key | 默认值 | 作用域 |
+| :--- | :--- | :--- | :--- |
+| `H2_SETTINGS_SUPPORT_NO_LOWER_HEADER_KEY` | `dubbo.rpc.tri.support-no-lower-header` | `true` | 环境变量 |
+| `H2_SETTINGS_IGNORE_1_0_0_KEY` | `dubbo.rpc.tri.ignore-1.0.0-version` | `false` | 环境变量 |
+| `H2_SETTINGS_RESOLVE_FALLBACK_TO_DEFAULT_KEY` | `dubbo.rpc.tri.resolve-fallback-to-default` | `true` | 环境变量 |
+| `H2_SETTINGS_VERBOSE_ENABLED` | `dubbo.protocol.triple.verbose` | `false` | 全局配置 |
+| `H2_SETTINGS_REST_ENABLED` | `dubbo.protocol.triple.rest.enabled` | `true` | 全局配置 |
+| `H2_SETTINGS_OPENAPI_ENABLED` | `dubbo.protocol.triple.rest.openapi.enabled` | `false` | 全局配置 |
+
+> [!NOTE]
+> 注意「**环境变量**」与「**全局配置**」两类作用域不同：前三项走 `ConfigurationUtils.getEnvConfiguration(...)`（读环境变量），后三项走 `getGlobalConfiguration(...)`（读 `dubbo.properties` 等全局配置源）。另外 `REST_ENABLED` / `OPENAPI_ENABLED` 等是 `public static` 字段——它们在**类初始化时**就被赋值，因此同一 JVM 内后续修改配置源不会即时生效（除非重新加载类）。
+
 ## Pitfall List
 
 | 直觉写法 | 源码实际 | 后果 |
@@ -307,6 +524,12 @@ private String[] produces;
 | 「`getName()` 判断协议类型」 | 3.3.6 `Protocol` 已无该方法 | 编译不过 |
 | 「单端口多协议默认开启」 | 需 `ext.protocol` + `ispuserver=true` | 端口复用不生效 |
 | 「`@DubboService(protobuf=true)`」 | 注解无 `protobuf` 属性 | 编译不过 |
+| 「`tri` / `grpc` / `rest2` 是三套实现」 | 三个都是 `TripleProtocol` 子类且**无任何覆写**，差异在 `RequestHandlerMapping` 层 | 误以为要按名字切换实现 |
+| 「content-type 是 `application/grpc`」 | Triple 默认发 `application/grpc+proto`；gRPC 兼容路径用 `application/grpc`，服务端按**前缀**判定 | 网关按精确匹配分流时匹配不上 |
+| 「`grpc-status` 在 header 里」 | 放在 HTTP/2 **trailer**；缺失时降级用 HTTP 状态码转换 | 按 header 解析永远拿不到状态 |
+| 「`tri` 协议名导出就只服务 gRPC」 | grpc 与 rest 两个 `RequestHandlerMapping` 并存，谁先匹配谁接管 | 误判 REST 客户端的可用性 |
+| 「`REST_ENABLED` 可以运行期动态改」 | 它是 `public static` 字段，在 `TripleProtocol` 构造器里一次性赋值 | 改配置不生效，需重启 |
+| 「`dubbo.rpc.tri.*` 和 `dubbo.protocol.triple.*` 是一类配置」 | 前三者是**环境变量**、后三者是**全局配置**，读取 API 都不同 | 配置写错位置不生效 |
 
 ## Links
 

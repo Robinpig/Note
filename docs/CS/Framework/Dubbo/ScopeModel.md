@@ -338,6 +338,44 @@ protected ModuleModel(ApplicationModel applicationModel, boolean isInternal) {
 > [!NOTE]
 > **运行时实际加载的数量取决于 classpath**，只有引入对应 jar 才会被 `ExtensionLoader` 扫到。所以「Dubbo 有 N 个 ScopeModelInitializer」这类固定数字是没有意义的——最小依赖场景大致 10 个左右。
 
+## Destroy Cascade
+
+三层模型的销毁是**自下而上自动级联**的，不需要用户手动关 FrameworkModel——这是 3.x 相对 2.x「静态单例难清理」的核心改进之一。
+
+`ApplicationModel` 的销毁入口 `onDestroy()`（`ApplicationModel.java:146-193`）按 8 步收尾，最后一步是：
+
+```java
+// dubbo-common/src/main/java/org/apache/dubbo/rpc/model/ApplicationModel.java:191-192
+// 8. destroy framework if none application
+frameworkModel.tryDestroy();
+```
+
+`FrameworkModel.tryDestroy()`（`FrameworkModel.java:285-291`）只在**已发布应用数为 0**时才真正销毁整个框架：
+
+```java
+// dubbo-common/src/main/java/org/apache/dubbo/rpc/model/FrameworkModel.java:285-291
+void tryDestroy() {
+    synchronized (instLock) {
+        if (pubApplicationModels.size() == 0) {
+            destroy();
+        }
+    }
+}
+```
+
+注意判据是 `pubApplicationModels`（已发布应用），不是含内部应用 `internalApplicationModel` 的 `applicationModels`——内部应用模型销毁不会触发框架销毁。
+
+`FrameworkModel.destroy()`（`FrameworkModel.java:127-150`）自身再向下级联：
+
+1. 遍历 `applicationModels` 逐个 `applicationModel.destroy()`；
+2. `checkApplicationDestroy()` 断言销毁期间没有新应用被创建（否则抛 "Not all application models are completely destroyed"，`FrameworkModel.java:153-163`）；
+3. `notifyDestroy()`（由 `FrameworkModelCleaner` 等监听器清理框架级资源）；
+4. 从 `allInstances` 移除自己并 `resetDefaultFrameworkModel()`；
+5. `destroyGlobalResources()`——仅当 `allInstances.isEmpty()` 时调用 `GlobalResourcesRepository.getInstance().destroy()`，**彻底关停 Dubbo**（释放全局静态资源，`FrameworkModel.java:165-171`）。
+
+> [!WARNING]
+> 销毁 default FrameworkModel 期间调用 `FrameworkModel.defaultModel()` / `ApplicationModel.defaultModel()` 会拿到 broken model（官方注释 `FrameworkModel.java:174`），所以官方明确建议「尽可能不用 default model」。级联销毁是自动的，但「最后一个应用 destroy 会顺带关掉 Framework」这一副作用，在单 JVM 多应用场景里要格外小心——别在别的应用还在跑时销毁其中一个。子模型的 `ExtensionLoader` 缓存随 `ExtensionDirector.destroy()` 一并清空，细节见 [SPI](/docs/CS/Framework/Dubbo/SPI.md?id=scopemodel-which-model-an-extension-instance-belongs-to)。
+
 ## Pitfall List
 
 - **把 `defaultApplication()` / `resetDefaultAppModel()` 当成 `ApplicationModel` 的方法**——它们在 `FrameworkModel` 上（`:225` / `:299`）。

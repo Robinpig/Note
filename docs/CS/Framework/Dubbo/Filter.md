@@ -583,6 +583,13 @@ public class ActiveLimitFilter implements Filter, Filter.Listener {
 >
 > 消费者侧要拦截选址**之前**的逻辑（如统一参数转换、入口日志），应该实现 `ClusterFilter` 而不是 `Filter`。原因是消费端 `Filter` 的实例数量级等于服务端地址量级，每个 `Invoker` 各持一条链；而 `ClusterFilter` 每个集群一份。完整扩展点全景见 [Consumer](/docs/CS/Framework/Dubbo/Consumer.md?id=consumer-side-extension-point-overview)。
 
+## Filter.Listener and ListenableFilter
+
+`BaseFilter.Listener`（`onResponse` / `onError`）是拦截「调用返回后」的关键扩展点——`TimeoutFilter`、`ExceptionFilter`、`ContextFilter`、`ActiveLimitFilter` 等都实现了它，用来在结果回传时做清理或告警。链上每个 `CopyOfFilterChainNode` 在 `invoker.invoke` 拿到 `Result` 后，会回调该 Filter 的 `Listener`（见 `DefaultFilterChainBuilder.buildInvokerChain` 中的 `CallbackRegistrationInvoker`）。
+
+> [!WARNING]
+> **`ListenableFilter` 在 3.3.6 已被标 `@Deprecated`**（`ListenableFilter.java:29`）。它的设计是「一个 Listener 实例 per RPC 调用」，用 `ConcurrentMap<Invocation, Listener>` 维护（`:33`）；官方注释明确建议**直接实现 `Filter.Listener`**（参考 `ExceptionFilter` 的写法）而非继承 `ListenableFilter`。自定义 Filter 时不要再使用 `ListenableFilter` 这个基类。
+
 ## Pitfall List
 
 > [!WARNING]

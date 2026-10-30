@@ -9,22 +9,7 @@ Dubbo 在很多大企业内部衍生出了独立版本，比如在阿里巴巴�
 > [!NOTE]
 > **版本基线：3.3.6**（2026-10 逐篇核实，tarball `apache/dubbo` tag `dubbo-3.3.6`；3.2.20 为 LTS，3.4 分支开发中）。
 >
-> **3.x 与 2.x 差异极大，网上中文资料大量停留在 2.x，照抄必错。** 本目录各分册均在开头标注版本基线，`Architecture`/`ScopeModel`/`ServiceConfig`/`Provider`/`Invocation`/`Protocol`/`Serialization`/`Triple`/`config` 等篇与本页同为 3.3.6 基线。
->
-> 几个最容易记错、且「类/方法已死」级别的点：
-> - 协议名是 **`tri` 不是 `triple`**（另注册 `grpc`/`rest2`，三者皆为 `TripleProtocol` 子类）；Triple 默认序列化 **hessian2 不是 Protobuf**（仅 PB 生成类走直通）；默认端口 **50051**
-> - 路由实现全改名 **`*StateRouter`**（`ConditionRouter`/`TagRouter` **已不存在**）；条件路由**没有** `in`/`not in`/`matches`/`any`（只认 `& = != ,`）
-> - **`sent` 是「发送阻塞等写入完成」不是「不等响应」**；**没有 `oneway` 这个 key**（由 `return=false` 推导）
-> - **3.3.6 中不存在**：`SpringExtensionFactory`、`Cglib`、`destroyAll()`、`RedisMetadataReport`、`CompositeMetadataReport`、`RetryMetadataReport`、`FailZoneAwareCluster`、`mina`
-> - **`DubboBootstrap` 未被删除也未被取代**（`start()` 全文 3 行委派 `DefaultApplicationDeployer`）；`ServiceBean` 已不监听任何事件
-> - 优雅停机 key 是 **`dubbo.service.shutdown.wait`**（10000ms）；`delay` 默认 **`null`** 不是 -1
-> - 主仓库序列化实现**只有 hessian2 / fastjson2**；主仓库注册中心**只有 nacos / zookeeper**（Redis/Consul/Etcd 已外置 `org.apache.dubbo.extensions`）；`MetadataReportFactory.DEFAULT="redis"` 是**死常量**（无消费方）
-> - 认证默认 **`basic` 是 Base64 明文**；`dubbo-spring-security` **信任客户端上下文不做校验**；异常码是 `AUTHORIZATION_EXCEPTION=13` 不是 `UNAUTHORIZED`
-> - **`20888` 是死常量**（Metrics 导出走 QoS 的 `metrics` 命令，无总开关，看 classpath 有无 Micrometer）
-> - 配置优先级：**`dubbo.properties` 最低**、`-D` 最高，没有 `DefaultConfigManager`
-> - **`actives` 是消费侧**（`ActiveLimitFilter` 的 group 是 CONSUMER），服务端并发限制是 **`executes`**；Provider 侧**没有** `retries`
-> - **`/dubbo/mapping/<interface>` 在 ZK 上真实存在**——被移除的只是**本地缓存 key** 的 `mapping/` 前缀（issue #4671），两者不能混为一谈
-> - **`ExporterListener` 没有任何内置实现**（生产 resources 里连 SPI 文件都没有），监听暴露事件要用 `ServiceListener`
+> **3.x 与 2.x 差异极大，网上中文资料大量停留在 2.x，照抄必错。** 本目录各分册（`Architecture`/`ScopeModel`/`ServiceConfig`/`Provider`/`Invocation`/`Protocol`/`Serialization`/`Triple`/`config` 等）开头均标注版本基线，与本页同为 3.3.6。全分册共用的「类/方法已死」级易错点统一汇总在文末 **Pitfall List**，逐篇深挖后的事实以各分册正文为准。
 
 与其他框架（Spring Cloud、gRPC、Istio）的横向对比与集成方式见 [Comparison](/docs/CS/Framework/Dubbo/Comparison.md)。
 
@@ -96,6 +81,24 @@ Dubbo 3 的能力可以按「一次调用经过哪些环节」串起来阅读，
 **再看集群与治理。** 路由与容错的整体结构见 [cluster](/docs/CS/Framework/Dubbo/cluster.md)，条件路由与标签路由的规则语法见 [Router](/docs/CS/Framework/Dubbo/Router.md)，选择算法见 [LoadBalance](/docs/CS/Framework/Dubbo/LoadBalance.md)；优雅停机、Mock 降级、QoS 与内置限流见 [Governance](/docs/CS/Framework/Dubbo/Governance.md)；服务鉴权、凭据签名与 mTLS 见 [Auth](/docs/CS/Framework/Dubbo/Auth.md)；指标与链路追踪见 [Metrics](/docs/CS/Framework/Dubbo/Metrics.md)。
 
 **最后是地址与生态。** 注册中心的实现与地址推送见 [registry](/docs/CS/Framework/Dubbo/registry.md)，接口到应用名的映射与元数据上报见 [Metadata](/docs/CS/Framework/Dubbo/Metadata.md)；Mesh 在 3.3.6 主仓库的真实能力边界（以及 Proxyless 尚未落地这一事实）见 [Mesh](/docs/CS/Framework/Dubbo/Mesh.md)；与 Spring Cloud、gRPC、Istio 的对比见 [Comparison](/docs/CS/Framework/Dubbo/Comparison.md)。
+
+## Pitfall List
+
+跨分册共用的「最容易记错、且类/方法已死级别」的点（均经源码逐篇核实，2026-10；逐篇深挖后的细节以各分册正文为准）：
+
+- 协议名是 **`tri` 不是 `triple`**（另注册 `grpc`/`rest2`，三者皆为 `TripleProtocol` 子类）；Triple 默认序列化 **hessian2 不是 Protobuf**（仅 PB 生成类走直通）；默认端口 **50051**
+- 路由实现全改名 **`*StateRouter`**（`ConditionRouter`/`TagRouter` **已不存在**）；条件路由**没有** `in`/`not in`/`matches`/`any`（只认 `& = != ,`）
+- **`sent` 是「发送阻塞等写入完成」不是「不等响应」**；**没有 `oneway` 这个 key**（由 `return=false` 推导）
+- **3.3.6 中不存在**：`SpringExtensionFactory`、`Cglib`、`destroyAll()`、`RedisMetadataReport`、`CompositeMetadataReport`、`RetryMetadataReport`、`FailZoneAwareCluster`、`mina`
+- **`DubboBootstrap` 未被删除也未被取代**（`start()` 全文 3 行委派 `DefaultApplicationDeployer`）；`ServiceBean` 已不监听任何事件
+- 优雅停机 key 是 **`dubbo.service.shutdown.wait`**（10000ms）；`delay` 默认 **`null`** 不是 -1
+- 主仓库序列化实现**只有 hessian2 / fastjson2**；主仓库注册中心**只有 nacos / zookeeper**（Redis/Consul/Etcd 已外置 `org.apache.dubbo.extensions`）；`MetadataReportFactory.DEFAULT="redis"` 是**死常量**（无消费方）
+- 认证默认 **`basic` 是 Base64 明文**；`dubbo-spring-security` **信任客户端上下文不做校验**；异常码是 `AUTHORIZATION_EXCEPTION=13` 不是 `UNAUTHORIZED`
+- **`20888` 是死常量**（Metrics 导出走 QoS 的 `metrics` 命令，无总开关，看 classpath 有无 Micrometer）
+- 配置优先级：**`dubbo.properties` 最低**、`-D` 最高，没有 `DefaultConfigManager`
+- **`actives` 是消费侧**（`ActiveLimitFilter` 的 group 是 CONSUMER），服务端并发限制是 **`executes`**；Provider 侧**没有** `retries`
+- **`/dubbo/mapping/<interface>` 在 ZK 上真实存在**——被移除的只是**本地缓存 key** 的 `mapping/` 前缀（issue #4671），两者不能混为一谈
+- **`ExporterListener` 没有任何内置实现**（生产 resources 里连 SPI 文件都没有），监听暴露事件要用 `ServiceListener`
 
 ## Links
 

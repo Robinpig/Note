@@ -94,6 +94,56 @@ Dubbo 已实现对 Istio 体系的全面接入：可以用 Istio 控制面治理
 
 <!-- tabs:end -->
 
+## Code-Level Differentiators
+
+上文是定位层面的对比；落到 3.3.6 源码，四个框架的差别集中在四件事：**传输模型、治理归属、注册中心抽象、扩展哲学**。下面用真实类把这几条钉死。
+
+### Triple vs gRPC: A Compatible Layer, Not a Thin Wrapper
+
+源码事实（3.3.6 已核实）：
+
+- `org.apache.dubbo.rpc.protocol.tri.TripleProtocol extends AbstractProtocol`；其 SPI 文件 `dubbo-rpc-triple/.../META-INF/dubbo/internal/org.apache.dubbo.rpc.Protocol` 注册了三个名字：`tri=TripleProtocol`、`grpc=GrpcProtocol`、`rest2=RestProtocol`。
+- `GrpcProtocol extends TripleProtocol`、`RestProtocol extends TripleProtocol`（`dubbo-rpc-triple/.../tri/GrpcProtocol.java:21`、`RestProtocol.java:21`）——三者共用同一套 HTTP/2 栈（`dubbo-remoting-http12`）。
+- gRPC 只定义「线格式 + 代码生成工具链」；Dubbo 在 Triple 之上叠加了注册发现、路由、集群容错、Filter 等治理能力，这些 gRPC 原生没有。
+
+为什么 Dubbo 的「支持 gRPC」不是「纯 gRPC」：
+
+| 维度 | gRPC | Dubbo Triple |
+| :--- | :--- | :--- |
+| 协议名 | `grpc` | `tri` / `grpc` / `rest2`（同属 `TripleProtocol` 体系） |
+| 默认序列化 | Protobuf | **hessian2**（仅 PB 生成类走直通） |
+| 默认端口 | 自定义 | **50051**（`CommonConstants` 相关常量） |
+| 服务治理 | 无（需另接控制面/sidecar） | 内置 Cluster / Router / LoadBalance / Filter |
+| 定位 | 通信规范 | Dubbo 的一个内置协议 |
+
+结论：**Dubbo 把 gRPC 当底层通信协议用，而非把 Dubbo 改写成 gRPC**。开发仍走 Dubbo 的 `@DubboService` / `@DubboReference` 与 `Invoker` 模型。
+
+### Feign/Spring Cloud vs Dubbo Invoker: Sync-Blocking vs Async-First
+
+| 维度 | Spring Cloud（Feign） | Dubbo |
+| :--- | :--- | :--- |
+| 调用模型 | `FeignClient` 同步阻塞 HTTP 调用 | `Invoker.invoke(Invocation)` 返回 `Result`；`org.apache.dubbo.rpc.AsyncRpcResult` 内嵌 `CompletableFuture`，**天生异步** |
+| 服务发现 | `DiscoveryClient` 拉模型，与具体注册中心无关 | `RegistryFactory.getRegistry(URL)` 推模型，注册中心经 `@SPI` 抽象（主仓库仅 nacos / zookeeper） |
+| 治理归属 | 依赖厂商套件（SCA / Netflix） | 框架内置 `Cluster` / `Router` / `LoadBalance` |
+| 协议绑定 | 绑定 HTTP | 多协议可切换（`dubbo` / `tri` / `injvm`），支持单端口多协议 |
+
+关键差异：Feign 的每次调用都阻塞在一条 HTTP 连接上，背压与异步需要调用方自己搭；Dubbo 的 `Invoker.invoke` 统一返回 `Result`，`AsyncRpcResult` 把 `CompletableFuture` 作为一等公民，同步/异步只是 `Result` 的两种取用方式（`Invocation.md` 详述）。这是「统一 `Invoker` 抽象」带来的直接好处。
+
+### Istio vs Dubbo: Control Plane vs Data Plane
+
+在 3.3.6 主仓库，Dubbo 与 Istio 的真实关系是**分层而非竞争**——且 mesh 能力只有 sidecar 模式（详见 [Mesh](/docs/CS/Framework/Dubbo/Mesh.md)）：
+
+- **Dubbo 的角色 = 数据面**：以 triple（HTTP/2）协议把流量发往 Envoy，地址形如 `tri://<svc>.<ns>.svc.cluster.local:80`（由 `ReferenceConfig` 的 `mesh-enable` + `providedBy` 拼出）。
+- **Istio 的角色 = 控制面**：做流量拦截、路由、mTLS、限流。
+- **Dubbo 不实现 xDS 客户端**：主仓库无 `dubbo-xds` 模块、无 `Xds*` / `Proxyless*` 类（[Mesh](/docs/CS/Framework/Dubbo/Mesh.md?id=missing-parts-of-the-main-repo) 已逐条核实）。因此「Dubbo vs Istio」本质是「数据面 vs 控制面」的协作关系。
+
+### Microkernel/SPI and Unified Invoker: The Real Differentiator
+
+上面三栏都指向同一条设计哲学，这也是 Dubbo 区别于 gRPC、Feign、Spring Cloud 的根本：
+
+- **每层都是 `@SPI` 接缝**：`ProxyFactory`(默认 `javassist`)、`Protocol`(默认 `dubbo`)、`Cluster`(默认 `failover`)、`LoadBalance`(默认 `random`)、`Transporter`(默认 `netty`)、`Compiler`(默认 `javassist`) 等，框架自带功能与你的扩展站在同一机制上（完整清单见 [Architecture](/docs/CS/Framework/Dubbo/Architecture.md?id=spi-extension-points-of-each-layer)）。gRPC / Feign 没有对等的插件内核。
+- **`Invoker<T>` 统一了本地/远程/集群调用**：`Cluster.join(Directory)` 返回 `Invoker`、`Protocol.refer()` 返回 `Invoker`、mesh 单地址也是 `Invoker`。这种单一抽象让 `Filter` / `Cluster` / `Router` 能以正交方式自由组合，而不必为每种场景写一套调用接口。
+
 ## Summary
 
 | 维度 | Dubbo | Spring Cloud | gRPC | Istio |

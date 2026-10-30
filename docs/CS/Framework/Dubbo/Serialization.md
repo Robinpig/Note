@@ -176,32 +176,83 @@ Triple 是这个机制的主要消费者：`serialize.multiple=default` 语义�
 
 ### hessian4 Naming Trap
 
-`Hessian2Serialization` 实际写入 content type 的名字是 `hessian4`——虽然 SPI 扩展名叫 `hessian2`，但底层用的是 Hessian 4.x 的库（`com.caucho.hessian4`，Maven 坐标 `com.caucho:hessian`）。对外配置写 `hessian2`，内部协商字符串却是 `hessian4`，排查 Triple 的 `serialize.multiple` 协商日志时会同时看到这两个名字，属于同一实现。
+`Hessian2Serialization` 写入 content type 的名字是 **`x-application/hessian2`**（`dubbo-serialization/.../hessian2/Hessian2Serialization.java:63-65`），与 SPI 扩展名 `hessian2` 一致。
+
+`hessian4` 这个名字出现在**另一个地方**——Triple 的 wrapper 路径。`ReflectionPackableMethod` 在把序列化类型写进 wrapper 头之前会做一次换算：
+
+```java
+// dubbo-rpc/dubbo-rpc-triple/.../tri/ReflectionPackableMethod.java:424-428
+private String convertHessianToWrapper(String serializeType) {
+    if (TripleConstants.HESSIAN2.equals(serializeType)) {
+        return TripleConstants.HESSIAN4;    // "hessian4"
+    }
+    return serializeType;
+}
+```
+
+`TripleConstants.HESSIAN4 = "hessian4"` 与 `HESSIAN2 = "hessian2"` 并列定义在 `dubbo-rpc/dubbo-rpc-triple/.../tri/TripleConstants.java:27,29`。所以：**Dubbo 协议头里写的是序列化 id `2`，Triple 的 wrapper 头里写的是字符串 `hessian4`，而 `Serialization.getContentType()` 返回 `x-application/hessian2`** —— 三个名字指同一个实现，排查时看到任何一个都要先确认自己在看哪一层。
+
+底层库也不是 `com.caucho:hessian` 而是 Dubbo 自己维护的 **`org.apache.dubbo:hessian-lite`**（`dubbo-serialization/dubbo-serialization-hessian2/pom.xml:39-42`，版本 `4.0.4` 见 `dubbo-dependencies-bom/pom.xml:171`），包名是 `com.alibaba.com.caucho.hessian.io`——`Hessian2Serialization` 静态块里校验的正是 `com.alibaba.com.caucho.hessian.io.Hessian2Output`。
 
 ### allowNonSerializable and Class Factory Bypass
 
-Hessian2 的对象输出工厂由 `Hessian2FactoryManager` 管理，其中有两处关键逻辑：
+Hessian2 的对象输出工厂由 `Hessian2FactoryManager` 管理，按 **ClassLoader 维度**缓存 `SerializerFactory`（`dubbo-serialization/.../hessian2/Hessian2FactoryManager.java:45`）：
 
 ```java
-// dubbo-serialization/dubbo-serialization-hessian2/.../hessian2/Hessian2FactoryManager.java:88-90
-// 类工厂层面放行 org.apache.dubbo.* 整个包
-hessian2SerializerFactory.getClassFactory().allow("org.apache.dubbo.*");
-
-// :117-119
-// 非序列化类的白名单同样放行 dubbo 包
-hessian2SerializerFactory.getNonSerializableObjectFactory().allow("org.apache.dubbo.*");
+// dubbo-serialization/dubbo-serialization-hessian2/.../hessian2/Hessian2FactoryManager.java:85-92
+private SerializerFactory createDefaultSerializerFactory(ClassLoader classLoader) {
+    Hessian2SerializerFactory hessian2SerializerFactory =
+            new Hessian2SerializerFactory(classLoader, defaultSerializeClassChecker);
+    hessian2SerializerFactory.setAllowNonSerializable(Boolean.parseBoolean(
+            SystemPropertyConfigUtils.getSystemProperty(DUBBO_HESSIAN_ALLOW_NON_SERIALIZABLE, "false")));
+    hessian2SerializerFactory.getClassFactory().allow("org.apache.dubbo.*");
+    return hessian2SerializerFactory;
+}
 ```
 
-也就是说，无论安全检查配置得多严格，`org.apache.dubbo.*` 在 Hessian2 这一层始终是放行的——这是框架自身类型（`URL`、`RpcInvocation` 等）能正常传输的保障。而控制「是否允许序列化未实现 `Serializable` 接口的类」的开关：
+两处关键点：
+
+- **类工厂层面放行 `org.apache.dubbo.*`**（`:90`）——这是框架自身类型（`URL`、`RpcInvocation` 等）能正常传输的保障，**与安全检查配置无关，无条件生效**。白名单模式分支（`createWhiteListSerializerFactory`，`:94-121`）在最后也补了同一行（`:119`），所以无论走哪条路径这个放行都存在。
+- **`allowNonSerializable` 读的是 JVM 系统属性，不是 URL 参数**。常量 `DUBBO_HESSIAN_ALLOW_NON_SERIALIZABLE = "dubbo.hessian.allowNonSerializable"` 定义在 `dubbo-common/.../constants/CommonConstants.java:784`（`DubboProperty` 接口内），读取走 `SystemPropertyConfigUtils.getSystemProperty(key, "false")`——**必须是 `-Ddubbo.hessian.allowNonSerializable=true` 启动参数或系统属性**，写成 URL 上的 `dubbo.hessian.allowNonSerializable=true` **不生效**。
+
+> [!WARNING]
+> **不存在 `getNonSerializableObjectFactory()` 这个方法。** 全仓库（`grep -rn "getNonSerializableObjectFactory" --include=*.java .`）搜不到任何定义或调用——它既不在 Hessian 官方库里，也不在 Dubbo 的 `Hessian2SerializerFactory` / `Hessian2FactoryManager` 里。「非序列化对象工厂」这个概念在 Hessian 4.x 里由 `SerializerFactory#isAllowNonSerializable()` 这个开关表达（见下），不是通过一个独立工厂对象放行的。
+
+`allowNonSerializable` 的最终语义由 `Hessian2SerializerFactory.checkSerializable` 决定——**它同时看 Hessian 自己的开关和 Dubbo 的 `checkSerializable` 开关，两者都放行才允许**：
 
 ```java
-// dubbo-serialization/dubbo-serialization-hessian2/.../hessian2/Hessian2FactoryManager.java（dubbo.hessian.allowNonSerializable 读取处）
-// 默认 "false"：非 Serializable 类默认拒绝序列化
-boolean allowNonSerializable = Boolean.parseBoolean(
-    url.getParameter("dubbo.hessian.allowNonSerializable", "false"));
+// dubbo-serialization/dubbo-serialization-hessian2/.../hessian2/Hessian2SerializerFactory.java:92-101
+private void checkSerializable(Class<?> cl) {
+    // If class is Serializable => ok
+    // If class has not implement Serializable
+    //      If hessian check serializable => fail
+    //      If dubbo class checker check serializable => fail
+    //      If both hessian and dubbo class checker allow non-serializable => ok
+    if (!Serializable.class.isAssignableFrom(cl)
+            && (!isAllowNonSerializable() || defaultSerializeClassChecker.isCheckSerializable())) {
+        throw new IllegalStateException(
+                "Serialized class " + cl.getName() + " must implement java.io.Serializable");
+    }
+}
 ```
 
-`dubbo.hessian.allowNonSerializable` 默认 `"false"`，与 Hessian 官方 `SerializerFactory#setAllowNonSerializable` 的语义一致。
+因此「Dubbo 侧把 `check-serializable` 关掉」**并不足以**让非 `Serializable` 类通过——Hessian 侧的 `allowNonSerializable` 也必须同时为 true。反过来 `dubbo.hessian.allowNonSerializable=false`（默认）时，无论 Dubbo 侧怎么配，非 `Serializable` 类一律抛 `IllegalStateException`。
+
+### Class Loading Hook loadSerializedClass
+
+安全检查真正的落点在 `Hessian2SerializerFactory` 覆写的 `loadSerializedClass` 上——Hessian 每次还原类名时都会调它：
+
+```java
+// dubbo-serialization/dubbo-serialization-hessian2/.../hessian2/Hessian2SerializerFactory.java:45-48
+@Override
+public Class<?> loadSerializedClass(String className) throws ClassNotFoundException {
+    return defaultSerializeClassChecker.loadClass(getClassLoader(), className);
+}
+```
+
+也就是说，**Dubbo 把「类名 → Class」的解析权接管了**：还原请求体里出现的类名时，先过 `DefaultSerializeClassChecker.loadClass`（`dubbo-common/.../utils/DefaultSerializeClassChecker.java:108`），命中 blockedlist 或不在 allowlist 就抛异常。`getDefaultSerializer` / `getDefaultDeserializer`（`:51-70`、`:69-87`）在取默认序列化器前还会额外做一次 `defaultSerializeClassChecker.loadClass(...)` 预检。
+
+这就是 CVE-2020-1948 之后的关键防线位置：**不是靠「序列化完之后再看类名」，而是在类被加载的那一刻就拦下**。与之配套的 `Hessian2ScopeModelInitializer`（`dubbo-serialization/.../hessian2/Hessian2ScopeModelInitializer.java`）在 `FrameworkModel` 初始化时注册 `Hessian2FactoryManager` Bean 并挂上 `Hessian2ClassLoaderListener`，保证 ClassLoader 回收时对应的 `SerializerFactory` 一并从 `CL_2_SERIALIZER_FACTORY` 移除（`Hessian2FactoryManager.onRemoveClassLoader`，`:123-125`）——否则会因 ClassLoader 泄漏导致工厂里的类引用无法回收。
 
 ## Serialization Security (Core Defense Line of 3.x)
 
@@ -321,8 +372,109 @@ private boolean checkSerializable = true;
 | `autoTrustSerializeClass` | `true` | `SerializeSecurityConfigurator.java:84-86` |
 | `trustSerializeClassLevel` | `Integer.MAX_VALUE` | `SerializeSecurityConfigurator.java:87-89` |
 | `checkSerializable` | `true` | `SerializeSecurityConfigurator.java:90-91` |
-| `dubbo.hessian.allowNonSerializable` | `"false"` | Hessian2FactoryManager |
-| Hessian2 固定放行 | `org.apache.dubbo.*` | `Hessian2FactoryManager.java:88-90,117-119` |
+| `dubbo.hessian.allowNonSerializable` | `"false"`，**系统属性**（非 URL 参数） | `Hessian2FactoryManager.java:88-89`、`CommonConstants.java:784` |
+| Hessian2 固定放行 | `org.apache.dubbo.*` | `Hessian2FactoryManager.java:90,119` |
+| Hessian2 content type | `"x-application/hessian2"` | `Hessian2Serialization.java:63-65` |
+| Triple wrapper 换算名 | `hessian2` → `hessian4` | `ReflectionPackableMethod.java:424-428` |
+| Hessian2 底层依赖 | `org.apache.dubbo:hessian-lite:4.0.4` | `dubbo-serialization-hessian2/pom.xml:39-42` |
+
+## Serialization Interface getContentTypeId and content type
+
+`Serialization` 接口（`dubbo-serialization-api/.../common/serialize/Serialization.java`）只约定四类能力，`@SPI(scope = ExtensionScope.FRAMEWORK)`：
+
+```java
+// dubbo-serialization-api/.../common/serialize/Serialization.java:36-76
+@SPI(scope = ExtensionScope.FRAMEWORK)
+public interface Serialization {
+    byte getContentTypeId();     // :46 写入协议头 flag 低 5 位
+    String getContentType();     // :53 协商/日志用的名字，如 "x-application/hessian2"
+    @Adaptive ObjectOutput serialize(URL url, OutputStream output);
+    @Adaptive ObjectInput deserialize(URL url, InputStream input);
+}
+```
+
+两个关键约束（接口 javadoc 明确写）：
+
+- `getContentTypeId()` 的返回值**必须 ≤ `ExchangeCodec.SERIALIZATION_MASK`（31）**，因为 Dubbo 私有协议头只用 5 个 bit 记录序列化 id（见 [Protocol](/docs/CS/Framework/Dubbo/Protocol.md)）。主仓库 `Constants.java` 的 ID 表最大到 `FURY_SERIALIZATION_ID = 28`，全部在 31 以内——外置扩展若要自定义 id 也不能越界。
+- `getContentTypeId()`（数字）与 `getContentType()`（字符串）是两套命名空间：协议头只认数字 id，而 `serialize.multiple` 协商、日志、Triple 的 `hessian4`/`hessian2` 换算走的是字符串名。**不存在 `getSerializationId()` 这个方法**，网上若见到这个名字是误记。
+
+## FastJson2 autotype and blacklist
+
+`FastJson2Serialization` 是主仓库唯二注册实现之一，它的反序列化安全不是自己实现的，而是复用全局的 `SerializeSecurityManager`，并借 fastjson2 的 `ContextAutoTypeBeforeHandler` 在「autotype」那一刻做拦截：
+
+```java
+// dubbo-serialization/.../fastjson2/FastJson2Serialization.java:57-64
+public byte getContentTypeId() { return FASTJSON2_SERIALIZATION_ID; }   // 23
+public String getContentType() { return "text/jsonb"; }
+// serialize/deserialize 都会取出 fastjson2SecurityManager Bean 传给 ObjectOutput/Input
+Fastjson2SecurityManager fastjson2SecurityManager = ...getBean(Fastjson2SecurityManager.class);
+```
+
+```java
+// dubbo-serialization/.../fastjson2/Fastjson2SecurityManager.java:103-170
+public static class Handler extends ContextAutoTypeBeforeHandler {   // 继承 fastjson2 的 autotype 前置处理器
+    public Class<?> apply(String typeName, Class<?> expectClass, long features) {
+        Class<?> tryLoad = super.apply(typeName, expectClass, features); // 1. fastjson2 自带 acceptNames 白名单
+        if (tryLoad != null) return tryLoad;
+        if (status == STRICT) {                                      // 2. STRICT 下不在白名单直接抛 IllegalArgumentException
+            throw new IllegalArgumentException("[Serialization Security] ... not in allow list ...");
+        }
+        Class<?> localClass = loadClassDirectly(typeName);           // 3. WARN 下尝试加载
+        ...
+    }
+    public boolean checkIfDisAllow(String typeName) {                // 4. 黑名单按前缀匹配
+        return disAllowedList.stream().anyMatch(typeName::startsWith);
+    }
+}
+```
+
+也就是说，fastjson2 的 autotype 与普通 Hessian2 走**同一套** `security/serialize.allowlist` + `security/serialize.blockedlist`（见 [Serialization Security](/docs/CS/Framework/Dubbo/Serialization.md)），`Fastjson2SecurityManager` 实现了 `AllowClassNotifyListener`（`:38`），当 `SerializeSecurityManager` 的配置变化时通过 `notifyPrefix`（`:66-75`）/ `notifyCheckStatus`（`:78-86`）重建 `Handler`。`disAllowedList` 用「前缀匹配」（`startsWith`，`:168-170`）拦截经典 gadget 来源，与 Hessian2 侧 `com.caucho.*`、`javax.naming.*` 等 blockedlist 条目目标一致。
+
+`checkIfDisAllow` 的调用点在类加载之前（`:179`）：类名命中 `disAllowedList` 前缀时直接返回 `null`（加载不到），**不抛异常**——所以 blockedlist 是「静默拒绝」，而「不在 allowlist 且处于 STRICT 模式」是「显式抛 `IllegalArgumentException`」，两者的失败表现不同，排障时看到的现象不一样。
+
+## Why hessian2 is the default
+
+默认远程序列化是 `hessian2` 并非偶然，几个事实叠加：
+
+- 它是**主仓库唯一与 Triple、Dubbo 两套协议都内置兼容**的实现（Dubbo 协议头 id = 2；Triple 的 wrapper 路径也默认回落 hessian2）。
+- 其余高性能实现（kryo / fst / protostuff / fury …）在 3.3.6 已整体外置到 `dubbo-spi-extensions`，主仓库只剩 ID 常量；而 `fastjson2` 虽在主仓库，语义是纯 JSON，不适合做默认二进制 RPC 体。
+- 生效开关是 `DefaultSerializationSelector.DEFAULT_REMOTING_SERIALIZATION_PROPERTY = "hessian2"`（`dubbo-serialization-api/.../support/DefaultSerializationSelector.java:25`），`UrlUtils.serializationId` 在未显式配置时回落到这里。
+- `Hessian2Serialization` 在静态块就校验 `com.alibaba.com.caucho.hessian.io.Hessian2Output` 是否在 classpath，缺失直接 `IllegalStateException("The hessian2 is not in classpath.")`，所以它对运行环境的依赖是硬绑定的。
+
+> [!TIP]
+> 默认值本身还可被**系统属性 / 环境变量**覆盖：`DefaultSerializationSelector` 除了硬编码的 `"hessian2"` 兜底，还会先读系统属性 `dubbo.default.remoting.serialization`，再读同名环境变量（`DefaultSerializationSelector.java:28-40`，常量 `DUBBO_DEFAULT_REMOTING_SERIALIZATION_PROPERTY`）。注意这与 URL 上的 `serialization` 参数是**两条独立路径**——前者是 JVM 级别的默认，后者是每次调用的协议协商。
+
+代价是 hessian2 体积与性能不如 fury/kryo；需要更高吞吐时按「扩展外置实现 + `serialization=` / `prefer.serialization=`」方式切换即可（见 [Cross-Language Serialization Selection](/docs/CS/Framework/Dubbo/Serialization.md)）。
+
+## Hessian2 Whitelist Mode and ClassLoader Scoping
+
+`Hessian2FactoryManager` 有两条建工厂的路径，由系统属性 `dubbo.application.hessian2.whitelist` 是否非空决定（`dubbo-serialization/.../hessian2/Hessian2FactoryManager.java:77-83`）：
+
+```java
+// dubbo-serialization/dubbo-serialization-hessian2/.../hessian2/Hessian2FactoryManager.java:85-92
+private SerializerFactory createDefaultSerializerFactory(ClassLoader classLoader) {
+    Hessian2SerializerFactory hessian2SerializerFactory =
+            new Hessian2SerializerFactory(classLoader, defaultSerializeClassChecker);
+    hessian2SerializerFactory.setAllowNonSerializable(Boolean.parseBoolean(
+            SystemPropertyConfigUtils.getSystemProperty(DUBBO_HESSIAN_ALLOW_NON_SERIALIZABLE, "false")));
+    hessian2SerializerFactory.getClassFactory().allow("org.apache.dubbo.*");
+    return hessian2SerializerFactory;
+}
+```
+
+白名单模式（`createWhiteListSerializerFactory`，`:94-121`）有两条互斥分支：
+
+| `dubbo.application.hessian2.whitelist` | 行为 |
+| :--- | :--- |
+| `"true"` | `getClassFactory().setWhitelist(true)`，按 `dubbo.application.hessian2.allow`（`;` 分隔的 pattern）逐条 `allow()`，并 `serializeSecurityManager.addToAlwaysAllowed(pattern)` + `setCheckStatus(STRICT)` |
+| 其它非空值 | `setWhitelist(false)`，按 `dubbo.application.hessian2.deny` 逐条 `deny()` + `serializeSecurityManager.addToDisAllowed(pattern)` |
+
+三个系统属性的常量定义在 `dubbo-common/.../constants/CommonConstants.java:786,788,790`（`DUBBO_HESSIAN_WHITELIST` / `DUBBO_HESSIAN_ALLOW` / `DUBBO_HESSIAN_DENY`），同样是**系统属性**而非 URL 参数。
+
+> [!NOTE]
+> 白名单模式有个容易被忽略的副作用：走 `"true"` 分支时会**强制把全局检查状态抬到 `STRICT`**（`:106`）。也就是说，只要设了 `dubbo.application.hessian2.whitelist=true`，即便别处把 `serialize-check-status` 配成 `WARN`，这一层也会把它拉回 `STRICT`。
+
+工厂的**ClassLoader 维度隔离**是另一处关键设计：`Hessian2FactoryManager` 用 `ConcurrentHashMap<ClassLoader, SerializerFactory> CL_2_SERIALIZER_FACTORY`（`:40`）为每个 ClassLoader 建一份工厂，并额外维护一个 `stickySerializerFactory` 缓存「最近用过的那份」（`:43`、`:58-61`），避免每次序列化都做 map 查找。系统 ClassLoader（`classLoader == null`）走单独的 `SYSTEM_SERIALIZER_FACTORY` 单例（`:62-72`）。
 
 ## Pitfall List
 
@@ -334,8 +486,13 @@ private boolean checkSerializable = true;
 | 类名 `SerializationSecurityManager` / `AllowClassChecker` | 真名 `DefaultSerializeClassChecker` / `SerializeSecurityManager` / `SerializeSecurityConfigurator` | 搜代码、写排查文档时找错类 |
 | 「allowlist 是 `java.*`、`javax.*` 这类包前缀」 | 是逐条类名文件 `security/serialize.allowlist` | 以为某些类默认放行，实际被 STRICT 拦截 |
 | 「检查器无法定制放行业务类」 | `autoTrustSerializeClass` 自动信任接口签名类型，`allowedClassList` 可显式补充 | 不必要的 `DISABLE` 降级，留下安全口子 |
-| SPI 名 `hessian2` 即 Hessian 2.x 协议 | 实现基于 Hessian 4.x，内部协商名为 `hessian4` | 协商日志看到 `hessian4` 误以为配置错了 |
-| 「`org.apache.dubbo.*` 也会被 STRICT 拦截」 | Hessian2 层固定放行（`Hessian2FactoryManager.java:88-90`） | 误判为安全配置问题 |
+| SPI 名 `hessian2` 即 Hessian 2.x 协议 | 实现基于 `org.apache.dubbo:hessian-lite:4.0.4`，content type 是 `x-application/hessian2`；`hessian4` 只是 Triple wrapper 层的换算名 | 协商日志看到 `hessian4` 误以为配置错了 |
+| 「`org.apache.dubbo.*` 也会被 STRICT 拦截」 | Hessian2 层固定放行（`Hessian2FactoryManager.java:90,119`） | 误判为安全配置问题 |
+| 「`getContentType()` 返回 `hessian4`」 | 返回 `x-application/hessian2`；`hessian4` 来自 `ReflectionPackableMethod.convertHessianToWrapper` | 混淆协议层与 Triple wrapper 层 |
+| 「有 `getNonSerializableObjectFactory()` 方法」 | 全仓库不存在该方法，非 Serializable 的判定在 `Hessian2SerializerFactory.checkSerializable` | 照抄代码编译不过 |
+| 「`dubbo.hessian.allowNonSerializable` 是 URL 参数」 | 是 **JVM 系统属性**，读自 `SystemPropertyConfigUtils`；写成 URL 参数不生效 | 以为配了其实没配，序列化仍被拒 |
+| 「关掉 `check-serializable` 就能传非 Serializable 类」 | `checkSerializable` 需与 hessian 侧 `allowNonSerializable` **同时**放行 | 单改一边仍抛 `IllegalStateException` |
+| 类名 `FastJson2SecurityManager` | 真实类名 `Fastjson2SecurityManager`（小写 j） | 搜类名搜不到 |
 
 ## Links
 

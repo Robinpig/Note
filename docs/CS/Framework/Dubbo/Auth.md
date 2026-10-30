@@ -543,6 +543,46 @@ Provider 侧的 `AuthenticationExceptionTranslatorFilter`（`order = Integer.MAX
 28. **`dubbo-compatible` 迟早会被删**：README 自陈「we will remove this module some day」，且**无生产 SPI**（只有 test 资源），新代码不要基于 `com.alibaba.dubbo.*` 写扩展。
 29. **没有 `ReactiveInvoker` / `MutinyInvoker` 这两个类**：响应式入口是 `calls/*ClientCalls` / `*ServerCalls` 系列，按这两个名字搜源码会一无所获。
 
+## AccessKeyStorage SPI and External Key Management
+
+默认 `AccessKeyAuthenticator` 并不自己持有密钥，而是委托 `AccessKeyStorage` SPI 去取 `AccessKeyPair`。扩展名只有一个且写死在资源文件里：
+
+```properties
+# dubbo-plugin/dubbo-auth/src/main/resources/META-INF/dubbo/internal/org.apache.dubbo.auth.spi.AccessKeyStorage
+urlstorage=org.apache.dubbo.auth.DefaultAccessKeyStorage
+```
+
+`DefaultAccessKeyStorage`（:21-34）的实现简单到只有几行——直接从 URL 参数读 `.accessKeyId` / `.secretAccessKey` 拼成 `AccessKeyPair`：
+
+```java
+// dubbo-plugin/dubbo-auth/src/main/java/org/apache/dubbo/auth/DefaultAccessKeyStorage.java:21
+public class DefaultAccessKeyStorage implements AccessKeyStorage {
+    @Override
+    public AccessKeyPair getAccessKey(URL url, Invocation invocation) {
+        AccessKeyPair accessKeyPair = new AccessKeyPair();
+        accessKeyPair.setAccessKey(url.getParameter(Constants.ACCESS_KEY_ID_KEY));
+        accessKeyPair.setSecretKey(url.getParameter(Constants.SECRET_ACCESS_KEY_KEY));
+        return accessKeyPair;
+    }
+}
+```
+
+加载点在 `AccessKeyAuthenticator`（:76-78）：通过 `frameworkModel.getExtensionLoader(AccessKeyStorage.class).getExtension(url.getParameter(ACCESS_KEY_STORAGE_KEY, DEFAULT_ACCESS_KEY_STORAGE))` 取扩展，扩展名 key 是 `accessKey.storage`，默认 `urlstorage`。
+
+**这带来一个绕不开的代价**：密钥此刻就躺在进程的 URL 对象里（见 Credential System 里「前导点 `.` 防输出」那节），没有任何外部密钥管理参与。要接 Vault / KMS / 配置中心加密项，必须自实现 `AccessKeyStorage` 并把扩展名配成 `accessKey.storage=<你的扩展名>`。接口本身只有一个方法：
+
+```java
+// dubbo-plugin/dubbo-auth/src/main/java/org/apache/dubbo/auth/spi/AccessKeyStorage.java
+public interface AccessKeyStorage {
+    AccessKeyPair getAccessKey(URL url, Invocation invocation);
+}
+```
+
+`invocation` 参数是关键：它让你能按「本次调用的服务 / 方法 / attachment」决定返回哪把密钥，从而做到**按接口或按调用方维度换 AK/SK**，而不只是全局一把钥匙。注意 `AccessKeyPair` 本身没有「凭据类型 / 适用范围」字段（见 Credential System），如果要做「某把 AK 只能调某服务」的约束，得在 `getAccessKey` 里自行读取并校验 `invocation`，框架不会替你限制。
+
+> [!WARNING]
+> 默认 `urlstorage` 把 secretKey 明文留在 URL 上，虽然靠前导点 `.` 不会进注册中心 / 监控 / 日志，但它**仍存在于进程内存的 URL 参数表**里。生产上对密钥敏感的场景，优先用 `accessKey.storage` 指向一个从 KMS 拉取、且带缓存与轮转的实现，而不是把密钥写在 dubbo 配置里。
+
 ## Links
 
 - [Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md)

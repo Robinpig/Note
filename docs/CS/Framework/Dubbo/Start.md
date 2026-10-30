@@ -314,6 +314,53 @@ public final class DubboBootstrap {
 
 `exportServiceInternal`（`:463`）里，若配置了异步导出则 `CompletableFuture.runAsync` 到 `executorRepository.getServiceExportExecutor()` 并把 future 收进 `asyncExportingFutures`（`:477`）；否则同步调用 `sc.export()` 或 `sc.export(RegisterTypeEnum.AUTO_REGISTER_BY_DEPLOYER)`（`:495`）。
 
+### Stage Methods, Not Separate Deployers
+
+Older notes often describe the boot flow as a chain of dedicated deployers — `ConfigDeployer` / `MetadataDeployer` / `MetricsDeployer` / `ServiceDeployer` / `ReferenceDeployer`. **None of these classes exist in 3.3.6.** Grepping the whole tree for `class ConfigDeployer` / `class MetadataDeployer` / `class ServiceDeployer` / `class ReferenceDeployer` / `class DubboDeployer` returns nothing, and there is no `deploy()` method anywhere in `dubbo-config` / `dubbo-common` — the entry is `start()`. The only deploy abstraction in `dubbo-common/.../common/deploy/` is the generic `Deployer` / `AbstractDeployer` / `ApplicationDeployer` / `ModuleDeployer` plus listener/state helpers (`ApplicationDeployListener`, `ModuleDeployListener`, `DeployListener`, `DeployListenerAdapter`, `DeployState`).
+
+What older notes call "stages" are in fact **plain methods** split across the two real deployers:
+
+| Phase | Real method | Owner |
+|---|---|---|
+| connect config center | `startConfigCenter()` | `DefaultApplicationDeployer` |
+| load & bind application configs | `loadApplicationConfigs()` → `ConfigManager.loadConfigs()` | `DefaultApplicationDeployer` |
+| init metrics reporter | `initMetricsReporter()` | `DefaultApplicationDeployer` |
+| init metrics service | `initMetricsService()` | `DefaultApplicationDeployer` |
+| init observation registry | `initObservationRegistry()` (@since 3.2.3) | `DefaultApplicationDeployer` |
+| start metadata center | `startMetadataCenter()` | `DefaultApplicationDeployer` |
+| export metadata service | `exportMetadataService()` | `DefaultApplicationDeployer` (called from `ServiceConfig#exported()`) |
+| export services | `exportServices()` | `DefaultModuleDeployer` |
+| refer services | `referServices()` | `DefaultModuleDeployer` |
+| unexport metrics service | `unexportMetricsService()` | `DefaultApplicationDeployer` (in `preDestroy()`) |
+
+So the "stage deployers" are an artifact of 2.x mental models. In 3.3.6 the **application-level** deployer (`DefaultApplicationDeployer`) owns config/metadata/metrics, while the **module-level** deployer (`DefaultModuleDeployer`) owns service export/reference. There is no finer-grained per-concern deployer object.
+
+## Configuration Binding and Storage
+
+Configuration objects are collected and resolved by `ConfigManager` (`dubbo-common/.../config/context/ConfigManager.java`), which extends `AbstractConfigManager` (same package). Its storage is a two-level concurrent map:
+
+```java
+// dubbo-common/src/main/java/org/apache/dubbo/config/context/AbstractConfigManager.java:77
+final ConcurrentHashMap<String, Map<String, AbstractConfig>> configsCache = new ConcurrentHashMap<>();
+```
+
+The outer key is the config **tag name** (e.g. `dubbo:registry`, `dubbo:protocol`); the inner map is keyed by config **id**, or an auto-generated `tagName#idx` when no id is set (`generateConfigId()` at `:410`). That is how one application can hold multiple `RegistryConfig` / `ProtocolConfig` instances while keeping a single `ApplicationConfig` — `uniqueConfigTypes` (`:95-99`) enforces cardinality per application/module.
+
+`ConfigManager`'s constructor registers the supported types (`ConfigManager.java:61-74`): `ApplicationConfig, MonitorConfig, MetricsConfig, SslConfig, ProtocolConfig, RegistryConfig, ConfigCenterConfig, MetadataReportConfig, TracingConfig`.
+
+### loadConfigs and refresh
+
+`DefaultApplicationDeployer#loadApplicationConfigs()` calls `configManager.loadConfigs()`, whose real order is (`ConfigManager.java:288-323`):
+
+1. `loadConfigsOfTypeFromProps(...)` for each type → reads `dubbo.applications.xxx`, `dubbo.monitors.xxx`, `dubbo.metrics.xxx`, `dubbo.tracing.xxx`, `dubbo.protocols.xxx`, `dubbo.registries.xxx`, `dubbo.metadata-report.xxx`. (`ConfigCenterConfig` is skipped — already loaded by `startConfigCenter()`.)
+2. `refreshAll()` → calls `refresh()` on every loaded config.
+3. `checkConfigs()` → validates and **detects duplicate ports** across `ProtocolConfig`s (`:341-353`).
+
+The binding itself is `@Parameter` + `refresh()`. Every setter that should be externally configurable is annotated with `@Parameter`; `AbstractConfig#refresh()` (`:718`) → `refreshWithPrefixes()` (`:739`) → `assignProperties()` (`:780`) reads from `Environment` (`getScopeModel().modelEnvironment()`), picks the preferred prefix among `getPrefixes()`, extracts sub-properties, then for every setter **not** flagged `attribute()` maps the kebab-cased property name to the field. `ConfigMode` (default `STRICT`, read from `dubbo.config.mode` at `AbstractConfigManager.java:120-131`) decides how duplicate/overlapping configs are reconciled: `STRICT` / `IGNORE` / `OVERRIDE` / `OVERRIDE_ALL` / `OVERRIDE_IF_ABSENT`.
+
+> [!NOTE]
+> `ApplicationInitListener` (`dubbo-common/.../rpc/model/ApplicationInitListener.java`) is **not** part of config binding. It is an `@SPI(scope = APPLICATION)` callback with a single `init()` (`:23-27`) used for RPC-model initialization. There is no "ApplicationInitListener binds Environment to ApplicationConfig" mechanism — that is done by `loadConfigs()` / `refresh()`.
+
 ## Spring Boot Integration
 
 Dubbo 与 Spring Boot 的集成靠 Spring 的事件机制触发，共三个关键类：
@@ -454,6 +501,12 @@ public class DubboBootstrapApplicationListener implements ApplicationListener, A
 
 > [!WARNING]
 > `SpringExtensionFactory` 这个类在 3.3.6 **全仓库不存在**（grep 零匹配）。它承接的职责已改由 `ExtensionInjector` 体系提供，SPI 注册在 `dubbo-common/src/main/resources/META-INF/dubbo/internal/org.apache.dubbo.common.extension.ExtensionInjector`：`adaptive` / `spi` / `scopeBean` 三项。老笔记里「`SpringExtensionFactory.addApplicationContext()` 里调 `DubboShutdownHook.getDubboShutdownHook().unregister()`」的代码整段都不存在——而且 `DubboShutdownHook.getDubboShutdownHook()` 这个静态方法在 3.3.6 也**已不存在**，实例需 `new DubboShutdownHook(applicationModel)`（`:62`）再从 bean factory 取。
+
+### AutoConfiguration and Initializer
+
+Spring Boot's auto-configuration entry is `DubboAutoConfiguration` (`dubbo-spring-boot-project/dubbo-spring-boot-autoconfigure/.../autoconfigure/DubboAutoConfiguration.java`), annotated `@ConditionalOnProperty(prefix = "dubbo", name = "enabled", matchIfMissing = true)`, `@EnableDubboConfig`, and `@AutoConfigureAfter(DubboRelaxedBindingAutoConfiguration.class)`. It only registers `ServiceAnnotationPostProcessor` (the `@DubboService` scanner) — **it never calls `DubboBootstrap.start()`**. The actual start is still event-driven through `DubboDeployApplicationListener` (see [Startup Sequence](#startup-sequence)).
+
+For non-Boot / XML Spring, the programmatic bridge is `DubboSpringInitializer` (`dubbo-config/dubbo-config-spring/.../spring/context/DubboSpringInitializer.java`). Its `initialize(BeanDefinitionRegistry)` (`:50`) creates a `DubboSpringInitContext` keyed by the registry and calls `initContext(...)`, binding the Spring `BeanFactory` to the Dubbo `ModuleModel`. This is the legacy entry point that predates the event-listener start path.
 
 ## Provider
 
@@ -1262,6 +1315,20 @@ public class DubboShutdownHook extends Thread {
 | 31 | `ContextClosedEvent` 调 `DubboShutdownHook.getDubboShutdownHook().run()` | 调 `moduleModel.getDeployer().stop()`（`:125-131`） |
 | 32 | `ShutdownHookCallback` 在 `common/hooks/` | 在 `dubbo-common/.../common/lang/`，触发点是 `DefaultApplicationDeployer#executeShutdownCallbacks`（`:1168-1172`） |
 
+## Programmatic Startup and Modular Evolution
+
+Dubbo 3.x deliberately kept `DubboBootstrap` instead of deleting it. The reason is **API compatibility for programmatic startup**: `DubboBootstrap` is the public, stable facade a user calls from `main()`, and deleting it would break every `DubboBootstrap.getInstance().start()` call. What changed in 3.x is not the class but its body — the four-step flow (`exportServices` / `exportMetadataService` / `registerServiceInstance` / `referServices`) was **extracted into `DefaultApplicationDeployer` / `DefaultModuleDeployer`**, and `DubboBootstrap`'s methods became one-line delegations to `applicationDeployer` (see [DubboBootstrap](#dubbo-bootstrap)).
+
+The deeper shift is the **ScopeModel ownership of deployers**. In 2.x the bootstrap held the whole flow inline. In 3.x every `ScopeModel` carries its own deployer:
+
+- `FrameworkModel` → global cleaner (`FrameworkModelCleaner`), no deployer of its own.
+- `ApplicationModel` → `DefaultApplicationDeployer` (application scope: config center, metadata center, metrics, module orchestration).
+- `ModuleModel` → `DefaultModuleDeployer` (module scope: export/refer services).
+
+This is why `ModuleDeployer#start()` must first call `applicationDeployer.initialize()` (lock-order safety, see [ModuleDeployer](#moduledeployer)): startup is bottom-up (application initializes first, modules start after) but each model owns its lifecycle. The deployer abstraction (`Deployer<E extends ScopeModel>` in `dubbo-common`) sits in the lowest module so config/protocol classes can reference lifecycle state without depending on `dubbo-config` — that is the whole point of pushing the interface down to `dubbo-common`.
+
+The payoff is testability and embeddability: you can boot Dubbo inside a unit test, inside Spring, or standalone, all through the same deployer state machine, and the `takeoverMode` flag (`SPRING` / `MANUAL` / `AUTO` / `SERVLET`, see [takeoverMode](#takeovermode)) tells the deployer who is allowed to drive `start()` / `stop()`.
+
 ## Links
 
 - [Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md)
@@ -1279,3 +1346,9 @@ public class DubboShutdownHook extends Thread {
 - [ServiceConfig.java](https://github.com/apache/dubbo/blob/dubbo-3.3.6/dubbo-config/dubbo-config-api/src/main/java/org/apache/dubbo/config/ServiceConfig.java)
 - [RegistryProtocol.java](https://github.com/apache/dubbo/blob/dubbo-3.3.6/dubbo-registry/dubbo-registry-api/src/main/java/org/apache/dubbo/registry/integration/RegistryProtocol.java)
 - [DubboShutdownHook.java](https://github.com/apache/dubbo/blob/dubbo-3.3.6/dubbo-config/dubbo-config-api/src/main/java/org/apache/dubbo/config/DubboShutdownHook.java)
+- [ConfigManager.java](https://github.com/apache/dubbo/blob/dubbo-3.3.6/dubbo-common/src/main/java/org/apache/dubbo/config/context/ConfigManager.java)
+- [AbstractConfigManager.java](https://github.com/apache/dubbo/blob/dubbo-3.3.6/dubbo-common/src/main/java/org/apache/dubbo/config/context/AbstractConfigManager.java)
+- [AbstractConfig.java](https://github.com/apache/dubbo/blob/dubbo-3.3.6/dubbo-common/src/main/java/org/apache/dubbo/config/AbstractConfig.java)
+- [DubboAutoConfiguration.java](https://github.com/apache/dubbo/blob/dubbo-3.3.6/dubbo-spring-boot-project/dubbo-spring-boot-autoconfigure/src/main/java/org/apache/dubbo/spring/boot/autoconfigure/DubboAutoConfiguration.java)
+- [DubboSpringInitializer.java](https://github.com/apache/dubbo/blob/dubbo-3.3.6/dubbo-config/dubbo-config-spring/src/main/java/org/apache/dubbo/config/spring/context/DubboSpringInitializer.java)
+- [ApplicationInitListener.java](https://github.com/apache/dubbo/blob/dubbo-3.3.6/dubbo-common/src/main/java/org/apache/dubbo/rpc/model/ApplicationInitListener.java)

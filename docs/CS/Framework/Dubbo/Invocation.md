@@ -371,6 +371,25 @@ public static boolean needWrap(MethodDescriptor methodDescriptor, Class<?>[] par
 > [!NOTE]
 > 「Triple 不支持泛化调用」的说法在 3.3.6 源码里找不到依据。`TripleInvoker`、`ReflectionPackableMethod` 都对 `$invoke` 有显式支持分支。
 
+## Invocation Interface and RpcInvocation
+
+`Invocation` 是贯穿整条调用链的核心载体（接口 `org.apache.dubbo.rpc.Invocation`，默认实现 `RpcInvocation`）。3.3.6 的接口方法（非 `@Experimental` 的稳定 API）可分成几组：
+
+| 分组 | 方法 | 含义 |
+| :--- | :--- | :--- |
+| 调用目标 | `getMethodName()` / `getServiceName()` / `getTargetServiceUniqueName()` / `getProtocolServiceKey()` | 方法名、接口名、唯一服务名、协议级 serviceKey |
+| 参数 | `getParameterTypes()` / `getArguments()` | 参数类型数组与实参数组 |
+| 隐式参数 | `getObjectAttachments()` / `getObjectAttachment(key)` / `setObjectAttachment(key, value)` 等 | 3.0 起用 `Object` 型 attachment 取代旧 `String` 型（`getAttachments()` 仍保留兼容） |
+| 上下文 | `@Transient Invoker<?> getInvoker()` / `getServiceModel()` / `getModuleModel()` | 当前 Invoker 与模型，标 `@Transient` 不随调用序列化 |
+| 自定义属性 | `put(key, value)` / `get(key)` / `getAttributes()` | 调用级 KV，供 `ClusterFilter` / `Filter` 临时存数据（如各 Filter 埋的 `*_START_TIME`） |
+
+两个容易被忽略的点：
+
+- **`getInvoker()` 是 `@Transient`**。它用于运行期取上下文，但不会被序列化进网络报文——跨进程时该字段为空，所以 Provider 端不能依赖 `invocation.getInvoker()` 拿到消费端的 Invoker。
+- **`Object` 型 attachment 是 3.x 主线**。`getAttachments()` 返回 `Map<String,String>`，`getObjectAttachments()` 返回 `Map<String,Object>`；跨进程透传时对象会被序列化，框架默认用 `getObjectAttachmentWithoutConvert` 以绕过字符串转换（见 Filter 篇 `TokenFilter`）。
+
+`RpcInvocation` 还实现了 `addInvokedInvoker` / `getInvokedInvokers`（`Invocation.java:173-181`），用于 Cluster 重试时记录已试过的 Invoker，目前**仅消费侧**使用。
+
 ## Pitfall List
 
 | 直觉写法 | 源码实际 | 后果 |

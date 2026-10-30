@@ -218,6 +218,44 @@ protected void onExported() {
 
 映射上报的细节见 [Metadata](/docs/CS/Framework/Dubbo/Metadata.md)。
 
+## URL Assembly and Warmup
+
+### URL Assembly: registry:// vs dubbo://
+
+服务 URL 的拼装发生在 `doExportUrlsFor1Protocol` → `buildUrl` → `exportUrl` → `exportRemote` / `exportLocal` 这条链上，最终喂给 `ProxyFactory.getInvoker(ref, interfaceClass, url)` 与 `Protocol.export(invoker)`（`ServiceConfig.java:974-978`）。
+
+- **业务 URL（`dubbo://` / `tri://`）**：`buildUrl`（`ServiceConfig.java:821-859`）用 `ProtocolConfig.getName()`（缺省 `DUBBO`）作协议名，算出 host/port、拼接 `getContextPath() + path`，构造 `new ServiceConfigURL(name, null, null, host, port, path, params)`。这是真正暴露服务的 URL。
+- **注册中心 URL（`registry://`）**：`doExportUrlsFor1Protocol` 用 `ConfigValidationUtils.loadRegistries(this, true)` 取得 `registryURLs`（`:596-597`）。每个注册中心 URL 的协议是 `RegistryConstants.REGISTRY_PROTOCOL = "registry"`（`RegistryConstants.java:27`），服务发现型注册中心则是 `SERVICE_REGISTRY_PROTOCOL = "service-discovery-registry"`（`:95`）。**业务 URL 并不直接作为注册 URL 的协议**，而是作为 `export` 属性嵌套进去：
+
+```java
+// dubbo-config/dubbo-config-api/.../ServiceConfig.java:947
+doExportUrl(registryURL.putAttribute(EXPORT_KEY, url), true, registerType);
+```
+
+`RegistryProtocol` 后续从注册 URL 取出 `EXPORT_KEY` 指向的业务 URL 去注册（`export` 属性即「要注册的服务描述」）。所以一份注册中心 URL 形如：`registry://host:port/org.apache.dubbo.registry.RegistryService?export=dubbo%3A%2F%2F...`。
+
+- **本地 URL（`injvm://`）**：`exportLocal`（`ServiceConfig.java:986-997`）把协议改成 `LOCAL_PROTOCOL`（`injvm`）、host 设 `LOCALHOST_VALUE`、port 设 `0`，同样走 `doExportUrl`。当 `scope != remote` 时本地暴露与远程暴露并存。
+
+> [!TIP]
+> `scope` 参数（`SCOPE_KEY`，值 `local` / `remote` / `none`）决定走 `exportLocal` 还是 `exportRemote`（`exportUrl` 的 `:862-909`）。`none` 则整个 `exportUrl` 不执行。`EXT_PROTOCOL` 还能在远程暴露基础上追加额外协议（如同一服务同时暴露 `dubbo` 与 `tri`，`:877-908`）。
+
+### Warmup: Linear Weight Recovery
+
+`warmup` 字段声明在 `AbstractServiceConfig:118`，本身无默认值；生效缺省是 `DEFAULT_WARMUP = 10 * 60 * 1000`（10 分钟，`rpc/cluster/Constants.java:99`）。它的作用不在 Provider 启动逻辑里，而在**消费侧负载均衡**：实例上线后权重按已运行时长线性爬升到配置权重，避免冷启动瞬间被打满。
+
+```java
+// dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/loadbalance/AbstractLoadBalance.java:46-48
+static int calculateWarmupWeight(int uptime, int warmup, int weight) {
+    int ww = (int) (uptime / ((float) warmup / weight));
+    return ww < 1 ? 1 : (ww > weight ? weight : ww);
+}
+```
+
+公式等价于 `ww = uptime * weight / warmup`，即「已运行时间占 warmup 的比例 × 目标权重」。启动瞬间 `uptime≈0` 权重趋近于 1，跑到 `uptime == warmup` 时恢复到满权重 `weight`。`AbstractLoadBalance.getWeight` 在 `uptime < warmup` 时调用它（`AbstractLoadBalance.java:91`）。
+
+> [!NOTE]
+> 这跟 `delay`（延迟暴露，`null` 不延迟）是两件独立的事：`delay` 决定「何时开始 export」，`warmup` 决定「export 后权重如何从 1 线性恢复到 `weight`」。两者都在 `AbstractServiceConfig`，但作用阶段不同。更多治理语义见 [Governance](/docs/CS/Framework/Dubbo/Governance.md)。
+
 ## ReferenceConfig in Contrast
 
 ```java

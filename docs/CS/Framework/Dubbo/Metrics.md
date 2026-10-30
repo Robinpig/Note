@@ -395,6 +395,40 @@ digraph observation {
 | 「Pushgateway 默认开启」 | 默认 `false` | 以为在推送其实没推 |
 | 「tracing 模块在顶层 `dubbo-tracing/`」 | 在 `dubbo-metrics/dubbo-tracing` | 依赖坐标写错 |
 
+## Metrics Dimensions and MetricsKey Inventory
+
+`rpcLevel`（`SERVICE` / `METHOD`，默认 `METHOD`）只是采集粒度开关，真正决定指标「挂在哪一级」的是 `MetricsLevel` 枚举（`dubbo-metrics-event/.../metrics/model/key/MetricsLevel.java:19`）。它定义了五级维度，远不止 Application/Service/Method 三档：
+
+```java
+// dubbo-metrics-event/.../model/key/MetricsLevel.java:19
+public enum MetricsLevel {
+    APP, SERVICE, METHOD, CONFIG, REGISTRY
+}
+```
+
+> [!NOTE]
+> `MetricsKey`（`MetricsKey.java:19`）是「具体指标项」的枚举，与 `MetricsLevel` 不是同一个类。每个 `MetricsKey` 带一个 Prometheus 名（如 `dubbo.%s.requests.total`）和一段描述，`%s` 在运行时被 `getNameByType(type)` 替换成 `app` / `service` / `method` 维度前缀，因此同一个 key 会按维度展开成多条时间序列。
+
+代表性 `MetricsKey`（节选自 `MetricsKey.java:19`）：
+
+| 维度 | MetricsKey | Prometheus 名（示例） | 含义 |
+| :--- | :--- | :--- | :--- |
+| 请求 | `METRIC_REQUESTS` / `METRIC_REQUESTS_SUCCEED` / `METRIC_REQUESTS_TOTAL_FAILED` | `dubbo.method.requests.total` 等 | 请求数、成功、各类失败（业务/超时/限流/网络/Codec/服务不可用） |
+| RT | `METRIC_RT_LAST` / `METRIC_RT_AVG` / `METRIC_RT_P99` / `METRIC_RT_P95` / `METRIC_RT_P90` / `METRIC_RT_P50` | `dubbo.method.rt.milliseconds.p99` 等 | 最近/均值/P 分位响应时间（毫秒） |
+| QPS | `METRIC_QPS` | `dubbo.method.qps.total` | 每秒查询数 |
+| 线程池 | `THREAD_POOL_CORE_SIZE` / `THREAD_POOL_LARGEST_SIZE` / `THREAD_POOL_ACTIVE_SIZE` / `THREAD_POOL_QUEUE_SIZE` / `THREAD_POOL_THREAD_REJECT_COUNT` | `dubbo.thread.pool.*` | 业务线程池核心/最大/活跃/队列/拒绝数（`enableThreadpool` 默认开） |
+| 注册中心 | `REGISTER_METRIC_REQUESTS` / `SUBSCRIBE_METRIC_NUM` / `DIRECTORY_METRIC_NUM_VALID` | `dubbo.registry.*` | 注册/订阅/目录数（`enableRegistry`） |
+| 元数据 | `METADATA_PUSH_METRIC_NUM` / `METADATA_SUBSCRIBE_METRIC_NUM` | `dubbo.metadata.*` | 元数据推/订阅（`enableMetadata`） |
+| 错误码 | `ERROR_CODE_COUNT` | `dubbo.error.code.count` | 各 RpcException 错误码出现次数（排障利器） |
+| Netty | `NETTY_ALLOCATOR_HEAP_MEMORY_USED` 等 | `netty.allocator.*` | Netty 内存分配器用量（`enableNetty`） |
+| 消费者 | `INVOKER_NO_AVAILABLE_COUNT` | `dubbo.consumer.invoker.no.available.count` | 无可用 Invoker 抛错计数 |
+
+### What the QoS metrics Command Actually Returns
+
+上文提到 Metrics 导出走 QoS 的 `metrics` 命令，它返回的就是上面这些 `MetricsKey` 拼出的内容。`PrometheusMetricsReporterCmd.java:37` 通过 `prometheusRegistry.scrape()` 输出 Prometheus exposition 文本（HTTP 头标注 `text/plain; version=0.0.4; charset=utf-8`）；不带参数时取第一个「有数据的 ApplicationModel」，也可 `metrics <appName>` 指定应用。
+
+与它并列的 `metrics_default`（`DefaultMetricsReporterCmd.java`，`dubbo-qos` 自带、非 prometheus 模块）返回 **JSON** 而不是文本——这是第二个常被混淆的点：**Prometheus 抓取必须走 `metrics`，不是 `metrics_default`**。没有引入 `micrometer-prometheus` 时，`metrics` 命令会因 registry 不可用而回退/报错，此时只有 `metrics_default` 能出 JSON 摘要。
+
 ## Links
 
 - [Dubbo](/docs/CS/Framework/Dubbo/Dubbo.md)

@@ -291,6 +291,40 @@ private void createInvoker() {
 > [!NOTE]
 > mesh 模式下是否要开 `unloadClusterRelated` 取决于你的治理诉求：开了就更「纯粹」地把治理交给 Istio（Dubbo 不做本地容错），不开则 Dubbo 仍保留本地 Cluster 行为。两条路径都只涉及「本地是否包一层 Cluster」，与 xDS 无关。
 
+## How MeshRuleRouter Joins the State Router Chain
+
+上文的 `StandardMeshRuleRouterFactory` 并不是被某段 mesh 专属代码「特判」加载的，而是走和所有其它路由完全一致的 **StateRouter SPI 机制**——这正说明它只是 Dubbo 路由体系的一个普通成员，而非独立的 xDS 数据面。
+
+加载链路（源码核实）：
+
+1. 集群侧在构造 `RouterChain` 时，通过 `StateRouterFactory` 扩展加载器把所有被激活的工厂收集成 `List<StateRouter<T>>`：
+
+   ```java
+   // dubbo-cluster/.../cluster/RouterChain.java:69-72（节选）
+   List<StateRouter<T>> stateRouters =
+       moduleModel.getExtensionLoader(StateRouterFactory.class)
+           .getActivateExtension(url, ROUTER_KEY).stream()
+           .map(factory -> factory.getRouter(interfaceClass, url))
+           .collect(Collectors.toList());
+   ```
+
+2. `StandardMeshRuleRouterFactory` 因为类上标了 `@Activate(order = -50)`（`StandardMeshRuleRouterFactory.java:27`），只要 URL 上的 `router=` 激活条件命中，就会被 `getActivateExtension(url, ROUTER_KEY)` 一并取出，和普通条件路由、标签路由站在同一条链上。
+
+3. `RouterChain` 把这些 `StateRouter` 串成一条链，对外只暴露一个 `getHeadStateRouter()`（`RouterChain.java:238`），调用方（如 `AbstractClusterInvoker` 选址时）只需对「链头」调一次 `route(...)`，请求便依次穿过每个 `StateRouter`，`MeshRuleRouter` 自然被纳入其中。
+
+接入形态归纳：
+
+| 维度 | 事实（源码） |
+| :--- | :--- |
+| 接口身份 | `MeshRuleRouter<T> extends AbstractStateRouter<T> implements MeshRuleListener`（`MeshRuleRouter.java:60`），是标准 `StateRouter`，不是独立控制面客户端 |
+| 工厂注册 | `standard-mesh-rule=...StandardMeshRuleRouterFactory` 写在 `META-INF/dubbo/internal/org.apache.dubbo.rpc.cluster.router.state.StateRouterFactory` |
+| 激活方式 | `@Activate(order = -50)` + `ROUTER_KEY` 激活，与条件/标签路由同链 |
+| 规则来源 | 配置中心 `DynamicConfiguration`（`<app>.MESHAPPRULE`），`MeshEnvListener` 默认 `isEnable()=false`，无 xDS 实现 |
+| 链头访问 | `RouterChain.getHeadStateRouter()`（`RouterChain.java:238`）统一对外，调用方无感知是否含 mesh 路由 |
+
+> [!NOTE]
+> 这条接入路径再次印证 [Mesh](/docs/CS/Framework/Dubbo/Mesh.md?id=mesh-code-actually-present-in-the-main-repo) 的核心结论：主仓库的 mesh 能力 = 「拼 K8s Service 地址」+「从配置中心消费 Istio 风格规则做本地选址」，**全部落在已有 SPI/路由范式内，没有新增 xDS 控制面代码**。
+
 ## Missing Parts of the Main Repo
 
 ### Reproduce the Retrieval Method

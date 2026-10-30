@@ -190,6 +190,75 @@ if (queues == 0) {
 > [!TIP]
 > `queues` 传任意负值效果相同（只要有界队列与无界队列二选一），不要指望 `-1` / `-100` 代表不同的容量。真正能调容量的是 `>0` 的数值。
 
+## EagerThreadPoolExecutor TaskQueue Offer Hook and Put-back
+
+`eager` 之所以要自造 `EagerThreadPoolExecutor` 而非复用 JDK `ThreadPoolExecutor` + `SynchronousQueue`，核心就在 `TaskQueue` 的 `offer` 钩子与 `execute` 的「放回队列」逻辑。构造时 `queues <= 0` 被规整成 `1`：
+
+```java
+// dubbo-common/.../threadpool/support/eager/EagerThreadPool.java:54-63
+TaskQueue<Runnable> taskQueue = new TaskQueue<>(queues <= 0 ? 1 : queues);
+EagerThreadPoolExecutor executor = new EagerThreadPoolExecutor(
+        cores, threads, alive, TimeUnit.MILLISECONDS, taskQueue,
+        new NamedInternalThreadFactory(name, true),
+        new AbortPolicyWithReport(name, url));
+taskQueue.setExecutor(executor);
+```
+
+```java
+// dubbo-common/.../threadpool/support/eager/TaskQueue.java:44-63
+public boolean offer(Runnable runnable) {
+    int currentPoolThreadSize = executor.getPoolSize();
+    if (executor.getActiveCount() < currentPoolThreadSize) {
+        return super.offer(runnable);          // 有空闲 worker，直接入队让其消费
+    }
+    if (currentPoolThreadSize < executor.getMaximumPoolSize()) {
+        return false;                          // 关键：返回 false 让 executor 新建 worker，而不是排队
+    }
+    return super.offer(runnable);              // 已达 max，才真正入队
+}
+```
+
+```java
+// dubbo-common/.../threadpool/support/eager/EagerThreadPoolExecutor.java:38-57
+public void execute(Runnable command) {
+    try {
+        super.execute(command);
+    } catch (RejectedExecutionException rx) {
+        final TaskQueue queue = (TaskQueue) super.getQueue();
+        if (!queue.retryOffer(command, 0, TimeUnit.MILLISECONDS)) {   // 被拒后强行塞回队列
+            throw new RejectedExecutionException("Queue capacity is full.", rx);
+        }
+    }
+}
+```
+
+机制要点（对比标准 JDK 行为）：
+
+| 场景 | 标准 `ThreadPoolExecutor`（core 满、队列空/满） | Dubbo `eager` |
+| :--- | :--- | :--- |
+| core 线程忙、未到 max | 先尝试入队（有界/同步队列）→ 入不了才扩线程，易在「队列型拒绝」时丢任务 | `offer` 返回 `false` **先扩线程**，把扩容时机前移 |
+| 触发 `RejectedExecutionException` | 由 `RejectedExecutionHandler` 决定（默认直接抛，任务丢失） | `execute` 捕获后 `retryOffer` 把任务**放回队列**，不丢 |
+
+所以 `eager` 解决的是「core 已满、任务却在无界队列里排队导致 max 形同虚设」的标准线程池短板；真正起扩容作用的旋钮是 `threads`（默认 `Integer.MAX_VALUE`），`queues` 规整成 `1` 仅是给 `offer` 钩子提供一个可用的交接槽，绝不能给 `eager` 配大队列（否则又退化成先排队）。
+
+## Rejection Policy AbortPolicyWithReport across All Four Pools
+
+四种线程池实现**全部**把同一个 `AbortPolicyWithReport(name, url)` 作为 `RejectedExecutionHandler` 传入，主源码里**不存在** `CallerRunsPolicy`（网上「Dubbo 用 CallerRuns 兜底」的说法在 3.3.6 不成立）：
+
+```java
+// FixedThreadPool.java:70 / CachedThreadPool.java:76 / LimitedThreadPool.java:72 / EagerThreadPool.java:62
+new AbortPolicyWithReport(name, url)   // 均为 AbortPolicyWithReport
+```
+
+`AbortPolicyWithReport`（`AbortPolicyWithReport.java:57-132`）继承 `ThreadPoolExecutor.AbortPolicy`，`rejectedExecution` 内依次：
+
+1. 打 `COMMON_THREAD_POOL_EXHAUSTED` warn 日志，输出「`Thread pool is EXHAUSTED!`」并带 Pool Size / active / core / max / largest、Task 完成数、executor 状态与 `url`；
+2. 若 `DUMP_ENABLE`（默认 `true`）则 `dumpJStack()`——**限流为每 10 分钟一次**（`TEN_MINUTES_MILLS = 10*60*1000`），并用 `Semaphore(1)` 防并发 dump，写出 `Dubbo_JStack.log.<date>` 到 `user.home` 或 `DUMP_DIRECTORY`；
+3. `dispatchThreadPoolExhaustedEvent(msg)` 通知 SPI 注册的 `ThreadPoolExhaustedListener`（key `thread_pool_exhausted_listeners`）；
+4. 最后 `throw new RejectedExecutionException(msg)`（继承 `AbortPolicy` 的抛异常行为）。
+
+唯一使用「裸」`ThreadPoolExecutor.AbortPolicy`（不报栈、不 dump）的是 `FrameworkExecutorRepository` 里的框架内调度器（`FrameworkExecutorRepository.java:83,99,121`），与业务线程池无关。
+
 ## Consumer Thread Model
 
 消费端是误解最集中的地方，分四点讲清楚。
@@ -380,6 +449,8 @@ workerGroup = new NioEventLoopGroup(
 | `iothreads` | `min(CPU+1, 32)` | `remoting/Constants.java:118` `DEFAULT_IO_THREADS` | **是**，≤0 回落默认 |
 | `connections`（Dubbo 协议） | `0`（共享连接） | `DubboProtocol.java:453` | — |
 | `shareconnections` | `1` | `dubbo-rpc-dubbo/Constants.java:27` | — |
+| 拒绝策略（fixed/cached/limited/eager） | `AbortPolicyWithReport`（含 jstack dump，10 分钟限流） | `AbortPolicyWithReport.java:57-132` | — |
+| `eager` 队列容量（queues<=0 规整） | `1`（仅作 offer 钩子交接槽） | `EagerThreadPool.java:54` | — |
 
 ## Pitfall List
 

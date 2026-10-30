@@ -131,7 +131,7 @@ private BitList<Invoker<T>> simpleRoute(BitList<Invoker<T>> invokers, URL url, I
 ```
 
 > [!NOTE]
-> legacy `Router` 接口**没有整体标注 `@Deprecated`**（`Router.java:35`），只有旧的三参 `route` default 方法单独标了 `@Deprecated`（:55）。也就是说四参 `route` + `RouterResult` 仍是受支持的 legacy 路径，MockInvokersSelector 就走这条路。
+> legacy `Router` 接口**没有整体标注 `@Deprecated`**（`Router.java:35`），只有旧的三参 `route` default 方法单独标了 `@Deprecated`（:55）。也就是说四参 `route` + `RouterResult` 仍是受支持的 legacy 路径，由 `SingleRouterChain.simpleRoute` 第二段循环调用；而 `MockInvokersSelector` 实际继承 `AbstractStateRouter`（见下文 [Script Mesh Mock Router Code](#script-mesh-mock-router-code) 节），走 StateRouter 链而非 legacy 路径。
 
 ### BitList: A Data Structure Born for Routing
 
@@ -336,6 +336,205 @@ if (filterUsingTag(invokers, tag) == null/empty ...) {
 | mock 路由（`MockInvokersSelector`） | 常驻内置 | legacy 链，见 cluster.md |
 | legacy `Router` 四参 route | 未废弃 | `Router.java:35,71-74` |
 
+## Affinity Routing
+
+亲和性路由由 `AffinityStateRouter`（`router/affinity/AffinityStateRouter.java:59`，`NAME = "affinity"`）实现，配套 `AffinityStateRouterFactory` 与 `affinity/config/` 下的 `AffinityServiceStateRouter` / `AffinityProviderAppStateRouter`。规则在配置中心的 key 形如 `{name}.affinity-router`，格式：
+
+```yaml
+configVersion: v3.1
+scope: service          # 或 application
+key: service.apache.com
+enabled: true
+runtime: true
+affinityAware:
+  key: region           # 按哪个 URL 参数做亲和
+  ratio: 20             # 命中比例阈值（0~100）
+```
+
+`doRoute`（`AffinityStateRouter.java:114-171`）的逻辑不是「硬过滤」，而是**按比例放行的软约束**：
+
+1. 用 `affinityKey`（如 `region`）构造 `ConditionMatcher`（`getMatcher` 取 `param` 工厂），从候选里挑出「该 key 命中本 Consumer 参数值」的实例。
+2. 计算命中比例 `result.size() / invokers.size()`，若 **≥ `ratio/100`** 则只返回命中子集；否则认为「亲和实例太少、不值得收敛」，直接返回原始全量列表并打 warn 日志（`CLUSTER_CONDITIONAL_ROUTE_LIST_EMPTY`）。
+
+也就是说亲和性路由是一种「能聚则聚、不能聚就摊开」的策略，适合把同一区域/同一租户的流量尽量圈在一起、又不致于在实例稀疏时反而恶化分布。
+
+> [!WARNING]
+> `affinity` 虽然在源码树里完整实现，但**没有出现在主 resources 的 `StateRouterFactory` SPI 文件里**（那 8 项里没有 `affinity`），与 `script`/`file` 的处境类似——默认不会自动激活，生产使用需自行注册 `AffinityStateRouterFactory`。
+
+## Source-level Route Execution (Overview)
+
+本节补充各路由的**真实 `route()` 执行流程**——即现有文档只讲了「语法/注册/解析」却没展开的「调用期代码」盲区。先澄清一个入口误区：StateRouter 的公开 `route(...)` 是 `AbstractStateRouter` 里的 `final` 方法（`AbstractStateRouter.java:94-149`），它负责构建快照节点、调 `doRoute`、并用 `invokers.and(routeResult)` 做「只能收窄、不能新增」的安全交集（`AbstractStateRouter.java:127-129`）；**真正的过滤逻辑写在各子类的 `doRoute(...)` 里**。下面所有「route 执行」都指 `doRoute`。
+
+## ConditionStateRouter route Execution
+
+`ConditionStateRouter` 继承 `AbstractStateRouter`，所有匹配在 `doRoute` 完成（`ConditionStateRouter.java:204-279`）：
+
+```java
+// dubbo-cluster/.../router/condition/ConditionStateRouter.java:204-279（节选）
+protected BitList<Invoker<T>> doRoute(BitList<Invoker<T>> invokers, URL url, Invocation invocation, ...) {
+    if (!enabled)                    return invokers;          // 规则停用，原样返回
+    if (CollectionUtils.isEmpty(invokers)) return invokers;     // 上游已清空，原样返回
+    // 1) 先 matchWhen：when 不命中 → 本条规则对该调用不生效，原样返回
+    if (!matchWhen(url, invocation))  return invokers;          // :227-231
+    // 2) thenCondition 为 null（即 then 侧是 "false"）→ 视为把当前 Consumer 拉黑，返回空列表
+    if (thenCondition == null)       return BitList.emptyList();// :233-243
+    // 3) 克隆后逐条去掉「then 不命中」的 Provider
+    BitList<Invoker<T>> result = invokers.clone();
+    result.removeIf(invoker -> !matchThen(invoker.getUrl(), url)); // :245-246
+    if (!result.isEmpty())           return result;             // 命中就返回子集
+    // 4) 结果为空时的 force 兜底（见下）
+    else if (this.isForce())         return result;            // :253-264  force=true → 返回空 BitList
+    // 5) force=false → 走到这里，返回原始 invokers 兜底（不报错）
+    return invokers;                                          // :278
+}
+```
+
+**`force` 兜底的真实代码**（最关键事实）：`doRoute` 在 `then` 过滤后若结果为空，先判断 `this.isForce()`——`true` 时直接 `return result`（此时 `result` 是空 `BitList`，即「宁可报错也不放行」）；`false` 时不进该分支，方法落到最后一行 `return invokers`，把**原始全量列表**交出去做兜底（`:253-278`）。
+
+`matchWhen` / `matchThen` 的真实实现（`ConditionStateRouter.java:300-314`）只差一个参数：
+
+```java
+// ConditionStateRouter.java:300-314
+boolean matchWhen(URL url, Invocation invocation) {           // when 侧：能拿到 invocation
+    if (CollectionUtils.isEmptyMap(whenCondition)) return true; // when 为空视为无条件命中
+    return doMatch(url, null, invocation, whenCondition, true);
+}
+private boolean matchThen(URL url, URL param) {                // then 侧：传 null 的 invocation
+    if (CollectionUtils.isEmptyMap(thenCondition)) return false;
+    return doMatch(url, param, null, thenCondition, false);
+}
+```
+
+`doMatch`（`:316-330`）把每个 `ConditionMatcher` 对 Provider/Consumer URL 做 `isMatch`，组内（同一 key 的多值）需全命中、组间（不同 key）任一命中即通过——这与已有「DNF 解析语义」一节呼应。`then` 侧 `invocation=null` 的硬约束已在「then-Side Boundaries」一节说明。
+
+**BitList 的位运算语义**：`invokers.clone()` 是位拷贝；`removeIf`（`ConditionStateRouter.java:246`）只翻转 bit 标记某下标实例被剔除，不重建 List；`AbstractStateRouter.route` 里的 `invokers.and(routeResult)`（`AbstractStateRouter.java:128`）是位与（交集）——保证任何 StateRouter 只能在传入集合内收窄，绝不可能凭空引入新实例。对比旧 `ConditionRouter`：旧版 `route` 返回 `List<Invoker<T>>`（每次过滤 `new ArrayList` 拷贝），新版返回 `BitList` 即为此优化。
+
+> [!NOTE]
+> 打假补充：源码树中**不存在 `AbstractConditionRouter` 这个类**（仅在 `condition/` 包下有 `MultiDestConditionRouter` 等具体实现）。现有「解析主循环」一节提到的 `ConditionStateRouter` 构造/解析入口（`init` 在 `:106-125`，`ROUTE_PATTERN` 在 `:76`）属实，但过滤逻辑的正确落点是 `doRoute` 而非 `route`——因为 `route` 已被 `AbstractStateRouter` 用 `final` 锁死。
+
+## TagStateRouter route Execution
+
+`TagStateRouter.doRoute`（`tag/TagStateRouter.java:92-186`）的骨架是「取 tag → 动态标签匹配 → 失败回退静态/无标签」：
+
+```java
+// tag/TagStateRouter.java:92-186（节选 + 关键分支）
+BitList<Invoker<T>> result = invokers;
+String tag = StringUtils.isEmpty(invocation.getAttachment(TAG_KEY))
+        ? url.getParameter(TAG_KEY) : invocation.getAttachment(TAG_KEY); // :118-120 先 attachment 再 URL
+if (tagRouterRuleCopy == null || !isValid() || !isEnabled()) {
+    return filterUsingStaticTag(invokers, url, invocation);   // :110-115 无动态规则 → 退化到静态标签
+}
+if (StringUtils.isNotEmpty(tag)) {
+    // 动态标签组命中：filterInvoker 按 addressMatches 过滤；
+    // 结果为空且 force=false → 回退无标签实例（FAILOVER，:152-161）
+    ...
+    if (CollectionUtils.isNotEmpty(result) || isForceUseTag(invocation)) return result;
+    // FAILOVER：返回全部「无标签」Provider（:152-161）
+    return filterInvoker(tmp, inv -> StringUtils.isEmpty(inv.getUrl().getParameter(TAG_KEY)));
+} else {
+    // 请求没带 tag：把「已在动态标签组里的地址」排除，再剩下无标签实例（:162-185）
+    ...
+}
+```
+
+静态标签降级 `filterUsingStaticTag`（`TagStateRouter.java:202-222`）是另一条腿：当无动态规则、或动态标签组内无匹配实例（`!isForceUseTag`）时，按 Provider URL 上的 `dubbo.tag` 静态参数匹配，仍为空才回退到全量无标签实例。完整优先级与「force 语义与降级」一节一致，这里补的是**代码落点**。
+
+## RouterChain Assembly and Invocation
+
+**装配**：`RouterChain.buildChain` 一次建出 `mainChain` + `backupChain` 两条 `SingleRouterChain`，用于地址热更新时的无锁切换（`RouterChain.java:52-90`）；`buildSingleChain`（`:58-81`）分别从 `RouterFactory`（legacy）与 `StateRouterFactory`（SPI）拉取激活的 router 实例，legacy router 按 `Router.compareTo` 排序。
+
+**StateRouter 链**：`SingleRouterChain.initWithStateRouters`（`SingleRouterChain.java:95-104`）从尾部 `TailStateRouter` 向前用 `setNextRouter` 把每个 StateRouter 串成单向链，头节点存为 `headStateRouter`。因此运行时 StateRouter 链是**递归责任链**：`AbstractStateRouter.route` 调 `doRoute` 后通过 `continueRoute` → `nextRouter.route` 自动级联（`AbstractStateRouter.java:131-136,176-187`），而不是外层手动循环。
+
+> [!WARNING]
+> 纠正现有文档一处不准确：`SingleRouterChain.simpleRoute` 中跑 StateRouter 的真实代码是 `headStateRouter.route(resultInvokers, url, invocation, false, null)`（`SingleRouterChain.java:166`），由 `nextRouter` 递归串起整条链；现有「StateRouter Chain」一节贴出的「`for (StateRouter : stateRouters)` 循环调用」片段与 3.3.6 实际代码不符（legacy 路由 `routers` 才是 `for` 循环：`SingleRouterChain.java:177-190`）。
+
+**调用点（最关键事实）**：`route` 在 `list` 阶段执行。`AbstractDirectory.list(Invocation)`（`AbstractDirectory.java:201`）先准备 `availableInvokers = invokers.clone()`（`:216-219`），取出 `singleChain` 并加读锁，再于 `:232` 调 `doList(singleChain, availableInvokers, invocation)`；真正执行过滤的是 `StaticDirectory.doList` 里的 `singleRouterChain.route(getConsumerUrl(), invokers, invocation)`（`StaticDirectory.java:128`）。`route` 返回的 `List<Invoker<T>>`（`SingleRouterChain.route:139-154` → `simpleRoute` 返回 `BitList`，经 `cloneToArrayList`/快照后转 `List`）在 `AbstractDirectory.list:247` 用 `Collections.unmodifiableList` 包好，交给 `LoadBalance` 选最终实例。
+
+> [!NOTE]
+> `grep "extends AbstractDirectory"` 仅命中 `StaticDirectory`，但这是因为 `RegistryDirectory` 经由 `DynamicDirectory`（`DynamicDirectory.java:63` 声明 `extends AbstractDirectory`）**间接继承**——`RegistryDirectory` 在 3.3.6 **仍然存在**（继承链 `RegistryDirectory → DynamicDirectory → AbstractDirectory`，见 [registry](/docs/CS/Framework/Dubbo/registry.md)），route 调用同样统一经 `AbstractDirectory.list` 发起。`StaticDirectory` 只是另一直接子类，用于直连/多 url 场景。
+
+## Three Config Routers Difference
+
+三者都继承 `ListenableStateRouter`，差异在**订阅 key 维度**与**侧（consumer/provider）**，由构造时传入的 `ruleKey` 决定（`ListenableStateRouter.java:65-70` 用 `ruleKey + ".condition-router"` 作为配置中心监听 key）：
+
+| Router | 订阅 key（构造参数） | 侧 | 说明 |
+|---|---|---|---|
+| `AppStateRouter` | `url.getApplication()`（`AppStateRouter.java:28`） | Consumer 应用级 | 监听 `{consumerApp}.condition-router` |
+| `ServiceStateRouter` | `DynamicConfiguration.getRuleKey(url)`（`ServiceStateRouter.java:29`，`DynamicConfiguration.java:212`） | 接口级 | 监听 `{interface:version:group}.condition-router` |
+| `ProviderAppStateRouter` | 构造传入 `url.getApplication()`，但 `notify` 内改订阅 Provider 的 `getRemoteApplication()`（`ProviderAppStateRouter.java:47-84`） | Provider 应用级 | 监听 `{providerApp}.condition-router`，仅当 Provider 与自身不同应用时订阅 |
+
+`ListenableStateRouter.doRoute`（`ListenableStateRouter.java:101-144`）本身不解析 `when/then`，而是把每条 condition 字符串包成一个 `ConditionStateRouter`（`generateConditions`，`:155-181`），再依次 `router.route(...)` 串联过滤——所以「config 路由」本质是**一个壳 + 多个内嵌 ConditionStateRouter**。`scope`/`key` 字段由 `AbstractRouterRule.parseFromMap0`（`AbstractRouterRule.java:48-84`）解析，但真正决定「这条规则归哪个 Router 管」的是**各 Router 监听的 `ruleKey`**，YAML 里的 `scope` 更多是声明性校验。
+
+Factory 决策（`@Activate` 顺序控制链内先后，值越小越先）：
+
+| Factory | `@Activate(order)` | 创建对象 |
+|---|---|---|
+| `ServiceStateRouterFactory` | `140`（`ServiceStateRouterFactory.java:28`） | `ServiceStateRouter` |
+| `ProviderAppStateRouterFactory` | `145`（`ProviderAppStateRouterFactory.java:24`） | `ProviderAppStateRouter` |
+| `AppStateRouterFactory` | `150`（`AppStateRouterFactory.java:28`） | `AppStateRouter` |
+
+三者经 `StateRouterFactory` SPI（主 resources 里的 `service`/`app`/`provider-app` 三项）按 URL 的 `router` 参数激活；`AppStateRouterFactory` 还用双重检查锁保证单例（`AppStateRouterFactory.java:36-47`）。
+
+## ConditionRouterRule YAML Parsing
+
+`ConditionRuleParser.parse`（`condition/config/model/ConditionRuleParser.java:52-83`）用 SnakeYAML 的 `SafeConstructor` 把原始 YAML 读成 `Map`，再按 `configVersion` 分流：
+
+```java
+// ConditionRuleParser.java:52-83（节选）
+Yaml yaml = new Yaml(new SafeConstructor(new LoaderOptions()));
+Map<String, Object> map = yaml.load(rawRule);
+String confVersion = (String) map.get(CONFIG_VERSION_KEY);
+if (confVersion != null && confVersion.toLowerCase().startsWith(RULE_VERSION_V31))
+    rule = MultiDestConditionRouterRule.parseFromMap(map);  // v3.1 多目标
+else
+    rule = ConditionRouterRule.parseFromMap(map);           // 普通条件路由
+```
+
+`ConditionRouterRule` 继承 `AbstractRouterRule`（`ConditionRouterRule.java:27`），`setConditions` 只负责把 YAML 的 `conditions:` 列表存成 `List<String>`（`ConditionRouterRule.java:50-52`），**不做 `when => then` 拆分**：
+
+```java
+// ConditionRouterRule.java:31-52
+public static AbstractRouterRule parseFromMap(Map<String, Object> map) {
+    ConditionRouterRule r = new ConditionRouterRule();
+    r.parseFromMap0(map);                 // 解析 scope/key/force/enabled/runtime/priority（见 AbstractRouterRule.java:48-84）
+    Object conditions = map.get(CONDITIONS_KEY);
+    if (conditions != null && List.class.isAssignableFrom(conditions.getClass()))
+        r.setConditions(((List<Object>) conditions).stream().map(String::valueOf).collect(Collectors.toList()));
+    return r;
+}
+```
+
+真正的 `when => then` 拆分发生在**下游**：`ListenableStateRouter.generateConditions` 把每条 condition 字符串交给 `new ConditionStateRouter(getUrl(), condition, force, enabled)`，而 `ConditionStateRouter.init` 用 `rule.indexOf("=>")` 把字符串剖成 `whenRule`/`thenRule` 再 `parseRule`（呼应已有「解析主循环」一节）。也就是说：`ConditionRouterRule` 只是「规则容器」，`when/then` 编译发生在 `ConditionStateRouter` 内部。
+
+## Script Mesh Mock Router Code
+
+**ScriptStateRouter**（`script/ScriptStateRouter.java`）：用 `ScriptEngineManager` 取引擎、`Compilable.compile` 预编译 Groovy 脚本（`ScriptStateRouter.java:89-107`），`doRoute`（`:135-170`）在受限 `AccessControlContext` 里 `function.eval(bindings)` 执行脚本，脚本通过 `bindings` 拿到 `invokers`/`invocation`/`context`（`createBindings`，`:192-199`）：
+
+```java
+// ScriptStateRouter.java:150-187（节选）
+Bindings bindings = createBindings(invokers, invocation);
+Object obj = function.eval(bindings);                 // 脚本返回 Invoker[] / Object[] / List<Invoker>
+BitList<Invoker<T>> result = invokers.clone();
+if (obj instanceof Invoker[])            result.retainAll(Arrays.asList((Invoker<T>[]) obj));
+else if (obj instanceof Object[])        result.retainAll(stream...(Invoker<T>)...);
+else                                    result.retainAll((List<Invoker<T>>) obj);   // retainAll 退化为位运算
+```
+
+注意：主 resources 的 `StateRouterFactory` SPI 只有 `script-app`（`AppScriptRouterFactory`），没有裸 `script`——脚本路由**仅应用级**可用（与「Current Status of Script and File Routing」一节一致）。
+
+**StandardMeshRuleRouter**（`mesh/route/StandardMeshRuleRouter.java`）只覆写 `ruleSuffix()` 返回 `STANDARD_ROUTER_KEY`，逻辑全在父类 `MeshRuleRouter.doRoute`（`MeshRuleRouter.java:82-140`）：按 `VirtualService`/`DubboRoute` 维度匹配——先用 `invocation.getServiceName()` 匹配服务（`getDubboRoute`，`:166-185`），再用 `DubboMatchRequest.isMatch` 匹配请求参数（`getDubboRouteDestination`，`:190-207`），命中后取 `subset` 对应的实例子集做 `result.or(destination)`（`:113`）。`doRoute` 第一行 `if (!ruleCache.containsRule()) return invokers;`（`:92-97`）即「无 Mesh 控制面不触发」的代码落点——没有从控制面下发的 `MeshRuleCache` 就原样放行。
+
+**MockInvokersSelector**（`mock/MockInvokersSelector.java`）：注意它**继承自 `AbstractStateRouter`**（`:40`），是 StateRouter 而非 legacy Router——现有文档「StateRouter Chain」一节称其「走 legacy 四参 route」不准确。`notify`（`MockInvokersSelector.java:92-109`）按 `MOCK_PROTOCOL` 把实例拆成 `mockedInvokers` 与 `normalInvokers` 两份缓存；`doRoute`（`:51-90`）按 `invocation` 附件 `INVOCATION_NEED_MOCK` 决定返回哪一份（`invokers.and(mockedInvokers)` 或 `invokers.and(normalInvokers)`），从而配合 `MockClusterInvoker` 实现 mock 分流。
+
+## Why the Router Was Renamed
+
+老资料里 `ConditionRouter` / `TagRouter` / `ScriptRouter` 被全量改名为 `*StateRouter`，**不是简单的重命名，而是接口语义的整体替换**：
+
+- 旧 `Router` 返回 `List<Invoker<T>>` / `RouterResult<Invoker<T>>`，按 `getPriority()` + `Comparable` 排序，没有链式协作与治理快照。
+- 新 `StateRouter`（`@since 3.0`）返回 `BitList<Invoker<T>>`，过滤靠位运算而非重建 List；新增 `setNextRouter` 把多个路由串成责任链、新增 `buildSnapshot()` 导出治理快照（`RouterSnapshotNode` 树，供 Dubbo Admin 的「路由分析」使用）。
+
+旧 `ConditionRouter` / `TagRouter` 类在 3.3.6 整棵源码树中**已删除**（不是保留兼容），因此任何依赖旧类名的代码或资料都会失效。3.x 真正干活的全在 `StateRouter` 链上；legacy `Router` 仅是「接口还在、默认实现已清空」的兼容壳。把 `RouterChain` 重写成「main/backup 双链 + `SingleRouterChain`」也是同一轮重构的一部分——目的是支持地址列表热更新时的无锁切换（见 [cluster](/docs/CS/Framework/Dubbo/cluster.md?id=routerchain)）。
+
 ## Pitfall List
 
 1. **类名全是旧版记忆**：`ConditionRouter`、`TagRouter`、`ScriptRouter`、`ServiceRouter` 在 3.3.6 整棵源码树中**已不存在**，实际是 `ConditionStateRouter`、`TagStateRouter`、`ScriptStateRouter`，以及语义拆分后的 `AppStateRouter` + `ServiceStateRouter`。照旧类名搜源码会一无所获。
@@ -362,3 +561,4 @@ if (filterUsingTag(invokers, tag) == null/empty ...) {
 
 1. [dubbo-cluster router 源码](https://github.com/apache/dubbo/tree/3.3/dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/router)
 2. [Dubbo 流量管控官方文档](https://cn.dubbo.apache.org/zh-cn/overview/core-features/traffic/)
+3. [AffinityStateRouter.java](https://github.com/apache/dubbo/blob/dubbo-3.3.6/dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/router/affinity/AffinityStateRouter.java)

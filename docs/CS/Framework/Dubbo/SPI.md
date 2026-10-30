@@ -98,6 +98,67 @@ public enum ExtensionScope {
 
 这四条约束不是装饰性的注释，而是 `ExtensionDirector` 实际路由的依据，见下一节。
 
+## The Other Three Core Annotations: @Activate, @Wrapper, @DisableInject
+
+`@SPI` 决定「类型层面」的扩展点语义，而另三个注解作用在「实现类层面」，共同构成 Dubbo SPI 的完整契约：`@Activate`（自动激活）、`@Wrapper`（AOP 包装）、`@DisableInject`（禁用某 setter 的自动注入）。它们都位于 `org.apache.dubbo.common.extension`。
+
+### @Activate
+
+自动激活注解，贴在扩展实现类上，让 `getActivateExtension(url, values, group)` 按 `group` / `value` / `onClass` 自动筛选并排序。完整定义（`Activate.java:45-100`）：
+
+```java
+// dubbo-common/src/main/java/org/apache/dubbo/common/extension/Activate.java:45-100
+public @interface Activate {
+    String[] group() default {};        // :53  URL 侧触发的分组, 如 CONSUMER / PROVIDER
+    String[] value() default {};        // :66  URL 参数 key, 命中即激活 (支持 "k:v" 精确值)
+    @Deprecated
+    String[] before() default {};       // :75  排序: 排在某些扩展之前 (2.7.0 起废弃)
+    @Deprecated
+    String[] after() default {};        // :84  排序: 排在某些扩展之后 (2.7.0 起废弃)
+    int order() default 0;              // :93  排序权重, 升序, 默认 0 (不是 -1)
+    String[] onClass() default {};      // :99  类路径条件: 列出的类全部存在才加载该扩展
+}
+```
+
+要点：
+
+- **`order` 默认 `0`**，不是 `-1`。升序排列，值越小越靠前；`order` 相同再按类名 `getSimpleName()` 字典序兜底（`ActivateComparator.java:117-123`）。
+- **`before` / `after` 已 `@Deprecated`**（自 2.7.0），但排序逻辑仍支持；若同时写了 `before/after` 与 `order`，**`before/after` 约束优先**（`ActivateComparator.java:72-111`）。新代码应只用 `order`。
+- `group` 与 `value` 是激活的「开关」：`group` 不匹配直接忽略；`value` 是 URL 参数名（支持 `k:v` 精确值匹配）。二者都在加载阶段被预解析进 `cachedActivateGroups` / `cachedActivateValues`（`ExtensionLoader.java:906-941`），详见 [Activation and Sorting](/docs/CS/Framework/Dubbo/SPI.md?id=activation-and-sorting)。
+- `onClass` 在 `loadClassIfActive`（`ExtensionLoader.java:1309-1333`）阶段做类存在性校验——指定的类**全部存在**才把这个扩展类加载进来，否则整类跳过。这是「类路径条件加载」的核心。
+
+### @Wrapper
+
+AOP 包装注解，贴在 wrapper 实现类上，控制它包裹哪些具体扩展。`@Wrapper` 本身没有 `@Target` 限定（默认可用于任意声明处），完整定义（`Wrapper.java:26-45`）：
+
+```java
+// dubbo-common/src/main/java/org/apache/dubbo/common/extension/Wrapper.java:26-45
+public @interface Wrapper {
+    String[] matches() default {};     // :32  只包裹 name 在 matches 里的扩展
+    String[] mismatches() default {};  // :37  永不包裹 name 在 mismatches 里的扩展
+    int order() default 0;             // :44  包裹顺序, 默认 0
+}
+```
+
+要点：
+
+- wrapper 判定与 `@Wrapper` 本身无关——`isWrapperClass`（`ExtensionLoader.java:1410-1418`）只看「构造器有且仅有一个 `type` 类型参数」。`@Wrapper` 只是**选择性包裹**的开关：`matches` 为空表示全匹配，`mismatches` 永远排除（见 [AOP](/docs/CS/Framework/Dubbo/SPI.md?id=aop) 一节的包裹逻辑）。
+- 多个 wrapper 按 `WrapperComparator` 排序（默认 `order` 升序）后反转，再逐层包裹。包裹后的实例同样会走一遍前后置处理与 IoC 注入。
+
+### @DisableInject
+
+标记注解（无属性），贴在扩展类的某个 setter 方法上，告诉 `injectExtension` 不要对该属性做自动依赖注入（`DisableInject.java:25-28`）：
+
+```java
+// dubbo-common/src/main/java/org/apache/dubbo/common/extension/DisableInject.java:25-28
+@Documented
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.TYPE, ElementType.METHOD})
+public @interface DisableInject {}
+```
+
+典型用途：扩展类自己通过其他方式（如 `ExtensionAccessor`）拿依赖，不希望被反射 setter 注入覆盖。
+
 ## ScopeModel: Which Model an Extension Instance Belongs To
 
 ### Three-Layer Model
@@ -276,6 +337,64 @@ private void checkDestroyed() {
 }
 ```
 
+`ExtensionLoader.destroy()`（`ExtensionLoader.java:249-279`）的具体销毁逻辑：
+
+```java
+// dubbo-common/src/main/java/org/apache/dubbo/common/extension/ExtensionLoader.java:249-279 (节选)
+public void destroy() {
+    if (!destroyed.compareAndSet(false, true)) {
+        return;                                            // 幂等: 已销毁直接返回
+    }
+    // 1. 原始扩展实例
+    extensionInstances.forEach((type, instance) -> {
+        if (instance instanceof Disposable) {
+            try { ((Disposable) instance).destroy(); }
+            catch (Exception e) { logger.error(...); }
+        }
+    });
+    extensionInstances.clear();
+    // 2. 包装后实例 (cachedInstances 里的 Holder)
+    for (Holder<Object> holder : cachedInstances.values()) {
+        Object wrapped = holder.get();
+        if (wrapped instanceof Disposable) {
+            try { ((Disposable) wrapped).destroy(); }
+            catch (Exception e) { logger.error(...); }
+        }
+    }
+    cachedInstances.clear();
+}
+```
+
+要点：
+
+- **销毁遍历两个缓存**：`extensionInstances`（裸实例）与 `cachedInstances`（经 wrapper 包裹后的实例 `Holder`）。3.3.6 **没有** `disposableInstances` 字段——旧笔记里的这个名字是错的。
+- 只有 `instance instanceof Disposable` 才调 `destroy()`。`Disposable` 接口（`dubbo-common/.../common/resource/Disposable.java:22-25`）签名极简：`void destroy();`（**没有 `throws Exception`**，实现里抛异常会被 `catch` 吞掉并仅记 error 日志，不会中断后续销毁）。
+- `destroy()` 用 `AtomicBoolean.compareAndSet` 保证幂等，`destroyed` 置位后所有 `getExtension` / `getAdaptiveExtension` / `getActivateExtension` 入口的 `checkDestroyed()` 都会抛 `IllegalStateException`。
+
+#### Enumerating Extensions: getSupportedExtensions vs getLoadedExtensions
+
+两个枚举 API 都返回 `Set<String>`（用 `TreeSet` 包成不可变集合，天然有序）：
+
+| 方法 | 行号 | 数据来源 | 语义 |
+| --- | --- | --- | --- |
+| `getSupportedExtensions()` | `:614-618` | `getExtensionClasses()` → `cachedClasses` | 所有**已识别**的扩展名（SPI 文件里声明的，未必都实例化） |
+| `getLoadedExtensions()` | `:532-534` | `cachedInstances.keySet()` | 当前**已创建实例**的扩展名 |
+
+```java
+// dubbo-common/src/main/java/org/apache/dubbo/common/extension/ExtensionLoader.java:614-618
+public Set<String> getSupportedExtensions() {
+    checkDestroyed();
+    Map<String, Class<?>> classes = getExtensionClasses();
+    return Collections.unmodifiableSet(new TreeSet<>(classes.keySet()));
+}
+// :532-534
+public Set<String> getLoadedExtensions() {
+    return Collections.unmodifiableSet(new TreeSet<>(cachedInstances.keySet()));
+}
+```
+
+通常要「列出某 SPI 类型支持的全部扩展」用 `getSupportedExtensions()`；要「看哪些已经被实例化（含 wrapper 后的 key）」才用 `getLoadedExtensions()`。
+
 ## ExtensionLoader Core Fields and Lifecycle
 
 ### Fields
@@ -369,6 +488,93 @@ public T getExtension(String name, boolean wrap) {
 注意 `cacheKey`：`wrap` 与否会缓存成两个不同的 key，所以 `getOriginalInstance` 与 `getExtension` 不会互相污染。
 
 流程仍是五步：解析配置文件 → 加载实现类 → 实例化 → 依赖注入 → 包装类处理并返回。
+
+### Default Extension Name Resolution
+
+「默认扩展」由 `@SPI(value = "...")` 决定。`loadExtensionClasses()` 在扫描类之前先调 `cacheDefaultExtensionName()`（`ExtensionLoader.java:989` → `:1026-1043`），它读接口上的 `@SPI.value()`，按 `NAME_SEPARATOR`（`=`,`,`,`;` 等）切分：
+
+```java
+// dubbo-common/src/main/java/org/apache/dubbo/common/extension/ExtensionLoader.java:1026-1043
+private void cacheDefaultExtensionName() {
+    final SPI defaultAnnotation = type.getAnnotation(SPI.class);
+    if (defaultAnnotation == null) {
+        return;
+    }
+    String value = defaultAnnotation.value();
+    if ((value = value.trim()).length() > 0) {
+        String[] names = NAME_SEPARATOR.split(value);
+        if (names.length > 1) {
+            throw new IllegalStateException("More than 1 default extension name on extension " + type.getName());
+        }
+        if (names.length == 1) {
+            cachedDefaultName = names[0];   // 存入缓存
+        }
+    }
+}
+```
+
+注意：**`@SPI` 的 `value` 只能写一个默认名**，写多个会直接抛 `IllegalStateException`（不是选第一个）。`getDefaultExtension()`（`ExtensionLoader.java:597-603`）就是先触发类加载、再用 `cachedDefaultName` 取实例：
+
+```java
+// dubbo-common/src/main/java/org/apache/dubbo/common/extension/ExtensionLoader.java:597-603
+public T getDefaultExtension() {
+    getExtensionClasses();                              // 触发 loadExtensionClasses -> cacheDefaultExtensionName
+    if (StringUtils.isBlank(cachedDefaultName) || "true".equals(cachedDefaultName)) {
+        return null;                                    // 接口没标 @SPI.value 时返回 null
+    }
+    return getExtension(cachedDefaultName);
+}
+```
+
+`getExtension("true")` 也会回落到默认扩展（`getExtension` 在 `:359` 判断 `"true".equals(name)` 直接 `getDefaultExtension()`），这是 Dubbo 内部用 `"true"` 表达「取默认」的约定。
+
+### End-to-End: From getExtension(name) to a Returned Instance
+
+把前面碎片拼成一条完整链路——用户调用 `extensionLoader.getExtension("dubbo")`（或 `getExtension("dubbo", true)`）到拿到实例：
+
+```text
+getExtension(name, wrap=true)                 // :557  checkDestroyed + 空/true 判定 + cacheKey(含 _origin 区分 wrap)
+  └─ getOrCreateHolder(cacheKey)              // 取/建 Holder<Object>
+       └─ createExtension(name, wrap)         // :773  (cachedClasses 命中才进; 否则 findException)
+            ├─ getExtensionClasses()          // :955  DCL + ReentrantLock -> loadExtensionClasses
+            │    └─ loadExtensionClasses()    // :987  cacheDefaultExtensionName + 遍历 strategies
+            │         └─ loadDirectory / loadResource / loadClass   // 见 Loading Process
+            ├─ extensionInstances.get(clazz)  // :664  实例级缓存 (putIfAbsent)
+            ├─ createExtensionInstance(clazz) // :825  -> InstantiationStrategy.instantiate
+            ├─ postProcessBeforeInitialization// :668  各 ExtensionPostProcessor.before
+            ├─ injectExtension(instance)      // :669  setter 反射注入 (ExtensionInjector)
+            ├─ postProcessAfterInitialization // :672  含 ScopeModelAware / ExtensionAccessorAware 注入
+            ├─ if (wrap) { ... wrapper 逐层包裹 ... }   // :684-707
+            └─ initExtension(instance)        // :711  Lifecycle.initialize() 钩子
+```
+
+几个关键细节：
+
+- **返回的是「最外层 wrapper」还是「裸实例」取决于 `wrap` 参数**。`getExtension(name)`（单参）默认 `wrap = true`，所以消费侧拿到的 `Protocol` / `Filter` 是已被所有匹配 wrapper 包裹过的对象；`getExtension(name, false)` 拿裸实例（内部 `cacheKey += "_origin"`，`:363-365`）。
+- **普通扩展名与 wrapper 不混在同一 Map**：`getExtensionClasses()` 返回的是 `cachedClasses`（仅普通扩展），wrapper 存在独立的 `cachedWrapperClasses`（`loadClass` 在 `:1287-1288` 分流）。没有公开的 `getWrapperClasses()` API——wrapper 完全由框架在 `createExtension` 的 `wrap` 分支自动套用。
+- 实例创建后**只做一次** `postProcess + inject + init`：因为 `extensionInstances` 用 `putIfAbsent`，并发取同一个扩展只会初始化一次。
+
+### findException: Backtrace the Loading Failure
+
+当用户 `getExtension("xxx")` 但该类在加载阶段就失败（例如第三方库缺失、`NoClassDefFoundError`），`createExtension` 在 `:774` 取不到 class 会调 `findException(name)`（`ExtensionLoader.java:748-770`）抛错。加载阶段每个失败的行都会被 `loadResource` 捕获并记入 `exceptions` Map（`:1173-1178`，key 是配置文件那一行的内容，value 是**带原始 cause `t`** 的 `IllegalStateException`）。
+
+`findException` 把这些记录拼进最终异常的消息文本：
+
+```java
+// dubbo-common/src/main/java/org/apache/dubbo/common/extension/ExtensionLoader.java:748-770 (节选)
+StringBuilder buf = new StringBuilder("No such extension " + type.getName() + " by name " + name);
+for (Map.Entry<String, IllegalStateException> entry : exceptions.entrySet()) {
+    if (entry.getKey().toLowerCase().startsWith(name.toLowerCase())) {
+        buf.append(", possible causes: \r\n(").append(i++).append(") ")
+           .append(entry.getKey()).append(":\r\n")
+           .append(StringUtils.toString(entry.getValue()));   // 原始异常(含 cause) 拼进消息
+    }
+}
+return new IllegalStateException(buf.toString());             // :769  注意: 外层未设 cause
+```
+
+> [!WARNING]
+> 最终抛出的 `IllegalStateException` **本身没有 `cause`**（`:769` 只传 message），但真实根因（`NoClassDefFoundError` / 第三方库缺失等）出现在消息的 "possible causes" 段落里，可见可追溯。不要只 catch 外层就放弃——要读异常消息文本才能看到根因。这与 2.x 把 cause 直接挂在外层的做法不同。
 
 ## Loading Process
 
@@ -673,9 +879,79 @@ private T createExtension(String name, boolean wrap) {
 
 三处关键变化：
 
-1. **实例化不再用 `clazz.getDeclaredConstructor().newInstance()`**，改为 `createExtensionInstance(clazz)` → `instantiationStrategy.instantiate(type)`（`ExtensionLoader.java:825-827`）。`InstantiationStrategy`（`dubbo-common/.../common/beans/support/InstantiationStrategy.java:33`）会先试无参构造，再试带 `ScopeModel` 参数的构造，从而让扩展能拿到它所属的模型。
-2. **新增 `postProcessBeforeInitialization` / `postProcessAfterInitialization`**，遍历 `extensionPostProcessors`。默认注册的 `ScopeModelAwareExtensionProcessor` 靠「前置」把 `ScopeModel` 注入给实现了 `ScopeModelAware` 的扩展。
+1. **实例化不再用 `clazz.getDeclaredConstructor().newInstance()`**，改为 `createExtensionInstance(clazz)` → `instantiationStrategy.instantiate(type)`（`ExtensionLoader.java:825-827`）。`InstantiationStrategy`（`dubbo-common/.../common/beans/support/InstantiationStrategy.java:46-95`）**优先匹配「全部参数为 `ScopeModel` 子类型」的构造，退化才用无参构造**——这样扩展若声明了 `Xxx(ApplicationModel model)` 这类构造，就能在创建时直接拿到所属模型。
+2. **新增 `postProcessBeforeInitialization` / `postProcessAfterInitialization`**，遍历 `extensionPostProcessors`。默认注册的 `ScopeModelAwareExtensionProcessor` 靠 **`postProcessAfterInitialization`（后置）** 把 `ScopeModel` 注入给实现了 `ScopeModelAware` 的扩展——注意是**后置**不是前置；而 `ExtensionAccessorAware` 的注入在 `ExtensionLoader.postProcessAfterInitialization` 中直接完成（`ExtensionLoader.java:842`）。
 3. **异常路径变了**：类找不到或名字被标记为不可接受时，抛 `findException(name)` 而不是简单返回 null——它会把之前 `loadResource` 里记录的原始异常带上，异常信息可追溯。
+
+#### InstantiationStrategy: Dual-Constructor Probe
+
+`ExtensionLoader` 自身不直接 `new` 实例，而是委托 `InstantiationStrategy.instantiate(type)`（`InstantiationStrategy.java:46-95`）。它的构造匹配逻辑与「先无参再 ScopeModel」的直觉相反：
+
+```java
+// dubbo-common/src/main/java/org/apache/dubbo/common/beans/support/InstantiationStrategy.java:46-95 (节选)
+public <T> T instantiate(Class<T> type) throws ReflectiveOperationException {
+    // 1. 取无参构造 (若无则 null)
+    Constructor<T> defaultConstructor = null;
+    try { defaultConstructor = type.getConstructor(); } catch (NoSuchMethodException e) { /* ignore */ }
+
+    // 2. 收集「全部参数为 ScopeModel 子类型」的构造
+    List<Constructor<?>> matchedConstructors = new ArrayList<>();
+    for (Constructor<?> constructor : type.getConstructors()) {
+        if (isMatched(constructor)) {  // isMatched: 每个参数类型都是 ScopeModel|FrameworkModel|ApplicationModel|ModuleModel
+            matchedConstructors.add(constructor);
+        }
+    }
+    matchedConstructors.remove(defaultConstructor);
+
+    Constructor<?> target;
+    if (matchedConstructors.size() == 1) {
+        target = matchedConstructors.get(0);          // 优先: 带 ScopeModel 型参数的构造
+    } else if (defaultConstructor != null) {
+        target = defaultConstructor;                  // 退化: 无参构造
+    } else {
+        throw new IllegalArgumentException("None matched constructor was found for type: " + type.getName());
+    }
+    // 对 ScopeModel 型参数, 按参数类型从 ScopeModelAccessor 取对应模型视图
+    Object[] args = ...;  // getArgumentValueForType(paramType) -> scopeModelAccessor.getScopeModel()
+    return (T) target.newInstance(args);
+}
+```
+
+选择优先级：**恰好一个 ScopeModel 型构造就用它 → 否则退化无参 → 两者皆无才抛异常**。所以「给扩展注入模型」有两种并存方式：构造期（声明 `Xxx(Model)` 单参构造）与注入期（实现 `ScopeModelAware` 接口）。`ExtensionLoader` 的 `instantiationStrategy` 在构造期经 `initInstantiationStrategy()` 初始化——若某个 `ExtensionPostProcessor` 是 `ScopeModelAccessor`（即 `ScopeModelAwareExtensionProcessor`），就以它作为 accessor 包装，否则用无参版本。
+
+#### ScopeModelAware and ExtensionAccessorAware Injection
+
+模型注入发生在创建之后，由 `ExtensionPostProcessor` 在**后置**阶段完成，而非前置：
+
+```java
+// dubbo-common/src/main/java/org/apache/dubbo/rpc/model/ScopeModelAwareExtensionProcessor.java:54-68
+@Override
+public Object postProcessAfterInitialization(Object instance, String name) throws Exception {
+    if (instance instanceof ScopeModelAware) {
+        ScopeModelAware modelAware = (ScopeModelAware) instance;
+        modelAware.setScopeModel(scopeModel);
+        if (this.moduleModel != null)     { modelAware.setModuleModel(this.moduleModel); }
+        if (this.applicationModel != null){ modelAware.setApplicationModel(this.applicationModel); }
+        if (this.frameworkModel != null)  { modelAware.setFrameworkModel(this.frameworkModel); }
+    }
+    return instance;
+}
+```
+
+`ScopeModelAwareExtensionProcessor` 在 `ScopeModel.initialize()` 时就被注册（`ScopeModel.java:119` 的 `extensionDirector.addExtensionPostProcessor(new ScopeModelAwareExtensionProcessor(this))`），因此每个扩展实例都能拿到所属模型的完整三层视图（`ScopeModel` / `ModuleModel` / `ApplicationModel` / `FrameworkModel`）。
+
+`ExtensionAccessorAware` 不走这个 processor，而是在 `ExtensionLoader.postProcessAfterInitialization` 里直接注入：
+
+```java
+// dubbo-common/src/main/java/org/apache/dubbo/common/extension/ExtensionLoader.java:840-843
+instance = postProcessAfterInitialization(instance, name);   // 先跑所有 post processors (含上面那个)
+if (instance instanceof ExtensionAccessorAware) {
+    ((ExtensionAccessorAware) instance).setExtensionAccessor(extensionDirector);
+}
+```
+
+> [!WARNING]
+> 旧笔记常说「`ScopeModelAware` 由前置处理器注入」，在 3.3.6 里这是错的——`ScopeModelAwareExtensionProcessor` 只重写了 **`postProcessAfterInitialization`**，前置阶段（`postProcessBeforeInitialization`）什么都做（`ExtensionPostProcessor` 接口默认空实现）。同时 `ScopeModelAware` 与 `ExtensionAccessorAware` 的 `setXxx` 是对象类型 setter，`injectExtension` 会误判为普通依赖去注入，因此 `ExtensionLoader.injectExtension` 里有专门的跳过分支（见下方「IoC：ExtensionInjector」一节中 `ScopeModelAware` / `ExtensionAccessorAware` 跳过逻辑）。
 
 包装类逻辑不变：`cachedWrapperClasses` 按 `WrapperComparator` 排序后反转，`@Wrapper(matches/mismatches)` 决定是否包裹，包裹后**同样要走一遍前后置处理和注入**。
 
@@ -712,6 +988,25 @@ private T createExtension(String name, boolean wrap) {
 ```
 
 注意匹配条件比旧版更完整：旧版是 `wrapper == null || (contains(matches, name) && !contains(mismatches, name))`，3.3.6 补了 `ArrayUtils.isEmpty(wrapper.matches())` 分支，即**`matches` 为空表示匹配全部**。这一点与 `@Wrapper` 的 javadoc 一致，但旧代码里会漏判。
+
+## LoadingStrategy and SPI Directory Layout
+
+Dubbo 把「去哪个目录扫 SPI 文件」抽象成 `LoadingStrategy`（`dubbo-common/.../extension/LoadingStrategy.java`，extends `Prioritized`）。三个内置实现**本身也是通过 JDK `ServiceLoader` 注册的**——`ExtensionLoader.loadLoadingStrategies()` 直接 `stream(load(LoadingStrategy.class)...).sorted()`（`ExtensionLoader.java:174-176`），而 `load(LoadingStrategy.class)` 就是 `java.util.ServiceLoader.load`；注册文件在 `dubbo-common/src/main/resources/META-INF/services/org.apache.dubbo.common.extension.LoadingStrategy`，列出三个全限定名。也就是说 Dubbo 用来加载自己扩展的「策略表」反而借用了 JDK SPI，但扩展实现本体仍走 Dubbo 的三目录体系。
+
+| 实现类 | `directory()` | `getPriority()`（Prioritized） | `overridden()` | `getName()` |
+| :--- | :--- | :--- | :--- | :--- |
+| `DubboInternalLoadingStrategy` | `META-INF/dubbo/internal/` | `MAX_PRIORITY` | `false`（默认） | `DUBBO_INTERNAL` |
+| `DubboLoadingStrategy` | `META-INF/dubbo/` | `NORMAL_PRIORITY` | `true` | `DUBBO` |
+| `ServicesLoadingStrategy` | `META-INF/services/` | `MIN_PRIORITY` | `true` | `SERVICES` |
+
+关键决策点：
+
+1. **扫描顺序由 `Prioritized.getPriority()` 决定**，`DubboInternalLoadingStrategy` 优先级最高、`ServicesLoadingStrategy` 最低；`loadExtensionClasses()` 按 `strategies` 顺序逐个 `loadDirectory`（`ExtensionLoader.java:416-417`）。`META-INF/dubbo/internal/` 是 Dubbo 内部扩展的专属目录（如 `ExtensionInjector`、`Compiler`），`META-INF/dubbo/` 给用户自定义扩展，`META-INF/services/` 用于兼容 JDK SPI 风格的文件。
+2. **`overridden()` 控制同名覆盖方向**。只有 `DubboInternalLoadingStrategy` 返回 `false`，另两个返回 `true`。`overridden == true` 的目录里扫到的同名扩展可以覆盖 `overridden == false` 目录里的实现——含义是「用户/`services` 目录的扩展能覆盖 Dubbo 内置实现」，内置目录不做反向覆盖。这个布尔最终透传到 `loadResource(..., boolean overridden, ...)` 与 `saveInExtensionClass` 的 `overridden` 形参（同名时 `c == null || overridden` 才允许写入，`ExtensionLoader.java:637-649`）。
+3. **`special_spi.properties` 让特定接口只从 Dubbo ClassLoader 加载**。`getSpecialSPILoadingStrategyMap()`（`ExtensionLoader.java:184-189`）按 `special_spi.properties` 建立「接口全限定名 → 允许加载它的 `LoadingStrategy` 名 / `ALL`」映射；命中后 `loadDirectoryInternal` 清空 `classLoadersToLoad` 并只加 `ExtensionLoader.class.getClassLoader()`（`ExtensionLoader.java:480-488`），跳过 scopeModel 的 ClassLoader 集合以加速启动。
+
+> [!NOTE]
+> `ExtensionLoader.setLoadingStrategies(LoadingStrategy...)`（`ExtensionLoader.java:163-168`）允许外部整个替换策略表——这是 Dubbo 给框架集成方留的逃生舱，但正常启动路径用的是 `loadLoadingStrategies()` 扫描出来的默认三件套。另见 [AOP](/docs/CS/Framework/Dubbo/SPI.md?id=aop) 对 wrapper 目录约定的说明。
 
 ## Adaptive Extension Generation
 
@@ -781,6 +1076,27 @@ private Class<?> createAdaptiveExtensionClass() {
 - `NativeDetector.inNativeImage()` 为真（GraalVM native-image）时不做生成，直接 `loadClass(type.getName() + "$Adaptive")`——原生镜像里所有自适应类必须在构建期预先生成好（`dubbo-native` 插件负责这件事），运行期没有 `javassist`/`jdk` 编译器可用。
 - 编译器改从 `extensionDirector` 取而不是 `ExtensionLoader.getExtensionLoader(Compiler.class)`，因为 `Compiler` 是 `FRAMEWORK` 作用域，必须由框架层的 Director 提供。
 - `compile` 变三参，见 Compiler 一节。
+
+### Two Forms of @Adaptive
+
+`@Adaptive` 有两种落点，二者在 `getAdaptiveExtensionClass()` 里被显式分支（`ExtensionLoader.java:1449-1454`）：
+
+```java
+// dubbo-common/src/main/java/org/apache/dubbo/common/extension/ExtensionLoader.java:1449-1454
+private Class<?> getAdaptiveExtensionClass() {
+    getExtensionClasses();
+    if (cachedAdaptiveClass != null) {
+        return cachedAdaptiveClass;          // 形式一：注解在类上，直接返回，不生成代码
+    }
+    return cachedAdaptiveClass = createAdaptiveExtensionClass();  // 形式二：注解在方法上，运行时生成
+}
+```
+
+- **形式一：注解在类上**。`loadClass` 发现 `clazz.isAnnotationPresent(Adaptive.class)` 就 `cacheAdaptiveClass(clazz)`（`ExtensionLoader.java:575-576`），`cachedAdaptiveClass` 被置位。典型例子是 `AdaptiveCompiler`、`AdaptiveExtensionInjector`——它们都是手写好的完整实现，直接作为自适应类返回，**不经过 `AdaptiveClassCodeGenerator`**。约束：`cacheAdaptiveClass` 保证至多一个 `@Adaptive` 实现，出现第二个会抛 "More than 1 adaptive class found"（`ExtensionLoader.java:1387-1389`）。
+- **形式二：注解在方法上**。`cachedAdaptiveClass == null` 时走 `createAdaptiveExtensionClass()`：先用 `AdaptiveClassCodeGenerator(type, cachedDefaultName).generate()` 拼出代理源码，再经 `Compiler` 编译成 `Xxx$Adaptive`（`ExtensionLoader.java:1457-1472`）。生成类里每个 `@Adaptive` 方法按 `URL.getMethodParameter` / `URL.getParameter` 解析扩展名并 `scopeModel.getExtensionLoader(type).getExtension(extName)` 加载具体实现（见 `AdaptiveClassCodeGenerator` 的 `CODE_EXTENSION_ASSIGNMENT`）。
+
+> [!TIP]
+> 判定一个扩展点是哪种：翻它的 SPI 实现类——若某个实现类头上直接标了 `@Adaptive` 就是形式一（编译期已定型，启动不生成）；若接口方法上有 `@Adaptive` 而实现类都没有，就是形式二（运行时按需生成代理）。`Protocol.export` / `refer` 属于形式二，所以 `Protocol$Adaptive` 是运行时生成的。
 
 ### AdaptiveClassCodeGenerator
 
@@ -986,6 +1302,26 @@ public class ActivateComparator implements Comparator<Class<?>> {
 
 > [!TIP]
 > `TreeMap<Class<?>, T>` 用 `Class` 当 key，而 `Class` 本身不可比较，实际顺序完全由 `activateComparator` 提供，类名这一层不会干扰结果。
+
+#### compare: before/after beats order
+
+`ActivateComparator.compare(Class, Class)`（`ActivateComparator.java:52-124`）的完整判定优先级：
+
+1. **空值 / 同类型** 直接返回（`:56-60`）。
+2. **`before` / `after` 约束优先于 `order`**：仅当某一侧 `applicableToCompare()`（即 `before` 或 `after` 至少有一个非空）且能找到公共 SPI 接口 `inf` 时，才进入约束分支（`:72`）。`before = {x}` 表示本类应在 `x` 之前（`isLess(x)` → 返回更小），`after = {x}` 表示应在 `x` 之后（`isMore(x)` → 返回更大，`:126-186` 的 `ActivateInfo`）。
+3. **约束不构成直接前后关系时退回 `order`**：单侧有 `before/after` 但彼此不相关（`isLess/isMore` 都为 false）时，用 `a1.order > a2.order ? 1 : -1` 兜底（`:111`）。
+4. **双方都无 `before/after` 约束**：直接走末尾 `order` 比较；`order` 相同再按 `getSimpleName()` 字典序（`:117-123`）。
+
+```java
+// dubbo-common/src/main/java/org/apache/dubbo/common/extension/support/ActivateComparator.java:117-123
+if (a1.order > a2.order) return 1;
+else if (a1.order == a2.order)
+    return o1.getSimpleName().compareTo(o2.getSimpleName()) > 0 ? 1 : -1;
+else return -1;
+```
+
+> [!WARNING]
+> `before` / `after` 在 `@Activate` 上已 `@Deprecated`（2.7.0 起），新扩展**只用 `order`** 控制排序。但排序器仍兼容旧注解，所以老代码里 `before/after` 依然生效且优先级高于 `order`。
 
 ## IoC：ExtensionInjector
 
@@ -1270,6 +1606,9 @@ Dubbo AOP 用 wrapper 模式实现，一个类要成为 AOP wrapper 必须同时
 13. **`loadResource` 的过滤是三重的**：`!isExcluded && isIncluded && !isExcludedByClassLoader`。只判 `excludedPackages` 的时代已经过去。
 14. **`activateExtensionsMap` 以 `Class` 为 key**，不是 `String`。所以同名冲突在 `saveInExtensionClass` 阶段就会被拦下并记入 `unacceptableExceptions`，`getExtension` 时抛 `findException(name)` 带出原始加载异常。
 15. **写 `ExtensionPostProcessor` 时不要假设 `name` 非空**——自适应扩展走 `postProcessBeforeInitialization(instance, null)`。
+16. **`ScopeModelAware` 由 `postProcessAfterInitialization`（后置）注入，不是前置。** `ScopeModelAwareExtensionProcessor` 只重写了 `postProcessAfterInitialization`（`ScopeModelAwareExtensionProcessor.java:54`），前置阶段什么都不做；`ExtensionAccessorAware` 则在 `ExtensionLoader.postProcessAfterInitialization`（`:842`）直接注入。
+17. **`ExtensionLoader.destroy()` 没有 `disposableInstances` 字段。** 它遍历 `extensionInstances`（裸实例）与 `cachedInstances`（包装实例）两个缓存，凡 `instance instanceof Disposable` 即调 `destroy()`；`Disposable.destroy()` 签名是 `void destroy();`（无 `throws Exception`）。
+18. **`findException` 抛出的外层 `IllegalStateException` 没有 `cause`**——真实根因（如 `NoClassDefFoundError`）只出现在消息的 "possible causes" 段落文本里，catch 时要读消息而非只看 `getCause()`。
 
 ## Links
 

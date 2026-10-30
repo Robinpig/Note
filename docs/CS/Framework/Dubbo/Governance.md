@@ -72,6 +72,52 @@ private void doDestroy() {
 - **手动注册 DubboShutdownHook 与 Spring Boot 冲突**：Spring Boot 自身已管理关闭流程，重复注册 hook 会造成双重销毁；3.x 中 Dubbo 与 Spring 的生命周期靠 `isLifeCycleManagedExternally()` 与两条 `ContextClosedEvent` 监听器对齐，用户代码里再手动 `DubboShutdownHook.getDubboShutdownHook().register()` 属于画蛇添足。
 - **`KEEP_RUNNING_ON_SPRING_CLOSED`**：设置后 Spring 关闭时 Dubbo 模块不随之 destroy（`DubboDeployApplicationListener.onContextClosedEvent` :191-200 的判断条件），用于「容器关闭但进程仍需存活」的特殊场景，常规部署不要开。
 
+## ApplicationDeployer Destroy Order
+
+`DubboShutdownHook.doDestroy` 只负责「置只读 + 等 Spring + 调 `applicationModel.destroy()`」，真正把资源一个个拆掉的是 `DefaultApplicationDeployer` 的 `preDestroy()` / `postDestroy()`（`dubbo-config-api/.../deploy/DefaultApplicationDeployer.java`）。两者由 `ApplicationModel.destroy()` 串联：先 `preDestroy`，再销毁各模块，最后 `postDestroy`。
+
+`preDestroy()`（:1086-1104）按「先摘流、后清理」的顺序做：
+
+```java
+// dubbo-config-api/.../deploy/DefaultApplicationDeployer.java:1086
+public void preDestroy() {
+    ...
+    onStopping();
+    offline();                   // 1. 遍历所有 ModuleModel 的 exportedServices，对 isRegistered() 的 RegisterStatedURL 调 registry.unregister(providerUrl)（:1106-1135）
+    unregisterServiceInstance();  // 2. ServiceInstanceMetadataUtils.unregisterMetadataAndInstance（:1095/1074）
+    unexportMetricsService();     // 3. metricsServiceExporter.unexport()（:1097/855）
+    unRegisterShutdownHook();     // 4. 卸载 DubboShutdownHook（:1099/186）
+}
+```
+
+`postDestroy()`（:1138-1166）在模块都停了之后执行，顺序是关键：
+
+```java
+// DefaultApplicationDeployer.java:1138
+public void postDestroy() {
+    destroyRegistries();        // RegistryManager.destroyAll()（:1425）
+    destroyMetadataReports();   // 各 MetadataReportFactory.destroy()（:1442）
+    executeShutdownCallbacks(); // ShutdownHookCallbacks.callback()（:1168，业务停机回调点）
+    destroyExecutorRepository();// 最后才关线程池（:1158/1418）
+}
+```
+
+`destroyExecutorRepository()`（:1418-1423）是**整条销毁链的最后一步**：
+
+```java
+// DefaultApplicationDeployer.java:1418
+private void destroyExecutorRepository() {
+    executorRepository.shutdownServiceExportExecutor();
+    executorRepository.shutdownServiceReferExecutor();
+    ExecutorRepository.getInstance(applicationModel).destroyAll();
+}
+```
+
+顺序的设计意图：**业务线程池（executor repository）必须留到最后才关**。前面 `offline()` 已经从注册中心摘流、等待在途请求在 `dubbo.service.shutdown.wait` 窗口内排空；这一步之前只切断「被发现 / 被订阅」，并不杀掉正在处理的连接与业务线程。等到注册中心、元数据都清理完，最后才 `destroyAll()` 业务线程池，保证在途请求在服务端还有线程可跑完，不会在 `readonly` 窗口里被「线程池先没」而丢失。export / refer 专用的 executor 也在此时一并关闭。
+
+> [!NOTE]
+> 若 `KEEP_RUNNING_ON_SPRING_CLOSED` 打开，Spring 关闭时模块不 destroy，`postDestroy` 不会被触发，线程池与注册中心保持存活——这是「容器停了但进程要继续服务」的特殊场景，常规滚动发布不要开（见 Graceful Shutdown 的 Misoperations）。
+
 ## Delayed Exposure and Startup Warmup
 
 ### The Default Value of delay Is null
@@ -250,6 +296,28 @@ OK
 
 > [!WARNING]
 > `qos.accept.foreign.ip=false` 是默认的安全防线（仅本机可连）。一旦把它打开且 22222 端口暴露到公网/办公网，任何人都能 `offline` 你的服务——务必配合网络隔离。
+
+### QoS Command Inventory
+
+上面只列了 `ls` / `online` / `offline` / `metrics` / `version` / `help`，实际 `dubbo-qos` 的 `command/impl` 包下注册了 50+ 命令类。按用途归类（命令名取 `@Cmd(name=...)`，实现类在 `dubbo-plugin/dubbo-qos/.../qos/command/impl/`，均逐文件核对）：
+
+| 类别 | 命令（@Cmd name） | 实现类 |
+| :--- | :--- | :--- |
+| 摘流/上线 | `offline` / `online`、`offlineApp` / `onlineApp`、`offlineInterface` / `onlineInterface` | `Offline`/`Online`(+`App`/`Interface`)、`BaseOffline`/`BaseOnline` |
+| 指标 | `metrics`（Prometheus 文本）、`metrics_default`（JSON） | `PrometheusMetricsReporterCmd` / `DefaultMetricsReporterCmd` |
+| 健康检查 | `live`、`ready`、`startup` | `Live` / `Ready` / `Startup` |
+| 列表/查询 | `ls`、`getAddress`、`getConfig`、`getOpenAPI`、`pwd`、`ps`、`select` | `Ls` / `GetAddress` / `GetConfig` / `GetOpenAPI` / `PwdTelnet` / `PortTelnet` / `SelectTelnet` |
+| 调用/计数 | `invoke`、`count`、`cd` | `InvokeTelnet` / `CountTelnet` / `ChangeTelnet` |
+| 日志 | `loggerInfo`、`switchLogLevel`、`switchLogger` | `LoggerInfo` / `SwitchLogLevel` / `SwitchLogger` |
+| 序列化安全 | `serializeCheckStatus`、`serializeWarnedClasses` | `SerializeCheckStatus` / `SerializeWarnedClasses` |
+| 性能剖析 | `enableSimpleProfiler` / `disableSimpleProfiler`、`enableDetailProfiler` / `disableDetailProfiler`、`setProfilerWarnPercent` | 对应 `*Profiler` 类 |
+| 路由快照 | `enableRouterSnapshot` / `disableRouterSnapshot`、`getRouterSnapshot` / `getEnabledRouterSnapshot` / `getRecentRouterSnapshot` | 对应类 |
+| 元数据/停机 | `publishMetadata`、`shutdown`、`gracefulShutdown`、`quit`、`help`、`version` | `PublishMetadata` / `ShutdownTelnet` / `GracefulShutdown` / `Quit` / `Help` / `Version` |
+
+两个最常被误解的点：
+
+- **`metrics` 与 `metrics_default` 是两个不同命令，输出格式不同**。`metrics`（`PrometheusMetricsReporterCmd`，`dubbo-metrics-prometheus` 提供）返回 Prometheus 文本；`metrics_default`（`DefaultMetricsReporterCmd`，`dubbo-qos` 自带）返回 JSON。Prometheus 抓取应走 `metrics`。
+- **`offline`/`online` 有进程级（默认作用于所有服务）、`App` 级、`Interface` 级三档**。`offlineApp <appName>` 只摘某个应用，`offlineInterface <service>` 只摘某个接口，粒度比「整进程上下线」更细，适合灰度摘流。
 
 ## Built-in Rate Limiting and Concurrency Control
 

@@ -534,6 +534,541 @@ adaptive=org.apache.dubbo.rpc.cluster.loadbalance.AdaptiveLoadBalance
 
 各算法的实现细节（预热权重公式、`ShortestResponse` 的滑动窗口、`ConsistentHash` 的虚拟节点）在 [LoadBalance](/docs/CS/Framework/Dubbo/LoadBalance.md)，本篇不重复。
 
+## Cluster Implementation Semantics
+
+`Cluster.join` 只负责「把 Directory 包成 Invoker」，真正的容错语义在各自的 `*ClusterInvoker.doInvoke` 里。11 个扩展名（含两个 Wrapper）对应的 Invoker 与行为如下，全部按源码逐条核对：
+
+| 扩展名 (SPI) | Invoker 类 | 语义 | 重试/重复行为 | 典型场景 |
+|---|---|---|---|---|
+| `failover` | `FailoverClusterInvoker` | 失败换一个 Provider 重试 | 最多 `retries+1` 次（含首次）；**业务异常 `e.isBiz()` 不重试**，直接抛出（`FailoverClusterInvoker.java:103-106`） | 读操作、幂等写 |
+| `failfast` | `FailfastClusterInvoker` | 只调一次，失败立即抛异常 | 无重试 | 非幂等写 |
+| `failsafe` | `FailsafeClusterInvoker` | 失败吞掉，返回空 `Result` | 无重试 | 审计日志等可丢操作 |
+| `failback` | `FailbackClusterInvoker` | 失败记入后台定时重试 | `HashedWheelTimer`（`RETRY_FAILED_PERIOD=5s`）异步重试 `retries` 次，调用侧立即返回空（`FailbackClusterInvoker.java:59,136-139`） | 通知类消息 |
+| `forking` | `ForkingClusterInvoker` | 并发调 `forks` 个 Provider，取第一个成功 | 并发 `forks` 个（`FORKS_KEY`/`DEFAULT_FORKS`），用共享线程池 `FrameworkExecutorRepository#getSharedExecutor()`（`ForkingClusterInvoker.java:62-67`） | 实时性要求高的读 |
+| `broadcast` | `BroadcastClusterInvoker` | 逐个调**全部** Provider | 失败数达 `broadcast.fail.percent`（默认 100，即任一失败即抛）阈值才中断（`BroadcastClusterInvoker.java:64-106`） | 广播通知 |
+| `available` | `AvailableClusterInvoker` | 取第一个 `isAvailable()` 的 Provider | **不走 LoadBalance**，顺序遍历 | 只需可用即可 |
+| `mergeable` | `MergeableClusterInvoker` | 跨 group 调用并合并结果 | 无 group 合并时退化为单 group 调用；合并走 `Merger` SPI（`MERGER_KEY`）（`MergeableClusterInvoker.java:71-90`） | 分组聚合结果 |
+| `zone-aware` | `ZoneAwareClusterInvoker` | 多注册中心选址 | `preferred=true` 注册中心 → 同 zone → 跨注册中心 LoadBalance → 首个可用（`ZoneAwareClusterInvoker.java:69-123`） | 多注册中心/单元化 |
+| `mock` | `MockClusterInvoker`（Wrapper 内） | 降级 | `fail`/`force` 两种模式（见 [MockClusterInvoker](#mockclusterinvoker)） | 降级 |
+| `scope` | `ScopeClusterInvoker`（Wrapper 内） | 按 ScopeModel 路由 | 包装真实 Cluster | 多应用隔离 |
+
+`failover` 的调用次数是**本地方法参数 + 1**，且支持通过 attachment 里的 `retries` 临时覆盖（`FailoverClusterInvoker.java:129-142` 的 `calculateInvokeTimes`）：
+
+```java
+// dubbo-cluster/.../support/FailoverClusterInvoker.java:129-142
+private int calculateInvokeTimes(String methodName) {
+    int len = getUrl().getMethodParameter(methodName, RETRIES_KEY, DEFAULT_RETRIES) + 1;
+    RpcContext rpcContext = RpcContext.getClientAttachment();
+    Object retry = rpcContext.getObjectAttachment(RETRIES_KEY);
+    if (retry instanceof Number) {
+        len = ((Number) retry).intValue() + 1;
+        rpcContext.removeAttachment(RETRIES_KEY);
+    }
+    if (len <= 0) { len = 1; }
+    return len;
+}
+```
+
+> [!TIP]
+> `retries` 配置的是「额外重试次数」，实际最多调用 `retries + 1` 个 Provider；把它设成 0 仍会调用一次（不会零次调用）。
+
+## AbstractClusterInvoker Template Method
+
+所有 Cluster Invoker 都继承 `AbstractClusterInvoker`（它实现 `ClusterInvoker` 接口），核心是一个模板方法 + 一个 `select` 选址辅助。
+
+`invoke`（入口，`AbstractClusterInvoker.java:344-370`）的固定流程：
+
+```
+checkWhetherDestroyed()         // 已 destroy 抛异常
+  → list(invocation)            // 委托 Directory.list → RouterChain 路由，拿到候选 BitList
+  → checkInvokers(...)          // 空则抛 NO_INVOKER_AVAILABLE_AFTER_FILTER
+  → initLoadBalance(...)        // 按方法级 loadbalance 参数取 LoadBalance 扩展
+  → doInvoke(...)               // 抽象方法，由具体容错策略实现
+```
+
+`select`（`AbstractClusterInvoker.java:155-185`）在 `doInvoke` 里被反复调用，**它的职责是「避免重复选到同一 invoker」**，而非单纯做负载均衡：
+
+- **sticky（粘性）**：读方法参数 `CLUSTER_STICKY_KEY`（默认 `DEFAULT_CLUSTER_STICKY` = false）。若开启且 `stickyInvoker` 仍在候选里且可用，直接返回它（`AbstractClusterInvoker.java:164-176`）。`stickyInvoker` 是字段级缓存，记下上一次选中的 invoker。
+- **selected 去重**：`doSelect`（`:187-240`）先 `loadbalance.select(...)`，若选中的 invoker 在 `selected` 列表里或不可用时，调用 `reselect`（`:254-328`）从「未选过的 + 可用的」里再挑一个；`reselect` 最多看 `reselectCount` 个（配置项 `RESELECT_COUNT`，默认 `DEFAULT_RESELECT_COUNT`），防止候选很多时长时间 hang。
+- `availableCheck`（`CLUSTER_AVAILABLE_CHECK_KEY`）为 true 时，选到不可用的 invoker 会 `invalidateInvoker` 把它丢进 Directory 的无效列表（`AbstractClusterInvoker.java:336-342`）。
+
+也就是说 **LoadBalance 只负责「按权重/策略挑一个」，重复规避与粘性由 `AbstractClusterInvoker.select` 在它外层兜住**，二者解耦——这正是 Dubbo 集群层的核心设计理念：容错策略（谁失败、怎么重试）与选址算法（挑谁）各自独立演进。
+
+## MockClusterInvoker
+
+`mock` 是 Wrapper 型扩展（`MockClusterWrapper`），它把真实 Invoker 包一层 `MockClusterInvoker`（`support/wrapper/MockClusterInvoker.java:48`）。降级触发取决于方法级 `MOCK_KEY`：
+
+- **无 mock 配置**：直接走真实 invoker（`MockClusterInvoker.java:105-107`）。
+- **`force.*`（以 `FORCE_KEY` 开头）**：跳过真实调用，直接 `doMockInvoke`（`:108-118`）——强制降级。
+- **`fail.*`（普通 mock 值）**：先调真实 invoker，仅当返回/抛出**非业务**异常（`e.isBiz()` 为 false）时才 `doMockInvoke`（`:119-149`）；业务异常照常抛出。
+- `doMockInvoke`（`:155-186`）通过 `selectMockInvoker` 给 invocation 打 `INVOCATION_NEED_MOCK=true` attachment，让 `Directory.list` 返回 mock invoker 列表；若取不到则用 `new MockInvoker(...)` 兜底。
+
+> [!NOTE]
+> `MockClusterInvoker` 实现的是 `ClusterInvoker` 接口而非继承 `AbstractClusterInvoker`——它不参与 `list→route→loadbalance` 模板，而是直接持有被包装的 invoker，是「Wrapper 在最外层做降级」的特例。
+
+## Cluster Interceptor Chain
+
+老资料里的 `ClusterInterceptor`（`cluster/interceptor/ClusterInterceptor.java`）在 **3.3.6 已标 `@Deprecated`**，且只在 `CLUSTER_INTERCEPTOR_COMPATIBLE_KEY`（默认 `"false"`）开启时才装配（`AbstractCluster.java:45-55,188-204`），通过 `InterceptorInvokerNode` 走 `before/intercept/after/Listener.onError`——这是 2.7.x 的兼容路径。
+
+真正的消费侧拦截链由 `AbstractCluster.join` → `buildClusterInterceptors`（`AbstractCluster.java:45-75`）构建，分两层：
+
+1. **`ClusterFilter` 链**：`ClusterFilterInvoker` 用 `FilterChainBuilder`（默认 `DefaultFilterChainBuilder`）把激活的 `ClusterFilter` 串起来，SPI 名 `reference.filter`、group `consumer`。3.3.6 内置实现有 `ConsumerContextFilter`、`ConsumerClassLoaderFilter`、`MetricsConsumerFilter`、`RouterSnapshotFilter`（`cluster/filter/support/`）。
+2. **`InvocationInterceptorBuilder` 链**：`InvocationInterceptorInvoker` 用 `InvocationInterceptorBuilder` 构建（`INVOCATION_INTERCEPTOR_KEY`）。
+
+> [!WARNING]
+> 老资料写的 `ConsumerContextClusterInterceptor` 在 3.3.6 **不存在**——承担「把消费端上下文塞进 invocation」职责的现在是 `ClusterFilter` 实现 `ConsumerContextFilter`，不是 `ClusterInterceptor` 子类。自定义扩展应实现 `ClusterFilter` 而非已废弃的 `ClusterInterceptor`。
+
+## RegistryDirectory Refresh Mechanism
+
+`RegistryDirectory`（`dubbo-registry/dubbo-registry-api/.../integration/RegistryDirectory.java`）是 `Directory` 的注册中心实现，它的 `notify` 是「地址变更如何刷新 invoker 列表」的总入口。
+
+`notify(List<URL>)`（`:200-236`）先把推送 URL 按 `judgeCategory` 分成三类——`CONFIGURATORS_CATEGORY` / `ROUTERS_CATEGORY` / `PROVIDERS_CATEGORY`；configurators 经 `Configurator.toConfigurators` 合并、routers 经 `toRouters` 重建（2.6.x 兼容开关 `ENABLE_26X_CONFIGURATION_LISTEN` 默认开）；provider URL 再经 `AddressListener` 扩展点预处理，最后 `refreshOverrideAndInvoker` → `refreshInvoker` → `toInvokers`。
+
+`toInvokers(Map, List<URL>)`（`:451-518`）的刷新规则是「**按未合并的 provider URL 做缓存 key，参数变了才重新 refer**」：
+
+```java
+// dubbo-registry/.../integration/RegistryDirectory.java:451-485（节选）
+private Map<URL, Invoker<T>> toInvokers(Map<URL, Invoker<T>> oldUrlInvokerMap, List<URL> urls) {
+    // ...
+    for (URL providerUrl : urls) {
+        URL url = mergeUrl(providerUrl);                 // 合并消费端参数
+        // 缓存 key 用未合并的 providerUrl，与消费侧参数无关
+        Invoker<T> invoker = oldUrlInvokerMap == null ? null : oldUrlInvokerMap.remove(url);
+        if (invoker == null) {                           // 不在缓存里才重新 refer
+            // ... enabled / disabled 判断 ...
+            if (enabled) {
+                invoker = protocol.refer(serviceType, url);
+            }
+        }
+        newUrlInvokerMap.put(url, invoker);
+    }
+    return newUrlInvokerMap;
+}
+```
+
+两个值得记住的边界（`refreshInvoker`，`:274-312`）：
+
+- 收到单个 `empty://` 协议 URL 时，置 `forbidden=true` 并 `destroyAllInvokers()`——即「禁用该服务全部地址」。
+- 收到**空列表**（`Collections.emptyList()`）且本地 `cachedInvokerUrls` 非空时，触发「空保护」，沿用上次缓存的地址，不立即清空——避免注册中心瞬时抖动把可用 Provider 全部摘掉。
+
+刷新完 invoker 列表后，`RouterChain#setInvokers` 被调用来驱动路由链热切换（见上文 [RouterChain](#routerchain) 的双链机制）。
+
+## AbstractClusterInvoker Core Code
+
+`AbstractClusterInvoker` 是模板方法基类（`AbstractClusterInvoker.java:62`）。它的 `invoke` 是 ClusterInvoker 调用总入口，四个固定步骤与 `select`/`doSelect` 的去重逻辑如下。
+
+`invoke`（`AbstractClusterInvoker.java:344-370`）依次做四件事：
+
+```java
+// dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/support/AbstractClusterInvoker.java:344-370
+public Result invoke(final Invocation invocation) throws RpcException {
+    checkWhetherDestroyed();                       // 1. 已 destroy 抛 "is now destroyed"
+    List<Invoker<T>> invokers = list(invocation);  // 2. 委托 Directory.list → RouterChain 路由
+    checkInvokers(invokers, invocation);           // 3. 空则抛 NO_INVOKER_AVAILABLE_AFTER_FILTER
+    LoadBalance loadbalance = initLoadBalance(invokers, invocation); // 4. 按方法级 loadbalance 取扩展
+    return doInvoke(invocation, invokers, loadbalance);             // 抽象方法，具体容错策略实现
+}
+```
+
+`initLoadBalance`（`AbstractClusterInvoker.java:466-478`）取 LoadBalance 的方式：候选非空时取「第一个 invoker 的 URL」的方法级 `loadbalance` 参数（默认 `DEFAULT_LOADBALANCE`=random），空时直接取默认扩展——即 LoadBalance 实例挂在候选列表首 invoker 的配置上。
+
+`select`（`AbstractClusterInvoker.java:155-185`）负责「避免重复选到同一 invoker」，而非做负载均衡：
+
+```java
+// AbstractClusterInvoker.java:155-185（节选）
+protected Invoker<T> select(LoadBalance loadbalance, Invocation invocation,
+        List<Invoker<T>> invokers, List<Invoker<T>> selected) throws RpcException {
+    // sticky：读方法参数 CLUSTER_STICKY_KEY，默认 DEFAULT_CLUSTER_STICKY=false
+    boolean sticky = invokers.get(0).getUrl().getMethodParameter(methodName, CLUSTER_STICKY_KEY, DEFAULT_CLUSTER_STICKY);
+    if (stickyInvoker != null && !invokers.contains(stickyInvoker)) stickyInvoker = null; // 已不在候选则清空
+    if (sticky && stickyInvoker != null && (selected == null || !selected.contains(stickyInvoker))) {
+        if (availableCheck && stickyInvoker.isAvailable()) return stickyInvoker;          // 粘性命中直接返回
+    }
+    Invoker<T> invoker = doSelect(loadbalance, invocation, invokers, selected);            // 否则走 doSelect
+    if (sticky) stickyInvoker = invoker;                                                 // 记下本次选中
+    return invoker;
+}
+```
+
+`doSelect`（`AbstractClusterInvoker.java:187-240`）先让 LoadBalance 挑一个，再判定「是否在 `selected` 里 / 不可用」：
+
+```java
+// AbstractClusterInvoker.java:187-240（节选）
+Invoker<T> invoker = loadbalance.select(invokers, getUrl(), invocation);  // ① 全量候选交给 LoadBalance
+boolean isSelected = selected != null && selected.contains(invoker);      // 已被本次调用选过
+boolean isUnavailable = availableCheck && !invoker.isAvailable() && getUrl() != null;
+if (isUnavailable) invalidateInvoker(invoker);                            // 不可用则丢进 Directory 无效列表
+if (isSelected || isUnavailable) {
+    Invoker<T> rInvoker = reselect(loadbalance, invocation, invokers, selected, availableCheck); // ② 重选
+    if (rInvoker != null) invoker = rInvoker;
+    else { // ③ 兜底：取 invokers 中 index+1 的那个，避免碰撞
+        int index = invokers.indexOf(invoker);
+        invoker = invokers.get((index + 1) % invokers.size());
+    }
+}
+```
+
+关键点（修正「LoadBalance 看到 selected/available 集合」的常见误解）：**LoadBalance 拿到的永远是原始全量 `invokers` 列表**，`selected` 去重与可用性过滤发生在它外层的 `reselect`（`AbstractClusterInvoker.java:254-328`）。`reselect` 会新建一个 `reselectInvokers`（排除 `selected` 与不可用者），再把这个**收窄后的候选列表**交给 `loadbalance.select(...)`（`:306`、`:323`）——这才是「selected/available 集合」真正作用于选址的地方，而不是通过 `BitList.clone/subList` 传进 LoadBalance。
+
+`reselect` 里 `reselectCount` 限量逻辑：配置项 `RESELECT_COUNT`，默认 `DEFAULT_RESELECT_COUNT=10`（`CommonConstants.java:527`）。候选数 ≥ `reselectCount` 时只随机挑 `reselectCount` 个（`:274-302`），防止候选极多时长时间 hang。`availableCheck` 为 true 时选到不可用 invoker 会走 `invalidateInvoker`（`AbstractClusterInvoker.java:336-342`）→ `getDirectory().addInvalidateInvoker(invoker)`，交由后台 `connectivityExecutor` 重连任务处理。
+
+## Failover Cluster Retry Loop
+
+`FailoverClusterInvoker.doInvoke`（`FailoverClusterInvoker.java:59-127`）是「失败换 Provider 重试」的完整实现，与上文已写的 `calculateInvokeTimes` 一一呼应：
+
+```java
+// dubbo-cluster/.../support/FailoverClusterInvoker.java:59-127（节选）
+public Result doInvoke(Invocation invocation, List<Invoker<T>> invokers, LoadBalance loadbalance) {
+    List<Invoker<T>> copyInvokers = invokers;
+    int len = calculateInvokeTimes(methodName);            // = retries+1（含首次），attachment 可临时覆盖
+    RpcException le = null;                                // last exception
+    List<Invoker<T>> invoked = new ArrayList<>(copyInvokers.size()); // 已选 invoker，传给 select 去重
+    Set<String> providers = new HashSet<>(len);
+    for (int i = 0; i < len; i++) {
+        if (i > 0) {                                       // 重试前重新 list，避免候选漂移
+            checkWhetherDestroyed();
+            copyInvokers = list(invocation);
+            checkInvokers(copyInvokers, invocation);
+        }
+        Invoker<T> invoker = select(loadbalance, invocation, copyInvokers, invoked); // 去重选新 Provider
+        invoked.add(invoker);
+        boolean success = false;
+        try {
+            Result result = invokeWithContext(invoker, invocation);
+            success = true;
+            return result;                                  // 成功即返回
+        } catch (RpcException e) {
+            if (e.isBiz()) throw e;                         // 业务异常不重试，直接抛出
+            le = e;                                         // 非业务异常：记 last exception，进入下一轮
+        } catch (Throwable e) {
+            le = new RpcException(e.getMessage(), e);
+        } finally {
+            if (!success) providers.add(invoker.getUrl().getAddress()); // 累计失败 Provider 地址
+        }
+    }
+    throw new RpcException(le.getCode(), "...Tried " + len + " times...", le.getCause() != null ? le.getCause() : le);
+}
+```
+
+三个源码级细节：① 每次重试（i>0）都重新 `list(invocation)` 拿最新候选，注释明确「若 invokers 变了，invoked 也会失真」；② 业务异常 `e.isBiz()` 立即 `throw`，**不打入重试循环**；③ 循环结束仍未成功，抛出携带 `le`（最后一次异常）与失败 Provider 列表的 `RpcException`。`len` 由 `calculateInvokeTimes` 决定（上文已贴 `:129-142`），`retries` 配的是「额外重试次数」，实际最多调 `retries+1` 个 Provider。
+
+## Failfast & Failsafe Code
+
+这两个策略是 `doInvoke` 的极简分支，都只调一次，差异在异常处理。
+
+`FailfastClusterInvoker.doInvoke`（`FailfastClusterInvoker.java:44-64`）只选一个直接调，任何异常（非业务异常包装成 `RpcException`）立即抛出：
+
+```java
+// dubbo-cluster/.../support/FailfastClusterInvoker.java:44-64（节选）
+public Result doInvoke(Invocation invocation, List<Invoker<T>> invokers, LoadBalance loadbalance) {
+    Invoker<T> invoker = select(loadbalance, invocation, invokers, null); // selected 传 null，不去重
+    try {
+        return invokeWithContext(invoker, invocation);
+    } catch (Throwable e) {
+        if (e instanceof RpcException && ((RpcException) e).isBiz()) throw (RpcException) e; // 业务异常原样抛
+        throw new RpcException(... "Failfast invoke providers ..." ..., e.getCause() != null ? e.getCause() : e);
+    }
+}
+```
+
+`FailsafeClusterInvoker.doInvoke`（`FailsafeClusterInvoker.java:49-63`）同样只调一次，但失败只记日志、返回空 `Result`：
+
+```java
+// dubbo-cluster/.../support/FailsafeClusterInvoker.java:49-63
+public Result doInvoke(Invocation invocation, List<Invoker<T>> invokers, LoadBalance loadbalance) {
+    try {
+        Invoker<T> invoker = select(loadbalance, invocation, invokers, null);
+        return invokeWithContext(invoker, invocation);
+    } catch (Throwable e) {
+        logger.error(CLUSTER_ERROR_RESPONSE, "Failsafe for provider exception", "", "Failsafe ignore exception: " + e.getMessage(), e);
+        return AsyncRpcResult.newDefaultAsyncResult(null, null, invocation); // 吞掉异常，返回空结果
+    }
+}
+```
+
+## Failback Timer Retry
+
+`FailbackClusterInvoker` 首次调用失败不抛，而是把任务丢进 `HashedWheelTimer` 后台定时重试，调用侧立即返回空 `Result`。
+
+核心常量与定时器创建（`FailbackClusterInvoker.java:59-99`）：
+
+```java
+// dubbo-cluster/.../support/FailbackClusterInvoker.java:59-99（节选）
+private static final long RETRY_FAILED_PERIOD = 5;          // 重试周期（秒）
+public FailbackClusterInvoker(Directory<T> directory) {
+    super(directory);
+    int retriesConfig = getUrl().getParameter(RETRIES_KEY, DEFAULT_FAILBACK_TIMES); // 默认 DEFAULT_FAILBACK_TIMES=3
+    if (retriesConfig < 0) retriesConfig = DEFAULT_FAILBACK_TIMES;
+    int failbackTasksConfig = getUrl().getParameter(FAIL_BACK_TASKS_KEY, DEFAULT_FAILBACK_TASKS);
+    ...
+    retries = retriesConfig; failbackTasks = failbackTasksConfig;
+}
+private void addFailed(...) {
+    if (failTimer == null) {
+        synchronized (this) {
+            if (failTimer == null) {
+                failTimer = new HashedWheelTimer(
+                    new NamedThreadFactory("failback-cluster-timer", true), // 守护线程
+                    1, TimeUnit.SECONDS,   // tickDuration=1s
+                    32,                    // ticksPerWheel=32
+                    failbackTasks);        // maxPendingTimeouts
+            }
+        }
+    }
+    RetryTimerTask retryTimerTask = new RetryTimerTask(loadbalance, invocation, invokers, lastInvoker, retries, RETRY_FAILED_PERIOD, consumerUrl);
+    failTimer.newTimeout(retryTimerTask, RETRY_FAILED_PERIOD, TimeUnit.SECONDS); // 5s 后触发
+}
+```
+
+`doInvoke`（`FailbackClusterInvoker.java:117-141`）用 `invokeWithContextAsync`（因后台重试会清 `ServiceContext`），失败且 `retries>0` 时 `addFailed`，无论成败都返回空 `Result`。`RetryTimerTask.run`（`FailbackClusterInvoker.java:190-218`）每次重试时以 `Collections.singletonList(lastInvoker)` 作为 `selected` 去重选新 invoker；若 `++retriedTimes >= retries` 则放弃，否则 `rePut(timeout)` 把自己重新塞回 `HashedWheelTimer` 再等一个 `RETRY_FAILED_PERIOD`（5s）。即：后台按 5s 间隔最多重试 `retries`（默认 3）次。
+
+## Forking Concurrent Invoke
+
+`ForkingClusterInvoker` 并发调 `forks` 个 Provider，取第一个成功返回的，用共享线程池而非自建池。
+
+线程池来源与并发收集（`ForkingClusterInvoker.java:62-115`）：
+
+```java
+// dubbo-cluster/.../support/ForkingClusterInvoker.java:62-115（节选）
+executor = directory.getUrl().getOrDefaultFrameworkModel()
+        .getBeanFactory().getBean(FrameworkExecutorRepository.class)
+        .getSharedExecutor();                       // 共享线程池，非 Forking 自建
+
+public Result doInvoke(Invocation invocation, List<Invoker<T>> invokers, LoadBalance loadbalance) {
+    final int forks = getUrl().getParameter(FORKS_KEY, DEFAULT_FORKS); // DEFAULT_FORKS=2（Constants.java:25）
+    final int timeout = getUrl().getParameter(TIMEOUT_KEY, DEFAULT_TIMEOUT);
+    if (forks <= 0 || forks >= invokers.size()) selected = invokers;  // forks 越界则全发
+    else { while (selected.size() < forks) {                         // 用 select 避免重复选同一 invoker
+        Invoker<T> invoker = select(loadbalance, invocation, invokers, selected);
+        if (!selected.contains(invoker)) selected.add(invoker);
+    }}
+    final BlockingQueue<Object> ref = new LinkedBlockingQueue<>(1);    // 容量 1，仅收第一个结果/异常
+    selected.forEach(invoker -> CompletableFuture.supplyAsync(() -> {
+        if (ref.size() > 0) return null;                             // 已有结果则后续线程直接放弃
+        return invokeWithContextAsync(invoker, invocation, consumerUrl);
+    }, executor).whenComplete((v, t) -> {
+        if (t == null) ref.offer(v);                                 // 成功：offer 结果
+        else if (count.incrementAndGet() >= selected.size()) ref.offer(t); // 全部失败：offer 异常
+    }));
+    Object ret = ref.poll(timeout, TimeUnit.MILLISECONDS);            // 阻塞等第一个到达，超时抛 RpcException
+    ...
+}
+```
+
+要点：① `forks` 默认 `DEFAULT_FORKS=2`，若 `forks<=0` 或 `>=invokers.size()` 则向全部 Provider 发；② `BlockingQueue` 容量固定为 1，先到者（成功结果或「全部失败标志」异常）写入，后续线程通过 `ref.size()>0` 短路；③ 主线程 `ref.poll(timeout, MILLISECONDS)` 阻塞等第一个结果，超时抛异常；④ 用 `FrameworkExecutorRepository#getSharedExecutor()` 共享线程池，并在 `finally` 清 `ClientAttachment`。
+
+## Broadcast Percent Threshold
+
+`BroadcastClusterInvoker` 逐个调**全部** Provider，但**不是**「任一失败即抛」——失败数达到 `broadcast.fail.percent` 阈值才中断并抛出。
+
+阈值计算与循环（`BroadcastClusterInvoker.java:44-126`）：
+
+```java
+// dubbo-cluster/.../support/BroadcastClusterInvoker.java:44-126（节选）
+private static final String BROADCAST_FAIL_PERCENT_KEY = "broadcast.fail.percent";
+private static final int MAX_BROADCAST_FAIL_PERCENT = 100;
+private static final int MIN_BROADCAST_FAIL_PERCENT = 0;
+
+int broadcastFailPercent = url.getParameter(BROADCAST_FAIL_PERCENT_KEY, MAX_BROADCAST_FAIL_PERCENT); // 默认 100
+if (broadcastFailPercent < 0 || broadcastFailPercent > 100) broadcastFailPercent = 100; // 越界重置为 100
+// 可容忍失败数：ceil 语义用整数除法，total*percent/100
+int failThresholdIndex = invokers.size() * broadcastFailPercent / MAX_BROADCAST_FAIL_PERCENT;
+int failIndex = 0;
+for (int i = 0, invokersSize = invokers.size(); i < invokersSize; i++) {
+    Invoker<T> invoker = invokers.get(i);
+    try {
+        result = invokeWithContext(invoker, subInvocation);
+        if (null != result && result.hasException()) { exception = getRpcException(result.getException()); failIndex++;
+            if (failIndex == failThresholdIndex) break; }             // 达到阈值才 break
+    } catch (Throwable e) {
+        exception = getRpcException(e); failIndex++;
+        if (failIndex == failThresholdIndex) break;                   // 达到阈值才 break
+    }
+}
+if (exception != null) throw exception;                              // 有异常（且循环结束）才抛
+return result;
+```
+
+计算语义：`failThresholdIndex = total * failPercent / 100`。`failPercent=100`（默认）时 `failThresholdIndex = total`，即**所有** Provider 都失败才会抛（任一失败只是记录，不中断）；`failPercent=0` 时 `failThresholdIndex=0`，第一个失败即 `failIndex==0==failThresholdIndex` 而 break 并抛出。注意临界判断是 `failIndex == failThresholdIndex`（等于而非大于等于），且每个 invoker 都先建 `RpcInvocation` 子调用（`subInvocation`）并 `copyObjectAttachments`，在 `finally` 里对非末次调用 `restoreContext.restore()` 还原 `RpcContext`。
+
+## Mergeable & Merger SPI
+
+`MergeableClusterInvoker.doInvoke`（`MergeableClusterInvoker.java:62-199`）按 `MERGER_KEY` 决定行为：无 merger 退化成单 group 调用；有 merger 则并发调各 group 再合并。
+
+```java
+// dubbo-cluster/.../support/MergeableClusterInvoker.java:62-199（节选）
+String merger = getUrl().getMethodParameter(invocation.getMethodName(), MERGER_KEY);
+if (ConfigUtils.isEmpty(merger)) {                 // 无 merger：退化，遍历 invokers 找第一个 available 调
+    for (final Invoker<T> invoker : invokers) {
+        if (invoker.isAvailable()) { try { return invokeWithContext(invoker, invocation); }
+            catch (RpcException e) { if (e.isNoInvokerAvailableAfterFilter()) continue; else throw e; } }
+    }
+    return invokeWithContext(invokers.iterator().next(), invocation);
+}
+// 有 merger：按 serviceKey 分组并发调，结果异步收集
+Map<String, Result> results = new HashMap<>();
+for (final Invoker<T> invoker : invokers) {
+    RpcInvocation subInvocation = new RpcInvocation(invocation, invoker);
+    subInvocation.setAttachment(Constants.ASYNC_KEY, "true");         // 强制异步，并发执行
+    results.put(invoker.getUrl().getServiceKey(), invokeWithContext(invoker, subInvocation));
+}
+... // 阻塞取各 Result（Integer.MAX_VALUE ms），异常记日志但不中断，正常结果入 resultList
+if (merger.startsWith(".")) {                    // ".methodName" 形式：反射调返回类型上的合并方法
+    merger = merger.substring(1);
+    Method method = returnType.getMethod(merger, returnType);
+    ...
+    result = method.invoke(resultList.remove(0).getValue(), r.getValue()); // 逐个归约
+} else {                                         // SPI 名形式：走 Merger 扩展
+    Merger resultMerger;
+    if (ConfigUtils.isDefault(merger))            // "*" 默认：按返回类型自动匹配 MergerFactory.getMerger(returnType)
+        resultMerger = applicationModel.getBeanFactory().getBean(MergerFactory.class).getMerger(returnType);
+    else                                         // 否则按名字取 Merger SPI 扩展
+        resultMerger = applicationModel.getExtensionLoader(Merger.class).getExtension(merger);
+    result = resultMerger.merge(rets.toArray((Object[]) Array.newInstance(returnType, 0)));
+}
+```
+
+`Merger` 接口极简（`Merger.java:21-25`）：`@SPI public interface Merger<T> { T merge(T... items); }`。`MergerFactory.getMerger(returnType)`（`MergerFactory.java:55-68`）按返回类型的**实际泛型实参**在 `MERGER_CACHE` 里查对应 Merger；若 `returnType.isArray()` 则统一回落到 `ArrayMerger.INSTANCE`。
+
+`Merger` SPI 文件 `dubbo-cluster/.../META-INF/dubbo/internal/org.apache.dubbo.rpc.cluster.Merger` 共 **11 项**，逐行如下：
+
+| SPI key | 实现类 | 合并类型 |
+|---|---|---|
+| `map` | `org.apache.dubbo.rpc.cluster.merger.MapMerger` | `Map` |
+| `set` | `org.apache.dubbo.rpc.cluster.merger.SetMerger` | `Set` |
+| `list` | `org.apache.dubbo.rpc.cluster.merger.ListMerger` | `List` |
+| `byte` | `org.apache.dubbo.rpc.cluster.merger.ByteArrayMerger` | `byte[]` |
+| `char` | `org.apache.dubbo.rpc.cluster.merger.CharArrayMerger` | `char[]` |
+| `short` | `org.apache.dubbo.rpc.cluster.merger.ShortArrayMerger` | `short[]` |
+| `int` | `org.apache.dubbo.rpc.cluster.merger.IntArrayMerger` | `int[]` |
+| `long` | `org.apache.dubbo.rpc.cluster.merger.LongArrayMerger` | `long[]` |
+| `float` | `org.apache.dubbo.rpc.cluster.merger.FloatArrayMerger` | `float[]` |
+| `double` | `org.apache.dubbo.rpc.cluster.merger.DoubleArrayMerger` | `double[]` |
+| `boolean` | `org.apache.dubbo.rpc.cluster.merger.BooleanArrayMerger` | `boolean[]` |
+
+即：`map/set/list` 三类集合合并器 + 8 种基本类型数组合并器，共 11 项（源码树 `merger/` 下另有 `ArrayMerger`（数组总入口，非 SPI 直列）等内部类）。
+
+## ZoneAware Multi-Registry
+
+`ZoneAwareClusterInvoker`（`ZoneAwareClusterInvoker.java:67-124`）在多注册中心场景下选「哪个注册中心的 ClusterInvoker」来发请求，四级优先级：
+
+```java
+// dubbo-cluster/.../support/registry/ZoneAwareClusterInvoker.java:67-124（节选）
+public Result doInvoke(Invocation invocation, List<Invoker<T>> invokers, LoadBalance loadbalance) {
+    // ① preferred=true 的注册中心优先级最高
+    for (Invoker<T> invoker : invokers) {
+        ClusterInvoker<T> ci = (ClusterInvoker<T>) invoker;
+        if (ci.isAvailable() && ci.getRegistryUrl().getParameter(PREFERRED_KEY, false))
+            return ci.invoke(invocation);
+    }
+    // ② 同 zone：取 REGISTRY_ZONE attachment（或 ZoneDetector 探测），挑同 zone 注册中心
+    String zone = rpcContext.getAttachment(REGISTRY_ZONE);
+    String force = rpcContext.getAttachment(REGISTRY_ZONE_FORCE);
+    if (StringUtils.isEmpty(zone) && zoneDetector != null) {
+        zone = zoneDetector.getZoneOfCurrentRequest(invocation);
+        force = zoneDetector.isZoneForcingEnabled(invocation, zone);
+    }
+    if (StringUtils.isNotEmpty(zone)) {
+        for (Invoker<T> invoker : invokers) {
+            ClusterInvoker<T> ci = (ClusterInvoker<T>) invoker;
+            if (ci.isAvailable() && zone.equals(ci.getRegistryUrl().getParameter(ZONE_KEY)))
+                return ci.invoke(invocation);
+        }
+        if (StringUtils.isNotEmpty(force) && "true".equalsIgnoreCase(force))
+            throw new IllegalStateException("No registry instance in zone ..."); // force 且无同 zone 可用则抛
+    }
+    // ③ 跨注册中心 LoadBalance（注册中心权重计入）
+    Invoker<T> balancedInvoker = select(loadbalance, invocation, invokers, null);
+    if (balancedInvoker != null && balancedInvoker.isAvailable()) return balancedInvoker.invoke(invocation);
+    // ④ 兜底：首个 available 的注册中心
+    for (Invoker<T> invoker : invokers) {
+        ClusterInvoker<T> ci = (ClusterInvoker<T>) invoker;
+        if (ci.isAvailable()) return ci.invoke(invocation);
+    }
+    throw new RpcException("No provider available in " + invokers);
+}
+```
+
+注意 `invokers` 里每个元素本身是一个 `ClusterInvoker`（多注册中心时，`RegistryProtocol` 把每个注册中心包成一个 ClusterInvoker 再聚合成 List 传入），所以 `doInvoke` 是在「注册中心 ClusterInvoker」之间选址，选中的那个再由其内部 `invoke` 走自己的容错策略。`zoneDetector` 默认取 `ZoneDetector` 扩展的 `"default"` 实现（构造器 `:58-63`）。
+
+## Directory Routing Entry
+
+`AbstractDirectory.list`（`AbstractDirectory.java:200-253`）是「候选列表如何过路由」的总入口。它先把 `validInvokers`（已初始化）或 `invokers` 做 `clone()` 防篡改，取 `RouterChain` 的 `singleChain`，再委托 `doList`：
+
+```java
+// dubbo-cluster/.../directory/AbstractDirectory.java:200-253（节选）
+public List<Invoker<T>> list(Invocation invocation) throws RpcException {
+    if (destroyed) throw new RpcException("Directory ... already destroyed ...");
+    BitList<Invoker<T>> availableInvokers;
+    SingleRouterChain<T> singleChain = null;
+    try {
+        if (routerChain != null) routerChain.getLock().readLock().lock();
+        availableInvokers = invokersInitialized ? validInvokers.clone() : invokers.clone(); // clone 防 doList 修改
+        if (routerChain != null) {
+            singleChain = routerChain.getSingleChain(getConsumerUrl(), availableInvokers, invocation); // 双链择一
+            singleChain.getLock().readLock().lock();
+        }
+    } finally { if (routerChain != null) routerChain.getLock().readLock().unlock(); }
+    List<Invoker<T>> routedResult = doList(singleChain, availableInvokers, invocation); // 抽象，子类实现
+    if (routedResult.isEmpty()) logger.warn(... "No provider available after connectivity filter ...");
+    return Collections.unmodifiableList(routedResult);                                 // 返回不可变 List
+}
+
+// doList 是抽象方法（AbstractDirectory.java:568-570）
+protected abstract List<Invoker<T>> doList(
+        SingleRouterChain<T> singleRouterChain, BitList<Invoker<T>> invokers, Invocation invocation) throws RpcException;
+```
+
+也就是说：**`list` 不自己调 `RouterChain.route`，而是把 `singleChain` 与 `BitList` 候选交给子类 `doList`，路由在 `doList` 内发生**。`StaticDirectory.doList`（`StaticDirectory.java:122-141`）展示了最简单形态——直连/多 URL 场景，`doList` 直接让 `singleRouterChain.route(...)` 过滤（无注册中心则原样返回 `invokers`）：
+
+```java
+// dubbo-cluster/.../directory/StaticDirectory.java:122-141（节选）
+protected List<Invoker<T>> doList(SingleRouterChain<T> singleRouterChain, BitList<Invoker<T>> invokers, Invocation invocation) {
+    if (singleRouterChain != null) {
+        try {
+            List<Invoker<T>> finalInvokers = singleRouterChain.route(getConsumerUrl(), invokers, invocation); // 返回 List
+            return finalInvokers == null ? BitList.emptyList() : finalInvokers;
+        } catch (Throwable t) {
+            logger.error(CLUSTER_FAILED_SITE_SELECTION, "Failed to execute router", "", "...", t);
+            return BitList.emptyList();
+        }
+    }
+    return invokers; // 无路由链：直连场景原样返回
+}
+```
+
+`StaticDirectory` 与 `RegistryDirectory` 的区别：前者在构造器里 `setInvokers(new BitList<>(invokers))`（`StaticDirectory.java:67`），地址是调用方显式传入的固定集合（直连 / 多 URL），没有注册中心订阅与 `notify` 刷新；后者由注册中心 `notify` 驱动 `toInvokers`/`refreshInvoker` 动态刷新（见上文 [RegistryDirectory Refresh Mechanism](#registrydirectory-refresh-mechanism)）。两者都继承 `AbstractDirectory`，共用 `list → doList → singleRouterChain.route` 这条路由入口。
+
+## Migration Cluster
+
+双注册中心（接口级→应用级）迁移类**不在 `dubbo-cluster` 模块**，而在 `dubbo-registry/dubbo-registry-api` 模块：`MigrationClusterInvoker` 是接口（`dubbo-registry-api/.../migration/MigrationClusterInvoker.java:29`），真正实现是 `MigrationInvoker`。它由 `RegistryProtocol#doRefer` 内部创建（并非 Cluster SPI 项，与 [Cluster](#cluster-implementation-semantics) 篇 Pitfall #17 一致）。
+
+`MigrationInvoker.invoke`（`MigrationInvoker.java:284-312`）把调用在「老（接口级 `invoker`）」与「新（应用级 `serviceDiscoveryInvoker`）」两套 invoker 之间按 migration step 路由，step 常量来自 `MigrationStep` 枚举（`MigrationStep.java:19-22`），仅三个：`FORCE_INTERFACE`、`APPLICATION_FIRST`、`FORCE_APPLICATION`（**没有** `APPLICATION_ONLY` / `INSTANCE_FIRST`）：
+
+```java
+// dubbo-registry-api/.../migration/MigrationInvoker.java:284-312（节选）
+public Result invoke(Invocation invocation) throws RpcException {
+    if (currentAvailableInvoker != null) {
+        if (step == APPLICATION_FIRST) {
+            // 按 promotion 比例随机：未达阈值则回退到接口级 invoker
+            if (promotion < 100 && ThreadLocalRandom.current().nextDouble(100) > promotion)
+                return invoker.invoke(invocation);             // 老（接口级）
+            return decideInvoker().invoke(invocation);          // 新（应用级），按可用性决策
+        }
+        return currentAvailableInvoker.invoke(invocation);
+    }
+    switch (step) {
+        case APPLICATION_FIRST:   currentAvailableInvoker = decideInvoker(); break;          // 双模式，按比例/可用
+        case FORCE_APPLICATION:   currentAvailableInvoker = serviceDiscoveryInvoker; break;  // 强制新（应用级）
+        case FORCE_INTERFACE:     // default
+        default:                  currentAvailableInvoker = invoker; break;                  // 强制老（接口级）
+    }
+    return currentAvailableInvoker.invoke(invocation);
+}
+```
+
+`decideInvoker()`（`MigrationInvoker.java:314-323`）在 `APPLICATION_FIRST` 下做可用性兜底：当前若是应用级且可用则保留，否则回退到接口级 `invoker`。即迁移过程通过 `step` 在「老接口发现」与「新应用级服务发现」之间平滑切换，`FORCE_INTERFACE` 为默认（保持旧行为）。
+
 ## Pitfall List
 
 | # | 说法 | 3.3.6 事实 |
@@ -575,3 +1110,13 @@ adaptive=org.apache.dubbo.rpc.cluster.loadbalance.AdaptiveLoadBalance
 - [StateRouter.java](https://github.com/apache/dubbo/blob/dubbo-3.3.6/dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/router/state/StateRouter.java)
 - [BitList.java](https://github.com/apache/dubbo/blob/dubbo-3.3.6/dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/router/state/BitList.java)
 - [Directory.java](https://github.com/apache/dubbo/blob/dubbo-3.3.6/dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/Directory.java)
+- [AbstractClusterInvoker.java](https://github.com/apache/dubbo/blob/dubbo-3.3.6/dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/support/AbstractClusterInvoker.java)
+- [FailoverClusterInvoker.java](https://github.com/apache/dubbo/blob/dubbo-3.3.6/dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/support/FailoverClusterInvoker.java)
+- [ForkingClusterInvoker.java](https://github.com/apache/dubbo/blob/dubbo-3.3.6/dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/support/ForkingClusterInvoker.java)
+- [BroadcastClusterInvoker.java](https://github.com/apache/dubbo/blob/dubbo-3.3.6/dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/support/BroadcastClusterInvoker.java)
+- [FailbackClusterInvoker.java](https://github.com/apache/dubbo/blob/dubbo-3.3.6/dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/support/FailbackClusterInvoker.java)
+- [ZoneAwareClusterInvoker.java](https://github.com/apache/dubbo/blob/dubbo-3.3.6/dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/support/registry/ZoneAwareClusterInvoker.java)
+- [MockClusterInvoker.java](https://github.com/apache/dubbo/blob/dubbo-3.3.6/dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/support/wrapper/MockClusterInvoker.java)
+- [AbstractCluster.java](https://github.com/apache/dubbo/blob/dubbo-3.3.6/dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/support/wrapper/AbstractCluster.java)
+- [ClusterInterceptor.java](https://github.com/apache/dubbo/blob/dubbo-3.3.6/dubbo-cluster/src/main/java/org/apache/dubbo/rpc/cluster/interceptor/ClusterInterceptor.java)
+- [RegistryDirectory.java](https://github.com/apache/dubbo/blob/dubbo-3.3.6/dubbo-registry/dubbo-registry-api/src/main/java/org/apache/dubbo/registry/integration/RegistryDirectory.java)

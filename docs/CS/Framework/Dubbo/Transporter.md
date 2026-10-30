@@ -516,6 +516,33 @@ listener 里只有 `Request` 才回调（`:208`）。写失败时不是抛异常
 
 `Codec2` 实例从哪来：`AbstractEndpoint.getChannelCodec(url)`（`AbstractEndpoint.java:48-60`）——读 URL 参数 `codec`，**为空则直接用协议名**（因为 Dubbo 约定 codec 扩展名与协议名相同），先去 `Codec2` 扩展里找，找不到再退 `Codec` 扩展。`NettyBackedChannelBuffer` / `NettyBackedChannelBufferFactory` 则是 `Buffer` 体系对 Netty `ByteBuf` 的适配，让上层（`Codec2` 实现、`Payload` 检查）不必认识 Netty 类型。
 
+## NettyServerHandler and NettyClientHandler Event Translation
+
+上面所有 pipeline 最终都把字节交给 `NettyServerHandler` / `NettyClientHandler`——它们是 Netty 事件与 Dubbo `ChannelHandler` 语义之间的**唯一翻译层**。两个类都 `@Sharable`、`extends ChannelDuplexHandler`，且持有的 `handler` 已经是 `MultiMessageHandler` → `HeartbeatHandler` → `Dispatcher` 包装后的链，因此**翻译层本身不做派发**，只负责把 Netty 生命周期事件映射成 Dubbo 语义事件，派发由下游 `Dispatcher` 决定。
+
+服务端翻译（`NettyServerHandler.java:45,74-173`）：
+
+```java
+@io.netty.channel.ChannelHandler.Sharable
+public class NettyServerHandler extends ChannelDuplexHandler {
+    private final Map<String, Channel> channels = new ConcurrentHashMap<>();
+    // channelActive   -> channels.put(...) + handler.connected(channel)
+    // channelInactive -> channels.remove(...) + handler.disconnected(channel) + NettyChannel.removeChannel(ch)
+    // channelRead     -> handler.received(channel, msg); ctx.fireChannelRead(msg);  // 继续向 QoS handler 传播
+    // write           -> super.write(...); handler.sent(channel, msg);             // 写成功后回调 sent
+    // userEventTriggered -> IdleStateEvent: channel.close()（读空闲超时关链）
+    //                       SslHandshakeCompletionEvent: 把 SSLSession 存入 channel 属性
+    // exceptionCaught -> handler.caught(channel, cause)
+}
+```
+
+客户端翻译（`NettyClientHandler.java:36,54-143`）与服务端有两点关键差异：
+
+- **`write` 不回调 `handler.sent`**。客户端发送是否成功的语义由 `NettyChannel.send` 里的 `ChannelFutureListener` 跟踪（见上文「`sent` 语义」），因此 `NettyClientHandler.write` 只 `super.write(...)` 透传，没有 `sent` 回调。
+- **`userEventTriggered` 在 `IdleStateEvent` 时主动发心跳**而不是关链：构造 `Request` 设 `setEvent(HEARTBEAT_EVENT)`、`setTwoWay(true)`，调 `channel.send(req)`。即「客户端读空闲 → 发心跳探测；服务端读空闲 → 直接关链」，心跳的「探测」与「裁决」职责分属两端。
+
+两条共性：所有回调都跑在 **Netty IO 线程**上，经 `NettyChannel.getOrAddChannel(ch, url, handler)` 把 Netty channel 包成 Dubbo `NettyChannel`（维护 `ConcurrentHashMap` 缓存）；`exceptionCaught` 统一转 `handler.caught`，由上层按错误响应处理。
+
 ## New Extension Points in 3.x
 
 ### ChannelHandlers.wrap Chain
@@ -593,6 +620,53 @@ public class NettyPortUnificationTransporter implements PortUnificationTransport
 | `ssl/aot/`、`http2/`、`logging/` | AOT 预置 SSL 上下文、HTTP/2 handler、日志桥接 |
 | `AddressUtils` / `ChannelAddressAccessor` | 地址工具 |
 
+## Reconnect Mechanism via ReconnectTimerTask and Lazy Connect
+
+连接断开后的自动重连**不是** `AbstractClient` 自带定时器，而是由交换层的 `HeaderExchangeClient` 借助共享 `HashedWheelTimer`（`IDLE_CHECK_TIMER`）驱动的 `ReconnectTimerTask` 完成。`AbstractClient` 只负责「算间隔」与「执行一次重连」：
+
+```java
+// dubbo-remoting/dubbo-remoting-api/.../transport/AbstractClient.java:72,78,324-352
+needReconnect = url.getParameter(Constants.SEND_RECONNECT_KEY, true);   // send.reconnect，默认 true
+reconnectDuration = getReconnectDuration(url);
+
+private long getReconnectDuration(URL url) {
+    int idleTimeout = getIdleTimeout(url);
+    long heartbeatTimeoutTick = calculateLeastDuration(idleTimeout);     // idleTimeout / HEARTBEAT_CHECK_TICK(=3)，下限 LEAST_HEARTBEAT_DURATION(=1000)
+    return calculateReconnectDuration(url, heartbeatTimeoutTick);         // max(LEAST_RECONNECT_DURATION(=60000), tick)
+}
+
+public void reconnect() throws RemotingException {                       // 加锁后「断 + 连」
+    connectLock.lock();
+    try { disconnect(); connect(); } finally { connectLock.unlock(); }
+}
+```
+
+定时任务侧（`HeaderExchangeClient.java:221-261`）：
+
+```java
+private void startReconnectTask(URL url) {
+    if (shouldReconnect(url)) {                                         // RECONNECT_KEY 默认 true；配 "false" 关闭
+        reconnectTimerTask = new ReconnectTimerTask(
+                () -> Collections.singleton(this),
+                IDLE_CHECK_TIMER.get(),
+                calculateReconnectDuration(url, heartbeatTimeoutTick),
+                idleTimeout);
+    }
+}
+protected boolean shouldReconnect(URL url) {
+    return !Boolean.FALSE.toString().equalsIgnoreCase(url.getParameter(Constants.RECONNECT_KEY));
+}
+```
+
+`ReconnectTimerTask.doTask`（`ReconnectTimerTask.java:44-80`）每 tick 做两件事，任一命中即 `reconnect()`：
+
+- 通道**未连接**（`!channel.isConnected()`）——覆盖懒连接初始化失败与运行中掉线；
+- 通道已连但 `now - lastRead > idleTimeout`——即客户端侧心跳读空闲超时。
+
+注意重连间隔 `reconnectDuration` 由 `idleTimeout`（心跳超时）分片与 `LEAST_RECONNECT_DURATION`（默认 60000ms，URL key `dubbo.application.least-reconnect-duration`）取较大值，而**不是**独立的 `reconnect` 参数；`reconnect` 这个 key 只决定「是否开启重连任务」，已被证实 3.3.6 里**没有** `reconnect.warningperiod` 之类的「告警周期」参数。
+
+懒连接（`LAZY_CONNECT_KEY`，`AbstractClient.java:102`）：首次 `connect()` 失败时，若开了懒连接则**不抛异常**、实例照常创建，后续由 `ReconnectTimerTask` 兜底重试；否则按 `CHECK_KEY`（默认 `true`）决定是否在构造期抛错（`check=false` 则记日志、留待重试）。
+
 ## Default Value Summary Table
 
 | 项 | 默认值 | 来源 |
@@ -610,6 +684,11 @@ public class NettyPortUnificationTransporter implements PortUnificationTransport
 | 消费端线程池 | `cached` | `CommonConstants.java:135`，`AbstractClient.java:155` |
 | 停机 `quietPeriod` | `min(2000, timeout)` | `NettyServer.java:230` |
 | SOCKS5 默认端口 | `1080` | `NettyClient.java:66` |
+| netty4 依赖版本（`netty4_version`） | `4.2.2.Final` | `dubbo-dependencies-bom/pom.xml:98` |
+| `reconnect` 开关（是否启重连任务） | `true`（设 `false` 关闭） | `remoting/Constants.java:142` `RECONNECT_KEY` |
+| `LEAST_RECONNECT_DURATION` | `60000` ms（key `dubbo.application.least-reconnect-duration`） | `remoting/Constants.java:70,72` |
+| `HEARTBEAT_CHECK_TICK`（重连/心跳分片分母） | `3` | `remoting/Constants.java:60` |
+| `send.reconnect`（`needReconnect`） | `true` | `remoting/Constants.java:148` `SEND_RECONNECT_KEY` |
 
 ## Pitfall List
 

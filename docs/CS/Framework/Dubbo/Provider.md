@@ -89,6 +89,92 @@ SPI 文件注册 4 项：`stub`（`StubProxyFactoryWrapper`）、`jdk`（`JdkPro
 - **`InvokerListener`**：只有一条 `deprecated=org.apache.dubbo.rpc.listener.DeprecatedInvokerListener`（`.../META-INF/dubbo/internal/org.apache.dubbo.rpc.InvokerListener:1`）。
 - 想监听服务暴露/取消暴露事件，用 **`ServiceListener`**——它由 `ServiceConfig.onExported()` / `onUnexported()` 直接遍历通知（`ServiceConfig.java:1026-1036`），见 [ServiceConfig](/docs/CS/Framework/Dubbo/ServiceConfig.md)。
 
+## Provider Registration to Registry
+
+消费侧启动时由 `RegistryProtocol` 把「订阅 URL」交给注册中心；Provider 侧则由**同一个** `RegistryProtocol.export()` 把「自己提供的服务」注册上去。这一步是「Provider 注册」的全部含义，它和本地协议导出（`doLocalExport`）是**两个不同动作**，但都在 `export()` 里串行完成。
+
+`RegistryProtocol.export(Invoker<?> originInvoker)`（`dubbo-registry/dubbo-registry-api/.../registry/integration/RegistryProtocol.java:272`）的完整顺序：
+
+```java
+272  public <T> Exporter<T> export(final Invoker<T> originInvoker) throws RpcException {
+273      URL registryUrl = getRegistryUrl(originInvoker);          // = originInvoker.getUrl()  (:489-491)
+275      URL providerUrl = getProviderUrl(originInvoker);          // 取 invoker.url 的 "export" 属性 (:530-537)
+288      providerUrl = overrideUrlWithConfig(providerUrl, overrideSubscribeListener); // 先合并 provider/service 配置
+290      final ExporterChangeableWrapper<T> exporter = doLocalExport(originInvoker, providerUrl); // ① 先本地导出
+293      final Registry registry = getRegistry(registryUrl);       // 取 Registry 实例
+294      final URL registeredProviderUrl = customizeURL(providerUrl, registryUrl); // URL 变换(见下)
+297      boolean register = providerUrl.getParameter(REGISTER_KEY, true)
+298              && registryUrl.getParameter(REGISTER_KEY, true);
+299      if (register) { register(registry, registeredProviderUrl); } // ② 再向注册中心注册
+303      registerStatedUrl(registryUrl, registeredProviderUrl, register); // 存进 ProviderModel，非静态集合
+305      exporter.setRegisterUrl(registeredProviderUrl);
+306      exporter.setSubscribeUrl(overrideSubscribeUrl);
+307      exporter.setNotifyListener(overrideSubscribeListener);
+308      exporter.setRegistered(register);
+317      registry.subscribe(overrideSubscribeUrl, overrideSubscribeListener); // 受开关保护(见下)
+321      notifyExport(exporter);
+323      return new DestroyableExporter<>(exporter);
+324  }
+```
+
+几个容易记错的点：
+
+- **`providerUrl` 不是从 `registryUrl` 过滤参数得到的**。`getProviderUrl`（`:530-537`）直接取 `originInvoker.getUrl().getAttribute(EXPORT_KEY)`——即挂在 `registry://` 这个 invoker URL 的 `export` 属性上的、真正的服务 URL（如 `dubbo://host:port/...`）。registry 自身参数之所以不污染注册 URL，靠的是「providerUrl 与 registryUrl 是 URL 上的两个不同属性」，而不是用 `filter` 剥离某个 key。
+- **`doLocalExport` 先于 `registry.register`**。本地协议导出（真正起 Netty Server、`exporterMap` 落表）在前，注册在后；即使注册中心暂时不可用，本地服务也能先起来（只是 consumer 暂时看不到）。
+- **注册的 URL 形态**：`customizeURL(providerUrl, registryUrl)`（`:507-516`）只做 `putAttribute(SIMPLIFIED_KEY, ...)`、`putAttribute(EXTRA_KEYS_KEY, ...)` 并应用 `ServiceURLCustomizer` 扩展，**不做 `appendParameters`、不 `addParameter(CATEGORY_KEY=providers)`**。也就是说 3.x 注册出去的其实就是「带着两个 attribute 的原生 provider URL」；`category=providers` / `dynamic` 是注册中心实现层（`AbstractRegistry` / `FailbackRegistry`）在落存储时拼的，`RegistryProtocol` 不负责。
+
+`doLocalExport`（`:349-360`）把 `providerUrl` 包成 `InvokerDelegate`，再 `exporterFactory.createExporter(providerUrlKey, () -> protocol.export(invokerDelegate))`（`:354-355`）。这里的 `protocol` 是完整协议包装链，末端的 `ProtocolFilterWrapper.export` 会顺手构建好**服务端 Filter 链**（见 Provider-Side Invocation Handling），最终 `DubboProtocol.export` 把「已包 Filter 链的 invoker」存进 `exporterMap`（见 Exporter Management）。导出关系挂在 `bounds` 字段（`:185-186`，`ConcurrentHashMap<String, ConcurrentHashMap<String, ExporterChangeableWrapper<?>>>`）：外层 key = `providerUrl.removeParameters(DYNAMIC_KEY, ENABLED_KEY).toFullString()`（`:545-548`），内层 key = `registryUrl` 同法处理后的串（`:550-553`）。
+
+### Override / 动态配置在 3.x 的归属
+
+`OverrideListener`（内部类，`:815-925`，实现 `NotifyListener`）确实存在，订阅的是 `getSubscribedOverrideUrl(providerUrl)`（其 `category=configurators`，`:518-522`），收到变更后过滤 `category=configurators` 的 URL、转成 `Configurator`，必要时 `reExport`。**但 `export()` 里的 `registry.subscribe(...)`（`:317`）是带开关的**：仅当 `ENABLE_26X_CONFIGURATION_LISTEN` 开启且 `!registry.isServiceDiscovery()` 时才走注册中心订阅。
+
+> [!WARNING]
+> **3.x 与 2.x 在「Provider 注册」上最容易被照抄错的一点：3.3.6 已没有「把 provider URL 注册成 configurator / override」的逻辑。** `registry.register(...)`（`:258`）注册的就是 provider 自身；override 动态配置改由 `ProviderConfigurationListener` / `ServiceConfigurationListener` 走配置中心（`GovernanceRuleRepository`）推送，注册中心订阅只是 2.6 兼容开关下的可选项。任何「provider 注册时会往注册中心写一份 override 规则」的说法都是 2.x 记忆。
+
+反注册对称：`DestroyableExporter.unexport()` → `ExporterChangeableWrapper.unexport()`（`:1161-1171`）先清 `bounds`、再 `unregister()`（`:1087-1158`，用 `registered.compareAndSet(true,false)` 保证只执行一次）调 `registry.unregister(registerUrl)`（`:1106`）、最后 `doUnExport()`。
+
+## Provider-Side Invocation Handling
+
+Provider Call Chain 把服务端链路拆成 8 步，这里把它落到真实代码：一条入站请求从 Netty 线程一路调到实现类，中间经过哪些类、Filter 链在哪构建、谁创建了 `AsyncRpcResult`。
+
+1. **分派入口**：`HeaderExchangeHandler.received(Channel, Object)`（`dubbo-remoting/.../exchange/support/header/HeaderExchangeHandler.java:196`）按消息类型分派；双向 `Request` 走 `handleRequest(exchangeChannel, request)`（`:206`）。
+2. **构造 Response**：`handleRequest`（`:88`）取出 `req.getData()`，调用 `handler.reply(channel, msg)`（`:110`）——注意 `reply` 返回 `CompletionStage<Object>`，在 `whenComplete` 里填充 `Response` 并 `channel.send(res)`（`:120`），即**响应是异步回写的**。
+3. **reply 实现（Dubbo 协议）**：`DubboProtocol` 内部 `requestHandler`（字段 `:111`，继承 `ExchangeHandlerAdapter`）的 `reply(ExchangeChannel, Object)`（`:117`）：
+
+   ```java
+   117  public CompletableFuture<Object> reply(ExchangeChannel channel, Object message) throws RemotingException {
+   119      if (!(message instanceof Invocation)) { throw new RemotingException(...); }
+   130      Invocation inv = (Invocation) message;
+   131      Invoker<?> invoker = inv.getInvoker() == null ? getInvoker(channel, inv) : inv.getInvoker();
+   166      RpcContext.getServiceContext().setRemoteAddress(channel.getRemoteAddress());
+   167      Result result = invoker.invoke(inv);          // 进入 Filter 链 + Proxy
+   168      return result.thenApply(Function.identity()); // Result -> CompletableFuture
+   169  }
+   ```
+
+   `getInvoker(Channel, Invocation)`（`:287`）用 `port/path/version/group`（从 invocation attachment 取，`:308-309`）拼出 `serviceKey`，从 `exporterMap` 取 `DubboExporter`（`:310`）；取不到直接抛 `"Not found exported service: " + serviceKey`——和 Exporter Management 是同一个 map，`version`/`group` 不匹配在此阶段就挂。
+4. **服务端 Filter 链是在 export 时构建好的，不是每次请求重建**。`ProtocolFilterWrapper.export`（注意它在 **`dubbo-cluster`** 模块，`org.apache.dubbo.rpc.cluster.filter.ProtocolFilterWrapper:53-58`）：
+
+   ```java
+   53   public <T> Exporter<T> export(Invoker<T> invoker) throws RpcException {
+   54       if (UrlUtils.isRegistry(invoker.getUrl())) { return protocol.export(invoker); }
+   57       FilterChainBuilder builder = getFilterChainBuilder(invoker.getUrl());
+   58       return protocol.export(builder.buildInvokerChain(invoker, SERVICE_FILTER_KEY, CommonConstants.PROVIDER));
+   59   }
+   ```
+
+   group 参数是 `CommonConstants.PROVIDER`（值 `"provider"`），key 是 `"service.filter"`。`buildInvokerChain` 实际实现在 `DefaultFilterChainBuilder.buildInvokerChain`（`:45-77`）：先 `last = originalInvoker`，再**逆序**遍历 filters（`:68`）使 order 最小的成为链头，每个包成 `CopyOfFilterChainNode`，最外层返回 `CallbackRegistrationInvoker`（`:73`）。所以 `reply` 第 167 行 `invoker.invoke(inv)` 调到的，正是 export 时存进 `exporterMap` 的「已包 Filter 链的 invoker」。
+5. **Filter 执行顺序（provider 侧，从外到内）**：`CallbackRegistrationInvoker`（先注册 Listener）→ `ContextFilter`（`@Activate(group=PROVIDER, order=Integer.MIN_VALUE)`，最先执行，`:138`）→ 其余 `@Activate(group=PROVIDER)` Filter 按 order 升序 → `AbstractProxyInvoker`（链尾 `originalInvoker`）→ `Wrapper.invokeMethod` → 真实实现类。
+6. **服务端 RpcContext 装配**：`ContextFilter.invoke`（`:138`）从 `invocation.getObjectAttachments()` 取出消费端传来的 attachment，注入 `RpcContext.getServerAttachment()`（`:178-180`），设置 service context；调用前 `clearAfterEachInvoke(false)`、调用后 `finally` 里 `clearAfterEachInvoke(true)`（`:190-193`）清理。这就是 [Invocation](/docs/CS/Framework/Dubbo/Invocation.md) 里「Consumer → Provider attachment 透传」的服务端落点。
+7. **最底层 Proxy → 实现类**：`AbstractProxyInvoker.invoke`（`dubbo-rpc/.../rpc/proxy/AbstractProxyInvoker.java:87`）调用抽象 `doInvoke(proxy, methodName, paramTypes, args)`（`:100`）；`JavassistProxyFactory.getInvoker`（`:80`）返回的 `AbstractProxyInvoker` 其 `doInvoke` 调 `wrapper.invokeMethod(proxy, methodName, parameterTypes, arguments)`（`:89`）。`Wrapper` 在 `dubbo-common/.../bytecode/Wrapper.java`，由 `getWrapper(Class)` → `makeWrapper` 动态生成 `invokeMethod` 字节码，按方法名反射/Javassist 分派到真实业务方法。**这是服务端 Invoker 的最底层，再往下就是调到你的实现。**
+
+> [!WARNING]
+> 三个会被旧笔记带偏的硬事实：
+> - **`ProtocolFilterWrapper` 在 3.3.6 已迁到 `dubbo-cluster`（`org.apache.dubbo.rpc.cluster.filter`），不再位于 `dubbo-rpc-api`**；`buildInvokerChain` 也拆到了 `DefaultFilterChainBuilder`。
+> - **`AsyncRpcResult` 不在 `reply` 里创建**——`reply` 只把已有的 `Result` 转成 `CompletableFuture`（`:168`）。它真正诞生在 `AbstractProxyInvoker.invoke` 的 `return new AsyncRpcResult(appResponseFuture, invocation)`（`:117`）。
+> - **没有 `makeInvoker` 方法、也没有 `JavassistWrapper` 类**（2.x 记忆）。服务端代理走的是 `JavassistProxyFactory.getInvoker` → `AbstractProxyInvoker` → `Wrapper.invokeMethod`。
+
 ## Concurrency and Rate Limiting
 
 服务端只有**两个**内置的流量限制 Filter，第三个（actives）是消费侧的：
@@ -197,6 +283,38 @@ if (StringUtils.isEmpty(accessLogKey) || "false".equalsIgnoreCase(accessLogKey))
 | delay | `null`（不延迟） | `ServiceConfigBase.java:138-146` |
 | accesslog | 未配（Filter 不做事） | `AccessLogFilter.java:110-121` |
 
+## Exporter Management
+
+Provider 暴露出的每个 `Invoker` 都会被包成一个 `Exporter`，并由协议层集中管理。容器是 `AbstractProtocol` 持有的一个 `ConcurrentHashMap`：
+
+```java
+// dubbo-rpc/dubbo-rpc-api/.../rpc/protocol/AbstractProtocol.java:60
+protected final Map<String, Exporter<?>> exporterMap = new ConcurrentHashMap<>();
+```
+
+`DubboProtocol.export()`（`DubboProtocol.java:336-365`）以 `serviceKey(url)` 为 key 构造 `DubboExporter`，并在其构造器里 `put` 进 `exporterMap`（`DubboExporter.java:38`）：
+
+```java
+// DubboProtocol.java:341-342
+String key = serviceKey(url);
+DubboExporter<T> exporter = new DubboExporter<>(invoker, key, exporterMap);
+```
+
+请求到来时，服务端处理器用同样的 `serviceKey` 反查 `Exporter` → `Invoker`（`DubboProtocol.java:310-315`）：
+
+```java
+DubboExporter<?> exporter = (DubboExporter<?>) exporterMap.get(serviceKey);
+if (exporter == null) {
+    throw new RemotingException(... "Not found exported service: " + serviceKey
+            + " in " + exporterMap.keySet() + ", may be version or group mismatch ...");
+}
+```
+
+也就是说：**`version` / `group` 不匹配的调用在查 `exporterMap` 阶段就直接失败**，根本进不了 Filter 链。该 map 同时支撑优雅停机与状态查询——`AbstractProtocol.unexport()` 遍历它逐个 `exporter.unexport()` 后 `clear()`（`:120-132`），`getExporters()` 返回其不可修改视图（`:144-148`）。
+
+> [!NOTE]
+> `exporterMap` 是 `protected final`，由 `AbstractProtocol` 统一管理，所有具体协议（`dubbo` / `tri` / `injvm`）共享同一套生命周期语义；`DubboExporter` 只在构造 / 销毁时读写它（`DubboExporter.java:34-43`），自身不持有并发逻辑。
+
 ## Pitfall List
 
 - **把 `actives` 当服务端并发控制**——它是 Consumer 侧，服务端用 `executes`。
@@ -207,6 +325,10 @@ if (StringUtils.isEmpty(accessLogKey) || "false".equalsIgnoreCase(accessLogKey))
 - **配了 `accesslog` 却发现没文件**——`accesslog.fixed.path` 默认 `true`，必须显式设为 `false` 才写文件。
 - **写 `tps.limit` 作为 TPS 配置键**——正确键名就是 `tps`。
 - **以为 `accepts` / `iothreads` 在 `CommonConstants`**——它们在 `dubbo-remoting` 的 `Constants`。
+- **以为 `ProtocolFilterWrapper` 还在 `dubbo-rpc-api`**——3.3.6 已迁 `dubbo-cluster`（`org.apache.dubbo.rpc.cluster.filter`），`buildInvokerChain` 拆到 `DefaultFilterChainBuilder`。
+- **以为 `AsyncRpcResult` 在 `reply` 里创建**——它在 `AbstractProxyInvoker.invoke`（`:117`）创建，`reply` 只把它转成 `CompletableFuture`。
+- **以为 Provider 注册会把自身写成 override/configurator**——3.x 只注册自身（`category=providers` 由注册中心实现层拼），override 动态配置改走配置中心（`GovernanceRuleRepository`）。
+- **以为有 `makeInvoker` / `JavassistWrapper`**——不存在，服务端代理走 `JavassistProxyFactory.getInvoker` → `AbstractProxyInvoker` → `Wrapper.invokeMethod`。
 
 ## Links
 

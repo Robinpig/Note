@@ -292,6 +292,62 @@ return ConfigUtils.loadProperties(classLoaders, path, false, true);
 > [!WARNING]
 > **`classpath:/META-INF/dubbo/dubbo.properties` 并不是 Dubbo 的默认查找路径。** 这个路径字符串只出现在 `dubbo-spring-boot-*` 的测试用例 `@PropertySource` 里（如 `CompatibleDubboAutoConfigurationTest.java:44`），不构成框架行为。把配置文件放到 `META-INF/dubbo/` 下**不会被自动加载**，这是很常见的误配。
 
+## @Parameter Annotation and append* Concatenation
+
+配置项到底怎么变成 URL 上的 `key=value`？答案是 `AbstractConfig` 的一对静态工具方法 `appendParameters` / `appendAttributes`，以及贯穿其上的 `@Parameter` 注解。
+
+`@Parameter`（`dubbo-common/.../config/support/Parameter.java`）只有六个属性，**没有 `order`**（排序不靠它）：
+
+| 属性 | 默认 | 含义 |
+| :--- | :--- | :--- |
+| `key()` | `""` | 写入 URL 时的参数名；为空则用 getter 名推导 |
+| `required()` | `false` | `true` 时该值为空则抛 "xxx == null" |
+| `excluded()` | `false` | `true` 时 `appendParameters` 直接跳过（不进 URL） |
+| `escaped()` | `false` | `true` 时对值做 `URL.encode` |
+| `attribute()` | `true` | `false` 时 `refresh()` / `getMetadata()` / `equals()` / `toString()` 忽略该字段 |
+| `append()` | `false` | `true` 时不覆盖而是逗号拼接并去重 |
+
+`appendParameters` 与 `appendAttributes` 都委托给 `appendParameters0(..., boolean asParameters)`（`AbstractConfig.java:182-271`）：
+
+- `appendParameters(..., prefix)` → `asParameters = true`：遍历 getter，跳过 `@Parameter.excluded()` 的；key 优先取 `parameter.key()`，否则 `calculatePropertyFromGetter(name)`（getter 名 → 属性名）；`escaped()` 做 `URL.encode`；`append()` 把新值用 `","` 拼到已有值后并 `splitToSet` 去重（`AbstractConfig.java:231-238`）；`prefix` 非空时 key 变为 `prefix + "." + key`。
+- `appendAttributes(..., prefix)` → `asParameters = false`：只保留 `@Parameter.attribute() == true` 的字段，key 经 `StringUtils.convertToSplitName` 转成 **kebab-case**（如 `myField` → `my-field`，`:221-223`）。
+- 嵌套 getter（`isNestedGetter`）会**递归**下钻，前缀累加 `prefix + "." + fieldName`（`:261-265`）；`getParameters()` 这类 `Map` getter 的内容会被整体并入 URL（用户自定义 `<dubbo:parameter>` 即走此路，`:247-260`）。
+
+> [!TIP]
+> 这两个方法解释了「为什么有些字段出现在 URL、有些不出现」：`executes` / `actives` / `token` 等带 `@Parameter` 会进 URL；而纯 Java 对象字段（`returnType == Object.class`）会被跳过（`:200-202`）。排查「某个配置没传到对端」时，先看它有没有 `@Parameter`、有没有被 `excluded`。
+
+### refresh(): Overriding Fields from Configuration Sources
+
+`AbstractConfig.refresh()`（`AbstractConfig.java:718-737`）是「七档优先级真正落到字段上」的入口。`needRefresh` 为真时它走 `refreshWithPrefixes(getPrefixes(), getConfigMode())`：
+
+```java
+// dubbo-common/src/main/java/org/apache/dubbo/config/AbstractConfig.java:739-756
+protected void refreshWithPrefixes(List<String> prefixes, ConfigMode configMode) {
+    Environment environment = getScopeModel().modelEnvironment();
+    List<Map<String, String>> configurationMaps = environment.getConfigurationMaps();
+    // 按优先级顺序找第一个命中子属性的 prefix
+    String preferredPrefix = null;
+    for (String prefix : prefixes) {
+        if (ConfigurationUtils.hasSubProperties(configurationMaps, prefix)) {
+            preferredPrefix = prefix; break;
+        }
+    }
+    if (preferredPrefix == null) preferredPrefix = prefixes.get(0);
+    Collection<Map<String, String>> instanceConfigMaps =
+            environment.getConfigurationMaps(this, preferredPrefix);
+    Map<String, String> subProperties =
+            ConfigurationUtils.getSubProperties(instanceConfigMaps, preferredPrefix);
+    ...
+    assignProperties(this, environment, subProperties, subPropsConfiguration, configMode);
+}
+```
+
+要点：
+
+- `getPrefixes()` 返回的优先级本身也分层，例如 `ServiceConfig` 含 `dubbo.service`、`dubbo.provider`、`dubbo.application`——同名属性按这个顺序挑**第一个命中**的 prefix 去覆盖（`AbstractConfig.java:744-753`）。这层「prefix 优先级」叠加在 `Environment` 的「七档来源优先级」之上，二者共同决定最终值。
+- `environment.getConfigurationMaps()` 返回的正是 [Configuration Source and Priority](/docs/CS/Framework/Dubbo/config.md?id=configuration-source-and-priority) 里那七档（按高到低排列），所以 `-Ddubbo.service.xxx` 能覆盖 API `new ServiceConfig().setXxx()` 的原因就在这里：高优先级的 `SystemConfiguration` 子属性先被 `assignProperties` 写回字段。
+- `refresh()` 由 `ServiceConfig.export()` / `ReferenceConfig.get()` 在 `postProcessRefresh()` 钩子里触发（详见 [ServiceConfig](/docs/CS/Framework/Dubbo/ServiceConfig.md) 的 export 流程），确保暴露/引用前字段已被配置中心 / `-D` 刷新。
+
 ## Common Configuration Pitfalls
 
 | 现象 | 原因 | 处理 |
