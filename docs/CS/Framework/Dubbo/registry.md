@@ -2421,6 +2421,96 @@ public class RegistryDirectory<T> extends DynamicDirectory<T> {
 ```
 
 
+## Registry Client Implementation: Failback, Zookeeper, Nacos
+
+上面几节是「注册中心抽象 + SPI + 订阅契约」。这一节落到**具体客户端怎么把 URL 变成 zk 节点 / nacos 实例**，以及断网时的重试兜底。类继承链（3.3.6 实测）：
+
+```
+AbstractRegistry                 (本地磁盘缓存 + NotifyListener 集合)
+  └─ FailbackRegistry            (模板方法 + 失败重试队列)
+       ├─ CacheableFailbackRegistry
+       │    └─ ZookeeperRegistry (zk 临时节点 + 一次性多 category 订阅)
+       └─ NacosRegistry          (namingService 实例注册 + 服务名维度)
+```
+
+> [!WARNING]
+> 网上常见 `AbstractZookeeperRegistry` 是 **2.x 的记忆，3.3.6 不存在**。Zookeeper 客户端直接继承 `CacheableFailbackRegistry`（它本身只是给 `FailbackRegistry` 套了一层 zk client 缓存），再上才是 `FailbackRegistry → AbstractRegistry`。
+
+### FailbackRegistry: Template Method + Retry Queue
+
+`FailbackRegistry`（`dubbo-registry-api/.../support/FailbackRegistry.java:50`）把「注册 / 订阅」拆成**模板方法**：公共方法先调抽象 `doRegister(url)` / `doSubscribe(url, listener)`，子类只实现 `do*`（zk / nacos 各写各的落地）；一旦 `do*` 抛异常，公共方法不向上炸，而是把 URL 收进失败集合、并起一个 `HashedWheelTimer` 定时重试。
+
+```java
+// FailbackRegistry.java
+private final ConcurrentMap<URL, FailedRegisteredTask> failedRegistered = new ConcurrentHashMap<>(); // :54
+...
+retryTimer = new HashedWheelTimer(                                              // :75
+    new NamedThreadFactory("DubboRegistryRetryTimer", true),
+    retryPeriod, retryPeriod, TimeUnit.MILLISECONDS);
+...
+private void addFailedRegistered(URL url) { ... }                               // :97
+```
+
+`failedRegistered` / `failedSubscribed` / `failedUnregistered` / `failedUnsubscribed` 四个 `ConcurrentMap` 各管一类失败操作；每个 URL 对应一个 `FailedRegisteredTask`（等定时器到点调 `doRetry` → 再调一次 `doRegister`，成功后 `removeFailedRegistered` 清理）。这正是「注册中心短暂不可用时不会丢注册、恢复后自动补发」的实现基础——但它**只兜底瞬时失败，不保证顺序**，且重试默认按固定周期无限进行（超时上限由 `retryPeriod` 与注册中心自身 TTL 决定）。
+
+### ZookeeperRegistry: Ephemeral Nodes + Multi-Category Subscribe
+
+`doRegister`（`ZookeeperRegistry.java:169`）只做一件事——把 URL 编码后写成 **zk 临时节点**：
+
+```java
+// ZookeeperRegistry.java:169-172
+public void doRegister(URL url) {
+    zkClient.create(toUrlPath(url), url.getParameter(DYNAMIC_KEY, true), true);
+    //                           ↑ 节点路径        ↑ 节点数据(是否持久)    ↑ ephemeral=true → 临时节点
+}
+```
+
+节点路径由 `toUrlPath`（`ZookeeperRegistry.java:370`）拼成：
+
+```java
+// ZookeeperRegistry.java:366-371
+private String toCategoryPath(URL url) {            // /dubbo/{interface}/providers|configurators|routers
+    return toServicePath(url) + PATH_SEPARATOR + url.getParameter(CATEGORY_KEY, DEFAULT_CATEGORY);
+}
+private String toUrlPath(URL url) {                 // .../providers/URL.encode(url.toFullString())
+    return toCategoryPath(url) + PATH_SEPARATOR + URL.encode(url.toFullString());
+}
+```
+
+所以一个 provider 注册后的真实形态是：`/dubbo/<interface>/providers/<url-encoded-full-string>`，**临时节点**——provider 进程一掉线，zk 会话超时后节点自动消失，consumer 立刻收到子节点变更通知。`dynamic=false` 时写的是持久节点（运维手动留的「死」节点，provider 下线不自动清）。
+
+`doSubscribe`（`ZookeeperRegistry.java:191`）是「**一次订阅监听三个 category 路径**」：
+
+```java
+// ZookeeperRegistry.java:191 / 254 / 268 / 275
+for (String path : toCategoriesPath(url)) {                 // providers + configurators + routers 三条
+    zkClient.addChildListener(path, zkListener);            // 给每条 category 挂子节点监听
+}
+...
+List<String> children = zkClient.addChildListener(path, zkListener);
+...
+notify(url, listener, urls);                                // 把子节点(已 URL 解码)转 List<URL> 回调 NotifyListener
+```
+
+注意 `toCategoriesPath` 默认就是 `providers` / `configurators` / `routers` 三个维度——consumer 订阅一次，能同时收到「可用实例列表 + 动态配置 + 路由规则」三类变更，这就是 Dubbo「配置与实例统一在注册中心」的具体落地。
+
+### NacosRegistry: Instance Registration by Service Name
+
+Nacos 不走「路径树」，走「**服务名 → 实例**」模型。`doRegister`（`NacosRegistry.java:180`）构造 `serviceName`（约定 `{group}@@{interface}` 这类组合，含 `provider:`/`consumer:` 前缀语义）后调 `namingService.registerInstance`：
+
+```java
+// NacosRegistry.java:205
+namingService.registerInstance(service, getUrl().getGroup(Constants.DEFAULT_GROUP), instance);
+// instance 的 ip/port/metadata 来自 URL
+```
+
+`doSubscribe`（`NacosRegistry.java:249`）则调 `namingService.getAllInstances` / `subscribe`（`:656`）拉实例并转成 `URL` 回调。差异一句话：**Zookeeper 靠「节点增删」做推送、临时节点感知掉线；Nacos 靠「服务发现实例心跳 + 订阅推送」做推送，实例上下线由 Nacos Server 侧 TTL 判定**。
+
+### AbstractRegistry: Local Disk Cache
+
+`AbstractRegistry`（`FailbackRegistry` 的父类）还埋了一条「**本地缓存恢复**」机制：每次收到订阅结果都会 `saveProperties(url)`（`AbstractRegistry.java:589`），把 `interface → List<URL>` 落盘到 `${user.home}/.dubbo/dubbo-registry-<app>.cache`；由 `registryCacheExecutor`（`AbstractRegistry.java:105`）调度、`savePropertiesRetryTimes`（`AbstractRegistry.java:107`）控制失败重试上限。注册中心全挂、连不上时，consumer 能从这个缓存文件把「上次已知的提供者列表」读回来兜底启动——这是 Dubbo「注册中心不是强依赖」的关键设计。
+
+
 ## RegistryProtocol
 
 `org.apache.dubbo.registry.integration.RegistryProtocol` is the integration layer that wraps any `Protocol` implementation (e.g. `DubboProtocol`, `TripleProtocol`) and attaches registry behaviors — register / subscribe / override-subscribe — to the export and refer lifecycle. It is selected by the `registry` URL protocol parameter (see `RegistryFactory` SPI).

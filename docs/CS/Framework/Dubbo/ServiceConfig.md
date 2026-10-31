@@ -256,6 +256,27 @@ static int calculateWarmupWeight(int uptime, int warmup, int weight) {
 > [!NOTE]
 > 这跟 `delay`（延迟暴露，`null` 不延迟）是两件独立的事：`delay` 决定「何时开始 export」，`warmup` 决定「export 后权重如何从 1 线性恢复到 `weight`」。两者都在 `AbstractServiceConfig`，但作用阶段不同。更多治理语义见 [Governance](/docs/CS/Framework/Dubbo/Governance.md)。
 
+### doExportUrl: The Last Mile (getInvoker → protocol.export)
+
+`doExportUrlsFor1Protocol` 把 URL 拼好后，真正「暴露」的一步在 `doExportUrl`（`ServiceConfig.java:964`）——这里把业务实现 `ref` 包成 Invoker，再交给 `Protocol` 暴露：
+
+```java
+// ServiceConfig.java:964-981
+private void doExportUrl(URL url, boolean withMetaData, RegisterTypeEnum registerType) {
+    ...
+    Invoker<?> invoker = proxyFactory.getInvoker(ref, (Class) interfaceClass, url);   // :974  ref → Invoker
+    if (withMetaData) {
+        invoker = new DelegateProviderMetaDataInvoker(invoker, this);
+    }
+    Exporter<?> exporter = protocolSPI.export(invoker);                               // :981  触发 Protocol.export
+    ...
+}
+```
+
+- `proxyFactory.getInvoker(ref, interfaceClass, url)`：`JavassistProxyFactory` 据此生成 `AbstractProxyInvoker`，把方法调用反射/Javassist 到真实 `ref`（详见 [Provider](/docs/CS/Framework/Dubbo/Provider.md) 的「Provider-Side Invocation Handling」）。
+- `protocolSPI.export(invoker)`：协议名是 `dubbo://` 就走 `DubboProtocol.export`，是 `registry://` 就走 `RegistryProtocol.export`（后者再把内层 `dubbo://` 业务 URL 注册到注册中心，见 [registry](/docs/CS/Framework/Dubbo/registry.md) 与 [Provider](/docs/CS/Framework/Dubbo/Provider.md)）。
+- 本地暴露 `exportLocal`（`ServiceConfig.java:986`）走的是同一条 `doExportUrl`，只是协议被改成 `injvm`、port=0。
+
 ## ReferenceConfig in Contrast
 
 ```java
@@ -285,10 +306,36 @@ public T get(boolean check) {
 
 `AbstractReferenceConfig` 其余字段：`check:50`、`init:55`、`generic:60`、`injvm:65`、`lazy:70`、`reconnect:72`、`sticky:74`、`stubevent:80`、`providedBy:85`、`providerPort:93`、`providerNamespace:99`、`router:101`、`referAsync:110`、`client:115`、`protocol:120`。
 
+### createProxy: refer → getProxy（消费端最后一公里）
+
+`init` 末尾调 `createProxy(referenceParameters)`（`ReferenceConfig.java:490`），这是消费端从「配置」到「可调用代理」的最后一公里：
+
+```java
+// ReferenceConfig.java:490 / 522
+private T createProxy(Map<String, String> referenceParameters) {
+    ...
+    // 对每条 registry URL：invoker = protocol.refer(interfaceClass, url)  ← RegistryProtocol.refer 经 Cluster 合并多提供者
+    // 多个 registry 时：cluster.join / RegistryProtocol.refer 把多个 Invoker 聚合成一个
+    ...
+    return (T) proxyFactory.getProxy(invoker, ProtocolUtils.isGeneric(generic));   // :522  Invoker → 代理对象
+}
+```
+
+- `protocol.refer(interfaceClass, url)`：协议名 `registry://` → `RegistryProtocol.refer`（订阅注册中心、拿到 `List<Invoker>`、交给 `Cluster.join` 聚合成带负载均衡/容错的 `Invoker`）；`injvm://` 则直接 refer 本地。
+- `proxyFactory.getProxy(invoker, ...)`：`JavassistProxyFactory` 据此生成动态代理，把接口方法调用转成 `invoker.invoke(new RpcInvocation(...))`。
+- `check` 默认值 **`true`**，由 `ReferenceConfigBase.shouldCheck()`（`ReferenceConfigBase.java:108`）决定——**没有 `DEFAULT_CHECK` 常量**，是方法内直接返回 `true`（除非显式设 `check=false` 或在批处理/延迟引用场景）。`check=false` 仅关闭「启动时连不上注册中心就抛错」，不影响运行时。
+
+> [!WARNING]
+> **`ReferenceListener` 接口在 3.3.6 不存在**（全仓库 0 命中）——消费侧没有与 `ServiceListener` 对称的监听接口。需要感知「引用创建/销毁」事件时，要么用 `ReferenceConfig` 自身的生命周期钩子，要么在 `InvokerListener`（若存在）或自定义 `ClusterFilter` 里做，不要照 2.x 老笔记去实现 `ReferenceListener`。与之对称的是 `ServiceListener`（`dubbo-config-api/.../ServiceListener.java:25`：`exported(ServiceConfig)` / `unexported(ServiceConfig)`），它在 `ServiceConfig.onExported()`（`ServiceConfig.java:1026`）被遍历通知。
+
+> [!NOTE]
+> `@DubboReference` 是 `ReferenceConfig` 的**注解版入口**，定义在 `dubbo-common/.../config/annotation/DubboReference.java:73`；`@DubboService` 对应 `ServiceConfig`。Spring 场景下注解由 `ReferenceAnnotationBeanPostProcessor` 扫描并转成 `ReferenceConfig`，XML/API 场景则直接 `new ReferenceConfig()`。
+
 ## Pitfall List
 
 - **以为配置字段都在 `ServiceConfig`**——绝大多数在 `dubbo-common` 的 `AbstractServiceConfig` / `AbstractInterfaceConfig`。
 - **以为 `setScopeModel` 可以重写**——它是 `final`，唯一的扩展点是 `checkScopeModel` 与 `postProcessAfterScopeModelChanged`。
+- **以为有 `ReferenceListener`**——3.3.6 无此接口，消费侧监听要另寻路径（见上方 WARNING）。
 - **把 `actives` 当服务端并发控制**——它是方法级且作用在 Consumer 侧；服务端用 `executes`。
 - **以为 Provider 侧有 `retries`**——没有，重试是消费侧 Cluster 的行为。
 - **把 `exportAsync` 当成推荐配置**——`AbstractServiceConfig` 上的那个已 `@Deprecated`，推荐 `ModuleConfig#exportAsync`；`exportBackground` 在 `ProviderConfig` 上。

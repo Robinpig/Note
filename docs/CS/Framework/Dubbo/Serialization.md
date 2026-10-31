@@ -476,6 +476,30 @@ private SerializerFactory createDefaultSerializerFactory(ClassLoader classLoader
 
 工厂的**ClassLoader 维度隔离**是另一处关键设计：`Hessian2FactoryManager` 用 `ConcurrentHashMap<ClassLoader, SerializerFactory> CL_2_SERIALIZER_FACTORY`（`:40`）为每个 ClassLoader 建一份工厂，并额外维护一个 `stickySerializerFactory` 缓存「最近用过的那份」（`:43`、`:58-61`），避免每次序列化都做 map 查找。系统 ClassLoader（`classLoader == null`）走单独的 `SYSTEM_SERIALIZER_FACTORY` 单例（`:62-72`）。
 
+## P2 Blind Spots: ID Map, protobuf, fastjson2 Security Bridge
+
+### ID_SERIALIZATION_MAP: the real central registry
+- 集中映射**不在** `dubbo-serialization-api`，而在 `dubbo-remoting/dubbo-remoting-api` 的 `CodecSupport`：`ID_SERIALIZATION_MAP`（`CodecSupport.java:45`，`Map<Byte, Serialization>`）。
+- 填充是 **SPI 动态扫描**而非硬编码静态块：静态初始化里用 `ExtensionLoader<Serialization>.getSupportedExtensions()` 遍历，以每个扩展的 `getContentTypeId()` 作 byte key 写入（`:56-71`）；反查入口 `getSerializationById(Byte)`（`:79-80`）。
+- 数值 ID 常量集中在 `dubbo-serialization-api/.../serialize/Constants.java:19-40`：hessian2=2、java=3、compactedjava=4、fastjson2=23、nativejava=7、kryo=8、fst=9、avro=11、protobuf-json=21、**protobuf=22**、gson=16、jackson=18、fury=28 等。
+
+> [!WARNING]
+> `Constants` 只定义 ID，主仓库（`f158588`）实际仅注册 `hessian2` 与 `fastjson2` 两个 `Serialization` SPI 扩展（`META-INF/dubbo/internal/...Serialization` 三份文件仅含 `hessian2=` / `fastjson2=` / `wrapper=`），其余实现在 `dubbo-spi-extensions`。配 `serialization=kryo` 等会报找不到扩展——见 Pitfall List 第 483 行。
+
+### protobuf 直通：3.x 已不是通用序列化
+- 主仓库 `dubbo-serialization/` 下**没有** `dubbo-serialization-protobuf` 子模块，全仓也无 `ProtobufSerialization` 实现类；`Constants.java:34` 的 `PROTOBUF_SERIALIZATION_ID=22` 只是遗留常量。
+- ⚠️ 旧认知「可配置 `serialization=protobuf` 走通用 ProtobufSerialization」在 3.3.6 **不成立**：protobuf 仅作 **Triple/gRPC 原生消息格式**，基于 `com.google.protobuf.MessageLite` 的 `parseFrom` / `writeTo` 直接序列化（`TripleRequestWrapper.parseFrom`、`PbUnpack` → `SingleProtobufUtils`），不经过 `Serialization` SPI 抽象。
+- `AbstractProtocol.optimizeSerialization`（`AbstractProtocol.java:151-184`）不是 hessian2/protobuf 选择器，而是 Kryo/FST 优化器（加载 `serialization.optimizer` 指定的 `SerializationOptimizer` 并 `SerializableClassRegistry.registerClass`），与 protobuf 直通无关。
+
+### fastjson2 and the shared STRICT state machine
+- fastjson2 实现为 `Fastjson2Serialization`（小写 j），content-type `text/jsonb`，ID=23，底层用 `com.alibaba.fastjson2.JSONB`。
+- 它有**独立**安全检查器 `Fastjson2SecurityManager`（`Fastjson2SecurityManager.java:38`），**不复用** hessian 的 `DefaultSerializeClassChecker`；但二者都**委托同一个共享状态机** `SerializeSecurityManager`（`SerializeSecurityManager.java:26`），并通过 `AllowClassNotifyListener` 同步 `STRICT/WARN/DISABLE` 状态与 allow/deny 前缀。
+- fastjson2 的 autotype 白名单走 fastjson2 原生 `ContextAutoTypeBeforeHandler`：`Handler` 继承它并以 `acceptNames`（allow 前缀）开启 autotype；`apply()` 中 `status==STRICT` 且类名不在前缀白名单即抛 `IllegalArgumentException`（`FastJson2SecurityManager.java:126-144`）；deny 侧同样 `typeName::startsWith`（`:169`）。
+- 因此「STRICT 状态机」对 hessian2 与 fastjson2 **统一生效**：任一处把状态抬到 STRICT，`Fastjson2SecurityManager` 与 `DefaultSerializeClassChecker` 都会拒绝白名单外的类。
+
+> [!NOTE]
+> 两个系统属性真实常量名为 `dubbo.security.serialize.allowedClassList` / `dubbo.security.serialize.blockedClassList`（非 `generic.allowlist`），由 `CommonConstants.java:750-753` 定义；是否进入 STRICT 由 `dubbo.security.serialize.blockAllClassExceptAllow=true` 或应用配置 `serializeCheckStatus=STRICT` 决定。allow/block 列表本质是**包前缀**匹配，见 Pitfall List 第 487 行修正。
+
 ## Pitfall List
 
 | 直觉/网传说法 | 源码实际 | 后果 |
@@ -484,7 +508,7 @@ private SerializerFactory createDefaultSerializerFactory(ClassLoader classLoader
 | 「安全检查默认 WARN」 | 默认 `STRICT`（`AllowClassNotifyListener.java:23`） | 新增 DTO 未被自动信任时线上直接反序列化失败 |
 | 配置 `serialize.check.status` / `serialize.checker` / `serialize.allowlist` | 这些 key 不存在 | 配置静默失效，策略以为生效实则没有 |
 | 类名 `SerializationSecurityManager` / `AllowClassChecker` | 真名 `DefaultSerializeClassChecker` / `SerializeSecurityManager` / `SerializeSecurityConfigurator` | 搜代码、写排查文档时找错类 |
-| 「allowlist 是 `java.*`、`javax.*` 这类包前缀」 | 是逐条类名文件 `security/serialize.allowlist` | 以为某些类默认放行，实际被 STRICT 拦截 |
+| 「allowlist 是逐条登记的精确类名文件」 | 实际是**包前缀匹配**（`SerializeSecurityManager` 用 `allowedPrefix` + `String::startsWith`，hessian 侧 `loadPrefix` 用滚动 FNV hash 逐前缀位命中），`security/serialize.allowlist` 写 `org.xxx.` 即整包放行，**并非逐条精确类名** | 以为要逐条登记类名，实际写包前缀即可整包信任 |
 | 「检查器无法定制放行业务类」 | `autoTrustSerializeClass` 自动信任接口签名类型，`allowedClassList` 可显式补充 | 不必要的 `DISABLE` 降级，留下安全口子 |
 | SPI 名 `hessian2` 即 Hessian 2.x 协议 | 实现基于 `org.apache.dubbo:hessian-lite:4.0.4`，content type 是 `x-application/hessian2`；`hessian4` 只是 Triple wrapper 层的换算名 | 协商日志看到 `hessian4` 误以为配置错了 |
 | 「`org.apache.dubbo.*` 也会被 STRICT 拦截」 | Hessian2 层固定放行（`Hessian2FactoryManager.java:90,119`） | 误判为安全配置问题 |

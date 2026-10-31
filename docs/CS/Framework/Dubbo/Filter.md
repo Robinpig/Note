@@ -564,6 +564,49 @@ public class ActiveLimitFilter implements Filter, Filter.Listener {
 
 
 
+## Two Chain Systems: Filter vs ClusterFilter
+
+Dubbo 3.x 里「Filter」不是一个扁平列表，而是**两套独立的扩展接口 + 两套独立的链构建点**。这是 2.x 用户最容易混淆的地方。
+
+### Two Interfaces
+
+| 接口 | 包路径 | SPI 配置文件 | 构建点 |
+|------|--------|--------------|--------|
+| `Filter` | `org.apache.dubbo.rpc.Filter`（`dubbo-rpc-api`） | `META-INF/dubbo/internal/org.apache.dubbo.rpc.Filter` | `ProtocolFilterWrapper`（已迁 `dubbo-cluster`） |
+| `ClusterFilter` | `org.apache.dubbo.rpc.cluster.filter.ClusterFilter`（`dubbo-rpc-api`） | `dubbo-cluster/.../org.apache.dubbo.rpc.Filter` | `AbstractCluster.buildClusterInvokerChain` |
+
+`ClusterFilter` 真实存在，定义为 `public interface ClusterFilter extends BaseFilter {}`（`dubbo-rpc-api/.../rpc/cluster/filter/ClusterFilter.java:24`）——它和 `Filter` 是**两个接口**，不是同一个。
+
+### Where Each Chain Is Built
+
+**`Filter` 链（业务拦截，最常用）**：在 `ProtocolFilterWrapper`（`org.apache.dubbo.rpc.cluster.filter.ProtocolFilterWrapper:36`，注意 3.3.6 已从 `dubbo-rpc-api` 迁到 `dubbo-cluster`）里构建，且**只在暴露/引用时构建一次，之后缓存复用，不每次请求重建**：
+
+```java
+// ProtocolFilterWrapper.java
+public <T> Exporter<T> export(Invoker<T> invoker) {                 // :53-58
+    return protocol.export(builder.buildInvokerChain(invoker, SERVICE_FILTER_KEY, CommonConstants.PROVIDER));
+}
+public <T> Invoker<T> refer(Class<T> type, URL url) {               // :72
+    return builder.buildInvokerChain(protocol.refer(type, url), REFERENCE_FILTER_KEY, CommonConstants.CONSUMER);
+}
+```
+
+**`ClusterFilter` 链（集群层拦截，如路由前/后的钩子）**：在 `AbstractCluster` 里、把 `ClusterInvoker` 包成 `ClusterFilterInvoker` 时构建（`AbstractCluster.java:92` 调 `builder.buildClusterInvokerChain(...)`），位于 Cluster 决策（选 Invoker、负载均衡、容错）**之前/之后**，不在业务 Invoker 的逐请求调用栈里。
+
+两条链的排序规则相同：`DefaultFilterChainBuilder.buildInvokerChain`（`:44`）用 `for (int i = filters.size() - 1; i >= 0; i--)`（`:68`）**逆序**包裹 `CopyOfFilterChainNode`（`:71`）——即 `@Activate(order=最小)` 的 Filter 成为链头（第一个 `invoke`），也是最后一个 `onResponse` 退出。
+
+### Built-in Filter group / order（已逐一核实 @Activate）
+
+| Filter | 文件 | @Activate |
+|--------|------|-----------|
+| `ContextFilter` | `dubbo-rpc-api/.../rpc/filter/ContextFilter.java:63` | `group = PROVIDER, order = Integer.MIN_VALUE` → **链头**，负责 RpcContext 装配 |
+| `ActiveLimitFilter` | `.../rpc/filter/ActiveLimitFilter.java:45` | `group = CONSUMER, value = ACTIVES_KEY` → **消费端**并发（`actives`） |
+| `ExecuteLimitFilter` | `.../rpc/filter/ExecuteLimitFilter.java:40` | `group = CommonConstants.PROVIDER, value = EXECUTES_KEY` → **服务端**并发（`executes`） |
+
+> [!WARNING]
+> `actives` 与 `executes` 的 group 不对称是高频踩坑点：**`actives` 在消费端（`ActiveLimitFilter` group=CONSUMER），`executes` 在服务端（`ExecuteLimitFilter` group=PROVIDER）**。网上「Provider 侧配 `actives` 限流」是错的——Provider 没有 `actives`，服务端并发上限是 `executes`（见 [ThreadPool](#threadpool-four-implementations-and-default-parameters) 的 `ExecuteLimitFilter` 落地）。
+
+
 ## Custom Filter
 
 自定义 Filter **不存在「默认在内置之后」这条规则**，真实规则只有一条：**按 `@Activate` 的 `order` 升序排**（见 [order 排序机制](#order-排序机制)）。

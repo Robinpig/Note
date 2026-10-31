@@ -390,6 +390,53 @@ public static boolean needWrap(MethodDescriptor methodDescriptor, Class<?>[] par
 
 `RpcInvocation` 还实现了 `addInvokedInvoker` / `getInvokedInvokers`（`Invocation.java:173-181`），用于 Cluster 重试时记录已试过的 Invoker，目前**仅消费侧**使用。
 
+## RpcInvocation Object Body (P2 blind spots)
+
+### Full field table (dubbo-rpc-api `RpcInvocation`)
+`RpcInvocation` 直接 `implements Invocation`，**没有** `AbstractInvocation` 基类；共 19 个字段（含 1 个 lock），**没有** `invocationId` / `id` 字段，也没有 `sentinel`，唯一锁是 `attachmentLock`（`ReentrantLock`）。
+
+| 字段 | 类型 | transient | 含义 |
+| :--- | :--- | :--- | :--- |
+| `targetServiceUniqueName` | `String` | 否 | 目标服务唯一名 |
+| `protocolServiceKey` | `String` | 否 | 协议级 service key |
+| `serviceModel` | `ServiceModel` | 否 | 服务模型元数据 |
+| `methodName` | `String` | 否 | 方法名 |
+| `interfaceName` | `String` | 否 | 接口名（= `getServiceName()`） |
+| `parameterTypes` | `Class<?>[]` | **是** | 参数类型数组（不跨网，跨网用 desc） |
+| `parameterTypesDesc` | `String` | 否 | 参数类型描述串，序列化用 |
+| `compatibleParamSignatures` | `String[]` | 否 | 兼容参数签名 |
+| `arguments` | `Object[]` | 否 | 方法实参 |
+| `attachments` | `Map<String, Object>` | 否 | 跨网络透传 KV |
+| `attachmentLock` | `Lock` | **是** | 附件并发锁 |
+| `attributes` | `Map<Object, Object>` | **是** | 进程内调用链上下文，**不序列化** |
+| `invoker` | `Invoker<?>` | **是** | 当前 invoker（见下） |
+| `returnType` | `Class<?>` | **是** | 返回值类型 |
+| `returnTypes` | `Type[]` | **是** | 泛型返回值类型 |
+| `invokeMode` | `InvokeMode` | **是** | 调用模式（SYNC/ASYNC/FUTURE） |
+| `invokedInvokers` | `List<Invoker<?>>` | **是** | 已调用 invoker 列表（Cluster 重试用） |
+
+注：`parameterTypes` 是 `transient`，真正跨网络的是 `parameterTypesDesc`（字符串描述，`initParameterDesc()` `:463-493`）。
+
+### Pitfall: `attachments` is STILL `Map<String, Object>` in 3.x
+⚠️ 不要以为 3.x 把 `attachments` 收紧成了 `Map<String, String>`。字段始终是 `Map<String, Object>`（`RpcInvocation.java:80`）；`Map<String, String>` **只出现在 `@Deprecated` 兼容接口**与 `AttachmentsAdapter.ObjectToStringMap` 视图里。
+- 规范的 Object 路径 API **未废弃**：`getObjectAttachments()`（`:603`）、`setObjectAttachment(String, Object)`（`:684`）、`addObjectAttachments(Map<String, Object>)`（`:737`）、`getObjectAttachment(String)`（`:790`）。
+- `Map<String, String>` 仅见于废弃适配：`getAttachments()`（`:654`，包成 `AttachmentsAdapter.ObjectToStringMap`）、`setAttachments(Map<String,String>)`（`:668`）、`addAttachments(Map<String,String>)`（`:721`）。
+- 新代码用 `getObjectAttachment` / `setObjectAttachment`；避免废弃的 `getAttachment(String)`。
+
+### Pitfall: `attributes` vs `attachments`
+- `attachments`（`Map<String, Object>`）是跨网络透传 KV，经 `readAttachments()` / `writeAttachments()` 序列化（`DecodeableRpcInvocation.java:182-184`）。
+- `attributes`（`Map<Object, Object>`）是 **`transient`**，源码注释明确「Only used on the caller side, will not appear on the wire」（`RpcInvocation.java:84-87`）——它是进程内单次调用链上下文，**从不序列化**。不要把它当透传通道。
+
+### Pitfall: invocation id is NOT a field
+⚠️ 没有 `invocationId` / `id` 字段。id 以 `ID_KEY` 为 key 存于 `attachments`：
+- 读取：`RpcUtils.getInvocationId(Invocation)` → `inv.getAttachment(ID_KEY)`（`RpcUtils.java:108`）。
+- 生成：`RpcUtils.attachInvocationIdIfAsync()` 用模块级静态 `AtomicLong`（`RpcUtils.java:56,119-121`）。
+
+### Request/Response correspondence
+- 请求 = `RpcInvocation`（实现 `Invocation`）。
+- 响应 = `Result` 接口（`Result.java:46`），两个实现：`AppResponse`（`:54`，具体结果）与 `AsyncRpcResult`（`:54`，异步包装，实现 `CompletionStage<AppResponse>`）。
+- `RpcContext` 通过 `InternalThreadLocal` `SERVICE_CONTEXT` 绑定当前 invocation（`RpcContext.java:90-91`，`setInvocation` `:746`）；注意 `getInvocation()` 自身已 `@Deprecated`（`:741`）。
+
 ## Pitfall List
 
 | 直觉写法 | 源码实际 | 后果 |
