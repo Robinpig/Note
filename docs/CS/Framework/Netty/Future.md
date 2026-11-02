@@ -313,6 +313,15 @@ protected void checkDeadLock() {
 
 
 
+### await / sync 与中断、超时
+
+实现要点（源码：DefaultPromise.java:253、:308、:418、:691）：
+
+- `await()`：进入等待前先 `checkDeadLock()`（在 EventLoop 线程内 await 会抛 `BlockingOperationException`，防死锁）；若调用前 `Thread.interrupted()` 已置位，或等待期间被中断，直接抛 `InterruptedException`。
+- `awaitUninterruptibly()`：捕获 `InterruptedException` 后**吞掉并恢复中断标志**（`Thread.currentThread().interrupt()`），不向外抛。
+- 带超时重载走 `await0(timeoutNanos, interruptable)`：用 `wait(timeoutMs, nanos)` 自旋，超时返回 `isDone()`；不可中断版把 `InterruptedException` 转成 `InternalError`（按设计不会真正抛出）。
+- `sync()` / `syncUninterruptibly()` = `await()` + `rethrowIfFailed()`；失败时通过 `PlatformDependent.throwException(cause)` 重新抛出（`CancellationException` 等取消态同样触发），同步写流程应 `try { f.sync(); } catch (...)` 兜底。
+
 DefaultPromise#addListener
 
 ```java
@@ -340,30 +349,6 @@ private void addListener0(GenericFutureListener<? extends Future<? super V>> lis
         listeners = new DefaultFutureListeners((GenericFutureListener<?>) listeners, listener);
     }
 }
-
-private void notifyListeners() {
-    EventExecutor executor = executor();
-    if (executor.inEventLoop()) {
-        final InternalThreadLocalMap threadLocals = InternalThreadLocalMap.get();
-        final int stackDepth = threadLocals.futureListenerStackDepth();
-        if (stackDepth < MAX_LISTENER_STACK_DEPTH) {
-            threadLocals.setFutureListenerStackDepth(stackDepth + 1);
-            try {
-                notifyListenersNow();
-            } finally {
-                threadLocals.setFutureListenerStackDepth(stackDepth);
-            }
-            return;
-        }
-    }
-
-    safeExecute(executor, new Runnable() {
-        @Override
-        public void run() {
-            notifyListenersNow();
-        }
-    });
-}
 ```
 
 
@@ -373,10 +358,11 @@ private void notifyListeners() {
 `DefaultPromise` 的结果落在一个 `Object result` 字段上，用三个哨兵对象区分终态：
 
 ```java
+// 源码：common/src/main/java/io/netty/util/concurrent/DefaultPromise.java:57
 private static final Object SUCCESS = new Object();
 private static final Object UNCANCELLABLE = new Object();
 private static final CauseHolder CANCELLATION_CAUSE_HOLDER = new CauseHolder(
-        ThrowableUtil.unknownStackTrace(new CancellationException(), DefaultPromise.class, "cancel(...)"));
+        StacklessCancellationException.newInstance(DefaultPromise.class, "cancel(...)"));
 
 private volatile Object result;
 ```
@@ -443,6 +429,30 @@ private void notifyListeners() {
 ```
 
 `MAX_LISTENER_STACK_DEPTH = 8`：监听器里再触发下一个 promise 完成时，递归深度超过 8 就改为投递到 executor 异步执行，防止栈溢出。
+
+### Listener 通知线程模型
+
+监听器**始终在 EventLoop 线程上执行**回调（`GenericFutureListener.operationComplete(Future)` 签名见 `common/src/main/java/io/netty/util/concurrent/GenericFutureListener.java:30`），触发位置由 `notifyListeners()` 决定（源码：DefaultPromise.java:498）：
+
+- 若完成 promise 的线程本身就是该 EventLoop 线程（`executor.inEventLoop()` 为真）且递归深度未超 `MAX_LISTENER_STACK_DEPTH`，`notifyListenersNow()` **直接在内联（EventLoop）线程执行**；
+- 否则通过 `safeExecute(executor, ...)` 把回调包成 task 提交到 `executor`（即 EventLoop）执行。
+
+`notifyListener0`（源码：DefaultPromise.java:602）调用 `listener.operationComplete(future)` 时**吞掉异常**——仅以 WARN 日志打印，不向后续监听器传播、也不中断其余监听器的通知：
+
+```java
+private static void notifyListener0(Future future, GenericFutureListener l) {
+    try {
+        l.operationComplete(future);
+    } catch (Throwable t) {
+        if (logger.isWarnEnabled()) {
+            logger.warn("An exception was thrown by " + l.getClass().getName() + ".operationComplete()", t);
+        }
+    }
+}
+```
+
+> [!TIP]
+> 呼应 [Netty](/docs/CS/Framework/Netty/Netty.md?id=pitfalls) 的「忽略 ChannelFuture 失败」：写操作返回的 `ChannelFuture` 若只调用 `write()` 而不 `addListener`，失败只留在 `cause()` 里——对端已关闭时错误静默消失。务必 `addListener` 或在 `sync()` 后用 `cause()` 判断。
 
 ## DefaultChannelPromise
 

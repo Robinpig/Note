@@ -619,7 +619,7 @@ private void startMetadataCenter() {
 
 ## Retry and Periodic Refresh of Reporting
 
-上报默认异步（`AbstractMetadataReport.storeProviderMetadata`，`:289-296`）：`syncReport=false` 时走单线程池 `reportCacheExecutor`（`DubboSaveMetadataReport`），`true` 时在调用线程同步执行。
+上报默认异步（`AbstractMetadataReport.storeProviderMetadata`，`:289-296`）：`syncReport=false` 时走单线程池 `reportCacheExecutor`（线程名 `DubboSaveMetadataReport`，来自 `NamedThreadFactory`，`AbstractMetadataReport.java:97`——**是线程名不是类名**，按类名搜会一无所获），`true` 时在调用线程同步执行。
 
 三个配置项的默认值在 `support/Constants.java:20-30`：
 

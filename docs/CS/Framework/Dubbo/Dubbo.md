@@ -72,7 +72,7 @@ Dubbo 从设计上**不绑定任何一款特定通信协议**，HTTP/2、REST、
 
 Dubbo 3 的能力可以按「一次调用经过哪些环节」串起来阅读，也可以按「你要解决什么问题」直接定位。
 
-**先看模型与启动。** 十层分层与五个核心抽象见 [Architecture](/docs/CS/Framework/Dubbo/Architecture.md)；三层域模型决定了扩展实例归属谁，见 [ScopeModel](/docs/CS/Framework/Dubbo/ScopeModel.md)；配置对象的字段与默认值见 [ServiceConfig](/docs/CS/Framework/Dubbo/ServiceConfig.md)，配置来源的七档优先级见 [config](/docs/CS/Framework/Dubbo/config.md)；从 `DubboBootstrap` 到服务暴露与引用的完整时序见 [Start](/docs/CS/Framework/Dubbo/Start.md)；所有这一切的装配机制是 [SPI](/docs/CS/Framework/Dubbo/SPI.md)。
+**先看模型与启动。** 十层分层与五个核心抽象见 [Architecture](/docs/CS/Framework/Dubbo/Architecture.md)；三层域模型决定了扩展实例归属谁，见 [ScopeModel](/docs/CS/Framework/Dubbo/ScopeModel.md)；配置对象的字段与默认值见 [ServiceConfig](/docs/CS/Framework/Dubbo/ServiceConfig.md)，配置来源的七档优先级见 [config](/docs/CS/Framework/Dubbo/config.md)，配置中心的客户端实现与动态推送见 [ConfigCenter](/docs/CS/Framework/Dubbo/ConfigCenter.md)；从 `DubboBootstrap` 到服务暴露与引用的完整时序见 [Start](/docs/CS/Framework/Dubbo/Start.md)；所有这一切的装配机制是 [SPI](/docs/CS/Framework/Dubbo/SPI.md)。
 
 **再看协议与传输。** Dubbo 协议的 16 字节报文格式、`Codec2` 体系与超时机制见 [Protocol](/docs/CS/Framework/Dubbo/Protocol.md)；Triple 协议的设计与 gRPC 兼容边界见 [Triple](/docs/CS/Framework/Dubbo/Triple.md)；序列化实现与 Hessian2 反序列化安全见 [Serialization](/docs/CS/Framework/Dubbo/Serialization.md)；remoting 抽象见 [remoting](/docs/CS/Framework/Dubbo/remoting.md)，Netty 服务端生命周期见 [Transporter](/docs/CS/Framework/Dubbo/Transporter.md)，线程模型与线程池默认值见 [ThreadPool](/docs/CS/Framework/Dubbo/ThreadPool.md)。
 

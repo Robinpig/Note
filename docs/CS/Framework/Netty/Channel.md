@@ -116,6 +116,17 @@ public interface Channel extends AttributeMap, ChannelOutboundInvoker, Comparabl
 
 
 
+### AbstractChannel
+
+`AbstractChannel` 是全部 Channel 实现的基类，内部持有以下核心字段（源码 transport/src/main/java/io/netty/channel/AbstractChannel.java:45-54、:48、:117-118）：
+
+- `parent`（`Channel`）：父 Channel。服务端 `NioServerSocketChannel` 的 `parent` 为 `null`；其 `accept` 出的 `NioSocketChannel` 的 `parent` 即该服务端 Channel。
+- `unsafe`（`Unsafe`）：`AbstractUnsafe` 实例，`register`/`close`/`bind`/`connect`/`read`/`write`/`flush` 等真正落地操作都委托给它。
+- `pipeline`（`DefaultChannelPipeline`）：构造时通过 `newChannelPipeline()` 创建，每个 Channel 绑定一条独立 pipeline。
+- `eventLoop`（`volatile EventLoop`）：在 `register()` 时赋值，一个 Channel 仅绑定一个 EventLoop 线程。
+
+`config()` 为抽象方法（本身无 `config` 字段），由具体子类提供 `ChannelConfig` 实例，`setAutoRead(boolean)`、`writeBufferWaterMark` 等配置都经由它下发给底层（见下方 `## ChannelConfig`）。`AbstractChannel` 的关键动作（如 `register0` → `doRegister` → `fireChannelRegistered` → `doBeginRead`）正是围绕上述字段在 `AbstractUnsafe` 中完成。
+
 Channel 会有多种状态，如**连接建立、连接注册、数据读写、连接销毁**等。随着状态的变化，Channel 处于不同的生命周期，每一种状态都会绑定相应的事件回调
 
 
@@ -378,32 +389,28 @@ private void register0(ChannelPromise promise) {
 
 #### doRegister
 
-register() 的第三个入参传入的是 `this`, 即 Netty 自己实现的 Channel 对象，调用 register() 方法会将它绑定在 JDK 底层 Channel 的 attachment 上
-这样在每次 Selector 对象进行事件循环时，Netty 都可以从返回的 JDK 底层 Channel 中获得自己的 Channel 对象
+register() 将当前 Netty 的 Channel（`this`）作为 attachment 绑定到底层 Channel 上，从而每次 Selector 事件循环时能从返回的底层 Channel 取回自己的 Channel 对象。
+
+> [!WARNING]
+> **4.2 模型变更**：4.2 起注册不再直接调用 `javaChannel().register(eventLoop().unwrappedSelector(), 0, this)`（4.1 写法，已移除），而是委托给 `IoEventLoop`，由它底层的 `IoHandler`（如 `NioIoHandler`）把 `SelectableChannel` 注册到自己的 `Selector` 上，并返回 `IoRegistration`（包装 `SelectionKey`）。
 
 ```java
-//AbstractNioChannel#doRegister()
-protected void doRegister() throws Exception {
-    boolean selected = false;
-    for (;;) {
-        try {
-            selectionKey = javaChannel().register(eventLoop().unwrappedSelector(), 0, this);
-            return;
-        } catch (CancelledKeyException e) {
-            if (!selected) {
-                // Force the Selector to select now as the "canceled" SelectionKey may still be
-                // cached and not removed because no Select.select(..) operation was called yet.
-                eventLoop().selectNow();
-                selected = true;
-            } else {
-                // We forced a select operation on the selector before but the SelectionKey is still cached
-                // for whatever reason. JDK bug ?
-                throw e;
-            }
+// AbstractNioChannel#doRegister() —— 4.2.19 实际实现
+@Override
+protected void doRegister(ChannelPromise promise) {
+    assert registration == null;
+    ((IoEventLoop) eventLoop()).register((AbstractNioUnsafe) unsafe()).addListener(f -> {
+        if (f.isSuccess()) {
+            registration = (IoRegistration) f.getNow();   // 持有 IoRegistration，后续 doBeginRead 通过它更新 interestOps
+            promise.setSuccess();
+        } else {
+            promise.setFailure(f.cause());
         }
-    }
+    });
 }
 ```
+
+源码：transport/src/main/java/io/netty/channel/nio/AbstractNioChannel.java:456-473。与 4.1 相比，`selectionKey` 不再是 `AbstractNioChannel` 直接持有的字段，而是被封装进 `IoRegistration`，由 `NioIoHandler` 管理。
 
 ### close
 
@@ -515,9 +522,9 @@ protected void doClose() throws Exception {
 
 ### beginRead
 
-call `SelectionKey.interestOps()`
+call `SelectionKey.interestOps()`（4.2 经由 `IoRegistration` 提交）
 
-readInterestOp 参数就是在前面初始化 Channel 所传入的 SelectionKey.OP_ACCEPT 事件，所以 OP_ACCEPT 事件会被注册到 Channel 的事件集合中
+4.2 中构造 Channel 时传入的 interest op 由 `NioIoOps readOps` 字段保存（4.1 的 `int readInterestOp` 已改为 `NioIoOps`），`doBeginRead()` 通过 `addAndSubmit(readOps)` 向 `IoRegistration` 提交，间接更新 `SelectionKey` 的 interest ops（注册 OP_ACCEPT / OP_READ 等事件）。
 
 ```java
 @Override
@@ -541,22 +548,28 @@ public final void beginRead() {
     }
 }
 
+// AbstractNioChannel#doBeginRead() —— 4.2.19 实际实现
 @Override
 protected void doBeginRead() throws Exception {
-    // Channel.read() or ChannelHandlerContext.read() was called
-    final SelectionKey selectionKey = this.selectionKey;
-    if (!selectionKey.isValid()) {
+    IoRegistration registration = this.registration;
+    if (registration == null || !registration.isValid()) {
         return;
     }
 
     readPending = true;
+    addAndSubmit(readOps);   // readOps 即构造时传入的 NioIoOps（如 OP_ACCEPT / OP_READ）
+}
 
-    final int interestOps = selectionKey.interestOps();
-    if ((interestOps & readInterestOp) == 0) {
-        selectionKey.interestOps(interestOps | readInterestOp);
+// AbstractNioChannel#addAndSubmit()
+protected void addAndSubmit(NioIoOps addOps) {
+    int interestOps = selectionKey().interestOps();
+    if (!addOps.isIncludedIn(interestOps)) {
+        registration().submit(NioIoOps.valueOf(interestOps).with(addOps));
     }
 }
 ```
+
+源码：transport/src/main/java/io/netty/channel/nio/AbstractNioChannel.java:484-495（doBeginRead）、:108-117（addAndSubmit）。`addAndSubmit` 内部通过 `registration().submit(...)` 把新的 interest ops 提交给 `NioIoHandler` 维护的 `SelectionKey`。
 
 
 

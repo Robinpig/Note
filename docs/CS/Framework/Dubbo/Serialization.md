@@ -97,7 +97,7 @@ public interface Serialization {
 
 ### wrapper Extension: Exception Wrapper
 
-注册清单里的 `wrapper=` 条目值得单独说明。`DefaultSerializationExceptionWrapper` 是一个装饰器，它在反序列化抛出异常时，把底层 IO 异常统一包装成 Dubbo 语义的 `SerializeException`（带 `isSerializationException` 标记），使上层能把「序列化本身出错」与「网络断开」区分开——前者应提示客户端检查类型与安全配置，后者应走重连逻辑。Dubbo SPI 的 wrapper 机制（命名以 `wrapper` 开头自动包裹所有实现）保证了这一层对所有序列化实现透明生效。
+注册清单里的 `wrapper=` 条目值得单独说明。`DefaultSerializationExceptionWrapper` 是一个装饰器，它在反序列化抛出异常时，把底层 IO 异常统一包装成 Dubbo 语义的 `SerializationException`（`dubbo-serialization-api/.../SerializationException.java`，带 `isSerializationException` 标记；注意不是 `SerializeException`，后者在源码中无定义），使上层能把「序列化本身出错」与「网络断开」区分开——前者应提示客户端检查类型与安全配置，后者应走重连逻辑。Dubbo SPI 的 wrapper 机制（命名以 `wrapper` 开头自动包裹所有实现）保证了这一层对所有序列化实现透明生效。
 
 ## Default Values and Priority
 
@@ -492,9 +492,9 @@ private SerializerFactory createDefaultSerializerFactory(ClassLoader classLoader
 - `AbstractProtocol.optimizeSerialization`（`AbstractProtocol.java:151-184`）不是 hessian2/protobuf 选择器，而是 Kryo/FST 优化器（加载 `serialization.optimizer` 指定的 `SerializationOptimizer` 并 `SerializableClassRegistry.registerClass`），与 protobuf 直通无关。
 
 ### fastjson2 and the shared STRICT state machine
-- fastjson2 实现为 `Fastjson2Serialization`（小写 j），content-type `text/jsonb`，ID=23，底层用 `com.alibaba.fastjson2.JSONB`。
+- fastjson2 实现为 `FastJson2Serialization`（**大写 J**），content-type `text/jsonb`，ID=23，底层用 `com.alibaba.fastjson2.JSONB`。
 - 它有**独立**安全检查器 `Fastjson2SecurityManager`（`Fastjson2SecurityManager.java:38`），**不复用** hessian 的 `DefaultSerializeClassChecker`；但二者都**委托同一个共享状态机** `SerializeSecurityManager`（`SerializeSecurityManager.java:26`），并通过 `AllowClassNotifyListener` 同步 `STRICT/WARN/DISABLE` 状态与 allow/deny 前缀。
-- fastjson2 的 autotype 白名单走 fastjson2 原生 `ContextAutoTypeBeforeHandler`：`Handler` 继承它并以 `acceptNames`（allow 前缀）开启 autotype；`apply()` 中 `status==STRICT` 且类名不在前缀白名单即抛 `IllegalArgumentException`（`FastJson2SecurityManager.java:126-144`）；deny 侧同样 `typeName::startsWith`（`:169`）。
+- fastjson2 的 autotype 白名单走 fastjson2 原生 `ContextAutoTypeBeforeHandler`：`Handler` 继承它并以 `acceptNames`（allow 前缀）开启 autotype；`apply()` 中 `status==STRICT` 且类名不在前缀白名单即抛 `IllegalArgumentException`（`Fastjson2SecurityManager.java:126-144`）；deny 侧同样 `typeName::startsWith`（`:169`）。
 - 因此「STRICT 状态机」对 hessian2 与 fastjson2 **统一生效**：任一处把状态抬到 STRICT，`Fastjson2SecurityManager` 与 `DefaultSerializeClassChecker` 都会拒绝白名单外的类。
 
 > [!NOTE]

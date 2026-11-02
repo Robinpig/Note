@@ -618,6 +618,7 @@ if opts.GetOnFailure {
 ## Links
 
 - [K8s 架构与四条主链路](/docs/CS/Container/k8s/Architecture.md)
+- [APF](/docs/CS/Container/k8s/APF.md)
 - [watch cache 读路径底座](/docs/CS/Container/k8s/WatchCache.md)
 - [访问控制](/docs/CS/Container/k8s/acl.md)
 - [etcd 存储](/docs/CS/Container/k8s/etcd.md)

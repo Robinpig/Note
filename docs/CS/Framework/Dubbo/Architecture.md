@@ -77,7 +77,7 @@ Fig.1. Ten-Layer Code Architecture
 
 | 十层归属 | SPI 接口（包路径） | `@SPI` 默认 | 核心方法 | 典型实现类 |
 | :--- | :--- | :--- | :--- | :--- |
-| Proxy | `org.apache.dubbo.rpc.ProxyFactory`（`dubbo-rpc-api`） | `"javassist"`（`scope=FRAMEWORK`） | `getProxy(Invoker)` / `getInvoker(proxy,type,url)` | `JavassistProxyFactory`、`ByteBuddyProxyFactory` |
+| Proxy | `org.apache.dubbo.rpc.ProxyFactory`（`dubbo-rpc-api`） | `"javassist"`（`scope=FRAMEWORK`） | `getProxy(Invoker)` / `getInvoker(proxy,type,url)` | `JavassistProxyFactory`、`JdkProxyFactory`（**无 `ByteBuddyProxyFactory`**：SPI 文件只有 `javassist` / `jdk` / `stub` / `nativestub` / `mockproxyfactory` / `testproxyfactory`） |
 | Registry | `org.apache.dubbo.registry.RegistryFactory`（`dubbo-registry-api`） | 无默认（`scope=APPLICATION`） | `getRegistry(URL)` | `NacosRegistryFactory`、`ZookeeperRegistryFactory` |
 | Cluster | `org.apache.dubbo.rpc.cluster.Cluster`（`dubbo-cluster`） | `Cluster.DEFAULT` = `"failover"` | `<T> Invoker<T> join(Directory<T>, boolean)` | `FailoverCluster`、`FailfastCluster`、`FailsafeCluster` |
 | Router | `org.apache.dubbo.rpc.cluster.router.state.StateRouter`（`dubbo-cluster`） | 经 `StateRouterFactory` 激活 | `BitList<Invoker<T>> route(BitList, URL, Invocation, boolean, Holder)` | `MeshRuleRouter`、`ConditionStateRouter`（3.3.6 的路由全改名 `*StateRouter`，无 `ConditionRouter`） |
@@ -85,7 +85,7 @@ Fig.1. Ten-Layer Code Architecture
 | Protocol | `org.apache.dubbo.rpc.Protocol`（`dubbo-rpc-api`） | `"dubbo"`（`scope=FRAMEWORK`） | `<T> Exporter<T> export(Invoker<T>)` / `<T> Invoker<T> refer(Class, URL)` | `DubboProtocol`、`TripleProtocol` |
 | Exchange | `org.apache.dubbo.remoting.exchange.Exchanger`（`dubbo-remoting-api`） | `HeaderExchanger.NAME` = `"header"`（`scope=FRAMEWORK`） | `ExchangeServer bind(URL, ExchangeHandler)` / `ExchangeClient connect(...)` | `HeaderExchanger` |
 | Transport | `org.apache.dubbo.remoting.Transporter`（`dubbo-remoting-api`） | `"netty"`（`scope=FRAMEWORK`） | `RemotingServer bind(URL, ChannelHandler)` / `Client connect(...)` | `NettyTransporter`（3.3.6 主仓库仅 netty4，无 Mina/Grizzly） |
-| Serialize | `org.apache.dubbo.common.serialize.Serialization`（`dubbo-serialization-api`） | 无默认（`scope=FRAMEWORK`） | `ObjectOutput serialize(URL, OutputStream)` / `ObjectInput deserialize(URL, InputStream)` | 主仓库仅 `Hessian2Serialization`、`Fastjson2Serialization` |
+| Serialize | `org.apache.dubbo.common.serialize.Serialization`（`dubbo-serialization-api`） | 无默认（`scope=FRAMEWORK`） | `ObjectOutput serialize(URL, OutputStream)` / `ObjectInput deserialize(URL, InputStream)` | 主仓库仅 `Hessian2Serialization`、`FastJson2Serialization`（**大写 J**） |
 | Compiler | `org.apache.dubbo.common.compiler.Compiler`（`dubbo-common`） | `"javassist"`（`scope=FRAMEWORK`） | `Class<?> compile(Class, String, ClassLoader)` | `JavassistCompiler`、`JdkCompiler` |
 | Logger | `org.apache.dubbo.common.logger.Logger` 由 `LoggerAdapter` SPI 产出（`dubbo-common`） | `LoggerAdapter` 默认 `"slf4j"` | `info/warn/error(...)` 等 | `Slf4jLogger`、`Log4j2Logger`、`JdkLogger` |
 

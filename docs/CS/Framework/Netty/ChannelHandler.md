@@ -527,6 +527,48 @@ public final void channelRegistered(ChannelHandlerContext ctx) throws Exception 
 }
 ```
 
+### ChannelHandlerMask
+
+每个 `ChannelHandler` 在加入 pipeline 时都会通过 `ChannelHandlerMask.mask(clazz)` 计算一个 `executionMask`（缓存于 `FastThreadLocal<WeakHashMap>`），用于快速判定该 handler 是否会处理某一类事件。`mask0()` 的算法是：初始 `mask = MASK_EXCEPTION_CAUGHT`；若实现 `ChannelInboundHandler` 则 `|= MASK_ALL_INBOUND`，若实现 `ChannelOutboundHandler` 则 `|= MASK_ALL_OUTBOUND`；随后对每个方法判断是否带 `@Skip` 注解（`isSkippable`），带则清掉对应位（`@Skip` 只能用于「只转发、什么都不做」的方法，且不被继承）。
+
+源码：transport/src/main/java/io/netty/channel/ChannelHandlerMask.java:39-63（常量）、:76-164（mask/mask0）。
+
+| 常量 | 值 | 对应事件 |
+| --- | --- | --- |
+| `MASK_EXCEPTION_CAUGHT` | `1` (`1 << 0`) | exceptionCaught |
+| `MASK_CHANNEL_REGISTERED` | `1 << 1` | channelRegistered |
+| `MASK_CHANNEL_UNREGISTERED` | `1 << 2` | channelUnregistered |
+| `MASK_CHANNEL_ACTIVE` | `1 << 3` | channelActive |
+| `MASK_CHANNEL_INACTIVE` | `1 << 4` | channelInactive |
+| `MASK_CHANNEL_READ` | `1 << 5` | channelRead |
+| `MASK_CHANNEL_READ_COMPLETE` | `1 << 6` | channelReadComplete |
+| `MASK_USER_EVENT_TRIGGERED` | `1 << 7` | userEventTriggered |
+| `MASK_CHANNEL_WRITABILITY_CHANGED` | `1 << 8` | channelWritabilityChanged |
+| `MASK_BIND` | `1 << 9` | bind |
+| `MASK_CONNECT` | `1 << 10` | connect |
+| `MASK_DISCONNECT` | `1 << 11` | disconnect |
+| `MASK_CLOSE` | `1 << 12` | close |
+| `MASK_DEREGISTER` | `1 << 13` | deregister |
+| `MASK_READ` | `1 << 14` | read（outbound 请求） |
+| `MASK_WRITE` | `1 << 15` | write |
+| `MASK_FLUSH` | `1 << 16` | flush |
+
+入站 / 出站的组合掩码（源码 ChannelHandlerMask.java:57-63）：
+
+```java
+static final int MASK_ONLY_INBOUND =  MASK_CHANNEL_REGISTERED |
+        MASK_CHANNEL_UNREGISTERED | MASK_CHANNEL_ACTIVE | MASK_CHANNEL_INACTIVE | MASK_CHANNEL_READ |
+        MASK_CHANNEL_READ_COMPLETE | MASK_USER_EVENT_TRIGGERED | MASK_CHANNEL_WRITABILITY_CHANGED;
+private static final int MASK_ALL_INBOUND = MASK_EXCEPTION_CAUGHT | MASK_ONLY_INBOUND;
+
+static final int MASK_ONLY_OUTBOUND =  MASK_BIND | MASK_CONNECT | MASK_DISCONNECT |
+        MASK_CLOSE | MASK_DEREGISTER | MASK_READ | MASK_WRITE | MASK_FLUSH;
+private static final int MASK_ALL_OUTBOUND = MASK_EXCEPTION_CAUGHT | MASK_ONLY_OUTBOUND;
+```
+
+> [!TIP]
+> `MASK_READ`/`MASK_WRITE`/`MASK_FLUSH`（位 14/15/16）属于出站掩码 `MASK_ONLY_OUTBOUND`，因为 `Channel.read()`/`write()`/`flush()` 本质是「请求底层执行」的出站操作。`MASK_EXCEPTION_CAUGHT` 同时包含在 `MASK_ALL_INBOUND` 与 `MASK_ALL_OUTBOUND` 中，因此 `exceptionCaught` 既能在入站链上向后传播，也能被出站 handler 处理。
+
 ### inbound
 
 from head -> tail
@@ -611,7 +653,16 @@ private static boolean skipContext(
     //
     // See https://github.com/netty/netty/issues/10067
     (ctx.executor() == currentExecutor && (ctx.executionMask & mask) == 0);
-}
+  }
+
+`skipContext` 返回 `true` 表示「应跳过该 ctx」，其逻辑等价于两个条件的「或」：
+
+1. `(executionMask & (onlyMask | mask)) == 0`：该 handler 连这一大类事件都不具备执行资格（比如纯 outbound handler 对 inbound 事件），无论 executor 是否相同直接跳过；
+2. `executor == currentExecutor && (executionMask & mask) == 0`：处于**同一** `EventExecutor` 且该**具体事件位**为 0（方法被 `@Skip` 或不属于该接口实现），可安全跳过。
+
+若 handler 处于**不同** executor 且具体事件位为 0，则条件 1 可能为 `false`（它还有别的 inbound 位）、条件 2 为 `false`（executor 不同），`skipContext` 返回 `false` → 必须 `invoke` 该 ctx（即便方法被 `@Skip` 也只做转发），以跨 executor 保证事件顺序（issue #10067）。
+
+`findContextInbound` 从当前 ctx 沿 `next` 向后（朝 Tail）移动、`findContextOutbound` 沿 `prev` 向前（朝 Head）移动，二者都靠 `skipContext` 过滤出下一个真正会处理事件的 handler，因此天然形成了 **inbound: Head → Tail、outbound: Tail → Head** 的传递方向（源码 transport/src/main/java/io/netty/channel/AbstractChannelHandlerContext.java:927-954）。
 ```
 
 #### HeadContext
@@ -831,7 +882,35 @@ public class DefaultChannelPipeline implements ChannelPipeline {
 
 #### SimpleChannelInboundHandler
 
-release automatically
+`SimpleChannelInboundHandler` 在 `channelRead` 中按类型匹配后调用用户实现的 `channelRead0`，并在 `finally` 中按 `autoRelease` 释放 `msg`：
+
+```java
+// SimpleChannelInboundHandler
+@Override
+public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+    boolean release = true;
+    try {
+        if (acceptInboundMessage(msg)) {
+            I imsg = (I) msg;
+            channelRead0(ctx, imsg);          // 用户逻辑
+        } else {
+            release = false;
+            ctx.fireChannelRead(msg);          // 类型不匹配，直接向后传递，不释放
+        }
+    } finally {
+        if (autoRelease && release) {
+            ReferenceCountUtil.release(msg);   // 处理过的 msg 在此被 release（referenceCount -1）
+        }
+    }
+}
+```
+
+关键点：
+
+- `autoRelease` 默认 `true`（无参构造器 `SimpleChannelInboundHandler()` 即 `this(true)`），构造时也可显式指定；`acceptInboundMessage` 借助 `TypeParameterMatcher` 判断 `msg` 是否匹配泛型 `I`。源码：transport/src/main/java/io/netty/channel/SimpleChannelInboundHandler.java:42-109。
+- 若 `msg` 匹配类型并被 `channelRead0` 消费，方法返回后即被 `ReferenceCountUtil.release(msg)` 释放——这与 `read()` 之后对象进入 pipeline、以及 `TailContext` 对未消费 msg 兜底 `release` 的语义一致（见上方 `#### TailContext`）。
+- 若要把 `msg` 继续传给后续 handler，必须在 `channelRead0` 内调用 `ReferenceCountUtil.retain(msg)` 提升引用计数，否则消息会在 `finally` 被提前释放，导致后续 `use-after-free`。
+- 类型不匹配时 `release = false` 并 `fireChannelRead` 向后传递，由后续 handler 或 `TailContext` 负责释放。
 
 ### outbound
 
@@ -926,7 +1005,28 @@ public final class ChannelOutboundBuffer {
 
 > [!TIP]
 >
-> 异常事件的传播顺序与 ChannelHandler 的添加顺序相同，会依次向后传播，与 Inbound 事件和 Outbound 事件无关
+> 入站异常事件沿 inbound 方向（Head → Tail）向后传播，与 handler 添加顺序一致；出站异常一般不走 `exceptionCaught`，而是通过 `ChannelFuture`/`ChannelPromise` 通知调用方。
+
+`fireExceptionCaught` 从 `HeadContext` 起步，借助 `findContextInbound(MASK_EXCEPTION_CAUGHT)` 寻找下一个具备异常执行资格的 handler（源码 transport/src/main/java/io/netty/channel/AbstractChannelHandlerContext.java:268-284）：
+
+```java
+// AbstractChannelHandlerContext
+@Override
+public ChannelHandlerContext fireExceptionCaught(final Throwable cause) {
+    AbstractChannelHandlerContext next = findContextInbound(MASK_EXCEPTION_CAUGHT);
+    ObjectUtil.checkNotNull(cause, "cause");
+    if (next.executor().inEventLoop()) {
+        next.invokeExceptionCaught(cause);
+    } else {
+        next.executor().execute(() -> next.invokeExceptionCaught(cause));
+    }
+    return this;
+}
+```
+
+`HeadContext.exceptionCaught` 只是 `ctx.fireExceptionCaught(cause)` 继续向后传；当异常抵达 `TailContext` 仍无人处理时，`TailContext.exceptionCaught` 调用 `onUnhandledInboundException(cause)`——打印 WARN 日志并 `ReferenceCountUtil.release(cause)` 释放（源码 transport/src/main/java/io/netty/channel/DefaultChannelPipeline.java:929-940、:1351-1353、:1213-1222）。
+
+因此排查异常时，推荐在 pipeline 末端（Tail 之前）放置统一异常处理器（`ChannelDuplexHandler`/`ChannelInboundHandler` 重写 `exceptionCaught`，处理完后 `ctx.fireExceptionCaught(cause)` 继续传播，或按需吞掉）。
 
 
 

@@ -35,6 +35,7 @@ digraph netty_index {
 - [EventLoop](/docs/CS/Framework/Netty/EventLoop.md)：事件循环、单线程串行语义、任务提交与执行。
 - [Transport](/docs/CS/Framework/Netty/Transport.md)：NIO / epoll / kqueue / io_uring 四种传输实现，4.2 的 `IoHandler` 重构与 `MultiThreadIoEventLoopGroup` 迁移。
 - [TPO](/docs/CS/Framework/Netty/TPO.md)：TCP Fast Open 在 Netty 中的支持（仅 native transport）。
+- [ioUring](/docs/CS/Framework/Netty/ioUring.md)：io_uring 原生传输，基于 SQ/CQ 共享内存环形队列的 Linux 真异步 IO 模型。
 - [FastThreadLocal](/docs/CS/Framework/Netty/FastThreadLocal.md)：Netty 对 JDK `ThreadLocal` 的高性能替代，数组寻址取代哈希探测。
 
 ## Channel and Pipeline
@@ -43,6 +44,8 @@ digraph netty_index {
 - [ChannelHandler](/docs/CS/Framework/Netty/ChannelHandler.md)：入站 / 出站 handler、pipeline 传播机制、编解码器。
 - [Codec](/docs/CS/Framework/Netty/Codec.md)：粘包拆包、`ByteToMessageDecoder` 的累积与判活、长度字段帧解码、编码器家族。
 - [Protocol](/docs/CS/Framework/Netty/Protocol.md)：TLS / HTTP/1.1 / WebSocket / HTTP/2 / HTTP/3 协议栈与握手流程。
+- [HTTP2](/docs/CS/Framework/Netty/HTTP2.md)：HTTP/2 二进制帧层、HPACK 头部压缩、多路复用、流控与 h2c 升级。
+- [Resolver](/docs/CS/Framework/Netty/Resolver.md)：DNS 异步解析、`DnsNameResolver` 与缓存/负载均衡，替代阻塞的 JDK `InetAddress`。
 - [Limiter](/docs/CS/Framework/Netty/Limiter.md)：流量整形与写水位线的相互作用。
 
 ## Memory and Buffering

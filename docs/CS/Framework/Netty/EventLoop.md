@@ -790,6 +790,10 @@ private void doStartThread() {
 
 ### run
 
+> [!NOTE]
+>
+> 下面给出的是 **4.1 时代** `NioEventLoop.run()` 的经典形态（此时 `ioRatio` 默认 50、`run` 内联了 `ioRatio` 切分与 `runAllTasks`）。4.2 把这套逻辑拆成了「通用骨架 `SingleThreadIoEventLoop.run()`（`?id=the-42-run-loop-singlethreadioeventloop`）＋ 可替换的 `IoHandler#run(context)`」，本章节仅作对照阅读。
+
 NioEventLoop 每次循环的处理流程
 
 1. [select](/docs/CS/Framework/Netty/EventLoop.md?id=select) get ready Channels, [rebuildSelector](/docs/CS/Framework/Netty/EventLoop.md?id=rebuildselector) if IOException occurs
@@ -1391,75 +1395,54 @@ public interface EventLoop extends OrderedEventExecutor, EventLoopGroup {
 
 ### IoHandler Interface
 
-`IoHandler` 直接继承 `EventLoop.Unsafe`，即注册能力是 IO 处理的前置部分。除 `wakeup(boolean)` 之外，所有方法都必须在 EventLoop 线程上执行，用户代码不应直接调用。
-
-> [!WARNING]
->
-> 下面这段源码取自 4.2 的早期 alpha，与 **4.2 GA** 的签名已经不一致。以 4.2.19 源码为准的接口形态是：
->
-> ```java
-> public interface IoHandler {
->     int run(IoHandlerContext context);
->     void initialize();
->     void prepareToDestroy();
->     void destroy();
->     IoRegistration register(IoHandle handle) throws IOException;
->     void wakeup();
->     boolean isCompatible(Class<?> handleType);
-> }
-> ```
->
-> 差异：不再继承 `EventLoop.Unsafe`；`wakeup()` 去掉了布尔参数；上下文类型从 `IoExecutionContext` 改为 `IoHandlerContext`；`register` 返回 `IoRegistration`（其核心是 `submit(IoOps)`，取代 4.1 里直接改 `SelectionKey.interestOps` / 调 `epoll_ctl` 的做法）。阅读时以 GA 签名为准。
+4.2 的 `IoHandler` **不再继承 `EventLoop.Unsafe`**，注册/解绑能力改由 `IoRegistration` 与 `IoHandle` 承担。除 `wakeup()` 与 `isCompatible(Class)` 之外，所有方法都**必须**在托管线程（实现 `ThreadAwareExecutor` 的线程）上执行，且不应由用户代码直接调用（源码：`transport/src/main/java/io/netty/channel/IoHandler.java:22-24`）。
 
 ```java
-public interface IoHandler extends EventLoop.Unsafe {
-    /**
-     * Run the IO handled by this {@link IoHandler}. The {@link IoExecutionContext} should be used
-     * to ensure we not execute too long and so block the processing of other task that are
-     * scheduled on the {@link EventLoop}. This is done by taking {@link IoExecutionContext#delayNanos(long)} or
-     * {@link IoExecutionContext#deadlineNanos()} into account.
-     *
-     * @return the number of {@link Channel} for which I/O was handled.
-     */
-    int run(IoExecutionContext context);
+// 源码：transport/src/main/java/io/netty/channel/IoHandler.java:33
+public interface IoHandler {
 
-    // Wakeup the IoHandler, which means if any operation blocks it should be unblocked and return as soon as possible.
-    void wakeup(boolean inEventLoop);
+    default void initialize() { }                                 // 启动前初始化（可选）
 
-    // Prepare to destroy this IoHandler. This method will be called before destroy() and may be called multiple times.
-    void prepareToDestroy();
+    int run(IoHandlerContext context);                            // 跑一轮 IO，返回处理的 IoHandle 数
 
-    /**
-     * Destroy the {@link IoHandler} and free all its resources.
-     */
-    void destroy();
+    default void prepareToDestroy() { }                           // destroy() 前调用，可多次
+    default void destroy() { }                                    // 释放资源
+
+    IoRegistration register(IoHandle handle) throws Exception;     // 注册句柄
+
+    void wakeup();                                                // 唤醒阻塞中的 IO（无布尔参数）
+
+    boolean isCompatible(Class<? extends IoHandle> handleType);    // 该句柄类型是否可注册
 }
 ```
 
-注意 `run(IoExecutionContext)` 的签名变化：经典版 `run()` 自己判断 `hasTasks()` 和下次定时任务到期时间，新版把这两个决策收进 `IoExecutionContext`（`canBlock()` / `delayNanos()` / `deadlineNanos()`），由外层 EventLoop 提供，handler 只问不猜。返回值也不再是「是否处理过」，而是本轮处理 IO 的 Channel 数量。
+注意 `run(IoHandlerContext)` 的签名变化：4.1 的 `run()` 自己判断 `hasTasks()` 和下次定时任务到期时间，4.2 把这两个决策收进 `IoHandlerContext`（`canBlock()` / `delayNanos()` / `deadlineNanos()`），由外层 `SingleThreadIoEventLoop` 提供，handler 只问不猜。返回值也不再是「是否处理过」，而是**本轮处理 IO 的 `IoHandle` 数量**。注册后通过 `IoRegistration#submit(IoOps)` 提交关注事件，取代 4.1 直接改 `SelectionKey.interestOps` / 调 `epoll_ctl` 的做法。
 
-### NioHandler
+### NioIoHandler
 
-`NioHandler` 是 `IoHandler` 的 NIO 实现。它与 `### run` 里的 `NioEventLoop.run()` 结构一致——同样处理 `wakenUp` 竞态、同样在 Selector 损坏时 `rebuildSelector()`——区别在于阻塞判断来自 `runner.canBlock()`，而 `select()` 只负责等待就绪事件，ready key 的处理交给 `processSelectedKeys()`。
+`NioIoHandler`（`public final class NioIoHandler implements IoHandler`，源码：`transport/src/main/java/io/netty/channel/nio/NioIoHandler.java:57`）是 `IoHandler` 的 NIO 实现，4.2 中承接了 4.1 `NioEventLoop#run` 的全部职责。它与 4.1 经典 `run` 结构一致——同样处理 `wakenUp` 竞态、同样在 Selector 损坏时 `rebuildSelector0()`——区别在于阻塞判断来自 `context.canBlock()`，而 `select()` 只负责等待就绪事件，ready key 的处理交给 `processSelectedKeys()`。注意 4.2 的 `run` 只返回本轮处理的就绪数，不再内联 `ioRatio` 的任务时间片计算（那部分在 `SingleThreadIoEventLoop`）。
 
 call [processSelectedKeys](/docs/CS/Framework/Netty/EventLoop.md?id=processselectedkey)
 
 ```java
-// NioHandler
+// 源码：transport/src/main/java/io/netty/channel/nio/NioIoHandler.java:419
 @Override
-public int run(IoExecutionContext runner) {
+public int run(IoHandlerContext context) {
     int handled = 0;
     try {
         try {
-            switch (selectStrategy.calculateStrategy(selectNowSupplier, !runner.canBlock())) {
+            switch (selectStrategy.calculateStrategy(selectNowSupplier, !context.canBlock())) {
                 case SelectStrategy.CONTINUE:
+                    if (context.shouldReportActiveIoTime()) {
+                        context.reportActiveIoTime(0); // 本轮无 IO，上报 0
+                    }
                     return 0;
 
                 case SelectStrategy.BUSY_WAIT:
                     // fall-through to SELECT since the busy-wait is not supported with NIO
 
                 case SelectStrategy.SELECT:
-                    select(runner, wakenUp.getAndSet(false));
+                    select(context, wakenUp.getAndSet(false));
 
                     // 'wakenUp.compareAndSet(false, true)' is always evaluated
                     // before calling 'selector.wakeup()' to reduce the wake-up
@@ -1498,20 +1481,76 @@ public int run(IoExecutionContext runner) {
         } catch (IOException e) {
             // If we receive an IOException here its because the Selector is messed up. Let's rebuild
             // the selector and retry. https://github.com/netty/netty/issues/8566
-            rebuildSelector();
+            rebuildSelector0();
             handleLoopException(e);
             return 0;
         }
 
         cancelledKeys = 0;
         needsToSelectAgain = false;
-        handled = processSelectedKeys();
+
+        if (context.shouldReportActiveIoTime()) {
+            long activeIoStartTimeNanos = System.nanoTime();
+            handled = processSelectedKeys();
+            long activeIoEndTimeNanos = System.nanoTime();
+            context.reportActiveIoTime(activeIoEndTimeNanos - activeIoStartTimeNanos);
+        } else {
+            handled = processSelectedKeys();
+        }
+    } catch (Error e) {
+        throw e;
     } catch (Throwable t) {
         handleLoopException(t);
     }
     return handled;
 }
 ```
+
+注意 `reportActiveIoTime` 仅在 `shouldReportActiveIoTime()` 返回 `true` 时调用——而该标志由 `SingleThreadIoEventLoop` 实现为 `isSuspensionSupported() || ioRatio != 100`（源码：`SingleThreadIoEventLoop.java:76-79`）。仅在开启 IO 利用率上报（供 `MultithreadEventExecutorGroup` 做基于利用率的自动扩缩容）或 `ioRatio != 100` 时才会打点，避免无谓的 `System.nanoTime()` 开销。
+
+### The 4.2 run loop (SingleThreadIoEventLoop)
+
+4.2 把「线程 + 任务队列 + 生命周期」与「具体 IO」彻底分离：`SingleThreadIoEventLoop.run()` 是通用骨架，每轮先 `ioHandler.run(context)` 跑 IO，再按 `ioRatio` 算出的时间片 `runAllTasks(taskQuantumNs)`；真正的 select/process 在 `NioIoHandler` / `EpollIoHandler` 里。
+
+```java
+// 源码：transport/src/main/java/io/netty/channel/SingleThreadIoEventLoop.java:201
+@Override
+protected void run() {
+    assert inEventLoop();
+    ioHandler.initialize();
+    do {
+        final int ioRatio = this.ioRatio;
+        final long taskQuantumNs;
+
+        activeIoTimeNanos = -1;
+        runIo();                                    // = ioHandler.run(context)
+        if (ioRatio == 100 || activeIoTimeNanos == -1) {
+            taskQuantumNs = maxTaskProcessingQuantumNs;          // 默认 1000ms 兜底
+        } else {
+            // 给任务一个与刚花在 IO 上的时间成比例的时间片，但仍受上限约束，
+            // 避免 IO 突发把任务队列饿死。
+            long quantum = Math.min(maxTaskProcessingQuantumNs,
+                    activeIoTimeNanos * (100 - ioRatio) / ioRatio);
+            taskQuantumNs = quantum == 0 ? maxTaskProcessingQuantumNs : quantum;
+        }
+        if (isShuttingDown()) {
+            ioHandler.prepareToDestroy();
+        }
+        // 跑任务，受 taskQuantumNs 限制，然后回到下一轮 IO。
+        runAllTasks(taskQuantumNs);
+    } while (!confirmShutdown() && !canSuspend());
+}
+```
+
+`context` 是 `SingleThreadIoEventLoop` 内部的匿名 `IoHandlerContext`，三个决策方法直接转给 loop 自身（源码：`SingleThreadIoEventLoop.java:49`）：
+
+| `IoHandlerContext` 方法 | 实现 | 语义 |
+| :-- | :-- | :-- |
+| `canBlock()` | `!hasTasks() && !hasScheduledTasks()` | 没有待处理任务才允许阻塞等待 IO |
+| `delayNanos(now)` | 转 `SingleThreadIoEventLoop.this.delayNanos(now)` | 距最近定时任务的剩余纳秒 |
+| `deadlineNanos()` | 转 `SingleThreadIoEventLoop.this.deadlineNanos()` | 最近定时任务的绝对截止点（`-1` 表示无） |
+
+对比 4.1：4.1 的 `NioEventLoop.run()` 把 select 策略、`ioRatio` 切分、任务运行全写在一个方法里；4.2 收敛为「通用骨架 + 可替换 `IoHandler`」，同一套 loop 能接 NIO / epoll / kqueue / io_uring 四种后端。
 
 ### Group and Migration
 
@@ -1688,6 +1727,10 @@ class EpollEventLoop extends SingleThreadEventLoop {
 ```
 
 ### Kqueue
+
+> [!NOTE]
+>
+> 下面这段是 **4.1 形态** 的 `KQueueEventLoop`。4.2 中 **不存在 `KQueueEventLoop` 类**（整个 kqueue 包只有 `KQueueEventLoopGroup`，且已 `@Deprecated`）；真正的 `kevent` 循环迁到了 `KQueueIoHandler#run(IoHandlerContext)`，`KQueueEventLoopGroup` 只剩委派。这与 epoll 不同——epoll 在 4.2 仍保留了 `@Deprecated` 的 `EpollEventLoop` 兼容类，而 kqueue 连这个兼容类都没留。
 
 ```java
 final class KQueueEventLoop extends SingleThreadEventLoop {

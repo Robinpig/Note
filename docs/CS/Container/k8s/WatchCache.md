@@ -18,7 +18,7 @@ Kubernetes 的每个组件都在做同一件事：从 apiserver 读一份自己�
 这条链路同时是前面几篇笔记的隐形底座：写请求落库后的通知、调度器看到 Pod 更新、kubelet 感知删除，全都建立在这里描述的机制上。
 
 > [!NOTE]
-> 本文全部结论基于 **Kubernetes v1.36.4** 源码实读，各处标注文件路径与行号。v1.36 在这一层有若干结构性改动，统一收在文末「v1.36 反直觉清单」。
+> 本文全部结论基于 **Kubernetes v1.36.4** 源码实读，各处标注文件路径与行号。v1.36 在这一层有若干结构性改动，统一收在文末「v1.36 反直觉清单」。Segment 7 的四个深挖小节（同步点、快照来源、交接流水线、等价性论证）按 **v1.37.2** 复核并刷新行号。
 
 ---
 
@@ -326,14 +326,55 @@ c.watchCache.SetOnReplace(func() {
 
 传统 List 的问题是服务端要把整份结果物化、编码、一次性返回。对象多的时候这是一次内存尖峰。而 watch cache 里本来就有全部对象——那能不能不构造 List，直接用 watch 事件把等价的内容流出去？这就是 WatchList。
 
-服务端的做法（`cacher.go:509` 起）：
+服务端的做法（v1.37.2 复核，`cacher.go:516` 起）：
 
-1. 判定这是不是流式 list 请求：`isListWatchRequest`（`:1280`）要求 `SendInitialEvents == true` **且** `AllowWatchBookmarks == true`
-2. 从 store 快照生成合成 ADDED 事件流（`watch_cache_interval.go:140` 的 `newCacheIntervalFromStore`），**按 key 排序**
-3. 收尾发一个特殊 BOOKMARK：`setInitialEventsEndBookmarkIfRequested`（`cacher.go:1337`）构造 RV = 缓存当前 RV 的 bookmark，带注解 `k8s.io/initial-events-end: "true"`（常量 `apimachinery/pkg/apis/meta/v1/types.go:493`）
-4. 由 `cache_watcher.go:513` 在区间事件发完后送出
+1. 判定这是不是流式 list 请求：`isListWatchRequest`（`:1297`）要求 `SendInitialEvents == true` **且** `AllowWatchBookmarks == true`
+2. 从 store 快照生成合成 ADDED 事件流（`watch_cache_interval.go:75` 的 `newCacheIntervalFromStore`，或 `:113` 的惰性快照版本），**按 key 排序**
+3. 收尾发一个特殊 BOOKMARK：`setInitialEventsEndBookmarkIfRequested`（`cacher.go:1358`）构造 RV = 缓存当前 RV 的 bookmark，注解 `k8s.io/initial-events-end: "true"` 是在 `cache_watcher.go:377` 的 `convertToWatchEvent` 里统一打上的
+4. 由 `cache_watcher.go:528` 在区间事件发完后送出
 
 客户端看到这个注解的 bookmark，就知道"初始状态已全部收到"，可以 `Replace` 本地 store 了。
+
+### The Synchronization Point Comes from etcd, Not the Cache
+
+流式 list 的一致性锚点不是 watch cache 自己走到哪，而是**向 etcd 要来的当前 RV**。RV 为空且 `SendInitialEvents=true` 时，`getWatchCacheResourceVersion`（`cacher.go:1313`）直接调 `c.storage.GetCurrentResourceVersion(ctx)` 穿透到 etcd 取同步点。拿到之后，`waitUntilWatchCacheFreshAndForceAllEvents`（`:1329`）把请求挂起，直到缓存追平该 RV。
+
+等待机制是 `cond.Wait` 循环（`watch_cache.go:354`），每次缓存 `processEvent` 推进 RV 后 `Broadcast` 唤醒检查，超时上限 `blockTimeout = 3s`，超时返回 `TooLargeResourceVersion` 让客户端几秒后重试。这里有一个隐蔽的依赖：**如果该资源一分钟都没有任何写事件，缓存的 RV 永远不会前进，等待就永远不会结束**——所以要求存储层支持 progress notify。`ConditionalProgressRequester`（`progress/watch_progress.go:68`）只在"有等待者"（`waitingUntilFresh` 计数非零）时周期性地向 etcd 发 `RequestWatchProgress`，逼 etcd 回一个 bookmark 事件把缓存 RV 推过同步点。这正解释了 `cacher.go:576` 的硬性前置：流式 list 请求进来先检查 etcd 特性 `RequestWatchProgress`，不支持就直接返回错误 watcher，客户端回退传统 List。
+
+### Interval Comes from the Store, Not the Ring Buffer
+
+普通 watch（RV>0）的初始事件来自 history 环形缓冲（`w.history.GetIntervalLocked`），但流式 list **绕开环形缓冲，直接拍 store 快照**（`watch_cache.go:647` 的 `getAllEventsSinceLocked` → `:650` 分支进 `getIntervalFromStoreLocked`）。原因是语义不同：流式 list 要的是"某一时刻的全量状态"，不是"某段历史变更"。
+
+快照有两个版本，差别在锁内开销（`watch_cache.go:676`）：
+
+| 版本 | 条件 | 锁内成本 |
+|---|---|---|
+| `newCacheIntervalFromLazySnapshot`（`watch_cache_interval.go:113`） | store 能提供不可变快照 `LatestSnapshotLocked` | **O(1)**：只拿快照引用，O(N) 遍历推迟到锁释放后的首次 `Next()` |
+| `newCacheIntervalFromStore`（`:75`） | 兜底 | 锁内物化整份 buffer，按 key 有序 |
+
+合成的动作只有一处：`storeElementToWatchCacheEvent`（`:123`）把每个元素包成一条 `watch.Added`，**全部盖同一个同步 RV**。所以客户端看到的"初始状态"是一组 RV 相同的 ADDED——这与历史事件（每条 RV 各异）在数据面上就能区分开。
+
+### The Handoff: processInterval
+
+发送侧的流水线在 `cacheWatcher.processInterval`（`cache_watcher.go:450`）：
+
+```
+发完 interval 全部合成事件（逐条 Next()）
+  → 发 initialEventsEndBookmark（:528）
+  → process(ctx, resourceVersion) 切换为实时事件（:531）
+```
+
+三条防错细节：
+
+1. **抬高下限**：快照可能比请求的更新（NotOlderThan 语义），`cacheInterval.resourceVersion > resourceVersion` 时把下限抬到快照 RV（`:474`），防止把比快照旧的事件发出去造成"时间倒流"。
+2. **发件去重**：每发一条 init 事件就拿事件 RV 与当前下限取 max（`:513`）；进入实时阶段后只发 `event.ResourceVersion > resourceVersion` 的事件（`:552`）。初始化期间到达的实时事件缓冲在 watcher 的 input channel 里不会丢——**接缝不漏事件靠的就是这个缓冲 + RV 去重**。
+3. **成本不可线性外推**：源码 TODO 注释给了 Kubemark 实测——13862 条 initEvents 花 66ms，14040 条却花 993ms（`:462-464`），耗时与事件数不成比例，疑似卡在序列化/GC。这就是为什么 `suggestedWatchChannelSize` 的缓冲设计是"防一个慢 watcher 拖累全体"，而不是无限大。
+
+发完初始书签后调 `utilflowcontrol.WatchInitialized(ctx)`（`:541`）通知 APF：**初始化结束，席位可以释放了**。这条线与 [APF](/docs/CS/Container/k8s/APF.md) 笔记里"watch 只在初始化阶段占座"的闭环正好接上——APF 的 `watchInitializationSignal.Wait()` 等的就是这里发出的信号。
+
+### Why the Stream Is Equivalent to List+Watch
+
+把三段拼起来，一致性论证很短：同步点 `RV_sync` 来自 etcd；快照内容是缓存 RV ≥ `RV_sync` 时刻的全量；接缝处实时事件按 RV 去重。客户端最终收到的序列 = 「`RV_sync` 时刻的全量 ADDED」+「`initial-events-end` 书签」+「之后的增量」，**等价于 `List(RV_sync)` + `Watch(RV_sync)`，但没有两次请求之间漏事件/重复事件的窗口**。这就是流式 list 在语义上严格强于 List+Watch 的原因——两次请求合成了一条流。
 
 ### Client and Server Are Two Independent Switches
 
@@ -432,8 +473,8 @@ Reflector 用 `isLastSyncResourceVersionUnavailable` 标记（`:145`）来处理
 | 阶段 | 服务端位置 | 客户端位置 |
 |---|---|---|
 | 发起同步 | — | `reflector.go:470` `ListAndWatchWithContext` |
-| 流式 list | `cacher.go:1280` + `watch_cache_interval.go:140` | `reflector.go:804` `watchList` |
-| 传统 list | `cacher.go:748` `GetList` | `reflector.go:674` `list` + `pager.go` |
+| 流式 list | `cacher.go:1297` + `watch_cache_interval.go:75` | `reflector.go:804` `watchList` |
+| 传统 list | `cacher.go:753` `GetList` | `reflector.go:674` `list` + `pager.go` |
 | 缓存分流 | `delegator/interface.go:40` `ShouldDelegateList` | — |
 | 新鲜度等待 | `watch_cache.go:449` + `progress/watch_progress.go` | — |
 | 事件分发 | `cacher.go:886` `dispatchEvents` → `cache_watcher.go:147` | `reflector.go:972` `handleAnyWatch` |

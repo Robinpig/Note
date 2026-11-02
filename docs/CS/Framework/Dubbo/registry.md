@@ -1121,7 +1121,7 @@ public void registerInstance(String serviceName, String groupName, Instance inst
 ### ZookeeperRegistry
 
 > [!WARNING]
-> **本节工厂代码是 2.7.x 的形态。** 3.3.6 中 `ZookeeperTransporter` 已被 `ZookeeperClientManager` 取代，底层 Curator 客户端为 `Curator5ZookeeperClient`（3.3.6 同时仍保留 `CuratorZookeeperClient`），`ZookeeperRegistry` 的构造函数签名随之改变。新增的类 `ZookeeperServiceDiscovery` 承担应用级服务发现，`AbstractZookeeperClient` 是客户端抽象层——这些在下文代码中均未出现。
+> **本节工厂代码是 2.7.x 的形态。** 3.3.6 中 `ZookeeperTransporter` 已被 `ZookeeperClientManager` 取代，底层 Curator 客户端为 `Curator5ZookeeperClient`（**3.3.6 已无 `CuratorZookeeperClient`**，该旧名在整棵源码树中没有任何 class 定义），`ZookeeperRegistry` 的构造函数签名随之改变。新增的类 `ZookeeperServiceDiscovery` 承担应用级服务发现，`AbstractZookeeperClient` 是客户端抽象层——这些在下文代码中均未出现。
 
 Dubbo 使用 ZooKeeper 作为注册中心时 只会创建持久节点和顺序节点两种 对创建的顺序没有要求
 
