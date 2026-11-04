@@ -12,7 +12,7 @@
 
 注册的资源约 21 类（`pkg/apiserver/apiserver.go`，generic server 名 `higress-apiserver:152`）：core/v1 的 configmaps / secrets / services / endpoints / pods / nodes / namespaces / endpointslices，apiextensions 的 customresourcedefinitions（`:182` 特判），admissionregistration 两个 webhook configuration，networking.k8s.io 的 ingresses（`:306`）与 ingressclasses（`:310`），Higress 三件套 **wasmplugins / mcpbridges / http2rpcs**，Gateway API 的 gatewayclasses / gateways / httproutes / referencegrants，以及 legacy istio group 的 `envoyfilters`（`:378-385`）。
 
-**CRD 定义是静态内嵌、只读提供的**：`pkg/storage/customresourcedefinition.go:22` 把 `pkg/storage/crds/*.yaml` 解码成固定切片，Get 在 `:62`、List 在 `:83`，**不可增删改**。而这个目录里只有 5 个 YAML（gatewayclasses / gateways / httproutes / referencegrants / envoyfilters），**不含 wasmplugins 与 mcpbridges**——三件套的 storage 已注册但 CRD schema 不在此处，控制器与 console 怎么拿到它们的 schema 未从调用点证实（见 Unverified）。
+**CRD 定义是静态内嵌、只读提供的**：`src/apiserver/pkg/storage/customresourcedefinition.go:22` 把 `src/apiserver/pkg/storage/crds/*.yaml`（相对本仓根的写法；前文简写的 `pkg/storage/crds/` 是 apiserver 模块内视角）解码成固定切片，Get 在 `:62`、List 在 `:83`，**不可增删改**。该目录实测恰好 **5 个 YAML**：`gateway.networking.k8s.io_gatewayclasses.yaml`、`gateway.networking.k8s.io_gateways.yaml`、`gateway.networking.k8s.io_httproutes.yaml`、`gateway.networking.k8s.io_referencegrants.yaml`、`networking.istio.io_envoyfilters.yaml`——**不含 wasmplugins 与 mcpbridges**，三件套的 storage 已注册但 schema 不在此处。
 
 ## Storage Backends
 
@@ -51,6 +51,11 @@ CR 实例的持久层二选一（`pkg/apiserver/apiserver.go:188` NewFileREST / 
 
 **all-in-one 与 compose 的本质差别是存储：只有 file 后端、没有 Nacos。** `all-in-one/scripts/start-apiserver.sh` 把 `/opt/data/defaultConfig` 拷进 `/data`，可选手工跑 `config-template/{ai-gateway,ai-proxy}.sh`，从 ConfigMap 抽数据到 `/etc/istio/config`，最后起 `apiserver --bind-address 127.0.0.1 --secure-port 18443 --storage file --file-root-dir /data`；kubeconfig 是**烘焙进镜像的静态文件**（`all-in-one/apiserver/config`，server 指向 `https://localhost:18443`、`insecure-skip-tls-verify: true`）。端口也不同：`start-controller.sh` 里 `GATEWAY_HTTP_PORT` 默认 **8080**、`GATEWAY_HTTPS_PORT` 默认 **8443**（compose 形态是 80 / 443），`USE_PLUGIN_SERVER=on` 时 MCP 插件地址指向 `http://localhost:8002/plugins/mcp-server/2.0.3/plugin.wasm`（plugin-server 的 nginx 监听 8002）。
 
+**三个暴露端口的角色已坐实**：`EXPOSE 8080 8443 8001`（`all-in-one/Dockerfile:88`）中 **8080 = 网关 HTTP、8443 = 网关 HTTPS、8001 = Console**——证据是 `all-in-one/scripts/start-console.sh:15` 的 `CONSOLE_PORT=8001`、`all-in-one/get-ai-gateway.sh:34` 的 `DEFAULT_CONSOLE_PORT=8001` 与 `:1622` 的 `--console-port PORT (default: 8001)`，`all-in-one/config/mcpbridges/default.yaml:10` 也把 console 域名写成 `127.0.0.1:8001`。插件服务的 nginx 是 **8002**，与 8001 无关；此前"未找到 8001 监听方"的疑问由此解决。
+
+> [!WARNING]
+> **不存在 `MODE=full|gateway|console` 这样的进程裁剪开关。** 全仓（`*.go` / `*.sh` / `Dockerfile*`）检索 `MODE=` 只有两种语义：`bin/configure.sh` 的 `MODE="wizard"` / `MODE="params"`（交互式向导 vs 纯参数两种**配置录入模式**），以及 `test/configure/configure-test-runner.sh:87` 给 Nacos 容器传的 `MODE=standalone`（那是 Nacos 自己的环境变量）。`all-in-one/scripts/base.sh` 内也没有任何 MODE 分支。⇒ all-in-one 跑哪些进程，实际由 **supervisord 的 10 个 program + priority** 与 `all-in-one/scripts/start-*.sh`（13 个脚本）决定，不是靠一个环境变量切换。
+
 ## Configuration Tooling
 
 `bin/base.sh` 探测 docker 并**明确拒绝 Compose v1**；`bin/startup.sh` 要求 `compose/.configured` 标记存在（由 configure 写入）后 `docker compose up -d`；`logs.sh` / `status.sh` / `shutdown.sh` / `restart.sh` / `reset.sh` 都是薄封装。核心是 `bin/configure.sh`（822 行），参数全集在 case 块 `:85-191`：
@@ -84,7 +89,9 @@ CR 实例的持久层二选一（`pkg/apiserver/apiserver.go:188` NewFileREST / 
 
 ## Unverified
 
-`EXPOSE 8001` 的确切角色（nginx 插件服务在 8002，README 的 docker run 映射 8001，未找到 8001 的监听方配置）；`MODE=full|gateway|console` 的进程裁剪逻辑（`all-in-one/scripts/base.sh` 未展开）；wasmplugins / mcpbridges 的 CRD schema 在不进 `pkg/storage/crds/` 的情况下如何被 controller 与 console 取得；本仓 5 个静态 CRD 与主仓 `helm/core/crds/` 的覆盖差异；`bin/update.sh`（110 行）的升级语义；`nacos_rest.go` 里对象序列化格式（flat / legacy）的细节；console 端 `HIGRESS_CONSOLE_ACCESS_TOKEN` 的签发与校验机制（只记变量名）。
+wasmplugins / mcpbridges 的 CRD schema 在**不进 `src/apiserver/pkg/storage/crds/` 的情况下**如何被 controller 与 console 取得（该目录实测只有 Gateway API 4 + EnvoyFilter 共 5 个静态 YAML，不含 Higress 三件套）；本仓这 5 个静态 CRD 与主仓 `helm/core/crds/`（三件套 + `istio-envoyfilter.yaml`）的字段级覆盖差异；`bin/update.sh`（110 行，行数已核）的升级语义；`nacos_rest.go` 里对象序列化格式（flat / legacy）的细节；console 端 `HIGRESS_CONSOLE_ACCESS_TOKEN` 的签发与校验机制（只记变量名）。
+
+已核并移入正文：`EXPOSE 8001` = **Console**（`start-console.sh:15`、`get-ai-gateway.sh:34`；插件 nginx 是 8002）；**`MODE=full|gateway|console` 进程裁剪在全仓不存在**，进程编排由 supervisord 的 10 个 program 与 13 个 `start-*.sh` 决定。
 
 ## Links
 

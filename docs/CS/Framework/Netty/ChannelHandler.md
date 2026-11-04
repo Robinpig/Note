@@ -1,1585 +1,437 @@
 ## Introduction
 
+ChannelPipeline 是 Netty 的核心编排组件：入站事件（读、连接、active 等）从 HeadContext 向后传播到 TailContext；出站事件（write、flush、connect 等）从 TailContext 向前传播到 HeadContext。Pipeline 本身是一个双向链表，每个节点是 `AbstractChannelHandlerContext`——它既包裹用户实现的 `ChannelHandler`，又携带事件路由所需的执行器与类型掩码。
 
-探讨ChannelPipeline 与 ChannelHandler 的关系
+本文以 **Netty 4.2.19.Final** 源码为准。
 
-## ChannelPipeline
+## DefaultChannelPipeline
 
-ChannelPipeline 是 Netty 的核心编排组件，负责组装各种 ChannelHandler，实际数据的编解码以及加工处理操作都是由 ChannelHandler 完成的。ChannelPipeline 可以理解为ChannelHandler 的实例列表——内部通过双向链表将不同的 ChannelHandler 链接在一起。当 I/O 读写事件触发时，ChannelPipeline 会依次调用 ChannelHandler 列表对 Channel 的数据进行拦截和处理。
-
-**ChannelPipeline 是线程安全的，因为每一个新的 Channel 都会对应绑定一个新的 ChannelPipeline 一个 ChannelPipeline 关联一个 EventLoop，一个 EventLoop 仅会绑定一个线程**
-
-
-
-下面我们看一下 ChannelPipeline 的结构图：
+`Channel.pipeline()` 返回的实现。构造时就带着两个内置节点：
 
 ```java
- /**
-  *                                                 I/O Request
-  *                                            via {@link Channel} or
-  *                                        {@link ChannelHandlerContext}
-  *                                                      |
-  *  +---------------------------------------------------+---------------+
-  *  |                           ChannelPipeline         |               |
-  *  |                                                  \|/              |
-  *  |    +---------------------+            +-----------+----------+    |
-  *  |    | Inbound Handler  N  |            | Outbound Handler  1  |    |
-  *  |    +----------+----------+            +-----------+----------+    |
-  *  |              /|\                                  |               |
-  *  |               |                                  \|/              |
-  *  |    +----------+----------+            +-----------+----------+    |
-  *  |    | Inbound Handler N-1 |            | Outbound Handler  2  |    |
-  *  |    +----------+----------+            +-----------+----------+    |
-  *  |              /|\                                  .               |
-  *  |               .                                   .               |
-  *  | ChannelHandlerContext.fireIN_EVT() ChannelHandlerContext.OUT_EVT()|
-  *  |        [ method call]                       [method call]         |
-  *  |               .                                   .               |
-  *  |               .                                  \|/              |
-  *  |    +----------+----------+            +-----------+----------+    |
-  *  |    | Inbound Handler  2  |            | Outbound Handler M-1 |    |
-  *  |    +----------+----------+            +-----------+----------+    |
-  *  |              /|\                                  |               |
-  *  |               |                                  \|/              |
-  *  |    +----------+----------+            +-----------+----------+    |
-  *  |    | Inbound Handler  1  |            | Outbound Handler  M  |    |
-  *  |    +----------+----------+            +-----------+----------+    |
-  *  |              /|\                                  |               |
-  *  +---------------+-----------------------------------+---------------+
-  *                  |                                  \|/
-  *  +---------------+-----------------------------------+---------------+
-  *  |               |                                   |               |
-  *  |       [ Socket.read() ]                    [ Socket.write() ]     |
-  *  |                                                                   |
-  *  |  Netty Internal I/O Threads (Transport Implementation)            |
-  *  +-------------------------------------------------------------------+
-  */
-```
-
-ChannelPipeline 中包含入站 ChannelInboundHandler 和出站 ChannelOutboundHandler 两种处理器
-
-ChannelPipeline 中每加入一个 ChannelHandler 都会绑定一个 ChannelHandlerContext
-
-ChannelHandlerContext 用于保存 ChannelHandler 上下文，通过 ChannelHandlerContext  我们可以知道 ChannelPipeline 和 ChannelHandler 的关联关系。ChannelHandlerContext 可以实现 ChannelHandler 之间的交互，ChannelHandlerContext 包含了 ChannelHandler  生命周期的所有事件，如 connect、bind、read、flush、write、close 等
-
-
-
-
-
-newChannelPipeline
-
-一个ChannelPipeline 固定有HeadContext 和 TailContext
-
-```java
-// Returns a new {@link DefaultChannelPipeline} instance.
-protected DefaultChannelPipeline newChannelPipeline() {
-    return new DefaultChannelPipeline(this);
-}
-
 protected DefaultChannelPipeline(Channel channel) {
     this.channel = ObjectUtil.checkNotNull(channel, "channel");
     succeededFuture = new SucceededChannelFuture(channel, null);
-    voidPromise =  new VoidChannelPromise(channel, true);
-
+    voidPromise = new VoidChannelPromise(channel, true);
     tail = new TailContext(this);
     head = new HeadContext(this);
-
     head.next = tail;
     tail.prev = head;
 }
+```
 
-TailContext(DefaultChannelPipeline pipeline) {
-    super(pipeline, null, TAIL_NAME, TailContext.class);
-    setAddComplete();
+### HeadContext
+
+HeadContext 是 pipeline 里唯一一个**既实现 Inbound 又实现 Outbound** 的 handler：
+
+- **Inbound 侧**：`channelActive` / `channelReadComplete` 末尾调 `readIfIsAutoRead()`（autoRead=true 时自动 beginRead）；`channelRegistered` 里调 `invokeHandlerAddedIfNeeded()`——把 channel 注册前挂起的 `handlerAdded` 回调链一次性触发（见 callHandlerAddedForAllHandlers）
+- **Outbound 侧**：全部直接转 `unsafe.xxx()`——它是 pipeline 与 transport 层的最后一环
+- `channelUnregistered` 里判断 `!channel.isOpen()` 则调 `destroy()` 清理全部 handler（destroyUp / destroyDown 两段式遍历）
+
+### TailContext
+
+纯 Inbound。所有未被用户 handler 消费的事件在这里兜底：`channelRead` → `onUnhandledInboundMessage`（warn + release）；`exceptionCaught` → `onUnhandledInboundException`（warn + release）；`userEventTriggered` → 只 release 不 log（因为 user event 可能是多余的）。
+
+### destroy（两段式遍历）
+
+```java
+private synchronized void destroy() {
+    destroyUp(head.next, false);     // 先正向下遍历到 tail
 }
-
-HeadContext(DefaultChannelPipeline pipeline) {
-    super(pipeline, null, HEAD_NAME, HeadContext.class);
-    unsafe = pipeline.channel().unsafe();
-    setAddComplete();
+private void destroyUp(AbstractChannelHandlerContext ctx, boolean inEventLoop) { ... }
+private void destroyDown(Thread currentThread, AbstractChannelHandlerContext ctx, boolean inEventLoop) {
+    // 然后反向上从 tail.prev 遍历到 head
+    ctx = ctx.prev;
+    // atomicRemoveFromHandlerList(ctx) —— handlerRemoved 里可能又 remove 或 replace 了别的 handler，必须用 CAS 跳过已经被移除的
+    // callHandlerRemoved0(ctx)
 }
 ```
 
-Netty 中的 IO 异步事件大体上分为两类：
-- inbound事件：入站事件，比如ChannelActive 事件， ChannelRead 事件，它们会从 pipeline 的头结点 HeadContext 开始一直向后传播。
-- outbound事件：出站事件，比如 write事件 以及 flush 事件，出站事件会从相反的方向从后往前传播直到 HeadContext 。最终会在 HeadContext 中完成出站事件的处理
+两段式遍历（up→down）是为了 **handlerRemoved 里注册的新事件能被前向处理完再 remove**——Issue #3156。`atomicRemoveFromHandlerList` 用 CAS，因为回调里别的 handlerRemoved 可能先把当前 ctx 从链里摘掉。
 
+## ChannelHandler 添加与回调时机
 
-
-pipeline 这样一个双向链表数据结构中的类型正是 ChannelHandlerContext ，由 ChannelHandlerContext 包裹我们自定义的 IO 处理逻辑 ChannelHandler
-
-ChannelHandler 并不需要感知到它所处的 pipeline 中的上下文信息 不会感知和它相邻的两个 ChannelHandler 只需要专心处理好 IO 逻辑即可，关于 pipeline 的上下文信息全部封装在 ChannelHandlerContext中
-
-ChannelHandlerContext 中维护了 pipeline 这个双向链表中的 pre 以及 next 指针，这样可以方便的找到与其相邻的 ChannelHandler ，并可以过滤出一些符合执行条件的 ChannelHandler。
-正如它的命名一样， ChannelHandlerContext 正是起到了维护 ChannelHandler 上下文的一个作用。而 Netty 中的异步事件在 pipeline 中的传播靠的就是这个 ChannelHandlerContext
-
-
-
-
-
-通过对ChannelPipeline 在不同位置添加不同类型的 ChannelHandler
-
-
-### addFirst
-
-we set the EventExecutorGroup of our workerThreadPoolExecutor for business.
+### addFirst 的三种路径
 
 ```java
-@Override
 public final ChannelPipeline addFirst(EventExecutorGroup group, String name, ChannelHandler handler) {
     final AbstractChannelHandlerContext newCtx;
     synchronized (this) {
-        checkMultiplicity(handler); // check if !h.isSharable() && h.added
-        name = filterName(name, handler);
-
+        checkMultiplicity(handler);      // ① sharable 检查
+        name = filterName(name, handler); // ② 唯一性 + 自动命名
         newCtx = newContext(group, name, handler);
-
-        addFirst0(newCtx);
-
-        // If the registered is false it means that the channel was not registered on an eventLoop yet.
-        // In this case we add the context to the pipeline and add a task that will call
-        // ChannelHandler.handlerAdded(...) once the channel is registered.
+        addFirst0(newCtx);                // ③ 链表插入
         if (!registered) {
             newCtx.setAddPending();
-            callHandlerCallbackLater(newCtx, true);
+            callHandlerCallbackLater(newCtx, true); // ④ 挂起：注册后再触发
             return this;
         }
-
         EventExecutor executor = newCtx.executor();
         if (!executor.inEventLoop()) {
-            callHandlerAddedInEventLoop(newCtx, executor);
+            callHandlerAddedInEventLoop(newCtx, executor); // ⑤ 跨 executor：任务形式
             return this;
         }
     }
-    callHandlerAdded0(newCtx);
+    callHandlerAdded0(newCtx); // ⑥ 同 executor 同步
     return this;
 }
-
 ```
 
+三条路径的语义：
+- **未注册 channel**：handlerAdded 回调不立刻执行，`callHandlerCallbackLater` 把 ctx 扔进 `pendingHandlerCallbackHead` 链，等 HeadContext.channelRegistered 触发时一次性执行 `callHandlerAddedForAllHandlers`（必须在 synchronized 外跑，否则 handlerAdded 里再 add handler 会死锁）
+- **已注册 + 同线程**：`callHandlerAdded0` 同步执行
+- **已注册 + 跨 executor**：包装成 Runnable 扔进 ctx.executor.execute；RejectedExecutionException 时 warn + 直接 remove（`atomicRemoveFromHandlerList` + `ctx.setRemoved()`），不丢 handler 到悬空状态
 
+### checkMultiplicity
 
+```java
+private static void checkMultiplicity(ChannelHandler handler) {
+    if (handler instanceof ChannelHandlerAdapter) {
+        ChannelHandlerAdapter h = (ChannelHandlerAdapter) handler;
+        if (!h.isSharable() && h.added) {
+            throw new IllegalStateException(
+                    h.getClass().getName() + " is not a @Sharable handler, so can't be added or removed multiple times.");
+        }
+    }
+}
+```
 
+`ChannelHandlerAdapter` 基类提供 `@Sharable` 注解（运行时反射读）和 `boolean added` 标记。每个 Channel 用的 handler 实例默认只能 add 到一个 pipeline；`@Sharable` 才能跨 Channel 复用。
 
-ChannelHandlerContext 用于保存 ChannelHandler 上下文，通过 ChannelHandlerContext 我们可以知道 ChannelPipeline 和 ChannelHandler 的关联关系。ChannelHandlerContext 可以实现 ChannelHandler 之间的交互，ChannelHandlerContext 包含了 ChannelHandler 生命周期的所有事件
+### invokeHandlerAddedIfNeeded（4.2 新增）
 
+```java
+// HeadContext.channelRegistered 触发
+private void invokeHandlerAddedIfNeeded() {
+    assert channel.eventLoop().inEventLoop();
+    if (!handlerAdded) {
+        handlerAdded = true;
+        callHandlerAddedForAllHandlers();
+    }
+}
+```
 
+4.2 把"注册前挂起的 handlerAdded 回调"的触发时机从 `AbstractChannel.register0()` 挪到了 HeadContext.channelRegistered——更合理的位置：它是 pipeline 自身事件链路的一部分，而非 Channel 注册流程的附属。
 
+## ChannelHandlerContext
 
+`AbstractChannelHandlerContext` 是 pipeline 双向链表的节点：
 
-ChannelHandlerContext 是对 ChannelHandler 的封装，每个 ChannelHandler 都对应一个  ChannelHandlerContext，实际上 ChannelPipeline 维护的是与 ChannelHandlerContext  的关系
+```java
+// 关键字段（4.2）
+private final DefaultChannelPipeline pipeline;
+private final String name;
+private final boolean ordered;             // executor 是否 OrderedEventExecutor
+private final int executionMask;            // 表示实现了哪些 handler 方法的位图
 
+final EventExecutor childExecutor;          // addXxx(group, ...) 传入的 executor
+EventExecutor contextExecutor;              // 运行时缓存的 executor —— 4.2 新增
+private Tasks invokeTasks;                  // invokeWrite / invokeFlush 等 Runnable 池 —— 4.2 新增
+private volatile int handlerState = INIT;   // INIT → ADD_PENDING → ADD_COMPLETE / REMOVE_COMPLETE（4.2 新增）
+```
 
-
-
-
-### fireChannelActive
+### executor() 缓存（4.2 优化）
 
 ```java
 @Override
-public final ChannelPipeline fireChannelActive() {
-    AbstractChannelHandlerContext.invokeChannelActive(head);
-    return this;
+public EventExecutor executor() {
+    EventExecutor ex = contextExecutor;
+    if (ex == null) {
+        contextExecutor = ex = childExecutor != null ? childExecutor : channel().eventLoop();
+    }
+    return ex;
 }
+```
 
-static void invokeChannelActive(final AbstractChannelHandlerContext next) {
-    EventExecutor executor = next.executor();
-    if (executor.inEventLoop()) {
-        next.invokeChannelActive();
-    } else {
-        executor.execute(new Runnable() {
-            @Override
-            public void run() {
-                next.invokeChannelActive();
+热路径上避免每次都做 `childExecutor != null ? childExecutor : channel().eventLoop()` 的链式依赖读取。**deregister 时必须清 null**（Channel.md `AbstractUnsafe.register` 里也有对应的遍历清理）。
+
+### handlerState 状态机
+
+```java
+private static final int INIT = 0;
+private static final int ADD_PENDING = 1;
+private static final int ADD_COMPLETE = 2;
+private static final int REMOVE_COMPLETE = 3;
+```
+
+`setAddComplete` 用 CAS：**只能从 INIT/ADD_PENDING 进入 ADD_COMPLETE**——如果 CAS 发现 `REMOVE_COMPLETE`，说明 handlerRemoved 已经被触发过（非 OrderedEventExecutor 的竞态），此时 setAddComplete 返回 false，后续流程跳过。
+
+## ChannelInitializer —— 一次性 init 后自摘除
+
+`ChannelInitializer<C extends Channel>` 是 Bootstrap 提供的抽象 handler，用户继承实现 `initChannel(C ch)`，Bootstrap 在 Channel 注册到 EventLoop 后自动调用，调用完立刻从 pipeline 自摘除。
+
+**必须标 `@Sharable`**（源码类级别就有）——Bootstrap / ServerBootstrap 会把同一个 ChannelInitializer 实例复用到**每一个新建的 Channel** 上。initMap（`ConcurrentHashMap.newKeySet()`）就是为这种共享设计的：用 Set 跟踪已经 init 过哪些 ChannelHandlerContext，防止重入。
+
+### 两条触发路径
+
+```java
+@Sharable
+public abstract class ChannelInitializer<C extends Channel> extends ChannelInboundHandlerAdapter {
+
+    private final Set<ChannelHandlerContext> initMap = ConcurrentHashMap.newKeySet();
+
+    protected abstract void initChannel(C ch) throws Exception;
+
+    // 路径 ①：handlerAdded 里触发（主要路径）
+    @Override
+    public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+        if (ctx.channel().isRegistered()) {
+            if (initChannel(ctx)) {
+                removeState(ctx);
             }
-        });
+        }
     }
-}
 
-static void invokeChannelActive(final AbstractChannelHandlerContext next) {
-    EventExecutor executor = next.executor();
-    if (executor.inEventLoop()) {
-        next.invokeChannelActive();
-    } else {
-        executor.execute(new Runnable() {
-            @Override
-            public void run() {
-                next.invokeChannelActive();
-            }
-        });
+    // 路径 ②：channelRegistered 里触发（fallback）
+    @Override
+    public final void channelRegistered(ChannelHandlerContext ctx) throws Exception {
+        if (initChannel(ctx)) {
+            ctx.pipeline().fireChannelRegistered();  // 补事件：handlerAdded 没调用过 channelRegistered
+            removeState(ctx);
+        } else {
+            ctx.fireChannelRegistered();  // 正常 forward
+        }
     }
 }
 ```
 
-```java
-@Override
-public void channelActive(ChannelHandlerContext ctx) {
-    ctx.fireChannelActive();
+注释说明为什么两条路径：`handlerAdded` 里 init 的好处是如果 initChannel 里**又加了另一个 ChannelInitializer**，所有 handler 都按正确顺序 add；但如果 channel 注册时 handler 才 add（例如 `addHandlerLater` 路径），就需要 channelRegistered 兜底。
 
-    readIfIsAutoRead();
-}
-
-/**
- * In HeadContext
- */
-private void readIfIsAutoRead() {
-    if (channel.config().isAutoRead()) {
-        channel.read();
-    }
-}
-```
-
-```java
-// AbstractChannelHandlerContext#disconnect()
-@Override
-public ChannelFuture disconnect(final ChannelPromise promise) {
-    if (!channel().metadata().hasDisconnect()) {
-        // Translate disconnect to close if the channel has no notion of disconnect-reconnect.
-        // So far, UDP/IP is the only transport that has such behavior.
-        return close(promise);
-    }
-    if (isNotValidPromise(promise, false)) {
-        // cancelled
-        return promise;
-    }
-
-    final AbstractChannelHandlerContext next = findContextOutbound(MASK_DISCONNECT);
-    EventExecutor executor = next.executor();
-    if (executor.inEventLoop()) {
-        next.invokeDisconnect(promise);
-    } else {
-        safeExecute(executor, new Runnable() {
-            @Override
-            public void run() {
-                next.invokeDisconnect(promise);
-            }
-        }, promise, null, false);
-    }
-    return promise;
-}
-```
-
-### fireChannelRegistered
-
-`fireChannelRegistered()` 是 Channel 成功注册到 EventLoop 后由 pipeline 触发的首个入站事件，沿 `HeadContext` 向后传播，逐个调用各 `ChannelInboundHandler.channelRegistered(ctx)`。它发生在 `fireChannelActive()` 之前——只有注册完成后才会进入 active 状态。
-
-```java
-// DefaultChannelPipeline
-@Override
-public final ChannelPipeline fireChannelRegistered() {
-    AbstractChannelHandlerContext.invokeChannelRegistered(head);
-    return this;
-}
-
-static void invokeChannelRegistered(final AbstractChannelHandlerContext next) {
-    EventExecutor executor = next.executor();
-    if (executor.inEventLoop()) {
-        next.invokeChannelRegistered();
-    } else {
-        executor.execute(new Runnable() {
-            @Override
-            public void run() {
-                next.invokeChannelRegistered();
-            }
-        });
-    }
-}
-```
-
-```java
-// AbstractChannel#register0()
-// 注册完成后的调用序列（节选）
-pipeline.fireChannelRegistered();
-if (isActive()) {
-    // 仅当 channel 已处于 active 才继续触发 active / autoRead
-    if (firstRegistration) {
-        pipeline.fireChannelActive();
-    } else if (config().isAutoRead()) {
-        beginRead();
-    }
-}
-```
-
-与 `fireChannelActive` 一样，若当前线程不是 EventLoop 线程，传播动作会被封装成 task 提交到该 EventExecutor，保证所有 handler 回调都在同一 EventLoop 线程串行执行。
-
-## ChannelHandler
-
-Handles an I/O event or intercepts an I/O operation, and forwards it to its next handler in its ChannelPipeline.
-
-**Sub-types**
-
-ChannelHandler itself does not provide many methods, but you usually have to implement one of its subtypes:
-
-- ChannelInboundHandler to handle inbound I/O events, and
-- ChannelOutboundHandler to handle outbound I/O operations.
-
-Alternatively, the following adapter classes are provided for your convenience:
-
-- ChannelInboundHandlerAdapter to handle inbound I/O events,
-- ChannelOutboundHandlerAdapter to handle outbound I/O operations, and
-- ChannelDuplexHandler to handle both inbound and outbound events
-
-For more information, please refer to the documentation of each subtype.
-
-**The context object**
-
-A ChannelHandler is provided with a ChannelHandlerContext object.
-A ChannelHandler is supposed to interact with the ChannelPipeline it belongs to via a context object.
-Using the context object, the ChannelHandler can pass events upstream or downstream, modify the pipeline dynamically, or store the information (using AttributeKeys) which is specific to the handler.
-
-**State management**
-
-A ChannelHandler often needs to store some stateful information. The simplest and recommended approach is to use member variables:
-
-```java
- public interface Message {
-     // your methods here
- }
-
- public class DataServerHandler extends SimpleChannelInboundHandler<Message> {
-
-     private boolean loggedIn;
-
-      @Override
-     public void channelRead0(ChannelHandlerContext ctx, Message message) {
-         if (message instanceof LoginMessage) {
-             authenticate((LoginMessage) message);
-             loggedIn = true;
-         } else (message instanceof GetDataMessage) {
-             if (loggedIn) {
-                 ctx.writeAndFlush(fetchSecret((GetDataMessage) message));
-             } else {
-                 fail();
-             }
-         }
-     }
-     ...
- }
- 
-```
-
-Because the handler instance has a state variable which is dedicated to one connection, you have to create a new handler instance for each new channel to avoid a race condition where a unauthenticated client can get the confidential information:
-
-```java
- // Create a new handler instance per channel.
- // See ChannelInitializer.initChannel(Channel).
- public class DataServerInitializer extends ChannelInitializer<Channel> {
-      @Override
-     public void initChannel(Channel channel) {
-         channel.pipeline().addLast("handler", new DataServerHandler());
-     }
- }
-
- 
-```
-
-**Using AttributeKeys**
-
-Although it's recommended to use member variables to store the state of a handler, for some reason you might not want to create many handler instances.
-In such a case, you can use AttributeKeys which is provided by ChannelHandlerContext:
-
-```java
- public interface Message {
-     // your methods here
- }
-
-  @Sharable
- public class DataServerHandler extends SimpleChannelInboundHandler<Message> {
-     private final AttributeKey<Boolean> auth =
-           AttributeKey.valueOf("auth");
-
-      @Override
-     public void channelRead(ChannelHandlerContext ctx, Message message) {
-         Attribute<Boolean> attr = ctx.attr(auth);
-         if (message instanceof LoginMessage) {
-             authenticate((LoginMessage) o);
-             attr.set(true);
-         } else (message instanceof GetDataMessage) {
-             if (Boolean.TRUE.equals(attr.get())) {
-                 ctx.writeAndFlush(fetchSecret((GetDataMessage) o));
-             } else {
-                 fail();
-             }
-         }
-     }
-     ...
- }
- 
-```
-
-Now that the state of the handler is attached to the ChannelHandlerContext, you can add the same handler instance to different pipelines:
-
-```java
- public class DataServerInitializer extends ChannelInitializer<Channel> {
-
-     private static final DataServerHandler SHARED = new DataServerHandler();
-
-      @Override
-     public void initChannel(Channel channel) {
-         channel.pipeline().addLast("handler", SHARED);
-     }
- }
- 
-```
-
-**The `@Sharable` annotation**
-
-In the example above which used an AttributeKey, you might have noticed the `@Sharable` annotation.
-
-If a ChannelHandler is annotated with the `@Sharable` annotation, it means you can create an instance of the handler just once and add it to one or more ChannelPipelines multiple times without a race condition.
-
-If this annotation is not specified, you have to create a new handler instance every time you add it to a pipeline because it has unshared state such as member variables.
-
-This annotation is provided for documentation purpose, just like [the JCIP annotations](http://www.javaconcurrencyinpractice.com/annotations/doc/).
-
-**Additional resources worth reading**
-
-Please refer to the ChannelHandler, and ChannelPipeline to find out more about inbound and outbound operations, what fundamental differences they have, how they flow in a pipeline, and how to handle the operation in your application.
-
-### LengthFieldBasedFrameDecoder
-
-```java
-// LengthFieldBasedFrameDecoder
-@Override
-protected final void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
-    Object decoded = decode(ctx, in);
-    if (decoded != null) {
-        out.add(decoded);
-    }
-}
-```
-
-lengthAdjustment
-
-discardingTooLongFrame
-
-tooLongFrameLength
-
-bytesToDiscard
-
-readableBytes < lengthFieldEndOffset, return null
-
-### ChannelInitializer
-
-#### initChannel
-
-Only call by `handlerAdded` or `channelRegistered`.
-
-Prevent multiple calls to initChannel().
+### initChannel —— 防重入 + finally 移除
 
 ```java
 private boolean initChannel(ChannelHandlerContext ctx) throws Exception {
-    if (initMap.add(ctx)) { // Guard against re-entrance.
+    if (initMap.add(ctx)) {               // ① add 成功 → 第一次处理这个 ctx
         try {
-            initChannel((C) ctx.channel());
+            initChannel((C) ctx.channel());  // ② 用户实现
         } catch (Throwable cause) {
-            // Explicitly call exceptionCaught(...) as we removed the handler before calling initChannel(...).
-            // We do so to prevent multiple calls to initChannel(...).
-            exceptionCaught(ctx, cause);
+            exceptionCaught(ctx, cause);      // ③ 默认 close channel
         } finally {
-            ChannelPipeline pipeline = ctx.pipeline();
-            if (pipeline.context(this) != null) {
-                pipeline.remove(this);
+            if (!ctx.isRemoved()) {
+                ctx.pipeline().remove(this); // ④ 自摘除
             }
         }
         return true;
     }
-    return false;
+    return false;  // ⑤ initMap 已存在 → 重入 → 不再 init
 }
 ```
 
-Gets called after the ChannelHandler was added to the actual context and it's ready to handle events. If override this method ensure you call super!
+四个关键点：
+- **initMap.add(ctx)** 是防重入哨兵——一个 ChannelInitializer 实例可能被 Bootstrap 复用到多个 Channel，但每个 ctx 只走一次 init
+- **finally 里 remove(this)**——保证无论 init 抛异常还是正常返回，ChannelInitializer 都从 pipeline 里消失。留在 pipeline 里没意义了（它的所有 handlerAdded 回调都执行完了）
+- **ctx.isRemoved() 检查**——ctx 在 offloaded EventExecutor 上可能已经被 remove 过了（handlerRemoved 里也会 remove），再 remove 会抛异常
+- **exceptionCaught 默认 close channel**——init 阶段任何 handler 初始化失败，这个 Channel 直接废掉
+
+### removeState 里的异步 ctx 清理
 
 ```java
-@Override
-public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
-    if (ctx.channel().isRegistered()) {
-        // This should always be true with our current DefaultChannelPipeline implementation.
-        // The good thing about calling initChannel(...) in handlerAdded(...) is that there will be no ordering
-        // surprises if a ChannelInitializer will add another ChannelInitializer. This is as all handlers will be added in the expected order.
-        if (initChannel(ctx)) {
-            // We are done with init the Channel, removing the initializer now.
-            removeState(ctx);
-        }
-    }
-}
-```
-
-Calls ChannelHandlerContext.fireChannelRegistered() to forward to the next ChannelInboundHandler in the ChannelPipeline. Sub-classes may override this method to change behavior.
-
-```java
-@Override
-@SuppressWarnings("unchecked")
-public final void channelRegistered(ChannelHandlerContext ctx) throws Exception {
-    // Normally this method will never be called as handlerAdded(...) should call initChannel(...) and remove
-    // the handler.
-    if (initChannel(ctx)) {
-        // we called initChannel(...) so we need to call now pipeline.fireChannelRegistered() to ensure we not
-        // miss an event.
-        ctx.pipeline().fireChannelRegistered();
-
-        // We are done with init the Channel, removing all the state for the Channel now.
-        removeState(ctx);
+private void removeState(final ChannelHandlerContext ctx) {
+    if (ctx.isRemoved()) {
+        initMap.remove(ctx);
     } else {
-        // Called initChannel(...) before which is the expected behavior, so just forward the event.
-        ctx.fireChannelRegistered();
+        // offloaded EventExecutor 场景下 ctx 移除可能还在排队
+        ctx.executor().execute(() -> initMap.remove(ctx));
     }
 }
 ```
 
-### inbound
+注释明确前提：用户给 ChannelInitializer 配了自定义 EventExecutor（`pipeline.addLast(executor, new MyInit())`）时，handlerRemoved 回调不在 EventLoop 线程——此时 `ctx.isRemoved()` 返回 false（还没跑到 remove 那步），在 ctx.executor 上 execute 一次清理就一定能成功。
 
-from head -> tail
+**ChannelInitializer 生命周期时序总结**：
 
-```java
-// DefaultChannelPipeline
-@Override
-public final ChannelPipeline fireChannelRead(Object msg) {
-  AbstractChannelHandlerContext.invokeChannelRead(head, msg);
-  return this;
-}
-
-// AbstractChannelHandlerContext
-@Override
-public ChannelHandlerContext fireChannelRead(final Object msg) {
-  invokeChannelRead(findContextInbound(MASK_CHANNEL_READ), msg);
-  return this;
-}
-
-static void invokeChannelRead(final AbstractChannelHandlerContext next, Object msg) {
-    final Object m = next.pipeline.touch(ObjectUtil.checkNotNull(msg, "msg"), next);
-    EventExecutor executor = next.executor();
-    if (executor.inEventLoop()) {
-        next.invokeChannelRead(m);
-    } else {
-        executor.execute(new Runnable() {
-            @Override
-            public void run() {
-                next.invokeChannelRead(m);
-            }
-        });
-    }
-}
-
-
-private void invokeChannelRead(Object msg) {
-  if (invokeHandler()) {
-    try {
-      ((ChannelInboundHandler) handler()).channelRead(this, msg);
-    } catch (Throwable t) {
-      invokeExceptionCaught(t);
-    }
-  } else {
-    fireChannelRead(msg);
-  }
-}
+```
+Bootstrap.init(channel)
+  → pipeline.addLast(new ChannelInitializer() { initChannel(ch) { ... } })
+  → group.register(channel)
+  → AbstractChannel.AbstractUnsafe.register0 → SingleThreadIoEventLoop.registerForIo0 → NioIoHandler.register
+  → HeadContext.channelRegistered → callHandlerAddedForAllHandlers → handlerAdded(ChannelInitializer ctx)
+  → ctx.channel().isRegistered() = true → initChannel(ChannelInitializer ctx)
+  → initChannel((C) ctx.channel()) [用户实现]
+  → finally: ctx.pipeline().remove(ChannelInitializer)  // 自摘除
+  → channelRead / channelActive / ... → pipeline 里已经没有 ChannelInitializer 了
 ```
 
-Makes best possible effort to detect if ChannelHandler.handlerAdded(ChannelHandlerContext) was called yet. If not return false and if called or could not detect return true. If this method returns false we will not invoke the ChannelHandler but just forward the event. This is needed as DefaultChannelPipeline may already put the ChannelHandler in the linked-list but not called ChannelHandler.handlerAdded(ChannelHandlerContext).
+
+
+4.1 里 skipContext 的唯一条件是"目标 handler 不实现当前事件类型"；4.2 加了 executor 条件：
 
 ```java
-private boolean invokeHandler() {
-    // Store in local variable to reduce volatile reads.
-    int handlerState = this.handlerState;
-    return handlerState == ADD_COMPLETE || (!ordered && handlerState == ADD_PENDING);
-}
-```
-
-```java
-// AbstractChannelHandlerContext
-@Override
-public ChannelHandlerContext fireChannelRead(final Object msg) {
-  invokeChannelRead(findContextInbound(MASK_CHANNEL_READ), msg);
-  return this;
-}
-
-private AbstractChannelHandlerContext findContextInbound(int mask) {
-    AbstractChannelHandlerContext ctx = this;
-    EventExecutor currentExecutor = executor();
-    do {
-        ctx = ctx.next;
-    } while (skipContext(ctx, currentExecutor, mask, MASK_ONLY_INBOUND));
-    return ctx;
-}
-
 private static boolean skipContext(
-  AbstractChannelHandlerContext ctx, EventExecutor currentExecutor, int mask, int onlyMask) {
-  // Ensure we correctly handle MASK_EXCEPTION_CAUGHT which is not included in the MASK_EXCEPTION_CAUGHT
-  return (ctx.executionMask & (onlyMask | mask)) == 0 ||
-    // We can only skip if the EventExecutor is the same as otherwise we need to ensure we offload
-    // everything to preserve ordering.
-    //
-    // See https://github.com/netty/netty/issues/10067
-    (ctx.executor() == currentExecutor && (ctx.executionMask & mask) == 0);
+        AbstractChannelHandlerContext ctx, EventExecutor currentExecutor, int mask, int onlyMask) {
+    // ① handler 本身不处理这类事件
+    return (ctx.executionMask & (onlyMask | mask)) == 0 ||
+        // ② handler 处理，但 executor 与当前不同 → 不能跳过，需要 offload 到它自己的 executor 以保序
+        //    见 https://github.com/netty/netty/issues/10067
+        (ctx.executor() == currentExecutor && (ctx.executionMask & mask) == 0);
 }
 ```
 
-#### HeadContext
+Issue #10067 的场景：pipeline 里有跨 executor 的 handler，若它被跳过上一个非空 handler 的 offload 任务，事件顺序就乱了。
 
-HeadContext 既是 Inbound 处理器，也是 Outbound 处理器。它分别实现了 ChannelInboundHandler 和 ChannelOutboundHandler。网络数据写入操作的入口就是由 HeadContext 节点完成的。HeadContext 作为  Pipeline 的头结点负责读取数据并开始传递 InBound 事件，当数据处理完成后，数据会反方向经过 Outbound 处理器，最终传递到 HeadContext，所以 HeadContext 又是处理 Outbound 事件的最后一站
+### 事件传播三步曲
 
-```java
-final class HeadContext extends AbstractChannelHandlerContext
-        implements ChannelOutboundHandler, ChannelInboundHandler {
-
-    private final Unsafe unsafe;
-
-    HeadContext(DefaultChannelPipeline pipeline) {
-        super(pipeline, null, HEAD_NAME, HeadContext.class);
-        unsafe = pipeline.channel().unsafe();
-        setAddComplete();
-    }
-
-  final boolean setAddComplete() {
-    for (;;) {
-      int oldState = handlerState;
-      if (oldState == REMOVE_COMPLETE) {
-        return false;
-      }
-      // Ensure we never update when the handlerState is REMOVE_COMPLETE already.
-      // oldState is usually ADD_PENDING but can also be REMOVE_COMPLETE when an EventExecutor is used that is not
-      // exposing ordering guarantees.
-      if (HANDLER_STATE_UPDATER.compareAndSet(this, oldState, ADD_COMPLETE)) {
-        return true;
-      }
-    }
-  }
-}
-```
+以 `fireChannelActive`（入站）为例，三步固定：
 
 ```java
 @Override
-public void bind(
-        ChannelHandlerContext ctx, SocketAddress localAddress, ChannelPromise promise) {
-    unsafe.bind(localAddress, promise);
-}
-```
-
-```java
-@Override
-public void channelRead(ChannelHandlerContext ctx, Object msg) {
-    ctx.fireChannelRead(msg);
-}
-
-@Override
-public void channelReadComplete(ChannelHandlerContext ctx) {
-    ctx.fireChannelReadComplete();
-
-    readIfIsAutoRead();
-}
-
-private void readIfIsAutoRead() {
-    if (channel.config().isAutoRead()) {
-        channel.read();
+public ChannelHandlerContext fireChannelActive() {
+    AbstractChannelHandlerContext next = findContextInbound(MASK_CHANNEL_ACTIVE); // ① 找下一个能处理的 ctx
+    EventExecutor executor = next.executor();
+    if (executor.inEventLoop()) {                    // ② executor 检查
+        if (next.invokeHandler()) {                  // ③ 执行（区分 HeadContext / Duplex / Adapter / Interface）
+            try {
+                final ChannelHandler handler = next.handler();
+                final DefaultChannelPipeline.HeadContext headContext = pipeline.head;
+                if (handler == headContext) {
+                    headContext.channelActive(next);
+                } else if (handler instanceof ChannelInboundHandlerAdapter) {
+                    ((ChannelInboundHandlerAdapter) handler).channelActive(next);
+                } else {
+                    ((ChannelInboundHandler) handler).channelActive(next);
+                }
+            } catch (Throwable t) {
+                next.invokeExceptionCaught(t);
+            }
+        } else {
+            next.fireChannelActive();  // invokeHandler 返回 false = handler 未 handlerAdded
+        }
+    } else {
+        next.executor().execute(this::fireChannelActive);  // 跨 executor 递归 offload
     }
+    return this;
 }
 ```
 
-Make sure use same EventLoop
+4.2 源码注释里有 **"DON'T CHANGE"** 警告：ChannelDuplexHandler 同时实现 Inbound / Outbound 两个接口，若走 instanceof ChannelInboundHandler 的通用分支，JDK 的接口检查开销会被放大——所以特意把 HeadContext 和 Adapter 提前分支。
+
+### Write 与 Flush（出站三步曲 + WriteTask）
 
 ```java
-abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, ResourceLeakHint {
-    static void invokeChannelRead(final AbstractChannelHandlerContext next, Object msg) {
-        final Object m = next.pipeline.touch(ObjectUtil.checkNotNull(msg, "msg"), next);
+void write(Object msg, boolean flush, ChannelPromise promise) {
+    if (validateWrite(msg, promise)) {
+        final AbstractChannelHandlerContext next = findContextOutbound(
+                flush ? MASK_WRITE | MASK_FLUSH : MASK_WRITE);
+        final Object m = pipeline.touch(msg, next);
         EventExecutor executor = next.executor();
         if (executor.inEventLoop()) {
-            next.invokeChannelRead(m);
+            // 同 executor 直接调 handler.write / handler.flush
+            ...
         } else {
-            executor.execute(new Runnable() {
-                @Override
-                public void run() {
-                    next.invokeChannelRead(m);
-                }
-            });
+            // 跨 executor → Recycler.get() 拿 WriteTask（Issue #8343 失败时 cancel 递减 pendingBytes）
+            final WriteTask task = WriteTask.newInstance(this, m, promise, flush);
+            if (!safeExecute(executor, task, promise, m, !flush)) {
+                task.cancel();  // 失败时必须减计数器并 recycle
+            }
         }
     }
 }
 ```
 
-```java
-// HeadContext
-public void channelRead(ChannelHandlerContext ctx, Object msg) {
-    ctx.fireChannelRead(msg);
-}
-```
+4.2 里 `WriteTask` 用 `Recycler` 池化，flush 任务也复用 `Tasks` 单例里的 `flushTask` / `readTask` / `fireChannelReadCompleteTask` / `fireChannelWritabilityChangedTask`——避免热路径上反复 new Runnable。
+
+## ChannelOutboundBuffer
+
+write 进 pipeline 后，最终落在 HeadContext.write → `unsafe.write(msg, promise)` → `AbstractChannel.AbstractUnsafe.write(...)`：
 
 ```java
-abstract class AbstractChannelHandlerContext implements ChannelHandlerContext, ResourceLeakHint {
-    public ChannelHandlerContext fireChannelRead(final Object msg) {
-        invokeChannelRead(findContextInbound(MASK_CHANNEL_READ), msg);
-        return this;
-    }
-
-    private AbstractChannelHandlerContext findContextInbound(int mask) {
-        AbstractChannelHandlerContext ctx = this;
-        EventExecutor currentExecutor = executor();
-        do {
-            ctx = ctx.next;
-        } while (skipContext(ctx, currentExecutor, mask, MASK_ONLY_INBOUND));
-        return ctx;
-    }
-}
-```
-
-#### HeadContext#write
-
-数据将会在 Pipeline 中一直寻找 Outbound 节点并向前传播，直到 Head 节点结束，由 Head 节点完成最后的数据发送
-
-```java
-// HeadContext
-@Override
-public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) {
-    unsafe.write(msg, promise);
-}
-```
-
-Head 节点是通过调用 unsafe 对象完成数据写入的，unsafe 对应的是 NioSocketChannelUnsafe 对象实例，最终调用到 AbstractChannel 中的 write 方法
-
-该方法有两个重要的点需要指出：
-
-1. filterOutboundMessage 方法会对待写入的 msg 进行过滤，如果 msg 使用的不是 DirectByteBuf，那么它会将 msg 转换成 DirectByteBuf。
-2. ChannelOutboundBuffer 可以理解为一个缓存结构，从源码最后一行 outboundBuffer.addMessage 可以看出是在向这个缓存中添加数据，所以 ChannelOutboundBuffer 才是理解数据发送的关键。
-
-> 只调用 write 方法，数据并不会被真正发送出去，而是存储在 ChannelOutboundBuffer 的缓存内
-
-```java
-// AbstractChannel.AbstractUnsafe
 @Override
 public final void write(Object msg, ChannelPromise promise) {
     assertEventLoop();
-
     ChannelOutboundBuffer outboundBuffer = this.outboundBuffer;
-    if (outboundBuffer == null) {
-        try {
-            // release message now to prevent resource-leak
-            ReferenceCountUtil.release(msg);
-        } finally {
-            safeSetFailure(promise,
-                    newClosedChannelException(initialCloseCause, "write(Object, ChannelPromise)"));
-        }
+    if (outboundBuffer == null) {  // 已 close
+        ReferenceCountUtil.release(msg);
+        safeSetFailure(promise, newClosedChannelException(...));
         return;
     }
-
     int size;
     try {
-        msg = filterOutboundMessage(msg);
-        size = pipeline.estimatorHandle().size(msg);
-        if (size < 0) {
-            size = 0;
-        }
+        msg = filterOutboundMessage(msg);          // heap → direct
+        size = pipeline.estimatorHandle().size(msg); // 估算字节数
     } catch (Throwable t) {
-        try {
-            ReferenceCountUtil.release(msg);
-        } finally {
-            safeSetFailure(promise, t);
-        }
+        ReferenceCountUtil.release(msg);
+        safeSetFailure(promise, t);
         return;
     }
-
-    outboundBuffer.addMessage(msg, size, promise);
+    outboundBuffer.addMessage(msg, size, promise); // 入队
 }
 ```
-#### filterOutboundMessage
-filterOutboundMessage 方法 取决于具体Channel的实现 以常用的NioByteChannel为例 只会接受 ByteBuf 类型以及 FileRegion 类型的 msg 数据 同时会将 heap buffer 转换成 direct buffer
 
-> FileRegion 是Netty定义的用来通过零拷贝的方式网络传输文件数据
+**只 write 不 flush，数据只在 buffer 里排队。** flush 才是真正触发 `doWrite()` 的动作。
 
+### Entry 结构（96B / 条）
 
 ```java
-public abstract class AbstractNioByteChannel extends AbstractNioChannel {
-    @Override
-    protected final Object filterOutboundMessage(Object msg) {
-        if (msg instanceof ByteBuf) {
-            ByteBuf buf = (ByteBuf) msg;
-            if (buf.isDirect()) {
-                return msg;
-            }
-
-            return newDirectBuffer(buf);
-        }
-
-        if (msg instanceof FileRegion) {
-            return msg;
-        }
-
-        throw new UnsupportedOperationException(
-            "unsupported message type: " + StringUtil.simpleClassName(msg) + EXPECTED_TYPES);
-    }
-}
+// 每条排队消息被包成一个 Entry
+static final int CHANNEL_OUTBOUND_BUFFER_ENTRY_OVERHEAD =
+        SystemPropertyUtil.getInt("io.netty.transport.outboundBufferEntrySizeOverhead", 96);
 ```
 
+96 字节 overhead 是 Entry 对象的固定内存占用（Object header + 8 字段引用/promise/bufs 等），每条排队消息的总内存估算 = `size(msg) + 96`。高水位 `highWaterMark` / 低水位 `lowWaterMark` 控制的是 `totalPendingSize`（原子计数），超过 high → `isWritable() = false`，降到 low 以下才重新变 true（hysteresis 防抖动）。
 
-
-pipeline 中会有一个 estimatorHandle 专门用来计算待发送 ByteBuffer 的大小。这个 estimatorHandle 会在 pipeline 对应的 Channel 中的配置类创建的时候被初始化
+### addMessage → 水位通知
 
 ```java
-public class DefaultChannelPipeline implements ChannelPipeline {
-    private volatile MessageSizeEstimator.Handle estimatorHandle;
+public void addMessage(Object msg, int size, ChannelPromise promise) {
+    Entry entry = newEntry(msg, size, promise);
+    ... // 链表 append
+    incrementPendingOutboundBytes(entry.pendingSize, false); // invokeLater=false：立刻同步 decrement
+}
 
-    final MessageSizeEstimator.Handle estimatorHandle() {
-        MessageSizeEstimator.Handle handle = estimatorHandle;
-        if (handle == null) {
-            handle = channel.config().getMessageSizeEstimator().newHandle();
-            if (!ESTIMATOR.compareAndSet(this, null, handle)) {
-                handle = estimatorHandle;
-            }
-        }
-        return handle;
+private void incrementPendingOutboundBytes(long size, boolean invokeLater) {
+    TOTAL_PENDING_SIZE_UPDATER.addAndGet(this, size);
+    if (invokeLater && UNWRITABLE_UPDATER.compareAndSet(this, 0, 1)) {
+        channel.pipeline().fireChannelWritabilityChanged();
     }
 }
 ```
 
-#### SimpleChannelInboundHandler
+`UNWRITABLE_UPDATER` 是一个原子 int 标记——只有第一次越过 high water 时触发一次 `fireChannelWritabilityChanged()`（writable→unwritable 边沿）；回落到 low 以下时再触发一次相反方向。
 
-release automatically
-
-### outbound
-
-tail -> head
-
-#### TailContext
+### nioBuffers：批量 DirectByteBuffer 拼接
 
 ```java
-// A special catch-all handler that handles both bytes and messages.
-final class TailContext extends AbstractChannelHandlerContext implements ChannelInboundHandler {
-
-    TailContext(DefaultChannelPipeline pipeline) {
-        super(pipeline, null, TAIL_NAME, TailContext.class);
-        setAddComplete();
-    }
+public ByteBuffer[] nioBuffers(int maxCount, long maxBytes) {
+    ByteBuffer[] nioBuffers = NIO_BUFFERS.get(threadLocalMap); // FastThreadLocal 缓存
+    int nioBufferCount = nioBuffers(entry, buf, nioBuffers, 0, maxCount);
+    // expandNioBufferArray 按需扩容
+    return nioBuffers;
 }
 ```
 
-Called once a message hit the end of the ChannelPipeline without been handled by the user in ChannelInboundHandler.channelRead(ChannelHandlerContext, Object).
-This method is responsible to call **ReferenceCountUtil.release(Object)** on the given msg at some point.
+`NIO_BUFFERS` 是 `FastThreadLocal<ByteBuffer[]>`，每个 EventLoop 线程复用同一组 `ByteBuffer` 数组，`entry.bufs` 也在 Entry 上缓存（避免每次 `buf.nioBuffers()` 重新分配）。`nioBuffers(...)` 必须紧接着 `forEachFlushable(...)` 写调完 `removeBytes(...)` 或 `abort()` 才能再用——回调里可能改写了 entry 状态。
+
+## Event Mask 与 Handler 类型
+
+`executionMask = mask(handlerClass)` 在构造 ctx 时一次性算出，之后事件传播时只做位与判断：
 
 ```java
- @Override
-        public void channelRead(ChannelHandlerContext ctx, Object msg) {
-            onUnhandledInboundMessage(ctx, msg);
-        }
-
- protected void onUnhandledInboundMessage(ChannelHandlerContext ctx, Object msg) {
-        onUnhandledInboundMessage(msg);
-        if (logger.isDebugEnabled()) {
-            logger.debug("Discarded message pipeline : {}. Channel : {}.",
-                         ctx.pipeline().names(), ctx.channel());
-        }
-    }
-
-protected void onUnhandledInboundMessage(Object msg) {
-    try {
-			// log
-    } finally {
-        ReferenceCountUtil.release(msg);
-    }
-}
+// 掩码常量
+static final int MASK_CHANNEL_REGISTERED = 1;
+static final int MASK_CHANNEL_UNREGISTERED = 1 << 1;
+...共 10 个 inbound + 8 个 outbound = 18 个位
+static final int MASK_ONLY_INBOUND  = 0x3FF;   // 低 10 位
+static final int MASK_ONLY_OUTBOUND = 0xFFC00; // 高 18 位
 ```
 
-
-
-TailContext 提供了兜底的异常处理逻辑
-
-
-
-
-
-##### addMessage
-
-ChannelOutboundBuffer 包含三个非常重要的指针：第一个被写到缓冲区的节点 flushedEntry、第一个未被写到缓冲区的节点 unflushedEntry和最后一个节点 tailEntry
-
-```java
-public final class ChannelOutboundBuffer {
-    public void addMessage(Object msg, int size, ChannelPromise promise) {
-        Entry entry = Entry.newInstance(msg, size, total(msg), promise);
-        if (tailEntry == null) {
-            flushedEntry = null;
-        } else {
-            Entry tail = tailEntry;
-            tail.next = entry;
-        }
-        tailEntry = entry;
-        if (unflushedEntry == null) {
-            unflushedEntry = entry;
-        }
-
-        // increment pending bytes after adding message to the unflushed arrays.
-        // See https://github.com/netty/netty/issues/1619
-        incrementPendingOutboundBytes(entry.pendingSize, false);
-    }
-}
-```
-
-第一次调用 write，因为链表里只有一个数据，所以 unflushedEntry 和 tailEntry 指针都指向第一个添加的数据 msg1。flushedEntry 指针在没有触发 flush 动作时会一直指向 NULL。
-
-第二次调用 write，tailEntry 指针会指向新加入的 msg2，unflushedEntry 保持不变。
-
-第 N 次调用 write，tailEntry 指针会不断指向新加入的 msgN，unflushedEntry 依然保持不变，unflushedEntry 和 tailEntry 指针之间的数据都是未写入 Socket 缓冲区的。
-
-每次写入数据后都会调用 incrementPendingOutboundBytes 方法判断缓存的水位线
-
-
-
-
-
-### exception
-
-> [!TIP]
->
-> 异常事件的传播顺序与 ChannelHandler 的添加顺序相同，会依次向后传播，与 Inbound 事件和 Outbound 事件无关
-
-
-
-### flush
-
-flush 的核心逻辑主要分为两个步骤：addFlush 和 flush0
-
-```java
-protected abstract class AbstractUnsafe implements Unsafe {
-    @Override
-    public final void flush() {
-        assertEventLoop();
-
-        ChannelOutboundBuffer outboundBuffer = this.outboundBuffer;
-        if (outboundBuffer == null) {
-            return;
-        }
-
-        outboundBuffer.addFlush();
-        flush0();
-    }
-}
-```
-
-
-#### addFlush
-
-Add a flush to this ChannelOutboundBuffer. This means all previous added messages are marked as flushed and so you will be able to handle them.
-
-```java
-public final class ChannelOutboundBuffer {
-    public void addFlush() {
-        // There is no need to process all entries if there was already a flush before and no new messages
-        // where added in the meantime.
-        //
-        // See https://github.com/netty/netty/issues/2577
-        Entry entry = unflushedEntry;
-        if (entry != null) {
-            if (flushedEntry == null) {
-                // there is no flushedEntry yet, so start with the entry
-                flushedEntry = entry;
-            }
-            do {
-                flushed++;
-                if (!entry.promise.setUncancellable()) {
-                    // Was cancelled so make sure we free up memory and notify about the freed bytes
-                    int pending = entry.cancel();
-                    decrementPendingOutboundBytes(pending, false, true);
-                }
-                entry = entry.next;
-            } while (entry != null);
-
-            // All flushed so reset unflushedEntry
-            unflushedEntry = null;
-        }
-    }
-}
-```
-
-
-#### flush0
-```java
-protected abstract class AbstractUnsafe implements Unsafe {
-    protected void flush0() {
-        if (inFlush0) {
-// Avoid re-entrance
-            return;
-        }
-
-        final ChannelOutboundBuffer outboundBuffer = this.outboundBuffer;
-        if (outboundBuffer == null || outboundBuffer.isEmpty()) {
-            return;
-        }
-
-        inFlush0 = true;
-
-        // Mark all pending write requests as failure if the channel is inactive.
-        if (!isActive()) {
-            try {
-                // Check if we need to generate the exception at all.
-                if (!outboundBuffer.isEmpty()) {
-                    if (isOpen()) {
-                        outboundBuffer.failFlushed(new NotYetConnectedException(), true);
-                    } else {
-                        // Do not trigger channelWritabilityChanged because the channel is closed already.
-                        outboundBuffer.failFlushed(newClosedChannelException(initialCloseCause, "flush0()"), false);
-                    }
-                }
-            } finally {
-                inFlush0 = false;
-            }
-            return;
-        }
-
-        try {
-            doWrite(outboundBuffer);
-        } catch (Throwable t) {
-            handleWriteError(t);
-        } finally {
-            inFlush0 = false;
-        }
-    }
-}
-```
-
-##### doWrite
-
-该方法负责将数据真正写入到 Socket 缓冲区
-
-
-根据自旋锁次数重复调用 doWriteInternal 方法发送数据，每成功发送一次数据，自旋锁的次数 writeSpinCount 减 1，当 writeSpinCount 耗尽，那么 doWrite 操作将会被暂时中断
-
-
-```java
-public class NioSocketChannel extends AbstractNioByteChannel implements io.netty.channel.socket.SocketChannel {
-    protected void doWrite(ChannelOutboundBuffer in) throws Exception {
-        SocketChannel ch = javaChannel();
-        /*
-         * Returns the maximum loop count for a write operation until WritableByteChannel.write(ByteBuffer) returns a non-zero value. 
-         * It is similar to what a spin lock is used for in concurrency programming. 
-         * It improves memory utilization and write throughput depending on the platform that JVM runs on. 
-         * The default value is 16.
-         */
-        int writeSpinCount = config().getWriteSpinCount();
-        do {
-            if (in.isEmpty()) {
-                // All written so clear OP_WRITE
-                clearOpWrite();
-                // Directly return here so incompleteWrite(...) is not called.
-                return;
-            }
-
-            // Ensure the pending writes are made of ByteBufs only.
-            int maxBytesPerGatheringWrite = ((NioSocketChannelConfig) config).getMaxBytesPerGatheringWrite();
-            ByteBuffer[] nioBuffers = in.nioBuffers(1024, maxBytesPerGatheringWrite);
-            int nioBufferCnt = in.nioBufferCount();
-
-            // Always use nioBuffers() to workaround data-corruption.
-            // See https://github.com/netty/netty/issues/2761
-            switch (nioBufferCnt) {
-                case 0:
-                    // We have something else beside ByteBuffers to write so fallback to normal writes.
-                    writeSpinCount -= doWrite0(in);
-                    break;
-                case 1: {
-                    // Only one ByteBuf so use non-gathering write
-                    // Zero length buffers are not added to nioBuffers by ChannelOutboundBuffer, so there is no need
-                    // to check if the total size of all the buffers is non-zero.
-                    ByteBuffer buffer = nioBuffers[0];
-                    int attemptedBytes = buffer.remaining();
-                    final int localWrittenBytes = ch.write(buffer);
-                    if (localWrittenBytes <= 0) {
-                        incompleteWrite(true);
-                        return;
-                    }
-                    adjustMaxBytesPerGatheringWrite(attemptedBytes, localWrittenBytes, maxBytesPerGatheringWrite);
-                    in.removeBytes(localWrittenBytes);
-                    --writeSpinCount;
-                    break;
-                }
-                default: {
-                    // Zero length buffers are not added to nioBuffers by ChannelOutboundBuffer, so there is no need
-                    // to check if the total size of all the buffers is non-zero.
-                    // We limit the max amount to int above so cast is safe
-                    long attemptedBytes = in.nioBufferSize();
-                    final long localWrittenBytes = ch.write(nioBuffers, 0, nioBufferCnt);
-                    if (localWrittenBytes <= 0) {
-                        incompleteWrite(true);
-                        return;
-                    }
-                    // Casting to int is safe because we limit the total amount of data in the nioBuffers to int above.
-                    adjustMaxBytesPerGatheringWrite((int) attemptedBytes, (int) localWrittenBytes,
-                            maxBytesPerGatheringWrite);
-                    in.removeBytes(localWrittenBytes);
-                    --writeSpinCount;
-                    break;
-                }
-            }
-        } while (writeSpinCount > 0);
-
-        incompleteWrite(writeSpinCount < 0);
-    }
-
-}
-```
-
-
-
-ChannelDuplexHandler which consolidates Channel.flush() / ChannelHandlerContext.flush() operations
-(which also includes Channel.writeAndFlush(Object) / Channel.writeAndFlush(Object, ChannelPromise)
-and ChannelOutboundInvoker.writeAndFlush(Object) / ChannelOutboundInvoker.writeAndFlush(Object, ChannelPromise)).
-
-Flush operations are generally speaking expensive as these may trigger a syscall on the transport level.
-Thus it is in most cases (where write latency can be traded with throughput) a good idea to try to minimize flush operations as much as possible.
-
-If a read loop is currently ongoing, flush(ChannelHandlerContext) will not be passed on to the next ChannelOutboundHandler in the ChannelPipeline,
-as it will pick up any pending flushes when channelReadComplete(ChannelHandlerContext) is triggered.
-If no read loop is ongoing, the behavior depends on the consolidateWhenNoReadInProgress constructor argument:
-
-- if false, flushes are passed on to the next handler directly;
-- if true, the invocation of the next handler is submitted as a separate task on the event loop. Under high throughput,
-  this gives the opportunity to process other flushes before the task gets executed, thus batching multiple flushes into one.
-
-If explicitFlushAfterFlushes is reached the flush will be forwarded as well (whether while in a read loop, or while batching outside of a read loop).
-
-If the Channel becomes non-writable it will also try to execute any pending flush operations.
-
-> The FlushConsolidationHandler should be put as first ChannelHandler in the ChannelPipeline to have the best effect.
-
-```java
-public class FlushConsolidationHandler extends ChannelDuplexHandler {
-    private final int explicitFlushAfterFlushes;
-    private final boolean consolidateWhenNoReadInProgress;
-    private final Runnable flushTask;
-
-
-    @Override
-    public void flush(ChannelHandlerContext ctx) throws Exception {
-        if (readInProgress) {
-            // If there is still a read in progress we are sure we will see a channelReadComplete(...) call. Thus
-            // we only need to flush if we reach the explicitFlushAfterFlushes limit.
-            if (++flushPendingCount == explicitFlushAfterFlushes) {
-                flushNow(ctx);
-            }
-        } else if (consolidateWhenNoReadInProgress) {
-            // Flush immediately if we reach the threshold, otherwise schedule
-            if (++flushPendingCount == explicitFlushAfterFlushes) {
-                flushNow(ctx);
-            } else {
-                scheduleFlush(ctx);
-            }
-        } else {
-            // Always flush directly
-            flushNow(ctx);
-        }
-    }
-
-    private void scheduleFlush(final ChannelHandlerContext ctx) {
-        if (nextScheduledFlush == null) {
-            // Run as soon as possible, but still yield to give a chance for additional writes to enqueue.
-            nextScheduledFlush = ctx.channel().eventLoop().submit(flushTask);
-        }
-    }
-
-    @Override
-    public void channelReadComplete(ChannelHandlerContext ctx) throws Exception {
-        // This may be the last event in the read loop, so flush now!
-        resetReadAndFlushIfNeeded(ctx);
-        ctx.fireChannelReadComplete();
-    }
-  
-    private void resetReadAndFlushIfNeeded(ChannelHandlerContext ctx) {
-        readInProgress = false;
-        flushIfNeeded(ctx);
-    }
-}
-```
-
-## Frame detection
-
-如何支持与自定义协议
-
-### ByteToMessageDecoder
-ByteToMessageDecoder decodes bytes in a stream-like fashion from one ByteBuf to an other Message type.
-
-Generally frame detection should be handled earlier in the pipeline by adding a `DelimiterBasedFrameDecoder`, `FixedLengthFrameDecoder`, `LengthFieldBasedFrameDecoder`, or `LineBasedFrameDecoder`.
-
-If a custom frame decoder is required, then one needs to be careful when implementing one with ByteToMessageDecoder. Ensure there are enough bytes in the buffer for a complete frame by checking ByteBuf.readableBytes().
-If there are not enough bytes for a complete frame, return without modifying the reader index to allow more bytes to arrive.
-
-To check for complete frames without modifying the reader index, use methods like ByteBuf.getInt(int). One MUST use the reader index when using methods like ByteBuf.getInt(int).
-For example calling in.getInt(0) is assuming the frame starts at the beginning of the buffer, which is not always the case. Use in.getInt(in.readerIndex()) instead.
-
-> [!TIP]
-> Be aware that sub-classes of ByteToMessageDecoder MUST NOT annotated with <font color='red'>@Sharable</font>.
->
-> Some methods such as <font color='red'>ByteBuf.readBytes(int)</font> will cause a memory leak if the returned buffer is not released or added to the out List.
-> Use derived buffers like <font color='blue'>ByteBuf.readSlice(int)</font> to avoid leaking memory.
-
-channelRead -> callDecode -> decodeRemovalReentryProtection -> decode
-
-#### LengthFieldBased
-
-
-
-#### cumulate
-
-cumulate before callDecode
-
-```java
- public interface Cumulator {
-        ByteBuf cumulate(ByteBufAllocator alloc, ByteBuf cumulation, ByteBuf in);
-}
-```
-
-- memcopy default
-- composite
-
-Be aware that CompositeByteBuf use a more complex indexing implementation so depending on your use-case and the decoder implementation this may be slower than just use the MERGE_CUMULATOR.
-
-### MessageToMessageDecoder
-
-MessageToMessageDecoder decodes from one message to an other message.
-
-
-```java
-
-public class WorldClockClientInitializer extends ChannelInitializer<SocketChannel> {
-
-    private final SslContext sslCtx;
-
-    public WorldClockClientInitializer(SslContext sslCtx) {
-        this.sslCtx = sslCtx;
-    }
-
-    @Override
-    public void initChannel(SocketChannel ch) {
-        ChannelPipeline p = ch.pipeline();
-        if (sslCtx != null) {
-            p.addLast(sslCtx.newHandler(ch.alloc(), WorldClockClient.HOST, WorldClockClient.PORT));
-        }
-
-        p.addLast(new ProtobufVarint32FrameDecoder());
-        p.addLast(new ProtobufDecoder(WorldClockProtocol.LocalTimes.getDefaultInstance()));
-
-        p.addLast(new ProtobufVarint32LengthFieldPrepender());
-        p.addLast(new ProtobufEncoder());
-
-        p.addLast(new WorldClockClientHandler());
-    }
-}
-```
-
-## Traffic
-
-- ChannelTrafficShapingHandler
-- GlobalTrafficShapingHandler
-- GlobalChannelTrafficShapingHandler
-
-set autoRead = false and schedule ReopenReadTimerTask
-
-```java
-public abstract class AbstractTrafficShapingHandler extends ChannelDuplexHandler {
-  @Override
-  public void channelRead(final ChannelHandlerContext ctx, final Object msg) throws Exception {
-    long size = calculateSize(msg);
-    long now = TrafficCounter.milliSecondFromNano();
-    if (size > 0) {
-      // compute the number of ms to wait before reopening the channel
-      long wait = trafficCounter.readTimeToWait(size, readLimit, maxTime, now);
-      wait = checkWaitReadTime(ctx, wait, now);
-      if (wait >= MINIMAL_WAIT) { // At least 10ms seems a minimal
-        // time in order to try to limit the traffic
-        // Only AutoRead AND HandlerActive True means Context Active
-        Channel channel = ctx.channel();
-        ChannelConfig config = channel.config();
-
-        if (config.isAutoRead() && isHandlerActive(ctx)) {
-          config.setAutoRead(false);
-          channel.attr(READ_SUSPENDED).set(true);
-          // Create a Runnable to reactive the read if needed. If one was create before it will just be
-          // reused to limit object creation
-          Attribute<Runnable> attr = channel.attr(REOPEN_TASK);
-          Runnable reopenTask = attr.get();
-          if (reopenTask == null) {
-            reopenTask = new ReopenReadTimerTask(ctx);
-            attr.set(reopenTask);
-          }
-          ctx.executor().schedule(reopenTask, wait, TimeUnit.MILLISECONDS);
-        }
-      }
-    }
-    informReadOperation(ctx, now);
-    ctx.fireChannelRead(msg);
-  }
-}
-```
-
-## Idle
-
-### IdleStateHandler
-
-IdleStateHandler triggers an IdleStateEvent when a Channel has not performed read, write, or both operation for a while.
-
-Supported idle states:
-
-
-| Property       | Meaning                                                                                                                                                                      |
-| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| readerIdleTime | an IdleStateEvent whose state is IdleState.READER_IDLE will be triggered when no read was performed for the specified period of time.<br />Specify 0 to disable.             |
-| writerIdleTime | an IdleStateEvent whose state is IdleState.WRITER_IDLE will be triggered when no write was performed for the specified period of time.<br />Specify 0 to disable.            |
-| allIdleTime    | an IdleStateEvent whose state is IdleState.ALL_IDLE will be triggered when neither read nor write was performed for the specified period of time.<br />Specify 0 to disable. |
-
-```java
-public class IdleStateHandler extends ChannelDuplexHandler {
-    public IdleStateHandler(
-            long readerIdleTime, long writerIdleTime, long allIdleTime,
-            TimeUnit unit) {
-        this(false, readerIdleTime, writerIdleTime, allIdleTime, unit);
-    }
-
-    // This method will be invoked only if this handler was added before channelActive() event is fired.
-    private void initialize(ChannelHandlerContext ctx) {
-      // Avoid the case where destroy() is called before scheduling timeouts.
-      // See: https://github.com/netty/netty/issues/143
-      switch (state) {
-        case 1:
-        case 2:
-          return;
-        default:
-          break;
-      }
-  
-      state = 1;
-      initOutputChanged(ctx);
-  
-      lastReadTime = lastWriteTime = ticksInNanos();
-      if (readerIdleTimeNanos > 0) {
-        readerIdleTimeout = schedule(ctx, new ReaderIdleTimeoutTask(ctx),
-                readerIdleTimeNanos, TimeUnit.NANOSECONDS);
-      }
-      if (writerIdleTimeNanos > 0) {
-        writerIdleTimeout = schedule(ctx, new WriterIdleTimeoutTask(ctx),
-                writerIdleTimeNanos, TimeUnit.NANOSECONDS);
-      }
-      if (allIdleTimeNanos > 0) {
-        allIdleTimeout = schedule(ctx, new AllIdleTimeoutTask(ctx),
-                allIdleTimeNanos, TimeUnit.NANOSECONDS);
-      }
-    }
-}
-```
-
-override userEventTriggered method and reply IdleStateEvent
-
-
-| IdleState   | Task                  | Handler            | Handler Description                                                                  |
-| ------------- | ----------------------- | -------------------- | -------------------------------------------------------------------------------------- |
-| READER_IDLE | ReaderIdleTimeoutTask | ReadTimeoutHandler | Raises a ReadTimeoutException when no data was read within a certain period of time. |
-| WRITER_IDLE | WriterIdleTimeoutTask |                    |                                                                                      |
-| ALL_IDLE    | AllIdleTimeoutTask    |                    |                                                                                      |
-
-WriteTimeoutHandler Raises a WriteTimeoutException when a write operation cannot finish in a certain period of time.
-
-
-```java
-private abstract static class AbstractIdleTask implements Runnable {
-  private final ChannelHandlerContext ctx;
-  AbstractIdleTask(ChannelHandlerContext ctx) {
-    this.ctx = ctx;
-  }
-  @Override
-  public void run() {
-    if (!ctx.channel().isOpen()) {
-      return;
-    }
-    run(ctx);
-  }
-  protected abstract void run(ChannelHandlerContext ctx);
-}
-```
-ReaderIdleTimeoutTask
-```java
-private final class ReaderIdleTimeoutTask extends AbstractIdleTask {
-    @Override
-    protected void run(ChannelHandlerContext ctx) {
-        long nextDelay = readerIdleTimeNanos;
-        if (!reading) {
-            nextDelay -= ticksInNanos() - lastReadTime;
-        }
-
-        if (nextDelay <= 0) {
-            // Reader is idle - set a new timeout and notify the callback.
-            readerIdleTimeout = schedule(ctx, this, readerIdleTimeNanos, TimeUnit.NANOSECONDS);
-
-            boolean first = firstReaderIdleEvent;
-            firstReaderIdleEvent = false;
-
-            try {
-                IdleStateEvent event = newIdleStateEvent(IdleState.READER_IDLE, first);
-                channelIdle(ctx, event);
-            } catch (Throwable t) {
-                ctx.fireExceptionCaught(t);
-            }
-        } else {
-            // Read occurred before the timeout - set a new timeout with shorter delay.
-            readerIdleTimeout = schedule(ctx, this, nextDelay, TimeUnit.NANOSECONDS);
-        }
-    }
-}
-```
-
-WriterIdleTimeoutTask
-```java
-private final class WriterIdleTimeoutTask extends AbstractIdleTask {
-    @Override
-    protected void run(ChannelHandlerContext ctx) {
-        long lastWriteTime = IdleStateHandler.this.lastWriteTime;
-        long nextDelay = writerIdleTimeNanos - (ticksInNanos() - lastWriteTime);
-        if (nextDelay <= 0) {
-            // Writer is idle - set a new timeout and notify the callback.
-            writerIdleTimeout = schedule(ctx, this, writerIdleTimeNanos, TimeUnit.NANOSECONDS);
-
-            boolean first = firstWriterIdleEvent;
-            firstWriterIdleEvent = false;
-
-            try {
-                if (hasOutputChanged(ctx, first)) {
-                    return;
-                }
-
-                IdleStateEvent event = newIdleStateEvent(IdleState.WRITER_IDLE, first);
-                channelIdle(ctx, event);
-            } catch (Throwable t) {
-                ctx.fireExceptionCaught(t);
-            }
-        } else {
-            // Write occurred before the timeout - set a new timeout with shorter delay.
-            writerIdleTimeout = schedule(ctx, this, nextDelay, TimeUnit.NANOSECONDS);
-        }
-    }
-}
-```
-hasOutputChanged
-```java
-public class IdleStateHandler extends ChannelDuplexHandler {
-  private boolean hasOutputChanged(ChannelHandlerContext ctx, boolean first) {
-    if (observeOutput) {
-
-      // We can take this shortcut if the ChannelPromises that got passed into write()
-      // appear to complete. It indicates "change" on message level and we simply assume
-      // that there's change happening on byte level. If the user doesn't observe channel
-      // writability events then they'll eventually OOME and there's clearly a different
-      // problem and idleness is least of their concerns.
-      if (lastChangeCheckTimeStamp != lastWriteTime) {
-        lastChangeCheckTimeStamp = lastWriteTime;
-
-        // But this applies only if it's the non-first call.
-        if (!first) {
-          return true;
-        }
-      }
-
-      Channel channel = ctx.channel();
-      Unsafe unsafe = channel.unsafe();
-      ChannelOutboundBuffer buf = unsafe.outboundBuffer();
-
-      if (buf != null) {
-        int messageHashCode = System.identityHashCode(buf.current());
-        long pendingWriteBytes = buf.totalPendingWriteBytes();
-
-        if (messageHashCode != lastMessageHashCode || pendingWriteBytes != lastPendingWriteBytes) {
-          lastMessageHashCode = messageHashCode;
-          lastPendingWriteBytes = pendingWriteBytes;
-
-          if (!first) {
-            return true;
-          }
-        }
-
-        long flushProgress = buf.currentProgress();
-        if (flushProgress != lastFlushProgress) {
-          lastFlushProgress = flushProgress;
-          return !first;
-        }
-      }
-    }
-
-    return false;
-  }
-}
-```
-## TimeoutHandler
-
-#### WriteTimeoutHandler
-
-
-
-```java
-private final class WriteTimeoutTask implements Runnable, ChannelFutureListener {
-  @Override
-  public void run() {
-    // Was not written yet so issue a write timeout
-    // The promise itself will be failed with a ClosedChannelException once the close() was issued
-    // See https://github.com/netty/netty/issues/2159
-    if (!promise.isDone()) {
-      try {
-        writeTimedOut(ctx);
-      } catch (Throwable t) {
-        ctx.fireExceptionCaught(t);
-      }
-    }
-    removeWriteTimeoutTask(this);
-  }
-}
-```
-
-## Filter
-
-## Log
-
-- The default factory is *Slf4JLoggerFactory*.
-- If SLF4J is not available, *Log4JLoggerFactory* is used.
-- If Log4J is not available, *JdkLoggerFactory* is used.
--
-
-You can change it to your preferred logging framework before other Netty classes are loaded: `InternalLoggerFactory.setDefaultFactory(Log4JLoggerFactory.INSTANCE)`;
-
-> [!NOTE]
->
-> The new default factory is effective only for the classes which were loaded after the default factory is changed.
-> Therefore, setDefaultFactory(InternalLoggerFactory) should be called as early as possible and shouldn't be called more than once.
-
-
-
-## Tuning
-
-异常事件的处理顺序与 ChannelHandler 的添加顺序相同，会依次向后传播，与 Inbound 事件和 Outbound 事件无关
-
-
-
-在 Netty  应用开发的过程中，良好的异常处理机制会让排查问题的过程事半功倍。所以推荐用户对异常进行统一拦截，然后根据实际业务场景实现更加完善的异常处理机制。通过异常传播机制的学习，我们应该可以想到最好的方法是在 ChannelPipeline 自定义处理器的末端添加统一的异常处理器
-
-
-
-```java
-public class ExceptionHandler extends ChannelDuplexHandler {
-
-    @Override
-
-    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-
-        if (cause instanceof RuntimeException) {
-
-            System.out.println("Handle Business Exception Success.");
-
-        }
-
-    }
-
-}
-
-```
-
-
-
-
+**ChannelHandler 类型与掩码的对应关系**：
+- `ChannelInboundHandlerAdapter` / `ChannelOutboundHandlerAdapter`：adapter 是接口的具体实现类，其 executionMask 由实际 override 哪些方法决定
+- `ChannelDuplexHandler`：同时有 inbound + outbound 掩码，invokeWrite / invokeFlush 里它有单独的 instanceof 分支（4.2 特意，见上文 DON'T CHANGE 注释）
+- HeadContext / TailContext：两个都用自身 class 算 mask（HeadContext 同时实现 Inbound + Outbound，TailContext 只 Inbound）
 
 ## Links
 
-- [Netty](/docs/CS/Framework/Netty/Netty.md)
-- [Channel](/docs/CS/Framework/Netty/Channel.md)
-- [EventLoop](/docs/CS/Framework/Netty/EventLoop.md)
-- [ByteBuf](/docs/CS/Framework/Netty/ByteBuf.md)
-- [Bootstrap](/docs/CS/Framework/Netty/Bootstrap.md)
-- [HashedWheelTimer](/docs/CS/Framework/Netty/HashedWheelTimer.md)
+- [Netty Channel 与注册路径](/docs/CS/Framework/Netty/Channel.md)
+- [Transport 与 IoHandler 抽象](/docs/CS/Framework/Netty/Transport.md)
+- [EventLoop 与线程模型](/docs/CS/Framework/Netty/EventLoop.md)
+- [Bootstrap 客户端与服务端启动](/docs/CS/Framework/Netty/Bootstrap.md)
+- [AdaptivePoolingAllocator 与 ByteBuf 内存](/docs/CS/Framework/Netty/memory.md)
+- [Future and Promise](/docs/CS/Framework/Netty/Future.md)
+
+## References
+
+1. [Netty 4.2 DefaultChannelPipeline source](https://github.com/netty/netty/blob/4.2/transport/src/main/java/io/netty/channel/DefaultChannelPipeline.java)
+2. [Netty #10067 — skipContext must consider executor](https://github.com/netty/netty/issues/10067)
+3. [Netty #3156 — destroy two-pass traversal](https://github.com/netty/netty/issues/3156)
+4. [Netty #8343 — WriteTask cancel on RejectedExecution](https://github.com/netty/netty/issues/8343)
+5. [OpenJDK JDK-8180450 — Duplex handler instanceof scalability](https://bugs.openjdk.org/browse/JDK-8180450)

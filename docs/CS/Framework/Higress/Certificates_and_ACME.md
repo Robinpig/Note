@@ -17,13 +17,19 @@
 
 `CredentialEntry`（`:154-159`）是 `domains` / `tlsIssuer` / `tlsSecret` / `cacertSecret`；`ACMEIssuerEntry`（`:161-166`）是 `name` / `email` / `ak` / `sk`，其中 AK/SK 的行内注释逐字是 "Only applicable for certain issuers like 'aliyunssl'"。
 
+> [!NOTE]
+> **`cacertSecret` 是死字段**：`CACertSecret` 只在 `config.go:158` 的结构体里定义（json tag `cacertSecret,omitempty`），主仓全量检索（含 `pkg/ingress`、`hgctl`、`registry` 等所有目录）**零读取点**——它既不被 `pkg/cert` 内部逻辑消费，也不在任何翻译路径上被引用。配合正文"`Data` 只有 `tls.key` 与 `tls.crt` 两键、没有 `ca.crt`"（`secret.go:88-99`），这个字段从设计上就从未接通过，配了也不会生效，与 `aliyunssl` / AK/SK 一样属于"预留但没落地"的配置。
+
 issuer 枚举只有两个值（`:42-43`）：`letsencrypt` 与 `aliyunssl`。但 **`Validate()` 的 switch 只列了 letsencrypt，`default` 分支直接报错**（`:107-117`）⇒ `aliyunssl` 连同它的 AK/SK 是**未实现且会被拒绝**的死配置，`acmeIssuer` 有数组的形态却只有单值的语义。
 
 三条校验行为值得记住：`renewBeforeDays` 的上限是**硬报错而不是 clamp**，且判定写的是 `>= RenewMaxDays`，所以 **90 本身也非法、合法区间是 1..89**（`:144-150`）；校验失败会让 `ParseConfigFromConfigmap` 整份返回 error（`:221-223`）、`syncConfigmap` 直接透传（`controller.go:130-133`）——**结果是内存里继续跑旧配置、日志一行 error、且不会重试**（见下一节），"改坏了会即时生效"这句话只对改对的情况成立。`ParseTLSSecret`（`:89-98`）按 `/` 切：一段 → `(空, name)`、两段 → `(ns, name)`、**三段以上返回两个空串**再被 Validate 判非法。域名匹配统一用 Istio 的 `host.Name.SubsetOf` + `strings.ToLower`（`MatchSecretNameByDomain:65-74`、`GetSecretNameByDomain:76-87`），**泛域名 `*.example.com` 能匹配 `a.example.com`，且 `credentialConfig` 按数组顺序先命中先返回**。`version` 字段在 `pkg/cert` 内只写不读，但因 informer 是整对象 `reflect.DeepEqual` 去重（`controller.go:70-72`），手改它等价于一次强制重跑。
 
 ## Challenge Path
 
-库是 `certmagic` + `mholt/acmez`（`certmgr.go:23-24`）。**一个必须写进依赖说明的事实**：`go.mod:20` require 的是 `certmagic v0.21.3`，但 `go.mod:318` 有 `replace github.com/caddyserver/certmagic => github.com/2456868764/certmagic v1.0.2`——**实际编进二进制的是一个第三方 fork**，本机 module cache 里也没有它，因此 fork 内所有行为（续期轮询周期、锁语义、进程内去重）不可核对。
+库是 `certmagic` + `mholt/acmez`（`certmgr.go:23-24`）。**一个必须写进依赖说明的事实**：`go.mod:20` require 的是 `certmagic v0.21.3`，但 `go.mod:318` 有 `replace github.com/caddyserver/certmagic => github.com/2456868764/certmagic v1.0.2`——**实际编进二进制的是一个第三方 fork**。该 fork（`github.com/2456868764/certmagic` tag `v1.0.2`）本机 module 缓存里没有，但**可直接拉源码核实**，本轮已核三条：续期轮询周期 **`DefaultRenewCheckInterval = 10 * time.Minute`**（`maintain.go:740`），定时器取 `certCache.options.RenewCheckInterval`（`maintain.go:59`），未显式设置时在 `cache.go:102-103` 回落到该默认值；`ManageSync`（`config.go:306`）本身只是一次 `manageAll(ctx, domainNames, false)` 委托。
+
+> [!NOTE]
+> ⇒ **`higress-https` 的到期检视是 10 分钟一次的轮询**，本包的 ConfigMap 事件只能缩短感知延迟、不能快于这个周期；而 `renewalWindowRatio` 决定"什么时候算该续"，两者相乘才是真实行为（主机名多的实例，10 分钟内可能跑完多轮 ACME 交互）。per-domain 的进程内去重与 `RenewDurationBefore` 的确切叠加关系仍未定位（见 Unverified）。
 
 `pkg/cert` 自己没有一行 ACME 协议代码，它只做四步：`NewCache`（`certmgr.go:67-75`）→ `certmagic.New`（`:77`）→ `NewACMEIssuer`（`:86-93`）→ `ManageSync`（`:192-195`）。issuer 参数逐字（`certmgr.go:86-93`）：`CA: LetsEncryptProductionCA`（`:88`，**上一行的 Staging CA 是被注释掉的 ⇒ 不能用配置切到 staging**）、`Email`、`Agreed: true`（`:90`，代码里直接同意条款）、`DisableHTTPChallenge: false`（`:91`）、**`DisableTLSALPNChallenge: true`（`:92`）**、`Http01Solver = ingressSolver`（`:95-96`）。⇒ **只有 HTTP-01，没有 TLS-ALPN-01，本包零 DNS-01 代码。**
 
@@ -36,7 +42,7 @@ HTTP-01 的呈现方式不是本地监听，而是**动态创建一个 Ingress**
 
 **`renewBeforeDays` 不是"提前多少天"，而是一个比例。** 初始化时算 `renewalWindowRatio = float64(RenewBeforeDays) / float64(RenewMaxDays)`（`certmgr.go:60`）并塞进 `certmagic.Config.RenewalWindowRatio`（`:63`），每次 reconcile 重算覆盖（`:164-165`）。`RenewMaxDays = 90` 这个常量同时充当**分母**与**校验上限**。默认 30 ⇒ ratio = 1/3，即"剩余生命周期不足总时长 1/3 时续期"；因为 LE 证书正好 90 天，才**碰巧**等于"提前 30 天"。换 CA 或证书时长不是 90 天时，字段名会骗人。
 
-续期定时器不在本包：`cache.Start()`（`certmgr.go:167`）/ `cache.Stop()`（`:175`）由 `automaticHttps` 开关决定，**轮询周期常量在 fork 里**，本地读不到。事件驱动入口只有 `higress-https` 的 Add/Update（`controller.go:159-162`，且按 namespace + 名字双重过滤），**`DeleteFunc` 没注册 ⇒ 删掉 ConfigMap 不触发任何清理**。队列虽然是 RateLimiting 的（`:155`），`enqueue` 用的却是普通 `Add`（`:77`），worker 数 `workNum = 1`（`:33`），而 `ManageSync` 是同步阻塞的（`certmgr.go:171`、`:194`，`ctx` 是不带超时的 `context.Background()`）。
+续期定时器不在本包：`cache.Start()`（`certmgr.go:167`）/ `cache.Stop()`（`:175`）由 `automaticHttps` 开关决定，**轮询周期常量在 fork 里**，实测为 **`DefaultRenewCheckInterval = 10 * time.Minute`**（见上一节），不再是未知项。事件驱动入口只有 `higress-https` 的 Add/Update（`controller.go:159-162`，且按 namespace + 名字双重过滤），**`DeleteFunc` 没注册 ⇒ 删掉 ConfigMap 不触发任何清理**。队列虽然是 RateLimiting 的（`:155`），`enqueue` 用的却是普通 `Add`（`:77`），worker 数 `workNum = 1`（`:33`），而 `ManageSync` 是同步阻塞的（`certmgr.go:171`、`:194`，`ctx` 是不带超时的 `context.Background()`）。
 
 三条失败行为都可复核：签发 / 续期失败**不产生 K8s Event、不写状态**（`OnEvent` 只处理 `cert_obtained`，`certmgr.go:218`，其余走 `:266` 的 `return nil`）；**不重试**——`handleError` 里显式 `c.queue.Forget(key)`（`controller.go:139-143`），常量 `maxRetry = 2`（`:34`）只有声明处一次命中，是死常量；**写 Secret 失败连错误都不向上冒**（`certmgr.go:260-264` 判的是 `err2` 但结尾 `return err`，此时 `err` 是上面 `Load` 留下的 nil）。既有证书在失败路径上不受影响（Secret 只在成功事件里写），但这不是安全设计而是 `cleanSync` 是空实现的副产品——它逐字写着 `//TODO implement clean up domains`（`certmgr.go:197-201`），**所以从配置里删掉域名不会清理 Storage、Secret 或已签证书**。
 
@@ -68,7 +74,7 @@ Secret 名字**不是按规则生成的，而是用户配的 `credentialConfig[]
 
 ## Unverified
 
-certmagic fork（`github.com/2456868764/certmagic v1.0.2`）本机 module cache 不存在 ⇒ 续期轮询间隔常量、`ManageSync` 的重试策略、per-domain 的进程内去重全部未核。首次冷启动那次 `InitConfig` 返回 NotFound 的真实后果（pod 崩溃重启？被 console 预建的 `higress-https` 掩盖？）未验证，且要看 console 仓（版本线 2.2.5 与主仓 `DEP_VERSION` 的 v2.1.9 不一致）。`cacertSecret`（`config.go:158`）在 `pkg/cert` 外是否有消费点未检索；只有 Gateway API、没有 Ingress 通路时 HTTP-01 是否确实失败未实测；多副本并发的具体失败形态（重复签发 / 互相覆盖 / LE 速率限制）未观测；`List` 依赖的 annotation FieldSelector（`storage.go:160`）在真实 apiserver 上是否被支持未验证；Standalone 无 kube-apiserver 时整个子系统的行为（依赖 `kubernetes.Interface`）未跟踪；`util.go:69-75` 的 `hostOnly` 与 `certmgr.go:42` 的 `mux` 已确认无使用点，但用途属推测。
+certmagic fork（`github.com/2456868764/certmagic v1.0.2`）**已可从源码核实**：续期轮询间隔常量为 **10 分钟**（`DefaultRenewCheckInterval`，`maintain.go:740`）、`ManageSync`（`config.go:306`）委托 `manageAll(async=false)`、失败重试为包文档所述的指数退避（最长约 30 天、间隔上限约 24h）。**仍未知**：per-domain 的进程内去重实现位置（`manageAll` 统一处理域名列表，未见单点单飞/去重分支），以及 `RenewDurationBefore`（`certificates.go:332` 注释提及）与本包 `RenewalWindowRatio` 叠加后的最终阈值。首次冷启动那次 `InitConfig` 返回 NotFound 的真实后果（pod 崩溃重启？被 console 预建的 `higress-https` 掩盖？）未验证，且要看 console 仓（版本线 2.2.5 与主仓 `DEP_VERSION` 的 v2.1.9 不一致）。只有 Gateway API、没有 Ingress 通路时 HTTP-01 是否确实失败未实测（但 `pkg/ingress/kube/gateway/` 对 `pkg/cert` / `higress-https` 零引用已有正面代码证据，见 Ingress Wiring 的 NOTE）；多副本并发的具体失败形态（重复签发 / 互相覆盖 / LE 速率限制）未观测；`List` 依赖的 annotation FieldSelector（`storage.go:160`）在真实 apiserver 上是否被支持未验证；Standalone 无 kube-apiserver 时整个子系统的行为（依赖 `kubernetes.Interface`）未跟踪。`util.go:69-75` 的 `hostOnly`（`net.SplitHostPort` 包装）与 `certmgr.go:42` 的 `mux`（`sync.RWMutex` 字段）**已确认主仓零调用 / 零 Lock-Unlock 使用点，属死代码**；`cacertSecret`（`config.go:158`）同样确认是全仓零读取的死字段（见 Configuration Surface 的 NOTE），三项均已从 Unverified 移除。
 
 ## Links
 

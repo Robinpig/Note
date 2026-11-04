@@ -175,7 +175,7 @@ K8s 后端完全基于 **agent-sandbox**：沙箱 pod 由集群里的 agent-sand
 | 模式 | 行为 |
 | :--- | :--- |
 | `ROOTED`（默认） | 绝对路径只允许 workspace + project + additionalRoots 范围内；`..` 穿越被拒绝 |
-| `SANDBOXED` | 所有路径强制锚定到 workspace 根，绝对路径和 `..` 全部拒绝 |
+| `SANDBOXED` | 绝对路径去前导 `/` 后 re-root 到 workspace 根（如 `/etc/passwd` 变 `cwd/etc/passwd`）；真正拒绝的是 `..` 段与最终越界兜底，并非拒绝绝对路径 |
 | `UNRESTRICTED` | 绝对路径原样透传，不做限制。仅用于测试或完全信任的环境 |
 
 **Overlay 文件系统**——本机模式实际产出的是 `OverlayFilesystem`：

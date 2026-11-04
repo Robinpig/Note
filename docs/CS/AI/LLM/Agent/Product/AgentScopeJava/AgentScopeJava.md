@@ -6,7 +6,7 @@ AgentScope Java 是 AgentScope 的 **Java 实现**，仓库 `agentscope-ai/agent
 
 本笔记以官方文档 **v2 线**为基准，版本事实：JDK 17+（`pom.xml` `<java.version>17`）、Maven 3.9+；GA 线最新 **v2.0.4**（Release Notes 准备日期 2026-10-08），Maven Central 另有 `2.1.0-BETA1`（2026-10-15 实测 `agentscope-harness` 的 `maven-metadata.xml`）。本笔记的事实来源是**本地 `v2.0.4` 源码树逐包核对**（`/Users/robin/Projects/agentscope-java`，git tag `v2.0.4`）+ 官方文档站（v2 中文文档全量抓取）+ GitHub 仓库元数据 + Maven Central 坐标；凡涉及类名、方法签名、默认值、枚举值的地方，一律以源码为准，文档与源码冲突时以源码为准并在文中标注。
 
-本笔记采用「枢纽 + 分册」结构，与 Python 版 AgentScope 家族的分册惯例对齐（主笔记 + 分册同目录，分册不带文件名前缀）。七个专题已拆为独立分册（均基于本地 `v2.0.4` 源码逐包核对，统一放在 `AgentScopeJava/` 子目录）。各分册由哪里接手、按什么顺序读，见下文 [How to Read the Subsystem Notes](#how-to-read-the-subsystem-notes)。
+本笔记采用「枢纽 + 分册」结构，与 Python 版 AgentScope 家族的分册惯例对齐（主笔记 + 分册同目录，分册不带文件名前缀）。各专题已拆为独立分册（均基于本地 `v2.0.4` 源码逐包核对，统一放在 `AgentScopeJava/` 子目录）。各分册由哪里接手、按什么顺序读，见下文 [How to Read the Subsystem Notes](#how-to-read-the-subsystem-notes)。
 
 ## Modules And Versions
 
@@ -149,12 +149,29 @@ ReAct 循环本身两版一致；Harness 的内置能力在循环的相应阶段
 - **权限**：五模式（DEFAULT / ACCEPT_EDITS / EXPLORE / BYPASS / DONT_ASK）+ 规则 DSL + 工具自带 `checkPermissions`（不可绕过）+ 危险路径保护。
 - **中间件**：**5 个 hook**（`MiddlewareBase` 接口）——4 个洋葱型（`onAgent` / `onReasoning` / `onActing` / `onModelCall`，before/after 包裹）+ 1 个管道型（`onSystemPrompt`，顺序变换字符串）；`order()` 默认 1，数值越大越靠外层，同级保持注册顺序。
 - **工作区**：`AGENTS.md` / `MEMORY.md` / `tools.json` / `skills/` / `subagents/` / `plans/` / `knowledge/` 一套逻辑目录，同一布局可落本机磁盘、共享 KV 或沙箱容器。
-- **会话**：原生 Session Log（`commits` 提交批次 + `blobs` 大载荷 + `inbox` 输入队列 + `exports` 导出进度，原子版本比较写入）+ checkpoint + AgentSession 后台调度。
+- **会话**：`AgentState` 持久化（`JsonFile` / Redis / JDBC / Mongo / PG / COS / OSS 的 `AgentStateStore`）与 harness 的 `TranscriptStore`（append-only JSONL）两套独立基础设施 + `AgentSession` 后台调度。⚠️ 官方文档站描述的 `commits` / `blobs` / `exports` / `inbox` 四目录与 `checkpoint` 在 v2.0.4 源码未落地，源码级事实见 [执行内核分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Execution.md) 的 State Persistence 段。
 - **服务化**：重新设计的 AgentScope Service（Session / Turn 模型 + 公共 SSE + 快照）+ Channel / Gateway（会话管理、per-session 并发、多 agent 路由）。
+
+## Execution Core (Source-level)
+
+若想看「上面这些扩展面在源码里到底怎么串起来」，而不是只用 API，读 [执行内核分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Execution.md)。它逐行核对 `v2.0.4` 源码（`ReActAgent` / `AgentBase` / `CallExecution` / `ToolExecutor` / `PermissionEngine` / `MiddlewareChain` / `ModelRegistry` / `HarnessAgent` / `AgentStateStore`），把七个分册没展开的底层机制一次讲清：
+
+- **执行核是同一个**——`call()` 与 `streamEvents()` 共用 `buildAgentStream`，`observe()` 不是执行核；整条链路订阅惰性（`Flux.create` + `Mono.deferContextual`）。
+- **「完全无状态」靠 `CallExecution` 实例 + Reactor Context**：per-call 可变状态放在 per-call 作用域，Reactor Context 只存 scope 引用；同 `(userId, sessionId)` slot 串行、异 slot 并发。`maxIters` 默认 **10**（不是 `ReactConfig` 的 20）。
+- **事件流源头是 `FluxSink`**（BUFFER 无界缓冲、每次订阅独立 sink），消息聚合分两层（增量块 → `ReasoningContext` 三个累加器；`call` 的最终 `Msg` 从 `AgentResultEvent` 取）。
+- **工具默认并行**：`Flux.mergeSequential` 并发且保序，不安全工具单独串行槽；单工具异常不中断整批。
+- **权限 6 步决策链**：deny → ask → 工具自检（bypass-immune）→ allow → BYPASS 兜底 → 默认 ASK；工具自带检查先于 BYPASS，BYPASS 绕不过返回 DENY/ASK 的工具。
+- **中间件 6 方法**（5 拦截 + `order()`）：`build()` 里按 `order` 降序稳定排序，从后向前递归组合，第一个成最外层。
+- **结构化输出双路径**：native（`response_format`）解析失败只告警不重试；fallback 注入 `generate_response` 合成工具，失败作为错误 tool result 回灌由循环再试。
+- **模型容错**：retry 用 Reactor `Retry.backoff`；fallback 是 `modelForCall()` 匿名 `Model` 包装，`switchOnFirst` 首个错误信号切备用；`model("dashscope:qwen-plus")` 整串交 Provider 正则匹配，Registry 不按冒号 split。
+- **Harness 组合（非继承）** `ReActAgent`：`build()` 按阶段注入 stateStore / sandbox / workspace / messageBus / middlewares / toolkit / skills / plan。
+- **状态持久化无 `checkpoint` 类**：每次 call 后 `saveStateToSession`，`ConflictPolicy` 三值处理跨副本冲突；v2.0.4 真实落地是 `AgentStateStore` + harness `TranscriptStore`，**不是**文档站的 `commits`/`blobs`/`exports`。
+
+各分册按「装配 → 边界 → 状态 → 持久 → 能力 → 隔离」几条线组织，大致对应上面 `The Extension Surface` 一节枚举的那些扩展维度。
 
 ## How to Read the Subsystem Notes
 
-七个分册按「**装配 → 边界 → 状态 → 持久 → 能力**」几条线组织，大致对应上面 `The Extension Surface` 一节枚举的那些扩展维度。只想把框架用起来的读者读完 Quickstart 与 Architecture Overview 即可；要改框架行为、或判断某个能力该不该自己补，按下面几条线找对应分册。
+各分册按「**装配 → 边界 → 状态 → 持久 → 能力 → 隔离**」几条线组织，大致对应上面 `The Extension Surface` 一节枚举的那些扩展维度。只想把框架用起来的读者读完 Quickstart 与 Architecture Overview 即可；要改框架行为、或判断某个能力该不该自己补，按下面几条线找对应分册。
 
 **装配线：一次调用长什么样。**[智能体分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Agent.md) 讲智能体接口与调用方式——`Agent` 三段式接口组合、`ReActAgent.Builder` 完整参数、实例生命周期、结构化输出、单次执行控制句柄 `AgentRun`、中断与 HITL、模型容错。串起「一次 call 内部发生了什么」的另一半在 [消息分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Message.md)：`Msg` + `AgentEvent` 双视图，`call` 消费全部事件还你一条 `Msg`、`streamEvents` 逐事件交给你，以及和 harness 远程线格式、Service 持久事件的边界。
 
@@ -163,6 +180,8 @@ ReAct 循环本身两版一致；Harness 的内置能力在循环的相应阶段
 **状态线：上下文与记忆。**[上下文分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Context.md) 讲 `AgentState` 与它的存储实现、`RuntimeContext` 的 per-call 语义、上下文压缩与工具结果卸载的取舍、两层长期记忆。最值得记的一条订正：core 的 `memory` 包在 2.0.0 已整体废弃，v2 记忆能力全部迁到 harness 层。
 
 **持久线：会话恢复与服务化。**[会话分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Session.md) 把 Session Log 当一层独立于 Agent 执行的持久基础设施讲——可回放、可恢复、可导出，`AgentSession` 在其上提供「提交任务、后台执行、中断续做」；[工作区分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Workspace.md) 解决 Agent 与文件世界的关系，拆成工作区目录 / 文件系统访问模式 / 沙箱后端三个正交关注点，是 HarnessAgent 定义与进化的 source of truth。
+
+**隔离线：沙箱执行环境。**[沙箱分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Sandbox.md) 把「agent 的命令与文件读写放进隔离环境」这件事从机制层面讲清——`Sandbox` / `SandboxClient` SPI、acquire 优先级链、`SandboxLifecycleMiddleware` 的 per-call 借还、IsolationScope 的顺序复用语义、工作区投影与快照的协作顺序、文件系统桥如何把读写转发进容器、五种后端对照、以及 USER / AGENT / GLOBAL 多并发串行化的执行护栏。它与 [工作区分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Workspace.md) 互补：Workspace 讲文件世界的关系（目录 / 身份 / 三种 filesystem 模式），Sandbox 讲隔离环境本身。
 
 **能力线：可复用能力与委派。**[技能分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Skill.md) 覆盖 Skill 与子 Agent——Skill 是「能力包」（`SKILL.md` + 参考文档，解决上下文预算问题），子 Agent 是「能力的执行体」，两者共用工作区声明与沙箱投影机制，合册最能看清「委派」这条链路。
 

@@ -114,18 +114,18 @@ Netty 自己实现的 [Channel](/docs/CS/Framework/Netty/Channel.md) 是以 JDK 
 
 服务端从配置到监听就绪，按顺序走完八步；下面 Bind 时序图展示的是第 7 步 `bind()` 内部发生了什么。
 
-1. [创建 EventLoopGroup](/docs/CS/Framework/Netty/EventLoop.md?id=create-eventloopgroup)
-2. [创建 ServerBootstrap](/docs/CS/Framework/Netty/Bootstrap.md?id=bind)
+1. [创建 EventLoopGroup](/docs/CS/Framework/Netty/EventLoop.md?id=multithreadioeventloopgroup)
+2. [创建 ServerBootstrap](/docs/CS/Framework/Netty/Bootstrap.md?id=bind-path)
 3. 设置 [Channel](/docs/CS/Framework/Netty/Channel.md)
 4. 设置 [ChannelHandler](/docs/CS/Framework/Netty/ChannelHandler.md)
 5. Option
 6. ChildOption
-7. [ServerBootstrap#bind()](/docs/CS/Framework/Netty/Bootstrap.md?id=bind)
+7. [ServerBootstrap#bind()](/docs/CS/Framework/Netty/Bootstrap.md?id=bind-path)
 8. [ChannelFuture](/docs/CS/Framework/Netty/Future.md)
 
 ### Bind
 
-- [创建 EventLoopGroup](/docs/CS/Framework/Netty/EventLoop.md?id=create-eventloopgroup)
+- [创建 EventLoopGroup](/docs/CS/Framework/Netty/EventLoop.md?id=multithreadioeventloopgroup)
 - 注册 ServerSocketChannel 时，BossEventLoop 才启动线程
 - 首次注册为 `register(Selector, 0, ServerSocketChannel)`，此时 interestOps 为 0
 - bind 之后在 `fireChannelActive()` 里才把 `selectionKey.interestOps` 置为 OP_ACCEPT
@@ -312,220 +312,82 @@ end
 
 #### AdaptiveRecvByteBufAllocator
 
-上面 read loop 里「每轮从 2048 起步、按上轮读取量扩容缩容」的策略由 AdaptiveRecvByteBufAllocator 决定。它并不真正分配内存，只负责给出"这次该分多大"的建议，真正动手的是 `ByteBufAllocator`（池化场景即 `PooledByteBufAllocator`）。源码走一遍：
+上面 read loop 里「每轮从 2048 起步、按上轮读取量扩容缩容」的策略由 AdaptiveRecvByteBufAllocator 决定。它并不真正分配内存，只负责给出"这次该分多大"的建议，真正动手的是 `ByteBufAllocator`（池化场景即 `PooledByteBufAllocator`）。
 
-最终会在NioSocketChannelConfig的父类DefaultChannelConfig的构造器中创建AdaptiveRecvByteBufAllocator。并保存在RecvByteBufAllocator rcvBufAllocator字段中
+4.2 把扩容缩容逻辑从 `AdaptiveRecvByteBufAllocator` 内部抽出来，委托给 `common` 模块的 `AdaptiveCalculator`。SIZE_TABLE、INDEX_INCREMENT/DECREMENT、二分查找、两次缩容才缩这些状态机逻辑全部集中在 `AdaptiveCalculator` 里，Allocator 本体和 HandleImpl 只保留薄壳。
 
-在new AdaptiveRecvByteBufAllocator()创建AdaptiveRecvByteBufAllocator类实例的时候会先触发AdaptiveRecvByteBufAllocator类的初始化
-
-
-
-扩容索引表 SIZE_TABLE 维护size 和 索引的关系
-- 当size < 512，索引增加 size + 16
-- 当size >= 512，索引增加 size 翻倍
-
-扩容步长 4 缩容步长 1 以initital size 2048为例 对应索引表为33 扩容步长 + 4 = 37 对应size = 32768， 缩容步长 -1 = 32 对应size = 1024
-
-
+`AdaptiveCalculator` 的核心结构：
 
 ```java
-
-public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufAllocator {
-
-    static final int DEFAULT_MINIMUM = 64;
-    // Use an initial value that is bigger than the common MTU of 1500
-    static final int DEFAULT_INITIAL = 2048;
-    static final int DEFAULT_MAXIMUM = 65536;
-
+// io.netty.util.internal.AdaptiveCalculator —— 4.2 新增，从 AdaptiveRecvByteBufAllocator 中抽出
+public final class AdaptiveCalculator {
     private static final int INDEX_INCREMENT = 4;
     private static final int INDEX_DECREMENT = 1;
 
-    private static final int[] SIZE_TABLE;
+    // SIZE_TABLE 和 4.1 一样：16~512 步长 16，512~ 2^n 翻倍
+    private static final int[] SIZE_TABLE = ...;
 
-    static {
-        List<Integer> sizeTable = new ArrayList<Integer>();
-        for (int i = 16; i < 512; i += 16) {
-            sizeTable.add(i);
-        }
+    private final int minIndex, maxIndex, minCapacity, maxCapacity;
+    private int index;           // 当前 SIZE_TABLE 索引
+    private int nextSize;        // 下次分配建议值
+    private boolean decreaseNow; // 缩容需要连续两次触发才执行（4.1 的语义保留）
 
-        // Suppress a warning since i becomes negative when an integer overflow happens
-        for (int i = 512; i > 0; i <<= 1) {
-            sizeTable.add(i);
-        }
-
-        SIZE_TABLE = new int[sizeTable.size()];
-        for (int i = 0; i < SIZE_TABLE.length; i ++) {
-            SIZE_TABLE[i] = sizeTable.get(i);
+    public void record(int size) {
+        if (size <= SIZE_TABLE[max(0, index - INDEX_DECREMENT)]) {
+            if (decreaseNow) {
+                // 连续两次"实际读取量 <= 缩容参考值"才缩
+                index = max(index - INDEX_DECREMENT, minIndex);
+                nextSize = max(SIZE_TABLE[index], minCapacity);
+                decreaseNow = false;
+            } else {
+                decreaseNow = true; // 第一次触发，记下来等下一轮确认
+            }
+        } else if (size >= nextSize) {
+            // 只要"实际读取量 >= 本次建议值"就扩，一次就执行
+            index = min(index + INDEX_INCREMENT, maxIndex);
+            nextSize = min(SIZE_TABLE[index], maxCapacity);
+            decreaseNow = false;
         }
     }
+
+    public int nextSize() { return nextSize; }
 }
 ```
 
-创建 AdaptiveRecvByteBufAllocator 时设置了size的 最小 最大和默认capcity 同时设置index范围
+`AdaptiveRecvByteBufAllocator.HandleImpl` 变成三层薄壳调用：
 
 ```java
-public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufAllocator {
+// AdaptiveRecvByteBufAllocator.HandleImpl —— 4.2 简化版
+private final class HandleImpl extends MaxMessageHandle {
+    private final AdaptiveCalculator calculator;
 
-    private final int minIndex;
-    private final int maxIndex;
-    private final int initialIndex;
-    private final int minCapacity;
-    private final int maxCapacity;
-
-    public AdaptiveRecvByteBufAllocator() {
-        this(DEFAULT_MINIMUM, DEFAULT_INITIAL, DEFAULT_MAXIMUM);
+    HandleImpl(int minimum, int initial, int maximum) {
+        calculator = new AdaptiveCalculator(minimum, initial, maximum);
     }
 
-    public AdaptiveRecvByteBufAllocator(int minimum, int initial, int maximum) {
-        checkPositive(minimum, "minimum");
-        if (initial < minimum) {
-            throw new IllegalArgumentException("initial: " + initial);
-        }
-        if (maximum < initial) {
-            throw new IllegalArgumentException("maximum: " + maximum);
-        }
-
-        int minIndex = getSizeTableIndex(minimum);
-        if (SIZE_TABLE[minIndex] < minimum) {
-            this.minIndex = minIndex + 1;
-        } else {
-            this.minIndex = minIndex;
-        }
-
-        int maxIndex = getSizeTableIndex(maximum);
-        if (SIZE_TABLE[maxIndex] > maximum) {
-            this.maxIndex = maxIndex - 1;
-        } else {
-            this.maxIndex = maxIndex;
-        }
-
-        int initialIndex = getSizeTableIndex(initial);
-        if (SIZE_TABLE[initialIndex] > initial) {
-            this.initialIndex = initialIndex - 1;
-        } else {
-            this.initialIndex = initialIndex;
-        }
-        this.minCapacity = minimum;
-        this.maxCapacity = maximum;
-    }
-
-}
-```
-
-
-
-
-设置的index 和 capcity 等值被带入到 Handle 中
-
-```java
-@SuppressWarnings("deprecation")
-@Override
-public Handle newHandle() {
-    return new HandleImpl(minIndex, maxIndex, initialIndex, minCapacity, maxCapacity);
-}
-```
-
-
-在每次read loop循环中都会判断是否continueReading 此时会
-对于客户端NioSocketChannel来说，它里边包含的IO数据时客户端发送来的网络数据，长度是不定的，所以才会需要这样一个可以根据每次IO数据的大小来自适应动态调整容量的ByteBuffer来接收
-AdaptiveRecvByteBufAllocator并不会真正的去分配ByteBuffer，它只是负责动态调整分配ByteBuffer的大小
-真正具体执行内存分配动作的是这里的ByteBufAllocator类型为PooledByteBufAllocator。它会根据AdaptiveRecvByteBufAllocator动态调整出来的大小去真正的申请内存分配ByteBuffer
-
-
-```java
-public class DefaultMaxBytesRecvByteBufAllocator implements MaxBytesRecvByteBufAllocator {
-    private volatile int maxBytesPerRead;
-    private volatile int maxBytesPerIndividualRead;
-
-    private final class HandleImpl implements ExtendedHandle {
-        private int individualReadMax;
-        private int bytesToRead;
-        private int lastBytesRead;
-        private int attemptBytesRead;
-    }
-}
-```
-
-
-
-在每次开始从NioSocketChannel中读取数据之前，需要利用PooledByteBufAllocator在内存池中为ByteBuffer分配内存
-
-
-```java
-byteBuf = allocHandle.allocate(allocator);
-```
-
-
-默认初始化大小为2048，这个容量由guess()方法决定
-
-
-
-```java
-@Override
-public ByteBuf allocate(ByteBufAllocator alloc) {
-    return alloc.ioBuffer(guess());
-}
-
-
-@Override
-public int guess() {
-    return Math.min(individualReadMax, bytesToRead);
-}
-```
-
-
-在每次通过doReadBytes从NioSocketChannel中读取到数据后，都会调用allocHandle.lastBytesRead(doReadBytes(byteBuf))记录本次读取了多少字节数据
-
-
-
-```java
-@Override
-public void lastBytesRead(int bytes) {
-    lastBytesRead = bytes;
-    // Ignore if bytes is negative, the interface contract states it will be detected externally after call.
-    // The value may be "invalid" after this point, but it doesn't matter because reading will be stopped.
-    bytesToRead -= bytes;
-}
-```
-
-
-
-每次read loop循环的末尾都需要通过调用allocHandle.continueReading()来判断是否继续read loop循环读取NioSocketChannel中的数据
-
-```java
-private final class HandleImpl implements ExtendedHandle {
-    private int individualReadMax;
-    private int bytesToRead;
-    private int lastBytesRead;
-    private int attemptBytesRead;
-    private final UncheckedBooleanSupplier defaultMaybeMoreSupplier = new UncheckedBooleanSupplier() {
-        @Override
-        public boolean get() {
-            return attemptBytesRead == lastBytesRead;
-        }
-    };
-
+    // 每次循环中，如果本次实际读满了分配的 buffer，就增量触发增长
     @Override
-    public boolean continueReading() {
-        return continueReading(defaultMaybeMoreSupplier);
+    public void lastBytesRead(int bytes) {
+        if (bytes == attemptedBytesRead()) {
+            calculator.record(bytes); // 读满了才暗示要扩
+        }
+        super.lastBytesRead(bytes);   // 更新 lastBytesRead / bytesToRead 等父类字段
     }
 
     @Override
-    public boolean continueReading(UncheckedBooleanSupplier maybeMoreDataSupplier) {
-        // Keep reading if we are allowed to read more bytes, and our last read filled up the buffer we provided.
-        return bytesToRead > 0 && maybeMoreDataSupplier.get();
+    public int guess() {
+        return calculator.nextSize(); // 直接取建议值
     }
 
+    // 整轮 read loop 结束后，用本轮总读取量做完整调整
+    @Override
+    public void readComplete() {
+        calculator.record(totalBytesRead());
+    }
 }
 ```
 
-
-在每轮read loop结束之后，我们都会调用allocHandle.readComplete()来根据在allocHandle中统计的在本轮read loop中读取字节总大小，来决定在下一轮read loop中是否对DirectByteBuffer进行扩容或者缩容
-
-
-满足两次缩容条件才会进行缩容，且缩容步长为1，缩容比较谨慎
-满足一次扩容条件就进行扩容，并且扩容步长为4， 扩容比较奔放
-
+与 4.1 的区别：4.1 里 `SIZE_TABLE` 内嵌在 `AdaptiveRecvByteBufAllocator` 里，`lastBytesRead` 和 `readComplete` 都直接改 index；4.2 把状态机抽成 `AdaptiveCalculator`，`lastBytesRead` 只在"读满"时增量触发增长（避免未读满也盲目扩容），`readComplete` 用总读取量做最终调整。两种缩容策略（一次就扩、两次才缩）的语义保留不变，只是代码位置换了。
 
 ### Write
 
@@ -827,12 +689,25 @@ Read 与 Write 都跑在 EventLoop 上、都受 16 次循环上限约束，但�
 在每次 write loop 之前，都会获取本次 write loop 最大能够写入的字节数，根据这个最大写入字节数从 ChannelOutboundBuffer 中转换 JDK NIO ByteBuffer 。每次写入 Socket 之后都需要重新评估是否对这个最大写入字节数进行扩容或者缩容。
 read loop 和 write loop 都被默认限定最多执行 16 次。
 在一个完整的 read loop 中，如果还读取不完数据，直接退出。等到 reactor 线程执行完其他 channel 上的 IO 事件再来读取未读完的数据。
-而在一个完整的 write loop 中，数据发送不完，则分两种情况。
-Socket 缓冲区满无法在继续写入。这时就需要向 reactor 注册 OP_WRITE 事件。等 Socket 缓冲区变的可写时，epoll 通知 reactor 线程继续发送。
-Socket 缓冲区可写，但是由于发送数据太多，导致虽然写满 16 次但依然没有写完。这时就直接向 reactor 丢一个 flushTask 进去，等到 reactor 线程执行完其他 channel 上的 IO 事件，在回过头来执行 flushTask。
-OP_READ 事件的注册是在 NioSocketChannel 被注册到对应的 Reactor 中时就会注册。而 OP_WRITE 事件只会在 Socket 缓冲区满的时候才会被注册。当 Socket 缓冲区再次变得可写时，要记得取消 OP_WRITE 事件的监听。否则的话就会一直被通知
+
+write loop 退出时调用 `incompleteWrite(writeSpinCount < 0)`，参数的来源值得注意：每次 `doWriteInternal` 返回 `0`（空 msg）、`1`（写了一次）、或 `WRITE_STATUS_SNDBUF_FULL = -1`（socket 缓冲区满）。`writeSpinCount -= returnValue`，所以当 socket 一直满时 count 会累加变成负数。退出后的两分支语义：
+
+- **`writeSpinCount < 0`（socket 真满）**：`setOpWrite()` 注册 OP_WRITE。等 socket 缓冲区再次可写时，IO handler 会被唤醒再走一次 flush。
+- **`writeSpinCount == 0`（循环次数用完但 socket 还能写）**：`clearOpWrite()` + `eventLoop().execute(flushTask)` 排队稍后继续。此时 socket 还可写但 event loop 需要先处理完其他 channel 的 IO 事件。
+
+OP_READ 事件在 NioSocketChannel 注册到 Reactor 时就会注册（首次注册 interestOps 为 0，fireChannelActive 里加 OP_READ）。而 OP_WRITE 事件只会在 socket 缓冲区满的时候才被注册。当 socket 缓冲区再次变得可写时，要记得取消 OP_WRITE 事件的监听——否则的话就会一直被通知。4.2 中 `setOpWrite` / `clearOpWrite` 不再直接调 `selectionKey.interestOps(OP_WRITE)`，而是通过 `IoRegistration.submit(NioIoOps.WRITE)` / `removeAndSubmit` 交给 IoHandler 抽象层处理。
 
 ### Shutdown
+
+4.2 的 shutdown 流程与 4.1 不同——因为 IO 循环已经抽到 `IoHandler` 里，清理顺序变成：
+
+1. 用户调用 `shutdownGracefully()` → `SingleThreadIoEventLoop` CAS 状态为 `ST_SHUTTING_DOWN`
+2. EventLoop 主循环下一轮检测到 shutting down，调用 `ioHandler.prepareToDestroy()`
+3. 再下一轮 `runIo()` → `runAllTasks()` → `confirmShutdown()`
+4. `confirmShutdown()` 确认后 `canSuspend()` 需要 `numRegistrations == 0`（所有 IO handle 都已取消）才能挂起
+5. EventLoop cleanup 时调用 `ioHandler.destroy()` 释放底层 selector / epoll / kqueue
+
+`IoHandler.prepareToDestroy()` 在 `NioIoHandler` 里的实现是同步关闭所有注册的 `IoHandle`（`NioIoHandle.close()` 会调 `SelectionKey.cancel()` + `SocketChannel.close()`），然后 `destroy()` 里 `selector.close()`。这和 4.1 里 NioEventLoop.cleanup() 直接 `closeAll` + `selector.close()` 的效果等价，只是入口换成了 IoHandler。
 
 ```plantuml
 skinparam backgroundColor #DDDDDD
@@ -840,29 +715,29 @@ skinparam backgroundColor #DDDDDD
 title: shutdown
 actor User
 participant EventLoopGroup as eg
-participant EventLoop as el
+participant SingleThreadIoEventLoop as el
+participant IoHandler as ih
 activate el
-el -> el: runAllTasks()
 User -> eg: shutdownGracefully()
 eg -> el: shutdownGracefully()
 loop shutdown
-
     break isShuttingDown
         note over el #AAAAAA: return
     end
     note over el: cas set state \n ST_STARTED -> ST_SHUTTING_DOWN
 end
+el -> ih: prepareToDestroy()
+activate ih
+ih -> ih: close all IoHandles
+note right: SelectionKey.cancel() + SocketChannel.close()
+deactivate ih
+el -> el: runAllTasks()
 el -> el: confirmShutdown()
-note right: runAllTasks() || runShutdownHooks()
-el -> el: closeAll()
-activate el
-participant Channel as ch
-participant Selector as se
-el -> se: cancel registed channels
-el -> ch: close NIO channels
-el -> se: cleanup()
-se -> se: Selector.close()
-deactivate el
+note right: numRegistrations == 0 才能挂起
+el -> ih: destroy()
+activate ih
+ih -> ih: selector.close()
+deactivate ih
 deactivate el
 ```
 
@@ -914,7 +789,7 @@ Netty 的调优面分两层：全局的 `io.netty.*` 系统属性（进程级、
 | `WRITE_BUFFER_WATER_MARK` | `32KB` / `64KB` | 写水位线，超过 high 判不可写，见 [Limiter](/docs/CS/Framework/Netty/Limiter.md) |
 | `ALLOCATOR` / `RCVBUF_ALLOCATOR` | 跟随全局属性 | 该 Channel 的 Buffer 分配器与读缓冲分配策略 |
 
-其余调优点（EventLoop 线程数、线程亲和、IO 比）见 [EventLoop - Tuning](/docs/CS/Framework/Netty/EventLoop.md?id=tuning)。
+其余调优点（EventLoop 线程数、ioRatio 任务预算比例）见 [EventLoop](/docs/CS/Framework/Netty/EventLoop.md)。
 
 ### Testing
 

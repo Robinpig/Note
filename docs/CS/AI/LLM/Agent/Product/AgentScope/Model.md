@@ -135,6 +135,83 @@ data = reply.structured_output        # dict（不是 Answer 实例）
 
 
 
+## Vendor Module Inventory
+
+主干已说明 `ChatModelBase` 之下有 10 个厂商子模块，这里逐一列出每个子模块注入的 formatter 与各自的 `_format_tools` 落点（行号以 v2.0.8 源码为准）。每个子模块同时携带 `_models/*.yaml` 模型卡片，`ChatModelBase.list_models`（`model/_base.py:135`）按子类源文件旁的 `_models` 目录加载，与主干「卡片清单」一致。
+
+| 子模块目录 | 公开 ChatModel 类 | 注入的 formatter（默认） | `_format_tools` 定义位置 |
+| :--- | :--- | :--- | :--- |
+| `_anthropic` | `AnthropicChatModel` | `AnthropicChatFormatter`（`_anthropic/_model.py:147`） | `_anthropic/_model.py:525` |
+| `_dashscope` | `DashScopeChatModel` | `DashScopeChatFormatter`（`_dashscope/_model.py:162`） | `_dashscope/_model.py:478` |
+| `_deepseek` | `DeepSeekChatModel` | `DeepSeekChatFormatter`（`_deepseek/_model.py:127`） | `_deepseek/_model.py:400` |
+| `_gemini` | `GeminiChatModel` | `GeminiChatFormatter`（`_gemini/_model.py:237`） | `_gemini/_model.py:533` |
+| `_moonshot` | `MoonshotChatModel` | `MoonshotChatFormatter`（`_moonshot/_model.py:126`） | `_moonshot/_model.py:404` |
+| `_ollama` | `OllamaChatModel` | `OllamaChatFormatter`（`_ollama/_model.py:109`） | `_ollama/_model.py:193` |
+| `_openai_chat` | `OpenAIChatModel` | `OpenAIChatFormatter`（`_openai_chat/_model.py:163`） | `_openai_chat/_model.py:554` |
+| `_openai_response` | `OpenAIResponseModel` | `OpenAIResponseFormatter`（`_openai_response/_model.py:153`） | `_openai_response/_model.py:482` |
+| `_volcengine` | `VolcengineChatModel` | `VolcengineChatFormatter`（`_volcengine/_model.py:129`） | `_volcengine/_model.py:406` |
+| `_xai` | `XAIChatModel` | `XAIChatFormatter`（`_xai/_model.py:144`） | `_xai/_model.py:239` |
+
+两个值得记的结构事实：
+
+- **formatter 与 `_format_tools` 都收在子类里，不在 `ChatModelBase`**。基类只声明 `_get_retryable_exceptions` / `_get_disable_thinking_kwargs` / `_get_structured_output_fallback_exceptions` 三个可被子类覆盖的 hook（`model/_base.py:100`、`:111`、`:122`）。工具 schema 的序列化由各子类自己的 `_format_tools` 完成，因为不同厂商的 tool 形状（尤其 xAI 走 protobuf）差异太大，无法在基类统一。
+- **OpenAI 在模型层其实有两个子模块**：`_openai_chat`（Chat Completions）与 `_openai_response`（Responses API）。两者 formatter 不同、模型类不同，但共用 `_OpenAIFormatterBase` 的多模态转换逻辑（`_openai_formatter.py:26`）。主干 Formatter Layer 把「OpenAI」列成一个厂商名，实际对应两个 formatter 文件，这是下文差异表要补的关键点。
+
+## Formatter Multi-Vendor Differences
+
+主干的「Four Vendors, Four Divergent Choices」只展开了 OpenAI / Anthropic / Gemini / DashScope 四家。这里把 v2.0.8 全部 10 个厂商 formatter 的差异逐列补齐，所有单元格均来自源码核实。`FormatterBase` 的单一抽象方法 `format()`（`formatter/_formatter_base.py:46`）返回完整 `list[dict]`（xAI 例外，见下文）。
+
+| Vendor（formatter 类） | 消息形状 | system prompt | tool call | tool result | 多模态 input_types | ThinkingBlock |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| Anthropic（`AnthropicChat` / `AnthropicMultiAgent`，`_anthropic_formatter.py:361` / `:398`） | `{role, content[]}` | MultiAgent 单独 system 消息；Chat 由 model 层从首条 pop 进 `kwargs["system"]`（`_anthropic/_model.py:260`） | `{type:tool_use, id, name, input(字典)}`（`_anthropic_formatter.py:165`） | `{type:tool_result, tool_use_id}` 必须包在 `role:user`（`_anthropic_formatter.py:255`） | `image/*` / `application/pdf`，全部 base64（`:307`） | 有 `signature` 才保留，否则丢弃；`redacted_thinking_data` 还原为 `redacted_thinking`（`:84`） |
+| OpenAI Chat（`OpenAIChat` / `OpenAIMultiAgent`，`_openai_formatter.py:229` / `:414`） | `{role, name, content[]}` | MultiAgent 首条 system 单独生成（`_openai_formatter.py:556`） | `tool_calls[]` + `function.arguments` | `{role:tool, tool_call_id}`（`:348`） | `text/plain` / `image/*` / `audio/*` / `application/pdf`（`:235`） | **丢弃**（`:384`） |
+| OpenAI Response（`OpenAIResponse` / `OpenAIResponseMultiAgent`，`_openai_response_formatter.py:162` / `:399`） | input items：`input_text` / `input_image` / `function_call` / `function_call_output` | 独立 `system` 项（`:531`） | `{type:function_call, call_id, name, arguments}`（`:330`） | `{type:function_call_output, call_id, output}`（`:361`） | `text/plain` / `image/*` / `application/pdf`，**不含 audio**（`:31`） | 带 `reasoning_item_id` 时原样回放（`:273`） |
+| Gemini（`GeminiChat` / `GeminiMultiAgent`，`_gemini_formatter.py:111` / `:287`） | `{role, parts[]}`，assistant 改 `model` | **降级为 `role:user`**（`_gemini_formatter.py:440`） | `{function_call:{id,name,args(字典)}}`（`_gemini_formatter.py:204`） | `{function_response:{id,name,response:{output}}}`（`_gemini_formatter.py:232`） | `text` / `image/*` / `audio/*` / `video/*` / `application/pdf`（`:117`） | `{thought:true, text}`，空则跳过（`:157`） |
+| DashScope（`DashScopeChat` / `DashScopeMultiAgent`，`_dashscope_formatter.py:219` / `:408`） | OpenAI 兼容 + 扩展 | 同 OpenAI | `tool_calls[]` + `function.arguments` | `{role:tool, tool_call_id}` | `text` / `image/*` / `audio/*` / `video/*`（含 `application/x-thinking`，`:30`） | **唯一支持回灌**：`reasoning_content` 字段，`supports_thinking_input` 开关控制（`:323`） |
+| DeepSeek（`DeepSeekChat` / `DeepSeekMultiAgent`，`_deepseek_formatter.py:20` / `:201`） | OpenAI 兼容 `{role, content}` | 同 OpenAI（独立 system 消息） | `tool_calls[]` + `function.arguments` | `{role:tool, tool_call_id}` | **仅 `text/plain`**（`:26`） | `reasoning_content` 保留在**所有** assistant 消息（即使空也带字段，`:181`） |
+| Moonshot（`MoonshotChat` / `MoonshotMultiAgent`，`_moonshot_formatter.py:59` / `:277`，继承 `_OpenAIFormatterBase`） | OpenAI 兼容 | 同 OpenAI | `tool_calls[]` + `function.arguments` | `{role:tool, tool_call_id}` | `text` / `image/*` / `audio/*`（`:69`） | `reasoning_content` 保留（Preserved Thinking，`:113`） |
+| Ollama（`OllamaChat` / `OllamaMultiAgent`，`_ollama_formatter.py:102` / `:332`） | `{role, content, images[]}` | 同 OpenAI（独立 system 消息，`:475`） | `tool_calls[]`，`function.arguments` 为**字典**（`:278`） | `{role:tool, tool_name}`（**非** `tool_call_id`，`:224`） | **仅 `image/*`**，base64 字符串列表（`:108`） | **丢弃**（`:183`） |
+| Volcengine（`VolcengineChat` / `VolcengineMultiAgent`，`_volcengine_formatter.py:87` / `:289`，继承 `_OpenAIFormatterBase`） | OpenAI 兼容 | 同 OpenAI | `tool_calls[]` + `function.arguments` | `{role:tool, tool_call_id}` | `text` / `image/*` / `video/*`（`:93`） | `reasoning_content` 保留（`:271`） |
+| xAI（`XAIChat` / `XAIMultiAgent`，`_xai_formatter.py:30` / `:374`） | **protobuf `Message` 对象，不是 dict** | `system()` / `user()` / `assistant()` 构造（`_xai_formatter.py:424`） | `tool_calls`（`TOOL_CALL_TYPE_CLIENT_SIDE_TOOL`，`:261`） | `tool_result()` proto（`:191`） | **仅 `image/jpeg` / `image/png`**（`:41`） | **丢弃**（`:94`） |
+
+几个逐行核实出来的、主干四家表没覆盖的硬差异：
+
+- **tool result 的并行合并**：Anthropic 严格要求并行 `tool_result` 合并进同一条 `role:user`（`_anthropic_formatter.py:182` 的 `has_tool_result` 标志防止拆分），注释明确写「strict endpoints (e.g. DeepSeek) reject with 400」。这解释了为什么主干说「拆开会 400」。
+- **Ollama 用 `tool_name` 不用 `tool_call_id`**：按 Ollama 官方 tool-calling spec，结果消息必须带 `tool_name` 字段让模型关联函数（`_ollama_formatter.py:219`）。
+- **DeepSeek 的 `reasoning_content` 强制在场**：每轮 assistant 消息都带该字段（无思考时也填空串），否则多轮思考模式上下文非法（`_deepseek_formatter.py:181`）。
+- **xAI 的 `format()` 返回类型不同**：其它 formatter 返回 `list[dict]`，xAI 返回 `list[Any]`（protobuf `chat_pb2.Message`），基类 `format()` 的抽象签名用 `*args, **kwargs` 容忍了这种差异（`formatter/_formatter_base.py:47`）。
+- **音频支持矩阵**：OpenAI / DashScope / Moonshot 支持 audio；OpenAI Response API 明确**不支持 audio**（`:70` 直接跳过并告警）；Ollama / xAI / DeepSeek 完全不支持音频。
+
+## Cross-Check with Trunk Four Vendors Table
+
+主干「Four Vendors, Four Divergent Choices」表的逐格与源码对照：
+
+| 主干声称 | 源码核实结果 |
+| :--- | :--- |
+| OpenAI 消息 `{role, name, content[]}` | 准确（`_openai_formatter.py:395` 确实带 `name`） |
+| Anthropic system 由 model 层 pop 进 `kwargs["system"]` | 准确（`_anthropic/_model.py:260`） |
+| Gemini assistant 改 `model`、system 降级为 user | 准确（`:272`、`:440`） |
+| DashScope 同 OpenAI + 扩展 | 准确；额外有 `video_url`（`_dashscope_formatter.py:142`）与 `application/x-thinking` 回灌 |
+| Anthropic ThinkingBlock 无 signature 丢弃、有 `redacted_thinking_data` 还原 | 准确（`:84-122`） |
+| Gemini ThinkingBlock `{thought:true}`，空则跳过 | 准确（`:157`） |
+| DashScope 唯一支持 thinking 回灌 `reasoning_content` | 准确（`:323`、`supports_thinking_input` 开关） |
+| OpenAI ThinkingBlock 丢弃 | 准确（`:384`） |
+| formatter 层无流式概念 | 准确；流式累加在 `model/_utils.py` 的 `_StreamAccumulator`（主干 Model Abstraction 已写） |
+
+唯一需要修正主干措辞的是厂商计数：**主干写「11 个文件覆盖 OpenAI / Anthropic / Gemini / DashScope / DeepSeek / Moonshot / Ollama / Volcengine / xAI（9 家）」**。实际 v2.0.8 的 `formatter/` 目录是 **11 个 `.py` 文件 = 1 个基类 `_formatter_base.py` + 10 个厂商 formatter**；那 10 个厂商里 OpenAI 拆成了 `OpenAIChatFormatter` 与 `OpenAIResponseFormatter` 两族，所以「厂商」应算 **10 家**而非 9 家（主干把两个 OpenAI 家族合并成一个名字了）。数字「11 个文件」本身成立，只是包含了基类文件。
+
+## Credential Factory Nuances
+
+主干 Model Abstraction 已写 `CredentialFactory` 的基本机制，这里补三个 v2.0.8 下才成立的细节：
+
+- **注册表只有 9 个类**（`credential/_factory.py:37-47`）：`Anthropic` / `DashScope` / `DeepSeek` / `Gemini` / `Moonshot` / `Ollama` / `OpenAI` / `xAI` / `Volcengine`。`from_dict`（`_factory.py:76`）、`get_credential_class`（`_factory.py:88`，用 `get_type_hints` 取 `type` 的 `Literal` 比对）、`list_schemas`（`_factory.py:113`）三件套分别服务「存储反序列化 / 按 provider 查类 / 前端表单」。discriminator 字符串就是传给 `type` 字段的值（`openai_credential` 等），与主干一致。
+- **`credential/` 目录里有个 `_kimi.py`，是 0 字节空文件**，既没有类也没有注册进 factory。`MoonshotCredential` 实际在 `_moonshot.py`。这是历史遗留占位，不要误读成「第 10 个凭据类」。
+- **v2.0.8 没有 `credential/_typesafe.py`**：主干 Version Delta 把它列为 v2.0.10 新增。以本笔记的 v2.0.8 为准时，`credential/` 只有上表文件，且全目录无 `os.getenv`（凭据不读环境变量，与主干一致）。
+
+## No LangChain Compatibility Layer
+
+主干称「仓库里没有任何 LangChain 兼容层」。在 v2.0.8 整棵树上执行 `grep -rni "langchain" src/agentscope/` 返回**空**，确认该结论成立：AgentScope 的跨厂商抽象完全自建在 `model/` + `formatter/` + `credential/` 三层，不依赖 LangChain。
+
 ## Links
 
 - [AgentScope](/docs/CS/AI/LLM/Agent/Product/AgentScope/AgentScope.md)

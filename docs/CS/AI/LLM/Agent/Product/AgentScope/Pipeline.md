@@ -178,7 +178,7 @@ Agent yields RequireExternalExecutionEvent(tool_calls=[...]) 并立即 return
 支撑类型集中在 `src/agentscope/types/`：
 
 - **`ReplyFinishedReason`**（`types/_reply.py`）：`COMPLETED` / `INTERRUPTED` / `EXCEED_MAX_ITERS` / `ERROR` 四值。
-- **`ErrorType`**（`types/_reply.py`）：9 个值；配套 `ErrorInfo`（`ErrorType` + `message` + 可选 `detail`），仅在 `ReplyEndEvent.error` 里出现。
+- **`ErrorType`**（`types/_reply.py:19-43`）：9 个值——`AUTHENTICATION`/`PERMISSION`/`RATE_LIMIT`/`INVALID_REQUEST`/`UPSTREAM`/`CONNECTION`/`INTERNAL`/`SETUP`/`UNKNOWN`；配套 `ErrorInfo`（`types/_reply.py:46-53`，仅 `type: ErrorType`——默认 `UNKNOWN`——加 `message: str` **两个字段，没有 `detail` 字段**），仅在 `ReplyEndEvent.error` 里出现（`event/_event.py:123`）。
 - **`AgentHookTypes`**（`types/_hook.py`）：`pre_reply` / `post_reply` / `pre_observe` / `post_observe` / `pre_print` / `post_print`——这是**旧式 Agent 级 hook** 命名，与中间件 `_base.py` 的 `on_*` 系列（见 [Middleware 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Middleware.md)）**是两套独立的机制**，写笔记时容易混。
 - **`ReActAgentHookTypes`**（`types/_hook.py`）：在 `AgentHookTypes` 基础上追加 `pre_reasoning` / `post_reasoning` / `pre_acting` / `post_acting`，是 ReAct Agent 专用的扩展。
 - **`Embedding`**（`types/_object.py`）：就是 `List[float]`，没有更花哨的封装。
@@ -224,6 +224,80 @@ elif event.type == EventType.DATA_BLOCK_DELTA and event.data:
 ### Query Helpers
 
 `Msg` 提供：`has_content_blocks()`（content 是否非空）、`get_text_content()`（把所有文本块拼成字符串）、`get_content_blocks()`（overloaded，按类型取块）、`_find_block(kind, id)`（状态机内部按 `block_id` 定位）。`append_usage()` 把 `ModelCallEndEvent` 的 token 计数累加进 `Msg.usage`。
+
+## Source Module Map
+
+v2.0.8（commit c7d8e31）此刻的真实布局，先厘清几处易混的模块名（任何自己拼事件/消息的代码都按这个路径 import）：
+
+- `pipeline/__init__.py` 只导出 `PipelineProtocol`（来自 `pipeline/_base.py`）与 `GoalPipeline`（来自 `pipeline/_goal_pipeline.py`）两个符号，**没有**独立的 `pipeline/_pipeline_protocol.py`。
+- `Msg` 类定义在 `message/_base.py`（**不是** `message/_msg.py`），`append_event` 是该文件的方法（`message/_base.py:244`）。`message/_block.py` 只定义内容块与状态枚举。
+- 全部事件在 `event/_event.py`：`EventType`（`:26`）、各 `AgentEvent` 子类、以及 `AgentEvent` 联合类型（`:568`）。
+- 支撑类型在 `types/`：`_reply.py`（`ReplyFinishedReason` / `ErrorType` / `ErrorInfo`）、`_hook.py`（`AgentHookTypes` / `ReActAgentHookTypes`）、`_object.py`（`Embedding`）。
+- `TeamPipeline`（主干所称 `pipeline/_team_pipeline.py`，Leader 委派 Worker）**在 v2.0.8 不存在**——`pipeline/` 目录此刻只有 `__init__.py` / `_base.py` / `_goal_pipeline.py` 三个文件，Team Pipeline 要等到 v2.0.10 才独立（见主干 `Version Delta: v2.0.8 → v2.0.10`）。
+
+## EventType Full Enumeration
+
+`EventType`（`event/_event.py:26-67`）是 `StrEnum`，**共 28 个值**。下面按源码顺序逐一列出（行号来自 `event/_event.py`），每个值对应一个 `EventBase` 子类：
+
+| # | `EventType` 值（行） | 事件类（行） | 备注 |
+| :--- | :--- | :--- | :--- |
+| 1 | `REPLY_START`（:29） | `ReplyStartEvent`（:83） | 带 `session_id`/`reply_id`/`name`/`role` |
+| 2 | `REPLY_END`（:30） | `ReplyEndEvent`（:112） | 带 `finished_reason` + 可选 `error` |
+| 3 | `MODEL_CALL_START`（:32） | `ModelCallStartEvent`（:128） | 带 `model_name` |
+| 4 | `MODEL_CALL_END`（:33） | `ModelCallEndEvent`（:139） | 4 个 token 计数 |
+| 5 | `TEXT_BLOCK_START`（:35） | `TextBlockStartEvent`（:160） | |
+| 6 | `TEXT_BLOCK_DELTA`（:36） | `TextBlockDeltaEvent`（:171） | `delta: str` |
+| 7 | `TEXT_BLOCK_END`（:37） | `TextBlockEndEvent`（:184） | `text` 仅在「非拼接」时填充 |
+| 8 | `DATA_BLOCK_START`（:39） | `DataBlockStartEvent`（:198） | 带 `media_type` |
+| 9 | `DATA_BLOCK_DELTA`（:40） | `DataBlockDeltaEvent`（:213） | `data`/`url` 互斥 |
+| 10 | `DATA_BLOCK_END`（:41） | `DataBlockEndEvent`（:239） | |
+| 11 | `THINKING_BLOCK_START`（:43） | `ThinkingBlockStartEvent`（:250） | |
+| 12 | `THINKING_BLOCK_DELTA`（:44） | `ThinkingBlockDeltaEvent`（:263） | `delta: str` |
+| 13 | `THINKING_BLOCK_END`（:45） | `ThinkingBlockEndEvent`（:278） | |
+| 14 | `HINT_BLOCK`（:47） | `HintBlockEvent`（:289） | 一次性，非流式 |
+| 15 | `TOOL_CALL_START`（:49） | `ToolCallStartEvent`（:314） | |
+| 16 | `TOOL_CALL_DELTA`（:50） | `ToolCallDeltaEvent`（:327） | `delta` 是 JSON 片段 |
+| 17 | `TOOL_CALL_END`（:51） | `ToolCallEndEvent`（:340） | |
+| 18 | `TOOL_RESULT_START`（:53） | `ToolResultStartEvent`（:351） | |
+| 19 | `TOOL_RESULT_TEXT_DELTA`（:54） | `ToolResultTextDeltaEvent`（:364） | |
+| 20 | `TOOL_RESULT_DATA_DELTA`（:55） | `ToolResultDataDeltaEvent`（:379） | `data`/`url` 互斥 |
+| 21 | `TOOL_RESULT_END`（:56） | `ToolResultEndEvent`（:409） | 带 `state: ToolResultState` |
+| 22 | `EXCEED_MAX_ITERS`（:58） | `ExceedMaxItersEvent`（:431） | `@deprecated`，仍 emit 无语义 |
+| 23 | `REQUIRE_USER_CONFIRM`（:60） | `RequireUserConfirmEvent`（:443） | 带 `tool_calls` |
+| 24 | `REQUIRE_EXTERNAL_EXECUTION`（:61） | `RequireExternalExecutionEvent`（:456） | 带 `tool_calls` |
+| 25 | `USER_CONFIRM_RESULT`（:63） | `UserConfirmResultEvent`（:483） | 带 `confirm_results` |
+| 26 | `USER_INTERRUPT`（:64） | `UserInterruptEvent`（:496） | 仅带 `reply_id` |
+| 27 | `EXTERNAL_EXECUTION_RESULT`（:65） | `ExternalExecutionResultEvent`（:521） | 带 `execution_results` |
+| 28 | `CUSTOM`（:67） | `CustomEvent`（:534） | `name` + `value` 扩展槽 |
+
+计数核对：Reply 2 + Model 2 + Text 3 + Data 3 + Thinking 3 + Hint 1 + ToolCall 3 + ToolResult 4 + IterCap 1 + HITL 2 + HITLResult 3 + Custom 1 = **28**。`AgentEvent`（`event/_event.py:568`）正是这 28 个类的 `TypeAlias` 联合，与上面一一对应。
+
+## append_event reply_id Guard
+
+`Msg.append_event(event)`（`message/_base.py:244`）是「状态机式增量重建」的落地方法，但它**不是无差别吞下所有事件**：方法入口先校验 `event.reply_id != self.id`（`message/_base.py:264`），不匹配就 `logger.warning(...)` 后直接 `return`（`message/_base.py:265-272`）。这就是「按 reply_id 归并」的硬机制——多条并发 reply 的事件流可以被交错喂给各自对应的 `Msg`，每条 `Msg` 只吸收属于自己 `reply_id` 的那一份，从而从一条混流里重建出多条独立 `Msg`（TUI、HITL 恢复都依赖这一点）。
+
+`REPLY_END` 分支（`:275-283`）的三个动作值得单独记，因为它们解释了 `Msg` 上几个关键字段的来源：
+
+- `self.finished_at = event.created_at`——用事件时间戳盖戳。
+- `self.finished_reason = ReplyFinishedReason(event.finished_reason)`——**注意这里做了一次显式 coerce**：因为 `EventBase` 设置了 `use_enum_values=True`（`event/_event.py:73`），`event.finished_reason` 到达时已是**裸字符串**而非枚举，必须用 `ReplyFinishedReason(...)` 包回枚举，字段才能干净序列化（`:277-282` 注释原话）。
+- `self.error = event.error`——仅在 `finished_reason == ERROR` 时事件才带非 `None` 的 `error`。
+
+`MODEL_CALL_END` 分支（`:285-295`）则把 `input_tokens` / `output_tokens` / `cache_input_tokens` / `cache_creation_input_tokens` 累加进 `Msg.usage`（`append_usage`，`:520`）。找不到目标的 block 级事件（如 `block_id` 未知的 `TEXT_BLOCK_DELTA`）同样 `logger.warning` 后跳过，不会抛异常。
+
+## ToolCallState and ToolResultState
+
+工具调用在流式事件里的状态机由 `_block.py` 的两个 `StrEnum` 收口，二者是 `append_event` 里 `TOOL_CALL_*` / `TOOL_RESULT_*` / HITL 分支翻转的对象：
+
+- **`ToolCallState`**（`message/_block.py:128-135`）：`PENDING` / `ASKING` / `ALLOWED` / `SUBMITTED` / `FINISHED` 五值。完整转移图见 `ToolCallBlock.state` 的 docstring（`message/_block.py:151-175`）：`pending` 经权限判定 → `asking`（需确认）或 `allowed`；`asking` 经用户决策 → `allowed`（批准）或 `finished`（拒绝）；`allowed` 本地工具直接 `finished`、外部工具 → `submitted`；`submitted` 等 `ExternalExecutionResultEvent` → `finished`。
+- **`ToolResultState`**（`message/_block.py:185-192`）：`SUCCESS` / `ERROR` / `INTERRUPTED` / `DENIED` / `RUNNING` 五值，是 `ToolResultBlock.state` 的取值，`ToolResultEndEvent.state`（`event/_event.py:420`）同此枚举。
+
+这些状态在 `append_event` 里被翻转的位置（均位于 `message/_base.py`）：
+
+- `REQUIRE_USER_CONFIRM` → 对应 `ToolCallBlock.state = ASKING`（`:472-480`）；
+- `USER_CONFIRM_RESULT` → `ALLOWED`（批准）或 `FINISHED`（拒绝），且仅当当前为 `ASKING` 才转移（`:482-494`）；
+- `REQUIRE_EXTERNAL_EXECUTION` → `SUBMITTED`（`:496-501`）；
+- `TOOL_RESULT_END` → 把**配对**的 `ToolCallBlock` 一并置为 `FINISHED`（`:455-470`），使 SSE 重建出的 `Msg` 与 `agent.state.context` 一致；
+- `EXTERNAL_EXECUTION_RESULT` → 直接把 `ToolResultBlock` 拼入 `content`，并对已存在同 id 的结果去重（`:503-516`）。
 
 ## Links
 

@@ -1,1737 +1,229 @@
 ## Introduction
 
-EventLoopGroup 本质是一个线程池，主要负责接收 I/O 请求，并分配线程执行处理请求
+EventLoopGroup 是 Netty Reactor 线程模型的实现：一个 group 管多个 EventLoop（线程），每个 EventLoop 管多个 Channel（注册到它的 fd）。4.2 的核心重构是把 IO 多路复用循环从 EventLoop 抽出来，交给 `IoHandler` 接口——EventLoop 只负责跑任务队列 + 调 `ioHandler.run(context)`，不再知道底层是 select 还是 epollWait。
 
-每新建一个 Channel，EventLoopGroup 会选择一个 EventLoop 与其绑定。该 Channel 在生命周期内都可以对 EventLoop 进行多次绑定和解绑
+本文以 **Netty 4.2.19.Final** 源码为准。
 
-EventLoopGroup、EventLoop、Channel 的关系
+## 家族对比
 
-1. 一个 EventLoopGroup 往往包含一个或者多个 EventLoop。EventLoop 用于处理 Channel 生命周期内的所有 I/O 事件，如 accept、connect、read、write 等 I/O 事件。
-2. EventLoop 同一时间会与一个线程绑定，每个 EventLoop 负责处理多个 Channel。
-3. 每新建一个 Channel，EventLoopGroup 会选择一个 EventLoop 与其绑定。该 Channel 在生命周期内都可以对 EventLoop 进行多次绑定和解绑
+| 4.1（已 Deprecated） | 4.2（当前） | 差异 |
+| :--- | :--- | :--- |
+| `NioEventLoopGroup` | `MultiThreadIoEventLoopGroup(new NioIoHandlerFactory(...))` | 构造时传入 IoHandlerFactory，实现细节（NIO / epoll / kqueue / io_uring）后移 |
+| `NioEventLoop` | `SingleThreadIoEventLoop`（继承 `SingleThreadEventLoop`） | 主循环从 `run0()` 里的 select 循环变成 `run()` 里的 `ioHandler.run(context)` |
+| — | `IoHandler` / `IoHandlerFactory` | 新增抽象层——见 [Transport IoHandler 抽象](/docs/CS/Framework/Netty/Transport.md?id=iohandler-abstraction) |
+| `EventExecutorGroup`（只有 next()） | `IoEventLoopGroup extends EventLoopGroup` | 新增 `register(IoHandle)` 让 EventLoop 能注册 IoHandle |
 
+AIO transport（`io.netty.channel.aio`）4.1 就彻底移除了。OIO（`io.netty.channel.socket.oio`）整体 `@Deprecated`，推荐换 NIO / epoll / kqueue。4.2 里原来那几个 `NioEventLoopGroup` / `EpollEventLoopGroup` / `KQueueEventLoopGroup` 也全部 `@Deprecated`，迁移方式就是上面那行 MultiThreadIoEventLoopGroup + 对应的 IoHandlerFactory。
 
-
-
-EventLoopGroup 是 Netty Reactor 线程模型的具体实现方式，Netty 通过创建不同的 EventLoopGroup 参数配置，就可以支持 Reactor 的三种线程模型
-
-不同IO模型下，EventLoop有着不同的实现，我们只需要切换不同的实现类就可以完成对NettyIO模型的切换
-
-| BIO                              | NIO                 | AIO               |
-|----------------------------------|---------------------|-------------------|
-| `ThreadPerChannelEventLoopGroup` | `NioEventLoopGroup` | `AioEventLoopGroup` |
-
-> [!WARNING]
->
-> 上表是 Netty 4.0 时代的分类。**AIO transport（`io.netty.channel.aio`）已在 Netty 4.1 中被彻底移除**，官方给出的理由是 Linux 上的 AIO 实现并不比 epoll 更快，且 Windows 上的 IOCP 语义难以与 Netty 的线程模型对齐。因此 4.1/4.2 只剩 BIO 与 NIO 两条路，`AioEventLoopGroup` 不再存在（OIO 包 `io.netty.channel.socket.oio` 整体 `@Deprecated`，推荐改用 NIO / epoll / kqueue）。
->
-> 另外 4.2 中 `NioEventLoopGroup`、`EpollEventLoopGroup`、`KQueueEventLoopGroup` 也已 `@Deprecated`，迁移方式见 [IoHandler](#iohandler)。
-
-
-
-![EventLoopGroup](img/EventLoop.png)
-
-#### EventExecutorGroup
-
-The EventExecutorGroup is responsible for **providing the EventExecutor's to use via its `next()` method**. 
-Besides this, it is also responsible for **handling their life-cycle** and **allows shutting them down in a global fashion**.
+## SingleThreadIoEventLoop.run() —— 4.2 主循环
 
 ```java
-public interface EventExecutorGroup extends ScheduledExecutorService, Iterable<EventExecutor> {
-  
-    //Returns one of the EventExecutors managed by this EventExecutorGroup.
-    EventExecutor next();
-}
-```
-
-Single-thread singleton EventExecutor. 
-It starts the thread automatically and stops it when there is no task pending in the task queue for 1 second. 
-Please note it is not scalable to schedule large number of tasks to this executor; use a dedicated executor.
-
-```java
-public abstract class MultithreadEventExecutorGroup extends AbstractEventExecutorGroup {
-    private final Promise<?> terminationFuture = new DefaultPromise(GlobalEventExecutor.INSTANCE);
-}
-
-public final class GlobalEventExecutor extends AbstractScheduledEventExecutor implements OrderedEventExecutor {
-    private GlobalEventExecutor() {
-        scheduledTaskQueue().add(quietPeriodTask);
-        threadFactory = ThreadExecutorMap.apply(new DefaultThreadFactory(
-                DefaultThreadFactory.toPoolName(getClass()), false, Thread.NORM_PRIORITY, null), this);
-    }
-}
-```
-
-
-```java
-public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
-
-    public DefaultPromise(EventExecutor executor) {
-        this.executor = checkNotNull(executor, "executor");
-    }
-    
-    private void notifyListeners() {
-        EventExecutor executor = executor();
-        if (executor.inEventLoop()) {
-            final InternalThreadLocalMap threadLocals = InternalThreadLocalMap.get();
-            final int stackDepth = threadLocals.futureListenerStackDepth();
-            if (stackDepth < MAX_LISTENER_STACK_DEPTH) {
-                threadLocals.setFutureListenerStackDepth(stackDepth + 1);
-                try {
-                    notifyListenersNow();
-                } finally {
-                    threadLocals.setFutureListenerStackDepth(stackDepth);
-                }
-                return;
-            }
-        }
-
-        safeExecute(executor, new Runnable() {
-            @Override
-            public void run() {
-                notifyListenersNow();
-            }
-        });
-    }
-}
-```
-
-#### shutdownGracefully
-
-Signals this executor that the caller wants the executor to be shut down.
-
-Once this method is called, isShuttingDown() starts to return true, and the executor prepares to shut itself down.
-Unlike shutdown(), graceful shutdown ensures that no tasks are submitted for 'the quiet period' (usually a couple seconds) before it shuts itself down.
-If a task is submitted during the quiet period, it is guaranteed to be accepted and the quiet period will start over.
-
-
-```java
-// SingleThreadEventExecutor
-@Override
-public Future<?> shutdownGracefully(long quietPeriod, long timeout, TimeUnit unit) {
-    ObjectUtil.checkPositiveOrZero(quietPeriod, "quietPeriod");
-    if (timeout < quietPeriod) {
-        throw new IllegalArgumentException(
-                "timeout: " + timeout + " (expected >= quietPeriod (" + quietPeriod + "))");
-    }
-    ObjectUtil.checkNotNull(unit, "unit");
-
-    if (isShuttingDown()) {
-        return terminationFuture();
-    }
-
-    boolean inEventLoop = inEventLoop();
-    boolean wakeup;
-    int oldState;
-    for (;;) {
-        if (isShuttingDown()) {
-            return terminationFuture();
-        }
-        int newState;
-        wakeup = true;
-        oldState = state;
-        if (inEventLoop) {
-            newState = ST_SHUTTING_DOWN;
+protected void run() {
+    assert inEventLoop();
+    ioHandler.initialize();                     // ① IoHandler 启动（openSelector / epoll_create1 / io_uring_setup）
+    do {
+        final int ioRatio = this.ioRatio;
+        long quantum;
+        activeIoTimeNanos = -1;                // ② reset，runIo() 里 reportActiveIoTime
+        runIo();                               // ③ ioHandler.run(context) —— select/epollWait/keventWait
+        if (ioRatio == 100 || activeIoTimeNanos == -1) {
+            quantum = maxTaskProcessingQuantumNs;  // 默认 1000ms，系统属性可配
         } else {
-            switch (oldState) {
-                case ST_NOT_STARTED:
-                case ST_STARTED:
-                    newState = ST_SHUTTING_DOWN;
-                    break;
-                default:
-                    newState = oldState;
-                    wakeup = false;
-            }
+            // ④ ioRatio 不是 100 → 任务预算按 IO 时间比例分配
+            quantum = Math.min(maxTaskProcessingQuantumNs,
+                    activeIoTimeNanos * (100 - ioRatio) / ioRatio);
+            if (quantum == 0) quantum = maxTaskProcessingQuantumNs;
         }
-        if (STATE_UPDATER.compareAndSet(this, oldState, newState)) {
-            break;
+        if (isShuttingDown()) {
+            ioHandler.prepareToDestroy();
         }
-    }
-    gracefulShutdownQuietPeriod = unit.toNanos(quietPeriod);
-    gracefulShutdownTimeout = unit.toNanos(timeout);
-
-    if (ensureThreadStarted(oldState)) {
-        return terminationFuture;
-    }
-
-    if (wakeup) {
-        taskQueue.offer(WAKEUP_TASK);
-        if (!addTaskWakesUp) {
-            wakeup(inEventLoop);
-        }
-    }
-
-    return terminationFuture();
+        runAllTasks(quantum);                  // ⑤ 任务队列消费（上限 quantum 时间）
+    } while (!confirmShutdown() && !canSuspend()); // ⑥ shutdown 确认 or 可挂起
 }
 ```
 
-## Reactor Thread Model
+**与 4.1 的差异**：
+- 4.1 的 `NioEventLoop.run0()` 里自己写 select 循环、自己处理 IO / 任务切换、自己处理 busy-wait。4.2 把 IO 循环完全委托给 `ioHandler.run(context)`，SingleThreadIoEventLoop 只做 **IO 时间计量 → 任务预算分配**
+- `ioRatio`（默认 100）控制 IO vs 任务的时间分配比例，4.2 把它从 NioEventLoop 挪到 SingleThreadIoEventLoop，成为通用调度器
+- `runIo()` 返回值（handled 就绪数）在 4.2 里不参与循环决策（4.1 里 `select` 就绪数决定下一轮 select timeout），只有 `runAllTasks(quantum)` 的 quantum 决策用到了 activeIoTimeNanos
+- `confirmShutdown()` 和 `canSuspend()` 是 4.2 新增。`canSuspend` 额外检查 `numRegistrations.get() == 0`——没有注册任何 fd 的 EventLoop 才允许挂起（底层 selector / epoll 空等没意义）
 
-Reactor 的核心思想：用少量事件循环线程批量等待 IO 事件（epoll/select，见 [multiplexing](/docs/CS/OS/Linux/IO/multiplexing.md)），就绪后分发给处理逻辑。按"事件循环线程 × 业务处理"的组合分三种形态：
+### ioRatio 与 taskQuantum 的实际语义
 
-| 形态 | 结构 | 瓶颈 |
-| :-- | :-- | :-- |
-| 单 Reactor 单线程 | 一个线程包揽 accept + read/write + 业务 | 一个慢 handler 拖死全局（Redis 6.0 前） |
-| 单 Reactor 多线程 | Reactor 只管 IO，业务丢线程池 | Reactor 是单点，高并发时 IO 线程抢不过来 |
-| 主从 Reactor 多线程 | MainReactor 管 accept，SubReactor 管 read/write | Netty 的默认形态 |
+| ioRatio | 行为 |
+| :--- | :--- |
+| 100（默认） | runAllTasks 永远跑满 `maxTaskProcessingQuantumNs`（默认 1000ms），不管上一轮 IO 花了多久——这是 4.1 以来的默认行为 |
+| 50 | 若上一轮 IO 花了 10ms，本轮任务预算 = `min(1000, 10 * 50/50) = 10ms`——给 IO 密集型场景留出更多 IO 时间 |
+| 20 | 若上一轮 IO 花了 10ms，本轮任务预算 = `min(1000, 10 * 80/20) = 40ms`——任务密集型 |
+| 1 | 几乎只给 1ms 任务预算（除非 activeIoTimeNanos 还是 -1），IO 优先模式 |
 
-Netty 的对应关系：
-
-- `bossGroup` = **MainReactor**：只处理 accept，把新连接注册到某个 `workerGroup` 的 EventLoop 上；
-- `workerGroup` = **SubReactor**：默认线程数 `CPU 核数 × 2`（`-Dio.netty.eventLoopThreads` 可调），每个 EventLoop 绑一个线程、管多个 Channel，在单线程内**无锁串行**处理这些 Channel 的全部事件与 Pipeline；
-- 耗时业务应转交业务线程池，避免阻塞 EventLoop。
+### IoHandlerContext —— IO handler 向 EventLoop 要时间参数
 
 ```java
-// 单 Reactor 单线程
-EventLoopGroup group = new NioEventLoopGroup(1);
-serverBootstrap.group(group);
-// 主从 Reactor 多线程
-EventLoopGroup bossGroup = new NioEventLoopGroup(1);
-EventLoopGroup workerGroup = new NioEventLoopGroup();   // 默认 CPU × 2
-serverBootstrap.group(bossGroup, workerGroup);
-```
-
-与 Proactor 的分野：Reactor 关心"**就绪**"——内核通知 fd 可读，用户线程自己拷贝（同步 IO）；Proactor 关心"**完成**"——内核完成拷贝后回调（Windows IOCP）。Linux 的 epoll 属于前者，所以 NIO/Netty 都是 Reactor 模型；io_uring 补上真异步后，Proactor 才有了 Linux 落地（见 [io_uring](/docs/CS/OS/Linux/IO/io_uring.md)）。
-
-## EventLoopGroup
-
-Special EventExecutorGroup which allows [registering Channels](/docs/CS/Framework/Netty/Channel.md?id=register) that get processed for later selection during the event loop.
-
-```dot
-digraph  {
-    node [shape=plaintext, fontsize=18];
-    rankdir = "TB"
-    
-    subgraph cluster_Group {
-        label="EventLoopGroup"
-        
-    Chooser;
-    node [shape=record, fontcolor=black, fontsize=14, width=4.75, fixedsize=true];
-    group [label="<f0> EventLoop | <f1> EventLoop | <f2> ...", color=black, fillcolor=white, style=filled];
-    
-    Chooser -> group:f0;
-  
-        subgraph cluster_NioEventLoop {
-            label="EventLoop"
-         
-          subgraph cluster_se {
-            label="Selector"
-            keys [label="<f0> SelectedKey | <f1> SelectedKey | <f2> ...", color=black, fillcolor=white, style=filled];
-          }
-          
-            Thread [label="FastThreadLocalThread"];
-            Thread -> keys:f0 [label="select()/selectNow()"]
-            Thread -> keys:f2 [label="process SelectedKeys()"]
-            
-            
-             subgraph cluster_queue {
-                label="MpscUnboundedArrayQueue";
-                queue [label="<f0> Task | <f1> Task | <f2> ...", color=black, fillcolor=white, style=filled];
-            }
-            
-            Thread -> queue:f0 [label="runAllTasks()"]
-            
-            
-            
-           
-           
-          
-        }
-        
-        group:f0 -> keys:f0;
-        
+private final IoHandlerContext context = new IoHandlerContext() {
+    public boolean canBlock() {
+        return !hasTasks() && !hasScheduledTasks();  // 无待办才能阻塞 IO 多路复用
     }
-}
-```
-
-
-```java
-public interface EventLoopGroup extends EventExecutorGroup {
-  
-    @Override
-    EventLoop next();
-
-    ChannelFuture register(Channel channel);
-
-    //Register a Channel with this EventLoop using a ChannelFuture. 
-  	//The passed ChannelFuture will get notified once the registration was complete and also will get returned.
-    ChannelFuture register(ChannelPromise promise);
-}
-```
-
-### Create EventLoopGroup
-
-
-
-1. just create NioEventLoop, not start Thread
-
-
-
-```java
-public NioEventLoopGroup(int nThreads) {
-    this(nThreads, (Executor) null);
-}
-
-//Create a new instance using the specified number of threads, 
-//the given ThreadFactory and the SelectorProvider which is returned by SelectorProvider#provider().
-public NioEventLoopGroup(int nThreads, ThreadFactory threadFactory) {
-    this(nThreads, threadFactory, SelectorProvider.provider());
-}
-
-public NioEventLoopGroup(
-        int nThreads, ThreadFactory threadFactory, final SelectorProvider selectorProvider) {
-    this(nThreads, threadFactory, selectorProvider, DefaultSelectStrategyFactory.INSTANCE);
-}
-
-public NioEventLoopGroup(int nThreads, ThreadFactory threadFactory,
-    final SelectorProvider selectorProvider, final SelectStrategyFactory selectStrategyFactory) {
-    super(nThreads, threadFactory, selectorProvider, selectStrategyFactory, RejectedExecutionHandlers.reject());
-}
-
-public NioEventLoopGroup(int nThreads, Executor executor, EventExecutorChooserFactory chooserFactory,
-                         final SelectorProvider selectorProvider,
-                         final SelectStrategyFactory selectStrategyFactory,
-                         final RejectedExecutionHandler rejectedExecutionHandler,
-                         final EventLoopTaskQueueFactory taskQueueFactory) {
-    super(nThreads, executor, chooserFactory, selectorProvider, selectStrategyFactory,
-            rejectedExecutionHandler, taskQueueFactory);
-}
-```
-
-ThreadChooser
-
-```java
-private final EventExecutor[] children;
-private final Set<EventExecutor> readonlyChildren;
-private final AtomicInteger terminatedChildren = new AtomicInteger();
-private final Promise<?> terminationFuture = new DefaultPromise(GlobalEventExecutor.INSTANCE);
-private final EventExecutorChooserFactory.EventExecutorChooser chooser;
-
-private static final int DEFAULT_EVENT_LOOP_THREADS;
-
-    static {
-        DEFAULT_EVENT_LOOP_THREADS = Math.max(1, SystemPropertyUtil.getInt(
-                "io.netty.eventLoopThreads", NettyRuntime.availableProcessors() * 2));
+    public long delayNanos(long currentTimeNanos) {
+        return SingleThreadIoEventLoop.this.delayNanos(currentTimeNanos); // 下一个定时任务剩余时间
     }
-
-protected MultithreadEventLoopGroup(int nThreads, Executor executor, EventExecutorChooserFactory chooserFactory, Object... args) {
-        super(nThreads == 0 ? DEFAULT_EVENT_LOOP_THREADS : nThreads, executor, chooserFactory, args);
-    }
-
-protected MultithreadEventExecutorGroup(int nThreads, Executor executor,
-                                        EventExecutorChooserFactory chooserFactory, Object... args) {
-  	// ... ignore assert method
-  
-  	if (executor == null) {
-            executor = new ThreadPerTaskExecutor(newDefaultThreadFactory());
-        }
-  
-    children = new EventExecutor[nThreads];
-
-    for (int i = 0; i < nThreads; i ++) {
-        boolean success = false;
-        try {
-            children[i] = newChild(executor, args);
-            success = true;
-        } catch (Exception e) {
-            // TODO: Think about if this is a good exception type
-            throw new IllegalStateException("failed to create a child event loop", e);
-        } finally {
-            if (!success) {
-                for (int j = 0; j < i; j ++) {
-                    children[j].shutdownGracefully();
-                }
-
-                for (int j = 0; j < i; j ++) {
-                    EventExecutor e = children[j];
-                    try {
-                        while (!e.isTerminated()) {
-                            e.awaitTermination(Integer.MAX_VALUE, TimeUnit.SECONDS);
-                        }
-                    } catch (InterruptedException interrupted) {
-                        // Let the caller handle the interruption.
-                        Thread.currentThread().interrupt();
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    chooser = chooserFactory.newChooser(children);
-
-    final FutureListener<Object> terminationListener = new FutureListener<Object>() {
-        @Override
-        public void operationComplete(Future<Object> future) throws Exception {
-            if (terminatedChildren.incrementAndGet() == children.length) {
-                terminationFuture.setSuccess(null);
-            }
-        }
-    };
-
-    for (EventExecutor e: children) {
-        e.terminationFuture().addListener(terminationListener);
-    }
-		//finally get readonlyChildrenSet
-    Set<EventExecutor> childrenSet = new LinkedHashSet<EventExecutor>(children.length);
-    Collections.addAll(childrenSet, children);
-    readonlyChildren = Collections.unmodifiableSet(childrenSet);
-}
-```
-
-### ThreadFactory
-
-create [FastThreadLocalThread](/docs/CS/Framework/Netty/FastThreadLocal.md)
-
-```java
-	//DefaultThreadFactory#newThread()
-    public Thread newThread(Runnable r) {
-        Thread t = newThread(FastThreadLocalRunnable.wrap(r), prefix + nextId.incrementAndGet());
-        try {
-            if (t.isDaemon() != daemon) {
-                t.setDaemon(daemon);
-            }
-
-            if (t.getPriority() != priority) {
-                t.setPriority(priority);
-            }
-        } catch (Exception ignored) {
-            // Doesn't matter even if failed to set.
-        }
-        return t;
-    }
-
-		protected Thread newThread(Runnable r, String name) {
-        return new FastThreadLocalThread(threadGroup, r, name);
-    }
-```
-
-
-
-每个 EventLoop 线程都维护一个 Selector 选择器和任务队列 taskQueue
-
-
-
-
-
-
-##### newTaskQueue
-
-`PlatformDependent#<Runnable>newMpscQueue()`
-
-```java
-private static Queue<Runnable> newTaskQueue(
-        EventLoopTaskQueueFactory queueFactory) {
-    if (queueFactory == null) {
-        return newTaskQueue0(DEFAULT_MAX_PENDING_TASKS);
-    }
-    return queueFactory.newTaskQueue(DEFAULT_MAX_PENDING_TASKS);
-}
-
-private static Queue<Runnable> newTaskQueue0(int maxPendingTasks) {
-    // This event loop never calls takeTask()
-    return maxPendingTasks == Integer.MAX_VALUE ? PlatformDependent.<Runnable>newMpscQueue()
-            : PlatformDependent.<Runnable>newMpscQueue(maxPendingTasks);
-}
-```
-
-
-
-### Chooser
-
-- if isPowerOfTwo default use **PowerOfTwoEventExecutorChooser**  idx.getAndIncrement() & executors.length - 1
-- or else GenericEventExecutorChooser Math.abs(idx.getAndIncrement() % executors.length)
-
-
-## Selector
-
-See [Selector](/docs/CS/Java/JDK/IO/NIO.md?id=selectors)
-
-### openSelector
-
-
-```java
-final class SelectedSelectionKeySet extends AbstractSet<SelectionKey> {
-    SelectionKey[] keys;
-    SelectedSelectionKeySet() {
-        keys = new SelectionKey[1024];
-    }
-}
-```
-
-Default replace *selectedKeys* and *publicSelectedKeys*(`Set<SelectionKey>`)  with *SelectedSelectionKeySet*(`SelectionKey[]`) into Selector.
-
-```java
-// NioEventLoop
-private SelectorTuple openSelector() {
-    final Selector unwrappedSelector;
-    try {
-      	//implement by different os, epoll/kqueue
-        unwrappedSelector = provider.openSelector();
-    } catch (IOException e) {
-        throw new ChannelException("failed to open a new selector", e);
-    }
-
-    if (DISABLE_KEY_SET_OPTIMIZATION) {
-        return new SelectorTuple(unwrappedSelector);
-    }
-    // ...
-
-    final Class<?> selectorImplClass = (Class<?>) maybeSelectorImplClass;
-    final SelectedSelectionKeySet selectedKeySet = new SelectedSelectionKeySet();
-
-    Object maybeException = AccessController.doPrivileged(new PrivilegedAction<Object>() {
-        @Override
-        public Object run() {
-            try {
-                Field selectedKeysField = selectorImplClass.getDeclaredField("selectedKeys");
-                Field publicSelectedKeysField = selectorImplClass.getDeclaredField("publicSelectedKeys");
-                // ...
-                selectedKeysField.set(unwrappedSelector, selectedKeySet);
-                publicSelectedKeysField.set(unwrappedSelector, selectedKeySet);
-                return null;
-            } catch (NoSuchFieldException | IllegalAccessException e) {
-                return e;
-            }
-        }
-    });
-    if (maybeException instanceof Exception) {
-        // ...
-        return new SelectorTuple(unwrappedSelector);
-    }
-    
-    selectedKeys = selectedKeySet;
-    return new SelectorTuple(unwrappedSelector,
-                             new SelectedSelectionKeySetSelector(unwrappedSelector, selectedKeySet));
-}
-```
-
-### rebuildSelector
-
-
->
-> From [Selector doesn't block on Selector.select(timeout)](https://bugs.java.com/bugdatabase/view_bug.do?bug_id=2147719)
-> 
-> This is an issue with poll (and epoll) on Linux. 
-> If a file descriptor for a connected socket is polled with a request event mask of 0, and if the connection is abruptly terminated (RST) then the poll wakes up with the POLLHUP (and maybe POLLERR) bit set in the returned event set. 
-> The implication of this behaviour is that Selector will wakeup and as the interest set for the SocketChannel is 0 it means there aren't any selected events and the select method returns 0.
-
-
-Replaces the current Selector of this event loop with newly created Selectors to work around the infamous epoll 100% CPU bug.
-
-1. Open a new Selector.
-2. Register all channels to the new Selector.
-3. Close the old selector as everything else is registered to the new one.
-
-```java
-private void rebuildSelector0() {
-    final Selector oldSelector = selector;
-    final SelectorTuple newSelectorTuple;
-
-    if (oldSelector == null) {
-        return;
-    }
-
-    try {
-        newSelectorTuple = openSelector();
-    } catch (Exception e) {
-        return;
-    }
-
-    int nChannels = 0;
-    for (SelectionKey key: oldSelector.keys()) {
-        Object a = key.attachment();
-        try {
-            if (!key.isValid() || key.channel().keyFor(newSelectorTuple.unwrappedSelector) != null) {
-                continue;
-            }
-
-            int interestOps = key.interestOps();
-            key.cancel();
-            SelectionKey newKey = key.channel().register(newSelectorTuple.unwrappedSelector, interestOps, a);
-            if (a instanceof AbstractNioChannel) {
-                // Update SelectionKey
-                ((AbstractNioChannel) a).selectionKey = newKey;
-            }
-            nChannels ++;
-        } catch (Exception e) {
-            if (a instanceof AbstractNioChannel) {
-                AbstractNioChannel ch = (AbstractNioChannel) a;
-                ch.unsafe().close(ch.unsafe().voidPromise());
-            } else {
-                NioTask<SelectableChannel> task = (NioTask<SelectableChannel>) a;
-                invokeChannelUnregistered(task, key, e);
-            }
-        }
-    }
-
-    selector = newSelectorTuple.selector;
-    unwrappedSelector = newSelectorTuple.unwrappedSelector;
-
-    try {
-        // time to close the old selector as everything else is registered to the new one
-        oldSelector.close();
-    } catch (Throwable t) {
-    }
-}
-```
-
-
-
-### wakeup
-
-
-Fields
-
-```java
-private static final int CLEANUP_INTERVAL = 256; // XXX Hard-coded value, but won't need customization.
-
-private static final boolean DISABLE_KEY_SET_OPTIMIZATION =
-        SystemPropertyUtil.getBoolean("io.netty.noKeySetOptimization", false);//default false
-
-private static final int MIN_PREMATURE_SELECTOR_RETURNS = 3;
-
-// if SystemPropertyUtil.getInt("io.netty.selectorAutoRebuildThreshold") < 3, default 512
-private static final int SELECTOR_AUTO_REBUILD_THRESHOLD;
-
-private final IntSupplier selectNowSupplier = new IntSupplier() {
-    @Override
-    public int get() throws Exception {
-        return selectNow();
+    public long deadlineNanos() {
+        return SingleThreadIoEventLoop.this.deadlineNanos();
     }
 };
-
-// Workaround for JDK NIO bug.
-//
-// See:
-// - http://bugs.sun.com/view_bug.do?bug_id=6427854
-// - https://github.com/netty/netty/issues/203
-static {
-    final String key = "sun.nio.ch.bugLevel";
-    final String bugLevel = SystemPropertyUtil.get(key);
-    // if (bugLevel == null), AccessController.doPrivileged(new PrivilegedAction<Void>()) to run System.setProperty(key, "");
-
-   //init SELECTOR_AUTO_REBUILD_THRESHOLD
-}
-
-/**
- * The NIO Selector.
- */
-private Selector selector;
-private Selector unwrappedSelector;
-private SelectedSelectionKeySet selectedKeys;
-
-private final SelectorProvider provider;
-
-/**
- * Boolean that controls determines if a blocked Selector.select should
- * break out of its selection process. In our case we use a timeout for
- * the select method and the select method will block for that time unless
- * waken up.
- */
-private final AtomicBoolean wakenUp = new AtomicBoolean();
-private volatile long nextWakeupTime = Long.MAX_VALUE;
-
-private final SelectStrategy selectStrategy;
-
-private volatile int ioRatio = 50;
-private int cancelledKeys;
-private boolean needsToSelectAgain;
 ```
 
-> [!NOTE]
->
-> 上面这段是 **Netty 4.1** 的 `NioEventLoop` 字段。4.2 的变化有两点：
->
-> 1. `ioRatio` 移到 `SingleThreadIoEventLoop`，且**默认值由 50 改为 100**：
->
-> ```java
-> static final int DEFAULT_IO_RATIO = Math.max(1, Math.min(100,
->         SystemPropertyUtil.getInt("io.netty.eventLoop.ioRatio", 100)));
-> private static final long DEFAULT_MAX_TASK_PROCESSING_QUANTUM_NS =
->         TimeUnit.MILLISECONDS.toNanos(Math.max(100, SystemPropertyUtil.getInt(
->                 "io.netty.eventLoop.maxTaskProcessingQuantumMs", 1000)));
-> ```
->
-> 2. 语义变了。`ioRatio == 100` 表示"任务预算恒为 `maxTaskProcessingQuantumNs`（默认 1000ms）"，即不再按 IO 耗时比例切分；只有显式设成小于 100 才启用比例切分：
->
-> ```java
-> runIo();
-> if (ioRatio == 100 || activeIoTimeNanos == -1) {
->     taskQuantumNs = maxTaskProcessingQuantumNs;
-> } else {
->     long quantum = Math.min(maxTaskProcessingQuantumNs, activeIoTimeNanos * (100 - ioRatio) / ioRatio);
->     taskQuantumNs = quantum == 0 ? maxTaskProcessingQuantumNs : quantum;
-> }
-> runAllTasks(taskQuantumNs);
-> ```
->
-> 也就是说 4.2 用"绝对时间片（默认 1 秒）"兜底替代了 4.1 的"按比例"模型，避免 IO 极轻时任务时间片被算得过小。设置范围由 `ObjectUtil.checkInRange(ioRatio, 1, 100, "ioRatio")` 校验。
+每个 transport 自己用这三个值算 IO 多路复用的超时：
+- **NioIoHandler**：`selectDeadLineNanos = currentTimeNanos + context.delayNanos()`，select 超时设为离下一个定时任务 deadline 的毫秒数
+- **EpollIoHandler**：timerFd 直接 arm 到 deadline（`prevDeadlineNanos` 缓存减少 arm 次数）
+- **IoUringIoHandler**：`submitAndWaitWithTimeout(sq, false, context.delayNanos())`——把 deadline 换算成 io_uring_enter 的 timeout_ns 参数
 
-## execute
+**canBlock() 是"是否允许长时间阻塞"**——有任务要执行时 IO handler 应尽量立即返回（selectNow、timeout=0 或 epollWait 的 immediate）。
 
-SocketChannel 调用register 函数时会调用 execute 函数
-startThread when execute first task
+### registerForIo0 + IoRegistrationWrapper
 
 ```java
-// SingleThreadEventExecutor#execute()
-@Override
-public void execute(Runnable task) {
-    ObjectUtil.checkNotNull(task, "task");
-    execute(task, !(task instanceof LazyRunnable) && wakesUpForTask(task));
-}
-
-private void execute(Runnable task, boolean immediate) {
-    boolean inEventLoop = inEventLoop();
-    addTask(task);
-    if (!inEventLoop) {
-        startThread();
-        if (isShutdown()) {
-            boolean reject = false;
-            try {
-                if (removeTask(task)) {
-                    reject = true;
-                }
-            } catch (UnsupportedOperationException e) {
-                // The task queue does not support removal so the best thing we can do is to just move on and
-                // hope we will be able to pick-up the task before its completely terminated.
-                // In worst case we will log on termination.
-            }
-            if (reject) {
-                reject();
-            }
-        }
-    }
-
-    if (!addTaskWakesUp && immediate) {
-        wakeup(inEventLoop);
-    }
-}
-```
-
-### startThread
-
-`EventLoop.run() in for(;;) `
-
-```java
-// SingleThreadEventExecutor#startThread()
-private void startThread() {
-    if (state == ST_NOT_STARTED) {
-        if (STATE_UPDATER.compareAndSet(this, ST_NOT_STARTED, ST_STARTED)) {
-            boolean success = false;
-            try {
-                doStartThread();
-                success = true;
-            } finally {
-                if (!success) {
-                    STATE_UPDATER.compareAndSet(this, ST_STARTED, ST_NOT_STARTED);
-                }
-            }
-        }
-    }
-}
-
-private void doStartThread() {
-    assert thread == null;
-    executor.execute(new Runnable() {
-        @Override
-        public void run() {
-            thread = Thread.currentThread();
-            if (interrupted) {
-                thread.interrupt();
-            }
-
-            boolean success = false;
-            updateLastExecutionTime();
-            try {
-                SingleThreadEventExecutor.this.run();//invoke EventLoop.run()
-                success = true;
-            } catch (Throwable t) {
-            } finally {
-                for (;;) {
-                    int oldState = state;
-                    if (oldState >= ST_SHUTTING_DOWN || STATE_UPDATER.compareAndSet(
-                            SingleThreadEventExecutor.this, oldState, ST_SHUTTING_DOWN)) {
-                        break;
-                    }
-                }
-
-                // Check if confirmShutdown() was called at the end of the loop.
-                if (success && gracefulShutdownStartTime == 0) {
-                }
-
-                try {
-                    // Run all remaining tasks and shutdown hooks.
-                    for (;;) {
-                        if (confirmShutdown()) {
-                            break;
-                        }
-                    }
-                } finally {
-                    try {
-                        cleanup(); // implement by different EventLoop
-                    } finally {
-                        // Lets remove all FastThreadLocals for the Thread as we are about to terminate and notify the future.
-                        // The user may block on the future and once it unblocks the JVM may terminate
-                        // and start unloading classes.
-                        // See https://github.com/netty/netty/issues/6596.
-                        FastThreadLocal.removeAll();
-
-                        STATE_UPDATER.set(SingleThreadEventExecutor.this, ST_TERMINATED);
-                        threadLock.countDown();
-                        terminationFuture.setSuccess(null);
-                    }
-                }
-            }
-        }
-    });
-}
-```
-
-### run
-
-NioEventLoop 每次循环的处理流程
-
-1. [select](/docs/CS/Framework/Netty/EventLoop.md?id=select) get ready Channels, [rebuildSelector](/docs/CS/Framework/Netty/EventLoop.md?id=rebuildselector) if IOException occurs
-2. [processSelectedKeys](/docs/CS/Framework/Netty/EventLoop.md?id=processselectedkey)
-3. Ensure we always [run tasks](/docs/CS/Framework/Netty/EventLoop.md?id=runalltasks).
-
-'wakenUp.compareAndSet(false, true)' is always evaluated before calling 'selector.wakeup()' to reduce the wake-up overhead. (Selector.wakeup() is an expensive operation.)
-However, there is a race condition in this approach.
-The race condition is triggered when 'wakenUp' is set to true too early.
-'wakenUp' is set to true too early if:
-
-1) Selector is waken up between 'wakenUp.set(false)' and 'selector.select(...)'. (BAD)
-2) Selector is waken up between 'selector.select(...)' and 'if (wakenUp.get()) { ... }'. (OK)
-
-In the first case, 'wakenUp' is set to true and the
-following 'selector.select(...)' will wake up immediately.
-Until 'wakenUp' is set to false again in the next round,
-'wakenUp.compareAndSet(false, true)' will fail, and therefore
-any attempt to wake up the Selector will fail, too, causing
-the following 'selector.select(...)' call to block
-unnecessarily.
-To fix this problem, we wake up the selector again if wakenUp
-is true immediately after selector.select(...).
-It is inefficient in that it wakes up the selector for both
-the first case (BAD - wake-up required) and the second case
-(OK - no wake-up required).
-
-
-
-NioEventLoop  无锁串行化的设计不仅使系统吞吐量达到最大化，而且降低了用户开发业务逻辑的难度，不需要花太多精力关心线程安全问题。虽然单线程执行避免了线程切换，但是它的缺陷就是不能执行时间过长的 I/O 操作，一旦某个 I/O 事件发生阻塞，那么后续的所有 I/O 事件都无法执行，甚至造成事件积压
-
-
-
-Always handle shutdown even if the loop processing threw an exception.
-And [closeAll](/docs/CS/Framework/Netty/EventLoop.md?id=closeall) before shut down
-
-```java
-public final class NioEventLoop extends SingleThreadEventLoop {
-    @Override
-    protected void run() {
-        int selectCnt = 0;
-        for (;;) {
-            try {
-                int strategy;
-                try {
-                    strategy = selectStrategy.calculateStrategy(selectNowSupplier, hasTasks());
-                    switch (strategy) {
-                        case SelectStrategy.CONTINUE:
-                            continue;
-
-                        case SelectStrategy.BUSY_WAIT:
-                            // fall-through to SELECT since the busy-wait is not supported with NIO
-
-                        case SelectStrategy.SELECT:
-                            long curDeadlineNanos = nextScheduledTaskDeadlineNanos();
-                            if (curDeadlineNanos == -1L) {
-                                curDeadlineNanos = NONE; // nothing on the calendar
-                            }
-                            nextWakeupNanos.set(curDeadlineNanos);
-                            try {
-                                if (!hasTasks()) {
-                                    strategy = select(curDeadlineNanos);
-                                }
-                            } finally {
-                                // This update is just to help block unnecessary selector wakeups
-                                // so use of lazySet is ok (no race condition)
-                                nextWakeupNanos.lazySet(AWAKE);
-                            }
-                            // fall through
-                        default:
-                    }
-                } catch (IOException e) {
-                    rebuildSelector0();
-                    selectCnt = 0;
-                    handleLoopException(e);
-                    continue;
-                }
-
-                selectCnt++;
-                cancelledKeys = 0;
-                needsToSelectAgain = false;
-                final int ioRatio = this.ioRatio;
-                boolean ranTasks;
-                if (ioRatio == 100) {
-                    try {
-                        if (strategy > 0) {
-                            processSelectedKeys();
-                        }
-                    } finally {
-                        ranTasks = runAllTasks();
-                    }
-                } else if (strategy > 0) {
-                    final long ioStartTime = System.nanoTime();
-                    try {
-                        processSelectedKeys();
-                    } finally {
-                        final long ioTime = System.nanoTime() - ioStartTime;
-                        ranTasks = runAllTasks(ioTime * (100 - ioRatio) / ioRatio);
-                    }
-                } else {
-                    ranTasks = runAllTasks(0); // This will run the minimum number of tasks
-                }
-
-                if (ranTasks || strategy > 0) {
-                    if (selectCnt > MIN_PREMATURE_SELECTOR_RETURNS && logger.isDebugEnabled()) {
-                        logger.debug("Selector.select() returned prematurely {} times in a row for Selector {}.",
-                                selectCnt - 1, selector);
-                    }
-                    selectCnt = 0;
-                } else if (unexpectedSelectorWakeup(selectCnt)) { // Unexpected wakeup (unusual case)
-                    selectCnt = 0;
-                }
-            } catch (Throwable t) {
-                handleLoopException(t);
-            } finally {
-                try {
-                    if (isShuttingDown()) {
-                        closeAll();
-                        if (confirmShutdown()) {
-                            return;
-                        }
-                    }
-                } catch (Throwable t) {
-                    handleLoopException(t);
-                }
-            }
-        }
-    }
-}
-```
-
-SelectedSelectionKeySet
-
-```java
-final class SelectedSelectionKeySet extends AbstractSet<SelectionKey> {
-    SelectionKey[] keys;
-    SelectedSelectionKeySet() {
-        keys = new SelectionKey[1024];
-    }
-}
-```
-
-### select
-
-- timeout
-  - already select() done, break
-  - else do selectNow() then break
-- task queue notEmpty & wakeUp == false, selectNow()
-- select() util
-  - timeout
-  - has ready keys
-  - wakeUp by other thread
-  - 512 rebuildSelector
-
-SELECT if the next step should be blocking select 
-CONTINUE if the next step should be to not select but rather jump back to the IO loop and try again. 
-Any value >= 0 is treated as an indicator that work needs to be done.
-
-If a task was submitted when wakenUp value was true, the task didn't get a chance to call
-Selector#wakeup. So we need to check task queue again before executing select operation.
-If we don't, the task might be pended until select operation was timed out.
-It might be pended until idle timeout if IdleStateHandler existed in pipeline.
-```java
-private void select(boolean oldWakenUp) throws IOException {
-    Selector selector = this.selector;
+private void registerForIo0(final IoHandle handle, Promise<IoRegistration> promise) {
+    assert inEventLoop();
+    final IoRegistration registration;
     try {
-        int selectCnt = 0;
-        long currentTimeNanos = System.nanoTime();
-        long selectDeadLineNanos = currentTimeNanos + delayNanos(currentTimeNanos);
-
-        for (;;) {
-            long timeoutMillis = (selectDeadLineNanos - currentTimeNanos + 500000L) / 1000000L;
-            if (timeoutMillis <= 0) {
-                if (selectCnt == 0) {
-                    selector.selectNow();
-                    selectCnt = 1;
-                }
-                break;
-            }
-
-//        If a task was submitted when wakenUp value was true, the task didn't get a chance to call
-//        Selector#wakeup. So we need to check task queue again before executing select operation.
-//        If we don't, the task might be pended until select operation was timed out.
-//        It might be pended until idle timeout if IdleStateHandler existed in pipeline.
-        if (hasTasks() && wakenUp.compareAndSet(false, true)) {
-                selector.selectNow();
-                selectCnt = 1;
-                break;
-            }
-
-            int selectedKeys = selector.select(timeoutMillis);
-            selectCnt ++;
-
-            if (selectedKeys != 0 || oldWakenUp || wakenUp.get() || hasTasks() || hasScheduledTasks()) {
-                // - Selected something,
-                // - waken up by user, or
-                // - the task queue has a pending task.
-                // - a scheduled task is ready for processing
-                break;
-            }
-            if (Thread.interrupted()) {
-                // Thread was interrupted so reset selected keys and break so we not run into a busy loop.
-                // As this is most likely a bug in the handler of the user or it's client library we will
-                // also log it.
-                //
-                // See https://github.com/netty/netty/issues/2426
-                selectCnt = 1;
-                break;
-            }
-
-            long time = System.nanoTime();
-            if (time - TimeUnit.MILLISECONDS.toNanos(timeoutMillis) >= currentTimeNanos) {
-                // timeoutMillis elapsed without anything selected.
-                selectCnt = 1;
-            } else if (SELECTOR_AUTO_REBUILD_THRESHOLD > 0 &&
-                    selectCnt >= SELECTOR_AUTO_REBUILD_THRESHOLD) {
-                // The code exists in an extra method to ensure the method is not too big to inline as this
-                // branch is not very likely to get hit very frequently.
-                selector = selectRebuildSelector(selectCnt);
-                selectCnt = 1;
-                break;
-            }
-
-            currentTimeNanos = time;
-        }
-    } catch (CancelledKeyException e) {
-        // Harmless exception - log anyway
+        registration = ioHandler.register(handle);
+    } catch (Exception e) {
+        promise.setFailure(e); return;
     }
+    numRegistrations.incrementAndGet();
+    promise.setSuccess(new IoRegistrationWrapper(registration));
 }
 ```
 
-### processSelectedKey
+`IoRegistrationWrapper` 是一个装饰器，`cancel()` 里额外 `numRegistrations.decrementAndGet()`——让 EventLoop 知道当前还有多少活跃注册，`canSuspend` 用的就是这个计数。
 
-call [Channel#finishConnect()](/docs/CS/Framework/Netty/Channel.md?id=finishconnect)
-
-```java
-private void processSelectedKeys() {
-    if (selectedKeys != null) {
-        processSelectedKeysOptimized();
-    } else {
-        processSelectedKeysPlain(selector.selectedKeys());
-    }
-}
-
-private void processSelectedKeysOptimized() {
-    for (int i = 0; i < selectedKeys.size; ++i) {
-        final SelectionKey k = selectedKeys.keys[i];
-        // null out entry in the array to allow to have it GC'ed once the Channel close
-        // See https://github.com/netty/netty/issues/2363
-        selectedKeys.keys[i] = null;
-
-        final Object a = k.attachment();
-
-        if (a instanceof AbstractNioChannel) {
-            processSelectedKey(k, (AbstractNioChannel) a);
-        } else {
-            @SuppressWarnings("unchecked")
-            NioTask<SelectableChannel> task = (NioTask<SelectableChannel>) a;
-            processSelectedKey(k, task);
-        }
-
-        if (needsToSelectAgain) {
-            // null out entries in the array to allow to have it GC'ed once the Channel close
-            // See https://github.com/netty/netty/issues/2363
-            selectedKeys.reset(i + 1);
-
-            selectAgain();
-            i = -1;
-        }
-    }
-}
-```
-
-In a serial loop, so it's not for upload file
-1. OP_CONNECT
-2. OP_WRITE
-3. read
+## NioIoHandler.run —— select 循环实锤
 
 ```java
-private void processSelectedKey(SelectionKey k, AbstractNioChannel ch) {
-    final AbstractNioChannel.NioUnsafe unsafe = ch.unsafe();
-    if (!k.isValid()) {
-        final EventLoop eventLoop;
-        try {
-            eventLoop = ch.eventLoop();
-        } catch (Throwable ignored) {
-            // If the channel implementation throws an exception because there is no event loop, we ignore this
-            // because we are only trying to determine if ch is registered to this event loop and thus has authority
-            // to close ch.
-            return;
-        }
-        // Only close ch if ch is still registered to this EventLoop. ch could have deregistered from the event loop
-        // and thus the SelectionKey could be cancelled as part of the deregistration process, but the channel is
-        // still healthy and should not be closed.
-        // See https://github.com/netty/netty/issues/5125
-        if (eventLoop != this || eventLoop == null) {
-            return;
-        }
-        // close the channel if the key is not valid anymore
-        unsafe.close(unsafe.voidPromise());
-        return;
-    }
-
-    try {
-        int readyOps = k.readyOps();
-        // We first need to call finishConnect() before try to trigger a read(...) or write(...) as otherwise
-        // the NIO JDK channel implementation may throw a NotYetConnectedException.
-        if ((readyOps & SelectionKey.OP_CONNECT) != 0) {
-            // remove OP_CONNECT as otherwise Selector.select(..) will always return without blocking
-            // See https://github.com/netty/netty/issues/924
-            int ops = k.interestOps();
-            ops &= ~SelectionKey.OP_CONNECT;
-            k.interestOps(ops);
-
-            unsafe.finishConnect();
-        }
-
-        // Process OP_WRITE first as we may be able to write some queued buffers and so free memory.
-        if ((readyOps & SelectionKey.OP_WRITE) != 0) {
-            // Call forceFlush which will also take care of clear the OP_WRITE once there is nothing left to write
-            ch.unsafe().forceFlush();
-        }
-
-        // Also check for readOps of 0 to workaround possible JDK bug which may otherwise lead
-        // to a spin loop
-        if ((readyOps & (SelectionKey.OP_READ | SelectionKey.OP_ACCEPT)) != 0 || readyOps == 0) {
-            unsafe.read();
-        }
-    } catch (CancelledKeyException ignored) {
-        unsafe.close(unsafe.voidPromise());
-    }
-}
-```
-
-#### read
-
-get [ByteBufAllocator]()
-
-Multiple fireChannelRead and 1 fireChannelReadComplete
-
-```java
-// AbstractNioByteChannel.NioByteUnsafe#read
-protected class NioByteUnsafe extends AbstractNioUnsafe {
-    public final void read() {
-        final ChannelConfig config = config();
-        if (shouldBreakReadReady(config)) {
-            clearReadPending();
-            return;
-        }
-        final ChannelPipeline pipeline = pipeline();
-        final ByteBufAllocator allocator = config.getAllocator();
-        final RecvByteBufAllocator.Handle allocHandle = recvBufAllocHandle();
-        allocHandle.reset(config);
-
-        ByteBuf byteBuf = null;
-        boolean close = false;
-        try {
-            do {
-                byteBuf = allocHandle.allocate(allocator);
-                allocHandle.lastBytesRead(doReadBytes(byteBuf));
-                if (allocHandle.lastBytesRead() <= 0) {
-                    // nothing was read. release the buffer.
-                    byteBuf.release();
-                    byteBuf = null;
-                    close = allocHandle.lastBytesRead() < 0;
-                    if (close) {
-                        // There is nothing left to read as we received an EOF.
-                        readPending = false;
-                    }
-                    break;
-                }
-
-                allocHandle.incMessagesRead(1);
-                readPending = false;
-                // fireChannelRead()
-                pipeline.fireChannelRead(byteBuf);
-                byteBuf = null;
-            } while (allocHandle.continueReading());
-
-            allocHandle.readComplete();
-            pipeline.fireChannelReadComplete();
-
-            if (close) {
-                closeOnRead(pipeline);
-            }
-        } catch (Throwable t) {
-            handleReadException(pipeline, byteBuf, t, close, allocHandle);
-        } finally {
-            // Check if there is a readPending which was not processed yet.
-            // This could be for two reasons:
-            // * The user called Channel.read() or ChannelHandlerContext.read() in channelRead(...) method
-            // * The user called Channel.read() or ChannelHandlerContext.read() in channelReadComplete(...) method
-            //
-            // See https://github.com/netty/netty/issues/2254
-            if (!readPending && !config.isAutoRead()) {
-                removeReadOp();
-            }
-        }
-    }
-
-}
-```
-
-max 16
-
-```java
-public abstract class MaxMessageHandle implements ExtendedHandle {
-    @Override
-    public boolean continueReading() {
-        return continueReading(defaultMaybeMoreSupplier);
-    }
-
-    @Override
-    public boolean continueReading(UncheckedBooleanSupplier maybeMoreDataSupplier) {
-        return config.isAutoRead() &&
-                (!respectMaybeMoreData || maybeMoreDataSupplier.get()) &&
-                totalMessages < maxMessagePerRead &&
-                totalBytesRead > 0;
-    }
-}
-```
-
-#### RecvByteBufAllocator
-
-Allocates a new receive buffer whose capacity is probably large enough to read all inbound data and small enough not to waste its space.
-
-The RecvByteBufAllocator that automatically increases and decreases the predicted buffer size on feed back.
-
-- It gradually increases the expected number of readable bytes if the previous read fully filled the allocated buffer.
-- It gradually decreases the expected number of readable bytes if the read operation was not able to fill a certain amount of the allocated buffer **two times consecutively**.
-- Otherwise, it keeps returning the same prediction.
-
-```java
-// AdaptiveRecvByteBufAllocator
-private final class HandleImpl extends MaxMessageHandle {
-    private void record(int actualReadBytes) {
-        if (actualReadBytes <= SIZE_TABLE[max(0, index - INDEX_DECREMENT)]) {
-            if (decreaseNow) {
-                index = max(index - INDEX_DECREMENT, minIndex);
-                nextReceiveBufferSize = SIZE_TABLE[index];
-                decreaseNow = false;
-            } else {
-                decreaseNow = true;
-            }
-        } else if (actualReadBytes >= nextReceiveBufferSize) {
-            index = min(index + INDEX_INCREMENT, maxIndex);
-            nextReceiveBufferSize = SIZE_TABLE[index];
-            decreaseNow = false;
-        }
-    }
-}
-```
-
-
-### runAllTasks
-Poll all tasks from the task queue and run them via `Runnable#run()` method.
-This method stops running the tasks in the task queue and returns if it ran longer than timeoutNanos.
-
-
-
-NioEventLoop 不仅负责处理 I/O 事件，还要兼顾执行任务队列中的任务。任务队列遵循 FIFO 规则，可以保证任务执行的公平性。NioEventLoop 处理的任务类型基本可以分为三类。
-
-1. **普通任务**：通过 NioEventLoop 的 execute() 方法向任务队列 taskQueue  中添加任务。例如 Netty 在写数据时会封装 WriteAndFlushTask 提交给 taskQueue。taskQueue  的实现类是**多生产者单消费者**队列 **MpscUnboundedArrayQueue**（jctools），在多线程并发添加任务时，可以保证线程安全。
-
-> [!NOTE]
->
-> 具体类型由 `SingleThreadIoEventLoop#newTaskQueue0` 决定：`maxPendingTasks == Integer.MAX_VALUE`（默认）时走 `PlatformDependent.newMpscQueue()` 无参分支，返回 `MpscUnboundedArrayQueue`，且在支持 VarHandle 时退化为 `MpscUnboundedVarHandleArrayQueue`。`MpscChunkedArrayQueue` 只在 `newMpscQueue(chunkSize, maxCapacity)` 的**有界**分支出现，不是 EventLoop 的默认路径。详见 [MpscLinkedQueue](/docs/CS/Framework/Netty/MpscLinkedQueue.md)。
-2. **定时任务**：通过调用 NioEventLoop 的 schedule() 方法向定时任务队列  scheduledTaskQueue 添加一个定时任务，用于周期性执行该任务。例如，心跳消息发送等。定时任务队列  scheduledTaskQueue 采用优先队列 PriorityQueue 实现。
-3. **尾部队列**：tailTasks 相比于普通任务队列优先级较低，在每次执行完 taskQueue 中任务后会去获取尾部队列中任务执行。尾部任务并不常用，主要用于做一些收尾工作，例如统计事件循环的执行时间、监控信息上报等。
-
-
-
-执行逻辑可以分为 6 个步骤。
-
-1. fetchFromScheduledTaskQueue 函数：将定时任务从 scheduledTaskQueue 中取出，聚合放入普通任务队列 taskQueue 中，只有定时任务的截止时间小于当前时间才可以被合并。
-2. 从普通任务队列 taskQueue 中取出任务。
-3. 计算任务执行的最大超时时间。
-4. safeExecute 函数：安全执行任务，实际直接调用的 Runnable 的 run() 方法。
-5. 每执行 64 个任务进行超时时间的检查，如果执行时间大于最大超时时间，则立即停止执行任务，避免影响下一轮的 I/O 事件的处理。
-6. 最后获取尾部队列中的任务执行。
-
-```java
-    protected boolean runAllTasks(long timeoutNanos) {
-        fetchFromScheduledTaskQueue();
-        Runnable task = pollTask();
-        if (task == null) {
-            afterRunningAllTasks();
-            return false;
-        }
-
-        final long deadline = timeoutNanos > 0 ? ScheduledFutureTask.nanoTime() + timeoutNanos : 0;
-        long runTasks = 0;
-        long lastExecutionTime;
-        for (; ; ) {
-            safeExecute(task);
-
-            runTasks++;
-            
-            if ((runTasks & 0x3F) == 0) {
-                lastExecutionTime = ScheduledFutureTask.nanoTime();
-                if (lastExecutionTime >= deadline) {
-                    break;
-                }
-            }
-
-            task = pollTask();
-            if (task == null) {
-                lastExecutionTime = ScheduledFutureTask.nanoTime();
-                break;
-            }
-        }
-
-        afterRunningAllTasks();
-        this.lastExecutionTime = lastExecutionTime;
-        return true;
-    }
-```
-
-```java
-protected final boolean runAllTasksFrom(Queue<Runnable> taskQueue) {
-        Runnable task = pollTaskFrom(taskQueue);
-        if (task == null) {
-            return false;
-        }
-        for (;;) {
-            safeExecute(task);
-            task = pollTaskFrom(taskQueue);
-            if (task == null) {
-                return true;
-            }
-        }
-    }
-```
-
-### closeAll
-
-```java
-private void closeAll() {
-    selectAgain();
-    Set<SelectionKey> keys = selector.keys();
-    Collection<AbstractNioChannel> channels = new ArrayList<AbstractNioChannel>(keys.size());
-    for (SelectionKey k: keys) {
-        Object a = k.attachment();
-        if (a instanceof AbstractNioChannel) {
-            channels.add((AbstractNioChannel) a);
-        } else {
-            k.cancel();
-            @SuppressWarnings("unchecked")
-            NioTask<SelectableChannel> task = (NioTask<SelectableChannel>) a;
-            invokeChannelUnregistered(task, k, null);
-        }
-    }
-
-    for (AbstractNioChannel ch: channels) {
-        ch.unsafe().close(ch.unsafe().voidPromise());
-    }
-}
-```
-
-unsafe.close( ) in [Channel](/docs/CS/Framework/Netty/Channel.md)
-
-## IoHandler
-
-上面 [`run`](/docs/CS/Framework/Netty/EventLoop.md?id=run) 一节是经典形态：`NioEventLoop` 自己持有 `Selector`，把 select / processSelectedKeys / runAllTasks 全部写在 `run()` 里。问题是 epoll、kqueue 各自也要抄一遍同样的线程骨架，只是 IO 语义不同。
-
-Netty 4.2 因此把「这一轮具体怎么做 IO」从 EventLoop 中抽成 `IoHandler` 接口：EventLoop 只负责线程、任务队列与生命周期，IO 处理交给可替换的 handler。这样同一套 loop 骨架可以接 NIO、epoll、kqueue 乃至 io_uring 后端，也让 IO 逻辑能脱离线程模型单独测试。以下三段源码应与 `### run` 对照阅读——它们做的是同一件事，只是换了一代接口。
-
-### EventLoop.Unsafe
-
-`EventLoop` 在一个 Channel 注册之后，就负责它的全部 I/O 操作。一个 EventLoop 实例通常服务于多个 Channel，具体分配由实现细节与内部策略决定。
-
-```java
-public interface EventLoop extends OrderedEventExecutor, EventLoopGroup {
-
-    /**
-     * Returns an <em>internal-use-only</em> object that provides unsafe operations.
-     */
-    Unsafe unsafe();
-
-    /**
-     * <em>Unsafe</em> operations that should <em>never</em> be called from user-code. These methods
-     * are only provided to implement the actual transport, and must be invoked from the {@link EventLoop} itself.
-     */
-    interface Unsafe {
-        /**
-         * Register the {@link Channel} to the {@link EventLoop}.
-         */
-        void register(Channel channel) throws Exception;
-
-        /**
-         * Deregister the {@link Channel} from the {@link EventLoop}.
-         */
-        void deregister(Channel channel) throws Exception;
-    }
-}
-```
-
-`Unsafe` 是给 transport 实现用的内部出口：注册与解绑 Channel 必须发生在 EventLoop 线程上，所以它被挂进 EventLoop 而不是 Channel。
-
-### IoHandler Interface
-
-`IoHandler` 直接继承 `EventLoop.Unsafe`，即注册能力是 IO 处理的前置部分。除 `wakeup(boolean)` 之外，所有方法都必须在 EventLoop 线程上执行，用户代码不应直接调用。
-
-> [!WARNING]
->
-> 下面这段源码取自 4.2 的早期 alpha，与 **4.2 GA** 的签名已经不一致。以 4.2.19 源码为准的接口形态是：
->
-> ```java
-> public interface IoHandler {
->     int run(IoHandlerContext context);
->     void initialize();
->     void prepareToDestroy();
->     void destroy();
->     IoRegistration register(IoHandle handle) throws IOException;
->     void wakeup();
->     boolean isCompatible(Class<?> handleType);
-> }
-> ```
->
-> 差异：不再继承 `EventLoop.Unsafe`；`wakeup()` 去掉了布尔参数；上下文类型从 `IoExecutionContext` 改为 `IoHandlerContext`；`register` 返回 `IoRegistration`（其核心是 `submit(IoOps)`，取代 4.1 里直接改 `SelectionKey.interestOps` / 调 `epoll_ctl` 的做法）。阅读时以 GA 签名为准。
-
-```java
-public interface IoHandler extends EventLoop.Unsafe {
-    /**
-     * Run the IO handled by this {@link IoHandler}. The {@link IoExecutionContext} should be used
-     * to ensure we not execute too long and so block the processing of other task that are
-     * scheduled on the {@link EventLoop}. This is done by taking {@link IoExecutionContext#delayNanos(long)} or
-     * {@link IoExecutionContext#deadlineNanos()} into account.
-     *
-     * @return the number of {@link Channel} for which I/O was handled.
-     */
-    int run(IoExecutionContext context);
-
-    // Wakeup the IoHandler, which means if any operation blocks it should be unblocked and return as soon as possible.
-    void wakeup(boolean inEventLoop);
-
-    // Prepare to destroy this IoHandler. This method will be called before destroy() and may be called multiple times.
-    void prepareToDestroy();
-
-    /**
-     * Destroy the {@link IoHandler} and free all its resources.
-     */
-    void destroy();
-}
-```
-
-注意 `run(IoExecutionContext)` 的签名变化：经典版 `run()` 自己判断 `hasTasks()` 和下次定时任务到期时间，新版把这两个决策收进 `IoExecutionContext`（`canBlock()` / `delayNanos()` / `deadlineNanos()`），由外层 EventLoop 提供，handler 只问不猜。返回值也不再是「是否处理过」，而是本轮处理 IO 的 Channel 数量。
-
-### NioHandler
-
-`NioHandler` 是 `IoHandler` 的 NIO 实现。它与 `### run` 里的 `NioEventLoop.run()` 结构一致——同样处理 `wakenUp` 竞态、同样在 Selector 损坏时 `rebuildSelector()`——区别在于阻塞判断来自 `runner.canBlock()`，而 `select()` 只负责等待就绪事件，ready key 的处理交给 `processSelectedKeys()`。
-
-call [processSelectedKeys](/docs/CS/Framework/Netty/EventLoop.md?id=processselectedkey)
-
-```java
-// NioHandler
-@Override
-public int run(IoExecutionContext runner) {
+public int run(IoHandlerContext context) {
     int handled = 0;
     try {
-        try {
-            switch (selectStrategy.calculateStrategy(selectNowSupplier, !runner.canBlock())) {
-                case SelectStrategy.CONTINUE:
-                    return 0;
-
-                case SelectStrategy.BUSY_WAIT:
-                    // fall-through to SELECT since the busy-wait is not supported with NIO
-
-                case SelectStrategy.SELECT:
-                    select(runner, wakenUp.getAndSet(false));
-
-                    // 'wakenUp.compareAndSet(false, true)' is always evaluated
-                    // before calling 'selector.wakeup()' to reduce the wake-up
-                    // overhead. (Selector.wakeup() is an expensive operation.)
-                    //
-                    // However, there is a race condition in this approach.
-                    // The race condition is triggered when 'wakenUp' is set to
-                    // true too early.
-                    //
-                    // 'wakenUp' is set to true too early if:
-                    // 1) Selector is waken up between 'wakenUp.set(false)' and
-                    //    'selector.select(...)'. (BAD)
-                    // 2) Selector is waken up between 'selector.select(...)' and
-                    //    'if (wakenUp.get()) { ... }'. (OK)
-                    //
-                    // In the first case, 'wakenUp' is set to true and the
-                    // following 'selector.select(...)' will wake up immediately.
-                    // Until 'wakenUp' is set to false again in the next round,
-                    // 'wakenUp.compareAndSet(false, true)' will fail, and therefore
-                    // any attempt to wake up the Selector will fail, too, causing
-                    // the following 'selector.select(...)' call to block
-                    // unnecessarily.
-                    //
-                    // To fix this problem, we wake up the selector again if wakenUp
-                    // is true immediately after selector.select(...).
-                    // It is inefficient in that it wakes up the selector for both
-                    // the first case (BAD - wake-up required) and the second case
-                    // (OK - no wake-up required).
-
-                    if (wakenUp.get()) {
-                        selector.wakeup();
-                    }
-                    // fall through
-                default:
-            }
-        } catch (IOException e) {
-            // If we receive an IOException here its because the Selector is messed up. Let's rebuild
-            // the selector and retry. https://github.com/netty/netty/issues/8566
-            rebuildSelector();
-            handleLoopException(e);
-            return 0;
+        switch (selectStrategy.calculateStrategy(selectNowSupplier, !context.canBlock())) {
+            case CONTINUE: return 0;         // IO 策略要求跳过（busy-wait 但没任务）
+            case SELECT:
+                select(context, wakenUp.getAndSet(false)); // 阻塞 select
+                // wakeup 竞态修复（4.1 就有但 4.2 保留在 IoHandler）
+                if (wakenUp.get()) selector.wakeup();
         }
-
-        cancelledKeys = 0;
-        needsToSelectAgain = false;
-        handled = processSelectedKeys();
-    } catch (Throwable t) {
-        handleLoopException(t);
+    } catch (IOException e) {
+        rebuildSelector0(); handleLoopException(e); return 0;
+    }
+    handled = processSelectedKeys();
+    if (context.shouldReportActiveIoTime()) {
+        context.reportActiveIoTime(System.nanoTime() - activeIoStartTimeNanos);
     }
     return handled;
 }
 ```
 
-### Group and Migration
+**与 4.1 的差异**：4.1 把 select + ready process + IO/timeouts 全塞在一个方法里；4.2 把它拆成独立 IoHandler 的 run，IoHandler 拿 context 从 SingleThreadIoEventLoop 取时间参数，同时把 transport 自己的 IO 准备（openSelector / epoll_create1）也提前到 `initialize()`。
 
-4.2 GA 中这个类的正式名字是 **`NioIoHandler`**（`public final class NioIoHandler implements IoHandler`），`run` 的签名与上文一致。它取代了 4.1 里 `NioEventLoop#run` 的全部职责：select 策略、空轮询重建、`processSelectedKeys` 都搬到了这里；`NioEventLoop` 本身缩到 233 行只剩委派。
-
-宿主 EventLoopGroup 相应换成 `MultiThreadIoEventLoopGroup`：
+### select 超时与定时任务 deadline
 
 ```java
-// 4.1 写法（4.2 中已 @Deprecated）
-EventLoopGroup group = new NioEventLoopGroup();
-
-// 4.2 写法
-EventLoopGroup group = new MultiThreadIoEventLoopGroup(NioIoHandler.newFactory());
-// epoll：EpollIoHandler.newFactory()
-// kqueue：KQueueIoHandler.newFactory()
-// io_uring：IoUringIoHandler.newFactory()
-```
-
-`MultiThreadIoEventLoopGroup extends MultithreadEventLoopGroup implements IoEventLoopGroup`，单线程侧对应 `SingleThreadIoEventLoop extends SingleThreadEventLoop implements IoEventLoop`。注意 **不存在 `MultiThreadIoEventLoop` 这个类**。
-
-各 transport 的旧 Group 类（`NioEventLoopGroup` / `EpollEventLoopGroup` / `KQueueEventLoopGroup`）在 4.2 中保留但全部 `@Deprecated`，Javadoc 一律指向 `MultiThreadIoEventLoopGroup` + 对应 `IoHandler.newFactory()`。io_uring 没有旧 Group 兼容类，只有 `IoHandler` 一条路。详见 [原生传输层](/docs/CS/Framework/Netty/Transport.md?id=iohandler-abstraction)。
-
-## Implementation
-
-### Epoll
-
-> [!NOTE]
->
-> 下面这段是 **4.1 形态**的 `EpollEventLoop`。4.2 中 `EpollEventLoop extends SingleThreadIoEventLoop`，本体不含 `epoll_wait` 逻辑，`run()` 已迁到 `EpollIoHandler#run(IoHandlerContext)`；且 `epollInReadyRunnablePending` 字段在 4.2 中已移除。见 [Transport](/docs/CS/Framework/Netty/Transport.md?id=event-loop)。
-
-
-
-> [!NOTE]
-> 
-> See [epoll_ctl](/docs/CS/OS/Linux/IO/epoll.md?id=epoll_ctl)
-
-```java
-class EpollEventLoop extends SingleThreadEventLoop {
-
-    @Override
-    protected void doRegister() throws Exception {
-        // Just in case the previous EventLoop was shutdown abruptly, or an event is still pending on the old EventLoop
-        // make sure the epollInReadyRunnablePending variable is reset so we will be able to execute the Runnable on the
-        // new EventLoop.
-        epollInReadyRunnablePending = false;
-        ((EpollEventLoop) eventLoop()).add(this);
+private void select(IoHandlerContext runner, boolean oldWakenUp) throws IOException {
+    long currentTimeNanos = System.nanoTime();
+    long delayNanos = runner.delayNanos(currentTimeNanos);
+    long selectDeadLineNanos = Long.MAX_VALUE;
+    if (delayNanos != Long.MAX_VALUE) {
+        selectDeadLineNanos = currentTimeNanos + delayNanos;
     }
-    
-    void add(AbstractEpollChannel ch) throws IOException {
-        assert inEventLoop();
-        int fd = ch.socket.intValue();
-        Native.epollCtlAdd(epollFd.intValue(), fd, ch.flags);
-        AbstractEpollChannel old = channels.put(fd, ch);
-
-        // We either expect to have no Channel in the map with the same FD or that the FD of the old Channel is already
-        // closed.
-        assert old == null || !old.isOpen();
-    }
-}
-```
-
-
-
-> [!NOTE]
->
-> See [epoll_wait](/docs/CS/OS/Linux/IO/epoll.md?id=epoll_wait)
-
-```java
-class EpollEventLoop extends SingleThreadEventLoop {
-
-    @Override
-    protected void run() {
-        long prevDeadlineNanos = NONE;
-        for (; ; ) {
-            try {
-                int strategy = selectStrategy.calculateStrategy(selectNowSupplier, hasTasks());
-                switch (strategy) {
-                    // ...
-                    case SelectStrategy.SELECT:
-                        if (pendingWakeup) {
-                            // We are going to be immediately woken so no need to reset wakenUp
-                            // or check for timerfd adjustment.
-                            strategy = epollWaitTimeboxed();
-                            if (strategy != 0) {
-                                break;
-                            }
-                            // We timed out so assume that we missed the write event due to an
-                            // abnormally failed syscall (the write itself or a prior epoll_wait)
-                            logger.warn("Missed eventfd write (not seen after > 1 second)");
-                            pendingWakeup = false;
-                            if (hasTasks()) {
-                                break;
-                            }
-                            // fall-through
-                        }
-
-                        long curDeadlineNanos = nextScheduledTaskDeadlineNanos();
-                        if (curDeadlineNanos == -1L) {
-                            curDeadlineNanos = NONE; // nothing on the calendar
-                        }
-                        nextWakeupNanos.set(curDeadlineNanos);
-                        try {
-                            if (!hasTasks()) {
-                                if (curDeadlineNanos == prevDeadlineNanos) {
-                                    // No timer activity needed
-                                    strategy = epollWaitNoTimerChange();
-                                } else {
-                                    // Timerfd needs to be re-armed or disarmed
-                                    prevDeadlineNanos = curDeadlineNanos;
-                                    strategy = epollWait(curDeadlineNanos);
-                                }
-                            }
-                        } finally {
-                            // Try get() first to avoid much more expensive CAS in the case we
-                            // were woken via the wakeup() method (submitted task)
-                            if (nextWakeupNanos.get() == AWAKE || nextWakeupNanos.getAndSet(AWAKE) == AWAKE) {
-                                pendingWakeup = true;
-                            }
-                        }
-                        // fallthrough
-                    default:
-                }
-
-                final int ioRatio = this.ioRatio;
-                if (ioRatio == 100) {
-                    try {
-                        if (strategy > 0 && processReady(events, strategy)) {
-                            prevDeadlineNanos = NONE;
-                        }
-                    } finally {
-                        // Ensure we always run tasks.
-                        runAllTasks();
-                    }
-                } else if (strategy > 0) {
-                    final long ioStartTime = System.nanoTime();
-                    try {
-                        if (processReady(events, strategy)) {
-                            prevDeadlineNanos = NONE;
-                        }
-                    } finally {
-                        // Ensure we always run tasks.
-                        final long ioTime = System.nanoTime() - ioStartTime;
-                        runAllTasks(ioTime * (100 - ioRatio) / ioRatio);
-                    }
-                } else {
-                    runAllTasks(0); // This will run the minimum number of tasks
-                }
-                if (allowGrowing && strategy == events.length()) {
-                    //increase the size of the array as we needed the whole space for the events
-                    events.increase();
-                }
-            } catch (Error e) {
-                throw e;
-            } catch (Throwable t) {
-                handleLoopException(t);
-            } finally {
-                // Always handle shutdown even if the loop processing threw an exception.
-                try {
-                    if (isShuttingDown()) {
-                        closeAll();
-                        if (confirmShutdown()) {
-                            break;
-                        }
-                    }
-                } catch (Error e) {
-                    throw e;
-                } catch (Throwable t) {
-                    handleLoopException(t);
-                }
-            }
+    for (;;) {
+        int timeoutMillis;
+        if (delayNanos != Long.MAX_VALUE) {
+            timeoutMillis = millisBeforeDeadline(selectDeadLineNanos, System.nanoTime());
+        } else if (runner.canBlock()) {
+            timeoutMillis = Long.MAX_VALUE; // 可以无限阻塞
+        } else {
+            timeoutMillis = 0;              // 有任务 → selectNow
+        }
+        int selectedKeys = selector.select(timeoutMillis);
+        if (selectedKeys != 0 || oldWakenUp || wakenUp.get() || !runner.canBlock()) {
+            break;
         }
     }
 }
 ```
 
-### Kqueue
+关键点：
+- `oldWakenUp = wakenUp.getAndSet(false)`——在进入 select 前先置 false，select 返回后若又变 true 说明 wakeup 竞态了，要再唤醒一次
+- `canBlock()` 返回 false 时 timeoutMillis = 0 → selectNow（无阻塞返回）
+- 定时任务 deadline 驱动 select timeout——到点 select 自动返回，EventLoop 轮完 IO 后就去跑任务队列
+
+### openSelector —— SelectedSelectionKeySet 反射注入
+
+4.1/4.2 都有的 **SelectedSelectionKeySet** 技巧：通过反射把 JDK Selector 内部的 `selectedKeys` 和 `publicSelectedKeys` 字段换成 Netty 自己的实现，省掉每次迭代 `Iterator<SelectionKey>` 的开销：
 
 ```java
-final class KQueueEventLoop extends SingleThreadEventLoop {
-
-    @Override
-    protected void doRegister() throws Exception {
-        // Just in case the previous EventLoop was shutdown abruptly, or an event is still pending on the old EventLoop
-        // make sure the readReadyRunnablePending variable is reset so we will be able to execute the Runnable on the
-        // new EventLoop.
-        readReadyRunnablePending = false;
-
-        ((KQueueEventLoop) eventLoop()).add(this);
-
-        // Add the write event first so we get notified of connection refused on the client side!
-        if (writeFilterEnabled) {
-            evSet0(Native.EVFILT_WRITE, Native.EV_ADD_CLEAR_ENABLE);
+private SelectorTuple openSelector() {
+    Selector unwrappedSelector = provider.openSelector();
+    final Class<?> selectorImplClass = (Class<?>) maybeSelectorImplClass;
+    if (selectorImplClass != null) {
+        Field selectedKeysField = selectorImplClass.getDeclaredField("selectedKeys");
+        Field publicSelectedKeysField = selectorImplClass.getDeclaredField("publicSelectedKeys");
+        // sun.nio.ch.SelectorImpl —— JDK HotSpot 实现的标准路径
+        long selectedKeysFieldOffset = PlatformDependent.objectFieldOffset(selectedKeysField);
+        if (selectedKeysFieldOffset != -1 && publicSelectedKeysFieldOffset != -1) {
+            // 用 UNSAFE 把 Netty 的 SelectedSelectionKeySet 替换掉两个字段
+            ...
+            selectedKeys = new SelectedSelectionKeySet();
         }
-        if (readFilterEnabled) {
-            evSet0(Native.EVFILT_READ, Native.EV_ADD_CLEAR_ENABLE);
-        }
-        evSet0(Native.EVFILT_SOCK, Native.EV_ADD, Native.NOTE_RDHUP);
     }
 }
 ```
 
-## Tuning
+`SelectedSelectionKeySet` 底层用 `SelectionKey[]` 数组 + 计数器（`Set` 接口实现），热路径上迭代 `for (int i = 0; i < size; i++)` 比 Iterator 快得多。
 
-结合实际工作中的经验给出一些 EventLoop 的最佳实践方案。
+### selector 重建（JDK select 空轮询）
 
-1. 网络连接建立过程中三次握手、安全认证的过程会消耗不少时间。这里建议采用 Boss 和 Worker 两个 EventLoopGroup，有助于分担 Reactor 线程的压力。
-2. 由于 Reactor 线程模式适合处理耗时短的任务场景，对于耗时较长的 ChannelHandler 可以考虑维护一个业务线程池，将编解码后的数据封装成 Task 进行异步处理，避免 ChannelHandler 阻塞而造成 EventLoop 不可用。
-3. 如果业务逻辑执行时间较短，建议直接在 ChannelHandler 中执行。例如编解码操作，这样可以避免过度设计而造成架构的复杂性。
-4. 不宜设计过多的 ChannelHandler。对于系统性能和可维护性都会存在问题，在设计业务架构的时候，需要明确业务分层和 Netty 分层之间的界限。不要一味地将业务逻辑都添加到 ChannelHandler 中
+```java
+// JDK NIO selector 的经典 bug：某些 Linux 内核版本下 selector.select() 返回 0 但没有任何就绪事件
+if (selectedKeys == 0 && ++selectNowCount >= SELECTOR_AUTO_REBUILD_THRESHOLD) { // 默认 512
+    rebuildSelector0();
+}
+```
 
-### Thread Affinity
+4.1 就有、4.2 保留。阈值 `-Dio.netty.selectorAutoRebuildThreshold=512`。
 
-Create an [AffinityThreadFactory](https://github.com/OpenHFT/Java-Thread-Affinity) with a particular strategy and pass it to the EventLoopGroup which would contain latency-sensitive threads.
+## MultiThreadIoEventLoopGroup
 
+```java
+public class MultiThreadIoEventLoopGroup extends MultithreadEventLoopGroup implements IoEventLoopGroup {
+    @Override
+    protected EventLoop newChild(Executor executor, Object... args) {
+        IoHandlerFactory handlerFactory = (IoHandlerFactory) args[0];
+        return newChild(executor, handlerFactory, argsCopy); // 默认 SingleThreadIoEventLoop
+    }
+    protected IoEventLoop newChild(Executor executor, IoHandlerFactory ioHandlerFactory, Object... args) {
+        return new SingleThreadIoEventLoop(this, executor, ioHandlerFactory);
+    }
+    public void setIoRatio(int ioRatio) { ... }
+}
+```
+
+构造器签名统一成 `(nThreads, IoHandlerFactory)` 或 `(nThreads, Executor, IoHandlerFactory)`——把"具体用哪个 IO handler"从 EventLoopGroup 子类（NioEventLoopGroup / EpollEventLoopGroup）挪到 IoHandlerFactory 参数。
+
+也支持 `EventExecutorChooserFactory` 注入（默认 `DefaultEventExecutorChooserFactory.INSTANCE`，thread-local round-robin）和 `AutoScalingEventExecutorChooserFactory`（利用率感知动态扩缩线程）。
 
 ## Links
 
-- [Netty](/docs/CS/Framework/Netty/Netty.md)
-- [Bootstrap](/docs/CS/Framework/Netty/Bootstrap.md)
-- [Channel](/docs/CS/Framework/Netty/Channel.md)
-- [MpscLinkedQueue](/docs/CS/Framework/Netty/MpscLinkedQueue.md)
-- [Linux IO 多路复用](/docs/CS/OS/Linux/IO/multiplexing.md)
-- [Linux IO 模型](/docs/CS/OS/Linux/IO/IO.md)
+- [Transport 与 IoHandler 抽象](/docs/CS/Framework/Netty/Transport.md)
+- [Channel 与注册路径](/docs/CS/Framework/Netty/Channel.md)
+- [Bootstrap 启动流程](/docs/CS/Framework/Netty/Bootstrap.md)
+- [ChannelPipeline 与 Handler](/docs/CS/Framework/Netty/ChannelHandler.md)
+- [Future and Promise](/docs/CS/Framework/Netty/Future.md)
+- [Netty.md 整体](/docs/CS/Framework/Netty/Netty.md)
+
+## References
+
+1. [Netty 4.2 SingleThreadIoEventLoop source](https://github.com/netty/netty/blob/4.2/transport/src/main/java/io/netty/channel/SingleThreadIoEventLoop.java)
+2. [Netty 4.2 NioIoHandler source](https://github.com/netty/netty/blob/4.2/transport/src/main/java/io/netty/channel/nio/NioIoHandler.java)
+3. [Netty #8566 — rebuildSelector IOException on select loop](https://github.com/netty/netty/issues/8566)
+4. [Netty #597 — empty selectedKeys optimization](https://github.com/netty/netty/issues/597)
+5. [OpenJDK JDK-8180450 — Duplex handler instanceof scalability](https://bugs.openjdk.org/browse/JDK-8180450)

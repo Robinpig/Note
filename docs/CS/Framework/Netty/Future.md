@@ -212,7 +212,7 @@ public interface Promise<V> extends Future<V> {
 
 **Special ChannelFuture which is writable.**
 
-Use in [Bootstrap-bind-register](/docs/CS/Framework/Netty/Bootstrap.md?id=register)
+Use in [Bootstrap.initAndRegister](/docs/CS/Framework/Netty/Bootstrap.md?id=initandregister-core)
 
 ```java
 public interface ChannelPromise extends ChannelFuture, Promise<Void> {
@@ -442,20 +442,129 @@ private void notifyListeners() {
 }
 ```
 
-`MAX_LISTENER_STACK_DEPTH = 8`：监听器里再触发下一个 promise 完成时，递归深度超过 8 就改为投递到 executor 异步执行，防止栈溢出。
+`MAX_LISTENER_STACK_DEPTH = 8`：监听器里再触发下一个 promise 完成时，递归深度超过 8 就改为投递到 executor 异步执行，防止栈溢出（系统属性 `io.netty.defaultPromise.maxListenerStackDepth` 可配）。
+
+### result 状态机
+
+`volatile Object result` + `RESULT_UPDATER` 驱动，六种值对应六种语义：
+
+| result 值 | 来源 | isDone() | isSuccess() | isCancelled() | isCancellable() |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `null` | 初始态 | false | — | — | **true** |
+| `SUCCESS`（静态 Object） | `setSuccess(null)` | true | true | false | false |
+| `<V>` 非 CauseHolder | `setSuccess(value)` | true | true | false | false |
+| `UNCANCELLABLE`（静态 Object） | `setUncancellable()` | true | **false** | false | **false** |
+| `CANCELLATION_CAUSE_HOLDER` | `cancel()` 直接 CAS | true | false | true | false |
+| `new CauseHolder(Throwable)` | `setFailure(t)` | true | false | false | false |
+
+`setUncancellable()` 的语义：Promise 置为不可取消但**还没完成**——`isCancellable() = false`，但 `isDone() = false`（result 仍是 `UNCANCELLABLE`，不是 SUCCESS）。这是 Bootstrap 初始化阶段的典型用法：channel 已经 register 但还没 bind/connect，此时 Promise 不能被用户 cancel，但也不能算完成。
+
+### setValue0 两次 CAS
+
+```java
+private boolean setValue0(Object objResult) {
+    if (RESULT_UPDATER.compareAndSet(this, null, objResult) ||
+        RESULT_UPDATER.compareAndSet(this, UNCANCELLABLE, objResult)) {
+        if (checkNotifyWaiters()) notifyListeners();
+        return true;
+    }
+    return false;  // 已经 success / failure / cancel 了
+}
+```
+
+两次 CAS 覆盖"正常未完成"（null → 结果）和"已 uncancellable 但仍需完成"（UNCANCELLABLE → 结果）两种场景。
+
+### LeanCancellationException —— 无栈取消异常
+
+`CANCELLATION_CAUSE_HOLDER` 里存的是 `StacklessCancellationException`（`fillInStackTrace()` 返回预存的一次栈帧，不再重新抓）。`cause()` 里有 lazy 替换：第一次访问时把占位 holder 换成带真实栈帧的 `CauseHolder(new LeanCancellationException())`，后续 `cause()` 就不再每次 create 异常对象。
+
+### await / checkDeadLock —— EventLoop 内不能阻塞
+
+```java
+public Promise<V> await() throws InterruptedException {
+    if (isDone()) return this;
+    if (Thread.interrupted()) throw new InterruptedException(toString());
+    checkDeadLock();  // ← EventLoop 线程内调用则抛 BlockingOperationException
+    synchronized (this) {
+        while (!isDone()) {
+            incWaiters();
+            try { wait(); } finally { decWaiters(); }
+        }
+    }
+    return this;
+}
+
+protected void checkDeadLock() {
+    EventExecutor e = executor();
+    if (e != null && e.inEventLoop()) {
+        throw new BlockingOperationException(toString());
+    }
+}
+```
+
+`waiters` 字段（`short waiters`）供 `notify` 时判断是否真的有人在等，避免无谓 notifyAll。
+
+### sync / rethrowIfFailed
+
+```java
+public Promise<V> sync() throws InterruptedException {
+    await();
+    rethrowIfFailed();  // cause != null → throw new CompletionException(cause)
+    return this;
+}
+```
+
+`sync()` = `await()` + 若失败抛异常。`syncUninterruptibly()` = `awaitUninterruptibly()` + 同样 rethrow。
 
 ## DefaultChannelPromise
 
-The default ChannelPromise implementation. It is recommended to use `Channel.newPromise()` to create a new ChannelPromise rather than calling the constructor explicitly.
+Channel 特化的 Promise，携带 `Channel channel` 上下文。两个关键差异：
 
 ```java
-public class DefaultChannelPromise extends DefaultPromise<Void> implements ChannelPromise, FlushCheckpoint {
-
-    private final Channel channel;
-    private long checkpoint;
- ... 
+protected EventExecutor executor() {
+    EventExecutor e = super.executor();
+    return e != null ? e : channel().eventLoop();  // 延迟绑定
+}
+protected void checkDeadLock() {
+    if (channel().isRegistered()) {  // channel 已注册时才检查
+        super.checkDeadLock();
+    }
 }
 ```
+
+- **executor 延迟绑定**：`new DefaultChannelPromise(channel)` 不传 executor 时，`executor()` 只有在真正需要通知监听器时才 fallback 到 `channel().eventLoop()`
+- **未注册豁免**：channel 还没 register 到 EventLoop 时 `channel.isRegistered() = false`，此时 await 是安全的（Promise 会绑定 GlobalEventExecutor 兜底）
+
+### VoidChannelPromise —— 忽略型 Promise
+
+`channel.voidPromise()` 返回一个单例 `VoidChannelPromise.INSTANCE`（`isVoid() = true`）。它**所有可写方法都是空实现或返回 false**：
+
+```java
+public final class VoidChannelPromise extends AbstractVoidContext implements ChannelPromise {
+    @Override public boolean trySuccess() { return false; }
+    @Override public VoidChannelPromise addListener(...) { return this; }
+    @Override public Throwable cause() { return null; }
+    @Override public boolean isDone() { return false; }  // 永远不"完成"
+}
+```
+
+用途：内部 API 不需要真实 Promise 时用它省对象分配（例如 `channel.read(voidPromise())` —— "read 一下，我不关心结果"）。
+
+### PendingRegistrationPromise —— Bootstrap 注册占位
+
+Bootstrap 内部 `doBind` / `doConnect` 的非 EventLoop 线程路径上用的特殊 Promise：
+
+```java
+static final class PendingRegistrationPromise extends DefaultChannelPromise {
+    private volatile boolean registered;
+    protected EventExecutor executor() {
+        if (registered) return super.executor(); // channel.eventLoop()
+        return GlobalEventExecutor.INSTANCE;     // 兜底（防 channel.eventLoop() 抛 IllegalStateException）
+    }
+}
+```
+
+`registered` 在注册成功回调里才置 true——在此之前 executor() 返回 GlobalEventExecutor 兜底，因为 channel.eventLoop() 会抛 IllegalStateException（还没注册）。issue #2586 实锤。
 
 
 ## Links

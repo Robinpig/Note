@@ -113,7 +113,7 @@ v2.2.5 依赖的内核版本不再是未决项——本地源码树的 `.gitmodu
 
 [AI Gateway](/docs/CS/Framework/Higress/AI_Gateway.md) 是本子树写得最深的一篇：协议转换怎么发生、33 个厂商 type 字符串、负载均衡策略的真实名字（含一个**只有仓库 README、没有文档站页面**的 `ai-load-balancer`）、语义缓存在默认参数下为什么静默不命中、MCP 的三条互不相同的托管路径。最后，[Deployment and Ops](/docs/CS/Framework/Higress/Deployment_and_Ops.md) 覆盖三种部署形态（其中两种官方明写"没有大规模生产使用过"）、升级顺序、以及"配置正确但没生效"时必须按层定位的四段排障链。
 
-上面这些都以文档口径为主。**再往下还有一层源码级分册**，它们回答的是"为什么是这样"而不是"怎么配"，所有断言带 `路径:行号`：[Config Pipeline](/docs/CS/Framework/Higress/Config_Pipeline.md) 追一条配置从 informer 到 xDS 的每一跳（结论形状是 **pilot 反向 pull、Higress 每次 List 全量重算、Higress 侧没有任何 debounce 生效**）；[Source Map](/docs/CS/Framework/Higress/Source_Map.md) 是以源码为准的模块地图与 108 条注解 key 总表；[Service Registry Internals](/docs/CS/Framework/Higress/Service_Registry_Internals.md) 讲 `registry/` 这一层——它是 Higress 少数真正自己写的部分，也是"服务名为什么长这样、`redis.static` 为什么不写端口就连 80"的出处；[Standalone and All-in-One](/docs/CS/Framework/Higress/Standalone_and_AllInOne.md) 说清"没有 Kubernetes 怎么办"其实是 fork 一个 `sample-apiserver` 并把 CR 存到 Nacos 或文件树；[Certificates and ACME](/docs/CS/Framework/Higress/Certificates_and_ACME.md) 则是自动签发的真实边界——只有 HTTP-01、续期参数其实是个比例、多副本之间没有任何互斥。
+上面这些都以文档口径为主。**再往下还有一层源码级分册**，它们回答的是"为什么是这样"而不是"怎么配"，所有断言带 `路径:行号`：[Config Pipeline](/docs/CS/Framework/Higress/Config_Pipeline.md) 追一条配置从 informer 到 xDS 的每一跳（结论形状是 **pilot 反向 pull、Higress 每次 List 全量重算、Higress 侧没有任何 debounce 生效**）；[Source Map](/docs/CS/Framework/Higress/Source_Map.md) 是以源码为准的模块地图（含约 89 个注解相对 key 的逐项清单与前缀行为）；[Service Registry Internals](/docs/CS/Framework/Higress/Service_Registry_Internals.md) 讲 `registry/` 这一层——它是 Higress 少数真正自己写的部分，也是"服务名为什么长这样、`redis.static` 为什么不写端口就连 80"的出处；[Standalone and All-in-One](/docs/CS/Framework/Higress/Standalone_and_AllInOne.md) 说清"没有 Kubernetes 怎么办"其实是 fork 一个 `sample-apiserver` 并把 CR 存到 Nacos 或文件树；[Certificates and ACME](/docs/CS/Framework/Higress/Certificates_and_ACME.md) 则是自动签发的真实边界——只有 HTTP-01、续期参数其实是个比例、多副本之间没有任何互斥。
 
 ```text
               枢纽 ─────┬─ Config Pipeline ─ Source Map
@@ -144,6 +144,7 @@ v2.2.5 依赖的内核版本不再是未决项——本地源码树的 `.gitmodu
 
 - **取文档正文**：用 `curl` 抓页面 + 正则抽 `<div class="sl-markdown-content">`（**WebFetch 抓这些页会 120s 超时**）；**文档 URL 一律取自 `https://higress.ai/llms.txt`，不要凭印象拼路径**（`higress.io/en/docs/...` 返回 404）。
 - **取源码**：`git clone --branch v2.2.5`（主仓）与 `--branch aio-v2.2.5`（`higress-standalone`，独立部署形态）。**不要假定本机有源码树**：`raw.githubusercontent` / `cdn.jsdelivr.net` / `unpkg` / `registry.npmjs.org` 在部分网络下全不可用，`api.github.com` 共享 60/小时极易打光，整仓 clone 与 blobless sparse clone 都可能超时失败——**没有源码时一律降级成文档口径并把"需回源码确认"的项显式写进该页 `## Unverified`**。
+- **本机可用源码树（2026-10-31）**：主仓 `/Users/robin/Projects/higress`（v2.2.5，`4deae1dd`）、**istio fork `/Users/robin/Projects/istio`（`istio-1.27` 分支 HEAD `65133dd`，即本仓 `.gitmodules` pin 的 `istio/istio`）**、`higress-console`（v2.2.5，`0279ce1a`）、`higress-standalone`（aio-v2.2.5，`36882509`）。⇒ **fork 内部与外部仓结论现已可离线核实**，此前"本机无工作树"的降级说明仅适用于旧会话；引用 fork 行号时以 `istio-1.27` 分支为准，注意本地 detached 的 `1.19.0` 不是本仓依赖（`istio/pkg` 才走 istio-1.19）。
 - **每篇分册末尾都有 `## Unverified`**，这是本子树的固定结构，也是硬禁区：那里面的东西一条都不许写进正文。
 
 ### 已证伪清单（尚未在 Three Threads 覆盖的条目）
@@ -164,7 +165,7 @@ v2.2.5 依赖的内核版本不再是未决项——本地源码树的 `.gitmodu
 
 ### 源码核对后推翻的三条（含本库自己上一版的错误）
 
-① **`hgctl config` 确实存在**（`hgctl/pkg/config_cmd.go:45-50`，是抓 xDS 的 all / bootstrap / cluster / endpoint / listener / route），文档站 hgctl 页没提它——旧版把它写成"不存在的子命令"是**反了**；`profile` / `install` / `upgrade` 等是 root 的子命令。
+① **`hgctl config` 这条把名字记错了——真实命令是 `hgctl gateway-config`**（`Use: "gateway-config"`，`hgctl/pkg/config_cmd.go:39`，别名 `gc`），二级命令确为 all / bootstrap / cluster / endpoint / listener / route（`:45-50`，抓 xDS）。这条结论的**存在性**是对的（文档站 hgctl 页没列它，旧版写成"不存在的子命令"是反了），但**不存在叫 `config` 的顶层子命令**；`profile` / `install` / `upgrade` 等是 root 的子命令。
 ② **`wrapper.ProcessStreamDone` 与 `ProcessStreamDoneBy` 两个名字都真实存在**（前者见主仓 `plugins/wasm-go/pkg/mcp/server/plugin.go:910`，后者是文档 SDK 页形态；`wrapper` 包在外部模块 `github.com/higress-group/wasm-go`，本地不可枚举导出项），不许再写"其中一个不存在"。
 ③ **文档的 41 款插件不都在 wasm-go**：认证基础族（`key_auth` / `basic_auth` / `jwt_auth` / `hmac_auth` / `oauth` / `bot_detect` / `request_block` / `key_rate_limit` / `custom_response` 等）在 **`plugins/wasm-cpp/`（snake_case、bazel）**，`ai-data-masking` 在 **`wasm-rust/`**；而 `plugins/wasm-go/extensions/` 有 **53** 个目录、约 20 个没有文档页（`mcp-router` 就在此列——**存在性成立、语义未读**，旧版"不存在 mcp-router"是错的）。
 

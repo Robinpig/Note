@@ -159,6 +159,54 @@ agent = Agent(
 
 3. **`read_only` fast path**——`_check_read_only_fast_path`（`_engine.py:659`）抽成**单一共享 helper**，保证五个 mode 对只读调用的处理永不漂移（这正是历史 bug 的来源：曾出现 `DEFAULT`/`DONT_ASK` 缺 fast path 而 `ACCEPT_EDITS`/`EXPLORE` 有的不一致）。
 
+### Onion Construction: execute_chain
+
+`Agent.__init__` 在构造时按 `is_implemented()` 把中间件分进 7 个列表（`agent/_agent.py:220-240`：`_reply_middlewares` / `_reasoning_middlewares` / `_check_permission_middlewares` / `_acting_middlewares` / `_model_call_middlewares` / `_system_prompt_middlewares` / `_compress_context_middlewares`）。
+
+六个 onion hook 各自在对应的 Agent 方法里**就地构造一个 `execute_chain` 递归函数**——不是一个统一的调度器，而是每处嵌套定义。以 `on_acting` 为例（`agent/_agent.py:2746-2772`）：`execute_chain(index)` 递归，`index >= len(middlewares)` 时调用 `_acting_impl` 收尾，否则取 `self._acting_middlewares[index]`，把 `input_kwargs` 交给 `mw.on_acting(agent=self, input_kwargs=..., next_handler=...)`，而 `next_handler` 内部再 `execute_chain(index+1, ...)`。这写法与 Koa/Express 洋葱模型完全一致——`next_handler(**)` 被调用前是「before」，await 其后 yield 是「after」。`on_model_call`（`agent/_agent.py:3325-3366`）返回 `ChatResponse` 或 async-generator、`on_compress_context`（`agent/_agent.py:410-440`）返回 `None`、`on_reply` 同理，只是收尾调用与返回类型不同。
+
+唯一的 transformer——`on_system_prompt`——不走递归，而是 `Agent._get_system_prompt` 里一段顺序循环（`agent/_agent.py:3230-3232`）：`for mw in self._system_prompt_middlewares: result = await mw.on_system_prompt(self, result)`，每个中间件拿上一次的输出当输入。
+
+### TTSMiddleware: Audio Event Injection
+
+`TTSMiddleware`（`src/agentscope/middleware/_tts_middleware.py:21`）只在 `on_reply`（`_tts_middleware.py:51`）拦截，把推理产出的文本块合成语音并注入 `DATA_BLOCK_*` 音频事件。它累积 `TextBlockDeltaEvent`（`_tts_middleware.py:67`）里的增量文本，分两路：
+
+- **实时**（`tts.realtime=True`）：每个 delta 立即 `tts.push(delta)`（`_tts_middleware.py:70`），产出音频增量马上 emit。
+- **非实时**：在 `TextBlockEndEvent`（`_tts_middleware.py:82`）时，整段 `text_buffer` 调 `tts.synthesize(text)`（`_tts_middleware.py:99`）一次性合成。
+
+每段音频由一个稳定的 `audio_block_id` 串起：`_emit_chunk`（`_tts_middleware.py:149`）在首个 chunk 时 yield `DataBlockStartEvent`、之后每个 chunk yield `DataBlockDeltaEvent`，`DataBlockDeltaEvent.data` 是**增量** base64 PCM，整段音频 = 所有 delta 解码后按 `block_id` 拼接。`on_reply` 在 `TextBlockEndEvent` 收尾时补 `DataBlockEndEvent`（`_tts_middleware.py:111`）并重置 `audio_block_id`。这正是 AgentScope 流式 base64 拼接陷阱的又一处实例（见 [Pipeline 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Pipeline.md)）。
+
+### TracingMiddleware: Span Mechanics
+
+`TracingMiddleware`（`src/agentscope/middleware/_tracing/_trace.py:117`）基于 OpenTelemetry，实现 `on_reply`（`_trace.py:137`）/ `on_model_call`（`_trace.py:259`）/ `on_acting`（`_trace.py:312`）。tracer 由 `_get_tracer()`（`_tracing/_setup.py:11`）以 name `"agentscope"` + 包版本创建，未配置 tracer 时近乎零开销短路。
+
+reply span 作为下游 span 的 parent，但**不跨 `yield` 持有 current OTel context**——只在推进 `next_handler` 的同一 `__anext__` 步内 `attach`/`detach`（`_trace.py:165-171`，注释指向 issue **#2076**：async generator 可能被另一个 asyncio task 关闭，token 必须在创建它的 context 里 detach）。对外部执行的工具，它在 reply 开头为 `ExternalExecutionResultEvent.execution_results` 合成 `execute_tool` span（`_trace.py:173-197`），带 `GEN_AI_OPERATION_NAME` / `GEN_AI_TOOL_CALL_ID` / `GEN_AI_TOOL_NAME` 等属性，并标 `AGENTSCOPE_IS_EXTERNAL_EXECUTION=True`，记录 HITL / external pending 状态。
+
+### Long-Term Memory: Implementation Layout
+
+三者各自一个子目录，差异在「记忆存哪、谁写、暴露什么工具」：
+
+| 中间件 | 目录 | 关键文件 | 后端 |
+| :--- | :--- | :--- | :--- |
+| `AgenticMemoryMiddleware` | `_longterm_memory/_agentic_memory/` | `_middleware.py`（单文件） | 文件系统 Markdown |
+| `Mem0Middleware` | `_longterm_memory/_mem0/` | `_middleware.py` + `_agentscope_adapter.py`（chat+embedding 适配器） + `_tools.py` + `_utils.py` | mem0（OSS / Platform） |
+| `ReMeMiddleware` | `_longterm_memory/_reme/` | `_middleware.py` + `_config.py` + `_tools.py` + `_utils.py` | 进程内嵌入 ReMe 应用（懒加载 `_build_app`） |
+
+`AgenticMemoryMiddleware`（`_agentic_memory/_middleware.py:359`）：`MEMORY.md` 是有界索引（`FILENAME_MEMORY_MD="MEMORY.md"`，`_agentic_memory/_middleware.py:368`，默认上限 `memory_max_tokens=4000`）。检索参数集中在 `Parameters`（`_agentic_memory/_middleware.py:370`）：`retrieval_async=True`（默认起异步检索任务）、`retrieval_max_files=200`、`retrieval_max_tokens_per_md=2000`、`retrieval_max_tokens_per_frontmatter=256`。记忆文件 frontmatter 带 4 类 `type` 标签（`user` / `feedback` / `project` / `reference`，`_agentic_memory/_middleware.py:39`）。`backend` 参数（`_agentic_memory/_middleware.py:456`）接受 `BackendBase`，故记忆目录既可落本地也可落沙箱。
+
+`Mem0Middleware`（`_mem0/_middleware.py:86`）：`mode: Literal["static_control","agent_control","both"]="both"`（`_mem0/_middleware.py:151`）；纯 `agent_control` 时 `on_reply` 是 no-op（`_mem0/_middleware.py:285` 起），只暴露工具由 Agent 自己调；`_async_add_with_fallback`（`_mem0/_middleware.py:571`）两级回退写回。
+
+`ReMeMiddleware`（`_reme/_middleware.py:88`）：模型在构造时固定（不取自 agent），按 `session_id` 隔离；`mode` 只决定是否暴露 `memory_search`，而「每轮回复后写回」由 ReMe 的 `auto_memory` job 在**所有 mode** 自动发生（`_reme/_middleware.py:16-17`），无 add 工具。
+
+### Permission: Field Semantics and Cross-Owner Policy
+
+`PermissionContext`（`src/agentscope/permission/_context.py:24`）除 `mode` 外还含 `working_directories: dict[str, AdditionalWorkingDirectory]`（`_context.py:9-21`，每项 `path` + `source`，供 `ACCEPT_EDITS` 判定「目标是否落在工作目录内」），以及按 tool name 分桶的 `allow_rules` / `deny_rules` / `ask_rules`。
+
+`PermissionDecision`（`src/agentscope/permission/_decision.py:10`）除了 `behavior` / `message` / `decision_reason` / `suggested_rules` / `bypass_immune`，还有 `updated_input: dict | None`（`_decision.py:27-28`）——工具可借它回传「已净化的输入」（如规整后的路径），引擎与 Agent 据此执行而非原始输入。
+
+> [!WARNING]
+> **跨 owner 资源访问策略与权限 DSL 不是一套东西。** `AgentScope.md` 把 `DenyAllResourceAccessPolicy` 列在「权限 DSL 的逐文件事实」下，但源码里它**不在 `src/agentscope/permission/`**，而在 **`src/agentscope/app/access/_policy.py:153`**——是服务层 `ResourceAccessPolicyBase`（`_policy.py:79`）的子类，管的是「多租户服务里 viewer 能跨 owner 访问哪些资源」（`list_accessible` / `can_edit`），与 `PermissionEngine` 的工具级 allow/deny/ask 判定是两条独立链路。`create_app` 在未显式传入 `resource_access_policy` 时默认装上 `DenyAllResourceAccessPolicy()`（`app/_app.py:302-303`），即默认拒绝一切跨 owner 访问。完整事实见 [App 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/App.md)。
+
 ## Links
 
 - [AgentScope](/docs/CS/AI/LLM/Agent/Product/AgentScope/AgentScope.md)
@@ -170,6 +218,8 @@ agent = Agent(
 
 - `src/agentscope/middleware/_base.py`
 - `src/agentscope/middleware/_budget.py`
-- `src/agentscope/middleware/_tracing/_trace.py`
+- `src/agentscope/middleware/_tts_middleware.py`
+- `src/agentscope/middleware/_tracing/_setup.py` / `_trace.py`
 - `src/agentscope/middleware/_longterm_memory/`（`_agentic_memory` / `_mem0` / `_reme`）
 - `src/agentscope/permission/_engine.py` / `_rule.py` / `_decision.py` / `_context.py` / `_types.py`
+- `src/agentscope/app/access/_policy.py`（跨 owner 资源访问策略，`DenyAllResourceAccessPolicy`）

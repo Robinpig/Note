@@ -1604,6 +1604,36 @@ do {
 
 先按 `threadId & (length - 1)` 直接定位；失败才在数组内轮转最多 `2 * length` 次；仍失败则 `tryExpandMagazines()` 把数组翻倍（上限 `MAX_STRIPES = availableProcessors() * 2`），最多 `EXPANSION_ATTEMPTS = 3` 次。初始长度 `INITIAL_MAGAZINES = 1`。`Magazine.tryAllocate` 用 `StampedLock.tryWriteLock()`，拿不到锁时走 `allocateWithoutLock`（借 `nextInLine` 或 `chunkCache`），这是降低竞争的关键。
 
+#### Allocation Path
+
+`Magazine.allocate()` 内部按三层顺序找 chunk，前两层是 magazine 私有的：
+
+1. **`current`**：当前正在切分的 chunk，`readInitInto` 就是 bump pointer——`startIndex = allocatedBytes; allocatedBytes += startingCapacity`，然后 `buf.init(delegate, chunk, ...)` 把 buffer 指向 chunk 内的偏移。切完发现 `remainingCapacity == 0` 就 `releaseFromMagazine()`；分配失败但还有剩，则移交 `nextInLine`。
+2. **`nextInLine`**：`volatile Chunk` + `AtomicReferenceFieldUpdater`，`getAndSet(null)` 抢走。它是"magazine 本地、但不持锁也能拿"的缓冲位——`allocateWithoutLock`（见下）和 `transferToNextInLineOrRelease` 都经它中转。后者用 CAS 放入，若已有占用且新 chunk 剩余更多则交换顶掉旧的，顶不掉就 `releaseFromMagazine()`。
+3. **`group.pollChunk(size)`** → **`chunkController.newChunkAllocation(...)`**：中央缓存（chunkCache）没有再新建。新建的 chunk 直接 `chunkRegistry.add` 计入 `usedMemory()`。
+
+拿不到写锁时的 `allocateWithoutLock` 是不阻塞的降级路径：`NEXT_IN_LINE.getAndSet(null)` 抢 nextInLine，抢不到就 `group.pollChunk` 拿一个，`attachToMagazine(this)` 后**只切一刀**（`computeBufferCapacity(..., true)` 强制 reallocate 语义、不更新统计），切完若 `remainingCapacity >= RETIRE_CAPACITY`（**256 字节**）就 `transferToNextInLineOrRelease` 留给下一次，否则 `releaseFromMagazine()`。整个路径不持锁，竞争下退化为"每次从中央队列拿 chunk 切一刀"，线程永不阻塞在别的线程的 magazine 上。
+
+扩容竞争用哨兵值解决：`tryExpandMagazines` 翻倍数组后会把旧 magazine `free()` 掉，`free()` 将 `nextInLine` CAS 成 `MAGAZINE_FREED` 哨兵；此后任何 `getAndSet` 拿到哨兵的线程会 `restoreMagazineFreed()` 恢复哨兵并返回失败，让上层重试新数组。
+
+顶层 `AdaptivePoolingAllocator.allocate()` 的路由（4.2.19 实测）：
+
+```java
+if (size <= MAX_POOLED_BUF_SIZE) {              // 8 MiB / 8 = 1 MiB
+    int index = sizeClassIndexOf(size);         // sizeIndexOf: (size + 31) >> 5，查 SIZE_INDEXES 字节表
+    if (index < magazineGroups.length) {        // 16 个 size class
+        allocated = magazineGroups[index].allocate(...);    // SizeClassedChunk
+    } else if (!IS_LOW_MEM) {
+        allocated = largeBufferMagazineGroup.allocate(...); // BuddyChunk
+    }
+}
+if (allocated == null) {
+    allocated = allocateFallback(...);          // 一次性 chunk：new Chunk(innerChunk, magazine, false)
+}
+```
+
+`allocateFallback` 为超大（>1 MiB）或低内存模式的大 buffer 创建**一次性 chunk**（`pooled=false`），buffer 释放时整个 chunk 直接 `deallocate()`，不进任何缓存。另外类上重写了 `finalize()` 兜底 `free()` 掉 `largeBufferMagazineGroup`，防止用户忘记 shutdown 时池内存泄漏（Javadoc 自述"usually harmless... but very confusing"）。JFR 开启时 chunk 分配/释放会提交 `AllocateChunkEvent` / `FreeChunkEvent`。
+
 切分算法有三套：
 
 - 基类 `Chunk` 是朴素游标：`startIndex = allocatedBytes; allocatedBytes = startIndex + startingCapacity;`
@@ -1637,6 +1667,22 @@ static final int MAX_POOLED_BUF_SIZE = MAX_CHUNK_SIZE / BUFS_PER_CHUNK;
 
 内存还给 OS 的路径：`AdaptiveByteBuf.deallocate()` → `chunk.releaseSegment(...)` → 所有段归还且 CAS 到 `DEALLOCATED` → `Chunk.deallocate()` → `delegate.release()`。此外还有 purge 机制：`CHUNK_PURGE_POLLS_THREAD_LOCAL=16` / `CHUNK_PURGE_POLLS_SHARED=128` 次 poll 后扫描，连续 `CHUNK_PURGE_THRESHOLD=3` 个周期空闲即驱逐空闲 chunk（保留 `purgeRetentionFloor`）。
 
+#### Release Path
+
+`Chunk.releaseFromMagazine()` 是 chunk 离开 magazine 的统一出口：`detachFromMagazine()` 后 `offerToQueue` 进 group 的 chunkCache，进不了缓存才 `markToDeallocate()`。注意 **chunk 不等掏空就可以回缓存**（注释原文："Chunks can be reused before they become empty"）——回缓存的 chunk 里可能还有活 buffer，所以缓存取 chunk 时（`MagazineGroup.offerChunk` 前）要先 `processFreelistEntries()` 处理积压的跨线程释放。
+
+`SizeClassedChunk` 的 `state` 字段是个三态编码，不是布尔：
+
+- `AVAILABLE = -1`：正常服役；
+- `DEALLOCATED = Integer.MIN_VALUE`：已宣判死刑。取 MIN_VALUE 的注释理由很硬核——"让 `DEALLOCATED + externalFreeList.size()` 永远不等于 `segments`，使外部线程**迟到的** `releaseSegment` 在算术上无害"（offer 进 MPSC 队列后不影响已 deallocate 的结果）；
+- 其余非负值：`markToDeallocate()` 被调用时 `localFreeList.size()` 的快照。此后每次释放（本地 push 或外部 offer）都重算 `local + external == segments` 是否成立，成立则 CAS 到 `DEALLOCATED` 并 `deallocate()`。
+
+`BuddyChunk` 的释放是**惰性合并**：`releaseSegment` 只把 `(offset, size)` 打包成一个 int（offset 低 16 位、size 以 `Integer.numberOfTrailingZeros` 存 shift）offer 进 `MpscIntQueue freeList`，**不碰伙伴树**；真正的 `unreserveMatchingBuddy`（沿树向上清 `IS_CLAIMED` / `HAS_CLAIMED_CHILDREN` 标记）由**下一个分配线程**在 `readInitInto` 开头的 `freeList.drain(...)` 里补做。`remainingCapacity()` 也因此要把 freeList 里未处理的容量用 `weakPeekReduce` 加回去。这与 4.1 `PoolChunk` 释放即合并的写法相反——把合并成本从"释放的任意线程"挪到了"下次分配的本线程"，释放路径只剩一次 MPSC offer。
+
+`ThreadLocalSizeClassedChunkCache` 是 SPSC 环形缓冲（`head`/`tail`/`count`/`notEmptyCount` 四个游标）：`scanForCapacity` 的 O(1) 快路径只从 head 取 `notEmptyCount > 0` 的 chunk；`notEmptyCount == 0` 时才线性扫"空 chunk 区"找被外部线程还回容量的。每 `CHUNK_PURGE_POLLS_THREAD_LOCAL`（16）次 poll 触发一次 `runPurgeScan`：满容量的 chunk 每周期 `purgeEpoch++`，超过 `CHUNK_PURGE_THRESHOLD`（3）且存活数超过 `purgeRetentionFloor` 就 `markToDeallocate()`；扫完再做一次荷兰国旗分区，把 `[epoch=0 | 0<epoch<T | epoch>=T | 无容量]` 排好，让快路径永远先拿到有容量的。每档缓存上限 `THREAD_LOCAL_CACHE_MAX_BYTES = 8 MiB`（按 chunkSize 换算成 chunk 个数），保留下限默认一半。
+
+大 buffer 侧的 chunk 大小决策在 `BuddyChunkController.newChunkAllocation`：`chunkSize = min(MAX_CHUNK_SIZE, max(maxChunkSize, nextPow2(BUFS_PER_CHUNK * promptingSize)))`，其中 `maxChunkSize` 是 `AtomicInteger`，注释明说"It's fine that this is racy"——只记录历史峰值、单调向上，这就是 4.2 取代 histogram 的"自适应"：不再统计分布，只记"我见过最大的是多大"。
+
 ### Difference from PooledByteBufAllocator
 
 | 维度       | `AdaptivePoolingAllocator`（4.2）                              | `PooledByteBufAllocator`                     |
@@ -1649,9 +1695,9 @@ static final int MAX_POOLED_BUF_SIZE = MAX_CHUNK_SIZE / BUFS_PER_CHUNK;
 
 > [!WARNING]
 >
-> 上面最后一行的"文档与实现脱节"是 4.2 HEAD（4.2.20-SNAPSHOT）上的实测状态：`AdaptivePoolingAllocator` 的类 Javadoc 完整描述了 histogram 与"big enough to service 10 allocations of the 99-percentile size"，但源码中 `histogram` 只出现在注释里，没有任何对应的数据结构。读这段 Javadoc 时不要当真。
+> 上面最后一行的"文档与实现脱节"在 4.2.19.Final tag 上依然成立：`AdaptivePoolingAllocator` 的类 Javadoc 仍完整描述 histogram 与 "big enough to service 10 allocations of the 99-percentile size"，但源码中 `histogram` 只出现在这两处注释里，没有任何对应的数据结构。读这段 Javadoc 时不要当真。
 >
-> 该类的实现在 4.2.x 迭代中变化很快（早期版本用位图分配，后来换成空闲表 + Buddy），本文以 4.2.19.Final 对应的分支 HEAD 为准。
+> 脱节时间点可以用 `git log -S histogram` 精确锁定：histogram 在 **4.2.3.Final** 被 size-classes 取代（commit `5ca90a70db`，#15399，Chris Vest），commit message 给出的动机是直方图会偏向大尺寸、浪费空间，且一个小分配长期存留会阻止整个大 chunk 被复用；Buddy 伙伴分配则在 **4.2.10.Final** 才加入（commit `2dbc1e7c5c`，#16053），专门服务超出最大 size class 的大 buffer。也就是说 4.2.19 里的"自适应"= 16 档 size class + Buddy + `maxChunkSize` 峰值记忆，histogram 已是历史。
 
 ## Recv Allocator
 

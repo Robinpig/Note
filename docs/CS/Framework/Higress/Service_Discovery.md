@@ -38,10 +38,10 @@ spec:
 
 | 类型 | 专有选填字段 | 说明 |
 | --- | --- | --- |
-| `nacos` / `nacos2` / `nacos3` | `nacosNamespaceId`、`nacosGroups`、`nacosAccessKey`、`nacosSecretKey`、`nacosRefreshInterval` | 三个值是并列的独立取值：**`nacos` = Nacos 1.x，只支持 HTTP；`nacos2` = Nacos 2.x，支持 gRPC**，官方建议升到 2.x 用 `nacos2`，"从而更快速地感知到服务变化，并消耗更少的 Nacos 服务端资源"；`nacos3` 目前唯一被文档点名的用途是作为 MCP Server 的注册源（见 [AI Gateway](/docs/CS/Framework/Higress/AI_Gateway.md)）。`*RefreshInterval` 单位是**纳秒**，示例 `30000000000` 即 30 秒。默认端口 8848 |
+| `nacos` / `nacos2` / `nacos3` | `nacosNamespaceId`、`nacosGroups`、`nacosAccessKey`、`nacosSecretKey`、`nacosRefreshInterval`（纳秒，默认 30s、下限 10s）、`nacosTimeout`（毫秒）、`vport`、`metadata`、`proxyName` | 三个值是并列的独立取值：**`nacos` = Nacos 1.x，只支持 HTTP；`nacos2` = Nacos 2.x，支持 gRPC**，官方建议升到 2.x 用 `nacos2`，"从而更快速地感知到服务变化，并消耗更少的 Nacos 服务端资源"；`nacos3` 作为 MCP Server 注册源时还会消费 `enableMCPServer` / `mcpServerExportDomains` / `mcpServerBaseUrl` / `enableScopeMcpServers` / `allowMcpServers`（均 `mcp_bridge.proto:20-24`，`BoolValue` 类型）。`*RefreshInterval` 单位是**纳秒**，示例 `30000000000` 即 30 秒。默认端口 8848 |
 | `zookeeper` | `zkServicesPath`（字符串数组） | 默认同时监听 `/dubbo` 与 `/services`，"前者为 dubbo 服务默认根路径，后者为 SpringCloud 服务默认根路径"。默认端口 2181 |
-| `consul` | `consulDatacenter`、`consulServiceTag`、`consulRefreshInterval`（纳秒） | 无额外强制字段 |
-| `eureka` | 无 | **本页只在枚举里出现 `eureka`，没有任何专属字段与示例** |
+| `consul` | `consulDatacenter`、`consulServiceTag`、`consulRefreshInterval`（纳秒，默认 30s、下限 10s） | `consulServiceTag` 是**小写精确匹配**过滤（Service Registry Internals 已坐实），无额外强制字段 |
+| `eureka` | 无（仅通用 4 必填 + 可选 `authSecretName`，但 eureka 不消费凭据，见 Service Registry Internals 的 Credentials 段） | 注册中心侧需 netflix-eureka 风格服务；Higress 端仅用到 `type/name/domain/port`，destination 写法见下方表格 |
 | `static` | `protocol`、`sni` | `domain` 直接写多个后端地址 `1.1.1.1:80,2.2.2.2:80` |
 | `dns` | `protocol`、`sni` | `domain` 写域名（如 `www.alibaba.com` + `port: 443` + `protocol: HTTPS`） |
 
@@ -85,6 +85,10 @@ spec:
 | Nacos | `服务名称.服务分组.命名空间ID.nacos` | `my-service.DEFAULT-GROUP.public.nacos`、`service-provider.DEFAULT-GROUP.d8ac64f3-xxxx.nacos`、自定义分组 `my-service.custom-group.d8ac64f3-xxxx.nacos` |
 | ZooKeeper | `服务名称.服务注册根路径.zookeeper` | `my-service.services.zookeeper`；配了 `spring.cloud.zookeeper.discovery.root=my-services-root` 则是 `my-service.my-services-root.zookeeper` |
 | Dubbo over Nacos | `providers:<接口>:<version>:<group>.<分组>.<命名空间>.nacos` | 见上方 WARNING |
+| `static` | `<name>.static` | `my-backends.static`（`name` 取 RegistryConfig.name，`direct/watcher.go:106`） |
+| `dns` | `<name>.dns` | `my-backends.dns` |
+| `consul` | `服务名.数据中心.consul` | `my-service.dc1.consul`（`consul/watcher.go:239`，数据中心取 `consulDatacenter`） |
+| `eureka` | `应用名.eureka` | `userservice.eureka`（`eureka/watcher.go:250`，应用名取 Eureka app 名大写） |
 
 `static` / `dns` / `consul` / `eureka` 四种来源的 destination 命名格式**文档未写**，本次未核实。
 
@@ -132,9 +136,18 @@ spec:
 
 服务发现这套体系还有一层副作用值得单独指出：**Wasm 插件里发起的 HTTP / Redis 外调，寻址单位是 Envoy cluster 名，不是 URL**。各种来源生成的 cluster 名规则（`outbound|<Port>|<Version>|<FQDN>` 家族）与由此产生的限制，展开在 [Wasm Development](/docs/CS/Framework/Higress/Plugin.md)。这条链解释了为什么限流插件的 Redis 必须先注册成服务来源、为什么 `redis.static` 不写端口会连到 80。
 
+> [!NOTE]
+> **Higress 控制面不做后端主动探活**：全仓只有控制面自身的 xds readiness 探针（`pkg/bootstrap/server.go:191`）与 CRD schema 启动校验，没有任何针对后端实例的 active health check / liveness probe；后端实例的"健康"完全来自注册中心（watcher 拉取的是注册中心标记的可用实例），`BaseWatcher.IsHealthy()` 在基类里恒返回 true（Service Registry Internals 已记）。所以"网关侧主动探活后端"在 v2.2.5 没有配置入口，想用 Envoy 侧健康检查得绕过 Higress 直接写 `DestinationRule`。
+
 ## Unverified
 
-`eureka` 与 `nacos3` 的专有 / 必填字段与 YAML 示例（McpBridge 页里 `eureka` 只出现在枚举、`nacos3` 只在 `enableMCPServer` 备注里出现）；`static` / `dns` / `consul` / `eureka` 的 destination 命名格式；Higress 侧的服务健康检查机制与主动探活配置（文档未见对应页面，`global.defaultUpstreamConcurrencyThreshold` 是并发上限不是健康检查）；`consulServiceTag` 的过滤语义细节；`nacosRefreshInterval` 与 consul 同名参数的取值边界与生效方式。
+本页曾列的未决项已在 v2.2.5 源码中全部转正，记录在 Registry Types 表、Destination Naming 表与上文 NOTE：
+
+- **`eureka` 无专属字段**（只用通用 4 必填 + 可选 `authSecretName`，但 eureka 不消费凭据）；**`nacos3` 的"专属"字段是 MCP 系列** `enableMCPServer` / `mcpServerExportDomains` / `mcpServerBaseUrl` / `enableScopeMcpServers` / `allowMcpServers`（`mcp_bridge.proto:20-24`），并新增 `nacosTimeout`（毫秒，`:28`）等通用扩展。
+- **`static` / `dns` / `consul` / `eureka` 的 destination 格式已补齐**：`name.static` / `name.dns`（`direct/watcher.go:106`）、`服务名.数据中心.consul`（`consul/watcher.go:239`）、`应用名.eureka`（`eureka/watcher.go:250`）。
+- **Higress 控制面无后端主动探活**，健康完全来自注册中心（见上文 NOTE 与 Service Registry Internals）。
+- **`consulServiceTag` 过滤是大小写不敏感精确匹配**（Service Registry Internals 已坐实，`consul/watcher.go:195-211`）。
+- **`*RefreshInterval` 均为纳秒、默认 30s、下限 10s**（nacos 与 consul 同值，`nacos/watcher.go:48-49`、`consul/watcher.go:37-38`）；consul 的该值是全量 fetch 的 ticker 周期（`consul/watcher.go:214`），与阻塞查询叠加。
 
 ## Links
 
