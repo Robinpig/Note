@@ -114,18 +114,18 @@ Netty 自己实现的 [Channel](/docs/CS/Framework/Netty/Channel.md) 是以 JDK 
 
 服务端从配置到监听就绪，按顺序走完八步；下面 Bind 时序图展示的是第 7 步 `bind()` 内部发生了什么。
 
-1. [创建 EventLoopGroup](/docs/CS/Framework/Netty/EventLoop.md?id=multithreadioeventloopgroup)
-2. [创建 ServerBootstrap](/docs/CS/Framework/Netty/Bootstrap.md?id=bind-path)
+1. [创建 EventLoopGroup](/docs/CS/Framework/Netty/EventLoop.md?id=eventloopgroup)
+2. [创建 ServerBootstrap](/docs/CS/Framework/Netty/Bootstrap.md?id=bind)
 3. 设置 [Channel](/docs/CS/Framework/Netty/Channel.md)
 4. 设置 [ChannelHandler](/docs/CS/Framework/Netty/ChannelHandler.md)
 5. Option
 6. ChildOption
-7. [ServerBootstrap#bind()](/docs/CS/Framework/Netty/Bootstrap.md?id=bind-path)
+7. [ServerBootstrap#bind()](/docs/CS/Framework/Netty/Bootstrap.md?id=bind)
 8. [ChannelFuture](/docs/CS/Framework/Netty/Future.md)
 
 ### Bind
 
-- [创建 EventLoopGroup](/docs/CS/Framework/Netty/EventLoop.md?id=multithreadioeventloopgroup)
+- [创建 EventLoopGroup](/docs/CS/Framework/Netty/EventLoop.md?id=eventloopgroup)
 - 注册 ServerSocketChannel 时，BossEventLoop 才启动线程
 - 首次注册为 `register(Selector, 0, ServerSocketChannel)`，此时 interestOps 为 0
 - bind 之后在 `fireChannelActive()` 里才把 `selectionKey.interestOps` 置为 OP_ACCEPT

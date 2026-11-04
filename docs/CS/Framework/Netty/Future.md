@@ -212,7 +212,7 @@ public interface Promise<V> extends Future<V> {
 
 **Special ChannelFuture which is writable.**
 
-Use in [Bootstrap.initAndRegister](/docs/CS/Framework/Netty/Bootstrap.md?id=initandregister-core)
+Use in [Bootstrap.initAndRegister](/docs/CS/Framework/Netty/Bootstrap.md?id=initandregister)
 
 ```java
 public interface ChannelPromise extends ChannelFuture, Promise<Void> {
