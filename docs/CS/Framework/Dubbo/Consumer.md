@@ -578,7 +578,7 @@ broadcast=org.apache.dubbo.rpc.cluster.support.BroadcastCluster
 zone-aware=org.apache.dubbo.rpc.cluster.support.registry.ZoneAwareCluster
 ```
 
-前两个（`mock` / `scope`）是 `ClusterWrapper`，只包一层不改变行为；其余是真正的容错策略。
+前两个（`mock` / `scope`）是 `MockClusterWrapper` / `ScopeClusterWrapper` 这类**包装器**（源码中并无 `ClusterWrapper` 这个类），只包一层不改变行为；其余是真正的容错策略。
 
 > [!WARNING]
 >

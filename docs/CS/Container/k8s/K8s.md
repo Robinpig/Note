@@ -282,6 +282,8 @@ K8s 集群是一个具有严格 [acl](/docs/CS/Container/k8s/acl.md) 控制机�
 
 这套控制机制背后是**三套彼此独立的身份体系**：组件/节点用 x509 客户端证书（信任根是集群 CA）、工作负载用 ServiceAccount JWT（签发与校验都在 apiserver 内部，与集群 CA 无关）、v1.36 起还有 Beta 中的 Pod 证书。节点首次加入时的"鸡生蛋"问题由 bootstrap token 解决，日常则由证书 70%~90% 生命周期处的自动轮换维持。完整链路见 [身份与证书](/docs/CS/Container/k8s/Identity.md)。
 
+入口侧的另一道防线是过载保护：apiserver 不再只用两个粗粒度信号量挡流量，而是用 APF 把 600 个总并发按 FlowSchema 分类、按 PriorityLevel 分份额，排队靠 shuffle sharding 隔离租户、靠虚拟时钟保证公平，空闲优先级还会把并发自动借给繁忙者。watch 只在初始化阶段占席位，kubelet 心跳与 leader election 各有独立优先级，过载时不会被业务流量挤死。完整机制见 [APF](/docs/CS/Container/k8s/APF.md)。
+
 容器运行时链路（kubelet → CRI → containerd → shim → runc）见 [containerd](/docs/CS/Container/k8s/containerd.md)。部署工具链：[kubeadm](/docs/CS/Container/k8s/kubeadm.md) 负责引导集群，[Helm](/docs/CS/Container/k8s/Helm.md) 负责应用包管理，日常操作见 [kubectl](/docs/CS/Container/k8s/kubectl.md)，故障排查速查见 [Issues](/docs/CS/Container/k8s/Issues.md)。
 
 K8s 的 API 本身是开放可扩展的：CRD 让你在不改 apiserver 的前提下注册新类型，Controller/Operator 把运维知识写成调谐循环，聚合 apiserver 与准入 Webhook 分别扩展"资源从哪来"和"写入前怎么校验"。四类扩展点的分工、失败模式（`failurePolicy: Fail` 会直接卡住写请求）与 v1.36 中 GA 的 ValidatingAdmissionPolicy / MutatingAdmissionPolicy 见 [扩展机制](/docs/CS/Container/k8s/Extension.md)。

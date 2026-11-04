@@ -381,6 +381,36 @@ digraph observation {
 | tracer 实现选择 | OTel 优先，其次 Brave | `TracerProviderFactory.java:29-35` | classpath 决定 |
 | ObservationRegistry | 复用外部，否则 `ObservationRegistry.create()` | `DubboObservationRegistry.java:57-88` | 外部（如 Spring）优先 |
 
+## QoS / Metrics Source Deep-Dive (3.3.6)
+
+### QoS admin port: real default, startup, relation to 20888
+- 真实管理端口是 **22222**，定义于 `dubbo-plugin/dubbo-qos/.../common/QosConstants.java:21`（`DEFAULT_PORT = 22222`）。
+- 它由 `QosProtocolWrapper`（`@Activate(order = 200)`）在 `Protocol.export()` / `Protocol.refer()` 内通过 `startQosServer(...)` 随业务协议一起拉起（`QosProtocolWrapper.java:77-86, 99-152`）——**不是**独立守护进程，而是挂在业务 Protocol 启动上。
+- 单 Netty 端口同时服务 **telnet 与 HTTP**：`Server.java:46` 开一个端口；`QosProcessHandler.java:78-115` 嗅首字节（`G`/`P` ⇒ HTTP，否则 telnet）切换到 `HttpProcessHandler` / `TelnetProcessHandler`。
+- 配置 key 是 `qos.enable` / `qos.port`（`QosConstants.java:21,27`），**不是** `dubbo.qos.*`；Spring Boot 属性为 `dubbo.application.qos-enable`（`DubboUtils.java:178`），值作为 URL 参数读取（源自 `ApplicationConfig` 的 `@Parameter`）。
+- ⚠️ `20888`（`MetricsConstants.PROMETHEUS_DEFAULT_METRICS_PORT`，`MetricsConstants.java:90`）是**死常量**——全仓库零引用。它本意给 Prometheus 独立导出端口，但从未接线上；QoS 管理端口（22222）与它无关（见 Pitfall List 第 389 行）。
+
+### metrics QoS commands: `metrics` vs `metrics_default`
+- 没有叫 `MetricsCommand` 的类。真实是两个命令：
+  - `metrics` → `PrometheusMetricsReporterCmd`（`@Cmd(name = "metrics")`，`PrometheusMetricsReporterCmd.java:37`），经 `PrometheusMetricsReporter.getResponse()` → `PrometheusMeterRegistry.scrape()` 返回 exposition 文本（`:126` → `PrometheusMetricsReporter.java:67-69`）。
+  - `metrics_default` → `DefaultMetricsReporterCmd`（`@Cmd(name = "metrics_default")`，`DefaultMetricsReporterCmd.java:36`），返回 `DefaultMetricsReporter` 的内存视图（JSON）。
+- HTTP 触发：`GET /metrics` 经 `HttpCommandDecoder.java:38-42` 映射为命令 `metrics`，由 `DefaultCommandExecutor` → `ExtensionLoader<BaseCommand>.getExtension(name)` 分发（`DefaultCommandExecutor.java:58-59`）；每次抓取前先 `resetIfSamplesChanged()`。
+- ⚠️ Prometheus 抓取必须走 `metrics` 而非 `metrics_default`（后者是 JSON 摘要，无 Prometheus 文本）。未引入 `micrometer-prometheus` 时 `metrics` 会因 registry 不可用而回退/报错。
+
+### Micrometer MetricsReporter
+- 核心接口 `MetricsReporter`（`MetricsReporter.java:23-37`）；`AbstractMetricsReporter` 持有 `CompositeMeterRegistry`（`AbstractMetricsReporter.java:74`），把 `MetricSample` 转成 Micrometer meter（`FunctionCounter.builder` `:200`、`Gauge.builder` `:208`）。
+- `DefaultMetricsReporter` 用 `SimpleMeterRegistry`（`DefaultMetricsReporter.java:35,93`）；`PrometheusMetricsReporter` 用 `PrometheusMeterRegistry`（`PrometheusMetricsReporter.java:54,63`）。
+- reporter 类型由 **`MetricsConfig.protocol`**（`MetricsConfig.java:40`，属性 `dubbo.metrics.protocol`，取值 `prometheus`/`default`）经 `MetricsReporterFactory` 自适应 SPI 选择（`DefaultApplicationDeployer.java:406-425`）。⚠️ **没有** `dubbo.metrics.reporter` 这个 key。
+- 注册的 meter：线程池 Gauge `dubbo.thread.pool.{core,max,active,thread.count,queue}.size`（`MetricsKey.java:92-97`，采样于 `ThreadPoolMetricsSampler.java:107-137`）；RT 作 `Timer`（`HistogramMetricRegister.java:52`）；QPS/请求计数作 `FunctionCounter` / 时间窗 `Gauge`（`AggregateMetricsCollector.java:144,215,253-255`）。
+
+> [!WARNING]
+> metrics 与 tracing 有**两条不同的生产路径**却汇聚到同一个 `CompositeMeterRegistry`：`(1)` 指标 RT/QPS/线程池经 `dubbo-metrics-*` collector → `MetricSample` → Micrometer；`(2)` tracing 的 `rpc.client.duration` / `rpc.server.duration` 经 Observation（`ObservationSenderFilter.java:63-68`、`ObservationReceiverFilter.java:62-68`）→ `ObservationMeter.addMeterRegistry`（`ObservationMeter.java:27-32`）。两者不是同一条链路，不要混为一谈（本页 `## Micrometer Observation Unified Model` 讲的是第 2 条）。
+
+### Prometheus export
+- 核心 `dubbo-metrics-prometheus` 模块**没有内置独立 `/metrics` HTTP 服务**；生产可用路径是 QoS 的 `metrics` 命令（端口 22222）返回 `scrape()` 文本。`*Test.java` 里出现的 `com.sun.net.httpserver.HttpServer` 是测试代码，非生产能力。
+- `MetricsConstants.java:68-76` 定义了 `prometheus.exporter.enabled` / `prometheus.exporter.metrics.port` / `prometheus.exporter.metrics.path`，但 main 源码**仅有定义、无消费**（独立 exporter 在 3.3.6 未接线上）。
+- Pushgateway 默认**关闭**：`PrometheusMetricsReporter.java:72` `url.getParameter(PROMETHEUS_PUSHGATEWAY_ENABLED_KEY, false)`；开启时按 `PROMETHEUS_DEFAULT_PUSH_INTERVAL=30s`（`MetricsConstants.java:94`）调度 `PushGateway.pushAdd(...)`。
+
 ## Pitfall List
 
 | 直觉写法 / 印象 | 源码实际 | 后果 |

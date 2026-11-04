@@ -183,7 +183,7 @@ dubbo=org.apache.dubbo.rpc.protocol.dubbo.DubboCountCodec
 
 | 维度 | `Codec2` 体系 | `WireProtocol` 体系 |
 | :--- | :--- | :--- |
-| 抽象层级 | 面向 `Channel` 的逐消息编解码 | 面向 `PuHandler`/探测的协议感知管线 |
+| 抽象层级 | 面向 `Channel` 的逐消息编解码 | 面向 `DefaultPuHandler`/探测的协议感知管线 |
 | 典型实现 | `ExchangeCodec`、`DubboCountCodec` | Triple、HTTP 系协议 |
 | 多协议单端口探测 | 不支持，端口绑定即协议确定 | 支持 magic/首个请求嗅探 |
 | 版本走向 | 维护旧协议（dubbo、telnet、transport） | 新协议（tri、rest2、http 系列）的接入方向 |

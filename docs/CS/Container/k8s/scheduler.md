@@ -7,40 +7,43 @@ kube-scheduler 是 Kubernetes 的默认调度器，职责窄到只有一件事�
 调度器的另一个特征是**每次只调度一个 Pod**。主循环严格单 goroutine 串行，是集群规模上升时的关键瓶颈点。
 
 > [!NOTE]
-> 本文基于 **Kubernetes v1.36.4** 源码实读。v1.36 有一批结构性变更，与多数既有资料的认知差异较大，集中列在文末。
+> 本文基于 **Kubernetes v1.37.2** 源码实读（v1.36 → v1.37 的主要变化：`NextPod` 改为 `NextEntity` 以统一 Pod / PodGroup 出队；`DefaultPreemption.PostFilter` 委托给 `Evaluator.Preempt` 支持异步抢占；新增 `PreBindPreFlight` 扩展点）。
 
 ## Source Code Structure
 
-v1.36 的调度器目录发生过一次重命名，**老路径已经全部失效**：
+v1.36 之后的目录布局稳定，核心文件位置：
 
-| 常见认知（≤1.34） | v1.36.4 实际 |
+| 模块 | 路径 |
 |---|---|
-| `pkg/scheduler/internal/queue/scheduling_queue.go` | `pkg/scheduler/backend/queue/scheduling_queue.go` |
-| `pkg/scheduler/internal/cache/cache.go` | `pkg/scheduler/backend/cache/cache.go` |
-| `pkg/scheduler/scheduler.go` 里的 `scheduleOne` | 已拆到 `pkg/scheduler/schedule_one.go`，且方法名改为大写 `ScheduleOne` |
+| 主循环 | `pkg/scheduler/schedule_one.go` (`ScheduleOne` + `scheduleOnePod`) |
+| 队列 | `pkg/scheduler/backend/queue/scheduling_queue.go` |
+| 调度快照 | `pkg/scheduler/backend/cache/cache.go` |
+| 框架接口 | `staging/src/k8s.io/kube-scheduler/framework/interface.go` |
+| 框架 runtime 实现 | `pkg/scheduler/framework/runtime/framework.go` |
+| 抢占插件 | `pkg/scheduler/framework/plugins/defaultpreemption/default_preemption.go` |
+| 默认插件权重 | `pkg/scheduler/apis/config/v1/default_plugins.go` |
 
-`pkg/scheduler/backend/` 下新增了 `api_cache`、`api_dispatcher`、`heap` 三个子层，用于支撑异步 API 调用（默认关闭）。原来的 `scheduler.go` 现在只剩构造与装配逻辑，主循环不在这里。
+原 `scheduler.go` 现在只剩构造与装配逻辑，主循环已拆到 `schedule_one.go`。
 
 ## Main Loop ScheduleOne
 
-`pkg/scheduler/schedule_one.go:67` 是整个调度器的入口：
+`pkg/scheduler/schedule_one.go:67` 是整个调度器的入口。v1.37 统一了 Pod 与 PodGroup 的出队：
 
 ```go
 func (sched *Scheduler) ScheduleOne(ctx context.Context) {
-	podInfo, err := sched.NextPod(logger)
-	...
-	if sched.genericWorkloadEnabled && podInfo.Pod.Spec.SchedulingGroup != nil {
-		sched.scheduleOnePodGroup(ctx, podInfo.PodGroupInfo)   // 1.36 新增的 gang 分支
-	} else {
-		sched.scheduleOnePod(ctx, podInfo)
-	}
+    entity, err := sched.NextEntity(logger)   // 替代旧的 NextPod
+    if entity == nil { return }               // queue 已关闭
+    switch specificEntity := entity.(type) {
+    case *framework.QueuedPodGroupInfo: sched.scheduleOnePodGroup(ctx, specificEntity)
+    case *framework.QueuedPodInfo:      sched.scheduleOnePod(ctx, specificEntity)
+    }
 }
 ```
 
 `scheduleOnePod` 内部两步走，**调度周期同步，绑定周期异步**：
 
 ```
-NextPod(activeQ.pop)            阻塞取当前最优 Pod
+NextEntity(activeQ.pop)         阻塞取当前最优 entity（Pod 或 PodGroup）
  frameworkForPod               按 pod.Spec.SchedulerName 选 profile
  skipPodSchedule               已在删除 / 已被 assume 则跳过
  UpdateSnapshot                固定本轮调度视图，此后到 Permit 结束前不变
@@ -102,6 +105,169 @@ if cache.headNode != nil {
 
 结尾有一次一致性自检：`nodeInfoList` 长度与 `nodeTree.numNodes` 不相等时，记录 `snapshot state is not consistent ... trying to recover` 并返回 error，本轮调度失败。**看到这条日志说明 cache 与快照已经跑偏**，属于需要上报的实现问题，不是可忽略的告警。
 
+## findNodesThatFitPod: The Complete Scheduling Pipeline
+
+`schedulePod`（`schedule_one.go:572`）是调度周期的算法核心，它把 `findNodesThatFitPod`（过滤）和 `prioritizeNodes`（打分）串起来：
+
+```
+schedulePod
+├─ findNodesThatFitPod(ctx, fwk, state, podInfo)   ← 本节展开
+│   ├─ ListNodesInPlacement()                      — 从快照取所有节点
+│   ├─ RunPreFilterPlugins                          — 可能返回 NodeNames 限定候选集
+│   ├─ evaluateNominatedNode                       — NominatedNodeName 快路
+│   ├─ findNodesThatPassFilters (并行 Filter)
+│   └─ findNodesThatPassExtenders                   — Extender 远程过滤
+├─ len(feasible) == 1 → 直接返回（跳过打分）
+├─ prioritizeNodes(ctx, extenders, fwk, state, pod, feasibleNodes)
+│   ├─ RunPreScorePlugins
+│   ├─ RunScorePlugins  → 加权求和
+│   └─ extenders.Prioritize  → 与框架分数相加
+└─ SortedScoredNodes.Pop() → SuggestedHost
+```
+
+### findNodesThatFitPod 五步
+
+源码（`schedule_one.go:630`）的完整流程：
+
+```go
+allNodes, _ := sched.nodeInfoSnapshot.ListNodesInPlacement()
+
+// ① PreFilter：可能返回 NodeNames 限定后续 Filter 范围
+preRes, s, unscheduledPlugins := schedFramework.RunPreFilterPlugins(ctx, state, pod)
+if !s.IsSuccess() {
+    diagnosis.NodeToStatus.SetAbsentNodesStatus(s)   // 所有节点都被标记为该状态
+    return nil, diagnosis, "", nil
+}
+
+// ② NominatedNodeName 快路：上一轮抢占指定的节点，先试它一个
+if len(pod.Status.NominatedNodeName) > 0 || len(nodeHint) > 0 {
+    feasibleNodes, _ := sched.evaluateNominatedNode(ctx, pod, fwk, state, nodeHint, diagnosis)
+    if len(feasibleNodes) != 0 {
+        return feasibleNodes, diagnosis, nodeHint, nil   // 命中就直接返回，不遍历全集群
+    }
+}
+
+// ③ 如果 PreFilter 给了 NodeNames，过滤候选集
+nodes := allNodes
+if !preRes.AllNodes() {
+    nodes = [...]   // 只保留 preRes.NodeNames 里的节点
+}
+
+// ④ 并行 Filter：每个节点串行跑所有 Filter 插件
+feasibleNodes, err := sched.findNodesThatPassFilters(ctx, fwk, state, pod, &diagnosis, nodes)
+
+// ⑤ Extender 远程过滤（如果配置了 Extender）
+feasibleNodesAfterExtender, _ := findNodesThatPassExtenders(ctx, sched.Extenders, pod, feasibleNodes, diagnosis.NodeToStatus)
+```
+
+两个容易忽略的设计点：
+
+1. **NominatedNodeName 快路是"先试一个"**——如果上一轮抢占给 Pod 标了 `nominatedNodeName`，这一轮先只对那个节点跑 Filter。命中就直接返回，不遍历全集群；不命中才降级到全量遍历。这避免了"抢占后还得重新扫一遍所有节点"的浪费。
+2. **Extender 过滤失败会把 `fwk.ExtenderName` 塞进 UnschedulablePlugins**——因为 Extender 不支持 EnqueueExtensions，所以任何集群事件都会触发这个 Pod 从 unschedulableQ 重入队，无论事件是否相关。这是 Extender 机制的固有缺陷，也是为什么新写插件不要用 Extender。
+
+### prioritizeNodes 与打分
+
+当 feasibleNodes > 1 时进入打分（`schedule_one.go:608`）：
+
+```go
+priorityList, _ := prioritizeNodes(ctx, sched.Extenders, fwk, state, pod, feasibleNodes)
+sortedPrioritizedNodes := framework.NewSortedScoredNodes(priorityList)
+node := sortedPrioritizedNodes.Pop().Name   // 取分数最高的
+```
+
+`prioritizeNodes` 内部先跑框架打分（`RunPreScorePlugins` + `RunScorePlugins`），再跑 Extender 打分，然后把两者**相加**（不是加权平均）。这意味着 Extender 的分数量纲如果和框架不一致，会直接压过框架分——写 Extender 时必须注意归一化到 `[0, MaxNodeScore]`。
+
+### 单节点短路
+
+`schedulePod` 里有个很重要的优化（`:596`）：如果 Filter 后只剩 **1 个可行节点**，**直接返回，不跑打分**。这避免了对唯一可行节点做无意义的 Score 计算，在节点资源紧张、大量 Pod 只能落到个别节点时很有用。
+
+## Binding Cycle: From Assume to PostBind
+
+绑定周期是异步的（`go runBindingCycle`），它和调度周期解耦——调度周期选出节点后就返回去调度下一个 Pod，绑定在后台 goroutine 里完成。完整链路在 `schedule_one.go`：
+
+```
+schedulingCycle (同步)
+├─ UpdateSnapshot
+├─ schedulingAlgorithm → schedulePod → SuggestedHost
+└─ prepareForBindingCycle
+   ├─ assumeAndReserve                     — ① assume 进 cache + RunReservePlugins
+   └─ RunPermitPlugins
+      ├─ Success  → 继续（去 bindingCycle）
+      ├─ Wait     → AddWaitingPod，挂起
+      └─ Reject   → unreserveAndForget，返回 Unschedulable
+
+runBindingCycle (异步 goroutine)
+└─ bindingCycle
+   ├─ RunPreBindPreFlights (可选)          — ② 预检 + 写 NominatedNodeName
+   ├─ WaitOnPermit                         — ③ 等待挂起的 Pod 被唤醒
+   ├─ SchedulingQueue.Done(uid)            — ④ 释放队列里的事件缓冲
+   ├─ RunPreBindPlugins                    — ⑤ PreBind（如 VolumeBinding）
+   ├─ bind (RunBindPlugins)                — ⑥ 实际调 apiserver POST binding
+   └─ RunPostBindPlugins                   — ⑦ PostBind（如清理 assumed 状态）
+```
+
+### assumeAndReserve: 内存侧提交
+
+`assumeAndReserve`（`:315`）做两件事：
+
+1. **`sched.assume(logger, state, assumedPodInfo, host)`**——把 Pod 的 `NodeName` 设为 SuggestedHost，然后调 `Cache.AssumePod`。这一步**只改 scheduler 进程内的 cache**，不碰 apiserver。后续调度的 Filter/Score 看到的 NodeInfo 就已经包含了这个 Pod 的资源占用。
+2. **`RunReservePlugins`**——通知 Reserve 插件（如 VolumeBinding 声明 "这个卷我占了"）。如果 Reserve 失败，调 `unreserveAndForget` 回滚。
+
+> [!IMPORTANT]
+> assume 是**乐观锁语义**：scheduler 假设绑定一定会成功，所以先在内存里占资源。如果实际绑定失败（apiserver 拒绝），会调 `ForgetPod` 回滚 cache。这期间如果有别的 Pod 调度到了同一节点，它看到的 NodeInfo 包含这个"还没真正绑定"的 Pod——这是 scheduler 吞吐的关键（不用等 apiserver 来回）。
+
+### Permit: 同步+异步两段
+
+Permit 分两步走：
+
+1. **调度周期内的 `RunPermitPlugins`**（`prepareForBindingCycle:211`）——同步跑所有 Permit 插件。如果所有插件都 Success，直接进入绑定周期；如果有 Wait，调 `AddWaitingPod` 挂起，然后**仍然返回 Success**（因为绑定周期会等）；如果 Reject，调 `unreserveAndForget` 回滚，Pod 回到 unschedulableQ。
+2. **绑定周期内的 `WaitOnPermit`**（`bindingCycle:433`）——阻塞等待 Pod 被唤醒。其它插件（如 Coscheduling）可以通过 `frameworkHandle.IterateOverWaitingPods` 找到等待中的 Pod 并调 `waitingPod.Allow()` 唤醒它。超时（15min）则失败。
+
+### PreBind → Bind → PostBind
+
+`bindingCycle` 的后半段（`:455` 之后）：
+
+```go
+// Permit 通过后，释放队列里的事件缓冲
+sched.SchedulingQueue.Done(assumedPod.UID)
+
+// PreBind：如 VolumeBinding 把 PV 绑定到 PVC
+if status := schedFramework.RunPreBindPlugins(ctx, state, assumedPod, host); !status.IsSuccess() {
+    return status   // 失败 → handleBindingCycleError → ForgetPod 回滚
+}
+
+// Bind：实际调 apiserver POST /api/v1/namespaces/<ns>/pods/<name>/binding
+if status := sched.bind(ctx, schedFramework, assumedPod, host, state); !status.IsSuccess() {
+    return status
+}
+
+// PostBind：成功后的清理（如清 assumed 状态、记录指标）
+schedFramework.RunPostBindPlugins(ctx, state, assumedPod, host)
+```
+
+> [!TIP]
+> **Permit 是最后一个能把 Pod 标记为 Unschedulable 的扩展点**。PreBind 或 Bind 失败不会让 Pod 进 unschedulableQ，而是进 backoffQ 重试（因为这通常是临时错误，不是真正的"不可调度"）。源码注释（`:449`）明确写了："We define the Pod as 'unschedulable' only when Pods are rejected at specific extension points, and Permit is the last one."
+
+### 失败回滚
+
+`handleBindingCycleError`（`:507`）在绑定周期任何阶段失败时触发：
+
+```go
+// 1. 调 Unreserve 插件回滚资源占用
+schedFramework.RunReservePluginsUnreserve(ctx, state, assumedPod, host)
+
+// 2. 从 cache 移除 assumed Pod
+sched.Cache.ForgetPod(assumedPod)
+
+// 3. 写失败指标
+metrics.PodScheduleErrors.Inc()
+
+// 4. 把 Pod 重新入队（backoffQ 或 unschedulableQ）
+sched.SchedulingQueue.AddUnschedulableIfNotPresent(...)
+```
+
+回滚顺序和 Reserve 相反（LIFO），保证资源占用被正确释放。
+
 ## Scheduling Queue
 
 `PriorityQueue` 由三个部分组成（`backend/queue/scheduling_queue.go:172`）：
@@ -162,6 +328,108 @@ v1.36 新增了两个扩展点：`PreBindPreFlight`（并行 PreBind 预检）�
 | `DefaultParallelism`（并发度） | 16 |
 
 即少于 100 个节点时全量遍历；5000 节点时按 `50 - 40 = 10%` 取 500 个节点，找到足够数量即 `cancel` 掉剩余的并行检查任务。
+
+## Framework Runtime: Plugin Invocation Semantics
+
+扩展点的"顺序"在接口文档里只是声明，真正的执行语义在 `pkg/scheduler/framework/runtime/framework.go`。理解各阶段是**串行还是并行**、**返回什么状态会停止后续插件**，是写自定义插件的前提。
+
+### Filter: Serial within Node, Parallel across Nodes
+
+`RunFilterPlugins`（`framework.go:1105`）对**单个节点**是串行遍历 `f.filterPlugins`：
+
+```go
+for _, pl := range f.filterPlugins {
+    if state.GetSkipFilterPlugins().Has(pl.Name()) { continue }  // PreFilter 标记跳过
+    if status := f.runFilterPlugin(ctx, pl, state, pod, nodeInfo); !status.IsSuccess() {
+        status.SetPlugin(pl.Name())
+        return status   // 第一个失败的 Filter 直接终止该节点的过滤
+    }
+}
+return nil
+```
+
+但调用 `RunFilterPlugins` 的外层（在 `schedule_one.go` 的 `findNodesThatFitPod` 里）是**按节点并行**的——`Parallelizer().Until(ctx, len(allNodes), func(index int) { ... RunFilterPlugins(...) })`。所以整体结构是：
+
+```
+外层: 按节点并行（默认 16 goroutine）
+  内层: 单节点内按插件串行（第一个 Unschedulable 即终止该节点）
+```
+
+`SkipFilterPlugins` 是一个重要的优化点：PreFilter 阶段如果某个插件确认"本 Pod 不需要跑某个 Filter"，就可以把那个插件名加进 skip 集合，避免无效调用。
+
+### Score: Three-Stage Parallel
+
+`RunScorePlugins`（`framework.go:1405`）是三段并行，比 Filter 复杂：
+
+```
+阶段 1: RunScorePlugins → 按节点并行（Parallelizer）
+         每个节点内串行跑所有 Score 插件，收集 RawScores
+         ↓ errCh，任一分支失败 cancel 全部
+
+阶段 2: normalizeScores → 按插件并行（Parallelizer）
+         对实现了 ScoreExtensions() 的插件调 NormalizeScore
+         ↓ 把 RawScores 转成归一化后的 Scores
+
+阶段 3: 加权求和 → 按节点并行
+         TotalScore = Σ (Score × weight)
+```
+
+关键代码片段（`framework.go:1436`）：
+
+```go
+// 阶段 1: 按节点并行收集每个插件的原始分
+f.Parallelizer().Until(ctx, len(nodes), func(index int) {
+    rawScores, status := f.runRawScorePlugins(nodeCtx, state, pod, nodeInfo, plugins)
+    for _, rawScore := range rawScores {
+        pluginToNodeScores[rawScore.Name][index] = fwk.NodeScore{Name: nodeName, Score: rawScore.Score}
+    }
+})
+
+// 阶段 2: 按插件并行归一化
+f.Parallelizer().Until(ctx, len(plugins), func(index int) {
+    pl := plugins[index]
+    ext := pl.ScoreExtensions()
+    if ext == nil { return }   // 没实现归一化的插件跳过
+    ext.NormalizeScore(ctx, state, pod, pluginToNodeScores[pl.Name()])
+})
+```
+
+> [!TIP]
+> **归一化是插件自己的责任，框架不代劳。** 框架只保证 `Score` 返回值落在 `[0, MaxNodeScore]`，但原始分的量纲（0~1 还是 0~100）完全由插件自己 `NormalizeScore` 拉平。忘了实现 `ScoreExtensions` 的插件，原始分会被直接乘权重，很容易压过所有内置插件。
+
+### PreFilter: Serial with Stateful Side Effects
+
+`RunPreFilterPlugins`（`framework.go:934`）是**串行**的，因为 PreFilter 的职责是"为后续 Filter/Score 准备数据"——通常是往 `CycleState` 里写计算结果（比如 Pod 反亲和的目标 Pod 集合）。串行保证插件间没有 race，但也意味着 PreFilter 是调度周期里不能并行化的瓶颈段。
+
+PreFilter 还有一个特殊返回值 `PreFilterResult`，里面的 `NodeNames` 字段可以**直接限定后续 Filter 只跑哪些节点**——这是大规模集群下"先粗筛再细筛"的常见优化（比如 NodeAffinity 在 PreFilter 里直接算出候选节点集合，避免对全集群跑 Filter）。
+
+### Permit: Wait Aggregation
+
+`RunPermitPlugins`（`framework.go:2097`）的语义和其它阶段都不同——它**收集所有插件的 Wait 状态，而不是遇到第一个失败就停**：
+
+```go
+for _, pl := range f.permitPlugins {
+    status, timeout := f.runPermitPlugin(ctx, pl, state, pod, nodeName)
+    switch {
+    case status.IsRejected():  return nil, status            // 立即拒绝
+    case status.IsWait():      pluginsWaitTime[pl.Name()] = timeout; waitStatus = status
+    case !status.IsSuccess():  return nil, status            // 错误
+    }
+}
+if waitStatus.IsWait() {
+    return pluginsWaitTime, waitStatus   // 至少一个插件说"等一下"
+}
+return nil, nil  // 全部 Success
+```
+
+逻辑是：**只要有一个插件 Reject，整个 Permit 失败；只要有一个插件 Wait 且没人 Reject，Pod 进入等待**。等待时间取 `pluginsWaitTime` 里的最大值，但不超过 `maxTimeout`（15min）。等待中的 Pod 由 `waitingPodsMap` 管理，其它插件可以通过 `frameworkHandle.IterateOverWaitingPods` 唤醒它。
+
+> [!TIP]
+> Permit 是 PodGroup（gang scheduling）的核心扩展点——Coscheduling 插件就是在 Permit 阶段检查"同组 Pod 是否都能调度"，不够就 Wait，凑齐了一起通过。
+
+### Reserve: Two-Phase Rollback
+
+`RunReservePluginsReserve`（`framework.go:2014`）在 assume 后调用，`RunReservePluginsUnreserve`（`:2058`）在绑定失败或 Permit 拒绝时调用。这是一个**两阶段提交**的雏形：Reserve 占资源，Unreserve 释放。框架保证只要调用过 Reserve 的插件，后续一定会调用对应的 Unreserve——顺序逆序（LIFO），和数据库的 undo log 一样。
 
 ## Default Plugins and Weights
 
@@ -250,6 +518,68 @@ finalscore := score * weight * (fwk.MaxNodeScore / extenderv1.MaxExtenderPriorit
 
 抢占并不会真的驱逐 Pod，它只是给被抢占者标记 `nominatedNodeName` 并通过 apiserver 删除 victim；真正的驱逐由 apiserver + kubelet 完成。
 
+### SelectVictimsOnNode: The Remove-All-Then-Reprieve Algorithm
+
+`SelectVictimsOnNode`（`defaultpreemption/default_preemption.go:286`）是抢占的核心算法。它在一个候选节点上决定"该驱逐哪些 Pod 才能让 preemptor 落下来"。直觉上是"找出要驱逐的最小集合"，但源码用了一个巧妙的反向策略：
+
+```
+① 先把该节点上所有可被抢占的 Pod 全部从 NodeInfo 里移除
+   removeVictim() —— 同时调 RunPreFilterExtensionRemovePod 更新 CycleState
+
+② 对该节点重跑一遍 Filter（RunFilterPluginsWithNominatedPods）
+   如果 preemptor 还是放不进去 → 这个节点不适合抢占，直接返回
+
+③ 把 potentialVictims 按"重要性"降序排序（优先级高 + 运行时长长的更重要）
+
+④ 逐个尝试"加回"（reprieve）每个 victim：
+   addVictim(victim) → 重跑 Filter
+   ├── preemptor 还能放 → 这个 victim 可以不驱逐，保留
+   └── preemptor 放不下 → 这个 victim 必须驱逐，从 potentialVictims 移除
+   优先尝试加回 PDB-violating 的 victim（保护 PodDisruptionBudget）
+```
+
+源码结构（简化）：
+
+```go
+// 第一步: 全部移除
+for _, victim := range potentialVictims {
+    removeVictim(victim)   // RemovePod + RunPreFilterExtensionRemovePod
+}
+
+// 第二步: 验证 preemptor 是否能放
+if status := RunFilterPluginsWithNominatedPods(...); !status.IsSuccess() {
+    return nil, 0, status   // 这个节点不适合抢占
+}
+
+// 第三步: 按重要性排序，优先 reprieve 重要的
+sort.Slice(potentialVictims, func(i, j int) bool {
+    return MoreImportantVictim(potentialVictims[i], potentialVictims[j])
+})
+
+// 第四步: 逐个加回，放不下的就作为最终 victim
+for _, victim := range potentialVictims {
+    addVictim(victim)
+    if status := RunFilterPluginsWithNominatedPods(...); !status.IsSuccess() {
+        removeVictim(victim)   // 放不回去，这个必须驱逐
+    }
+}
+```
+
+这个算法的精妙之处：**不是枚举"驱逐哪些"的组合（指数级），而是从"全驱逐"出发贪心加回（线性）**。最终驱逐的是"加回去会导致 preemptor 放不下"的那些 Pod，保证了"驱逐数量最少"在贪心意义下成立。
+
+### PostFilter Delegation and Async Preemption
+
+v1.37 的 `DefaultPreemption.PostFilter`（`default_preemption.go:152`）本身很薄：
+
+```go
+func (pl *DefaultPreemption) PostFilter(ctx, state, pod, m) (*PostFilterResult, *Status) {
+    result, status := pl.Evaluator.Preempt(ctx, state, pod, m)
+    return result, status
+}
+```
+
+它把真正的抢占逻辑委托给 `Evaluator`。当 `EnableAsyncPreemption` feature gate 开启时，PreEnqueue 会检查当前 Pod（或其 PodGroup）是否已经有正在运行的抢占——如果有，返回 `UnschedulableAndUnresolvable` 让 Pod 留在 unschedulablePods，等抢占完成后由事件驱动重入队。这避免了同一个 Pod 在等待抢占结果时被反复调度。
+
 ## Nominated Node and Nominator
 
 抢占留下的 `status.nominatedNodeName` 不只是给人看的字段，它在下一轮调度里被**当作优先路径**（`schedule_one.go:663`）：
@@ -327,4 +657,5 @@ Permit 上限 15min 常被误记成 30s 或 5min，这是校验卡住时的常�
 1. [Kubernetes Scheduling Framework](https://kubernetes.io/docs/concepts/scheduling-eviction/scheduling-framework/)
 2. [Scheduler Configuration](https://kubernetes.io/docs/reference/scheduling/config/)
 3. [Pod Preemption](https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/)
-4. [kube-scheduler v1.36.4 source](https://github.com/kubernetes/kubernetes/tree/v1.36.4/pkg/scheduler)
+4. [kube-scheduler v1.37.2 source (本地仓库)](https://github.com/kubernetes/kubernetes/tree/v1.37.2/pkg/scheduler)
+5. [scheduler framework runtime](https://github.com/kubernetes/kubernetes/tree/v1.37.2/pkg/scheduler/framework/runtime)

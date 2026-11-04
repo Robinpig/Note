@@ -514,6 +514,58 @@ OPENAPI_ENABLED = globalConf.getBoolean(H2_SETTINGS_OPENAPI_ENABLED, false);
 > [!NOTE]
 > 注意「**环境变量**」与「**全局配置**」两类作用域不同：前三项走 `ConfigurationUtils.getEnvConfiguration(...)`（读环境变量），后三项走 `getGlobalConfiguration(...)`（读 `dubbo.properties` 等全局配置源）。另外 `REST_ENABLED` / `OPENAPI_ENABLED` 等是 `public static` 字段——它们在**类初始化时**就被赋值，因此同一 JVM 内后续修改配置源不会即时生效（除非重新加载类）。
 
+## Source Reality: SPI Registration + HTTP/2 Layering + Stream Types
+
+把前几节的概念落到**可 grep 的源码事实**上，避免「听起来对但类名记错」。
+
+### The SPI File Proves Three Real Classes
+
+`tri` / `grpc` / `rest2` 不是同一个类的别名——SPI 注册文件里它们是**三个独立类**：
+
+```text
+# dubbo-rpc/dubbo-rpc-triple/.../META-INF/dubbo/internal/org.apache.dubbo.rpc.Protocol
+tri=org.apache.dubbo.rpc.protocol.tri.TripleProtocol
+grpc=org.apache.dubbo.rpc.protocol.tri.GrpcProtocol
+rest2=org.apache.dubbo.rpc.protocol.tri.RestProtocol
+```
+
+`GrpcProtocol` 与 `RestProtocol` **都 `extends TripleProtocol`**（`GrpcProtocol.java:21`、`RestProtocol.java:21`），但继承链上没有任何字段或方法被覆写——所以「三个协议名共享同一套引擎逻辑、差异只在入口层的 `RequestHandlerMapping` 路由」这个结论在源码层面成立。端口常量也在这里坐实：`TripleProtocol.getDefaultPort()` 直接 `return 50051;`（`TripleProtocol.java:97-99`）。
+
+### Transport Layering: h12 / h3 + ALPN Detector
+
+Triple 不是 Dubbo 私有 TCP 帧，而是建立在 **HTTP/2（及 HTTP/1.1 回退、HTTP/3 可选）** 之上。包结构是分层的：
+
+```
+org.apache.dubbo.rpc.protocol.tri
+  ├─ h12/                 HTTP/1.1 + HTTP/2 公共层
+  │   ├─ TripleProtocolDetector     (ProtocolDetector:28，按 ALPN 协商 h2 / http/1.1)
+  │   ├─ http2/GenericHttp2ServerTransportListener  (HTTP/2 服务端传输监听:50)
+  │   └─ http1/DefaultHttp11ServerTransportListener  (HTTP/1.1 回退)
+  ├─ h3/                  HTTP/3 层 (GenericHttp3ServerTransportListener)
+  └─ frame/               HTTP/2 帧解析 (Deframer / TriDecoder, 长度前缀帧)
+```
+
+`TripleProtocolDetector` 实现 `ProtocolDetector`（`:28`），在 `PortUnificationExchanger` 绑定端口后用 ALPN 决定这条连接走 HTTP/2 还是 HTTP/1.1；`GenericHttp2ServerTransportListener` 负责把 HTTP/2 的 HEADERS + DATA 帧翻译成 Dubbo 的 invocation。这也是 Triple 能与标准 gRPC 客户端互通的底层原因：**它真的在说 HTTP/2 + protobuf wire format**（当方法声明为 PB 类型时）。
+
+### RpcType: The Four gRPC-Compatible Method Types
+
+方法类型在 `MethodDescriptor.RpcType`（`dubbo-common/.../rpc/model/MethodDescriptor.java:58-62`）枚举定义，正好对应 gRPC 的四种方法：
+
+```java
+enum RpcType {
+    UNARY,          // 一元：一请求一响应
+    CLIENT_STREAM,  // 客户端流式：多请求一响应
+    SERVER_STREAM,  // 服务端流式：一请求多响应
+    BI_STREAM       // 双向流式：多请求多响应
+}
+```
+
+`RpcType getRpcType()` 由 `MethodDescriptor` 暴露，Triple 在 `refer`/`export` 时据此选不同的 `ServerStream` / `ClientStream` / `BiStream` 实现（见 [Four Invocation Modes](#four-invocation-modes)）。注意 `RpcType` 只有这四种——**没有**「单向 oneway」这个枚举值，单向在 Triple 里是作为 UNARY 之上的语义（`send` 后不等响应），而非独立的流类型。
+
+> [!NOTE]
+> 序列化默认值在 [Serialization: First Check Whether It Is a Protobuf Type](#serialization-first-check-whether-it-is-a-protobuf-type) 已详述：URL 未显式带 `serialization` 时 Triple 走 **hessian2**，`optimizeSerialization(url)`（`TripleProtocol.java:148` / `:186`，分别在 `export`/`refer` 入口调用）只做「PB 生成类 → protobuf 直通，其余 → hessian2」的判定，不引入第三种默认。
+
+
 ## Pitfall List
 
 | 直觉写法 | 源码实际 | 后果 |

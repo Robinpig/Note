@@ -544,6 +544,51 @@ public ChannelHandler dispatch(ChannelHandler handler, URL url) {
 
 `AllChannelHandler.received` 用的是 `getPreferredExecutorService(message)`（按消息类型选线程池），而 `connected` / `disconnected` / `caught` 用 `getSharedExecutorService()`（共享池）；`received` 里还专门捕获 `RejectedExecutionException` 并对 `Request` 回一个 `sendFeedback` 响应（`AllChannelHandler.java:63-72`）——线程池满时不能让客户端干等。
 
+## The Full ChannelHandler Wrapping Chain
+
+`Exchange Layer Roles` 一节展示了 `HeaderExchanger` 内部是 `DecodeHandler(new HeaderExchangeHandler(handler))`——但这只是**内层**装饰。传输层在 `Transporters.bind/connect` 收到 handler 后，会先经过 `ChannelHandlers.wrap` 再交给 `Transporter`：
+
+```java
+// dubbo-remoting/.../transport/dispatcher/ChannelHandlers.java:31-46
+public static ChannelHandler wrap(ChannelHandler handler, URL url) {
+    return ChannelHandlers.getInstance().wrapInternal(handler, url);
+}
+protected ChannelHandler wrapInternal(ChannelHandler handler, URL url) {
+    return new MultiMessageHandler(new HeartbeatHandler(url.getOrDefaultFrameworkModel()
+            .getExtensionLoader(Dispatcher.class)
+            .getAdaptiveExtension()
+            .dispatch(handler, url)));
+}
+```
+
+叠加上 `HeaderExchanger` 注入的 `DecodeHandler`，从「原始 socket 字节」到「业务 `ExchangeHandler.reply`」的完整链路是 **5 层**：
+
+```
+MultiMessageHandler(                              ← 拆 MultiMessage（一次读到多条）
+    HeartbeatHandler(                              ← 心跳探活 / 维护读时间戳
+        AllChannelHandler(                         ← Dispatcher 默认 all，received 派发到业务线程池
+            DecodeHandler(                         ← 触发 Decodeable.decode()，延迟反序列化
+                HeaderExchangeHandler(             ← 按消息类型分派：Response→DefaultFuture / Request→reply()
+                    业务 ExchangeHandler)))))       ← DubboProtocol.requestHandler
+```
+
+各层职责与「在哪个线程跑」：
+
+| 层 | 类 | `received` 做什么 | 线程 |
+| :--- | :--- | :--- | :--- |
+| 1 | `MultiMessageHandler` | 若 `message instanceof MultiMessage`，逐条 `handler.received(channel, subMsg)`；否则透传 | I/O 线程 |
+| 2 | `HeartbeatHandler` | 心跳请求直接回包、心跳响应只更新时间戳，都不下传业务；普通消息下传 | I/O 线程 |
+| 3 | `AllChannelHandler`（默认 `all`） | `submit` 到线程池执行，IO 线程立即返回 | **业务线程池** |
+| 4 | `DecodeHandler` | `message instanceof Decodeable` → `((Decodeable) message).decode()`；`Request` 解 `getData()`、`Response` 解 `getResult()`，再下传 | 业务线程池（在 3 之后） |
+| 5 | `HeaderExchangeHandler` | `Response`→`DefaultFuture.received`；`Request`→`handleRequest`→`reply()` | 业务线程池 |
+
+`DecodeHandler.received`（`DecodeHandler.java:39-52`）的关键点：它做的不是「传输层解码成 Request/Response 对象」（`ExchangeCodec` 已经干完），而是**把 Request/Response 内部承载的 invocation / result 从字节延迟反序列化**——`ExchangeCodec` 解出的是「带未解码 body 的 Request 信封」，真正的参数对象要等 `DecodeHandler` 这一层才落地。把反序列化推迟到线程池里做，正是为了避免在 I/O 线程上卡 CPU。
+
+> [!TIP]
+> 当 `Transporters.bind/connect` 收到**多个** handler（变参 `ChannelHandler...`）时，会先用 `ChannelHandlerDispatcher`（见下）把这些 handler 聚合成一个再传给 `Transporter`；单 handler 则直接透传。也就是说，`ChannelHandlerDispatcher` 是「多 listener 广播」语义，与上面这条「单链路装饰」是两套不同的组合方式。
+
+`ChannelHandlerDispatcher`（`transport/ChannelHandlers...` 实际在 `transport/ChannelHandlerDispatcher.java`）持有一个 `CopyOnWriteArraySet<ChannelHandler>`（`ChannelHandlerDispatcher.java:41`），它的 `received`（`ChannelHandlerDispatcher.java:107-110`）**遍历所有 listener 逐一调用，并对单个 listener 的异常 try/catch 吞掉**——一个 handler 抛错不会阻断其它 handler 收到事件。这正是 `Transporters` 把多个 handler 合一时所用的「广播」实现。
+
 ## HeartbeatHandler and Idle Timeout
 
 心跳不是协议层（`Codec2`）的事，而是 Exchange 层的 `HeartbeatHandler`（包 `exchange.support.header`）负责。它在每个 Channel 上记录最近读/写时间戳：
@@ -662,6 +707,35 @@ public static Serialization getSerialization(Byte id) throws IOException {
 
 `ID_SERIALIZATION_MAP` 由静态块遍历所有 `Serialization` 扩展建立（`:57-72`），映射不上就抛 `IOException("Unrecognized serialize type from consumer: " + id)`——**这是「客户端与服务端序列化实现不一致」最典型的报错点**。
 
+## ExchangeCodec: The 16-Byte Binary Frame
+
+`Codec2.decode` 只负责「拆出一条完整消息」，`ExchangeCodec` 负责把这条消息的**头部**写成固定 16 字节。常量集中在 `ExchangeCodec.java:60-69`：
+
+```java
+// dubbo-remoting/.../exchange/codec/ExchangeCodec.java:60-69
+protected static final int  HEADER_LENGTH    = 16;
+protected static final short MAGIC           = (short) 0xdabb;       // 拆成 MAGIC_HIGH=0xda, MAGIC_LOW=0xbb
+protected static final byte  FLAG_REQUEST    = (byte) 0x80;
+protected static final byte  FLAG_TWOWAY     = (byte) 0x40;
+protected static final byte  FLAG_EVENT      = (byte) 0x20;
+protected static final int   SERIALIZATION_MASK = 0x1f;              // flag 低 5 位放序列化 id
+```
+
+帧布局（大端）：
+
+| 偏移 | 长度 | 字段 | 说明 |
+| :--- | :--- | :--- | :--- |
+| 0–1 | 2 | `magic` | `0xda 0xbb`，校验起点，不匹配则扫描下一处 `0xdabb` 重新对齐 |
+| 2 | 1 | `flag` | 高 3 位：`FLAG_REQUEST(0x80)` / `FLAG_TWOWAY(0x40)` / `FLAG_EVENT(0x20)`；低 5 位（`SERIALIZATION_MASK`）是序列化实现的 content-type-id |
+| 3 | 1 | `status` | **仅 Response 有意义**（OK / SERVICE_ERROR / TIMEOUT 等）；Request 这一字节恒为 `0`，协议版本写在 body 里（`encodeRequestData(..., req.getVersion())`） |
+| 4–11 | 8 | `invocation id` | `req.getId()`，8 字节 long，请求-响应配对的唯一键 |
+| 12–15 | 4 | `body length` | body 字节数，int |
+
+`encodeRequest`（`ExchangeCodec.java:258-290`）写入顺序：`Bytes.short2bytes(MAGIC, header)` → `header[2] = FLAG_REQUEST | serialization.getContentTypeId()`（两路/事件再 `|=` 对应 bit）→ `Bytes.long2bytes(req.getId(), header, 4)` → 序列化 body 后 `Bytes.int2bytes(len, header, 12)`，最后把 16 字节头整体 `writeBytes(header)`。`encodeResponse`（`encodeResponse` 内 `header[2] = serialization.getContentTypeId()` 不带 `FLAG_REQUEST` 位，`header[3] = status`（`ExchangeCodec.java:319-325`）——`decodeBody` 正是靠 `(flag & FLAG_REQUEST) == 0`（`:156`、`:542`）来区分「这是响应还是请求」。
+
+> [!WARNING]
+> **`checkPayload` 不在 `ExchangeCodec` 里，而在 `AbstractCodec`**（`AbstractCodec.java:52-80`）。它在**序列化/反序列化之前**就对 body 长度做硬上限校验：阈值取 URL 的 `payload` 参数，默认 `Constants.DEFAULT_PAYLOAD = 8 * 1024 * 1024`（**8MB**，`Constants.java:83`），超限直接抛 `ExceedPayloadLimitException`。这是反序列化攻击（如 CVE-2020-1948 一类）的 OOM 兜底——恶意方即便声明一个超大 body 长度，也在「读字节」之前就被拒，无法用超大声明撑爆内存。注意 `encodeRequest` 调的是带 `req.getPayload()` 的重载（`:287`），即单请求粒度也能单独设限。
+
 ## Transporter Client Server Channel Layering
 
 remoting 的四层抽象是**接口继承链**而非实现继承，每层只加一样东西：
@@ -688,6 +762,47 @@ Client connect(URL url, ChannelHandler handler) throws RemotingException;
 `Constants.SERVER_KEY` / `CLIENT_KEY` 分别是 `"server"` / `"client"`，`TRANSPORTER_KEY` 是 `"transporter"`——所以 `server=netty4&client=netty4` 这类配置直接生效。默认 `netty`（`@SPI(value = "netty", ...)`）。
 
 `Client` 与 `RemotingServer` 都继承了 `Resetable`（只有一个 `reset(URL url)`）与 `IdleSensible`（只有一个 `canHandleIdle()`，默认 `false`）——这两个接口是 3.x 的扩展点约定：前者让 `DubboProtocol.openServer` 能在复用 Server 时更新配置（`server.reset(url)`），后者让「空闲连接由谁管」可插拔。
+
+## Endpoint Lifecycle: AbstractServer / AbstractClient Template Methods
+
+`NettyServer` / `NettyClient` 的具体逻辑（建连、pipeline）都在 `Transporter.md` 里。`remoting.md` 这里补上**抽象的模板骨架**——因为网上常见「`AbstractServer` 有个 `Status` 枚举管生命周期」的说法，在 3.3.6 是**错的**：
+
+> [!WARNING]
+> **`AbstractServer` / `AbstractClient` 没有 `Status` 枚举。** 连接状态不是枚举，而是 `AbstractPeer`（`AbstractServer` / `AbstractClient` 的共同父类）里的两个 `volatile boolean` 字段：`closing` 与 `closed`（`AbstractPeer.java` 中 `private volatile boolean closing;` / `private volatile boolean closed;`）。判断「能不能用」看这两个布尔，不是 `status == Status.RUNNING` 这种写法。
+
+模板方法结构（两端对称）：
+
+```java
+// dubbo-remoting/.../transport/AbstractServer.java
+public void open() throws ... {
+    ...
+    doOpen();                 // :64 调子类钩子（NettyServer 建 boss/worker、bind 端口）
+}
+protected abstract void doOpen() throws Throwable;     // :81
+protected abstract void doClose() throws Throwable;    // :83
+public void close() { ... doClose(); ... }             // :122
+```
+
+```java
+// dubbo-remoting/.../transport/AbstractClient.java
+public void open() throws ... {
+    ...
+    doOpen();                 // :81 调子类钩子
+}
+public void connect() throws ... {
+    ...
+    doConnect();              // :267 调子类钩子（NettyClient 建 bootstrap、connect 远端）
+}
+protected abstract void doOpen() throws Throwable;     // :416
+protected abstract void doConnect() throws Throwable;  // :426
+public void close() { ... doClose(); ... }             // :355
+```
+
+关键事实：
+
+1. **`open()` 是「开传输」，`connect()` 是「建连接」**，两者在客户端是分开的两步——`open()` 阶段 `doOpen()`，真正握手远端在 `connect()` 阶段的 `doConnect()`（`:267`）。服务端没有 `connect`，只有 `open()` → `doOpen()`。
+2. **子类只实现 `doOpen` / `doClose`（服务端）与 `doOpen` / `doConnect` / `doClose`（客户端）**，生命周期的「状态流转 + 异常处理 + 关闭兜底」全部在抽象基类里统一做，具体传输（`NettyServer`/`NettyClient`）只填钩子。
+3. **重连不是抽象基类管的**——`Client.reconnect()` 是接口方法，具体重连逻辑（带退避、配合 `ReconnectTimerTask`）在 `AbstractClient` 的实现里，不属于「open/close 模板」这一对。
 
 ## Exchange Layer Roles
 
@@ -746,6 +861,32 @@ static void handleResponse(Channel channel, Response response) throws RemotingEx
 
 客户端收到 Response → `DefaultFuture.received` 按 request id 唤醒 future；服务端收到 Request → `handleRequest` → `handler.reply(channel, msg)` → future 完成后回写 Response。**心跳响应在这里被显式排除**（`!response.isHeartbeat()`），因为心跳不占 request id 槽位，走 `HeartbeatHandler` 那条路。
 
+## DefaultFuture: The Request→Response Bridge
+
+`HeaderExchangeChannel.request(invocation)` 发出一个 `Request` 后会立刻拿回一个 `DefaultFuture`，调用方再用 `future.get(timeout)` 阻塞等结果。它是「客户端发 Request → 收 Response」这一段的异步桥，**与 `HeaderExchangeClient` 的连接生命周期（心跳/重连/关链）完全解耦**——后者是连接级，前者是单次调用级。
+
+> [!WARNING]
+> **请求级超时与连接级超时是两套机制，别混。** `HeaderExchange*` 上的 `HeartbeatTimerTask` / `ReconnectTimerTask` / `CloseTimerTask` 管的是「连接 idle / 断线」，而「一次 RPC 多久没回就算超时」由 `DefaultFuture` 自己的 `TimeoutCheckTask` 负责——它挂在 `DefaultFuture` 私有的共享时间轮 `TIME_OUT_TIMER` 上，不在 HeaderExchange 的定时器里。
+
+`DefaultFuture`（`exchange/support/DefaultFuture.java`）的几个核心事实：
+
+```java
+// dubbo-remoting/.../exchange/support/DefaultFuture.java:51-65
+public class DefaultFuture extends CompletableFuture<Object> {        // 注意：是 CompletableFuture 子类
+    private static final Map<Long, DefaultFuture> FUTURES = new ConcurrentHashMap<>();  // id → future
+    private static final GlobalResourceInitializer<Timer> TIME_OUT_TIMER              // 共享 HashedWheelTimer
+            = new GlobalResourceInitializer<>(...);
+}
+```
+
+1. **存储按 invocation id 索引**：`newFuture(...)` 时 `FUTURES.put(id, this)`（`:100`/`:128`），`received` 时 `FUTURES.remove(response.getId())`（`:202`）取出并唤醒。所以「哪个响应对应哪个请求」完全靠这 8 字节 id 配对。
+2. **阻塞等待靠 `CompletableFuture.get()`**：因为 `DefaultFuture extends CompletableFuture<Object>`，`get(timeout)` 就是 `CompletableFuture` 的阻塞语义，超时抛 `TimeoutException`。唤醒发生在 `doReceived(Response res)`（`:254`）里 `complete(res)`。
+3. **请求级超时**（`DefaultFuture.java:107-109`）：`timeoutCheck(future)` 创建 `TimeoutCheckTask`，用 `TIME_OUT_TIMER.get().newTimeout(task, future.getTimeout(), MILLISECONDS)` 注册。超时触发时（`:343`）会构造一个超时 Response，其 status 是 **`future.isSent() ? Response.SERVER_TIMEOUT : Response.CLIENT_TIMEOUT`**——即「请求已经发出到线路上却没回」记为服务端超时，「还没真正发出去就超时」记为客户端超时。这两个 status 码是诊断「到底谁慢」的关键区分。
+4. **`received` 是静态门面**：`DefaultFuture.received(channel, response)`（`:196`/`:200`）按 `response.getId()` 从 `FUTURES` 取 future，调 `future.doReceived(response)` 完成 `CompletableFuture`。`HeaderExchangeHandler.handleResponse` 正是调用这个静态方法把响应送回对的 future。
+
+> [!TIP]
+> `TIME_OUT_TIMER` 用 `GlobalResourceInitializer` 包了一层——它是 JVM 内所有 `DefaultFuture` 共享的一个 `HashedWheelTimer`，而不是每条连接各建一个，避免海量短连接时时间轮爆炸。这与 `HeaderExchangeClient` 自身持有的心跳 `HashedWheelTimer` 是**两个独立的时间轮**。
+
 ## Pitfall List
 
 > [!WARNING]
@@ -763,6 +904,10 @@ static void handleResponse(Channel channel, Response response) throws RemotingEx
 9. **「`heartbeat.timeout` 配多少都生效」**。`UrlUtils.getIdleTimeout` 有下限校验：小于 `heartbeat * 2` 直接抛 `IllegalStateException`，启动即失败。
 10. **「`idleTimeout` 和 `closeTimeout` 是同一个值」**。`close.timeout` 未配时才回落到 `idleTimeout`；两者独立可配，但都必须 ≥ `heartbeat * 2`。
 11. **「`Codec2.decode` 返回 `null` 表示解不出」**。它返回 `DecodeResult.NEED_MORE_INPUT` / `SKIP_SOME_INPUT` 两个状态值表达半包与脏数据，不靠 `null`。
+12. **「`AbstractServer` / `AbstractClient` 用 `Status` 枚举管生命周期」**。3.3.6 里没有这个枚举，状态是 `AbstractPeer` 上的两个 `volatile boolean`：`closing` / `closed`。`open()`→`doOpen()`、`close()`→`doClose()`，客户端还有独立的 `connect()`→`doConnect()`。
+13. **「`checkPayload` 在 `ExchangeCodec` 里」**。它在 `AbstractCodec`（`AbstractCodec.java:52-80`），默认上限 `DEFAULT_PAYLOAD = 8MB`，在序列化**之前**校验 body 长度，是反序列化攻击的 OOM 兜底。
+14. **「请求级超时是 HeaderExchange 的 `TimeoutCheckTask` 管的」**。那个 `TimeoutCheckTask`（在 HeaderExchange 里）管的是连接级；单次 RPC 调用超时由 `DefaultFuture` 自己的 `TimeoutCheckTask` + 共享 `TIME_OUT_TIMER`（`HashedWheelTimer`）负责，`DefaultFuture extends CompletableFuture<Object>`。
+15. **「从 socket 到业务只有 `DecodeHandler → HeaderExchangeHandler` 两层」**。`ChannelHandlers.wrap` 在外层还包了 `MultiMessageHandler → HeartbeatHandler → Dispatcher.dispatch(包装器)`（默认 `AllChannelHandler`），完整是 5 层装饰链；且 `DecodeHandler` 解的是 Request/Response 内部的 invocation/result（延迟反序列化），不是传输层拆帧。
 
 ## Links
 

@@ -11,7 +11,7 @@ Netty 是一个基于 [NIO](/docs/CS/Java/JDK/IO/NIO.md) 的客户端/服务端�
 
 ## Version Baseline
 
-本文以 **Netty 4.2** 源码为准。版本事实（2026-10 核实）：
+本文以 **Netty 4.2** 源码为准。版本事实（2026-11-02 以本地 `netty-4.2.19.Final` tag 逐项复核）：
 
 | 系列   | 最新 GA                        | 说明                                                |
 | :--- | :--------------------------- | :------------------------------------------------ |
@@ -19,12 +19,12 @@ Netty 是一个基于 [NIO](/docs/CS/Java/JDK/IO/NIO.md) 的客户端/服务端�
 | 4.2  | **4.2.19.Final**（2026-10-06）  | 2025-04-03 首次 GA（4.2.0.Final）；4.1 升级无需改 API       |
 | 5.0  | 5.0.0.Alpha5（2022-09-28）     | 分支仍在活跃开发，未 GA；包名改为 `io.netty5.*`；不在本文范围          |
 
-Netty **不存在 4.3 分支**。4.2 相对 4.1 的四个破坏性/结构性变化（详见各专题页）：
+Netty **不存在 4.3 分支**。4.2 相对 4.1 的四个破坏性/结构性变化（详见各专题页，以下源码坐标均对照 4.2.19 实测）：
 
-1. **IO 循环抽象成 `IoHandler`**：`NioEventLoop` / `EpollEventLoop` / `KQueueEventLoop` 全部 `@Deprecated`，改用 `MultiThreadIoEventLoopGroup` + `*IoHandler.newFactory()`，见 [原生传输层](/docs/CS/Framework/Netty/Transport.md?id=iohandler-abstraction)
-2. **默认分配器改为 `AdaptiveByteBufAllocator`**：`io.netty.allocator.type` 默认值由 `pooled` 变为 `adaptive`，见 [内存池](/docs/CS/Framework/Netty/memory.md?id=adaptivebytebufallocator)
-3. **引用计数实现换成 `RefCnt`**：`AbstractReferenceCountedByteBuf` 不再直接用 `AtomicIntegerFieldUpdater`，见 [ByteBuf](/docs/CS/Framework/Netty/ByteBuf.md?id=referencecounting)
-4. **`ioRatio` 默认 100 并引入任务时间片**：见 [EventLoop](/docs/CS/Framework/Netty/EventLoop.md)
+1. **IO 循环抽象成 `IoHandler`**：`NioEventLoop` / `EpollEventLoop` 已 `@Deprecated`，改用 `MultiThreadIoEventLoopGroup` + `*IoHandler.newFactory()`（`NioIoHandler` / `EpollIoHandler` / `KQueueIoHandler` / `IoUringIoHandler`），见 [原生传输层](/docs/CS/Framework/Netty/Transport.md?id=iohandler-abstraction)。注意 **4.2 中并不存在 `KQueueEventLoop` 类**——kqueue 包只保留了 `@Deprecated` 的 `KQueueEventLoopGroup`，`kevent` 循环整体迁入 `KQueueIoHandler`；epoll 侧则仍保留了废弃的 `EpollEventLoop` 兼容类
+2. **默认分配器改为 `AdaptiveByteBufAllocator`**：`io.netty.allocator.type` 默认值由 `pooled` 变为 `adaptive`（源码：`buffer/.../ByteBufUtil.java:81`），且 4.2 是**无条件**默认，不再区分 Android，见 [内存池](/docs/CS/Framework/Netty/memory.md?id=adaptivebytebufallocator)
+3. **引用计数实现换成 `RefCnt`**：`AbstractReferenceCountedByteBuf` 不再直接用 `AtomicIntegerFieldUpdater`，改用 `common/.../util/internal/RefCnt.java`（`volatile int` + CAS 循环；实测**没有** `@Contended`、也没有单线程快路径），见 [ByteBuf](/docs/CS/Framework/Netty/ByteBuf.md?id=referencecounting)
+4. **`ioRatio` 默认 100 并引入任务时间片**：源码 `transport/.../SingleThreadIoEventLoop.java:43-44`（系统属性 `io.netty.eventLoop.ioRatio`）；`ioRatio == 100` 时整个 loop 归 IO、不设任务时间片上限，否则按 `activeIoTimeNanos * (100 - ioRatio) / ioRatio` 给任务分时间，见 [EventLoop](/docs/CS/Framework/Netty/EventLoop.md)
 
 ## Architecture
 
@@ -832,7 +832,7 @@ Netty 的组件是层层引用的，按依赖顺序读比按包结构读省力�
 
 支撑上述组件的 common 工具件各自对应一个 JDK 层面的具体缺陷：[FastThreadLocal](/docs/CS/Framework/Netty/FastThreadLocal.md) 用数组寻址替代 ThreadLocal 的哈希探测，并允许在池化对象上批量清理；[MpscLinkedQueue](/docs/CS/Framework/Netty/MpscLinkedQueue.md) 讲 EventLoop 任务队列采用的**多生产者单消费者（MPSC）**无锁队列；[HashedWheelTimer](/docs/CS/Framework/Netty/HashedWheelTimer.md) 用时间轮把海量超时的管理成本从 O(log n) 降到 O(1)。
 
-协议相关的内容分三块：[编解码器体系](/docs/CS/Framework/Netty/Codec.md) 讲粘包拆包与 `ByteToMessageDecoder` 的累积机制；[HTTP / WebSocket / TLS 协议栈](/docs/CS/Framework/Netty/Protocol.md) 讲协议支持层的 handler 组装与握手流程；[原生传输层](/docs/CS/Framework/Netty/Transport.md) 讲 NIO / epoll / kqueue / io_uring 四种实现的差异与 4.2 的 `IoHandler` 重构。
+协议相关的内容分三块：[编解码器体系](/docs/CS/Framework/Netty/Codec.md) 讲粘包拆包与 `ByteToMessageDecoder` 的累积机制；[HTTP / WebSocket / TLS 协议栈](/docs/CS/Framework/Netty/Protocol.md) 讲协议支持层的 handler 组装与握手流程（其中 [HTTP/2 专题](/docs/CS/Framework/Netty/HTTP2.md) 单列二进制帧层、HPACK、多路复用与流控）；[原生传输层](/docs/CS/Framework/Netty/Transport.md) 讲 NIO / epoll / kqueue / io_uring 四种实现的差异与 4.2 的 `IoHandler` 重构（[io_uring 传输](/docs/CS/Framework/Netty/ioUring.md) 单列 SQ/CQ 共享内存环形队列的真异步 IO 模型）。此外，[DNS 异步解析](/docs/CS/Framework/Netty/Resolver.md) 单独成页，讲 Netty 替代 JDK `InetAddress` 的非阻塞域名解析、缓存与负载均衡。
 
 另有两个横切专题：[流量整形 TrafficShaping](/docs/CS/Framework/Netty/Limiter.md) 讲读写速率控制及其与写水位线的相互作用；[TCP Fast Open 支持](/docs/CS/Framework/Netty/TPO.md) 说明省下一个 RTT 的能力为什么必须走 native epoll transport 才拿得到。
 

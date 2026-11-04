@@ -350,7 +350,7 @@ active-limit=org.apache.dubbo.rpc.filter.ActiveLimitFilter
 
 ### TpsLimitFilter Implementation Notes
 
-`TpsLimitFilter` 用 `RateLimiter`（Dubbo 自实现的固定窗口计数）实现：`tps` 配置每秒允许的请求数，超限抛 `RpcException("Failed to invoke service ...")`。固定窗口的通病它都有——窗口边界处可能放过 2 倍突发流量。两个 Filter 都没有熔断（半开探测）、没有降级回调，失败就是直接抛异常给上层，因此「限流」而不「兜底」。
+`TpsLimitFilter` 用 `DefaultTPSLimiter` + `StatItem`（包 `org.apache.dubbo.rpc.filter.tps`）实现**固定窗口计数**——源码里**没有 `RateLimiter`，也没有 `TpsLimitUtil`** 这两个类（全仓库 `find` 均无命中）。另注意 `tps` 的分母是 `tps.interval`（**默认 60000 ms，不是 1 秒**），细节见下文。固定窗口的通病它都有——窗口边界处可能放过 2 倍突发流量。两个 Filter 都没有熔断（半开探测）、没有降级回调，因此「限流」而不「兜底」；且 TPS 限流是**返回携带异常的 Result** 而非同步抛出，也见下文。
 
 > [!NOTE]
 > 这些内置能力都很「朴素」：单机维度、无平滑、无分布式配额，生产上的限流/熔断通常改用 Sentinel 集成（`dubbo-sentinel-support`），见 [Sentinel](/docs/CS/Framework/Sentinel/Sentinel.md)。
@@ -387,6 +387,94 @@ active-limit=org.apache.dubbo.rpc.filter.ActiveLimitFilter
 | `qos.check` | `false` | `QosProtocolWrapper.java:100` |
 | `qos.accept.foreign.ip` | `false`（仅本机） | `QosProtocolWrapper.java:117` |
 | `executes` / `tps` / `actives` | 未配置则不启用对应 Filter | `dubbo-rpc-api` Filter SPI |
+
+## TpsLimitFilter Source Reality
+
+`TpsLimitFilter`（`dubbo-rpc/dubbo-rpc-api/src/main/java/org/apache/dubbo/rpc/filter/TpsLimitFilter.java`）的真实实现是 `DefaultTPSLimiter` + `StatItem` 两个类（包 `org.apache.dubbo.rpc.filter.tps`），**不存在 `TpsLimitUtil`，也不存在 `RateLimiter`**（全仓库 `find` 均无命中）。算法是**固定窗口计数**：
+
+```java
+// StatItem.java:46-54
+public boolean isAllowable() {
+    long now = System.currentTimeMillis();
+    if (now > lastResetTime.get() + interval) {   // :48 窗口到期判定
+        token.set(rate);                          // :49 一次性重置为满额
+        lastResetTime.set(now);                   // :50
+    }
+    return token.decrementAndGet() >= 0;          // :53 递减到 0 后全部拒绝
+}
+```
+
+字段（`StatItem.java`）：`name:28`、`AtomicLong lastResetTime:30`、`long interval:32`、`AtomicInteger token:34`、`int rate:36`；构造时 `token = new AtomicInteger(rate)`（`:42-43`）。
+
+**它不是令牌桶**：没有 refill 速率、没有按时间比例补发，只有 `token.set(rate)` 的一次性重置——字段叫 `token` 只是命名惯性。单测 `StatItemTest.java:42-48`（`new StatItem("test", 5, 1000L)`，sleep 1100ms 后 `getToken()==4`）坐实「整桶重置」而非匀速补发。**它也不是滑动窗口**：只有 `lastResetTime` 一个时间戳，没有任何分片桶结构。
+
+> [!WARNING]
+> **`tps` 不等于「每秒 N 次」**。分母是 `tps.interval`，而 `DEFAULT_TPS_LIMIT_INTERVAL = 60 * 1000`（`dubbo-rpc-api/.../rpc/Constants.java:49`）。只写 `tps=100` 不写 `tps.interval`，真实含义是**每 60 秒 100 次 ≈ 1.67 QPS**，与直觉差 60 倍。要「每秒 100」必须显式配 `tps.interval=1000`。
+
+### 限流维度与配置读取
+
+```java
+// DefaultTPSLimiter.java:42-49
+boolean isMethodLevelTpsConfigured =
+        url.hasMethodParameter(RpcUtils.getMethodName(invocation), TPS_LIMIT_RATE_KEY);  // :43
+String key = isMethodLevelTpsConfigured
+        ? url.getServiceKey() + "#" + RpcUtils.getMethodName(invocation)   // :45 方法级
+        : url.getServiceKey();                                             // :46 服务级
+int rate      = url.getMethodParameter(methodName, TPS_LIMIT_RATE_KEY, -1);                     // :47
+long interval = url.getMethodParameter(methodName, TPS_LIMIT_INTERVAL_KEY, DEFAULT_TPS_LIMIT_INTERVAL); // :48-49
+```
+
+- **维度 key 是 `url.getServiceKey()`，不是 full URL**：`getServiceKey()`（`URL.java:1336-1346`）→ `BaseServiceMetadata.buildServiceKey`（`BaseServiceMetadata.java:36-48`），格式 `group/interface:version`，**不含 host/port/参数**。同进程内指向同一服务的多个 URL 会**共用同一个计数器**。
+- **方法级优先**：用 `hasMethodParameter` 判断（`:43`），命中则 key 变 `serviceKey#method`，与服务级 `serviceKey` 是两个独立计数器，不互相污染。
+- 配置常量：`TPS_LIMIT_RATE_KEY="tps"`（`Constants.java:45`）、`TPS_LIMIT_INTERVAL_KEY="tps.interval"`（`:47`）。
+- **动态改 `tps` 会丢弃已有计数**：`:58-61` 检测到 rate 或 interval 变化直接 `new StatItem` 覆盖，窗口重新开始。
+- 计数状态在 `DefaultTPSLimiter.stats`（`ConcurrentMap`，`:38`），而 `DefaultTPSLimiter` 是 `TpsLimitFilter` 的实例字段（`TpsLimitFilter.java:43`）——单机单实例内存态，无分布式配额。
+
+### 限流命中的失败形态
+
+`TpsLimitFilter` **不 `throw`**，而是返回一个携带异常的 `AsyncRpcResult`（`TpsLimitFilter.java:48-53`），且用的是**无错误码的单参构造器** `RpcException(String)`（`RpcException.java:58-60`，`code` 默认 `0`）：
+
+```java
+// TpsLimitFilter.java:48-54
+if (!tpsLimiter.isAllowable(invoker.getUrl(), invocation)) {
+    return AsyncRpcResult.newDefaultAsyncResult(
+            new RpcException("Failed to invoke service " + invoker.getInterface().getName() + "."
+                    + RpcUtils.getMethodName(invocation) + " because exceed max service tps."),
+            invocation);
+}
+```
+
+> [!WARNING]
+> **TPS 限流的异常 `isLimitExceed()` 是 `false`**。它 `code=0`，而 `RpcException.java:123` 判定的是 `code == LIMIT_EXCEEDED_EXCEPTION || cause instanceof LimitExceededException`。想按错误码区分「被限流」，`tps` 这条路走不通——只能靠 message 匹配。
+
+另外 `StatItem.java:48` 的「窗口到期判断」与 `:49-50` 的「重置赋值」**非原子**，并发下可重复重置；`token` 在 `:53` 无下界保护，打满后会持续递减为负数直到下次重置。
+
+### 激活条件与 SPI 注册
+
+- `@Activate(group = CommonConstants.PROVIDER, value = TPS_LIMIT_RATE_KEY)`（`TpsLimitFilter.java:40`）。**注解上未声明 `order`**，取 `Activate` 默认 `0`（`Activate.java:93`）。
+- SPI 注册名 **`tps`**，位置是 `META-INF/dubbo/internal/org.apache.dubbo.rpc.Filter:14`——**不是 `META-INF/dubbo/`**（该路径文件在整个仓库不存在）。
+- **默认不启用，双重保险**：① `@Activate(value="tps")` 要求 URL 上出现 `tps` 参数才会被激活；② 即使进链，`rate <= 0` 时 `DefaultTPSLimiter.java:51` 走 else 分支，移除 `StatItem` 并 `return true`。
+
+## TPS vs Executes: Two Different Rate Limiting Semantics
+
+两者虽同为 PROVIDER 侧 `@Activate` 且都产出 `RpcException`，但**度量对象、计数方式、失败形态完全不同**：
+
+| 维度 | `ExecuteLimitFilter` / `executes` | `TpsLimitFilter` / `tps` |
+|---|---|---|
+| 度量对象 | **在途并发数**（`RpcStatus.active`） | **时间窗内累计请求数**（`StatItem.token`） |
+| 计数方向 | +1 / −1 配对（`RpcStatus.java:137`） | 单调递减，仅窗口到期重置（`StatItem.java:49`） |
+| 时间维度 | 无（瞬时量） | 有，`interval` 默认 60000 ms（`Constants.java:49`） |
+| 维度 key | `RpcStatus.getStatus(url, methodName)` | `serviceKey` 或 `serviceKey#method`（`DefaultTPSLimiter.java:45-46`） |
+| 作用端 | PROVIDER（`ExecuteLimitFilter.java:40`） | PROVIDER（`TpsLimitFilter.java:40`） |
+| 失败行为 | **同步 `throw`**（`ExecuteLimitFilter.java:51`） | **返回带异常的 Result**（`TpsLimitFilter.java:49`） |
+| 错误码 | `LIMIT_EXCEEDED_EXCEPTION = 7`（`RpcException.java:37`） | **0 / UNKNOWN**（无参构造） |
+| `isLimitExceed()` | `true` | **false** |
+| 释放时机 | `onResponse`/`onError` 回调（`ExecuteLimitFilter.java:72,83`） | 无释放，只能等窗口到期 |
+| 默认 | 未配 `executes` → `max = Integer.MAX_VALUE`（`RpcStatus.java:102`） | 未配 `tps` → `rate = -1` 放行（`DefaultTPSLimiter.java:47,51`） |
+
+`ExecuteLimitFilter` 实现的是 `Filter.Listener`（`ExecuteLimitFilter.java:41`），靠 `onResponse`/`onError` 配对 `RpcStatus.beginCount`（`RpcStatus.java:101-123`，`:110-114` CAS 自旋判 `i + 1 > max`）；被限流拒绝的那次**不会 `endCount`**（`:77-82`，否则会误减计数）。`TpsLimitFilter` 只实现 `Filter`（`TpsLimitFilter.java:41`），**没有任何回调**——这也是它只能做「单向计数 + 窗口重置」而不能做并发信号量的结构性原因。
+
+一句话：**`executes` 管「同时在跑几个」，`tps` 管「这段时间里一共来了几个」**，二者不可互换，也不叠加成一套限流。
 
 ## Pitfall List
 

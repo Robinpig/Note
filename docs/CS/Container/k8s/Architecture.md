@@ -76,7 +76,7 @@ filter chain 的精确顺序在 `DefaultBuildHandlerChain`（`staging/src/k8s.io
 | 10 | `WithAuthorization` | `:1040` | **最内层**，RBAC / Node / Webhook 联合判定 |
 
 > [!TIP]
-> **APF 排在 Authorization 之前**，这是很多人记反的地方。原因很直接：给请求分流只需要 user（来自认证）和 RequestInfo（来自上一层），完全不需要鉴权结果。换句话说，被拒的请求也曾经占用过队列席位——这是刻意的，否则任意用户都能用非法请求挤爆排队。
+> **APF 排在 Authorization 之前**，这是很多人记反的地方。原因很直接：给请求分流只需要 user（来自认证）和 RequestInfo（来自上一层），完全不需要鉴权结果。换句话说，被拒的请求也曾经占用过队列席位——这是刻意的，否则任意用户都能用非法请求挤爆排队。APF 自身的分类、席位估算、公平排队与并发借贷机制见 [APF](/docs/CS/Container/k8s/APF.md)。
 
 进入 REST handler 之后是 `decode → managedFields 合并 → mutating admission → BeforeCreate 策略校验 → 存储`。落库由 etcd 事务完成，详见 [apiserver](/docs/CS/Container/k8s/apiserver.md?id=write-path)。
 

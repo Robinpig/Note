@@ -259,11 +259,11 @@ return c.CoreV1().Pods(ns).Delete(ctx, name, metav1.DeleteOptions{})
 
 ## Segment 4: kubelet Self-protection — Node Pressure Eviction
 
-这套机制与前面三段**完全没有代码交集**。
+这套机制与前面三段**完全没有代码交集**。以下锚点全部按 **v1.37.2** 复核，v1.36 就已基本一致。
 
 ### Main Loop
 
-`Start`（`pkg/kubelet/eviction/eviction_manager.go:188`）里已经不是老版本的 `wait.Until`：
+`Start`（`pkg/kubelet/eviction/eviction_manager.go:188`）里的循环：
 
 ```go
 // :209-222
@@ -279,19 +279,23 @@ go func() {
 }()
 ```
 
-`monitoringInterval` = **10s**（`kubelet.go:197` `evictionMonitoringPeriod`）。但语义变了：驱逐成功后不 sleep，而是阻塞在 `waitForPodsCleanup`（最多 30s，1s 轮询，`:49-50`）。所以实际节奏是"空闲 10s / 清理完立即重试"。
+`monitoringInterval` = **10s**（`kubelet.go:218` `evictionMonitoringPeriod`）。驱逐成功后不 sleep，而是阻塞在 `waitForPodsCleanup`（最多 30s，1s 轮询，`:49-50`）。所以实际节奏是"空闲 10s / 清理完立即重试"。
 
-`synchronize`（`:248`）的顺序值得记住：
+`synchronize`（`:256`）的顺序值得记住：
 
-1. `summaryProvider.Get()` 取统计（`:295`）
-2. `makeSignalObservations` 算观测值（`:311`）
-3. `thresholdsMet` 判定（`:315`）
-4. `nodeConditions` + `PressureTransitionPeriod` 过滤（`:330-339`）
-5. `localStorageEviction` —— emptyDir / ephemeral 超限，命中就返回（`:364`）
-6. **`reclaimNodeLevelResources` —— 先 GC 试试**（`:387`）
-7. 排序 + 逐个驱逐（`:421-443`）
+1. `summaryProvider.Get()` 取统计（`:303`）
+2. `makeSignalObservations` 算观测值（`:319`）
+3. `thresholdsMet` 判定（`:323`）
+4. **minReclaim 未满足的阈值继续保留**（`:327-329` 的 merge）
+5. `thresholdsFirstObservedAt` + `thresholdsMetGracePeriod` 等 grace period（`:333-353`）
+6. `nodeConditions` + `PressureTransitionPeriod` 过滤（`:338-347`）
+7. `localStorageEviction` —— emptyDir / ephemeral 超限，命中就返回（`:372-375`）
+8. **`reclaimNodeLevelResources` —— 先 GC 试试**（`:395`）
+9. 按优先级排序阈值 + 排序 Pod + 逐个驱逐（`:384-447`）
 
-**每轮最多只杀一个 Pod**（`:421-443` 的循环在成功一次后就 break）。这是刻意的保守设计：杀完一个立刻重新观测，很可能已经降压了。
+**每轮最多只杀一个 Pod**（`:429-449` 的 for 循环在成功一次后就 return）。这是刻意的保守设计：杀完一个立刻重新观测，很可能已经降压了。
+
+阈值优先级在 `byEvictionPriority.Less`（`helpers.go:842`）里：**memory 永远排第一**，其它按是否有可驱逐资源排。
 
 ### Default Threshold
 
@@ -326,35 +330,50 @@ var DefaultEvictionHard = map[string]string{
 
 ### Sorting: QoS Not Considered
 
-这是另一处常见误解。三个 rank 函数（`helpers.go:816-833`）的排序关键字里**没有 QoS 等级**：
+这是另一处常见误解。三个 rank 函数（`helpers.go:819-833`）的排序关键字里**没有 QoS 等级**：
 
 ```go
-819  rankMemoryPressure:  orderedBy(exceedMemoryRequests, priority, memory).Sort(pods)
-824  rankPIDPressure:     orderedBy(priority, process).Sort(pods)
-829  rankDiskPressure:    orderedBy(exceedDiskRequests, priority, disk).Sort(pods)
+// helpers.go:819-833
+rankMemoryPressure:  orderedBy(exceedMemoryRequests, priority, memory).Sort(pods)
+rankPIDPressure:     orderedBy(priority, process).Sort(pods)
+rankDiskPressure:    orderedBy(exceedDiskRequests, priority, disk).Sort(pods)
 ```
 
-实际规则：先按"是否超过自己的 request"，再按 `priority`（低的先走，`:679`），最后按绝对用量降序。QoS 只在 **Admit 阶段**起作用（`eviction_manager.go:163-178`），而且只在"**仅有 memory pressure 一个 condition**"时才放行非 BestEffort 的 Pod；DiskPressure / PIDPressure 下一律拒绝新 Pod。
+实际规则：先按"是否超过自己的 request"（`exceedMemoryRequests`：比较 usage vs `GetResourceRequestQuantity`），再按 `priority`（低的先走，`:680`），最后按"超 request 的绝对增量"降序（`memory` 把 usage 减去 request 再比，`:722-731`）。QoS 只在 **Admit 阶段**起作用（`eviction_manager.go:163-178`），而且只在"**仅有 memory pressure 一个 condition**"时才放行非 BestEffort 的 Pod；DiskPressure / PIDPressure 下一律拒绝新 Pod。
 
 ### Execution: Local kill, Not Through apiserver
 
+v1.37 多了一层 `evictPod` 包装（`eviction_manager.go:633`），它先做 **critical pod 保护**：
+
 ```go
-// eviction_manager.go:623
+// eviction_manager.go:637
+if kubelettypes.IsCriticalPod(pod) {
+    logger.Error(nil, "Eviction manager: cannot evict a critical pod", ...)
+    return false
+}
+```
+
+通过后构造 `DisruptionTarget` condition（`Reason: "TerminationByKubelet"`，`:440-446`），再调 `killPodFunc`：
+
+```go
+// evictPod 内部 :646-654
 err := m.killPodFunc(pod, true, &gracePeriodOverride, func(status *v1.PodStatus) {
     status.Phase = v1.PodFailed
     status.Reason = Reason          // "Evicted"
     status.Message = evictMsg
-    ...
+    if condition != nil {
+        podutil.UpdatePodCondition(status, condition)
+    }
 })
 ```
 
-`killPodFunc` 是 kubelet 注入的 `killPodNow`（`kubelet.go:1074`），定义在 `pkg/kubelet/pod_workers.go:1697`，最终走：
+`killPodFunc` 是 kubelet 注入的 `killPodNow`（`kubelet.go:1074`），最终走：
 
 > `podWorkers.UpdatePod(SyncPodKill)` → `SyncTerminatingPod` → CRI 停容器
 
 **整条链路没有任何 kubeClient 调用。** apiserver 的 `POST .../pods/{name}/eviction` 是给 `kubectl drain`、descheduler 这类外部客户端用的，kubelet 自我保护从不碰它。
 
-被驱逐的 Pod 会带 `DisruptionTarget` condition（`Reason: "TerminationByKubelet"`，`eviction_manager.go:432`）。但注意：**local storage 超限的那三种驱逐不设这个 condition**（`:546`/`:574`/`:600` 传 nil）。
+三种 local storage 超限驱逐（emptyDir `/ ephemeral podfs / ephemeral containerfs`，锚点 :560/:588/:623）仍然**不设 DisruptionTarget condition**——调用方传 nil。
 
 ### Who Set the Taint
 

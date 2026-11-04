@@ -348,6 +348,98 @@ protected void refreshWithPrefixes(List<String> prefixes, ConfigMode configMode)
 - `environment.getConfigurationMaps()` 返回的正是 [Configuration Source and Priority](/docs/CS/Framework/Dubbo/config.md?id=configuration-source-and-priority) 里那七档（按高到低排列），所以 `-Ddubbo.service.xxx` 能覆盖 API `new ServiceConfig().setXxx()` 的原因就在这里：高优先级的 `SystemConfiguration` 子属性先被 `assignProperties` 写回字段。
 - `refresh()` 由 `ServiceConfig.export()` / `ReferenceConfig.get()` 在 `postProcessRefresh()` 钩子里触发（详见 [ServiceConfig](/docs/CS/Framework/Dubbo/ServiceConfig.md) 的 export 流程），确保暴露/引用前字段已被配置中心 / `-D` 刷新。
 
+## Configuration Lookup and Validation Internals
+
+### CompositeConfiguration: First-Hit Short-Circuit Lookup
+
+七档优先级的真正落地在 `CompositeConfiguration.getInternalProperty()`，它是一个**短路遍历**，不是 map 合并：
+
+```java
+// dubbo-common/src/main/java/org/apache/dubbo/common/config/CompositeConfiguration.java:78-95
+public Object getInternalProperty(String key) {
+    for (Configuration config : configList) {          // :79 按加入顺序
+        try {
+            Object value = config.getProperty(key);    // :81
+            if (!ConfigurationUtils.isEmptyValue(value)) {
+                return value;                          // :83 命中即返回，后续源不再读
+            }
+        } catch (Exception e) {
+            logger.error(...);                         // :85-92 单源异常被吞，继续下一档
+        }
+    }
+    return null;                                       // :94 全落空返回 null
+}
+```
+
+要点：
+
+- `CompositeConfiguration` **只重写了 `getInternalProperty`**，没有重写 `getProperty`——后者是 `Configuration` 接口的 default 方法，最终仍回到 `getInternalProperty`，`null` 时用调用方给的默认值兜底。因此"后加入覆盖先加入"的 map 合并语义**不成立**：后续源的同类 key 根本不会被读。
+- "空"的判定是 `ConfigurationUtils.isEmptyValue`：`null` **或** `String` 且 `isBlank` 都算空。所以 `-Ddubbo.protocol.port=`（空串）**不会**短路，会继续降到下一档——空值等价于没配。
+- 单个配置源抛异常不会中断查找，只打一条 error 日志继续下一档。
+
+> [!WARNING]
+> `Environment.getConfiguration()`（`Environment.java:209-221`）只装了 **6 档**，**缺少 `AbstractConfig` 实例档**。运行期通过 `environment.getConfiguration()` 取 `dubbo.*` 时，注解 / API 显式设置的值不会出现在这里——只有 `getPrefixedConfiguration(config, prefix)` 与 `getConfigurationMaps(config, prefix)` 才是完整七档。
+
+> [!TIP]
+> `addConfigurationFirst`（`CompositeConfiguration.java:69-71`）和 `dynamicIncluded`（`:41`）在 3.3.6 主代码里**没有任何调用点**，只有单元测试使用。想插队到 `SystemConfiguration` 之前，目前没有生产级入口。
+
+### ConfigValidator: Where Validation Actually Happens
+
+3.3.6 的校验是**接口 + 单一实现**：接口 `org.apache.dubbo.config.context.ConfigValidator` 只有 `void validate(AbstractConfig config)`，实现是 `DefaultConfigValidator`（`dubbo-config-api/.../config/utils/DefaultConfigValidator.java`），内部按类型分派到 `ConfigValidationUtils`。**不存在** `DubboConfigValidator` 或 `AbstractConfigValidator`。
+
+校验有**两个时机**，且都不是「export 之前单独调一次」：
+
+| 时机 | 调用链 | 校验对象 |
+| :--- | :--- | :--- |
+| 启动加载期 | `ConfigManager.loadConfigs()` → `refreshAll()` → `checkDefaultAndValidateConfigs()` → `getConfigValidator().validate(config)`（`AbstractConfigManager.java:626-630`） | `ApplicationConfig`、`ProtocolConfig`、`RegistryConfig`、`MonitorConfig`、`MetricsConfig`、`TracingConfig`、`SslConfig` |
+| refresh 尾部 | `AbstractConfig.refresh()` → `postProcessRefresh()` → `ConfigValidationUtils.validateServiceConfig(this)`（`ServiceConfig.java:542`） | `ServiceConfig` / `ReferenceConfig` 及其聚合的 registries、protocols |
+
+具体校验项（均在 `dubbo-config-api/.../config/utils/ConfigValidationUtils.java`）：
+
+- **`ApplicationConfig.name` 必填**：`isValid()` 就是 `!StringUtils.isEmpty(name)`（`ApplicationConfig.java:657-661`），不满足直接抛 `No application config found or it's not a valid config!`。
+- **端口**：`ProtocolConfig` **没有端口范围校验**（`validateProtocolConfig` 只 check name/host/contextpath/扩展点）。唯一的端口检查是 `ConfigManager` 里的**重复端口冲突**（`Duplicated port used by protocol configs`，`ConfigManager.java:340-353`）。**没有 `qos.port` 冲突检测**，qos 端口只是从 url parameter 取值。
+- **`RegistryConfig.address`**：`validateRegistryConfig` **不校验 address**，空 address 会被兜成 `ANYHOST_VALUE`。真正的「必须有注册中心」报错在引用侧（`No such any registry to reference`）。
+- **格式校验**：`checkProperty(property, value, maxlength, pattern)`，长度上限 200，正则见 `PATTERN_NAME` 等。
+
+> [!WARNING]
+> `checkProperty` 命中违规时**只 `logger.error`，不抛异常**。超长或含非法字符的配置不会中断启动，只会打一条日志——排查「配了但不生效 / 行为异常」时务必翻这段日志。
+
+> [!WARNING]
+> `validateMetricsConfig` / `validateTracingConfig` / `validateSslConfig` / `validateConsumerConfig` 是**空实现**，这几类配置当前不做任何校验。
+
+> [!TIP]
+> `@Parameter.required()` **只在拼 URL 时生效**（`AbstractConfig.java:244-245`），`refresh()` / `assignProperties` 完全不校验它——`assignProperties` 只消费 `@Parameter.attribute()`（`AbstractConfig.java:799-802`）。所以一个字段标了 `required=true` 但没设值，启动不会失败，而是在 `appendParameters` 阶段抛 `xxx == null`。
+
+## Environment Variable Key Normalization
+
+`EnvironmentConfiguration` 的归一化方向是「把 dubbo 的点分 key **反向大写化**去匹配 OS 环境变量」，共 5 次尝试（`EnvironmentConfiguration.java:33-51`）：
+
+```java
+String value = getenv().get(key);                                 // :37 原样直查
+if (value != null) return value;
+for (String candidateKey : generateCandidateEnvironmentKeys(key)) // :41 4 个候选
+    ...
+String osStyleKey = StringUtils.toOSStyleKey(key);                // :48 兜底
+```
+
+候选生成（`:53-74`，`LinkedHashSet` 去重保序）。以 `dubbo.protocol.port` 为例：
+
+| 次序 | 变换 | 结果 | 行号 |
+| :--- | :--- | :--- | :--- |
+| 1 | `.`→`_`、`-`→`_`、大写 | `DUBBO_PROTOCOL_PORT` | `:56-61` |
+| 2 | `.`→`_`、**删除** `-`、大写 | `DUBBO_PROTOCOL_PORT` | `:63-66` |
+| 3 | 仅 `.`→`_`、大写（保留 `-`） | `DUBBO_PROTOCOL_PORT` | `:68-69` |
+| 4 | 同 1 但**不**大写 | `dubbo_protocol_port` | `:71` |
+| 兜底 | `toOSStyleKey` | `DUBBO_PROTOCOL_PORT` | `:48` + `StringUtils.java:1059-1065` |
+
+兜底 `toOSStyleKey` 的规则（`StringUtils.java:1059-1065`）：`toUpperCase()` → 点转下划线 → **不以 `DUBBO_` 开头则补 `DUBBO_` 前缀**。它只处理点，**不处理连字符**。
+
+> [!WARNING]
+> 候选 4 是**未大写**的 `dubbo_protocol_port`（`:71`），Linux 下小写环境变量同样能命中——「环境变量必须全大写」这个直觉在 Dubbo 里不成立。另外连字符有两条路径：候选 1/4 转成 `_`，候选 2 **直接删除**（`:63-65`），所以 `qos-enable` 同时匹配 `DUBBO_APPLICATION_QOS_ENABLE` 与 `DUBBO_APPLICATION_QOSENABLE`。
+
+> [!TIP]
+> 兜底会自动补 `DUBBO_` 前缀，因此 key `protocol.port` 也能命中 `DUBBO_PROTOCOL_PORT`；但反过来，自定义的非 `dubbo` 前缀配置在环境变量里必须写成 `DUBBO_<你的key>` 才能被兜底路径识别。
+
 ## Common Configuration Pitfalls
 
 | 现象 | 原因 | 处理 |
@@ -365,8 +457,8 @@ protected void refreshWithPrefixes(List<String> prefixes, ConfigMode configMode)
 - [Start](/docs/CS/Framework/Dubbo/Start.md)
 - [registry](/docs/CS/Framework/Dubbo/registry.md)
 - [Metadata](/docs/CS/Framework/Dubbo/Metadata.md)
-- [SPI](/docs/CS/Framework/Dubbo/SPI.md)
 - [Governance](/docs/CS/Framework/Dubbo/Governance.md)
+- [ConfigCenter](/docs/CS/Framework/Dubbo/ConfigCenter.md)
 
 ## References
 

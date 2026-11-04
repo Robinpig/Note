@@ -452,6 +452,73 @@ workerGroup = new NioEventLoopGroup(
 | 拒绝策略（fixed/cached/limited/eager） | `AbortPolicyWithReport`（含 jstack dump，10 分钟限流） | `AbortPolicyWithReport.java:57-132` | — |
 | `eager` 队列容量（queues<=0 规整） | `1`（仅作 offer 钩子交接槽） | `EagerThreadPool.java:54` | — |
 
+## ThreadlessExecutor: No Thread of Its Own
+
+消费端异步调用里有一个反直觉的设计：**`ThreadlessExecutor` 自己不起任何线程**（`dubbo-common/.../threadpool/ThreadlessExecutor.java:40`，`extends AbstractExecutorService`）。它内部只有一个 `ConcurrentLinkedQueue<Runnable>`（`:47`）和一个 `AtomicReference<Object> waiter`（`:54`）。
+
+```java
+// ThreadlessExecutor.java:56-90  (waitAndDrain)
+public void waitAndDrain(long deadline) throws InterruptedException {
+    Runnable runnable = queue.poll();
+    if (runnable == null) {
+        if (waiter.compareAndSet(null, Thread.currentThread())) {   // 标记「当前线程在等」
+            while ((runnable = queue.poll()) == null && waiter.get() == Thread.currentThread()) {
+                LockSupport.parkNanos(this, restTime);              // 把自己(LockSupport)停住，不占线程池
+            }
+        }
+    }
+    do { if (runnable != null) runnable.run(); }                     // 在【调用方线程】上直接跑回调
+    while ((runnable = queue.poll()) != null);
+}
+// :95  execute(Runnable): queue.add(run); LockSupport.unpark(waiter);  ← 响应回来时唤醒调用线程
+```
+
+它的工作模型：消费端发起异步调用后，**调用线程**调 `waitAndDrain` 把自己 `LockSupport.park` 住（不占任何线程池线程）；等响应从 IO 线程回来，IO 线程把回调 `execute` 进队列并 `unpark` 唤醒调用线程，**回调在「原本发起调用的用户线程」上执行**。这样异步结果的后续处理不会额外消耗线程池线程、也省一次线程切换——这正是 Dubbo 异步能扛高并发的关键之一。
+
+> [!NOTE]
+> `ThreadlessExecutor` 只服务于「调用方线程等待自己那次异步结果」的场景；真正的「跨请求」回调（如 `onResponse`）仍走 [Consumer Thread Model](#consumer-thread-model) 里提到的全局共享 `cached` 线程池。两者职责不同：前者是「谁发起谁等」，后者是「通用回调池」。
+
+## ExecuteLimitFilter and RpcStatus: executes Server-Side
+
+服务端并发上限 `executes` 不是在线程池层做的，而是由一个 **Filter** 用信号量式计数拦截——`ExecuteLimitFilter`：
+
+```java
+// dubbo-rpc-api/.../rpc/filter/ExecuteLimitFilter.java:40-53
+@Activate(group = CommonConstants.PROVIDER, value = EXECUTES_KEY)   // ← 服务端、按 executes 激活
+public class ExecuteLimitFilter implements Filter, Filter.Listener {
+    public Result invoke(Invoker<?> invoker, Invocation invocation) throws RpcException {
+        int max = url.getMethodParameter(methodName, EXECUTES_KEY, 0);
+        if (!RpcStatus.beginCount(url, methodName, max)) {           // 超过 executes → 直接拒绝
+            throw new RpcException(
+                RpcException.LIMIT_EXCEEDED_EXCEPTION,               // ← 是 RpcException 子类，不是专用异常
+                "Failed to invoke method ... greater than <dubbo:service executes=\"" + max + "\" />");
+        }
+        ...
+    }
+}
+```
+
+计数由 `RpcStatus` 维护，按 `URL + methodName` 两级 `ConcurrentHashMap`（`RpcStatus.java:36-38`）记录每个方法当前并发数：`beginCount(url, methodName, max)`（`:101`）原子自增并判断是否超 `max`，`endCount(url, methodName, elapsed, succeeded)`（`:130`）在 `invoker.invoke` 之后（含 `onResponse`）归还计数。
+
+> [!WARNING]
+> `executes`（服务端）与 `actives`（消费端）又一次**不对称**：`executes` 由 `ExecuteLimitFilter`（group=PROVIDER）在**服务端**拦截，`actives` 由 `ActiveLimitFilter`（group=CONSUMER）在**消费端**拦截（见 [Filter](#two-chain-systems-filter-vs-clusterfilter)）。在 Provider 上配 `actives` 不会触发任何限制——那里只有 `executes` 生效。
+
+## InvokeMode
+
+调用模式在 `InvokeMode` 枚举（`dubbo-rpc-api/.../rpc/InvokeMode.java:19-22`）定义，只有三个值：
+
+```java
+public enum InvokeMode {
+    SYNC,     // 同步：发出去后阻塞等结果
+    ASYNC,    // 异步：立即返回 Future / CompletableFuture
+    FUTURE;   // Future 模式（先拿 Future，后续 get）
+}
+```
+
+> [!WARNING]
+> **`InvokeMode` 没有 `ONEWAY` 这个值。** 单向（fire-and-forget）在 3.x 不是枚举项，而是由 URL 上的 `return=false`（即 `INVOCATION_MODE_KEY` 推导）表达的语义——`sent` 关键字管的是「发送时是否阻塞等写入完成」，与「单向」是两件独立的事（见 [remoting](/docs/CS/Framework/Dubbo/remoting.md) 与 [Provider](/docs/CS/Framework/Dubbo/Provider.md)）。把 `ONEWAY` 当成 `InvokeMode` 枚举值，是 2.x 记忆带来的典型误读。
+
+
 ## Pitfall List
 
 | 直觉写法 / 印象 | 源码实际 | 后果 |
