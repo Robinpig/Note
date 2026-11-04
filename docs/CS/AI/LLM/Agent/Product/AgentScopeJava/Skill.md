@@ -1,5 +1,3 @@
-# Skill
-
 ## Introduction
 
 Skill 是 AgentScope Java 对「可复用能力包」的抽象：一个目录里放一份 `SKILL.md`（说明用途、给 agent 看的指令），可以再带参考文档、脚本。写好后丢给 agent，它会在合适的时候自己用。
@@ -119,6 +117,137 @@ description: 当用户需要代码评审、风格反馈或 PR 审核时使用。
 
 沙箱模式下三步走：**物化到宿主 → 投影进沙箱 → 容器内执行**。投影默认根 `AGENTS.md skills/ subagents/ knowledge/ .skills-cache/`，按内容 SHA-256 整体比对，没变就跳过 hydrate。跨调用保留脚本副作用（npm install、pip install、编译输出）需要配 `snapshotSpec(...)`——快照保存整个 `/workspace`，下次同一 scope key 的调用先恢复快照、再叠加投影。
 
+## Skill Loading And Usage (Source Pipeline)
+
+上一节「[如何被读取](#how-the-agent-reads-skills)」讲的是概念，这一节把链路落到源码类与调用关系上。核心结论：**技能不是一次性塞进 system prompt，而是「多仓库合并 → 过滤 → 物化 → 装进 `RuntimeContext` → 按需加载」的分阶段管线，且隔离边界建在 `RuntimeContext` 上**——这正是 `SkillRuntime` javadoc 点明的「catalog 存 context 不存共享 runtime，是 `SkillLoadTool` 的授权边界」。
+
+### Model And Parsing
+
+`AgentSkill`（`core/.../skill/AgentSkill.java:68`）是技能的内存模型，五个字段：`metadata`（必含 `name` + `description`）、`skillContent`（指令正文）、`resources`（`Map<path,content>` 附属文件）、`source`（来源标识）、`originDir`（可选磁盘源目录，用于 `<files-root>` 与磁盘回退）。`getSkillId()` 返回 `name + "_" + source`（如 `code-reviewer_workspace-namespaced`，正是 `load_skill_through_path` 与 `<skill-id>` 使用的 id）。
+
+`SKILL.md` 由 `MarkdownSkillParser`（`core/.../skill/util/MarkdownSkillParser.java:68`）解析：正则抽 `---` frontmatter，YAML 用 SnakeYAML `SafeConstructor`（带 `FRONTMATTER_CODE_POINT_LIMIT = 16_384` 上限 + 嵌套深度上限）解析，解析失败回退到逐行简单 `key: value` 提取（只取标量，跳过列表 / 块标量）；`normalizeMetadataValue` 把容器规整成稳定的 `Map<String,Object>` / `List<Object>` 树，便于后续 XML 渲染。`generate(metadata, content)` 则把模型**还原成完整 `SKILL.md`（frontmatter + 正文）**——`SkillLoadTool` 加载 `SKILL.md` 时调它，保证 LLM 读到的字节与 `skill_manage(action=patch)` 改的是同一份（旧版只回 body，导致 patch 在 frontmatter 边界附近 `old_string` 匹配失败）。
+
+### Loading: Repository → Registry → Catalog
+
+加载落点是 `SkillRegistry`（`core/.../skill/SkillRegistry.java:32`）——一个 `Map<String, AgentSkill>`，6 个方法（register / get / getSkillIds / exists / remove）。它不关心来源：`ClasspathSkillRepository` / `FileSystemSkillRepository` / `RuntimeContextSkillRepository`（core），`GitSkillRepository` / `Mysql` / `Postgres` / `Nacos`（extensions）都实现 `AgentSkillRepository` 接口（`getAllSkills` / `getSkill` / `save` / `delete` / `skillExists` / `getRepositoryInfo` / `getSource` + `isWriteable`），构成「多后端可插拔」的加载来源。
+
+合并发生在 `HarnessSkillMiddleware`（`harness/.../middleware/HarnessSkillMiddleware.java:72`）的 `onSystemPrompt` 内 `mergeRepositories`（:349）：按 `repositories` 注册顺序遍历，同名 skill **后者赢**（与「四层组合」概念一致），并记住每个 winning skill 的来源 repo（`RepoBound`），供后续 lazy 资源与物化使用。`frozenSkills` 非空时直接用冻结快照、跳过实时合并（这正是 `disableDynamicSkills()` 的落点）。
+
+### Rendering: Catalog → `<available_skills>`
+
+渲染链（`onSystemPrompt`，:262-315）一次完成：
+
+1. `skillsForCall(ctx)` → `mergeRepositories` 合并；
+2. `applyVisibility`（agent-created skill 的可见性过滤）+ `applySkillFilter`（builderFilter overlay 到 RuntimeContext 的 `SkillFilter`）；
+3. `stager.stage(enabled, sourceNamespaces, scopeKeyFor(ctx))` —— 即 [MarketplaceStager 物化](#marketplacestager-and-files-root)（`<files-root>` 那一步）；
+4. 每个 skill 包成 `HarnessSkillEntry`（skill + `lazyResources` + `filesRoot`），`SkillCatalog.of(entries)` 成**不可变**目录；
+5. `runtime.install(catalog, ctx, toolkit)` —— **把 catalog 存进 `RuntimeContext`**（不是共享 runtime），并幂等注册 `load_skill_through_path` 工具为 **ungrouped**（不受 active-group 列表影响，老 session 也能用）；
+6. `runtime.renderPrompt(...)` → `SkillPromptBuilder.render`（`SkillPromptBuilder.java:120`）拼 `<available_skills>` 块，且**仅当至少一个 visible skill 有 `filesRoot` 时才追加 code-execution 指令**（否则会误导 LLM 以为有 shell 可用）。
+
+`SkillCatalog`（`harness/.../runtime/SkillCatalog.java:30`）就是 `Map<String, HarnessSkillEntry>` 的不可变包装——**每次 call 一个快照**。
+
+### Usage: Runtime Load (`load_skill_through_path`)
+
+agent 决定用某 skill 后调内置工具 `load_skill_through_path(skillId, path)`，真实实现是 `SkillLoadTool`（`harness/.../runtime/SkillLoadTool.java:54`）的 `callAsync`（:156）：
+
+- 从 `param.getRuntimeContext()` 取 catalog（`catalogFor`，:187）——**授权边界**：只能加载本 call 可见的 skill，被过滤掉的即便别的 session 暴露也加载不到，并发 session 互不污染；
+- `catalog.get(skillId)` 找 entry；
+- `loadOne`（:195）四级查找，越靠后越「重」：
+  1. `path == "SKILL.md"` → 返回完整 markdown（用 `MarkdownSkillParser.generate` 重建，含 frontmatter）；
+  2. 内存 `resources` 命中 → 直接返回；
+  3. `lazyResources.read(path)` 回退磁盘（`WorkspaceSkillRepository` 等 `LazyResourceCapable` 源，按 per-user namespace + 沙箱路由）；
+  4. 都没 → 报错并**枚举真实可用路径**，不是死路。
+
+⚠️ 读 `SKILL.md` / `references/` 走内存或宿主文件系统，**与沙箱无关**；只有 shell 跑脚本才需要文件真进容器（见 [MarketplaceStager 节](#marketplacestager-and-files-root)）。
+
+```dot
+digraph SkillLoad {
+  rankdir=TB;
+  node [shape=box, style=rounded, fontsize=11];
+  Repo [label="AgentSkillRepository 多后端\n(classpath/fs/git/mysql/nacos/...)"];
+  Parse [label="MarkdownSkillParser\n解析 SKILL.md frontmatter"];
+  Reg [label="SkillRegistry\nMap<id, AgentSkill>"];
+  Merge [label="HarnessSkillMiddleware.mergeRepositories\n按注册序合并, 同名后者赢"];
+  Filter [label="applyVisibility + applySkillFilter"];
+  Stage [label="MarketplaceStager.stage\n物化到 .skills-cache (SHA-256)"];
+  Entry [label="HarnessSkillEntry\nskill + lazyResources + filesRoot"];
+  Cat [label="SkillCatalog (不可变快照)"];
+  Ctx [label="RuntimeContext.put(SkillCatalog.class)\n隔离边界"];
+  RT [label="SkillRuntime.install + renderPrompt"];
+  Prompt [label="<available_skills> 块\n(SkillPromptBuilder)"];
+  Load [label="SkillLoadTool.callAsync\nload_skill_through_path"];
+  Repo -> Parse -> Reg -> Merge;
+  Merge -> Filter -> Stage -> Entry -> Cat -> Ctx -> RT -> Prompt;
+  Prompt -> Load [style=dashed, label="agent 选中"];
+  Ctx -> Load [style=dashed, label="catalogFor 授权"];
+}
+```
+
+## Two Loading Tracks: SkillBox (Core) vs SkillRuntime (Harness)
+
+AgentScope-Java 的 skill 加载**不是单一实现**，而是**按「是否使用 harness 层」分层并存的两套机制**——这点最容易被误读成「框架有两套互相打架的加载器」。事实是它们服务不同场景，互不竞争：
+
+- **Harness 轨**（上一节 `Skill Loading And Usage` 描述的）：`HarnessAgent`（`implements Agent`，**不继承** `ReActAgent`）在 build（`HarnessAgent.java:2900`）装配 `HarnessSkillMiddleware`，走 `SkillRuntime` + 不可变 `SkillCatalog` + scope-key 隔离 + 物化 + 沙箱投影，加载工具是 `SkillLoadTool`（`load_skill_through_path`）。
+- **Core 轨**：裸 `ReActAgent`（core 层，不依赖 harness）走 `DynamicSkillMiddleware`（`ReActAgent.build():5585` 引用）+ `SkillBox`，把 `SkillBox` 直接存进 `RuntimeContext`，加载工具是 `SkillBox.registerSkillLoadTool` 形态。
+
+两套**都把「per-call 授权视图」存进 `RuntimeContext`**，且都用**内容寻址**（signature / scope key）做隔离与去重；`disableDynamicSkills()` 是跨两轨通用的「build 时合并一次」开关（harness → frozen middleware；core → 跳过每 call 重合并）。
+
+| 维度 | Core 轨（`SkillBox` / `DynamicSkillMiddleware`） | Harness 轨（`SkillRuntime` / `HarnessSkillMiddleware`） |
+| :--- | :--- | :--- |
+| 适用 | 裸 `ReActAgent`、不依赖 harness 的场景 | `HarnessAgent`（生产 harness，带沙箱 / 多租户） |
+| 视图载体 | `SkillBox` → `RuntimeContext.put(SkillBox.class)` | `SkillCatalog`（不可变快照）→ `RuntimeContext`，按 `scopeKeyFor(ctx)` 隔离 |
+| 隔离粒度 | `computeSignature`（SHA-256 内容寻址：name+source+metadata+content+资源键+originDir）→ 每个 signature 一个独立 temp 目录 | `scope key`（PER_USER / PER_SESSION / PER_AGENT）→ catalog 是 `SkillLoadTool` 的授权边界 |
+| 缓存 | `boxCache`（`MAX_CACHED_BOXES`，满了 `clear()`；**evict 只清引用不删资源目录**，active 请求仍可读） | catalog 每次 call 一个快照，无长生命周期缓存 |
+| 物化 | `autoUploadSkill=true` 时 `uploadSkillFiles()` 到 `uploadDir` | `MarketplaceStager` 物化到 `.skills-cache`（文件级 SHA-256 去重） |
+| 沙箱投影 | 无（core 不认知沙箱） | 有（`SandboxLifecycleMiddleware` 投影 + snapshotSpec） |
+| 加载工具 | `SkillBox.registerSkillLoadTool`（老的 `load_skill` 形态） | `SkillLoadTool`（`load_skill_through_path`，四级查找） |
+
+### `SkillRegistration`: The Programmatic Four-Layer Composition
+
+概念层的「四层组合（skills / tools / agents / teams）」在**编程式注册**上的真身，是 `SkillBox.SkillRegistration`（`SkillBox.java:286`）——一个 skill 不只是 `SKILL.md` 指令，还能把整包能力注册进 toolkit：
+
+| 注册项 | 方法 | 含义 |
+| :--- | :--- | :--- |
+| Java 工具对象 | `.tool(Object)` | 扫描对象上的 `@Tool` 方法，注册为工具 |
+| 原生工具 | `.agentTool(AgentTool)` | 直接注册一个 `AgentTool` 实例 |
+| MCP 连接 | `.mcpClient(McpClientWrapper)` | 把 MCP server 的工具暴露给该 skill |
+| 子 Agent | `.subAgent(SubAgentProvider)` | 把一个子 Agent 注册成工具（默认 `message` + 可选 `session_id`，支持持久会话） |
+| 预设参数 | `.presetParameters(...)` | 调用该 skill 工具时自动注入的参数 |
+| 模型覆盖 | `.extendedModel(...)` | 该 skill 工具使用的模型 |
+| 工具白/黑名单 | `.enableTools(...)` / `.disableTools(...)` | 限定子 Agent / 工具可见的工具集 |
+
+这正是「skill = 能力包」的落地：skill 可以携带工具、子 agent、MCP 连接，而不只是文本指令。`apply()` 后这些能力随 skill 一起进入 per-call 视图。
+
+```dot
+digraph Tracks {
+  rankdir=LR;
+  node [shape=box, style=rounded, fontsize=11];
+  subgraph cluster_core {
+    label="Core 轨 (裸 ReActAgent)";
+    R1 [label="ReActAgent"];
+    M1 [label="DynamicSkillMiddleware\nonSystemPrompt"];
+    B1 [label="SkillBox\n(存 RuntimeContext)"];
+    D1 [label="signature temp dir\n(computeSignature SHA-256)"];
+    C1 [label="SkillRegistry"];
+    C1 -> M1 -> B1 -> D1;
+    R1 -> M1;
+  }
+  subgraph cluster_harness {
+    label="Harness 轨 (HarnessAgent)";
+    R2 [label="HarnessAgent\n(implements Agent)"];
+    M2 [label="HarnessSkillMiddleware\nonSystemPrompt"];
+    RT [label="SkillRuntime"];
+    CAT [label="SkillCatalog\n(不可变, scope key)"];
+    STAGER [label="MarketplaceStager\n.skills-cache"];
+    R2 -> M2 -> RT -> CAT;
+    M2 -> STAGER -> CAT;
+  }
+  RC [label="RuntimeContext\n授权视图载体", shape=ellipse];
+  B1 -> RC [style=dashed, label="put(SkillBox.class)"];
+  CAT -> RC [style=dashed, label="put(SkillCatalog.class)"];
+}
+```
+
 ## Self-Learning Loop
 
 Harness 拼了一套「让 agent 自己起草 / 沉淀 / 整理 skill」的闭环，各阶段独立可开：
@@ -173,6 +302,97 @@ agent.promoteSkill("notes-taker", "alice")                   // 手动晋升一�
 源码侧的对应物：`SkillCurator`（整理主逻辑）、`SkillPromoter` / `SkillPromotionGate` / `LocalApprovalGate` / `NotifyAndWaitGate` / `RejectAllGate`（闸门族）、`SkillVisibilityFilter` / `CompositeFilter` / `EnvironmentFilter` / `CanaryFilter` / `AllowListFilter` / `AbstractAgentCreatedFilter`（过滤族）、`SkillUsageStore` / `SkillUsageBackend` / `FilesystemSkillUsageBackend` / `BaseStoreSkillUsageBackend` / `SkillUsageRecord`（计数族）、`SkillSecurityScanner`、`SkillAuditLog`、`SkillCandidate`、`NotificationSink`。
 
 `SkillUsageMiddleware` 的计数语义值得注意（javadoc）：「the model decided to invoke this skill on this turn」——**不是**「the call succeeded」；provenance 门控在 store 内部，只记 `created_by="agent"` 或 `"agent-draft"` 的技能。
+
+## Skill Self-Management: Source Mechanisms
+
+本节是上一节「Self-Learning Loop」概念层的**源码落地**——agent 怎么写 skill、草稿怎么晋升、不用了怎么归档、安全怎么兜底。核心是 `SkillManageTool`（写）+ `SkillPromoter`（晋升）+ `SkillCurator`（整理）+ `SkillSecurityScanner`（扫描）+ `SkillAuditLog`（审计）五个协作类。
+
+### Authoring: `SkillManageTool` & `ProposeSkillTool`
+
+`SkillManageTool`（`skill_manage`，`AgentTool`）把六类操作 dispatch 到 `dispatchSync`（`SkillManageTool.java:240`）：
+
+| action | 语义 |
+| :--- | :--- |
+| `create` | 写全新 `SKILL.md`（frontmatter 必需） |
+| `edit` | 全量重写已有 `SKILL.md` |
+| `patch` | **精确字符串替换**：`old_string` / `new_string`；`all=false` 时要求唯一匹配，空 `new_string` 即删除 |
+| `write_file` | 新增/覆盖 `references/` / `templates/` / `scripts/` / `assets/` 下的单文件 |
+| `remove_file` | 删附属文件 |
+| `archive` | 归档 |
+
+**写入落点**：默认写到 `skills/_drafts/<name>/`；`autoPromote=true` 直写 `skills/`；**drafts win on collision**（草稿覆盖同名正式）。
+
+**写后静态安全扫描**（:341 / :422）：每次落盘后跑 `SkillSecurityScanner.scan` → `shouldAllow(TrustLevel.AGENT_CREATED, scan.verdict())`，`DANGEROUS` 时**回滚**到写前内容（`target.writeSkillFile(name, "SKILL.md", previous, ctx)`）——agent 可改后重试，而非被静默吞掉。
+
+`ProposeSkillTool`（`propose_skill`）是 `SkillManageTool` 的**委托包装**（:48）：接受 `body`（**无 frontmatter，框架自动补**）+ 脚本列表，转成 `create` + `write_file`，免 agent 手撸 YAML frontmatter。
+
+### Promotion: `SkillPromoter` Five Steps
+
+`SkillPromoter.promote(name, reviewerId, ctx)`（:87）把草稿推成正式 skill，依次五步：
+
+1. `SkillSecurityScanner.scan` 安全扫描（:106）；
+2. `buildCandidate(draft, scan)`（:116）—— 含 `buildScriptPreview` 给 reviewer 看脚本预览；
+3. 过 `SkillPromotionGate.review(candidate, ctx)`（:124）→ sealed `PromotionDecision` 三态；
+4. `workspaceManager.moveSkill(ctx, src, dst)`（:145）移出草稿目录到正式；
+5. sidecar 盖 `promoted_by` + 目标环境（:150），`SkillAuditLog.promoteEntry`（:172）写审计。
+
+`SkillPromotionGate`（sealed interface，`review` 返回 `PromotionDecision` permits `Approve` / `Reject` / `Defer`，:49）：
+
+| 决策 | 字段 | 用途 |
+| :--- | :--- | :--- |
+| `Approve` | `reviewerId, targetEnvironments, decidedAt` | 放行并标记目标环境 |
+| `Reject` | `reason, reviewerId` | 拒绝（附原因） |
+| `Defer` | `retryAfter, reason` | 暂缓（如等人工，可重试） |
+
+内置三闸门：`RejectAllGate`（全拒，仅程序化 promote）、`LocalApprovalGate`（本地人工，stdin 等）、`NotifyAndWaitGate`（多副本，写 `.review_request.json` 等）。
+
+### Lifecycle State Machine
+
+`SkillUsageRecord.State` 枚举（:60）：`DRAFT` → `ACTIVE` → `STALE` → `ARCHIVED`，外加 `pinned=true` 钉住免自动迁移。
+
+`SkillCurator.applyAutomaticTransitions`（:193）**只对 `createdBy=="agent"` 且未 `pinned` 的已晋升 skill** 做自动迁移（草稿归 promotion gate 管）：
+
+- `anchor`（latestActivityAt，无则 createdAt）早于 `archiveCutoff`（> `archiveAfterDays`）→ **ARCHIVED**（由 `mainRepo.delete` 非破坏性归档到 `.archive/`，不是真删）；
+- 早于 `staleCutoff`（> `staleAfterDays`）且当前 ACTIVE → **STALE**；
+- 晚于 staleCutoff 且当前 STALE → 回 **ACTIVE**（reactivated，双向）。
+
+```dot
+digraph Lifecycle {
+  rankdir=LR;
+  node [shape=box, style=rounded, fontsize=11];
+  DRAFT [label="DRAFT\n(草稿 _drafts/)"];
+  ACTIVE [label="ACTIVE\n(已晋升, agent 创建)"];
+  STALE [label="STALE\n(>staleAfterDays 无活动)"];
+  ARCHIVED [label="ARCHIVED\n(>archiveAfterDays, 非破坏性)"];
+  PINNED [label="pinned=true\n(免自动迁移)", shape=note];
+  DRAFT -> ACTIVE [label="promote"];
+  ACTIVE -> STALE [label="无活动 >staleAfterDays"];
+  STALE -> ACTIVE [label="再次活动 (reactivated)"];
+  ACTIVE -> ARCHIVED [label="无活动 >archiveAfterDays"];
+  STALE -> ARCHIVED [label="无活动 >archiveAfterDays"];
+  ACTIVE -> PINNED [style=dashed, label="pinned"];
+}
+```
+
+### Audit & Security Scanning
+
+`SkillAuditLog`（`AUDIT_DIR = "skills/.audit"`，:52）：按**天**分文件，经 `WorkspaceManager.appendUtf8WorkspaceRelative`（标准写路径）追加；两类条目 `manageEntry`（管理操作）/ `promoteEntry`（晋升操作）；`query(dayUtc, filter)` 可按谓词检索——收集器故障时也能给运维一份可查记录。
+
+`SkillSecurityScanner`（最终工具类）：枚举 `Severity` / `Category` / `Verdict`（SAFE / CAUTION / DANGEROUS）/ `TrustLevel` / `Finding` / `ScanResult`；`shouldAllow(TrustLevel, Verdict)`——SAFE/CAUTION 放行，DANGEROUS 阻断（注释提到 Hermes 的「ASK」模式在此折叠）。正则库覆盖五大类危险模式：
+
+| 类别 | 代表检测（正则意图） |
+| :--- | :--- |
+| 数据外泄 | `curl -d/--data/--data-binary`、`wget --post-data`、`cat\|tar\|gzip … \| nc` |
+| 提示注入 / 越权 | `<system>` / `<admin>` 注入、`DAN` / `jailbreak` / `developer mode` |
+| 破坏性 | `rm -rf /`、`mkfs.<fs> /dev/`、`dd of=/dev/(sd|nvme|hd|xvd|disk)`、`> /dev/...` |
+| 持久化 | `crontab -`、写 `~/.bashrc` / `~/.zshrc` / `~/.profile` |
+| 反向 shell | `bash -i >& /dev/tcp/`、`nc -e` / `nc -l/-lvp`、`base64 -d \| bash`、`eval $(curl)`、`curl\|bash` |
+
+### Curator State & Umbrella (Dry-Run)
+
+`SkillCuratorState`（`skills/.curator_state.json`，Jackson 注解，:28）：`lastRunAt` / `runCount` / `paused` / `lastRunSummary` / `lastRunDurationSeconds` / `lastReportPath`；`isPaused()` / `setPaused()` 支持**运行时暂停**（程序化 `runCuratorOnce` 绕过 `PeriodicGate` 节流）。
+
+**伞合并（umbrella consolidation）** `runUmbrellaDryRunReport`（:258）：按名字第一段（dash / underscore / dot 分隔）聚类成 *PREFIX CLUSTERS*，生成 Markdown 报告写到 `skills/.curator_reports/<ts>/REPORT.md`，含结构化 YAML（`consolidations: []` / `prunings: []`）。**注意：真正的 LLM 合并尚未实现——当前只是 dry-run 出报告，不实际改技能**（源码注释明确标注为 stub，默认 `DRY_RUN_ONLY`）。
 
 ## SubAgent
 
@@ -352,11 +572,8 @@ chat.sendToSubagent(subagentId, "重点关注 LLM agent").block();
 
 ## Links
 
-- [主笔记](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/AgentScopeJava.md)
-- [工具分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Tool.md)
-- [工作区分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Workspace.md)
-- [上下文分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Context.md)
-- [AgentScope（Python 版）](/docs/CS/AI/LLM/Agent/Product/AgentScope/AgentScope.md)
+- [AgentScope-Java](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/AgentScopeJava.md)
+
 
 ## References
 

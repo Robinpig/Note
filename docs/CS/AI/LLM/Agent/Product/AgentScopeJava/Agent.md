@@ -1,5 +1,3 @@
-# Agent
-
 ## Introduction
 
 本分册覆盖 AgentScope Java 的**智能体接口与调用方式**：`Agent` 接口的三段式组合、`ReActAgent.Builder` 的完整参数、实例生命周期模型、结构化输出、单次执行控制句柄（`AgentRun`）、中断、人机交互（HITL）与模型容错。消息与事件体系的完整事实在 [消息分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Message.md)，Harness 装配层的能力矩阵在 [主笔记](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/AgentScopeJava.md)。
@@ -195,6 +193,8 @@ ReActAgent.builder()
 
 ## Links
 
+- [Harness Agent 分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/HarnessAgent.md)
+- [记忆分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Memory.md)
 - [主笔记](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/AgentScopeJava.md)
 - [消息分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Message.md)
 - [工具分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Tool.md)
