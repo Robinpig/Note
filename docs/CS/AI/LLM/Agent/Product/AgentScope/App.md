@@ -125,6 +125,119 @@ app = create_app(
 - `agentscope[workspace-docker]` → aiodocker
 - `agentscope[tools]` → 内置 `Grep` 需要的 `rg` 二进制，版本锁 `ripgrep>=14.1,<15`（15.x 只有部分平台的 wheel，其它平台回退 Rust sdist 无工具链会编译失败；远程沙箱在镜像内装 ripgrep，不走此 extra）
 
+## Deployment Switches: Three Role-Separation Toggles
+
+`create_app` 的三个布尔开关把 Service 层拆成可独立部署的角色，源码落点：
+
+- `enable_index_worker`（默认 `True`，`src/agentscope/app/_app.py:86`）——`False` 时索引循环挪到独立进程 `python -m agentscope.app.rag.index_worker`；`True` 时在 API 进程内起 `IndexWorker` + `IndexTaskConsumer`。（`enable_index_worker` 还会与 `knowledge_base_manager is not None` 做 AND，见 `_app.py:366-368`。）
+- `enable_channel_worker`（默认 `True`，`src/agentscope/app/_app.py:90`）——`False` 时本进程不持有频道长连接，连接交给独立 channel worker；API 端点仍可用，只把「连接」移走。
+- `enable_scheduler`（默认 `True`，`src/agentscope/app/_app.py:91`）——`False` 时本节点不持有 APScheduler 定时器，只写 storage 并 bus 通知 owner 节点。
+
+三者关闭后对应 API 端点**仍然可用**：它们的实现改成「写 storage → 经 bus 排队唤醒」，真正的长连接/定时器/索引循环由 owner 节点 reconcile。这套 reconcile 模式统一在 `SchedulerManager.reconcile` / `ChannelLifecycleDispatcher.reconcile` / `IndexSweeper` 三处。注意 trunk 把这三个开关列在 `Agent Service` 一节，但**实际默认值都是 `True`（嵌入部署）**，只有横向扩展时才显式关掉其中某个。
+
+## MessageBus: Five Primitives
+
+`MessageBus`（`src/agentscope/app/message_bus/_base.py:53`）是整个 Service 层的神经中枢。trunk 称「六原语」，但 base 类的接口实际暴露**五族消费语义** + 一层 session/inbox/wakeup 业务 helper。base 类文档字符串自述「Three orthogonal modes are exposed」（A/C/D），但实现里还包含了分布式锁（E）与注册表（F）两族，共五族：
+
+| 族 | 语义 | 抽象方法（行号） | 典型用途 |
+| :--- | :--- | :--- | :--- |
+| **Mode A — drain queue** | 单消费者、ack-on-read，读走即删 | `queue_push:95` / `queue_drain:131` / `queue_delete:159` | wakeup 触发队列、session inbox（HintBlock 投递） |
+| **Mode C — replay log** | 多消费者、非破坏性、`max_len`/`ttl` 限长 | `log_append:175` / `log_read:214` / `log_trim:244` | session event log（SSE late-join 补历史） |
+| **Mode D — transient broadcast** | fire-and-forget，仅实时订阅者收到 | `publish:264` / `subscribe:284` | wakeup signal、cancel broadcast、schedule lifecycle notify |
+| **Mode E — distributed lock** | 集群级互斥，带心跳续租 | `acquire_lock:327` / `is_locked:359` / `try_lock:373` / `unlock:395` | session run 锁（同 session 同时只有一个 `ChatService.run` 在跑） |
+| **Mode F — registry map** | hash-keyed namespace，支持 CAS（`registry_set_if`）与 pop-exactly-once | `registry_set:403` / `registry_set_if:434` / `registry_pop:464` / `registry_del:482` / `registry_exists:495` / `registry_getall:511` / `registry_get:528` / `registry_drop:548` | background task 全局注册表、channel liveness 心跳 |
+
+base 类不碰任何业务 key —— 所有 key 格式集中在 `MessageBusKeys`（`src/agentscope/app/message_bus/_keys.py`）：`session_events:130` / `session_lock:144` / `wakeup_queue:203` / `wakeup_signal:208` / `bg_tasks:251` / `schedule_lifecycle:298` / `channel_liveness:337` / `channel_seen_chats:356`。
+
+在此之上 base 类还提供了 session/inbox/wakeup/bg-task 业务 helper，把上面的原语组合成可复用能力：`session_run:590`（acquire lock → yield → trim log）、`session_is_running:606`、`session_publish_event:616`、`session_read_events:634`、`session_subscribe_events:651`、`inbox_push:710` / `inbox_drain:727`、`enqueue_wakeup:744` / `enqueue_input:767` / `dequeue_wakeups:792` / `subscribe_wakeup_signal:806`、`bg_task_register:823`。关键常量：`_SESSION_LOCK_KEY="agentscope:session:lock:{sid}":572`、`_SESSION_REPLAY_MAX_LEN=1000:576`。
+
+Redis 实现 `RedisMessageBus`（`src/agentscope/app/message_bus/_redis_message_bus.py:48`）把这五族映射到 Redis 数据结构：`queue_*` 用 Stream（`queue_push:225` / `queue_drain:257`）、`log_*` 用 Stream + `MAXLEN`（`log_append:307` / `log_read:350`）、`registry_*` 用 Hash（`registry_set_if:434` 的 CAS 走 Lua 脚本保证原子）、`acquire_lock:628` 的分布式锁带 `_heartbeat:673` 心跳续租（防进程崩溃死锁）、`publish`/`subscribe:564` 走 Redis pub/sub。base 类文档明确说**不暴露「counted broadcast」**——要 fan-out 给 N 个成员，生产者写时各自 push 一条 Mode A 到每个收件人 inbox，总线不维护 consumer group 状态。
+
+> [!NOTE]
+> trunk 把 Mode C 的「replay-then-live」描述为 `MessageBus.open_reply_stream`。**实际 v2.0.8 并不存在这个方法**——`open_reply_stream` 是 `src/agentscope/app/channel/_stream.py:31` 的一个**模块级 async 生成器函数**（被 `ChannelClients` 调用，见 `_clients.py:203`），不是 `MessageBus` 的成员。它先用 `bus.log_read(event_key, max_count=SESSION_REPLAY_MAX_LEN=1000)` 把最近 1000 条历史事件拉回（`:93`），再进入 `bus.subscribe` 实时模式（`:57`），用 `_entry_id` 做去重（`:103-107`），遇到 terminal event（`REPLY_END` / `REQUIRE_USER_CONFIRM` / `REQUIRE_EXTERNAL_EXECUTION`，定义于 `_stream.py:22`）即停。消费者因此可在 run 已经开始后才订阅而不会漏事件。
+
+## WakeupDispatcher: Single Serial Consumer
+
+`WakeupDispatcher`（`src/agentscope/app/_manager/_wakeup_dispatcher.py:65`）每进程**只有一个** asyncio task（`__aenter__` 里 `asyncio.create_task(self._loop(...))`，`:125`）。`_loop` 订阅 `wakeup_signal` 频道，每次收到信号就 `queue_drain(wakeup_queue, max_count=64)` 一批（`:181-184`），然后逐条 `_dispatch_one`。
+
+设计要点（与 trunk 一致，均经源码确认）：
+
+- **串行消费**：所有 run trigger 只走这一个消费者，分布式 `session_lock` 是保险；正常流程里锁几乎不会被竞态（docstring `:8-10`）。
+- **`is_locked` 检查**：`_dispatch_one` 在 spawn 前 `is_locked(session_lock)` 判定（`:275`），锁被占则该 trigger `_schedule_retry`（backoff `_RESUME_RETRY_BACKOFF_SECS=0.1`，`:62`）后重入队（`:355`，最终 `enqueue_run_trigger`，`:391`），**绝不丢弃**。
+- **orphan guard**：spawn 前 `storage.get_session(...)` 查存在性（`:300`），session 已删则投放一条 `ReplyEndEvent(ERROR)` 让前端快速失败，而非让 `ChatService.run` 崩溃。
+- trigger 分三类（`src/agentscope/app/message_bus/_keys.py:33-51`）：`wake`（idle session 唤醒，`input_msg=None`）、`resume`（parked HITL 投递结果）、`message`（真实用户 `Msg` 新轮次）；后两者携带 input，锁冲突时一律重排。
+
+## SchedulerManager: In-Memory APScheduler with Reconcile
+
+`SchedulerManager`（`src/agentscope/app/_manager/_scheduler/_scheduler_manager.py:33`）拥有**内存版** `AsyncIOScheduler`（`from apscheduler.schedulers.asyncio import AsyncIOScheduler`，`:90`）。之所以不能多副本持有：`jobstore` 在内存，每个副本都会在每个 cron tick 触发任务。
+
+- **fire 路径与 `ChatService` 解耦**：`_build_trigger` 触发的 coroutine 不直调 `ChatService.run`，而是把 schedule prompt 包装成 `HintBlock`（带 `<scheduled-task>` XML 标签，`:289-302`）经 `deliver_to_inbox` 投到目标 session inbox，再 `enqueue` 一个 wakeup（`:303-309`）。于是 wakeup 由任意节点的 `WakeupDispatcher` 接手——与 channel 消息、team / 后台工具结果走同一条投递链路。
+- **reconcile 是真相同步机制**：`reconcile:421` 读 `storage.list_all_schedules()`，把本地 job set 驱动到与「enabled records」一致（增缺的、删 gone 的、`updated_at` 变动的重建，`:437-453`）。`_listen:457` 订阅 `schedule_lifecycle` 通知即时 reconcile，`_periodic:482` 每 `RECONCILE_INTERVAL_SECS=60` 秒（`55`）自愈一次丢失的通知。`notify_changed:398` 只 publish 一条通知（丢了最多等一个周期）。
+- **校验**：`validate_schedule:331` 要求 5 段 cron 表达式、非空 IANA timezone、且 `ended_at > started_at`；`CronTrigger.from_crontab` 不可用（吞掉 start/end 窗口），见 `:339-386`。`misfire_grace_time=300` 防止错过窗口的任务静默丢失（`:509`）。
+
+## Channel Routing: Deterministic uuid5 Sessions
+
+Channel 路由**不需要持久化映射表**。`resolve`（`src/agentscope/app/channel/_routing.py:41`）是纯函数：给定入站 `ChannelEvent` 与 `ChannelRecord`，先从 `bindings` 取第一个匹配的（`:55-59`），再算 `scope_key`，最后用 uuid5 得出 `session_id`。
+
+```python
+# channel/_routing.py:18
+_SESSION_NAMESPACE = uuid5(NAMESPACE_URL, "agentscope.channel.session")
+
+# channel/_routing.py:63-73
+if binding.session_scope is SessionScope.PER_CHAT_USER:
+    scope_key = f"{event.chat_id}:{event.channel_user_id}"
+else:
+    scope_key = event.chat_id
+session_id = str(uuid5(
+    _SESSION_NAMESPACE,
+    f"{record.id}:{binding.agent_id}:{scope_key}",
+))
+```
+
+后果与 trunk 一致：多节点零协调（任何节点算出同一 `session_id`）、幂等创建（`_gateway._ensure_session` 查存在不才 upsert）、删除安全（删后同 chat 同 scope 自动重建）。
+
+## Channel Subsystem: Gateway (Data Plane) + Dispatcher (Control Plane)
+
+Channel 子系统按数据面/控制面拆成两个独立组件，与 trunk 叙述吻合：
+
+- **`ChannelGateway`（数据面，无状态）** —— `src/agentscope/app/channel/_gateway.py:46`。`process(event):67` 是唯一入口，分流到 `_handle_decision`（卡片点击，`:88` → `_resume:154` → `resume_after_decision`）与 `_handle_message`（消息，`:184` → `resolve` 算出 `agent_id/session_id`，`:198`，并在有 `chat_id` 时 `registry_set(channel_seen_chats, ...):200`）。**只入站**：活跃 session 写 inbox（HintBlock）/ 空闲 session enqueue wakeup，确认点击则读 session state 找等待中的 tool_call 恢复 parked run。
+- **`ChannelLifecycleDispatcher`（控制面，持有长连接）** —— `src/agentscope/app/channel/_dispatcher.py:54`。每节点一个，`_instances: dict[channel_id, ChannelInstance]:77` 持有所有本地长连接。`lifespan:82` 先 `reconcile` 再起两个 loop：`_listen:187`（订阅 lifecycle 事件 reconcile）+ `_periodic:204`（每 `LIVENESS_REFRESH_SECS=10:41` 做 reconcile + 心跳）。`reconcile:101` 让 `_instances` 与 storage 里 enabled records 对齐；`_publish_status:217` 把 liveness 通过 bus 广播（API 副本无 dispatcher，只能从 bus 读状态）。
+
+输出方向完全反向：Agent 跑完事件直接发 bus，持有该 channel 长连接的 Dispatcher 经 `open_reply_stream`（`channel/_stream.py:31`）订阅 session events → 调 channel client 发 REST。**Gateway 只入站、Dispatcher 只持有连接**，两者经 bus + storage 间接协作，无直接调用。
+
+## Storage Backends: RedisStorage vs AsyncSQLAlchemyStorage
+
+v2.0.8 两套后端均实现 `StorageBase`（`src/agentscope/app/storage/_base.py`）：
+
+- **`RedisStorage`** —— `src/agentscope/app/storage/_redis_storage.py:53`。基于 Redis，记录带 TTL 语义（`_set_with_ttl:194` / `_refresh_key_ttl:199`），适合高吞吐、可过期的会话/凭证/工具类记录。注意它与 `RedisMessageBus` 是**两个独立 Redis 客户端**——storage 管持久化、bus 管传输，正是 `create_app` 里「`storage` 与 `message_bus` 刻意解耦」的来源。
+- **`AsyncSQLAlchemyStorage`** —— `src/agentscope/app/storage/_sql/_storage.py:90`。异步 SQLAlchemy 2.0，支持 SQLite / Postgres / MySQL 任意方言；`__aenter__:162` 时惰性 `Base.metadata.create_all`（`:207`），全新部署无需手动建库。时间戳统一存 **naive UTC**——`_utcnow:67` 生成、`_to_naive_utc:79` 归一（注释见 `_sql/_storage.py:11-16`），保证跨时区可比且不与 aware 时间混用。`Chunk` 的 `embedding` / `score` 不进扁平 Record，而是拆成 promoted column（`_indexed_fields`）+ `payload` JSON（mapper 在 `storage/_sql/_mappers.py`），保证 dialect 中立与「无重复」往返不变量。
+
+Blob 走独立 `BlobStoreBase`（`src/agentscope/app/rag/blob_store.py`），v2.0.8 提供 `LocalBlobStore`（默认 `./blobs`），S3 走同一抽象。
+
+## Hub Implementations: GitHubHub and ClawHub
+
+Hub 抽象与 trunk 一致，源码落点细化：
+
+- **`HUB_ID_PATTERN`** = `re.compile(r"[a-zA-Z0-9_-]+")`（`src/agentscope/app/hub/_base.py:7`），`HubBase` 构造时 `fullmatch` 校验，否则 `ValueError`（`:49`）。`create_app._index_hubs`（`src/agentscope/app/_app.py:49`）按 `hub_id` 建索引，重复 id 直接 `ValueError`——同一 kind 的 hub 必须 id 唯一，否则路由无法唯一定址。
+- **`GitHubHub`（MCPHubBase 首实现）** —— `src/agentscope/app/hub/_mcp/_github_hub.py`。`DEFAULT_BASE_URL = "https://api.mcp.github.com":29`，`hub_id` 默认 `"github"`（构造器 `:110`，`base_url` 默认同 `:133`）。`_request:165` 是带鉴权的 HTTP 客户端，`_to_card:299` 把远端条目转成 `MCPCard`。
+- **`ClawHub`（SkillHubBase 首实现）** —— `src/agentscope/app/hub/_skill/_claw_hub.py`。`DEFAULT_BASE_URL = "https://clawhub.ai":33`，`hub_id` 默认 `"clawhub"`（`:88`）。`_request:220` / `download:277` 走 ClawHub HTTP API，`_to_card:456` 转 `SkillCard`。
+
+两个 hub 都是「从远端注册中心发现并装载」的 HTTP 客户端，无本地状态；`hub` router 把「发现 / 装载 / 列出」暴露成 HTTP 端点。
+
+> [!WARNING]
+> **与主干 AgentScope.md 的冲突点**：主干「Permission System」一节将 `DenyAllResourceAccessPolicy` 的逐文件事实指向 **Middleware 分册（权限）**，并称其在「跨 owner 访问」处由权限引擎处理。但 v2.0.8 **真实位置是 `src/agentscope/app/access/_policy.py:153`**（`ResourceAccessPolicyBase` 在 `:79`，`list_accessible` / `can_edit` 为其抽象方法），**不在任何 permission / 中间件包里**。`create_app` 默认装 `DenyAllResourceAccessPolicy()`（`_app.py:302-304`），再包进 `ResourceAccessService`（`_lifespan.py`）。本分册「ResourceAccessPolicy」一节已正确归位到 `app/access/`，与源码一致；主干的指针应理解为「权限 DSL 的 5 模式 × 4 行为」在 Middleware 分册，而「跨 owner 资源共享策略」是 Service 层独立子系统，二者不混。
+
+## SOP and Classifier: Absent in v2.0.8
+
+trunk 的「Version Delta: v2.0.8 → v2.0.10」一节把 **SOP / Classifier / AskUser Tool / TUI** 标为「超出 v2.0.8」的新子系统。本分册以 v2.0.8 为基准，逐目录核实：
+
+- `src/agentscope/app/sop/` —— **不存在**（本树 `ls` 无此目录）。
+- `src/agentscope/app/classifier/` —— **不存在**。
+- `src/agentscope/app/middleware/_sop_step_middleware.py` —— **不存在**。
+- `app/_service/_sop.py`、`tool/_builtin/_ask_user.py`、`src/agentscope/tui/` 等均为 v2.0.9 / v2.0.10 才加入（仓库另有 `v2.0.9` / `v2.0.10` tag，其 commit 历史含 `feat(classifier)`、`feat(sop)` 等）。
+
+因此本文档**不收录** SOP / Classifier / AskUser / TUI 的任何事实；它们属于 v2.0.10+ 分册范畴，强行写入会与 v2.0.8 源码不符。主干「Service Layer」一节对 `sop/` 的描述应读作「后续版本前瞻」，不应回灌到本分册。
+
 ## Links
 
 - [AgentScope](/docs/CS/AI/LLM/Agent/Product/AgentScope/AgentScope.md)

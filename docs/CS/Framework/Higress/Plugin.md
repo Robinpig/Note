@@ -6,11 +6,14 @@ Higress 把"扩展能力"压成一个模型：插件就是 Envoy HTTP filter 链
 - **插件开发**：Go SDK 的真实 API 名、外部 HTTP / Redis 寻址、Go 1.24 编译换代、Wasm 运行时模型。
 - **AI 插件家族**：`ai-proxy` 协议转换、key 池 / 故障转移、模型负载均衡、token 限流配额、语义缓存、内容安全与脱敏、MCP 托管、AI 可观测。
 
-不在本页的内容：AI 网关的产品定位、控制台路由层（模型级 Fallback 只在那一层）、网关内置 MCP Server Filter 与 McpBridge、HiMarket 平台——这些在 [AI Gateway](/docs/CS/Framework/Higress/AI_Gateway.md)。源码级模块地图与 108 条注解 key 总表在 [Source Map](/docs/CS/Framework/Higress/Source_Map.md)。
+不在本页的内容：AI 网关的产品定位、控制台路由层（模型级 Fallback 只在那一层）、网关内置 MCP Server Filter 与 McpBridge、HiMarket 平台——这些在 [AI Gateway](/docs/CS/Framework/Higress/AI_Gateway.md)。源码级模块地图（含约 89 个注解相对 key 的逐项清单与前缀行为）在 [Source Map](/docs/CS/Framework/Higress/Source_Map.md)；"108 条注解"是文档站流传概数，源码侧无此单一数字。
 
 ## Official Inventory
 
 官方[插件市场页](https://higress.ai/plugins/)自标 **"共 41 款插件 覆盖 5 个分类"**，与文档站索引 `user/plugins/**` 的 41 条一一对应（`intro` 与 `custom` 是使用说明页，不计入）。旧口径"50+ 官方内置插件"应改为 **41**。
+
+> [!NOTE]
+> **"41" 是文档站自标口径，版本匹配的实际发布量更大**：`higress-console` v2.2.5（commit `0279ce1a`）的 `backend/sdk/src/main/resources/plugins/` 下实际有 **52** 个 `spec.yaml`（每个 = 一个 marketplace 插件 manifest），已经包含 wasm-cpp 基础族（`key-auth` / `basic-auth` / `jwt-auth` / `hmac-auth` / `hmac-auth-apisix` / `oauth` / `bot-detect` / `request-block` / `key-rate-limit` / `custom-response` / `model-mapper` / `model-router` 等）与若干文档站未单列的工具类插件（`nginx-rewrite-compatible` / `response-cache` / `log-request-response` / `gw-error-format` / `traffic-editor` / `json-converter` / `de-graphql` 等）。文档站索引与"41"已落后于实际 bundle；统计"官方插件数"以 console 仓的 manifest 数为准，且要区分"marketplace 发布"与"`plugins/wasm-go/extensions/` 里存在但未发布"两类（后者如 `hello-world` / `gc-test` / `test-redis-inject-spin` / `streaming-body-example` / `http-call` / `api-workflow` / `chatgpt-proxy` / `jsonrpc-converter` / `qwen3guard` / `ai-image-reader` / `traffic-editor` / `replay-protection` 共 12 个，不进 marketplace）。
 
 | 分类 | 数量 | 插件 |
 | --- | --- | --- |
@@ -52,34 +55,42 @@ matchRules:
 
 插件链的顺序由 `WasmPlugin` **顶层**的 `phase` 与 `priority` 决定（注意不是 `matchRules` 项内字段）。`phase` 四个取值对应四个插入点：`UNSPECIFIED_PHASE`（插件过滤器链末端）、`AUTHN`（Istio 认证过滤器之前）、`AUTHZ`（认证之后、授权之前）、`STATS`（授权之后、统计之前）；**同 phase 下 priority 越大越靠前**。
 
-下面这张表是全子树共用的判读件，其它页引用而不重述：
+下面这张表是全子树共用的判读件，其它页引用而不重述。
+
+> [!NOTE]
+> **phase / priority 的权威源是 `higress-console` 的 marketplace 元数据**（`backend/sdk/src/main/resources/plugins/<name>/spec.yaml`，版本匹配 v2.2.5，commit `0279ce1a`）。本表此前取自官方文档站，与 marketplace 实际下发的默认值有多处不符，已用 console 源逐项订正。**两套源会互相打架**：wasm-go 扩展自己的 `README_EN.md` 也声明 priority（如 `ai-cache` 的 README 写 10），但 marketplace 真正下发的是 800——以 console 元数据为准（它才是 `hgctl` / 控制台安装时实际写入 `WasmPlugin` 的值）。
 
 | 插件 | 阶段 | priority |
 | --- | --- | --- |
-| `ai-cache` | 认证阶段 | 10 |
+| `ai-cache` | 默认阶段 | 800 |
 | `ip-restriction` | 认证阶段 | 210 |
 | `key-auth` | 认证阶段 | 310 |
 | `basic-auth` | 认证阶段 | 320 |
-| `hmac-auth` / `hmac-auth-apisix` | 认证阶段 | 330 |
+| `hmac-auth` | 认证阶段 | 330 |
+| `hmac-auth-apisix` | 认证阶段 | 200 |
 | `jwt-auth` | 认证阶段 | 340 |
 | `oauth` / `oidc` | 认证阶段 | 350 |
 | `ext-auth` | 认证阶段 | 360 |
-| `frontend-gray` | 认证阶段 | 450 |
+| `frontend-gray` | 默认阶段 | 450 |
 | `replay-protection` | 认证阶段 | 800 |
 | `ai-data-masking` | 认证阶段 | 991 |
 | `key-rate-limit` | 默认阶段 | 10 |
 | `cluster-key-rate-limit` | 默认阶段 | 20 |
-| `mcp-server` | 默认阶段 | 30 |
+| `mcp-server` | 默认阶段 | 999 |
 | `ai-proxy` | 默认阶段 | 100 |
-| `ai-statistics` | 默认阶段 | 200 |
-| `opa` | 默认阶段 | 225 |
+| `ai-statistics` | 默认阶段 | 900 |
+| `opa` | 认证阶段 | 225 |
 | `ai-security-guard` | 默认阶段 | 300 |
 | `traffic-tag` | 默认阶段 | 400 |
 | `ai-token-ratelimit` | 默认阶段 | 600 |
 | `ai-quota` | 默认阶段 | 750 |
-| `custom-response` | AUTHN | 200 |
+| `custom-response` | 认证阶段 | 910 |
 
-这张表解释了三件反直觉的事：`ai-cache`（认证阶段 10）早于所有默认阶段的限流与配额插件，**缓存命中可以完全绕过 `ai-token-ratelimit` 与 `ai-quota`**；`ai-data-masking` 排在认证阶段末尾（991），所以它在鉴权与内容安全之后才脱敏；`frontend-gray` 名字在"转换"分类里，却跑在认证阶段 450。写任何"某插件一定生效"的结论前，先回这张表核对它和谁抢顺序。
+> [!WARNING]
+> **`replay-protection` 未进入 v2.2.5 的 marketplace**（`higress-console` 资源目录下没有该插件），它只作为 wasm-go 扩展存在（README_EN 声明 priority 800）。marketplace 安装列表里看不到它；手动写 `WasmPlugin` 才能用。
+> 阶段标签：`认证阶段` = Istio `AUTHN`，`默认阶段` = `UNSPECIFIED_PHASE`（过滤器链末端）；同阶段下 priority 越大越靠前。
+
+这张表重新解释三件反直觉的事——**与旧版结论相反**：`ai-cache` 现在落在**默认阶段 800**，**晚于** `ai-token-ratelimit`（默认 600）和 `ai-quota`（默认 750），即请求**必然先过限流与配额、再进语义缓存**；所谓"缓存命中绕过限流"是旧表把关口错写成认证阶段 10 造成的错觉，真实顺序下缓存省的是后端算力、不绕开限流/配额计数。`ai-data-masking` 在认证阶段末尾（991），所以它跑在 consumer 鉴权之后、但**早于**默认阶段的 `ai-security-guard`（内容安全在默认阶段）；`frontend-gray` 名字在"转换"分类里，实际落在**默认阶段** 450（旧表误标为认证阶段）。写任何"某插件一定生效"的结论前，先回这张表核对它和谁抢顺序。
 
 ## Hot Reload via ECDS
 
@@ -239,6 +250,14 @@ Higress 的 17 款 AI 插件分布在一个**三层模型**里，把三层混为
 
 阶段与优先级的全表见上文 Phase and Priority Registry。控制台路由层、内置 MCP Filter、McpBridge、HiMarket 平台这些非插件内容见 [AI Gateway](/docs/CS/Framework/Higress/AI_Gateway.md)。
 
+### Console Routing Persistence and Platform Boundary
+
+三层模型里的控制台路由层与 HiMarket 平台都不是插件，但它们的落盘形态常被误判成"某个 AI 网关 CRD"或"网关自带组件"。本段一处从 `higress-console` 源码坐实、一处界定本地检索范围，把边界钉死。
+
+**AI 路由管理落成 ConfigMap，不是 CRD**。控制台"AI 路由管理"的核心定义（`AiRoute`：域名、模型匹配方式、请求消费者等）在 `higress-console` v2.2.5 里落盘为 K8s 原生 **ConfigMap**：`KubernetesModelConverter.aiRoute2ConfigMap` 把整个 `AiRoute` 序列化进 `ConfigMap.data`、命名为 `AI_ROUTE_PREFIX + routeName` 并打 `CONFIG_MAP_TYPE_VALUE_AI_ROUTE` 标签（`KubernetesModelConverter.java:320-365`），写回走 `AiRouteServiceImpl.java:136-139` 的 `createConfigMap` 与 `:192-195` 的 `replaceConfigMap`。**模型级降级配置单独落成 `EnvoyFilter`**（`AiRouteServiceImpl` 的 `createEnvoyFilter` / `replaceEnvoyFilter`，`V1alpha3EnvoyFilter`），**路由上挂的 AI 插件实例落成 `WasmPlugin`**（`WasmPluginInstance`，scope `ROUTE` / `SERVICE`）。所以"AI 路由管理 = 某个 AI 网关 CRD"不成立——主对象是无类型 ConfigMap，仅降级与插件实例走标准 Istio 资源。功能面见 [AI Gateway](/docs/CS/Framework/Higress/AI_Gateway.md)。
+
+**HiMarket 的计量计费不在 Higress 仓内**。已在本地三仓 `higress` / `higress-console` / `higress-standalone` 检索，HiMarket 平台实现不在其中，主仓仅保留文档引用；因此"计量计费由哪个组件承载、能否脱离 Higress 使用"无法由本地源码坐实，属跨仓库运行时问题，不作为网关插件层的事实写入。HiMarket 与网关插件的编排关系见 [AI Gateway](/docs/CS/Framework/Higress/AI_Gateway.md)。
+
 ### Provider Adaptation (ai-proxy)
 
 `ai-proxy` 是默认阶段、priority 100 的插件，定位"基于 OpenAI API 契约的 AI 代理"。**协议转换靠路径后缀匹配 + 零配置自动检测，不需要用户声明 protocol**：
@@ -272,19 +291,22 @@ Higress 的 17 款 AI 插件分布在一个**三层模型**里，把三层混为
 
 ### Load Balancing over Models (ai-load-balancer)
 
-`ai-load-balancer` 是本页唯一**没有文档站页面**的插件（文档 URL 取不到正文、`llms.txt` 索引里也没有），只存在于仓库 `plugins/wasm-go/extensions/ai-load-balancer/` 的 README 中——因此下面这组事实的信源层级低于本页其余内容，且**取自 main 分支而非 v2.2.5 tag**。顶层三字段 `lb_type`（`endpoint` | `cluster`，默认 `endpoint`）/ `lb_policy`（必填）/ `lb_config`（必填），文档要求网关版本 >= v2.1.5。
+`ai-load-balancer` 是本页唯一**没有文档站页面**的插件（文档 URL 取不到正文、`llms.txt` 索引里也没有），只存在于仓库 `plugins/wasm-go/extensions/ai-load-balancer/` 的 README 中。**其字段口径最早取自 main 分支 README，本轮已用本地 v2.2.5 tag 源码坐实**——`main.go:47-58` 的 `lb_type`/`lb_policy` 常量枚举 + 五个策略子目录 `cluster_hash`/`cluster_metrics`/`endpoint_metrics`/`global_least_request`/`prefix_cache` 全部存在，信源层级提升为源码核实。顶层三字段 `lb_type`（`endpoint` | `cluster`，空值回退 `endpoint`，见 `main.go:63-65`）/ `lb_policy`（必填）/ `lb_config`（必填），README 要求网关版本 >= v2.1.5。
 
 | `lb_policy` | 属于 | 语义 |
 | --- | --- | --- |
 | `global_least_request` | endpoint | 基于 Redis 的全局最小请求数（在途计数 ±1） |
 | `prefix_cache` | endpoint | **按 prompt 前缀匹配选后端节点以复用 KV Cache**，miss 时静默回落到 `global_least_request`；`redisKeyTTL` 默认 1800s |
-| `endpoint_metrics` / `metrics_based` | endpoint | 读 LLM 服务自己暴露的 metrics，`metric_policy` 取 `default`（即 gateway-api-inference-extension 算法实现）/ `least` / `most`，配 `target_metric`（示例用 `vllm:num_requests_waiting`、`vllm:num_requests_running`）与 `rate_limit`（默认 1） |
+| `endpoint_metrics`（含兼容别名 `metrics_based`） | endpoint | 读 LLM 服务自己暴露的 metrics，`metric_policy` 取 `default`（即 gateway-api-inference-extension 算法实现）/ `least` / `most`，配 `target_metric`（示例用 `vllm:num_requests_waiting`、`vllm:num_requests_running`）与 `rate_limit`（默认 1）。**`metrics_based` 是 `main.go:55` 标注的废弃兼容名（`MetricsBasedEndpointDeprecated`，解析时与 `endpoint_metrics` 同分支），不是独立策略** |
 | `cluster_metrics` | cluster | 跨服务负载，`mode` 取 `LeastBusy` / `LeastTotalLatency` / `LeastFirstTokenLatency` / `AdaptiveScore` |
 | `cluster_hash` | cluster | 读指定请求头做 **FNV-1a** 一致性 hash 固定到同一 cluster |
 
-三条必须一起写的注意事项：**README 自身矛盾**——`lb_type: endpoint` 的策略清单写 `endpoint_metrics`，而下面所有配置示例写 `lb_policy: metrics_based`，照抄清单和照抄示例会得到不同结果；**`cluster_hash` 是硬失败**——所有 `weight` 之和必须为 100，且请求缺少 `hash_header`（默认 `x-mse-consumer`）时插件**直接返回 403**，不是静默降级；**`AdaptiveScore` 的失败率只用插件实例生命周期内的累计值**，README 明写"目前不使用时间窗口或衰减"，即重启实例就清零，别当熔断器历史用；它开启 `global_inflight_enabled` 后靠 Redis Lua 原子选服务，**Redis 异常时降级到本地打分、不阻断请求**。
+三条必须一起写的注意事项：~~**README 自身矛盾**~~（**已证伪**）——清单写 `endpoint_metrics`、示例写 `metrics_based` 只是命名差异：`metrics_based` 是 `main.go:55` 标注的废弃兼容名（`MetricsBasedEndpointDeprecated`），解析走与 `endpoint_metrics` 完全相同的分支，**照抄清单或示例结果等价**，不存在"不同结果"；**`cluster_hash` 是硬失败**——所有 `weight` 之和必须为 100，且请求缺少 `hash_header`（默认 `x-mse-consumer`）时插件**直接返回 403**，不是静默降级（与 README 一致）；**`AdaptiveScore` 已随 v2.2.5 进 `cluster_metrics.mode`**（README_EN:219/246 列出 `[LeastBusy, LeastTotalLatency, LeastFirstTokenLatency, AdaptiveScore]`，源码子目录 `cluster_metrics/` 佐证），其失败率只用插件实例生命周期内的累计值，README 明写"目前不使用时间窗口或衰减"，即重启实例就清零，别当熔断器历史用；它开启 `global_inflight_enabled` 后靠 Redis Lua 原子选服务，**Redis 异常时降级到本地打分、不阻断请求**。
 
 关闭 `ai-load-balancer` 后策略不是"退化为轮询"，而是退化为服务本身内置策略集合（轮询、本地最小请求数、随机、一致性 hash）。
+
+> [!NOTE]
+> **`higress.io/load-balance` 注解是集群级简单 LB，不能做模型级负载均衡**——这是本轮从源码坐实、且与本段插件强相关的关键辨析。它是控制面 Ingress 注解（`pkg/ingress/kube/annotations/loadbalance.go:25,142-153`），解析后翻译成 Istio `TrafficPolicy.LoadBalancer.Simple`（即 Envoy 集群级简单 LB），与 `ai-load-balancer` wasm 插件的模型级加权（`endpoint_metrics` / `cluster_hash` / `AdaptiveScore`）是**完全不同的两层**。取值集合来自 Istio `LoadBalancerSettings_SimpleLB` 枚举（`istio.io/api` 的 `v1.27.1` 分支，fork 内 `pilot/pkg` 对 `ROUND_ROBIN` / `LEAST_CONN` / `RANDOM` / `PASSTHROUGH` 四常量均有引用），**大小写不敏感**（源码 `strings.ToUpper`）：有效值为 `ROUND_ROBIN`（默认，且**无效值会静默 fallback 到它**——`SimpleLB_value[lb]` 对未命中 key 返回 int32 零值 0，不报错）、`LEAST_CONN`、`RANDOM`、`PASSTHROUGH`；另有特判值 `MCP-SSE`（非 LB 算法，触发 McpSse 会话保持开关，见 [Config Pipeline](/docs/CS/Framework/Higress/Config_Pipeline.md)）。解析优先级需注意：**若 `affinity` / `session-cookie-name` / `session-cookie-path` 任一存在 → cookie 一致性 hash（忽略 `load-balance` 值）；否则若 `upstream-hash-by` 存在 → 按 header / query / 源 IP 的一致性 hash（同样忽略 `load-balance` 值）；否则才读 `load-balance` 本身**。⇒ 想做模型级加权必须装 `ai-load-balancer` 插件，仅靠注解最多到集群级轮询 / 最小连接 / 随机 / 透传。
 
 **`prefix_cache` 与 `ai-cache` 是完全不同的两件事**，尽管名字都带 cache：前者选 pod（复用后端 LLM 的 KV Cache），后者直接短路 LLM 调用。
 
@@ -294,14 +316,14 @@ Higress 的 17 款 AI 插件分布在一个**三层模型**里，把三层混为
 
 `ai-quota`（默认阶段、priority 750）管的是**总额**：给特定 consumer 分配固定 quota，并提供查询 / 刷新 / 增减三类管理动作（`admin_consumer` 必填、`admin_path` 默认 `/quota`、`redis_key_prefix` 默认 `chat_quota:`）。它有两个硬前置，文档原话："需要配合认证插件比如 `key-auth`、`jwt-auth` 等获取认证身份的 consumer 名称，同时**需要配合 `ai-statistics` 插件获取 AI Token 统计信息**"。
 
-于是这几个插件是**共生关系而不是可独立使用**：`ai-quota` 自己不认身份、也不自己数 token；`ai-token-ratelimit` 虽有 `limit_by_consumer`，但 consumer 仍需认证插件产出。
+于是这几个插件是**共生关系而不是可独立使用**：`ai-quota` 不认身份（consumer 来自认证插件），但**自己通过共享库 `pkg/tokenusage` 从响应体解析并计量 token**、并写自有 Redis（`chat_quota:` 前缀）；`ai-token-ratelimit` 同理自解 token、写 `higress-token-ratelimit:` 前缀 Redis。三者**与 `ai-statistics` 无运行时数据耦合**——它只是纯观测插件（见下方 AI Observability 段 NOTE）。
 
 > [!WARNING]
-> 两个后果经常被忽略。① **`rule_items` 是命中第一条即停**（官方"后续规则不再执行"），不是所有命中规则叠加生效——部分二手博客称"混合配置时所有命中规则叠加、任一触发即 429"，与官方正文直接冲突。② **`ai-cache` 跑在认证阶段 priority 10，而限流与配额跑在默认阶段**，所以缓存命中的请求可能根本走不到 `ai-token-ratelimit` / `ai-quota`；不要把"token 限流"写成对所有请求一定生效。
+> 两个后果经常被忽略。① **`rule_items` 是命中第一条即停**（官方"后续规则不再执行"），不是所有命中规则叠加生效——部分二手博客称"混合配置时所有命中规则叠加、任一触发即 429"，与官方正文直接冲突。② **`ai-cache` 落在默认阶段 priority 800，晚于 `ai-token-ratelimit`（默认 600）与 `ai-quota`（默认 750）**——请求必然先过限流与配额、再进语义缓存，缓存命中省的是后端算力、不绕过限流/配额计数；不要写"缓存命中使限流失效"。（旧表曾把 `ai-cache` 误标为认证阶段 10，结论正好相反。）
 
 ### Semantic Cache (ai-cache)
 
-`ai-cache` 在认证阶段、priority 10（AI 插件里最早介入的一批，正是为了短路后端），**默认配置即可缓存 OpenAI 协议结果，支持流式与非流式**。它用同一个插件承载两种缓存，靠 `enableSemanticCache`（默认 true）切换；关闭即"使用字符串匹配的方式查找缓存，此时需要配置 `cache` 服务"。缓存键策略 `cacheKeyStrategy` 取 `lastQuestion`（默认）/ `allQuestions` / `disabled`。
+`ai-cache` 在默认阶段、priority 800（注意它**晚于** `ai-token-ratelimit` 600 / `ai-quota` 750，请求先过限流配额再进缓存，并非"最早介入"），**默认配置即可缓存 OpenAI 协议结果，支持流式与非流式**。它用同一个插件承载两种缓存，靠 `enableSemanticCache`（默认 true）切换；关闭即"使用字符串匹配的方式查找缓存，此时需要配置 `cache` 服务"。缓存键策略 `cacheKeyStrategy` 取 `lastQuestion`（默认）/ `allQuestions` / `disabled`。
 
 三种合法组合与一个优先级：`cache` 单用 = 字符串精确匹配；`vector`(+`embedding`) = 语义缓存（向量库自身不提供字符串向量化时必须配 `embedding`）；`vector`(+`embedding`) + `cache` = 语义缓存并用缓存服务存响应以加速。`vector` 与 `cache` 不能同时为空，而**同时配置时字符串匹配优先**（"优先使用缓存数据库，未命中场景下使用向量数据库能力"）——所以"配了向量库却没生效"不一定是 bug。embedding 一律来自**外部文本向量化服务**，插件不做本地向量化。
 
@@ -337,7 +359,10 @@ cache:     { type: redis, serviceName: ..., cacheTTL: 0, cacheKeyPrefix: "higres
 
 ### AI Observability (ai-statistics)
 
-`ai-statistics`（默认阶段、priority 200）是 AI 观测的数据源，定位"提供 AI 可观测基础能力，包括 metric, log, trace"，并有一条前置：**其后需接 `ai-proxy` 插件，不接的话需要用户自行配置才生效**。默认零配置即可得到输入 token、输出 token、**首个 token 的 rt（仅流式）**、请求总 rt，支持**网关 / 路由 / 服务 / 模型四个观测维度**。
+`ai-statistics`（默认阶段、priority 900）是 AI 观测的数据源，定位"提供 AI 可观测基础能力，包括 metric, log, trace"，并有一条前置：**其后需接 `ai-proxy` 插件，不接的话需要用户自行配置才生效**。默认零配置即可得到输入 token、输出 token、**首个 token 的 rt（仅流式）**、请求总 rt，支持**网关 / 路由 / 服务 / 模型四个观测维度**。
+
+> [!NOTE]
+> **`ai-statistics` 是纯观测插件，不是管控插件的数据源**。源码（`ai-statistics/main.go`）从 LLM 响应体提取 token 用量后，只通过 Proxy-Wasm metric API 上报为 Envoy 指标 / 访问日志 / 链路 span，**自身不写 Redis、也不被 `ai-quota` / `ai-token-ratelimit` 调用**。限流与配额插件各自通过共享库 `pkg/tokenusage` 直接从响应体解析 token、并写各自独立的 Redis 前缀（`higress-token-ratelimit:` / `chat_quota:`）。因此"管控插件依赖 ai-statistics 取数"是文档把"功能配套、建议同装"误表述成了数据依赖——三者是**观测与管控解耦**的关系。
 
 六个 counter 指标共享前缀 `route_upstream_model_consumer_metric_`，后缀分别是 `input_token`、`output_token`、`llm_service_duration`（流式 + 非流式总耗时累加）、`llm_duration_count`、`llm_first_token_duration`（**流式请求首 token 延时累加，即 TTFT**）、`llm_stream_duration_count`；标签为 `ai_route`、`ai_cluster`、`ai_model`、`ai_consumer`。访问日志侧对应字段是 `input_token`、`output_token`、`model`、`llm_service_duration`、`llm_first_token_duration`。通用三支柱（指标端口、日志格式、追踪后端）在 [Observability](/docs/CS/Framework/Higress/Observability.md)。
 
@@ -369,11 +394,19 @@ HiMarket 不是网关组件：官方定义是"基于 Higress AI 网关构建的*
 | nacos（任意版本）可作 MCP 注册源 | 仅 `nacos3` | 收窄 |
 | token 限流多条规则叠加生效 | `rule_items` 命中第一条即停 | 采信官方 |
 | `openapi-to-mcpserver` 是独立工具 / 插件 | 官方文档站无页面；本仓源码里也**没有**这个目录（`plugins/wasm-go/extensions` 全清单已比对） | 不作为已核实名称写 |
-| 不存在 `mcp-router` | **源码里有**：`plugins/wasm-go/extensions/mcp-router/` 是真实目录，`plugins/release/console/` 下也有一份发布件；但**功能与配置面本次未读** | 存在性成立、语义不写 |
+| 不存在 `mcp-router` | **源码里有且已读**：`plugins/wasm-go/extensions/mcp-router/` 是真实目录，基于 `mcp.LoadMCPFilter` 框架（`pkg/mcp`）；`higress-console` 的 marketplace `spec.yaml` 也已收录（确属发布插件）。**功能面已核**：为 MCP `tools/call` 做路由聚合，按工具名前缀 `server-name___tool-name`（`consts.ToolSetNameSplitter = "___"`，`pkg/mcp/consts/vars.go:18`）匹配 `servers[].name`，改写 `:authority`/`:path`、注入 `x-envoy-internal-route: true` 并剥离前缀后重路由；`domain` 省略则保留原域名。**注意 README_ZH 写的分隔符是 `/`，与源码 `___` 冲突，以源码为准** | 已核实 |
 
 ### AI Plugin Unverified
 
-**信源层级说明**：本页正文的字段名、默认值、阶段与优先级**全部来自官方文档站正文**（逐条 `[摘要级]`）。本地源码树（v2.2.5）现已可用，源码级核对仅限**插件的存在性与语言层归属**——`ai-load-balancer` 与 `mcp-router` 确认存在于 `plugins/wasm-go/extensions/`，认证基础族确认在 `plugins/wasm-cpp/`，`ai-data-masking` 确认在 `plugins/wasm-rust/`（见 [Source Map](/docs/CS/Framework/Higress/Source_Map.md)）。**未做的是逐个读 AI 插件的实现代码**，因此以下各项仍是"文档口径或未决"，不得当成源码结论：33 个 `type` 是否等于 `ai-proxy` 源码里的 provider 数；`ai-load-balancer` 在 **v2.2.5 tag** 的确切策略集合与默认值（README 取自 main 分支，`AdaptiveScore` 是否已进 2.2.5、`endpoint_metrics` 与 `metrics_based` 哪个是有效值均未决）；`mcp-router` 的功能与配置面；`higress.io/load-balance` 注解取值集合；`ai-proxy` 对 OpenAI Responses / Fine-Tuning 的支持；`ai-token-ratelimit` 是否也依赖 `ai-statistics` 取数（`ai-quota` 的依赖已核实）；其余 AI 插件的执行阶段与优先级；控制台"AI 路由管理"最终落成哪种 K8s 对象；HiMarket"计量计费"由哪个组件承载、能否脱离 Higress 使用。
+本页曾列的 AI 插件未决项已在 v2.2.5 源码中全部转正或界定范围，结论已移入正文；以下保留逐项核实记录与信源层级说明。
+
+> [!NOTE]
+> **`ai-proxy` 在 v2.2.5 已完整支持 OpenAI Responses API 与全套 Fine-Tuning API**（本轮从源码坐实，不再未决）。`provider.go:54,103` 定义 `ApiNameResponses = "openai/v1/responses"` + `PathOpenAIResponses = "/v1/responses"`，并在 `main.go:72` 注册；Fine-Tuning 全套 9 个能力（`provider.go:55-63`：`ApiNameFineTuningJobs` / `RetrieveFineTuningJob` / `FineTuningJobEvents` / `FineTuningJobCheckpoints` / `CancelFineTuningJob` / `ResumeFineTuningJob` / `PauseFineTuningJob` / `FineTuningCheckpointPermissions` / `DeleteFineTuningCheckpointPermission`，对应 `/v1/fine_tuning/jobs` 及其子资源，`main.go:71` 等注册）。不止 OpenAI 一家：`qwen` / `doubao` / `vllm` / `groq` / `azure` 的 capabilities 映射也都包含 Responses（`needToProcessRequestBody(ApiNameResponses)=true` 表明走请求体转换、可用于 provider 间格式翻译）；`provider.go:881,888-893` 标注 Responses 与 Fine-Tuning 系列 `needProcessResponseBody = true`——前者维护 `previous_response_id` 对话状态、后者维护 job 状态。文档站若把这些 API 写成"不支持"，与源码直接冲突。
+
+**信源层级说明**：本页字段名、默认值**仍以官方文档站正文为主**（逐条 `[摘要级]`），但两类关键结论现已从源码坐实：① **阶段与优先级不再来自文档站**，改为 `higress-console` 的 marketplace `spec.yaml`（v2.2.5，commit `0279ce1a`）逐项抽取（见上方 Phase and Priority Registry 的 NOTE），旧表据此订正了 `ai-cache` / `ai-statistics` / `mcp-server` / `custom-response` / `hmac-auth-apisix` / `frontend-gray` / `opa` 七项；② **两个高频默认值已从 Go 配置结构体核实**——`ai-security-guard.denyCode` 默认 `200`（`config/config.go:68` `DefaultDenyCode`）、`ai-cache.vector.threshold` 默认 `1000` 且 `thresholdRelation` 默认 `lt`（`vector/provider.go:151-157`），与文档一致。本地源码树（v2.2.5）还确认了**插件的存在性与语言层归属**——`ai-load-balancer` 与 `mcp-router` 在 `plugins/wasm-go/extensions/`，认证基础族在 `plugins/wasm-cpp/`，`ai-data-masking` 在 `plugins/wasm-rust/`（见 [Source Map](/docs/CS/Framework/Higress/Source_Map.md)）。**本页原列的两项未决均已收口**：控制台"AI 路由管理"落成对象已从 `higress-console` 源码坐实、HiMarket 计量计费已界定为跨仓库运行时问题，两条结论均已移入正文 Console Routing Persistence and Platform Boundary 段；`higress.io/load-balance` 注解取值集合（见上方 ai-load-balancer 段 NOTE）、`ai-proxy` 对 OpenAI Responses / Fine-Tuning 的支持（见上方 NOTE）、`ai-load-balancer` 在 v2.2.5 的策略集（含 `metrics_based` 别名、`AdaptiveScore` 已进入 `cluster_metrics.mode`）与 `mcp-router` 的功能面亦均已从源码坐实，见上方对应小节。
+
+> [!NOTE]
+> **`ai-proxy` 的 provider 数已从源码确定（不再未决）**：v2.2.5 的 `plugins/wasm-go/extensions/ai-proxy/provider/` 定义 **37 个 `providerType` 常量**（36 个厂商类型 + 内部回退 `generic`），**不等于文档收录的 33 个 `type` 字符串**。差异精确为：源码比文档多出 `galadriel` / `kling` / `longcat` / `vllm` 四个厂商类型；文档列在 31 个里的 **`ai360` 在 v2.2.5 源码的 `providerType` 常量集合中不存在**（枚举 37 个常量无 `ai360`）。因此"文档 type 数 = 源码 provider 数"的假设不成立，且文档的 provider 清单本身也已落后于源码。
 
 ## Links
 

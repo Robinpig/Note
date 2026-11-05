@@ -21,7 +21,7 @@ Redis 侧有两个真实踩坑点。第一，`redis.service_name` 要求**带服
 > [!WARNING]
 > 两条经常被写成事实、但**官方正文里找不到**的说法：① "本地限流配 100 QPS、3 副本实际放行约 300 QPS"——两个限流插件正文都没有副本数、倍数或放大的任何表述，"多副本线性放大"是推论不是文档结论；② `key-rate-limit` 的"本地 / 单实例"定性**只出现在文档索引条目名《基于 Key 的本地限流》里**，页面正文没有出现"本地"二字。真要写"每实例限流"，官方口径来自另外三个 annotation：`higress.io/route-limit-rps` / `higress.io/route-limit-rpm` 逐字写着"该 Ingress 定义的路由在**每个网关实例上**每秒/每分钟最大请求次数"，且瞬时最大值要乘 `higress.io/route-limit-burst-multiplier`（**默认 5**）。这个默认 5 倍的瞬时放大，比"×副本数"更容易被读者误算。
 
-熔断与过载保护这一侧，文档能落到实证的是**重试与容灾**而不是某个熔断开关：`nginx.ingress.kubernetes.io/proxy-next-upstream-tries`（默认 3 次）、`-timeout`、`proxy-next-upstream`（默认 `"error,timeout"`，合法值 `error` / `timeout` / `invalid_header` / `http_xxx` 如 `http_502` / `non_idempotent` / `off`——**默认对非幂等的 POST、PATCH 不重试**，要配 `non_idempotent` 才打开）。容灾靠 `default-backend`（无可用节点时自动转发）配 `custom-http-errors`（命中指定状态码再转）；**一条行为差异必须记住：转发至容灾服务时请求的 Path 会被重写为 `/`**（官方注明与 ingress-nginx 保持一致），业务侧若依赖 path 会莫名 404。至于 Sentinel 体系与集群流控，官方仅在场景描述里写"深度集成了 Dubbo、Nacos、Sentinel 等微服务技术栈"，**没有给出配置面**，具体接入方式与熔断语义不要在本子树里写成事实；通用方法学见 [Sentinel](/docs/CS/Framework/Sentinel/Sentinel.md) 与 [TrafficManagement](/docs/CS/Framework/Istio/TrafficManagement.md)。
+熔断与过载保护这一侧，文档能落到实证的是**重试与容灾**而不是某个熔断开关：`nginx.ingress.kubernetes.io/proxy-next-upstream-tries`（默认 3 次）、`-timeout`、`proxy-next-upstream`（默认 `"error,timeout"`，合法值 `error` / `timeout` / `invalid_header` / `http_xxx` 如 `http_502` / `non_idempotent` / `off`——**默认对非幂等的 POST、PATCH 不重试**，要配 `non_idempotent` 才打开）。容灾靠 `default-backend`（无可用节点时自动转发）配 `custom-http-errors`（命中指定状态码再转）；**一条行为差异必须记住：转发至容灾服务时请求的 Path 会被重写为 `/`**（官方注明与 ingress-nginx 保持一致），业务侧若依赖 path 会莫名 404。至于 Sentinel 体系与集群流控，官方仅在场景描述里写"深度集成了 Dubbo、Nacos、Sentinel 等微服务技术栈"，**没有给出配置面**，具体接入方式与熔断语义不要在本子树里写成事实；通用方法学见 [Sentinel](/docs/CS/Framework/Sentinel/Sentinel.md) 与 [TrafficManagement](/docs/CS/Framework/Istio/TrafficManagement.md)。一个常被追问的空白：**Envoy 异常点检测（Outlier Detection）在 Higress 侧没有原生配置入口**——全仓只在 `hgctl` 打包的 Istio CRD 定义（`pkg/manifests/istiobase/crds/crd-all.gen.yaml` 的 `outlierDetection` 字段）与抓 xDS 的测试数据里出现，注解 parser 21 个 handler 与三套入口均无对应项；要用只能用户直接写 Istio `DestinationRule` CRD 绕过 Higress 的 Ingress 抽象。
 
 ## Routing Primitives
 
@@ -80,6 +80,9 @@ conditionGroups:
 
 **OpenKruise Rollout 联动**是第四条，但它是"由外而内"的：用户只声明 `Rollout` CRD（`rollouts.kruise.io/v1alpha1`），Kruise Rollout 通过 hook 修改 Deployment 的 `Pause` 暂停滚动发布，每批次为正式 Ingress 生成对应的**灰度 Ingress**并配置灰度流量策略，Higress 监听 Ingress 变化实时改路由，回滚时灰度 Ingress 自动下线。Higress 的接入开关只有一处：`spec.strategy.canary.trafficRoutings[].ingress.classType: higress`。安装 `helm install kruise-rollout openkruise/kruise-rollout --version 0.3.0-rc.0`，另需 `kubectl-kruise`。引用批次数时要小心：该页金丝雀示例只有 2 个 step，正文却写"一共分为 3 批"（最后一批隐式为全量）。
 
+> [!NOTE]
+> 三个容易踩的权重 / 染色细节（已回源码确认）：① **`canary-weight-total` 是 per-Ingress 声明的分母，但合并时取"目标路由已算出的权重和，没有才用 100"**——`controller.go:974-975` 仅在 `targetRoute.WeightTotal==0` 时用 canary 的 total 填充，`ingress_config.go:1599-1624` 再把它与 destination 权重和取大者作真正分母；所以**多个灰度 Ingress 的 weight-total 不会相加**，各自相对默认 100 的比例即实际切流比。② **Kubernetes Ingress 规范没有原生 weight 字段**，Higress 的加权路由一律靠"多 Ingress 共享 host/path + `canary-weight`"实现，不存在单 Ingress 内直接写权重的东西。③ **`x-mse-tag` 不是 Higress 控制面消费的 header**——`traffic-tag` 只负责染色，全仓控制面/翻译层对 `x-mse-tag` 零引用；真正消费它的是用户自配的 `match-header` 路由规则或外部全链路灰度系统，`frontend-gray` 的 `backendGrayTag`（默认 `x-mse-tag`）仅做透传。
+
 ## Nginx Annotation Compatibility
 
 Higress 能从 ingress-nginx 平滑迁移，靠的就是这张表——[兼容说明页](https://higress.ai/docs/latest/user/annotation/)开篇的事实是"常见的 Nginx Ingress Controller 引入了 100 多个 Annotation……目前 Higress 已经全面兼容了大部分"（**官方没给确切条数与百分比，不要写成"支持 X 条 / Y%"**）。
@@ -91,7 +94,7 @@ Higress 能从 ingress-nginx 平滑迁移，靠的就是这张表——[兼容�
 | annotation | 官方限制原文 |
 | --- | --- |
 | `backend-protocol` | 不支持 AJP 和 FCGI |
-| `load-balance` | 不支持 ewma 算法；合法值只有 `round_robin` / `least_conn` / `random`，**配成 ewma 会静默回退 round_robin** |
+| `load-balance` | 不支持 ewma 算法；合法值只有 `round_robin` / `least_conn` / `random`，**配成 ewma 会静默回退 round_robin**（注解层 `loadbalance.go:25-46` 只定义 **key 名常量**，不校验算法值，值透传给 Envoy 的 `lb_policy`；`consistenthash` 不在核心支持列表，需另寻 consistent-hash 类插件） |
 | `upstream-hash-by` | 暂不支持 Nginx 变量与常量的组合使用；只支持 `$request_uri`、`$host`、`$remote_addr`、`$http_headerName`、`$arg_varName` |
 | `affinity-mode` | 暂不支持 persistent 模式，只支持 `balanced`（`affinity` 本身只支持 `cookie`） |
 | `auth-type` | 暂只支持 Basic |
@@ -105,9 +108,15 @@ Higress 能从 ingress-nginx 平滑迁移，靠的就是这张表——[兼容�
 
 ## Unverified
 
-有一项已**从源码转正**：HTTP Method / query / header 作为路由匹配条件确实有字段级入口，是四条 Higress 自有注解 `higress.io/match-method`、`match-query`、`match-header`、`match-pseudo-header`（`pkg/ingress/kube/annotations/match.go:29-32`）——文档站的兼容矩阵页没列它们，完整注解表在 [Source Map](/docs/CS/Framework/Higress/Source_Map.md)。同类转正的还有 `mirror-target-fqdn` 与 `mirror-target-fqdn-port`（`mirror.go:27-28`，文档未列的镜像目标写法）。
+本页曾列的未决项已在 v2.2.5 源码中全部转正，集中记录在 Gray Release 段末尾的 NOTE 与上文兼容性表：
 
-仍不知道的：**Envoy 异常点检测（Outlier Detection）在 Higress 侧的暴露入口**——文档没有对应页面，`pkg/ingress/kube/annotations/` 的 21 个 parser 里也没有对应 handler；`higress.io/load-balance` 与 `consistenthash` 那组取值只在搜索结果正文读到、未与 `loadbalance.go:25-46` 的常量逐项比对；同一 Ingress 内是否存在原生 weighted routing 字段（官方做法仍是"多 Ingress + `canary-weight`"）；`canary-weight-total` 在多个灰度 Ingress 下的分母作用域；`traffic-tag` 染出的 `x-mse-tag` 具体被谁消费（`applyCanaryIngresses` 处理的是 Ingress 层的 canary 合并，与插件染色的关系未追）。
+- **Envoy Outlier Detection**：Higress 侧无原生配置入口，只在 `hgctl` 打包的 Istio CRD 定义与抓 xDS 测试数据里出现，需用户直接写 `DestinationRule` 绕过 Ingress 抽象（见熔断段）。
+- **`load-balance` 算法取值**：`loadbalance.go:25-46` 只定义注解 key 名，不校验算法值；合法集合 `round_robin` / `least_conn` / `random`（ewma 静默回退）与透传 Envoy `lb_policy` 的机制已坐实（见兼容性表）。
+- **单 Ingress 加权**：K8s Ingress 无原生 weight 字段，一律靠"多 Ingress + `canary-weight`"（见 Gray Release NOTE）。
+- **`canary-weight-total` 分母作用域**：per-Ingress 声明、路由合并时取"目标路由权重和或默认 100"、多个灰度 Ingress 不相加（见 Gray Release NOTE 与 `controller.go:974-975` / `ingress_config.go:1599-1624`）。
+- **`x-mse-tag` 消费方**：Higress 控制面零引用，`traffic-tag` 只染色，由下游 `match-header` 路由规则或外部全链路灰度系统消费，`frontend-gray` 的 `backendGrayTag` 仅透传（见 Gray Release NOTE）。
+
+较早转正的：HTTP Method / query / header 路由匹配条件确为四条 Higress 自有注解（`match-method` / `match-query` / `match-header` / `match-pseudo-header`，`match.go:29-32`），以及文档未列的 `mirror-target-fqdn` / `mirror-target-fqdn-port`（`mirror.go:27-28`）。
 
 ## Links
 

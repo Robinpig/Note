@@ -17,16 +17,16 @@
 | `plugins/` | `wasm-go` `wasm-rust` `wasm-cpp` `wasm-assemblyscript` `golang-filter` `release` | 源码文件数 526 / 23 / 29 / 9 / 98 |
 | `helm/` | 两个 chart：`core`（控制面 + 数据面 + CRD）与 `higress`（console 子 chart） | `helm/core/crds/`、`helm/core/templates/configmap.yaml` |
 | `istio/`、`envoy/` | 子模块挂载点（见本页"构建"一节） | 本机工作树为空，需 `make prebuild` |
-| `test/` | `e2e` `gateway` `inference-extension` | — |
+| `test/` | `e2e` `gateway` `inference-extension` | `inference-extension/` 非空：`manifests/epp-tls.yaml` + `reports/v1.4.0/`（README + `v2.2.4-default-gateway-report.yaml`）⇒ 是 **Gateway API Inference Extension v1.4.0 一致性测试的清单与报告产物**，非 e2e 代码 |
 | `samples/` | `gateway-api` `hello-world` `loadbalance` `mcp` `nacos-discovery` `wasmplugin` `quickstart.yaml` | — |
 | `changes/` | **不是版本 changelog**，现存 4 个 md 全是贡献流程记录 | 另有 `release-notes/` 目录 |
 
 ## hgctl Command Tree
 
-命令树在 `hgctl/pkg/root.go:35-47` 的 `AddCommand`，**13 个顶层子命令**：`version`、`config`、`install`、`uninstall`、`upgrade`、`profile`、`dashboard`、`manifest`、`plugin`、`completion`、`code-debug`、`mcp`、`agent`。
+命令树在 `hgctl/pkg/root.go:35-47` 的 `AddCommand`，**13 个顶层子命令**（名称取自各命令的 `Use:` 字面量，已逐个核实）：`version`（`version.go:48`）、**`gateway-config`**（`config_cmd.go:39`，别名 `gc`）、`install`（`install.go:95`）、`uninstall`（`uninstall.go:44`）、`upgrade`（`upgrade.go:73`）、`profile`（`profile.go:24`）、`dashboard`（`dashboard.go:71`）、`manifest`（`manifest.go:57`）、`plugin`（`plugin/plugin.go:31`）、`completion`（`completion.go:113`）、`code-debug`（`code_debug.go:40`）、`mcp`（`agent/mcp.go:69`）、`agent`（`agent/agent.go:35`）。`gateway-config` 的二级命令是 all / bootstrap / cluster / endpoint / listener / route（`config_cmd.go:45-50`）；`mcp` 与 `agent` 同源于 `hgctl/pkg/agent/` 但**是两个独立的顶层命令**；`plugin` 的二级命令最杂（`ls` / `build` / `uninstall` / `init` / `config` / `test` / `start` / `stop` / `clean` / `create` / `edit`，按动作拆目录）。
 
 > [!NOTE]
-> 两条与文档相反的结论。① **`hgctl config` 是存在的**（文档站 hgctl 页没列它），但它的语义是**抓 xDS 配置**：二级命令为 `all` / `bootstrap` / `cluster` / `endpoint` / `listener` / `route`（`hgctl/pkg/config_cmd.go:45-50`），不是"profile / install / upgrade"那一组——后者是 root 的子命令，文档页把两者混为一谈了。② `hgctl plugin` 确实是一个子命令组，成员为 `build` / `install` / `uninstall` / `ls` / `test` / `config` / `init`（`hgctl/pkg/plugin/plugin.go:36-42`），其中 `test`（`plugin/test/test.go:28-32`）与 `config`（`plugin/config/config.go:26-27`）是二级动作；`agent` 是 `create` / `deploy` / `add`（`agent/agent.go:42-44`），`mcp` 只有 `add`（`agent/mcp.go:73`），`code-debug` 是 `start` / `stop`（`code_debug.go:44-45`），`dashboard` 覆盖 prom / grafana / envoy / console / controller-debug（`dashboard.go:96-116`）。
+> 两条与文档相反的结论。① **这条此前把命令名写成了 `config`，实际是 `gateway-config`**（`hgctl/pkg/config_cmd.go:39`，别名 `gc`；文档站 hgctl 页没列它）。存在性结论成立，语义也确为**抓 xDS 配置**，二级命令为 `all` / `bootstrap` / `cluster` / `endpoint` / `listener` / `route`（`config_cmd.go:45-50`），不是"profile / install / upgrade"那一组——后者是 root 的子命令，文档页把两者混为一谈了。② `hgctl plugin` 确实是一个子命令组，成员为 `build` / `install` / `uninstall` / `ls` / `test` / `config` / `init`（`hgctl/pkg/plugin/plugin.go:36-42`），其中 `test`（`plugin/test/test.go:28-32`）与 `config`（`plugin/config/config.go:26-27`）是二级动作；`agent` 是 `create` / `deploy` / `add`（`agent/agent.go:42-44`），`mcp` 只有 `add`（`agent/mcp.go:73`），`code-debug` 是 `start` / `stop`（`code_debug.go:44-45`），`dashboard` 覆盖 prom / grafana / envoy / console / controller-debug（`dashboard.go:96-116`）。
 
 ## CRD Definitions
 
@@ -51,9 +51,11 @@ proto 里**没有 `plural:` marker**，复数形式（mcpbridges / http2rpcs / w
 
 两处容易找错地方：核心聚合类型 `model.IngressRoute` **定义在 pilot fork**（`model.go:22` import `istio.io/istio/pilot/pkg/model`），本仓只是消费方；`pkg/config/constants/constants.go` 只有 `DefaultIngressClass` / `DefaultGatewayClass`（都是 `higress`）、两个 Knative CRD 名、`ManagedGatewayController`、以及 `RegistryTypeLabelKey` / `RegistryNameLabelKey`（`higress-registry-type` / `higress-registry-name`）**七个常量**——端口、系统命名空间、finalizer 常量都不在这里（`pkg/` 全量 grep `finalizer` 零命中；命名空间走 `higressconfig.PodNamespace` 运行时参数）。`pkg/common/` 提供协议与分隔符枚举：`protocol.go:22-29`（TCP / HTTP / HTTP2 / HTTPS / GRPC / GRPCS / Dubbo / Unsupported）、`proxy.go:24-28`（ProxyType）、`symbol.go:21`（`SpecialSeparator = "#@"`）。
 
+`pkg/ingress/kube/gateway/istio/`（Gateway API 的 istio 移植层，约 19 个 go 文件）实测由三组构成：**资源 collection**（`gateway_collection.go` `gatewayclass_collection.go` `references_collection.go` `route_collections.go` `inferencepool_collection.go`）、**转换与判定**（`conversion.go` `backend_policies.go` `conditions.go` `references.go` `gatewayclass.go` `context.go`）、**控制器本体**（`controller.go` `deploymentcontroller.go`）。注意 **Inference Extension（`inferencepool_*`）就落在这层**，与 `test/inference-extension` 里的一致性报告产物是同一个功能的两面；该子树对 `pkg/cert` 与 `higress-https` 零命中（见 [Certificates and ACME](/docs/CS/Framework/Higress/Certificates_and_ACME.md)）。`conversion.go` 把 Gateway / HTTPRoute / GRPCRoute 翻译成 Istio 的四类资源（落地子类型包括 `istio.TCPRoute` / `istio.TLSRoute` / `istio.Destination` / `istio.HTTPMirrorPolicy` 等，组装进 Gateway/VirtualService/DestinationRule/ServiceEntry）——**与 Ingress 侧同构**，不是另一套翻译管线。
+
 ## Annotation Registry
 
-`pkg/ingress/kube/annotations/` 共 47 个文件（能力实现约 24 个 + 同名 test）。注册表是 `NewAnnotationHandlerManager()`（`annotations.go:161`），内部五组：`parsers`（`:163-185`，**21 个**：canary / cors / downstreamTLS / sslPassthrough / redirect / rewrite / upstreamTLS / ipAccessControl / timeout / retry / loadBalance / localRateLimit / fallback / auth / mirror / destination / ignoreCaseMatching / match / headerControl / http2rpc / mcpServer）、`gatewayHandlers`（`:186-188`，只有 downstreamTLS）、`virtualServiceHandlers`（`:189-191`，只有 ipAccessControl）、`routeHandlers`（`:192-205`，12 个）、`trafficPolicyHandlers`（`:206-209`，upstreamTLS + loadBalance）。接口 `AnnotationHandler:145` 由这五类能力组合而成，`Parse():213` 遍历 parsers 把结果填进聚合结构体 `Ingress:47-89`（每个能力一个 `*Config` 字段）。
+`pkg/ingress/kube/annotations/` 共 **46 个 .go 文件**（25 个非 test：21 个能力 parser + `annotations.go` / `parser.go` / `interface.go` / `util.go` 4 个基础设施；21 个同名 `_test.go`）。注册表是 `NewAnnotationHandlerManager()`（`annotations.go:161`），内部五组：`parsers`（`:163-185`，**21 个**：canary / cors / downstreamTLS / sslPassthrough / redirect / rewrite / upstreamTLS / ipAccessControl / timeout / retry / loadBalance / localRateLimit / fallback / auth / mirror / destination / ignoreCaseMatching / match / headerControl / http2rpc / mcpServer）、`gatewayHandlers`（`:186-188`，只有 downstreamTLS）、`virtualServiceHandlers`（`:189-191`，只有 ipAccessControl）、`routeHandlers`（`:192-205`，12 个）、`trafficPolicyHandlers`（`:206-209`，upstreamTLS + loadBalance）。接口 `AnnotationHandler:145` 由这五类能力组合而成，`Parse():213` 遍历 parsers 把结果填进聚合结构体 `Ingress:47-89`（每个能力一个 `*Config` 字段）。
 
 前缀常量在 `parser.go:25`（`nginx.ingress.kubernetes.io`，默认）与 `:28`（`higress.io`），拼接函数 `buildNginxAnnotationKey:256` / `buildHigressAnnotationKey:260`。
 
@@ -77,6 +79,9 @@ proto 里**没有 `plural:` marker**，复数形式（mcpbridges / http2rpcs / w
 | 重试 / 容灾 | `proxy-next-upstream*` 4 个（`retry.go:25-31`）；`default-backend` + `custom-http-errors`（`default_backend.go:27-28`），fallback 路由后缀 `-fallback` 并注入 `x-envoy-route-name` / `x-envoy-fallback-service`（`:31-33`） | 同左 | ASAP |
 | 其余 | cors 7（`cors.go:28-34`）、redirect 6（`redirect.go:27-32`）、`whitelist-source-range`（`ip_access_control.go:23`）、`ignore-path-case`（`:22`）、`ssl-passthrough`（`ssl_passthrough.go:17`）、http2rpc 2（`http2rpc.go:22-23`）、mcp-server 家族 7（`mcpserver.go:25-31`） | 见各文件 | ASAP / ForHigress |
 
+> [!NOTE]
+> **关于"108 条注解"的口径**：本表列的是**相对 key（功能点）**，共 **89 个**（逐文件提取 const 块得出：21 个仅 `higress.io` 前缀 + 68 个 ASAP 双前缀）。完整 key = 前缀 + 相对 key，ASAP 类叠加 `nginx.ingress.kubernetes.io` 与 `higress.io` 两个前缀后，**完整 key 约 157 个**。Plugin 页曾引用的"108 条注解 key 总表"在源码侧**没有对应的单一数字**——它既非 89（相对 key）、也非 157（完整 key）；当前文档站注解页（`higress.ai/docs/latest/user/annotation/`）实际只列 45 个 nginx 兼容 + 4 个 higress key ≈ 49 个。**"108"是流传概数，不能当源码事实引用**，已在 Plugin 页取消该引用。
+
 ## ConfigMap Layer
 
 `pkg/ingress/kube/configmap/` 由 `config.go` `controller.go` `global.go` `gzip.go` `mcp_server.go` `tracing.go` 组成。`config.go:28-29` 定下 `HigressConfigMapName = "higress-config"` 与 key `"higress"`；聚合结构体 `HigressConfig:36-44` 的字段映射是 `tracing→Tracing`、`gzip→Gzip`、`downstream→Downstream`（`global.go:62`）、`upstream→Upstream`（`global.go:76`）、`mcpServer→mcp_server.go`，外加 `disableXEnvoyHeaders` 与 `addXRealIpHeader`；默认值入口 `NewDefaultHigressConfig():46-58`。`global.go` 还有 `Http2:84` 与四个默认构造函数（`:176/:186/:197/:205`）与 `GlobalOptionController:214`；`controller.go:64` 的 `ConfigmapMgr` 在 `:140-146` 反序列化 `higress` 段。三个派生 EnvoyFilter 的名字写死在：`higress-config-tracing`（`tracing.go:33`）、`higress-config-gzip`（`gzip.go:32`）、`higress-config-mcp-server`（`mcp_server.go:126`）。
@@ -94,7 +99,7 @@ proto 里**没有 `plural:` marker**，复数形式（mcpbridges / http2rpcs / w
 | `plugins/wasm-rust/` | 1 个 | `ai-data-masking`（其余 6 个目录在 `example/` 下） |
 | `plugins/wasm-assemblyscript/` | 少量 | `custom-response` 的第二实现（`asconfig.json`） |
 | `plugins/golang-filter/` | 98 文件，独立 go.mod | **MCP Server Filter 的真身**：`main.go:13-14` 两次 `envoyHttp.RegisterHttpFilterFactoryAndConfigParser`，分别注册 `mcp-session` 与 `mcp-server` 两个 filter，子树 `mcp-server/{registry,servers}` 与 `mcp-session/handler`；构建 target `build-golang-filter` |
-| `plugins/release/` | — | 发布管线产物区（`console/` 下 9 个目录：`ai-context-limit`、`ai-endpoint-picker`、`gw-error-format`、`hmac-auth-apisix`、`json-converter`、`log-request-response`、`mcp-router`、`nginx-rewrite-compatible`、`response-cache` + `plans/ evidence/ snapshots/`） |
+| `plugins/release/` | 7 项（6 目录 + 1 json） | 发布管线产物区。顶层实测为 `bootstrap-evidence` `console` `console-recovery` `evidence` `plans` `snapshots` + `catalog.json`；其中 **`console/` 下恰 9 个目录**（已逐个核实）：`ai-context-limit`、`ai-endpoint-picker`、`gw-error-format`、`hmac-auth-apisix`、`json-converter`、`log-request-response`、`mcp-router`、`nginx-rewrite-compatible`、`response-cache` |
 
 按语言层数一遍就知道：**文档站的 41 与 wasm-go 的 53 是两个不相等的集合**。wasm-go 里约 20 个扩展没有文档页（含 `mcp-router`、Go 版 `model-router`、`nginx-rewrite-compatible`、`ai-context-limit`、`ai-endpoint-picker`、`ai-image-reader`、`api-workflow`、`jsonrpc-converter`、`log-request-response`、`response-cache`、`traffic-editor`、`gc-test`、`hello-world`、`http-call`、`streaming-body-example`、`test-redis-inject-spin`、`chatgpt-proxy`、`qwen3guard` 等），而文档收录的认证基础族在 wasm-cpp。上一版笔记据此写"41 款插件"是对的（那是**文档站口径**），但补一句"源码侧另有未入文档的扩展"更准确——`mcp-router` 此前被判为"未核实存在"，源码里它确实是一个目录。
 
@@ -117,7 +122,17 @@ proto 里**没有 `plural:` marker**，复数形式（mcpbridges / http2rpcs / w
 
 ## Unverified
 
-`istio/` 与 `envoy/` 子模块在本机**均未 checkout**（`ls istio/istio` 空），`external/` 不存在 ⇒ fork 与 Envoy 侧的内部实现一律未核，包括 `model.IngressRoute` 字段、cue-gen 的 plural 派生规则（结论标推断）、`hgctl` 各命令 `Use:` 字符串字面量（一次 `grep 'Use:\s+"'` 返回空，与该文件确实存在命令定义相矛盾，故不作为"不存在"的结论）、端口与 finalizer 常量的真实定义处（很可能在 fork 的 `features` 或 helm values）、`plugins/release/` 九个工作目录的性质、`test/inference-extension` 与 `pkg/ingress/kube/gateway/istio/` 移植层的细节。
+仍待核实（其余原分项已核到源码并移入正文）：
+
+- **Gateway API istio 移植层 `conversion.go` 的具体字段映射**：已核入口与输出目标（Gateway/HTTPRoute/GRPCRoute → Istio 四类资源，与 Ingress 侧同构），但每个 Gateway API 字段到 Istio 字段的逐条映射未逐行读（该层约 19 个 go 文件，仅核对了目录分组与输出类型）。
+- `external/` 在本机仍不存在（未跑 `make prebuild`），但 fork 侧结论已可在 `/Users/robin/Projects/istio` 的 **`istio-1.27` 分支**（HEAD `65133dd`，即本仓 `.gitmodules` pin 的 `istio/istio`）离线核实；`envoy/` 侧（含 `go-control-plane`）本机仍无对照树。
+
+以下原 Unverified 项已核实并移入正文：
+- **cue-gen plural 派生规则**：`api/gen.sh:11` 的 `cue-gen -verbose -f=./cue.yaml -crd=true` 调用链已坐实，`api/cue.yaml` 仅配 `openapi`（无 `k8s:` 段）；plural（wasmplugins / http2rpcs / mcpbridges）由 cue-gen 在 `-crd=true` 模式下**按 kind 名派生（标准规则：kind 小写 + s）**，Higress 未用 kubebuilder 的 `plural=` 显式标注——落地形式已在生成 yaml 交叉验证（`:7/:150/:237`），结论由"推断"升级为"可核"。
+- **端口与 finalizer 常量**：端口主定义在 `pkg/cmd/server.go:92-94` 的字面量（`HttpAddress: ":8888"` / `CertHttpAddress: ":8889"` / `GrpcAddress: ":15051"`），**无集中常量名**；cert 包侧另有 `IngressServicePort = 8889` 引用常量（`pkg/cert/ingress.go:37`）；finalizer 主仓业务代码**无自定义常量**（全仓 grep 仅命中 client 自动生成代码与 wasm build tag），即自有 CRD 的删除保护依赖 K8s 默认级联，而非 Higress 注的 finalizer。
+- `model.IngressRoute` 字段结构（`pilot/pkg/model/ali_push_context.go:38`，**fork 专有类型**）、13 个 hgctl 顶层命令的 `Use:` 字面量与各自文件、`plugins/release/` 顶层 7 项与 `console/` 下 9 个目录、`test/inference-extension` 的实质内容。
+
+证据基准：higress 主仓 v2.2.5（HEAD `4deae1dd`）+ istio-1.27 fork（HEAD `65133dd`，即本仓 pin 的 `istio/istio` 分支）。
 
 ## Links
 

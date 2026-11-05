@@ -364,7 +364,7 @@ deny_rules → ask_rules → read_only → tool.check_permissions → allow_rule
 
 3. **Concurrent batch 内的 ASK 去重**：并发执行多个工具时，同一批次的 `kept_rules` 列表累积已确认生成的 allow rule。后续工具的 ASK 如果已被某个 earlier rule 覆盖，就不再弹第二次——只对非安全 ASK 生效。
 
-权限 DSL 的完整逐文件事实（五种模式字段语义、`_check_<mode>` 分发顺序、`suggested_rules` 生成、`DenyAllResourceAccessPolicy` 跨 owner 访问）见 [Middleware 分册（权限）](/docs/CS/AI/LLM/Agent/Product/AgentScope/Middleware.md)。
+权限 DSL 的完整逐文件事实（五种模式字段语义、`_check_<mode>` 分发顺序、`suggested_rules` 生成）见 [Middleware 分册（权限）](/docs/CS/AI/LLM/Agent/Product/AgentScope/Middleware.md)。注意：`DenyAllResourceAccessPolicy` 不属于 `permission/` 包的权限 DSL，而是 Service 层的跨 owner 资源访问策略，位于 `src/agentscope/app/access/_policy.py`（见 [App 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/App.md)），与 `PermissionEngine` 的工具级 allow/deny/ask 判定是两条独立链路。
 
 ## Context Management
 
@@ -519,7 +519,7 @@ return template.render(
 
 ## Formatter Layer
 
-模型适配真正的复杂点不在「怎么发 HTTP 请求」，而在「怎么把统一的 `Msg` 序列翻译成某家 API 认得的 JSON」。AgentScope 用一整包 formatter 来收拢这件事——每家厂商两个类（`XxxChatFormatter` / `XxxMultiAgentFormatter`），目前 11 个文件覆盖 OpenAI / Anthropic / Gemini / DashScope / DeepSeek / Moonshot / Ollama / Volcengine / xAI。
+模型适配真正的复杂点不在「怎么发 HTTP 请求」，而在「怎么把统一的 `Msg` 序列翻译成某家 API 认得的 JSON」。AgentScope 用一整包 formatter 来收拢这件事——`formatter/` 目录下 11 个非 `__init__` 的 `.py` = 1 个 `FormatterBase` 抽象基类 + 10 个厂商 formatter；每家厂商一个 `XxxFormatter` 类，OpenAI 较特殊拆成 `OpenAIChatFormatter` 与 `OpenAIResponseFormatter` 两族（对应 Chat Completions 与 Responses 两套 API），故厂商实为 10 家（Anthropic / DashScope / DeepSeek / Gemini / Moonshot / Ollama / OpenAI / Volcengine / xAI，OpenAI 计两族）。
 
 `FormatterBase`（`formatter/_formatter_base.py`）的抽象面窄得出人意料——**只有一个抽象方法**：
 
@@ -851,9 +851,9 @@ else:
 
 Core Agent 层是 AgentScope 的大脑，但它假设"Agent 实例存在、输入消息有人喂、状态有人存"。Service 层（`agentscope/app/`）补上这三块——把 `Agent` 包装成一个可以被多用户、多会话、多进程并发调用的在线服务。这一层的设计模式和 Core Agent 层完全不同，因为它解决的是分布式系统问题，不是推理问题。
 
-#### MessageBus: Six Primitives Instead of Domain-Specific APIs
+#### MessageBus: Five Primitives Instead of Domain-Specific APIs
 
-`MessageBus` 是整个 Service 层的神经中枢。AgentScope 没有定义 `InboxQueue` / `EventLog` / `WakeupSignal` 这类领域对象，而是把协调需求收敛成**六种消费语义原语**，每个原语对应一种数据生命周期：
+`MessageBus` 是整个 Service 层的神经中枢。AgentScope 没有定义 `InboxQueue` / `EventLog` / `WakeupSignal` 这类领域对象，而是把协调需求收敛成**五种消费语义原语（Mode A/C/D/E/F，编号无 B）**，每个原语对应一种数据生命周期：
 
 | 原语模式 | 语义 | 典型用途 |
 | :--- | :--- | :--- |
@@ -865,7 +865,7 @@ Core Agent 层是 AgentScope 的大脑，但它假设"Agent 实例存在、输�
 
 **设计动机**：把业务语义与传输层解耦。Service 层上层代码只管选原语 + 定义 key 命名约定（`MessageBusKeys` 静态类集中管理所有 key 格式），底层可以换成 Redis / NATS / InMemory 而不触动业务代码。`_base.py` 里那句"Counted broadcast is intentionally not exposed"尤其说明问题——想 fan-out 给 N 个成员？写时 fan-out（每个收件人 inbox push 一条 Mode A），不要让总线维护 consumer group 协调状态。总线保持简单，复杂性留给生产者。
 
-**Mode C 的 replay-then-live 模式**是事件流 gap-free 读取的基础。`open_reply_stream()` 的两阶段读取——先 `log_read(max_count=SESSION_REPLAY_MAX_LEN)` 把最近 1000 条历史拉回来，再进入 `subscribe` 实时模式，用 entry_id 做去重——让消费者可以在 Agent 已经在跑之后才订阅（SSE endpoint 的典型场景），而不会错过任何事件。
+**Mode C 的 replay-then-live 模式**是事件流 gap-free 读取的基础。Service 层的 `open_reply_stream()`（位于 `app/channel/_stream.py`，**并非 `MessageBus` 成员**，而是模块级 async 生成器）的两阶段读取——先 `log_read(max_count=SESSION_REPLAY_MAX_LEN)` 把最近 1000 条历史拉回来，再进入 `subscribe` 实时模式，用 entry_id 做去重——让消费者可以在 Agent 已经在跑之后才订阅（SSE endpoint 的典型场景），而不会错过任何事件。
 
 #### Deployment Mode: Three Role-Separation Switches
 

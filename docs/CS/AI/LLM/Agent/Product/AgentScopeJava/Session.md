@@ -6,9 +6,14 @@ AgentScope Java 的 Session Log 是一层**独立于 Agent 执行的持久化基
 
 与 Python 版「内存态 conversation + 可选 SQLite 落盘」的做法不同，Java 版的 Session Log 从第一版起就是核心模块，Agent 本身反而是它的消费者——Agent 启动时先向 Session 要历史，执行中把事件写回 Session。这层设计直接服务于生产环境的三个硬需求：多轮对话可恢复（进程重启不丢上下文）、长任务可审计（谁在什么时候改了什么）、多实例可共享（同一 session 在 Service 模式下被不同节点接管）。
 
-本分册事实来自本地 `v2.0.4` 源码树（`agentscope-core/.../session/`、`agentscope-harness/.../memory/session/`、`.../transcript/`、`agentscope-service/`）与官方文档站 v2 会话日志页，冲突处以源码为准。
+本分册事实核对自本地 `v2.0.4` 源码树（`agentscope-harness/.../memory/session/`、`.../transcript/`、`agentscope-core/.../state/`、`agentscope-service/`）与官方文档站 v2 会话日志页。
+
+> [!WARNING]
+> **源码校准（重要）**：官方文档站（含 v2 会话日志页）描述了一套逻辑对象模型——`commits` / `blobs` / `exports` / `inbox` 四类存储，以及 `WorkspaceSessionLogStore` / `JournalSessionLog` / `AtomicSessionStorage` / `SessionMigration` / `SessionLogExporter` / `SessionRecorder` / `SessionEventCodecRegistry` / `SessionKey` 等类名。但**在 v2.0.4 主源码（`core` / `harness` / `extensions` / `service`）中这些均未落地**——`agentscope-core` 下甚至没有 `session/` 包，全仓 Grep 这些类名零命中（仅 `SessionFreshnessEvaluator` / `ChatUiChannel` 出现在 `agentscope-examples` 示例模块）。v2.0.4 真实持久化是 `AgentStateStore`（`JsonFile` / Redis / JDBC / Mongo / PG / COS / OSS）+ harness 的 `TranscriptStore` / `SessionTranscriptWriter`（append-only JSONL），且**没有 `checkpoint` 类**。因此下方 **Object Layout 段的 `commits`/`blobs`/`exports`/`inbox` 应视为文档站逻辑模型**，真实源码机制请以下方 **Compat Session Tree 段**与 [执行内核分册 State Persistence 段](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Execution.md) 为准；AgentSession API / Identity / Event Catalog / Channel 的接口名若与源码不符，以源码为准。
 
 ## Object Layout
+
+> ⚠️ 见顶部源码校准声明：以下 `commits` / `blobs` / `exports` / `inbox` 是**官方文档站的逻辑对象模型**，在 v2.0.4 源码中未落地；v2.0.4 真实持久化布局见下方 Compat Session Tree 段（`.log.jsonl` + `TranscriptStore`）与 [执行内核分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Execution.md)。保留本段作为设计概念对照，不把它当作源码事实。
 
 日志对象与输入队列按会话保存如下（**身份段用 Base64URL 编码**）：
 

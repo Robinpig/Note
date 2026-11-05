@@ -106,7 +106,14 @@ helm upgrade higress --version ${higress_version} -n higress-system higress.io/h
 > [!WARNING]
 > **`hgctl config` 确实存在**，但它的语义是**抓 xDS 配置**——二级命令 `all` / `bootstrap` / `cluster` / `endpoint` / `listener` / `route`（`hgctl/pkg/config_cmd.go:45-50`），文档站的 hgctl 页整段没提它。反过来，`profile` / `install` / `upgrade` / `dashboard` / `uninstall` 这些是 **root 的子命令**，不是 `config` 的子命令；旧资料把两组混成"hgctl config 的子命令是 profile / install / …"是错的。`plugin` 子命令组的真实动作是 `build` / `install` / `uninstall` / `ls` / `test` / `config` / `init`（`hgctl/pkg/plugin/plugin.go:36-42`）。
 
-install 核心参数只有 `-s/--set` 与 `-f/--filename`，profile 取值文档里出现的是 `local-k8s` 与 `local-docker`。`dashboard` 可打开 Console、Controller Debug、Envoy、Grafana、Prometheus 五个界面（`--browser` 默认 true）。
+`hgctl install` 的参数全集（源码 `hgctl/pkg/install.go:76-81` + `options.AddKubeConfigFlags`）：`-f/--filename`（helm 自定义 values 文件，可多次）、`-s/--set`（`path=value`，既能覆盖 profile 字段如 `profile=local-k8s` / `gateway.replicas=2`，也能透传 helm values 如 `values.global.proxy.resources.requests.cpu=500m`）、`-d/--manifests`（本地 manifests/profiles 目录，内部别名成 `--set installPackagePath=`）、`--devel`（version=latest 时拉取 alpha/beta/rc 而非 stable），以及标准的 kube config 旗（`--kubeconfig` / `--context` / `--namespace` 等）。
+
+profile 取值（`hgctl/pkg/manifests/profiles/` + `hgctl/pkg/helm/profile.go`）：`hgctl profile list` 只列出 **`k8s`、`local-k8s`、`local-docker`** 三个（`readProfiles` 跳过内部模板 `_all.yaml`）；另有 `_all.yaml`（`profile: all`，含 higress + standalone 双 chart 段）是内部汇总模板、不可选。默认 profile 是 **`local-k8s`**（`DefaultProfileName`，`render.go:47`）——但 `install` 不静默取默认：未写 `--set profile=` 时会交互提示「1=local-k8s / 2=k8s / 3=local-docker」。三个 profile 的差异在全局开关与默认值：`k8s` 关 IstioAPI/GatewayAPI、gateway 副本 2；`local-k8s` 开两者 + `global.local=true`、o11y 开、gateway 副本 1；`local-docker` 走 `storage.url=file://`、显式给 console.port / gateway 三端口。`global.install` 枚举虽写了 `k8s/local-k8s/local-docker/local` 四个值，但 `Validate` 只接受前三个（`local` 已定义却被拒）。
+
+> [!NOTE]
+> **`hgctl install` 的校验规则（`Profile.Validate()`，`profile.go:400-431`）按 install mode 分级**：① `global.install` 必须是 `k8s`/`local-k8s`/`local-docker` 之一，且 k8s 系下 `global.ingressClass` 与 `global.namespace` 不可为空；② k8s 系要求 `console.replicas`/`gateway.replicas`/`controller.replicas` 均 > 0，`local-docker` 要求 `console.port` 与 `gateway.httpPort`/`httpsPort`/`metricsPort` 均 > 0；③ `local-docker` 下 `storage.url` 必填、须以 `nacos://` 或 `file://` 开头、且**禁止 localhost / 127. 回环地址**（`storage.url` 含 "localhost" 或 "/127." 直接报错），`dataEncKey` 若填则**必须恰好 32 字符**（否则 "expecting 32 characters for dataEncKey"），nacos 的 `username`/`password` 必须同时有或同时空；④ 所有资源字段（CPU/memory）必须匹配 k8s 资源格式正则 `^\d+((n|u|m|k|Ki|M|Mi|G|Gi|T|Ti|P|Pi|E|Ei)?)$` 且不以 `-`/`0` 开头。校验在 `install` 流程里于渲染前执行（`install.go:149-153`），不通过直接返回 error、不会部分落地。资源字段另有默认值回填（如 console 250m/512Mi、gateway 2000m/2048Mi、controller 500m/2048Mi）。
+
+`dashboard` 可打开 Console、Controller Debug、Envoy、Grafana、Prometheus 五个界面（`--browser` 默认 true）。
 
 "配置改了但没生效"必须按层定位，四段链依次是控制面生成、pilot 收到、pilot 推出、数据面生效：
 
@@ -136,7 +143,7 @@ FAQ 与场景页给出的、值得照抄进决策清单的口径：
 
 ## Unverified
 
-`hgctl install` 支持的完整 profile 取值集合与 hgctl 级参数全集；Standalone 各参数的必填性校验规则（参数**存在性已逐个核到源码**，但 `-c` 与 `--use-builtin-nacos` 之外的组合约束、`-k` 在升级时是否会轮换既有密文仍未核）；Console 管理员账号是否落地为某个 K8s Secret、密码重置方式与登录失败锁定策略；`crd.yaml` 在各版本间的差异；企业版（MSE 云原生网关）与开源版在 WAF / 认证插件上的功能差异清单。
+`hgctl install` 的 profile 取值集合（`k8s`/`local-k8s`/`local-docker` + 内部 `_all` 模板）、hgctl 级参数全集（`-f`/`-s`/`-d`/`--devel` + kube 旗）与 `Profile.Validate()` 校验规则**已自主仓源码解锁**（见 hgctl and Troubleshooting Chain 的 NOTE）。Standalone 各参数的必填性校验规则（参数**存在性已逐个核到 `higress-standalone` 源码**，但 `-c` 与 `--use-builtin-nacos` 之外的组合约束、`-k` 在升级时是否会轮换既有密文仍未核）；Console 管理员账号是否落地为某个 K8s Secret、密码重置方式与登录失败锁定策略（涉及 `higress-console` 仓，含敏感凭据检索；本轮实际检索被敏感内容审批拦截，保持未核）；`crd.yaml` 在各版本间的差异；企业版（MSE 云原生网关）与开源版在 WAF / 认证插件上的功能差异清单。
 
 Istio / Envoy 的内核版本已不再是未决项——主仓 `.gitmodules` 把 fork 分支钉在 **`istio-1.27`**（`istio/pkg` 单独走 `istio-1.19`）与 **`envoy-1.36`**，K8s 侧依赖 pin 在 v0.34.1，证据与推导链在 [Source Map](/docs/CS/Framework/Higress/Source_Map.md)。
 

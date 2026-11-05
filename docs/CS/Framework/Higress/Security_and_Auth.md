@@ -37,7 +37,21 @@ allow: [app-a]
 
 ## External Auth Engines
 
-`ext-auth` 的实现参考 Envoy 原生 `ext_authz` filter，且**只覆盖了对接 HTTP 服务的那部分能力**。核心字段：`http_service`（必填，含 `endpoint_mode: envoy|forward_auth`（默认 envoy）、`endpoint.service_name`（带服务类型的完整 FQDN，如 `ext-auth.dns`）、`service_port` 默认 80、`service_host`、`timeout` 默认 1000ms、`authorization_request` / `authorization_response`）、`match_type` + `match_list`（每项 `match_rule_domain` 支持 `*.bar.com`、`match_rule_path`、`match_rule_type`）、以及三个失败语义开关：`failure_mode_allow`（默认 false，授权服务不可达或返回 5xx 时是否放行）、`failure_mode_allow_header_add`、`status_on_error`（默认 403）。
+`ext-auth` 的实现参考 Envoy 原生 `ext_authz` filter，且**只覆盖了对接 HTTP 服务的那部分能力**（`config.go` @ v2.2.5）。核心字段：`http_service`（必填，含 `endpoint_mode: envoy|forward_auth`（默认 envoy）、`endpoint.service_name`（带服务类型的完整 FQDN，如 `ext-auth.dns`）、`service_port` 默认 80、`service_host`、`timeout` 默认 1000ms、`authorization_request` / `authorization_response`）、`match_type` + `match_list`（每项 `match_rule_domain` 支持 `*.bar.com`、`match_rule_path`、`match_rule_type`、`match_rule_method`、`match_rule_headers`）、以及三个失败语义开关：`failure_mode_allow`（默认 false，授权服务不可达或返回 5xx 时是否放行）、`failure_mode_allow_header_add`、`status_on_error`（默认 403）。
+
+`authorization_request` 与 `authorization_response` 是 Envoy 同名概念的精简子集，源码确认字段全集如下（`config.go:49-65` 结构体 + `:187-256` 解析）：
+
+| 子字段 | 所属 | 类型与默认值 | 说明 |
+| --- | --- | --- | --- |
+| `allowed_headers` | request | `StringMatcher` 数组（大小写不敏感） | 允许透传给外部授权服务的请求头；不配则默认全透传 |
+| `headers_to_add` | request | `map[string]string` | 调用授权服务前注入的请求头 |
+| `with_request_body` | request | bool | 把请求体发给授权服务；**envoy 模式下若方法是 GET/OPTIONS/HEAD 还设为 true 会直接报错** |
+| `max_request_body_bytes` | request | uint32，默认 **10 MiB**（`DefaultMaxRequestBodyBytes`） | 随体发送的最大字节；设为 0 也会回落到 10 MiB |
+| `allowed_properties` | request | `{path:[]string, header:string}` 数组 | 把 Envoy 属性（attribute）映射成请求头给授权服务 |
+| `allowed_upstream_headers` | response | `StringMatcher` 数组 | 授权服务响应头里允许回写进上游请求的头 |
+| `allowed_client_headers` | response | `StringMatcher` 数组 | 授权服务响应头里允许回写客户端的头 |
+
+注意 `allowed_headers` 是**白名单式**——这与 Envoy 原始行为（默认透传全部、用 `allowed_headers` 裁剪）一致，配置时需显式列出要透传的头，否则授权服务收不到认证信息。
 
 `opa` 把 Open Policy Agent 作为外部策略引擎，字段是 **camelCase**——`policy`、`timeout`、`serviceSource`（取值 `k8s,nacos,ip,route`）、`host`、`serviceName`、`servicePort`、`namespace` 全是。全站其它插件用 snake_case，**照抄邻居插件的风格写 opa 会静默不生效**。
 
@@ -55,7 +69,9 @@ secRules:
   - "SecRule REQUEST_URI \"@streq /admin\" \"id:101,phase:1,t:lowercase,deny\""
 ```
 
-三条实操要点：**`useCRS` 默认 false**，只装插件不写这个字段，等于只有用户自定义规则、没有基础防护；上线顺序是 `DetectionOnly` 观察 → 用 `SecRuleRemoveById` 摘误拦 → 再 `SecRuleEngine On`；支持路由级 / 域名级细粒度防护。效果评测官方推荐 **GoTestWAF**（API / OWASP 攻击模拟工具，支持 REST、GraphQL、gRPC、WebSocket、SOAP、XMLRPC），并指出 benchmark 里的 `paranoia` 是防护等级、**数值越大正确拦截与误拦截都同时增加**（CRS 版本、paranoia 可配字段与得分数值本次未取到可读数字，不写具体值）。
+三条实操要点：**`useCRS` 默认 false**，只装插件不写这个字段，等于只有用户自定义规则、没有基础防护；上线顺序是 `DetectionOnly` 观察 → 用 `SecRuleRemoveById` 摘误拦 → 再 `SecRuleEngine On`；支持路由级 / 域名级细粒度防护。效果评测官方推荐 **GoTestWAF**（API / OWASP 攻击模拟工具，支持 REST、GraphQL、gRPC、WebSocket、SOAP、XMLRPC），并指出 benchmark 里的 `paranoia` 是防护等级、**数值越大正确拦截与误拦截都同时增加**。
+
+**CRS 版本与 paranoia 的源码事实（v2.2.5）**：插件配置 schema 只有 `useCRS` + `secRules` 两个字段（`README_EN.md:18-19`），**paranoia level 不是用户可配项**，由打包的 CRS setup 配置固定。打包的 CRS 规则集实际是 **`OWASP_CRS/4.0.0-rc1`**——`wasmplugin/rules/crs/` 下全部 356 处 `ver:'OWASP_CRS/4.0.0-rc1'` 且 `crs-setup.conf.example` 文件头明确写着 "Core Rule Set ver.4.0.0-rc1"。**这与 README 里引用的 `coreruleset/tree/v3.3.2` 链接不一致（README 是陈旧链接，实际打包的不是 3.3.2）**，引用版本号时要以打包规则为准。默认 paranoia level 是 **Level 1**（规则文件内 `DETECTION_PARANOIA_LEVEL "@lt 1"` 标注 "Paranoia Level 1 (default)"，可选 1–4），Level 越高覆盖攻击面越广、误拦也越多。
 
 其余防护插件，注意它们的阶段与归类都不是直觉那样：
 
@@ -101,7 +117,7 @@ Helm 侧等价开关是 `higress-core.controller.automaticHttps.enabled`（默�
 
 ## Unverified
 
-`ext-auth` 的 `authorization_request` / `authorization_response` 子字段全集（是否含 `withRequestBody`、maxRequestBytes、allowed_headers 等 Envoy 同名概念的确切字段名）；CRS 版本号、`paranoia level` 的可配字段与默认等级、GoTestWAF 得分数值；`oidc` 是否也支持 consumer / allow 式的按调用方授权；mTLS 服务网格侧的证书轮转细节（`trustDomain` 已核实，其下的证书生命周期未核实）。
+mTLS 服务网格侧的证书轮转细节已从 istio-1.27 fork 源码坐实：**网格服务证书的签发与轮转由 istiod 侧的 SDS（node agent secret cache）承载**，证据在 `security/pkg/nodeagent/cache/secretcache.go`——`:630` 的 `rotateTime(secret)` 计算轮转窗口、`:302` 注释明确 "trigger the periodic rotation for workload certificate"；根证书轮转由 `security/pkg/pki/ca/selfsignedcarootcertrotator.go` 承担。`trustDomain`（`higress-core.meshConfig.trustDomain` 默认 `cluster.local`）与 `pilot.jwksResolverExtraRootCA` 见正文。结论：**Higress 不自签网格 mTLS 证书**，仅通过信任域与额外根 CA 配置把证书生命周期完全交给 istiod（与"Higress 控制面不实现 xDS、只翻译 Istio 对象"的架构一致），因此这块逻辑不在 Higress 自研代码里。
 
 ## Links
 
