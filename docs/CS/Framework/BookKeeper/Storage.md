@@ -430,6 +430,19 @@ GarbageCollectorThread.run()                  // :445
 > [!WARNING]
 > `minorCompactionThreshold` 与 `majorCompactionThreshold` 都是**存活率阈值**（不是「垃圾率」）：entry log 里存活比例低于 0.2 才触发 minor。启动时若 `threshold > 1.0` 会直接抛 `IOException`（`:247-249`）。
 
+### GC 算法源码级
+
+上文给了阈值与概览，这里落到 `GarbageCollectorThread` 的真实调度与两种实现。
+
+**调度**：构造取 `gcWaitTime = conf.getGcWaitTime()`（`GarbageCollectorThread.java:180`），默认 **600000 ms（10 分钟）**（`ServerConfiguration.java:424`）；`start()`（`:422-428`）用 `scheduleWithFixedDelay(..., gcWaitTime, ...)` 每轮跑 `runWithFlags`（`:444-575`）：依次 `doGcLedgers` → `extractMetaFromEntryLogs` → `doGcEntryLogs` → 视条件 compaction。多 ledger 目录错开 `getModInitialDelay`（`:437-442`）避免 GC 风暴。
+
+**minor / major 触发**：启用需 `interval>0 && threshold>0 && threshold<1.0 && interval>=gcWaitTime`（`:246-277`），且要求 `minor.interval < major.interval` 与 `minor.threshold < major.threshold`（否则抛 IOException，`:279-287`）。判定在 `runWithFlags`（`:489-534`）：进 major 当到了 `majorCompactionInterval`（默认 86400s）或强制且 `!suspendMajor` → `doCompactEntryLogs(majorCompactionThreshold=0.8, ...)`（`:501`）；否则进 minor 当到了 `minorCompactionInterval`（默认 3600s）或强制 → `doCompactEntryLogs(minorCompactionThreshold=0.2, ...)`（`:524`）。`doCompactEntryLogs`（`:664-780`）用 10 个 bucket（每 10% 一档，`:63`），只压缩 `usage < threshold` 的 log（存活率低 / 垃圾率高），受 `maxTimeMillis` 时间预算约束。
+
+**两种 compactor**（字段 `compactor`，`:239-243`）：默认 `EntryLogCompactor`（`EntryLogCompactor.java:58-76`）**边读边写搬迁**—— `scanEntryLog` 扫旧 log，把仍存活的 ledger entry `entryLogger.addEntry` 写进当前新 entry log，flush 后 `removeEntryLog` 删旧文件，`maxOutstandingRequests`（默认 **100000**，`ServerConfiguration.java:2984`）满则 flush；`useTransactionalCompaction=true` 时换 `TransactionalEntryLogCompactor`（断电可恢复，`cleanUpAndRecover`，`GarbageCollectorThread.java:459`）。
+
+> [!IMPORTANT]
+> 两个纠偏：`majorCompactionMaxOutstandingRequests` 在该版本**不存在**，pending 上限由 `compactionMaxOutstandingRequests`（默认 100000）承担；`ScanAndCompareGarbageCollector`（`GarbageCollectorThread.java:187` 默认创建）是**另一类 ledger 级 GC**——它比较「本 bookie 活跃 ledger 集合」与「元数据 store」，删除本地有但元数据已无的 ledger 索引（`ScanAndCompareGarbageCollector.java:119-231`），**并不扫描 entry log**；扫描 entry log 收集 ledger 集合的是 `GarbageCollectorThread.extractMetaFromEntryLogs`（`:879-928`）。
+
 ## Disk Usage And Read-Only Mode
 
 bookie 会周期性检查磁盘使用率（`diskCheckInterval` 默认 **10000 ms**，`:2679`），超过阈值就进入只读：
@@ -460,6 +473,39 @@ bookie 会周期性检查磁盘使用率（`diskCheckInterval` 默认 **10000 ms
   └─ Journal.logAddEntry → 队列 → group commit → fsync（ForceWriteThread）
         └─ fsync 成功后回调客户端
 ```
+
+## End-to-End Write Path
+
+把前面拆开的片段串成一条端到端写入时序（基于 `addEntryInternal` 的真实调用顺序，`BookieImpl.java:980-1016`）：
+
+```sequence
+participant Client
+participant BookieImpl
+participant LedgerStorage
+participant Journal
+participant ForceWriteThread
+participant EntryLogger
+
+Note over Client,EntryLogger: 一次 addEntry 的端到端链路
+Client->>BookieImpl: addEntry(entry, ackBeforeSync, cb)
+BookieImpl->>LedgerStorage: handle.addEntry(entry)  :984
+LedgerStorage->>LedgerStorage: 放入 WriteCache（堆外内存，不落盘）
+BookieImpl->>Journal: logAddEntry(entry, cb)  :1015
+Journal->>Journal: 入队 queue（BlockingMpscQueue）
+Note over Journal: 主循环攒批写 BufferedChannel
+Journal->>ForceWriteThread: forceWriteRequests（达 2ms / 512KB）
+ForceWriteThread->>Journal: fsync（FileChannel.force）
+ForceWriteThread-->>Client: cb.writeComplete（ack 发出）
+Note over LedgerStorage,EntryLogger: 后台异步（与 ack 解耦）
+LedgerStorage->>EntryLogger: swapWriteCache → entryLogger.addEntry  :826
+EntryLogger->>EntryLogger: 追加到 entry log 文件
+```
+
+> [!TIP]
+> 时序里有两个**并不同步**的阶段：客户端拿到 ack 只需 Journal fsync（上方 WAL 路径）；entry 真正写进 entry log 文件是 LedgerStorage 后台 flush 异步完成的（下方虚线区）。两者解耦正是 BookKeeper 既低延迟又持久的原因。
+
+> [!NOTE]
+> 读路径、Recovery、Auto-Recovery 等其它时序拆解见 [Read](/docs/CS/Framework/BookKeeper/Read.md)、[Ledger](/docs/CS/Framework/BookKeeper/Ledger.md)、[Cluster](/docs/CS/Framework/BookKeeper/Cluster.md)。
 
 ## Corrections To Common Claims
 

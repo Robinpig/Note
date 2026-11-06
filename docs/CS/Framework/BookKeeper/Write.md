@@ -100,6 +100,41 @@ if (completed) {
 
 即：**「回调成功」只代表 Qa 份落盘，剩下的副本由 ensemble change 或后台 auto-recovery 补齐**。
 
+### Client 写缓冲与有序完成（源码级）
+
+`LedgerHandle` 内部用一条 `ConcurrentLinkedQueue<PendingAddOp> pendingAddOps`（`LedgerHandle.java:174/:218`）充当**客户端写缓冲**：`doAsyncAddEntry` 在分配完 `entryId` 后把 op 入队（`LedgerHandle.java:1731`），随后 `op.initiate()` 才真正把请求发往 bookie。用户回调**不按「谁先 ack 回来」乱序触发**，而是严格按 entryId 顺序从队头 drain——这是并发写下读安全线（LAC）连续的根本保证。
+
+**入队与 entryId 分配（`doAsyncAddEntry` :1716）**
+
+```java
+if (throttler != null) { throttler.acquire(); }          // :1717  应用层限速（默认 5000 permits/s）
+synchronized {
+    long entryId = ++lastAddPushed;                       // :1727  ★entryId 由客户端分配
+    op.setEntryId(entryId); pendingAddOps.add(op);        // :1731  入写缓冲
+}
+```
+
+**有序 drain（`sendAddSuccessCallbacks` :2225）—— LAC 推进与用户回调的唯一出口**
+
+```java
+while ((pendingAddOp = pendingAddOps.peek()) != null && !changingEnsemble) {
+    if (!pendingAddOp.completed) return;                          // :2232  队头未完成就停
+    if (pendingAddOp.entryId != pendingAddsSequenceHead + 1) return; // :2239  非期望序号就停
+    pendingAddOps.remove();                                       // :2249
+    pendingAddsSequenceHead = pendingAddOp.entryId;                // :2251  ★推进有序指针
+    if (!writeFlags.contains(WriteFlag.DEFERRED_SYNC))
+        this.lastAddConfirmed = pendingAddsSequenceHead;           // :2253  ★LAC 只在此推进
+    pendingAddOp.submitCallback(BKException.Code.OK);              // :2256  ★用户回调在此发出
+}
+```
+
+关键在 `pendingAddsSequenceHead`（`LedgerHandle.java:131`）：entry 是并发写、乱序 ack 的，**即便某条 entry 已凑满 Qa 个成功，只要它之前还有 entry 没完成，它的用户回调就不能发、LAC 也不能往前推**。所以 `lastAddConfirmed` 只在这里推进，不在 `PendingAddOp.writeComplete` 里——这正是并发写下「读只能读到连续 LAC 之前」的实现基础。
+
+**completed 标志与「完成之后才报错」**（`PendingAddOp.java:278-330`）：`writeComplete` 是 bookie 响应的回调入口。`completed` 一旦置 true（:413），后续晚到的错误不会撤销完成，但会记账并触发副本修复：`getAddOpUrCounter().inc()` + `notifyWriteFailed`（:304-307）—— 即「回调成功只代表 Qa 份落盘、其余副本待补齐」的源码体现（`notifyWriteFailed` 把失效 bookie 放入 `delayedWriteFailedBookies`，下一轮 `initiate` 经 `maybeHandleDelayedWriteBookieFailure` :272 触发 ensemble change）。
+
+> [!TIP]
+> 还有一处**幂等闭合细节**：`unsetSuccessAndSendWriteRequest`（:191）在 ensemble 变更时会撤销某条 entry 的「成功」并重发；若撤销导致 ack quorum 被打破，`completed` 会重置为 false（:235-237）并重发。这解释了为什么 `writeComplete` 里 `completed==true` 之后仍需在 :325 再调一次 `sendAddSuccessCallbacks()`——防止「已完成的 op 因 unset 不再被触发回调而永远卡住」。
+
 ## Ensemble Change
 
 写失败有两条处理分支（`PendingAddOp.java:361-391`），取决于 `delayEnsembleChange`（默认 **false**，`ClientConfiguration.java:1875`）：
@@ -125,6 +160,56 @@ sendWriteRequest(ensemble, bookieIndex);                          // :240
 > [!WARNING]
 > 换 ensemble 会**追加一个 segment 到 ledger 元数据**（代价是一次元数据写入，见 [Ledger](/docs/CS/Framework/BookKeeper/Ledger.md)）。频繁 ensemble change 意味着元数据服务压力大、写延迟抖动 —— 排查写延迟时先看 ensemble change 计数，而不是只看 bookie 的磁盘。
 
+### Ensemble Change 路由（源码级）
+
+写失败的处理入口在 `PendingAddOp.writeComplete` 的 `default` 分支：`delayEnsembleChange=true` 时先把失效 bookie 记入 `failedBookies`、攒够再 `handleBookieFailure`（:361-371）；`false`（默认）则每个失败立即 `lh.handleBookieFailure(ImmutableMap.of(bookieIndex, addr))`（:390）。
+
+**`handleBookieFailure`（`LedgerHandle.java:2293`）** 三分支：
+
+- `disableEnsembleChangeFeature` 开启 → 不换副本，直接 `unsetSuccessAndSendWriteRequest(getCurrentEnsemble(), failedBookies)`（:2301）重新发给原 bookie；
+- 携带 `WriteFlag.DEFERRED_SYNC` → 不允许 ensemble change，`handleUnrecoverableErrorDuringAdd`（:2312）；
+- 否则进入 `ensembleChangeLoop`。
+
+**`ensembleChangeLoop`（:2339）** 是真正的「换副本 + 写元数据」：
+
+1. `metadataLock` 守护 `changingEnsemble`，正在换则把失败合并进 `delayedWriteFailedBookies`（:2322）留到下一轮；
+2. `maxAllowedEnsembleChanges` 上限保护（:2344），超频直接判不可恢复错误；
+3. **MetadataUpdateLoop** 用 CAS 语义替换失效 bookie：`EnsembleUtils.replaceBookiesInEnsemble`（:2373）按 PlacementPolicy 选新 bookie；
+4. 计算 `newEnsembleStartEntry = getLastAddConfirmed() + 1`（:2377），**关键判定**（:2390）：若 `lastEnsembleKey == newEnsembleStartEntry` 则 `replaceEnsembleEntry`（覆盖最后一个 segment），否则 `newEnsembleEntry`（追加新 segment）—— 直接对应 ledger 元数据的 **segment** 列表（一致性边界，见 [Ledger](/docs/CS/Framework/BookKeeper/Ledger.md)）；
+5. 成功后 `EnsembleUtils.diffEnsemble(origEnsemble, newEnsemble)`（:2437）算出被换掉的 bookie 下标，调 `unsetSuccessAndSendWriteRequest(newEnsemble, replaced)`（:2451）把飞行中的 entry 重发到新 bookie。
+
+> [!WARNING]
+> 「换 ensemble」的代价是一次 **元数据写（ZK 事务）**，不是内存操作——这正是频繁 ensemble change 拉高延迟、压元数据服务的根因。另外 `replaceEnsembleEntry` vs `newEnsembleEntry` 的判定（:2390）保证「新 segment 起点要么是 LAC+1（覆盖最后一段）、要么是更大的 entryId（追加新段）」，与 ledger 元数据「segment 必须连续、不可重叠」的约束一致。排查时先看 `ensembleChangeCounter`（:177/:2341）与 `numEnsembleChanges`，而非直接盯 bookie 磁盘。
+
+## Netty 网络层与限速（源码级）
+
+客户端到 bookie 的每一次 addEntry 都经 Netty 收发。`PendingAddOp.sendWriteRequest`（:146）→ `clientCtx.getBookieClient().addEntry(...)`，落到 `PerChannelBookieClient`（每条 TCP 连接一个，继承 `ChannelInboundHandlerAdapter`）。
+
+**连接与 pipeline（`connect` :506 / `initChannel` :586）**
+
+- 传输层按 `EventLoopGroup` 类型选 `IoUringSocketChannel` / `EpollSocketChannel` / `NioSocketChannel` / `LocalChannel`（:520-539），默认 NIO；
+- TCP 选项：`TCP_NODELAY`（:547）、`SO_KEEPALIVE`（:548）、`WRITE_BUFFER_WATER_MARK`（:543-544，背压水位）、epoll/iouring 的 `TCP_USER_TIMEOUT`（:523/531）；
+- pipeline：`FlushConsolidationHandler(1024)`（攒批 flush）→ `ByteBufList.ENCODER` → `LengthFieldBasedFrameDecoder(maxFrameSize, 0, 4, 0, 4)`（按长度解帧）→ `BookieProtoEncoding.RequestEncoder/ResponseDecoder` → `AuthHandler.ClientSideHandler` → 本 handler（:590-600）。
+
+**发请求（`addEntry` :762 → `writeAndFlush` :1148）**
+
+- 协议：V3（`ProtocolVersion.VERSION_THREE` :794），`AddRequest` 带 `ledgerId/entryId/masterKey/body`（:805-809），`RECOVERY_ADD` 与 `WriteFlag` 经 header flag 表达（:811-818）；
+- 注册 `AddCompletion` 到 `completionObjects`（`ConcurrentOpenHashMap`，:160/:824），键为 `TxnCompletionKey(txnId, ADD_ENTRY)`；
+- `writeAndFlush`（:1148）先查 `channel.isWritable()`：**背压**—— 若 `allowFastFail && !isWritable` 直接 `errorOut(key, TooManyRequestsException)`（:1168-1176），不让发送队列无界膨胀；否则 `channel.writeAndFlush(request, promise)`（:1205），写失败经 promise listener `errorOut(key)`（:1197）回滚。
+
+**收响应与断连（`channelRead` :1382 / `channelInactive` :1285）**
+
+- 响应经 `readV2/V3Response` → `AddCompletion` → 回到 `PendingAddOp.writeComplete`（见上文 AckSet 一节），完成 quorum 判定；
+- 连接断开 `channelInactive`（:1285）会把该 channel 上**所有在飞请求** `errorOutOutstandingEntries(BookieHandleNotAvailableException)`（:1296）—— 一条 TCP 断线会让这条连接上所有未完成 add 立即以「bookie 不可用」错误返回，进而触发 `handleBookieFailure` 换副本。**这是 BookKeeper「无副本协商、客户端自愈」在网络层的落点**。
+
+**客户端限速（两层）**
+
+1. **应用层令牌桶**：`LedgerHandle.throttler`（`RateLimiter`，:148/:250），`doAsyncAddEntry` 里 `throttler.acquire()`（:1717）；`throttleValue` 默认 **5000 permits/s**（`ClientConfiguration.java:238`），设 0 关闭（:252）。
+2. **Netty 写缓冲水位背压**：`WRITE_BUFFER_WATER_MARK` + `allowFastFail` 的 `TooManyRequestsException`（见上）。
+
+> [!TIP]
+> `BookieClientImpl.channels` 是 `ConcurrentHashMap<BookieId, PerChannelBookieClientPool>`（:88），每个 bookie 一个 pool，`coreSize = numChannelsPerBookie`（默认 **1**，:573）。pool 内按 `signSafeMod(ledgerId, coreSize)`（:101）选 channel—— **同一 ledger 的写固定落到同一连接**，避免同 ledger 请求跨连接乱序；要提升单 bookie 并发吞吐可调大 `numChannelsPerBookie`。
+
 ## Bookie-Side Write Path
 
 ```java
@@ -149,6 +234,11 @@ private void addEntryInternal(LedgerDescriptor handle, ByteBuf entry, boolean ac
 > **顺序是「先 LedgerStorage 后 Journal」，与很多资料写的相反**。源码注释（`:988-989`）给出的理由是：若先写 journal，journal 文件可能在 ledger 于 LedgerStorage 中创建之前就被 roll 掉。
 >
 > 另外 `memLimit` / `bytesSinceLastSync` 这套「写满内存再刷盘」的旧机制在 4.18.1 **全仓零命中**，不要照抄旧描述。内存聚合由 `EntryMemTable` 承担，刷盘由 journal 的 group commit 驱动 —— 见 [Storage](/docs/CS/Framework/BookKeeper/Storage.md)。
+
+> [!TIP]
+> **ack 与「entry log 落盘」是解耦的两件事**。`addEntryInternal` 里 `handle.addEntry`（`:984`）只是把 entry 同步塞进 `WriteCache` 这块**堆外内存**（不落盘）；真正决定客户端 ack 的是随后的 `Journal.logAddEntry`（`:1015`）——Journal 走完 group commit 并 fsync 后回调 `cb.writeComplete`。entry 真正写进 **entry log 文件** 是 `LedgerStorage` 后台 `flush`（`swapWriteCache` → `entryLogger.addEntry`，见 [Storage](/docs/CS/Framework/BookKeeper/Storage.md)）异步完成的，与这次 ack 无关。
+>
+> 这正是 BookKeeper「低延迟 yet 持久」的诀窍：客户端拿到的 ack 只需要 Journal 这块 WAL 落地，entry log 文件可以稍后慢慢写；万一 bookie 在 entry log 落盘前崩溃，重启时 **Journal replay** 会把这条 entry 重新补进 entry log。
 
 journal 的选择按 ledgerId 哈希分桶（`BookieImpl.java:962-964`）：
 
@@ -230,6 +320,31 @@ synchronized void updateLastConfirmed(long lac, long len) {
 
 > [!WARNING]
 > `addEntryQuorumTimeout` 默认 **-1**（不是 0，也不是某个秒数）。-1 表示「等 quorum 超时的独立计时器」关闭，此时写超时由 `addEntryTimeout` 统一兜底。把它和 `addEntryTimeout` 混为一谈是常见的配置错误。
+
+## BookieImpl Lifecycle & Startup
+
+`BookieImpl.start()`（`BookieImpl.java:675`）的启动链路，决定了「先重放还是先接流量」：
+
+1. `dirsMonitor.start()`（`:685`）—— 起磁盘健康检查线程。
+2. `readJournal()`（`:689`）—— **重放所有未 checkpoint 的 journal 文件**，把 WAL 里尚未刷到 entry log 的 entry 补齐（崩溃恢复关键，见 [Storage](/docs/CS/Framework/BookKeeper/Storage.md) 的 Journal: File Format & Replay）。
+3. `syncThread.requestFlush().get()`（`:698`）—— replay 后做一次全量 checkpoint，把 `lastLogMark` 推到最新，缩短下次重启的 replay 窗口。
+4. `syncThread.start()`（`:739`）—— 起 checkpoint 后台线程（journal 文件滚动清理）。
+5. `bookieThread.start()`（`:742`）→ `run()`（`:863`）起各 `Journal` 的写线程。
+6. `ledgerStorage.start()`（`:751`）。
+7. `stateManager.initState()`（`:756`）→ `stateManager.registerBookie(true).get()`（`:759`）—— 在 ZooKeeper 的 `/ledgers/available` 下注册 **ephemeral 节点**，此后客户端才会把流量路由过来。
+
+> [!NOTE]
+> 注册是**最后一步**：bookie 必须先把 journal replay 完、存储层 ready，才暴露给集群。若 replay 失败或本地一致性检查（`isLocalConsistencyCheckOnStartup`，`:708`）不通过，直接 `shutdown(BOOKIE_EXCEPTION)` 不注册 —— 避免一台脏 bookie 接入后污染 quorum。
+
+### State Manager: writable / read-only
+
+`BookieStateManager`（`BookieImpl.java:526` 初始化）持有 bookie 的「可写 / 只读」状态，由磁盘事件驱动（`BookieImpl.java:783-840`）：
+
+- 任一磁盘满 → `transitionToReadOnlyMode()`（`:797` / `:830`），并据 `highPriorityWritesAllowed` 决定是否还收高优写。
+- 磁盘恢复可写 → `transitionToWritableMode()`（`:813` / `:823`）。
+- 磁盘故障 / 致命错误 → `triggerBookieShutdown(BOOKIE_EXCEPTION)`（`:790` / `:803`）。
+
+这与 [Storage](/docs/CS/Framework/BookKeeper/Storage.md) 的磁盘只读水位（`diskUsageThreshold = 0.95`）是同一套机制的两端：状态机决定「能不能写」，水位决定「什么时候翻只读」。
 
 ## Corrections To Common Claims
 

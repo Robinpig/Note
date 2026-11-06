@@ -234,6 +234,18 @@ int flags = isRecoveryAdd ? FLAG_RECOVERY_ADD | FLAG_HIGH_PRIORITY : FLAG_NONE;
 > [!TIP]
 > 运维排障时用 `openLedgerNoRecovery` 去探查一个「疑似卡在 OPEN」的 ledger，避免把自己的排查动作变成恢复动作 —— 恢复具有**截断副作用**。
 
+### Fencing / Recovery 源码级下钻
+
+上文是机制概览，这里落到 client 与 bookie 两端的精确源码（均出自 4.18.1）。
+
+**栅栏成功条件 `(Qw−Qa)+1` 的落点**。recovery 打开 ledger 时，client 对每个 bookie 发带 `FLAG_DO_FENCING` 的 `readEntry(LAST_ADD_CONFIRMED)`（`ReadLastConfirmedOp.java:103-111`）充当 fence 请求；bookie 侧 `ReadEntryProcessorV3.getReadResponse()`（`ReadEntryProcessorV3.java:203-218`）识别后调 `BookieImpl.fenceLedger`（`BookieImpl.java:1153`）→ `LedgerDescriptorImpl.fenceAndLogInJournal`（`LedgerDescriptorImpl.java:93-136`）：先 `setFenced()`（`:73-74`，写进 bookie 本地存储），再把 fence 标记**写进 Journal**（`:117-136`）—— 幂等，注释说「once fenced, never unfenced」（`Bookie.java:67-68`）。
+
+栅栏是否成功由 quorum 覆盖判定（`ReadLastConfirmedOp.java:113-179`）：每个 bookie 响应进入 `RRQuorumCoverageSet`（`ReadLastConfirmedOp.java:86`），其 `checkCovered()`（`RoundRobinDistributionSchedule.java:378-401`）遍历每个大小为 `writeQuorumSize` 的写 quorum 窗口，当窗口内「未知响应节点数 ≥ ackQuorumSize」即判定未覆盖（`:397` 的 `if (nodesUnknown >= ackQuorumSize) return false;`）。等价表述：**每个写 quorum 内已知响应节点数 ≥ `Qw − Qa + 1`，全部门覆盖才 fence 成功** —— 这正是 `(Qw−Qa)+1` 公式的源码出处。
+
+**fencing 状态持久化的两面**。Ledger 元数据状态（`OPEN / IN_RECOVERY / CLOSED`，`api/LedgerMetadata.java:153-168`）写进 **ZooKeeper** 的 ledger znode（recovery 时 `MetadataUpdateLoop` 写 `IN_RECOVERY`，结束写 `CLOSED`）；但真正的「已 fenced、拒绝写入」**不在 ZK 元数据里**，而是每个 bookie 的本地状态（`FileInfo.java:354`、`InterleavedLedgerStorage.java:318`、`DbLedgerStorage.java:334`），并通过 `fenceAndLogInJournal` 持久化到 **Journal** —— 否则重建索引（`LedgersIndexRebuildOp`）会丢失 fence 位，而「丢失 fence 位是不安全的」（`storage/ldb/LedgersIndexRebuildOp.java:53-55`）。
+
+**recovery 读与正常读的差异**：recovery 读**故意越过 LAC** 探尾部缺口（`RecoveryReadOp`，`LedgerRecoveryOp.java:54-68`），读到未充分复制的 entry 会用 `asyncRecoveryAddEntry`（`:206`）重写；正常读受 `lastAddConfirmed` 约束、不写回。其余恢复步骤见上方「Recovery」。
+
 ## Write Ordering Is The Client's Job
 
 BookKeeper 不保证跨 ledger 的顺序，也不在服务端排序。entryId 由客户端在 `LedgerHandle` 内单调递增分配：

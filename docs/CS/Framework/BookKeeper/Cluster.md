@@ -25,6 +25,19 @@ BookKeeper 在元数据存储上的根路径默认是 **`/ledgers`**（`BookKeep
 | `disable` | `DISABLE_NODE` | 手动禁用某 bookie 的节点 |
 | `{hash}/L{ledgerId}` | `LEDGER_NODE_PREFIX = "L"` | **ledger 元数据本身**，按 id 分桶（如 `/ledgers/00/0000/L0001`） |
 
+### LedgerManager 层级路径（源码级）
+
+第 26 行的 `{hash}/L{ledgerId}` 不是随意哈希，而是 `HierarchicalLedgerManager` 按 id 区间选两种布局之一（`StringUtils.java:103-108`）：
+
+| 布局 | 位数 / 补零 | 拆分 | 路径模板 | 源码 |
+| ---- | ---------- | ---- | -------- | ---- |
+| legacy（短） | 10 位 `%010d` | **2-4-4**（3 层） | `/ledgers/XX/XXXX/LXXXXXXXX` | `StringUtils.java:70-80` |
+| long | 19 位 `%019d` | **3-4-4-4-4**（5 层） | `/ledgers/XXX/XXXX/XXXX/XXXX/LXXXXXXXXXXXXX` | `StringUtils.java:89-101` |
+
+- `HierarchicalLedgerManager`（`HierarchicalLedgerManager.java:42`）内部同时持有 legacyLM（31-bit）与 longLM（63-bit），`getLedgerPath`（`:74-76`）按 `ledgerId < Integer.MAX_VALUE` 分流到两种实现。
+- `LongHierarchicalLedgerManager`（`LongHierarchicalLedgerManager.java:58`）处理超过 31-bit 的 id，5 层布局把每个 znode 子节点数限制在 ≤10000，避免 ZK `getChildren` 列表过长与 GC 压力（`:53-55`）。
+- 创建 / 读取 / 删除由 `AbstractZkLedgerManager` 编排：`createLedgerMetadata`（`:272-357`）用 `asyncCreateFullPathOptimistic`（`:354-355`）一次性建好整条父层级 + 叶子 znode；`readLedgerMetadata`（`:480-530`）即 `open` 的元数据读取；`removeLedgerMetadata`（`:360-418`）层级实现走 `asyncDeleteFullPathOptimistic` 递归清理空父节点。
+
 > [!NOTE]
 > 这套布局是 **BookKeeper 自己的**。如果通过 [Pulsar](/docs/CS/MQ/Pulsar/Pulsar.md) 使用，Pulsar 的 topic / namespace / bundle 元数据在**另一棵**树上（`/admin/policies`、`/managed-ledgers`、`/namespace/...`），见 [ManagedLedger 存储层](/docs/CS/MQ/Pulsar/ManagedLedger.md)。两者可以共享同一个 ZooKeeper，也可能分离（Pulsar 的 `bookkeeperMetadataServiceUri`）。
 
@@ -111,6 +124,19 @@ digraph AutoRecovery {
 
 > [!IMPORTANT]
 > **`autoRecoveryDaemonEnabled` 默认是 false**（`ServerConfiguration.java:2895`）。也就是说，**BookKeeper 默认不会因为丢了一个 bookie 就自动补副本** —— 必须显式开启 `autoRecoveryDaemonEnabled=true` 才会启动 Auditor。这是部署时最容易漏掉的一项。
+
+### Auto-Recovery 源码级
+
+上文是角色概览，落地到守护进程 `AutoRecoveryMain` 的源码：
+
+- **启动与角色组装**：`AutoRecoveryMain`（`AutoRecoveryMain.java:88-115`）创建系统级 BK 客户端、`AuditorElector`（集群唯一 Auditor 选举，`:103-108`）、`ReplicationWorker`（`:109-113`），`start()`（`:120-128`）依次启动三者 + `deathWatcher`（任一退出即 shutdown，`:234-246`）。
+- **Auditor 如何发现故障**：不轮询，而是 `watchWritableBookiesChanged` / `watchReadOnlyBookiesChanged`（`Auditor.java:612-615`）监听 ZK `/bookies` 变化触发 `submitAuditTask`（`:241-322`）；差异计算 `bookiesToBeAudited = knownBookies − availableBookies`（`:275`），`lostBookieRecoveryDelay`（`:281-311`）控制立即审计或延迟（多 bookie 同时丢失则立即，单 bookie 丢失可调度延迟并在恢复时 cancel）。
+- **标记 under-replicated**：`AuditorBookieCheckTask.auditBookies`（`:101-154`）建立 `bookie → 其持有 ledger` 映射（`BookieLedgerIndexer`），对每个疑似 ledger 调 `markLedgerUnderreplicatedAsync`（`AuditorTask.java:80-109`），落 ZK `underreplication/ledger_<id>`（`ZkLedgerUnderreplicationManager.java:165`）。
+- **ReplicationWorker 补齐**：`run()`（`:244-275`）循环 `rereplicate()`（`:289-307`）；`rereplicate(long)`（`:444-548`）用 `openLedgerNoRecovery`（`:450`）打开，取 under-replicated 片段（`getUnderreplicatedFragments`，`:451`，含 data-loss 与 placement 两类），对 closed 片段调 `replicateLedgerFragment`（`:474` → `BookKeeperAdmin.java:1182-1227` 从源副本读、写新 bookie）。
+- **锁联动**：RW 取任务时在 `urLedgerPath` 下建 **EPHEMERAL** 锁 znode（`ZkLedgerUnderreplicationManager.java:506-574`），已存在（他人持有）则 `NodeExistsException` 跳过（`:544-545`）；GC 的 `ScanAndCompareGarbageCollector` 删 over-replicated ledger 前也复用同一把锁（`:281`），避免与 RW 抢删。
+
+> [!WARNING]
+> `ReplicationException` 在 4.18.x **只有** `UnavailableException` / `NonRecoverableReplicationException` / `CompatibilityException` / `BKAuditException`（`ReplicationException.java:57-113`）四类，**没有 `LockedOutException` 或 `CompactionException`** —— 「被锁挡住」由 ZK ephemeral 锁的 `NodeExistsException` 表达，不要照抄旧文档的异常名。
 
 相关配置：
 
