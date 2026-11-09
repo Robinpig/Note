@@ -197,6 +197,8 @@ proxy  remoting  srvutil  store  style  test  tieredstore  tools
 
 5.x 融合两者优势，提出 **Controller** 作为管控节点，将选主逻辑插件化并优化数据复制实现。它是**轻量级、可拔插的**选主组件，既可部署在 NameServer 中，也可部署在本地。
 
+Controller 如何接管选主、Proxy 如何屏蔽选主层，源码级见 [Controller HA](/docs/CS/MQ/RocketMQ/ControllerHA.md)；内嵌 NameServer 部署（`enableControllerInNamesrv`）与 AutoSwitch 复制/容灾纵深见 [Controller Replication](/docs/CS/MQ/RocketMQ/ControllerReplication.md)。
+
 > [!WARNING]
 > **早期资料把这条路径写成「DLedger Controller」，在 5.5.1 中已不准确**，需分三层理解：
 > - **Broker DLedger 模式已废弃** —— 源码常量 `DLEDGER_COMMIT_LOG_DEPRECATION_WARNING`（`BrokerStartup.java:47-49`）写明 "Use Controller mode for new deployments"，启动即打警告。**但官方 5.x 文档页至今没标 deprecation**
@@ -281,6 +283,14 @@ Label 集：`cluster`、`node_type`(proxy/broker/nameserver)、`node_id`、`topi
 > `BrokerConfig` 真实路径是 `common/src/main/java/org/apache/rocketmq/common/BrokerConfig.java`（**不在 `broker/` 模块下**），其中 `listenPort` 默认 **6888**（`:40`），不是常见的 10911（10911 是 NameServer 端口）。
 
 ## Links
+- /docs/CS/MQ/RocketMQ/DLedgerCommitLog.md
+- /docs/CS/MQ/RocketMQ/ProxyGrpcConverter.md
+- /docs/CS/MQ/RocketMQ/rocketmqClients.md
+- /docs/CS/MQ/RocketMQ/Stats.md
+
+- [ACL](/docs/CS/MQ/RocketMQ/ACL.md)
+- [Trace](/docs/CS/MQ/RocketMQ/Trace.md)
+- [FlowControl](/docs/CS/MQ/RocketMQ/FlowControl.md)
 
 - [Apache RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md)
 - [Broker](/docs/CS/MQ/RocketMQ/Broker.md)
@@ -288,6 +298,8 @@ Label 集：`cluster`、`node_type`(proxy/broker/nameserver)、`node_id`、`topi
 - [Consumer](/docs/CS/MQ/RocketMQ/Consumer.md)
 - [事务消息](/docs/CS/MQ/RocketMQ/Transaction.md)
 - [消息过滤](/docs/CS/MQ/RocketMQ/Filter.md)
+- [ProxyProtocol（5.x gRPC Proxy 协议转换：gRPC→Remoting 四层栈 / CLUSTER·LOCAL）](/docs/CS/MQ/RocketMQ/ProxyProtocol.md)
+- [TimerMessage（5.x 时间轮延迟消息 / 旧 18 级 SCHEDULE 对照）](/docs/CS/MQ/RocketMQ/TimerMessage.md)
 
 ## References
 

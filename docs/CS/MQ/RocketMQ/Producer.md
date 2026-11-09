@@ -1223,7 +1223,7 @@ void cleanExpiredRequestInQueue(final BlockingQueue<Runnable> blockingQueue, fin
 
 
 在RocketMQ事务消息的主要流程中，一阶段的消息如何对用户不可见。其中，事务消息相对普通消息最大的特点就是一阶段发送的消息对用户是不可见的。
-那么，如何做到写入消息但是对用户不可见呢？RocketMQ事务消息的做法是：如果消息是half消息，将备份原消息的主题与消息消费队列，然后改变主题为RMQ_SYS_TRANS_HALF_TOPIC
+那么，如何做到写入消息但是对用户不可见呢？RocketMQ事务消息的做法是：如果消息是half消息，将备份原消息的主题与消息消费队列，然后改变主题为RMQ_SYS_TRANS_HALF_TOPIC（源码级逐跳链路与 Broker 二阶段处理见 [TransactionalMessage](/docs/CS/MQ/RocketMQ/TransactionalMessage.md)）
 由于消费组未订阅该主题，故消费端无法消费half类型的消息，然后RocketMQ会开启一个定时任务，从Topic为RMQ_SYS_TRANS_HALF_TOPIC中拉取消息进行消费，
 根据生产者组获取一个服务提供者发送回查事务状态请求，根据事务状态来决定是提交或回滚消息。
 
@@ -1236,7 +1236,25 @@ RocketMQ的具体实现策略是：写入的如果事务消息，对消息的Top
 RocketMQ事务消息方案中引入了Op消息的概念，用Op消息标识事务消息已经确定的状态（Commit或者Rollback）
 
 
+## 消息不丢失（生产者侧保障）
+
+RocketMQ 没有「一键不丢失」。生产者这一侧能做的，是把 `sendDefaultImpl`（:738）的三种发送模式用对、把重试打开：
+
+- **用 SYNC 发送**：只有 SYNC 模式 `timesTotal = 1 + retryTimesWhenSendFailed`（:756）才有客户端自动重试；ASYNC/ONEWAY 的 `timesTotal = 1` 且不重试，ONEWAY（:795）连响应都不等，绝不可用于重要消息。
+- **判 `SendStatus`**：返回 `SEND_OK` 不等于绝对不丢——它只代表「按当前刷盘+复制配置成功」。配了 `ASYNC_FLUSH`/`ASYNC_MASTER` 时，要按 `FLUSH_DISK_TIMEOUT`/`FLUSH_SLAVE_TIMEOUT`/`SLAVE_NOT_AVAILABLE` 视为失败做业务层重试。
+- **打开 `retryAnotherBrokerWhenNotStoreOK`**（:799）：broker 返回非 `SEND_OK` 时换 broker 重试。
+
+完整的「三道防线 + 幂等」端到端分析见 [Message Lifecycle](/docs/CS/MQ/RocketMQ/MessageLifecycle.md)。
+
 ## Links
+- /docs/CS/MQ/RocketMQ/ProxyGrpcConverter.md
+- /docs/CS/MQ/RocketMQ/rocketmqClients.md
+- /docs/CS/MQ/RocketMQ/Stats.md
+
+- [OrderedMessage](/docs/CS/MQ/RocketMQ/OrderedMessage.md)
+- [ACL](/docs/CS/MQ/RocketMQ/ACL.md)
+- [Trace](/docs/CS/MQ/RocketMQ/Trace.md)
+- [FlowControl](/docs/CS/MQ/RocketMQ/FlowControl.md)
 
 - [RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md)
 - [事务消息](/docs/CS/MQ/RocketMQ/Transaction.md)
@@ -1244,4 +1262,8 @@ RocketMQ事务消息方案中引入了Op消息的概念，用Op消息标识事�
 - [Store](/docs/CS/MQ/RocketMQ/Store.md)
 - [消息过滤](/docs/CS/MQ/RocketMQ/Filter.md)
 - [RocketMQ 5.x](/docs/CS/MQ/RocketMQ/RocketMQ5.md)
+- [BatchEncoding（批量发送与批量编码源码级）](/docs/CS/MQ/RocketMQ/BatchEncoding.md)
+- [PopConsume（POP 无状态消费协议：extraInfo 票据 / ck-ack / Revive）](/docs/CS/MQ/RocketMQ/PopConsume.md)
+- [TimerMessage（5.x 时间轮延迟消息 / 旧 18 级 SCHEDULE 对照）](/docs/CS/MQ/RocketMQ/TimerMessage.md)
+- [Rebalance（Rebalance 负载均衡 / OffsetStore / 集群·广播 有状态消费）](/docs/CS/MQ/RocketMQ/Rebalance.md)
 

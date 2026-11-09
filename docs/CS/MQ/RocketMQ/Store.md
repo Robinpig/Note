@@ -18,6 +18,76 @@ Producer ──▶ ┌───────────────────�
 
 这种「一写多读」的结构是 RocketMQ 高吞吐的来源，也是它所有痛点的来源（无法按消息删除、磁盘稀疏、恢复复杂）。
 
+## End-to-End Storage Path (Write → Dispatch → Read)
+
+把「一条消息从进来到被读出」的存储链路单独串一遍，比孤立看三大文件更直观。整条链分三段：**顺序写 CommitLog（唯一真相源）→ 异步派发补全二级索引（ConsumeQueue / IndexFile）→ 经索引随机读 CommitLog**。每一跳的源码锚点如下（5.5.1 真文件核验）：
+
+```dot
+digraph storage_path {
+  rankdir=TB;
+  node [shape=box, style=rounded];
+  subgraph cluster_write {
+    label="WRITE: 顺序写 CommitLog（单一真相源）";
+    p1 [label="DefaultMessageStore.putMessage :716"];
+    p2 [label="asyncPutMessage → CommitLog.appendMessage → MappedFile.appendMessage :1109/:340"];
+    p3 [label="DefaultAppendMessageCallback.doAppend :1990\n byteBuffer.put(preEncodeBuffer) → 仅写内存 :2099\n WROTE_POSITION_UPDATER.addAndGet :416"];
+    p4 [label="handleDiskFlushAndHA :1360"];
+    p5 [label="SYNC_FLUSH → GroupCommitService :1705\n ASYNC_FLUSH → FlushRealTimeService :1578"];
+  }
+  subgraph cluster_dispatch {
+    label="DISPATCH: 异步派发（ReputMessageService.doReput :2711，每 1ms sleep :2825）";
+    d1 [label="commitLog.getData(reputFromOffset)\n + checkMessageAndReturnSize :2723/:2734"];
+    d2 [label="doDispatch(request) :2745"];
+    d3 [label="BuildConsumeQueue.dispatch :2241\n 仅 NON_TYPE/COMMIT_TYPE 入 CQ，跳过 PREPARED/ROLLBACK"];
+    d4 [label="ConsumeQueue.putMessagePositionInfo :836\n 20B 单元 putLong(offset)+putInt(size)+putLong(tagsCode) :851-853"];
+    d5 [label="BuildIndex.dispatch :2258 → IndexService.buildIndex → IndexFile.putKey :116\n hashSlot + 头插反向链表"];
+  }
+  subgraph cluster_read {
+    label="READ: 经索引随机读 CommitLog（page cache 友好）";
+    r1 [label="getMessage :853 → findConsumeQueue :896"];
+    r2 [label="consumeQueue.iterateFrom(offset) :932\n CqUnit.getPos()/getSize() :946"];
+    r3 [label="commitLog.getMessage(offsetPy,sizePy) :983\n MappedFile.selectMappedBuffer(pos,size) :1444"];
+  }
+  p1 -> p2 -> p3 -> p4 -> p5 [label="写路径（同步/阻塞或异步/定时）"];
+  p3 -> d1 [style=dashed, label="doReput 异步回扫，非阻塞写"];
+  d1 -> d2 -> d3 -> d4;
+  d2 -> d5;
+  r1 -> r2 -> r3;
+  d4 -> r2 [style=dotted, label="CQ 索引供拉取"];
+  d5 -> r2 [style=dotted, label="IndexFile 供按 key/时间查"];
+}
+```
+
+### 写路径：只动 CommitLog，落内存即返回
+
+`SendMessageProcessor` 调 `MessageStore.putMessage`（`DefaultMessageStore.java:716`），它只是 `waitForPutResult(asyncPutMessage(msg))` 的**阻塞包装**（`DefaultMessageStore.java:716-738`）。真正的写入在 `CommitLog`：`mappedFile.appendMessage(msg, appendMessageCallback)`（`CommitLog.java:1109/:1127`）→ `DefaultMappedFile.appendMessage`（`DefaultMappedFile.java:340`）→ 回调 `DefaultAppendMessageCallback.doAppend`（`CommitLog.java:1990`），在 `byteBuffer.put(preEncodeBuffer)` 处把整条已编码消息**写入 mmap 的字节缓冲**（`CommitLog.java:2099`），随后 `WROTE_POSITION_UPDATER.addAndGet` 推进写指针（`DefaultMappedFile.java:416`）。
+
+> [!IMPORTANT]
+> **写路径至此只把数据放进 page cache（mmap 内存），并未落盘**。落盘由 `handleDiskFlushAndHA`（`CommitLog.java:1360`）决定：`SYNC_FLUSH` 走 `GroupCommitService`（:`1705`，阻塞等 `flush(0)` 直到 `getFlushedWhere() >= nextOffset`）；`ASYNC_FLUSH` 走 `FlushRealTimeService`（`:1578`，定时 `mappedFileQueue.flush`）。这就是「`SEND_OK` ≠ 落盘」的底层原因（详见 [MessageLifecycle](/docs/CS/MQ/RocketMQ/MessageLifecycle.md) 防线 2）。
+
+### 派发路径：异步补全二级索引，且与写解耦
+
+`ReputMessageService`（内层 `ServiceThread`）的 `run()` 每 `sleep(1)` 一次调用 `doReput`（`DefaultMessageStore.java:2825/:2711`）：从 `reputFromOffset` 起 `commitLog.getData()` 拿到一段 commitlog，逐条 `checkMessageAndReturnSize()` 解析（`DefaultMessageStore.java:2723/:2734`），成功则 `doDispatch(request)`（`DefaultMessageStore.java:2745`），并推进 `reputFromOffset += size`。
+
+`doDispatch` 遍历所有 `CommitLogDispatcher`（启动时注册，见 `DefaultMessageStore.java:248` 一带）：
+
+- **`CommitLogDispatcherBuildConsumeQueue`（`DefaultMessageStore.java:2241`）**：按事务类型分流——`TRANSACTION_NOT_TYPE` / `TRANSACTION_COMMIT_TYPE` 才调 `putMessagePositionInfo`；`TRANSACTION_PREPARED_TYPE` / `TRANSACTION_ROLLBACK_TYPE` **直接跳过**。这正解释了事务消息里 half/rollback 为何不入 ConsumeQueue、对消费者不可见（见 [TransactionalMessage](/docs/CS/MQ/RocketMQ/TransactionalMessage.md)）。
+- **`CommitLogDispatcherBuildIndex`（`DefaultMessageStore.java:2258`）**：`isMessageIndexEnable()` 为真时 `IndexService.buildIndex(request)`，最终落到 `IndexFile.putKey`（`IndexFile.java:116`）的 hashSlot + 头插反向链表。
+
+`ConsumeQueue.putMessagePositionInfo`（`ConsumeQueue.java:836`）把 20 字节单元写入：`putLong(offset)` + `putInt(size)` + `putLong(tagsCode)`（`ConsumeQueue.java:851-853`），即 `CQ_STORE_UNIT_SIZE = 20` 的固定布局（见下方 ConsumeQueue 物理结构）。
+
+> [!WARNING]
+> 派发是**异步、与写解耦**的：`putMessage` 早已返回，CQ/Index 才在后台逐步补全。因此消息写入后**极短时间内**可能查不到（CQ 还没建好）——这是 RocketMQ 的「近实时可见」而非「实时可见」根源。`reputFromOffset` 初始值来自 `commitLog.getConfirmOffset()`（`DefaultMessageStore.java:439`）。
+
+### 读路径：先查索引，再回 CommitLog 取体
+
+`DefaultMessageStore.getMessage`（`DefaultMessageStore.java:853`）是消费拉取的存储入口：`findConsumeQueue(topic, queueId)`（`:896`）拿到对应 `ConsumeQueue`，`consumeQueue.iterateFrom(nextBeginOffset, maxMsgNums)`（`:932`）逐单元读出 `CqUnit`，取其 `getPos()`（commitlog 物理偏移）与 `getSize()`（`:946-947`），再 `commitLog.getMessage(offsetPy, sizePy)`（`DefaultMessageStore.java:983`）→ `MappedFile.findMappedFileByOffset` + `selectMappedBuffer(pos, size)`（`CommitLog.java:1441/:1444`）返回消息体。
+
+按 key / 时间的检索则走另一条读路径：`queryMessage`（`DefaultMessageStore.java:1397`）→ `IndexService.queryOffset` → `IndexFile.selectPhyOffset`（`IndexFile.java:201`，沿 hashSlot + 反向链表回退，见 IndexFile 章）。
+
+> [!TIP]
+> 读路径是「**顺序文件 + 随机索引 + page cache**」的教科书实现：ConsumeQueue/IndexFile 极小（20B/条），全部进 page cache，定位到 commitlog 物理偏移后做 `mmap` 零拷贝读（见 [ZeroCopy](/docs/CS/OS/Linux/ZeroCopy.md)）。这也是 RocketMQ 选择 `mmap` 而非 `sendfile` 的原因——拿得到消息内容，才能在读路径做 SQL92 过滤、死信投递等二次处理。
+
 ## 5.5.1 Package Path Refactoring (Pitfall Warning)
 
 5.5.1 对 `store` 模块做过一次大规模包重构，**网上绝大多数资料给的是 4.x 路径，照着找不到文件**：
@@ -904,13 +974,23 @@ RocketMQ 的存储设计几乎每一步都踩在 Linux 内核机制上，可以�
 - **定时器与时间轮**：`store/timer/TimerWheel` 的时间轮结构，对应 [`timer.md`](/docs/CS/OS/Linux/timer.md) 的定时器精度与时间缓存讨论 —— 时间轮是「用精度换效率」的典型，与内核定时器的取舍逻辑一致。
 
 ## Links
+- /docs/CS/MQ/RocketMQ/DLedgerCommitLog.md
+- /docs/CS/MQ/RocketMQ/Stats.md
+
+- [IndexFile](/docs/CS/MQ/RocketMQ/IndexFile.md)
+- [FlowControl](/docs/CS/MQ/RocketMQ/FlowControl.md)
 
 - [Apache RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md)
 - [Broker](/docs/CS/MQ/RocketMQ/Broker.md)
 - [Producer](/docs/CS/MQ/RocketMQ/Producer.md)
 - [Consumer](/docs/CS/MQ/RocketMQ/Consumer.md)
+- [MessageProtocol（消息协议字节级详情）](/docs/CS/MQ/RocketMQ/MessageProtocol.md)
+- [BatchEncoding（批量落盘粒度与 inner batch）](/docs/CS/MQ/RocketMQ/BatchEncoding.md)
 - [事务消息](/docs/CS/MQ/RocketMQ/Transaction.md)
 - [ZeroCopy](/docs/CS/OS/Linux/ZeroCopy.md)
+- [PopConsume（POP 无状态消费协议：extraInfo 票据 / ck-ack / Revive）](/docs/CS/MQ/RocketMQ/PopConsume.md)
+- [TimerMessage（5.x 时间轮延迟消息 / 旧 18 级 SCHEDULE 对照）](/docs/CS/MQ/RocketMQ/TimerMessage.md)
+- [HAService（传统主从复制：HAClient 反向拉取 / SYNC·ASYNC / GroupTransfer）](/docs/CS/MQ/RocketMQ/HAService.md)
 
 ## References
 

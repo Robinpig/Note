@@ -46,12 +46,18 @@ Remoting 是 RocketMQ 自研的**远程通信基础模块**（`rocketmq-remoting
 RocketMQ 5.x 引入无状态 Proxy，对外提供标准 gRPC（多语言友好、云原生），Proxy 内部仍可通过 Remoting 与 Broker 通信；同时保留私有协议客户端的兼容。选型上，新多语言客户端走 gRPC，存量 Java 生态仍是 Remoting。
 
 ## Links
+- /docs/CS/MQ/RocketMQ/ProxyGrpcConverter.md
+
+- [ACL](/docs/CS/MQ/RocketMQ/ACL.md)
 
 - [RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md)
 - [Broker](/docs/CS/MQ/RocketMQ/Broker.md)
 - [Namesrv](/docs/CS/MQ/RocketMQ/Namesrv.md)
 - [Producer](/docs/CS/MQ/RocketMQ/Producer.md)
 - [Netty](/docs/CS/Framework/Netty/Netty.md)
+- [MessageProtocol（消息协议字节级详情）](/docs/CS/MQ/RocketMQ/MessageProtocol.md)
+- [BatchEncoding（SEND_BATCH_MESSAGE=320 与批量编码）](/docs/CS/MQ/RocketMQ/BatchEncoding.md)
+- [ProxyProtocol（5.x gRPC Proxy 协议转换：gRPC→Remoting 落地与 CLUSTER/LOCAL）](/docs/CS/MQ/RocketMQ/ProxyProtocol.md)
 
 ## References
 

@@ -161,7 +161,7 @@ public void start() throws Exception {
 
 #### registerBrokerAll
 
-Broker 启动后，通过 `BrokerController.registerBrokerAll()` 立即向所有 NameServer 注册，随后启动定时任务，默认每 30 秒发送一次心跳（间隔可通过 `brokerConfig.getRegisterNameServerPeriod()` 调整）。
+Broker 启动后，通过 `BrokerController.registerBrokerAll()` 立即向所有 NameServer 注册，随后启动定时任务，默认每 30 秒发送一次心跳（间隔可通过 `brokerConfig.getRegisterNameServerPeriod()` 调整）。在 Controller 模式下，主从切换后 `ReplicasManager.registerBrokerWhenRoleChange` 同样走 `registerBrokerAll` 把新 master 身份写回 NameServer（源码级见 [Controller HA](/docs/CS/MQ/RocketMQ/ControllerHA.md)；其 AutoSwitch 复制的 confirmOffset/syncStateSet 语意纵深见 [Controller Replication](/docs/CS/MQ/RocketMQ/ControllerReplication.md)）。
 
 心跳请求携带 Broker 的核心信息，包括 Broker ID、地址、Topic 配置等，NameServer 接收后更新 `RouteInfoManager` 中的路由表
 
@@ -1412,6 +1412,14 @@ DeliverDelayedMessageTimerTask#run 调用了 executeOnTimeUp方法
 
 
 ## Links
+- /docs/CS/MQ/RocketMQ/DLedgerCommitLog.md
+- /docs/CS/MQ/RocketMQ/ProxyGrpcConverter.md
+- /docs/CS/MQ/RocketMQ/Stats.md
+
+- [IndexFile](/docs/CS/MQ/RocketMQ/IndexFile.md)
+- [ACL](/docs/CS/MQ/RocketMQ/ACL.md)
+- [Trace](/docs/CS/MQ/RocketMQ/Trace.md)
+- [FlowControl](/docs/CS/MQ/RocketMQ/FlowControl.md)
 
 - [RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md)
 - [Store](/docs/CS/MQ/RocketMQ/Store.md)
@@ -1419,4 +1427,6 @@ DeliverDelayedMessageTimerTask#run 调用了 executeOnTimeUp方法
 - [消息过滤](/docs/CS/MQ/RocketMQ/Filter.md)
 - [Producer](/docs/CS/MQ/RocketMQ/Producer.md)
 - [Namesrv](/docs/CS/MQ/RocketMQ/Namesrv.md)
+- [RetryDLQ（重试消息与死信队列：%RETRY% / %DLQ% / CONSUMER_SEND_MSG_BACK）](/docs/CS/MQ/RocketMQ/RetryDLQ.md)
+- [HAService（传统主从复制：HAClient 反向拉取 / SYNC·ASYNC / GroupTransfer）](/docs/CS/MQ/RocketMQ/HAService.md)
 

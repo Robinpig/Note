@@ -29,6 +29,9 @@ Producer                  Broker
   │ ⑤ endTransaction(REPLY)  ──▶│ 补偿到达
 ```
 
+> [!NOTE]
+> 本文偏概念与反直觉点。若需要**逐跳 `file:line` 的端到端链路**（生产者 `sendMessageInTransaction` → Broker `SendMessageProcessor` 路由 → `EndTransactionProcessor` 二阶段 → OP 打标 → 回查循环），见 [TransactionalMessage（源码级链路）](/docs/CS/MQ/RocketMQ/TransactionalMessage.md)。
+
 ## Topic and Flag Constants
 
 ### Topic Name
@@ -390,7 +393,7 @@ this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
 首次延迟 60s，周期 `cleanResourceInterval`（默认 10000 ms）。命令行工具：`tools/.../broker/DeleteExpiredCommitLogSubCommand.java`、`CleanExpiredCQSubCommand.java`。
 
-**未查到**：Op 消息（`RMQ_SYS_TRANS_OP_HALF_TOPIC`）有任何独立的过期清理逻辑 —— 它依赖 CommitLog 文件级过期被一并清理。
+**未查到**：Op 消息（`RMQ_SYS_TRANS_OP_HALF_TOPIC`）有任何独立的过期清理逻辑 —— 它依赖 CommitLog 文件级过期被一并清理。OP 消息的批量写入（`TransactionalOpBatchService`）与回查消费（`fillOpRemoveMap`）实现细节，见 [OP 消息实现原理](/docs/CS/MQ/RocketMQ/OPMessage.md)。
 
 ## Practice Key Points
 
