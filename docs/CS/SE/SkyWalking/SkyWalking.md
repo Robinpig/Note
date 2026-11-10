@@ -41,6 +41,7 @@ digraph oap_spine {
   - [OAL Runtime and Code Generation](/docs/CS/SE/SkyWalking/OAL_Runtime.md)（已完成）—— ANTLR4 解析 `.oal` + **Javassist 运行时字节码织入**（FreeMarker 仅生成方法体）+ `@MetricsFunction`/`MetricsHolder` 函数注册表 + 按 source 聚合的 Dispatcher 生成。
 - **P1 — 子系统**
   - [Storage Abstraction (存储抽象层)](/docs/CS/SE/SkyWalking/Storage_Abstraction.md)（已完成）—— `StorageModule` DAO 契约 + `StorageDAO` 工厂、BanyanDB/ES/JDBC 三套 `Provider` 绑定、`Model`/`@Column`/`@Stream` 注解驱动 Schema、`ModelInstaller` 策略化安装（init/no-init 模式 + BanyanDB 本地 schema 缓存与删除栅栏）。
+  - [BanyanDB Native Storage Engine (BanyanDB 原生存储引擎)](/docs/CS/SE/SkyWalking/BanyanDB.md)（已完成）—— 独立仓库 `skywalking-banyandb` 的源码级深挖：整体架构/节点角色、元数据协调（property 同步）、数据模型、列式 TSDB 引擎、编码压缩、索引子系统、写入路径（per-batch ack）、向量化查询引擎（BYDBQL + 分布式 scatter-gather）；子页导航见枢纽页。[^banyandb]
   - [Receiver and Protocol (接收层与协议)](/docs/CS/SE/SkyWalking/Receiver_Protocol.md)（已完成）—— `apm-network` gRPC 协议与 20+ receiver 挂载、解码成 Source。
     - [Receiver Otel Decode (OTLP 解码)](/docs/CS/SE/SkyWalking/Receiver_Otel_Decode.md)（已完成）—— OTLP trace 直落 `OTLPSpan` Source + TAL、metric 走 MAL、log 走 LAL；不复用 `SegmentParser`。
     - [Receiver Zipkin Decode (Zipkin 解码)](/docs/CS/SE/SkyWalking/Receiver_Zipkin_Decode.md)（已完成）—— Zipkin span 经 `SpanForward` 直转 `ZipkinService`/`ZipkinServiceRelation`/`ZipkinSpan` Source。
@@ -60,12 +61,15 @@ digraph oap_spine {
   - [Agent 插件拦截器范式（Plugin Define 与 Span 创建）](/docs/CS/SE/SkyWalking/Agent_Plugin_Interceptor.md)（已完成）—— 插件声明式 Define + 拦截器成对范式、`NameMatch`/`HierarchyMatch` 匹配、三种 Span 在 HTTP/DB/RPC 插件里的真实用法、`agent.ignore_suffix` 后缀忽略机制、`AgentConfig`/`PluginConfig` 配置优先级。
   - [Agent 遥测上报与配置（gRPC 上行 / 注册 / agent.config）](/docs/CS/SE/SkyWalking/Agent_Telemetry_Config.md)（已完成）—— `GRPCChannelManager` 通道托管、`TraceSegment` 经 `DataCarrier` 流式上报、`ServiceManagementClient` 注册心跳、`JVMService` 指标采集、`agent.config` 四来源覆盖优先级。
 
+[^banyandb]: BanyanDB 是 SkyWalking 默认且深度优化的原生可观测性数据库，独立仓库 `skywalking-banyandb`；其与 OAP `StorageModule` 的对接见 [SkyWalking Storage Abstraction](/docs/CS/SE/SkyWalking/Storage_Abstraction.md)。
+
 ## Links
 
 - [SkyWalking Module System](/docs/CS/SE/SkyWalking/Module_System.md)
 - [SkyWalking Streaming Pipeline](/docs/CS/SE/SkyWalking/Streaming_Pipeline.md)
 - [SkyWalking OAL Runtime](/docs/CS/SE/SkyWalking/OAL_Runtime.md)
 - [SkyWalking Storage Abstraction](/docs/CS/SE/SkyWalking/Storage_Abstraction.md)
+- [BanyanDB Native Storage Engine](/docs/CS/SE/SkyWalking/BanyanDB.md)
 - [SkyWalking Analyzer Family](/docs/CS/SE/SkyWalking/Analyzer_Family.md)
 - [Agent 启动引导与字节码织入](/docs/CS/SE/SkyWalking/Agent_Bootstrap_Plugin.md)
 - [Agent ContextManager 与 Span 模型](/docs/CS/SE/SkyWalking/Agent_Context_Span.md)

@@ -100,33 +100,33 @@ digraph index_arch {
   rankdir=TB;
   subgraph cluster_write {
     label="Write Path";
-    cb[indexCallback.Rev];
-    ins[segment.IndexDB().Insert / Update];
+    cb[label="indexCallback.Rev"];
+    ins[label="segment.IndexDB().Insert / Update"];
     cb -> ins;
   }
   subgraph cluster_native {
     label="Native Engine (pkg/index/native + nativeice)";
-    gen[ReadOnlyGeneration %012x.snp / %012x.seg];
-    dict[Dictionary + Posting(Roaring)];
-    rng[Range / Wildcard / Prefix];
-    sf[StoredFields];
+    gen[label="ReadOnlyGeneration %012x.snp / %012x.seg"];
+    dict[label="Dictionary + Posting(Roaring)"];
+    rng[label="Range / Wildcard / Prefix"];
+    sf[label="StoredFields"];
     gen -> dict -> rng -> sf;
   }
   subgraph cluster_adapter {
     label="Adapter (nativeadapter.Searcher)";
-    sr[Searcher.Match / MatchTerms / Range];
+    sr[label="Searcher.Match / MatchTerms / Range"];
     sr -> gen [label="view = pinned generation"];
   }
   subgraph cluster_plan {
     label="Query Planner (pkg/query/logical)";
-    fs[GetSearcher(IndexRule_Type)];
-    inv[invertedFilter (TYPE_INVERTED)];
-    skip[skippingFilter -> blockFilter.ShouldSkip];
+    fs[label="GetSearcher(IndexRule_Type)"];
+    inv[label="invertedFilter (TYPE_INVERTED)"];
+    skip[label="skippingFilter -> blockFilter.ShouldSkip"];
     fs -> inv;
     fs -> skip;
   }
   ins -> gen;
-  skip -> pi[part_iter.ShouldSkip skips block] [style=dashed];
+  skip -> pi[label="part_iter.ShouldSkip skips block"][style=dashed];
 }
 ```
 
