@@ -6,7 +6,7 @@ Higress 把"扩展能力"压成一个模型：插件就是 Envoy HTTP filter 链
 - **插件开发**：Go SDK 的真实 API 名、外部 HTTP / Redis 寻址、Go 1.24 编译换代、Wasm 运行时模型。
 - **AI 插件家族**：`ai-proxy` 协议转换、key 池 / 故障转移、模型负载均衡、token 限流配额、语义缓存、内容安全与脱敏、MCP 托管、AI 可观测。
 
-不在本页的内容：AI 网关的产品定位、控制台路由层（模型级 Fallback 只在那一层）、网关内置 MCP Server Filter 与 McpBridge、HiMarket 平台——这些在 [AI Gateway](/docs/CS/Framework/Higress/AI_Gateway.md)。源码级模块地图（含约 89 个注解相对 key 的逐项清单与前缀行为）在 [Source Map](/docs/CS/Framework/Higress/Source_Map.md)；"108 条注解"是文档站流传概数，源码侧无此单一数字。
+不在本页的内容：AI 网关的产品定位、控制台路由层（模型级 Fallback 只在那一层）、网关内置 MCP Server Filter 与 McpBridge、HiMarket 平台——这些在 [AI Gateway](/docs/CS/Framework/Higress/AI_Gateway.md)。源码级模块地图（含约 89 个注解相对 key 的逐项清单与前缀行为）在 [Source Map](/docs/CS/Framework/Higress/Source_Map.md)；"108 条注解"是文档站流传概数，源码侧无此单一数字。**插件的加载链路**（CR 字段与三种 URL scheme → 控制面翻译 → 三源合并 → OCI / 本地 HTTP 取件 → 不可变发布快照 → 运行时配置解析）单列在 [Plugin Loading Internals](/docs/CS/Framework/Higress/Plugin_Loading_Internals.md)，本页只保留使用口径。
 
 ## Official Inventory
 
@@ -44,7 +44,7 @@ matchRules:
       ...
 ```
 
-把转换后的形态摊开看得更清楚。`convertIstioWasmPlugin`（`pkg/ingress/config/ingress_config.go`）会生成 Istio `WasmPlugin`，其 `pluginConfig` 内出现 `_rules_` 列表，匹配键有三个：`_match_domain_`（域名，支持通配）、`_match_route_`（格式 `命名空间/Ingress名称`）、`_match_service_`（服务，支持通配）。运行时插件在 `OnHttpRequestHeaders` 阶段按当前请求的 `:authority` / `route_name` / `cluster_name` 取对应级别配置（`plugins/wasm-go/pkg/matcher/rule_matcher.go` 的 `GetMatchConfig`）。
+`convertIstioWasmPlugin`（`pkg/ingress/config/ingress_config.go`）会生成 Istio `WasmPlugin`，其 `pluginConfig` 内出现 `_rules_` 列表，匹配键有三个：`_match_domain_`（域名，支持通配）、`_match_route_`（格式 `命名空间/Ingress名称`）、`_match_service_`（服务，支持通配）。运行时插件在 `OnHttpRequestHeaders` 阶段按当前请求的 `:authority` / `route_name` / `cluster_name` 取对应级别配置。有一处路径要订正：v2.2.5 本仓 `plugins/wasm-go/pkg/` 下只有 `mcp/` 与 `pathutil/` 两个 module，**没有** `matcher/rule_matcher.go`；SDK 来自外部 module `github.com/higress-group/wasm-go`（扩展实际 import `.../pkg/wrapper` 与 `.../pkg/log`），旧资料里的 `rule_matcher.go` / `GetMatchConfig` 属外部 SDK 仓或更早布局，本机无工作树可核。配置解析入口与加载链路见 [Plugin Loading Internals](/docs/CS/Framework/Higress/Plugin_Loading_Internals.md)。
 
 > [!NOTE]
 > 两条容易漏掉的规则：① **多条 `matchRules` 按数组书写顺序优先匹配**，不是按特异性；官方建议把 `ingress` 匹配放在 `domain` 之前，控制台就是这么做的。② `configDisable` 与 `defaultConfigDisable` **确实存在**（Go SDK 原理页的 basic-auth 样例里真实出现，分别关闭某条规则与默认配置），但 `intro` 页的字段表没列——引用出处要用后者。
@@ -100,9 +100,16 @@ matchRules:
 
 官方对结果的表述是"Wasm 插件是通过 OCI 实现了 wasm 文件更新，直接热加载，不会导致任何连接中断，业务流量完全无损"。Envoy 侧每个插件条目的形态是 `config_discovery` + `default_config: Composite` + `apply_default_config_without_warming: true`，`type_urls` 含 `envoy.filters.http.wasm.v3.Wasm` 与 `composite.v3.Composite`。插件链生成的 filter 名形如 `higress-system.custom-response`、`higress-system.wasm-keyauth`。
 
-**分发规范**。wasm 镜像是普通 OCI 分布格式，文件与 media type 一一对应：`spec.yaml` → `application/vnd.module.wasm.spec.v1+yaml`、`README.md` → `...doc.v1+markdown`（多语言 `README_{lang}.md` → `...doc.v1.{lang}+markdown`）、`icon.png` → `...icon.v1+png`，且 **`plugin.wasm` 必须放在镜像最后一层**（该层用 `application/vnd.oci.image.layer.v1.tar+gzip`）。`spec.yaml` 元数据里带 `phase`、`priority` 与 `configSchema`（仅支持 OpenAPI 3.0.0 Schema）。也支持 `url` 直接指向 http(s) 的 `.wasm` 文件，前提是 Gateway 容器内能访问该 URL；自签证书场景要在 Gateway 容器设 `WASM_INSECURE_REGISTRIES=*`。
+OCI 直拉只是取件通道之一（上面第 6~8 步）。v2.2.5 还有一条 plugin-server 本地 HTTP 通道：把 Console 的 `HIGRESS_ADMIN_WASM_PLUGIN_CUSTOM_IMAGE_URL_PATTERN` 指到 `http://.../plugins/${name}/${version}/plugin.wasm`，CR 的 `url` 就变成 `http[s]://` —— 这是 `api/extensions/v1alpha1/wasmplugin.proto:51-56` 原生支持的 scheme，不是私有扩展；`file://` 同理。Helm 默认**关闭**（`helm/core/values.yaml:16 enablePluginServer: false`），standalone 默认**开启**（all-in-one `localhost:8002`、compose `plugin-server:8080`）。控制面翻译只有一套，差别在二进制怎么取。三源合并、三条 URL scheme、不可变发布供应链与 standalone 的本地托管细节，收在 [Plugin Loading Internals](/docs/CS/Framework/Higress/Plugin_Loading_Internals.md)。
 
-**官方插件地址**。清单在 `higress-console` 仓库的 `backend/sdk/src/main/resources/plugins/plugins.properties`，稳定 tag 统一 `1.0.0`、开发版 `latest`；示例形态 `oci://higress-registry.cn-hangzhou.cr.aliyuncs.com/plugins/request-block:1.0.0`。用 `latest` 时"插件有任意配置更新就会自动拉取最新版本"。换到私有仓库是改 Console 容器的环境变量 `HIGRESS_ADMIN_WASM_PLUGIN_CUSTOM_IMAGE_URL_PATTERN`（占位符 `${name}` / `${version}`），Nacos 3.x 的 MCP 注册中心另有一个 `MCP_SERVER_WASM_IMAGE_URL`；各形态的写法与转义细节见 [Deployment and Ops](/docs/CS/Framework/Higress/Deployment_and_Ops.md)。
+镜像规范有两套，字段和层数互不相容：
+
+- A（`hgctl` / 文档站的开发者规范）。`hgctl/pkg/plugin/build/build.go:48-53` 定义 `spec.yaml` → `application/vnd.module.wasm.spec.v1+yaml`、`README.md` → `...doc.v1+markdown`（多语言 README 与 icon 各有 type，`:425-441` 按存在与否追加）；`:446` 的基准命令是 `oras push`；`templates.go:44-52` 先 `tinygo build -o plugin.wasm`，再 `tar czf plugin.tar.gz plugin.wasm`，最后追加 `./plugin.tar.gz:application/vnd.oci.image.layer.v1.tar+gzip`。最后一层装的是 `plugin.tar.gz`，里面才是 wasm。另有 `plugins/wasm-go/Dockerfile:26-29` 的纯二进制路径（`FROM scratch` + `COPY /main.wasm plugin.wasm`），配 `Makefile` 的 `GOOS=wasip1 GOARCH=wasm go build`。
+- B（官方 v2.2.5 不可变发布规范）。`docs/developers/immutable-plugin-releases.md:90-93` 要求严格两层、没有 spec/README/icon 层：layer 0 `config.json` = `application/vnd.module.wasm.config.v1+json`（规范空对象 `{}`），layer 1 `plugin.wasm` = `application/vnd.module.wasm.content.layer.v1+wasm`；OCI image-spec v1.0、四个 provenance 注解、发布前 pull gate 做结构校验 + wazero 编译并检 Proxy-Wasm 导出（`:181-196`）。`:189-191` 明说单层 `latest` 镜像曾导致 Envoy 无法加载；`:198` 也声明该门禁只编译不实例化、不证明运行时可用。
+
+`spec.yaml` 元数据（phase / priority / `configSchema`，仅 OpenAPI 3.0.0）属于第一套；第二套的元数据走 `plugins/release/catalog.json` 与快照。把第一套的 mediaType 套到官方产物上是错的。也支持 `url` 直接指向 http(s) 的 `.wasm`（Gateway 容器需能访问）；自签证书场景要在 Gateway 容器设 `WASM_INSECURE_REGISTRIES=*`（该变量只见于文档站，Helm 模板与本机源码未 grep 到）。
+
+官方插件地址。旧清单在 `higress-console` 的 `backend/sdk/src/main/resources/plugins/plugins.properties`，稳定 tag 统一 `1.0.0`、开发版 `latest`；示例形态 `oci://higress-registry.cn-hangzhou.cr.aliyuncs.com/plugins/request-block:1.0.0`，用 `latest` 时"插件有任意配置更新就会自动拉取最新版本"。v2.2.5 的新口径是快照锁：主仓 `plugins/release/snapshots/2.2.5.json` 列 **43** 个插件（42 go + 1 rust、36 项版本 `2.0.3`），每项带 `ociRef` + `digest`，`plugin-server` 与 Console 都从这份不可变快照构建；`1.0.0` / `latest` 是旧通道说法，两者在 console 仓是否并存本机无工作树可核（列在分册 Unverified）。换私有仓库仍是改 Console 容器的 `HIGRESS_ADMIN_WASM_PLUGIN_CUSTOM_IMAGE_URL_PATTERN`（占位符 `${name}` / `${version}`），Nacos 3.x 的 MCP 注册中心另有 `MCP_SERVER_WASM_IMAGE_URL`；各形态的写法与转义细节见 [Deployment and Ops](/docs/CS/Framework/Higress/Deployment_and_Ops.md)。
 
 ## Inspecting the Plugin Chain
 
@@ -238,7 +245,9 @@ Envoy 侧的插件类型有三种，Higress 网关逻辑用的是第一种：Htt
 
 ### Wasm Development Unverified
 
-四项本次**核不到一手出处**，不要写成事实：Rust / JS SDK 的现状与 API 名（文档站在 `user/plugins/**` 与 `llms.txt` 索引里没有对应页面，本次只核实到 Go 路径）；`wasm-image-spec` 第 4 节镜像构建用的具体 CLI 工具名；`hgctl plugin` 子命令组的二级动作（只核实到存在这一节标题）；以及 wasm17 示例在发起外部调用后**确切返回哪个 Action**——该页可见代码只印出 `types.ActionContinue`，暂停 / 恢复的权威表述在 wasm-go 页，引用要引后者。
+已从源码核实两项：① 镜像构建用的 CLI 是 `oras push`（`hgctl/pkg/plugin/build/build.go:446`），`templates.go:44-52` 还给出完整命令链 `tinygo build -o plugin.wasm` → `tar czf plugin.tar.gz plugin.wasm` → 把 tar.gz 作为最后一层追加；两套 OCI 规范的差异见 Hot Reload via ECDS。② `hgctl plugin` 的二级子命令已按 `hgctl/pkg/plugin/` 目录与 cobra `Use:` 核实为 `build` / `config`（下含 `create` / `edit`）/ `init` / `install` / `ls` / `test`（下含 `clean` / `create` / `ls` / `start` / `stop`）/ `uninstall`；`install` 有 `-y` 从 YAML 与 `-g` 从 Go 源码两条路径，后者先 build+push 镜像、再按 `spec.yaml` 的 `configSchema` 交互式问配置、生成 `plugin-conf.yaml`、最终 `Create` 到 `higress-system`（`install/install.go:141-290`、`config/templates.go:29-51`）。
+
+仍缺一手出处的两项：Rust / JS SDK 的现状与 API 名（文档站在 `user/plugins/**` 与 `llms.txt` 索引里没有对应页面，本次只核实到 Go 路径）；wasm17 示例在发起外部调用后**确切返回哪个 Action**——该页可见代码只印出 `types.ActionContinue`，暂停 / 恢复的权威表述在 wasm-go 页，引用要引后者。另需注意：外部 SDK 仓 `github.com/higress-group/wasm-go` 本机无工作树，运行时规则匹配的实现细节不在本页证据范围内（见 [Plugin Loading Internals](/docs/CS/Framework/Higress/Plugin_Loading_Internals.md) 的 Unverified）。
 
 ## AI Plugins
 
@@ -291,7 +300,7 @@ Higress 的 17 款 AI 插件分布在一个**三层模型**里，把三层混为
 
 ### Load Balancing over Models (ai-load-balancer)
 
-`ai-load-balancer` 是本页唯一**没有文档站页面**的插件（文档 URL 取不到正文、`llms.txt` 索引里也没有），只存在于仓库 `plugins/wasm-go/extensions/ai-load-balancer/` 的 README 中。**其字段口径最早取自 main 分支 README，本轮已用本地 v2.2.5 tag 源码坐实**——`main.go:47-58` 的 `lb_type`/`lb_policy` 常量枚举 + 五个策略子目录 `cluster_hash`/`cluster_metrics`/`endpoint_metrics`/`global_least_request`/`prefix_cache` 全部存在，信源层级提升为源码核实。顶层三字段 `lb_type`（`endpoint` | `cluster`，空值回退 `endpoint`，见 `main.go:63-65`）/ `lb_policy`（必填）/ `lb_config`（必填），README 要求网关版本 >= v2.1.5。
+`ai-load-balancer` 是本页唯一**没有文档站页面**的插件（文档 URL 取不到正文、`llms.txt` 索引里也没有），只存在于仓库 `plugins/wasm-go/extensions/ai-load-balancer/` 的 README 中。其字段口径最早取自 main 分支 README，现已用本地 v2.2.5 tag 源码坐实——`main.go:47-58` 的 `lb_type`/`lb_policy` 常量枚举 + 五个策略子目录 `cluster_hash`/`cluster_metrics`/`endpoint_metrics`/`global_least_request`/`prefix_cache` 全部存在，信源层级提升为源码核实。顶层三字段 `lb_type`（`endpoint` | `cluster`，空值回退 `endpoint`，见 `main.go:63-65`）/ `lb_policy`（必填）/ `lb_config`（必填），README 要求网关版本 >= v2.1.5。
 
 | `lb_policy` | 属于 | 语义 |
 | --- | --- | --- |
@@ -306,7 +315,7 @@ Higress 的 17 款 AI 插件分布在一个**三层模型**里，把三层混为
 关闭 `ai-load-balancer` 后策略不是"退化为轮询"，而是退化为服务本身内置策略集合（轮询、本地最小请求数、随机、一致性 hash）。
 
 > [!NOTE]
-> **`higress.io/load-balance` 注解是集群级简单 LB，不能做模型级负载均衡**——这是本轮从源码坐实、且与本段插件强相关的关键辨析。它是控制面 Ingress 注解（`pkg/ingress/kube/annotations/loadbalance.go:25,142-153`），解析后翻译成 Istio `TrafficPolicy.LoadBalancer.Simple`（即 Envoy 集群级简单 LB），与 `ai-load-balancer` wasm 插件的模型级加权（`endpoint_metrics` / `cluster_hash` / `AdaptiveScore`）是**完全不同的两层**。取值集合来自 Istio `LoadBalancerSettings_SimpleLB` 枚举（`istio.io/api` 的 `v1.27.1` 分支，fork 内 `pilot/pkg` 对 `ROUND_ROBIN` / `LEAST_CONN` / `RANDOM` / `PASSTHROUGH` 四常量均有引用），**大小写不敏感**（源码 `strings.ToUpper`）：有效值为 `ROUND_ROBIN`（默认，且**无效值会静默 fallback 到它**——`SimpleLB_value[lb]` 对未命中 key 返回 int32 零值 0，不报错）、`LEAST_CONN`、`RANDOM`、`PASSTHROUGH`；另有特判值 `MCP-SSE`（非 LB 算法，触发 McpSse 会话保持开关，见 [Config Pipeline](/docs/CS/Framework/Higress/Config_Pipeline.md)）。解析优先级需注意：**若 `affinity` / `session-cookie-name` / `session-cookie-path` 任一存在 → cookie 一致性 hash（忽略 `load-balance` 值）；否则若 `upstream-hash-by` 存在 → 按 header / query / 源 IP 的一致性 hash（同样忽略 `load-balance` 值）；否则才读 `load-balance` 本身**。⇒ 想做模型级加权必须装 `ai-load-balancer` 插件，仅靠注解最多到集群级轮询 / 最小连接 / 随机 / 透传。
+> **`higress.io/load-balance` 注解是集群级简单 LB，不能做模型级负载均衡**——这点从源码坐实，且与本段插件强相关。它是控制面 Ingress 注解（`pkg/ingress/kube/annotations/loadbalance.go:25,142-153`），解析后翻译成 Istio `TrafficPolicy.LoadBalancer.Simple`（即 Envoy 集群级简单 LB），与 `ai-load-balancer` wasm 插件的模型级加权（`endpoint_metrics` / `cluster_hash` / `AdaptiveScore`）是**完全不同的两层**。取值集合来自 Istio `LoadBalancerSettings_SimpleLB` 枚举（`istio.io/api` 的 `v1.27.1` 分支，fork 内 `pilot/pkg` 对 `ROUND_ROBIN` / `LEAST_CONN` / `RANDOM` / `PASSTHROUGH` 四常量均有引用），**大小写不敏感**（源码 `strings.ToUpper`）：有效值为 `ROUND_ROBIN`（默认，且**无效值会静默 fallback 到它**——`SimpleLB_value[lb]` 对未命中 key 返回 int32 零值 0，不报错）、`LEAST_CONN`、`RANDOM`、`PASSTHROUGH`；另有特判值 `MCP-SSE`（非 LB 算法，触发 McpSse 会话保持开关，见 [Config Pipeline](/docs/CS/Framework/Higress/Config_Pipeline.md)）。解析优先级需注意：**若 `affinity` / `session-cookie-name` / `session-cookie-path` 任一存在 → cookie 一致性 hash（忽略 `load-balance` 值）；否则若 `upstream-hash-by` 存在 → 按 header / query / 源 IP 的一致性 hash（同样忽略 `load-balance` 值）；否则才读 `load-balance` 本身**。⇒ 想做模型级加权必须装 `ai-load-balancer` 插件，仅靠注解最多到集群级轮询 / 最小连接 / 随机 / 透传。
 
 **`prefix_cache` 与 `ai-cache` 是完全不同的两件事**，尽管名字都带 cache：前者选 pod（复用后端 LLM 的 KV Cache），后者直接短路 LLM 调用。
 
@@ -401,12 +410,12 @@ HiMarket 不是网关组件：官方定义是"基于 Higress AI 网关构建的*
 本页曾列的 AI 插件未决项已在 v2.2.5 源码中全部转正或界定范围，结论已移入正文；以下保留逐项核实记录与信源层级说明。
 
 > [!NOTE]
-> **`ai-proxy` 在 v2.2.5 已完整支持 OpenAI Responses API 与全套 Fine-Tuning API**（本轮从源码坐实，不再未决）。`provider.go:54,103` 定义 `ApiNameResponses = "openai/v1/responses"` + `PathOpenAIResponses = "/v1/responses"`，并在 `main.go:72` 注册；Fine-Tuning 全套 9 个能力（`provider.go:55-63`：`ApiNameFineTuningJobs` / `RetrieveFineTuningJob` / `FineTuningJobEvents` / `FineTuningJobCheckpoints` / `CancelFineTuningJob` / `ResumeFineTuningJob` / `PauseFineTuningJob` / `FineTuningCheckpointPermissions` / `DeleteFineTuningCheckpointPermission`，对应 `/v1/fine_tuning/jobs` 及其子资源，`main.go:71` 等注册）。不止 OpenAI 一家：`qwen` / `doubao` / `vllm` / `groq` / `azure` 的 capabilities 映射也都包含 Responses（`needToProcessRequestBody(ApiNameResponses)=true` 表明走请求体转换、可用于 provider 间格式翻译）；`provider.go:881,888-893` 标注 Responses 与 Fine-Tuning 系列 `needProcessResponseBody = true`——前者维护 `previous_response_id` 对话状态、后者维护 job 状态。文档站若把这些 API 写成"不支持"，与源码直接冲突。
+> **`ai-proxy` 在 v2.2.5 已完整支持 OpenAI Responses API 与全套 Fine-Tuning API**（已从源码坐实）。`provider.go:54,103` 定义 `ApiNameResponses = "openai/v1/responses"` + `PathOpenAIResponses = "/v1/responses"`，并在 `main.go:72` 注册；Fine-Tuning 全套 9 个能力（`provider.go:55-63`：`ApiNameFineTuningJobs` / `RetrieveFineTuningJob` / `FineTuningJobEvents` / `FineTuningJobCheckpoints` / `CancelFineTuningJob` / `ResumeFineTuningJob` / `PauseFineTuningJob` / `FineTuningCheckpointPermissions` / `DeleteFineTuningCheckpointPermission`，对应 `/v1/fine_tuning/jobs` 及其子资源，`main.go:71` 等注册）。不止 OpenAI 一家：`qwen` / `doubao` / `vllm` / `groq` / `azure` 的 capabilities 映射也都包含 Responses（`needToProcessRequestBody(ApiNameResponses)=true` 表明走请求体转换、可用于 provider 间格式翻译）；`provider.go:881,888-893` 标注 Responses 与 Fine-Tuning 系列 `needProcessResponseBody = true`——前者维护 `previous_response_id` 对话状态、后者维护 job 状态。文档站若把这些 API 写成"不支持"，与源码直接冲突。
 
-**信源层级说明**：本页字段名、默认值**仍以官方文档站正文为主**（逐条 `[摘要级]`），但两类关键结论现已从源码坐实：① **阶段与优先级不再来自文档站**，改为 `higress-console` 的 marketplace `spec.yaml`（v2.2.5，commit `0279ce1a`）逐项抽取（见上方 Phase and Priority Registry 的 NOTE），旧表据此订正了 `ai-cache` / `ai-statistics` / `mcp-server` / `custom-response` / `hmac-auth-apisix` / `frontend-gray` / `opa` 七项；② **两个高频默认值已从 Go 配置结构体核实**——`ai-security-guard.denyCode` 默认 `200`（`config/config.go:68` `DefaultDenyCode`）、`ai-cache.vector.threshold` 默认 `1000` 且 `thresholdRelation` 默认 `lt`（`vector/provider.go:151-157`），与文档一致。本地源码树（v2.2.5）还确认了**插件的存在性与语言层归属**——`ai-load-balancer` 与 `mcp-router` 在 `plugins/wasm-go/extensions/`，认证基础族在 `plugins/wasm-cpp/`，`ai-data-masking` 在 `plugins/wasm-rust/`（见 [Source Map](/docs/CS/Framework/Higress/Source_Map.md)）。**本页原列的两项未决均已收口**：控制台"AI 路由管理"落成对象已从 `higress-console` 源码坐实、HiMarket 计量计费已界定为跨仓库运行时问题，两条结论均已移入正文 Console Routing Persistence and Platform Boundary 段；`higress.io/load-balance` 注解取值集合（见上方 ai-load-balancer 段 NOTE）、`ai-proxy` 对 OpenAI Responses / Fine-Tuning 的支持（见上方 NOTE）、`ai-load-balancer` 在 v2.2.5 的策略集（含 `metrics_based` 别名、`AdaptiveScore` 已进入 `cluster_metrics.mode`）与 `mcp-router` 的功能面亦均已从源码坐实，见上方对应小节。
+**信源层级说明**：本页字段名、默认值**仍以官方文档站正文为主**（逐条 `[摘要级]`），但两类关键结论现已从源码坐实：① **阶段与优先级不再来自文档站**，改为 `higress-console` 的 marketplace `spec.yaml`（v2.2.5，commit `0279ce1a`）逐项抽取（见上方 Phase and Priority Registry 的 NOTE），旧表据此订正了 `ai-cache` / `ai-statistics` / `mcp-server` / `custom-response` / `hmac-auth-apisix` / `frontend-gray` / `opa` 七项；② **两个高频默认值已从 Go 配置结构体核实**——`ai-security-guard.denyCode` 默认 `200`（`config/config.go:68` `DefaultDenyCode`）、`ai-cache.vector.threshold` 默认 `1000` 且 `thresholdRelation` 默认 `lt`（`vector/provider.go:151-157`），与文档一致。本地源码树（v2.2.5）还确认了**插件的存在性与语言层归属**——`ai-load-balancer` 与 `mcp-router` 在 `plugins/wasm-go/extensions/`，认证基础族在 `plugins/wasm-cpp/`，`ai-data-masking` 在 `plugins/wasm-rust/`（见 [Source Map](/docs/CS/Framework/Higress/Source_Map.md)）。控制台"AI 路由管理"落成对象已从 `higress-console` 源码坐实，HiMarket 计量计费界定为跨仓库运行时问题，两条结论都在正文 Console Routing Persistence and Platform Boundary 段；`higress.io/load-balance` 注解取值集合（见上方 ai-load-balancer 段 NOTE）、`ai-proxy` 对 OpenAI Responses / Fine-Tuning 的支持（见上方 NOTE）、`ai-load-balancer` 在 v2.2.5 的策略集（含 `metrics_based` 别名、`AdaptiveScore` 已进入 `cluster_metrics.mode`）与 `mcp-router` 的功能面亦均已从源码坐实，见上方对应小节。
 
 > [!NOTE]
-> **`ai-proxy` 的 provider 数已从源码确定（不再未决）**：v2.2.5 的 `plugins/wasm-go/extensions/ai-proxy/provider/` 定义 **37 个 `providerType` 常量**（36 个厂商类型 + 内部回退 `generic`），**不等于文档收录的 33 个 `type` 字符串**。差异精确为：源码比文档多出 `galadriel` / `kling` / `longcat` / `vllm` 四个厂商类型；文档列在 31 个里的 **`ai360` 在 v2.2.5 源码的 `providerType` 常量集合中不存在**（枚举 37 个常量无 `ai360`）。因此"文档 type 数 = 源码 provider 数"的假设不成立，且文档的 provider 清单本身也已落后于源码。
+> `ai-proxy` 的 provider 数是 38，与文档收录的 33 个 `type` 字符串不相等。`plugins/wasm-go/extensions/ai-proxy/provider/provider.go:130-167` 定义 38 个 `providerType*` 常量（37 个厂商类型 + 内部回退 `generic`），`:236` 的 `providerInitializers map[string]providerInitializer` 注册表也恰 38 项、与常量一一对应，`providerTypeAi360 = "ai360"` 就在 `:132`。文档那 33 个全部能在源码常量里找到，源码多出 `galadriel` / `kling` / `longcat` / `vllm` 四个厂商类型与内部 `generic`。另注：codegraph 的 `implements` 边把 `providerInitializer` 连出 40 条，其中混入 `ai-cache/vector/` 与 `ai-cache/cache/` 的同名类型，属于按名称匹配的误连，不能当 provider 数（口径见 [Call Graph Internals](/docs/CS/Framework/Higress/Call_Graph_Internals.md)）。
 
 ## Links
 
@@ -420,6 +429,8 @@ HiMarket 不是网关组件：官方定义是"基于 Higress AI 网关构建的*
 - [Envoy](/docs/CS/Framework/Istio/Envoy.md)
 - [Higress](/docs/CS/Framework/Higress/Higress.md)
 - [Config Pipeline](/docs/CS/Framework/Higress/Config_Pipeline.md)
+- [Plugin Loading Internals](/docs/CS/Framework/Higress/Plugin_Loading_Internals.md)
+- [Call Graph Internals](/docs/CS/Framework/Higress/Call_Graph_Internals.md)
 
 ## References
 

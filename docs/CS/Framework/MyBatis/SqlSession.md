@@ -113,7 +113,7 @@ public class SqlSessionManager implements SqlSessionFactory, SqlSession {
 }
 ```
 
-SqlSessionManager 与 DefaultSqlSessionFactory 的主要不同点 SqlSessionManager 提供了两种模式 在SqlSessionInterceptor的invoke里处理
+SqlSessionManager 与 DefaultSqlSessionFactory 的主要不同点 SqlSessionManager 提供了两种模式 在 SqlSessionInterceptor 的 invoke 里处理
 
 - 同一线程每次通过 SqlSessionManager 对象访问数据库时，都会创建新的 SqlSession 对象完成数据库操作
 - 通过 localSqlSession 这 ThreadLocal 变量，记录与当前线程绑定的 SqlSession 对象，供当前线程循环使用

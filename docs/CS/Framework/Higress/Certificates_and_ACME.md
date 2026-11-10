@@ -26,7 +26,7 @@ issuer 枚举只有两个值（`:42-43`）：`letsencrypt` 与 `aliyunssl`。但
 
 ## Challenge Path
 
-库是 `certmagic` + `mholt/acmez`（`certmgr.go:23-24`）。**一个必须写进依赖说明的事实**：`go.mod:20` require 的是 `certmagic v0.21.3`，但 `go.mod:318` 有 `replace github.com/caddyserver/certmagic => github.com/2456868764/certmagic v1.0.2`——**实际编进二进制的是一个第三方 fork**。该 fork（`github.com/2456868764/certmagic` tag `v1.0.2`）本机 module 缓存里没有，但**可直接拉源码核实**，本轮已核三条：续期轮询周期 **`DefaultRenewCheckInterval = 10 * time.Minute`**（`maintain.go:740`），定时器取 `certCache.options.RenewCheckInterval`（`maintain.go:59`），未显式设置时在 `cache.go:102-103` 回落到该默认值；`ManageSync`（`config.go:306`）本身只是一次 `manageAll(ctx, domainNames, false)` 委托。
+库是 `certmagic` + `mholt/acmez`（`certmgr.go:23-24`）。**一个必须写进依赖说明的事实**：`go.mod:20` require 的是 `certmagic v0.21.3`，但 `go.mod:318` 有 `replace github.com/caddyserver/certmagic => github.com/2456868764/certmagic v1.0.2`——**实际编进二进制的是一个第三方 fork**。该 fork（`github.com/2456868764/certmagic` tag `v1.0.2`）本机 module 缓存里没有，但**可直接拉源码核实**，已核实三条：续期轮询周期 **`DefaultRenewCheckInterval = 10 * time.Minute`**（`maintain.go:740`），定时器取 `certCache.options.RenewCheckInterval`（`maintain.go:59`），未显式设置时在 `cache.go:102-103` 回落到该默认值；`ManageSync`（`config.go:306`）本身只是一次 `manageAll(ctx, domainNames, false)` 委托。
 
 > [!NOTE]
 > ⇒ **`higress-https` 的到期检视是 10 分钟一次的轮询**，本包的 ConfigMap 事件只能缩短感知延迟、不能快于这个周期；而 `renewalWindowRatio` 决定"什么时候算该续"，两者相乘才是真实行为（主机名多的实例，10 分钟内可能跑完多轮 ACME 交互）。per-domain 的进程内去重与 `RenewDurationBefore` 的确切叠加关系仍未定位（见 Unverified）。

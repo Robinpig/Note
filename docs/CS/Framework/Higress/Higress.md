@@ -105,7 +105,7 @@ v2.2.5 依赖的内核版本不再是未决项——本地源码树的 `.gitmodu
 
 理解[架构与控制面](/docs/CS/Framework/Higress/Higress.md?id=architecture)是所有判断的前提：Higress 的控制面**不自己实现 xDS**，而是把 Ingress / Gateway API / 自有 CRD / annotation 翻译成一整套 Istio 资源，交给一个 istiod 的 fork 下发。由此推出两个结论——它为什么能同时吃四种配置入口，以及为什么内置的 `istio` 不等于独立安装的 Istio。数据面那侧的机制细节交给 [Envoy](/docs/CS/Framework/Istio/Envoy.md)，xDS 与 Wasm 的通用原理交给 [WasmPlugin](/docs/CS/Framework/Istio/WasmPlugin.md)，本子树不重述。
 
-配置入口确定后，扩展能力看[插件体系](/docs/CS/Framework/Higress/Plugin.md)：作用域在控制台与 CRD 侧是**两套口径**（三级 vs 四级），热更新靠 ECDS 订阅而非重启，官方插件以 OCI 镜像分发；自己写插件（Go SDK 的真实 API 名、外部 HTTP / Redis 调用、Go 1.24 编译换代）也在同一篇的 Wasm 开发小节。
+配置入口确定后，扩展能力看[插件体系](/docs/CS/Framework/Higress/Plugin.md)：作用域在控制台与 CRD 侧是两套口径（三级 vs 四级），热更新靠 ECDS 订阅而非重启，官方插件以 OCI 镜像分发；自己写插件（Go SDK 的真实 API 名、外部 HTTP / Redis 调用、Go 1.24 编译换代）也在同一篇的 Wasm 开发小节。插件究竟怎么被装进 Envoy，是 [Plugin Loading Internals](/docs/CS/Framework/Higress/Plugin_Loading_Internals.md) 的事：从 CR 字段、三源并集、两套 OCI 规范、不可变快照一路串到 plugin-server 的本地 HTTP 目录，pilot 看到的 `WasmPlugin` 因此不等于用户写的 CR，官方发布用快照锁 digest，standalone 则把 OCI 直拉整个换掉。fork 未 checkout 的那几步，分册里单独划了边界。
 
 流量与路由的日常操作集中在[Traffic Governance](/docs/CS/Framework/Higress/Traffic_Governance.md)：两个限流插件的配置面**完全不对称**，灰度有 annotation / 插件 / Kruise Rollout 三条路，nginx 注解兼容矩阵的实际分档是"兼容 / 部分兼容 / Higress 扩展"三档。后端服务从哪来、HTTP 怎么转 Dubbo，在 [Service Discovery and RPC](/docs/CS/Framework/Higress/Service_Discovery.md)。
 
@@ -113,14 +113,16 @@ v2.2.5 依赖的内核版本不再是未决项——本地源码树的 `.gitmodu
 
 [AI Gateway](/docs/CS/Framework/Higress/AI_Gateway.md) 是本子树写得最深的一篇：协议转换怎么发生、33 个厂商 type 字符串、负载均衡策略的真实名字（含一个**只有仓库 README、没有文档站页面**的 `ai-load-balancer`）、语义缓存在默认参数下为什么静默不命中、MCP 的三条互不相同的托管路径。最后，[Deployment and Ops](/docs/CS/Framework/Higress/Deployment_and_Ops.md) 覆盖三种部署形态（其中两种官方明写"没有大规模生产使用过"）、升级顺序、以及"配置正确但没生效"时必须按层定位的四段排障链。
 
-上面这些都以文档口径为主。**再往下还有一层源码级分册**，它们回答的是"为什么是这样"而不是"怎么配"，所有断言带 `路径:行号`：[Config Pipeline](/docs/CS/Framework/Higress/Config_Pipeline.md) 追一条配置从 informer 到 xDS 的每一跳（结论形状是 **pilot 反向 pull、Higress 每次 List 全量重算、Higress 侧没有任何 debounce 生效**）；[Source Map](/docs/CS/Framework/Higress/Source_Map.md) 是以源码为准的模块地图（含约 89 个注解相对 key 的逐项清单与前缀行为）；[Service Registry Internals](/docs/CS/Framework/Higress/Service_Registry_Internals.md) 讲 `registry/` 这一层——它是 Higress 少数真正自己写的部分，也是"服务名为什么长这样、`redis.static` 为什么不写端口就连 80"的出处；[Standalone and All-in-One](/docs/CS/Framework/Higress/Standalone_and_AllInOne.md) 说清"没有 Kubernetes 怎么办"其实是 fork 一个 `sample-apiserver` 并把 CR 存到 Nacos 或文件树；[Certificates and ACME](/docs/CS/Framework/Higress/Certificates_and_ACME.md) 则是自动签发的真实边界——只有 HTTP-01、续期参数其实是个比例、多副本之间没有任何互斥。
+上面这些都以文档口径为主。再往下是源码级分册，回答"为什么是这样"而非"怎么配"，所有断言带 `路径:行号`：[Config Pipeline](/docs/CS/Framework/Higress/Config_Pipeline.md) 追一条配置从 informer 到 xDS 的每一跳（结论是 pilot 反向 pull、Higress 每次 List 全量重算、Higress 侧没有 debounce 生效）；[Source Map](/docs/CS/Framework/Higress/Source_Map.md) 是以源码为准的模块地图（含约 89 个注解相对 key 的逐项清单与前缀行为）；[Service Registry Internals](/docs/CS/Framework/Higress/Service_Registry_Internals.md) 讲 `registry/` 这一层——它是 Higress 少数真正自己写的部分，也是"服务名为什么长这样、`redis.static` 为什么不写端口就连 80"的出处；[Standalone and All-in-One](/docs/CS/Framework/Higress/Standalone_and_AllInOne.md) 说清"没有 Kubernetes 怎么办"其实是 fork 一个 `sample-apiserver` 并把 CR 存到 Nacos 或文件树，再往下还有 21 次 `appendStorage` 与四个 legacy group、`flat` / `legacy` 两种 codec 的真实归属、Nacos 以 MD5 充当 resourceVersion 配合 `CasMd5` 乐观锁、名单轮询加逐对象订阅的 watch 模拟；[Certificates and ACME](/docs/CS/Framework/Higress/Certificates_and_ACME.md) 则是自动签发的真实边界——只有 HTTP-01、续期参数其实是个比例、多副本之间没有任何互斥。
+
+跨文件的关系在 [Call Graph Internals](/docs/CS/Framework/Higress/Call_Graph_Internals.md)：两份 codegraph 索引能回答单文件读不出来的问题——谁实现谁、十条 `ConfigUpdate` 入口为何汇流到同一个 `DiscoveryServer`、九个 EnvoyFilter 构造点分属哪两族、四个配置层类型为何实现同一组 lister 接口。这一页也交代了证据边界：`calls` 边按名称解析会误连，`unresolved_refs` 反而更适合统计调用点，所以结论都回源码核过行号。
 
 ```text
-              枢纽 ─────┬─ Config Pipeline ─ Source Map
+              枢纽 ─────┬─ Config Pipeline ─ Source Map ─ Call Graph Internals
                         ├─ Service Registry Internals
                         ├─ Standalone and All-in-One
                         ├─ Certificates and ACME
-                        ├─ Plugin
+                        ├─ Plugin ─ Plugin Loading Internals
                         ├─ AI Gateway
                         ├─ Traffic Governance ── Service Discovery
                         ├─ Security and Auth
@@ -138,13 +140,15 @@ v2.2.5 依赖的内核版本不再是未决项——本地源码树的 `.gitmodu
 
 ## Verification Protocol
 
-### 信源与核实口径（两层）
+### 信源与核实口径（三层）
 
-本子树的信源有两层：**官方文档站** `higress.ai/docs/latest/`（Astro Starlight 文档）与 **v2.2.5 tag 的源码**，凡文档与源码冲突**一律以源码为准**，且偏差散在各页正文里说。
+本子树的信源有三层：官方文档站 `higress.ai/docs/latest/`（Astro Starlight 文档）、v2.2.5 tag 的源码，以及 codegraph 符号图（只补跨文件关系，不单独构成事实）。文档与源码冲突时以源码为准，偏差散在各页正文里说。
 
 - **取文档正文**：用 `curl` 抓页面 + 正则抽 `<div class="sl-markdown-content">`（**WebFetch 抓这些页会 120s 超时**）；**文档 URL 一律取自 `https://higress.ai/llms.txt`，不要凭印象拼路径**（`higress.io/en/docs/...` 返回 404）。
 - **取源码**：`git clone --branch v2.2.5`（主仓）与 `--branch aio-v2.2.5`（`higress-standalone`，独立部署形态）。**不要假定本机有源码树**：`raw.githubusercontent` / `cdn.jsdelivr.net` / `unpkg` / `registry.npmjs.org` 在部分网络下全不可用，`api.github.com` 共享 60/小时极易打光，整仓 clone 与 blobless sparse clone 都可能超时失败——**没有源码时一律降级成文档口径并把"需回源码确认"的项显式写进该页 `## Unverified`**。
-- **本机可用源码树（2026-10-31）**：主仓 `/Users/robin/Projects/higress`（v2.2.5，`4deae1dd`）、**istio fork `/Users/robin/Projects/istio`（`istio-1.27` 分支 HEAD `65133dd`，即本仓 `.gitmodules` pin 的 `istio/istio`）**、`higress-console`（v2.2.5，`0279ce1a`）、`higress-standalone`（aio-v2.2.5，`36882509`）。⇒ **fork 内部与外部仓结论现已可离线核实**，此前"本机无工作树"的降级说明仅适用于旧会话；引用 fork 行号时以 `istio-1.27` 分支为准，注意本地 detached 的 `1.19.0` 不是本仓依赖（`istio/pkg` 才走 istio-1.19）。
+- **本机可用源码树（2026-11-10）**：主仓 `E:/Projects/higress-2.2.5`（v2.2.5，含 `.codegraph/codegraph.db`）、standalone `E:/Projects/higress-standalone-2.2.5`（aio-v2.2.5，同样带索引）。本机可离线核实两个 v2.2.5 仓的源码与符号图；istio-1.27 fork（HEAD `65133dd`）与 higress-console 仓在本机没有工作树，凡引用 fork 行号的结论（`DebounceAfter=100ms`、`AlwaysPushLabel` 字面量、`model.IngressRoute` 字段等）保留但标注为旧会话离线核实，换机器或换网络需重测。`/Users/robin/Projects/{higress,istio,higress-console,higress-standalone}` 是另一台机器的路径，只用于追溯旧证据出处，不要据此假定本机存在。
+- **取符号图**：两仓各有 `.codegraph/codegraph.db`（CodeGraph 1.6.2 / extraction 27 / schema v11；主仓 26826 节点 70358 边、standalone 562 节点 1093 边）。`nodes` / `implements` / `unresolved_refs` 可作候选证据；**`calls` 与 `implements` 边按名称解析、跨包同名会误连**（主仓 22234 条 calls 里 `exact-match` 12485 条），故边计数只能用于定位、不能当结论，统计全仓调用点要 `unresolved_refs` + `grep` 双证。图中没有 pilot fork / Envoy / `external/` 的符号，`shell` 编排也未被索引，跨 fork 与部署脚本的结论一律回源码。完整口径见 [Call Graph Internals](/docs/CS/Framework/Higress/Call_Graph_Internals.md)。
+- **源码级分册自足**：[Config Pipeline](/docs/CS/Framework/Higress/Config_Pipeline.md)、[Standalone and All-in-One](/docs/CS/Framework/Higress/Standalone_and_AllInOne.md)、[Plugin Loading Internals](/docs/CS/Framework/Higress/Plugin_Loading_Internals.md)、[Call Graph Internals](/docs/CS/Framework/Higress/Call_Graph_Internals.md) 与 [Service Registry Internals](/docs/CS/Framework/Higress/Service_Registry_Internals.md) 把承载机制的关键源码直接抄进正文，读者不必另开编辑器。代码块里的 `// ...` 表示节选省略，省略范围在块外写明；`路径:行号` 只用于回查，不承担解释。
 - **每篇分册末尾都有 `## Unverified`**，这是本子树的固定结构，也是硬禁区：那里面的东西一条都不许写进正文。
 
 ### 已证伪清单（尚未在 Three Threads 覆盖的条目）
@@ -162,14 +166,20 @@ v2.2.5 依赖的内核版本不再是未决项——本地源码树的 `.gitmodu
 - "nacos 可作 MCP server 注册源"（仅 `nacos3`，且这条限制在源码里是**软校验**——nacos2 配了只打 error 日志后静默跳过）
 - "Http2Rpc 支持 Dubbo3 Triple"（官方逐字"暂不支持 Triple 协议"，Triple 走 gRPC 直接代理）
 - 语义缓存阈值字段 `similarityThreshold`（实为 `vector.threshold` + `vector.thresholdRelation`，且默认组合对 Cosine / DotProduct 永不命中）
+- "`ConfigUpdate` 只有 `bootstrap/server.go:212` 一个调用点"（全仓非测试代码 **10 处**、三类触发源；"唯一"只在方法/对象层面成立，十条共享同一个 `*xds.DiscoveryServer`）
+- "EnvoyFilter 全仓只有 `convertEnvoyFilter` 一个制造点"（路由翻译族 4 处 + ConfigMap 派生族 5 处，共 **9 处** `networking.EnvoyFilter{` 构造）
+- "standalone 的 `flat` / `legacy` 是 `nacos_rest.go` 里的对象序列化格式"（前者是 file 后端 Ingress 专用简写 codec，后者是 APIGroupInfo 的 HTTP 内容协商器，都不在 nacos 后端）
+- "`higress-standalone` 缺 wasmplugins / mcpbridges 的 CRD schema"（它们不是 CRD，而是内置 typed API group，Go 类型来自 `higress/v2@v2.1.8`；5 个静态 CRD YAML 只服务 discovery，且 CRD watch 恒空）
+- "独立部署注册了约 21 类资源"（精确为 **11 个 APIGroupInfo**、21 次 `appendStorage` 加 1 个直挂的 `subjectaccessreviews`）
 
-### 源码核对后推翻的三条（含本库自己上一版的错误）
+### 源码核对后推翻的四条
 
 ① **`hgctl config` 这条把名字记错了——真实命令是 `hgctl gateway-config`**（`Use: "gateway-config"`，`hgctl/pkg/config_cmd.go:39`，别名 `gc`），二级命令确为 all / bootstrap / cluster / endpoint / listener / route（`:45-50`，抓 xDS）。这条结论的**存在性**是对的（文档站 hgctl 页没列它，旧版写成"不存在的子命令"是反了），但**不存在叫 `config` 的顶层子命令**；`profile` / `install` / `upgrade` 等是 root 的子命令。
 ② **`wrapper.ProcessStreamDone` 与 `ProcessStreamDoneBy` 两个名字都真实存在**（前者见主仓 `plugins/wasm-go/pkg/mcp/server/plugin.go:910`，后者是文档 SDK 页形态；`wrapper` 包在外部模块 `github.com/higress-group/wasm-go`，本地不可枚举导出项），不许再写"其中一个不存在"。
 ③ **文档的 41 款插件不都在 wasm-go**：认证基础族（`key_auth` / `basic_auth` / `jwt_auth` / `hmac_auth` / `oauth` / `bot_detect` / `request_block` / `key_rate_limit` / `custom_response` 等）在 **`plugins/wasm-cpp/`（snake_case、bazel）**，`ai-data-masking` 在 **`wasm-rust/`**；而 `plugins/wasm-go/extensions/` 有 **53** 个目录、约 20 个没有文档页（`mcp-router` 就在此列——**存在性成立、语义未读**，旧版"不存在 mcp-router"是错的）。
+④ `ai-proxy` 的 provider 数是 38，不是 37，`ai360` 也确实存在：`plugins/wasm-go/extensions/ai-proxy/provider/provider.go:130-167` 共 38 个 `providerType*` 常量，`:236` 的 `providerInitializers` 注册表也恰 38 项，`providerTypeAi360` 就在 `:132`。文档收录的 33 个 type 字符串全部能在源码找到，源码多出 `galadriel` / `kling` / `longcat` / `vllm` 四个厂商类型与内部 `generic`。顺带一条方法论教训：codegraph 的 `implements` 边给该接口连出 40 条，其中混进 `ai-cache/vector/` 的同名 `providerInitializer`，属于按名称匹配的误连，不能当 provider 数引用。
 
-另有一批源码事实值得常驻：**pilot fork 与 Higress 控制器同进程**（`go.mod:302-314` replace + 共享 `*xds.DiscoveryServer` 指针，不是两个服务）、**配置是 pilot 反向 pull、每次 List 全量重算、Higress 侧 debounce 是死字段**、**`higress-config` 的 `mesh` 段不走 Higress 解析**（注入的是 `meshwatcher.NewTestWatcher` 空对象）、**ACME 只有 HTTP-01 且多副本零互斥**、**独立部署的 apiserver 是 `sample-apiserver` fork、CR 存 Nacos 或文件树而非 etcd**。
+另有一批容易记错的源码事实：pilot fork 与 Higress 控制器同进程（`go.mod:302-314` replace + 共享 `*xds.DiscoveryServer` 指针，不是两个服务）；配置是 pilot 反向 pull、每次 List 全量重算、Higress 侧 debounce 是死字段；`higress-config` 的 `mesh` 段不走 Higress 解析（注入的是 `meshwatcher.NewTestWatcher` 空对象）；ACME 只有 HTTP-01 且多副本零互斥；独立部署的 apiserver 是 `sample-apiserver` fork，CR 存 Nacos 或文件树而非 etcd。符号图与源码双证另补三条：六个 generator 各自一次 `Environment.List`，只有 ServiceEntry 排序（为 IP 分配确定性）；独立部署只有 Secret 走 Nacos AES 加密，resourceVersion 由内容 MD5 模拟并配合 `CasMd5` 乐观锁；file 后端的 100ms fsnotify 去抖发生在 apiserver 侧，与控制器侧的"debounce 死字段"不是同一层。
 
 ## References
 - [Higress 是什么](https://higress.ai/docs/latest/overview/what-is-higress/)

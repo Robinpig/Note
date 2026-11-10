@@ -143,7 +143,7 @@ FAQ 与场景页给出的、值得照抄进决策清单的口径：
 
 ## Unverified
 
-`hgctl install` 的 profile 取值集合（`k8s`/`local-k8s`/`local-docker` + 内部 `_all` 模板）、hgctl 级参数全集（`-f`/`-s`/`-d`/`--devel` + kube 旗）与 `Profile.Validate()` 校验规则**已自主仓源码解锁**（见 hgctl and Troubleshooting Chain 的 NOTE）。Standalone 各参数的必填性校验规则（参数**存在性已逐个核到 `higress-standalone` 源码**，但 `-c` 与 `--use-builtin-nacos` 之外的组合约束、`-k` 在升级时是否会轮换既有密文仍未核）；Console 管理员账号是否落地为某个 K8s Secret、密码重置方式与登录失败锁定策略（涉及 `higress-console` 仓，含敏感凭据检索；本轮实际检索被敏感内容审批拦截，保持未核）；`crd.yaml` 在各版本间的差异；企业版（MSE 云原生网关）与开源版在 WAF / 认证插件上的功能差异清单。
+`hgctl install` 的 profile 取值集合（`k8s`/`local-k8s`/`local-docker` + 内部 `_all` 模板）、hgctl 级参数全集（`-f`/`-s`/`-d`/`--devel` + kube 旗）与 `Profile.Validate()` 校验规则**已自主仓源码解锁**（见 hgctl and Troubleshooting Chain 的 NOTE）。Standalone 各参数的必填性校验规则（参数**存在性已逐个核到 `higress-standalone` 源码**，但 `-c` 与 `--use-builtin-nacos` 之外的组合约束、`-k` 在升级时是否会轮换既有密文仍未核）；Console 管理员账号是否落地为某个 K8s Secret、密码重置方式与登录失败锁定策略（涉及 `higress-console` 仓，含敏感凭据检索；本仓检索受敏感内容审批限制，保持未核）；`crd.yaml` 在各版本间的差异；企业版（MSE 云原生网关）与开源版在 WAF / 认证插件上的功能差异清单。
 
 Istio / Envoy 的内核版本已不再是未决项——主仓 `.gitmodules` 把 fork 分支钉在 **`istio-1.27`**（`istio/pkg` 单独走 `istio-1.19`）与 **`envoy-1.36`**，K8s 侧依赖 pin 在 v0.34.1，证据与推导链在 [Source Map](/docs/CS/Framework/Higress/Source_Map.md)。
 

@@ -2,13 +2,35 @@
 
 这一页只讲**链路**：一条配置从进控制器到变成 xDS 资源，中间经过哪些函数、在哪一步变成什么对象。模块与目录清单在 [Source Map](/docs/CS/Framework/Higress/Source_Map.md)，服务来源那一层的内部实现在 [Service Registry Internals](/docs/CS/Framework/Higress/Service_Registry_Internals.md)。
 
-基准：`/Users/robin/Projects/higress` @ **v2.2.5**（HEAD `4deae1dd`）。全部行号可直接开文件复核。三条最先该知道的结论：**① Higress 对 pilot 是只读的 pull 模型，配置产物不缓存、每次 `List` 全量重算；② 事件只是脏标记，Higress 侧没有任何时间去抖生效；③ Higress 与 pilot fork 是同一个进程内共享指针，不是两个服务。**
+基准是 higress 主仓 v2.2.5（HEAD `4deae1dd`）与 standalone aio-v2.2.5（`36882509`），取自本机的两份 v2.2.5 源码树。承载机制的关键源码直接抄在正文里，`路径:行号` 只用于回查，代码块里的 `// ...` 表示节选省略。有三条事实贯穿全篇：Higress 对 pilot 是只读的 pull 模型，配置产物不缓存、每次 `List` 全量重算；事件只作脏标记，Higress 侧没有生效的时间去抖；Higress 与 pilot fork 在同一进程里共享指针，并非两个服务。
+
+跨文件的符号级关系（接口实现矩阵、十条 `ConfigUpdate` 入口、九个 EnvoyFilter 构造点）放在 [Call Graph Internals](/docs/CS/Framework/Higress/Call_Graph_Internals.md)，本页不重述。
 
 ## Process Assembly
 
 `cmd/higress/main.go:28` 执行 `cmd.GetRootCommand().Execute()`，根命令（`pkg/cmd/root.go:21-31`）**只有 serve 与 version 两个子命令**——整个网关控制器就是一个 `higress serve`。`pkg/cmd/server.go:73` 构造、`:78` 启动，构造期与启动期是分开的。
 
-`pkg/bootstrap/server.go:170-184` 的 `initFuncList` **注册顺序即执行顺序，全部同步，任一失败即整个构造失败**：
+注册顺序就是这份切片，循环里没有任何并发或容错（`bootstrap/server.go:170-184`）：
+
+```go
+	s.environment.Watcher = meshwatcher.NewTestWatcher(&v1alpha1.MeshConfig{})
+	s.environment.Init()
+	initFuncList := []func() error{
+		s.initKubeClient,
+		s.initXdsServer,
+		s.initHttpServer,
+		s.initConfigController,
+		s.initRegistryEventHandlers,
+		s.initAuthenticators,
+		s.initAutomaticHttps,
+	}
+
+	for _, f := range initFuncList {
+		if err := f(); err != nil {
+			return nil, err
+		}
+	}
+```
 
 1. `initKubeClient`（`:454-472`，`:459` 取 rest config、`:466` 建 client、`:470` 开 CRD watcher）
 2. `initXdsServer`（`:383-408`，见 fork 边界一节）
@@ -42,20 +64,172 @@
 
 以 Ingress 为例（`pkg/ingress/kube/ingressv1/controller.go`）：`:119` 把 informer 的 EventHandler 直接接到 `controllers.ObjectHandler(c.queue.AddObject)`，队列是 pilot 的 `controllers.NewQueue("ingressv1", WithReconciler(c.onEvent), WithMaxAttempts(5))`（`:116-118`），key 就是 `namespace/name`，**没有自定义拼接**。该队列底层是 **`workqueue.NewRateLimitingQueue`**（`pkg/kube/controllers/queue.go:92-94`）：Higress 只传了 `WithMaxAttempts(5)` 而**没有传 `WithRateLimiter`**，因此走 pilot 默认的 `workqueue.DefaultControllerRateLimiter()`（per-item 指数退避 + 令牌桶）——⇒ **队列的退避与速率是 pilot 侧默认值，不是 Higress 自己配的**，`WithRateLimiter`（`:51-55`）是留给自定义的口子。Service / IngressClass 的 informer 在同一函数建立（`:95-102`）；CRD 侧走通用控制器 `pkg/ingress/kube/controller/model.go:67-70`，配置相同，只是内部 key 多带一个 ClusterId（`model.go:101-107`）。
 
-真正的"合并"只有一处，且**不是时间窗**：`shouldProcessIngressUpdate`（`ingressv1/controller.go:1342-1387`）在对象已见过时用 `reflect.DeepEqual` 比较 **Annotations / Labels / Spec** 三项（`:1357-1372`，注释逐字为 "We only care about annotations, labels and spec."），三者全等就把事件丢掉。推论：**只改 status 或其它字段的更新不会触发下发**；而 `pkg/kube/client.go:73` 的 `resyncInterval = 0` 意味着**不存在周期性全量重推**——漏掉的事件不会靠 resync 自愈。
+真正的"合并"只有一处，且**不是时间窗**：`shouldProcessIngressUpdate`（`ingressv1/controller.go:1342-1387`）在对象已见过时用 `reflect.DeepEqual` 比较 **Annotations / Labels / Spec** 三项（`:1357-1372`，注释逐字为 "We only care about annotations, labels and spec."），三者全等就把事件丢掉。推论：**只改 status 或其它字段的更新不会触发下发**；而 `pkg/kube/client.go:73` 的 `resyncInterval = 0` 意味着**不存在周期性全量重推**——漏掉的事件不会靠 resync 自愈。所谓"合并"其实是这段比较（`ingressv1/controller.go:1353-1375`），既没有时间窗，也没有攒批：
+
+```go
+		// We only care about annotations, labels and spec.
+		if exist {
+			if !reflect.DeepEqual(preConfig.Annotations, ing.Annotations) {
+				IngressLog.Debugf("Annotations of ingress %s changed, should process.", namespacedName)
+				return true, nil
+			}
+			if !reflect.DeepEqual(preConfig.Labels, ing.Labels) {
+				IngressLog.Debugf("Labels of ingress %s changed, should process.", namespacedName)
+				return true, nil
+			}
+			if !reflect.DeepEqual(preConfig.Spec, ing.Spec) {
+				IngressLog.Debugf("Spec of ingress %s changed, should process.", namespacedName)
+				return true, nil
+			}
+
+			return false, nil
+		}
+```
 
 状态回写是另一条独立链路（与配置下发无关）：`ingressv1/status.go` 的 `statusSyncer` 以 `common.DefaultStatusUpdateInterval`（`pkg/ingress/kube/common/model.go:66` = **10s**）为周期 ticker 轮询，回写前用 `reflect.DeepEqual` 比较 LB IP 去重（`:114`），不是事件驱动的即时写。
 
-一次 Ingress 变更产生的是 **4 个合成 Meta**：`<name>-destinationrule` / `-virtualservice` / `-envoyfilter` / `-gateway`（`:191-212`），按 DR → VS → EnvoyFilter → Gateway 顺序向四组 handler 广播（`:219-233`），每个都带 `Labels{AlwaysPushLabel: "true"}`（注释："Set this label so that we do not compare configs and just push."）。所有下游 handler 最终汇流到同一个闭包：`bootstrap/server.go:201-213` 构造 `PushRequest{Full: true, ...}` 后调 `xdsServer.ConfigUpdate`（`:212`）——**这就是入队事件到 xDS push 的唯一汇流点**。合成名是全链路一致的约定，唯一例外是 Http2Rpc 用 CR 真名（`ingress_config.go:1528`）。
+一次 Ingress 变更产生的是 **4 个合成 Meta**：`<name>-destinationrule` / `-virtualservice` / `-envoyfilter` / `-gateway`（`:191-212`），按 DR → VS → EnvoyFilter → Gateway 顺序向四组 handler 广播（`:219-233`），每个都带 `Labels{AlwaysPushLabel: "true"}`（注释："Set this label so that we do not compare configs and just push."）。所有下游 handler 汇流到 `bootstrap/server.go:199-216` 的 `configHandler`：构造 `PushRequest{Full: true, ConfigsUpdated: {...}, Reason: model.ConfigUpdate}` 后调 `s.xdsServer.ConfigUpdate`（`:212`）。合成名是全链路一致的约定，唯一例外是 Http2Rpc 用 CR 真名（`ingress_config.go:1528`）。四个 Meta 与四组广播是同一段代码（`ingressv1/controller.go:190-233`），`AlwaysPushLabel` 写在每一份 Meta 上：
+
+```go
+	drmetadata := config.Meta{
+		Name:             ing.Name + "-" + "destinationrule",
+		Namespace:        ing.Namespace,
+		GroupVersionKind: gvk.DestinationRule,
+		// Set this label so that we do not compare configs and just push.
+		Labels: map[string]string{constants.AlwaysPushLabel: "true"},
+	}
+	vsmetadata := config.Meta{
+		Name:             ing.Name + "-" + "virtualservice",
+		Namespace:        ing.Namespace,
+		GroupVersionKind: gvk.VirtualService,
+		// Set this label so that we do not compare configs and just push.
+		Labels: map[string]string{constants.AlwaysPushLabel: "true"},
+	}
+	efmetadata := config.Meta{
+		Name:             ing.Name + "-" + "envoyfilter",
+		Namespace:        ing.Namespace,
+		GroupVersionKind: gvk.EnvoyFilter,
+		// Set this label so that we do not compare configs and just push.
+		Labels: map[string]string{constants.AlwaysPushLabel: "true"},
+	}
+	gatewaymetadata := config.Meta{
+		Name:             ing.Name + "-" + "gateway",
+		Namespace:        ing.Namespace,
+		GroupVersionKind: gvk.Gateway,
+		// Set this label so that we do not compare configs and just push.
+		Labels: map[string]string{constants.AlwaysPushLabel: "true"},
+	}
+
+	for _, f := range c.destinationRuleHandlers {
+		f(config.Config{Meta: drmetadata}, config.Config{Meta: drmetadata}, event)
+	}
+	for _, f := range c.virtualServiceHandlers {
+		f(config.Config{Meta: vsmetadata}, config.Config{Meta: vsmetadata}, event)
+	}
+	for _, f := range c.envoyFilterHandlers {
+		f(config.Config{Meta: efmetadata}, config.Config{Meta: efmetadata}, event)
+	}
+	for _, f := range c.gatewayHandlers {
+		f(config.Config{Meta: gatewaymetadata}, config.Config{Meta: gatewaymetadata}, event)
+	}
+```
+
+传给 handler 的两个 `config.Config` 都只有 Meta，没有 Spec。事件本身不携带任何配置内容，这是理解后面 pull 模型的关键。
+
+> [!WARNING]
+> 全仓非测试代码里 `ConfigUpdate(` 有 10 个调用点，分三类：上述合成 Meta handler 1 处；配置层经 `XDSUpdater` 接口间接推 8 处（`cert/certmgr.go:182`、`ingress_config.go:1524/1553/1578/2288`、`kingress_config.go:470`、`secret_config_mgr.go:153`、`kube/configmap/controller.go:212`）；Gateway API 移植层的 krt 泛型 `pushXds` 1 处（`kube/gateway/istio/controller.go:631`）。它们指向同一个对象：`bootstrap/server.go:240` 把 `s.xdsServer` 作为 `xdsUpdater` 注入 `NewIngressTranslation`，再由 `translation.go:50-53` 原样交给 Ingress / KIngress 两个配置存储，cert 与 gateway 控制器拿的也是同一指针。准确说法是十条入口、三类触发器、一个 `DiscoveryServer.ConfigUpdate`，十条一律 `Full: true`，"唯一汇流点"只在方法/对象层面成立。其中 `notifyXDSFullUpdate`（`:2279-2292`）全仓只有 `:496` 一个调用者且 `ConfigsUpdated` 恒为 nil，是一次不带任何 ConfigKey 的全量推送；`pushXds`（`gateway/istio/controller.go:614-636`）则是唯一先做 `ConfigKey` 集合去重、空集合直接 return 的入口。`AlwaysPushLabel` + `ProxyNeedsPush` 恒真的放大效应因此没法靠少发几次事件规避：直接推送路径绕过了 handler 广播。
 
 > [!WARNING]
 > Higress 侧**没有任何限流或去抖在生效**：`pkg/cmd/server.go:97-99` 把 pilot 的 `DebounceAfter` / `DebounceMax` / `EnableEDSDebounce` 读进 `ServerArgs.XdsOptions`，但全仓 Go 代码对这三个字段的引用只有赋值处与结构体声明，`bootstrap` 实际只消费 `KeepConfigLabels` / `KeepConfigAnnotations`（`:386`）——**它们是死字段**，真正的 debounce 在 pilot fork 内部（本机无工作树，默认值不可核）。同时 `ProxyNeedsPush` 被硬置恒真（`:399-401`），即 Higress 主动放弃了"哪些配置变化影响哪些 proxy"的精确判定，把成本换成"重算 + 全推"。
 
+三个 debounce 字段只在构造 `ServerArgs` 时被赋值（`pkg/cmd/server.go:97-102`），而 `initXdsServer` 只取另外两个（`bootstrap/server.go:385`）：
+
+```go
+		XdsOptions: bootstrap.XdsOptions{
+			DebounceAfter:         features.DebounceAfter,
+			DebounceMax:           features.DebounceMax,
+			EnableEDSDebounce:     features.EnableEDSDebounce,
+			KeepConfigLabels:      keepConfigLabels,
+			KeepConfigAnnotations: keepConfigAnnotations,
+		},
+```
+
+```go
+	generatorOptions := mcp.GeneratorOptions{KeepConfigLabels: s.XdsOptions.KeepConfigLabels, KeepConfigAnnotations: s.XdsOptions.KeepConfigAnnotations}
+```
+
 ## Translation is Pull
 
-`IngressConfig` 实现的接口是 `istiomodel.ConfigStoreController` + `istiomodel.IngressStore`（`ingress_config.go:80-82` 的编译期断言），且**写操作全部显式不支持**：`Create/Update/UpdateStatus/Patch/Delete` 一律返回 `ErrUnsupportedOp`（`:2166-2184`），`Get` 恒返回 nil（`:2162-2164`）。方向因此是反的：不是 Higress 把配置推给 pilot，而是 **pilot 反向 pull Higress**。
+`IngressConfig` 实现的接口是 `istiomodel.ConfigStoreController` + `istiomodel.IngressStore`（`ingress_config.go:80-82` 的编译期断言），且**写操作全部显式不支持**：`Create/Update/UpdateStatus/Patch/Delete` 一律返回 `ErrUnsupportedOp`（`:2166-2184`），`Get` 恒返回 nil（`:2162-2164`）。方向因此是反的：不是 Higress 把配置推给 pilot，而是 **pilot 反向 pull Higress**。写路径被整组封死（`ingress_config.go:2162-2184`）：
 
-产物也不缓存。`List(typ, namespace)`（`:290-327`）先做 gvk 白名单，然后每次调用 `listFromIngressControllers`（`:329-380`）**把全部 Ingress 当场重算**：`:356-360` 从各集群子控制器取对象 → `:362` `SortIngressByCreationTime`（**排序是冲突路由归属的确定性来源**）→ `:363` `createWrapperConfigs` → `:366-377` 分派到 `convertGateways:502` / `convertVirtualService:555` / `convertDestinationRule:973` / `convertServiceEntry:931` / `convertWasmPlugin:907`；EnvoyFilter 在 `:336-353` 走独立分支提前 return，来源是 configmap 派生件加缓存。整个 `IngressConfig` 只有五处常驻状态：`wasmPlugins`、`http2rpcs`、`cachedEnvoyFilters`、`watchedSecretSet`、`mcpServerCache`。
+```go
+func (m *IngressConfig) Get(config.GroupVersionKind, string, string) *config.Config {
+	return nil
+}
+
+func (m *IngressConfig) Create(config.Config) (revision string, err error) {
+	return "", common.ErrUnsupportedOp
+}
+
+func (m *IngressConfig) Update(config.Config) (newRevision string, err error) {
+	return "", common.ErrUnsupportedOp
+}
+
+func (m *IngressConfig) UpdateStatus(config.Config) (newRevision string, err error) {
+	return "", common.ErrUnsupportedOp
+}
+
+func (m *IngressConfig) Patch(config.Config, config.PatchFunc) (string, error) {
+	return "", common.ErrUnsupportedOp
+}
+
+func (m *IngressConfig) Delete(config.GroupVersionKind, string, string, *string) error {
+	return common.ErrUnsupportedOp
+}
+```
+
+产物也不缓存。`List(typ, namespace)`（`:290-327`）先做 gvk 白名单，然后每次调用 `listFromIngressControllers`（`:329-380`）**把全部 Ingress 当场重算**：`:356-360` 从各集群子控制器取对象 → `:362` `SortIngressByCreationTime`（**排序是冲突路由归属的确定性来源**）→ `:363` `createWrapperConfigs` → `:366-377` 分派到 `convertGateways:502` / `convertVirtualService:555` / `convertDestinationRule:973` / `convertServiceEntry:931` / `convertWasmPlugin:907`；EnvoyFilter 在 `:336-353` 走独立分支提前 return，来源是 configmap 派生件加缓存。整个 `IngressConfig` 只有五处常驻状态：`wasmPlugins`、`http2rpcs`、`cachedEnvoyFilters`、`watchedSecretSet`、`mcpServerCache`。`List` 本身（`:290-327`）没有缓存，只有白名单、两次重算与两轮模板处理：
+
+```go
+func (m *IngressConfig) List(typ config.GroupVersionKind, namespace string) []config.Config {
+	if typ != gvk.Gateway &&
+		typ != gvk.VirtualService &&
+		typ != gvk.DestinationRule &&
+		typ != gvk.EnvoyFilter &&
+		typ != gvk.ServiceEntry &&
+		typ != gvk.WasmPlugin {
+		return nil
+	}
+	configs := make([]config.Config, 0)
+
+	if configsFromIngress := m.listFromIngressControllers(typ, namespace); configsFromIngress != nil {
+		// Process templates for ingress configs
+		for i := range configsFromIngress {
+			if err := m.templateProcessor.ProcessConfig(&configsFromIngress[i]); err != nil {
+				IngressLog.Errorf("Failed to process template for config %s/%s: %v",
+					configsFromIngress[i].Namespace, configsFromIngress[i].Name, err)
+			}
+		}
+		configs = append(configs, configsFromIngress...)
+	}
+
+	if configsFromGateway := m.listFromGatewayControllers(typ, namespace); configsFromGateway != nil {
+		// Process templates for gateway configs. These are merged across namespaces and some of
+		// them are re-stamped with the Higress system namespace, so the namespace of the object
+		// a config was generated from cannot be recovered here. Their references are restricted
+		// during the Gateway API conversion instead, while that namespace is still known.
+		for i := range configsFromGateway {
+			if err := m.templateProcessor.ProcessConfig(&configsFromGateway[i]); err != nil {
+				IngressLog.Errorf("Failed to process template for config %s/%s: %v",
+					configsFromGateway[i].Namespace, configsFromGateway[i].Name, err)
+			}
+		}
+		configs = append(configs, configsFromGateway...)
+	}
+
+	return configs
+}
+```
 
 Kingress（Gateway API）是同一机制的另一实现：`pkg/ingress/config/kingress_config.go`（562 行）具备同名同形的 `RegisterEventHandler` / `List` / `Run` / `HasSynced`，并复用同一个 `common.ConvertOptions.Route2Ingress` 结构（`:256` 与 `ingress_config.go:560` 逐字相同）；两者由 `translation/translation.go:50-53` 并联构造、`:163-192` 把两边结果 append 合并。Gateway API 资源本身又是第三个控制器，只在 `features.EnableGatewayAPI` 为真时注册（`ingress_config.go:285-287`）。
 
@@ -83,9 +257,17 @@ K8s API → informer(resync=0) → controllers.Queue(maxAttempts=5) → onEvent
 
 **WasmPlugin**。`convertIstioWasmPlugin` 精确在 `ingress_config.go:1199`。要点：`:1200-1216` 直拷 `Url/Sha256/ImagePullPolicy/ImagePullSecret/VerificationKey/PluginConfig/PluginName/Phase/FailStrategy/Priority` 并塞入 selector；**`:1227-1229`：`spec.pluginConfig` 非空就直接返回，`matchRules` 完全不看**（两者互斥、前者优先，这条文档没写）；`:1230-1232` 否则 `defaultConfigDisable != true` 时拿 `defaultConfig` 当 `PluginConfig`。四个下划线键 `_match_route_`（`:1276`）、`_match_service_`（`:1295`）、`_match_domain_`（`:1314`）、`_rules_`（`:1332`）**全是内联字符串字面量，本仓没有导出常量**。两处可疑实现值得记：`:1265-1267` 对非 HTTP 型规则做 `path.Join(rule.GetRouteType().String())`——**单参数 Join 等于只留路由类型，原始 ingress 值被丢弃**（是否构成实际缺陷需运行时验证，这里只记代码事实）；`:1322-1328` 一条规则的三个匹配条件全空会让**整份 CR 翻译失败**，而 `:1373-1375` 打 error 后保留旧缓存，即**旧配置继续生效**。另外 `AddOrUpdateWasmPlugin`（`:1351-1389`）是**先广播再写缓存**（`:1368` vs `:1386-1388`）。
 
+调用图普查还给出三条结构性结论。其一，pilot 拿到的是三源并集：`convertWasmPlugin:907-927` 逐项输出 `m.wasmPlugins` 缓存（未排序），随后追加 `RegistryReconciler.GetAllConfigs(gvk.WasmPlugin)` 合成的 MCP 自动插件（`registry/memory/cache.go:93-131`，`Priority 999` / `FAIL_OPEN` / `ImagePullPolicy: Always` / Url 取 `MCP_SERVER_WASM_IMAGE_URL`）；`listFromGatewayControllers:381-388` 又对 WasmPlugin 特判，改走 `convertBuiltinInferenceEndpointPicker:403-441`，在 Gateway API `InferencePool` 的 builtin 模式下生成 `higress-internal-ai-endpoint-picker`（`_rules_` 只含 `_match_route_`，Url 取 `AI_ENDPOINT_PICKER_PLUGIN_URL`）。全仓 `pkg/` + `registry/` 非测试代码里 `extensions.WasmPlugin{` 共 3 处（`ingress_config.go:433` / `:1200` / `cache.go:115`），与三条来源对得上。其二，`List:290-327` 对合并结果还跑 `templateProcessor.ProcessConfig`，插件配置同样走模板注入。其三，事件语义另有两道门：`:1352` 非控制器自身 ns 的 WasmPlugin 静默忽略；`:1377-1383` 转换返回 nil 时删缓存却不广播删除事件；`DeleteWasmPlugin:1397` 则仅在缓存命中时广播。`WasmPluginGenerator.GenerateDeltas`（`mcp/generator.go:163-166`）恒返回 `false`，插件因此永远走全量 SotW。完整链路与失效矩阵见 [Plugin Loading Internals](/docs/CS/Framework/Higress/Plugin_Loading_Internals.md)。
+
 **Http2Rpc**。产物是 **EnvoyFilter**，不是独立路由资源：`convertEnvoyFilter:821` → `constructHttp2RpcEnvoyFilter:836`（函数体 `:1652`，方法映射在 `constructHttp2RpcMethods:1762`，patch 载体由 `buildPatchStruct:1847` 从内联 JSON 构造）。方法名与参数来源的映射表是包级变量：`Http2RpcMethodMap`（`:83-91`，`GET→ALL_GET` 等 5 项）、`Http2RpcParamSourceMap`（`:92-99`，`QUERY→ALL_QUERY_PARAMETER` 等 4 项）——这就是文档里两张枚举表的源码对应物。路由侧靠注解 `higress.io/http2rpc-name` / `higress.io/rpc-destination-name`（`pkg/ingress/kube/annotations/http2rpc.go:22-23`）按名字引用它，`:1534-1535` 则连推 VirtualService 与 EnvoyFilter 两次。
 
 `constructHttp2RpcEnvoyFilter:1652` 实际构造 **2~3 个 `EnvoyConfigObjectPatch`**（Context 一律 `GATEWAY`）：① `ApplyTo: HTTP_ROUTE` + `Operation: MERGE`，按 `RouteConfiguration.VirtualHost.Route.Name = 路由名` 精确匹配，把 `constructHttp2RpcMethods` 返回的 HTTP 方法与 Dubbo 方法映射 MERGE 进路由；② `ApplyTo: CLUSTER` + `MERGE`，按 `Service = 上游 Host` 匹配，给上游集群挂 `envoy.upstreams.http.dubbo_tcp` 连接池（`DubboTcpConnectionPoolProto`，`:1708-1716`）——即 Dubbo 走 **TCP 上游**而非 HTTP；③ `ApplyTo: HTTP_FILTER` + `INSERT_BEFORE envoy.filters.http.router`，注入 `envoy.filters.http.http_dubbo_transcoder`（`HttpDubboTranscoder`，`:1740-1746`）——**这条仅当 `initHttp2RpcGlobalConfig=true` 时追加**。`convertEnvoyFilter:825` 把该布尔初始化为 true，每成功构造一个 http2rpc 后于 `:842` 置 false ⇒ **transcoder filter 全网关只注入一次**（挂在第一个命中路由上），其余路由只生成各自的 route/cluster patch。EnvoyFilter 命名 `CreateConvertedName(gatewayName, "http2rpc", crName, "route", dnsRouteName)`（`:1753`）。⇒ Http2Rpc 的协议转换**不依赖任何 wasm 插件**，是 Envoy 原生 transcoder + dubbo_tcp 上游。
+
+`constructHttp2RpcMethods:1762` 的方法映射模板逐字段展开如下。`httpRouterTemplate`（`:1763-1788`）是 `HTTP_ROUTE` 的 MERGE patch 值：`route.upgrade_configs[0]` 是 `upgrade_type: CONNECT` + `connect_config.allow_post: true`，把 HTTP 请求升级成可承载 Dubbo 的连接；`typed_per_filter_config` 只挂 `envoy.filters.http.http_dubbo_transcoder`，开 `reject_unknown_method: true` / `reject_unknown_query_parameters: true` 严格校验，配 `url_unescape_spec: ALL_CHARACTERS_EXCEPT_RESERVED`；`services_mapping` 的 `%s` 占位符在 `:1840-1841` 由 `json.Marshal` 结果经 `fmt.Fprintf` 填入。
+
+映射体（`:1831-1838`）是 `name` / `version` / `group`（非空才写）+ `method_mapping`；每个方法（`:1790-1829`）含 `name`、`parameter_mapping[]` 的 `extract_key` / `extract_key_spec`（取自 `Http2RpcParamSourceMap()`）/ `mapping_type`、`path_matcher` 的 `match_http_method_spec`（取自 `Http2RpcMethodMap()[serviceMethod.HttpMethods[0]]`）与 `match_pattern`，以及 `passthrough_setting` 三态（空串 → `passthrough_all_headers:false`，`*` → `true`，其它 → `passthrough_headers`）。`match_http_method_spec` 只取第一个 HTTP 方法，配多个会被静默丢弃。
+
+两种边界行为：`paramFromEntireBody != nil` 时忽略整个 `params` 列表，只生成单条 `extract_key_spec: BODY`（`:1794-1800`）；`HttpMethods` 为空则打 error 后 `continue` 跳过该方法（`:1812-1815`）。`buildPatchStruct:1847` 用 `jsonpb.Unmarshal` 转 `_struct.Struct`，失败只打 error、不返回错误。
 
 **非 CRD 驱动的 EnvoyFilter（`convertEnvoyFilter:821` 内部，与 Http2Rpc 同函数）。** 同一次路由遍历还按注解/配置生成另外三类 EnvoyFilter：
 
@@ -93,13 +275,17 @@ K8s API → informer(resync=0) → controllers.Queue(maxAttempts=5) → onEvent
 - **proxy / service-proxy**（`constructProxyEnvoyFilters:1939`）：每个 `ProxyWrapper` 直接 emit 一个 `proxy.<ProxyName>` EnvoyFilter（Spec 即 proxy 自带，`:1945-1949`）；随后为每个"使用 proxy 的服务"再生成一个 `service-proxy` EnvoyFilter——对每个 `outbound|<port>||<host>` 集群先做 `REMOVE`，再 `ADD` 一个 `STATIC` 集群指向 `127.0.0.1:<proxyWrapper.ListenerPort>`（connect_timeout 10s，`:1987-2050`），即把原上游改成**本机 sidecar 代理监听**；上游为 HTTPS 时附加 `envoy.transport_sockets.tls` 上游 TLS context（带 SNI，`:2029-2040`）。这是 Higress "服务级本地代理拦截" 的实现机制（对应 Source Map 的 `ServiceProxyConfig` / `ProxyWrapper`）。
 - **MCP SSE 会话保持**（`constructMcpSseStatefulSessionEnvoyFilter:2186`，由 `loadBalance.McpSseStateful` 触发、`mcp-sse-stateful-param-name` 注解）：同样走 `INSERT_BEFORE envoy.filters.http.router` 的**全局一次性**注入（`:849/:855` 的 `initMcpSseGlobalFilter` 与 http2rpc 的全局布尔同构）。
 
-⇒ 本仓的 EnvoyFilter 全部走 `networking.EnvoyFilter`（Istio 原生类型），没有自造 CRD；`convertEnvoyFilter` 是它们的唯一制造点，四类（http2rpc / basic-auth / proxy / mcp-sse）都受 `AlwaysPushLabel` 与 `ProxyNeedsPush` 恒真的推送放大影响。
+本仓的 EnvoyFilter 全部走 `networking.EnvoyFilter`（Istio 原生类型），没有自造 CRD；四类（http2rpc / basic-auth / proxy / mcp-sse）都受 `AlwaysPushLabel` 与 `ProxyNeedsPush` 恒真的推送放大影响。
+
+全仓 `networking.EnvoyFilter{` 构造、非测试代码共 9 处，分两族。`convertEnvoyFilter:821` 是路由翻译族的唯一制造点，四类产物落在 `:1756` / `:1910` / `:2062` / `:2273`；ConfigMap 派生族在 `pkg/ingress/kube/configmap/` 直接构造 5 处（`global.go:367`、`gzip.go:258`、`mcp_server.go:385`、`:448`、`tracing.go:317`），由 configmap controller 产出，经 `IngressConfig.cachedEnvoyFilters` 走 `List` 的 `gvk.EnvoyFilter` 独立分支提前返回（`:336-353`）。准确说法是两族、9 个构造点。McpBridge 变更广播的 `mcpbridge-envoyfilter` 合成 Meta 因此要同时顾及两族。
 
 ## The pilot Fork Boundary
 
 **没有独立 pilot 进程。** `pkg/bootstrap/server.go` 直接 import `istio.io/istio/pilot/pkg/{xds,grpc,config/aggregate,serviceregistry/aggregate,...}`（`:31-48`），`go.mod:302-314` 用 replace 把 `istio.io/{api,pkg,client-go,istio}` 与 go-control-plane 全部指向 `./external/*`（`external/` 由 `tools/hack/prebuild.sh` 从子模块 `cp -RP` 生成，本机 clone 后不存在），**fork 是编译期硬前提**。同一个 `*xds.DiscoveryServer` 被分别塞给 IngressTranslation（`:240`）、cert.Server（`:440`）与 gateway 控制器（`ingress_config.go:286`），三者共享 `*model.Environment` 与 `aggregate.Controller` 指针。耦合强度是**内存对象级**，不是 RPC 级。
 
 `pkg/ingress/mcp/` 不是 MCP 协议服务，而是 `DiscoveryServer.Generators` 的**替换层**（注册在 `bootstrap/server.go:387-392`）：六个类型 ServiceEntry / VirtualService / DestinationRule / EnvoyFilter / Gateway / WasmPlugin，每个 `Generate` 的第一动作都是 `Environment.List(gvk.X, NamespaceAll)`。`:393-398` 遍历 `collections.Pilot.All()`，把**没被覆盖的 gvk 一律塞 `FallbackGenerator`，而它恒返回空资源**（`mcp/generator.go:175-178`）。⇒ 除这六类之外的 Pilot collection 在这台网关上永远是空的。
+
+符号图把这六次 pull 变成可数的：`unresolved_refs` 里 `c.Environment.List` 恰好 6 条，落在 `mcp/generator.go:54/87/105/123/141/159`，第七个 `FallbackGenerator::Generate` 没有 `List`。有两处不对称，单文件通读容易漏掉。其一是只有 `ServiceEntryGenerator` 排序（`:56-69`，先按 `CreationTimestamp`、并列时按 `name.namespace`，注释逐字说明是为"让 IP 分配逻辑确定性地给同一 ServiceEntry 分配同一个 IP"）。其二是 `GenerateDeltas` 签名分两批：前五个四参数（proxy / updates / w），`WasmPluginGenerator`（`:163`）与 `FallbackGenerator`（`:180`）多一个 `push *model.PushContext`，但七处函数体一律 `// TODO: delta implement` 并返回 `(..., false, nil)`，只有 `ServiceEntryGenerator` 在 `:36-39` 声明了 `XdsDeltaResourceGenerator` 断言。签名分两批是紧跟 fork 接口演进留下的残骸，与两种 delta 实现无关。`generate()`（`:186-236`）把每个 config 包成 `mcp.Resource`，`Metadata.Name = path.Join(namespace, name)`，labels / annotations 是否保留由 `GeneratorOptions` 两个布尔控制。
 
 三条实现约束值得单独记：
 
@@ -123,12 +309,13 @@ fork 内部常量现已可核：本仓 `.gitmodules` 把 `istio/istio` 钉在 **
 
 ## Unverified
 
-以下仍待逐行确认（其余原 Unverified 项均已核实并移入正文）：
+仍待核实：
 
-- **`constructHttp2RpcMethods:1762` 的方法映射 JSON 模板逐字段语义**（函数存在性、调用链、外层三 patch 字面量已核，但 `:1763` 起的 `httpRouterTemplate` 内每个 HTTP 方法 → Dubbo 方法的具体字段映射未逐行展开）。
-- **`convertEnvoyFilter:821` 之外是否还有别的 EnvoyFilter 制造点**（`constructMcpSseStatefulSessionEnvoyFilter:2186` 已核，但全仓是否仅此一处 `EnvoyFilter` Spec 构造未全局 grep 确认）。
+- fork 内部真正的 debounce 生效路径、以及 `GenerateDeltas` 返回 false 后回退到全量下发的具体时机（Higress 侧三个 debounce 字段是死字段，但 fork 侧行为未实测）。
+- `constructBasicAuthEnvoyFilter:1856` 的 Null VM 内联配置与 `constructProxyEnvoyFilters:1939` 的 cluster patch 模板逐字段语义；`buildPatchStruct` 解析失败后下发空 `Struct` 到 Envoy 的实际表现未验证。
+- 十条 `ConfigUpdate` 入口在真实集群里的触发频率与合并效果未观测；`notifyXDSFullUpdate` 不带 `ConfigKey` 是否等价于全 proxy 全量重算，需在 fork 侧确认。
 
-其余已核实并移入正文：McpBridge 落地为 **ServiceEntry** 而非 WorkloadEntry（证伪流传说法）；注册中心写入 Higress 自有内存 store（`registry/memory/cache.go`）而非 pilot 的 `aggregate.Controller`；`convertServiceEntry:931` 在 `List` 被 pull 时触发（前提是 `RegistryReconciler != nil`）；`ingressv1/status.go` 状态回写为 **10s** ticker + `reflect.DeepEqual` 去重；`AlwaysPushLabel` 字面量 `internal.istio.io/always-push`；pilot `DebounceAfter` 默认 **100ms**（Higress 侧为死字段）；`AddDebugHandlers` 端点清单（含 `configz`，受 `EnableDebugOnHTTP` 门控）；`model.IngressRoute` 为 fork 专有类型及其字段结构；**四条 annotation/proxy 驱动的 EnvoyFilter（http2rpc / basic-auth / proxy / mcp-sse）的 patch 字面量与全局一次性注入逻辑**。证据基准：higress 主仓 v2.2.5（HEAD `4deae1dd`）+ istio-1.27 fork（HEAD `65133dd`，即本仓 pin 的 `istio/istio` 分支）。
+其余已核实并移入正文：McpBridge 落地为 ServiceEntry 而非 WorkloadEntry（证伪流传说法）；注册中心写入 Higress 自有内存 store（`registry/memory/cache.go`）而非 pilot 的 `aggregate.Controller`；`convertServiceEntry:931` 在 `List` 被 pull 时触发（前提是 `RegistryReconciler != nil`）；`ingressv1/status.go` 状态回写为 10s ticker + `reflect.DeepEqual` 去重；`AlwaysPushLabel` 字面量 `internal.istio.io/always-push`；pilot `DebounceAfter` 默认 100ms（Higress 侧为死字段）；`AddDebugHandlers` 端点清单（含 `configz`，受 `EnableDebugOnHTTP` 门控）；`model.IngressRoute` 为 fork 专有类型及其字段结构；四条 annotation/proxy 驱动的 EnvoyFilter（http2rpc / basic-auth / proxy / mcp-sse）的 patch 字面量与全局一次性注入逻辑；http2rpc 方法映射模板全字段语义；EnvoyFilter 两族 9 个构造点；六个 generator 的 6 次 `Environment.List` 与 delta 签名分两批；`ConfigUpdate` 十条入口共享同一 `DiscoveryServer`。证据基准：higress 主仓 v2.2.5（HEAD `4deae1dd`）+ standalone aio-v2.2.5（`36882509`）+ istio-1.27 fork（HEAD `65133dd`，即本仓 pin 的 `istio/istio` 分支，为旧会话离线核实结果）。
 
 ## Links
 
