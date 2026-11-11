@@ -63,7 +63,7 @@ static final String DLEDGER_COMMIT_LOG_DEPRECATION_WARNING =
 
 ### Controller Mode
 
-Controller 把 Raft 放在存储**之外**，只做选主与副本元数据管理。Broker 侧 HA 实现被替换为 `AutoSwitchHAService`（`DefaultMessageStore.java:1976-1988`）。
+Controller 把 Raft 放在存储**之外**，只做选主与副本元数据管理。Broker 侧 HA 实现被替换为 `AutoSwitchHAService`（`DefaultMessageStore.java:1976-1988`）。Controller 如何与 NameServer 分工、Proxy 如何屏蔽选主层，源码级见 [Controller HA](/docs/CS/MQ/RocketMQ/ControllerHA.md)；`AutoSwitchHAService` 的 confirmOffset/syncStateSet 复制语意与 `enableElectUncleanMaster` 容灾取舍纵深见 [Controller Replication](/docs/CS/MQ/RocketMQ/ControllerReplication.md)。
 
 | 配置 | 默认值 | 说明 |
 | --- | --- | --- |

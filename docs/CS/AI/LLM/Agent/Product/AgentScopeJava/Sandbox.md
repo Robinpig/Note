@@ -1,4 +1,4 @@
-# Sandbox
+## Introduction
 
 沙箱是 AgentScope Java 把 Agent 的 shell 命令与文件读写放进**隔离执行环境**的机制——agent 不再直接碰宿主 shell，而是由一套 `Sandbox` 抽象把命令发往容器 / 远端环境执行。它和 [工作区分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Workspace.md) 是同一件事的两个视角：Workspace 讲「文件世界的关系」（目录布局 / 身份 / 三种 filesystem 模式），本分册讲「隔离执行环境本身」——生命周期、隔离范围、工作区投影、快照、文件系统桥、后端实现与并发护栏。事实来自本地 `v2.0.4` 源码逐包核对（`agentscope-harness/.../sandbox/`、`.../filesystem/`、`agentscope-extensions-sandbox/*`、`agentscope-extensions-{redis,jdbc,mysql,postgresql,mongodb,aistio}`），冲突处以源码为准。
 

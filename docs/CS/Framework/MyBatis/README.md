@@ -1,6 +1,6 @@
 ## Introduction
 
-本目录是 **MyBatis** 的专题索引。MyBatis 的主线是一条「一次查询的执行链路」：`SqlSession` 委托 `Executor` → 经 `StatementHandler` 执行 JDBC → `ResultSetHandler` 映射结果，整条链上可挂 `Interceptor` 插件、`Cache` 二级缓存。本目录按这条链路 + 初始化 + 集成分组收录。
+本目录是 **MyBatis** 的专题索引。MyBatis 的主线是一条「一次查询的执行链路」：`SqlSession` 委托 `Executor` → 经 `StatementHandler` 执行 JDBC → `ResultSetHandler` 映射结果，整条链上可挂 `Interceptor` 插件、`Cache` 二级缓存。本目录按这条链路 + 初始化 + 集成分组收录，另有一层源码级分册专讲「为什么是这样」，见 [Source-Level Volumes](/docs/CS/Framework/MyBatis/README.md?id=source-level-volumes)。
 
 ```dot
 digraph mybatis_index {
@@ -52,6 +52,16 @@ digraph mybatis_index {
 - [Init](/docs/CS/Framework/MyBatis/Init.md)：启动与配置解析、`Configuration`、Mapper 解析。
 - [DataSource](/docs/CS/Framework/MyBatis/DataSource.md)：数据源与事务。
 - [MyBatis-Spring](/docs/CS/Framework/MyBatis/MyBatis-Spring.md)：与 Spring 集成（`SqlSessionFactoryBean`、Mapper 扫描、事务同步）。
+
+## Source-Level Volumes
+
+上面几组按使用与执行链路组织，回答「怎么用」；下面这一层回答「为什么是这样」。关键源码片段直接贴在正文里，读单篇不需要另开源码文件；代码块以本机 `mybatis-3.6.0` 为准，路径与行号只作出处标注，跨文件关系另用 `.codegraph/codegraph.db` 定位。顺序有依赖：先看配置怎么变成 `MappedStatement`，才能看懂 SQL 文本从哪来；再用符号图补单文件读不出来的扇入扇出。版本基准贴在 [MyBatis](/docs/CS/Framework/MyBatis/MyBatis.md?id=version-baseline) 的 Version Baseline。
+
+- [Config Pipeline](/docs/CS/Framework/MyBatis/Config_Pipeline.md)：贴了 `parseConfiguration` 的 12 步、`StrictMap.put/get` 的歧义哨兵、`applyIncludes` 改 DOM、四个挂起队列的 `removeIf` 重试，以及四个 `pluginAll` 挂载点。
+- [Annotation Mapper](/docs/CS/Framework/MyBatis/Annotation_Mapper.md)：贴了 `parse()` 的完整顺序、`loadXmlResource` 的伪资源名判断、`getAnnotationWrapper` 的 databaseId 分派、`ProviderSqlSource.getBoundSql`，以及三处 `@since 3.6.0` 的注解定义。
+- [Dynamic SQL](/docs/CS/Framework/MyBatis/Dynamic_SQL.md)：贴了 `initNodeHandlerMap`、`parseDynamicTags`、`ContextMap.get`、`ForEachSqlNode.apply`、`TextSqlNode.apply` 与两个 `TrimSqlNode` 子类的构造参数。
+- [SqlSource and Parameters](/docs/CS/Framework/MyBatis/SqlSource_and_Parameters.md)：贴了 `LanguageDriverRegistry`、两组 `createSqlSource` 重载、四种 `SqlSource` 的定型代码、`handleToken` 恒返回 `?`、`BoundSql` 与 `DefaultParameterHandler` 的取值分支。
+- [Call Graph Internals](/docs/CS/Framework/MyBatis/Call_Graph_Internals.md)：给出可复现的 SQL 与合成边 metadata 样例，贴了 `applyCurrentNamespace` 和三处继承声明，说明边计数为什么不能当结论。
 
 ## MyBatis-Plus（增强工具包）
 

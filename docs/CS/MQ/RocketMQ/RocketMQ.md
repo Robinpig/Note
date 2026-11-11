@@ -522,7 +522,7 @@ check
 
 **存储层**是 RocketMQ 与 Kafka 最本质的分野：所有 topic 的消息**顺序追加到同一个 CommitLog**（默认 1 GB 一段），再由 `ReputMessageService` 异步为每个 topic 派发一份 ConsumeQueue（20 字节一条的索引）。这样一个文件就能承载海量 topic，代价是无法按消息删除、恢复逻辑复杂。存储用 mmap 而非 sendfile，因此能拿到消息内容做 SQL92 过滤与死信投递。详见 [Store](/docs/CS/MQ/RocketMQ/Store.md)。
 
-**业务能力**建立在存储之上：事务消息把 half 消息的 topic 改写成系统 topic 使其对用户不可见，再靠 30 秒一次的回查兜底（[Transaction](/docs/CS/MQ/RocketMQ/Transaction.md)）；延时消息用 18 级固定延迟队列，5.x 另加时间轮（[Broker](/docs/CS/MQ/RocketMQ/Broker.md)）；SQL92 过滤用 JavaCC 解析的 AST 解释执行，**不是 Calcite**（[Filter](/docs/CS/MQ/RocketMQ/Filter.md)）。
+**业务能力**建立在存储之上：事务消息把 half 消息的 topic 改写成系统 topic 使其对用户不可见，再靠 30 秒一次的回查兜底（[Transaction](/docs/CS/MQ/RocketMQ/Transaction.md) / [TransactionalMessage 源码链路](/docs/CS/MQ/RocketMQ/TransactionalMessage.md)）；延时消息用 18 级固定延迟队列，5.x 另加时间轮（[Broker](/docs/CS/MQ/RocketMQ/Broker.md)）；SQL92 过滤用 JavaCC 解析的 AST 解释执行，**不是 Calcite**（[Filter](/docs/CS/MQ/RocketMQ/Filter.md)）。
 
 ## Reading Guide
 
@@ -672,7 +672,7 @@ public class SendMessageTraceHookImpl implements SendMessageHook {
 
 ### Transactional Messages
 
-2PC + 补偿：先存 half 消息（改写 topic 故对消费者不可见），本地事务执行完再定论；结果丢失时 Broker 以 30s 间隔单向 RPC 回查 Producer，最多 15 次后丢弃。不保证强一致 —— 细节见 [事务消息](/docs/CS/MQ/RocketMQ/Transaction.md)。
+2PC + 补偿：先存 half 消息（改写 topic 故对消费者不可见），本地事务执行完再定论；结果丢失时 Broker 以 30s 间隔单向 RPC 回查 Producer，最多 15 次后丢弃。不保证强一致 —— 细节见 [事务消息](/docs/CS/MQ/RocketMQ/Transaction.md) 与 [OP 消息实现原理](/docs/CS/MQ/RocketMQ/OPMessage.md)。
 
 ### Delayed Messages
 
@@ -776,12 +776,16 @@ RocketMQ 消息消费端会从 3 个维度进行限流：
 
 - [MQ](/docs/CS/MQ/MQ.md?id=rocketmq)
 - [Remoting（通信模块）](/docs/CS/MQ/RocketMQ/Remoting.md)
+- [MessageProtocol（消息协议字节级详情）](/docs/CS/MQ/RocketMQ/MessageProtocol.md)
 - [Dledger](/docs/CS/MQ/RocketMQ/Dledger.md)
 - [Cluster](/docs/CS/MQ/RocketMQ/Cluster.md)
 - [LiteTopic](/docs/CS/MQ/RocketMQ/LiteTopic.md)
 - [Spring Cloud Alibaba](/docs/CS/Framework/Spring_Cloud/Alibaba.md)
+- [PopConsume（POP 无状态消费协议：extraInfo 票据 / ck-ack / Revive）](/docs/CS/MQ/RocketMQ/PopConsume.md)
+- [ProxyProtocol（5.x gRPC Proxy 协议转换：gRPC→Remoting 四层栈 / CLUSTER·LOCAL 双路径）](/docs/CS/MQ/RocketMQ/ProxyProtocol.md)
+- [Rebalance（Rebalance 负载均衡 / OffsetStore / 集群·广播 有状态消费）](/docs/CS/MQ/RocketMQ/Rebalance.md)
 
-消息可靠性与数据面细节分散在几篇专题里：存储引擎的三类文件、mmap 与刷盘两阶段见 [Store](/docs/CS/MQ/RocketMQ/Store.md)，2PC + 补偿的事务消息链路见 [事务消息](/docs/CS/MQ/RocketMQ/Transaction.md)，Tag/SQL92 过滤的实现位置与开关见 [消息过滤](/docs/CS/MQ/RocketMQ/Filter.md)，而 5.x 的无状态 Proxy、gRPC SDK 仓库归属与 POP 模型见 [RocketMQ 5.x](/docs/CS/MQ/RocketMQ/RocketMQ5.md)。5.5.0 的 LiteTopic 把订阅通道下沉到**会话粒度**（官方定性 designed for AI scenarios），这条演进方向的一手证据与断言强度记在 [Future](/docs/CS/MQ/Future.md?id=consumer-shapes-change-ai-era-workloads)。
+消息可靠性与数据面细节分散在几篇专题里：存储引擎的三类文件、mmap 与刷盘两阶段见 [Store](/docs/CS/MQ/RocketMQ/Store.md)，2PC + 补偿的事务消息链路见 [事务消息](/docs/CS/MQ/RocketMQ/Transaction.md)，Tag/SQL92 过滤的实现位置与开关见 [消息过滤](/docs/CS/MQ/RocketMQ/Filter.md)，而 5.x 的无状态 Proxy、gRPC SDK 仓库归属与 POP 模型见 [RocketMQ 5.x](/docs/CS/MQ/RocketMQ/RocketMQ5.md)。5.5.0 的 LiteTopic 把订阅通道下沉到**会话粒度**（官方定性 designed for AI scenarios），这条演进方向的一手证据与断言强度记在 [Future](/docs/CS/MQ/Future.md?id=consumer-shapes-change-ai-era-workloads)。端到端把「生产 → 存储 → 复制 → 消费 → offset 提交」串成一条链路、并集中分析「不丢失三道防线」与「幂等消费」的见 [Message Lifecycle](/docs/CS/MQ/RocketMQ/MessageLifecycle.md)。
 
 ## References
 

@@ -25,7 +25,7 @@
 | -- | --------- | ------------- | ----------- |
 | 定位 | 事件流平台（日志型） | 面向业务的消息队列 | 存算分离的云原生队列 |
 | 存储路线 | **多文件**：每分区独立 segment | **单文件**：全 topic 共用 commitlog | **两级**：topic → ledger → segment → entry |
-| 存储引擎 | 自研日志系统 | 自研 CommitLog | **独立的 Apache BookKeeper** |
+| 存储引擎 | 自研日志系统 | 自研 CommitLog | **独立的 [Apache BookKeeper](/docs/CS/Framework/BookKeeper/BookKeeper.md)** |
 | 零拷贝路线 | `FileChannel.transferTo`（内核 sendfile） | **mmap**（能拿到消息内容） | mmap + BookKeeper ledger |
 | 路由 | 客户端直连 broker | NameServer 轻量注册中心 | metadata store + bundle 切分 |
 | 扩容粒度 | 加 partition（受单文件路线限制） | 加 topic 几乎无影响 | **加 bookie**（存储层独立扩） |
@@ -216,7 +216,7 @@ RocketMQ 是业界唯一一个既支持自定义编解码，又支持成熟编�
 
 缺点是同一个分区的数据一般会在文件中的不同位置，或者不同的文件段中，无法利用到顺序读的优势，读取的性能会受到影响，但是随着 SSD 技术的发展，随机读写的性能也越来越高。如果使用 SSD 或高性能 SSD，一定程度上可以缓解随机读写的性能损耗，但 SSD 的成本比机械硬盘高很多。
 
-目前 RocketMQ、RabbitMQ 和 Pulsar 的底层存储 BookKeeper 用的就是这个方案。
+目前 RocketMQ、RabbitMQ 和 Pulsar 的底层存储 [BookKeeper](/docs/CS/Framework/BookKeeper/BookKeeper.md) 用的就是这个方案。
 
 选择哪种方案考虑的是你对读和写的性能要求。第一种方案，单个文件读和写都是顺序的，性能最高。但是当文件很多且都有读写的场景下，硬盘层面就会退化为随机读写，性能会严重下降。第二种方案，因为只有一个文件，不存在文件过多的情况，写入层面一直都会是顺序的，性能一直很高。但是在消费的时候，因为多个分区数据存储在同一个文件中，同一个分区的数据在底层存储上是不连续的，硬盘层面会出现随机读的情况，导致读取的性能降低。
 

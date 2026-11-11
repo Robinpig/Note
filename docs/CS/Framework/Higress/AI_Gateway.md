@@ -4,7 +4,7 @@
 
 落到实现上，Higress 的 AI 能力分散在**三个不同的层**。把三层混为一谈是这片内容所有错误的共同来源，也是配置静默不生效的高发区：
 
-- **Wasm 插件层**：`ai-proxy`、`ai-cache`、`ai-token-ratelimit`、`ai-quota`、`ai-security-guard`、`ai-data-masking`、`ai-statistics`、`mcp-server`、`ai-load-balancer` 等，配置写进 `WasmPlugin` 的 YAML。这一层的完整字段口径、阶段与优先级、协议转换、限流配额、语义缓存、内容安全、MCP 托管、AI 可观测**全部收在 [Plugin](/docs/CS/Framework/Higress/Plugin.md)**，本页不再重述。
+- **Wasm 插件层**：`ai-proxy`、`ai-cache`、`ai-token-ratelimit`、`ai-quota`、`ai-security-guard`、`ai-data-masking`、`ai-statistics`、`mcp-server`、`ai-load-balancer` 等，配置写进 `WasmPlugin` 的 YAML。这一层的完整字段口径、阶段与优先级、协议转换、限流配额、语义缓存、内容安全、MCP 托管、AI 可观测**全部收在 [Plugin](/docs/CS/Framework/Higress/Plugin.md)**，本页不再重述；插件镜像从哪来、怎么热加载、standalone 下如何换成本地 HTTP，见 [Plugin Loading Internals](/docs/CS/Framework/Higress/Plugin_Loading_Internals.md)。
 - **控制台路由层**：AI 服务提供者管理、AI 路由管理（域名、模型匹配方式、**降级配置**、请求消费者）。**模型级 Fallback 只存在于这一层**，插件 YAML 里没有对应字段。
 - **网关内置层**：MCP Server Filter（golang-filter），走控制台"系统设置"改 `mcpServer` 配置项，不是插件。
 

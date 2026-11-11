@@ -26,7 +26,7 @@ private final TaskContextState tasksContext;
 private final PlanModeContextState planModeContext;
 ```
 
-访问器要点：`getContext()` 返回只读视图，**`contextMutable()` 才是可变入口**（压缩中间件就是先 `contextMutable()` 压实旧结果再落盘，防 legacy hook 把原始结果藏起来）；`toJson()` / `fromJsonString(String)` 提供序列化；Builder 支持 `sessionId/userId/summary/context/addMessage/replyId/curIter/shutdownInterrupted/permissionContext/toolContext/tasksContext/planModeContext`。
+访问器要点（源码验证）：`getContext()` 返回**防御拷贝**——`Collections.unmodifiableList(new ArrayList<>(context))`，调用方既不能 add/remove，也无法穿透改写内层 `Msg` 引用；**`contextMutable()` 才是可变入口**，它直接 `return context`（live 引用），压缩中间件、工具结果回写、HITL 状态修补都走它就地增删。`summary` 是 free-form `String`（`@JsonProperty("summary")`），javadoc 明确「richer structured forms are left for future iterations」。序列化走 `toJson()`（pretty JSON）/ `fromJsonString(String)`，`context` 字段 `@JsonProperty("context")` 反序列化直接落到这个可变 `List<Msg>`。`Builder` 支持 `sessionId/userId/summary/context/addMessage/replyId/curIter/shutdownInterrupted/permissionContext/toolContext/tasksContext/planModeContext`。
 
 三个子状态类把不同关注点拆开：`PermissionContextState`（权限模式 + 工作目录 + 三张规则表）、`ToolContextState`、`TaskContextState`（任务/todo）、`PlanModeContextState`（`planActive` + `currentPlanFile`）。
 
@@ -52,6 +52,19 @@ javadoc 明确的槽位约定：`sessionId` 非空非空白；**`userId` 可空�
 
 ⚠️ **定位变化**：v2 默认是 **EVENT_LOG 模式**——`AgentState` 的 checkpoint 与完整执行事实都进原生 Session Log，`AgentStateStore` 退化为「LEGACY 恢复来源 + 显式迁移来源」。另有两个辅助类：`LegacyStateLoader`（读旧格式）、`VersionedState` / `ConflictPolicy`（版本与冲突策略）、`ConcurrentSessionModificationException`（CAS 冲突）、`SessionInfo`、`ReadCacheEntry`、`ListHashUtil`。
 
+### CAS 持久化（源码级）
+
+每次 `call()` 结束（或关键节点）都会把 `AgentState` 落盘。`ReActAgent.persistAgentStateCas(...)`（@4699）走**乐观并发**：
+
+```java
+persistAgentStateCas(userId, sessionId, slot, state, expected, state.getContext().size());
+// expected = 上一个成功持久化的版本号；CAS 失败抛 ConcurrentSessionModificationException
+```
+
+- `getVersioned(...)` / `saveIfVersion(...)` 只在 `supportsOptimisticConcurrency()==true` 时启用；默认 `InMemoryAgentStateStore` / `JsonFileAgentStateStore` 都**不支持**（退化为无条件 `save`，`UNVERSIONED=-1L` 哨兵）。
+- 持久化尺寸以 `getContext().size()` 计（注意是防御拷贝视图的 size，等价于 live 列表长度），作为版本外的辅助校验。
+- 落盘粒度：reasoning 产生 `finalMsg`、PostReasoning 的 `eventMsg`、acting 的工具结果、`RequestStopEvent` 暂停态——凡改变 `contextMutable()` 的节点，最终都经 `saveStateToSession(scope)`（如 `doCallInner` 后、`runPostReasoningPipeline` 末尾）统一刷写，保证中断后可从 `AgentState.context` 重放 pending tool calls。
+
 ## RuntimeContext
 
 `RuntimeContext`（`agent/RuntimeContext.java`）是 **per-call 瞬态上下文**，决定这次调用读写哪个状态槽位：
@@ -68,6 +81,16 @@ javadoc 明确的槽位约定：`sessionId` 非空非空白；**`userId` 可空�
 
 Builder 支持 `sessionId/userId/agentState/put/putAll/toolExecutionContext/toolRequestConfig/from(source)`。类型化槽（`put(Class<T>, T)`）是框架内部传递单例对象的通道——例如子 Agent 的 `AgentSpawnTool.CTX_FORCE_SYNC`、`CTX_EXPOSE_TO_USER` 都走这类 key。
 
+### Typed Slots & Tool DI（源码级深化）
+
+`RuntimeContext` 的属性分**两套槽**：`stringAttributes`（`ConcurrentHashMap<String,Object>`，字符串键）与 `typedAttributes`（`ConcurrentMap<Class<?>, ConcurrentMap<String,Object>>`，类型键）。类型化槽是框架内部传单例对象的通道：
+
+- `put(Class<T>, T)` / `get(Class<T>)` 以常量 `TYPED_DEFAULT_KEY`（空串）作为「单例类型」访问的 key；`get(Class)` 先查 exact type，再查 `getAssignableValue`——沿类型层级找**最具体**的匹配（子类/接口实现优先），这正是 `AgentSpawnTool.CTX_FORCE_SYNC`、`CTX_EXPOSE_TO_USER` 这类「按类型取回调用方注入的对象」的落地方式。
+- 特殊 case：`get(Class)` 当 `type == RuntimeContext.class` 时**直接返回 `this`**，即 `ctx.get(RuntimeContext.class)` 拿到上下文自身。
+- `asToolExecutionContext()`：把本 `RuntimeContext` 包成 `DefaultMutableContextStore` 作为**最高优先级**嵌进 `ToolExecutionContext`，再合并 build-time 注入的 `toolExecutionContext`（嵌套 store，低优先级）。所以工具读上下文时**运行时属性覆盖 build-time DI**。
+
+**并发安全关键点**：`agentState` 字段是 `volatile`，在 `call()` 入口由 agent 调 `setAgentState(...)` 安装，非 call 期 `null`。因此中间件/工具应调静态 `resolveAgentState(ctx, fallbackAgent)`（优先 ctx 的 call-scoped state，回退 `fallbackAgent.getAgentState()`），而非直接 `agent.getAgentState()`——后者在并发多 session 下会取到错误 session 的状态。
+
 ## Context Construction
 
 工作区材料**每次 call 读取一次**，由最终 Context 构建器分层组织，**不把全部文件直接追加进 System**——`AGENTS.md` 进 `project_rules`、`MEMORY.md` / `knowledge` / `additionalContextFile` 以参考消息（`HARNESS_CONTEXT`）形式注入，预算不足时后三者可被省略（只有 `additionalContextFile` 是必需材料）。
@@ -77,6 +100,66 @@ Builder 支持 `sessionId/userId/agentState/put/putAll/toolExecutionContext/tool
 - `MEMORY.md` 在记忆工具与 hooks 都关闭时不加载；
 - 知识目录只加载入口和索引，其余文件由模型按需读取；
 - 同一次 call 内文件变化不自动刷新，下一次 call 重新加载。
+
+## ReAct Loop: Context Assembly Per Turn
+
+> **核心认知**：`AgentState.context` 是**持久化的对话历史**；`systemMsg` 是 **call-scoped 临时合成的指令/参考材料**。两者在发给模型前才经 `MessageUtils.prependSystemMessage(...)` 合并，**system message 从不写入 `AgentState.context`**。
+
+**循环入口**：
+
+- 全新调用：`coreAgent()` → `executeIteration(0)` → `reasoning(0, false)`。
+- 带 pending tool calls 的恢复：`resumeAgent()` → `acting(0)`（**直入 acting，跳过 reasoning**——上次已产生 tool_use，只需补结果）。
+
+**reasoning 阶段（@2410 起，逐轮构建 context）**：
+
+1. `firePreReasoning(state.contextMutable(), systemMsg, modelName)` —— 把**当前 live context** 交给 PreReasoning hook（hook 可读可改）。
+2. `modelInput = MessageUtils.prependSystemMessage(event.getInputMessages(), event.getSystemMessage())` —— system message **临时 prepend** 到 `modelInput`，**不触碰** `AgentState.context`。
+3. 模型流产生 `finalMsg`（assistant，含 `ToolUseBlock`）。
+4. 即使 `RequestStopEvent`（HITL/中间件停止）也 `state.contextMutable().add(finalMsg)`（@2498）——**暂停态也持久化，保证下次 call 能从 pending tool calls 恢复**。
+5. `InterruptedException` 时 `context.buildFinalMessage()` 除非 `DISCARD` 策略否则 `contextMutable().add(msg)`（@2520）。
+6. `runPostReasoningPipeline`（@2542）：PostReasoning hook 的 `eventMsg` 也 `add`（@2549）；然后判定 HITL stop / `gotoReasoning`（→ `reasoning(iter+1,true)`）/ finish / `buildEmptyResponseReminder`（空响应则加提醒并回 reasoning）/ **continue → `acting(iter)`（@2590）**。
+
+**acting 阶段（@3001 起）**：`actingStream` → `evaluatePermissions(toolCalls)`（权限闸门，见权限分册）→ `runToolBatch` → 工具结果经 `ToolResultMessageBuilder.buildToolResultMsg(...)` 写成 `Msg` 再 `state.contextMutable().add(...)`（@3091/@3706/@3764）。
+
+**循环判定（@1905）**：acting 之后若 `!pendingToolUseIds(state.contextMutable()).isEmpty()` 则回到下一轮 `reasoning → acting`；为空则结束。
+
+**错误与中断的 context 一致性保护**：
+
+- `doNativeStructuredCall.doOnError`（@1342-1349）：把 context 回滚到 `contextSizeBefore`（移除错误后多 append 的临时消息），**失败不污染持久化 context**。
+- `synthesizeErrorResultsForPendingToolCalls`（@2203）：若中断发生在「reasoning 已写 tool_use、acting 未产 result」之间，为每个 pending tool call 合成 error `ToolResultBlock` 补上，**必须早于 recovery message 添加**（否则 last assistant 变成 recovery msg，pending 检测失效）——避免恢复后 context 不一致、provider 返回空响应。
+- `compressStructuredOutputContext`（@1444）：`clear()` + 重建过滤临时消息——「压实 `contextMutable()`」手法的另一处（compaction 也用同款 clear+addAll 重建）。
+
+```dot
+digraph react_context {
+  rankdir=TB;
+  node [shape=box, style=rounded];
+
+  ENTRY [label="call 入口\nresolveAgentState(ctx) 安装 call-scoped AgentState", color="#1f6feb"];
+  REASON [label="reasoning(iter)\nfirePreReasoning(contextMutable) + 合成 modelInput", color="#1f6feb"];
+  PREPEND [label="prependSystemMessage(systemMsg, context)\nsystemMsg 仅临时 prepend, 不写 context", color="#2da44e"];
+  LLM [label="LLM 推理 → finalMsg(assistant + tool_use)", color="#2da44e"];
+  ADDA [label="contextMutable().add(finalMsg)\n即使 RequestStop 也持久化", color="#2da44e"];
+  ACTING [label="acting(iter)\n权限闸门 → runToolBatch", color="#cf222e"];
+  ADDT [label="ToolResultMessageBuilder → contextMutable().add(toolResult)", color="#cf222e"];
+  PEND [label="pendingToolUseIds 非空?", shape=diamond, color="#6e7781"];
+  STOP [label="结束 / HITL 暂停\ncontext 即中断现场", shape=octagon, color="#6e7781"];
+
+  ENTRY -> REASON;
+  REASON -> PREPEND -> LLM -> ADDA -> ACTING -> ADDT -> PEND;
+  PEND -> REASON [label="非空 → 下一轮"];
+  PEND -> STOP [label="空"];
+}
+```
+
+## HITL & Permission State in Context
+
+权限/HITL 的**暂停态不是存在另一个字段里，而是编码进 `AgentState.context` 本身**——这正是「context 即可恢复中断现场」的落地：
+
+- **replyId 持久化进 context**：`persistPendingRequestReplyId`（@2044）把 replyId 写入 **last assistant message 的 metadata**（`Msg.METADATA_CONFIRM_REQUEST_REPLY_ID`）。因为 assistant message 拥有那些被暂停的 `ToolUseBlock`，把关联键存那，下次 `call()` 才能从 session state 找回是哪个 pending 请求；恢复接受后 `clearPendingRequestReplyId`（@2058）清除。
+- **用户确认结果回写**：`applyConfirmResults`（@2088）——确认则 `MessageUtils.replaceToolUseBlocks(contextMutable(), replacements)` 把 ASKING 的 `ToolUseBlock` 替换为 ALLOWED（可带用户修改的参数）并注册其 `PermissionRule`；拒绝则合成 DENIED `ToolResultBlock` 经 `contextMutable().add(...)`（@2128）写入——这样 resume 时该 tool 不再是 pending。
+- **pending 兜底修补**：`maybePatchPendingToolCalls`（@2144）——恢复时若 pending tool calls 无结果、且用户也没提供结果，自动合成 error `ToolResultBlock`，防止 context 不一致导致 provider 空响应。
+
+> 结论：`AgentState.context` 远不止「对话历史」——它是**带暂停态、带权限态、可逐 call 重放的中断现场**；权限引擎的 ALLOW/ASK/DENY 决策最终都物化为 context 里的 `ToolUseBlock.state` 与 `ToolResultBlock.state`，靠 `saveStateToSession` 跨 call 持久化。
 
 ## Compaction
 
@@ -114,6 +197,8 @@ Builder 支持 `sessionId/userId/agentState/put/putAll/toolExecutionContext/tool
 两者触发条件与生命周期事件都不同。机制：单个工具结果的文本内容超 `maxResultChars()`（默认 **80K 字符**）时，`ToolResultEvictionMiddleware` 把完整输出写到 `{evictionPath}/{agentName}/{sanitized-toolCallId}-{contentHash}`，上下文里的 `ToolResultBlock` 换成带 head+tail 预览 + 「用 `read_file` 读全文」指引的紧凑占位符。写盘前先压实 `AgentState.contextMutable()`，防止 legacy pre-reasoning hook 把原始结果藏过持久化清理。
 
 ## Memory In V2
+
+设计实现与源码机制（四件套算法、中间件调度节流、`MemoryConsolidator` 水位 CAS、三工具落点）见 [记忆分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Memory.md)。本节约写概念层。
 
 ⚠️ **core 的 `memory` 包整体废弃**：`LongTermMemory`、`Memory`、`StateBackedMemory`、`InMemoryMemory`、`AgentStateMemoryView`、`LongTermMemoryTools`、`StaticLongTermMemoryHook`、`LongTermMemoryMode` 全部 `@Deprecated(forRemoval = true, since = "2.0.0")`。`LongTermMemory` 的 javadoc 原文：「Long-term memory is removed; conversation context now lives on `AgentState#getContext()`」；`Memory`：「Conversation context is now held on ...」。`ReActAgent.Builder` 里的 `longTermMemory(...)` / `longTermMemoryMode(...)` / `longTermMemoryAsyncRecord(...)` 只是 1.x 兼容 setters。
 
@@ -156,6 +241,7 @@ workspace/
 - [智能体分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Agent.md)
 - [会话分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Session.md)
 - [工作区分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Workspace.md)
+- [记忆分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Memory.md)
 - [Compaction](/docs/CS/AI/LLM/Agent/Theory/Compaction.md)
 - [AgentScope（Python 版）](/docs/CS/AI/LLM/Agent/Product/AgentScope/AgentScope.md)
 

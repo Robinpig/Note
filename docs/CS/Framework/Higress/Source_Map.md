@@ -1,6 +1,6 @@
 ## Introduction
 
-这是 [Config Pipeline](/docs/CS/Framework/Higress/Config_Pipeline.md) 的静态 counterpart：那条链路上的每个函数住在哪个目录、由哪个生成器产出、以什么形态被编译进来。基准同样钉在 **v2.2.5**（HEAD `4deae1dd`），全部结论带 `路径:行号`。
+这是 [Config Pipeline](/docs/CS/Framework/Higress/Config_Pipeline.md) 的静态 counterpart：那条链路上的每个函数住在哪个目录、由哪个生成器产出、以什么形态被编译进来。基准同样钉在 **v2.2.5**（HEAD `4deae1dd`），全部结论带 `路径:行号`。跨文件的调用关系、接口实现矩阵与符号图的可靠性口径放在 [Call Graph Internals](/docs/CS/Framework/Higress/Call_Graph_Internals.md)。
 
 先说这张地图存在的理由：**文档版的目录职责表已经和源码对不上**。[源码阅读指引](https://higress.ai/docs/latest/dev/code/)列的九项（`cmd` / `pkg/ingress` / `pkg/bootstrap` / `registry` / `envoy` / `istio` / `plugins` / `script` / `docker`）没有 `hgctl`、没有 `api`、没有 `client`，而 `script` 实际在 `tools/` 下、`tools/hgctl` 根本不存在（hgctl 在顶层且是独立 Go module）。要读源码，得先有一张以源码为准的表。
 
@@ -14,7 +14,7 @@
 | `client/` | code-generator 产物：`apis` / `clientset` / `informers` / `lister` / `applyconfiguration` | 非手写，入口 `client/Makefile` |
 | `registry/` | 服务来源 watcher 层，详见 [Service Registry Internals](/docs/CS/Framework/Higress/Service_Registry_Internals.md) | `registry/watcher.go` `registry/reconcile/` |
 | `hgctl/` | **顶层、独立 go.mod**（`go.mod:316` `replace .../hgctl => ./hgctl`） | `tools/` 下只有 `hack` `linter` `plugin-release` `src`，**没有 `tools/hgctl`** |
-| `plugins/` | `wasm-go` `wasm-rust` `wasm-cpp` `wasm-assemblyscript` `golang-filter` `release` | 源码文件数 526 / 23 / 29 / 9 / 98 |
+| `plugins/` | `wasm-go` `wasm-rust` `wasm-cpp` `wasm-assemblyscript` `golang-filter` `release` | 源码文件数 526 / 23 / 29 / 9 / 98；`release/` 是发布快照与供应链：`catalog.json`（54 项、44 releaseEligible）、`snapshots/<version>.json`（2.2.5 共 43 项，含 ociRef + digest）、`plans/` / `evidence/` / `bootstrap-evidence/` / `console-recovery/`，镜像构建与分发细节见 [Plugin Loading Internals](/docs/CS/Framework/Higress/Plugin_Loading_Internals.md) |
 | `helm/` | 两个 chart：`core`（控制面 + 数据面 + CRD）与 `higress`（console 子 chart） | `helm/core/crds/`、`helm/core/templates/configmap.yaml` |
 | `istio/`、`envoy/` | 子模块挂载点（见本页"构建"一节） | 本机工作树为空，需 `make prebuild` |
 | `test/` | `e2e` `gateway` `inference-extension` | `inference-extension/` 非空：`manifests/epp-tls.yaml` + `reports/v1.4.0/`（README + `v2.2.4-default-gateway-report.yaml`）⇒ 是 **Gateway API Inference Extension v1.4.0 一致性测试的清单与报告产物**，非 e2e 代码 |
@@ -101,7 +101,7 @@ proto 里**没有 `plural:` marker**，复数形式（mcpbridges / http2rpcs / w
 | `plugins/golang-filter/` | 98 文件，独立 go.mod | **MCP Server Filter 的真身**：`main.go:13-14` 两次 `envoyHttp.RegisterHttpFilterFactoryAndConfigParser`，分别注册 `mcp-session` 与 `mcp-server` 两个 filter，子树 `mcp-server/{registry,servers}` 与 `mcp-session/handler`；构建 target `build-golang-filter` |
 | `plugins/release/` | 7 项（6 目录 + 1 json） | 发布管线产物区。顶层实测为 `bootstrap-evidence` `console` `console-recovery` `evidence` `plans` `snapshots` + `catalog.json`；其中 **`console/` 下恰 9 个目录**（已逐个核实）：`ai-context-limit`、`ai-endpoint-picker`、`gw-error-format`、`hmac-auth-apisix`、`json-converter`、`log-request-response`、`mcp-router`、`nginx-rewrite-compatible`、`response-cache` |
 
-按语言层数一遍就知道：**文档站的 41 与 wasm-go 的 53 是两个不相等的集合**。wasm-go 里约 20 个扩展没有文档页（含 `mcp-router`、Go 版 `model-router`、`nginx-rewrite-compatible`、`ai-context-limit`、`ai-endpoint-picker`、`ai-image-reader`、`api-workflow`、`jsonrpc-converter`、`log-request-response`、`response-cache`、`traffic-editor`、`gc-test`、`hello-world`、`http-call`、`streaming-body-example`、`test-redis-inject-spin`、`chatgpt-proxy`、`qwen3guard` 等），而文档收录的认证基础族在 wasm-cpp。上一版笔记据此写"41 款插件"是对的（那是**文档站口径**），但补一句"源码侧另有未入文档的扩展"更准确——`mcp-router` 此前被判为"未核实存在"，源码里它确实是一个目录。
+按语言层数一遍就知道：**文档站的 41 与 wasm-go 的 53 是两个不相等的集合**。wasm-go 里约 20 个扩展没有文档页（含 `mcp-router`、Go 版 `model-router`、`nginx-rewrite-compatible`、`ai-context-limit`、`ai-endpoint-picker`、`ai-image-reader`、`api-workflow`、`jsonrpc-converter`、`log-request-response`、`response-cache`、`traffic-editor`、`gc-test`、`hello-world`、`http-call`、`streaming-body-example`、`test-redis-inject-spin`、`chatgpt-proxy`、`qwen3guard` 等），而文档收录的认证基础族在 wasm-cpp。所以"41 款插件"只在文档站口径下成立，源码侧另有未入文档的扩展；`mcp-router` 在源码里确实是一个目录。
 
 ## Build and Version Evidence
 
@@ -125,20 +125,22 @@ proto 里**没有 `plural:` marker**，复数形式（mcpbridges / http2rpcs / w
 仍待核实（其余原分项已核到源码并移入正文）：
 
 - **Gateway API istio 移植层 `conversion.go` 的具体字段映射**：已核入口与输出目标（Gateway/HTTPRoute/GRPCRoute → Istio 四类资源，与 Ingress 侧同构），但每个 Gateway API 字段到 Istio 字段的逐条映射未逐行读（该层约 19 个 go 文件，仅核对了目录分组与输出类型）。
-- `external/` 在本机仍不存在（未跑 `make prebuild`），但 fork 侧结论已可在 `/Users/robin/Projects/istio` 的 **`istio-1.27` 分支**（HEAD `65133dd`，即本仓 `.gitmodules` pin 的 `istio/istio`）离线核实；`envoy/` 侧（含 `go-control-plane`）本机仍无对照树。
+- `external/` 在本机仍不存在（未跑 `make prebuild`）。**istio-1.27 fork（HEAD `65133dd`）与 `envoy/` 侧（含 `go-control-plane`）在当前本机均无对照树**；fork 侧结论来自旧会话在另一台机器上的离线核实，换机器需重测。两个 v2.2.5 仓的 codegraph 索引同样不含 fork / Envoy 符号，这一项无法靠符号图闭合。
 
 以下原 Unverified 项已核实并移入正文：
 - **cue-gen plural 派生规则**：`api/gen.sh:11` 的 `cue-gen -verbose -f=./cue.yaml -crd=true` 调用链已坐实，`api/cue.yaml` 仅配 `openapi`（无 `k8s:` 段）；plural（wasmplugins / http2rpcs / mcpbridges）由 cue-gen 在 `-crd=true` 模式下**按 kind 名派生（标准规则：kind 小写 + s）**，Higress 未用 kubebuilder 的 `plural=` 显式标注——落地形式已在生成 yaml 交叉验证（`:7/:150/:237`），结论由"推断"升级为"可核"。
 - **端口与 finalizer 常量**：端口主定义在 `pkg/cmd/server.go:92-94` 的字面量（`HttpAddress: ":8888"` / `CertHttpAddress: ":8889"` / `GrpcAddress: ":15051"`），**无集中常量名**；cert 包侧另有 `IngressServicePort = 8889` 引用常量（`pkg/cert/ingress.go:37`）；finalizer 主仓业务代码**无自定义常量**（全仓 grep 仅命中 client 自动生成代码与 wasm build tag），即自有 CRD 的删除保护依赖 K8s 默认级联，而非 Higress 注的 finalizer。
 - `model.IngressRoute` 字段结构（`pilot/pkg/model/ali_push_context.go:38`，**fork 专有类型**）、13 个 hgctl 顶层命令的 `Use:` 字面量与各自文件、`plugins/release/` 顶层 7 项与 `console/` 下 9 个目录、`test/inference-extension` 的实质内容。
 
-证据基准：higress 主仓 v2.2.5（HEAD `4deae1dd`）+ istio-1.27 fork（HEAD `65133dd`，即本仓 pin 的 `istio/istio` 分支）。
+证据基准：higress 主仓 v2.2.5（HEAD `4deae1dd`）+ standalone aio-v2.2.5（`36882509`）+ istio-1.27 fork（HEAD `65133dd`，即本仓 pin 的 `istio/istio` 分支，为旧会话离线核实结果）。
 
 ## Links
 
 - [Config Pipeline](/docs/CS/Framework/Higress/Config_Pipeline.md)
 - [Service Registry Internals](/docs/CS/Framework/Higress/Service_Registry_Internals.md)
 - [Plugin System](/docs/CS/Framework/Higress/Plugin.md)
+- [Plugin Loading Internals](/docs/CS/Framework/Higress/Plugin_Loading_Internals.md)
+- [Call Graph Internals](/docs/CS/Framework/Higress/Call_Graph_Internals.md)
 - [Traffic Governance](/docs/CS/Framework/Higress/Traffic_Governance.md)
 - [Higress](/docs/CS/Framework/Higress/Higress.md)
 - [Service Discovery](/docs/CS/Framework/Higress/Service_Discovery.md)

@@ -874,7 +874,20 @@ RocketMQ 提供了并发消费、顺序消费两种消费模型。
 > 并发消费模型中，消息消费失败默认会重试 16 次，每一次的间隔时间不一样；而顺序消费，如果一条消息消费失败，则会一直消费，直到消费成功。故在顺序消费的使用过程中，应用程序需要区分系统异常、业务异常，如果是不符合业务规则导致的异常，则重试多少次都无法消费成功，这个时候一定要告警机制，及时进行人为干预，否则消费会积压。
 
 
+## 幂等消费与可靠消费
+
+RocketMQ 对集群模式承诺 **at-least-once（至少一次）**：`ConsumeMessageConcurrentlyService.processConsumeResult`（:242）在业务返回 `RECONSUME_LATER`（:262）时经 `sendMessageBack`（:289）把消息发回 `%RETRY%` 延迟队列，耗尽后转 `%DLQ%` 死信队列。而 offset 在**消费成功后**才 `updateOffset`（:308），由 `RemoteBrokerOffsetStore.persistAll`（:122）定时推到 broker（:207）。崩溃于「消费完未提交 offset」则重启重投——重复消费必然发生。
+
+5.5.1 客户端**不内置消费去重**（源码无 dedup 逻辑，已 grep 证实），幂等需业务侧基于 `keys`/状态机/本地事务表实现；5.x 的「消费幂等」是 Proxy 服务端特性，不在本次深挖的 4.x 风格 client 路径内。端到端的「不丢失三道防线 + 幂等三板斧」见 [Message Lifecycle](/docs/CS/MQ/RocketMQ/MessageLifecycle.md)。
+
 ## Links
+- /docs/CS/MQ/RocketMQ/ProxyGrpcConverter.md
+- /docs/CS/MQ/RocketMQ/rocketmqClients.md
+- /docs/CS/MQ/RocketMQ/Stats.md
+
+- [OrderedMessage](/docs/CS/MQ/RocketMQ/OrderedMessage.md)
+- [Trace](/docs/CS/MQ/RocketMQ/Trace.md)
+- [FlowControl](/docs/CS/MQ/RocketMQ/FlowControl.md)
 
 - [RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md)
 - [消息过滤](/docs/CS/MQ/RocketMQ/Filter.md)
@@ -882,4 +895,7 @@ RocketMQ 提供了并发消费、顺序消费两种消费模型。
 - [Broker](/docs/CS/MQ/RocketMQ/Broker.md)
 - [RocketMQ 5.x](/docs/CS/MQ/RocketMQ/RocketMQ5.md)
 - [事务消息](/docs/CS/MQ/RocketMQ/Transaction.md)
+- [PopConsume（POP 无状态消费协议：extraInfo 票据 / ck-ack / Revive）](/docs/CS/MQ/RocketMQ/PopConsume.md)
+- [RetryDLQ（重试消息与死信队列：%RETRY% / %DLQ% / CONSUMER_SEND_MSG_BACK）](/docs/CS/MQ/RocketMQ/RetryDLQ.md)
+- [Rebalance（Rebalance 负载均衡 / OffsetStore / 集群·广播 有状态消费）](/docs/CS/MQ/RocketMQ/Rebalance.md)
 

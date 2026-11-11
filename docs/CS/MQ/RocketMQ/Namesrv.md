@@ -1,3 +1,7 @@
+# RocketMQ NameServer
+
+源码基线：RocketMQ 5.5.1（`namesrv` 模块）。NameServer 是 RocketMQ 的**无状态路由注册中心**：Broker 主动注册并周期心跳，Client 主动定时拉取，节点之间互不通信，以**最终一致**换取部署独立与高可用。
+
 ## Introduction
 NameServer是一个几乎无状态节点，可集群部署，节点是对等的，节点之间无任何信息同步 ，客户端访问任意节点获取的消息路由信息是一致的
 
@@ -322,6 +326,41 @@ public class RouteInfoManager {
 
 Use [ReentrantReadWriteLock](/docs/CS/Java/JDK/Concurrency/Lock.md?id=lock)
 
+### 五大路由表的写入语义
+
+`RouteInfoManager` 用 5 张 `ConcurrentHashMap` 维护全量路由（构造器初始化于 `RouteInfoManager.java:84-94`），全部由一把 `ReentrantReadWriteLock`（`:71`）保护：
+
+| 表 | Key | Value | 写入时机 |
+| --- | --- | --- | --- |
+| `topicQueueTable` | topic | `Map<brokerName, QueueData>` | broker 注册/心跳携带的 topic 配置变更时（`createAndUpdateQueueData`，`:477`） |
+| `brokerAddrTable` | brokerName | `BrokerData`(brokerId→addr 映射) | `registerBroker`（`:248-253`） |
+| `clusterAddrTable` | clusterName | `Set<brokerName>` | `registerBroker`（`:243-244`） |
+| `brokerLiveTable` | `BrokerAddrInfo`(cluster+addr) | `BrokerLiveInfo`(心跳时间戳/超时/Channel) | 每次注册或心跳（`:367` / `updateBrokerInfoUpdateTimestamp:469`） |
+| `filterServerTable` | `BrokerAddrInfo` | `List<String>`(filter server) | `registerBroker`（`:378-384`） |
+
+此外 `topicQueueMappingInfoTable` 存静态 topic 映射（`registerBroker:352-362`），5.5.1 暂未启用静态 topic。
+
+### registerBroker 在 RouteInfoManager 的内部写入（源码级）
+
+`DefaultRequestProcessor.registerBroker`（:218）校验 CRC32 与版本后调用 `RouteInfoManager.registerBroker`（:226）。加**写锁**（`lock.writeLock().lockInterruptibly()`，`:240`）后依次：
+
+1. **brokerAddrTable / clusterAddrTable**：首次注册新建 `BrokerData` 并 put（:248-253）；支持 Slave→Master 切换时先删旧 `brokerId→addr` 记录再 add（:273）。
+2. **stateVersion 冲突检测**（:276-292）：若同 brokerId 已注册且旧 `stateVersion` 更新，则拒绝新注册并清理 `brokerLiveTable` 中冲突 addr。
+3. **topicQueueTable**：仅 Master 或「最小 brokerId 的 prime slave」才写队列（`isMaster || isPrimeSlave`，:308），遍历 `TopicConfig` 调 `createAndUpdateQueueData`（:348）；开启 `deleteTopicWithBrokerRegistration` 时清理已下线 broker 的 topic（:320-336）。
+4. **brokerLiveTable 心跳登记**（:367）：`put(new BrokerLiveInfo(now, timeoutMillis, dataVersion, channel, haServerAddr))`，`timeoutMillis` 默认 `DEFAULT_BROKER_CHANNEL_EXPIRED_TIME = 1000*60*2`（2 分钟，:70），可由注册请求头 `heartbeatTimeoutMillis` 覆盖。
+5. **回填 masterAddr/haServerAddr**（:386-396）：非 master 从 `brokerAddrTable` 查 master 地址回填 `RegisterBrokerResult`，供 broker 间主从同步建链。
+
+### 路由全景图（注册 / 心跳保活 / 查询 / 注销）
+
+```dot
+digraph G {
+  rankdir=TB;
+  subgraph cluster_register { label="注册 & 心跳"; broker[label="Broker (register/heartbeat)"]; drp[label="DefaultRequestProcessor :218/:379"]; rim[label="RouteInfoManager.registerBroker :226"]; live[label="brokerLiveTable :367/:469"]; broker -> drp -> rim -> live; }
+  subgraph cluster_query { label="客户端查询"; client[label="Producer/Consumer GET_ROUTEINFO_BY_TOPIC"]; crp[label="ClientRequestProcessor :419"]; pickup[label="pickupTopicRouteData :700"]; client -> crp -> pickup; }
+  subgraph cluster_offline { label="故障注销(5.5.1 异步批量)"; scan[label="scanNotActiveBroker :803"]; destroy[label="onChannelDestroy :820"]; batch[label="BatchUnregistrationService :61"]; clean[label="unRegisterBroker(Set) :571"]; scan -> destroy -> batch -> clean; }
+}
+```
+
 RouteInfoManager
 
 #### registerBroker
@@ -458,9 +497,58 @@ public class ClientRequestProcessor implements NettyRequestProcessor {
 
 ## HouseKeep
 
-BrokerHousekeepingService
+> NameServer 的高可用不靠副本，而靠「Broker 自申报 + 定时扫描清理 + 客户端重试」。在 Controller 模式下它进一步退化为纯路由发现，master 地址的权威性来自 Controller 裁定，源码级见 [Controller HA](/docs/CS/MQ/RocketMQ/ControllerHA.md)。其内嵌部署（`enableControllerInNamesrv`）与 AutoSwitch 复制语意、容灾选举的纵深，见 [Controller Replication](/docs/CS/MQ/RocketMQ/ControllerReplication.md)。
 
+### 连接断开感知：BrokerHousekeepingService
 
+`NamesrvController` 把 `BrokerHousekeepingService`（实现 `ChannelEventListener`）注入 Netty Server（:104 `new NettyRemotingServer(... this.brokerHousekeepingService)`）。当 broker 连接 **close / exception / idle** 时，`onChannelClose/Exception/Idle` 都会调 `RouteInfoManager.onChannelDestroy(channel)`（已在「start」节代码块展示 :193-205）。
+
+### 心跳超时踢除：scanNotActiveBroker
+
+`NamesrvController.startScheduleService` 以 `scanNotActiveBrokerInterval`（默认 10s）周期跑 `RouteInfoManager.scanNotActiveBroker`（:803）：
+
+```java
+public void scanNotActiveBroker() {
+    for (Entry<BrokerAddrInfo, BrokerLiveInfo> next : this.brokerLiveTable.entrySet()) {
+        long last = next.getValue().getLastUpdateTimestamp();
+        long timeoutMillis = next.getValue().getHeartbeatTimeoutMillis();
+        if ((last + timeoutMillis) < System.currentTimeMillis()) {
+            RemotingHelper.closeChannel(next.getValue().getChannel());
+            this.onChannelDestroy(next.getKey());   // :812
+        }
+    }
+}
+```
+
+判定标准是 `brokerLiveTable` 中该 broker 的 `lastUpdateTimestamp + heartbeatTimeoutMillis < now`。超时阈值默认 2 分钟（:70），可由注册请求头 `heartbeatTimeoutMillis` 覆盖。
+
+### 5.5.1 改进：异步批量注销（BatchUnregistrationService）
+
+`onChannelDestroy(BrokerAddrInfo)`（:820）先加读锁 `setupUnRegisterRequest` 凑出 `UnRegisterBrokerRequestHeader`，再 `submitUnRegisterBrokerRequest`（:837 → :104）→ **投递到 `BatchUnregistrationService` 的 `LinkedBlockingQueue`**（:42，容量 `getUnRegisterBrokerQueueCapacity`），**不直接删路由**。
+
+后台 `BatchUnregistrationService extends ServiceThread`（:35）的 `run()`（:61）循环 `take()` 一个请求后 `drainTo` 把队列里其余请求一并收集，**批量**调 `RouteInfoManager.unRegisterBroker(Set)`（:71）。这样把「单 broker 掉线导致逐条加写锁清理」收敛成「批量一次写锁」，显著降低高并发掉线（如整机房断电）时的锁竞争——这是 5.5.1 相对旧版（每个 `onChannelDestroy` 直接拿写锁清理）的关键性能改进。
+
+### 实际清理：unRegisterBroker(Set) / cleanTopicByUnRegisterRequests
+
+`unRegisterBroker(Set<UnRegisterBrokerRequestHeader>)`（:571）加写锁后，对每个请求：从 `brokerLiveTable` / `filterServerTable` 删除 → 从 `brokerAddrTable` 的 `brokerAddrs` 移除该 addr（:601），若某 brokerName 下 addr 清空则连 `brokerAddrTable`/`clusterAddrTable` 一并移除（:606-633）→ 最后 `cleanTopicByUnRegisterRequests`（:652）遍历 `topicQueueTable` 删除该 broker 的 `QueueData`，并对开启 ActingMaster 且 `isNoMasterExists`（:687）的 broker 擦除 write perm（:676-680）。
+
+### 5.x 新增轻量心跳：brokerHeartbeat
+
+4.x 仅有 `REGISTER_BROKER`（注册即心跳，携带全量 topic 配置）；5.x 引入独立 `BROKER_HEARTBEAT` 请求码，`DefaultRequestProcessor.brokerHeartbeat`（:379）**只调 `updateBrokerInfoUpdateTimestamp`**（`RouteInfoManager:469`，仅 `setLastUpdateTimestamp(now)`）刷新存活时间戳，**不重传 topic 配置**。注册与保活职责由此分离：注册负责 topic 路由变更，心跳只负责「我还活着」。
+
+### KVConfigManager：顺序 KV 持久化
+
+`KVConfigManager` 用 `HashMap<namespace, HashMap<key,value>>`（:37）存配置，对外提供 `PUT/GET/DELETE_KV_CONFIG`（见 `DefaultRequestProcessor` 大 switch :232-237）。其持久化极简单：
+
+- `load()`（:44）：启动从 `NamesrvConfig.getKvConfigPath()`（默认 `~/namesrv/kvConfig.json`）读文件 → `KVConfigSerializeWrapper.fromJson` → 灌入 `configTable`（:55）。
+- `putKVConfig`（:61）/ `deleteKVConfig`（:114）：改内存后**立即 `persist()`**（:87/:131）。
+- `persist()`（:90）：`toJson()` 后 `MixAll.string2File` 全量覆盖写回 `kvConfig.json`（:100）。
+
+> 注意：KVConfig **无 WAL、无增量**，每次写都全量刷盘；它只存少量控制面配置（如顺序消息 topic 配置 `ORDER_TOPIC_CONFIG`、ACL 等），不在消息热路径上，故可接受。
+
+### 客户端查路由：pickupTopicRouteData
+
+Client 发 `GET_ROUTEINFO_BY_TOPIC` → `ClientRequestProcessor.getRouteInfoByTopic`（:419）→ `RouteInfoManager.pickupTopicRouteData`（:700）：加读锁，从 `topicQueueTable` 取 `QueueData` 列表、从 `brokerAddrTable` 克隆 `BrokerData`、合并 `filterServerTable` 与 `topicQueueMappingInfoTable`，组装成 `TopicRouteData`（含 `queueDatas`/`brokerDatas`/`filterServerTable`）返回。客户端**每 `pollNameServerInterval`（默认 30s）主动拉取一次**，故路由视图是最终一致、非实时。
 
 ## Summary
 
@@ -474,4 +562,18 @@ RocketMQ 选择自研 NameServer 而非使用 Zookeeper、Nacos，核心原因�
 
 ## Links
 
+- [ACL](/docs/CS/MQ/RocketMQ/ACL.md)
+
 - [RocketMQ](/docs/CS/MQ/RocketMQ/RocketMQ.md)
+- [Broker](/docs/CS/MQ/RocketMQ/Broker.md)
+- [Cluster](/docs/CS/MQ/RocketMQ/Cluster.md)
+- [Remoting](/docs/CS/MQ/RocketMQ/Remoting.md)
+- [Store](/docs/CS/MQ/RocketMQ/Store.md)
+- [Producer](/docs/CS/MQ/RocketMQ/Producer.md)
+- [Rebalance（Rebalance 负载均衡 / OffsetStore / 集群·广播 有状态消费）](/docs/CS/MQ/RocketMQ/Rebalance.md)
+
+## References
+
+- Apache RocketMQ 官方文档（NameServer 角色与架构）：https://rocketmq.apache.org/docs/domainModel/ ，设计哲学见源码 `NamesrvStartup` / `RouteInfoManager` 注释。
+- RocketMQ GitHub 仓库 `namesrv` 模块：https://github.com/apache/rocketmq/tree/rocketmq-all-5.5.1/namesrv （`RouteInfoManager.java` / `DefaultRequestProcessor.java` / `kvconfig/KVConfigManager.java` / `routeinfo/BatchUnregistrationService.java`）
+- 源码基线：RocketMQ 5.5.1，本地仓库 `E:/Projects/rocketmq-rocketmq-all-5.5.1`。

@@ -101,7 +101,7 @@ BookKeeper 的一致性不是靠副本协商达成的，而是**客户端协议 
 本目录按「一条 entry 从写到读、再到一个集群怎么自愈」的顺序展开，各篇分工如下：
 
 - [Ledger](/docs/CS/Framework/BookKeeper/Ledger.md)：ledger 是什么、元数据长什么样、如何从可写变成封闭、fencing 与 recovery 两段协议。
-- [Write](/docs/CS/Framework/BookKeeper/Write.md)：写路径 —— 客户端怎么发、bookie 怎么落盘（Journal 与 EntryLog 的先后）、quorum 何时算成功、ensemble 怎么换。
+- [Write](/docs/CS/Framework/BookKeeper/Write.md)：写路径 —— 客户端写缓冲与有序完成（pendingAddOps / LAC 推进）、Netty 网络层与限速、quorum 何时算成功、ensemble 变更路由与换副本、bookie 怎么落盘（Journal 与 EntryLog 的先后）。
 - [Read](/docs/CS/Framework/BookKeeper/Read.md)：读路径 —— LAC 读与 entry 读、speculative read、读序重排、索引怎么定位到 entry。
 - [Storage](/docs/CS/Framework/BookKeeper/Storage.md)：bookie 内部 —— Journal / EntryLog / Index 三件套、内存表刷盘、垃圾回收与压缩、磁盘水位与只读模式。
 - [Cluster](/docs/CS/Framework/BookKeeper/Cluster.md)：集群侧 —— 元数据在 ZooKeeper 上的布局、cookie 校验、副本放置策略、auto-recovery 的 Auditor 与 ReplicationWorker。
