@@ -81,6 +81,12 @@ docker run -d -p 9411:9411 openzipkin/zipkin
 - [SkyWalking](/docs/CS/Distributed/Tracing/SkyWalking.md) — 国产 APM 平台
 - [Spring Cloud Sleuth](/docs/CS/Framework/Spring_Cloud/Sleuth.md) — Spring 生态历史 Zipkin 客户端（已 EOL）
 - [Micrometer](/docs/CS/log/Micrometer.md) — JVM 侧埋点门面，Sleuth 的继任者
+- [Zipkin 源码实现](/docs/CS/Distributed/Tracing/Zipkin/Architecture.md) — Span 模型、字节级编解码探测、Collector 管线、存储索引与依赖推导
+- [Zipkin 存储抽象](/docs/CS/Distributed/Tracing/Zipkin/Storage.md) — StorageComponent 脊柱、五接口拆分、InMemory 索引、后端 Spring 分派
+- [Zipkin 查询 API](/docs/CS/Distributed/Tracing/Zipkin/Query.md) — ZipkinQueryApiV2、非对称 v1/v2 双协议、V1Span 内部模型与双向转换
+- [Zipkin Collector 传输层](/docs/CS/Distributed/Tracing/Zipkin/Collectors.md) — CollectorSampler 存储层采样、Kafka/RabbitMQ/Scribe 薄适配同构
+- [Zipkin 编解码内核](/docs/CS/Distributed/Tracing/Zipkin/Codec.md) — WriteBuffer/ReadBuffer 缓冲原语、SpanBytesDecoderDetector 嗅探、四协议字节级序列化
+- [Zipkin Elasticsearch 后端](/docs/CS/Distributed/Tracing/Zipkin/Elasticsearch.md) — AutoValue 不可变配置、秒级分桶、`_id` 内容寻址、streaming bulk、terms 聚合读路径
 
 ## References
 

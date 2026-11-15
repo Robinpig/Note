@@ -18,11 +18,17 @@
 - [Jaeger](/docs/CS/Distributed/Tracing/Jaeger.md) — CNCF 分布式追踪后端，兼容 OpenTelemetry。
 - [Zipkin](/docs/CS/Distributed/Tracing/Zipkin.md) — 起源于 Twitter 的轻量追踪系统，Dapper 思路的早期实现；架构 / 数据模型 / 传输(B3) / 存储 / 查询已拆为子分册。
 - [SkyWalking](/docs/CS/Distributed/Tracing/SkyWalking.md) — 国产 APM 平台，覆盖追踪/拓扑/告警；数据模型 / 传输(sw8) / OAP 后端与存储 / 查询与 UI 拆为子分册，架构并入枢纽页，并附实现机理分册（两级采样、拓扑推导、BanyanDB 存储模型）。
+- [Pinpoint](/docs/CS/Distributed/Tracing/Pinpoint.md) — NAVER 开源全栈 APM，字节码插桩 + HBase/Pinot 存储，ServerMap 自动拓扑；**非 OTel 后端**。
+- [CAT](/docs/CS/Distributed/Tracing/CAT.md) — 美团点评开源实时监控，Message Tree 模型 + 全量指标/采样链路，cat-client/consumer/home 三段。
 - [Tempo](/docs/CS/Distributed/Tracing/Tempo.md) — Grafana 的追踪后端，Parquet 块 + 对象存储，TraceQL。
+- [SigNoz](/docs/CS/Distributed/Tracing/SigNoz.md) — OpenTelemetry-native 全栈 APM，单一 ClickHouse 库覆盖 traces/metrics/logs。
+- [Uptrace](/docs/CS/Distributed/Tracing/Uptrace.md) — 极简 OpenTelemetry-native APM（单一 Go 二进制 + ClickHouse + PostgreSQL），AGPL-3.0。
+- [Elastic APM](/docs/CS/Distributed/Tracing/ElasticAPM.md) — Elastic Observability 的 APM 能力，原生说 OpenTelemetry，落 Elasticsearch（LogsDB + TSDS）。
 
 ### 指标与日志
 
 - [Prometheus](/docs/CS/Distributed/Tracing/Prometheus/Prometheus.md) — 指标（Metrics）支柱的事实标准；[部署实践](/docs/CS/Distributed/Tracing/Prometheus/Deploy.md)单独成篇。
+- [Mimir](/docs/CS/Distributed/Tracing/Mimir.md) — Grafana 的 Prometheus 长期存储（LGTM 的 M），对象存储里的 TSDB block。
 - [Loki](/docs/CS/Distributed/Tracing/Loki.md) — 只索引标签的日志聚合系统，LogQL。
 
 ### 采集层

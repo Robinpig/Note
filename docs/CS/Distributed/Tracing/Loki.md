@@ -9,6 +9,9 @@ Loki 的核心取舍一句话可以概括：**只索引标签，不索引日志�
 > [!NOTE]
 > 版本事实截至 2026-10：Loki 当前主线为 **3.7.x**（最新 3.7.9，2026-10-20）。3.8.0 尚未打 tag，CHANGELOG 中已列出移除 BoltDB / Cassandra / DynamoDB / BigTable 等旧存储后端的条目，属「即将发生」。下文涉及新架构的部分 Grafana Labs 已在 GrafanaCON 2026 公布，正处于向 Loki 4.0 演进的过程中，落地状态请以官方 release notes 为准。
 
+> [!NOTE]
+> 本页为**源码级**笔记，关键结论已对照 **Loki `v3.7.10`**（tag `v3.7.10`，浅克隆于 `loki-3.7.10/`）逐条核实。下文讲解直接贴真实源码片段，涉及的文件路径相对仓库根（统一前缀 `loki-3.7.10/`），不再标注行号。读者不会打开仓库，需要看机制时直接看贴出的代码。
+
 ## Design: 用索引换成本
 
 | 维度 | Elasticsearch / EFK | Loki |
@@ -62,7 +65,43 @@ Loki 3.x 在分布式模式下由以下组件构成（单体模式全部塞进�
 | Compactor | 合并索引文件、执行保留策略（retention）与删除请求 |
 | Ruler | 评估告警规则与 recording rule（与 Prometheus 的 rule 概念一致） |
 | Pattern Ingester | 为 `pattern` 过滤器维护日志行的模式（把变量部分抽象成 `<_>`） |
-| Bloom Planner / Builder / Gateway | 构建与查询 bloom filter，用于在扫描前快速排除不含目标字符串的 chunk |
+| [Bloom Planner / Builder / Gateway](/docs/CS/Distributed/Tracing/Loki/Bloom.md) | 构建与查询 bloom filter，用于在扫描前快速排除不含目标字符串的 chunk（详见 [Bloom 子系统](/docs/CS/Distributed/Tracing/Loki/Bloom.md)） |
+
+组件以 Cortex 风格的模块机制装配：入口 `cmd/loki/main.go` 里 `loki.New(config.Config)` 构建整个应用；全部 target 名称定义在 `pkg/loki/modules.go` 的常量块中：
+
+```go
+Distributor                  = "distributor"
+Ingester                     = "ingester"
+PatternIngester              = "pattern-ingester"
+Querier                      = "querier"
+QueryFrontend                = "query-frontend"
+QueryEngine                  = "query-engine"
+Store                        = "store"
+Ruler                        = "ruler"
+Compactor                    = "compactor"
+IndexGateway                 = "index-gateway"
+BloomStore                   = "bloom-store"
+BloomGateway                 = "bloom-gateway"
+BloomPlanner                 = "bloom-planner"
+BloomBuilder                 = "bloom-builder"
+QueryScheduler               = "query-scheduler"
+```
+
+随后在 `pkg/loki/loki.go` 里逐个注册到模块管理器与依赖图：
+
+```go
+mm.RegisterModule(Distributor, t.initDistributor)
+mm.RegisterModule(Store, t.initStore, modules.UserInvisibleModule)
+mm.RegisterModule(Querier, t.initQuerier)
+mm.RegisterModule(Ingester, t.initIngester)
+mm.RegisterModule(QueryFrontend, t.initQueryFrontend)
+mm.RegisterModule(Ruler, t.initRuler)
+mm.RegisterModule(Compactor, t.initCompactor)
+mm.RegisterModule(BloomStore, t.initBloomStore, modules.UserInvisibleModule)
+mm.RegisterModule(BloomPlanner, t.initBloomPlanner)
+mm.RegisterModule(BloomBuilder, t.initBloomBuilder)
+mm.RegisterModule(IndexGateway, t.initIndexGateway)
+```
 
 ### Write and Read Paths
 
@@ -82,7 +121,194 @@ Loki 3.x 在分布式模式下由以下组件构成（单体模式全部塞进�
                                                                 │
                                     ┌───────────────────────────┴──────────────┐
                                     ▼                                          ▼
-                             Ingester（近期、未 flush）               Index Gateway + 对象存储（历史）
+                              Ingester（近期、未 flush）               Index Gateway + 对象存储（历史）
+```
+
+源码层面印证上述链路。写路径入口：Distributor 的 `POST /loki/api/v1/push` 由 `pkg/distributor/http.go` 的 `PushHandler` 承接：
+
+```go
+// PushHandler reads a snappy-compressed proto from the HTTP body.
+func (d *Distributor) PushHandler(w http.ResponseWriter, r *http.Request) {
+	d.pushHandler(w, r, push.ParseLokiRequest, push.HTTPError, constants.Loki)
+}
+```
+
+进入 `pkg/distributor/distributor.go` 的 `PushWithResolver` 后校验并规范化标签，再为每个流算一致性哈希 token：
+
+```go
+maybeShardByRate := func(stream logproto.Stream, pushSize int, policy string) {
+	if shardStreamsCfg.Enabled {
+		streams = append(streams, d.shardStream(stream, pushSize, tenantID, policy)...)
+		return
+	}
+	streams = append(streams, KeyedStream{
+		HashKey:        lokiring.TokenFor(tenantID, stream.Labels),
+		HashKeyNoShard: stream.Hash,
+		Stream:         stream,
+		Policy:         policy,
+	})
+}
+```
+
+token 的生成就是 `pkg/util/ring/ring.go` 里对「租户 + 标签串」做 FNV-32 哈希：
+
+```go
+// TokenFor generates a token used for finding ingesters from ring
+func TokenFor(userID, labels string) uint32 {
+	h := fnv.New32()
+	_, _ = h.Write([]byte(userID))
+	_, _ = h.Write([]byte(labels))
+	return h.Sum32()
+}
+```
+
+随后按 token 从 ingester ring 中取副本集并经 gRPC 转发：
+
+```go
+for i, stream := range streams {
+	replicationSet, err := d.ingestersRing.Get(stream.HashKey, ring.WriteNoExtend, descs[:0], nil, nil)
+	if err != nil {
+		return err
+	}
+
+	streamTrackers[i] = streamTracker{
+		KeyedStream: stream,
+		minSuccess:  len(replicationSet.Instances) - replicationSet.MaxErrors,
+		maxFailures: replicationSet.MaxErrors,
+	}
+	for _, ingester := range replicationSet.Instances {
+		streamsByIngester[ingester.Addr] = append(streamsByIngester[ingester.Addr], &streamTrackers[i])
+		ingesterDescs[ingester.Addr] = ingester
+	}
+}
+```
+
+Ingester（`pkg/ingester/ingester.go`，`type Ingester struct`）在内存按流攒日志。流的模型见 `pkg/ingester/stream.go`：
+
+```go
+type stream struct {
+	limiter *StreamRateLimiter
+	cfg     *Config
+	tenant  string
+	// Newest chunk at chunks[n-1].
+	// Not thread-safe; assume accesses to this are locked by caller.
+	chunks   []chunkDesc
+	fp       model.Fingerprint // possibly remapped fingerprint, used in the streams map
+	chunkMtx sync.RWMutex
+
+	labels           labels.Labels
+	labelsString     string
+	labelHash        uint64
+	labelHashNoShard uint64
+	// ...
+}
+```
+
+chunk 压缩体见 `pkg/chunkenc/memchunk.go`：
+
+```go
+// MemChunk implements compressed log chunks.
+type MemChunk struct {
+	// The number of uncompressed bytes per block.
+	blockSize int
+	// Target size in compressed bytes
+	targetSize int
+
+	symbolizer *symbolizer
+	// The finished blocks.
+	blocks []block
+	// The compressed size of all the blocks
+	cutBlockSize int
+
+	// Current in-mem block being appended to.
+	head HeadBlock
+
+	format   byte
+	encoding compression.Codec
+	headFmt  HeadBlockFmt
+	// ...
+}
+```
+
+ingester 启动时创建 WAL 保证持久性：
+
+```go
+wal, err := newWAL(cfg.WAL, registerer, metrics, newIngesterSeriesIter(i))
+if err != nil {
+	return nil, err
+}
+i.wal = wal
+```
+
+满足大小/空闲/年龄阈值后由 `pkg/ingester/flush.go` 的 `flushChunk` 把 chunk 写入对象存储：
+
+```go
+func (i *Ingester) flushChunk(ctx context.Context, ch *chunk.Chunk) error {
+	i.metrics.chunksFlushRequestsTotal.Inc()
+	if err := i.store.Put(ctx, []chunk.Chunk{*ch}); err != nil {
+		i.metrics.chunksFlushFailures.Inc()
+		return fmt.Errorf("store put chunk: %w", err)
+	}
+	i.metrics.flushedChunksStats.Inc(1)
+	return nil
+}
+```
+
+读路径上，`Query Frontend` 由 `pkg/querier/queryrange/split_by_interval.go` 的 `SplitByIntervalMiddleware` 按时间区间切分并缓存：
+
+```go
+// SplitByIntervalMiddleware creates a new Middleware that splits log requests by a given interval.
+func SplitByIntervalMiddleware(configs []config.PeriodConfig, limits Limits, merger queryrangebase.Merger, splitter splitter, metrics *SplitByMetrics) queryrangebase.Middleware {
+	if metrics == nil {
+		metrics = NewSplitByMetrics(nil)
+	}
+
+	return queryrangebase.MiddlewareFunc(func(next queryrangebase.Handler) queryrangebase.Handler {
+		return &splitByInterval{
+			configs:  configs,
+			next:     next,
+			limits:   limits,
+			merger:   merger,
+			metrics:  metrics,
+			splitter: splitter,
+		}
+	})
+}
+```
+
+`Query Scheduler` 在 `pkg/loki/modules.go` 的 `initQueryScheduler` 中以每租户公平队列前置：
+
+```go
+func (t *Loki) initQueryScheduler() (services.Service, error) {
+	s, err := scheduler.NewScheduler(t.Cfg.QueryScheduler, t.Overrides, util_log.Logger, t.querySchedulerRingManager, prometheus.DefaultRegisterer, t.Cfg.MetricsNamespace)
+	if err != nil {
+		return nil, err
+	}
+
+	schedulerpb.RegisterSchedulerForFrontendServer(t.Server.GRPC, s)
+	schedulerpb.RegisterSchedulerForQuerierServer(t.Server.GRPC, s)
+
+	t.queryScheduler = s
+	return s, nil
+}
+```
+
+`Querier` 在 `pkg/querier/querier.go` 的 `New` 中组装，同时向 ingester 查近期、向 store 查历史：
+
+```go
+// New makes a new Querier.
+func New(cfg Config, store Store, ingesterQuerier *IngesterQuerier, limits querier_limits.Limits, d deletion.DeleteGetter, logger log.Logger) (*SingleTenantQuerier, error) {
+	q := &SingleTenantQuerier{
+		cfg:             cfg,
+		store:           store,
+		ingesterQuerier: ingesterQuerier,
+		limits:          limits,
+		deleteGetter:    d,
+		logger:          logger,
+	}
+
+	return q, nil
+}
 ```
 
 ### Deployment Modes
@@ -95,7 +321,88 @@ Loki 3.x 在分布式模式下由以下组件构成（单体模式全部塞进�
 
 ## Storage
 
-Loki 采用 **single store**：索引与 chunk 都放同一个对象存储，只需维护一套后端。
+Loki 采用 **single store**：索引与 chunk 都放同一个对象存储，只需维护一套后端。源码侧印证：`pkg/storage/config/schema_config.go` 中 `UsingObjectStorageIndex` 即「索引与 chunk 都在对象存储」的判定点：
+
+```go
+func IsObjectStorageIndex(indexType string) bool {
+	return indexType == types.BoltDBShipperType || indexType == types.TSDBType
+}
+
+// UsingObjectStorageIndex returns true if the current or any of the upcoming periods
+// use an object store index.
+func UsingObjectStorageIndex(configs []PeriodConfig) bool {
+	return usingForPeriodConfigs(configs, IsObjectStorageIndex)
+}
+```
+
+`PeriodConfig` 的字段 doc 也直接写明当前推荐 schema：
+
+```go
+type PeriodConfig struct {
+	// type of index client to use.
+	IndexType string `yaml:"store" doc:"description=store and object_store below affect which <storage_config> key is used. Which index to use. Either tsdb or boltdb-shipper. Following stores are deprecated: aws, aws-dynamo, gcp, gcp-columnkey, bigtable, bigtable-hashed, cassandra, grpc."`
+	// type of object client to use.
+	ObjectType string `yaml:"object_store" doc:"description=Which store to use for the chunks. Either aws (alias s3), azure, gcs, alibabacloud, bos, cos, swift, filesystem, or a named_store (refer to named_stores_config). ..."`
+	Schema string `yaml:"schema" doc:"description=The schema version to use, current recommended schema is v13."`
+	// ...
+}
+```
+
+v13 映射到 TSDB 索引格式（替代旧 boltdb-shipper）：
+
+```go
+// TSDBFormat returns index format corresponding to the `schema` version
+// in the given `PeriodConfig`.
+func (cfg *PeriodConfig) TSDBFormat() (int, error) {
+	sver, err := cfg.VersionAsInt()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get index format: %w", err)
+	}
+
+	switch {
+	case sver <= 12:
+		return index.FormatV2, nil
+	default: // for v13 and above
+		return index.FormatV3, nil
+	}
+}
+```
+
+`Index Gateway`（`pkg/indexgateway/gateway.go`）为 querier 提供 TSDB 索引查询，避免每个 querier 都去扫索引桶：
+
+```go
+type Gateway struct {
+	services.Service
+
+	indexQuerier IndexQuerier
+	indexClients []IndexClientWithRange
+	bloomQuerier BloomQuerier
+	metrics      *Metrics
+
+	cfg    Config
+	limits Limits
+	log    log.Logger
+}
+```
+
+`Compactor`（`pkg/compactor/compactor.go`）合并索引、执行保留与删除请求：
+
+```go
+type Compactor struct {
+	services.Service
+
+	cfg                       Config
+	indexStorageClient        storage.Client
+	tableMarker               retention.TableMarker
+	sweeper                   *retention.Sweeper
+	deleteRequestsStore       deletion.DeleteRequestsStore
+	DeleteRequestsHandler     *deletion.DeleteRequestHandler
+	DeleteRequestsGRPCHandler *deletion.GRPCRequestHandler
+	deleteRequestsManager     *deletion.DeleteRequestsManager
+	expirationChecker         retention.ExpirationChecker
+	// ...
+}
+```
 
 - **TSDB（推荐）**：Loki 2.8 引入，查询性能更好、TCO 更低，功能上对标 boltdb-shipper，是目前推荐的索引存储。配置上对应 `store: tsdb` + `schema: v13`。
 - **BoltDB（boltdb-shipper，已弃用）**：Loki 2.0 引入，曾用于 2.0.0–2.7.x。3.8 起计划移除。
@@ -182,9 +489,14 @@ Grafana Labs 在 GrafanaCON 2026 公布了 Loki 的一次重大架构演进，�
 ## Links
 
 - [Tracing](/docs/CS/Distributed/Tracing/Tracing.md)
+- [Mimir](/docs/CS/Distributed/Tracing/Mimir.md) — LGTM 栈的 M（指标），同源对象存储思路
 - [Prometheus](/docs/CS/Distributed/Tracing/Prometheus/Prometheus.md)
 - [OpenTelemetry](/docs/CS/Distributed/Tracing/Otel.md)
 - [Micrometer](/docs/CS/log/Micrometer.md)
+
+- [Loki Bloom 子系统](/docs/CS/Distributed/Tracing/Loki/Bloom.md) — 离线 bloombuild 建块（planner+builder）+ 在线 bloom-gateway 跳查，把 `|= "error"` 翻译成 bloom test 剪枝 chunk；bloomgateway 无 ring，分片靠 jump-hash
+- [Loki 软删除](/docs/CS/Distributed/Tracing/Loki/Deletion.md) — delete-request store 登记 + compactor 物理重写 chunk；查询时按 selector+区间逐行屏蔽（非 gRPC、SQLite 非字面默认）
+- [Loki WAL 与重放](/docs/CS/Distributed/Tracing/Loki/Wal.md) — ingester WAL + checkpoint 提供 at-least-once，重启只回放未 flush 段；无序 WAL 可重放进有序配置
 
 ## References
 

@@ -59,6 +59,59 @@ Tracer 的核心任务是**在带内（in-band）传播 trace 上下文**：它�
 3. 每个下游服务对同一次调用，在 RPC 的客户端侧记录 `cs`/`cr`、在服务端侧记录 `sr`/`ss`（详见 [Zipkin Data Model](/docs/CS/Distributed/Tracing/Zipkin/Data_Model.md)）；客户端与服务端共享同一 `spanId`，collector 收到后**合并**成一条完整记录。
 4. 所有 span 经 Reporter 异步上报到 collector，落存储后由 Query Service 聚合成一条可检索的 trace。
 
+## Server Bootstrap: Spring Boot Under the Hood
+
+尽管核心采集/存储逻辑与框架无关，Zipkin 的 server 端确实跑在 **Spring Boot** 上。`ZipkinServer` 用 `@SpringBootConfiguration` + `@EnableAutoConfiguration`，但**默认关掉**自动配置（`ENABLED_OVERRIDE_PROPERTY=false`），改由 `@EnableZipkinServer` 与 `ZipkinModuleImporter` 显式装配支持哪些存储 / collector 模块：
+
+```java
+// zipkin/server/ZipkinServer.java
+@SpringBootConfiguration
+@EnableAutoConfiguration
+@EnableZipkinServer
+public class ZipkinServer {
+    public static void main(String[] args) {
+        new SpringApplicationBuilder(ZipkinServer.class)
+            .banner(new ZipkinBanner())
+            .initializers(new ZipkinModuleImporter(), new ZipkinActuatorImporter())
+            .logStartupInfo(false)
+            .properties(
+                EnableAutoConfiguration.ENABLED_OVERRIDE_PROPERTY + "=false",
+                "spring.config.name=zipkin-server").run(args);
+    }
+}
+```
+
+这与 SkyWalking 的纯 `ServiceLoader` SPI（见 [SkyWalking Source Code](/docs/CS/Distributed/Tracing/SkyWalking.md)）和 Jaeger v2 的 OTel Collector 组件模型形成三方对照：Zipkin 用 Spring 但把它「关到最小」，只为复用其配置加载与 actuator 健康端点。
+
+## Why Zipkin Is Not "Just a Monolith"
+
+单进程架构常被误解为「无法水平扩展」。源码事实是：扩展点在于**共享存储 + 多 server 实例 + 可选 Kafka collector**，而不是进程内多副本。两条常被忽略的边界：
+
+- `strictTraceId=false` 时，128-bit 与 64-bit 的 traceId 按**低 64 位**归并——这是为了兼容老 instrumentation 截断 traceId 的过渡期，但会引入不同 trace 碰撞的风险（`StorageComponent.Builder` 的 javadoc 有详尽说明）。
+- `Span` 的合并（client + server 两段）发生在**入库前**的 `Builder.merge`，存储层拿到的是已经拼好的完整 span，因此同一 `spanId` 的 client/server 视图在存储里是「一条记录 + shared 标志」，而非两条。
+
+```dot
+digraph zipkin_flow {
+  rankdir=LR;
+  subgraph cluster_in {
+    label="Instrumented App";
+    reporter[label="Brave / OTel\nexporter"];
+  }
+  subgraph cluster_srv {
+    label="Zipkin server (single process)";
+    detect[label="SpanBytesDecoderDetector\n(byte-level sniff)"];
+    collector[label="Collector\n(decode→sample→store)"];
+    storage[label="StorageComponent\n(InMemory/ES/Cassandra/MySQL)"];
+    linker[label="DependencyLinker\nserver-side view"];
+    ui[label="Web UI + Query API\n(:9411)"];
+  }
+  reporter -> detect;
+  detect -> collector -> storage;
+  storage -> linker[style=dashed];
+  storage -> ui;
+}
+```
+
 ## Links
 
 - [Zipkin](/docs/CS/Distributed/Tracing/Zipkin.md) — 枢纽页与 Quickstart

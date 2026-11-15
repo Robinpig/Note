@@ -91,6 +91,70 @@ Zipkin 中所有时间戳都是 **epoch 微秒**（而非毫秒），且存为 6
 - **shared**：当同一 `spanId` 同时出现在客户端与服务端时，服务端那条记录置 `shared=true`，表明它与客户端的 span 是「同一段」的共享视图，UI 据此只渲染一次。
 - **debug**：由 B3 的 `X-B3-Flags: 1` 触发，强制该 trace 被采样并尽量保证送达 collector 层，用于临时排查问题。
 
+## Span 类的内部实现（Span.java）
+
+`Span` 是 `final` 的不可变类，所有字段在构造后冻结。它的 flags 用四个位表达 `debug` 与 `shared` 的**三态**（null / true / false）——`*_SET` 位区分「未设置」与「显式 false」：
+
+```java
+// zipkin2/Span.java
+//@Immutable
+public final class Span implements Serializable {
+  static final int FLAG_DEBUG = 1 << 1;
+  static final int FLAG_DEBUG_SET = 1 << 2;
+  static final int FLAG_SHARED = 1 << 3;
+  static final int FLAG_SHARED_SET = 1 << 4;
+```
+
+这里有个源码陷阱：`Builder` 与 `Span` 的 `flags` 字段声明处，行尾注释都写着 `bit field for timestamp and duration`，但实际存的是上面的 debug/shared 标志位。`timestamp` / `duration` 用的是另一个技巧：用 `long` 的 **0 值表示 null**，省掉两个 `Long` 对象引用：
+
+```java
+// zipkin2/Span.java
+final long timestamp, duration; // zero means null, saving 2 object references
+```
+
+构造器里还有一处防呆：若 `parentId` 等于自身 `id`（某些 instrumentation bug 会造出自引用），直接置空：
+
+```java
+Span(Builder builder) {
+    traceId = builder.traceId;
+    parentId = builder.id.equals(builder.parentId) ? null : builder.parentId; // prevent self-referencing spans
+```
+
+RPC 场景下，客户端（`cs`/`cr`）和服务端（`sr`/`ss`）各报一段、共享同一 `spanId`。合并发生在 `Builder.merge`——它把另一段里「自己为 null」的字段补上，并 **或运算** flags：
+
+```java
+// zipkin2/Span.java
+public Builder merge(Span source) {
+    if (traceId == null) traceId = source.traceId;
+    if (id == null) id = source.id;
+    if (parentId == null) parentId = source.parentId;
+    if (kind == null) kind = source.kind;
+    if (name == null) name = source.name;
+    if (timestamp == 0L) timestamp = source.timestamp;
+    if (duration == 0L) duration = source.duration;
+    // ... endpoints 递归 merge ...
+    flags = flags | source.flags;
+    return this;
+}
+```
+
+`build()` 做最后的合法性校验，并处理两个边界：若 `id == parentId` 撤销这条「回环依赖」；若 `shared` 被错误地标在 **CLIENT** 侧，直接清掉——源码注释明说 shared 只属于服务端：
+
+```java
+public Span build() {
+    String missing = "";
+    if (traceId == null) missing += " traceId";
+    if (id == null) missing += " id";
+    if (!missing.isEmpty()) throw new IllegalStateException("Missing :" + missing);
+    if (id.equals(parentId)) { /* undo circular dependency */ parentId = null; }
+    // shared is for the server side, unset it if accidentally set on the client side
+    if ((flags & FLAG_SHARED) == FLAG_SHARED && kind == Kind.CLIENT) {
+        shared(null);
+    }
+    return new Span(this);
+}
+```
+
 ## Links
 
 - [Zipkin](/docs/CS/Distributed/Tracing/Zipkin.md) — 枢纽页

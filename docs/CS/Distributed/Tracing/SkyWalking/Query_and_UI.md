@@ -45,7 +45,7 @@ query {
 - [SkyWalking](/docs/CS/Distributed/Tracing/SkyWalking.md) — 枢纽页
 - [SkyWalking OAP Backend and Storage](/docs/CS/Distributed/Tracing/SkyWalking/Collector_and_Storage.md) — 指标来源与告警
 - [SkyWalking Data Model](/docs/CS/Distributed/Tracing/SkyWalking/Data_Model.md) — 返回的 Span / Segment 字段
-- [SkyWalking Internals](/docs/CS/Distributed/Tracing/SkyWalking/Internals.md) — 拓扑边的推导与聚合来源
+- [SkyWalking 拓扑与告警](/docs/CS/Distributed/Tracing/SkyWalking/Topology_Alarm.md) — 拓扑边的摄入期派生与双端检测
 - [Zipkin Query and UI](/docs/CS/Distributed/Tracing/Zipkin/Query_and_UI.md) — REST API 对照
 - [Grafana](/docs/CS/Distributed/Tracing/Grafana.md) — 也可通过 SkyWalking Grafana 插件在 Grafana 看拓扑
 
