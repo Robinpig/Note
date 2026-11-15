@@ -68,7 +68,7 @@ Dubbo 的超时检测是时间轮的另一个典型用法：`DefaultFuture` 每�
 
 RocketMQ 有两条实现路径，理解它们能看清"固定级别"与"任意时间点"的代价差别。固定延迟（18 级）把 topic 改写成 `SCHEDULE_TOPIC_XXXX` 并按级别分队列，每一级一个定时器线程顺序扫该队列、到期后搬回原 topic；任意时间点投递则用 `rmq_sys_wheel_timer` + `TimerMessageStore`，槽位粒度 1 秒、指针每秒推进一格（见 [固定延迟](/docs/CS/MQ/RocketMQ/Broker.md?id=fixed-delay) 与 [指定时间点](/docs/CS/MQ/RocketMQ/Broker.md?id=specify-point-in-time)）。
 
-RabbitMQ 没有原生延时队列，靠 **TTL + 死信交换机**拼：消息（或队列）设 TTL，过期后被投到 DLX。致命细节是**过期消息只在到达队首时才被丢弃**，所以"队列深度一直涨但里面的消息早该过期"是正常行为而非泄漏，需要即时释放就得换队列级 TTL（见 [两种 TTL 方式](/docs/CS/MQ/RabbitMQ.md?id=two-types-of-ttl-approaches)）。4.3 quorum queue 的 `x-delayed-retry-*` 是消费失败退避重试，不要当成定时投递。
+RabbitMQ 没有原生延时队列，靠 **TTL + 死信交换机**拼：消息（或队列）设 TTL，过期后被投到 DLX。致命细节是**过期消息只在到达队首时才被丢弃**，所以"队列深度一直涨但里面的消息早该过期"是正常行为而非泄漏，需要即时释放就得换队列级 TTL（见 [两种 TTL 方式](/docs/CS/MQ/RabbitMQ/Message_Lifetime_and_DLX.md)）。4.3 quorum queue 的 `x-delayed-retry-*` 是消费失败退避重试，不要当成定时投递。
 
 ActiveMQ/Artemis 用消息属性 `_AMQ_SCHED_DELIVERY`（未来毫秒时间戳）实现 Scheduled Messages；Kafka **原生不支持**，只能自建"延迟 topic + 时间轮"或引入外部调度（见 [ActiveMQ](/docs/CS/MQ/ActiveMQ.md)）。
 
