@@ -45,10 +45,10 @@ Claude Code、Codex、Manus、Cursor 等产品定位不同，处理复杂任务�
 | **4. 子任务委派** | 长任务分片并行；也用于隔离污染主上下文的副作用输出 | [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) 的 SubAgent、[OpenCode](/docs/CS/AI/LLM/Agent/Product/OpenCode/OpenCode.md) 的三个内置子 Agent |
 | **5. 状态恢复** | 失败级联与中断的解药：让长任务能断点续跑 | [DSH](/docs/CS/AI/LLM/Agent/Product/DSH/DSH.md) 的 Session 持久化、[Codex](/docs/CS/AI/LLM/Agent/Product/Codex/Codex.md) 的 Rollout |
 | **6. 权限控制** | 越界执行的解药：区分自决动作与需确认动作 | **[权限与沙箱](/docs/CS/AI/LLM/Agent/Theory/Permission.md)** |
-| **7. 可观测性** | 让 Agent 的行为可审计——企业落地的硬前提 | [权限与沙箱](/docs/CS/AI/LLM/Agent/Theory/Permission.md) 的企业策略注入一节 |
+| **7. 可观测性** | 让 Agent 的行为可审计——企业落地的硬前提 | **[可观测性](/docs/CS/AI/LLM/Agent/Theory/Observability.md)** |
 | **8. 上下文管理** | 上下文溢出的解药：按需读取 + 主动压缩 | **[上下文压缩](/docs/CS/AI/LLM/Agent/Theory/Compaction.md)** |
 
-其中第 6 与第 8 项是两篇独立专页——它们虽然只是八项里的两项，却是**最容易被实现错、且错了代价最大**的两项：权限配错会让 Agent 删掉不该删的文件，压缩策略配错会让长任务在十几轮后「忘记自己为什么出发」。
+其中第 6 与第 8 项是两篇独立专页——它们虽然只是八项里的两项，却是**最容易被实现错、且错了代价最大**的两项：权限配错会让 Agent 删掉不该删的文件，压缩策略配错会让长任务在十几轮后「忘记自己为什么出发」。第 7 项（可观测性）同样有一篇专页：它与传统服务可观测性有四点根本差异（非确定性主体、自激风险、数据即敏感内容、观测面也受权限约束），核心材料取自 Codex 的 OTel 实现。
 
 > ⚠️ **一项值得注意的规律**：这八项里**只有第 1 项是几乎所有产品都做的**（文件操作），其余七项的实现深度在各产品间差异极大。判断一个 Agent 产品的成熟度，不是看它「有没有规划功能」，而是看**压缩策略、权限粒度、恢复语义这三项做得对不对**——前两项决定了它能不能在真实项目里跑长任务，后一项决定了它出问题时能不能接上。
 
@@ -178,10 +178,13 @@ Codex 把"能不能执行一个动作"拆成四层，缺一不可：
 4. 保留取消与重连语义，任务状态不要存在前端内存里
 5. 先定风险边界（文件可写、工具只读、动作需批准），再写提示词
 
+可观测性作为第 7 项共性怎么落，「四种失效模式 → 观测信号」的映射与设计检查单见 [可观测性](/docs/CS/AI/LLM/Agent/Theory/Observability.md) 专页。
+
 ## Links
 
 - [Agent 目录](/docs/CS/AI/LLM/Agent/README.md)
 - [上下文压缩](/docs/CS/AI/LLM/Agent/Theory/Compaction.md) / [权限与沙箱](/docs/CS/AI/LLM/Agent/Theory/Permission.md) — 八项共性里最吃重的两项专页
+- [可观测性](/docs/CS/AI/LLM/Agent/Theory/Observability.md) — 八项共性第 7 项专页：从失效模式反推观测信号
 - [Self-Evolving](/docs/CS/AI/LLM/Agent/Practice/Self-Evolving.md)
 - [Codex](/docs/CS/AI/LLM/Agent/Product/Codex/Codex.md) / [DSH](/docs/CS/AI/LLM/Agent/Product/DSH/DSH.md) — 两个 Harness 工程实例（Codex 有源码级分析）
 - [LLM 应用开发平台](/docs/CS/AI/LLM/Platform/Platform.md) — Harness 的产品化形态：Coze / Dify 把这套执行面做成了默认件

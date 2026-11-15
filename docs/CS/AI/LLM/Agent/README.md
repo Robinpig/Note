@@ -6,11 +6,11 @@
 
 | 分层 | 装什么 | 
 | :--- | :--- |  
-| Theory | 机制与概念：Agent 四组件、经典范式、Harness 工程、权限与沙箱、Skill 规范、上下文压缩 |  
+| Theory | 机制与概念：Agent 四组件、经典范式、Harness 工程、权限与沙箱、Skill 规范、上下文压缩、可观测性 |  
 | Product | 具体的 Agent 产品与框架实现 |  
 | Practice | 演进方向与开发方式的自变化 | 
 
-## How the Six Theory Articles Divide Responsibilities
+## How the Seven Theory Articles Divide Responsibilities
 
 这几篇的关系是**从抽象到具体**，不是并列：
 
@@ -26,6 +26,8 @@
 
 **Compaction** 讲长会话怎么在窗口耗尽前活下来。它最反直觉的地方在**代价结构**上：压缩不是免费的，而是拿「模型对原始上下文的可见性」换「更长的会话时长」——厂商承认能力会下降（Codex 每次压缩后向用户发警告，说长线程与多次压缩会让模型变得不够准确）。这篇的骨架是六件事：阈值怎么定（**几乎全是 token 预算，不是「最近 N 轮」**）、保留什么、摘要由谁生成（**基本都要额外调一次 LLM**）、能否恢复（**原文通常还在盘上，但模型几乎都取不回**）、失败怎么处理、以及和 KV 缓存的交互（**各家在压缩过程中刻意在保缓存**：DSH 把指令放在回放前缀之后以复用热前缀，Claude Code 复用 system prompt 层，Pi 干脆禁掉摘要请求的 cache 写入）。附一张五家对比表与「陷阱」清单——其中「压缩会不会丢 skill 正文」的精确答案在 Claude Code 官方表里：**会重新注入，但每 skill 上限 5K、总计 25K token，超限时最老的先被丢弃**，这比直接消失更隐蔽。
 
+**Observability** 讲怎么观测一个会自己决策的循环。它最反直觉的地方在**主数据结构的选择**上：观测的基础不是 trace 而是回放记录——既然模型决策不可复现，就必须完整记录 I/O，而这份记录恰好就是崩溃恢复需要的那份，所以观测应该建立在持久化之上而非另建一套。它与传统服务可观测性有四点根本差异（非确定性主体、遥测自激、观测数据即用户代码、观测面不能绕过权限），核心框架提炼自 Codex 的 OTel 实现：四种失效模式各自对应一组必须可见的信号，外加一张八条的设计检查单。
+
 ## Product: Ten Implementations
 
 编程 Agent 是这一层最成熟的产品形态，几家的差异比想象中大，**不在「谁更强」而在架构选择**：
@@ -37,7 +39,7 @@
 - **[DSH](/docs/CS/AI/LLM/Agent/Product/DSH/DSH.md)** 是**架构哲学最激进的一个**：「一切皆插件」，连驱动 Agent 运转的主循环都只是默认插件实现之一，没有特权内核。已拆分为枢纽主文件 + 7 个子文件（Cordis 微内核、Agent Loop & Session、Context/Memory/Knowledge、Permission & Sandbox、Subprocess Management、Tool Layer、Plugin Development），逐行源码剖析覆盖了 Fiber 状态机、事件分派五模式、进程树收割六类死法等底层机制。
 - **[OpenClaw](/docs/CS/AI/LLM/Agent/Product/OpenClaw/OpenClaw.md)** 走的是另一条路：**本地优先的个人助手网关**，核心是接管 20 多种通讯软件 + 多 agent 路由，不服务于「写代码」这件事。已拆分为枢纽主文件 + 15 个专题页（Gateway / Lifecycle / Clients / Deployment / Runtime / Memory / SubAgent / Process / Channels / Storage / Plugins / Integrations / Media / Security / Observability），源码级覆盖 18789 单端口协议面、worker placement 的 turn claim 权威链、SQLite-only 存储与 context engine 插件化压缩。
 - **[Hermes](/docs/CS/AI/LLM/Agent/Product/Hermes/Hermes.md)** 是 **Nous Research 开源、MIT 许可的自进化个人 AI agent**：同一套 agent core 跑在 CLI / TUI / 消息网关（约 27 个平台）/ Electron 桌面端，跨会话持续沉淀记忆与 Skill，用 40+ 个 model-provider、在本地硬件或云端 24/7 运行。已拆分为枢纽主文件 + 8 个专题页（Architecture / AgentLoop / Tools / Skills / Memory / Gateway / Evolve / Extensions / Infrastructure），源码级覆盖 facade/siblings 三层骨架、34 段 turn 循环、registry 自发现 28 toolset、curator 自进化 Skill 生命周期与 background review 复盘、FTS5+CJK 会话检索、双消息守卫网关、「插件不碰 core」铁律，以及 fts5_cjk / pm / docker / acp_adapter 差异化基建。与 OpenClaw 同源本地优先个人助手路线，并显式提供 `hermes claw migrate` 一键迁移。
-- **[AgentScope](/docs/CS/AI/LLM/Agent/Product/AgentScope/AgentScope.md)** 是这层里**唯一的通用 Python Agent 框架**（非编程 Agent 产品），阿里巴巴开源，v2.0 起把 Framework 和 Harness 两层合并：单一 `Agent` 类内置 ReAct 循环、七 hook 中间件、五模式权限引擎、结构化上下文压缩与运行时状态注入，往下有 formatter / workspace 沙箱 / RAG / Skill 四套基础设施，再往上附带 FastAPI Agent Service（多租户、频道接入、Hub、调度）。源码级剖析见该文。
+- **[AgentScope](/docs/CS/AI/LLM/Agent/Product/AgentScope/AgentScope.md)** 是这层里**唯一的通用 Python Agent 框架**（非编程 Agent 产品），阿里巴巴开源，v2.0 起把 Framework 和 Harness 两层合并：单一 `Agent` 类内置 ReAct 循环、七 hook 中间件、五模式权限引擎、结构化上下文压缩与运行时状态注入，往下有 formatter / workspace 沙箱 / RAG / Skill 四套基础设施，再往上附带 FastAPI Agent Service（多租户、频道接入、Hub、调度）。已拆为枢纽主文件 + 13 个专题页（Tool / Model / Middleware / RAG / Realtime / Pipeline / App / AgentLoop / SOP / Classifier / VoiceStack / TUI / Memory），**全部以 v2.0.11（2026-10-27，当前最新正式版）为基线逐文件重核**：枢纽含一张 v2.0.8 旧基线的 Corrections 反例表与逐 tag 的 Version Evolution，覆盖 `_reply_impl` 三动作状态机、外部执行契约、SOP 存储过程式流程约束、概率分类与逐 reply 选模、ASR/TTS/Realtime 语音三栈、WebRTC transport 与 Textual TUI；[Memory 分册](/docs/CS/AI/LLM/Agent/Product/AgentScope/Memory.md) 则按「短期压缩 / 三套长期记忆中间件 / SessionRecord 持久化 / workspace 只写归档」四层互不连通的地图重讲记忆实现，并纠掉 `file://` → `workspace://`、`bypass_immune=True` 无出处等旧结论。
 - **[AgentScopeJava](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/AgentScopeJava.md)** 与上面的 AgentScope 是**同族不同语言的两个独立框架**（`agentscope-java` 仓库，Java 21+/Reactor 响应式），不是后者的移植版——Event/Message 模型、Session Log 持久化、沙箱后端选型都是独立设计。它把 Session Log（commits/blobs/inbox 三层结构 + 原子 CAS）做成一等模块，往下扩出 Workspace（文件系统模式 × 沙箱后端 × IsolationScope 三维）、Skill（四层合成 + 市场后端 + 自学习闭环）与 SubAgent（同步/后台/远程三态）。已拆分为枢纽主文件 + 7 个子文件。
 
 一篇横向对照见 [OpenCode 与 Claude Code 的对照表](/docs/CS/AI/LLM/Agent/Product/OpenCode/OpenCode.md?id=comparison-with-claude-code)，它把客户端架构、模型绑定、规则文件兼容性与扩展方式逐项列出。另有 [cc-haha 的三向对照](/docs/CS/AI/LLM/Agent/Product/CcHaha/Comparison.md)，把 Claude Code / OpenCode / cc-haha 的开源路线、内核形态、权限模型、多 Agent 编排（含 cc-haha 的 Dynamic Workflow 真功能）、Computer Use、MCP/Skill、IM/远控逐项并列。
@@ -60,7 +62,7 @@
 | :--- | :--- | :--- | :--- |
 | **Loop** | 调用模型→执行工具→观察结果的循环 | 以为「调用工具」是模型的能力 | [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) |
 | **Tools** | 模型可调用的具体能力 | 以为 Tool 承担「怎么做」 | [Tools](/docs/CS/AI/LLM/Protocol/Tools.md) / [MCP](/docs/CS/AI/LLM/Protocol/MCP.md) |
-| **Memory** | 管理每轮 Context 的存读写 | 以为必须用向量数据库 | [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) |
+| **Memory** | 管理每轮 Context 的存读写 | 以为必须用向量数据库 | [Agent](/docs/CS/AI/LLM/Agent/Theory/Agent.md) / [AgentScope Memory](/docs/CS/AI/LLM/Agent/Product/AgentScope/Memory.md) |
 | **Harness** | 基础设施：错误处理、权限、编排 | 以为组件越多越好 | [Harness](/docs/CS/AI/LLM/Agent/Theory/Harness.md) |
 | **Skill** | 可复用的方法打包成目录 | 以为是一次性提示词 | [Skill](/docs/CS/AI/LLM/Agent/Theory/Skill.md) |
 
@@ -75,3 +77,4 @@
 - [Paradigm](/docs/CS/AI/LLM/Agent/Theory/Paradigm.md)
 - [Permission](/docs/CS/AI/LLM/Agent/Theory/Permission.md)
 - [Compaction](/docs/CS/AI/LLM/Agent/Theory/Compaction.md)
+- [Observability](/docs/CS/AI/LLM/Agent/Theory/Observability.md)
