@@ -14,6 +14,7 @@ resources:
 
 - **requests**：调度器按"节点已分配 requests 之和 + 本 Pod requests"判断是否放得下；也是 kubelet 给 cgroup 设的**保证下限**（被压缩时最后才被抢）。
 - **limits**：运行时上限。CPU 超限只被 CFS 限流（throttle），**不会被杀**；内存超限被 OOMKill（退出码 137），因为内存不可压缩。
+- **v1.34 起可在 Pod 级声明**：`spec.resources`（`PodLevelResources` Beta 默认开启）允许直接给整个 Pod 设总量，kubelet 再拆给容器并挂 Pod 级 cgroup；对 `oom_score_adj` 公式也有影响，机制细节见 [Pod 的 Pod-level Resources 一节](/docs/CS/Container/k8s/Pod.md?id=why-pod-level-resources（v134-beta）)。
 
 > [!TIP]
 > CPU 用"可压缩资源"、内存用"不可压缩资源"——这是后面所有调度、QoS、驱逐行为的根。CPU 超了只是慢，内存超了直接死。

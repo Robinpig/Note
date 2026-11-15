@@ -1,9 +1,11 @@
 ## Introduction
 
+> [!NOTE]
+> 本文源码片段基于 **Kubernetes v1.37.2**（`pkg/controller/job/job_controller.go`）逐字核对。`JobBackoffLimitPerIndex` / `JobPodSuccessPolicy` / `JobPodReplacementPolicy` / `JobPodFailurePolicy` 等 gate 均已 GA 并从代码中移除（行为恒开），唯一还在的 `JobManagedBy` 自 v1.35 起 GA + LockToDefault。
 
 入口函数 `cmd/kube-controller-manager/app/batch.go`
 
-```c
+```go
 func startJobController(ctx context.Context, controllerContext ControllerContext, controllerName string) (controller.Interface, bool, error) {
     jobController, err := job.NewController(
         ctx,
@@ -21,7 +23,7 @@ func startJobController(ctx context.Context, controllerContext ControllerContext
 
 NewController creates a new Job controller that keeps the relevant pods in sync with their corresponding Job objects.
 
-```c
+```go
 // pkg/controller/job/job_controller.go
 func NewController(ctx context.Context, podInformer coreinformers.PodInformer, jobInformer batchinformers.JobInformer, kubeClient clientset.Interface) (*Controller, error) {
     return newControllerWithClock(ctx, podInformer, jobInformer, kubeClient, &clock.RealClock{})
@@ -90,7 +92,7 @@ func newControllerWithClock(ctx context.Context, podInformer coreinformers.PodIn
 ```
 
 addJob
-```c
+```go
 func (jm *Controller) addJob(logger klog.Logger, obj interface{}) {
     jm.enqueueSyncJobImmediately(logger, obj)
     jobObj, ok := obj.(*batch.Job)
@@ -109,7 +111,7 @@ func (jm *Controller) enqueueSyncJobImmediately(logger klog.Logger, obj interfac
 ```
 
 
-```c
+```go
 func (jm *Controller) updateJob(logger klog.Logger, old, cur interface{}) {
     oldJob := old.(*batch.Job)
     curJob := cur.(*batch.Job)
@@ -155,7 +157,7 @@ func (jm *Controller) updateJob(logger klog.Logger, old, cur interface{}) {
 
 
 
-```c
+```go
 func (jm *Controller) enqueueSyncJobInternal(logger klog.Logger, obj interface{}, delay time.Duration) {
 	key, err := controller.KeyFunc(obj)
 	if err != nil {
@@ -178,7 +180,7 @@ func (jm *Controller) enqueueSyncJobInternal(logger klog.Logger, obj interface{}
 addPod
 
 
-```c
+```go
 // When a pod is created, enqueue the controller that manages it and update its expectations.
 func (jm *Controller) addPod(logger klog.Logger, obj interface{}) {
     pod := obj.(*v1.Pod)
@@ -296,7 +298,7 @@ func (jm *Controller) updatePod(logger klog.Logger, old, cur interface{}) {
 
 ## Run
 
-```c
+```go
 // pkg/controller/job/job_controller.go
 func (jm *Controller) Run(ctx context.Context, workers int) {
     defer utilruntime.HandleCrash()
@@ -333,7 +335,7 @@ func (jm *Controller) Run(ctx context.Context, workers int) {
 worker
 
 
-```c
+```go
 // worker runs a worker thread that just dequeues items, processes them, and marks them done.
 // It enforces that the syncHandler is never invoked concurrently with the same key.
 func (jm *Controller) worker(ctx context.Context) {
@@ -364,7 +366,7 @@ func (jm *Controller) processNextWorkItem(ctx context.Context) bool {
 syncHandler 在 newControllerWithClock 已经赋值为 syncJob函数
 
 
-```c
+```go
 // syncJob will sync the job with the given key if it has had its expectations fulfilled, meaning
 // it did not expect to see any more of its pods created or deleted. This function is not meant to be invoked
 // concurrently with the same key.
@@ -620,7 +622,7 @@ func (jm *Controller) syncJob(ctx context.Context, key string) (rErr error) {
 
 
 
-```c
+```go
 // manageJob is the core method responsible for managing the number of running
 // pods according to what is specified in the job.Spec.
 // Respects back-off; does not create new pods if the back-off time has not passed
@@ -827,10 +829,12 @@ func (jm *Controller) manageJob(ctx context.Context, job *batch.Job, jobCtx *syn
 - 在入列的时候，immediate 参数为 true 则立即加入队列，否则根据失败次数计算退避时间再再次加入到延迟队列。
 - 在更新 job 对象的时候，会计算 ActiveDeadlineSeconds 时间，如果对比上次更新多了 ActiveDeadlineSeconds 字段，则计算出延迟加入队列的时间再入列。
 - job 控制器也引入了 pod 控制器，用来创建/删除/更新 pod 信息，这个 pod 控制器是再 controller_util 里面对 Clientset 操作 Pod 接口的再封装。
-- 监听到 pod 事件时， 先判断 pod 是否处于删除状态，再判断 pod 是否属于 job 对象的，是的话，将 pod 的父对象加入队列，更新 job 对象的状态什么的。
-- 我们注意到一直提到 ControllerExpectations 这个东西，这个按我目前的理解是类似于 sync.WaitGroup ，期望创建的 Pod 的数量为 N (等同于 sync.WaitGroup.Add(N) )，监视( SharedIndexInformer 的 Pod 的事件)到一个Pod创建成功就会通知 ControllerExpectations 对期望创建的 Pod 数量减一(等同于 sync.WaitGroup.Done() )
-- 正是由于有 ControllerExpectations 这个的存在，syncJob 才能处理 job 对象看起来像在同步操作一样，直到期望达成才进入下一步的操作。
-- manageJob 这里是控制 pod 数量的地方，多则删除，少则新增。
+读完全文可以提炼出四条机制主线：
+
+1. **事件驱动的主循环**：监听到 Pod 事件时，先判断 Pod 是否处于删除状态，再判断 Pod 是否属于某个 Job；是的话把 Pod 的父对象（Job）加入队列，触发一轮 sync。
+2. **ControllerExpectations 是"计数对账"机制**：语义类似 `sync.WaitGroup`——期望创建的 Pod 数为 N（等价于 `Add(N)`），informer 观察到一个 Pod 创建成功就对期望数减一（等价于 `Done()`）。它的存在让 `syncJob` 在期望未达成时跳过本轮操作，防止Pod 创建请求因事件乱序而重复下发。
+3. **双队列结构**：主队列 `job` 处理正常调和（spec 变更立即入队、仅 status 变更批量化延迟入队），`job_orphan_pod` 队列专门处理"孤儿 Pod"（owner 已不存在的 Pod 清理），两者都是 `TypedRateLimitingQueue`（1s 起步指数退避、上限 1min）。
+4. **`manageJob` 是副本数控制点**：多则删除、少则新增，配合 `finalizerExpectations`（跟踪带 `job-tracking` finalizer 的 Pod UID）确保"Pod 已结束"与"计数已落库"不断档。Job 语义层（backoffLimit、Indexed、successPolicy 等）的展开见 [Workloads](/docs/CS/Container/k8s/Workloads.md) 的 Job 一节。
 
 
 
@@ -842,4 +846,13 @@ func (jm *Controller) manageJob(ctx context.Context, job *batch.Job, jobCtx *syn
 ## Links
 
 - [controller manager](/docs/CS/Container/k8s/controller-manager.md)
+- [Workloads](/docs/CS/Container/k8s/Workloads.md)
+- [删除与级联](/docs/CS/Container/k8s/Deletion.md)
 - [K8s 架构与四条主链路](/docs/CS/Container/k8s/Architecture.md)
+
+## References
+
+1. [Kubernetes v1.37.2 pkg/controller/job](https://github.com/kubernetes/kubernetes/tree/v1.37.2/pkg/controller/job)
+2. [Jobs - Kubernetes 文档](https://kubernetes.io/docs/concepts/workloads/controllers/job/)
+3. [KEP-2302: Job Pod Success Policy](https://github.com/kubernetes/enhancements/tree/master/keps/sig-apps/2302-job-pod-success-policy)
+4. [KEP-3850: Backoff Limit Per Index](https://github.com/kubernetes/enhancements/tree/master/keps/sig-apps/3850-backoff-limit-per-index)

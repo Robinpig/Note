@@ -76,7 +76,7 @@ roleRef:
 - 内置插件：`NamespaceLifecycle`（向不存在的 namespace 创建对象会被拒）、`ResourceQuota`（配额检查）、`LimitRanger`（注入默认资源限制）、`ServiceAccount`（自动挂载 SA token）等。
 - 动态扩展：**Admission Webhook**（MutatingWebhookConfiguration / ValidatingWebhookConfiguration），是 Istio sidecar 自动注入、OPA Gatekeeper 策略引擎的实现基础。
 
-在请求里的位置：认证与授权都在 filter chain 里完成，而准入发生在 **REST handler 内部**——对象解码之后、写 etcd 之前，且 mutating 与 validating 被拆在两处。完整链路见 [apiserver 写路径](/docs/CS/Container/k8s/apiserver.md?id=write-path)。
+在请求里的位置：认证与授权都在 filter chain 里完成，而准入发生在 **REST handler 内部**——对象解码之后、写 etcd 之前，且 mutating 与 validating 被拆在两处。完整链路见 [apiserver 写路径](/docs/CS/Container/k8s/apiserver.md?id=the-create-pipeline-from-bytes-to-an-object)。
 
 ### Execution Order Is a Table, Not Registration Order
 

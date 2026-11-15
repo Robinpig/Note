@@ -75,7 +75,7 @@ sudo crictl inspect -o json $CID | jq -r '.status.metadata.name' # 容器名
 
 `kubectl debug node/<node> -it --image=alpine` 起出来的调试 Pod 直接使用宿主机的 PID/Network/IPC namespace，宿主机根文件系统挂在 `/host`，没有 ssh 权限时用它最省事。
 
-pause（沙箱）容器也是普通容器，要看 Pod 共享的那张网络栈，先 `crictl pods --name <pod>` 拿到沙箱 ID，再用 `crictl ps --pod <沙箱ID>` 找到 pause 容器本身，最后同样 inspect 取 `.info.pid`。pause 持有 net/ipc/uts ns 的机制见 [pause 容器](/docs/CS/Container/k8s/Pod.md?id=pause-container)。
+pause（沙箱）容器也是普通容器，要看 Pod 共享的那张网络栈，先 `crictl pods --name <pod>` 拿到沙箱 ID，再用 `crictl ps --pod <沙箱ID>` 找到 pause 容器本身，最后同样 inspect 取 `.info.pid`。pause 持有 net/ipc/uts ns 的机制见 [pause 容器](/docs/CS/Container/k8s/Pod.md?id=sandbox-and-the-pause-container)。
 
 ## Find Container from Host PID
 
