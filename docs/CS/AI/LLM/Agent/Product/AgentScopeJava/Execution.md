@@ -55,7 +55,7 @@
 ## Event Stream Source
 
 - 真正 emit 事件的是 **`FluxSink`**，不是 `Sinks.Many`：`buildAgentStream` 用 `Flux.create` 拿 `FluxSink<AgentEvent>`（ReActAgent.java:1041-1045），`OverflowStrategy.BUFFER`（`:1095`）。
-- 发布统一走 `CallExecution.publishEvent` → `FluxSink.next`（`:2226-2233`）；`AgentEventEmitter` 是工具侧函数式接口 = `sink::next`（event/AgentEventEmitter.java:38-39 / :63-64 注释 "the underlying FluxSink.next is thread-safe"）。
+- 发布统一走 `CallExecution.publishEvent` → `FluxSink.next`（`:2226-2233`）；`AgentEventEmitter` 是工具侧函数式接口 = `sink::next`（event/AgentEventEmitter.java:38-39 / :63-64 注释 "the underlying FluxSink.next is thread-safe"）。这些 `AgentEvent` 既是 `call` 的消费源，也是可观测性的接入点——它们如何被追踪为 OpenTelemetry span、被 legacy hook 导出为 JSONL，见 [可观测性分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Observability.md)。
 - **背压与多订阅者**：BUFFER = 无界缓冲，不丢事件、不向下游传导背压。`Flux.create` 是冷流、非多播，每次订阅独立 sink（ReActAgent.java:1141-1142 "each subscription gets its own event sink and lifecycle execution"）；`AgentStartEvent` / `AgentEndEvent` / `AgentResultEvent` 都写进订阅专属 sink。事件类型枚举 `AgentEventType` 共 **31** 值（event/AgentEventType.java:42-90），功能语义见 [消息分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Message.md)。
 
 ## Message Aggregation

@@ -2,7 +2,7 @@
 
 ## Introduction
 
-AgentScope Java 的输出模型是**消息（Msg）+ 事件（AgentEvent）双视图**：`call` 消费全部事件后还你一条完整 `Msg`，`streamEvents` 把执行过程逐事件交给你。本分册记录这两套类型的完整事实，以及与 harness 远程线格式、Service 持久事件、公共 SSE 的边界。
+AgentScope Java 的输出模型是**消息（Msg）+ 事件（AgentEvent）双视图**：`call` 消费全部事件后还你一条完整 `Msg`，`streamEvents` 把执行过程逐事件交给你。本分册记录这两套类型的完整事实，以及与 harness 远程线格式、Service 持久事件、公共 SSE 的边界。这两套事件如何被追踪为 OpenTelemetry span、被 legacy hook 导出为 JSONL，见 [可观测性分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Observability.md)。
 
 本分册所有类名、字段名、枚举值均核对自本地 `v2.0.4` 源码树（`agentscope-core/src/main/java/io/agentscope/core/event/`、`.../message/`、`agentscope-harness/.../subagent/protocol/`、`agentscope-service/`），与官方文档冲突处以源码为准。
 

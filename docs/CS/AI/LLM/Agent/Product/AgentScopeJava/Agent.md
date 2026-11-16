@@ -110,6 +110,8 @@ WeatherResponse weather = result.getStructuredData(WeatherResponse.class);
 
 高级用法：自行管理单次执行。`prepareRun(messages, context)`（事件流，返回 `AgentRun<AgentEvent>`）与 `prepareCall(messages, context)`（最终回复，返回 `AgentRun<Msg>`）产出带唯一 `runId()` 的 `AgentRun<T>`。**创建句柄不执行 Agent，订阅一次 `stream()` 才开始**（`AgentRun.java:107-110`，`runId` 是 `UUID.randomUUID().toString()`）：
 
+这些事件流既是 `call` 的消费源，也是可观测性的接入点；事件如何被追踪为 OpenTelemetry span、被导出为 JSONL，见 [可观测性分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Observability.md)。
+
 ```java
 AgentRun<AgentEvent> run = agent.prepareRun(List.of(new UserMessage("你好")), context);
 String runId = run.runId();          // 先在应用的运行管理器里登记句柄

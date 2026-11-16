@@ -147,6 +147,338 @@ digraph ExecutionChain {
 
 ⚠️ 一个边界：第 ④ 步的「组激活闸门」与第 ② 步的「权限引擎」是**两套独立的可用性/放行机制**——前者管「这个工具在当前激活组里可不可见」，后者管「这次调用批不批准」。外部工具经 `ToolRequestConfig` 注入时不受组激活约束（同名的未激活后端工具不能拒绝它，模型看到的是外部覆盖）。
 
+## Execution Engine Internals
+
+[Execution Chain](#execution-chain) 第 ③、④ 步提到了「并发分区」和「基础设施层」，但没展开。`ToolExecutor`（`tool/ToolExecutor.java`）把一次工具调用拆成「单工具核心 `executeCore`」+「四层基础设施」两层，批量入口 `executeAll` 再叠加并发控制。本节把这两层讲透——它们决定了工具执行的**线程模型、超时 / 重试 / 优雅关闭语义、以及并发安全性**，是理解「为什么工具执行有时慢、有时被取消、有时顺序和请求不一致」的关键。
+
+### Four Infrastructure Layers (executeWithInfrastructure)
+
+`executeWithInfrastructure`（`ToolExecutor.java:454-489`）对 `executeCore` 返回的 `Mono<ToolResultBlock>` 依次叠加四层（`ToolExecutor.java:472-476`）：
+
+| 层 | 实现（`ToolExecutor.java`） | 默认行为 |
+| :--- | :--- | :--- |
+| 调度 Scheduling | `execution.subscribeOn(Schedulers.boundedElastic())` | 工具方法多为阻塞 I/O，离开事件循环线程、落到 Reactor 专为阻塞 I/O 设计的弹性线程池；`ToolkitConfig.executorService != null` 时改用 `Schedulers.fromExecutor(...)` |
+| 超时 Timeout | `execution.timeout(timeout, Mono.error(new RuntimeException(...)))` | Reactor 操作符，超时即取消订阅并 error；**默认 5 分钟**（见 [ToolkitConfig Defaults](#toolkitconfig-defaults)） |
+| 重试 Retry | `Retry.backoff(maxAttempts-1, initialBackoff).maxBackoff(maxBackoff).jitter(0.5).filter(retryOn)` | **默认 `maxAttempts=1`（不重试）**；若 >1，指数退避、上限 10s、抖动 0.5、按 `retryOn` 过滤 |
+| 优雅关闭 Shutdown | `Mono.firstWithSignal(execution, shutdownGuard)` | 与 `GracefulShutdownManager` 的关闭超时信号竞速，关机信号一来即取消执行并 error，绝不阻塞进程优雅退出 |
+
+**设计动机（为何这么写）**：
+- **为何调度默认 `boundedElastic` 而非 `parallel()`？** 工具方法（文件读写、HTTP、Shell）本质是阻塞 I/O；Reactor 的 `boundedElastic` 是专为"包裹阻塞调用"设计的弹性线程池（带上限、按需增长），能把阻塞从事件循环（event-loop）线程挪走，避免拖垮整个 reactor 流水线的吞吐。自定义 `ExecutorService` 则用于把工具执行钉进用户指定的线程池（如隔离型线程池）。
+- **为何超时是 Reactor `timeout` 操作符而非手动计时？** 它天然与响应式取消（cancel）对齐——超时触发时不仅发 error，还取消上游订阅；被 `retry` 或 `onErrorResume` 统一收口成 `ToolResultBlock.error`，语义干净，不会留下"已超时但仍在跑"的僵尸调用。
+- **为何重试注释强调「上一次尝试被取消、可能仍在占用资源」？** `Retry.backoff` 取消的是订阅而非底层调用，一个卡住的远程工具在重试间隙可能仍未释放连接 / 锁；这是"重试 ≠ 无缝切换"的提醒，作者据此把"可重试错误"（429/5xx/timeout/网络）作为 `retryOn` 默认过滤条件（`ExecutionConfig.MODEL_DEFAULTS`）。
+- **为何优雅关闭用 `firstWithSignal` 竞速而非等待执行完？** 关闭流程必须有时限——一个 5 分钟超时的工具若等它自然结束，关机将卡死；竞速让"关闭信号"胜出时立即取消工具并降级为 error 结果，执行权交还关机流程。
+
+> 实例方法 `execute(ToolCallParam)` 先解析 per-call 的 `ToolRequestConfig`（来自 RuntimeContext），再转给 `executeCore`；批量 `executeAll` 对每条都调 `executeWithInfrastructure`（即四层仅作用于单工具，批量层再叠加并发控制）。
+
+### ToolkitConfig Defaults
+
+`ToolkitConfig`（`tool/ToolkitConfig.java`）的默认值（Builder 初始值，`defaultConfig()` 即 `builder().build()`）：
+
+| 字段 | 默认值 | 含义 |
+| :--- | :--- | :--- |
+| `parallel` | `true` | 同一轮多个工具调用并行 |
+| `executorService` | `null` | 用 `Schedulers.boundedElastic()` |
+| `executionConfig` | `ExecutionConfig.TOOL_DEFAULTS` | **5 分钟超时、无重试（1 attempt）** |
+| `allowToolDeletion` | `true` | `removeTool()`/`removeToolGroups()`/`updateToolGroups(...,false)` 可调用；置 false 后这些调用被忽略 |
+| `defaultContext` | `null` | `@Deprecated`，改用 `RuntimeContext` |
+
+⚠️ 注意 `executionConfig` 默认等于 `TOOL_DEFAULTS`（`timeout=5min, maxAttempts=1`）——即**工具默认不重试**，只有显式 `.executionConfig(...)` 配了 `maxAttempts>1` 才触发 `Retry.backoff`；对比 `MODEL_DEFAULTS` 是 5min + 3 次重试 + 2s/30s 退避（用于模型调用）。工具与模型用两套不同的弹性默认值，因为工具失败多是不可重试的业务 / 系统错误，盲目重试反而放大副作用（如重复写文件）。
+
+### Concurrency Partitioning (executeAll parallel mode)
+
+[Execution Chain](#execution-chain) 第 ③ 步的「按 `isConcurrencySafe` 分区」在 `executeAll`（`ToolExecutor.java:405-433`）里是这样切的：
+
+- 连续若干个 `safe` 工具收集进 `safeBatch`，用 **`Flux.mergeSequential(safeBatch)`** 并发推进、**输出顺序与输入一致**（保序）；
+- 一旦遇到 `unsafe` 工具（或无法判定的 legacy `AgentTool`），先 flush 当前 safe 批，再让该工具**独占一个串行槽**（`mono.flux()` 单独成 chunk）；
+- 外层 `Flux.concat(chunks)` 按 chunk 顺序**串行**串起所有批 / 槽。
+- `isConcurrencySafe`（`:443-449`）：只对 `ToolBase` 看 `isConcurrencySafe()`（默认 `true`）；legacy `AgentTool`（非 `ToolBase`、无此标志）统一返回 `true`——**保持 2.0 前的并发行为**，即框架默认假设老工具线程安全、由作者自己保证。
+
+串行模式（`parallel=false`）则退化为 `Flux.concat(monos)`：**严格按声明顺序**逐个执行。
+
+```dot
+digraph ConcurrencyPartition {
+  rankdir=TB;
+  node [shape=box, style=rounded, fontname="Helvetica"];
+  subgraph cluster_in { label="executeAll(parallel=true)"; fontname="Helvetica";
+    input [label="tool calls: [A(safe),B(safe),C(unsafe),D(safe),E(safe)]", shape=box];
+    chunk1 [label="chunk1 = mergeSequential(A,B)\n并发 + 保序", style=filled, fillcolor="#d1e7dd"];
+    slotC [label="chunk2 = C\n串行槽(独占)", style=filled, fillcolor="#f8d7da"];
+    chunk2 [label="chunk3 = mergeSequential(D,E)\n并发 + 保序", style=filled, fillcolor="#d1e7dd"];
+    out [label="Flux.concat(chunk1,chunk2,chunk3)\n外层串行 → 顺序结果", shape=box];
+    input -> chunk1 -> slotC -> chunk2 -> out;
+  }
+}
+```
+
+下面是可交互的并发分区可视化（基于 `ToolExecutor.executeAll` 的切分算法）：拖动滑块调节工具数 N，点击任一工具芯片切换 `safe`/`unsafe`，实时观察「连续 safe 段 → 同一 `mergeSequential` 并发批（保序）」与「unsafe 工具 → 独占串行槽」如何被切分，以及外层 `Flux.concat` 如何把各 chunk 按序串成 `R1..RN` 的结果。**注意**：v2.0.4 里 legacy `AgentTool` 也默认 `safe=true`，故初始全为 safe；只有显式继承 `ToolBase` 且声明 `concurrencySafe=false` 的工具才进入串行槽。上方 dot 图为同一逻辑的静态呈现，供未启用脚本的阅读器对照。
+
+<div class="cp-root">
+<style>
+.cp-root{--bg:#ffffff;--bg2:#f6f7f9;--fg:#1a1a1a;--fg2:#52525b;--bd:#e4e4e7;--green:#3b6d11;--green50:#eaf3de;--red:#a4262c;--red50:#fcebeb;--blue:#185fa5;font-family:system-ui,-apple-system,sans-serif;color:var(--fg);}
+@media (prefers-color-scheme: dark){.cp-root{--bg:#1e1e1e;--bg2:#27272a;--fg:#e4e4e7;--fg2:#a1a1aa;--bd:#3f3f46;--green:#97c459;--green50:#1f2f12;--red:#f0898c;--red50:#3a1f1f;--blue:#85b7eb;}}
+.cp-ctrl{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;margin-bottom:14px;}
+.cp-ctrl label{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--fg);min-width:220px;flex:1;}
+.cp-hint{font-size:12px;color:var(--fg2);max-width:340px;line-height:1.5;}
+.cp-hint code{background:var(--bg2);padding:1px 4px;border-radius:4px;border:.5px solid var(--bd);font-size:11px;}
+.cp-chip{cursor:pointer;user-select:none;font-size:12px;padding:7px 10px;border-radius:8px;border:.5px solid var(--bd);background:var(--bg);color:var(--fg);display:inline-flex;align-items:center;gap:6px;transition:border-color .12s,background .12s;}
+.cp-chip:hover{border-color:var(--blue);}
+.cp-chip.safe{border-color:var(--green);}
+.cp-chip.unsafe{border-color:var(--red);}
+.cp-dot{width:8px;height:8px;border-radius:50%;flex:none;}
+.cp-chip.safe .cp-dot{background:var(--green);}
+.cp-chip.unsafe .cp-dot{background:var(--red);}
+.cp-stage{background:var(--bg2);border-radius:10px;padding:14px;margin-bottom:12px;}
+.cp-stage h4{margin:0 0 10px;font-size:13px;color:var(--fg2);font-weight:500;}
+.cp-row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;}
+.cp-chunk{border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px;min-width:128px;}
+.cp-chunk.safe{background:var(--green50);border:.5px solid var(--green);}
+.cp-chunk.unsafe{background:var(--red50);border:.5px solid var(--red);}
+.cp-chunk .cp-tag{font-size:11px;font-weight:600;}
+.cp-chunk.safe .cp-tag{color:var(--green);}
+.cp-chunk.unsafe .cp-tag{color:var(--red);}
+.cp-chunk .cp-tools{display:flex;flex-wrap:wrap;gap:6px;}
+.cp-out{display:flex;flex-wrap:wrap;gap:8px;}
+.cp-res{font-size:12px;padding:7px 12px;border-radius:8px;background:var(--bg);border:.5px solid var(--bd);color:var(--fg);}
+.cp-legend{display:flex;flex-wrap:wrap;gap:16px;font-size:12px;color:var(--fg2);margin-top:4px;}
+.cp-legend span{display:flex;align-items:center;gap:5px;}
+.cp-sw{width:11px;height:11px;border-radius:2px;border:.5px solid var(--bd);}
+</style>
+<div class="cp-ctrl">
+  <label>工具数量 N（executeAll 输入长度）
+    <input id="cp-n" type="range" min="3" max="8" step="1" value="5" style="width:100%">
+    <span style="font-size:12px;color:var(--fg2);">当前：<b id="cp-nOut">5</b> 个工具</span>
+  </label>
+  <div class="cp-hint">点击①中任一工具芯片切换 <code>safe</code>/<code>unsafe</code>。<code>unsafe</code> 工具会独占一个串行槽；<code>safe</code> 连续段被收进同一 <code>mergeSequential</code> 并发批（保序）。</div>
+</div>
+<div class="cp-stage">
+  <h4>① 输入（点击切换 safe / unsafe）</h4>
+  <div id="cp-input" class="cp-row"></div>
+</div>
+<div class="cp-stage">
+  <h4>② 并发分区（executeAll 切分算法）</h4>
+  <div id="cp-part" class="cp-row"></div>
+</div>
+<div class="cp-stage">
+  <h4>③ 保序输出（Flux.concat 外层串行 → 顺序结果 R1..RN）</h4>
+  <div id="cp-out" class="cp-out"></div>
+</div>
+<div class="cp-legend">
+  <span><span class="cp-sw" style="background:var(--green50);border-color:var(--green);"></span>safe 批：mergeSequential 并发 + 保序</span>
+  <span><span class="cp-sw" style="background:var(--red50);border-color:var(--red);"></span>unsafe 串行槽：独占、不进任何并发批</span>
+</div>
+<script>
+(function(){
+  var $=function(id){return document.getElementById(id);};
+  var nEl=$('cp-n'), input=$('cp-input'), part=$('cp-part'), out=$('cp-out'), nOut=$('cp-nOut');
+  var state=[];
+  function syncLen(n){ while(state.length<n) state.push(true); if(state.length>n) state.length=n; }
+  function render(){
+    var n=+nEl.value; nOut.textContent=n; syncLen(n);
+    input.innerHTML='';
+    for(var i=0;i<n;i++){
+      var safe=state[i];
+      var c=document.createElement('div');
+      c.className='cp-chip '+(safe?'safe':'unsafe');
+      c.innerHTML='<span class="cp-dot"></span>T'+(i+1)+' · '+(safe?'safe':'unsafe');
+      (function(idx){ c.onclick=function(){ state[idx]=!state[idx]; render(); }; })(i);
+      input.appendChild(c);
+    }
+    part.innerHTML='';
+    var chunks=[], cur=[];
+    for(var j=0;j<n;j++){
+      if(state[j]){ cur.push(j); }
+      else { if(cur.length){ chunks.push({type:'safe',items:cur.slice()}); cur=[]; } chunks.push({type:'unsafe',items:[j]}); }
+    }
+    if(cur.length){ chunks.push({type:'safe',items:cur.slice()}); }
+    chunks.forEach(function(ch){
+      var box=document.createElement('div');
+      box.className='cp-chunk '+ch.type;
+      var tag=document.createElement('div');
+      tag.className='cp-tag';
+      tag.textContent = ch.type==='safe' ? ('mergeSequential ∥ 并发批（'+ch.items.length+'）') : '串行槽 独占';
+      box.appendChild(tag);
+      var tools=document.createElement('div');
+      tools.className='cp-tools';
+      ch.items.forEach(function(idx){
+        var t=document.createElement('div');
+        t.className='cp-chip '+(state[idx]?'safe':'unsafe');
+        t.innerHTML='<span class="cp-dot"></span>T'+(idx+1);
+        tools.appendChild(t);
+      });
+      box.appendChild(tools);
+      part.appendChild(box);
+    });
+    out.innerHTML='';
+    for(var k=0;k<n;k++){
+      var r=document.createElement('div');
+      r.className='cp-res';
+      r.textContent='R'+(k+1)+' (T'+(k+1)+')';
+      out.appendChild(r);
+    }
+  }
+  nEl.addEventListener('input', render);
+  render();
+})();
+</script>
+</div>
+
+**设计动机**：
+- **为何保序（mergeSequential 而非 merge）？** 工具结果要按模型请求的顺序回填进上下文（`ToolResultBlock.withIdAndName` 也强绑定原始 `ToolUseBlock` 的 id/name），乱序会让结果对不上调用。mergeSequential 在「并发执行」与「顺序交付」之间取了最优解：快的工具不等慢的，但交付顺序恒定。
+- **为何 unsafe 要独占串行槽？** 两个共享可变状态（如写同一工作区、改同一全局标志）的工具若重叠执行，会踩出竞态（读到半成品、覆盖写入）。把它们各自塞进独立串行槽、且**不放进任何 mergeSequential 批**，就保证同一 unsafe 工具（以及它和相邻 safe 工具之间）不会并发交错——这是「宁可牺牲一点并行度、也不冒数据竞争」的保守选择。
+- **为何 legacy `AgentTool` 默认 `safe=true`？** 向后兼容：2.0 前没有 `concurrencySafe` 标志，框架一律并发执行用户工具；升级后若默认改 false，会无端拖慢所有老工具。于是只对显式继承 `ToolBase` 的新工具开放该标志，老 `AgentTool` 维持原行为。
+
+### Single-Tool Core (executeCore)
+
+`executeCore`（`ToolExecutor.java:201-316`）是单工具真正干活的地方，[Execution Chain](#execution-chain) 第 ④ 步已概述，这里补几个容易被略过的点：
+
+1. **工具解析走 `ToolRequestConfig.resolveTool`**（external → hide-backend → registry，见 [Tool Resolution Gates](#tool-resolution-gates)），与 `Toolkit.getTool` 共用同一策略，保证「模型看到的名字」和「实际执行的实现」永远一致。
+2. **组激活闸门只对 backend 工具生效**：`fromRequestConfig`（同名外部工具注入）为 true 时跳过——否则一个被模型看到的同名外部覆盖会被「未激活」的 backend 工具误拒（`ToolExecutor.java:219-229`）。
+3. **preset 参数合并在 input 之后、callAsync 之前**（`ToolExecutor.java:271-289`）：`mergedInput` 先放 input，再 `putAll(registered.getPresetParameters())`——**preset 覆盖 input**，使框架控制参数（如注入的 agent/session 标识）从调用方 / LLM 视角不可变。
+4. **错误收口**：`callAsync` 的异常经 `onErrorResume` 转成 `ToolResultBlock.error`（含 `ToolSuspendException`→`suspended`）；`switchIfEmpty` 兜底「工具正常结束却没返回结果」→error。所有失败路径都归一为 `ToolResultBlock`，绝不让异常穿透到 reactor 流水线外。
+
+## Under the Hood
+
+[Execution Engine Internals](#execution-engine-internals) 讲的是「工具怎么被调度、超时、并发」，本节往更底层走：一个 `@Tool` 方法从被反射调用、到参数如何注入与转换、到 schema 怎么生成、再到结果如何流式回传与包装成消息。这些组件在 [Internal Architecture](#internal-architecture) 的组件表里各占一行，这里把它们从「是什么」挖到「为什么这么写」。
+
+### Reflection & Parameter Injection (ToolMethodInvoker)
+
+`ToolMethodInvoker.invokeAsync`（`tool/ToolMethodInvoker.java:55-125`）按方法返回类型分三路，全部经 `Mono` 收口：
+
+- `CompletableFuture<?>` → `Mono.fromFuture(future)`；
+- `Mono<?>` → 直接 `flatMap`；
+- 其余（同步）→ `Mono.fromCallable(...)` 包裹。
+
+反射调用前统一 `method.setAccessible(true)`（绕过 private/package 限制，使工具方法无需公开）。参数绑定走 `convertParameters`（`:149-198`），按**参数类型**而非名称自动注入以下框架对象：
+
+| 参数类型 | 注入内容 | 备注 |
+| :--- | :--- | :--- |
+| `ToolEmitter` | 本次调用的流式 emitter | 工具方法声明此参数即可向调用方推送中间 chunk |
+| `Agent` | 当前 agent 实例 | 可为 null |
+| `AgentState` | 优先 `runtimeContext.getAgentState()`（call-scoped、并发安全），否则 agent 当前 state | 与 `@Tool(stateInjected=true)` 配合 |
+| `RuntimeContext` | 本次调用的运行时上下文 | 直接注入 |
+| `ToolExecutionContext` | 由 RuntimeContext 桥接（**已废弃**） | 新代码勿用 |
+| 用户自定义 POJO | 从 `RuntimeContext.get(type)` 解析 | 见下 |
+
+**用户 POJO 判定（`isUserContextPojo`，`:218-250`）**：一个无 `@ToolParam` 的参数，若**不是** primitive、**不是** `ContentBlock`/`Msg` 类层级、**不在** `java.`/`javax.` 包，就被当作「应从 RuntimeContext 按类型解析的上下文 POJO」——这正是 `@Tool(stateInjected=true)` 之外的另一条依赖注入通道，让工具无需 `@ToolParam` 也能拿到业务上下文（如数据库连接、用户身份）。
+
+**单参数转换（`convertSingleParameter`，`:283-315`）**：LLM 给的是 `Map<String,Object>`（通常都是字符串 / 嵌套 map），要转成方法声明的强类型实参：
+- 若 rawType 可赋值且非 `ParameterizedType` → 直接赋值（零拷贝）；
+- 否则 `JsonUtils.getJsonCodec().convertValue(value, paramType)`——**保留泛型信息**（`ParameterizedType`），这是 `List<Order>`/`Map<String, X>` 这类参数能正确反序列化的关键；
+- 失败回退 `convertFromString`（仅支持常见 primitive/boxed 的字符串解析）。
+
+**错误透传**：`handleInvocationError`（`:363-379`）会在异常链里查找 `ToolSuspendException` 并**重新抛出**——因为 `ToolExecutor` 靠它把执行权交给外部（HITL 挂起）。这一跳很隐蔽：工具方法里抛出的 `ToolSuspendException` 经 `Mono` 链被 `onErrorResume` 捕获后，必须「重新抛出」而非包成 error 块，否则挂起语义就丢了。
+
+### Schema Generation (ToolSchemaGenerator)
+
+模型要「看懂」一个工具，靠的是 JSON Schema。`ToolSchemaGenerator.generateParameterSchema`（`tool/ToolSchemaGenerator.java:50-93`）只收带 `@ToolParam` 的参数（`toolParam == null` 直接跳过——所以**没有 `@ToolParam` 的参数对模型不可见**，正是上面「框架对象自动注入」得以不污染 schema 的原因），对每个参数用 `JsonSchemaUtils.generateSchemaFromType(param.getParameterizedType())` 生成（支持泛型），并做两件事：
+
+- **`$defs`/`definitions` 提升到根**：嵌套类型的 schema 定义（如 `List<Order>` 里的 `Order`）被 hoist 到文档根的 `$defs`，使 `#/$defs/Order` 这种 `$ref` 能解析；
+- **冲突检测**：同名但内容不同的定义 → 抛 `IllegalStateException`（避免两个不同 `Order` 一静默覆盖另一）。
+
+`excludeParams` 参数用于**不把 preset 参数暴露给模型**（见 [Execution Engine Internals](#execution-engine-internals) 的 preset 合并）——预设参数对 LLM 透明，模型无需也无法填它。
+
+> 校验（`ToolValidator.validateInput`，`executeCore` 第 ② 步）用同一套 schema 在**执行前**再核一遍输入，失败返回错误块并提示「请修正参数」，形成「生成 schema → 模型填参 → 执行前校验 → 注入调用」的闭环。
+
+### Streaming Result & Conversion
+
+工具执行结果从 `callAsync` 的返回，到成为上下文里的一条 `Msg`，中间经过三道：
+
+1. **`ToolEmitter`**（`tool/DefaultToolEmitter.java`）：`ToolExecutor` 为**每次调用** new 一个 `DefaultToolEmitter`，把 chunk 经 `chunkCallback` 投递（internal + user 两个回调组合，null 安全）。工具方法只要声明 `ToolEmitter` 参数并调用 `emit(chunk)`，就能在调用方实时看到中间产出（如长任务的进度文本）——这是工具「流式输出」的通道，与 [Middleware](#middleware) 的 `onActingChunk` 事件衔接。
+2. **`ToolResultConverter`**（`tool/DefaultToolResultConverter.java`）把返回值规范成 `ToolResultBlock`：
+   - `null` → `"null"` 文本块；
+   - `void`（`Void.TYPE`）→ `"Done"`；
+   - 已是 `ToolResultBlock` → 透传；
+   - 其余 → `JsonUtils.toJson(...)` 序列化（失败回退 `String.valueOf`/`toString()`）。
+3. **`ToolResultMessageBuilder.buildToolResultMsg`**（`tool/ToolResultMessageBuilder.java:40-51`）把 `ToolResultBlock` 包成 `Msg`（role=`TOOL`、content 带 id/name，由 `withIdAndName(originalCall.getId(), originalCall.getName())` 绑定回原始 `ToolUseBlock`）——这一步才让结果能作为「工具消息」回填进 `AgentState.context`。
+
+### Tool Resolution Gates
+
+执行链第 ④ 步的「工具查找」和「组激活闸门」背后是三个协作组件，它们的规则决定了**一个名字最终映射到哪个实现、以及它此刻能不能被调用**。
+
+**`ToolRequestConfig.resolveTool`（单一真相源，`tool/ToolRequestConfig.java:89-98`）**：
+
+```java
+AgentTool external = externalTools.get(name);   // 1. 外部工具（SchemaOnlyTool）永远优先
+if (external != null) return external;
+if (hidesBackend()) return null;                 // 2. EXTERNAL_ONLY 模式隐藏 backend
+return registry.getTool(name);                   // 3. 否则查共享 registry
+```
+
+这个三路策略同时被 `Toolkit.getTool` 和 `ToolExecutor` 复用，因此「模型看到的工具名」与「实际执行的实现」永不漂移。`overrides(name)`（external 是否覆盖 backend）被执行器的可用性闸门用来**跳过组激活检查**——外部覆盖既然已被模型看到，就不能被一个未激活的同名 backend 工具拒绝。`NONE`（即 `AGENT_ONLY`）等于「用共享 toolkit 原样」；`AGENT_ONLY` 与「非空 externalTools」组合会被构造器拒绝（`IllegalArgumentException`），因为那在语义上自相矛盾。
+
+**`ToolRegistry`**（`tool/ToolRegistry.java`）持两份 `ConcurrentHashMap`：`tools`（name→`AgentTool` 实现）与 `registeredTools`（name→`RegisteredToolFunction` 元数据，含 preset、MCP client 名、extended model）。关键点：
+- `removeToolIfSame(name, expected)` 用 `ConcurrentHashMap.remove(k, expected)`——**原子地「值相等才删」**，防 TOCTOU 竞态（避免误删一个已经被替换成新实例的同名工具）；
+- `copyTo(target)` **按引用共享工具实例、只拷贝元数据**——工具被假定无状态且线程安全，构建期隔离（见 [Toolkit And Tool Registration](#toolkit-and-tool-registration) 的 `copy()`）只需隔离「注册表 entries」，不复制工具本身。
+
+**`ToolGroupManager` 可用性闸门**（`tool/ToolGroupManager.java:355-369`）的 `isActiveTool(name[, activeGroups])` 规则：
+- **未分组的工具默认 `active=true`**（不在任何组 → 可见可调用）；
+- 分组工具只要落在**任一激活组**里就 `active`。
+
+⚠️ 这与直觉相反——很多框架把「未分组」当作「不可用」，但 AgentScope 选择反过来：**分组是按需开关的优化（元工具用分组节省上下文），不应让未显式分组的工具因「没被任何组激活」而失活**。外部工具经 `ToolRequestConfig` 注入时不受组约束（同名的未激活 backend 工具不能拒绝它），也源于同一原则——模型看到的覆盖必须被尊重。
+
+## Replay Protection (Anti-Replay)
+
+一个容易被误解的点：AgentScope 的「防重放」**不是 `ToolExecutor` 里按「工具名 + 参数」做内容缓存**，而是在 **agent 循环层（`ReActAgent`）用 `tool_use_id` 做「pending 门禁」**——同一个工具调用实例（同一 id）只会被执行一次，而内容相同的不同实例（不同 id）仍会重跑。这套门禁横跨「正常循环 / 会话恢复 / 优雅关闭重试 / 中断自愈」四种场景。
+
+**核心判定：`MessageUtils.pendingToolUseIds`（`core/util/MessageUtils.java:154-171`）**
+
+```java
+Set<String> existingResultIds = messages.stream()                 // 全量对话历史
+    .flatMap(m -> m.getContentBlocks(ToolResultBlock.class).stream())
+    .map(ToolResultBlock::getId).collect(toSet());                 // 所有已存在的 tool_result.id
+return lastAssistant.getContentBlocks(ToolUseBlock.class).stream() // 仅最近一条 assistant
+    .map(ToolUseBlock::getId)
+    .filter(id -> !existingResultIds.contains(id))                 // 没有对应结果的，才是 pending
+    .collect(toSet());
+```
+
+即：**一个 `ToolUseBlock` 是「待执行」(pending) 当且仅当它在对话历史里找不到同 id 的 `ToolResultBlock`**。`ToolResultBlock.getId()` 与 `ToolUseBlock.getId()` 同源——都是模型下发的 `tool_use_id`（`ToolResultBlock.withIdAndName` 强绑定它就是为这个）。`extractPendingToolCalls`（`:82-92`）再用这个 id 集合过滤「最近一条 assistant 的工具调用」。
+
+**执行门禁：`ReActAgent.acting`（`ReActAgent.java:2858-2861`）**
+
+```java
+List<ToolUseBlock> pendingToolCalls =
+    MessageUtils.extractPendingToolCalls(state.contextMutable(), getName());
+if (pendingToolCalls.isEmpty()) { ... }   // 没有 pending → 不进 executeAll
+```
+
+`acting` 只把 pending 的工具交给 `ToolExecutor.executeAll`。于是：
+
+- **同一轮内**：每个 `tool_use` 执行一次、结果写入上下文，后续迭代再算它时已非 pending，**绝不二次执行**；
+- **会话恢复（resume）/ transcript 重放**：历史 `tool_result` 已在上下文里，同名 `tool_use` 直接非 pending → 不重跑，agent 从已保存状态续跑（`doCallInner` 在 `pendingIds` 非空且无新输入时走 `resumeAgent()`，`:1862-1864`）。
+
+**外部结果按 id 关联（HITL / 外部执行）**
+
+当工具结果由外部提供（人工确认、外部执行器回填），`pairProvidedToolResults`（`:2323-2332`）把提供的 `ToolResultBlock` 按 `result.getId()` 建 map，再用 `resultsById.get(toolUse.getId())` 与 pending `ToolUseBlock` 配对——**已配对的不再执行，只有未配对的 remainder 进 `executeAll`**。这正是「防重放」在人机协同场景下的体现：模型/HITL 已给出的结果不会被框架重复触发。
+
+**优雅关闭重试去重（`doCallInner`，`:1822-1831`）**
+
+> Graceful-shutdown deduplication: if the agent's session was previously interrupted by shutdown, the client is likely retrying with the same user prompt that already exists in memory. Discard the duplicate input so the agent resumes purely from its saved memory context.
+
+即客户端因超时被关闭而**用同一 user prompt 重试**时，框架丢弃这条重复输入、直接基于已保存上下文续跑，避免「同一意图被当成新请求再驱动一轮」造成的重放。
+
+**中断自愈（`synthesizeErrorResultsForPendingToolCalls` / `maybePatchPendingToolCalls`，`:2203-2211`、`:2144-2187`）**
+
+若在「reasoning 写出 `tool_use`」与「acting 写出 `tool_result`」之间被中断，上下文会残一条**没有结果的 `tool_use`**。这两个方法在中断恢复前为这些 dangling 调用自动补 error 结果（文案：`Previous tool execution failed or was interrupted`）。作用有二：① 不让 resume 后的运行继承「`tool_use` 无 `tool_result`」的不一致上下文（否则 provider 可能返回空响应）；② 显式把未完成项标记为 error 而非「假装成功」，避免误以为它已执行而漏掉重试。
+
+四类守卫汇总：
+
+| 场景 | 机制 | 源码 |
+| :--- | :--- | :--- |
+| 正常循环 / 会话恢复 | 只执行 pending（`tool_use_id` 无对应 `tool_result`）的工具 | `MessageUtils.pendingToolUseIds` `:154`；`ReActAgent.acting` `:2858` |
+| HITL / 外部结果回填 | 按 `tool_use_id` 配对，已配对的不重跑 | `ReActAgent.pairProvidedToolResults` `:2323` |
+| 优雅关闭重试 | 丢弃重复 user prompt，基于已存上下文续跑 | `ReActAgent.doCallInner` `:1822` |
+| 中断恢复 | 为无结果的 dangling `tool_use` 补 error 结果 | `synthesizeErrorResultsForPendingToolCalls` `:2203`、`maybePatchPendingToolCalls` `:2144` |
+
+> [!WARNING]
+>
+> **AgentScope 不提供「内容级幂等缓存」**。防重放是 **实例级**（按 `tool_use_id`），不是 **请求级**（按 `工具名 + 参数`）。如果模型用**同一个工具、同一份参数**但下发了**一个新的 `tool_use_id`**，框架**会再次执行**它——因为有新 id、历史里找不到对应结果、于是被判定为 pending。需要「相同入参绝不二次执行」语义的工具（如重复扣款、重复发消息），必须**自己在工具体内做幂等**（用业务主键去重、或基于 `RuntimeContext` 的调用去重），不能依赖框架的 pending 门禁。
+
+**设计动机**
+
+- **为何用 `tool_use_id` 而不是「工具 + 参数」做去重？** 模型每轮给的 `tool_use_id` 是天然的幂等键：同一调用实例 id 恒定，框架据此精确区分「这是上次那个调用（结果已在）→ 跳过」与「这是个新请求 → 执行」。若改用「工具名 + 参数」哈希，则会把「模型有意重复发起的相同操作」（如确实需要发两封相同邮件）误判为重放而吞掉——这与 agent 的自主性相悖。
+- **为何 pending 只看「最近一条 assistant」的 `tool_use`？** 历史 assistant 消息里的 `tool_use` 必然已经走过 acting 并写入了 `tool_result`（否则上下文早就不一致、被中断自愈补了 error），所以只需对「最近一轮」重新判定；全量扫 `tool_result.id` 是为了正确识别哪些已结算。
+
 ## Permission
 
 权限是 [Execution Chain](#execution-chain) 第 ② 步的**前瞻闸门**，由 `ReActAgent.evaluatePermissions` 在工具真正执行前调用 `PermissionEngine`，**不在 `ToolExecutor` 内**。本节把引擎判定流、它如何嵌入循环、以及它与工具自身安全层的关系写实。
@@ -203,6 +535,98 @@ digraph ExecutionChain {
 5. BYPASS 模式兜底
 6. 默认 ASK（DONT_ASK 模式下变 DENY）
 ```
+
+下面是可交互的六闸门判定树（对齐 `PermissionEngine.checkPermission:139-201`）：切换模式、工具只读性、各规则命中与工具自判结果，实时高亮**哪一道闸门裁决**、后续闸门如何被短路，以及最终 `ALLOW` / `DENY` / `ASK`。
+
+<div class="pe-root">
+<style>
+.pe-root{--card:var(--color-background-primary,#fff);--bg2:var(--color-background-secondary,#f6f7f9);--fg:var(--color-text-primary,#1a1a1a);--fg2:var(--color-text-secondary,#52525b);--bd:var(--color-border-tertiary,#e4e4e7);--allow:var(--color-text-success,#3b6d11);--allowbg:var(--color-background-success,#eaf3de);--deny:var(--color-text-danger,#a4262c);--denybg:var(--color-background-danger,#fcebeb);--ask:var(--color-text-warning,#854f0b);--askbg:var(--color-background-warning,#faeeda);--pass:var(--color-text-secondary,#52525b);font-family:var(--font-sans,system-ui,-apple-system,sans-serif);color:var(--fg);line-height:1.6;}
+@media (prefers-color-scheme: dark){.pe-root{--card:#1e1e1e;--bg2:#27272a;--fg:#e4e4e7;--fg2:#a1a1aa;--bd:#3f3f46;--allow:#97c459;--allowbg:#1f2f12;--deny:#f0898c;--denybg:#3a1f1f;--ask:#ef9f27;--askbg:#3a2a10;--pass:#a1a1aa;}}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
+.pe-root code{background:var(--bg2);padding:1px 4px;border-radius:4px;font-size:11px;}
+.pe-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:10px;margin-bottom:14px;}
+.pe-grid label{display:flex;flex-direction:column;gap:5px;font-size:12px;color:var(--fg2);}
+.pe-grid select{font-size:13px;padding:6px 8px;border-radius:8px;border:.5px solid var(--bd);background:var(--card);color:var(--fg);}
+.pe-steps{display:flex;flex-direction:column;gap:5px;margin-bottom:14px;}
+.pe-step{display:flex;gap:10px;align-items:flex-start;border-radius:8px;padding:7px 11px;border:.5px solid var(--bd);background:var(--card);font-size:12px;}
+.pe-step .pe-n{font-weight:500;min-width:118px;flex:none;}
+.pe-step.dead{color:var(--fg2);}
+.pe-step.dead .pe-n{color:var(--fg2);}
+.pe-step.decide-allow{background:var(--allowbg);border-color:var(--allow);}
+.pe-step.decide-allow .pe-n{color:var(--allow);}
+.pe-step.decide-deny{background:var(--denybg);border-color:var(--deny);}
+.pe-step.decide-deny .pe-n{color:var(--deny);}
+.pe-step.decide-ask{background:var(--askbg);border-color:var(--ask);}
+.pe-step.decide-ask .pe-n{color:var(--ask);}
+.pe-res{border-radius:10px;padding:12px 14px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+.pe-res.allow{background:var(--allowbg);border:.5px solid var(--allow);}
+.pe-res.deny{background:var(--denybg);border:.5px solid var(--deny);}
+.pe-res.ask{background:var(--askbg);border:.5px solid var(--ask);}
+.pe-badge{font-size:16px;font-weight:500;min-width:64px;text-align:center;padding:6px 12px;border-radius:8px;background:var(--card);}
+.pe-res.allow .pe-badge{color:var(--allow);}
+.pe-res.deny .pe-badge{color:var(--deny);}
+.pe-res.ask .pe-badge{color:var(--ask);}
+.pe-why{font-size:12px;color:var(--fg);flex:1;min-width:200px;}
+.pe-note{font-size:12px;color:var(--fg2);margin-top:10px;line-height:1.6;}
+</style>
+<h2 class="sr-only">AgentScope Java PermissionEngine.checkPermission 六闸门权限判定交互树：切换模式与规则命中，实时查看哪道闸门决定 ALLOW、DENY 或 ASK</h2>
+<div class="pe-grid">
+  <label>权限模式 mode<select id="pe-mode"><option>DEFAULT</option><option>EXPLORE</option><option>ACCEPT_EDITS</option><option>BYPASS</option><option>DONT_ASK</option></select></label>
+  <label>工具只读 isReadOnly<select id="pe-ro"><option value="0">否（写操作）</option><option value="1">是（只读）</option></select></label>
+  <label>① deny 规则命中<select id="pe-deny"><option value="0">否</option><option value="1">是</option></select></label>
+  <label>② ask 规则命中<select id="pe-ask"><option value="0">否</option><option value="1">是</option></select></label>
+  <label>③ 工具自判 checkPermissions<select id="pe-tool"><option>PASSTHROUGH</option><option>ALLOW</option><option>DENY</option><option>ASK+safety</option><option>ASK+other</option></select></label>
+  <label>④ allow 规则命中<select id="pe-allow"><option value="0">否</option><option value="1">是</option></select></label>
+</div>
+<div id="pe-steps" class="pe-steps"></div>
+<div id="pe-res" class="pe-res"><span id="pe-badge" class="pe-badge">—</span><span id="pe-why" class="pe-why"></span></div>
+<div class="pe-note">初始为出厂缺省 <code>DEFAULT</code> 模式、无规则、工具 passthrough → 落到第 6 步默认 ASK。切换任一项观察六闸门短路：<code>DENY/ASK 规则</code>优先于工具自判，而工具自判（含 <code>EXPLORE/ACCEPT_EDITS</code> 只读判定）<code>bypass-immune</code> 又优先于 <code>allow 规则</code>与 <code>BYPASS</code> 兜底。</div>
+<script>
+(function(){
+var $=function(id){return document.getElementById(id);};
+var ids=['pe-mode','pe-ro','pe-deny','pe-ask','pe-tool','pe-allow'];
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;');}
+function dec(steps,cls,why){var b={ALLOW:'ALLOW',DENY:'DENY',ASK:'ASK'};return{steps:steps,cls:cls,badge:b[cls],why:why};}
+function decide(s){
+  var steps=[];
+  function add(n,txt){steps.push({n:n,txt:txt,state:'dead'});}
+  function hit(i,cls){steps[i].state='decide-'+cls.toLowerCase();}
+  add('① deny 规则','DENY 规则最高优先，命中即拒');
+  if(s.deny){hit(0,'DENY');return dec(steps,'deny','第 ① 道 deny 规则命中 → 直接 DENY（最高优先级，模式与工具自判都被短路）。');}
+  add('② ask 规则','命中即 ASK，并挂 tool.generateSuggestions');
+  if(s.ask){hit(1,'ASK');return dec(steps,'ask','第 ② 道 ask 规则命中 → ASK，并附上工具生成的建议规则（suggestedRules）。');}
+  add('③ 工具自判','EXPLORE/ACCEPT_EDITS 只读处理 + ToolBase.checkPermissions（bypass-immune）');
+  var modeDecision=null;
+  if(s.mode==='EXPLORE'||s.mode==='ACCEPT_EDITS'){
+    if(s.ro){modeDecision='ALLOW';}
+    else if(s.mode==='EXPLORE'){modeDecision='DENY';}
+  }
+  var toolDecision=modeDecision||s.tool;
+  if(modeDecision){hit(2,modeDecision);return dec(steps,modeDecision.toLowerCase(),'第 ③ 道：'+s.mode+' 模式下按 isReadOnly 判定 → '+modeDecision+'（模式裁决先于工具自身 checkPermissions，checkExploreMode:229-263）。');}
+  if(toolDecision==='DENY'){hit(2,'DENY');return dec(steps,'deny','第 ③ 道工具自判返回 DENY → 直接拒绝（bypass-immune，连 BYPASS 都拦不住）。');}
+  if(toolDecision==='ALLOW'){hit(2,'ALLOW');return dec(steps,'allow','第 ③ 道工具自判返回 ALLOW → 直接放行（bypass-immune，先于 allow 规则与 BYPASS）。');}
+  if(toolDecision==='ASK+safety'){hit(2,'ASK');return dec(steps,'ask','第 ③ 道工具自判 ASK 且 decisionReason 含 “safety” → 带建议规则直接 ASK（:165-174）。');}
+  add('④ allow 规则','命中即 ALLOW');
+  if(s.allow){hit(3,'ALLOW');return dec(steps,'allow','工具自判 PASSTHROUGH（ASK+非 safety 继续）→ 第 ④ 道 allow 规则命中 → ALLOW。');}
+  add('⑤ BYPASS 兜底','仅 BYPASS 模式兜底放行');
+  if(s.mode==='BYPASS'){hit(4,'ALLOW');return dec(steps,'allow','无规则命中、工具 passthrough，但处于 BYPASS 模式 → 第 ⑤ 道兜底 ALLOW（:188-196）。');}
+  add('⑥ 默认裁决','DONT_ASK 模式变 DENY，否则 ASK');
+  var final=s.mode==='DONT_ASK'?'DENY':'ASK';
+  hit(5,final);
+  return dec(steps,final.toLowerCase(),'前五道均未裁决 → 第 ⑥ 道默认：'+(s.mode==='DONT_ASK'?'DONT_ASK 模式下用户不可用 → DENY':'默认 ASK 并附建议规则')+'（defaultDecisionAsk:318-331）。');
+}
+function render(){
+  var s={mode:$('pe-mode').value,ro:+$('pe-ro').value,deny:+$('pe-deny').value,ask:+$('pe-ask').value,tool:$('pe-tool').value,allow:+$('pe-allow').value};
+  var r=decide(s),box=$('pe-steps');box.innerHTML='';
+  r.steps.forEach(function(st){var d=document.createElement('div');d.className='pe-step '+st.state;d.innerHTML='<span class="pe-n">'+esc(st.n)+'</span><span>'+esc(st.txt)+'</span>';box.appendChild(d);});
+  var res=$('pe-res');res.className='pe-res '+r.cls;
+  $('pe-badge').textContent=r.badge;$('pe-why').textContent=r.why;
+}
+ids.forEach(function(id){$(id).addEventListener('change',render);});
+render();
+})();
+</script>
+</div>
 
 第三步的 bypass-immune 体现在：即使 `BYPASS` 模式，工具自带检查仍先于 allow 规则求值——`continueAfterToolCheck()` 里的 BYPASS 兜底排在工具检查之后（`:188-196`）。工具返回 `PASSTHROUGH` 时引擎走空（`Mono.empty()`）继续往后匹配（`:222-224`）。
 
@@ -350,6 +774,8 @@ default Mono<String> onSystemPrompt(Agent agent, RuntimeContext ctx, String curr
 
 配套输入类型：`AgentInput`（消息）、`ReasoningInput`（消息 + 工具 + 选项）、`ActingInput`（工具调用）、`ModelCallInput`（消息 + 工具 + 选项 + model）、`MiddlewareChain`。
 
+这 5 个中间件钩子也是可观测性的接入点：`OtelTracingMiddleware` 挂在 `onAgent` / `onModelCall` / `onActing` 上，把 agent / 模型 / 工具三段包成符合 GenAI semantic conventions 的 OpenTelemetry span；其机制与事件流、JSONL 导出一并收在 [可观测性分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Observability.md)。
+
 ### Built-in Middleware
 
 **core 两个**：`FinalAnswerFilterMiddleware`（最终答复过滤）、`TaskReminderMiddleware`（任务提醒）。
@@ -390,11 +816,57 @@ private String currentPlanFile;   // workspace 相对路径，markdown 蓝图
 
 计划文件落 `plans/PLAN.md`（可用 `.planFileDirectory("design-docs")` 改路径），跨调用保留；Plan Mode 下 spawn 的子 Agent 会自动继承只读限制，详见 [技能分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Skill.md)。
 
-## MCP And Tool Groups
+## MCP: Handshake and Mapping
 
-`mcp/` 包：`McpClientManager`（客户端生命周期）、`McpClientWrapper`（`Toolkit.registerMcpClient` 的参数）、`RegisteredToolFunction` / `ReflectiveFunctionTool` / `SchemaOnlyTool` / `MetaToolFactory` / `SimpleExtendedModel` / `ExtendedModel`（扩展模型能力）、`ToolExecutor` / `ToolMethodInvoker`（反射调用）、`ToolSchemaGenerator` / `ToolSchemaModule` / `ToolSchemaProvider`（JSON Schema 生成）、`SkillToolGroup`（技能工具组）、`ToolMergeMode`。
+MCP（Model Context Protocol）让 AgentScope 把**远程 / 外部**工具当成一等公民接入——它们参与权限评估与 pending-confirm 流，对模型和内置 `@Tool` 无异。但接入方式与注册 POJO 工具完全不同：POJO 是同步、进程内的；MCP 是**异步握手 + 远程调用**。本节讲清握手、命名空间、映射与设计动机。
 
-工具组相关：`ToolGroup`、`ToolGroupManager`（`replaceMetaActiveGroups(toActivate)` 是元工具的落点、`getMetaGroupNames()`、`isActiveTool(name, activeGroups)`）、`ToolGroupScope`（META / EXTERNAL）、`ToolkitConfig`（`parallel` 默认 **true**——同一轮多个同步工具调用并行推进）。
+### Three Transports & Async Registration
+
+`McpClientBuilder`（`tool/mcp/McpClientBuilder.java`）支持三种 transport（类注释与 `create` 实例）：
+
+| transport | 方法 | 语义 |
+| :--- | :--- | :--- |
+| StdIO | `stdioTransport(cmd, args[, env])` | 本地子进程通信，spawn 一个 MCP server 进程 |
+| SSE | `sseTransport(url)` | HTTP Server-Sent Events，**有状态**连接 |
+| StreamableHTTP | `streamableHttpTransport(url)` | HTTP 流式，**无状态**连接 |
+
+默认请求超时 120s、初始化超时 30s；`protocolVersions("2024-11-05","2025-03-26")` 可覆盖协议版本；`propagateMeta` 默认 true（见下）。`buildAsync()` / `buildSync()` 分别产出 `McpAsyncClientWrapper` / `McpSyncClientWrapper`。
+
+**注册是异步握手**（`McpClientManager.registerMcpClient`，`tool/McpClientManager.java:222-382`）：`initialize()`（握手 + 列出工具）→ `listTools()` → 按 `enableTools`/`disableTools` 过滤（`enable` 优先于 `disable`）→ 对每个远程工具 `new McpTool(...)` 并经 `registrationCallback.registerAgentToolWithMcpClient` 注册进 registry + 组。注意这与 `Toolkit.registration().tool(pojo)` 的**同步**注册形成对比：MCP 注册返回 `Mono<Void>`，必须在 `registerMcpClient` 上 `.block()` 或订阅后才能用——这是「本地 vs 远程」在注册时序上的第一处差异。
+
+**失败处理**：注册中途失败（如远程不可用、per-tool `propagateMeta` override 不匹配任何真实工具）时，best-effort `close()` 已 initialize 的 client（对 StdIO 尤其重要——它拥有 spawn 的子进程，不清理会泄漏），但**不掩盖原始 error**。per-tool override 若指向一个未实际注册的工具 → 抛 `IllegalArgumentException`（fail-loud，避免「想静默关闭某工具 meta 却因名字拼错而悄悄失效」）。
+
+### McpTool: Bridging Remote Tool
+
+`McpTool`（`tool/mcp/McpTool.java`，extends `ToolBase`）把远程工具包装成 AgentScope 工具，几个关键桥接点：
+
+- **命名空间**：构造时 `name = toolNamePrefix + mcpTool.name()`（模型可见、可带前缀避免跨 server 重名），`remoteToolName = mcpTool.name()`（实际发给 MCP server 的名字）——这正是「模型面名字」与「协议面名字」的解耦。
+- **`concurrencySafe(false)`**——**关键设计**：每个 MCP client 背后是共享连接 / 会话状态，默认让所有该 server 的工具**串行**执行，避免并发调用交错破坏协议或踩踏资源；需要并发时可显式覆写。
+- **覆写 `checkPermissions`**：`isReadOnly()` 真 → `allow`（无提示）；否则 → `ask`（每次调用需显式授权）。这把 MCP 工具的权限二分成了「只读放行 / 写即问」，区别于内置 `ToolBase` 默认 `passthrough`（交给规则引擎）。
+- **`callAsync`**：`mergeArguments(input)`（input 优先于 preset）→ `clientWrapper.callTool(remoteToolName, mergedArgs, metaMap)` → `McpContentConverter.convertCallToolResult` → 错误转 `ToolResultBlock.error("MCP tool error: ...")`。
+- **meta 双开关**：请求元数据（用户 `McpMeta` 条目 + 框架 tool-call id）只在 **per-tool `propagateMeta` AND connection-level `isPropagateMeta()`**（后者每次调用 live 读取）都为 true 时才随请求发出，否则整段 `_meta` 字段省略。`readOnly` 取自 `annotations().readOnlyHint()`（MCP server 声明）。
+
+**设计动机**：
+- **为何 MCP 工具默认 `concurrencySafe(false)`？** 远程 client 通常封装一条有状态连接（STDIO 进程、SSE session）；并发发起多个工具调用会让它们在该连接上交错，可能破坏请求 / 响应配对或耗尽 server 资源。保守串行比「快但偶发错乱」划算——这也解释了 [Execution Engine Internals](#execution-engine-internals) 为何把它们塞进独立串行槽。
+- **为何 meta 用双开关而非单开关？** meta 承载 trace id、回调 URL 等**内部信息**；对不可信 MCP server，泄露这些是安全隐患。于是 connection 级开关（live、可随时关闭）作为「总闸」，tool 级只能**进一步收紧不能放宽**——即便某工具曾被记为「允许」，只要连接被关，它立刻停发 meta；而连接开着时，tool 级 `false` 也能单独拦下它。`null` override 表示「听连接的」。
+
+### Content Mapping (McpContentConverter)
+
+`McpContentConverter.convertCallToolResult`（`tool/mcp/McpContentConverter.java:57-72`）把 MCP `CallToolResult` 翻成 AgentScope `ToolResultBlock`，并处理 `isError`：
+
+| MCP Content | → AgentScope | 说明 |
+| :--- | :--- | :--- |
+| `TextContent` | `TextBlock` | 文本直转 |
+| `ImageContent` | `ImageBlock` | `http(s)/file` 前缀 → `URLSource`，否则 `Base64Source` |
+| `AudioContent` | `TextBlock`（占位） | 暂未支持音频块，占位 `[Audio content: <mime>]` |
+| `EmbeddedResource` | `TextBlock`/`ImageBlock` | 文本资源直转；blob 若 mime 是 image/* → `ImageBlock`，否则占位 |
+| `isError=true` | `ToolResultBlock.error(...)` | 从 text content 拼错误消息 |
+
+这样无论工具来自本地 `@Tool` 还是远程 MCP，最终都归一到 `ToolResultBlock` → `Msg(role=TOOL)`，模型侧无感知。
+
+### Tool Groups
+
+`ToolGroup` / `ToolGroupManager`（`replaceMetaActiveGroups(toActivate)` 是元工具的落点、`getMetaGroupNames()`、`isActiveTool(name, activeGroups)`）、`ToolGroupScope`（META / EXTERNAL）、`ToolkitConfig`（`parallel` 默认 **true**）。详见 [Tool Resolution Gates](#tool-resolution-gates)。
 
 ## Links
 

@@ -185,6 +185,8 @@ ReAct 循环本身两版一致；Harness 的内置能力在循环的相应阶段
 
 **能力线：可复用能力与委派。**[技能分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Skill.md) 覆盖 Skill 与子 Agent——Skill 是「能力包」（`SKILL.md` + 参考文档，解决上下文预算问题），子 Agent 是「能力的执行体」，两者共用工作区声明与沙箱投影机制，合册最能看清「委派」这条链路。Skill 分册深挖了**双轨加载架构**（core 的 `SkillBox`+`DynamicSkillMiddleware` 按 signature 缓存 temp 目录 vs harness 的 `SkillRuntime`+`SkillCatalog` 按 scope key 隔离，都把授权视图存进 `RuntimeContext`）与**自管理源码机制**（`SkillManageTool` 六 action、`SkillPromoter` 晋升五步、`SkillUsageRecord` 状态机 DRAFT→ACTIVE→STALE→ARCHIVED、`SkillSecurityScanner` 危险正则库、`SkillAuditLog` 审计）。
 
+**可观测性线：追踪、事件与导出。** [可观测性分册](/docs/CS/AI/LLM/Agent/Product/AgentScopeJava/Observability.md) 把「一次调用内部每一步如何被记录、追踪、导出」讲清——现代 `AgentEvent` 31 事件流（与 Message 分册的双视图同源）、挂在 middleware 链上的 `OtelTracingMiddleware`（产出符合 GenAI semantic conventions 的 OpenTelemetry span）、已废弃的 legacy `hook` 体系（`JsonlTraceExporter` 反射注入 `trace_id`/`span_id` 的 JSONL 本地 trace），以及 studio extension 更完整的遥测桥。它同时订正了「core 无 metrics registry、指标是 admin starter 领域」这一常见误读。
+
 ## Comparison With Python AgentScope
 
 同族两个框架的逐项对照（Python 侧事实见 [AgentScope 主笔记](/docs/CS/AI/LLM/Agent/Product/AgentScope/AgentScope.md)及其分册，Java 侧为 v2 文档事实）：
