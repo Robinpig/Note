@@ -136,7 +136,7 @@ state: Arc::new(ModelClientState { provider: model_provider, /* … */ })
 ## Links
 
 - [Codex 总览](/docs/CS/AI/Codex/Codex.md)
-- [Codex 架构](/docs/CS/AI/Codex/Architecture.md)
+- [Codex 架构](/docs/CS/AI/Codex/Codex.md?id=architecture)
 - [Codex 可观测性](/docs/CS/AI/Codex/Observability.md)
 - [Codex 核心会话循环](/docs/CS/AI/Codex/SessionLoop.md)
 - [Codex 沙箱](/docs/CS/AI/Codex/Sandbox.md)

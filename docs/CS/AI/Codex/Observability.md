@@ -135,7 +135,7 @@ app-server 通过 `otel_reloader` 在**不重启进程**的前提下重建导出
 ## Links
 
 - [Agent Harness 可观测性（理论框架）](/docs/CS/AI/LLM/Agent/Theory/Observability.md) — 本文机制的通用化提炼与设计检查单
-- [Codex 架构总览](/docs/CS/AI/Codex/Architecture.md)
+- [Codex 架构总览](/docs/CS/AI/Codex/Codex.md?id=architecture)
 - [Codex 核心会话循环](/docs/CS/AI/Codex/SessionLoop.md)
 - [Codex 工具系统](/docs/CS/AI/Codex/Tools.md)
 - [Codex 插件系统](/docs/CS/AI/Codex/PluginSystem.md)

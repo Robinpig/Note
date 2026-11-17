@@ -104,7 +104,7 @@ core 通过 `codex_exec_server::EnvironmentManager` 统一两类执行环境：
 
 - [Codex 总览](/docs/CS/AI/Codex/Codex.md)
 - [Codex 沙箱](/docs/CS/AI/Codex/Sandbox.md)
-- [Codex 架构](/docs/CS/AI/Codex/Architecture.md)
+- [Codex 架构](/docs/CS/AI/Codex/Codex.md?id=architecture)
 - [Codex 插件系统](/docs/CS/AI/Codex/PluginSystem.md)
 - [Codex 可观测性](/docs/CS/AI/Codex/Observability.md)
 

@@ -433,7 +433,7 @@ digraph CodexSessionLoop {
 ## Links
 
 - [Codex 总览](/docs/CS/AI/Codex/Codex.md)
-- [Codex 架构与启动链路](/docs/CS/AI/Codex/Architecture.md)
+- [Codex 架构与启动链路](/docs/CS/AI/Codex/Codex.md?id=architecture)
 - [AI 总纲](/docs/CS/AI/AI.md)
 - [LLM Agent 理论](/docs/CS/AI/LLM/Agent/Theory/Agent.md)
 - [MCP 协议](/docs/CS/AI/LLM/Protocol/MCP.md)

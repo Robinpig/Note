@@ -186,7 +186,7 @@ digraph CodeMode {
 
 ## Links
 
-- [Codex Architecture](/docs/CS/AI/Codex/Architecture.md)
+- [Codex Architecture](/docs/CS/AI/Codex/Codex.md?id=architecture)
 - [Codex 核心会话循环](/docs/CS/AI/Codex/SessionLoop.md)
 - [Codex Sandbox](/docs/CS/AI/Codex/Sandbox.md)
 - [Codex 多 Agent](/docs/CS/AI/Codex/MultiAgent.md)

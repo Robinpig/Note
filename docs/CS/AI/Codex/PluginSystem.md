@@ -162,7 +162,7 @@ pub enum RuntimeMessage {
 
 ## Links
 
-- [Codex 架构总览](/docs/CS/AI/Codex/Architecture.md)
+- [Codex 架构总览](/docs/CS/AI/Codex/Codex.md?id=architecture)
 - [Codex 核心会话循环](/docs/CS/AI/Codex/SessionLoop.md)
 - [Codex 工具系统](/docs/CS/AI/Codex/Tools.md)
 - [Codex 多 Agent](/docs/CS/AI/Codex/MultiAgent.md)

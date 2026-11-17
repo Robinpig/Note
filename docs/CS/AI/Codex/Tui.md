@@ -171,7 +171,7 @@ pub(crate) struct ExecApprovalRequestEvent {
 ## Links
 
 - [Codex 总览](/docs/CS/AI/Codex/Codex.md)
-- [Codex 架构](/docs/CS/AI/Codex/Architecture.md)
+- [Codex 架构](/docs/CS/AI/Codex/Codex.md?id=architecture)
 - [Codex 核心会话循环](/docs/CS/AI/Codex/SessionLoop.md)
 - [Codex 沙箱](/docs/CS/AI/Codex/Sandbox.md)
 - [Codex 持久化与状态](/docs/CS/AI/Codex/Persistence.md)

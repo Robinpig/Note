@@ -198,7 +198,7 @@ async fn check_approval_requirement(&self, ctx: &ApprovalContext) -> Result<(), 
 
 ## Links
 
-- [Codex Architecture](/docs/CS/AI/Codex/Architecture.md)
+- [Codex Architecture](/docs/CS/AI/Codex/Codex.md?id=architecture)
 - [Codex 核心会话循环](/docs/CS/AI/Codex/SessionLoop.md)
 - [Codex 枢纽页](/docs/CS/AI/Codex/Codex.md)
 - [AI 总纲](/docs/CS/AI/AI.md)
